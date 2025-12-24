@@ -1,0 +1,46 @@
+<Project>
+	<PropertyGroup>
+		<EngRoot>$(MSBuildThisFileDirectory)</EngRoot>
+		<PGMRootPath>$(EngRoot)..\..\..\..\</PGMRootPath>
+		<AbsPGMRootPath>$([System.IO.Path]::GetFullPath('$(PGMRootPath)'))</AbsPGMRootPath>
+
+		<OutDir>$(EngRoot)bin\$(Platform)\$(Configuration)\</OutDir>
+		<IntDir>$(EngRoot)build\obj\$(MSBuildProjectName)\$(Platform)\$(Configuration)\</IntDir>
+
+		<AoiSdkPath>$(EngRoot)sdk\AOI_SDK\</AoiSdkPath>
+		<CoreCVPath>$(AoiSdkPath)core_cv\</CoreCVPath>
+		<CoreCVTestsPath>$(AoiSdkPath)core_cv_tests\</CoreCVTestsPath>
+		<CppUtilsPath>$(AoiSdkPath)cpp_utils\</CppUtilsPath>
+		<FrameworkPath>$(AoiSdkPath)framework\</FrameworkPath>
+		<LocalModulesPath>$(EngRoot)src_native\modules\</LocalModulesPath>
+
+		<ThirdPartyPath>$(EngRoot)third_party\</ThirdPartyPath>
+		<StbPath>$(ThirdPartyPath)stb\include\</StbPath>
+
+		<TestImageRelPath>02_Projects_Active\PICoater\05_QA_Validation\feasibility_test_data\20250117 L5C\Envision\Low_Angle_by_nor_line\mura\cal_25-11-17_11-16-48-283.bmp</TestImageRelPath>
+		<FullTestImagePath>$(AbsPGMRootPath)$(TestImageRelPath)</FullTestImagePath>
+	</PropertyGroup>
+
+	<ItemDefinitionGroup>
+		<ClCompile>
+			<PreprocessorDefinitions>
+				WORKSPACE_ROOT=R"($(AbsPGMRootPath))";
+				DEFAULT_TEST_IMAGE=R"($(FullTestImagePath))";
+				%(PreprocessorDefinitions)
+			</PreprocessorDefinitions>
+
+			<AdditionalIncludeDirectories>
+				$(CoreCVPath)include;
+				$(CoreCVTestsPath)include;
+				$(FrameworkPath)include;
+				$(CppUtilsPath)include;
+				$(StbPath);
+				$(LocalModulesPath)GetPICoaterBackground\include;
+				%(AdditionalIncludeDirectories)
+			</AdditionalIncludeDirectories>
+		</ClCompile>
+
+
+	</ItemDefinitionGroup>
+
+</Project>

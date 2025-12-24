@@ -1,0 +1,3 @@
+[submodule "sdk\AOI_SDK"]
+	path = sdk\AOI_SDK
+	url = https://github.com/rogic1105/AOI_Core_CV
