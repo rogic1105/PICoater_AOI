@@ -19,7 +19,6 @@ x64/
 x86/
 Debug/
 Release/
-sdk/
 *.dll
 *.exe
 *.pdb
