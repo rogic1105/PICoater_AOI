@@ -1,8 +1,12 @@
 <Project>
 	<PropertyGroup>
 		<EngRoot>$(MSBuildThisFileDirectory)</EngRoot>
+		<ProjectPath>$(EngRoot)..\..\</ProjectPath>
 		<PGMRootPath>$(EngRoot)..\..\..\..\</PGMRootPath>
+		
 		<AbsPGMRootPath>$([System.IO.Path]::GetFullPath('$(PGMRootPath)'))</AbsPGMRootPath>
+		<AbsProjectRootPath>$([System.IO.Path]::GetFullPath('$(ProjectPath)'))</AbsProjectRootPath>
+		<AbsRepoRoot>$([System.IO.Path]::GetFullPath('$(EngRoot)'))</AbsRepoRoot>
 
 		<OutDir>$(EngRoot)bin\$(Platform)\$(Configuration)\</OutDir>
 		<IntDir>$(EngRoot)build\obj\$(MSBuildProjectName)\$(Platform)\$(Configuration)\</IntDir>
@@ -24,7 +28,9 @@
 	<ItemDefinitionGroup>
 		<ClCompile>
 			<PreprocessorDefinitions>
-				WORKSPACE_ROOT=R"($(AbsPGMRootPath))";
+				PGM_ROOT=R"($(AbsPGMRootPath))";
+				PROJECT_ROOT=R"($(AbsProjectRootPath))";
+				REPO_ROOT=R"($(AbsRepoRoot))";
 				DEFAULT_TEST_IMAGE=R"($(FullTestImagePath))";
 				%(PreprocessorDefinitions)
 			</PreprocessorDefinitions>

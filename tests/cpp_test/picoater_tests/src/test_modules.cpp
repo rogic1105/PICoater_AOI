@@ -2,9 +2,10 @@
 
 #include "framework/test_utils.hpp"
 #include "core_cv_tests/image_utils.hpp"
+#include "framework/test_utils.hpp" 
 #include "Module_GetPICoaterBackground.hpp"
 
-#include "core/cuda_utils.hpp"
+#include "core_cv/base/cuda_utils.hpp"
 #include "cpp_utils/timer_utils.hpp" 
 #include "cpp_utils/terminal_colors.hpp"
 
@@ -40,12 +41,20 @@ void RunModuleTests(const std::string& imgPath) {
         // 下載並存圖 - 背景
         std::vector<uint8_t> h_bg(size);
         checkCudaErrors(cudaMemcpy(h_bg.data(), d_bg, size, cudaMemcpyDeviceToHost));
-        SaveImageRaw("picoater_background_check", W, H, 1, h_bg.data());
+
+        std::string outPath1 = framework::GetOutputPath("picoater_tests", "picoater_background.bmp");
+        stbi_write_bmp(outPath1.c_str(), W, H, 1, h_bg.data());
+        std::cout << "[Save] " << outPath1 << "\n";
+
 
         // 下載並存圖 - Mura
         std::vector<uint8_t> h_mura(size);
         checkCudaErrors(cudaMemcpy(h_mura.data(), d_mura, size, cudaMemcpyDeviceToHost));
-        SaveImageRaw("picoater_mura_result", W, H, 1, h_mura.data());
+
+        std::string outPath2 = framework::GetOutputPath("picoater_tests", "picoater_mura.bmp");
+        stbi_write_bmp(outPath2.c_str(), W, H, 1, h_mura.data());
+        std::cout << "[Save] " << outPath2 << "\n";
+
 
         cudaFree(d_in);
         cudaFree(d_bg);

@@ -1,8 +1,8 @@
 //Module_GetPICoaterBackground.cu
 
 #include "Module_GetPICoaterBackground.hpp"
-#include "core/core_ops.hpp"   // 改引用 ops
-#include "core/cuda_utils.hpp" // 為了 CUDA_CHECK
+#include "core_cv/imgproc/core_ops.hpp"   // 改引用 ops
+#include "core_cv/base/cuda_utils.hpp" // 為了 CUDA_CHECK
 
 namespace picoater {
 

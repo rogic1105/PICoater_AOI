@@ -8,6 +8,11 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "aoi_gui_test", "src_dotnet\aoi_gui_test\aoi_gui_test.csproj", "{F6422BC5-FB6E-4A79-9E54-74954D72B116}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SDK", "SDK", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
+	ProjectSection(SolutionItems) = preProject
+		sdk\AOI_SDK\.gitignore = sdk\AOI_SDK\.gitignore
+		sdk\AOI_SDK\Directory.Build.props = sdk\AOI_SDK\Directory.Build.props
+		sdk\AOI_SDK\readme.md = sdk\AOI_SDK\readme.md
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Module_GetPICoaterBackground", "src_native\modules\GetPICoaterBackground\Module_GetPICoaterBackground.vcxproj", "{89631E35-4DE2-4280-BB43-32D6DBDD4840}"
 EndProject
@@ -37,6 +42,13 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "picoater_tests", "tests\cpp
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "framework", "sdk\AOI_SDK\framework\framework.vcxproj", "{D3CC3425-9807-4866-AEB5-1F1DBC49523C}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "DEV", "DEV", "{7B6C5943-96EB-4AE1-ACF4-A98750620977}"
+	ProjectSection(SolutionItems) = preProject
+		.gitignore = .gitignore
+		Directory.Build.props = Directory.Build.props
+		README.md = README.md
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -175,10 +187,13 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{F4087972-DBE6-48E4-A764-CA9767E5E63A} = {045B1682-9917-40A9-8090-B480480CDEB5}
 		{F6422BC5-FB6E-4A79-9E54-74954D72B116} = {045B1682-9917-40A9-8090-B480480CDEB5}
+		{89631E35-4DE2-4280-BB43-32D6DBDD4840} = {7B6C5943-96EB-4AE1-ACF4-A98750620977}
 		{B39F6111-258B-48F8-8A3E-F940771A4D52} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{05DB04FC-CC8E-2E92-8736-4D39CC68F27A} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{F5B38893-304A-4913-A17A-0C63F88FA391} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+		{AE695487-606D-41DC-8639-5DB96B92B89C} = {7B6C5943-96EB-4AE1-ACF4-A98750620977}
 		{77281454-B828-499A-9A88-D9E46249A625} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+		{87AB434E-F87E-465F-B6E5-5D0625B80059} = {7B6C5943-96EB-4AE1-ACF4-A98750620977}
 		{D3CC3425-9807-4866-AEB5-1F1DBC49523C} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
