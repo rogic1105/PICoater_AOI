@@ -8,9 +8,13 @@
 		<AbsProjectRootPath>$([System.IO.Path]::GetFullPath('$(ProjectPath)'))</AbsProjectRootPath>
 		<AbsRepoRoot>$([System.IO.Path]::GetFullPath('$(EngRoot)'))</AbsRepoRoot>
 
+		<DataFolderPath>05_QA_Validation\feasibility_test_data</DataFolderPath>
+		<TargetImageRelPath>20250117 L5C\Envision\Low_Angle_by_nor_line\mura\cal_25-11-17_11-16-48-283.bmp</TargetImageRelPath>
+
 		<OutDir>$(EngRoot)bin\$(Platform)\$(Configuration)\</OutDir>
 		<IntDir>$(EngRoot)build\obj\$(MSBuildProjectName)\$(Platform)\$(Configuration)\</IntDir>
 
+		<OutputPath>$(OutDir)</OutputPath>
 		<AoiSdkPath>$(EngRoot)sdk\AOI_SDK\</AoiSdkPath>
 		<CoreCVPath>$(AoiSdkPath)core_cv\</CoreCVPath>
 		<CoreCVTestsPath>$(AoiSdkPath)core_cv_tests\</CoreCVTestsPath>
@@ -32,6 +36,10 @@
 				PROJECT_ROOT=R"($(AbsProjectRootPath))";
 				REPO_ROOT=R"($(AbsRepoRoot))";
 				DEFAULT_TEST_IMAGE=R"($(FullTestImagePath))";
+
+				DATA_FOLDER_PATH=R"($(DataFolderPath))";
+				TARGET_IMAGE_PATH=R"($(TargetImageRelPath))";
+				
 				%(PreprocessorDefinitions)
 			</PreprocessorDefinitions>
 

@@ -1,13 +1,14 @@
 import cv2
 import numpy as np
 import os
+from scipy.signal import find_peaks
 
 # Google Style: 模組級常數使用全大寫
 IMAGE_FOLDER = "../../../../05_QA_Validation/feasibility_test_data/20250117 L5C/Envision/Low_Angle_by_nor_line/mura/"
 IMAGE_NAME = 'cal_25-11-17_11-19-38-086.bmp'
 IMAGE_PATH = os.path.join(IMAGE_FOLDER, IMAGE_NAME)
 OUTPUT_DIR = "out"
-
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 def remove_column_background(image: np.ndarray) -> np.ndarray:
     """Removes background by subtracting the column-wise mean.
     """
@@ -62,41 +63,73 @@ def compute_hessian_ridge(image: np.ndarray, sigma: float = 1.0) -> np.ndarray:
     resp_norm = cv2.normalize(resp, None, 0, 255, cv2.NORM_MINMAX)
     return resp_norm.astype(np.uint8)
 
-def compute_hessian_ridge_vertical(image: np.ndarray, sigma: float = 2.0) -> np.ndarray:
+import cv2
+import numpy as np
+
+def compute_hessian_ridge(image: np.ndarray, 
+                          sigma: float = 2.0, 
+                          mode: str = 'vertical') -> np.ndarray:
+    """Computes Hessian-based ridge detection for specific directions.
+
+    This function calculates the 2nd derivative (Hessian) to highlight ridge-like
+    structures. It approximates the operation using Gaussian smoothing followed
+    by Sobel operators.
+
+    Args:
+        image: Input image (grayscale), numpy array.
+        sigma: Standard deviation for Gaussian smoothing. Higher values
+               detect wider ridges but may lose detail.
+        mode: Direction to detect. Options are:
+              'vertical'   - Detects vertical lines (Lxx).
+              'horizontal' - Detects horizontal lines (Lyy).
+              'both'       - Detects ridges in both directions (|Lxx| + |Lyy|).
+
+    Returns:
+        A normalized uint8 image (0-255) containing the ridge response.
+
+    Raises:
+        ValueError: If an invalid mode is provided.
     """
-    Detects vertical ridges only by computing the 2nd derivative in X (Lxx).
-    Faster and more specific to vertical defects.
-    """
-    print(f"  [Process] Computing Vertical Ridge (Lxx only, Sigma={sigma})...")
+    if mode not in ('vertical', 'horizontal', 'both'):
+        raise ValueError(f"Invalid mode: {mode}. Use 'vertical', 'horizontal', or 'both'.")
+
+    print(f"  [Process] Computing Ridge (Mode={mode}, Sigma={sigma})...")
+    
     img_float = image.astype(np.float32)
 
-    # 1. Gaussian Smoothing (高斯平滑)
-    # 這是為了抗噪，一定要做。雖然只看 X 方向，但建議還是用 2D 高斯，
-    # 這樣可以利用垂直方向的像素平均來消除雜訊點。
+    # 1. Gaussian Smoothing
+    # Apply 2D Gaussian blur to suppress noise before differentiation.
     ksize = int(6 * sigma + 1) | 1
     smooth = cv2.GaussianBlur(img_float, (ksize, ksize), sigma)
 
-    # 2. Compute 2nd Derivative in X (Lxx)
-    # cv2.Sobel 參數說明: 
-    # dx=2, dy=0 代表對 X 做二次微分，對 Y 不微分
-    dxx = cv2.Sobel(smooth, cv2.CV_32F, 2, 0, ksize=3)
+    response = None
 
-    # 3. Filter Ridges
-    # Lxx 的物理意義：
-    # - 數值為負大值 (<< 0)：代表亮度凸起 (Bright Line / Peak)
-    # - 數值為正大值 (>> 0)：代表亮度凹陷 (Dark Line / Valley)
-    # - 數值接近 0：平坦區域或斜坡
-    
-    # 因為我們要找 "顯著的線條" (不管是亮紋還是暗紋)，取絕對值即可
-    resp = np.abs(dxx)
+    # 2. Compute Derivatives based on mode
+    if mode == 'vertical':
+        # 2nd derivative in X (Lxx) -> Detects Vertical features
+        dxx = cv2.Sobel(smooth, cv2.CV_32F, 2, 0, ksize=3)
+        response = np.abs(dxx)
 
-    # 如果你只想找 "亮紋" (Mura 比背景亮)，可以改成：
-    # resp = np.maximum(-dxx, 0) 
-    
-    # Normalize output to 0-255
-    resp_norm = cv2.normalize(resp, None, 0, 255, cv2.NORM_MINMAX)
-    
+    elif mode == 'horizontal':
+        # 2nd derivative in Y (Lyy) -> Detects Horizontal features
+        dyy = cv2.Sobel(smooth, cv2.CV_32F, 0, 2, ksize=3)
+        response = np.abs(dyy)
+
+    elif mode == 'both':
+        # Compute both and combine
+        dxx = cv2.Sobel(smooth, cv2.CV_32F, 2, 0, ksize=3)
+        dyy = cv2.Sobel(smooth, cv2.CV_32F, 0, 2, ksize=3)
+        # Combine absolute responses to capture features in both directions
+        response = np.abs(dxx) + np.abs(dyy)
+
+    # 3. Normalize output to 0-255
+    resp_norm = cv2.normalize(response, None, 0, 255, cv2.NORM_MINMAX)
+
     return resp_norm.astype(np.uint8)
+
+
+
+
 
 def connect_with_vertical_average(image: np.ndarray,kernel_width: int = 30, kernel_height: int = 180) -> np.ndarray:
     """
@@ -116,20 +149,73 @@ def connect_with_vertical_average(image: np.ndarray,kernel_width: int = 30, kern
     
     return result
 
+def mark_local_peaks(image: np.ndarray, 
+                     n: int, 
+                     min_height: float = 20.0,
+                     min_distance: int = 50,
+                     prominence: float = 10.0,
+                     radius: int = 15, 
+                     color: tuple = (255, 255, 255)) -> np.ndarray:
+    """Detects and marks local maxima in averaged row blocks using Scipy.
+
+    This function averages the image intensity every n rows to create a 1D profile.
+    It then uses scipy.signal.find_peaks to identify significant local maxima
+    based on height and prominence, allowing for multiple detections per block.
+
+    Args:
+        image: Source image (grayscale or color), numpy array.
+        n: The height of the row block to average.
+        min_height: Required minimum intensity of peaks (0-255).
+                    Peaks below this value are ignored (e.g., background noise).
+        min_distance: Required minimum horizontal distance between neighboring peaks.
+        prominence: Required prominence of peaks. Measures how much a peak stands 
+                    out from the surrounding baseline.
+        radius: Radius of the circle to draw.
+        color: Color of the circle (B, G, R).
+
+    Returns:
+        The image with circles drawn at all detected peak locations.
+    """
+    if n <= 0:
+        raise ValueError("Parameter n must be greater than 0.")
+
+    output_img = image.copy()
+    h, w = image.shape[:2]
+
+    print(f"  [Process] Scanning for local peaks (Block size={n}, Min Height={min_height})...")
+
+    # Iterate through the image height with step n
+    for y in range(0, h, n):
+        y_end = min(y + n, h)
+        
+        # 1. Extract and Average
+        strip = image[y:y_end, :]
+        # Shape becomes (width, ) - a 1D signal
+        avg_row = np.mean(strip, axis=0)
+
+        # 2. Find Peaks using Scipy
+        # find_peaks returns indices of peaks satisfying the conditions
+        peaks, _ = find_peaks(
+            avg_row, 
+            height=min_height,      # Absolute height check
+            distance=min_distance,  # Avoid multiple detections on thick lines
+            prominence=prominence   # Relative height check (peak vs valley)
+        )
+
+        # 3. Draw Circles for all found peaks
+        center_y = int((y + y_end) / 2)
+        
+        for x_peak in peaks:
+            cv2.circle(output_img, (int(x_peak), center_y), radius, color, -1)
+
+    return output_img
 
 def main():
-    # --- 0. Prepare Output Directory ---
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
-        print(f"[Info] Created output directory: {OUTPUT_DIR}")
-
     # --- 1. Load Image ---
-    print(f"[Info] Loading image: {IMAGE_PATH}")
     if not os.path.exists(IMAGE_PATH):
         print(f"[Error] File not found: {IMAGE_PATH}")
         return
-
-    # Use IMREAD_GRAYSCALE to load as single channel
+    
     src_img = cv2.imread(IMAGE_PATH, cv2.IMREAD_GRAYSCALE)
     
     if src_img is None:
@@ -137,25 +223,51 @@ def main():
         return
 
     h, w = src_img.shape
+    print(f"[Info] Image loaded. {IMAGE_PATH}")
     print(f"[Info] Image loaded. Width: {w}, Height: {h}")
-    src_img =cv2.GaussianBlur(src_img, (11, 11), 5)
-    # --- 2. Filter Background ---
-    bg_removed = remove_column_background(src_img)
-    cv2.imwrite(os.path.join(OUTPUT_DIR, "step1_bg_removed.png"), bg_removed)
-
-    # --- 3. Hessian Matrix Ridge Detection ---
-    ridge_map = compute_hessian_ridge_vertical(bg_removed, sigma=9.0)
-    cv2.imwrite(os.path.join(OUTPUT_DIR, "step2_hessian_response.png"), ridge_map)
-
-    ridge_map = connect_with_vertical_average(ridge_map, kernel_width=30, kernel_height=180)
-    cv2.imwrite(os.path.join(OUTPUT_DIR, "step3_vertical_max.png"), ridge_map)
-
-    # --- 4. Post-processing & Visualization ---
-    print("  [Process] Generating overlay...")
+    cv2.imwrite(os.path.join(OUTPUT_DIR, "step1_input.png"), src_img)
     
+    # --- 2. Pre-processing ---
+    src_img =cv2.GaussianBlur(src_img, (11, 11), 5)
+    cv2.imwrite(os.path.join(OUTPUT_DIR, "step2_blurred.png"), src_img)
+    print("  [Process] Pre-processing completed.")
+    
+    # --- 3. Filter Background ---
+    bg_removed = remove_column_background(src_img)
+    cv2.imwrite(os.path.join(OUTPUT_DIR, "step3_bg_removed.png"), bg_removed)
+    print("  [Process] Background removed.")
+    
+    # --- 4. Hessian Matrix Ridge Detection ---
+    res_v = compute_hessian_ridge(bg_removed, sigma=9.0, mode='vertical')
+    res_h = compute_hessian_ridge(bg_removed, sigma=9.0, mode='horizontal')
+    res_b = compute_hessian_ridge(bg_removed, sigma=9.0, mode='both')
+    
+    cv2.imwrite(os.path.join(OUTPUT_DIR, "step4_res_v.png"), res_v)
+    cv2.imwrite(os.path.join(OUTPUT_DIR, "step4_res_h.png"), res_h)
+    cv2.imwrite(os.path.join(OUTPUT_DIR, "step4_res_b.png"), res_b)
 
-    _, binary = cv2.threshold(ridge_map, 30, 255, cv2.THRESH_BINARY)
-    cv2.imwrite(os.path.join(OUTPUT_DIR, "step4_binary.png"), binary)
+    ridge_map = res_v + res_h
+    print("  [Process] Ridge map computed.")
+    
+    # --- 5.0. Post-processing ---
+    ridge_map_peak = mark_local_peaks(
+            res_v, 
+            n=100, 
+            min_height=10,      # Ignore dark noise < 50
+            min_distance=50,   # Peaks must be 100px apart
+            prominence=10
+        )
+    
+    cv2.imwrite(os.path.join(OUTPUT_DIR, "step5_peak.png"), ridge_map_peak)
+    
+    # --- 5. Post-processing ---
+    ridge_map_conv = connect_with_vertical_average(res_v, kernel_width=30, kernel_height=180)
+    cv2.imwrite(os.path.join(OUTPUT_DIR, "step5_conv.png"), ridge_map_conv)
+    print("  [Process] Ridge map post-processing completed.")
+    
+    # --- 6. mask ---
+    _, binary = cv2.threshold(ridge_map_conv, 30, 255, cv2.THRESH_BINARY)
+    cv2.imwrite(os.path.join(OUTPUT_DIR, "step6_binary.png"), binary)
 
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
     print(f"  [Info] Detected {num_labels - 1} potential defect segments.")
@@ -179,7 +291,7 @@ def main():
     overlay = cv2.addWeighted(src_bgr, 0.7, colored_mask, 0.3, 0)
 
 
-    output_path = os.path.join(OUTPUT_DIR, "step5_result_overlay.jpg")
+    output_path = os.path.join(OUTPUT_DIR, "step6_result_overlay.jpg")
     cv2.imwrite(output_path, overlay)
     
     print(f"[Success] All results saved to '{OUTPUT_DIR}/'")
