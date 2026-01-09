@@ -1,88 +1,179 @@
-// PiCoater_api\src\export_api.cpp
+// AOI_SDK\src_native\c_api\picoater_api\src\export_api.cpp
 
 #include "export_c/export_api.h"
 
+#include "Module_GetPICoaterBackground.hpp"
+#include "core_cv/base/cuda_memory.hpp"
+#include "core_cv/base/cuda_utils.hpp" 
+
+#include "core_cv/imgcodecs/core_imgcodecs.hpp"
+
 #include <cuda_runtime.h>
 #include <iostream>
-#include <vector>
 
-// 引用你的演算法模組
-#include "Module_GetPICoaterBackground.hpp" 
-// 假設這個標頭檔在 include path 中可以被找到
+// === 內部封裝結構 ===
+// 這個 Context 負責持有 Detector 以及 I/O 用的 Device Memory
+struct PICoaterContext {
+    picoater::PICoaterDetector detector;
 
-// 內部使用的錯誤檢查輔助巨集 (不拋出例外，改為回傳錯誤碼)
-#define CHECK_CUDA(call)                                          \
-  {                                                               \
-    cudaError_t err = call;                                       \
-    if (err != cudaSuccess) {                                     \
-      std::cerr << "CUDA Error: " << cudaGetErrorString(err)      \
-                << " at " << __FILE__ << ":" << __LINE__ << "\n"; \
-      return -1; /* CUDA 錯誤通用代碼 */                          \
-    }                                                             \
-  }
-
-int Picoater_GetBackground(
-    const uint8_t* input_img,
-    int width,
-    int height,
-    float sigma,
-    uint8_t* output_bg,
-    uint8_t* output_mura) {
-
-    // 1. 參數基本檢查
-    if (input_img == nullptr || output_bg == nullptr || output_mura == nullptr) {
-        std::cerr << "Error: Input or Output pointers are null.\n";
-        return -2; // 指標錯誤
-    }
-    if (width <= 0 || height <= 0) {
-        std::cerr << "Error: Invalid image dimensions.\n";
-        return -3; // 維度錯誤
-    }
-
-    // 2. 準備 GPU 資源
-    size_t img_size = static_cast<size_t>(width) * height * sizeof(uint8_t);
+    // 這些是 GPU 上的緩衝區，用來接 C# 傳進來的資料
+    // Detector Class 只管理中間暫存 (temp)，不管理 I/O，所以這裡要管理
     uint8_t* d_in = nullptr;
     uint8_t* d_bg = nullptr;
     uint8_t* d_mura = nullptr;
+    uint8_t* d_ridge = nullptr;
 
-    // 使用 try-catch 區塊來確保發生 C++ 例外時也能釋放 GPU 記憶體 (RAII 更好，但這是 C API 實作層)
-    try {
-        CHECK_CUDA(cudaMalloc(&d_in, img_size));
-        CHECK_CUDA(cudaMalloc(&d_bg, img_size));
-        CHECK_CUDA(cudaMalloc(&d_mura, img_size));
+    int current_w = 0;
+    int current_h = 0;
 
-        // 3. 資料上傳 (Host -> Device)
-        CHECK_CUDA(cudaMemcpy(d_in, input_img, img_size, cudaMemcpyHostToDevice));
-
-        // 4. 執行核心演算法
-        // 注意：假設這個函數是同步的，或是我們需要手動同步
-        picoater::GetPICoaterBackground_gpu(d_in, d_bg, d_mura, width, height, sigma, 0);
-
-        // 檢查 Kernel 啟動是否有錯
-        CHECK_CUDA(cudaGetLastError());
-        // 等待 GPU 完成 (對於 C API 呼叫通常建議同步，除非有非同步介面設計)
-        CHECK_CUDA(cudaDeviceSynchronize());
-
-        // 5. 資料下載 (Device -> Host)
-        CHECK_CUDA(cudaMemcpy(output_bg, d_bg, img_size, cudaMemcpyDeviceToHost));
-        CHECK_CUDA(cudaMemcpy(output_mura, d_mura, img_size, cudaMemcpyDeviceToHost));
-
-        // 6. 釋放資源
-        cudaFree(d_in);
-        cudaFree(d_bg);
-        cudaFree(d_mura);
-
-        return 0; // 成功
-
+    ~PICoaterContext() {
+        ReleaseBuffers();
     }
-    catch (const std::exception& e) {
-        std::cerr << "Exception in Picoater_GetBackground: " << e.what() << "\n";
 
-        // 發生例外時的清理
+    void ReleaseBuffers() {
         if (d_in) cudaFree(d_in);
         if (d_bg) cudaFree(d_bg);
         if (d_mura) cudaFree(d_mura);
-
-        return -99; // 未知例外
+        if (d_ridge) cudaFree(d_ridge);
+        d_in = nullptr;
+        d_bg = nullptr;
+        d_mura = nullptr;
+        d_ridge = nullptr;
+        current_w = 0;
+        current_h = 0;
     }
+
+    // 分配 I/O GPU 記憶體
+    bool AllocateBuffers(int w, int h) {
+        if (current_w == w && current_h == h) return true;
+
+        ReleaseBuffers();
+        current_w = w;
+        current_h = h;
+        size_t size = w * h * sizeof(uint8_t);
+
+        cudaError_t err;
+        err = cudaMalloc(&d_in, size);    if (err) return false;
+        err = cudaMalloc(&d_bg, size);    if (err) return false;
+        err = cudaMalloc(&d_mura, size);  if (err) return false;
+        err = cudaMalloc(&d_ridge, size); if (err) return false;
+
+        // 同時也要初始化內部的 Detector
+        detector.Initialize(w, h);
+        return true;
+    }
+};
+
+// === 巨集：安全捕捉例外 ===
+#define SAFE_EXEC(stmt) \
+    try { \
+        stmt; \
+        return 0; \
+    } catch (const std::exception& e) { \
+        std::cerr << "[DLL Error] " << e.what() << std::endl; \
+        return -1; \
+    } catch (...) { \
+        std::cerr << "[DLL Error] Unknown exception." << std::endl; \
+        return -2; \
+    }
+
+// === API 實作 ===
+
+extern "C" {
+
+    // --- 記憶體管理 (直接轉發給 core_cv) ---
+    PICOATER_API unsigned char* PICoater_AllocPinned(unsigned long long size) {
+        // 呼叫 core_cv/base/cuda_memory.hpp
+        return static_cast<unsigned char*>(core::alloc_pinned_memory(static_cast<size_t>(size)));
+    }
+
+    PICOATER_API void PICoater_FreePinned(unsigned char* ptr) {
+        core::free_pinned_memory(ptr);
+    }
+
+    // --- 物件生命週期 ---
+    PICOATER_API PICoaterHandle PICoater_Create() {
+        // new 一個 Context (包含 Detector 和 I/O Buffers)
+        return new PICoaterContext();
+    }
+
+    PICOATER_API void PICoater_Destroy(PICoaterHandle handle) {
+        if (handle) {
+            auto* ctx = static_cast<PICoaterContext*>(handle);
+            delete ctx; // 這會自動呼叫解構子釋放 GPU 記憶體
+        }
+    }
+
+    PICOATER_API int PICoater_Initialize(PICoaterHandle handle, int width, int height) {
+        if (!handle) return -1;
+        auto* ctx = static_cast<PICoaterContext*>(handle);
+
+        SAFE_EXEC(
+            if (!ctx->AllocateBuffers(width, height)) {
+                return -3; // Malloc failed
+            }
+                );
+    }
+
+    // --- 核心執行 ---
+    PICOATER_API int PICoater_Run(
+        PICoaterHandle handle,
+        const unsigned char* h_in,
+        unsigned char* h_bg_out,
+        unsigned char* h_mura_out,
+        unsigned char* h_ridge_out,
+        float bgSigmaFactor,
+        float ridgeSigma,
+        const char* ridgeMode,
+        void* stream
+    ) {
+        if (!handle || !h_in) return -1;
+        auto* ctx = static_cast<PICoaterContext*>(handle);
+
+        // 如果還沒初始化，防呆
+        if (ctx->current_w == 0 || ctx->current_h == 0) return -4;
+
+        cudaStream_t cuStream = static_cast<cudaStream_t>(stream);
+        size_t size = ctx->current_w * ctx->current_h * sizeof(uint8_t);
+
+        SAFE_EXEC(
+            // 1. 上傳 (Host Pinned -> Device)
+            // 因為 h_in 是 Pinned Memory，這會觸發全速 DMA
+            cudaMemcpyAsync(ctx->d_in, h_in, size, cudaMemcpyHostToDevice, cuStream);
+
+        // 2. 計算 (Device -> Device)
+        ctx->detector.Run(
+            ctx->d_in,
+            ctx->d_bg,
+            ctx->d_mura,
+            ctx->d_ridge,
+            bgSigmaFactor,
+            ridgeSigma,
+            ridgeMode,
+            cuStream
+        );
+
+        // 3. 下載 (Device -> Host Pinned)
+        if (h_bg_out)    cudaMemcpyAsync(h_bg_out, ctx->d_bg, size, cudaMemcpyDeviceToHost, cuStream);
+        if (h_mura_out)  cudaMemcpyAsync(h_mura_out, ctx->d_mura, size, cudaMemcpyDeviceToHost, cuStream);
+        if (h_ridge_out) cudaMemcpyAsync(h_ridge_out, ctx->d_ridge, size, cudaMemcpyDeviceToHost, cuStream);
+
+        // 4. 同步
+        // 由於 C# 呼叫通常是 Blocking 的，這裡等待 GPU 完成是安全的做法
+        // 如果希望 C# 端也是 Async，可以把這行拿掉，但 C# 就要自己負責同步
+        cudaStreamSynchronize(cuStream);
+            );
+    }
+
+
+    PICOATER_API int PICoater_LoadThumbnail(const char* path, int targetWidth, unsigned char* outBuffer, int* outRealW, int* outRealH) {
+        try {
+            // 呼叫 core_cv 的 CPU 函式
+            return core::load_thumbnail_cpu(path, targetWidth, outBuffer, outRealW, outRealH);
+        }
+        catch (...) {
+            return -99;
+        }
+    }
+
 }

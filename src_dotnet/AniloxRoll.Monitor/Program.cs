@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace CsTestApp
+namespace AniloxRoll.Monitor
 {
     internal static class Program
     {

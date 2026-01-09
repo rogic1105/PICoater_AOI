@@ -26,46 +26,6 @@ def remove_column_background(image: np.ndarray) -> np.ndarray:
     
     return np.clip(result, 0, 255).astype(np.uint8)
 
-def compute_hessian_ridge(image: np.ndarray, sigma: float = 1.0) -> np.ndarray:
-    """Detects ridges using Hessian Matrix eigenvalues.
-    """
-    print(f"  [Process] Computing Hessian Matrix (Sigma={sigma})...")
-    img_float = image.astype(np.float32)
-
-    # 1. Gaussian Smoothing
-    ksize = int(6 * sigma + 1) | 1
-    smooth = cv2.GaussianBlur(img_float, (ksize, ksize), sigma)
-
-    k_sobel = 3
-    # 2. Second Derivatives
-    dx = cv2.Sobel(smooth, cv2.CV_32F, 1, 0, ksize=k_sobel)
-    dy = cv2.Sobel(smooth, cv2.CV_32F, 0, 1, ksize=k_sobel)
-    
-    dxx = cv2.Sobel(dx, cv2.CV_32F, 1, 0, ksize=k_sobel)
-    dyy = cv2.Sobel(dy, cv2.CV_32F, 0, 1, ksize=k_sobel)
-    dxy = cv2.Sobel(dx, cv2.CV_32F, 0, 1, ksize=k_sobel)
-
-    # 3. Compute Eigenvalues
-    tr = dxx + dyy
-    det = dxx * dyy - dxy * dxy
-    
-    discriminant = tr * tr - 4 * det
-    discriminant[discriminant < 0] = 0
-    sqrt_disc = np.sqrt(discriminant)
-    
-    lambda1 = (tr + sqrt_disc) / 2.0
-    lambda2 = (tr - sqrt_disc) / 2.0
-    
-    # 4. Filter Ridges (Maximize curvature response)
-    resp = np.maximum(np.abs(lambda1), np.abs(lambda2))
-    
-    # Normalize result
-    resp_norm = cv2.normalize(resp, None, 0, 255, cv2.NORM_MINMAX)
-    return resp_norm.astype(np.uint8)
-
-import cv2
-import numpy as np
-
 def compute_hessian_ridge(image: np.ndarray, 
                           sigma: float = 2.0, 
                           mode: str = 'vertical') -> np.ndarray:
@@ -185,6 +145,7 @@ def mark_local_peaks(image: np.ndarray,
     print(f"  [Process] Scanning for local peaks (Block size={n}, Min Height={min_height})...")
 
     # Iterate through the image height with step n
+    peak_array = []
     for y in range(0, h, n):
         y_end = min(y + n, h)
         
@@ -201,14 +162,14 @@ def mark_local_peaks(image: np.ndarray,
             distance=min_distance,  # Avoid multiple detections on thick lines
             prominence=prominence   # Relative height check (peak vs valley)
         )
-
+        peak_array.append(peaks)
         # 3. Draw Circles for all found peaks
         center_y = int((y + y_end) / 2)
         
         for x_peak in peaks:
             cv2.circle(output_img, (int(x_peak), center_y), radius, color, -1)
 
-    return output_img
+    return output_img, peak_array
 
 def main():
     # --- 1. Load Image ---
@@ -249,21 +210,21 @@ def main():
     ridge_map = res_v + res_h
     print("  [Process] Ridge map computed.")
     
+    # --- 5. Post-processing ---
+    ridge_map_conv = connect_with_vertical_average(res_v, kernel_width=50, kernel_height=100)
+    cv2.imwrite(os.path.join(OUTPUT_DIR, "step5_conv.png"), ridge_map_conv)
+    print("  [Process] Ridge map post-processing completed.")
+    
     # --- 5.0. Post-processing ---
-    ridge_map_peak = mark_local_peaks(
-            res_v, 
+    ridge_map_peak, peak_array = mark_local_peaks(
+            ridge_map_conv, 
             n=100, 
             min_height=10,      # Ignore dark noise < 50
-            min_distance=50,   # Peaks must be 100px apart
+            min_distance=300,   # Peaks must be 100px apart
             prominence=10
         )
     
     cv2.imwrite(os.path.join(OUTPUT_DIR, "step5_peak.png"), ridge_map_peak)
-    
-    # --- 5. Post-processing ---
-    ridge_map_conv = connect_with_vertical_average(res_v, kernel_width=30, kernel_height=180)
-    cv2.imwrite(os.path.join(OUTPUT_DIR, "step5_conv.png"), ridge_map_conv)
-    print("  [Process] Ridge map post-processing completed.")
     
     # --- 6. mask ---
     _, binary = cv2.threshold(ridge_map_conv, 30, 255, cv2.THRESH_BINARY)

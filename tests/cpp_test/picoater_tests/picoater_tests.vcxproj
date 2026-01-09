@@ -20,7 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp" />
-    <ClCompile Include="src\test_modules.cpp" />
+    <ClCompile Include="src\PICoaterModuleTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\sdk\AOI_SDK\core_cv\core_cv.vcxproj">
