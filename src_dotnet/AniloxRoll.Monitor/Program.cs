@@ -1,22 +1,20 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+﻿// PICoater_AOI\src_dotnet\AniloxRoll.Monitor\Program.cs
+
+using System;
 using System.Windows.Forms;
+using AniloxRoll.Monitor.Forms; // [修改]
 
 namespace AniloxRoll.Monitor
 {
     internal static class Program
     {
-        /// <summary>
-        /// 應用程式的主要進入點。
-        /// </summary>
         [STAThread]
         static void Main()
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new Form1());
+            // [修改] 啟動 MainForm
+            Application.Run(new MainForm());
         }
     }
 }

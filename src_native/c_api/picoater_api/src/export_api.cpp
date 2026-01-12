@@ -7,6 +7,7 @@
 #include "core_cv/base/cuda_utils.hpp" 
 
 #include "core_cv/imgcodecs/core_imgcodecs.hpp"
+#include "core_cv/imgcodecs/core_imgcodecs_fast.hpp"
 
 #include <cuda_runtime.h>
 #include <iostream>
@@ -173,6 +174,34 @@ extern "C" {
         }
         catch (...) {
             return -99;
+        }
+    }
+
+    // [新增] 實作 FastRead
+    PICOATER_API bool PICoater_FastReadBMP(const char* filepath, int* w, int* h, unsigned char* outBuffer, int bufferSize) {
+        try {
+            int width = 0, height = 0;
+            // 呼叫 core_cv 的極速讀取
+            bool res = core::fast_read_bmp_8bit(filepath, width, height, outBuffer, bufferSize);
+            if (res) {
+                if (w) *w = width;
+                if (h) *h = height;
+            }
+            return res;
+        }
+        catch (...) {
+            return false;
+        }
+    }
+
+    // [新增] 實作 FastWrite
+    PICOATER_API bool PICoater_FastWriteBMP(const char* filepath, int w, int h, const unsigned char* inBuffer) {
+        try {
+            // 呼叫 core_cv 的極速寫入
+            return core::fast_write_bmp_8bit(filepath, w, h, inBuffer);
+        }
+        catch (...) {
+            return false;
         }
     }
 

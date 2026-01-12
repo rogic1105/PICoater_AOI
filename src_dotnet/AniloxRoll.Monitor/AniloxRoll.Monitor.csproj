@@ -67,18 +67,19 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Form1.cs">
+    <Compile Include="Forms\MainForm.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="Form1.Designer.cs">
-      <DependentUpon>Form1.cs</DependentUpon>
+    <Compile Include="Forms\MainForm.Designer.cs">
+      <DependentUpon>MainForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="ImageDataManager.cs" />
-    <Compile Include="PICoaterWrapper.cs" />
+    <Compile Include="Core\ImageDataManager.cs" />
+    <Compile Include="Core\PICoaterWrapper.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <EmbeddedResource Include="Form1.resx">
-      <DependentUpon>Form1.cs</DependentUpon>
+    <Compile Include="Utils\BitmapHelper.cs" />
+    <EmbeddedResource Include="Forms\MainForm.resx">
+      <DependentUpon>MainForm.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
@@ -103,10 +104,11 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\sdk\AOI_SDK\src_dotnet\AOI.SDK.UI\AOI.SDK.UI.csproj">
-      <Project>{7baa4bf0-71c1-4b52-b744-91b3e039870f}</Project>
-      <Name>AOI.SDK.UI</Name>
+    <ProjectReference Include="..\..\sdk\AOI_SDK\src_dotnet\AOI.SDK\AOI.SDK.csproj">
+      <Project>{27263c11-7fef-4076-a2f1-f412bb496df3}</Project>
+      <Name>AOI.SDK</Name>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

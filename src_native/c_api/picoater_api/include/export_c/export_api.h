@@ -27,14 +27,9 @@ extern "C" {
 
 
     // --- 演算法 API ---
-    // 1. 建立實例
     PICOATER_API PICoaterHandle PICoater_Create();
-
-    // 2. 初始化 (分配 GPU 資源)
     PICOATER_API int PICoater_Initialize(PICoaterHandle handle, int width, int height);
 
-    // 3. 執行 (接受 Host Pinned Pointers)
-    // C# 端傳入 AllocPinned 拿到的指標
     PICOATER_API int PICoater_Run(
         PICoaterHandle handle,
         const unsigned char* h_in,       // [In]  Host Pinned Pointer
@@ -44,11 +39,39 @@ extern "C" {
         float bgSigmaFactor,
         float ridgeSigma,
         const char* ridgeMode,
-        void* stream                     // cudaStream_t (可傳 IntPtr.Zero)
+        void* stream                     // cudaStream_t
     );
 
-    // 4. 銷毀
     PICOATER_API void PICoater_Destroy(PICoaterHandle handle);
+
+    // --- [新增] 極速 IO API (Fast IO) ---
+
+    // 縮圖預覽 (原本的 CPU 縮放功能)
+    PICOATER_API int PICoater_LoadThumbnail(
+        const char* path,
+        int targetWidth,
+        unsigned char* outBuffer,
+        int* outRealW,
+        int* outRealH
+    );
+
+    // 極速讀取 8-bit BMP (直接讀入 Buffer，不縮放)
+    // C# 必須先 AllocPinned 足夠大的空間來接
+    PICOATER_API bool PICoater_FastReadBMP(
+        const char* filepath,
+        int* w,
+        int* h,
+        unsigned char* outBuffer,
+        int bufferSize
+    );
+
+    // 極速寫入 8-bit BMP
+    PICOATER_API bool PICoater_FastWriteBMP(
+        const char* filepath,
+        int w,
+        int h,
+        const unsigned char* inBuffer
+    );
 
 #ifdef __cplusplus
 }

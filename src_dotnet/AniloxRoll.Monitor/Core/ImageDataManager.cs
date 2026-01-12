@@ -1,10 +1,12 @@
-﻿using System;
+﻿// PICoater_AOI\src_dotnet\AniloxRoll.Monitor\ImageDataManager.cs
+
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 
-namespace AniloxRoll.Monitor
+namespace AniloxRoll.Monitor.Core
 {
     public class ImageFileInfo
     {

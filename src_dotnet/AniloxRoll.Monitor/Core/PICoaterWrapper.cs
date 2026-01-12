@@ -4,7 +4,7 @@ using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.IO;
 
-namespace AniloxRoll.Monitor
+namespace AniloxRoll.Monitor.Core
 {
     public class PICoaterWrapper : IDisposable
     {
@@ -48,6 +48,15 @@ namespace AniloxRoll.Monitor
             out int outRealH
         );
 
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool PICoater_FastReadBMP(string filepath, out int w, out int h, IntPtr outBuffer, int bufferSize);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool PICoater_FastWriteBMP(string filepath, int w, int h, IntPtr inBuffer);
+
+
         // === 2. 成員變數 ===
         private IntPtr _handle = IntPtr.Zero;
         private bool _disposed = false;
@@ -55,23 +64,15 @@ namespace AniloxRoll.Monitor
         // === 3. 建構與解構 ===
         public PICoaterWrapper()
         {
-            // 建立 C++ 物件
             _handle = PICoater_Create();
-            if (_handle == IntPtr.Zero)
-            {
-                throw new Exception("Failed to create PICoater instance.");
-            }
+            if (_handle == IntPtr.Zero) throw new Exception("Failed to create PICoater instance.");
         }
 
         public void Dispose()
         {
             if (!_disposed)
             {
-                if (_handle != IntPtr.Zero)
-                {
-                    PICoater_Destroy(_handle);
-                    _handle = IntPtr.Zero;
-                }
+                if (_handle != IntPtr.Zero) { PICoater_Destroy(_handle); _handle = IntPtr.Zero; }
                 _disposed = true;
             }
         }
@@ -121,53 +122,54 @@ namespace AniloxRoll.Monitor
 
         // === 5. 功能 B: 執行檢測 (使用 Pinned Memory) ===
         // 這裡回傳處理後的 Mura 圖，你也可以改回傳結構包含 Ridge/BG
-        public Bitmap RunInspection(Bitmap srcBmp)
+        public Bitmap RunInspectionFast(string filePath)
         {
             if (_handle == IntPtr.Zero) throw new ObjectDisposedException("PICoaterWrapper");
+            if (!File.Exists(filePath)) return null;
 
-            int w = srcBmp.Width;
-            int h = srcBmp.Height;
-            ulong size = (ulong)(w * h);
+            // 1. 預估緩衝區大小 (假設最大 16384x10000)
+            // 為了安全，也可以先讀 Header，但為了極速我們先給個夠大的
+            int maxW = 16384;
+            int maxH = 10000;
+            ulong maxBytes = (ulong)(maxW * maxH);
 
-            // 1. 初始化 (分配 GPU 記憶體，若尺寸沒變 C++ 內部會跳過)
-            PICoater_Initialize(_handle, w, h);
-
-            // 2. 申請 Pinned Memory (加速傳輸)
-            // 這次我們需要四塊：Input, BG, Mura, Ridge
-            IntPtr pIn = PICoater_AllocPinned(size);
-            IntPtr pBg = PICoater_AllocPinned(size);   // 如果不想看結果，可傳 IntPtr.Zero (需修改 C++ 允許 null)
-            IntPtr pMura = PICoater_AllocPinned(size);
-            IntPtr pRidge = PICoater_AllocPinned(size);
-
-            Bitmap resultBmp = null;
+            // 2. 申請 Pinned Memory (Input)
+            IntPtr pIn = PICoater_AllocPinned(maxBytes);
+            IntPtr pBg = IntPtr.Zero;
+            IntPtr pMura = IntPtr.Zero;
+            IntPtr pRidge = IntPtr.Zero;
 
             try
             {
-                // 3. 複製 Input: Bitmap -> Pinned Memory
-                BitmapData srcData = srcBmp.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.ReadOnly, PixelFormat.Format8bppIndexed);
-                unsafe
+                // 3. 極速讀圖 (SSD -> Pinned Memory)
+                int w, h;
+                if (!PICoater_FastReadBMP(filePath, out w, out h, pIn, (int)maxBytes))
                 {
-                    Buffer.MemoryCopy((void*)srcData.Scan0, (void*)pIn, size, size);
+                    return null; // 讀取失敗 (可能不是 BMP)
                 }
-                srcBmp.UnlockBits(srcData);
 
-                // 4. 執行演算法
-                // 參數可拉出去變成函式參數
-                float bgSigma = 2.0f;
-                float ridgeSigma = 9.0f;
-                string ridgeMode = "vertical";
+                ulong imgSize = (ulong)(w * h);
 
+                // 4. 申請輸出 Pinned Memory
+                // pBg = PICoater_AllocPinned(imgSize);
+                pMura = PICoater_AllocPinned(imgSize);
+                // pRidge = PICoater_AllocPinned(imgSize);
+
+                // 5. 初始化演算法 (若尺寸沒變會跳過)
+                PICoater_Initialize(_handle, w, h);
+
+                // 6. 執行演算法
                 int ret = PICoater_Run(
                     _handle,
                     pIn, pBg, pMura, pRidge,
-                    bgSigma, ridgeSigma, ridgeMode,
-                    IntPtr.Zero // Stream
+                    2.0f, 9.0f, "vertical", IntPtr.Zero
                 );
 
-                if (ret != 0) throw new Exception($"PICoater_Run failed with code {ret}");
+                if (ret != 0) throw new Exception($"PICoater_Run failed: {ret}");
 
-                // 5. 複製 Output: Pinned Memory -> Result Bitmap (這裡只取 Mura 做示範)
-                resultBmp = new Bitmap(w, h, PixelFormat.Format8bppIndexed);
+                // 7. 轉成 Bitmap 回傳 (這裡回傳 Mura 圖)
+                // 注意：這裡會發生一次 Memory Copy (Pinned -> Managed Heap)
+                Bitmap resultBmp = new Bitmap(w, h, PixelFormat.Format8bppIndexed);
                 ColorPalette pal = resultBmp.Palette;
                 for (int i = 0; i < 256; i++) pal.Entries[i] = Color.FromArgb(i, i, i);
                 resultBmp.Palette = pal;
@@ -175,21 +177,22 @@ namespace AniloxRoll.Monitor
                 BitmapData dstData = resultBmp.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.WriteOnly, PixelFormat.Format8bppIndexed);
                 unsafe
                 {
-                    // 這裡選擇拷貝 pMura (瑕疵圖)，如果要看背景改 pBg，看脊線改 pRidge
-                    Buffer.MemoryCopy((void*)pMura, (void*)dstData.Scan0, size, size);
+                    Buffer.MemoryCopy((void*)pMura, (void*)dstData.Scan0, imgSize, imgSize);
                 }
                 resultBmp.UnlockBits(dstData);
+
+                return resultBmp;
             }
             finally
             {
-                // 6. 釋放 Pinned Memory (一定要做！)
+                // 8. 釋放所有 Pinned Memory
                 if (pIn != IntPtr.Zero) PICoater_FreePinned(pIn);
                 if (pBg != IntPtr.Zero) PICoater_FreePinned(pBg);
                 if (pMura != IntPtr.Zero) PICoater_FreePinned(pMura);
                 if (pRidge != IntPtr.Zero) PICoater_FreePinned(pRidge);
             }
-
-            return resultBmp;
         }
+
+
     }
 }

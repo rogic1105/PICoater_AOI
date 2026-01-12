@@ -1,43 +1,52 @@
-﻿using System;
+﻿// PICoater_AOI\src_dotnet\AniloxRoll.Monitor\Forms\MainForm.cs
+
+using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Drawing.Imaging; // 用於 PixelFormat
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using AOI.SDK.UI; // 你的 SmartCanvas namespace
 
-namespace AniloxRoll.Monitor
+using AniloxRoll.Monitor.Core;
+using AniloxRoll.Monitor.Utils;
+
+namespace AniloxRoll.Monitor.Forms
 {
-    public partial class Form1 : Form
+    public partial class MainForm : Form
     {
-        // === 1. 成員變數 ===
+        private int _imgW, _imgH;
+        private bool _isProcessedMode = false;
+
+        // 使用 Core 中的 Manager
         private ImageDataManager _dataMgr = new ImageDataManager();
 
-        // 7 個預覽框 (對應界面上的 pbCam1 ~ pbCam7)
         private PictureBox[] _previewBoxes = new PictureBox[7];
-
-        // 當前 7 張圖的檔案路徑
         private string[] _currentFilePaths = new string[7];
-
-        // 縮圖快取 (用來在 Form 關閉時釋放)
         private List<Image> _thumbnailCache = new List<Image>();
 
-        // 演算法 Wrapper (隨 Form 建立，程式結束時 Dispose)
+        // 使用 Core 中的 Wrapper
         private PICoaterWrapper _algo = new PICoaterWrapper();
 
-        // 防呆旗標：防止使用者在讀圖時重複點擊
         private bool _isLoading = false;
 
-        public Form1()
+        public MainForm()
         {
             InitializeComponent();
             InitializeControls();
+
+            // 使用 AOI.SDK.UI.SmartCanvas 的事件
+            canvasMain.PixelHovered += (x, y, color) =>
+            {
+                // 注意：_imgW, _imgH 需在讀圖時更新
+                if (x >= 0 && x < _imgW && y >= 0 && y < _imgH)
+                {
+                    lblPixelInfo.Text = $"座標: ({x}, {y}) | 亮度: {color.R}";
+                }
+            };
         }
 
         private void InitializeControls()
         {
-            // 將 Designer 上的 PictureBox 放入陣列
             _previewBoxes[0] = pbCam1;
             _previewBoxes[1] = pbCam2;
             _previewBoxes[2] = pbCam3;
@@ -46,10 +55,9 @@ namespace AniloxRoll.Monitor
             _previewBoxes[5] = pbCam6;
             _previewBoxes[6] = pbCam7;
 
-            // 綁定點擊事件：點縮圖 -> 顯示大圖
             for (int i = 0; i < 7; i++)
             {
-                int index = i; // 閉包變數
+                int index = i;
                 _previewBoxes[i].Click += (s, e) => OnPreviewClick(index);
                 _previewBoxes[i].Cursor = Cursors.Hand;
             }
@@ -57,28 +65,22 @@ namespace AniloxRoll.Monitor
 
         private void Form1_Load(object sender, EventArgs e)
         {
-            // 讀取上次的路徑設定
             string path = Properties.Settings.Default.LastDataPath;
             if (Directory.Exists(path))
             {
                 _dataMgr.LoadDirectory(path);
                 UpdateCombo(cbYear, _dataMgr.GetYears(), Properties.Settings.Default.LastYear);
-
-                // 自動觸發連動 (如果只有一個選項)
                 if (cbYear.Items.Count > 0 && cbYear.SelectedIndex == -1) cbYear.SelectedIndex = 0;
             }
         }
 
-        // === 2. 選單與路徑邏輯 ===
-
+        // === 下拉選單邏輯 (保持不變) ===
         private void btnSelectFolder_Click(object sender, EventArgs e)
         {
             using (var fbd = new FolderBrowserDialog())
             {
                 if (Directory.Exists(Properties.Settings.Default.LastDataPath))
-                {
                     fbd.SelectedPath = Properties.Settings.Default.LastDataPath;
-                }
 
                 if (fbd.ShowDialog() == DialogResult.OK)
                 {
@@ -95,44 +97,36 @@ namespace AniloxRoll.Monitor
                     Properties.Settings.Default.Save();
 
                     UpdateCombo(cbYear, _dataMgr.GetYears(), Properties.Settings.Default.LastYear);
-
-                    // 自動觸發連動
                     if (cbYear.Items.Count > 0 && cbYear.SelectedIndex == -1) cbYear.SelectedIndex = 0;
                 }
             }
         }
 
-        // --- Cascading Dropdowns ---
         private void cbYear_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (cbYear.SelectedItem == null) return;
             UpdateCombo(cbMonth, _dataMgr.GetMonths(cbYear.Text), Properties.Settings.Default.LastMonth);
         }
-
         private void cbMonth_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (cbMonth.SelectedItem == null) return;
             UpdateCombo(cbDay, _dataMgr.GetDays(cbYear.Text, cbMonth.Text), Properties.Settings.Default.LastDay);
         }
-
         private void cbDay_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (cbDay.SelectedItem == null) return;
             UpdateCombo(cbHour, _dataMgr.GetHours(cbYear.Text, cbMonth.Text, cbDay.Text), Properties.Settings.Default.LastHour);
         }
-
         private void cbHour_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (cbHour.SelectedItem == null) return;
             UpdateCombo(cbMin, _dataMgr.GetMinutes(cbYear.Text, cbMonth.Text, cbDay.Text, cbHour.Text), Properties.Settings.Default.LastMin);
         }
-
         private void cbMin_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (cbMin.SelectedItem == null) return;
             UpdateCombo(cbSec, _dataMgr.GetSeconds(cbYear.Text, cbMonth.Text, cbDay.Text, cbHour.Text, cbMin.Text), Properties.Settings.Default.LastSec);
         }
-
         private void cbSec_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (cbSec.SelectedItem != null) SaveCurrentSelection();
@@ -143,9 +137,8 @@ namespace AniloxRoll.Monitor
             cb.Items.Clear();
             cb.Items.AddRange(items.ToArray());
             if (items.Count == 0) return;
-
             if (items.Contains(lastVal)) cb.SelectedItem = lastVal;
-            else cb.SelectedIndex = 0; // 自動選第一個
+            else cb.SelectedIndex = 0;
         }
 
         private void SaveCurrentSelection()
@@ -159,7 +152,7 @@ namespace AniloxRoll.Monitor
             Properties.Settings.Default.Save();
         }
 
-        // === 3. 核心功能：載入圖片 ===
+        // === 載入圖片邏輯 ===
 
         private async void btnShowOriginal_Click(object sender, EventArgs e)
         {
@@ -173,25 +166,29 @@ namespace AniloxRoll.Monitor
 
         private async Task LoadImagesAsync(bool enableProcess)
         {
-            if (_isLoading) return; // 防呆：避免重複執行
+            if (_isLoading) return;
 
             try
             {
+                // 1. 狀態設定
                 _isLoading = true;
+                _isProcessedMode = enableProcess; // 記錄當前模式
                 this.Cursor = Cursors.WaitCursor;
                 btnShowOriginal.Enabled = false;
                 btnShowProcessed.Enabled = false;
 
-                // 1. 取得路徑
-                var filesMap = _dataMgr.GetImages(cbYear.Text, cbMonth.Text, cbDay.Text, cbHour.Text, cbMin.Text, cbSec.Text);
+                // 取得檔案路徑
+                var filesMap = _dataMgr.GetImages(
+                    cbYear.Text, cbMonth.Text, cbDay.Text,
+                    cbHour.Text, cbMin.Text, cbSec.Text);
 
                 // 2. 清理資源
-                mainCanvas.Image = null;
+                canvasMain.Image = null;
                 foreach (var img in _thumbnailCache) img.Dispose();
                 _thumbnailCache.Clear();
-                GC.Collect(); // 強制回收大圖
+                GC.Collect(); // 強制回收記憶體
 
-                // 3. 執行載入
+                // 3. 非同步並行處理 (7 張圖同時跑)
                 await Task.Run(() =>
                 {
                     Parallel.For(0, 7, i =>
@@ -205,42 +202,62 @@ namespace AniloxRoll.Monitor
                             if (File.Exists(path))
                             {
                                 _currentFilePaths[i] = path;
+                                Bitmap thumb = null;
 
                                 if (enableProcess)
                                 {
-                                    // A. 檢測模式 (需讀大圖 -> 跑 DLL -> 縮圖)
-                                    // 注意：GDI+ 讀大圖較慢
-                                    using (Bitmap original = new Bitmap(path))
-                                    {
-                                        // 關鍵：Wrapper 內部使用同一個 GPU Context，必須鎖定避免多執行緒衝突
-                                        Bitmap result;
-                                        lock (_algo)
-                                        {
-                                            result = _algo.RunInspection(original);
-                                        }
+                                    // === [重點] 檢測模式 ===
+                                    // 流程：FastRead -> C++ Run -> 取得 Result Big -> 縮圖 -> Dispose Big
 
-                                        using (result) // 用完要 Dispose
+                                    // 為了線程安全 (C++ Context 共用)，這裡加鎖
+                                    // 如果你的 C++ DLL 內部已經支援多執行緒 Context (每個 PICoaterWrapper 獨立)，可以不用鎖
+                                    // 假設目前 _algo 是共用的，建議鎖住避免 CUDA Stream 衝突
+                                    Bitmap resultBig = null;
+                                    lock (_algo)
+                                    {
+                                        // 這行會呼叫 C++ 的 PICoater_Run (即 PICoaterDetector::Run)
+                                        resultBig = _algo.RunInspectionFast(path);
+                                    }
+
+                                    if (resultBig != null)
+                                    {
+                                        using (resultBig) // 用完馬上釋放 100MB 大圖，只留縮圖
                                         {
-                                            Bitmap thumb = MakeThumbnail(result, 1000);
-                                            lock (_thumbnailCache) { _thumbnailCache.Add(thumb); }
-                                            this.Invoke((Action)(() => _previewBoxes[i].Image = thumb));
+                                            thumb = BitmapHelper.MakeThumbnail(resultBig, 1000);
                                         }
                                     }
                                 }
                                 else
                                 {
-                                    // B. 原圖模式 (C++ 極速縮圖)
-                                    Bitmap thumb = PICoaterWrapper.LoadThumbnail(path, 1000);
-                                    if (thumb != null)
+                                    // === 原圖模式 ===
+                                    // 使用 C++ 極速縮圖讀取 (LoadThumbnail)
+                                    thumb = PICoaterWrapper.LoadThumbnail(path, 1000);
+                                }
+
+                                // 更新 UI (縮圖)
+                                if (thumb != null)
+                                {
+                                    lock (_thumbnailCache) { _thumbnailCache.Add(thumb); }
+                                    this.Invoke((Action)(() =>
                                     {
-                                        lock (_thumbnailCache) { _thumbnailCache.Add(thumb); }
-                                        this.Invoke((Action)(() => _previewBoxes[i].Image = thumb));
-                                    }
+                                        _previewBoxes[i].Image = thumb;
+                                        // 可以在這裡加個邊框顏色區分，例如紅色代表檢測過
+                                        if (enableProcess) _previewBoxes[i].BorderStyle = BorderStyle.FixedSingle;
+                                        else _previewBoxes[i].BorderStyle = BorderStyle.None;
+                                    }));
                                 }
                             }
                         }
+                        else
+                        {
+                            this.Invoke((Action)(() => _previewBoxes[i].Image = null));
+                        }
                     });
                 });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"處理失敗: {ex.Message}");
             }
             finally
             {
@@ -251,18 +268,6 @@ namespace AniloxRoll.Monitor
             }
         }
 
-        private Bitmap MakeThumbnail(Bitmap src, int width)
-        {
-            int height = (int)((float)src.Height / src.Width * width);
-            Bitmap thumb = new Bitmap(width, height);
-            using (Graphics g = Graphics.FromImage(thumb))
-            {
-                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                g.DrawImage(src, 0, 0, width, height);
-            }
-            return thumb;
-        }
-
         private void OnPreviewClick(int index)
         {
             string path = _currentFilePaths[index];
@@ -270,25 +275,49 @@ namespace AniloxRoll.Monitor
 
             try
             {
-                if (mainCanvas.Image != null)
+                // 清理舊的大圖
+                if (canvasMain.Image != null)
                 {
-                    var old = mainCanvas.Image;
-                    mainCanvas.Image = null;
+                    var old = canvasMain.Image;
+                    canvasMain.Image = null;
                     old.Dispose();
                     GC.Collect();
                 }
 
-                Bitmap bigImg = new Bitmap(path);
+                Bitmap bigImg = null;
 
-                // 如果是在 "檢測模式" 下，這裡其實應該顯示檢測後的大圖
-                // 但為了簡單，目前點擊預覽還是先顯示原圖
-                // 若要顯示檢測圖，需再次呼叫 _algo.RunInspection(bigImg) 並顯示結果
+                // [關鍵] 根據當前模式，決定大圖要不要運算
+                if (_isProcessedMode)
+                {
+                    // 如果現在是檢測模式，點擊縮圖時，應該要重新算一次大圖給 Canvas 看
+                    // (因為之前算完的 resultBig 已經 Dispose 了，這樣才省記憶體)
+                    lock (_algo)
+                    {
+                        bigImg = _algo.RunInspectionFast(path);
+                    }
+                }
+                else
+                {
+                    // 原圖模式，直接讀檔
+                    // 也可以用 FastRead 加速：
+                    // bigImg = LoadUsingFastRead(path); // 若有實作
+                    // 目前先用 GDI+
+                    bigImg = new Bitmap(path);
+                }
 
-                mainCanvas.Image = bigImg;
-                mainCanvas.FitToScreen();
+                if (bigImg != null)
+                {
+                    _imgW = bigImg.Width;
+                    _imgH = bigImg.Height;
+                    canvasMain.Image = bigImg;
+                    canvasMain.FitToScreen();
+                }
 
-                foreach (var pb in _previewBoxes) pb.BorderStyle = BorderStyle.None;
-                _previewBoxes[index].BorderStyle = BorderStyle.Fixed3D;
+                // 更新選取狀態框
+                foreach (var pb in _previewBoxes)
+                    pb.BackColor = Color.Transparent; // 或控制 Padding/Border
+
+                _previewBoxes[index].BackColor = Color.Orange; // 簡單示意選取
             }
             catch (Exception ex)
             {
@@ -296,13 +325,11 @@ namespace AniloxRoll.Monitor
             }
         }
 
-        // 關閉視窗時清理所有資源
+
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
             foreach (var img in _thumbnailCache) img?.Dispose();
-            if (mainCanvas.Image != null) mainCanvas.Image.Dispose();
-
-            // 釋放 DLL 資源
+            if (canvasMain.Image != null) canvasMain.Image.Dispose();
             _algo.Dispose();
         }
     }

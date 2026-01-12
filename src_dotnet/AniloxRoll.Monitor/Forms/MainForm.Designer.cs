@@ -1,6 +1,8 @@
-﻿namespace AniloxRoll.Monitor
+﻿// PICoater_AOI\src_dotnet\AniloxRoll.Monitor\Form1.Designer.cs
+
+namespace AniloxRoll.Monitor.Forms
 {
-    partial class Form1
+    partial class MainForm
     {
         /// <summary>
         /// 設計工具所需的變數。
@@ -47,7 +49,8 @@
             this.pbCam3 = new System.Windows.Forms.PictureBox();
             this.pbCam2 = new System.Windows.Forms.PictureBox();
             this.pbCam1 = new System.Windows.Forms.PictureBox();
-            this.mainCanvas = new AOI.SDK.UI.SmartCanvas();
+            this.canvasMain = new AOI.SDK.UI.SmartCanvas();
+            this.lblPixelInfo = new System.Windows.Forms.Label();
             this.tabControl1.SuspendLayout();
             this.tabPage2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam7)).BeginInit();
@@ -57,7 +60,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.pbCam3)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam2)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam1)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.mainCanvas)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).BeginInit();
             this.SuspendLayout();
             // 
             // tabControl1
@@ -82,6 +85,7 @@
             // 
             // tabPage2
             // 
+            this.tabPage2.Controls.Add(this.lblPixelInfo);
             this.tabPage2.Controls.Add(this.btnSelectFolder);
             this.tabPage2.Controls.Add(this.btnShowProcessed);
             this.tabPage2.Controls.Add(this.btnShowOriginal);
@@ -98,7 +102,7 @@
             this.tabPage2.Controls.Add(this.pbCam3);
             this.tabPage2.Controls.Add(this.pbCam2);
             this.tabPage2.Controls.Add(this.pbCam1);
-            this.tabPage2.Controls.Add(this.mainCanvas);
+            this.tabPage2.Controls.Add(this.canvasMain);
             this.tabPage2.Location = new System.Drawing.Point(4, 25);
             this.tabPage2.Name = "tabPage2";
             this.tabPage2.Padding = new System.Windows.Forms.Padding(3);
@@ -109,7 +113,7 @@
             // 
             // btnSelectFolder
             // 
-            this.btnSelectFolder.Location = new System.Drawing.Point(15, 406);
+            this.btnSelectFolder.Location = new System.Drawing.Point(15, 431);
             this.btnSelectFolder.Name = "btnSelectFolder";
             this.btnSelectFolder.Size = new System.Drawing.Size(112, 40);
             this.btnSelectFolder.TabIndex = 23;
@@ -119,7 +123,7 @@
             // 
             // btnShowProcessed
             // 
-            this.btnShowProcessed.Location = new System.Drawing.Point(283, 406);
+            this.btnShowProcessed.Location = new System.Drawing.Point(283, 431);
             this.btnShowProcessed.Name = "btnShowProcessed";
             this.btnShowProcessed.Size = new System.Drawing.Size(112, 40);
             this.btnShowProcessed.TabIndex = 22;
@@ -129,7 +133,7 @@
             // 
             // btnShowOriginal
             // 
-            this.btnShowOriginal.Location = new System.Drawing.Point(143, 406);
+            this.btnShowOriginal.Location = new System.Drawing.Point(143, 431);
             this.btnShowOriginal.Name = "btnShowOriginal";
             this.btnShowOriginal.Size = new System.Drawing.Size(112, 40);
             this.btnShowOriginal.TabIndex = 21;
@@ -140,7 +144,7 @@
             // cbSec
             // 
             this.cbSec.FormattingEnabled = true;
-            this.cbSec.Location = new System.Drawing.Point(401, 452);
+            this.cbSec.Location = new System.Drawing.Point(401, 477);
             this.cbSec.Name = "cbSec";
             this.cbSec.Size = new System.Drawing.Size(71, 23);
             this.cbSec.TabIndex = 20;
@@ -149,7 +153,7 @@
             // cbMin
             // 
             this.cbMin.FormattingEnabled = true;
-            this.cbMin.Location = new System.Drawing.Point(324, 452);
+            this.cbMin.Location = new System.Drawing.Point(324, 477);
             this.cbMin.Name = "cbMin";
             this.cbMin.Size = new System.Drawing.Size(71, 23);
             this.cbMin.TabIndex = 19;
@@ -158,7 +162,7 @@
             // cbHour
             // 
             this.cbHour.FormattingEnabled = true;
-            this.cbHour.Location = new System.Drawing.Point(246, 452);
+            this.cbHour.Location = new System.Drawing.Point(246, 477);
             this.cbHour.Name = "cbHour";
             this.cbHour.Size = new System.Drawing.Size(71, 23);
             this.cbHour.TabIndex = 18;
@@ -167,7 +171,7 @@
             // cbDay
             // 
             this.cbDay.FormattingEnabled = true;
-            this.cbDay.Location = new System.Drawing.Point(169, 452);
+            this.cbDay.Location = new System.Drawing.Point(169, 477);
             this.cbDay.Name = "cbDay";
             this.cbDay.Size = new System.Drawing.Size(71, 23);
             this.cbDay.TabIndex = 17;
@@ -176,7 +180,7 @@
             // cbMonth
             // 
             this.cbMonth.FormattingEnabled = true;
-            this.cbMonth.Location = new System.Drawing.Point(92, 452);
+            this.cbMonth.Location = new System.Drawing.Point(92, 477);
             this.cbMonth.Name = "cbMonth";
             this.cbMonth.Size = new System.Drawing.Size(71, 23);
             this.cbMonth.TabIndex = 16;
@@ -185,7 +189,7 @@
             // cbYear
             // 
             this.cbYear.FormattingEnabled = true;
-            this.cbYear.Location = new System.Drawing.Point(15, 452);
+            this.cbYear.Location = new System.Drawing.Point(15, 477);
             this.cbYear.Name = "cbYear";
             this.cbYear.Size = new System.Drawing.Size(71, 23);
             this.cbYear.TabIndex = 15;
@@ -254,15 +258,24 @@
             this.pbCam1.TabIndex = 8;
             this.pbCam1.TabStop = false;
             // 
-            // mainCanvas
+            // canvasMain
             // 
-            this.mainCanvas.BackColor = System.Drawing.Color.Black;
-            this.mainCanvas.Cursor = System.Windows.Forms.Cursors.Cross;
-            this.mainCanvas.Location = new System.Drawing.Point(15, 115);
-            this.mainCanvas.Name = "mainCanvas";
-            this.mainCanvas.Size = new System.Drawing.Size(736, 285);
-            this.mainCanvas.TabIndex = 7;
-            this.mainCanvas.TabStop = false;
+            this.canvasMain.BackColor = System.Drawing.Color.Black;
+            this.canvasMain.Cursor = System.Windows.Forms.Cursors.Cross;
+            this.canvasMain.Location = new System.Drawing.Point(15, 115);
+            this.canvasMain.Name = "canvasMain";
+            this.canvasMain.Size = new System.Drawing.Size(736, 285);
+            this.canvasMain.TabIndex = 7;
+            this.canvasMain.TabStop = false;
+            // 
+            // lblPixelInfo
+            // 
+            this.lblPixelInfo.AutoSize = true;
+            this.lblPixelInfo.Location = new System.Drawing.Point(12, 403);
+            this.lblPixelInfo.Name = "lblPixelInfo";
+            this.lblPixelInfo.Size = new System.Drawing.Size(42, 15);
+            this.lblPixelInfo.TabIndex = 24;
+            this.lblPixelInfo.Text = "Ready";
             // 
             // Form1
             // 
@@ -274,6 +287,7 @@
             this.Text = "Form1";
             this.tabControl1.ResumeLayout(false);
             this.tabPage2.ResumeLayout(false);
+            this.tabPage2.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam7)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam6)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam5)).EndInit();
@@ -281,7 +295,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.pbCam3)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam2)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam1)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.mainCanvas)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).EndInit();
             this.ResumeLayout(false);
 
         }
@@ -290,7 +304,7 @@
         private System.Windows.Forms.TabControl tabControl1;
         private System.Windows.Forms.TabPage tabPage1;
         private System.Windows.Forms.TabPage tabPage2;
-        private AOI.SDK.UI.SmartCanvas mainCanvas;
+        private AOI.SDK.UI.SmartCanvas canvasMain;
         private System.Windows.Forms.PictureBox pbCam7;
         private System.Windows.Forms.PictureBox pbCam6;
         private System.Windows.Forms.PictureBox pbCam5;
@@ -307,6 +321,7 @@
         private System.Windows.Forms.Button btnShowProcessed;
         private System.Windows.Forms.Button btnShowOriginal;
         private System.Windows.Forms.Button btnSelectFolder;
+        private System.Windows.Forms.Label lblPixelInfo;
     }
 }
 
