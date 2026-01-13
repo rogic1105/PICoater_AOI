@@ -9,6 +9,8 @@
 #include "core_cv/imgcodecs/core_imgcodecs.hpp"
 #include "core_cv/imgcodecs/core_imgcodecs_fast.hpp"
 
+#include "core_cv/imgproc/core_transform.hpp"
+
 #include <cuda_runtime.h>
 #include <iostream>
 
@@ -17,18 +19,27 @@
 struct PICoaterContext {
     picoater::PICoaterDetector detector;
 
-    // 這些是 GPU 上的緩衝區，用來接 C# 傳進來的資料
-    // Detector Class 只管理中間暫存 (temp)，不管理 I/O，所以這裡要管理
+    // GPU Buffers
     uint8_t* d_in = nullptr;
     uint8_t* d_bg = nullptr;
     uint8_t* d_mura = nullptr;
     uint8_t* d_ridge = nullptr;
 
+    // [新增] 每個 Context 擁有獨立的 CUDA Stream
+    cudaStream_t stream = nullptr;
+
     int current_w = 0;
     int current_h = 0;
 
+    PICoaterContext() {
+        // [新增] 建立 Stream (Non-blocking，提升併發性)
+        cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
+    }
+
     ~PICoaterContext() {
         ReleaseBuffers();
+        // [新增] 銷毀 Stream
+        if (stream) cudaStreamDestroy(stream);
     }
 
     void ReleaseBuffers() {
@@ -36,30 +47,23 @@ struct PICoaterContext {
         if (d_bg) cudaFree(d_bg);
         if (d_mura) cudaFree(d_mura);
         if (d_ridge) cudaFree(d_ridge);
-        d_in = nullptr;
-        d_bg = nullptr;
-        d_mura = nullptr;
-        d_ridge = nullptr;
-        current_w = 0;
-        current_h = 0;
+        d_in = nullptr; d_bg = nullptr; d_mura = nullptr; d_ridge = nullptr;
+        current_w = 0; current_h = 0;
     }
 
-    // 分配 I/O GPU 記憶體
     bool AllocateBuffers(int w, int h) {
         if (current_w == w && current_h == h) return true;
-
         ReleaseBuffers();
         current_w = w;
         current_h = h;
         size_t size = w * h * sizeof(uint8_t);
 
-        cudaError_t err;
-        err = cudaMalloc(&d_in, size);    if (err) return false;
-        err = cudaMalloc(&d_bg, size);    if (err) return false;
-        err = cudaMalloc(&d_mura, size);  if (err) return false;
-        err = cudaMalloc(&d_ridge, size); if (err) return false;
+        // 注意：這裡 malloc 還是同步的，但只發生一次
+        if (cudaMalloc(&d_in, size) != cudaSuccess) return false;
+        if (cudaMalloc(&d_bg, size) != cudaSuccess) return false;
+        if (cudaMalloc(&d_mura, size) != cudaSuccess) return false;
+        if (cudaMalloc(&d_ridge, size) != cudaSuccess) return false;
 
-        // 同時也要初始化內部的 Detector
         detector.Initialize(w, h);
         return true;
     }
@@ -204,5 +208,42 @@ extern "C" {
             return false;
         }
     }
+
+
+    PICOATER_API int PICoater_Run_And_GetThumbnail(
+        PICoaterHandle handle,
+        const unsigned char* h_in,
+        unsigned char* h_thumb_out,
+        int thumb_w,
+        int thumb_h,
+        float bgSigma, float ridgeSigma, const char* rMode
+    ) {
+        if (!handle || !h_in || !h_thumb_out) return -1;
+        auto* ctx = static_cast<PICoaterContext*>(handle);
+
+        size_t size = ctx->current_w * ctx->current_h;
+
+        // 1. 上傳 (指定 Stream!)
+        // 如果 h_in 是 Pinned Memory，這會是 Async 的
+        cudaMemcpyAsync(ctx->d_in, h_in, size, cudaMemcpyHostToDevice, ctx->stream);
+
+        // 2. 運算 (傳入 Stream!)
+        ctx->detector.Run(ctx->d_in, ctx->d_bg, ctx->d_mura, ctx->d_ridge,
+            bgSigma, ridgeSigma, rMode, ctx->stream);
+
+        // 3. 縮圖 (傳入 Stream!)
+        uint8_t* d_thumb_temp = ctx->d_bg;
+        core::resize_u8_gpu(ctx->d_mura, ctx->current_w, ctx->current_h,
+            d_thumb_temp, thumb_w, thumb_h, ctx->stream);
+
+        // 4. 下載 (指定 Stream!)
+        size_t thumb_size = thumb_w * thumb_h;
+        cudaMemcpyAsync(h_thumb_out, d_thumb_temp, thumb_size, cudaMemcpyDeviceToHost, ctx->stream);
+
+        // 5. 同步 (只等待這個 Stream 完成，不擋其他相機)
+        cudaStreamSynchronize(ctx->stream);
+        return 0;
+    }
+
 
 }

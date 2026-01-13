@@ -73,6 +73,15 @@ extern "C" {
         const unsigned char* inBuffer
     );
 
+    PICOATER_API int PICoater_Run_And_GetThumbnail(
+        PICoaterHandle handle,
+        const unsigned char* h_in,      // 輸入大圖 (Pinned)
+        unsigned char* h_thumb_out,     // 輸出縮圖 (Pinned)
+        int thumb_w,
+        int thumb_h,
+        float bgSigma, float ridgeSigma, const char* rMode
+    );
+
 #ifdef __cplusplus
 }
 #endif

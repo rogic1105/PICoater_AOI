@@ -6,6 +6,9 @@ using System.Drawing;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Collections.Concurrent; // [新增] 用於收集多執行緒Log
+using System.Diagnostics;          // [新增] 用於計時
+using System.Text;                 // [新增] 用於組字串
 
 using AniloxRoll.Monitor.Core;
 using AniloxRoll.Monitor.Utils;
@@ -25,7 +28,7 @@ namespace AniloxRoll.Monitor.Forms
         private List<Image> _thumbnailCache = new List<Image>();
 
         // 使用 Core 中的 Wrapper
-        private PICoaterWrapper _algo = new PICoaterWrapper();
+        private PICoaterWrapper[] _algoPool = new PICoaterWrapper[7];
 
         private bool _isLoading = false;
 
@@ -33,6 +36,7 @@ namespace AniloxRoll.Monitor.Forms
         {
             InitializeComponent();
             InitializeControls();
+            InitializeAlgoPool();
 
             // 使用 AOI.SDK.UI.SmartCanvas 的事件
             canvasMain.PixelHovered += (x, y, color) =>
@@ -60,6 +64,14 @@ namespace AniloxRoll.Monitor.Forms
                 int index = i;
                 _previewBoxes[i].Click += (s, e) => OnPreviewClick(index);
                 _previewBoxes[i].Cursor = Cursors.Hand;
+            }
+        }
+
+        private void InitializeAlgoPool()
+        {
+            for (int i = 0; i < 7; i++)
+            {
+                _algoPool[i] = new PICoaterWrapper();
             }
         }
 
@@ -168,27 +180,27 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (_isLoading) return;
 
+            Stopwatch swTotal = Stopwatch.StartNew();
+            ConcurrentQueue<string> debugLogs = new ConcurrentQueue<string>();
+
             try
             {
-                // 1. 狀態設定
                 _isLoading = true;
-                _isProcessedMode = enableProcess; // 記錄當前模式
+                _isProcessedMode = enableProcess;
                 this.Cursor = Cursors.WaitCursor;
                 btnShowOriginal.Enabled = false;
                 btnShowProcessed.Enabled = false;
 
-                // 取得檔案路徑
                 var filesMap = _dataMgr.GetImages(
                     cbYear.Text, cbMonth.Text, cbDay.Text,
                     cbHour.Text, cbMin.Text, cbSec.Text);
 
-                // 2. 清理資源
                 canvasMain.Image = null;
                 foreach (var img in _thumbnailCache) img.Dispose();
                 _thumbnailCache.Clear();
-                GC.Collect(); // 強制回收記憶體
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
 
-                // 3. 非同步並行處理 (7 張圖同時跑)
                 await Task.Run(() =>
                 {
                     Parallel.For(0, 7, i =>
@@ -202,49 +214,45 @@ namespace AniloxRoll.Monitor.Forms
                             if (File.Exists(path))
                             {
                                 _currentFilePaths[i] = path;
+
+                                // 變數宣告
                                 Bitmap thumb = null;
+                                long t_io = 0;
+                                long t_gpu = 0;
 
                                 if (enableProcess)
                                 {
-                                    // === [重點] 檢測模式 ===
-                                    // 流程：FastRead -> C++ Run -> 取得 Result Big -> 縮圖 -> Dispose Big
+                                    // === 檢測模式 (詳細計時版) ===
+                                    // 使用 Wrapper 直接回傳時間資訊
+                                    var result = _algoPool[i].RunInspectionFast_Detailed(path, 1000);
 
-                                    // 為了線程安全 (C++ Context 共用)，這裡加鎖
-                                    // 如果你的 C++ DLL 內部已經支援多執行緒 Context (每個 PICoaterWrapper 獨立)，可以不用鎖
-                                    // 假設目前 _algo 是共用的，建議鎖住避免 CUDA Stream 衝突
-                                    Bitmap resultBig = null;
-                                    lock (_algo)
-                                    {
-                                        // 這行會呼叫 C++ 的 PICoater_Run (即 PICoaterDetector::Run)
-                                        resultBig = _algo.RunInspectionFast(path);
-                                    }
+                                    thumb = result.Thumbnail;
+                                    t_io = result.IoTimeMs;
+                                    t_gpu = result.GpuTimeMs;
 
-                                    if (resultBig != null)
-                                    {
-                                        using (resultBig) // 用完馬上釋放 100MB 大圖，只留縮圖
-                                        {
-                                            thumb = BitmapHelper.MakeThumbnail(resultBig, 1000);
-                                        }
-                                    }
+                                    // result 本身不需要 Dispose (除了 Thumbnail)，因為它是純數據結構
                                 }
                                 else
                                 {
                                     // === 原圖模式 ===
-                                    // 使用 C++ 極速縮圖讀取 (LoadThumbnail)
+                                    Stopwatch sw = Stopwatch.StartNew();
                                     thumb = PICoaterWrapper.LoadThumbnail(path, 1000);
+                                    sw.Stop();
+                                    t_io = sw.ElapsedMilliseconds; // 原圖模式幾乎都是 IO 時間
                                 }
 
-                                // 更新 UI (縮圖)
                                 if (thumb != null)
                                 {
                                     lock (_thumbnailCache) { _thumbnailCache.Add(thumb); }
                                     this.Invoke((Action)(() =>
                                     {
                                         _previewBoxes[i].Image = thumb;
-                                        // 可以在這裡加個邊框顏色區分，例如紅色代表檢測過
                                         if (enableProcess) _previewBoxes[i].BorderStyle = BorderStyle.FixedSingle;
                                         else _previewBoxes[i].BorderStyle = BorderStyle.None;
                                     }));
+
+                                    // [記錄] 區分 IO 和 GPU 時間
+                                    debugLogs.Enqueue($"Cam {camId}: IO(讀碟)={t_io}ms, GPU(運算)={t_gpu}ms");
                                 }
                             }
                         }
@@ -265,7 +273,37 @@ namespace AniloxRoll.Monitor.Forms
                 this.Cursor = Cursors.Default;
                 btnShowOriginal.Enabled = true;
                 btnShowProcessed.Enabled = true;
+
+                swTotal.Stop();
+                ShowPerformanceReport(swTotal.ElapsedMilliseconds, debugLogs);
             }
+        }
+
+
+
+        // [新增] 顯示統計結果的輔助函式
+        private void ShowPerformanceReport(long totalMs, ConcurrentQueue<string> logs)
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine($"總耗時: {totalMs} ms");
+            sb.AppendLine("--------------------------------");
+
+            // 排序讓 Cam 1~7 依序顯示
+            var sortedLogs = new List<string>(logs);
+            sortedLogs.Sort();
+
+            foreach (var log in sortedLogs)
+            {
+                sb.AppendLine(log);
+            }
+
+            // 顯示在 MessageBox，或是你可以 output 到 Console / Label
+            // MessageBox.Show(sb.ToString(), "效能分析報告"); 
+
+            // 建議改寫到 Label 或 Console，不然每次彈窗很煩
+            Console.WriteLine(sb.ToString());
+            // 或者如果你介面上有個 statusLabel:
+            // lblPixelInfo.Text = $"Done in {totalMs} ms";
         }
 
         private void OnPreviewClick(int index)
@@ -275,7 +313,6 @@ namespace AniloxRoll.Monitor.Forms
 
             try
             {
-                // 清理舊的大圖
                 if (canvasMain.Image != null)
                 {
                     var old = canvasMain.Image;
@@ -286,22 +323,14 @@ namespace AniloxRoll.Monitor.Forms
 
                 Bitmap bigImg = null;
 
-                // [關鍵] 根據當前模式，決定大圖要不要運算
                 if (_isProcessedMode)
                 {
-                    // 如果現在是檢測模式，點擊縮圖時，應該要重新算一次大圖給 Canvas 看
-                    // (因為之前算完的 resultBig 已經 Dispose 了，這樣才省記憶體)
-                    lock (_algo)
-                    {
-                        bigImg = _algo.RunInspectionFast(path);
-                    }
+                    // [修改] 點擊縮圖時，也使用專屬的 Wrapper 重算
+                    // 這會非常快，因為 GPU 記憶體已經分配好了，只是重新 Upload + Run
+                    bigImg = _algoPool[index].RunInspectionFast(path);
                 }
                 else
                 {
-                    // 原圖模式，直接讀檔
-                    // 也可以用 FastRead 加速：
-                    // bigImg = LoadUsingFastRead(path); // 若有實作
-                    // 目前先用 GDI+
                     bigImg = new Bitmap(path);
                 }
 
@@ -313,11 +342,8 @@ namespace AniloxRoll.Monitor.Forms
                     canvasMain.FitToScreen();
                 }
 
-                // 更新選取狀態框
-                foreach (var pb in _previewBoxes)
-                    pb.BackColor = Color.Transparent; // 或控制 Padding/Border
-
-                _previewBoxes[index].BackColor = Color.Orange; // 簡單示意選取
+                foreach (var pb in _previewBoxes) pb.BackColor = Color.Transparent;
+                _previewBoxes[index].BackColor = Color.Orange;
             }
             catch (Exception ex)
             {
@@ -325,12 +351,18 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-
+        // [修改] 程式關閉時，一次釋放所有 Wrapper
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
             foreach (var img in _thumbnailCache) img?.Dispose();
             if (canvasMain.Image != null) canvasMain.Image.Dispose();
-            _algo.Dispose();
+
+            // 釋放 7 個 Wrapper (釋放 3.5GB VRAM)
+            for (int i = 0; i < 7; i++)
+            {
+                _algoPool[i]?.Dispose();
+            }
         }
+
     }
 }

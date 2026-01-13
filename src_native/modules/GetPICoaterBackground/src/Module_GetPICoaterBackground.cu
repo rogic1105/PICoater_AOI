@@ -96,7 +96,6 @@ namespace picoater {
         // 因為 Initialize 已經確保 d_workspace_ 足夠容納 Gaussian 所需的 3 個 float buffers
 
         core::gaussianBlur_u8_gpu(d_in, d_blur_tmp_, m_width, m_height, 5.0f, 11, stream, d_workspace_);
-
         core::calcColumnBackground_u8_gpu(d_blur_tmp_, d_col_bg_, m_width, m_height, bgSigmaFactor, stream);
         core::expandBackground_u8_gpu(d_col_bg_, d_bg_out, m_width, m_height, stream);
         core::subtractBackgroundAbs_u8_gpu(d_blur_tmp_, d_col_bg_, d_mura_out, m_width, m_height, stream);
@@ -112,7 +111,8 @@ namespace picoater {
             stream,
             d_hessian_u8_,
             d_hessian_f32_,
-            d_hessian_resp_
+            d_hessian_resp_,
+            d_workspace_ // [新增] 這裡傳入 workspace！
         );
     }
 }

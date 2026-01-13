@@ -1,11 +1,26 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
-using System.Runtime.InteropServices;
 using System.IO;
+using System.Runtime.InteropServices;
 
 namespace AniloxRoll.Monitor.Core
 {
+
+    public class InspectionResult : IDisposable
+    {
+        public Bitmap Thumbnail { get; set; }
+        public long IoTimeMs { get; set; }
+        public long GpuTimeMs { get; set; }
+
+        public void Dispose()
+        {
+            Thumbnail?.Dispose();
+        }
+    }
+
+
     public class PICoaterWrapper : IDisposable
     {
         // === 1. DllImport 定義 (對應 export_api.h) ===
@@ -56,23 +71,57 @@ namespace AniloxRoll.Monitor.Core
         [return: MarshalAs(UnmanagedType.I1)]
         private static extern bool PICoater_FastWriteBMP(string filepath, int w, int h, IntPtr inBuffer);
 
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int PICoater_Run_And_GetThumbnail(
+            IntPtr handle, IntPtr h_in, IntPtr h_thumb_out,
+            int thumb_w, int thumb_h,
+            float bgSigma, float ridgeSigma, string rMode
+        );
+
 
         // === 2. 成員變數 ===
         private IntPtr _handle = IntPtr.Zero;
+        private IntPtr _pIn = IntPtr.Zero;
+        private IntPtr _pThumb = IntPtr.Zero;
+
+        // 記錄分配的大小，避免重複分配
+        private ulong _currentAllocSize = 0;
+        private int _currentThumbSize = 0;
+
+        // 固定的最大尺寸 (1.5億畫素夠用了)
+        private const int MAX_W = 16384;
+        private const int MAX_H = 10000;
+
         private bool _disposed = false;
 
         // === 3. 建構與解構 ===
         public PICoaterWrapper()
         {
             _handle = PICoater_Create();
-            if (_handle == IntPtr.Zero) throw new Exception("Failed to create PICoater instance.");
+            if (_handle == IntPtr.Zero) throw new Exception("Failed.");
+
+            // [新增] 建構時就預先分配最大 Pinned Memory (只做一次)
+            ulong maxBytes = (ulong)(MAX_W * MAX_H);
+            _pIn = PICoater_AllocPinned(maxBytes);
+            _currentAllocSize = maxBytes;
+
+            // 預先分配縮圖 Buffer (假設最大縮圖寬度 2000)
+            // 2000 * 2000 = 4MB, 很小
+            int maxThumbPixels = 2000 * 2000;
+            _pThumb = PICoater_AllocPinned((ulong)maxThumbPixels);
+            _currentThumbSize = maxThumbPixels;
         }
 
         public void Dispose()
         {
             if (!_disposed)
             {
-                if (_handle != IntPtr.Zero) { PICoater_Destroy(_handle); _handle = IntPtr.Zero; }
+                // [新增] 釋放 Pinned Memory
+                if (_pIn != IntPtr.Zero) PICoater_FreePinned(_pIn);
+                if (_pThumb != IntPtr.Zero) PICoater_FreePinned(_pThumb);
+
+                if (_handle != IntPtr.Zero) PICoater_Destroy(_handle);
+                _handle = IntPtr.Zero;
                 _disposed = true;
             }
         }
@@ -190,6 +239,118 @@ namespace AniloxRoll.Monitor.Core
                 if (pBg != IntPtr.Zero) PICoater_FreePinned(pBg);
                 if (pMura != IntPtr.Zero) PICoater_FreePinned(pMura);
                 if (pRidge != IntPtr.Zero) PICoater_FreePinned(pRidge);
+            }
+        }
+
+        public Bitmap RunInspectionFast_ThumbnailOnly(string filePath, int targetThumbW)
+        {
+            if (_disposed) throw new ObjectDisposedException("PICoaterWrapper");
+            if (!File.Exists(filePath)) return null;
+
+            try
+            {
+                // 1. 直接讀到 _pIn (已經分配好了，速度極快)
+                int w, h;
+                if (!PICoater_FastReadBMP(filePath, out w, out h, _pIn, (int)_currentAllocSize))
+                    return null;
+
+                // 2. 計算縮圖參數
+                int thumbH = (int)((float)h / w * targetThumbW);
+                if (targetThumbW * thumbH > _currentThumbSize) return null; // 防呆
+
+                // 3. 初始化演算法
+                PICoater_Initialize(_handle, w, h);
+
+                // 4. 執行 (使用 _pIn 和 _pThumb)
+                // 這裡會非同步執行，因為 C++ 那邊用了獨立 Stream
+                int ret = PICoater_Run_And_GetThumbnail(
+                    _handle, _pIn, _pThumb, targetThumbW, thumbH,
+                    2.0f, 9.0f, "vertical"
+                );
+
+                if (ret != 0) throw new Exception($"GPU Error: {ret}");
+
+                // 5. 轉 Bitmap (這步很快，因為只有 0.6MB)
+                Bitmap bmp = new Bitmap(targetThumbW, thumbH, PixelFormat.Format8bppIndexed);
+                ColorPalette pal = bmp.Palette;
+                for (int i = 0; i < 256; i++) pal.Entries[i] = Color.FromArgb(i, i, i);
+                bmp.Palette = pal;
+
+                BitmapData bData = bmp.LockBits(new Rectangle(0, 0, targetThumbW, thumbH), ImageLockMode.WriteOnly, PixelFormat.Format8bppIndexed);
+                unsafe
+                {
+                    // Copy from _pThumb to Bitmap
+                    Buffer.MemoryCopy((void*)_pThumb, (void*)bData.Scan0, _currentThumbSize, targetThumbW * thumbH);
+                }
+                bmp.UnlockBits(bData);
+
+                return bmp;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        public InspectionResult RunInspectionFast_Detailed(string filePath, int targetThumbW)
+        {
+            if (_disposed) throw new ObjectDisposedException("PICoaterWrapper");
+
+            var result = new InspectionResult();
+            var sw = new Stopwatch();
+
+            if (!File.Exists(filePath)) return result;
+
+            try
+            {
+                // --- 1. IO 階段 (讀硬碟) ---
+                sw.Start();
+                int w, h;
+                // 從硬碟讀到 Pinned Memory
+                bool readSuccess = PICoater_FastReadBMP(filePath, out w, out h, _pIn, (int)_currentAllocSize);
+                sw.Stop();
+                result.IoTimeMs = sw.ElapsedMilliseconds;
+
+                if (!readSuccess) return result;
+
+                // --- 2. GPU 階段 (運算 + 縮圖 + 下載) ---
+                sw.Restart();
+
+                int thumbH = (int)((float)h / w * targetThumbW);
+                if (targetThumbW * thumbH > _currentThumbSize) return result;
+
+                PICoater_Initialize(_handle, w, h);
+
+                // C++ 非同步執行
+                int ret = PICoater_Run_And_GetThumbnail(
+                    _handle, _pIn, _pThumb, targetThumbW, thumbH,
+                    2.0f, 9.0f, "vertical"
+                );
+
+                if (ret != 0) throw new Exception($"GPU Error: {ret}");
+
+                // 轉成 Bitmap (記憶體複製，很快)
+                Bitmap bmp = new Bitmap(targetThumbW, thumbH, PixelFormat.Format8bppIndexed);
+                ColorPalette pal = bmp.Palette;
+                for (int i = 0; i < 256; i++) pal.Entries[i] = Color.FromArgb(i, i, i);
+                bmp.Palette = pal;
+
+                BitmapData bData = bmp.LockBits(new Rectangle(0, 0, targetThumbW, thumbH), ImageLockMode.WriteOnly, PixelFormat.Format8bppIndexed);
+                unsafe
+                {
+                    Buffer.MemoryCopy((void*)_pThumb, (void*)bData.Scan0, _currentThumbSize, targetThumbW * thumbH);
+                }
+                bmp.UnlockBits(bData);
+
+                sw.Stop();
+                result.GpuTimeMs = sw.ElapsedMilliseconds;
+                result.Thumbnail = bmp;
+
+                return result;
+            }
+            catch
+            {
+                return result;
             }
         }
 
