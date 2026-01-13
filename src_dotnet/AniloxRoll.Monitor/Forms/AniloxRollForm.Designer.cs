@@ -1,8 +1,9 @@
-﻿// PICoater_AOI\src_dotnet\AniloxRoll.Monitor\Form1.Designer.cs
+﻿// PICoater_AOI\src_dotnet\AniloxRoll.Monitor\Forms\AniloxRollForm.Designer.cs
 
 namespace AniloxRoll.Monitor.Forms
 {
-    partial class MainForm
+    // [修正] 類別名稱必須與主程式碼 (AniloxRollForm) 完全一致
+    partial class AniloxRollForm
     {
         /// <summary>
         /// 設計工具所需的變數。
@@ -42,7 +43,6 @@ namespace AniloxRoll.Monitor.Forms
             this.cbDay = new System.Windows.Forms.ComboBox();
             this.cbMonth = new System.Windows.Forms.ComboBox();
             this.cbYear = new System.Windows.Forms.ComboBox();
-            this.lblPixelInfo = new System.Windows.Forms.Label();
             this.pbCam7 = new System.Windows.Forms.PictureBox();
             this.pbCam6 = new System.Windows.Forms.PictureBox();
             this.pbCam5 = new System.Windows.Forms.PictureBox();
@@ -51,6 +51,8 @@ namespace AniloxRoll.Monitor.Forms
             this.pbCam2 = new System.Windows.Forms.PictureBox();
             this.pbCam1 = new System.Windows.Forms.PictureBox();
             this.canvasMain = new AOI.SDK.UI.SmartCanvas();
+            this.statusStrip1 = new System.Windows.Forms.StatusStrip();
+            this.lblPixelInfo = new System.Windows.Forms.ToolStripStatusLabel();
             this.tabControl1.SuspendLayout();
             this.tabPage2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam7)).BeginInit();
@@ -61,16 +63,17 @@ namespace AniloxRoll.Monitor.Forms
             ((System.ComponentModel.ISupportInitialize)(this.pbCam2)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).BeginInit();
+            this.statusStrip1.SuspendLayout();
             this.SuspendLayout();
             // 
             // tabControl1
             // 
             this.tabControl1.Controls.Add(this.tabPage1);
             this.tabControl1.Controls.Add(this.tabPage2);
-            this.tabControl1.Location = new System.Drawing.Point(13, 406);
+            this.tabControl1.Location = new System.Drawing.Point(758, 12);
             this.tabControl1.Name = "tabControl1";
             this.tabControl1.SelectedIndex = 0;
-            this.tabControl1.Size = new System.Drawing.Size(739, 187);
+            this.tabControl1.Size = new System.Drawing.Size(357, 581);
             this.tabControl1.TabIndex = 1;
             // 
             // tabPage1
@@ -78,7 +81,7 @@ namespace AniloxRoll.Monitor.Forms
             this.tabPage1.Location = new System.Drawing.Point(4, 25);
             this.tabPage1.Name = "tabPage1";
             this.tabPage1.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage1.Size = new System.Drawing.Size(771, 177);
+            this.tabPage1.Size = new System.Drawing.Size(349, 552);
             this.tabPage1.TabIndex = 0;
             this.tabPage1.Text = "Live Monitor";
             this.tabPage1.UseVisualStyleBackColor = true;
@@ -97,7 +100,7 @@ namespace AniloxRoll.Monitor.Forms
             this.tabPage2.Location = new System.Drawing.Point(4, 25);
             this.tabPage2.Name = "tabPage2";
             this.tabPage2.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage2.Size = new System.Drawing.Size(731, 158);
+            this.tabPage2.Size = new System.Drawing.Size(349, 552);
             this.tabPage2.TabIndex = 1;
             this.tabPage2.Text = "Review & Test";
             this.tabPage2.UseVisualStyleBackColor = true;
@@ -106,7 +109,7 @@ namespace AniloxRoll.Monitor.Forms
             // 
             this.btnSelectFolder.Location = new System.Drawing.Point(6, 6);
             this.btnSelectFolder.Name = "btnSelectFolder";
-            this.btnSelectFolder.Size = new System.Drawing.Size(112, 40);
+            this.btnSelectFolder.Size = new System.Drawing.Size(101, 40);
             this.btnSelectFolder.TabIndex = 23;
             this.btnSelectFolder.Text = "讀取資料夾";
             this.btnSelectFolder.UseVisualStyleBackColor = true;
@@ -114,19 +117,19 @@ namespace AniloxRoll.Monitor.Forms
             // 
             // btnShowProcessed
             // 
-            this.btnShowProcessed.Location = new System.Drawing.Point(274, 6);
+            this.btnShowProcessed.Location = new System.Drawing.Point(6, 98);
             this.btnShowProcessed.Name = "btnShowProcessed";
-            this.btnShowProcessed.Size = new System.Drawing.Size(112, 40);
+            this.btnShowProcessed.Size = new System.Drawing.Size(101, 40);
             this.btnShowProcessed.TabIndex = 22;
-            this.btnShowProcessed.Text = "顯示檢測圖";
+            this.btnShowProcessed.Text = "計算mura";
             this.btnShowProcessed.UseVisualStyleBackColor = true;
             this.btnShowProcessed.Click += new System.EventHandler(this.btnShowProcessed_Click);
             // 
             // btnShowOriginal
             // 
-            this.btnShowOriginal.Location = new System.Drawing.Point(134, 6);
+            this.btnShowOriginal.Location = new System.Drawing.Point(6, 52);
             this.btnShowOriginal.Name = "btnShowOriginal";
-            this.btnShowOriginal.Size = new System.Drawing.Size(112, 40);
+            this.btnShowOriginal.Size = new System.Drawing.Size(101, 40);
             this.btnShowOriginal.TabIndex = 21;
             this.btnShowOriginal.Text = "顯示原圖";
             this.btnShowOriginal.UseVisualStyleBackColor = true;
@@ -135,65 +138,56 @@ namespace AniloxRoll.Monitor.Forms
             // cbSec
             // 
             this.cbSec.FormattingEnabled = true;
-            this.cbSec.Location = new System.Drawing.Point(392, 52);
+            this.cbSec.Location = new System.Drawing.Point(242, 110);
             this.cbSec.Name = "cbSec";
-            this.cbSec.Size = new System.Drawing.Size(71, 23);
+            this.cbSec.Size = new System.Drawing.Size(64, 23);
             this.cbSec.TabIndex = 20;
             this.cbSec.SelectedIndexChanged += new System.EventHandler(this.cbSec_SelectedIndexChanged);
             // 
             // cbMin
             // 
             this.cbMin.FormattingEnabled = true;
-            this.cbMin.Location = new System.Drawing.Point(315, 52);
+            this.cbMin.Location = new System.Drawing.Point(242, 81);
             this.cbMin.Name = "cbMin";
-            this.cbMin.Size = new System.Drawing.Size(71, 23);
+            this.cbMin.Size = new System.Drawing.Size(64, 23);
             this.cbMin.TabIndex = 19;
             this.cbMin.SelectedIndexChanged += new System.EventHandler(this.cbMin_SelectedIndexChanged);
             // 
             // cbHour
             // 
             this.cbHour.FormattingEnabled = true;
-            this.cbHour.Location = new System.Drawing.Point(237, 52);
+            this.cbHour.Location = new System.Drawing.Point(242, 52);
             this.cbHour.Name = "cbHour";
-            this.cbHour.Size = new System.Drawing.Size(71, 23);
+            this.cbHour.Size = new System.Drawing.Size(64, 23);
             this.cbHour.TabIndex = 18;
             this.cbHour.SelectedIndexChanged += new System.EventHandler(this.cbHour_SelectedIndexChanged);
             // 
             // cbDay
             // 
             this.cbDay.FormattingEnabled = true;
-            this.cbDay.Location = new System.Drawing.Point(160, 52);
+            this.cbDay.Location = new System.Drawing.Point(138, 110);
             this.cbDay.Name = "cbDay";
-            this.cbDay.Size = new System.Drawing.Size(71, 23);
+            this.cbDay.Size = new System.Drawing.Size(64, 23);
             this.cbDay.TabIndex = 17;
             this.cbDay.SelectedIndexChanged += new System.EventHandler(this.cbDay_SelectedIndexChanged);
             // 
             // cbMonth
             // 
             this.cbMonth.FormattingEnabled = true;
-            this.cbMonth.Location = new System.Drawing.Point(83, 52);
+            this.cbMonth.Location = new System.Drawing.Point(138, 81);
             this.cbMonth.Name = "cbMonth";
-            this.cbMonth.Size = new System.Drawing.Size(71, 23);
+            this.cbMonth.Size = new System.Drawing.Size(64, 23);
             this.cbMonth.TabIndex = 16;
             this.cbMonth.SelectedIndexChanged += new System.EventHandler(this.cbMonth_SelectedIndexChanged);
             // 
             // cbYear
             // 
             this.cbYear.FormattingEnabled = true;
-            this.cbYear.Location = new System.Drawing.Point(6, 52);
+            this.cbYear.Location = new System.Drawing.Point(138, 52);
             this.cbYear.Name = "cbYear";
-            this.cbYear.Size = new System.Drawing.Size(71, 23);
+            this.cbYear.Size = new System.Drawing.Size(64, 23);
             this.cbYear.TabIndex = 15;
             this.cbYear.SelectedIndexChanged += new System.EventHandler(this.cbYear_SelectedIndexChanged);
-            // 
-            // lblPixelInfo
-            // 
-            this.lblPixelInfo.AutoSize = true;
-            this.lblPixelInfo.Location = new System.Drawing.Point(542, 406);
-            this.lblPixelInfo.Name = "lblPixelInfo";
-            this.lblPixelInfo.Size = new System.Drawing.Size(42, 15);
-            this.lblPixelInfo.TabIndex = 24;
-            this.lblPixelInfo.Text = "Ready";
             // 
             // pbCam7
             // 
@@ -264,16 +258,33 @@ namespace AniloxRoll.Monitor.Forms
             this.canvasMain.Cursor = System.Windows.Forms.Cursors.Cross;
             this.canvasMain.Location = new System.Drawing.Point(12, 118);
             this.canvasMain.Name = "canvasMain";
-            this.canvasMain.Size = new System.Drawing.Size(739, 285);
+            this.canvasMain.Size = new System.Drawing.Size(739, 450);
             this.canvasMain.TabIndex = 7;
             this.canvasMain.TabStop = false;
             // 
-            // MainForm
+            // statusStrip1
+            // 
+            this.statusStrip1.ImageScalingSize = new System.Drawing.Size(20, 20);
+            this.statusStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.lblPixelInfo});
+            this.statusStrip1.Location = new System.Drawing.Point(0, 570);
+            this.statusStrip1.Name = "statusStrip1";
+            this.statusStrip1.Size = new System.Drawing.Size(1127, 25);
+            this.statusStrip1.TabIndex = 15;
+            this.statusStrip1.Text = "statusStrip1";
+            // 
+            // lblPixelInfo
+            // 
+            this.lblPixelInfo.Name = "lblPixelInfo";
+            this.lblPixelInfo.Size = new System.Drawing.Size(127, 19);
+            this.lblPixelInfo.Text = "座標:(0, 0)|亮度: 0";
+            // 
+            // AniloxRollForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(764, 595);
-            this.Controls.Add(this.lblPixelInfo);
+            this.ClientSize = new System.Drawing.Size(1127, 595);
+            this.Controls.Add(this.statusStrip1);
             this.Controls.Add(this.tabControl1);
             this.Controls.Add(this.pbCam1);
             this.Controls.Add(this.pbCam2);
@@ -283,8 +294,8 @@ namespace AniloxRoll.Monitor.Forms
             this.Controls.Add(this.pbCam6);
             this.Controls.Add(this.pbCam7);
             this.Controls.Add(this.canvasMain);
-            this.Name = "MainForm";
-            this.Text = "Form1";
+            this.Name = "AniloxRollForm"; // [修正] 這裡的名稱建議也保持一致
+            this.Text = "AniloxRoll Monitor";
             this.tabControl1.ResumeLayout(false);
             this.tabPage2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.pbCam7)).EndInit();
@@ -295,6 +306,8 @@ namespace AniloxRoll.Monitor.Forms
             ((System.ComponentModel.ISupportInitialize)(this.pbCam2)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam1)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).EndInit();
+            this.statusStrip1.ResumeLayout(false);
+            this.statusStrip1.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -321,7 +334,7 @@ namespace AniloxRoll.Monitor.Forms
         private System.Windows.Forms.Button btnShowProcessed;
         private System.Windows.Forms.Button btnShowOriginal;
         private System.Windows.Forms.Button btnSelectFolder;
-        private System.Windows.Forms.Label lblPixelInfo;
+        private System.Windows.Forms.StatusStrip statusStrip1;
+        private System.Windows.Forms.ToolStripStatusLabel lblPixelInfo;
     }
 }
-

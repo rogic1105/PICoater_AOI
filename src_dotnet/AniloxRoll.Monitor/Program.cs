@@ -14,7 +14,7 @@ namespace AniloxRoll.Monitor
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             // [修改] 啟動 MainForm
-            Application.Run(new MainForm());
+            Application.Run(new AniloxRollForm());
         }
     }
 }
