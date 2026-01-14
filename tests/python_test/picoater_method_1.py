@@ -7,7 +7,7 @@ from scipy.signal import find_peaks
 IMAGE_FOLDER = "../../../../05_QA_Validation/feasibility_test_data/20250117 L5C/Envision/Low_Angle_by_nor_line/mura/"
 IMAGE_NAME = 'cal_25-11-17_11-19-38-086.bmp'
 IMAGE_PATH = os.path.join(IMAGE_FOLDER, IMAGE_NAME)
-OUTPUT_DIR = "out"
+OUTPUT_DIR = "../../artifacts/python_test/method_1"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 def remove_column_background(image: np.ndarray) -> np.ndarray:
     """Removes background by subtracting the column-wise mean.
