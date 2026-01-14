@@ -1,8 +1,5 @@
-﻿// PICoater_AOI\src_dotnet\AniloxRoll.Monitor\Forms\AniloxRollForm.Designer.cs
-
-namespace AniloxRoll.Monitor.Forms
+﻿namespace AniloxRoll.Monitor.Forms
 {
-    // [修正] 類別名稱必須與主程式碼 (AniloxRollForm) 完全一致
     partial class AniloxRollForm
     {
         /// <summary>
@@ -142,7 +139,6 @@ namespace AniloxRoll.Monitor.Forms
             this.cbSec.Name = "cbSec";
             this.cbSec.Size = new System.Drawing.Size(64, 23);
             this.cbSec.TabIndex = 20;
-            this.cbSec.SelectedIndexChanged += new System.EventHandler(this.cbSec_SelectedIndexChanged);
             // 
             // cbMin
             // 
@@ -151,7 +147,6 @@ namespace AniloxRoll.Monitor.Forms
             this.cbMin.Name = "cbMin";
             this.cbMin.Size = new System.Drawing.Size(64, 23);
             this.cbMin.TabIndex = 19;
-            this.cbMin.SelectedIndexChanged += new System.EventHandler(this.cbMin_SelectedIndexChanged);
             // 
             // cbHour
             // 
@@ -160,7 +155,6 @@ namespace AniloxRoll.Monitor.Forms
             this.cbHour.Name = "cbHour";
             this.cbHour.Size = new System.Drawing.Size(64, 23);
             this.cbHour.TabIndex = 18;
-            this.cbHour.SelectedIndexChanged += new System.EventHandler(this.cbHour_SelectedIndexChanged);
             // 
             // cbDay
             // 
@@ -169,7 +163,6 @@ namespace AniloxRoll.Monitor.Forms
             this.cbDay.Name = "cbDay";
             this.cbDay.Size = new System.Drawing.Size(64, 23);
             this.cbDay.TabIndex = 17;
-            this.cbDay.SelectedIndexChanged += new System.EventHandler(this.cbDay_SelectedIndexChanged);
             // 
             // cbMonth
             // 
@@ -178,7 +171,6 @@ namespace AniloxRoll.Monitor.Forms
             this.cbMonth.Name = "cbMonth";
             this.cbMonth.Size = new System.Drawing.Size(64, 23);
             this.cbMonth.TabIndex = 16;
-            this.cbMonth.SelectedIndexChanged += new System.EventHandler(this.cbMonth_SelectedIndexChanged);
             // 
             // cbYear
             // 
@@ -187,7 +179,6 @@ namespace AniloxRoll.Monitor.Forms
             this.cbYear.Name = "cbYear";
             this.cbYear.Size = new System.Drawing.Size(64, 23);
             this.cbYear.TabIndex = 15;
-            this.cbYear.SelectedIndexChanged += new System.EventHandler(this.cbYear_SelectedIndexChanged);
             // 
             // pbCam7
             // 
@@ -294,7 +285,7 @@ namespace AniloxRoll.Monitor.Forms
             this.Controls.Add(this.pbCam6);
             this.Controls.Add(this.pbCam7);
             this.Controls.Add(this.canvasMain);
-            this.Name = "AniloxRollForm"; // [修正] 這裡的名稱建議也保持一致
+            this.Name = "AniloxRollForm";
             this.Text = "AniloxRoll Monitor";
             this.tabControl1.ResumeLayout(false);
             this.tabPage2.ResumeLayout(false);
@@ -314,10 +305,10 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         #endregion
+        private AOI.SDK.UI.SmartCanvas canvasMain;
         private System.Windows.Forms.TabControl tabControl1;
         private System.Windows.Forms.TabPage tabPage1;
         private System.Windows.Forms.TabPage tabPage2;
-        private AOI.SDK.UI.SmartCanvas canvasMain;
         private System.Windows.Forms.PictureBox pbCam7;
         private System.Windows.Forms.PictureBox pbCam6;
         private System.Windows.Forms.PictureBox pbCam5;

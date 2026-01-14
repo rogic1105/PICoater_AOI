@@ -1,11 +1,10 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO;
-
 using AniloxRoll.Monitor.Core.Interop;
-using AOI.SDK.Core.Models; 
+using AOI.SDK.Core.Models;
+using AOI.SDK.Utils; // [Refactor] 引用 SDK Utils
 
 namespace AniloxRoll.Monitor.Core.Services
 {
@@ -25,21 +24,6 @@ namespace AniloxRoll.Monitor.Core.Services
 
         private bool _isDisposed = false;
 
-        private static readonly ColorPalette _grayPalette;
-
-        static PICoaterProcessor()
-        {
-            // 透過一個暫時的 Bitmap 取得標準 Palette 結構
-            using (var bmp = new Bitmap(1, 1, PixelFormat.Format8bppIndexed))
-            {
-                _grayPalette = bmp.Palette;
-            }
-            // 填入灰階
-            for (int i = 0; i < 256; i++)
-            {
-                _grayPalette.Entries[i] = Color.FromArgb(i, i, i);
-            }
-        }
         public PICoaterProcessor()
         {
             InitializeNativeResources();
@@ -66,28 +50,25 @@ namespace AniloxRoll.Monitor.Core.Services
         {
             if (_isDisposed) throw new ObjectDisposedException(nameof(PICoaterProcessor));
 
-            var result = new TimedResult<Bitmap>();
-            var stopwatch = new Stopwatch();
-
-            if (!File.Exists(filePath)) return result;
-
-            try
+            // 使用本地函數封裝核心邏輯，方便計時
+            return ExecuteTimedOperation(filePath, (stopwatch) =>
             {
                 // 1. IO 階段
                 stopwatch.Start();
                 bool readSuccess = PICoaterNative.PICoater_FastReadBMP(
                     filePath, out int w, out int h, _inputBuffer, (int)_inputBufferSize);
                 stopwatch.Stop();
-                result.IoDurationMs = stopwatch.ElapsedMilliseconds;
 
-                if (!readSuccess) return result;
+                if (!readSuccess) return (null, stopwatch.ElapsedMilliseconds, 0);
+
+                long ioTime = stopwatch.ElapsedMilliseconds;
 
                 // 2. 運算階段
                 stopwatch.Restart();
                 int thumbH = (int)((float)h / w * targetThumbWidth);
 
-                // 檢查緩衝區
-                if (targetThumbWidth * thumbH > _thumbnailBufferSize) return result;
+                if (targetThumbWidth * thumbH > _thumbnailBufferSize)
+                    return (null, ioTime, 0); // Buffer 不足
 
                 PICoaterNative.PICoater_Initialize(_handle, w, h);
 
@@ -97,12 +78,14 @@ namespace AniloxRoll.Monitor.Core.Services
 
                 if (ret != 0) throw new Exception($"Algo Error: {ret}");
 
-                result.Data = CopyToBitmap(targetThumbWidth, thumbH, _thumbnailBuffer);
+                // [Refactor] 使用 SDK 的 ImageUtils 直接從指標建立 Bitmap
+                var bitmap = ImageUtils.Create8bppBitmap(_thumbnailBuffer, targetThumbWidth, thumbH);
+
                 stopwatch.Stop();
-                result.ComputeDurationMs = stopwatch.ElapsedMilliseconds;
-            }
-            catch (Exception) { /* Log error */ }
-            return result;
+                long computeTime = stopwatch.ElapsedMilliseconds;
+
+                return (bitmap, ioTime, computeTime);
+            });
         }
 
         /// <summary>
@@ -111,60 +94,56 @@ namespace AniloxRoll.Monitor.Core.Services
         public TimedResult<Bitmap> LoadThumbnailOnly(string filePath, int targetThumbWidth)
         {
             if (_isDisposed) throw new ObjectDisposedException(nameof(PICoaterProcessor));
-            var result = new TimedResult<Bitmap>();
-            var stopwatch = new Stopwatch();
 
+            return ExecuteTimedOperation(filePath, (stopwatch) =>
+            {
+                stopwatch.Start();
+
+                int ret = PICoaterNative.PICoater_LoadThumbnail(
+                    filePath, targetThumbWidth, _thumbnailBuffer, out int realW, out int realH);
+
+                Bitmap bitmap = null;
+                if (ret == 0)
+                {
+                    // [Refactor] 使用 SDK 的 ImageUtils
+                    bitmap = ImageUtils.Create8bppBitmap(_thumbnailBuffer, realW, realH);
+                }
+                stopwatch.Stop();
+
+                return (bitmap, stopwatch.ElapsedMilliseconds, 0);
+            });
+        }
+
+        /// <summary>
+        /// 輔助方法：統一處理計時、例外與結果封裝
+        /// </summary>
+        private TimedResult<Bitmap> ExecuteTimedOperation(string filePath, Func<Stopwatch, (Bitmap data, long io, long gpu)> operation)
+        {
+            var result = new TimedResult<Bitmap>();
             if (!File.Exists(filePath)) return result;
 
             try
             {
-                stopwatch.Start();
-                int realW, realH;
-                // 使用 Native 快速縮放讀取
-                int ret = PICoaterNative.PICoater_LoadThumbnail(
-                    filePath, targetThumbWidth, _thumbnailBuffer, out realW, out realH);
+                var sw = new Stopwatch();
+                var (data, io, gpu) = operation(sw);
 
-                if (ret == 0)
-                {
-                    result.Data = CopyToBitmap(realW, realH, _thumbnailBuffer);
-                }
-                stopwatch.Stop();
-
-                result.IoDurationMs = stopwatch.ElapsedMilliseconds;
-                result.ComputeDurationMs = 0; // 無運算
+                result.Data = data;
+                result.IoDurationMs = io;
+                result.ComputeDurationMs = gpu;
             }
-            catch (Exception) { /* Log error */ }
+            catch (Exception)
+            {
+                // 可在此加入 Log 機制
+            }
             return result;
         }
 
-        /// <summary>
-        /// 點擊放大時使用，產生高解析度結果
-        /// </summary>
         public Bitmap RunInspectionFullRes(string filePath)
         {
-            // 這裡應實作完整尺寸的 PICoater_Run
-            // 為求簡潔，此處僅示意呼叫 ProcessImage 產生較大縮圖
             // 實務上請改為回傳 1:1 的結果
             var res = ProcessImage(filePath, 2000);
             var bmp = res.Data;
-            res.Data = null; // 轉移擁有權，避免被 TimedResult Dispose
-            return bmp;
-        }
-
-        private Bitmap CopyToBitmap(int w, int h, IntPtr ptr)
-        {
-            var bmp = new Bitmap(w, h, PixelFormat.Format8bppIndexed);
-
-            // 直接指定快取好的 Palette，不用再跑迴圈
-            bmp.Palette = _grayPalette;
-
-            BitmapData bData = bmp.LockBits(new Rectangle(0, 0, w, h),
-                                            ImageLockMode.WriteOnly, PixelFormat.Format8bppIndexed);
-            unsafe
-            {
-                Buffer.MemoryCopy((void*)ptr, (void*)bData.Scan0, _thumbnailBufferSize, w * h);
-            }
-            bmp.UnlockBits(bData);
+            res.Data = null; // 轉移擁有權
             return bmp;
         }
 
