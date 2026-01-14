@@ -7,9 +7,11 @@ using AOI.SDK.Core.Models;
 namespace AniloxRoll.Monitor.Forms.Helpers
 {
     /// <summary>
-    /// 負責管理縮圖列表的顯示、繪圖 (Paint) 與選取狀態
+    /// [View Helper] 縮圖畫廊管理器。
+    /// 封裝 PictureBox 陣列的顯示邏輯，包含：更新圖片、繪製選取邊框 (Paint)、
+    /// 以及處理點擊事件，減輕 Form 的程式碼負擔。
     /// </summary>
-    public class ThumbnailGalleryManager
+    public class ThumbnailGridPresenter
     {
         private PictureBox[] _previewBoxes;
         private int _selectedIndex = 0;

@@ -5,23 +5,28 @@ using System.Text.RegularExpressions;
 
 namespace AniloxRoll.Monitor.Core.Data
 {
+    /// <summary>
+    /// [DAO] 影像檔案儲存庫，負責與檔案系統溝通。
+    /// 核心功能包含：掃描目錄建立索引、提供時間階層的查詢 (Year->Month->Day...)
+    /// 以及將查詢條件轉換為實際檔案路徑。
+    /// </summary>
+    /// 
     public class ImageRepository
     {
-        private List<ImageMetadata> _files = new List<ImageMetadata>();
+        private List<ImageMetadata> _metadataCache = new List<ImageMetadata>();
         // Regex: YYYYMMDD_HHMMSS-CamID.bmp
         private readonly Regex _fileNameRegex = new Regex(@"(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})-(\d)");
 
-        public int FileCount => _files.Count;
+        public int FileCount => _metadataCache.Count;
 
         public void LoadDirectory(string rootPath)
         {
-            _files.Clear();
+            _metadataCache.Clear();
             if (!Directory.Exists(rootPath)) return;
 
             var rawFiles = Directory.GetFiles(rootPath, "*.bmp", SearchOption.AllDirectories);
 
-            // 使用 PLINQ 加速大量檔案字串解析
-            _files = rawFiles.AsParallel().Select(ParsePath).Where(x => x != null).ToList();
+            _metadataCache = rawFiles.AsParallel().Select(ParsePath).Where(x => x != null).ToList();
         }
 
         private ImageMetadata ParsePath(string path)
@@ -44,19 +49,20 @@ namespace AniloxRoll.Monitor.Core.Data
         }
 
         // 下拉選單資料來源
-        public List<string> GetYears() => _files.Select(x => x.Year).Distinct().OrderBy(x => x).ToList();
-        public List<string> GetMonths(string y) => _files.Where(x => x.Year == y).Select(x => x.Month).Distinct().OrderBy(x => x).ToList();
-        public List<string> GetDays(string y, string m) => _files.Where(x => x.Year == y && x.Month == m).Select(x => x.Day).Distinct().OrderBy(x => x).ToList();
-        public List<string> GetHours(string y, string m, string d) => _files.Where(x => x.Year == y && x.Month == m && x.Day == d).Select(x => x.Hour).Distinct().OrderBy(x => x).ToList();
-        public List<string> GetMinutes(string y, string m, string d, string h) => _files.Where(x => x.Year == y && x.Month == m && x.Day == d && x.Hour == h).Select(x => x.Minute).Distinct().OrderBy(x => x).ToList();
-        public List<string> GetSeconds(string y, string m, string d, string h, string min) => _files.Where(x => x.Year == y && x.Month == m && x.Day == d && x.Hour == h && x.Minute == min).Select(x => x.Second).Distinct().OrderBy(x => x).ToList();
+        public List<string> GetYears() => _metadataCache.Select(x => x.Year).Distinct().OrderBy(x => x).ToList();
+        public List<string> GetMonths(string y) => _metadataCache.Where(x => x.Year == y).Select(x => x.Month).Distinct().OrderBy(x => x).ToList();
+        public List<string> GetDays(string y, string m) => _metadataCache.Where(x => x.Year == y && x.Month == m).Select(x => x.Day).Distinct().OrderBy(x => x).ToList();
+        public List<string> GetHours(string y, string m, string d) => _metadataCache.Where(x => x.Year == y && x.Month == m && x.Day == d).Select(x => x.Hour).Distinct().OrderBy(x => x).ToList();
+        public List<string> GetMinutes(string y, string m, string d, string h) => _metadataCache.Where(x => x.Year == y && x.Month == m && x.Day == d && x.Hour == h).Select(x => x.Minute).Distinct().OrderBy(x => x).ToList();
+        public List<string> GetSeconds(string y, string m, string d, string h, string min) => _metadataCache.Where(x => x.Year == y && x.Month == m && x.Day == d && x.Hour == h && x.Minute == min).Select(x => x.Second).Distinct().OrderBy(x => x).ToList();
 
         // 查詢特定時間點的所有相機圖片
         public Dictionary<int, string> GetImages(string y, string m, string d, string h, string min, string s)
         {
-            return _files
+            return _metadataCache
                 .Where(x => x.Year == y && x.Month == m && x.Day == d && x.Hour == h && x.Minute == min && x.Second == s)
                 .ToDictionary(x => x.CameraId, x => x.FullPath);
         }
     }
+
 }

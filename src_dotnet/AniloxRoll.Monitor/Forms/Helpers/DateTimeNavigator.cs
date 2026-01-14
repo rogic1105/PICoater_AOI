@@ -8,14 +8,16 @@ using AniloxRoll.Monitor.Core.Data;
 namespace AniloxRoll.Monitor.Forms.Helpers
 {
     /// <summary>
-    /// 負責管理 年/月/日/時/分/秒 下拉選單的連動邏輯
+    /// [View Helper] 時間篩選連動管理器。
+    /// 負責處理 ComboBox (年/月/日/時/分/秒) 之間的級聯更新邏輯，
+    /// 並將使用者的選擇持久化儲存 (Properties.Settings)。
     /// </summary>
-    public class TimeSelectionManager
+    public class DateTimeNavigator
     {
         private readonly ImageRepository _repository;
         private readonly ComboBox _cbYear, _cbMonth, _cbDay, _cbHour, _cbMin, _cbSec;
 
-        public TimeSelectionManager(
+        public DateTimeNavigator(
             ImageRepository repository,
             ComboBox year, ComboBox month, ComboBox day,
             ComboBox hour, ComboBox min, ComboBox sec)

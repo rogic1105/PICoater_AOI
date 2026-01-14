@@ -1,6 +1,4 @@
-﻿// PICoater_AOI\src_dotnet\AniloxRoll.Monitor\Core\Services\BatchInspectionService.cs
-
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Drawing;
@@ -10,21 +8,21 @@ using AOI.SDK.Core.Models;
 namespace AniloxRoll.Monitor.Core.Services
 {
     /// <summary>
-    /// 負責管理多個 PICoaterProcessor 實例與並行運算
+    /// [Service] 批次檢測服務，負責並行處理邏輯。
     /// </summary>
     public class BatchInspectionService : IDisposable
     {
-        private readonly PICoaterProcessor[] _processors;
+        private readonly InspectionEngine[] _processors;
         private readonly string[] _currentFilePaths;
 
         public BatchInspectionService(int cameraCount = 7)
         {
-            _processors = new PICoaterProcessor[cameraCount];
+            _processors = new InspectionEngine[cameraCount];
             _currentFilePaths = new string[cameraCount];
 
             for (int i = 0; i < cameraCount; i++)
             {
-                _processors[i] = new PICoaterProcessor();
+                _processors[i] = new InspectionEngine();
             }
         }
 
@@ -34,9 +32,6 @@ namespace AniloxRoll.Monitor.Core.Services
             return _currentFilePaths[index];
         }
 
-        /// <summary>
-        /// 執行並行讀取或檢測
-        /// </summary>
         public (TimedResult<Bitmap>[] results, ConcurrentQueue<string> logs) ProcessBatch(
             Dictionary<int, string> filesMap,
             bool enableProcessing)
@@ -44,7 +39,8 @@ namespace AniloxRoll.Monitor.Core.Services
             var results = new TimedResult<Bitmap>[_processors.Length];
             var logs = new ConcurrentQueue<string>();
 
-            var pOptions = new ParallelOptions { MaxDegreeOfParallelism = -1 }; // -1 代表不限制
+            // [修正] 強制平行度為相機數量 (7)，避免 ThreadPool 爬升延遲，確保最快速度
+            var pOptions = new ParallelOptions { MaxDegreeOfParallelism = _processors.Length };
 
             Parallel.For(0, _processors.Length, pOptions, i =>
             {
@@ -54,14 +50,14 @@ namespace AniloxRoll.Monitor.Core.Services
 
                 if (!string.IsNullOrEmpty(path))
                 {
-                    // 根據模式選擇執行完整檢測或是純讀取
                     results[i] = enableProcessing
                         ? _processors[i].ProcessImage(path, 1000)
                         : _processors[i].LoadThumbnailOnly(path, 1000);
 
                     if (results[i] != null)
                     {
-                        logs.Enqueue($"Cam {camId}: IO={results[i].IoDurationMs}ms, GPU={results[i].ComputeDurationMs}ms");
+                        logs.Enqueue($"Cam {camId}: IO={results[i].IoDurationMs}ms, GPU={results[i].ComputeDurationMs}ms, BMP={results[i].BitmapDurationMs}ms");
+
                     }
                 }
                 else
@@ -77,6 +73,7 @@ namespace AniloxRoll.Monitor.Core.Services
         {
             var path = GetFilePath(index);
             if (string.IsNullOrEmpty(path)) return null;
+            // 這裡會執行檢測運算，回傳大圖
             return _processors[index].RunInspectionFullRes(path);
         }
 

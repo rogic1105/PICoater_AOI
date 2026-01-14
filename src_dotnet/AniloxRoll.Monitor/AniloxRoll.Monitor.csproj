@@ -69,9 +69,9 @@
   <ItemGroup>
     <Compile Include="Core\Data\ImageMetadata.cs" />
     <Compile Include="Core\Data\ImageRepository.cs" />
-    <Compile Include="Core\Interop\PICoaterNative.cs" />
+    <Compile Include="Core\Interop\NativeMethods.cs" />
     <Compile Include="Core\Services\BatchInspectionService.cs" />
-    <Compile Include="Core\Services\PICoaterProcessor.cs" />
+    <Compile Include="Core\Services\InspectionEngine.cs" />
     <Compile Include="Forms\AniloxRollForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -79,8 +79,9 @@
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
     </Compile>
     <Compile Include="Forms\Helpers\AniloxRollPresenter.cs" />
-    <Compile Include="Forms\Helpers\ThumbnailGalleryManager.cs" />
-    <Compile Include="Forms\Helpers\TimeSelectionManager.cs" />
+    <Compile Include="Forms\Helpers\FormInteractionHelper.cs" />
+    <Compile Include="Forms\Helpers\ThumbnailGridPresenter.cs" />
+    <Compile Include="Forms\Helpers\DateTimeNavigator.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <EmbeddedResource Include="Forms\AniloxRollForm.resx">

@@ -3,7 +3,11 @@ using System.Runtime.InteropServices;
 
 namespace AniloxRoll.Monitor.Core.Interop
 {
-    internal static class PICoaterNative
+    /// <summary>
+    /// [Interop] 定義與 C++ (picoater_api.dll) 對接的 P/Invoke 介面。
+    /// 包含記憶體配置 (AllocPinned)、演算法執行 (Run) 與資源釋放 (Destroy) 的原始入口點。
+    /// </summary>
+    internal static class NativeMethods
     {
         private const string DllName = "picoater_api.dll";
 
@@ -27,7 +31,7 @@ namespace AniloxRoll.Monitor.Core.Interop
         public static extern int PICoater_Run_And_GetThumbnail(
             IntPtr handle,
             IntPtr inputHandle,
-            IntPtr thumbOutHandle,
+            IntPtr outputBufferPtr,
             int thumbWidth,
             int thumbHeight,
             float bgSigma,
