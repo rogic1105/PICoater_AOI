@@ -32,14 +32,15 @@ extern "C" {
 
     PICOATER_API int PICoater_Run(
         PICoaterHandle handle,
-        const unsigned char* h_in,       // [In]  Host Pinned Pointer
-        unsigned char* h_bg_out,         // [Out] Host Pinned Pointer
-        unsigned char* h_mura_out,       // [Out] Host Pinned Pointer
-        unsigned char* h_ridge_out,      // [Out] Host Pinned Pointer
+        const unsigned char* h_in,
+        unsigned char* h_bg_out,
+        unsigned char* h_mura_out,
+        unsigned char* h_ridge_out,
+        float* h_mura_curve_out, // [新增] 輸出 1D 曲線 (大小 = width)
         float bgSigmaFactor,
         float ridgeSigma,
         const char* ridgeMode,
-        void* stream                     // cudaStream_t
+        void* stream
     );
 
     PICOATER_API void PICoater_Destroy(PICoaterHandle handle);
@@ -75,8 +76,9 @@ extern "C" {
 
     PICOATER_API int PICoater_Run_And_GetThumbnail(
         PICoaterHandle handle,
-        const unsigned char* h_in,      // 輸入大圖 (Pinned)
-        unsigned char* h_thumb_out,     // 輸出縮圖 (Pinned)
+        const unsigned char* h_in,
+        unsigned char* h_thumb_out,
+        float* h_mura_curve_out, // [新增] 輸出 1D 曲線
         int thumb_w,
         int thumb_h,
         float bgSigma, float ridgeSigma, const char* rMode

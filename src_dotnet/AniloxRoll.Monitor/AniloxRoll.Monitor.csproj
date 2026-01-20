@@ -56,6 +56,7 @@
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Windows.Forms.DataVisualization" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -80,6 +81,7 @@
     </Compile>
     <Compile Include="Forms\Helpers\AniloxRollPresenter.cs" />
     <Compile Include="Forms\Helpers\FormInteractionHelper.cs" />
+    <Compile Include="Forms\Helpers\MuraChartHelper.cs" />
     <Compile Include="Forms\Helpers\ThumbnailGridPresenter.cs" />
     <Compile Include="Forms\Helpers\DateTimeNavigator.cs" />
     <Compile Include="Program.cs" />

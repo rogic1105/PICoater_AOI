@@ -20,7 +20,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp" />
-    <ClCompile Include="src\PICoaterModuleTests.cpp" />
     <ClCompile Include="src\PICoaterModuleTestsFast.cpp" />
   </ItemGroup>
   <ItemGroup>

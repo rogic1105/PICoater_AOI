@@ -7,6 +7,8 @@
 #include "core_cv/imgproc/core_background.hpp"
 #include "core_cv/imgproc/core_features.hpp"
 
+#include "cpp_utils/timer_utils.hpp"
+
 namespace picoater {
 
     // [Helper] 記憶體對齊計算工具 (對齊到 256 bytes，符合 CUDA 最佳存取粒度)
@@ -19,12 +21,14 @@ namespace picoater {
 
     void PICoaterDetector::Release() {
         // 只需要釋放 "擁有權" 的記憶體
+        if (d_col_mean) cudaFree(d_col_mean);
         if (d_col_bg_) cudaFree(d_col_bg_);
         if (d_blur_tmp_) cudaFree(d_blur_tmp_);
 
         // [關鍵] 只需要釋放總 workspace，內部的指標只是借用位址，不需要 free
         if (d_workspace_) cudaFree(d_workspace_);
 
+		d_col_mean = nullptr;
         d_col_bg_ = nullptr;
         d_blur_tmp_ = nullptr;
         d_workspace_ = nullptr;
@@ -43,6 +47,7 @@ namespace picoater {
         m_height = height;
         size_t num_pixels = width * height;
 
+        CUDA_CHECK(cudaMalloc(&d_col_mean, width * sizeof(float)));
         CUDA_CHECK(cudaMalloc(&d_col_bg_, num_pixels * sizeof(uint8_t)));
         CUDA_CHECK(cudaMalloc(&d_blur_tmp_, num_pixels * sizeof(uint8_t)));
 
@@ -77,6 +82,7 @@ namespace picoater {
         d_hessian_u8_ = (uint8_t*)(base + off_u8);
         d_hessian_f32_ = (float*)(base + off_f32);
         d_hessian_resp_ = (float*)(base + off_resp);
+
     }
 
     void PICoaterDetector::Run(
@@ -84,6 +90,7 @@ namespace picoater {
         uint8_t* d_bg_out,
         uint8_t* d_mura_out,
         uint8_t* d_ridge_out,
+        float* d_mura_curve_out,
         float bgSigmaFactor,
         float ridgeSigma,
         const char* ridgeMode,
@@ -91,28 +98,58 @@ namespace picoater {
     ) {
         if (m_width == 0) return;
 
-        // 1. 背景計算流程
-        // [關鍵修正] 直接傳 d_workspace_ (總記憶體池) 給 Gaussian
-        // 因為 Initialize 已經確保 d_workspace_ 足夠容納 Gaussian 所需的 3 個 float buffers
+        float fixed_max_val = 1.0;
+        int sigma_col = 1;
 
-        core::gaussianBlur_u8_gpu(d_in, d_blur_tmp_, m_width, m_height, 5.0f, 11, stream, d_workspace_);
-        core::calcColumnBackground_u8_gpu(d_blur_tmp_, d_col_bg_, m_width, m_height, bgSigmaFactor, stream);
-        core::expandBackground_u8_gpu(d_col_bg_, d_bg_out, m_width, m_height, stream);
-        core::subtractBackgroundAbs_u8_gpu(d_blur_tmp_, d_col_bg_, d_mura_out, m_width, m_height, stream);
 
-        // 2. 脊線計算流程
-        // 這裡會複用 d_workspace_ 的前段部分，但這時候 Gaussian 已經做完了，所以安全
-        core::hessianRidge_u8_gpu(
-            d_mura_out,
-            d_ridge_out,
-            m_width, m_height,
-            ridgeSigma,
-            ridgeMode,
-            stream,
-            d_hessian_u8_,
-            d_hessian_f32_,
-            d_hessian_resp_,
-            d_workspace_ // [新增] 這裡傳入 workspace！
-        );
+        // [新增] 總耗時測量 (這會包住整個 Run)
+        // 注意：這裡的同步 lambda 會在 Run 函式結束時執行
+        TIME_SCOPE_MS_SYNC("Total Run Time", cudaStreamSynchronize(stream));
+
+        // 步驟 1: 計算列平均 (Column Means)
+        {
+            // [新增] 步驟計時器
+            TIME_SCOPE_MS_SYNC("      1. Calc Column Means", cudaStreamSynchronize(stream));
+            core::calcColumnMeans_RemoveOutliers_gpu(d_in, d_col_mean, m_width, m_height, sigma_col, stream);
+        }
+
+        // 步驟 2: 計算背景與 Mura (Background & Mura)
+        {
+            // [新增] 步驟計時器
+            TIME_SCOPE_MS_SYNC("      2. Calc Background & Mura", cudaStreamSynchronize(stream));
+            core::calcColumnBackground_u8_gpu(d_in, d_col_mean, d_mura_out, m_width, m_height, stream);
+        }
+
+        // 步驟 3: Hessian Ridge Detection
+        {
+            // [新增] 步驟計時器
+            TIME_SCOPE_MS_SYNC("      3. Hessian Ridge", cudaStreamSynchronize(stream));
+            core::hessianRidge_u8_gpu(
+                d_mura_out,
+                d_ridge_out,
+                m_width, m_height,
+                ridgeSigma,
+                ridgeMode,
+                fixed_max_val,
+                d_hessian_f32_,
+                d_hessian_resp_,
+                stream,
+                d_workspace_
+            );
+        }
+
+        // 步驟 4: Hessian Ridge Detection 之col平均
+
+        {
+            TIME_SCOPE_MS_SYNC("      4. Hessian Ridge col mean", cudaStreamSynchronize(stream));
+            core::calcColumnMeans_gpu<float>(
+                d_hessian_resp_,
+                d_mura_curve_out,
+                m_width,
+                m_height,
+                stream,
+                d_workspace_
+            );
+        }
     }
 }

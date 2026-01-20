@@ -18,6 +18,7 @@ namespace picoater {
             uint8_t* d_bg_out,
             uint8_t* d_mura_out,
             uint8_t* d_ridge_out,
+            float* d_mura_curve_out,
             float bgSigmaFactor,
             float ridgeSigma,
             const char* ridgeMode,
@@ -31,6 +32,7 @@ namespace picoater {
         int m_height = 0;
 
         // 主要輸出與中間緩衝
+        float* d_col_mean = nullptr;
         uint8_t* d_col_bg_ = nullptr;
         uint8_t* d_blur_tmp_ = nullptr; // 給背景運算用的暫存
 

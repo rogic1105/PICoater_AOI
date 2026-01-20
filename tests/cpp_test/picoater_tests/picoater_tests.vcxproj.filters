@@ -18,9 +18,6 @@
     <ClCompile Include="src\main.cpp">
       <Filter>來源檔案</Filter>
     </ClCompile>
-    <ClCompile Include="src\PICoaterModuleTests.cpp">
-      <Filter>來源檔案</Filter>
-    </ClCompile>
     <ClCompile Include="src\PICoaterModuleTestsFast.cpp">
       <Filter>來源檔案</Filter>
     </ClCompile>

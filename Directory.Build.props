@@ -5,7 +5,7 @@
 		<PGMRootPath>$(EngRoot)..\..\..\..\</PGMRootPath>
 
 		<DataFolderPath>05_QA_Validation\feasibility_test_data</DataFolderPath>
-		<TargetImageRelPath>20250117 L5C\Envision\Low_Angle_by_nor_line\mura\cal_25-11-17_11-16-48-283.bmp</TargetImageRelPath>
+		<TargetImageRelPath>20250117 L5C\Envision\Low_Angle_by_nor_line\mura\cal_25-11-17_11-19-25-929.bmp</TargetImageRelPath>
 		
 		<AbsPGMRootPath>$([System.IO.Path]::GetFullPath('$(PGMRootPath)'))</AbsPGMRootPath>
 		<AbsProjectRootPath>$([System.IO.Path]::GetFullPath('$(ProjectPath)'))</AbsProjectRootPath>

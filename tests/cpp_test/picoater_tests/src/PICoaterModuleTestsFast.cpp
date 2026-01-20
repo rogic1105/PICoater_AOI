@@ -19,15 +19,18 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
 
     // 1. 定義 Host Pinned Memory (輸入與輸出)
     uint8_t* h_pinned_in = nullptr;
+    uint8_t* h_in = nullptr;
     uint8_t* h_pinned_bg = nullptr;
     uint8_t* h_pinned_mura = nullptr;
     uint8_t* h_pinned_ridge = nullptr;
+    float* h_pinned_mura_curve = nullptr;
 
     // 2. 定義 Device Memory (GPU)
     uint8_t* d_in = nullptr;
     uint8_t* d_bg = nullptr;
     uint8_t* d_mura = nullptr;
     uint8_t* d_ridge = nullptr;
+    float* d_mura_curve = nullptr;
 
     try {
         // 預估最大可能尺寸 (例如 16384 x 10000)，先分配夠大的 Pinned Memory
@@ -55,11 +58,14 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
         checkCudaErrors(cudaMalloc(&d_bg, img_size));
         checkCudaErrors(cudaMalloc(&d_mura, img_size));
         checkCudaErrors(cudaMalloc(&d_ridge, img_size));
+        checkCudaErrors(cudaMalloc(&d_mura_curve, w * sizeof(float)));
 
         // --- C. 分配輸出 Pinned Memory ---
+        h_in = (uint8_t*)core::alloc_pinned_memory(img_size);
         h_pinned_bg = (uint8_t*)core::alloc_pinned_memory(img_size);
         h_pinned_mura = (uint8_t*)core::alloc_pinned_memory(img_size);
         h_pinned_ridge = (uint8_t*)core::alloc_pinned_memory(img_size);
+        h_pinned_mura_curve = (float*)core::alloc_pinned_memory(w * sizeof(float));
 
         // --- D. 上傳圖片 (Pinned -> Device) ---
         {
@@ -78,36 +84,43 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
             detector.Initialize(w, h);
 
             TIME_SCOPE_MS_SYNC("Module: PICoater Detector Run (GPU)", cudaDeviceSynchronize());
-            detector.Run(d_in, d_bg, d_mura, d_ridge, bgSigma, ridgeSigma, ridgeMode, 0);
+            detector.Run(d_in, d_bg, d_mura, d_ridge, d_mura_curve, bgSigma, ridgeSigma, ridgeMode, 0);
         }
 
         // --- F. 下載結果 (Device -> Pinned) ---
         {
             TIME_SCOPE_MS("Download Result (Device -> Host Pinned)");
+            checkCudaErrors(cudaMemcpy(h_in, d_in, img_size, cudaMemcpyDeviceToHost));
             checkCudaErrors(cudaMemcpy(h_pinned_bg, d_bg, img_size, cudaMemcpyDeviceToHost));
             checkCudaErrors(cudaMemcpy(h_pinned_mura, d_mura, img_size, cudaMemcpyDeviceToHost));
             checkCudaErrors(cudaMemcpy(h_pinned_ridge, d_ridge, img_size, cudaMemcpyDeviceToHost));
+            checkCudaErrors(cudaMemcpy(h_pinned_mura_curve, d_mura_curve, w * sizeof(float), cudaMemcpyDeviceToHost));
         }
 
         // --- G. 極速存圖測試 (Parallel) ---
         {
             TIME_SCOPE_MS("Fast Save BMP (Parallel + Raw Write)");
 
-            std::string outPath1 = framework::GetOutputPath("picoater_tests", "fast_bg.bmp");
-            std::string outPath2 = framework::GetOutputPath("picoater_tests", "fast_mura.bmp");
-            std::string outPath3 = framework::GetOutputPath("picoater_tests", "fast_ridge.bmp");
+            std::string outPath1 = framework::GetOutputPath("picoater_tests", "fast_ori.bmp");
+            std::string outPath2 = framework::GetOutputPath("picoater_tests", "fast_bg.bmp");
+            std::string outPath3 = framework::GetOutputPath("picoater_tests", "fast_mura.bmp");
+            std::string outPath4 = framework::GetOutputPath("picoater_tests", "fast_ridge.bmp");
+
 
             auto f1 = std::async(std::launch::async, [&] {
-                core::fast_write_bmp_8bit(outPath1, w, h, h_pinned_bg);
+                core::fast_write_bmp_8bit(outPath1, w, h, h_in);
                 });
             auto f2 = std::async(std::launch::async, [&] {
-                core::fast_write_bmp_8bit(outPath2, w, h, h_pinned_mura);
+                core::fast_write_bmp_8bit(outPath2, w, h, h_pinned_bg);
                 });
             auto f3 = std::async(std::launch::async, [&] {
-                core::fast_write_bmp_8bit(outPath3, w, h, h_pinned_ridge);
+                core::fast_write_bmp_8bit(outPath3, w, h, h_pinned_mura);
+                });
+            auto f4 = std::async(std::launch::async, [&] {
+                core::fast_write_bmp_8bit(outPath4, w, h, h_pinned_ridge);
                 });
 
-            f1.get(); f2.get(); f3.get();
+            f2.get(); f3.get(); f4.get();
         }
 
         std::cout << Color::GREEN << "AOI Pipeline Test Completed." << Color::RESET << "\n\n";
@@ -149,11 +162,13 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
     if (d_bg) cudaFree(d_bg);
     if (d_mura) cudaFree(d_mura);
     if (d_ridge) cudaFree(d_ridge);
+    if (d_mura_curve) cudaFree(d_mura_curve);
 
     core::free_pinned_memory(h_pinned_in); // 別忘了釋放 Input
     core::free_pinned_memory(h_pinned_bg);
     core::free_pinned_memory(h_pinned_mura);
     core::free_pinned_memory(h_pinned_ridge);
+    core::free_pinned_memory(h_pinned_mura_curve);
 
     std::cout << Color::GREEN << "All Tests Finished." << Color::RESET << "\n";
 }
@@ -169,10 +184,12 @@ struct CamContext {
     uint8_t* d_bg = nullptr;
     uint8_t* d_mura = nullptr;
     uint8_t* d_ridge = nullptr;
+    float* d_mura_curve = nullptr;
 
     // Pinned Buffers (Input & Output)
     uint8_t* h_pinned_in = nullptr;
     uint8_t* h_pinned_thumb = nullptr;
+    float* h_pinned_mura_curve = nullptr;
 
     // Stream
     cudaStream_t stream = nullptr;
@@ -192,10 +209,19 @@ struct CamContext {
         checkCudaErrors(cudaMalloc(&d_bg, img_size));
         checkCudaErrors(cudaMalloc(&d_mura, img_size));
         checkCudaErrors(cudaMalloc(&d_ridge, img_size));
+        checkCudaErrors(cudaMalloc(&d_mura_curve, w * sizeof(float)));
 
         // 3. 分配 Pinned Memory
         h_pinned_in = (uint8_t*)core::alloc_pinned_memory(img_size);
-        h_pinned_thumb = (uint8_t*)core::alloc_pinned_memory(2000 * 2000); // 預留夠大的縮圖空間
+        h_pinned_thumb = (uint8_t*)core::alloc_pinned_memory(2000 * 2000); 
+        h_pinned_mura_curve = (float*)core::alloc_pinned_memory(w * sizeof(float));
+
+        // [新增] 檢查分配是否成功
+        if (!h_pinned_in || !h_pinned_thumb || !h_pinned_mura_curve) {
+            std::cerr << "CamContext " << id << ": Failed to allocate Host Pinned Memory!\n";
+            // 這裡可以 throw exception 或是做錯誤處理
+            throw std::runtime_error("Pinned Memory Allocation Failed");
+        }
 
         // 4. 初始化 Detector
         detector.Initialize(w, h);
@@ -206,9 +232,11 @@ struct CamContext {
         if (d_bg) cudaFree(d_bg);
         if (d_mura) cudaFree(d_mura);
         if (d_ridge) cudaFree(d_ridge);
+        if (d_mura_curve) cudaFree(d_mura_curve);
 
         core::free_pinned_memory(h_pinned_in);
         core::free_pinned_memory(h_pinned_thumb);
+        core::free_pinned_memory(h_pinned_mura_curve);
 
         if (stream) cudaStreamDestroy(stream);
     }
@@ -272,7 +300,7 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath) {
                 checkCudaErrors(cudaMemcpyAsync(ctx.d_in, ctx.h_pinned_in, ctx.img_size, cudaMemcpyHostToDevice, ctx.stream));
 
                 // C. 運算 (Async)
-                ctx.detector.Run(ctx.d_in, ctx.d_bg, ctx.d_mura, ctx.d_ridge,
+                ctx.detector.Run(ctx.d_in, ctx.d_bg, ctx.d_mura, ctx.d_ridge, ctx.d_mura_curve,
                     2.0f, 9.0f, "vertical", ctx.stream);
 
                 // D. GPU 縮圖 (Async)
@@ -283,6 +311,8 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath) {
                 // E. 下載縮圖 (Async)
                 size_t thumb_size = THUMB_W * thumb_h;
                 checkCudaErrors(cudaMemcpyAsync(ctx.h_pinned_thumb, d_thumb_temp, thumb_size, cudaMemcpyDeviceToHost, ctx.stream));
+                checkCudaErrors(cudaMemcpyAsync(ctx.h_pinned_mura_curve, ctx.d_mura_curve, ctx.w * sizeof(float), cudaMemcpyDeviceToHost, ctx.stream));
+
 
                 // F. 等待完成
                 checkCudaErrors(cudaStreamSynchronize(ctx.stream));

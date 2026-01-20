@@ -24,8 +24,8 @@ def remove_column_background(image: np.ndarray) -> np.ndarray:
     img_float = image.astype(np.float32)
     col_mean = np.mean(img_float, axis=0)
     bg_2d = np.tile(col_mean, (image.shape[0], 1))
-    minus = img_float - bg_2d
-    result = abs(minus-minus.min())
+    result = img_float - bg_2d + 127
+
     return np.clip(result, 0, 255).astype(np.uint8)
 
 def compute_hessian_ridge(image: np.ndarray, 
@@ -45,12 +45,12 @@ def compute_hessian_ridge(image: np.ndarray,
         raise ValueError(f"Invalid mode: {mode}")
 
     print(f"  [Process] Computing Ridge (Mode={mode}, Sigma={sigma}, FixedMax={fixed_max_val})...")
-    
-    img_float = image.astype(np.float32)
-
-    # 1. Gaussian Smoothing
     ksize = int(6 * sigma + 1) | 1
-    smooth = cv2.GaussianBlur(img_float, (ksize, ksize), sigma)
+    
+    smooth = cv2.GaussianBlur(image.astype(np.float32), (ksize, ksize), sigma)
+    
+    # smooth = cv2.GaussianBlur(image, (ksize, ksize), sigma).astype(np.float32)
+    
 
     response = None
 
@@ -74,7 +74,7 @@ def compute_hessian_ridge(image: np.ndarray,
     
     # 4. Clip to 0-255 (超過上限的就切平在 255)
     resp_fixed = np.clip(resp_scaled, 0, 255).astype(np.uint8)
-    return resp_fixed.astype(np.uint8)
+    return resp_fixed
 
 # --- 新增函數 ---
 
@@ -185,6 +185,7 @@ def main():
         print("[Error] Failed to decode image.")
         return
 
+    src_img = np.flip(src_img, axis=0)
     h, w = src_img.shape
     print(f"[Info] Image loaded. Width: {w}, Height: {h}")
     cv2.imwrite(os.path.join(OUTPUT_DIR, "step1_input.png"), src_img)
@@ -226,7 +227,7 @@ def main():
     
     heatmap_result = overlay_heatmap(src_img, res_v, 
                                      lower_limit=OVERLAY_LOWER, 
-                                     alpha=0.6) # 原圖佔 60%, 熱力圖佔 40%
+                                     alpha=0.3) # 原圖佔 60%, 熱力圖佔 40%
     
     cv2.imwrite(os.path.join(OUTPUT_DIR, "step6_heatmap_overlay.png"), heatmap_result)
     print(f"[Done] All artifacts saved to {OUTPUT_DIR}")

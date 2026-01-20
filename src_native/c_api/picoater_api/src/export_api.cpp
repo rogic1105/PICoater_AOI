@@ -25,20 +25,19 @@ struct PICoaterContext {
     uint8_t* d_mura = nullptr;
     uint8_t* d_ridge = nullptr;
 
-    // [新增] 每個 Context 擁有獨立的 CUDA Stream
-    cudaStream_t stream = nullptr;
+    // [新增] 曲線用的 GPU Buffer
+    float* d_mura_curve = nullptr;
 
+    cudaStream_t stream = nullptr;
     int current_w = 0;
     int current_h = 0;
 
     PICoaterContext() {
-        // [新增] 建立 Stream (Non-blocking，提升併發性)
         cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
     }
 
     ~PICoaterContext() {
         ReleaseBuffers();
-        // [新增] 銷毀 Stream
         if (stream) cudaStreamDestroy(stream);
     }
 
@@ -47,7 +46,12 @@ struct PICoaterContext {
         if (d_bg) cudaFree(d_bg);
         if (d_mura) cudaFree(d_mura);
         if (d_ridge) cudaFree(d_ridge);
+
+        // [新增] 釋放曲線
+        if (d_mura_curve) cudaFree(d_mura_curve);
+
         d_in = nullptr; d_bg = nullptr; d_mura = nullptr; d_ridge = nullptr;
+        d_mura_curve = nullptr;
         current_w = 0; current_h = 0;
     }
 
@@ -57,12 +61,15 @@ struct PICoaterContext {
         current_w = w;
         current_h = h;
         size_t size = w * h * sizeof(uint8_t);
+        size_t curve_size = w * sizeof(float); // [新增] 大小為 寬度 * 4 bytes
 
-        // 注意：這裡 malloc 還是同步的，但只發生一次
         if (cudaMalloc(&d_in, size) != cudaSuccess) return false;
         if (cudaMalloc(&d_bg, size) != cudaSuccess) return false;
         if (cudaMalloc(&d_mura, size) != cudaSuccess) return false;
         if (cudaMalloc(&d_ridge, size) != cudaSuccess) return false;
+
+        // [新增] 分配曲線記憶體
+        if (cudaMalloc(&d_mura_curve, curve_size) != cudaSuccess) return false;
 
         detector.Initialize(w, h);
         return true;
@@ -127,6 +134,7 @@ extern "C" {
         unsigned char* h_bg_out,
         unsigned char* h_mura_out,
         unsigned char* h_ridge_out,
+        float* h_mura_curve_out, // [新增] 接收曲線的 Host 指標 (可以是 nullptr)
         float bgSigmaFactor,
         float ridgeSigma,
         const char* ridgeMode,
@@ -134,38 +142,33 @@ extern "C" {
     ) {
         if (!handle || !h_in) return -1;
         auto* ctx = static_cast<PICoaterContext*>(handle);
-
-        // 如果還沒初始化，防呆
         if (ctx->current_w == 0 || ctx->current_h == 0) return -4;
 
         cudaStream_t cuStream = static_cast<cudaStream_t>(stream);
         size_t size = ctx->current_w * ctx->current_h * sizeof(uint8_t);
+        size_t curve_size = ctx->current_w * sizeof(float);
 
         SAFE_EXEC(
-            // 1. 上傳 (Host Pinned -> Device)
-            // 因為 h_in 是 Pinned Memory，這會觸發全速 DMA
+            // 1. 上傳
             cudaMemcpyAsync(ctx->d_in, h_in, size, cudaMemcpyHostToDevice, cuStream);
 
-        // 2. 計算 (Device -> Device)
+        // 2. 計算 (傳入 d_mura_curve)
         ctx->detector.Run(
-            ctx->d_in,
-            ctx->d_bg,
-            ctx->d_mura,
-            ctx->d_ridge,
-            bgSigmaFactor,
-            ridgeSigma,
-            ridgeMode,
-            cuStream
+            ctx->d_in, ctx->d_bg, ctx->d_mura, ctx->d_ridge,
+            ctx->d_mura_curve, // [新增] 傳入 GPU buffer
+            bgSigmaFactor, ridgeSigma, ridgeMode, cuStream
         );
 
-        // 3. 下載 (Device -> Host Pinned)
+        // 3. 下載影像
         if (h_bg_out)    cudaMemcpyAsync(h_bg_out, ctx->d_bg, size, cudaMemcpyDeviceToHost, cuStream);
         if (h_mura_out)  cudaMemcpyAsync(h_mura_out, ctx->d_mura, size, cudaMemcpyDeviceToHost, cuStream);
         if (h_ridge_out) cudaMemcpyAsync(h_ridge_out, ctx->d_ridge, size, cudaMemcpyDeviceToHost, cuStream);
 
-        // 4. 同步
-        // 由於 C# 呼叫通常是 Blocking 的，這裡等待 GPU 完成是安全的做法
-        // 如果希望 C# 端也是 Async，可以把這行拿掉，但 C# 就要自己負責同步
+        // [新增] 4. 下載曲線 (如果使用者有提供 buffer)
+        if (h_mura_curve_out) {
+            cudaMemcpyAsync(h_mura_curve_out, ctx->d_mura_curve, curve_size, cudaMemcpyDeviceToHost, cuStream);
+        }
+
         cudaStreamSynchronize(cuStream);
             );
     }
@@ -214,6 +217,7 @@ extern "C" {
         PICoaterHandle handle,
         const unsigned char* h_in,
         unsigned char* h_thumb_out,
+        float* h_mura_curve_out, // [新增] 同時拿縮圖和曲線
         int thumb_w,
         int thumb_h,
         float bgSigma, float ridgeSigma, const char* rMode
@@ -222,28 +226,36 @@ extern "C" {
         auto* ctx = static_cast<PICoaterContext*>(handle);
 
         size_t size = ctx->current_w * ctx->current_h;
+        size_t curve_size = ctx->current_w * sizeof(float);
 
-        // 1. 上傳 (指定 Stream!)
-        // 如果 h_in 是 Pinned Memory，這會是 Async 的
-        cudaMemcpyAsync(ctx->d_in, h_in, size, cudaMemcpyHostToDevice, ctx->stream);
+        SAFE_EXEC(
+            // 1. 上傳
+            cudaMemcpyAsync(ctx->d_in, h_in, size, cudaMemcpyHostToDevice, ctx->stream);
 
-        // 2. 運算 (傳入 Stream!)
-        ctx->detector.Run(ctx->d_in, ctx->d_bg, ctx->d_mura, ctx->d_ridge,
-            bgSigma, ridgeSigma, rMode, ctx->stream);
+        // 2. 運算
+        ctx->detector.Run(
+            ctx->d_in, ctx->d_bg, ctx->d_mura, ctx->d_ridge,
+            ctx->d_mura_curve, // [新增]
+            bgSigma, ridgeSigma, rMode, ctx->stream
+        );
 
-        // 3. 縮圖 (傳入 Stream!)
-        uint8_t* d_thumb_temp = ctx->d_bg;
+        // 3. 縮圖
+        uint8_t * d_thumb_temp = ctx->d_bg; // 借用 buffer
         core::resize_u8_gpu(ctx->d_mura, ctx->current_w, ctx->current_h,
             d_thumb_temp, thumb_w, thumb_h, ctx->stream);
 
-        // 4. 下載 (指定 Stream!)
+        // 4. 下載縮圖
         size_t thumb_size = thumb_w * thumb_h;
         cudaMemcpyAsync(h_thumb_out, d_thumb_temp, thumb_size, cudaMemcpyDeviceToHost, ctx->stream);
 
-        // 5. 同步 (只等待這個 Stream 完成，不擋其他相機)
+        // [新增] 5. 下載曲線
+        if (h_mura_curve_out) {
+            cudaMemcpyAsync(h_mura_curve_out, ctx->d_mura_curve, curve_size, cudaMemcpyDeviceToHost, ctx->stream);
+        }
+
         cudaStreamSynchronize(ctx->stream);
+            );
         return 0;
     }
-
 
 }

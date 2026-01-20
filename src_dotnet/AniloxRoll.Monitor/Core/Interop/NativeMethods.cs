@@ -30,13 +30,14 @@ namespace AniloxRoll.Monitor.Core.Interop
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         public static extern int PICoater_Run_And_GetThumbnail(
             IntPtr handle,
-            IntPtr inputHandle,
-            IntPtr outputBufferPtr,
-            int thumbWidth,
-            int thumbHeight,
+            IntPtr h_in,             // 輸入大圖
+            IntPtr h_thumb_out,      // 輸出縮圖
+            IntPtr h_mura_curve_out, // [新增] 輸出曲線 (float*)
+            int thumb_w,
+            int thumb_h,
             float bgSigma,
             float ridgeSigma,
-            [MarshalAs(UnmanagedType.LPStr)] string ridgeMode
+            [MarshalAs(UnmanagedType.LPStr)] string rMode
         );
 
         // 快速讀取 BMP 到記憶體
@@ -59,5 +60,10 @@ namespace AniloxRoll.Monitor.Core.Interop
             out int outRealW,
             out int outRealH
         );
+
+
+
+
+
     }
 }

@@ -1,8 +1,9 @@
-﻿using System;
+﻿using AniloxRoll.Monitor.Core.Data;
+using AOI.SDK.Core.Models;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
-using AOI.SDK.Core.Models;
 
 namespace AniloxRoll.Monitor.Forms.Helpers
 {
@@ -20,6 +21,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         public event Action<int> SelectionChanged;
 
         public int SelectedIndex => _selectedIndex;
+        private TimedResult<InspectionData>[] _currentResults;
 
         public void Initialize(PictureBox[] boxes)
         {
@@ -44,27 +46,35 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         /// </summary>
         /// <param name="results">檢測結果陣列</param>
         /// <param name="cacheCollector">用於收集 Bitmap 以便 Form 進行統一 Dispose 管理的 List</param>
-        public void UpdateImages(TimedResult<Bitmap>[] results, List<Image> cacheCollector)
+        public void UpdateImages(TimedResult<InspectionData>[] results, List<Image> cacheCollector)
         {
+            _currentResults = results; // 保存引用
+
             for (int i = 0; i < _previewBoxes.Length; i++)
             {
                 if (i >= results.Length) break;
 
                 var result = results[i];
-                if (result?.Data != null)
+                // 取出 Image 顯示
+                if (result?.Data?.Image != null)
                 {
-                    // 加入外部 Cache List 管理生命週期
-                    cacheCollector.Add(result.Data);
-                    _previewBoxes[i].Image = result.Data;
+                    cacheCollector.Add(result.Data.Image);
+                    _previewBoxes[i].Image = result.Data.Image;
                 }
                 else
                 {
                     _previewBoxes[i].Image = null;
                 }
-
-                // 強制重繪以確保邊框在最上層
                 _previewBoxes[i].Invalidate();
             }
+        }
+
+        public InspectionData GetCurrentSelectionData()
+        {
+            if (_currentResults == null || _selectedIndex < 0 || _selectedIndex >= _currentResults.Length)
+                return null;
+
+            return _currentResults[_selectedIndex]?.Data;
         }
 
         /// <summary>
