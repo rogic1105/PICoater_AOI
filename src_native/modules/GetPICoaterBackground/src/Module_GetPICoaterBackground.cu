@@ -6,6 +6,7 @@
 #include "core_cv/imgproc/core_filters.hpp"
 #include "core_cv/imgproc/core_background.hpp"
 #include "core_cv/imgproc/core_features.hpp"
+#include "core_cv/imgproc/core_utils.hpp" // [新增] for overlay_heatmap_gpu
 
 #include "cpp_utils/timer_utils.hpp"
 
@@ -28,7 +29,7 @@ namespace picoater {
         // [關鍵] 只需要釋放總 workspace，內部的指標只是借用位址，不需要 free
         if (d_workspace_) cudaFree(d_workspace_);
 
-		d_col_mean = nullptr;
+        d_col_mean = nullptr;
         d_col_bg_ = nullptr;
         d_blur_tmp_ = nullptr;
         d_workspace_ = nullptr;
@@ -82,7 +83,6 @@ namespace picoater {
         d_hessian_u8_ = (uint8_t*)(base + off_u8);
         d_hessian_f32_ = (float*)(base + off_f32);
         d_hessian_resp_ = (float*)(base + off_resp);
-
     }
 
     void PICoaterDetector::Run(
@@ -91,38 +91,36 @@ namespace picoater {
         uint8_t* d_mura_out,
         uint8_t* d_ridge_out,
         float* d_mura_curve_out,
+        uint8_t* d_heatmap_out, // [新增]
         float bgSigmaFactor,
         float ridgeSigma,
+        int heatmap_lower_thres, // [新增]
+        float heatmap_alpha,     // [新增]
         const char* ridgeMode,
         cudaStream_t stream
     ) {
         if (m_width == 0) return;
 
-        float fixed_max_val = 1.0;
+        float fixed_max_val = 1.0f;
         int sigma_col = 1;
 
-
         // [新增] 總耗時測量 (這會包住整個 Run)
-        // 注意：這裡的同步 lambda 會在 Run 函式結束時執行
         TIME_SCOPE_MS_SYNC("Total Run Time", cudaStreamSynchronize(stream));
 
         // 步驟 1: 計算列平均 (Column Means)
         {
-            // [新增] 步驟計時器
             TIME_SCOPE_MS_SYNC("      1. Calc Column Means", cudaStreamSynchronize(stream));
             core::calcColumnMeans_RemoveOutliers_gpu(d_in, d_col_mean, m_width, m_height, sigma_col, stream);
         }
 
         // 步驟 2: 計算背景與 Mura (Background & Mura)
         {
-            // [新增] 步驟計時器
             TIME_SCOPE_MS_SYNC("      2. Calc Background & Mura", cudaStreamSynchronize(stream));
             core::calcColumnBackground_u8_gpu(d_in, d_col_mean, d_mura_out, m_width, m_height, stream);
         }
 
         // 步驟 3: Hessian Ridge Detection
         {
-            // [新增] 步驟計時器
             TIME_SCOPE_MS_SYNC("      3. Hessian Ridge", cudaStreamSynchronize(stream));
             core::hessianRidge_u8_gpu(
                 d_mura_out,
@@ -139,7 +137,6 @@ namespace picoater {
         }
 
         // 步驟 4: Hessian Ridge Detection 之col平均
-
         {
             TIME_SCOPE_MS_SYNC("      4. Hessian Ridge col mean", cudaStreamSynchronize(stream));
             core::calcColumnMeans_gpu<float>(
@@ -149,6 +146,24 @@ namespace picoater {
                 m_height,
                 stream,
                 d_workspace_
+            );
+        }
+
+        // [新增] 步驟 5: Overlay Heatmap
+        // 只有在外部有分配 buffer 時才執行
+        if (d_heatmap_out != nullptr)
+        {
+            TIME_SCOPE_MS_SYNC("      5. Overlay Heatmap", cudaStreamSynchronize(stream));
+
+            core::overlay_heatmap_gpu(
+                d_in,             // 來源圖 (src_image)
+                d_ridge_out,      // 疊加圖 (overlay_image/heatmap source)
+                d_heatmap_out,    // 輸出結果 (BGR)
+                m_width,
+                m_height,
+                heatmap_lower_thres,
+                heatmap_alpha,
+                stream
             );
         }
     }

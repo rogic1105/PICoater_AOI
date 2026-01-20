@@ -6,6 +6,9 @@
 #include "core_cv/imgcodecs/core_imgcodecs_fast.hpp"
 #include "core_cv/imgproc/core_transform.hpp"
 
+
+#include <stb/stb_image_write.h>
+
 #include "cpp_utils/timer_utils.hpp"
 #include "cpp_utils/terminal_colors.hpp"
 #include "Module_GetPICoaterBackground.hpp"
@@ -23,6 +26,7 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
     uint8_t* h_pinned_bg = nullptr;
     uint8_t* h_pinned_mura = nullptr;
     uint8_t* h_pinned_ridge = nullptr;
+    uint8_t* h_pinned_heatmap = nullptr; // [新增]
     float* h_pinned_mura_curve = nullptr;
 
     // 2. 定義 Device Memory (GPU)
@@ -30,11 +34,11 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
     uint8_t* d_bg = nullptr;
     uint8_t* d_mura = nullptr;
     uint8_t* d_ridge = nullptr;
+    uint8_t* d_heatmap = nullptr; // [新增]
     float* d_mura_curve = nullptr;
 
     try {
-        // 預估最大可能尺寸 (例如 16384 x 10000)，先分配夠大的 Pinned Memory
-        // 這樣讀圖時就不用 realloc
+        // 預估最大可能尺寸 (例如 16384 x 10000)
         size_t max_size = 16384 * 10000;
         h_pinned_in = (uint8_t*)core::alloc_pinned_memory(max_size);
 
@@ -43,7 +47,6 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
         // --- A. 極速讀圖測試 (Direct to Pinned) ---
         {
             TIME_SCOPE_MS("Fast Load BMP (SSD -> Pinned Memory)");
-            // 直接從 SSD 讀到 Pinned Memory，不經過 CPU Cache/Vector
             if (!core::fast_read_bmp_8bit(imgPath, w, h, h_pinned_in, max_size)) {
                 std::cerr << "Fast load failed! Check file path or format.\n";
                 return;
@@ -52,12 +55,14 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
         }
 
         size_t img_size = (size_t)w * h;
+        size_t heatmap_size = img_size * 3; // [新增] RGB 3 channels
 
         // --- B. 分配 GPU 記憶體 ---
         checkCudaErrors(cudaMalloc(&d_in, img_size));
         checkCudaErrors(cudaMalloc(&d_bg, img_size));
         checkCudaErrors(cudaMalloc(&d_mura, img_size));
         checkCudaErrors(cudaMalloc(&d_ridge, img_size));
+        checkCudaErrors(cudaMalloc(&d_heatmap, heatmap_size)); // [新增]
         checkCudaErrors(cudaMalloc(&d_mura_curve, w * sizeof(float)));
 
         // --- C. 分配輸出 Pinned Memory ---
@@ -65,12 +70,12 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
         h_pinned_bg = (uint8_t*)core::alloc_pinned_memory(img_size);
         h_pinned_mura = (uint8_t*)core::alloc_pinned_memory(img_size);
         h_pinned_ridge = (uint8_t*)core::alloc_pinned_memory(img_size);
+        h_pinned_heatmap = (uint8_t*)core::alloc_pinned_memory(heatmap_size); // [新增]
         h_pinned_mura_curve = (float*)core::alloc_pinned_memory(w * sizeof(float));
 
         // --- D. 上傳圖片 (Pinned -> Device) ---
         {
             TIME_SCOPE_MS("Upload (Pinned -> Device)");
-            // 因為是 Pinned Memory，這步會跑全速 DMA
             checkCudaErrors(cudaMemcpy(d_in, h_pinned_in, img_size, cudaMemcpyHostToDevice));
         }
 
@@ -78,13 +83,18 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
         float bgSigma = 2.0f;
         float ridgeSigma = 9.0f;
         const char* ridgeMode = "vertical";
+        // [新增] Heatmap 參數
+        int heatmap_thres = 20;
+        float heatmap_alpha = 0.6f;
 
         {
             picoater::PICoaterDetector detector;
             detector.Initialize(w, h);
 
             TIME_SCOPE_MS_SYNC("Module: PICoater Detector Run (GPU)", cudaDeviceSynchronize());
-            detector.Run(d_in, d_bg, d_mura, d_ridge, d_mura_curve, bgSigma, ridgeSigma, ridgeMode, 0);
+            // [修改] 傳入 heatmap 相關參數
+            detector.Run(d_in, d_bg, d_mura, d_ridge, d_mura_curve, d_heatmap,
+                bgSigma, ridgeSigma, heatmap_thres, heatmap_alpha, ridgeMode, 0);
         }
 
         // --- F. 下載結果 (Device -> Pinned) ---
@@ -94,6 +104,8 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
             checkCudaErrors(cudaMemcpy(h_pinned_bg, d_bg, img_size, cudaMemcpyDeviceToHost));
             checkCudaErrors(cudaMemcpy(h_pinned_mura, d_mura, img_size, cudaMemcpyDeviceToHost));
             checkCudaErrors(cudaMemcpy(h_pinned_ridge, d_ridge, img_size, cudaMemcpyDeviceToHost));
+            // [新增] 下載 Heatmap
+            checkCudaErrors(cudaMemcpy(h_pinned_heatmap, d_heatmap, heatmap_size, cudaMemcpyDeviceToHost));
             checkCudaErrors(cudaMemcpy(h_pinned_mura_curve, d_mura_curve, w * sizeof(float), cudaMemcpyDeviceToHost));
         }
 
@@ -105,7 +117,7 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
             std::string outPath2 = framework::GetOutputPath("picoater_tests", "fast_bg.bmp");
             std::string outPath3 = framework::GetOutputPath("picoater_tests", "fast_mura.bmp");
             std::string outPath4 = framework::GetOutputPath("picoater_tests", "fast_ridge.bmp");
-
+            std::string outPath5 = framework::GetOutputPath("picoater_tests", "fast_heatmap.bmp"); // [新增]
 
             auto f1 = std::async(std::launch::async, [&] {
                 core::fast_write_bmp_8bit(outPath1, w, h, h_in);
@@ -119,12 +131,16 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
             auto f4 = std::async(std::launch::async, [&] {
                 core::fast_write_bmp_8bit(outPath4, w, h, h_pinned_ridge);
                 });
+            // [新增] 存 Heatmap (用 STB 因為是 BGR 彩圖)
+            auto f5 = std::async(std::launch::async, [&] {
+                // stbi_write_bmp expects 3 components (RGB)
+                stbi_write_bmp(outPath5.c_str(), w, h, 3, h_pinned_heatmap);
+                });
 
-            f2.get(); f3.get(); f4.get();
+            f2.get(); f3.get(); f4.get(); f5.get();
         }
 
         std::cout << Color::GREEN << "AOI Pipeline Test Completed." << Color::RESET << "\n\n";
-
 
         // --- H. 額外測試: 單純 IO 極限測試 ---
         // 為了驗證頻寬，我們模擬存 3 張原始圖片 (input) 到硬碟
@@ -162,19 +178,20 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
     if (d_bg) cudaFree(d_bg);
     if (d_mura) cudaFree(d_mura);
     if (d_ridge) cudaFree(d_ridge);
+    if (d_heatmap) cudaFree(d_heatmap); // [新增]
     if (d_mura_curve) cudaFree(d_mura_curve);
 
-    core::free_pinned_memory(h_pinned_in); // 別忘了釋放 Input
+    core::free_pinned_memory(h_pinned_in);
     core::free_pinned_memory(h_pinned_bg);
     core::free_pinned_memory(h_pinned_mura);
     core::free_pinned_memory(h_pinned_ridge);
+    core::free_pinned_memory(h_pinned_heatmap); // [新增]
     core::free_pinned_memory(h_pinned_mura_curve);
 
     std::cout << Color::GREEN << "All Tests Finished." << Color::RESET << "\n";
 }
 
 
-// [新增] 模擬 7 顆相機的 Context
 struct CamContext {
     int id;
     picoater::PICoaterDetector detector;
@@ -184,14 +201,14 @@ struct CamContext {
     uint8_t* d_bg = nullptr;
     uint8_t* d_mura = nullptr;
     uint8_t* d_ridge = nullptr;
+    uint8_t* d_heatmap = nullptr; // [新增]
     float* d_mura_curve = nullptr;
 
-    // Pinned Buffers (Input & Output)
+    // Pinned Buffers
     uint8_t* h_pinned_in = nullptr;
     uint8_t* h_pinned_thumb = nullptr;
     float* h_pinned_mura_curve = nullptr;
 
-    // Stream
     cudaStream_t stream = nullptr;
 
     int w = 0, h = 0;
@@ -201,29 +218,24 @@ struct CamContext {
         w = width; h = height;
         img_size = w * h;
 
-        // 1. 建立 Stream
         checkCudaErrors(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
 
-        // 2. 分配 GPU 記憶體
         checkCudaErrors(cudaMalloc(&d_in, img_size));
         checkCudaErrors(cudaMalloc(&d_bg, img_size));
         checkCudaErrors(cudaMalloc(&d_mura, img_size));
         checkCudaErrors(cudaMalloc(&d_ridge, img_size));
+        checkCudaErrors(cudaMalloc(&d_heatmap, img_size * 3)); // [新增] 分配 Heatmap 記憶體
         checkCudaErrors(cudaMalloc(&d_mura_curve, w * sizeof(float)));
 
-        // 3. 分配 Pinned Memory
         h_pinned_in = (uint8_t*)core::alloc_pinned_memory(img_size);
-        h_pinned_thumb = (uint8_t*)core::alloc_pinned_memory(2000 * 2000); 
+        h_pinned_thumb = (uint8_t*)core::alloc_pinned_memory(2000 * 2000);
         h_pinned_mura_curve = (float*)core::alloc_pinned_memory(w * sizeof(float));
 
-        // [新增] 檢查分配是否成功
         if (!h_pinned_in || !h_pinned_thumb || !h_pinned_mura_curve) {
             std::cerr << "CamContext " << id << ": Failed to allocate Host Pinned Memory!\n";
-            // 這裡可以 throw exception 或是做錯誤處理
             throw std::runtime_error("Pinned Memory Allocation Failed");
         }
 
-        // 4. 初始化 Detector
         detector.Initialize(w, h);
     }
 
@@ -232,6 +244,7 @@ struct CamContext {
         if (d_bg) cudaFree(d_bg);
         if (d_mura) cudaFree(d_mura);
         if (d_ridge) cudaFree(d_ridge);
+        if (d_heatmap) cudaFree(d_heatmap); // [新增]
         if (d_mura_curve) cudaFree(d_mura_curve);
 
         core::free_pinned_memory(h_pinned_in);
@@ -248,14 +261,9 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath) {
 
     std::cout << Color::CYAN << "Initializing " << NUM_CAMS << " Cameras..." << Color::RESET << "\n";
 
-    // 1. 讀取圖片尺寸 (只讀一次 header 或第一張圖)
+    // 1. 讀取圖片尺寸
     int w = 0, h = 0;
-    // 這裡我們作弊一下，先讀一次拿到尺寸，模擬系統已知規格
-    // 實際上每顆相機都一樣大
     {
-        uint8_t* temp = nullptr;
-        // 為了簡單，這裡用 stbi 讀一下 header 或是假定已知
-        // 為了嚴謹，我們先用 fast_read 讀到一個臨時 buffer
         size_t max_size = 16384 * 10000;
         uint8_t* temp_pinned = (uint8_t*)core::alloc_pinned_memory(max_size);
         if (!core::fast_read_bmp_8bit(imgPath, w, h, temp_pinned, max_size)) {
@@ -265,7 +273,7 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath) {
     }
     int thumb_h = (int)((float)h / w * THUMB_W);
 
-    // 2. 準備 7 個 Context (模擬 C# 的 _algoPool)
+    // 2. 準備 7 個 Context
     std::vector<CamContext> cams(NUM_CAMS);
     for (int i = 0; i < NUM_CAMS; ++i) {
         cams[i].id = i;
@@ -283,36 +291,43 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath) {
 
         for (int i = 0; i < NUM_CAMS; ++i) {
             futures.push_back(std::async(std::launch::async, [&](int idx) -> double {
-                // 每個執行緒內部的計時器
                 auto start = std::chrono::high_resolution_clock::now();
-
                 CamContext& ctx = cams[idx];
 
-                // A. 讀圖 (IO)
-                // 為了模擬真實情況，我們讓每個 thread 讀同一張圖 (或者你可以準備 7 張不同的圖)
-                // 注意：多執行緒讀同一個檔案，OS 的 File Cache 會介入，速度可能會比讀 7 個不同檔案快一點
-                // 但如果是 NVMe，差異不大
+                // A. 讀圖
                 if (!core::fast_read_bmp_8bit(imgPath, ctx.w, ctx.h, ctx.h_pinned_in, ctx.img_size)) {
                     return 0.0;
                 }
 
-                // B. 上傳 (Async)
+                // B. 上傳
                 checkCudaErrors(cudaMemcpyAsync(ctx.d_in, ctx.h_pinned_in, ctx.img_size, cudaMemcpyHostToDevice, ctx.stream));
 
-                // C. 運算 (Async)
-                ctx.detector.Run(ctx.d_in, ctx.d_bg, ctx.d_mura, ctx.d_ridge, ctx.d_mura_curve,
-                    2.0f, 9.0f, "vertical", ctx.stream);
+                // C. 運算 [修改: 傳入新的參數]
+                // 注意：這裡我們在 MultiThread 測試中也啟用 Heatmap 生成，
+                // 即使不一定下載它，也可以測試 GPU 負載。
+                ctx.detector.Run(
+                    ctx.d_in,
+                    ctx.d_bg,
+                    ctx.d_mura,
+                    ctx.d_ridge,
+                    ctx.d_mura_curve,
+                    ctx.d_heatmap, // [新增]
+                    2.0f,          // bgSigma
+                    9.0f,          // ridgeSigma
+                    20,            // heatmap_lower_thres
+                    0.6f,          // heatmap_alpha
+                    "vertical",    // ridgeMode
+                    ctx.stream
+                );
 
-                // D. GPU 縮圖 (Async)
-                // 借用 d_bg 放縮圖
+                // D. GPU 縮圖
                 uint8_t* d_thumb_temp = ctx.d_bg;
                 core::resize_u8_gpu(ctx.d_mura, ctx.w, ctx.h, d_thumb_temp, THUMB_W, thumb_h, ctx.stream);
 
-                // E. 下載縮圖 (Async)
+                // E. 下載縮圖
                 size_t thumb_size = THUMB_W * thumb_h;
                 checkCudaErrors(cudaMemcpyAsync(ctx.h_pinned_thumb, d_thumb_temp, thumb_size, cudaMemcpyDeviceToHost, ctx.stream));
                 checkCudaErrors(cudaMemcpyAsync(ctx.h_pinned_mura_curve, ctx.d_mura_curve, ctx.w * sizeof(float), cudaMemcpyDeviceToHost, ctx.stream));
-
 
                 // F. 等待完成
                 checkCudaErrors(cudaStreamSynchronize(ctx.stream));
@@ -322,7 +337,6 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath) {
                 }, i));
         }
 
-        // 等待所有執行緒完成並收集時間
         for (int i = 0; i < NUM_CAMS; ++i) {
             double ms = futures[i].get();
             std::cout << "Cam " << i + 1 << ": " << ms << " ms\n";
