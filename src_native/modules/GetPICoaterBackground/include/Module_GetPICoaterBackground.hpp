@@ -13,21 +13,6 @@ namespace picoater {
 
         void Initialize(int width, int height);
 
-        /**
-         * @brief 執行檢測流程
-         * * @param d_in 輸入影像 (Device Pointer, 8-bit)
-         * @param d_bg_out 輸出背景 (Device Pointer, 8-bit)
-         * @param d_mura_out 輸出 Mura (Device Pointer, 8-bit)
-         * @param d_ridge_out 輸出 Ridge (Device Pointer, 8-bit)
-         * @param d_mura_curve_out 輸出曲線 (Device Pointer, Float)
-         * @param d_heatmap_out [新增] 輸出疊加圖 (Device Pointer, BGR, w*h*3 bytes). 若為 nullptr 則不執行疊圖。
-         * @param bgSigmaFactor 背景 sigma 參數
-         * @param ridgeSigma Ridge sigma 參數
-         * @param heatmap_lower_thres [新增] Heatmap 顯示下限 (低於此值的 Ridge 不顯示顏色)
-         * @param heatmap_alpha [新增] 原圖權重 (0.0~1.0)
-         * @param ridgeMode Ridge 模式 ("vertical" 等)
-         * @param stream CUDA Stream
-         */
         void Run(
             const uint8_t* d_in,
             uint8_t* d_bg_out,

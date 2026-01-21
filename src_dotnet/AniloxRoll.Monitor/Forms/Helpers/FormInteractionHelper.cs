@@ -38,7 +38,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
         public async Task LoadImages(bool enableProcess)
         {
-            // 設定模式：True 代表接下來點擊圖片要顯示 Heatmap
+
             _isProcessedMode = enableProcess;
             ClearOldImages();
             // 執行批次處理 (產生縮圖)
@@ -70,8 +70,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
                 if (_isProcessedMode)
                 {
-                    // [關鍵] 這裡是顯示 Heatmap 的入口
-                    // 當處於 ProcessedMode 時，呼叫 RunInspectionFullRes 取得 Heatmap
+
                     bigImg = _inspectionService.RunInspectionFullRes(index);
                 }
                 else

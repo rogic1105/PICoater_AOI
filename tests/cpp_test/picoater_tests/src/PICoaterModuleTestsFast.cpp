@@ -62,7 +62,6 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
         checkCudaErrors(cudaMalloc(&d_bg, img_size));
         checkCudaErrors(cudaMalloc(&d_mura, img_size));
         checkCudaErrors(cudaMalloc(&d_ridge, img_size));
-        checkCudaErrors(cudaMalloc(&d_heatmap, heatmap_size)); // [新增]
         checkCudaErrors(cudaMalloc(&d_mura_curve, w * sizeof(float)));
 
         // --- C. 分配輸出 Pinned Memory ---
@@ -70,7 +69,6 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
         h_pinned_bg = (uint8_t*)core::alloc_pinned_memory(img_size);
         h_pinned_mura = (uint8_t*)core::alloc_pinned_memory(img_size);
         h_pinned_ridge = (uint8_t*)core::alloc_pinned_memory(img_size);
-        h_pinned_heatmap = (uint8_t*)core::alloc_pinned_memory(heatmap_size); // [新增]
         h_pinned_mura_curve = (float*)core::alloc_pinned_memory(w * sizeof(float));
 
         // --- D. 上傳圖片 (Pinned -> Device) ---
@@ -83,16 +81,14 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
         float bgSigma = 2.0f;
         float ridgeSigma = 9.0f;
         const char* ridgeMode = "vertical";
-        // [新增] Heatmap 參數
-        int heatmap_thres = 20;
-        float heatmap_alpha = 0.6f;
+
 
         {
             picoater::PICoaterDetector detector;
             detector.Initialize(w, h);
 
             TIME_SCOPE_MS_SYNC("Module: PICoater Detector Run (GPU)", cudaDeviceSynchronize());
-            // [修改] 傳入 heatmap 相關參數
+
             detector.Run(
                 d_in, 
                 d_bg,
@@ -112,8 +108,6 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
             checkCudaErrors(cudaMemcpy(h_pinned_bg, d_bg, img_size, cudaMemcpyDeviceToHost));
             checkCudaErrors(cudaMemcpy(h_pinned_mura, d_mura, img_size, cudaMemcpyDeviceToHost));
             checkCudaErrors(cudaMemcpy(h_pinned_ridge, d_ridge, img_size, cudaMemcpyDeviceToHost));
-            // [新增] 下載 Heatmap
-            checkCudaErrors(cudaMemcpy(h_pinned_heatmap, d_heatmap, heatmap_size, cudaMemcpyDeviceToHost));
             checkCudaErrors(cudaMemcpy(h_pinned_mura_curve, d_mura_curve, w * sizeof(float), cudaMemcpyDeviceToHost));
         }
 
@@ -230,7 +224,6 @@ struct CamContext {
         checkCudaErrors(cudaMalloc(&d_bg, img_size));
         checkCudaErrors(cudaMalloc(&d_mura, img_size));
         checkCudaErrors(cudaMalloc(&d_ridge, img_size));
-        checkCudaErrors(cudaMalloc(&d_heatmap, img_size * 3)); // [新增] 分配 Heatmap 記憶體
         checkCudaErrors(cudaMalloc(&d_mura_curve, w * sizeof(float)));
 
         h_pinned_in = (uint8_t*)core::alloc_pinned_memory(img_size);
@@ -308,9 +301,7 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath) {
                 // B. 上傳
                 checkCudaErrors(cudaMemcpyAsync(ctx.d_in, ctx.h_pinned_in, ctx.img_size, cudaMemcpyHostToDevice, ctx.stream));
 
-                // C. 運算 [修改: 傳入新的參數]
-                // 注意：這裡我們在 MultiThread 測試中也啟用 Heatmap 生成，
-                // 即使不一定下載它，也可以測試 GPU 負載。
+
                 ctx.detector.Run(
                     ctx.d_in,
                     ctx.d_bg,

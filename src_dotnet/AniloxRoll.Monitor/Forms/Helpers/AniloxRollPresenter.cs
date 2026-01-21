@@ -65,7 +65,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
                 // 自動選取第一張
                 // 這會觸發 FormInteractionHelper.OnGallerySelectionChanged
-                // 進而呼叫 InspectionEngine.RunInspectionFullRes 顯示 Heatmap
+                // 進而呼叫 InspectionEngine.RunInspectionFullRes
                 _galleryManager.Select(_galleryManager.SelectedIndex, triggerEvent: true);
 
                 string logText = string.Join(Environment.NewLine, logs.OrderBy(x => x));
