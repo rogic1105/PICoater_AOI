@@ -93,8 +93,16 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
 
             TIME_SCOPE_MS_SYNC("Module: PICoater Detector Run (GPU)", cudaDeviceSynchronize());
             // [修改] 傳入 heatmap 相關參數
-            detector.Run(d_in, d_bg, d_mura, d_ridge, d_mura_curve, d_heatmap,
-                bgSigma, ridgeSigma, heatmap_thres, heatmap_alpha, ridgeMode, 0);
+            detector.Run(
+                d_in, 
+                d_bg,
+                d_mura, 
+                d_ridge, 
+                d_mura_curve,
+                bgSigma, 
+                ridgeSigma, 
+                ridgeMode,
+                0);
         }
 
         // --- F. 下載結果 (Device -> Pinned) ---
@@ -117,7 +125,7 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
             std::string outPath2 = framework::GetOutputPath("picoater_tests", "fast_bg.bmp");
             std::string outPath3 = framework::GetOutputPath("picoater_tests", "fast_mura.bmp");
             std::string outPath4 = framework::GetOutputPath("picoater_tests", "fast_ridge.bmp");
-            std::string outPath5 = framework::GetOutputPath("picoater_tests", "fast_heatmap.bmp"); // [新增]
+            std::string outPath5 = framework::GetOutputPath("picoater_tests", "fast_heatmap.bmp");
 
             auto f1 = std::async(std::launch::async, [&] {
                 core::fast_write_bmp_8bit(outPath1, w, h, h_in);
@@ -131,10 +139,8 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
             auto f4 = std::async(std::launch::async, [&] {
                 core::fast_write_bmp_8bit(outPath4, w, h, h_pinned_ridge);
                 });
-            // [新增] 存 Heatmap (用 STB 因為是 BGR 彩圖)
             auto f5 = std::async(std::launch::async, [&] {
-                // stbi_write_bmp expects 3 components (RGB)
-                stbi_write_bmp(outPath5.c_str(), w, h, 3, h_pinned_heatmap);
+                core::fast_write_bmp_24bit(outPath5, w, h, h_pinned_heatmap);
                 });
 
             f2.get(); f3.get(); f4.get(); f5.get();
@@ -311,11 +317,8 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath) {
                     ctx.d_mura,
                     ctx.d_ridge,
                     ctx.d_mura_curve,
-                    ctx.d_heatmap, // [新增]
                     2.0f,          // bgSigma
                     9.0f,          // ridgeSigma
-                    20,            // heatmap_lower_thres
-                    0.6f,          // heatmap_alpha
                     "vertical",    // ridgeMode
                     ctx.stream
                 );

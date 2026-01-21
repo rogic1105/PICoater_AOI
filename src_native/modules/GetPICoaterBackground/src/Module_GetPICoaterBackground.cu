@@ -91,11 +91,8 @@ namespace picoater {
         uint8_t* d_mura_out,
         uint8_t* d_ridge_out,
         float* d_mura_curve_out,
-        uint8_t* d_heatmap_out, // [新增]
         float bgSigmaFactor,
         float ridgeSigma,
-        int heatmap_lower_thres, // [新增]
-        float heatmap_alpha,     // [新增]
         const char* ridgeMode,
         cudaStream_t stream
     ) {
@@ -109,19 +106,19 @@ namespace picoater {
 
         // 步驟 1: 計算列平均 (Column Means)
         {
-            TIME_SCOPE_MS_SYNC("      1. Calc Column Means", cudaStreamSynchronize(stream));
+            //TIME_SCOPE_MS_SYNC("      1. Calc Column Means", cudaStreamSynchronize(stream));
             core::calcColumnMeans_RemoveOutliers_gpu(d_in, d_col_mean, m_width, m_height, sigma_col, stream);
         }
 
         // 步驟 2: 計算背景與 Mura (Background & Mura)
         {
-            TIME_SCOPE_MS_SYNC("      2. Calc Background & Mura", cudaStreamSynchronize(stream));
+            //TIME_SCOPE_MS_SYNC("      2. Calc Background & Mura", cudaStreamSynchronize(stream));
             core::calcColumnBackground_u8_gpu(d_in, d_col_mean, d_mura_out, m_width, m_height, stream);
         }
 
         // 步驟 3: Hessian Ridge Detection
         {
-            TIME_SCOPE_MS_SYNC("      3. Hessian Ridge", cudaStreamSynchronize(stream));
+            //TIME_SCOPE_MS_SYNC("      3. Hessian Ridge", cudaStreamSynchronize(stream));
             core::hessianRidge_u8_gpu(
                 d_mura_out,
                 d_ridge_out,
@@ -138,7 +135,7 @@ namespace picoater {
 
         // 步驟 4: Hessian Ridge Detection 之col平均
         {
-            TIME_SCOPE_MS_SYNC("      4. Hessian Ridge col mean", cudaStreamSynchronize(stream));
+            //TIME_SCOPE_MS_SYNC("      4. Hessian Ridge col mean", cudaStreamSynchronize(stream));
             core::calcColumnMeans_gpu<float>(
                 d_hessian_resp_,
                 d_mura_curve_out,
@@ -149,22 +146,5 @@ namespace picoater {
             );
         }
 
-        // [新增] 步驟 5: Overlay Heatmap
-        // 只有在外部有分配 buffer 時才執行
-        if (d_heatmap_out != nullptr)
-        {
-            TIME_SCOPE_MS_SYNC("      5. Overlay Heatmap", cudaStreamSynchronize(stream));
-
-            core::overlay_heatmap_gpu(
-                d_in,             // 來源圖 (src_image)
-                d_ridge_out,      // 疊加圖 (overlay_image/heatmap source)
-                d_heatmap_out,    // 輸出結果 (BGR)
-                m_width,
-                m_height,
-                heatmap_lower_thres,
-                heatmap_alpha,
-                stream
-            );
-        }
     }
 }

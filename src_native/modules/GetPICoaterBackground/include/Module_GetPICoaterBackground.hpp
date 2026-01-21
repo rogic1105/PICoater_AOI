@@ -34,11 +34,8 @@ namespace picoater {
             uint8_t* d_mura_out,
             uint8_t* d_ridge_out,
             float* d_mura_curve_out,
-            uint8_t* d_heatmap_out,
             float bgSigmaFactor,
             float ridgeSigma,
-            int heatmap_lower_thres,
-            float heatmap_alpha,
             const char* ridgeMode,
             cudaStream_t stream = 0
         );
