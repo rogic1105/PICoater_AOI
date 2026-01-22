@@ -47,9 +47,9 @@
             this.pbCam3 = new System.Windows.Forms.PictureBox();
             this.pbCam2 = new System.Windows.Forms.PictureBox();
             this.pbCam1 = new System.Windows.Forms.PictureBox();
-            this.canvasMain = new AOI.SDK.UI.SmartCanvas();
             this.statusStrip1 = new System.Windows.Forms.StatusStrip();
             this.lblPixelInfo = new System.Windows.Forms.ToolStripStatusLabel();
+            this.canvasMain = new AOI.SDK.UI.SmartCanvas();
             this.tabControl1.SuspendLayout();
             this.tabPage2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam7)).BeginInit();
@@ -59,18 +59,18 @@
             ((System.ComponentModel.ISupportInitialize)(this.pbCam3)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam2)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam1)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).BeginInit();
             this.statusStrip1.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).BeginInit();
             this.SuspendLayout();
             // 
             // tabControl1
             // 
             this.tabControl1.Controls.Add(this.tabPage1);
             this.tabControl1.Controls.Add(this.tabPage2);
-            this.tabControl1.Location = new System.Drawing.Point(758, 12);
+            this.tabControl1.Location = new System.Drawing.Point(1099, 12);
             this.tabControl1.Name = "tabControl1";
             this.tabControl1.SelectedIndex = 0;
-            this.tabControl1.Size = new System.Drawing.Size(357, 581);
+            this.tabControl1.Size = new System.Drawing.Size(357, 718);
             this.tabControl1.TabIndex = 1;
             // 
             // tabPage1
@@ -78,7 +78,7 @@
             this.tabPage1.Location = new System.Drawing.Point(4, 25);
             this.tabPage1.Name = "tabPage1";
             this.tabPage1.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage1.Size = new System.Drawing.Size(349, 552);
+            this.tabPage1.Size = new System.Drawing.Size(349, 689);
             this.tabPage1.TabIndex = 0;
             this.tabPage1.Text = "Live Monitor";
             this.tabPage1.UseVisualStyleBackColor = true;
@@ -182,54 +182,54 @@
             // 
             // pbCam7
             // 
-            this.pbCam7.Location = new System.Drawing.Point(651, 12);
+            this.pbCam7.Location = new System.Drawing.Point(936, 12);
             this.pbCam7.Name = "pbCam7";
-            this.pbCam7.Size = new System.Drawing.Size(100, 100);
+            this.pbCam7.Size = new System.Drawing.Size(148, 157);
             this.pbCam7.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             this.pbCam7.TabIndex = 14;
             this.pbCam7.TabStop = false;
             // 
             // pbCam6
             // 
-            this.pbCam6.Location = new System.Drawing.Point(545, 12);
+            this.pbCam6.Location = new System.Drawing.Point(782, 12);
             this.pbCam6.Name = "pbCam6";
-            this.pbCam6.Size = new System.Drawing.Size(100, 100);
+            this.pbCam6.Size = new System.Drawing.Size(148, 157);
             this.pbCam6.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             this.pbCam6.TabIndex = 13;
             this.pbCam6.TabStop = false;
             // 
             // pbCam5
             // 
-            this.pbCam5.Location = new System.Drawing.Point(439, 12);
+            this.pbCam5.Location = new System.Drawing.Point(628, 12);
             this.pbCam5.Name = "pbCam5";
-            this.pbCam5.Size = new System.Drawing.Size(100, 100);
+            this.pbCam5.Size = new System.Drawing.Size(148, 157);
             this.pbCam5.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             this.pbCam5.TabIndex = 12;
             this.pbCam5.TabStop = false;
             // 
             // pbCam4
             // 
-            this.pbCam4.Location = new System.Drawing.Point(333, 12);
+            this.pbCam4.Location = new System.Drawing.Point(474, 12);
             this.pbCam4.Name = "pbCam4";
-            this.pbCam4.Size = new System.Drawing.Size(100, 100);
+            this.pbCam4.Size = new System.Drawing.Size(148, 157);
             this.pbCam4.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             this.pbCam4.TabIndex = 11;
             this.pbCam4.TabStop = false;
             // 
             // pbCam3
             // 
-            this.pbCam3.Location = new System.Drawing.Point(226, 12);
+            this.pbCam3.Location = new System.Drawing.Point(320, 12);
             this.pbCam3.Name = "pbCam3";
-            this.pbCam3.Size = new System.Drawing.Size(100, 100);
+            this.pbCam3.Size = new System.Drawing.Size(148, 157);
             this.pbCam3.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             this.pbCam3.TabIndex = 10;
             this.pbCam3.TabStop = false;
             // 
             // pbCam2
             // 
-            this.pbCam2.Location = new System.Drawing.Point(118, 12);
+            this.pbCam2.Location = new System.Drawing.Point(166, 12);
             this.pbCam2.Name = "pbCam2";
-            this.pbCam2.Size = new System.Drawing.Size(100, 100);
+            this.pbCam2.Size = new System.Drawing.Size(148, 157);
             this.pbCam2.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             this.pbCam2.TabIndex = 9;
             this.pbCam2.TabStop = false;
@@ -238,29 +238,19 @@
             // 
             this.pbCam1.Location = new System.Drawing.Point(12, 12);
             this.pbCam1.Name = "pbCam1";
-            this.pbCam1.Size = new System.Drawing.Size(100, 100);
+            this.pbCam1.Size = new System.Drawing.Size(148, 157);
             this.pbCam1.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             this.pbCam1.TabIndex = 8;
             this.pbCam1.TabStop = false;
-            // 
-            // canvasMain
-            // 
-            this.canvasMain.BackColor = System.Drawing.Color.Black;
-            this.canvasMain.Cursor = System.Windows.Forms.Cursors.Cross;
-            this.canvasMain.Location = new System.Drawing.Point(12, 118);
-            this.canvasMain.Name = "canvasMain";
-            this.canvasMain.Size = new System.Drawing.Size(739, 450);
-            this.canvasMain.TabIndex = 7;
-            this.canvasMain.TabStop = false;
             // 
             // statusStrip1
             // 
             this.statusStrip1.ImageScalingSize = new System.Drawing.Size(20, 20);
             this.statusStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.lblPixelInfo});
-            this.statusStrip1.Location = new System.Drawing.Point(0, 570);
+            this.statusStrip1.Location = new System.Drawing.Point(0, 733);
             this.statusStrip1.Name = "statusStrip1";
-            this.statusStrip1.Size = new System.Drawing.Size(1127, 25);
+            this.statusStrip1.Size = new System.Drawing.Size(1468, 25);
             this.statusStrip1.TabIndex = 15;
             this.statusStrip1.Text = "statusStrip1";
             // 
@@ -270,11 +260,21 @@
             this.lblPixelInfo.Size = new System.Drawing.Size(127, 19);
             this.lblPixelInfo.Text = "座標:(0, 0)|亮度: 0";
             // 
+            // canvasMain
+            // 
+            this.canvasMain.BackColor = System.Drawing.Color.Black;
+            this.canvasMain.Cursor = System.Windows.Forms.Cursors.Cross;
+            this.canvasMain.Location = new System.Drawing.Point(12, 193);
+            this.canvasMain.Name = "canvasMain";
+            this.canvasMain.Size = new System.Drawing.Size(1072, 537);
+            this.canvasMain.TabIndex = 7;
+            this.canvasMain.TabStop = false;
+            // 
             // AniloxRollForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1127, 595);
+            this.ClientSize = new System.Drawing.Size(1468, 758);
             this.Controls.Add(this.statusStrip1);
             this.Controls.Add(this.tabControl1);
             this.Controls.Add(this.pbCam1);
@@ -296,9 +296,9 @@
             ((System.ComponentModel.ISupportInitialize)(this.pbCam3)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam2)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam1)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).EndInit();
             this.statusStrip1.ResumeLayout(false);
             this.statusStrip1.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 

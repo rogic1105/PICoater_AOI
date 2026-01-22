@@ -29,6 +29,13 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             _inspectionService = service;
             _timeManager = timeMgr;
             _galleryManager = galleryMgr;
+
+            // 啟動時 WarmUp
+            Task.Run(() =>
+            {
+                try { _inspectionService.WarmUp(); }
+                catch { /* ignore */ }
+            });
         }
 
         public async Task RunWorkflowAsync(bool enableProcess, List<Image> cacheCollector)
@@ -51,8 +58,6 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
                 var sw = System.Diagnostics.Stopwatch.StartNew();
 
-                // 這裡會呼叫 InspectionEngine.ProcessImage
-                // 若 enableProcess=true，Engine 會產生 Mura 縮圖
                 var (results, logs) = await Task.Run(() =>
                     _inspectionService.ProcessBatch(filesMap, enableProcess));
 
@@ -60,12 +65,9 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
                 _galleryManager.UpdateImages(results, cacheCollector);
 
-                // 解除忙碌狀態，允許 InteractionHelper 處理 SelectionChanged
                 BusyStateChanged?.Invoke(false);
 
-                // 自動選取第一張
-                // 這會觸發 FormInteractionHelper.OnGallerySelectionChanged
-                // 進而呼叫 InspectionEngine.RunInspectionFullRes
+                // 自動選取第一張，觸發大圖檢視
                 _galleryManager.Select(_galleryManager.SelectedIndex, triggerEvent: true);
 
                 string logText = string.Join(Environment.NewLine, logs.OrderBy(x => x));

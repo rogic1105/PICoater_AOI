@@ -19,8 +19,7 @@ extern "C" {
     PICOATER_API void PICoater_Destroy(PICoaterHandle handle);
     PICOATER_API int PICoater_Initialize(PICoaterHandle handle, int width, int height);
 
-    // [Algo] 執行檢測
-    // [修正] 移除 h_heatmap_out，保留其他設定參數以符合 detector 需求
+    // [Algo] 執行完整檢測
     PICOATER_API int PICoater_Run(
         PICoaterHandle handle,
         const uint8_t* h_img_in,
@@ -30,9 +29,20 @@ extern "C" {
         float* h_mura_curve_out,
         float bgSigma,
         float ridgeSigma,
-        int heatmap_lower_thres, // 仍需保留，傳給內部用
-        float heatmap_alpha,     // 仍需保留，傳給內部用
+        int heatmap_lower_thres,
+        float heatmap_alpha,
         const char* ridgeMode
+    );
+
+    // [New] 僅執行 GPU 縮圖 (高速模式)
+    // 利用已分配的 GPU Memory 進行縮圖，避免 CPU 計算
+    PICOATER_API int PICoater_RunThumbnail_GPU(
+        PICoaterHandle handle,
+        const uint8_t* h_img_in, // Full size 原始圖
+        int targetW,             // 目標寬度
+        uint8_t* h_thumb_out,    // 輸出 Buffer (大小需 >= targetW * targetH)
+        int* outRealW,
+        int* outRealH
     );
 
     // [Helper] 記憶體管理 (Pinned Memory)
@@ -48,12 +58,17 @@ extern "C" {
         size_t bufferSize
     );
 
-    // [Helper] 讀取縮圖
-    PICOATER_API int PICoater_LoadThumbnail(
-        const char* filepath,
-        int targetWidth,
-        uint8_t* outBuffer,
-        int* outRealW,
-        int* outRealH
+    PICOATER_API int PICoater_Run_WithThumb(
+        PICoaterHandle handle,
+        const uint8_t* h_img_in,
+        uint8_t* h_ridge_thumb_out, // [新增] 用來接縮圖的 Buffer
+        int thumbW,                 // [新增] 指定縮圖寬
+        int thumbH,                 // [新增] 指定縮圖高
+        float* h_mura_curve_out,
+        float bgSigma,
+        float ridgeSigma,
+        int heatmap_lower_thres,
+        float heatmap_alpha,
+        const char* ridgeMode
     );
 }

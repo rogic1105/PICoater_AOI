@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Imaging; // 用於 PixelFormat
 using System.IO;
 using System.Runtime.InteropServices;
 using AniloxRoll.Monitor.Core.Data;
@@ -15,25 +14,21 @@ namespace AniloxRoll.Monitor.Core.Services
     {
         private IntPtr _handle = IntPtr.Zero;
 
-        // Pinned Buffers
+        // Pinned Buffers (這些是給演算法用的，永遠保持 Raw 狀態，不要去翻轉它們)
         private IntPtr _inputBuffer = IntPtr.Zero;
         private IntPtr _thumbnailBuffer = IntPtr.Zero;
-        private IntPtr _muraBuffer = IntPtr.Zero; 
+        private IntPtr _muraBuffer = IntPtr.Zero;
         private IntPtr _ridgeBuffer = IntPtr.Zero;
         private IntPtr _curveBuffer = IntPtr.Zero;
 
-        // Buffer Sizes
-        private ulong _inputBufferSize = 0;
+        private ulong _imgBufferSize = 0;
         private int _thumbnailBufferSize = 0;
-        private ulong _imgBufferSize = 0; 
         private int _curveBufferSize = 0;
 
-        // Constants
         private const int MaxWidth = 16384;
         private const int MaxHeight = 10000;
         private const int MaxThumbnailSide = 2000;
 
-        // Default Params
         private const float DefaultBgSigma = 2.0f;
         private const float DefaultRidgeSigma = 9.0f;
         private const int DefaultHeatmapThres = 20;
@@ -48,24 +43,29 @@ namespace AniloxRoll.Monitor.Core.Services
         {
             _handle = NativeMethods.PICoater_Create();
 
-            // 1. Image Buffers (Gray 8bit) - Input, Mura, Ridge 都是一樣大
             _imgBufferSize = (ulong)(MaxWidth * MaxHeight);
-
             _inputBuffer = NativeMethods.PICoater_AllocPinned(_imgBufferSize);
             _muraBuffer = NativeMethods.PICoater_AllocPinned(_imgBufferSize);
-            _ridgeBuffer = NativeMethods.PICoater_AllocPinned(_imgBufferSize); 
+            _ridgeBuffer = NativeMethods.PICoater_AllocPinned(_imgBufferSize);
 
-            // 2. Thumbnail Buffer
             _thumbnailBufferSize = MaxThumbnailSide * MaxThumbnailSide;
             _thumbnailBuffer = NativeMethods.PICoater_AllocPinned((ulong)_thumbnailBufferSize);
 
-            // 3. Curve Buffer
             _curveBufferSize = MaxWidth * sizeof(float);
             _curveBuffer = NativeMethods.PICoater_AllocPinned((ulong)_curveBufferSize);
+        }
 
-            // 4. Curve Buffer
-            _curveBufferSize = MaxWidth * sizeof(float);
-            _curveBuffer = NativeMethods.PICoater_AllocPinned((ulong)_curveBufferSize);
+        public void WarmUp()
+        {
+            if (_isDisposed) return;
+            try
+            {
+                int w = 14288;
+                int h = 9003;
+                NativeMethods.PICoater_Initialize(_handle, w, h);
+                NativeMethods.PICoater_RunThumbnail_GPU(_handle, _inputBuffer, 1000, _thumbnailBuffer, out _, out _);
+            }
+            catch { /* ignore */ }
         }
 
         private TimedResult<T> ExecuteTimedOperation<T>(
@@ -91,9 +91,9 @@ namespace AniloxRoll.Monitor.Core.Services
             return result;
         }
 
-        /// <summary>
-        /// 批次處理：現在改為顯示 Ridge 的縮圖
-        /// </summary>
+        // ----------------------------------------------------------------------
+        // 1. [Processed Mode] 
+        // ----------------------------------------------------------------------
         public TimedResult<InspectionData> ProcessImage(string filePath, int targetThumbWidth)
         {
             if (_isDisposed) throw new ObjectDisposedException(nameof(InspectionEngine));
@@ -111,15 +111,11 @@ namespace AniloxRoll.Monitor.Core.Services
                 stopwatch.Restart();
                 NativeMethods.PICoater_Initialize(_handle, w, h);
 
-                // [修改] 請求 Ridge 輸出 (_ridgeBuffer)
-                int ret = NativeMethods.PICoater_Run(
-                    _handle,
-                    _inputBuffer,
-                    IntPtr.Zero,    // BG
-                    IntPtr.Zero,    // Mura (如果不需要顯示 Mura 就不傳)
-                    _ridgeBuffer,   // Ridge (Output) <--- 這次我們要這個
-                    _curveBuffer,   // Curve
-                    DefaultBgSigma, DefaultRidgeSigma, DefaultHeatmapThres, DefaultHeatmapAlpha, DefaultRidgeMode
+                int thumbH = (int)((float)h / w * targetThumbWidth);
+
+                int ret = NativeMethods.PICoater_Run_WithThumb(
+                    _handle, _inputBuffer, _thumbnailBuffer, targetThumbWidth, thumbH,
+                    _curveBuffer, DefaultBgSigma, DefaultRidgeSigma, DefaultHeatmapThres, DefaultHeatmapAlpha, DefaultRidgeMode
                 );
 
                 stopwatch.Stop();
@@ -128,31 +124,67 @@ namespace AniloxRoll.Monitor.Core.Services
 
                 stopwatch.Restart();
 
-                int thumbH = (int)((float)h / w * targetThumbWidth);
+                // [Process Mode] 直接拷貝 (保持 Raw 的顛倒狀態)
+                var thumb = ImageUtils.Create8bppBitmap(_thumbnailBuffer, targetThumbWidth, thumbH);
 
-                // [修改] 從 _ridgeBuffer 建立縮圖
-                // ImageUtils.Create8bppBitmap 應該支援 IntPtr 來源
-                using (var fullRidge = ImageUtils.Create8bppBitmap(_ridgeBuffer, w, h))
-                {
-                    var thumb = new Bitmap(fullRidge, targetThumbWidth, thumbH);
+                float[] curveData = new float[w];
+                Marshal.Copy(_curveBuffer, curveData, 0, w);
 
-                    float[] curveData = new float[w];
-                    Marshal.Copy(_curveBuffer, curveData, 0, w);
+                var data = new InspectionData { Image = thumb, MuraCurve = curveData };
 
-                    var data = new InspectionData { Image = thumb, MuraCurve = curveData };
+                stopwatch.Stop();
+                long bmpTime = stopwatch.ElapsedMilliseconds;
 
-                    stopwatch.Stop();
-                    long bmpTime = stopwatch.ElapsedMilliseconds;
-                    return (data, ioTime, algoTime, bmpTime);
-                }
+                return (data, ioTime, algoTime, bmpTime);
             });
         }
 
+        // ----------------------------------------------------------------------
+        // 2. [Original Mode]
+        // ----------------------------------------------------------------------
+        public TimedResult<InspectionData> LoadThumbnailOnly(string filePath, int targetThumbWidth)
+        {
+            return ExecuteTimedOperation<InspectionData>(filePath, (stopwatch) =>
+            {
+                stopwatch.Start();
+                bool readSuccess = NativeMethods.PICoater_FastReadBMP(
+                    filePath, out int w, out int h, _inputBuffer, _imgBufferSize);
+                stopwatch.Stop();
+                long ioTime = stopwatch.ElapsedMilliseconds;
 
-        /// <summary>
-        /// 單張檢視：回傳 Ridge 原圖 (8-bit Gray)
-        /// </summary>
-        public Bitmap RunInspectionFullRes(string filePath)
+                if (!readSuccess) return (null, ioTime, 0, 0);
+
+                stopwatch.Restart();
+                NativeMethods.PICoater_Initialize(_handle, w, h);
+
+                int ret = NativeMethods.PICoater_RunThumbnail_GPU(
+                    _handle, _inputBuffer, targetThumbWidth, _thumbnailBuffer,
+                    out int realW, out int realH
+                );
+
+                stopwatch.Stop();
+                long gpuTime = stopwatch.ElapsedMilliseconds;
+
+                if (ret != 0) throw new Exception($"GPU Resize Error: {ret}");
+
+                stopwatch.Restart();
+
+                // [Original Mode] 為了讓人眼看著正常，必須手動翻轉 Bitmap (CreateFlippedBitmap)
+                // 這只會改變顯示用的 Bitmap，不會影響 _inputBuffer
+                var bitmap = ImageUtils.Create8bppBitmap(_thumbnailBuffer, realW, realH);
+
+                stopwatch.Stop();
+                long bmpTime = stopwatch.ElapsedMilliseconds;
+
+                var data = new InspectionData { Image = bitmap, MuraCurve = null };
+                return (data, ioTime, gpuTime, bmpTime);
+            });
+        }
+
+        // ----------------------------------------------------------------------
+        // 3. [Full Res Mode] 大圖檢視
+        // ----------------------------------------------------------------------
+        public Bitmap RunInspectionFullRes(string filePath, bool isProcessedMode)
         {
             if (_isDisposed) return null;
             if (!File.Exists(filePath)) return null;
@@ -161,51 +193,25 @@ namespace AniloxRoll.Monitor.Core.Services
                  filePath, out int w, out int h, _inputBuffer, _imgBufferSize);
             if (!readSuccess) return null;
 
-            NativeMethods.PICoater_Initialize(_handle, w, h);
-
-            // [修改] 請求 Ridge 輸出
-            int ret = NativeMethods.PICoater_Run(
-                _handle,
-                _inputBuffer,
-                IntPtr.Zero,
-                IntPtr.Zero,
-                _ridgeBuffer,   // Ridge Output
-                IntPtr.Zero,
-                DefaultBgSigma,
-                DefaultRidgeSigma,
-                DefaultHeatmapThres,
-                DefaultHeatmapAlpha,
-                DefaultRidgeMode
-            );
-
-            if (ret != 0) return null;
-
-            // [修改] 回傳 8-bit Bitmap
-            // ImageUtils.Create8bppBitmap 會負責設定 Grayscale Palette
-            return ImageUtils.Create8bppBitmap(_ridgeBuffer, w, h);
-        }
-
-        public TimedResult<InspectionData> LoadThumbnailOnly(string filePath, int targetThumbWidth)
-        {
-            // 保持不變
-            return ExecuteTimedOperation<InspectionData>(filePath, (stopwatch) =>
+            if (isProcessedMode)
             {
-                stopwatch.Start();
-                int ret = NativeMethods.PICoater_LoadThumbnail(
-                    filePath, targetThumbWidth, _thumbnailBuffer, out int realW, out int realH);
-                stopwatch.Stop();
-                long ioTime = stopwatch.ElapsedMilliseconds;
+                // [Processed Mode] 演算法結果 -> 顯示顛倒 (Raw) -> 直接拷貝
+                NativeMethods.PICoater_Initialize(_handle, w, h);
+                int ret = NativeMethods.PICoater_Run(
+                    _handle, _inputBuffer, IntPtr.Zero, IntPtr.Zero, _ridgeBuffer, IntPtr.Zero,
+                    DefaultBgSigma, DefaultRidgeSigma, DefaultHeatmapThres, DefaultHeatmapAlpha, DefaultRidgeMode
+                );
+                if (ret != 0) return null;
 
-                if (ret != 0) return (null, ioTime, 0, 0);
-
-                stopwatch.Restart();
-                var bitmap = ImageUtils.Create8bppBitmap(_thumbnailBuffer, realW, realH);
-                stopwatch.Stop();
-                long bmpTime = stopwatch.ElapsedMilliseconds;
-
-                var data = new InspectionData { Image = bitmap, MuraCurve = null };
-                return (data, ioTime, 0, bmpTime);
-            });
+                // 直接使用 _ridgeBuffer (不翻轉)
+                return ImageUtils.Create8bppBitmap(_ridgeBuffer, w, h, flipY: false);
+            }
+            else
+            {
+                // [Original Mode] 原圖 -> 顯示正常 (Upright) -> 需要翻轉
+                // 使用 _inputBuffer 並進行翻轉
+                return ImageUtils.Create8bppBitmap(_inputBuffer, w, h, flipY: false);
+            }
         }
 
         public void Dispose()
@@ -215,15 +221,11 @@ namespace AniloxRoll.Monitor.Core.Services
                 if (_inputBuffer != IntPtr.Zero) NativeMethods.PICoater_FreePinned(_inputBuffer);
                 if (_thumbnailBuffer != IntPtr.Zero) NativeMethods.PICoater_FreePinned(_thumbnailBuffer);
                 if (_muraBuffer != IntPtr.Zero) NativeMethods.PICoater_FreePinned(_muraBuffer);
-                if (_ridgeBuffer != IntPtr.Zero) NativeMethods.PICoater_FreePinned(_ridgeBuffer); // [新增]
+                if (_ridgeBuffer != IntPtr.Zero) NativeMethods.PICoater_FreePinned(_ridgeBuffer);
                 if (_curveBuffer != IntPtr.Zero) NativeMethods.PICoater_FreePinned(_curveBuffer);
-                // [移除] _heatmapBuffer free
-
                 if (_handle != IntPtr.Zero) NativeMethods.PICoater_Destroy(_handle);
                 _isDisposed = true;
             }
         }
-
-
     }
 }

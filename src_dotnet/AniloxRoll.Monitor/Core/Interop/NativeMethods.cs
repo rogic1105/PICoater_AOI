@@ -56,5 +56,31 @@ namespace AniloxRoll.Monitor.Core.Interop
             out int outRealW,
             out int outRealH
         );
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int PICoater_RunThumbnail_GPU(
+            IntPtr handle,
+            IntPtr h_img_in,
+            int targetW,
+            IntPtr h_thumb_out,
+            out int outRealW,
+            out int outRealH
+        );
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int PICoater_Run_WithThumb(
+            IntPtr handle,
+            IntPtr h_img_in,
+            IntPtr h_ridge_thumb_out, // 對應 C++ 的縮圖輸出
+            int thumbW,
+            int thumbH,
+            IntPtr h_mura_curve_out,
+            float bgSigma,
+            float ridgeSigma,
+            int heatmap_lower_thres,
+            float heatmap_alpha,
+            string ridgeMode
+        );
+
     }
 }

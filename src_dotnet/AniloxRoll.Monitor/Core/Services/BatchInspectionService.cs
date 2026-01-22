@@ -4,21 +4,27 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Threading.Tasks;
 using AOI.SDK.Core.Models;
-using AniloxRoll.Monitor.Core.Data; // 引用 InspectionData
+using AniloxRoll.Monitor.Core.Data;
 
 namespace AniloxRoll.Monitor.Core.Services
 {
     public class BatchInspectionService : IDisposable
     {
-        private readonly InspectionEngine[] _processors;
+        private readonly InspectionEngine _sharedProcessor;
         private readonly string[] _currentFilePaths;
+        private readonly int _cameraCount;
+
+        // [新增] 記錄當前檢視模式 (true=Processed/Normal, false=Original/UpsideDown)
+        private bool _isProcessedMode = false;
 
         public BatchInspectionService(int cameraCount = 7)
         {
-            _processors = new InspectionEngine[cameraCount];
+            _cameraCount = cameraCount;
+            _sharedProcessor = new InspectionEngine();
             _currentFilePaths = new string[cameraCount];
-            for (int i = 0; i < cameraCount; i++) _processors[i] = new InspectionEngine();
         }
+
+        public void WarmUp() => _sharedProcessor.WarmUp();
 
         public string GetFilePath(int index)
         {
@@ -26,18 +32,17 @@ namespace AniloxRoll.Monitor.Core.Services
             return _currentFilePaths[index];
         }
 
-        // [修正] 回傳型別改為 InspectionData
         public (TimedResult<InspectionData>[] results, ConcurrentQueue<string> logs) ProcessBatch(
             Dictionary<int, string> filesMap,
             bool enableProcessing)
         {
-            // [修正] 陣列型別改為 InspectionData
-            var results = new TimedResult<InspectionData>[_processors.Length];
+            // [更新狀態] 記錄這次 Batch 是哪種模式
+            _isProcessedMode = enableProcessing;
+
+            var results = new TimedResult<InspectionData>[_cameraCount];
             var logs = new ConcurrentQueue<string>();
 
-            var pOptions = new ParallelOptions { MaxDegreeOfParallelism = _processors.Length };
-
-            Parallel.For(0, _processors.Length, pOptions, i =>
+            for (int i = 0; i < _cameraCount; i++)
             {
                 int camId = i + 1;
                 string path = filesMap.ContainsKey(camId) ? filesMap[camId] : null;
@@ -45,9 +50,12 @@ namespace AniloxRoll.Monitor.Core.Services
 
                 if (!string.IsNullOrEmpty(path))
                 {
+                    // 根據 enableProcessing 呼叫不同方法
+                    // ProcessImage -> 會執行翻轉 (變正常)
+                    // LoadThumbnailOnly -> 不執行翻轉 (保持顛倒)
                     results[i] = enableProcessing
-                        ? _processors[i].ProcessImage(path, 1000)
-                        : _processors[i].LoadThumbnailOnly(path, 1000);
+                        ? _sharedProcessor.ProcessImage(path, 1000)
+                        : _sharedProcessor.LoadThumbnailOnly(path, 1000);
 
                     if (results[i] != null)
                     {
@@ -58,21 +66,24 @@ namespace AniloxRoll.Monitor.Core.Services
                 {
                     results[i] = null;
                 }
-            });
+            }
 
             return (results, logs);
         }
 
+        // [修改] 根據當前模式決定大圖是否翻轉
         public Bitmap RunInspectionFullRes(int index)
         {
             var path = GetFilePath(index);
             if (string.IsNullOrEmpty(path)) return null;
-            return _processors[index].RunInspectionFullRes(path);
+
+            // 傳入 _isProcessedMode 讓 Engine 決定用哪個 Buffer 和是否翻轉
+            return _sharedProcessor.RunInspectionFullRes(path, _isProcessedMode);
         }
 
         public void Dispose()
         {
-            foreach (var p in _processors) p?.Dispose();
+            _sharedProcessor?.Dispose();
         }
     }
 }

@@ -5,13 +5,10 @@
 #include "core_cv/base/cuda_utils.hpp"
 #include "core_cv/base/cuda_memory.hpp"
 #include "core_cv/imgcodecs/core_imgcodecs_fast.hpp"
-// 為了 LoadThumbnail 需要 stb resize 或類似實作，這裡假設 core_cv 有提供，或使用簡單實作
-// 若 core_cv 沒有 resize_cpu，這裡可能需要 include stb_image_resize.h
-// 假設專案已有 stb，我們直接用 core::fast_read + 簡單 resize，或是完整讀取
+#include "core_cv/imgproc/core_transform.hpp" // [必須] 引用 GPU Resize
 #include <iostream>
 #include <vector>
 
-// 內部 Context 結構
 struct PICoaterContext {
     picoater::PICoaterDetector detector;
     int width = 0;
@@ -25,7 +22,6 @@ struct PICoaterContext {
     uint8_t* d_ridge = nullptr;
     float* d_mura_curve = nullptr;
 
-
     void Release() {
         if (d_in) cudaFree(d_in);
         if (d_bg) cudaFree(d_bg);
@@ -33,14 +29,13 @@ struct PICoaterContext {
         if (d_ridge) cudaFree(d_ridge);
         if (d_mura_curve) cudaFree(d_mura_curve);
 
-
         d_in = nullptr; d_bg = nullptr; d_mura = nullptr;
         d_ridge = nullptr; d_mura_curve = nullptr;
         detector.Release();
     }
 };
 
-// --- Context API ---
+// ... (Create, Destroy, Initialize 保持不變) ...
 
 PICOATER_API PICoaterHandle PICoater_Create() {
     return new PICoaterContext();
@@ -72,7 +67,6 @@ PICOATER_API int PICoater_Initialize(PICoaterHandle handle, int width, int heigh
         cudaMalloc(&ctx->d_ridge, ctx->img_size);
         cudaMalloc(&ctx->d_mura_curve, width * sizeof(float));
 
-
         ctx->detector.Initialize(width, height);
     }
     catch (...) {
@@ -97,23 +91,13 @@ PICOATER_API int PICoater_Run(
     if (!handle) return -1;
     PICoaterContext* ctx = (PICoaterContext*)handle;
 
-    // 1. Upload
     cudaMemcpy(ctx->d_in, h_img_in, ctx->img_size, cudaMemcpyHostToDevice);
 
-    // 2. Run
     ctx->detector.Run(
-        ctx->d_in, 
-        ctx->d_bg, 
-        ctx->d_mura,
-        ctx->d_ridge,
-        ctx->d_mura_curve,
-        bgSigma,
-        ridgeSigma, 
-        ridgeMode, 
-        0
+        ctx->d_in, ctx->d_bg, ctx->d_mura, ctx->d_ridge, ctx->d_mura_curve,
+        bgSigma, ridgeSigma, ridgeMode, 0
     );
 
-    // 3. Download
     if (h_bg_out) cudaMemcpy(h_bg_out, ctx->d_bg, ctx->img_size, cudaMemcpyDeviceToHost);
     if (h_mura_out) cudaMemcpy(h_mura_out, ctx->d_mura, ctx->img_size, cudaMemcpyDeviceToHost);
     if (h_ridge_out) cudaMemcpy(h_ridge_out, ctx->d_ridge, ctx->img_size, cudaMemcpyDeviceToHost);
@@ -123,8 +107,40 @@ PICOATER_API int PICoater_Run(
     return 0;
 }
 
-// --- Helper API ---
+// [New] GPU 縮圖實作
+PICOATER_API int PICoater_RunThumbnail_GPU(
+    PICoaterHandle handle,
+    const uint8_t* h_img_in,
+    int targetW,
+    uint8_t* h_thumb_out,
+    int* outRealW,
+    int* outRealH
+) {
+    if (!handle) return -1;
+    PICoaterContext* ctx = (PICoaterContext*)handle;
 
+    // 1. Upload Full Image
+    cudaMemcpy(ctx->d_in, h_img_in, ctx->img_size, cudaMemcpyHostToDevice);
+
+    // 2. Calculate Size
+    float scale = (float)targetW / ctx->width;
+    int targetH = (int)(ctx->height * scale);
+    *outRealW = targetW;
+    *outRealH = targetH;
+
+    // 3. GPU Resize
+    // 借用 d_bg 作為輸出 buffer (因為是縮圖模式，不需要保留背景圖)
+    // core::resize_u8_gpu(src, srcW, srcH, dst, dstW, dstH, stream)
+    core::resize_u8_gpu(ctx->d_in, ctx->width, ctx->height, ctx->d_bg, targetW, targetH, 0);
+
+    // 4. Download Thumbnail
+    cudaMemcpy(h_thumb_out, ctx->d_bg, targetW * targetH, cudaMemcpyDeviceToHost);
+
+    cudaDeviceSynchronize();
+    return 0;
+}
+
+// Helper API
 PICOATER_API void* PICoater_AllocPinned(size_t size) {
     return core::alloc_pinned_memory(size);
 }
@@ -136,50 +152,52 @@ PICOATER_API void PICoater_FreePinned(void* ptr) {
 PICOATER_API bool PICoater_FastReadBMP(const char* filepath, int* width, int* height, uint8_t* pData, size_t bufferSize) {
     if (!filepath || !width || !height) return false;
     int w = 0, h = 0;
-    // 呼叫 core_cv 的 fast read
     bool res = core::fast_read_bmp_8bit(filepath, w, h, pData, bufferSize);
     *width = w;
     *height = h;
     return res;
 }
 
-// 簡單的縮圖載入: 讀取全圖 -> CPU Resize (Nearest Neighbor for speed or use STB if available)
-// 這裡為了保持範例完整，若 core_cv 沒有 cpu resize，我們做一個簡單的採樣
-PICOATER_API int PICoater_LoadThumbnail(const char* filepath, int targetWidth, uint8_t* outBuffer, int* outRealW, int* outRealH) {
-    int w = 0, h = 0;
-    // 1. 為了讀取方便，這裡需要一個臨時 buffer。
-    // 但因為我們不知道圖多大，如果 core::fast_read_bmp_8bit 需要預分配 buffer，我們可能需要先讀 header。
-    // 假設我們有夠大的 buffer (e.g. 200MB 暫存)，或者直接 new 一個 (慢一點但安全)。
+PICOATER_API int PICoater_Run_WithThumb(
+    PICoaterHandle handle,
+    const uint8_t* h_img_in,
+    uint8_t* h_ridge_thumb_out,
+    int thumbW,
+    int thumbH,
+    float* h_mura_curve_out,
+    float bgSigma,
+    float ridgeSigma,
+    int heatmap_lower_thres,
+    float heatmap_alpha,
+    const char* ridgeMode
+) {
+    if (!handle) return -1;
+    PICoaterContext* ctx = (PICoaterContext*)handle;
 
-    // 為了安全起見，這裡先分配一塊大記憶體 (假設最大 16K*10K)
-    // 注意：這會比較吃記憶體，正式版建議改用 STB 讀 header 再 alloc
-    static size_t MAX_SIZE = 16384ULL * 10000ULL;
-    uint8_t* temp = (uint8_t*)core::alloc_pinned_memory(MAX_SIZE);
+    // 1. 上傳原圖
+    cudaMemcpy(ctx->d_in, h_img_in, ctx->img_size, cudaMemcpyHostToDevice);
 
-    if (!core::fast_read_bmp_8bit(filepath, w, h, temp, MAX_SIZE)) {
-        core::free_pinned_memory(temp);
-        return -1;
+    // 2. 執行演算法 (GPU)
+    ctx->detector.Run(
+        ctx->d_in, ctx->d_bg, ctx->d_mura, ctx->d_ridge, ctx->d_mura_curve,
+        bgSigma, ridgeSigma, ridgeMode, 0
+    );
+
+    // 3. [關鍵] GPU 內直接縮圖 (Full -> Thumb)
+    // 借用 d_bg 當臨時 buffer，把 d_ridge 縮小存進去
+    uint8_t* d_thumb = ctx->d_bg;
+    core::resize_u8_gpu(ctx->d_ridge, ctx->width, ctx->height, d_thumb, thumbW, thumbH, 0);
+
+    // 4. 只下載縮圖 (快!)
+    if (h_ridge_thumb_out) {
+        cudaMemcpy(h_ridge_thumb_out, d_thumb, thumbW * thumbH, cudaMemcpyDeviceToHost);
     }
 
-    // 2. 計算縮圖尺寸
-    float scale = (float)targetWidth / w;
-    int thumbH = (int)(h * scale);
-    *outRealW = targetWidth;
-    *outRealH = thumbH;
-
-    // 3. CPU Resize (Nearest Neighbor) - 簡單實作
-    for (int y = 0; y < thumbH; ++y) {
-        int srcY = (int)(y / scale);
-        if (srcY >= h) srcY = h - 1;
-
-        for (int x = 0; x < targetWidth; ++x) {
-            int srcX = (int)(x / scale);
-            if (srcX >= w) srcX = w - 1;
-
-            outBuffer[y * targetWidth + x] = temp[srcY * w + srcX];
-        }
+    // 5. 下載曲線數據
+    if (h_mura_curve_out) {
+        cudaMemcpy(h_mura_curve_out, ctx->d_mura_curve, ctx->width * sizeof(float), cudaMemcpyDeviceToHost);
     }
 
-    core::free_pinned_memory(temp);
+    cudaDeviceSynchronize();
     return 0;
 }

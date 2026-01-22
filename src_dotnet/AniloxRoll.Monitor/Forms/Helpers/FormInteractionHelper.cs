@@ -68,19 +68,10 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             {
                 Bitmap bigImg = null;
 
-                if (_isProcessedMode)
-                {
-
-                    bigImg = _inspectionService.RunInspectionFullRes(index);
-                }
-                else
-                {
-                    string path = _inspectionService.GetFilePath(index);
-                    if (!string.IsNullOrEmpty(path))
-                    {
-                        bigImg = new Bitmap(path);
-                    }
-                }
+                // [修正] 移除 if-else 判斷，統一交給 Service 處理
+                // Service 內部已經知道現在是 Original 還是 Processed 模式
+                // 並且會呼叫 Engine 執行對應的翻轉/不翻轉邏輯
+                bigImg = _inspectionService.RunInspectionFullRes(index);
 
                 UpdateCanvas(bigImg);
             }
