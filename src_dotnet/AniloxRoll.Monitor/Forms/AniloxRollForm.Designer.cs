@@ -70,7 +70,7 @@
             this.tabControl1.Location = new System.Drawing.Point(1099, 12);
             this.tabControl1.Name = "tabControl1";
             this.tabControl1.SelectedIndex = 0;
-            this.tabControl1.Size = new System.Drawing.Size(357, 718);
+            this.tabControl1.Size = new System.Drawing.Size(357, 929);
             this.tabControl1.TabIndex = 1;
             // 
             // tabPage1
@@ -78,7 +78,7 @@
             this.tabPage1.Location = new System.Drawing.Point(4, 25);
             this.tabPage1.Name = "tabPage1";
             this.tabPage1.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage1.Size = new System.Drawing.Size(349, 689);
+            this.tabPage1.Size = new System.Drawing.Size(349, 900);
             this.tabPage1.TabIndex = 0;
             this.tabPage1.Text = "Live Monitor";
             this.tabPage1.UseVisualStyleBackColor = true;
@@ -97,7 +97,7 @@
             this.tabPage2.Location = new System.Drawing.Point(4, 25);
             this.tabPage2.Name = "tabPage2";
             this.tabPage2.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage2.Size = new System.Drawing.Size(349, 552);
+            this.tabPage2.Size = new System.Drawing.Size(349, 689);
             this.tabPage2.TabIndex = 1;
             this.tabPage2.Text = "Review & Test";
             this.tabPage2.UseVisualStyleBackColor = true;
@@ -248,7 +248,7 @@
             this.statusStrip1.ImageScalingSize = new System.Drawing.Size(20, 20);
             this.statusStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.lblPixelInfo});
-            this.statusStrip1.Location = new System.Drawing.Point(0, 733);
+            this.statusStrip1.Location = new System.Drawing.Point(0, 944);
             this.statusStrip1.Name = "statusStrip1";
             this.statusStrip1.Size = new System.Drawing.Size(1468, 25);
             this.statusStrip1.TabIndex = 15;
@@ -257,8 +257,8 @@
             // lblPixelInfo
             // 
             this.lblPixelInfo.Name = "lblPixelInfo";
-            this.lblPixelInfo.Size = new System.Drawing.Size(127, 19);
-            this.lblPixelInfo.Text = "座標:(0, 0)|亮度: 0";
+            this.lblPixelInfo.Size = new System.Drawing.Size(292, 19);
+            this.lblPixelInfo.Text = "座標:(0, 0) | 亮度: 0  | 倍率:0.0x | 平移:(0, 0)";
             // 
             // canvasMain
             // 
@@ -274,7 +274,7 @@
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1468, 758);
+            this.ClientSize = new System.Drawing.Size(1468, 969);
             this.Controls.Add(this.statusStrip1);
             this.Controls.Add(this.tabControl1);
             this.Controls.Add(this.pbCam1);

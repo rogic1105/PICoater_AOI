@@ -59,7 +59,11 @@ namespace AniloxRoll.Monitor.Forms
                 new Button[] { btnShowOriginal, btnShowProcessed, btnSelectFolder },
                 _thumbnailCache,
                 _presenter,
-                _inspectionService
+                _inspectionService,
+                // [新增] 傳入這三個依賴
+                _imageRepository,
+                _timeSelectionManager,
+                _galleryManager
             );
 
             // 4. 綁定事件
@@ -67,50 +71,30 @@ namespace AniloxRoll.Monitor.Forms
             _presenter.LogReported += log => Console.WriteLine(log);
             _galleryManager.SelectionChanged += _interactionHelper.OnGallerySelectionChanged;
 
-            // Canvas 資訊顯示事件 (邏輯簡單，留在 View 層即可)
-            canvasMain.PixelHovered += (x, y, color) =>
+            // 1. 滑鼠移動 (PixelHovered) -> 更新變數 -> 呼叫統一更新
+            canvasMain.StatusChanged += (info) =>
             {
-                if (canvasMain.Image != null)
-                    lblPixelInfo.Text = $"座標: ({x}, {y}) | 亮度: {color.R}";
+                lblPixelInfo.Text =
+                    $"座標: ({info.ImageX}, {info.ImageY}) | " +
+                    $"亮度: {info.PixelColor.R} | " +
+                    $"倍率: {info.Zoom:F5}x | " +
+                    $"平移: ({info.PanOffset.X:F0}, {info.PanOffset.Y:F0})";
             };
         }
+
 
         // =========================================================
         // button
         // =========================================================
 
         private void btnSelectFolder_Click(object sender, EventArgs e)
-        {
-            using (var fbd = new FolderBrowserDialog())
-            {
-                if (Directory.Exists(Properties.Settings.Default.LastDataPath))
-                    fbd.SelectedPath = Properties.Settings.Default.LastDataPath;
-
-                if (fbd.ShowDialog() == DialogResult.OK)
-                {
-                    _imageRepository.LoadDirectory(fbd.SelectedPath);
-                    if (_imageRepository.FileCount == 0)
-                    {
-                        MessageBox.Show("該路徑下無符合格式的圖片！");
-                        return;
-                    }
-
-                    Properties.Settings.Default.LastDataPath = fbd.SelectedPath;
-                    Properties.Settings.Default.Save();
-
-                    _timeSelectionManager.Initialize(Properties.Settings.Default.LastYear);
-                    _galleryManager.Select(0, triggerEvent: false);
-                }
-            }
-        }
-
+                    => _interactionHelper.SelectAndLoadFolder();
 
         private async void btnShowOriginal_Click(object sender, EventArgs e)
             => await _interactionHelper.LoadImages(false);
 
         private async void btnShowProcessed_Click(object sender, EventArgs e)
             => await _interactionHelper.LoadImages(true);
-
 
 
 
