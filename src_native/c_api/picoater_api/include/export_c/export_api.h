@@ -26,7 +26,8 @@ extern "C" {
         uint8_t* h_bg_out,
         uint8_t* h_mura_out,
         uint8_t* h_ridge_out,
-        float* h_mura_curve_out,
+        float* h_mura_curve_mean,
+        float* h_mura_curve_max,
         float bgSigma,
         float ridgeSigma,
         int heatmap_lower_thres,
@@ -61,10 +62,11 @@ extern "C" {
     PICOATER_API int PICoater_Run_WithThumb(
         PICoaterHandle handle,
         const uint8_t* h_img_in,
-        uint8_t* h_ridge_thumb_out, // [新增] 用來接縮圖的 Buffer
-        int thumbW,                 // [新增] 指定縮圖寬
-        int thumbH,                 // [新增] 指定縮圖高
-        float* h_mura_curve_out,
+        uint8_t* h_ridge_thumb_out,
+        int thumbW,
+        int thumbH,
+        float* h_mura_curve_mean,
+        float* h_mura_curve_max,
         float bgSigma,
         float ridgeSigma,
         int heatmap_lower_thres,

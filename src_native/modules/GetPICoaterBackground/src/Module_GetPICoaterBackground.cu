@@ -90,7 +90,8 @@ namespace picoater {
         uint8_t* d_bg_out,
         uint8_t* d_mura_out,
         uint8_t* d_ridge_out,
-        float* d_mura_curve_out,
+        float* d_mura_curve_mean,
+		float* d_mura_curve_max,
         float bgSigmaFactor,
         float ridgeSigma,
         const char* ridgeMode,
@@ -133,16 +134,28 @@ namespace picoater {
             );
         }
 
-        // 步驟 4: Hessian Ridge Detection 之col平均
+        // 步驟 4: Hessian Ridge Detection 之col mean
         {
             //TIME_SCOPE_MS_SYNC("      4. Hessian Ridge col mean", cudaStreamSynchronize(stream));
             core::calcColumnMeans_gpu<float>(
                 d_hessian_resp_,
-                d_mura_curve_out,
+                d_mura_curve_mean,
                 m_width,
                 m_height,
                 stream,
                 d_workspace_
+            );
+        }
+
+        // 步驟 5: Hessian Ridge Detection 之col max
+        {
+            //TIME_SCOPE_MS_SYNC("      4. Hessian Ridge col mean", cudaStreamSynchronize(stream));
+            core::calcColumnMax_gpu<float>(
+                d_hessian_resp_,
+                d_mura_curve_max,
+                m_width,
+                m_height,
+                stream
             );
         }
 

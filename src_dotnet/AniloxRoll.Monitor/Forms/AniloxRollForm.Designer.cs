@@ -264,9 +264,9 @@
             // 
             this.canvasMain.BackColor = System.Drawing.Color.Black;
             this.canvasMain.Cursor = System.Windows.Forms.Cursors.Cross;
-            this.canvasMain.Location = new System.Drawing.Point(12, 193);
+            this.canvasMain.Location = new System.Drawing.Point(12, 292);
             this.canvasMain.Name = "canvasMain";
-            this.canvasMain.Size = new System.Drawing.Size(1072, 537);
+            this.canvasMain.Size = new System.Drawing.Size(1072, 454);
             this.canvasMain.TabIndex = 7;
             this.canvasMain.TabStop = false;
             // 

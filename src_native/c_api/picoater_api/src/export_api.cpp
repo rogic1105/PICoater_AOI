@@ -20,17 +20,23 @@ struct PICoaterContext {
     uint8_t* d_bg = nullptr;
     uint8_t* d_mura = nullptr;
     uint8_t* d_ridge = nullptr;
-    float* d_mura_curve = nullptr;
+    float* d_mura_curve_mean = nullptr;
+	float* d_mura_curve_max = nullptr;
 
     void Release() {
         if (d_in) cudaFree(d_in);
         if (d_bg) cudaFree(d_bg);
         if (d_mura) cudaFree(d_mura);
         if (d_ridge) cudaFree(d_ridge);
-        if (d_mura_curve) cudaFree(d_mura_curve);
+        if (d_mura_curve_mean) cudaFree(d_mura_curve_mean);
+		if (d_mura_curve_max) cudaFree(d_mura_curve_max);
 
-        d_in = nullptr; d_bg = nullptr; d_mura = nullptr;
-        d_ridge = nullptr; d_mura_curve = nullptr;
+        d_in = nullptr; 
+        d_bg = nullptr;
+        d_mura = nullptr;
+        d_ridge = nullptr;
+        d_mura_curve_mean = nullptr;
+		d_mura_curve_max = nullptr;
         detector.Release();
     }
 };
@@ -65,7 +71,8 @@ PICOATER_API int PICoater_Initialize(PICoaterHandle handle, int width, int heigh
         cudaMalloc(&ctx->d_bg, ctx->img_size);
         cudaMalloc(&ctx->d_mura, ctx->img_size);
         cudaMalloc(&ctx->d_ridge, ctx->img_size);
-        cudaMalloc(&ctx->d_mura_curve, width * sizeof(float));
+        cudaMalloc(&ctx->d_mura_curve_mean, width * sizeof(float));
+        cudaMalloc(&ctx->d_mura_curve_max, width * sizeof(float));
 
         ctx->detector.Initialize(width, height);
     }
@@ -81,7 +88,8 @@ PICOATER_API int PICoater_Run(
     uint8_t* h_bg_out,
     uint8_t* h_mura_out,
     uint8_t* h_ridge_out,
-    float* h_mura_curve_out,
+    float* h_mura_curve_mean,
+	float* h_mura_curve_max,
     float bgSigma,
     float ridgeSigma,
     int heatmap_lower_thres,
@@ -94,14 +102,15 @@ PICOATER_API int PICoater_Run(
     cudaMemcpy(ctx->d_in, h_img_in, ctx->img_size, cudaMemcpyHostToDevice);
 
     ctx->detector.Run(
-        ctx->d_in, ctx->d_bg, ctx->d_mura, ctx->d_ridge, ctx->d_mura_curve,
+        ctx->d_in, ctx->d_bg, ctx->d_mura, ctx->d_ridge, ctx->d_mura_curve_mean, ctx->d_mura_curve_max,
         bgSigma, ridgeSigma, ridgeMode, 0
     );
 
     if (h_bg_out) cudaMemcpy(h_bg_out, ctx->d_bg, ctx->img_size, cudaMemcpyDeviceToHost);
     if (h_mura_out) cudaMemcpy(h_mura_out, ctx->d_mura, ctx->img_size, cudaMemcpyDeviceToHost);
     if (h_ridge_out) cudaMemcpy(h_ridge_out, ctx->d_ridge, ctx->img_size, cudaMemcpyDeviceToHost);
-    if (h_mura_curve_out) cudaMemcpy(h_mura_curve_out, ctx->d_mura_curve, ctx->width * sizeof(float), cudaMemcpyDeviceToHost);
+    if (h_mura_curve_mean) cudaMemcpy(h_mura_curve_mean, ctx->d_mura_curve_mean, ctx->width * sizeof(float), cudaMemcpyDeviceToHost);
+	if (h_mura_curve_max) cudaMemcpy(h_mura_curve_max, ctx->d_mura_curve_max, ctx->width * sizeof(float), cudaMemcpyDeviceToHost);
 
     cudaDeviceSynchronize();
     return 0;
@@ -164,7 +173,8 @@ PICOATER_API int PICoater_Run_WithThumb(
     uint8_t* h_ridge_thumb_out,
     int thumbW,
     int thumbH,
-    float* h_mura_curve_out,
+    float* h_mura_curve_mean,
+    float* h_mura_curve_max,
     float bgSigma,
     float ridgeSigma,
     int heatmap_lower_thres,
@@ -179,7 +189,7 @@ PICOATER_API int PICoater_Run_WithThumb(
 
     // 2. 執行演算法 (GPU)
     ctx->detector.Run(
-        ctx->d_in, ctx->d_bg, ctx->d_mura, ctx->d_ridge, ctx->d_mura_curve,
+        ctx->d_in, ctx->d_bg, ctx->d_mura, ctx->d_ridge, ctx->d_mura_curve_mean, ctx->d_mura_curve_max,
         bgSigma, ridgeSigma, ridgeMode, 0
     );
 
@@ -194,8 +204,13 @@ PICOATER_API int PICoater_Run_WithThumb(
     }
 
     // 5. 下載曲線數據
-    if (h_mura_curve_out) {
-        cudaMemcpy(h_mura_curve_out, ctx->d_mura_curve, ctx->width * sizeof(float), cudaMemcpyDeviceToHost);
+    if (h_mura_curve_mean) {
+        cudaMemcpy(h_mura_curve_mean, ctx->d_mura_curve_mean, ctx->width * sizeof(float), cudaMemcpyDeviceToHost);
+    }
+
+    // [獨立檢查] 必須確認 h_mura_curve_max 不為 nullptr 才能寫入
+    if (h_mura_curve_max) {
+        cudaMemcpy(h_mura_curve_max, ctx->d_mura_curve_max, ctx->width * sizeof(float), cudaMemcpyDeviceToHost);
     }
 
     cudaDeviceSynchronize();

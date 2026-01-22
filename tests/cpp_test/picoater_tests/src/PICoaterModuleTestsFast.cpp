@@ -27,7 +27,8 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
     uint8_t* h_pinned_mura = nullptr;
     uint8_t* h_pinned_ridge = nullptr;
     uint8_t* h_pinned_heatmap = nullptr; // [新增]
-    float* h_pinned_mura_curve = nullptr;
+    float* h_pinned_mura_mean = nullptr;
+	float* h_pinned_mura_max = nullptr;
 
     // 2. 定義 Device Memory (GPU)
     uint8_t* d_in = nullptr;
@@ -35,7 +36,8 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
     uint8_t* d_mura = nullptr;
     uint8_t* d_ridge = nullptr;
     uint8_t* d_heatmap = nullptr; // [新增]
-    float* d_mura_curve = nullptr;
+    float* d_mura_curve_mean = nullptr;
+	float* d_mura_curve_max = nullptr;
 
     try {
         // 預估最大可能尺寸 (例如 16384 x 10000)
@@ -62,14 +64,16 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
         checkCudaErrors(cudaMalloc(&d_bg, img_size));
         checkCudaErrors(cudaMalloc(&d_mura, img_size));
         checkCudaErrors(cudaMalloc(&d_ridge, img_size));
-        checkCudaErrors(cudaMalloc(&d_mura_curve, w * sizeof(float)));
+        checkCudaErrors(cudaMalloc(&d_mura_curve_mean, w * sizeof(float)));
+		checkCudaErrors(cudaMalloc(&d_mura_curve_max, w * sizeof(float)));
 
         // --- C. 分配輸出 Pinned Memory ---
         h_in = (uint8_t*)core::alloc_pinned_memory(img_size);
         h_pinned_bg = (uint8_t*)core::alloc_pinned_memory(img_size);
         h_pinned_mura = (uint8_t*)core::alloc_pinned_memory(img_size);
         h_pinned_ridge = (uint8_t*)core::alloc_pinned_memory(img_size);
-        h_pinned_mura_curve = (float*)core::alloc_pinned_memory(w * sizeof(float));
+        h_pinned_mura_mean = (float*)core::alloc_pinned_memory(w * sizeof(float));
+        h_pinned_mura_max = (float*)core::alloc_pinned_memory(w * sizeof(float));
 
         // --- D. 上傳圖片 (Pinned -> Device) ---
         {
@@ -94,7 +98,8 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
                 d_bg,
                 d_mura, 
                 d_ridge, 
-                d_mura_curve,
+                d_mura_curve_mean,
+                d_mura_curve_max,
                 bgSigma, 
                 ridgeSigma, 
                 ridgeMode,
@@ -108,7 +113,8 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
             checkCudaErrors(cudaMemcpy(h_pinned_bg, d_bg, img_size, cudaMemcpyDeviceToHost));
             checkCudaErrors(cudaMemcpy(h_pinned_mura, d_mura, img_size, cudaMemcpyDeviceToHost));
             checkCudaErrors(cudaMemcpy(h_pinned_ridge, d_ridge, img_size, cudaMemcpyDeviceToHost));
-            checkCudaErrors(cudaMemcpy(h_pinned_mura_curve, d_mura_curve, w * sizeof(float), cudaMemcpyDeviceToHost));
+            checkCudaErrors(cudaMemcpy(h_pinned_mura_mean, d_mura_curve_mean, w * sizeof(float), cudaMemcpyDeviceToHost));
+            checkCudaErrors(cudaMemcpy(h_pinned_mura_max, d_mura_curve_max, w * sizeof(float), cudaMemcpyDeviceToHost));
         }
 
         // --- G. 極速存圖測試 (Parallel) ---
@@ -179,14 +185,14 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
     if (d_mura) cudaFree(d_mura);
     if (d_ridge) cudaFree(d_ridge);
     if (d_heatmap) cudaFree(d_heatmap); // [新增]
-    if (d_mura_curve) cudaFree(d_mura_curve);
+    if (d_mura_curve_mean) cudaFree(d_mura_curve_mean);
 
     core::free_pinned_memory(h_pinned_in);
     core::free_pinned_memory(h_pinned_bg);
     core::free_pinned_memory(h_pinned_mura);
     core::free_pinned_memory(h_pinned_ridge);
     core::free_pinned_memory(h_pinned_heatmap); // [新增]
-    core::free_pinned_memory(h_pinned_mura_curve);
+    core::free_pinned_memory(h_pinned_mura_mean);
 
     std::cout << Color::GREEN << "All Tests Finished." << Color::RESET << "\n";
 }
@@ -202,12 +208,14 @@ struct CamContext {
     uint8_t* d_mura = nullptr;
     uint8_t* d_ridge = nullptr;
     uint8_t* d_heatmap = nullptr; // [新增]
-    float* d_mura_curve = nullptr;
+    float* d_mura_curve_mean = nullptr;
+	float* d_mura_curve_max = nullptr;
 
     // Pinned Buffers
     uint8_t* h_pinned_in = nullptr;
     uint8_t* h_pinned_thumb = nullptr;
-    float* h_pinned_mura_curve = nullptr;
+    float* h_pinned_mura_mean = nullptr;
+	float* h_pinned_mura_max = nullptr;
 
     cudaStream_t stream = nullptr;
 
@@ -224,13 +232,15 @@ struct CamContext {
         checkCudaErrors(cudaMalloc(&d_bg, img_size));
         checkCudaErrors(cudaMalloc(&d_mura, img_size));
         checkCudaErrors(cudaMalloc(&d_ridge, img_size));
-        checkCudaErrors(cudaMalloc(&d_mura_curve, w * sizeof(float)));
+        checkCudaErrors(cudaMalloc(&d_mura_curve_mean, w * sizeof(float)));
+		checkCudaErrors(cudaMalloc(&d_mura_curve_max, w * sizeof(float)));
 
         h_pinned_in = (uint8_t*)core::alloc_pinned_memory(img_size);
         h_pinned_thumb = (uint8_t*)core::alloc_pinned_memory(2000 * 2000);
-        h_pinned_mura_curve = (float*)core::alloc_pinned_memory(w * sizeof(float));
+        h_pinned_mura_mean = (float*)core::alloc_pinned_memory(w * sizeof(float));
+        h_pinned_mura_max = (float*)core::alloc_pinned_memory(w * sizeof(float));
 
-        if (!h_pinned_in || !h_pinned_thumb || !h_pinned_mura_curve) {
+        if (!h_pinned_in || !h_pinned_thumb || !h_pinned_mura_mean) {
             std::cerr << "CamContext " << id << ": Failed to allocate Host Pinned Memory!\n";
             throw std::runtime_error("Pinned Memory Allocation Failed");
         }
@@ -244,11 +254,12 @@ struct CamContext {
         if (d_mura) cudaFree(d_mura);
         if (d_ridge) cudaFree(d_ridge);
         if (d_heatmap) cudaFree(d_heatmap); // [新增]
-        if (d_mura_curve) cudaFree(d_mura_curve);
+        if (d_mura_curve_mean) cudaFree(d_mura_curve_mean);
+        if (d_mura_curve_max) cudaFree(d_mura_curve_max);
 
         core::free_pinned_memory(h_pinned_in);
         core::free_pinned_memory(h_pinned_thumb);
-        core::free_pinned_memory(h_pinned_mura_curve);
+        core::free_pinned_memory(h_pinned_mura_mean);
 
         if (stream) cudaStreamDestroy(stream);
     }
@@ -293,7 +304,7 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath, const int NUM_CA
         // 隨便跑一次讓 GPU 醒來
         std::memcpy(shared_ctx.h_pinned_in, shared_source_img, img_size);
         checkCudaErrors(cudaMemcpyAsync(shared_ctx.d_in, shared_ctx.h_pinned_in, shared_ctx.img_size, cudaMemcpyHostToDevice, shared_ctx.stream));
-        shared_ctx.detector.Run(shared_ctx.d_in, shared_ctx.d_bg, shared_ctx.d_mura, shared_ctx.d_ridge, shared_ctx.d_mura_curve, 2.0f, 9.0f, "vertical", shared_ctx.stream);
+        shared_ctx.detector.Run(shared_ctx.d_in, shared_ctx.d_bg, shared_ctx.d_mura, shared_ctx.d_ridge, shared_ctx.d_mura_curve_mean, shared_ctx.d_mura_curve_max, 2.0f, 9.0f, "vertical", shared_ctx.stream);
         checkCudaErrors(cudaStreamSynchronize(shared_ctx.stream));
     }
 
@@ -312,7 +323,7 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath, const int NUM_CA
 
             // B. Run (GPU 內部的暫存區會被複寫，這在 AOI 是正常的，因為我們只關心當前的結果)
             shared_ctx.detector.Run(
-                shared_ctx.d_in, shared_ctx.d_bg, shared_ctx.d_mura, shared_ctx.d_ridge, shared_ctx.d_mura_curve,
+                shared_ctx.d_in, shared_ctx.d_bg, shared_ctx.d_mura, shared_ctx.d_ridge, shared_ctx.d_mura_curve_mean, shared_ctx.d_mura_curve_max,
                 2.0f, 9.0f, "vertical", shared_ctx.stream
             );
 
