@@ -12,18 +12,20 @@ namespace AniloxRoll.Monitor.Forms
 {
     public partial class AniloxRollForm : Form
     {
-        // 核心服務
         private readonly ImageRepository _imageRepository = new ImageRepository();
         private BatchInspectionService _inspectionService;
-
-        // UI Helpers
         private DateTimeNavigator _timeSelectionManager;
         private ThumbnailGridPresenter _galleryManager;
         private AniloxRollPresenter _presenter;
         private FormInteractionHelper _interactionHelper;
-
-        // 資源管理 (傳給 Helper 管理)
         private readonly List<Image> _thumbnailCache = new List<Image>();
+
+        private double[] _cameraOps = new double[] { 33, 33, 33, 33, 33, 33, 33 };
+        private double[] _cameraStartPos = new double[] { 0, 400, 800, 1200, 1600, 2000, 2400 };
+        private int _currentCameraIndex = 0;
+
+        private int _currentViewLeftX = 0;
+        private int _currentViewRightX = 0;
 
         public AniloxRollForm()
         {
@@ -33,10 +35,8 @@ namespace AniloxRoll.Monitor.Forms
 
         private void InitializeSystem()
         {
-            // 1. 建立 Service
             _inspectionService = new BatchInspectionService();
 
-            // 2. 建立 Presenter 與 Navigator
             _timeSelectionManager = new DateTimeNavigator(
                 _imageRepository, cbYear, cbMonth, cbDay, cbHour, cbMin, cbSec);
 
@@ -52,7 +52,6 @@ namespace AniloxRoll.Monitor.Forms
                 _galleryManager
             );
 
-            // 3. 建立 InteractionHelper (傳入 Form 上需要被控制的元件)
             _interactionHelper = new FormInteractionHelper(
                 this,
                 canvasMain,
@@ -60,43 +59,62 @@ namespace AniloxRoll.Monitor.Forms
                 _thumbnailCache,
                 _presenter,
                 _inspectionService,
-                // [新增] 傳入這三個依賴
                 _imageRepository,
                 _timeSelectionManager,
                 _galleryManager
             );
 
-            // 4. 綁定事件
             _presenter.BusyStateChanged += _interactionHelper.SetUiLoadingState;
             _presenter.LogReported += log => Console.WriteLine(log);
+
+            _galleryManager.SelectionChanged += (idx) =>
+            {
+                if (idx >= 0 && idx < 7) _currentCameraIndex = idx;
+            };
+
             _galleryManager.SelectionChanged += _interactionHelper.OnGallerySelectionChanged;
 
-            // 1. 滑鼠移動 (PixelHovered) -> 更新變數 -> 呼叫統一更新
+            // ================================================================
+            // [修正重點] 這裡只使用 StatusChanged，請刪除舊的 PixelHovered
+            // ================================================================
             canvasMain.StatusChanged += (info) =>
             {
+                double ops = _cameraOps[_currentCameraIndex];
+                double startPos = _cameraStartPos[_currentCameraIndex];
+
+                // 計算物理座標
+                double physicalX = startPos + (info.ImageX * (ops / 1000.0));
+
+                // 計算視野範圍
+                _currentViewLeftX = (int)((0 - info.PanOffset.X) / info.Zoom);
+                _currentViewRightX = (int)((canvasMain.Width - info.PanOffset.X) / info.Zoom);
+
+                // 更新狀態列
                 lblPixelInfo.Text =
+                    $"位置:{physicalX:F2} mm| " +
                     $"座標: ({info.ImageX}, {info.ImageY}) | " +
                     $"亮度: {info.PixelColor.R} | " +
-                    $"倍率: {info.Zoom:F5}x | " +
-                    $"平移: ({info.PanOffset.X:F0}, {info.PanOffset.Y:F0})";
+                    $"倍率:{info.Zoom:F2}x | " +
+                    $"平移:({info.PanOffset.X:F0}, {info.PanOffset.Y:F0})";
+            };
+
+            // 綁定邊緣觸發事件 (自動跳轉)
+            canvasMain.EdgeReached += (direction) =>
+            {
+                int nextIndex = _currentCameraIndex + direction;
+                if (nextIndex >= 0 && nextIndex < 7)
+                {
+                    _galleryManager.Select(nextIndex);
+                }
             };
         }
-
-
-        // =========================================================
-        // button
-        // =========================================================
-
         private void btnSelectFolder_Click(object sender, EventArgs e)
-                    => _interactionHelper.SelectAndLoadFolder();
+            => _interactionHelper.SelectAndLoadFolder();
 
         private async void btnShowOriginal_Click(object sender, EventArgs e)
             => await _interactionHelper.LoadImages(false);
 
         private async void btnShowProcessed_Click(object sender, EventArgs e)
             => await _interactionHelper.LoadImages(true);
-
-
-
     }
 }

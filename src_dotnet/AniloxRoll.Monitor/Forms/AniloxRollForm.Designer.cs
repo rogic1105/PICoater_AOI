@@ -97,7 +97,7 @@
             this.tabPage2.Location = new System.Drawing.Point(4, 25);
             this.tabPage2.Name = "tabPage2";
             this.tabPage2.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage2.Size = new System.Drawing.Size(349, 689);
+            this.tabPage2.Size = new System.Drawing.Size(349, 900);
             this.tabPage2.TabIndex = 1;
             this.tabPage2.Text = "Review & Test";
             this.tabPage2.UseVisualStyleBackColor = true;
@@ -257,8 +257,8 @@
             // lblPixelInfo
             // 
             this.lblPixelInfo.Name = "lblPixelInfo";
-            this.lblPixelInfo.Size = new System.Drawing.Size(292, 19);
-            this.lblPixelInfo.Text = "座標:(0, 0) | 亮度: 0  | 倍率:0.0x | 平移:(0, 0)";
+            this.lblPixelInfo.Size = new System.Drawing.Size(395, 19);
+            this.lblPixelInfo.Text = "位置:0.00mm | 座標:(0, 0) | 亮度: 0  | 倍率:0.0x | 平移:(0, 0)";
             // 
             // canvasMain
             // 
