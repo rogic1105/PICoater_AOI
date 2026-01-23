@@ -71,13 +71,12 @@ namespace AniloxRoll.Monitor.Core.Services
             return (results, logs);
         }
 
-        // [修改] 根據當前模式決定大圖是否翻轉
-        public Bitmap RunInspectionFullRes(int index)
+        // 回傳 InspectionData 包含圖片與曲線 
+        public InspectionData RunInspectionFullRes(int index)
         {
             var path = GetFilePath(index);
             if (string.IsNullOrEmpty(path)) return null;
 
-            // 傳入 _isProcessedMode 讓 Engine 決定用哪個 Buffer 和是否翻轉
             return _sharedProcessor.RunInspectionFullRes(path, _isProcessedMode);
         }
 

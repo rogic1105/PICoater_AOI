@@ -26,6 +26,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private int _currentViewLeftX = 0;
         private int _currentViewRightX = 0;
+        private MuraChartHelper _muraChartHelper;
 
         public AniloxRollForm()
         {
@@ -52,6 +53,14 @@ namespace AniloxRoll.Monitor.Forms
                 _galleryManager
             );
 
+            // 初始化 ChartHelper
+            _muraChartHelper = new MuraChartHelper(this.chartMura);
+            // 設定 OPS (假設第一支相機的 OPS 為全域設定)
+            if (_cameraOps.Length > 0)
+            {
+                _muraChartHelper.SetOps(_cameraOps[0]);
+            }
+
             _interactionHelper = new FormInteractionHelper(
                 this,
                 canvasMain,
@@ -61,7 +70,8 @@ namespace AniloxRoll.Monitor.Forms
                 _inspectionService,
                 _imageRepository,
                 _timeSelectionManager,
-                _galleryManager
+                _galleryManager,
+                _muraChartHelper 
             );
 
             _presenter.BusyStateChanged += _interactionHelper.SetUiLoadingState;
@@ -74,9 +84,8 @@ namespace AniloxRoll.Monitor.Forms
 
             _galleryManager.SelectionChanged += _interactionHelper.OnGallerySelectionChanged;
 
-            // ================================================================
-            // [修正重點] 這裡只使用 StatusChanged，請刪除舊的 PixelHovered
-            // ================================================================
+
+
             canvasMain.StatusChanged += (info) =>
             {
                 double ops = _cameraOps[_currentCameraIndex];

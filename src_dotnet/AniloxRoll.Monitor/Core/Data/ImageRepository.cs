@@ -68,17 +68,4 @@ namespace AniloxRoll.Monitor.Core.Data
     }
 
 
-    /// <summary>
-    /// [Model] 檢測結果封包，包含顯示用的圖片與分析用的曲線數據。
-    /// </summary>
-    public class InspectionData : IDisposable
-    {
-        public Bitmap Image { get; set; }
-        public float[] MuraCurve { get; set; } // 1D 曲線數據
-
-        public void Dispose()
-        {
-            Image?.Dispose();
-        }
-    }
 }

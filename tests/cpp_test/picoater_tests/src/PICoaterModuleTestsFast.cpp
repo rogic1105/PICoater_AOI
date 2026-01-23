@@ -84,6 +84,7 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
         // --- E. 執行 AOI 模組 ---
         float bgSigma = 2.0f;
         float ridgeSigma = 9.0f;
+		float hessianMaxFactor = 1.0f;
         const char* ridgeMode = "vertical";
 
 
@@ -102,6 +103,7 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
                 d_mura_curve_max,
                 bgSigma, 
                 ridgeSigma, 
+                hessianMaxFactor,
                 ridgeMode,
                 0);
         }
@@ -324,7 +326,7 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath, const int NUM_CA
             // B. Run (GPU 內部的暫存區會被複寫，這在 AOI 是正常的，因為我們只關心當前的結果)
             shared_ctx.detector.Run(
                 shared_ctx.d_in, shared_ctx.d_bg, shared_ctx.d_mura, shared_ctx.d_ridge, shared_ctx.d_mura_curve_mean, shared_ctx.d_mura_curve_max,
-                2.0f, 9.0f, "vertical", shared_ctx.stream
+                2.0f, 9.0f, 1.0f, "vertical", shared_ctx.stream
             );
 
             // C. Resize

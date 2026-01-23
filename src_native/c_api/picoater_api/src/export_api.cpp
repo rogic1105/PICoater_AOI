@@ -92,8 +92,7 @@ PICOATER_API int PICoater_Run(
 	float* h_mura_curve_max,
     float bgSigma,
     float ridgeSigma,
-    int heatmap_lower_thres,
-    float heatmap_alpha,
+	float hessianMaxFactor,
     const char* ridgeMode
 ) {
     if (!handle) return -1;
@@ -103,7 +102,7 @@ PICOATER_API int PICoater_Run(
 
     ctx->detector.Run(
         ctx->d_in, ctx->d_bg, ctx->d_mura, ctx->d_ridge, ctx->d_mura_curve_mean, ctx->d_mura_curve_max,
-        bgSigma, ridgeSigma, ridgeMode, 0
+        bgSigma, ridgeSigma, hessianMaxFactor, ridgeMode, 0
     );
 
     if (h_bg_out) cudaMemcpy(h_bg_out, ctx->d_bg, ctx->img_size, cudaMemcpyDeviceToHost);
@@ -177,8 +176,7 @@ PICOATER_API int PICoater_Run_WithThumb(
     float* h_mura_curve_max,
     float bgSigma,
     float ridgeSigma,
-    int heatmap_lower_thres,
-    float heatmap_alpha,
+	float hessianMaxFactor,
     const char* ridgeMode
 ) {
     if (!handle) return -1;
@@ -190,7 +188,7 @@ PICOATER_API int PICoater_Run_WithThumb(
     // 2. 執行演算法 (GPU)
     ctx->detector.Run(
         ctx->d_in, ctx->d_bg, ctx->d_mura, ctx->d_ridge, ctx->d_mura_curve_mean, ctx->d_mura_curve_max,
-        bgSigma, ridgeSigma, ridgeMode, 0
+        bgSigma, ridgeSigma, hessianMaxFactor, ridgeMode, 0
     );
 
     // 3. [關鍵] GPU 內直接縮圖 (Full -> Thumb)

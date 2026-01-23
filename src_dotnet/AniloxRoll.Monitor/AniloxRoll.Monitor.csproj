@@ -70,6 +70,7 @@
   <ItemGroup>
     <Compile Include="Core\Data\ImageMetadata.cs" />
     <Compile Include="Core\Data\ImageRepository.cs" />
+    <Compile Include="Core\Data\InspectionData.cs" />
     <Compile Include="Core\Interop\NativeMethods.cs" />
     <Compile Include="Core\Services\BatchInspectionService.cs" />
     <Compile Include="Core\Services\InspectionEngine.cs" />

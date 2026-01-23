@@ -94,12 +94,12 @@ namespace picoater {
 		float* d_mura_curve_max,
         float bgSigmaFactor,
         float ridgeSigma,
+        float hessianMaxFactor,
         const char* ridgeMode,
         cudaStream_t stream
     ) {
         if (m_width == 0) return;
 
-        float fixed_max_val = 1.0f;
         int sigma_col = 1;
 
         // [新增] 總耗時測量 (這會包住整個 Run)
@@ -126,7 +126,7 @@ namespace picoater {
                 m_width, m_height,
                 ridgeSigma,
                 ridgeMode,
-                fixed_max_val,
+                hessianMaxFactor,
                 d_hessian_f32_,
                 d_hessian_resp_,
                 stream,

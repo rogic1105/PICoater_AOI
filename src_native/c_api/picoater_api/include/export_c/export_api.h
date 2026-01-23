@@ -30,8 +30,7 @@ extern "C" {
         float* h_mura_curve_max,
         float bgSigma,
         float ridgeSigma,
-        int heatmap_lower_thres,
-        float heatmap_alpha,
+		float hessianMaxFactor,
         const char* ridgeMode
     );
 
@@ -69,8 +68,7 @@ extern "C" {
         float* h_mura_curve_max,
         float bgSigma,
         float ridgeSigma,
-        int heatmap_lower_thres,
-        float heatmap_alpha,
+		float hessianMaxFactor,
         const char* ridgeMode
     );
 }

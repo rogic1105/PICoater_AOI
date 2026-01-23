@@ -34,8 +34,7 @@ namespace AniloxRoll.Monitor.Core.Interop
             IntPtr h_mura_curve_max_out,
             float bgSigma,
             float ridgeSigma,
-            int heatmap_lower_thres,
-            float heatmap_alpha,
+            float hessianMaxFactor,
             [MarshalAs(UnmanagedType.LPStr)] string rMode
         );
 
@@ -79,8 +78,7 @@ namespace AniloxRoll.Monitor.Core.Interop
             IntPtr h_mura_curve_max_out,
             float bgSigma,
             float ridgeSigma,
-            int heatmap_lower_thres,
-            float heatmap_alpha,
+            float hessianMaxFactor,
             string ridgeMode
         );
 

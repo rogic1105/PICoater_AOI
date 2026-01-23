@@ -22,6 +22,7 @@ namespace picoater {
             float* d_mura_curve_max,
             float bgSigmaFactor,
             float ridgeSigma,
+            float hessianMaxFactor,
             const char* ridgeMode,
             cudaStream_t stream = 0
         );

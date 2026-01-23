@@ -28,7 +28,10 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.tabControl1 = new System.Windows.Forms.TabControl();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea2 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend2 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series2 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            this.tabControl = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.tabPage2 = new System.Windows.Forms.TabPage();
             this.btnSelectFolder = new System.Windows.Forms.Button();
@@ -49,8 +52,11 @@
             this.pbCam1 = new System.Windows.Forms.PictureBox();
             this.statusStrip1 = new System.Windows.Forms.StatusStrip();
             this.lblPixelInfo = new System.Windows.Forms.ToolStripStatusLabel();
+            this.chartMura = new System.Windows.Forms.DataVisualization.Charting.Chart();
+            this.tableLayoutPanel1 = new System.Windows.Forms.TableLayoutPanel();
             this.canvasMain = new AOI.SDK.UI.SmartCanvas();
-            this.tabControl1.SuspendLayout();
+            this.tabPage3 = new System.Windows.Forms.TabPage();
+            this.tabControl.SuspendLayout();
             this.tabPage2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam7)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam6)).BeginInit();
@@ -60,18 +66,21 @@
             ((System.ComponentModel.ISupportInitialize)(this.pbCam2)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam1)).BeginInit();
             this.statusStrip1.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.chartMura)).BeginInit();
+            this.tableLayoutPanel1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).BeginInit();
             this.SuspendLayout();
             // 
-            // tabControl1
+            // tabControl
             // 
-            this.tabControl1.Controls.Add(this.tabPage1);
-            this.tabControl1.Controls.Add(this.tabPage2);
-            this.tabControl1.Location = new System.Drawing.Point(1099, 12);
-            this.tabControl1.Name = "tabControl1";
-            this.tabControl1.SelectedIndex = 0;
-            this.tabControl1.Size = new System.Drawing.Size(357, 929);
-            this.tabControl1.TabIndex = 1;
+            this.tabControl.Controls.Add(this.tabPage1);
+            this.tabControl.Controls.Add(this.tabPage2);
+            this.tabControl.Controls.Add(this.tabPage3);
+            this.tabControl.Location = new System.Drawing.Point(1099, 12);
+            this.tabControl.Name = "tabControl";
+            this.tabControl.SelectedIndex = 0;
+            this.tabControl.Size = new System.Drawing.Size(357, 929);
+            this.tabControl.TabIndex = 1;
             // 
             // tabPage1
             // 
@@ -80,7 +89,7 @@
             this.tabPage1.Padding = new System.Windows.Forms.Padding(3);
             this.tabPage1.Size = new System.Drawing.Size(349, 900);
             this.tabPage1.TabIndex = 0;
-            this.tabPage1.Text = "Live Monitor";
+            this.tabPage1.Text = "監控";
             this.tabPage1.UseVisualStyleBackColor = true;
             // 
             // tabPage2
@@ -99,7 +108,7 @@
             this.tabPage2.Padding = new System.Windows.Forms.Padding(3);
             this.tabPage2.Size = new System.Drawing.Size(349, 900);
             this.tabPage2.TabIndex = 1;
-            this.tabPage2.Text = "Review & Test";
+            this.tabPage2.Text = "回顧";
             this.tabPage2.UseVisualStyleBackColor = true;
             // 
             // btnSelectFolder
@@ -142,6 +151,8 @@
             // 
             // cbMin
             // 
+            this.cbMin.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
             this.cbMin.FormattingEnabled = true;
             this.cbMin.Location = new System.Drawing.Point(242, 81);
             this.cbMin.Name = "cbMin";
@@ -248,7 +259,7 @@
             this.statusStrip1.ImageScalingSize = new System.Drawing.Size(20, 20);
             this.statusStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.lblPixelInfo});
-            this.statusStrip1.Location = new System.Drawing.Point(0, 944);
+            this.statusStrip1.Location = new System.Drawing.Point(0, 947);
             this.statusStrip1.Name = "statusStrip1";
             this.statusStrip1.Size = new System.Drawing.Size(1468, 25);
             this.statusStrip1.TabIndex = 15;
@@ -260,23 +271,69 @@
             this.lblPixelInfo.Size = new System.Drawing.Size(395, 19);
             this.lblPixelInfo.Text = "位置:0.00mm | 座標:(0, 0) | 亮度: 0  | 倍率:0.0x | 平移:(0, 0)";
             // 
+            // chartMura
+            // 
+            this.chartMura.Anchor = System.Windows.Forms.AnchorStyles.None;
+            chartArea2.Name = "ChartArea1";
+            this.chartMura.ChartAreas.Add(chartArea2);
+            legend2.Name = "Legend1";
+            this.chartMura.Legends.Add(legend2);
+            this.chartMura.Location = new System.Drawing.Point(19, 376);
+            this.chartMura.Name = "chartMura";
+            series2.ChartArea = "ChartArea1";
+            series2.Legend = "Legend1";
+            series2.Name = "Series1";
+            this.chartMura.Series.Add(series2);
+            this.chartMura.Size = new System.Drawing.Size(1034, 150);
+            this.chartMura.TabIndex = 16;
+            this.chartMura.Text = "chart1";
+            // 
+            // tableLayoutPanel1
+            // 
+            this.tableLayoutPanel1.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.tableLayoutPanel1.ColumnCount = 1;
+            this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            this.tableLayoutPanel1.Controls.Add(this.canvasMain, 0, 0);
+            this.tableLayoutPanel1.Controls.Add(this.chartMura, 0, 1);
+            this.tableLayoutPanel1.Location = new System.Drawing.Point(12, 180);
+            this.tableLayoutPanel1.Name = "tableLayoutPanel1";
+            this.tableLayoutPanel1.RowCount = 2;
+            this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 70F));
+            this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 30F));
+            this.tableLayoutPanel1.Size = new System.Drawing.Size(1072, 531);
+            this.tableLayoutPanel1.TabIndex = 17;
+            // 
             // canvasMain
             // 
             this.canvasMain.BackColor = System.Drawing.Color.Black;
             this.canvasMain.Cursor = System.Windows.Forms.Cursors.Cross;
-            this.canvasMain.Location = new System.Drawing.Point(12, 292);
+            this.canvasMain.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.canvasMain.Location = new System.Drawing.Point(3, 3);
             this.canvasMain.Name = "canvasMain";
-            this.canvasMain.Size = new System.Drawing.Size(1072, 454);
+            this.canvasMain.Size = new System.Drawing.Size(1066, 365);
             this.canvasMain.TabIndex = 7;
             this.canvasMain.TabStop = false;
+            // 
+            // tabPage3
+            // 
+            this.tabPage3.Location = new System.Drawing.Point(4, 25);
+            this.tabPage3.Name = "tabPage3";
+            this.tabPage3.Padding = new System.Windows.Forms.Padding(3);
+            this.tabPage3.Size = new System.Drawing.Size(349, 900);
+            this.tabPage3.TabIndex = 2;
+            this.tabPage3.Text = "參數";
+            this.tabPage3.UseVisualStyleBackColor = true;
             // 
             // AniloxRollForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1468, 969);
+            this.ClientSize = new System.Drawing.Size(1468, 972);
+            this.Controls.Add(this.tableLayoutPanel1);
             this.Controls.Add(this.statusStrip1);
-            this.Controls.Add(this.tabControl1);
+            this.Controls.Add(this.tabControl);
             this.Controls.Add(this.pbCam1);
             this.Controls.Add(this.pbCam2);
             this.Controls.Add(this.pbCam3);
@@ -284,10 +341,10 @@
             this.Controls.Add(this.pbCam5);
             this.Controls.Add(this.pbCam6);
             this.Controls.Add(this.pbCam7);
-            this.Controls.Add(this.canvasMain);
             this.Name = "AniloxRollForm";
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "AniloxRoll Monitor";
-            this.tabControl1.ResumeLayout(false);
+            this.tabControl.ResumeLayout(false);
             this.tabPage2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.pbCam7)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam6)).EndInit();
@@ -298,6 +355,8 @@
             ((System.ComponentModel.ISupportInitialize)(this.pbCam1)).EndInit();
             this.statusStrip1.ResumeLayout(false);
             this.statusStrip1.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.chartMura)).EndInit();
+            this.tableLayoutPanel1.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
@@ -306,7 +365,7 @@
 
         #endregion
         private AOI.SDK.UI.SmartCanvas canvasMain;
-        private System.Windows.Forms.TabControl tabControl1;
+        private System.Windows.Forms.TabControl tabControl;
         private System.Windows.Forms.TabPage tabPage1;
         private System.Windows.Forms.TabPage tabPage2;
         private System.Windows.Forms.PictureBox pbCam7;
@@ -327,5 +386,8 @@
         private System.Windows.Forms.Button btnSelectFolder;
         private System.Windows.Forms.StatusStrip statusStrip1;
         private System.Windows.Forms.ToolStripStatusLabel lblPixelInfo;
+        private System.Windows.Forms.DataVisualization.Charting.Chart chartMura;
+        private System.Windows.Forms.TableLayoutPanel tableLayoutPanel1;
+        private System.Windows.Forms.TabPage tabPage3;
     }
 }

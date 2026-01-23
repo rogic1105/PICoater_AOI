@@ -18,20 +18,19 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         private readonly List<Image> _thumbnailCache;
         private readonly AniloxRollPresenter _presenter;
         private readonly BatchInspectionService _inspectionService;
-
-        private bool _isProcessedMode = false;
-        private bool _isBusy = false;
-
-        // [新增] 為了處理資料夾載入，需要這三個元件的控制權
         private readonly ImageRepository _imageRepository;
         private readonly DateTimeNavigator _timeNavigator;
         private readonly ThumbnailGridPresenter _galleryManager;
+        private readonly MuraChartHelper _muraChartHelper;
 
-        // 視圖狀態記憶
+        // 狀態
+        private bool _isProcessedMode = false;
+        private bool _isBusy = false;
         private float _savedZoom = 1.0f;
         private PointF _savedPan = PointF.Empty;
         private bool _shouldRestoreView = false;
 
+        // 建構子 (共 10 個參數)
         public FormInteractionHelper(
             Form form,
             SmartCanvas canvas,
@@ -39,10 +38,10 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             List<Image> cache,
             AniloxRollPresenter presenter,
             BatchInspectionService service,
-            // [新增] 透過建構子注入依賴
             ImageRepository repo,
             DateTimeNavigator timeNav,
-            ThumbnailGridPresenter galleryMgr)
+            ThumbnailGridPresenter galleryMgr,
+            MuraChartHelper chartHelper) // 第 10 個參數
         {
             _form = form;
             _canvas = canvas;
@@ -50,11 +49,10 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             _thumbnailCache = cache;
             _presenter = presenter;
             _inspectionService = service;
-
-            // [新增] 指派
             _imageRepository = repo;
             _timeNavigator = timeNav;
             _galleryManager = galleryMgr;
+            _muraChartHelper = chartHelper;
         }
 
         public async Task LoadImages(bool enableProcess)
@@ -98,12 +96,19 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
             try
             {
-                Bitmap bigImg = null;
+                AniloxRoll.Monitor.Core.Data.InspectionData data = _inspectionService.RunInspectionFullRes(index);
 
-                // 呼叫 Service 取得大圖 (自動處理翻轉)
-                bigImg = _inspectionService.RunInspectionFullRes(index);
+                if (data != null)
+                {
+                    // UpdateCanvas 內會處裡 Image
+                    UpdateCanvas(data.Image);
 
-                UpdateCanvas(bigImg);
+                    // 更新圖表
+                    if (_muraChartHelper != null)
+                    {
+                        _muraChartHelper.UpdateData(data.MuraCurveMean, data.MuraCurveMax);
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -168,6 +173,11 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         private void UpdateCanvas(Bitmap newImage)
         {
             if (newImage == null) return;
+
+            // 這裡 SmartCanvas 是單張圖片模式 (根據您之前的需求，多張模式暫緩)
+            // 如果要用多張模式，這裡要改成 ClearItems + AddItem
+
+            // 假設目前是單張模式:
             if (_canvas.Image != null)
             {
                 var old = _canvas.Image;
@@ -176,16 +186,13 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             }
             _canvas.Image = newImage;
 
-            // [新增] 2. 判斷是否需要還原視圖
             if (_shouldRestoreView)
             {
-                // 如果是透過按鈕切換模式進來的，還原上一次的位置
                 _canvas.SetView(_savedZoom, _savedPan);
-                _shouldRestoreView = false; // 用完即丟，避免切換不同縮圖時也被還原
+                _shouldRestoreView = false;
             }
             else
             {
-                // 如果是直接點選縮圖進來的，就重置為全圖顯示
                 _canvas.FitToScreen();
             }
         }

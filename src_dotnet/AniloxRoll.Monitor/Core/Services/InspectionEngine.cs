@@ -36,8 +36,8 @@ namespace AniloxRoll.Monitor.Core.Services
         // ... (常數保持不變) ...
         private const float DefaultBgSigma = 2.0f;
         private const float DefaultRidgeSigma = 9.0f;
-        private const int DefaultHeatmapThres = 20;
-        private const float DefaultHeatmapAlpha = 0.6f;
+        private const float DefaultHessianMaxFactor = 2.0f;
+
         private const string DefaultRidgeMode = "vertical";
 
         private bool _isDisposed = false;
@@ -107,52 +107,6 @@ namespace AniloxRoll.Monitor.Core.Services
             }
         }
 
-        public TimedResult<InspectionData> ProcessImage(string filePath, int targetThumbWidth)
-        {
-            if (_isDisposed) throw new ObjectDisposedException(nameof(InspectionEngine));
-
-            // ExecuteTimedOperation 已經有 lock 了，這裡不用再加
-            return ExecuteTimedOperation<InspectionData>(filePath, (stopwatch) =>
-            {
-                stopwatch.Start();
-                bool readSuccess = NativeMethods.PICoater_FastReadBMP(
-                    filePath, out int w, out int h, _inputBuffer, _imgBufferSize);
-                stopwatch.Stop();
-                long ioTime = stopwatch.ElapsedMilliseconds;
-
-                if (!readSuccess) return (null, ioTime, 0, 0);
-
-                stopwatch.Restart();
-                NativeMethods.PICoater_Initialize(_handle, w, h);
-
-                int thumbH = (int)((float)h / w * targetThumbWidth);
-
-                int ret = NativeMethods.PICoater_Run_WithThumb(
-                    _handle, _inputBuffer, _thumbnailBuffer, targetThumbWidth, thumbH,
-                    _curveMeanBuffer, _curveMaxBuffer, // 這裡現在安全了
-                    DefaultBgSigma, DefaultRidgeSigma, DefaultHeatmapThres, DefaultHeatmapAlpha, DefaultRidgeMode
-                );
-
-                stopwatch.Stop();
-                long algoTime = stopwatch.ElapsedMilliseconds;
-                if (ret != 0) throw new Exception($"Algo Error: {ret}");
-
-                stopwatch.Restart();
-
-                var thumb = ImageUtils.Create8bppBitmap(_thumbnailBuffer, targetThumbWidth, thumbH);
-
-                float[] curveData = new float[w];
-                Marshal.Copy(_curveMeanBuffer, curveData, 0, w);
-
-                var data = new InspectionData { Image = thumb, MuraCurve = curveData };
-
-                stopwatch.Stop();
-                long bmpTime = stopwatch.ElapsedMilliseconds;
-
-                return (data, ioTime, algoTime, bmpTime);
-            });
-        }
-
         public TimedResult<InspectionData> LoadThumbnailOnly(string filePath, int targetThumbWidth)
         {
             return ExecuteTimedOperation<InspectionData>(filePath, (stopwatch) =>
@@ -185,40 +139,123 @@ namespace AniloxRoll.Monitor.Core.Services
                 stopwatch.Stop();
                 long bmpTime = stopwatch.ElapsedMilliseconds;
 
-                var data = new InspectionData { Image = bitmap, MuraCurve = null };
+                var data = new InspectionData { Image = bitmap, MuraCurveMean = null };
                 return (data, ioTime, gpuTime, bmpTime);
             });
         }
 
-        public Bitmap RunInspectionFullRes(string filePath, bool isProcessedMode)
+
+        public TimedResult<InspectionData> ProcessImage(string filePath, int targetThumbWidth)
+        {
+            if (_isDisposed) throw new ObjectDisposedException(nameof(InspectionEngine));
+
+            // ExecuteTimedOperation 已經有 lock 了，這裡不用再加
+            return ExecuteTimedOperation<InspectionData>(filePath, (stopwatch) =>
+            {
+                stopwatch.Start();
+                bool readSuccess = NativeMethods.PICoater_FastReadBMP(
+                    filePath, out int w, out int h, _inputBuffer, _imgBufferSize);
+                stopwatch.Stop();
+                long ioTime = stopwatch.ElapsedMilliseconds;
+
+                if (!readSuccess) return (null, ioTime, 0, 0);
+
+                stopwatch.Restart();
+                NativeMethods.PICoater_Initialize(_handle, w, h);
+
+                int thumbH = (int)((float)h / w * targetThumbWidth);
+
+                int ret = NativeMethods.PICoater_Run_WithThumb(
+                    _handle, _inputBuffer, _thumbnailBuffer, targetThumbWidth, thumbH,
+                    _curveMeanBuffer, _curveMaxBuffer, // 這裡現在安全了
+                    DefaultBgSigma, DefaultRidgeSigma, DefaultHessianMaxFactor, DefaultRidgeMode
+                );
+
+                stopwatch.Stop();
+                long algoTime = stopwatch.ElapsedMilliseconds;
+                if (ret != 0) throw new Exception($"Algo Error: {ret}");
+
+                stopwatch.Restart();
+
+                var thumb = ImageUtils.Create8bppBitmap(_thumbnailBuffer, targetThumbWidth, thumbH);
+
+                float[] curveMean = new float[w];
+                Marshal.Copy(_curveMeanBuffer, curveMean, 0, w);
+
+                float[] curveMax = new float[w];
+                Marshal.Copy(_curveMaxBuffer, curveMax, 0, w);
+
+                var data = new InspectionData
+                {
+                    Image = thumb,
+                    MuraCurveMean = curveMean,
+                    MuraCurveMax = curveMax
+                };
+
+                stopwatch.Stop();
+                long bmpTime = stopwatch.ElapsedMilliseconds;
+
+                return (data, ioTime, algoTime, bmpTime);
+            });
+        }
+
+
+        public InspectionData RunInspectionFullRes(string filePath, bool isProcessedMode)
         {
             if (_isDisposed) return null;
             if (!File.Exists(filePath)) return null;
 
-            // [關鍵] 這裡沒有呼叫 ExecuteTimedOperation，所以必須手動加 lock
             lock (_lock)
             {
                 bool readSuccess = NativeMethods.PICoater_FastReadBMP(
                      filePath, out int w, out int h, _inputBuffer, _imgBufferSize);
                 if (!readSuccess) return null;
 
+                Bitmap bmp = null;
+                float[] curveMean = null;
+                float[] curveMax = null;
+
                 if (isProcessedMode)
                 {
                     NativeMethods.PICoater_Initialize(_handle, w, h);
                     int ret = NativeMethods.PICoater_Run(
                         _handle, _inputBuffer, IntPtr.Zero, IntPtr.Zero, _ridgeBuffer, IntPtr.Zero, IntPtr.Zero,
-                        DefaultBgSigma, DefaultRidgeSigma, DefaultHeatmapThres, DefaultHeatmapAlpha, DefaultRidgeMode
+                        DefaultBgSigma, DefaultRidgeSigma, DefaultHessianMaxFactor, DefaultRidgeMode
                     );
                     if (ret != 0) return null;
 
-                    return ImageUtils.Create8bppBitmap(_ridgeBuffer, w, h, flipY: false);
+                    // 產生圖片 (不翻轉)
+                    bmp = ImageUtils.Create8bppBitmap(_ridgeBuffer, w, h, flipY: false);
+
+                    curveMean = new float[w];
+                    curveMax = new float[w];
+
+                    // 再次呼叫 Run 以獲取曲線資料
+                    NativeMethods.PICoater_Run(
+                        _handle, _inputBuffer, IntPtr.Zero, IntPtr.Zero, _ridgeBuffer,
+                        _curveMeanBuffer, _curveMaxBuffer,
+                        DefaultBgSigma, DefaultRidgeSigma, DefaultHessianMaxFactor, DefaultRidgeMode
+                    );
+
+                    Marshal.Copy(_curveMeanBuffer, curveMean, 0, w);
+                    Marshal.Copy(_curveMaxBuffer, curveMax, 0, w);
                 }
                 else
                 {
-                    return ImageUtils.Create8bppBitmap(_inputBuffer, w, h, flipY: false);
+                    // Original Mode: 顯示正常 (翻轉)
+                    bmp = ImageUtils.Create8bppBitmap(_inputBuffer, w, h, flipY: false);
                 }
+
+                // [關鍵] 回傳 InspectionData 物件
+                return new InspectionData
+                {
+                    Image = bmp,
+                    MuraCurveMean = curveMean,
+                    MuraCurveMax = curveMax
+                };
             }
         }
+
 
         public void Dispose()
         {
