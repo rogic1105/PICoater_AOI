@@ -13,6 +13,16 @@ namespace AniloxRoll.Monitor.Core.Services
         private readonly InspectionEngine _sharedProcessor;
         private readonly string[] _currentFilePaths;
         private readonly int _cameraCount;
+        private float _hessianMaxFactor = 5.0f;
+        private float _errorMean = 1.0f;
+        private float _errorMax = 2.0f;
+
+        public void UpdateAlgorithmParams(float hessianFactor, float errMean, float errMax)
+        {
+            _hessianMaxFactor = hessianFactor;
+            _errorMean = errMean;
+            _errorMax = errMax;
+        }
 
         // [新增] 記錄當前檢視模式 (true=Processed/Normal, false=Original/UpsideDown)
         private bool _isProcessedMode = false;
@@ -54,7 +64,7 @@ namespace AniloxRoll.Monitor.Core.Services
                     // ProcessImage -> 會執行翻轉 (變正常)
                     // LoadThumbnailOnly -> 不執行翻轉 (保持顛倒)
                     results[i] = enableProcessing
-                        ? _sharedProcessor.ProcessImage(path, 1000)
+                        ? _sharedProcessor.ProcessImage(path, 1000, _hessianMaxFactor)
                         : _sharedProcessor.LoadThumbnailOnly(path, 1000);
 
                     if (results[i] != null)
@@ -77,7 +87,7 @@ namespace AniloxRoll.Monitor.Core.Services
             var path = GetFilePath(index);
             if (string.IsNullOrEmpty(path)) return null;
 
-            return _sharedProcessor.RunInspectionFullRes(path, _isProcessedMode);
+            return _sharedProcessor.RunInspectionFullRes(path, _isProcessedMode, _hessianMaxFactor); // <--- 確認這裡
         }
 
         public void Dispose()

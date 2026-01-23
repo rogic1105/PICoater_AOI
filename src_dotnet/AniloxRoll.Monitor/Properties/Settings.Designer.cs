@@ -106,5 +106,17 @@ namespace AniloxRoll.Monitor.Properties {
                 this["LastSec"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("\"\"")]
+        public string InspectionConfigJson {
+            get {
+                return ((string)(this["InspectionConfigJson"]));
+            }
+            set {
+                this["InspectionConfigJson"] = value;
+            }
+        }
     }
 }

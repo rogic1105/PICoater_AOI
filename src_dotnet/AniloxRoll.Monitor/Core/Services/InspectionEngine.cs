@@ -25,6 +25,7 @@ namespace AniloxRoll.Monitor.Core.Services
         private IntPtr _curveMeanBuffer = IntPtr.Zero;
         private IntPtr _curveMaxBuffer = IntPtr.Zero; // [修正] 確保這個有被 Alloc
 
+
         private ulong _imgBufferSize = 0;
         private int _thumbnailBufferSize = 0;
         private int _curveBufferSize = 0;
@@ -145,7 +146,7 @@ namespace AniloxRoll.Monitor.Core.Services
         }
 
 
-        public TimedResult<InspectionData> ProcessImage(string filePath, int targetThumbWidth)
+        public TimedResult<InspectionData> ProcessImage(string filePath, int targetThumbWidth, float hessianFactor)
         {
             if (_isDisposed) throw new ObjectDisposedException(nameof(InspectionEngine));
 
@@ -200,7 +201,7 @@ namespace AniloxRoll.Monitor.Core.Services
         }
 
 
-        public InspectionData RunInspectionFullRes(string filePath, bool isProcessedMode)
+        public InspectionData RunInspectionFullRes(string filePath, bool isProcessedMode, float hessianFactor)
         {
             if (_isDisposed) return null;
             if (!File.Exists(filePath)) return null;

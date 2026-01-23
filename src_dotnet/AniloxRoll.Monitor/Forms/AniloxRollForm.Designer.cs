@@ -28,9 +28,9 @@
         /// </summary>
         private void InitializeComponent()
         {
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea2 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend2 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series2 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea1 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend1 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series1 = new System.Windows.Forms.DataVisualization.Charting.Series();
             this.tabControl = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.tabPage2 = new System.Windows.Forms.TabPage();
@@ -43,6 +43,8 @@
             this.cbDay = new System.Windows.Forms.ComboBox();
             this.cbMonth = new System.Windows.Forms.ComboBox();
             this.cbYear = new System.Windows.Forms.ComboBox();
+            this.tabPage3 = new System.Windows.Forms.TabPage();
+            this.propertyGrid1 = new System.Windows.Forms.PropertyGrid();
             this.pbCam7 = new System.Windows.Forms.PictureBox();
             this.pbCam6 = new System.Windows.Forms.PictureBox();
             this.pbCam5 = new System.Windows.Forms.PictureBox();
@@ -55,9 +57,9 @@
             this.chartMura = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.tableLayoutPanel1 = new System.Windows.Forms.TableLayoutPanel();
             this.canvasMain = new AOI.SDK.UI.SmartCanvas();
-            this.tabPage3 = new System.Windows.Forms.TabPage();
             this.tabControl.SuspendLayout();
             this.tabPage2.SuspendLayout();
+            this.tabPage3.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam7)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam6)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam5)).BeginInit();
@@ -79,7 +81,7 @@
             this.tabControl.Location = new System.Drawing.Point(1099, 12);
             this.tabControl.Name = "tabControl";
             this.tabControl.SelectedIndex = 0;
-            this.tabControl.Size = new System.Drawing.Size(357, 929);
+            this.tabControl.Size = new System.Drawing.Size(357, 628);
             this.tabControl.TabIndex = 1;
             // 
             // tabPage1
@@ -151,8 +153,6 @@
             // 
             // cbMin
             // 
-            this.cbMin.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
             this.cbMin.FormattingEnabled = true;
             this.cbMin.Location = new System.Drawing.Point(242, 81);
             this.cbMin.Name = "cbMin";
@@ -191,11 +191,30 @@
             this.cbYear.Size = new System.Drawing.Size(64, 23);
             this.cbYear.TabIndex = 15;
             // 
+            // tabPage3
+            // 
+            this.tabPage3.Controls.Add(this.propertyGrid1);
+            this.tabPage3.Location = new System.Drawing.Point(4, 25);
+            this.tabPage3.Name = "tabPage3";
+            this.tabPage3.Padding = new System.Windows.Forms.Padding(3);
+            this.tabPage3.Size = new System.Drawing.Size(349, 599);
+            this.tabPage3.TabIndex = 2;
+            this.tabPage3.Text = "參數";
+            this.tabPage3.UseVisualStyleBackColor = true;
+            // 
+            // propertyGrid1
+            // 
+            this.propertyGrid1.Dock = System.Windows.Forms.DockStyle.Fill; // [建議加上這行]
+            this.propertyGrid1.Location = new System.Drawing.Point(3, 3);
+            this.propertyGrid1.Name = "propertyGrid1";
+            this.propertyGrid1.Size = new System.Drawing.Size(343, 593);
+            this.propertyGrid1.TabIndex = 0;
+            // 
             // pbCam7
             // 
             this.pbCam7.Location = new System.Drawing.Point(936, 12);
             this.pbCam7.Name = "pbCam7";
-            this.pbCam7.Size = new System.Drawing.Size(148, 157);
+            this.pbCam7.Size = new System.Drawing.Size(148, 111);
             this.pbCam7.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             this.pbCam7.TabIndex = 14;
             this.pbCam7.TabStop = false;
@@ -204,7 +223,7 @@
             // 
             this.pbCam6.Location = new System.Drawing.Point(782, 12);
             this.pbCam6.Name = "pbCam6";
-            this.pbCam6.Size = new System.Drawing.Size(148, 157);
+            this.pbCam6.Size = new System.Drawing.Size(148, 111);
             this.pbCam6.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             this.pbCam6.TabIndex = 13;
             this.pbCam6.TabStop = false;
@@ -213,7 +232,7 @@
             // 
             this.pbCam5.Location = new System.Drawing.Point(628, 12);
             this.pbCam5.Name = "pbCam5";
-            this.pbCam5.Size = new System.Drawing.Size(148, 157);
+            this.pbCam5.Size = new System.Drawing.Size(148, 111);
             this.pbCam5.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             this.pbCam5.TabIndex = 12;
             this.pbCam5.TabStop = false;
@@ -222,7 +241,7 @@
             // 
             this.pbCam4.Location = new System.Drawing.Point(474, 12);
             this.pbCam4.Name = "pbCam4";
-            this.pbCam4.Size = new System.Drawing.Size(148, 157);
+            this.pbCam4.Size = new System.Drawing.Size(148, 111);
             this.pbCam4.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             this.pbCam4.TabIndex = 11;
             this.pbCam4.TabStop = false;
@@ -231,7 +250,7 @@
             // 
             this.pbCam3.Location = new System.Drawing.Point(320, 12);
             this.pbCam3.Name = "pbCam3";
-            this.pbCam3.Size = new System.Drawing.Size(148, 157);
+            this.pbCam3.Size = new System.Drawing.Size(148, 111);
             this.pbCam3.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             this.pbCam3.TabIndex = 10;
             this.pbCam3.TabStop = false;
@@ -240,7 +259,7 @@
             // 
             this.pbCam2.Location = new System.Drawing.Point(166, 12);
             this.pbCam2.Name = "pbCam2";
-            this.pbCam2.Size = new System.Drawing.Size(148, 157);
+            this.pbCam2.Size = new System.Drawing.Size(148, 111);
             this.pbCam2.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             this.pbCam2.TabIndex = 9;
             this.pbCam2.TabStop = false;
@@ -249,7 +268,7 @@
             // 
             this.pbCam1.Location = new System.Drawing.Point(12, 12);
             this.pbCam1.Name = "pbCam1";
-            this.pbCam1.Size = new System.Drawing.Size(148, 157);
+            this.pbCam1.Size = new System.Drawing.Size(148, 111);
             this.pbCam1.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             this.pbCam1.TabIndex = 8;
             this.pbCam1.TabStop = false;
@@ -259,7 +278,7 @@
             this.statusStrip1.ImageScalingSize = new System.Drawing.Size(20, 20);
             this.statusStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.lblPixelInfo});
-            this.statusStrip1.Location = new System.Drawing.Point(0, 947);
+            this.statusStrip1.Location = new System.Drawing.Point(0, 689);
             this.statusStrip1.Name = "statusStrip1";
             this.statusStrip1.Size = new System.Drawing.Size(1468, 25);
             this.statusStrip1.TabIndex = 15;
@@ -274,17 +293,17 @@
             // chartMura
             // 
             this.chartMura.Anchor = System.Windows.Forms.AnchorStyles.None;
-            chartArea2.Name = "ChartArea1";
-            this.chartMura.ChartAreas.Add(chartArea2);
-            legend2.Name = "Legend1";
-            this.chartMura.Legends.Add(legend2);
-            this.chartMura.Location = new System.Drawing.Point(19, 376);
+            chartArea1.Name = "ChartArea1";
+            this.chartMura.ChartAreas.Add(chartArea1);
+            legend1.Name = "Legend1";
+            this.chartMura.Legends.Add(legend1);
+            this.chartMura.Location = new System.Drawing.Point(19, 369);
             this.chartMura.Name = "chartMura";
-            series2.ChartArea = "ChartArea1";
-            series2.Legend = "Legend1";
-            series2.Name = "Series1";
-            this.chartMura.Series.Add(series2);
-            this.chartMura.Size = new System.Drawing.Size(1034, 150);
+            series1.ChartArea = "ChartArea1";
+            series1.Legend = "Legend1";
+            series1.Name = "Series1";
+            this.chartMura.Series.Add(series1);
+            this.chartMura.Size = new System.Drawing.Size(1034, 123);
             this.chartMura.TabIndex = 16;
             this.chartMura.Text = "chart1";
             // 
@@ -297,12 +316,12 @@
             this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanel1.Controls.Add(this.canvasMain, 0, 0);
             this.tableLayoutPanel1.Controls.Add(this.chartMura, 0, 1);
-            this.tableLayoutPanel1.Location = new System.Drawing.Point(12, 180);
+            this.tableLayoutPanel1.Location = new System.Drawing.Point(12, 129);
             this.tableLayoutPanel1.Name = "tableLayoutPanel1";
             this.tableLayoutPanel1.RowCount = 2;
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 70F));
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 30F));
-            this.tableLayoutPanel1.Size = new System.Drawing.Size(1072, 531);
+            this.tableLayoutPanel1.Size = new System.Drawing.Size(1072, 507);
             this.tableLayoutPanel1.TabIndex = 17;
             // 
             // canvasMain
@@ -312,25 +331,15 @@
             this.canvasMain.Dock = System.Windows.Forms.DockStyle.Fill;
             this.canvasMain.Location = new System.Drawing.Point(3, 3);
             this.canvasMain.Name = "canvasMain";
-            this.canvasMain.Size = new System.Drawing.Size(1066, 365);
+            this.canvasMain.Size = new System.Drawing.Size(1066, 348);
             this.canvasMain.TabIndex = 7;
             this.canvasMain.TabStop = false;
-            // 
-            // tabPage3
-            // 
-            this.tabPage3.Location = new System.Drawing.Point(4, 25);
-            this.tabPage3.Name = "tabPage3";
-            this.tabPage3.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage3.Size = new System.Drawing.Size(349, 900);
-            this.tabPage3.TabIndex = 2;
-            this.tabPage3.Text = "參數";
-            this.tabPage3.UseVisualStyleBackColor = true;
             // 
             // AniloxRollForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1468, 972);
+            this.ClientSize = new System.Drawing.Size(1468, 714);
             this.Controls.Add(this.tableLayoutPanel1);
             this.Controls.Add(this.statusStrip1);
             this.Controls.Add(this.tabControl);
@@ -346,6 +355,7 @@
             this.Text = "AniloxRoll Monitor";
             this.tabControl.ResumeLayout(false);
             this.tabPage2.ResumeLayout(false);
+            this.tabPage3.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.pbCam7)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam6)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam5)).EndInit();
@@ -389,5 +399,6 @@
         private System.Windows.Forms.DataVisualization.Charting.Chart chartMura;
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanel1;
         private System.Windows.Forms.TabPage tabPage3;
+        private System.Windows.Forms.PropertyGrid propertyGrid1;
     }
 }
