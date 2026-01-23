@@ -137,8 +137,8 @@ namespace picoater {
         // 步驟 4: Hessian Ridge Detection 之col mean
         {
             //TIME_SCOPE_MS_SYNC("      4. Hessian Ridge col mean", cudaStreamSynchronize(stream));
-            core::calcColumnMeans_gpu<float>(
-                d_hessian_resp_,
+            core::calcColumnMeans_gpu<uint8_t>(
+                d_ridge_out,
                 d_mura_curve_mean,
                 m_width,
                 m_height,
@@ -150,8 +150,8 @@ namespace picoater {
         // 步驟 5: Hessian Ridge Detection 之col max
         {
             //TIME_SCOPE_MS_SYNC("      4. Hessian Ridge col mean", cudaStreamSynchronize(stream));
-            core::calcColumnMax_gpu<float>(
-                d_hessian_resp_,
+            core::calcColumnMax_gpu<uint8_t>(
+                d_ridge_out,
                 d_mura_curve_max,
                 m_width,
                 m_height,

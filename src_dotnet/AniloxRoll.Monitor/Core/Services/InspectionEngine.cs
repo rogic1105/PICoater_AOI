@@ -169,7 +169,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 int ret = NativeMethods.PICoater_Run_WithThumb(
                     _handle, _inputBuffer, _thumbnailBuffer, targetThumbWidth, thumbH,
                     _curveMeanBuffer, _curveMaxBuffer, // 這裡現在安全了
-                    DefaultBgSigma, DefaultRidgeSigma, DefaultHessianMaxFactor, DefaultRidgeMode
+                    DefaultBgSigma, DefaultRidgeSigma, hessianFactor, DefaultRidgeMode
                 );
 
                 stopwatch.Stop();
@@ -221,7 +221,7 @@ namespace AniloxRoll.Monitor.Core.Services
                     NativeMethods.PICoater_Initialize(_handle, w, h);
                     int ret = NativeMethods.PICoater_Run(
                         _handle, _inputBuffer, IntPtr.Zero, IntPtr.Zero, _ridgeBuffer, IntPtr.Zero, IntPtr.Zero,
-                        DefaultBgSigma, DefaultRidgeSigma, DefaultHessianMaxFactor, DefaultRidgeMode
+                        DefaultBgSigma, DefaultRidgeSigma, hessianFactor, DefaultRidgeMode
                     );
                     if (ret != 0) return null;
 
@@ -235,7 +235,7 @@ namespace AniloxRoll.Monitor.Core.Services
                     NativeMethods.PICoater_Run(
                         _handle, _inputBuffer, IntPtr.Zero, IntPtr.Zero, _ridgeBuffer,
                         _curveMeanBuffer, _curveMaxBuffer,
-                        DefaultBgSigma, DefaultRidgeSigma, DefaultHessianMaxFactor, DefaultRidgeMode
+                        DefaultBgSigma, DefaultRidgeSigma, hessianFactor, DefaultRidgeMode
                     );
 
                     Marshal.Copy(_curveMeanBuffer, curveMean, 0, w);

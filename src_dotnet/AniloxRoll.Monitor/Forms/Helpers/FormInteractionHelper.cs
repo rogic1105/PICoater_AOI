@@ -22,15 +22,21 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         private readonly DateTimeNavigator _timeNavigator;
         private readonly ThumbnailGridPresenter _galleryManager;
         private readonly MuraChartHelper _muraChartHelper;
+        private readonly InspectionSettings _settings;
+        private readonly ToolStripStatusLabel _statusLabel;
 
-        // 狀態
+        private int _currentCameraIndex = 0;
+
+        // 單位: mm
+        private double _currentViewLeftMm = 0;
+        private double _currentViewRightMm = 0;
+
         private bool _isProcessedMode = false;
         private bool _isBusy = false;
         private float _savedZoom = 1.0f;
         private PointF _savedPan = PointF.Empty;
         private bool _shouldRestoreView = false;
 
-        // 建構子 (共 10 個參數)
         public FormInteractionHelper(
             Form form,
             SmartCanvas canvas,
@@ -41,7 +47,9 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             ImageRepository repo,
             DateTimeNavigator timeNav,
             ThumbnailGridPresenter galleryMgr,
-            MuraChartHelper chartHelper) // 第 10 個參數
+            MuraChartHelper chartHelper,
+            InspectionSettings settings,
+            ToolStripStatusLabel statusLabel)
         {
             _form = form;
             _canvas = canvas;
@@ -53,16 +61,89 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             _timeNavigator = timeNav;
             _galleryManager = galleryMgr;
             _muraChartHelper = chartHelper;
+            _settings = settings;
+            _statusLabel = statusLabel;
+        }
+
+        public void ApplySettingsToService()
+        {
+            if (_inspectionService == null || _settings == null) return;
+            _inspectionService.UpdateAlgorithmParams(
+                _settings.HessianMaxFactor,
+                _settings.ErrorValueMean,
+                _settings.ErrorValueMax
+            );
+        }
+
+        public void HandleSettingsChanged()
+        {
+            if (_settings == null) return;
+            _settings.SaveToSettings();
+            ApplySettingsToService();
+            if (_muraChartHelper != null)
+            {
+                _muraChartHelper.SetOps(_settings.Cam1_Ops);
+            }
+            if (_canvas != null) _canvas.Invalidate();
+        }
+
+        // [重點] 這裡計算視野並驅動 Chart
+        public void UpdateCanvasInfo(AOI.SDK.UI.CanvasInfo info)
+        {
+            if (_settings == null || _statusLabel == null) return;
+
+            double[] opsArray = _settings.GetOpsArray();
+            double[] posArray = _settings.GetPosArray();
+
+            if (_currentCameraIndex < 0 || _currentCameraIndex >= opsArray.Length)
+                return;
+
+            double opsInUm = opsArray[_currentCameraIndex];
+            double opsInMm = opsInUm / 1000.0;
+            double startPosMm = posArray[_currentCameraIndex];
+
+            double physicalX = startPosMm + (info.ImageX * opsInMm);
+
+            // 計算視野範圍 (mm)
+            if (info.Zoom > 0)
+            {
+                double pixelLeft = (0 - info.PanOffset.X) / info.Zoom;
+                double pixelRight = (_canvas.Width - info.PanOffset.X) / info.Zoom;
+
+                _currentViewLeftMm = startPosMm + (pixelLeft * opsInMm);
+                _currentViewRightMm = startPosMm + (pixelRight * opsInMm);
+
+                // [更新 Chart] 設定 X 軸顯示範圍，這會讓 Chart 自動 Clip 掉範圍外的數據
+                if (_muraChartHelper != null)
+                {
+                    _muraChartHelper.UpdateViewRange(_currentViewLeftMm, _currentViewRightMm);
+                }
+            }
+
+            _statusLabel.Text =
+                $"位置:{physicalX:F2} mm | " +
+                $"範圍:{_currentViewLeftMm:F1}~{_currentViewRightMm:F1} mm | " +
+                $"座標: ({info.ImageX}, {info.ImageY}) | " +
+                $"亮度: {info.PixelColor.R} | " +
+                $"倍率:{info.Zoom:F2}x";
+        }
+
+        public void NavigateCamera(int direction)
+        {
+            int nextIndex = _currentCameraIndex + direction;
+            if (nextIndex >= 0 && nextIndex < 7)
+            {
+                _galleryManager.Select(nextIndex);
+            }
         }
 
         public async Task LoadImages(bool enableProcess)
         {
-            // [新增] 1. 在切換模式前，記住當前的視圖狀態
             if (_canvas.Image != null)
             {
                 _savedZoom = _canvas.Zoom;
                 _savedPan = _canvas.PanOffset;
-                _shouldRestoreView = true; // 設定旗標：下次 UpdateCanvas 時請還原
+                _shouldRestoreView = true;
             }
             else
             {
@@ -71,7 +152,6 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
             _isProcessedMode = enableProcess;
             ClearOldImages();
-            // 執行批次處理 (產生縮圖)
             await _presenter.RunWorkflowAsync(enableProcess, _thumbnailCache);
         }
 
@@ -92,6 +172,8 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
         public void OnGallerySelectionChanged(int index)
         {
+            if (index >= 0 && index < 7) _currentCameraIndex = index;
+
             if (_isBusy) return;
 
             try
@@ -100,13 +182,15 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
                 if (data != null)
                 {
-                    // UpdateCanvas 內會處裡 Image
                     UpdateCanvas(data.Image);
 
-                    // 更新圖表
-                    if (_muraChartHelper != null)
+                    if (_muraChartHelper != null && _settings != null)
                     {
-                        _muraChartHelper.UpdateData(data.MuraCurveMean, data.MuraCurveMax);
+                        double[] posArray = _settings.GetPosArray();
+                        double startPos = (index >= 0 && index < posArray.Length) ? posArray[index] : 0;
+
+                        // 傳入 startPos 讓 X 軸座標正確
+                        _muraChartHelper.UpdateData(data.MuraCurveMean, data.MuraCurveMax, startPos);
                     }
                 }
             }
@@ -120,17 +204,14 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         {
             using (var fbd = new FolderBrowserDialog())
             {
-                // 讀取上次路徑
                 if (Directory.Exists(Properties.Settings.Default.LastDataPath))
                     fbd.SelectedPath = Properties.Settings.Default.LastDataPath;
 
                 if (fbd.ShowDialog() == DialogResult.OK)
                 {
-                    // 1. 記住當前相機 Index
                     int lastCameraIndex = _galleryManager.SelectedIndex;
                     if (lastCameraIndex < 0) lastCameraIndex = 0;
 
-                    // 2. 載入資料
                     _imageRepository.LoadDirectory(fbd.SelectedPath);
                     if (_imageRepository.FileCount == 0)
                     {
@@ -138,15 +219,13 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                         return;
                     }
 
-                    // 3. 儲存設定
                     Properties.Settings.Default.LastDataPath = fbd.SelectedPath;
                     Properties.Settings.Default.Save();
 
-                    // 4. 初始化時間軸
                     _timeNavigator.Initialize(Properties.Settings.Default.LastYear);
 
-                    // 5. 還原相機選取 (不觸發大圖載入，等待使用者點擊 ShowOriginal/Processed)
                     _galleryManager.Select(lastCameraIndex, triggerEvent: false);
+                    _currentCameraIndex = lastCameraIndex;
                 }
             }
         }
@@ -174,10 +253,6 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         {
             if (newImage == null) return;
 
-            // 這裡 SmartCanvas 是單張圖片模式 (根據您之前的需求，多張模式暫緩)
-            // 如果要用多張模式，這裡要改成 ClearItems + AddItem
-
-            // 假設目前是單張模式:
             if (_canvas.Image != null)
             {
                 var old = _canvas.Image;

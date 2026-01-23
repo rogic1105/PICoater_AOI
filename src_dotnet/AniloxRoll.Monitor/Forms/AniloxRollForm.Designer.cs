@@ -81,7 +81,7 @@
             this.tabControl.Location = new System.Drawing.Point(1099, 12);
             this.tabControl.Name = "tabControl";
             this.tabControl.SelectedIndex = 0;
-            this.tabControl.Size = new System.Drawing.Size(357, 628);
+            this.tabControl.Size = new System.Drawing.Size(357, 674);
             this.tabControl.TabIndex = 1;
             // 
             // tabPage1
@@ -89,7 +89,7 @@
             this.tabPage1.Location = new System.Drawing.Point(4, 25);
             this.tabPage1.Name = "tabPage1";
             this.tabPage1.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage1.Size = new System.Drawing.Size(349, 900);
+            this.tabPage1.Size = new System.Drawing.Size(349, 645);
             this.tabPage1.TabIndex = 0;
             this.tabPage1.Text = "監控";
             this.tabPage1.UseVisualStyleBackColor = true;
@@ -108,7 +108,7 @@
             this.tabPage2.Location = new System.Drawing.Point(4, 25);
             this.tabPage2.Name = "tabPage2";
             this.tabPage2.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage2.Size = new System.Drawing.Size(349, 900);
+            this.tabPage2.Size = new System.Drawing.Size(349, 599);
             this.tabPage2.TabIndex = 1;
             this.tabPage2.Text = "回顧";
             this.tabPage2.UseVisualStyleBackColor = true;
@@ -204,7 +204,7 @@
             // 
             // propertyGrid1
             // 
-            this.propertyGrid1.Dock = System.Windows.Forms.DockStyle.Fill; // [建議加上這行]
+            this.propertyGrid1.Dock = System.Windows.Forms.DockStyle.Fill;
             this.propertyGrid1.Location = new System.Drawing.Point(3, 3);
             this.propertyGrid1.Name = "propertyGrid1";
             this.propertyGrid1.Size = new System.Drawing.Size(343, 593);
@@ -292,18 +292,18 @@
             // 
             // chartMura
             // 
-            this.chartMura.Anchor = System.Windows.Forms.AnchorStyles.None;
             chartArea1.Name = "ChartArea1";
             this.chartMura.ChartAreas.Add(chartArea1);
+            this.chartMura.Dock = System.Windows.Forms.DockStyle.Fill;
             legend1.Name = "Legend1";
             this.chartMura.Legends.Add(legend1);
-            this.chartMura.Location = new System.Drawing.Point(19, 369);
+            this.chartMura.Location = new System.Drawing.Point(3, 392);
             this.chartMura.Name = "chartMura";
             series1.ChartArea = "ChartArea1";
             series1.Legend = "Legend1";
             series1.Name = "Series1";
             this.chartMura.Series.Add(series1);
-            this.chartMura.Size = new System.Drawing.Size(1034, 123);
+            this.chartMura.Size = new System.Drawing.Size(1066, 162);
             this.chartMura.TabIndex = 16;
             this.chartMura.Text = "chart1";
             // 
@@ -321,7 +321,7 @@
             this.tableLayoutPanel1.RowCount = 2;
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 70F));
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 30F));
-            this.tableLayoutPanel1.Size = new System.Drawing.Size(1072, 507);
+            this.tableLayoutPanel1.Size = new System.Drawing.Size(1072, 557);
             this.tableLayoutPanel1.TabIndex = 17;
             // 
             // canvasMain
@@ -331,7 +331,7 @@
             this.canvasMain.Dock = System.Windows.Forms.DockStyle.Fill;
             this.canvasMain.Location = new System.Drawing.Point(3, 3);
             this.canvasMain.Name = "canvasMain";
-            this.canvasMain.Size = new System.Drawing.Size(1066, 348);
+            this.canvasMain.Size = new System.Drawing.Size(1066, 383);
             this.canvasMain.TabIndex = 7;
             this.canvasMain.TabStop = false;
             // 

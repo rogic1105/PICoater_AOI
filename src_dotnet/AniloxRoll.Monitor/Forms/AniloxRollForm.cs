@@ -29,26 +29,25 @@ namespace AniloxRoll.Monitor.Forms
         // --- 參數設定 (核心) ---
         private InspectionSettings _settings;
 
-        // --- 狀態變數 ---
-        private int _currentCameraIndex = 0;
-        private int _currentViewLeftX = 0;
-        private int _currentViewRightX = 0;
+        // [移除] 狀態變數已移至 FormInteractionHelper
+        // private int _currentCameraIndex = 0;
+        // private int _currentViewLeftX = 0;
+        // private int _currentViewRightX = 0;
 
         public AniloxRollForm()
         {
             InitializeComponent();
-
             InitializeSystem();
         }
 
         private void InitializeSystem()
         {
-
             if (_settings == null) _settings = InspectionSettings.LoadFromSettings();
+
             // 2. 初始化服務
             _inspectionService = new BatchInspectionService();
-            // 立即將參數套用到 Service
-            ApplySettingsToService();
+            // 參數套用邏輯稍後透過 Helper 執行，或在此手動呼叫一次，
+            // 但現在 Helper 尚未建立，為了避免依賴順序問題，我們在 Helper 建立後呼叫一次。
 
             _timeSelectionManager = new DateTimeNavigator(
                 _imageRepository, cbYear, cbMonth, cbDay, cbHour, cbMin, cbSec);
@@ -67,19 +66,18 @@ namespace AniloxRoll.Monitor.Forms
 
             // 3. 初始化 Chart
             _muraChartHelper = new MuraChartHelper(this.chartMura);
-            // 套用第一支相機的 OPS
             _muraChartHelper.SetOps(_settings.Cam1_Ops);
 
             // 4. 設定 PropertyGrid
             propertyGrid1.SelectedObject = _settings;
             propertyGrid1.ToolbarVisible = false;
 
-            // [關鍵] 先移除事件 (防止重複)，再綁定
-            // 並且確保這行是在 _inspectionService 初始化之後
+            // 先移除事件 (防止重複)
             propertyGrid1.PropertyValueChanged -= _propertyGrid_PropertyValueChanged;
             propertyGrid1.PropertyValueChanged += _propertyGrid_PropertyValueChanged;
 
             // 5. 初始化 InteractionHelper
+            // [關鍵] 傳入 _settings 與 lblPixelInfo (假設其類型為 ToolStripStatusLabel)
             _interactionHelper = new FormInteractionHelper(
                 this,
                 canvasMain,
@@ -90,17 +88,20 @@ namespace AniloxRoll.Monitor.Forms
                 _imageRepository,
                 _timeSelectionManager,
                 _galleryManager,
-                _muraChartHelper
+                _muraChartHelper,
+                _settings,      // 新增參數
+                lblPixelInfo    // 新增參數
             );
+
+            // [新增] 立即套用參數 (取代原有的 ApplySettingsToService() 呼叫)
+            _interactionHelper.ApplySettingsToService();
 
             // 6. 綁定事件
             _presenter.BusyStateChanged += _interactionHelper.SetUiLoadingState;
             _presenter.LogReported += log => Console.WriteLine(log);
 
-            _galleryManager.SelectionChanged += (idx) =>
-            {
-                if (idx >= 0 && idx < 7) _currentCameraIndex = idx;
-            };
+            // [修改] 移除這裡對 _currentCameraIndex 的直接操作，Helper 內部會處理
+            // _galleryManager.SelectionChanged += (idx) => ... [移除]
 
             _galleryManager.SelectionChanged += _interactionHelper.OnGallerySelectionChanged;
 
@@ -108,74 +109,26 @@ namespace AniloxRoll.Monitor.Forms
             canvasMain.EdgeReached += OnCanvasEdgeReached;
         }
 
+        // [修改] 委派給 Helper
         private void OnCanvasStatusChanged(AOI.SDK.UI.CanvasInfo info)
         {
-            // 從 Settings 動態取得陣列
-            double[] opsArray = _settings.GetOpsArray();
-            double[] posArray = _settings.GetPosArray();
-
-            double ops = opsArray[_currentCameraIndex];
-            double startPos = posArray[_currentCameraIndex];
-
-            // 計算物理座標
-            double physicalX = startPos + (info.ImageX * (ops / 1000.0));
-
-            // 計算視野範圍
-            _currentViewLeftX = (int)((0 - info.PanOffset.X) / info.Zoom);
-            _currentViewRightX = (int)((canvasMain.Width - info.PanOffset.X) / info.Zoom);
-
-            // 更新狀態列
-            lblPixelInfo.Text =
-                $"位置:{physicalX:F2} mm | " +
-                $"座標: ({info.ImageX}, {info.ImageY}) | " +
-                $"亮度: {info.PixelColor.R} | " +
-                $"倍率:{info.Zoom:F2}x | " +
-                $"平移:({info.PanOffset.X:F0}, {info.PanOffset.Y:F0})";
+            _interactionHelper.UpdateCanvasInfo(info);
         }
 
+        // [修改] 委派給 Helper
         private void OnCanvasEdgeReached(int direction)
         {
-            int nextIndex = _currentCameraIndex + direction;
-            if (nextIndex >= 0 && nextIndex < 7)
-            {
-                _galleryManager.Select(nextIndex);
-            }
+            _interactionHelper.NavigateCamera(direction);
         }
 
-        // [關鍵] 參數變更時的邏輯
+        // [修改] 委派給 Helper
         private void _propertyGrid_PropertyValueChanged(object s, PropertyValueChangedEventArgs e)
         {
-            // 防呆 1: Settings 是否存在
-            if (_settings == null) return;
-
-            // 1. 儲存設定
-            _settings.SaveToSettings();
-
-            // 2. 更新服務 (內部有檢查 _inspectionService)
-            ApplySettingsToService();
-
-            // 3. 更新圖表
-            if (_muraChartHelper != null)
-            {
-                _muraChartHelper.SetOps(_settings.Cam1_Ops);
-            }
-
-            // 4. 刷新 UI
-            if (canvasMain != null) canvasMain.Invalidate();
+            _interactionHelper.HandleSettingsChanged();
         }
 
-        // 抽取出來的共用函式：將設定套用到 Service
-        private void ApplySettingsToService()
-        {
-            // 必須嚴格檢查所有可能為 null 的物件
-            if (_inspectionService == null || _settings == null) return;
-
-            _inspectionService.UpdateAlgorithmParams(
-                _settings.HessianMaxFactor,
-                _settings.ErrorValueMean,
-                _settings.ErrorValueMax
-            );
-        }
+        // [移除] 此方法已移至 Helper
+        // private void ApplySettingsToService() { ... }
 
         // --- 按鈕事件 ---
         private void btnSelectFolder_Click(object sender, EventArgs e)
