@@ -148,32 +148,34 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
             f2.get(); f3.get(); f4.get(); f5.get();
         }
 
-        std::cout << Color::GREEN << "AOI Pipeline Test Completed." << Color::RESET << "\n\n";
-
-        // --- H. 額外測試: 單純 IO 極限測試 ---
-        // 為了驗證頻寬，我們模擬存 3 張原始圖片 (input) 到硬碟
-        std::cout << Color::CYAN << "--- Running Extra IO Stress Test ---" << Color::RESET << "\n";
-
+        // --- I. CPU SIMD Implementation Test (New) ---
+                // 驗證 CPU 版本 (AVX2 + OpenMP) 的運算結果與存圖
+        std::cout << Color::CYAN << "\n--- Running CPU SIMD Implementation Test ---" << Color::RESET << "\n";
         {
-            TIME_SCOPE_MS("Stress Test: Save 3 Raw Images (Parallel)");
-            std::string ioTest1 = framework::GetOutputPath("picoater_tests", "stress_1.bmp");
-            std::string ioTest2 = framework::GetOutputPath("picoater_tests", "stress_2.bmp");
-            std::string ioTest3 = framework::GetOutputPath("picoater_tests", "stress_3.bmp");
+            // 1. 分配 CPU 輸出緩衝區
+            uint8_t* h_cpu_mura = (uint8_t*)core::alloc_pinned_memory(img_size);
 
-            // 注意：這裡必須用 h_pinned_in (Host Memory)，不能用 d_in (Device Memory)
-            // fast_write_bmp_8bit 只能讀取 CPU 記憶體
+            // 2. 建立 Detector 實例
+            picoater::PICoaterDetector detector_cpu;
+            detector_cpu.Initialize(w, h); // 初始化 (設定長寬)
 
-            auto f1 = std::async(std::launch::async, [&] {
-                core::fast_write_bmp_8bit(ioTest1, w, h, h_pinned_in);
-                });
-            auto f2 = std::async(std::launch::async, [&] {
-                core::fast_write_bmp_8bit(ioTest2, w, h, h_pinned_in);
-                });
-            auto f3 = std::async(std::launch::async, [&] {
-                core::fast_write_bmp_8bit(ioTest3, w, h, h_pinned_in);
-                });
+            // 3. 執行 RunCPU (只跑 Column Mean & Background 兩步)
+            // h_pinned_in 是已經載入的原始影像
+            {
+                TIME_SCOPE_MS("Module: PICoater Detector Run (CPU SIMD)");
+                detector_cpu.RunCPU(h_pinned_in, h_cpu_mura, bgSigma);
+            }
 
-            f1.get(); f2.get(); f3.get();
+            // 4. 存圖驗證
+            {
+                TIME_SCOPE_MS("Save CPU Result BMP");
+                std::string outPathCPU = framework::GetOutputPath("picoater_tests", "cpu_simd_mura.bmp");
+                core::fast_write_bmp_8bit(outPathCPU, w, h, h_cpu_mura);
+                std::cout << "Saved CPU result to: " << outPathCPU << "\n";
+            }
+
+            // 清理本地資源
+            core::free_pinned_memory(h_cpu_mura);
         }
 
     }
@@ -306,7 +308,10 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath, const int NUM_CA
         // 隨便跑一次讓 GPU 醒來
         std::memcpy(shared_ctx.h_pinned_in, shared_source_img, img_size);
         checkCudaErrors(cudaMemcpyAsync(shared_ctx.d_in, shared_ctx.h_pinned_in, shared_ctx.img_size, cudaMemcpyHostToDevice, shared_ctx.stream));
-        shared_ctx.detector.Run(shared_ctx.d_in, shared_ctx.d_bg, shared_ctx.d_mura, shared_ctx.d_ridge, shared_ctx.d_mura_curve_mean, shared_ctx.d_mura_curve_max, 2.0f, 9.0f, "vertical", shared_ctx.stream);
+        shared_ctx.detector.Run(
+            shared_ctx.d_in, shared_ctx.d_bg, shared_ctx.d_mura, shared_ctx.d_ridge, shared_ctx.d_mura_curve_mean, shared_ctx.d_mura_curve_max,
+            2.0f, 9.0f, 1.0f, "vertical", shared_ctx.stream
+        );
         checkCudaErrors(cudaStreamSynchronize(shared_ctx.stream));
     }
 

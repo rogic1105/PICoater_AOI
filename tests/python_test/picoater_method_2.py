@@ -2,9 +2,11 @@ import cv2
 import numpy as np
 import os
 import csv
+import time
 import matplotlib.pyplot as plt
 from datetime import datetime
 from scipy.signal import find_peaks
+
 
 # --- 參數設定 ---
 IMAGE_FOLDER = "../../../../05_QA_Validation/feasibility_test_data/20250117 L5C/Envision/Low_Angle_by_nor_line/mura/"
@@ -139,36 +141,16 @@ def save_array_to_csv(data_array: np.ndarray, file_path: str):
 def overlay_heatmap(src_image: np.ndarray, overlay_image: np.ndarray, 
                     lower_limit: int = 0, 
                     alpha: float = 0.5) -> np.ndarray:
-    """
-    將 overlay_image 轉換為熱力圖並疊加。
-    僅針對 lower_limit < 值 < upper_limit 的區域上色，其餘保留原圖灰階。
-    """
 
-    
-    # 1. 準備原圖 (轉為 BGR 以便與熱力圖疊加)
     if len(src_image.shape) == 2:
         src_bgr = cv2.cvtColor(src_image, cv2.COLOR_GRAY2BGR)
     else:
         src_bgr = src_image.copy()
 
-    # 2. 應用熱力圖
-    # 注意：這裡直接轉換，代表數值 0-255 對應 藍-紅。
-    # 如果您希望 50-250 這個區間「展開」成全光譜顏色，需要先做 normalize，
-    # 但若只需單純截斷顏色，直接 applyColorMap 即可。
     heatmap = cv2.applyColorMap(overlay_image, cv2.COLORMAP_JET)
-    
-    # 3. 疊加 (全局疊加)
     beta = 1.0 - alpha
     result = cv2.addWeighted(src_bgr, alpha, heatmap, beta, 0)
-    
-    # 4. 遮罩還原 (Masking)
-    # 邏輯：找出「不需要上色」的區域 mask
-    # 條件：數值 <= lower_limit  或  數值 >= upper_limit
     mask_indices = (overlay_image <= lower_limit) 
-    
-    # 5. 替換像素
-    # [修正點]：result 是 3 通道，src_bgr 也是 3 通道，這樣才能正確替換。
-    # 原本寫 src_image (單通道) 會報錯。
     result[mask_indices] = src_bgr[mask_indices]
     
     return result
@@ -191,13 +173,19 @@ def main():
     cv2.imwrite(os.path.join(OUTPUT_DIR, "step1_input.png"), src_img)
     
     # --- 3. Filter Background ---
+    time_start = time.time()
     bg_removed = remove_column_background(src_img)
+    time_end = time.time()
+    print(f"  [Timing] Background removal took {time_end - time_start:.3f} seconds.")
     cv2.imwrite(os.path.join(OUTPUT_DIR, "step3_bg_removed.png"), bg_removed)
     
     # --- 4. Hessian Matrix Ridge Detection ---
+    time_start = time.time()
     res_v = compute_hessian_ridge(bg_removed, sigma=9.0, mode='vertical')
+    time_end = time.time()
+    print(f"  [Timing] Hessian Ridge Detection took {time_end - time_start:.3f} seconds.")
     cv2.imwrite(os.path.join(OUTPUT_DIR, "step4_res_v.png"), res_v)
-    res_v[res_v<0] = 0
+
     
     # --- 5. 統計分析 (Mean & Std) ---
     print("  [Process] Calculating Column Statistics...")
@@ -223,12 +211,8 @@ def main():
     # --- 6. 熱力圖疊加 (Overlay) ---
     # 設定顯示範圍 (可以根據 res_v 的 histogram 調整，這裡示範 0-100 讓特徵更明顯)
     # 如果要看全範圍就設 0, 255
-    OVERLAY_LOWER = 0
-    
-    heatmap_result = overlay_heatmap(src_img, res_v, 
-                                     lower_limit=OVERLAY_LOWER, 
-                                     alpha=0.3) # 原圖佔 60%, 熱力圖佔 40%
-    
+    OVERLAY_LOWER = 20
+    heatmap_result = overlay_heatmap(src_img, res_v, lower_limit=OVERLAY_LOWER, alpha=0.3)
     cv2.imwrite(os.path.join(OUTPUT_DIR, "step6_heatmap_overlay.png"), heatmap_result)
     print(f"[Done] All artifacts saved to {OUTPUT_DIR}")
 

@@ -26,6 +26,9 @@
   <ItemGroup>
     <ClInclude Include="include\Module_GetPICoaterBackground.hpp" />
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Module_GetPICoaterBackground_CPU.cpp" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>

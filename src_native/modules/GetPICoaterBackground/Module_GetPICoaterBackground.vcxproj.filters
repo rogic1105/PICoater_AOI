@@ -24,4 +24,9 @@
       <Filter>來源檔案</Filter>
     </CudaCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Module_GetPICoaterBackground_CPU.cpp">
+      <Filter>來源檔案</Filter>
+    </ClCompile>
+  </ItemGroup>
 </Project>
