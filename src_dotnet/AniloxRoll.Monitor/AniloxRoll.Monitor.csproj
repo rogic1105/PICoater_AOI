@@ -55,6 +55,10 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Matrox.MatroxImagingLibrary, Version=10.70.963.1085, Culture=neutral, PublicKeyToken=5a83d419d44a9d98, processorArchitecture=AMD64">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\Program Files\Matrox Imaging\MIL\MIL.NET\Matrox.MatroxImagingLibrary.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Windows.Forms.DataVisualization" />
@@ -69,6 +73,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Core\Camera\AniloxCamera.cs" />
+    <Compile Include="Core\Camera\CameraImageProcessor.cs" />
+    <Compile Include="Core\Camera\CameraSystemManager.cs" />
     <Compile Include="Core\Data\ImageMetadata.cs" />
     <Compile Include="Core\Data\ImageRepository.cs" />
     <Compile Include="Core\Data\InspectionData.cs" />
