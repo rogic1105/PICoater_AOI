@@ -1,7 +1,5 @@
 ﻿using System;
 using System.ComponentModel;
-using System.IO;
-using System.Xml.Serialization;
 
 namespace AniloxRoll.Monitor.Core.Data
 {
@@ -100,41 +98,5 @@ namespace AniloxRoll.Monitor.Core.Data
             return new double[] { Cam1_Pos, Cam2_Pos, Cam3_Pos, Cam4_Pos, Cam5_Pos, Cam6_Pos, Cam7_Pos };
         }
 
-        // =================================================================
-        // 儲存與載入邏輯 (利用 XML 序列化存入 UserConfig string)
-        // =================================================================
-        public static InspectionSettings LoadFromSettings()
-        {
-            try
-            {
-                string xml = Properties.Settings.Default.InspectionConfigJson;
-                if (string.IsNullOrWhiteSpace(xml)) return new InspectionSettings();
-
-                XmlSerializer serializer = new XmlSerializer(typeof(InspectionSettings));
-                using (StringReader reader = new StringReader(xml))
-                {
-                    return (InspectionSettings)serializer.Deserialize(reader);
-                }
-            }
-            catch
-            {
-                return new InspectionSettings(); // 載入失敗則回傳預設值
-            }
-        }
-
-        public void SaveToSettings()
-        {
-            try
-            {
-                XmlSerializer serializer = new XmlSerializer(typeof(InspectionSettings));
-                using (StringWriter writer = new StringWriter())
-                {
-                    serializer.Serialize(writer, this);
-                    Properties.Settings.Default.InspectionConfigJson = writer.ToString();
-                    Properties.Settings.Default.Save();
-                }
-            }
-            catch { /* Ignore save error */ }
-        }
     }
 }

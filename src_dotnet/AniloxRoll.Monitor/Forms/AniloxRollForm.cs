@@ -35,7 +35,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private void InitializeSystem()
         {
-            if (_settings == null) _settings = InspectionSettings.LoadFromSettings();
+            if (_settings == null) _settings = InspectionSettingsStore.Load();
 
             _inspectionService = new BatchInspectionService();
 

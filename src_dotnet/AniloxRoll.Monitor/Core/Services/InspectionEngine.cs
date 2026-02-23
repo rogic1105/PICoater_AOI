@@ -1,16 +1,13 @@
 ﻿using System;
 using System.Diagnostics;
-using System.Drawing;
 using System.IO;
-using System.Runtime.InteropServices;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Interop;
 using AOI.SDK.Core.Models;
-using AOI.SDK.Utils;
 
 namespace AniloxRoll.Monitor.Core.Services
 {
-    public class InspectionEngine : IDisposable
+    public partial class InspectionEngine : IDisposable
     {
         // [新增] 執行緒鎖：防止多執行緒同時存取共用 Buffer
         private readonly object _lock = new object();
@@ -30,17 +27,6 @@ namespace AniloxRoll.Monitor.Core.Services
         private int _thumbnailBufferSize = 0;
         private int _curveBufferSize = 0;
 
-        private const int MaxWidth = 16384;
-        private const int MaxHeight = 10000;
-        private const int MaxThumbnailSide = 2000;
-
-        // ... (常數保持不變) ...
-        private const float DefaultBgSigma = 2.0f;
-        private const float DefaultRidgeSigma = 9.0f;
-        private const float DefaultHessianMaxFactor = 2.0f;
-
-        private const string DefaultRidgeMode = "vertical";
-
         private bool _isDisposed = false;
 
         public InspectionEngine() { InitializeNativeResources(); }
@@ -49,15 +35,15 @@ namespace AniloxRoll.Monitor.Core.Services
         {
             _handle = NativeMethods.PICoater_Create();
 
-            _imgBufferSize = (ulong)(MaxWidth * MaxHeight);
+            _imgBufferSize = (ulong)(InspectionEngineConfig.MaxWidth * InspectionEngineConfig.MaxHeight);
             _inputBuffer = NativeMethods.PICoater_AllocPinned(_imgBufferSize);
             _muraBuffer = NativeMethods.PICoater_AllocPinned(_imgBufferSize);
             _ridgeBuffer = NativeMethods.PICoater_AllocPinned(_imgBufferSize);
 
-            _thumbnailBufferSize = MaxThumbnailSide * MaxThumbnailSide;
+            _thumbnailBufferSize = InspectionEngineConfig.MaxThumbnailSide * InspectionEngineConfig.MaxThumbnailSide;
             _thumbnailBuffer = NativeMethods.PICoater_AllocPinned((ulong)_thumbnailBufferSize);
 
-            _curveBufferSize = MaxWidth * sizeof(float);
+            _curveBufferSize = InspectionEngineConfig.MaxWidth * sizeof(float);
             _curveMeanBuffer = NativeMethods.PICoater_AllocPinned((ulong)_curveBufferSize);
 
             // [新增] 補上 Max Buffer 的記憶體配置
@@ -107,156 +93,6 @@ namespace AniloxRoll.Monitor.Core.Services
                 return result;
             }
         }
-
-        public TimedResult<InspectionData> LoadThumbnailOnly(string filePath, int targetThumbWidth)
-        {
-            return ExecuteTimedOperation<InspectionData>(filePath, (stopwatch) =>
-            {
-                stopwatch.Start();
-                bool readSuccess = NativeMethods.PICoater_FastReadBMP(
-                    filePath, out int w, out int h, _inputBuffer, _imgBufferSize);
-                stopwatch.Stop();
-                long ioTime = stopwatch.ElapsedMilliseconds;
-
-                if (!readSuccess) return (null, ioTime, 0, 0);
-
-                stopwatch.Restart();
-                NativeMethods.PICoater_Initialize(_handle, w, h);
-
-                int ret = NativeMethods.PICoater_RunThumbnail_GPU(
-                    _handle, _inputBuffer, targetThumbWidth, _thumbnailBuffer,
-                    out int realW, out int realH
-                );
-
-                stopwatch.Stop();
-                long gpuTime = stopwatch.ElapsedMilliseconds;
-
-                if (ret != 0) throw new Exception($"GPU Resize Error: {ret}");
-
-                stopwatch.Restart();
-
-                var bitmap = ImageUtils.Create8bppBitmap(_thumbnailBuffer, realW, realH);
-
-                stopwatch.Stop();
-                long bmpTime = stopwatch.ElapsedMilliseconds;
-
-                var data = new InspectionData { Image = bitmap, MuraCurveMean = null };
-                return (data, ioTime, gpuTime, bmpTime);
-            });
-        }
-
-
-        public TimedResult<InspectionData> ProcessImage(string filePath, int targetThumbWidth, float hessianFactor)
-        {
-            if (_isDisposed) throw new ObjectDisposedException(nameof(InspectionEngine));
-
-            // ExecuteTimedOperation 已經有 lock 了，這裡不用再加
-            return ExecuteTimedOperation<InspectionData>(filePath, (stopwatch) =>
-            {
-                stopwatch.Start();
-                bool readSuccess = NativeMethods.PICoater_FastReadBMP(
-                    filePath, out int w, out int h, _inputBuffer, _imgBufferSize);
-                stopwatch.Stop();
-                long ioTime = stopwatch.ElapsedMilliseconds;
-
-                if (!readSuccess) return (null, ioTime, 0, 0);
-
-                stopwatch.Restart();
-                NativeMethods.PICoater_Initialize(_handle, w, h);
-
-                int thumbH = (int)((float)h / w * targetThumbWidth);
-
-                int ret = NativeMethods.PICoater_Run_WithThumb(
-                    _handle, _inputBuffer, _thumbnailBuffer, targetThumbWidth, thumbH,
-                    _curveMeanBuffer, _curveMaxBuffer, // 這裡現在安全了
-                    DefaultBgSigma, DefaultRidgeSigma, hessianFactor, DefaultRidgeMode
-                );
-
-                stopwatch.Stop();
-                long algoTime = stopwatch.ElapsedMilliseconds;
-                if (ret != 0) throw new Exception($"Algo Error: {ret}");
-
-                stopwatch.Restart();
-
-                var thumb = ImageUtils.Create8bppBitmap(_thumbnailBuffer, targetThumbWidth, thumbH);
-
-                float[] curveMean = new float[w];
-                Marshal.Copy(_curveMeanBuffer, curveMean, 0, w);
-
-                float[] curveMax = new float[w];
-                Marshal.Copy(_curveMaxBuffer, curveMax, 0, w);
-
-                var data = new InspectionData
-                {
-                    Image = thumb,
-                    MuraCurveMean = curveMean,
-                    MuraCurveMax = curveMax
-                };
-
-                stopwatch.Stop();
-                long bmpTime = stopwatch.ElapsedMilliseconds;
-
-                return (data, ioTime, algoTime, bmpTime);
-            });
-        }
-
-
-        public InspectionData RunInspectionFullRes(string filePath, bool isProcessedMode, float hessianFactor)
-        {
-            if (_isDisposed) return null;
-            if (!File.Exists(filePath)) return null;
-
-            lock (_lock)
-            {
-                bool readSuccess = NativeMethods.PICoater_FastReadBMP(
-                     filePath, out int w, out int h, _inputBuffer, _imgBufferSize);
-                if (!readSuccess) return null;
-
-                Bitmap bmp = null;
-                float[] curveMean = null;
-                float[] curveMax = null;
-
-                if (isProcessedMode)
-                {
-                    NativeMethods.PICoater_Initialize(_handle, w, h);
-                    int ret = NativeMethods.PICoater_Run(
-                        _handle, _inputBuffer, IntPtr.Zero, IntPtr.Zero, _ridgeBuffer, IntPtr.Zero, IntPtr.Zero,
-                        DefaultBgSigma, DefaultRidgeSigma, hessianFactor, DefaultRidgeMode
-                    );
-                    if (ret != 0) return null;
-
-                    // 產生圖片 (不翻轉)
-                    bmp = ImageUtils.Create8bppBitmap(_ridgeBuffer, w, h, flipY: false);
-
-                    curveMean = new float[w];
-                    curveMax = new float[w];
-
-                    // 再次呼叫 Run 以獲取曲線資料
-                    NativeMethods.PICoater_Run(
-                        _handle, _inputBuffer, IntPtr.Zero, IntPtr.Zero, _ridgeBuffer,
-                        _curveMeanBuffer, _curveMaxBuffer,
-                        DefaultBgSigma, DefaultRidgeSigma, hessianFactor, DefaultRidgeMode
-                    );
-
-                    Marshal.Copy(_curveMeanBuffer, curveMean, 0, w);
-                    Marshal.Copy(_curveMaxBuffer, curveMax, 0, w);
-                }
-                else
-                {
-                    // Original Mode: 顯示正常 (翻轉)
-                    bmp = ImageUtils.Create8bppBitmap(_inputBuffer, w, h, flipY: false);
-                }
-
-                // [關鍵] 回傳 InspectionData 物件
-                return new InspectionData
-                {
-                    Image = bmp,
-                    MuraCurveMean = curveMean,
-                    MuraCurveMax = curveMax
-                };
-            }
-        }
-
 
         public void Dispose()
         {

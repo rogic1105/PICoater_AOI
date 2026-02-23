@@ -78,7 +78,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         public void HandleSettingsChanged()
         {
             if (_settings == null) return;
-            _settings.SaveToSettings();
+            InspectionSettingsStore.Save(_settings);
             ApplySettingsToService();
             if (_muraChartHelper != null)
             {
