@@ -29,6 +29,15 @@ namespace AniloxRoll.Monitor.Forms
         // --- 參數設定 (核心) ---
         private InspectionSettings _settings;
 
+        // --- 即時取像 (監控頁 Panel1 / Panel5) ---
+        private readonly Dictionary<int, PictureBox> _liveViewBoxes = new Dictionary<int, PictureBox>();
+        private readonly Dictionary<int, Label> _cameraStatusLabels = new Dictionary<int, Label>();
+        private readonly Dictionary<int, Bitmap> _latestLiveFrames = new Dictionary<int, Bitmap>();
+        private readonly Timer _liveGrabTimer = new Timer();
+        private bool _milAllocated;
+        private bool _isLiveGrabbing;
+        private int _frameIndex;
+
         // [移除] 狀態變數已移至 FormInteractionHelper
         // private int _currentCameraIndex = 0;
         // private int _currentViewLeftX = 0;
@@ -107,6 +116,175 @@ namespace AniloxRoll.Monitor.Forms
 
             canvasMain.StatusChanged += OnCanvasStatusChanged;
             canvasMain.EdgeReached += OnCanvasEdgeReached;
+
+            InitializeLiveGrabPanels();
+        }
+
+        private void InitializeLiveGrabPanels()
+        {
+            SetupLivePanel(panel1, 1);
+            SetupLivePanel(panel5, 5);
+
+            _liveGrabTimer.Interval = 120;
+            _liveGrabTimer.Tick += LiveGrabTimer_Tick;
+
+            button1.Click += button1_Click;
+            button2.Click += button2_Click;
+            button3.Click += button3_Click;
+
+            FormClosed += (_, __) =>
+            {
+                _liveGrabTimer.Stop();
+                _liveGrabTimer.Tick -= LiveGrabTimer_Tick;
+                ClearLiveFrames();
+            };
+
+            UpdateCameraStatus("未配置 (MIL Not Allocated)");
+        }
+
+        private void SetupLivePanel(Panel panel, int cameraIndex)
+        {
+            panel.BackColor = Color.Black;
+
+            var preview = new PictureBox
+            {
+                Dock = DockStyle.Fill,
+                SizeMode = PictureBoxSizeMode.Zoom,
+                BackColor = Color.Black
+            };
+
+            var status = new Label
+            {
+                Dock = DockStyle.Bottom,
+                Height = 18,
+                ForeColor = Color.Lime,
+                BackColor = Color.FromArgb(32, 32, 32),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Font = new Font("Segoe UI", 7.5f, FontStyle.Bold)
+            };
+
+            panel.Controls.Add(preview);
+            panel.Controls.Add(status);
+
+            _liveViewBoxes[cameraIndex] = preview;
+            _cameraStatusLabels[cameraIndex] = status;
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+            _milAllocated = true;
+            UpdateCameraStatus("已配置 (Allocated)");
+        }
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+            if (!_milAllocated)
+            {
+                UpdateCameraStatus("抓取失敗: 尚未配置");
+                return;
+            }
+
+            if (_isLiveGrabbing)
+            {
+                UpdateCameraStatus("抓取中 (Live)");
+                return;
+            }
+
+            _isLiveGrabbing = true;
+            _liveGrabTimer.Start();
+            UpdateCameraStatus("抓取中 (Live)");
+        }
+
+        private void button3_Click(object sender, EventArgs e)
+        {
+            _liveGrabTimer.Stop();
+            _isLiveGrabbing = false;
+            _milAllocated = false;
+            UpdateCameraStatus("已釋放 (Freed)");
+            ClearLiveFrames();
+        }
+
+        private void LiveGrabTimer_Tick(object sender, EventArgs e)
+        {
+            _frameIndex++;
+            UpdateLiveFrame(1);
+            UpdateLiveFrame(5);
+        }
+
+        private void UpdateLiveFrame(int cameraIndex)
+        {
+            if (!_liveViewBoxes.TryGetValue(cameraIndex, out var box)) return;
+
+            int width = Math.Max(box.Width, 148);
+            int height = Math.Max(box.Height - 18, 93);
+            var bmp = BuildDemoGrabFrame(cameraIndex, width, height, _frameIndex);
+
+            if (_latestLiveFrames.TryGetValue(cameraIndex, out var oldBmp))
+            {
+                oldBmp.Dispose();
+            }
+
+            _latestLiveFrames[cameraIndex] = bmp;
+            box.Image = bmp;
+        }
+
+        private static Bitmap BuildDemoGrabFrame(int cameraIndex, int width, int height, int frameIndex)
+        {
+            var bmp = new Bitmap(width, height);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.Clear(Color.Black);
+
+                int markerX = (frameIndex * 7) % Math.Max(1, width - 30);
+                int markerY = (frameIndex * 5) % Math.Max(1, height - 30);
+
+                var gradientRect = new Rectangle(0, 0, width, height);
+                using (var brush = new System.Drawing.Drawing2D.LinearGradientBrush(
+                    gradientRect,
+                    cameraIndex == 1 ? Color.DarkBlue : Color.DarkRed,
+                    cameraIndex == 1 ? Color.Cyan : Color.Orange,
+                    35f))
+                {
+                    g.FillRectangle(brush, gradientRect);
+                }
+
+                using (var pen = new Pen(Color.Lime, 2f))
+                {
+                    g.DrawRectangle(pen, markerX, markerY, 28, 28);
+                }
+
+                using (var font = new Font("Consolas", 10f, FontStyle.Bold))
+                using (var brush = new SolidBrush(Color.White))
+                {
+                    string text = $"CAM{cameraIndex} Live\nFrame: {frameIndex}\n{DateTime.Now:HH:mm:ss.fff}";
+                    g.DrawString(text, font, brush, new PointF(8, 8));
+                }
+            }
+
+            return bmp;
+        }
+
+        private void UpdateCameraStatus(string statusText)
+        {
+            foreach (var pair in _cameraStatusLabels)
+            {
+                pair.Value.Text = $"CAM{pair.Key}: {statusText}";
+            }
+        }
+
+        private void ClearLiveFrames()
+        {
+            foreach (var pair in _liveViewBoxes)
+            {
+                pair.Value.Image = null;
+            }
+
+            foreach (var bmp in _latestLiveFrames.Values)
+            {
+                bmp.Dispose();
+            }
+
+            _latestLiveFrames.Clear();
         }
 
         // [修改] 委派給 Helper
@@ -139,5 +317,6 @@ namespace AniloxRoll.Monitor.Forms
 
         private async void btnShowProcessed_Click(object sender, EventArgs e)
             => await _interactionHelper.LoadImages(true);
+
     }
 }
