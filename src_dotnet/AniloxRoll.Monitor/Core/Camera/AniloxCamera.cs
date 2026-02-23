@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Threading;
 using Matrox.MatroxImagingLibrary;
 using AOI.SDK.Core;
+using AniloxRoll.Monitor.Core.Interop;
 
 namespace AniloxRoll.Monitor.Core.Camera
 {
@@ -43,8 +44,12 @@ namespace AniloxRoll.Monitor.Core.Camera
         private int _frameHeight = 0;
         private byte[] _hostInputBuffer = null;
         private byte[] _hostOutputBuffer = null;
-        private IntPtr _gpuInputBuffer = IntPtr.Zero;
-        private IntPtr _gpuOutputBuffer = IntPtr.Zero;
+
+        private readonly object _picoaterLock = new object();
+        private IntPtr _picoaterHandle = IntPtr.Zero;
+        private IntPtr _picoaterInputBuffer = IntPtr.Zero;
+        private IntPtr _picoaterRidgeBuffer = IntPtr.Zero;
+        private ulong _picoaterBufferSize = 0;
 
         private long _fpsWindowStartTicks = 0;
         private int _fpsFrameCount = 0;
@@ -98,8 +103,10 @@ namespace AniloxRoll.Monitor.Core.Camera
                 _hostInputBuffer = new byte[_frameWidth * _frameHeight];
                 _hostOutputBuffer = new byte[_frameWidth * _frameHeight];
 
-                CoreCVWrapper.CoreCV_MallocGPU(out _gpuInputBuffer, _frameWidth, _frameHeight);
-                CoreCVWrapper.CoreCV_MallocGPU(out _gpuOutputBuffer, _frameWidth, _frameHeight);
+                _picoaterHandle = NativeMethods.PICoater_Create();
+                _picoaterBufferSize = (ulong)(_frameWidth * _frameHeight);
+                _picoaterInputBuffer = NativeMethods.PICoater_AllocPinned(_picoaterBufferSize);
+                _picoaterRidgeBuffer = NativeMethods.PICoater_AllocPinned(_picoaterBufferSize);
 
                 for (int i = 0; i < _milGrabBufferListSize; i++)
                 {
@@ -186,9 +193,9 @@ namespace AniloxRoll.Monitor.Core.Camera
                     return MIL.M_NULL;
                 }
 
-                bool processedByCoreCv = cam.TryApplyThresholdGpu(modifiedBuffer, cam._milProcBuffer);
+                bool processedByPicoater = cam.TryApplyPicoaterRidge(modifiedBuffer, cam._milProcBuffer);
 
-                if (processedByCoreCv)
+                if (processedByPicoater)
                 {
                     MIL.MbufCopy(cam._milProcBuffer, cam._milDisplayBuffer);
                 }
@@ -280,8 +287,13 @@ namespace AniloxRoll.Monitor.Core.Camera
                 if (_milDisplayBuffer != MIL.M_NULL) { MIL.MbufFree(_milDisplayBuffer); _milDisplayBuffer = MIL.M_NULL; }
                 if (_milProcBuffer != MIL.M_NULL) { MIL.MbufFree(_milProcBuffer); _milProcBuffer = MIL.M_NULL; }
 
-                if (_gpuInputBuffer != IntPtr.Zero) { CoreCVWrapper.CoreCV_FreeGPU(_gpuInputBuffer); _gpuInputBuffer = IntPtr.Zero; }
-                if (_gpuOutputBuffer != IntPtr.Zero) { CoreCVWrapper.CoreCV_FreeGPU(_gpuOutputBuffer); _gpuOutputBuffer = IntPtr.Zero; }
+                lock (_picoaterLock)
+                {
+                    if (_picoaterInputBuffer != IntPtr.Zero) { NativeMethods.PICoater_FreePinned(_picoaterInputBuffer); _picoaterInputBuffer = IntPtr.Zero; }
+                    if (_picoaterRidgeBuffer != IntPtr.Zero) { NativeMethods.PICoater_FreePinned(_picoaterRidgeBuffer); _picoaterRidgeBuffer = IntPtr.Zero; }
+                    if (_picoaterHandle != IntPtr.Zero) { NativeMethods.PICoater_Destroy(_picoaterHandle); _picoaterHandle = IntPtr.Zero; }
+                }
+
                 _hostInputBuffer = null;
                 _hostOutputBuffer = null;
 
@@ -293,44 +305,49 @@ namespace AniloxRoll.Monitor.Core.Camera
             if (_hUserData.IsAllocated) _hUserData.Free();
         }
 
-        private bool TryApplyThresholdGpu(MIL_ID srcBuffer, MIL_ID dstBuffer)
+        private bool TryApplyPicoaterRidge(MIL_ID srcBuffer, MIL_ID dstBuffer)
         {
             if (srcBuffer == MIL.M_NULL || dstBuffer == MIL.M_NULL) return false;
             if (_frameWidth <= 0 || _frameHeight <= 0) return false;
             if (_hostInputBuffer == null || _hostOutputBuffer == null) return false;
-            if (_gpuInputBuffer == IntPtr.Zero || _gpuOutputBuffer == IntPtr.Zero) return false;
 
-            try
+            lock (_picoaterLock)
             {
-                MIL.MbufGet2d(srcBuffer, 0, 0, _frameWidth, _frameHeight, _hostInputBuffer);
-
-                GCHandle hIn = GCHandle.Alloc(_hostInputBuffer, GCHandleType.Pinned);
-                GCHandle hOut = GCHandle.Alloc(_hostOutputBuffer, GCHandleType.Pinned);
+                if (_picoaterHandle == IntPtr.Zero || _picoaterInputBuffer == IntPtr.Zero || _picoaterRidgeBuffer == IntPtr.Zero)
+                    return false;
 
                 try
                 {
-                    int uploadResult = CoreCVWrapper.CoreCV_Upload(hIn.AddrOfPinnedObject(), _gpuInputBuffer, _frameWidth, _frameHeight);
-                    if (uploadResult != 0) return false;
+                    MIL.MbufGet2d(srcBuffer, 0, 0, _frameWidth, _frameHeight, _hostInputBuffer);
 
-                    byte threshold = (byte)Math.Max(0, Math.Min(255, (int)BinarizeThreshold));
-                    int thresholdResult = CoreCVWrapper.CoreCV_Threshold_GPU(_gpuInputBuffer, _frameWidth, _frameHeight, threshold, _gpuOutputBuffer);
-                    if (thresholdResult != 0) return false;
+                    Marshal.Copy(_hostInputBuffer, 0, _picoaterInputBuffer, _hostInputBuffer.Length);
 
-                    int downloadResult = CoreCVWrapper.CoreCV_Download(_gpuOutputBuffer, hOut.AddrOfPinnedObject(), _frameWidth, _frameHeight);
-                    if (downloadResult != 0) return false;
+                    NativeMethods.PICoater_Initialize(_picoaterHandle, _frameWidth, _frameHeight);
+
+                    int ret = NativeMethods.PICoater_Run(
+                        _picoaterHandle,
+                        _picoaterInputBuffer,
+                        IntPtr.Zero,
+                        IntPtr.Zero,
+                        _picoaterRidgeBuffer,
+                        IntPtr.Zero,
+                        IntPtr.Zero,
+                        2.0f,
+                        (float)HessianSigma,
+                        (float)HessianFixedMax,
+                        "vertical"
+                    );
+
+                    if (ret != 0) return false;
+
+                    Marshal.Copy(_picoaterRidgeBuffer, _hostOutputBuffer, 0, _hostOutputBuffer.Length);
+                    MIL.MbufPut2d(dstBuffer, 0, 0, _frameWidth, _frameHeight, _hostOutputBuffer);
+                    return true;
                 }
-                finally
+                catch
                 {
-                    if (hIn.IsAllocated) hIn.Free();
-                    if (hOut.IsAllocated) hOut.Free();
+                    return false;
                 }
-
-                MIL.MbufPut2d(dstBuffer, 0, 0, _frameWidth, _frameHeight, _hostOutputBuffer);
-                return true;
-            }
-            catch
-            {
-                return false;
             }
         }
 
