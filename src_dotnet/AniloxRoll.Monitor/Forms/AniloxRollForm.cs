@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using AniloxRoll.Monitor.Core.Data;
@@ -34,9 +36,9 @@ namespace AniloxRoll.Monitor.Forms
         private readonly Dictionary<int, Label> _cameraStatusLabels = new Dictionary<int, Label>();
         private readonly Dictionary<int, Bitmap> _latestLiveFrames = new Dictionary<int, Bitmap>();
         private readonly Timer _liveGrabTimer = new Timer();
+        private readonly LiveGrabAdapter _liveGrabAdapter = new LiveGrabAdapter();
         private bool _milAllocated;
         private bool _isLiveGrabbing;
-        private int _frameIndex;
 
         // [移除] 狀態變數已移至 FormInteractionHelper
         // private int _currentCameraIndex = 0;
@@ -137,6 +139,7 @@ namespace AniloxRoll.Monitor.Forms
                 _liveGrabTimer.Stop();
                 _liveGrabTimer.Tick -= LiveGrabTimer_Tick;
                 ClearLiveFrames();
+                _liveGrabAdapter.Free();
             };
 
             UpdateCameraStatus("未配置 (MIL Not Allocated)");
@@ -172,8 +175,15 @@ namespace AniloxRoll.Monitor.Forms
 
         private void button1_Click(object sender, EventArgs e)
         {
-            _milAllocated = true;
-            UpdateCameraStatus("已配置 (Allocated)");
+            if (_liveGrabAdapter.TryAllocate(out string status))
+            {
+                _milAllocated = true;
+                UpdateCameraStatus(status);
+                return;
+            }
+
+            _milAllocated = false;
+            UpdateCameraStatus(status);
         }
 
         private void button2_Click(object sender, EventArgs e)
@@ -190,9 +200,15 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
 
+            if (!_liveGrabAdapter.TryStartGrab(out string status))
+            {
+                UpdateCameraStatus(status);
+                return;
+            }
+
             _isLiveGrabbing = true;
             _liveGrabTimer.Start();
-            UpdateCameraStatus("抓取中 (Live)");
+            UpdateCameraStatus(status);
         }
 
         private void button3_Click(object sender, EventArgs e)
@@ -200,13 +216,14 @@ namespace AniloxRoll.Monitor.Forms
             _liveGrabTimer.Stop();
             _isLiveGrabbing = false;
             _milAllocated = false;
-            UpdateCameraStatus("已釋放 (Freed)");
             ClearLiveFrames();
+
+            _liveGrabAdapter.Free();
+            UpdateCameraStatus("已釋放 (Freed)");
         }
 
         private void LiveGrabTimer_Tick(object sender, EventArgs e)
         {
-            _frameIndex++;
             UpdateLiveFrame(1);
             UpdateLiveFrame(5);
         }
@@ -215,53 +232,16 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (!_liveViewBoxes.TryGetValue(cameraIndex, out var box)) return;
 
-            int width = Math.Max(box.Width, 148);
-            int height = Math.Max(box.Height - 18, 93);
-            var bmp = BuildDemoGrabFrame(cameraIndex, width, height, _frameIndex);
-
-            if (_latestLiveFrames.TryGetValue(cameraIndex, out var oldBmp))
+            if (_liveGrabAdapter.TryGrabFrame(cameraIndex, out Bitmap bitmap, out string status))
             {
-                oldBmp.Dispose();
+                if (_latestLiveFrames.TryGetValue(cameraIndex, out var oldBmp)) oldBmp.Dispose();
+                _latestLiveFrames[cameraIndex] = bitmap;
+                box.Image = bitmap;
+                UpdateSingleCameraStatus(cameraIndex, status);
+                return;
             }
 
-            _latestLiveFrames[cameraIndex] = bmp;
-            box.Image = bmp;
-        }
-
-        private static Bitmap BuildDemoGrabFrame(int cameraIndex, int width, int height, int frameIndex)
-        {
-            var bmp = new Bitmap(width, height);
-            using (var g = Graphics.FromImage(bmp))
-            {
-                g.Clear(Color.Black);
-
-                int markerX = (frameIndex * 7) % Math.Max(1, width - 30);
-                int markerY = (frameIndex * 5) % Math.Max(1, height - 30);
-
-                var gradientRect = new Rectangle(0, 0, width, height);
-                using (var brush = new System.Drawing.Drawing2D.LinearGradientBrush(
-                    gradientRect,
-                    cameraIndex == 1 ? Color.DarkBlue : Color.DarkRed,
-                    cameraIndex == 1 ? Color.Cyan : Color.Orange,
-                    35f))
-                {
-                    g.FillRectangle(brush, gradientRect);
-                }
-
-                using (var pen = new Pen(Color.Lime, 2f))
-                {
-                    g.DrawRectangle(pen, markerX, markerY, 28, 28);
-                }
-
-                using (var font = new Font("Consolas", 10f, FontStyle.Bold))
-                using (var brush = new SolidBrush(Color.White))
-                {
-                    string text = $"CAM{cameraIndex} Live\nFrame: {frameIndex}\n{DateTime.Now:HH:mm:ss.fff}";
-                    g.DrawString(text, font, brush, new PointF(8, 8));
-                }
-            }
-
-            return bmp;
+            UpdateSingleCameraStatus(cameraIndex, status);
         }
 
         private void UpdateCameraStatus(string statusText)
@@ -272,19 +252,215 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
+        private void UpdateSingleCameraStatus(int cameraIndex, string statusText)
+        {
+            if (_cameraStatusLabels.TryGetValue(cameraIndex, out var label))
+            {
+                label.Text = $"CAM{cameraIndex}: {statusText}";
+            }
+        }
+
         private void ClearLiveFrames()
         {
-            foreach (var pair in _liveViewBoxes)
-            {
-                pair.Value.Image = null;
-            }
+            foreach (var pair in _liveViewBoxes) pair.Value.Image = null;
 
-            foreach (var bmp in _latestLiveFrames.Values)
-            {
-                bmp.Dispose();
-            }
+            foreach (var bmp in _latestLiveFrames.Values) bmp.Dispose();
 
             _latestLiveFrames.Clear();
+        }
+
+        private sealed class LiveGrabAdapter
+        {
+            private object _grabber;
+            private MethodInfo _allocMethod;
+            private MethodInfo _startMethod;
+            private MethodInfo _freeMethod;
+            private MethodInfo _grabMethod;
+            private MethodInfo _statusMethod;
+
+            public bool TryAllocate(out string status)
+            {
+                status = string.Empty;
+                if (!EnsureBound(out status)) return false;
+
+                if (!InvokeBool(_allocMethod, out status, "AOI_SDK: MIL 配置失敗")) return false;
+
+                status = "已配置 (Allocated)";
+                return true;
+            }
+
+            public bool TryStartGrab(out string status)
+            {
+                status = string.Empty;
+                if (!EnsureBound(out status)) return false;
+
+                if (_startMethod == null)
+                {
+                    status = "抓取中 (Live)";
+                    return true;
+                }
+
+                if (!InvokeBool(_startMethod, out status, "AOI_SDK: 啟動抓取失敗")) return false;
+
+                status = "抓取中 (Live)";
+                return true;
+            }
+
+            public bool TryGrabFrame(int cameraIndex, out Bitmap bitmap, out string status)
+            {
+                bitmap = null;
+                status = "未抓到影像";
+                if (!EnsureBound(out status) || _grabMethod == null) return false;
+
+                object result;
+                try
+                {
+                    var pars = _grabMethod.GetParameters();
+                    result = pars.Length == 0
+                        ? _grabMethod.Invoke(_grabber, null)
+                        : _grabMethod.Invoke(_grabber, new object[] { cameraIndex });
+                }
+                catch (Exception ex)
+                {
+                    status = $"抓取異常: {ex.GetBaseException().Message}";
+                    return false;
+                }
+
+                if (result is Bitmap bmp)
+                {
+                    bitmap = (Bitmap)bmp.Clone();
+                    status = GetCameraStatus(cameraIndex) ?? "抓取中";
+                    return true;
+                }
+
+                if (result is Image image)
+                {
+                    bitmap = new Bitmap(image);
+                    status = GetCameraStatus(cameraIndex) ?? "抓取中";
+                    return true;
+                }
+
+                status = "AOI_SDK 回傳型別非 Bitmap";
+                return false;
+            }
+
+            public void Free()
+            {
+                if (_grabber == null || _freeMethod == null) return;
+                try { _freeMethod.Invoke(_grabber, null); } catch { }
+            }
+
+            private string GetCameraStatus(int cameraIndex)
+            {
+                if (_statusMethod == null || _grabber == null) return null;
+
+                try
+                {
+                    var pars = _statusMethod.GetParameters();
+                    object result = pars.Length == 0
+                        ? _statusMethod.Invoke(_grabber, null)
+                        : _statusMethod.Invoke(_grabber, new object[] { cameraIndex });
+                    return result?.ToString();
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+
+            private bool EnsureBound(out string status)
+            {
+                status = string.Empty;
+                if (_grabber != null) return true;
+
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    Type[] types;
+                    try { types = asm.GetTypes(); }
+                    catch (ReflectionTypeLoadException ex) { types = ex.Types.Where(t => t != null).ToArray(); }
+                    catch { continue; }
+
+                    var candidate = types.FirstOrDefault(t =>
+                        t != null &&
+                        t.IsClass &&
+                        !t.IsAbstract &&
+                        (t.Name.IndexOf("Mdig", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         t.Name.IndexOf("MilGrab", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         t.Name.IndexOf("Grab", StringComparison.OrdinalIgnoreCase) >= 0));
+
+                    if (candidate == null) continue;
+
+                    object instance = ResolveInstance(candidate);
+                    if (instance == null) continue;
+
+                    _grabber = instance;
+                    BindMethods(candidate);
+
+                    if (_allocMethod == null || _grabMethod == null)
+                    {
+                        status = $"AOI_SDK 類別 {candidate.FullName} 缺少 Allocate/Grab 方法";
+                        continue;
+                    }
+
+                    return true;
+                }
+
+                status = "找不到 AOI_SDK 的 MdigGrab 類別 (請確認 AOI_SDK 已載入)";
+                return false;
+            }
+
+            private void BindMethods(Type t)
+            {
+                _allocMethod = FindMethod(t, "Alloc", "Allocate", "Initialize");
+                _startMethod = FindMethod(t, "Start", "GrabStart", "Run", "GrabContinuous");
+                _freeMethod = FindMethod(t, "Free", "Release", "Dispose", "Uninitialize");
+                _grabMethod = FindMethod(t, "Grab", "GetImage", "GetBitmap", "GrabFrame", "Capture");
+                _statusMethod = FindMethod(t, "Status", "GetStatus", "CameraStatus");
+            }
+
+            private static MethodInfo FindMethod(Type t, params string[] keys)
+            {
+                var methods = t.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(m => !m.IsSpecialName).ToArray();
+
+                foreach (var key in keys)
+                {
+                    var hit = methods.FirstOrDefault(m =>
+                        m.Name.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                        (m.GetParameters().Length == 0 || m.GetParameters().Length == 1));
+                    if (hit != null) return hit;
+                }
+
+                return null;
+            }
+
+            private static object ResolveInstance(Type t)
+            {
+                var instanceProp = t.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static);
+                if (instanceProp != null) return instanceProp.GetValue(null, null);
+
+                var defaultCtor = t.GetConstructor(Type.EmptyTypes);
+                return defaultCtor != null ? Activator.CreateInstance(t) : null;
+            }
+
+            private bool InvokeBool(MethodInfo method, out string status, string failText)
+            {
+                status = failText;
+                if (method == null) return true;
+
+                try
+                {
+                    object result = method.Invoke(_grabber, null);
+                    if (result is bool ok) return ok;
+                    if (result is int code) return code == 0;
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    status = $"{failText}: {ex.GetBaseException().Message}";
+                    return false;
+                }
+            }
         }
 
         // [修改] 委派給 Helper
