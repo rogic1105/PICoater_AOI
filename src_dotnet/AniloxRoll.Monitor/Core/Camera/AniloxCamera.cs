@@ -11,13 +11,11 @@ namespace AniloxRoll.Monitor.Core.Camera
     {
         public MIL_ID MilDigitizer = MIL.M_NULL;
         public MIL_ID MilDisplay = MIL.M_NULL;
-        public MIL_ID MilSecondaryDisplay = MIL.M_NULL; // [新增] 支援大畫面的第二顯示區
-        private MIL_ID _milProcBuffer = MIL.M_NULL;
+        public MIL_ID MilSecondaryDisplay = MIL.M_NULL; // [新增] 第二顯示區
 
-        // [新增] 紀錄這支相機所屬的 System ID
+        private MIL_ID _milProcBuffer = MIL.M_NULL;
         private MIL_ID _ownerSystemId = MIL.M_NULL;
 
-        // 雙緩衝區與顯示緩衝區
         private MIL_ID[] _milGrabBuffers = new MIL_ID[2];
         private MIL_ID _milDisplayBuffer = MIL.M_NULL;
         private MIL_INT _milGrabBufferListSize = 2;
@@ -26,16 +24,17 @@ namespace AniloxRoll.Monitor.Core.Camera
         public int CameraId { get; private set; }
         public bool IsConnected { get; private set; } = false;
 
-        // 公開屬性
         public bool UserWantsGrab => _userWantsGrab;
         public bool EnableImageProcessing { get; set; } = true;
         public bool EnableHessian { get; set; } = true;
         public double BinarizeThreshold { get; set; } = 128.0;
-        public double HessianSigma { get; set; } = 85;   
+        public double HessianSigma { get; set; } = 85;
         public double HessianFixedMax { get; set; } = 1.0;
 
         private bool _userWantsGrab = false;
         private bool _isReleased = false;
+        private bool _isSecondaryHooked = false; // [新增] 紀錄第二顯示區是否已掛載滑鼠事件
+
         private MIL_INT _devNum;
         private string _dcfPath;
         private IntPtr _panelHandle;
@@ -53,20 +52,20 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         public double CurrentFps => Volatile.Read(ref _currentFps);
 
-        // Delegates (防止被 GC 回收)
+        // Delegates
         private MIL_DIG_HOOK_FUNCTION_PTR _cameraStatusDelegate;
         private MIL_DISP_HOOK_FUNCTION_PTR _mouseStatusDelegate;
+        private MIL_DISP_HOOK_FUNCTION_PTR _mouseClickDelegate; // [新增] 點擊事件委派
         private MIL_DIG_HOOK_FUNCTION_PTR _processingDelegate;
         private GCHandle _hUserData;
 
+        // Events
         public event Action<int, int, int, int> OnMouseDataChanged;
+        public event Action<int> OnCameraClicked; // [新增] 點擊事件
 
-        /// <summary>
-        /// 建構子：必須傳入 systemId
-        /// </summary>
         public AniloxCamera(MIL_ID systemId, int id, MIL_INT devNum, string dcfPath, IntPtr panelHandle, bool enableImageProcessing = true)
         {
-            _ownerSystemId = systemId; // [重要] 保存 System ID
+            _ownerSystemId = systemId;
             CameraId = id;
             _devNum = devNum;
             _dcfPath = dcfPath;
@@ -75,6 +74,7 @@ namespace AniloxRoll.Monitor.Core.Camera
 
             _cameraStatusDelegate = new MIL_DIG_HOOK_FUNCTION_PTR(CameraStatusHandler);
             _mouseStatusDelegate = new MIL_DISP_HOOK_FUNCTION_PTR(MouseStatusHandler);
+            _mouseClickDelegate = new MIL_DISP_HOOK_FUNCTION_PTR(MouseClickHandler); // [新增] 初始化點擊委派
             _processingDelegate = new MIL_DIG_HOOK_FUNCTION_PTR(ProcessingFunction);
             _hUserData = GCHandle.Alloc(this);
         }
@@ -87,9 +87,8 @@ namespace AniloxRoll.Monitor.Core.Camera
 
             if (MilDigitizer != MIL.M_NULL)
             {
-                // ... (Display Alloc 保持不變) ...
                 MIL.MdispAlloc(_ownerSystemId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref MilDisplay);
-                MIL.MdispAlloc(_ownerSystemId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref MilSecondaryDisplay);
+                MIL.MdispAlloc(_ownerSystemId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref MilSecondaryDisplay); // [新增] 分配第二顯示區
 
                 MIL_INT sizeX = MIL.MdigInquire(MilDigitizer, MIL.M_SIZE_X, MIL.M_NULL);
                 MIL_INT sizeY = MIL.MdigInquire(MilDigitizer, MIL.M_SIZE_Y, MIL.M_NULL);
@@ -102,7 +101,6 @@ namespace AniloxRoll.Monitor.Core.Camera
                 CoreCVWrapper.CoreCV_MallocGPU(out _gpuInputBuffer, _frameWidth, _frameHeight);
                 CoreCVWrapper.CoreCV_MallocGPU(out _gpuOutputBuffer, _frameWidth, _frameHeight);
 
-                // 1. Grab Buffers (保持不變)
                 for (int i = 0; i < _milGrabBufferListSize; i++)
                 {
                     MIL.MbufAlloc2d(_ownerSystemId, sizeX, sizeY, 8 + MIL.M_UNSIGNED,
@@ -110,28 +108,62 @@ namespace AniloxRoll.Monitor.Core.Camera
                     MIL.MbufClear(_milGrabBuffers[i], 0);
                 }
 
-                // 2. Display Buffer (保持不變)
                 MIL.MbufAlloc2d(_ownerSystemId, sizeX, sizeY, 8 + MIL.M_UNSIGNED,
                     MIL.M_IMAGE + MIL.M_DISP + MIL.M_PROC, ref _milDisplayBuffer);
                 MIL.MbufClear(_milDisplayBuffer, 0);
 
-                // 3. [新增] 分配幕後處理 Buffer (Off-screen)
-                // 屬性不需要 M_DISP，只要 M_IMAGE + M_PROC 即可
                 MIL.MbufAlloc2d(_ownerSystemId, sizeX, sizeY, 8 + MIL.M_UNSIGNED,
                     MIL.M_IMAGE + MIL.M_PROC, ref _milProcBuffer);
                 MIL.MbufClear(_milProcBuffer, 0);
 
-                // ... (Display Select Window 與 Hooks 保持不變) ...
                 MIL.MdispSelectWindow(MilDisplay, _milDisplayBuffer, _panelHandle);
 
                 MIL.MdispControl(MilDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
                 MIL.MdispControl(MilDisplay, MIL.M_CENTER_DISPLAY, MIL.M_ENABLE);
                 MIL.MdispControl(MilDisplay, MIL.M_MOUSE_USE, MIL.M_ENABLE);
 
-                // Hooks
+                // 掛載 Hooks
                 MIL.MdispHookFunction(MilDisplay, MIL.M_MOUSE_MOVE, _mouseStatusDelegate, (IntPtr)CameraId);
+                MIL.MdispHookFunction(MilDisplay, MIL.M_MOUSE_LEFT_BUTTON_DOWN, _mouseClickDelegate, (IntPtr)CameraId); // [新增] 掛載左鍵點擊
                 MIL.MdigHookFunction(MilDigitizer, MIL.M_CAMERA_PRESENT, _cameraStatusDelegate, (IntPtr)CameraId);
             }
+        }
+
+        // [新增] 設定第二顯示區的方法
+        public void SetSecondaryDisplay(IntPtr handle)
+        {
+            if (MilSecondaryDisplay == MIL.M_NULL) return;
+
+            if (handle == IntPtr.Zero)
+            {
+                if (_isSecondaryHooked)
+                {
+                    MIL.MdispHookFunction(MilSecondaryDisplay, MIL.M_MOUSE_MOVE + MIL.M_UNHOOK, _mouseStatusDelegate, IntPtr.Zero);
+                    _isSecondaryHooked = false;
+                }
+                MIL.MdispSelectWindow(MilSecondaryDisplay, MIL.M_NULL, IntPtr.Zero);
+            }
+            else
+            {
+                MIL.MdispSelectWindow(MilSecondaryDisplay, _milDisplayBuffer, handle);
+                MIL.MdispControl(MilSecondaryDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
+                MIL.MdispControl(MilSecondaryDisplay, MIL.M_CENTER_DISPLAY, MIL.M_ENABLE);
+                MIL.MdispControl(MilSecondaryDisplay, MIL.M_MOUSE_USE, MIL.M_ENABLE); // 允許滑鼠互動(平移/縮放)
+
+                if (!_isSecondaryHooked)
+                {
+                    MIL.MdispHookFunction(MilSecondaryDisplay, MIL.M_MOUSE_MOVE, _mouseStatusDelegate, (IntPtr)CameraId);
+                    _isSecondaryHooked = true;
+                }
+            }
+        }
+
+        // [新增] 滑鼠點擊攔截事件
+        private MIL_INT MouseClickHandler(MIL_INT HookType, MIL_ID EventId, IntPtr UserPtr)
+        {
+            if (_isReleased) return MIL.M_NULL;
+            OnCameraClicked?.Invoke(CameraId); // 通知 UI 切換畫面
+            return MIL.M_NULL;
         }
 
         private static MIL_INT ProcessingFunction(MIL_INT hookType, MIL_ID eventId, IntPtr userPtr)
@@ -145,7 +177,6 @@ namespace AniloxRoll.Monitor.Core.Camera
             MIL_ID modifiedBuffer = MIL.M_NULL;
             MIL.MdigGetHookInfo(eventId, MIL.M_MODIFIED_BUFFER + MIL.M_BUFFER_ID, ref modifiedBuffer);
 
-            // 確保所有 Buffer 都有效
             if (modifiedBuffer != MIL.M_NULL && cam._milProcBuffer != MIL.M_NULL && cam._milDisplayBuffer != MIL.M_NULL)
             {
                 if (!cam.EnableImageProcessing)
@@ -204,28 +235,6 @@ namespace AniloxRoll.Monitor.Core.Camera
             return IsConnected;
         }
 
-        public void SetSecondaryDisplay(IntPtr handle)
-        {
-            if (MilSecondaryDisplay == MIL.M_NULL) return;
-
-            if (handle == IntPtr.Zero)
-            {
-                // 解除綁定，清空畫面
-                MIL.MdispSelectWindow(MilSecondaryDisplay, MIL.M_NULL, IntPtr.Zero);
-            }
-            else
-            {
-                // 將目前相機的 Buffer 綁定到傳入的 Handle (例如 panel8)
-                MIL.MdispSelectWindow(MilSecondaryDisplay, _milDisplayBuffer, handle);
-                MIL.MdispControl(MilSecondaryDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
-                MIL.MdispControl(MilSecondaryDisplay, MIL.M_CENTER_DISPLAY, MIL.M_ENABLE);
-
-                // [新增] 啟用滑鼠互動，這樣就可以在 panel8 上平移和縮放了
-                MIL.MdispControl(MilSecondaryDisplay, MIL.M_MOUSE_USE, MIL.M_ENABLE);
-            }
-        }
-
-
         public void Free()
         {
             _isReleased = true;
@@ -237,10 +246,26 @@ namespace AniloxRoll.Monitor.Core.Camera
                 IsLive = false;
 
                 MIL.MdigHookFunction(MilDigitizer, MIL.M_CAMERA_PRESENT + MIL.M_UNHOOK, _cameraStatusDelegate, IntPtr.Zero);
+
+                // [修改] 完整釋放主顯示區與 Hooks
                 if (MilDisplay != MIL.M_NULL)
                 {
                     MIL.MdispHookFunction(MilDisplay, MIL.M_MOUSE_MOVE + MIL.M_UNHOOK, _mouseStatusDelegate, IntPtr.Zero);
+                    MIL.MdispHookFunction(MilDisplay, MIL.M_MOUSE_LEFT_BUTTON_DOWN + MIL.M_UNHOOK, _mouseClickDelegate, IntPtr.Zero);
                     MIL.MdispSelectWindow(MilDisplay, MIL.M_NULL, IntPtr.Zero);
+                }
+
+                // [新增] 完整釋放第二顯示區與 Hooks
+                if (MilSecondaryDisplay != MIL.M_NULL)
+                {
+                    if (_isSecondaryHooked)
+                    {
+                        MIL.MdispHookFunction(MilSecondaryDisplay, MIL.M_MOUSE_MOVE + MIL.M_UNHOOK, _mouseStatusDelegate, IntPtr.Zero);
+                        _isSecondaryHooked = false;
+                    }
+                    MIL.MdispSelectWindow(MilSecondaryDisplay, MIL.M_NULL, IntPtr.Zero);
+                    MIL.MdispFree(MilSecondaryDisplay);
+                    MilSecondaryDisplay = MIL.M_NULL;
                 }
 
                 for (int i = 0; i < _milGrabBufferListSize; i++)
@@ -252,50 +277,21 @@ namespace AniloxRoll.Monitor.Core.Camera
                     }
                 }
 
-                if (_milDisplayBuffer != MIL.M_NULL)
-                {
-                    MIL.MbufFree(_milDisplayBuffer);
-                    _milDisplayBuffer = MIL.M_NULL;
-                }
-                if (_milProcBuffer != MIL.M_NULL)
-                {
-                    MIL.MbufFree(_milProcBuffer);
-                    _milProcBuffer = MIL.M_NULL;
-                }
+                if (_milDisplayBuffer != MIL.M_NULL) { MIL.MbufFree(_milDisplayBuffer); _milDisplayBuffer = MIL.M_NULL; }
+                if (_milProcBuffer != MIL.M_NULL) { MIL.MbufFree(_milProcBuffer); _milProcBuffer = MIL.M_NULL; }
 
-                if (_gpuInputBuffer != IntPtr.Zero)
-                {
-                    CoreCVWrapper.CoreCV_FreeGPU(_gpuInputBuffer);
-                    _gpuInputBuffer = IntPtr.Zero;
-                }
-                if (_gpuOutputBuffer != IntPtr.Zero)
-                {
-                    CoreCVWrapper.CoreCV_FreeGPU(_gpuOutputBuffer);
-                    _gpuOutputBuffer = IntPtr.Zero;
-                }
+                if (_gpuInputBuffer != IntPtr.Zero) { CoreCVWrapper.CoreCV_FreeGPU(_gpuInputBuffer); _gpuInputBuffer = IntPtr.Zero; }
+                if (_gpuOutputBuffer != IntPtr.Zero) { CoreCVWrapper.CoreCV_FreeGPU(_gpuOutputBuffer); _gpuOutputBuffer = IntPtr.Zero; }
                 _hostInputBuffer = null;
                 _hostOutputBuffer = null;
 
-                if (MilSecondaryDisplay != MIL.M_NULL)
-                {
-                    MIL.MdispSelectWindow(MilSecondaryDisplay, MIL.M_NULL, IntPtr.Zero);
-                    MIL.MdispFree(MilSecondaryDisplay);
-                    MilSecondaryDisplay = MIL.M_NULL;
-                }
-                if (MilDisplay != MIL.M_NULL) 
-                {
-                    MIL.MdispFree(MilDisplay); MilDisplay = MIL.M_NULL; 
-                }
+                if (MilDisplay != MIL.M_NULL) { MIL.MdispFree(MilDisplay); MilDisplay = MIL.M_NULL; }
                 MIL.MdigFree(MilDigitizer);
                 MilDigitizer = MIL.M_NULL;
             }
 
             if (_hUserData.IsAllocated) _hUserData.Free();
-
-            // 注意：我們不在這裡釋放 System，因為 System 是由外部 (Form) 傳入並管理的
         }
-
-
 
         private bool TryApplyThresholdGpu(MIL_ID srcBuffer, MIL_ID dstBuffer)
         {
@@ -402,8 +398,5 @@ namespace AniloxRoll.Monitor.Core.Camera
             }
             return MIL.M_NULL;
         }
-   
-    
-
     }
 }

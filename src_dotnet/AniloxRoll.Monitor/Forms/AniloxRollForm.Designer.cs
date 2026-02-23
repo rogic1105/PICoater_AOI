@@ -28,11 +28,12 @@
         /// </summary>
         private void InitializeComponent()
         {
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea2 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend2 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series2 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea1 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend1 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series1 = new System.Windows.Forms.DataVisualization.Charting.Series();
             this.tabControl = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
+            this.checkBoxEnableImageProcessing = new System.Windows.Forms.CheckBox();
             this.btnCameraFree = new System.Windows.Forms.Button();
             this.btnCameraGrab = new System.Windows.Forms.Button();
             this.btnCameraAllocation = new System.Windows.Forms.Button();
@@ -73,7 +74,6 @@
             this.propertyGrid1 = new System.Windows.Forms.PropertyGrid();
             this.statusStrip1 = new System.Windows.Forms.StatusStrip();
             this.lblPixelInfo = new System.Windows.Forms.ToolStripStatusLabel();
-            this.checkBoxEnableImageProcessing = new System.Windows.Forms.CheckBox();
             this.tabControl.SuspendLayout();
             this.tabPage1.SuspendLayout();
             this.tabPage2.SuspendLayout();
@@ -122,6 +122,19 @@
             this.tabPage1.Text = "監控";
             this.tabPage1.UseVisualStyleBackColor = true;
             // 
+            // checkBoxEnableImageProcessing
+            // 
+            this.checkBoxEnableImageProcessing.AutoSize = true;
+            this.checkBoxEnableImageProcessing.Checked = true;
+            this.checkBoxEnableImageProcessing.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.checkBoxEnableImageProcessing.Location = new System.Drawing.Point(1088, 123);
+            this.checkBoxEnableImageProcessing.Name = "checkBoxEnableImageProcessing";
+            this.checkBoxEnableImageProcessing.Size = new System.Drawing.Size(89, 19);
+            this.checkBoxEnableImageProcessing.TabIndex = 8;
+            this.checkBoxEnableImageProcessing.Text = "影像處理";
+            this.checkBoxEnableImageProcessing.UseVisualStyleBackColor = true;
+            this.checkBoxEnableImageProcessing.CheckedChanged += new System.EventHandler(this.checkBoxEnableImageProcessing_CheckedChanged);
+            // 
             // btnCameraFree
             // 
             this.btnCameraFree.Location = new System.Drawing.Point(1084, 81);
@@ -159,7 +172,7 @@
             // 
             this.panel8.Location = new System.Drawing.Point(6, 123);
             this.panel8.Name = "panel8";
-            this.panel8.Size = new System.Drawing.Size(1072, 425);
+            this.panel8.Size = new System.Drawing.Size(1072, 347);
             this.panel8.TabIndex = 1;
             // 
             // panel7
@@ -326,17 +339,17 @@
             // 
             // chartMura
             // 
-            chartArea2.Name = "ChartArea1";
-            this.chartMura.ChartAreas.Add(chartArea2);
+            chartArea1.Name = "ChartArea1";
+            this.chartMura.ChartAreas.Add(chartArea1);
             this.chartMura.Dock = System.Windows.Forms.DockStyle.Fill;
-            legend2.Name = "Legend1";
-            this.chartMura.Legends.Add(legend2);
+            legend1.Name = "Legend1";
+            this.chartMura.Legends.Add(legend1);
             this.chartMura.Location = new System.Drawing.Point(3, 349);
             this.chartMura.Name = "chartMura";
-            series2.ChartArea = "ChartArea1";
-            series2.Legend = "Legend1";
-            series2.Name = "Series1";
-            this.chartMura.Series.Add(series2);
+            series1.ChartArea = "ChartArea1";
+            series1.Legend = "Legend1";
+            series1.Name = "Series1";
+            this.chartMura.Series.Add(series1);
             this.chartMura.Size = new System.Drawing.Size(1064, 143);
             this.chartMura.TabIndex = 16;
             this.chartMura.Text = "chart1";
@@ -509,19 +522,6 @@
             this.lblPixelInfo.Name = "lblPixelInfo";
             this.lblPixelInfo.Size = new System.Drawing.Size(395, 19);
             this.lblPixelInfo.Text = "位置:0.00mm | 座標:(0, 0) | 亮度: 0  | 倍率:0.0x | 平移:(0, 0)";
-            // 
-            // checkBoxEnableImageProcessing
-            // 
-            this.checkBoxEnableImageProcessing.AutoSize = true;
-            this.checkBoxEnableImageProcessing.Checked = true;
-            this.checkBoxEnableImageProcessing.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.checkBoxEnableImageProcessing.Location = new System.Drawing.Point(1088, 123);
-            this.checkBoxEnableImageProcessing.Name = "checkBoxEnableImageProcessing";
-            this.checkBoxEnableImageProcessing.Size = new System.Drawing.Size(89, 19);
-            this.checkBoxEnableImageProcessing.TabIndex = 8;
-            this.checkBoxEnableImageProcessing.Text = "影像處理";
-            this.checkBoxEnableImageProcessing.UseVisualStyleBackColor = true;
-            this.checkBoxEnableImageProcessing.CheckedChanged += new System.EventHandler(this.checkBoxEnableImageProcessing_CheckedChanged);
             // 
             // AniloxRollForm
             // 

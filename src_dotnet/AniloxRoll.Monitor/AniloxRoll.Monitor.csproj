@@ -91,6 +91,7 @@
     </Compile>
     <Compile Include="Forms\Helpers\AniloxRollPresenter.cs" />
     <Compile Include="Forms\Helpers\FormInteractionHelper.cs" />
+    <Compile Include="Forms\Helpers\LiveCameraManager.cs" />
     <Compile Include="Forms\Helpers\MuraChartHelper.cs" />
     <Compile Include="Forms\Helpers\ThumbnailGridPresenter.cs" />
     <Compile Include="Forms\Helpers\DateTimeNavigator.cs" />
