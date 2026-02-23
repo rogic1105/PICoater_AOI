@@ -1,14 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.IO;
-using System.Linq;
-using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.Forms.Helpers;
+using AniloxRoll.Monitor.Core.Camera; // 確保引入你的相機命名空間
+using Matrox.MatroxImagingLibrary;
 
 namespace AniloxRoll.Monitor.Forms
 {
@@ -31,19 +30,35 @@ namespace AniloxRoll.Monitor.Forms
         // --- 參數設定 (核心) ---
         private InspectionSettings _settings;
 
-        // --- 即時取像 (監控頁 Panel1 / Panel5) ---
-        private readonly Dictionary<int, PictureBox> _liveViewBoxes = new Dictionary<int, PictureBox>();
-        private readonly Dictionary<int, Label> _cameraStatusLabels = new Dictionary<int, Label>();
-        private readonly Dictionary<int, Bitmap> _latestLiveFrames = new Dictionary<int, Bitmap>();
-        private readonly Timer _liveGrabTimer = new Timer();
-        private readonly LiveGrabAdapter _liveGrabAdapter = new LiveGrabAdapter();
-        private bool _milAllocated;
-        private bool _isLiveGrabbing;
+        private int _selectedMainCameraId = 1;
 
-        // [移除] 狀態變數已移至 FormInteractionHelper
-        // private int _currentCameraIndex = 0;
-        // private int _currentViewLeftX = 0;
-        // private int _currentViewRightX = 0;
+        // ==========================================
+        // --- 即時取像 (監控頁 Panel1 / Panel5) ---
+        // ==========================================
+        private class CameraConfig
+        {
+            public int Id { get; set; }
+            public string SystemDescriptor { get; set; }
+            public int SystemNum { get; set; }
+            public MIL_INT DevNum { get; set; }
+            public string DcfPath { get; set; }
+
+            // 【修改1】把 PictureBox 改成 Panel
+            public Panel DisplayPanel { get; set; }
+            public Label StatusLabel { get; set; }
+        }
+
+        private List<AniloxCamera> _cameras = new List<AniloxCamera>();
+        private List<CameraConfig> _cameraConfigs;
+        private Dictionary<int, MIL_ID> _allocatedSystems = new Dictionary<int, MIL_ID>();
+
+        // 【修改2】把 PictureBox 字典改成 Panel 字典
+        private readonly Dictionary<int, Panel> _liveViewPanels = new Dictionary<int, Panel>();
+        private readonly Dictionary<int, Label> _cameraStatusLabels = new Dictionary<int, Label>();
+
+        private Timer _cameraStatusTimer;
+        private bool _milAllocated = false;
+        private bool _isLiveGrabbing = false;
 
         public AniloxRollForm()
         {
@@ -57,8 +72,6 @@ namespace AniloxRoll.Monitor.Forms
 
             // 2. 初始化服務
             _inspectionService = new BatchInspectionService();
-            // 參數套用邏輯稍後透過 Helper 執行，或在此手動呼叫一次，
-            // 但現在 Helper 尚未建立，為了避免依賴順序問題，我們在 Helper 建立後呼叫一次。
 
             _timeSelectionManager = new DateTimeNavigator(
                 _imageRepository, cbYear, cbMonth, cbDay, cbHour, cbMin, cbSec);
@@ -69,11 +82,7 @@ namespace AniloxRoll.Monitor.Forms
             });
 
             _presenter = new AniloxRollPresenter(
-                _imageRepository,
-                _inspectionService,
-                _timeSelectionManager,
-                _galleryManager
-            );
+                _imageRepository, _inspectionService, _timeSelectionManager, _galleryManager);
 
             // 3. 初始化 Chart
             _muraChartHelper = new MuraChartHelper(this.chartMura);
@@ -82,77 +91,77 @@ namespace AniloxRoll.Monitor.Forms
             // 4. 設定 PropertyGrid
             propertyGrid1.SelectedObject = _settings;
             propertyGrid1.ToolbarVisible = false;
-
-            // 先移除事件 (防止重複)
             propertyGrid1.PropertyValueChanged -= _propertyGrid_PropertyValueChanged;
             propertyGrid1.PropertyValueChanged += _propertyGrid_PropertyValueChanged;
 
             // 5. 初始化 InteractionHelper
-            // [關鍵] 傳入 _settings 與 lblPixelInfo (假設其類型為 ToolStripStatusLabel)
             _interactionHelper = new FormInteractionHelper(
-                this,
-                canvasMain,
-                new Button[] { btnShowOriginal, btnShowProcessed, btnSelectFolder },
-                _thumbnailCache,
-                _presenter,
-                _inspectionService,
-                _imageRepository,
-                _timeSelectionManager,
-                _galleryManager,
-                _muraChartHelper,
-                _settings,      // 新增參數
-                lblPixelInfo    // 新增參數
+                this, canvasMain, new Button[] { btnShowOriginal, btnShowProcessed, btnSelectFolder },
+                _thumbnailCache, _presenter, _inspectionService, _imageRepository,
+                _timeSelectionManager, _galleryManager, _muraChartHelper, _settings, lblPixelInfo
             );
 
-            // [新增] 立即套用參數 (取代原有的 ApplySettingsToService() 呼叫)
             _interactionHelper.ApplySettingsToService();
 
             // 6. 綁定事件
             _presenter.BusyStateChanged += _interactionHelper.SetUiLoadingState;
             _presenter.LogReported += log => Console.WriteLine(log);
-
-            // [修改] 移除這裡對 _currentCameraIndex 的直接操作，Helper 內部會處理
-            // _galleryManager.SelectionChanged += (idx) => ... [移除]
-
             _galleryManager.SelectionChanged += _interactionHelper.OnGallerySelectionChanged;
 
             canvasMain.StatusChanged += OnCanvasStatusChanged;
             canvasMain.EdgeReached += OnCanvasEdgeReached;
 
+            // 7. 初始化即時相機面板
             InitializeLiveGrabPanels();
         }
 
+        // ==========================================
+        // --- 相機硬體初始化與綁定 ---
+        // ==========================================
         private void InitializeLiveGrabPanels()
         {
             SetupLivePanel(panel1, 1);
             SetupLivePanel(panel5, 5);
 
-            _liveGrabTimer.Interval = 120;
-            _liveGrabTimer.Tick += LiveGrabTimer_Tick;
-
-            button1.Click += button1_Click;
-            button2.Click += button2_Click;
-            button3.Click += button3_Click;
-
-            FormClosed += (_, __) =>
+            _cameraConfigs = new List<CameraConfig>
             {
-                _liveGrabTimer.Stop();
-                _liveGrabTimer.Tick -= LiveGrabTimer_Tick;
-                ClearLiveFrames();
-                _liveGrabAdapter.Free();
+                new CameraConfig
+                {
+                    Id = 1,
+                    SystemDescriptor = MIL.M_SYSTEM_RADIENTEVCL,
+                    SystemNum = 0,
+                    DevNum = MIL.M_DEV0,
+                    DcfPath = @"C:\Users\User\Downloads\dcf\Radient_Config.dcf",
+                    DisplayPanel = _liveViewPanels[1], // 【修改4】綁定 Panel
+                    StatusLabel = _cameraStatusLabels[1]
+                },
+                new CameraConfig
+                {
+                    Id = 5,
+                    SystemDescriptor = MIL.M_SYSTEM_RADIENTEVCL,
+                    SystemNum = 1,
+                    DevNum = MIL.M_DEV0,
+                    DcfPath = @"C:\Users\User\Downloads\dcf\Radient_Config.dcf",
+                    DisplayPanel = _liveViewPanels[5], // 【修改4】綁定 Panel
+                    StatusLabel = _cameraStatusLabels[5]
+                }
             };
 
-            UpdateCameraStatus("未配置 (MIL Not Allocated)");
-        }
+            _cameraStatusTimer = new Timer { Interval = 500 };
+            _cameraStatusTimer.Tick += CameraStatusTimer_Tick;
 
+            UpdateCameraStatus("未配置 (MIL Not Allocated)", Color.Gray);
+
+            FormClosed += (_, __) => { FreeCameras(); };
+        }
         private void SetupLivePanel(Panel panel, int cameraIndex)
         {
             panel.BackColor = Color.Black;
+            panel.Controls.Clear();
 
-            var preview = new PictureBox
+            var displayPanel = new Panel
             {
                 Dock = DockStyle.Fill,
-                SizeMode = PictureBoxSizeMode.Zoom,
                 BackColor = Color.Black
             };
 
@@ -160,331 +169,219 @@ namespace AniloxRoll.Monitor.Forms
             {
                 Dock = DockStyle.Bottom,
                 Height = 18,
-                ForeColor = Color.Lime,
+                ForeColor = Color.White,
                 BackColor = Color.FromArgb(32, 32, 32),
                 TextAlign = ContentAlignment.MiddleCenter,
                 Font = new Font("Segoe UI", 7.5f, FontStyle.Bold)
             };
 
-            panel.Controls.Add(preview);
-            panel.Controls.Add(status);
+            // [新增] 綁定點擊事件，當點擊小面板時，切換主畫面
+            displayPanel.MouseClick += (s, e) => SwitchMainDisplay(cameraIndex);
+            status.MouseClick += (s, e) => SwitchMainDisplay(cameraIndex);
 
-            _liveViewBoxes[cameraIndex] = preview;
+            panel.Controls.Add(displayPanel);
+            panel.Controls.Add(status);
+            displayPanel.BringToFront();
+
+            _liveViewPanels[cameraIndex] = displayPanel;
             _cameraStatusLabels[cameraIndex] = status;
         }
 
-        private void button1_Click(object sender, EventArgs e)
+        private void SwitchMainDisplay(int cameraIndex)
         {
-            if (_liveGrabAdapter.TryAllocate(out string status))
+            _selectedMainCameraId = cameraIndex;
+
+            // 1. 更新 UI 標籤背景顏色 (選中的變深藍色，其餘恢復)
+            foreach (var kvp in _cameraStatusLabels)
             {
-                _milAllocated = true;
-                UpdateCameraStatus(status);
-                return;
+                if (kvp.Key == cameraIndex)
+                    kvp.Value.BackColor = Color.DarkBlue;
+                else
+                    kvp.Value.BackColor = Color.FromArgb(32, 32, 32);
             }
 
-            _milAllocated = false;
-            UpdateCameraStatus(status);
+            // 2. 切換 MIL 的大畫面顯示控制代碼
+            foreach (var cam in _cameras)
+            {
+                if (cam.CameraId == cameraIndex)
+                {
+                    // 被選中的相機，將第二畫面投影到 panel8
+                    cam.SetSecondaryDisplay(panel8.Handle);
+                }
+                else
+                {
+                    // 其他相機，取消第二畫面投影
+                    cam.SetSecondaryDisplay(IntPtr.Zero);
+                }
+            }
         }
 
-        private void button2_Click(object sender, EventArgs e)
+        // ==========================================
+        // --- 按鈕事件：配置 (Allocate) ---
+        // ==========================================
+        private void btnCameraAllocation_Click(object sender, EventArgs e)
+        {
+            if (_milAllocated) return;
+
+            try
+            {
+                CameraSystemManager.Initialize();
+
+                foreach (var cfg in _cameraConfigs)
+                {
+                    MIL_ID currentSysId = MIL.M_NULL;
+
+                    if (_allocatedSystems.ContainsKey(cfg.SystemNum))
+                    {
+                        currentSysId = _allocatedSystems[cfg.SystemNum];
+                    }
+                    else
+                    {
+                        currentSysId = CameraSystemManager.AllocateSystem(cfg.SystemDescriptor, cfg.SystemNum);
+                        if (currentSysId != MIL.M_NULL)
+                        {
+                            _allocatedSystems.Add(cfg.SystemNum, currentSysId);
+                        }
+                        else
+                        {
+                            UpdateSingleCameraStatus(cfg.Id, "分配 System 失敗", Color.Red);
+                            continue;
+                        }
+                    }
+
+                    // 實例化 AniloxCamera (將 PictureBox.Handle 交給 MIL 處理顯示)
+                    var cam = new AniloxCamera(
+                        currentSysId,
+                        cfg.Id,
+                        cfg.DevNum,
+                        cfg.DcfPath,
+                        cfg.DisplayPanel.Handle, // 【確認】這裡是傳入 Panel 的 Handle
+                        checkBoxEnableImageProcessing.Checked // 【修改這裡】讀取 CheckBox 目前的狀態
+                    );
+
+                    cam.Initialize();
+                    _cameras.Add(cam);
+                }
+
+                _milAllocated = true;
+                _cameraStatusTimer.Start();
+                UpdateCameraStatus("已配置 (Ready)", Color.Yellow);
+                SwitchMainDisplay(_selectedMainCameraId);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"相機配置失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // ==========================================
+        // --- 按鈕事件：抓取/停止 (Toggle Grab) ---
+        // ==========================================
+        private void btnCameraGrab_Click(object sender, EventArgs e)
         {
             if (!_milAllocated)
             {
-                UpdateCameraStatus("抓取失敗: 尚未配置");
+                MessageBox.Show("請先點擊「相機配置」!", "提示");
                 return;
             }
 
-            if (_isLiveGrabbing)
+            _isLiveGrabbing = !_isLiveGrabbing;
+
+            foreach (var cam in _cameras)
             {
-                UpdateCameraStatus("抓取中 (Live)");
-                return;
+                cam.SetUserGrabIntent(_isLiveGrabbing);
             }
 
-            if (!_liveGrabAdapter.TryStartGrab(out string status))
-            {
-                UpdateCameraStatus(status);
-                return;
-            }
-
-            _isLiveGrabbing = true;
-            _liveGrabTimer.Start();
-            UpdateCameraStatus(status);
+            btnCameraGrab.Text = _isLiveGrabbing ? "停止抓取" : "開始抓取";
         }
 
-        private void button3_Click(object sender, EventArgs e)
+        // ==========================================
+        // --- 按鈕事件：釋放 (Free) ---
+        // ==========================================
+        private void btnCameraFree_Click(object sender, EventArgs e)
         {
-            _liveGrabTimer.Stop();
+            FreeCameras();
+            btnCameraGrab.Text = "開始抓取";
+        }
+
+        private void FreeCameras()
+        {
+            _cameraStatusTimer?.Stop();
             _isLiveGrabbing = false;
-            _milAllocated = false;
-            ClearLiveFrames();
 
-            _liveGrabAdapter.Free();
-            UpdateCameraStatus("已釋放 (Freed)");
-        }
-
-        private void LiveGrabTimer_Tick(object sender, EventArgs e)
-        {
-            UpdateLiveFrame(1);
-            UpdateLiveFrame(5);
-        }
-
-        private void UpdateLiveFrame(int cameraIndex)
-        {
-            if (!_liveViewBoxes.TryGetValue(cameraIndex, out var box)) return;
-
-            if (_liveGrabAdapter.TryGrabFrame(cameraIndex, out Bitmap bitmap, out string status))
+            // 1. 釋放相機與 Buffers
+            foreach (var cam in _cameras)
             {
-                if (_latestLiveFrames.TryGetValue(cameraIndex, out var oldBmp)) oldBmp.Dispose();
-                _latestLiveFrames[cameraIndex] = bitmap;
-                box.Image = bitmap;
-                UpdateSingleCameraStatus(cameraIndex, status);
-                return;
+                cam.Free();
             }
+            _cameras.Clear();
 
-            UpdateSingleCameraStatus(cameraIndex, status);
+            // 2. 釋放擷取卡系統
+            foreach (var kvp in _allocatedSystems)
+            {
+                CameraSystemManager.FreeSystem(kvp.Value);
+            }
+            _allocatedSystems.Clear();
+
+            // 3. 釋放 MIL Application
+            CameraSystemManager.FreeApplication();
+
+            _milAllocated = false;
+            UpdateCameraStatus("已釋放 (Freed)", Color.Gray);
         }
 
-        private void UpdateCameraStatus(string statusText)
+        // ==========================================
+        // --- 狀態更新 (FPS & 連線狀態) ---
+        // ==========================================
+        private void CameraStatusTimer_Tick(object sender, EventArgs e)
+        {
+            foreach (var cam in _cameras)
+            {
+                bool isConnected = cam.CheckPresence();
+                string fpsText = cam.IsLive ? $" | FPS: {cam.CurrentFps:F1}" : "";
+
+                string statusText = isConnected
+                    ? (cam.IsLive ? $"Live{fpsText}" : "Ready")
+                    : "Offline";
+
+                Color color = isConnected
+                    ? (cam.IsLive ? Color.Lime : Color.Yellow)
+                    : Color.Red;
+
+                UpdateSingleCameraStatus(cam.CameraId, statusText, color);
+            }
+        }
+
+        private void UpdateCameraStatus(string statusText, Color color)
         {
             foreach (var pair in _cameraStatusLabels)
             {
                 pair.Value.Text = $"CAM{pair.Key}: {statusText}";
+                pair.Value.ForeColor = color;
             }
         }
 
-        private void UpdateSingleCameraStatus(int cameraIndex, string statusText)
+        private void UpdateSingleCameraStatus(int cameraIndex, string statusText, Color color)
         {
             if (_cameraStatusLabels.TryGetValue(cameraIndex, out var label))
             {
                 label.Text = $"CAM{cameraIndex}: {statusText}";
+                label.ForeColor = color;
             }
         }
 
-        private void ClearLiveFrames()
-        {
-            foreach (var pair in _liveViewBoxes) pair.Value.Image = null;
-
-            foreach (var bmp in _latestLiveFrames.Values) bmp.Dispose();
-
-            _latestLiveFrames.Clear();
-        }
-
-        private sealed class LiveGrabAdapter
-        {
-            private object _grabber;
-            private MethodInfo _allocMethod;
-            private MethodInfo _startMethod;
-            private MethodInfo _freeMethod;
-            private MethodInfo _grabMethod;
-            private MethodInfo _statusMethod;
-
-            public bool TryAllocate(out string status)
-            {
-                status = string.Empty;
-                if (!EnsureBound(out status)) return false;
-
-                if (!InvokeBool(_allocMethod, out status, "AOI_SDK: MIL 配置失敗")) return false;
-
-                status = "已配置 (Allocated)";
-                return true;
-            }
-
-            public bool TryStartGrab(out string status)
-            {
-                status = string.Empty;
-                if (!EnsureBound(out status)) return false;
-
-                if (_startMethod == null)
-                {
-                    status = "抓取中 (Live)";
-                    return true;
-                }
-
-                if (!InvokeBool(_startMethod, out status, "AOI_SDK: 啟動抓取失敗")) return false;
-
-                status = "抓取中 (Live)";
-                return true;
-            }
-
-            public bool TryGrabFrame(int cameraIndex, out Bitmap bitmap, out string status)
-            {
-                bitmap = null;
-                status = "未抓到影像";
-                if (!EnsureBound(out status) || _grabMethod == null) return false;
-
-                object result;
-                try
-                {
-                    var pars = _grabMethod.GetParameters();
-                    result = pars.Length == 0
-                        ? _grabMethod.Invoke(_grabber, null)
-                        : _grabMethod.Invoke(_grabber, new object[] { cameraIndex });
-                }
-                catch (Exception ex)
-                {
-                    status = $"抓取異常: {ex.GetBaseException().Message}";
-                    return false;
-                }
-
-                if (result is Bitmap bmp)
-                {
-                    bitmap = (Bitmap)bmp.Clone();
-                    status = GetCameraStatus(cameraIndex) ?? "抓取中";
-                    return true;
-                }
-
-                if (result is Image image)
-                {
-                    bitmap = new Bitmap(image);
-                    status = GetCameraStatus(cameraIndex) ?? "抓取中";
-                    return true;
-                }
-
-                status = "AOI_SDK 回傳型別非 Bitmap";
-                return false;
-            }
-
-            public void Free()
-            {
-                if (_grabber == null || _freeMethod == null) return;
-                try { _freeMethod.Invoke(_grabber, null); } catch { }
-            }
-
-            private string GetCameraStatus(int cameraIndex)
-            {
-                if (_statusMethod == null || _grabber == null) return null;
-
-                try
-                {
-                    var pars = _statusMethod.GetParameters();
-                    object result = pars.Length == 0
-                        ? _statusMethod.Invoke(_grabber, null)
-                        : _statusMethod.Invoke(_grabber, new object[] { cameraIndex });
-                    return result?.ToString();
-                }
-                catch
-                {
-                    return null;
-                }
-            }
-
-            private bool EnsureBound(out string status)
-            {
-                status = string.Empty;
-                if (_grabber != null) return true;
-
-                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    Type[] types;
-                    try { types = asm.GetTypes(); }
-                    catch (ReflectionTypeLoadException ex) { types = ex.Types.Where(t => t != null).ToArray(); }
-                    catch { continue; }
-
-                    var candidate = types.FirstOrDefault(t =>
-                        t != null &&
-                        t.IsClass &&
-                        !t.IsAbstract &&
-                        (t.Name.IndexOf("Mdig", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                         t.Name.IndexOf("MilGrab", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                         t.Name.IndexOf("Grab", StringComparison.OrdinalIgnoreCase) >= 0));
-
-                    if (candidate == null) continue;
-
-                    object instance = ResolveInstance(candidate);
-                    if (instance == null) continue;
-
-                    _grabber = instance;
-                    BindMethods(candidate);
-
-                    if (_allocMethod == null || _grabMethod == null)
-                    {
-                        status = $"AOI_SDK 類別 {candidate.FullName} 缺少 Allocate/Grab 方法";
-                        continue;
-                    }
-
-                    return true;
-                }
-
-                status = "找不到 AOI_SDK 的 MdigGrab 類別 (請確認 AOI_SDK 已載入)";
-                return false;
-            }
-
-            private void BindMethods(Type t)
-            {
-                _allocMethod = FindMethod(t, "Alloc", "Allocate", "Initialize");
-                _startMethod = FindMethod(t, "Start", "GrabStart", "Run", "GrabContinuous");
-                _freeMethod = FindMethod(t, "Free", "Release", "Dispose", "Uninitialize");
-                _grabMethod = FindMethod(t, "Grab", "GetImage", "GetBitmap", "GrabFrame", "Capture");
-                _statusMethod = FindMethod(t, "Status", "GetStatus", "CameraStatus");
-            }
-
-            private static MethodInfo FindMethod(Type t, params string[] keys)
-            {
-                var methods = t.GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                    .Where(m => !m.IsSpecialName).ToArray();
-
-                foreach (var key in keys)
-                {
-                    var hit = methods.FirstOrDefault(m =>
-                        m.Name.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0 &&
-                        (m.GetParameters().Length == 0 || m.GetParameters().Length == 1));
-                    if (hit != null) return hit;
-                }
-
-                return null;
-            }
-
-            private static object ResolveInstance(Type t)
-            {
-                var instanceProp = t.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static);
-                if (instanceProp != null) return instanceProp.GetValue(null, null);
-
-                var defaultCtor = t.GetConstructor(Type.EmptyTypes);
-                return defaultCtor != null ? Activator.CreateInstance(t) : null;
-            }
-
-            private bool InvokeBool(MethodInfo method, out string status, string failText)
-            {
-                status = failText;
-                if (method == null) return true;
-
-                try
-                {
-                    object result = method.Invoke(_grabber, null);
-                    if (result is bool ok) return ok;
-                    if (result is int code) return code == 0;
-                    return true;
-                }
-                catch (Exception ex)
-                {
-                    status = $"{failText}: {ex.GetBaseException().Message}";
-                    return false;
-                }
-            }
-        }
-
-        // [修改] 委派給 Helper
+        // ==========================================
+        // --- 原本的委派事件 ---
+        // ==========================================
         private void OnCanvasStatusChanged(AOI.SDK.UI.CanvasInfo info)
-        {
-            _interactionHelper.UpdateCanvasInfo(info);
-        }
+            => _interactionHelper.UpdateCanvasInfo(info);
 
-        // [修改] 委派給 Helper
         private void OnCanvasEdgeReached(int direction)
-        {
-            _interactionHelper.NavigateCamera(direction);
-        }
+            => _interactionHelper.NavigateCamera(direction);
 
-        // [修改] 委派給 Helper
         private void _propertyGrid_PropertyValueChanged(object s, PropertyValueChangedEventArgs e)
-        {
-            _interactionHelper.HandleSettingsChanged();
-        }
+            => _interactionHelper.HandleSettingsChanged();
 
-        // [移除] 此方法已移至 Helper
-        // private void ApplySettingsToService() { ... }
-
-        // --- 按鈕事件 ---
         private void btnSelectFolder_Click(object sender, EventArgs e)
             => _interactionHelper.SelectAndLoadFolder();
 
@@ -494,5 +391,16 @@ namespace AniloxRoll.Monitor.Forms
         private async void btnShowProcessed_Click(object sender, EventArgs e)
             => await _interactionHelper.LoadImages(true);
 
+        private void checkBoxEnableImageProcessing_CheckedChanged(object sender, EventArgs e)
+        {
+            // 取得當前 CheckBox 的狀態
+            bool enableImageProcessing = checkBoxEnableImageProcessing.Checked;
+
+            // 遍歷所有已開啟的相機，即時更新它們的內部屬性
+            foreach (var cam in _cameras)
+            {
+                cam.EnableImageProcessing = enableImageProcessing;
+            }
+        }
     }
 }
