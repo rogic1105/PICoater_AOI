@@ -2,6 +2,7 @@
 using System.Runtime.InteropServices;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Threading;
 using Matrox.MatroxImagingLibrary;
 using AOI.SDK.Core;
@@ -47,6 +48,12 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         private int _frameWidth = 0;
         private int _frameHeight = 0;
+
+        private static readonly string[] ExposureControlCandidates =
+            { "M_EXPOSURE", "M_EXPOSURE_TIME", "M_CAMERA_EXPOSURE" };
+
+        private static bool _exposureControlResolved = false;
+        private static MIL_INT _exposureControlType = MIL.M_NULL;
         private byte[] _hostInputBuffer = null;
         private byte[] _hostOutputBuffer = null;
 
@@ -228,6 +235,43 @@ namespace AniloxRoll.Monitor.Core.Camera
                 MIL_INT height = (MIL_INT)CameraGrabHeight;
                 MIL.MdigControl(MilDigitizer, MIL.M_SOURCE_SIZE_Y, height);
             }
+
+            if (CameraExposureTimeUs > 0)
+            {
+                MIL_INT exposureControl = ResolveExposureControlType();
+                if (exposureControl != MIL.M_NULL)
+                {
+                    MIL.MdigControl(MilDigitizer, exposureControl, CameraExposureTimeUs);
+                }
+            }
+        }
+
+        private static MIL_INT ResolveExposureControlType()
+        {
+            if (_exposureControlResolved) return _exposureControlType;
+
+            _exposureControlResolved = true;
+            Type milType = typeof(MIL);
+            foreach (string name in ExposureControlCandidates)
+            {
+                FieldInfo f = milType.GetField(name, BindingFlags.Public | BindingFlags.Static);
+                if (f == null) continue;
+
+                object raw = f.GetValue(null);
+                if (raw == null) continue;
+
+                try
+                {
+                    _exposureControlType = (MIL_INT)Convert.ToInt64(raw);
+                    if (_exposureControlType != MIL.M_NULL) break;
+                }
+                catch
+                {
+                    // try next candidate
+                }
+            }
+
+            return _exposureControlType;
         }
 
         public void ApplyAcquisitionSettings()
