@@ -202,13 +202,13 @@ namespace AniloxRoll.Monitor.Core.Camera
                 if (processedByPicoater)
                 {
                     MIL.MbufCopy(cam._milProcBuffer, cam._milDisplayBuffer);
-                    cam.TrySaveCapture(cam._milProcBuffer);
                 }
                 else
                 {
                     MIL.MbufCopy(modifiedBuffer, cam._milDisplayBuffer);
-                    cam.TrySaveCapture(modifiedBuffer);
                 }
+
+                cam.TrySaveCapture(modifiedBuffer);
             }
 
             cam.UpdateFps();
