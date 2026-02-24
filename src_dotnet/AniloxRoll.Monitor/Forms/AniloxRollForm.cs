@@ -87,6 +87,7 @@ namespace AniloxRoll.Monitor.Forms
                 pixelText => { if (lblPixelInfo != null) lblPixelInfo.Text = pixelText; }
             );
             _liveCameraManager.SetCaptureSettings(_settings);
+            btnCameraAllocation.Visible = false;
 
             // 關閉視窗時確保釋放硬體
             FormClosed += (_, __) => _liveCameraManager.FreeCameras();
@@ -111,8 +112,15 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (!_liveCameraManager.IsAllocated)
             {
-                MessageBox.Show("請先點擊「相機配置」!", "提示");
-                return;
+                try
+                {
+                    _liveCameraManager.AllocateCameras(checkBoxEnableImageProcessing.Checked);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"相機配置失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
             }
 
             _liveCameraManager.ToggleGrab();
@@ -143,6 +151,31 @@ namespace AniloxRoll.Monitor.Forms
         {
             _interactionHelper.HandleSettingsChanged();
             _liveCameraManager?.SetCaptureSettings(_settings);
+
+            bool isCameraAcqParam =
+                e?.ChangedItem?.PropertyDescriptor?.Name == nameof(InspectionSettings.CameraGrabHeight) ||
+                e?.ChangedItem?.PropertyDescriptor?.Name == nameof(InspectionSettings.CameraExposureTimeUs);
+
+            if (isCameraAcqParam && _liveCameraManager != null && _liveCameraManager.IsAllocated)
+            {
+                bool wasLive = _liveCameraManager.IsLiveGrabbing;
+                _liveCameraManager.FreeCameras();
+                btnCameraGrab.Text = "開始抓取";
+
+                try
+                {
+                    _liveCameraManager.AllocateCameras(checkBoxEnableImageProcessing.Checked);
+                    if (wasLive)
+                    {
+                        _liveCameraManager.ToggleGrab();
+                        btnCameraGrab.Text = "停止抓取";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"重設相機失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
         }
 
         private void btnSelectFolder_Click(object sender, EventArgs e)
