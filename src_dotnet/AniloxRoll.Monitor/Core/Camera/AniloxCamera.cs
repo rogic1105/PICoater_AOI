@@ -98,6 +98,7 @@ namespace AniloxRoll.Monitor.Core.Camera
 
             if (MilDigitizer != MIL.M_NULL)
             {
+                ApplyDigitizerSettings();
                 MIL.MdispAlloc(_ownerSystemId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref MilDisplay);
                 MIL.MdispAlloc(_ownerSystemId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref MilSecondaryDisplay); // [新增] 分配第二顯示區
 
@@ -218,6 +219,22 @@ namespace AniloxRoll.Monitor.Core.Camera
             return MIL.M_NULL;
         }
 
+        private void ApplyDigitizerSettings()
+        {
+            if (MilDigitizer == MIL.M_NULL) return;
+
+            if (CameraGrabHeight > 0)
+            {
+                MIL_INT height = (MIL_INT)CameraGrabHeight;
+                MIL.MdigControl(MilDigitizer, MIL.M_SOURCE_SIZE_Y, height);
+            }
+        }
+
+        public void ApplyAcquisitionSettings()
+        {
+            ApplyDigitizerSettings();
+        }
+
         public void SetUserGrabIntent(bool enable)
         {
             _userWantsGrab = enable;
@@ -230,6 +247,7 @@ namespace AniloxRoll.Monitor.Core.Camera
 
             if (_userWantsGrab && !IsLive && CheckPresence())
             {
+                ApplyDigitizerSettings();
                 MIL.MdigProcess(MilDigitizer, _milGrabBuffers, _milGrabBufferListSize, MIL.M_START, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
                 ResetFps();
                 IsLive = true;

@@ -261,6 +261,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                 cam.CaptureRootPath = _captureRootPath;
                 cam.CameraGrabHeight = _cameraGrabHeight;
                 cam.CameraExposureTimeUs = _cameraExposureTimeUs;
+                cam.ApplyAcquisitionSettings();
             }
         }
 
