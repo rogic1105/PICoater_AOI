@@ -307,6 +307,11 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             foreach (var cam in _cameras)
             {
                 bool isConnected = cam.CheckPresence();
+                if (isConnected && cam.UserWantsGrab && !cam.IsLive)
+                {
+                    cam.ApplyGrabState();
+                }
+
                 string fpsText = cam.IsLive ? $" | FPS: {cam.CurrentFps:F1}" : "";
 
                 string statusText = isConnected

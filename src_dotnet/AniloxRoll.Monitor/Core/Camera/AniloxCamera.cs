@@ -444,6 +444,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         private MIL_INT CameraStatusHandler(MIL_INT HookType, MIL_ID EventId, IntPtr UserPtr)
         {
             if (_isReleased) return MIL.M_NULL;
+
             bool present = CheckPresence();
             if (!present && IsLive)
             {
@@ -451,6 +452,11 @@ namespace AniloxRoll.Monitor.Core.Camera
                 ResetFps();
                 IsLive = false;
             }
+            else if (present && _userWantsGrab && !IsLive)
+            {
+                ApplyGrabState();
+            }
+
             return MIL.M_NULL;
         }
     }
