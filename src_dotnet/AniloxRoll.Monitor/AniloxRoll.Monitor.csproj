@@ -81,6 +81,7 @@
     <Compile Include="Core\Data\InspectionData.cs" />
     <Compile Include="Core\Data\InspectionSettings.cs" />
     <Compile Include="Core\Data\InspectionSettingsStore.cs" />
+    <Compile Include="Core\Data\UserSettingsService.cs" />
     <Compile Include="Core\Interop\NativeMethods.cs" />
     <Compile Include="Core\Services\BatchInspectionService.cs" />
     <Compile Include="Core\Services\InspectionEngine.cs" />

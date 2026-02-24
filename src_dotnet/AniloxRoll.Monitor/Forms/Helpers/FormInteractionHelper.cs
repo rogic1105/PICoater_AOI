@@ -204,8 +204,8 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         {
             using (var fbd = new FolderBrowserDialog())
             {
-                if (Directory.Exists(Properties.Settings.Default.LastDataPath))
-                    fbd.SelectedPath = Properties.Settings.Default.LastDataPath;
+                if (Directory.Exists(UserSettingsService.LastDataPath))
+                    fbd.SelectedPath = UserSettingsService.LastDataPath;
 
                 if (fbd.ShowDialog() == DialogResult.OK)
                 {
@@ -219,10 +219,10 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                         return;
                     }
 
-                    Properties.Settings.Default.LastDataPath = fbd.SelectedPath;
-                    Properties.Settings.Default.Save();
+                    UserSettingsService.SetLastDataPath(fbd.SelectedPath);
+                    UserSettingsService.Save();
 
-                    _timeNavigator.Initialize(Properties.Settings.Default.LastYear);
+                    _timeNavigator.Initialize(UserSettingsService.LastYear);
 
                     _galleryManager.Select(lastCameraIndex, triggerEvent: false);
                     _currentCameraIndex = lastCameraIndex;

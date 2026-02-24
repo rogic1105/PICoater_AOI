@@ -9,7 +9,7 @@ namespace AniloxRoll.Monitor.Core.Data
         {
             try
             {
-                string xml = Properties.Settings.Default.InspectionConfigJson;
+                string xml = UserSettingsService.InspectionConfigJson;
                 if (string.IsNullOrWhiteSpace(xml)) return new InspectionSettings();
 
                 XmlSerializer serializer = new XmlSerializer(typeof(InspectionSettings));
@@ -32,8 +32,8 @@ namespace AniloxRoll.Monitor.Core.Data
                 using (StringWriter writer = new StringWriter())
                 {
                     serializer.Serialize(writer, settings);
-                    Properties.Settings.Default.InspectionConfigJson = writer.ToString();
-                    Properties.Settings.Default.Save();
+                    UserSettingsService.InspectionConfigJson = writer.ToString();
+                    UserSettingsService.Save();
                 }
             }
             catch
