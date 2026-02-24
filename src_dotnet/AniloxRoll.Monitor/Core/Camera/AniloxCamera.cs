@@ -193,6 +193,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                 if (!cam.EnableImageProcessing)
                 {
                     MIL.MbufCopy(modifiedBuffer, cam._milDisplayBuffer);
+                    cam.TrySaveCapture(modifiedBuffer);
                     cam.UpdateFps();
                     return MIL.M_NULL;
                 }
