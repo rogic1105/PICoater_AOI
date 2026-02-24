@@ -85,6 +85,16 @@ namespace AniloxRoll.Monitor.Core.Data
         [DisplayName("Error Value Max")]
         public float ErrorValueMax { get; set; } = 2.0f;
 
+
+        [Category("4. 截圖設定")]
+        [DisplayName("啟用即時截圖")]
+        public bool EnableAutoCapture { get; set; } = false;
+
+        [Category("4. 截圖設定")]
+        [DisplayName("截圖根目錄")]
+        [Description("格式: YYYY/YYYYMM/YYYYMMDD/YYYYMMDD_hhmmss-[CameraId].bmp")]
+        public string CaptureRootPath { get; set; } = @"D:\AniloxCaptures";
+
         // =================================================================
         // Helper Methods (Array Conversion)
         // =================================================================

@@ -86,6 +86,7 @@ namespace AniloxRoll.Monitor.Forms
                 panel8,
                 pixelText => { if (lblPixelInfo != null) lblPixelInfo.Text = pixelText; }
             );
+            _liveCameraManager.SetCaptureSettings(_settings);
 
             // 關閉視窗時確保釋放硬體
             FormClosed += (_, __) => _liveCameraManager.FreeCameras();
@@ -139,7 +140,10 @@ namespace AniloxRoll.Monitor.Forms
             => _interactionHelper.NavigateCamera(direction);
 
         private void _propertyGrid_PropertyValueChanged(object s, PropertyValueChangedEventArgs e)
-            => _interactionHelper.HandleSettingsChanged();
+        {
+            _interactionHelper.HandleSettingsChanged();
+            _liveCameraManager?.SetCaptureSettings(_settings);
+        }
 
         private void btnSelectFolder_Click(object sender, EventArgs e)
             => _interactionHelper.SelectAndLoadFolder();

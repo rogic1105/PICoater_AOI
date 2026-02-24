@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using Matrox.MatroxImagingLibrary;
 using AniloxRoll.Monitor.Core.Camera;
+using AniloxRoll.Monitor.Core.Data;
 
 namespace AniloxRoll.Monitor.Forms.Helpers
 {
@@ -32,6 +33,8 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         private readonly Dictionary<int, Label> _cameraStatusLabels = new Dictionary<int, Label>();
 
         private Timer _cameraStatusTimer;
+        private bool _enableAutoCapture;
+        private string _captureRootPath = string.Empty;
 
         public bool IsAllocated { get; private set; } = false;
         public bool IsLiveGrabbing { get; private set; } = false;
@@ -182,6 +185,9 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                     enableImageProcessing
                 );
 
+                cam.EnableAutoCapture = _enableAutoCapture;
+                cam.CaptureRootPath = _captureRootPath;
+
                 cam.OnMouseDataChanged += HandleMouseDataChanged;
                 cam.OnCameraClicked += SwitchMainDisplay;
                 cam.Initialize();
@@ -233,6 +239,20 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             foreach (var cam in _cameras)
             {
                 cam.EnableImageProcessing = enable;
+            }
+        }
+
+        public void SetCaptureSettings(InspectionSettings settings)
+        {
+            if (settings == null) return;
+
+            _enableAutoCapture = settings.EnableAutoCapture;
+            _captureRootPath = settings.CaptureRootPath ?? string.Empty;
+
+            foreach (var cam in _cameras)
+            {
+                cam.EnableAutoCapture = _enableAutoCapture;
+                cam.CaptureRootPath = _captureRootPath;
             }
         }
 

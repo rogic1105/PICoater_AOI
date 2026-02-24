@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
 using Matrox.MatroxImagingLibrary;
 using AOI.SDK.Core;
@@ -28,6 +29,8 @@ namespace AniloxRoll.Monitor.Core.Camera
         public bool UserWantsGrab => _userWantsGrab;
         public bool EnableImageProcessing { get; set; } = true;
         public bool EnableHessian { get; set; } = true;
+        public bool EnableAutoCapture { get; set; } = false;
+        public string CaptureRootPath { get; set; } = string.Empty;
         public double BinarizeThreshold { get; set; } = 128.0;
         public double HessianSigma { get; set; } = 85;
         public double HessianFixedMax { get; set; } = 1.0;
@@ -54,6 +57,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         private long _fpsWindowStartTicks = 0;
         private int _fpsFrameCount = 0;
         private double _currentFps = 0;
+        private string _lastCaptureSecondKey = string.Empty;
 
         public double CurrentFps => Volatile.Read(ref _currentFps);
 
@@ -198,10 +202,12 @@ namespace AniloxRoll.Monitor.Core.Camera
                 if (processedByPicoater)
                 {
                     MIL.MbufCopy(cam._milProcBuffer, cam._milDisplayBuffer);
+                    cam.TrySaveCapture(cam._milProcBuffer);
                 }
                 else
                 {
                     MIL.MbufCopy(modifiedBuffer, cam._milDisplayBuffer);
+                    cam.TrySaveCapture(modifiedBuffer);
                 }
             }
 
@@ -348,6 +354,37 @@ namespace AniloxRoll.Monitor.Core.Camera
                 {
                     return false;
                 }
+            }
+        }
+
+        private void TrySaveCapture(MIL_ID sourceBuffer)
+        {
+            if (!EnableAutoCapture) return;
+            if (sourceBuffer == MIL.M_NULL) return;
+            if (string.IsNullOrWhiteSpace(CaptureRootPath)) return;
+
+            try
+            {
+                DateTime now = DateTime.Now;
+                string secondKey = now.ToString("yyyyMMdd_HHmmss");
+                if (string.Equals(_lastCaptureSecondKey, secondKey, StringComparison.Ordinal)) return;
+
+                string yearFolder = now.ToString("yyyy");
+                string yearMonthFolder = now.ToString("yyyyMM");
+                string dayFolder = now.ToString("yyyyMMdd");
+                string fileName = $"{now:yyyyMMdd_HHmmss}-{CameraId}.bmp";
+
+                string saveDir = Path.Combine(CaptureRootPath, yearFolder, yearMonthFolder, dayFolder);
+                Directory.CreateDirectory(saveDir);
+
+                string fullPath = Path.Combine(saveDir, fileName);
+                MIL.MbufExport(fullPath, MIL.M_BMP, sourceBuffer);
+
+                _lastCaptureSecondKey = secondKey;
+            }
+            catch
+            {
+                // ignore save error
             }
         }
 
