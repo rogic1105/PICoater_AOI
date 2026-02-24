@@ -26,6 +26,7 @@ namespace AniloxRoll.Monitor.Forms
         // --- 資料緩存 ---
         private readonly List<Image> _thumbnailCache = new List<Image>();
         private InspectionSettings _settings;
+        private bool _isApplyingCameraReinit = false;
 
         public AniloxRollForm()
         {
@@ -156,15 +157,23 @@ namespace AniloxRoll.Monitor.Forms
                 e?.ChangedItem?.PropertyDescriptor?.Name == nameof(InspectionSettings.CameraGrabHeight) ||
                 e?.ChangedItem?.PropertyDescriptor?.Name == nameof(InspectionSettings.CameraExposureTimeUs);
 
-            if (isCameraAcqParam && _liveCameraManager != null && _liveCameraManager.IsAllocated)
+            if (isCameraAcqParam && _liveCameraManager != null && _liveCameraManager.IsAllocated && !_isApplyingCameraReinit)
             {
-                bool wasLive = _liveCameraManager.IsLiveGrabbing;
-                _liveCameraManager.FreeCameras();
-                btnCameraGrab.Text = "開始抓取";
-
+                _isApplyingCameraReinit = true;
                 try
                 {
+                    bool wasLive = _liveCameraManager.IsLiveGrabbing;
+                    if (wasLive)
+                    {
+                        _liveCameraManager.ToggleGrab();
+                    }
+
+                    _liveCameraManager.FreeCameras();
+                    btnCameraGrab.Text = "開始抓取";
+
                     _liveCameraManager.AllocateCameras(checkBoxEnableImageProcessing.Checked);
+                    _liveCameraManager.SetCaptureSettings(_settings);
+
                     if (wasLive)
                     {
                         _liveCameraManager.ToggleGrab();
@@ -174,6 +183,10 @@ namespace AniloxRoll.Monitor.Forms
                 catch (Exception ex)
                 {
                     MessageBox.Show($"重設相機失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+                finally
+                {
+                    _isApplyingCameraReinit = false;
                 }
             }
         }

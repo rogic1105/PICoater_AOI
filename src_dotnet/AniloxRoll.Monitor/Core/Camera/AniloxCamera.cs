@@ -50,7 +50,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         private int _frameHeight = 0;
 
         private static readonly string[] ExposureControlCandidates =
-            { "M_EXPOSURE", "M_EXPOSURE_TIME", "M_CAMERA_EXPOSURE" };
+            { "M_EXPOSURE", "M_EXPOSURE_TIME", "M_CAMERA_EXPOSURE", "M_GRAB_EXPOSURE" };
 
         private static bool _exposureControlResolved = false;
         private static MIL_INT _exposureControlType = MIL.M_NULL;
@@ -243,6 +243,54 @@ namespace AniloxRoll.Monitor.Core.Camera
                 {
                     MIL.MdigControl(MilDigitizer, exposureControl, CameraExposureTimeUs);
                 }
+                else
+                {
+                    TrySetExposureByFeature("ExposureTime", CameraExposureTimeUs);
+                    TrySetExposureByFeature("ExposureTimeAbs", CameraExposureTimeUs);
+                }
+            }
+        }
+
+        private void TrySetExposureByFeature(string featureName, double value)
+        {
+            if (MilDigitizer == MIL.M_NULL) return;
+            if (string.IsNullOrWhiteSpace(featureName)) return;
+
+            try
+            {
+                MethodInfo[] methods = typeof(MIL).GetMethods(BindingFlags.Public | BindingFlags.Static);
+                foreach (MethodInfo method in methods)
+                {
+                    if (!string.Equals(method.Name, "MdigControlFeature", StringComparison.Ordinal)) continue;
+
+                    ParameterInfo[] ps = method.GetParameters();
+                    if (ps.Length != 4) continue;
+
+                    object[] args = new object[4];
+                    args[0] = MilDigitizer;
+                    args[1] = ResolveMilConstant("M_FEATURE_VALUE");
+                    args[2] = featureName;
+                    args[3] = value;
+                    method.Invoke(null, args);
+                    break;
+                }
+            }
+            catch
+            {
+                // ignore if feature API is unavailable on this MIL version.
+            }
+        }
+
+        private static object ResolveMilConstant(string name)
+        {
+            try
+            {
+                FieldInfo f = typeof(MIL).GetField(name, BindingFlags.Public | BindingFlags.Static);
+                return f != null ? f.GetValue(null) : 0;
+            }
+            catch
+            {
+                return 0;
             }
         }
 
