@@ -86,6 +86,14 @@ namespace AniloxRoll.Monitor.Core.Data
         public float ErrorValueMax { get; set; } = 2.0f;
 
 
+        [Category("4. 相機取像參數")]
+        [DisplayName("取像高度 (Pixel)")]
+        public int CameraGrabHeight { get; set; } = 0;
+
+        [Category("4. 相機取像參數")]
+        [DisplayName("曝光時間 (us)")]
+        public double CameraExposureTimeUs { get; set; } = 0;
+
         [Category("4. 截圖設定")]
         [DisplayName("啟用即時截圖")]
         public bool EnableAutoCapture { get; set; } = false;

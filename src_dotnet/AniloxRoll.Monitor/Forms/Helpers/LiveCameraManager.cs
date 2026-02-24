@@ -35,6 +35,8 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         private Timer _cameraStatusTimer;
         private bool _enableAutoCapture;
         private string _captureRootPath = string.Empty;
+        private int _cameraGrabHeight;
+        private double _cameraExposureTimeUs;
 
         public bool IsAllocated { get; private set; } = false;
         public bool IsLiveGrabbing { get; private set; } = false;
@@ -187,6 +189,8 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
                 cam.EnableAutoCapture = _enableAutoCapture;
                 cam.CaptureRootPath = _captureRootPath;
+                cam.CameraGrabHeight = _cameraGrabHeight;
+                cam.CameraExposureTimeUs = _cameraExposureTimeUs;
 
                 cam.OnMouseDataChanged += HandleMouseDataChanged;
                 cam.OnCameraClicked += SwitchMainDisplay;
@@ -248,11 +252,15 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
             _enableAutoCapture = settings.EnableAutoCapture;
             _captureRootPath = settings.CaptureRootPath ?? string.Empty;
+            _cameraGrabHeight = settings.CameraGrabHeight;
+            _cameraExposureTimeUs = settings.CameraExposureTimeUs;
 
             foreach (var cam in _cameras)
             {
                 cam.EnableAutoCapture = _enableAutoCapture;
                 cam.CaptureRootPath = _captureRootPath;
+                cam.CameraGrabHeight = _cameraGrabHeight;
+                cam.CameraExposureTimeUs = _cameraExposureTimeUs;
             }
         }
 

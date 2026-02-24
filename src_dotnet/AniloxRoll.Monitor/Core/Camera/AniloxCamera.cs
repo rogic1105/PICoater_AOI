@@ -31,6 +31,8 @@ namespace AniloxRoll.Monitor.Core.Camera
         public bool EnableHessian { get; set; } = true;
         public bool EnableAutoCapture { get; set; } = false;
         public string CaptureRootPath { get; set; } = string.Empty;
+        public int CameraGrabHeight { get; set; } = 0;
+        public double CameraExposureTimeUs { get; set; } = 0;
         public double BinarizeThreshold { get; set; } = 128.0;
         public double HessianSigma { get; set; } = 85;
         public double HessianFixedMax { get; set; } = 1.0;
