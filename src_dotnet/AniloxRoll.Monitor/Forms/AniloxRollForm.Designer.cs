@@ -28,15 +28,14 @@
         /// </summary>
         private void InitializeComponent()
         {
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea1 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend1 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series1 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea2 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend2 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series2 = new System.Windows.Forms.DataVisualization.Charting.Series();
             this.tabControl = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.checkBoxEnableImageProcessing = new System.Windows.Forms.CheckBox();
             this.btnCameraFree = new System.Windows.Forms.Button();
             this.btnCameraGrab = new System.Windows.Forms.Button();
-            this.btnCameraAllocation = new System.Windows.Forms.Button();
             this.panel8 = new System.Windows.Forms.Panel();
             this.panel7 = new System.Windows.Forms.Panel();
             this.panel6 = new System.Windows.Forms.Panel();
@@ -107,7 +106,6 @@
             this.tabPage1.Controls.Add(this.checkBoxEnableImageProcessing);
             this.tabPage1.Controls.Add(this.btnCameraFree);
             this.tabPage1.Controls.Add(this.btnCameraGrab);
-            this.tabPage1.Controls.Add(this.btnCameraAllocation);
             this.tabPage1.Controls.Add(this.panel8);
             this.tabPage1.Controls.Add(this.panel7);
             this.tabPage1.Controls.Add(this.panel6);
@@ -139,10 +137,10 @@
             // 
             // btnCameraFree
             // 
-            this.btnCameraFree.Location = new System.Drawing.Point(1084, 81);
+            this.btnCameraFree.Location = new System.Drawing.Point(1084, 68);
             this.btnCameraFree.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.btnCameraFree.Name = "btnCameraFree";
-            this.btnCameraFree.Size = new System.Drawing.Size(93, 29);
+            this.btnCameraFree.Size = new System.Drawing.Size(93, 49);
             this.btnCameraFree.TabIndex = 5;
             this.btnCameraFree.Text = "Free";
             this.btnCameraFree.UseVisualStyleBackColor = true;
@@ -150,25 +148,14 @@
             // 
             // btnCameraGrab
             // 
-            this.btnCameraGrab.Location = new System.Drawing.Point(1084, 44);
+            this.btnCameraGrab.Location = new System.Drawing.Point(1084, 7);
             this.btnCameraGrab.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.btnCameraGrab.Name = "btnCameraGrab";
-            this.btnCameraGrab.Size = new System.Drawing.Size(93, 29);
+            this.btnCameraGrab.Size = new System.Drawing.Size(93, 49);
             this.btnCameraGrab.TabIndex = 4;
             this.btnCameraGrab.Text = "Grab";
             this.btnCameraGrab.UseVisualStyleBackColor = true;
             this.btnCameraGrab.Click += new System.EventHandler(this.btnCameraGrab_Click);
-            // 
-            // btnCameraAllocation
-            // 
-            this.btnCameraAllocation.Location = new System.Drawing.Point(1084, 7);
-            this.btnCameraAllocation.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
-            this.btnCameraAllocation.Name = "btnCameraAllocation";
-            this.btnCameraAllocation.Size = new System.Drawing.Size(93, 29);
-            this.btnCameraAllocation.TabIndex = 2;
-            this.btnCameraAllocation.Text = "Allocation MIL";
-            this.btnCameraAllocation.UseVisualStyleBackColor = true;
-            this.btnCameraAllocation.Click += new System.EventHandler(this.btnCameraAllocation_Click);
             // 
             // panel8
             // 
@@ -343,17 +330,17 @@
             // 
             // chartMura
             // 
-            chartArea1.Name = "ChartArea1";
-            this.chartMura.ChartAreas.Add(chartArea1);
+            chartArea2.Name = "ChartArea1";
+            this.chartMura.ChartAreas.Add(chartArea2);
             this.chartMura.Dock = System.Windows.Forms.DockStyle.Fill;
-            legend1.Name = "Legend1";
-            this.chartMura.Legends.Add(legend1);
+            legend2.Name = "Legend1";
+            this.chartMura.Legends.Add(legend2);
             this.chartMura.Location = new System.Drawing.Point(3, 349);
             this.chartMura.Name = "chartMura";
-            series1.ChartArea = "ChartArea1";
-            series1.Legend = "Legend1";
-            series1.Name = "Series1";
-            this.chartMura.Series.Add(series1);
+            series2.ChartArea = "ChartArea1";
+            series2.Legend = "Legend1";
+            series2.Name = "Series1";
+            this.chartMura.Series.Add(series2);
             this.chartMura.Size = new System.Drawing.Size(1064, 143);
             this.chartMura.TabIndex = 16;
             this.chartMura.Text = "chart1";
@@ -620,7 +607,6 @@
         private System.Windows.Forms.Panel panel4;
         private System.Windows.Forms.Panel panel3;
         private System.Windows.Forms.Panel panel2;
-        private System.Windows.Forms.Button btnCameraAllocation;
         private System.Windows.Forms.Button btnCameraFree;
         private System.Windows.Forms.Button btnCameraGrab;
         private System.Windows.Forms.CheckBox checkBoxEnableImageProcessing;

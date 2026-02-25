@@ -91,7 +91,6 @@ namespace AniloxRoll.Monitor.Forms
                 pixelText => { if (lblPixelInfo != null) lblPixelInfo.Text = pixelText; }
             );
             _liveCameraManager.SetCaptureSettings(_settings);
-            btnCameraAllocation.Visible = false;
 
             // 關閉視窗時確保釋放硬體
             FormClosed += (_, __) => _liveCameraManager.FreeCameras();
