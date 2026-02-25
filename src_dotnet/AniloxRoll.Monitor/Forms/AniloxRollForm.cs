@@ -28,6 +28,7 @@ namespace AniloxRoll.Monitor.Forms
         private InspectionSettings _settings;
         private bool _isApplyingCameraReinit = false;
         private bool _lastReviewProcessedMode = false;
+        private bool _isPeriodNavigationBusy = false;
 
         public AniloxRollForm()
         {
@@ -74,6 +75,13 @@ namespace AniloxRoll.Monitor.Forms
             _presenter.LogReported += log => Console.WriteLine(log);
             _galleryManager.SelectionChanged += _interactionHelper.OnGallerySelectionChanged;
 
+            cbYear.SelectedIndexChanged += (_, __) => UpdatePeriodNavigationState();
+            cbMonth.SelectedIndexChanged += (_, __) => UpdatePeriodNavigationState();
+            cbDay.SelectedIndexChanged += (_, __) => UpdatePeriodNavigationState();
+            cbHour.SelectedIndexChanged += (_, __) => UpdatePeriodNavigationState();
+            cbMin.SelectedIndexChanged += (_, __) => UpdatePeriodNavigationState();
+            cbSec.SelectedIndexChanged += (_, __) => UpdatePeriodNavigationState();
+
             canvasMain.StatusChanged += OnCanvasStatusChanged;
             canvasMain.EdgeReached += OnCanvasEdgeReached;
 
@@ -94,6 +102,8 @@ namespace AniloxRoll.Monitor.Forms
 
             // 關閉視窗時確保釋放硬體
             FormClosed += (_, __) => _liveCameraManager.FreeCameras();
+
+            UpdatePeriodNavigationState();
         }
 
         // ==========================================
@@ -196,18 +206,25 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         private void btnSelectFolder_Click(object sender, EventArgs e)
-            => _interactionHelper.SelectAndLoadFolder();
+        {
+            _interactionHelper.SelectAndLoadFolder();
+            UpdatePeriodNavigationState();
+        }
 
         private async void btnShowOriginal_Click(object sender, EventArgs e)
         {
+            if (_isPeriodNavigationBusy) return;
+
             _lastReviewProcessedMode = false;
-            await _interactionHelper.LoadImages(false);
+            await LoadImagesWithPeriodLockAsync(false);
         }
 
         private async void btnShowProcessed_Click(object sender, EventArgs e)
         {
+            if (_isPeriodNavigationBusy) return;
+
             _lastReviewProcessedMode = true;
-            await _interactionHelper.LoadImages(true);
+            await LoadImagesWithPeriodLockAsync(true);
         }
 
         private async void btnLastPeriod_Click(object sender, EventArgs e)
@@ -218,8 +235,16 @@ namespace AniloxRoll.Monitor.Forms
 
         private async Task MovePeriodAsync(int step)
         {
+            if (_isPeriodNavigationBusy) return;
+
+            SetPeriodNavigationBusy(true);
+
             var periods = _imageRepository.GetAvailablePeriods();
-            if (periods.Count == 0) return;
+            if (periods.Count == 0)
+            {
+                SetPeriodNavigationBusy(false);
+                return;
+            }
 
             DateTime current = GetCurrentPeriodOrDefault(periods[0]);
             int idx = periods.FindIndex(x => x == current);
@@ -230,8 +255,71 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             int target = Math.Max(0, Math.Min(periods.Count - 1, idx + step));
+            if (target == idx)
+            {
+                SetPeriodNavigationBusy(false);
+                return;
+            }
+
             SetPeriodToCombo(periods[target]);
-            await _interactionHelper.LoadImages(_lastReviewProcessedMode);
+            try
+            {
+                await _interactionHelper.LoadImages(_lastReviewProcessedMode);
+            }
+            finally
+            {
+                SetPeriodNavigationBusy(false);
+            }
+        }
+
+        private async Task LoadImagesWithPeriodLockAsync(bool isProcessedMode)
+        {
+            SetPeriodNavigationBusy(true);
+
+            try
+            {
+                await _interactionHelper.LoadImages(isProcessedMode);
+            }
+            finally
+            {
+                SetPeriodNavigationBusy(false);
+            }
+        }
+
+        private void SetPeriodNavigationBusy(bool isBusy)
+        {
+            _isPeriodNavigationBusy = isBusy;
+            UpdatePeriodNavigationState();
+        }
+
+        private void UpdatePeriodNavigationState()
+        {
+            if (_isPeriodNavigationBusy)
+            {
+                btnLastPeriod.Enabled = false;
+                btnNextPeriod.Enabled = false;
+                return;
+            }
+
+            var periods = _imageRepository.GetAvailablePeriods();
+            if (periods.Count == 0)
+            {
+                btnLastPeriod.Enabled = false;
+                btnNextPeriod.Enabled = false;
+                return;
+            }
+
+            DateTime current = GetCurrentPeriodOrDefault(periods[0]);
+            int idx = periods.FindIndex(x => x == current);
+
+            if (idx < 0)
+            {
+                idx = periods.FindLastIndex(x => x <= current);
+                if (idx < 0) idx = 0;
+            }
+
+            btnLastPeriod.Enabled = idx > 0;
+            btnNextPeriod.Enabled = idx < periods.Count - 1;
         }
 
         private DateTime GetCurrentPeriodOrDefault(DateTime fallback)
