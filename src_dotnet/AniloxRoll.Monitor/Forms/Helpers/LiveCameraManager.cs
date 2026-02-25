@@ -5,6 +5,7 @@ using System.Windows.Forms;
 using Matrox.MatroxImagingLibrary;
 using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Data;
+using AniloxRoll.Monitor.Core.Services;
 
 namespace AniloxRoll.Monitor.Forms.Helpers
 {
@@ -191,6 +192,8 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                 cam.CaptureRootPath = _captureRootPath;
                 cam.CameraGrabHeight = _cameraGrabHeight;
                 cam.CameraExposureTimeUs = _cameraExposureTimeUs;
+                cam.HessianSigma = InspectionEngineConfig.DefaultRidgeSigma;
+                cam.HessianFixedMax =  InspectionEngineConfig.DefaultHessianMaxFactor;
 
                 cam.OnMouseDataChanged += HandleMouseDataChanged;
                 cam.OnCameraClicked += SwitchMainDisplay;
@@ -272,6 +275,9 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             _captureRootPath = settings.CaptureRootPath ?? string.Empty;
             _cameraGrabHeight = settings.CameraGrabHeight;
             _cameraExposureTimeUs = settings.CameraExposureTimeUs;
+            float hessianMaxFactor = settings.HessianMaxFactor > 0
+                ? settings.HessianMaxFactor
+                : InspectionEngineConfig.DefaultHessianMaxFactor;
 
             foreach (var cam in _cameras)
             {
@@ -279,6 +285,8 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                 cam.CaptureRootPath = _captureRootPath;
                 cam.CameraGrabHeight = _cameraGrabHeight;
                 cam.CameraExposureTimeUs = _cameraExposureTimeUs;
+                cam.HessianSigma = InspectionEngineConfig.DefaultRidgeSigma;
+                cam.HessianFixedMax = hessianMaxFactor;
                 cam.ApplyAcquisitionSettings();
             }
         }
