@@ -28,7 +28,8 @@ namespace AniloxRoll.Monitor.Forms
         private InspectionSettings _settings;
         private bool _isApplyingCameraReinit = false;
         private bool _lastReviewProcessedMode = false;
-        private bool _isPeriodSwitching = false;
+        private bool _isPeriodNavigationBusy = false;
+        private int _periodNavigationBusyCount = 0;
 
         public AniloxRollForm()
         {
@@ -72,12 +73,11 @@ namespace AniloxRoll.Monitor.Forms
             _interactionHelper.ApplySettingsToService();
 
             _presenter.BusyStateChanged += _interactionHelper.SetUiLoadingState;
-            _presenter.BusyStateChanged += OnPresenterBusyStateChanged;
             _presenter.LogReported += log => Console.WriteLine(log);
             _galleryManager.SelectionChanged += _interactionHelper.OnGallerySelectionChanged;
 
             BindPeriodEvents();
-            UpdatePeriodNavigationButtons();
+            UpdatePeriodNavigationState();
 
             canvasMain.StatusChanged += OnCanvasStatusChanged;
             canvasMain.EdgeReached += OnCanvasEdgeReached;
@@ -203,19 +203,23 @@ namespace AniloxRoll.Monitor.Forms
         private void btnSelectFolder_Click(object sender, EventArgs e)
         {
             _interactionHelper.SelectAndLoadFolder();
-            UpdatePeriodNavigationButtons();
+            UpdatePeriodNavigationState();
         }
 
         private async void btnShowOriginal_Click(object sender, EventArgs e)
         {
+            if (_isPeriodNavigationBusy) return;
+
             _lastReviewProcessedMode = false;
-            await _interactionHelper.LoadImages(false);
+            await LoadImagesWithPeriodLockAsync(false);
         }
 
         private async void btnShowProcessed_Click(object sender, EventArgs e)
         {
+            if (_isPeriodNavigationBusy) return;
+
             _lastReviewProcessedMode = true;
-            await _interactionHelper.LoadImages(true);
+            await LoadImagesWithPeriodLockAsync(true);
         }
 
         private async void btnLastPeriod_Click(object sender, EventArgs e)
@@ -226,10 +230,14 @@ namespace AniloxRoll.Monitor.Forms
 
         private async Task MovePeriodAsync(int step)
         {
-            if (_isPeriodSwitching) return;
+            if (_isPeriodNavigationBusy) return;
 
             var periods = _imageRepository.GetAvailablePeriods();
-            if (periods.Count == 0) return;
+            if (periods.Count == 0)
+            {
+                UpdatePeriodNavigationState();
+                return;
+            }
 
             DateTime current = GetCurrentPeriodOrDefault(periods[0]);
             int idx = periods.FindIndex(x => x == current);
@@ -242,23 +250,12 @@ namespace AniloxRoll.Monitor.Forms
             int target = Math.Max(0, Math.Min(periods.Count - 1, idx + step));
             if (target == idx)
             {
-                UpdatePeriodNavigationButtons();
+                UpdatePeriodNavigationState();
                 return;
             }
 
             SetPeriodToCombo(periods[target]);
-
-            try
-            {
-                _isPeriodSwitching = true;
-                UpdatePeriodNavigationButtons();
-                await _interactionHelper.LoadImages(_lastReviewProcessedMode);
-            }
-            finally
-            {
-                _isPeriodSwitching = false;
-                UpdatePeriodNavigationButtons();
-            }
+            await LoadImagesWithPeriodLockAsync(_lastReviewProcessedMode);
         }
 
         private DateTime GetCurrentPeriodOrDefault(DateTime fallback)
@@ -293,15 +290,36 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         private void OnPeriodSelectionChanged(object sender, EventArgs e)
-            => UpdatePeriodNavigationButtons();
+            => UpdatePeriodNavigationState();
 
-        private void OnPresenterBusyStateChanged(bool isBusy)
+        private async Task LoadImagesWithPeriodLockAsync(bool isProcessedMode)
         {
-            _isPeriodSwitching = isBusy;
-            UpdatePeriodNavigationButtons();
+            BeginPeriodNavigationBusy();
+            try
+            {
+                await _interactionHelper.LoadImages(isProcessedMode);
+            }
+            finally
+            {
+                EndPeriodNavigationBusy();
+            }
         }
 
-        private void UpdatePeriodNavigationButtons()
+        private void BeginPeriodNavigationBusy()
+        {
+            _periodNavigationBusyCount++;
+            _isPeriodNavigationBusy = _periodNavigationBusyCount > 0;
+            UpdatePeriodNavigationState();
+        }
+
+        private void EndPeriodNavigationBusy()
+        {
+            _periodNavigationBusyCount = Math.Max(0, _periodNavigationBusyCount - 1);
+            _isPeriodNavigationBusy = _periodNavigationBusyCount > 0;
+            UpdatePeriodNavigationState();
+        }
+
+        private void UpdatePeriodNavigationState()
         {
             var periods = _imageRepository.GetAvailablePeriods();
             if (periods.Count == 0)
@@ -319,7 +337,7 @@ namespace AniloxRoll.Monitor.Forms
                 if (idx < 0) idx = 0;
             }
 
-            bool canOperate = !_isPeriodSwitching;
+            bool canOperate = !_isPeriodNavigationBusy;
             btnLastPeriod.Enabled = canOperate && idx > 0;
             btnNextPeriod.Enabled = canOperate && idx < periods.Count - 1;
         }
