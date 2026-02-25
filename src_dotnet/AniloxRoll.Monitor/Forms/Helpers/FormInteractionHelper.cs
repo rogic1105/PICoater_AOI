@@ -78,7 +78,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         public void HandleSettingsChanged()
         {
             if (_settings == null) return;
-            _settings.SaveToSettings();
+            InspectionSettingsStore.Save(_settings);
             ApplySettingsToService();
             if (_muraChartHelper != null)
             {
@@ -204,8 +204,10 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         {
             using (var fbd = new FolderBrowserDialog())
             {
-                if (Directory.Exists(Properties.Settings.Default.LastDataPath))
-                    fbd.SelectedPath = Properties.Settings.Default.LastDataPath;
+                string preferredPath = UserSettingsService.LastDataPath;
+                if (!Directory.Exists(preferredPath)) preferredPath = @"D:\AniloxCaptures";
+                if (Directory.Exists(preferredPath))
+                    fbd.SelectedPath = preferredPath;
 
                 if (fbd.ShowDialog() == DialogResult.OK)
                 {
@@ -219,10 +221,10 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                         return;
                     }
 
-                    Properties.Settings.Default.LastDataPath = fbd.SelectedPath;
-                    Properties.Settings.Default.Save();
+                    UserSettingsService.SetLastDataPath(fbd.SelectedPath);
+                    UserSettingsService.Save();
 
-                    _timeNavigator.Initialize(Properties.Settings.Default.LastYear);
+                    _timeNavigator.Initialize(UserSettingsService.LastYear);
 
                     _galleryManager.Select(lastCameraIndex, triggerEvent: false);
                     _currentCameraIndex = lastCameraIndex;

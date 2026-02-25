@@ -61,6 +61,7 @@
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Configuration" />
     <Reference Include="System.Windows.Forms.DataVisualization" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
@@ -80,9 +81,13 @@
     <Compile Include="Core\Data\ImageRepository.cs" />
     <Compile Include="Core\Data\InspectionData.cs" />
     <Compile Include="Core\Data\InspectionSettings.cs" />
+    <Compile Include="Core\Data\InspectionSettingsStore.cs" />
+    <Compile Include="Core\Data\UserSettingsService.cs" />
     <Compile Include="Core\Interop\NativeMethods.cs" />
     <Compile Include="Core\Services\BatchInspectionService.cs" />
     <Compile Include="Core\Services\InspectionEngine.cs" />
+    <Compile Include="Core\Services\InspectionEngine.ImageProcessing.cs" />
+    <Compile Include="Core\Services\InspectionEngineConfig.cs" />
     <Compile Include="Forms\AniloxRollForm.cs">
       <SubType>Form</SubType>
     </Compile>
