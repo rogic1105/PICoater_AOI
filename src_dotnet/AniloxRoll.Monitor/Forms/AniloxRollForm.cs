@@ -29,6 +29,7 @@ namespace AniloxRoll.Monitor.Forms
         private bool _isApplyingCameraReinit = false;
         private bool _lastReviewProcessedMode = false;
         private bool _isPeriodNavigationBusy = false;
+        private bool _isFullResLoading = false;
 
         public AniloxRollForm()
         {
@@ -74,6 +75,11 @@ namespace AniloxRoll.Monitor.Forms
             _presenter.BusyStateChanged += _interactionHelper.SetUiLoadingState;
             _presenter.LogReported += log => Console.WriteLine(log);
             _galleryManager.SelectionChanged += _interactionHelper.OnGallerySelectionChanged;
+            _interactionHelper.FullResLoadingStateChanged += isLoading =>
+            {
+                _isFullResLoading = isLoading;
+                UpdatePeriodNavigationState();
+            };
 
             cbYear.SelectedIndexChanged += (_, __) => UpdatePeriodNavigationState();
             cbMonth.SelectedIndexChanged += (_, __) => UpdatePeriodNavigationState();
@@ -295,6 +301,13 @@ namespace AniloxRoll.Monitor.Forms
         private void UpdatePeriodNavigationState()
         {
             if (_isPeriodNavigationBusy)
+            {
+                btnLastPeriod.Enabled = false;
+                btnNextPeriod.Enabled = false;
+                return;
+            }
+
+            if (_isFullResLoading)
             {
                 btnLastPeriod.Enabled = false;
                 btnNextPeriod.Enabled = false;

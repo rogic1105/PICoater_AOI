@@ -65,6 +65,8 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             _statusLabel = statusLabel;
         }
 
+        public event Action<bool> FullResLoadingStateChanged;
+
         public void ApplySettingsToService()
         {
             if (_inspectionService == null || _settings == null) return;
@@ -176,6 +178,8 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
             if (_isBusy) return;
 
+            FullResLoadingStateChanged?.Invoke(true);
+
             try
             {
                 AniloxRoll.Monitor.Core.Data.InspectionData data = _inspectionService.RunInspectionFullRes(index);
@@ -197,6 +201,10 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             catch (Exception ex)
             {
                 MessageBox.Show(_form, "載入圖像失敗: " + ex.Message);
+            }
+            finally
+            {
+                FullResLoadingStateChanged?.Invoke(false);
             }
         }
 
