@@ -28,6 +28,7 @@ namespace AniloxRoll.Monitor.Forms
         private InspectionSettings _settings;
         private bool _isApplyingCameraReinit = false;
         private bool _lastReviewProcessedMode = false;
+        private bool _isPeriodSwitching = false;
 
         public AniloxRollForm()
         {
@@ -71,8 +72,12 @@ namespace AniloxRoll.Monitor.Forms
             _interactionHelper.ApplySettingsToService();
 
             _presenter.BusyStateChanged += _interactionHelper.SetUiLoadingState;
+            _presenter.BusyStateChanged += OnPresenterBusyStateChanged;
             _presenter.LogReported += log => Console.WriteLine(log);
             _galleryManager.SelectionChanged += _interactionHelper.OnGallerySelectionChanged;
+
+            BindPeriodEvents();
+            UpdatePeriodNavigationButtons();
 
             canvasMain.StatusChanged += OnCanvasStatusChanged;
             canvasMain.EdgeReached += OnCanvasEdgeReached;
@@ -196,7 +201,10 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         private void btnSelectFolder_Click(object sender, EventArgs e)
-            => _interactionHelper.SelectAndLoadFolder();
+        {
+            _interactionHelper.SelectAndLoadFolder();
+            UpdatePeriodNavigationButtons();
+        }
 
         private async void btnShowOriginal_Click(object sender, EventArgs e)
         {
@@ -218,6 +226,8 @@ namespace AniloxRoll.Monitor.Forms
 
         private async Task MovePeriodAsync(int step)
         {
+            if (_isPeriodSwitching) return;
+
             var periods = _imageRepository.GetAvailablePeriods();
             if (periods.Count == 0) return;
 
@@ -230,8 +240,25 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             int target = Math.Max(0, Math.Min(periods.Count - 1, idx + step));
+            if (target == idx)
+            {
+                UpdatePeriodNavigationButtons();
+                return;
+            }
+
             SetPeriodToCombo(periods[target]);
-            await _interactionHelper.LoadImages(_lastReviewProcessedMode);
+
+            try
+            {
+                _isPeriodSwitching = true;
+                UpdatePeriodNavigationButtons();
+                await _interactionHelper.LoadImages(_lastReviewProcessedMode);
+            }
+            finally
+            {
+                _isPeriodSwitching = false;
+                UpdatePeriodNavigationButtons();
+            }
         }
 
         private DateTime GetCurrentPeriodOrDefault(DateTime fallback)
@@ -253,6 +280,48 @@ namespace AniloxRoll.Monitor.Forms
             cbHour.Text = dt.ToString("HH");
             cbMin.Text = dt.ToString("mm");
             cbSec.Text = dt.ToString("ss");
+        }
+
+        private void BindPeriodEvents()
+        {
+            cbYear.SelectedIndexChanged += OnPeriodSelectionChanged;
+            cbMonth.SelectedIndexChanged += OnPeriodSelectionChanged;
+            cbDay.SelectedIndexChanged += OnPeriodSelectionChanged;
+            cbHour.SelectedIndexChanged += OnPeriodSelectionChanged;
+            cbMin.SelectedIndexChanged += OnPeriodSelectionChanged;
+            cbSec.SelectedIndexChanged += OnPeriodSelectionChanged;
+        }
+
+        private void OnPeriodSelectionChanged(object sender, EventArgs e)
+            => UpdatePeriodNavigationButtons();
+
+        private void OnPresenterBusyStateChanged(bool isBusy)
+        {
+            _isPeriodSwitching = isBusy;
+            UpdatePeriodNavigationButtons();
+        }
+
+        private void UpdatePeriodNavigationButtons()
+        {
+            var periods = _imageRepository.GetAvailablePeriods();
+            if (periods.Count == 0)
+            {
+                btnLastPeriod.Enabled = false;
+                btnNextPeriod.Enabled = false;
+                return;
+            }
+
+            DateTime current = GetCurrentPeriodOrDefault(periods[0]);
+            int idx = periods.FindIndex(x => x == current);
+            if (idx < 0)
+            {
+                idx = periods.FindLastIndex(x => x <= current);
+                if (idx < 0) idx = 0;
+            }
+
+            bool canOperate = !_isPeriodSwitching;
+            btnLastPeriod.Enabled = canOperate && idx > 0;
+            btnNextPeriod.Enabled = canOperate && idx < periods.Count - 1;
         }
 
     }
