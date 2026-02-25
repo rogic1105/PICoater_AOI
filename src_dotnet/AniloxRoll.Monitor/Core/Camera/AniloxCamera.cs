@@ -7,6 +7,7 @@ using System.Threading;
 using Matrox.MatroxImagingLibrary;
 using AOI.SDK.Core;
 using AniloxRoll.Monitor.Core.Interop;
+using AniloxRoll.Monitor.Core.Services;
 
 namespace AniloxRoll.Monitor.Core.Camera
 {
@@ -35,8 +36,8 @@ namespace AniloxRoll.Monitor.Core.Camera
         public int CameraGrabHeight { get; set; } = 0;
         public double CameraExposureTimeUs { get; set; } = 0;
         public double BinarizeThreshold { get; set; } = 128.0;
-        public double HessianSigma { get; set; } = 85;
-        public double HessianFixedMax { get; set; } = 1.0;
+        public double HessianSigma { get; set; } = InspectionEngineConfig.DefaultRidgeSigma;
+        public double HessianFixedMax { get; set; } = InspectionEngineConfig.DefaultHessianMaxFactor;
 
         private bool _userWantsGrab = false;
         private bool _isReleased = false;
@@ -451,10 +452,10 @@ namespace AniloxRoll.Monitor.Core.Camera
                         _picoaterRidgeBuffer,
                         IntPtr.Zero,
                         IntPtr.Zero,
-                        2.0f,
+                        InspectionEngineConfig.DefaultBgSigma,
                         (float)HessianSigma,
                         (float)HessianFixedMax,
-                        "vertical"
+                        InspectionEngineConfig.DefaultRidgeMode
                     );
 
                     if (ret != 0) return false;
