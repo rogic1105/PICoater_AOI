@@ -207,11 +207,29 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         public void ToggleGrab()
         {
             if (!IsAllocated) return;
+            if (IsLiveGrabbing) StopGrab();
+            else StartGrab();
+        }
 
-            IsLiveGrabbing = !IsLiveGrabbing;
+        public void StartGrab()
+        {
+            if (!IsAllocated || IsLiveGrabbing) return;
+
+            IsLiveGrabbing = true;
             foreach (var cam in _cameras)
             {
-                cam.SetUserGrabIntent(IsLiveGrabbing);
+                cam.SetUserGrabIntent(true);
+            }
+        }
+
+        public void StopGrab()
+        {
+            if (!IsAllocated || !IsLiveGrabbing) return;
+
+            IsLiveGrabbing = false;
+            foreach (var cam in _cameras)
+            {
+                cam.SetUserGrabIntent(false);
             }
         }
 
