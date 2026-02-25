@@ -50,11 +50,11 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         }
 
         // 封裝各層級的更新邏輯，不再讓 Form 直接呼叫 Repository
-        private void UpdateMonth() => UpdateCombo(_cbMonth, _repository.GetMonths(_cbYear.Text), Properties.Settings.Default.LastMonth);
-        private void UpdateDay() => UpdateCombo(_cbDay, _repository.GetDays(_cbYear.Text, _cbMonth.Text), Properties.Settings.Default.LastDay);
-        private void UpdateHour() => UpdateCombo(_cbHour, _repository.GetHours(_cbYear.Text, _cbMonth.Text, _cbDay.Text), Properties.Settings.Default.LastHour);
-        private void UpdateMinute() => UpdateCombo(_cbMin, _repository.GetMinutes(_cbYear.Text, _cbMonth.Text, _cbDay.Text, _cbHour.Text), Properties.Settings.Default.LastMin);
-        private void UpdateSecond() => UpdateCombo(_cbSec, _repository.GetSeconds(_cbYear.Text, _cbMonth.Text, _cbDay.Text, _cbHour.Text, _cbMin.Text), Properties.Settings.Default.LastSec);
+        private void UpdateMonth() => UpdateCombo(_cbMonth, _repository.GetMonths(_cbYear.Text), UserSettingsService.LastMonth);
+        private void UpdateDay() => UpdateCombo(_cbDay, _repository.GetDays(_cbYear.Text, _cbMonth.Text), UserSettingsService.LastDay);
+        private void UpdateHour() => UpdateCombo(_cbHour, _repository.GetHours(_cbYear.Text, _cbMonth.Text, _cbDay.Text), UserSettingsService.LastHour);
+        private void UpdateMinute() => UpdateCombo(_cbMin, _repository.GetMinutes(_cbYear.Text, _cbMonth.Text, _cbDay.Text, _cbHour.Text), UserSettingsService.LastMin);
+        private void UpdateSecond() => UpdateCombo(_cbSec, _repository.GetSeconds(_cbYear.Text, _cbMonth.Text, _cbDay.Text, _cbHour.Text, _cbMin.Text), UserSettingsService.LastSec);
 
         private void UpdateCombo(ComboBox cb, List<string> items, string lastVal)
         {
@@ -66,13 +66,15 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
         public void SaveCurrentSelection()
         {
-            Properties.Settings.Default.LastYear = _cbYear.Text;
-            Properties.Settings.Default.LastMonth = _cbMonth.Text;
-            Properties.Settings.Default.LastDay = _cbDay.Text;
-            Properties.Settings.Default.LastHour = _cbHour.Text;
-            Properties.Settings.Default.LastMin = _cbMin.Text;
-            Properties.Settings.Default.LastSec = _cbSec.Text;
-            Properties.Settings.Default.Save();
+            UserSettingsService.SaveDateTimeSelection(
+                _cbYear.Text,
+                _cbMonth.Text,
+                _cbDay.Text,
+                _cbHour.Text,
+                _cbMin.Text,
+                _cbSec.Text
+            );
+            UserSettingsService.Save();
         }
 
         public string GetCurrentYear() => _cbYear.Text;

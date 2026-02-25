@@ -71,6 +71,8 @@
             this.cbMonth = new System.Windows.Forms.ComboBox();
             this.pbCam7 = new System.Windows.Forms.PictureBox();
             this.cbYear = new System.Windows.Forms.ComboBox();
+            this.btnLastPeriod = new System.Windows.Forms.Button();
+            this.btnNextPeriod = new System.Windows.Forms.Button();
             this.propertyGrid1 = new System.Windows.Forms.PropertyGrid();
             this.statusStrip1 = new System.Windows.Forms.StatusStrip();
             this.lblPixelInfo = new System.Windows.Forms.ToolStripStatusLabel();
@@ -249,6 +251,8 @@
             this.tabPage2.Controls.Add(this.cbMonth);
             this.tabPage2.Controls.Add(this.pbCam7);
             this.tabPage2.Controls.Add(this.cbYear);
+            this.tabPage2.Controls.Add(this.btnLastPeriod);
+            this.tabPage2.Controls.Add(this.btnNextPeriod);
             this.tabPage2.Location = new System.Drawing.Point(4, 25);
             this.tabPage2.Name = "tabPage2";
             this.tabPage2.Padding = new System.Windows.Forms.Padding(3);
@@ -498,6 +502,26 @@
             this.cbYear.Size = new System.Drawing.Size(64, 23);
             this.cbYear.TabIndex = 15;
             // 
+            // btnLastPeriod
+            // 
+            this.btnLastPeriod.Location = new System.Drawing.Point(1084, 360);
+            this.btnLastPeriod.Name = "btnLastPeriod";
+            this.btnLastPeriod.Size = new System.Drawing.Size(44, 28);
+            this.btnLastPeriod.TabIndex = 30;
+            this.btnLastPeriod.Text = "<";
+            this.btnLastPeriod.UseVisualStyleBackColor = true;
+            this.btnLastPeriod.Click += new System.EventHandler(this.btnLastPeriod_Click);
+            // 
+            // btnNextPeriod
+            // 
+            this.btnNextPeriod.Location = new System.Drawing.Point(1134, 360);
+            this.btnNextPeriod.Name = "btnNextPeriod";
+            this.btnNextPeriod.Size = new System.Drawing.Size(44, 28);
+            this.btnNextPeriod.TabIndex = 31;
+            this.btnNextPeriod.Text = ">";
+            this.btnNextPeriod.UseVisualStyleBackColor = true;
+            this.btnNextPeriod.Click += new System.EventHandler(this.btnNextPeriod_Click);
+            // 
             // propertyGrid1
             // 
             this.propertyGrid1.Anchor = System.Windows.Forms.AnchorStyles.None;
@@ -600,5 +624,7 @@
         private System.Windows.Forms.Button btnCameraFree;
         private System.Windows.Forms.Button btnCameraGrab;
         private System.Windows.Forms.CheckBox checkBoxEnableImageProcessing;
+        private System.Windows.Forms.Button btnLastPeriod;
+        private System.Windows.Forms.Button btnNextPeriod;
     }
 }

@@ -118,5 +118,17 @@ namespace AniloxRoll.Monitor.Properties {
                 this["InspectionConfigJson"] = value;
             }
         }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool LastEnableImageProcessing {
+            get {
+                return ((bool)(this["LastEnableImageProcessing"]));
+            }
+            set {
+                this["LastEnableImageProcessing"] = value;
+            }
+        }
     }
 }

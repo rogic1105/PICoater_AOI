@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
+using System.IO;
+using System.Reflection;
 using System.Threading;
 using Matrox.MatroxImagingLibrary;
 using AOI.SDK.Core;
+using AniloxRoll.Monitor.Core.Interop;
 
 namespace AniloxRoll.Monitor.Core.Camera
 {
@@ -27,6 +30,10 @@ namespace AniloxRoll.Monitor.Core.Camera
         public bool UserWantsGrab => _userWantsGrab;
         public bool EnableImageProcessing { get; set; } = true;
         public bool EnableHessian { get; set; } = true;
+        public bool EnableAutoCapture { get; set; } = false;
+        public string CaptureRootPath { get; set; } = string.Empty;
+        public int CameraGrabHeight { get; set; } = 0;
+        public double CameraExposureTimeUs { get; set; } = 0;
         public double BinarizeThreshold { get; set; } = 128.0;
         public double HessianSigma { get; set; } = 85;
         public double HessianFixedMax { get; set; } = 1.0;
@@ -41,14 +48,25 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         private int _frameWidth = 0;
         private int _frameHeight = 0;
+
+        private static readonly string[] ExposureControlCandidates =
+            { "M_EXPOSURE", "M_EXPOSURE_TIME", "M_CAMERA_EXPOSURE", "M_GRAB_EXPOSURE" };
+
+        private static bool _exposureControlResolved = false;
+        private static MIL_INT _exposureControlType = MIL.M_NULL;
         private byte[] _hostInputBuffer = null;
         private byte[] _hostOutputBuffer = null;
-        private IntPtr _gpuInputBuffer = IntPtr.Zero;
-        private IntPtr _gpuOutputBuffer = IntPtr.Zero;
+
+        private readonly object _picoaterLock = new object();
+        private IntPtr _picoaterHandle = IntPtr.Zero;
+        private IntPtr _picoaterInputBuffer = IntPtr.Zero;
+        private IntPtr _picoaterRidgeBuffer = IntPtr.Zero;
+        private ulong _picoaterBufferSize = 0;
 
         private long _fpsWindowStartTicks = 0;
         private int _fpsFrameCount = 0;
         private double _currentFps = 0;
+        private string _lastCaptureSecondKey = string.Empty;
 
         public double CurrentFps => Volatile.Read(ref _currentFps);
 
@@ -87,6 +105,7 @@ namespace AniloxRoll.Monitor.Core.Camera
 
             if (MilDigitizer != MIL.M_NULL)
             {
+                ApplyDigitizerSettings();
                 MIL.MdispAlloc(_ownerSystemId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref MilDisplay);
                 MIL.MdispAlloc(_ownerSystemId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref MilSecondaryDisplay); // [新增] 分配第二顯示區
 
@@ -98,8 +117,10 @@ namespace AniloxRoll.Monitor.Core.Camera
                 _hostInputBuffer = new byte[_frameWidth * _frameHeight];
                 _hostOutputBuffer = new byte[_frameWidth * _frameHeight];
 
-                CoreCVWrapper.CoreCV_MallocGPU(out _gpuInputBuffer, _frameWidth, _frameHeight);
-                CoreCVWrapper.CoreCV_MallocGPU(out _gpuOutputBuffer, _frameWidth, _frameHeight);
+                _picoaterHandle = NativeMethods.PICoater_Create();
+                _picoaterBufferSize = (ulong)(_frameWidth * _frameHeight);
+                _picoaterInputBuffer = NativeMethods.PICoater_AllocPinned(_picoaterBufferSize);
+                _picoaterRidgeBuffer = NativeMethods.PICoater_AllocPinned(_picoaterBufferSize);
 
                 for (int i = 0; i < _milGrabBufferListSize; i++)
                 {
@@ -182,13 +203,14 @@ namespace AniloxRoll.Monitor.Core.Camera
                 if (!cam.EnableImageProcessing)
                 {
                     MIL.MbufCopy(modifiedBuffer, cam._milDisplayBuffer);
+                    cam.TrySaveCapture(modifiedBuffer);
                     cam.UpdateFps();
                     return MIL.M_NULL;
                 }
 
-                bool processedByCoreCv = cam.TryApplyThresholdGpu(modifiedBuffer, cam._milProcBuffer);
+                bool processedByPicoater = cam.TryApplyPicoaterRidge(modifiedBuffer, cam._milProcBuffer);
 
-                if (processedByCoreCv)
+                if (processedByPicoater)
                 {
                     MIL.MbufCopy(cam._milProcBuffer, cam._milDisplayBuffer);
                 }
@@ -196,10 +218,113 @@ namespace AniloxRoll.Monitor.Core.Camera
                 {
                     MIL.MbufCopy(modifiedBuffer, cam._milDisplayBuffer);
                 }
+
+                cam.TrySaveCapture(modifiedBuffer);
             }
 
             cam.UpdateFps();
             return MIL.M_NULL;
+        }
+
+        private void ApplyDigitizerSettings()
+        {
+            if (MilDigitizer == MIL.M_NULL) return;
+
+            if (CameraGrabHeight > 0)
+            {
+                MIL_INT height = (MIL_INT)CameraGrabHeight;
+                MIL.MdigControl(MilDigitizer, MIL.M_SOURCE_SIZE_Y, height);
+            }
+
+            if (CameraExposureTimeUs > 0)
+            {
+                MIL_INT exposureControl = ResolveExposureControlType();
+                if (exposureControl != MIL.M_NULL)
+                {
+                    MIL.MdigControl(MilDigitizer, exposureControl, CameraExposureTimeUs);
+                }
+                else
+                {
+                    TrySetExposureByFeature("ExposureTime", CameraExposureTimeUs);
+                    TrySetExposureByFeature("ExposureTimeAbs", CameraExposureTimeUs);
+                }
+            }
+        }
+
+        private void TrySetExposureByFeature(string featureName, double value)
+        {
+            if (MilDigitizer == MIL.M_NULL) return;
+            if (string.IsNullOrWhiteSpace(featureName)) return;
+
+            try
+            {
+                MethodInfo[] methods = typeof(MIL).GetMethods(BindingFlags.Public | BindingFlags.Static);
+                foreach (MethodInfo method in methods)
+                {
+                    if (!string.Equals(method.Name, "MdigControlFeature", StringComparison.Ordinal)) continue;
+
+                    ParameterInfo[] ps = method.GetParameters();
+                    if (ps.Length != 4) continue;
+
+                    object[] args = new object[4];
+                    args[0] = MilDigitizer;
+                    args[1] = ResolveMilConstant("M_FEATURE_VALUE");
+                    args[2] = featureName;
+                    args[3] = value;
+                    method.Invoke(null, args);
+                    break;
+                }
+            }
+            catch
+            {
+                // ignore if feature API is unavailable on this MIL version.
+            }
+        }
+
+        private static object ResolveMilConstant(string name)
+        {
+            try
+            {
+                FieldInfo f = typeof(MIL).GetField(name, BindingFlags.Public | BindingFlags.Static);
+                return f != null ? f.GetValue(null) : 0;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private static MIL_INT ResolveExposureControlType()
+        {
+            if (_exposureControlResolved) return _exposureControlType;
+
+            _exposureControlResolved = true;
+            Type milType = typeof(MIL);
+            foreach (string name in ExposureControlCandidates)
+            {
+                FieldInfo f = milType.GetField(name, BindingFlags.Public | BindingFlags.Static);
+                if (f == null) continue;
+
+                object raw = f.GetValue(null);
+                if (raw == null) continue;
+
+                try
+                {
+                    _exposureControlType = (MIL_INT)Convert.ToInt64(raw);
+                    if (_exposureControlType != MIL.M_NULL) break;
+                }
+                catch
+                {
+                    // try next candidate
+                }
+            }
+
+            return _exposureControlType;
+        }
+
+        public void ApplyAcquisitionSettings()
+        {
+            ApplyDigitizerSettings();
         }
 
         public void SetUserGrabIntent(bool enable)
@@ -214,6 +339,7 @@ namespace AniloxRoll.Monitor.Core.Camera
 
             if (_userWantsGrab && !IsLive && CheckPresence())
             {
+                ApplyDigitizerSettings();
                 MIL.MdigProcess(MilDigitizer, _milGrabBuffers, _milGrabBufferListSize, MIL.M_START, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
                 ResetFps();
                 IsLive = true;
@@ -280,8 +406,13 @@ namespace AniloxRoll.Monitor.Core.Camera
                 if (_milDisplayBuffer != MIL.M_NULL) { MIL.MbufFree(_milDisplayBuffer); _milDisplayBuffer = MIL.M_NULL; }
                 if (_milProcBuffer != MIL.M_NULL) { MIL.MbufFree(_milProcBuffer); _milProcBuffer = MIL.M_NULL; }
 
-                if (_gpuInputBuffer != IntPtr.Zero) { CoreCVWrapper.CoreCV_FreeGPU(_gpuInputBuffer); _gpuInputBuffer = IntPtr.Zero; }
-                if (_gpuOutputBuffer != IntPtr.Zero) { CoreCVWrapper.CoreCV_FreeGPU(_gpuOutputBuffer); _gpuOutputBuffer = IntPtr.Zero; }
+                lock (_picoaterLock)
+                {
+                    if (_picoaterInputBuffer != IntPtr.Zero) { NativeMethods.PICoater_FreePinned(_picoaterInputBuffer); _picoaterInputBuffer = IntPtr.Zero; }
+                    if (_picoaterRidgeBuffer != IntPtr.Zero) { NativeMethods.PICoater_FreePinned(_picoaterRidgeBuffer); _picoaterRidgeBuffer = IntPtr.Zero; }
+                    if (_picoaterHandle != IntPtr.Zero) { NativeMethods.PICoater_Destroy(_picoaterHandle); _picoaterHandle = IntPtr.Zero; }
+                }
+
                 _hostInputBuffer = null;
                 _hostOutputBuffer = null;
 
@@ -293,44 +424,80 @@ namespace AniloxRoll.Monitor.Core.Camera
             if (_hUserData.IsAllocated) _hUserData.Free();
         }
 
-        private bool TryApplyThresholdGpu(MIL_ID srcBuffer, MIL_ID dstBuffer)
+        private bool TryApplyPicoaterRidge(MIL_ID srcBuffer, MIL_ID dstBuffer)
         {
             if (srcBuffer == MIL.M_NULL || dstBuffer == MIL.M_NULL) return false;
             if (_frameWidth <= 0 || _frameHeight <= 0) return false;
             if (_hostInputBuffer == null || _hostOutputBuffer == null) return false;
-            if (_gpuInputBuffer == IntPtr.Zero || _gpuOutputBuffer == IntPtr.Zero) return false;
 
-            try
+            lock (_picoaterLock)
             {
-                MIL.MbufGet2d(srcBuffer, 0, 0, _frameWidth, _frameHeight, _hostInputBuffer);
-
-                GCHandle hIn = GCHandle.Alloc(_hostInputBuffer, GCHandleType.Pinned);
-                GCHandle hOut = GCHandle.Alloc(_hostOutputBuffer, GCHandleType.Pinned);
+                if (_picoaterHandle == IntPtr.Zero || _picoaterInputBuffer == IntPtr.Zero || _picoaterRidgeBuffer == IntPtr.Zero)
+                    return false;
 
                 try
                 {
-                    int uploadResult = CoreCVWrapper.CoreCV_Upload(hIn.AddrOfPinnedObject(), _gpuInputBuffer, _frameWidth, _frameHeight);
-                    if (uploadResult != 0) return false;
+                    MIL.MbufGet2d(srcBuffer, 0, 0, _frameWidth, _frameHeight, _hostInputBuffer);
 
-                    byte threshold = (byte)Math.Max(0, Math.Min(255, (int)BinarizeThreshold));
-                    int thresholdResult = CoreCVWrapper.CoreCV_Threshold_GPU(_gpuInputBuffer, _frameWidth, _frameHeight, threshold, _gpuOutputBuffer);
-                    if (thresholdResult != 0) return false;
+                    Marshal.Copy(_hostInputBuffer, 0, _picoaterInputBuffer, _hostInputBuffer.Length);
 
-                    int downloadResult = CoreCVWrapper.CoreCV_Download(_gpuOutputBuffer, hOut.AddrOfPinnedObject(), _frameWidth, _frameHeight);
-                    if (downloadResult != 0) return false;
+                    NativeMethods.PICoater_Initialize(_picoaterHandle, _frameWidth, _frameHeight);
+
+                    int ret = NativeMethods.PICoater_Run(
+                        _picoaterHandle,
+                        _picoaterInputBuffer,
+                        IntPtr.Zero,
+                        IntPtr.Zero,
+                        _picoaterRidgeBuffer,
+                        IntPtr.Zero,
+                        IntPtr.Zero,
+                        2.0f,
+                        (float)HessianSigma,
+                        (float)HessianFixedMax,
+                        "vertical"
+                    );
+
+                    if (ret != 0) return false;
+
+                    Marshal.Copy(_picoaterRidgeBuffer, _hostOutputBuffer, 0, _hostOutputBuffer.Length);
+                    MIL.MbufPut2d(dstBuffer, 0, 0, _frameWidth, _frameHeight, _hostOutputBuffer);
+                    return true;
                 }
-                finally
+                catch
                 {
-                    if (hIn.IsAllocated) hIn.Free();
-                    if (hOut.IsAllocated) hOut.Free();
+                    return false;
                 }
+            }
+        }
 
-                MIL.MbufPut2d(dstBuffer, 0, 0, _frameWidth, _frameHeight, _hostOutputBuffer);
-                return true;
+        private void TrySaveCapture(MIL_ID sourceBuffer)
+        {
+            if (!EnableAutoCapture) return;
+            if (sourceBuffer == MIL.M_NULL) return;
+            if (string.IsNullOrWhiteSpace(CaptureRootPath)) return;
+
+            try
+            {
+                DateTime now = DateTime.Now;
+                string secondKey = now.ToString("yyyyMMdd_HHmmss");
+                if (string.Equals(_lastCaptureSecondKey, secondKey, StringComparison.Ordinal)) return;
+
+                string yearFolder = now.ToString("yyyy");
+                string yearMonthFolder = now.ToString("yyyyMM");
+                string dayFolder = now.ToString("yyyyMMdd");
+                string fileName = $"{now:yyyyMMdd_HHmmss}-{CameraId}.bmp";
+
+                string saveDir = Path.Combine(CaptureRootPath, yearFolder, yearMonthFolder, dayFolder);
+                Directory.CreateDirectory(saveDir);
+
+                string fullPath = Path.Combine(saveDir, fileName);
+                MIL.MbufExport(fullPath, MIL.M_BMP, sourceBuffer);
+
+                _lastCaptureSecondKey = secondKey;
             }
             catch
             {
-                return false;
+                // ignore save error
             }
         }
 
@@ -389,6 +556,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         private MIL_INT CameraStatusHandler(MIL_INT HookType, MIL_ID EventId, IntPtr UserPtr)
         {
             if (_isReleased) return MIL.M_NULL;
+
             bool present = CheckPresence();
             if (!present && IsLive)
             {
@@ -396,6 +564,11 @@ namespace AniloxRoll.Monitor.Core.Camera
                 ResetFps();
                 IsLive = false;
             }
+            else if (present && _userWantsGrab && !IsLive)
+            {
+                ApplyGrabState();
+            }
+
             return MIL.M_NULL;
         }
     }

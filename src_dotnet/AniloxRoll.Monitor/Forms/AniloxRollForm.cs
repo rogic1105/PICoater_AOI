@@ -26,6 +26,8 @@ namespace AniloxRoll.Monitor.Forms
         // --- 資料緩存 ---
         private readonly List<Image> _thumbnailCache = new List<Image>();
         private InspectionSettings _settings;
+        private bool _isApplyingCameraReinit = false;
+        private bool _lastReviewProcessedMode = false;
 
         public AniloxRollForm()
         {
@@ -35,7 +37,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private void InitializeSystem()
         {
-            if (_settings == null) _settings = InspectionSettings.LoadFromSettings();
+            if (_settings == null) _settings = InspectionSettingsStore.Load();
 
             _inspectionService = new BatchInspectionService();
 
@@ -52,6 +54,8 @@ namespace AniloxRoll.Monitor.Forms
 
             _muraChartHelper = new MuraChartHelper(this.chartMura);
             _muraChartHelper.SetOps(_settings.Cam1_Ops);
+
+            checkBoxEnableImageProcessing.Checked = UserSettingsService.LastEnableImageProcessing;
 
             propertyGrid1.SelectedObject = _settings;
             propertyGrid1.ToolbarVisible = false;
@@ -86,6 +90,8 @@ namespace AniloxRoll.Monitor.Forms
                 panel8,
                 pixelText => { if (lblPixelInfo != null) lblPixelInfo.Text = pixelText; }
             );
+            _liveCameraManager.SetCaptureSettings(_settings);
+            btnCameraAllocation.Visible = false;
 
             // 關閉視窗時確保釋放硬體
             FormClosed += (_, __) => _liveCameraManager.FreeCameras();
@@ -110,8 +116,15 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (!_liveCameraManager.IsAllocated)
             {
-                MessageBox.Show("請先點擊「相機配置」!", "提示");
-                return;
+                try
+                {
+                    _liveCameraManager.AllocateCameras(checkBoxEnableImageProcessing.Checked);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"相機配置失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
             }
 
             _liveCameraManager.ToggleGrab();
@@ -127,6 +140,8 @@ namespace AniloxRoll.Monitor.Forms
         private void checkBoxEnableImageProcessing_CheckedChanged(object sender, EventArgs e)
         {
             _liveCameraManager.SetImageProcessingEnabled(checkBoxEnableImageProcessing.Checked);
+            UserSettingsService.SetLastEnableImageProcessing(checkBoxEnableImageProcessing.Checked);
+            UserSettingsService.Save();
         }
 
         // ==========================================
@@ -139,15 +154,107 @@ namespace AniloxRoll.Monitor.Forms
             => _interactionHelper.NavigateCamera(direction);
 
         private void _propertyGrid_PropertyValueChanged(object s, PropertyValueChangedEventArgs e)
-            => _interactionHelper.HandleSettingsChanged();
+        {
+            _interactionHelper.HandleSettingsChanged();
+            _liveCameraManager?.SetCaptureSettings(_settings);
+
+            bool isCameraAcqParam =
+                e?.ChangedItem?.PropertyDescriptor?.Name == nameof(InspectionSettings.CameraGrabHeight) ||
+                e?.ChangedItem?.PropertyDescriptor?.Name == nameof(InspectionSettings.CameraExposureTimeUs);
+
+            if (isCameraAcqParam && _liveCameraManager != null && _liveCameraManager.IsAllocated && !_isApplyingCameraReinit)
+            {
+                _isApplyingCameraReinit = true;
+                try
+                {
+                    bool wasLive = _liveCameraManager.IsLiveGrabbing;
+                    if (wasLive)
+                    {
+                        _liveCameraManager.StopGrab();
+                    }
+
+                    _liveCameraManager.FreeCameras();
+                    btnCameraGrab.Text = "開始抓取";
+
+                    _liveCameraManager.AllocateCameras(checkBoxEnableImageProcessing.Checked);
+                    _liveCameraManager.SetCaptureSettings(_settings);
+
+                    if (wasLive)
+                    {
+                        _liveCameraManager.StartGrab();
+                        btnCameraGrab.Text = "停止抓取";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"重設相機失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+                finally
+                {
+                    _isApplyingCameraReinit = false;
+                }
+            }
+        }
 
         private void btnSelectFolder_Click(object sender, EventArgs e)
             => _interactionHelper.SelectAndLoadFolder();
 
         private async void btnShowOriginal_Click(object sender, EventArgs e)
-            => await _interactionHelper.LoadImages(false);
+        {
+            _lastReviewProcessedMode = false;
+            await _interactionHelper.LoadImages(false);
+        }
 
         private async void btnShowProcessed_Click(object sender, EventArgs e)
-            => await _interactionHelper.LoadImages(true);
+        {
+            _lastReviewProcessedMode = true;
+            await _interactionHelper.LoadImages(true);
+        }
+
+        private async void btnLastPeriod_Click(object sender, EventArgs e)
+            => await MovePeriodAsync(-1);
+
+        private async void btnNextPeriod_Click(object sender, EventArgs e)
+            => await MovePeriodAsync(+1);
+
+        private async Task MovePeriodAsync(int step)
+        {
+            var periods = _imageRepository.GetAvailablePeriods();
+            if (periods.Count == 0) return;
+
+            DateTime current = GetCurrentPeriodOrDefault(periods[0]);
+            int idx = periods.FindIndex(x => x == current);
+            if (idx < 0)
+            {
+                idx = periods.FindLastIndex(x => x <= current);
+                if (idx < 0) idx = 0;
+            }
+
+            int target = Math.Max(0, Math.Min(periods.Count - 1, idx + step));
+            SetPeriodToCombo(periods[target]);
+            await _interactionHelper.LoadImages(_lastReviewProcessedMode);
+        }
+
+        private DateTime GetCurrentPeriodOrDefault(DateTime fallback)
+        {
+            if (int.TryParse(cbYear.Text, out int y) && int.TryParse(cbMonth.Text, out int m) && int.TryParse(cbDay.Text, out int d) &&
+                int.TryParse(cbHour.Text, out int h) && int.TryParse(cbMin.Text, out int min) && int.TryParse(cbSec.Text, out int s))
+            {
+                try { return new DateTime(y, m, d, h, min, s); }
+                catch { }
+            }
+            return fallback;
+        }
+
+        private void SetPeriodToCombo(DateTime dt)
+        {
+            cbYear.Text = dt.ToString("yyyy");
+            cbMonth.Text = dt.ToString("MM");
+            cbDay.Text = dt.ToString("dd");
+            cbHour.Text = dt.ToString("HH");
+            cbMin.Text = dt.ToString("mm");
+            cbSec.Text = dt.ToString("ss");
+        }
+
     }
 }

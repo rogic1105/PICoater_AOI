@@ -58,6 +58,29 @@ namespace AniloxRoll.Monitor.Core.Data
         public List<string> GetMinutes(string y, string m, string d, string h) => _metadataCache.Where(x => x.Year == y && x.Month == m && x.Day == d && x.Hour == h).Select(x => x.Minute).Distinct().OrderBy(x => x).ToList();
         public List<string> GetSeconds(string y, string m, string d, string h, string min) => _metadataCache.Where(x => x.Year == y && x.Month == m && x.Day == d && x.Hour == h && x.Minute == min).Select(x => x.Second).Distinct().OrderBy(x => x).ToList();
 
+
+        public List<DateTime> GetAvailablePeriods()
+        {
+            return _metadataCache
+                .Select(x => BuildDateTime(x.Year, x.Month, x.Day, x.Hour, x.Minute, x.Second))
+                .Where(x => x.HasValue)
+                .Select(x => x.Value)
+                .Distinct()
+                .OrderBy(x => x)
+                .ToList();
+        }
+
+        private DateTime? BuildDateTime(string y, string m, string d, string h, string min, string s)
+        {
+            if (int.TryParse(y, out int yi) && int.TryParse(m, out int mi) && int.TryParse(d, out int di) &&
+                int.TryParse(h, out int hi) && int.TryParse(min, out int mni) && int.TryParse(s, out int si))
+            {
+                try { return new DateTime(yi, mi, di, hi, mni, si); }
+                catch { return null; }
+            }
+            return null;
+        }
+
         // 查詢特定時間點的所有相機圖片
         public Dictionary<int, string> GetImages(string y, string m, string d, string h, string min, string s)
         {
