@@ -88,11 +88,11 @@ namespace AniloxRoll.Monitor.Core.Data
 
         [Category("4. 相機取像參數")]
         [DisplayName("取像高度 (Pixel)")]
-        public int CameraGrabHeight { get; set; } = 0;
+        public int CameraGrabHeight { get; set; } = 5000;
 
         [Category("4. 相機取像參數")]
         [DisplayName("曝光時間 (us)")]
-        public double CameraExposureTimeUs { get; set; } = 0;
+        public double CameraExposureTimeUs { get; set; } = 50;
 
         [Category("4. 截圖設定")]
         [DisplayName("啟用即時截圖")]

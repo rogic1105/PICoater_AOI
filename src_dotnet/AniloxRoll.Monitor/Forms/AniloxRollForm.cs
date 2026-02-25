@@ -165,7 +165,7 @@ namespace AniloxRoll.Monitor.Forms
                     bool wasLive = _liveCameraManager.IsLiveGrabbing;
                     if (wasLive)
                     {
-                        _liveCameraManager.ToggleGrab();
+                        _liveCameraManager.StopGrab();
                     }
 
                     _liveCameraManager.FreeCameras();
@@ -176,7 +176,7 @@ namespace AniloxRoll.Monitor.Forms
 
                     if (wasLive)
                     {
-                        _liveCameraManager.ToggleGrab();
+                        _liveCameraManager.StartGrab();
                         btnCameraGrab.Text = "停止抓取";
                     }
                 }

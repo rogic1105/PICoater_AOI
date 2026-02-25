@@ -15,7 +15,10 @@ namespace AniloxRoll.Monitor.Core.Data
                 XmlSerializer serializer = new XmlSerializer(typeof(InspectionSettings));
                 using (StringReader reader = new StringReader(xml))
                 {
-                    return (InspectionSettings)serializer.Deserialize(reader);
+                    var settings = (InspectionSettings)serializer.Deserialize(reader);
+                    if (settings.CameraGrabHeight <= 0) settings.CameraGrabHeight = 5000;
+                    if (settings.CameraExposureTimeUs <= 0) settings.CameraExposureTimeUs = 50;
+                    return settings;
                 }
             }
             catch
