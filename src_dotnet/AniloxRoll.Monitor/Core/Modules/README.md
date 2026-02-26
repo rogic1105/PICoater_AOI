@@ -7,7 +7,7 @@
 
 - `AniloxCamera.cs`：單一相機生命週期與取圖流程。
 - `CameraSystemManager.cs`：MIL Application/System 配置與釋放。
-- `CameraImageProcessor.cs`：相機端影像前處理與轉換。
+- `Inspection/InspectionData.cs`：影像與運算結果資料模型。
 
 ## 2) ImageProcessing（影像處理）
 路徑：`Core/Modules/ImageProcessing`
@@ -16,13 +16,13 @@
 - `InspectionEngine.ImageProcessing.cs`：縮圖、全尺寸檢測、曲線輸出。
 - `BatchInspectionService.cs`：多相機批次流程與參數更新。
 - `InspectionEngineConfig.cs`：演算法預設參數。
+- `MIL/CameraImageProcessor.cs`：MIL 專用影像前處理與轉換（與 Interop DLL 模組分離）。
 
 ## 3) ImageCatalog（圖片編號管理 / 索引）
 路徑：`Core/Modules/ImageCatalog`
 
 - `ImageRepository.cs`：掃描檔案、依時間/相機編號查圖。
 - `ImageMetadata.cs`：影像檔名解析後的欄位。
-- `InspectionData.cs`：影像與運算結果資料模型。
 
 ## 4) Settings（圖片參數管理）
 路徑：`Core/Modules/Settings`

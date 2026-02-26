@@ -75,11 +75,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Core\Modules\Acquisition\AniloxCamera.cs" />
-    <Compile Include="Core\Modules\Acquisition\CameraImageProcessor.cs" />
+    <Compile Include="Core\Modules\ImageProcessing\MIL\CameraImageProcessor.cs" />
     <Compile Include="Core\Modules\Acquisition\CameraSystemManager.cs" />
     <Compile Include="Core\Modules\ImageCatalog\ImageMetadata.cs" />
     <Compile Include="Core\Modules\ImageCatalog\ImageRepository.cs" />
-    <Compile Include="Core\Modules\ImageCatalog\InspectionData.cs" />
+    <Compile Include="Core\Modules\Acquisition\Inspection\InspectionData.cs" />
     <Compile Include="Core\Modules\Settings\InspectionSettings.cs" />
     <Compile Include="Core\Modules\Settings\InspectionSettingsStore.cs" />
     <Compile Include="Core\Modules\Settings\UserSettingsService.cs" />

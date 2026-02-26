@@ -1,4 +1,5 @@
 ﻿using AniloxRoll.Monitor.Core.Data;
+using AniloxRoll.Monitor.Core.Acquisition.Inspection;
 using AOI.SDK.Core.Models;
 using System;
 using System.Collections.Generic;

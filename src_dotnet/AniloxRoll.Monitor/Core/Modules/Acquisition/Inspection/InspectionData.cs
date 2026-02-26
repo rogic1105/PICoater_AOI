@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Drawing;
 
-namespace AniloxRoll.Monitor.Core.Data
+namespace AniloxRoll.Monitor.Core.Acquisition.Inspection
 {
     public class InspectionData : IDisposable
     {

@@ -1,4 +1,5 @@
 ﻿using AniloxRoll.Monitor.Core.Data;
+using AniloxRoll.Monitor.Core.Acquisition.Inspection;
 using AniloxRoll.Monitor.Core.Services;
 using AOI.SDK.UI;
 using System;
@@ -178,7 +179,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
             try
             {
-                AniloxRoll.Monitor.Core.Data.InspectionData data = _inspectionService.RunInspectionFullRes(index);
+                InspectionData data = _inspectionService.RunInspectionFullRes(index);
 
                 if (data != null)
                 {

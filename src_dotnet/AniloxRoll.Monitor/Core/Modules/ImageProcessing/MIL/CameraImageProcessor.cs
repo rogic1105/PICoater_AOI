@@ -1,6 +1,6 @@
 ﻿using Matrox.MatroxImagingLibrary;
 
-namespace AniloxRoll.Monitor.Core.Camera
+namespace AniloxRoll.Monitor.Core.ImageProcessing.MIL
 {
     public static class CameraImageProcessor
     {
