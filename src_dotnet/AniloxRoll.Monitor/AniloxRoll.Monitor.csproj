@@ -74,20 +74,20 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Core\Camera\AniloxCamera.cs" />
-    <Compile Include="Core\Camera\CameraImageProcessor.cs" />
-    <Compile Include="Core\Camera\CameraSystemManager.cs" />
-    <Compile Include="Core\Data\ImageMetadata.cs" />
-    <Compile Include="Core\Data\ImageRepository.cs" />
-    <Compile Include="Core\Data\InspectionData.cs" />
-    <Compile Include="Core\Data\InspectionSettings.cs" />
-    <Compile Include="Core\Data\InspectionSettingsStore.cs" />
-    <Compile Include="Core\Data\UserSettingsService.cs" />
-    <Compile Include="Core\Interop\NativeMethods.cs" />
-    <Compile Include="Core\Services\BatchInspectionService.cs" />
-    <Compile Include="Core\Services\InspectionEngine.cs" />
-    <Compile Include="Core\Services\InspectionEngine.ImageProcessing.cs" />
-    <Compile Include="Core\Services\InspectionEngineConfig.cs" />
+    <Compile Include="Core\Modules\Acquisition\AniloxCamera.cs" />
+    <Compile Include="Core\Modules\Acquisition\CameraImageProcessor.cs" />
+    <Compile Include="Core\Modules\Acquisition\CameraSystemManager.cs" />
+    <Compile Include="Core\Modules\ImageCatalog\ImageMetadata.cs" />
+    <Compile Include="Core\Modules\ImageCatalog\ImageRepository.cs" />
+    <Compile Include="Core\Modules\ImageCatalog\InspectionData.cs" />
+    <Compile Include="Core\Modules\Settings\InspectionSettings.cs" />
+    <Compile Include="Core\Modules\Settings\InspectionSettingsStore.cs" />
+    <Compile Include="Core\Modules\Settings\UserSettingsService.cs" />
+    <Compile Include="Core\Modules\Interop\NativeMethods.cs" />
+    <Compile Include="Core\Modules\ImageProcessing\BatchInspectionService.cs" />
+    <Compile Include="Core\Modules\ImageProcessing\InspectionEngine.cs" />
+    <Compile Include="Core\Modules\ImageProcessing\InspectionEngine.ImageProcessing.cs" />
+    <Compile Include="Core\Modules\ImageProcessing\InspectionEngineConfig.cs" />
     <Compile Include="Forms\AniloxRollForm.cs">
       <SubType>Form</SubType>
     </Compile>
