@@ -94,12 +94,12 @@
     <Compile Include="Forms\AniloxRollForm.Designer.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="Forms\Helpers\AniloxRollPresenter.cs" />
-    <Compile Include="Forms\Helpers\FormInteractionHelper.cs" />
-    <Compile Include="Forms\Helpers\LiveCameraManager.cs" />
-    <Compile Include="Forms\Helpers\MuraChartHelper.cs" />
-    <Compile Include="Forms\Helpers\ThumbnailGridPresenter.cs" />
-    <Compile Include="Forms\Helpers\DateTimeNavigator.cs" />
+    <Compile Include="Forms\Helpers\Presenters\AniloxRollPresenter.cs" />
+    <Compile Include="Forms\Helpers\Helpers\FormInteractionHelper.cs" />
+    <Compile Include="Forms\Helpers\Managers\LiveCameraManager.cs" />
+    <Compile Include="Forms\Helpers\Helpers\MuraChartHelper.cs" />
+    <Compile Include="Forms\Helpers\Presenters\ThumbnailGridPresenter.cs" />
+    <Compile Include="Forms\Helpers\Navigators\DateTimeNavigator.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <EmbeddedResource Include="Forms\AniloxRollForm.resx">
