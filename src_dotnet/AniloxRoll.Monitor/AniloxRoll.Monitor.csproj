@@ -98,21 +98,21 @@
     <Compile Include="ImageProcessing\InspectionEngine.cs" />
     <Compile Include="ImageProcessing\InspectionEngine.ImageProcessing.cs" />
     <Compile Include="ImageProcessing\InspectionEngineConfig.cs" />
-    <Compile Include="UI\AniloxRollForm.cs">
+    <Compile Include="UI\Form\AniloxRollForm.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="UI\AniloxRollForm.Designer.cs">
+    <Compile Include="UI\Form\AniloxRollForm.Designer.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="UI\Helpers\Presenters\AniloxRollPresenter.cs" />
-    <Compile Include="UI\Helpers\Helpers\FormInteractionHelper.cs" />
-    <Compile Include="UI\Helpers\Managers\LiveCameraManager.cs" />
-    <Compile Include="UI\Helpers\Helpers\MuraChartHelper.cs" />
-    <Compile Include="UI\Helpers\Presenters\ThumbnailGridPresenter.cs" />
-    <Compile Include="UI\Helpers\Navigators\DateTimeNavigator.cs" />
+    <Compile Include="UI\Presenters\AniloxRollPresenter.cs" />
+    <Compile Include="UI\Widgets\FormInteractionHelper.cs" />
+    <Compile Include="UI\Managers\LiveCameraManager.cs" />
+    <Compile Include="UI\Widgets\MuraChartHelper.cs" />
+    <Compile Include="UI\Presenters\ThumbnailGridPresenter.cs" />
+    <Compile Include="UI\Navigators\DateTimeNavigator.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <EmbeddedResource Include="UI\AniloxRollForm.resx">
+    <EmbeddedResource Include="UI\Form\AniloxRollForm.resx">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">

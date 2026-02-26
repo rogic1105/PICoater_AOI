@@ -39,8 +39,11 @@
 ## 5) UI（介面）
 路徑：`UI`
 
-- `AniloxRollForm.cs`
-- `Helpers/*`（Presenters/Navigators/Managers/Helpers）
+- `Form/AniloxRollForm.cs`
+- `Presenters/*`
+- `Navigators/*`
+- `Managers/*`
+- `Widgets/*`
 
 ## 6) Interop（原生 DLL）
 路徑：`Interop`
