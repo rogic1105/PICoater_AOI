@@ -1,23 +1,31 @@
 {
-  "Cam1_Ops": 33.0,
-  "Cam2_Ops": 33.0,
-  "Cam3_Ops": 33.0,
-  "Cam4_Ops": 33.0,
-  "Cam5_Ops": 33.0,
-  "Cam6_Ops": 33.0,
-  "Cam7_Ops": 33.0,
-  "Cam1_Pos": 0.0,
-  "Cam2_Pos": 400.0,
-  "Cam3_Pos": 800.0,
-  "Cam4_Pos": 1200.0,
-  "Cam5_Pos": 1600.0,
-  "Cam6_Pos": 2000.0,
-  "Cam7_Pos": 2400.0,
-  "HessianMaxFactor": 5.0,
-  "ErrorValueMean": 1.0,
-  "ErrorValueMax": 2.0,
-  "CameraGrabHeight": 5000,
-  "CameraExposureTimeUs": 50.0,
-  "EnableAutoCapture": false,
-  "CaptureRootPath": "D:\\AniloxCaptures"
+  "MachineLayout": {
+    "Cam1_Ops": 33.0,
+    "Cam2_Ops": 33.0,
+    "Cam3_Ops": 33.0,
+    "Cam4_Ops": 33.0,
+    "Cam5_Ops": 33.0,
+    "Cam6_Ops": 33.0,
+    "Cam7_Ops": 33.0,
+    "Cam1_Pos": 0.0,
+    "Cam2_Pos": 400.0,
+    "Cam3_Pos": 800.0,
+    "Cam4_Pos": 1200.0,
+    "Cam5_Pos": 1600.0,
+    "Cam6_Pos": 2000.0,
+    "Cam7_Pos": 2400.0
+  },
+  "Acquisition": {
+    "CameraGrabHeight": 5000,
+    "CameraExposureTimeUs": 50.0
+  },
+  "Recipe": {
+    "HessianMaxFactor": 5.0,
+    "ErrorValueMean": 1.0,
+    "ErrorValueMax": 2.0
+  },
+  "Storage": {
+    "EnableAutoCapture": false,
+    "CaptureRootPath": "D:\\AniloxCaptures"
+  }
 }

@@ -3,139 +3,68 @@ using System.ComponentModel;
 
 namespace AniloxRoll.Monitor.Core.Data
 {
-    /// <summary>
-    /// 檢測與相機設定模型。
-    /// 用於 PropertyGrid 顯示、流程參數套用，以及 XML 持久化。
-    /// </summary>
     [Serializable]
     public class InspectionSettings
     {
-        // =================================================================
-        // 1. Camera OPS (7 支相機)
-        // =================================================================
-        [Category("1. 相機解析度 (OPS)")]
-        [DisplayName("Cam 1 OPS (um)")]
-        public double Cam1_Ops { get; set; } = 33.0;
+        [Category("1. 機台佈局")]
+        [DisplayName("Machine Layout")]
+        public MachineLayoutConfig MachineLayout { get; set; } = new MachineLayoutConfig();
 
-        [Category("1. 相機解析度 (OPS)")]
-        [DisplayName("Cam 2 OPS (um)")]
-        public double Cam2_Ops { get; set; } = 33.0;
+        [Category("2. 取像設定")]
+        [DisplayName("Acquisition")]
+        public AcquisitionSettings Acquisition { get; set; } = new AcquisitionSettings();
 
-        [Category("1. 相機解析度 (OPS)")]
-        [DisplayName("Cam 3 OPS (um)")]
-        public double Cam3_Ops { get; set; } = 33.0;
+        [Category("3. 檢測配方")]
+        [DisplayName("Inspection Recipe")]
+        public InspectionRecipe Recipe { get; set; } = new InspectionRecipe();
 
-        [Category("1. 相機解析度 (OPS)")]
-        [DisplayName("Cam 4 OPS (um)")]
-        public double Cam4_Ops { get; set; } = 33.0;
+        [Category("4. 儲存設定")]
+        [DisplayName("Storage")]
+        public StorageSettings Storage { get; set; } = new StorageSettings();
 
-        [Category("1. 相機解析度 (OPS)")]
-        [DisplayName("Cam 5 OPS (um)")]
-        public double Cam5_Ops { get; set; } = 33.0;
-
-        [Category("1. 相機解析度 (OPS)")]
-        [DisplayName("Cam 6 OPS (um)")]
-        public double Cam6_Ops { get; set; } = 33.0;
-
-        [Category("1. 相機解析度 (OPS)")]
-        [DisplayName("Cam 7 OPS (um)")]
-        public double Cam7_Ops { get; set; } = 33.0;
-
-        // =================================================================
-        // 2. Camera Start Position (7 支相機)
-        // =================================================================
-        [Category("2. 相機起始位置 (Position)")]
-        [DisplayName("Cam 1 Start (mm)")]
-        public double Cam1_Pos { get; set; } = 0.0;
-
-        [Category("2. 相機起始位置 (Position)")]
-        [DisplayName("Cam 2 Start (mm)")]
-        public double Cam2_Pos { get; set; } = 400.0;
-
-        [Category("2. 相機起始位置 (Position)")]
-        [DisplayName("Cam 3 Start (mm)")]
-        public double Cam3_Pos { get; set; } = 800.0;
-
-        [Category("2. 相機起始位置 (Position)")]
-        [DisplayName("Cam 4 Start (mm)")]
-        public double Cam4_Pos { get; set; } = 1200.0;
-
-        [Category("2. 相機起始位置 (Position)")]
-        [DisplayName("Cam 5 Start (mm)")]
-        public double Cam5_Pos { get; set; } = 1600.0;
-
-        [Category("2. 相機起始位置 (Position)")]
-        [DisplayName("Cam 6 Start (mm)")]
-        public double Cam6_Pos { get; set; } = 2000.0;
-
-        [Category("2. 相機起始位置 (Position)")]
-        [DisplayName("Cam 7 Start (mm)")]
-        public double Cam7_Pos { get; set; } = 2400.0;
-
-        // =================================================================
-        // 3. Algorithm Parameters
-        // =================================================================
-        [Category("3. 演算法參數")]
-        [DisplayName("Hessian Max Factor")]
-        [Description("控制 Hessian Ridge 的最大值常數 (hessian_max_const)")]
-        public float HessianMaxFactor { get; set; } = 5.0f;
-
-        [Category("3. 演算法參數")]
-        [DisplayName("Error Value Mean")]
-        public float ErrorValueMean { get; set; } = 1.0f;
-
-        [Category("3. 演算法參數")]
-        [DisplayName("Error Value Max")]
-        public float ErrorValueMax { get; set; } = 2.0f;
-
-
-        [Category("4. 相機取像參數")]
-        [DisplayName("取像高度 (Pixel)")]
-        public int CameraGrabHeight { get; set; } = 5000;
-
-        [Category("4. 相機取像參數")]
-        [DisplayName("曝光時間 (us)")]
-        public double CameraExposureTimeUs { get; set; } = 50;
-
-        [Category("5. 截圖設定")]
-        [DisplayName("啟用即時截圖")]
-        public bool EnableAutoCapture { get; set; } = false;
-
-        [Category("5. 截圖設定")]
-        [DisplayName("截圖根目錄")]
-        [Description("格式: YYYY/YYYYMM/YYYYMMDD/YYYYMMDD_hhmmss-[CameraId].bmp")]
-        public string CaptureRootPath { get; set; } = @"D:\AniloxCaptures";
-
-        // =================================================================
-        // Helper Methods (Array Conversion)
-        // =================================================================
-        /// <summary>
-        /// 回傳 1~7 號相機的 OPS（單位 um）陣列。
-        /// </summary>
-        public double[] GetCameraOpsUmArray()
+        public void Validate()
         {
-            return new double[] { Cam1_Ops, Cam2_Ops, Cam3_Ops, Cam4_Ops, Cam5_Ops, Cam6_Ops, Cam7_Ops };
+            if (MachineLayout == null) MachineLayout = new MachineLayoutConfig();
+            if (Acquisition == null) Acquisition = new AcquisitionSettings();
+            if (Recipe == null) Recipe = new InspectionRecipe();
+            if (Storage == null) Storage = new StorageSettings();
+
+            MachineLayout.Validate();
+            Acquisition.Validate();
+            Recipe.Validate();
+            Storage.Validate();
         }
 
-        /// <summary>
-        /// 回傳 1~7 號相機的起始位置（單位 mm）陣列。
-        /// </summary>
-        public double[] GetCameraStartPositionMmArray()
-        {
-            return new double[] { Cam1_Pos, Cam2_Pos, Cam3_Pos, Cam4_Pos, Cam5_Pos, Cam6_Pos, Cam7_Pos };
-        }
+        public double[] GetCameraOpsUmArray() => MachineLayout.GetCameraOpsUmArray();
+        public double[] GetCameraStartPositionMmArray() => MachineLayout.GetCameraStartPositionMmArray();
 
-        /// <summary>
-        /// [相容保留] 請改用 <see cref="GetCameraOpsUmArray"/>。
-        /// </summary>
         [Obsolete("Use GetCameraOpsUmArray() instead.")]
         public double[] GetOpsArray() => GetCameraOpsUmArray();
 
-        /// <summary>
-        /// [相容保留] 請改用 <see cref="GetCameraStartPositionMmArray"/>。
-        /// </summary>
         [Obsolete("Use GetCameraStartPositionMmArray() instead.")]
         public double[] GetPosArray() => GetCameraStartPositionMmArray();
 
+        // ===== Backward-compatible flattened accessors =====
+        [Browsable(false)] public double Cam1_Ops { get => MachineLayout.Cam1_Ops; set => MachineLayout.Cam1_Ops = value; }
+        [Browsable(false)] public double Cam2_Ops { get => MachineLayout.Cam2_Ops; set => MachineLayout.Cam2_Ops = value; }
+        [Browsable(false)] public double Cam3_Ops { get => MachineLayout.Cam3_Ops; set => MachineLayout.Cam3_Ops = value; }
+        [Browsable(false)] public double Cam4_Ops { get => MachineLayout.Cam4_Ops; set => MachineLayout.Cam4_Ops = value; }
+        [Browsable(false)] public double Cam5_Ops { get => MachineLayout.Cam5_Ops; set => MachineLayout.Cam5_Ops = value; }
+        [Browsable(false)] public double Cam6_Ops { get => MachineLayout.Cam6_Ops; set => MachineLayout.Cam6_Ops = value; }
+        [Browsable(false)] public double Cam7_Ops { get => MachineLayout.Cam7_Ops; set => MachineLayout.Cam7_Ops = value; }
+        [Browsable(false)] public double Cam1_Pos { get => MachineLayout.Cam1_Pos; set => MachineLayout.Cam1_Pos = value; }
+        [Browsable(false)] public double Cam2_Pos { get => MachineLayout.Cam2_Pos; set => MachineLayout.Cam2_Pos = value; }
+        [Browsable(false)] public double Cam3_Pos { get => MachineLayout.Cam3_Pos; set => MachineLayout.Cam3_Pos = value; }
+        [Browsable(false)] public double Cam4_Pos { get => MachineLayout.Cam4_Pos; set => MachineLayout.Cam4_Pos = value; }
+        [Browsable(false)] public double Cam5_Pos { get => MachineLayout.Cam5_Pos; set => MachineLayout.Cam5_Pos = value; }
+        [Browsable(false)] public double Cam6_Pos { get => MachineLayout.Cam6_Pos; set => MachineLayout.Cam6_Pos = value; }
+        [Browsable(false)] public double Cam7_Pos { get => MachineLayout.Cam7_Pos; set => MachineLayout.Cam7_Pos = value; }
+        [Browsable(false)] public float HessianMaxFactor { get => Recipe.HessianMaxFactor; set => Recipe.HessianMaxFactor = value; }
+        [Browsable(false)] public float ErrorValueMean { get => Recipe.ErrorValueMean; set => Recipe.ErrorValueMean = value; }
+        [Browsable(false)] public float ErrorValueMax { get => Recipe.ErrorValueMax; set => Recipe.ErrorValueMax = value; }
+        [Browsable(false)] public int CameraGrabHeight { get => Acquisition.CameraGrabHeight; set => Acquisition.CameraGrabHeight = value; }
+        [Browsable(false)] public double CameraExposureTimeUs { get => Acquisition.CameraExposureTimeUs; set => Acquisition.CameraExposureTimeUs = value; }
+        [Browsable(false)] public bool EnableAutoCapture { get => Storage.EnableAutoCapture; set => Storage.EnableAutoCapture = value; }
+        [Browsable(false)] public string CaptureRootPath { get => Storage.CaptureRootPath; set => Storage.CaptureRootPath = value; }
     }
 }

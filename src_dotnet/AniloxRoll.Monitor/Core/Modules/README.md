@@ -28,7 +28,9 @@
 路徑：`Core/Modules/Settings`
 
 - `InspectionSettings.cs`：UI/流程使用的設定模型。
+- `Settings/Models/*`：依領域拆分的設定子模型（Layout/Acquisition/Recipe/Storage）。
 - `InspectionSettingsStore.cs`：設定序列化與持久化。
+- `Settings/Services/ConfigManager.cs`：設定整合存取入口。
 - `UserSettingsService.cs`：存取使用者設定。
 - `System/SystemSettings.cs`：系統層硬體配置（相機/擷取卡拓樸）。
 - `System/CameraHardwareConfig.cs`：單一相機硬體設定模型。

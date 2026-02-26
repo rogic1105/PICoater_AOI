@@ -86,6 +86,11 @@
     <Compile Include="Core\Modules\Settings\InspectionSettingsStore.cs" />
     <Compile Include="Core\Modules\Settings\JsonConfigLoader.cs" />
     <Compile Include="Core\Modules\Settings\UserSettingsService.cs" />
+    <Compile Include="Core\Modules\Settings\Models\MachineLayoutConfig.cs" />
+    <Compile Include="Core\Modules\Settings\Models\AcquisitionSettings.cs" />
+    <Compile Include="Core\Modules\Settings\Models\InspectionRecipe.cs" />
+    <Compile Include="Core\Modules\Settings\Models\StorageSettings.cs" />
+    <Compile Include="Core\Modules\Settings\Services\ConfigManager.cs" />
     <Compile Include="Core\Modules\Settings\System\CameraHardwareConfig.cs" />
     <Compile Include="Core\Modules\Settings\System\SystemSettings.cs" />
     <Compile Include="Core\Modules\Interop\NativeMethods.cs" />

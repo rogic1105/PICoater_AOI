@@ -1,61 +1,43 @@
-﻿using System.IO;
-using System.Xml.Serialization;
+﻿using System.Web.Script.Serialization;
 
 namespace AniloxRoll.Monitor.Core.Data
 {
     /// <summary>
-    /// InspectionSettings 的序列化儲存層。
-    /// 負責 XML 載入/儲存，並在載入時套用必要的安全預設值。
+    /// InspectionSettings 儲存層（JSON）。
     /// </summary>
     public static class InspectionSettingsStore
     {
-        /// <summary>
-        /// 從使用者設定載入 InspectionSettings。
-        /// </summary>
         public static InspectionSettings Load()
         {
             InspectionSettings defaults = InspectionSettingsDefaultsProvider.LoadDefaults();
+            defaults.Validate();
+
             try
             {
-                string xml = UserSettingsService.InspectionConfigJson;
-                if (string.IsNullOrWhiteSpace(xml)) return ApplySafety(defaults);
+                string json = UserSettingsService.InspectionConfigJson;
+                if (string.IsNullOrWhiteSpace(json)) return defaults;
 
-                XmlSerializer serializer = new XmlSerializer(typeof(InspectionSettings));
-                using (StringReader reader = new StringReader(xml))
-                {
-                    var settings = (InspectionSettings)serializer.Deserialize(reader);
-                    return ApplySafety(settings ?? defaults);
-                }
+                JavaScriptSerializer serializer = new JavaScriptSerializer();
+                InspectionSettings settings = serializer.Deserialize<InspectionSettings>(json) ?? defaults;
+                settings.Validate();
+                return settings;
             }
             catch
             {
-                return ApplySafety(defaults);
+                return defaults;
             }
         }
 
-        private static InspectionSettings ApplySafety(InspectionSettings settings)
-        {
-            if (settings == null) settings = new InspectionSettings();
-            if (settings.CameraGrabHeight <= 0) settings.CameraGrabHeight = 5000;
-            if (settings.CameraExposureTimeUs <= 0) settings.CameraExposureTimeUs = 50;
-            if (string.IsNullOrWhiteSpace(settings.CaptureRootPath)) settings.CaptureRootPath = @"D:\AniloxCaptures";
-            return settings;
-        }
-
-        /// <summary>
-        /// 將 InspectionSettings 序列化後寫回使用者設定。
-        /// </summary>
         public static void Save(InspectionSettings settings)
         {
             try
             {
-                XmlSerializer serializer = new XmlSerializer(typeof(InspectionSettings));
-                using (StringWriter writer = new StringWriter())
-                {
-                    serializer.Serialize(writer, settings);
-                    UserSettingsService.InspectionConfigJson = writer.ToString();
-                    UserSettingsService.Save();
-                }
+                if (settings == null) settings = new InspectionSettings();
+                settings.Validate();
+
+                JavaScriptSerializer serializer = new JavaScriptSerializer();
+                UserSettingsService.InspectionConfigJson = serializer.Serialize(settings);
+                UserSettingsService.Save();
             }
             catch
             {

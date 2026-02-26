@@ -40,7 +40,7 @@ namespace AniloxRoll.Monitor.Forms
         private void InitializeSystem()
         {
             // [Settings 模組] 載入檢測參數與相機擷取設定（供 PropertyGrid、流程與相機初始化共用）。
-            if (_settings == null) _settings = InspectionSettingsStore.Load();
+            if (_settings == null) _settings = ConfigManager.LoadInspectionSettings();
 
             // [ImageProcessing 模組] 建立批次檢測服務，負責縮圖/全尺寸檢測流程與演算法參數套用。
             _inspectionService = new BatchInspectionService();

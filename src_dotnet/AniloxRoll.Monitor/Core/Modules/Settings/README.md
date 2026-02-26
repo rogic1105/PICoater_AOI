@@ -1,12 +1,23 @@
 # Settings Module
 
-此資料夾負責 **使用者設定與檢測參數** 的定義、序列化與持久化。
+此資料夾採用「集中化配置管理」，依領域拆成 Models/Services/Store。
 
 ## 檔案職責
 
+- `Models/MachineLayoutConfig.cs`
+  - 機台物理佈局：OPS 與相機起始位置。
+
+- `Models/AcquisitionSettings.cs`
+  - 取像設定：取像高度與曝光時間。
+
+- `Models/InspectionRecipe.cs`
+  - 檢測配方：Hessian 與誤差參數。
+
+- `Models/StorageSettings.cs`
+  - 儲存設定：截圖開關與路徑。
+
 - `InspectionSettings.cs`
-  - 定義可由 UI (`PropertyGrid`) 編輯的檢測/流程參數模型。
-  - 包含相機 OPS、相機位置、演算法參數、取像參數與截圖設定。
+  - 聚合根模型（供 PropertyGrid 與流程使用），整合上述子模型並提供相容屬性。
 
 - `System/SystemSettings.cs`、`System/CameraHardwareConfig.cs`
   - 系統層（硬體）設定：MIL System Descriptor、System Number、Device Number、DCF 路徑。
@@ -17,8 +28,11 @@
   - 將相機硬體參數與 PropertyGrid 預設值改為由 JSON 檔集中管理。
 
 - `InspectionSettingsStore.cs`
-  - 負責 `InspectionSettings` 的 XML 序列化/反序列化。
-  - 對外提供 `Load()` / `Save()`，並在讀取時補齊安全預設值。
+  - 底層 JSON 序列化儲存層（統一 JSON，不再混用 XML）。
+  - `Validate()` 校驗移至 Model，Store 專注讀寫。
+
+- `Services/ConfigManager.cs`
+  - 設定整合入口（載入/儲存 InspectionSettings 與 SystemSettings）。
 
 - `UserSettingsService.cs`
   - 封裝 `Properties.Settings` 的存取。
