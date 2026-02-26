@@ -11,17 +11,6 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 {
     public class LiveCameraManager
     {
-        private class CameraConfig
-        {
-            public int Id { get; set; }
-            public string SystemDescriptor { get; set; }
-            public int SystemNum { get; set; }
-            public MIL_INT DevNum { get; set; }
-            public string DcfPath { get; set; }
-            public Panel DisplayPanel { get; set; }
-            public Label StatusLabel { get; set; }
-        }
-
         private readonly Form _mainForm;
         private readonly Panel _mainDisplayPanel; // 大畫面 (Panel8)
         private readonly Action<string> _updatePixelInfoCallback; // 更新座標文字的委派
