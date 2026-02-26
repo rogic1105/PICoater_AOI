@@ -75,44 +75,44 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Core\Modules\Acquisition\AniloxCamera.cs" />
-    <Compile Include="Core\Modules\ImageProcessing\MIL\CameraImageProcessor.cs" />
-    <Compile Include="Core\Modules\Acquisition\CameraSystemManager.cs" />
-    <Compile Include="Core\Modules\ImageCatalog\ImageMetadata.cs" />
-    <Compile Include="Core\Modules\ImageCatalog\ImageRepository.cs" />
-    <Compile Include="Core\Modules\Acquisition\Inspection\InspectionData.cs" />
-    <Compile Include="Core\Modules\Settings\InspectionSettings.cs" />
-    <Compile Include="Core\Modules\Settings\InspectionSettingsDefaultsProvider.cs" />
-    <Compile Include="Core\Modules\Settings\InspectionSettingsStore.cs" />
-    <Compile Include="Core\Modules\Settings\JsonConfigLoader.cs" />
-    <Compile Include="Core\Modules\Settings\UserSettingsService.cs" />
-    <Compile Include="Core\Modules\Settings\Models\MachineLayoutConfig.cs" />
-    <Compile Include="Core\Modules\Settings\Models\AcquisitionSettings.cs" />
-    <Compile Include="Core\Modules\Settings\Models\InspectionRecipe.cs" />
-    <Compile Include="Core\Modules\Settings\Models\StorageSettings.cs" />
-    <Compile Include="Core\Modules\Settings\Services\ConfigManager.cs" />
-    <Compile Include="Core\Modules\Settings\System\CameraHardwareConfig.cs" />
-    <Compile Include="Core\Modules\Settings\System\SystemSettings.cs" />
-    <Compile Include="Core\Modules\Interop\NativeMethods.cs" />
-    <Compile Include="Core\Modules\ImageProcessing\BatchInspectionService.cs" />
-    <Compile Include="Core\Modules\ImageProcessing\InspectionEngine.cs" />
-    <Compile Include="Core\Modules\ImageProcessing\InspectionEngine.ImageProcessing.cs" />
-    <Compile Include="Core\Modules\ImageProcessing\InspectionEngineConfig.cs" />
-    <Compile Include="Forms\AniloxRollForm.cs">
+    <Compile Include="Acquisition\AniloxCamera.cs" />
+    <Compile Include="ImageProcessing\MIL\CameraImageProcessor.cs" />
+    <Compile Include="Acquisition\CameraSystemManager.cs" />
+    <Compile Include="ImageCatalog\ImageMetadata.cs" />
+    <Compile Include="ImageCatalog\ImageRepository.cs" />
+    <Compile Include="Acquisition\Inspection\InspectionData.cs" />
+    <Compile Include="Settings\InspectionSettings.cs" />
+    <Compile Include="Settings\InspectionSettingsDefaultsProvider.cs" />
+    <Compile Include="Settings\InspectionSettingsStore.cs" />
+    <Compile Include="Settings\JsonConfigLoader.cs" />
+    <Compile Include="Settings\UserSettingsService.cs" />
+    <Compile Include="Settings\Models\MachineLayoutConfig.cs" />
+    <Compile Include="Settings\Models\AcquisitionSettings.cs" />
+    <Compile Include="Settings\Models\InspectionRecipe.cs" />
+    <Compile Include="Settings\Models\StorageSettings.cs" />
+    <Compile Include="Settings\Services\ConfigManager.cs" />
+    <Compile Include="Settings\System\CameraHardwareConfig.cs" />
+    <Compile Include="Settings\System\SystemSettings.cs" />
+    <Compile Include="Interop\NativeMethods.cs" />
+    <Compile Include="ImageProcessing\BatchInspectionService.cs" />
+    <Compile Include="ImageProcessing\InspectionEngine.cs" />
+    <Compile Include="ImageProcessing\InspectionEngine.ImageProcessing.cs" />
+    <Compile Include="ImageProcessing\InspectionEngineConfig.cs" />
+    <Compile Include="UI\AniloxRollForm.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="Forms\AniloxRollForm.Designer.cs">
+    <Compile Include="UI\AniloxRollForm.Designer.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="Forms\Helpers\Presenters\AniloxRollPresenter.cs" />
-    <Compile Include="Forms\Helpers\Helpers\FormInteractionHelper.cs" />
-    <Compile Include="Forms\Helpers\Managers\LiveCameraManager.cs" />
-    <Compile Include="Forms\Helpers\Helpers\MuraChartHelper.cs" />
-    <Compile Include="Forms\Helpers\Presenters\ThumbnailGridPresenter.cs" />
-    <Compile Include="Forms\Helpers\Navigators\DateTimeNavigator.cs" />
+    <Compile Include="UI\Helpers\Presenters\AniloxRollPresenter.cs" />
+    <Compile Include="UI\Helpers\Helpers\FormInteractionHelper.cs" />
+    <Compile Include="UI\Helpers\Managers\LiveCameraManager.cs" />
+    <Compile Include="UI\Helpers\Helpers\MuraChartHelper.cs" />
+    <Compile Include="UI\Helpers\Presenters\ThumbnailGridPresenter.cs" />
+    <Compile Include="UI\Helpers\Navigators\DateTimeNavigator.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <EmbeddedResource Include="Forms\AniloxRollForm.resx">
+    <EmbeddedResource Include="UI\AniloxRollForm.resx">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
