@@ -83,6 +83,8 @@
     <Compile Include="Core\Modules\Settings\InspectionSettings.cs" />
     <Compile Include="Core\Modules\Settings\InspectionSettingsStore.cs" />
     <Compile Include="Core\Modules\Settings\UserSettingsService.cs" />
+    <Compile Include="Core\Modules\Settings\System\CameraHardwareConfig.cs" />
+    <Compile Include="Core\Modules\Settings\System\SystemSettings.cs" />
     <Compile Include="Core\Modules\Interop\NativeMethods.cs" />
     <Compile Include="Core\Modules\ImageProcessing\BatchInspectionService.cs" />
     <Compile Include="Core\Modules\ImageProcessing\InspectionEngine.cs" />
@@ -97,7 +99,6 @@
     <Compile Include="Forms\Helpers\Presenters\AniloxRollPresenter.cs" />
     <Compile Include="Forms\Helpers\Helpers\FormInteractionHelper.cs" />
     <Compile Include="Forms\Helpers\Managers\LiveCameraManager.cs" />
-    <Compile Include="Forms\Helpers\Managers\CameraConfig.cs" />
     <Compile Include="Forms\Helpers\Helpers\MuraChartHelper.cs" />
     <Compile Include="Forms\Helpers\Presenters\ThumbnailGridPresenter.cs" />
     <Compile Include="Forms\Helpers\Navigators\DateTimeNavigator.cs" />
