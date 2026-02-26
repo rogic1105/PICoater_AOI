@@ -166,6 +166,16 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             else StartGrab();
         }
 
+        public void EnsureAllocatedAndToggleGrab(bool enableImageProcessing)
+        {
+            if (!IsAllocated)
+            {
+                AllocateCameras(enableImageProcessing);
+            }
+
+            ToggleGrab();
+        }
+
         public void StartGrab()
         {
             if (!IsAllocated || IsLiveGrabbing) return;
@@ -209,6 +219,24 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
             IsAllocated = false;
             UpdateCameraStatus("已釋放 (Freed)", Color.Gray);
+        }
+
+        public void ReinitializeForAcquisitionSettings(bool enableImageProcessing, InspectionSettings settings)
+        {
+            bool wasLive = IsLiveGrabbing;
+            if (wasLive)
+            {
+                StopGrab();
+            }
+
+            FreeCameras();
+            AllocateCameras(enableImageProcessing);
+            SetCaptureSettings(settings);
+
+            if (wasLive)
+            {
+                StartGrab();
+            }
         }
 
         public void SetImageProcessingEnabled(bool enable)

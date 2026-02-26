@@ -121,13 +121,16 @@ namespace AniloxRoll.Monitor.Forms
             {
                 try
                 {
-                    _liveCameraManager.AllocateCameras(checkBoxEnableImageProcessing.Checked);
+                    _liveCameraManager.EnsureAllocatedAndToggleGrab(checkBoxEnableImageProcessing.Checked);
                 }
                 catch (Exception ex)
                 {
                     MessageBox.Show($"相機配置失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
+
+                btnCameraGrab.Text = _liveCameraManager.IsLiveGrabbing ? "停止抓取" : "開始抓取";
+                return;
             }
 
             _liveCameraManager.ToggleGrab();
@@ -170,23 +173,8 @@ namespace AniloxRoll.Monitor.Forms
                 _isApplyingCameraReinit = true;
                 try
                 {
-                    bool wasLive = _liveCameraManager.IsLiveGrabbing;
-                    if (wasLive)
-                    {
-                        _liveCameraManager.StopGrab();
-                    }
-
-                    _liveCameraManager.FreeCameras();
-                    btnCameraGrab.Text = "開始抓取";
-
-                    _liveCameraManager.AllocateCameras(checkBoxEnableImageProcessing.Checked);
-                    _liveCameraManager.SetCaptureSettings(_settings);
-
-                    if (wasLive)
-                    {
-                        _liveCameraManager.StartGrab();
-                        btnCameraGrab.Text = "停止抓取";
-                    }
+                    _liveCameraManager.ReinitializeForAcquisitionSettings(checkBoxEnableImageProcessing.Checked, _settings);
+                    btnCameraGrab.Text = _liveCameraManager.IsLiveGrabbing ? "停止抓取" : "開始抓取";
                 }
                 catch (Exception ex)
                 {
