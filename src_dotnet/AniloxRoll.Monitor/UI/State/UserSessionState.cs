@@ -2,72 +2,34 @@
 using System.Configuration;
 using System.IO;
 
-namespace AniloxRoll.Monitor.Core.Data
+namespace AniloxRoll.Monitor.UI.State
 {
-    public static class UserSettingsService
+    public static class UserSessionState
     {
         private static T Execute<T>(Func<Properties.Settings, T> getter, T fallback = default(T))
         {
-            try
-            {
-                return getter(Properties.Settings.Default);
-            }
+            try { return getter(Properties.Settings.Default); }
             catch (ConfigurationErrorsException ex)
             {
                 RecoverFromCorruptedConfig(ex);
-                try
-                {
-                    return getter(Properties.Settings.Default);
-                }
-                catch
-                {
-                    return fallback;
-                }
+                try { return getter(Properties.Settings.Default); } catch { return fallback; }
             }
         }
 
         private static void Execute(Action<Properties.Settings> setter)
         {
-            try
-            {
-                setter(Properties.Settings.Default);
-            }
+            try { setter(Properties.Settings.Default); }
             catch (ConfigurationErrorsException ex)
             {
                 RecoverFromCorruptedConfig(ex);
-                try
-                {
-                    setter(Properties.Settings.Default);
-                }
-                catch
-                {
-                    // ignore
-                }
+                try { setter(Properties.Settings.Default); } catch { }
             }
         }
 
         private static void RecoverFromCorruptedConfig(ConfigurationErrorsException ex)
         {
-            try
-            {
-                if (!string.IsNullOrWhiteSpace(ex.Filename) && File.Exists(ex.Filename))
-                {
-                    File.Delete(ex.Filename);
-                }
-            }
-            catch
-            {
-                // ignore
-            }
-
-            try
-            {
-                Properties.Settings.Default.Reset();
-            }
-            catch
-            {
-                // ignore
-            }
+            try { if (!string.IsNullOrWhiteSpace(ex.Filename) && File.Exists(ex.Filename)) File.Delete(ex.Filename); } catch { }
+            try { Properties.Settings.Default.Reset(); } catch { }
         }
 
         public static string LastDataPath => Execute(s => s.LastDataPath, string.Empty);
@@ -79,26 +41,9 @@ namespace AniloxRoll.Monitor.Core.Data
         public static string LastSec => Execute(s => s.LastSec, string.Empty);
         public static bool LastEnableImageProcessing => Execute(s => s.LastEnableImageProcessing, true);
 
-        public static string InspectionConfigJson
-        {
-            get => Execute(s => s.InspectionConfigJson, string.Empty);
-            set => Execute(s => s.InspectionConfigJson = value);
-        }
-
-        public static void Save()
-        {
-            Execute(s => s.Save());
-        }
-
-        public static void SetLastDataPath(string path)
-        {
-            Execute(s => s.LastDataPath = path ?? string.Empty);
-        }
-
-        public static void SetLastEnableImageProcessing(bool enabled)
-        {
-            Execute(s => s.LastEnableImageProcessing = enabled);
-        }
+        public static void Save() => Execute(s => s.Save());
+        public static void SetLastDataPath(string path) => Execute(s => s.LastDataPath = path ?? string.Empty);
+        public static void SetLastEnableImageProcessing(bool enabled) => Execute(s => s.LastEnableImageProcessing = enabled);
 
         public static void SaveDateTimeSelection(string year, string month, string day, string hour, string min, string sec)
         {

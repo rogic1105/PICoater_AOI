@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Threading.Tasks;
 using AOI.SDK.Core.Models;
 using AniloxRoll.Monitor.Core.Data;
+using AniloxRoll.Monitor.Core.Acquisition.Inspection;
 
 namespace AniloxRoll.Monitor.Core.Services
 {

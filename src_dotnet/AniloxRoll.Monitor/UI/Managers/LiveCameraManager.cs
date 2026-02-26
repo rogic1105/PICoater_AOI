@@ -11,23 +11,12 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 {
     public class LiveCameraManager
     {
-        private class CameraConfig
-        {
-            public int Id { get; set; }
-            public string SystemDescriptor { get; set; }
-            public int SystemNum { get; set; }
-            public MIL_INT DevNum { get; set; }
-            public string DcfPath { get; set; }
-            public Panel DisplayPanel { get; set; }
-            public Label StatusLabel { get; set; }
-        }
-
         private readonly Form _mainForm;
         private readonly Panel _mainDisplayPanel; // 大畫面 (Panel8)
         private readonly Action<string> _updatePixelInfoCallback; // 更新座標文字的委派
 
         private List<AniloxCamera> _cameras = new List<AniloxCamera>();
-        private List<CameraConfig> _cameraConfigs;
+        private List<CameraHardwareConfig> _cameraHardwareConfigs;
         private Dictionary<int, MIL_ID> _allocatedSystems = new Dictionary<int, MIL_ID>();
 
         private readonly Dictionary<int, Panel> _liveViewPanels = new Dictionary<int, Panel>();
@@ -69,49 +58,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             SetupLivePanel(panel6, 6);
             SetupLivePanel(panel7, 7);
 
-            _cameraConfigs = new List<CameraConfig>
-            {
-                new CameraConfig
-                {
-                    Id = 1,
-                    SystemDescriptor = MIL.M_SYSTEM_RADIENTEVCL,
-                    SystemNum = 0,
-                    DevNum = MIL.M_DEV0,
-                    DcfPath = @"C:\Users\User\Downloads\dcf\Radient_Config.dcf",
-                    DisplayPanel = _liveViewPanels[1],
-                    StatusLabel = _cameraStatusLabels[1]
-                },
-                new CameraConfig
-                {
-                    Id = 2,
-                    SystemDescriptor = MIL.M_SYSTEM_RADIENTEVCL,
-                    SystemNum = 0, // 第一張擷取卡
-                    DevNum = MIL.M_DEV1, // 第二個 Port
-                    DcfPath = @"C:\Users\User\Downloads\dcf\Radient_Config.dcf",
-                    DisplayPanel = _liveViewPanels[2],
-                    StatusLabel = _cameraStatusLabels[2]
-                },
-                new CameraConfig
-                {
-                    Id = 5,
-                    SystemDescriptor = MIL.M_SYSTEM_RADIENTEVCL,
-                    SystemNum = 1,
-                    DevNum = MIL.M_DEV0,
-                    DcfPath = @"C:\Users\User\Downloads\dcf\Radient_Config.dcf",
-                    DisplayPanel = _liveViewPanels[5],
-                    StatusLabel = _cameraStatusLabels[5]
-                },
-                new CameraConfig
-                {
-                    Id = 6,
-                    SystemDescriptor = MIL.M_SYSTEM_RADIENTEVCL,
-                    SystemNum = 1, 
-                    DevNum = MIL.M_DEV1,
-                    DcfPath = @"C:\Users\User\Downloads\dcf\Radient_Config.dcf",
-                    DisplayPanel = _liveViewPanels[6],
-                    StatusLabel = _cameraStatusLabels[6]
-                }
-            };
+            _cameraHardwareConfigs = SystemSettings.CreateDefault().CameraDevices;
 
             _cameraStatusTimer = new Timer { Interval = 500 };
             _cameraStatusTimer.Tick += CameraStatusTimer_Tick;
@@ -157,7 +104,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
             CameraSystemManager.Initialize();
 
-            foreach (var cfg in _cameraConfigs)
+            foreach (var cfg in _cameraHardwareConfigs)
             {
                 MIL_ID currentSysId = MIL.M_NULL;
 
@@ -179,12 +126,17 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                     }
                 }
 
+                if (!_liveViewPanels.TryGetValue(cfg.Id, out Panel displayPanel) || !_cameraStatusLabels.ContainsKey(cfg.Id))
+                {
+                    continue;
+                }
+
                 var cam = new AniloxCamera(
                     currentSysId,
                     cfg.Id,
                     cfg.DevNum,
                     cfg.DcfPath,
-                    cfg.DisplayPanel.Handle,
+                    displayPanel.Handle,
                     enableImageProcessing
                 );
 
@@ -212,6 +164,16 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             if (!IsAllocated) return;
             if (IsLiveGrabbing) StopGrab();
             else StartGrab();
+        }
+
+        public void EnsureAllocatedAndToggleGrab(bool enableImageProcessing)
+        {
+            if (!IsAllocated)
+            {
+                AllocateCameras(enableImageProcessing);
+            }
+
+            ToggleGrab();
         }
 
         public void StartGrab()
@@ -257,6 +219,30 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
             IsAllocated = false;
             UpdateCameraStatus("已釋放 (Freed)", Color.Gray);
+        }
+
+        public void ReinitializeForAcquisitionSettings(bool enableImageProcessing, InspectionSettings settings)
+        {
+            bool wasLive = IsLiveGrabbing;
+            if (wasLive)
+            {
+                StopGrab();
+            }
+
+            FreeCameras();
+            AllocateCameras(enableImageProcessing);
+            SetCaptureSettings(settings);
+
+            if (wasLive)
+            {
+                StartGrab();
+            }
+        }
+
+        public bool RequiresAcquisitionReinitialize(string changedPropertyName)
+        {
+            return changedPropertyName == nameof(InspectionSettings.CameraGrabHeight)
+                || changedPropertyName == nameof(InspectionSettings.CameraExposureTimeUs);
         }
 
         public void SetImageProcessingEnabled(bool enable)

@@ -70,39 +70,50 @@
     <Reference Include="System.Deployment" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Net.Http" />
+    <Reference Include="System.Web.Extensions" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Core\Modules\Acquisition\AniloxCamera.cs" />
-    <Compile Include="Core\Modules\Acquisition\CameraImageProcessor.cs" />
-    <Compile Include="Core\Modules\Acquisition\CameraSystemManager.cs" />
-    <Compile Include="Core\Modules\ImageCatalog\ImageMetadata.cs" />
-    <Compile Include="Core\Modules\ImageCatalog\ImageRepository.cs" />
-    <Compile Include="Core\Modules\ImageCatalog\InspectionData.cs" />
-    <Compile Include="Core\Modules\Settings\InspectionSettings.cs" />
-    <Compile Include="Core\Modules\Settings\InspectionSettingsStore.cs" />
-    <Compile Include="Core\Modules\Settings\UserSettingsService.cs" />
-    <Compile Include="Core\Modules\Interop\NativeMethods.cs" />
-    <Compile Include="Core\Modules\ImageProcessing\BatchInspectionService.cs" />
-    <Compile Include="Core\Modules\ImageProcessing\InspectionEngine.cs" />
-    <Compile Include="Core\Modules\ImageProcessing\InspectionEngine.ImageProcessing.cs" />
-    <Compile Include="Core\Modules\ImageProcessing\InspectionEngineConfig.cs" />
-    <Compile Include="Forms\AniloxRollForm.cs">
+    <Compile Include="Acquisition\AniloxCamera.cs" />
+    <Compile Include="ImageProcessing\MIL\CameraImageProcessor.cs" />
+    <Compile Include="Acquisition\CameraSystemManager.cs" />
+    <Compile Include="ImageCatalog\ImageMetadata.cs" />
+    <Compile Include="ImageCatalog\ImageRepository.cs" />
+    <Compile Include="Acquisition\Inspection\InspectionData.cs" />
+    <Compile Include="Settings\InspectionSettings.cs" />
+    <Compile Include="Settings\Providers\InspectionSettingsDefaultsProvider.cs" />
+    <Compile Include="Settings\Stores\InspectionSettingsStore.cs" />
+    <Compile Include="Settings\Utilities\JsonConfigLoader.cs" />
+    <Compile Include="Settings\State\UserSettingsService.cs" />
+    <Compile Include="Settings\Models\MachineLayoutConfig.cs" />
+    <Compile Include="Settings\Models\AcquisitionSettings.cs" />
+    <Compile Include="Settings\Models\InspectionRecipe.cs" />
+    <Compile Include="Settings\Models\StorageSettings.cs" />
+    <Compile Include="Settings\Services\ConfigManager.cs" />
+    <Compile Include="Settings\System\CameraHardwareConfig.cs" />
+    <Compile Include="Settings\System\SystemSettings.cs" />
+    <Compile Include="Interop\NativeMethods.cs" />
+    <Compile Include="ImageProcessing\BatchInspectionService.cs" />
+    <Compile Include="ImageProcessing\InspectionEngine.cs" />
+    <Compile Include="ImageProcessing\InspectionEngine.ImageProcessing.cs" />
+    <Compile Include="ImageProcessing\InspectionEngineConfig.cs" />
+    <Compile Include="UI\Form\AniloxRollForm.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="Forms\AniloxRollForm.Designer.cs">
+    <Compile Include="UI\Form\AniloxRollForm.Designer.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="Forms\Helpers\AniloxRollPresenter.cs" />
-    <Compile Include="Forms\Helpers\FormInteractionHelper.cs" />
-    <Compile Include="Forms\Helpers\LiveCameraManager.cs" />
-    <Compile Include="Forms\Helpers\MuraChartHelper.cs" />
-    <Compile Include="Forms\Helpers\ThumbnailGridPresenter.cs" />
-    <Compile Include="Forms\Helpers\DateTimeNavigator.cs" />
+    <Compile Include="UI\Presenters\AniloxRollPresenter.cs" />
+    <Compile Include="UI\Widgets\FormInteractionHelper.cs" />
+    <Compile Include="UI\Managers\LiveCameraManager.cs" />
+    <Compile Include="UI\Widgets\MuraChartHelper.cs" />
+    <Compile Include="UI\Presenters\ThumbnailGridPresenter.cs" />
+    <Compile Include="UI\Navigators\DateTimeNavigator.cs" />
+    <Compile Include="UI\State\UserSessionState.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <EmbeddedResource Include="Forms\AniloxRollForm.resx">
+    <EmbeddedResource Include="UI\Form\AniloxRollForm.resx">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
@@ -127,6 +138,12 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+    <None Include="Config\inspection-settings.defaults.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Config\system-settings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\sdk\AOI_SDK\src_dotnet\AOI.SDK\AOI.SDK.csproj">

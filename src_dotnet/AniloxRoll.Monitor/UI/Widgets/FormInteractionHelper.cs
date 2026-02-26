@@ -1,4 +1,5 @@
 ﻿using AniloxRoll.Monitor.Core.Data;
+using AniloxRoll.Monitor.Core.Acquisition.Inspection;
 using AniloxRoll.Monitor.Core.Services;
 using AOI.SDK.UI;
 using System;
@@ -7,6 +8,7 @@ using System.Drawing;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using AniloxRoll.Monitor.UI.State;
 
 namespace AniloxRoll.Monitor.Forms.Helpers
 {
@@ -78,7 +80,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         public void HandleSettingsChanged()
         {
             if (_settings == null) return;
-            InspectionSettingsStore.Save(_settings);
+            ConfigManager.SaveInspectionSettings(_settings);
             ApplySettingsToService();
             if (_muraChartHelper != null)
             {
@@ -92,15 +94,15 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         {
             if (_settings == null || _statusLabel == null) return;
 
-            double[] opsArray = _settings.GetOpsArray();
-            double[] posArray = _settings.GetPosArray();
+            double[] cameraOpsUmArray = _settings.GetCameraOpsUmArray();
+            double[] cameraStartPositionMmArray = _settings.GetCameraStartPositionMmArray();
 
-            if (_currentCameraIndex < 0 || _currentCameraIndex >= opsArray.Length)
+            if (_currentCameraIndex < 0 || _currentCameraIndex >= cameraOpsUmArray.Length)
                 return;
 
-            double opsInUm = opsArray[_currentCameraIndex];
+            double opsInUm = cameraOpsUmArray[_currentCameraIndex];
             double opsInMm = opsInUm / 1000.0;
-            double startPosMm = posArray[_currentCameraIndex];
+            double startPosMm = cameraStartPositionMmArray[_currentCameraIndex];
 
             double physicalX = startPosMm + (info.ImageX * opsInMm);
 
@@ -178,7 +180,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
             try
             {
-                AniloxRoll.Monitor.Core.Data.InspectionData data = _inspectionService.RunInspectionFullRes(index);
+                InspectionData data = _inspectionService.RunInspectionFullRes(index);
 
                 if (data != null)
                 {
@@ -186,8 +188,8 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
                     if (_muraChartHelper != null && _settings != null)
                     {
-                        double[] posArray = _settings.GetPosArray();
-                        double startPos = (index >= 0 && index < posArray.Length) ? posArray[index] : 0;
+                        double[] cameraStartPositionMmArray = _settings.GetCameraStartPositionMmArray();
+                        double startPos = (index >= 0 && index < cameraStartPositionMmArray.Length) ? cameraStartPositionMmArray[index] : 0;
 
                         // 傳入 startPos 讓 X 軸座標正確
                         _muraChartHelper.UpdateData(data.MuraCurveMean, data.MuraCurveMax, startPos);
@@ -204,7 +206,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         {
             using (var fbd = new FolderBrowserDialog())
             {
-                string preferredPath = UserSettingsService.LastDataPath;
+                string preferredPath = UserSessionState.LastDataPath;
                 if (!Directory.Exists(preferredPath)) preferredPath = @"D:\AniloxCaptures";
                 if (Directory.Exists(preferredPath))
                     fbd.SelectedPath = preferredPath;
@@ -221,10 +223,10 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                         return;
                     }
 
-                    UserSettingsService.SetLastDataPath(fbd.SelectedPath);
-                    UserSettingsService.Save();
+                    UserSessionState.SetLastDataPath(fbd.SelectedPath);
+                    UserSessionState.Save();
 
-                    _timeNavigator.Initialize(UserSettingsService.LastYear);
+                    _timeNavigator.Initialize(UserSessionState.LastYear);
 
                     _galleryManager.Select(lastCameraIndex, triggerEvent: false);
                     _currentCameraIndex = lastCameraIndex;

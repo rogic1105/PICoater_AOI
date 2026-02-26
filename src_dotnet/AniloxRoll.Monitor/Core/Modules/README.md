@@ -1,41 +1,55 @@
-# AniloxRoll.Monitor Core Modules
+# AniloxRoll.Monitor 模組目錄（扁平化）
 
-為了讓功能更容易定位，Core 依責任拆成以下模組：
+目前已改為以功能域扁平化整理，不再集中於 `Core/Modules` 或 `Forms`：
 
-## 1) Acquisition（擷取卡取圖）
-路徑：`Core/Modules/Acquisition`
+## 1) Acquisition（擷取）
+路徑：`Acquisition`
 
-- `AniloxCamera.cs`：單一相機生命週期與取圖流程。
-- `CameraSystemManager.cs`：MIL Application/System 配置與釋放。
-- `CameraImageProcessor.cs`：相機端影像前處理與轉換。
+- `AniloxCamera.cs`
+- `CameraSystemManager.cs`
+- `Inspection/InspectionData.cs`
 
 ## 2) ImageProcessing（影像處理）
-路徑：`Core/Modules/ImageProcessing`
+路徑：`ImageProcessing`
 
-- `InspectionEngine.cs`：Native 引擎資源管理（建立、buffer、釋放）。
-- `InspectionEngine.ImageProcessing.cs`：縮圖、全尺寸檢測、曲線輸出。
-- `BatchInspectionService.cs`：多相機批次流程與參數更新。
-- `InspectionEngineConfig.cs`：演算法預設參數。
+- `InspectionEngine.cs`
+- `InspectionEngine.ImageProcessing.cs`
+- `BatchInspectionService.cs`
+- `InspectionEngineConfig.cs`
+- `MIL/CameraImageProcessor.cs`
 
-## 3) ImageCatalog（圖片編號管理 / 索引）
-路徑：`Core/Modules/ImageCatalog`
+## 3) ImageCatalog（影像索引）
+路徑：`ImageCatalog`
 
-- `ImageRepository.cs`：掃描檔案、依時間/相機編號查圖。
-- `ImageMetadata.cs`：影像檔名解析後的欄位。
-- `InspectionData.cs`：影像與運算結果資料模型。
+- `ImageRepository.cs`
+- `ImageMetadata.cs`
 
-## 4) Settings（圖片參數管理）
-路徑：`Core/Modules/Settings`
+## 4) Settings（設定）
+路徑：`Settings`
 
-- `InspectionSettings.cs`：UI/流程使用的設定模型。
-- `InspectionSettingsStore.cs`：設定序列化與持久化。
-- `UserSettingsService.cs`：存取使用者設定。
+- `InspectionSettings.cs`
+- `Models/*`
+- `Providers/*`
+- `Services/ConfigManager.cs`
+- `Stores/InspectionSettingsStore.cs`
+- `State/UserSettingsService.cs`
+- `Utilities/*`
+- `System/SystemSettings.cs`
+- `System/CameraHardwareConfig.cs`
+- `README.md`
 
-## 5) Interop（DLL 讀取）
-路徑：`Core/Modules/Interop`
+> UI Session 狀態（LastDataPath / LastEnableImageProcessing / 時間篩選記憶）已移至 `UI/State/UserSessionState.cs`。
 
-- `NativeMethods.cs`：`picoater_api.dll` P/Invoke 入口與簽名。
+## 5) UI（介面）
+路徑：`UI`
 
----
+- `Form/AniloxRollForm.cs`
+- `Presenters/*`
+- `Navigators/*`
+- `Managers/*`
+- `Widgets/*`
 
-> UI 顯示相關（即時畫面、縮圖牆、表單互動）仍位於 `Forms/Helpers`，可作為下一步再拆分成 `Forms/Display` 與 `Forms/Workflow`。
+## 6) Interop（原生 DLL）
+路徑：`Interop`
+
+- `NativeMethods.cs`

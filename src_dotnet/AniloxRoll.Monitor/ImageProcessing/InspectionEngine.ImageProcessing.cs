@@ -3,6 +3,7 @@ using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
 using AniloxRoll.Monitor.Core.Data;
+using AniloxRoll.Monitor.Core.Acquisition.Inspection;
 using AniloxRoll.Monitor.Core.Interop;
 using AOI.SDK.Core.Models;
 using AOI.SDK.Utils;
