@@ -16,7 +16,7 @@ namespace AniloxRoll.Monitor.Forms
         private BatchInspectionService _inspectionService;
 
         // --- UI Helpers ---
-        private DateTimeNavigator _timeSelectionManager;
+        private DateTimeNavigator _dateTimeNavigator;
         private ThumbnailGridPresenter _galleryManager;
         private AniloxRollPresenter _presenter;
         private FormInteractionHelper _interactionHelper;
@@ -46,7 +46,7 @@ namespace AniloxRoll.Monitor.Forms
             _inspectionService = new BatchInspectionService();
 
             // [ImageCatalog 模組] 管理時間條件（年/月/日/時/分/秒）與影像索引查詢。
-            _timeSelectionManager = new DateTimeNavigator(
+            _dateTimeNavigator = new DateTimeNavigator(
                 _imageRepository, cbYear, cbMonth, cbDay, cbHour, cbMin, cbSec);
 
             // [UI 顯示模組] 管理多相機縮圖牆的初始化、選取狀態與同步更新。
@@ -57,7 +57,7 @@ namespace AniloxRoll.Monitor.Forms
 
             // [Workflow 協調模組] 串接資料存取、檢測服務與縮圖選取，提供表單層統一操作入口。
             _presenter = new AniloxRollPresenter(
-                _imageRepository, _inspectionService, _timeSelectionManager, _galleryManager);
+                _imageRepository, _inspectionService, _dateTimeNavigator, _galleryManager);
 
             // [視覺化模組] 管理 Mura 曲線圖顯示與 Ops 套用。
             _muraChartHelper = new MuraChartHelper(this.chartMura);
@@ -74,7 +74,7 @@ namespace AniloxRoll.Monitor.Forms
             _interactionHelper = new FormInteractionHelper(
                 this, canvasMain, new Button[] { btnShowOriginal, btnShowProcessed, btnSelectFolder },
                 _thumbnailCache, _presenter, _inspectionService, _imageRepository,
-                _timeSelectionManager, _galleryManager, _muraChartHelper, _settings, lblPixelInfo
+                _dateTimeNavigator, _galleryManager, _muraChartHelper, _settings, lblPixelInfo
             );
 
             _interactionHelper.ApplySettingsToService();

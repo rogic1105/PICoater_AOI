@@ -112,7 +112,7 @@ namespace AniloxRoll.Monitor.Core.Data
         /// <summary>
         /// 回傳 1~7 號相機的 OPS（單位 um）陣列。
         /// </summary>
-        public double[] GetOpsArray()
+        public double[] GetCameraOpsUmArray()
         {
             return new double[] { Cam1_Ops, Cam2_Ops, Cam3_Ops, Cam4_Ops, Cam5_Ops, Cam6_Ops, Cam7_Ops };
         }
@@ -120,10 +120,22 @@ namespace AniloxRoll.Monitor.Core.Data
         /// <summary>
         /// 回傳 1~7 號相機的起始位置（單位 mm）陣列。
         /// </summary>
-        public double[] GetPosArray()
+        public double[] GetCameraStartPositionMmArray()
         {
             return new double[] { Cam1_Pos, Cam2_Pos, Cam3_Pos, Cam4_Pos, Cam5_Pos, Cam6_Pos, Cam7_Pos };
         }
+
+        /// <summary>
+        /// [相容保留] 請改用 <see cref="GetCameraOpsUmArray"/>。
+        /// </summary>
+        [Obsolete("Use GetCameraOpsUmArray() instead.")]
+        public double[] GetOpsArray() => GetCameraOpsUmArray();
+
+        /// <summary>
+        /// [相容保留] 請改用 <see cref="GetCameraStartPositionMmArray"/>。
+        /// </summary>
+        [Obsolete("Use GetCameraStartPositionMmArray() instead.")]
+        public double[] GetPosArray() => GetCameraStartPositionMmArray();
 
     }
 }
