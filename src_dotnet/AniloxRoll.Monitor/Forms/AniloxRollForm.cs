@@ -111,18 +111,6 @@ namespace AniloxRoll.Monitor.Forms
         // ==========================================
         // --- 相機按鈕事件：呼叫 Manager 執行 ---
         // ==========================================
-        private void btnCameraAllocation_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                _liveCameraManager.AllocateCameras(checkBoxEnableImageProcessing.Checked);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"相機配置失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
         private void btnCameraGrab_Click(object sender, EventArgs e)
         {
             if (!_liveCameraManager.IsAllocated)

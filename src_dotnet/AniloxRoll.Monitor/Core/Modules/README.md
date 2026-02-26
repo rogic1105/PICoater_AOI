@@ -30,6 +30,7 @@
 - `InspectionSettings.cs`：UI/流程使用的設定模型。
 - `InspectionSettingsStore.cs`：設定序列化與持久化。
 - `UserSettingsService.cs`：存取使用者設定。
+- `README.md`：Settings 子模組職責與設計說明。
 
 ## 5) Interop（DLL 讀取）
 路徑：`Core/Modules/Interop`

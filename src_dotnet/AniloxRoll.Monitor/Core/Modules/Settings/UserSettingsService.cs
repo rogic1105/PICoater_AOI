@@ -4,8 +4,13 @@ using System.IO;
 
 namespace AniloxRoll.Monitor.Core.Data
 {
+    /// <summary>
+    /// 使用者設定存取服務。
+    /// 統一封裝 Properties.Settings 的讀寫與損毀設定檔復原流程。
+    /// </summary>
     public static class UserSettingsService
     {
+        // ===== 內部安全存取 Helper =====
         private static T Execute<T>(Func<Properties.Settings, T> getter, T fallback = default(T))
         {
             try
@@ -70,6 +75,7 @@ namespace AniloxRoll.Monitor.Core.Data
             }
         }
 
+        // ===== 讀取型屬性（UI 狀態、篩選條件、功能開關） =====
         public static string LastDataPath => Execute(s => s.LastDataPath, string.Empty);
         public static string LastYear => Execute(s => s.LastYear, string.Empty);
         public static string LastMonth => Execute(s => s.LastMonth, string.Empty);
@@ -85,6 +91,7 @@ namespace AniloxRoll.Monitor.Core.Data
             set => Execute(s => s.InspectionConfigJson = value);
         }
 
+        // ===== 對外操作 API =====
         public static void Save()
         {
             Execute(s => s.Save());

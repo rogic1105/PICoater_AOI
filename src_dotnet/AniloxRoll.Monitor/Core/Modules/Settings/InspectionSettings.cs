@@ -3,7 +3,10 @@ using System.ComponentModel;
 
 namespace AniloxRoll.Monitor.Core.Data
 {
-    // [Serializable] 標記，讓它支援 XML 序列化
+    /// <summary>
+    /// 檢測與相機設定模型。
+    /// 用於 PropertyGrid 顯示、流程參數套用，以及 XML 持久化。
+    /// </summary>
     [Serializable]
     public class InspectionSettings
     {
@@ -94,11 +97,11 @@ namespace AniloxRoll.Monitor.Core.Data
         [DisplayName("曝光時間 (us)")]
         public double CameraExposureTimeUs { get; set; } = 50;
 
-        [Category("4. 截圖設定")]
+        [Category("5. 截圖設定")]
         [DisplayName("啟用即時截圖")]
         public bool EnableAutoCapture { get; set; } = false;
 
-        [Category("4. 截圖設定")]
+        [Category("5. 截圖設定")]
         [DisplayName("截圖根目錄")]
         [Description("格式: YYYY/YYYYMM/YYYYMMDD/YYYYMMDD_hhmmss-[CameraId].bmp")]
         public string CaptureRootPath { get; set; } = @"D:\AniloxCaptures";
@@ -106,11 +109,17 @@ namespace AniloxRoll.Monitor.Core.Data
         // =================================================================
         // Helper Methods (Array Conversion)
         // =================================================================
+        /// <summary>
+        /// 回傳 1~7 號相機的 OPS（單位 um）陣列。
+        /// </summary>
         public double[] GetOpsArray()
         {
             return new double[] { Cam1_Ops, Cam2_Ops, Cam3_Ops, Cam4_Ops, Cam5_Ops, Cam6_Ops, Cam7_Ops };
         }
 
+        /// <summary>
+        /// 回傳 1~7 號相機的起始位置（單位 mm）陣列。
+        /// </summary>
         public double[] GetPosArray()
         {
             return new double[] { Cam1_Pos, Cam2_Pos, Cam3_Pos, Cam4_Pos, Cam5_Pos, Cam6_Pos, Cam7_Pos };
