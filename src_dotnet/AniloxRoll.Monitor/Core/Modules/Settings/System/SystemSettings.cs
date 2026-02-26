@@ -1,4 +1,3 @@
-using System.Runtime.Serialization;
 using System.Collections.Generic;
 using Matrox.MatroxImagingLibrary;
 
@@ -7,10 +6,8 @@ namespace AniloxRoll.Monitor.Core.Data
     /// <summary>
     /// 系統層設定（硬體/設備拓樸）。
     /// </summary>
-    [DataContract]
     public class SystemSettings
     {
-        [DataMember]
         public List<CameraHardwareConfig> CameraDevices { get; set; } = new List<CameraHardwareConfig>();
 
         public static SystemSettings CreateDefault()
