@@ -70,6 +70,7 @@
     <Reference Include="System.Deployment" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Net.Http" />
+    <Reference Include="System.Web.Extensions" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
   </ItemGroup>
@@ -81,7 +82,9 @@
     <Compile Include="Core\Modules\ImageCatalog\ImageRepository.cs" />
     <Compile Include="Core\Modules\Acquisition\Inspection\InspectionData.cs" />
     <Compile Include="Core\Modules\Settings\InspectionSettings.cs" />
+    <Compile Include="Core\Modules\Settings\InspectionSettingsDefaultsProvider.cs" />
     <Compile Include="Core\Modules\Settings\InspectionSettingsStore.cs" />
+    <Compile Include="Core\Modules\Settings\JsonConfigLoader.cs" />
     <Compile Include="Core\Modules\Settings\UserSettingsService.cs" />
     <Compile Include="Core\Modules\Settings\System\CameraHardwareConfig.cs" />
     <Compile Include="Core\Modules\Settings\System\SystemSettings.cs" />
@@ -129,6 +132,12 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+    <None Include="Config\inspection-settings.defaults.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Config\system-settings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\sdk\AOI_SDK\src_dotnet\AOI.SDK\AOI.SDK.csproj">

@@ -14,24 +14,32 @@ namespace AniloxRoll.Monitor.Core.Data
         /// </summary>
         public static InspectionSettings Load()
         {
+            InspectionSettings defaults = InspectionSettingsDefaultsProvider.LoadDefaults();
             try
             {
                 string xml = UserSettingsService.InspectionConfigJson;
-                if (string.IsNullOrWhiteSpace(xml)) return new InspectionSettings();
+                if (string.IsNullOrWhiteSpace(xml)) return ApplySafety(defaults);
 
                 XmlSerializer serializer = new XmlSerializer(typeof(InspectionSettings));
                 using (StringReader reader = new StringReader(xml))
                 {
                     var settings = (InspectionSettings)serializer.Deserialize(reader);
-                    if (settings.CameraGrabHeight <= 0) settings.CameraGrabHeight = 5000;
-                    if (settings.CameraExposureTimeUs <= 0) settings.CameraExposureTimeUs = 50;
-                    return settings;
+                    return ApplySafety(settings ?? defaults);
                 }
             }
             catch
             {
-                return new InspectionSettings();
+                return ApplySafety(defaults);
             }
+        }
+
+        private static InspectionSettings ApplySafety(InspectionSettings settings)
+        {
+            if (settings == null) settings = new InspectionSettings();
+            if (settings.CameraGrabHeight <= 0) settings.CameraGrabHeight = 5000;
+            if (settings.CameraExposureTimeUs <= 0) settings.CameraExposureTimeUs = 50;
+            if (string.IsNullOrWhiteSpace(settings.CaptureRootPath)) settings.CaptureRootPath = @"D:\AniloxCaptures";
+            return settings;
         }
 
         /// <summary>

@@ -12,6 +12,10 @@
   - 系統層（硬體）設定：MIL System Descriptor、System Number、Device Number、DCF 路徑。
   - 提供集中管理的相機硬體配置來源。
 
+- `JsonConfigLoader.cs`、`InspectionSettingsDefaultsProvider.cs`
+  - JSON 設定載入工具與預設參數提供者。
+  - 將相機硬體參數與 PropertyGrid 預設值改為由 JSON 檔集中管理。
+
 - `InspectionSettingsStore.cs`
   - 負責 `InspectionSettings` 的 XML 序列化/反序列化。
   - 對外提供 `Load()` / `Save()`，並在讀取時補齊安全預設值。
@@ -32,3 +36,8 @@
 1. **SystemSettings（硬體/系統）**：相機與擷取卡拓樸。
 2. **InspectionSettings（檢測/流程）**：演算法與操作參數。
 3. **UserSettingsService（AppState）**：UI 行為狀態與最近使用資訊。
+
+## JSON 設定檔
+
+- `Config/system-settings.json`：相機硬體參數（SystemSettings）。
+- `Config/inspection-settings.defaults.json`：PropertyGrid 預設值（InspectionSettings defaults）。
