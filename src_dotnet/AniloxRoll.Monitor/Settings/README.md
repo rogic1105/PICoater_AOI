@@ -35,8 +35,10 @@
   - 設定整合入口（載入/儲存 InspectionSettings 與 SystemSettings）。
 
 - `State/UserSettingsService.cs`
-  - 封裝 `Properties.Settings` 的存取。
-  - 集中處理設定檔損毀復原（刪除壞檔 + `Reset()`）與例外保護。
+  - Core 設定儲存（例如 `InspectionConfigJson`），不承載 UI Session 狀態。
+
+- `UI/State/UserSessionState.cs`
+  - UI 使用者操作狀態（最後資料夾、時間篩選、影像處理勾選狀態）。
 
 ## 設計重點
 
@@ -49,7 +51,7 @@
 
 1. **SystemSettings（硬體/系統）**：相機與擷取卡拓樸。
 2. **InspectionSettings（檢測/流程）**：演算法與操作參數。
-3. **UserSettingsService（AppState）**：UI 行為狀態與最近使用資訊。
+3. **UserSessionState（UI AppState）**：UI 行為狀態與最近使用資訊。
 
 ## JSON 設定檔
 

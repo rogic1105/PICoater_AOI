@@ -21,3 +21,7 @@
 - `Widgets/`
   - `FormInteractionHelper.cs`
   - `MuraChartHelper.cs`
+
+- `State/`
+  - `UserSessionState.cs`
+  - UI 使用者操作狀態（最後路徑、上次選項、時間篩選記憶）。

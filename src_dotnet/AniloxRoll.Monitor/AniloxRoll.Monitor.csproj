@@ -110,6 +110,7 @@
     <Compile Include="UI\Widgets\MuraChartHelper.cs" />
     <Compile Include="UI\Presenters\ThumbnailGridPresenter.cs" />
     <Compile Include="UI\Navigators\DateTimeNavigator.cs" />
+    <Compile Include="UI\State\UserSessionState.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <EmbeddedResource Include="UI\Form\AniloxRollForm.resx">

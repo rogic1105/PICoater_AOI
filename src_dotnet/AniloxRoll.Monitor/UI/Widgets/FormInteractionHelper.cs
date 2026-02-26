@@ -8,6 +8,7 @@ using System.Drawing;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using AniloxRoll.Monitor.UI.State;
 
 namespace AniloxRoll.Monitor.Forms.Helpers
 {
@@ -205,7 +206,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         {
             using (var fbd = new FolderBrowserDialog())
             {
-                string preferredPath = UserSettingsService.LastDataPath;
+                string preferredPath = UserSessionState.LastDataPath;
                 if (!Directory.Exists(preferredPath)) preferredPath = @"D:\AniloxCaptures";
                 if (Directory.Exists(preferredPath))
                     fbd.SelectedPath = preferredPath;
@@ -222,10 +223,10 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                         return;
                     }
 
-                    UserSettingsService.SetLastDataPath(fbd.SelectedPath);
-                    UserSettingsService.Save();
+                    UserSessionState.SetLastDataPath(fbd.SelectedPath);
+                    UserSessionState.Save();
 
-                    _timeNavigator.Initialize(UserSettingsService.LastYear);
+                    _timeNavigator.Initialize(UserSessionState.LastYear);
 
                     _galleryManager.Select(lastCameraIndex, triggerEvent: false);
                     _currentCameraIndex = lastCameraIndex;

@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Windows.Forms;
 using AniloxRoll.Monitor.Core.Data;
+using AniloxRoll.Monitor.UI.State;
 
 namespace AniloxRoll.Monitor.Forms.Helpers
 {
@@ -50,11 +51,11 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         }
 
         // 封裝各層級的更新邏輯，不再讓 Form 直接呼叫 Repository
-        private void UpdateMonth() => UpdateCombo(_cbMonth, _repository.GetMonths(_cbYear.Text), UserSettingsService.LastMonth);
-        private void UpdateDay() => UpdateCombo(_cbDay, _repository.GetDays(_cbYear.Text, _cbMonth.Text), UserSettingsService.LastDay);
-        private void UpdateHour() => UpdateCombo(_cbHour, _repository.GetHours(_cbYear.Text, _cbMonth.Text, _cbDay.Text), UserSettingsService.LastHour);
-        private void UpdateMinute() => UpdateCombo(_cbMin, _repository.GetMinutes(_cbYear.Text, _cbMonth.Text, _cbDay.Text, _cbHour.Text), UserSettingsService.LastMin);
-        private void UpdateSecond() => UpdateCombo(_cbSec, _repository.GetSeconds(_cbYear.Text, _cbMonth.Text, _cbDay.Text, _cbHour.Text, _cbMin.Text), UserSettingsService.LastSec);
+        private void UpdateMonth() => UpdateCombo(_cbMonth, _repository.GetMonths(_cbYear.Text), UserSessionState.LastMonth);
+        private void UpdateDay() => UpdateCombo(_cbDay, _repository.GetDays(_cbYear.Text, _cbMonth.Text), UserSessionState.LastDay);
+        private void UpdateHour() => UpdateCombo(_cbHour, _repository.GetHours(_cbYear.Text, _cbMonth.Text, _cbDay.Text), UserSessionState.LastHour);
+        private void UpdateMinute() => UpdateCombo(_cbMin, _repository.GetMinutes(_cbYear.Text, _cbMonth.Text, _cbDay.Text, _cbHour.Text), UserSessionState.LastMin);
+        private void UpdateSecond() => UpdateCombo(_cbSec, _repository.GetSeconds(_cbYear.Text, _cbMonth.Text, _cbDay.Text, _cbHour.Text, _cbMin.Text), UserSessionState.LastSec);
 
         private void UpdateCombo(ComboBox cb, List<string> items, string lastVal)
         {
@@ -66,7 +67,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
         public void SaveCurrentSelection()
         {
-            UserSettingsService.SaveDateTimeSelection(
+            UserSessionState.SaveDateTimeSelection(
                 _cbYear.Text,
                 _cbMonth.Text,
                 _cbDay.Text,
@@ -74,7 +75,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                 _cbMin.Text,
                 _cbSec.Text
             );
-            UserSettingsService.Save();
+            UserSessionState.Save();
         }
 
         public string GetCurrentYear() => _cbYear.Text;

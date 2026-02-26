@@ -38,6 +38,8 @@
 - `System/CameraHardwareConfig.cs`
 - `README.md`
 
+> UI Session 狀態（LastDataPath / LastEnableImageProcessing / 時間篩選記憶）已移至 `UI/State/UserSessionState.cs`。
+
 ## 5) UI（介面）
 路徑：`UI`
 

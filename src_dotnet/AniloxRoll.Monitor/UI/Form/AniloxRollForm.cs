@@ -6,6 +6,7 @@ using System.Windows.Forms;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.Forms.Helpers;
+using AniloxRoll.Monitor.UI.State;
 
 namespace AniloxRoll.Monitor.Forms
 {
@@ -63,7 +64,7 @@ namespace AniloxRoll.Monitor.Forms
             _muraChartHelper = new MuraChartHelper(this.chartMura);
             _muraChartHelper.SetOps(_settings.Cam1_Ops);
 
-            checkBoxEnableImageProcessing.Checked = UserSettingsService.LastEnableImageProcessing;
+            checkBoxEnableImageProcessing.Checked = UserSessionState.LastEnableImageProcessing;
 
             propertyGrid1.SelectedObject = _settings;
             propertyGrid1.ToolbarVisible = false;
@@ -139,8 +140,8 @@ namespace AniloxRoll.Monitor.Forms
         private void checkBoxEnableImageProcessing_CheckedChanged(object sender, EventArgs e)
         {
             _liveCameraManager.SetImageProcessingEnabled(checkBoxEnableImageProcessing.Checked);
-            UserSettingsService.SetLastEnableImageProcessing(checkBoxEnableImageProcessing.Checked);
-            UserSettingsService.Save();
+            UserSessionState.SetLastEnableImageProcessing(checkBoxEnableImageProcessing.Checked);
+            UserSessionState.Save();
         }
 
         // ==========================================
