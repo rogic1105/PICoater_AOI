@@ -39,21 +39,27 @@ namespace AniloxRoll.Monitor.Forms
 
         private void InitializeSystem()
         {
+            // [Settings 模組] 載入檢測參數與相機擷取設定（供 PropertyGrid、流程與相機初始化共用）。
             if (_settings == null) _settings = InspectionSettingsStore.Load();
 
+            // [ImageProcessing 模組] 建立批次檢測服務，負責縮圖/全尺寸檢測流程與演算法參數套用。
             _inspectionService = new BatchInspectionService();
 
+            // [ImageCatalog 模組] 管理時間條件（年/月/日/時/分/秒）與影像索引查詢。
             _timeSelectionManager = new DateTimeNavigator(
                 _imageRepository, cbYear, cbMonth, cbDay, cbHour, cbMin, cbSec);
 
+            // [UI 顯示模組] 管理多相機縮圖牆的初始化、選取狀態與同步更新。
             _galleryManager = new ThumbnailGridPresenter();
             _galleryManager.Initialize(new PictureBox[] {
                 pbCam1, pbCam2, pbCam3, pbCam4, pbCam5, pbCam6, pbCam7
             });
 
+            // [Workflow 協調模組] 串接資料存取、檢測服務與縮圖選取，提供表單層統一操作入口。
             _presenter = new AniloxRollPresenter(
                 _imageRepository, _inspectionService, _timeSelectionManager, _galleryManager);
 
+            // [視覺化模組] 管理 Mura 曲線圖顯示與 Ops 套用。
             _muraChartHelper = new MuraChartHelper(this.chartMura);
             _muraChartHelper.SetOps(_settings.Cam1_Ops);
 
@@ -64,6 +70,7 @@ namespace AniloxRoll.Monitor.Forms
             propertyGrid1.PropertyValueChanged -= _propertyGrid_PropertyValueChanged;
             propertyGrid1.PropertyValueChanged += _propertyGrid_PropertyValueChanged;
 
+            // [UI 互動模組] 封裝按鈕事件、畫面切換、縮圖選取與主畫布資訊更新等表單互動流程。
             _interactionHelper = new FormInteractionHelper(
                 this, canvasMain, new Button[] { btnShowOriginal, btnShowProcessed, btnSelectFolder },
                 _thumbnailCache, _presenter, _inspectionService, _imageRepository,
@@ -82,7 +89,7 @@ namespace AniloxRoll.Monitor.Forms
             canvasMain.StatusChanged += OnCanvasStatusChanged;
             canvasMain.EdgeReached += OnCanvasEdgeReached;
 
-            // [新增] 初始化 LiveCameraManager
+            // [Acquisition 模組] 管理 MIL 相機硬體生命週期（配置、連續抓圖、釋放）與即時畫面輸出。
             _liveCameraManager = new LiveCameraManager(
                 this,
                 panel1,
