@@ -15,9 +15,12 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         private readonly BatchInspectionService _inspectionService;
         private readonly DateTimeNavigator _timeManager;
         private readonly ThumbnailGridPresenter _galleryManager;
+        private int _periodNavigationBusyCount = 0;
+        private bool _isPeriodNavigationBusy = false;
 
         public event Action<bool> BusyStateChanged;
         public event Action<string> LogReported;
+        public event Action<bool, bool> PeriodNavigationStateChanged;
 
         public AniloxRollPresenter(
             ImageRepository repo,
@@ -78,6 +81,84 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                 LogReported?.Invoke($"Workflow Error: {ex.Message}");
                 BusyStateChanged?.Invoke(false);
             }
+        }
+
+        public async Task LoadImagesWithPeriodLockAsync(bool isProcessedMode, Func<bool, Task> loadImagesAsync)
+        {
+            BeginPeriodNavigationBusy();
+            try
+            {
+                await loadImagesAsync(isProcessedMode);
+            }
+            finally
+            {
+                EndPeriodNavigationBusy();
+            }
+        }
+
+        public async Task MovePeriodAsync(int step, bool isProcessedMode, Func<bool, Task> loadImagesAsync)
+        {
+            if (_isPeriodNavigationBusy) return;
+
+            var periods = _repository.GetAvailablePeriods();
+            if (periods.Count == 0)
+            {
+                UpdatePeriodNavigationState();
+                return;
+            }
+
+            DateTime current = _timeManager.GetCurrentPeriodOrDefault(periods[0]);
+            int idx = periods.FindIndex(x => x == current);
+            if (idx < 0)
+            {
+                idx = periods.FindLastIndex(x => x <= current);
+                if (idx < 0) idx = 0;
+            }
+
+            int target = Math.Max(0, Math.Min(periods.Count - 1, idx + step));
+            if (target == idx)
+            {
+                UpdatePeriodNavigationState();
+                return;
+            }
+
+            _timeManager.SetPeriodToCombo(periods[target]);
+            await LoadImagesWithPeriodLockAsync(isProcessedMode, loadImagesAsync);
+        }
+
+        public void BeginPeriodNavigationBusy()
+        {
+            _periodNavigationBusyCount++;
+            _isPeriodNavigationBusy = _periodNavigationBusyCount > 0;
+            UpdatePeriodNavigationState();
+        }
+
+        public void EndPeriodNavigationBusy()
+        {
+            _periodNavigationBusyCount = Math.Max(0, _periodNavigationBusyCount - 1);
+            _isPeriodNavigationBusy = _periodNavigationBusyCount > 0;
+            UpdatePeriodNavigationState();
+        }
+
+        public void UpdatePeriodNavigationState()
+        {
+            var periods = _repository.GetAvailablePeriods();
+            if (periods.Count == 0)
+            {
+                PeriodNavigationStateChanged?.Invoke(false, false);
+                return;
+            }
+
+            DateTime current = _timeManager.GetCurrentPeriodOrDefault(periods[0]);
+            int idx = periods.FindIndex(x => x == current);
+            if (idx < 0)
+            {
+                idx = periods.FindLastIndex(x => x <= current);
+                if (idx < 0) idx = 0;
+            }
+
+            bool canOperate = !_isPeriodNavigationBusy;
+            PeriodNavigationStateChanged?.Invoke(canOperate && idx > 0, canOperate && idx < periods.Count - 1);
         }
     }
 }

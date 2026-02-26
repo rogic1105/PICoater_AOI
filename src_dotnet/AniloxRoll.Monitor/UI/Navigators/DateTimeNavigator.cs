@@ -17,6 +17,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
     {
         private readonly ImageRepository _repository;
         private readonly ComboBox _cbYear, _cbMonth, _cbDay, _cbHour, _cbMin, _cbSec;
+        public event Action PeriodSelectionChanged;
 
         public DateTimeNavigator(
             ImageRepository repository,
@@ -36,12 +37,15 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
         private void BindEvents()
         {
-            _cbYear.SelectedIndexChanged += (s, e) => UpdateMonth();
-            _cbMonth.SelectedIndexChanged += (s, e) => UpdateDay();
-            _cbDay.SelectedIndexChanged += (s, e) => UpdateHour();
-            _cbHour.SelectedIndexChanged += (s, e) => UpdateMinute();
-            _cbMin.SelectedIndexChanged += (s, e) => UpdateSecond();
+            _cbYear.SelectedIndexChanged += (s, e) => { UpdateMonth(); OnPeriodSelectionChanged(); };
+            _cbMonth.SelectedIndexChanged += (s, e) => { UpdateDay(); OnPeriodSelectionChanged(); };
+            _cbDay.SelectedIndexChanged += (s, e) => { UpdateHour(); OnPeriodSelectionChanged(); };
+            _cbHour.SelectedIndexChanged += (s, e) => { UpdateMinute(); OnPeriodSelectionChanged(); };
+            _cbMin.SelectedIndexChanged += (s, e) => { UpdateSecond(); OnPeriodSelectionChanged(); };
+            _cbSec.SelectedIndexChanged += (s, e) => OnPeriodSelectionChanged();
         }
+
+        private void OnPeriodSelectionChanged() => PeriodSelectionChanged?.Invoke();
 
         public void Initialize(string lastYear)
         {
@@ -84,5 +88,26 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         public string GetCurrentHour() => _cbHour.Text;
         public string GetCurrentMin() => _cbMin.Text;
         public string GetCurrentSec() => _cbSec.Text;
+
+        public DateTime GetCurrentPeriodOrDefault(DateTime fallback)
+        {
+            if (int.TryParse(_cbYear.Text, out int y) && int.TryParse(_cbMonth.Text, out int m) && int.TryParse(_cbDay.Text, out int d) &&
+                int.TryParse(_cbHour.Text, out int h) && int.TryParse(_cbMin.Text, out int min) && int.TryParse(_cbSec.Text, out int s))
+            {
+                try { return new DateTime(y, m, d, h, min, s); }
+                catch { }
+            }
+            return fallback;
+        }
+
+        public void SetPeriodToCombo(DateTime dt)
+        {
+            _cbYear.Text = dt.ToString("yyyy");
+            _cbMonth.Text = dt.ToString("MM");
+            _cbDay.Text = dt.ToString("dd");
+            _cbHour.Text = dt.ToString("HH");
+            _cbMin.Text = dt.ToString("mm");
+            _cbSec.Text = dt.ToString("ss");
+        }
     }
 }

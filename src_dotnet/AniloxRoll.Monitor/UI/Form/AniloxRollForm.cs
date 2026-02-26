@@ -29,8 +29,6 @@ namespace AniloxRoll.Monitor.Forms
         private InspectionSettings _settings;
         private bool _isApplyingCameraReinit = false;
         private bool _lastReviewProcessedMode = false;
-        private bool _isPeriodNavigationBusy = false;
-        private int _periodNavigationBusyCount = 0;
 
         public AniloxRollForm()
         {
@@ -84,8 +82,13 @@ namespace AniloxRoll.Monitor.Forms
             _presenter.LogReported += log => Console.WriteLine(log);
             _galleryManager.SelectionChanged += _interactionHelper.OnGallerySelectionChanged;
 
-            BindPeriodEvents();
-            UpdatePeriodNavigationState();
+            _dateTimeNavigator.PeriodSelectionChanged += _presenter.UpdatePeriodNavigationState;
+            _presenter.PeriodNavigationStateChanged += (canLast, canNext) =>
+            {
+                btnLastPeriod.Enabled = canLast;
+                btnNextPeriod.Enabled = canNext;
+            };
+            _presenter.UpdatePeriodNavigationState();
 
             canvasMain.StatusChanged += OnCanvasStatusChanged;
             canvasMain.EdgeReached += OnCanvasEdgeReached;
@@ -199,144 +202,26 @@ namespace AniloxRoll.Monitor.Forms
         private void btnSelectFolder_Click(object sender, EventArgs e)
         {
             _interactionHelper.SelectAndLoadFolder();
-            UpdatePeriodNavigationState();
+            _presenter.UpdatePeriodNavigationState();
         }
 
         private async void btnShowOriginal_Click(object sender, EventArgs e)
         {
-            if (_isPeriodNavigationBusy) return;
-
             _lastReviewProcessedMode = false;
-            await LoadImagesWithPeriodLockAsync(false);
+            await _presenter.LoadImagesWithPeriodLockAsync(false, _interactionHelper.LoadImages);
         }
 
         private async void btnShowProcessed_Click(object sender, EventArgs e)
         {
-            if (_isPeriodNavigationBusy) return;
-
             _lastReviewProcessedMode = true;
-            await LoadImagesWithPeriodLockAsync(true);
+            await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
         }
 
         private async void btnLastPeriod_Click(object sender, EventArgs e)
-            => await MovePeriodAsync(-1);
+            => await _presenter.MovePeriodAsync(-1, _lastReviewProcessedMode, _interactionHelper.LoadImages);
 
         private async void btnNextPeriod_Click(object sender, EventArgs e)
-            => await MovePeriodAsync(+1);
-
-        private async Task MovePeriodAsync(int step)
-        {
-            if (_isPeriodNavigationBusy) return;
-
-            var periods = _imageRepository.GetAvailablePeriods();
-            if (periods.Count == 0)
-            {
-                UpdatePeriodNavigationState();
-                return;
-            }
-
-            DateTime current = GetCurrentPeriodOrDefault(periods[0]);
-            int idx = periods.FindIndex(x => x == current);
-            if (idx < 0)
-            {
-                idx = periods.FindLastIndex(x => x <= current);
-                if (idx < 0) idx = 0;
-            }
-
-            int target = Math.Max(0, Math.Min(periods.Count - 1, idx + step));
-            if (target == idx)
-            {
-                UpdatePeriodNavigationState();
-                return;
-            }
-
-            SetPeriodToCombo(periods[target]);
-            await LoadImagesWithPeriodLockAsync(_lastReviewProcessedMode);
-        }
-
-        private DateTime GetCurrentPeriodOrDefault(DateTime fallback)
-        {
-            if (int.TryParse(cbYear.Text, out int y) && int.TryParse(cbMonth.Text, out int m) && int.TryParse(cbDay.Text, out int d) &&
-                int.TryParse(cbHour.Text, out int h) && int.TryParse(cbMin.Text, out int min) && int.TryParse(cbSec.Text, out int s))
-            {
-                try { return new DateTime(y, m, d, h, min, s); }
-                catch { }
-            }
-            return fallback;
-        }
-
-        private void SetPeriodToCombo(DateTime dt)
-        {
-            cbYear.Text = dt.ToString("yyyy");
-            cbMonth.Text = dt.ToString("MM");
-            cbDay.Text = dt.ToString("dd");
-            cbHour.Text = dt.ToString("HH");
-            cbMin.Text = dt.ToString("mm");
-            cbSec.Text = dt.ToString("ss");
-        }
-
-        private void BindPeriodEvents()
-        {
-            cbYear.SelectedIndexChanged += OnPeriodSelectionChanged;
-            cbMonth.SelectedIndexChanged += OnPeriodSelectionChanged;
-            cbDay.SelectedIndexChanged += OnPeriodSelectionChanged;
-            cbHour.SelectedIndexChanged += OnPeriodSelectionChanged;
-            cbMin.SelectedIndexChanged += OnPeriodSelectionChanged;
-            cbSec.SelectedIndexChanged += OnPeriodSelectionChanged;
-        }
-
-        private void OnPeriodSelectionChanged(object sender, EventArgs e)
-            => UpdatePeriodNavigationState();
-
-        private async Task LoadImagesWithPeriodLockAsync(bool isProcessedMode)
-        {
-            BeginPeriodNavigationBusy();
-            try
-            {
-                await _interactionHelper.LoadImages(isProcessedMode);
-            }
-            finally
-            {
-                EndPeriodNavigationBusy();
-            }
-        }
-
-        private void BeginPeriodNavigationBusy()
-        {
-            _periodNavigationBusyCount++;
-            _isPeriodNavigationBusy = _periodNavigationBusyCount > 0;
-            UpdatePeriodNavigationState();
-        }
-
-        private void EndPeriodNavigationBusy()
-        {
-            _periodNavigationBusyCount = Math.Max(0, _periodNavigationBusyCount - 1);
-            _isPeriodNavigationBusy = _periodNavigationBusyCount > 0;
-            UpdatePeriodNavigationState();
-        }
-
-        private void UpdatePeriodNavigationState()
-        {
-            var periods = _imageRepository.GetAvailablePeriods();
-            if (periods.Count == 0)
-            {
-                btnLastPeriod.Enabled = false;
-                btnNextPeriod.Enabled = false;
-                return;
-            }
-
-            DateTime current = GetCurrentPeriodOrDefault(periods[0]);
-            int idx = periods.FindIndex(x => x == current);
-            if (idx < 0)
-            {
-                idx = periods.FindLastIndex(x => x <= current);
-                if (idx < 0) idx = 0;
-            }
-
-            bool canOperate = !_isPeriodNavigationBusy;
-            btnLastPeriod.Enabled = canOperate && idx > 0;
-            btnNextPeriod.Enabled = canOperate && idx < periods.Count - 1;
-        }
+            => await _presenter.MovePeriodAsync(+1, _lastReviewProcessedMode, _interactionHelper.LoadImages);
 
     }
 }
