@@ -1,6 +1,6 @@
 # Settings Module
 
-此資料夾採用「集中化配置管理」，依領域拆成 Models/Services/Store。
+此資料夾採用「集中化配置管理」，依領域拆成 Models / Services / Stores / Providers / Utilities / State / System。
 
 ## 檔案職責
 
@@ -23,18 +23,18 @@
   - 系統層（硬體）設定：MIL System Descriptor、System Number、Device Number、DCF 路徑。
   - 提供集中管理的相機硬體配置來源。
 
-- `JsonConfigLoader.cs`、`InspectionSettingsDefaultsProvider.cs`
+- `Providers/InspectionSettingsDefaultsProvider.cs`、`Utilities/JsonConfigLoader.cs`
   - JSON 設定載入工具與預設參數提供者。
   - 將相機硬體參數與 PropertyGrid 預設值改為由 JSON 檔集中管理。
 
-- `InspectionSettingsStore.cs`
+- `Stores/InspectionSettingsStore.cs`
   - 底層 JSON 序列化儲存層（統一 JSON，不再混用 XML）。
   - `Validate()` 校驗移至 Model，Store 專注讀寫。
 
 - `Services/ConfigManager.cs`
   - 設定整合入口（載入/儲存 InspectionSettings 與 SystemSettings）。
 
-- `UserSettingsService.cs`
+- `State/UserSettingsService.cs`
   - 封裝 `Properties.Settings` 的存取。
   - 集中處理設定檔損毀復原（刪除壞檔 + `Reset()`）與例外保護。
 

@@ -29,9 +29,11 @@
 
 - `InspectionSettings.cs`
 - `Models/*`
+- `Providers/*`
 - `Services/ConfigManager.cs`
-- `InspectionSettingsStore.cs`
-- `UserSettingsService.cs`
+- `Stores/InspectionSettingsStore.cs`
+- `State/UserSettingsService.cs`
+- `Utilities/*`
 - `System/SystemSettings.cs`
 - `System/CameraHardwareConfig.cs`
 - `README.md`

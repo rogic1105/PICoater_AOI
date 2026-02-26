@@ -82,10 +82,10 @@
     <Compile Include="ImageCatalog\ImageRepository.cs" />
     <Compile Include="Acquisition\Inspection\InspectionData.cs" />
     <Compile Include="Settings\InspectionSettings.cs" />
-    <Compile Include="Settings\InspectionSettingsDefaultsProvider.cs" />
-    <Compile Include="Settings\InspectionSettingsStore.cs" />
-    <Compile Include="Settings\JsonConfigLoader.cs" />
-    <Compile Include="Settings\UserSettingsService.cs" />
+    <Compile Include="Settings\Providers\InspectionSettingsDefaultsProvider.cs" />
+    <Compile Include="Settings\Stores\InspectionSettingsStore.cs" />
+    <Compile Include="Settings\Utilities\JsonConfigLoader.cs" />
+    <Compile Include="Settings\State\UserSettingsService.cs" />
     <Compile Include="Settings\Models\MachineLayoutConfig.cs" />
     <Compile Include="Settings\Models\AcquisitionSettings.cs" />
     <Compile Include="Settings\Models\InspectionRecipe.cs" />
