@@ -239,6 +239,12 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             }
         }
 
+        public bool RequiresAcquisitionReinitialize(string changedPropertyName)
+        {
+            return changedPropertyName == nameof(InspectionSettings.CameraGrabHeight)
+                || changedPropertyName == nameof(InspectionSettings.CameraExposureTimeUs);
+        }
+
         public void SetImageProcessingEnabled(bool enable)
         {
             foreach (var cam in _cameras)

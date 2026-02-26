@@ -90,8 +90,8 @@ namespace AniloxRoll.Monitor.Forms
             };
             _presenter.UpdatePeriodNavigationState();
 
-            canvasMain.StatusChanged += OnCanvasStatusChanged;
-            canvasMain.EdgeReached += OnCanvasEdgeReached;
+            canvasMain.StatusChanged += _interactionHelper.UpdateCanvasInfo;
+            canvasMain.EdgeReached += _interactionHelper.NavigateCamera;
 
             // [Acquisition 模組] 管理 MIL 相機硬體生命週期（配置、連續抓圖、釋放）與即時畫面輸出。
             _liveCameraManager = new LiveCameraManager(
@@ -150,23 +150,13 @@ namespace AniloxRoll.Monitor.Forms
             UserSessionState.Save();
         }
 
-        // ==========================================
-        // --- 原本的委派事件 ---
-        // ==========================================
-        private void OnCanvasStatusChanged(AOI.SDK.UI.CanvasInfo info)
-            => _interactionHelper.UpdateCanvasInfo(info);
-
-        private void OnCanvasEdgeReached(int direction)
-            => _interactionHelper.NavigateCamera(direction);
-
         private void _propertyGrid_PropertyValueChanged(object s, PropertyValueChangedEventArgs e)
         {
             _interactionHelper.HandleSettingsChanged();
             _liveCameraManager?.SetCaptureSettings(_settings);
 
-            bool isCameraAcqParam =
-                e?.ChangedItem?.PropertyDescriptor?.Name == nameof(InspectionSettings.CameraGrabHeight) ||
-                e?.ChangedItem?.PropertyDescriptor?.Name == nameof(InspectionSettings.CameraExposureTimeUs);
+            string changedPropertyName = e?.ChangedItem?.PropertyDescriptor?.Name;
+            bool isCameraAcqParam = _liveCameraManager != null && _liveCameraManager.RequiresAcquisitionReinitialize(changedPropertyName);
 
             if (isCameraAcqParam && _liveCameraManager != null && _liveCameraManager.IsAllocated && !_isApplyingCameraReinit)
             {
