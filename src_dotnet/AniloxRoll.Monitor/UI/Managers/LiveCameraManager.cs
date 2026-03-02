@@ -229,6 +229,8 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                 StopGrab();
             }
 
+            UpdateCaptureSettingsCache(settings);
+
             FreeCameras();
             AllocateCameras(enableImageProcessing);
             SetCaptureSettings(settings);
@@ -257,10 +259,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         {
             if (settings == null) return;
 
-            _enableAutoCapture = settings.EnableAutoCapture;
-            _captureRootPath = settings.CaptureRootPath ?? string.Empty;
-            _cameraGrabHeight = settings.CameraGrabHeight;
-            _cameraExposureTimeUs = settings.CameraExposureTimeUs;
+            UpdateCaptureSettingsCache(settings);
             float hessianMaxFactor = settings.HessianMaxFactor > 0
                 ? settings.HessianMaxFactor
                 : InspectionEngineConfig.DefaultHessianMaxFactor;
@@ -275,6 +274,16 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                 cam.HessianFixedMax = hessianMaxFactor;
                 cam.ApplyAcquisitionSettings();
             }
+        }
+
+        private void UpdateCaptureSettingsCache(InspectionSettings settings)
+        {
+            if (settings == null) return;
+
+            _enableAutoCapture = settings.EnableAutoCapture;
+            _captureRootPath = settings.CaptureRootPath ?? string.Empty;
+            _cameraGrabHeight = settings.CameraGrabHeight;
+            _cameraExposureTimeUs = settings.CameraExposureTimeUs;
         }
 
         private void SwitchMainDisplay(int cameraIndex)
