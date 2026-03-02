@@ -139,6 +139,16 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             axisX.Minimum = newWorldMin;
             axisX.Maximum = newWorldMax;
 
+            // 依照目前視野寬度，讓 X 軸主格線固定落在整數刻度，並使用 1/5/10/20/50/100 序列
+            double viewWidth = maxMm - minMm;
+            double gridInterval = GetIntegerGridInterval(viewWidth);
+            axisX.Interval = gridInterval;
+            axisX.MajorGrid.Interval = gridInterval;
+            axisX.MajorGrid.IntervalOffset = 0;
+            axisX.LabelStyle.Interval = gridInterval;
+            axisX.LabelStyle.IntervalOffset = 0;
+            axisX.LabelStyle.Format = "F0";
+
             // 最後再執行縮放
             try
             {
@@ -148,6 +158,33 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             {
                 // 萬一計算還是溢位，至少捕捉例外不讓程式崩潰
                 // 通常是因為 minMm/maxMm 數值過大 (例如 1.7E+308)
+            }
+        }
+
+        private static double GetIntegerGridInterval(double viewWidth)
+        {
+            if (double.IsNaN(viewWidth) || double.IsInfinity(viewWidth) || viewWidth <= 0)
+            {
+                return 1;
+            }
+
+            // 目標維持約 10 條以內的主格線
+            double targetInterval = viewWidth / 10.0;
+            double[] preferred = { 1, 5, 10, 20, 50, 100 };
+            double scale = 1;
+
+            while (true)
+            {
+                for (int i = 0; i < preferred.Length; i++)
+                {
+                    double interval = preferred[i] * scale;
+                    if (interval >= targetInterval)
+                    {
+                        return interval;
+                    }
+                }
+
+                scale *= 10;
             }
         }
     }
