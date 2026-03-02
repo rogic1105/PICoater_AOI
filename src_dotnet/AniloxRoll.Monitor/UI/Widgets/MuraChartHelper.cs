@@ -142,14 +142,19 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             // 依照目前視野寬度，讓 X 軸主格線固定落在整數刻度，並使用 1/5/10/20/50/100 序列
             double viewWidth = maxMm - minMm;
             double gridInterval = GetIntegerGridInterval(viewWidth);
-            double gridOffset = GetGridOffset(minMm, gridInterval);
+
+            // 軸邊界也對齊到目前 interval 的倍數，避免格線從任意小數或非倍數值起跳
+            double alignedWorldMin = Math.Floor(newWorldMin / gridInterval) * gridInterval;
+            double alignedWorldMax = Math.Ceiling(newWorldMax / gridInterval) * gridInterval;
+            axisX.Minimum = alignedWorldMin;
+            axisX.Maximum = alignedWorldMax;
 
             axisX.Interval = gridInterval;
-            axisX.IntervalOffset = gridOffset;
+            axisX.IntervalOffset = 0;
             axisX.MajorGrid.Interval = gridInterval;
-            axisX.MajorGrid.IntervalOffset = gridOffset;
+            axisX.MajorGrid.IntervalOffset = 0;
             axisX.LabelStyle.Interval = gridInterval;
-            axisX.LabelStyle.IntervalOffset = gridOffset;
+            axisX.LabelStyle.IntervalOffset = 0;
             axisX.LabelStyle.Format = "F0";
 
             // 最後再執行縮放
@@ -162,22 +167,6 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                 // 萬一計算還是溢位，至少捕捉例外不讓程式崩潰
                 // 通常是因為 minMm/maxMm 數值過大 (例如 1.7E+308)
             }
-        }
-
-        private static double GetGridOffset(double minMm, double gridInterval)
-        {
-            if (double.IsNaN(minMm) || double.IsInfinity(minMm))
-            {
-                return 0;
-            }
-
-            // 格線起點對齊到目前 interval 的倍數，例如 interval=50 時 8 -> 50、103 -> 150
-            if (double.IsNaN(gridInterval) || double.IsInfinity(gridInterval) || gridInterval <= 0)
-            {
-                return 0;
-            }
-
-            return Math.Ceiling(minMm / gridInterval) * gridInterval;
         }
 
         private static double GetIntegerGridInterval(double viewWidth)
