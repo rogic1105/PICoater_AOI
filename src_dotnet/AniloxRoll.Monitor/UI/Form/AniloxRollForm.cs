@@ -165,6 +165,7 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _lastReviewProcessedMode = true;
                 await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
+                _interactionHelper.RefreshCurrentCanvasResult();
             }
 
             if (isCameraAcqParam && _liveCameraManager != null && _liveCameraManager.IsAllocated && !_isApplyingCameraReinit)
