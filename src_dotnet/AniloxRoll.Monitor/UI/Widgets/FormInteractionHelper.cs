@@ -213,6 +213,10 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
                 if (fbd.ShowDialog() == DialogResult.OK)
                 {
+                    // 記住使用者最新選過的資料夾，下次開啟時直接預設到此路徑。
+                    UserSessionState.SetLastDataPath(fbd.SelectedPath);
+                    UserSessionState.Save();
+
                     int lastCameraIndex = _galleryManager.SelectedIndex;
                     if (lastCameraIndex < 0) lastCameraIndex = 0;
 
@@ -222,9 +226,6 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                         MessageBox.Show(_form, "該路徑下無符合格式的圖片！");
                         return;
                     }
-
-                    UserSessionState.SetLastDataPath(fbd.SelectedPath);
-                    UserSessionState.Save();
 
                     _timeNavigator.Initialize(UserSessionState.LastYear);
 
