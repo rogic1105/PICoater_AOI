@@ -153,13 +153,23 @@ namespace AniloxRoll.Monitor.Forms
         private async void _propertyGrid_PropertyValueChanged(object s, PropertyValueChangedEventArgs e)
         {
             _interactionHelper.HandleSettingsChanged();
-            _liveCameraManager?.SetCaptureSettings(_settings);
 
             string changedPropertyName = e?.ChangedItem?.PropertyDescriptor?.Name;
             bool isHessianMaxFactorChanged =
                 string.Equals(changedPropertyName, nameof(InspectionRecipe.HessianMaxFactor), StringComparison.Ordinal) ||
                 string.Equals(changedPropertyName, "Hessian Max Factor", StringComparison.Ordinal);
             bool isCameraAcqParam = _liveCameraManager != null && _liveCameraManager.RequiresAcquisitionReinitialize(changedPropertyName);
+
+            bool mustReinitializeDuringGrab =
+                isCameraAcqParam &&
+                _liveCameraManager != null &&
+                _liveCameraManager.IsAllocated &&
+                !_isApplyingCameraReinit;
+
+            if (!mustReinitializeDuringGrab)
+            {
+                _liveCameraManager?.SetCaptureSettings(_settings);
+            }
 
             if (isHessianMaxFactorChanged)
             {
@@ -168,7 +178,7 @@ namespace AniloxRoll.Monitor.Forms
                 _interactionHelper.RefreshCurrentCanvasResult();
             }
 
-            if (isCameraAcqParam && _liveCameraManager != null && _liveCameraManager.IsAllocated && !_isApplyingCameraReinit)
+            if (mustReinitializeDuringGrab)
             {
                 _isApplyingCameraReinit = true;
                 try
