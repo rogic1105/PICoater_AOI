@@ -142,11 +142,14 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             // 依照目前視野寬度，讓 X 軸主格線固定落在整數刻度，並使用 1/5/10/20/50/100 序列
             double viewWidth = maxMm - minMm;
             double gridInterval = GetIntegerGridInterval(viewWidth);
+            double gridOffset = GetGridOffset(minMm);
+
             axisX.Interval = gridInterval;
+            axisX.IntervalOffset = gridOffset;
             axisX.MajorGrid.Interval = gridInterval;
-            axisX.MajorGrid.IntervalOffset = 0;
+            axisX.MajorGrid.IntervalOffset = gridOffset;
             axisX.LabelStyle.Interval = gridInterval;
-            axisX.LabelStyle.IntervalOffset = 0;
+            axisX.LabelStyle.IntervalOffset = gridOffset;
             axisX.LabelStyle.Format = "F0";
 
             // 最後再執行縮放
@@ -159,6 +162,17 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                 // 萬一計算還是溢位，至少捕捉例外不讓程式崩潰
                 // 通常是因為 minMm/maxMm 數值過大 (例如 1.7E+308)
             }
+        }
+
+        private static double GetGridOffset(double minMm)
+        {
+            if (double.IsNaN(minMm) || double.IsInfinity(minMm))
+            {
+                return 0;
+            }
+
+            // 格線起點固定對齊到 10 的整數進位，例如 8 -> 10、103 -> 110
+            return Math.Ceiling(minMm / 10.0) * 10.0;
         }
 
         private static double GetIntegerGridInterval(double viewWidth)
