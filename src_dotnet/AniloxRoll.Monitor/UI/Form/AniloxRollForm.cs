@@ -150,13 +150,22 @@ namespace AniloxRoll.Monitor.Forms
             UserSessionState.Save();
         }
 
-        private void _propertyGrid_PropertyValueChanged(object s, PropertyValueChangedEventArgs e)
+        private async void _propertyGrid_PropertyValueChanged(object s, PropertyValueChangedEventArgs e)
         {
             _interactionHelper.HandleSettingsChanged();
             _liveCameraManager?.SetCaptureSettings(_settings);
 
             string changedPropertyName = e?.ChangedItem?.PropertyDescriptor?.Name;
+            bool isHessianMaxFactorChanged =
+                string.Equals(changedPropertyName, nameof(InspectionRecipe.HessianMaxFactor), StringComparison.Ordinal) ||
+                string.Equals(changedPropertyName, "Hessian Max Factor", StringComparison.Ordinal);
             bool isCameraAcqParam = _liveCameraManager != null && _liveCameraManager.RequiresAcquisitionReinitialize(changedPropertyName);
+
+            if (isHessianMaxFactorChanged)
+            {
+                _lastReviewProcessedMode = true;
+                await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
+            }
 
             if (isCameraAcqParam && _liveCameraManager != null && _liveCameraManager.IsAllocated && !_isApplyingCameraReinit)
             {
