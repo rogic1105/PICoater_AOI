@@ -46,6 +46,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             area.AxisX.ScaleView.Zoomable = true;
             area.AxisX.IsMarginVisible = false;
             area.AxisX.IsStartedFromZero = true;
+            area.AxisX.IntervalAutoMode = IntervalAutoMode.FixedCount;
 
             // [關鍵] 初始時不設限，讓它自動依照數據調整 (UpdateData 會重設)
             area.AxisX.Minimum = Double.NaN;
@@ -150,22 +151,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             axisX.Minimum = alignedWorldMin;
             axisX.Maximum = alignedWorldMax;
 
-            axisX.IntervalType = DateTimeIntervalType.Number;
-            axisX.IntervalOffsetType = DateTimeIntervalType.Number;
-            axisX.MajorGrid.IntervalType = DateTimeIntervalType.Number;
-            axisX.MajorGrid.IntervalOffsetType = DateTimeIntervalType.Number;
-            axisX.LabelStyle.IntervalType = DateTimeIntervalType.Number;
-            axisX.LabelStyle.IntervalOffsetType = DateTimeIntervalType.Number;
-
-            axisX.Interval = gridInterval;
-            axisX.IntervalOffset = 0;
-            axisX.MajorGrid.Interval = gridInterval;
-            axisX.MajorGrid.IntervalOffset = 0;
-            axisX.LabelStyle.Interval = gridInterval;
-            axisX.LabelStyle.IntervalOffset = 0;
-            axisX.LabelStyle.Format = "F0";
-
-            // 最後再執行縮放
+            // 先縮放，再強制套用 Number 型別 interval 設定，避免滑鼠移入/滾輪後被 Auto 覆寫
             try
             {
                 axisX.ScaleView.Zoom(minMm, maxMm);
@@ -175,6 +161,26 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                 // 萬一計算還是溢位，至少捕捉例外不讓程式崩潰
                 // 通常是因為 minMm/maxMm 數值過大 (例如 1.7E+308)
             }
+
+            axisX.IntervalAutoMode = IntervalAutoMode.FixedCount;
+            axisX.IntervalType = DateTimeIntervalType.Number;
+            axisX.IntervalOffsetType = DateTimeIntervalType.Number;
+            axisX.MajorGrid.IntervalType = DateTimeIntervalType.Number;
+            axisX.MajorGrid.IntervalOffsetType = DateTimeIntervalType.Number;
+            axisX.LabelStyle.IntervalType = DateTimeIntervalType.Number;
+            axisX.LabelStyle.IntervalOffsetType = DateTimeIntervalType.Number;
+            axisX.ScaleView.SmallScrollMinSizeType = DateTimeIntervalType.Number;
+            axisX.ScaleView.SmallScrollSizeType = DateTimeIntervalType.Number;
+            axisX.ScaleView.SmallScrollMinSize = gridInterval;
+            axisX.ScaleView.SmallScrollSize = gridInterval;
+
+            axisX.Interval = gridInterval;
+            axisX.IntervalOffset = 0;
+            axisX.MajorGrid.Interval = gridInterval;
+            axisX.MajorGrid.IntervalOffset = 0;
+            axisX.LabelStyle.Interval = gridInterval;
+            axisX.LabelStyle.IntervalOffset = 0;
+            axisX.LabelStyle.Format = "F0";
         }
 
         private static double GetIntegerGridInterval(double viewWidth)
