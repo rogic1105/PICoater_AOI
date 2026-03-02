@@ -157,6 +157,11 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             await _presenter.RunWorkflowAsync(enableProcess, _thumbnailCache);
         }
 
+        public void RefreshCurrentCanvasResult()
+        {
+            OnGallerySelectionChanged(_galleryManager?.SelectedIndex ?? 0);
+        }
+
         public void SetUiLoadingState(bool isBusy)
         {
             _isBusy = isBusy;
