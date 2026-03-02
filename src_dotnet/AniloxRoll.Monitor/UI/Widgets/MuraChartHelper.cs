@@ -45,6 +45,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             area.AxisX.ScrollBar.Enabled = false;
             area.AxisX.ScaleView.Zoomable = true;
             area.AxisX.IsMarginVisible = false;
+            area.AxisX.IsStartedFromZero = true;
 
             // [關鍵] 初始時不設限，讓它自動依照數據調整 (UpdateData 會重設)
             area.AxisX.Minimum = Double.NaN;
@@ -148,6 +149,13 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             double alignedWorldMax = Math.Ceiling(newWorldMax / gridInterval) * gridInterval;
             axisX.Minimum = alignedWorldMin;
             axisX.Maximum = alignedWorldMax;
+
+            axisX.IntervalType = DateTimeIntervalType.Number;
+            axisX.IntervalOffsetType = DateTimeIntervalType.Number;
+            axisX.MajorGrid.IntervalType = DateTimeIntervalType.Number;
+            axisX.MajorGrid.IntervalOffsetType = DateTimeIntervalType.Number;
+            axisX.LabelStyle.IntervalType = DateTimeIntervalType.Number;
+            axisX.LabelStyle.IntervalOffsetType = DateTimeIntervalType.Number;
 
             axisX.Interval = gridInterval;
             axisX.IntervalOffset = 0;
