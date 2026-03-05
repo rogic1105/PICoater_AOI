@@ -1,27 +1,24 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using AniloxRoll.Monitor.Core.Data;
-using AniloxRoll.Monitor.Core.Interop;
+using AniloxRoll.Monitor.Services;
 using AOI.SDK.Core.Models;
 
 namespace AniloxRoll.Monitor.Core.Services
 {
     public partial class InspectionEngine : IDisposable
     {
-        // [新增] 執行緒鎖：防止多執行緒同時存取共用 Buffer
         private readonly object _lock = new object();
+        private readonly AoiService _aoiService;
 
-        private IntPtr _handle = IntPtr.Zero;
-
-        // Pinned Buffers
         private IntPtr _inputBuffer = IntPtr.Zero;
         private IntPtr _thumbnailBuffer = IntPtr.Zero;
         private IntPtr _muraBuffer = IntPtr.Zero;
         private IntPtr _ridgeBuffer = IntPtr.Zero;
         private IntPtr _curveMeanBuffer = IntPtr.Zero;
-        private IntPtr _curveMaxBuffer = IntPtr.Zero; // [修正] 確保這個有被 Alloc
-
+        private IntPtr _curveMaxBuffer = IntPtr.Zero;
 
         private ulong _imgBufferSize = 0;
         private int _thumbnailBufferSize = 0;
@@ -29,41 +26,56 @@ namespace AniloxRoll.Monitor.Core.Services
 
         private bool _isDisposed = false;
 
-        public InspectionEngine() { InitializeNativeResources(); }
+        public InspectionEngine()
+        {
+            _aoiService = new AoiService();
+            InitializeNativeResources();
+        }
 
         private void InitializeNativeResources()
         {
-            _handle = NativeMethods.PICoater_Create();
+            _aoiService.Initialize();
 
             _imgBufferSize = (ulong)(InspectionEngineConfig.MaxWidth * InspectionEngineConfig.MaxHeight);
-            _inputBuffer = NativeMethods.PICoater_AllocPinned(_imgBufferSize);
-            _muraBuffer = NativeMethods.PICoater_AllocPinned(_imgBufferSize);
-            _ridgeBuffer = NativeMethods.PICoater_AllocPinned(_imgBufferSize);
+            _inputBuffer = Marshal.AllocHGlobal((IntPtr)_imgBufferSize);
+            _muraBuffer = Marshal.AllocHGlobal((IntPtr)_imgBufferSize);
+            _ridgeBuffer = Marshal.AllocHGlobal((IntPtr)_imgBufferSize);
 
             _thumbnailBufferSize = InspectionEngineConfig.MaxThumbnailSide * InspectionEngineConfig.MaxThumbnailSide;
-            _thumbnailBuffer = NativeMethods.PICoater_AllocPinned((ulong)_thumbnailBufferSize);
+            _thumbnailBuffer = Marshal.AllocHGlobal(_thumbnailBufferSize);
 
             _curveBufferSize = InspectionEngineConfig.MaxWidth * sizeof(float);
-            _curveMeanBuffer = NativeMethods.PICoater_AllocPinned((ulong)_curveBufferSize);
-
-            // [新增] 補上 Max Buffer 的記憶體配置
-            _curveMaxBuffer = NativeMethods.PICoater_AllocPinned((ulong)_curveBufferSize);
+            _curveMeanBuffer = Marshal.AllocHGlobal(_curveBufferSize);
+            _curveMaxBuffer = Marshal.AllocHGlobal(_curveBufferSize);
         }
 
         public void WarmUp()
         {
             if (_isDisposed) return;
-            // WarmUp 也要鎖
+
             lock (_lock)
             {
                 try
                 {
-                    int w = 14288;
-                    int h = 9003;
-                    NativeMethods.PICoater_Initialize(_handle, w, h);
-                    NativeMethods.PICoater_RunThumbnail_GPU(_handle, _inputBuffer, 1000, _thumbnailBuffer, out _, out _);
+                    _aoiService.ProcessImage(
+                        64,
+                        64,
+                        _inputBuffer,
+                        IntPtr.Zero,
+                        _muraBuffer,
+                        _ridgeBuffer,
+                        _curveMeanBuffer,
+                        _curveMaxBuffer,
+                        InspectionEngineConfig.DefaultBgSigma,
+                        InspectionEngineConfig.DefaultRidgeSigma,
+                        1.0f,
+                        InspectionEngineConfig.DefaultRidgeMode,
+                        IntPtr.Zero);
                 }
-                catch { /* ignore */ }
+                catch
+                {
+                    // Ignore warm-up errors.
+                }
             }
         }
 
@@ -71,7 +83,6 @@ namespace AniloxRoll.Monitor.Core.Services
                     string filePath,
                     Func<Stopwatch, (T data, long io, long gpu, long bmp)> operation)
         {
-            // [關鍵] 加入 lock：確保同一時間只有一個執行緒能使用 Engine 和 Buffers
             lock (_lock)
             {
                 var result = new TimedResult<T>();
@@ -96,22 +107,29 @@ namespace AniloxRoll.Monitor.Core.Services
 
         public void Dispose()
         {
-            if (!_isDisposed)
+            if (_isDisposed)
             {
-                lock (_lock) // Dispose 時也要鎖
-                {
-                    if (_inputBuffer != IntPtr.Zero) NativeMethods.PICoater_FreePinned(_inputBuffer);
-                    if (_thumbnailBuffer != IntPtr.Zero) NativeMethods.PICoater_FreePinned(_thumbnailBuffer);
-                    if (_muraBuffer != IntPtr.Zero) NativeMethods.PICoater_FreePinned(_muraBuffer);
-                    if (_ridgeBuffer != IntPtr.Zero) NativeMethods.PICoater_FreePinned(_ridgeBuffer);
-                    if (_curveMeanBuffer != IntPtr.Zero) NativeMethods.PICoater_FreePinned(_curveMeanBuffer);
+                return;
+            }
 
-                    // [新增] 釋放 Max Buffer
-                    if (_curveMaxBuffer != IntPtr.Zero) NativeMethods.PICoater_FreePinned(_curveMaxBuffer);
+            lock (_lock)
+            {
+                if (_inputBuffer != IntPtr.Zero) Marshal.FreeHGlobal(_inputBuffer);
+                if (_thumbnailBuffer != IntPtr.Zero) Marshal.FreeHGlobal(_thumbnailBuffer);
+                if (_muraBuffer != IntPtr.Zero) Marshal.FreeHGlobal(_muraBuffer);
+                if (_ridgeBuffer != IntPtr.Zero) Marshal.FreeHGlobal(_ridgeBuffer);
+                if (_curveMeanBuffer != IntPtr.Zero) Marshal.FreeHGlobal(_curveMeanBuffer);
+                if (_curveMaxBuffer != IntPtr.Zero) Marshal.FreeHGlobal(_curveMaxBuffer);
 
-                    if (_handle != IntPtr.Zero) NativeMethods.PICoater_Destroy(_handle);
-                    _isDisposed = true;
-                }
+                _inputBuffer = IntPtr.Zero;
+                _thumbnailBuffer = IntPtr.Zero;
+                _muraBuffer = IntPtr.Zero;
+                _ridgeBuffer = IntPtr.Zero;
+                _curveMeanBuffer = IntPtr.Zero;
+                _curveMaxBuffer = IntPtr.Zero;
+
+                _aoiService.Dispose();
+                _isDisposed = true;
             }
         }
     }
