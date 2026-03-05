@@ -94,6 +94,7 @@
     <Compile Include="Settings\System\CameraHardwareConfig.cs" />
     <Compile Include="Settings\System\SystemSettings.cs" />
     <Compile Include="Interop\NativeMethods.cs" />
+    <Compile Include="Services\AoiService.cs" />
     <Compile Include="ImageProcessing\BatchInspectionService.cs" />
     <Compile Include="ImageProcessing\InspectionEngine.cs" />
     <Compile Include="ImageProcessing\InspectionEngine.ImageProcessing.cs" />

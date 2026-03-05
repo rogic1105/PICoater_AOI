@@ -20,9 +20,11 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\export_api.cpp" />
+    <ClCompile Include="..\..\pipeline\aoi_pipeline.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\export_c\export_api.h" />
+    <ClInclude Include="..\..\pipeline\aoi_pipeline.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\sdk\AOI_SDK\core_cv\core_cv.vcxproj">
