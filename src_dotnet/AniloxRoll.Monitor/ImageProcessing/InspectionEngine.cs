@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using AniloxRoll.Monitor.Core.Data;
+using AniloxRoll.Monitor.Services;
 using AOI.SDK.Core.Models;
 
 namespace AniloxRoll.Monitor.Core.Services

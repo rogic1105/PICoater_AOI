@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Acquisition.Inspection;
+using AOI.SDK.Core.Models;
 using AOI.SDK.Utils;
 
 namespace AniloxRoll.Monitor.Core.Services

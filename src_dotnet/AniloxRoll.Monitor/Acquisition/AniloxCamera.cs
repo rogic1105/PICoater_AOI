@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Threading;
 using Matrox.MatroxImagingLibrary;
 using AOI.SDK.Core;
+using AniloxRoll.Monitor.Services;
 using AniloxRoll.Monitor.Core.Services;
 
 namespace AniloxRoll.Monitor.Core.Camera
