@@ -50,5 +50,26 @@ namespace AniloxRoll.Monitor.Core.Interop
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         public static extern void PICoaterAPI_DestroyPipeline(IntPtr handle);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr PICoaterAPI_CreateMockPlc();
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void PICoaterAPI_DestroyPlc(IntPtr handle);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int PICoaterAPI_PlcConnect(IntPtr handle);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int PICoaterAPI_PlcReadBit(
+            IntPtr handle,
+            int address,
+            [MarshalAs(UnmanagedType.I1)] out bool value);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int PICoaterAPI_PlcWriteBit(
+            IntPtr handle,
+            int address,
+            [MarshalAs(UnmanagedType.I1)] bool value);
     }
 }

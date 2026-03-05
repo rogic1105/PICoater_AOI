@@ -11,6 +11,7 @@
 extern "C" {
 
 typedef void* AoiPipelineHandle;
+typedef void* PlcAdapterHandle;
 
 PICOATER_API AoiPipelineHandle PICoaterAPI_CreatePipeline();
 
@@ -33,5 +34,17 @@ PICOATER_API int PICoaterAPI_ProcessPipeline(
 PICOATER_API const char* PICoaterAPI_GetLastError(AoiPipelineHandle handle);
 
 PICOATER_API void PICoaterAPI_DestroyPipeline(AoiPipelineHandle handle);
+
+PICOATER_API PlcAdapterHandle PICoaterAPI_CreateMockPlc();
+
+PICOATER_API void PICoaterAPI_DestroyPlc(PlcAdapterHandle handle);
+
+PICOATER_API int PICoaterAPI_PlcConnect(PlcAdapterHandle handle);
+
+PICOATER_API int PICoaterAPI_PlcReadBit(
+    PlcAdapterHandle handle, int address, bool* value);
+
+PICOATER_API int PICoaterAPI_PlcWriteBit(
+    PlcAdapterHandle handle, int address, bool value);
 
 }  // extern "C"
