@@ -2,7 +2,7 @@
 using System.Runtime.InteropServices;
 using AniloxRoll.Monitor.Core.Interop;
 
-namespace AniloxRoll.Monitor.Services
+namespace AniloxRoll.Monitor.Core.Services
 {
     public sealed class AoiService : IDisposable
     {
