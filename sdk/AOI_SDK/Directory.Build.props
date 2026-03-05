@@ -1,0 +1,29 @@
+<Project>
+	<PropertyGroup>
+		<ParentPropsPath>$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))</ParentPropsPath>
+	</PropertyGroup>
+
+	<Import Project="$(ParentPropsPath)" Condition="Exists('$(ParentPropsPath)')" />
+
+	<PropertyGroup>
+		<SdkRoot>$(MSBuildThisFileDirectory)</SdkRoot>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(EngRoot)' == ''">
+		<OutDir>$(SdkRoot)bin\$(Platform)\$(Configuration)\</OutDir>
+		<IntDir>$(SdkRoot)build\obj\$(MSBuildProjectName)\$(Platform)\$(Configuration)\</IntDir>
+
+		<OutputPath>$(OutDir)</OutputPath>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+	</PropertyGroup>
+
+	<ItemDefinitionGroup>
+		<ClCompile>
+			<AdditionalIncludeDirectories>$(CoreCVPath)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+		</ClCompile>
+		<CudaCompile>
+			<Include>$(CoreCVPath)src;%(Include)</Include>
+		</CudaCompile>
+	</ItemDefinitionGroup>
+
+</Project>

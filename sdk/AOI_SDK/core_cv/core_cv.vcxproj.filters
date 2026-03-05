@@ -1,0 +1,143 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="標頭檔">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="資源檔">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="來源檔案">
+      <UniqueIdentifier>{1fe8875b-414e-4594-b896-31e2c567c675}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="標頭檔\base">
+      <UniqueIdentifier>{a67cf561-8395-46ad-b3fd-2ff2591e64b0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="標頭檔\imgproc">
+      <UniqueIdentifier>{2a7feee1-741c-441e-a034-705e0c233169}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="標頭檔\algo">
+      <UniqueIdentifier>{b0b9f19a-b95d-4e76-8d4f-1bf0004b2bf4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="來源檔案\base">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="來源檔案\imgproc">
+      <UniqueIdentifier>{63686548-6d8a-435c-ba96-c467d373f111}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="來源檔案\algo">
+      <UniqueIdentifier>{102c0199-2e34-4c1e-a099-3915652abf37}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="來源檔案\imgproc\background">
+      <UniqueIdentifier>{97348d3e-37e4-4f6f-bbd9-200557ee6264}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="來源檔案\imgproc\enhance">
+      <UniqueIdentifier>{1cdeb80b-de3d-44cf-9f36-b6e2ff783505}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="來源檔案\imgproc\features">
+      <UniqueIdentifier>{a8143d9e-43a5-4c12-b4a0-22354eb8daff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="來源檔案\imgproc\filters">
+      <UniqueIdentifier>{3ffad2cf-b6d6-4680-a860-508b3920dc84}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="來源檔案\imgproc\utils">
+      <UniqueIdentifier>{007a4898-f0f1-4c52-85e2-d0c040df3de0}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="include\core_cv\base\cuda_utils.hpp">
+      <Filter>標頭檔\base</Filter>
+    </ClInclude>
+    <ClInclude Include="include\core_cv\imgproc\core_enhance.hpp">
+      <Filter>標頭檔</Filter>
+    </ClInclude>
+    <ClInclude Include="include\core_cv\imgproc\core_filters.hpp">
+      <Filter>標頭檔</Filter>
+    </ClInclude>
+    <ClInclude Include="include\core_cv\imgproc\core_features.hpp">
+      <Filter>標頭檔</Filter>
+    </ClInclude>
+    <ClInclude Include="include\core_cv\imgproc\core_utils.hpp">
+      <Filter>標頭檔</Filter>
+    </ClInclude>
+    <ClInclude Include="include\core_cv\imgproc\core_background.hpp">
+      <Filter>標頭檔</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imgproc\background\background_kernels.cuh">
+      <Filter>來源檔案\imgproc\background</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imgproc\enhance\enhance_kernels.cuh">
+      <Filter>來源檔案\imgproc\enhance</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imgproc\features\features_kernels.cuh">
+      <Filter>來源檔案\imgproc\features</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imgproc\filters\filters_kernels.cuh">
+      <Filter>來源檔案\imgproc\filters</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imgproc\utils\utils_kernels.cuh">
+      <Filter>來源檔案\imgproc\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="include\core_cv\base\cuda_memory.hpp">
+      <Filter>標頭檔\base</Filter>
+    </ClInclude>
+    <ClInclude Include="include\core_cv\imgcodecs\core_imgcodecs.hpp">
+      <Filter>標頭檔</Filter>
+    </ClInclude>
+    <ClInclude Include="include\core_cv\imgcodecs\core_imgcodecs_fast.hpp">
+      <Filter>標頭檔</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imgproc\transform\transform_kernels.cuh" />
+    <ClInclude Include="include\core_cv\imgproc\core_transform.hpp">
+      <Filter>標頭檔</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="src\imgproc\background\background_kernels.cu">
+      <Filter>來源檔案\imgproc\background</Filter>
+    </CudaCompile>
+    <CudaCompile Include="src\imgproc\background\background_ops.cu">
+      <Filter>來源檔案\imgproc\background</Filter>
+    </CudaCompile>
+    <CudaCompile Include="src\imgproc\enhance\enhance_kernels.cu">
+      <Filter>來源檔案\imgproc\enhance</Filter>
+    </CudaCompile>
+    <CudaCompile Include="src\imgproc\enhance\enhance_ops.cu">
+      <Filter>來源檔案\imgproc\enhance</Filter>
+    </CudaCompile>
+    <CudaCompile Include="src\imgproc\features\features_kernels.cu">
+      <Filter>來源檔案\imgproc\features</Filter>
+    </CudaCompile>
+    <CudaCompile Include="src\imgproc\features\features_ops.cu">
+      <Filter>來源檔案\imgproc\features</Filter>
+    </CudaCompile>
+    <CudaCompile Include="src\imgproc\filters\filters_kernels.cu">
+      <Filter>來源檔案\imgproc\filters</Filter>
+    </CudaCompile>
+    <CudaCompile Include="src\imgproc\filters\filters_ops.cu">
+      <Filter>來源檔案\imgproc\filters</Filter>
+    </CudaCompile>
+    <CudaCompile Include="src\imgproc\utils\utils_kernels.cu">
+      <Filter>來源檔案\imgproc\utils</Filter>
+    </CudaCompile>
+    <CudaCompile Include="src\imgproc\utils\utils_ops.cu">
+      <Filter>來源檔案\imgproc\utils</Filter>
+    </CudaCompile>
+    <CudaCompile Include="src\imgproc\transform\transform_kernels.cu" />
+    <CudaCompile Include="src\imgproc\transform\transform_ops.cu" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\imgcodecs\core_imgcodecs.cpp">
+      <Filter>來源檔案\base</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imgcodecs\core_imgcodecs_fast.cpp">
+      <Filter>來源檔案\base</Filter>
+    </ClCompile>
+    <ClCompile Include="core_background_cpu.cpp">
+      <Filter>來源檔案\imgproc\background</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>
