@@ -4,6 +4,7 @@
 #include <string>
 
 #include "../../i_aoi_module.hpp"
+#include "Module_GetPICoaterBackground.hpp"
 
 namespace picoater {
 namespace aoi {
@@ -18,6 +19,11 @@ class GetPICoaterBackgroundModule : public IAoiModule {
   std::string GetLastError() const override;
 
  private:
+  bool ValidateInputImage(const AoiImage& input_image);
+  bool ValidateOutputImage(const AoiImage& output_image);
+
+  ::picoater::PICoaterDetector detector_;
+  bool initialized_ = false;
   std::string last_error_;
 };
 
