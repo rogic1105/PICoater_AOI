@@ -25,9 +25,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\Module_GetPICoaterBackground.hpp" />
+    <ClInclude Include="include\module_get_picoater_background.hpp" />
+    <ClInclude Include="..\i_aoi_module.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Module_GetPICoaterBackground_CPU.cpp" />
+    <ClCompile Include="src\module_get_picoater_background.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
