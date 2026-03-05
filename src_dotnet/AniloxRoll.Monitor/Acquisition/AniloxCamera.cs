@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Threading;
 using Matrox.MatroxImagingLibrary;
 using AOI.SDK.Core;
-using AniloxRoll.Monitor.Core.Interop;
+using AniloxRoll.Monitor.Core.Services;
 
 namespace AniloxRoll.Monitor.Core.Camera
 {
@@ -58,7 +58,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         private byte[] _hostOutputBuffer = null;
 
         private readonly object _picoaterLock = new object();
-        private IntPtr _picoaterHandle = IntPtr.Zero;
+        private readonly AoiService _aoiService = new AoiService();
         private IntPtr _picoaterInputBuffer = IntPtr.Zero;
         private IntPtr _picoaterRidgeBuffer = IntPtr.Zero;
         private ulong _picoaterBufferSize = 0;
@@ -117,10 +117,10 @@ namespace AniloxRoll.Monitor.Core.Camera
                 _hostInputBuffer = new byte[_frameWidth * _frameHeight];
                 _hostOutputBuffer = new byte[_frameWidth * _frameHeight];
 
-                _picoaterHandle = NativeMethods.PICoater_Create();
+                _aoiService.Initialize();
                 _picoaterBufferSize = (ulong)(_frameWidth * _frameHeight);
-                _picoaterInputBuffer = NativeMethods.PICoater_AllocPinned(_picoaterBufferSize);
-                _picoaterRidgeBuffer = NativeMethods.PICoater_AllocPinned(_picoaterBufferSize);
+                _picoaterInputBuffer = Marshal.AllocHGlobal((IntPtr)_picoaterBufferSize);
+                _picoaterRidgeBuffer = Marshal.AllocHGlobal((IntPtr)_picoaterBufferSize);
 
                 for (int i = 0; i < _milGrabBufferListSize; i++)
                 {
@@ -408,9 +408,9 @@ namespace AniloxRoll.Monitor.Core.Camera
 
                 lock (_picoaterLock)
                 {
-                    if (_picoaterInputBuffer != IntPtr.Zero) { NativeMethods.PICoater_FreePinned(_picoaterInputBuffer); _picoaterInputBuffer = IntPtr.Zero; }
-                    if (_picoaterRidgeBuffer != IntPtr.Zero) { NativeMethods.PICoater_FreePinned(_picoaterRidgeBuffer); _picoaterRidgeBuffer = IntPtr.Zero; }
-                    if (_picoaterHandle != IntPtr.Zero) { NativeMethods.PICoater_Destroy(_picoaterHandle); _picoaterHandle = IntPtr.Zero; }
+                    if (_picoaterInputBuffer != IntPtr.Zero) { Marshal.FreeHGlobal(_picoaterInputBuffer); _picoaterInputBuffer = IntPtr.Zero; }
+                    if (_picoaterRidgeBuffer != IntPtr.Zero) { Marshal.FreeHGlobal(_picoaterRidgeBuffer); _picoaterRidgeBuffer = IntPtr.Zero; }
+                    _aoiService.Dispose();
                 }
 
                 _hostInputBuffer = null;
@@ -432,7 +432,7 @@ namespace AniloxRoll.Monitor.Core.Camera
 
             lock (_picoaterLock)
             {
-                if (_picoaterHandle == IntPtr.Zero || _picoaterInputBuffer == IntPtr.Zero || _picoaterRidgeBuffer == IntPtr.Zero)
+                if (_picoaterInputBuffer == IntPtr.Zero || _picoaterRidgeBuffer == IntPtr.Zero)
                     return false;
 
                 try
@@ -441,10 +441,9 @@ namespace AniloxRoll.Monitor.Core.Camera
 
                     Marshal.Copy(_hostInputBuffer, 0, _picoaterInputBuffer, _hostInputBuffer.Length);
 
-                    NativeMethods.PICoater_Initialize(_picoaterHandle, _frameWidth, _frameHeight);
-
-                    int ret = NativeMethods.PICoater_Run(
-                        _picoaterHandle,
+                    _aoiService.ProcessImage(
+                        _frameWidth,
+                        _frameHeight,
                         _picoaterInputBuffer,
                         IntPtr.Zero,
                         IntPtr.Zero,
@@ -454,10 +453,8 @@ namespace AniloxRoll.Monitor.Core.Camera
                         2.0f,
                         (float)HessianSigma,
                         (float)HessianFixedMax,
-                        "vertical"
-                    );
-
-                    if (ret != 0) return false;
+                        "vertical",
+                        IntPtr.Zero);
 
                     Marshal.Copy(_picoaterRidgeBuffer, _hostOutputBuffer, 0, _hostOutputBuffer.Length);
                     MIL.MbufPut2d(dstBuffer, 0, 0, _frameWidth, _frameHeight, _hostOutputBuffer);
