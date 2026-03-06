@@ -4,6 +4,41 @@ using AniloxRoll.Monitor.Core.Interop;
 
 namespace AniloxRoll.Monitor.Core.Services
 {
+    public sealed class AoiProcessRequest
+    {
+        public sealed class InputImage
+        {
+            public int Width { get; set; }
+            public int Height { get; set; }
+            public IntPtr Data { get; set; }
+            public IntPtr Stream { get; set; }
+        }
+
+        public sealed class OutputBuffers
+        {
+            public int Width { get; set; }
+            public int Height { get; set; }
+            public IntPtr BackgroundData { get; set; }
+            public IntPtr MuraData { get; set; }
+            public IntPtr RidgeData { get; set; }
+            public IntPtr MuraCurveMean { get; set; }
+            public IntPtr MuraCurveMax { get; set; }
+            public IntPtr Stream { get; set; }
+        }
+
+        public sealed class AlgorithmParams
+        {
+            public float BgSigmaFactor { get; set; }
+            public float RidgeSigma { get; set; }
+            public float HessianMaxFactor { get; set; }
+            public string RidgeMode { get; set; } = "dark";
+        }
+
+        public InputImage Input { get; set; } = new InputImage();
+        public OutputBuffers Output { get; set; } = new OutputBuffers();
+        public AlgorithmParams Params { get; set; } = new AlgorithmParams();
+    }
+
     public sealed class AoiService : IDisposable
     {
         private IntPtr _pipelineHandle = IntPtr.Zero;
@@ -22,42 +57,78 @@ namespace AniloxRoll.Monitor.Core.Services
             }
         }
 
-        public void ProcessImage(
-            int width,
-            int height,
-            IntPtr inputData,
-            IntPtr backgroundOutput,
-            IntPtr muraOutput,
-            IntPtr ridgeOutput,
-            IntPtr muraCurveMeanOutput,
-            IntPtr muraCurveMaxOutput,
-            float bgSigmaFactor,
-            float ridgeSigma,
-            float hessianMaxFactor,
-            string ridgeMode,
-            IntPtr stream)
+        public void ProcessImage(AoiProcessRequest request)
         {
             EnsureInitialized();
 
-            int result = NativeMethods.PICoaterAPI_ProcessPipeline(
-                _pipelineHandle,
-                width,
-                height,
-                inputData,
-                backgroundOutput,
-                muraOutput,
-                ridgeOutput,
-                muraCurveMeanOutput,
-                muraCurveMaxOutput,
-                bgSigmaFactor,
-                ridgeSigma,
-                hessianMaxFactor,
-                ridgeMode,
-                stream);
-
-            if (result != 0)
+            if (request == null)
             {
-                throw new InvalidOperationException(GetLastError());
+                throw new ArgumentNullException(nameof(request));
+            }
+
+            if (request.Input.Width <= 0 || request.Input.Height <= 0)
+            {
+                throw new ArgumentException("Width and height must be positive.", nameof(request));
+            }
+
+            if (request.Input.Data == IntPtr.Zero)
+            {
+                throw new ArgumentException("InputData must not be null.", nameof(request));
+            }
+
+            var input = new AoiInputImageNative
+            {
+                Width = request.Input.Width,
+                Height = request.Input.Height,
+                Data = request.Input.Data,
+                Stream = request.Input.Stream
+            };
+
+            var output = new AoiOutputBuffersNative
+            {
+                Width = request.Output.Width > 0 ? request.Output.Width : request.Input.Width,
+                Height = request.Output.Height > 0 ? request.Output.Height : request.Input.Height,
+                BackgroundData = request.Output.BackgroundData,
+                MuraData = request.Output.MuraData,
+                RidgeData = request.Output.RidgeData,
+                MuraCurveMean = request.Output.MuraCurveMean,
+                MuraCurveMax = request.Output.MuraCurveMax,
+                Stream = request.Output.Stream != IntPtr.Zero ? request.Output.Stream : request.Input.Stream
+            };
+
+            IntPtr ridgeModePtr = IntPtr.Zero;
+            try
+            {
+                if (!string.IsNullOrEmpty(request.Params.RidgeMode))
+                {
+                    ridgeModePtr = Marshal.StringToHGlobalAnsi(request.Params.RidgeMode);
+                }
+
+                var parameters = new AoiAlgorithmParamsNative
+                {
+                    BgSigmaFactor = request.Params.BgSigmaFactor,
+                    RidgeSigma = request.Params.RidgeSigma,
+                    HessianMaxFactor = request.Params.HessianMaxFactor,
+                    RidgeMode = ridgeModePtr
+                };
+
+                int result = NativeMethods.PICoaterAPI_ProcessPipeline(
+                    _pipelineHandle,
+                    ref input,
+                    ref parameters,
+                    ref output);
+
+                if (result != 0)
+                {
+                    throw new InvalidOperationException(GetLastError());
+                }
+            }
+            finally
+            {
+                if (ridgeModePtr != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(ridgeModePtr);
+                }
             }
         }
 

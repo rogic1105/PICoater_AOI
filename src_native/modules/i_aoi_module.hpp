@@ -7,12 +7,19 @@
 namespace picoater {
 namespace aoi {
 
-struct AoiImage {
+struct AoiInputImage {
   int width = 0;
   int height = 0;
 
   // Primary image buffer pointer on GPU.
   uint8_t* data = nullptr;
+
+  void* stream = nullptr;
+};
+
+struct AoiOutputBuffers {
+  int width = 0;
+  int height = 0;
 
   // Optional output buffers on GPU.
   uint8_t* background_data = nullptr;
@@ -21,12 +28,15 @@ struct AoiImage {
   float* mura_curve_mean = nullptr;
   float* mura_curve_max = nullptr;
 
+  void* stream = nullptr;
+};
+
+struct AoiAlgorithmParams {
   // Processing parameters.
   float bg_sigma_factor = 1.0f;
   float ridge_sigma = 1.0f;
   float hessian_max_factor = 1.0f;
   const char* ridge_mode = "dark";
-  void* stream = nullptr;
 };
 
 class IAoiModule {
@@ -34,7 +44,9 @@ class IAoiModule {
   virtual ~IAoiModule() = default;
 
   virtual bool Initialize() = 0;
-  virtual bool Process(const AoiImage& input_image, AoiImage* output_image) = 0;
+  virtual bool Process(const AoiInputImage& input,
+                       const AoiAlgorithmParams& params,
+                       AoiOutputBuffers* output) = 0;
   virtual std::string GetLastError() const = 0;
 };
 

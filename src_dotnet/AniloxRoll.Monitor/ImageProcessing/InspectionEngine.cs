@@ -56,20 +56,32 @@ namespace AniloxRoll.Monitor.Core.Services
             {
                 try
                 {
-                    _aoiService.ProcessImage(
-                        64,
-                        64,
-                        _inputBuffer,
-                        IntPtr.Zero,
-                        _muraBuffer,
-                        _ridgeBuffer,
-                        _curveMeanBuffer,
-                        _curveMaxBuffer,
-                        InspectionEngineConfig.DefaultBgSigma,
-                        InspectionEngineConfig.DefaultRidgeSigma,
-                        1.0f,
-                        InspectionEngineConfig.DefaultRidgeMode,
-                        IntPtr.Zero);
+                    _aoiService.ProcessImage(new AoiProcessRequest
+                    {
+                        Input = new AoiProcessRequest.InputImage
+                        {
+                            Width = 64,
+                            Height = 64,
+                            Data = _inputBuffer,
+                            Stream = IntPtr.Zero
+                        },
+                        Output = new AoiProcessRequest.OutputBuffers
+                        {
+                            BackgroundData = IntPtr.Zero,
+                            MuraData = _muraBuffer,
+                            RidgeData = _ridgeBuffer,
+                            MuraCurveMean = _curveMeanBuffer,
+                            MuraCurveMax = _curveMaxBuffer,
+                            Stream = IntPtr.Zero
+                        },
+                        Params = new AoiProcessRequest.AlgorithmParams
+                        {
+                            BgSigmaFactor = InspectionEngineConfig.DefaultBgSigma,
+                            RidgeSigma = InspectionEngineConfig.DefaultRidgeSigma,
+                            HessianMaxFactor = 1.0f,
+                            RidgeMode = InspectionEngineConfig.DefaultRidgeMode
+                        }
+                    });
                 }
                 catch
                 {

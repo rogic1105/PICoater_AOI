@@ -441,20 +441,32 @@ namespace AniloxRoll.Monitor.Core.Camera
 
                     Marshal.Copy(_hostInputBuffer, 0, _picoaterInputBuffer, _hostInputBuffer.Length);
 
-                    _aoiService.ProcessImage(
-                        _frameWidth,
-                        _frameHeight,
-                        _picoaterInputBuffer,
-                        IntPtr.Zero,
-                        IntPtr.Zero,
-                        _picoaterRidgeBuffer,
-                        IntPtr.Zero,
-                        IntPtr.Zero,
-                        2.0f,
-                        (float)HessianSigma,
-                        (float)HessianFixedMax,
-                        "vertical",
-                        IntPtr.Zero);
+                    _aoiService.ProcessImage(new AoiProcessRequest
+                    {
+                        Input = new AoiProcessRequest.InputImage
+                        {
+                            Width = _frameWidth,
+                            Height = _frameHeight,
+                            Data = _picoaterInputBuffer,
+                            Stream = IntPtr.Zero
+                        },
+                        Output = new AoiProcessRequest.OutputBuffers
+                        {
+                            BackgroundData = IntPtr.Zero,
+                            MuraData = IntPtr.Zero,
+                            RidgeData = _picoaterRidgeBuffer,
+                            MuraCurveMean = IntPtr.Zero,
+                            MuraCurveMax = IntPtr.Zero,
+                            Stream = IntPtr.Zero
+                        },
+                        Params = new AoiProcessRequest.AlgorithmParams
+                        {
+                            BgSigmaFactor = 2.0f,
+                            RidgeSigma = (float)HessianSigma,
+                            HessianMaxFactor = (float)HessianFixedMax,
+                            RidgeMode = "vertical"
+                        }
+                    });
 
                     Marshal.Copy(_picoaterRidgeBuffer, _hostOutputBuffer, 0, _hostOutputBuffer.Length);
                     MIL.MbufPut2d(dstBuffer, 0, 0, _frameWidth, _frameHeight, _hostOutputBuffer);
