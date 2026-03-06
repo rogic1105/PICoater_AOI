@@ -102,7 +102,9 @@ namespace AniloxRoll.Monitor.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"InspectionEngine Error: {ex.Message}");
+                    throw new InvalidOperationException(
+                        $"InspectionEngine failed while processing '{filePath}'.",
+                        ex);
                 }
                 return result;
             }
