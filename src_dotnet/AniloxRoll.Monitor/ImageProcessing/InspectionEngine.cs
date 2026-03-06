@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
 using AniloxRoll.Monitor.Core.Data;
 using AOI.SDK.Core.Models;
 
@@ -11,41 +10,34 @@ namespace AniloxRoll.Monitor.Core.Services
     {
         private readonly object _lock = new object();
         private readonly AoiService _aoiService;
+        private readonly NativeBufferPool _bufferPool;
 
-        private IntPtr _inputBuffer = IntPtr.Zero;
-        private IntPtr _thumbnailBuffer = IntPtr.Zero;
-        private IntPtr _muraBuffer = IntPtr.Zero;
-        private IntPtr _ridgeBuffer = IntPtr.Zero;
-        private IntPtr _curveMeanBuffer = IntPtr.Zero;
-        private IntPtr _curveMaxBuffer = IntPtr.Zero;
+        private IntPtr _inputBuffer => _bufferPool.InputBuffer;
+        private IntPtr _thumbnailBuffer => _bufferPool.ThumbnailBuffer;
+        private IntPtr _muraBuffer => _bufferPool.MuraBuffer;
+        private IntPtr _ridgeBuffer => _bufferPool.RidgeBuffer;
+        private IntPtr _curveMeanBuffer => _bufferPool.CurveMeanBuffer;
+        private IntPtr _curveMaxBuffer => _bufferPool.CurveMaxBuffer;
 
-        private ulong _imgBufferSize = 0;
-        private int _thumbnailBufferSize = 0;
-        private int _curveBufferSize = 0;
+        private ulong _imgBufferSize => _bufferPool.ImageBufferSize;
+        private int _thumbnailBufferSize => _bufferPool.ThumbnailBufferSize;
+        private int _curveBufferSize => _bufferPool.CurveBufferSize;
 
         private bool _isDisposed = false;
 
         public InspectionEngine()
         {
             _aoiService = new AoiService();
+            _bufferPool = new NativeBufferPool(
+                InspectionEngineConfig.MaxWidth,
+                InspectionEngineConfig.MaxHeight,
+                InspectionEngineConfig.MaxThumbnailSide);
             InitializeNativeResources();
         }
 
         private void InitializeNativeResources()
         {
             _aoiService.Initialize();
-
-            _imgBufferSize = (ulong)(InspectionEngineConfig.MaxWidth * InspectionEngineConfig.MaxHeight);
-            _inputBuffer = Marshal.AllocHGlobal((IntPtr)_imgBufferSize);
-            _muraBuffer = Marshal.AllocHGlobal((IntPtr)_imgBufferSize);
-            _ridgeBuffer = Marshal.AllocHGlobal((IntPtr)_imgBufferSize);
-
-            _thumbnailBufferSize = InspectionEngineConfig.MaxThumbnailSide * InspectionEngineConfig.MaxThumbnailSide;
-            _thumbnailBuffer = Marshal.AllocHGlobal(_thumbnailBufferSize);
-
-            _curveBufferSize = InspectionEngineConfig.MaxWidth * sizeof(float);
-            _curveMeanBuffer = Marshal.AllocHGlobal(_curveBufferSize);
-            _curveMaxBuffer = Marshal.AllocHGlobal(_curveBufferSize);
         }
 
         public void WarmUp()
@@ -125,20 +117,7 @@ namespace AniloxRoll.Monitor.Core.Services
 
             lock (_lock)
             {
-                if (_inputBuffer != IntPtr.Zero) Marshal.FreeHGlobal(_inputBuffer);
-                if (_thumbnailBuffer != IntPtr.Zero) Marshal.FreeHGlobal(_thumbnailBuffer);
-                if (_muraBuffer != IntPtr.Zero) Marshal.FreeHGlobal(_muraBuffer);
-                if (_ridgeBuffer != IntPtr.Zero) Marshal.FreeHGlobal(_ridgeBuffer);
-                if (_curveMeanBuffer != IntPtr.Zero) Marshal.FreeHGlobal(_curveMeanBuffer);
-                if (_curveMaxBuffer != IntPtr.Zero) Marshal.FreeHGlobal(_curveMaxBuffer);
-
-                _inputBuffer = IntPtr.Zero;
-                _thumbnailBuffer = IntPtr.Zero;
-                _muraBuffer = IntPtr.Zero;
-                _ridgeBuffer = IntPtr.Zero;
-                _curveMeanBuffer = IntPtr.Zero;
-                _curveMaxBuffer = IntPtr.Zero;
-
+                _bufferPool.Dispose();
                 _aoiService.Dispose();
                 _isDisposed = true;
             }

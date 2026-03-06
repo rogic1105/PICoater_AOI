@@ -35,28 +35,29 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
         public LiveCameraManager(
             Form mainForm,
-            Panel panel1,
-            Panel panel2,
-            Panel panel3,
-            Panel panel4,
-            Panel panel5, 
-            Panel panel6,
-            Panel panel7,
-            Panel panel8, 
+            Panel[] cameraPanels,
+            Panel mainDisplayPanel,
             Action<string> updatePixelInfoCallback)
         {
+            if (cameraPanels == null)
+            {
+                throw new ArgumentNullException(nameof(cameraPanels));
+            }
+
+            if (cameraPanels.Length < 7)
+            {
+                throw new ArgumentException("cameraPanels must contain at least 7 panels.", nameof(cameraPanels));
+            }
+
             _mainForm = mainForm;
-            _mainDisplayPanel = panel8;
+            _mainDisplayPanel = mainDisplayPanel;
             _updatePixelInfoCallback = updatePixelInfoCallback;
             _mainDisplayPanel.BackColor = Color.Black;
 
-            SetupLivePanel(panel1, 1);
-            SetupLivePanel(panel2, 2); 
-            SetupLivePanel(panel3, 3);
-            SetupLivePanel(panel4, 4);
-            SetupLivePanel(panel5, 5);
-            SetupLivePanel(panel6, 6);
-            SetupLivePanel(panel7, 7);
+            for (int i = 0; i < 7; i++)
+            {
+                SetupLivePanel(cameraPanels[i], i + 1);
+            }
 
             _cameraHardwareConfigs = SystemSettings.CreateDefault().CameraDevices;
 

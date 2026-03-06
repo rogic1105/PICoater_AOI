@@ -53,33 +53,54 @@ namespace AniloxRoll.Monitor.Core.Services
             var results = new TimedResult<InspectionData>[_cameraCount];
             var logs = new ConcurrentQueue<string>();
 
-            for (int i = 0; i < _cameraCount; i++)
+            if (enableProcessing)
             {
-                int camId = i + 1;
-                string path = filesMap.ContainsKey(camId) ? filesMap[camId] : null;
-                _currentFilePaths[i] = path;
-
-                if (!string.IsNullOrEmpty(path))
+                for (int i = 0; i < _cameraCount; i++)
                 {
-                    // 根據 enableProcessing 呼叫不同方法
-                    // ProcessImage -> 會執行翻轉 (變正常)
-                    // LoadThumbnailOnly -> 不執行翻轉 (保持顛倒)
-                    results[i] = enableProcessing
-                        ? _sharedProcessor.ProcessImage(path, 1000, _hessianMaxFactor)
-                        : _sharedProcessor.LoadThumbnailOnly(path, 1000);
-
-                    if (results[i] != null)
-                    {
-                        logs.Enqueue($"Cam {camId}: IO={results[i].IoDurationMs}ms, GPU={results[i].ComputeDurationMs}ms, BMP={results[i].BitmapDurationMs}ms");
-                    }
+                    ProcessSingleCamera(i, filesMap, results, logs, enableProcessing: true);
                 }
-                else
+            }
+            else
+            {
+                // 純 IO 縮圖讀取路徑並行化，縮短多相機總讀取時間。
+                Parallel.For(0, _cameraCount, i =>
                 {
-                    results[i] = null;
-                }
+                    ProcessSingleCamera(i, filesMap, results, logs, enableProcessing: false);
+                });
             }
 
             return (results, logs);
+        }
+
+
+        private void ProcessSingleCamera(
+            int index,
+            Dictionary<int, string> filesMap,
+            TimedResult<InspectionData>[] results,
+            ConcurrentQueue<string> logs,
+            bool enableProcessing)
+        {
+            int camId = index + 1;
+            filesMap.TryGetValue(camId, out string path);
+            _currentFilePaths[index] = path;
+
+            if (string.IsNullOrEmpty(path))
+            {
+                results[index] = null;
+                return;
+            }
+
+            // 根據 enableProcessing 呼叫不同方法
+            // ProcessImage -> 會執行翻轉 (變正常)
+            // LoadThumbnailOnly -> 不執行翻轉 (保持顛倒)
+            results[index] = enableProcessing
+                ? _sharedProcessor.ProcessImage(path, 1000, _hessianMaxFactor)
+                : _sharedProcessor.LoadThumbnailOnly(path, 1000);
+
+            if (results[index] != null)
+            {
+                logs.Enqueue($"Cam {camId}: IO={results[index].IoDurationMs}ms, GPU={results[index].ComputeDurationMs}ms, BMP={results[index].BitmapDurationMs}ms");
+            }
         }
 
         // 回傳 InspectionData 包含圖片與曲線 

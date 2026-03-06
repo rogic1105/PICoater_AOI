@@ -8,6 +8,7 @@
 #include "../../../modules/GetPICoaterBackground/include/module_get_picoater_background.hpp"
 #include "../../../pipeline/aoi_pipeline.hpp"
 #include "../../../plc/i_plc_adapter.hpp"
+#include "../../../plc/mock_plc_adapter.hpp"
 
 namespace {
 

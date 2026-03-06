@@ -4,8 +4,13 @@ namespace AniloxRoll.Monitor.Core.Camera
 {
     public static class CameraSystemManager
     {
-        public static MIL_ID MilApplication = MIL.M_NULL;
+        private static MIL_ID _milApplication = MIL.M_NULL;
         private static bool _isInitialized = false;
+
+        public static MIL_ID MilApplication
+        {
+            get { return _milApplication; }
+        }
 
         public static void Initialize()
         {
@@ -16,7 +21,7 @@ namespace AniloxRoll.Monitor.Core.Camera
             // 參數 1: Server Description (本機使用 M_NULL)
             // 參數 2: Init Flag (M_DEFAULT)
             // 參數 3: Application ID (接收分配結果)
-            MIL.MappAlloc(MIL.M_NULL, MIL.M_DEFAULT, ref MilApplication);
+            MIL.MappAlloc(MIL.M_NULL, MIL.M_DEFAULT, ref _milApplication);
 
             // 禁用預設錯誤視窗 (改由程式內部處理)
             MIL.MappControl(MIL.M_DEFAULT, MIL.M_ERROR, MIL.M_PRINT_DISABLE);
@@ -26,12 +31,12 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         public static MIL_ID AllocateSystem(string systemDescriptor, int systemNum)
         {
-            if (MilApplication == MIL.M_NULL) return MIL.M_NULL;
+            if (_milApplication == MIL.M_NULL) return MIL.M_NULL;
 
             MIL_ID sysId = MIL.M_NULL;
 
             // 這裡才是真正分配硬體資源 (擷取卡) 的地方
-            MIL.MsysAlloc(MilApplication, systemDescriptor, systemNum, MIL.M_DEFAULT, ref sysId);
+            MIL.MsysAlloc(_milApplication, systemDescriptor, systemNum, MIL.M_DEFAULT, ref sysId);
 
             return sysId;
         }
@@ -46,10 +51,10 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         public static void FreeApplication()
         {
-            if (MilApplication != MIL.M_NULL)
+            if (_milApplication != MIL.M_NULL)
             {
-                MIL.MappFreeDefault(MilApplication, MIL.M_NULL, MIL.M_NULL, MIL.M_NULL, MIL.M_NULL);
-                MilApplication = MIL.M_NULL;
+                MIL.MappFreeDefault(_milApplication, MIL.M_NULL, MIL.M_NULL, MIL.M_NULL, MIL.M_NULL);
+                _milApplication = MIL.M_NULL;
                 _isInitialized = false;
             }
         }

@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace AniloxRoll.Monitor.Forms.Helpers
@@ -16,7 +17,6 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         private readonly DateTimeNavigator _timeManager;
         private readonly ThumbnailGridPresenter _galleryManager;
         private int _periodNavigationBusyCount = 0;
-        private bool _isPeriodNavigationBusy = false;
 
         public event Action<bool> BusyStateChanged;
         public event Action<string> LogReported;
@@ -98,7 +98,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
         public async Task MovePeriodAsync(int step, bool isProcessedMode, Func<bool, Task> loadImagesAsync)
         {
-            if (_isPeriodNavigationBusy) return;
+            if (GetIsPeriodNavigationBusy()) return;
 
             var periods = _repository.GetAvailablePeriods();
             if (periods.Count == 0)
@@ -128,17 +128,23 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
         public void BeginPeriodNavigationBusy()
         {
-            _periodNavigationBusyCount++;
-            _isPeriodNavigationBusy = _periodNavigationBusyCount > 0;
+            Interlocked.Increment(ref _periodNavigationBusyCount);
             UpdatePeriodNavigationState();
         }
 
         public void EndPeriodNavigationBusy()
         {
-            _periodNavigationBusyCount = Math.Max(0, _periodNavigationBusyCount - 1);
-            _isPeriodNavigationBusy = _periodNavigationBusyCount > 0;
+            int next = Interlocked.Decrement(ref _periodNavigationBusyCount);
+            if (next < 0)
+            {
+                Interlocked.Exchange(ref _periodNavigationBusyCount, 0);
+            }
+
             UpdatePeriodNavigationState();
         }
+
+        private bool GetIsPeriodNavigationBusy()
+            => Interlocked.CompareExchange(ref _periodNavigationBusyCount, 0, 0) > 0;
 
         public void UpdatePeriodNavigationState()
         {
@@ -157,7 +163,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                 if (idx < 0) idx = 0;
             }
 
-            bool canOperate = !_isPeriodNavigationBusy;
+            bool canOperate = !GetIsPeriodNavigationBusy();
             PeriodNavigationStateChanged?.Invoke(canOperate && idx > 0, canOperate && idx < periods.Count - 1);
         }
     }

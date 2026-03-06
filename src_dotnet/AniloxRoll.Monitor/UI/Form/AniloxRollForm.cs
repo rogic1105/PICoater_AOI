@@ -96,13 +96,7 @@ namespace AniloxRoll.Monitor.Forms
             // [Acquisition 模組] 管理 MIL 相機硬體生命週期（配置、連續抓圖、釋放）與即時畫面輸出。
             _liveCameraManager = new LiveCameraManager(
                 this,
-                panel1,
-                panel2,
-                panel3,
-                panel4,
-                panel5,
-                panel6,
-                panel7,
+                new[] { panel1, panel2, panel3, panel4, panel5, panel6, panel7 },
                 panel8,
                 pixelText => { if (lblPixelInfo != null) lblPixelInfo.Text = pixelText; }
             );
