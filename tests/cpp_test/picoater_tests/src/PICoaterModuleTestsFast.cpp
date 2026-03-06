@@ -11,7 +11,7 @@
 
 #include "cpp_utils/timer_utils.hpp"
 #include "cpp_utils/terminal_colors.hpp"
-#include "Module_GetPICoaterBackground.hpp"
+#include "module_get_picoater_background.hpp"
 
 #include <future> 
 #include <iostream>
@@ -20,33 +20,33 @@
 void PICoaterModuleTestsFast(const std::string& imgPath) {
     std::cout << Color::CYAN << "\n========= Running PICoater Module Tests (Fast IO) =========" << Color::RESET << "\n";
 
-    // 1. ©w¸q Host Pinned Memory (¿é¤J»P¿é¥X)
+    // 1. å®šç¾© Host Pinned Memory (è¼¸å…¥èˆ‡è¼¸å‡º)
     uint8_t* h_pinned_in = nullptr;
     uint8_t* h_in = nullptr;
     uint8_t* h_pinned_bg = nullptr;
     uint8_t* h_pinned_mura = nullptr;
     uint8_t* h_pinned_ridge = nullptr;
-    uint8_t* h_pinned_heatmap = nullptr; // [·s¼W]
+    uint8_t* h_pinned_heatmap = nullptr; // [æ–°å¢]
     float* h_pinned_mura_mean = nullptr;
 	float* h_pinned_mura_max = nullptr;
 
-    // 2. ©w¸q Device Memory (GPU)
+    // 2. å®šç¾© Device Memory (GPU)
     uint8_t* d_in = nullptr;
     uint8_t* d_bg = nullptr;
     uint8_t* d_mura = nullptr;
     uint8_t* d_ridge = nullptr;
-    uint8_t* d_heatmap = nullptr; // [·s¼W]
+    uint8_t* d_heatmap = nullptr; // [æ–°å¢]
     float* d_mura_curve_mean = nullptr;
 	float* d_mura_curve_max = nullptr;
 
     try {
-        // ¹w¦ô³Ì¤j¥i¯à¤Ø¤o (¨Ò¦p 16384 x 10000)
+        // é ä¼°æœ€å¤§å¯èƒ½å°ºå¯¸ (ä¾‹å¦‚ 16384 x 10000)
         size_t max_size = 16384 * 10000;
         h_pinned_in = (uint8_t*)core::alloc_pinned_memory(max_size);
 
         int w = 0, h = 0;
 
-        // --- A. ·¥³tÅª¹Ï´ú¸Õ (Direct to Pinned) ---
+        // --- A. æ¥µé€Ÿè®€åœ–æ¸¬è©¦ (Direct to Pinned) ---
         {
             TIME_SCOPE_MS("Fast Load BMP (SSD -> Pinned Memory)");
             if (!core::fast_read_bmp_8bit(imgPath, w, h, h_pinned_in, max_size)) {
@@ -57,9 +57,9 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
         }
 
         size_t img_size = (size_t)w * h;
-        size_t heatmap_size = img_size * 3; // [·s¼W] RGB 3 channels
+        size_t heatmap_size = img_size * 3; // [æ–°å¢] RGB 3 channels
 
-        // --- B. ¤À°t GPU °O¾ĞÅé ---
+        // --- B. åˆ†é… GPU è¨˜æ†¶é«” ---
         checkCudaErrors(cudaMalloc(&d_in, img_size));
         checkCudaErrors(cudaMalloc(&d_bg, img_size));
         checkCudaErrors(cudaMalloc(&d_mura, img_size));
@@ -67,7 +67,7 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
         checkCudaErrors(cudaMalloc(&d_mura_curve_mean, w * sizeof(float)));
 		checkCudaErrors(cudaMalloc(&d_mura_curve_max, w * sizeof(float)));
 
-        // --- C. ¤À°t¿é¥X Pinned Memory ---
+        // --- C. åˆ†é…è¼¸å‡º Pinned Memory ---
         h_in = (uint8_t*)core::alloc_pinned_memory(img_size);
         h_pinned_bg = (uint8_t*)core::alloc_pinned_memory(img_size);
         h_pinned_mura = (uint8_t*)core::alloc_pinned_memory(img_size);
@@ -75,13 +75,13 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
         h_pinned_mura_mean = (float*)core::alloc_pinned_memory(w * sizeof(float));
         h_pinned_mura_max = (float*)core::alloc_pinned_memory(w * sizeof(float));
 
-        // --- D. ¤W¶Ç¹Ï¤ù (Pinned -> Device) ---
+        // --- D. ä¸Šå‚³åœ–ç‰‡ (Pinned -> Device) ---
         {
             TIME_SCOPE_MS("Upload (Pinned -> Device)");
             checkCudaErrors(cudaMemcpy(d_in, h_pinned_in, img_size, cudaMemcpyHostToDevice));
         }
 
-        // --- E. °õ¦æ AOI ¼Ò²Õ ---
+        // --- E. åŸ·è¡Œ AOI æ¨¡çµ„ ---
         float bgSigma = 2.0f;
         float ridgeSigma = 9.0f;
 		float hessianMaxFactor = 1.0f;
@@ -108,7 +108,7 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
                 0);
         }
 
-        // --- F. ¤U¸üµ²ªG (Device -> Pinned) ---
+        // --- F. ä¸‹è¼‰çµæœ (Device -> Pinned) ---
         {
             TIME_SCOPE_MS("Download Result (Device -> Host Pinned)");
             checkCudaErrors(cudaMemcpy(h_in, d_in, img_size, cudaMemcpyDeviceToHost));
@@ -119,7 +119,7 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
             checkCudaErrors(cudaMemcpy(h_pinned_mura_max, d_mura_curve_max, w * sizeof(float), cudaMemcpyDeviceToHost));
         }
 
-        // --- G. ·¥³t¦s¹Ï´ú¸Õ (Parallel) ---
+        // --- G. æ¥µé€Ÿå­˜åœ–æ¸¬è©¦ (Parallel) ---
         {
             TIME_SCOPE_MS("Fast Save BMP (Parallel + Raw Write)");
 
@@ -149,24 +149,24 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
         }
 
         // --- I. CPU SIMD Implementation Test (New) ---
-                // ÅçÃÒ CPU ª©¥» (AVX2 + OpenMP) ªº¹Bºâµ²ªG»P¦s¹Ï
+                // é©—è­‰ CPU ç‰ˆæœ¬ (AVX2 + OpenMP) çš„é‹ç®—çµæœèˆ‡å­˜åœ–
         std::cout << Color::CYAN << "\n--- Running CPU SIMD Implementation Test ---" << Color::RESET << "\n";
         {
-            // 1. ¤À°t CPU ¿é¥X½w½Ä°Ï
+            // 1. åˆ†é… CPU è¼¸å‡ºç·©è¡å€
             uint8_t* h_cpu_mura = (uint8_t*)core::alloc_pinned_memory(img_size);
 
-            // 2. «Ø¥ß Detector ¹ê¨Ò
+            // 2. å»ºç«‹ Detector å¯¦ä¾‹
             picoater::PICoaterDetector detector_cpu;
-            detector_cpu.Initialize(w, h); // ªì©l¤Æ (³]©wªø¼e)
+            detector_cpu.Initialize(w, h); // åˆå§‹åŒ– (è¨­å®šé•·å¯¬)
 
-            // 3. °õ¦æ RunCPU (¥u¶] Column Mean & Background ¨â¨B)
-            // h_pinned_in ¬O¤w¸g¸ü¤Jªº­ì©l¼v¹³
+            // 3. åŸ·è¡Œ RunCPU (åªè·‘ Column Mean & Background å…©æ­¥)
+            // h_pinned_in æ˜¯å·²ç¶“è¼‰å…¥çš„åŸå§‹å½±åƒ
             {
                 TIME_SCOPE_MS("Module: PICoater Detector Run (CPU SIMD)");
                 detector_cpu.RunCPU(h_pinned_in, h_cpu_mura, bgSigma);
             }
 
-            // 4. ¦s¹ÏÅçÃÒ
+            // 4. å­˜åœ–é©—è­‰
             {
                 TIME_SCOPE_MS("Save CPU Result BMP");
                 std::string outPathCPU = framework::GetOutputPath("picoater_tests", "cpu_simd_mura.bmp");
@@ -174,7 +174,7 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
                 std::cout << "Saved CPU result to: " << outPathCPU << "\n";
             }
 
-            // ²M²z¥»¦a¸ê·½
+            // æ¸…ç†æœ¬åœ°è³‡æº
             core::free_pinned_memory(h_cpu_mura);
         }
 
@@ -183,19 +183,19 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
         std::cerr << "Error: " << e.what() << "\n";
     }
 
-    // ²M²z¸ê·½
+    // æ¸…ç†è³‡æº
     if (d_in) cudaFree(d_in);
     if (d_bg) cudaFree(d_bg);
     if (d_mura) cudaFree(d_mura);
     if (d_ridge) cudaFree(d_ridge);
-    if (d_heatmap) cudaFree(d_heatmap); // [·s¼W]
+    if (d_heatmap) cudaFree(d_heatmap); // [æ–°å¢]
     if (d_mura_curve_mean) cudaFree(d_mura_curve_mean);
 
     core::free_pinned_memory(h_pinned_in);
     core::free_pinned_memory(h_pinned_bg);
     core::free_pinned_memory(h_pinned_mura);
     core::free_pinned_memory(h_pinned_ridge);
-    core::free_pinned_memory(h_pinned_heatmap); // [·s¼W]
+    core::free_pinned_memory(h_pinned_heatmap); // [æ–°å¢]
     core::free_pinned_memory(h_pinned_mura_mean);
 
     std::cout << Color::GREEN << "All Tests Finished." << Color::RESET << "\n";
@@ -211,7 +211,7 @@ struct CamContext {
     uint8_t* d_bg = nullptr;
     uint8_t* d_mura = nullptr;
     uint8_t* d_ridge = nullptr;
-    uint8_t* d_heatmap = nullptr; // [·s¼W]
+    uint8_t* d_heatmap = nullptr; // [æ–°å¢]
     float* d_mura_curve_mean = nullptr;
 	float* d_mura_curve_max = nullptr;
 
@@ -257,7 +257,7 @@ struct CamContext {
         if (d_bg) cudaFree(d_bg);
         if (d_mura) cudaFree(d_mura);
         if (d_ridge) cudaFree(d_ridge);
-        if (d_heatmap) cudaFree(d_heatmap); // [·s¼W]
+        if (d_heatmap) cudaFree(d_heatmap); // [æ–°å¢]
         if (d_mura_curve_mean) cudaFree(d_mura_curve_mean);
         if (d_mura_curve_max) cudaFree(d_mura_curve_max);
 
@@ -272,14 +272,14 @@ struct CamContext {
 void PICoaterModuleTestsMultiThread(const std::string& imgPath, const int NUM_CAMS) {
 
 
-    // 1. [­×§ï] ¹w¥ıÅª¨ú¹Ï¤ù¨ì¦@¥Î Buffer (¼ÒÀÀ FrameGrabber ·Ç³Æ¦n¸ê®Æ)
+    // 1. [ä¿®æ”¹] é å…ˆè®€å–åœ–ç‰‡åˆ°å…±ç”¨ Buffer (æ¨¡æ“¬ FrameGrabber æº–å‚™å¥½è³‡æ–™)
     int w = 0, h = 0;
     uint8_t* shared_source_img = nullptr;
     size_t img_size = 0;
 
     {
         size_t max_size = 16384 * 10000;
-        shared_source_img = (uint8_t*)core::alloc_pinned_memory(max_size); // ¼È¦s°Ï
+        shared_source_img = (uint8_t*)core::alloc_pinned_memory(max_size); // æš«å­˜å€
 
         if (!core::fast_read_bmp_8bit(imgPath, w, h, shared_source_img, max_size)) {
             std::cerr << "Init failed: Cannot load image.\n";
@@ -296,16 +296,16 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath, const int NUM_CA
     // 2. Context
     std::cout << Color::CYAN << "Initializing Shared GPU Resources (1 Context)..." << Color::RESET << "\n";
 
-    CamContext shared_ctx; // ¥u«Å§i¤@­Ó¡I
+    CamContext shared_ctx; // åªå®£å‘Šä¸€å€‹ï¼
     shared_ctx.id = 0;
-    shared_ctx.Initialize(w, h); // ³o¸Ì¦û¥Î¬ù 2.5GB VRAM
+    shared_ctx.Initialize(w, h); // é€™è£¡ä½”ç”¨ç´„ 2.5GB VRAM
 
     std::cout << "Starting Serial Execution with Resource Reuse...\n";
 
-    // ·x¨­ (Warmup)
+    // æš–èº« (Warmup)
     {
         std::cout << "Warming up...\n";
-        // ÀH«K¶]¤@¦¸Åı GPU ¿ô¨Ó
+        // éš¨ä¾¿è·‘ä¸€æ¬¡è®“ GPU é†’ä¾†
         std::memcpy(shared_ctx.h_pinned_in, shared_source_img, img_size);
         checkCudaErrors(cudaMemcpyAsync(shared_ctx.d_in, shared_ctx.h_pinned_in, shared_ctx.img_size, cudaMemcpyHostToDevice, shared_ctx.stream));
         shared_ctx.detector.Run(
@@ -321,14 +321,14 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath, const int NUM_CA
         for (int i = 0; i < NUM_CAMS; ++i) {
             auto start = std::chrono::high_resolution_clock::now();
 
-            // ³o¸Ìª½±µ¨Ï¥Î shared_ctx
-            // ¼ÒÀÀ¡G±N¸ê®Æ½Æ»s¶i¥h
+            // é€™è£¡ç›´æ¥ä½¿ç”¨ shared_ctx
+            // æ¨¡æ“¬ï¼šå°‡è³‡æ–™è¤‡è£½é€²å»
             std::memcpy(shared_ctx.h_pinned_in, shared_source_img, img_size);
 
             // A. Upload
             checkCudaErrors(cudaMemcpyAsync(shared_ctx.d_in, shared_ctx.h_pinned_in, shared_ctx.img_size, cudaMemcpyHostToDevice, shared_ctx.stream));
 
-            // B. Run (GPU ¤º³¡ªº¼È¦s°Ï·|³Q½Æ¼g¡A³o¦b AOI ¬O¥¿±`ªº¡A¦]¬°§Ú­Ì¥uÃö¤ß·í«eªºµ²ªG)
+            // B. Run (GPU å…§éƒ¨çš„æš«å­˜å€æœƒè¢«è¤‡å¯«ï¼Œé€™åœ¨ AOI æ˜¯æ­£å¸¸çš„ï¼Œå› ç‚ºæˆ‘å€‘åªé—œå¿ƒç•¶å‰çš„çµæœ)
             shared_ctx.detector.Run(
                 shared_ctx.d_in, shared_ctx.d_bg, shared_ctx.d_mura, shared_ctx.d_ridge, shared_ctx.d_mura_curve_mean, shared_ctx.d_mura_curve_max,
                 2.0f, 9.0f, 1.0f, "vertical", shared_ctx.stream
@@ -352,7 +352,7 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath, const int NUM_CA
         }
     }
 
-    // ²M²z
+    // æ¸…ç†
     shared_ctx.Release();
     core::free_pinned_memory(shared_source_img);
 

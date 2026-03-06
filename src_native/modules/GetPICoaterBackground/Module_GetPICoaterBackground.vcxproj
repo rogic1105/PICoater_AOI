@@ -24,7 +24,6 @@
     </CudaCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\Module_GetPICoaterBackground.hpp" />
     <ClInclude Include="include\module_get_picoater_background.hpp" />
     <ClInclude Include="..\i_aoi_module.hpp" />
   </ItemGroup>

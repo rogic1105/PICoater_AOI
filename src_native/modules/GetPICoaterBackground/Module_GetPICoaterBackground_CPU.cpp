@@ -1,9 +1,9 @@
-#include "Module_GetPICoaterBackground.hpp"
+#include "module_get_picoater_background.hpp"
 #include "core_cv/imgproc/core_background.hpp"
 #include "core_cv/imgproc/core_utils.hpp"
-#include "cpp_utils/timer_utils.hpp" // ¥Î©ó­p®É
+#include "cpp_utils/timer_utils.hpp" // ç”¨æ–¼è¨ˆæ™‚
 
-// ¦pªG»İ­n Debug ¦s¹Ï¡A½Ğ¸Ñ¶}¥H¤Uµù¸Ñ
+// å¦‚æœéœ€è¦ Debug å­˜åœ–ï¼Œè«‹è§£é–‹ä»¥ä¸‹è¨»è§£
 // #define DEBUG_SAVE_IMAGE
 #ifdef DEBUG_SAVE_IMAGE
 #include "stb/stb_image_write.h"
@@ -19,31 +19,31 @@ namespace picoater {
     ) {
         if (m_width == 0 || m_height == 0) return;
 
-        // 1. ½T«O CPU °O¾ĞÅé¤w¤À°t
-        // ¦pªG Initialize ¨S³Q©I¥s©Î¥u¤À°t¤F GPU¡A³o¸Ì°µ lazy initialization
+        // 1. ç¢ºä¿ CPU è¨˜æ†¶é«”å·²åˆ†é…
+        // å¦‚æœ Initialize æ²’è¢«å‘¼å«æˆ–åªåˆ†é…äº† GPUï¼Œé€™è£¡åš lazy initialization
         if (h_col_mean.size() != m_width) {
             h_col_mean.resize(m_width);
         }
 
-        // ¨Ï¥Î­p®É¾¹¨ÓÆ[¹î CPU ª©®Ä¯à
+        // ä½¿ç”¨è¨ˆæ™‚å™¨ä¾†è§€å¯Ÿ CPU ç‰ˆæ•ˆèƒ½
         {
             TIME_SCOPE_MS("Total Run Time (CPU)");
 
-            // ¨BÆJ 1: ­pºâ¦C¥­§¡ (Column Means)
+            // æ­¥é©Ÿ 1: è¨ˆç®—åˆ—å¹³å‡ (Column Means)
             {
                 // TIME_SCOPE_MS("   1. Calc Column Means (CPU)");
-                // ³o¸Ì stride ¶Ç¤J m_width¡A°²³] h_in ¬Oºò±K±Æ¦Cªº (µL padding)
+                // é€™è£¡ stride å‚³å…¥ m_widthï¼Œå‡è¨­ h_in æ˜¯ç·Šå¯†æ’åˆ—çš„ (ç„¡ padding)
                 core::calcColumnMeans_RemoveOutliers_cpu(
                     h_in,
                     h_col_mean.data(),
                     m_width,
                     m_height,
                     m_width, // stride
-                    bgSigmaFactor // sigma_threshold (ÁöµM¦W¦r¬O bgSigmaFactor¡A¦ı¦b¦¹¤W¤U¤å¤¤±`³Q¦@¥Î)
+                    bgSigmaFactor // sigma_threshold (é›–ç„¶åå­—æ˜¯ bgSigmaFactorï¼Œä½†åœ¨æ­¤ä¸Šä¸‹æ–‡ä¸­å¸¸è¢«å…±ç”¨)
                 );
             }
 
-            // ¨BÆJ 2: ­pºâ­I´º»P Mura
+            // æ­¥é©Ÿ 2: è¨ˆç®—èƒŒæ™¯èˆ‡ Mura
             {
                 // TIME_SCOPE_MS("   2. Calc Background & Mura (CPU)");
                 core::calcColumnBackground_u8_cpu(

@@ -5,24 +5,24 @@ VisualStudioVersion = 17.14.36221.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SDK", "SDK", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
 	ProjectSection(SolutionItems) = preProject
-		sdk\AOI_SDK\.gitignore = sdk\AOI_SDK\.gitignore
-		sdk\AOI_SDK\Directory.Build.props = sdk\AOI_SDK\Directory.Build.props
-		sdk\AOI_SDK\readme.md = sdk\AOI_SDK\readme.md
+		sdk\.gitignore = sdk\.gitignore
+		sdk\Directory.Build.props = sdk\Directory.Build.props
+		sdk\readme.md = sdk\readme.md
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Module_GetPICoaterBackground", "src_native\modules\GetPICoaterBackground\Module_GetPICoaterBackground.vcxproj", "{89631E35-4DE2-4280-BB43-32D6DBDD4840}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core_cv", "sdk\AOI_SDK\core_cv\core_cv.vcxproj", "{B39F6111-258B-48F8-8A3E-F940771A4D52}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core_cv", "sdk\core_cv\core_cv.vcxproj", "{B39F6111-258B-48F8-8A3E-F940771A4D52}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cpp_utils", "sdk\AOI_SDK\cpp_utils\cpp_utils.vcxproj", "{05DB04FC-CC8E-2E92-8736-4D39CC68F27A}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cpp_utils", "sdk\cpp_utils\cpp_utils.vcxproj", "{05DB04FC-CC8E-2E92-8736-4D39CC68F27A}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core_cv_api", "sdk\AOI_SDK\core_cv_api\core_cv_api.vcxproj", "{F5B38893-304A-4913-A17A-0C63F88FA391}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core_cv_api", "sdk\core_cv_api\core_cv_api.vcxproj", "{F5B38893-304A-4913-A17A-0C63F88FA391}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "picoater_api", "src_native\c_api\PiCoater_api\PiCoater_api.vcxproj", "{AE695487-606D-41DC-8639-5DB96B92B89C}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "GUI", "GUI", "{045B1682-9917-40A9-8090-B480480CDEB5}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core_cv_tests", "sdk\AOI_SDK\core_cv_tests\core_cv_tests.vcxproj", "{77281454-B828-499A-9A88-D9E46249A625}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core_cv_tests", "sdk\core_cv_tests\core_cv_tests.vcxproj", "{77281454-B828-499A-9A88-D9E46249A625}"
 	ProjectSection(ProjectDependencies) = postProject
 		{05DB04FC-CC8E-2E92-8736-4D39CC68F27A} = {05DB04FC-CC8E-2E92-8736-4D39CC68F27A}
 		{B39F6111-258B-48F8-8A3E-F940771A4D52} = {B39F6111-258B-48F8-8A3E-F940771A4D52}
@@ -37,7 +37,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "picoater_tests", "tests\cpp
 		{D3CC3425-9807-4866-AEB5-1F1DBC49523C} = {D3CC3425-9807-4866-AEB5-1F1DBC49523C}
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "framework", "sdk\AOI_SDK\framework\framework.vcxproj", "{D3CC3425-9807-4866-AEB5-1F1DBC49523C}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "framework", "sdk\framework\framework.vcxproj", "{D3CC3425-9807-4866-AEB5-1F1DBC49523C}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "PIcoater", "PIcoater", "{7B6C5943-96EB-4AE1-ACF4-A98750620977}"
 	ProjectSection(SolutionItems) = preProject
@@ -48,7 +48,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "PIcoater", "PIcoater", "{7B
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "GUI", "GUI", "{BF9C6D13-F0E4-4AE4-AB67-40A550EA3F3B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AOI.SDK.TestApp", "sdk\AOI_SDK\src_dotnet\AOI.SDK.TestApp\AOI.SDK.TestApp.csproj", "{430F061A-C98E-48C7-8013-F830FB781F45}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AOI.SDK.TestApp", "sdk\src_dotnet\AOI.SDK.TestApp\AOI.SDK.TestApp.csproj", "{430F061A-C98E-48C7-8013-F830FB781F45}"
 	ProjectSection(ProjectDependencies) = postProject
 		{F5B38893-304A-4913-A17A-0C63F88FA391} = {F5B38893-304A-4913-A17A-0C63F88FA391}
 	EndProjectSection
@@ -62,9 +62,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AniloxRoll.Monitor", "src_d
 		{AE695487-606D-41DC-8639-5DB96B92B89C} = {AE695487-606D-41DC-8639-5DB96B92B89C}
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AOI.SDK", "sdk\AOI_SDK\src_dotnet\AOI.SDK\AOI.SDK.csproj", "{27263C11-7FEF-4076-A2F1-F412BB496DF3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AOI.SDK", "sdk\src_dotnet\AOI.SDK\AOI.SDK.csproj", "{27263C11-7FEF-4076-A2F1-F412BB496DF3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Envision_MdigGrab", "sdk\AOI_SDK\src_dotnet\Envision_MdigGrab\Envision_MdigGrab\Envision_MdigGrab.csproj", "{3673D056-EC7F-443F-9DF3-4A6B185DFBC2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Envision_MdigGrab", "sdk\src_dotnet\Envision_MdigGrab\Envision_MdigGrab\Envision_MdigGrab.csproj", "{3673D056-EC7F-443F-9DF3-4A6B185DFBC2}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

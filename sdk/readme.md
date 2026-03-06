@@ -13,7 +13,7 @@
 
 ## 2. 專案架構 (Project Structure)
 
-SDK 的核心檔案位於 `sdk/AOI_SDK` 目錄下，主要模組如下：
+SDK 的核心檔案位於 `sdk` 目錄下，主要模組如下：
 
 * **core_cv**: 核心影像處理演算法庫。
 * 包含所有 CUDA Kernel 實作 (`.cu`) 與 Host Wrapper (`.cpp`/`.cu`)。
@@ -101,7 +101,7 @@ SDK 的核心檔案位於 `sdk/AOI_SDK` 目錄下，主要模組如下：
 #include <iostream>
 #include "framework/test_utils.hpp"
 #include "core_cv/core_ops.hpp" // 引用核心演算法
-#include "Module_GetPICoaterBackground.hpp" // 引用特定模組
+#include "module_get_picoater_background.hpp" // 引用特定模組
 
 // 測試邏輯實作
 void RunMyTest(const std::string& imagePath) {

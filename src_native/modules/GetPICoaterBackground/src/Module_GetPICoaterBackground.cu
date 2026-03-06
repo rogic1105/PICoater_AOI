@@ -1,18 +1,18 @@
 // PICoater_AOI\src_native\modules\GetPICoaterBackground\src\Module_GetPICoaterBackground.cu
 
-#include "Module_GetPICoaterBackground.hpp"
+#include "module_get_picoater_background.hpp"
 #include "core_cv/base/cuda_utils.hpp"
 
 #include "core_cv/imgproc/core_filters.hpp"
 #include "core_cv/imgproc/core_background.hpp"
 #include "core_cv/imgproc/core_features.hpp"
-#include "core_cv/imgproc/core_utils.hpp" // [·s¼W] for overlay_heatmap_gpu
+#include "core_cv/imgproc/core_utils.hpp" // [æ–°å¢] for overlay_heatmap_gpu
 
 #include "cpp_utils/timer_utils.hpp"
 
 namespace picoater {
 
-    // [Helper] °O¾ĞÅé¹ï»ô­pºâ¤u¨ã (¹ï»ô¨ì 256 bytes¡A²Å¦X CUDA ³Ì¨Î¦s¨ú²É«×)
+    // [Helper] è¨˜æ†¶é«”å°é½Šè¨ˆç®—å·¥å…· (å°é½Šåˆ° 256 bytesï¼Œç¬¦åˆ CUDA æœ€ä½³å­˜å–ç²’åº¦)
     inline size_t alignUp(size_t offset, size_t alignment = 256) {
         return (offset + alignment - 1) & ~(alignment - 1);
     }
@@ -21,12 +21,12 @@ namespace picoater {
     PICoaterDetector::~PICoaterDetector() { Release(); }
 
     void PICoaterDetector::Release() {
-        // ¥u»İ­nÄÀ©ñ "¾Ö¦³Åv" ªº°O¾ĞÅé
+        // åªéœ€è¦é‡‹æ”¾ "æ“æœ‰æ¬Š" çš„è¨˜æ†¶é«”
         if (d_col_mean) cudaFree(d_col_mean);
         if (d_col_bg_) cudaFree(d_col_bg_);
         if (d_blur_tmp_) cudaFree(d_blur_tmp_);
 
-        // [ÃöÁä] ¥u»İ­nÄÀ©ñÁ` workspace¡A¤º³¡ªº«ü¼Ğ¥u¬O­É¥Î¦ì§}¡A¤£»İ­n free
+        // [é—œéµ] åªéœ€è¦é‡‹æ”¾ç¸½ workspaceï¼Œå…§éƒ¨çš„æŒ‡æ¨™åªæ˜¯å€Ÿç”¨ä½å€ï¼Œä¸éœ€è¦ free
         if (d_workspace_) cudaFree(d_workspace_);
 
         d_col_mean = nullptr;
@@ -34,7 +34,7 @@ namespace picoater {
         d_blur_tmp_ = nullptr;
         d_workspace_ = nullptr;
 
-        // Âk¹s«ü¼Ğ¡AÁ×§KÄaªÅ
+        // æ­¸é›¶æŒ‡æ¨™ï¼Œé¿å…æ‡¸ç©º
         d_hessian_u8_ = nullptr;
         d_hessian_f32_ = nullptr;
         d_hessian_resp_ = nullptr;
@@ -52,7 +52,7 @@ namespace picoater {
         CUDA_CHECK(cudaMalloc(&d_col_bg_, num_pixels * sizeof(uint8_t)));
         CUDA_CHECK(cudaMalloc(&d_blur_tmp_, num_pixels * sizeof(uint8_t)));
 
-        // --- ­pºâ Hessian »İ­nªº°¾²¾ (¥Î©ó«ü¬£«ü¼Ğ) ---
+        // --- è¨ˆç®— Hessian éœ€è¦çš„åç§» (ç”¨æ–¼æŒ‡æ´¾æŒ‡æ¨™) ---
         size_t offset = 0;
         auto alignUp = [](size_t off) { return (off + 255) & ~255; };
 
@@ -65,20 +65,20 @@ namespace picoater {
         size_t off_resp = alignUp(offset);
         offset = off_resp + num_pixels * sizeof(float);
 
-        size_t hessian_req_size = offset; // Hessian »İ­n³o»ò¦h
+        size_t hessian_req_size = offset; // Hessian éœ€è¦é€™éº¼å¤š
 
-        // --- ­pºâ Gaussian »İ­nªº¤j¤p ---
-        // Gaussian »İ­n 3 ­Ó float buffer + mask (°²³] mask 1KB)
+        // --- è¨ˆç®— Gaussian éœ€è¦çš„å¤§å° ---
+        // Gaussian éœ€è¦ 3 å€‹ float buffer + mask (å‡è¨­ mask 1KB)
         size_t gaussian_req_size = (num_pixels * sizeof(float)) * 3 + 1024;
 
-        // [ÃöÁä] Á`¤j¤p¨ú¨âªÌ¤§³Ì¤j­È
+        // [é—œéµ] ç¸½å¤§å°å–å…©è€…ä¹‹æœ€å¤§å€¼
         size_t total_size = (gaussian_req_size > hessian_req_size) ? gaussian_req_size : hessian_req_size;
 
-        // --- ³æ¦¸¤À°t ---
+        // --- å–®æ¬¡åˆ†é… ---
         CUDA_CHECK(cudaMalloc(&d_workspace_, total_size));
 
-        // --- «ü¼Ğ«ü¬£ (µ¹ Hessian ¥Î) ---
-        // ³o¨Ç«ü¼Ğ¦b Run Hessian ®É·|¥Î¨ì
+        // --- æŒ‡æ¨™æŒ‡æ´¾ (çµ¦ Hessian ç”¨) ---
+        // é€™äº›æŒ‡æ¨™åœ¨ Run Hessian æ™‚æœƒç”¨åˆ°
         uint8_t* base = (uint8_t*)d_workspace_;
         d_hessian_u8_ = (uint8_t*)(base + off_u8);
         d_hessian_f32_ = (float*)(base + off_f32);
@@ -102,22 +102,22 @@ namespace picoater {
 
         int sigma_col = 1;
 
-        // [·s¼W] Á`¯Ó®É´ú¶q (³o·|¥]¦í¾ã­Ó Run)
+        // [æ–°å¢] ç¸½è€—æ™‚æ¸¬é‡ (é€™æœƒåŒ…ä½æ•´å€‹ Run)
         TIME_SCOPE_MS_SYNC("Total Run Time", cudaStreamSynchronize(stream));
 
-        // ¨BÆJ 1: ­pºâ¦C¥­§¡ (Column Means)
+        // æ­¥é©Ÿ 1: è¨ˆç®—åˆ—å¹³å‡ (Column Means)
         {
             //TIME_SCOPE_MS_SYNC("      1. Calc Column Means", cudaStreamSynchronize(stream));
             core::calcColumnMeans_RemoveOutliers_gpu(d_in, d_col_mean, m_width, m_height, sigma_col, stream);
         }
 
-        // ¨BÆJ 2: ­pºâ­I´º»P Mura (Background & Mura)
+        // æ­¥é©Ÿ 2: è¨ˆç®—èƒŒæ™¯èˆ‡ Mura (Background & Mura)
         {
             //TIME_SCOPE_MS_SYNC("      2. Calc Background & Mura", cudaStreamSynchronize(stream));
             core::calcColumnBackground_u8_gpu(d_in, d_col_mean, d_mura_out, m_width, m_height, stream);
         }
 
-        // ¨BÆJ 3: Hessian Ridge Detection
+        // æ­¥é©Ÿ 3: Hessian Ridge Detection
         {
             //TIME_SCOPE_MS_SYNC("      3. Hessian Ridge", cudaStreamSynchronize(stream));
             core::hessianRidge_u8_gpu(
@@ -134,7 +134,7 @@ namespace picoater {
             );
         }
 
-        // ¨BÆJ 4: Hessian Ridge Detection ¤§col mean
+        // æ­¥é©Ÿ 4: Hessian Ridge Detection ä¹‹col mean
         {
             //TIME_SCOPE_MS_SYNC("      4. Hessian Ridge col mean", cudaStreamSynchronize(stream));
             core::calcColumnMeans_gpu<uint8_t>(
@@ -147,7 +147,7 @@ namespace picoater {
             );
         }
 
-        // ¨BÆJ 5: Hessian Ridge Detection ¤§col max
+        // æ­¥é©Ÿ 5: Hessian Ridge Detection ä¹‹col max
         {
             //TIME_SCOPE_MS_SYNC("      4. Hessian Ridge col mean", cudaStreamSynchronize(stream));
             core::calcColumnMax_gpu<uint8_t>(

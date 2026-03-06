@@ -15,7 +15,7 @@
 		<IntDir>$(EngRoot)build\obj\$(MSBuildProjectName)\$(Platform)\$(Configuration)\</IntDir>
 
 		<OutputPath>$(OutDir)</OutputPath>
-		<AoiSdkPath>$(EngRoot)sdk\AOI_SDK\</AoiSdkPath>
+		<AoiSdkPath>$(EngRoot)sdk\</AoiSdkPath>
 		<CoreCVPath>$(AoiSdkPath)core_cv\</CoreCVPath>
 		<CoreCVTestsPath>$(AoiSdkPath)core_cv_tests\</CoreCVTestsPath>
 		<CppUtilsPath>$(AoiSdkPath)cpp_utils\</CppUtilsPath>
