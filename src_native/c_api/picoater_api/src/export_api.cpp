@@ -94,68 +94,61 @@ AoiPipelineHandle PICoaterAPI_CreatePipeline() {
 }
 
 int PICoaterAPI_ProcessPipeline(AoiPipelineHandle handle,
-                                int width,
-                                int height,
-                                const uint8_t* d_input,
-                                uint8_t* d_background_output,
-                                uint8_t* d_mura_output,
-                                uint8_t* d_ridge_output,
-                                float* d_mura_curve_mean_output,
-                                float* d_mura_curve_max_output,
-                                float bg_sigma_factor,
-                                float ridge_sigma,
-                                float hessian_max_factor,
-                                const char* ridge_mode,
-                                void* stream) {
+                                const AoiInputImageC* input,
+                                const AoiAlgorithmParamsC* params,
+                                const AoiOutputBuffersC* output) {
   if (handle == nullptr) {
     return -1;
   }
 
-  if (d_input == nullptr) {
+  if (input == nullptr || params == nullptr || output == nullptr ||
+      input->data == nullptr) {
     return -1;
   }
 
   auto* context = reinterpret_cast<AoiPipelineContext*>(handle);
 
-  if (!context->EnsureBuffers(width, height, &context->last_error)) {
+  if (!context->EnsureBuffers(input->width, input->height, &context->last_error)) {
     return -2;
   }
 
   if (cudaMemcpy(context->d_input,
-                 d_input,
+                 input->data,
                  context->image_size,
                  cudaMemcpyHostToDevice) != cudaSuccess) {
     context->last_error = "Failed to copy input image from host to CUDA memory.";
     return -2;
   }
 
-  picoater::aoi::AoiImage input_image;
-  input_image.width = width;
-  input_image.height = height;
+  picoater::aoi::AoiInputImage input_image;
+  input_image.width = input->width;
+  input_image.height = input->height;
   input_image.data = context->d_input;
-  input_image.bg_sigma_factor = bg_sigma_factor;
-  input_image.ridge_sigma = ridge_sigma;
-  input_image.hessian_max_factor = hessian_max_factor;
-  input_image.ridge_mode = ridge_mode;
-  input_image.stream = stream;
+  input_image.stream = input->stream;
 
-  picoater::aoi::AoiImage output_image;
-  output_image.width = width;
-  output_image.height = height;
+  picoater::aoi::AoiAlgorithmParams algo_params;
+  algo_params.bg_sigma_factor = params->bg_sigma_factor;
+  algo_params.ridge_sigma = params->ridge_sigma;
+  algo_params.hessian_max_factor = params->hessian_max_factor;
+  algo_params.ridge_mode = params->ridge_mode;
+
+  picoater::aoi::AoiOutputBuffers output_image;
+  output_image.width = output->width > 0 ? output->width : input->width;
+  output_image.height = output->height > 0 ? output->height : input->height;
   output_image.background_data = context->d_background;
   output_image.mura_data = context->d_mura;
   output_image.ridge_data = context->d_ridge;
   output_image.mura_curve_mean = context->d_curve_mean;
   output_image.mura_curve_max = context->d_curve_max;
-  output_image.stream = stream;
+  output_image.stream = output->stream != nullptr ? output->stream : input->stream;
 
-  if (!context->pipeline.Process(input_image, &output_image)) {
+  if (!context->pipeline.Process(input_image, algo_params, &output_image)) {
     context->last_error = context->pipeline.GetLastError();
     return -2;
   }
 
-  if (d_background_output != nullptr &&
-      cudaMemcpy(d_background_output,
+  if (output->background_data != nullptr &&
+      cudaMemcpy(output->background_data,
                  context->d_background,
                  context->image_size,
                  cudaMemcpyDeviceToHost) != cudaSuccess) {
@@ -163,16 +156,16 @@ int PICoaterAPI_ProcessPipeline(AoiPipelineHandle handle,
     return -2;
   }
 
-  if (d_mura_output != nullptr &&
+  if (output->mura_data != nullptr &&
       cudaMemcpy(
-          d_mura_output, context->d_mura, context->image_size, cudaMemcpyDeviceToHost) !=
+          output->mura_data, context->d_mura, context->image_size, cudaMemcpyDeviceToHost) !=
           cudaSuccess) {
     context->last_error = "Failed to copy mura output to host.";
     return -2;
   }
 
-  if (d_ridge_output != nullptr &&
-      cudaMemcpy(d_ridge_output,
+  if (output->ridge_data != nullptr &&
+      cudaMemcpy(output->ridge_data,
                  context->d_ridge,
                  context->image_size,
                  cudaMemcpyDeviceToHost) != cudaSuccess) {
@@ -180,19 +173,19 @@ int PICoaterAPI_ProcessPipeline(AoiPipelineHandle handle,
     return -2;
   }
 
-  if (d_mura_curve_mean_output != nullptr &&
-      cudaMemcpy(d_mura_curve_mean_output,
+  if (output->mura_curve_mean != nullptr &&
+      cudaMemcpy(output->mura_curve_mean,
                  context->d_curve_mean,
-                 width * sizeof(float),
+                 input->width * sizeof(float),
                  cudaMemcpyDeviceToHost) != cudaSuccess) {
     context->last_error = "Failed to copy mura mean curve output to host.";
     return -2;
   }
 
-  if (d_mura_curve_max_output != nullptr &&
-      cudaMemcpy(d_mura_curve_max_output,
+  if (output->mura_curve_max != nullptr &&
+      cudaMemcpy(output->mura_curve_max,
                  context->d_curve_max,
-                 width * sizeof(float),
+                 input->width * sizeof(float),
                  cudaMemcpyDeviceToHost) != cudaSuccess) {
     context->last_error = "Failed to copy mura max curve output to host.";
     return -2;

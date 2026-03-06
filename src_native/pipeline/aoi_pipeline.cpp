@@ -13,9 +13,11 @@ void AoiPipeline::AddModule(std::unique_ptr<IAoiModule> module) {
   modules_.push_back(std::move(module));
 }
 
-bool AoiPipeline::Process(const AoiImage& input_image, AoiImage* output_image) {
-  if (output_image == nullptr) {
-    last_error_ = "output_image must not be null.";
+bool AoiPipeline::Process(const AoiInputImage& input_image,
+                          const AoiAlgorithmParams& params,
+                          AoiOutputBuffers* output_buffers) {
+  if (output_buffers == nullptr) {
+    last_error_ = "output_buffers must not be null.";
     return false;
   }
 
@@ -24,18 +26,21 @@ bool AoiPipeline::Process(const AoiImage& input_image, AoiImage* output_image) {
     return false;
   }
 
-  AoiImage current_input = input_image;
-  AoiImage current_output = *output_image;
+  AoiInputImage current_input = input_image;
+  AoiOutputBuffers current_output = *output_buffers;
 
   for (const auto& module : modules_) {
-    if (!module->Process(current_input, &current_output)) {
+    if (!module->Process(current_input, params, &current_output)) {
       last_error_ = module->GetLastError();
       return false;
     }
-    current_input = current_output;
+    current_input.width = current_output.width;
+    current_input.height = current_output.height;
+    current_input.data = current_output.background_data;
+    current_input.stream = current_output.stream;
   }
 
-  *output_image = current_output;
+  *output_buffers = current_output;
   last_error_.clear();
   return true;
 }

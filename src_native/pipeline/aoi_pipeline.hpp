@@ -13,7 +13,9 @@ namespace aoi {
 class AoiPipeline {
  public:
   void AddModule(std::unique_ptr<IAoiModule> module);
-  bool Process(const AoiImage& input_image, AoiImage* output_image);
+  bool Process(const AoiInputImage& input_image,
+               const AoiAlgorithmParams& params,
+               AoiOutputBuffers* output_buffers);
   std::string GetLastError() const;
 
  private:

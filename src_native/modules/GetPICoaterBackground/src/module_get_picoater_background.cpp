@@ -19,8 +19,9 @@ bool GetPICoaterBackgroundModule::Initialize() {
   return true;
 }
 
-bool GetPICoaterBackgroundModule::Process(const AoiImage& input_image,
-                                          AoiImage* output_image) {
+bool GetPICoaterBackgroundModule::Process(const AoiInputImage& input_image,
+                                          const AoiAlgorithmParams& params,
+                                          AoiOutputBuffers* output_image) {
   if (!initialized_ && !Initialize()) {
     if (last_error_.empty()) {
       last_error_ = "Failed to initialize GetPICoaterBackgroundModule.";
@@ -52,10 +53,10 @@ bool GetPICoaterBackgroundModule::Process(const AoiImage& input_image,
       output_image->ridge_data,
       output_image->mura_curve_mean,
       output_image->mura_curve_max,
-      input_image.bg_sigma_factor,
-      input_image.ridge_sigma,
-      input_image.hessian_max_factor,
-      input_image.ridge_mode == nullptr ? kDefaultRidgeMode : input_image.ridge_mode,
+      params.bg_sigma_factor,
+      params.ridge_sigma,
+      params.hessian_max_factor,
+      params.ridge_mode == nullptr ? kDefaultRidgeMode : params.ridge_mode,
       reinterpret_cast<cudaStream_t>(input_image.stream));
 
   last_error_.clear();
@@ -67,7 +68,7 @@ std::string GetPICoaterBackgroundModule::GetLastError() const {
 }
 
 bool GetPICoaterBackgroundModule::ValidateInputImage(
-    const AoiImage& input_image) {
+    const AoiInputImage& input_image) {
   if (input_image.width <= 0 || input_image.height <= 0) {
     last_error_ = "input_image width/height must be positive.";
     return false;
@@ -82,7 +83,7 @@ bool GetPICoaterBackgroundModule::ValidateInputImage(
 }
 
 bool GetPICoaterBackgroundModule::ValidateOutputImage(
-    const AoiImage& output_image) {
+    const AoiOutputBuffers& output_image) {
   if (output_image.mura_data == nullptr) {
     last_error_ = "output_image.mura_data must not be null.";
     return false;

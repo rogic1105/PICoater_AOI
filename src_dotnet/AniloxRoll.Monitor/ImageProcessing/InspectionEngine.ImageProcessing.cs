@@ -57,20 +57,32 @@ namespace AniloxRoll.Monitor.Core.Services
                 if (!readSuccess) return (null, ioTime, 0, 0);
 
                 stopwatch.Restart();
-                _aoiService.ProcessImage(
-                    w,
-                    h,
-                    _inputBuffer,
-                    IntPtr.Zero,
-                    _muraBuffer,
-                    _ridgeBuffer,
-                    _curveMeanBuffer,
-                    _curveMaxBuffer,
-                    InspectionEngineConfig.DefaultBgSigma,
-                    InspectionEngineConfig.DefaultRidgeSigma,
-                    hessianFactor,
-                    InspectionEngineConfig.DefaultRidgeMode,
-                    IntPtr.Zero);
+                _aoiService.ProcessImage(new AoiProcessRequest
+                {
+                    Input = new AoiProcessRequest.InputImage
+                    {
+                        Width = w,
+                        Height = h,
+                        Data = _inputBuffer,
+                        Stream = IntPtr.Zero
+                    },
+                    Output = new AoiProcessRequest.OutputBuffers
+                    {
+                        BackgroundData = IntPtr.Zero,
+                        MuraData = _muraBuffer,
+                        RidgeData = _ridgeBuffer,
+                        MuraCurveMean = _curveMeanBuffer,
+                        MuraCurveMax = _curveMaxBuffer,
+                        Stream = IntPtr.Zero
+                    },
+                    Params = new AoiProcessRequest.AlgorithmParams
+                    {
+                        BgSigmaFactor = InspectionEngineConfig.DefaultBgSigma,
+                        RidgeSigma = InspectionEngineConfig.DefaultRidgeSigma,
+                        HessianMaxFactor = hessianFactor,
+                        RidgeMode = InspectionEngineConfig.DefaultRidgeMode
+                    }
+                });
                 stopwatch.Stop();
                 long algoTime = stopwatch.ElapsedMilliseconds;
 
@@ -119,20 +131,32 @@ namespace AniloxRoll.Monitor.Core.Services
 
                 if (isProcessedMode)
                 {
-                    _aoiService.ProcessImage(
-                        w,
-                        h,
-                        _inputBuffer,
-                        IntPtr.Zero,
-                        _muraBuffer,
-                        _ridgeBuffer,
-                        _curveMeanBuffer,
-                        _curveMaxBuffer,
-                        InspectionEngineConfig.DefaultBgSigma,
-                        InspectionEngineConfig.DefaultRidgeSigma,
-                        hessianFactor,
-                        InspectionEngineConfig.DefaultRidgeMode,
-                        IntPtr.Zero);
+                    _aoiService.ProcessImage(new AoiProcessRequest
+                    {
+                        Input = new AoiProcessRequest.InputImage
+                        {
+                            Width = w,
+                            Height = h,
+                            Data = _inputBuffer,
+                            Stream = IntPtr.Zero
+                        },
+                        Output = new AoiProcessRequest.OutputBuffers
+                        {
+                            BackgroundData = IntPtr.Zero,
+                            MuraData = _muraBuffer,
+                            RidgeData = _ridgeBuffer,
+                            MuraCurveMean = _curveMeanBuffer,
+                            MuraCurveMax = _curveMaxBuffer,
+                            Stream = IntPtr.Zero
+                        },
+                        Params = new AoiProcessRequest.AlgorithmParams
+                        {
+                            BgSigmaFactor = InspectionEngineConfig.DefaultBgSigma,
+                            RidgeSigma = InspectionEngineConfig.DefaultRidgeSigma,
+                            HessianMaxFactor = hessianFactor,
+                            RidgeMode = InspectionEngineConfig.DefaultRidgeMode
+                        }
+                    });
 
                     bmp = ImageUtils.Create8bppBitmap(_ridgeBuffer, w, h, flipY: false);
 

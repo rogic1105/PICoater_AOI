@@ -15,12 +15,14 @@ class GetPICoaterBackgroundModule : public IAoiModule {
   ~GetPICoaterBackgroundModule() override;
 
   bool Initialize() override;
-  bool Process(const AoiImage& input_image, AoiImage* output_image) override;
+  bool Process(const AoiInputImage& input_image,
+               const AoiAlgorithmParams& params,
+               AoiOutputBuffers* output_image) override;
   std::string GetLastError() const override;
 
  private:
-  bool ValidateInputImage(const AoiImage& input_image);
-  bool ValidateOutputImage(const AoiImage& output_image);
+  bool ValidateInputImage(const AoiInputImage& input_image);
+  bool ValidateOutputImage(const AoiOutputBuffers& output_image);
 
   ::picoater::PICoaterDetector detector_;
   bool initialized_ = false;
