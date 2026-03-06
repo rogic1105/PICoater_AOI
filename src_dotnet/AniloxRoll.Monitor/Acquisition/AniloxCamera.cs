@@ -12,9 +12,13 @@ namespace AniloxRoll.Monitor.Core.Camera
 {
     public class AniloxCamera : IDisposable
     {
-        public MIL_ID MilDigitizer { get; private set; } = MIL.M_NULL;
-        public MIL_ID MilDisplay { get; private set; } = MIL.M_NULL;
-        public MIL_ID MilSecondaryDisplay { get; private set; } = MIL.M_NULL; // [新增] 第二顯示區
+        private MIL_ID _milDigitizer = MIL.M_NULL;
+        private MIL_ID _milDisplay = MIL.M_NULL;
+        private MIL_ID _milSecondaryDisplay = MIL.M_NULL;
+
+        public MIL_ID MilDigitizer => _milDigitizer;
+        public MIL_ID MilDisplay => _milDisplay;
+        public MIL_ID MilSecondaryDisplay => _milSecondaryDisplay; // [新增] 第二顯示區
 
         private MIL_ID _milProcBuffer = MIL.M_NULL;
         private MIL_ID _ownerSystemId = MIL.M_NULL;
@@ -99,16 +103,16 @@ namespace AniloxRoll.Monitor.Core.Camera
         {
             if (_ownerSystemId == MIL.M_NULL) return;
 
-            MIL.MdigAlloc(_ownerSystemId, _devNum, _dcfPath, MIL.M_DEFAULT, ref MilDigitizer);
+            MIL.MdigAlloc(_ownerSystemId, _devNum, _dcfPath, MIL.M_DEFAULT, ref _milDigitizer);
 
-            if (MilDigitizer != MIL.M_NULL)
+            if (_milDigitizer != MIL.M_NULL)
             {
                 ApplyDigitizerSettings();
-                MIL.MdispAlloc(_ownerSystemId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref MilDisplay);
-                MIL.MdispAlloc(_ownerSystemId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref MilSecondaryDisplay); // [新增] 分配第二顯示區
+                MIL.MdispAlloc(_ownerSystemId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref _milDisplay);
+                MIL.MdispAlloc(_ownerSystemId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref _milSecondaryDisplay); // [新增] 分配第二顯示區
 
-                MIL_INT sizeX = MIL.MdigInquire(MilDigitizer, MIL.M_SIZE_X, MIL.M_NULL);
-                MIL_INT sizeY = MIL.MdigInquire(MilDigitizer, MIL.M_SIZE_Y, MIL.M_NULL);
+                MIL_INT sizeX = MIL.MdigInquire(_milDigitizer, MIL.M_SIZE_X, MIL.M_NULL);
+                MIL_INT sizeY = MIL.MdigInquire(_milDigitizer, MIL.M_SIZE_Y, MIL.M_NULL);
 
                 _frameWidth = (int)sizeX;
                 _frameHeight = (int)sizeY;
@@ -133,43 +137,43 @@ namespace AniloxRoll.Monitor.Core.Camera
                     MIL.M_IMAGE + MIL.M_PROC, ref _milProcBuffer);
                 MIL.MbufClear(_milProcBuffer, 0);
 
-                MIL.MdispSelectWindow(MilDisplay, _milDisplayBuffer, _panelHandle);
+                MIL.MdispSelectWindow(_milDisplay, _milDisplayBuffer, _panelHandle);
 
-                MIL.MdispControl(MilDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
-                MIL.MdispControl(MilDisplay, MIL.M_CENTER_DISPLAY, MIL.M_ENABLE);
-                MIL.MdispControl(MilDisplay, MIL.M_MOUSE_USE, MIL.M_ENABLE);
+                MIL.MdispControl(_milDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
+                MIL.MdispControl(_milDisplay, MIL.M_CENTER_DISPLAY, MIL.M_ENABLE);
+                MIL.MdispControl(_milDisplay, MIL.M_MOUSE_USE, MIL.M_ENABLE);
 
                 // 掛載 Hooks
-                MIL.MdispHookFunction(MilDisplay, MIL.M_MOUSE_MOVE, _mouseStatusDelegate, (IntPtr)CameraId);
-                MIL.MdispHookFunction(MilDisplay, MIL.M_MOUSE_LEFT_BUTTON_DOWN, _mouseClickDelegate, (IntPtr)CameraId); // [新增] 掛載左鍵點擊
-                MIL.MdigHookFunction(MilDigitizer, MIL.M_CAMERA_PRESENT, _cameraStatusDelegate, (IntPtr)CameraId);
+                MIL.MdispHookFunction(_milDisplay, MIL.M_MOUSE_MOVE, _mouseStatusDelegate, (IntPtr)CameraId);
+                MIL.MdispHookFunction(_milDisplay, MIL.M_MOUSE_LEFT_BUTTON_DOWN, _mouseClickDelegate, (IntPtr)CameraId); // [新增] 掛載左鍵點擊
+                MIL.MdigHookFunction(_milDigitizer, MIL.M_CAMERA_PRESENT, _cameraStatusDelegate, (IntPtr)CameraId);
             }
         }
 
         // [新增] 設定第二顯示區的方法
         public void SetSecondaryDisplay(IntPtr handle)
         {
-            if (MilSecondaryDisplay == MIL.M_NULL) return;
+            if (_milSecondaryDisplay == MIL.M_NULL) return;
 
             if (handle == IntPtr.Zero)
             {
                 if (_isSecondaryHooked)
                 {
-                    MIL.MdispHookFunction(MilSecondaryDisplay, MIL.M_MOUSE_MOVE + MIL.M_UNHOOK, _mouseStatusDelegate, IntPtr.Zero);
+                    MIL.MdispHookFunction(_milSecondaryDisplay, MIL.M_MOUSE_MOVE + MIL.M_UNHOOK, _mouseStatusDelegate, IntPtr.Zero);
                     _isSecondaryHooked = false;
                 }
-                MIL.MdispSelectWindow(MilSecondaryDisplay, MIL.M_NULL, IntPtr.Zero);
+                MIL.MdispSelectWindow(_milSecondaryDisplay, MIL.M_NULL, IntPtr.Zero);
             }
             else
             {
-                MIL.MdispSelectWindow(MilSecondaryDisplay, _milDisplayBuffer, handle);
-                MIL.MdispControl(MilSecondaryDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
-                MIL.MdispControl(MilSecondaryDisplay, MIL.M_CENTER_DISPLAY, MIL.M_ENABLE);
-                MIL.MdispControl(MilSecondaryDisplay, MIL.M_MOUSE_USE, MIL.M_ENABLE); // 允許滑鼠互動(平移/縮放)
+                MIL.MdispSelectWindow(_milSecondaryDisplay, _milDisplayBuffer, handle);
+                MIL.MdispControl(_milSecondaryDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
+                MIL.MdispControl(_milSecondaryDisplay, MIL.M_CENTER_DISPLAY, MIL.M_ENABLE);
+                MIL.MdispControl(_milSecondaryDisplay, MIL.M_MOUSE_USE, MIL.M_ENABLE); // 允許滑鼠互動(平移/縮放)
 
                 if (!_isSecondaryHooked)
                 {
-                    MIL.MdispHookFunction(MilSecondaryDisplay, MIL.M_MOUSE_MOVE, _mouseStatusDelegate, (IntPtr)CameraId);
+                    MIL.MdispHookFunction(_milSecondaryDisplay, MIL.M_MOUSE_MOVE, _mouseStatusDelegate, (IntPtr)CameraId);
                     _isSecondaryHooked = true;
                 }
             }
@@ -224,12 +228,12 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         private void ApplyDigitizerSettings()
         {
-            if (MilDigitizer == MIL.M_NULL) return;
+            if (_milDigitizer == MIL.M_NULL) return;
 
             if (CameraGrabHeight > 0)
             {
                 MIL_INT height = (MIL_INT)CameraGrabHeight;
-                MIL.MdigControl(MilDigitizer, MIL.M_SOURCE_SIZE_Y, height);
+                MIL.MdigControl(_milDigitizer, MIL.M_SOURCE_SIZE_Y, height);
             }
 
             if (CameraExposureTimeUs > 0)
@@ -237,7 +241,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                 MIL_INT exposureControl = ResolveExposureControlType();
                 if (exposureControl != MIL.M_NULL)
                 {
-                    MIL.MdigControl(MilDigitizer, exposureControl, CameraExposureTimeUs);
+                    MIL.MdigControl(_milDigitizer, exposureControl, CameraExposureTimeUs);
                 }
                 else
                 {
@@ -249,7 +253,7 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         private void TrySetExposureByFeature(string featureName, double value)
         {
-            if (MilDigitizer == MIL.M_NULL) return;
+            if (_milDigitizer == MIL.M_NULL) return;
             if (string.IsNullOrWhiteSpace(featureName)) return;
 
             try
@@ -263,7 +267,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                     if (ps.Length != 4) continue;
 
                     object[] args = new object[4];
-                    args[0] = MilDigitizer;
+                    args[0] = _milDigitizer;
                     args[1] = ResolveMilConstant("M_FEATURE_VALUE");
                     args[2] = featureName;
                     args[3] = value;
@@ -331,18 +335,18 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         public void ApplyGrabState()
         {
-            if (MilDigitizer == MIL.M_NULL) return;
+            if (_milDigitizer == MIL.M_NULL) return;
 
             if (_userWantsGrab && !IsLive && CheckPresence())
             {
                 ApplyDigitizerSettings();
-                MIL.MdigProcess(MilDigitizer, _milGrabBuffers, _milGrabBufferListSize, MIL.M_START, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
+                MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize, MIL.M_START, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
                 ResetFps();
                 IsLive = true;
             }
             else if (!_userWantsGrab && IsLive)
             {
-                MIL.MdigProcess(MilDigitizer, _milGrabBuffers, _milGrabBufferListSize, MIL.M_STOP, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
+                MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize, MIL.M_STOP, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
                 ResetFps();
                 IsLive = false;
             }
@@ -350,9 +354,9 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         public bool CheckPresence()
         {
-            if (MilDigitizer == MIL.M_NULL) { IsConnected = false; return false; }
+            if (_milDigitizer == MIL.M_NULL) { IsConnected = false; return false; }
             MIL_INT presence = 0;
-            MIL.MdigInquire(MilDigitizer, MIL.M_CAMERA_PRESENT, ref presence);
+            MIL.MdigInquire(_milDigitizer, MIL.M_CAMERA_PRESENT, ref presence);
             IsConnected = (presence == MIL.M_YES);
             return IsConnected;
         }
@@ -372,33 +376,33 @@ namespace AniloxRoll.Monitor.Core.Camera
 
             _isReleased = true;
 
-            if (MilDigitizer != MIL.M_NULL)
+            if (_milDigitizer != MIL.M_NULL)
             {
-                MIL.MdigProcess(MilDigitizer, _milGrabBuffers, _milGrabBufferListSize, MIL.M_STOP, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
+                MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize, MIL.M_STOP, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
                 ResetFps();
                 IsLive = false;
 
-                MIL.MdigHookFunction(MilDigitizer, MIL.M_CAMERA_PRESENT + MIL.M_UNHOOK, _cameraStatusDelegate, IntPtr.Zero);
+                MIL.MdigHookFunction(_milDigitizer, MIL.M_CAMERA_PRESENT + MIL.M_UNHOOK, _cameraStatusDelegate, IntPtr.Zero);
 
                 // [修改] 完整釋放主顯示區與 Hooks
-                if (MilDisplay != MIL.M_NULL)
+                if (_milDisplay != MIL.M_NULL)
                 {
-                    MIL.MdispHookFunction(MilDisplay, MIL.M_MOUSE_MOVE + MIL.M_UNHOOK, _mouseStatusDelegate, IntPtr.Zero);
-                    MIL.MdispHookFunction(MilDisplay, MIL.M_MOUSE_LEFT_BUTTON_DOWN + MIL.M_UNHOOK, _mouseClickDelegate, IntPtr.Zero);
-                    MIL.MdispSelectWindow(MilDisplay, MIL.M_NULL, IntPtr.Zero);
+                    MIL.MdispHookFunction(_milDisplay, MIL.M_MOUSE_MOVE + MIL.M_UNHOOK, _mouseStatusDelegate, IntPtr.Zero);
+                    MIL.MdispHookFunction(_milDisplay, MIL.M_MOUSE_LEFT_BUTTON_DOWN + MIL.M_UNHOOK, _mouseClickDelegate, IntPtr.Zero);
+                    MIL.MdispSelectWindow(_milDisplay, MIL.M_NULL, IntPtr.Zero);
                 }
 
                 // [新增] 完整釋放第二顯示區與 Hooks
-                if (MilSecondaryDisplay != MIL.M_NULL)
+                if (_milSecondaryDisplay != MIL.M_NULL)
                 {
                     if (_isSecondaryHooked)
                     {
-                        MIL.MdispHookFunction(MilSecondaryDisplay, MIL.M_MOUSE_MOVE + MIL.M_UNHOOK, _mouseStatusDelegate, IntPtr.Zero);
+                        MIL.MdispHookFunction(_milSecondaryDisplay, MIL.M_MOUSE_MOVE + MIL.M_UNHOOK, _mouseStatusDelegate, IntPtr.Zero);
                         _isSecondaryHooked = false;
                     }
-                    MIL.MdispSelectWindow(MilSecondaryDisplay, MIL.M_NULL, IntPtr.Zero);
-                    MIL.MdispFree(MilSecondaryDisplay);
-                    MilSecondaryDisplay = MIL.M_NULL;
+                    MIL.MdispSelectWindow(_milSecondaryDisplay, MIL.M_NULL, IntPtr.Zero);
+                    MIL.MdispFree(_milSecondaryDisplay);
+                    _milSecondaryDisplay = MIL.M_NULL;
                 }
 
                 for (int i = 0; i < _milGrabBufferListSize; i++)
@@ -423,9 +427,9 @@ namespace AniloxRoll.Monitor.Core.Camera
                 _hostInputBuffer = null;
                 _hostOutputBuffer = null;
 
-                if (MilDisplay != MIL.M_NULL) { MIL.MdispFree(MilDisplay); MilDisplay = MIL.M_NULL; }
-                MIL.MdigFree(MilDigitizer);
-                MilDigitizer = MIL.M_NULL;
+                if (_milDisplay != MIL.M_NULL) { MIL.MdispFree(_milDisplay); _milDisplay = MIL.M_NULL; }
+                MIL.MdigFree(_milDigitizer);
+                _milDigitizer = MIL.M_NULL;
             }
 
             if (_hUserData.IsAllocated) _hUserData.Free();
@@ -581,7 +585,7 @@ namespace AniloxRoll.Monitor.Core.Camera
             bool present = CheckPresence();
             if (!present && IsLive)
             {
-                MIL.MdigProcess(MilDigitizer, _milGrabBuffers, _milGrabBufferListSize, MIL.M_STOP, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
+                MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize, MIL.M_STOP, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
                 ResetFps();
                 IsLive = false;
             }
