@@ -27,6 +27,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         public MuraChartHelper MuraChartHelper { get; set; }
         public InspectionSettings Settings { get; set; }
         public ToolStripStatusLabel StatusLabel { get; set; }
+        public PictureBox[] CameraPanels { get; set; }
     }
 
     public class FormInteractionHelper
@@ -43,6 +44,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         private readonly MuraChartHelper _muraChartHelper;
         private readonly InspectionSettings _settings;
         private readonly ToolStripStatusLabel _statusLabel;
+        private readonly PictureBox[] _cameraPanels;
 
         private int _currentCameraIndex = 0;
 
@@ -72,6 +74,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             _muraChartHelper = context.MuraChartHelper;
             _settings = context.Settings;
             _statusLabel = context.StatusLabel;
+            _cameraPanels = context.CameraPanels ?? Array.Empty<PictureBox>();
         }
 
         public void ApplySettingsToService()
@@ -140,7 +143,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         public void NavigateCamera(int direction)
         {
             int nextIndex = _currentCameraIndex + direction;
-            if (nextIndex >= 0 && nextIndex < 7)
+            if (nextIndex >= 0 && nextIndex < _cameraPanels.Length)
             {
                 _galleryManager.Select(nextIndex);
             }
@@ -186,7 +189,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
         public void OnGallerySelectionChanged(int index)
         {
-            if (index >= 0 && index < 7) _currentCameraIndex = index;
+            if (index >= 0 && index < _cameraPanels.Length) _currentCameraIndex = index;
 
             if (_isBusy) return;
 

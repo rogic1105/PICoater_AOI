@@ -84,7 +84,8 @@ namespace AniloxRoll.Monitor.Forms
                 GalleryManager = _galleryManager,
                 MuraChartHelper = _muraChartHelper,
                 Settings = _settings,
-                StatusLabel = lblPixelInfo
+                StatusLabel = lblPixelInfo,
+                CameraPanels = new[] { pbCam1, pbCam2, pbCam3, pbCam4, pbCam5, pbCam6, pbCam7 }
             });
 
             _interactionHelper.ApplySettingsToService();

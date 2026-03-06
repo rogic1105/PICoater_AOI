@@ -10,11 +10,11 @@ using AniloxRoll.Monitor.Core.Services;
 
 namespace AniloxRoll.Monitor.Core.Camera
 {
-    public class AniloxCamera
+    public class AniloxCamera : IDisposable
     {
-        public MIL_ID MilDigitizer = MIL.M_NULL;
-        public MIL_ID MilDisplay = MIL.M_NULL;
-        public MIL_ID MilSecondaryDisplay = MIL.M_NULL; // [新增] 第二顯示區
+        public MIL_ID MilDigitizer { get; private set; } = MIL.M_NULL;
+        public MIL_ID MilDisplay { get; private set; } = MIL.M_NULL;
+        public MIL_ID MilSecondaryDisplay { get; private set; } = MIL.M_NULL; // [新增] 第二顯示區
 
         private MIL_ID _milProcBuffer = MIL.M_NULL;
         private MIL_ID _ownerSystemId = MIL.M_NULL;
@@ -52,16 +52,14 @@ namespace AniloxRoll.Monitor.Core.Camera
         private static readonly string[] ExposureControlCandidates =
             { "M_EXPOSURE", "M_EXPOSURE_TIME", "M_CAMERA_EXPOSURE", "M_GRAB_EXPOSURE" };
 
-        private static bool _exposureControlResolved = false;
-        private static MIL_INT _exposureControlType = MIL.M_NULL;
+        private bool _exposureControlResolved = false;
+        private MIL_INT _exposureControlType = MIL.M_NULL;
         private byte[] _hostInputBuffer = null;
         private byte[] _hostOutputBuffer = null;
 
         private readonly object _picoaterLock = new object();
         private readonly AoiService _aoiService = new AoiService();
-        private IntPtr _picoaterInputBuffer = IntPtr.Zero;
-        private IntPtr _picoaterRidgeBuffer = IntPtr.Zero;
-        private ulong _picoaterBufferSize = 0;
+        private NativeBufferPool _nativeBufferPool;
 
         private long _fpsWindowStartTicks = 0;
         private int _fpsFrameCount = 0;
@@ -118,9 +116,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                 _hostOutputBuffer = new byte[_frameWidth * _frameHeight];
 
                 _aoiService.Initialize();
-                _picoaterBufferSize = (ulong)(_frameWidth * _frameHeight);
-                _picoaterInputBuffer = Marshal.AllocHGlobal((IntPtr)_picoaterBufferSize);
-                _picoaterRidgeBuffer = Marshal.AllocHGlobal((IntPtr)_picoaterBufferSize);
+                _nativeBufferPool = new NativeBufferPool(_frameWidth, _frameHeight, 1);
 
                 for (int i = 0; i < _milGrabBufferListSize; i++)
                 {
@@ -294,7 +290,7 @@ namespace AniloxRoll.Monitor.Core.Camera
             }
         }
 
-        private static MIL_INT ResolveExposureControlType()
+        private MIL_INT ResolveExposureControlType()
         {
             if (_exposureControlResolved) return _exposureControlType;
 
@@ -363,6 +359,17 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         public void Free()
         {
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (_isReleased)
+            {
+                if (_hUserData.IsAllocated) _hUserData.Free();
+                return;
+            }
+
             _isReleased = true;
 
             if (MilDigitizer != MIL.M_NULL)
@@ -408,8 +415,8 @@ namespace AniloxRoll.Monitor.Core.Camera
 
                 lock (_picoaterLock)
                 {
-                    if (_picoaterInputBuffer != IntPtr.Zero) { Marshal.FreeHGlobal(_picoaterInputBuffer); _picoaterInputBuffer = IntPtr.Zero; }
-                    if (_picoaterRidgeBuffer != IntPtr.Zero) { Marshal.FreeHGlobal(_picoaterRidgeBuffer); _picoaterRidgeBuffer = IntPtr.Zero; }
+                    _nativeBufferPool?.Dispose();
+                    _nativeBufferPool = null;
                     _aoiService.Dispose();
                 }
 
@@ -432,14 +439,19 @@ namespace AniloxRoll.Monitor.Core.Camera
 
             lock (_picoaterLock)
             {
-                if (_picoaterInputBuffer == IntPtr.Zero || _picoaterRidgeBuffer == IntPtr.Zero)
+                if (_nativeBufferPool == null)
+                    return false;
+
+                IntPtr picoaterInputBuffer = _nativeBufferPool.InputBuffer;
+                IntPtr picoaterRidgeBuffer = _nativeBufferPool.RidgeBuffer;
+                if (picoaterInputBuffer == IntPtr.Zero || picoaterRidgeBuffer == IntPtr.Zero)
                     return false;
 
                 try
                 {
                     MIL.MbufGet2d(srcBuffer, 0, 0, _frameWidth, _frameHeight, _hostInputBuffer);
 
-                    Marshal.Copy(_hostInputBuffer, 0, _picoaterInputBuffer, _hostInputBuffer.Length);
+                    Marshal.Copy(_hostInputBuffer, 0, picoaterInputBuffer, _hostInputBuffer.Length);
 
                     _aoiService.ProcessImage(new AoiProcessRequest
                     {
@@ -447,14 +459,14 @@ namespace AniloxRoll.Monitor.Core.Camera
                         {
                             Width = _frameWidth,
                             Height = _frameHeight,
-                            Data = _picoaterInputBuffer,
+                            Data = picoaterInputBuffer,
                             Stream = IntPtr.Zero
                         },
                         Output = new AoiProcessRequest.OutputBuffers
                         {
                             BackgroundData = IntPtr.Zero,
                             MuraData = IntPtr.Zero,
-                            RidgeData = _picoaterRidgeBuffer,
+                            RidgeData = picoaterRidgeBuffer,
                             MuraCurveMean = IntPtr.Zero,
                             MuraCurveMax = IntPtr.Zero,
                             Stream = IntPtr.Zero
@@ -468,7 +480,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                         }
                     });
 
-                    Marshal.Copy(_picoaterRidgeBuffer, _hostOutputBuffer, 0, _hostOutputBuffer.Length);
+                    Marshal.Copy(picoaterRidgeBuffer, _hostOutputBuffer, 0, _hostOutputBuffer.Length);
                     MIL.MbufPut2d(dstBuffer, 0, 0, _frameWidth, _frameHeight, _hostOutputBuffer);
                     return true;
                 }
