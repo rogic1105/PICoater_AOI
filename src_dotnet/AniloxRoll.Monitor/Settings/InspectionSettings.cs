@@ -38,12 +38,6 @@ namespace AniloxRoll.Monitor.Core.Data
         public double[] GetCameraOpsUmArray() => MachineLayout.GetCameraOpsUmArray();
         public double[] GetCameraStartPositionMmArray() => MachineLayout.GetCameraStartPositionMmArray();
 
-        [Obsolete("Use GetCameraOpsUmArray() instead.")]
-        public double[] GetOpsArray() => GetCameraOpsUmArray();
-
-        [Obsolete("Use GetCameraStartPositionMmArray() instead.")]
-        public double[] GetPosArray() => GetCameraStartPositionMmArray();
-
         // ===== Backward-compatible flattened accessors =====
         [Browsable(false)] public double Cam1_Ops { get => MachineLayout.Cam1_Ops; set => MachineLayout.Cam1_Ops = value; }
         [Browsable(false)] public double Cam2_Ops { get => MachineLayout.Cam2_Ops; set => MachineLayout.Cam2_Ops = value; }

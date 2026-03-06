@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -70,16 +71,26 @@ namespace AniloxRoll.Monitor.Forms
             propertyGrid1.PropertyValueChanged += _propertyGrid_PropertyValueChanged;
 
             // [UI 互動模組] 封裝按鈕事件、畫面切換、縮圖選取與主畫布資訊更新等表單互動流程。
-            _interactionHelper = new FormInteractionHelper(
-                this, canvasMain, new Button[] { btnShowOriginal, btnShowProcessed, btnSelectFolder },
-                _thumbnailCache, _presenter, _inspectionService, _imageRepository,
-                _dateTimeNavigator, _galleryManager, _muraChartHelper, _settings, lblPixelInfo
-            );
+            _interactionHelper = new FormInteractionHelper(new FormInteractionContext
+            {
+                Form = this,
+                Canvas = canvasMain,
+                ButtonsToLock = new Button[] { btnShowOriginal, btnShowProcessed, btnSelectFolder },
+                ThumbnailCache = _thumbnailCache,
+                Presenter = _presenter,
+                InspectionService = _inspectionService,
+                ImageRepository = _imageRepository,
+                TimeNavigator = _dateTimeNavigator,
+                GalleryManager = _galleryManager,
+                MuraChartHelper = _muraChartHelper,
+                Settings = _settings,
+                StatusLabel = lblPixelInfo
+            });
 
             _interactionHelper.ApplySettingsToService();
 
             _presenter.BusyStateChanged += _interactionHelper.SetUiLoadingState;
-            _presenter.LogReported += log => Console.WriteLine(log);
+            _presenter.LogReported += OnPresenterLogReported;
             _galleryManager.SelectionChanged += _interactionHelper.OnGallerySelectionChanged;
 
             _dateTimeNavigator.PeriodSelectionChanged += _presenter.UpdatePeriodNavigationState;
@@ -104,6 +115,25 @@ namespace AniloxRoll.Monitor.Forms
 
             // 關閉視窗時確保釋放硬體
             FormClosed += (_, __) => _liveCameraManager.FreeCameras();
+        }
+
+
+        private void OnPresenterLogReported(string log)
+        {
+            Debug.WriteLine(log);
+
+            if (lblPixelInfo == null || string.IsNullOrWhiteSpace(log))
+            {
+                return;
+            }
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action<string>(OnPresenterLogReported), log);
+                return;
+            }
+
+            lblPixelInfo.Text = log.Replace(Environment.NewLine, " | ");
         }
 
         // ==========================================

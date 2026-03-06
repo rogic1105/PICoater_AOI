@@ -12,6 +12,23 @@ using AniloxRoll.Monitor.UI.State;
 
 namespace AniloxRoll.Monitor.Forms.Helpers
 {
+
+    public class FormInteractionContext
+    {
+        public Form Form { get; set; }
+        public SmartCanvas Canvas { get; set; }
+        public Button[] ButtonsToLock { get; set; }
+        public List<Image> ThumbnailCache { get; set; }
+        public AniloxRollPresenter Presenter { get; set; }
+        public BatchInspectionService InspectionService { get; set; }
+        public ImageRepository ImageRepository { get; set; }
+        public DateTimeNavigator TimeNavigator { get; set; }
+        public ThumbnailGridPresenter GalleryManager { get; set; }
+        public MuraChartHelper MuraChartHelper { get; set; }
+        public InspectionSettings Settings { get; set; }
+        public ToolStripStatusLabel StatusLabel { get; set; }
+    }
+
     public class FormInteractionHelper
     {
         private readonly Form _form;
@@ -39,32 +56,22 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         private PointF _savedPan = PointF.Empty;
         private bool _shouldRestoreView = false;
 
-        public FormInteractionHelper(
-            Form form,
-            SmartCanvas canvas,
-            Button[] buttons,
-            List<Image> cache,
-            AniloxRollPresenter presenter,
-            BatchInspectionService service,
-            ImageRepository repo,
-            DateTimeNavigator timeNav,
-            ThumbnailGridPresenter galleryMgr,
-            MuraChartHelper chartHelper,
-            InspectionSettings settings,
-            ToolStripStatusLabel statusLabel)
+        public FormInteractionHelper(FormInteractionContext context)
         {
-            _form = form;
-            _canvas = canvas;
-            _buttonsToLock = buttons;
-            _thumbnailCache = cache;
-            _presenter = presenter;
-            _inspectionService = service;
-            _imageRepository = repo;
-            _timeNavigator = timeNav;
-            _galleryManager = galleryMgr;
-            _muraChartHelper = chartHelper;
-            _settings = settings;
-            _statusLabel = statusLabel;
+            if (context == null) throw new ArgumentNullException(nameof(context));
+
+            _form = context.Form;
+            _canvas = context.Canvas;
+            _buttonsToLock = context.ButtonsToLock;
+            _thumbnailCache = context.ThumbnailCache;
+            _presenter = context.Presenter;
+            _inspectionService = context.InspectionService;
+            _imageRepository = context.ImageRepository;
+            _timeNavigator = context.TimeNavigator;
+            _galleryManager = context.GalleryManager;
+            _muraChartHelper = context.MuraChartHelper;
+            _settings = context.Settings;
+            _statusLabel = context.StatusLabel;
         }
 
         public void ApplySettingsToService()
