@@ -98,6 +98,7 @@
     <Compile Include="Services\PlcService.cs" />
     <Compile Include="ImageProcessing\BatchInspectionService.cs" />
     <Compile Include="ImageProcessing\InspectionEngine.cs" />
+    <Compile Include="ImageProcessing\NativeBufferPool.cs" />
     <Compile Include="ImageProcessing\InspectionEngine.ImageProcessing.cs" />
     <Compile Include="ImageProcessing\InspectionEngineConfig.cs" />
     <Compile Include="UI\Form\AniloxRollForm.cs">

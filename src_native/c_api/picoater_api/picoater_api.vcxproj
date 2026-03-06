@@ -21,10 +21,13 @@
   <ItemGroup>
     <ClCompile Include="src\export_api.cpp" />
     <ClCompile Include="..\..\pipeline\aoi_pipeline.cpp" />
+    <ClCompile Include="..\..\plc\mock_plc_adapter.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\export_c\export_api.h" />
     <ClInclude Include="..\..\pipeline\aoi_pipeline.hpp" />
+    <ClInclude Include="..\..\plc\i_plc_adapter.hpp" />
+    <ClInclude Include="..\..\plc\mock_plc_adapter.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\sdk\AOI_SDK\core_cv\core_cv.vcxproj">
