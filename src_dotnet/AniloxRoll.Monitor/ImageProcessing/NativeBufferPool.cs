@@ -5,12 +5,19 @@ namespace AniloxRoll.Monitor.Core.Services
 {
     public sealed class NativeBufferPool : IDisposable
     {
-        public IntPtr InputBuffer { get; private set; } = IntPtr.Zero;
-        public IntPtr ThumbnailBuffer { get; private set; } = IntPtr.Zero;
-        public IntPtr MuraBuffer { get; private set; } = IntPtr.Zero;
-        public IntPtr RidgeBuffer { get; private set; } = IntPtr.Zero;
-        public IntPtr CurveMeanBuffer { get; private set; } = IntPtr.Zero;
-        public IntPtr CurveMaxBuffer { get; private set; } = IntPtr.Zero;
+        private IntPtr _inputBuffer = IntPtr.Zero;
+        private IntPtr _thumbnailBuffer = IntPtr.Zero;
+        private IntPtr _muraBuffer = IntPtr.Zero;
+        private IntPtr _ridgeBuffer = IntPtr.Zero;
+        private IntPtr _curveMeanBuffer = IntPtr.Zero;
+        private IntPtr _curveMaxBuffer = IntPtr.Zero;
+
+        public IntPtr InputBuffer => _inputBuffer;
+        public IntPtr ThumbnailBuffer => _thumbnailBuffer;
+        public IntPtr MuraBuffer => _muraBuffer;
+        public IntPtr RidgeBuffer => _ridgeBuffer;
+        public IntPtr CurveMeanBuffer => _curveMeanBuffer;
+        public IntPtr CurveMaxBuffer => _curveMaxBuffer;
 
         public ulong ImageBufferSize { get; }
         public int ThumbnailBufferSize { get; }
@@ -24,12 +31,12 @@ namespace AniloxRoll.Monitor.Core.Services
             ThumbnailBufferSize = maxThumbnailSide * maxThumbnailSide;
             CurveBufferSize = maxWidth * sizeof(float);
 
-            InputBuffer = Allocate((IntPtr)ImageBufferSize);
-            MuraBuffer = Allocate((IntPtr)ImageBufferSize);
-            RidgeBuffer = Allocate((IntPtr)ImageBufferSize);
-            ThumbnailBuffer = Allocate(ThumbnailBufferSize);
-            CurveMeanBuffer = Allocate(CurveBufferSize);
-            CurveMaxBuffer = Allocate(CurveBufferSize);
+            _inputBuffer = Allocate((IntPtr)ImageBufferSize);
+            _muraBuffer = Allocate((IntPtr)ImageBufferSize);
+            _ridgeBuffer = Allocate((IntPtr)ImageBufferSize);
+            _thumbnailBuffer = Allocate((IntPtr)ThumbnailBufferSize);
+            _curveMeanBuffer = Allocate((IntPtr)CurveBufferSize);
+            _curveMaxBuffer = Allocate((IntPtr)CurveBufferSize);
         }
 
         public void Dispose()
@@ -39,12 +46,12 @@ namespace AniloxRoll.Monitor.Core.Services
                 return;
             }
 
-            Free(ref InputBuffer);
-            Free(ref ThumbnailBuffer);
-            Free(ref MuraBuffer);
-            Free(ref RidgeBuffer);
-            Free(ref CurveMeanBuffer);
-            Free(ref CurveMaxBuffer);
+            Free(ref _inputBuffer);
+            Free(ref _thumbnailBuffer);
+            Free(ref _muraBuffer);
+            Free(ref _ridgeBuffer);
+            Free(ref _curveMeanBuffer);
+            Free(ref _curveMaxBuffer);
 
             _isDisposed = true;
         }
