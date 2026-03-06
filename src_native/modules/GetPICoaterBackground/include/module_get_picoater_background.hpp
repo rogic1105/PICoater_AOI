@@ -54,7 +54,8 @@ class PICoaterDetector {
 
 }  // namespace picoater
 
-namespace picoater::aoi {
+namespace picoater {
+namespace aoi {
 
 class GetPICoaterBackgroundModule : public IAoiModule {
  public:
@@ -74,6 +75,7 @@ class GetPICoaterBackgroundModule : public IAoiModule {
   std::string last_error_;
 };
 
-}  // namespace picoater::aoi
+}  // namespace aoi
+}  // namespace picoater
 
 #endif  // PICOATER_AOI_SRC_NATIVE_MODULES_GET_PICOATER_BACKGROUND_MODULE_HPP_
