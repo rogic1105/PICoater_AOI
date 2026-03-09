@@ -42,6 +42,12 @@ namespace AniloxRoll.Monitor.Core.Services
     public sealed class AoiService : IDisposable
     {
         private IntPtr _pipelineHandle = IntPtr.Zero;
+        private IntPtr _ridgeModeVerticalPtr;
+
+        public AoiService()
+        {
+            _ridgeModeVerticalPtr = Marshal.StringToHGlobalAnsi("vertical");
+        }
 
         public void Initialize()
         {
@@ -74,6 +80,19 @@ namespace AniloxRoll.Monitor.Core.Services
             if (request.Input.Data == IntPtr.Zero)
             {
                 throw new ArgumentException("InputData must not be null.", nameof(request));
+            }
+
+            if (string.Equals(request.Params.RidgeMode, "vertical", StringComparison.Ordinal))
+            {
+                ProcessImageDirect(
+                    request.Input.Width,
+                    request.Input.Height,
+                    request.Input.Data,
+                    request.Output.RidgeData,
+                    request.Params.BgSigmaFactor,
+                    request.Params.RidgeSigma,
+                    request.Params.HessianMaxFactor);
+                return;
             }
 
             var input = new AoiInputImageNative
@@ -132,6 +151,67 @@ namespace AniloxRoll.Monitor.Core.Services
             }
         }
 
+        public void ProcessImageDirect(
+            int width,
+            int height,
+            IntPtr inputData,
+            IntPtr ridgeOutput,
+            float bgSigmaFactor,
+            float ridgeSigma,
+            float hessianMaxFactor)
+        {
+            EnsureInitialized();
+
+            if (width <= 0 || height <= 0)
+            {
+                throw new ArgumentException("Width and height must be positive.");
+            }
+
+            if (inputData == IntPtr.Zero)
+            {
+                throw new ArgumentException("InputData must not be null.");
+            }
+
+            var input = new AoiInputImageNative
+            {
+                Width = width,
+                Height = height,
+                Data = inputData,
+                Stream = IntPtr.Zero
+            };
+
+            var output = new AoiOutputBuffersNative
+            {
+                Width = width,
+                Height = height,
+                BackgroundData = IntPtr.Zero,
+                MuraData = IntPtr.Zero,
+                RidgeData = ridgeOutput,
+                MuraCurveMean = IntPtr.Zero,
+                MuraCurveMax = IntPtr.Zero,
+                Stream = IntPtr.Zero
+            };
+
+            var parameters = new AoiAlgorithmParamsNative
+            {
+                BgSigmaFactor = bgSigmaFactor,
+                RidgeSigma = ridgeSigma,
+                HessianMaxFactor = hessianMaxFactor,
+                RidgeMode = _ridgeModeVerticalPtr
+            };
+
+            int result = NativeMethods.PICoaterAPI_ProcessPipeline(
+                _pipelineHandle,
+                ref input,
+                ref parameters,
+                ref output);
+
+            if (result != 0)
+            {
+                throw new InvalidOperationException(GetLastError());
+            }
+        }
+
         public string GetLastError()
         {
             if (_pipelineHandle == IntPtr.Zero)
@@ -147,6 +227,12 @@ namespace AniloxRoll.Monitor.Core.Services
 
         public void Dispose()
         {
+            if (_ridgeModeVerticalPtr != IntPtr.Zero)
+            {
+                Marshal.FreeHGlobal(_ridgeModeVerticalPtr);
+                _ridgeModeVerticalPtr = IntPtr.Zero;
+            }
+
             if (_pipelineHandle != IntPtr.Zero)
             {
                 NativeMethods.PICoaterAPI_DestroyPipeline(_pipelineHandle);

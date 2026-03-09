@@ -457,32 +457,14 @@ namespace AniloxRoll.Monitor.Core.Camera
 
                     Marshal.Copy(_hostInputBuffer, 0, picoaterInputBuffer, _hostInputBuffer.Length);
 
-                    _aoiService.ProcessImage(new AoiProcessRequest
-                    {
-                        Input = new AoiProcessRequest.InputImage
-                        {
-                            Width = _frameWidth,
-                            Height = _frameHeight,
-                            Data = picoaterInputBuffer,
-                            Stream = IntPtr.Zero
-                        },
-                        Output = new AoiProcessRequest.OutputBuffers
-                        {
-                            BackgroundData = IntPtr.Zero,
-                            MuraData = IntPtr.Zero,
-                            RidgeData = picoaterRidgeBuffer,
-                            MuraCurveMean = IntPtr.Zero,
-                            MuraCurveMax = IntPtr.Zero,
-                            Stream = IntPtr.Zero
-                        },
-                        Params = new AoiProcessRequest.AlgorithmParams
-                        {
-                            BgSigmaFactor = 2.0f,
-                            RidgeSigma = (float)HessianSigma,
-                            HessianMaxFactor = (float)HessianFixedMax,
-                            RidgeMode = "vertical"
-                        }
-                    });
+                    _aoiService.ProcessImageDirect(
+                        _frameWidth,
+                        _frameHeight,
+                        picoaterInputBuffer,
+                        picoaterRidgeBuffer,
+                        2.0f,
+                        (float)HessianSigma,
+                        (float)HessianFixedMax);
 
                     Marshal.Copy(picoaterRidgeBuffer, _hostOutputBuffer, 0, _hostOutputBuffer.Length);
                     MIL.MbufPut2d(dstBuffer, 0, 0, _frameWidth, _frameHeight, _hostOutputBuffer);
