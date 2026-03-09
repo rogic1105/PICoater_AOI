@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -136,16 +137,23 @@ namespace AniloxRoll.Monitor.Core.Services
 
             lock (_lock)
             {
+                var swTotal = Stopwatch.StartNew();
+                var sw = Stopwatch.StartNew();
+
                 bool readSuccess = NativeMethods.CoreCV_FastReadBMP(
                     filePath, out int w, out int h, _inputBuffer, (int)_imgBufferSize);
+                long ioMs = sw.ElapsedMilliseconds;
+
                 if (!readSuccess) return null;
 
                 Bitmap bmp;
                 float[] curveMean = null;
                 float[] curveMax = null;
+                long gpuMs = 0, bmpMs = 0, copyMs = 0;
 
                 if (isProcessedMode)
                 {
+                    sw.Restart();
                     _aoiService.ProcessImage(new AoiProcessRequest
                     {
                         Input = new AoiProcessRequest.InputImage
@@ -172,18 +180,30 @@ namespace AniloxRoll.Monitor.Core.Services
                             RidgeMode = InspectionEngineConfig.DefaultRidgeMode
                         }
                     });
+                    gpuMs = sw.ElapsedMilliseconds;
 
+                    sw.Restart();
                     bmp = ImageUtils.Create8bppBitmap(_ridgeBuffer, w, h, flipY: false);
+                    bmpMs = sw.ElapsedMilliseconds;
 
+                    sw.Restart();
                     curveMean = new float[w];
                     curveMax = new float[w];
                     Marshal.Copy(_curveMeanBuffer, curveMean, 0, w);
                     Marshal.Copy(_curveMaxBuffer, curveMax, 0, w);
+                    copyMs = sw.ElapsedMilliseconds;
                 }
                 else
                 {
+                    sw.Restart();
                     bmp = ImageUtils.Create8bppBitmap(_inputBuffer, w, h, flipY: false);
+                    bmpMs = sw.ElapsedMilliseconds;
                 }
+
+                Console.WriteLine(
+                    $"[FullRes] mode={isProcessedMode,-5} | " +
+                    $"IO={ioMs,4}ms | GPU={gpuMs,4}ms | BMP={bmpMs,4}ms | Copy={copyMs,3}ms | " +
+                    $"Total={swTotal.ElapsedMilliseconds,5}ms  ({w}x{h})");
 
                 return new InspectionData
                 {

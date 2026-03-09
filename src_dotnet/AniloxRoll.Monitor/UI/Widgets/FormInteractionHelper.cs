@@ -4,6 +4,7 @@ using AniloxRoll.Monitor.Core.Services;
 using AOI.SDK.UI;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Threading.Tasks;
@@ -193,23 +194,36 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
             if (_isBusy) return;
 
+            var swTotal = Stopwatch.StartNew();
+
             try
             {
+                var sw = Stopwatch.StartNew();
                 InspectionData data = _inspectionService.RunInspectionFullRes(index);
+                long fullResMs = sw.ElapsedMilliseconds;
+
+                long canvasMs = 0, chartMs = 0;
 
                 if (data != null)
                 {
+                    sw.Restart();
                     UpdateCanvas(data.Image);
+                    canvasMs = sw.ElapsedMilliseconds;
 
                     if (_muraChartHelper != null && _settings != null)
                     {
+                        sw.Restart();
                         double[] cameraStartPositionMmArray = _settings.GetCameraStartPositionMmArray();
                         double startPos = (index >= 0 && index < cameraStartPositionMmArray.Length) ? cameraStartPositionMmArray[index] : 0;
-
-                        // 傳入 startPos 讓 X 軸座標正確
                         _muraChartHelper.UpdateData(data.MuraCurveMean, data.MuraCurveMax, startPos);
+                        chartMs = sw.ElapsedMilliseconds;
                     }
                 }
+
+                Console.WriteLine(
+                    $"[OnSelect] Cam{index + 1} | " +
+                    $"FullRes={fullResMs,5}ms | Canvas={canvasMs,4}ms | Chart={chartMs,4}ms | " +
+                    $"Total={swTotal.ElapsedMilliseconds,5}ms");
             }
             catch (Exception ex)
             {
