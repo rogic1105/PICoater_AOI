@@ -91,7 +91,14 @@ namespace AOI.SDK.Core
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern int CoreCV_Upload_Float(float[] h_src, IntPtr d_dst, int count);
 
-
+        // =========================================================
+        // 5. GPU 縮圖 (Thumbnail)
+        // =========================================================
+        // h_src / h_dst 若為 CoreCV_AllocPinned 分配，H<->D 傳輸自動走 DMA 加速。
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int CoreCV_Resize_GPU(
+            IntPtr hSrc, int srcW, int srcH,
+            IntPtr hDst, int dstW, int dstH);
 
     }
 }

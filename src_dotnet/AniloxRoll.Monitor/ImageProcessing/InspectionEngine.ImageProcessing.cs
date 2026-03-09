@@ -1,10 +1,10 @@
 ﻿using System;
 using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Acquisition.Inspection;
+using AniloxRoll.Monitor.Core.Interop;
 using AOI.SDK.Core.Models;
 using AOI.SDK.Utils;
 
@@ -16,9 +16,11 @@ namespace AniloxRoll.Monitor.Core.Services
         {
             return ExecuteTimedOperation<InspectionData>(filePath, (stopwatch) =>
             {
+                // [IO] 使用 CoreCV_FastReadBMP 直接讀入 Pinned Memory，
+                // 比 GDI+ new Bitmap() 快，且為後續 DMA 傳輸做好準備。
                 stopwatch.Start();
-                bool readSuccess = LoadGrayscaleImageToBuffer(
-                    filePath, out int w, out int h, _inputBuffer, _imgBufferSize);
+                bool readSuccess = NativeMethods.CoreCV_FastReadBMP(
+                    filePath, out int w, out int h, _inputBuffer, (int)_imgBufferSize);
                 stopwatch.Stop();
                 long ioTime = stopwatch.ElapsedMilliseconds;
 
@@ -26,19 +28,25 @@ namespace AniloxRoll.Monitor.Core.Services
 
                 int thumbH = (int)((float)h / w * targetThumbWidth);
 
+                // [GPU] 在 GPU 上縮圖，對應 de24f715 的 PICoater_RunThumbnail_GPU 設計。
+                // _inputBuffer / _thumbnailBuffer 均為 Pinned Memory，H<->D 走 DMA 加速。
                 stopwatch.Restart();
-                using (Bitmap source = ImageUtils.Create8bppBitmap(_inputBuffer, w, h))
-                using (Bitmap thumb = new Bitmap(source, new Size(targetThumbWidth, thumbH)))
-                {
-                    stopwatch.Stop();
-                    long gpuTime = stopwatch.ElapsedMilliseconds;
+                int ret = NativeMethods.CoreCV_Resize_GPU(
+                    _inputBuffer, w, h,
+                    _thumbnailBuffer, targetThumbWidth, thumbH);
+                stopwatch.Stop();
+                long gpuTime = stopwatch.ElapsedMilliseconds;
 
-                    stopwatch.Restart();
-                    var data = new InspectionData { Image = (Bitmap)thumb.Clone(), MuraCurveMean = null };
-                    stopwatch.Stop();
-                    long bmpTime = stopwatch.ElapsedMilliseconds;
-                    return (data, ioTime, gpuTime, bmpTime);
-                }
+                if (ret != 0) throw new InvalidOperationException($"GPU Resize Error: {ret}");
+
+                // [BMP] 從 Pinned Memory 建立 Bitmap（直接 MemoryCopy，無額外 Marshal 開銷）
+                stopwatch.Restart();
+                var bitmap = ImageUtils.Create8bppBitmap(_thumbnailBuffer, targetThumbWidth, thumbH);
+                stopwatch.Stop();
+                long bmpTime = stopwatch.ElapsedMilliseconds;
+
+                var data = new InspectionData { Image = bitmap, MuraCurveMean = null };
+                return (data, ioTime, gpuTime, bmpTime);
             });
         }
 
@@ -48,14 +56,16 @@ namespace AniloxRoll.Monitor.Core.Services
 
             return ExecuteTimedOperation<InspectionData>(filePath, (stopwatch) =>
             {
+                // [IO] 使用 CoreCV_FastReadBMP 讀入 Pinned Memory
                 stopwatch.Start();
-                bool readSuccess = LoadGrayscaleImageToBuffer(
-                    filePath, out int w, out int h, _inputBuffer, _imgBufferSize);
+                bool readSuccess = NativeMethods.CoreCV_FastReadBMP(
+                    filePath, out int w, out int h, _inputBuffer, (int)_imgBufferSize);
                 stopwatch.Stop();
                 long ioTime = stopwatch.ElapsedMilliseconds;
 
                 if (!readSuccess) return (null, ioTime, 0, 0);
 
+                // [GPU] CUDA 全尺寸檢測 Pipeline (背景去除 + Ridge 增強)
                 stopwatch.Restart();
                 _aoiService.ProcessImage(new AoiProcessRequest
                 {
@@ -86,13 +96,18 @@ namespace AniloxRoll.Monitor.Core.Services
                 stopwatch.Stop();
                 long algoTime = stopwatch.ElapsedMilliseconds;
 
+                // [BMP + GPU 縮圖] 對應 de24f715 的 PICoater_Run_WithThumb 設計：
+                // 在 GPU 上將 ridge 結果縮圖，再建立 Bitmap 供縮圖牆顯示。
                 stopwatch.Restart();
                 int thumbH = (int)((float)h / w * targetThumbWidth);
-                Bitmap thumb;
-                using (Bitmap source = ImageUtils.Create8bppBitmap(_ridgeBuffer, w, h))
-                {
-                    thumb = new Bitmap(source, new Size(targetThumbWidth, thumbH));
-                }
+
+                int resizeRet = NativeMethods.CoreCV_Resize_GPU(
+                    _ridgeBuffer, w, h,
+                    _thumbnailBuffer, targetThumbWidth, thumbH);
+
+                if (resizeRet != 0) throw new InvalidOperationException($"GPU Resize Error: {resizeRet}");
+
+                Bitmap thumb = ImageUtils.Create8bppBitmap(_thumbnailBuffer, targetThumbWidth, thumbH);
 
                 float[] curveMean = new float[w];
                 Marshal.Copy(_curveMeanBuffer, curveMean, 0, w);
@@ -121,8 +136,8 @@ namespace AniloxRoll.Monitor.Core.Services
 
             lock (_lock)
             {
-                bool readSuccess = LoadGrayscaleImageToBuffer(
-                    filePath, out int w, out int h, _inputBuffer, _imgBufferSize);
+                bool readSuccess = NativeMethods.CoreCV_FastReadBMP(
+                    filePath, out int w, out int h, _inputBuffer, (int)_imgBufferSize);
                 if (!readSuccess) return null;
 
                 Bitmap bmp;
@@ -179,79 +194,5 @@ namespace AniloxRoll.Monitor.Core.Services
             }
         }
 
-        private static bool LoadGrayscaleImageToBuffer(
-            string filePath,
-            out int width,
-            out int height,
-            IntPtr destination,
-            ulong destinationSize)
-        {
-            width = 0;
-            height = 0;
-            if (!File.Exists(filePath) || destination == IntPtr.Zero)
-            {
-                return false;
-            }
-
-            using (Bitmap bitmap = new Bitmap(filePath))
-            {
-                width = bitmap.Width;
-                height = bitmap.Height;
-                int required = width * height;
-                if ((ulong)required > destinationSize)
-                {
-                    return false;
-                }
-
-                byte[] grayscale = new byte[required];
-                Rectangle rect = new Rectangle(0, 0, width, height);
-                BitmapData data = bitmap.LockBits(rect, ImageLockMode.ReadOnly, bitmap.PixelFormat);
-                try
-                {
-                    int bytes = Math.Abs(data.Stride) * height;
-                    byte[] raw = new byte[bytes];
-                    Marshal.Copy(data.Scan0, raw, 0, bytes);
-
-                    int bitsPerPixel = Image.GetPixelFormatSize(bitmap.PixelFormat);
-                    int bytesPerPixel = Math.Max(1, bitsPerPixel / 8);
-
-                    for (int y = 0; y < height; y++)
-                    {
-                        int srcRow = y * Math.Abs(data.Stride);
-                        int dstRow = y * width;
-
-                        for (int x = 0; x < width; x++)
-                        {
-                            if (bytesPerPixel == 1)
-                            {
-                                grayscale[dstRow + x] = raw[srcRow + x];
-                            }
-                            else
-                            {
-                                int srcIndex = srcRow + (x * bytesPerPixel);
-                                if (srcIndex + 2 >= raw.Length)
-                                {
-                                    grayscale[dstRow + x] = 0;
-                                    continue;
-                                }
-
-                                byte b = raw[srcIndex + 0];
-                                byte g = raw[srcIndex + 1];
-                                byte r = raw[srcIndex + 2];
-                                grayscale[dstRow + x] = (byte)((r * 299 + g * 587 + b * 114) / 1000);
-                            }
-                        }
-                    }
-                }
-                finally
-                {
-                    bitmap.UnlockBits(data);
-                }
-
-                Marshal.Copy(grayscale, 0, destination, grayscale.Length);
-            }
-
-            return true;
-        }
     }
 }

@@ -10,6 +10,7 @@
 // [新增] 引用 Fast IO 與 Memory 模組
 #include "core_cv/imgcodecs/core_imgcodecs_fast.hpp"
 #include "core_cv/base/cuda_memory.hpp"
+#include "core_cv/imgproc/core_transform.hpp"
 
 #include <cuda_runtime.h>
 #include <iostream>
@@ -251,6 +252,45 @@ extern "C" {
         size_t size = (size_t)count * sizeof(float);
         CHECK_CUDA(cudaMemcpy(d_dst, h_src, size, cudaMemcpyHostToDevice));
         return CORE_CV_SUCCESS;
+    }
+
+    // --- [新增] GPU 縮圖實作 ---
+    // h_src / h_dst 若為 Pinned Memory，cudaMemcpy 自動走非同步 DMA，速度更快。
+    CORE_CV_API int CoreCV_Resize_GPU(
+        const uint8_t* h_src, int src_w, int src_h,
+        uint8_t*       h_dst, int dst_w, int dst_h)
+    {
+        if (!h_src || !h_dst)                          return CORE_CV_ERROR_NULL_POINTER;
+        if (src_w <= 0 || src_h <= 0 ||
+            dst_w <= 0 || dst_h <= 0)                  return CORE_CV_ERROR_INVALID_PARAM;
+
+        uint8_t* d_src = nullptr;
+        uint8_t* d_dst = nullptr;
+
+        try {
+            CHECK_CUDA(cudaMalloc(&d_src, (size_t)src_w * src_h));
+            CHECK_CUDA(cudaMalloc(&d_dst, (size_t)dst_w * dst_h));
+
+            // 若 h_src 是 Pinned Memory，此 memcpy 走 DMA 加速
+            CHECK_CUDA(cudaMemcpy(d_src, h_src, (size_t)src_w * src_h, cudaMemcpyHostToDevice));
+
+            core::resize_u8_gpu(d_src, src_w, src_h, d_dst, dst_w, dst_h, /*stream=*/nullptr);
+
+            CHECK_CUDA(cudaGetLastError());
+            CHECK_CUDA(cudaDeviceSynchronize());
+
+            // 若 h_dst 是 Pinned Memory，此 memcpy 走 DMA 加速
+            CHECK_CUDA(cudaMemcpy(h_dst, d_dst, (size_t)dst_w * dst_h, cudaMemcpyDeviceToHost));
+
+            cudaFree(d_src);
+            cudaFree(d_dst);
+            return CORE_CV_SUCCESS;
+        }
+        catch (...) {
+            if (d_src) cudaFree(d_src);
+            if (d_dst) cudaFree(d_dst);
+            return CORE_CV_ERROR_UNKNOWN;
+        }
     }
 
 }

@@ -57,6 +57,12 @@ extern "C" {
     CORE_CV_API int CoreCV_FreeGPU_Float(float* d_ptr);
     CORE_CV_API int CoreCV_Upload_Float(const float* h_src, float* d_dst, int count);
 
+    // --- [新增] GPU 縮圖 ---
+    // 從 Host 讀入全尺寸影像，在 GPU 上縮放後寫回 Host。
+    // h_src / h_dst 若為 Pinned Memory，H<->D 傳輸走 DMA 加速。
+    CORE_CV_API int CoreCV_Resize_GPU(
+        const uint8_t* h_src, int src_w, int src_h,
+        uint8_t*       h_dst, int dst_w, int dst_h);
 
 #ifdef __cplusplus
 }

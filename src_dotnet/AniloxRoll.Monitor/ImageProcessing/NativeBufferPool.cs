@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Runtime.InteropServices;
+using AniloxRoll.Monitor.Core.Interop;
 
 namespace AniloxRoll.Monitor.Core.Services
 {
@@ -31,12 +31,14 @@ namespace AniloxRoll.Monitor.Core.Services
             ThumbnailBufferSize = maxThumbnailSide * maxThumbnailSide;
             CurveBufferSize = maxWidth * sizeof(float);
 
-            _inputBuffer = Allocate((IntPtr)ImageBufferSize);
-            _muraBuffer = Allocate((IntPtr)ImageBufferSize);
-            _ridgeBuffer = Allocate((IntPtr)ImageBufferSize);
-            _thumbnailBuffer = Allocate((IntPtr)ThumbnailBufferSize);
-            _curveMeanBuffer = Allocate((IntPtr)CurveBufferSize);
-            _curveMaxBuffer = Allocate((IntPtr)CurveBufferSize);
+            // 使用 CUDA Pinned Memory（cudaMallocHost），讓 H<->D memcpy 走非同步 DMA，
+            // 對應 de24f715 版本的 PICoater_AllocPinned 設計。
+            _inputBuffer     = AllocatePinned(ImageBufferSize);
+            _muraBuffer      = AllocatePinned(ImageBufferSize);
+            _ridgeBuffer     = AllocatePinned(ImageBufferSize);
+            _thumbnailBuffer = AllocatePinned((ulong)ThumbnailBufferSize);
+            _curveMeanBuffer = AllocatePinned((ulong)CurveBufferSize);
+            _curveMaxBuffer  = AllocatePinned((ulong)CurveBufferSize);
         }
 
         public void Dispose()
@@ -46,35 +48,35 @@ namespace AniloxRoll.Monitor.Core.Services
                 return;
             }
 
-            Free(ref _inputBuffer);
-            Free(ref _thumbnailBuffer);
-            Free(ref _muraBuffer);
-            Free(ref _ridgeBuffer);
-            Free(ref _curveMeanBuffer);
-            Free(ref _curveMaxBuffer);
+            FreePinned(ref _inputBuffer);
+            FreePinned(ref _thumbnailBuffer);
+            FreePinned(ref _muraBuffer);
+            FreePinned(ref _ridgeBuffer);
+            FreePinned(ref _curveMeanBuffer);
+            FreePinned(ref _curveMaxBuffer);
 
             _isDisposed = true;
         }
 
-        private static IntPtr Allocate(IntPtr size)
+        private static IntPtr AllocatePinned(ulong size)
         {
-            IntPtr ptr = Marshal.AllocHGlobal(size);
+            IntPtr ptr = NativeMethods.CoreCV_AllocPinned(size);
             if (ptr == IntPtr.Zero)
             {
-                throw new OutOfMemoryException($"Native buffer allocation failed. Requested size={size}.");
+                throw new OutOfMemoryException($"CUDA pinned buffer allocation failed. Requested size={size}.");
             }
 
             return ptr;
         }
 
-        private static void Free(ref IntPtr ptr)
+        private static void FreePinned(ref IntPtr ptr)
         {
             if (ptr == IntPtr.Zero)
             {
                 return;
             }
 
-            Marshal.FreeHGlobal(ptr);
+            NativeMethods.CoreCV_FreePinned(ptr);
             ptr = IntPtr.Zero;
         }
     }
