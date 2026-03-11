@@ -1,6 +1,8 @@
-﻿using AniloxRoll.Monitor.Core.Data;
+using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Acquisition.Inspection;
 using AniloxRoll.Monitor.Core.Services;
+using AniloxRoll.Monitor.UI.Navigators;
+using AniloxRoll.Monitor.UI.Presenters;
 using AOI.SDK.UI;
 using System;
 using System.Collections.Generic;
@@ -11,9 +13,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using AniloxRoll.Monitor.UI.State;
 
-namespace AniloxRoll.Monitor.Forms.Helpers
+namespace AniloxRoll.Monitor.UI.Widgets
 {
-
     public class FormInteractionContext
     {
         public Form Form { get; set; }
@@ -34,7 +35,6 @@ namespace AniloxRoll.Monitor.Forms.Helpers
     public class FormInteractionHelper
     {
         private readonly Form _form;
-        private readonly SmartCanvas _canvas;
         private readonly Button[] _buttonsToLock;
         private readonly List<Image> _thumbnailCache;
         private readonly AniloxRollPresenter _presenter;
@@ -44,27 +44,16 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         private readonly ThumbnailGridPresenter _galleryManager;
         private readonly MuraChartHelper _muraChartHelper;
         private readonly InspectionSettings _settings;
-        private readonly ToolStripStatusLabel _statusLabel;
-        private readonly PictureBox[] _cameraPanels;
-
-        private int _currentCameraIndex = 0;
-
-        // 單位: mm
-        private double _currentViewLeftMm = 0;
-        private double _currentViewRightMm = 0;
+        private readonly CanvasInteractionHelper _canvasHelper;
 
         private bool _isProcessedMode = false;
         private bool _isBusy = false;
-        private float _savedZoom = 1.0f;
-        private PointF _savedPan = PointF.Empty;
-        private bool _shouldRestoreView = false;
 
         public FormInteractionHelper(FormInteractionContext context)
         {
             if (context == null) throw new ArgumentNullException(nameof(context));
 
             _form = context.Form;
-            _canvas = context.Canvas;
             _buttonsToLock = context.ButtonsToLock;
             _thumbnailCache = context.ThumbnailCache;
             _presenter = context.Presenter;
@@ -74,10 +63,21 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             _galleryManager = context.GalleryManager;
             _muraChartHelper = context.MuraChartHelper;
             _settings = context.Settings;
-            _statusLabel = context.StatusLabel;
-            _cameraPanels = context.CameraPanels ?? Array.Empty<PictureBox>();
+
+            _canvasHelper = new CanvasInteractionHelper(
+                context.Canvas,
+                context.Settings,
+                context.StatusLabel,
+                context.MuraChartHelper,
+                context.CameraPanels,
+                context.GalleryManager);
         }
 
+        // ── Canvas 事件代理 ──────────────────────────────────────────────
+        public void UpdateCanvasInfo(CanvasInfo info) => _canvasHelper.UpdateCanvasInfo(info);
+        public void NavigateCamera(int direction) => _canvasHelper.NavigateCamera(direction);
+
+        // ── 設定 ─────────────────────────────────────────────────────────
         public void ApplySettingsToService()
         {
             if (_inspectionService == null || _settings == null) return;
@@ -93,76 +93,14 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             if (_settings == null) return;
             ConfigManager.SaveInspectionSettings(_settings);
             ApplySettingsToService();
-            if (_muraChartHelper != null)
-            {
-                _muraChartHelper.SetOps(_settings.Cam1_Ops);
-            }
-            if (_canvas != null) _canvas.Invalidate();
+            _muraChartHelper?.SetOps(_settings.Cam1_Ops);
+            _canvasHelper.Invalidate();
         }
 
-        // [重點] 這裡計算視野並驅動 Chart
-        public void UpdateCanvasInfo(AOI.SDK.UI.CanvasInfo info)
-        {
-            if (_settings == null || _statusLabel == null) return;
-
-            double[] cameraOpsUmArray = _settings.GetCameraOpsUmArray();
-            double[] cameraStartPositionMmArray = _settings.GetCameraStartPositionMmArray();
-
-            if (_currentCameraIndex < 0 || _currentCameraIndex >= cameraOpsUmArray.Length)
-                return;
-
-            double opsInUm = cameraOpsUmArray[_currentCameraIndex];
-            double opsInMm = opsInUm / 1000.0;
-            double startPosMm = cameraStartPositionMmArray[_currentCameraIndex];
-
-            double physicalX = startPosMm + (info.ImageX * opsInMm);
-
-            // 計算視野範圍 (mm)
-            if (info.Zoom > 0)
-            {
-                double pixelLeft = (0 - info.PanOffset.X) / info.Zoom;
-                double pixelRight = (_canvas.Width - info.PanOffset.X) / info.Zoom;
-
-                _currentViewLeftMm = startPosMm + (pixelLeft * opsInMm);
-                _currentViewRightMm = startPosMm + (pixelRight * opsInMm);
-
-                // [更新 Chart] 設定 X 軸顯示範圍，這會讓 Chart 自動 Clip 掉範圍外的數據
-                if (_muraChartHelper != null)
-                {
-                    _muraChartHelper.UpdateViewRange(_currentViewLeftMm, _currentViewRightMm);
-                }
-            }
-
-            _statusLabel.Text =
-                $"位置:{physicalX:F2} mm | " +
-                $"範圍:{_currentViewLeftMm:F1}~{_currentViewRightMm:F1} mm | " +
-                $"座標: ({info.ImageX}, {info.ImageY}) | " +
-                $"亮度: {info.PixelColor.R} | " +
-                $"倍率:{info.Zoom:F2}x";
-        }
-
-        public void NavigateCamera(int direction)
-        {
-            int nextIndex = _currentCameraIndex + direction;
-            if (nextIndex >= 0 && nextIndex < _cameraPanels.Length)
-            {
-                _galleryManager.Select(nextIndex);
-            }
-        }
-
+        // ── 工作流程 ──────────────────────────────────────────────────────
         public async Task LoadImages(bool enableProcess)
         {
-            if (_canvas.Image != null)
-            {
-                _savedZoom = _canvas.Zoom;
-                _savedPan = _canvas.PanOffset;
-                _shouldRestoreView = true;
-            }
-            else
-            {
-                _shouldRestoreView = false;
-            }
-
+            _canvasHelper.SaveViewIfNeeded();
             _isProcessedMode = enableProcess;
             ClearOldImages();
             await _presenter.RunWorkflowAsync(enableProcess, _thumbnailCache);
@@ -188,9 +126,10 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             }
         }
 
+        // ── Gallery 選取 ──────────────────────────────────────────────────
         public void OnGallerySelectionChanged(int index)
         {
-            if (index >= 0 && index < _cameraPanels.Length) _currentCameraIndex = index;
+            _canvasHelper.SetCurrentCameraIndex(index);
 
             if (_isBusy) return;
 
@@ -207,14 +146,15 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                 if (data != null)
                 {
                     sw.Restart();
-                    UpdateCanvas(data.Image);
+                    _canvasHelper.UpdateCanvas(data.Image);
                     canvasMs = sw.ElapsedMilliseconds;
 
                     if (_muraChartHelper != null && _settings != null)
                     {
                         sw.Restart();
                         double[] cameraStartPositionMmArray = _settings.GetCameraStartPositionMmArray();
-                        double startPos = (index >= 0 && index < cameraStartPositionMmArray.Length) ? cameraStartPositionMmArray[index] : 0;
+                        double startPos = (index >= 0 && index < cameraStartPositionMmArray.Length)
+                            ? cameraStartPositionMmArray[index] : 0;
                         _muraChartHelper.UpdateData(data.MuraCurveMean, data.MuraCurveMax, startPos);
                         chartMs = sw.ElapsedMilliseconds;
                     }
@@ -231,6 +171,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             }
         }
 
+        // ── 資料夾選擇 ────────────────────────────────────────────────────
         public void SelectAndLoadFolder()
         {
             using (var fbd = new FolderBrowserDialog())
@@ -258,19 +199,15 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                     _timeNavigator.Initialize(UserSessionState.LastYear);
 
                     _galleryManager.Select(lastCameraIndex, triggerEvent: false);
-                    _currentCameraIndex = lastCameraIndex;
+                    _canvasHelper.SetCurrentCameraIndex(lastCameraIndex);
                 }
             }
         }
 
+        // ── 資源清理 ──────────────────────────────────────────────────────
         public void ClearOldImages()
         {
-            if (_canvas.Image != null)
-            {
-                var old = _canvas.Image;
-                _canvas.Image = null;
-                old.Dispose();
-            }
+            _canvasHelper.ClearCanvas();
             foreach (var img in _thumbnailCache) img.Dispose();
             _thumbnailCache.Clear();
             GC.Collect();
@@ -280,29 +217,6 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         {
             ClearOldImages();
             _inspectionService?.Dispose();
-        }
-
-        private void UpdateCanvas(Bitmap newImage)
-        {
-            if (newImage == null) return;
-
-            if (_canvas.Image != null)
-            {
-                var old = _canvas.Image;
-                _canvas.Image = null;
-                old.Dispose();
-            }
-            _canvas.Image = newImage;
-
-            if (_shouldRestoreView)
-            {
-                _canvas.SetView(_savedZoom, _savedPan);
-                _shouldRestoreView = false;
-            }
-            else
-            {
-                _canvas.FitToScreen();
-            }
         }
     }
 }

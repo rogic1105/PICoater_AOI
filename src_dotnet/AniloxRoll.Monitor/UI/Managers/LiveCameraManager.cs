@@ -1,13 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
 using System.Windows.Forms;
 using Matrox.MatroxImagingLibrary;
 using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
+using AniloxRoll.Monitor.UI.State;
 
-namespace AniloxRoll.Monitor.Forms.Helpers
+namespace AniloxRoll.Monitor.UI.Managers
 {
     public class LiveCameraManager
     {
@@ -64,7 +66,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             _cameraStatusTimer = new Timer { Interval = 500 };
             _cameraStatusTimer.Tick += CameraStatusTimer_Tick;
 
-            UpdateCameraStatus("未配置 (MIL Not Allocated)", Color.Gray);
+            UpdateCameraStatus("未配置", Color.Gray);
         }
 
         private void SetupLivePanel(Panel parentPanel, int cameraIndex)
@@ -82,7 +84,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             {
                 Dock = DockStyle.Bottom,
                 Height = 18,
-                ForeColor = Color.White,
+                ForeColor = Color.DarkGray,
                 BackColor = Color.FromArgb(32, 32, 32),
                 TextAlign = ContentAlignment.MiddleCenter,
                 Font = new Font("Segoe UI", 7.5f, FontStyle.Bold)
@@ -156,7 +158,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
 
             IsAllocated = true;
             _cameraStatusTimer.Start();
-            UpdateCameraStatus("已配置 (Ready)", Color.Yellow);
+            UpdateCameraStatus("已配置", Color.White);
             SwitchMainDisplay(_selectedMainCameraId);
         }
 
@@ -196,6 +198,24 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             foreach (var cam in _cameras)
             {
                 cam.SetUserGrabIntent(false);
+            }
+
+            // 停止抓圖後，將今日存檔目錄記入 LastDataPath，
+            // 下次點「選擇資料夾」時會直接開啟剛拍攝的影像位置。
+            if (_enableAutoCapture && !string.IsNullOrEmpty(_captureRootPath))
+            {
+                DateTime now = DateTime.Now;
+                string todayDir = Path.Combine(
+                    _captureRootPath,
+                    now.ToString("yyyy"),
+                    now.ToString("yyyyMM"),
+                    now.ToString("yyyyMMdd"));
+
+                if (Directory.Exists(todayDir))
+                {
+                    UserSessionState.SetLastDataPath(todayDir);
+                    UserSessionState.Save();
+                }
             }
         }
 
@@ -240,12 +260,6 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             {
                 StartGrab();
             }
-        }
-
-        public bool RequiresAcquisitionReinitialize(string changedPropertyName)
-        {
-            return changedPropertyName == nameof(InspectionSettings.CameraGrabHeight)
-                || changedPropertyName == nameof(InspectionSettings.CameraExposureTimeUs);
         }
 
         public void SetImageProcessingEnabled(bool enable)
@@ -300,7 +314,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
             foreach (var kvp in _cameraStatusLabels)
             {
                 if (kvp.Key == cameraIndex)
-                    kvp.Value.BackColor = Color.DarkBlue;
+                    kvp.Value.BackColor = Color.PapayaWhip;
                 else
                     kvp.Value.BackColor = Color.FromArgb(32, 32, 32);
             }
@@ -350,7 +364,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
                     : "Offline";
 
                 Color color = isConnected
-                    ? (cam.IsLive ? Color.Lime : Color.Yellow)
+                    ? (cam.IsLive ? Color.Green : Color.Yellow)
                     : Color.Red;
 
                 UpdateSingleCameraStatus(cam.CameraId, statusText, color);
@@ -361,7 +375,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         {
             foreach (var pair in _cameraStatusLabels)
             {
-                pair.Value.Text = $"CAM{pair.Key}: {statusText}";
+                pair.Value.Text = $"{pair.Key}: {statusText}";
                 pair.Value.ForeColor = color;
             }
         }
@@ -370,7 +384,7 @@ namespace AniloxRoll.Monitor.Forms.Helpers
         {
             if (_cameraStatusLabels.TryGetValue(cameraIndex, out var label))
             {
-                label.Text = $"CAM{cameraIndex}: {statusText}";
+                label.Text = $"{cameraIndex}: {statusText}";
                 label.ForeColor = color;
             }
         }

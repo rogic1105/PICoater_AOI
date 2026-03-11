@@ -1,5 +1,6 @@
 ﻿using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
+using AniloxRoll.Monitor.UI.Navigators;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -8,7 +9,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace AniloxRoll.Monitor.Forms.Helpers
+namespace AniloxRoll.Monitor.UI.Presenters
 {
     public class AniloxRollPresenter
     {

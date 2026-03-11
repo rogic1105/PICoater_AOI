@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace AniloxRoll.Monitor.Forms.Helpers
+namespace AniloxRoll.Monitor.UI.Presenters
 {
     /// <summary>
     /// [View Helper] 縮圖畫廊管理器。

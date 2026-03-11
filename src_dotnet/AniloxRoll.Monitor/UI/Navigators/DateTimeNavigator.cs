@@ -6,7 +6,7 @@ using System.Windows.Forms;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.UI.State;
 
-namespace AniloxRoll.Monitor.Forms.Helpers
+namespace AniloxRoll.Monitor.UI.Navigators
 {
     /// <summary>
     /// [View Helper] 時間篩選連動管理器。

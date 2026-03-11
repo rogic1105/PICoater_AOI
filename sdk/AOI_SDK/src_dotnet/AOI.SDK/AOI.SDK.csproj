@@ -78,7 +78,7 @@
     <Compile Include="Core\GPUHelper.cs" />
     <Compile Include="Core\GPUProcessor.cs" />
     <Compile Include="Core\Models\TimedResult.cs" />
-    <Compile Include="UI\SmartCanvas.cs" />
+    <!-- SmartCanvas.cs moved to AniloxRoll.Monitor to avoid Matrox design-time load failure -->
     <Compile Include="Utils\FileUtils.cs" />
     <Compile Include="Utils\ImageUtils.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

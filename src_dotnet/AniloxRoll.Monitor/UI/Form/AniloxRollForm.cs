@@ -6,7 +6,10 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
-using AniloxRoll.Monitor.Forms.Helpers;
+using AniloxRoll.Monitor.UI.Managers;
+using AniloxRoll.Monitor.UI.Navigators;
+using AniloxRoll.Monitor.UI.Presenters;
+using AniloxRoll.Monitor.UI.Widgets;
 using AniloxRoll.Monitor.UI.State;
 
 namespace AniloxRoll.Monitor.Forms
@@ -183,27 +186,9 @@ namespace AniloxRoll.Monitor.Forms
             bool isHessianMaxFactorChanged =
                 string.Equals(changedPropertyName, nameof(InspectionRecipe.HessianMaxFactor), StringComparison.Ordinal) ||
                 string.Equals(changedPropertyName, "Hessian Max Factor", StringComparison.Ordinal);
-            bool isCameraAcqParam = _liveCameraManager != null && _liveCameraManager.RequiresAcquisitionReinitialize(changedPropertyName);
 
-            bool mustReinitializeDuringGrab =
-                isCameraAcqParam &&
-                _liveCameraManager != null &&
-                _liveCameraManager.IsAllocated &&
-                !_isApplyingCameraReinit;
-
-            if (!mustReinitializeDuringGrab)
-            {
-                _liveCameraManager?.SetCaptureSettings(_settings);
-            }
-
-            if (isHessianMaxFactorChanged)
-            {
-                _lastReviewProcessedMode = true;
-                await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
-                _interactionHelper.RefreshCurrentCanvasResult();
-            }
-
-            if (mustReinitializeDuringGrab)
+            // 任何設定改變，只要相機已配置就重新初始化，避免舊參數在抓圖中導致當機。
+            if (_liveCameraManager != null && _liveCameraManager.IsAllocated && !_isApplyingCameraReinit)
             {
                 _isApplyingCameraReinit = true;
                 try
@@ -219,6 +204,18 @@ namespace AniloxRoll.Monitor.Forms
                 {
                     _isApplyingCameraReinit = false;
                 }
+            }
+            else
+            {
+                // 相機尚未配置時，只更新緩存設定供下次配置使用。
+                _liveCameraManager?.SetCaptureSettings(_settings);
+            }
+
+            if (isHessianMaxFactorChanged)
+            {
+                _lastReviewProcessedMode = true;
+                await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
+                _interactionHelper.RefreshCurrentCanvasResult();
             }
         }
 
