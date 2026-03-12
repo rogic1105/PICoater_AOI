@@ -180,6 +180,8 @@ MdigProcess(M_STOP) → MdispHookFunction(M_UNHOOK) → MbufFree × n
 
 ### 已知限制
 
-- `M_LINE_RATE` / `M_LINE_RATE_CURRENT` 常數在 MIL .NET wrapper 中**不存在**，不可使用。Line Rate 只能走 CLProtocol Feature API。
+- `M_LINE_RATE` / `M_LINE_RATE_CURRENT` / `M_GRAB_SIZE_Y` 常數在 MIL .NET wrapper 中**不存在**，不可使用。
+  - Line Rate → CLProtocol Feature API `"AcquisitionLineRate"`
+  - Grab Height → `MdigControl(M_SOURCE_SIZE_Y, height)`（`M_SOURCE_SIZE_Y` 存在），且必須走完整 Stop → Free Buffers → Set → Realloc → Restart 流程，否則舊尺寸 Buffer 與新尺寸不符會崩潰。
 - `MdigHookFunction(M_CAMERA_PRESENT)` 已移除，相機連線狀態改由 Timer 每 500ms 輪詢 `MdigInquire(M_CAMERA_PRESENT)`。
 - CLProtocol 初始化期間（約 1–2 秒）`Exp Meas`、`Line Rate`、`Cam Temp` 欄位會顯示 N/A，屬正常現象。

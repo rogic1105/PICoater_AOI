@@ -127,6 +127,42 @@ namespace Envision_MdigGrab
             }
         }
 
+        // ================= 即時參數調整 =================
+
+        /// <summary>
+        /// 對指定相機設定曝光時間（μs）。
+        /// </summary>
+        public void SetExposureForCamera(int camId, double exposureUs)
+        {
+            var cam = FindCamera(camId);
+            cam?.SetExposureUs(exposureUs);
+        }
+
+        /// <summary>
+        /// 對指定相機設定 Line Rate（Hz），需 CLProtocol 已啟用。
+        /// </summary>
+        public void SetLineRateForCamera(int camId, double hz)
+        {
+            var cam = FindCamera(camId);
+            cam?.SetLineRateHz(hz);
+        }
+
+        /// <summary>
+        /// 對指定相機變更 Grab 高度（px）。
+        /// 內部走完整的 Stop → Free → Realloc → Restart 流程（由 MilCameraUnit.SetGrabHeight 處理）。
+        /// </summary>
+        public void SetGrabHeightForCamera(int camId, int height)
+        {
+            FindCamera(camId)?.SetGrabHeight(height);
+        }
+
+        private MilCameraUnit FindCamera(int camId)
+        {
+            for (int i = 0; i < _cameras.Count; i++)
+                if (_cameras[i].CameraId == camId) return _cameras[i];
+            return null;
+        }
+
         // ================= 釋放資源 =================
 
         /// <summary>

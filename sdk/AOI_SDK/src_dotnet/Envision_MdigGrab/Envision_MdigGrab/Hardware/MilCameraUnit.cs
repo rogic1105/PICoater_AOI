@@ -247,6 +247,88 @@ namespace Envision_MdigGrab
 
         // ================= MsysInquire 系統層級查詢 =================
 
+        // ================= Grab 高度重新初始化 =================
+
+        /// <summary>
+        /// 變更 Grab 高度並重新分配所有 MIL 與 GPU 緩衝區。
+        /// 直接呼叫 MdigControl(M_SOURCE_SIZE_Y)（參考 AniloxRoll.Monitor/AniloxCamera.cs）。
+        /// 流程：停止抓圖 → 釋放舊 Buffer → 設定新高度 → 重新分配 → 重啟抓圖。
+        /// </summary>
+        /// <param name="height">新的影像高度（行數）</param>
+        public void SetGrabHeight(int height)
+        {
+            if (MilDigitizer == MIL.M_NULL || height <= 0) return;
+
+            bool wasLive = IsLive;
+
+            // 1. 停止抓圖（不修改 _userWantsGrab）
+            if (wasLive)
+            {
+                MIL.MdigProcess(MilDigitizer, _milGrabBuffers, _milGrabBufferListSize,
+                    MIL.M_STOP, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
+                IsLive = false;
+            }
+
+            // 2. 釋放舊 MIL Buffer
+            for (int i = 0; i < _milGrabBufferListSize; i++)
+            {
+                if (_milGrabBuffers[i] != MIL.M_NULL)
+                {
+                    MIL.MbufFree(_milGrabBuffers[i]);
+                    _milGrabBuffers[i] = MIL.M_NULL;
+                }
+            }
+            if (_milDisplayBuffer != MIL.M_NULL) { MIL.MbufFree(_milDisplayBuffer); _milDisplayBuffer = MIL.M_NULL; }
+            if (_milProcBuffer    != MIL.M_NULL) { MIL.MbufFree(_milProcBuffer);    _milProcBuffer    = MIL.M_NULL; }
+
+            // 3. 釋放舊 GPU Buffer
+            if (_gpuInputBuffer  != IntPtr.Zero) { CoreCVWrapper.CoreCV_FreeGPU(_gpuInputBuffer);  _gpuInputBuffer  = IntPtr.Zero; }
+            if (_gpuOutputBuffer != IntPtr.Zero) { CoreCVWrapper.CoreCV_FreeGPU(_gpuOutputBuffer); _gpuOutputBuffer = IntPtr.Zero; }
+            _hostInputBuffer  = null;
+            _hostOutputBuffer = null;
+
+            // 4. 設定新高度（M_SOURCE_SIZE_Y 在 MIL .NET wrapper 中存在，參考 AniloxCamera.cs）
+            MIL.MdigControl(MilDigitizer, MIL.M_SOURCE_SIZE_Y, (MIL_INT)height);
+
+            // 5. 重新查詢實際尺寸（硬體可能夾緊至最近合法值）
+            MIL_INT sizeX = MIL.MdigInquire(MilDigitizer, MIL.M_SIZE_X, MIL.M_NULL);
+            MIL_INT sizeY = MIL.MdigInquire(MilDigitizer, MIL.M_SIZE_Y, MIL.M_NULL);
+            _frameWidth  = (int)sizeX;
+            _frameHeight = (int)sizeY;
+
+            // 6. 重新分配 CPU / GPU Buffer
+            _hostInputBuffer  = new byte[_frameWidth * _frameHeight];
+            _hostOutputBuffer = new byte[_frameWidth * _frameHeight];
+            CoreCVWrapper.CoreCV_MallocGPU(out _gpuInputBuffer,  _frameWidth, _frameHeight);
+            CoreCVWrapper.CoreCV_MallocGPU(out _gpuOutputBuffer, _frameWidth, _frameHeight);
+
+            // 7. 重新分配 MIL Buffer
+            for (int i = 0; i < _milGrabBufferListSize; i++)
+            {
+                MIL.MbufAlloc2d(_ownerSystemId, sizeX, sizeY, 8 + MIL.M_UNSIGNED,
+                    MIL.M_IMAGE + MIL.M_GRAB + MIL.M_PROC, ref _milGrabBuffers[i]);
+                MIL.MbufClear(_milGrabBuffers[i], 0);
+            }
+            MIL.MbufAlloc2d(_ownerSystemId, sizeX, sizeY, 8 + MIL.M_UNSIGNED,
+                MIL.M_IMAGE + MIL.M_DISP + MIL.M_PROC, ref _milDisplayBuffer);
+            MIL.MbufClear(_milDisplayBuffer, 0);
+            MIL.MbufAlloc2d(_ownerSystemId, sizeX, sizeY, 8 + MIL.M_UNSIGNED,
+                MIL.M_IMAGE + MIL.M_PROC, ref _milProcBuffer);
+            MIL.MbufClear(_milProcBuffer, 0);
+
+            // 8. 重新綁定 Display Window
+            MIL.MdispSelectWindow(MilDisplay, _milDisplayBuffer, _panelHandle);
+            MIL.MdispControl(MilDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
+
+            // 9. 恢復抓圖
+            if (wasLive && _userWantsGrab)
+            {
+                MIL.MdigProcess(MilDigitizer, _milGrabBuffers, _milGrabBufferListSize,
+                    MIL.M_START, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
+                IsLive = true;
+            }
+        }
+
         // ================= Line Rate（CLProtocol Feature API）=================
 
         /// <summary>

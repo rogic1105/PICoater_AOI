@@ -20,6 +20,9 @@ namespace Envision_MdigGrab
         private readonly System.Windows.Forms.Timer _statusTimer;
         private readonly Label _sharedCoordLabel;
 
+        private CameraParamPanel _paramPanel;
+        private Button _btnToggleParams;
+
         /// <summary>
         /// 建構子：初始化相機設定、CameraSession 事件、Timer、ListView Presenter，
         /// 並將所有相機的連線狀態預設為 Offline。
@@ -67,6 +70,56 @@ namespace Envision_MdigGrab
 
             foreach (var cfg in _configs) UpdateStatusUI(cfg.Id, false);
             UpdateGlobalCoordLabel("Ready");
+
+            InitParamPanel();
+        }
+
+        /// <summary>
+        /// 建立參數調整面板與切換按鈕，並加入 Form。
+        /// 面板預設隱藏，點擊切換按鈕後展開並撐高 Form。
+        /// </summary>
+        private void InitParamPanel()
+        {
+            // StatusStrip 釘在底部，展開時自動跟著 Form 高度移動
+            statusStripMain.Dock = DockStyle.Bottom;
+            labelCoord1.Anchor  = AnchorStyles.Left | AnchorStyles.Bottom;
+
+            // 切換按鈕：放在現有按鈕列下方
+            _btnToggleParams = new Button
+            {
+                Text     = "▼ 參數調整",
+                Location = new Point(button1.Left, checkBoxEnableImageProcessing.Bottom + 8),
+                Size     = new Size(button3.Right - button1.Left, 29),
+            };
+            _btnToggleParams.Click += BtnToggleParams_Click;
+            Controls.Add(_btnToggleParams);
+
+            // 參數面板：緊接在 ListView 下方，初始隱藏
+            _paramPanel = new CameraParamPanel(_configs)
+            {
+                Location = new Point(listView1.Left, listView1.Bottom + 6),
+                Width    = listView1.Width,
+                Visible  = false,
+            };
+            _paramPanel.ExposureApply += (camId, us) => _session.SetExposureForCamera(camId, us);
+            _paramPanel.LineRateApply += (camId, hz) => _session.SetLineRateForCamera(camId, hz);
+            _paramPanel.HeightApply   += (camId, px) => _session.SetGrabHeightForCamera(camId, px);
+            Controls.Add(_paramPanel);
+        }
+
+        // ================= 參數面板切換 =================
+
+        /// <summary>
+        /// 切換參數調整面板的顯示狀態，同時伸縮 Form 高度。
+        /// </summary>
+        private void BtnToggleParams_Click(object sender, EventArgs e)
+        {
+            bool show = !_paramPanel.Visible;
+            int delta = _paramPanel.Height + 6;
+
+            _paramPanel.Visible      = show;
+            _btnToggleParams.Text    = show ? "▲ 參數調整" : "▼ 參數調整";
+            ClientSize = new Size(ClientSize.Width, ClientSize.Height + (show ? delta : -delta));
         }
 
         // ================= Button Events =================
@@ -117,6 +170,13 @@ namespace Envision_MdigGrab
             if (_session.IsReleasing) return;
             _session.UpdatePresence((camId, connected) => UpdateStatusUI(camId, connected));
             _listPresenter.Update(_session.Cameras);
+
+            // 面板可見時，將硬體讀回值同步到輸入框（使用者輸入中不覆蓋）
+            if (_paramPanel.Visible)
+            {
+                foreach (var cam in _session.Cameras)
+                    _paramPanel.SyncFromCamera(cam.CameraId, cam.GetExposureUs(), cam.GetLineRateHz());
+            }
         }
 
         // ================= UI Update =================
