@@ -54,7 +54,7 @@
             // 
             // button1
             // 
-            this.button1.Location = new System.Drawing.Point(533, 33);
+            this.button1.Location = new System.Drawing.Point(1022, 35);
             this.button1.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.button1.Name = "button1";
             this.button1.Size = new System.Drawing.Size(119, 29);
@@ -65,7 +65,7 @@
             // 
             // button2
             // 
-            this.button2.Location = new System.Drawing.Point(533, 70);
+            this.button2.Location = new System.Drawing.Point(1022, 72);
             this.button2.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.button2.Name = "button2";
             this.button2.Size = new System.Drawing.Size(119, 29);
@@ -76,7 +76,7 @@
             // 
             // button3
             // 
-            this.button3.Location = new System.Drawing.Point(677, 33);
+            this.button3.Location = new System.Drawing.Point(1166, 35);
             this.button3.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.button3.Name = "button3";
             this.button3.Size = new System.Drawing.Size(119, 29);
@@ -87,7 +87,7 @@
             // 
             // panel2
             // 
-            this.panel2.Location = new System.Drawing.Point(14, 212);
+            this.panel2.Location = new System.Drawing.Point(526, 35);
             this.panel2.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.panel2.Name = "panel2";
             this.panel2.Size = new System.Drawing.Size(477, 111);
@@ -105,7 +105,7 @@
             // label2
             // 
             this.label2.AutoSize = true;
-            this.label2.Location = new System.Drawing.Point(13, 186);
+            this.label2.Location = new System.Drawing.Point(525, 9);
             this.label2.Name = "label2";
             this.label2.Size = new System.Drawing.Size(41, 15);
             this.label2.TabIndex = 5;
@@ -114,7 +114,7 @@
             // labelCoord1
             // 
             this.labelCoord1.AutoSize = true;
-            this.labelCoord1.Location = new System.Drawing.Point(11, 306);
+            this.labelCoord1.Location = new System.Drawing.Point(13, 388);
             this.labelCoord1.Name = "labelCoord1";
             this.labelCoord1.Size = new System.Drawing.Size(41, 15);
             this.labelCoord1.TabIndex = 6;
@@ -125,7 +125,7 @@
             this.checkBoxEnableImageProcessing.AutoSize = true;
             this.checkBoxEnableImageProcessing.Checked = true;
             this.checkBoxEnableImageProcessing.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.checkBoxEnableImageProcessing.Location = new System.Drawing.Point(677, 80);
+            this.checkBoxEnableImageProcessing.Location = new System.Drawing.Point(1166, 82);
             this.checkBoxEnableImageProcessing.Name = "checkBoxEnableImageProcessing";
             this.checkBoxEnableImageProcessing.Size = new System.Drawing.Size(119, 19);
             this.checkBoxEnableImageProcessing.TabIndex = 7;
@@ -139,9 +139,9 @@
             this.statusStripMain.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.toolStripStatusLabelFps,
             this.toolStripStatusLabelCoord});
-            this.statusStripMain.Location = new System.Drawing.Point(0, 382);
+            this.statusStripMain.Location = new System.Drawing.Point(0, 405);
             this.statusStripMain.Name = "statusStripMain";
-            this.statusStripMain.Size = new System.Drawing.Size(946, 25);
+            this.statusStripMain.Size = new System.Drawing.Size(1332, 25);
             this.statusStripMain.TabIndex = 8;
             this.statusStripMain.Text = "statusStrip1";
             // 
@@ -160,9 +160,9 @@
             // listView1
             // 
             this.listView1.HideSelection = false;
-            this.listView1.Location = new System.Drawing.Point(533, 106);
+            this.listView1.Location = new System.Drawing.Point(16, 151);
             this.listView1.Name = "listView1";
-            this.listView1.Size = new System.Drawing.Size(401, 273);
+            this.listView1.Size = new System.Drawing.Size(1279, 234);
             this.listView1.TabIndex = 9;
             this.listView1.UseCompatibleStateImageBehavior = false;
             // 
@@ -170,7 +170,7 @@
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(946, 407);
+            this.ClientSize = new System.Drawing.Size(1332, 430);
             this.Controls.Add(this.listView1);
             this.Controls.Add(this.statusStripMain);
             this.Controls.Add(this.checkBoxEnableImageProcessing);

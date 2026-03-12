@@ -2,12 +2,19 @@
 
 namespace Envision_MdigGrab
 {
+    /// <summary>
+    /// 提供基於 MIL 的影像處理靜態方法，包含欄均值消除、Hessian 垂直脊線偵測、二值化與影像複製。
+    /// 所有方法均不含 UI 依賴，可跨表單重用。
+    /// </summary>
     public static class MilImageProcessor
     {
+        /// <summary>
+        /// 計算影像每個欄（Column）的平均亮度，並從原圖減去該平均值，最後加上 127 回補偏移，
+        /// 達到消除橫向光源不均的效果（Column Mean Subtraction）。
+        /// 運算流程：MimProjection(M_0_DEGREE, M_MEAN) → MimResize 擴展 → MimArith(M_SUB + M_ADD_CONST)。
+        /// </summary>
         /// <param name="srcBuffer">來源影像 (8-bit)</param>
         /// <param name="destBuffer">結果影像 (8-bit)</param>
-        /// <param name="sigma">平滑係數 (Python: 9.0)</param>
-        /// <param name="fixedMaxVal">絕對強度上限 (Python: 1.0)</param>
         public static void ApplyColMeanSubtraction(MIL_ID srcBuffer, MIL_ID destBuffer)
         {
             if (srcBuffer == MIL.M_NULL || destBuffer == MIL.M_NULL) return;
@@ -86,6 +93,15 @@ namespace Envision_MdigGrab
             }
         }
 
+        /// <summary>
+        /// 使用 MIL Edge Finder（M_CREST 模式）提取影像的垂直脊線（Hessian Dxx），
+        /// 模擬 Python OpenCV 中的 Sobel(dx=2, dy=0) 搭配 Gaussian 平滑的效果。
+        /// 運算流程：MedgeAlloc(M_CREST) → MedgeCalculate → MedgeDraw(M_DRAW_SECOND_DERIVATIVE_X) → 取絕對值 → Fixed Scaling → MbufCopy 輸出。
+        /// </summary>
+        /// <param name="srcBuffer">來源影像 (8-bit)</param>
+        /// <param name="destBuffer">結果影像 (8-bit)</param>
+        /// <param name="sigma">MIL Edge Finder 平滑係數（對應 Python GaussianBlur sigma，建議傳 85.0 左右）</param>
+        /// <param name="fixedMaxVal">Scaling 用的強度上限；小於等於 0 時自動回退為 1.0</param>
         public static void ApplyHessianVerticalFixed(MIL_ID srcBuffer, MIL_ID destBuffer, double sigma, double fixedMaxVal)
         {
             if (srcBuffer == MIL.M_NULL || destBuffer == MIL.M_NULL) return;
@@ -166,12 +182,25 @@ namespace Envision_MdigGrab
             }
         }
 
+        /// <summary>
+        /// 對來源影像執行固定閾值二值化（MimBinarize M_FIXED + M_GREATER）。
+        /// 像素值大於 threshold 的輸出為白（255），其餘為黑（0）。
+        /// </summary>
+        /// <param name="srcBuffer">來源影像 (8-bit)</param>
+        /// <param name="destBuffer">結果影像 (8-bit，輸出二值影像)</param>
+        /// <param name="threshold">二值化閾值</param>
         public static void ApplyBinarize(MIL_ID srcBuffer, MIL_ID destBuffer, double threshold)
         {
             if (srcBuffer == MIL.M_NULL || destBuffer == MIL.M_NULL) return;
             MIL.MimBinarize(srcBuffer, destBuffer, MIL.M_FIXED + MIL.M_GREATER, threshold, MIL.M_NULL);
         }
 
+        /// <summary>
+        /// 將來源 Buffer 複製到目的 Buffer（MbufCopy）。
+        /// 型別不同時 MIL 會自動做型別轉換與飽和截斷。
+        /// </summary>
+        /// <param name="srcBuffer">來源 Buffer</param>
+        /// <param name="destBuffer">目的 Buffer</param>
         public static void CopyImage(MIL_ID srcBuffer, MIL_ID destBuffer)
         {
             if (srcBuffer == MIL.M_NULL || destBuffer == MIL.M_NULL) return;
