@@ -84,7 +84,9 @@
     <Compile Include="Session\CameraSession.cs" />
     <!-- UI -->
     <Compile Include="UI\CameraListViewPresenter.cs" />
-    <Compile Include="UI\CameraParamPanel.cs" />
+    <Compile Include="UI\CameraParamPanel.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="UI\GrabForm.cs">
       <SubType>Form</SubType>
     </Compile>
