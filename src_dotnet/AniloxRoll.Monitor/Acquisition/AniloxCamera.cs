@@ -2,8 +2,8 @@
 using System.Runtime.InteropServices;
 using System.Diagnostics;
 using System.IO;
-using System.Reflection;
 using System.Threading;
+using System.Threading.Tasks;
 using Matrox.MatroxImagingLibrary;
 using AOI.SDK.Core;
 using AniloxRoll.Monitor.Core.Services;
@@ -53,11 +53,9 @@ namespace AniloxRoll.Monitor.Core.Camera
         private int _frameWidth = 0;
         private int _frameHeight = 0;
 
-        private static readonly string[] ExposureControlCandidates =
-            { "M_EXPOSURE", "M_EXPOSURE_TIME", "M_CAMERA_EXPOSURE", "M_GRAB_EXPOSURE" };
-
-        private bool _exposureControlResolved = false;
-        private MIL_INT _exposureControlType = MIL.M_NULL;
+        private double _appliedExposureUs = 0;
+        private bool _clProtocolEnabled = false;
+        private volatile bool _clProtocolInitStarted = false;
         private byte[] _hostInputBuffer = null;
         private byte[] _hostOutputBuffer = null;
 
@@ -71,6 +69,134 @@ namespace AniloxRoll.Monitor.Core.Camera
         private string _lastCaptureSecondKey = string.Empty;
 
         public double CurrentFps => Volatile.Read(ref _currentFps);
+
+        private void StartCLProtocolAsync()
+        {
+            if (_clProtocolInitStarted) return;
+            _clProtocolInitStarted = true;
+            Task.Run(() => TryEnableCLProtocol());
+        }
+
+        private void TryEnableCLProtocol()
+        {
+            if (_milDigitizer == MIL.M_NULL) return;
+            try
+            {
+                MIL.MdigControl(_milDigitizer, MIL.M_GC_CLPROTOCOL_DEVICE_ID, "M_DEFAULT");
+                MIL.MdigControl(_milDigitizer, MIL.M_GC_CLPROTOCOL, MIL.M_ENABLE);
+                _clProtocolEnabled = true;
+
+                if (_appliedExposureUs > 0 && !_isReleased)
+                    SetExposureUs(_appliedExposureUs);
+            }
+            catch
+            {
+                _clProtocolEnabled = false;
+            }
+        }
+
+        public void SetExposureUs(double exposureUs)
+        {
+            if (_milDigitizer == MIL.M_NULL || exposureUs <= 0) return;
+
+            if (_clProtocolEnabled)
+            {
+                MIL.MdigControlFeature(_milDigitizer, MIL.M_FEATURE_VALUE,
+                    "ExposureTime", MIL.M_TYPE_DOUBLE, ref exposureUs);
+            }
+            else
+            {
+                MIL.MdigControl(_milDigitizer, MIL.M_EXPOSURE_TIME, exposureUs * 1000.0);
+            }
+
+            _appliedExposureUs = exposureUs;
+        }
+
+        public void SetGrabHeight(int height)
+        {
+            if (_milDigitizer == MIL.M_NULL || height <= 0) return;
+
+            bool wasLive = IsLive;
+
+            if (wasLive)
+            {
+                MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize,
+                    MIL.M_STOP, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
+                ResetFps();
+                IsLive = false;
+            }
+
+            for (int i = 0; i < _milGrabBufferListSize; i++)
+            {
+                if (_milGrabBuffers[i] != MIL.M_NULL)
+                {
+                    MIL.MbufFree(_milGrabBuffers[i]);
+                    _milGrabBuffers[i] = MIL.M_NULL;
+                }
+            }
+
+            if (_milDisplayBuffer != MIL.M_NULL)
+            {
+                MIL.MbufFree(_milDisplayBuffer);
+                _milDisplayBuffer = MIL.M_NULL;
+            }
+
+            if (_milProcBuffer != MIL.M_NULL)
+            {
+                MIL.MbufFree(_milProcBuffer);
+                _milProcBuffer = MIL.M_NULL;
+            }
+
+            lock (_picoaterLock)
+            {
+                _nativeBufferPool?.Dispose();
+                _nativeBufferPool = null;
+            }
+
+            _hostInputBuffer = null;
+            _hostOutputBuffer = null;
+
+            MIL.MdigControl(_milDigitizer, MIL.M_SOURCE_SIZE_Y, (MIL_INT)height);
+
+            MIL_INT sizeX = MIL.MdigInquire(_milDigitizer, MIL.M_SIZE_X, MIL.M_NULL);
+            MIL_INT sizeY = MIL.MdigInquire(_milDigitizer, MIL.M_SIZE_Y, MIL.M_NULL);
+            _frameWidth = (int)sizeX;
+            _frameHeight = (int)sizeY;
+
+            _hostInputBuffer = new byte[_frameWidth * _frameHeight];
+            _hostOutputBuffer = new byte[_frameWidth * _frameHeight];
+
+            lock (_picoaterLock)
+            {
+                _nativeBufferPool = new NativeBufferPool(_frameWidth, _frameHeight, 1);
+            }
+
+            for (int i = 0; i < _milGrabBufferListSize; i++)
+            {
+                MIL.MbufAlloc2d(_ownerSystemId, sizeX, sizeY, 8 + MIL.M_UNSIGNED,
+                    MIL.M_IMAGE + MIL.M_GRAB + MIL.M_PROC, ref _milGrabBuffers[i]);
+                MIL.MbufClear(_milGrabBuffers[i], 0);
+            }
+
+            MIL.MbufAlloc2d(_ownerSystemId, sizeX, sizeY, 8 + MIL.M_UNSIGNED,
+                MIL.M_IMAGE + MIL.M_DISP + MIL.M_PROC, ref _milDisplayBuffer);
+            MIL.MbufClear(_milDisplayBuffer, 0);
+
+            MIL.MbufAlloc2d(_ownerSystemId, sizeX, sizeY, 8 + MIL.M_UNSIGNED,
+                MIL.M_IMAGE + MIL.M_PROC, ref _milProcBuffer);
+            MIL.MbufClear(_milProcBuffer, 0);
+
+            MIL.MdispSelectWindow(_milDisplay, _milDisplayBuffer, _panelHandle);
+            MIL.MdispControl(_milDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
+
+            if (wasLive && _userWantsGrab)
+            {
+                MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize,
+                    MIL.M_START, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
+                ResetFps();
+                IsLive = true;
+            }
+        }
 
         // Delegates
         private MIL_DIG_HOOK_FUNCTION_PTR _cameraStatusDelegate;
@@ -232,94 +358,13 @@ namespace AniloxRoll.Monitor.Core.Camera
 
             if (CameraGrabHeight > 0)
             {
-                MIL_INT height = (MIL_INT)CameraGrabHeight;
-                MIL.MdigControl(_milDigitizer, MIL.M_SOURCE_SIZE_Y, height);
+                SetGrabHeight(CameraGrabHeight);
             }
 
             if (CameraExposureTimeUs > 0)
             {
-                MIL_INT exposureControl = ResolveExposureControlType();
-                if (exposureControl != MIL.M_NULL)
-                {
-                    MIL.MdigControl(_milDigitizer, exposureControl, CameraExposureTimeUs);
-                }
-                else
-                {
-                    TrySetExposureByFeature("ExposureTime", CameraExposureTimeUs);
-                    TrySetExposureByFeature("ExposureTimeAbs", CameraExposureTimeUs);
-                }
+                SetExposureUs(CameraExposureTimeUs);
             }
-        }
-
-        private void TrySetExposureByFeature(string featureName, double value)
-        {
-            if (_milDigitizer == MIL.M_NULL) return;
-            if (string.IsNullOrWhiteSpace(featureName)) return;
-
-            try
-            {
-                MethodInfo[] methods = typeof(MIL).GetMethods(BindingFlags.Public | BindingFlags.Static);
-                foreach (MethodInfo method in methods)
-                {
-                    if (!string.Equals(method.Name, "MdigControlFeature", StringComparison.Ordinal)) continue;
-
-                    ParameterInfo[] ps = method.GetParameters();
-                    if (ps.Length != 4) continue;
-
-                    object[] args = new object[4];
-                    args[0] = _milDigitizer;
-                    args[1] = ResolveMilConstant("M_FEATURE_VALUE");
-                    args[2] = featureName;
-                    args[3] = value;
-                    method.Invoke(null, args);
-                    break;
-                }
-            }
-            catch
-            {
-                // ignore if feature API is unavailable on this MIL version.
-            }
-        }
-
-        private static object ResolveMilConstant(string name)
-        {
-            try
-            {
-                FieldInfo f = typeof(MIL).GetField(name, BindingFlags.Public | BindingFlags.Static);
-                return f != null ? f.GetValue(null) : 0;
-            }
-            catch
-            {
-                return 0;
-            }
-        }
-
-        private MIL_INT ResolveExposureControlType()
-        {
-            if (_exposureControlResolved) return _exposureControlType;
-
-            _exposureControlResolved = true;
-            Type milType = typeof(MIL);
-            foreach (string name in ExposureControlCandidates)
-            {
-                FieldInfo f = milType.GetField(name, BindingFlags.Public | BindingFlags.Static);
-                if (f == null) continue;
-
-                object raw = f.GetValue(null);
-                if (raw == null) continue;
-
-                try
-                {
-                    _exposureControlType = (MIL_INT)Convert.ToInt64(raw);
-                    if (_exposureControlType != MIL.M_NULL) break;
-                }
-                catch
-                {
-                    // try next candidate
-                }
-            }
-
-            return _exposureControlType;
         }
 
         public void ApplyAcquisitionSettings()
@@ -343,6 +388,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                 MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize, MIL.M_START, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
                 ResetFps();
                 IsLive = true;
+                StartCLProtocolAsync();
             }
             else if (!_userWantsGrab && IsLive)
             {
