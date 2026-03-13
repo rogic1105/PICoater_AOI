@@ -67,7 +67,7 @@ namespace AniloxRoll.Monitor.Forms
             _muraChartHelper = new MuraChartHelper(this.chartMura);
             _muraChartHelper.SetOps(_settings.Cam1_Ops);
 
-            checkBoxEnableImageProcessing.Checked = UserSessionState.LastEnableImageProcessing;
+            checkBoxEnableImageProcessing.Checked = UserSessionState.GetLastEnableImageProcessing(checkBoxEnableImageProcessing.Checked);
 
             propertyGrid1.SelectedObject = _settings;
             propertyGrid1.ToolbarVisible = false;
