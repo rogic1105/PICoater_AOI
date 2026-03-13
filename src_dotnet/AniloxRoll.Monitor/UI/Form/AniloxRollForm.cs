@@ -34,6 +34,7 @@ namespace AniloxRoll.Monitor.Forms
         private bool _isApplyingCameraReinit = false;
         private bool _lastReviewProcessedMode = false;
 
+
         public AniloxRollForm()
         {
             InitializeComponent();
@@ -119,6 +120,9 @@ namespace AniloxRoll.Monitor.Forms
 
             // 關閉視窗時確保釋放硬體
             FormClosed += (_, __) => _liveCameraManager.FreeCameras();
+
+            // [右側面板] 初始化相機 TrackBar 與系統 ListView
+            InitializeRightPanelControls();
         }
 
 
@@ -242,6 +246,104 @@ namespace AniloxRoll.Monitor.Forms
 
         private async void btnNextPeriod_Click(object sender, EventArgs e)
             => await _presenter.MovePeriodAsync(+1, _lastReviewProcessedMode, _interactionHelper.LoadImages);
+
+        // ==========================================
+        // --- 右側面板：初始化 ---
+        // ==========================================
+
+        private void InitializeRightPanelControls()
+        {
+            SetupCameraTab();
+            SetupSystemTab();
+        }
+
+        private void SetupCameraTab()
+        {
+            // 從 _settings 套用初始值
+            int expVal = (int)Math.Max(1, Math.Min(2000, _settings.Acquisition.CameraExposureTimeUs));
+            int ghVal  = Math.Max(100, Math.Min(10000, _settings.Acquisition.CameraGrabHeight));
+            trackBarExposure.Value = expVal;
+            numExposure.Value      = expVal;
+            trackBarGrabHeight.Value = ghVal;
+            numGrabHeight.Value      = ghVal;
+
+            // ── 曝光時間 事件繫結 ─────────────────────────
+            bool syncingExp = false;
+            trackBarExposure.ValueChanged += (s, e) =>
+            {
+                if (syncingExp) return;
+                syncingExp = true;
+                numExposure.Value = trackBarExposure.Value;
+                _settings.Acquisition.CameraExposureTimeUs = trackBarExposure.Value;
+                _liveCameraManager?.SetCaptureSettings(_settings);
+                syncingExp = false;
+            };
+            numExposure.ValueChanged += (s, e) =>
+            {
+                if (syncingExp) return;
+                syncingExp = true;
+                int v = (int)numExposure.Value;
+                trackBarExposure.Value = Math.Max(1, Math.Min(2000, v));
+                _settings.Acquisition.CameraExposureTimeUs = v;
+                _liveCameraManager?.SetCaptureSettings(_settings);
+                syncingExp = false;
+            };
+
+            // ── 擷取高度 事件繫結 ─────────────────────────
+            bool syncingGH = false;
+            trackBarGrabHeight.ValueChanged += (s, e) =>
+            {
+                if (syncingGH) return;
+                syncingGH = true;
+                numGrabHeight.Value = trackBarGrabHeight.Value;
+                _settings.Acquisition.CameraGrabHeight = trackBarGrabHeight.Value;
+                _liveCameraManager?.SetCaptureSettings(_settings);
+                syncingGH = false;
+            };
+            numGrabHeight.ValueChanged += (s, e) =>
+            {
+                if (syncingGH) return;
+                syncingGH = true;
+                int v = (int)numGrabHeight.Value;
+                trackBarGrabHeight.Value = Math.Max(100, Math.Min(10000, v));
+                _settings.Acquisition.CameraGrabHeight = v;
+                _liveCameraManager?.SetCaptureSettings(_settings);
+                syncingGH = false;
+            };
+        }
+
+        private void SetupSystemTab()
+        {
+            // ── 相機硬體設定 ──────────────────────────────
+            listViewCameras.Columns.Add("Cam",      38);
+            listViewCameras.Columns.Add("System",   80);
+            listViewCameras.Columns.Add("Sys#",     38);
+            listViewCameras.Columns.Add("Dev#",     38);
+            listViewCameras.Columns.Add("DCF Path", 200);
+
+            var sysSettings = SystemSettings.CreateDefault();
+            foreach (var cam in sysSettings.CameraDevices)
+            {
+                var item = new ListViewItem(cam.Id.ToString());
+                item.SubItems.Add(cam.SystemDescriptor ?? "");
+                item.SubItems.Add(cam.SystemNum.ToString());
+                item.SubItems.Add(cam.DevNum.ToString());
+                item.SubItems.Add(cam.DcfPath ?? "");
+                listViewCameras.Items.Add(item);
+            }
+
+            // ── 影像引擎常數 ──────────────────────────────
+            listViewEngine.Columns.Add("參數", 160);
+            listViewEngine.Columns.Add("值",    90);
+
+            listViewEngine.Items.Add(new ListViewItem(new[] { "MaxWidth",          InspectionEngineConfig.MaxWidth.ToString() }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "MaxHeight",         InspectionEngineConfig.MaxHeight.ToString() }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "MaxThumbnailSide",  InspectionEngineConfig.MaxThumbnailSide.ToString() }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "DefaultBgSigma",    InspectionEngineConfig.DefaultBgSigma.ToString() }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "DefaultRidgeSigma", InspectionEngineConfig.DefaultRidgeSigma.ToString() }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "DefaultHessianMax", InspectionEngineConfig.DefaultHessianMaxFactor.ToString() }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "DefaultRidgeMode",  InspectionEngineConfig.DefaultRidgeMode }));
+        }
 
     }
 }

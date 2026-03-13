@@ -79,8 +79,46 @@ CoreCV_FastReadBMP  →  AoiService.ProcessImage  →  CoreCV_Resize_GPU  →  C
 | `src_dotnet/AniloxRoll.Monitor/ImageProcessing/InspectionEngineConfig.cs` | MaxWidth=16384, MaxHeight=10000 |
 | `src_dotnet/AniloxRoll.Monitor/ImageProcessing/BatchInspectionService.cs` | Parallel.For 批次縮圖 |
 | `src_dotnet/AniloxRoll.Monitor/UI/Widgets/FormInteractionHelper.cs` | UI 互動、gallery 選擇、計時 |
+| `src_dotnet/AniloxRoll.Monitor/UI/Form/AniloxRollForm.cs` | Form 邏輯：事件、InitializeSystem、右側面板初始化 |
+| `src_dotnet/AniloxRoll.Monitor/UI/Form/AniloxRollForm.Designer.cs` | Form 控制項佈局（VS Designer 管理） |
+| `src_dotnet/AniloxRoll.Monitor/Settings/InspectionSettings.cs` | 根設定物件（MachineLayout/Acquisition/Recipe/Storage） |
+| `src_dotnet/AniloxRoll.Monitor/Settings/System/SystemSettings.cs` | 相機硬體拓樸設定（CameraHardwareConfig 清單） |
 | `sdk/AOI_SDK/core_cv_api/src/export_api.cpp` | CoreCV_Resize_GPU 實作 |
 | `sdk/AOI_SDK/core_cv_api/include/export_c/export_api.h` | CoreCV_Resize_GPU 宣告 |
+
+---
+
+## AniloxRoll.Monitor 右側參數面板（tabControl1）
+
+Form 右側固定有 `tabControl1`（Location=1209,12，Size=276×679），包含 3 個 Tab：
+
+| Tab | 控制項 | 內容 |
+|-----|--------|------|
+| **"檢測"** (tabPage3) | `propertyGrid1`（Dock=Fill） | `InspectionSettings`（MachineLayout / Acquisition / Recipe / Storage） |
+| **"相機"** (tabPage4) | `panelExposure` + `panelGrabHeight` | TrackBar + NumericUpDown 控制曝光時間(1–2000μs)、擷取高度(100–10000px) |
+| **"系統"** (tabPage5) | `listViewCameras` + `listViewEngine` | SystemSettings.CameraDevices 清單 + InspectionEngineConfig 常數 |
+
+### 參數分類（UI 可調 vs JSON 限定）
+
+| 類別 | 參數 | 位置 |
+|------|------|------|
+| A. 相機硬體設定 | Id, SystemDescriptor, SystemNum, DevNum, DcfPath | JSON only（`system-settings.json`） |
+| B. 取像設定（控制） | CameraExposureTimeUs, CameraGrabHeight | TrackBar（"相機" tab）+ JSON |
+| C. 機台佈局 | Cam1–7_Ops, Cam1–7_Pos | PropertyGrid（"檢測" tab）+ JSON |
+| D. 檢測配方 | HessianMaxFactor, ErrorValueMean, ErrorValueMax | PropertyGrid（"檢測" tab）+ JSON |
+| E. 儲存設定 | EnableAutoCapture, CaptureRootPath | PropertyGrid（"檢測" tab）+ JSON |
+| F. 影像引擎常數 | MaxWidth, MaxHeight, MaxThumbnailSide, Sigma 等 | ListView 唯讀（"系統" tab） |
+
+### 右側面板初始化流程（code-behind）
+
+```
+InitializeSystem()
+  └─ InitializeRightPanelControls()
+       ├─ SetupCameraTab()   ← 從 _settings 套用初始值 + 繫結事件（寫回 _settings + LiveCameraManager）
+       └─ SetupSystemTab()   ← 填充 listViewCameras（SystemSettings）+ listViewEngine（InspectionEngineConfig）
+```
+
+**重要**：`tabControl1` 的所有控制項**必須宣告在 `InitializeComponent()`**（Designer.cs），才能在 VS Designer 顯示。事件繫結（需要 `_settings`、`_liveCameraManager`）保留在 code-behind。
 
 ---
 

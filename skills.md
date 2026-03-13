@@ -87,6 +87,63 @@ AniloxRoll.Monitor 使用 **Pinned Host** 記憶體（picoater pipeline 大量 D
 
 ---
 
+## WinForms Designer 控制項規則
+
+### 控制項必須在 InitializeComponent() 才能在 VS Designer 顯示
+
+動態在 code-behind 建立的控制項（`new TrackBar()`、`new ListView()` 等）**不會出現在 VS Designer**。
+若需要 Designer 能看到，必須：
+
+1. 在 `InitializeComponent()` 頂端加 `this.xxx = new ...`
+2. 加 `SuspendLayout()` / `BeginInit()`（ISupportInitialize 控制項：TrackBar、NumericUpDown）
+3. 加 container 的 `Controls.Add(this.xxx)`
+4. 加控制項屬性設定區塊
+5. 加 `ResumeLayout()` / `EndInit()`
+6. 加 `private System.Windows.Forms.Xxx xxx;` 欄位宣告
+
+然後在 code-behind 的 `InitializeSystem()` 只做：
+- 從 runtime 資料套用初始值（`trackBar.Value = _settings.Xxx`）
+- 繫結事件（需要 `_settings`、service 等 runtime 物件的部分）
+
+### TrackBar + NumericUpDown 雙向同步
+
+避免互觸無窮迴圈的 pattern（用 captured local bool）：
+
+```csharp
+bool syncing = false;
+trackBar.ValueChanged += (s, e) => {
+    if (syncing) return;
+    syncing = true;
+    numericUpDown.Value = trackBar.Value;
+    // ... 寫回設定
+    syncing = false;
+};
+numericUpDown.ValueChanged += (s, e) => {
+    if (syncing) return;
+    syncing = true;
+    trackBar.Value = Math.Max(trackBar.Minimum, Math.Min(trackBar.Maximum, (int)numericUpDown.Value));
+    // ... 寫回設定
+    syncing = false;
+};
+```
+
+`syncing` 是 lambda 捕獲的 local 變數，兩個 lambda 共用同一個 heap slot，C# closure 保證正確。
+
+### AOI.SDK.csproj AllowUnsafeBlocks 陷阱
+
+Solution 將 `Debug|x64` 映射為 `Debug|Any CPU`（Platform="Any CPU" 含空格），導致：
+- `.csproj` 中 `Condition="'Debug|AnyCPU'"` 的 PropertyGroup **不被套用**（名稱不符）
+- `AllowUnsafeBlocks` 必須放在**無條件的全域 PropertyGroup**：
+
+```xml
+<PropertyGroup>
+  <StartupObject />
+  <AllowUnsafeBlocks>true</AllowUnsafeBlocks>   ← 這裡
+</PropertyGroup>
+```
+
+---
+
 ## /perf-diagnose
 
 效能問題排查流程：
