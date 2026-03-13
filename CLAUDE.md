@@ -112,15 +112,18 @@ sdk/AOI_SDK/src_dotnet/MilGrabSample/MilGrabSample/
 
 ### CLProtocol（GenICam Camera Link）
 
-**啟用方式**（`MilCameraUnit.Initialize()` 完成後在背景執行緒自動執行）：
+**啟用時機**：第一次 `MdigGrab`（`ApplyGrabState` → `MdigProcess(M_START)`）後才啟動背景執行緒：
 ```csharp
-MIL.MdigControl(MilDigitizer, MIL.M_GC_CLPROTOCOL_DEVICE_ID, "M_DEFAULT");
-MIL.MdigControl(MilDigitizer, MIL.M_GC_CLPROTOCOL, M_ENABLE);
-// → _clProtocolEnabled = true
+// ApplyGrabState() 內：
+MIL.MdigProcess(..., MIL.M_START, ...);
+IsLive = true;
+StartCLProtocolAsync();   // ← 所有 MIL/GPU 資源就緒後才啟動
 ```
 
 **重要**：`M_GC_CLPROTOCOL, M_ENABLE` 會載入 CLProtocol DLL 並讀取相機 GenICam XML，**耗時數秒**。
-必須用 `Task.Run` 在背景執行，不可同步呼叫，否則 Init MIL 按鈕會卡頓。
+- 必須用 `Task.Run` 在背景執行，不可同步呼叫
+- **不可在 `Initialize()` 期間啟動**：背景執行緒的 `MdigControl` 會與主執行緒的 MIL 資源分配（`MbufAlloc2d` 等）競爭內部鎖，導致 Init 按鈕卡頓
+- `_clProtocolInitStarted`（`volatile bool`）guard 防止 ToggleGrab 重複觸發
 
 CLProtocol 就緒後自動重新套用 `_appliedExposureUs`（`SetExposureUs` 重呼叫）。
 
