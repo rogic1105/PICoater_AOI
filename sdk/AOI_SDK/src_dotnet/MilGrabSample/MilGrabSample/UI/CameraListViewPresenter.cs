@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Windows.Forms;
 
-namespace Envision_MdigGrab
+namespace MilGrabSample
 {
     /// <summary>
     /// 負責 ListView 欄位的初始化與每次 Timer Tick 的資料更新，以及 FPS StatusStrip label。

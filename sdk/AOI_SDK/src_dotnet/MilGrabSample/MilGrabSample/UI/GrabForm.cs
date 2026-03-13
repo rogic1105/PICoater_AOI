@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Matrox.MatroxImagingLibrary;
 
-namespace Envision_MdigGrab
+namespace MilGrabSample
 {
     /// <summary>
     /// 主視窗，負責 UI 佈局與按鈕事件。

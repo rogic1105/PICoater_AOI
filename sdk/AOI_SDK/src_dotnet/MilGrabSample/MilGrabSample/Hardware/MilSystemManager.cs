@@ -1,6 +1,6 @@
 using Matrox.MatroxImagingLibrary;
 
-namespace Envision_MdigGrab
+namespace MilGrabSample
 {
     /// <summary>
     /// 管理 MIL Application Context 與各張擷取卡（System）的分配與釋放。

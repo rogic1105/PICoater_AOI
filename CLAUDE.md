@@ -84,12 +84,12 @@ CoreCV_FastReadBMP  →  AoiService.ProcessImage  →  CoreCV_Resize_GPU  →  C
 
 ---
 
-## Envision_MdigGrab 模組（MIL 相機擷取工具）
+## MilGrabSample 模組（MIL 相機擷取工具）
 
 ### 路徑
 
 ```
-sdk/AOI_SDK/src_dotnet/Envision_MdigGrab/Envision_MdigGrab/
+sdk/AOI_SDK/src_dotnet/MilGrabSample/MilGrabSample/
 ├── Config/
 │   └── CameraConfig.cs          ← 單台相機靜態設定（Id, DCF, ExposureUs, Panel, Label）
 ├── Hardware/

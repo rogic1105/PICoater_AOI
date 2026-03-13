@@ -5,11 +5,11 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProductVersion>9.0.30729</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>{3673D056-EC7F-443F-9DF3-4A6B185DFBC2}</ProjectGuid>
+    <ProjectGuid>{9E9F5938-3FD6-4E47-BF50-675C286D72DF}</ProjectGuid>
     <OutputType>WinExe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Envision_MdigGrab</RootNamespace>
-    <AssemblyName>Envision_MdigGrab</AssemblyName>
+    <RootNamespace>MilGrabSample</RootNamespace>
+    <AssemblyName>MilGrabSample</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
@@ -76,15 +76,12 @@
   <ItemGroup>
     <!-- Config -->
     <Compile Include="Config\CameraConfig.cs" />
-
     <!-- Hardware -->
     <Compile Include="Hardware\MilCameraUnit.cs" />
     <Compile Include="Hardware\MilImageProcessor.cs" />
     <Compile Include="Hardware\MilSystemManager.cs" />
-
     <!-- Session -->
     <Compile Include="Session\CameraSession.cs" />
-
     <!-- UI -->
     <Compile Include="UI\CameraListViewPresenter.cs" />
     <Compile Include="UI\CameraParamPanel.cs" />
@@ -94,7 +91,6 @@
     <Compile Include="UI\GrabForm.Designer.cs">
       <DependentUpon>GrabForm.cs</DependentUpon>
     </Compile>
-
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <EmbeddedResource Include="UI\GrabForm.resx">

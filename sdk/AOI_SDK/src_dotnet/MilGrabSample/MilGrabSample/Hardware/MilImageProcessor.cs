@@ -1,6 +1,6 @@
 ﻿using Matrox.MatroxImagingLibrary;
 
-namespace Envision_MdigGrab
+namespace MilGrabSample
 {
     /// <summary>
     /// 提供基於 MIL 的影像處理靜態方法，包含欄均值消除、Hessian 垂直脊線偵測、二值化與影像複製。

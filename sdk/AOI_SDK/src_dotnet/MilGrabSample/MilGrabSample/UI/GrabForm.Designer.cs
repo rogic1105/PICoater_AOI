@@ -1,4 +1,4 @@
-﻿namespace Envision_MdigGrab
+﻿namespace MilGrabSample
 {
     partial class GrabForm
     {

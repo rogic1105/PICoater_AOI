@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Matrox.MatroxImagingLibrary;
 
-namespace Envision_MdigGrab
+namespace MilGrabSample
 {
     /// <summary>
     /// 管理多台相機的生命週期：初始化、抓圖開關、釋放資源。

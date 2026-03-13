@@ -1,7 +1,7 @@
 using System.Windows.Forms;
 using Matrox.MatroxImagingLibrary;
 
-namespace Envision_MdigGrab
+namespace MilGrabSample
 {
     /// <summary>
     /// 單台相機的靜態設定資料。

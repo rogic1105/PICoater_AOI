@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using Matrox.MatroxImagingLibrary;
 using AOI.SDK.Core;
 
-namespace Envision_MdigGrab
+namespace MilGrabSample
 {
     /// <summary>
     /// 封裝單台相機的所有 MIL 資源：Digitizer、Display、Grab Buffer、Processing Buffer。
