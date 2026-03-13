@@ -39,7 +39,10 @@ namespace AniloxRoll.Monitor.UI.State
         public static string LastHour => Execute(s => s.LastHour, string.Empty);
         public static string LastMin => Execute(s => s.LastMin, string.Empty);
         public static string LastSec => Execute(s => s.LastSec, string.Empty);
-        public static bool LastEnableImageProcessing => Execute(s => s.LastEnableImageProcessing, true);
+        public static bool LastEnableImageProcessing => GetLastEnableImageProcessing(false);
+
+        public static bool GetLastEnableImageProcessing(bool fallback)
+            => Execute(s => s.LastEnableImageProcessing, fallback);
 
         public static void Save() => Execute(s => s.Save());
         public static void SetLastDataPath(string path) => Execute(s => s.LastDataPath = path ?? string.Empty);
