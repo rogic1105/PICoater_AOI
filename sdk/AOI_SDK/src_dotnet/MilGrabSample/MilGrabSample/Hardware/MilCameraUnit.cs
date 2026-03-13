@@ -90,6 +90,7 @@ namespace MilGrabSample
         /// false = fallback 至 MdigControl/MdigInquire（M_EXPOSURE_TIME，單位 ns）。
         /// </summary>
         private bool _clProtocolEnabled = false;
+        private volatile bool _clProtocolInitStarted = false;
 
         // ================= CLProtocol 初始化 =================
 
@@ -101,6 +102,8 @@ namespace MilGrabSample
         /// </summary>
         private void StartCLProtocolAsync()
         {
+            if (_clProtocolInitStarted) return;
+            _clProtocolInitStarted = true;
             Task.Run(() => TryEnableCLProtocol());
         }
 
@@ -503,9 +506,6 @@ namespace MilGrabSample
 
             if (MilDigitizer != MIL.M_NULL)
             {
-                // 背景啟用 CLProtocol（載入 DLL + 讀取 GenICam XML，不阻塞 Initialize）
-                StartCLProtocolAsync();
-
                 MIL.MdispAlloc(_ownerSystemId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref MilDisplay);
 
                 MIL_INT sizeX = MIL.MdigInquire(MilDigitizer, MIL.M_SIZE_X, MIL.M_NULL);
@@ -609,6 +609,10 @@ namespace MilGrabSample
                 MIL.MdigProcess(MilDigitizer, _milGrabBuffers, _milGrabBufferListSize,
                     MIL.M_START, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
                 IsLive = true;
+
+                // 第一次抓圖啟動後才初始化 CLProtocol，
+                // 確保不與 Initialize() 的 MIL 分配操作競爭，且有圖像串流再啟用 GenICam 功能。
+                StartCLProtocolAsync();
             }
             else if (!_userWantsGrab && IsLive)
             {
