@@ -58,6 +58,7 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public float ErrorValueMax { get => Recipe.ErrorValueMax; set => Recipe.ErrorValueMax = value; }
         [Browsable(false)] public int CameraGrabHeight { get => Acquisition.CameraGrabHeight; set => Acquisition.CameraGrabHeight = value; }
         [Browsable(false)] public double CameraExposureTimeUs { get => Acquisition.CameraExposureTimeUs; set => Acquisition.CameraExposureTimeUs = value; }
+        [Browsable(false)] public double CameraLineRateHz { get => Acquisition.CameraLineRateHz; set => Acquisition.CameraLineRateHz = value; }
         [Browsable(false)] public bool EnableAutoCapture { get => Storage.EnableAutoCapture; set => Storage.EnableAutoCapture = value; }
         [Browsable(false)] public string CaptureRootPath { get => Storage.CaptureRootPath; set => Storage.CaptureRootPath = value; }
     }

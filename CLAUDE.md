@@ -81,48 +81,222 @@ CoreCV_FastReadBMP  →  AoiService.ProcessImage  →  CoreCV_Resize_GPU  →  C
 | `src_dotnet/AniloxRoll.Monitor/UI/Widgets/FormInteractionHelper.cs` | UI 互動、gallery 選擇、計時 |
 | `src_dotnet/AniloxRoll.Monitor/UI/Form/AniloxRollForm.cs` | Form 邏輯：事件、InitializeSystem、右側面板初始化 |
 | `src_dotnet/AniloxRoll.Monitor/UI/Form/AniloxRollForm.Designer.cs` | Form 控制項佈局（VS Designer 管理） |
+| `src_dotnet/AniloxRoll.Monitor/Acquisition/AniloxCamera.cs` | 單台相機 MIL 資源封裝（CLProtocol、曝光、GrabHeight、Telemetry） |
+| `src_dotnet/AniloxRoll.Monitor/UI/Managers/LiveCameraManager.cs` | 多台相機生命週期管理（Allocate/Grab/Free） |
 | `src_dotnet/AniloxRoll.Monitor/Settings/InspectionSettings.cs` | 根設定物件（MachineLayout/Acquisition/Recipe/Storage） |
+| `src_dotnet/AniloxRoll.Monitor/Settings/Models/AcquisitionSettings.cs` | 取像設定（CameraGrabHeight/CameraExposureTimeUs/CameraLineRateHz） |
 | `src_dotnet/AniloxRoll.Monitor/Settings/System/SystemSettings.cs` | 相機硬體拓樸設定（CameraHardwareConfig 清單） |
 | `sdk/AOI_SDK/core_cv_api/src/export_api.cpp` | CoreCV_Resize_GPU 實作 |
 | `sdk/AOI_SDK/core_cv_api/include/export_c/export_api.h` | CoreCV_Resize_GPU 宣告 |
 
 ---
 
-## AniloxRoll.Monitor 右側參數面板（tabControl1）
+## AniloxRoll.Monitor 右側參數面板（tabControlRight）
 
-Form 右側固定有 `tabControl1`（Location=1209,12，Size=276×679），包含 3 個 Tab：
+Form 右側固定有 `tabControlRight`（Location=1209,12，Size=276×679），包含 3 個 Tab：
 
-| Tab | 控制項 | 內容 |
-|-----|--------|------|
-| **"檢測"** (tabPage3) | `propertyGrid1`（Dock=Fill） | `InspectionSettings`（MachineLayout / Acquisition / Recipe / Storage） |
-| **"相機"** (tabPage4) | `panelExposure` + `panelGrabHeight` | TrackBar + NumericUpDown 控制曝光時間(1–2000μs)、擷取高度(100–10000px) |
-| **"系統"** (tabPage5) | `listViewCameras` + `listViewEngine` | SystemSettings.CameraDevices 清單 + InspectionEngineConfig 常數 |
+| Tab（Name） | Tab Text | 控制項 | 內容 |
+|-------------|----------|--------|------|
+| `tabPageInspSettings` | 檢測設定 | `propertyGrid1`（Dock=Fill） | `InspectionSettings`（MachineLayout / Acquisition / Recipe / Storage） |
+| `tabPageCamera` | 相機參數 | `tabControlCamTabs`（嵌套） | 曝光時間 / 線掃速率 / 擷取高度 各 7 台 |
+| `tabPageSystem` | 系統資訊 | `listViewCameras` + `listViewEngine` | SystemSettings.CameraDevices + InspectionEngineConfig 常數 |
+
+`tabPageCamera` 內嵌 `tabControlCamTabs`，含 3 個子 Tab：
+
+| Sub Tab（Name） | Sub Tab Text | 控制項範圍 |
+|----------------|--------------|------------|
+| `tabPageExposure` | 曝光時間 (μs) | trackBarExposure/numExposure (CAM1 master)；trackBar2–7/numericUpDown2–7 (CAM2–7)；範圍：1–10000 |
+| `tabPageLineRate` | 線掃速率 (Hz) | trackBarGrabHeight/numGrabHeight (CAM1 master)；trackBar8–13/numericUpDown8–13 (CAM2–7)；範圍：1–10000 |
+| `tabPageGrabHeight` | 擷取高度 (px) | trackBar19/numericUpDown19 (CAM1 master)；trackBar1/14–18/numericUpDown1/14–18 (CAM2–7)；範圍：1–10000；預設 2048 |
+
+主內容區為 `tabMain`，含 `tabPageLiveView`（即時監控）、`tabPageReview`（影像回顧）、`tabPageData`（檢測數據）。
 
 ### 參數分類（UI 可調 vs JSON 限定）
 
 | 類別 | 參數 | 位置 |
 |------|------|------|
 | A. 相機硬體設定 | Id, SystemDescriptor, SystemNum, DevNum, DcfPath | JSON only（`system-settings.json`） |
-| B. 取像設定（控制） | CameraExposureTimeUs, CameraGrabHeight | TrackBar（"相機" tab）+ JSON |
-| C. 機台佈局 | Cam1–7_Ops, Cam1–7_Pos | PropertyGrid（"檢測" tab）+ JSON |
-| D. 檢測配方 | HessianMaxFactor, ErrorValueMean, ErrorValueMax | PropertyGrid（"檢測" tab）+ JSON |
-| E. 儲存設定 | EnableAutoCapture, CaptureRootPath | PropertyGrid（"檢測" tab）+ JSON |
-| F. 影像引擎常數 | MaxWidth, MaxHeight, MaxThumbnailSide, Sigma 等 | ListView 唯讀（"系統" tab） |
+| B. 取像設定（控制） | CameraExposureTimeUs, CameraLineRateHz, CameraGrabHeight | TrackBar（`tabPageCamera`）+ JSON |
+| C. 機台佈局 | Cam1–7_Ops, Cam1–7_Pos | PropertyGrid（`tabPageInspSettings`）+ JSON |
+| D. 檢測配方 | HessianMaxFactor, ErrorValueMean, ErrorValueMax | PropertyGrid（`tabPageInspSettings`）+ JSON |
+| E. 儲存設定 | EnableAutoCapture, CaptureRootPath | PropertyGrid（`tabPageInspSettings`）+ JSON |
+| F. 影像引擎常數 | MaxWidth, MaxHeight, MaxThumbnailSide, Sigma 等 | ListView 唯讀（`tabPageSystem`） |
 
 ### 右側面板初始化流程（code-behind）
 
 ```
 InitializeSystem()
   └─ InitializeRightPanelControls()
-       ├─ SetupCameraTab()   ← 從 _settings 套用初始值 + 繫結事件（寫回 _settings + LiveCameraManager）
+       ├─ SetupCameraTab()   ← 設定範圍 + 套用初始值 + 繫結事件（寫回 _settings + LiveCameraManager）
        └─ SetupSystemTab()   ← 填充 listViewCameras（SystemSettings）+ listViewEngine（InspectionEngineConfig）
 ```
 
-**重要**：`tabControl1` 的所有控制項**必須宣告在 `InitializeComponent()`**（Designer.cs），才能在 VS Designer 顯示。事件繫結（需要 `_settings`、`_liveCameraManager`）保留在 code-behind。
+**重要**：`tabControlRight` 的所有控制項**必須宣告在 `InitializeComponent()`**（Designer.cs），才能在 VS Designer 顯示。事件繫結（需要 `_settings`、`_liveCameraManager`）保留在 code-behind。
+
+**tabPageLineRate 控制項命名注意**：`trackBarGrabHeight`/`numGrabHeight`/`panelGrabHeight` 名稱源自歷史遺留，實際對應**線掃速率**（Hz），不是擷取高度。程式碼內以 `syncingLr` / `SetLineRateForAll` 處理。
 
 ---
 
-## MilGrabSample 模組（MIL 相機擷取工具）
+## MIL API 取像模組（AniloxCamera / LiveCameraManager）
+
+### 架構對應
+
+```
+LiveCameraManager           ← 多台相機生命週期（Allocate/Grab/Free/Reinitialize）
+    │
+    └─ AniloxCamera × 7     ← 單台相機 MIL 資源（對應 MilGrabSample/MilCameraUnit）
+            │
+            └─ CameraSystemManager  ← MIL Application + System（對應 MilSystemManager）
+```
+
+### MIL 資源分配順序（AniloxCamera.Initialize）
+
+```
+MdigAlloc(systemId, devNum, dcfPath)          // 1. 開 Digitizer
+  ↓
+MdigControl(M_SOURCE_SIZE_Y, grabHeight)      // 2. 設 Grab 高度（查尺寸前先設）
+  ↓
+MdispAlloc × 2（primary + secondary）         // 3. 開 Display（AniloxCamera 有副顯）
+  ↓
+MdigInquire(M_SIZE_X / M_SIZE_Y)              // 4. 查實際尺寸
+  ↓
+new byte[W×H]  +  NativeBufferPool(W, H, 1)  // 5. CPU buffer + CUDA Pinned Memory
+  ↓
+MbufAlloc2d × 2（Grab，M_GRAB+M_PROC）        // 6. Grab Buffer（雙緩衝）
+MbufAlloc2d（Display，M_DISP+M_PROC）         // 7. Display Buffer
+MbufAlloc2d（Proc，M_PROC）                   // 8. Processing Buffer
+  ↓
+MdispSelectWindow(display, displayBuf, hwnd)  // 9. 綁定 Panel
+MdispControl(M_SCALE_DISPLAY, M_ONCE)
+MdispControl(M_CENTER_DISPLAY, M_ENABLE)
+MdispControl(M_MOUSE_USE, M_ENABLE)
+  ↓
+MdispHookFunction(M_MOUSE_MOVE)               // 10. 掛 Mouse Hook
+MdispHookFunction(M_MOUSE_LEFT_BUTTON_DOWN)
+  ↓
+SetExposureUs(_appliedExposureUs)             // 11. 套用初始曝光（CLProtocol 尚未啟用，走 legacy ns 路徑）
+```
+
+**注意**：步驟 2 必須在步驟 4 之前，否則 Buffer 大小錯誤。CLProtocol **不在此處啟動**（會與 MbufAlloc2d 競爭 MIL 內部鎖）。
+
+### CLProtocol 啟動時序
+
+```
+SetUserGrabIntent(true)
+  └─ ApplyGrabState()
+       ├─ CheckPresence()                          // 確認相機在線
+       ├─ MdigProcess(M_START, callback)           // 開始連續抓圖
+       ├─ IsLive = true
+       └─ StartCLProtocolAsync()                   // 所有資源就緒後才啟動
+              └─ Task.Run(TryEnableCLProtocol)     // 背景執行，不阻塞 UI
+                   ├─ MdigControl(M_GC_CLPROTOCOL_DEVICE_ID, "M_DEFAULT")
+                   ├─ MdigControl(M_GC_CLPROTOCOL, M_ENABLE)  // 耗時 1–2 秒
+                   ├─ _clProtocolEnabled = true
+                   ├─ SetExposureUs(_appliedExposureUs)    // 重套曝光（改走 Feature API）
+                   └─ SetLineRateHz(_appliedLineRateHz)    // 重套線掃速率（CLProtocol 才能設）
+```
+
+`_clProtocolInitStarted`（`volatile bool`）guard 防止 ToggleGrab 重複觸發。
+
+### 曝光設定規則
+
+| 條件 | Set | Get（量測） | 單位 |
+|------|-----|------------|------|
+| CLProtocol 啟用 | `MdigControlFeature("ExposureTime", M_TYPE_DOUBLE)` | `MdigInquireFeature("ExposureTime")` | **μs**（直接） |
+| CLProtocol 未啟用 | `MdigControl(M_EXPOSURE_TIME, μs×1000)` | `MdigInquire(M_EXPOSURE_TIME)` ÷ 1000 | ns → μs |
+
+- `_appliedExposureUs` 永遠記錄最後設定值，不依賴硬體回讀
+- Camera Link 無 CLProtocol 時 `MdigInquire(M_EXPOSURE_TIME)` 通常回傳 0
+
+### 線掃速率設定規則
+
+| 條件 | 行為 |
+|------|------|
+| CLProtocol 啟用 | `MdigControlFeature("AcquisitionLineRate", M_TYPE_DOUBLE, Hz)` 立即生效 |
+| CLProtocol 未啟用 | 僅記錄至 `_appliedLineRateHz`，待 CLProtocol 就緒後自動重套 |
+
+`SetLineRateHz` 與 `SetExposureUs` 機制一致：先記錄、後套用，重新初始化後也能正確恢復。
+
+### SetGrabHeight 完整流程（不可省略任何步驟）
+
+```
+1. MdigProcess(M_STOP)                           // 停止抓圖
+2. MbufFree(GrabBuffers × 2)                     // 釋放舊 MIL Buffer
+   MbufFree(DisplayBuffer)
+   MbufFree(ProcBuffer)
+3. NativeBufferPool.Dispose()                    // 釋放 CUDA Pinned Memory
+4. MdigControl(M_SOURCE_SIZE_Y, newHeight)       // 設定新高度
+5. MdigInquire(M_SIZE_X / M_SIZE_Y)              // 重查實際尺寸（硬體可能夾緊）
+6. new byte[W×H]  +  new NativeBufferPool(W,H,1) // 重新分配 CPU + CUDA Pinned
+7. MbufAlloc2d × 4                               // 重新分配 MIL Buffer
+8. MdispSelectWindow(display, newDisplayBuf, hwnd)// 重新綁定 Display
+9. MdigProcess(M_START)  ← if wasLive            // 恢復抓圖
+```
+
+**崩潰警告**：舊尺寸 Buffer 與新尺寸不符會導致 MIL 崩潰。必須先釋放再重新分配，不可省略步驟 2–3。
+
+### MIL 資源釋放順序（AniloxCamera.Dispose）
+
+```
+_isReleased = true                               // 立即阻止 ProcessingFunction 繼續
+  ↓
+MdigProcess(M_STOP)                              // 停止連續抓圖
+  ↓
+MdispHookFunction(M_MOUSE_MOVE + M_UNHOOK)       // 移除 Mouse Hook
+MdispHookFunction(M_MOUSE_LEFT_BUTTON_DOWN + M_UNHOOK)
+MdispSelectWindow(M_NULL, IntPtr.Zero)           // 取消 Display 綁定
+  ↓
+MbufFree(GrabBuffers × 2)                        // 釋放 Buffer
+MbufFree(DisplayBuffer)
+MbufFree(ProcBuffer)
+  ↓
+NativeBufferPool.Dispose()                       // 釋放 CUDA Pinned Memory
+AoiService.Dispose()
+  ↓
+MdispFree(primary)  +  MdispFree(secondary)      // 釋放 Display
+  ↓
+MdigFree(digitizer)                              // 最後釋放 Digitizer
+  ↓
+GCHandle.Free()                                  // 釋放 GCHandle（Callback 安全鎖）
+```
+
+LiveCameraManager 釋放順序：
+```
+IsReleasing = true  →  Timer.Stop()
+  →  cam.Free() × 7  →  MsysFree × n  →  MappFreeDefault
+```
+
+`IsReleasing = true` 必須在 `Timer.Stop()` 之前設定，防止 Tick 存取已釋放相機資源。
+
+### Telemetry 查詢方法（AniloxCamera）
+
+| 方法 | MIL API | 說明 |
+|------|---------|------|
+| `CurrentFps` | `MdigInquire(M_PROCESS_FRAME_RATE)` | 實際量測 FPS |
+| `GetSelectedFrameRate()` | `MdigInquire(M_SELECTED_FRAME_RATE)` | DCF 設定目標 FPS |
+| `GetFrameCount()` | `MdigInquire(M_PROCESS_FRAME_COUNT)` | 累計處理幀數 |
+| `GetFrameMissed()` | `MdigInquire(M_PROCESS_FRAME_MISSED)` | Callback 遺漏幀數 |
+| `GetGrabFrameMissed()` | `MdigInquire(M_GRAB_FRAME_MISSED)` | 硬體層遺漏幀數 |
+| `GetScanMode()` | `MdigInquire(M_SCAN_MODE)` | "Line" / "Progressive" |
+| `GetLineRateHz()` | `MdigInquireFeature("AcquisitionLineRate")` | 需 CLProtocol 啟用 |
+| `GetMeasuredExposureUs()` | `MdigInquireFeature("ExposureTime")` | 需 CLProtocol 啟用 |
+| `GetCameraTemperature()` | `MdigInquireFeature("DeviceTemperature")` | 相機本體溫度（°C） |
+| `GetFpgaTemperature()` | `MsysInquire(M_TEMPERATURE_FPGA)` | 擷取卡 FPGA 溫度 |
+| `GetMemoryFreeMB()` | `MsysInquire(M_MEMORY_FREE)` | 板卡可用記憶體（MB） |
+| `GetPcieNumberOfLanes()` | `MsysInquire(M_PCIE_NUMBER_OF_LANES)` | PCIe 通道數 |
+| `GetPcieSpeed()` | `MsysInquire(M_PCIE_SPEED)` | "Gen1"/"Gen2"/"Gen3" |
+
+### 已知 MIL .NET Wrapper 限制
+
+- `M_LINE_RATE` / `M_LINE_RATE_CURRENT` / `M_GRAB_SIZE_Y` 常數**不存在**於 .NET wrapper，不可使用。
+  - Line Rate → CLProtocol Feature API `"AcquisitionLineRate"`
+  - Grab Height → `MdigControl(M_SOURCE_SIZE_Y, height)`（`M_SOURCE_SIZE_Y` 存在）
+- `MdigHookFunction(M_CAMERA_PRESENT)` 已移除，改用 Timer 每 500ms 輪詢 `MdigInquire(M_CAMERA_PRESENT)`。
+- CLProtocol 初始化期間（約 1–2 秒）Line Rate、Exp Meas、Cam Temp 無法讀取，屬正常現象。
+
+---
+
+## MilGrabSample 模組（MIL 相機擷取參考實作）
 
 ### 路徑
 
@@ -148,43 +322,6 @@ sdk/AOI_SDK/src_dotnet/MilGrabSample/MilGrabSample/
 - `CameraSession` 不含任何 UI 依賴
 - `MilCameraUnit` 不管 MIL System 生命週期，System 由 `CameraSession` 統一管理
 
-### CLProtocol（GenICam Camera Link）
-
-**啟用時機**：第一次 `MdigGrab`（`ApplyGrabState` → `MdigProcess(M_START)`）後才啟動背景執行緒：
-```csharp
-// ApplyGrabState() 內：
-MIL.MdigProcess(..., MIL.M_START, ...);
-IsLive = true;
-StartCLProtocolAsync();   // ← 所有 MIL/GPU 資源就緒後才啟動
-```
-
-**重要**：`M_GC_CLPROTOCOL, M_ENABLE` 會載入 CLProtocol DLL 並讀取相機 GenICam XML，**耗時數秒**。
-- 必須用 `Task.Run` 在背景執行，不可同步呼叫
-- **不可在 `Initialize()` 期間啟動**：背景執行緒的 `MdigControl` 會與主執行緒的 MIL 資源分配（`MbufAlloc2d` 等）競爭內部鎖，導致 Init 按鈕卡頓
-- `_clProtocolInitStarted`（`volatile bool`）guard 防止 ToggleGrab 重複觸發
-
-CLProtocol 就緒後自動重新套用 `_appliedExposureUs`（`SetExposureUs` 重呼叫）。
-
-### 曝光設定規則
-
-| 條件 | Set | Get（量測） | 單位 |
-|------|-----|------------|------|
-| CLProtocol 啟用 | `MdigControlFeature("ExposureTime")` | `MdigInquireFeature("ExposureTime")` | **μs**（直接） |
-| CLProtocol 未啟用 | `MdigControl(M_EXPOSURE_TIME, μs×1000)` | `MdigInquire(M_EXPOSURE_TIME)` ÷ 1000 | ns → μs |
-
-- Camera Link 無 CLProtocol 時 `MdigInquire(M_EXPOSURE_TIME)` 通常回傳 0（硬體不支援讀回）
-- `_appliedExposureUs` 永遠記錄最後設定值，不依賴硬體回讀
-
-### Feature API（CLProtocol 啟用後可用）
-
-| Feature 名稱 | 用途 | 單位 |
-|---|---|---|
-| `"ExposureTime"` | 曝光讀寫 | μs |
-| `"AcquisitionLineRate"` | Line Rate 讀寫 | Hz |
-| `"DeviceTemperature"` | 相機本體溫度（唯讀） | °C |
-
-使用 `MdigInquireFeature` / `MdigControlFeature`，均需先確認 `_clProtocolEnabled == true`。
-
 ### ListView 欄位索引（共 16 欄，0–15）
 
 | 索引 | 欄位名稱 | 來源 | 格式 |
@@ -207,22 +344,3 @@ CLProtocol 就緒後自動重新套用 `_appliedExposureUs`（`SetExposureUs` �
 | [15] | PCIe Speed | `MsysInquire(M_PCIE_SPEED)` | Gen1/2/3 |
 
 **維護注意**：新增或移除欄位時，`Initialize()`（`for i < N`）、`Update()`（各 SubItems[n]）、`ResetAll()`（`for i <= N`）三處必須同步修改。
-
-### MIL 資源釋放順序
-
-```
-MdigProcess(M_STOP) → MdispHookFunction(M_UNHOOK) → MbufFree × n
-→ MdispFree → MdigFree     （MilCameraUnit.Free()）
-→ MsysFree × n             （CameraSession.ReleaseResources()）
-→ MappFreeDefault           （MilSystemManager.FreeApplication()）
-```
-
-`IsReleasing = true` 必須在 Timer Stop 之前設定，防止 Tick 存取已釋放資源。
-
-### 已知限制
-
-- `M_LINE_RATE` / `M_LINE_RATE_CURRENT` / `M_GRAB_SIZE_Y` 常數在 MIL .NET wrapper 中**不存在**，不可使用。
-  - Line Rate → CLProtocol Feature API `"AcquisitionLineRate"`
-  - Grab Height → `MdigControl(M_SOURCE_SIZE_Y, height)`（`M_SOURCE_SIZE_Y` 存在），且必須走完整 Stop → Free Buffers → Set → Realloc → Restart 流程，否則舊尺寸 Buffer 與新尺寸不符會崩潰。
-- `MdigHookFunction(M_CAMERA_PRESENT)` 已移除，相機連線狀態改由 Timer 每 500ms 輪詢 `MdigInquire(M_CAMERA_PRESENT)`。
-- CLProtocol 初始化期間（約 1–2 秒）`Exp Meas`、`Line Rate`、`Cam Temp` 欄位會顯示 N/A，屬正常現象。

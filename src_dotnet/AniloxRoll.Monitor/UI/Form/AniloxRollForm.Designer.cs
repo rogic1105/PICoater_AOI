@@ -31,8 +31,8 @@
             System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea6 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
             System.Windows.Forms.DataVisualization.Charting.Legend legend6 = new System.Windows.Forms.DataVisualization.Charting.Legend();
             System.Windows.Forms.DataVisualization.Charting.Series series6 = new System.Windows.Forms.DataVisualization.Charting.Series();
-            this.tabControl = new System.Windows.Forms.TabControl();
-            this.tabPage1 = new System.Windows.Forms.TabPage();
+            this.tabMain = new System.Windows.Forms.TabControl();
+            this.tabPageLiveView = new System.Windows.Forms.TabPage();
             this.checkBoxEnableImageProcessing = new System.Windows.Forms.CheckBox();
             this.btnCameraFree = new System.Windows.Forms.Button();
             this.btnCameraGrab = new System.Windows.Forms.Button();
@@ -44,7 +44,7 @@
             this.panel3 = new System.Windows.Forms.Panel();
             this.panel2 = new System.Windows.Forms.Panel();
             this.panel1 = new System.Windows.Forms.Panel();
-            this.tabPage2 = new System.Windows.Forms.TabPage();
+            this.tabPageReview = new System.Windows.Forms.TabPage();
             this.label_sec = new System.Windows.Forms.Label();
             this.label_min = new System.Windows.Forms.Label();
             this.label_hr = new System.Windows.Forms.Label();
@@ -75,11 +75,11 @@
             this.propertyGrid1 = new System.Windows.Forms.PropertyGrid();
             this.statusStrip1 = new System.Windows.Forms.StatusStrip();
             this.lblPixelInfo = new System.Windows.Forms.ToolStripStatusLabel();
-            this.tabControl1 = new System.Windows.Forms.TabControl();
-            this.tabPage3 = new System.Windows.Forms.TabPage();
-            this.tabPage4 = new System.Windows.Forms.TabPage();
-            this.tabControl2 = new System.Windows.Forms.TabControl();
-            this.tabPage6 = new System.Windows.Forms.TabPage();
+            this.tabControlRight = new System.Windows.Forms.TabControl();
+            this.tabPageInspSettings = new System.Windows.Forms.TabPage();
+            this.tabPageCamera = new System.Windows.Forms.TabPage();
+            this.tabControlCamTabs = new System.Windows.Forms.TabControl();
+            this.tabPageExposure = new System.Windows.Forms.TabPage();
             this.panel14 = new System.Windows.Forms.Panel();
             this.label13 = new System.Windows.Forms.Label();
             this.trackBar7 = new System.Windows.Forms.TrackBar();
@@ -115,7 +115,7 @@
             this.trackBarExposure = new System.Windows.Forms.TrackBar();
             this.numExposure = new System.Windows.Forms.NumericUpDown();
             this.lblExposure = new System.Windows.Forms.Label();
-            this.tabPage7 = new System.Windows.Forms.TabPage();
+            this.tabPageLineRate = new System.Windows.Forms.TabPage();
             this.panel15 = new System.Windows.Forms.Panel();
             this.label15 = new System.Windows.Forms.Label();
             this.trackBar8 = new System.Windows.Forms.TrackBar();
@@ -151,7 +151,7 @@
             this.trackBarGrabHeight = new System.Windows.Forms.TrackBar();
             this.numGrabHeight = new System.Windows.Forms.NumericUpDown();
             this.lblGrabHeight = new System.Windows.Forms.Label();
-            this.tabPage8 = new System.Windows.Forms.TabPage();
+            this.tabPageGrabHeight = new System.Windows.Forms.TabPage();
             this.panel21 = new System.Windows.Forms.Panel();
             this.label1 = new System.Windows.Forms.Label();
             this.trackBar1 = new System.Windows.Forms.TrackBar();
@@ -187,15 +187,15 @@
             this.trackBar19 = new System.Windows.Forms.TrackBar();
             this.numericUpDown19 = new System.Windows.Forms.NumericUpDown();
             this.label40 = new System.Windows.Forms.Label();
-            this.tabPage5 = new System.Windows.Forms.TabPage();
+            this.tabPageSystem = new System.Windows.Forms.TabPage();
             this.listViewEngine = new System.Windows.Forms.ListView();
             this.lblEngineConst = new System.Windows.Forms.Label();
             this.listViewCameras = new System.Windows.Forms.ListView();
             this.lblCamHardware = new System.Windows.Forms.Label();
-            this.tabPage9 = new System.Windows.Forms.TabPage();
-            this.tabControl.SuspendLayout();
-            this.tabPage1.SuspendLayout();
-            this.tabPage2.SuspendLayout();
+            this.tabPageData = new System.Windows.Forms.TabPage();
+            this.tabMain.SuspendLayout();
+            this.tabPageLiveView.SuspendLayout();
+            this.tabPageReview.SuspendLayout();
             this.tableLayoutPanel1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.chartMura)).BeginInit();
@@ -207,11 +207,11 @@
             ((System.ComponentModel.ISupportInitialize)(this.pbCam6)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam7)).BeginInit();
             this.statusStrip1.SuspendLayout();
-            this.tabControl1.SuspendLayout();
-            this.tabPage3.SuspendLayout();
-            this.tabPage4.SuspendLayout();
-            this.tabControl2.SuspendLayout();
-            this.tabPage6.SuspendLayout();
+            this.tabControlRight.SuspendLayout();
+            this.tabPageInspSettings.SuspendLayout();
+            this.tabPageCamera.SuspendLayout();
+            this.tabControlCamTabs.SuspendLayout();
+            this.tabPageExposure.SuspendLayout();
             this.panel14.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBar7)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numericUpDown7)).BeginInit();
@@ -233,7 +233,7 @@
             this.panelExposure.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarExposure)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numExposure)).BeginInit();
-            this.tabPage7.SuspendLayout();
+            this.tabPageLineRate.SuspendLayout();
             this.panel15.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBar8)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numericUpDown8)).BeginInit();
@@ -255,7 +255,7 @@
             this.panelGrabHeight.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarGrabHeight)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numGrabHeight)).BeginInit();
-            this.tabPage8.SuspendLayout();
+            this.tabPageGrabHeight.SuspendLayout();
             this.panel21.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBar1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numericUpDown1)).BeginInit();
@@ -277,40 +277,40 @@
             this.panel27.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBar19)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numericUpDown19)).BeginInit();
-            this.tabPage5.SuspendLayout();
+            this.tabPageSystem.SuspendLayout();
             this.SuspendLayout();
             // 
-            // tabControl
+            // tabMain
             // 
-            this.tabControl.Controls.Add(this.tabPage1);
-            this.tabControl.Controls.Add(this.tabPage2);
-            this.tabControl.Controls.Add(this.tabPage9);
-            this.tabControl.Location = new System.Drawing.Point(12, 12);
-            this.tabControl.Name = "tabControl";
-            this.tabControl.SelectedIndex = 0;
-            this.tabControl.Size = new System.Drawing.Size(1191, 674);
-            this.tabControl.TabIndex = 1;
+            this.tabMain.Controls.Add(this.tabPageLiveView);
+            this.tabMain.Controls.Add(this.tabPageReview);
+            this.tabMain.Controls.Add(this.tabPageData);
+            this.tabMain.Location = new System.Drawing.Point(12, 12);
+            this.tabMain.Name = "tabMain";
+            this.tabMain.SelectedIndex = 0;
+            this.tabMain.Size = new System.Drawing.Size(1191, 674);
+            this.tabMain.TabIndex = 1;
             // 
-            // tabPage1
+            // tabPageLiveView
             // 
-            this.tabPage1.Controls.Add(this.checkBoxEnableImageProcessing);
-            this.tabPage1.Controls.Add(this.btnCameraFree);
-            this.tabPage1.Controls.Add(this.btnCameraGrab);
-            this.tabPage1.Controls.Add(this.panel8);
-            this.tabPage1.Controls.Add(this.panel7);
-            this.tabPage1.Controls.Add(this.panel6);
-            this.tabPage1.Controls.Add(this.panel5);
-            this.tabPage1.Controls.Add(this.panel4);
-            this.tabPage1.Controls.Add(this.panel3);
-            this.tabPage1.Controls.Add(this.panel2);
-            this.tabPage1.Controls.Add(this.panel1);
-            this.tabPage1.Location = new System.Drawing.Point(4, 25);
-            this.tabPage1.Name = "tabPage1";
-            this.tabPage1.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage1.Size = new System.Drawing.Size(1183, 645);
-            this.tabPage1.TabIndex = 0;
-            this.tabPage1.Text = "監控";
-            this.tabPage1.UseVisualStyleBackColor = true;
+            this.tabPageLiveView.Controls.Add(this.checkBoxEnableImageProcessing);
+            this.tabPageLiveView.Controls.Add(this.btnCameraFree);
+            this.tabPageLiveView.Controls.Add(this.btnCameraGrab);
+            this.tabPageLiveView.Controls.Add(this.panel8);
+            this.tabPageLiveView.Controls.Add(this.panel7);
+            this.tabPageLiveView.Controls.Add(this.panel6);
+            this.tabPageLiveView.Controls.Add(this.panel5);
+            this.tabPageLiveView.Controls.Add(this.panel4);
+            this.tabPageLiveView.Controls.Add(this.panel3);
+            this.tabPageLiveView.Controls.Add(this.panel2);
+            this.tabPageLiveView.Controls.Add(this.panel1);
+            this.tabPageLiveView.Location = new System.Drawing.Point(4, 25);
+            this.tabPageLiveView.Name = "tabPageLiveView";
+            this.tabPageLiveView.Padding = new System.Windows.Forms.Padding(3);
+            this.tabPageLiveView.Size = new System.Drawing.Size(1183, 645);
+            this.tabPageLiveView.TabIndex = 0;
+            this.tabPageLiveView.Text = "即時監控";
+            this.tabPageLiveView.UseVisualStyleBackColor = true;
             // 
             // checkBoxEnableImageProcessing
             // 
@@ -403,40 +403,40 @@
             this.panel1.Size = new System.Drawing.Size(148, 111);
             this.panel1.TabIndex = 0;
             // 
-            // tabPage2
+            // tabPageReview
             // 
-            this.tabPage2.Controls.Add(this.label_sec);
-            this.tabPage2.Controls.Add(this.label_min);
-            this.tabPage2.Controls.Add(this.label_hr);
-            this.tabPage2.Controls.Add(this.label_day);
-            this.tabPage2.Controls.Add(this.label_mon);
-            this.tabPage2.Controls.Add(this.label_yr);
-            this.tabPage2.Controls.Add(this.tableLayoutPanel1);
-            this.tabPage2.Controls.Add(this.btnSelectFolder);
-            this.tabPage2.Controls.Add(this.btnShowProcessed);
-            this.tabPage2.Controls.Add(this.pbCam1);
-            this.tabPage2.Controls.Add(this.btnShowOriginal);
-            this.tabPage2.Controls.Add(this.pbCam2);
-            this.tabPage2.Controls.Add(this.cbSec);
-            this.tabPage2.Controls.Add(this.pbCam3);
-            this.tabPage2.Controls.Add(this.cbMin);
-            this.tabPage2.Controls.Add(this.pbCam4);
-            this.tabPage2.Controls.Add(this.cbHour);
-            this.tabPage2.Controls.Add(this.pbCam5);
-            this.tabPage2.Controls.Add(this.cbDay);
-            this.tabPage2.Controls.Add(this.pbCam6);
-            this.tabPage2.Controls.Add(this.cbMonth);
-            this.tabPage2.Controls.Add(this.pbCam7);
-            this.tabPage2.Controls.Add(this.cbYear);
-            this.tabPage2.Controls.Add(this.btnLastPeriod);
-            this.tabPage2.Controls.Add(this.btnNextPeriod);
-            this.tabPage2.Location = new System.Drawing.Point(4, 25);
-            this.tabPage2.Name = "tabPage2";
-            this.tabPage2.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage2.Size = new System.Drawing.Size(1183, 645);
-            this.tabPage2.TabIndex = 1;
-            this.tabPage2.Text = "回顧";
-            this.tabPage2.UseVisualStyleBackColor = true;
+            this.tabPageReview.Controls.Add(this.label_sec);
+            this.tabPageReview.Controls.Add(this.label_min);
+            this.tabPageReview.Controls.Add(this.label_hr);
+            this.tabPageReview.Controls.Add(this.label_day);
+            this.tabPageReview.Controls.Add(this.label_mon);
+            this.tabPageReview.Controls.Add(this.label_yr);
+            this.tabPageReview.Controls.Add(this.tableLayoutPanel1);
+            this.tabPageReview.Controls.Add(this.btnSelectFolder);
+            this.tabPageReview.Controls.Add(this.btnShowProcessed);
+            this.tabPageReview.Controls.Add(this.pbCam1);
+            this.tabPageReview.Controls.Add(this.btnShowOriginal);
+            this.tabPageReview.Controls.Add(this.pbCam2);
+            this.tabPageReview.Controls.Add(this.cbSec);
+            this.tabPageReview.Controls.Add(this.pbCam3);
+            this.tabPageReview.Controls.Add(this.cbMin);
+            this.tabPageReview.Controls.Add(this.pbCam4);
+            this.tabPageReview.Controls.Add(this.cbHour);
+            this.tabPageReview.Controls.Add(this.pbCam5);
+            this.tabPageReview.Controls.Add(this.cbDay);
+            this.tabPageReview.Controls.Add(this.pbCam6);
+            this.tabPageReview.Controls.Add(this.cbMonth);
+            this.tabPageReview.Controls.Add(this.pbCam7);
+            this.tabPageReview.Controls.Add(this.cbYear);
+            this.tabPageReview.Controls.Add(this.btnLastPeriod);
+            this.tabPageReview.Controls.Add(this.btnNextPeriod);
+            this.tabPageReview.Location = new System.Drawing.Point(4, 25);
+            this.tabPageReview.Name = "tabPageReview";
+            this.tabPageReview.Padding = new System.Windows.Forms.Padding(3);
+            this.tabPageReview.Size = new System.Drawing.Size(1183, 645);
+            this.tabPageReview.TabIndex = 1;
+            this.tabPageReview.Text = "影像回顧";
+            this.tabPageReview.UseVisualStyleBackColor = true;
             // 
             // label_sec
             // 
@@ -724,68 +724,68 @@
             this.lblPixelInfo.Size = new System.Drawing.Size(395, 19);
             this.lblPixelInfo.Text = "位置:0.00mm | 座標:(0, 0) | 亮度: 0  | 倍率:0.0x | 平移:(0, 0)";
             // 
-            // tabControl1
+            // tabControlRight
             // 
-            this.tabControl1.Controls.Add(this.tabPage3);
-            this.tabControl1.Controls.Add(this.tabPage4);
-            this.tabControl1.Controls.Add(this.tabPage5);
-            this.tabControl1.Location = new System.Drawing.Point(1209, 12);
-            this.tabControl1.Multiline = true;
-            this.tabControl1.Name = "tabControl1";
-            this.tabControl1.SelectedIndex = 0;
-            this.tabControl1.Size = new System.Drawing.Size(276, 679);
-            this.tabControl1.TabIndex = 16;
+            this.tabControlRight.Controls.Add(this.tabPageInspSettings);
+            this.tabControlRight.Controls.Add(this.tabPageCamera);
+            this.tabControlRight.Controls.Add(this.tabPageSystem);
+            this.tabControlRight.Location = new System.Drawing.Point(1209, 12);
+            this.tabControlRight.Multiline = true;
+            this.tabControlRight.Name = "tabControlRight";
+            this.tabControlRight.SelectedIndex = 0;
+            this.tabControlRight.Size = new System.Drawing.Size(276, 679);
+            this.tabControlRight.TabIndex = 16;
             // 
-            // tabPage3
+            // tabPageInspSettings
             // 
-            this.tabPage3.Controls.Add(this.propertyGrid1);
-            this.tabPage3.Location = new System.Drawing.Point(4, 25);
-            this.tabPage3.Name = "tabPage3";
-            this.tabPage3.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage3.Size = new System.Drawing.Size(268, 650);
-            this.tabPage3.TabIndex = 0;
-            this.tabPage3.Text = "檢測";
-            this.tabPage3.UseVisualStyleBackColor = true;
+            this.tabPageInspSettings.Controls.Add(this.propertyGrid1);
+            this.tabPageInspSettings.Location = new System.Drawing.Point(4, 25);
+            this.tabPageInspSettings.Name = "tabPageInspSettings";
+            this.tabPageInspSettings.Padding = new System.Windows.Forms.Padding(3);
+            this.tabPageInspSettings.Size = new System.Drawing.Size(268, 650);
+            this.tabPageInspSettings.TabIndex = 0;
+            this.tabPageInspSettings.Text = "檢測設定";
+            this.tabPageInspSettings.UseVisualStyleBackColor = true;
             // 
-            // tabPage4
+            // tabPageCamera
             // 
-            this.tabPage4.Controls.Add(this.tabControl2);
-            this.tabPage4.Location = new System.Drawing.Point(4, 25);
-            this.tabPage4.Name = "tabPage4";
-            this.tabPage4.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage4.Size = new System.Drawing.Size(268, 650);
-            this.tabPage4.TabIndex = 1;
-            this.tabPage4.Text = "相機";
-            this.tabPage4.UseVisualStyleBackColor = true;
+            this.tabPageCamera.Controls.Add(this.tabControlCamTabs);
+            this.tabPageCamera.Location = new System.Drawing.Point(4, 25);
+            this.tabPageCamera.Name = "tabPageCamera";
+            this.tabPageCamera.Padding = new System.Windows.Forms.Padding(3);
+            this.tabPageCamera.Size = new System.Drawing.Size(268, 650);
+            this.tabPageCamera.TabIndex = 1;
+            this.tabPageCamera.Text = "相機參數";
+            this.tabPageCamera.UseVisualStyleBackColor = true;
             // 
-            // tabControl2
+            // tabControlCamTabs
             // 
-            this.tabControl2.Controls.Add(this.tabPage6);
-            this.tabControl2.Controls.Add(this.tabPage7);
-            this.tabControl2.Controls.Add(this.tabPage8);
-            this.tabControl2.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.tabControl2.Location = new System.Drawing.Point(3, 3);
-            this.tabControl2.Name = "tabControl2";
-            this.tabControl2.SelectedIndex = 0;
-            this.tabControl2.Size = new System.Drawing.Size(262, 644);
-            this.tabControl2.TabIndex = 2;
+            this.tabControlCamTabs.Controls.Add(this.tabPageExposure);
+            this.tabControlCamTabs.Controls.Add(this.tabPageLineRate);
+            this.tabControlCamTabs.Controls.Add(this.tabPageGrabHeight);
+            this.tabControlCamTabs.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.tabControlCamTabs.Location = new System.Drawing.Point(3, 3);
+            this.tabControlCamTabs.Name = "tabControlCamTabs";
+            this.tabControlCamTabs.SelectedIndex = 0;
+            this.tabControlCamTabs.Size = new System.Drawing.Size(262, 644);
+            this.tabControlCamTabs.TabIndex = 2;
             // 
-            // tabPage6
+            // tabPageExposure
             // 
-            this.tabPage6.Controls.Add(this.panel14);
-            this.tabPage6.Controls.Add(this.panel13);
-            this.tabPage6.Controls.Add(this.panel12);
-            this.tabPage6.Controls.Add(this.panel11);
-            this.tabPage6.Controls.Add(this.panel10);
-            this.tabPage6.Controls.Add(this.panel9);
-            this.tabPage6.Controls.Add(this.panelExposure);
-            this.tabPage6.Location = new System.Drawing.Point(4, 25);
-            this.tabPage6.Name = "tabPage6";
-            this.tabPage6.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage6.Size = new System.Drawing.Size(254, 615);
-            this.tabPage6.TabIndex = 0;
-            this.tabPage6.Text = "曝光值";
-            this.tabPage6.UseVisualStyleBackColor = true;
+            this.tabPageExposure.Controls.Add(this.panel14);
+            this.tabPageExposure.Controls.Add(this.panel13);
+            this.tabPageExposure.Controls.Add(this.panel12);
+            this.tabPageExposure.Controls.Add(this.panel11);
+            this.tabPageExposure.Controls.Add(this.panel10);
+            this.tabPageExposure.Controls.Add(this.panel9);
+            this.tabPageExposure.Controls.Add(this.panelExposure);
+            this.tabPageExposure.Location = new System.Drawing.Point(4, 25);
+            this.tabPageExposure.Name = "tabPageExposure";
+            this.tabPageExposure.Padding = new System.Windows.Forms.Padding(3);
+            this.tabPageExposure.Size = new System.Drawing.Size(254, 615);
+            this.tabPageExposure.TabIndex = 0;
+            this.tabPageExposure.Text = "曝光時間 (μs)";
+            this.tabPageExposure.UseVisualStyleBackColor = true;
             // 
             // panel14
             // 
@@ -1249,22 +1249,22 @@
             this.lblExposure.TabIndex = 0;
             this.lblExposure.Text = "CAM1";
             // 
-            // tabPage7
+            // tabPageLineRate
             // 
-            this.tabPage7.Controls.Add(this.panel15);
-            this.tabPage7.Controls.Add(this.panel16);
-            this.tabPage7.Controls.Add(this.panel17);
-            this.tabPage7.Controls.Add(this.panel18);
-            this.tabPage7.Controls.Add(this.panel19);
-            this.tabPage7.Controls.Add(this.panel20);
-            this.tabPage7.Controls.Add(this.panelGrabHeight);
-            this.tabPage7.Location = new System.Drawing.Point(4, 25);
-            this.tabPage7.Name = "tabPage7";
-            this.tabPage7.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage7.Size = new System.Drawing.Size(254, 615);
-            this.tabPage7.TabIndex = 1;
-            this.tabPage7.Text = "線掃頻率";
-            this.tabPage7.UseVisualStyleBackColor = true;
+            this.tabPageLineRate.Controls.Add(this.panel15);
+            this.tabPageLineRate.Controls.Add(this.panel16);
+            this.tabPageLineRate.Controls.Add(this.panel17);
+            this.tabPageLineRate.Controls.Add(this.panel18);
+            this.tabPageLineRate.Controls.Add(this.panel19);
+            this.tabPageLineRate.Controls.Add(this.panel20);
+            this.tabPageLineRate.Controls.Add(this.panelGrabHeight);
+            this.tabPageLineRate.Location = new System.Drawing.Point(4, 25);
+            this.tabPageLineRate.Name = "tabPageLineRate";
+            this.tabPageLineRate.Padding = new System.Windows.Forms.Padding(3);
+            this.tabPageLineRate.Size = new System.Drawing.Size(254, 615);
+            this.tabPageLineRate.TabIndex = 1;
+            this.tabPageLineRate.Text = "線掃速率 (Hz)";
+            this.tabPageLineRate.UseVisualStyleBackColor = true;
             // 
             // panel15
             // 
@@ -1728,22 +1728,22 @@
             this.lblGrabHeight.TabIndex = 0;
             this.lblGrabHeight.Text = "CAM1";
             // 
-            // tabPage8
+            // tabPageGrabHeight
             // 
-            this.tabPage8.Controls.Add(this.panel21);
-            this.tabPage8.Controls.Add(this.panel22);
-            this.tabPage8.Controls.Add(this.panel23);
-            this.tabPage8.Controls.Add(this.panel24);
-            this.tabPage8.Controls.Add(this.panel25);
-            this.tabPage8.Controls.Add(this.panel26);
-            this.tabPage8.Controls.Add(this.panel27);
-            this.tabPage8.Location = new System.Drawing.Point(4, 25);
-            this.tabPage8.Name = "tabPage8";
-            this.tabPage8.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage8.Size = new System.Drawing.Size(254, 615);
-            this.tabPage8.TabIndex = 2;
-            this.tabPage8.Text = "高度";
-            this.tabPage8.UseVisualStyleBackColor = true;
+            this.tabPageGrabHeight.Controls.Add(this.panel21);
+            this.tabPageGrabHeight.Controls.Add(this.panel22);
+            this.tabPageGrabHeight.Controls.Add(this.panel23);
+            this.tabPageGrabHeight.Controls.Add(this.panel24);
+            this.tabPageGrabHeight.Controls.Add(this.panel25);
+            this.tabPageGrabHeight.Controls.Add(this.panel26);
+            this.tabPageGrabHeight.Controls.Add(this.panel27);
+            this.tabPageGrabHeight.Location = new System.Drawing.Point(4, 25);
+            this.tabPageGrabHeight.Name = "tabPageGrabHeight";
+            this.tabPageGrabHeight.Padding = new System.Windows.Forms.Padding(3);
+            this.tabPageGrabHeight.Size = new System.Drawing.Size(254, 615);
+            this.tabPageGrabHeight.TabIndex = 2;
+            this.tabPageGrabHeight.Text = "擷取高度 (px)";
+            this.tabPageGrabHeight.UseVisualStyleBackColor = true;
             // 
             // panel21
             // 
@@ -2207,18 +2207,18 @@
             this.label40.TabIndex = 0;
             this.label40.Text = "CAM1";
             // 
-            // tabPage5
+            // tabPageSystem
             // 
-            this.tabPage5.Controls.Add(this.listViewEngine);
-            this.tabPage5.Controls.Add(this.lblEngineConst);
-            this.tabPage5.Controls.Add(this.listViewCameras);
-            this.tabPage5.Controls.Add(this.lblCamHardware);
-            this.tabPage5.Location = new System.Drawing.Point(4, 25);
-            this.tabPage5.Name = "tabPage5";
-            this.tabPage5.Size = new System.Drawing.Size(268, 650);
-            this.tabPage5.TabIndex = 2;
-            this.tabPage5.Text = "系統";
-            this.tabPage5.UseVisualStyleBackColor = true;
+            this.tabPageSystem.Controls.Add(this.listViewEngine);
+            this.tabPageSystem.Controls.Add(this.lblEngineConst);
+            this.tabPageSystem.Controls.Add(this.listViewCameras);
+            this.tabPageSystem.Controls.Add(this.lblCamHardware);
+            this.tabPageSystem.Location = new System.Drawing.Point(4, 25);
+            this.tabPageSystem.Name = "tabPageSystem";
+            this.tabPageSystem.Size = new System.Drawing.Size(268, 650);
+            this.tabPageSystem.TabIndex = 2;
+            this.tabPageSystem.Text = "系統資訊";
+            this.tabPageSystem.UseVisualStyleBackColor = true;
             // 
             // listViewEngine
             // 
@@ -2268,31 +2268,31 @@
             this.lblCamHardware.TabIndex = 0;
             this.lblCamHardware.Text = "【相機硬體設定】";
             // 
-            // tabPage9
+            // tabPageData
             // 
-            this.tabPage9.Location = new System.Drawing.Point(4, 25);
-            this.tabPage9.Name = "tabPage9";
-            this.tabPage9.Size = new System.Drawing.Size(1183, 645);
-            this.tabPage9.TabIndex = 2;
-            this.tabPage9.Text = "數據";
-            this.tabPage9.UseVisualStyleBackColor = true;
+            this.tabPageData.Location = new System.Drawing.Point(4, 25);
+            this.tabPageData.Name = "tabPageData";
+            this.tabPageData.Size = new System.Drawing.Size(1183, 645);
+            this.tabPageData.TabIndex = 2;
+            this.tabPageData.Text = "檢測數據";
+            this.tabPageData.UseVisualStyleBackColor = true;
             // 
             // AniloxRollForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1491, 714);
-            this.Controls.Add(this.tabControl1);
+            this.Controls.Add(this.tabControlRight);
             this.Controls.Add(this.statusStrip1);
-            this.Controls.Add(this.tabControl);
+            this.Controls.Add(this.tabMain);
             this.Name = "AniloxRollForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "AniloxRoll Monitor";
-            this.tabControl.ResumeLayout(false);
-            this.tabPage1.ResumeLayout(false);
-            this.tabPage1.PerformLayout();
-            this.tabPage2.ResumeLayout(false);
-            this.tabPage2.PerformLayout();
+            this.tabMain.ResumeLayout(false);
+            this.tabPageLiveView.ResumeLayout(false);
+            this.tabPageLiveView.PerformLayout();
+            this.tabPageReview.ResumeLayout(false);
+            this.tabPageReview.PerformLayout();
             this.tableLayoutPanel1.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.chartMura)).EndInit();
@@ -2305,11 +2305,11 @@
             ((System.ComponentModel.ISupportInitialize)(this.pbCam7)).EndInit();
             this.statusStrip1.ResumeLayout(false);
             this.statusStrip1.PerformLayout();
-            this.tabControl1.ResumeLayout(false);
-            this.tabPage3.ResumeLayout(false);
-            this.tabPage4.ResumeLayout(false);
-            this.tabControl2.ResumeLayout(false);
-            this.tabPage6.ResumeLayout(false);
+            this.tabControlRight.ResumeLayout(false);
+            this.tabPageInspSettings.ResumeLayout(false);
+            this.tabPageCamera.ResumeLayout(false);
+            this.tabControlCamTabs.ResumeLayout(false);
+            this.tabPageExposure.ResumeLayout(false);
             this.panel14.ResumeLayout(false);
             this.panel14.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBar7)).EndInit();
@@ -2338,7 +2338,7 @@
             this.panelExposure.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarExposure)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numExposure)).EndInit();
-            this.tabPage7.ResumeLayout(false);
+            this.tabPageLineRate.ResumeLayout(false);
             this.panel15.ResumeLayout(false);
             this.panel15.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBar8)).EndInit();
@@ -2367,7 +2367,7 @@
             this.panelGrabHeight.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarGrabHeight)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numGrabHeight)).EndInit();
-            this.tabPage8.ResumeLayout(false);
+            this.tabPageGrabHeight.ResumeLayout(false);
             this.panel21.ResumeLayout(false);
             this.panel21.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBar1)).EndInit();
@@ -2396,8 +2396,8 @@
             this.panel27.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBar19)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numericUpDown19)).EndInit();
-            this.tabPage5.ResumeLayout(false);
-            this.tabPage5.PerformLayout();
+            this.tabPageSystem.ResumeLayout(false);
+            this.tabPageSystem.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -2405,9 +2405,9 @@
 
         #endregion
         private AOI.SDK.UI.SmartCanvas canvasMain;
-        private System.Windows.Forms.TabControl tabControl;
-        private System.Windows.Forms.TabPage tabPage1;
-        private System.Windows.Forms.TabPage tabPage2;
+        private System.Windows.Forms.TabControl tabMain;
+        private System.Windows.Forms.TabPage tabPageLiveView;
+        private System.Windows.Forms.TabPage tabPageReview;
         private System.Windows.Forms.PictureBox pbCam7;
         private System.Windows.Forms.PictureBox pbCam6;
         private System.Windows.Forms.PictureBox pbCam5;
@@ -2448,10 +2448,10 @@
         private System.Windows.Forms.CheckBox checkBoxEnableImageProcessing;
         private System.Windows.Forms.Button btnLastPeriod;
         private System.Windows.Forms.Button btnNextPeriod;
-        private System.Windows.Forms.TabControl tabControl1;
-        private System.Windows.Forms.TabPage tabPage3;
-        private System.Windows.Forms.TabPage tabPage4;
-        private System.Windows.Forms.TabPage tabPage5;
+        private System.Windows.Forms.TabControl tabControlRight;
+        private System.Windows.Forms.TabPage tabPageInspSettings;
+        private System.Windows.Forms.TabPage tabPageCamera;
+        private System.Windows.Forms.TabPage tabPageSystem;
         private System.Windows.Forms.Panel panelExposure;
         private System.Windows.Forms.Label lblExposure;
         private System.Windows.Forms.NumericUpDown numExposure;
@@ -2460,10 +2460,10 @@
         private System.Windows.Forms.ListView listViewCameras;
         private System.Windows.Forms.Label lblEngineConst;
         private System.Windows.Forms.ListView listViewEngine;
-        private System.Windows.Forms.TabControl tabControl2;
-        private System.Windows.Forms.TabPage tabPage6;
-        private System.Windows.Forms.TabPage tabPage7;
-        private System.Windows.Forms.TabPage tabPage8;
+        private System.Windows.Forms.TabControl tabControlCamTabs;
+        private System.Windows.Forms.TabPage tabPageExposure;
+        private System.Windows.Forms.TabPage tabPageLineRate;
+        private System.Windows.Forms.TabPage tabPageGrabHeight;
         private System.Windows.Forms.Panel panel14;
         private System.Windows.Forms.Label label13;
         private System.Windows.Forms.TrackBar trackBar7;
@@ -2565,6 +2565,6 @@
         private System.Windows.Forms.TrackBar trackBar19;
         private System.Windows.Forms.NumericUpDown numericUpDown19;
         private System.Windows.Forms.Label label40;
-        private System.Windows.Forms.TabPage tabPage9;
+        private System.Windows.Forms.TabPage tabPageData;
     }
 }
