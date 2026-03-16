@@ -121,7 +121,7 @@ namespace AniloxRoll.Monitor.Properties {
 
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
         public bool LastEnableImageProcessing {
             get {
                 return ((bool)(this["LastEnableImageProcessing"]));

@@ -27,7 +27,7 @@
       <Value Profile="(Default)">""</Value>
     </Setting>
     <Setting Name="LastEnableImageProcessing" Type="System.Boolean" Scope="User">
-      <Value Profile="(Default)">True</Value>
+      <Value Profile="(Default)">False</Value>
     </Setting>
   </Settings>
 </SettingsFile>
