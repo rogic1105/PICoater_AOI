@@ -8,7 +8,6 @@ using Matrox.MatroxImagingLibrary;
 using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
-using AniloxRoll.Monitor.UI.State;
 
 namespace AniloxRoll.Monitor.UI.Managers
 {
@@ -196,22 +195,6 @@ namespace AniloxRoll.Monitor.UI.Managers
             foreach (var cam in _cameras)
                 cam.SetUserGrabIntent(false);
 
-            // 停止抓圖後，將今日存檔目錄記入 LastDataPath
-            if (_enableAutoCapture && !string.IsNullOrEmpty(_captureRootPath))
-            {
-                DateTime now = DateTime.Now;
-                string todayDir = Path.Combine(
-                    _captureRootPath,
-                    now.ToString("yyyy"),
-                    now.ToString("yyyyMM"),
-                    now.ToString("yyyyMMdd"));
-
-                if (Directory.Exists(todayDir))
-                {
-                    UserSessionState.SetLastDataPath(todayDir);
-                    UserSessionState.Save();
-                }
-            }
         }
 
         // ==================== Release ====================
