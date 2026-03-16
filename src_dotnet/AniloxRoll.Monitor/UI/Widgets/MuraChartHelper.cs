@@ -74,15 +74,17 @@ namespace AniloxRoll.Monitor.UI.Widgets
             // ── 資料曲線 ──────────────────────────────────────────────────
             var sMean = new Series("Mean")
             {
-                ChartType = SeriesChartType.FastLine,
-                Color     = Color.Blue
+                ChartType       = SeriesChartType.FastLine,
+                Color           = Color.Blue,
+                BorderDashStyle = ChartDashStyle.Dash
             };
             _chart.Series.Add(sMean);
 
             var sMax = new Series("Max")
             {
-                ChartType = SeriesChartType.FastLine,
-                Color     = Color.Orange
+                ChartType       = SeriesChartType.FastLine,
+                Color           = Color.Blue,
+                BorderDashStyle = ChartDashStyle.Solid
             };
             _chart.Series.Add(sMax);
 
@@ -153,7 +155,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             UpdateThresholdLines();
         }
 
-        /// <summary>依目前 _dataMinX/_dataMaxX 更新閾值線端點，並調整 Y 軸上限。</summary>
+        /// <summary>更新閾值線端點（固定超寬 X 範圍，由 chart 裁切，視覺上永遠橫跨全圖），並調整 Y 軸上限。</summary>
         private void UpdateThresholdLines()
         {
             var sErrMax  = _chart.Series["ErrorMax"];
@@ -162,11 +164,12 @@ namespace AniloxRoll.Monitor.UI.Widgets
             sErrMax.Points.Clear();
             sErrMean.Points.Clear();
 
-            sErrMax.Points.AddXY(_dataMinX, _errorValueMax);
-            sErrMax.Points.AddXY(_dataMaxX, _errorValueMax);
+            const double xSpan = 1e9;
+            sErrMax.Points.AddXY(-xSpan, _errorValueMax);
+            sErrMax.Points.AddXY( xSpan, _errorValueMax);
 
-            sErrMean.Points.AddXY(_dataMinX, _errorValueMean);
-            sErrMean.Points.AddXY(_dataMaxX, _errorValueMean);
+            sErrMean.Points.AddXY(-xSpan, _errorValueMean);
+            sErrMean.Points.AddXY( xSpan, _errorValueMean);
 
             // Y 軸上限：資料在 0–1，但閾值可能超過 1，自動擴展
             float threshTop  = Math.Max(_errorValueMean, _errorValueMax);
