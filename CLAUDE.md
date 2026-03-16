@@ -88,8 +88,11 @@ CoreCV_FastReadBMP  →  AoiService.ProcessImage  →  CoreCV_Resize_GPU  →  C
 | `src_dotnet/AniloxRoll.Monitor/Settings/Models/AcquisitionSettings.cs` | 取像設定（各 7 台陣列：CameraGrabHeight[7]/CameraExposureTimeUs[7]/CameraLineRateHz[7]） |
 | `src_dotnet/AniloxRoll.Monitor/Settings/Stores/AcquisitionSettingsStore.cs` | 讀寫 `Config\acquisition-settings.json`（tabPageCamera 的唯一持久化入口） |
 | `src_dotnet/AniloxRoll.Monitor/Settings/System/SystemSettings.cs` | 相機硬體拓樸設定（CameraHardwareConfig 清單） |
-| `src_dotnet/AniloxRoll.Monitor/UI/State/UserSessionState.cs` | UI session 狀態持久化（LastDataPath / 時間篩選 / LastEnableImageProcessing）→ `Config\session-state.json` |
+| `src_dotnet/AniloxRoll.Monitor/UI/State/UserSessionState.cs` | UI session 狀態持久化（LastDataPath / 時間篩選 / LastEnableImageProcessing / LastGrabIdNum）→ `Config\session-state.json` |
 | `src_dotnet/AniloxRoll.Monitor/UI/Widgets/FormInteractionHelper.cs` | `SelectAndLoadFolder`：選擇資料夾後先 `SetLastDataPath`+`Save()` 再掃描檔案 |
+| `src_dotnet/AniloxRoll.Monitor/Services/InspectionLogService.cs` | 抓圖事件編號（A00001 起）+ 每日 CSV 寫入（`{CaptureRootPath}\{YYYY}\{YYYYMM}\inspection-log-{YYYYMMDD}.csv`） |
+| `src_dotnet/AniloxRoll.Monitor/Services/InspectionStatisticsService.cs` | 從 CSV 逐日邊讀邊累加計算 Pass/Fail 統計（不載入記憶體） |
+| `src_dotnet/AniloxRoll.Monitor/UI/Presenters/InspectionStatsPresenter.cs` | tabPageData：7 個卡片 Panel（良率顏色）+ listViewStats（5 欄表格） |
 | `sdk/AOI_SDK/core_cv_api/src/export_api.cpp` | CoreCV_Resize_GPU 實作 |
 | `sdk/AOI_SDK/core_cv_api/include/export_c/export_api.h` | CoreCV_Resize_GPU 宣告 |
 
@@ -114,6 +117,19 @@ Form 右側固定有 `tabControlRight`（Location=1209,12，Size=276×679），�
 | `tabPageGrabHeight` | 擷取高度 (px) | `trackBarHtCam1`/`numHtCam1` (CAM1 master)；`trackBarHtCam2–7`/`numHtCam2–7` (CAM2–7)；範圍：100–10000 px；預設 2048；拖動結束 MouseUp → `LiveCameraManager.RefreshMainDisplay()` |
 
 主內容區為 `tabMain`，含 `tabPageLiveView`（即時監控）、`tabPageReview`（影像回顧）、`tabPageData`（檢測數據）。
+
+### tabPageData 控制項
+
+| 控制項 | Name | 說明 |
+|--------|------|------|
+| 7 個 Panel（X=6~930，Y=6） | `panelStatCam1`~`panelStatCam7` | 卡片式顯示（良率%、Pass/Total、顏色） |
+| ListView | `listViewStats` | 5 欄：相機/Pass/Fail/Total/良率 |
+| Start 時間 | `cbStartYear/Month/Day/Hour/Min/Sec` | 統計起始時間 |
+| End 時間 | `cbEndYear/Month/Day/Hour/Min/Sec` | 統計結束時間 |
+| `btnSelectDataFolder` | "讀取資料夾" | 選擇 CaptureRootPath |
+| `btnQueryStats` | "統計數據" | 讀取 CSV 計算並更新 UI |
+
+初始化：`InitializeSystem()` → `SetupDataTab()` → `InspectionStatsPresenter.Initialize()`
 
 ### 參數分類（UI 可調 vs JSON 限定）
 

@@ -222,14 +222,16 @@ public AcquisitionSettings Acquisition { get; set; } = new AcquisitionSettings()
 
 `MuraChartHelper.SetThresholds(float mean, float max)` 在 chartMura 畫兩條水平參考線：
 
-- `ErrorValueMax` → **紅色實線**（`ChartDashStyle.Solid`）
-- `ErrorValueMean` → **紅色虛線**（`ChartDashStyle.Dash`）
+- `ErrorValueMax` → **紅色實線**
+- `ErrorValueMean` → **紅色虛線**
 
 實作要點：
-- Series 在 `ConfigureChart()` 建立，與資料曲線同一 `ChartArea`
-- `UpdateThresholdLines()` 在 `UpdateData()` 後呼叫，將端點延伸至最新 X 範圍（`_dataMinX`/`_dataMaxX`）
-- Y 軸上限自動擴展：`AxisY.Maximum = Math.Max(1.0, threshTop * 1.1)`，確保閾值線不被截斷
-- 初始化在 `InitializeSystem()` 呼叫 `SetThresholds`；`_propertyGrid_PropertyValueChanged` 亦呼叫，確保 UI 修改即時反映
+- **必須用 `StripLine` on `AxisY`（非 Series）**：`StripLine` 自動橫跨全圖，不需 X 座標
+- **陷阱：Series + ±1e9 X 座標 → `OverflowException`**：Chart 計算刻度時嘗試覆蓋整個 X 範圍，整數溢位崩潰。每次讀取圖片就會發生
+- StripLine 寫法：`IntervalOffset = threshold, StripWidth = 0, Interval = 0, BorderColor = Color.Red`
+- 資料曲線：Mean = `DeepSkyBlue` 虛線，Max = `Blue` 實線
+- Y 軸上限自動擴展：`AxisY.Maximum = Math.Max(1.0, threshTop * 1.1)`
+- 初始化在 `InitializeSystem()` 呼叫 `SetThresholds`；`_propertyGrid_PropertyValueChanged` 亦呼叫
 
 ---
 
@@ -333,6 +335,55 @@ private void UpdateExpMaxAndClampColor(int idx, int newMax)
 
 - NUD BackColor（比 ForeColor 視覺更強，容易辨識）
 - LR ValueChanged（TrackBar + NUD 兩側）均呼叫此方法
+
+---
+
+## 檢測日誌 CSV 架構
+
+### InspectionLogService
+
+- 路徑：`{CaptureRootPath}\{YYYY}\{YYYYMM}\inspection-log-{YYYYMMDD}.csv`
+- 欄位：`Id, FileName, MaxExceed, MeanExceed`（Pass = 兩者均為 0）
+- ID 格式：`A00001`（5 位數字，跨日不重置），計數器持久化至 `session-state.json` 的 `LastGrabIdNum`
+- `btnCameraGrab_Click` 開始抓取時呼叫 `NextGrabId()` → `_currentGrabId`
+- CSV 寫入時機：`AniloxCamera.TrySaveCapture()` 實際存檔後，透過 `OnInspectionResult` 事件逐層傳遞至 Form
+
+### AniloxCamera 影像處理 + 日誌整合
+
+- `ProcessingFunction` **不管 `EnableImageProcessing` 一律執行 GPU 處理**（`TryApplyPicoaterRidge`）
+  - `EnableImageProcessing` 只控制「顯示原圖還是處理圖」
+  - 目的：即使 checkbox 未勾選也能計算 Mura 曲線 peak 值供 CSV 判斷
+- `TryApplyPicoaterRidge` 傳入 `_nativeBufferPool.CurveMeanBuffer` + `CurveMaxBuffer`，讀回 peak 值（`max / 255f`），存入 `_lastMeanPeak` / `_lastMaxPeak`
+- `TrySaveCapture` 存檔後觸發 `OnInspectionResult(camId, fileNameNoExt, meanPeak, maxPeak)`
+- 事件鏈：`AniloxCamera.OnInspectionResult` → `LiveCameraManager.OnInspectionResult` → `AniloxRollForm.OnCameraInspectionResult` → `InspectionLogService.AppendRecord`
+- **前提**：`EnableAutoCapture = true` 才會存檔，才有日誌
+
+### InspectionStatisticsService
+
+- 逐日枚舉 CSV 檔，邊讀邊累加（`StreamReader` per file）
+- 從 FileName 提取 CamId：`fileName.LastIndexOf('-')` 後的數字
+- `Compute(root, start, end)` 回傳 `Dictionary<int, CameraStats>`
+
+### InspectionStatsPresenter（tabPageData）
+
+- 7 個 Panel 卡片：BackColor = 綠(≥95%) / 橙(80-95%) / 紅(<80%) / 灰(無資料)
+- ListView 5 欄：相機 / Pass / Fail / Total / 良率
+- ListView row BackColor 亦依良率上色（淡色版）
+- 控制項命名：`panelStatCam1`~7，`listViewStats`，`cbStart/EndYear/Month/Day/Hour/Min/Sec`，`btnQueryStats`，`btnSelectDataFolder`
+
+---
+
+## Designer.cs 控制項批次重命名
+
+`Edit` 工具的 `replace_all: true` 可安全批次替換 Designer.cs 中的控制項名稱：
+
+```
+old_string: "panel7"  →  new_string: "panelStatCam1"
+```
+
+**安全性確認**：`panel7` 不是 `panel70` / `panel17` 等的子字串（因為後跟的是空格、`.`、`)`、`;` 或 `"`），不會誤替換。
+
+**順序**：先替換較長的數字（`comboBox12` 先於 `comboBox1`），避免 `comboBox1` 誤替換 `comboBox12` 中的部分字元。
 
 ---
 

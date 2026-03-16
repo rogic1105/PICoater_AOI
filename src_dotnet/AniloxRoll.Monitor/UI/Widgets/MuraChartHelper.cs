@@ -75,7 +75,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             var sMean = new Series("Mean")
             {
                 ChartType       = SeriesChartType.FastLine,
-                Color           = Color.Blue,
+                Color           = Color.DeepSkyBlue,
                 BorderDashStyle = ChartDashStyle.Dash
             };
             _chart.Series.Add(sMean);
@@ -87,25 +87,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 BorderDashStyle = ChartDashStyle.Solid
             };
             _chart.Series.Add(sMax);
-
-            // ── 閾值參考線 ────────────────────────────────────────────────
-            var sErrMax = new Series("ErrorMax")
-            {
-                ChartType       = SeriesChartType.FastLine,
-                Color           = Color.Red,
-                BorderWidth     = 1,
-                BorderDashStyle = ChartDashStyle.Solid
-            };
-            _chart.Series.Add(sErrMax);
-
-            var sErrMean = new Series("ErrorMean")
-            {
-                ChartType       = SeriesChartType.FastLine,
-                Color           = Color.Red,
-                BorderWidth     = 1,
-                BorderDashStyle = ChartDashStyle.Dash
-            };
-            _chart.Series.Add(sErrMean);
 
             UpdateThresholdLines();
         }
@@ -155,26 +136,40 @@ namespace AniloxRoll.Monitor.UI.Widgets
             UpdateThresholdLines();
         }
 
-        /// <summary>更新閾值線端點（固定超寬 X 範圍，由 chart 裁切，視覺上永遠橫跨全圖），並調整 Y 軸上限。</summary>
+        /// <summary>更新閾值線（StripLine on AxisY，自動橫跨全圖，不影響 X 軸刻度計算），並調整 Y 軸上限。</summary>
         private void UpdateThresholdLines()
         {
-            var sErrMax  = _chart.Series["ErrorMax"];
-            var sErrMean = _chart.Series["ErrorMean"];
+            var area = _chart.ChartAreas[0];
+            area.AxisY.StripLines.Clear();
 
-            sErrMax.Points.Clear();
-            sErrMean.Points.Clear();
+            // ErrorMax — 紅色實線
+            area.AxisY.StripLines.Add(new StripLine
+            {
+                IntervalOffset  = _errorValueMax,
+                StripWidth      = 0,
+                Interval        = 0,
+                BorderColor     = Color.Red,
+                BorderWidth     = 1,
+                BorderDashStyle = ChartDashStyle.Solid,
+                BackColor       = Color.Transparent,
+            });
 
-            const double xSpan = 1e9;
-            sErrMax.Points.AddXY(-xSpan, _errorValueMax);
-            sErrMax.Points.AddXY( xSpan, _errorValueMax);
-
-            sErrMean.Points.AddXY(-xSpan, _errorValueMean);
-            sErrMean.Points.AddXY( xSpan, _errorValueMean);
+            // ErrorMean — 紅色虛線
+            area.AxisY.StripLines.Add(new StripLine
+            {
+                IntervalOffset  = _errorValueMean,
+                StripWidth      = 0,
+                Interval        = 0,
+                BorderColor     = Color.Red,
+                BorderWidth     = 1,
+                BorderDashStyle = ChartDashStyle.Dash,
+                BackColor       = Color.Transparent,
+            });
 
             // Y 軸上限：資料在 0–1，但閾值可能超過 1，自動擴展
             float threshTop  = Math.Max(_errorValueMean, _errorValueMax);
             double yAxisMax  = Math.Max(1.0, threshTop * 1.1);
-            _chart.ChartAreas[0].AxisY.Maximum = yAxisMax;
+            area.AxisY.Maximum = yAxisMax;
         }
 
         public void UpdateViewRange(double minMm, double maxMm)

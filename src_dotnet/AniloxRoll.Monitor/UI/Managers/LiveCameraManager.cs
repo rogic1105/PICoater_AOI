@@ -37,6 +37,10 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// <summary>目前已初始化的相機清單（唯讀），供 LiveTelemetryPresenter 查詢 Telemetry。</summary>
         public IReadOnlyList<AniloxCamera> Cameras => _cameras.AsReadOnly();
 
+        /// <summary>每台相機存檔並完成 inspection 後觸發。
+        /// 參數：(cameraId, fileNameWithoutExt, meanPeak_0to1, maxPeak_0to1)</summary>
+        public event Action<int, string, float, float> OnInspectionResult;
+
         /// <summary>
         /// 正在執行釋放流程時為 true，防止 Timer Tick 在資源已釋放後繼續存取相機。
         /// 同 CameraSession.IsReleasing。
@@ -155,8 +159,10 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.HessianSigma       = InspectionEngineConfig.DefaultRidgeSigma;
                 cam.HessianFixedMax    = InspectionEngineConfig.DefaultHessianMaxFactor;
 
-                cam.OnMouseDataChanged += HandleMouseDataChanged;
-                cam.OnCameraClicked    += SwitchMainDisplay;
+                cam.OnMouseDataChanged   += HandleMouseDataChanged;
+                cam.OnCameraClicked      += SwitchMainDisplay;
+                cam.OnInspectionResult   += (camId, fn, mp, xp) =>
+                    OnInspectionResult?.Invoke(camId, fn, mp, xp);
                 cam.Initialize();
                 _cameras.Add(cam);
             }

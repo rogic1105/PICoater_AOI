@@ -6,11 +6,11 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
+using AniloxRoll.Monitor.UI.State;
 using AniloxRoll.Monitor.UI.Managers;
 using AniloxRoll.Monitor.UI.Navigators;
 using AniloxRoll.Monitor.UI.Presenters;
 using AniloxRoll.Monitor.UI.Widgets;
-using AniloxRoll.Monitor.UI.State;
 
 namespace AniloxRoll.Monitor.Forms
 {
@@ -45,6 +45,14 @@ namespace AniloxRoll.Monitor.Forms
         // --- Telemetry ---
         private LiveTelemetryPresenter _telemetryPresenter;
         private System.Windows.Forms.Timer _telemetryTimer;
+
+        // --- 檢測日誌 ---
+        private InspectionLogService _inspectionLogService;
+        private string _currentGrabId;
+
+        // --- 統計 ---
+        private InspectionStatsPresenter _statsPresenter;
+        private string _statsDataRootPath = string.Empty;
 
         // --- 資料緩存 ---
         private readonly List<Image> _thumbnailCache = new List<Image>();
@@ -103,6 +111,10 @@ namespace AniloxRoll.Monitor.Forms
                 CameraPanels = new[] { pbCam1, pbCam2, pbCam3, pbCam4, pbCam5, pbCam6, pbCam7 }
             });
 
+            _inspectionLogService = new InspectionLogService(
+                () => _settings?.CaptureRootPath ?? string.Empty,
+                UserSessionState.LastGrabIdNum);
+
             _interactionHelper.ApplySettingsToService();
 
             _presenter.BusyStateChanged += _interactionHelper.SetUiLoadingState;
@@ -127,10 +139,12 @@ namespace AniloxRoll.Monitor.Forms
                 pixelText => { if (lblPixelInfo != null) lblPixelInfo.Text = pixelText; }
             );
             _liveCameraManager.SetCaptureSettings(_settings);
+            _liveCameraManager.OnInspectionResult += OnCameraInspectionResult;
 
             FormClosed += (_, __) => _liveCameraManager.FreeCameras();
 
             InitializeRightPanelControls();
+            SetupDataTab();
         }
 
 
@@ -155,6 +169,8 @@ namespace AniloxRoll.Monitor.Forms
 
         private void btnCameraGrab_Click(object sender, EventArgs e)
         {
+            bool wasGrabbing = _liveCameraManager.IsLiveGrabbing;
+
             if (!_liveCameraManager.IsAllocated)
             {
                 try
@@ -166,13 +182,33 @@ namespace AniloxRoll.Monitor.Forms
                     MessageBox.Show($"相機配置失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
-
-                btnCameraGrab.Text = _liveCameraManager.IsLiveGrabbing ? "停止抓取" : "開始抓取";
-                return;
+            }
+            else
+            {
+                _liveCameraManager.ToggleGrab();
             }
 
-            _liveCameraManager.ToggleGrab();
+            // 剛從「未抓取」→「抓取中」：分配新的抓圖編號
+            if (!wasGrabbing && _liveCameraManager.IsLiveGrabbing)
+                _currentGrabId = _inspectionLogService.NextGrabId();
+
             btnCameraGrab.Text = _liveCameraManager.IsLiveGrabbing ? "停止抓取" : "開始抓取";
+        }
+
+        /// <summary>
+        /// 相機存檔後回呼（MIL 執行緒，非 UI 執行緒）。
+        /// EnableAutoCapture=true 且抓取中時才會觸發。
+        /// </summary>
+        private void OnCameraInspectionResult(int camId, string fileNameNoExt, float meanPeak, float maxPeak)
+        {
+            if (string.IsNullOrEmpty(_currentGrabId)) return;
+            _inspectionLogService?.AppendRecord(
+                _currentGrabId,
+                fileNameNoExt,
+                meanPeak,
+                maxPeak,
+                _settings.ErrorValueMean,
+                _settings.ErrorValueMax);
         }
 
         private void btnCameraFree_Click(object sender, EventArgs e)
@@ -467,6 +503,147 @@ namespace AniloxRoll.Monitor.Forms
         /// 每次 Telemetry Timer Tick 呼叫。從相機硬體讀回曝光與線掃速率，
         /// 若差異超過 5% 且使用者未拖曳，則更新 TrackBar/NUD（帶 hysteresis 防抖）。
         /// </summary>
+        // ==========================================
+        // --- 檢測數據 Tab ---
+        // ==========================================
+
+        private void SetupDataTab()
+        {
+            _statsPresenter = new InspectionStatsPresenter(
+                listViewStats,
+                new[] { panelStatCam1, panelStatCam2, panelStatCam3, panelStatCam4,
+                        panelStatCam5, panelStatCam6, panelStatCam7 });
+            _statsPresenter.Initialize();
+
+            // 預設時間：開始 = 今天 00:00，結束 = 今天 23:59
+            DateTime today = DateTime.Today;
+            PopulateStatDateCombos(today.AddDays(-7), today);
+
+            // 預設資料夾與 CaptureRootPath 相同
+            _statsDataRootPath = _settings?.CaptureRootPath ?? string.Empty;
+
+            btnSelectDataFolder.Click += BtnSelectDataFolder_Click;
+            btnQueryStats.Click       += BtnQueryStats_Click;
+        }
+
+        private void PopulateStatDateCombos(DateTime start, DateTime end)
+        {
+            // Year
+            int curYear = DateTime.Today.Year;
+            cbStartYear.Items.Clear(); cbEndYear.Items.Clear();
+            for (int y = curYear - 5; y <= curYear + 1; y++)
+            {
+                cbStartYear.Items.Add(y.ToString());
+                cbEndYear.Items.Add(y.ToString());
+            }
+            cbStartYear.Text = start.Year.ToString();
+            cbEndYear.Text   = end.Year.ToString();
+
+            // Month
+            cbStartMonth.Items.Clear(); cbEndMonth.Items.Clear();
+            for (int m = 1; m <= 12; m++)
+            {
+                cbStartMonth.Items.Add(m.ToString("D2"));
+                cbEndMonth.Items.Add(m.ToString("D2"));
+            }
+            cbStartMonth.Text = start.Month.ToString("D2");
+            cbEndMonth.Text   = end.Month.ToString("D2");
+
+            // Day
+            cbStartDay.Items.Clear(); cbEndDay.Items.Clear();
+            for (int d = 1; d <= 31; d++)
+            {
+                cbStartDay.Items.Add(d.ToString("D2"));
+                cbEndDay.Items.Add(d.ToString("D2"));
+            }
+            cbStartDay.Text = start.Day.ToString("D2");
+            cbEndDay.Text   = end.Day.ToString("D2");
+
+            // Hour
+            cbStartHour.Items.Clear(); cbEndHour.Items.Clear();
+            for (int h = 0; h <= 23; h++)
+            {
+                cbStartHour.Items.Add(h.ToString("D2"));
+                cbEndHour.Items.Add(h.ToString("D2"));
+            }
+            cbStartHour.Text = "00";
+            cbEndHour.Text   = "23";
+
+            // Min
+            cbStartMin.Items.Clear(); cbEndMin.Items.Clear();
+            for (int mn = 0; mn <= 59; mn++)
+            {
+                cbStartMin.Items.Add(mn.ToString("D2"));
+                cbEndMin.Items.Add(mn.ToString("D2"));
+            }
+            cbStartMin.Text = "00";
+            cbEndMin.Text   = "59";
+
+            // Sec
+            cbStartSec.Items.Clear(); cbEndSec.Items.Clear();
+            for (int s = 0; s <= 59; s++)
+            {
+                cbStartSec.Items.Add(s.ToString("D2"));
+                cbEndSec.Items.Add(s.ToString("D2"));
+            }
+            cbStartSec.Text = "00";
+            cbEndSec.Text   = "59";
+        }
+
+        private void BtnSelectDataFolder_Click(object sender, EventArgs e)
+        {
+            using (var dlg = new FolderBrowserDialog())
+            {
+                dlg.Description       = "選擇 AniloxCaptures 根目錄";
+                dlg.SelectedPath      = string.IsNullOrWhiteSpace(_statsDataRootPath)
+                    ? (_settings?.CaptureRootPath ?? string.Empty)
+                    : _statsDataRootPath;
+                dlg.ShowNewFolderButton = false;
+
+                if (dlg.ShowDialog() == DialogResult.OK)
+                    _statsDataRootPath = dlg.SelectedPath;
+            }
+        }
+
+        private void BtnQueryStats_Click(object sender, EventArgs e)
+        {
+            if (!TryParseStatDateTime(out DateTime start, out DateTime end))
+            {
+                MessageBox.Show("時間格式錯誤，請確認輸入。", "錯誤",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            var stats = InspectionStatisticsService.Compute(_statsDataRootPath, start, end);
+            _statsPresenter.Update(stats);
+        }
+
+        private bool TryParseStatDateTime(out DateTime start, out DateTime end)
+        {
+            start = end = DateTime.MinValue;
+            if (!TryBuildDateTime(cbStartYear, cbStartMonth, cbStartDay,
+                                  cbStartHour, cbStartMin, cbStartSec, out start)) return false;
+            if (!TryBuildDateTime(cbEndYear,   cbEndMonth,   cbEndDay,
+                                  cbEndHour,   cbEndMin,     cbEndSec,   out end))   return false;
+            return start <= end;
+        }
+
+        private static bool TryBuildDateTime(
+            ComboBox year, ComboBox month, ComboBox day,
+            ComboBox hour, ComboBox min,  ComboBox sec,
+            out DateTime result)
+        {
+            result = DateTime.MinValue;
+            if (!int.TryParse(year.Text,  out int y)) return false;
+            if (!int.TryParse(month.Text, out int mo)) return false;
+            if (!int.TryParse(day.Text,   out int d))  return false;
+            if (!int.TryParse(hour.Text,  out int h))  return false;
+            if (!int.TryParse(min.Text,   out int mn)) return false;
+            if (!int.TryParse(sec.Text,   out int s))  return false;
+            try { result = new DateTime(y, mo, d, h, mn, s); return true; }
+            catch { return false; }
+        }
+
         private void SyncCameraParamsFromHardware()
         {
             if (_expBars == null || _lrBars == null) return;

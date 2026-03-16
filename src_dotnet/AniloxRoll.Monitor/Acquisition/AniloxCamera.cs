@@ -106,6 +106,13 @@ namespace AniloxRoll.Monitor.Core.Camera
         public event Action<int, int, int, int> OnMouseDataChanged;
         public event Action<int> OnCameraClicked;
 
+        /// <summary>每次 TrySaveCapture 成功存檔後觸發（MIL 回呼執行緒）。
+        /// 參數：(cameraId, fileNameWithoutExt, meanPeak_0to1, maxPeak_0to1)</summary>
+        public event Action<int, string, float, float> OnInspectionResult;
+
+        private float _lastMeanPeak = 0f;
+        private float _lastMaxPeak  = 0f;
+
         // ==================== Constructor ====================
         public AniloxCamera(MIL_ID systemId, int id, MIL_INT devNum, string dcfPath, IntPtr panelHandle, bool enableImageProcessing = true)
         {
@@ -589,16 +596,11 @@ namespace AniloxRoll.Monitor.Core.Camera
 
             if (modifiedBuffer != MIL.M_NULL && cam._milProcBuffer != MIL.M_NULL && cam._milDisplayBuffer != MIL.M_NULL)
             {
-                if (!cam.EnableImageProcessing)
-                {
-                    MIL.MbufCopy(modifiedBuffer, cam._milDisplayBuffer);
-                    cam.TrySaveCapture(modifiedBuffer);
-                    return MIL.M_NULL;
-                }
-
+                // 不管 EnableImageProcessing，一律執行 GPU 處理以取得 Mura 曲線（供 CSV 日誌判斷）
                 bool processedByPicoater = cam.TryApplyPicoaterRidge(modifiedBuffer, cam._milProcBuffer);
 
-                if (processedByPicoater)
+                // EnableImageProcessing 控制「顯示」：勾選才顯示處理結果，否則顯示原圖
+                if (cam.EnableImageProcessing && processedByPicoater)
                     MIL.MbufCopy(cam._milProcBuffer, cam._milDisplayBuffer);
                 else
                     MIL.MbufCopy(modifiedBuffer, cam._milDisplayBuffer);
@@ -630,6 +632,9 @@ namespace AniloxRoll.Monitor.Core.Camera
                     MIL.MbufGet2d(srcBuffer, 0, 0, _frameWidth, _frameHeight, _hostInputBuffer);
                     Marshal.Copy(_hostInputBuffer, 0, picoaterInputBuffer, _hostInputBuffer.Length);
 
+                    IntPtr picoaterCurveMean = _nativeBufferPool.CurveMeanBuffer;
+                    IntPtr picoaterCurveMax  = _nativeBufferPool.CurveMaxBuffer;
+
                     _aoiService.ProcessImage(new AoiProcessRequest
                     {
                         Input = new AoiProcessRequest.InputImage
@@ -644,8 +649,8 @@ namespace AniloxRoll.Monitor.Core.Camera
                             BackgroundData = IntPtr.Zero,
                             MuraData       = IntPtr.Zero,
                             RidgeData      = picoaterRidgeBuffer,
-                            MuraCurveMean  = IntPtr.Zero,
-                            MuraCurveMax   = IntPtr.Zero,
+                            MuraCurveMean  = picoaterCurveMean,
+                            MuraCurveMax   = picoaterCurveMax,
                             Stream         = IntPtr.Zero
                         },
                         Params = new AoiProcessRequest.AlgorithmParams
@@ -656,6 +661,24 @@ namespace AniloxRoll.Monitor.Core.Camera
                             RidgeMode      = "vertical"
                         }
                     });
+
+                    // 從 Mura 曲線計算 peak（0-1 normalized），供 OnInspectionResult 使用
+                    int curveLen = _nativeBufferPool.CurveBufferSize / sizeof(float);
+                    if (curveLen > 0 && picoaterCurveMean != IntPtr.Zero && picoaterCurveMax != IntPtr.Zero)
+                    {
+                        float[] meanArr = new float[curveLen];
+                        float[] maxArr  = new float[curveLen];
+                        Marshal.Copy(picoaterCurveMean, meanArr, 0, curveLen);
+                        Marshal.Copy(picoaterCurveMax,  maxArr,  0, curveLen);
+                        float mp = 0f, xp = 0f;
+                        for (int k = 0; k < curveLen; k++)
+                        {
+                            if (meanArr[k] > mp) mp = meanArr[k];
+                            if (maxArr[k]  > xp) xp = maxArr[k];
+                        }
+                        _lastMeanPeak = mp / 255f;
+                        _lastMaxPeak  = xp / 255f;
+                    }
 
                     Marshal.Copy(picoaterRidgeBuffer, _hostOutputBuffer, 0, _hostOutputBuffer.Length);
                     MIL.MbufPut2d(dstBuffer, 0, 0, _frameWidth, _frameHeight, _hostOutputBuffer);
@@ -689,6 +712,10 @@ namespace AniloxRoll.Monitor.Core.Camera
                 string fileName = $"{now:yyyyMMdd_HHmmss}-{CameraId}.bmp";
                 MIL.MbufExport(Path.Combine(saveDir, fileName), MIL.M_BMP, sourceBuffer);
                 _lastCaptureSecondKey = secondKey;
+
+                // 通知：檔名（不含副檔名）+ 本幀的 peak 值
+                string fileNameNoExt = Path.GetFileNameWithoutExtension(fileName);
+                OnInspectionResult?.Invoke(CameraId, fileNameNoExt, _lastMeanPeak, _lastMaxPeak);
             }
             catch { }
         }
