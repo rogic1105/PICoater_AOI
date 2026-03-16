@@ -268,8 +268,12 @@ namespace AniloxRoll.Monitor.Forms
             const int HtDefault =  2048;   // px
             const int TickFreq  =  1000;
 
+            // ── 曝光 CAM2–7 陣列（ApplyExpMax 需在宣告後使用）────────
+            var expBarsRef = new[] { trackBarExpCam2, trackBarExpCam3, trackBarExpCam4, trackBarExpCam5, trackBarExpCam6, trackBarExpCam7 };
+            var expNumsRef = new[] { numExpCam2, numExpCam3, numExpCam4, numExpCam5, numExpCam6, numExpCam7 };
+            var expCamIds  = new[] { 2, 3, 4, 5, 6, 7 };
+
             // ── 動態計算曝光上限：0.9 / lrHz * 1e6 μs ──────────────
-            // lrHz > 0 保護；結果夾緊到 [ExpMin, ExpMaxCap]
             int CalcExpMax(int lrHz)
             {
                 if (lrHz <= 0) return ExpMaxCap;
@@ -302,10 +306,6 @@ namespace AniloxRoll.Monitor.Forms
             numExpCam1.Maximum            = expMax0;
             trackBarExpCam1.Value         = expVal;
             numExpCam1.Value              = expVal;
-
-            var expBarsRef = new[] { trackBarExpCam2, trackBarExpCam3, trackBarExpCam4, trackBarExpCam5, trackBarExpCam6, trackBarExpCam7 };
-            var expNumsRef = new[] { numExpCam2, numExpCam3, numExpCam4, numExpCam5, numExpCam6, numExpCam7 };
-            var expCamIds  = new[] { 2, 3, 4, 5, 6, 7 };
             for (int i = 0; i < expBarsRef.Length; i++)
             {
                 expBarsRef[i].Minimum       = ExpMin;
