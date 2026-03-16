@@ -109,6 +109,7 @@
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
     </Compile>
     <Compile Include="UI\Presenters\AniloxRollPresenter.cs" />
+    <Compile Include="UI\Presenters\LiveTelemetryPresenter.cs" />
     <Compile Include="UI\Widgets\CanvasInteractionHelper.cs" />
     <Compile Include="UI\Widgets\FormInteractionHelper.cs" />
     <Compile Include="..\..\sdk\AOI_SDK\src_dotnet\AOI.SDK\UI\SmartCanvas.cs">

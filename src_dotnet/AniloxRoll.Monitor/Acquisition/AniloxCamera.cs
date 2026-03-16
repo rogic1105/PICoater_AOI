@@ -72,6 +72,9 @@ namespace AniloxRoll.Monitor.Core.Camera
         private int _frameWidth = 0;
         private int _frameHeight = 0;
 
+        public int FrameWidth  => _frameWidth;
+        public int FrameHeight => _frameHeight;
+
         private byte[] _hostInputBuffer = null;
         private byte[] _hostOutputBuffer = null;
 

@@ -34,6 +34,9 @@ namespace AniloxRoll.Monitor.UI.Managers
         public bool IsAllocated    { get; private set; } = false;
         public bool IsLiveGrabbing { get; private set; } = false;
 
+        /// <summary>目前已初始化的相機清單（唯讀），供 LiveTelemetryPresenter 查詢 Telemetry。</summary>
+        public IReadOnlyList<AniloxCamera> Cameras => _cameras.AsReadOnly();
+
         /// <summary>
         /// 正在執行釋放流程時為 true，防止 Timer Tick 在資源已釋放後繼續存取相機。
         /// 同 CameraSession.IsReleasing。

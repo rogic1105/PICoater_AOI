@@ -217,6 +217,109 @@ public AcquisitionSettings Acquisition { get; set; } = new AcquisitionSettings()
 
 ---
 
+## TrackBar 拖曳偵測模式
+
+拖曳期間抑制硬體寫入（避免每個中間值都呼叫 SetGrabHeight / SetExposureUs）：
+
+```csharp
+private readonly HashSet<TrackBar> _dragging = new HashSet<TrackBar>();
+
+bar.MouseDown  += (s, e) => _dragging.Add(bar);
+bar.MouseUp    += (s, e) =>
+{
+    _dragging.Remove(bar);
+    // 拖曳結束：補送一次硬體寫入
+    _liveCameraManager?.SetXxxForCamera(camId, bar.Value);
+    ConfigManager.SaveAcquisitionSettings(acq);
+};
+bar.ValueChanged += (s, e) =>
+{
+    if (sync || _syncingFromHw) return; sync = true;
+    // ... UI 同步 ...
+    if (!_dragging.Contains(bar))
+    {
+        _liveCameraManager?.SetXxxForCamera(camId, bar.Value);
+        ConfigManager.SaveAcquisitionSettings(acq);
+    }
+    sync = false;
+};
+```
+
+- `HashSet<TrackBar>` per Form（不是 per camera），7 台 TrackBar 共用
+- `SetGrabHeight` 特別受益：拖曳期間完全不執行（Buffer 重分配代價高）
+
+---
+
+## Hardware → UI 反向同步（SyncFromCamera 5% hysteresis）
+
+每 500ms 從相機硬體讀回實際值，超過 5% 才更新 UI，防止 CLProtocol 就緒後 UI 顯示舊值：
+
+```csharp
+private bool _syncingFromHw = false;  // 防止 ValueChanged 再回寫硬體
+
+// 在 ValueChanged 中加入 _syncingFromHw guard：
+if (sync || _syncingFromHw) return;
+
+// SyncCameraParamsFromHardware（Telemetry Timer Tick 呼叫）：
+if (!_dragging.Contains(_expBars[idx]))
+{
+    double hw = cam.GetMeasuredExposureUs();
+    if (hw > 0)
+    {
+        int clamped = Math.Max(bar.Minimum, Math.Min(bar.Maximum, (int)hw));
+        double diff = Math.Abs(clamped - bar.Value) / (double)Math.Max(1, bar.Value);
+        if (diff > 0.05)
+        {
+            _syncingFromHw = true;
+            bar.Value = clamped; num.Value = clamped;
+            acq.CameraExposureTimeUs[idx] = clamped;
+            _syncingFromHw = false;
+        }
+    }
+}
+```
+
+- `GetMeasuredExposureUs()` 只在 CLProtocol 就緒後回傳非零值
+- `GetLineRateHz()` 同理
+
+---
+
+## 即時 Telemetry ListView 架構
+
+`LiveTelemetryPresenter`（移植自 MilGrabSample.CameraListViewPresenter）：
+
+- **16 欄**：Camera / FPS / Target FPS / Line Rate / Exp Set / Exp Meas / Frames / Missed / GrabMiss / Resolution / Scan Mode / FPGA°C / Cam Temp°C / Mem Free / PCIe Lanes / PCIe Speed
+- `Initialize(IList<CameraHardwareConfig>)` — 建立欄位 + 初始列（Tag = camId）
+- `Update(IReadOnlyList<AniloxCamera>)` — 每 500ms 讀取所有 Telemetry 更新 SubItems
+- `ResetAll()` — FreeCameras 後呼叫，所有欄位還原為 "N/A"
+- `listViewCameras` 完全由 `LiveTelemetryPresenter` 管理，舊的靜態 5 欄設定已移除
+- Telemetry Timer 在 `SetupSystemTab()` 建立（`Interval=500`，永遠運行），Tick 同時呼叫 `Update` 和 `SyncCameraParamsFromHardware`
+
+---
+
+## Exposure 夾緊視覺回饋
+
+LR 改變導致曝光被夾緊時，以 OrangeRed 背景色提醒：
+
+```csharp
+private void UpdateExpMaxAndClampColor(int idx, int newMax)
+{
+    _expBars[idx].Maximum = newMax;
+    _expNums[idx].Maximum = newMax;
+    if (_expBars[idx].Value > newMax)
+    {
+        _expBars[idx].Value = newMax; _expNums[idx].Value = newMax;
+        _expNums[idx].BackColor = Color.OrangeRed;
+    }
+    else { _expNums[idx].BackColor = SystemColors.Window; }
+}
+```
+
+- NUD BackColor（比 ForeColor 視覺更強，容易辨識）
+- LR ValueChanged（TrackBar + NUD 兩側）均呼叫此方法
+
+---
+
 ## /perf-diagnose
 
 效能問題排查流程：
