@@ -77,6 +77,7 @@ namespace AniloxRoll.Monitor.Forms
 
             _muraChartHelper = new MuraChartHelper(this.chartMura);
             _muraChartHelper.SetOps(_settings.Cam1_Ops);
+            _muraChartHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
 
             checkBoxEnableImageProcessing.Checked = UserSessionState.GetLastEnableImageProcessing(checkBoxEnableImageProcessing.Checked);
 
@@ -192,6 +193,7 @@ namespace AniloxRoll.Monitor.Forms
         {
             _interactionHelper.HandleSettingsChanged();
             _liveCameraManager?.SetCaptureSettings(_settings);
+            _muraChartHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
 
             // 任何 Recipe 參數（HessianMaxFactor / ErrorValueMean / ErrorValueMax）變更都觸發重載
             string changedPropertyName = e?.ChangedItem?.PropertyDescriptor?.Name ?? string.Empty;

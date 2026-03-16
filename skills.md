@@ -218,6 +218,21 @@ public AcquisitionSettings Acquisition { get; set; } = new AcquisitionSettings()
 
 ---
 
+## MuraChart 閾值參考線
+
+`MuraChartHelper.SetThresholds(float mean, float max)` 在 chartMura 畫兩條水平參考線：
+
+- `ErrorValueMax` → **紅色實線**（`ChartDashStyle.Solid`）
+- `ErrorValueMean` → **紅色虛線**（`ChartDashStyle.Dash`）
+
+實作要點：
+- Series 在 `ConfigureChart()` 建立，與資料曲線同一 `ChartArea`
+- `UpdateThresholdLines()` 在 `UpdateData()` 後呼叫，將端點延伸至最新 X 範圍（`_dataMinX`/`_dataMaxX`）
+- Y 軸上限自動擴展：`AxisY.Maximum = Math.Max(1.0, threshTop * 1.1)`，確保閾值線不被截斷
+- 初始化在 `InitializeSystem()` 呼叫 `SetThresholds`；`_propertyGrid_PropertyValueChanged` 亦呼叫，確保 UI 修改即時反映
+
+---
+
 ## TrackBar 拖曳偵測模式
 
 拖曳期間抑制硬體寫入（避免每個中間值都呼叫 SetGrabHeight / SetExposureUs）：
