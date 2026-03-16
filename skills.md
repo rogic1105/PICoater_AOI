@@ -185,6 +185,37 @@ public AcquisitionSettings Acquisition { get; set; } = new AcquisitionSettings()
 
 ---
 
+## UserSessionState 持久化架構
+
+### 設計規則
+
+- 檔案路徑：`Config\session-state.json`（`AppDomain.CurrentDomain.BaseDirectory` 同目錄）
+- **不使用 `JavaScriptSerializer`**：其構造函數會存取 `ConfigurationManager`，若 `user.config` 損毀則拋出 `ConfigurationErrorsException`，導致 `WriteToFile` 靜默失敗
+- 改用自建 `ParseJson` / `SerializeJson` / `EscapeJson`（純 Regex + StringBuilder，零外部依賴）
+- `Load()` 讀不到檔案時回傳空 dict，**不**預建空檔（避免「建立後立刻覆寫」的競爭）；檔案在第一次 `Save()` 時才建立
+- `WriteToFile` 使用 `FileStream(FileMode.Create, FileShare.ReadWrite)`，允許其他 process 持有讀取 handle 時仍能寫入
+
+### 儲存時機
+
+| 觸發點 | 呼叫位置 |
+|--------|---------|
+| 選擇資料夾 | `FormInteractionHelper.SelectAndLoadFolder` — `SetLastDataPath` + `Save()` 在 `LoadDirectory` **之前** |
+| 時間篩選確認 | `DateTimeNavigator.SaveCurrentSelection` → `SaveDateTimeSelection` + `Save()` |
+| 影像處理開關 | `AniloxRollForm.checkBoxEnableImageProcessing_CheckedChanged` → `SetLastEnableImageProcessing` + `Save()` |
+
+### 已知陷阱：user.config 損毀
+
+**症狀**：`session-state.json` 永遠停在 `{}` 或舊內容，只有重新 Build 後第一次選擇資料夾才寫入。
+
+**根本原因**：
+1. `user.config`（`%APPDATA%\Local\AniloxRoll\...\user.config`）含 null bytes（0x00），使 `ConfigurationManager` 初始化失敗
+2. `new JavaScriptSerializer()` 構造函數呼叫 `ConfigurationManager.GetSection()`，拋出 `ConfigurationErrorsException`
+3. `WriteToFile` 的 `catch {}` 靜默吞掉例外，`session-state.json` 不更新
+
+**修復**：刪除損毀的 `user.config` 並 Rebuild。為防止再次發生，`UserSessionState` 改用不依賴 ConfigurationManager 的自建 JSON 實作。
+
+---
+
 ## /perf-diagnose
 
 效能問題排查流程：

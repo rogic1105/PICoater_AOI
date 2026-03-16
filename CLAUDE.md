@@ -87,6 +87,8 @@ CoreCV_FastReadBMP  →  AoiService.ProcessImage  →  CoreCV_Resize_GPU  →  C
 | `src_dotnet/AniloxRoll.Monitor/Settings/Models/AcquisitionSettings.cs` | 取像設定（各 7 台陣列：CameraGrabHeight[7]/CameraExposureTimeUs[7]/CameraLineRateHz[7]） |
 | `src_dotnet/AniloxRoll.Monitor/Settings/Stores/AcquisitionSettingsStore.cs` | 讀寫 `Config\acquisition-settings.json`（tabPageCamera 的唯一持久化入口） |
 | `src_dotnet/AniloxRoll.Monitor/Settings/System/SystemSettings.cs` | 相機硬體拓樸設定（CameraHardwareConfig 清單） |
+| `src_dotnet/AniloxRoll.Monitor/UI/State/UserSessionState.cs` | UI session 狀態持久化（LastDataPath / 時間篩選 / LastEnableImageProcessing）→ `Config\session-state.json` |
+| `src_dotnet/AniloxRoll.Monitor/UI/Widgets/FormInteractionHelper.cs` | `SelectAndLoadFolder`：選擇資料夾後先 `SetLastDataPath`+`Save()` 再掃描檔案 |
 | `sdk/AOI_SDK/core_cv_api/src/export_api.cpp` | CoreCV_Resize_GPU 實作 |
 | `sdk/AOI_SDK/core_cv_api/include/export_c/export_api.h` | CoreCV_Resize_GPU 宣告 |
 

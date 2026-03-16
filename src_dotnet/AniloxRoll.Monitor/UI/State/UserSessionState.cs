@@ -2,8 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using System.Web.Script.Serialization;
-using AniloxRoll.Monitor.Core.Data;
+using System.Text.RegularExpressions;
 
 namespace AniloxRoll.Monitor.UI.State
 {
@@ -27,12 +26,7 @@ namespace AniloxRoll.Monitor.UI.State
                     return new Dictionary<string, string>();
 
                 string json = File.ReadAllText(FullConfigPath, Encoding.UTF8);
-                if (string.IsNullOrWhiteSpace(json))
-                    return new Dictionary<string, string>();
-
-                var result = new JavaScriptSerializer()
-                    .Deserialize<Dictionary<string, string>>(json);
-                return result ?? new Dictionary<string, string>();
+                return ParseJson(json);
             }
             catch
             {
@@ -40,21 +34,65 @@ namespace AniloxRoll.Monitor.UI.State
             }
         }
 
+        /// <summary>簡單解析 {"key":"value",...} 格式，不依賴 ConfigurationManager。</summary>
+        private static Dictionary<string, string> ParseJson(string json)
+        {
+            var result = new Dictionary<string, string>();
+            if (string.IsNullOrWhiteSpace(json)) return result;
+
+            foreach (Match m in Regex.Matches(json, "\"([^\"]+)\"\\s*:\\s*\"([^\"]*)\""))
+            {
+                string key = m.Groups[1].Value;
+                string val = m.Groups[2].Value
+                    .Replace("\\\\", "\x00BSLASH\x00")
+                    .Replace("\\\"", "\"")
+                    .Replace("\x00BSLASH\x00", "\\");
+                result[key] = val;
+            }
+            return result;
+        }
+
+        /// <summary>序列化為縮排 JSON，不依賴 ConfigurationManager。</summary>
+        private static string SerializeJson(Dictionary<string, string> data)
+        {
+            var entries = new List<string>();
+            foreach (var kv in data)
+                entries.Add($"  \"{EscapeJson(kv.Key)}\": \"{EscapeJson(kv.Value)}\"");
+
+            return entries.Count == 0
+                ? "{\n}"
+                : "{\n" + string.Join(",\n", entries) + "\n}";
+        }
+
+        private static string EscapeJson(string s)
+            => (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"");
+
         private static string Get(string key)
         {
             return _data.TryGetValue(key, out string val) ? (val ?? string.Empty) : string.Empty;
         }
 
-        public static void Save()
+        private static void WriteToFile(Dictionary<string, string> data)
         {
             try
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(FullConfigPath));
-                string json = new JavaScriptSerializer().Serialize(_data);
-                File.WriteAllText(FullConfigPath, JsonConfigLoader.FormatJson(json), Encoding.UTF8);
+                string dir = Path.GetDirectoryName(FullConfigPath);
+                Directory.CreateDirectory(dir);
+                byte[] bytes = new UTF8Encoding(false).GetBytes(SerializeJson(data));
+                using (var fs = new FileStream(FullConfigPath, FileMode.Create,
+                                               FileAccess.Write, FileShare.ReadWrite))
+                {
+                    fs.Write(bytes, 0, bytes.Length);
+                }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine(
+                    $"[UserSessionState] Save failed: {ex.GetType().Name}: {ex.Message}");
+            }
         }
+
+        public static void Save() => WriteToFile(_data);
 
         public static string LastDataPath              => Get("LastDataPath");
         public static string LastYear                  => Get("LastYear");

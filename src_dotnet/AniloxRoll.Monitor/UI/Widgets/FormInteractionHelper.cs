@@ -186,15 +186,15 @@ namespace AniloxRoll.Monitor.UI.Widgets
                     int lastCameraIndex = _galleryManager.SelectedIndex;
                     if (lastCameraIndex < 0) lastCameraIndex = 0;
 
+                    UserSessionState.SetLastDataPath(fbd.SelectedPath);
+                    UserSessionState.Save();
+
                     _imageRepository.LoadDirectory(fbd.SelectedPath);
                     if (_imageRepository.FileCount == 0)
                     {
                         MessageBox.Show(_form, "該路徑下無符合格式的圖片！");
                         return;
                     }
-
-                    UserSessionState.SetLastDataPath(fbd.SelectedPath);
-                    UserSessionState.Save();
 
                     _timeNavigator.Initialize(UserSessionState.LastYear);
 
