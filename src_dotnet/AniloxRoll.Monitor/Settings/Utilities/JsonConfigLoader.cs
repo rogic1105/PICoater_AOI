@@ -28,5 +28,44 @@ namespace AniloxRoll.Monitor.Core.Data
                 return fallback;
             }
         }
+
+        /// <summary>簡單 JSON 格式化（縮排 2 空格），供各 Store 共用。</summary>
+        public static string FormatJson(string json)
+        {
+            var sb = new StringBuilder();
+            int indent = 0;
+            bool inString = false;
+            foreach (char c in json)
+            {
+                if (c == '"') inString = !inString;
+                if (inString) { sb.Append(c); continue; }
+                switch (c)
+                {
+                    case '{': case '[':
+                        sb.Append(c); sb.Append('\n'); sb.Append(new string(' ', ++indent * 2));
+                        break;
+                    case '}': case ']':
+                        sb.Append('\n'); sb.Append(new string(' ', --indent * 2)); sb.Append(c);
+                        break;
+                    case ',':
+                        sb.Append(c); sb.Append('\n'); sb.Append(new string(' ', indent * 2));
+                        break;
+                    case ':':
+                        sb.Append(": ");
+                        break;
+                    default:
+                        sb.Append(c);
+                        break;
+                }
+            }
+            return sb.ToString();
+        }
+
+        public static void SaveJson<T>(string fullPath, T obj) where T : class
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath));
+            string json = new JavaScriptSerializer().Serialize(obj);
+            File.WriteAllText(fullPath, FormatJson(json), Encoding.UTF8);
+        }
     }
 }

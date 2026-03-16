@@ -144,6 +144,20 @@ Solution 將 `Debug|x64` 映射為 `Debug|Any CPU`（Platform="Any CPU" 含空�
 
 ---
 
+## Settings 分檔持久化架構
+
+| 檔案 | 對應 Tab | 內容 |
+|------|---------|------|
+| `Config\inspection-settings.json` | tabPageInspSettings（PropertyGrid） | MachineLayout + Recipe + Storage |
+| `Config\acquisition-settings.json` | tabPageCamera（TrackBar） | CameraGrabHeight[7] + CameraExposureTimeUs[7] + CameraLineRateHz[7] |
+| `Config\system-settings.json` | tabPageSystem（唯讀） | 相機硬體拓樸 |
+
+- 兩個 JSON 首次執行自動建立（`Load()` 讀不到時 `Save(defaults)` 建檔）
+- `AcquisitionSettings` 陣列索引 0 = CAM1 … 6 = CAM7
+- 存檔在 **`ValueChanged`** 觸發（不用 `MouseUp`）：TrackBar 快速拖曳放開不在控制項範圍內時 `MouseUp` 不一定觸發，導致遺漏存檔
+
+---
+
 ## PropertyGrid 隱藏特定屬性
 
 若某個屬性不應在 PropertyGrid 顯示（例如：已有其他 UI 專門控制），在屬性上加 `[Browsable(false)]`：

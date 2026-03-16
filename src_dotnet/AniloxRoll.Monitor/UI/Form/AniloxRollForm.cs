@@ -241,275 +241,120 @@ namespace AniloxRoll.Monitor.Forms
             const int LrMax     = 10000;   // Hz
             const int HtMin     =   100;   // px
             const int HtMax     = 10000;   // px
-            const int HtDefault =  2048;   // px
             const int TickFreq  =  1000;
 
-            // ── 曝光 CAM2–7 陣列（ApplyExpMax 需在宣告後使用）────────
-            var expBarsRef = new[] { trackBarExpCam2, trackBarExpCam3, trackBarExpCam4, trackBarExpCam5, trackBarExpCam6, trackBarExpCam7 };
-            var expNumsRef = new[] { numExpCam2, numExpCam3, numExpCam4, numExpCam5, numExpCam6, numExpCam7 };
-            var expCamIds  = new[] { 2, 3, 4, 5, 6, 7 };
+            // ── 7 台相機 TrackBar 陣列，索引 0 = CAM1 ─────────────────
+            var acq     = _settings.Acquisition;
+            var expBars = new[] { trackBarExpCam1, trackBarExpCam2, trackBarExpCam3, trackBarExpCam4, trackBarExpCam5, trackBarExpCam6, trackBarExpCam7 };
+            var expNums = new[] { numExpCam1,      numExpCam2,      numExpCam3,      numExpCam4,      numExpCam5,      numExpCam6,      numExpCam7      };
+            var lrBars  = new[] { trackBarLrCam1,  trackBarLrCam2,  trackBarLrCam3,  trackBarLrCam4,  trackBarLrCam5,  trackBarLrCam6,  trackBarLrCam7  };
+            var lrNums  = new[] { numLrCam1,       numLrCam2,       numLrCam3,       numLrCam4,       numLrCam5,       numLrCam6,       numLrCam7       };
+            var htBars  = new[] { trackBarHtCam1,  trackBarHtCam2,  trackBarHtCam3,  trackBarHtCam4,  trackBarHtCam5,  trackBarHtCam6,  trackBarHtCam7  };
+            var htNums  = new[] { numHtCam1,       numHtCam2,       numHtCam3,       numHtCam4,       numHtCam5,       numHtCam6,       numHtCam7       };
 
-            // ── 動態計算曝光上限：0.9 / lrHz * 1e6 μs ──────────────
-            int CalcExpMax(int lrHz)
+            for (int i = 0; i < 7; i++)
             {
-                if (lrHz <= 0) return ExpMaxCap;
-                int dyn = (int)(900000.0 / lrHz);
-                return Math.Max(ExpMin, Math.Min(ExpMaxCap, dyn));
-            }
+                int idx   = i;
+                int camId = i + 1;
 
-            void ApplyExpMax(int expMax)
-            {
-                trackBarExpCam1.Maximum = expMax;
-                numExpCam1.Maximum      = expMax;
-                if (trackBarExpCam1.Value > expMax)
+                // 動態曝光上限（依各台自己的 LR）
+                int CalcExpMax()
                 {
-                    trackBarExpCam1.Value = expMax;
-                    numExpCam1.Value      = expMax;
+                    int lrHz = (int)acq.CameraLineRateHz[idx];
+                    return lrHz <= 0 ? ExpMaxCap : Math.Max(ExpMin, Math.Min(ExpMaxCap, (int)(900000.0 / lrHz)));
                 }
-                foreach (var b in expBarsRef) b.Maximum = expMax;
-                foreach (var n in expNumsRef) { n.Maximum = expMax; if (n.Value > expMax) n.Value = expMax; }
-            }
 
-            // ── 曝光時間 (tabPageExposure) ────────────────────────
-            int lrInit  = (int)Math.Max(LrMin, Math.Min(LrMax, _settings.Acquisition.CameraLineRateHz));
-            int expMax0 = CalcExpMax(lrInit);
-            int expVal  = (int)Math.Max(ExpMin, Math.Min(expMax0, _settings.Acquisition.CameraExposureTimeUs));
+                // ── 曝光時間 ────────────────────────────────────────────
+                int expMax = CalcExpMax();
+                int expVal = (int)Math.Max(ExpMin, Math.Min(expMax, acq.CameraExposureTimeUs[idx]));
+                expBars[idx].Minimum = ExpMin; expBars[idx].Maximum = expMax; expBars[idx].TickFrequency = TickFreq;
+                expNums[idx].Minimum = ExpMin; expNums[idx].Maximum = expMax;
+                expBars[idx].Value   = expVal; expNums[idx].Value   = expVal;
 
-            trackBarExpCam1.Minimum       = ExpMin;
-            trackBarExpCam1.Maximum       = expMax0;
-            trackBarExpCam1.TickFrequency = TickFreq;
-            numExpCam1.Minimum            = ExpMin;
-            numExpCam1.Maximum            = expMax0;
-            trackBarExpCam1.Value         = expVal;
-            numExpCam1.Value              = expVal;
-            for (int i = 0; i < expBarsRef.Length; i++)
-            {
-                expBarsRef[i].Minimum       = ExpMin;
-                expBarsRef[i].Maximum       = expMax0;
-                expBarsRef[i].TickFrequency = TickFreq;
-                expBarsRef[i].Value         = expVal;
-                expNumsRef[i].Minimum       = ExpMin;
-                expNumsRef[i].Maximum       = expMax0;
-                expNumsRef[i].Value         = expVal;
-            }
-
-            bool syncingExp = false;
-            trackBarExpCam1.ValueChanged += (s, e) =>
-            {
-                if (syncingExp) return;
-                syncingExp = true;
-                numExpCam1.Value = trackBarExpCam1.Value;
-                _settings.Acquisition.CameraExposureTimeUs = trackBarExpCam1.Value;
-                _liveCameraManager?.SetExposureForAll(trackBarExpCam1.Value);
-                syncingExp = false;
-            };
-            numExpCam1.ValueChanged += (s, e) =>
-            {
-                if (syncingExp) return;
-                syncingExp = true;
-                int v = (int)numExpCam1.Value;
-                trackBarExpCam1.Value = Math.Max(ExpMin, Math.Min(trackBarExpCam1.Maximum, v));
-                _settings.Acquisition.CameraExposureTimeUs = v;
-                _liveCameraManager?.SetExposureForAll(v);
-                syncingExp = false;
-            };
-
-            void SwitchAndSave(int camId) { _liveCameraManager?.SwitchToCamera(camId); ConfigManager.SaveInspectionSettings(_settings); }
-
-            trackBarExpCam1.MouseUp += (s, e) => SwitchAndSave(1);
-
-            for (int i = 0; i < expBarsRef.Length; i++)
-            {
-                int camId    = expCamIds[i];
-                var bar      = expBarsRef[i];
-                var num      = expNumsRef[i];
-                bool syncing = false;
-                bar.ValueChanged += (s, e) =>
+                bool syncExp = false;
+                expBars[idx].ValueChanged += (s, e) =>
                 {
-                    if (syncing) return;
-                    syncing = true;
-                    num.Value = bar.Value;
-                    _liveCameraManager?.SetExposureForCamera(camId, bar.Value);
-                    syncing = false;
+                    if (syncExp) return; syncExp = true;
+                    expNums[idx].Value = expBars[idx].Value;
+                    acq.CameraExposureTimeUs[idx] = expBars[idx].Value;
+                    _liveCameraManager?.SetExposureForCamera(camId, expBars[idx].Value);
+                    ConfigManager.SaveAcquisitionSettings(acq);
+                    syncExp = false;
                 };
-                num.ValueChanged += (s, e) =>
+                expNums[idx].ValueChanged += (s, e) =>
                 {
-                    if (syncing) return;
-                    syncing = true;
-                    int v = (int)num.Value;
-                    bar.Value = Math.Max(ExpMin, Math.Min(bar.Maximum, v));
+                    if (syncExp) return; syncExp = true;
+                    int v = (int)expNums[idx].Value;
+                    expBars[idx].Value = Math.Max(ExpMin, Math.Min(expBars[idx].Maximum, v));
+                    acq.CameraExposureTimeUs[idx] = v;
                     _liveCameraManager?.SetExposureForCamera(camId, v);
-                    syncing = false;
+                    ConfigManager.SaveAcquisitionSettings(acq);
+                    syncExp = false;
                 };
-                bar.MouseUp += (s, e) => SwitchAndSave(camId);
-            }
+                expBars[idx].MouseUp += (s, e) => _liveCameraManager?.SwitchToCamera(camId);
 
-            // ── 線掃速率 (tabPageLineRate) ────────────────────────
-            // min=100 Hz；調整 LR 後動態更新曝光上限（ExpMax = 0.9/LR*1e6 μs）
-            int lrVal = lrInit;
+                // ── 線掃速率 ────────────────────────────────────────────
+                int lrVal = (int)Math.Max(LrMin, Math.Min(LrMax, acq.CameraLineRateHz[idx]));
+                lrBars[idx].Minimum = LrMin; lrBars[idx].Maximum = LrMax; lrBars[idx].TickFrequency = TickFreq;
+                lrNums[idx].Minimum = LrMin; lrNums[idx].Maximum = LrMax;
+                lrBars[idx].Value   = lrVal; lrNums[idx].Value   = lrVal;
 
-            trackBarLrCam1.Minimum       = LrMin;
-            trackBarLrCam1.Maximum       = LrMax;
-            trackBarLrCam1.TickFrequency = TickFreq;
-            numLrCam1.Minimum            = LrMin;
-            numLrCam1.Maximum            = LrMax;
-            trackBarLrCam1.Value         = lrVal;
-            numLrCam1.Value              = lrVal;
-
-            // tabPageLineRate 面板順序：panel15=CAM7 … panel20=CAM2
-            var lrBars   = new[] { trackBarLrCam7, trackBarLrCam6, trackBarLrCam5,
-                                   trackBarLrCam4, trackBarLrCam3, trackBarLrCam2 };
-            var lrNums   = new[] { numLrCam7, numLrCam6, numLrCam5,
-                                   numLrCam4, numLrCam3, numLrCam2 };
-            var lrCamIds = new[] { 7, 6, 5, 4, 3, 2 };
-            for (int i = 0; i < lrBars.Length; i++)
-            {
-                lrBars[i].Minimum       = LrMin;
-                lrBars[i].Maximum       = LrMax;
-                lrBars[i].TickFrequency = TickFreq;
-                lrBars[i].Value         = lrVal;
-                lrNums[i].Minimum       = LrMin;
-                lrNums[i].Maximum       = LrMax;
-                lrNums[i].Value         = lrVal;
-            }
-
-            bool syncingLr = false;
-            trackBarLrCam1.ValueChanged += (s, e) =>
-            {
-                if (syncingLr) return;
-                syncingLr = true;
-                numLrCam1.Value = trackBarLrCam1.Value;
-                _settings.Acquisition.CameraLineRateHz = trackBarLrCam1.Value;
-                _liveCameraManager?.SetLineRateForAll(trackBarLrCam1.Value);
-                ApplyExpMax(CalcExpMax(trackBarLrCam1.Value));
-                syncingLr = false;
-            };
-            numLrCam1.ValueChanged += (s, e) =>
-            {
-                if (syncingLr) return;
-                syncingLr = true;
-                int v = (int)numLrCam1.Value;
-                trackBarLrCam1.Value = Math.Max(LrMin, Math.Min(LrMax, v));
-                _settings.Acquisition.CameraLineRateHz = v;
-                _liveCameraManager?.SetLineRateForAll(v);
-                ApplyExpMax(CalcExpMax(v));
-                syncingLr = false;
-            };
-
-            trackBarLrCam1.MouseUp += (s, e) => SwitchAndSave(1);
-
-            for (int i = 0; i < lrBars.Length; i++)
-            {
-                int camId    = lrCamIds[i];
-                var bar      = lrBars[i];
-                var num      = lrNums[i];
-                bool syncing = false;
-                bar.ValueChanged += (s, e) =>
+                bool syncLr = false;
+                lrBars[idx].ValueChanged += (s, e) =>
                 {
-                    if (syncing) return;
-                    syncing = true;
-                    num.Value = bar.Value;
-                    _liveCameraManager?.SetLineRateForCamera(camId, bar.Value);
-                    syncing = false;
+                    if (syncLr) return; syncLr = true;
+                    lrNums[idx].Value = lrBars[idx].Value;
+                    acq.CameraLineRateHz[idx] = lrBars[idx].Value;
+                    _liveCameraManager?.SetLineRateForCamera(camId, lrBars[idx].Value);
+                    int newMax = CalcExpMax();
+                    expBars[idx].Maximum = newMax; expNums[idx].Maximum = newMax;
+                    if (expBars[idx].Value > newMax) { expBars[idx].Value = newMax; expNums[idx].Value = newMax; }
+                    ConfigManager.SaveAcquisitionSettings(acq);
+                    syncLr = false;
                 };
-                num.ValueChanged += (s, e) =>
+                lrNums[idx].ValueChanged += (s, e) =>
                 {
-                    if (syncing) return;
-                    syncing = true;
-                    int v = (int)num.Value;
-                    bar.Value = Math.Max(LrMin, Math.Min(LrMax, v));
+                    if (syncLr) return; syncLr = true;
+                    int v = (int)lrNums[idx].Value;
+                    lrBars[idx].Value = Math.Max(LrMin, Math.Min(LrMax, v));
+                    acq.CameraLineRateHz[idx] = v;
                     _liveCameraManager?.SetLineRateForCamera(camId, v);
-                    syncing = false;
+                    int newMax = CalcExpMax();
+                    expBars[idx].Maximum = newMax; expNums[idx].Maximum = newMax;
+                    if (expBars[idx].Value > newMax) { expBars[idx].Value = newMax; expNums[idx].Value = newMax; }
+                    ConfigManager.SaveAcquisitionSettings(acq);
+                    syncLr = false;
                 };
-                bar.MouseUp += (s, e) => SwitchAndSave(camId);
-            }
+                lrBars[idx].MouseUp += (s, e) => _liveCameraManager?.SwitchToCamera(camId);
 
-            // ── 擷取高度 (tabPageGrabHeight) ────────────────────────
-            // Grab Height 需走 Stop→Free→Realloc→Restart 完整流程，不可 live apply。
-            // tabPageGrabHeight 面板順序：panel21=CAM7 … panel27=CAM1
-            int htVal = Math.Max(HtMin, Math.Min(HtMax, _settings.Acquisition.CameraGrabHeight));
-            if (htVal == 0) htVal = HtDefault;
+                // ── 擷取高度 ────────────────────────────────────────────
+                int htVal = Math.Max(HtMin, Math.Min(HtMax, acq.CameraGrabHeight[idx]));
+                htBars[idx].Minimum = HtMin; htBars[idx].Maximum = HtMax; htBars[idx].TickFrequency = TickFreq;
+                htBars[idx].SmallChange = 64; htBars[idx].LargeChange = 512;
+                htNums[idx].Minimum = HtMin; htNums[idx].Maximum = HtMax;
+                htBars[idx].Value   = htVal; htNums[idx].Value   = htVal;
 
-            trackBarHtCam1.Minimum       = HtMin;
-            trackBarHtCam1.Maximum       = HtMax;
-            trackBarHtCam1.TickFrequency = TickFreq;
-            trackBarHtCam1.SmallChange   = 64;
-            trackBarHtCam1.LargeChange   = 512;
-            numHtCam1.Minimum            = HtMin;
-            numHtCam1.Maximum            = HtMax;
-            trackBarHtCam1.Value         = htVal;
-            numHtCam1.Value              = htVal;
-
-            var htBars   = new[] { trackBarHtCam7, trackBarHtCam6, trackBarHtCam5,
-                                   trackBarHtCam4, trackBarHtCam3, trackBarHtCam2 };
-            var htNums   = new[] { numHtCam7, numHtCam6, numHtCam5,
-                                   numHtCam4, numHtCam3, numHtCam2 };
-            var htCamIds = new[] { 7, 6, 5, 4, 3, 2 };
-            for (int i = 0; i < htBars.Length; i++)
-            {
-                htBars[i].Minimum       = HtMin;
-                htBars[i].Maximum       = HtMax;
-                htBars[i].TickFrequency = TickFreq;
-                htBars[i].SmallChange   = 64;
-                htBars[i].LargeChange   = 512;
-                htBars[i].Value         = htVal;
-                htNums[i].Minimum       = HtMin;
-                htNums[i].Maximum       = HtMax;
-                htNums[i].Value         = htVal;
-            }
-
-            // 拖動結束後切換主顯示到該相機，確保畫面立即顯示在 panelMainDisplay
-            trackBarHtCam1.MouseUp += (s, e) => SwitchAndSave(1);
-            for (int i = 0; i < htBars.Length; i++)
-            {
-                int camId = htCamIds[i];
-                htBars[i].MouseUp += (s, e) => SwitchAndSave(camId);
-            }
-
-            bool syncingHt = false;
-            trackBarHtCam1.ValueChanged += (s, e) =>
-            {
-                if (syncingHt) return;
-                syncingHt = true;
-                numHtCam1.Value = trackBarHtCam1.Value;
-                _settings.Acquisition.CameraGrabHeight = trackBarHtCam1.Value;
-                _liveCameraManager?.SetGrabHeightForAll(trackBarHtCam1.Value);
-                syncingHt = false;
-            };
-            numHtCam1.ValueChanged += (s, e) =>
-            {
-                if (syncingHt) return;
-                syncingHt = true;
-                int v = (int)numHtCam1.Value;
-                trackBarHtCam1.Value = Math.Max(HtMin, Math.Min(HtMax, v));
-                _settings.Acquisition.CameraGrabHeight = v;
-                _liveCameraManager?.SetGrabHeightForAll(v);
-                syncingHt = false;
-            };
-
-            for (int i = 0; i < htBars.Length; i++)
-            {
-                int camId    = htCamIds[i];
-                var bar      = htBars[i];
-                var num      = htNums[i];
-                bool syncing = false;
-                bar.ValueChanged += (s, e) =>
+                bool syncHt = false;
+                htBars[idx].ValueChanged += (s, e) =>
                 {
-                    if (syncing) return;
-                    syncing = true;
-                    num.Value = bar.Value;
-                    _liveCameraManager?.SetGrabHeightForCamera(camId, bar.Value);
-                    syncing = false;
+                    if (syncHt) return; syncHt = true;
+                    htNums[idx].Value = htBars[idx].Value;
+                    acq.CameraGrabHeight[idx] = htBars[idx].Value;
+                    _liveCameraManager?.SetGrabHeightForCamera(camId, htBars[idx].Value);
+                    ConfigManager.SaveAcquisitionSettings(acq);
+                    syncHt = false;
                 };
-                num.ValueChanged += (s, e) =>
+                htNums[idx].ValueChanged += (s, e) =>
                 {
-                    if (syncing) return;
-                    syncing = true;
-                    int v = (int)num.Value;
-                    bar.Value = Math.Max(HtMin, Math.Min(HtMax, v));
+                    if (syncHt) return; syncHt = true;
+                    int v = (int)htNums[idx].Value;
+                    htBars[idx].Value = Math.Max(HtMin, Math.Min(HtMax, v));
+                    acq.CameraGrabHeight[idx] = v;
                     _liveCameraManager?.SetGrabHeightForCamera(camId, v);
-                    syncing = false;
+                    ConfigManager.SaveAcquisitionSettings(acq);
+                    syncHt = false;
                 };
+                htBars[idx].MouseUp += (s, e) => _liveCameraManager?.SwitchToCamera(camId);
             }
         }
 

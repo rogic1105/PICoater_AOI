@@ -83,6 +83,7 @@
     <Compile Include="Acquisition\Inspection\InspectionData.cs" />
     <Compile Include="Settings\InspectionSettings.cs" />
     <Compile Include="Settings\Providers\InspectionSettingsDefaultsProvider.cs" />
+    <Compile Include="Settings\Stores\AcquisitionSettingsStore.cs" />
     <Compile Include="Settings\Stores\InspectionSettingsStore.cs" />
     <Compile Include="Settings\Utilities\JsonConfigLoader.cs" />
     <Compile Include="Settings\State\UserSettingsService.cs" />
@@ -146,9 +147,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
-    <None Include="Config\inspection-settings.defaults.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
     <None Include="Config\system-settings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

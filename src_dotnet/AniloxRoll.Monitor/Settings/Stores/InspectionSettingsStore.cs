@@ -1,27 +1,57 @@
-﻿using System;
+using System;
 using System.IO;
-using System.Text;
-using System.Web.Script.Serialization;
 
 namespace AniloxRoll.Monitor.Core.Data
 {
     /// <summary>
-    /// InspectionSettings 儲存層。
-    /// 直接讀寫 Config\inspection-settings.defaults.json（與 exe 同目錄）。
-    /// 該檔案確定存在且可寫，不依賴版本相依的 user.config。
+    /// InspectionSettings 儲存層（MachineLayout + Recipe + Storage）。
+    /// 讀寫 Config\inspection-settings.json（與 exe 同目錄）。
+    /// 對應 tabPageInspSettings（PropertyGrid）顯示的參數。
+    /// Acquisition 由 AcquisitionSettingsStore 獨立管理。
     /// </summary>
     public static class InspectionSettingsStore
     {
-        private const string ConfigPath = "Config\\inspection-settings.defaults.json";
-
         private static string FullConfigPath =>
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ConfigPath);
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"Config\inspection-settings.json");
+
+        /// <summary>僅序列化 PropertyGrid 顯示的三個群組，不含 Acquisition。</summary>
+        private class Dto
+        {
+            public MachineLayoutConfig MachineLayout { get; set; } = new MachineLayoutConfig();
+            public InspectionRecipe    Recipe        { get; set; } = new InspectionRecipe();
+            public StorageSettings     Storage       { get; set; } = new StorageSettings();
+        }
 
         public static InspectionSettings Load()
         {
-            var settings = InspectionSettingsDefaultsProvider.LoadDefaults();
-            settings.Validate();
-            return settings;
+            try
+            {
+                if (!File.Exists(FullConfigPath))
+                {
+                    var defaults = new InspectionSettings();
+                    defaults.Validate();
+                    Save(defaults);
+                    return defaults;
+                }
+
+                string json = File.ReadAllText(FullConfigPath, System.Text.Encoding.UTF8);
+                var dto = string.IsNullOrWhiteSpace(json)
+                    ? new Dto()
+                    : (new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<Dto>(json) ?? new Dto());
+
+                var settings = new InspectionSettings
+                {
+                    MachineLayout = dto.MachineLayout ?? new MachineLayoutConfig(),
+                    Recipe        = dto.Recipe        ?? new InspectionRecipe(),
+                    Storage       = dto.Storage       ?? new StorageSettings(),
+                };
+                settings.Validate();
+                return settings;
+            }
+            catch
+            {
+                return new InspectionSettings();
+            }
         }
 
         public static void Save(InspectionSettings settings)
@@ -31,48 +61,18 @@ namespace AniloxRoll.Monitor.Core.Data
                 if (settings == null) settings = new InspectionSettings();
                 settings.Validate();
 
-                var serializer = new JavaScriptSerializer();
-                string json = serializer.Serialize(settings);
-
-                // 寫入格式化 JSON，方便人工閱讀
-                File.WriteAllText(FullConfigPath, FormatJson(json), Encoding.UTF8);
+                var dto = new Dto
+                {
+                    MachineLayout = settings.MachineLayout,
+                    Recipe        = settings.Recipe,
+                    Storage       = settings.Storage,
+                };
+                JsonConfigLoader.SaveJson(FullConfigPath, dto);
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("[InspectionSettingsStore.Save] " + ex.Message);
             }
-        }
-
-        /// <summary>簡單 JSON 格式化（縮排 2 空格）。</summary>
-        private static string FormatJson(string json)
-        {
-            var sb = new StringBuilder();
-            int indent = 0;
-            bool inString = false;
-            foreach (char c in json)
-            {
-                if (c == '"') inString = !inString;
-                if (inString) { sb.Append(c); continue; }
-                switch (c)
-                {
-                    case '{': case '[':
-                        sb.Append(c); sb.Append('\n'); sb.Append(new string(' ', ++indent * 2));
-                        break;
-                    case '}': case ']':
-                        sb.Append('\n'); sb.Append(new string(' ', --indent * 2)); sb.Append(c);
-                        break;
-                    case ',':
-                        sb.Append(c); sb.Append('\n'); sb.Append(new string(' ', indent * 2));
-                        break;
-                    case ':':
-                        sb.Append(": ");
-                        break;
-                    default:
-                        sb.Append(c);
-                        break;
-                }
-            }
-            return sb.ToString();
         }
     }
 }

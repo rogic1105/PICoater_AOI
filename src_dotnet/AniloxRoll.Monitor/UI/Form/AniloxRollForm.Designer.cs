@@ -315,8 +315,8 @@
             // checkBoxEnableImageProcessing
             // 
             this.checkBoxEnableImageProcessing.AutoSize = true;
-            this.checkBoxEnableImageProcessing.Checked = true;
-            this.checkBoxEnableImageProcessing.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.checkBoxEnableImageProcessing.Checked = false;
+            this.checkBoxEnableImageProcessing.CheckState = System.Windows.Forms.CheckState.Unchecked;
             this.checkBoxEnableImageProcessing.Location = new System.Drawing.Point(1088, 123);
             this.checkBoxEnableImageProcessing.Name = "checkBoxEnableImageProcessing";
             this.checkBoxEnableImageProcessing.Size = new System.Drawing.Size(89, 19);

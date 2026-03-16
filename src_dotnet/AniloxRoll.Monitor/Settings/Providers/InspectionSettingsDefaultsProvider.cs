@@ -1,12 +1,8 @@
 namespace AniloxRoll.Monitor.Core.Data
 {
+    /// <summary>已整合至 InspectionSettingsStore，保留以避免外部參考錯誤。</summary>
     internal static class InspectionSettingsDefaultsProvider
     {
-        private const string DefaultConfigPath = "Config\\inspection-settings.defaults.json";
-
-        public static InspectionSettings LoadDefaults()
-        {
-            return JsonConfigLoader.LoadOrDefault(DefaultConfigPath, new InspectionSettings());
-        }
+        public static InspectionSettings LoadDefaults() => InspectionSettingsStore.Load();
     }
 }

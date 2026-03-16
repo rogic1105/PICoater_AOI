@@ -28,9 +28,9 @@ namespace AniloxRoll.Monitor.UI.Managers
         private Timer _cameraStatusTimer;
         private bool _enableAutoCapture;
         private string _captureRootPath = string.Empty;
-        private int _cameraGrabHeight;
-        private double _cameraExposureTimeUs;
-        private double _cameraLineRateHz;
+        private int[]    _cameraGrabHeight    = new int[7];
+        private double[] _cameraExposureTimeUs = new double[7];
+        private double[] _cameraLineRateHz     = new double[7];
 
         public bool IsAllocated    { get; private set; } = false;
         public bool IsLiveGrabbing { get; private set; } = false;
@@ -145,10 +145,11 @@ namespace AniloxRoll.Monitor.UI.Managers
                     displayPanel.Handle,
                     enableImageProcessing);
 
-                cam.EnableAutoCapture  = _enableAutoCapture;
-                cam.CaptureRootPath    = _captureRootPath;
-                cam.CameraGrabHeight   = _cameraGrabHeight;
-                cam.CameraExposureTimeUs = _cameraExposureTimeUs; // Initialize() 會呼叫 SetExposureUs 套用
+                int camIdx = cfg.Id - 1; // cfg.Id 為 1–7，轉為 0–6 陣列索引
+                cam.EnableAutoCapture    = _enableAutoCapture;
+                cam.CaptureRootPath      = _captureRootPath;
+                cam.CameraGrabHeight     = _cameraGrabHeight[camIdx];
+                cam.CameraExposureTimeUs = _cameraExposureTimeUs[camIdx]; // Initialize() 會呼叫 SetExposureUs 套用
                 cam.HessianSigma       = InspectionEngineConfig.DefaultRidgeSigma;
                 cam.HessianFixedMax    = InspectionEngineConfig.DefaultHessianMaxFactor;
 
@@ -269,16 +270,17 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             foreach (var cam in _cameras)
             {
+                int camIdx = cam.CameraId - 1;
                 cam.EnableAutoCapture = _enableAutoCapture;
                 cam.CaptureRootPath   = _captureRootPath;
-                cam.CameraGrabHeight  = _cameraGrabHeight;
+                cam.CameraGrabHeight  = _cameraGrabHeight[camIdx];
                 cam.HessianSigma      = InspectionEngineConfig.DefaultRidgeSigma;
                 cam.HessianFixedMax   = hessianMaxFactor;
 
                 // 曝光：走 CLProtocol-aware SetExposureUs（CLProtocol 未就緒時記錄，就緒後自動重套）
-                cam.SetExposureUs(_cameraExposureTimeUs);
+                cam.SetExposureUs(_cameraExposureTimeUs[camIdx]);
                 // 線掃速率：同上，CLProtocol 未就緒時記錄，就緒後自動重套
-                cam.SetLineRateHz(_cameraLineRateHz);
+                cam.SetLineRateHz(_cameraLineRateHz[camIdx]);
             }
         }
 
@@ -296,7 +298,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// </summary>
         public void SetExposureForAll(double exposureUs)
         {
-            _cameraExposureTimeUs = exposureUs;
+            for (int i = 0; i < _cameraExposureTimeUs.Length; i++) _cameraExposureTimeUs[i] = exposureUs;
             foreach (var cam in _cameras)
                 cam.SetExposureUs(exposureUs);
         }
@@ -315,7 +317,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// </summary>
         public void SetLineRateForAll(double hz)
         {
-            _cameraLineRateHz = hz;
+            for (int i = 0; i < _cameraLineRateHz.Length; i++) _cameraLineRateHz[i] = hz;
             foreach (var cam in _cameras)
                 cam.SetLineRateHz(hz);
         }
@@ -335,7 +337,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// </summary>
         public void SetGrabHeightForAll(int height)
         {
-            _cameraGrabHeight = height;
+            for (int i = 0; i < _cameraGrabHeight.Length; i++) _cameraGrabHeight[i] = height;
             foreach (var cam in _cameras)
                 cam.SetGrabHeight(height);
         }
@@ -370,8 +372,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (settings == null) return;
             _enableAutoCapture    = settings.EnableAutoCapture;
             _captureRootPath      = settings.CaptureRootPath ?? string.Empty;
-            _cameraGrabHeight     = settings.CameraGrabHeight;
-            _cameraExposureTimeUs = settings.CameraExposureTimeUs;
+            _cameraGrabHeight     = settings.Acquisition.CameraGrabHeight;
+            _cameraExposureTimeUs = settings.Acquisition.CameraExposureTimeUs;
             _cameraLineRateHz     = settings.Acquisition.CameraLineRateHz;
         }
 
