@@ -155,6 +155,7 @@ Solution 將 `Debug|x64` 映射為 `Debug|Any CPU`（Platform="Any CPU" 含空�
 - 兩個 JSON 首次執行自動建立（`Load()` 讀不到時 `Save(defaults)` 建檔）
 - `AcquisitionSettings` 陣列索引 0 = CAM1 … 6 = CAM7
 - 存檔在 **`ValueChanged`** 觸發（不用 `MouseUp`）：TrackBar 快速拖曳放開不在控制項範圍內時 `MouseUp` 不一定觸發，導致遺漏存檔
+- **`AcquisitionSettingsStore` 不使用 `JavaScriptSerializer`**：改用手刻 `SerializeJson` / `ParseJson`（Regex 解析陣列，`InvariantCulture` 解析 double），`FileStream(FileMode.Create, FileShare.ReadWrite)`，`Trace.WriteLine` 記錯誤。原因同 `UserSessionState`：`user.config` 損毀時 `new JavaScriptSerializer()` 拋 `ConfigurationErrorsException`，`catch { Debug.WriteLine }` 在 Release 靜默失敗，導致 JSON 永不更新
 
 ---
 

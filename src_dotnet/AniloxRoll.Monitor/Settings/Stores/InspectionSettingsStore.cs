@@ -71,7 +71,7 @@ namespace AniloxRoll.Monitor.Core.Data
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("[InspectionSettingsStore.Save] " + ex.Message);
+                System.Diagnostics.Trace.WriteLine($"[InspectionSettingsStore.Save] {ex.GetType().Name}: {ex.Message}");
             }
         }
     }
