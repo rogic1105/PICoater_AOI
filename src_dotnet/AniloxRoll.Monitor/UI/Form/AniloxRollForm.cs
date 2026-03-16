@@ -338,6 +338,8 @@ namespace AniloxRoll.Monitor.Forms
                 syncingExp = false;
             };
 
+            trackBarExpCam1.MouseUp += (s, e) => _liveCameraManager?.SwitchToCamera(1);
+
             for (int i = 0; i < expBarsRef.Length; i++)
             {
                 int camId    = expCamIds[i];
@@ -361,6 +363,7 @@ namespace AniloxRoll.Monitor.Forms
                     _liveCameraManager?.SetExposureForCamera(camId, v);
                     syncing = false;
                 };
+                bar.MouseUp += (s, e) => _liveCameraManager?.SwitchToCamera(camId);
             }
 
             // ── 線掃速率 (tabPageLineRate) ────────────────────────
@@ -415,6 +418,8 @@ namespace AniloxRoll.Monitor.Forms
                 syncingLr = false;
             };
 
+            trackBarLrCam1.MouseUp += (s, e) => _liveCameraManager?.SwitchToCamera(1);
+
             for (int i = 0; i < lrBars.Length; i++)
             {
                 int camId    = lrCamIds[i];
@@ -438,6 +443,7 @@ namespace AniloxRoll.Monitor.Forms
                     _liveCameraManager?.SetLineRateForCamera(camId, v);
                     syncing = false;
                 };
+                bar.MouseUp += (s, e) => _liveCameraManager?.SwitchToCamera(camId);
             }
 
             // ── 擷取高度 (tabPageGrabHeight) ────────────────────────
