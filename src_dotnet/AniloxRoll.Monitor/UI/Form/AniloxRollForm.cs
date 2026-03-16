@@ -31,7 +31,6 @@ namespace AniloxRoll.Monitor.Forms
         // --- 資料緩存 ---
         private readonly List<Image> _thumbnailCache = new List<Image>();
         private InspectionSettings _settings;
-        private bool _isApplyingCameraReinit = false;
         private bool _lastReviewProcessedMode = false;
 
 
@@ -185,35 +184,12 @@ namespace AniloxRoll.Monitor.Forms
         private async void _propertyGrid_PropertyValueChanged(object s, PropertyValueChangedEventArgs e)
         {
             _interactionHelper.HandleSettingsChanged();
+            _liveCameraManager?.SetCaptureSettings(_settings);
 
             string changedPropertyName = e?.ChangedItem?.PropertyDescriptor?.Name;
             bool isHessianMaxFactorChanged =
                 string.Equals(changedPropertyName, nameof(InspectionRecipe.HessianMaxFactor), StringComparison.Ordinal) ||
                 string.Equals(changedPropertyName, "Hessian Max Factor", StringComparison.Ordinal);
-
-            // 任何設定改變，只要相機已配置就重新初始化，避免舊參數在抓圖中導致當機。
-            if (_liveCameraManager != null && _liveCameraManager.IsAllocated && !_isApplyingCameraReinit)
-            {
-                _isApplyingCameraReinit = true;
-                try
-                {
-                    _liveCameraManager.ReinitializeForAcquisitionSettings(checkBoxEnableImageProcessing.Checked, _settings);
-                    btnCameraGrab.Text = _liveCameraManager.IsLiveGrabbing ? "停止抓取" : "開始抓取";
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"重設相機失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-                finally
-                {
-                    _isApplyingCameraReinit = false;
-                }
-            }
-            else
-            {
-                // 相機尚未配置時，只更新緩存設定供下次配置使用。
-                _liveCameraManager?.SetCaptureSettings(_settings);
-            }
 
             if (isHessianMaxFactorChanged)
             {

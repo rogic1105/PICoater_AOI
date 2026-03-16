@@ -144,6 +144,33 @@ Solution 將 `Debug|x64` 映射為 `Debug|Any CPU`（Platform="Any CPU" 含空�
 
 ---
 
+## PropertyGrid 隱藏特定屬性
+
+若某個屬性不應在 PropertyGrid 顯示（例如：已有其他 UI 專門控制），在屬性上加 `[Browsable(false)]`：
+
+```csharp
+// InspectionSettings.cs
+[Browsable(false)]
+public AcquisitionSettings Acquisition { get; set; } = new AcquisitionSettings();
+```
+
+- Category / DisplayName 等 attribute 可同時移除，`[Browsable(false)]` 優先生效
+- 屬性本身仍可正常讀寫（序列化、code-behind 存取不受影響）
+- 適用場景：同一設定有兩個 UI 入口時，保留一個入口、隱藏另一個，避免重複設定造成混亂
+
+---
+
+## Git Workflow 規則
+
+**每次 commit / push 前，必須先更新以下兩個檔案：**
+
+1. `CLAUDE.md` — 更新專案架構、設定規則、關鍵檔案速查等內容
+2. `skills.md` — 更新開發過程累積的模式、陷阱、可重用知識
+
+確保文件反映最新的程式碼狀態，讓下次對話能快速上手。
+
+---
+
 ## /perf-diagnose
 
 效能問題排查流程：

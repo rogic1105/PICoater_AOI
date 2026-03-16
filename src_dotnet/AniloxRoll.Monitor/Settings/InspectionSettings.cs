@@ -10,15 +10,14 @@ namespace AniloxRoll.Monitor.Core.Data
         [DisplayName("Machine Layout")]
         public MachineLayoutConfig MachineLayout { get; set; } = new MachineLayoutConfig();
 
-        [Category("2. 取像設定")]
-        [DisplayName("Acquisition")]
+        [Browsable(false)]
         public AcquisitionSettings Acquisition { get; set; } = new AcquisitionSettings();
 
-        [Category("3. 檢測配方")]
+        [Category("2. 檢測配方")]
         [DisplayName("Inspection Recipe")]
         public InspectionRecipe Recipe { get; set; } = new InspectionRecipe();
 
-        [Category("4. 儲存設定")]
+        [Category("3. 儲存設定")]
         [DisplayName("Storage")]
         public StorageSettings Storage { get; set; } = new StorageSettings();
 

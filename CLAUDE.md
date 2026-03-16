@@ -97,8 +97,8 @@ Form 右側固定有 `tabControlRight`（Location=1209,12，Size=276×679），�
 
 | Tab（Name） | Tab Text | 控制項 | 內容 |
 |-------------|----------|--------|------|
-| `tabPageInspSettings` | 檢測設定 | `propertyGrid1`（Dock=Fill） | `InspectionSettings`（MachineLayout / Acquisition / Recipe / Storage） |
-| `tabPageCamera` | 相機參數 | `tabControlCamTabs`（嵌套） | 曝光時間 / 線掃速率 / 擷取高度 各 7 台 |
+| `tabPageInspSettings` | 檢測設定 | `propertyGrid1`（Dock=Fill） | `InspectionSettings`（MachineLayout / Recipe / Storage）— **Acquisition 已隱藏（[Browsable(false)]）** |
+| `tabPageCamera` | 相機參數 | `tabControlCamTabs`（嵌套） | 曝光時間 / 線掃速率 / 擷取高度 各 7 台（**唯一設定入口**） |
 | `tabPageSystem` | 系統資訊 | `listViewCameras` + `listViewEngine` | SystemSettings.CameraDevices + InspectionEngineConfig 常數 |
 
 `tabPageCamera` 內嵌 `tabControlCamTabs`，含 3 個子 Tab：
@@ -116,7 +116,7 @@ Form 右側固定有 `tabControlRight`（Location=1209,12，Size=276×679），�
 | 類別 | 參數 | 位置 |
 |------|------|------|
 | A. 相機硬體設定 | Id, SystemDescriptor, SystemNum, DevNum, DcfPath | JSON only（`system-settings.json`） |
-| B. 取像設定（控制） | CameraExposureTimeUs, CameraLineRateHz, CameraGrabHeight | TrackBar（`tabPageCamera`）+ JSON |
+| B. 取像設定（控制） | CameraExposureTimeUs, CameraLineRateHz, CameraGrabHeight | **TrackBar 唯一入口**（`tabPageCamera`）+ JSON；PropertyGrid 不顯示 |
 | C. 機台佈局 | Cam1–7_Ops, Cam1–7_Pos | PropertyGrid（`tabPageInspSettings`）+ JSON |
 | D. 檢測配方 | HessianMaxFactor, ErrorValueMean, ErrorValueMax | PropertyGrid（`tabPageInspSettings`）+ JSON |
 | E. 儲存設定 | EnableAutoCapture, CaptureRootPath | PropertyGrid（`tabPageInspSettings`）+ JSON |
@@ -346,3 +346,14 @@ sdk/AOI_SDK/src_dotnet/MilGrabSample/MilGrabSample/
 | [15] | PCIe Speed | `MsysInquire(M_PCIE_SPEED)` | Gen1/2/3 |
 
 **維護注意**：新增或移除欄位時，`Initialize()`（`for i < N`）、`Update()`（各 SubItems[n]）、`ResetAll()`（`for i <= N`）三處必須同步修改。
+
+---
+
+## Git Workflow 規則
+
+**每次 commit / push 前，必須先更新以下兩個檔案：**
+
+1. `CLAUDE.md` — 更新專案架構、設定規則、關鍵檔案速查等內容
+2. `skills.md` — 更新開發過程累積的模式、陷阱、可重用知識
+
+確保文件反映最新的程式碼狀態，讓下次對話能快速上手。

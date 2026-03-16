@@ -28,9 +28,9 @@
         /// </summary>
         private void InitializeComponent()
         {
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea6 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend6 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series6 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea1 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend1 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series1 = new System.Windows.Forms.DataVisualization.Charting.Series();
             this.tabMain = new System.Windows.Forms.TabControl();
             this.tabPageLiveView = new System.Windows.Forms.TabPage();
             this.checkBoxEnableImageProcessing = new System.Windows.Forms.CheckBox();
@@ -72,6 +72,7 @@
             this.cbYear = new System.Windows.Forms.ComboBox();
             this.btnLastPeriod = new System.Windows.Forms.Button();
             this.btnNextPeriod = new System.Windows.Forms.Button();
+            this.tabPageData = new System.Windows.Forms.TabPage();
             this.propertyGrid1 = new System.Windows.Forms.PropertyGrid();
             this.statusStrip1 = new System.Windows.Forms.StatusStrip();
             this.lblPixelInfo = new System.Windows.Forms.ToolStripStatusLabel();
@@ -192,7 +193,6 @@
             this.lblEngineConst = new System.Windows.Forms.Label();
             this.listViewCameras = new System.Windows.Forms.ListView();
             this.lblCamHardware = new System.Windows.Forms.Label();
-            this.tabPageData = new System.Windows.Forms.TabPage();
             this.tabMain.SuspendLayout();
             this.tabPageLiveView.SuspendLayout();
             this.tabPageReview.SuspendLayout();
@@ -520,17 +520,17 @@
             // 
             // chartMura
             // 
-            chartArea6.Name = "ChartArea1";
-            this.chartMura.ChartAreas.Add(chartArea6);
+            chartArea1.Name = "ChartArea1";
+            this.chartMura.ChartAreas.Add(chartArea1);
             this.chartMura.Dock = System.Windows.Forms.DockStyle.Fill;
-            legend6.Name = "Legend1";
-            this.chartMura.Legends.Add(legend6);
+            legend1.Name = "Legend1";
+            this.chartMura.Legends.Add(legend1);
             this.chartMura.Location = new System.Drawing.Point(3, 349);
             this.chartMura.Name = "chartMura";
-            series6.ChartArea = "ChartArea1";
-            series6.Legend = "Legend1";
-            series6.Name = "Series1";
-            this.chartMura.Series.Add(series6);
+            series1.ChartArea = "ChartArea1";
+            series1.Legend = "Legend1";
+            series1.Name = "Series1";
+            this.chartMura.Series.Add(series1);
             this.chartMura.Size = new System.Drawing.Size(1064, 143);
             this.chartMura.TabIndex = 16;
             this.chartMura.Text = "chart1";
@@ -699,6 +699,15 @@
             this.btnNextPeriod.UseVisualStyleBackColor = true;
             this.btnNextPeriod.Click += new System.EventHandler(this.btnNextPeriod_Click);
             // 
+            // tabPageData
+            // 
+            this.tabPageData.Location = new System.Drawing.Point(4, 25);
+            this.tabPageData.Name = "tabPageData";
+            this.tabPageData.Size = new System.Drawing.Size(1183, 645);
+            this.tabPageData.TabIndex = 2;
+            this.tabPageData.Text = "檢測數據";
+            this.tabPageData.UseVisualStyleBackColor = true;
+            // 
             // propertyGrid1
             // 
             this.propertyGrid1.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -784,7 +793,7 @@
             this.tabPageExposure.Padding = new System.Windows.Forms.Padding(3);
             this.tabPageExposure.Size = new System.Drawing.Size(254, 615);
             this.tabPageExposure.TabIndex = 0;
-            this.tabPageExposure.Text = "曝光時間 (μs)";
+            this.tabPageExposure.Text = "曝光時間";
             this.tabPageExposure.UseVisualStyleBackColor = true;
             // 
             // panel14
@@ -1263,7 +1272,7 @@
             this.tabPageLineRate.Padding = new System.Windows.Forms.Padding(3);
             this.tabPageLineRate.Size = new System.Drawing.Size(254, 615);
             this.tabPageLineRate.TabIndex = 1;
-            this.tabPageLineRate.Text = "線掃速率 (Hz)";
+            this.tabPageLineRate.Text = "線掃速率";
             this.tabPageLineRate.UseVisualStyleBackColor = true;
             // 
             // panel15
@@ -1742,7 +1751,7 @@
             this.tabPageGrabHeight.Padding = new System.Windows.Forms.Padding(3);
             this.tabPageGrabHeight.Size = new System.Drawing.Size(254, 615);
             this.tabPageGrabHeight.TabIndex = 2;
-            this.tabPageGrabHeight.Text = "擷取高度 (px)";
+            this.tabPageGrabHeight.Text = "擷取高度";
             this.tabPageGrabHeight.UseVisualStyleBackColor = true;
             // 
             // panel21
@@ -2267,15 +2276,6 @@
             this.lblCamHardware.Size = new System.Drawing.Size(135, 15);
             this.lblCamHardware.TabIndex = 0;
             this.lblCamHardware.Text = "【相機硬體設定】";
-            // 
-            // tabPageData
-            // 
-            this.tabPageData.Location = new System.Drawing.Point(4, 25);
-            this.tabPageData.Name = "tabPageData";
-            this.tabPageData.Size = new System.Drawing.Size(1183, 645);
-            this.tabPageData.TabIndex = 2;
-            this.tabPageData.Text = "檢測數據";
-            this.tabPageData.UseVisualStyleBackColor = true;
             // 
             // AniloxRollForm
             // 
