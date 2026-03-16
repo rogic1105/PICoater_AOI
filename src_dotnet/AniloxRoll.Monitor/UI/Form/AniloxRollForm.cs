@@ -338,7 +338,9 @@ namespace AniloxRoll.Monitor.Forms
                 syncingExp = false;
             };
 
-            trackBarExpCam1.MouseUp += (s, e) => _liveCameraManager?.SwitchToCamera(1);
+            void SwitchAndSave(int camId) { _liveCameraManager?.SwitchToCamera(camId); ConfigManager.SaveInspectionSettings(_settings); }
+
+            trackBarExpCam1.MouseUp += (s, e) => SwitchAndSave(1);
 
             for (int i = 0; i < expBarsRef.Length; i++)
             {
@@ -363,7 +365,7 @@ namespace AniloxRoll.Monitor.Forms
                     _liveCameraManager?.SetExposureForCamera(camId, v);
                     syncing = false;
                 };
-                bar.MouseUp += (s, e) => _liveCameraManager?.SwitchToCamera(camId);
+                bar.MouseUp += (s, e) => SwitchAndSave(camId);
             }
 
             // ── 線掃速率 (tabPageLineRate) ────────────────────────
@@ -418,7 +420,7 @@ namespace AniloxRoll.Monitor.Forms
                 syncingLr = false;
             };
 
-            trackBarLrCam1.MouseUp += (s, e) => _liveCameraManager?.SwitchToCamera(1);
+            trackBarLrCam1.MouseUp += (s, e) => SwitchAndSave(1);
 
             for (int i = 0; i < lrBars.Length; i++)
             {
@@ -443,7 +445,7 @@ namespace AniloxRoll.Monitor.Forms
                     _liveCameraManager?.SetLineRateForCamera(camId, v);
                     syncing = false;
                 };
-                bar.MouseUp += (s, e) => _liveCameraManager?.SwitchToCamera(camId);
+                bar.MouseUp += (s, e) => SwitchAndSave(camId);
             }
 
             // ── 擷取高度 (tabPageGrabHeight) ────────────────────────
@@ -481,11 +483,11 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             // 拖動結束後切換主顯示到該相機，確保畫面立即顯示在 panelMainDisplay
-            trackBarHtCam1.MouseUp += (s, e) => _liveCameraManager?.SwitchToCamera(1);
+            trackBarHtCam1.MouseUp += (s, e) => SwitchAndSave(1);
             for (int i = 0; i < htBars.Length; i++)
             {
                 int camId = htCamIds[i];
-                htBars[i].MouseUp += (s, e) => _liveCameraManager?.SwitchToCamera(camId);
+                htBars[i].MouseUp += (s, e) => SwitchAndSave(camId);
             }
 
             bool syncingHt = false;
