@@ -474,13 +474,13 @@ namespace AniloxRoll.Monitor.Forms
                 htNums[i].Value         = htVal;
             }
 
-            // 拖動結束後重新套用主顯示，確保畫面更新到 panelMainDisplay
-            void RefreshOnMouseUp(object s, MouseEventArgs e)
-                => _liveCameraManager?.RefreshMainDisplay();
-
-            trackBarHtCam1.MouseUp += RefreshOnMouseUp;
-            foreach (var bar in htBars)
-                bar.MouseUp += RefreshOnMouseUp;
+            // 拖動結束後切換主顯示到該相機，確保畫面立即顯示在 panelMainDisplay
+            trackBarHtCam1.MouseUp += (s, e) => _liveCameraManager?.SwitchToCamera(1);
+            for (int i = 0; i < htBars.Length; i++)
+            {
+                int camId = htCamIds[i];
+                htBars[i].MouseUp += (s, e) => _liveCameraManager?.SwitchToCamera(camId);
+            }
 
             bool syncingHt = false;
             trackBarHtCam1.ValueChanged += (s, e) =>
