@@ -105,9 +105,9 @@ Form 右側固定有 `tabControlRight`（Location=1209,12，Size=276×679），�
 
 | Sub Tab（Name） | Sub Tab Text | 控制項範圍 |
 |----------------|--------------|------------|
-| `tabPageExposure` | 曝光時間 (μs) | trackBarExposure/numExposure (CAM1 master)；trackBar2–7/numericUpDown2–7 (CAM2–7)；範圍：1–10000 |
-| `tabPageLineRate` | 線掃速率 (Hz) | trackBarGrabHeight/numGrabHeight (CAM1 master)；trackBar8–13/numericUpDown8–13 (CAM2–7)；範圍：1–10000 |
-| `tabPageGrabHeight` | 擷取高度 (px) | trackBar19/numericUpDown19 (CAM1 master)；trackBar1/14–18/numericUpDown1/14–18 (CAM2–7)；範圍：1–10000；預設 2048 |
+| `tabPageExposure` | 曝光時間 (μs) | `trackBarExpCam1`/`numExpCam1` (CAM1 master)；`trackBarExpCam2–7`/`numExpCam2–7` (CAM2–7)；min=1 μs，max=動態：`floor(900000/lrHz)` μs（隨 LR 更新） |
+| `tabPageLineRate` | 線掃速率 (Hz) | `trackBarLrCam1`/`numLrCam1` (CAM1 master)；`trackBarLrCam2–7`/`numLrCam2–7` (CAM2–7)；範圍：100–10000 Hz；更改時自動更新 tabPageExposure 上限 |
+| `tabPageGrabHeight` | 擷取高度 (px) | `trackBarHtCam1`/`numHtCam1` (CAM1 master)；`trackBarHtCam2–7`/`numHtCam2–7` (CAM2–7)；範圍：100–10000 px；預設 2048；拖動結束 MouseUp → `LiveCameraManager.RefreshMainDisplay()` |
 
 主內容區為 `tabMain`，含 `tabPageLiveView`（即時監控）、`tabPageReview`（影像回顧）、`tabPageData`（檢測數據）。
 
@@ -133,7 +133,9 @@ InitializeSystem()
 
 **重要**：`tabControlRight` 的所有控制項**必須宣告在 `InitializeComponent()`**（Designer.cs），才能在 VS Designer 顯示。事件繫結（需要 `_settings`、`_liveCameraManager`）保留在 code-behind。
 
-**tabPageLineRate 控制項命名注意**：`trackBarGrabHeight`/`numGrabHeight`/`panelGrabHeight` 名稱源自歷史遺留，實際對應**線掃速率**（Hz），不是擷取高度。程式碼內以 `syncingLr` / `SetLineRateForAll` 處理。
+**tabPageLiveView 面板命名**：`panelLiveCam1–7`（各相機縮圖容器，148×111）；`panelMainDisplay`（主顯示，1072×347）。`LiveCameraManager` 接收 `panelLiveCam1–7` 陣列與 `panelMainDisplay`。
+
+**曝光上限計算**：`CalcExpMax(lrHz) = clamp(floor(900000/lrHz), 1, 10000)`。LR 改變時呼叫 `ApplyExpMax()` 更新所有 7 台曝光 TrackBar/NumericUpDown 的 Maximum 並夾緊現有值。
 
 ---
 

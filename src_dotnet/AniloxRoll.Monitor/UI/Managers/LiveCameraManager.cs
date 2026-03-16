@@ -377,6 +377,14 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         // ==================== Display Switching ====================
 
+        /// <summary>
+        /// 重新套用目前選定相機的主顯示，用於 SetGrabHeight 後重新綁定畫面。
+        /// </summary>
+        public void RefreshMainDisplay()
+        {
+            SwitchMainDisplay(_selectedMainCameraId);
+        }
+
         private void SwitchMainDisplay(int cameraIndex)
         {
             if (_mainForm.InvokeRequired)
