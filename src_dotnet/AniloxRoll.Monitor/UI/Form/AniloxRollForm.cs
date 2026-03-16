@@ -193,12 +193,18 @@ namespace AniloxRoll.Monitor.Forms
             _interactionHelper.HandleSettingsChanged();
             _liveCameraManager?.SetCaptureSettings(_settings);
 
-            string changedPropertyName = e?.ChangedItem?.PropertyDescriptor?.Name;
-            bool isHessianMaxFactorChanged =
+            // 任何 Recipe 參數（HessianMaxFactor / ErrorValueMean / ErrorValueMax）變更都觸發重載
+            string changedPropertyName = e?.ChangedItem?.PropertyDescriptor?.Name ?? string.Empty;
+            bool isRecipeChange =
                 string.Equals(changedPropertyName, nameof(InspectionRecipe.HessianMaxFactor), StringComparison.Ordinal) ||
-                string.Equals(changedPropertyName, "Hessian Max Factor", StringComparison.Ordinal);
+                string.Equals(changedPropertyName, "Hessian Max Factor",                      StringComparison.Ordinal) ||
+                string.Equals(changedPropertyName, nameof(InspectionRecipe.ErrorValueMean),   StringComparison.Ordinal) ||
+                string.Equals(changedPropertyName, "Error Value Mean",                        StringComparison.Ordinal) ||
+                string.Equals(changedPropertyName, nameof(InspectionRecipe.ErrorValueMax),    StringComparison.Ordinal) ||
+                string.Equals(changedPropertyName, "Error Value Max",                         StringComparison.Ordinal);
 
-            if (isHessianMaxFactorChanged)
+            // 有影像且為配方參數變更 → 重載（始終用 processed 模式，因為配方只影響演算法輸出）
+            if (isRecipeChange && _imageRepository.FileCount > 0)
             {
                 _lastReviewProcessedMode = true;
                 await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
