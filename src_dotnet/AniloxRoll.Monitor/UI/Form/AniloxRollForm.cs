@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Diagnostics;
 using System.Drawing;
 using System.Threading.Tasks;
@@ -52,7 +53,9 @@ namespace AniloxRoll.Monitor.Forms
 
         // --- 統計 ---
         private InspectionStatsPresenter _statsPresenter;
-        private string _statsDataRootPath = string.Empty;
+        private string                   _statsDataRootPath   = string.Empty;
+        private SortedSet<DateTime>      _statAvailableTimes  = new SortedSet<DateTime>();
+        private bool                     _statComboUpdating;
 
         // --- 資料緩存 ---
         private readonly List<Image> _thumbnailCache = new List<Image>();
@@ -524,6 +527,7 @@ namespace AniloxRoll.Monitor.Forms
 
             btnSelectDataFolder.Click += BtnSelectDataFolder_Click;
             btnQueryStats.Click       += BtnQueryStats_Click;
+            WireStatDateCombos();
         }
 
         private void PopulateStatDateCombos(DateTime start, DateTime end)
@@ -566,8 +570,8 @@ namespace AniloxRoll.Monitor.Forms
                 cbStartHour.Items.Add(h.ToString("D2"));
                 cbEndHour.Items.Add(h.ToString("D2"));
             }
-            cbStartHour.Text = "00";
-            cbEndHour.Text   = "23";
+            cbStartHour.Text = start.Hour.ToString("D2");
+            cbEndHour.Text   = end.Hour.ToString("D2");
 
             // Min
             cbStartMin.Items.Clear(); cbEndMin.Items.Clear();
@@ -576,8 +580,8 @@ namespace AniloxRoll.Monitor.Forms
                 cbStartMin.Items.Add(mn.ToString("D2"));
                 cbEndMin.Items.Add(mn.ToString("D2"));
             }
-            cbStartMin.Text = "00";
-            cbEndMin.Text   = "59";
+            cbStartMin.Text = start.Minute.ToString("D2");
+            cbEndMin.Text   = end.Minute.ToString("D2");
 
             // Sec
             cbStartSec.Items.Clear(); cbEndSec.Items.Clear();
@@ -586,8 +590,8 @@ namespace AniloxRoll.Monitor.Forms
                 cbStartSec.Items.Add(s.ToString("D2"));
                 cbEndSec.Items.Add(s.ToString("D2"));
             }
-            cbStartSec.Text = "00";
-            cbEndSec.Text   = "59";
+            cbStartSec.Text = start.Second.ToString("D2");
+            cbEndSec.Text   = end.Second.ToString("D2");
         }
 
         private void BtnSelectDataFolder_Click(object sender, EventArgs e)
@@ -601,22 +605,28 @@ namespace AniloxRoll.Monitor.Forms
                 dlg.ShowNewFolderButton = false;
 
                 if (dlg.ShowDialog() == DialogResult.OK)
-                    _statsDataRootPath = dlg.SelectedPath;
+                {
+                    _statsDataRootPath  = dlg.SelectedPath;
+                    _statAvailableTimes = InspectionStatisticsService.LoadAvailableTimes(_statsDataRootPath);
+
+                    if (_statAvailableTimes.Count > 0)
+                    {
+                        _statComboUpdating = true;
+                        try
+                        {
+                            SetCombosToDateTime(true,  _statAvailableTimes.Min);
+                            SetCombosToDateTime(false, _statAvailableTimes.Max);
+                            DoRefreshCombos(true,  0);
+                            DoRefreshCombos(false, 0);
+                        }
+                        finally { _statComboUpdating = false; }
+                        RefreshStats();
+                    }
+                }
             }
         }
 
-        private void BtnQueryStats_Click(object sender, EventArgs e)
-        {
-            if (!TryParseStatDateTime(out DateTime start, out DateTime end))
-            {
-                MessageBox.Show("時間格式錯誤，請確認輸入。", "錯誤",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            var stats = InspectionStatisticsService.Compute(_statsDataRootPath, start, end);
-            _statsPresenter.Update(stats);
-        }
+        private void BtnQueryStats_Click(object sender, EventArgs e) => RefreshStats();
 
         private bool TryParseStatDateTime(out DateTime start, out DateTime end)
         {
@@ -643,6 +653,178 @@ namespace AniloxRoll.Monitor.Forms
             try { result = new DateTime(y, mo, d, h, mn, s); return true; }
             catch { return false; }
         }
+
+        // ==========================================
+        // --- 統計 Tab：Cascading ComboBox 邏輯 ---
+        // ==========================================
+
+        private void WireStatDateCombos()
+        {
+            cbStartYear.SelectedIndexChanged  += (s, e) => OnStartComboChanged(1);
+            cbStartMonth.SelectedIndexChanged += (s, e) => OnStartComboChanged(2);
+            cbStartDay.SelectedIndexChanged   += (s, e) => OnStartComboChanged(3);
+            cbStartHour.SelectedIndexChanged  += (s, e) => OnStartComboChanged(4);
+            cbStartMin.SelectedIndexChanged   += (s, e) => OnStartComboChanged(5);
+            cbStartSec.SelectedIndexChanged   += (s, e) => OnStartComboChanged(6);
+
+            cbEndYear.SelectedIndexChanged    += (s, e) => OnEndComboChanged(1);
+            cbEndMonth.SelectedIndexChanged   += (s, e) => OnEndComboChanged(2);
+            cbEndDay.SelectedIndexChanged     += (s, e) => OnEndComboChanged(3);
+            cbEndHour.SelectedIndexChanged    += (s, e) => OnEndComboChanged(4);
+            cbEndMin.SelectedIndexChanged     += (s, e) => OnEndComboChanged(5);
+            cbEndSec.SelectedIndexChanged     += (s, e) => OnEndComboChanged(6);
+        }
+
+        private void OnStartComboChanged(int fromLevel)
+        {
+            if (_statComboUpdating) return;
+            if (_statAvailableTimes.Count > 0)
+            {
+                _statComboUpdating = true;
+                try { DoRefreshCombos(true, fromLevel); ClampEndToStart(); }
+                finally { _statComboUpdating = false; }
+            }
+            RefreshStats();
+        }
+
+        private void OnEndComboChanged(int fromLevel)
+        {
+            if (_statComboUpdating) return;
+            if (_statAvailableTimes.Count > 0)
+            {
+                _statComboUpdating = true;
+                try { DoRefreshCombos(false, fromLevel); ClampStartToEnd(); }
+                finally { _statComboUpdating = false; }
+            }
+            RefreshStats();
+        }
+
+        /// <summary>
+        /// 從 fromLevel 開始（含）向下重建 isStart 側的 ComboBox Items，
+        /// 只保留 _statAvailableTimes 中實際存在的選項。
+        /// </summary>
+        private void DoRefreshCombos(bool isStart, int fromLevel)
+        {
+            var cbs = isStart
+                ? new[] { cbStartYear, cbStartMonth, cbStartDay, cbStartHour, cbStartMin, cbStartSec }
+                : new[] { cbEndYear,   cbEndMonth,   cbEndDay,   cbEndHour,   cbEndMin,   cbEndSec   };
+
+            // 先讀取目前文字（作為偏好值）
+            int[] cur = new int[6];
+            for (int i = 0; i < 6; i++) int.TryParse(cbs[i].Text, out cur[i]);
+
+            if (fromLevel <= 0) RefillCombo(cbs[0], GetAvailableYears(),                            cur[0], "");
+            if (!int.TryParse(cbs[0].Text, out int y))  return;
+
+            if (fromLevel <= 1) RefillCombo(cbs[1], GetAvailableMonths(y),                         cur[1], "D2");
+            if (!int.TryParse(cbs[1].Text, out int mo)) return;
+
+            if (fromLevel <= 2) RefillCombo(cbs[2], GetAvailableDays(y, mo),                       cur[2], "D2");
+            if (!int.TryParse(cbs[2].Text, out int d))  return;
+
+            if (fromLevel <= 3) RefillCombo(cbs[3], GetAvailableHours(y, mo, d),                   cur[3], "D2");
+            if (!int.TryParse(cbs[3].Text, out int h))  return;
+
+            if (fromLevel <= 4) RefillCombo(cbs[4], GetAvailableMinutes(y, mo, d, h),              cur[4], "D2");
+            if (!int.TryParse(cbs[4].Text, out int mi)) return;
+
+            if (fromLevel <= 5) RefillCombo(cbs[5], GetAvailableSeconds(y, mo, d, h, mi),          cur[5], "D2");
+        }
+
+        private static void RefillCombo(ComboBox cb, List<int> values, int preferred, string fmt)
+        {
+            string target = preferred > 0 ? preferred.ToString(fmt) : cb.Text;
+            cb.Items.Clear();
+            foreach (int v in values) cb.Items.Add(v.ToString(fmt));
+            int idx = cb.Items.IndexOf(target);
+            cb.SelectedIndex = idx >= 0 ? idx : (cb.Items.Count > 0 ? 0 : -1);
+        }
+
+        private void SetCombosToDateTime(bool isStart, DateTime dt)
+        {
+            if (isStart)
+            {
+                cbStartYear.Text  = dt.Year.ToString();
+                cbStartMonth.Text = dt.Month.ToString("D2");
+                cbStartDay.Text   = dt.Day.ToString("D2");
+                cbStartHour.Text  = dt.Hour.ToString("D2");
+                cbStartMin.Text   = dt.Minute.ToString("D2");
+                cbStartSec.Text   = dt.Second.ToString("D2");
+            }
+            else
+            {
+                cbEndYear.Text  = dt.Year.ToString();
+                cbEndMonth.Text = dt.Month.ToString("D2");
+                cbEndDay.Text   = dt.Day.ToString("D2");
+                cbEndHour.Text  = dt.Hour.ToString("D2");
+                cbEndMin.Text   = dt.Minute.ToString("D2");
+                cbEndSec.Text   = dt.Second.ToString("D2");
+            }
+        }
+
+        /// <summary>若 start > end，將 end 推至最近的可用時間 ≥ start。</summary>
+        private void ClampEndToStart()
+        {
+            if (!TryBuildDateTime(cbStartYear, cbStartMonth, cbStartDay,
+                                  cbStartHour, cbStartMin, cbStartSec, out DateTime start)) return;
+            if (!TryBuildDateTime(cbEndYear, cbEndMonth, cbEndDay,
+                                  cbEndHour, cbEndMin, cbEndSec, out DateTime end)) return;
+            if (start <= end) return;
+
+            var view = _statAvailableTimes.GetViewBetween(start, DateTime.MaxValue);
+            DateTime newEnd = view.Count > 0 ? view.Min : _statAvailableTimes.Max;
+            SetCombosToDateTime(false, newEnd);
+            DoRefreshCombos(false, 0);
+        }
+
+        /// <summary>若 end < start，將 start 推至最近的可用時間 ≤ end。</summary>
+        private void ClampStartToEnd()
+        {
+            if (!TryBuildDateTime(cbStartYear, cbStartMonth, cbStartDay,
+                                  cbStartHour, cbStartMin, cbStartSec, out DateTime start)) return;
+            if (!TryBuildDateTime(cbEndYear, cbEndMonth, cbEndDay,
+                                  cbEndHour, cbEndMin, cbEndSec, out DateTime end)) return;
+            if (start <= end) return;
+
+            var view = _statAvailableTimes.GetViewBetween(DateTime.MinValue, end);
+            DateTime newStart = view.Count > 0 ? view.Max : _statAvailableTimes.Min;
+            SetCombosToDateTime(true, newStart);
+            DoRefreshCombos(true, 0);
+        }
+
+        private void RefreshStats()
+        {
+            if (string.IsNullOrWhiteSpace(_statsDataRootPath)) return;
+            if (!TryParseStatDateTime(out DateTime start, out DateTime end)) return;
+            var stats = InspectionStatisticsService.Compute(_statsDataRootPath, start, end);
+            _statsPresenter.Update(stats);
+        }
+
+        // ── Available values helpers ──────────────────────────────────────
+
+        private List<int> GetAvailableYears() =>
+            _statAvailableTimes.Select(t => t.Year).Distinct().ToList();
+
+        private List<int> GetAvailableMonths(int y) =>
+            _statAvailableTimes.Where(t => t.Year == y)
+                               .Select(t => t.Month).Distinct().ToList();
+
+        private List<int> GetAvailableDays(int y, int mo) =>
+            _statAvailableTimes.Where(t => t.Year == y && t.Month == mo)
+                               .Select(t => t.Day).Distinct().ToList();
+
+        private List<int> GetAvailableHours(int y, int mo, int d) =>
+            _statAvailableTimes.Where(t => t.Year == y && t.Month == mo && t.Day == d)
+                               .Select(t => t.Hour).Distinct().ToList();
+
+        private List<int> GetAvailableMinutes(int y, int mo, int d, int h) =>
+            _statAvailableTimes.Where(t => t.Year == y && t.Month == mo && t.Day == d && t.Hour == h)
+                               .Select(t => t.Minute).Distinct().ToList();
+
+        private List<int> GetAvailableSeconds(int y, int mo, int d, int h, int mi) =>
+            _statAvailableTimes.Where(t => t.Year == y && t.Month == mo && t.Day == d
+                                        && t.Hour == h && t.Minute == mi)
+                               .Select(t => t.Second).Distinct().ToList();
 
         private void SyncCameraParamsFromHardware()
         {

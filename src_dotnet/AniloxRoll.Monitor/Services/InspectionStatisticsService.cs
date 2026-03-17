@@ -22,7 +22,8 @@ namespace AniloxRoll.Monitor.Core.Services
     public static class InspectionStatisticsService
     {
         /// <summary>
-        /// 計算指定時間區間內所有相機的統計數據。
+        /// 遞迴掃描 captureRootPath 下所有 CSV，
+        /// 只統計 FileName 時間戳落在 [start, end] 範圍內的紀錄。
         /// 邊讀邊累加，不一次載入記憶體。
         /// </summary>
         public static Dictionary<int, CameraStats> Compute(
@@ -37,7 +38,7 @@ namespace AniloxRoll.Monitor.Core.Services
             if (string.IsNullOrWhiteSpace(captureRootPath) || !Directory.Exists(captureRootPath))
                 return stats;
 
-            foreach (string csvPath in EnumerateCsvFiles(captureRootPath, start, end))
+            foreach (string csvPath in Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories))
             {
                 try
                 {
@@ -53,6 +54,10 @@ namespace AniloxRoll.Monitor.Core.Services
                                 out int maxExceed, out int meanExceed))
                                 continue;
 
+                            // 過濾時間範圍（精確到秒）
+                            if (!TryParseFileNameDateTime(fileName, out DateTime ts)) continue;
+                            if (ts < start || ts > end) continue;
+
                             if (!TryExtractCamId(fileName, out int camId)) continue;
                             if (!stats.TryGetValue(camId, out var s)) continue;
 
@@ -67,27 +72,69 @@ namespace AniloxRoll.Monitor.Core.Services
             return stats;
         }
 
-        // ── 私有輔助 ──────────────────────────────────────────────────────
-
-        private static IEnumerable<string> EnumerateCsvFiles(
-            string root, DateTime start, DateTime end)
+        /// <summary>
+        /// 遞迴掃描 captureRootPath 下所有 CSV，
+        /// 解析每筆 FileName（YYYYMMDD_HHMMSS-camId），
+        /// 回傳所有不重複的精確時間（秒）排序集合。
+        /// </summary>
+        public static SortedSet<DateTime> LoadAvailableTimes(string captureRootPath)
         {
-            // 每日 CSV 路徑：{root}\{YYYY}\{YYYYMM}\inspection-log-{YYYYMMDD}.csv
-            DateTime cursor = start.Date;
-            while (cursor <= end.Date)
+            var times = new SortedSet<DateTime>();
+            if (string.IsNullOrWhiteSpace(captureRootPath) || !Directory.Exists(captureRootPath))
+                return times;
+
+            foreach (string csvPath in Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories))
             {
-                string path = Path.Combine(
-                    root,
-                    cursor.Year.ToString(CultureInfo.InvariantCulture),
-                    cursor.ToString("yyyyMM"),
-                    $"inspection-log-{cursor:yyyyMMdd}.csv");
-
-                if (File.Exists(path))
-                    yield return path;
-
-                cursor = cursor.AddDays(1);
+                try
+                {
+                    using (var sr = new StreamReader(csvPath))
+                    {
+                        sr.ReadLine(); // skip header
+                        string line;
+                        while ((line = sr.ReadLine()) != null)
+                        {
+                            if (!TryParseLine(line, out string fileName, out _, out _)) continue;
+                            if (!TryParseFileNameDateTime(fileName, out DateTime dt)) continue;
+                            times.Add(dt);
+                        }
+                    }
+                }
+                catch { }
             }
+
+            return times;
         }
+
+        /// <summary>取得資料夾內所有 CSV 紀錄的最早與最新時間。</summary>
+        public static bool TryGetDateRange(
+            string captureRootPath,
+            out DateTime earliest,
+            out DateTime latest)
+        {
+            var times = LoadAvailableTimes(captureRootPath);
+            earliest = latest = DateTime.MinValue;
+            if (times.Count == 0) return false;
+            earliest = times.Min;
+            latest   = times.Max;
+            return true;
+        }
+
+        /// <summary>
+        /// 從 FileName（e.g. "20260316_102301-3"）解析出完整 DateTime（精確到秒）。
+        /// </summary>
+        private static bool TryParseFileNameDateTime(string fileName, out DateTime result)
+        {
+            result = DateTime.MinValue;
+            if (string.IsNullOrEmpty(fileName)) return false;
+            int underscoreIdx = fileName.IndexOf('_');
+            if (underscoreIdx != 8 || fileName.Length < 15) return false;
+            string datePart = fileName.Substring(0, 8); // YYYYMMDD
+            string timePart = fileName.Substring(9, 6); // HHMMSS
+            return DateTime.TryParseExact(datePart + timePart, "yyyyMMddHHmmss",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out result);
+        }
+
+        // ── 私有輔助 ──────────────────────────────────────────────────────
 
         private static bool TryParseLine(string line,
             out string fileName, out int maxExceed, out int meanExceed)
