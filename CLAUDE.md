@@ -122,6 +122,10 @@ Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×654），�
 
 主內容區為 `tabMain`，含 `tabPageLiveView`（即時監控）、`tabPageReview`（影像回顧）、`tabPageData`（檢測數據）。
 
+**tabPageReview 主要控制項**：
+- `canvasMain`：Location=(8, 123)，Size=(1070, 346)，直接置於 `tabPageReview`（已移除 `tlpReviewLayout`）
+- `chartMura`：Location=(8, 469)，Size=(1070, 149)，直接置於 `tabPageReview`
+
 **tabPageReview 額外控制項（X=1084 右欄）**：
 - `lblImageFormat`（Y=400）：顯示目前圖片格式，"壓縮 JPEG" / "原始 BMP"
 - `lblImageScale`（Y=424）：顯示壓縮倍率，"縮放: 5x" / "縮放: 1x"

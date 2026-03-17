@@ -28,9 +28,9 @@
         /// </summary>
         private void InitializeComponent()
         {
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea2 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend2 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series2 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea1 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend1 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series1 = new System.Windows.Forms.DataVisualization.Charting.Series();
             this.tabMain = new System.Windows.Forms.TabControl();
             this.tabPageLiveView = new System.Windows.Forms.TabPage();
             this.checkBoxEnableImageProcessing = new System.Windows.Forms.CheckBox();
@@ -53,7 +53,7 @@
             this.label_day = new System.Windows.Forms.Label();
             this.label_mon = new System.Windows.Forms.Label();
             this.label_yr = new System.Windows.Forms.Label();
-            this.tlpReviewLayout = new System.Windows.Forms.TableLayoutPanel();
+            this.canvasMain = new AOI.SDK.UI.SmartCanvas();
             this.chartMura = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.btnSelectFolder = new System.Windows.Forms.Button();
             this.btnShowProcessed = new System.Windows.Forms.Button();
@@ -233,11 +233,10 @@
             this.lblCamHardware = new System.Windows.Forms.Label();
             this.panelStatusBar = new System.Windows.Forms.Panel();
             this.lblStatusGrab = new System.Windows.Forms.Label();
-            this.canvasMain = new AOI.SDK.UI.SmartCanvas();
             this.tabMain.SuspendLayout();
             this.tabPageLiveView.SuspendLayout();
             this.tabPageReview.SuspendLayout();
-            this.tlpReviewLayout.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.chartMura)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam2)).BeginInit();
@@ -322,7 +321,6 @@
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam1)).BeginInit();
             this.tabPageSystem.SuspendLayout();
             this.panelStatusBar.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).BeginInit();
             this.SuspendLayout();
             // 
             // tabMain
@@ -456,7 +454,8 @@
             this.tabPageReview.Controls.Add(this.label_day);
             this.tabPageReview.Controls.Add(this.label_mon);
             this.tabPageReview.Controls.Add(this.label_yr);
-            this.tabPageReview.Controls.Add(this.tlpReviewLayout);
+            this.tabPageReview.Controls.Add(this.canvasMain);
+            this.tabPageReview.Controls.Add(this.chartMura);
             this.tabPageReview.Controls.Add(this.btnSelectFolder);
             this.tabPageReview.Controls.Add(this.btnShowProcessed);
             this.tabPageReview.Controls.Add(this.pbCam1);
@@ -555,35 +554,29 @@
             this.label_yr.TabIndex = 24;
             this.label_yr.Text = "年";
             // 
-            // tlpReviewLayout
+            // canvasMain
             // 
-            this.tlpReviewLayout.Anchor = System.Windows.Forms.AnchorStyles.None;
-            this.tlpReviewLayout.ColumnCount = 1;
-            this.tlpReviewLayout.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tlpReviewLayout.Controls.Add(this.canvasMain, 0, 0);
-            this.tlpReviewLayout.Controls.Add(this.chartMura, 0, 1);
-            this.tlpReviewLayout.Location = new System.Drawing.Point(8, 123);
-            this.tlpReviewLayout.Name = "tlpReviewLayout";
-            this.tlpReviewLayout.RowCount = 2;
-            this.tlpReviewLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 70F));
-            this.tlpReviewLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 30F));
-            this.tlpReviewLayout.Size = new System.Drawing.Size(1070, 495);
-            this.tlpReviewLayout.TabIndex = 17;
+            this.canvasMain.BackColor = System.Drawing.Color.Black;
+            this.canvasMain.Cursor = System.Windows.Forms.Cursors.Cross;
+            this.canvasMain.Location = new System.Drawing.Point(8, 123);
+            this.canvasMain.Name = "canvasMain";
+            this.canvasMain.Size = new System.Drawing.Size(1070, 346);
+            this.canvasMain.TabIndex = 7;
+            this.canvasMain.TabStop = false;
             // 
             // chartMura
             // 
-            chartArea2.Name = "ChartArea1";
-            this.chartMura.ChartAreas.Add(chartArea2);
-            this.chartMura.Dock = System.Windows.Forms.DockStyle.Fill;
-            legend2.Name = "Legend1";
-            this.chartMura.Legends.Add(legend2);
-            this.chartMura.Location = new System.Drawing.Point(3, 349);
+            chartArea1.Name = "ChartArea1";
+            this.chartMura.ChartAreas.Add(chartArea1);
+            legend1.Name = "Legend1";
+            this.chartMura.Legends.Add(legend1);
+            this.chartMura.Location = new System.Drawing.Point(8, 469);
             this.chartMura.Name = "chartMura";
-            series2.ChartArea = "ChartArea1";
-            series2.Legend = "Legend1";
-            series2.Name = "Series1";
-            this.chartMura.Series.Add(series2);
-            this.chartMura.Size = new System.Drawing.Size(1064, 143);
+            series1.ChartArea = "ChartArea1";
+            series1.Legend = "Legend1";
+            series1.Name = "Series1";
+            this.chartMura.Series.Add(series1);
+            this.chartMura.Size = new System.Drawing.Size(1070, 149);
             this.chartMura.TabIndex = 16;
             this.chartMura.Text = "chart1";
             // 
@@ -2696,17 +2689,6 @@
             this.lblStatusGrab.Text = "● 待機";
             this.lblStatusGrab.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             // 
-            // canvasMain
-            // 
-            this.canvasMain.BackColor = System.Drawing.Color.Black;
-            this.canvasMain.Cursor = System.Windows.Forms.Cursors.Cross;
-            this.canvasMain.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.canvasMain.Location = new System.Drawing.Point(3, 3);
-            this.canvasMain.Name = "canvasMain";
-            this.canvasMain.Size = new System.Drawing.Size(1064, 340);
-            this.canvasMain.TabIndex = 7;
-            this.canvasMain.TabStop = false;
-            // 
             // AniloxRollForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
@@ -2724,7 +2706,7 @@
             this.tabPageLiveView.PerformLayout();
             this.tabPageReview.ResumeLayout(false);
             this.tabPageReview.PerformLayout();
-            this.tlpReviewLayout.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.chartMura)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam1)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam2)).EndInit();
@@ -2834,7 +2816,6 @@
             this.tabPageSystem.ResumeLayout(false);
             this.tabPageSystem.PerformLayout();
             this.panelStatusBar.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -2864,7 +2845,6 @@
         private System.Windows.Forms.StatusStrip statusBarMain;
         private System.Windows.Forms.ToolStripStatusLabel lblPixelInfo;
         private System.Windows.Forms.DataVisualization.Charting.Chart chartMura;
-        private System.Windows.Forms.TableLayoutPanel tlpReviewLayout;
         private System.Windows.Forms.PropertyGrid propertyGridSettings;
         private System.Windows.Forms.Label label_sec;
         private System.Windows.Forms.Label label_min;

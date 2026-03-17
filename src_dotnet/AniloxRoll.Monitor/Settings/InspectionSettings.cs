@@ -6,20 +6,11 @@ namespace AniloxRoll.Monitor.Core.Data
     [Serializable]
     public class InspectionSettings
     {
-        [Category("1. 機台佈局")]
-        [DisplayName("Machine Layout")]
-        public MachineLayoutConfig MachineLayout { get; set; } = new MachineLayoutConfig();
-
-        [Browsable(false)]
-        public AcquisitionSettings Acquisition { get; set; } = new AcquisitionSettings();
-
-        [Category("2. 檢測配方")]
-        [DisplayName("Inspection Recipe")]
-        public InspectionRecipe Recipe { get; set; } = new InspectionRecipe();
-
-        [Category("3. 儲存設定")]
-        [DisplayName("Storage")]
-        public StorageSettings Storage { get; set; } = new StorageSettings();
+        // 子物件隱藏於 PropertyGrid，屬性直接平鋪於各 Category（兩層顯示）
+        [Browsable(false)] public MachineLayoutConfig MachineLayout { get; set; } = new MachineLayoutConfig();
+        [Browsable(false)] public AcquisitionSettings Acquisition   { get; set; } = new AcquisitionSettings();
+        [Browsable(false)] public InspectionRecipe    Recipe        { get; set; } = new InspectionRecipe();
+        [Browsable(false)] public StorageSettings     Storage       { get; set; } = new StorageSettings();
 
         public void Validate()
         {
@@ -37,25 +28,30 @@ namespace AniloxRoll.Monitor.Core.Data
         public double[] GetCameraOpsUmArray() => MachineLayout.GetCameraOpsUmArray();
         public double[] GetCameraStartPositionMmArray() => MachineLayout.GetCameraStartPositionMmArray();
 
-        // ===== Backward-compatible flattened accessors =====
-        [Browsable(false)] public double Cam1_Ops { get => MachineLayout.Cam1_Ops; set => MachineLayout.Cam1_Ops = value; }
-        [Browsable(false)] public double Cam2_Ops { get => MachineLayout.Cam2_Ops; set => MachineLayout.Cam2_Ops = value; }
-        [Browsable(false)] public double Cam3_Ops { get => MachineLayout.Cam3_Ops; set => MachineLayout.Cam3_Ops = value; }
-        [Browsable(false)] public double Cam4_Ops { get => MachineLayout.Cam4_Ops; set => MachineLayout.Cam4_Ops = value; }
-        [Browsable(false)] public double Cam5_Ops { get => MachineLayout.Cam5_Ops; set => MachineLayout.Cam5_Ops = value; }
-        [Browsable(false)] public double Cam6_Ops { get => MachineLayout.Cam6_Ops; set => MachineLayout.Cam6_Ops = value; }
-        [Browsable(false)] public double Cam7_Ops { get => MachineLayout.Cam7_Ops; set => MachineLayout.Cam7_Ops = value; }
-        [Browsable(false)] public double Cam1_Pos { get => MachineLayout.Cam1_Pos; set => MachineLayout.Cam1_Pos = value; }
-        [Browsable(false)] public double Cam2_Pos { get => MachineLayout.Cam2_Pos; set => MachineLayout.Cam2_Pos = value; }
-        [Browsable(false)] public double Cam3_Pos { get => MachineLayout.Cam3_Pos; set => MachineLayout.Cam3_Pos = value; }
-        [Browsable(false)] public double Cam4_Pos { get => MachineLayout.Cam4_Pos; set => MachineLayout.Cam4_Pos = value; }
-        [Browsable(false)] public double Cam5_Pos { get => MachineLayout.Cam5_Pos; set => MachineLayout.Cam5_Pos = value; }
-        [Browsable(false)] public double Cam6_Pos { get => MachineLayout.Cam6_Pos; set => MachineLayout.Cam6_Pos = value; }
-        [Browsable(false)] public double Cam7_Pos { get => MachineLayout.Cam7_Pos; set => MachineLayout.Cam7_Pos = value; }
-        [Browsable(false)] public float HessianMaxFactor { get => Recipe.HessianMaxFactor; set => Recipe.HessianMaxFactor = value; }
-        [Browsable(false)] public float ErrorValueMean { get => Recipe.ErrorValueMean; set => Recipe.ErrorValueMean = value; }
-        [Browsable(false)] public float ErrorValueMax { get => Recipe.ErrorValueMax; set => Recipe.ErrorValueMax = value; }
-[Browsable(false)] public bool EnableAutoCapture { get => Storage.EnableAutoCapture; set => Storage.EnableAutoCapture = value; }
-        [Browsable(false)] public string CaptureRootPath { get => Storage.CaptureRootPath; set => Storage.CaptureRootPath = value; }
+        // ===== 1. 機台佈局 =====
+        [Category("1. 機台佈局")][DisplayName("Cam 1 OPS (um)")]   public double Cam1_Ops { get => MachineLayout.Cam1_Ops; set => MachineLayout.Cam1_Ops = value; }
+        [Category("1. 機台佈局")][DisplayName("Cam 2 OPS (um)")]   public double Cam2_Ops { get => MachineLayout.Cam2_Ops; set => MachineLayout.Cam2_Ops = value; }
+        [Category("1. 機台佈局")][DisplayName("Cam 3 OPS (um)")]   public double Cam3_Ops { get => MachineLayout.Cam3_Ops; set => MachineLayout.Cam3_Ops = value; }
+        [Category("1. 機台佈局")][DisplayName("Cam 4 OPS (um)")]   public double Cam4_Ops { get => MachineLayout.Cam4_Ops; set => MachineLayout.Cam4_Ops = value; }
+        [Category("1. 機台佈局")][DisplayName("Cam 5 OPS (um)")]   public double Cam5_Ops { get => MachineLayout.Cam5_Ops; set => MachineLayout.Cam5_Ops = value; }
+        [Category("1. 機台佈局")][DisplayName("Cam 6 OPS (um)")]   public double Cam6_Ops { get => MachineLayout.Cam6_Ops; set => MachineLayout.Cam6_Ops = value; }
+        [Category("1. 機台佈局")][DisplayName("Cam 7 OPS (um)")]   public double Cam7_Ops { get => MachineLayout.Cam7_Ops; set => MachineLayout.Cam7_Ops = value; }
+        [Category("1. 機台佈局")][DisplayName("Cam 1 Start (mm)")] public double Cam1_Pos { get => MachineLayout.Cam1_Pos; set => MachineLayout.Cam1_Pos = value; }
+        [Category("1. 機台佈局")][DisplayName("Cam 2 Start (mm)")] public double Cam2_Pos { get => MachineLayout.Cam2_Pos; set => MachineLayout.Cam2_Pos = value; }
+        [Category("1. 機台佈局")][DisplayName("Cam 3 Start (mm)")] public double Cam3_Pos { get => MachineLayout.Cam3_Pos; set => MachineLayout.Cam3_Pos = value; }
+        [Category("1. 機台佈局")][DisplayName("Cam 4 Start (mm)")] public double Cam4_Pos { get => MachineLayout.Cam4_Pos; set => MachineLayout.Cam4_Pos = value; }
+        [Category("1. 機台佈局")][DisplayName("Cam 5 Start (mm)")] public double Cam5_Pos { get => MachineLayout.Cam5_Pos; set => MachineLayout.Cam5_Pos = value; }
+        [Category("1. 機台佈局")][DisplayName("Cam 6 Start (mm)")] public double Cam6_Pos { get => MachineLayout.Cam6_Pos; set => MachineLayout.Cam6_Pos = value; }
+        [Category("1. 機台佈局")][DisplayName("Cam 7 Start (mm)")] public double Cam7_Pos { get => MachineLayout.Cam7_Pos; set => MachineLayout.Cam7_Pos = value; }
+
+        // ===== 2. 檢測配方 =====
+        [Category("2. 檢測配方")][DisplayName("Hessian Max Factor")] public float HessianMaxFactor { get => Recipe.HessianMaxFactor; set => Recipe.HessianMaxFactor = value; }
+        [Category("2. 檢測配方")][DisplayName("Error Value Mean")]   public float ErrorValueMean   { get => Recipe.ErrorValueMean;   set => Recipe.ErrorValueMean   = value; }
+        [Category("2. 檢測配方")][DisplayName("Error Value Max")]    public float ErrorValueMax    { get => Recipe.ErrorValueMax;    set => Recipe.ErrorValueMax    = value; }
+
+        // ===== 3. 儲存設定 =====
+        [Category("3. 儲存設定")][DisplayName("啟用即時截圖")]   public bool   EnableAutoCapture    { get => Storage.EnableAutoCapture;    set => Storage.EnableAutoCapture    = value; }
+        [Category("3. 儲存設定")][DisplayName("截圖根目錄")]     public string CaptureRootPath      { get => Storage.CaptureRootPath;      set => Storage.CaptureRootPath      = value; }
+        [Category("3. 儲存設定")][DisplayName("啟用壓縮存檔")]   public bool   UseCompressedCapture { get => Storage.UseCompressedCapture; set => Storage.UseCompressedCapture = value; }
     }
 }

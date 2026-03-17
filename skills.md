@@ -602,6 +602,67 @@ public void Dispose()
 
 ---
 
+## TrackBar 滑鼠滾輪每格 = 1
+
+### 問題
+
+Windows 原生 TRACKBAR 控制項 WM_MOUSEWHEEL 行為：每個滾輪 notch 送出 **3 × TB_LINEUP/TB_LINEDOWN**（等同 3 × SmallChange）。設定 `SmallChange = 1` 或 `LargeChange = 1` 無法改變此行為。
+
+### 解法：NativeWindow 攔截
+
+```csharp
+private sealed class TrackBarWheelInterceptor : NativeWindow
+{
+    private const int WM_MOUSEWHEEL = 0x020A;
+    private readonly TrackBar _bar;
+
+    public TrackBarWheelInterceptor(TrackBar bar)
+    {
+        _bar = bar;
+        AssignHandle(bar.Handle);
+        bar.HandleCreated   += (s, e) => AssignHandle(_bar.Handle);
+        bar.HandleDestroyed += (s, e) => ReleaseHandle();
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == WM_MOUSEWHEEL)
+        {
+            int delta = (short)(((long)m.WParam >> 16) & 0xFFFF);
+            _bar.Value = Math.Max(_bar.Minimum, Math.Min(_bar.Maximum, _bar.Value + Math.Sign(delta)));
+            return; // 跳過原生 3 格行為
+        }
+        base.WndProc(ref m);
+    }
+}
+```
+
+- 注意方向：`+ Math.Sign(delta)`（正 delta = 上滾 = 值增加）
+- 攔截器引用必須存放於 `List<NativeWindow>` 防止 GC 回收
+- `ValueChanged` 仍會觸發，現有硬體寫入邏輯不需修改
+- **不要用 `bar.MouseWheel` 事件**：該事件無法阻止 DefWndProc 的原生 3 格行為
+
+---
+
+## Designer.cs 移除 TableLayoutPanel（取出子控制項）
+
+### 步驟
+
+1. 移除 `this.tlp = new System.Windows.Forms.TableLayoutPanel();`
+2. 移除 `this.tlp.SuspendLayout();` / `this.tlp.ResumeLayout(false);`
+3. 將 `parent.Controls.Add(this.tlp)` 換成直接 `parent.Controls.Add(child1); parent.Controls.Add(child2);`
+4. 刪除整個 TLP 設定區塊（`ColumnCount`、`ColumnStyles`、`Controls.Add`、`RowStyles` 等）
+5. 子控制項移除 `Dock = Fill`，設定絕對 Location / Size（依 TLP 的 Location + 各 Row 的百分比計算）
+6. 移除欄位宣告 `private System.Windows.Forms.TableLayoutPanel tlp;`
+
+### 位置計算（百分比 → 絕對）
+
+TLP Location=(8, 123), Size=(1070, 495), Row0=70%, Row1=30%：
+- Row0 子控制項：Location=(8, 123), Size=(1070, 346)  → 346 = floor(495 × 0.7)
+- Row1 子控制項：Location=(8, 469), Size=(1070, 149)  → 469 = 123 + 346
+
+---
+
 ## /perf-diagnose
 
 效能問題排查流程：

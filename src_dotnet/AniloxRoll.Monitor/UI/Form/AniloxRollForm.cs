@@ -40,6 +40,9 @@ namespace AniloxRoll.Monitor.Forms
         // --- 拖曳偵測：拖曳中時抑制硬體寫入 ---
         private readonly HashSet<TrackBar> _dragging = new HashSet<TrackBar>();
 
+        // --- TrackBar 滾輪攔截器（每格 = 1）---
+        private readonly List<NativeWindow> _wheelInterceptors = new List<NativeWindow>();
+
         // --- Hardware → UI 同步：防止 SyncFromHardware 觸發 ValueChanged 再回寫硬體 ---
         private bool _syncingFromHw = false;
 
@@ -97,6 +100,7 @@ namespace AniloxRoll.Monitor.Forms
             propertyGridSettings.ToolbarVisible = false;
             propertyGridSettings.PropertyValueChanged -= _propertyGrid_PropertyValueChanged;
             propertyGridSettings.PropertyValueChanged += _propertyGrid_PropertyValueChanged;
+            AutoFitPropertyGridLabelColumn(propertyGridSettings);
 
             _interactionHelper = new FormInteractionHelper(new FormInteractionContext
             {
@@ -297,6 +301,39 @@ namespace AniloxRoll.Monitor.Forms
             SetupSystemTab();
         }
 
+        /// <summary>
+        /// 用 reflection 調整 PropertyGrid 標籤欄寬度至最長屬性名稱剛好容納。
+        /// PropertyGrid 無公開 API 可設欄寬，透過內部 gridView.MoveSplitterTo() 實現。
+        /// </summary>
+        private static void AutoFitPropertyGridLabelColumn(System.Windows.Forms.PropertyGrid grid)
+        {
+            try
+            {
+                var gridViewField = grid.GetType().GetField("gridView",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                var gridView = gridViewField?.GetValue(grid);
+                if (gridView == null) return;
+
+                // 以所有可見屬性的 DisplayName 量測最大文字寬度
+                int maxWidth = 0;
+                foreach (System.ComponentModel.PropertyDescriptor pd in
+                    System.ComponentModel.TypeDescriptor.GetProperties(grid.SelectedObject))
+                {
+                    if (!pd.IsBrowsable) continue;
+                    string label = pd.DisplayName ?? pd.Name;
+                    int w = System.Windows.Forms.TextRenderer.MeasureText(
+                        label, grid.Font).Width;
+                    if (w > maxWidth) maxWidth = w;
+                }
+
+                const int padding = 16;
+                var moveSplitter = gridView.GetType().GetMethod("MoveSplitterTo",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                moveSplitter?.Invoke(gridView, new object[] { maxWidth + padding });
+            }
+            catch { /* reflection 失敗時保留預設欄寬，不影響功能 */ }
+        }
+
         private void SetupCameraTab()
         {
             const int ExpMin    =     1;   // μs
@@ -448,6 +485,11 @@ namespace AniloxRoll.Monitor.Forms
                     syncHt = false;
                 };
             }
+
+            // 滾輪每格移動 1（攔截原生 3 格行為）
+            RegisterWheelInterceptors(_expBars);
+            RegisterWheelInterceptors(_lrBars);
+            RegisterWheelInterceptors(_htBars);
         }
 
         /// <summary>
@@ -989,6 +1031,42 @@ namespace AniloxRoll.Monitor.Forms
             _statAvailableTimes.Where(t => t.Year == y && t.Month == mo && t.Day == d
                                         && t.Hour == h && t.Minute == mi)
                                .Select(t => t.Second).Distinct().ToList();
+
+        // ── TrackBar 滾輪：每格僅移動 1 ──────────────────────────────────
+        private void RegisterWheelInterceptors(TrackBar[] bars)
+        {
+            foreach (var bar in bars)
+                _wheelInterceptors.Add(new TrackBarWheelInterceptor(bar));
+        }
+
+        /// <summary>
+        /// 攔截原生 WM_MOUSEWHEEL：Windows TRACKBAR 每個滾輪 notch 會送出 3 個
+        /// TB_LINEUP/TB_LINEDOWN（等同 3 × SmallChange），此攔截器改為每格僅移動 1。
+        /// </summary>
+        private sealed class TrackBarWheelInterceptor : NativeWindow
+        {
+            private const int WM_MOUSEWHEEL = 0x020A;
+            private readonly TrackBar _bar;
+
+            public TrackBarWheelInterceptor(TrackBar bar)
+            {
+                _bar = bar;
+                AssignHandle(bar.Handle);
+                bar.HandleCreated   += (s, e) => AssignHandle(_bar.Handle);
+                bar.HandleDestroyed += (s, e) => ReleaseHandle();
+            }
+
+            protected override void WndProc(ref Message m)
+            {
+                if (m.Msg == WM_MOUSEWHEEL)
+                {
+                    int delta = (short)(((long)m.WParam >> 16) & 0xFFFF);
+                    _bar.Value = Math.Max(_bar.Minimum, Math.Min(_bar.Maximum, _bar.Value + Math.Sign(delta)));
+                    return; // 跳過原生 3 格行為
+                }
+                base.WndProc(ref m);
+            }
+        }
 
         private void SyncCameraParamsFromHardware()
         {
