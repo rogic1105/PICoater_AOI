@@ -15,7 +15,7 @@ namespace AniloxRoll.Monitor.Core.Services
     }
 
     /// <summary>
-    /// 從每日 inspection-log CSV 讀取資料，計算各相機的 Pass/Fail 統計。
+    /// 從每日 CSV（{YYYYMMDD}.csv）讀取資料，計算各相機的 Pass/Fail 統計。
     /// CSV 格式：Id,FileName,MaxExceed,MeanExceed
     /// Pass 定義：MaxExceed==0 AND MeanExceed==0
     /// </summary>

@@ -9,7 +9,7 @@ namespace AniloxRoll.Monitor.Core.Services
     /// <summary>
     /// 逐圖檢測結果記錄服務。
     /// 每次抓圖事件分配一個唯一編號（A00001 起），
-    /// 並以 CSV 格式寫入 {CaptureRootPath}\{YYYY}\{YYYYMM}\inspection-log-{YYYYMMDD}.csv。
+    /// 並以 CSV 格式寫入 {CaptureRootPath}\{YYYY}\{YYYYMM}\{YYYYMMDD}.csv。
     /// </summary>
     public class InspectionLogService
     {
@@ -76,7 +76,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 Directory.CreateDirectory(dir);
 
                 string path = Path.Combine(dir,
-                    $"inspection-log-{timestamp:yyyyMMdd}.csv");
+                    $"{timestamp:yyyyMMdd}.csv");
 
                 bool writeHeader = !File.Exists(path);
                 int  maxExceed   = maxPeak  > errMax  ? 1 : 0;
