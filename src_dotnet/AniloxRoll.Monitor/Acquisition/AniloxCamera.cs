@@ -283,9 +283,11 @@ namespace AniloxRoll.Monitor.Core.Camera
                         SetLineRateHz(_appliedLineRateHz);
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 _clProtocolEnabled = false;
+                System.Diagnostics.Trace.WriteLine(
+                    $"[CAM{CameraId}] CLProtocol init failed: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -342,12 +344,14 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>
         /// 變更 Grab 高度並重新分配所有 MIL 與 CUDA Pinned Buffer。
         /// 流程：停止抓圖 → 釋放舊 Buffer → 設定新高度 → 重新分配 → 重啟抓圖。
+        /// 若分配失敗，自動 rollback 至原本高度；rollback 亦失敗則停用相機。
         /// </summary>
         public void SetGrabHeight(int height)
         {
             if (_milDigitizer == MIL.M_NULL || height <= 0) return;
 
             bool wasLive = IsLive;
+            int  oldHeight = CameraGrabHeight;
 
             // 1. 停止抓圖（不修改 _userWantsGrab）
             if (wasLive)
@@ -357,7 +361,35 @@ namespace AniloxRoll.Monitor.Core.Camera
                 IsLive = false;
             }
 
-            // 2. 釋放舊 MIL Buffer
+            // 2–3. 釋放所有舊 Buffer
+            FreeGrabBuffers();
+
+            // 4–9. 分配新高度；失敗則 rollback 至原高度
+            try
+            {
+                AllocateAndBind(height, wasLive);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine(
+                    $"[CAM{CameraId}] SetGrabHeight({height}) failed: {ex.GetType().Name}: {ex.Message}. Rolling back to {oldHeight}px.");
+                FreeGrabBuffers(); // 清除可能的部分分配殘留
+                try
+                {
+                    AllocateAndBind(oldHeight, wasLive);
+                }
+                catch (Exception rex)
+                {
+                    System.Diagnostics.Trace.WriteLine(
+                        $"[CAM{CameraId}] SetGrabHeight rollback to {oldHeight}px also failed: {rex.GetType().Name}: {rex.Message}. Camera disabled.");
+                    _userWantsGrab = false; // 防止 Timer 不斷重試已損壞的相機
+                }
+            }
+        }
+
+        /// <summary>釋放所有 MIL Grab/Display/Proc Buffer 與 CUDA Pinned Memory。</summary>
+        private void FreeGrabBuffers()
+        {
             for (int i = 0; i < _milGrabBufferListSize; i++)
             {
                 if (_milGrabBuffers[i] != MIL.M_NULL)
@@ -369,7 +401,6 @@ namespace AniloxRoll.Monitor.Core.Camera
             if (_milDisplayBuffer != MIL.M_NULL) { MIL.MbufFree(_milDisplayBuffer); _milDisplayBuffer = MIL.M_NULL; }
             if (_milProcBuffer    != MIL.M_NULL) { MIL.MbufFree(_milProcBuffer);    _milProcBuffer    = MIL.M_NULL; }
 
-            // 3. 釋放 CUDA Pinned Memory（NativeBufferPool + resize buffers）
             FreeResizeBuffers();
             lock (_picoaterLock)
             {
@@ -378,10 +409,17 @@ namespace AniloxRoll.Monitor.Core.Camera
             }
             _hostInputBuffer  = null;
             _hostOutputBuffer = null;
+        }
 
+        /// <summary>
+        /// 設定指定高度，重新分配所有 Buffer 並重新綁定 Display。
+        /// 呼叫前必須先呼叫 FreeGrabBuffers()。
+        /// </summary>
+        private void AllocateAndBind(int targetHeight, bool shouldRestart)
+        {
             // 4. 設定新高度
-            MIL.MdigControl(_milDigitizer, MIL.M_SOURCE_SIZE_Y, (MIL_INT)height);
-            CameraGrabHeight = height;
+            MIL.MdigControl(_milDigitizer, MIL.M_SOURCE_SIZE_Y, (MIL_INT)targetHeight);
+            CameraGrabHeight = targetHeight;
 
             // 5. 查詢實際尺寸（硬體可能夾緊至最近合法值）
             MIL_INT sizeX = MIL.MdigInquire(_milDigitizer, MIL.M_SIZE_X, MIL.M_NULL);
@@ -417,7 +455,7 @@ namespace AniloxRoll.Monitor.Core.Camera
             MIL.MdispControl(_milDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
 
             // 9. 恢復抓圖
-            if (wasLive && _userWantsGrab)
+            if (shouldRestart && _userWantsGrab)
             {
                 MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize,
                     MIL.M_START, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
@@ -455,7 +493,11 @@ namespace AniloxRoll.Monitor.Core.Camera
                 MIL.MdigControlFeature(_milDigitizer, MIL.M_FEATURE_VALUE,
                     "AcquisitionLineRate", MIL.M_TYPE_DOUBLE, ref hz);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine(
+                    $"[CAM{CameraId}] SetLineRateHz({hz}) failed: {ex.GetType().Name}: {ex.Message}");
+            }
         }
 
         // ==================== Temperature ====================
@@ -787,7 +829,11 @@ namespace AniloxRoll.Monitor.Core.Camera
                 _lastCaptureSecondKey = secondKey;
                 OnInspectionResult?.Invoke(CameraId, baseName, _lastMeanPeak, _lastMaxPeak);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine(
+                    $"[CAM{CameraId}] TrySaveCapture failed: {ex.GetType().Name}: {ex.Message}");
+            }
         }
 
         private void AllocateResizeBuffers()

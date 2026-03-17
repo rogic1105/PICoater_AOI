@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 
@@ -84,7 +85,10 @@ namespace AniloxRoll.Monitor.Core.Services
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine($"[InspectionStatisticsService.Compute] {csvPath}: {ex.GetType().Name}: {ex.Message}");
+                }
             }
 
             return stats;
@@ -142,7 +146,10 @@ namespace AniloxRoll.Monitor.Core.Services
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine($"[InspectionStatisticsService.ComputeByGrabIdRange] {csvPath}: {ex.GetType().Name}: {ex.Message}");
+                }
             }
 
             // 彙總：每個 (grabNum, camId) 算一次 Pass 或 Fail
@@ -213,7 +220,10 @@ namespace AniloxRoll.Monitor.Core.Services
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine($"[InspectionStatisticsService.ComputeDetailedByGrabIdRange] {csvPath}: {ex.GetType().Name}: {ex.Message}");
+                }
             }
 
             return new List<GrabDetail>(dict.Values);
@@ -261,7 +271,10 @@ namespace AniloxRoll.Monitor.Core.Services
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine($"[InspectionStatisticsService.LoadGrabIdInfos] {csvPath}: {ex.GetType().Name}: {ex.Message}");
+                }
             }
 
             var result = new List<GrabIdInfo>(dict.Count);
@@ -303,7 +316,10 @@ namespace AniloxRoll.Monitor.Core.Services
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine($"[InspectionStatisticsService.LoadAvailableTimes] {csvPath}: {ex.GetType().Name}: {ex.Message}");
+                }
             }
 
             return times;

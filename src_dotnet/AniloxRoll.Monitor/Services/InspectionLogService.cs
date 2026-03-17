@@ -15,6 +15,7 @@ namespace AniloxRoll.Monitor.Core.Services
     {
         private int _lastIdNum;
         private readonly Func<string> _getCaptureRoot;
+        private readonly object _csvLock = new object();
 
         /// <summary>
         /// <param name="getCaptureRoot">取得 CaptureRootPath 的委派（支援動態更新）</param>
@@ -78,16 +79,20 @@ namespace AniloxRoll.Monitor.Core.Services
                 string path = Path.Combine(dir,
                     $"{timestamp:yyyyMMdd}.csv");
 
-                bool writeHeader = !File.Exists(path);
-                int  maxExceed   = maxPeak  > errMax  ? 1 : 0;
-                int  meanExceed  = meanPeak > errMean ? 1 : 0;
+                int maxExceed  = maxPeak  > errMax  ? 1 : 0;
+                int meanExceed = meanPeak > errMean ? 1 : 0;
 
-                using (var sw = new StreamWriter(path, append: true, new UTF8Encoding(false)))
+                // 多台相機可能同時寫入同一日 CSV，加 lock 防止交錯寫入
+                lock (_csvLock)
                 {
-                    if (writeHeader)
-                        sw.WriteLine("Id,FileName,MaxExceed,MeanExceed");
+                    bool writeHeader = !File.Exists(path);
+                    using (var sw = new StreamWriter(path, append: true, new UTF8Encoding(false)))
+                    {
+                        if (writeHeader)
+                            sw.WriteLine("Id,FileName,MaxExceed,MeanExceed");
 
-                    sw.WriteLine($"{grabId},{fileName},{maxExceed},{meanExceed}");
+                        sw.WriteLine($"{grabId},{fileName},{maxExceed},{meanExceed}");
+                    }
                 }
             }
             catch (Exception ex)

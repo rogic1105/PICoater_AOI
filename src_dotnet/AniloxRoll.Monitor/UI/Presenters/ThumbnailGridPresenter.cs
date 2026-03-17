@@ -70,6 +70,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
         }
 
+        /// <summary>清除所有 PictureBox 的 Image 引用（Bitmap Dispose 前必須先呼叫，防止 Paint 畫 disposed Bitmap）。</summary>
+        public void ClearImages()
+        {
+            if (_previewBoxes == null) return;
+            for (int i = 0; i < _previewBoxes.Length; i++)
+                _previewBoxes[i].Image = null;
+        }
+
         public InspectionData GetCurrentSelectionData()
         {
             if (_currentResults == null || _selectedIndex < 0 || _selectedIndex >= _currentResults.Length)

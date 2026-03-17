@@ -92,7 +92,7 @@ CoreCV_FastReadBMP  →  AoiService.ProcessImage  →  CoreCV_Resize_GPU  →  C
 | `src_dotnet/AniloxRoll.Monitor/UI/Widgets/FormInteractionHelper.cs` | `SelectAndLoadFolder`：選擇資料夾後先 `SetLastDataPath`+`Save()` 再掃描檔案 |
 | `src_dotnet/AniloxRoll.Monitor/Acquisition/Inspection/InspectionData.cs` | 檢測結果資料物件（Image/MuraCurveMean/MuraCurveMax/IsCompressedJpeg/ScaleFactor） |
 | `src_dotnet/AniloxRoll.Monitor/ImageCatalog/ImageRepository.cs` | 掃描目錄建立索引，同時掃 `*_raw.jpg` + `*.bmp` 兩種格式 |
-| `src_dotnet/AniloxRoll.Monitor/Services/InspectionLogService.cs` | 抓圖事件編號（A00001 起）+ 每日 CSV 寫入（`{CaptureRootPath}\{YYYY}\{YYYYMM}\{YYYYMMDD}.csv`） |
+| `src_dotnet/AniloxRoll.Monitor/Services/InspectionLogService.cs` | 抓圖事件編號（A00001 起）+ 每日 CSV 寫入（`{CaptureRootPath}\{YYYY}\{YYYYMM}\{YYYYMMDD}.csv`）；`_csvLock` 保護多相機同時寫入同一日 CSV |
 | `src_dotnet/AniloxRoll.Monitor/Services/InspectionStatisticsService.cs` | CSV 統計服務：`Compute`（時間範圍/張數分母）、`ComputeByGrabIdRange`（序號範圍/唯一序號分母/一票否決）、`ComputeDetailedByGrabIdRange`（逐序號×CAM1~7 Pass/Fail）、`LoadGrabIdInfos`、`LoadAvailableTimes` |
 | `src_dotnet/AniloxRoll.Monitor/UI/Presenters/InspectionStatsPresenter.cs` | tabPageData：7 個卡片 Panel（良率顏色）+ listViewStats（5 欄彙總表） |
 | `sdk/AOI_SDK/core_cv_api/src/export_api.cpp` | CoreCV_Resize_GPU 實作 |
@@ -272,6 +272,8 @@ SetUserGrabIntent(true)
 ```
 
 **崩潰警告**：舊尺寸 Buffer 與新尺寸不符會導致 MIL 崩潰。必須先釋放再重新分配，不可省略步驟 2–3。
+
+**Rollback 機制**：步驟 4–9 包在 try/catch 中，失敗時先再次呼叫 `FreeGrabBuffers()` 清除殘留，再嘗試以原高度 `AllocateAndBind(oldHeight)`。若 rollback 也失敗則設 `_userWantsGrab = false` 停用相機，防止 Timer 反覆重試。私有方法：`FreeGrabBuffers()`（步驟 2–3）、`AllocateAndBind(targetHeight, shouldRestart)`（步驟 4–9）。
 
 ### MIL 資源釋放順序（AniloxCamera.Dispose）
 

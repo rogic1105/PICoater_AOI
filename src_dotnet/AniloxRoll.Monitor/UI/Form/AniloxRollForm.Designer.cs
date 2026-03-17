@@ -28,9 +28,9 @@
         /// </summary>
         private void InitializeComponent()
         {
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea1 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend1 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series1 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea2 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend2 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series2 = new System.Windows.Forms.DataVisualization.Charting.Series();
             this.tabMain = new System.Windows.Forms.TabControl();
             this.tabPageLiveView = new System.Windows.Forms.TabPage();
             this.checkBoxEnableImageProcessing = new System.Windows.Forms.CheckBox();
@@ -488,16 +488,16 @@
             this.lblImageFormat.Font = new System.Drawing.Font("新細明體", 8F);
             this.lblImageFormat.Location = new System.Drawing.Point(1084, 400);
             this.lblImageFormat.Name = "lblImageFormat";
-            this.lblImageFormat.Size = new System.Drawing.Size(92, 48);
+            this.lblImageFormat.Size = new System.Drawing.Size(92, 22);
             this.lblImageFormat.TabIndex = 32;
             this.lblImageFormat.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // lblImageScale
             // 
             this.lblImageScale.Font = new System.Drawing.Font("新細明體", 8F);
-            this.lblImageScale.Location = new System.Drawing.Point(1084, 472);
+            this.lblImageScale.Location = new System.Drawing.Point(1084, 422);
             this.lblImageScale.Name = "lblImageScale";
-            this.lblImageScale.Size = new System.Drawing.Size(92, 42);
+            this.lblImageScale.Size = new System.Drawing.Size(92, 23);
             this.lblImageScale.TabIndex = 33;
             this.lblImageScale.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
@@ -572,17 +572,17 @@
             // 
             // chartMura
             // 
-            chartArea1.Name = "ChartArea1";
-            this.chartMura.ChartAreas.Add(chartArea1);
+            chartArea2.Name = "ChartArea1";
+            this.chartMura.ChartAreas.Add(chartArea2);
             this.chartMura.Dock = System.Windows.Forms.DockStyle.Fill;
-            legend1.Name = "Legend1";
-            this.chartMura.Legends.Add(legend1);
+            legend2.Name = "Legend1";
+            this.chartMura.Legends.Add(legend2);
             this.chartMura.Location = new System.Drawing.Point(3, 349);
             this.chartMura.Name = "chartMura";
-            series1.ChartArea = "ChartArea1";
-            series1.Legend = "Legend1";
-            series1.Name = "Series1";
-            this.chartMura.Series.Add(series1);
+            series2.ChartArea = "ChartArea1";
+            series2.Legend = "Legend1";
+            series2.Name = "Series1";
+            this.chartMura.Series.Add(series2);
             this.chartMura.Size = new System.Drawing.Size(1064, 143);
             this.chartMura.TabIndex = 16;
             this.chartMura.Text = "chart1";

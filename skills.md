@@ -538,6 +538,70 @@ Fallback：settings 不可用時退回 pixel zoom/pan 直接還原（同倍率�
 
 ---
 
+## Exception Handling 標準
+
+### 專案規則：絕不裸 `catch {}`
+
+```csharp
+// ❌ 裸 catch — 錯誤完全消失，無法排查
+catch { }
+
+// ✅ 最小代價：保留 type + message，不改行為
+catch (Exception ex)
+{
+    Trace.WriteLine($"[ClassName.MethodName] {ex.GetType().Name}: {ex.Message}");
+}
+```
+
+- `Trace.WriteLine` 在 Debug 和 Release 都有效（不像 `Debug.WriteLine`）
+- 含路徑的場合加上來源（如 CSV 路徑）：`$"[InspectionStatisticsService.Compute] {csvPath}: ..."`
+- 含相機 ID 的場合加上 `[CAM{CameraId}]`
+- **例外**：已知系統損毀後的 retry/reset 路徑（如 `UserSettingsService` 的 `ConfigurationErrorsException` 恢復流程）允許裸 catch
+
+---
+
+## PictureBox Bitmap Dispose 陷阱
+
+### 問題
+
+`PictureBox.Image` 指向 Bitmap → Dispose 該 Bitmap → Windows 發出 Paint 事件（async await 後 UI 執行緒釋放期間）→ `ArgumentException: 參數無效`
+
+### 正確順序
+
+```csharp
+// ❌ 錯誤：先 Dispose，PictureBox 還持有引用
+foreach (var img in cache) img.Dispose();
+cache.Clear();
+// ... await Task.Run(...) 期間 Paint 事件爆炸
+
+// ✅ 正確：先清 PictureBox 引用，再 Dispose
+galleryManager.ClearImages();          // 所有 PictureBox.Image = null
+foreach (var img in cache) img.Dispose();
+cache.Clear();
+```
+
+`ThumbnailGridPresenter.ClearImages()` 已實作此模式，`FormInteractionHelper.ClearOldImages()` 呼叫它。
+
+---
+
+## NativeBufferPool Dispose 安全模式
+
+`_isDisposed = true` 必須在所有 `FreePinned` 呼叫**之前**設定：
+
+```csharp
+public void Dispose()
+{
+    if (_isDisposed) return;
+    _isDisposed = true;  // ← 先設，即使後續 Free 拋例外也不會重複釋放
+    FreePinned(ref _inputBuffer);
+    // ... 其餘 Free
+}
+```
+
+若先 Free 再設旗標，中途拋例外會導致 `_isDisposed` 永遠是 `false`，下次 `Dispose()` 重複 Free 同一 pointer。
+
+---
+
 ## /perf-diagnose
 
 效能問題排查流程：

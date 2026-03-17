@@ -43,10 +43,8 @@ namespace AniloxRoll.Monitor.Core.Services
 
         public void Dispose()
         {
-            if (_isDisposed)
-            {
-                return;
-            }
+            if (_isDisposed) return;
+            _isDisposed = true; // 先設旗標，即使後續 Free 拋例外也不會重複釋放
 
             FreePinned(ref _inputBuffer);
             FreePinned(ref _thumbnailBuffer);
@@ -54,8 +52,6 @@ namespace AniloxRoll.Monitor.Core.Services
             FreePinned(ref _ridgeBuffer);
             FreePinned(ref _curveMeanBuffer);
             FreePinned(ref _curveMaxBuffer);
-
-            _isDisposed = true;
         }
 
         private static IntPtr AllocatePinned(ulong size)

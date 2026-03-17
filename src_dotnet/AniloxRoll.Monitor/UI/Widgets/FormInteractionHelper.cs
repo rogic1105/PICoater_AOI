@@ -226,6 +226,10 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public void ClearOldImages()
         {
             _canvasHelper.ClearCanvas();
+            // 先清 PictureBox 引用，再 Dispose Bitmap。
+            // 若順序相反，await Task.Run 期間 UI 執行緒空出，
+            // Windows Paint 事件會嘗試繪製已 Dispose 的 Bitmap，拋 ArgumentException。
+            _galleryManager.ClearImages();
             foreach (var img in _thumbnailCache) img.Dispose();
             _thumbnailCache.Clear();
             GC.Collect();
