@@ -342,7 +342,7 @@ private void UpdateExpMaxAndClampColor(int idx, int newMax)
 
 ### InspectionLogService
 
-- 路徑：`{CaptureRootPath}\{YYYY}\{YYYYMM}\inspection-log-{YYYYMMDD}.csv`
+- 路徑：`{CaptureRootPath}\{YYYY}\{YYYYMM}\{YYYYMMDD}.csv`
 - 欄位：`Id, FileName, MaxExceed, MeanExceed`（Pass = 兩者均為 0）
 - ID 格式：`A00001`（5 位數字，跨日不重置），計數器持久化至 `session-state.json` 的 `LastGrabIdNum`
 - `btnCameraGrab_Click` 開始抓取時呼叫 `NextGrabId()` → `_currentGrabId`
@@ -360,16 +360,23 @@ private void UpdateExpMaxAndClampColor(int idx, int newMax)
 
 ### InspectionStatisticsService
 
-- 逐日枚舉 CSV 檔，邊讀邊累加（`StreamReader` per file）
+- 遞迴掃描 `Directory.GetFiles(root, "*.csv", SearchOption.AllDirectories)`，兩種統計模式：
+  - `Compute(root, start, end)`：時間範圍過濾，分母 = 張數，每筆獨立判斷
+  - `ComputeByGrabIdRange(root, startNum, endNum)`：序號範圍過濾，分母 = 唯一序號數，一票否決
+  - `ComputeDetailedByGrabIdRange(root, startNum, endNum)`：回傳 `List<GrabDetail>`（逐序號×CAM1~7 的 `bool?`）
+- `LoadGrabIdInfos(root)` → `List<GrabIdInfo>`（每個序號的 Earliest/Latest 時間）
+- `LoadAvailableTimes(root)` → `SortedSet<DateTime>`（全部時間戳，供 cascading comboBox 使用）
+- CSV 格式：`Id,FileName,MaxExceed,MeanExceed`；FileName = `YYYYMMDD_HHMMSS-camId`；Id = `A00001`
+- CSV 路徑：`{root}\{YYYY}\{YYYYMM}\{YYYYMMDD}.csv`
 - 從 FileName 提取 CamId：`fileName.LastIndexOf('-')` 後的數字
-- `Compute(root, start, end)` 回傳 `Dictionary<int, CameraStats>`
+- 序號數字提取：`ParseGrabIdNum("A00008")` → `8`（Substring(1) parse int）
 
 ### InspectionStatsPresenter（tabPageData）
 
 - 7 個 Panel 卡片：BackColor = 綠(≥95%) / 橙(80-95%) / 紅(<80%) / 灰(無資料)
-- ListView 5 欄：相機 / Pass / Fail / Total / 良率
-- ListView row BackColor 亦依良率上色（淡色版）
-- 控制項命名：`panelStatCam1`~7，`listViewStats`，`cbStart/EndYear/Month/Day/Hour/Min/Sec`，`btnQueryStats`，`btnSelectDataFolder`
+- `listViewStats` 5 欄彙總：相機 / Pass / Fail / Total / 良率（序號模式下分母=唯一序號數）
+- `listView1` 逐序號明細：序號 + CAM1~7（Pass/Fail/—），整行紅底 = 任一 CAM Fail
+- 控制項命名：`panelStatCam1`~7，`listViewStats`，`listView1`，`comboBox1`（序號起），`comboBox2`（序號迄），`cbStart/EndYear/Month/Day/Hour/Min/Sec`，`btnQueryStats`，`btnSelectDataFolder`
 
 ---
 
@@ -384,6 +391,31 @@ old_string: "panel7"  →  new_string: "panelStatCam1"
 **安全性確認**：`panel7` 不是 `panel70` / `panel17` 等的子字串（因為後跟的是空格、`.`、`)`、`;` 或 `"`），不會誤替換。
 
 **順序**：先替換較長的數字（`comboBox12` 先於 `comboBox1`），避免 `comboBox1` 誤替換 `comboBox12` 中的部分字元。
+
+---
+
+## ListView AutoFit 欄寬
+
+資料填完後呼叫，取 content 與 header 兩者的較大寬度：
+
+```csharp
+private static void AutoFitListViewColumns(ListView lv)
+{
+    for (int i = 0; i < lv.Columns.Count; i++)
+    {
+        lv.AutoResizeColumn(i, ColumnHeaderAutoResizeStyle.ColumnContent);
+        int contentWidth = lv.Columns[i].Width;
+        lv.AutoResizeColumn(i, ColumnHeaderAutoResizeStyle.HeaderSize);
+        if (contentWidth > lv.Columns[i].Width)
+            lv.Columns[i].Width = contentWidth;
+    }
+}
+```
+
+各 ListView 觸發時機：
+- **靜態資料**（`listViewEngine`）：`SetupSystemTab()` 末尾一次
+- **每 500ms 動態更新**（`listViewCameras`）：第一次 Tick 後執行一次（`_telemetryFitDone` flag），之後不重複（避免閃爍）
+- **統計資料**（`listViewStats`、`listView1`）：每次 `RefreshStats()` / `UpdateGrabDetailListView()` 後執行
 
 ---
 

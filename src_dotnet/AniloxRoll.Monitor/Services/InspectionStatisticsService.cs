@@ -14,6 +14,17 @@ namespace AniloxRoll.Monitor.Core.Services
         public float PassRate => Total == 0 ? 0f : (float)Pass / Total;
     }
 
+    /// <summary>
+    /// 單一序號對 CAM1~7 的 Pass/Fail 結果。
+    /// CamResult[i]（i=0~6 對應 CAM1~7）：null=無資料, false=Pass, true=Fail
+    /// </summary>
+    public class GrabDetail
+    {
+        public string  GrabId    { get; set; }
+        public int     GrabNum   { get; set; }
+        public bool?[] CamResult { get; } = new bool?[7];
+    }
+
     /// <summary>每個序號（grabId）的時間範圍資訊。</summary>
     public class GrabIdInfo
     {
@@ -146,6 +157,66 @@ namespace AniloxRoll.Monitor.Core.Services
             }
 
             return stats;
+        }
+
+        // ── 逐序號詳細結果 ───────────────────────────────────────────────
+
+        /// <summary>
+        /// 遞迴掃描所有 CSV，回傳 [startGrabNum, endGrabNum] 範圍內每個序號
+        /// 對 CAM1~7 的 Pass/Fail 結果，依序號排序。
+        /// 同一序號同一相機任一張超標即為 Fail（一票否決）。
+        /// </summary>
+        public static List<GrabDetail> ComputeDetailedByGrabIdRange(
+            string captureRootPath,
+            int    startGrabNum,
+            int    endGrabNum)
+        {
+            // grabNum → GrabDetail
+            var dict = new SortedDictionary<int, GrabDetail>();
+
+            if (string.IsNullOrWhiteSpace(captureRootPath) || !Directory.Exists(captureRootPath))
+                return new List<GrabDetail>();
+
+            foreach (string csvPath in Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories))
+            {
+                try
+                {
+                    using (var sr = new StreamReader(csvPath))
+                    {
+                        string header = sr.ReadLine();
+                        if (header == null) continue;
+
+                        string line;
+                        while ((line = sr.ReadLine()) != null)
+                        {
+                            if (!TryParseLine(line, out string grabId, out string fileName,
+                                out int maxExceed, out int meanExceed)) continue;
+
+                            int grabNum = ParseGrabIdNum(grabId);
+                            if (grabNum < startGrabNum || grabNum > endGrabNum) continue;
+
+                            if (!TryExtractCamId(fileName, out int camId)) continue;
+                            if (camId < 1 || camId > 7) continue;
+
+                            if (!dict.TryGetValue(grabNum, out var detail))
+                            {
+                                detail = new GrabDetail { GrabId = grabId, GrabNum = grabNum };
+                                dict[grabNum] = detail;
+                            }
+
+                            int idx = camId - 1;
+                            bool thisFail = maxExceed > 0 || meanExceed > 0;
+                            if (detail.CamResult[idx] == null)
+                                detail.CamResult[idx] = thisFail;
+                            else if (thisFail)
+                                detail.CamResult[idx] = true; // 一票否決
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            return new List<GrabDetail>(dict.Values);
         }
 
         // ── 載入輔助資料 ─────────────────────────────────────────────────

@@ -91,8 +91,8 @@ CoreCV_FastReadBMP  →  AoiService.ProcessImage  →  CoreCV_Resize_GPU  →  C
 | `src_dotnet/AniloxRoll.Monitor/UI/State/UserSessionState.cs` | UI session 狀態持久化（LastDataPath / 時間篩選 / LastEnableImageProcessing / LastGrabIdNum）→ `Config\session-state.json` |
 | `src_dotnet/AniloxRoll.Monitor/UI/Widgets/FormInteractionHelper.cs` | `SelectAndLoadFolder`：選擇資料夾後先 `SetLastDataPath`+`Save()` 再掃描檔案 |
 | `src_dotnet/AniloxRoll.Monitor/Services/InspectionLogService.cs` | 抓圖事件編號（A00001 起）+ 每日 CSV 寫入（`{CaptureRootPath}\{YYYY}\{YYYYMM}\{YYYYMMDD}.csv`） |
-| `src_dotnet/AniloxRoll.Monitor/Services/InspectionStatisticsService.cs` | 從 CSV 逐日邊讀邊累加計算 Pass/Fail 統計（不載入記憶體） |
-| `src_dotnet/AniloxRoll.Monitor/UI/Presenters/InspectionStatsPresenter.cs` | tabPageData：7 個卡片 Panel（良率顏色）+ listViewStats（5 欄表格） |
+| `src_dotnet/AniloxRoll.Monitor/Services/InspectionStatisticsService.cs` | CSV 統計服務：`Compute`（時間範圍/張數分母）、`ComputeByGrabIdRange`（序號範圍/唯一序號分母/一票否決）、`ComputeDetailedByGrabIdRange`（逐序號×CAM1~7 Pass/Fail）、`LoadGrabIdInfos`、`LoadAvailableTimes` |
+| `src_dotnet/AniloxRoll.Monitor/UI/Presenters/InspectionStatsPresenter.cs` | tabPageData：7 個卡片 Panel（良率顏色）+ listViewStats（5 欄彙總表） |
 | `sdk/AOI_SDK/core_cv_api/src/export_api.cpp` | CoreCV_Resize_GPU 實作 |
 | `sdk/AOI_SDK/core_cv_api/include/export_c/export_api.h` | CoreCV_Resize_GPU 宣告 |
 
@@ -123,13 +123,20 @@ Form 右側固定有 `tabControlRight`（Location=1209,12，Size=276×679），�
 | 控制項 | Name | 說明 |
 |--------|------|------|
 | 7 個 Panel（X=6~930，Y=6） | `panelStatCam1`~`panelStatCam7` | 卡片式顯示（良率%、Pass/Total、顏色） |
-| ListView | `listViewStats` | 5 欄：相機/Pass/Fail/Total/良率 |
-| Start 時間 | `cbStartYear/Month/Day/Hour/Min/Sec` | 統計起始時間 |
-| End 時間 | `cbEndYear/Month/Day/Hour/Min/Sec` | 統計結束時間 |
-| `btnSelectDataFolder` | "讀取資料夾" | 選擇 CaptureRootPath |
-| `btnQueryStats` | "統計數據" | 讀取 CSV 計算並更新 UI |
+| ListView | `listViewStats` | 5 欄彙總：相機/Pass/Fail/Total/良率（分母=唯一序號數） |
+| ListView | `listView1` | 逐序號明細：序號 + CAM1~7 各欄 Pass/Fail/—（行紅底=任一 Fail） |
+| ComboBox | `comboBox1` | 序號起（選擇後自動更新 cbStart 時間 + 統計） |
+| ComboBox | `comboBox2` | 序號迄（選擇後自動更新 cbEnd 時間 + 統計） |
+| Start 時間 | `cbStartYear/Month/Day/Hour/Min/Sec` | 統計起始時間（cascading，僅顯示資料中存在的值） |
+| End 時間 | `cbEndYear/Month/Day/Hour/Min/Sec` | 統計結束時間（cascading，start ≤ end 強制 clamp） |
+| `btnSelectDataFolder` | "讀取資料夾" | 選擇 CaptureRootPath，載入後自動填充 comboBox1/2 及時間 |
+| `btnQueryStats` | "統計數據" | 手動觸發 RefreshStats() |
 
-初始化：`InitializeSystem()` → `SetupDataTab()` → `InspectionStatsPresenter.Initialize()`
+初始化：`InitializeSystem()` → `SetupDataTab()` → `InspectionStatsPresenter.Initialize()` + `InitGrabDetailListView()`
+
+**統計模式**：
+- 序號模式（comboBox1/2 已選）→ `ComputeByGrabIdRange` + `ComputeDetailedByGrabIdRange`；分母 = 唯一序號數；同一序號同一相機任一張超標即 Fail
+- 時間模式（fallback）→ `Compute`；分母 = 照片張數；每筆獨立判斷
 
 ### 參數分類（UI 可調 vs JSON 限定）
 
@@ -370,6 +377,8 @@ sdk/AOI_SDK/src_dotnet/MilGrabSample/MilGrabSample/
 ---
 
 ## Git Workflow 規則
+
+**未經使用者明確說「commit/push」，不得主動執行任何 git commit 或 git push。**
 
 **每次 commit / push 前，必須先更新以下兩個檔案：**
 

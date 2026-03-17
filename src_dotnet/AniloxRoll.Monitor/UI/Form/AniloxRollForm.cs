@@ -478,6 +478,7 @@ namespace AniloxRoll.Monitor.Forms
             listViewEngine.Items.Add(new ListViewItem(new[] { "DefaultRidgeSigma", InspectionEngineConfig.DefaultRidgeSigma.ToString() }));
             listViewEngine.Items.Add(new ListViewItem(new[] { "DefaultHessianMax", InspectionEngineConfig.DefaultHessianMaxFactor.ToString() }));
             listViewEngine.Items.Add(new ListViewItem(new[] { "DefaultRidgeMode",  InspectionEngineConfig.DefaultRidgeMode }));
+            AutoFitListViewColumns(listViewEngine);
 
             // ── Telemetry Timer（每 500ms 更新 ListView + SyncFromHardware）─
             _telemetryTimer = new System.Windows.Forms.Timer { Interval = 500 };
@@ -489,11 +490,19 @@ namespace AniloxRoll.Monitor.Forms
         // --- Telemetry Timer ---
         // ==========================================
 
+        private bool _telemetryFitDone;
+
         private void TelemetryTimer_Tick(object sender, EventArgs e)
         {
             if (_liveCameraManager == null || _liveCameraManager.IsReleasing) return;
 
             _telemetryPresenter?.Update(_liveCameraManager.Cameras);
+
+            if (!_telemetryFitDone)
+            {
+                AutoFitListViewColumns(listViewCameras);
+                _telemetryFitDone = true;
+            }
 
             if (_liveCameraManager.IsAllocated)
                 SyncCameraParamsFromHardware();
@@ -529,6 +538,7 @@ namespace AniloxRoll.Monitor.Forms
             btnSelectDataFolder.Click += BtnSelectDataFolder_Click;
             btnQueryStats.Click       += BtnQueryStats_Click;
             WireStatDateCombos();
+            InitGrabDetailListView();
 
             comboBox1.SelectedIndexChanged += (s, e) => OnGrabIdComboChanged(isStart: true);
             comboBox2.SelectedIndexChanged += (s, e) => OnGrabIdComboChanged(isStart: false);
@@ -859,9 +869,17 @@ namespace AniloxRoll.Monitor.Forms
             {
                 var startInfo = _grabIdInfos[comboBox1.SelectedIndex];
                 var endInfo   = _grabIdInfos[comboBox2.SelectedIndex];
-                var stats = InspectionStatisticsService.ComputeByGrabIdRange(
-                    _statsDataRootPath, startInfo.GrabNum, endInfo.GrabNum);
+                int startNum  = startInfo.GrabNum;
+                int endNum    = endInfo.GrabNum;
+
+                var stats   = InspectionStatisticsService.ComputeByGrabIdRange(
+                    _statsDataRootPath, startNum, endNum);
+                var details = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
+                    _statsDataRootPath, startNum, endNum);
+
                 _statsPresenter.Update(stats);
+                AutoFitListViewColumns(listViewStats);
+                UpdateGrabDetailListView(details);
                 return;
             }
 
@@ -869,6 +887,72 @@ namespace AniloxRoll.Monitor.Forms
             if (!TryParseStatDateTime(out DateTime start, out DateTime end)) return;
             var statsTime = InspectionStatisticsService.Compute(_statsDataRootPath, start, end);
             _statsPresenter.Update(statsTime);
+            AutoFitListViewColumns(listViewStats);
+            UpdateGrabDetailListView(new List<GrabDetail>());
+        }
+
+        private void InitGrabDetailListView()
+        {
+            listView1.View          = View.Details;
+            listView1.FullRowSelect = true;
+            listView1.GridLines     = true;
+            listView1.Columns.Clear();
+            listView1.Items.Clear();
+
+            listView1.Columns.Add("序號", 70);
+            for (int i = 1; i <= 7; i++)
+                listView1.Columns.Add($"CAM{i}", 65);
+        }
+
+        private static readonly System.Drawing.Color _detailPass  = System.Drawing.Color.FromArgb(232, 245, 233);
+        private static readonly System.Drawing.Color _detailFail  = System.Drawing.Color.FromArgb(255, 235, 238);
+        private static readonly System.Drawing.Color _detailEmpty = SystemColors.Window;
+
+        private void UpdateGrabDetailListView(List<GrabDetail> details)
+        {
+            listView1.BeginUpdate();
+            listView1.Items.Clear();
+
+            foreach (var d in details)
+            {
+                var item = new ListViewItem(d.GrabId);
+                bool rowHasFail = false;
+
+                for (int i = 0; i < 7; i++)
+                {
+                    if (d.CamResult[i] == null)
+                    {
+                        item.SubItems.Add("—");
+                    }
+                    else if (d.CamResult[i] == false)
+                    {
+                        item.SubItems.Add("Pass");
+                    }
+                    else
+                    {
+                        item.SubItems.Add("Fail");
+                        rowHasFail = true;
+                    }
+                }
+
+                item.BackColor = rowHasFail ? _detailFail : _detailPass;
+                listView1.Items.Add(item);
+            }
+
+            listView1.EndUpdate();
+            AutoFitListViewColumns(listView1);
+        }
+
+        private static void AutoFitListViewColumns(ListView lv)
+        {
+            for (int i = 0; i < lv.Columns.Count; i++)
+            {
+                lv.AutoResizeColumn(i, ColumnHeaderAutoResizeStyle.ColumnContent);
+                int contentWidth = lv.Columns[i].Width;
+                lv.AutoResizeColumn(i, ColumnHeaderAutoResizeStyle.HeaderSize);
+                if (contentWidth > lv.Columns[i].Width)
+                    lv.Columns[i].Width = contentWidth;
+            }
         }
 
         // ── Available values helpers ──────────────────────────────────────
