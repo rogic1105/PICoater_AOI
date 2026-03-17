@@ -100,11 +100,13 @@ CoreCV_FastReadBMP  →  AoiService.ProcessImage  →  CoreCV_Resize_GPU  →  C
 
 ## AniloxRoll.Monitor 右側參數面板（tabControlRight）
 
-Form 右側固定有 `tabControlRight`（Location=1209,12，Size=276×679），包含 3 個 Tab：
+頂部有 `panelStatusBar`（Dock=Top，Height=32），內含 `lblStatusGrab`（Dock=Fill，IEC 60073 訊號燈，待機=灰、抓取中=綠）。
+
+Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×654），包含 3 個 Tab：
 
 | Tab（Name） | Tab Text | 控制項 | 內容 |
 |-------------|----------|--------|------|
-| `tabPageInspSettings` | 檢測設定 | `propertyGrid1`（Dock=Fill） | `InspectionSettings`（MachineLayout / Recipe / Storage）— **Acquisition 已隱藏（[Browsable(false)]）** |
+| `tabPageInspSettings` | 檢測設定 | `propertyGridSettings`（Dock=Fill） | `InspectionSettings`（MachineLayout / Recipe / Storage）— **Acquisition 已隱藏（[Browsable(false)]）** |
 | `tabPageCamera` | 相機參數 | `tabControlCamTabs`（嵌套） | 曝光時間 / 線掃速率 / 擷取高度 各 7 台（**唯一設定入口**） |
 | `tabPageSystem` | 系統資訊 | `listViewCameras` + `listViewEngine` | SystemSettings.CameraDevices + InspectionEngineConfig 常數 |
 
@@ -124,18 +126,18 @@ Form 右側固定有 `tabControlRight`（Location=1209,12，Size=276×679），�
 |--------|------|------|
 | 7 個 Panel（X=6~930，Y=6） | `panelStatCam1`~`panelStatCam7` | 卡片式顯示（良率%、Pass/Total、顏色） |
 | ListView | `listViewStats` | 5 欄彙總：相機/Pass/Fail/Total/良率（分母=唯一序號數） |
-| ListView | `listView1` | 逐序號明細：序號 + CAM1~7 各欄 Pass/Fail/—（行紅底=任一 Fail） |
-| ComboBox | `comboBox1` | 序號起（選擇後自動更新 cbStart 時間 + 統計） |
-| ComboBox | `comboBox2` | 序號迄（選擇後自動更新 cbEnd 時間 + 統計） |
+| ListView | `listViewGrabDetail` | 逐序號明細：序號 + CAM1~7 各欄 Pass/Fail/—（行紅底=任一 Fail） |
+| ComboBox | `cbGrabIdStart` | 序號起（選擇後自動更新 cbStart 時間 + 統計） |
+| ComboBox | `cbGrabIdEnd` | 序號迄（選擇後自動更新 cbEnd 時間 + 統計） |
 | Start 時間 | `cbStartYear/Month/Day/Hour/Min/Sec` | 統計起始時間（cascading，僅顯示資料中存在的值） |
 | End 時間 | `cbEndYear/Month/Day/Hour/Min/Sec` | 統計結束時間（cascading，start ≤ end 強制 clamp） |
-| `btnSelectDataFolder` | "讀取資料夾" | 選擇 CaptureRootPath，載入後自動填充 comboBox1/2 及時間 |
+| `btnSelectDataFolder` | "讀取資料夾" | 選擇 CaptureRootPath，載入後自動填充 cbGrabIdStart/End 及時間 |
 | `btnQueryStats` | "統計數據" | 手動觸發 RefreshStats() |
 
 初始化：`InitializeSystem()` → `SetupDataTab()` → `InspectionStatsPresenter.Initialize()` + `InitGrabDetailListView()`
 
 **統計模式**：
-- 序號模式（comboBox1/2 已選）→ `ComputeByGrabIdRange` + `ComputeDetailedByGrabIdRange`；分母 = 唯一序號數；同一序號同一相機任一張超標即 Fail
+- 序號模式（cbGrabIdStart/End 已選）→ `ComputeByGrabIdRange` + `ComputeDetailedByGrabIdRange`；分母 = 唯一序號數；同一序號同一相機任一張超標即 Fail
 - 時間模式（fallback）→ `Compute`；分母 = 照片張數；每筆獨立判斷
 
 ### 參數分類（UI 可調 vs JSON 限定）

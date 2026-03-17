@@ -93,10 +93,10 @@ namespace AniloxRoll.Monitor.Forms
 
             checkBoxEnableImageProcessing.Checked = UserSessionState.GetLastEnableImageProcessing(checkBoxEnableImageProcessing.Checked);
 
-            propertyGrid1.SelectedObject = _settings;
-            propertyGrid1.ToolbarVisible = false;
-            propertyGrid1.PropertyValueChanged -= _propertyGrid_PropertyValueChanged;
-            propertyGrid1.PropertyValueChanged += _propertyGrid_PropertyValueChanged;
+            propertyGridSettings.SelectedObject = _settings;
+            propertyGridSettings.ToolbarVisible = false;
+            propertyGridSettings.PropertyValueChanged -= _propertyGrid_PropertyValueChanged;
+            propertyGridSettings.PropertyValueChanged += _propertyGrid_PropertyValueChanged;
 
             _interactionHelper = new FormInteractionHelper(new FormInteractionContext
             {
@@ -196,7 +196,7 @@ namespace AniloxRoll.Monitor.Forms
             if (!wasGrabbing && _liveCameraManager.IsLiveGrabbing)
                 _currentGrabId = _inspectionLogService.NextGrabId();
 
-            btnCameraGrab.Text = _liveCameraManager.IsLiveGrabbing ? "停止抓取" : "開始抓取";
+            UpdateGrabButton(_liveCameraManager.IsLiveGrabbing);
         }
 
         /// <summary>
@@ -219,7 +219,24 @@ namespace AniloxRoll.Monitor.Forms
         {
             _liveCameraManager.FreeCameras();
             _telemetryPresenter?.ResetAll();
-            btnCameraGrab.Text = "開始抓取";
+            UpdateGrabButton(false);
+        }
+
+        private void UpdateGrabButton(bool isGrabbing)
+        {
+            btnCameraGrab.Text = isGrabbing ? "停止抓取" : "開始抓取";
+            if (isGrabbing)
+            {
+                lblStatusGrab.Text      = "● 相機抓取中";
+                lblStatusGrab.BackColor = Color.FromArgb(56, 142, 60);   // IEC 綠：運轉中
+                lblStatusGrab.ForeColor = Color.White;
+            }
+            else
+            {
+                lblStatusGrab.Text      = "● 待機";
+                lblStatusGrab.BackColor = Color.FromArgb(117, 117, 117); // IEC 白/灰：中性待機
+                lblStatusGrab.ForeColor = Color.White;
+            }
         }
 
         private void checkBoxEnableImageProcessing_CheckedChanged(object sender, EventArgs e)
@@ -540,8 +557,8 @@ namespace AniloxRoll.Monitor.Forms
             WireStatDateCombos();
             InitGrabDetailListView();
 
-            comboBox1.SelectedIndexChanged += (s, e) => OnGrabIdComboChanged(isStart: true);
-            comboBox2.SelectedIndexChanged += (s, e) => OnGrabIdComboChanged(isStart: false);
+            cbGrabIdStart.SelectedIndexChanged += (s, e) => OnGrabIdComboChanged(isStart: true);
+            cbGrabIdEnd.SelectedIndexChanged += (s, e) => OnGrabIdComboChanged(isStart: false);
         }
 
         private void PopulateStatDateCombos(DateTime start, DateTime end)
@@ -628,17 +645,17 @@ namespace AniloxRoll.Monitor.Forms
                     _statComboUpdating = true;
                     try
                     {
-                        comboBox1.Items.Clear();
-                        comboBox2.Items.Clear();
+                        cbGrabIdStart.Items.Clear();
+                        cbGrabIdEnd.Items.Clear();
                         foreach (var info in _grabIdInfos)
                         {
-                            comboBox1.Items.Add(info.GrabId);
-                            comboBox2.Items.Add(info.GrabId);
+                            cbGrabIdStart.Items.Add(info.GrabId);
+                            cbGrabIdEnd.Items.Add(info.GrabId);
                         }
-                        if (comboBox1.Items.Count > 0)
+                        if (cbGrabIdStart.Items.Count > 0)
                         {
-                            comboBox1.SelectedIndex = 0;
-                            comboBox2.SelectedIndex = comboBox2.Items.Count - 1;
+                            cbGrabIdStart.SelectedIndex = 0;
+                            cbGrabIdEnd.SelectedIndex = cbGrabIdEnd.Items.Count - 1;
                         }
 
                         // 時間 ComboBox 設為全範圍
@@ -823,29 +840,29 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         /// <summary>
-        /// comboBox1（序號起）或 comboBox2（序號迄）變更時：
+        /// cbGrabIdStart（序號起）或 cbGrabIdEnd（序號迄）變更時：
         /// 強制 start ≤ end、更新 cbStart/cbEnd 時間、重新統計。
         /// </summary>
         private void OnGrabIdComboChanged(bool isStart)
         {
             if (_statComboUpdating || _grabIdInfos.Count == 0) return;
 
-            int idx1 = comboBox1.SelectedIndex;
-            int idx2 = comboBox2.SelectedIndex;
+            int idx1 = cbGrabIdStart.SelectedIndex;
+            int idx2 = cbGrabIdEnd.SelectedIndex;
             if (idx1 < 0 || idx2 < 0) return;
 
-            // 強制 comboBox1 ≤ comboBox2
+            // 強制 cbGrabIdStart ≤ cbGrabIdEnd
             _statComboUpdating = true;
             try
             {
                 if (isStart && idx1 > idx2)
-                    comboBox2.SelectedIndex = idx1;
+                    cbGrabIdEnd.SelectedIndex = idx1;
                 else if (!isStart && idx2 < idx1)
-                    comboBox1.SelectedIndex = idx2;
+                    cbGrabIdStart.SelectedIndex = idx2;
 
                 // 更新 cbStart/cbEnd 時間
-                var startInfo = _grabIdInfos[comboBox1.SelectedIndex];
-                var endInfo   = _grabIdInfos[comboBox2.SelectedIndex];
+                var startInfo = _grabIdInfos[cbGrabIdStart.SelectedIndex];
+                var endInfo   = _grabIdInfos[cbGrabIdEnd.SelectedIndex];
                 SetCombosToDateTime(true,  startInfo.Earliest);
                 SetCombosToDateTime(false, endInfo.Latest);
                 if (_statAvailableTimes.Count > 0)
@@ -863,12 +880,12 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (string.IsNullOrWhiteSpace(_statsDataRootPath)) return;
 
-            // 序號模式（comboBox1/2 已設定）
-            if (comboBox1.SelectedIndex >= 0 && comboBox2.SelectedIndex >= 0
+            // 序號模式（cbGrabIdStart/2 已設定）
+            if (cbGrabIdStart.SelectedIndex >= 0 && cbGrabIdEnd.SelectedIndex >= 0
                 && _grabIdInfos.Count > 0)
             {
-                var startInfo = _grabIdInfos[comboBox1.SelectedIndex];
-                var endInfo   = _grabIdInfos[comboBox2.SelectedIndex];
+                var startInfo = _grabIdInfos[cbGrabIdStart.SelectedIndex];
+                var endInfo   = _grabIdInfos[cbGrabIdEnd.SelectedIndex];
                 int startNum  = startInfo.GrabNum;
                 int endNum    = endInfo.GrabNum;
 
@@ -893,15 +910,15 @@ namespace AniloxRoll.Monitor.Forms
 
         private void InitGrabDetailListView()
         {
-            listView1.View          = View.Details;
-            listView1.FullRowSelect = true;
-            listView1.GridLines     = true;
-            listView1.Columns.Clear();
-            listView1.Items.Clear();
+            listViewGrabDetail.View          = View.Details;
+            listViewGrabDetail.FullRowSelect = true;
+            listViewGrabDetail.GridLines     = true;
+            listViewGrabDetail.Columns.Clear();
+            listViewGrabDetail.Items.Clear();
 
-            listView1.Columns.Add("序號", 70);
+            listViewGrabDetail.Columns.Add("序號", 70);
             for (int i = 1; i <= 7; i++)
-                listView1.Columns.Add($"CAM{i}", 65);
+                listViewGrabDetail.Columns.Add($"CAM{i}", 65);
         }
 
         private static readonly System.Drawing.Color _detailPass  = System.Drawing.Color.FromArgb(232, 245, 233);
@@ -910,8 +927,8 @@ namespace AniloxRoll.Monitor.Forms
 
         private void UpdateGrabDetailListView(List<GrabDetail> details)
         {
-            listView1.BeginUpdate();
-            listView1.Items.Clear();
+            listViewGrabDetail.BeginUpdate();
+            listViewGrabDetail.Items.Clear();
 
             foreach (var d in details)
             {
@@ -936,11 +953,11 @@ namespace AniloxRoll.Monitor.Forms
                 }
 
                 item.BackColor = rowHasFail ? _detailFail : _detailPass;
-                listView1.Items.Add(item);
+                listViewGrabDetail.Items.Add(item);
             }
 
-            listView1.EndUpdate();
-            AutoFitListViewColumns(listView1);
+            listViewGrabDetail.EndUpdate();
+            AutoFitListViewColumns(listViewGrabDetail);
         }
 
         private static void AutoFitListViewColumns(ListView lv)

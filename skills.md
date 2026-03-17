@@ -376,7 +376,7 @@ private void UpdateExpMaxAndClampColor(int idx, int newMax)
 - 7 個 Panel 卡片：BackColor = 綠(≥95%) / 橙(80-95%) / 紅(<80%) / 灰(無資料)
 - `listViewStats` 5 欄彙總：相機 / Pass / Fail / Total / 良率（序號模式下分母=唯一序號數）
 - `listView1` 逐序號明細：序號 + CAM1~7（Pass/Fail/—），整行紅底 = 任一 CAM Fail
-- 控制項命名：`panelStatCam1`~7，`listViewStats`，`listView1`，`comboBox1`（序號起），`comboBox2`（序號迄），`cbStart/EndYear/Month/Day/Hour/Min/Sec`，`btnQueryStats`，`btnSelectDataFolder`
+- 控制項命名：`panelStatCam1`~7，`listViewStats`，`listViewGrabDetail`，`cbGrabIdStart`（序號起），`cbGrabIdEnd`（序號迄），`cbStart/EndYear/Month/Day/Hour/Min/Sec`，`btnQueryStats`，`btnSelectDataFolder`
 
 ---
 
@@ -416,6 +416,58 @@ private static void AutoFitListViewColumns(ListView lv)
 - **靜態資料**（`listViewEngine`）：`SetupSystemTab()` 末尾一次
 - **每 500ms 動態更新**（`listViewCameras`）：第一次 Tick 後執行一次（`_telemetryFitDone` flag），之後不重複（避免閃爍）
 - **統計資料**（`listViewStats`、`listView1`）：每次 `RefreshStats()` / `UpdateGrabDetailListView()` 後執行
+
+---
+
+## IEC 60073 訊號燈（WinForms）
+
+工廠 IEC 60073 規範顏色語義：
+
+| 顏色 | 含義 | 本專案用途 |
+|------|------|-----------|
+| 綠 `#388E3C` | 正常運轉中 | 相機抓取中 |
+| 灰 `#757575` | 待機/中性 | 待機 |
+| 紅 `#C62828` | 危險/故障 | 預留：異常 |
+| 黃 `#F9A825` | 警告 | 預留：警告 |
+
+### 架構：Panel（容器）+ Label（訊號燈）
+
+```
+panelStatusBar  Dock=Top, Height=32
+  └─ lblStatusGrab  Dock=Fill, TextAlign=MiddleRight, Padding=(0,0,12,0)
+```
+
+- `Dock=Top` 保證全寬，不需指定 Width
+- `Dock=Fill` + `TextAlign=MiddleRight` = 整條著色 + 文字靠右
+- 未來新增訊號燈：在 panel 內加新 Label，設 `Dock=Right` + 固定 Width，從右往左排列
+- `lblStatusGrab` 改回 `Dock=Fill` 確保填滿剩餘空間
+
+### UpdateGrabButton 模式
+
+```csharp
+private void UpdateGrabButton(bool isGrabbing)
+{
+    btnCameraGrab.Text = isGrabbing ? "停止抓取" : "開始抓取";
+    if (isGrabbing)
+    {
+        lblStatusGrab.Text      = "● 相機抓取中";
+        lblStatusGrab.BackColor = Color.FromArgb(56, 142, 60);   // IEC 綠
+        lblStatusGrab.ForeColor = Color.White;
+    }
+    else
+    {
+        lblStatusGrab.Text      = "● 待機";
+        lblStatusGrab.BackColor = Color.FromArgb(117, 117, 117); // IEC 灰
+        lblStatusGrab.ForeColor = Color.White;
+    }
+}
+```
+
+### 為何用 Label 而非 Panel
+
+- `Panel` 本身無 Text 屬性（需塞子 Label，結構更深）
+- `Label` 天生有 `Text`、`BackColor`、`TextAlign`，是最簡單的著色文字控件
+- `PictureBox` 適合圓形 LED（需 Paint 事件），長條形文字不需要
 
 ---
 

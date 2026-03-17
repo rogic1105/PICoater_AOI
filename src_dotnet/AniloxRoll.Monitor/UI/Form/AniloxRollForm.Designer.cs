@@ -28,9 +28,9 @@
         /// </summary>
         private void InitializeComponent()
         {
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea2 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend2 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series2 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea1 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend1 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series1 = new System.Windows.Forms.DataVisualization.Charting.Series();
             this.tabMain = new System.Windows.Forms.TabControl();
             this.tabPageLiveView = new System.Windows.Forms.TabPage();
             this.checkBoxEnableImageProcessing = new System.Windows.Forms.CheckBox();
@@ -51,7 +51,7 @@
             this.label_day = new System.Windows.Forms.Label();
             this.label_mon = new System.Windows.Forms.Label();
             this.label_yr = new System.Windows.Forms.Label();
-            this.tableLayoutPanel1 = new System.Windows.Forms.TableLayoutPanel();
+            this.tlpReviewLayout = new System.Windows.Forms.TableLayoutPanel();
             this.chartMura = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.btnSelectFolder = new System.Windows.Forms.Button();
             this.btnShowProcessed = new System.Windows.Forms.Button();
@@ -72,8 +72,45 @@
             this.btnLastPeriod = new System.Windows.Forms.Button();
             this.btnNextPeriod = new System.Windows.Forms.Button();
             this.tabPageData = new System.Windows.Forms.TabPage();
-            this.propertyGrid1 = new System.Windows.Forms.PropertyGrid();
-            this.statusStrip1 = new System.Windows.Forms.StatusStrip();
+            this.listViewGrabDetail = new System.Windows.Forms.ListView();
+            this.groupBoxGrabIdRange = new System.Windows.Forms.GroupBox();
+            this.cbGrabIdStart = new System.Windows.Forms.ComboBox();
+            this.cbGrabIdEnd = new System.Windows.Forms.ComboBox();
+            this.label49 = new System.Windows.Forms.Label();
+            this.label50 = new System.Windows.Forms.Label();
+            this.groupBoxTimeRange = new System.Windows.Forms.GroupBox();
+            this.label48 = new System.Windows.Forms.Label();
+            this.label47 = new System.Windows.Forms.Label();
+            this.label41 = new System.Windows.Forms.Label();
+            this.label42 = new System.Windows.Forms.Label();
+            this.label43 = new System.Windows.Forms.Label();
+            this.label44 = new System.Windows.Forms.Label();
+            this.label45 = new System.Windows.Forms.Label();
+            this.label46 = new System.Windows.Forms.Label();
+            this.cbStartYear = new System.Windows.Forms.ComboBox();
+            this.cbStartMonth = new System.Windows.Forms.ComboBox();
+            this.cbStartDay = new System.Windows.Forms.ComboBox();
+            this.cbEndSec = new System.Windows.Forms.ComboBox();
+            this.cbStartHour = new System.Windows.Forms.ComboBox();
+            this.cbEndMin = new System.Windows.Forms.ComboBox();
+            this.cbStartMin = new System.Windows.Forms.ComboBox();
+            this.cbEndHour = new System.Windows.Forms.ComboBox();
+            this.cbStartSec = new System.Windows.Forms.ComboBox();
+            this.cbEndDay = new System.Windows.Forms.ComboBox();
+            this.cbEndYear = new System.Windows.Forms.ComboBox();
+            this.cbEndMonth = new System.Windows.Forms.ComboBox();
+            this.btnSelectDataFolder = new System.Windows.Forms.Button();
+            this.btnQueryStats = new System.Windows.Forms.Button();
+            this.listViewStats = new System.Windows.Forms.ListView();
+            this.panelStatCam7 = new System.Windows.Forms.Panel();
+            this.panelStatCam6 = new System.Windows.Forms.Panel();
+            this.panelStatCam5 = new System.Windows.Forms.Panel();
+            this.panelStatCam4 = new System.Windows.Forms.Panel();
+            this.panelStatCam3 = new System.Windows.Forms.Panel();
+            this.panelStatCam2 = new System.Windows.Forms.Panel();
+            this.panelStatCam1 = new System.Windows.Forms.Panel();
+            this.propertyGridSettings = new System.Windows.Forms.PropertyGrid();
+            this.statusBarMain = new System.Windows.Forms.StatusStrip();
             this.lblPixelInfo = new System.Windows.Forms.ToolStripStatusLabel();
             this.tabControlRight = new System.Windows.Forms.TabControl();
             this.tabPageInspSettings = new System.Windows.Forms.TabPage();
@@ -105,7 +142,7 @@
             this.trackBarExpCam3 = new System.Windows.Forms.TrackBar();
             this.numExpCam3 = new System.Windows.Forms.NumericUpDown();
             this.label6 = new System.Windows.Forms.Label();
-            this.panel9 = new System.Windows.Forms.Panel();
+            this.panelExpCam2 = new System.Windows.Forms.Panel();
             this.label3 = new System.Windows.Forms.Label();
             this.trackBarExpCam2 = new System.Windows.Forms.TrackBar();
             this.numExpCam2 = new System.Windows.Forms.NumericUpDown();
@@ -192,33 +229,13 @@
             this.lblEngineConst = new System.Windows.Forms.Label();
             this.listViewCameras = new System.Windows.Forms.ListView();
             this.lblCamHardware = new System.Windows.Forms.Label();
-            this.panelStatCam7 = new System.Windows.Forms.Panel();
-            this.panelStatCam6 = new System.Windows.Forms.Panel();
-            this.panelStatCam5 = new System.Windows.Forms.Panel();
-            this.panelStatCam4 = new System.Windows.Forms.Panel();
-            this.panelStatCam3 = new System.Windows.Forms.Panel();
-            this.panelStatCam2 = new System.Windows.Forms.Panel();
-            this.panelStatCam1 = new System.Windows.Forms.Panel();
-            this.listViewStats = new System.Windows.Forms.ListView();
+            this.panelStatusBar = new System.Windows.Forms.Panel();
+            this.lblStatusGrab = new System.Windows.Forms.Label();
             this.canvasMain = new AOI.SDK.UI.SmartCanvas();
-            this.cbStartSec = new System.Windows.Forms.ComboBox();
-            this.cbStartMin = new System.Windows.Forms.ComboBox();
-            this.cbStartHour = new System.Windows.Forms.ComboBox();
-            this.cbStartDay = new System.Windows.Forms.ComboBox();
-            this.cbStartMonth = new System.Windows.Forms.ComboBox();
-            this.cbStartYear = new System.Windows.Forms.ComboBox();
-            this.cbEndSec = new System.Windows.Forms.ComboBox();
-            this.cbEndMin = new System.Windows.Forms.ComboBox();
-            this.cbEndHour = new System.Windows.Forms.ComboBox();
-            this.cbEndDay = new System.Windows.Forms.ComboBox();
-            this.cbEndMonth = new System.Windows.Forms.ComboBox();
-            this.cbEndYear = new System.Windows.Forms.ComboBox();
-            this.btnQueryStats = new System.Windows.Forms.Button();
-            this.btnSelectDataFolder = new System.Windows.Forms.Button();
             this.tabMain.SuspendLayout();
             this.tabPageLiveView.SuspendLayout();
             this.tabPageReview.SuspendLayout();
-            this.tableLayoutPanel1.SuspendLayout();
+            this.tlpReviewLayout.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.chartMura)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam2)).BeginInit();
@@ -228,7 +245,9 @@
             ((System.ComponentModel.ISupportInitialize)(this.pbCam6)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam7)).BeginInit();
             this.tabPageData.SuspendLayout();
-            this.statusStrip1.SuspendLayout();
+            this.groupBoxGrabIdRange.SuspendLayout();
+            this.groupBoxTimeRange.SuspendLayout();
+            this.statusBarMain.SuspendLayout();
             this.tabControlRight.SuspendLayout();
             this.tabPageInspSettings.SuspendLayout();
             this.tabPageCamera.SuspendLayout();
@@ -249,7 +268,7 @@
             this.panelStatCam70.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarExpCam3)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numExpCam3)).BeginInit();
-            this.panel9.SuspendLayout();
+            this.panelExpCam2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarExpCam2)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numExpCam2)).BeginInit();
             this.panelExposure.SuspendLayout();
@@ -300,6 +319,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.trackBarHtCam1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam1)).BeginInit();
             this.tabPageSystem.SuspendLayout();
+            this.panelStatusBar.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).BeginInit();
             this.SuspendLayout();
             // 
@@ -308,10 +328,10 @@
             this.tabMain.Controls.Add(this.tabPageLiveView);
             this.tabMain.Controls.Add(this.tabPageReview);
             this.tabMain.Controls.Add(this.tabPageData);
-            this.tabMain.Location = new System.Drawing.Point(12, 12);
+            this.tabMain.Location = new System.Drawing.Point(12, 37);
             this.tabMain.Name = "tabMain";
             this.tabMain.SelectedIndex = 0;
-            this.tabMain.Size = new System.Drawing.Size(1191, 674);
+            this.tabMain.Size = new System.Drawing.Size(1191, 649);
             this.tabMain.TabIndex = 1;
             // 
             // tabPageLiveView
@@ -330,7 +350,7 @@
             this.tabPageLiveView.Location = new System.Drawing.Point(4, 25);
             this.tabPageLiveView.Name = "tabPageLiveView";
             this.tabPageLiveView.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPageLiveView.Size = new System.Drawing.Size(1183, 645);
+            this.tabPageLiveView.Size = new System.Drawing.Size(1183, 620);
             this.tabPageLiveView.TabIndex = 0;
             this.tabPageLiveView.Text = "即時監控";
             this.tabPageLiveView.UseVisualStyleBackColor = true;
@@ -432,7 +452,7 @@
             this.tabPageReview.Controls.Add(this.label_day);
             this.tabPageReview.Controls.Add(this.label_mon);
             this.tabPageReview.Controls.Add(this.label_yr);
-            this.tabPageReview.Controls.Add(this.tableLayoutPanel1);
+            this.tabPageReview.Controls.Add(this.tlpReviewLayout);
             this.tabPageReview.Controls.Add(this.btnSelectFolder);
             this.tabPageReview.Controls.Add(this.btnShowProcessed);
             this.tabPageReview.Controls.Add(this.pbCam1);
@@ -454,7 +474,7 @@
             this.tabPageReview.Location = new System.Drawing.Point(4, 25);
             this.tabPageReview.Name = "tabPageReview";
             this.tabPageReview.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPageReview.Size = new System.Drawing.Size(1183, 645);
+            this.tabPageReview.Size = new System.Drawing.Size(1183, 620);
             this.tabPageReview.TabIndex = 1;
             this.tabPageReview.Text = "影像回顧";
             this.tabPageReview.UseVisualStyleBackColor = true;
@@ -513,34 +533,34 @@
             this.label_yr.TabIndex = 24;
             this.label_yr.Text = "年";
             // 
-            // tableLayoutPanel1
+            // tlpReviewLayout
             // 
-            this.tableLayoutPanel1.Anchor = System.Windows.Forms.AnchorStyles.None;
-            this.tableLayoutPanel1.ColumnCount = 1;
-            this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanel1.Controls.Add(this.canvasMain, 0, 0);
-            this.tableLayoutPanel1.Controls.Add(this.chartMura, 0, 1);
-            this.tableLayoutPanel1.Location = new System.Drawing.Point(8, 123);
-            this.tableLayoutPanel1.Name = "tableLayoutPanel1";
-            this.tableLayoutPanel1.RowCount = 2;
-            this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 70F));
-            this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 30F));
-            this.tableLayoutPanel1.Size = new System.Drawing.Size(1070, 495);
-            this.tableLayoutPanel1.TabIndex = 17;
+            this.tlpReviewLayout.Anchor = System.Windows.Forms.AnchorStyles.None;
+            this.tlpReviewLayout.ColumnCount = 1;
+            this.tlpReviewLayout.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            this.tlpReviewLayout.Controls.Add(this.canvasMain, 0, 0);
+            this.tlpReviewLayout.Controls.Add(this.chartMura, 0, 1);
+            this.tlpReviewLayout.Location = new System.Drawing.Point(8, 123);
+            this.tlpReviewLayout.Name = "tlpReviewLayout";
+            this.tlpReviewLayout.RowCount = 2;
+            this.tlpReviewLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 70F));
+            this.tlpReviewLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 30F));
+            this.tlpReviewLayout.Size = new System.Drawing.Size(1070, 495);
+            this.tlpReviewLayout.TabIndex = 17;
             // 
             // chartMura
             // 
-            chartArea2.Name = "ChartArea1";
-            this.chartMura.ChartAreas.Add(chartArea2);
+            chartArea1.Name = "ChartArea1";
+            this.chartMura.ChartAreas.Add(chartArea1);
             this.chartMura.Dock = System.Windows.Forms.DockStyle.Fill;
-            legend2.Name = "Legend1";
-            this.chartMura.Legends.Add(legend2);
+            legend1.Name = "Legend1";
+            this.chartMura.Legends.Add(legend1);
             this.chartMura.Location = new System.Drawing.Point(3, 349);
             this.chartMura.Name = "chartMura";
-            series2.ChartArea = "ChartArea1";
-            series2.Legend = "Legend1";
-            series2.Name = "Series1";
-            this.chartMura.Series.Add(series2);
+            series1.ChartArea = "ChartArea1";
+            series1.Legend = "Legend1";
+            series1.Name = "Series1";
+            this.chartMura.Series.Add(series1);
             this.chartMura.Size = new System.Drawing.Size(1064, 143);
             this.chartMura.TabIndex = 16;
             this.chartMura.Text = "chart1";
@@ -711,20 +731,11 @@
             // 
             // tabPageData
             // 
+            this.tabPageData.Controls.Add(this.listViewGrabDetail);
+            this.tabPageData.Controls.Add(this.groupBoxGrabIdRange);
+            this.tabPageData.Controls.Add(this.groupBoxTimeRange);
             this.tabPageData.Controls.Add(this.btnSelectDataFolder);
             this.tabPageData.Controls.Add(this.btnQueryStats);
-            this.tabPageData.Controls.Add(this.cbEndSec);
-            this.tabPageData.Controls.Add(this.cbEndMin);
-            this.tabPageData.Controls.Add(this.cbEndHour);
-            this.tabPageData.Controls.Add(this.cbEndDay);
-            this.tabPageData.Controls.Add(this.cbEndMonth);
-            this.tabPageData.Controls.Add(this.cbEndYear);
-            this.tabPageData.Controls.Add(this.cbStartSec);
-            this.tabPageData.Controls.Add(this.cbStartMin);
-            this.tabPageData.Controls.Add(this.cbStartHour);
-            this.tabPageData.Controls.Add(this.cbStartDay);
-            this.tabPageData.Controls.Add(this.cbStartMonth);
-            this.tabPageData.Controls.Add(this.cbStartYear);
             this.tabPageData.Controls.Add(this.listViewStats);
             this.tabPageData.Controls.Add(this.panelStatCam7);
             this.tabPageData.Controls.Add(this.panelStatCam6);
@@ -735,29 +746,360 @@
             this.tabPageData.Controls.Add(this.panelStatCam1);
             this.tabPageData.Location = new System.Drawing.Point(4, 25);
             this.tabPageData.Name = "tabPageData";
-            this.tabPageData.Size = new System.Drawing.Size(1183, 645);
+            this.tabPageData.Size = new System.Drawing.Size(1183, 620);
             this.tabPageData.TabIndex = 2;
             this.tabPageData.Text = "檢測數據";
             this.tabPageData.UseVisualStyleBackColor = true;
             // 
-            // propertyGrid1
+            // listViewGrabDetail
             // 
-            this.propertyGrid1.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.propertyGrid1.Location = new System.Drawing.Point(3, 3);
-            this.propertyGrid1.Name = "propertyGrid1";
-            this.propertyGrid1.Size = new System.Drawing.Size(262, 644);
-            this.propertyGrid1.TabIndex = 0;
+            this.listViewGrabDetail.HideSelection = false;
+            this.listViewGrabDetail.Location = new System.Drawing.Point(545, 123);
+            this.listViewGrabDetail.Name = "listViewGrabDetail";
+            this.listViewGrabDetail.Size = new System.Drawing.Size(533, 182);
+            this.listViewGrabDetail.TabIndex = 37;
+            this.listViewGrabDetail.UseCompatibleStateImageBehavior = false;
             // 
-            // statusStrip1
+            // groupBoxGrabIdRange
             // 
-            this.statusStrip1.ImageScalingSize = new System.Drawing.Size(20, 20);
-            this.statusStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.groupBoxGrabIdRange.Controls.Add(this.cbGrabIdStart);
+            this.groupBoxGrabIdRange.Controls.Add(this.cbGrabIdEnd);
+            this.groupBoxGrabIdRange.Controls.Add(this.label49);
+            this.groupBoxGrabIdRange.Controls.Add(this.label50);
+            this.groupBoxGrabIdRange.Location = new System.Drawing.Point(224, 327);
+            this.groupBoxGrabIdRange.Name = "groupBoxGrabIdRange";
+            this.groupBoxGrabIdRange.Size = new System.Drawing.Size(163, 281);
+            this.groupBoxGrabIdRange.TabIndex = 36;
+            this.groupBoxGrabIdRange.TabStop = false;
+            this.groupBoxGrabIdRange.Text = "序號分類";
+            // 
+            // cbGrabIdStart
+            // 
+            this.cbGrabIdStart.FormattingEnabled = true;
+            this.cbGrabIdStart.Location = new System.Drawing.Point(9, 56);
+            this.cbGrabIdStart.Name = "cbGrabIdStart";
+            this.cbGrabIdStart.Size = new System.Drawing.Size(133, 23);
+            this.cbGrabIdStart.TabIndex = 42;
+            // 
+            // cbGrabIdEnd
+            // 
+            this.cbGrabIdEnd.FormattingEnabled = true;
+            this.cbGrabIdEnd.Location = new System.Drawing.Point(9, 126);
+            this.cbGrabIdEnd.Name = "cbGrabIdEnd";
+            this.cbGrabIdEnd.Size = new System.Drawing.Size(133, 23);
+            this.cbGrabIdEnd.TabIndex = 43;
+            // 
+            // label49
+            // 
+            this.label49.AutoSize = true;
+            this.label49.Location = new System.Drawing.Point(6, 91);
+            this.label49.Name = "label49";
+            this.label49.Size = new System.Drawing.Size(67, 15);
+            this.label49.TabIndex = 41;
+            this.label49.Text = "結束序號";
+            // 
+            // label50
+            // 
+            this.label50.AutoSize = true;
+            this.label50.Location = new System.Drawing.Point(6, 36);
+            this.label50.Name = "label50";
+            this.label50.Size = new System.Drawing.Size(67, 15);
+            this.label50.TabIndex = 40;
+            this.label50.Text = "開始序號";
+            // 
+            // groupBoxTimeRange
+            // 
+            this.groupBoxTimeRange.Controls.Add(this.label48);
+            this.groupBoxTimeRange.Controls.Add(this.label47);
+            this.groupBoxTimeRange.Controls.Add(this.label41);
+            this.groupBoxTimeRange.Controls.Add(this.label42);
+            this.groupBoxTimeRange.Controls.Add(this.label43);
+            this.groupBoxTimeRange.Controls.Add(this.label44);
+            this.groupBoxTimeRange.Controls.Add(this.label45);
+            this.groupBoxTimeRange.Controls.Add(this.label46);
+            this.groupBoxTimeRange.Controls.Add(this.cbStartYear);
+            this.groupBoxTimeRange.Controls.Add(this.cbStartMonth);
+            this.groupBoxTimeRange.Controls.Add(this.cbStartDay);
+            this.groupBoxTimeRange.Controls.Add(this.cbEndSec);
+            this.groupBoxTimeRange.Controls.Add(this.cbStartHour);
+            this.groupBoxTimeRange.Controls.Add(this.cbEndMin);
+            this.groupBoxTimeRange.Controls.Add(this.cbStartMin);
+            this.groupBoxTimeRange.Controls.Add(this.cbEndHour);
+            this.groupBoxTimeRange.Controls.Add(this.cbStartSec);
+            this.groupBoxTimeRange.Controls.Add(this.cbEndDay);
+            this.groupBoxTimeRange.Controls.Add(this.cbEndYear);
+            this.groupBoxTimeRange.Controls.Add(this.cbEndMonth);
+            this.groupBoxTimeRange.Location = new System.Drawing.Point(6, 327);
+            this.groupBoxTimeRange.Name = "groupBoxTimeRange";
+            this.groupBoxTimeRange.Size = new System.Drawing.Size(212, 281);
+            this.groupBoxTimeRange.TabIndex = 35;
+            this.groupBoxTimeRange.TabStop = false;
+            this.groupBoxTimeRange.Text = "時間分類";
+            // 
+            // label48
+            // 
+            this.label48.AutoSize = true;
+            this.label48.Location = new System.Drawing.Point(90, 36);
+            this.label48.Name = "label48";
+            this.label48.Size = new System.Drawing.Size(67, 15);
+            this.label48.TabIndex = 39;
+            this.label48.Text = "結束時間";
+            // 
+            // label47
+            // 
+            this.label47.AutoSize = true;
+            this.label47.Location = new System.Drawing.Point(17, 37);
+            this.label47.Name = "label47";
+            this.label47.Size = new System.Drawing.Size(67, 15);
+            this.label47.TabIndex = 36;
+            this.label47.Text = "開始時間";
+            // 
+            // label41
+            // 
+            this.label41.AutoSize = true;
+            this.label41.Location = new System.Drawing.Point(160, 221);
+            this.label41.Name = "label41";
+            this.label41.Size = new System.Drawing.Size(22, 15);
+            this.label41.TabIndex = 38;
+            this.label41.Text = "秒";
+            // 
+            // label42
+            // 
+            this.label42.AutoSize = true;
+            this.label42.Location = new System.Drawing.Point(160, 189);
+            this.label42.Name = "label42";
+            this.label42.Size = new System.Drawing.Size(22, 15);
+            this.label42.TabIndex = 37;
+            this.label42.Text = "分";
+            // 
+            // label43
+            // 
+            this.label43.AutoSize = true;
+            this.label43.Location = new System.Drawing.Point(160, 160);
+            this.label43.Name = "label43";
+            this.label43.Size = new System.Drawing.Size(22, 15);
+            this.label43.TabIndex = 36;
+            this.label43.Text = "時";
+            // 
+            // label44
+            // 
+            this.label44.AutoSize = true;
+            this.label44.Location = new System.Drawing.Point(160, 116);
+            this.label44.Name = "label44";
+            this.label44.Size = new System.Drawing.Size(22, 15);
+            this.label44.TabIndex = 35;
+            this.label44.Text = "日";
+            // 
+            // label45
+            // 
+            this.label45.AutoSize = true;
+            this.label45.Location = new System.Drawing.Point(160, 84);
+            this.label45.Name = "label45";
+            this.label45.Size = new System.Drawing.Size(22, 15);
+            this.label45.TabIndex = 34;
+            this.label45.Text = "月";
+            // 
+            // label46
+            // 
+            this.label46.AutoSize = true;
+            this.label46.Location = new System.Drawing.Point(160, 58);
+            this.label46.Name = "label46";
+            this.label46.Size = new System.Drawing.Size(22, 15);
+            this.label46.TabIndex = 33;
+            this.label46.Text = "年";
+            // 
+            // cbStartYear
+            // 
+            this.cbStartYear.FormattingEnabled = true;
+            this.cbStartYear.Location = new System.Drawing.Point(20, 55);
+            this.cbStartYear.Name = "cbStartYear";
+            this.cbStartYear.Size = new System.Drawing.Size(64, 23);
+            this.cbStartYear.TabIndex = 21;
+            // 
+            // cbStartMonth
+            // 
+            this.cbStartMonth.FormattingEnabled = true;
+            this.cbStartMonth.Location = new System.Drawing.Point(20, 84);
+            this.cbStartMonth.Name = "cbStartMonth";
+            this.cbStartMonth.Size = new System.Drawing.Size(64, 23);
+            this.cbStartMonth.TabIndex = 22;
+            // 
+            // cbStartDay
+            // 
+            this.cbStartDay.FormattingEnabled = true;
+            this.cbStartDay.Location = new System.Drawing.Point(20, 113);
+            this.cbStartDay.Name = "cbStartDay";
+            this.cbStartDay.Size = new System.Drawing.Size(64, 23);
+            this.cbStartDay.TabIndex = 23;
+            // 
+            // cbEndSec
+            // 
+            this.cbEndSec.FormattingEnabled = true;
+            this.cbEndSec.Location = new System.Drawing.Point(90, 218);
+            this.cbEndSec.Name = "cbEndSec";
+            this.cbEndSec.Size = new System.Drawing.Size(64, 23);
+            this.cbEndSec.TabIndex = 32;
+            // 
+            // cbStartHour
+            // 
+            this.cbStartHour.FormattingEnabled = true;
+            this.cbStartHour.Location = new System.Drawing.Point(20, 160);
+            this.cbStartHour.Name = "cbStartHour";
+            this.cbStartHour.Size = new System.Drawing.Size(64, 23);
+            this.cbStartHour.TabIndex = 24;
+            // 
+            // cbEndMin
+            // 
+            this.cbEndMin.FormattingEnabled = true;
+            this.cbEndMin.Location = new System.Drawing.Point(90, 189);
+            this.cbEndMin.Name = "cbEndMin";
+            this.cbEndMin.Size = new System.Drawing.Size(64, 23);
+            this.cbEndMin.TabIndex = 31;
+            // 
+            // cbStartMin
+            // 
+            this.cbStartMin.FormattingEnabled = true;
+            this.cbStartMin.Location = new System.Drawing.Point(20, 189);
+            this.cbStartMin.Name = "cbStartMin";
+            this.cbStartMin.Size = new System.Drawing.Size(64, 23);
+            this.cbStartMin.TabIndex = 25;
+            // 
+            // cbEndHour
+            // 
+            this.cbEndHour.FormattingEnabled = true;
+            this.cbEndHour.Location = new System.Drawing.Point(90, 160);
+            this.cbEndHour.Name = "cbEndHour";
+            this.cbEndHour.Size = new System.Drawing.Size(64, 23);
+            this.cbEndHour.TabIndex = 30;
+            // 
+            // cbStartSec
+            // 
+            this.cbStartSec.FormattingEnabled = true;
+            this.cbStartSec.Location = new System.Drawing.Point(20, 218);
+            this.cbStartSec.Name = "cbStartSec";
+            this.cbStartSec.Size = new System.Drawing.Size(64, 23);
+            this.cbStartSec.TabIndex = 26;
+            // 
+            // cbEndDay
+            // 
+            this.cbEndDay.FormattingEnabled = true;
+            this.cbEndDay.Location = new System.Drawing.Point(90, 113);
+            this.cbEndDay.Name = "cbEndDay";
+            this.cbEndDay.Size = new System.Drawing.Size(64, 23);
+            this.cbEndDay.TabIndex = 29;
+            // 
+            // cbEndYear
+            // 
+            this.cbEndYear.FormattingEnabled = true;
+            this.cbEndYear.Location = new System.Drawing.Point(90, 55);
+            this.cbEndYear.Name = "cbEndYear";
+            this.cbEndYear.Size = new System.Drawing.Size(64, 23);
+            this.cbEndYear.TabIndex = 27;
+            // 
+            // cbEndMonth
+            // 
+            this.cbEndMonth.FormattingEnabled = true;
+            this.cbEndMonth.Location = new System.Drawing.Point(90, 84);
+            this.cbEndMonth.Name = "cbEndMonth";
+            this.cbEndMonth.Size = new System.Drawing.Size(64, 23);
+            this.cbEndMonth.TabIndex = 28;
+            // 
+            // btnSelectDataFolder
+            // 
+            this.btnSelectDataFolder.Font = new System.Drawing.Font("新細明體", 8F);
+            this.btnSelectDataFolder.Location = new System.Drawing.Point(409, 339);
+            this.btnSelectDataFolder.Name = "btnSelectDataFolder";
+            this.btnSelectDataFolder.Size = new System.Drawing.Size(92, 40);
+            this.btnSelectDataFolder.TabIndex = 34;
+            this.btnSelectDataFolder.Text = "讀取資料夾";
+            this.btnSelectDataFolder.UseVisualStyleBackColor = true;
+            // 
+            // btnQueryStats
+            // 
+            this.btnQueryStats.Font = new System.Drawing.Font("新細明體", 8F);
+            this.btnQueryStats.Location = new System.Drawing.Point(409, 380);
+            this.btnQueryStats.Name = "btnQueryStats";
+            this.btnQueryStats.Size = new System.Drawing.Size(92, 40);
+            this.btnQueryStats.TabIndex = 33;
+            this.btnQueryStats.Text = "統計數據";
+            this.btnQueryStats.UseVisualStyleBackColor = true;
+            // 
+            // listViewStats
+            // 
+            this.listViewStats.HideSelection = false;
+            this.listViewStats.Location = new System.Drawing.Point(6, 123);
+            this.listViewStats.Name = "listViewStats";
+            this.listViewStats.Size = new System.Drawing.Size(533, 182);
+            this.listViewStats.TabIndex = 9;
+            this.listViewStats.UseCompatibleStateImageBehavior = false;
+            // 
+            // panelStatCam7
+            // 
+            this.panelStatCam7.Location = new System.Drawing.Point(930, 6);
+            this.panelStatCam7.Name = "panelStatCam7";
+            this.panelStatCam7.Size = new System.Drawing.Size(148, 111);
+            this.panelStatCam7.TabIndex = 3;
+            // 
+            // panelStatCam6
+            // 
+            this.panelStatCam6.Location = new System.Drawing.Point(776, 6);
+            this.panelStatCam6.Name = "panelStatCam6";
+            this.panelStatCam6.Size = new System.Drawing.Size(148, 111);
+            this.panelStatCam6.TabIndex = 4;
+            // 
+            // panelStatCam5
+            // 
+            this.panelStatCam5.Location = new System.Drawing.Point(622, 6);
+            this.panelStatCam5.Name = "panelStatCam5";
+            this.panelStatCam5.Size = new System.Drawing.Size(148, 111);
+            this.panelStatCam5.TabIndex = 5;
+            // 
+            // panelStatCam4
+            // 
+            this.panelStatCam4.Location = new System.Drawing.Point(468, 6);
+            this.panelStatCam4.Name = "panelStatCam4";
+            this.panelStatCam4.Size = new System.Drawing.Size(148, 111);
+            this.panelStatCam4.TabIndex = 6;
+            // 
+            // panelStatCam3
+            // 
+            this.panelStatCam3.Location = new System.Drawing.Point(314, 6);
+            this.panelStatCam3.Name = "panelStatCam3";
+            this.panelStatCam3.Size = new System.Drawing.Size(148, 111);
+            this.panelStatCam3.TabIndex = 7;
+            // 
+            // panelStatCam2
+            // 
+            this.panelStatCam2.Location = new System.Drawing.Point(160, 6);
+            this.panelStatCam2.Name = "panelStatCam2";
+            this.panelStatCam2.Size = new System.Drawing.Size(148, 111);
+            this.panelStatCam2.TabIndex = 8;
+            // 
+            // panelStatCam1
+            // 
+            this.panelStatCam1.Location = new System.Drawing.Point(6, 6);
+            this.panelStatCam1.Name = "panelStatCam1";
+            this.panelStatCam1.Size = new System.Drawing.Size(148, 111);
+            this.panelStatCam1.TabIndex = 2;
+            // 
+            // propertyGridSettings
+            // 
+            this.propertyGridSettings.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.propertyGridSettings.Location = new System.Drawing.Point(3, 3);
+            this.propertyGridSettings.Name = "propertyGridSettings";
+            this.propertyGridSettings.Size = new System.Drawing.Size(262, 619);
+            this.propertyGridSettings.TabIndex = 0;
+            // 
+            // statusBarMain
+            // 
+            this.statusBarMain.ImageScalingSize = new System.Drawing.Size(20, 20);
+            this.statusBarMain.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.lblPixelInfo});
-            this.statusStrip1.Location = new System.Drawing.Point(0, 689);
-            this.statusStrip1.Name = "statusStrip1";
-            this.statusStrip1.Size = new System.Drawing.Size(1491, 25);
-            this.statusStrip1.TabIndex = 15;
-            this.statusStrip1.Text = "statusStrip1";
+            this.statusBarMain.Location = new System.Drawing.Point(0, 689);
+            this.statusBarMain.Name = "statusBarMain";
+            this.statusBarMain.Size = new System.Drawing.Size(1491, 25);
+            this.statusBarMain.TabIndex = 15;
+            this.statusBarMain.Text = "statusBarMain";
             // 
             // lblPixelInfo
             // 
@@ -770,20 +1112,20 @@
             this.tabControlRight.Controls.Add(this.tabPageInspSettings);
             this.tabControlRight.Controls.Add(this.tabPageCamera);
             this.tabControlRight.Controls.Add(this.tabPageSystem);
-            this.tabControlRight.Location = new System.Drawing.Point(1209, 12);
+            this.tabControlRight.Location = new System.Drawing.Point(1209, 37);
             this.tabControlRight.Multiline = true;
             this.tabControlRight.Name = "tabControlRight";
             this.tabControlRight.SelectedIndex = 0;
-            this.tabControlRight.Size = new System.Drawing.Size(276, 679);
+            this.tabControlRight.Size = new System.Drawing.Size(276, 654);
             this.tabControlRight.TabIndex = 16;
             // 
             // tabPageInspSettings
             // 
-            this.tabPageInspSettings.Controls.Add(this.propertyGrid1);
+            this.tabPageInspSettings.Controls.Add(this.propertyGridSettings);
             this.tabPageInspSettings.Location = new System.Drawing.Point(4, 25);
             this.tabPageInspSettings.Name = "tabPageInspSettings";
             this.tabPageInspSettings.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPageInspSettings.Size = new System.Drawing.Size(268, 650);
+            this.tabPageInspSettings.Size = new System.Drawing.Size(268, 625);
             this.tabPageInspSettings.TabIndex = 0;
             this.tabPageInspSettings.Text = "檢測設定";
             this.tabPageInspSettings.UseVisualStyleBackColor = true;
@@ -794,7 +1136,7 @@
             this.tabPageCamera.Location = new System.Drawing.Point(4, 25);
             this.tabPageCamera.Name = "tabPageCamera";
             this.tabPageCamera.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPageCamera.Size = new System.Drawing.Size(268, 650);
+            this.tabPageCamera.Size = new System.Drawing.Size(268, 625);
             this.tabPageCamera.TabIndex = 1;
             this.tabPageCamera.Text = "相機參數";
             this.tabPageCamera.UseVisualStyleBackColor = true;
@@ -808,7 +1150,7 @@
             this.tabControlCamTabs.Location = new System.Drawing.Point(3, 3);
             this.tabControlCamTabs.Name = "tabControlCamTabs";
             this.tabControlCamTabs.SelectedIndex = 0;
-            this.tabControlCamTabs.Size = new System.Drawing.Size(262, 644);
+            this.tabControlCamTabs.Size = new System.Drawing.Size(262, 619);
             this.tabControlCamTabs.TabIndex = 2;
             // 
             // tabPageExposure
@@ -818,12 +1160,12 @@
             this.tabPageExposure.Controls.Add(this.panelStatCam72);
             this.tabPageExposure.Controls.Add(this.panelStatCam71);
             this.tabPageExposure.Controls.Add(this.panelStatCam70);
-            this.tabPageExposure.Controls.Add(this.panel9);
+            this.tabPageExposure.Controls.Add(this.panelExpCam2);
             this.tabPageExposure.Controls.Add(this.panelExposure);
             this.tabPageExposure.Location = new System.Drawing.Point(4, 25);
             this.tabPageExposure.Name = "tabPageExposure";
             this.tabPageExposure.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPageExposure.Size = new System.Drawing.Size(254, 615);
+            this.tabPageExposure.Size = new System.Drawing.Size(254, 590);
             this.tabPageExposure.TabIndex = 0;
             this.tabPageExposure.Text = "曝光時間";
             this.tabPageExposure.UseVisualStyleBackColor = true;
@@ -1158,19 +1500,19 @@
             this.label6.TabIndex = 0;
             this.label6.Text = "CAM3";
             // 
-            // panel9
+            // panelExpCam2
             // 
-            this.panel9.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelExpCam2.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panel9.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panel9.Controls.Add(this.label3);
-            this.panel9.Controls.Add(this.trackBarExpCam2);
-            this.panel9.Controls.Add(this.numExpCam2);
-            this.panel9.Controls.Add(this.label4);
-            this.panel9.Location = new System.Drawing.Point(0, 73);
-            this.panel9.Name = "panel9";
-            this.panel9.Size = new System.Drawing.Size(254, 69);
-            this.panel9.TabIndex = 4;
+            this.panelExpCam2.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelExpCam2.Controls.Add(this.label3);
+            this.panelExpCam2.Controls.Add(this.trackBarExpCam2);
+            this.panelExpCam2.Controls.Add(this.numExpCam2);
+            this.panelExpCam2.Controls.Add(this.label4);
+            this.panelExpCam2.Location = new System.Drawing.Point(0, 73);
+            this.panelExpCam2.Name = "panelExpCam2";
+            this.panelExpCam2.Size = new System.Drawing.Size(254, 69);
+            this.panelExpCam2.TabIndex = 4;
             // 
             // label3
             // 
@@ -1302,7 +1644,7 @@
             this.tabPageLineRate.Location = new System.Drawing.Point(4, 25);
             this.tabPageLineRate.Name = "tabPageLineRate";
             this.tabPageLineRate.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPageLineRate.Size = new System.Drawing.Size(254, 615);
+            this.tabPageLineRate.Size = new System.Drawing.Size(254, 590);
             this.tabPageLineRate.TabIndex = 1;
             this.tabPageLineRate.Text = "線掃速率";
             this.tabPageLineRate.UseVisualStyleBackColor = true;
@@ -1781,7 +2123,7 @@
             this.tabPageGrabHeight.Location = new System.Drawing.Point(4, 25);
             this.tabPageGrabHeight.Name = "tabPageGrabHeight";
             this.tabPageGrabHeight.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPageGrabHeight.Size = new System.Drawing.Size(254, 615);
+            this.tabPageGrabHeight.Size = new System.Drawing.Size(254, 590);
             this.tabPageGrabHeight.TabIndex = 2;
             this.tabPageGrabHeight.Text = "擷取高度";
             this.tabPageGrabHeight.UseVisualStyleBackColor = true;
@@ -2256,7 +2598,7 @@
             this.tabPageSystem.Controls.Add(this.lblCamHardware);
             this.tabPageSystem.Location = new System.Drawing.Point(4, 25);
             this.tabPageSystem.Name = "tabPageSystem";
-            this.tabPageSystem.Size = new System.Drawing.Size(268, 650);
+            this.tabPageSystem.Size = new System.Drawing.Size(268, 625);
             this.tabPageSystem.TabIndex = 2;
             this.tabPageSystem.Text = "系統資訊";
             this.tabPageSystem.UseVisualStyleBackColor = true;
@@ -2309,63 +2651,26 @@
             this.lblCamHardware.TabIndex = 0;
             this.lblCamHardware.Text = "【相機硬體設定】";
             // 
-            // panelStatCam7
+            // panelStatusBar
             // 
-            this.panelStatCam7.Location = new System.Drawing.Point(930, 6);
-            this.panelStatCam7.Name = "panelStatCam7";
-            this.panelStatCam7.Size = new System.Drawing.Size(148, 111);
-            this.panelStatCam7.TabIndex = 3;
+            this.panelStatusBar.Controls.Add(this.lblStatusGrab);
+            this.panelStatusBar.Dock = System.Windows.Forms.DockStyle.Top;
+            this.panelStatusBar.Location = new System.Drawing.Point(0, 0);
+            this.panelStatusBar.Name = "panelStatusBar";
+            this.panelStatusBar.Size = new System.Drawing.Size(1491, 32);
+            this.panelStatusBar.TabIndex = 17;
             // 
-            // panelStatCam6
+            // lblStatusGrab
             // 
-            this.panelStatCam6.Location = new System.Drawing.Point(776, 6);
-            this.panelStatCam6.Name = "panelStatCam6";
-            this.panelStatCam6.Size = new System.Drawing.Size(148, 111);
-            this.panelStatCam6.TabIndex = 4;
-            // 
-            // panelStatCam5
-            // 
-            this.panelStatCam5.Location = new System.Drawing.Point(622, 6);
-            this.panelStatCam5.Name = "panelStatCam5";
-            this.panelStatCam5.Size = new System.Drawing.Size(148, 111);
-            this.panelStatCam5.TabIndex = 5;
-            // 
-            // panelStatCam4
-            // 
-            this.panelStatCam4.Location = new System.Drawing.Point(468, 6);
-            this.panelStatCam4.Name = "panelStatCam4";
-            this.panelStatCam4.Size = new System.Drawing.Size(148, 111);
-            this.panelStatCam4.TabIndex = 6;
-            // 
-            // panelStatCam3
-            // 
-            this.panelStatCam3.Location = new System.Drawing.Point(314, 6);
-            this.panelStatCam3.Name = "panelStatCam3";
-            this.panelStatCam3.Size = new System.Drawing.Size(148, 111);
-            this.panelStatCam3.TabIndex = 7;
-            // 
-            // panelStatCam2
-            // 
-            this.panelStatCam2.Location = new System.Drawing.Point(160, 6);
-            this.panelStatCam2.Name = "panelStatCam2";
-            this.panelStatCam2.Size = new System.Drawing.Size(148, 111);
-            this.panelStatCam2.TabIndex = 8;
-            // 
-            // panelStatCam1
-            // 
-            this.panelStatCam1.Location = new System.Drawing.Point(6, 6);
-            this.panelStatCam1.Name = "panelStatCam1";
-            this.panelStatCam1.Size = new System.Drawing.Size(148, 111);
-            this.panelStatCam1.TabIndex = 2;
-            // 
-            // listViewStats
-            // 
-            this.listViewStats.HideSelection = false;
-            this.listViewStats.Location = new System.Drawing.Point(6, 123);
-            this.listViewStats.Name = "listViewStats";
-            this.listViewStats.Size = new System.Drawing.Size(1072, 182);
-            this.listViewStats.TabIndex = 9;
-            this.listViewStats.UseCompatibleStateImageBehavior = false;
+            this.lblStatusGrab.BackColor = System.Drawing.Color.Gray;
+            this.lblStatusGrab.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lblStatusGrab.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblStatusGrab.ForeColor = System.Drawing.Color.White;
+            this.lblStatusGrab.Name = "lblStatusGrab";
+            this.lblStatusGrab.TabIndex = 0;
+            this.lblStatusGrab.Text = "● 待機";
+            this.lblStatusGrab.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.lblStatusGrab.Padding = new System.Windows.Forms.Padding(0, 0, 12, 0);
             // 
             // canvasMain
             // 
@@ -2378,129 +2683,14 @@
             this.canvasMain.TabIndex = 7;
             this.canvasMain.TabStop = false;
             // 
-            // cbStartSec
-            // 
-            this.cbStartSec.FormattingEnabled = true;
-            this.cbStartSec.Location = new System.Drawing.Point(6, 490);
-            this.cbStartSec.Name = "cbStartSec";
-            this.cbStartSec.Size = new System.Drawing.Size(64, 23);
-            this.cbStartSec.TabIndex = 26;
-            // 
-            // cbStartMin
-            // 
-            this.cbStartMin.FormattingEnabled = true;
-            this.cbStartMin.Location = new System.Drawing.Point(6, 461);
-            this.cbStartMin.Name = "cbStartMin";
-            this.cbStartMin.Size = new System.Drawing.Size(64, 23);
-            this.cbStartMin.TabIndex = 25;
-            // 
-            // cbStartHour
-            // 
-            this.cbStartHour.FormattingEnabled = true;
-            this.cbStartHour.Location = new System.Drawing.Point(6, 432);
-            this.cbStartHour.Name = "cbStartHour";
-            this.cbStartHour.Size = new System.Drawing.Size(64, 23);
-            this.cbStartHour.TabIndex = 24;
-            // 
-            // cbStartDay
-            // 
-            this.cbStartDay.FormattingEnabled = true;
-            this.cbStartDay.Location = new System.Drawing.Point(6, 385);
-            this.cbStartDay.Name = "cbStartDay";
-            this.cbStartDay.Size = new System.Drawing.Size(64, 23);
-            this.cbStartDay.TabIndex = 23;
-            // 
-            // cbStartMonth
-            // 
-            this.cbStartMonth.FormattingEnabled = true;
-            this.cbStartMonth.Location = new System.Drawing.Point(6, 356);
-            this.cbStartMonth.Name = "cbStartMonth";
-            this.cbStartMonth.Size = new System.Drawing.Size(64, 23);
-            this.cbStartMonth.TabIndex = 22;
-            // 
-            // cbStartYear
-            // 
-            this.cbStartYear.FormattingEnabled = true;
-            this.cbStartYear.Location = new System.Drawing.Point(6, 327);
-            this.cbStartYear.Name = "cbStartYear";
-            this.cbStartYear.Size = new System.Drawing.Size(64, 23);
-            this.cbStartYear.TabIndex = 21;
-            // 
-            // cbEndSec
-            // 
-            this.cbEndSec.FormattingEnabled = true;
-            this.cbEndSec.Location = new System.Drawing.Point(100, 490);
-            this.cbEndSec.Name = "cbEndSec";
-            this.cbEndSec.Size = new System.Drawing.Size(64, 23);
-            this.cbEndSec.TabIndex = 32;
-            // 
-            // cbEndMin
-            // 
-            this.cbEndMin.FormattingEnabled = true;
-            this.cbEndMin.Location = new System.Drawing.Point(100, 461);
-            this.cbEndMin.Name = "cbEndMin";
-            this.cbEndMin.Size = new System.Drawing.Size(64, 23);
-            this.cbEndMin.TabIndex = 31;
-            // 
-            // cbEndHour
-            // 
-            this.cbEndHour.FormattingEnabled = true;
-            this.cbEndHour.Location = new System.Drawing.Point(100, 432);
-            this.cbEndHour.Name = "cbEndHour";
-            this.cbEndHour.Size = new System.Drawing.Size(64, 23);
-            this.cbEndHour.TabIndex = 30;
-            // 
-            // cbEndDay
-            // 
-            this.cbEndDay.FormattingEnabled = true;
-            this.cbEndDay.Location = new System.Drawing.Point(100, 385);
-            this.cbEndDay.Name = "cbEndDay";
-            this.cbEndDay.Size = new System.Drawing.Size(64, 23);
-            this.cbEndDay.TabIndex = 29;
-            // 
-            // cbEndMonth
-            // 
-            this.cbEndMonth.FormattingEnabled = true;
-            this.cbEndMonth.Location = new System.Drawing.Point(100, 356);
-            this.cbEndMonth.Name = "cbEndMonth";
-            this.cbEndMonth.Size = new System.Drawing.Size(64, 23);
-            this.cbEndMonth.TabIndex = 28;
-            // 
-            // cbEndYear
-            // 
-            this.cbEndYear.FormattingEnabled = true;
-            this.cbEndYear.Location = new System.Drawing.Point(100, 327);
-            this.cbEndYear.Name = "cbEndYear";
-            this.cbEndYear.Size = new System.Drawing.Size(64, 23);
-            this.cbEndYear.TabIndex = 27;
-            // 
-            // btnQueryStats
-            // 
-            this.btnQueryStats.Font = new System.Drawing.Font("新細明體", 8F);
-            this.btnQueryStats.Location = new System.Drawing.Point(192, 368);
-            this.btnQueryStats.Name = "btnQueryStats";
-            this.btnQueryStats.Size = new System.Drawing.Size(92, 40);
-            this.btnQueryStats.TabIndex = 33;
-            this.btnQueryStats.Text = "統計數據";
-            this.btnQueryStats.UseVisualStyleBackColor = true;
-            // 
-            // btnSelectDataFolder
-            // 
-            this.btnSelectDataFolder.Font = new System.Drawing.Font("新細明體", 8F);
-            this.btnSelectDataFolder.Location = new System.Drawing.Point(192, 327);
-            this.btnSelectDataFolder.Name = "btnSelectDataFolder";
-            this.btnSelectDataFolder.Size = new System.Drawing.Size(92, 40);
-            this.btnSelectDataFolder.TabIndex = 34;
-            this.btnSelectDataFolder.Text = "讀取資料夾";
-            this.btnSelectDataFolder.UseVisualStyleBackColor = true;
-            // 
             // AniloxRollForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1491, 714);
+            this.Controls.Add(this.panelStatusBar);
             this.Controls.Add(this.tabControlRight);
-            this.Controls.Add(this.statusStrip1);
+            this.Controls.Add(this.statusBarMain);
             this.Controls.Add(this.tabMain);
             this.Name = "AniloxRollForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
@@ -2510,7 +2700,7 @@
             this.tabPageLiveView.PerformLayout();
             this.tabPageReview.ResumeLayout(false);
             this.tabPageReview.PerformLayout();
-            this.tableLayoutPanel1.ResumeLayout(false);
+            this.tlpReviewLayout.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.chartMura)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam1)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam2)).EndInit();
@@ -2520,8 +2710,12 @@
             ((System.ComponentModel.ISupportInitialize)(this.pbCam6)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam7)).EndInit();
             this.tabPageData.ResumeLayout(false);
-            this.statusStrip1.ResumeLayout(false);
-            this.statusStrip1.PerformLayout();
+            this.groupBoxGrabIdRange.ResumeLayout(false);
+            this.groupBoxGrabIdRange.PerformLayout();
+            this.groupBoxTimeRange.ResumeLayout(false);
+            this.groupBoxTimeRange.PerformLayout();
+            this.statusBarMain.ResumeLayout(false);
+            this.statusBarMain.PerformLayout();
             this.tabControlRight.ResumeLayout(false);
             this.tabPageInspSettings.ResumeLayout(false);
             this.tabPageCamera.ResumeLayout(false);
@@ -2547,8 +2741,8 @@
             this.panelStatCam70.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarExpCam3)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numExpCam3)).EndInit();
-            this.panel9.ResumeLayout(false);
-            this.panel9.PerformLayout();
+            this.panelExpCam2.ResumeLayout(false);
+            this.panelExpCam2.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarExpCam2)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numExpCam2)).EndInit();
             this.panelExposure.ResumeLayout(false);
@@ -2615,6 +2809,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam1)).EndInit();
             this.tabPageSystem.ResumeLayout(false);
             this.tabPageSystem.PerformLayout();
+            this.panelStatusBar.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
@@ -2642,11 +2837,11 @@
         private System.Windows.Forms.Button btnShowProcessed;
         private System.Windows.Forms.Button btnShowOriginal;
         private System.Windows.Forms.Button btnSelectFolder;
-        private System.Windows.Forms.StatusStrip statusStrip1;
+        private System.Windows.Forms.StatusStrip statusBarMain;
         private System.Windows.Forms.ToolStripStatusLabel lblPixelInfo;
         private System.Windows.Forms.DataVisualization.Charting.Chart chartMura;
-        private System.Windows.Forms.TableLayoutPanel tableLayoutPanel1;
-        private System.Windows.Forms.PropertyGrid propertyGrid1;
+        private System.Windows.Forms.TableLayoutPanel tlpReviewLayout;
+        private System.Windows.Forms.PropertyGrid propertyGridSettings;
         private System.Windows.Forms.Label label_sec;
         private System.Windows.Forms.Label label_min;
         private System.Windows.Forms.Label label_hr;
@@ -2707,7 +2902,7 @@
         private System.Windows.Forms.TrackBar trackBarExpCam3;
         private System.Windows.Forms.NumericUpDown numExpCam3;
         private System.Windows.Forms.Label label6;
-        private System.Windows.Forms.Panel panel9;
+        private System.Windows.Forms.Panel panelExpCam2;
         private System.Windows.Forms.Label label3;
         private System.Windows.Forms.TrackBar trackBarExpCam2;
         private System.Windows.Forms.NumericUpDown numExpCam2;
@@ -2806,5 +3001,22 @@
         private System.Windows.Forms.ComboBox cbStartYear;
         private System.Windows.Forms.Button btnSelectDataFolder;
         private System.Windows.Forms.Button btnQueryStats;
+        private System.Windows.Forms.GroupBox groupBoxGrabIdRange;
+        private System.Windows.Forms.ComboBox cbGrabIdStart;
+        private System.Windows.Forms.ComboBox cbGrabIdEnd;
+        private System.Windows.Forms.Label label49;
+        private System.Windows.Forms.Label label50;
+        private System.Windows.Forms.GroupBox groupBoxTimeRange;
+        private System.Windows.Forms.Label label48;
+        private System.Windows.Forms.Label label47;
+        private System.Windows.Forms.Label label41;
+        private System.Windows.Forms.Label label42;
+        private System.Windows.Forms.Label label43;
+        private System.Windows.Forms.Label label44;
+        private System.Windows.Forms.Label label45;
+        private System.Windows.Forms.Label label46;
+        private System.Windows.Forms.ListView listViewGrabDetail;
+        private System.Windows.Forms.Panel panelStatusBar;
+        private System.Windows.Forms.Label lblStatusGrab;
     }
 }
