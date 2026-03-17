@@ -112,7 +112,9 @@ namespace AniloxRoll.Monitor.Forms
                 MuraChartHelper = _muraChartHelper,
                 Settings = _settings,
                 StatusLabel = lblPixelInfo,
-                CameraPanels = new[] { pbCam1, pbCam2, pbCam3, pbCam4, pbCam5, pbCam6, pbCam7 }
+                CameraPanels = new[] { pbCam1, pbCam2, pbCam3, pbCam4, pbCam5, pbCam6, pbCam7 },
+                ImageFormatLabel = lblImageFormat,
+                ImageScaleLabel = lblImageScale
             });
 
             _inspectionLogService = new InspectionLogService(
@@ -155,16 +157,6 @@ namespace AniloxRoll.Monitor.Forms
         private void OnPresenterLogReported(string log)
         {
             Debug.WriteLine(log);
-
-            if (lblPixelInfo == null || string.IsNullOrWhiteSpace(log)) return;
-
-            if (InvokeRequired)
-            {
-                BeginInvoke(new Action<string>(OnPresenterLogReported), log);
-                return;
-            }
-
-            lblPixelInfo.Text = log.Replace(Environment.NewLine, " | ");
         }
 
         // ==========================================

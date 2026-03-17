@@ -90,6 +90,8 @@ CoreCV_FastReadBMP  →  AoiService.ProcessImage  →  CoreCV_Resize_GPU  →  C
 | `src_dotnet/AniloxRoll.Monitor/Settings/System/SystemSettings.cs` | 相機硬體拓樸設定（CameraHardwareConfig 清單） |
 | `src_dotnet/AniloxRoll.Monitor/UI/State/UserSessionState.cs` | UI session 狀態持久化（LastDataPath / 時間篩選 / LastEnableImageProcessing / LastGrabIdNum）→ `Config\session-state.json` |
 | `src_dotnet/AniloxRoll.Monitor/UI/Widgets/FormInteractionHelper.cs` | `SelectAndLoadFolder`：選擇資料夾後先 `SetLastDataPath`+`Save()` 再掃描檔案 |
+| `src_dotnet/AniloxRoll.Monitor/Acquisition/Inspection/InspectionData.cs` | 檢測結果資料物件（Image/MuraCurveMean/MuraCurveMax/IsCompressedJpeg/ScaleFactor） |
+| `src_dotnet/AniloxRoll.Monitor/ImageCatalog/ImageRepository.cs` | 掃描目錄建立索引，同時掃 `*_raw.jpg` + `*.bmp` 兩種格式 |
 | `src_dotnet/AniloxRoll.Monitor/Services/InspectionLogService.cs` | 抓圖事件編號（A00001 起）+ 每日 CSV 寫入（`{CaptureRootPath}\{YYYY}\{YYYYMM}\{YYYYMMDD}.csv`） |
 | `src_dotnet/AniloxRoll.Monitor/Services/InspectionStatisticsService.cs` | CSV 統計服務：`Compute`（時間範圍/張數分母）、`ComputeByGrabIdRange`（序號範圍/唯一序號分母/一票否決）、`ComputeDetailedByGrabIdRange`（逐序號×CAM1~7 Pass/Fail）、`LoadGrabIdInfos`、`LoadAvailableTimes` |
 | `src_dotnet/AniloxRoll.Monitor/UI/Presenters/InspectionStatsPresenter.cs` | tabPageData：7 個卡片 Panel（良率顏色）+ listViewStats（5 欄彙總表） |
@@ -120,6 +122,11 @@ Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×654），�
 
 主內容區為 `tabMain`，含 `tabPageLiveView`（即時監控）、`tabPageReview`（影像回顧）、`tabPageData`（檢測數據）。
 
+**tabPageReview 額外控制項（X=1084 右欄）**：
+- `lblImageFormat`（Y=400）：顯示目前圖片格式，"壓縮 JPEG" / "原始 BMP"
+- `lblImageScale`（Y=424）：顯示壓縮倍率，"縮放: 5x" / "縮放: 1x"
+- 由 `FormInteractionHelper.OnGallerySelectionChanged` 透過 `data.IsCompressedJpeg` / `data.ScaleFactor` 更新
+
 ### tabPageData 控制項
 
 | 控制項 | Name | 說明 |
@@ -148,7 +155,7 @@ Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×654），�
 | B. 取像設定（控制） | CameraExposureTimeUs[7], CameraLineRateHz[7], CameraGrabHeight[7] | **TrackBar 唯一入口**（`tabPageCamera`）+ `acquisition-settings.json`；PropertyGrid 不顯示 |
 | C. 機台佈局 | Cam1–7_Ops, Cam1–7_Pos | PropertyGrid（`tabPageInspSettings`）+ JSON |
 | D. 檢測配方 | HessianMaxFactor, ErrorValueMean, ErrorValueMax | PropertyGrid（`tabPageInspSettings`）+ JSON |
-| E. 儲存設定 | EnableAutoCapture, CaptureRootPath | PropertyGrid（`tabPageInspSettings`）+ JSON |
+| E. 儲存設定 | EnableAutoCapture, CaptureRootPath, UseCompressedCapture | PropertyGrid（`tabPageInspSettings`）+ JSON；`SaveResizeScale`/`SaveJpgQuality` 為 `[Browsable(false)]` 常數 |
 | F. 影像引擎常數 | MaxWidth, MaxHeight, MaxThumbnailSide, Sigma 等 | ListView 唯讀（`tabPageSystem`） |
 
 ### 右側面板初始化流程（code-behind）
@@ -375,6 +382,57 @@ sdk/AOI_SDK/src_dotnet/MilGrabSample/MilGrabSample/
 | [15] | PCIe Speed | `MsysInquire(M_PCIE_SPEED)` | Gen1/2/3 |
 
 **維護注意**：新增或移除欄位時，`Initialize()`（`for i < N`）、`Update()`（各 SubItems[n]）、`ResetAll()`（`for i <= N`）三處必須同步修改。
+
+---
+
+## 壓縮存檔格式（UseCompressedCapture）
+
+### 檔案命名與目錄結構
+
+```
+{CaptureRootPath}\{yyyy}\{yyyyMM}\{yyyyMMdd}\
+    {yyyyMMdd_HHmmss}-{CameraId}_raw.jpg   ← 縮小版原圖（GPU resize，1/SaveResizeScale）
+    {yyyyMMdd_HHmmss}-{CameraId}_proc.jpg  ← 縮小版處理圖
+    {yyyyMMdd_HHmmss}-{CameraId}_mean.bin  ← Mura Mean 曲線（全解析度長度）
+    {yyyyMMdd_HHmmss}-{CameraId}_max.bin   ← Mura Max 曲線（全解析度長度）
+```
+
+舊格式（`UseCompressedCapture = false`）：
+```
+{CaptureRootPath}\{yyyy}\{yyyyMM}\{yyyyMMdd}\
+    {yyyyMMdd_HHmmss}-{CameraId}.bmp       ← 全解析度原圖
+```
+
+### .bin 檔案格式
+
+```
+magic(4)="MCBF" | version(4=int) | scale_factor(4=float) | array_length(4=int) | float[]
+```
+
+- `scale_factor` 儲存縮圖倍率（`SaveResizeScale`），供 `ReadScaleFactorFromBin` 讀取
+- 曲線長度 = 全解析度圖寬，`_raw.jpg` 寬度 = 全解析度 ÷ scale_factor
+
+### InspectionData 格式欄位
+
+| 欄位 | 類型 | 說明 |
+|------|------|------|
+| `IsCompressedJpeg` | bool | `true`=新格式，`false`=BMP |
+| `ScaleFactor` | int | 縮圖倍率（1=BMP，5=JPEG 1/5） |
+
+- 兩者由 `InspectionEngine.LoadFromPrecomputedFiles`（新格式）或 `RunInspectionFullRes` BMP 路徑設定
+- 非處理模式下（curves=null）由 `ReadScaleFactorFromBin` 讀 .bin 標頭取得 ScaleFactor
+
+### ImageRepository 掃描邏輯
+
+同時掃 `*_raw.jpg` + `*.bmp`，兩種格式可在同一根目錄共存，`ParsePath` regex 兩種皆可 match。
+`*_proc.jpg`、`*_mean.bin`、`*_max.bin` 不被收入（不符合 glob 模式）。
+
+### CanvasInteractionHelper 跨倍率 View 保存
+
+`SaveViewIfNeeded` → 把 pixel viewport 轉換成 mm 世界座標存檔；
+`UpdateCanvas` → 用新圖的 `_imageScaleFactor` 把 mm 反算回 pixel zoom/pan。
+Y 軸用 `_savedYCenterFraction`（圖片高度中心分率）保持垂直位置。
+`SaveViewIfNeeded` 在 `_imageScaleFactor` 更新前呼叫，`UpdateCanvas` 在更新後呼叫（呼叫順序由 `FormInteractionHelper.LoadImages` → `OnGallerySelectionChanged` 保證）。
 
 ---
 

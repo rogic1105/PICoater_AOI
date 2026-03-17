@@ -26,9 +26,12 @@ namespace AniloxRoll.Monitor.Core.Data
             _metadataCache.Clear();
             if (!Directory.Exists(rootPath)) return;
 
-            var rawFiles = Directory.GetFiles(rootPath, "*.bmp", SearchOption.AllDirectories);
+            // 同時掃描新格式（*_raw.jpg）與舊格式（*.bmp），合併後由 ParsePath 統一解析
+            var files = Directory.GetFiles(rootPath, "*_raw.jpg", SearchOption.AllDirectories)
+                .Concat(Directory.GetFiles(rootPath, "*.bmp", SearchOption.AllDirectories))
+                .ToArray();
 
-            _metadataCache = rawFiles.AsParallel().Select(ParsePath).Where(x => x != null).ToList();
+            _metadataCache = files.AsParallel().Select(ParsePath).Where(x => x != null).ToList();
         }
 
         private ImageMetadata ParsePath(string path)

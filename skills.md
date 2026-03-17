@@ -471,6 +471,73 @@ private void UpdateGrabButton(bool isGrabbing)
 
 ---
 
+## 壓縮存檔格式（JPEG + .bin）
+
+### 捕獲端（AniloxCamera.TrySaveCapture）
+
+- `UseCompressedCapture=true`：GPU resize（`CoreCV_Resize_GPU`）→ `SaveJpegFromPinned`（需 24bpp 轉換）+ `SaveCurveBin`（自描述 .bin）
+- `UseCompressedCapture=false`：`MbufExport(.bmp)`（舊行為）
+- JPEG 需要 24bpp：GDI+ JPEG encoder 不支援 8bpp indexed；用 `ImageUtils.Create8bppBitmap` 建 8bpp → `Graphics.DrawImage` 至 24bpp `Bitmap` 再 `Save(JpegCodecInfo)`
+- `[ThreadStatic] ImageCodecInfo _jpegCodec`：per-thread cache，避免每幀都 `GetImageEncoders()`
+
+### 回顧端（InspectionEngine.ImageProcessing.cs）
+
+- 路徑末尾 `_raw.jpg` → `LoadFromPrecomputedFiles`；否則 BMP+GPU 路徑（向下相容）
+- 非處理模式（curves=null）的 ScaleFactor：`ReadScaleFactorFromBin` 只讀 16 bytes 標頭，不載入整個 float[]
+- `IsCompressedJpeg` / `ScaleFactor` 統一由 engine 設定，UI 層直接讀取，**不再從 curve/image 比例推斷**
+
+### ImageRepository 混格式掃描
+
+```csharp
+// 同時掃兩種格式，讓不同時期的資料共存
+Directory.GetFiles(root, "*_raw.jpg", AllDirectories)
+    .Concat(Directory.GetFiles(root, "*.bmp", AllDirectories))
+    .ToArray()
+```
+**陷阱**：舊的 either/or 邏輯（先掃 jpg，有就不掃 bmp）會讓混合資料夾丟失 BMP 檔。
+
+---
+
+## 跨倍率 Canvas View 保存（世界座標法）
+
+### 問題
+
+切換時間段（btnLastPeriod/NextPeriod）若前後圖片倍率不同（BMP 1x vs JPEG 5x），pixel zoom/pan 直接還原會造成視窗跳位。
+
+### 解法：mm 世界座標存/取
+
+**Save（切換前，`_imageScaleFactor` 仍為舊圖）**：
+```csharp
+double pixelLeft  = (0             - pan.X) / zoom * _imageScaleFactor;
+double pixelRight = (_canvas.Width - pan.X) / zoom * _imageScaleFactor;
+_savedViewLeftMm  = startPosMm + pixelLeft  * opsInMm;
+_savedViewRightMm = startPosMm + pixelRight * opsInMm;
+_savedYCenterFraction = (canvas.Height/2 - pan.Y) / zoom / image.Height;
+```
+
+**Restore（新圖載入後，`_imageScaleFactor` 已更新為新圖）**：
+```csharp
+double leftPx  = (savedViewLeftMm  - startPosMm) / (opsInMm * _imageScaleFactor);
+double rightPx = (savedViewRightMm - startPosMm) / (opsInMm * _imageScaleFactor);
+float zoom = (float)(canvas.Width / (rightPx - leftPx));
+float panX = (float)(-leftPx * zoom);
+float panY = (float)(canvas.Height / 2 - savedYCenterFraction * newImage.Height * zoom);
+canvas.SetView(zoom, new PointF(panX, panY));
+```
+
+**呼叫時序保證**（`FormInteractionHelper`）：
+```
+LoadImages() → SaveViewIfNeeded()       ← 舊 scaleFactor
+             → RunWorkflowAsync()
+                  → OnGallerySelectionChanged()
+                       → SetImageScaleFactor(newSf)  ← 更新
+                       → UpdateCanvas(newImage)       ← 用新 sf 還原
+```
+
+Fallback：settings 不可用時退回 pixel zoom/pan 直接還原（同倍率仍正確）。
+
+---
+
 ## /perf-diagnose
 
 效能問題排查流程：

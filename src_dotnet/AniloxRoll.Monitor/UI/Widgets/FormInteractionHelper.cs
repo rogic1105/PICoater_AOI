@@ -30,6 +30,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public InspectionSettings Settings { get; set; }
         public ToolStripStatusLabel StatusLabel { get; set; }
         public PictureBox[] CameraPanels { get; set; }
+        public Label ImageFormatLabel { get; set; }
+        public Label ImageScaleLabel { get; set; }
     }
 
     public class FormInteractionHelper
@@ -45,6 +47,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private readonly MuraChartHelper _muraChartHelper;
         private readonly InspectionSettings _settings;
         private readonly CanvasInteractionHelper _canvasHelper;
+        private readonly Label _imageFormatLabel;
+        private readonly Label _imageScaleLabel;
 
         private bool _isProcessedMode = false;
         private bool _isBusy = false;
@@ -63,6 +67,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             _galleryManager = context.GalleryManager;
             _muraChartHelper = context.MuraChartHelper;
             _settings = context.Settings;
+            _imageFormatLabel = context.ImageFormatLabel;
+            _imageScaleLabel = context.ImageScaleLabel;
 
             _canvasHelper = new CanvasInteractionHelper(
                 context.Canvas,
@@ -145,6 +151,13 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
                 if (data != null)
                 {
+                    _canvasHelper.SetImageScaleFactor(data.ScaleFactor);
+
+                    if (_imageFormatLabel != null)
+                        _imageFormatLabel.Text = data.IsCompressedJpeg ? "壓縮 JPEG" : "原始 BMP";
+                    if (_imageScaleLabel != null)
+                        _imageScaleLabel.Text = $"縮放: {data.ScaleFactor}x";
+
                     sw.Restart();
                     _canvasHelper.UpdateCanvas(data.Image);
                     canvasMs = sw.ElapsedMilliseconds;
@@ -158,6 +171,11 @@ namespace AniloxRoll.Monitor.UI.Widgets
                         _muraChartHelper.UpdateData(data.MuraCurveMean, data.MuraCurveMax, startPos);
                         chartMs = sw.ElapsedMilliseconds;
                     }
+                }
+                else
+                {
+                    if (_imageFormatLabel != null) _imageFormatLabel.Text = "";
+                    if (_imageScaleLabel != null)  _imageScaleLabel.Text  = "";
                 }
 
                 Console.WriteLine(

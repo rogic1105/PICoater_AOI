@@ -8,6 +8,8 @@ namespace AniloxRoll.Monitor.Core.Acquisition.Inspection
         public Bitmap Image { get; set; }
         public float[] MuraCurveMean { get; set; }
         public float[] MuraCurveMax { get; set; }
+        public bool IsCompressedJpeg { get; set; }
+        public int ScaleFactor { get; set; } = 1;
 
         public void Dispose()
         {

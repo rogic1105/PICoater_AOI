@@ -45,6 +45,8 @@
             this.panelLiveCam2 = new System.Windows.Forms.Panel();
             this.panelLiveCam1 = new System.Windows.Forms.Panel();
             this.tabPageReview = new System.Windows.Forms.TabPage();
+            this.lblImageFormat = new System.Windows.Forms.Label();
+            this.lblImageScale = new System.Windows.Forms.Label();
             this.label_sec = new System.Windows.Forms.Label();
             this.label_min = new System.Windows.Forms.Label();
             this.label_hr = new System.Windows.Forms.Label();
@@ -446,6 +448,8 @@
             // 
             // tabPageReview
             // 
+            this.tabPageReview.Controls.Add(this.lblImageFormat);
+            this.tabPageReview.Controls.Add(this.lblImageScale);
             this.tabPageReview.Controls.Add(this.label_sec);
             this.tabPageReview.Controls.Add(this.label_min);
             this.tabPageReview.Controls.Add(this.label_hr);
@@ -478,6 +482,24 @@
             this.tabPageReview.TabIndex = 1;
             this.tabPageReview.Text = "影像回顧";
             this.tabPageReview.UseVisualStyleBackColor = true;
+            // 
+            // lblImageFormat
+            // 
+            this.lblImageFormat.Font = new System.Drawing.Font("新細明體", 8F);
+            this.lblImageFormat.Location = new System.Drawing.Point(1084, 400);
+            this.lblImageFormat.Name = "lblImageFormat";
+            this.lblImageFormat.Size = new System.Drawing.Size(92, 48);
+            this.lblImageFormat.TabIndex = 32;
+            this.lblImageFormat.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
+            // lblImageScale
+            // 
+            this.lblImageScale.Font = new System.Drawing.Font("新細明體", 8F);
+            this.lblImageScale.Location = new System.Drawing.Point(1084, 472);
+            this.lblImageScale.Name = "lblImageScale";
+            this.lblImageScale.Size = new System.Drawing.Size(92, 42);
+            this.lblImageScale.TabIndex = 33;
+            this.lblImageScale.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // label_sec
             // 
@@ -2666,11 +2688,13 @@
             this.lblStatusGrab.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.lblStatusGrab.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblStatusGrab.ForeColor = System.Drawing.Color.White;
+            this.lblStatusGrab.Location = new System.Drawing.Point(0, 0);
             this.lblStatusGrab.Name = "lblStatusGrab";
+            this.lblStatusGrab.Padding = new System.Windows.Forms.Padding(0, 0, 12, 0);
+            this.lblStatusGrab.Size = new System.Drawing.Size(1491, 32);
             this.lblStatusGrab.TabIndex = 0;
             this.lblStatusGrab.Text = "● 待機";
             this.lblStatusGrab.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            this.lblStatusGrab.Padding = new System.Windows.Forms.Padding(0, 0, 12, 0);
             // 
             // canvasMain
             // 
@@ -3018,5 +3042,7 @@
         private System.Windows.Forms.ListView listViewGrabDetail;
         private System.Windows.Forms.Panel panelStatusBar;
         private System.Windows.Forms.Label lblStatusGrab;
+        private System.Windows.Forms.Label lblImageFormat;
+        private System.Windows.Forms.Label lblImageScale;
     }
 }

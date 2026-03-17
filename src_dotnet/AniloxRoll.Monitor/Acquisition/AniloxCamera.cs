@@ -1,9 +1,13 @@
 using System;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.IO;
 using System.Threading.Tasks;
 using Matrox.MatroxImagingLibrary;
 using AOI.SDK.Core;
+using AOI.SDK.Utils;
+using AniloxRoll.Monitor.Core.Interop;
 using AniloxRoll.Monitor.Core.Services;
 
 namespace AniloxRoll.Monitor.Core.Camera
@@ -35,6 +39,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         public bool EnableImageProcessing { get; set; } = true;
         public bool EnableHessian { get; set; } = true;
         public bool EnableAutoCapture { get; set; } = false;
+        public bool UseCompressedCapture { get; set; } = true;
         public string CaptureRootPath { get; set; } = string.Empty;
         public int CameraGrabHeight { get; set; } = 0;
 
@@ -83,6 +88,37 @@ namespace AniloxRoll.Monitor.Core.Camera
         private NativeBufferPool _nativeBufferPool;
 
         private string _lastCaptureSecondKey = string.Empty;
+
+        // ==================== Save Format (resize + JPEG) ====================
+        private int _saveResizeScale = 5;
+        private int _saveJpgQuality  = 90;
+        private IntPtr _rawResizeBuf  = IntPtr.Zero;
+        private IntPtr _procResizeBuf = IntPtr.Zero;
+        private int _resizeWidth  = 0;
+        private int _resizeHeight = 0;
+
+        /// <summary>存檔縮小倍率（1=不縮小，5=寬高各除以5）。必須在 Initialize() 之前設定。</summary>
+        public int SaveResizeScale
+        {
+            get => _saveResizeScale;
+            set => _saveResizeScale = value > 0 ? value : 1;
+        }
+
+        /// <summary>JPEG 存檔品質（1–100）。</summary>
+        public int SaveJpgQuality
+        {
+            get => _saveJpgQuality;
+            set => _saveJpgQuality = Math.Max(1, Math.Min(100, value));
+        }
+
+        [ThreadStatic] private static ImageCodecInfo _jpegCodec;
+        private static ImageCodecInfo GetJpegEncoder()
+        {
+            if (_jpegCodec != null) return _jpegCodec;
+            foreach (var c in ImageCodecInfo.GetImageEncoders())
+                if (c.MimeType == "image/jpeg") { _jpegCodec = c; return c; }
+            return null;
+        }
 
         // ==================== FPS（來自 MdigInquire，同 MilCameraUnit）====================
         /// <summary>目前實際量測的 FPS（MdigInquire M_PROCESS_FRAME_RATE）。抓圖未啟動時回傳 0。</summary>
@@ -155,6 +191,7 @@ namespace AniloxRoll.Monitor.Core.Camera
 
                 _aoiService.Initialize();
                 _nativeBufferPool = new NativeBufferPool(_frameWidth, _frameHeight, 1);
+                AllocateResizeBuffers();
 
                 for (int i = 0; i < _milGrabBufferListSize; i++)
                 {
@@ -332,7 +369,8 @@ namespace AniloxRoll.Monitor.Core.Camera
             if (_milDisplayBuffer != MIL.M_NULL) { MIL.MbufFree(_milDisplayBuffer); _milDisplayBuffer = MIL.M_NULL; }
             if (_milProcBuffer    != MIL.M_NULL) { MIL.MbufFree(_milProcBuffer);    _milProcBuffer    = MIL.M_NULL; }
 
-            // 3. 釋放 CUDA Pinned Memory（NativeBufferPool）
+            // 3. 釋放 CUDA Pinned Memory（NativeBufferPool + resize buffers）
+            FreeResizeBuffers();
             lock (_picoaterLock)
             {
                 _nativeBufferPool?.Dispose();
@@ -351,13 +389,14 @@ namespace AniloxRoll.Monitor.Core.Camera
             _frameWidth  = (int)sizeX;
             _frameHeight = (int)sizeY;
 
-            // 6. 重新分配 CPU Buffer 與 NativeBufferPool
+            // 6. 重新分配 CPU Buffer 與 NativeBufferPool + resize buffers
             _hostInputBuffer  = new byte[_frameWidth * _frameHeight];
             _hostOutputBuffer = new byte[_frameWidth * _frameHeight];
             lock (_picoaterLock)
             {
                 _nativeBufferPool = new NativeBufferPool(_frameWidth, _frameHeight, 1);
             }
+            AllocateResizeBuffers();
 
             // 7. 重新分配 MIL Buffer
             for (int i = 0; i < _milGrabBufferListSize; i++)
@@ -709,15 +748,118 @@ namespace AniloxRoll.Monitor.Core.Camera
                     now.ToString("yyyyMMdd"));
                 Directory.CreateDirectory(saveDir);
 
-                string fileName = $"{now:yyyyMMdd_HHmmss}-{CameraId}.bmp";
-                MIL.MbufExport(Path.Combine(saveDir, fileName), MIL.M_BMP, sourceBuffer);
-                _lastCaptureSecondKey = secondKey;
+                string baseName = $"{now:yyyyMMdd_HHmmss}-{CameraId}";
 
-                // 通知：檔名（不含副檔名）+ 本幀的 peak 值
-                string fileNameNoExt = Path.GetFileNameWithoutExtension(fileName);
-                OnInspectionResult?.Invoke(CameraId, fileNameNoExt, _lastMeanPeak, _lastMaxPeak);
+                lock (_picoaterLock)
+                {
+                    if (UseCompressedCapture &&
+                        _nativeBufferPool != null &&
+                        _rawResizeBuf  != IntPtr.Zero &&
+                        _procResizeBuf != IntPtr.Zero)
+                    {
+                        // 新格式：GPU resize → JPEG × 2 + .bin × 2
+                        NativeMethods.CoreCV_Resize_GPU(
+                            _nativeBufferPool.InputBuffer, _frameWidth, _frameHeight,
+                            _rawResizeBuf, _resizeWidth, _resizeHeight);
+
+                        NativeMethods.CoreCV_Resize_GPU(
+                            _nativeBufferPool.RidgeBuffer, _frameWidth, _frameHeight,
+                            _procResizeBuf, _resizeWidth, _resizeHeight);
+
+                        SaveJpegFromPinned(_rawResizeBuf,  _resizeWidth, _resizeHeight,
+                            Path.Combine(saveDir, baseName + "_raw.jpg"),  _saveJpgQuality);
+                        SaveJpegFromPinned(_procResizeBuf, _resizeWidth, _resizeHeight,
+                            Path.Combine(saveDir, baseName + "_proc.jpg"), _saveJpgQuality);
+
+                        int curveLen = _nativeBufferPool.CurveBufferSize / sizeof(float);
+                        SaveCurveBin(_nativeBufferPool.CurveMeanBuffer, curveLen, _saveResizeScale,
+                            Path.Combine(saveDir, baseName + "_mean.bin"));
+                        SaveCurveBin(_nativeBufferPool.CurveMaxBuffer,  curveLen, _saveResizeScale,
+                            Path.Combine(saveDir, baseName + "_max.bin"));
+                    }
+                    else
+                    {
+                        // Fallback：直接存原始 BMP（舊行為）
+                        MIL.MbufExport(Path.Combine(saveDir, baseName + ".bmp"), MIL.M_BMP, sourceBuffer);
+                    }
+                }
+
+                _lastCaptureSecondKey = secondKey;
+                OnInspectionResult?.Invoke(CameraId, baseName, _lastMeanPeak, _lastMaxPeak);
             }
             catch { }
+        }
+
+        private void AllocateResizeBuffers()
+        {
+            FreeResizeBuffers();
+            if (_frameWidth <= 0 || _frameHeight <= 0 || _saveResizeScale <= 1) return;
+
+            _resizeWidth  = _frameWidth  / _saveResizeScale;
+            _resizeHeight = _frameHeight / _saveResizeScale;
+            if (_resizeWidth <= 0 || _resizeHeight <= 0) return;
+
+            ulong sz = (ulong)(_resizeWidth * _resizeHeight);
+            _rawResizeBuf  = NativeMethods.CoreCV_AllocPinned(sz);
+            _procResizeBuf = NativeMethods.CoreCV_AllocPinned(sz);
+        }
+
+        private void FreeResizeBuffers()
+        {
+            if (_rawResizeBuf != IntPtr.Zero)
+            {
+                NativeMethods.CoreCV_FreePinned(_rawResizeBuf);
+                _rawResizeBuf = IntPtr.Zero;
+            }
+            if (_procResizeBuf != IntPtr.Zero)
+            {
+                NativeMethods.CoreCV_FreePinned(_procResizeBuf);
+                _procResizeBuf = IntPtr.Zero;
+            }
+        }
+
+        /// <summary>
+        /// 將 8-bit 灰階 pinned memory 存成 JPEG。
+        /// GDI+ JPEG encoder 需要 24bpp，透過 Graphics.DrawImage 轉換。
+        /// </summary>
+        private static void SaveJpegFromPinned(IntPtr buffer, int w, int h, string path, int quality)
+        {
+            using (var bmp8  = ImageUtils.Create8bppBitmap(buffer, w, h))
+            using (var bmp24 = new Bitmap(w, h, PixelFormat.Format24bppRgb))
+            using (var g     = Graphics.FromImage(bmp24))
+            {
+                g.DrawImage(bmp8, 0, 0, w, h);
+
+                var codec  = GetJpegEncoder();
+                if (codec == null) { bmp24.Save(path); return; }
+
+                using (var ep = new EncoderParameters(1))
+                {
+                    ep.Param[0] = new EncoderParameter(Encoder.Quality, (long)quality);
+                    bmp24.Save(path, codec, ep);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 將 float[] 曲線資料寫成自描述 .bin 格式。
+        /// Header: magic(4)"MCBF" + version(4)=1 + scale_factor(4f) + array_length(4) + float[]
+        /// </summary>
+        private static void SaveCurveBin(IntPtr buffer, int curveLen, int scaleForHeader, string path)
+        {
+            if (buffer == IntPtr.Zero || curveLen <= 0) return;
+            float[] arr = new float[curveLen];
+            Marshal.Copy(buffer, arr, 0, curveLen);
+
+            using (var bw = new BinaryWriter(File.Open(path, FileMode.Create, FileAccess.Write)))
+            {
+                bw.Write(new byte[] { (byte)'M', (byte)'C', (byte)'B', (byte)'F' });
+                bw.Write(1);                        // version
+                bw.Write((float)scaleForHeader);    // scale_factor（JPEG 縮小倍率，供讀取時參考）
+                bw.Write(curveLen);                 // array_length
+                for (int i = 0; i < curveLen; i++)
+                    bw.Write(arr[i]);
+            }
         }
 
         // ==================== Event Handlers ====================
@@ -806,6 +948,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                 if (_milDisplayBuffer != MIL.M_NULL) { MIL.MbufFree(_milDisplayBuffer); _milDisplayBuffer = MIL.M_NULL; }
                 if (_milProcBuffer    != MIL.M_NULL) { MIL.MbufFree(_milProcBuffer);    _milProcBuffer    = MIL.M_NULL; }
 
+                FreeResizeBuffers();
                 lock (_picoaterLock)
                 {
                     _nativeBufferPool?.Dispose();

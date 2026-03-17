@@ -26,10 +26,13 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         private Timer _cameraStatusTimer;
         private bool _enableAutoCapture;
+        private bool _useCompressedCapture = true;
         private string _captureRootPath = string.Empty;
         private int[]    _cameraGrabHeight    = new int[7];
         private double[] _cameraExposureTimeUs = new double[7];
         private double[] _cameraLineRateHz     = new double[7];
+        private int _saveResizeScale = 5;
+        private int _saveJpgQuality  = 90;
 
         public bool IsAllocated    { get; private set; } = false;
         public bool IsLiveGrabbing { get; private set; } = false;
@@ -153,11 +156,14 @@ namespace AniloxRoll.Monitor.UI.Managers
 
                 int camIdx = cfg.Id - 1; // cfg.Id 為 1–7，轉為 0–6 陣列索引
                 cam.EnableAutoCapture    = _enableAutoCapture;
+                cam.UseCompressedCapture = _useCompressedCapture;
                 cam.CaptureRootPath      = _captureRootPath;
                 cam.CameraGrabHeight     = _cameraGrabHeight[camIdx];
                 cam.CameraExposureTimeUs = _cameraExposureTimeUs[camIdx]; // Initialize() 會呼叫 SetExposureUs 套用
-                cam.HessianSigma       = InspectionEngineConfig.DefaultRidgeSigma;
-                cam.HessianFixedMax    = InspectionEngineConfig.DefaultHessianMaxFactor;
+                cam.HessianSigma         = InspectionEngineConfig.DefaultRidgeSigma;
+                cam.HessianFixedMax      = InspectionEngineConfig.DefaultHessianMaxFactor;
+                cam.SaveResizeScale      = _saveResizeScale;
+                cam.SaveJpgQuality       = _saveJpgQuality;
 
                 cam.OnMouseDataChanged   += HandleMouseDataChanged;
                 cam.OnCameraClicked      += SwitchMainDisplay;
@@ -263,11 +269,14 @@ namespace AniloxRoll.Monitor.UI.Managers
             foreach (var cam in _cameras)
             {
                 int camIdx = cam.CameraId - 1;
-                cam.EnableAutoCapture = _enableAutoCapture;
-                cam.CaptureRootPath   = _captureRootPath;
-                cam.CameraGrabHeight  = _cameraGrabHeight[camIdx];
-                cam.HessianSigma      = InspectionEngineConfig.DefaultRidgeSigma;
-                cam.HessianFixedMax   = hessianMaxFactor;
+                cam.EnableAutoCapture    = _enableAutoCapture;
+                cam.UseCompressedCapture = _useCompressedCapture;
+                cam.CaptureRootPath      = _captureRootPath;
+                cam.CameraGrabHeight     = _cameraGrabHeight[camIdx];
+                cam.HessianSigma         = InspectionEngineConfig.DefaultRidgeSigma;
+                cam.HessianFixedMax      = hessianMaxFactor;
+                cam.SaveResizeScale      = _saveResizeScale;
+                cam.SaveJpgQuality       = _saveJpgQuality;
 
                 // 曝光：走 CLProtocol-aware SetExposureUs（CLProtocol 未就緒時記錄，就緒後自動重套）
                 cam.SetExposureUs(_cameraExposureTimeUs[camIdx]);
@@ -363,10 +372,13 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (settings == null) return;
             _enableAutoCapture    = settings.EnableAutoCapture;
+            _useCompressedCapture = settings.Storage?.UseCompressedCapture ?? true;
             _captureRootPath      = settings.CaptureRootPath ?? string.Empty;
             _cameraGrabHeight     = settings.Acquisition.CameraGrabHeight;
             _cameraExposureTimeUs = settings.Acquisition.CameraExposureTimeUs;
             _cameraLineRateHz     = settings.Acquisition.CameraLineRateHz;
+            _saveResizeScale      = settings.Recipe?.SaveResizeScale ?? 5;
+            _saveJpgQuality       = settings.Recipe?.SaveJpgQuality  ?? 90;
         }
 
         // ==================== Display Switching ====================

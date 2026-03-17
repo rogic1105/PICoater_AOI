@@ -102,13 +102,16 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine("  \"Recipe\": {");
             sb.AppendLine($"    \"HessianMaxFactor\": {F(R.HessianMaxFactor)},");
             sb.AppendLine($"    \"ErrorValueMean\": {F(R.ErrorValueMean)},");
-            sb.AppendLine($"    \"ErrorValueMax\": {F(R.ErrorValueMax)}");
+            sb.AppendLine($"    \"ErrorValueMax\": {F(R.ErrorValueMax)},");
+            sb.AppendLine($"    \"SaveResizeScale\": {R.SaveResizeScale},");
+            sb.AppendLine($"    \"SaveJpgQuality\": {R.SaveJpgQuality}");
             sb.AppendLine("  },");
 
             // Storage
             sb.AppendLine("  \"Storage\": {");
             sb.AppendLine($"    \"EnableAutoCapture\": {(T.EnableAutoCapture ? "true" : "false")},");
-            sb.AppendLine($"    \"CaptureRootPath\": \"{EscapeJson(T.CaptureRootPath)}\"");
+            sb.AppendLine($"    \"CaptureRootPath\": \"{EscapeJson(T.CaptureRootPath)}\",");
+            sb.AppendLine($"    \"UseCompressedCapture\": {(T.UseCompressedCapture ? "true" : "false")}");
             sb.AppendLine("  }");
 
             sb.Append("}");
@@ -147,6 +150,13 @@ namespace AniloxRoll.Monitor.Core.Data
             if (!m.Success) return fallback;
             return double.TryParse(m.Groups[1].Value, NumberStyles.Any,
                 CultureInfo.InvariantCulture, out double v) ? v : fallback;
+        }
+
+        private static int GetInt(string obj, string key, int fallback)
+        {
+            var m = Regex.Match(obj, "\"" + key + "\"\\s*:\\s*([\\d]+)");
+            if (!m.Success) return fallback;
+            return int.TryParse(m.Groups[1].Value, out int v) ? v : fallback;
         }
 
         private static float GetFloat(string obj, string key, float fallback)
@@ -205,6 +215,8 @@ namespace AniloxRoll.Monitor.Core.Data
                 HessianMaxFactor = GetFloat(obj, "HessianMaxFactor", 5.0f),
                 ErrorValueMean   = GetFloat(obj, "ErrorValueMean",   1.0f),
                 ErrorValueMax    = GetFloat(obj, "ErrorValueMax",     2.0f),
+                SaveResizeScale  = GetInt  (obj, "SaveResizeScale",   5),
+                SaveJpgQuality   = GetInt  (obj, "SaveJpgQuality",    90),
             };
         }
 
@@ -213,8 +225,9 @@ namespace AniloxRoll.Monitor.Core.Data
             string obj = ExtractObject(json, "Storage");
             return new StorageSettings
             {
-                EnableAutoCapture = GetBool  (obj, "EnableAutoCapture", false),
-                CaptureRootPath   = GetString(obj, "CaptureRootPath",   @"D:\AniloxCaptures"),
+                EnableAutoCapture    = GetBool  (obj, "EnableAutoCapture",    false),
+                CaptureRootPath      = GetString(obj, "CaptureRootPath",      @"D:\AniloxCaptures"),
+                UseCompressedCapture = GetBool  (obj, "UseCompressedCapture", true),
             };
         }
     }

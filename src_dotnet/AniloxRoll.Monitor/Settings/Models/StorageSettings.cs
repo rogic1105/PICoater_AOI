@@ -7,6 +7,7 @@ namespace AniloxRoll.Monitor.Core.Data
     {
         [DisplayName("啟用即時截圖")] public bool EnableAutoCapture { get; set; } = false;
         [DisplayName("截圖根目錄")] public string CaptureRootPath { get; set; } = @"D:\AniloxCaptures";
+        [DisplayName("啟用壓縮存檔")] public bool UseCompressedCapture { get; set; } = true;
 
         public void Validate()
         {
