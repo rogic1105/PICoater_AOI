@@ -52,10 +52,11 @@ namespace AniloxRoll.Monitor.Forms
         private string _currentGrabId;
 
         // --- 統計 ---
-        private InspectionStatsPresenter _statsPresenter;
-        private string                   _statsDataRootPath   = string.Empty;
-        private SortedSet<DateTime>      _statAvailableTimes  = new SortedSet<DateTime>();
-        private bool                     _statComboUpdating;
+        private InspectionStatsPresenter    _statsPresenter;
+        private string                      _statsDataRootPath   = string.Empty;
+        private SortedSet<DateTime>         _statAvailableTimes  = new SortedSet<DateTime>();
+        private List<GrabIdInfo>            _grabIdInfos         = new List<GrabIdInfo>();
+        private bool                        _statComboUpdating;
 
         // --- 資料緩存 ---
         private readonly List<Image> _thumbnailCache = new List<Image>();
@@ -528,6 +529,9 @@ namespace AniloxRoll.Monitor.Forms
             btnSelectDataFolder.Click += BtnSelectDataFolder_Click;
             btnQueryStats.Click       += BtnQueryStats_Click;
             WireStatDateCombos();
+
+            comboBox1.SelectedIndexChanged += (s, e) => OnGrabIdComboChanged(isStart: true);
+            comboBox2.SelectedIndexChanged += (s, e) => OnGrabIdComboChanged(isStart: false);
         }
 
         private void PopulateStatDateCombos(DateTime start, DateTime end)
@@ -608,20 +612,36 @@ namespace AniloxRoll.Monitor.Forms
                 {
                     _statsDataRootPath  = dlg.SelectedPath;
                     _statAvailableTimes = InspectionStatisticsService.LoadAvailableTimes(_statsDataRootPath);
+                    _grabIdInfos        = InspectionStatisticsService.LoadGrabIdInfos(_statsDataRootPath);
 
-                    if (_statAvailableTimes.Count > 0)
+                    // 填充序號 ComboBox
+                    _statComboUpdating = true;
+                    try
                     {
-                        _statComboUpdating = true;
-                        try
+                        comboBox1.Items.Clear();
+                        comboBox2.Items.Clear();
+                        foreach (var info in _grabIdInfos)
+                        {
+                            comboBox1.Items.Add(info.GrabId);
+                            comboBox2.Items.Add(info.GrabId);
+                        }
+                        if (comboBox1.Items.Count > 0)
+                        {
+                            comboBox1.SelectedIndex = 0;
+                            comboBox2.SelectedIndex = comboBox2.Items.Count - 1;
+                        }
+
+                        // 時間 ComboBox 設為全範圍
+                        if (_statAvailableTimes.Count > 0)
                         {
                             SetCombosToDateTime(true,  _statAvailableTimes.Min);
                             SetCombosToDateTime(false, _statAvailableTimes.Max);
                             DoRefreshCombos(true,  0);
                             DoRefreshCombos(false, 0);
                         }
-                        finally { _statComboUpdating = false; }
-                        RefreshStats();
                     }
+                    finally { _statComboUpdating = false; }
+                    RefreshStats();
                 }
             }
         }
@@ -792,12 +812,63 @@ namespace AniloxRoll.Monitor.Forms
             DoRefreshCombos(true, 0);
         }
 
+        /// <summary>
+        /// comboBox1（序號起）或 comboBox2（序號迄）變更時：
+        /// 強制 start ≤ end、更新 cbStart/cbEnd 時間、重新統計。
+        /// </summary>
+        private void OnGrabIdComboChanged(bool isStart)
+        {
+            if (_statComboUpdating || _grabIdInfos.Count == 0) return;
+
+            int idx1 = comboBox1.SelectedIndex;
+            int idx2 = comboBox2.SelectedIndex;
+            if (idx1 < 0 || idx2 < 0) return;
+
+            // 強制 comboBox1 ≤ comboBox2
+            _statComboUpdating = true;
+            try
+            {
+                if (isStart && idx1 > idx2)
+                    comboBox2.SelectedIndex = idx1;
+                else if (!isStart && idx2 < idx1)
+                    comboBox1.SelectedIndex = idx2;
+
+                // 更新 cbStart/cbEnd 時間
+                var startInfo = _grabIdInfos[comboBox1.SelectedIndex];
+                var endInfo   = _grabIdInfos[comboBox2.SelectedIndex];
+                SetCombosToDateTime(true,  startInfo.Earliest);
+                SetCombosToDateTime(false, endInfo.Latest);
+                if (_statAvailableTimes.Count > 0)
+                {
+                    DoRefreshCombos(true,  0);
+                    DoRefreshCombos(false, 0);
+                }
+            }
+            finally { _statComboUpdating = false; }
+
+            RefreshStats();
+        }
+
         private void RefreshStats()
         {
             if (string.IsNullOrWhiteSpace(_statsDataRootPath)) return;
+
+            // 序號模式（comboBox1/2 已設定）
+            if (comboBox1.SelectedIndex >= 0 && comboBox2.SelectedIndex >= 0
+                && _grabIdInfos.Count > 0)
+            {
+                var startInfo = _grabIdInfos[comboBox1.SelectedIndex];
+                var endInfo   = _grabIdInfos[comboBox2.SelectedIndex];
+                var stats = InspectionStatisticsService.ComputeByGrabIdRange(
+                    _statsDataRootPath, startInfo.GrabNum, endInfo.GrabNum);
+                _statsPresenter.Update(stats);
+                return;
+            }
+
+            // 時間模式（fallback）
             if (!TryParseStatDateTime(out DateTime start, out DateTime end)) return;
-            var stats = InspectionStatisticsService.Compute(_statsDataRootPath, start, end);
-            _statsPresenter.Update(stats);
+            var statsTime = InspectionStatisticsService.Compute(_statsDataRootPath, start, end);
+            _statsPresenter.Update(statsTime);
         }
 
         // ── Available values helpers ──────────────────────────────────────

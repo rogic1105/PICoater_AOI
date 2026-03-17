@@ -14,17 +14,26 @@ namespace AniloxRoll.Monitor.Core.Services
         public float PassRate => Total == 0 ? 0f : (float)Pass / Total;
     }
 
+    /// <summary>每個序號（grabId）的時間範圍資訊。</summary>
+    public class GrabIdInfo
+    {
+        public string   GrabId   { get; set; }
+        public int      GrabNum  { get; set; }   // 從 "A00008" 提取的數字
+        public DateTime Earliest { get; set; }
+        public DateTime Latest   { get; set; }
+    }
+
     /// <summary>
     /// 從每日 CSV（{YYYYMMDD}.csv）讀取資料，計算各相機的 Pass/Fail 統計。
     /// CSV 格式：Id,FileName,MaxExceed,MeanExceed
-    /// Pass 定義：MaxExceed==0 AND MeanExceed==0
     /// </summary>
     public static class InspectionStatisticsService
     {
+        // ── 時間範圍統計（舊模式：以張數為分母）────────────────────────────
+
         /// <summary>
-        /// 遞迴掃描 captureRootPath 下所有 CSV，
-        /// 只統計 FileName 時間戳落在 [start, end] 範圍內的紀錄。
-        /// 邊讀邊累加，不一次載入記憶體。
+        /// 遞迴掃描所有 CSV，只統計 FileName 時間戳落在 [start, end] 的紀錄。
+        /// 分母 = 照片張數；每筆獨立判斷 Pass/Fail。
         /// </summary>
         public static Dictionary<int, CameraStats> Compute(
             string   captureRootPath,
@@ -44,17 +53,15 @@ namespace AniloxRoll.Monitor.Core.Services
                 {
                     using (var sr = new StreamReader(csvPath))
                     {
-                        string header = sr.ReadLine(); // skip header
+                        string header = sr.ReadLine();
                         if (header == null) continue;
 
                         string line;
                         while ((line = sr.ReadLine()) != null)
                         {
-                            if (!TryParseLine(line, out string fileName,
-                                out int maxExceed, out int meanExceed))
-                                continue;
+                            if (!TryParseLine(line, out _, out string fileName,
+                                out int maxExceed, out int meanExceed)) continue;
 
-                            // 過濾時間範圍（精確到秒）
                             if (!TryParseFileNameDateTime(fileName, out DateTime ts)) continue;
                             if (ts < start || ts > end) continue;
 
@@ -66,16 +73,142 @@ namespace AniloxRoll.Monitor.Core.Services
                         }
                     }
                 }
-                catch { /* 單檔讀取失敗，跳過繼續 */ }
+                catch { }
             }
 
             return stats;
         }
 
+        // ── 序號範圍統計（新模式：以唯一序號為分母）────────────────────────
+
         /// <summary>
-        /// 遞迴掃描 captureRootPath 下所有 CSV，
-        /// 解析每筆 FileName（YYYYMMDD_HHMMSS-camId），
-        /// 回傳所有不重複的精確時間（秒）排序集合。
+        /// 遞迴掃描所有 CSV，統計序號落在 [startGrabNum, endGrabNum] 的紀錄。
+        /// 分母 = 唯一序號數；同一序號同一相機只要任一張超標即為 Fail。
+        /// </summary>
+        public static Dictionary<int, CameraStats> ComputeByGrabIdRange(
+            string captureRootPath,
+            int    startGrabNum,
+            int    endGrabNum)
+        {
+            var stats = new Dictionary<int, CameraStats>();
+            for (int i = 1; i <= 7; i++)
+                stats[i] = new CameraStats { CamId = i };
+
+            if (string.IsNullOrWhiteSpace(captureRootPath) || !Directory.Exists(captureRootPath))
+                return stats;
+
+            // grabNum → camId → hasFail
+            var grabCamFail = new Dictionary<int, Dictionary<int, bool>>();
+
+            foreach (string csvPath in Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories))
+            {
+                try
+                {
+                    using (var sr = new StreamReader(csvPath))
+                    {
+                        string header = sr.ReadLine();
+                        if (header == null) continue;
+
+                        string line;
+                        while ((line = sr.ReadLine()) != null)
+                        {
+                            if (!TryParseLine(line, out string grabId, out string fileName,
+                                out int maxExceed, out int meanExceed)) continue;
+
+                            int grabNum = ParseGrabIdNum(grabId);
+                            if (grabNum < startGrabNum || grabNum > endGrabNum) continue;
+
+                            if (!TryExtractCamId(fileName, out int camId)) continue;
+
+                            if (!grabCamFail.TryGetValue(grabNum, out var camMap))
+                                grabCamFail[grabNum] = camMap = new Dictionary<int, bool>();
+
+                            bool thisFail = maxExceed > 0 || meanExceed > 0;
+                            if (!camMap.TryGetValue(camId, out bool prev))
+                                camMap[camId] = thisFail;
+                            else if (thisFail)
+                                camMap[camId] = true; // 一票否決
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // 彙總：每個 (grabNum, camId) 算一次 Pass 或 Fail
+            foreach (var grabKv in grabCamFail)
+            {
+                foreach (var camKv in grabKv.Value)
+                {
+                    if (!stats.TryGetValue(camKv.Key, out var s)) continue;
+                    if (camKv.Value) s.Fail++;
+                    else             s.Pass++;
+                }
+            }
+
+            return stats;
+        }
+
+        // ── 載入輔助資料 ─────────────────────────────────────────────────
+
+        /// <summary>
+        /// 遞迴掃描所有 CSV，回傳每個序號的最早/最晚時間，依序號排序。
+        /// </summary>
+        public static List<GrabIdInfo> LoadGrabIdInfos(string captureRootPath)
+        {
+            // grabNum → (grabId string, earliest, latest)
+            var dict = new SortedDictionary<int, (string grabId, DateTime earliest, DateTime latest)>();
+
+            if (string.IsNullOrWhiteSpace(captureRootPath) || !Directory.Exists(captureRootPath))
+                return new List<GrabIdInfo>();
+
+            foreach (string csvPath in Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories))
+            {
+                try
+                {
+                    using (var sr = new StreamReader(csvPath))
+                    {
+                        sr.ReadLine(); // skip header
+                        string line;
+                        while ((line = sr.ReadLine()) != null)
+                        {
+                            if (!TryParseLine(line, out string grabId, out string fileName, out _, out _)) continue;
+                            if (!TryParseFileNameDateTime(fileName, out DateTime dt)) continue;
+
+                            int grabNum = ParseGrabIdNum(grabId);
+                            if (grabNum < 0) continue;
+
+                            if (dict.TryGetValue(grabNum, out var existing))
+                            {
+                                dict[grabNum] = (existing.grabId,
+                                    dt < existing.earliest ? dt : existing.earliest,
+                                    dt > existing.latest   ? dt : existing.latest);
+                            }
+                            else
+                            {
+                                dict[grabNum] = (grabId, dt, dt);
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            var result = new List<GrabIdInfo>(dict.Count);
+            foreach (var kv in dict)
+            {
+                result.Add(new GrabIdInfo
+                {
+                    GrabId   = kv.Value.grabId,
+                    GrabNum  = kv.Key,
+                    Earliest = kv.Value.earliest,
+                    Latest   = kv.Value.latest
+                });
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// 遞迴掃描所有 CSV，回傳所有不重複的精確時間（秒）排序集合。
         /// </summary>
         public static SortedSet<DateTime> LoadAvailableTimes(string captureRootPath)
         {
@@ -89,11 +222,11 @@ namespace AniloxRoll.Monitor.Core.Services
                 {
                     using (var sr = new StreamReader(csvPath))
                     {
-                        sr.ReadLine(); // skip header
+                        sr.ReadLine();
                         string line;
                         while ((line = sr.ReadLine()) != null)
                         {
-                            if (!TryParseLine(line, out string fileName, out _, out _)) continue;
+                            if (!TryParseLine(line, out _, out string fileName, out _, out _)) continue;
                             if (!TryParseFileNameDateTime(fileName, out DateTime dt)) continue;
                             times.Add(dt);
                         }
@@ -119,6 +252,15 @@ namespace AniloxRoll.Monitor.Core.Services
             return true;
         }
 
+        // ── 私有輔助 ──────────────────────────────────────────────────────
+
+        /// <summary>從序號字串（e.g. "A00008"）提取數字部分。</summary>
+        internal static int ParseGrabIdNum(string grabId)
+        {
+            if (string.IsNullOrEmpty(grabId) || grabId.Length < 2) return -1;
+            return int.TryParse(grabId.Substring(1), out int n) ? n : -1;
+        }
+
         /// <summary>
         /// 從 FileName（e.g. "20260316_102301-3"）解析出完整 DateTime（精確到秒）。
         /// </summary>
@@ -128,17 +270,18 @@ namespace AniloxRoll.Monitor.Core.Services
             if (string.IsNullOrEmpty(fileName)) return false;
             int underscoreIdx = fileName.IndexOf('_');
             if (underscoreIdx != 8 || fileName.Length < 15) return false;
-            string datePart = fileName.Substring(0, 8); // YYYYMMDD
-            string timePart = fileName.Substring(9, 6); // HHMMSS
+            string datePart = fileName.Substring(0, 8);
+            string timePart = fileName.Substring(9, 6);
             return DateTime.TryParseExact(datePart + timePart, "yyyyMMddHHmmss",
                 CultureInfo.InvariantCulture, DateTimeStyles.None, out result);
         }
 
-        // ── 私有輔助 ──────────────────────────────────────────────────────
-
+        /// <summary>解析一行 CSV：Id,FileName,MaxExceed,MeanExceed</summary>
         private static bool TryParseLine(string line,
-            out string fileName, out int maxExceed, out int meanExceed)
+            out string grabId, out string fileName,
+            out int maxExceed, out int meanExceed)
         {
+            grabId     = null;
             fileName   = null;
             maxExceed  = 0;
             meanExceed = 0;
@@ -147,6 +290,7 @@ namespace AniloxRoll.Monitor.Core.Services
             string[] cols = line.Split(',');
             if (cols.Length < 4) return false;
 
+            grabId   = cols[0].Trim();
             fileName = cols[1].Trim();
             return int.TryParse(cols[2].Trim(), out maxExceed) &&
                    int.TryParse(cols[3].Trim(), out meanExceed);
