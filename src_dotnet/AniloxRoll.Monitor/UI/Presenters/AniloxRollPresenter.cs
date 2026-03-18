@@ -38,7 +38,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
             Task.Run(() =>
             {
                 try { _inspectionService.WarmUp(); }
-                catch { /* ignore */ }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Trace.WriteLine(
+                        $"[AniloxRollPresenter] WarmUp failed: {ex.GetType().Name}: {ex.Message}");
+                }
             });
         }
 

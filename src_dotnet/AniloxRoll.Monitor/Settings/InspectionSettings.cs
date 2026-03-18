@@ -45,13 +45,15 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category("1. 機台佈局 / Start (mm)")][DisplayName("Cam 7")] public double Cam7_Pos { get => MachineLayout.Cam7_Pos; set => MachineLayout.Cam7_Pos = value; }
 
         // ===== 2. 檢測配方 =====
-        [Category("2. 檢測配方")][DisplayName("紋路增強強度")]   public float HessianMaxFactor { get => Recipe.HessianMaxFactor; set => Recipe.HessianMaxFactor = value; }
-        [Category("2. 檢測配方")][DisplayName("平均瑕疵閾值")] public float ErrorValueMean   { get => Recipe.ErrorValueMean;   set => Recipe.ErrorValueMean   = value; }
-        [Category("2. 檢測配方")][DisplayName("最大瑕疵閾值")] public float ErrorValueMax    { get => Recipe.ErrorValueMax;    set => Recipe.ErrorValueMax    = value; }
+        [Category("2. 檢測配方")][DisplayName("平均閾值")] public float ErrorValueMean   { get => Recipe.ErrorValueMean;   set => Recipe.ErrorValueMean   = value; }
+        [Category("2. 檢測配方")][DisplayName("最大閾值")] public float ErrorValueMax    { get => Recipe.ErrorValueMax;    set => Recipe.ErrorValueMax    = value; }
+        [Category("2. 檢測配方")][DisplayName("正規值")] public float HessianMaxFactor { get => Recipe.HessianMaxFactor; set => Recipe.HessianMaxFactor = value; }
+
 
         // ===== 3. 儲存設定 =====
-        [Category("3. 儲存設定")][DisplayName("啟用即時截圖")]   public bool   EnableAutoCapture    { get => Storage.EnableAutoCapture;    set => Storage.EnableAutoCapture    = value; }
-        [Category("3. 儲存設定")][DisplayName("截圖根目錄")]     public string CaptureRootPath      { get => Storage.CaptureRootPath;      set => Storage.CaptureRootPath      = value; }
-        [Category("3. 儲存設定")][DisplayName("啟用壓縮存檔")]   public bool   UseCompressedCapture { get => Storage.UseCompressedCapture; set => Storage.UseCompressedCapture = value; }
+        [Category("3. 儲存設定")][DisplayName("存檔")]       public bool   EnableAutoCapture    { get => Storage.EnableAutoCapture;    set => Storage.EnableAutoCapture    = value; }
+        [Category("3. 儲存設定")][DisplayName("壓縮")]       public bool   UseCompressedCapture { get => Storage.UseCompressedCapture; set => Storage.UseCompressedCapture = value; }
+        [Category("3. 儲存設定")][DisplayName("存檔目錄")] public string CaptureRootPath { get => Storage.CaptureRootPath; set => Storage.CaptureRootPath = value; }
+
     }
 }

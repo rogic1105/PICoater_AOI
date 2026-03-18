@@ -769,3 +769,161 @@ public void FitToScreen() {
 3. MIL 相關卡頓：優先排查是否有多執行緒競爭同一 MIL ID
 4. CUDA 相關卡頓：確認是否為冷啟動（首次 `cudaMalloc` / `cudaMallocHost`）
 5. UI 卡頓：確認 allocation 是否在 UI 執行緒同步執行，改為 `Task.Run` + `await`
+
+---
+
+## CLProtocol 初始化逾時保護
+
+`TryEnableCLProtocol()` 在硬體異常時可能無限等待。使用 `Task.WhenAny` + `Task.Delay` 實現非阻塞逾時，不需 `CancellationToken`：
+
+```csharp
+private void StartCLProtocolAsync()
+{
+    if (_clProtocolInitStarted) return;
+    _clProtocolInitStarted = true;
+    var initTask    = Task.Run((Action)TryEnableCLProtocol);
+    var timeoutTask = Task.Delay(TimeSpan.FromSeconds(10));
+    Task.WhenAny(initTask, timeoutTask).ContinueWith(_ =>
+    {
+        if (!initTask.IsCompleted)
+            Trace.WriteLine($"[CAM{CameraId}] CLProtocol 初始化逾時（>10s）...");
+    });
+}
+```
+
+- **不取消 initTask**：即使逾時，initTask 仍可在後台完成（MIL 不支援安全取消）
+- **ContinueWith 在 ThreadPool 執行**：不阻塞 UI 或 CLProtocol 執行緒
+- 之前的 skills.md 裡 `StartCLProtocolAsync` 範例只有 guard，沒有逾時保護 ← 此版本已補上
+
+---
+
+## WinForms Timer + Task.Run 競爭條件修復
+
+**問題**：Timer Tick（UI 執行緒）與 FreeCameras（Task.Run 背景執行緒）並發。若 `FreeCameras` 先釋放相機，Tick 仍在存取已釋放的資源。
+
+**三步修復**：
+
+```csharp
+// 1. ReleaseAsync：先停 Timer，再 Task.Run
+public async Task ReleaseAsync()
+{
+    _cameraStatusTimer.Stop();   // ← 先停
+    IsReleasing = true;
+    await Task.Run(() => FreeCameras());
+}
+
+// 2. Tick：快照相機清單，防止遍歷中被 Free
+void CameraStatusTimer_Tick(object sender, EventArgs e)
+{
+    AniloxCamera[] snapshot;
+    try { snapshot = _cameras.ToArray(); }
+    catch { return; }
+
+    foreach (var cam in snapshot)
+    {
+        if (IsReleasing) return;   // ← mid-loop 檢查
+        // ... 讀取 Telemetry
+    }
+}
+
+// 3. AniloxCamera：CheckPresence / ApplyGrabState 先查 _isReleased
+private void CheckPresence()
+{
+    if (_isReleased) return;
+    // ...
+}
+```
+
+**關鍵順序**：`Timer.Stop()` 必須在 `Task.Run` **之前**（不是 `IsReleasing = true` 的後面），因為 `Timer.Stop()` 發生在 UI 執行緒，確保下一個 Tick 不會被排入 message queue。
+
+---
+
+## PropertyGrid 欄位寬度自動適配
+
+`propertyGridSettings` 的 Label 欄寬需考慮 16px 縮排 + 右邊距，否則文字被截斷：
+
+```csharp
+private void AutoFitPropertyGridLabelColumn(PropertyGrid grid)
+{
+    var gridView  = grid?.Controls?.OfType<Control>()
+                        .FirstOrDefault(c => c.GetType().Name == "PropertyGridView");
+    if (gridView == null) return;
+
+    var moveSplitter = gridView.GetType()
+        .GetMethod("MoveSplitterTo", BindingFlags.Instance | BindingFlags.NonPublic);
+    if (moveSplitter == null) return;
+
+    using (var g = gridView.CreateGraphics())
+    {
+        float maxTextWidth = 0;
+        foreach (GridItem item in grid.SelectedGridItem?.Parent?.GridItems
+                                  ?? grid.SelectedGridItem?.GridItems
+                                  ?? Enumerable.Empty<GridItem>())
+        {
+            float w = g.MeasureString(item.Label, gridView.Font).Width;
+            if (w > maxTextWidth) maxTextWidth = w;
+        }
+
+        const int indent      = 16;   // PropertyGrid 的左縮排
+        const int rightMargin =  8;   // 右邊距
+        moveSplitter?.Invoke(gridView, new object[] { indent + (int)maxTextWidth + rightMargin });
+    }
+}
+```
+
+**陷阱**：若 padding 設為 6（像素太小），最長的 label「存檔目錄」仍被截。正確值 indent=16 + rightMargin=8。
+
+---
+
+## PropertyGrid 屬性排列順序
+
+`PropertySort.CategorizedAlphabetical`（預設）在 Category 內依屬性名稱字母排序，無視宣告順序。
+若需按 `.cs` 中宣告順序顯示（如「正規值、平均閾值、最大閾值」），改用：
+
+```csharp
+propertyGridSettings.PropertySort = PropertySort.Categorized;
+```
+
+**注意**：`PropertySort.Categorized` 仍保留 Category 分組，只是 Category 內部不再字母排序。
+
+---
+
+## SetExposureUs 夾緊上限（曝光 × 線掃速率）
+
+曝光時間上限 = `floor(900000 / lineRateHz)`，與 UI 的 `CalcExpMax` 公式一致：
+
+```csharp
+// AniloxCamera.SetExposureUs
+if (_appliedLineRateHz > 0)
+{
+    double maxUs = Math.Max(1.0, Math.Min(10000.0,
+                   Math.Floor(900000.0 / _appliedLineRateHz)));
+    if (exposureUs > maxUs)
+    {
+        Trace.WriteLine($"[CAM{CameraId}] SetExposureUs: {exposureUs}μs 超出上限 {maxUs}μs (LR={_appliedLineRateHz}Hz)，自動夾緊");
+        exposureUs = maxUs;
+    }
+}
+```
+
+- 公式來源：一行掃描時間 = 1/lineRateHz 秒；曝光必須 < 90% × 掃描時間（安全係數）
+- `_appliedLineRateHz = 0` 時跳過（CLProtocol 尚未設定）
+- 與 UI TrackBar 的 `CalcExpMax` 完全一致，防止硬體收到非法值
+
+---
+
+## AcquisitionSettings 初始值與 Validate fallback 一致性
+
+`AcquisitionSettings.cs` 的屬性初始值（`= new int[] {...}`）必須與 `Validate()` fallback 一致，確保：
+- 首次執行（JSON 不存在）載入預設值
+- JSON 存在但某欄位損毀時回退值
+兩者相同。
+
+```csharp
+// 正確：init 值 = Validate fallback
+public int[] CameraGrabHeight { get; set; } = new int[] { 3001, 3001, 3001, 3001, 3001, 3001, 3001 };
+
+// 錯誤：init 不同於 Validate（會造成第一次啟動與後續啟動行為不一致）
+// public int[] CameraGrabHeight { get; set; } = new int[] { 2048, 2048, ... };
+// Validate: if (v < 100 || v > 10000) return 3001;  ← 不一致！
+```

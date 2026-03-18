@@ -31,8 +31,8 @@ namespace AniloxRoll.Monitor.UI.Managers
         private int[]    _cameraGrabHeight    = new int[7];
         private double[] _cameraExposureTimeUs = new double[7];
         private double[] _cameraLineRateHz     = new double[7];
-        private int _saveResizeScale = 5;
-        private int _saveJpgQuality  = 90;
+        private int _saveResizeScale = InspectionEngineConfig.DefaultSaveResizeScale;
+        private int _saveJpgQuality  = InspectionEngineConfig.DefaultSaveJpgQuality;
 
         public bool IsAllocated    { get; private set; } = false;
         public bool IsLiveGrabbing { get; private set; } = false;
@@ -236,10 +236,17 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         /// <summary>
         /// 非同步釋放所有 MIL 資源，避免阻塞 UI 執行緒。
+        /// 先在呼叫端執行緒停止 Timer，防止 background thread 釋放相機時
+        /// UI thread 的 Tick 仍在存取 _cameras（可能 InvalidOperationException 或 MdigInquire on freed digitizer）。
         /// 同 CameraSession.ReleaseAsync()。
         /// </summary>
         public async Task ReleaseAsync()
         {
+            // 在交給 background thread 之前，先於呼叫端執行緒停止 Timer。
+            // WinForms Timer.Tick 在 UI thread 執行，若 FreeCameras 在 background thread 執行，
+            // Stop() 必須先呼叫，否則 Tick 可能在 cam.Free() 期間存取同一台相機資源。
+            _cameraStatusTimer.Stop();
+            IsReleasing = true;
             await Task.Run(() => FreeCameras());
         }
 
@@ -377,8 +384,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             _cameraGrabHeight     = settings.Acquisition.CameraGrabHeight;
             _cameraExposureTimeUs = settings.Acquisition.CameraExposureTimeUs;
             _cameraLineRateHz     = settings.Acquisition.CameraLineRateHz;
-            _saveResizeScale      = settings.Recipe?.SaveResizeScale ?? 5;
-            _saveJpgQuality       = settings.Recipe?.SaveJpgQuality  ?? 90;
+            _saveResizeScale      = settings.Recipe?.SaveResizeScale ?? InspectionEngineConfig.DefaultSaveResizeScale;
+            _saveJpgQuality       = settings.Recipe?.SaveJpgQuality  ?? InspectionEngineConfig.DefaultSaveJpgQuality;
         }
 
         // ==================== Display Switching ====================
@@ -448,13 +455,22 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// <summary>
         /// 每 500ms 輪詢相機連線狀態並自動重啟抓圖，同 CameraSession.UpdatePresence()。
         /// IsReleasing = true 時提早返回，防止存取已釋放的相機資源。
+        /// 使用快照（ToArray）避免 background FreeCameras 呼叫 _cameras.Clear() 時導致 InvalidOperationException。
         /// </summary>
         private void CameraStatusTimer_Tick(object sender, EventArgs e)
         {
             if (IsReleasing) return;
 
-            foreach (var cam in _cameras)
+            // 先拍快照：防止 ReleaseAsync 在 background thread 執行 _cameras.Clear() 時，
+            // foreach 拋出 InvalidOperationException 或存取已釋放的相機物件。
+            AniloxCamera[] snapshot;
+            try { snapshot = _cameras.ToArray(); }
+            catch { return; }
+
+            foreach (var cam in snapshot)
             {
+                if (IsReleasing) return; // 釋放流程已開始，立即中止
+
                 bool isConnected = cam.CheckPresence();
 
                 // 連線恢復且使用者希望抓圖時，自動重啟（同 CameraSession.UpdatePresence）

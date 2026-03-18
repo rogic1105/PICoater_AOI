@@ -11,5 +11,9 @@ namespace AniloxRoll.Monitor.Core.Services
         public const float DefaultHessianMaxFactor = 2.0f;
 
         public const string DefaultRidgeMode = "vertical";
+
+        // 壓縮存檔預設值（InspectionRecipe.SaveResizeScale / SaveJpgQuality 的唯一參考來源）
+        public const int DefaultSaveResizeScale = 5;
+        public const int DefaultSaveJpgQuality  = 90;
     }
 }

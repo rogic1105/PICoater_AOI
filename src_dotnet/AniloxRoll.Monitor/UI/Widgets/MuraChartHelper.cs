@@ -82,7 +82,12 @@ namespace AniloxRoll.Monitor.UI.Widgets
             if (hasView)
             {
                 try { area.AxisX.ScaleView.Zoom(viewLeftMm, viewRightMm); }
-                catch { area.AxisX.ScaleView.ZoomReset(); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Trace.WriteLine(
+                        $"[MuraChart] UpdateDataAndView Zoom({viewLeftMm:F2}, {viewRightMm:F2}) failed: {ex.GetType().Name}: {ex.Message}");
+                    area.AxisX.ScaleView.ZoomReset();
+                }
             }
             else
             {
@@ -103,7 +108,11 @@ namespace AniloxRoll.Monitor.UI.Widgets
             axisX.Minimum = Math.Min(_dataMinX, minMm);
             axisX.Maximum = Math.Max(_dataMaxX, maxMm);
             try { axisX.ScaleView.Zoom(minMm, maxMm); }
-            catch (Exception) { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine(
+                    $"[MuraChart] UpdateViewRange Zoom({minMm:F2}, {maxMm:F2}) failed: {ex.GetType().Name}: {ex.Message}");
+            }
         }
 
         // ── 建立 ──────────────────────────────────────────────────────────────

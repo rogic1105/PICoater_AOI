@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using AniloxRoll.Monitor.Core.Services;
 
 namespace AniloxRoll.Monitor.Core.Data
 {
@@ -9,19 +10,19 @@ namespace AniloxRoll.Monitor.Core.Data
         [DisplayName("Error Value Mean")] public float ErrorValueMean { get; set; } = 0.3f;
         [DisplayName("Error Value Max")] public float ErrorValueMax { get; set; } = 0.5f;
 
-        /// <summary>存檔縮小倍率（預設 5）。原圖寬高各除以此值後存成 JPEG。</summary>
-        [Browsable(false)] public int SaveResizeScale { get; set; } = 5;
+        /// <summary>存檔縮小倍率。原圖寬高各除以此值後存成 JPEG。唯一預設值來源：InspectionEngineConfig.DefaultSaveResizeScale。</summary>
+        [Browsable(false)] public int SaveResizeScale { get; set; } = InspectionEngineConfig.DefaultSaveResizeScale;
 
-        /// <summary>JPEG 存檔品質（1–100，預設 90）。</summary>
-        [Browsable(false)] public int SaveJpgQuality  { get; set; } = 90;
+        /// <summary>JPEG 存檔品質（1–100）。唯一預設值來源：InspectionEngineConfig.DefaultSaveJpgQuality。</summary>
+        [Browsable(false)] public int SaveJpgQuality  { get; set; } = InspectionEngineConfig.DefaultSaveJpgQuality;
 
         public void Validate()
         {
             if (HessianMaxFactor <= 0) HessianMaxFactor = 1.0f;
             if (ErrorValueMean <= 0) ErrorValueMean = 0.3f;
             if (ErrorValueMax <= 0) ErrorValueMax = 0.5f;
-            if (SaveResizeScale <= 0) SaveResizeScale = 5;
-            if (SaveJpgQuality  < 1 || SaveJpgQuality > 100) SaveJpgQuality = 90;
+            if (SaveResizeScale <= 0) SaveResizeScale = InspectionEngineConfig.DefaultSaveResizeScale;
+            if (SaveJpgQuality  < 1 || SaveJpgQuality > 100) SaveJpgQuality = InspectionEngineConfig.DefaultSaveJpgQuality;
         }
 
         public override string ToString() => "Inspection Recipe";

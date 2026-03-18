@@ -83,7 +83,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
                 if (cam == null)
                 {
-                    for (int i = 1; i <= 15; i++) item.SubItems[i].Text = "N/A";
+                    for (int i = 1; i <= 15; i++) item.SubItems[i].Text = "-";
                 }
                 else
                 {
@@ -91,13 +91,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     item.SubItems[2].Text  = $"{cam.GetSelectedFrameRate():F2}";
 
                     double lineRate = cam.GetLineRateHz();
-                    item.SubItems[3].Text  = lineRate > 0 ? $"{lineRate:F1}" : "N/A";
+                    item.SubItems[3].Text  = lineRate > 0 ? $"{lineRate:F1}" : "-";
 
                     double expUs = cam.GetExposureUs();
-                    item.SubItems[4].Text  = expUs > 0 ? $"{expUs:F1}" : "N/A";
+                    item.SubItems[4].Text  = expUs > 0 ? $"{expUs:F1}" : "-";
 
                     double measUs = cam.GetMeasuredExposureUs();
-                    item.SubItems[5].Text  = measUs > 0 ? $"{measUs:F1}" : "N/A";
+                    item.SubItems[5].Text  = measUs > 0 ? $"{measUs:F1}" : "-";
 
                     item.SubItems[6].Text  = $"{cam.GetFrameCount()}";
                     item.SubItems[7].Text  = $"{cam.GetFrameMissed()}";
@@ -106,16 +106,16 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     item.SubItems[10].Text = cam.GetScanMode();
 
                     double fpgaTemp = cam.GetFpgaTemperature();
-                    item.SubItems[11].Text = double.IsNaN(fpgaTemp) ? "N/A" : $"{fpgaTemp:F1}";
+                    item.SubItems[11].Text = double.IsNaN(fpgaTemp) ? "-" : $"{fpgaTemp:F1}";
 
                     double camTemp = cam.GetCameraTemperature();
-                    item.SubItems[12].Text = double.IsNaN(camTemp) ? "N/A" : $"{camTemp:F1}";
+                    item.SubItems[12].Text = double.IsNaN(camTemp) ? "-" : $"{camTemp:F1}";
 
                     long memFree = cam.GetMemoryFreeMB();
-                    item.SubItems[13].Text = memFree >= 0 ? $"{memFree}" : "N/A";
+                    item.SubItems[13].Text = memFree >= 0 ? $"{memFree}" : "-";
 
                     int lanes = cam.GetPcieNumberOfLanes();
-                    item.SubItems[14].Text = lanes >= 0 ? $"{lanes}" : "N/A";
+                    item.SubItems[14].Text = lanes >= 0 ? $"{lanes}" : "-";
 
                     item.SubItems[15].Text = cam.GetPcieSpeed();
                 }
@@ -124,12 +124,12 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         // ── 重置 ─────────────────────────────────────────────────────────
 
-        /// <summary>所有欄位重置為 "N/A"（相機釋放後呼叫）。</summary>
+        /// <summary>所有欄位重置為 "-"（相機釋放後呼叫）。</summary>
         public void ResetAll()
         {
             if (_listView == null) return;
             foreach (ListViewItem item in _listView.Items)
-                for (int i = 1; i <= 15; i++) item.SubItems[i].Text = "N/A";
+                for (int i = 1; i <= 15; i++) item.SubItems[i].Text = "-";
         }
 
         // ── 私有輔助 ─────────────────────────────────────────────────────

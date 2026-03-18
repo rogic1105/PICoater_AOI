@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -31,7 +32,18 @@ namespace AniloxRoll.Monitor.Core.Data
                 .Concat(Directory.GetFiles(rootPath, "*.bmp", SearchOption.AllDirectories))
                 .ToArray();
 
-            _metadataCache = files.AsParallel().Select(ParsePath).Where(x => x != null).ToList();
+            _metadataCache = files.AsParallel()
+                .Select(f =>
+                {
+                    try { return ParsePath(f); }
+                    catch (Exception ex)
+                    {
+                        Trace.WriteLine($"[ImageRepository] ParsePath({f}) failed: {ex.GetType().Name}: {ex.Message}");
+                        return null;
+                    }
+                })
+                .Where(x => x != null)
+                .ToList();
         }
 
         private ImageMetadata ParsePath(string path)

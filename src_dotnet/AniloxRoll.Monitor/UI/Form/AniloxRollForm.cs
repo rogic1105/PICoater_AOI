@@ -99,6 +99,9 @@ namespace AniloxRoll.Monitor.Forms
 
             propertyGridSettings.SelectedObject = _settings;
             propertyGridSettings.ToolbarVisible = false;
+            // Categorized：同一 Category 內維持 InspectionSettings.cs 的宣告順序
+            // （預設 CategorizedAlphabetical 會把「最大閾值」排到「平均閾值」前面）
+            propertyGridSettings.PropertySort = System.Windows.Forms.PropertySort.Categorized;
             propertyGridSettings.PropertyValueChanged -= _propertyGrid_PropertyValueChanged;
             propertyGridSettings.PropertyValueChanged += _propertyGrid_PropertyValueChanged;
             AutoFitPropertyGridLabelColumn(propertyGridSettings);
@@ -307,6 +310,8 @@ namespace AniloxRoll.Monitor.Forms
         /// <summary>
         /// 用 reflection 調整 PropertyGrid 標籤欄寬度至最長屬性名稱剛好容納。
         /// PropertyGrid 無公開 API 可設欄寬，透過內部 gridView.MoveSplitterTo() 實現。
+        /// 注意：MoveSplitterTo 的參數是整個標籤欄寬（含左側 indent 區域），
+        /// 因此需在純文字寬度之外加上 indent（約 16px）＋ 右側留白。
         /// </summary>
         private static void AutoFitPropertyGridLabelColumn(System.Windows.Forms.PropertyGrid grid)
         {
@@ -318,7 +323,7 @@ namespace AniloxRoll.Monitor.Forms
                 if (gridView == null) return;
 
                 // 以所有可見屬性的 DisplayName 量測最大文字寬度
-                int maxWidth = 0;
+                int maxTextWidth = 0;
                 foreach (System.ComponentModel.PropertyDescriptor pd in
                     System.ComponentModel.TypeDescriptor.GetProperties(grid.SelectedObject))
                 {
@@ -326,13 +331,16 @@ namespace AniloxRoll.Monitor.Forms
                     string label = pd.DisplayName ?? pd.Name;
                     int w = System.Windows.Forms.TextRenderer.MeasureText(
                         label, grid.Font).Width;
-                    if (w > maxWidth) maxWidth = w;
+                    if (w > maxTextWidth) maxTextWidth = w;
                 }
 
-                const int padding = 6;
+                // indent：PropertyGrid 標籤欄左側的展開箭頭區域固定約 16px
+                // rightMargin：文字右側留白，避免緊貼分隔線
+                const int indent      = 16;
+                const int rightMargin = 8;
                 var moveSplitter = gridView.GetType().GetMethod("MoveSplitterTo",
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                moveSplitter?.Invoke(gridView, new object[] { maxWidth + padding });
+                moveSplitter?.Invoke(gridView, new object[] { indent + maxTextWidth + rightMargin });
             }
             catch { /* reflection 失敗時保留預設欄寬，不影響功能 */ }
         }

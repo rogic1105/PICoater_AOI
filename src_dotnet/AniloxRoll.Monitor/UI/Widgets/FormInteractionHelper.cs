@@ -237,9 +237,18 @@ namespace AniloxRoll.Monitor.UI.Widgets
             // 若順序相反，await Task.Run 期間 UI 執行緒空出，
             // Windows Paint 事件會嘗試繪製已 Dispose 的 Bitmap，拋 ArgumentException。
             _galleryManager.ClearImages();
-            foreach (var img in _thumbnailCache) img.Dispose();
+            foreach (var img in _thumbnailCache)
+            {
+                try { img.Dispose(); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Trace.WriteLine(
+                        $"[FormInteractionHelper] Bitmap.Dispose failed: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
             _thumbnailCache.Clear();
-            GC.Collect();
+            // blocking:false — 讓 GC 在 background 執行，不阻塞 UI 執行緒
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, blocking: false);
         }
 
         public void CleanupSystem()

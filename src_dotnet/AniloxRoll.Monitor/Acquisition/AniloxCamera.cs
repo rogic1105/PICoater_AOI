@@ -257,12 +257,29 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// 在背景執行緒啟動 CLProtocol 初始化，避免阻塞 Initialize()。
         /// MdigControl(M_GC_CLPROTOCOL, M_ENABLE) 需載入 CLProtocol DLL 並讀取相機 GenICam XML，
         /// 耗時較長，因此以 Task.Run 非同步執行，且必須在 MdigProcess 啟動後才呼叫。
+        /// 設有 10 秒 Timeout：若硬體 hang 住，記錄警告並停用 CLProtocol，
+        /// 避免背景 Task 永遠佔用 Thread Pool 且無任何回饋。
         /// </summary>
         private void StartCLProtocolAsync()
         {
             if (_clProtocolInitStarted) return;
             _clProtocolInitStarted = true;
-            Task.Run(() => TryEnableCLProtocol());
+
+            var initTask    = Task.Run((Action)TryEnableCLProtocol);
+            var timeoutTask = Task.Delay(TimeSpan.FromSeconds(10));
+
+            // 任一完成後檢查：若 initTask 尚未完成，代表硬體逾時
+            Task.WhenAny(initTask, timeoutTask).ContinueWith(_ =>
+            {
+                if (!initTask.IsCompleted)
+                {
+                    System.Diagnostics.Trace.WriteLine(
+                        $"[CAM{CameraId}] CLProtocol 初始化逾時（>10s）。" +
+                        "CLProtocol 已停用，曝光/線掃速率維持 fallback 路徑。");
+                    // _clProtocolEnabled 保持 false；initTask 繼續在背景等待硬體回應，
+                    // 若最終完成，TryEnableCLProtocol 仍會套用設定（late init）。
+                }
+            });
         }
 
         private void TryEnableCLProtocol()
@@ -297,10 +314,23 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// 設定曝光時間（μs）。
         /// CLProtocol 已啟用：MdigControlFeature("ExposureTime")，GenICam 單位直接為 μs。
         /// CLProtocol 未啟用：MdigControl(M_EXPOSURE_TIME)，MIL 單位為 ns，自動乘以 1000。
+        /// 上限：clamp(floor(900000 / lineRateHz), 1, 10000)，與 UI CalcExpMax 公式一致。
         /// </summary>
         public void SetExposureUs(double exposureUs)
         {
             if (_milDigitizer == MIL.M_NULL || exposureUs <= 0) return;
+
+            // 依 Line Rate 計算曝光上限（0.9 × 行週期），與 UI TrackBar 上限一致
+            if (_appliedLineRateHz > 0)
+            {
+                double maxUs = Math.Max(1.0, Math.Min(10000.0, Math.Floor(900000.0 / _appliedLineRateHz)));
+                if (exposureUs > maxUs)
+                {
+                    System.Diagnostics.Trace.WriteLine(
+                        $"[CAM{CameraId}] SetExposureUs: {exposureUs} μs 超出上限 {maxUs} μs（LR={_appliedLineRateHz} Hz），已夾緊。");
+                    exposureUs = maxUs;
+                }
+            }
 
             if (_clProtocolEnabled)
                 MIL.MdigControlFeature(_milDigitizer, MIL.M_FEATURE_VALUE,
@@ -513,16 +543,30 @@ namespace AniloxRoll.Monitor.Core.Camera
                     "DeviceTemperature", MIL.M_TYPE_DOUBLE, ref val);
                 return val;
             }
-            catch { return double.NaN; }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine(
+                    $"[CAM{CameraId}] GetCameraTemperature failed: {ex.GetType().Name}: {ex.Message}");
+                return double.NaN;
+            }
         }
 
         /// <summary>取得擷取卡 FPGA 溫度（°C）。MsysInquire M_TEMPERATURE_FPGA。</summary>
         public double GetFpgaTemperature()
         {
             if (_ownerSystemId == MIL.M_NULL) return double.NaN;
-            double val = 0;
-            MIL.MsysInquire(_ownerSystemId, MIL.M_TEMPERATURE_FPGA, ref val);
-            return val;
+            try
+            {
+                double val = 0;
+                MIL.MsysInquire(_ownerSystemId, MIL.M_TEMPERATURE_FPGA, ref val);
+                return val;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine(
+                    $"[CAM{CameraId}] GetFpgaTemperature failed: {ex.GetType().Name}: {ex.Message}");
+                return double.NaN;
+            }
         }
 
         // ==================== Hardware Telemetry ====================
@@ -634,7 +678,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// </summary>
         public void ApplyGrabState()
         {
-            if (_milDigitizer == MIL.M_NULL) return;
+            if (_isReleased || _milDigitizer == MIL.M_NULL) return;
 
             if (_userWantsGrab && !IsLive && CheckPresence())
             {
@@ -655,7 +699,10 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         public bool CheckPresence()
         {
-            if (_milDigitizer == MIL.M_NULL) { IsConnected = false; return false; }
+            // 先檢查 _isReleased：Dispose() 在第一行即設為 true，之後才釋放 MIL 資源。
+            // 若不加此檢查，當 CameraStatusTimer_Tick 快照的相機物件恰好在 Dispose() 進行中，
+            // MdigInquire 可能存取到已 MdigFree 的 digitizer 而導致 crash。
+            if (_isReleased || _milDigitizer == MIL.M_NULL) { IsConnected = false; return false; }
             MIL_INT presence = 0;
             MIL.MdigInquire(_milDigitizer, MIL.M_CAMERA_PRESENT, ref presence);
             IsConnected = (presence == MIL.M_YES);
@@ -765,7 +812,12 @@ namespace AniloxRoll.Monitor.Core.Camera
                     MIL.MbufPut2d(dstBuffer, 0, 0, _frameWidth, _frameHeight, _hostOutputBuffer);
                     return true;
                 }
-                catch { return false; }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Trace.WriteLine(
+                        $"[CAM{CameraId}] TryApplyPicoaterRidge failed: {ex.GetType().Name}: {ex.Message}");
+                    return false;
+                }
             }
         }
 

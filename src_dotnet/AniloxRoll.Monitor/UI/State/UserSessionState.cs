@@ -20,16 +20,19 @@ namespace AniloxRoll.Monitor.UI.State
 
         private static Dictionary<string, string> Load()
         {
+            if (!File.Exists(FullConfigPath))
+                return new Dictionary<string, string>(); // 首次執行，正常情況
+
             try
             {
-                if (!File.Exists(FullConfigPath))
-                    return new Dictionary<string, string>();
-
                 string json = File.ReadAllText(FullConfigPath, Encoding.UTF8);
                 return ParseJson(json);
             }
-            catch
+            catch (Exception ex)
             {
+                // 檔案存在但讀取/解析失敗（磁碟錯誤、權限不足、JSON 損壞）
+                System.Diagnostics.Trace.WriteLine(
+                    $"[UserSessionState] Load failed ({FullConfigPath}): {ex.GetType().Name}: {ex.Message}. Using empty state.");
                 return new Dictionary<string, string>();
             }
         }

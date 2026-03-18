@@ -5,9 +5,9 @@ namespace AniloxRoll.Monitor.Core.Data
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public class StorageSettings
     {
-        [DisplayName("啟用即時截圖")] public bool EnableAutoCapture { get; set; } = false;
-        [DisplayName("截圖根目錄")] public string CaptureRootPath { get; set; } = @"D:\AniloxCaptures";
-        [DisplayName("啟用壓縮存檔")] public bool UseCompressedCapture { get; set; } = true;
+        [DisplayName("存檔")]     public bool EnableAutoCapture { get; set; } = false;
+        [DisplayName("存檔目錄")] public string CaptureRootPath { get; set; } = @"D:\AniloxCaptures";
+        [DisplayName("壓縮")]     public bool UseCompressedCapture { get; set; } = true;
 
         public void Validate()
         {
