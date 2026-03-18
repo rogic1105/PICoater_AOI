@@ -168,7 +168,14 @@ namespace AniloxRoll.Monitor.UI.Widgets
                         double[] cameraStartPositionMmArray = _settings.GetCameraStartPositionMmArray();
                         double startPos = (index >= 0 && index < cameraStartPositionMmArray.Length)
                             ? cameraStartPositionMmArray[index] : 0;
-                        _muraChartHelper.UpdateData(data.MuraCurveMean, data.MuraCurveMax, startPos);
+
+                        // FitToScreen/SetView 同步更新 Zoom/PanOffset，
+                        // UpdateDataAndView 在 SuspendUpdates/ResumeUpdates 內一次完成資料+縮放，
+                        // 且 RefreshThresholds 已從 UpdateDataAndView 移除（threshold 未改變不需重算），
+                        // 故整個 chart 只 redraw 一次，不閃爍。
+                        _canvasHelper.TryComputeCurrentViewRange(index, out double leftMm, out double rightMm);
+                        _muraChartHelper.UpdateDataAndView(data.MuraCurveMean, data.MuraCurveMax,
+                            startPos, leftMm, rightMm);
                         chartMs = sw.ElapsedMilliseconds;
                     }
                 }

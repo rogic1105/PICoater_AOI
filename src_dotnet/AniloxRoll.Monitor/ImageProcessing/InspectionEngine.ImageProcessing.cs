@@ -161,38 +161,19 @@ namespace AniloxRoll.Monitor.Core.Services
 
                 Bitmap bmp;
                 float[] curveMean = null;
-                float[] curveMax = null;
+                float[] curveMax  = null;
                 long gpuMs = 0, bmpMs = 0, copyMs = 0;
+
+                string basePath   = Path.Combine(Path.GetDirectoryName(filePath),
+                                        Path.GetFileNameWithoutExtension(filePath));
+                string meanBinPath = basePath + "_mean.bin";
+                string maxBinPath  = basePath + "_max.bin";
 
                 if (isProcessedMode)
                 {
+                    // 處理模式：跑 GPU，用 _ridgeBuffer 當圖片
                     sw.Restart();
-                    _aoiService.ProcessImage(new AoiProcessRequest
-                    {
-                        Input = new AoiProcessRequest.InputImage
-                        {
-                            Width = w,
-                            Height = h,
-                            Data = _inputBuffer,
-                            Stream = IntPtr.Zero
-                        },
-                        Output = new AoiProcessRequest.OutputBuffers
-                        {
-                            BackgroundData = IntPtr.Zero,
-                            MuraData = _muraBuffer,
-                            RidgeData = _ridgeBuffer,
-                            MuraCurveMean = _curveMeanBuffer,
-                            MuraCurveMax = _curveMaxBuffer,
-                            Stream = IntPtr.Zero
-                        },
-                        Params = new AoiProcessRequest.AlgorithmParams
-                        {
-                            BgSigmaFactor = InspectionEngineConfig.DefaultBgSigma,
-                            RidgeSigma = InspectionEngineConfig.DefaultRidgeSigma,
-                            HessianMaxFactor = hessianFactor,
-                            RidgeMode = InspectionEngineConfig.DefaultRidgeMode
-                        }
-                    });
+                    RunGpuPipeline(w, h, hessianFactor);
                     gpuMs = sw.ElapsedMilliseconds;
 
                     sw.Restart();
@@ -201,16 +182,44 @@ namespace AniloxRoll.Monitor.Core.Services
 
                     sw.Restart();
                     curveMean = new float[w];
-                    curveMax = new float[w];
+                    curveMax  = new float[w];
                     Marshal.Copy(_curveMeanBuffer, curveMean, 0, w);
-                    Marshal.Copy(_curveMaxBuffer, curveMax, 0, w);
+                    Marshal.Copy(_curveMaxBuffer,  curveMax,  0, w);
                     copyMs = sw.ElapsedMilliseconds;
+
+                    // 存 .bin 供下次原圖模式直接讀取
+                    if (!File.Exists(meanBinPath)) SaveCurveBin(curveMean, 1, meanBinPath);
+                    if (!File.Exists(maxBinPath))  SaveCurveBin(curveMax,  1, maxBinPath);
                 }
                 else
                 {
+                    // 原圖模式：圖片用 _inputBuffer（快），曲線優先讀 .bin，沒有才跑 GPU
                     sw.Restart();
                     bmp = ImageUtils.Create8bppBitmap(_inputBuffer, w, h, flipY: false);
                     bmpMs = sw.ElapsedMilliseconds;
+
+                    if (File.Exists(meanBinPath) && File.Exists(maxBinPath))
+                    {
+                        curveMean = LoadCurveBin(meanBinPath);
+                        curveMax  = LoadCurveBin(maxBinPath);
+                    }
+                    else
+                    {
+                        // .bin 不存在：背景計算並存檔，下次直接讀
+                        sw.Restart();
+                        RunGpuPipeline(w, h, hessianFactor);
+                        gpuMs = sw.ElapsedMilliseconds;
+
+                        sw.Restart();
+                        curveMean = new float[w];
+                        curveMax  = new float[w];
+                        Marshal.Copy(_curveMeanBuffer, curveMean, 0, w);
+                        Marshal.Copy(_curveMaxBuffer,  curveMax,  0, w);
+                        copyMs = sw.ElapsedMilliseconds;
+
+                        SaveCurveBin(curveMean, 1, meanBinPath);
+                        SaveCurveBin(curveMax,  1, maxBinPath);
+                    }
                 }
 
                 Console.WriteLine(
@@ -311,8 +320,8 @@ namespace AniloxRoll.Monitor.Core.Services
             }
             catch { return null; }
 
-            float[] curveMean = isProcessedMode ? LoadCurveBin(meanBinPath) : null;
-            float[] curveMax  = isProcessedMode ? LoadCurveBin(maxBinPath)  : null;
+            float[] curveMean = LoadCurveBin(meanBinPath);
+            float[] curveMax  = LoadCurveBin(maxBinPath);
 
             Console.WriteLine(
                 $"[FullRes-New] mode={isProcessedMode,-5} | Total={swTotal.ElapsedMilliseconds,4}ms  ({bmp.Width}x{bmp.Height})");
@@ -329,6 +338,57 @@ namespace AniloxRoll.Monitor.Core.Services
                 IsCompressedJpeg = true,
                 ScaleFactor = scaleFactor
             };
+        }
+
+        private void RunGpuPipeline(int w, int h, float hessianFactor)
+        {
+            _aoiService.ProcessImage(new AoiProcessRequest
+            {
+                Input = new AoiProcessRequest.InputImage
+                {
+                    Width  = w,
+                    Height = h,
+                    Data   = _inputBuffer,
+                    Stream = IntPtr.Zero
+                },
+                Output = new AoiProcessRequest.OutputBuffers
+                {
+                    BackgroundData = IntPtr.Zero,
+                    MuraData       = _muraBuffer,
+                    RidgeData      = _ridgeBuffer,
+                    MuraCurveMean  = _curveMeanBuffer,
+                    MuraCurveMax   = _curveMaxBuffer,
+                    Stream         = IntPtr.Zero
+                },
+                Params = new AoiProcessRequest.AlgorithmParams
+                {
+                    BgSigmaFactor    = InspectionEngineConfig.DefaultBgSigma,
+                    RidgeSigma       = InspectionEngineConfig.DefaultRidgeSigma,
+                    HessianMaxFactor = hessianFactor,
+                    RidgeMode        = InspectionEngineConfig.DefaultRidgeMode
+                }
+            });
+        }
+
+        /// <summary>將 float[] 曲線寫成 MCBF .bin（scaleForHeader=1 代表全解析度 BMP）。</summary>
+        private static void SaveCurveBin(float[] data, int scaleForHeader, string path)
+        {
+            if (data == null || data.Length == 0) return;
+            try
+            {
+                using (var bw = new BinaryWriter(File.Open(path, FileMode.Create, FileAccess.Write)))
+                {
+                    bw.Write(new byte[] { (byte)'M', (byte)'C', (byte)'B', (byte)'F' });
+                    bw.Write(1);                       // version
+                    bw.Write((float)scaleForHeader);   // scale_factor
+                    bw.Write(data.Length);             // array_length
+                    foreach (float v in data) bw.Write(v);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine($"[InspectionEngine.SaveCurveBin] {ex.Message}");
+            }
         }
 
         /// <summary>僅讀取 .bin 標頭中的 scale_factor，不載入整個陣列。</summary>

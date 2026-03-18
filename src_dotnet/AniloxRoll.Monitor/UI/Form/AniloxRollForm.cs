@@ -71,6 +71,7 @@ namespace AniloxRoll.Monitor.Forms
         {
             InitializeComponent();
             InitializeSystem();
+            Shown += (s, e) => AutoFitPropertyGridLabelColumn(propertyGridSettings);
         }
 
         private void InitializeSystem()
@@ -267,10 +268,12 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        private void btnSelectFolder_Click(object sender, EventArgs e)
+        private async void btnSelectFolder_Click(object sender, EventArgs e)
         {
             _interactionHelper.SelectAndLoadFolder();
             _presenter.UpdatePeriodNavigationState();
+            _lastReviewProcessedMode = false;
+            await _presenter.LoadImagesWithPeriodLockAsync(false, _interactionHelper.LoadImages);
         }
 
         private async void btnShowOriginal_Click(object sender, EventArgs e)
@@ -326,7 +329,7 @@ namespace AniloxRoll.Monitor.Forms
                     if (w > maxWidth) maxWidth = w;
                 }
 
-                const int padding = 16;
+                const int padding = 6;
                 var moveSplitter = gridView.GetType().GetMethod("MoveSplitterTo",
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 moveSplitter?.Invoke(gridView, new object[] { maxWidth + padding });

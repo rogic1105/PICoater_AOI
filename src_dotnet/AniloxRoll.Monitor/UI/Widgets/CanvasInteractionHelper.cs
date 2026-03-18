@@ -33,6 +33,11 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private PointF _savedPan = PointF.Empty;
         private bool _shouldRestoreView = false;
 
+        // FitToScreen/SetView 會同步觸發 StatusChanged → UpdateCanvasInfo → UpdateViewRange，
+        // 在程式碼主動呼叫 UpdateCanvas 期間需要壓制此路徑，
+        // 讓 chart 只由呼叫端在 UpdateDataAndView 統一更新一次（避免閃爍與 range 錯誤）。
+        private bool _suppressChartSync = false;
+
         // 世界座標存檔（mm），用於跨倍率的 view 還原
         private double _savedViewLeftMm = double.NaN;
         private double _savedViewRightMm = double.NaN;
@@ -107,7 +112,9 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public void Invalidate() => _canvas?.Invalidate();
 
         /// <summary>顯示新圖，依 SaveViewIfNeeded 決定還原縮放或 FitToScreen。
-        /// 若有世界座標存檔，以 mm 反算新倍率下的 zoom/pan（跨倍率連續）。</summary>
+        /// 若有世界座標存檔，以 mm 反算新倍率下的 zoom/pan（跨倍率連續）。
+        /// FitToScreen/SetView 內部會觸發 StatusChanged → chart sync，
+        /// 此處以 _suppressChartSync 壓制，讓呼叫端統一呼叫 UpdateDataAndView。</summary>
         public void UpdateCanvas(Bitmap newImage)
         {
             if (newImage == null) return;
@@ -115,47 +122,87 @@ namespace AniloxRoll.Monitor.UI.Widgets
             ClearCanvas();
             _canvas.Image = newImage;
 
-            if (_shouldRestoreView)
+            _suppressChartSync = true;
+            try
             {
-                _shouldRestoreView = false;
-
-                // 優先：以 mm 世界座標還原（支援 1x↔5x 等跨倍率跳轉）
-                if (!double.IsNaN(_savedViewLeftMm) && _settings != null && _currentCameraIndex >= 0)
+                if (_shouldRestoreView)
                 {
-                    double[] opsUm   = _settings.GetCameraOpsUmArray();
-                    double[] startMmArr = _settings.GetCameraStartPositionMmArray();
-                    if (_currentCameraIndex < opsUm.Length)
+                    _shouldRestoreView = false;
+
+                    // 優先：以 mm 世界座標還原（支援 1x↔5x 等跨倍率跳轉）
+                    if (!double.IsNaN(_savedViewLeftMm) && _settings != null && _currentCameraIndex >= 0)
                     {
-                        double opsInMm    = opsUm[_currentCameraIndex] / 1000.0;
-                        double startPosMm = startMmArr[_currentCameraIndex];
-
-                        // mm → 新圖像素（使用當前 _imageScaleFactor，已在 SetImageScaleFactor 更新）
-                        double leftPx  = (_savedViewLeftMm  - startPosMm) / (opsInMm * _imageScaleFactor);
-                        double rightPx = (_savedViewRightMm - startPosMm) / (opsInMm * _imageScaleFactor);
-                        double widthPx = rightPx - leftPx;
-
-                        if (widthPx > 0)
+                        double[] opsUm      = _settings.GetCameraOpsUmArray();
+                        double[] startMmArr = _settings.GetCameraStartPositionMmArray();
+                        if (_currentCameraIndex < opsUm.Length)
                         {
-                            float zoom = (float)(_canvas.Width / widthPx);
-                            float panX = (float)(-leftPx * zoom);
+                            double opsInMm    = opsUm[_currentCameraIndex] / 1000.0;
+                            double startPosMm = startMmArr[_currentCameraIndex];
 
-                            // Y：從中心分率反算 panOffset
-                            float yCenterPx = (float)(_savedYCenterFraction * newImage.Height);
-                            float panY = (float)(_canvas.Height / 2.0 - yCenterPx * zoom);
+                            double leftPx  = (_savedViewLeftMm  - startPosMm) / (opsInMm * _imageScaleFactor);
+                            double rightPx = (_savedViewRightMm - startPosMm) / (opsInMm * _imageScaleFactor);
+                            double widthPx = rightPx - leftPx;
 
-                            _canvas.SetView(zoom, new PointF(panX, panY));
-                            return;
+                            if (widthPx > 0)
+                            {
+                                float zoom  = (float)(_canvas.Width / widthPx);
+                                float panX  = (float)(-leftPx * zoom);
+                                float yCenterPx = (float)(_savedYCenterFraction * newImage.Height);
+                                float panY  = (float)(_canvas.Height / 2.0 - yCenterPx * zoom);
+                                _canvas.SetView(zoom, new PointF(panX, panY));
+                                return;
+                            }
                         }
                     }
-                }
 
-                // Fallback：pixel 直接還原（同倍率，或 settings 不可用）
-                _canvas.SetView(_savedZoom, _savedPan);
+                    // Fallback：pixel 直接還原（同倍率，或 settings 不可用）
+                    _canvas.SetView(_savedZoom, _savedPan);
+                }
+                else
+                {
+                    _canvas.FitToScreen();
+                }
             }
-            else
+            finally
             {
-                _canvas.FitToScreen();
+                _suppressChartSync = false;
             }
+        }
+
+        /// <summary>計算目前 canvas zoom/pan 對應的 mm 視野範圍，不觸發 chart 更新。</summary>
+        public bool TryComputeCurrentViewRange(int cameraIndex, out double leftMm, out double rightMm)
+        {
+            leftMm = rightMm = 0;
+            if (_settings == null || _canvas.Image == null) return false;
+
+            double[] opsUmArray   = _settings.GetCameraOpsUmArray();
+            double[] startMmArray = _settings.GetCameraStartPositionMmArray();
+            if (cameraIndex < 0 || cameraIndex >= opsUmArray.Length) return false;
+
+            float zoom = _canvas.Zoom;
+            if (zoom <= 0) return false;
+
+            double opsInMm    = opsUmArray[cameraIndex] / 1000.0;
+            double startPosMm = startMmArray[cameraIndex];
+            PointF pan        = _canvas.PanOffset;
+
+            double pixelLeft  = (0             - pan.X) / zoom * _imageScaleFactor;
+            double pixelRight = (_canvas.Width - pan.X) / zoom * _imageScaleFactor;
+
+            leftMm  = startPosMm + pixelLeft  * opsInMm;
+            rightMm = startPosMm + pixelRight * opsInMm;
+            return true;
+        }
+
+        /// <summary>從目前 canvas 狀態更新 chartMura 視野範圍（滑鼠移動以外的呼叫點）。</summary>
+        public void RefreshChartRange()
+        {
+            if (_muraChartHelper == null) return;
+            if (!TryComputeCurrentViewRange(_currentCameraIndex, out double leftMm, out double rightMm)) return;
+
+            _currentViewLeftMm  = leftMm;
+            _currentViewRightMm = rightMm;
+            _muraChartHelper.UpdateViewRange(leftMm, rightMm);
         }
 
         /// <summary>事件處理：canvas.StatusChanged → 更新 status bar 與 chart 視野範圍。</summary>
@@ -184,7 +231,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 _currentViewLeftMm = startPosMm + (pixelLeft * opsInMm);
                 _currentViewRightMm = startPosMm + (pixelRight * opsInMm);
 
-                _muraChartHelper?.UpdateViewRange(_currentViewLeftMm, _currentViewRightMm);
+                if (!_suppressChartSync)
+                    _muraChartHelper?.UpdateViewRange(_currentViewLeftMm, _currentViewRightMm);
             }
 
             _statusLabel.Text =

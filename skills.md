@@ -218,6 +218,40 @@ public AcquisitionSettings Acquisition { get; set; } = new AcquisitionSettings()
 
 ---
 
+## MuraChartHelper — Chart 軸線設定
+
+### Y 軸移到右側
+
+**陷阱**：`Axis` 沒有 `IsOnTheRightSide` 屬性，會編譯錯誤。
+
+正確做法：
+- `AxisY`（左）：隱藏 label/刻度，但保留 grid 和 StripLines（Primary axis 才能渲染 StripLines）
+- `AxisY2`（右）：顯示刻度 label，不畫 grid
+- 資料 Series（Mean/Max）綁 `AxisType.Primary`
+- 加兩組 anchor series（transparent point, Y=[0,2.2]）強制 AxisY / AxisY2 初始化 scale
+
+```csharp
+// AxisY（左，隱藏但保留 grid + StripLines）
+area.AxisY.LabelStyle.Enabled = false;
+area.AxisY.MajorGrid.Enabled  = true;   // Y 格線
+area.AxisY.MajorGrid.LineColor = Color.FromArgb(220, 220, 220);
+area.AxisY.StripLines → 紅色閾值線（IntervalOffset = threshold, StripWidth = 0）
+
+// AxisY2（右，僅顯示 label）
+area.AxisY2.Enabled           = AxisEnabled.True;
+area.AxisY2.LabelStyle.Format = "F1";
+area.AxisY2.MajorGrid.Enabled = false;
+
+// Mean/Max Series 綁 Primary（與 AxisY grid/StripLines 對齊）
+new Series("Mean") { YAxisType = AxisType.Primary, ... }
+new Series("Max")  { YAxisType = AxisType.Primary, ... }
+```
+
+**陷阱：AxisY2 不顯示 label 的根本原因**：AxisY2 沒有 bound series 時 scale 不初始化，label 不渲染。
+解法：加一個 `_anchorY2`（Secondary，transparent，Y=[0,2.2]）強制 AxisY2 建立 scale。
+
+---
+
 ## MuraChart 閾值參考線
 
 `MuraChartHelper.SetThresholds(float mean, float max)` 在 chartMura 畫兩條水平參考線：
@@ -226,12 +260,12 @@ public AcquisitionSettings Acquisition { get; set; } = new AcquisitionSettings()
 - `ErrorValueMean` → **紅色虛線**
 
 實作要點：
-- **必須用 `StripLine` on `AxisY`（非 Series）**：`StripLine` 自動橫跨全圖，不需 X 座標
+- **StripLines 必須放在 `AxisY`（Primary）**：StripLines on AxisY2（Secondary）在初始化時不渲染
 - **陷阱：Series + ±1e9 X 座標 → `OverflowException`**：Chart 計算刻度時嘗試覆蓋整個 X 範圍，整數溢位崩潰。每次讀取圖片就會發生
 - StripLine 寫法：`IntervalOffset = threshold, StripWidth = 0, Interval = 0, BorderColor = Color.Red`
 - 資料曲線：Mean = `DeepSkyBlue` 虛線，Max = `Blue` 實線
 - Y 軸上限自動擴展：`AxisY.Maximum = Math.Max(1.0, threshTop * 1.1)`
-- 初始化在 `InitializeSystem()` 呼叫 `SetThresholds`；`_propertyGrid_PropertyValueChanged` 亦呼叫
+- **`RefreshThresholds()` 不可放在 `UpdateDataAndView()` 末尾**：會在 `ResumeUpdates()` 之後再觸發一次 chart redraw（StripLines/Axis 修改不受 SuspendUpdates 壓制），造成閃爍。只在 `Build()` 和 `SetThresholds()` 呼叫。
 
 ---
 
@@ -660,6 +694,69 @@ private sealed class TrackBarWheelInterceptor : NativeWindow
 TLP Location=(8, 123), Size=(1070, 495), Row0=70%, Row1=30%：
 - Row0 子控制項：Location=(8, 123), Size=(1070, 346)  → 346 = floor(495 × 0.7)
 - Row1 子控制項：Location=(8, 469), Size=(1070, 149)  → 469 = 123 + 346
+
+---
+
+## SmartCanvas chart sync 壓制（_suppressChartSync）
+
+### 問題：FitToScreen/SetView 觸發 chart 雙次 redraw + range 錯誤
+
+`SmartCanvas.FitToScreen()` 和 `SetView()` 末尾同步呼叫 `TriggerStatusChange()`，
+這會立即觸發 `StatusChanged` → `UpdateCanvasInfo` → `UpdateViewRange`（chart redraw #1）。
+之後呼叫端再呼叫 `UpdateDataAndView`（chart redraw #2）。
+
+**雙次 redraw 的問題**：
+- **閃爍**：兩次繪製間使用者看到中間狀態
+- **range 錯誤**：第一次 redraw 時 `_dataMinX/_dataMaxX` 仍為舊值（100），chart zoom 計算錯誤
+
+### 解法：UpdateCanvas 內部 suppress chart sync
+
+```csharp
+// CanvasInteractionHelper
+private bool _suppressChartSync = false;
+
+public void UpdateCanvas(Bitmap newImage)
+{
+    _suppressChartSync = true;
+    try
+    {
+        _canvas.FitToScreen();   // 同步設定 Zoom/PanOffset + 觸發 StatusChanged（被壓制）
+        // 或 _canvas.SetView(...)
+    }
+    finally { _suppressChartSync = false; }
+}
+
+public void UpdateCanvasInfo(CanvasInfo info)
+{
+    // ...
+    if (!_suppressChartSync)
+        _muraChartHelper?.UpdateViewRange(...);  // 只在使用者互動時更新
+}
+```
+
+### 呼叫端正確流程
+
+```csharp
+// FormInteractionHelper.OnGallerySelectionChanged
+_canvasHelper.UpdateCanvas(data.Image);     // FitToScreen 同步更新 Zoom/PanOffset，chart sync 被壓制
+_canvasHelper.TryComputeCurrentViewRange(index, out double leftMm, out double rightMm);  // 立即讀取（正確）
+_muraChartHelper.UpdateDataAndView(mean, max, startPos, leftMm, rightMm);                // chart 唯一一次 redraw
+```
+
+### SmartCanvas FitToScreen/SetView 行為確認
+
+```csharp
+// sdk/AOI_SDK/src_dotnet/AOI.SDK/UI/SmartCanvas.cs
+public void FitToScreen() {
+    _zoom = Math.Min(ratioW, ratioH) * 0.95f;          // 同步設定
+    _panOffset = new PointF(...);                        // 同步設定
+    this.Invalidate();                                   // 異步 paint
+    TriggerStatusChange();                               // 同步觸發 StatusChanged
+}
+```
+
+`_zoom` 和 `_panOffset` 在 `FitToScreen()` / `SetView()` 返回前已正確設定，
+`TryComputeCurrentViewRange` 可在呼叫後立即讀取到正確值，無需 `BeginInvoke` 延遲。
 
 ---
 

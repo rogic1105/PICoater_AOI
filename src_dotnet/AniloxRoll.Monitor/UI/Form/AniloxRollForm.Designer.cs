@@ -598,7 +598,7 @@
             this.btnShowProcessed.Name = "btnShowProcessed";
             this.btnShowProcessed.Size = new System.Drawing.Size(92, 40);
             this.btnShowProcessed.TabIndex = 22;
-            this.btnShowProcessed.Text = "計算mura";
+            this.btnShowProcessed.Text = "強化圖";
             this.btnShowProcessed.UseVisualStyleBackColor = true;
             this.btnShowProcessed.Click += new System.EventHandler(this.btnShowProcessed_Click);
             // 
@@ -618,7 +618,7 @@
             this.btnShowOriginal.Name = "btnShowOriginal";
             this.btnShowOriginal.Size = new System.Drawing.Size(92, 40);
             this.btnShowOriginal.TabIndex = 21;
-            this.btnShowOriginal.Text = "顯示原圖";
+            this.btnShowOriginal.Text = "原圖";
             this.btnShowOriginal.UseVisualStyleBackColor = true;
             this.btnShowOriginal.Click += new System.EventHandler(this.btnShowOriginal_Click);
             // 
