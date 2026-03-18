@@ -912,6 +912,63 @@ if (_appliedLineRateHz > 0)
 
 ---
 
+## MuraChart X 軸與 Canvas 對齊（InnerPlotPosition 補償）
+
+### 問題
+
+`ScaleView.Zoom(leftMm, rightMm)` 將 leftMm/rightMm 對應到 **plot 內部區域**的左右邊緣，而非圖表控制項的邊緣。由於圖表右側有 AxisY2 標籤 margin，視覺上曲線會向右偏移，與 canvas 左右邊緣不對齊。
+
+### 解法：反推 zoom 範圍
+
+讀取 `ChartArea.InnerPlotPosition`（plot 區域在控制項內的百分比），反推讓**控制項邊緣**對應 leftMm/rightMm 所需的 zoom 值：
+
+```csharp
+// 推導（令 s = rightMm - leftMm）：
+// 插值至控制項 0% → leftMm，100% → rightMm
+// zoomMin = leftMm + fLeft  × s
+// zoomMax = leftMm + fRight × s
+// 其中 fLeft = InnerPlotPosition.X / 100, fRight = (X + Width) / 100
+
+private void GetAdjustedZoom(double leftMm, double rightMm,
+                             out double zoomMin, out double zoomMax)
+{
+    double s = rightMm - leftMm;
+    zoomMin = leftMm + _cachedFLeft  * s;
+    zoomMax = leftMm + _cachedFRight * s;
+}
+```
+
+### 正確讀取時機：PostPaint 事件快取
+
+`InnerPlotPosition` 只在渲染後才有效值（渲染前 Width=0）。應在 `PostPaint` 事件快取，而非在 zoom 計算時即時讀取：
+
+```csharp
+// 預設 [0,1] = 無補償（安全 fallback）
+private double _cachedFLeft  = 0.0;
+private double _cachedFRight = 1.0;
+
+// Build() 中訂閱：
+_chart.PostPaint += OnPostPaint;
+
+private void OnPostPaint(object sender, ChartPaintEventArgs e)
+{
+    if (_chart.ChartAreas.Count == 0) return;
+    var inner = _chart.ChartAreas[0].InnerPlotPosition;
+    if (inner.Width < 1.0) return;   // 尚未初始化，保留預設
+    _cachedFLeft  = inner.X / 100.0;
+    _cachedFRight = (inner.X + inner.Width) / 100.0;
+}
+```
+
+**優點**：
+- Form 顯示後空圖表首次渲染即更新快取，載入資料時已有正確值
+- Resize / 字型改變後自動更新
+- `GetAdjustedZoom` 無任何 fallback 邏輯，乾淨
+
+**陷阱**：若在 `GetAdjustedZoom` 中即時讀 `InnerPlotPosition`，首次呼叫（渲染前）得到 Width=0，需要 fallback 邏輯；且即時讀取不保證是本次渲染後的值。
+
+---
+
 ## AcquisitionSettings 初始值與 Validate fallback 一致性
 
 `AcquisitionSettings.cs` 的屬性初始值（`= new int[] {...}`）必須與 `Validate()` fallback 一致，確保：

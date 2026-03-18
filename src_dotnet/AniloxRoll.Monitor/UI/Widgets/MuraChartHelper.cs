@@ -18,6 +18,11 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private float  _errorValueMean = 1.0f;
         private float  _errorValueMax  = 2.0f;
 
+        // PostPaint 事件快取的 InnerPlotPosition（plot 區域佔控制項的比例）。
+        // 預設 [0,1] = 無補償，第一次渲染後自動更新為正確值。
+        private double _cachedFLeft  = 0.0;
+        private double _cachedFRight = 1.0;
+
         public MuraChartHelper(Chart chart)
         {
             _chart = chart;
@@ -75,22 +80,27 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 _chart.Series["Max"].Points.DataBindXY(xs, yMax);
 
             var area = _chart.ChartAreas[0];
-            area.AxisX.Minimum = _dataMinX;
-            area.AxisX.Maximum = _dataMaxX;
 
             bool hasView = !double.IsNaN(viewLeftMm) && !double.IsNaN(viewRightMm) && viewLeftMm < viewRightMm;
             if (hasView)
             {
-                try { area.AxisX.ScaleView.Zoom(viewLeftMm, viewRightMm); }
+                GetAdjustedZoom(viewLeftMm, viewRightMm, out double zMin, out double zMax);
+                area.AxisX.Minimum = Math.Min(_dataMinX, zMin);
+                area.AxisX.Maximum = Math.Max(_dataMaxX, zMax);
+                try { area.AxisX.ScaleView.Zoom(zMin, zMax); }
                 catch (Exception ex)
                 {
                     System.Diagnostics.Trace.WriteLine(
-                        $"[MuraChart] UpdateDataAndView Zoom({viewLeftMm:F2}, {viewRightMm:F2}) failed: {ex.GetType().Name}: {ex.Message}");
+                        $"[MuraChart] UpdateDataAndView Zoom({zMin:F2}, {zMax:F2}) failed: {ex.GetType().Name}: {ex.Message}");
+                    area.AxisX.Minimum = _dataMinX;
+                    area.AxisX.Maximum = _dataMaxX;
                     area.AxisX.ScaleView.ZoomReset();
                 }
             }
             else
             {
+                area.AxisX.Minimum = _dataMinX;
+                area.AxisX.Maximum = _dataMaxX;
                 area.AxisX.ScaleView.ZoomReset();
             }
 
@@ -104,15 +114,50 @@ namespace AniloxRoll.Monitor.UI.Widgets
             if (_chart.ChartAreas.Count == 0) return;
             if (double.IsNaN(minMm) || double.IsNaN(maxMm) || minMm >= maxMm) return;
 
+            GetAdjustedZoom(minMm, maxMm, out double zMin, out double zMax);
             var axisX = _chart.ChartAreas[0].AxisX;
-            axisX.Minimum = Math.Min(_dataMinX, minMm);
-            axisX.Maximum = Math.Max(_dataMaxX, maxMm);
-            try { axisX.ScaleView.Zoom(minMm, maxMm); }
+            axisX.Minimum = Math.Min(_dataMinX, zMin);
+            axisX.Maximum = Math.Max(_dataMaxX, zMax);
+            try { axisX.ScaleView.Zoom(zMin, zMax); }
             catch (Exception ex)
             {
                 System.Diagnostics.Trace.WriteLine(
-                    $"[MuraChart] UpdateViewRange Zoom({minMm:F2}, {maxMm:F2}) failed: {ex.GetType().Name}: {ex.Message}");
+                    $"[MuraChart] UpdateViewRange Zoom({zMin:F2}, {zMax:F2}) failed: {ex.GetType().Name}: {ex.Message}");
             }
+        }
+
+        // ── InnerPlotPosition 補償 ────────────────────────────────────────────
+
+        /// <summary>
+        /// 每次 chart 渲染後更新 _cachedFLeft / _cachedFRight。
+        /// InnerPlotPosition 由渲染引擎自動計算（Auto=true），
+        /// 在 PostPaint 時讀取才保證是本次渲染後的正確值。
+        /// </summary>
+        private void OnPostPaint(object sender, System.Windows.Forms.DataVisualization.Charting.ChartPaintEventArgs e)
+        {
+            if (_chart.ChartAreas.Count == 0) return;
+            var inner = _chart.ChartAreas[0].InnerPlotPosition;
+            if (inner.Width < 1.0) return;   // 尚未初始化，保留預設 [0,1]
+            _cachedFLeft  = inner.X / 100.0;
+            _cachedFRight = (inner.X + inner.Width) / 100.0;
+        }
+
+        /// <summary>
+        /// 根據快取的 InnerPlotPosition 計算補償後的 ScaleView.Zoom 範圍，
+        /// 使圖表控制項的左右邊緣對應 leftMm / rightMm（與 canvas 對齊）。
+        /// <para>
+        /// ScaleView.Zoom(min, max) 將 min/max 對應到 plot 區域的邊緣，
+        /// 而非控制項邊緣。補償公式（推導見 skills.md）：
+        /// zoomMin = leftMm + fLeft  × (rightMm - leftMm)
+        /// zoomMax = leftMm + fRight × (rightMm - leftMm)
+        /// </para>
+        /// </summary>
+        private void GetAdjustedZoom(double leftMm, double rightMm,
+                                     out double zoomMin, out double zoomMax)
+        {
+            double s = rightMm - leftMm;
+            zoomMin = leftMm + _cachedFLeft  * s;
+            zoomMax = leftMm + _cachedFRight * s;
         }
 
         // ── 建立 ──────────────────────────────────────────────────────────────
@@ -128,6 +173,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             _chart.ChartAreas.Add(BuildChartArea());
             AddSeries();
             RefreshThresholds();
+            _chart.PostPaint += OnPostPaint;
         }
 
         private static ChartArea BuildChartArea()
