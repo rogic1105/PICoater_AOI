@@ -18,10 +18,16 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private float  _errorValueMean = 1.0f;
         private float  _errorValueMax  = 2.0f;
 
-        // PostPaint 事件快取的 InnerPlotPosition（plot 區域佔控制項的比例）。
-        // 預設 [0,1] = 無補償，第一次渲染後自動更新為正確值。
-        private double _cachedFLeft  = 0.0;
-        private double _cachedFRight = 1.0;
+        // InnerPlotPosition 補償：plot 區域佔控制項的比例（PostPaint 首次量測後凍結）。
+        // 預設 [0,1] = 無補償，安全地用於首次渲染前的 zoom 計算。
+        private double _cachedFLeft              = 0.0;
+        private double _cachedFRight             = 1.0;
+        private bool   _innerPlotPositionFrozen  = false;
+
+        // 上次設定的「邏輯視野」（canvas 的 leftMm/rightMm），
+        // 供 PostPaint 凍結後透過 BeginInvoke 補正 zoom 使用。
+        private double _logicalLeftMm  = double.NaN;
+        private double _logicalRightMm = double.NaN;
 
         public MuraChartHelper(Chart chart)
         {
@@ -84,6 +90,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             bool hasView = !double.IsNaN(viewLeftMm) && !double.IsNaN(viewRightMm) && viewLeftMm < viewRightMm;
             if (hasView)
             {
+                _logicalLeftMm  = viewLeftMm;
+                _logicalRightMm = viewRightMm;
                 GetAdjustedZoom(viewLeftMm, viewRightMm, out double zMin, out double zMax);
                 area.AxisX.Minimum = Math.Min(_dataMinX, zMin);
                 area.AxisX.Maximum = Math.Max(_dataMaxX, zMax);
@@ -99,6 +107,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             }
             else
             {
+                _logicalLeftMm  = double.NaN;
+                _logicalRightMm = double.NaN;
                 area.AxisX.Minimum = _dataMinX;
                 area.AxisX.Maximum = _dataMaxX;
                 area.AxisX.ScaleView.ZoomReset();
@@ -114,6 +124,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             if (_chart.ChartAreas.Count == 0) return;
             if (double.IsNaN(minMm) || double.IsNaN(maxMm) || minMm >= maxMm) return;
 
+            _logicalLeftMm  = minMm;
+            _logicalRightMm = maxMm;
             GetAdjustedZoom(minMm, maxMm, out double zMin, out double zMax);
             var axisX = _chart.ChartAreas[0].AxisX;
             axisX.Minimum = Math.Min(_dataMinX, zMin);
@@ -129,17 +141,67 @@ namespace AniloxRoll.Monitor.UI.Widgets
         // ── InnerPlotPosition 補償 ────────────────────────────────────────────
 
         /// <summary>
-        /// 每次 chart 渲染後更新 _cachedFLeft / _cachedFRight。
-        /// InnerPlotPosition 由渲染引擎自動計算（Auto=true），
-        /// 在 PostPaint 時讀取才保證是本次渲染後的正確值。
+        /// 首次有效渲染後：量測 InnerPlotPosition、凍結版面（Auto=false）、
+        /// 若快取值改變則透過 BeginInvoke 補正當下 zoom。
+        /// <para>
+        /// 凍結後（_innerPlotPositionFrozen=true）不再進入此邏輯，
+        /// 確保 _cachedFLeft/_cachedFRight 在整個會話中固定不變，
+        /// 防止 zoom 變更導致 InnerPlotPosition 微幅改動、進而 UpdateViewRange 跳動。
+        /// </para>
         /// </summary>
-        private void OnPostPaint(object sender, System.Windows.Forms.DataVisualization.Charting.ChartPaintEventArgs e)
+        private void OnPostPaint(object sender, ChartPaintEventArgs e)
         {
+            if (_innerPlotPositionFrozen) return;
             if (_chart.ChartAreas.Count == 0) return;
+
             var inner = _chart.ChartAreas[0].InnerPlotPosition;
             if (inner.Width < 1.0) return;   // 尚未初始化，保留預設 [0,1]
-            _cachedFLeft  = inner.X / 100.0;
-            _cachedFRight = (inner.X + inner.Width) / 100.0;
+
+            // 左邊界額外留白：~0.5% ≈ 半個字元（1070px chart → ~5px）
+            const float leftPadding = 0.5f;
+
+            double newFLeft  = (inner.X + leftPadding) / 100.0;
+            double newFRight = (inner.X + inner.Width) / 100.0;
+            bool   changed   = Math.Abs(newFLeft  - _cachedFLeft)  > 0.001 ||
+                               Math.Abs(newFRight - _cachedFRight) > 0.001;
+
+            _cachedFLeft  = newFLeft;
+            _cachedFRight = newFRight;
+            _innerPlotPositionFrozen = true;
+
+            // 凍結版面：套用左邊界額外留白，防止 zoom/data 改變後 chart engine 重算
+            var area = _chart.ChartAreas[0];
+            area.InnerPlotPosition.Auto   = false;
+            area.InnerPlotPosition.X      = inner.X + leftPadding;
+            area.InnerPlotPosition.Y      = inner.Y;
+            area.InnerPlotPosition.Width  = Math.Max(1f, inner.Width - leftPadding);
+            area.InnerPlotPosition.Height = inner.Height;
+
+            // 若快取改變（首次量測到有效值）且已有邏輯視野，透過 BeginInvoke 補正
+            if (changed && !double.IsNaN(_logicalLeftMm) && _logicalLeftMm < _logicalRightMm)
+            {
+                double left  = _logicalLeftMm;
+                double right = _logicalRightMm;
+                _chart.BeginInvoke(new Action(() => ReapplyZoom(left, right)));
+            }
+        }
+
+        /// <summary>
+        /// 以最新的 _cachedFLeft/_cachedFRight 重算並套用 zoom。
+        /// 由 OnPostPaint 透過 BeginInvoke 非同步呼叫，不在 PostPaint 內直接改 zoom。
+        /// </summary>
+        private void ReapplyZoom(double logicalLeft, double logicalRight)
+        {
+            GetAdjustedZoom(logicalLeft, logicalRight, out double zMin, out double zMax);
+            var axisX = _chart.ChartAreas[0].AxisX;
+            axisX.Minimum = Math.Min(_dataMinX, zMin);
+            axisX.Maximum = Math.Max(_dataMaxX, zMax);
+            try { axisX.ScaleView.Zoom(zMin, zMax); }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine(
+                    $"[MuraChart] ReapplyZoom({logicalLeft:F2}, {logicalRight:F2}) failed: {ex.GetType().Name}: {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -186,14 +248,18 @@ namespace AniloxRoll.Monitor.UI.Widgets
             area.Position.Height = 100f;
 
             // X 軸：整數標籤
-            area.AxisX.Minimum             = 0;
-            area.AxisX.Maximum             = 100;
-            area.AxisX.IsMarginVisible     = false;
-            area.AxisX.LabelStyle.Format   = "F0";
-            area.AxisX.MajorGrid.Enabled   = true;
-            area.AxisX.MajorGrid.LineColor = Color.FromArgb(220, 220, 220);
-            area.AxisX.ScrollBar.Enabled   = false;
-            area.AxisX.ScaleView.Zoomable  = true;
+            area.AxisX.Minimum                  = 0;
+            area.AxisX.Maximum                  = 100;
+            area.AxisX.IsMarginVisible          = false;
+            area.AxisX.LabelStyle.Format        = "F0";
+            area.AxisX.IsLabelAutoFit           = true;
+            area.AxisX.LabelAutoFitMinFontSize  = 6;   // 允許縮小字體 → auto 可選更密 interval
+            area.AxisX.MajorGrid.Enabled        = true;
+            area.AxisX.MajorGrid.LineColor      = Color.FromArgb(220, 220, 220);
+            area.AxisX.MinorGrid.Enabled        = true;
+            area.AxisX.MinorGrid.LineColor      = Color.FromArgb(220, 220, 220);
+            area.AxisX.ScrollBar.Enabled        = false;
+            area.AxisX.ScaleView.Zoomable       = true;
 
             // AxisY（左）：完全不顯示（軸線/刻度/標籤全隱藏）
             // 仍需設定 scale，否則 grid 和 StripLines 無法渲染

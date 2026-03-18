@@ -102,6 +102,7 @@ namespace AniloxRoll.Monitor.Forms
             // Categorized：同一 Category 內維持 InspectionSettings.cs 的宣告順序
             // （預設 CategorizedAlphabetical 會把「最大閾值」排到「平均閾值」前面）
             propertyGridSettings.PropertySort = System.Windows.Forms.PropertySort.Categorized;
+            propertyGridSettings.CollapseAllGridItems();
             propertyGridSettings.PropertyValueChanged -= _propertyGrid_PropertyValueChanged;
             propertyGridSettings.PropertyValueChanged += _propertyGrid_PropertyValueChanged;
             AutoFitPropertyGridLabelColumn(propertyGridSettings);

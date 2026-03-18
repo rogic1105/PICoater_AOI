@@ -967,6 +967,66 @@ private void OnPostPaint(object sender, ChartPaintEventArgs e)
 
 **陷阱**：若在 `GetAdjustedZoom` 中即時讀 `InnerPlotPosition`，首次呼叫（渲染前）得到 Width=0，需要 fallback 邏輯；且即時讀取不保證是本次渲染後的值。
 
+### 初次載入跳動問題（cache 與第一次 zoom 不一致）
+
+**症狀**：載入資料後 chart 起始點正確，但第一次滑鼠移過 canvas 後 chart X 軸跳動，之後才穩定。
+
+**根因**：首次 `UpdateDataAndView` 呼叫時 `_cachedFLeft=0, _cachedFRight=1`（預設無補償）。Chart 渲染後 PostPaint 更新 cache 為真實值，下一次 `UpdateViewRange`（滑鼠移動）用新 cache → zoom 跳動。
+
+**完整修法**（三件事同時做）：
+
+1. **凍結 InnerPlotPosition**（`Auto=false`）：防止後續 zoom/data 改變版面，確保 cache 整個會話固定不變
+2. **記錄邏輯視野**（`_logicalLeftMm/_logicalRightMm`）：在 `UpdateDataAndView` / `UpdateViewRange` 更新
+3. **首次凍結時補正**：若 cache 從預設值變為真實值（`changed=true`），透過 `BeginInvoke` 非同步重算 zoom
+
+```csharp
+private void OnPostPaint(object sender, ChartPaintEventArgs e)
+{
+    if (_innerPlotPositionFrozen) return;
+    var inner = _chart.ChartAreas[0].InnerPlotPosition;
+    if (inner.Width < 1.0) return;
+
+    const float leftPadding = 0.5f;  // 額外左邊界留白 ≈ 半個字元
+    double newFLeft  = (inner.X + leftPadding) / 100.0;
+    double newFRight = (inner.X + inner.Width)  / 100.0;
+    bool changed = Math.Abs(newFLeft - _cachedFLeft) > 0.001 ||
+                   Math.Abs(newFRight - _cachedFRight) > 0.001;
+
+    _cachedFLeft  = newFLeft;
+    _cachedFRight = newFRight;
+    _innerPlotPositionFrozen = true;
+
+    // 凍結版面
+    var area = _chart.ChartAreas[0];
+    area.InnerPlotPosition.Auto   = false;
+    area.InnerPlotPosition.X      = inner.X + leftPadding;
+    area.InnerPlotPosition.Width  = Math.Max(1f, inner.Width - leftPadding);
+    // ...Y, Height 不變
+
+    // 補正 zoom（若 cache 改變且已有邏輯視野）
+    if (changed && !double.IsNaN(_logicalLeftMm) && _logicalLeftMm < _logicalRightMm)
+        _chart.BeginInvoke(new Action(() => ReapplyZoom(_logicalLeftMm, _logicalRightMm)));
+}
+```
+
+**為何用 `BeginInvoke` 而非直接在 PostPaint 內修改 zoom**：PostPaint 是在 chart render pipeline 中，直接修改 zoom 會觸發另一次 render，可能產生遞迴或閃爍。`BeginInvoke` 排在 message queue 中，等 PostPaint 完全結束後才執行。
+
+### WinForms Chart X 軸更多 label 值
+
+Auto-fit 演算法根據字體大小和畫面寬度估算可放幾個 label，預設偏保守。縮小 `LabelAutoFitMinFontSize` 可讓演算法在空間夠時選更密的 interval：
+
+```csharp
+area.AxisX.IsLabelAutoFit          = true;
+area.AxisX.LabelAutoFitMinFontSize = 6;   // 預設 ~8，縮小後可顯示更多 label
+```
+
+配合 MinorGrid 提供視覺密度：
+```csharp
+area.AxisX.MinorGrid.Enabled   = true;
+area.AxisX.MinorGrid.LineColor = Color.FromArgb(220, 220, 220);
+// Interval=0 (預設) → auto 在 Major 刻度中間插入，約 2 倍密度
+```
+
 ---
 
 ## AcquisitionSettings 初始值與 Validate fallback 一致性
