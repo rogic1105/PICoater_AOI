@@ -60,6 +60,15 @@ namespace AniloxRoll.Monitor.Forms
         private SortedSet<DateTime>         _statAvailableTimes  = new SortedSet<DateTime>();
         private List<GrabIdInfo>            _grabIdInfos         = new List<GrabIdInfo>();
         private bool                        _statComboUpdating;
+        private List<GrabDetail>            _currentDetails      = new List<GrabDetail>();
+        private bool                        _showFailOnly        = false;
+        // --- 圖表導航狀態 ---
+        private List<int> _chartYears    = new List<int>();
+        private List<int> _chartMonths   = new List<int>();
+        private List<int> _chartDays     = new List<int>();
+        private int       _chartYearIdx  = -1;
+        private int       _chartMonthIdx = -1;
+        private int       _chartDayIdx   = -1;
 
         // --- 資料緩存 ---
         private readonly List<Image> _thumbnailCache = new List<Image>();
@@ -600,8 +609,17 @@ namespace AniloxRoll.Monitor.Forms
 
             btnSelectDataFolder.Click += BtnSelectDataFolder_Click;
             btnQueryStats.Click       += BtnQueryStats_Click;
+            btnShowFail.Click         += BtnShowFail_Click;
             WireStatDateCombos();
             InitGrabDetailListView();
+            InitPeriodCharts();
+            ApplyChartNavStyle();
+            btnChartYearPrev.Click  += (s, e) => { if (_chartYearIdx  > 0)                       { _chartYearIdx--;  OnChartYearIndexChanged();  } };
+            btnChartYearNext.Click  += (s, e) => { if (_chartYearIdx  < _chartYears.Count  - 1)  { _chartYearIdx++;  OnChartYearIndexChanged();  } };
+            btnChartMonthPrev.Click += (s, e) => { if (_chartMonthIdx > 0)                       { _chartMonthIdx--; OnChartMonthIndexChanged(); } };
+            btnChartMonthNext.Click += (s, e) => { if (_chartMonthIdx < _chartMonths.Count - 1)  { _chartMonthIdx++; OnChartMonthIndexChanged(); } };
+            btnChartDayPrev.Click   += (s, e) => { if (_chartDayIdx   > 0)                       { _chartDayIdx--;   OnChartDayIndexChanged();   } };
+            btnChartDayNext.Click   += (s, e) => { if (_chartDayIdx   < _chartDays.Count   - 1)  { _chartDayIdx++;   OnChartDayIndexChanged();   } };
 
             cbGrabIdStart.SelectedIndexChanged += (s, e) => OnGrabIdComboChanged(isStart: true);
             cbGrabIdEnd.SelectedIndexChanged += (s, e) => OnGrabIdComboChanged(isStart: false);
@@ -714,6 +732,7 @@ namespace AniloxRoll.Monitor.Forms
                         }
                     }
                     finally { _statComboUpdating = false; }
+                    PopulateChartNavigators();
                     RefreshStats();
                 }
             }
@@ -942,7 +961,8 @@ namespace AniloxRoll.Monitor.Forms
 
                 _statsPresenter.Update(stats);
                 AutoFitListViewColumns(listViewStats);
-                UpdateGrabDetailListView(details);
+                _currentDetails = details;
+                ApplyFailFilter();
                 return;
             }
 
@@ -951,7 +971,8 @@ namespace AniloxRoll.Monitor.Forms
             var statsTime = InspectionStatisticsService.Compute(_statsDataRootPath, start, end);
             _statsPresenter.Update(statsTime);
             AutoFitListViewColumns(listViewStats);
-            UpdateGrabDetailListView(new List<GrabDetail>());
+            _currentDetails = new List<GrabDetail>();
+            ApplyFailFilter();
         }
 
         private void InitGrabDetailListView()
@@ -1016,6 +1037,220 @@ namespace AniloxRoll.Monitor.Forms
                 if (contentWidth > lv.Columns[i].Width)
                     lv.Columns[i].Width = contentWidth;
             }
+        }
+
+        // ── 瑕疵篩選 ─────────────────────────────────────────────────────
+
+        private void BtnShowFail_Click(object sender, EventArgs e)
+        {
+            _showFailOnly = !_showFailOnly;
+            btnShowFail.Text      = _showFailOnly ? "顯示全部" : "篩選瑕疵";
+            btnShowFail.BackColor = _showFailOnly
+                ? System.Drawing.Color.FromArgb(255, 235, 238)
+                : SystemColors.Control;
+            ApplyFailFilter();
+        }
+
+        private void ApplyFailFilter()
+        {
+            var toShow = _showFailOnly
+                ? _currentDetails.Where(d => d.CamResult.Any(r => r == true)).ToList()
+                : _currentDetails;
+            UpdateGrabDetailListView(toShow);
+        }
+
+        // ── 趨勢圖（年 / 月 / 日）────────────────────────────────────────
+
+        private void InitPeriodCharts()
+        {
+            InitOneChart(chartYearly);   // 月份 1-12
+            InitOneChart(chartMonthly);  // 日期 1-31
+            InitOneChart(chartDaily);    // 小時 0-23
+        }
+
+        private static void InitOneChart(
+            System.Windows.Forms.DataVisualization.Charting.Chart chart)
+        {
+            chart.ChartAreas.Clear();
+            chart.Series.Clear();
+            chart.Legends.Clear();
+            chart.Titles.Clear();
+
+            var area = new System.Windows.Forms.DataVisualization.Charting.ChartArea("Main");
+            // X 軸：無格線、每格顯示標籤、小字型
+            area.AxisX.MajorGrid.Enabled    = false;
+            area.AxisX.Interval             = 1;
+            area.AxisX.LabelStyle.Angle     = -90;
+            area.AxisX.LabelStyle.Font      = new System.Drawing.Font("Arial", 6f);
+            // Y 軸（左）：隱藏，改用右側 AxisY2
+            area.AxisY.MajorGrid.Enabled    = false;
+            area.AxisY.LabelStyle.Enabled   = false;
+            area.AxisY.Minimum              = 0;
+            // Y2 軸（右）：淡格線、小字型
+            area.AxisY2.Enabled             = System.Windows.Forms.DataVisualization.Charting.AxisEnabled.True;
+            area.AxisY2.MajorGrid.LineColor = System.Drawing.Color.FromArgb(220, 220, 220);
+            area.AxisY2.MajorGrid.LineDashStyle =
+                System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Dot;
+            area.AxisY2.LabelStyle.Font     = new System.Drawing.Font("Arial", 6f);
+            area.AxisY2.Minimum             = 0;
+            // 縮小 InnerPlotPosition，左邊界最小化（Y 軸在右側不佔左邊空間）
+            area.InnerPlotPosition.Auto     = false;
+            area.InnerPlotPosition.X        = 1f;
+            area.InnerPlotPosition.Y        = 2f;
+            area.InnerPlotPosition.Width    = 92f;
+            area.InnerPlotPosition.Height   = 76f;
+            chart.ChartAreas.Add(area);
+
+            // Legend 放在圖表內右上角，透明背景
+            var legend = new System.Windows.Forms.DataVisualization.Charting.Legend("L");
+            legend.IsDockedInsideChartArea  = true;
+            legend.DockedToChartArea        = "Main";
+            legend.Docking                  = System.Windows.Forms.DataVisualization.Charting.Docking.Top;
+            legend.Alignment                = System.Drawing.StringAlignment.Far;
+            legend.Font                     = new System.Drawing.Font("Arial", 6.5f);
+            legend.BackColor                = System.Drawing.Color.Transparent;
+            legend.BorderColor              = System.Drawing.Color.Transparent;
+            chart.Legends.Add(legend);
+
+            var sPass = new System.Windows.Forms.DataVisualization.Charting.Series("合格");
+            sPass.ChartType  = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.StackedColumn;
+            sPass.Color      = System.Drawing.Color.FromArgb(102, 187, 106);
+            sPass.ChartArea  = "Main";
+            sPass.Legend     = "L";
+            sPass.YAxisType  = System.Windows.Forms.DataVisualization.Charting.AxisType.Secondary;
+            chart.Series.Add(sPass);
+
+            var sFail = new System.Windows.Forms.DataVisualization.Charting.Series("瑕疵");
+            sFail.ChartType  = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.StackedColumn;
+            sFail.Color      = System.Drawing.Color.FromArgb(239, 83, 80);
+            sFail.ChartArea  = "Main";
+            sFail.Legend     = "L";
+            sFail.YAxisType  = System.Windows.Forms.DataVisualization.Charting.AxisType.Secondary;
+            chart.Series.Add(sFail);
+            // 無標題
+        }
+
+        private void UpdatePeriodCharts(DateTime start, DateTime end)
+        {
+            var byMonth = InspectionStatisticsService.ComputeGroupedByMonthOfYear(_statsDataRootPath, start, end);
+            var byDay   = InspectionStatisticsService.ComputeGroupedByDayOfMonth(_statsDataRootPath,  start, end);
+            var byHour  = InspectionStatisticsService.ComputeGroupedByHourOfDay(_statsDataRootPath,   start, end);
+
+            FillPeriodChart(chartYearly,  byMonth);  // 月
+            FillPeriodChart(chartMonthly, byDay);    // 日
+            FillPeriodChart(chartDaily,   byHour);   // 時
+        }
+
+        private static void FillPeriodChart(
+            System.Windows.Forms.DataVisualization.Charting.Chart chart,
+            List<PeriodStats> data)
+        {
+            var sPass = chart.Series["合格"];
+            var sFail = chart.Series["瑕疵"];
+            sPass.Points.Clear();
+            sFail.Points.Clear();
+            foreach (var p in data)
+            {
+                sPass.Points.AddXY(p.Label, p.Pass);
+                sFail.Points.AddXY(p.Label, p.Fail);
+            }
+        }
+
+        // ── 圖表導航列（◄ 年/月/日 ►）────────────────────────────────────
+
+        /// <summary>套用導航按鈕與標籤的外觀樣式（在 InitializeComponent 後呼叫）。</summary>
+        private void ApplyChartNavStyle()
+        {
+            var navFont  = new System.Drawing.Font("Segoe UI", 8f, System.Drawing.FontStyle.Bold);
+            var valFont  = new System.Drawing.Font("Segoe UI", 10f, System.Drawing.FontStyle.Bold);
+
+            foreach (var btn in new[] {
+                btnChartYearPrev, btnChartYearNext,
+                btnChartMonthPrev, btnChartMonthNext,
+                btnChartDayPrev,  btnChartDayNext })
+            {
+                btn.FlatStyle = FlatStyle.Flat;
+                btn.FlatAppearance.BorderColor = System.Drawing.Color.Silver;
+                btn.FlatAppearance.BorderSize  = 1;
+                btn.Font      = navFont;
+                btn.Padding   = System.Windows.Forms.Padding.Empty;
+                btn.Cursor    = System.Windows.Forms.Cursors.Hand;
+            }
+
+            foreach (var lbl in new[] { lblChartYear, lblChartMonth, lblChartDay })
+            {
+                lbl.Font        = valFont;
+                lbl.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+                lbl.BackColor   = System.Drawing.SystemColors.Window;
+            }
+        }
+
+        /// <summary>資料夾載入後，以 CSV 中實際存在的年份初始化三列導航。</summary>
+        private void PopulateChartNavigators()
+        {
+            _chartYears   = GetAvailableYears();
+            _chartYearIdx = _chartYears.Count > 0 ? _chartYears.Count - 1 : -1;
+            OnChartYearIndexChanged();
+        }
+
+        private void OnChartYearIndexChanged()
+        {
+            bool ok = _chartYearIdx >= 0 && _chartYearIdx < _chartYears.Count;
+            lblChartYear.Text         = ok ? _chartYears[_chartYearIdx].ToString() : "—";
+            btnChartYearPrev.Enabled  = _chartYearIdx > 0;
+            btnChartYearNext.Enabled  = _chartYearIdx < _chartYears.Count - 1;
+
+            if (!ok) { lblChartMonth.Text = "—"; lblChartDay.Text = "—"; return; }
+            int year = _chartYears[_chartYearIdx];
+
+            var start = new DateTime(year, 1, 1);
+            var end   = new DateTime(year, 12, 31, 23, 59, 59);
+            FillPeriodChart(chartYearly,
+                InspectionStatisticsService.ComputeGroupedByMonthOfYear(_statsDataRootPath, start, end));
+
+            _chartMonths   = GetAvailableMonths(year);
+            _chartMonthIdx = _chartMonths.Count > 0 ? _chartMonths.Count - 1 : -1;
+            OnChartMonthIndexChanged();
+        }
+
+        private void OnChartMonthIndexChanged()
+        {
+            bool ok = _chartMonthIdx >= 0 && _chartMonthIdx < _chartMonths.Count;
+            lblChartMonth.Text        = ok ? _chartMonths[_chartMonthIdx].ToString() : "—";
+            btnChartMonthPrev.Enabled = _chartMonthIdx > 0;
+            btnChartMonthNext.Enabled = _chartMonthIdx < _chartMonths.Count - 1;
+
+            if (!ok || _chartYearIdx < 0) { lblChartDay.Text = "—"; return; }
+            int year  = _chartYears[_chartYearIdx];
+            int month = _chartMonths[_chartMonthIdx];
+
+            int lastDay = DateTime.DaysInMonth(year, month);
+            var start = new DateTime(year, month, 1);
+            var end   = new DateTime(year, month, lastDay, 23, 59, 59);
+            FillPeriodChart(chartMonthly,
+                InspectionStatisticsService.ComputeGroupedByDayOfMonth(_statsDataRootPath, start, end));
+
+            _chartDays   = GetAvailableDays(year, month);
+            _chartDayIdx = _chartDays.Count > 0 ? _chartDays.Count - 1 : -1;
+            OnChartDayIndexChanged();
+        }
+
+        private void OnChartDayIndexChanged()
+        {
+            bool ok = _chartDayIdx >= 0 && _chartDayIdx < _chartDays.Count;
+            lblChartDay.Text        = ok ? _chartDays[_chartDayIdx].ToString() : "—";
+            btnChartDayPrev.Enabled = _chartDayIdx > 0;
+            btnChartDayNext.Enabled = _chartDayIdx < _chartDays.Count - 1;
+
+            if (!ok || _chartYearIdx < 0 || _chartMonthIdx < 0) return;
+            int year  = _chartYears[_chartYearIdx];
+            int month = _chartMonths[_chartMonthIdx];
+            int day   = _chartDays[_chartDayIdx];
+
+            var start = new DateTime(year, month, day);
+            var end   = new DateTime(year, month, day, 23, 59, 59);
+            FillPeriodChart(chartDaily,
+                InspectionStatisticsService.ComputeGroupedByHourOfDay(_statsDataRootPath, start, end));
         }
 
         // ── Available values helpers ──────────────────────────────────────

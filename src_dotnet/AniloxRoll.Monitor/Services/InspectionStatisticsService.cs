@@ -35,6 +35,14 @@ namespace AniloxRoll.Monitor.Core.Services
         public DateTime Latest   { get; set; }
     }
 
+    /// <summary>按時間週期分組的 Pass/Fail 統計（年/月/日）。</summary>
+    public class PeriodStats
+    {
+        public string Label { get; set; }
+        public int    Pass  { get; set; }
+        public int    Fail  { get; set; }
+    }
+
     /// <summary>
     /// 從每日 CSV（{YYYYMMDD}.csv）讀取資料，計算各相機的 Pass/Fail 統計。
     /// CSV 格式：Id,FileName,MaxExceed,MeanExceed
@@ -337,6 +345,99 @@ namespace AniloxRoll.Monitor.Core.Services
             earliest = times.Min;
             latest   = times.Max;
             return true;
+        }
+
+        // ── 時間週期分組統計（月份 / 日期 / 小時，固定完整軸）────────────────
+
+        /// <summary>
+        /// 按月份（1–12）彙總 Pass/Fail，固定回傳 12 筆，無資料月份為 0。
+        /// </summary>
+        public static List<PeriodStats> ComputeGroupedByMonthOfYear(
+            string captureRootPath, DateTime start, DateTime end)
+        {
+            var counts = new (int Pass, int Fail)[13]; // index 1-12
+            ScanCsvByDateRange(captureRootPath, start, end, (ts, isFail) =>
+            {
+                if (isFail) counts[ts.Month].Fail++;
+                else        counts[ts.Month].Pass++;
+            });
+            var result = new List<PeriodStats>(12);
+            for (int m = 1; m <= 12; m++)
+                result.Add(new PeriodStats { Label = m.ToString(), Pass = counts[m].Pass, Fail = counts[m].Fail });
+            return result;
+        }
+
+        /// <summary>
+        /// 按日期（1–31）彙總 Pass/Fail，固定回傳 31 筆，無資料日期為 0。
+        /// </summary>
+        public static List<PeriodStats> ComputeGroupedByDayOfMonth(
+            string captureRootPath, DateTime start, DateTime end)
+        {
+            var counts = new (int Pass, int Fail)[32]; // index 1-31
+            ScanCsvByDateRange(captureRootPath, start, end, (ts, isFail) =>
+            {
+                if (isFail) counts[ts.Day].Fail++;
+                else        counts[ts.Day].Pass++;
+            });
+            var result = new List<PeriodStats>(31);
+            for (int d = 1; d <= 31; d++)
+                result.Add(new PeriodStats { Label = d.ToString(), Pass = counts[d].Pass, Fail = counts[d].Fail });
+            return result;
+        }
+
+        /// <summary>
+        /// 按小時（0–23）彙總 Pass/Fail，固定回傳 24 筆，無資料小時為 0。
+        /// </summary>
+        public static List<PeriodStats> ComputeGroupedByHourOfDay(
+            string captureRootPath, DateTime start, DateTime end)
+        {
+            var counts = new (int Pass, int Fail)[24]; // index 0-23
+            ScanCsvByDateRange(captureRootPath, start, end, (ts, isFail) =>
+            {
+                if (isFail) counts[ts.Hour].Fail++;
+                else        counts[ts.Hour].Pass++;
+            });
+            var result = new List<PeriodStats>(24);
+            for (int h = 0; h < 24; h++)
+                result.Add(new PeriodStats { Label = h.ToString(), Pass = counts[h].Pass, Fail = counts[h].Fail });
+            return result;
+        }
+
+        /// <summary>
+        /// 掃描所有 CSV，篩選落在 [start, end] 的紀錄，
+        /// 對每筆呼叫 onRecord(timestamp, isFail)。
+        /// </summary>
+        private static void ScanCsvByDateRange(
+            string captureRootPath, DateTime start, DateTime end,
+            Action<DateTime, bool> onRecord)
+        {
+            if (string.IsNullOrWhiteSpace(captureRootPath) || !Directory.Exists(captureRootPath)) return;
+
+            foreach (string csvPath in Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories))
+            {
+                try
+                {
+                    using (var sr = new StreamReader(csvPath))
+                    {
+                        string header = sr.ReadLine();
+                        if (header == null) continue;
+
+                        string line;
+                        while ((line = sr.ReadLine()) != null)
+                        {
+                            if (!TryParseLine(line, out _, out string fileName,
+                                out int maxExceed, out int meanExceed)) continue;
+                            if (!TryParseFileNameDateTime(fileName, out DateTime ts)) continue;
+                            if (ts < start || ts > end) continue;
+                            onRecord(ts, maxExceed > 0 || meanExceed > 0);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine($"[InspectionStatisticsService.ScanCsvByDateRange] {csvPath}: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
         }
 
         // ── 私有輔助 ──────────────────────────────────────────────────────

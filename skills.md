@@ -414,6 +414,83 @@ private void UpdateExpMaxAndClampColor(int idx, int newMax)
 
 ---
 
+## WinForms Form Resize — Anchor 策略
+
+讓 Form 放大時內部控制項跟著縮放，不需 TableLayoutPanel：設定 `Anchor` 屬性即可。
+
+### 各控制項 Anchor 規則
+
+| 控制項位置 | Anchor | 效果 |
+|-----------|--------|------|
+| 主內容區（跨全寬全高） | `Top\|Bottom\|Left\|Right` | 四方向等比延伸（`tabMain`、`panelMainDisplay`、`canvasMain`） |
+| 右側固定寬度面板 | `Top\|Bottom\|Right` | 保持寬度，跟著右邊緣移動並垂直延伸（`tabControlRight`） |
+| 底部圖表（全寬） | `Bottom\|Left\|Right` | 保持在底部，水平延伸（`chartMura`、`chartYearly/Monthly/Daily`） |
+| 右欄操作按鈕 | `Top\|Right` 或 `Bottom\|Right` | 跟右邊緣保持固定距離（`btnSelectDataFolder`、`groupBoxTimeRange` 等） |
+| 頂部固定高 ListView | `Top\|Bottom\|Left` | 只垂直延伸，不改寬（`listViewStats`、`listViewGrabDetail`） |
+| 導航按鈕（年/月/日） | `Bottom\|Left` | 跟圖表底部對齊，水平位置不動 |
+
+### 已設定的控制項清單（AniloxRollForm.Designer.cs）
+
+- `tabMain` → Top|Bottom|Left|Right
+- `tabControlRight` → Top|Bottom|Right
+- `panelMainDisplay` → Top|Bottom|Left|Right
+- `canvasMain` → Top|Bottom|Left|Right
+- `chartMura` → Bottom|Left|Right
+- `listViewStats`、`listViewGrabDetail` → Top|Bottom|Left
+- `chartYearly`、`chartMonthly`、`chartDaily` → Bottom|Left|Right
+- `btnChartYear/Month/DayPrev/Next`、`lblChartYear/Month/Day` → Bottom|Left
+- `groupBoxTimeRange` → Top|Bottom|Right
+- `groupBoxGrabIdRange` → Bottom|Left|Right
+- `btnSelectDataFolder`、`btnQueryStats`、`btnShowFail` → Top|Bottom|Right
+- `lblImageFormat`、`lblImageScale` → Top|Right
+
+### 未處理（需手動/未來改進）
+
+- `pbCam1–7`（gallery 縮圖）、`panelLiveCam1–7`、`panelStatCam1–7`：固定位置固定大小，不跟著放大
+- Form 內需等比縮放的小控制項（按鈕、comboBox）：需 `OnResize` override 或換 TableLayoutPanel
+
+---
+
+## 檢測數據 Period Charts（StackedColumn）
+
+### 架構
+
+三張 `Chart`（`chartYearly` 月份 1–12 / `chartMonthly` 日期 1–31 / `chartDaily` 小時 0–23）
+共用 `InitOneChart()`，資料由 `InspectionStatisticsService.ComputeGroupedByXxx` 提供。
+
+### Y 軸在右側的正確做法
+
+與 MuraChart 不同（MuraChart 資料綁 Primary，AxisY2 只做標籤），Period Charts 採取：
+- 資料 Series 直接綁 `YAxisType.Secondary`
+- `AxisY`（左）：grid + label 全隱藏
+- `AxisY2`（右）：`Enabled=True`，淡格線，Minimum=0
+
+```csharp
+area.AxisY.MajorGrid.Enabled  = false;
+area.AxisY.LabelStyle.Enabled = false;
+area.AxisY.Minimum            = 0;
+
+area.AxisY2.Enabled           = AxisEnabled.True;
+area.AxisY2.MajorGrid.LineColor = Color.FromArgb(220, 220, 220);
+area.AxisY2.Minimum           = 0;
+
+sPass.YAxisType = AxisType.Secondary;
+sFail.YAxisType = AxisType.Secondary;
+```
+
+> MuraChart 不能這樣做：其 StripLines 必須綁 Primary AxisY 才能渲染（見 MuraChart 閾值參考線段落）。
+
+### InnerPlotPosition 左邊界
+
+Y 軸在右側後，左邊不再需要留空間給刻度標籤，`InnerPlotPosition.X` 可縮到 1f：
+
+```csharp
+area.InnerPlotPosition.X      = 1f;   // 左邊界最小化
+area.InnerPlotPosition.Width  = 92f;  // 右邊留空間給 AxisY2 標籤
+```
+
+---
+
 ## Designer.cs 控制項批次重命名
 
 `Edit` 工具的 `replace_all: true` 可安全批次替換 Designer.cs 中的控制項名稱：

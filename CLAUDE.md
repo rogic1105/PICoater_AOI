@@ -79,9 +79,9 @@ CoreCV_FastReadBMP  →  AoiService.ProcessImage  →  CoreCV_Resize_GPU  →  C
 | `src_dotnet/AniloxRoll.Monitor/ImageProcessing/InspectionEngineConfig.cs` | MaxWidth=16384, MaxHeight=10000, DefaultSaveResizeScale=5, DefaultSaveJpgQuality=90 |
 | `src_dotnet/AniloxRoll.Monitor/ImageProcessing/BatchInspectionService.cs` | Parallel.For 批次縮圖 |
 | `src_dotnet/AniloxRoll.Monitor/UI/Widgets/FormInteractionHelper.cs` | UI 互動、gallery 選擇、計時 |
-| `src_dotnet/AniloxRoll.Monitor/UI/Form/AniloxRollForm.cs` | Form 邏輯：事件、InitializeSystem、右側面板初始化、SyncCameraParamsFromHardware、TelemetryTimer |
+| `src_dotnet/AniloxRoll.Monitor/UI/Form/AniloxRollForm.cs` | Form 邏輯：事件、InitializeSystem、右側面板初始化、SyncCameraParamsFromHardware、TelemetryTimer、Period Charts (InitOneChart/FillPeriodChart/PopulateChartNavigators) |
 | `src_dotnet/AniloxRoll.Monitor/UI/Presenters/LiveTelemetryPresenter.cs` | listViewCameras 16 欄即時 Telemetry（每 500ms 更新） |
-| `src_dotnet/AniloxRoll.Monitor/UI/Form/AniloxRollForm.Designer.cs` | Form 控制項佈局（VS Designer 管理） |
+| `src_dotnet/AniloxRoll.Monitor/UI/Form/AniloxRollForm.Designer.cs` | Form 控制項佈局（VS Designer 管理）；主要控制項已設 Anchor 支援視窗放大縮小 |
 | `src_dotnet/AniloxRoll.Monitor/Acquisition/AniloxCamera.cs` | 單台相機 MIL 資源封裝（CLProtocol、曝光、GrabHeight、Telemetry） |
 | `src_dotnet/AniloxRoll.Monitor/UI/Managers/LiveCameraManager.cs` | 多台相機生命週期管理（Allocate/Grab/Free） |
 | `src_dotnet/AniloxRoll.Monitor/Settings/InspectionSettings.cs` | 根設定物件（MachineLayout/Acquisition/Recipe/Storage） |
@@ -144,8 +144,16 @@ Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×654），�
 | End 時間 | `cbEndYear/Month/Day/Hour/Min/Sec` | 統計結束時間（cascading，start ≤ end 強制 clamp） |
 | `btnSelectDataFolder` | "讀取資料夾" | 選擇 CaptureRootPath，載入後自動填充 cbGrabIdStart/End 及時間 |
 | `btnQueryStats` | "統計數據" | 手動觸發 RefreshStats() |
+| `btnShowFail` | "篩選瑕疵" | Toggle：只顯示 listViewGrabDetail 中有 Fail 的序號 |
+| Chart × 3 | `chartYearly`/`chartMonthly`/`chartDaily` | StackedColumn（合格=綠/瑕疵=紅），Y 軸在右側（AxisY2+Secondary），X 軸直式標籤（Angle=-90） |
+| 年月日導航 | `btnChartYearPrev/Next`、`lblChartYear`（同理月/日） | < value > 箭頭選取年/月/日，Anchor=Bottom\|Left（跟圖表底部對齊） |
 
 初始化：`InitializeSystem()` → `SetupDataTab()` → `InspectionStatsPresenter.Initialize()` + `InitGrabDetailListView()`
+
+**Period Charts 資料流**：
+- `BtnSelectDataFolder_Click` → `PopulateChartNavigators()` → `UpdatePeriodCharts(MinValue, MaxValue)` （整個資料夾，不跟 QueryStats 範圍）
+- 年/月/日切換 → `OnChartYearIndexChanged` → `OnChartMonthIndexChanged` → `OnChartDayIndexChanged`（cascade）
+- `InspectionStatisticsService.ComputeGroupedByMonthOfYear/DayOfMonth/HourOfDay`：固定 12/31/24 個 bucket，空的顯示 0
 
 **統計模式**：
 - 序號模式（cbGrabIdStart/End 已選）→ `ComputeByGrabIdRange` + `ComputeDetailedByGrabIdRange`；分母 = 唯一序號數；同一序號同一相機任一張超標即 Fail

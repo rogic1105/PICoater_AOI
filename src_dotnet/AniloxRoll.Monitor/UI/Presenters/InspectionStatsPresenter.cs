@@ -53,7 +53,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _listView.Columns.Add("Pass", 70);
             _listView.Columns.Add("Fail", 70);
             _listView.Columns.Add("Total",70);
-            _listView.Columns.Add("良率",  80);
+            _listView.Columns.Add("無異常",  80);
 
             for (int i = 1; i <= 7; i++)
             {
