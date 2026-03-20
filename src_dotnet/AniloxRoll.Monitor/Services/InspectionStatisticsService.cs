@@ -493,5 +493,73 @@ namespace AniloxRoll.Monitor.Core.Services
             if (dashIdx < 0 || dashIdx >= fileName.Length - 1) return false;
             return int.TryParse(fileName.Substring(dashIdx + 1), out camId);
         }
+
+        /// <summary>
+        /// 掃描 CSV，找出指定序號的各相機所有影像路徑（一台相機可能有多張），
+        /// 依檔名（時間戳）排序。優先回傳 _raw.jpg，其次 .bmp。
+        /// 回傳 Dictionary&lt;camId, List&lt;sortedFilePaths&gt;&gt;。
+        /// </summary>
+        public static Dictionary<int, List<string>> LoadImagePathsForGrabId(
+            string captureRootPath, string grabId)
+        {
+            // camId → unique set of fileNames (無副檔名)
+            var camFileNames = new Dictionary<int, HashSet<string>>();
+
+            if (string.IsNullOrWhiteSpace(captureRootPath) || !Directory.Exists(captureRootPath))
+                return new Dictionary<int, List<string>>();
+
+            foreach (string csvPath in Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories))
+            {
+                try
+                {
+                    using (var sr = new StreamReader(csvPath))
+                    {
+                        sr.ReadLine(); // skip header
+                        string line;
+                        while ((line = sr.ReadLine()) != null)
+                        {
+                            if (!TryParseLine(line, out string id, out string fileName, out _, out _)) continue;
+                            if (id != grabId) continue;
+                            if (!TryExtractCamId(fileName, out int camId)) continue;
+                            if (!camFileNames.ContainsKey(camId))
+                                camFileNames[camId] = new HashSet<string>();
+                            camFileNames[camId].Add(fileName);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine($"[InspectionStatisticsService.LoadImagePathsForGrabId] {csvPath}: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+
+            // 將 fileName → 完整檔案路徑（目錄結構：root\yyyy\yyyyMM\yyyyMMdd\），依時間排序
+            var result = new Dictionary<int, List<string>>();
+            foreach (var kv in camFileNames)
+            {
+                var sortedNames = new List<string>(kv.Value);
+                sortedNames.Sort(); // "YYYYMMDD_HHMMSS-n" 字典序 = 時間序
+
+                var paths = new List<string>();
+                foreach (string fn in sortedNames)
+                {
+                    if (fn.Length < 8) continue;
+                    string dateStr = fn.Substring(0, 8);
+                    string dir = Path.Combine(captureRootPath,
+                        dateStr.Substring(0, 4),
+                        dateStr.Substring(0, 6),
+                        dateStr.Substring(0, 8));
+
+                    string rawJpg = Path.Combine(dir, fn + "_raw.jpg");
+                    if (File.Exists(rawJpg)) { paths.Add(rawJpg); continue; }
+
+                    string bmp = Path.Combine(dir, fn + ".bmp");
+                    if (File.Exists(bmp)) paths.Add(bmp);
+                }
+                if (paths.Count > 0) result[kv.Key] = paths;
+            }
+
+            return result;
+        }
     }
 }

@@ -1190,3 +1190,62 @@ public int[] CameraGrabHeight { get; set; } = new int[] { 3001, 3001, 3001, 3001
 // public int[] CameraGrabHeight { get; set; } = new int[] { 2048, 2048, ... };
 // Validate: if (v < 100 || v > 10000) return 3001;  ← 不一致！
 ```
+
+---
+
+## GDI+ 無縫拼接圖片
+
+### 問題
+`DrawImage(src, x, y, width, height)` 即使尺寸完全相符，GDI+ 仍有內部 0.5px 偏移，加上 `HighQualityBicubic` 插值核心會把相鄰像素色彩擴散到邊界 → 拼接處出現明顯接縫線。
+
+### 修正模式
+```csharp
+g.InterpolationMode = InterpolationMode.NearestNeighbor;
+g.PixelOffsetMode   = PixelOffsetMode.Half;
+g.DrawImage(src,
+    new Rectangle(destX, destY, destW, destH),   // 目標 pixel rect
+    new Rectangle(0, 0, src.Width, src.Height),  // 來源 pixel rect（明確指定）
+    GraphicsUnit.Pixel);                          // 強制 pixel 單位，避免座標系統偏移
+```
+
+拼接本身不需要縮放插值（同尺寸）→ 用 `NearestNeighbor`；縮圖仍可用 `HighQualityBicubic` 但需加 `PixelOffsetMode.Half`。
+
+---
+
+## SmartCanvas 拖曳效能
+
+### 問題
+`OnMouseMove` 在每個 event 都執行：
+1. `bmp.GetPixel(x, y)` — 每次 lock/unlock bitmap，大圖極慢
+2. `TriggerStatusChange()` → `ScaleView.Zoom()` — chart 同步重繪
+3. `_statusLabel.Text = ...` — label repaint + 字串分配
+
+全部同步阻塞 UI thread → canvas `Invalidate()` 積壓 → 拖曳卡頓。
+
+### 修正模式（throttle 分層策略）
+```csharp
+// 拖曳中：跳過 GetPixel；TriggerStatusChange 限流 ~30fps
+if (_isDragging)
+{
+    int now = Environment.TickCount;
+    if (now - _lastStatusTickMs >= StatusThrottleMs) // 32ms
+    {
+        _lastStatusTickMs = now;
+        TriggerStatusChange();
+    }
+}
+else
+{
+    _lastColor = bmp.GetPixel(...); // 靜止 hover 才讀色
+    TriggerStatusChange();
+}
+
+// OnMouseUp：補一次完整更新，確保 chart range 停在最終位置
+protected override void OnMouseUp(...)
+{
+    _isDragging = false;
+    TriggerStatusChange();
+}
+```
+
+**效果**：canvas repaint 以滑鼠原生頻率執行（順）；chart/statusbar ~30fps 更新（也順）；兩者不互相阻塞。

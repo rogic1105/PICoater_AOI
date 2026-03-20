@@ -78,6 +78,17 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _previewBoxes[i].Image = null;
         }
 
+        /// <summary>直接設定各 PictureBox 影像（Stitch 模式使用，不透過 InspectionData）。</summary>
+        public void SetImages(Bitmap[] images)
+        {
+            if (_previewBoxes == null) return;
+            for (int i = 0; i < _previewBoxes.Length; i++)
+            {
+                _previewBoxes[i].Image = (images != null && i < images.Length) ? images[i] : null;
+                _previewBoxes[i].Invalidate();
+            }
+        }
+
         public InspectionData GetCurrentSelectionData()
         {
             if (_currentResults == null || _selectedIndex < 0 || _selectedIndex >= _currentResults.Length)

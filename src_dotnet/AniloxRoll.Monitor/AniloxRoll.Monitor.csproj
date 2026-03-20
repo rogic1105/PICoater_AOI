@@ -119,6 +119,7 @@
     </Compile>
     <Compile Include="UI\Managers\LiveCameraManager.cs" />
     <Compile Include="UI\Widgets\MuraChartHelper.cs" />
+    <Compile Include="UI\Widgets\GrabImageStitcher.cs" />
     <Compile Include="UI\Presenters\InspectionStatsPresenter.cs" />
     <Compile Include="UI\Presenters\ThumbnailGridPresenter.cs" />
     <Compile Include="UI\Navigators\DateTimeNavigator.cs" />

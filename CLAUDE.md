@@ -94,8 +94,10 @@ CoreCV_FastReadBMP  →  AoiService.ProcessImage  →  CoreCV_Resize_GPU  →  C
 | `src_dotnet/AniloxRoll.Monitor/Acquisition/Inspection/InspectionData.cs` | 檢測結果資料物件（Image/MuraCurveMean/MuraCurveMax/IsCompressedJpeg/ScaleFactor） |
 | `src_dotnet/AniloxRoll.Monitor/ImageCatalog/ImageRepository.cs` | 掃描目錄建立索引，同時掃 `*_raw.jpg` + `*.bmp` 兩種格式 |
 | `src_dotnet/AniloxRoll.Monitor/Services/InspectionLogService.cs` | 抓圖事件編號（A00001 起）+ 每日 CSV 寫入（`{CaptureRootPath}\{YYYY}\{YYYYMM}\{YYYYMMDD}.csv`）；`_csvLock` 保護多相機同時寫入同一日 CSV |
-| `src_dotnet/AniloxRoll.Monitor/Services/InspectionStatisticsService.cs` | CSV 統計服務：`Compute`（時間範圍/張數分母）、`ComputeByGrabIdRange`（序號範圍/唯一序號分母/一票否決）、`ComputeDetailedByGrabIdRange`（逐序號×CAM1~7 Pass/Fail）、`LoadGrabIdInfos`、`LoadAvailableTimes` |
+| `src_dotnet/AniloxRoll.Monitor/Services/InspectionStatisticsService.cs` | CSV 統計服務：`Compute`、`ComputeByGrabIdRange`、`ComputeDetailedByGrabIdRange`、`LoadGrabIdInfos`、`LoadAvailableTimes`、**`LoadImagePathsForGrabId`**（回傳 `Dictionary<int,List<string>>` camId→排序路徑） |
+| `src_dotnet/AniloxRoll.Monitor/UI/Widgets/GrabImageStitcher.cs` | `StitchCamera(IList<string> sortedPaths)`：同一相機多張影像垂直拼接（JPEG 直接載入；BMP 先 1/bmpResizeScale 縮圖再拼）；接縫修正：`NearestNeighbor` + `PixelOffsetMode.Half` + 明確 pixel-unit src/dst Rectangle |
 | `src_dotnet/AniloxRoll.Monitor/UI/Presenters/InspectionStatsPresenter.cs` | tabPageData：7 個卡片 Panel（良率顏色）+ listViewStats（5 欄彙總表） |
+| `sdk/AOI_SDK/src_dotnet/AOI.SDK/UI/SmartCanvas.cs` | PictureBox 子類：zoom/pan/edge；**拖曳效能**：拖曳中跳過 `GetPixel`，`TriggerStatusChange` 限流 32ms（chart ~30fps），`MouseUp` 補一次完整更新 |
 | `sdk/AOI_SDK/core_cv_api/src/export_api.cpp` | CoreCV_Resize_GPU 實作 |
 | `sdk/AOI_SDK/core_cv_api/include/export_c/export_api.h` | CoreCV_Resize_GPU 宣告 |
 
@@ -131,7 +133,13 @@ Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×741），�
 - `lblImageFormat`（Y=400）：顯示目前圖片格式，"壓縮 JPEG" / "原始 BMP"
 - `lblImageScale`（Y=424）：顯示壓縮倍率，"縮放: 5x" / "縮放: 1x"
 - 由 `FormInteractionHelper.OnGallerySelectionChanged` 透過 `data.IsCompressedJpeg` / `data.ScaleFactor` 更新
-- `grpReviewGrabNav`（GroupBox，Location=1082,450，Size=96×90，Text="序號跳轉"）：含 `cbReviewGrabId`（DropDownList，選擇序號）、`btnReviewGrabPrev`（"<"）、`btnReviewGrabNext`（">"）；選擇後立即呼叫 `OnReviewGrabIdChanged` → `NavigateToDateTime(info.Earliest)` + `LoadImagesWithPeriodLockAsync`；Prev/Next 按鈕透過 `StepReviewGrabId(±1)` 操作 `cbReviewGrabId.SelectedIndex` 觸發同一事件
+- `grpReviewGrabNav`（GroupBox，Location=1082,450，Size=96×90，Text="序號跳轉"）：含 `cbReviewGrabId`（DropDownList，選擇序號）、`btnReviewGrabPrev`（"<"）、`btnReviewGrabNext`（">"）；選擇後呼叫 `OnReviewGrabIdChanged` → `NavigateToDateTime(info.Earliest)` + **`LoadGrabStitchedViewAsync(grabId)`**（拼接模式，見下）；Prev/Next 透過 `StepReviewGrabId(±1)` 操作 `SelectedIndex` 觸發同一事件
+
+**Grab ID 拼接模式（`_stitchedImages` 欄位）**：
+- `_stitchedImages != null` 表示目前為拼接模式；`null` = 一般模式
+- `LoadGrabStitchedViewAsync(grabId)` → `InspectionStatisticsService.LoadImagePathsForGrabId`（掃 CSV，回傳每台相機的所有影像路徑 `Dictionary<int, List<string>>`）→ `GrabImageStitcher.StitchCamera`（每台相機多張依時間垂直拼接）→ `_galleryManager.SetImages(_stitchedImages)`→ `ShowStitchedCameraInCanvas`
+- `ClearStitchedMode()`：先 null `canvasMain.Image` + `_galleryManager.ClearImages()` 再 Dispose 所有 bitmaps；在所有一般載入路徑前呼叫（propertyGrid / btnSelectFolder / btnShowOriginal / btnShowProcessed / btnLastPeriod / btnNextPeriod）
+- `SelectionChanged` handler 以 `_stitchedImages != null` 分支：拼接模式呼叫 `ShowStitchedCameraInCanvas(idx)`，一般模式呼叫 `_interactionHelper.OnGallerySelectionChanged(idx)`
 
 ### tabPageData 控制項
 

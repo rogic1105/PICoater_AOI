@@ -73,6 +73,9 @@ namespace AniloxRoll.Monitor.Forms
         private InspectionSettings _settings;
         private bool _lastReviewProcessedMode = false;
 
+        // --- Grab ID 拼接模式（null = 一般模式）---
+        private Bitmap[] _stitchedImages;
+
 
         public AniloxRollForm()
         {
@@ -152,7 +155,13 @@ namespace AniloxRoll.Monitor.Forms
 
             _presenter.BusyStateChanged += _interactionHelper.SetUiLoadingState;
             _presenter.LogReported      += OnPresenterLogReported;
-            _galleryManager.SelectionChanged += _interactionHelper.OnGallerySelectionChanged;
+            _galleryManager.SelectionChanged += idx =>
+            {
+                if (_stitchedImages != null)
+                    ShowStitchedCameraInCanvas(idx);
+                else
+                    _interactionHelper.OnGallerySelectionChanged(idx);
+            };
 
             _dateTimeNavigator.PeriodSelectionChanged += _presenter.UpdatePeriodNavigationState;
             _presenter.PeriodNavigationStateChanged   += (canLast, canNext) =>
@@ -289,6 +298,7 @@ namespace AniloxRoll.Monitor.Forms
             if (isRecipeChange && _imageRepository.FileCount > 0)
             {
                 _lastReviewProcessedMode = true;
+                ClearStitchedMode();
                 await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
                 _interactionHelper.RefreshCurrentCanvasResult();
             }
@@ -313,26 +323,29 @@ namespace AniloxRoll.Monitor.Forms
                 }
             }
 
+            ClearStitchedMode();
             await _presenter.LoadImagesWithPeriodLockAsync(false, _interactionHelper.LoadImages);
         }
 
         private async void btnShowOriginal_Click(object sender, EventArgs e)
         {
             _lastReviewProcessedMode = false;
+            ClearStitchedMode();
             await _presenter.LoadImagesWithPeriodLockAsync(false, _interactionHelper.LoadImages);
         }
 
         private async void btnShowProcessed_Click(object sender, EventArgs e)
         {
             _lastReviewProcessedMode = true;
+            ClearStitchedMode();
             await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
         }
 
         private async void btnLastPeriod_Click(object sender, EventArgs e)
-            => await _presenter.MovePeriodAsync(-1, _lastReviewProcessedMode, _interactionHelper.LoadImages);
+        { ClearStitchedMode(); await _presenter.MovePeriodAsync(-1, _lastReviewProcessedMode, _interactionHelper.LoadImages); }
 
         private async void btnNextPeriod_Click(object sender, EventArgs e)
-            => await _presenter.MovePeriodAsync(+1, _lastReviewProcessedMode, _interactionHelper.LoadImages);
+        { ClearStitchedMode(); await _presenter.MovePeriodAsync(+1, _lastReviewProcessedMode, _interactionHelper.LoadImages); }
 
         // ==========================================
         // --- 右側面板：初始化 ---
@@ -1011,8 +1024,69 @@ namespace AniloxRoll.Monitor.Forms
             if (_grabIdInfos.Count == 0) return;
             int idx = cbReviewGrabId.SelectedIndex;
             if (idx < 0 || idx >= _grabIdInfos.Count) return;
-            _interactionHelper.NavigateToDateTime(_grabIdInfos[idx].Earliest);
-            await _presenter.LoadImagesWithPeriodLockAsync(_lastReviewProcessedMode, _interactionHelper.LoadImages);
+
+            var info = _grabIdInfos[idx];
+            _interactionHelper.NavigateToDateTime(info.Earliest);
+            await LoadGrabStitchedViewAsync(info.GrabId);
+        }
+
+        private async Task LoadGrabStitchedViewAsync(string grabId)
+        {
+            string root = !string.IsNullOrWhiteSpace(UserSessionState.LastDataPath)
+                          ? UserSessionState.LastDataPath : _statsDataRootPath;
+            if (string.IsNullOrWhiteSpace(root)) return;
+
+            _interactionHelper.SetUiLoadingState(true);
+            try
+            {
+                var grouped = await Task.Run(() =>
+                    InspectionStatisticsService.LoadImagePathsForGrabId(root, grabId));
+
+                var newImages = await Task.Run(() =>
+                {
+                    var imgs = new Bitmap[7];
+                    for (int i = 0; i < 7; i++)
+                    {
+                        int camId = i + 1;
+                        if (grouped.TryGetValue(camId, out var paths) && paths.Count > 0)
+                        {
+                            try { imgs[i] = GrabImageStitcher.StitchCamera(paths); }
+                            catch (Exception ex)
+                            {
+                                System.Diagnostics.Trace.WriteLine(
+                                    $"[LoadGrabStitchedViewAsync] CAM{camId}: {ex.GetType().Name}: {ex.Message}");
+                            }
+                        }
+                    }
+                    return imgs;
+                });
+
+                ClearStitchedMode();
+                _stitchedImages = newImages;
+                _galleryManager.SetImages(_stitchedImages);
+                ShowStitchedCameraInCanvas(_galleryManager.SelectedIndex);
+            }
+            finally
+            {
+                _interactionHelper.SetUiLoadingState(false);
+            }
+        }
+
+        private void ClearStitchedMode()
+        {
+            if (_stitchedImages == null) return;
+            canvasMain.Image = null;
+            _galleryManager.ClearImages();
+            foreach (var bmp in _stitchedImages) bmp?.Dispose();
+            _stitchedImages = null;
+        }
+
+        private void ShowStitchedCameraInCanvas(int idx)
+        {
+            if (_stitchedImages == null) return;
+            var bmp = (idx >= 0 && idx < _stitchedImages.Length) ? _stitchedImages[idx] : null;
+            canvasMain.Image = bmp;
+            if (bmp != null) canvasMain.FitToScreen();
         }
 
         private void StepReviewGrabId(int delta)

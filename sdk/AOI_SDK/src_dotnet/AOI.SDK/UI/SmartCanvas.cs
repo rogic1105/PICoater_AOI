@@ -34,6 +34,8 @@ namespace AOI.SDK.UI
 
         // [新增] 避免重複觸發的冷卻旗標
         private bool _edgeTriggeredInDrag = false;
+        private int  _lastStatusTickMs = 0;
+        private const int StatusThrottleMs = 32; // 拖曳中 chart/statusbar 最高 ~30 fps
 
         public float Zoom => _zoom;
         public PointF PanOffset => _panOffset;
@@ -97,6 +99,7 @@ namespace AOI.SDK.UI
         {
             base.OnMouseUp(e);
             _isDragging = false;
+            TriggerStatusChange(); // 拖曳結束後補一次，更新 chart range 與 status bar
         }
 
         protected override void OnMouseMove(MouseEventArgs e)
@@ -122,6 +125,19 @@ namespace AOI.SDK.UI
                 _lastImgX = (int)imgXf;
                 _lastImgY = (int)imgYf;
 
+                if (_isDragging)
+            {
+                // 拖曳中：跳過 GetPixel（慢），chart/statusbar 限流到 ~30 fps
+                // 讓 canvas Invalidate() 能以最快速度進入 OnPaint
+                int now = Environment.TickCount;
+                if (now - _lastStatusTickMs >= StatusThrottleMs)
+                {
+                    _lastStatusTickMs = now;
+                    TriggerStatusChange();
+                }
+            }
+            else
+            {
                 if (this.Image is Bitmap bmp &&
                     _lastImgX >= 0 && _lastImgX < bmp.Width &&
                     _lastImgY >= 0 && _lastImgY < bmp.Height)
@@ -134,6 +150,7 @@ namespace AOI.SDK.UI
                 }
 
                 TriggerStatusChange();
+            }
             }
         }
 
