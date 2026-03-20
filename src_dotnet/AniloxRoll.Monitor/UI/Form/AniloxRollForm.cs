@@ -63,12 +63,10 @@ namespace AniloxRoll.Monitor.Forms
         private List<GrabDetail>            _currentDetails      = new List<GrabDetail>();
         private bool                        _showFailOnly        = false;
         // --- 圖表導航狀態 ---
-        private List<int> _chartYears    = new List<int>();
-        private List<int> _chartMonths   = new List<int>();
-        private List<int> _chartDays     = new List<int>();
-        private int       _chartYearIdx  = -1;
-        private int       _chartMonthIdx = -1;
-        private int       _chartDayIdx   = -1;
+        private List<int> _chartYears  = new List<int>();
+        private List<int> _chartMonths = new List<int>();
+        private List<int> _chartDays   = new List<int>();
+        private bool      _chartNavUpdating = false;
 
         // --- 資料緩存 ---
         private readonly List<Image> _thumbnailCache = new List<Image>();
@@ -86,9 +84,25 @@ namespace AniloxRoll.Monitor.Forms
         private void InitializeSystem()
         {
             if (_settings == null) _settings = ConfigManager.LoadInspectionSettings();
+            InitServiceLayer();
+            InitUiLayer();
+            InitCameraLayer();
+            InitializeRightPanelControls();
+            SetupDataTab();
+        }
 
-            _inspectionService = new BatchInspectionService();
+        /// <summary>純業務服務：不依賴任何 UI 控制項。</summary>
+        private void InitServiceLayer()
+        {
+            _inspectionService    = new BatchInspectionService();
+            _inspectionLogService = new InspectionLogService(
+                () => _settings?.CaptureRootPath ?? string.Empty,
+                UserSessionState.LastGrabIdNum);
+        }
 
+        /// <summary>UI 層：Presenter、Helper、PropertyGrid、Canvas 事件。</summary>
+        private void InitUiLayer()
+        {
             _dateTimeNavigator = new DateTimeNavigator(
                 _imageRepository, cbYear, cbMonth, cbDay, cbHour, cbMin, cbSec);
 
@@ -104,13 +118,13 @@ namespace AniloxRoll.Monitor.Forms
             _muraChartHelper.SetOps(_settings.Cam1_Ops);
             _muraChartHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
 
-            checkBoxEnableImageProcessing.Checked = UserSessionState.GetLastEnableImageProcessing(checkBoxEnableImageProcessing.Checked);
+            checkBoxEnableImageProcessing.Checked =
+                UserSessionState.GetLastEnableImageProcessing(checkBoxEnableImageProcessing.Checked);
 
+            // PropertyGrid：Categorized 排序（維持宣告順序），預設摺疊
             propertyGridSettings.SelectedObject = _settings;
             propertyGridSettings.ToolbarVisible = false;
-            // Categorized：同一 Category 內維持 InspectionSettings.cs 的宣告順序
-            // （預設 CategorizedAlphabetical 會把「最大閾值」排到「平均閾值」前面）
-            propertyGridSettings.PropertySort = System.Windows.Forms.PropertySort.Categorized;
+            propertyGridSettings.PropertySort   = System.Windows.Forms.PropertySort.Categorized;
             propertyGridSettings.CollapseAllGridItems();
             propertyGridSettings.PropertyValueChanged -= _propertyGrid_PropertyValueChanged;
             propertyGridSettings.PropertyValueChanged += _propertyGrid_PropertyValueChanged;
@@ -118,35 +132,30 @@ namespace AniloxRoll.Monitor.Forms
 
             _interactionHelper = new FormInteractionHelper(new FormInteractionContext
             {
-                Form = this,
-                Canvas = canvasMain,
-                ButtonsToLock = new Button[] { btnShowOriginal, btnShowProcessed, btnSelectFolder },
-                ThumbnailCache = _thumbnailCache,
-                Presenter = _presenter,
+                Form             = this,
+                Canvas           = canvasMain,
+                ButtonsToLock    = new Button[] { btnShowOriginal, btnShowProcessed, btnSelectFolder },
+                ThumbnailCache   = _thumbnailCache,
+                Presenter        = _presenter,
                 InspectionService = _inspectionService,
-                ImageRepository = _imageRepository,
-                TimeNavigator = _dateTimeNavigator,
-                GalleryManager = _galleryManager,
-                MuraChartHelper = _muraChartHelper,
-                Settings = _settings,
-                StatusLabel = lblPixelInfo,
-                CameraPanels = new[] { pbCam1, pbCam2, pbCam3, pbCam4, pbCam5, pbCam6, pbCam7 },
+                ImageRepository  = _imageRepository,
+                TimeNavigator    = _dateTimeNavigator,
+                GalleryManager   = _galleryManager,
+                MuraChartHelper  = _muraChartHelper,
+                Settings         = _settings,
+                StatusLabel      = lblPixelInfo,
+                CameraPanels     = new[] { pbCam1, pbCam2, pbCam3, pbCam4, pbCam5, pbCam6, pbCam7 },
                 ImageFormatLabel = lblImageFormat,
-                ImageScaleLabel = lblImageScale
+                ImageScaleLabel  = lblImageScale
             });
-
-            _inspectionLogService = new InspectionLogService(
-                () => _settings?.CaptureRootPath ?? string.Empty,
-                UserSessionState.LastGrabIdNum);
-
             _interactionHelper.ApplySettingsToService();
 
             _presenter.BusyStateChanged += _interactionHelper.SetUiLoadingState;
-            _presenter.LogReported += OnPresenterLogReported;
+            _presenter.LogReported      += OnPresenterLogReported;
             _galleryManager.SelectionChanged += _interactionHelper.OnGallerySelectionChanged;
 
             _dateTimeNavigator.PeriodSelectionChanged += _presenter.UpdatePeriodNavigationState;
-            _presenter.PeriodNavigationStateChanged += (canLast, canNext) =>
+            _presenter.PeriodNavigationStateChanged   += (canLast, canNext) =>
             {
                 btnLastPeriod.Enabled = canLast;
                 btnNextPeriod.Enabled = canNext;
@@ -154,11 +163,16 @@ namespace AniloxRoll.Monitor.Forms
             _presenter.UpdatePeriodNavigationState();
 
             canvasMain.StatusChanged += _interactionHelper.UpdateCanvasInfo;
-            canvasMain.EdgeReached += _interactionHelper.NavigateCamera;
+            canvasMain.EdgeReached   += _interactionHelper.NavigateCamera;
+        }
 
+        /// <summary>相機層：LiveCameraManager 與 FormClosed 清理。</summary>
+        private void InitCameraLayer()
+        {
             _liveCameraManager = new LiveCameraManager(
                 this,
-                new[] { panelLiveCam1, panelLiveCam2, panelLiveCam3, panelLiveCam4, panelLiveCam5, panelLiveCam6, panelLiveCam7 },
+                new[] { panelLiveCam1, panelLiveCam2, panelLiveCam3,
+                        panelLiveCam4, panelLiveCam5, panelLiveCam6, panelLiveCam7 },
                 panelMainDisplay,
                 pixelText => { if (lblPixelInfo != null) lblPixelInfo.Text = pixelText; }
             );
@@ -166,9 +180,6 @@ namespace AniloxRoll.Monitor.Forms
             _liveCameraManager.OnInspectionResult += OnCameraInspectionResult;
 
             FormClosed += (_, __) => _liveCameraManager.FreeCameras();
-
-            InitializeRightPanelControls();
-            SetupDataTab();
         }
 
 
@@ -256,21 +267,23 @@ namespace AniloxRoll.Monitor.Forms
             UserSessionState.Save();
         }
 
+        // PropertyGrid 回傳的 ChangedItem.PropertyDescriptor.Name 可能是 MemberName 或 DisplayName 其中之一，
+        // 因此兩種形式都放入集合，避免版本差異導致漏判。
+        private static readonly HashSet<string> RecipePropertyNames = new HashSet<string>(StringComparer.Ordinal)
+        {
+            nameof(InspectionRecipe.HessianMaxFactor), "Hessian Max Factor",
+            nameof(InspectionRecipe.ErrorValueMean),   "Error Value Mean",
+            nameof(InspectionRecipe.ErrorValueMax),    "Error Value Max",
+        };
+
         private async void _propertyGrid_PropertyValueChanged(object s, PropertyValueChangedEventArgs e)
         {
             _interactionHelper.HandleSettingsChanged();
             _liveCameraManager?.SetCaptureSettings(_settings);
             _muraChartHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
 
-            // 任何 Recipe 參數（HessianMaxFactor / ErrorValueMean / ErrorValueMax）變更都觸發重載
             string changedPropertyName = e?.ChangedItem?.PropertyDescriptor?.Name ?? string.Empty;
-            bool isRecipeChange =
-                string.Equals(changedPropertyName, nameof(InspectionRecipe.HessianMaxFactor), StringComparison.Ordinal) ||
-                string.Equals(changedPropertyName, "Hessian Max Factor",                      StringComparison.Ordinal) ||
-                string.Equals(changedPropertyName, nameof(InspectionRecipe.ErrorValueMean),   StringComparison.Ordinal) ||
-                string.Equals(changedPropertyName, "Error Value Mean",                        StringComparison.Ordinal) ||
-                string.Equals(changedPropertyName, nameof(InspectionRecipe.ErrorValueMax),    StringComparison.Ordinal) ||
-                string.Equals(changedPropertyName, "Error Value Max",                         StringComparison.Ordinal);
+            bool isRecipeChange = RecipePropertyNames.Contains(changedPropertyName);
 
             // 有影像且為配方參數變更 → 重載（始終用 processed 模式，因為配方只影響演算法輸出）
             if (isRecipeChange && _imageRepository.FileCount > 0)
@@ -286,6 +299,20 @@ namespace AniloxRoll.Monitor.Forms
             _interactionHelper.SelectAndLoadFolder();
             _presenter.UpdatePeriodNavigationState();
             _lastReviewProcessedMode = false;
+
+            // 同步載入序號清單並填充 cbReviewGrabId
+            if (_imageRepository.FileCount > 0)
+            {
+                var reviewPath = UserSessionState.LastDataPath;
+                if (!string.IsNullOrWhiteSpace(reviewPath))
+                {
+                    _grabIdInfos = InspectionStatisticsService.LoadGrabIdInfos(reviewPath);
+                    cbReviewGrabId.Items.Clear();
+                    foreach (var info in _grabIdInfos)
+                        cbReviewGrabId.Items.Add(info.GrabId);
+                }
+            }
+
             await _presenter.LoadImagesWithPeriodLockAsync(false, _interactionHelper.LoadImages);
         }
 
@@ -613,16 +640,23 @@ namespace AniloxRoll.Monitor.Forms
             WireStatDateCombos();
             InitGrabDetailListView();
             InitPeriodCharts();
-            ApplyChartNavStyle();
-            btnChartYearPrev.Click  += (s, e) => { if (_chartYearIdx  > 0)                       { _chartYearIdx--;  OnChartYearIndexChanged();  } };
-            btnChartYearNext.Click  += (s, e) => { if (_chartYearIdx  < _chartYears.Count  - 1)  { _chartYearIdx++;  OnChartYearIndexChanged();  } };
-            btnChartMonthPrev.Click += (s, e) => { if (_chartMonthIdx > 0)                       { _chartMonthIdx--; OnChartMonthIndexChanged(); } };
-            btnChartMonthNext.Click += (s, e) => { if (_chartMonthIdx < _chartMonths.Count - 1)  { _chartMonthIdx++; OnChartMonthIndexChanged(); } };
-            btnChartDayPrev.Click   += (s, e) => { if (_chartDayIdx   > 0)                       { _chartDayIdx--;   OnChartDayIndexChanged();   } };
-            btnChartDayNext.Click   += (s, e) => { if (_chartDayIdx   < _chartDays.Count   - 1)  { _chartDayIdx++;   OnChartDayIndexChanged();   } };
+            cbChartYear.SelectedIndexChanged  += (s, e) => { if (!_chartNavUpdating) OnChartYearIndexChanged();  };
+            cbChartMonth.SelectedIndexChanged += (s, e) => { if (!_chartNavUpdating) OnChartMonthIndexChanged(); };
+            cbChartDay.SelectedIndexChanged   += (s, e) => { if (!_chartNavUpdating) OnChartDayIndexChanged();   };
+            // 滾輪上滾 = 數值增加（反轉 ComboBox 預設行為）
+            foreach (var cb in new[] {
+                cbChartYear, cbChartMonth, cbChartDay,
+                cbStartYear, cbStartMonth, cbStartDay, cbStartHour, cbStartMin, cbStartSec,
+                cbEndYear,   cbEndMonth,   cbEndDay,   cbEndHour,   cbEndMin,   cbEndSec,
+                cbGrabIdStart, cbGrabIdEnd, cbDataGrabId, cbReviewGrabId })
+                _wheelInterceptors.Add(new ComboBoxWheelReverser(cb));
 
-            cbGrabIdStart.SelectedIndexChanged += (s, e) => OnGrabIdComboChanged(isStart: true);
-            cbGrabIdEnd.SelectedIndexChanged += (s, e) => OnGrabIdComboChanged(isStart: false);
+            cbGrabIdStart.SelectedIndexChanged  += (s, e) => OnGrabIdComboChanged(isStart: true);
+            cbGrabIdEnd.SelectedIndexChanged    += (s, e) => OnGrabIdComboChanged(isStart: false);
+            cbDataGrabId.SelectedIndexChanged   += (s, e) => OnSingleSheetComboChanged();
+            cbReviewGrabId.SelectedIndexChanged += (s, e) => OnReviewGrabIdChanged();
+            btnReviewGrabPrev.Click             += (s, e) => StepReviewGrabId(-1);
+            btnReviewGrabNext.Click             += (s, e) => StepReviewGrabId(+1);
         }
 
         private void PopulateStatDateCombos(DateTime start, DateTime end)
@@ -711,10 +745,14 @@ namespace AniloxRoll.Monitor.Forms
                     {
                         cbGrabIdStart.Items.Clear();
                         cbGrabIdEnd.Items.Clear();
+                        cbDataGrabId.Items.Clear();
+                        cbReviewGrabId.Items.Clear();
                         foreach (var info in _grabIdInfos)
                         {
                             cbGrabIdStart.Items.Add(info.GrabId);
                             cbGrabIdEnd.Items.Add(info.GrabId);
+                            cbDataGrabId.Items.Add(info.GrabId);
+                            cbReviewGrabId.Items.Add(info.GrabId);
                         }
                         if (cbGrabIdStart.Items.Count > 0)
                         {
@@ -941,6 +979,50 @@ namespace AniloxRoll.Monitor.Forms
             RefreshStats();
         }
 
+        private void OnSingleSheetComboChanged()
+        {
+            if (_statComboUpdating || _grabIdInfos.Count == 0) return;
+            int idx = cbDataGrabId.SelectedIndex;
+            if (idx < 0) return;
+
+            _statComboUpdating = true;
+            try
+            {
+                cbGrabIdStart.SelectedIndex = idx;
+                cbGrabIdEnd.SelectedIndex   = idx;
+                var info = _grabIdInfos[idx];
+                SetCombosToDateTime(true,  info.Earliest);
+                SetCombosToDateTime(false, info.Latest);
+                if (_statAvailableTimes.Count > 0)
+                {
+                    DoRefreshCombos(true,  0);
+                    DoRefreshCombos(false, 0);
+                }
+            }
+            finally { _statComboUpdating = false; }
+
+            RefreshStats();
+        }
+
+        // ── 影像回顧 序號跳轉 ─────────────────────────────────────────────
+
+        private async void OnReviewGrabIdChanged()
+        {
+            if (_grabIdInfos.Count == 0) return;
+            int idx = cbReviewGrabId.SelectedIndex;
+            if (idx < 0 || idx >= _grabIdInfos.Count) return;
+            _interactionHelper.NavigateToDateTime(_grabIdInfos[idx].Earliest);
+            await _presenter.LoadImagesWithPeriodLockAsync(_lastReviewProcessedMode, _interactionHelper.LoadImages);
+        }
+
+        private void StepReviewGrabId(int delta)
+        {
+            if (_grabIdInfos.Count == 0) return;
+            int next = cbReviewGrabId.SelectedIndex + delta;
+            if (next >= 0 && next < cbReviewGrabId.Items.Count)
+                cbReviewGrabId.SelectedIndex = next;   // triggers OnReviewGrabIdChanged
+        }
+
         private void RefreshStats()
         {
             if (string.IsNullOrWhiteSpace(_statsDataRootPath)) return;
@@ -960,7 +1042,6 @@ namespace AniloxRoll.Monitor.Forms
                     _statsDataRootPath, startNum, endNum);
 
                 _statsPresenter.Update(stats);
-                AutoFitListViewColumns(listViewStats);
                 _currentDetails = details;
                 ApplyFailFilter();
                 return;
@@ -970,7 +1051,6 @@ namespace AniloxRoll.Monitor.Forms
             if (!TryParseStatDateTime(out DateTime start, out DateTime end)) return;
             var statsTime = InspectionStatisticsService.Compute(_statsDataRootPath, start, end);
             _statsPresenter.Update(statsTime);
-            AutoFitListViewColumns(listViewStats);
             _currentDetails = new List<GrabDetail>();
             ApplyFailFilter();
         }
@@ -983,9 +1063,10 @@ namespace AniloxRoll.Monitor.Forms
             listViewGrabDetail.Columns.Clear();
             listViewGrabDetail.Items.Clear();
 
-            listViewGrabDetail.Columns.Add("序號", 70);
+            listViewGrabDetail.Columns.Add("序號");
             for (int i = 1; i <= 7; i++)
-                listViewGrabDetail.Columns.Add($"CAM{i}", 65);
+                listViewGrabDetail.Columns.Add($"CAM{i}");
+            AutoFitListViewColumns(listViewGrabDetail);
         }
 
         private static readonly System.Drawing.Color _detailPass  = System.Drawing.Color.FromArgb(232, 245, 233);
@@ -1024,7 +1105,6 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             listViewGrabDetail.EndUpdate();
-            AutoFitListViewColumns(listViewGrabDetail);
         }
 
         private static void AutoFitListViewColumns(ListView lv)
@@ -1039,12 +1119,12 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        // ── 瑕疵篩選 ─────────────────────────────────────────────────────
+        // ── 異常篩選 ─────────────────────────────────────────────────────
 
         private void BtnShowFail_Click(object sender, EventArgs e)
         {
             _showFailOnly = !_showFailOnly;
-            btnShowFail.Text      = _showFailOnly ? "顯示全部" : "篩選瑕疵";
+            btnShowFail.Text      = _showFailOnly ? "顯示全部" : "篩選異常";
             btnShowFail.BackColor = _showFailOnly
                 ? System.Drawing.Color.FromArgb(255, 235, 238)
                 : SystemColors.Control;
@@ -1063,13 +1143,17 @@ namespace AniloxRoll.Monitor.Forms
 
         private void InitPeriodCharts()
         {
-            InitOneChart(chartYearly);   // 月份 1-12
-            InitOneChart(chartMonthly);  // 日期 1-31
-            InitOneChart(chartDaily);    // 小時 0-23
+            InitOneChart(chartYearly,  yDefault: 60000, xCount: 12, xStart: 1);  // 月份 1-12
+            InitOneChart(chartMonthly, yDefault: 2000,  xCount: 31, xStart: 1);  // 日期 1-31
+            InitOneChart(chartDaily,   yDefault: 300,   xCount: 24, xStart: 0);  // 小時 0-23
         }
 
         private static void InitOneChart(
-            System.Windows.Forms.DataVisualization.Charting.Chart chart)
+            System.Windows.Forms.DataVisualization.Charting.Chart chart,
+            int xLabelAngle = 0,
+            int yDefault    = 10,
+            int xCount      = 0,
+            int xStart      = 1)
         {
             chart.ChartAreas.Clear();
             chart.Series.Clear();
@@ -1077,28 +1161,47 @@ namespace AniloxRoll.Monitor.Forms
             chart.Titles.Clear();
 
             var area = new System.Windows.Forms.DataVisualization.Charting.ChartArea("Main");
-            // X 軸：無格線、每格顯示標籤、小字型
-            area.AxisX.MajorGrid.Enabled    = false;
-            area.AxisX.Interval             = 1;
-            area.AxisX.LabelStyle.Angle     = -90;
-            area.AxisX.LabelStyle.Font      = new System.Drawing.Font("Arial", 6f);
-            // Y 軸（左）：隱藏，改用右側 AxisY2
-            area.AxisY.MajorGrid.Enabled    = false;
-            area.AxisY.LabelStyle.Enabled   = false;
-            area.AxisY.Minimum              = 0;
-            // Y2 軸（右）：淡格線、小字型
-            area.AxisY2.Enabled             = System.Windows.Forms.DataVisualization.Charting.AxisEnabled.True;
-            area.AxisY2.MajorGrid.LineColor = System.Drawing.Color.FromArgb(220, 220, 220);
-            area.AxisY2.MajorGrid.LineDashStyle =
+            // X 軸：格線（垂直虛線）、刻度、每格顯示標籤、小字型
+            area.AxisX.MajorGrid.Enabled        = true;
+            area.AxisX.MajorGrid.LineColor      = System.Drawing.Color.FromArgb(220, 220, 220);
+            area.AxisX.MajorGrid.LineDashStyle  = System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Dot;
+            area.AxisX.MajorTickMark.Enabled    = true;
+            area.AxisX.MajorTickMark.LineColor  = System.Drawing.Color.FromArgb(120, 120, 120);
+            area.AxisX.IsMarginVisible          = false;
+            area.AxisX.Interval                 = 1;
+            area.AxisX.LabelStyle.Angle         = xLabelAngle;
+            area.AxisX.LabelStyle.Font          = new System.Drawing.Font("Arial", 5f);
+            // Y 軸（左）：完全隱藏
+            area.AxisY.LineColor                = System.Drawing.Color.Transparent;
+            area.AxisY.MajorGrid.Enabled        = false;
+            area.AxisY.MajorTickMark.Enabled    = false;
+            area.AxisY.MinorTickMark.Enabled    = false;
+            area.AxisY.LabelStyle.Enabled       = false;
+            area.AxisY.Minimum                  = 0;
+            // Y 軸（left/Primary）：格線由此軸驅動，但標籤隱藏
+            // 與 chartMura 相同策略：Primary 軸提供格線，Secondary 軸提供右側標籤
+            area.AxisY.Interval              = yDefault / 5.0;
+            area.AxisY.Maximum               = yDefault;
+            area.AxisY.MajorGrid.Enabled     = true;
+            area.AxisY.MajorGrid.LineColor   = System.Drawing.Color.FromArgb(220, 220, 220);
+            area.AxisY.MajorGrid.LineDashStyle =
                 System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Dot;
-            area.AxisY2.LabelStyle.Font     = new System.Drawing.Font("Arial", 6f);
-            area.AxisY2.Minimum             = 0;
+            // Y2 軸（right/Secondary）：顯示右側標籤；格線由 AxisY 驅動故此處關閉
+            area.AxisY2.Enabled                 = System.Windows.Forms.DataVisualization.Charting.AxisEnabled.True;
+            area.AxisY2.MajorGrid.Enabled       = false;
+            area.AxisY2.MajorTickMark.Enabled   = true;
+            area.AxisY2.MajorTickMark.LineColor = System.Drawing.Color.FromArgb(120, 120, 120);
+            area.AxisY2.LabelStyle.Font         = new System.Drawing.Font("Arial", 5f);
+            area.AxisY2.Minimum                 = 0;
+            area.AxisY2.Maximum                 = yDefault;
+            area.AxisY2.Interval                = yDefault / 5.0;
+            area.AxisY2.LabelStyle.Interval     = yDefault;
             // 縮小 InnerPlotPosition，左邊界最小化（Y 軸在右側不佔左邊空間）
             area.InnerPlotPosition.Auto     = false;
-            area.InnerPlotPosition.X        = 1f;
-            area.InnerPlotPosition.Y        = 2f;
-            area.InnerPlotPosition.Width    = 92f;
-            area.InnerPlotPosition.Height   = 76f;
+            area.InnerPlotPosition.X        = 0f;
+            area.InnerPlotPosition.Y        = 12f;
+            area.InnerPlotPosition.Width    = 93f;
+            area.InnerPlotPosition.Height   = 66f;
             chart.ChartAreas.Add(area);
 
             // Legend 放在圖表內右上角，透明背景
@@ -1120,13 +1223,24 @@ namespace AniloxRoll.Monitor.Forms
             sPass.YAxisType  = System.Windows.Forms.DataVisualization.Charting.AxisType.Secondary;
             chart.Series.Add(sPass);
 
-            var sFail = new System.Windows.Forms.DataVisualization.Charting.Series("瑕疵");
+            var sFail = new System.Windows.Forms.DataVisualization.Charting.Series("異常");
             sFail.ChartType  = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.StackedColumn;
             sFail.Color      = System.Drawing.Color.FromArgb(239, 83, 80);
             sFail.ChartArea  = "Main";
             sFail.Legend     = "L";
             sFail.YAxisType  = System.Windows.Forms.DataVisualization.Charting.AxisType.Secondary;
             chart.Series.Add(sFail);
+
+            // 預填 0 值佔位：建立 X category 軸，讓 grid/tick/axis 在空圖時就能渲染
+            // FillPeriodChart 載入真實資料前會先 Points.Clear()，不影響顯示
+            if (xCount > 0)
+            {
+                for (int i = 0; i < xCount; i++)
+                {
+                    sPass.Points.AddXY((xStart + i).ToString(), 0);
+                    sFail.Points.AddXY((xStart + i).ToString(), 0);
+                }
+            }
             // 無標題
         }
 
@@ -1146,7 +1260,7 @@ namespace AniloxRoll.Monitor.Forms
             List<PeriodStats> data)
         {
             var sPass = chart.Series["合格"];
-            var sFail = chart.Series["瑕疵"];
+            var sFail = chart.Series["異常"];
             sPass.Points.Clear();
             sFail.Points.Clear();
             foreach (var p in data)
@@ -1154,103 +1268,101 @@ namespace AniloxRoll.Monitor.Forms
                 sPass.Points.AddXY(p.Label, p.Pass);
                 sFail.Points.AddXY(p.Label, p.Fail);
             }
+
+            // 動態計算 Y2 軸：5 等分格線，只顯示 0 和 max 兩個標籤
+            // Maximum 比 niceMax 多 5%，讓最頂格線上方留約半個字元的空白
+            int maxTotal = 0;
+            foreach (var p in data)
+                maxTotal = Math.Max(maxTotal, p.Pass + p.Fail);
+            int niceMax = Math.Max(5, (int)(Math.Ceiling(maxTotal / 5.0) * 5));
+            var area     = chart.ChartAreas["Main"];
+            double yMax  = niceMax * 1.05;
+            double yStep = niceMax / 5.0;
+            // Primary 軸（AxisY）驅動格線：scale 與 Y2 保持同步
+            area.AxisY.Maximum               = yMax;
+            area.AxisY.Interval              = yStep;
+            area.AxisY.MajorGrid.Interval    = yStep;
+            // Secondary 軸（AxisY2）顯示右側標籤
+            area.AxisY2.Maximum              = yMax;
+            area.AxisY2.Interval             = yStep;
+            area.AxisY2.MajorGrid.Interval   = yStep;
+            area.AxisY2.LabelStyle.Interval  = niceMax;
         }
 
         // ── 圖表導航列（◄ 年/月/日 ►）────────────────────────────────────
 
-        /// <summary>套用導航按鈕與標籤的外觀樣式（在 InitializeComponent 後呼叫）。</summary>
-        private void ApplyChartNavStyle()
+        /// <summary>
+        /// 將 values 填入 cb（帶 _chartNavUpdating guard 防 cascade），選取最後一筆。
+        /// </summary>
+        private void RefillChartComboBox(ComboBox cb, List<int> values)
         {
-            var navFont  = new System.Drawing.Font("Segoe UI", 8f, System.Drawing.FontStyle.Bold);
-            var valFont  = new System.Drawing.Font("Segoe UI", 10f, System.Drawing.FontStyle.Bold);
-
-            foreach (var btn in new[] {
-                btnChartYearPrev, btnChartYearNext,
-                btnChartMonthPrev, btnChartMonthNext,
-                btnChartDayPrev,  btnChartDayNext })
-            {
-                btn.FlatStyle = FlatStyle.Flat;
-                btn.FlatAppearance.BorderColor = System.Drawing.Color.Silver;
-                btn.FlatAppearance.BorderSize  = 1;
-                btn.Font      = navFont;
-                btn.Padding   = System.Windows.Forms.Padding.Empty;
-                btn.Cursor    = System.Windows.Forms.Cursors.Hand;
-            }
-
-            foreach (var lbl in new[] { lblChartYear, lblChartMonth, lblChartDay })
-            {
-                lbl.Font        = valFont;
-                lbl.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-                lbl.BackColor   = System.Drawing.SystemColors.Window;
-            }
+            _chartNavUpdating = true;
+            cb.Items.Clear();
+            foreach (var v in values) cb.Items.Add(v.ToString());
+            cb.SelectedIndex = values.Count > 0 ? values.Count - 1 : -1;
+            _chartNavUpdating = false;
         }
 
         /// <summary>資料夾載入後，以 CSV 中實際存在的年份初始化三列導航。</summary>
         private void PopulateChartNavigators()
         {
-            _chartYears   = GetAvailableYears();
-            _chartYearIdx = _chartYears.Count > 0 ? _chartYears.Count - 1 : -1;
+            _chartYears = GetAvailableYears();
+            RefillChartComboBox(cbChartYear, _chartYears);
             OnChartYearIndexChanged();
         }
 
         private void OnChartYearIndexChanged()
         {
-            bool ok = _chartYearIdx >= 0 && _chartYearIdx < _chartYears.Count;
-            lblChartYear.Text         = ok ? _chartYears[_chartYearIdx].ToString() : "—";
-            btnChartYearPrev.Enabled  = _chartYearIdx > 0;
-            btnChartYearNext.Enabled  = _chartYearIdx < _chartYears.Count - 1;
+            int idx = cbChartYear.SelectedIndex;
+            bool ok = idx >= 0 && idx < _chartYears.Count;
 
-            if (!ok) { lblChartMonth.Text = "—"; lblChartDay.Text = "—"; return; }
-            int year = _chartYears[_chartYearIdx];
+            _chartMonths = ok ? GetAvailableMonths(_chartYears[idx]) : new List<int>();
+            RefillChartComboBox(cbChartMonth, _chartMonths);
 
-            var start = new DateTime(year, 1, 1);
-            var end   = new DateTime(year, 12, 31, 23, 59, 59);
+            if (!ok) return;
+            int year = _chartYears[idx];
             FillPeriodChart(chartYearly,
-                InspectionStatisticsService.ComputeGroupedByMonthOfYear(_statsDataRootPath, start, end));
+                InspectionStatisticsService.ComputeGroupedByMonthOfYear(_statsDataRootPath,
+                    new DateTime(year, 1, 1), new DateTime(year, 12, 31, 23, 59, 59)));
 
-            _chartMonths   = GetAvailableMonths(year);
-            _chartMonthIdx = _chartMonths.Count > 0 ? _chartMonths.Count - 1 : -1;
             OnChartMonthIndexChanged();
         }
 
         private void OnChartMonthIndexChanged()
         {
-            bool ok = _chartMonthIdx >= 0 && _chartMonthIdx < _chartMonths.Count;
-            lblChartMonth.Text        = ok ? _chartMonths[_chartMonthIdx].ToString() : "—";
-            btnChartMonthPrev.Enabled = _chartMonthIdx > 0;
-            btnChartMonthNext.Enabled = _chartMonthIdx < _chartMonths.Count - 1;
+            int idx  = cbChartMonth.SelectedIndex;
+            int yIdx = cbChartYear.SelectedIndex;
+            bool ok  = idx >= 0 && idx < _chartMonths.Count && yIdx >= 0;
 
-            if (!ok || _chartYearIdx < 0) { lblChartDay.Text = "—"; return; }
-            int year  = _chartYears[_chartYearIdx];
-            int month = _chartMonths[_chartMonthIdx];
+            _chartDays = ok ? GetAvailableDays(_chartYears[yIdx], _chartMonths[idx]) : new List<int>();
+            RefillChartComboBox(cbChartDay, _chartDays);
 
+            if (!ok) return;
+            int year    = _chartYears[yIdx];
+            int month   = _chartMonths[idx];
             int lastDay = DateTime.DaysInMonth(year, month);
-            var start = new DateTime(year, month, 1);
-            var end   = new DateTime(year, month, lastDay, 23, 59, 59);
             FillPeriodChart(chartMonthly,
-                InspectionStatisticsService.ComputeGroupedByDayOfMonth(_statsDataRootPath, start, end));
+                InspectionStatisticsService.ComputeGroupedByDayOfMonth(_statsDataRootPath,
+                    new DateTime(year, month, 1), new DateTime(year, month, lastDay, 23, 59, 59)));
 
-            _chartDays   = GetAvailableDays(year, month);
-            _chartDayIdx = _chartDays.Count > 0 ? _chartDays.Count - 1 : -1;
             OnChartDayIndexChanged();
         }
 
         private void OnChartDayIndexChanged()
         {
-            bool ok = _chartDayIdx >= 0 && _chartDayIdx < _chartDays.Count;
-            lblChartDay.Text        = ok ? _chartDays[_chartDayIdx].ToString() : "—";
-            btnChartDayPrev.Enabled = _chartDayIdx > 0;
-            btnChartDayNext.Enabled = _chartDayIdx < _chartDays.Count - 1;
+            int dIdx = cbChartDay.SelectedIndex;
+            int mIdx = cbChartMonth.SelectedIndex;
+            int yIdx = cbChartYear.SelectedIndex;
+            bool ok  = dIdx >= 0 && mIdx >= 0 && yIdx >= 0
+                    && dIdx < _chartDays.Count && mIdx < _chartMonths.Count && yIdx < _chartYears.Count;
 
-            if (!ok || _chartYearIdx < 0 || _chartMonthIdx < 0) return;
-            int year  = _chartYears[_chartYearIdx];
-            int month = _chartMonths[_chartMonthIdx];
-            int day   = _chartDays[_chartDayIdx];
-
-            var start = new DateTime(year, month, day);
-            var end   = new DateTime(year, month, day, 23, 59, 59);
+            if (!ok) return;
+            int year  = _chartYears[yIdx];
+            int month = _chartMonths[mIdx];
+            int day   = _chartDays[dIdx];
             FillPeriodChart(chartDaily,
-                InspectionStatisticsService.ComputeGroupedByHourOfDay(_statsDataRootPath, start, end));
+                InspectionStatisticsService.ComputeGroupedByHourOfDay(_statsDataRootPath,
+                    new DateTime(year, month, day), new DateTime(year, month, day, 23, 59, 59)));
         }
 
         // ── Available values helpers ──────────────────────────────────────
@@ -1310,6 +1422,37 @@ namespace AniloxRoll.Monitor.Forms
                     int delta = (short)(((long)m.WParam >> 16) & 0xFFFF);
                     _bar.Value = Math.Max(_bar.Minimum, Math.Min(_bar.Maximum, _bar.Value + Math.Sign(delta)));
                     return; // 跳過原生 3 格行為
+                }
+                base.WndProc(ref m);
+            }
+        }
+
+        /// <summary>
+        /// 反轉 ComboBox 滾輪方向：上滾 (delta &gt; 0) → SelectedIndex 增加（數值變大）。
+        /// 預設 ComboBox 行為是上滾減少 index，此攔截器直接處理後 return，略過原生訊息。
+        /// </summary>
+        private sealed class ComboBoxWheelReverser : NativeWindow
+        {
+            private const int WM_MOUSEWHEEL = 0x020A;
+            private readonly ComboBox _cb;
+
+            public ComboBoxWheelReverser(ComboBox cb)
+            {
+                _cb = cb;
+                AssignHandle(cb.Handle);
+                cb.HandleCreated   += (s, e) => AssignHandle(_cb.Handle);
+                cb.HandleDestroyed += (s, e) => ReleaseHandle();
+            }
+
+            protected override void WndProc(ref Message m)
+            {
+                if (m.Msg == WM_MOUSEWHEEL)
+                {
+                    int delta  = (short)(((long)m.WParam >> 16) & 0xFFFF);
+                    int newIdx = _cb.SelectedIndex + Math.Sign(delta); // 正 delta = 上滾 = index++
+                    if (newIdx >= 0 && newIdx < _cb.Items.Count)
+                        _cb.SelectedIndex = newIdx;
+                    return; // 跳過原生行為（原生是上滾 index--）
                 }
                 base.WndProc(ref m);
             }

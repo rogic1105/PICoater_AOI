@@ -100,6 +100,18 @@ namespace AniloxRoll.Monitor.UI.Navigators
             return fallback;
         }
 
+        /// <summary>
+        /// 以指定時間為目標，更新 session state 後重新初始化 cascade，
+        /// 使各層 ComboBox 自動選到最接近該時間的項目。
+        /// </summary>
+        public void NavigateTo(DateTime dt)
+        {
+            UserSessionState.SaveDateTimeSelection(
+                dt.ToString("yyyy"), dt.ToString("MM"), dt.ToString("dd"),
+                dt.ToString("HH"), dt.ToString("mm"), dt.ToString("ss"));
+            Initialize(dt.ToString("yyyy"));
+        }
+
         public void SetPeriodToCombo(DateTime dt)
         {
             _cbYear.Text = dt.ToString("yyyy");

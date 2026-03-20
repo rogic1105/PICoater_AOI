@@ -410,7 +410,9 @@ private void UpdateExpMaxAndClampColor(int idx, int newMax)
 - 7 個 Panel 卡片：BackColor = 綠(≥95%) / 橙(80-95%) / 紅(<80%) / 灰(無資料)
 - `listViewStats` 5 欄彙總：相機 / Pass / Fail / Total / 良率（序號模式下分母=唯一序號數）
 - `listView1` 逐序號明細：序號 + CAM1~7（Pass/Fail/—），整行紅底 = 任一 CAM Fail
-- 控制項命名：`panelStatCam1`~7，`listViewStats`，`listViewGrabDetail`，`cbGrabIdStart`（序號起），`cbGrabIdEnd`（序號迄），`cbStart/EndYear/Month/Day/Hour/Min/Sec`，`btnQueryStats`，`btnSelectDataFolder`
+- 控制項命名：`panelStatCam1`~7，`listViewStats`，`listViewGrabDetail`，`cbGrabIdStart`（序號起），`cbGrabIdEnd`（序號迄），`cbDataGrabId`（單片選擇，位於 `grpDataSingleSheet`），`cbStart/EndYear/Month/Day/Hour/Min/Sec`，`btnQueryStats`，`btnSelectDataFolder`
+- tabPageReview 序號導航：`grpReviewGrabNav`（"序號跳轉"） > `cbReviewGrabId` / `btnReviewGrabPrev` / `btnReviewGrabNext`；選擇序號後立即 NavigateToDateTime + LoadImages
+- `ComboBoxWheelReverser` 適用清單：`cbGrabIdStart`、`cbGrabIdEnd`、`cbDataGrabId`、`cbReviewGrabId` 及所有時間 ComboBox
 
 ---
 
@@ -438,7 +440,7 @@ private void UpdateExpMaxAndClampColor(int idx, int newMax)
 - `chartMura` → Bottom|Left|Right
 - `listViewStats`、`listViewGrabDetail` → Top|Bottom|Left
 - `chartYearly`、`chartMonthly`、`chartDaily` → Bottom|Left|Right
-- `btnChartYear/Month/DayPrev/Next`、`lblChartYear/Month/Day` → Bottom|Left
+- `btnChartYear/Month/DayPrev/Next`、`cbChartYear/Month/Day` → Bottom|Left
 - `groupBoxTimeRange` → Top|Bottom|Right
 - `groupBoxGrabIdRange` → Bottom|Left|Right
 - `btnSelectDataFolder`、`btnQueryStats`、`btnShowFail` → Top|Bottom|Right
@@ -456,37 +458,104 @@ private void UpdateExpMaxAndClampColor(int idx, int newMax)
 ### 架構
 
 三張 `Chart`（`chartYearly` 月份 1–12 / `chartMonthly` 日期 1–31 / `chartDaily` 小時 0–23）
-共用 `InitOneChart()`，資料由 `InspectionStatisticsService.ComputeGroupedByXxx` 提供。
+共用 `InitOneChart(chart, xLabelAngle=0)`，資料由 `InspectionStatisticsService.ComputeGroupedByXxx` 提供。
 
-### Y 軸在右側的正確做法
+### 年月日導航：ComboBox + Prev/Next 按鈕
 
-與 MuraChart 不同（MuraChart 資料綁 Primary，AxisY2 只做標籤），Period Charts 採取：
-- 資料 Series 直接綁 `YAxisType.Secondary`
-- `AxisY`（左）：grid + label 全隱藏
-- `AxisY2`（右）：`Enabled=True`，淡格線，Minimum=0
+`lblChartYear/Month/Day`（Label）已替換為 `cbChartYear/Month/Day`（`ComboBoxStyle.DropDownList`）：
+
+- Prev/Next 按鈕直接操作 `cbChartXxx.SelectedIndex`
+- `cbChartXxx.SelectedIndexChanged` → `OnChartYearIndexChanged()` 等
+- `_chartNavUpdating` flag：`PopulateChartNavigators` 與各 `OnChartXxxIndexChanged` 填充子 ComboBox 時設 `true`，防止 cascade 期間重複觸發
 
 ```csharp
-area.AxisY.MajorGrid.Enabled  = false;
-area.AxisY.LabelStyle.Enabled = false;
-area.AxisY.Minimum            = 0;
+_chartNavUpdating = true;
+cbChartYear.Items.Clear();
+foreach (var y in _chartYears) cbChartYear.Items.Add(y.ToString());
+cbChartYear.SelectedIndex = _chartYears.Count > 0 ? _chartYears.Count - 1 : -1;
+_chartNavUpdating = false;
+OnChartYearIndexChanged();   // 手動觸發一次 cascade
+```
 
+### Y 軸在右側的正確做法（Period Charts）
+
+**最終架構**（與 MuraChart 相同 grid 策略）：
+- `AxisY`（Primary，左）：**驅動 MajorGrid**（dotted Light Gray）；`LabelStyle.Enabled=false`；scale 與 AxisY2 保持同步
+- `AxisY2`（Secondary，右）：`Enabled=True`；只顯示右側 label（`LabelStyle.Interval=niceMax`）；`MajorGrid.Enabled=false`
+- StackedColumn series 綁 `YAxisType.Secondary`
+
+```csharp
+// AxisY（Primary，左）— 只負責 grid，標籤隱藏
+area.AxisY.LabelStyle.Enabled = false;
+area.AxisY.MajorGrid.Enabled  = true;
+area.AxisY.MajorGrid.LineColor = Color.FromArgb(220, 220, 220);
+area.AxisY.MajorGrid.LineDashStyle = ChartDashStyle.Dot;
+area.AxisY.Minimum            = 0;
+area.AxisY.Maximum            = yDefault;
+area.AxisY.Interval           = yDefault / 5.0;
+
+// AxisY2（Secondary，右）— 只負責標籤，grid 關閉
 area.AxisY2.Enabled           = AxisEnabled.True;
-area.AxisY2.MajorGrid.LineColor = Color.FromArgb(220, 220, 220);
+area.AxisY2.MajorGrid.Enabled = false;
 area.AxisY2.Minimum           = 0;
+area.AxisY2.Maximum           = yDefault;
+area.AxisY2.Interval          = yDefault / 5.0;
+area.AxisY2.LabelStyle.Interval = yDefault;  // 只顯示 0 和 max
 
 sPass.YAxisType = AxisType.Secondary;
 sFail.YAxisType = AxisType.Secondary;
 ```
 
+**重要**：AxisY 與 AxisY2 的 Maximum / Interval 必須在 `InitOneChart` 和 `FillPeriodChart` 兩處同步更新，否則 grid 間距與 Y2 標籤不對齊。
+
 > MuraChart 不能這樣做：其 StripLines 必須綁 Primary AxisY 才能渲染（見 MuraChart 閾值參考線段落）。
 
-### InnerPlotPosition 左邊界
+### StackedColumn 啟動空白問題（必讀陷阱）
 
-Y 軸在右側後，左邊不再需要留空間給刻度標籤，`InnerPlotPosition.X` 可縮到 1f：
+**症狀**：`InitOneChart` 設好 grid/axis 後，Form 一開啟三張圖表完全空白（無 grid、無軸線、無刻度）。載入資料後才正常顯示。
+
+**根本原因**：StackedColumn 使用類別型 X 軸（字串類別），沒有資料點就沒有 X 類別，chart area 整個不渲染（包括 grid 和 axis）。
+
+**解法**：`InitOneChart` 加 `xCount`/`xStart` 參數，預填 zero-value 資料點建立 X 類別：
 
 ```csharp
-area.InnerPlotPosition.X      = 1f;   // 左邊界最小化
-area.InnerPlotPosition.Width  = 92f;  // 右邊留空間給 AxisY2 標籤
+// 預填佔位符（年=月份1-12，月=日期1-31，日=小時0-23）
+if (xCount > 0)
+    for (int i = 0; i < xCount; i++)
+    {
+        sPass.Points.AddXY((xStart + i).ToString(), 0);
+        sFail.Points.AddXY((xStart + i).ToString(), 0);
+    }
+```
+
+`FillPeriodChart` 開頭呼叫 `Points.Clear()` 再填真實資料，佔位符不影響正式顯示。
+
+### FillPeriodChart 動態軸同步
+
+```csharp
+int maxTotal = data.Max(p => p.Pass + p.Fail);
+int niceMax  = Math.Max(5, (int)(Math.Ceiling(maxTotal / 5.0) * 5));
+double yMax  = niceMax * 1.05;
+double yStep = niceMax / 5.0;
+// AxisY 和 AxisY2 兩軸必須同步
+area.AxisY.Maximum               = yMax;
+area.AxisY.Interval              = yStep;
+area.AxisY.MajorGrid.Interval    = yStep;
+area.AxisY2.Maximum              = yMax;
+area.AxisY2.Interval             = yStep;
+area.AxisY2.LabelStyle.Interval  = niceMax;  // 只顯示 0 和 niceMax
+```
+
+預設 Y 軸最大值（無資料時）：chartYearly=60000，chartMonthly=2000，chartDaily=300。
+
+### InnerPlotPosition
+
+```csharp
+area.InnerPlotPosition.Auto   = false;
+area.InnerPlotPosition.X      = 0f;   // 左邊界貼齊（Y 軸已移至右側，左邊不需留空）
+area.InnerPlotPosition.Y      = 12f;  // 上邊留 12% 給標題
+area.InnerPlotPosition.Width  = 93f;
+area.InnerPlotPosition.Height = 66f;
 ```
 
 ---

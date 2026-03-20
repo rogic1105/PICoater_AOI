@@ -49,11 +49,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _listView.Columns.Clear();
             _listView.Items.Clear();
 
-            _listView.Columns.Add("相機",  60);
-            _listView.Columns.Add("Pass", 70);
-            _listView.Columns.Add("Fail", 70);
-            _listView.Columns.Add("Total",70);
-            _listView.Columns.Add("無異常",  80);
+            _listView.Columns.Add("相機");
+            _listView.Columns.Add("Pass");
+            _listView.Columns.Add("Fail");
+            _listView.Columns.Add("Total");
+            _listView.Columns.Add("無異常");
 
             for (int i = 1; i <= 7; i++)
             {
@@ -63,6 +63,15 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 item.SubItems.Add("—");
                 item.SubItems.Add("—");
                 _listView.Items.Add(item);
+            }
+
+            // 初始欄寬：依標題與初始內容自動最適配
+            for (int i = 0; i < _listView.Columns.Count; i++)
+            {
+                _listView.AutoResizeColumn(i, ColumnHeaderAutoResizeStyle.ColumnContent);
+                int w = _listView.Columns[i].Width;
+                _listView.AutoResizeColumn(i, ColumnHeaderAutoResizeStyle.HeaderSize);
+                if (w > _listView.Columns[i].Width) _listView.Columns[i].Width = w;
             }
         }
 

@@ -196,6 +196,9 @@ namespace AniloxRoll.Monitor.UI.Widgets
             }
         }
 
+        // ── 時間導航 ──────────────────────────────────────────────────────
+        public void NavigateToDateTime(DateTime dt) => _timeNavigator.NavigateTo(dt);
+
         // ── 資料夾選擇 ────────────────────────────────────────────────────
         public void SelectAndLoadFolder()
         {

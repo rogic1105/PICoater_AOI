@@ -78,7 +78,7 @@ CoreCV_FastReadBMP  →  AoiService.ProcessImage  →  CoreCV_Resize_GPU  →  C
 | `src_dotnet/AniloxRoll.Monitor/ImageProcessing/InspectionEngine.ImageProcessing.cs` | 縮圖/全解析度影像處理 |
 | `src_dotnet/AniloxRoll.Monitor/ImageProcessing/InspectionEngineConfig.cs` | MaxWidth=16384, MaxHeight=10000, DefaultSaveResizeScale=5, DefaultSaveJpgQuality=90 |
 | `src_dotnet/AniloxRoll.Monitor/ImageProcessing/BatchInspectionService.cs` | Parallel.For 批次縮圖 |
-| `src_dotnet/AniloxRoll.Monitor/UI/Widgets/FormInteractionHelper.cs` | UI 互動、gallery 選擇、計時 |
+| `src_dotnet/AniloxRoll.Monitor/UI/Widgets/FormInteractionHelper.cs` | UI 互動、gallery 選擇、計時；`NavigateToDateTime(DateTime)` → `_timeNavigator.NavigateTo(dt)` |
 | `src_dotnet/AniloxRoll.Monitor/UI/Form/AniloxRollForm.cs` | Form 邏輯：事件、InitializeSystem、右側面板初始化、SyncCameraParamsFromHardware、TelemetryTimer、Period Charts (InitOneChart/FillPeriodChart/PopulateChartNavigators) |
 | `src_dotnet/AniloxRoll.Monitor/UI/Presenters/LiveTelemetryPresenter.cs` | listViewCameras 16 欄即時 Telemetry（每 500ms 更新） |
 | `src_dotnet/AniloxRoll.Monitor/UI/Form/AniloxRollForm.Designer.cs` | Form 控制項佈局（VS Designer 管理）；主要控制項已設 Anchor 支援視窗放大縮小 |
@@ -89,6 +89,7 @@ CoreCV_FastReadBMP  →  AoiService.ProcessImage  →  CoreCV_Resize_GPU  →  C
 | `src_dotnet/AniloxRoll.Monitor/Settings/Stores/AcquisitionSettingsStore.cs` | 讀寫 `Config\acquisition-settings.json`（tabPageCamera 的唯一持久化入口） |
 | `src_dotnet/AniloxRoll.Monitor/Settings/System/SystemSettings.cs` | 相機硬體拓樸設定（CameraHardwareConfig 清單） |
 | `src_dotnet/AniloxRoll.Monitor/UI/State/UserSessionState.cs` | UI session 狀態持久化（LastDataPath / 時間篩選 / LastEnableImageProcessing / LastGrabIdNum）→ `Config\session-state.json` |
+| `src_dotnet/AniloxRoll.Monitor/UI/Navigators/DateTimeNavigator.cs` | 時間篩選 ComboBox cascade 管理；`NavigateTo(DateTime)` 將目標時間存入 SessionState 再重新 cascade 初始化 |
 | `src_dotnet/AniloxRoll.Monitor/UI/Widgets/FormInteractionHelper.cs` | `SelectAndLoadFolder`：選擇資料夾後先 `SetLastDataPath`+`Save()` 再掃描檔案 |
 | `src_dotnet/AniloxRoll.Monitor/Acquisition/Inspection/InspectionData.cs` | 檢測結果資料物件（Image/MuraCurveMean/MuraCurveMax/IsCompressedJpeg/ScaleFactor） |
 | `src_dotnet/AniloxRoll.Monitor/ImageCatalog/ImageRepository.cs` | 掃描目錄建立索引，同時掃 `*_raw.jpg` + `*.bmp` 兩種格式 |
@@ -104,7 +105,7 @@ CoreCV_FastReadBMP  →  AoiService.ProcessImage  →  CoreCV_Resize_GPU  →  C
 
 頂部有 `panelStatusBar`（Dock=Top，Height=32），內含 `lblStatusGrab`（Dock=Fill，IEC 60073 訊號燈，待機=灰、抓取中=綠）。
 
-Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×654），包含 3 個 Tab：
+Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×741），包含 3 個 Tab：
 
 | Tab（Name） | Tab Text | 控制項 | 內容 |
 |-------------|----------|--------|------|
@@ -130,6 +131,7 @@ Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×654），�
 - `lblImageFormat`（Y=400）：顯示目前圖片格式，"壓縮 JPEG" / "原始 BMP"
 - `lblImageScale`（Y=424）：顯示壓縮倍率，"縮放: 5x" / "縮放: 1x"
 - 由 `FormInteractionHelper.OnGallerySelectionChanged` 透過 `data.IsCompressedJpeg` / `data.ScaleFactor` 更新
+- `grpReviewGrabNav`（GroupBox，Location=1082,450，Size=96×90，Text="序號跳轉"）：含 `cbReviewGrabId`（DropDownList，選擇序號）、`btnReviewGrabPrev`（"<"）、`btnReviewGrabNext`（">"）；選擇後立即呼叫 `OnReviewGrabIdChanged` → `NavigateToDateTime(info.Earliest)` + `LoadImagesWithPeriodLockAsync`；Prev/Next 按鈕透過 `StepReviewGrabId(±1)` 操作 `cbReviewGrabId.SelectedIndex` 觸發同一事件
 
 ### tabPageData 控制項
 
@@ -142,18 +144,28 @@ Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×654），�
 | ComboBox | `cbGrabIdEnd` | 序號迄（選擇後自動更新 cbEnd 時間 + 統計） |
 | Start 時間 | `cbStartYear/Month/Day/Hour/Min/Sec` | 統計起始時間（cascading，僅顯示資料中存在的值） |
 | End 時間 | `cbEndYear/Month/Day/Hour/Min/Sec` | 統計結束時間（cascading，start ≤ end 強制 clamp） |
-| `btnSelectDataFolder` | "讀取資料夾" | 選擇 CaptureRootPath，載入後自動填充 cbGrabIdStart/End 及時間 |
+| `btnSelectDataFolder` | "讀取資料夾" | 選擇 CaptureRootPath，載入後自動填充 cbGrabIdStart/End 及時間；同時填充 `cbReviewGrabId` |
 | `btnQueryStats` | "統計數據" | 手動觸發 RefreshStats() |
-| `btnShowFail` | "篩選瑕疵" | Toggle：只顯示 listViewGrabDetail 中有 Fail 的序號 |
-| Chart × 3 | `chartYearly`/`chartMonthly`/`chartDaily` | StackedColumn（合格=綠/瑕疵=紅），Y 軸在右側（AxisY2+Secondary），X 軸直式標籤（Angle=-90） |
-| 年月日導航 | `btnChartYearPrev/Next`、`lblChartYear`（同理月/日） | < value > 箭頭選取年/月/日，Anchor=Bottom\|Left（跟圖表底部對齊） |
+| `btnShowFail` | "篩選異常" | Toggle：只顯示 listViewGrabDetail 中有 Fail 的序號（切換後文字改為"顯示全部"） |
+| GroupBox | `grpDataSingleSheet`（Text="單片資訊"） | 含 `lblDataGrabId` + `cbDataGrabId`（序號下拉）；選擇後自動設 cbGrabIdStart==cbGrabIdEnd，同步時間欄位，觸發 RefreshStats |
+| Chart × 3 | `chartYearly`/`chartMonthly`/`chartDaily` | StackedColumn（合格=綠/異常=紅）；Y 軸在右側（AxisY2 Labels）；AxisY（Primary）驅動水平 grid；X 軸水平標籤（Angle=0）；Y 軸預設：年=60000、月=2000、日=300 |
+| 年月日導航 | `btnChartYearPrev/Next` + `cbChartYear`（同理月/日） | < ComboBox > 箭頭操作 SelectedIndex；Anchor=Bottom\|Left（跟圖表底部對齊） |
 
 初始化：`InitializeSystem()` → `SetupDataTab()` → `InspectionStatsPresenter.Initialize()` + `InitGrabDetailListView()`
 
 **Period Charts 資料流**：
-- `BtnSelectDataFolder_Click` → `PopulateChartNavigators()` → `UpdatePeriodCharts(MinValue, MaxValue)` （整個資料夾，不跟 QueryStats 範圍）
-- 年/月/日切換 → `OnChartYearIndexChanged` → `OnChartMonthIndexChanged` → `OnChartDayIndexChanged`（cascade）
+- `BtnSelectDataFolder_Click` → `PopulateChartNavigators()` → 填充 `cbChartYear` items，觸發 cascade → `OnChartYearIndexChanged` → `OnChartMonthIndexChanged` → `OnChartDayIndexChanged`
+- 年/月/日切換：`cbChartYear/Month/Day.SelectedIndexChanged` 觸發對應 `OnChartXxxIndexChanged()`；Prev/Next 按鈕操作 `cbChartXxx.SelectedIndex`
+- `_chartNavUpdating = true` 在 `PopulateChartNavigators` / `OnChartYearIndexChanged` / `OnChartMonthIndexChanged` 填充子 ComboBox 時設置，防止 `SelectedIndexChanged` 重複觸發 cascade
 - `InspectionStatisticsService.ComputeGroupedByMonthOfYear/DayOfMonth/HourOfDay`：固定 12/31/24 個 bucket，空的顯示 0
+- `FillPeriodChart` 動態軸：`niceMax = max(5, ceil(maxTotal/5)*5)`，5 等分格線，只顯示 0 和 niceMax 兩個標籤；AxisY 與 AxisY2 兩軸 Maximum/Interval 必須同步
+
+**Period Charts 軸線架構**（`InitOneChart` + `FillPeriodChart`）：
+- `AxisY`（Primary，左）：隱藏 label，但**驅動 MajorGrid**（dotted，Light Gray），`Minimum=0`，`Maximum/Interval` 與 AxisY2 同步
+- `AxisY2`（Secondary，右）：`Enabled=True`，顯示右側 label（只顯示 0 和 niceMax），`MajorGrid.Enabled=false`
+- StackedColumn series 綁 `YAxisType.Secondary`
+- **StackedColumn 空白啟動問題**：無資料時整個 chart area 空白（無 grid/軸/刻度），因為沒有 X 類別。解法：`InitOneChart` 傳入 `xCount`/`xStart` 預填 zero-value 資料點（月份=1–12，日期=1–31，小時=0–23）；`FillPeriodChart` 先 `Points.Clear()` 再填真實資料，佔位符不影響正式資料
+- `InnerPlotPosition`：`X=0, Y=12, Width=93, Height=66`（左邊界貼齊，上邊留 12% 給標題）
 
 **統計模式**：
 - 序號模式（cbGrabIdStart/End 已選）→ `ComputeByGrabIdRange` + `ComputeDetailedByGrabIdRange`；分母 = 唯一序號數；同一序號同一相機任一張超標即 Fail
