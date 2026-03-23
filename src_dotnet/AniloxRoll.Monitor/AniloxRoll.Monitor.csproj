@@ -76,6 +76,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Acquisition\AniloxCamera.cs" />
+    <Compile Include="Acquisition\CaptureTimestampCoordinator.cs" />
     <Compile Include="ImageProcessing\MIL\CameraImageProcessor.cs" />
     <Compile Include="Acquisition\CameraSystemManager.cs" />
     <Compile Include="ImageCatalog\ImageMetadata.cs" />

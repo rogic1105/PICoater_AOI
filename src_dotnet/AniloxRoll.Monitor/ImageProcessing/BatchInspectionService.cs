@@ -112,6 +112,13 @@ namespace AniloxRoll.Monitor.Core.Services
             return _sharedProcessor.RunInspectionFullRes(path, _isProcessedMode, _hessianMaxFactor); // <--- 確認這裡
         }
 
+        /// <summary>
+        /// BMP 拼接專用：CoreCV_FastReadBMP + GPU resize 縮 scale 倍，回傳 Bitmap。
+        /// 比 GDI+ new Bitmap(path) 快約 10x。
+        /// </summary>
+        public Bitmap LoadBmpAtScale(string path, int scale) =>
+            _sharedProcessor.LoadBitmapAtScale(path, scale);
+
         public void Dispose()
         {
             _sharedProcessor?.Dispose();

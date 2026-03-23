@@ -87,7 +87,13 @@ namespace AniloxRoll.Monitor.Core.Camera
         private readonly AoiService _aoiService = new AoiService();
         private NativeBufferPool _nativeBufferPool;
 
-        private string _lastCaptureSecondKey = string.Empty;
+        private string _lastCaptureKey = string.Empty;
+
+        /// <summary>
+        /// 同 Line Rate 相機共用時間戳協調器。由 LiveCameraManager 注入。
+        /// 為 null 時各台獨立使用 DateTime.Now。
+        /// </summary>
+        public CaptureTimestampCoordinator TimestampCoordinator { get; set; }
 
         // ==================== Save Format (resize + JPEG) ====================
         private int _saveResizeScale = 5;
@@ -832,17 +838,28 @@ namespace AniloxRoll.Monitor.Core.Camera
             try
             {
                 DateTime now = DateTime.Now;
-                string secondKey = now.ToString("yyyyMMdd_HHmmss");
-                if (string.Equals(_lastCaptureSecondKey, secondKey, StringComparison.Ordinal)) return;
+                // 同 Line Rate 的相機共用時間戳，讓同一輪 grab 的檔名一致
+                if (TimestampCoordinator != null && _appliedLineRateHz > 0)
+                    now = TimestampCoordinator.Coordinate((int)_appliedLineRateHz, now);
+
+                string captureKey = now.ToString("yyyyMMdd_HHmmss.fff");
+                if (string.Equals(_lastCaptureKey, captureKey, StringComparison.Ordinal)) return;
+
+                // 提前更新，防止 Task.Run 延遲期間下一幀重複觸發存檔
+                _lastCaptureKey = captureKey;
 
                 string saveDir = Path.Combine(
                     CaptureRootPath,
                     now.ToString("yyyy"),
                     now.ToString("yyyyMM"),
                     now.ToString("yyyyMMdd"));
-                Directory.CreateDirectory(saveDir);
 
-                string baseName = $"{now:yyyyMMdd_HHmmss}-{CameraId}";
+                string baseName = $"{now:yyyyMMdd_HHmmss.fff}-{CameraId}";
+
+                byte[] rawBytes = null, procBytes = null;
+                float[] meanArr = null, maxArr = null;
+                int rw = _resizeWidth, rh = _resizeHeight;
+                bool useCompressed = false;
 
                 lock (_picoaterLock)
                 {
@@ -851,35 +868,80 @@ namespace AniloxRoll.Monitor.Core.Camera
                         _rawResizeBuf  != IntPtr.Zero &&
                         _procResizeBuf != IntPtr.Zero)
                     {
-                        // 新格式：GPU resize → JPEG × 2 + .bin × 2
+                        useCompressed = true;
+
+                        // GPU resize（快速，在 callback 執行緒完成）
                         NativeMethods.CoreCV_Resize_GPU(
                             _nativeBufferPool.InputBuffer, _frameWidth, _frameHeight,
-                            _rawResizeBuf, _resizeWidth, _resizeHeight);
-
+                            _rawResizeBuf, rw, rh);
                         NativeMethods.CoreCV_Resize_GPU(
                             _nativeBufferPool.RidgeBuffer, _frameWidth, _frameHeight,
-                            _procResizeBuf, _resizeWidth, _resizeHeight);
+                            _procResizeBuf, rw, rh);
 
-                        SaveJpegFromPinned(_rawResizeBuf,  _resizeWidth, _resizeHeight,
-                            Path.Combine(saveDir, baseName + "_raw.jpg"),  _saveJpgQuality);
-                        SaveJpegFromPinned(_procResizeBuf, _resizeWidth, _resizeHeight,
-                            Path.Combine(saveDir, baseName + "_proc.jpg"), _saveJpgQuality);
+                        // 複製至 managed 陣列，讓 callback 可以立即返回，I/O 移至 Task.Run
+                        int pixels = rw * rh;
+                        rawBytes  = new byte[pixels];
+                        procBytes = new byte[pixels];
+                        Marshal.Copy(_rawResizeBuf,  rawBytes,  0, pixels);
+                        Marshal.Copy(_procResizeBuf, procBytes, 0, pixels);
 
                         int curveLen = _nativeBufferPool.CurveBufferSize / sizeof(float);
-                        SaveCurveBin(_nativeBufferPool.CurveMeanBuffer, curveLen, _saveResizeScale,
-                            Path.Combine(saveDir, baseName + "_mean.bin"));
-                        SaveCurveBin(_nativeBufferPool.CurveMaxBuffer,  curveLen, _saveResizeScale,
-                            Path.Combine(saveDir, baseName + "_max.bin"));
-                    }
-                    else
-                    {
-                        // Fallback：直接存原始 BMP（舊行為）
-                        MIL.MbufExport(Path.Combine(saveDir, baseName + ".bmp"), MIL.M_BMP, sourceBuffer);
+                        if (curveLen > 0 &&
+                            _nativeBufferPool.CurveMeanBuffer != IntPtr.Zero &&
+                            _nativeBufferPool.CurveMaxBuffer  != IntPtr.Zero)
+                        {
+                            meanArr = new float[curveLen];
+                            maxArr  = new float[curveLen];
+                            Marshal.Copy(_nativeBufferPool.CurveMeanBuffer, meanArr, 0, curveLen);
+                            Marshal.Copy(_nativeBufferPool.CurveMaxBuffer,  maxArr,  0, curveLen);
+                        }
                     }
                 }
 
-                _lastCaptureSecondKey = secondKey;
-                OnInspectionResult?.Invoke(CameraId, baseName, _lastMeanPeak, _lastMaxPeak);
+                // 快照目前峰值（callback 執行緒讀取，Task.Run 不回讀共享狀態）
+                float meanPeak = _lastMeanPeak;
+                float maxPeak  = _lastMaxPeak;
+                int   camId    = CameraId;
+                int   scale    = _saveResizeScale;
+                int   quality  = _saveJpgQuality;
+
+                if (useCompressed)
+                {
+                    // 所有磁碟 I/O 移至背景執行緒，callback 立即返回，不阻塞連續抓圖
+                    Task.Run(() =>
+                    {
+                        try
+                        {
+                            Directory.CreateDirectory(saveDir);
+                            SaveJpegFromBytes(rawBytes,  rw, rh,
+                                Path.Combine(saveDir, baseName + "_raw.jpg"),  quality);
+                            SaveJpegFromBytes(procBytes, rw, rh,
+                                Path.Combine(saveDir, baseName + "_proc.jpg"), quality);
+
+                            if (meanArr != null)
+                            {
+                                SaveCurveBinFromArray(meanArr, scale,
+                                    Path.Combine(saveDir, baseName + "_mean.bin"));
+                                SaveCurveBinFromArray(maxArr,  scale,
+                                    Path.Combine(saveDir, baseName + "_max.bin"));
+                            }
+
+                            OnInspectionResult?.Invoke(camId, baseName, meanPeak, maxPeak);
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Trace.WriteLine(
+                                $"[CAM{camId}] TrySaveCapture(bg) failed: {ex.GetType().Name}: {ex.Message}");
+                        }
+                    });
+                }
+                else
+                {
+                    // BMP fallback（舊格式，全解析度，同步存）
+                    Directory.CreateDirectory(saveDir);
+                    MIL.MbufExport(Path.Combine(saveDir, baseName + ".bmp"), MIL.M_BMP, sourceBuffer);
+                    OnInspectionResult?.Invoke(CameraId, baseName, _lastMeanPeak, _lastMaxPeak);
+                }
             }
             catch (Exception ex)
             {
@@ -917,45 +979,50 @@ namespace AniloxRoll.Monitor.Core.Camera
         }
 
         /// <summary>
-        /// 將 8-bit 灰階 pinned memory 存成 JPEG。
-        /// GDI+ JPEG encoder 需要 24bpp，透過 Graphics.DrawImage 轉換。
+        /// 將 8-bit 灰階 byte[] 存成 JPEG（在 Task.Run 背景執行緒呼叫）。
+        /// GDI+ JPEG encoder 需要 24bpp，透過 GCHandle pin + Graphics.DrawImage 轉換。
         /// </summary>
-        private static void SaveJpegFromPinned(IntPtr buffer, int w, int h, string path, int quality)
+        private static void SaveJpegFromBytes(byte[] data, int w, int h, string path, int quality)
         {
-            using (var bmp8  = ImageUtils.Create8bppBitmap(buffer, w, h))
-            using (var bmp24 = new Bitmap(w, h, PixelFormat.Format24bppRgb))
-            using (var g     = Graphics.FromImage(bmp24))
+            var gch = GCHandle.Alloc(data, GCHandleType.Pinned);
+            try
             {
-                g.DrawImage(bmp8, 0, 0, w, h);
-
-                var codec  = GetJpegEncoder();
-                if (codec == null) { bmp24.Save(path); return; }
-
-                using (var ep = new EncoderParameters(1))
+                using (var bmp8  = ImageUtils.Create8bppBitmap(gch.AddrOfPinnedObject(), w, h))
+                using (var bmp24 = new Bitmap(w, h, PixelFormat.Format24bppRgb))
+                using (var g     = Graphics.FromImage(bmp24))
                 {
-                    ep.Param[0] = new EncoderParameter(Encoder.Quality, (long)quality);
-                    bmp24.Save(path, codec, ep);
+                    g.DrawImage(bmp8, 0, 0, w, h);
+
+                    var codec = GetJpegEncoder();
+                    if (codec == null) { bmp24.Save(path); return; }
+
+                    using (var ep = new EncoderParameters(1))
+                    {
+                        ep.Param[0] = new EncoderParameter(Encoder.Quality, (long)quality);
+                        bmp24.Save(path, codec, ep);
+                    }
                 }
+            }
+            finally
+            {
+                gch.Free();
             }
         }
 
         /// <summary>
-        /// 將 float[] 曲線資料寫成自描述 .bin 格式。
+        /// 將 float[] 曲線資料寫成自描述 .bin 格式（在 Task.Run 背景執行緒呼叫）。
         /// Header: magic(4)"MCBF" + version(4)=1 + scale_factor(4f) + array_length(4) + float[]
         /// </summary>
-        private static void SaveCurveBin(IntPtr buffer, int curveLen, int scaleForHeader, string path)
+        private static void SaveCurveBinFromArray(float[] arr, int scaleForHeader, string path)
         {
-            if (buffer == IntPtr.Zero || curveLen <= 0) return;
-            float[] arr = new float[curveLen];
-            Marshal.Copy(buffer, arr, 0, curveLen);
-
+            if (arr == null || arr.Length == 0) return;
             using (var bw = new BinaryWriter(File.Open(path, FileMode.Create, FileAccess.Write)))
             {
                 bw.Write(new byte[] { (byte)'M', (byte)'C', (byte)'B', (byte)'F' });
                 bw.Write(1);                        // version
                 bw.Write((float)scaleForHeader);    // scale_factor（JPEG 縮小倍率，供讀取時參考）
-                bw.Write(curveLen);                 // array_length
-                for (int i = 0; i < curveLen; i++)
+                bw.Write(arr.Length);               // array_length
+                for (int i = 0; i < arr.Length; i++)
                     bw.Write(arr[i]);
             }
         }

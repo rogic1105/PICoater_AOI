@@ -440,7 +440,6 @@ namespace AniloxRoll.Monitor.Forms
                     _dragging.Remove(_expBars[idx]);
                     // 拖曳結束：補送一次硬體寫入（拖曳中被抑制）
                     _liveCameraManager?.SetExposureForCamera(camId, _expBars[idx].Value);
-                    ConfigManager.SaveAcquisitionSettings(acq);
                     _liveCameraManager?.SwitchToCamera(camId);
                 };
                 _expBars[idx].ValueChanged += (s, e) =>
@@ -448,11 +447,9 @@ namespace AniloxRoll.Monitor.Forms
                     if (syncExp || _syncingFromHw) return; syncExp = true;
                     _expNums[idx].Value = _expBars[idx].Value;
                     acq.CameraExposureTimeUs[idx] = _expBars[idx].Value;
+                    ConfigManager.SaveAcquisitionSettings(acq);
                     if (!_dragging.Contains(_expBars[idx]))
-                    {
                         _liveCameraManager?.SetExposureForCamera(camId, _expBars[idx].Value);
-                        ConfigManager.SaveAcquisitionSettings(acq);
-                    }
                     syncExp = false;
                 };
                 _expNums[idx].ValueChanged += (s, e) =>
@@ -461,8 +458,8 @@ namespace AniloxRoll.Monitor.Forms
                     int v = (int)_expNums[idx].Value;
                     _expBars[idx].Value = Math.Max(ExpMin, Math.Min(_expBars[idx].Maximum, v));
                     acq.CameraExposureTimeUs[idx] = v;
-                    _liveCameraManager?.SetExposureForCamera(camId, v);
                     ConfigManager.SaveAcquisitionSettings(acq);
+                    _liveCameraManager?.SetExposureForCamera(camId, v);
                     syncExp = false;
                 };
 
@@ -478,7 +475,6 @@ namespace AniloxRoll.Monitor.Forms
                 {
                     _dragging.Remove(_lrBars[idx]);
                     _liveCameraManager?.SetLineRateForCamera(camId, _lrBars[idx].Value);
-                    ConfigManager.SaveAcquisitionSettings(acq);
                     _liveCameraManager?.SwitchToCamera(camId);
                 };
                 _lrBars[idx].ValueChanged += (s, e) =>
@@ -486,11 +482,9 @@ namespace AniloxRoll.Monitor.Forms
                     if (syncLr || _syncingFromHw) return; syncLr = true;
                     _lrNums[idx].Value = _lrBars[idx].Value;
                     acq.CameraLineRateHz[idx] = _lrBars[idx].Value;
+                    ConfigManager.SaveAcquisitionSettings(acq);
                     if (!_dragging.Contains(_lrBars[idx]))
-                    {
                         _liveCameraManager?.SetLineRateForCamera(camId, _lrBars[idx].Value);
-                        ConfigManager.SaveAcquisitionSettings(acq);
-                    }
                     UpdateExpMaxAndClampColor(idx, CalcExpMax());
                     syncLr = false;
                 };
@@ -500,8 +494,8 @@ namespace AniloxRoll.Monitor.Forms
                     int v = (int)_lrNums[idx].Value;
                     _lrBars[idx].Value = Math.Max(LrMin, Math.Min(LrMax, v));
                     acq.CameraLineRateHz[idx] = v;
-                    _liveCameraManager?.SetLineRateForCamera(camId, v);
                     ConfigManager.SaveAcquisitionSettings(acq);
+                    _liveCameraManager?.SetLineRateForCamera(camId, v);
                     UpdateExpMaxAndClampColor(idx, CalcExpMax());
                     syncLr = false;
                 };
@@ -520,7 +514,6 @@ namespace AniloxRoll.Monitor.Forms
                     _dragging.Remove(_htBars[idx]);
                     // SetGrabHeight 代價高（重分配 Buffer），拖曳結束才執行一次
                     _liveCameraManager?.SetGrabHeightForCamera(camId, _htBars[idx].Value);
-                    ConfigManager.SaveAcquisitionSettings(acq);
                     _liveCameraManager?.SwitchToCamera(camId);
                 };
                 _htBars[idx].ValueChanged += (s, e) =>
@@ -528,11 +521,9 @@ namespace AniloxRoll.Monitor.Forms
                     if (syncHt || _syncingFromHw) return; syncHt = true;
                     _htNums[idx].Value = _htBars[idx].Value;
                     acq.CameraGrabHeight[idx] = _htBars[idx].Value;
+                    ConfigManager.SaveAcquisitionSettings(acq);
                     if (!_dragging.Contains(_htBars[idx]))
-                    {
                         _liveCameraManager?.SetGrabHeightForCamera(camId, _htBars[idx].Value);
-                        ConfigManager.SaveAcquisitionSettings(acq);
-                    }
                     syncHt = false;
                 };
                 _htNums[idx].ValueChanged += (s, e) =>
@@ -541,8 +532,8 @@ namespace AniloxRoll.Monitor.Forms
                     int v = (int)_htNums[idx].Value;
                     _htBars[idx].Value = Math.Max(HtMin, Math.Min(HtMax, v));
                     acq.CameraGrabHeight[idx] = v;
-                    _liveCameraManager?.SetGrabHeightForCamera(camId, v);
                     ConfigManager.SaveAcquisitionSettings(acq);
+                    _liveCameraManager?.SetGrabHeightForCamera(camId, v);
                     syncHt = false;
                 };
             }
@@ -798,6 +789,8 @@ namespace AniloxRoll.Monitor.Forms
                                   cbStartHour, cbStartMin, cbStartSec, out start)) return false;
             if (!TryBuildDateTime(cbEndYear,   cbEndMonth,   cbEndDay,
                                   cbEndHour,   cbEndMin,     cbEndSec,   out end))   return false;
+            // 秒級 ComboBox 無毫秒，將 end 推至該秒末尾以涵蓋所有毫秒
+            end = end.AddMilliseconds(999);
             return start <= end;
         }
 
@@ -1027,37 +1020,51 @@ namespace AniloxRoll.Monitor.Forms
 
             var info = _grabIdInfos[idx];
             _interactionHelper.NavigateToDateTime(info.Earliest);
-            await LoadGrabStitchedViewAsync(info.GrabId);
+            await LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest);
         }
 
-        private async Task LoadGrabStitchedViewAsync(string grabId)
+        private async Task LoadGrabStitchedViewAsync(string grabId, DateTime hintFrom, DateTime hintTo)
         {
             string root = !string.IsNullOrWhiteSpace(UserSessionState.LastDataPath)
                           ? UserSessionState.LastDataPath : _statsDataRootPath;
             if (string.IsNullOrWhiteSpace(root)) return;
 
             _interactionHelper.SetUiLoadingState(true);
+            var swTotal = Stopwatch.StartNew();
             try
             {
-                var grouped = await Task.Run(() =>
-                    InspectionStatisticsService.LoadImagePathsForGrabId(root, grabId));
-
+                // CSV 掃描 + 拼接合併成一個 Task.Run，減少 thread pool 排程開銷；
+                // CSV 掃描以 hintFrom/hintTo 限縮到相關日期（通常只有 1 個 CSV）
+                long csvMs = 0, stitchMs = 0;
                 var newImages = await Task.Run(() =>
                 {
+                    var swCsv = Stopwatch.StartNew();
+                    var grouped = InspectionStatisticsService.LoadImagePathsForGrabId(
+                        root, grabId, hintFrom, hintTo);
+                    csvMs = swCsv.ElapsedMilliseconds;
+
+                    var swStitch = Stopwatch.StartNew();
+                    // BMP 路徑改走 CoreCV_FastReadBMP + GPU resize（比 GDI+ 快約 10x）
+                    Func<string, Bitmap> bmpLoader = _inspectionService != null
+                        ? (Func<string, Bitmap>)(p => _inspectionService.LoadBmpAtScale(
+                              p, InspectionEngineConfig.DefaultSaveResizeScale))
+                        : null;
                     var imgs = new Bitmap[7];
                     for (int i = 0; i < 7; i++)
                     {
                         int camId = i + 1;
                         if (grouped.TryGetValue(camId, out var paths) && paths.Count > 0)
                         {
-                            try { imgs[i] = GrabImageStitcher.StitchCamera(paths); }
+                            try { imgs[i] = GrabImageStitcher.StitchCamera(
+                                      paths, InspectionEngineConfig.DefaultSaveResizeScale, bmpLoader); }
                             catch (Exception ex)
                             {
                                 System.Diagnostics.Trace.WriteLine(
-                                    $"[LoadGrabStitchedViewAsync] CAM{camId}: {ex.GetType().Name}: {ex.Message}");
+                                    $"[StitchView] CAM{camId}: {ex.GetType().Name}: {ex.Message}");
                             }
                         }
                     }
+                    stitchMs = swStitch.ElapsedMilliseconds;
                     return imgs;
                 });
 
@@ -1065,6 +1072,8 @@ namespace AniloxRoll.Monitor.Forms
                 _stitchedImages = newImages;
                 _galleryManager.SetImages(_stitchedImages);
                 ShowStitchedCameraInCanvas(_galleryManager.SelectedIndex);
+
+                Trace.WriteLine($"[StitchView] {grabId} | CSV={csvMs}ms | Stitch={stitchMs}ms | Total={swTotal.ElapsedMilliseconds}ms");
             }
             finally
             {

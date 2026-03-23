@@ -13,6 +13,29 @@ namespace AniloxRoll.Monitor.Core.Services
 {
     public partial class InspectionEngine
     {
+        /// <summary>
+        /// BMP 拼接專用：CoreCV_FastReadBMP + GPU resize 縮 scale 倍，回傳 Bitmap。
+        /// 比 GDI+ new Bitmap(path) 快約 10x（繞過 GDI+，DMA 傳輸）。
+        /// 使用 _muraBuffer 作為 resize 目標（MaxWidth×MaxHeight，不受 ThumbnailBufferSize 限制）。
+        /// </summary>
+        public Bitmap LoadBitmapAtScale(string path, int scale)
+        {
+            lock (_lock)
+            {
+                bool ok = NativeMethods.CoreCV_FastReadBMP(
+                    path, out int w, out int h, _inputBuffer, (int)_imgBufferSize);
+                if (!ok) return null;
+                int dstW = Math.Max(1, w / scale);
+                int dstH = Math.Max(1, h / scale);
+                int ret = NativeMethods.CoreCV_Resize_GPU(_inputBuffer, w, h, _muraBuffer, dstW, dstH);
+                if (ret != 0) return null;
+                // CoreCV_Resize_GPU 輸出為 bottom-up（Y 軸反轉），需 flipY: true 補正；
+                // 直接從 _inputBuffer 建立 bitmap（RunInspectionFullRes 路徑）不經過 GPU resize，
+                // 保持 top-down，故用 flipY: false。
+                return ImageUtils.Create8bppBitmap(_muraBuffer, dstW, dstH, flipY: true);
+            }
+        }
+
         public TimedResult<InspectionData> LoadThumbnailOnly(string filePath, int targetThumbWidth)
         {
             // 新格式：直接從 JPEG 讀取縮圖，無需 GPU

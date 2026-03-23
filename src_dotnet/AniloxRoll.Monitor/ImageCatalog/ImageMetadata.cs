@@ -14,6 +14,7 @@
         public string Hour { get; set; }
         public string Minute { get; set; }
         public string Second { get; set; }
+        public string Millisecond { get; set; }
         public int CameraId { get; set; }
     }
 }

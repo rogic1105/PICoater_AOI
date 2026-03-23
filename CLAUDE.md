@@ -82,7 +82,8 @@ CoreCV_FastReadBMP  →  AoiService.ProcessImage  →  CoreCV_Resize_GPU  →  C
 | `src_dotnet/AniloxRoll.Monitor/UI/Form/AniloxRollForm.cs` | Form 邏輯：事件、InitializeSystem、右側面板初始化、SyncCameraParamsFromHardware、TelemetryTimer、Period Charts (InitOneChart/FillPeriodChart/PopulateChartNavigators) |
 | `src_dotnet/AniloxRoll.Monitor/UI/Presenters/LiveTelemetryPresenter.cs` | listViewCameras 16 欄即時 Telemetry（每 500ms 更新） |
 | `src_dotnet/AniloxRoll.Monitor/UI/Form/AniloxRollForm.Designer.cs` | Form 控制項佈局（VS Designer 管理）；主要控制項已設 Anchor 支援視窗放大縮小 |
-| `src_dotnet/AniloxRoll.Monitor/Acquisition/AniloxCamera.cs` | 單台相機 MIL 資源封裝（CLProtocol、曝光、GrabHeight、Telemetry） |
+| `src_dotnet/AniloxRoll.Monitor/Acquisition/AniloxCamera.cs` | 單台相機 MIL 資源封裝（CLProtocol、曝光、GrabHeight、Telemetry）；`TrySaveCapture` 磁碟 I/O 走 `Task.Run` 非同步 |
+| `src_dotnet/AniloxRoll.Monitor/Acquisition/CaptureTimestampCoordinator.cs` | 同 Line Rate 相機共用存檔時間戳（`Coordinate(lineRateHz, now)` → 100ms 內同組共用 `.fff`） |
 | `src_dotnet/AniloxRoll.Monitor/UI/Managers/LiveCameraManager.cs` | 多台相機生命週期管理（Allocate/Grab/Free） |
 | `src_dotnet/AniloxRoll.Monitor/Settings/InspectionSettings.cs` | 根設定物件（MachineLayout/Acquisition/Recipe/Storage） |
 | `src_dotnet/AniloxRoll.Monitor/Settings/Models/AcquisitionSettings.cs` | 取像設定（各 7 台陣列：CameraGrabHeight[7]/CameraExposureTimeUs[7]/CameraLineRateHz[7]） |
@@ -92,10 +93,10 @@ CoreCV_FastReadBMP  →  AoiService.ProcessImage  →  CoreCV_Resize_GPU  →  C
 | `src_dotnet/AniloxRoll.Monitor/UI/Navigators/DateTimeNavigator.cs` | 時間篩選 ComboBox cascade 管理；`NavigateTo(DateTime)` 將目標時間存入 SessionState 再重新 cascade 初始化 |
 | `src_dotnet/AniloxRoll.Monitor/UI/Widgets/FormInteractionHelper.cs` | `SelectAndLoadFolder`：選擇資料夾後先 `SetLastDataPath`+`Save()` 再掃描檔案 |
 | `src_dotnet/AniloxRoll.Monitor/Acquisition/Inspection/InspectionData.cs` | 檢測結果資料物件（Image/MuraCurveMean/MuraCurveMax/IsCompressedJpeg/ScaleFactor） |
-| `src_dotnet/AniloxRoll.Monitor/ImageCatalog/ImageRepository.cs` | 掃描目錄建立索引，同時掃 `*_raw.jpg` + `*.bmp` 兩種格式 |
+| `src_dotnet/AniloxRoll.Monitor/ImageCatalog/ImageRepository.cs` | 掃描目錄建立索引，同時掃 `*_raw.jpg` + `*.bmp`；regex 解析 `yyyyMMdd_HHmmss.fff-CamId`；秒下拉顯示 `ss.fff` |
 | `src_dotnet/AniloxRoll.Monitor/Services/InspectionLogService.cs` | 抓圖事件編號（A00001 起）+ 每日 CSV 寫入（`{CaptureRootPath}\{YYYY}\{YYYYMM}\{YYYYMMDD}.csv`）；`_csvLock` 保護多相機同時寫入同一日 CSV |
 | `src_dotnet/AniloxRoll.Monitor/Services/InspectionStatisticsService.cs` | CSV 統計服務：`Compute`、`ComputeByGrabIdRange`、`ComputeDetailedByGrabIdRange`、`LoadGrabIdInfos`、`LoadAvailableTimes`、**`LoadImagePathsForGrabId`**（回傳 `Dictionary<int,List<string>>` camId→排序路徑） |
-| `src_dotnet/AniloxRoll.Monitor/UI/Widgets/GrabImageStitcher.cs` | `StitchCamera(IList<string> sortedPaths)`：同一相機多張影像垂直拼接（JPEG 直接載入；BMP 先 1/bmpResizeScale 縮圖再拼）；接縫修正：`NearestNeighbor` + `PixelOffsetMode.Half` + 明確 pixel-unit src/dst Rectangle |
+| `src_dotnet/AniloxRoll.Monitor/UI/Widgets/GrabImageStitcher.cs` | `StitchCamera(sortedPaths, bmpResizeScale, bmpLoader)`：同一相機多張影像垂直拼接；JPEG 直接載入；BMP 優先用 `bmpLoader`（CoreCV_FastReadBMP + GPU resize，比 GDI+ 快 ~10x），縮圖後 JPEG 95% 重編碼對齊品質；接縫修正：`NearestNeighbor` + `PixelOffsetMode.Half` |
 | `src_dotnet/AniloxRoll.Monitor/UI/Presenters/InspectionStatsPresenter.cs` | tabPageData：7 個卡片 Panel（良率顏色）+ listViewStats（5 欄彙總表） |
 | `sdk/AOI_SDK/src_dotnet/AOI.SDK/UI/SmartCanvas.cs` | PictureBox 子類：zoom/pan/edge；**拖曳效能**：拖曳中跳過 `GetPixel`，`TriggerStatusChange` 限流 32ms（chart ~30fps），`MouseUp` 補一次完整更新 |
 | `sdk/AOI_SDK/core_cv_api/src/export_api.cpp` | CoreCV_Resize_GPU 實作 |
@@ -184,7 +185,7 @@ Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×741），�
 | 類別 | 參數 | 位置 |
 |------|------|------|
 | A. 相機硬體設定 | Id, SystemDescriptor, SystemNum, DevNum, DcfPath | JSON only（`system-settings.json`） |
-| B. 取像設定（控制） | CameraExposureTimeUs[7], CameraLineRateHz[7], CameraGrabHeight[7] | **TrackBar 唯一入口**（`tabPageCamera`）+ `acquisition-settings.json`；PropertyGrid 不顯示 |
+| B. 取像設定（控制） | CameraExposureTimeUs[7], CameraLineRateHz[7], CameraGrabHeight[7] | **TrackBar 唯一入口**（`tabPageCamera`）+ `acquisition-settings.json`；PropertyGrid 不顯示；**任何時間調整都立即存檔**（不限 grab 期間） |
 | C. 機台佈局 | Cam1–7_Ops, Cam1–7_Pos | PropertyGrid（`tabPageInspSettings`）+ JSON |
 | D. 檢測配方 | HessianMaxFactor, ErrorValueMean, ErrorValueMax | PropertyGrid（`tabPageInspSettings`）+ JSON |
 | E. 儲存設定 | EnableAutoCapture, CaptureRootPath, UseCompressedCapture | PropertyGrid（`tabPageInspSettings`）+ JSON；`SaveResizeScale`/`SaveJpgQuality` 為 `[Browsable(false)]` 常數 |
@@ -423,19 +424,25 @@ sdk/AOI_SDK/src_dotnet/MilGrabSample/MilGrabSample/
 
 ### 檔案命名與目錄結構
 
+時間戳精確到毫秒（`.fff`），同 Line Rate 的相機由 `CaptureTimestampCoordinator` 協調共用同一 `.fff`（100ms 容差）。
+
 ```
 {CaptureRootPath}\{yyyy}\{yyyyMM}\{yyyyMMdd}\
-    {yyyyMMdd_HHmmss}-{CameraId}_raw.jpg   ← 縮小版原圖（GPU resize，1/SaveResizeScale）
-    {yyyyMMdd_HHmmss}-{CameraId}_proc.jpg  ← 縮小版處理圖
-    {yyyyMMdd_HHmmss}-{CameraId}_mean.bin  ← Mura Mean 曲線（全解析度長度）
-    {yyyyMMdd_HHmmss}-{CameraId}_max.bin   ← Mura Max 曲線（全解析度長度）
+    {yyyyMMdd_HHmmss.fff}-{CameraId}_raw.jpg   ← 縮小版原圖（GPU resize，1/SaveResizeScale）
+    {yyyyMMdd_HHmmss.fff}-{CameraId}_proc.jpg  ← 縮小版處理圖
+    {yyyyMMdd_HHmmss.fff}-{CameraId}_mean.bin  ← Mura Mean 曲線（全解析度長度）
+    {yyyyMMdd_HHmmss.fff}-{CameraId}_max.bin   ← Mura Max 曲線（全解析度長度）
 ```
 
 舊格式（`UseCompressedCapture = false`）：
 ```
 {CaptureRootPath}\{yyyy}\{yyyyMM}\{yyyyMMdd}\
-    {yyyyMMdd_HHmmss}-{CameraId}.bmp       ← 全解析度原圖
+    {yyyyMMdd_HHmmss.fff}-{CameraId}.bmp       ← 全解析度原圖
 ```
+
+### TrySaveCapture 非同步 I/O
+
+壓縮格式下，GPU resize + Marshal.Copy 在 MIL callback 執行緒完成（快），磁碟 I/O（JPEG/bin 寫入）移至 `Task.Run` 背景執行緒，callback 立即返回不阻塞連續抓圖。`_lastCaptureKey` 在 Task.Run 前提前更新，防止重複觸發。
 
 ### .bin 檔案格式
 

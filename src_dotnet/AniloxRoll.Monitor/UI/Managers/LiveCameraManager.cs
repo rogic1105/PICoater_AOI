@@ -33,6 +33,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private double[] _cameraLineRateHz     = new double[7];
         private int _saveResizeScale = InspectionEngineConfig.DefaultSaveResizeScale;
         private int _saveJpgQuality  = InspectionEngineConfig.DefaultSaveJpgQuality;
+        private readonly CaptureTimestampCoordinator _timestampCoordinator = new CaptureTimestampCoordinator();
 
         public bool IsAllocated    { get; private set; } = false;
         public bool IsLiveGrabbing { get; private set; } = false;
@@ -160,10 +161,12 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.CaptureRootPath      = _captureRootPath;
                 cam.CameraGrabHeight     = _cameraGrabHeight[camIdx];
                 cam.CameraExposureTimeUs = _cameraExposureTimeUs[camIdx]; // Initialize() 會呼叫 SetExposureUs 套用
+                cam.SetLineRateHz(_cameraLineRateHz[camIdx]);  // 記錄 _appliedLineRateHz（CLProtocol 就緒後自動重套）
                 cam.HessianSigma         = InspectionEngineConfig.DefaultRidgeSigma;
                 cam.HessianFixedMax      = InspectionEngineConfig.DefaultHessianMaxFactor;
                 cam.SaveResizeScale      = _saveResizeScale;
                 cam.SaveJpgQuality       = _saveJpgQuality;
+                cam.TimestampCoordinator = _timestampCoordinator;
 
                 cam.OnMouseDataChanged   += HandleMouseDataChanged;
                 cam.OnCameraClicked      += SwitchMainDisplay;
@@ -284,6 +287,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.HessianFixedMax      = hessianMaxFactor;
                 cam.SaveResizeScale      = _saveResizeScale;
                 cam.SaveJpgQuality       = _saveJpgQuality;
+                cam.TimestampCoordinator = _timestampCoordinator;
 
                 // 曝光：走 CLProtocol-aware SetExposureUs（CLProtocol 未就緒時記錄，就緒後自動重套）
                 cam.SetExposureUs(_cameraExposureTimeUs[camIdx]);

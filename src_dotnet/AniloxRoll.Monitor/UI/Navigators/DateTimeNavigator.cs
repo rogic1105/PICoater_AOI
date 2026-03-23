@@ -92,9 +92,21 @@ namespace AniloxRoll.Monitor.UI.Navigators
         public DateTime GetCurrentPeriodOrDefault(DateTime fallback)
         {
             if (int.TryParse(_cbYear.Text, out int y) && int.TryParse(_cbMonth.Text, out int m) && int.TryParse(_cbDay.Text, out int d) &&
-                int.TryParse(_cbHour.Text, out int h) && int.TryParse(_cbMin.Text, out int min) && int.TryParse(_cbSec.Text, out int s))
+                int.TryParse(_cbHour.Text, out int h) && int.TryParse(_cbMin.Text, out int min))
             {
-                try { return new DateTime(y, m, d, h, min, s); }
+                int s = 0, ms = 0;
+                string secText = _cbSec.Text ?? "";
+                int dot = secText.IndexOf('.');
+                if (dot >= 0)
+                {
+                    int.TryParse(secText.Substring(0, dot), out s);
+                    int.TryParse(secText.Substring(dot + 1), out ms);
+                }
+                else
+                {
+                    int.TryParse(secText, out s);
+                }
+                try { return new DateTime(y, m, d, h, min, s, ms); }
                 catch { }
             }
             return fallback;
@@ -108,7 +120,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
         {
             UserSessionState.SaveDateTimeSelection(
                 dt.ToString("yyyy"), dt.ToString("MM"), dt.ToString("dd"),
-                dt.ToString("HH"), dt.ToString("mm"), dt.ToString("ss"));
+                dt.ToString("HH"), dt.ToString("mm"), dt.ToString("ss.fff"));
             Initialize(dt.ToString("yyyy"));
         }
 
@@ -119,7 +131,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
             _cbDay.Text = dt.ToString("dd");
             _cbHour.Text = dt.ToString("HH");
             _cbMin.Text = dt.ToString("mm");
-            _cbSec.Text = dt.ToString("ss");
+            _cbSec.Text = dt.ToString("ss.fff");
         }
     }
 }

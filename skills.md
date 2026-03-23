@@ -653,12 +653,18 @@ private void UpdateGrabButton(bool isGrabbing)
 
 ## 壓縮存檔格式（JPEG + .bin）
 
+### 檔名時間戳：`yyyyMMdd_HHmmss.fff`
+
+- 毫秒精度（`.fff`），支援每秒多幀存檔
+- 同 Line Rate 相機由 `CaptureTimestampCoordinator` 在 100ms 容差內共用同一 `.fff`
+- `_lastCaptureKey` 以毫秒粒度去重（原為秒級）
+- 相關解析點：`ImageRepository` regex `(\d{6})\.(\d{3})-(\d)`、`TryParseFileNameDateTime` 解析 19 碼、review tab 秒下拉顯示 `ss.fff`
+
 ### 捕獲端（AniloxCamera.TrySaveCapture）
 
-- `UseCompressedCapture=true`：GPU resize（`CoreCV_Resize_GPU`）→ `SaveJpegFromPinned`（需 24bpp 轉換）+ `SaveCurveBin`（自描述 .bin）
-- `UseCompressedCapture=false`：`MbufExport(.bmp)`（舊行為）
-- JPEG 需要 24bpp：GDI+ JPEG encoder 不支援 8bpp indexed；用 `ImageUtils.Create8bppBitmap` 建 8bpp → `Graphics.DrawImage` 至 24bpp `Bitmap` 再 `Save(JpegCodecInfo)`
-- `[ThreadStatic] ImageCodecInfo _jpegCodec`：per-thread cache，避免每幀都 `GetImageEncoders()`
+- `UseCompressedCapture=true`：GPU resize + `Marshal.Copy` 在 callback 執行緒完成 → 磁碟 I/O（`SaveJpegFromBytes` + `SaveCurveBinFromArray`）移至 `Task.Run` 背景執行
+- `UseCompressedCapture=false`：`MbufExport(.bmp)`（同步，舊行為）
+- JPEG 需要 24bpp：GDI+ JPEG encoder 不支援 8bpp indexed；用 `GCHandle.Alloc` pin byte[] → `Create8bppBitmap` → `Graphics.DrawImage` 至 24bpp → `Save(JpegCodecInfo)`
 
 ### 回顧端（InspectionEngine.ImageProcessing.cs）
 
@@ -1249,3 +1255,37 @@ protected override void OnMouseUp(...)
 ```
 
 **效果**：canvas repaint 以滑鼠原生頻率執行（順）；chart/statusbar ~30fps 更新（也順）；兩者不互相阻塞。
+
+---
+
+## CaptureTimestampCoordinator（同步多相機存檔時間戳）
+
+### 問題
+7 台相機各自在 MIL callback 中取 `DateTime.Now`，同 FPS 相機有 5-15ms 時間差，導致檔名不同、無法直覺配對。
+
+### 解法
+`CaptureTimestampCoordinator` 以 `(int)lineRateHz` 為 group key：
+- 同一 rate group 內，第一台 callback 建立時間戳
+- 後續同組在 100ms 內到達的共用同一時間戳
+- 不同 rate 的相機各自獨立
+
+### 關鍵接線
+- `LiveCameraManager` 持有 `_timestampCoordinator`，注入每台 `AniloxCamera.TimestampCoordinator`
+- **`AllocateCameras` 必須呼叫 `cam.SetLineRateHz()`**，否則 `_appliedLineRateHz = 0` 導致 coordinator 被跳過
+- Grab 中途改 Line Rate → `_appliedLineRateHz` 立即更新 → 下一輪 callback 自動改組
+
+---
+
+## 相機參數即時存檔
+
+### 原則
+`ConfigManager.SaveAcquisitionSettings(acq)` 在 `acq.CameraXxx[idx] = value` 之後**立即呼叫**，不受 `!_dragging` 或硬體呼叫阻擋。
+
+### 順序
+```
+acq.CameraXxx[idx] = value;           // 1. 更新記憶體
+ConfigManager.SaveAcquisitionSettings; // 2. 立即持久化
+_liveCameraManager?.SetXxx();          // 3. 硬體（可能失敗，不影響存檔）
+```
+
+MouseUp 只負責補送硬體寫入 + `SwitchToCamera`，不再重複存檔。

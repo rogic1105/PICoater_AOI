@@ -450,17 +450,18 @@ namespace AniloxRoll.Monitor.Core.Services
         }
 
         /// <summary>
-        /// 從 FileName（e.g. "20260316_102301-3"）解析出完整 DateTime（精確到秒）。
+        /// 從 FileName（e.g. "20260316_102301.123-3"）解析出完整 DateTime（精確到毫秒）。
+        /// 格式：yyyyMMdd_HHmmss.fff-CamId
         /// </summary>
         private static bool TryParseFileNameDateTime(string fileName, out DateTime result)
         {
             result = DateTime.MinValue;
             if (string.IsNullOrEmpty(fileName)) return false;
             int underscoreIdx = fileName.IndexOf('_');
-            if (underscoreIdx != 8 || fileName.Length < 15) return false;
-            string datePart = fileName.Substring(0, 8);
-            string timePart = fileName.Substring(9, 6);
-            return DateTime.TryParseExact(datePart + timePart, "yyyyMMddHHmmss",
+            if (underscoreIdx != 8 || fileName.Length < 19) return false;  // "yyyyMMdd_HHmmss.fff" = 19 chars
+            string datePart = fileName.Substring(0, 8);      // "yyyyMMdd"
+            string timePart = fileName.Substring(9, 10);     // "HHmmss.fff"
+            return DateTime.TryParseExact(datePart + timePart, "yyyyMMddHHmmss.fff",
                 CultureInfo.InvariantCulture, DateTimeStyles.None, out result);
         }
 
@@ -484,7 +485,7 @@ namespace AniloxRoll.Monitor.Core.Services
                    int.TryParse(cols[3].Trim(), out meanExceed);
         }
 
-        /// <summary>從 FileName（e.g. "20260316_102301-3"）提取相機 ID。</summary>
+        /// <summary>從 FileName（e.g. "20260316_102301.123-3"）提取相機 ID。</summary>
         private static bool TryExtractCamId(string fileName, out int camId)
         {
             camId = 0;
@@ -498,9 +499,11 @@ namespace AniloxRoll.Monitor.Core.Services
         /// 掃描 CSV，找出指定序號的各相機所有影像路徑（一台相機可能有多張），
         /// 依檔名（時間戳）排序。優先回傳 _raw.jpg，其次 .bmp。
         /// 回傳 Dictionary&lt;camId, List&lt;sortedFilePaths&gt;&gt;。
+        /// hintFrom/hintTo：已知的時間範圍，用於縮小 CSV 搜尋範圍（只掃相關日期）。
         /// </summary>
         public static Dictionary<int, List<string>> LoadImagePathsForGrabId(
-            string captureRootPath, string grabId)
+            string captureRootPath, string grabId,
+            DateTime hintFrom = default(DateTime), DateTime hintTo = default(DateTime))
         {
             // camId → unique set of fileNames (無副檔名)
             var camFileNames = new Dictionary<int, HashSet<string>>();
@@ -508,7 +511,25 @@ namespace AniloxRoll.Monitor.Core.Services
             if (string.IsNullOrWhiteSpace(captureRootPath) || !Directory.Exists(captureRootPath))
                 return new Dictionary<int, List<string>>();
 
-            foreach (string csvPath in Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories))
+            // 若有時間提示，只掃對應日期的 CSV（通常只有 1 個）；否則掃全部
+            IEnumerable<string> csvPaths;
+            if (hintFrom != default(DateTime) && hintTo != default(DateTime))
+            {
+                var dateCsvs = new List<string>();
+                for (DateTime d = hintFrom.Date; d <= hintTo.Date; d = d.AddDays(1))
+                {
+                    string p = Path.Combine(captureRootPath,
+                        d.ToString("yyyy"), d.ToString("yyyyMM"), d.ToString("yyyyMMdd") + ".csv");
+                    if (File.Exists(p)) dateCsvs.Add(p);
+                }
+                csvPaths = dateCsvs;
+            }
+            else
+            {
+                csvPaths = Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories);
+            }
+
+            foreach (string csvPath in csvPaths)
             {
                 try
                 {
@@ -538,7 +559,7 @@ namespace AniloxRoll.Monitor.Core.Services
             foreach (var kv in camFileNames)
             {
                 var sortedNames = new List<string>(kv.Value);
-                sortedNames.Sort(); // "YYYYMMDD_HHMMSS-n" 字典序 = 時間序
+                sortedNames.Sort(); // "YYYYMMDD_HHMMSS.fff-n" 字典序 = 時間序
 
                 var paths = new List<string>();
                 foreach (string fn in sortedNames)
