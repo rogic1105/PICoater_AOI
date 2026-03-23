@@ -368,6 +368,11 @@ namespace AniloxRoll.Monitor.Forms
 
         private async void btnShowOriginal_Click(object sender, EventArgs e)
         {
+            if (_stitchedImages != null)
+            {
+                await ReloadCurrentStitchedView(false);
+                return;
+            }
             _lastReviewProcessedMode = false;
             ClearStitchedMode();
             await _presenter.LoadImagesWithPeriodLockAsync(false, _interactionHelper.LoadImages);
@@ -375,9 +380,22 @@ namespace AniloxRoll.Monitor.Forms
 
         private async void btnShowProcessed_Click(object sender, EventArgs e)
         {
+            if (_stitchedImages != null)
+            {
+                await ReloadCurrentStitchedView(true);
+                return;
+            }
             _lastReviewProcessedMode = true;
             ClearStitchedMode();
             await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
+        }
+
+        private async Task ReloadCurrentStitchedView(bool enableProcess)
+        {
+            int idx = cbReviewGrabId.SelectedIndex;
+            if (idx < 0 || idx >= _grabIdInfos.Count) return;
+            var info = _grabIdInfos[idx];
+            await LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest, enableProcess);
         }
 
         private async void btnPeriodPrev_Click(object sender, EventArgs e)
@@ -1133,18 +1151,21 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        private async Task LoadGrabStitchedViewAsync(string grabId, DateTime hintFrom, DateTime hintTo)
+        private Task LoadGrabStitchedViewAsync(string grabId, DateTime hintFrom, DateTime hintTo)
+            => LoadGrabStitchedViewAsync(grabId, hintFrom, hintTo, false);
+
+        private async Task LoadGrabStitchedViewAsync(string grabId, DateTime hintFrom, DateTime hintTo,
+            bool enableProcess)
         {
             string root = !string.IsNullOrWhiteSpace(UserSessionState.LastDataPath)
                           ? UserSessionState.LastDataPath : _statsDataRootPath;
             if (string.IsNullOrWhiteSpace(root)) return;
 
             _interactionHelper.SetUiLoadingState(true);
+            _lastReviewProcessedMode = enableProcess;
             var swTotal = Stopwatch.StartNew();
             try
             {
-                // CSV 掃描 + 拼接合併成一個 Task.Run，減少 thread pool 排程開銷；
-                // CSV 掃描以 hintFrom/hintTo 限縮到相關日期（通常只有 1 個 CSV）
                 long csvMs = 0, stitchMs = 0;
                 float[][] newCurveMean = new float[7][];
                 float[][] newCurveMax  = new float[7][];
@@ -1157,10 +1178,6 @@ namespace AniloxRoll.Monitor.Forms
 
                     var swStitch = Stopwatch.StartNew();
                     int scale = InspectionEngineConfig.DefaultSaveResizeScale;
-                    // BMP 路徑改走 CoreCV_FastReadBMP + GPU resize（比 GDI+ 快約 10x）
-                    Func<string, Bitmap> bmpLoader = _inspectionService != null
-                        ? (Func<string, Bitmap>)(p => _inspectionService.LoadBmpAtScale(p, scale))
-                        : null;
                     var imgs = new Bitmap[7];
                     for (int i = 0; i < 7; i++)
                     {
@@ -1169,7 +1186,29 @@ namespace AniloxRoll.Monitor.Forms
                         {
                             try
                             {
-                                imgs[i] = GrabImageStitcher.StitchCamera(paths, scale, bmpLoader);
+                                bool isBmp = paths[0].EndsWith(".bmp", StringComparison.OrdinalIgnoreCase);
+
+                                if (enableProcess && isBmp && _inspectionService != null)
+                                {
+                                    // BMP 處理模式：逐張 GPU pipeline + resize，再拼接
+                                    Func<string, Bitmap> procLoader = (p) =>
+                                    {
+                                        var bmp = _inspectionService.ProcessBmpAtScale(p, scale,
+                                            out float[] m, out float[] x);
+                                        // 曲線在 MergeCurves 統一處理（.bin 已在 ProcessBmpAtScale 存好）
+                                        return bmp;
+                                    };
+                                    imgs[i] = GrabImageStitcher.StitchCamera(paths, scale, procLoader);
+                                }
+                                else
+                                {
+                                    // JPEG 路徑（含 _proc.jpg 切換）或 BMP 原圖路徑
+                                    Func<string, Bitmap> bmpLoader = _inspectionService != null
+                                        ? (Func<string, Bitmap>)(p => _inspectionService.LoadBmpAtScale(p, scale))
+                                        : null;
+                                    imgs[i] = GrabImageStitcher.StitchCamera(paths, scale, bmpLoader,
+                                        useProcessed: enableProcess);
+                                }
                                 MergeCurves(paths, out newCurveMean[i], out newCurveMax[i]);
                             }
                             catch (Exception ex)
@@ -1191,7 +1230,7 @@ namespace AniloxRoll.Monitor.Forms
                 _galleryManager.SetImages(_stitchedImages);
                 ShowStitchedCameraInCanvas(_galleryManager.SelectedIndex);
 
-                Trace.WriteLine($"[StitchView] {grabId} | CSV={csvMs}ms | Stitch={stitchMs}ms | Total={swTotal.ElapsedMilliseconds}ms");
+                Trace.WriteLine($"[StitchView] {grabId} proc={enableProcess} | CSV={csvMs}ms | Stitch={stitchMs}ms | Total={swTotal.ElapsedMilliseconds}ms");
             }
             finally
             {
@@ -1267,7 +1306,7 @@ namespace AniloxRoll.Monitor.Forms
             canvasMain.Image = bmp;
             if (bmp != null) canvasMain.FitToScreen();
 
-            // 更新 MuraChart
+            // 更新 MuraChart（含 X 軸範圍，與 Period 模式一致）
             if (_muraChartHelper != null && _settings != null)
             {
                 float[] mean = (_stitchedCurveMean != null && idx >= 0 && idx < _stitchedCurveMean.Length)
@@ -1277,7 +1316,8 @@ namespace AniloxRoll.Monitor.Forms
 
                 double[] posArr = _settings.GetCameraStartPositionMmArray();
                 double startPos = (idx >= 0 && idx < posArr.Length) ? posArr[idx] : 0;
-                _muraChartHelper.UpdateDataAndView(mean, max, startPos, double.NaN, double.NaN);
+                _interactionHelper.TryComputeCurrentViewRange(idx, out double leftMm, out double rightMm);
+                _muraChartHelper.UpdateDataAndView(mean, max, startPos, leftMm, rightMm);
             }
         }
 

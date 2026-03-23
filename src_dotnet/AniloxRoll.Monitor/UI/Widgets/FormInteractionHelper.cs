@@ -87,6 +87,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             _canvasHelper.SetImageScaleFactor(scaleFactor);
             _canvasHelper.SetCurrentCameraIndex(cameraIndex);
         }
+        public bool TryComputeCurrentViewRange(int cameraIndex, out double leftMm, out double rightMm)
+            => _canvasHelper.TryComputeCurrentViewRange(cameraIndex, out leftMm, out rightMm);
 
         // ── 設定 ─────────────────────────────────────────────────────────
         public void ApplySettingsToService()

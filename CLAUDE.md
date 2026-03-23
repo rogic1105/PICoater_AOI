@@ -139,9 +139,14 @@ Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×741），�
 
 **Grab ID 拼接模式（`_stitchedImages` 欄位）**：
 - `_stitchedImages != null` 表示目前為拼接模式；`null` = 一般模式
-- `LoadGrabStitchedViewAsync(grabId)` → `InspectionStatisticsService.LoadImagePathsForGrabId`（掃 CSV，回傳每台相機的所有影像路徑 `Dictionary<int, List<string>>`）→ `GrabImageStitcher.StitchCamera`（每台相機多張依時間垂直拼接，完成後 `RotateFlip(RotateNoneFlipY)` 對齊取像時序）→ `_galleryManager.SetImages(_stitchedImages)` → `ShowStitchedCameraInCanvas`
+- `LoadGrabStitchedViewAsync(grabId, hintFrom, hintTo, enableProcess)` → `LoadImagePathsForGrabId`（掃 CSV）→ 依模式分支：
+  - **JPEG 路徑**：`StitchCamera(paths, useProcessed: enableProcess)`（_proc.jpg 若存在則替代 _raw.jpg）
+  - **BMP 原圖**：`StitchCamera(paths, bmpLoader: LoadBmpAtScale)`
+  - **BMP 處理**：`StitchCamera(paths, bmpLoader: ProcessBmpAtScale)`（逐張 GPU pipeline + resize，再拼接）
+  - 完成後 `RotateFlip(RotateNoneFlipY)` 對齊取像時序
 - `MergeCurves`：載入每張影像的 `_mean.bin`/`_max.bin`，全解析度合併（Mean=平均、Max=取最大），存入 `_stitchedCurveMean[7]`/`_stitchedCurveMax[7]`
 - `ShowStitchedCameraInCanvas`：設 `_imageScaleFactor=DefaultSaveResizeScale` + `_currentCameraIndex` 後 `FitToScreen()`，再以合併曲線更新 chartMura
+- `btnShowOriginal`/`btnShowProcessed`：若 `_stitchedImages != null` → `ReloadCurrentStitchedView(false/true)`；否則走原圖路徑
 - `ClearStitchedMode()`：先 null `canvasMain.Image` + `_galleryManager.ClearImages()` 再 Dispose 所有 bitmaps；在所有一般載入路徑前呼叫（propertyGrid / btnSelectFolder / btnShowOriginal / btnShowProcessed / btnPeriodPrev / btnPeriodNext）
 - `SelectionChanged` handler 以 `_stitchedImages != null` 分支：拼接模式呼叫 `ShowStitchedCameraInCanvas(idx)`，一般模式呼叫 `_interactionHelper.OnGallerySelectionChanged(idx)`
 
@@ -158,6 +163,57 @@ Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×741），�
 - `SetGroupBoxActive(grp, active)`：透過 `ActiveGroupBox_Paint` 繪製綠色填充 `(220,248,225)` / 邊框 `(0,140,60)` / 標題文字；不設 `ForeColor` 避免子控制項繼承
 - Review tab：`grpReviewTimePeriod`（原圖路徑）、`grpReviewGrabNav`（合圖路徑）二擇一
 - Data tab：`groupBoxGrabIdRange`、`grpDataSingleSheet`、`groupBoxTimeRange` 三擇一（`SetActiveStatGroupBox`）
+
+### 控制項觸發關係圖
+
+```
+btnSelectFolder ─┬─→ ImageRepository.LoadDirectory + TimeNavigator.Initialize
+                 ├─→ 填充 cbReviewGrabId / cbGrabIdStart / cbGrabIdEnd / cbDataGrabId + 時間 ComboBox
+                 ├─→ SyncGrabIdFromTimeCombos() → cbReviewGrabId.SelectedIndex
+                 ├─→ PopulateChartNavigators() + RefreshStats()
+                 ├─→ ClearStitchedMode() → 高亮 grpReviewTimePeriod
+                 └─→ LoadImagesWithPeriodLockAsync(false)
+
+btnSelectDataFolder ─┬─→ LoadDirectoryAndInitNavigator (Review tab)
+                     ├─→ 填充 cbGrabIdStart / cbGrabIdEnd / cbDataGrabId / cbReviewGrabId + 時間 ComboBox
+                     ├─→ PopulateChartNavigators() + RefreshStats()
+                     └─→ 高亮 groupBoxGrabIdRange
+
+btnShowOriginal / btnShowProcessed
+  ├─ _stitchedImages != null（合圖路徑）→ ReloadCurrentStitchedView(false/true)
+  │    → LoadGrabStitchedViewAsync(enableProcess)
+  └─ _stitchedImages == null（原圖路徑）→ LoadImagesWithPeriodLockAsync(false/true)
+
+btnPeriodPrev / btnPeriodNext → ClearStitchedMode() → MovePeriodAsync
+
+btnGrabIdPrev / btnGrabIdNext → StepReviewGrabId(±1)
+  → cbReviewGrabId.SelectedIndex → OnReviewGrabIdChanged()
+    ├─→ NavigateToDateTime(info.Earliest)
+    ├─→ LoadGrabStitchedViewAsync(grabId)
+    └─→ (_syncingGrabIdCross) cbDataGrabId + cbGrabIdStart/End + 時間 + RefreshStats
+
+btnGrabIdDataPrev / btnGrabIdDataNext → StepDataGrabId(±1)
+  → cbDataGrabId.SelectedIndex → OnSingleSheetComboChanged()
+    ├─→ cbGrabIdStart/End + 時間 + RefreshStats
+    └─→ (_syncingGrabIdCross) cbReviewGrabId + NavigateToDateTime + LoadGrabStitchedViewAsync
+
+cbReviewGrabId ←→ cbDataGrabId  （雙向同步，_syncingGrabIdCross 防迴圈）
+cbYear~cbSec   →  SyncGrabIdFromTimeCombos() → cbReviewGrabId （_syncingGrabIdNav 防迴圈）
+
+cbGrabIdStart / cbGrabIdEnd → OnGrabIdComboChanged → 時間同步 + RefreshStats → 高亮 groupBoxGrabIdRange
+cbDataGrabId                → OnSingleSheetComboChanged → 上述 + 同步 cbReviewGrabId → 高亮 grpDataSingleSheet
+cbStart/EndYear~Sec         → OnStartComboChanged / OnEndComboChanged → RefreshStats → 高亮 groupBoxTimeRange
+
+Gallery SelectionChanged
+  ├─ _stitchedImages != null → ShowStitchedCameraInCanvas(idx)
+  └─ _stitchedImages == null → _interactionHelper.OnGallerySelectionChanged(idx) → FullRes + Canvas + Chart
+```
+
+Guard flags：
+- `_syncingGrabIdNav`：防止 cbReviewGrabId ↔ 時間 ComboBox 迴圈
+- `_syncingGrabIdCross`：防止 cbReviewGrabId ↔ cbDataGrabId 迴圈
+- `_statComboUpdating`：防止 stat ComboBox cascade 重複觸發
+- `_chartNavUpdating`：防止 chart 年月日 ComboBox cascade 重複觸發
 
 ### tabPageData 控制項
 

@@ -45,33 +45,34 @@
             this.panelLiveCam2 = new System.Windows.Forms.Panel();
             this.panelLiveCam1 = new System.Windows.Forms.Panel();
             this.tabPageReview = new System.Windows.Forms.TabPage();
+            this.grpReviewTimePeriod = new System.Windows.Forms.GroupBox();
+            this.cbYear = new System.Windows.Forms.ComboBox();
+            this.btnPeriodNext = new System.Windows.Forms.Button();
+            this.btnPeriodPrev = new System.Windows.Forms.Button();
+            this.label_sec = new System.Windows.Forms.Label();
+            this.cbMonth = new System.Windows.Forms.ComboBox();
+            this.label_min = new System.Windows.Forms.Label();
+            this.cbDay = new System.Windows.Forms.ComboBox();
+            this.label_hr = new System.Windows.Forms.Label();
+            this.cbHour = new System.Windows.Forms.ComboBox();
+            this.label_day = new System.Windows.Forms.Label();
+            this.cbMin = new System.Windows.Forms.ComboBox();
+            this.label_mon = new System.Windows.Forms.Label();
+            this.cbSec = new System.Windows.Forms.ComboBox();
+            this.label_yr = new System.Windows.Forms.Label();
             this.lblImageFormat = new System.Windows.Forms.Label();
             this.lblImageScale = new System.Windows.Forms.Label();
-            this.label_sec = new System.Windows.Forms.Label();
-            this.label_min = new System.Windows.Forms.Label();
-            this.label_hr = new System.Windows.Forms.Label();
-            this.label_day = new System.Windows.Forms.Label();
-            this.label_mon = new System.Windows.Forms.Label();
-            this.label_yr = new System.Windows.Forms.Label();
             this.chartMura = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.btnSelectFolder = new System.Windows.Forms.Button();
             this.btnShowProcessed = new System.Windows.Forms.Button();
             this.pbCam1 = new System.Windows.Forms.PictureBox();
             this.btnShowOriginal = new System.Windows.Forms.Button();
             this.pbCam2 = new System.Windows.Forms.PictureBox();
-            this.cbSec = new System.Windows.Forms.ComboBox();
             this.pbCam3 = new System.Windows.Forms.PictureBox();
-            this.cbMin = new System.Windows.Forms.ComboBox();
             this.pbCam4 = new System.Windows.Forms.PictureBox();
-            this.cbHour = new System.Windows.Forms.ComboBox();
             this.pbCam5 = new System.Windows.Forms.PictureBox();
-            this.cbDay = new System.Windows.Forms.ComboBox();
             this.pbCam6 = new System.Windows.Forms.PictureBox();
-            this.cbMonth = new System.Windows.Forms.ComboBox();
             this.pbCam7 = new System.Windows.Forms.PictureBox();
-            this.cbYear = new System.Windows.Forms.ComboBox();
-            this.btnPeriodPrev = new System.Windows.Forms.Button();
-            this.btnPeriodNext = new System.Windows.Forms.Button();
             this.grpReviewGrabNav = new System.Windows.Forms.GroupBox();
             this.cbReviewGrabId = new System.Windows.Forms.ComboBox();
             this.btnGrabIdPrev = new System.Windows.Forms.Button();
@@ -253,12 +254,12 @@
             this.lblCamHardware = new System.Windows.Forms.Label();
             this.panelStatusBar = new System.Windows.Forms.Panel();
             this.lblStatusGrab = new System.Windows.Forms.Label();
-            this.grpReviewTimePeriod = new System.Windows.Forms.GroupBox();
             this.backgroundWorker1 = new System.ComponentModel.BackgroundWorker();
             this.canvasMain = new AOI.SDK.UI.SmartCanvas();
             this.tabMain.SuspendLayout();
             this.tabPageLiveView.SuspendLayout();
             this.tabPageReview.SuspendLayout();
+            this.grpReviewTimePeriod.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.chartMura)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam2)).BeginInit();
@@ -348,7 +349,6 @@
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam1)).BeginInit();
             this.tabPageSystem.SuspendLayout();
             this.panelStatusBar.SuspendLayout();
-            this.grpReviewTimePeriod.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).BeginInit();
             this.SuspendLayout();
             // 
@@ -505,25 +505,56 @@
             this.tabPageReview.Text = "影像回顧";
             this.tabPageReview.UseVisualStyleBackColor = true;
             // 
-            // lblImageFormat
+            // grpReviewTimePeriod
             // 
-            this.lblImageFormat.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.lblImageFormat.Font = new System.Drawing.Font("新細明體", 8F);
-            this.lblImageFormat.Location = new System.Drawing.Point(1113, 400);
-            this.lblImageFormat.Name = "lblImageFormat";
-            this.lblImageFormat.Size = new System.Drawing.Size(92, 22);
-            this.lblImageFormat.TabIndex = 32;
-            this.lblImageFormat.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.grpReviewTimePeriod.Controls.Add(this.cbYear);
+            this.grpReviewTimePeriod.Controls.Add(this.btnPeriodNext);
+            this.grpReviewTimePeriod.Controls.Add(this.btnPeriodPrev);
+            this.grpReviewTimePeriod.Controls.Add(this.label_sec);
+            this.grpReviewTimePeriod.Controls.Add(this.cbMonth);
+            this.grpReviewTimePeriod.Controls.Add(this.label_min);
+            this.grpReviewTimePeriod.Controls.Add(this.cbDay);
+            this.grpReviewTimePeriod.Controls.Add(this.label_hr);
+            this.grpReviewTimePeriod.Controls.Add(this.cbHour);
+            this.grpReviewTimePeriod.Controls.Add(this.label_day);
+            this.grpReviewTimePeriod.Controls.Add(this.cbMin);
+            this.grpReviewTimePeriod.Controls.Add(this.label_mon);
+            this.grpReviewTimePeriod.Controls.Add(this.cbSec);
+            this.grpReviewTimePeriod.Controls.Add(this.label_yr);
+            this.grpReviewTimePeriod.Location = new System.Drawing.Point(1086, 123);
+            this.grpReviewTimePeriod.Name = "grpReviewTimePeriod";
+            this.grpReviewTimePeriod.Size = new System.Drawing.Size(109, 346);
+            this.grpReviewTimePeriod.TabIndex = 56;
+            this.grpReviewTimePeriod.TabStop = false;
+            this.grpReviewTimePeriod.Text = "時序";
             // 
-            // lblImageScale
+            // cbYear
             // 
-            this.lblImageScale.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.lblImageScale.Font = new System.Drawing.Font("新細明體", 8F);
-            this.lblImageScale.Location = new System.Drawing.Point(1113, 422);
-            this.lblImageScale.Name = "lblImageScale";
-            this.lblImageScale.Size = new System.Drawing.Size(92, 23);
-            this.lblImageScale.TabIndex = 33;
-            this.lblImageScale.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.cbYear.FormattingEnabled = true;
+            this.cbYear.Location = new System.Drawing.Point(6, 24);
+            this.cbYear.Name = "cbYear";
+            this.cbYear.Size = new System.Drawing.Size(64, 23);
+            this.cbYear.TabIndex = 15;
+            // 
+            // btnPeriodNext
+            // 
+            this.btnPeriodNext.Location = new System.Drawing.Point(55, 273);
+            this.btnPeriodNext.Name = "btnPeriodNext";
+            this.btnPeriodNext.Size = new System.Drawing.Size(44, 28);
+            this.btnPeriodNext.TabIndex = 31;
+            this.btnPeriodNext.Text = ">";
+            this.btnPeriodNext.UseVisualStyleBackColor = true;
+            this.btnPeriodNext.Click += new System.EventHandler(this.btnPeriodNext_Click);
+            // 
+            // btnPeriodPrev
+            // 
+            this.btnPeriodPrev.Location = new System.Drawing.Point(5, 273);
+            this.btnPeriodPrev.Name = "btnPeriodPrev";
+            this.btnPeriodPrev.Size = new System.Drawing.Size(44, 28);
+            this.btnPeriodPrev.TabIndex = 30;
+            this.btnPeriodPrev.Text = "<";
+            this.btnPeriodPrev.UseVisualStyleBackColor = true;
+            this.btnPeriodPrev.Click += new System.EventHandler(this.btnPeriodPrev_Click);
             // 
             // label_sec
             // 
@@ -534,6 +565,14 @@
             this.label_sec.TabIndex = 29;
             this.label_sec.Text = "秒";
             // 
+            // cbMonth
+            // 
+            this.cbMonth.FormattingEnabled = true;
+            this.cbMonth.Location = new System.Drawing.Point(6, 53);
+            this.cbMonth.Name = "cbMonth";
+            this.cbMonth.Size = new System.Drawing.Size(64, 23);
+            this.cbMonth.TabIndex = 16;
+            // 
             // label_min
             // 
             this.label_min.AutoSize = true;
@@ -542,6 +581,14 @@
             this.label_min.Size = new System.Drawing.Size(22, 15);
             this.label_min.TabIndex = 28;
             this.label_min.Text = "分";
+            // 
+            // cbDay
+            // 
+            this.cbDay.FormattingEnabled = true;
+            this.cbDay.Location = new System.Drawing.Point(6, 82);
+            this.cbDay.Name = "cbDay";
+            this.cbDay.Size = new System.Drawing.Size(64, 23);
+            this.cbDay.TabIndex = 17;
             // 
             // label_hr
             // 
@@ -552,6 +599,14 @@
             this.label_hr.TabIndex = 27;
             this.label_hr.Text = "時";
             // 
+            // cbHour
+            // 
+            this.cbHour.FormattingEnabled = true;
+            this.cbHour.Location = new System.Drawing.Point(6, 129);
+            this.cbHour.Name = "cbHour";
+            this.cbHour.Size = new System.Drawing.Size(64, 23);
+            this.cbHour.TabIndex = 18;
+            // 
             // label_day
             // 
             this.label_day.AutoSize = true;
@@ -560,6 +615,14 @@
             this.label_day.Size = new System.Drawing.Size(22, 15);
             this.label_day.TabIndex = 26;
             this.label_day.Text = "日";
+            // 
+            // cbMin
+            // 
+            this.cbMin.FormattingEnabled = true;
+            this.cbMin.Location = new System.Drawing.Point(6, 158);
+            this.cbMin.Name = "cbMin";
+            this.cbMin.Size = new System.Drawing.Size(64, 23);
+            this.cbMin.TabIndex = 19;
             // 
             // label_mon
             // 
@@ -570,6 +633,14 @@
             this.label_mon.TabIndex = 25;
             this.label_mon.Text = "月";
             // 
+            // cbSec
+            // 
+            this.cbSec.FormattingEnabled = true;
+            this.cbSec.Location = new System.Drawing.Point(6, 187);
+            this.cbSec.Name = "cbSec";
+            this.cbSec.Size = new System.Drawing.Size(64, 23);
+            this.cbSec.TabIndex = 20;
+            // 
             // label_yr
             // 
             this.label_yr.AutoSize = true;
@@ -578,6 +649,26 @@
             this.label_yr.Size = new System.Drawing.Size(22, 15);
             this.label_yr.TabIndex = 24;
             this.label_yr.Text = "年";
+            // 
+            // lblImageFormat
+            // 
+            this.lblImageFormat.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.lblImageFormat.Font = new System.Drawing.Font("新細明體", 8F);
+            this.lblImageFormat.Location = new System.Drawing.Point(1093, 589);
+            this.lblImageFormat.Name = "lblImageFormat";
+            this.lblImageFormat.Size = new System.Drawing.Size(92, 22);
+            this.lblImageFormat.TabIndex = 32;
+            this.lblImageFormat.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
+            // lblImageScale
+            // 
+            this.lblImageScale.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.lblImageScale.Font = new System.Drawing.Font("新細明體", 8F);
+            this.lblImageScale.Location = new System.Drawing.Point(1093, 611);
+            this.lblImageScale.Name = "lblImageScale";
+            this.lblImageScale.Size = new System.Drawing.Size(92, 23);
+            this.lblImageScale.TabIndex = 33;
+            this.lblImageScale.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // chartMura
             // 
@@ -602,7 +693,7 @@
             this.btnSelectFolder.Font = new System.Drawing.Font("新細明體", 8F);
             this.btnSelectFolder.Location = new System.Drawing.Point(1084, 6);
             this.btnSelectFolder.Name = "btnSelectFolder";
-            this.btnSelectFolder.Size = new System.Drawing.Size(110, 40);
+            this.btnSelectFolder.Size = new System.Drawing.Size(115, 55);
             this.btnSelectFolder.TabIndex = 23;
             this.btnSelectFolder.Text = "讀取資料夾";
             this.btnSelectFolder.UseVisualStyleBackColor = true;
@@ -611,9 +702,9 @@
             // btnShowProcessed
             // 
             this.btnShowProcessed.Font = new System.Drawing.Font("新細明體", 8F);
-            this.btnShowProcessed.Location = new System.Drawing.Point(1084, 98);
+            this.btnShowProcessed.Location = new System.Drawing.Point(1086, 90);
             this.btnShowProcessed.Name = "btnShowProcessed";
-            this.btnShowProcessed.Size = new System.Drawing.Size(110, 40);
+            this.btnShowProcessed.Size = new System.Drawing.Size(115, 27);
             this.btnShowProcessed.TabIndex = 22;
             this.btnShowProcessed.Text = "強化圖";
             this.btnShowProcessed.UseVisualStyleBackColor = true;
@@ -631,9 +722,9 @@
             // btnShowOriginal
             // 
             this.btnShowOriginal.Font = new System.Drawing.Font("新細明體", 8F);
-            this.btnShowOriginal.Location = new System.Drawing.Point(1084, 52);
+            this.btnShowOriginal.Location = new System.Drawing.Point(1086, 62);
             this.btnShowOriginal.Name = "btnShowOriginal";
-            this.btnShowOriginal.Size = new System.Drawing.Size(110, 40);
+            this.btnShowOriginal.Size = new System.Drawing.Size(115, 27);
             this.btnShowOriginal.TabIndex = 21;
             this.btnShowOriginal.Text = "原圖";
             this.btnShowOriginal.UseVisualStyleBackColor = true;
@@ -648,14 +739,6 @@
             this.pbCam2.TabIndex = 9;
             this.pbCam2.TabStop = false;
             // 
-            // cbSec
-            // 
-            this.cbSec.FormattingEnabled = true;
-            this.cbSec.Location = new System.Drawing.Point(6, 187);
-            this.cbSec.Name = "cbSec";
-            this.cbSec.Size = new System.Drawing.Size(64, 23);
-            this.cbSec.TabIndex = 20;
-            // 
             // pbCam3
             // 
             this.pbCam3.Location = new System.Drawing.Point(314, 6);
@@ -664,14 +747,6 @@
             this.pbCam3.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             this.pbCam3.TabIndex = 10;
             this.pbCam3.TabStop = false;
-            // 
-            // cbMin
-            // 
-            this.cbMin.FormattingEnabled = true;
-            this.cbMin.Location = new System.Drawing.Point(6, 158);
-            this.cbMin.Name = "cbMin";
-            this.cbMin.Size = new System.Drawing.Size(64, 23);
-            this.cbMin.TabIndex = 19;
             // 
             // pbCam4
             // 
@@ -682,14 +757,6 @@
             this.pbCam4.TabIndex = 11;
             this.pbCam4.TabStop = false;
             // 
-            // cbHour
-            // 
-            this.cbHour.FormattingEnabled = true;
-            this.cbHour.Location = new System.Drawing.Point(6, 129);
-            this.cbHour.Name = "cbHour";
-            this.cbHour.Size = new System.Drawing.Size(64, 23);
-            this.cbHour.TabIndex = 18;
-            // 
             // pbCam5
             // 
             this.pbCam5.Location = new System.Drawing.Point(622, 6);
@@ -698,14 +765,6 @@
             this.pbCam5.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             this.pbCam5.TabIndex = 12;
             this.pbCam5.TabStop = false;
-            // 
-            // cbDay
-            // 
-            this.cbDay.FormattingEnabled = true;
-            this.cbDay.Location = new System.Drawing.Point(6, 82);
-            this.cbDay.Name = "cbDay";
-            this.cbDay.Size = new System.Drawing.Size(64, 23);
-            this.cbDay.TabIndex = 17;
             // 
             // pbCam6
             // 
@@ -716,14 +775,6 @@
             this.pbCam6.TabIndex = 13;
             this.pbCam6.TabStop = false;
             // 
-            // cbMonth
-            // 
-            this.cbMonth.FormattingEnabled = true;
-            this.cbMonth.Location = new System.Drawing.Point(6, 53);
-            this.cbMonth.Name = "cbMonth";
-            this.cbMonth.Size = new System.Drawing.Size(64, 23);
-            this.cbMonth.TabIndex = 16;
-            // 
             // pbCam7
             // 
             this.pbCam7.Location = new System.Drawing.Point(930, 6);
@@ -733,41 +784,13 @@
             this.pbCam7.TabIndex = 14;
             this.pbCam7.TabStop = false;
             // 
-            // cbYear
-            // 
-            this.cbYear.FormattingEnabled = true;
-            this.cbYear.Location = new System.Drawing.Point(6, 24);
-            this.cbYear.Name = "cbYear";
-            this.cbYear.Size = new System.Drawing.Size(64, 23);
-            this.cbYear.TabIndex = 15;
-            // 
-            // btnPeriodPrev
-            // 
-            this.btnPeriodPrev.Location = new System.Drawing.Point(5, 273);
-            this.btnPeriodPrev.Name = "btnPeriodPrev";
-            this.btnPeriodPrev.Size = new System.Drawing.Size(44, 28);
-            this.btnPeriodPrev.TabIndex = 30;
-            this.btnPeriodPrev.Text = "<";
-            this.btnPeriodPrev.UseVisualStyleBackColor = true;
-            this.btnPeriodPrev.Click += new System.EventHandler(this.btnPeriodPrev_Click);
-            // 
-            // btnPeriodNext
-            // 
-            this.btnPeriodNext.Location = new System.Drawing.Point(55, 273);
-            this.btnPeriodNext.Name = "btnPeriodNext";
-            this.btnPeriodNext.Size = new System.Drawing.Size(44, 28);
-            this.btnPeriodNext.TabIndex = 31;
-            this.btnPeriodNext.Text = ">";
-            this.btnPeriodNext.UseVisualStyleBackColor = true;
-            this.btnPeriodNext.Click += new System.EventHandler(this.btnPeriodNext_Click);
-            // 
             // grpReviewGrabNav
             // 
             this.grpReviewGrabNav.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.grpReviewGrabNav.Controls.Add(this.cbReviewGrabId);
             this.grpReviewGrabNav.Controls.Add(this.btnGrabIdPrev);
             this.grpReviewGrabNav.Controls.Add(this.btnGrabIdNext);
-            this.grpReviewGrabNav.Location = new System.Drawing.Point(1088, 469);
+            this.grpReviewGrabNav.Location = new System.Drawing.Point(1086, 475);
             this.grpReviewGrabNav.Name = "grpReviewGrabNav";
             this.grpReviewGrabNav.Size = new System.Drawing.Size(109, 96);
             this.grpReviewGrabNav.TabIndex = 55;
@@ -877,6 +900,24 @@
             this.grpDataSingleSheet.TabStop = false;
             this.grpDataSingleSheet.Text = "單片分類";
             // 
+            // btnGrabIdDataPrev
+            // 
+            this.btnGrabIdDataPrev.Location = new System.Drawing.Point(17, 66);
+            this.btnGrabIdDataPrev.Name = "btnGrabIdDataPrev";
+            this.btnGrabIdDataPrev.Size = new System.Drawing.Size(44, 28);
+            this.btnGrabIdDataPrev.TabIndex = 43;
+            this.btnGrabIdDataPrev.Text = "<";
+            this.btnGrabIdDataPrev.UseVisualStyleBackColor = true;
+            // 
+            // btnGrabIdDataNext
+            // 
+            this.btnGrabIdDataNext.Location = new System.Drawing.Point(63, 66);
+            this.btnGrabIdDataNext.Name = "btnGrabIdDataNext";
+            this.btnGrabIdDataNext.Size = new System.Drawing.Size(44, 28);
+            this.btnGrabIdDataNext.TabIndex = 44;
+            this.btnGrabIdDataNext.Text = ">";
+            this.btnGrabIdDataNext.UseVisualStyleBackColor = true;
+            // 
             // cbDataGrabId
             // 
             this.cbDataGrabId.FormattingEnabled = true;
@@ -886,31 +927,13 @@
             this.cbDataGrabId.TabIndex = 42;
             // 
             // lblDataGrabId
-            //
+            // 
             this.lblDataGrabId.AutoSize = true;
             this.lblDataGrabId.Location = new System.Drawing.Point(15, 21);
             this.lblDataGrabId.Name = "lblDataGrabId";
             this.lblDataGrabId.Size = new System.Drawing.Size(37, 15);
             this.lblDataGrabId.TabIndex = 40;
             this.lblDataGrabId.Text = "序號";
-            //
-            // btnGrabIdDataPrev
-            //
-            this.btnGrabIdDataPrev.Location = new System.Drawing.Point(17, 66);
-            this.btnGrabIdDataPrev.Name = "btnGrabIdDataPrev";
-            this.btnGrabIdDataPrev.Size = new System.Drawing.Size(44, 28);
-            this.btnGrabIdDataPrev.TabIndex = 43;
-            this.btnGrabIdDataPrev.Text = "<";
-            this.btnGrabIdDataPrev.UseVisualStyleBackColor = true;
-            //
-            // btnGrabIdDataNext
-            //
-            this.btnGrabIdDataNext.Location = new System.Drawing.Point(63, 66);
-            this.btnGrabIdDataNext.Name = "btnGrabIdDataNext";
-            this.btnGrabIdDataNext.Size = new System.Drawing.Size(44, 28);
-            this.btnGrabIdDataNext.TabIndex = 44;
-            this.btnGrabIdDataNext.Text = ">";
-            this.btnGrabIdDataNext.UseVisualStyleBackColor = true;
             // 
             // label51
             // 
@@ -2933,29 +2956,6 @@
             this.lblStatusGrab.Text = "● 待機";
             this.lblStatusGrab.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             // 
-            // grpReviewTimePeriod
-            // 
-            this.grpReviewTimePeriod.Controls.Add(this.cbYear);
-            this.grpReviewTimePeriod.Controls.Add(this.btnPeriodNext);
-            this.grpReviewTimePeriod.Controls.Add(this.btnPeriodPrev);
-            this.grpReviewTimePeriod.Controls.Add(this.label_sec);
-            this.grpReviewTimePeriod.Controls.Add(this.cbMonth);
-            this.grpReviewTimePeriod.Controls.Add(this.label_min);
-            this.grpReviewTimePeriod.Controls.Add(this.cbDay);
-            this.grpReviewTimePeriod.Controls.Add(this.label_hr);
-            this.grpReviewTimePeriod.Controls.Add(this.cbHour);
-            this.grpReviewTimePeriod.Controls.Add(this.label_day);
-            this.grpReviewTimePeriod.Controls.Add(this.cbMin);
-            this.grpReviewTimePeriod.Controls.Add(this.label_mon);
-            this.grpReviewTimePeriod.Controls.Add(this.cbSec);
-            this.grpReviewTimePeriod.Controls.Add(this.label_yr);
-            this.grpReviewTimePeriod.Location = new System.Drawing.Point(1084, 144);
-            this.grpReviewTimePeriod.Name = "grpReviewTimePeriod";
-            this.grpReviewTimePeriod.Size = new System.Drawing.Size(109, 319);
-            this.grpReviewTimePeriod.TabIndex = 56;
-            this.grpReviewTimePeriod.TabStop = false;
-            this.grpReviewTimePeriod.Text = "時序";
-            // 
             // canvasMain
             // 
             this.canvasMain.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
@@ -2985,6 +2985,8 @@
             this.tabPageLiveView.ResumeLayout(false);
             this.tabPageLiveView.PerformLayout();
             this.tabPageReview.ResumeLayout(false);
+            this.grpReviewTimePeriod.ResumeLayout(false);
+            this.grpReviewTimePeriod.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.chartMura)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam1)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam2)).EndInit();
@@ -3101,8 +3103,6 @@
             this.tabPageSystem.ResumeLayout(false);
             this.tabPageSystem.PerformLayout();
             this.panelStatusBar.ResumeLayout(false);
-            this.grpReviewTimePeriod.ResumeLayout(false);
-            this.grpReviewTimePeriod.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();

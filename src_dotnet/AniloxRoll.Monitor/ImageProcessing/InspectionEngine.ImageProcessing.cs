@@ -395,6 +395,49 @@ namespace AniloxRoll.Monitor.Core.Services
             });
         }
 
+        /// <summary>
+        /// BMP 拼接處理模式：讀 BMP → GPU pipeline → resize 縮 scale 倍，回傳處理後 Bitmap。
+        /// 曲線保持全解析度（用於 MergeCurves），同時存 .bin 供下次原圖模式讀取。
+        /// </summary>
+        public Bitmap ProcessBmpAtScale(string path, int scale, float hessianFactor,
+            out float[] curveMean, out float[] curveMax)
+        {
+            curveMean = null;
+            curveMax  = null;
+            if (_isDisposed) return null;
+
+            lock (_lock)
+            {
+                bool ok = NativeMethods.CoreCV_FastReadBMP(
+                    path, out int w, out int h, _inputBuffer, (int)_imgBufferSize);
+                if (!ok) return null;
+
+                RunGpuPipeline(w, h, hessianFactor);
+
+                // 曲線（全解析度）
+                curveMean = new float[w];
+                curveMax  = new float[w];
+                Marshal.Copy(_curveMeanBuffer, curveMean, 0, w);
+                Marshal.Copy(_curveMaxBuffer,  curveMax,  0, w);
+
+                // 存 .bin 供下次原圖模式直接讀取
+                string basePath    = Path.Combine(Path.GetDirectoryName(path),
+                                        Path.GetFileNameWithoutExtension(path));
+                string meanBinPath = basePath + "_mean.bin";
+                string maxBinPath  = basePath + "_max.bin";
+                if (!File.Exists(meanBinPath)) SaveCurveBin(curveMean, 1, meanBinPath);
+                if (!File.Exists(maxBinPath))  SaveCurveBin(curveMax,  1, maxBinPath);
+
+                // 縮圖：從 _ridgeBuffer（處理結果）resize
+                int dstW = Math.Max(1, w / scale);
+                int dstH = Math.Max(1, h / scale);
+                // 用 _muraBuffer 作為 resize 目標（與 LoadBitmapAtScale 相同策略）
+                int ret = NativeMethods.CoreCV_Resize_GPU(_ridgeBuffer, w, h, _muraBuffer, dstW, dstH);
+                if (ret != 0) return null;
+                return ImageUtils.Create8bppBitmap(_muraBuffer, dstW, dstH, flipY: true);
+            }
+        }
+
         /// <summary>將 float[] 曲線寫成 MCBF .bin（scaleForHeader=1 代表全解析度 BMP）。</summary>
         private static void SaveCurveBin(float[] data, int scaleForHeader, string path)
         {

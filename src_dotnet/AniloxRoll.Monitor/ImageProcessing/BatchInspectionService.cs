@@ -119,6 +119,11 @@ namespace AniloxRoll.Monitor.Core.Services
         public Bitmap LoadBmpAtScale(string path, int scale) =>
             _sharedProcessor.LoadBitmapAtScale(path, scale);
 
+        public Bitmap ProcessBmpAtScale(string path, int scale,
+            out float[] curveMean, out float[] curveMax) =>
+            _sharedProcessor.ProcessBmpAtScale(path, scale, _hessianMaxFactor,
+                out curveMean, out curveMax);
+
         public void Dispose()
         {
             _sharedProcessor?.Dispose();

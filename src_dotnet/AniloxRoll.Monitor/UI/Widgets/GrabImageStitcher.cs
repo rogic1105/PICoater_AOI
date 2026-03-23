@@ -29,12 +29,14 @@ namespace AniloxRoll.Monitor.UI.Widgets
         /// 拼接同一相機的多張影像（依 sortedPaths 順序，第一張在最上方）。
         /// bmpLoader：BMP 檔案的快速載入器（CoreCV_FastReadBMP + GPU resize）；
         ///            為 null 時退回 GDI+ 路徑（慢）。
+        /// useProcessed：true 時 _raw.jpg 改讀 _proc.jpg（若存在）；BMP 路徑不受影響。
         /// 若只有一張則直接回傳該張的 Bitmap。全部失敗則回傳 null。
         /// </summary>
         public static Bitmap StitchCamera(
             IList<string> sortedPaths,
             int bmpResizeScale = InspectionEngineConfig.DefaultSaveResizeScale,
-            Func<string, Bitmap> bmpLoader = null)
+            Func<string, Bitmap> bmpLoader = null,
+            bool useProcessed = false)
         {
             var images = new List<Bitmap>();
             int refW = 0, refH = 0;
@@ -44,7 +46,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 if (!File.Exists(path)) continue;
                 try
                 {
-                    var bmp = LoadCameraImage(path, bmpResizeScale, bmpLoader);
+                    var bmp = LoadCameraImage(path, bmpResizeScale, bmpLoader, useProcessed);
                     if (bmp == null) continue;
                     images.Add(bmp);
                     if (refW == 0) { refW = bmp.Width; refH = bmp.Height; }
@@ -88,11 +90,18 @@ namespace AniloxRoll.Monitor.UI.Widgets
             return result;
         }
 
-        private static Bitmap LoadCameraImage(string path, int bmpResizeScale, Func<string, Bitmap> bmpLoader)
+        private static Bitmap LoadCameraImage(string path, int bmpResizeScale,
+            Func<string, Bitmap> bmpLoader, bool useProcessed)
         {
             if (path.EndsWith("_raw.jpg", StringComparison.OrdinalIgnoreCase))
             {
-                byte[] bytes = File.ReadAllBytes(path);
+                string loadPath = path;
+                if (useProcessed)
+                {
+                    string procPath = path.Substring(0, path.Length - "_raw.jpg".Length) + "_proc.jpg";
+                    if (File.Exists(procPath)) loadPath = procPath;
+                }
+                byte[] bytes = File.ReadAllBytes(loadPath);
                 using (var ms = new MemoryStream(bytes))
                     return new Bitmap(ms);
             }
