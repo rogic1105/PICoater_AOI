@@ -97,6 +97,7 @@
     <Compile Include="Settings\System\SystemSettings.cs" />
     <Compile Include="Interop\NativeMethods.cs" />
     <Compile Include="Services\AoiService.cs" />
+    <Compile Include="Services\CsvConfigSnapshot.cs" />
     <Compile Include="Services\InspectionLogService.cs" />
     <Compile Include="Services\InspectionStatisticsService.cs" />
     <Compile Include="Services\PlcService.cs" />
@@ -121,6 +122,7 @@
     <Compile Include="UI\Managers\LiveCameraManager.cs" />
     <Compile Include="UI\Widgets\MuraChartHelper.cs" />
     <Compile Include="UI\Widgets\GrabImageStitcher.cs" />
+    <Compile Include="UI\Widgets\ProportionalScaler.cs" />
     <Compile Include="UI\Presenters\InspectionStatsPresenter.cs" />
     <Compile Include="UI\Presenters\ThumbnailGridPresenter.cs" />
     <Compile Include="UI\Navigators\DateTimeNavigator.cs" />

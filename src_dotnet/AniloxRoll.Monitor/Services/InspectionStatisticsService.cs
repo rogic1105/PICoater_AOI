@@ -465,7 +465,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 CultureInfo.InvariantCulture, DateTimeStyles.None, out result);
         }
 
-        /// <summary>解析一行 CSV：Id,FileName,MaxExceed,MeanExceed</summary>
+        /// <summary>解析一行 CSV 資料列（跳過 #CFG 等註解列）。
+        /// 相容 4 欄舊格式與 9 欄新格式。</summary>
         private static bool TryParseLine(string line,
             out string grabId, out string fileName,
             out int maxExceed, out int meanExceed)
@@ -476,6 +477,7 @@ namespace AniloxRoll.Monitor.Core.Services
             meanExceed = 0;
 
             if (string.IsNullOrWhiteSpace(line)) return false;
+            if (line[0] == '#') return false; // #CFG 等註解列
             string[] cols = line.Split(',');
             if (cols.Length < 4) return false;
 
@@ -483,6 +485,30 @@ namespace AniloxRoll.Monitor.Core.Services
             fileName = cols[1].Trim();
             return int.TryParse(cols[2].Trim(), out maxExceed) &&
                    int.TryParse(cols[3].Trim(), out meanExceed);
+        }
+
+        /// <summary>解析 9 欄新格式，額外取得 MeanPeak/MaxPeak/GrabHeight/LineRateHz/ExposureUs。</summary>
+        private static bool TryParseLineEx(string line,
+            out string grabId, out string fileName,
+            out int maxExceed, out int meanExceed,
+            out float meanPeak, out float maxPeak,
+            out int grabHeight, out double lineRateHz, out double exposureUs)
+        {
+            meanPeak = 0; maxPeak = 0; grabHeight = 0; lineRateHz = 0; exposureUs = 0;
+
+            if (!TryParseLine(line, out grabId, out fileName, out maxExceed, out meanExceed))
+                return false;
+
+            string[] cols = line.Split(',');
+            if (cols.Length >= 9)
+            {
+                float.TryParse(cols[4].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out meanPeak);
+                float.TryParse(cols[5].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out maxPeak);
+                int.TryParse(cols[6].Trim(), out grabHeight);
+                double.TryParse(cols[7].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out lineRateHz);
+                double.TryParse(cols[8].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out exposureUs);
+            }
+            return true;
         }
 
         /// <summary>從 FileName（e.g. "20260316_102301.123-3"）提取相機 ID。</summary>
@@ -581,6 +607,65 @@ namespace AniloxRoll.Monitor.Core.Services
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// 從 CSV 中找出指定 grabId 對應的 #CFG（該 grabId 上方最近的 #CFG 列）。
+        /// 回傳 null 表示無 #CFG（舊格式 CSV）。
+        /// </summary>
+        public static CsvConfigSnapshot LoadConfigForGrabId(
+            string captureRootPath, string grabId,
+            DateTime hintFrom = default(DateTime), DateTime hintTo = default(DateTime))
+        {
+            if (string.IsNullOrWhiteSpace(captureRootPath) || !Directory.Exists(captureRootPath))
+                return null;
+
+            IEnumerable<string> csvPaths;
+            if (hintFrom != default(DateTime) && hintTo != default(DateTime))
+            {
+                var dateCsvs = new List<string>();
+                for (DateTime d = hintFrom.Date; d <= hintTo.Date; d = d.AddDays(1))
+                {
+                    string p = Path.Combine(captureRootPath,
+                        d.ToString("yyyy"), d.ToString("yyyyMM"), d.ToString("yyyyMMdd") + ".csv");
+                    if (File.Exists(p)) dateCsvs.Add(p);
+                }
+                csvPaths = dateCsvs;
+            }
+            else
+            {
+                csvPaths = Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories);
+            }
+
+            foreach (string csvPath in csvPaths)
+            {
+                try
+                {
+                    CsvConfigSnapshot lastCfg = null;
+                    using (var sr = new StreamReader(csvPath))
+                    {
+                        string line;
+                        while ((line = sr.ReadLine()) != null)
+                        {
+                            if (line.StartsWith("#CFG,"))
+                            {
+                                if (CsvConfigSnapshot.TryParse(line, out var cfg))
+                                    lastCfg = cfg;
+                                continue;
+                            }
+                            if (!TryParseLine(line, out string id, out _, out _, out _)) continue;
+                            if (id == grabId && lastCfg != null) return lastCfg;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine(
+                        $"[InspectionStatisticsService.LoadConfigForGrabId] {csvPath}: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+
+            return null;
         }
     }
 }

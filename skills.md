@@ -1300,3 +1300,58 @@ _liveCameraManager?.SetXxx();          // 3. 硬體（可能失敗，不影響�
 ```
 
 MouseUp 只負責補送硬體寫入 + `SwitchToCamera`，不再重複存檔。
+
+---
+
+## ProportionalScaler — Form 等比例縮放
+
+### 陷阱：AutoScaleMode + Anchor 衝突
+
+WinForms `AutoScaleMode = Font`（預設）會在 Load 時依 DPI/字體縮放所有控制項，導致 runtime 位置 ≠ Designer 位置。ProportionalScaler 接管後：
+
+1. Designer.cs 設 `AutoScaleMode = None`
+2. `Initialize()` 記錄比例後**立即移除 Anchor**（`c.Anchor = Top|Left`）
+3. `ScaleRecursive` 不還原 savedAnchor，永久由 Scaler 接管
+
+**絕不可混用 Anchor 和 Scaler**：`ResumeLayout(true)` 會觸發 Anchor Layout 覆蓋手動 `SetBounds`。
+
+### TabControl 延遲頁面
+
+未顯示過的 TabPage 控制項可能尺寸為 0。`HookTabControls` 在 `SelectedIndexChanged` 時補呼叫 `RecordRecursive`。
+
+---
+
+## CSV #CFG 設定快照
+
+### 格式
+```
+#CFG,2025-03-23T14:30:00,Cam1_Ops=33,...,ErrorValueMax=2
+```
+
+### 變更偵測
+`CsvConfigSnapshot.ContentKey`（所有 17 值的逗號字串）與 `_lastWrittenConfigKey` 比對，避免重複寫入。
+
+### 讀取流程
+`InspectionStatisticsService.LoadConfigForGrabId(root, grabId, hintFrom, hintTo)` → 逆向掃 CSV 找該序號上方最近的 `#CFG` → `CsvConfigSnapshot.TryParse` → 回傳快照。
+
+### 用途
+- 影像回顧拼接模式：`ShowStitchedCameraInCanvas` 用歷史 OPS/Pos/閾值更新 chartMura + chart1
+- `ClearStitchedMode`：恢復 chart 為當前 `_settings`
+
+---
+
+## chart1 全覽圖（7 台合併曲線）
+
+`chart1`（tabPageReview，Zoomable=false）用 `MuraChartHelper` 顯示 7 台相機 Mean/Max 曲線依機台布局合併。
+
+### 合併演算法（`UpdateOverviewChart`）
+1. 最細 OPS → 統一格點（gridMm = minOpsUm / 1000）
+2. 全域 X 範圍：`min(Cam_Pos)` ~ `max(Cam_Pos + curveLen × opsMm)`
+3. 映射：`idx = (camStart + j×opsMm - globalMin) / gridMm`
+4. 重疊區域：Mean = sum/count（平均）、Max = max（最大值）
+
+### 兩條路徑
+| 路徑 | 方法 | 資料來源 |
+|------|------|---------|
+| 合圖 | `UpdateStitchedOverviewChart()` | `_stitchedCurveMean/Max` |
+| 原圖 | `UpdateOverviewChartFromRepository()` | 當前時間點 7 台 `_mean.bin`/`_max.bin` |

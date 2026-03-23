@@ -94,10 +94,12 @@ CoreCV_FastReadBMP  →  AoiService.ProcessImage  →  CoreCV_Resize_GPU  →  C
 | `src_dotnet/AniloxRoll.Monitor/UI/Widgets/FormInteractionHelper.cs` | `SelectAndLoadFolder`：選擇資料夾後先 `SetLastDataPath`+`Save()` 再掃描檔案 |
 | `src_dotnet/AniloxRoll.Monitor/Acquisition/Inspection/InspectionData.cs` | 檢測結果資料物件（Image/MuraCurveMean/MuraCurveMax/IsCompressedJpeg/ScaleFactor） |
 | `src_dotnet/AniloxRoll.Monitor/ImageCatalog/ImageRepository.cs` | 掃描目錄建立索引，同時掃 `*_raw.jpg` + `*.bmp`；regex 解析 `yyyyMMdd_HHmmss.fff-CamId`；秒下拉顯示 `ss.fff` |
-| `src_dotnet/AniloxRoll.Monitor/Services/InspectionLogService.cs` | 抓圖事件編號（A00001 起）+ 每日 CSV 寫入（`{CaptureRootPath}\{YYYY}\{YYYYMM}\{YYYYMMDD}.csv`）；`_csvLock` 保護多相機同時寫入同一日 CSV |
-| `src_dotnet/AniloxRoll.Monitor/Services/InspectionStatisticsService.cs` | CSV 統計服務：`Compute`、`ComputeByGrabIdRange`、`ComputeDetailedByGrabIdRange`、`LoadGrabIdInfos`、`LoadAvailableTimes`、**`LoadImagePathsForGrabId`**（回傳 `Dictionary<int,List<string>>` camId→排序路徑） |
+| `src_dotnet/AniloxRoll.Monitor/Services/CsvConfigSnapshot.cs` | 不可變設定快照（17 欄：7×CamOps + 7×CamPos + HessianMaxFactor + ErrorValueMean + ErrorValueMax）；`ToCsvLine()` → `#CFG,...`；`TryParse` 反序列化；`ContentKey` 變更偵測 |
+| `src_dotnet/AniloxRoll.Monitor/Services/InspectionLogService.cs` | 抓圖事件編號（A00001 起）+ 每日 CSV 寫入；Header 9 欄 `Id,FileName,MaxExceed,MeanExceed,MeanPeak,MaxPeak,GrabHeight,LineRateHz,ExposureUs`；`#CFG` 列記錄設定快照（每日首筆 + 設定變更時插入）；`ForceWriteConfig` 供抓圖中途設定變更 |
+| `src_dotnet/AniloxRoll.Monitor/Services/InspectionStatisticsService.cs` | CSV 統計服務：`Compute`、`ComputeByGrabIdRange`、`ComputeDetailedByGrabIdRange`、`LoadGrabIdInfos`、`LoadAvailableTimes`、**`LoadImagePathsForGrabId`**（回傳 `Dictionary<int,List<string>>` camId→排序路徑）、**`LoadConfigForGrabId`**（回傳該序號最近的 `#CFG` 快照） |
 | `src_dotnet/AniloxRoll.Monitor/UI/Widgets/GrabImageStitcher.cs` | `StitchCamera(sortedPaths, bmpResizeScale, bmpLoader)`：同一相機多張影像垂直拼接；JPEG 直接載入；BMP 優先用 `bmpLoader`（CoreCV_FastReadBMP + GPU resize，比 GDI+ 快 ~10x），縮圖後 JPEG 95% 重編碼對齊品質；接縫修正：`NearestNeighbor` + `PixelOffsetMode.Half` |
 | `src_dotnet/AniloxRoll.Monitor/UI/Presenters/InspectionStatsPresenter.cs` | tabPageData：7 個卡片 Panel（良率顏色）+ listViewStats（5 欄彙總表） |
+| `src_dotnet/AniloxRoll.Monitor/UI/Widgets/ProportionalScaler.cs` | Form 等比例縮放 Helper；Initialize 記錄所有控制項比例 + 移除 Anchor；Resize 時按比例還原位置/大小/字體；TabControl 延遲頁面自動補記錄 |
 | `sdk/AOI_SDK/src_dotnet/AOI.SDK/UI/SmartCanvas.cs` | PictureBox 子類：zoom/pan/edge；**拖曳效能**：拖曳中跳過 `GetPixel`，`TriggerStatusChange` 限流 32ms（chart ~30fps），`MouseUp` 補一次完整更新 |
 | `sdk/AOI_SDK/core_cv_api/src/export_api.cpp` | CoreCV_Resize_GPU 實作 |
 | `sdk/AOI_SDK/core_cv_api/include/export_c/export_api.h` | CoreCV_Resize_GPU 宣告 |
@@ -128,7 +130,8 @@ Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×741），�
 
 **tabPageReview 主要控制項**：
 - `canvasMain`：Location=(8, 123)，Size=(1070, 346)，直接置於 `tabPageReview`（已移除 `tlpReviewLayout`）
-- `chartMura`：Location=(8, 469)，Size=(1070, 149)，直接置於 `tabPageReview`
+- `chartMura`：Location=(7, 426)，Size=(888, 96)，單台相機 Mean/Max 曲線（MuraChartHelper，可 zoom/pan 與 canvas 聯動）
+- `chart1`：Location=(6, 529)，Size=(888, 96)，**全覽圖**（MuraChartHelper，Zoomable=false）：7 台相機曲線依 Cam_Pos 位置合併；重疊區域 Mean 取平均、Max 取最大值；合圖路徑（`UpdateStitchedOverviewChart`）和原圖路徑（`UpdateOverviewChartFromRepository`）皆更新
 
 **tabPageReview 額外控制項（X=1084 右欄）**：
 - `lblImageFormat`（Y=400）：顯示目前圖片格式，"壓縮 JPEG" / "原始 BMP"
@@ -549,6 +552,17 @@ magic(4)="MCBF" | version(4=int) | scale_factor(4=float) | array_length(4=int) |
 `UpdateCanvas` → 用新圖的 `_imageScaleFactor` 把 mm 反算回 pixel zoom/pan。
 Y 軸用 `_savedYCenterFraction`（圖片高度中心分率）保持垂直位置。
 `SaveViewIfNeeded` 在 `_imageScaleFactor` 更新前呼叫，`UpdateCanvas` 在更新後呼叫（呼叫順序由 `FormInteractionHelper.LoadImages` → `OnGallerySelectionChanged` 保證）。
+
+---
+
+## ProportionalScaler 等比例縮放
+
+Form 使用 `AutoScaleMode = None`（Designer.cs），所有控制項的 Anchor 在 `ProportionalScaler.Initialize()` 時被移除（設為 `Top|Left`），由 Scaler 全權接管定位。
+
+- **Initialize**：記錄每個控制項的 `Left/Top/Width/Height` 相對於 `Parent.ClientSize` 的比例 + `FontSize / FormHeight`
+- **OnFormResize**：按比例重算位置/大小/字體（4–72pt 範圍，差距 > 0.5pt 才更新）
+- **TabControl**：`SelectedIndexChanged` hook，首次切頁時補記錄延遲頁面的控制項
+- **重要**：不可混用 Anchor 和 Scaler，否則 `ResumeLayout` 觸發 Anchor 重算會覆蓋 Scaler 設定
 
 ---
 

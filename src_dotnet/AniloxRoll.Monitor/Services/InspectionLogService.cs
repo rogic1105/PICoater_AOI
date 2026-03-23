@@ -13,9 +13,16 @@ namespace AniloxRoll.Monitor.Core.Services
     /// </summary>
     public class InspectionLogService
     {
+        private const string Header =
+            "Id,FileName,MaxExceed,MeanExceed,MeanPeak,MaxPeak,GrabHeight,LineRateHz,ExposureUs";
+
         private int _lastIdNum;
         private readonly Func<string> _getCaptureRoot;
         private readonly object _csvLock = new object();
+
+        // #CFG 變更偵測
+        private string _lastWrittenConfigKey;
+        private string _lastCsvPath;
 
         /// <summary>
         /// <param name="getCaptureRoot">取得 CaptureRootPath 的委派（支援動態更新）</param>
@@ -42,8 +49,7 @@ namespace AniloxRoll.Monitor.Core.Services
         }
 
         /// <summary>
-        /// 寫入一筆單相機檢測結果到當日 CSV。
-        /// maxPeak / meanPeak 為 0–1 normalized（MuraCurve.Max() / 255f）。
+        /// 寫入一筆單相機檢測結果到當日 CSV（新格式 9 欄 + #CFG）。
         /// </summary>
         public void AppendRecord(
             string grabId,
@@ -51,9 +57,14 @@ namespace AniloxRoll.Monitor.Core.Services
             float  meanPeak,
             float  maxPeak,
             float  errMean,
-            float  errMax)
+            float  errMax,
+            int    grabHeight,
+            double lineRateHz,
+            double exposureUs,
+            CsvConfigSnapshot config)
         {
-            AppendRecord(grabId, fileName, meanPeak, maxPeak, errMean, errMax, DateTime.Now);
+            AppendRecord(grabId, fileName, meanPeak, maxPeak, errMean, errMax,
+                grabHeight, lineRateHz, exposureUs, config, DateTime.Now);
         }
 
         internal void AppendRecord(
@@ -63,6 +74,10 @@ namespace AniloxRoll.Monitor.Core.Services
             float    maxPeak,
             float    errMean,
             float    errMax,
+            int      grabHeight,
+            double   lineRateHz,
+            double   exposureUs,
+            CsvConfigSnapshot config,
             DateTime timestamp)
         {
             try
@@ -76,22 +91,41 @@ namespace AniloxRoll.Monitor.Core.Services
                     timestamp.ToString("yyyyMM"));
                 Directory.CreateDirectory(dir);
 
-                string path = Path.Combine(dir,
-                    $"{timestamp:yyyyMMdd}.csv");
+                string csvPath = Path.Combine(dir, $"{timestamp:yyyyMMdd}.csv");
 
                 int maxExceed  = maxPeak  > errMax  ? 1 : 0;
                 int meanExceed = meanPeak > errMean ? 1 : 0;
 
-                // 多台相機可能同時寫入同一日 CSV，加 lock 防止交錯寫入
                 lock (_csvLock)
                 {
-                    bool writeHeader = !File.Exists(path);
-                    using (var sw = new StreamWriter(path, append: true, new UTF8Encoding(false)))
-                    {
-                        if (writeHeader)
-                            sw.WriteLine("Id,FileName,MaxExceed,MeanExceed");
+                    bool isNewFile = !File.Exists(csvPath);
+                    bool isNewDay  = !string.Equals(_lastCsvPath, csvPath, StringComparison.OrdinalIgnoreCase);
 
-                        sw.WriteLine($"{grabId},{fileName},{maxExceed},{meanExceed}");
+                    using (var sw = new StreamWriter(csvPath, append: true, new UTF8Encoding(false)))
+                    {
+                        // 新檔案或新的一天 → 寫 #CFG + header
+                        if (isNewFile || isNewDay)
+                        {
+                            if (config != null)
+                            {
+                                sw.WriteLine(config.ToCsvLine());
+                                _lastWrittenConfigKey = config.ContentKey;
+                            }
+                            if (isNewFile)
+                                sw.WriteLine(Header);
+                            _lastCsvPath = csvPath;
+                        }
+                        else if (config != null && config.ContentKey != _lastWrittenConfigKey)
+                        {
+                            // 設定變更 → 插入新的 #CFG 列
+                            sw.WriteLine(config.ToCsvLine());
+                            _lastWrittenConfigKey = config.ContentKey;
+                        }
+
+                        sw.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                            "{0},{1},{2},{3},{4:F4},{5:F4},{6},{7:F1},{8:F1}",
+                            grabId, fileName, maxExceed, meanExceed,
+                            meanPeak, maxPeak, grabHeight, lineRateHz, exposureUs));
                     }
                 }
             }
@@ -99,6 +133,53 @@ namespace AniloxRoll.Monitor.Core.Services
             {
                 Trace.WriteLine(
                     $"[InspectionLogService] {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 抓圖進行中設定變更時呼叫，立刻在當日 CSV 插入一行 #CFG（不伴隨資料列）。
+        /// </summary>
+        public void ForceWriteConfig(CsvConfigSnapshot config)
+        {
+            if (config == null) return;
+            try
+            {
+                string root = _getCaptureRoot();
+                if (string.IsNullOrWhiteSpace(root)) return;
+
+                DateTime now = DateTime.Now;
+                string dir = Path.Combine(root,
+                    now.Year.ToString(CultureInfo.InvariantCulture),
+                    now.ToString("yyyyMM"));
+                Directory.CreateDirectory(dir);
+
+                string csvPath = Path.Combine(dir, $"{now:yyyyMMdd}.csv");
+
+                lock (_csvLock)
+                {
+                    if (config.ContentKey == _lastWrittenConfigKey &&
+                        string.Equals(_lastCsvPath, csvPath, StringComparison.OrdinalIgnoreCase))
+                        return; // 沒有變更，不寫
+
+                    using (var sw = new StreamWriter(csvPath, append: true, new UTF8Encoding(false)))
+                    {
+                        bool isNewFile = !File.Exists(csvPath) ||
+                            new FileInfo(csvPath).Length == 0;
+
+                        if (isNewFile)
+                            sw.WriteLine(Header);
+
+                        sw.WriteLine(config.ToCsvLine());
+                    }
+
+                    _lastWrittenConfigKey = config.ContentKey;
+                    _lastCsvPath = csvPath;
+                }
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine(
+                    $"[InspectionLogService.ForceWriteConfig] {ex.GetType().Name}: {ex.Message}");
             }
         }
 

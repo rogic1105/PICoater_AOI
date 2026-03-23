@@ -28,7 +28,9 @@ namespace AniloxRoll.Monitor.Forms
         private FormInteractionHelper _interactionHelper;
         private MuraChartHelper _muraChartHelper;
         private MuraChartHelper _muraChartLiveHelper;
+        private MuraChartHelper _stitchedOverviewHelper;
         private LiveCameraManager _liveCameraManager;
+        private ProportionalScaler _scaler;
 
         // --- 相機參數控制項陣列（供 SyncFromCamera 存取）---
         private TrackBar[]      _expBars;
@@ -80,12 +82,15 @@ namespace AniloxRoll.Monitor.Forms
         private Bitmap[] _stitchedImages;
         private float[][] _stitchedCurveMean;
         private float[][] _stitchedCurveMax;
+        private CsvConfigSnapshot _currentGrabConfig;
 
 
         public AniloxRollForm()
         {
             InitializeComponent();
             InitializeSystem();
+            _scaler = new ProportionalScaler(this);
+            _scaler.Initialize();
             Shown += (s, e) => AutoFitPropertyGridLabelColumn(propertyGridSettings);
         }
 
@@ -129,6 +134,11 @@ namespace AniloxRoll.Monitor.Forms
             _muraChartLiveHelper = new MuraChartHelper(this.muraChartLive);
             _muraChartLiveHelper.SetOps(_settings.Cam1_Ops);
             _muraChartLiveHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+
+            _stitchedOverviewHelper = new MuraChartHelper(this.chart1);
+            _stitchedOverviewHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            if (chart1.ChartAreas.Count > 0)
+                chart1.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
 
             checkBoxEnableImageProcessing.Checked =
                 UserSessionState.GetLastEnableImageProcessing(checkBoxEnableImageProcessing.Checked);
@@ -247,13 +257,21 @@ namespace AniloxRoll.Monitor.Forms
         private void OnCameraInspectionResult(int camId, string fileNameNoExt, float meanPeak, float maxPeak)
         {
             if (string.IsNullOrEmpty(_currentGrabId)) return;
+            int idx = camId - 1;
             _inspectionLogService?.AppendRecord(
                 _currentGrabId,
                 fileNameNoExt,
                 meanPeak,
                 maxPeak,
                 _settings.ErrorValueMean,
-                _settings.ErrorValueMax);
+                _settings.ErrorValueMax,
+                idx >= 0 && idx < _settings.Acquisition.CameraGrabHeight.Length
+                    ? _settings.Acquisition.CameraGrabHeight[idx] : 0,
+                idx >= 0 && idx < _settings.Acquisition.CameraLineRateHz.Length
+                    ? _settings.Acquisition.CameraLineRateHz[idx] : 0,
+                idx >= 0 && idx < _settings.Acquisition.CameraExposureTimeUs.Length
+                    ? _settings.Acquisition.CameraExposureTimeUs[idx] : 0,
+                CsvConfigSnapshot.FromSettings(_settings));
         }
 
         private void OnLiveCurveData(int camId, float[] meanArr, float[] maxArr)
@@ -327,6 +345,10 @@ namespace AniloxRoll.Monitor.Forms
             _muraChartLiveHelper?.SetOps(_settings.Cam1_Ops);
             _muraChartLiveHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
 
+            // 抓圖進行中設定變更 → 立刻在 CSV 插入 #CFG
+            if (_liveCameraManager?.IsLiveGrabbing == true)
+                _inspectionLogService?.ForceWriteConfig(CsvConfigSnapshot.FromSettings(_settings));
+
             string changedPropertyName = e?.ChangedItem?.PropertyDescriptor?.Name ?? string.Empty;
             bool isRecipeChange = RecipePropertyNames.Contains(changedPropertyName);
 
@@ -336,6 +358,7 @@ namespace AniloxRoll.Monitor.Forms
                 _lastReviewProcessedMode = true;
                 ClearStitchedMode();
                 await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
+                UpdateOverviewChartFromRepository();
                 _interactionHelper.RefreshCurrentCanvasResult();
             }
         }
@@ -395,6 +418,7 @@ namespace AniloxRoll.Monitor.Forms
             SetGroupBoxActive(grpReviewTimePeriod, true);
             SetGroupBoxActive(grpReviewGrabNav, false);
             await _presenter.LoadImagesWithPeriodLockAsync(false, _interactionHelper.LoadImages);
+            UpdateOverviewChartFromRepository();
         }
 
         private async void btnShowOriginal_Click(object sender, EventArgs e)
@@ -407,6 +431,7 @@ namespace AniloxRoll.Monitor.Forms
             _lastReviewProcessedMode = false;
             ClearStitchedMode();
             await _presenter.LoadImagesWithPeriodLockAsync(false, _interactionHelper.LoadImages);
+            UpdateOverviewChartFromRepository();
         }
 
         private async void btnShowProcessed_Click(object sender, EventArgs e)
@@ -419,6 +444,7 @@ namespace AniloxRoll.Monitor.Forms
             _lastReviewProcessedMode = true;
             ClearStitchedMode();
             await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
+            UpdateOverviewChartFromRepository();
         }
 
         private async Task ReloadCurrentStitchedView(bool enableProcess)
@@ -430,10 +456,10 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         private async void btnPeriodPrev_Click(object sender, EventArgs e)
-        { ClearStitchedMode(); await _presenter.MovePeriodAsync(-1, _lastReviewProcessedMode, _interactionHelper.LoadImages); }
+        { ClearStitchedMode(); await _presenter.MovePeriodAsync(-1, _lastReviewProcessedMode, _interactionHelper.LoadImages); UpdateOverviewChartFromRepository(); }
 
         private async void btnPeriodNext_Click(object sender, EventArgs e)
-        { ClearStitchedMode(); await _presenter.MovePeriodAsync(+1, _lastReviewProcessedMode, _interactionHelper.LoadImages); }
+        { ClearStitchedMode(); await _presenter.MovePeriodAsync(+1, _lastReviewProcessedMode, _interactionHelper.LoadImages); UpdateOverviewChartFromRepository(); }
 
         // ==========================================
         // --- 右側面板：初始化 ---
@@ -1200,10 +1226,13 @@ namespace AniloxRoll.Monitor.Forms
                 long csvMs = 0, stitchMs = 0;
                 float[][] newCurveMean = new float[7][];
                 float[][] newCurveMax  = new float[7][];
+                CsvConfigSnapshot grabCfg = null;
                 var newImages = await Task.Run(() =>
                 {
                     var swCsv = Stopwatch.StartNew();
                     var grouped = InspectionStatisticsService.LoadImagePathsForGrabId(
+                        root, grabId, hintFrom, hintTo);
+                    grabCfg = InspectionStatisticsService.LoadConfigForGrabId(
                         root, grabId, hintFrom, hintTo);
                     csvMs = swCsv.ElapsedMilliseconds;
 
@@ -1257,9 +1286,11 @@ namespace AniloxRoll.Monitor.Forms
                 _stitchedImages    = newImages;
                 _stitchedCurveMean = newCurveMean;
                 _stitchedCurveMax  = newCurveMax;
+                _currentGrabConfig = grabCfg;
                 SetGroupBoxActive(grpReviewGrabNav, true); SetGroupBoxActive(grpReviewTimePeriod, false);
                 _galleryManager.SetImages(_stitchedImages);
                 ShowStitchedCameraInCanvas(_galleryManager.SelectedIndex);
+                UpdateStitchedOverviewChart();
 
                 Trace.WriteLine($"[StitchView] {grabId} proc={enableProcess} | CSV={csvMs}ms | Stitch={stitchMs}ms | Total={swTotal.ElapsedMilliseconds}ms");
             }
@@ -1278,6 +1309,16 @@ namespace AniloxRoll.Monitor.Forms
             _stitchedImages = null;
             _stitchedCurveMean = null;
             _stitchedCurveMax = null;
+            _currentGrabConfig = null;
+            // 恢復 chart 為當前設定（stitch mode 可能改用了歷史 #CFG 的 Ops/閾值）
+            _muraChartHelper?.SetOps(_settings.Cam1_Ops);
+            _muraChartHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            // 清除全覽圖
+            if (_stitchedOverviewHelper != null && chart1.ChartAreas.Count > 0)
+            {
+                chart1.Series["Mean"].Points.Clear();
+                chart1.Series["Max"].Points.Clear();
+            }
             SetGroupBoxActive(grpReviewGrabNav, false); SetGroupBoxActive(grpReviewTimePeriod, true);
         }
 
@@ -1338,6 +1379,7 @@ namespace AniloxRoll.Monitor.Forms
             if (bmp != null) canvasMain.FitToScreen();
 
             // 更新 MuraChart（含 X 軸範圍，與 Period 模式一致）
+            // 若有 #CFG 設定快照，用抓圖當時的 Ops/Pos/閾值；否則 fallback 到當前 _settings
             if (_muraChartHelper != null && _settings != null)
             {
                 float[] mean = (_stitchedCurveMean != null && idx >= 0 && idx < _stitchedCurveMean.Length)
@@ -1345,11 +1387,162 @@ namespace AniloxRoll.Monitor.Forms
                 float[] max = (_stitchedCurveMax != null && idx >= 0 && idx < _stitchedCurveMax.Length)
                     ? _stitchedCurveMax[idx] : null;
 
-                double[] posArr = _settings.GetCameraStartPositionMmArray();
+                double[] posArr;
+                if (_currentGrabConfig != null)
+                {
+                    double opsUm = (idx >= 0 && idx < _currentGrabConfig.CamOps.Length)
+                        ? _currentGrabConfig.CamOps[idx] : _settings.Cam1_Ops;
+                    _muraChartHelper.SetOps(opsUm);
+                    _muraChartHelper.SetThresholds(
+                        _currentGrabConfig.ErrorValueMean, _currentGrabConfig.ErrorValueMax);
+                    posArr = _currentGrabConfig.CamPos;
+                }
+                else
+                {
+                    posArr = _settings.GetCameraStartPositionMmArray();
+                }
+
                 double startPos = (idx >= 0 && idx < posArr.Length) ? posArr[idx] : 0;
                 _interactionHelper.TryComputeCurrentViewRange(idx, out double leftMm, out double rightMm);
                 _muraChartHelper.UpdateDataAndView(mean, max, startPos, leftMm, rightMm);
             }
+        }
+
+        /// <summary>
+        /// 合圖路徑：用 _stitchedCurveMean/Max 更新 chart1 全覽圖。
+        /// </summary>
+        private void UpdateStitchedOverviewChart()
+        {
+            if (_stitchedCurveMean == null) return;
+
+            double[] opsArr, posArr;
+            float errMean, errMax;
+            if (_currentGrabConfig != null)
+            {
+                opsArr  = _currentGrabConfig.CamOps;
+                posArr  = _currentGrabConfig.CamPos;
+                errMean = _currentGrabConfig.ErrorValueMean;
+                errMax  = _currentGrabConfig.ErrorValueMax;
+            }
+            else
+            {
+                opsArr  = _settings.GetCameraOpsUmArray();
+                posArr  = _settings.GetCameraStartPositionMmArray();
+                errMean = _settings.ErrorValueMean;
+                errMax  = _settings.ErrorValueMax;
+            }
+
+            UpdateOverviewChart(_stitchedCurveMean, _stitchedCurveMax, opsArr, posArr, errMean, errMax);
+        }
+
+        /// <summary>
+        /// 原圖路徑：從當前 Repository 時間點讀取 7 台 .bin 曲線更新 chart1 全覽圖。
+        /// </summary>
+        private void UpdateOverviewChartFromRepository()
+        {
+            if (_stitchedOverviewHelper == null || _stitchedImages != null) return;
+
+            var images = _imageRepository.GetImages(
+                _dateTimeNavigator.GetCurrentYear(),
+                _dateTimeNavigator.GetCurrentMonth(),
+                _dateTimeNavigator.GetCurrentDay(),
+                _dateTimeNavigator.GetCurrentHour(),
+                _dateTimeNavigator.GetCurrentMin(),
+                _dateTimeNavigator.GetCurrentSec());
+
+            if (images == null || images.Count == 0)
+            {
+                chart1.Series["Mean"].Points.Clear();
+                chart1.Series["Max"].Points.Clear();
+                return;
+            }
+
+            var curveMean = new float[7][];
+            var curveMax  = new float[7][];
+            for (int i = 0; i < 7; i++)
+            {
+                if (!images.TryGetValue(i + 1, out string path)) continue;
+                string basePath;
+                if (path.EndsWith("_raw.jpg", StringComparison.OrdinalIgnoreCase))
+                    basePath = path.Substring(0, path.Length - "_raw.jpg".Length);
+                else
+                    basePath = System.IO.Path.Combine(
+                        System.IO.Path.GetDirectoryName(path),
+                        System.IO.Path.GetFileNameWithoutExtension(path));
+                curveMean[i] = InspectionEngine.LoadCurveBin(basePath + "_mean.bin");
+                curveMax[i]  = InspectionEngine.LoadCurveBin(basePath + "_max.bin");
+            }
+
+            UpdateOverviewChart(curveMean, curveMax,
+                _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray(),
+                _settings.ErrorValueMean, _settings.ErrorValueMax);
+        }
+
+        /// <summary>
+        /// 將 7 台相機的曲線依機台布局位置合併到 chart1（全覽圖）。
+        /// 重疊區域：Mean 取平均、Max 取最大值。
+        /// </summary>
+        private void UpdateOverviewChart(float[][] allMean, float[][] allMax,
+            double[] opsArr, double[] posArr, float errMean, float errMax)
+        {
+            if (_stitchedOverviewHelper == null || allMean == null) return;
+
+            // 最細 OPS 作為統一格點
+            double minOpsUm = double.MaxValue;
+            for (int i = 0; i < 7; i++)
+                if (opsArr[i] > 0 && opsArr[i] < minOpsUm) minOpsUm = opsArr[i];
+            if (minOpsUm <= 0 || minOpsUm == double.MaxValue) minOpsUm = 33.0;
+            double gridMm = minOpsUm / 1000.0;
+
+            // 全域範圍
+            double globalMin = double.MaxValue, globalMax = double.MinValue;
+            for (int i = 0; i < 7; i++)
+            {
+                var curve = allMean[i];
+                if (curve == null || curve.Length == 0) continue;
+                double camStart = posArr[i];
+                double camEnd   = camStart + curve.Length * (opsArr[i] / 1000.0);
+                if (camStart < globalMin) globalMin = camStart;
+                if (camEnd   > globalMax) globalMax = camEnd;
+            }
+            if (globalMin >= globalMax) return;
+
+            int totalLen = (int)Math.Ceiling((globalMax - globalMin) / gridMm);
+            if (totalLen <= 0 || totalLen > 2000000) return;
+
+            var mergedMean   = new float[totalLen];
+            var mergedMax    = new float[totalLen];
+            var overlapCount = new int[totalLen];
+
+            for (int i = 0; i < 7; i++)
+            {
+                var curveMean = allMean[i];
+                if (curveMean == null || curveMean.Length == 0) continue;
+                var curveMax = (allMax != null && i < allMax.Length) ? allMax[i] : null;
+
+                double camOpsMm = opsArr[i] / 1000.0;
+                double camStart = posArr[i];
+
+                for (int j = 0; j < curveMean.Length; j++)
+                {
+                    int idx = (int)((camStart + j * camOpsMm - globalMin) / gridMm);
+                    if (idx < 0 || idx >= totalLen) continue;
+
+                    mergedMean[idx]   += curveMean[j];
+                    overlapCount[idx] += 1;
+
+                    float mv = (curveMax != null && j < curveMax.Length) ? curveMax[j] : 0;
+                    if (mv > mergedMax[idx]) mergedMax[idx] = mv;
+                }
+            }
+
+            // 重疊區域 Mean 取平均
+            for (int i = 0; i < totalLen; i++)
+                if (overlapCount[i] > 1) mergedMean[i] /= overlapCount[i];
+
+            _stitchedOverviewHelper.SetOps(minOpsUm);
+            _stitchedOverviewHelper.SetThresholds(errMean, errMax);
+            _stitchedOverviewHelper.UpdateData(mergedMean, mergedMax, globalMin);
         }
 
         /// <summary>
