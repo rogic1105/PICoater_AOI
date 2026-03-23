@@ -410,8 +410,11 @@ private void UpdateExpMaxAndClampColor(int idx, int newMax)
 - 7 個 Panel 卡片：BackColor = 綠(≥95%) / 橙(80-95%) / 紅(<80%) / 灰(無資料)
 - `listViewStats` 5 欄彙總：相機 / Pass / Fail / Total / 良率（序號模式下分母=唯一序號數）
 - `listView1` 逐序號明細：序號 + CAM1~7（Pass/Fail/—），整行紅底 = 任一 CAM Fail
-- 控制項命名：`panelStatCam1`~7，`listViewStats`，`listViewGrabDetail`，`cbGrabIdStart`（序號起），`cbGrabIdEnd`（序號迄），`cbDataGrabId`（單片選擇，位於 `grpDataSingleSheet`），`cbStart/EndYear/Month/Day/Hour/Min/Sec`，`btnQueryStats`，`btnSelectDataFolder`
-- tabPageReview 序號導航：`grpReviewGrabNav`（"序號跳轉"） > `cbReviewGrabId` / `btnReviewGrabPrev` / `btnReviewGrabNext`；選擇序號後立即 NavigateToDateTime + LoadImages
+- 控制項命名：`panelStatCam1`~7，`listViewStats`，`listViewGrabDetail`，`cbGrabIdStart`（序號起），`cbGrabIdEnd`（序號迄），`cbDataGrabId`（單片選擇，位於 `grpDataSingleSheet`）+ `btnGrabIdDataPrev`/`btnGrabIdDataNext`，`cbStart/EndYear/Month/Day/Hour/Min/Sec`，`btnQueryStats`，`btnSelectDataFolder`
+- tabPageReview 序號導航：`grpReviewGrabNav`（"單片"） > `cbReviewGrabId` / `btnGrabIdPrev` / `btnGrabIdNext`；選擇序號後立即 NavigateToDateTime + LoadGrabStitchedViewAsync
+- `cbReviewGrabId` ↔ `cbDataGrabId` 雙向同步（`_syncingGrabIdCross` guard）；`btnGrabIdDataPrev`/`Next` 操作 `cbDataGrabId` 也連動 Review tab
+- `btnSelectFolder` / `btnSelectDataFolder` 互相共享資料（序號清單、時間、ImageRepository）
+- GroupBox 綠色高亮：`ActiveGroupBox_Paint` 繪製活動模式指示，Review tab 2 擇 1、Data tab 3 擇 1
 - `ComboBoxWheelReverser` 適用清單：`cbGrabIdStart`、`cbGrabIdEnd`、`cbDataGrabId`、`cbReviewGrabId` 及所有時間 ComboBox
 
 ---
@@ -688,7 +691,7 @@ Directory.GetFiles(root, "*_raw.jpg", AllDirectories)
 
 ### 問題
 
-切換時間段（btnLastPeriod/NextPeriod）若前後圖片倍率不同（BMP 1x vs JPEG 5x），pixel zoom/pan 直接還原會造成視窗跳位。
+切換時間段（btnPeriodPrev/PeriodNext）若前後圖片倍率不同（BMP 1x vs JPEG 5x），pixel zoom/pan 直接還原會造成視窗跳位。
 
 ### 解法：mm 世界座標存/取
 

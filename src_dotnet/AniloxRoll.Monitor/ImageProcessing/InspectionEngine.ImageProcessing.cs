@@ -68,6 +68,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 if (ret != 0) throw new InvalidOperationException($"GPU Resize Error: {ret}");
 
                 // [BMP] 從 Pinned Memory 建立 Bitmap（直接 MemoryCopy，無額外 Marshal 開銷）
+                // CoreCV_Resize_GPU 輸出為 bottom-up，此應用刻意保持翻轉（取像時序）
                 stopwatch.Restart();
                 var bitmap = ImageUtils.Create8bppBitmap(_thumbnailBuffer, targetThumbWidth, thumbH);
                 stopwatch.Stop();
@@ -139,6 +140,7 @@ namespace AniloxRoll.Monitor.Core.Services
 
                 if (resizeRet != 0) throw new InvalidOperationException($"GPU Resize Error: {resizeRet}");
 
+                // CoreCV_Resize_GPU 輸出為 bottom-up，此應用刻意保持翻轉（取像時序）
                 Bitmap thumb = ImageUtils.Create8bppBitmap(_thumbnailBuffer, targetThumbWidth, thumbH);
 
                 float[] curveMean = new float[w];
@@ -436,7 +438,7 @@ namespace AniloxRoll.Monitor.Core.Services
         /// <summary>
         /// 讀取 .bin 曲線檔案。格式：magic(4) + version(4) + scale_factor(4f) + array_length(4) + float[]
         /// </summary>
-        private static float[] LoadCurveBin(string path)
+        internal static float[] LoadCurveBin(string path)
         {
             if (!File.Exists(path)) return null;
             try

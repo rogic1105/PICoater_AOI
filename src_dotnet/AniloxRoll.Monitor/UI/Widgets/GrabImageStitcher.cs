@@ -57,7 +57,12 @@ namespace AniloxRoll.Monitor.UI.Widgets
             }
 
             if (images.Count == 0) return null;
-            if (images.Count == 1) return images[0]; // 單張直接回傳，不需拼接
+            if (images.Count == 1)
+            {
+                // 取像時序需上下翻轉顯示
+                images[0].RotateFlip(RotateFlipType.RotateNoneFlipY);
+                return images[0];
+            }
 
             var result = new Bitmap(refW, refH * images.Count, PixelFormat.Format32bppArgb);
             try
@@ -78,6 +83,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 foreach (var img in images) img.Dispose();
             }
 
+            // 合成完一次翻轉（取像時序需上下翻轉顯示，與 Period 模式一致）
+            result.RotateFlip(RotateFlipType.RotateNoneFlipY);
             return result;
         }
 

@@ -70,15 +70,19 @@
             this.cbMonth = new System.Windows.Forms.ComboBox();
             this.pbCam7 = new System.Windows.Forms.PictureBox();
             this.cbYear = new System.Windows.Forms.ComboBox();
-            this.btnLastPeriod = new System.Windows.Forms.Button();
-            this.btnNextPeriod = new System.Windows.Forms.Button();
+            this.btnPeriodPrev = new System.Windows.Forms.Button();
+            this.btnPeriodNext = new System.Windows.Forms.Button();
             this.grpReviewGrabNav = new System.Windows.Forms.GroupBox();
             this.cbReviewGrabId = new System.Windows.Forms.ComboBox();
-            this.btnReviewGrabPrev = new System.Windows.Forms.Button();
-            this.btnReviewGrabNext = new System.Windows.Forms.Button();
-            this.canvasMain = new AOI.SDK.UI.SmartCanvas();
+            this.btnGrabIdPrev = new System.Windows.Forms.Button();
+            this.btnGrabIdNext = new System.Windows.Forms.Button();
             this.tabPageData = new System.Windows.Forms.TabPage();
+            this.label54 = new System.Windows.Forms.Label();
+            this.label55 = new System.Windows.Forms.Label();
+            this.label56 = new System.Windows.Forms.Label();
             this.grpDataSingleSheet = new System.Windows.Forms.GroupBox();
+            this.btnGrabIdDataPrev = new System.Windows.Forms.Button();
+            this.btnGrabIdDataNext = new System.Windows.Forms.Button();
             this.cbDataGrabId = new System.Windows.Forms.ComboBox();
             this.lblDataGrabId = new System.Windows.Forms.Label();
             this.label51 = new System.Windows.Forms.Label();
@@ -119,7 +123,6 @@
             this.cbEndYear = new System.Windows.Forms.ComboBox();
             this.cbEndMonth = new System.Windows.Forms.ComboBox();
             this.btnSelectDataFolder = new System.Windows.Forms.Button();
-            this.btnQueryStats = new System.Windows.Forms.Button();
             this.listViewStats = new System.Windows.Forms.ListView();
             this.panelStatCam7 = new System.Windows.Forms.Panel();
             this.panelStatCam6 = new System.Windows.Forms.Panel();
@@ -250,6 +253,9 @@
             this.lblCamHardware = new System.Windows.Forms.Label();
             this.panelStatusBar = new System.Windows.Forms.Panel();
             this.lblStatusGrab = new System.Windows.Forms.Label();
+            this.grpReviewTimePeriod = new System.Windows.Forms.GroupBox();
+            this.backgroundWorker1 = new System.ComponentModel.BackgroundWorker();
+            this.canvasMain = new AOI.SDK.UI.SmartCanvas();
             this.tabMain.SuspendLayout();
             this.tabPageLiveView.SuspendLayout();
             this.tabPageReview.SuspendLayout();
@@ -262,7 +268,6 @@
             ((System.ComponentModel.ISupportInitialize)(this.pbCam6)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam7)).BeginInit();
             this.grpReviewGrabNav.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).BeginInit();
             this.tabPageData.SuspendLayout();
             this.grpDataSingleSheet.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.chartYearly)).BeginInit();
@@ -343,6 +348,8 @@
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam1)).BeginInit();
             this.tabPageSystem.SuspendLayout();
             this.panelStatusBar.SuspendLayout();
+            this.grpReviewTimePeriod.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).BeginInit();
             this.SuspendLayout();
             // 
             // tabMain
@@ -356,7 +363,7 @@
             this.tabMain.Location = new System.Drawing.Point(12, 37);
             this.tabMain.Name = "tabMain";
             this.tabMain.SelectedIndex = 0;
-            this.tabMain.Size = new System.Drawing.Size(1191, 736);
+            this.tabMain.Size = new System.Drawing.Size(1216, 736);
             this.tabMain.TabIndex = 1;
             // 
             // tabPageLiveView
@@ -375,7 +382,7 @@
             this.tabPageLiveView.Location = new System.Drawing.Point(4, 25);
             this.tabPageLiveView.Name = "tabPageLiveView";
             this.tabPageLiveView.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPageLiveView.Size = new System.Drawing.Size(1183, 707);
+            this.tabPageLiveView.Size = new System.Drawing.Size(1208, 707);
             this.tabPageLiveView.TabIndex = 0;
             this.tabPageLiveView.Text = "即時監控";
             this.tabPageLiveView.UseVisualStyleBackColor = true;
@@ -420,7 +427,7 @@
             | System.Windows.Forms.AnchorStyles.Right)));
             this.panelMainDisplay.Location = new System.Drawing.Point(6, 123);
             this.panelMainDisplay.Name = "panelMainDisplay";
-            this.panelMainDisplay.Size = new System.Drawing.Size(1072, 347);
+            this.panelMainDisplay.Size = new System.Drawing.Size(1076, 347);
             this.panelMainDisplay.TabIndex = 1;
             // 
             // panelLiveCam7
@@ -474,39 +481,26 @@
             // 
             // tabPageReview
             // 
+            this.tabPageReview.Controls.Add(this.grpReviewTimePeriod);
             this.tabPageReview.Controls.Add(this.lblImageFormat);
             this.tabPageReview.Controls.Add(this.lblImageScale);
-            this.tabPageReview.Controls.Add(this.label_sec);
-            this.tabPageReview.Controls.Add(this.label_min);
-            this.tabPageReview.Controls.Add(this.label_hr);
-            this.tabPageReview.Controls.Add(this.label_day);
-            this.tabPageReview.Controls.Add(this.label_mon);
-            this.tabPageReview.Controls.Add(this.label_yr);
             this.tabPageReview.Controls.Add(this.chartMura);
             this.tabPageReview.Controls.Add(this.btnSelectFolder);
             this.tabPageReview.Controls.Add(this.btnShowProcessed);
             this.tabPageReview.Controls.Add(this.pbCam1);
             this.tabPageReview.Controls.Add(this.btnShowOriginal);
             this.tabPageReview.Controls.Add(this.pbCam2);
-            this.tabPageReview.Controls.Add(this.cbSec);
             this.tabPageReview.Controls.Add(this.pbCam3);
-            this.tabPageReview.Controls.Add(this.cbMin);
             this.tabPageReview.Controls.Add(this.pbCam4);
-            this.tabPageReview.Controls.Add(this.cbHour);
             this.tabPageReview.Controls.Add(this.pbCam5);
-            this.tabPageReview.Controls.Add(this.cbDay);
             this.tabPageReview.Controls.Add(this.pbCam6);
-            this.tabPageReview.Controls.Add(this.cbMonth);
             this.tabPageReview.Controls.Add(this.pbCam7);
-            this.tabPageReview.Controls.Add(this.cbYear);
-            this.tabPageReview.Controls.Add(this.btnLastPeriod);
-            this.tabPageReview.Controls.Add(this.btnNextPeriod);
             this.tabPageReview.Controls.Add(this.grpReviewGrabNav);
             this.tabPageReview.Controls.Add(this.canvasMain);
             this.tabPageReview.Location = new System.Drawing.Point(4, 25);
             this.tabPageReview.Name = "tabPageReview";
             this.tabPageReview.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPageReview.Size = new System.Drawing.Size(1183, 707);
+            this.tabPageReview.Size = new System.Drawing.Size(1208, 707);
             this.tabPageReview.TabIndex = 1;
             this.tabPageReview.Text = "影像回顧";
             this.tabPageReview.UseVisualStyleBackColor = true;
@@ -515,7 +509,7 @@
             // 
             this.lblImageFormat.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.lblImageFormat.Font = new System.Drawing.Font("新細明體", 8F);
-            this.lblImageFormat.Location = new System.Drawing.Point(1084, 400);
+            this.lblImageFormat.Location = new System.Drawing.Point(1113, 400);
             this.lblImageFormat.Name = "lblImageFormat";
             this.lblImageFormat.Size = new System.Drawing.Size(92, 22);
             this.lblImageFormat.TabIndex = 32;
@@ -525,7 +519,7 @@
             // 
             this.lblImageScale.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.lblImageScale.Font = new System.Drawing.Font("新細明體", 8F);
-            this.lblImageScale.Location = new System.Drawing.Point(1084, 422);
+            this.lblImageScale.Location = new System.Drawing.Point(1113, 422);
             this.lblImageScale.Name = "lblImageScale";
             this.lblImageScale.Size = new System.Drawing.Size(92, 23);
             this.lblImageScale.TabIndex = 33;
@@ -534,7 +528,7 @@
             // label_sec
             // 
             this.label_sec.AutoSize = true;
-            this.label_sec.Location = new System.Drawing.Point(1154, 325);
+            this.label_sec.Location = new System.Drawing.Point(76, 190);
             this.label_sec.Name = "label_sec";
             this.label_sec.Size = new System.Drawing.Size(22, 15);
             this.label_sec.TabIndex = 29;
@@ -543,7 +537,7 @@
             // label_min
             // 
             this.label_min.AutoSize = true;
-            this.label_min.Location = new System.Drawing.Point(1154, 293);
+            this.label_min.Location = new System.Drawing.Point(76, 158);
             this.label_min.Name = "label_min";
             this.label_min.Size = new System.Drawing.Size(22, 15);
             this.label_min.TabIndex = 28;
@@ -552,7 +546,7 @@
             // label_hr
             // 
             this.label_hr.AutoSize = true;
-            this.label_hr.Location = new System.Drawing.Point(1154, 264);
+            this.label_hr.Location = new System.Drawing.Point(76, 129);
             this.label_hr.Name = "label_hr";
             this.label_hr.Size = new System.Drawing.Size(22, 15);
             this.label_hr.TabIndex = 27;
@@ -561,7 +555,7 @@
             // label_day
             // 
             this.label_day.AutoSize = true;
-            this.label_day.Location = new System.Drawing.Point(1154, 220);
+            this.label_day.Location = new System.Drawing.Point(76, 85);
             this.label_day.Name = "label_day";
             this.label_day.Size = new System.Drawing.Size(22, 15);
             this.label_day.TabIndex = 26;
@@ -570,7 +564,7 @@
             // label_mon
             // 
             this.label_mon.AutoSize = true;
-            this.label_mon.Location = new System.Drawing.Point(1154, 188);
+            this.label_mon.Location = new System.Drawing.Point(76, 53);
             this.label_mon.Name = "label_mon";
             this.label_mon.Size = new System.Drawing.Size(22, 15);
             this.label_mon.TabIndex = 25;
@@ -579,7 +573,7 @@
             // label_yr
             // 
             this.label_yr.AutoSize = true;
-            this.label_yr.Location = new System.Drawing.Point(1154, 162);
+            this.label_yr.Location = new System.Drawing.Point(76, 27);
             this.label_yr.Name = "label_yr";
             this.label_yr.Size = new System.Drawing.Size(22, 15);
             this.label_yr.TabIndex = 24;
@@ -599,7 +593,7 @@
             series1.Legend = "Legend1";
             series1.Name = "Series1";
             this.chartMura.Series.Add(series1);
-            this.chartMura.Size = new System.Drawing.Size(1070, 149);
+            this.chartMura.Size = new System.Drawing.Size(1074, 232);
             this.chartMura.TabIndex = 16;
             this.chartMura.Text = "chart1";
             // 
@@ -608,7 +602,7 @@
             this.btnSelectFolder.Font = new System.Drawing.Font("新細明體", 8F);
             this.btnSelectFolder.Location = new System.Drawing.Point(1084, 6);
             this.btnSelectFolder.Name = "btnSelectFolder";
-            this.btnSelectFolder.Size = new System.Drawing.Size(92, 40);
+            this.btnSelectFolder.Size = new System.Drawing.Size(110, 40);
             this.btnSelectFolder.TabIndex = 23;
             this.btnSelectFolder.Text = "讀取資料夾";
             this.btnSelectFolder.UseVisualStyleBackColor = true;
@@ -619,7 +613,7 @@
             this.btnShowProcessed.Font = new System.Drawing.Font("新細明體", 8F);
             this.btnShowProcessed.Location = new System.Drawing.Point(1084, 98);
             this.btnShowProcessed.Name = "btnShowProcessed";
-            this.btnShowProcessed.Size = new System.Drawing.Size(92, 40);
+            this.btnShowProcessed.Size = new System.Drawing.Size(110, 40);
             this.btnShowProcessed.TabIndex = 22;
             this.btnShowProcessed.Text = "強化圖";
             this.btnShowProcessed.UseVisualStyleBackColor = true;
@@ -639,7 +633,7 @@
             this.btnShowOriginal.Font = new System.Drawing.Font("新細明體", 8F);
             this.btnShowOriginal.Location = new System.Drawing.Point(1084, 52);
             this.btnShowOriginal.Name = "btnShowOriginal";
-            this.btnShowOriginal.Size = new System.Drawing.Size(92, 40);
+            this.btnShowOriginal.Size = new System.Drawing.Size(110, 40);
             this.btnShowOriginal.TabIndex = 21;
             this.btnShowOriginal.Text = "原圖";
             this.btnShowOriginal.UseVisualStyleBackColor = true;
@@ -657,7 +651,7 @@
             // cbSec
             // 
             this.cbSec.FormattingEnabled = true;
-            this.cbSec.Location = new System.Drawing.Point(1084, 322);
+            this.cbSec.Location = new System.Drawing.Point(6, 187);
             this.cbSec.Name = "cbSec";
             this.cbSec.Size = new System.Drawing.Size(64, 23);
             this.cbSec.TabIndex = 20;
@@ -674,7 +668,7 @@
             // cbMin
             // 
             this.cbMin.FormattingEnabled = true;
-            this.cbMin.Location = new System.Drawing.Point(1084, 293);
+            this.cbMin.Location = new System.Drawing.Point(6, 158);
             this.cbMin.Name = "cbMin";
             this.cbMin.Size = new System.Drawing.Size(64, 23);
             this.cbMin.TabIndex = 19;
@@ -691,7 +685,7 @@
             // cbHour
             // 
             this.cbHour.FormattingEnabled = true;
-            this.cbHour.Location = new System.Drawing.Point(1084, 264);
+            this.cbHour.Location = new System.Drawing.Point(6, 129);
             this.cbHour.Name = "cbHour";
             this.cbHour.Size = new System.Drawing.Size(64, 23);
             this.cbHour.TabIndex = 18;
@@ -708,7 +702,7 @@
             // cbDay
             // 
             this.cbDay.FormattingEnabled = true;
-            this.cbDay.Location = new System.Drawing.Point(1084, 217);
+            this.cbDay.Location = new System.Drawing.Point(6, 82);
             this.cbDay.Name = "cbDay";
             this.cbDay.Size = new System.Drawing.Size(64, 23);
             this.cbDay.TabIndex = 17;
@@ -725,7 +719,7 @@
             // cbMonth
             // 
             this.cbMonth.FormattingEnabled = true;
-            this.cbMonth.Location = new System.Drawing.Point(1084, 188);
+            this.cbMonth.Location = new System.Drawing.Point(6, 53);
             this.cbMonth.Name = "cbMonth";
             this.cbMonth.Size = new System.Drawing.Size(64, 23);
             this.cbMonth.TabIndex = 16;
@@ -742,85 +736,75 @@
             // cbYear
             // 
             this.cbYear.FormattingEnabled = true;
-            this.cbYear.Location = new System.Drawing.Point(1084, 159);
+            this.cbYear.Location = new System.Drawing.Point(6, 24);
             this.cbYear.Name = "cbYear";
             this.cbYear.Size = new System.Drawing.Size(64, 23);
             this.cbYear.TabIndex = 15;
             // 
-            // btnLastPeriod
+            // btnPeriodPrev
             // 
-            this.btnLastPeriod.Location = new System.Drawing.Point(1084, 360);
-            this.btnLastPeriod.Name = "btnLastPeriod";
-            this.btnLastPeriod.Size = new System.Drawing.Size(44, 28);
-            this.btnLastPeriod.TabIndex = 30;
-            this.btnLastPeriod.Text = "<";
-            this.btnLastPeriod.UseVisualStyleBackColor = true;
-            this.btnLastPeriod.Click += new System.EventHandler(this.btnLastPeriod_Click);
+            this.btnPeriodPrev.Location = new System.Drawing.Point(5, 273);
+            this.btnPeriodPrev.Name = "btnPeriodPrev";
+            this.btnPeriodPrev.Size = new System.Drawing.Size(44, 28);
+            this.btnPeriodPrev.TabIndex = 30;
+            this.btnPeriodPrev.Text = "<";
+            this.btnPeriodPrev.UseVisualStyleBackColor = true;
+            this.btnPeriodPrev.Click += new System.EventHandler(this.btnPeriodPrev_Click);
             // 
-            // btnNextPeriod
+            // btnPeriodNext
             // 
-            this.btnNextPeriod.Location = new System.Drawing.Point(1134, 360);
-            this.btnNextPeriod.Name = "btnNextPeriod";
-            this.btnNextPeriod.Size = new System.Drawing.Size(44, 28);
-            this.btnNextPeriod.TabIndex = 31;
-            this.btnNextPeriod.Text = ">";
-            this.btnNextPeriod.UseVisualStyleBackColor = true;
-            this.btnNextPeriod.Click += new System.EventHandler(this.btnNextPeriod_Click);
+            this.btnPeriodNext.Location = new System.Drawing.Point(55, 273);
+            this.btnPeriodNext.Name = "btnPeriodNext";
+            this.btnPeriodNext.Size = new System.Drawing.Size(44, 28);
+            this.btnPeriodNext.TabIndex = 31;
+            this.btnPeriodNext.Text = ">";
+            this.btnPeriodNext.UseVisualStyleBackColor = true;
+            this.btnPeriodNext.Click += new System.EventHandler(this.btnPeriodNext_Click);
             // 
             // grpReviewGrabNav
             // 
             this.grpReviewGrabNav.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.grpReviewGrabNav.Controls.Add(this.cbReviewGrabId);
-            this.grpReviewGrabNav.Controls.Add(this.btnReviewGrabPrev);
-            this.grpReviewGrabNav.Controls.Add(this.btnReviewGrabNext);
-            this.grpReviewGrabNav.Location = new System.Drawing.Point(1082, 450);
+            this.grpReviewGrabNav.Controls.Add(this.btnGrabIdPrev);
+            this.grpReviewGrabNav.Controls.Add(this.btnGrabIdNext);
+            this.grpReviewGrabNav.Location = new System.Drawing.Point(1088, 469);
             this.grpReviewGrabNav.Name = "grpReviewGrabNav";
-            this.grpReviewGrabNav.Size = new System.Drawing.Size(96, 90);
+            this.grpReviewGrabNav.Size = new System.Drawing.Size(109, 96);
             this.grpReviewGrabNav.TabIndex = 55;
             this.grpReviewGrabNav.TabStop = false;
-            this.grpReviewGrabNav.Text = "序號跳轉";
+            this.grpReviewGrabNav.Text = "單片";
             // 
             // cbReviewGrabId
             // 
             this.cbReviewGrabId.FormattingEnabled = true;
-            this.cbReviewGrabId.Location = new System.Drawing.Point(7, 20);
+            this.cbReviewGrabId.Location = new System.Drawing.Point(10, 21);
             this.cbReviewGrabId.Name = "cbReviewGrabId";
             this.cbReviewGrabId.Size = new System.Drawing.Size(82, 23);
             this.cbReviewGrabId.TabIndex = 0;
             // 
-            // btnReviewGrabPrev
+            // btnGrabIdPrev
             // 
-            this.btnReviewGrabPrev.Location = new System.Drawing.Point(7, 50);
-            this.btnReviewGrabPrev.Name = "btnReviewGrabPrev";
-            this.btnReviewGrabPrev.Size = new System.Drawing.Size(36, 26);
-            this.btnReviewGrabPrev.TabIndex = 1;
-            this.btnReviewGrabPrev.Text = "<";
-            this.btnReviewGrabPrev.UseVisualStyleBackColor = true;
+            this.btnGrabIdPrev.Location = new System.Drawing.Point(7, 50);
+            this.btnGrabIdPrev.Name = "btnGrabIdPrev";
+            this.btnGrabIdPrev.Size = new System.Drawing.Size(44, 28);
+            this.btnGrabIdPrev.TabIndex = 1;
+            this.btnGrabIdPrev.Text = "<";
+            this.btnGrabIdPrev.UseVisualStyleBackColor = true;
             // 
-            // btnReviewGrabNext
+            // btnGrabIdNext
             // 
-            this.btnReviewGrabNext.Location = new System.Drawing.Point(53, 50);
-            this.btnReviewGrabNext.Name = "btnReviewGrabNext";
-            this.btnReviewGrabNext.Size = new System.Drawing.Size(36, 26);
-            this.btnReviewGrabNext.TabIndex = 2;
-            this.btnReviewGrabNext.Text = ">";
-            this.btnReviewGrabNext.UseVisualStyleBackColor = true;
-            // 
-            // canvasMain
-            // 
-            this.canvasMain.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.canvasMain.BackColor = System.Drawing.Color.Black;
-            this.canvasMain.Cursor = System.Windows.Forms.Cursors.Cross;
-            this.canvasMain.Location = new System.Drawing.Point(8, 123);
-            this.canvasMain.Name = "canvasMain";
-            this.canvasMain.Size = new System.Drawing.Size(1070, 346);
-            this.canvasMain.TabIndex = 7;
-            this.canvasMain.TabStop = false;
+            this.btnGrabIdNext.Location = new System.Drawing.Point(53, 50);
+            this.btnGrabIdNext.Name = "btnGrabIdNext";
+            this.btnGrabIdNext.Size = new System.Drawing.Size(44, 28);
+            this.btnGrabIdNext.TabIndex = 2;
+            this.btnGrabIdNext.Text = ">";
+            this.btnGrabIdNext.UseVisualStyleBackColor = true;
             // 
             // tabPageData
             // 
+            this.tabPageData.Controls.Add(this.label54);
+            this.tabPageData.Controls.Add(this.label55);
+            this.tabPageData.Controls.Add(this.label56);
             this.tabPageData.Controls.Add(this.grpDataSingleSheet);
             this.tabPageData.Controls.Add(this.label51);
             this.tabPageData.Controls.Add(this.cbChartYear);
@@ -836,7 +820,6 @@
             this.tabPageData.Controls.Add(this.groupBoxGrabIdRange);
             this.tabPageData.Controls.Add(this.groupBoxTimeRange);
             this.tabPageData.Controls.Add(this.btnSelectDataFolder);
-            this.tabPageData.Controls.Add(this.btnQueryStats);
             this.tabPageData.Controls.Add(this.listViewStats);
             this.tabPageData.Controls.Add(this.panelStatCam7);
             this.tabPageData.Controls.Add(this.panelStatCam6);
@@ -847,23 +830,52 @@
             this.tabPageData.Controls.Add(this.panelStatCam1);
             this.tabPageData.Location = new System.Drawing.Point(4, 25);
             this.tabPageData.Name = "tabPageData";
-            this.tabPageData.Size = new System.Drawing.Size(1183, 707);
+            this.tabPageData.Size = new System.Drawing.Size(1208, 707);
             this.tabPageData.TabIndex = 2;
             this.tabPageData.Text = "檢測數據";
             this.tabPageData.UseVisualStyleBackColor = true;
+            // 
+            // label54
+            // 
+            this.label54.AutoSize = true;
+            this.label54.Location = new System.Drawing.Point(18, 557);
+            this.label54.Name = "label54";
+            this.label54.Size = new System.Drawing.Size(22, 15);
+            this.label54.TabIndex = 53;
+            this.label54.Text = "日";
+            // 
+            // label55
+            // 
+            this.label55.AutoSize = true;
+            this.label55.Location = new System.Drawing.Point(18, 673);
+            this.label55.Name = "label55";
+            this.label55.Size = new System.Drawing.Size(22, 15);
+            this.label55.TabIndex = 52;
+            this.label55.Text = "時";
+            // 
+            // label56
+            // 
+            this.label56.AutoSize = true;
+            this.label56.Location = new System.Drawing.Point(18, 441);
+            this.label56.Name = "label56";
+            this.label56.Size = new System.Drawing.Size(22, 15);
+            this.label56.TabIndex = 51;
+            this.label56.Text = "月";
             // 
             // grpDataSingleSheet
             // 
             this.grpDataSingleSheet.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
+            this.grpDataSingleSheet.Controls.Add(this.btnGrabIdDataPrev);
+            this.grpDataSingleSheet.Controls.Add(this.btnGrabIdDataNext);
             this.grpDataSingleSheet.Controls.Add(this.cbDataGrabId);
             this.grpDataSingleSheet.Controls.Add(this.lblDataGrabId);
             this.grpDataSingleSheet.Location = new System.Drawing.Point(1035, 251);
             this.grpDataSingleSheet.Name = "grpDataSingleSheet";
-            this.grpDataSingleSheet.Size = new System.Drawing.Size(136, 100);
+            this.grpDataSingleSheet.Size = new System.Drawing.Size(165, 100);
             this.grpDataSingleSheet.TabIndex = 50;
             this.grpDataSingleSheet.TabStop = false;
-            this.grpDataSingleSheet.Text = "單片資訊";
+            this.grpDataSingleSheet.Text = "單片分類";
             // 
             // cbDataGrabId
             // 
@@ -874,28 +886,46 @@
             this.cbDataGrabId.TabIndex = 42;
             // 
             // lblDataGrabId
-            // 
+            //
             this.lblDataGrabId.AutoSize = true;
             this.lblDataGrabId.Location = new System.Drawing.Point(15, 21);
             this.lblDataGrabId.Name = "lblDataGrabId";
             this.lblDataGrabId.Size = new System.Drawing.Size(37, 15);
             this.lblDataGrabId.TabIndex = 40;
             this.lblDataGrabId.Text = "序號";
+            //
+            // btnGrabIdDataPrev
+            //
+            this.btnGrabIdDataPrev.Location = new System.Drawing.Point(17, 66);
+            this.btnGrabIdDataPrev.Name = "btnGrabIdDataPrev";
+            this.btnGrabIdDataPrev.Size = new System.Drawing.Size(44, 28);
+            this.btnGrabIdDataPrev.TabIndex = 43;
+            this.btnGrabIdDataPrev.Text = "<";
+            this.btnGrabIdDataPrev.UseVisualStyleBackColor = true;
+            //
+            // btnGrabIdDataNext
+            //
+            this.btnGrabIdDataNext.Location = new System.Drawing.Point(63, 66);
+            this.btnGrabIdDataNext.Name = "btnGrabIdDataNext";
+            this.btnGrabIdDataNext.Size = new System.Drawing.Size(44, 28);
+            this.btnGrabIdDataNext.TabIndex = 44;
+            this.btnGrabIdDataNext.Text = ">";
+            this.btnGrabIdDataNext.UseVisualStyleBackColor = true;
             // 
             // label51
             // 
             this.label51.AutoSize = true;
-            this.label51.Location = new System.Drawing.Point(1158, 520);
+            this.label51.Location = new System.Drawing.Point(1177, 514);
             this.label51.Name = "label51";
             this.label51.Size = new System.Drawing.Size(22, 15);
             this.label51.TabIndex = 42;
-            this.label51.Text = "日";
+            this.label51.Text = "月";
             // 
             // cbChartYear
             // 
             this.cbChartYear.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.cbChartYear.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbChartYear.Location = new System.Drawing.Point(1079, 401);
+            this.cbChartYear.Location = new System.Drawing.Point(1102, 395);
             this.cbChartYear.Name = "cbChartYear";
             this.cbChartYear.Size = new System.Drawing.Size(73, 23);
             this.cbChartYear.TabIndex = 43;
@@ -903,17 +933,17 @@
             // label52
             // 
             this.label52.AutoSize = true;
-            this.label52.Location = new System.Drawing.Point(1158, 631);
+            this.label52.Location = new System.Drawing.Point(1177, 630);
             this.label52.Name = "label52";
             this.label52.Size = new System.Drawing.Size(22, 15);
             this.label52.TabIndex = 41;
-            this.label52.Text = "月";
+            this.label52.Text = "日";
             // 
             // cbChartMonth
             // 
             this.cbChartMonth.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.cbChartMonth.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbChartMonth.Location = new System.Drawing.Point(1080, 517);
+            this.cbChartMonth.Location = new System.Drawing.Point(1102, 511);
             this.cbChartMonth.Name = "cbChartMonth";
             this.cbChartMonth.Size = new System.Drawing.Size(73, 23);
             this.cbChartMonth.TabIndex = 46;
@@ -921,7 +951,7 @@
             // label53
             // 
             this.label53.AutoSize = true;
-            this.label53.Location = new System.Drawing.Point(1159, 404);
+            this.label53.Location = new System.Drawing.Point(1177, 398);
             this.label53.Name = "label53";
             this.label53.Size = new System.Drawing.Size(22, 15);
             this.label53.TabIndex = 40;
@@ -931,7 +961,7 @@
             // 
             this.cbChartDay.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.cbChartDay.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbChartDay.Location = new System.Drawing.Point(1079, 628);
+            this.cbChartDay.Location = new System.Drawing.Point(1102, 627);
             this.cbChartDay.Name = "cbChartDay";
             this.cbChartDay.Size = new System.Drawing.Size(73, 23);
             this.cbChartDay.TabIndex = 49;
@@ -942,7 +972,7 @@
             | System.Windows.Forms.AnchorStyles.Right)));
             this.chartYearly.Location = new System.Drawing.Point(6, 357);
             this.chartYearly.Name = "chartYearly";
-            this.chartYearly.Size = new System.Drawing.Size(1170, 110);
+            this.chartYearly.Size = new System.Drawing.Size(1199, 110);
             this.chartYearly.TabIndex = 38;
             this.chartYearly.Text = "chartYearly";
             // 
@@ -952,7 +982,7 @@
             | System.Windows.Forms.AnchorStyles.Right)));
             this.chartMonthly.Location = new System.Drawing.Point(6, 473);
             this.chartMonthly.Name = "chartMonthly";
-            this.chartMonthly.Size = new System.Drawing.Size(1170, 110);
+            this.chartMonthly.Size = new System.Drawing.Size(1199, 110);
             this.chartMonthly.TabIndex = 39;
             this.chartMonthly.Text = "chartMonthly";
             // 
@@ -962,7 +992,7 @@
             | System.Windows.Forms.AnchorStyles.Right)));
             this.chartDaily.Location = new System.Drawing.Point(6, 589);
             this.chartDaily.Name = "chartDaily";
-            this.chartDaily.Size = new System.Drawing.Size(1170, 110);
+            this.chartDaily.Size = new System.Drawing.Size(1199, 110);
             this.chartDaily.TabIndex = 40;
             this.chartDaily.Text = "chartDaily";
             // 
@@ -971,9 +1001,9 @@
             this.btnShowFail.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.btnShowFail.Font = new System.Drawing.Font("新細明體", 8F);
-            this.btnShowFail.Location = new System.Drawing.Point(1084, 83);
+            this.btnShowFail.Location = new System.Drawing.Point(1084, 62);
             this.btnShowFail.Name = "btnShowFail";
-            this.btnShowFail.Size = new System.Drawing.Size(92, 34);
+            this.btnShowFail.Size = new System.Drawing.Size(115, 55);
             this.btnShowFail.TabIndex = 41;
             this.btnShowFail.Text = "篩選異常";
             this.btnShowFail.UseVisualStyleBackColor = true;
@@ -999,7 +1029,7 @@
             this.groupBoxGrabIdRange.Controls.Add(this.label50);
             this.groupBoxGrabIdRange.Location = new System.Drawing.Point(1035, 123);
             this.groupBoxGrabIdRange.Name = "groupBoxGrabIdRange";
-            this.groupBoxGrabIdRange.Size = new System.Drawing.Size(136, 122);
+            this.groupBoxGrabIdRange.Size = new System.Drawing.Size(165, 122);
             this.groupBoxGrabIdRange.TabIndex = 36;
             this.groupBoxGrabIdRange.TabStop = false;
             this.groupBoxGrabIdRange.Text = "序號分類";
@@ -1067,7 +1097,7 @@
             this.groupBoxTimeRange.Size = new System.Drawing.Size(194, 228);
             this.groupBoxTimeRange.TabIndex = 35;
             this.groupBoxTimeRange.TabStop = false;
-            this.groupBoxTimeRange.Text = "時間分類";
+            this.groupBoxTimeRange.Text = "時序分類";
             // 
             // label48
             // 
@@ -1244,22 +1274,10 @@
             this.btnSelectDataFolder.Font = new System.Drawing.Font("新細明體", 8F);
             this.btnSelectDataFolder.Location = new System.Drawing.Point(1084, 6);
             this.btnSelectDataFolder.Name = "btnSelectDataFolder";
-            this.btnSelectDataFolder.Size = new System.Drawing.Size(92, 34);
+            this.btnSelectDataFolder.Size = new System.Drawing.Size(115, 55);
             this.btnSelectDataFolder.TabIndex = 34;
             this.btnSelectDataFolder.Text = "讀取資料夾";
             this.btnSelectDataFolder.UseVisualStyleBackColor = true;
-            // 
-            // btnQueryStats
-            // 
-            this.btnQueryStats.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnQueryStats.Font = new System.Drawing.Font("新細明體", 8F);
-            this.btnQueryStats.Location = new System.Drawing.Point(1084, 46);
-            this.btnQueryStats.Name = "btnQueryStats";
-            this.btnQueryStats.Size = new System.Drawing.Size(92, 34);
-            this.btnQueryStats.TabIndex = 33;
-            this.btnQueryStats.Text = "統計數據";
-            this.btnQueryStats.UseVisualStyleBackColor = true;
             // 
             // listViewStats
             // 
@@ -1326,7 +1344,7 @@
             this.propertyGridSettings.Dock = System.Windows.Forms.DockStyle.Fill;
             this.propertyGridSettings.Location = new System.Drawing.Point(3, 3);
             this.propertyGridSettings.Name = "propertyGridSettings";
-            this.propertyGridSettings.Size = new System.Drawing.Size(262, 706);
+            this.propertyGridSettings.Size = new System.Drawing.Size(290, 706);
             this.propertyGridSettings.TabIndex = 0;
             // 
             // statusBarMain
@@ -1336,7 +1354,7 @@
             this.lblPixelInfo});
             this.statusBarMain.Location = new System.Drawing.Point(0, 776);
             this.statusBarMain.Name = "statusBarMain";
-            this.statusBarMain.Size = new System.Drawing.Size(1491, 25);
+            this.statusBarMain.Size = new System.Drawing.Size(1533, 25);
             this.statusBarMain.TabIndex = 15;
             this.statusBarMain.Text = "statusBarMain";
             // 
@@ -1353,11 +1371,11 @@
             this.tabControlRight.Controls.Add(this.tabPageInspSettings);
             this.tabControlRight.Controls.Add(this.tabPageCamera);
             this.tabControlRight.Controls.Add(this.tabPageSystem);
-            this.tabControlRight.Location = new System.Drawing.Point(1209, 37);
+            this.tabControlRight.Location = new System.Drawing.Point(1223, 37);
             this.tabControlRight.Multiline = true;
             this.tabControlRight.Name = "tabControlRight";
             this.tabControlRight.SelectedIndex = 0;
-            this.tabControlRight.Size = new System.Drawing.Size(276, 741);
+            this.tabControlRight.Size = new System.Drawing.Size(304, 741);
             this.tabControlRight.TabIndex = 16;
             // 
             // tabPageInspSettings
@@ -1366,7 +1384,7 @@
             this.tabPageInspSettings.Location = new System.Drawing.Point(4, 25);
             this.tabPageInspSettings.Name = "tabPageInspSettings";
             this.tabPageInspSettings.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPageInspSettings.Size = new System.Drawing.Size(268, 712);
+            this.tabPageInspSettings.Size = new System.Drawing.Size(296, 712);
             this.tabPageInspSettings.TabIndex = 0;
             this.tabPageInspSettings.Text = "檢測設定";
             this.tabPageInspSettings.UseVisualStyleBackColor = true;
@@ -1377,7 +1395,7 @@
             this.tabPageCamera.Location = new System.Drawing.Point(4, 25);
             this.tabPageCamera.Name = "tabPageCamera";
             this.tabPageCamera.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPageCamera.Size = new System.Drawing.Size(268, 712);
+            this.tabPageCamera.Size = new System.Drawing.Size(296, 712);
             this.tabPageCamera.TabIndex = 1;
             this.tabPageCamera.Text = "相機參數";
             this.tabPageCamera.UseVisualStyleBackColor = true;
@@ -1391,7 +1409,7 @@
             this.tabControlCamTabs.Location = new System.Drawing.Point(3, 3);
             this.tabControlCamTabs.Name = "tabControlCamTabs";
             this.tabControlCamTabs.SelectedIndex = 0;
-            this.tabControlCamTabs.Size = new System.Drawing.Size(262, 706);
+            this.tabControlCamTabs.Size = new System.Drawing.Size(290, 706);
             this.tabControlCamTabs.TabIndex = 2;
             // 
             // tabPageExposure
@@ -1406,7 +1424,7 @@
             this.tabPageExposure.Location = new System.Drawing.Point(4, 25);
             this.tabPageExposure.Name = "tabPageExposure";
             this.tabPageExposure.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPageExposure.Size = new System.Drawing.Size(254, 677);
+            this.tabPageExposure.Size = new System.Drawing.Size(282, 677);
             this.tabPageExposure.TabIndex = 0;
             this.tabPageExposure.Text = "曝光時間";
             this.tabPageExposure.UseVisualStyleBackColor = true;
@@ -1422,7 +1440,7 @@
             this.panelStatCam74.Controls.Add(this.label14);
             this.panelStatCam74.Location = new System.Drawing.Point(0, 438);
             this.panelStatCam74.Name = "panelStatCam74";
-            this.panelStatCam74.Size = new System.Drawing.Size(254, 69);
+            this.panelStatCam74.Size = new System.Drawing.Size(282, 69);
             this.panelStatCam74.TabIndex = 4;
             // 
             // label13
@@ -1488,7 +1506,7 @@
             this.panelStatCam73.Controls.Add(this.label12);
             this.panelStatCam73.Location = new System.Drawing.Point(0, 365);
             this.panelStatCam73.Name = "panelStatCam73";
-            this.panelStatCam73.Size = new System.Drawing.Size(254, 69);
+            this.panelStatCam73.Size = new System.Drawing.Size(282, 69);
             this.panelStatCam73.TabIndex = 4;
             // 
             // label11
@@ -1554,7 +1572,7 @@
             this.panelStatCam72.Controls.Add(this.label10);
             this.panelStatCam72.Location = new System.Drawing.Point(0, 292);
             this.panelStatCam72.Name = "panelStatCam72";
-            this.panelStatCam72.Size = new System.Drawing.Size(254, 69);
+            this.panelStatCam72.Size = new System.Drawing.Size(282, 69);
             this.panelStatCam72.TabIndex = 4;
             // 
             // label9
@@ -1620,7 +1638,7 @@
             this.panelStatCam71.Controls.Add(this.label8);
             this.panelStatCam71.Location = new System.Drawing.Point(0, 219);
             this.panelStatCam71.Name = "panelStatCam71";
-            this.panelStatCam71.Size = new System.Drawing.Size(254, 69);
+            this.panelStatCam71.Size = new System.Drawing.Size(282, 69);
             this.panelStatCam71.TabIndex = 4;
             // 
             // label7
@@ -1686,7 +1704,7 @@
             this.panelStatCam70.Controls.Add(this.label6);
             this.panelStatCam70.Location = new System.Drawing.Point(0, 146);
             this.panelStatCam70.Name = "panelStatCam70";
-            this.panelStatCam70.Size = new System.Drawing.Size(254, 69);
+            this.panelStatCam70.Size = new System.Drawing.Size(282, 69);
             this.panelStatCam70.TabIndex = 4;
             // 
             // label5
@@ -1752,7 +1770,7 @@
             this.panelExpCam2.Controls.Add(this.label4);
             this.panelExpCam2.Location = new System.Drawing.Point(0, 73);
             this.panelExpCam2.Name = "panelExpCam2";
-            this.panelExpCam2.Size = new System.Drawing.Size(254, 69);
+            this.panelExpCam2.Size = new System.Drawing.Size(282, 69);
             this.panelExpCam2.TabIndex = 4;
             // 
             // label3
@@ -1818,7 +1836,7 @@
             this.panelExposure.Controls.Add(this.lblExposure);
             this.panelExposure.Location = new System.Drawing.Point(0, 0);
             this.panelExposure.Name = "panelExposure";
-            this.panelExposure.Size = new System.Drawing.Size(254, 69);
+            this.panelExposure.Size = new System.Drawing.Size(282, 69);
             this.panelExposure.TabIndex = 0;
             // 
             // label2
@@ -1885,7 +1903,7 @@
             this.tabPageLineRate.Location = new System.Drawing.Point(4, 25);
             this.tabPageLineRate.Name = "tabPageLineRate";
             this.tabPageLineRate.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPageLineRate.Size = new System.Drawing.Size(254, 677);
+            this.tabPageLineRate.Size = new System.Drawing.Size(282, 677);
             this.tabPageLineRate.TabIndex = 1;
             this.tabPageLineRate.Text = "線掃速率";
             this.tabPageLineRate.UseVisualStyleBackColor = true;
@@ -2364,7 +2382,7 @@
             this.tabPageGrabHeight.Location = new System.Drawing.Point(4, 25);
             this.tabPageGrabHeight.Name = "tabPageGrabHeight";
             this.tabPageGrabHeight.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPageGrabHeight.Size = new System.Drawing.Size(254, 677);
+            this.tabPageGrabHeight.Size = new System.Drawing.Size(282, 677);
             this.tabPageGrabHeight.TabIndex = 2;
             this.tabPageGrabHeight.Text = "擷取高度";
             this.tabPageGrabHeight.UseVisualStyleBackColor = true;
@@ -2839,7 +2857,7 @@
             this.tabPageSystem.Controls.Add(this.lblCamHardware);
             this.tabPageSystem.Location = new System.Drawing.Point(4, 25);
             this.tabPageSystem.Name = "tabPageSystem";
-            this.tabPageSystem.Size = new System.Drawing.Size(268, 712);
+            this.tabPageSystem.Size = new System.Drawing.Size(296, 712);
             this.tabPageSystem.TabIndex = 2;
             this.tabPageSystem.Text = "系統資訊";
             this.tabPageSystem.UseVisualStyleBackColor = true;
@@ -2853,7 +2871,7 @@
             this.listViewEngine.HideSelection = false;
             this.listViewEngine.Location = new System.Drawing.Point(3, 336);
             this.listViewEngine.Name = "listViewEngine";
-            this.listViewEngine.Size = new System.Drawing.Size(256, 200);
+            this.listViewEngine.Size = new System.Drawing.Size(284, 200);
             this.listViewEngine.TabIndex = 3;
             this.listViewEngine.UseCompatibleStateImageBehavior = false;
             this.listViewEngine.View = System.Windows.Forms.View.Details;
@@ -2877,7 +2895,7 @@
             this.listViewCameras.HideSelection = false;
             this.listViewCameras.Location = new System.Drawing.Point(3, 25);
             this.listViewCameras.Name = "listViewCameras";
-            this.listViewCameras.Size = new System.Drawing.Size(256, 271);
+            this.listViewCameras.Size = new System.Drawing.Size(284, 271);
             this.listViewCameras.TabIndex = 1;
             this.listViewCameras.UseCompatibleStateImageBehavior = false;
             this.listViewCameras.View = System.Windows.Forms.View.Details;
@@ -2898,7 +2916,7 @@
             this.panelStatusBar.Dock = System.Windows.Forms.DockStyle.Top;
             this.panelStatusBar.Location = new System.Drawing.Point(0, 0);
             this.panelStatusBar.Name = "panelStatusBar";
-            this.panelStatusBar.Size = new System.Drawing.Size(1491, 32);
+            this.panelStatusBar.Size = new System.Drawing.Size(1533, 32);
             this.panelStatusBar.TabIndex = 17;
             // 
             // lblStatusGrab
@@ -2910,16 +2928,52 @@
             this.lblStatusGrab.Location = new System.Drawing.Point(0, 0);
             this.lblStatusGrab.Name = "lblStatusGrab";
             this.lblStatusGrab.Padding = new System.Windows.Forms.Padding(0, 0, 12, 0);
-            this.lblStatusGrab.Size = new System.Drawing.Size(1491, 32);
+            this.lblStatusGrab.Size = new System.Drawing.Size(1533, 32);
             this.lblStatusGrab.TabIndex = 0;
             this.lblStatusGrab.Text = "● 待機";
             this.lblStatusGrab.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            // 
+            // grpReviewTimePeriod
+            // 
+            this.grpReviewTimePeriod.Controls.Add(this.cbYear);
+            this.grpReviewTimePeriod.Controls.Add(this.btnPeriodNext);
+            this.grpReviewTimePeriod.Controls.Add(this.btnPeriodPrev);
+            this.grpReviewTimePeriod.Controls.Add(this.label_sec);
+            this.grpReviewTimePeriod.Controls.Add(this.cbMonth);
+            this.grpReviewTimePeriod.Controls.Add(this.label_min);
+            this.grpReviewTimePeriod.Controls.Add(this.cbDay);
+            this.grpReviewTimePeriod.Controls.Add(this.label_hr);
+            this.grpReviewTimePeriod.Controls.Add(this.cbHour);
+            this.grpReviewTimePeriod.Controls.Add(this.label_day);
+            this.grpReviewTimePeriod.Controls.Add(this.cbMin);
+            this.grpReviewTimePeriod.Controls.Add(this.label_mon);
+            this.grpReviewTimePeriod.Controls.Add(this.cbSec);
+            this.grpReviewTimePeriod.Controls.Add(this.label_yr);
+            this.grpReviewTimePeriod.Location = new System.Drawing.Point(1084, 144);
+            this.grpReviewTimePeriod.Name = "grpReviewTimePeriod";
+            this.grpReviewTimePeriod.Size = new System.Drawing.Size(109, 319);
+            this.grpReviewTimePeriod.TabIndex = 56;
+            this.grpReviewTimePeriod.TabStop = false;
+            this.grpReviewTimePeriod.Text = "時序";
+            // 
+            // canvasMain
+            // 
+            this.canvasMain.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.canvasMain.BackColor = System.Drawing.Color.Black;
+            this.canvasMain.Cursor = System.Windows.Forms.Cursors.Cross;
+            this.canvasMain.Location = new System.Drawing.Point(8, 123);
+            this.canvasMain.Name = "canvasMain";
+            this.canvasMain.Size = new System.Drawing.Size(1070, 346);
+            this.canvasMain.TabIndex = 7;
+            this.canvasMain.TabStop = false;
             // 
             // AniloxRollForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1491, 801);
+            this.ClientSize = new System.Drawing.Size(1533, 801);
             this.Controls.Add(this.panelStatusBar);
             this.Controls.Add(this.tabControlRight);
             this.Controls.Add(this.statusBarMain);
@@ -2931,7 +2985,6 @@
             this.tabPageLiveView.ResumeLayout(false);
             this.tabPageLiveView.PerformLayout();
             this.tabPageReview.ResumeLayout(false);
-            this.tabPageReview.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.chartMura)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam1)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam2)).EndInit();
@@ -2941,7 +2994,6 @@
             ((System.ComponentModel.ISupportInitialize)(this.pbCam6)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam7)).EndInit();
             this.grpReviewGrabNav.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).EndInit();
             this.tabPageData.ResumeLayout(false);
             this.tabPageData.PerformLayout();
             this.grpDataSingleSheet.ResumeLayout(false);
@@ -3049,6 +3101,9 @@
             this.tabPageSystem.ResumeLayout(false);
             this.tabPageSystem.PerformLayout();
             this.panelStatusBar.ResumeLayout(false);
+            this.grpReviewTimePeriod.ResumeLayout(false);
+            this.grpReviewTimePeriod.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -3100,8 +3155,8 @@
         private System.Windows.Forms.Button btnCameraFree;
         private System.Windows.Forms.Button btnCameraGrab;
         private System.Windows.Forms.CheckBox checkBoxEnableImageProcessing;
-        private System.Windows.Forms.Button btnLastPeriod;
-        private System.Windows.Forms.Button btnNextPeriod;
+        private System.Windows.Forms.Button btnPeriodPrev;
+        private System.Windows.Forms.Button btnPeriodNext;
         private System.Windows.Forms.TabControl tabControlRight;
         private System.Windows.Forms.TabPage tabPageInspSettings;
         private System.Windows.Forms.TabPage tabPageCamera;
@@ -3241,7 +3296,6 @@
         private System.Windows.Forms.ComboBox cbStartMonth;
         private System.Windows.Forms.ComboBox cbStartYear;
         private System.Windows.Forms.Button btnSelectDataFolder;
-        private System.Windows.Forms.Button btnQueryStats;
         private System.Windows.Forms.GroupBox groupBoxGrabIdRange;
         private System.Windows.Forms.ComboBox cbGrabIdStart;
         private System.Windows.Forms.ComboBox cbGrabIdEnd;
@@ -3268,11 +3322,18 @@
         private System.Windows.Forms.Label label52;
         private System.Windows.Forms.Label label53;
         private System.Windows.Forms.GroupBox grpDataSingleSheet;
+        private System.Windows.Forms.Button btnGrabIdDataPrev;
+        private System.Windows.Forms.Button btnGrabIdDataNext;
         private System.Windows.Forms.ComboBox cbDataGrabId;
         private System.Windows.Forms.Label lblDataGrabId;
         private System.Windows.Forms.GroupBox grpReviewGrabNav;
         private System.Windows.Forms.ComboBox cbReviewGrabId;
-        private System.Windows.Forms.Button btnReviewGrabPrev;
-        private System.Windows.Forms.Button btnReviewGrabNext;
+        private System.Windows.Forms.Button btnGrabIdPrev;
+        private System.Windows.Forms.Button btnGrabIdNext;
+        private System.Windows.Forms.Label label54;
+        private System.Windows.Forms.Label label55;
+        private System.Windows.Forms.Label label56;
+        private System.Windows.Forms.GroupBox grpReviewTimePeriod;
+        private System.ComponentModel.BackgroundWorker backgroundWorker1;
     }
 }

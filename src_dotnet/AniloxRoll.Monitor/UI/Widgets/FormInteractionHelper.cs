@@ -82,6 +82,11 @@ namespace AniloxRoll.Monitor.UI.Widgets
         // ── Canvas 事件代理 ──────────────────────────────────────────────
         public void UpdateCanvasInfo(CanvasInfo info) => _canvasHelper.UpdateCanvasInfo(info);
         public void NavigateCamera(int direction) => _canvasHelper.NavigateCamera(direction);
+        public void SetCanvasScaleAndCamera(int scaleFactor, int cameraIndex)
+        {
+            _canvasHelper.SetImageScaleFactor(scaleFactor);
+            _canvasHelper.SetCurrentCameraIndex(cameraIndex);
+        }
 
         // ── 設定 ─────────────────────────────────────────────────────────
         public void ApplySettingsToService()
@@ -198,6 +203,13 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
         // ── 時間導航 ──────────────────────────────────────────────────────
         public void NavigateToDateTime(DateTime dt) => _timeNavigator.NavigateTo(dt);
+
+        public void LoadDirectoryAndInitNavigator(string path)
+        {
+            _imageRepository.LoadDirectory(path);
+            if (_imageRepository.FileCount > 0)
+                _timeNavigator.Initialize(UserSessionState.LastYear);
+        }
 
         // ── 資料夾選擇 ────────────────────────────────────────────────────
         public void SelectAndLoadFolder()

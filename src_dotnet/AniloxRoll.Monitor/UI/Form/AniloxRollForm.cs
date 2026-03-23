@@ -60,6 +60,8 @@ namespace AniloxRoll.Monitor.Forms
         private SortedSet<DateTime>         _statAvailableTimes  = new SortedSet<DateTime>();
         private List<GrabIdInfo>            _grabIdInfos         = new List<GrabIdInfo>();
         private bool                        _statComboUpdating;
+        private bool                        _syncingGrabIdNav;
+        private bool                        _syncingGrabIdCross;
         private List<GrabDetail>            _currentDetails      = new List<GrabDetail>();
         private bool                        _showFailOnly        = false;
         // --- 圖表導航狀態 ---
@@ -75,6 +77,8 @@ namespace AniloxRoll.Monitor.Forms
 
         // --- Grab ID 拼接模式（null = 一般模式）---
         private Bitmap[] _stitchedImages;
+        private float[][] _stitchedCurveMean;
+        private float[][] _stitchedCurveMax;
 
 
         public AniloxRollForm()
@@ -164,10 +168,11 @@ namespace AniloxRoll.Monitor.Forms
             };
 
             _dateTimeNavigator.PeriodSelectionChanged += _presenter.UpdatePeriodNavigationState;
+            _dateTimeNavigator.PeriodSelectionChanged += SyncGrabIdFromTimeCombos;
             _presenter.PeriodNavigationStateChanged   += (canLast, canNext) =>
             {
-                btnLastPeriod.Enabled = canLast;
-                btnNextPeriod.Enabled = canNext;
+                btnPeriodPrev.Enabled = canLast;
+                btnPeriodNext.Enabled = canNext;
             };
             _presenter.UpdatePeriodNavigationState();
 
@@ -310,20 +315,54 @@ namespace AniloxRoll.Monitor.Forms
             _presenter.UpdatePeriodNavigationState();
             _lastReviewProcessedMode = false;
 
-            // 同步載入序號清單並填充 cbReviewGrabId
+            // 同步載入序號清單並填充所有序號 ComboBox（Review + Data）
             if (_imageRepository.FileCount > 0)
             {
                 var reviewPath = UserSessionState.LastDataPath;
                 if (!string.IsNullOrWhiteSpace(reviewPath))
                 {
-                    _grabIdInfos = InspectionStatisticsService.LoadGrabIdInfos(reviewPath);
-                    cbReviewGrabId.Items.Clear();
-                    foreach (var info in _grabIdInfos)
-                        cbReviewGrabId.Items.Add(info.GrabId);
+                    _statsDataRootPath  = reviewPath;
+                    _statAvailableTimes = InspectionStatisticsService.LoadAvailableTimes(reviewPath);
+                    _grabIdInfos        = InspectionStatisticsService.LoadGrabIdInfos(reviewPath);
+
+                    _statComboUpdating = true;
+                    try
+                    {
+                        cbReviewGrabId.Items.Clear();
+                        cbGrabIdStart.Items.Clear();
+                        cbGrabIdEnd.Items.Clear();
+                        cbDataGrabId.Items.Clear();
+                        foreach (var info in _grabIdInfos)
+                        {
+                            cbReviewGrabId.Items.Add(info.GrabId);
+                            cbGrabIdStart.Items.Add(info.GrabId);
+                            cbGrabIdEnd.Items.Add(info.GrabId);
+                            cbDataGrabId.Items.Add(info.GrabId);
+                        }
+                        SyncGrabIdFromTimeCombos();
+                        UpdateGrabIdNavState();
+                        if (cbGrabIdStart.Items.Count > 0)
+                        {
+                            cbGrabIdStart.SelectedIndex = 0;
+                            cbGrabIdEnd.SelectedIndex = cbGrabIdEnd.Items.Count - 1;
+                        }
+                        if (_statAvailableTimes.Count > 0)
+                        {
+                            SetCombosToDateTime(true,  _statAvailableTimes.Min);
+                            SetCombosToDateTime(false, _statAvailableTimes.Max);
+                            DoRefreshCombos(true,  0);
+                            DoRefreshCombos(false, 0);
+                        }
+                    }
+                    finally { _statComboUpdating = false; }
+                    PopulateChartNavigators();
+                    RefreshStats();
                 }
             }
 
             ClearStitchedMode();
+            SetGroupBoxActive(grpReviewTimePeriod, true);
+            SetGroupBoxActive(grpReviewGrabNav, false);
             await _presenter.LoadImagesWithPeriodLockAsync(false, _interactionHelper.LoadImages);
         }
 
@@ -341,10 +380,10 @@ namespace AniloxRoll.Monitor.Forms
             await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
         }
 
-        private async void btnLastPeriod_Click(object sender, EventArgs e)
+        private async void btnPeriodPrev_Click(object sender, EventArgs e)
         { ClearStitchedMode(); await _presenter.MovePeriodAsync(-1, _lastReviewProcessedMode, _interactionHelper.LoadImages); }
 
-        private async void btnNextPeriod_Click(object sender, EventArgs e)
+        private async void btnPeriodNext_Click(object sender, EventArgs e)
         { ClearStitchedMode(); await _presenter.MovePeriodAsync(+1, _lastReviewProcessedMode, _interactionHelper.LoadImages); }
 
         // ==========================================
@@ -639,7 +678,6 @@ namespace AniloxRoll.Monitor.Forms
             _statsDataRootPath = _settings?.CaptureRootPath ?? string.Empty;
 
             btnSelectDataFolder.Click += BtnSelectDataFolder_Click;
-            btnQueryStats.Click       += BtnQueryStats_Click;
             btnShowFail.Click         += BtnShowFail_Click;
             WireStatDateCombos();
             InitGrabDetailListView();
@@ -659,8 +697,10 @@ namespace AniloxRoll.Monitor.Forms
             cbGrabIdEnd.SelectedIndexChanged    += (s, e) => OnGrabIdComboChanged(isStart: false);
             cbDataGrabId.SelectedIndexChanged   += (s, e) => OnSingleSheetComboChanged();
             cbReviewGrabId.SelectedIndexChanged += (s, e) => OnReviewGrabIdChanged();
-            btnReviewGrabPrev.Click             += (s, e) => StepReviewGrabId(-1);
-            btnReviewGrabNext.Click             += (s, e) => StepReviewGrabId(+1);
+            btnGrabIdPrev.Click             += (s, e) => StepReviewGrabId(-1);
+            btnGrabIdNext.Click             += (s, e) => StepReviewGrabId(+1);
+            btnGrabIdDataPrev.Click         += (s, e) => StepDataGrabId(-1);
+            btnGrabIdDataNext.Click         += (s, e) => StepDataGrabId(+1);
         }
 
         private void PopulateStatDateCombos(DateTime start, DateTime end)
@@ -743,6 +783,12 @@ namespace AniloxRoll.Monitor.Forms
                     _statAvailableTimes = InspectionStatisticsService.LoadAvailableTimes(_statsDataRootPath);
                     _grabIdInfos        = InspectionStatisticsService.LoadGrabIdInfos(_statsDataRootPath);
 
+                    // 同步 Review tab：載入圖片索引 + 時間導航
+                    UserSessionState.SetLastDataPath(_statsDataRootPath);
+                    UserSessionState.Save();
+                    _interactionHelper.LoadDirectoryAndInitNavigator(_statsDataRootPath);
+                    _presenter.UpdatePeriodNavigationState();
+
                     // 填充序號 ComboBox
                     _statComboUpdating = true;
                     try
@@ -758,6 +804,8 @@ namespace AniloxRoll.Monitor.Forms
                             cbDataGrabId.Items.Add(info.GrabId);
                             cbReviewGrabId.Items.Add(info.GrabId);
                         }
+                        SyncGrabIdFromTimeCombos();
+                        UpdateGrabIdNavState();
                         if (cbGrabIdStart.Items.Count > 0)
                         {
                             cbGrabIdStart.SelectedIndex = 0;
@@ -774,13 +822,13 @@ namespace AniloxRoll.Monitor.Forms
                         }
                     }
                     finally { _statComboUpdating = false; }
+                    SetActiveStatGroupBox(groupBoxGrabIdRange);
                     PopulateChartNavigators();
                     RefreshStats();
                 }
             }
         }
 
-        private void BtnQueryStats_Click(object sender, EventArgs e) => RefreshStats();
 
         private bool TryParseStatDateTime(out DateTime start, out DateTime end)
         {
@@ -834,6 +882,7 @@ namespace AniloxRoll.Monitor.Forms
         private void OnStartComboChanged(int fromLevel)
         {
             if (_statComboUpdating) return;
+            SetActiveStatGroupBox(groupBoxTimeRange);
             if (_statAvailableTimes.Count > 0)
             {
                 _statComboUpdating = true;
@@ -846,6 +895,7 @@ namespace AniloxRoll.Monitor.Forms
         private void OnEndComboChanged(int fromLevel)
         {
             if (_statComboUpdating) return;
+            SetActiveStatGroupBox(groupBoxTimeRange);
             if (_statAvailableTimes.Count > 0)
             {
                 _statComboUpdating = true;
@@ -955,6 +1005,7 @@ namespace AniloxRoll.Monitor.Forms
         private void OnGrabIdComboChanged(bool isStart)
         {
             if (_statComboUpdating || _grabIdInfos.Count == 0) return;
+            SetActiveStatGroupBox(groupBoxGrabIdRange);
 
             int idx1 = cbGrabIdStart.SelectedIndex;
             int idx2 = cbGrabIdEnd.SelectedIndex;
@@ -985,9 +1036,12 @@ namespace AniloxRoll.Monitor.Forms
             RefreshStats();
         }
 
-        private void OnSingleSheetComboChanged()
+        private async void OnSingleSheetComboChanged()
         {
+            UpdateDataGrabIdNavState();
             if (_statComboUpdating || _grabIdInfos.Count == 0) return;
+            if (_syncingGrabIdCross) return;
+            SetActiveStatGroupBox(grpDataSingleSheet);
             int idx = cbDataGrabId.SelectedIndex;
             if (idx < 0) return;
 
@@ -1008,19 +1062,75 @@ namespace AniloxRoll.Monitor.Forms
             finally { _statComboUpdating = false; }
 
             RefreshStats();
+
+            // 同步 cbReviewGrabId（影像回顧）+ 拼接顯示
+            if (!_syncingGrabIdCross && cbReviewGrabId.Items.Count > 0 && idx < cbReviewGrabId.Items.Count)
+            {
+                _syncingGrabIdCross = true;
+                try
+                {
+                    var info = _grabIdInfos[idx];
+                    _syncingGrabIdNav = true;
+                    try
+                    {
+                        cbReviewGrabId.SelectedIndex = idx;
+                        _interactionHelper.NavigateToDateTime(info.Earliest);
+                    }
+                    finally { _syncingGrabIdNav = false; }
+                    UpdateGrabIdNavState();
+                    SetGroupBoxActive(grpReviewGrabNav, true);
+                    SetGroupBoxActive(grpReviewTimePeriod, false);
+                    await LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest);
+                }
+                finally { _syncingGrabIdCross = false; }
+            }
         }
 
         // ── 影像回顧 序號跳轉 ─────────────────────────────────────────────
 
         private async void OnReviewGrabIdChanged()
         {
+            UpdateGrabIdNavState();
+            if (_syncingGrabIdNav) return;
+            if (_syncingGrabIdCross) return;
             if (_grabIdInfos.Count == 0) return;
             int idx = cbReviewGrabId.SelectedIndex;
             if (idx < 0 || idx >= _grabIdInfos.Count) return;
 
             var info = _grabIdInfos[idx];
-            _interactionHelper.NavigateToDateTime(info.Earliest);
+            _syncingGrabIdNav = true;
+            try { _interactionHelper.NavigateToDateTime(info.Earliest); }
+            finally { _syncingGrabIdNav = false; }
+
             await LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest);
+
+            // 同步 cbDataGrabId（單片資訊）+ 統計
+            if (!_syncingGrabIdCross && cbDataGrabId.Items.Count > 0 && idx < cbDataGrabId.Items.Count)
+            {
+                _syncingGrabIdCross = true;
+                try
+                {
+                    cbDataGrabId.SelectedIndex = idx;
+                    // 同步序號範圍 + 時間 + 統計
+                    _statComboUpdating = true;
+                    try
+                    {
+                        cbGrabIdStart.SelectedIndex = idx;
+                        cbGrabIdEnd.SelectedIndex   = idx;
+                        SetCombosToDateTime(true,  info.Earliest);
+                        SetCombosToDateTime(false, info.Latest);
+                        if (_statAvailableTimes.Count > 0)
+                        {
+                            DoRefreshCombos(true,  0);
+                            DoRefreshCombos(false, 0);
+                        }
+                    }
+                    finally { _statComboUpdating = false; }
+                    RefreshStats();
+                    SetActiveStatGroupBox(grpDataSingleSheet);
+                }
+                finally { _syncingGrabIdCross = false; }
+            }
         }
 
         private async Task LoadGrabStitchedViewAsync(string grabId, DateTime hintFrom, DateTime hintTo)
@@ -1036,6 +1146,8 @@ namespace AniloxRoll.Monitor.Forms
                 // CSV 掃描 + 拼接合併成一個 Task.Run，減少 thread pool 排程開銷；
                 // CSV 掃描以 hintFrom/hintTo 限縮到相關日期（通常只有 1 個 CSV）
                 long csvMs = 0, stitchMs = 0;
+                float[][] newCurveMean = new float[7][];
+                float[][] newCurveMax  = new float[7][];
                 var newImages = await Task.Run(() =>
                 {
                     var swCsv = Stopwatch.StartNew();
@@ -1044,10 +1156,10 @@ namespace AniloxRoll.Monitor.Forms
                     csvMs = swCsv.ElapsedMilliseconds;
 
                     var swStitch = Stopwatch.StartNew();
+                    int scale = InspectionEngineConfig.DefaultSaveResizeScale;
                     // BMP 路徑改走 CoreCV_FastReadBMP + GPU resize（比 GDI+ 快約 10x）
                     Func<string, Bitmap> bmpLoader = _inspectionService != null
-                        ? (Func<string, Bitmap>)(p => _inspectionService.LoadBmpAtScale(
-                              p, InspectionEngineConfig.DefaultSaveResizeScale))
+                        ? (Func<string, Bitmap>)(p => _inspectionService.LoadBmpAtScale(p, scale))
                         : null;
                     var imgs = new Bitmap[7];
                     for (int i = 0; i < 7; i++)
@@ -1055,8 +1167,11 @@ namespace AniloxRoll.Monitor.Forms
                         int camId = i + 1;
                         if (grouped.TryGetValue(camId, out var paths) && paths.Count > 0)
                         {
-                            try { imgs[i] = GrabImageStitcher.StitchCamera(
-                                      paths, InspectionEngineConfig.DefaultSaveResizeScale, bmpLoader); }
+                            try
+                            {
+                                imgs[i] = GrabImageStitcher.StitchCamera(paths, scale, bmpLoader);
+                                MergeCurves(paths, out newCurveMean[i], out newCurveMax[i]);
+                            }
                             catch (Exception ex)
                             {
                                 System.Diagnostics.Trace.WriteLine(
@@ -1069,7 +1184,10 @@ namespace AniloxRoll.Monitor.Forms
                 });
 
                 ClearStitchedMode();
-                _stitchedImages = newImages;
+                _stitchedImages    = newImages;
+                _stitchedCurveMean = newCurveMean;
+                _stitchedCurveMax  = newCurveMax;
+                SetGroupBoxActive(grpReviewGrabNav, true); SetGroupBoxActive(grpReviewTimePeriod, false);
                 _galleryManager.SetImages(_stitchedImages);
                 ShowStitchedCameraInCanvas(_galleryManager.SelectedIndex);
 
@@ -1088,14 +1206,133 @@ namespace AniloxRoll.Monitor.Forms
             _galleryManager.ClearImages();
             foreach (var bmp in _stitchedImages) bmp?.Dispose();
             _stitchedImages = null;
+            _stitchedCurveMean = null;
+            _stitchedCurveMax = null;
+            SetGroupBoxActive(grpReviewGrabNav, false); SetGroupBoxActive(grpReviewTimePeriod, true);
+        }
+
+        // ── GroupBox 綠色高亮指示 ───────────────────────────────────────────
+
+        private static readonly Color _activeGrpFill   = Color.FromArgb(220, 248, 225);
+        private static readonly Color _activeGrpBorder = Color.FromArgb(0, 140, 60);
+
+        private void SetGroupBoxActive(GroupBox box, bool active)
+        {
+            if (active)
+            {
+                box.Paint -= ActiveGroupBox_Paint;
+                box.Paint += ActiveGroupBox_Paint;
+            }
+            else
+            {
+                box.Paint -= ActiveGroupBox_Paint;
+            }
+            box.Invalidate();
+        }
+
+        private void SetActiveStatGroupBox(GroupBox active)
+        {
+            foreach (var box in new[] { groupBoxGrabIdRange, grpDataSingleSheet, groupBoxTimeRange })
+                SetGroupBoxActive(box, box == active);
+        }
+
+        private static void ActiveGroupBox_Paint(object sender, PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            var box = (GroupBox)sender;
+            int textH = (int)g.MeasureString(box.Text, box.Font).Height;
+            int midY = textH / 2;
+
+            using (var brush = new SolidBrush(_activeGrpFill))
+                g.FillRectangle(brush, 0, midY, box.Width, box.Height - midY);
+            using (var pen = new Pen(_activeGrpBorder, 1.5f))
+                g.DrawRectangle(pen, 0, midY, box.Width - 1, box.Height - midY - 1);
+
+            var textSize = g.MeasureString(box.Text, box.Font);
+            using (var bgBrush = new SolidBrush(_activeGrpFill))
+                g.FillRectangle(bgBrush, 6, 0, textSize.Width + 2, textH);
+            using (var textBrush = new SolidBrush(_activeGrpBorder))
+                g.DrawString(box.Text, box.Font, textBrush, 8, 0);
         }
 
         private void ShowStitchedCameraInCanvas(int idx)
         {
             if (_stitchedImages == null) return;
             var bmp = (idx >= 0 && idx < _stitchedImages.Length) ? _stitchedImages[idx] : null;
+
+            // 設定 scaleFactor 和 cameraIndex，FitToScreen 觸發 StatusChanged 時 mm 換算才正確
+            _interactionHelper.SetCanvasScaleAndCamera(
+                InspectionEngineConfig.DefaultSaveResizeScale, idx);
+
             canvasMain.Image = bmp;
             if (bmp != null) canvasMain.FitToScreen();
+
+            // 更新 MuraChart
+            if (_muraChartHelper != null && _settings != null)
+            {
+                float[] mean = (_stitchedCurveMean != null && idx >= 0 && idx < _stitchedCurveMean.Length)
+                    ? _stitchedCurveMean[idx] : null;
+                float[] max = (_stitchedCurveMax != null && idx >= 0 && idx < _stitchedCurveMax.Length)
+                    ? _stitchedCurveMax[idx] : null;
+
+                double[] posArr = _settings.GetCameraStartPositionMmArray();
+                double startPos = (idx >= 0 && idx < posArr.Length) ? posArr[idx] : 0;
+                _muraChartHelper.UpdateDataAndView(mean, max, startPos, double.NaN, double.NaN);
+            }
+        }
+
+        /// <summary>
+        /// 載入多張影像的 .bin 曲線，Mean 取平均、Max 取最大值。
+        /// 曲線保持全解析度（mm 座標由 MuraChart 映射，不需與圖片 pixel 對齊）。
+        /// </summary>
+        private static void MergeCurves(IList<string> imagePaths,
+            out float[] mergedMean, out float[] mergedMax)
+        {
+            mergedMean = null;
+            mergedMax  = null;
+
+            var allMean = new List<float[]>();
+            var allMax  = new List<float[]>();
+            int curveLen = 0;
+
+            foreach (string path in imagePaths)
+            {
+                string basePath;
+                if (path.EndsWith("_raw.jpg", StringComparison.OrdinalIgnoreCase))
+                    basePath = path.Substring(0, path.Length - "_raw.jpg".Length);
+                else
+                    basePath = System.IO.Path.Combine(
+                        System.IO.Path.GetDirectoryName(path),
+                        System.IO.Path.GetFileNameWithoutExtension(path));
+
+                var mean = InspectionEngine.LoadCurveBin(basePath + "_mean.bin");
+                var max  = InspectionEngine.LoadCurveBin(basePath + "_max.bin");
+                if (mean != null && max != null && mean.Length > 0)
+                {
+                    allMean.Add(mean);
+                    allMax.Add(max);
+                    if (curveLen == 0) curveLen = mean.Length;
+                }
+            }
+
+            if (allMean.Count == 0 || curveLen == 0) return;
+
+            // 合併：Mean 取全部平均，Max 取全部最大值
+            mergedMean = new float[curveLen];
+            mergedMax  = new float[curveLen];
+            for (int x = 0; x < curveLen; x++)
+            {
+                float sumMean = 0;
+                float maxVal  = float.MinValue;
+                int count = 0;
+                for (int j = 0; j < allMean.Count; j++)
+                {
+                    if (x < allMean[j].Length) { sumMean += allMean[j][x]; count++; }
+                    if (x < allMax[j].Length && allMax[j][x] > maxVal) maxVal = allMax[j][x];
+                }
+                mergedMean[x] = count > 0 ? sumMean / count : 0;
+                mergedMax[x]  = maxVal > float.MinValue ? maxVal : 0;
+            }
         }
 
         private void StepReviewGrabId(int delta)
@@ -1104,6 +1341,69 @@ namespace AniloxRoll.Monitor.Forms
             int next = cbReviewGrabId.SelectedIndex + delta;
             if (next >= 0 && next < cbReviewGrabId.Items.Count)
                 cbReviewGrabId.SelectedIndex = next;   // triggers OnReviewGrabIdChanged
+        }
+
+        private void StepDataGrabId(int delta)
+        {
+            if (_grabIdInfos.Count == 0) return;
+            int next = cbDataGrabId.SelectedIndex + delta;
+            if (next >= 0 && next < cbDataGrabId.Items.Count)
+                cbDataGrabId.SelectedIndex = next;   // triggers OnSingleSheetComboChanged
+        }
+
+        private void UpdateGrabIdNavState()
+        {
+            int idx   = cbReviewGrabId.SelectedIndex;
+            int count = cbReviewGrabId.Items.Count;
+            btnGrabIdPrev.Enabled = idx > 0;
+            btnGrabIdNext.Enabled = idx >= 0 && idx < count - 1;
+            UpdateDataGrabIdNavState();
+        }
+
+        private void UpdateDataGrabIdNavState()
+        {
+            int idx   = cbDataGrabId.SelectedIndex;
+            int count = cbDataGrabId.Items.Count;
+            btnGrabIdDataPrev.Enabled = idx > 0;
+            btnGrabIdDataNext.Enabled = count > 0 && idx < count - 1;
+        }
+
+        /// <summary>
+        /// 時間 ComboBox 變更時，同步 cbReviewGrabId 到包含該時間的序號。
+        /// </summary>
+        private void SyncGrabIdFromTimeCombos()
+        {
+            if (_syncingGrabIdNav || _grabIdInfos.Count == 0) return;
+            DateTime current = _dateTimeNavigator.GetCurrentPeriodOrDefault(DateTime.MinValue);
+            if (current == DateTime.MinValue) return;
+
+            // 找包含 current 的 grab ID（Earliest ≤ current ≤ Latest），
+            // 若無精確匹配則找 Earliest 最接近且 ≤ current 的
+            int bestIdx = -1;
+            long bestDiff = long.MaxValue;
+            for (int i = 0; i < _grabIdInfos.Count; i++)
+            {
+                var info = _grabIdInfos[i];
+                if (current >= info.Earliest && current <= info.Latest)
+                {
+                    bestIdx = i;
+                    break;
+                }
+                long diff = Math.Abs(current.Ticks - info.Earliest.Ticks);
+                if (diff < bestDiff)
+                {
+                    bestDiff = diff;
+                    bestIdx = i;
+                }
+            }
+
+            if (bestIdx >= 0 && bestIdx < cbReviewGrabId.Items.Count
+                && bestIdx != cbReviewGrabId.SelectedIndex)
+            {
+                _syncingGrabIdNav = true;
+                try { cbReviewGrabId.SelectedIndex = bestIdx; }
+                finally { _syncingGrabIdNav = false; }
+            }
         }
 
         private void RefreshStats()

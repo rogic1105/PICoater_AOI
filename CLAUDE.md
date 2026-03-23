@@ -134,13 +134,30 @@ Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×741），�
 - `lblImageFormat`（Y=400）：顯示目前圖片格式，"壓縮 JPEG" / "原始 BMP"
 - `lblImageScale`（Y=424）：顯示壓縮倍率，"縮放: 5x" / "縮放: 1x"
 - 由 `FormInteractionHelper.OnGallerySelectionChanged` 透過 `data.IsCompressedJpeg` / `data.ScaleFactor` 更新
-- `grpReviewGrabNav`（GroupBox，Location=1082,450，Size=96×90，Text="序號跳轉"）：含 `cbReviewGrabId`（DropDownList，選擇序號）、`btnReviewGrabPrev`（"<"）、`btnReviewGrabNext`（">"）；選擇後呼叫 `OnReviewGrabIdChanged` → `NavigateToDateTime(info.Earliest)` + **`LoadGrabStitchedViewAsync(grabId)`**（拼接模式，見下）；Prev/Next 透過 `StepReviewGrabId(±1)` 操作 `SelectedIndex` 觸發同一事件
+- `grpReviewGrabNav`（GroupBox，Location=1088,469，Size=109×96，Text="單片"）：含 `cbReviewGrabId`（DropDownList，選擇序號）、`btnGrabIdPrev`（"<"）、`btnGrabIdNext`（">"）；選擇後呼叫 `OnReviewGrabIdChanged` → `NavigateToDateTime(info.Earliest)` + **`LoadGrabStitchedViewAsync(grabId)`**（拼接模式，見下）；Prev/Next 透過 `StepReviewGrabId(±1)` 操作 `SelectedIndex` 觸發同一事件
+- `grpReviewTimePeriod`（GroupBox，"時間段"）：時間段導航區塊，含 `btnPeriodPrev`/`btnPeriodNext`
 
 **Grab ID 拼接模式（`_stitchedImages` 欄位）**：
 - `_stitchedImages != null` 表示目前為拼接模式；`null` = 一般模式
-- `LoadGrabStitchedViewAsync(grabId)` → `InspectionStatisticsService.LoadImagePathsForGrabId`（掃 CSV，回傳每台相機的所有影像路徑 `Dictionary<int, List<string>>`）→ `GrabImageStitcher.StitchCamera`（每台相機多張依時間垂直拼接）→ `_galleryManager.SetImages(_stitchedImages)`→ `ShowStitchedCameraInCanvas`
-- `ClearStitchedMode()`：先 null `canvasMain.Image` + `_galleryManager.ClearImages()` 再 Dispose 所有 bitmaps；在所有一般載入路徑前呼叫（propertyGrid / btnSelectFolder / btnShowOriginal / btnShowProcessed / btnLastPeriod / btnNextPeriod）
+- `LoadGrabStitchedViewAsync(grabId)` → `InspectionStatisticsService.LoadImagePathsForGrabId`（掃 CSV，回傳每台相機的所有影像路徑 `Dictionary<int, List<string>>`）→ `GrabImageStitcher.StitchCamera`（每台相機多張依時間垂直拼接，完成後 `RotateFlip(RotateNoneFlipY)` 對齊取像時序）→ `_galleryManager.SetImages(_stitchedImages)` → `ShowStitchedCameraInCanvas`
+- `MergeCurves`：載入每張影像的 `_mean.bin`/`_max.bin`，全解析度合併（Mean=平均、Max=取最大），存入 `_stitchedCurveMean[7]`/`_stitchedCurveMax[7]`
+- `ShowStitchedCameraInCanvas`：設 `_imageScaleFactor=DefaultSaveResizeScale` + `_currentCameraIndex` 後 `FitToScreen()`，再以合併曲線更新 chartMura
+- `ClearStitchedMode()`：先 null `canvasMain.Image` + `_galleryManager.ClearImages()` 再 Dispose 所有 bitmaps；在所有一般載入路徑前呼叫（propertyGrid / btnSelectFolder / btnShowOriginal / btnShowProcessed / btnPeriodPrev / btnPeriodNext）
 - `SelectionChanged` handler 以 `_stitchedImages != null` 分支：拼接模式呼叫 `ShowStitchedCameraInCanvas(idx)`，一般模式呼叫 `_interactionHelper.OnGallerySelectionChanged(idx)`
+
+**cbReviewGrabId ↔ cbDataGrabId 雙向同步**：
+- `OnReviewGrabIdChanged` → 同步 `cbDataGrabId` + 統計刷新（`_syncingGrabIdCross` guard 防迴圈）
+- `OnSingleSheetComboChanged` → 同步 `cbReviewGrabId` + 導航時間 + 載入拼接圖（`_syncingGrabIdCross` guard）
+- `SyncGrabIdFromTimeCombos`：時間 ComboBox 變更 → 找包含該時間的 grab ID → 同步 `cbReviewGrabId`（`_syncingGrabIdNav` guard）
+
+**btnSelectFolder ↔ btnSelectDataFolder 資料共享**：
+- `btnSelectFolder`（Review tab）：載入圖片後同時填充 Data tab 所有序號/時間 ComboBox + 圖表導航 + 統計
+- `btnSelectDataFolder`（Data tab）：載入統計後同時設定 Review tab 的 `ImageRepository` + `TimeNavigator`（透過 `FormInteractionHelper.LoadDirectoryAndInitNavigator`）
+
+**GroupBox 綠色高亮（活動模式指示）**：
+- `SetGroupBoxActive(grp, active)`：透過 `ActiveGroupBox_Paint` 繪製綠色填充 `(220,248,225)` / 邊框 `(0,140,60)` / 標題文字；不設 `ForeColor` 避免子控制項繼承
+- Review tab：`grpReviewTimePeriod`（原圖路徑）、`grpReviewGrabNav`（合圖路徑）二擇一
+- Data tab：`groupBoxGrabIdRange`、`grpDataSingleSheet`、`groupBoxTimeRange` 三擇一（`SetActiveStatGroupBox`）
 
 ### tabPageData 控制項
 
@@ -156,7 +173,7 @@ Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×741），�
 | `btnSelectDataFolder` | "讀取資料夾" | 選擇 CaptureRootPath，載入後自動填充 cbGrabIdStart/End 及時間；同時填充 `cbReviewGrabId` |
 | `btnQueryStats` | "統計數據" | 手動觸發 RefreshStats() |
 | `btnShowFail` | "篩選異常" | Toggle：只顯示 listViewGrabDetail 中有 Fail 的序號（切換後文字改為"顯示全部"） |
-| GroupBox | `grpDataSingleSheet`（Text="單片資訊"） | 含 `lblDataGrabId` + `cbDataGrabId`（序號下拉）；選擇後自動設 cbGrabIdStart==cbGrabIdEnd，同步時間欄位，觸發 RefreshStats |
+| GroupBox | `grpDataSingleSheet`（Text="單片分類"） | 含 `lblDataGrabId` + `cbDataGrabId`（序號下拉）+ `btnGrabIdDataPrev`（"<"）/ `btnGrabIdDataNext`（">"）；選擇後自動設 cbGrabIdStart==cbGrabIdEnd，同步時間欄位，觸發 RefreshStats；與 `cbReviewGrabId` 雙向同步 |
 | Chart × 3 | `chartYearly`/`chartMonthly`/`chartDaily` | StackedColumn（合格=綠/異常=紅）；Y 軸在右側（AxisY2 Labels）；AxisY（Primary）驅動水平 grid；X 軸水平標籤（Angle=0）；Y 軸預設：年=60000、月=2000、日=300 |
 | 年月日導航 | `btnChartYearPrev/Next` + `cbChartYear`（同理月/日） | < ComboBox > 箭頭操作 SelectedIndex；Anchor=Bottom\|Left（跟圖表底部對齊） |
 
