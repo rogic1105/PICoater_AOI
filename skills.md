@@ -685,6 +685,14 @@ Directory.GetFiles(root, "*_raw.jpg", AllDirectories)
 ```
 **陷阱**：舊的 either/or 邏輯（先掃 jpg，有就不掃 bmp）會讓混合資料夾丟失 BMP 檔。
 
+**陷阱**：`GetImages()` 原本用 `.ToDictionary(x => x.CameraId, x => x.FullPath)`，當 BMP+JPG 同時存在時 duplicate key 會拋 `ArgumentException`，導致 `RunWorkflowAsync` 靜默失敗（UI 無反應）。改用手動迭代 + JPG 優先覆寫邏輯。
+
+### SaveOriginalBmp（原 UseCompressedCapture 反轉）
+
+- `SaveOriginalBmp=false`（預設）：只存 4 檔（`_raw.jpg`/`_proc.jpg`/`_mean.bin`/`_max.bin`）
+- `SaveOriginalBmp=true`：額外同步匯出全解析度 `.bmp`（MIL `MbufExport` 必須在 callback 同步，因 `sourceBuffer` 會被 MIL 回收）
+- JSON 向後相容：讀取時若有 `SaveOriginalBmp` key 直接用，否則讀 `UseCompressedCapture` 並反轉
+
 ---
 
 ## 跨倍率 Canvas View 保存（世界座標法）

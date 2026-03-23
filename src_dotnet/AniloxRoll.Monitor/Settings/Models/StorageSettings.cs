@@ -7,7 +7,7 @@ namespace AniloxRoll.Monitor.Core.Data
     {
         [DisplayName("存檔")]     public bool EnableAutoCapture { get; set; } = false;
         [DisplayName("存檔目錄")] public string CaptureRootPath { get; set; } = @"D:\AniloxCaptures";
-        [DisplayName("壓縮")]     public bool UseCompressedCapture { get; set; } = true;
+        [DisplayName("存原圖")]   public bool SaveOriginalBmp { get; set; } = false;
 
         public void Validate()
         {

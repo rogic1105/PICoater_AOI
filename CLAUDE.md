@@ -84,7 +84,7 @@ CoreCV_FastReadBMP  →  AoiService.ProcessImage  →  CoreCV_Resize_GPU  →  C
 | `src_dotnet/AniloxRoll.Monitor/UI/Form/AniloxRollForm.Designer.cs` | Form 控制項佈局（VS Designer 管理）；主要控制項已設 Anchor 支援視窗放大縮小 |
 | `src_dotnet/AniloxRoll.Monitor/Acquisition/AniloxCamera.cs` | 單台相機 MIL 資源封裝（CLProtocol、曝光、GrabHeight、Telemetry）；`TrySaveCapture` 磁碟 I/O 走 `Task.Run` 非同步 |
 | `src_dotnet/AniloxRoll.Monitor/Acquisition/CaptureTimestampCoordinator.cs` | 同 Line Rate 相機共用存檔時間戳（`Coordinate(lineRateHz, now)` → 100ms 內同組共用 `.fff`） |
-| `src_dotnet/AniloxRoll.Monitor/UI/Managers/LiveCameraManager.cs` | 多台相機生命週期管理（Allocate/Grab/Free） |
+| `src_dotnet/AniloxRoll.Monitor/UI/Managers/LiveCameraManager.cs` | 多台相機生命週期管理（Allocate/Grab/Free）；`OnLiveCurveData` 事件轉發至 Form |
 | `src_dotnet/AniloxRoll.Monitor/Settings/InspectionSettings.cs` | 根設定物件（MachineLayout/Acquisition/Recipe/Storage） |
 | `src_dotnet/AniloxRoll.Monitor/Settings/Models/AcquisitionSettings.cs` | 取像設定（各 7 台陣列：CameraGrabHeight[7]/CameraExposureTimeUs[7]/CameraLineRateHz[7]） |
 | `src_dotnet/AniloxRoll.Monitor/Settings/Stores/AcquisitionSettingsStore.cs` | 讀寫 `Config\acquisition-settings.json`（tabPageCamera 的唯一持久化入口） |
@@ -261,7 +261,7 @@ Guard flags：
 | B. 取像設定（控制） | CameraExposureTimeUs[7], CameraLineRateHz[7], CameraGrabHeight[7] | **TrackBar 唯一入口**（`tabPageCamera`）+ `acquisition-settings.json`；PropertyGrid 不顯示；**任何時間調整都立即存檔**（不限 grab 期間） |
 | C. 機台佈局 | Cam1–7_Ops, Cam1–7_Pos | PropertyGrid（`tabPageInspSettings`）+ JSON |
 | D. 檢測配方 | HessianMaxFactor, ErrorValueMean, ErrorValueMax | PropertyGrid（`tabPageInspSettings`）+ JSON |
-| E. 儲存設定 | EnableAutoCapture, CaptureRootPath, UseCompressedCapture | PropertyGrid（`tabPageInspSettings`）+ JSON；`SaveResizeScale`/`SaveJpgQuality` 為 `[Browsable(false)]` 常數 |
+| E. 儲存設定 | EnableAutoCapture, CaptureRootPath, SaveOriginalBmp | PropertyGrid（`tabPageInspSettings`）+ JSON；`SaveResizeScale`/`SaveJpgQuality` 為 `[Browsable(false)]` 常數 |
 | F. 影像引擎常數 | MaxWidth, MaxHeight, MaxThumbnailSide, Sigma 等 | ListView 唯讀（`tabPageSystem`） |
 
 ### 右側面板初始化流程（code-behind）
@@ -275,7 +275,7 @@ InitializeSystem()
 
 **重要**：`tabControlRight` 的所有控制項**必須宣告在 `InitializeComponent()`**（Designer.cs），才能在 VS Designer 顯示。事件繫結（需要 `_settings`、`_liveCameraManager`）保留在 code-behind。
 
-**tabPageLiveView 面板命名**：`panelLiveCam1–7`（各相機縮圖容器，148×111）；`panelMainDisplay`（主顯示，1072×347）。`LiveCameraManager` 接收 `panelLiveCam1–7` 陣列與 `panelMainDisplay`。
+**tabPageLiveView 面板命名**：`panelLiveCam1–7`（各相機縮圖容器，148×111）；`panelMainDisplay`（主顯示，1072×347）；`muraChartLive`（即時 Mura 曲線圖，Anchor=Bottom|Left|Right，由 `_muraChartLiveHelper` 管理，`OnLiveCurveData` 事件驅動，只顯示 `SelectedMainCameraId` 的曲線）。`LiveCameraManager` 接收 `panelLiveCam1–7` 陣列與 `panelMainDisplay`。
 
 **曝光上限計算**：`CalcExpMax(lrHz) = clamp(floor(900000/lrHz), 1, 10000)`。LR 改變時呼叫 `ApplyExpMax()` 更新所有 7 台曝光 TrackBar/NumericUpDown 的 Maximum 並夾緊現有值。
 
@@ -493,12 +493,13 @@ sdk/AOI_SDK/src_dotnet/MilGrabSample/MilGrabSample/
 
 ---
 
-## 壓縮存檔格式（UseCompressedCapture）
+## 存檔格式（TrySaveCapture）
 
 ### 檔案命名與目錄結構
 
 時間戳精確到毫秒（`.fff`），同 Line Rate 的相機由 `CaptureTimestampCoordinator` 協調共用同一 `.fff`（100ms 容差）。
 
+**一律存檔的 4 個檔案**（不管 `SaveOriginalBmp` 設定）：
 ```
 {CaptureRootPath}\{yyyy}\{yyyyMM}\{yyyyMMdd}\
     {yyyyMMdd_HHmmss.fff}-{CameraId}_raw.jpg   ← 縮小版原圖（GPU resize，1/SaveResizeScale）
@@ -507,15 +508,14 @@ sdk/AOI_SDK/src_dotnet/MilGrabSample/MilGrabSample/
     {yyyyMMdd_HHmmss.fff}-{CameraId}_max.bin   ← Mura Max 曲線（全解析度長度）
 ```
 
-舊格式（`UseCompressedCapture = false`）：
+**額外檔案**（`SaveOriginalBmp = true` 時）：
 ```
-{CaptureRootPath}\{yyyy}\{yyyyMM}\{yyyyMMdd}\
-    {yyyyMMdd_HHmmss.fff}-{CameraId}.bmp       ← 全解析度原圖
+    {yyyyMMdd_HHmmss.fff}-{CameraId}.bmp       ← 全解析度原圖（同步匯出，因 sourceBuffer 會被 MIL 回收）
 ```
 
 ### TrySaveCapture 非同步 I/O
 
-壓縮格式下，GPU resize + Marshal.Copy 在 MIL callback 執行緒完成（快），磁碟 I/O（JPEG/bin 寫入）移至 `Task.Run` 背景執行緒，callback 立即返回不阻塞連續抓圖。`_lastCaptureKey` 在 Task.Run 前提前更新，防止重複觸發。
+GPU resize + Marshal.Copy 在 MIL callback 執行緒完成（快），JPEG/bin 寫入移至 `Task.Run` 背景執行緒，callback 立即返回不阻塞連續抓圖。`_lastCaptureKey` 在 Task.Run 前提前更新，防止重複觸發。`SaveOriginalBmp=true` 時 BMP 匯出必須在 callback 同步完成（`sourceBuffer` 會被 MIL 回收用於下一幀）。
 
 ### .bin 檔案格式
 
@@ -540,6 +540,8 @@ magic(4)="MCBF" | version(4=int) | scale_factor(4=float) | array_length(4=int) |
 
 同時掃 `*_raw.jpg` + `*.bmp`，兩種格式可在同一根目錄共存，`ParsePath` regex 兩種皆可 match。
 `*_proc.jpg`、`*_mean.bin`、`*_max.bin` 不被收入（不符合 glob 模式）。
+
+**JPG 優先規則**：`GetImages()` 同一相機同時存在 JPG 與 BMP 時，優先回傳 JPG（讀取速度快，走 `LoadFromPrecomputedFiles` 不需 GPU）。避免 `.ToDictionary()` 重複 key 崩潰。
 
 ### CanvasInteractionHelper 跨倍率 View 保存
 

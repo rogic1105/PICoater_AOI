@@ -115,6 +115,7 @@ namespace AniloxRoll.Monitor.Core.Data
         }
 
         // 查詢特定時間點的所有相機圖片（s 格式為 "ss.fff"）
+        // 同一相機同時存在 JPG 與 BMP 時，優先回傳 JPG（讀取速度較快）
         public Dictionary<int, string> GetImages(string y, string m, string d, string h, string min, string sFff)
         {
             string sec = sFff, ms = "";
@@ -123,9 +124,20 @@ namespace AniloxRoll.Monitor.Core.Data
                 int dot = sFff.IndexOf('.');
                 if (dot >= 0) { sec = sFff.Substring(0, dot); ms = sFff.Substring(dot + 1); }
             }
-            return _metadataCache
-                .Where(x => x.Year == y && x.Month == m && x.Day == d && x.Hour == h && x.Minute == min && x.Second == sec && x.Millisecond == ms)
-                .ToDictionary(x => x.CameraId, x => x.FullPath);
+            var result = new Dictionary<int, string>();
+            foreach (var x in _metadataCache)
+            {
+                if (x.Year != y || x.Month != m || x.Day != d || x.Hour != h || x.Minute != min || x.Second != sec || x.Millisecond != ms)
+                    continue;
+                // JPG 優先：若已有 JPG 不被 BMP 覆寫；若已有 BMP 可被 JPG 覆寫
+                if (result.TryGetValue(x.CameraId, out string existing))
+                {
+                    bool existingIsJpg = existing.EndsWith("_raw.jpg", StringComparison.OrdinalIgnoreCase);
+                    if (existingIsJpg) continue; // 已是 JPG，不覆寫
+                }
+                result[x.CameraId] = x.FullPath;
+            }
+            return result;
         }
     }
 

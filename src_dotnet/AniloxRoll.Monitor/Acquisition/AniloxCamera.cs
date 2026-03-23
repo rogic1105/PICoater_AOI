@@ -39,7 +39,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         public bool EnableImageProcessing { get; set; } = true;
         public bool EnableHessian { get; set; } = true;
         public bool EnableAutoCapture { get; set; } = false;
-        public bool UseCompressedCapture { get; set; } = true;
+        public bool SaveOriginalBmp { get; set; } = false;
         public string CaptureRootPath { get; set; } = string.Empty;
         public int CameraGrabHeight { get; set; } = 0;
 
@@ -151,6 +151,10 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>每次 TrySaveCapture 成功存檔後觸發（MIL 回呼執行緒）。
         /// 參數：(cameraId, fileNameWithoutExt, meanPeak_0to1, maxPeak_0to1)</summary>
         public event Action<int, string, float, float> OnInspectionResult;
+
+        /// <summary>每幀 GPU pipeline 完成後觸發（MIL 回呼執行緒）。
+        /// 參數：(cameraId, curveMean_raw255, curveMax_raw255)</summary>
+        public event Action<int, float[], float[]> OnLiveCurveData;
 
         private float _lastMeanPeak = 0f;
         private float _lastMaxPeak  = 0f;
@@ -812,6 +816,8 @@ namespace AniloxRoll.Monitor.Core.Camera
                         }
                         _lastMeanPeak = mp / 255f;
                         _lastMaxPeak  = xp / 255f;
+
+                        OnLiveCurveData?.Invoke(CameraId, meanArr, maxArr);
                     }
 
                     Marshal.Copy(picoaterRidgeBuffer, _hostOutputBuffer, 0, _hostOutputBuffer.Length);
@@ -859,16 +865,15 @@ namespace AniloxRoll.Monitor.Core.Camera
                 byte[] rawBytes = null, procBytes = null;
                 float[] meanArr = null, maxArr = null;
                 int rw = _resizeWidth, rh = _resizeHeight;
-                bool useCompressed = false;
+                bool hasResizeData = false;
 
                 lock (_picoaterLock)
                 {
-                    if (UseCompressedCapture &&
-                        _nativeBufferPool != null &&
+                    if (_nativeBufferPool != null &&
                         _rawResizeBuf  != IntPtr.Zero &&
                         _procResizeBuf != IntPtr.Zero)
                     {
-                        useCompressed = true;
+                        hasResizeData = true;
 
                         // GPU resize（快速，在 callback 執行緒完成）
                         NativeMethods.CoreCV_Resize_GPU(
@@ -904,10 +909,19 @@ namespace AniloxRoll.Monitor.Core.Camera
                 int   camId    = CameraId;
                 int   scale    = _saveResizeScale;
                 int   quality  = _saveJpgQuality;
+                bool  alsoBmp  = SaveOriginalBmp;
 
-                if (useCompressed)
+                if (hasResizeData)
                 {
-                    // 所有磁碟 I/O 移至背景執行緒，callback 立即返回，不阻塞連續抓圖
+                    // 非壓縮模式：BMP 必須在 callback 同步匯出（sourceBuffer 會被 MIL 回收）
+                    if (alsoBmp)
+                    {
+                        Directory.CreateDirectory(saveDir);
+                        MIL.MbufExport(Path.Combine(saveDir, baseName + ".bmp"), MIL.M_BMP, sourceBuffer);
+                    }
+
+                    // 其餘 I/O 移至背景執行緒，callback 立即返回，不阻塞連續抓圖
+                    // 不管 UseCompressedCapture，一律存 _raw.jpg / _proc.jpg / _mean.bin / _max.bin
                     Task.Run(() =>
                     {
                         try
@@ -937,7 +951,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                 }
                 else
                 {
-                    // BMP fallback（舊格式，全解析度，同步存）
+                    // Resize buffer 不可用時的 fallback（不應發生）
                     Directory.CreateDirectory(saveDir);
                     MIL.MbufExport(Path.Combine(saveDir, baseName + ".bmp"), MIL.M_BMP, sourceBuffer);
                     OnInspectionResult?.Invoke(CameraId, baseName, _lastMeanPeak, _lastMaxPeak);

@@ -27,6 +27,7 @@ namespace AniloxRoll.Monitor.Forms
         private AniloxRollPresenter _presenter;
         private FormInteractionHelper _interactionHelper;
         private MuraChartHelper _muraChartHelper;
+        private MuraChartHelper _muraChartLiveHelper;
         private LiveCameraManager _liveCameraManager;
 
         // --- 相機參數控制項陣列（供 SyncFromCamera 存取）---
@@ -125,6 +126,10 @@ namespace AniloxRoll.Monitor.Forms
             _muraChartHelper.SetOps(_settings.Cam1_Ops);
             _muraChartHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
 
+            _muraChartLiveHelper = new MuraChartHelper(this.muraChartLive);
+            _muraChartLiveHelper.SetOps(_settings.Cam1_Ops);
+            _muraChartLiveHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+
             checkBoxEnableImageProcessing.Checked =
                 UserSessionState.GetLastEnableImageProcessing(checkBoxEnableImageProcessing.Checked);
 
@@ -192,6 +197,7 @@ namespace AniloxRoll.Monitor.Forms
             );
             _liveCameraManager.SetCaptureSettings(_settings);
             _liveCameraManager.OnInspectionResult += OnCameraInspectionResult;
+            _liveCameraManager.OnLiveCurveData   += OnLiveCurveData;
 
             FormClosed += (_, __) => _liveCameraManager.FreeCameras();
         }
@@ -250,6 +256,29 @@ namespace AniloxRoll.Monitor.Forms
                 _settings.ErrorValueMax);
         }
 
+        private void OnLiveCurveData(int camId, float[] meanArr, float[] maxArr)
+        {
+            // 只顯示目前主畫面相機的曲線
+            if (camId != _liveCameraManager.SelectedMainCameraId) return;
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action<int, float[], float[]>(OnLiveCurveData), camId, meanArr, maxArr);
+                return;
+            }
+
+            if (_muraChartLiveHelper == null || _settings == null) return;
+
+            int cameraIndex = camId - 1;
+            double[] startPositions = _settings.GetCameraStartPositionMmArray();
+            double startPos = (cameraIndex >= 0 && cameraIndex < startPositions.Length)
+                ? startPositions[cameraIndex] : 0;
+
+            // Live 模式顯示完整範圍（viewLeft/viewRight 設 NaN 表示 FitToScreen）
+            _muraChartLiveHelper.UpdateDataAndView(meanArr, maxArr,
+                startPos, double.NaN, double.NaN);
+        }
+
         private void btnCameraFree_Click(object sender, EventArgs e)
         {
             _liveCameraManager.FreeCameras();
@@ -295,6 +324,8 @@ namespace AniloxRoll.Monitor.Forms
             _interactionHelper.HandleSettingsChanged();
             _liveCameraManager?.SetCaptureSettings(_settings);
             _muraChartHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _muraChartLiveHelper?.SetOps(_settings.Cam1_Ops);
+            _muraChartLiveHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
 
             string changedPropertyName = e?.ChangedItem?.PropertyDescriptor?.Name ?? string.Empty;
             bool isRecipeChange = RecipePropertyNames.Contains(changedPropertyName);

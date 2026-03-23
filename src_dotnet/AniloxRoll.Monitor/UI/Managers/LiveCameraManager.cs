@@ -26,7 +26,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         private Timer _cameraStatusTimer;
         private bool _enableAutoCapture;
-        private bool _useCompressedCapture = true;
+        private bool _saveOriginalBmp = false;
         private string _captureRootPath = string.Empty;
         private int[]    _cameraGrabHeight    = new int[7];
         private double[] _cameraExposureTimeUs = new double[7];
@@ -45,6 +45,10 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// 參數：(cameraId, fileNameWithoutExt, meanPeak_0to1, maxPeak_0to1)</summary>
         public event Action<int, string, float, float> OnInspectionResult;
 
+        /// <summary>每幀 GPU pipeline 完成後觸發（MIL 回呼執行緒）。
+        /// 參數：(cameraId, curveMean_raw255, curveMax_raw255)</summary>
+        public event Action<int, float[], float[]> OnLiveCurveData;
+
         /// <summary>
         /// 正在執行釋放流程時為 true，防止 Timer Tick 在資源已釋放後繼續存取相機。
         /// 同 CameraSession.IsReleasing。
@@ -52,6 +56,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         public volatile bool IsReleasing = false;
 
         private int _selectedMainCameraId = 1;
+        public int SelectedMainCameraId => _selectedMainCameraId;
 
         public LiveCameraManager(
             Form mainForm,
@@ -157,7 +162,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
                 int camIdx = cfg.Id - 1; // cfg.Id 為 1–7，轉為 0–6 陣列索引
                 cam.EnableAutoCapture    = _enableAutoCapture;
-                cam.UseCompressedCapture = _useCompressedCapture;
+                cam.SaveOriginalBmp = _saveOriginalBmp;
                 cam.CaptureRootPath      = _captureRootPath;
                 cam.CameraGrabHeight     = _cameraGrabHeight[camIdx];
                 cam.CameraExposureTimeUs = _cameraExposureTimeUs[camIdx]; // Initialize() 會呼叫 SetExposureUs 套用
@@ -172,6 +177,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.OnCameraClicked      += SwitchMainDisplay;
                 cam.OnInspectionResult   += (camId, fn, mp, xp) =>
                     OnInspectionResult?.Invoke(camId, fn, mp, xp);
+                cam.OnLiveCurveData      += (camId, mean, max) =>
+                    OnLiveCurveData?.Invoke(camId, mean, max);
                 cam.Initialize();
                 _cameras.Add(cam);
             }
@@ -280,7 +287,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             {
                 int camIdx = cam.CameraId - 1;
                 cam.EnableAutoCapture    = _enableAutoCapture;
-                cam.UseCompressedCapture = _useCompressedCapture;
+                cam.SaveOriginalBmp = _saveOriginalBmp;
                 cam.CaptureRootPath      = _captureRootPath;
                 cam.CameraGrabHeight     = _cameraGrabHeight[camIdx];
                 cam.HessianSigma         = InspectionEngineConfig.DefaultRidgeSigma;
@@ -383,7 +390,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (settings == null) return;
             _enableAutoCapture    = settings.EnableAutoCapture;
-            _useCompressedCapture = settings.Storage?.UseCompressedCapture ?? true;
+            _saveOriginalBmp = settings.Storage?.SaveOriginalBmp ?? false;
             _captureRootPath      = settings.CaptureRootPath ?? string.Empty;
             _cameraGrabHeight     = settings.Acquisition.CameraGrabHeight;
             _cameraExposureTimeUs = settings.Acquisition.CameraExposureTimeUs;

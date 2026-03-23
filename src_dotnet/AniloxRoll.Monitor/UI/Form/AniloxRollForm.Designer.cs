@@ -31,8 +31,12 @@
             System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea1 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
             System.Windows.Forms.DataVisualization.Charting.Legend legend1 = new System.Windows.Forms.DataVisualization.Charting.Legend();
             System.Windows.Forms.DataVisualization.Charting.Series series1 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea2 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend2 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series2 = new System.Windows.Forms.DataVisualization.Charting.Series();
             this.tabMain = new System.Windows.Forms.TabControl();
             this.tabPageLiveView = new System.Windows.Forms.TabPage();
+            this.muraChartLive = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.checkBoxEnableImageProcessing = new System.Windows.Forms.CheckBox();
             this.btnCameraFree = new System.Windows.Forms.Button();
             this.btnCameraGrab = new System.Windows.Forms.Button();
@@ -258,6 +262,7 @@
             this.canvasMain = new AOI.SDK.UI.SmartCanvas();
             this.tabMain.SuspendLayout();
             this.tabPageLiveView.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.muraChartLive)).BeginInit();
             this.tabPageReview.SuspendLayout();
             this.grpReviewTimePeriod.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.chartMura)).BeginInit();
@@ -368,6 +373,7 @@
             // 
             // tabPageLiveView
             // 
+            this.tabPageLiveView.Controls.Add(this.muraChartLive);
             this.tabPageLiveView.Controls.Add(this.checkBoxEnableImageProcessing);
             this.tabPageLiveView.Controls.Add(this.btnCameraFree);
             this.tabPageLiveView.Controls.Add(this.btnCameraGrab);
@@ -386,6 +392,24 @@
             this.tabPageLiveView.TabIndex = 0;
             this.tabPageLiveView.Text = "即時監控";
             this.tabPageLiveView.UseVisualStyleBackColor = true;
+            // 
+            // muraChartLive
+            // 
+            this.muraChartLive.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            chartArea1.Name = "ChartArea1";
+            this.muraChartLive.ChartAreas.Add(chartArea1);
+            legend1.Name = "Legend1";
+            this.muraChartLive.Legends.Add(legend1);
+            this.muraChartLive.Location = new System.Drawing.Point(6, 472);
+            this.muraChartLive.Name = "muraChartLive";
+            series1.ChartArea = "ChartArea1";
+            series1.Legend = "Legend1";
+            series1.Name = "Series1";
+            this.muraChartLive.Series.Add(series1);
+            this.muraChartLive.Size = new System.Drawing.Size(1074, 232);
+            this.muraChartLive.TabIndex = 17;
+            this.muraChartLive.Text = "chart1";
             // 
             // checkBoxEnableImageProcessing
             // 
@@ -674,17 +698,17 @@
             // 
             this.chartMura.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            chartArea1.Name = "ChartArea1";
-            this.chartMura.ChartAreas.Add(chartArea1);
-            legend1.Name = "Legend1";
-            this.chartMura.Legends.Add(legend1);
+            chartArea2.Name = "ChartArea1";
+            this.chartMura.ChartAreas.Add(chartArea2);
+            legend2.Name = "Legend1";
+            this.chartMura.Legends.Add(legend2);
             this.chartMura.Location = new System.Drawing.Point(8, 469);
             this.chartMura.Name = "chartMura";
-            series1.ChartArea = "ChartArea1";
-            series1.Legend = "Legend1";
-            series1.Name = "Series1";
-            this.chartMura.Series.Add(series1);
-            this.chartMura.Size = new System.Drawing.Size(1074, 232);
+            series2.ChartArea = "ChartArea1";
+            series2.Legend = "Legend1";
+            series2.Name = "Series1";
+            this.chartMura.Series.Add(series2);
+            this.chartMura.Size = new System.Drawing.Size(1070, 232);
             this.chartMura.TabIndex = 16;
             this.chartMura.Text = "chart1";
             // 
@@ -2984,6 +3008,7 @@
             this.tabMain.ResumeLayout(false);
             this.tabPageLiveView.ResumeLayout(false);
             this.tabPageLiveView.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.muraChartLive)).EndInit();
             this.tabPageReview.ResumeLayout(false);
             this.grpReviewTimePeriod.ResumeLayout(false);
             this.grpReviewTimePeriod.PerformLayout();
@@ -3335,5 +3360,6 @@
         private System.Windows.Forms.Label label56;
         private System.Windows.Forms.GroupBox grpReviewTimePeriod;
         private System.ComponentModel.BackgroundWorker backgroundWorker1;
+        private System.Windows.Forms.DataVisualization.Charting.Chart muraChartLive;
     }
 }

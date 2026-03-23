@@ -111,7 +111,7 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine("  \"Storage\": {");
             sb.AppendLine($"    \"EnableAutoCapture\": {(T.EnableAutoCapture ? "true" : "false")},");
             sb.AppendLine($"    \"CaptureRootPath\": \"{EscapeJson(T.CaptureRootPath)}\",");
-            sb.AppendLine($"    \"UseCompressedCapture\": {(T.UseCompressedCapture ? "true" : "false")}");
+            sb.AppendLine($"    \"SaveOriginalBmp\": {(T.SaveOriginalBmp ? "true" : "false")}");
             sb.AppendLine("  }");
 
             sb.Append("}");
@@ -227,7 +227,10 @@ namespace AniloxRoll.Monitor.Core.Data
             {
                 EnableAutoCapture    = GetBool  (obj, "EnableAutoCapture",    false),
                 CaptureRootPath      = GetString(obj, "CaptureRootPath",      @"D:\AniloxCaptures"),
-                UseCompressedCapture = GetBool  (obj, "UseCompressedCapture", true),
+                // 向後相容：舊 JSON 有 UseCompressedCapture（true=壓縮），反轉為 SaveOriginalBmp
+                SaveOriginalBmp      = obj.Contains("SaveOriginalBmp")
+                    ? GetBool(obj, "SaveOriginalBmp", false)
+                    : !GetBool(obj, "UseCompressedCapture", true),
             };
         }
     }

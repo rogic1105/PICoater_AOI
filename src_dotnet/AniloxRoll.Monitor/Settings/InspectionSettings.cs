@@ -52,7 +52,7 @@ namespace AniloxRoll.Monitor.Core.Data
 
         // ===== 3. 儲存設定 =====
         [Category("3. 儲存設定")][DisplayName("存檔")]       public bool   EnableAutoCapture    { get => Storage.EnableAutoCapture;    set => Storage.EnableAutoCapture    = value; }
-        [Category("3. 儲存設定")][DisplayName("壓縮")]       public bool   UseCompressedCapture { get => Storage.UseCompressedCapture; set => Storage.UseCompressedCapture = value; }
+        [Category("3. 儲存設定")][DisplayName("存原圖")]     public bool   SaveOriginalBmp      { get => Storage.SaveOriginalBmp;      set => Storage.SaveOriginalBmp      = value; }
         [Category("3. 儲存設定")][DisplayName("存檔目錄")] public string CaptureRootPath { get => Storage.CaptureRootPath; set => Storage.CaptureRootPath = value; }
 
     }
