@@ -186,6 +186,20 @@ namespace AniloxRoll.Monitor.UI.Widgets
             }
         }
 
+        private static readonly Font _unitFont  = new Font("Segoe UI", 7f);
+        private static readonly Brush _unitBrush = new SolidBrush(Color.Gray);
+
+        private void OnPostPaintUnit(object sender, ChartPaintEventArgs e)
+        {
+            if (e.ChartElement != _chart.ChartAreas[0]) return;
+            var g = e.ChartGraphics.Graphics;
+            // X 軸最右端繪製 "mm"
+            float chartW = _chart.Width;
+            float chartH = _chart.Height;
+            var sz = g.MeasureString("mm", _unitFont);
+            g.DrawString("mm", _unitFont, _unitBrush, chartW - sz.Width - 2, chartH - sz.Height - 1);
+        }
+
         /// <summary>
         /// 以最新的 _cachedFLeft/_cachedFRight 重算並套用 zoom。
         /// 由 OnPostPaint 透過 BeginInvoke 非同步呼叫，不在 PostPaint 內直接改 zoom。
@@ -236,6 +250,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             AddSeries();
             RefreshThresholds();
             _chart.PostPaint += OnPostPaint;
+
+            _chart.PostPaint += OnPostPaintUnit;
         }
 
         private static ChartArea BuildChartArea()

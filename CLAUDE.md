@@ -116,7 +116,7 @@ Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×741），�
 |-------------|----------|--------|------|
 | `tabPageInspSettings` | 檢測設定 | `propertyGridSettings`（Dock=Fill） | `InspectionSettings`（MachineLayout / Recipe / Storage）— **Acquisition 已隱藏（[Browsable(false)]）** |
 | `tabPageCamera` | 相機參數 | `tabControlCamTabs`（嵌套） | 曝光時間 / 線掃速率 / 擷取高度 各 7 台（**唯一設定入口**） |
-| `tabPageSystem` | 系統資訊 | `listViewCameras` + `listViewEngine` | SystemSettings.CameraDevices + InspectionEngineConfig 常數 |
+| `tabPageSystem` | 系統資訊 | `listViewCameras` + `listViewEngine` + `listViewChartConst` | SystemSettings.CameraDevices + InspectionEngineConfig 常數 + 圖表引擎常數 |
 
 `tabPageCamera` 內嵌 `tabControlCamTabs`，含 3 個子 Tab：
 
@@ -131,7 +131,7 @@ Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×741），�
 **tabPageReview 主要控制項**：
 - `canvasMain`：Location=(8, 123)，Size=(1070, 346)，直接置於 `tabPageReview`（已移除 `tlpReviewLayout`）
 - `chartMura`：Location=(7, 426)，Size=(888, 96)，單台相機 Mean/Max 曲線（MuraChartHelper，可 zoom/pan 與 canvas 聯動）
-- `chart1`：Location=(6, 529)，Size=(888, 96)，**全覽圖**（MuraChartHelper，Zoomable=false）：7 台相機曲線依 Cam_Pos 位置合併；重疊區域 Mean 取平均、Max 取最大值；合圖路徑（`UpdateStitchedOverviewChart`）和原圖路徑（`UpdateOverviewChartFromRepository`）皆更新
+- `chartOverview`：Location=(6, 529)，Size=(888, 96)，**回顧全覽圖**（MuraChartHelper，Zoomable=false）：7 台相機曲線依 Cam_Pos 位置合併；兩層合併演算法（per-camera max-window downsample → cross-camera overlap）；MaxOverviewPoints=2000 點上限；合圖路徑（`UpdateStitchedOverviewChart`）和原圖路徑（`UpdateOverviewChartFromRepository`）皆更新
 
 **tabPageReview 額外控制項（X=1084 右欄）**：
 - `lblImageFormat`（Y=400）：顯示目前圖片格式，"壓縮 JPEG" / "原始 BMP"
@@ -223,8 +223,8 @@ Guard flags：
 | 控制項 | Name | 說明 |
 |--------|------|------|
 | 7 個 Panel（X=6~930，Y=6） | `panelStatCam1`~`panelStatCam7` | 卡片式顯示（良率%、Pass/Total、顏色） |
-| ListView | `listViewStats` | 5 欄彙總：相機/Pass/Fail/Total/良率（分母=唯一序號數） |
-| ListView | `listViewGrabDetail` | 逐序號明細：序號 + CAM1~7 各欄 Pass/Fail/—（行紅底=任一 Fail） |
+| ListView | `listViewStats` | 5 欄彙總：相機(1~7)/Pass/Fail/Total/良率（分母=唯一序號數）；欄寬按標題文字比例自適配；全欄置中 |
+| ListView | `listViewGrabDetail` | 逐序號明細：序號 + 1~7 各欄 Pass/Fail/—（行紅底=任一 Fail）；欄寬按標題文字比例自適配 |
 | ComboBox | `cbGrabIdStart` | 序號起（選擇後自動更新 cbStart 時間 + 統計） |
 | ComboBox | `cbGrabIdEnd` | 序號迄（選擇後自動更新 cbEnd 時間 + 統計） |
 | Start 時間 | `cbStartYear/Month/Day/Hour/Min/Sec` | 統計起始時間（cascading，僅顯示資料中存在的值） |
@@ -252,9 +252,10 @@ Guard flags：
 - **StackedColumn 空白啟動問題**：無資料時整個 chart area 空白（無 grid/軸/刻度），因為沒有 X 類別。解法：`InitOneChart` 傳入 `xCount`/`xStart` 預填 zero-value 資料點（月份=1–12，日期=1–31，小時=0–23）；`FillPeriodChart` 先 `Points.Clear()` 再填真實資料，佔位符不影響正式資料
 - `InnerPlotPosition`：`X=0, Y=12, Width=93, Height=66`（左邊界貼齊，上邊留 12% 給標題）
 
-**統計模式**：
-- 序號模式（cbGrabIdStart/End 已選）→ `ComputeByGrabIdRange` + `ComputeDetailedByGrabIdRange`；分母 = 唯一序號數；同一序號同一相機任一張超標即 Fail
-- 時間模式（fallback）→ `Compute`；分母 = 照片張數；每筆獨立判斷
+**統計模式**（由 `_activeStatMode` 追蹤當前活動 GroupBox）：
+- 序號模式（`_activeStatMode != groupBoxTimeRange` 且 cbGrabIdStart/End 已選）→ `ComputeByGrabIdRange` + `ComputeDetailedByGrabIdRange`；分母 = 唯一序號數；同一序號同一相機任一張超標即 Fail
+- 時間模式（`_activeStatMode == groupBoxTimeRange`）→ 找時間範圍內的 grab IDs → 同樣用 `ComputeByGrabIdRange`；分母 = 唯一序號數
+- Period Charts（`ScanCsvByDateRange`）也使用序號分組邏輯：以 (GrabId, CamId) 為單位，一票否決
 
 ### 參數分類（UI 可調 vs JSON 限定）
 
@@ -273,12 +274,12 @@ Guard flags：
 InitializeSystem()
   └─ InitializeRightPanelControls()
        ├─ SetupCameraTab()   ← 設定範圍 + 套用初始值 + 繫結事件（寫回 _settings + LiveCameraManager）
-       └─ SetupSystemTab()   ← 填充 listViewCameras（SystemSettings）+ listViewEngine（InspectionEngineConfig）
+       └─ SetupSystemTab()   ← 填充 listViewCameras（SystemSettings）+ listViewEngine（InspectionEngineConfig + SaveResizeScale/SaveJpgQuality）+ listViewChartConst（圖表引擎常數：MaxOverviewPoints/DownsampleMode 等）
 ```
 
 **重要**：`tabControlRight` 的所有控制項**必須宣告在 `InitializeComponent()`**（Designer.cs），才能在 VS Designer 顯示。事件繫結（需要 `_settings`、`_liveCameraManager`）保留在 code-behind。
 
-**tabPageLiveView 面板命名**：`panelLiveCam1–7`（各相機縮圖容器，148×111）；`panelMainDisplay`（主顯示，1072×347）；`muraChartLive`（即時 Mura 曲線圖，Anchor=Bottom|Left|Right，由 `_muraChartLiveHelper` 管理，`OnLiveCurveData` 事件驅動，只顯示 `SelectedMainCameraId` 的曲線）。`LiveCameraManager` 接收 `panelLiveCam1–7` 陣列與 `panelMainDisplay`。
+**tabPageLiveView 面板命名**：`panelLiveCam1–7`（各相機縮圖容器，148×111）；`panelMainDisplay`（主顯示，1072×347）；`muraChartLive`（即時 Mura 曲線圖，Anchor=Bottom|Left|Right，由 `_muraChartLiveHelper` 管理，`OnLiveCurveData` 事件驅動，只顯示 `SelectedMainCameraId` 的曲線）；`chartLiveOverview`（即時全覽圖，Zoomable=false，由 `_liveOverviewHelper` 管理，`_liveOverviewTimer` 驅動，動態跟隨最大 FPS 50–500ms，兩層 max-window 合併）。`LiveCameraManager` 接收 `panelLiveCam1–7` 陣列與 `panelMainDisplay`。
 
 **曝光上限計算**：`CalcExpMax(lrHz) = clamp(floor(900000/lrHz), 1, 10000)`。LR 改變時呼叫 `ApplyExpMax()` 更新所有 7 台曝光 TrackBar/NumericUpDown 的 Maximum 並夾緊現有值。
 

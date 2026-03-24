@@ -1340,18 +1340,35 @@ WinForms `AutoScaleMode = Font`（預設）會在 Load 時依 DPI/字體縮放�
 
 ---
 
-## chart1 全覽圖（7 台合併曲線）
+## 全覽圖（7 台合併曲線）
 
-`chart1`（tabPageReview，Zoomable=false）用 `MuraChartHelper` 顯示 7 台相機 Mean/Max 曲線依機台布局合併。
+三個全覽圖控制項皆用 `MuraChartHelper`（Zoomable=false）：
+- `chartOverview`（tabPageReview）：回顧模式全覽圖
+- `chartLiveOverview`（tabPageLiveView）：即時模式全覽圖，由 `_liveOverviewTimer` 驅動（動態跟隨最大 FPS，50–500ms）
 
-### 合併演算法（`UpdateOverviewChart`）
-1. 最細 OPS → 統一格點（gridMm = minOpsUm / 1000）
+### 兩層合併演算法（`UpdateOverviewChart`）
+1. 格點間距：`gridMm = max(minOpsUm/1000, (globalMax-globalMin)/MaxOverviewPoints)`（MaxOverviewPoints=2000）
 2. 全域 X 範圍：`min(Cam_Pos)` ~ `max(Cam_Pos + curveLen × opsMm)`
-3. 映射：`idx = (camStart + j×opsMm - globalMin) / gridMm`
-4. 重疊區域：Mean = sum/count（平均）、Max = max（最大值）
+3. **第一層（per-camera max-window）**：同一相機多個原始點映射到同一 bin → 取最大值（保留峰值）
+4. **第二層（cross-camera overlap）**：不同相機重疊區域 → Mean 取平均、Max 取最大值
+5. X 軸 OPS 傳入 `gridMm * 1000.0`（不是原始 minOpsUm）
 
-### 兩條路徑
+### 三條路徑
 | 路徑 | 方法 | 資料來源 |
 |------|------|---------|
 | 合圖 | `UpdateStitchedOverviewChart()` | `_stitchedCurveMean/Max` |
 | 原圖 | `UpdateOverviewChartFromRepository()` | 當前時間點 7 台 `_mean.bin`/`_max.bin` |
+| 即時 | `LiveOverviewTimer_Tick()` | `_liveCurveMean/Max`（每幀快取） |
+
+### MuraChartHelper mm 單位標籤
+- 使用 `PostPaint` 事件（`OnPostPaintUnit`）在圖表右下角繪製 "mm"
+- 不使用 Chart Title（Title 佔據獨立列，無法和 X 軸數值重疊）
+- 靜態 Font/Brush 避免重複建立
+
+### Period Charts 統計邏輯
+- `ScanCsvByDateRange` 以 `(GrabId, CamId)` 為單位分組，一票否決（任一張超標即 Fail）
+- 與 `ComputeByGrabIdRange` 邏輯一致（序號基準統計）
+
+### ListView 欄寬自適配
+- `FitListViewColumnsProportional(ListView)`：用 `Graphics.MeasureString` 量測標題文字寬度，按比例分配欄寬填滿控制項（無水平捲軸）
+- WinForms 限制：Column 0 強制左對齊；Column 1+ 支援 `HorizontalAlignment.Center`

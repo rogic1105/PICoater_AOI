@@ -29,6 +29,7 @@ namespace AniloxRoll.Monitor.Forms
         private MuraChartHelper _muraChartHelper;
         private MuraChartHelper _muraChartLiveHelper;
         private MuraChartHelper _stitchedOverviewHelper;
+        private MuraChartHelper _liveOverviewHelper;
         private LiveCameraManager _liveCameraManager;
         private ProportionalScaler _scaler;
 
@@ -52,6 +53,7 @@ namespace AniloxRoll.Monitor.Forms
         // --- Telemetry ---
         private LiveTelemetryPresenter _telemetryPresenter;
         private System.Windows.Forms.Timer _telemetryTimer;
+        private System.Windows.Forms.Timer _liveOverviewTimer;
 
         // --- 檢測日誌 ---
         private InspectionLogService _inspectionLogService;
@@ -63,6 +65,7 @@ namespace AniloxRoll.Monitor.Forms
         private SortedSet<DateTime>         _statAvailableTimes  = new SortedSet<DateTime>();
         private List<GrabIdInfo>            _grabIdInfos         = new List<GrabIdInfo>();
         private bool                        _statComboUpdating;
+        private GroupBox                    _activeStatMode;
         private bool                        _syncingGrabIdNav;
         private bool                        _syncingGrabIdCross;
         private List<GrabDetail>            _currentDetails      = new List<GrabDetail>();
@@ -77,6 +80,12 @@ namespace AniloxRoll.Monitor.Forms
         private readonly List<Image> _thumbnailCache = new List<Image>();
         private InspectionSettings _settings;
         private bool _lastReviewProcessedMode = false;
+
+        // --- Live 全覽圖：每台相機最新曲線快取 ---
+        private readonly float[][] _liveCurveMean = new float[7][];
+        private readonly float[][] _liveCurveMax  = new float[7][];
+        private volatile bool _liveOverviewDirty;
+        private const int MaxOverviewPoints = 2000;
 
         // --- Grab ID 拼接模式（null = 一般模式）---
         private Bitmap[] _stitchedImages;
@@ -135,10 +144,15 @@ namespace AniloxRoll.Monitor.Forms
             _muraChartLiveHelper.SetOps(_settings.Cam1_Ops);
             _muraChartLiveHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
 
-            _stitchedOverviewHelper = new MuraChartHelper(this.chart1);
+            _stitchedOverviewHelper = new MuraChartHelper(this.chartOverview);
             _stitchedOverviewHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
-            if (chart1.ChartAreas.Count > 0)
-                chart1.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
+            if (chartOverview.ChartAreas.Count > 0)
+                chartOverview.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
+
+            _liveOverviewHelper = new MuraChartHelper(this.chartLiveOverview);
+            _liveOverviewHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            if (chartLiveOverview.ChartAreas.Count > 0)
+                chartLiveOverview.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
 
             checkBoxEnableImageProcessing.Checked =
                 UserSessionState.GetLastEnableImageProcessing(checkBoxEnableImageProcessing.Checked);
@@ -209,7 +223,12 @@ namespace AniloxRoll.Monitor.Forms
             _liveCameraManager.OnInspectionResult += OnCameraInspectionResult;
             _liveCameraManager.OnLiveCurveData   += OnLiveCurveData;
 
-            FormClosed += (_, __) => _liveCameraManager.FreeCameras();
+            FormClosed += (_, __) =>
+            {
+                _telemetryTimer?.Stop();
+                _liveOverviewTimer?.Stop();
+                _liveCameraManager.FreeCameras();
+            };
         }
 
 
@@ -276,7 +295,16 @@ namespace AniloxRoll.Monitor.Forms
 
         private void OnLiveCurveData(int camId, float[] meanArr, float[] maxArr)
         {
-            // 只顯示目前主畫面相機的曲線
+            // 快取每台相機最新曲線（callback 執行緒，只是 ref 賦值）
+            int cameraIndex = camId - 1;
+            if (cameraIndex >= 0 && cameraIndex < 7)
+            {
+                _liveCurveMean[cameraIndex] = meanArr;
+                _liveCurveMax[cameraIndex]  = maxArr;
+                _liveOverviewDirty = true;
+            }
+
+            // 只有選中相機才 marshal 到 UI 執行緒更新 muraChartLive
             if (camId != _liveCameraManager.SelectedMainCameraId) return;
 
             if (InvokeRequired)
@@ -287,12 +315,10 @@ namespace AniloxRoll.Monitor.Forms
 
             if (_muraChartLiveHelper == null || _settings == null) return;
 
-            int cameraIndex = camId - 1;
             double[] startPositions = _settings.GetCameraStartPositionMmArray();
             double startPos = (cameraIndex >= 0 && cameraIndex < startPositions.Length)
                 ? startPositions[cameraIndex] : 0;
 
-            // Live 模式顯示完整範圍（viewLeft/viewRight 設 NaN 表示 FitToScreen）
             _muraChartLiveHelper.UpdateDataAndView(meanArr, maxArr,
                 startPos, double.NaN, double.NaN);
         }
@@ -344,6 +370,7 @@ namespace AniloxRoll.Monitor.Forms
             _muraChartHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
             _muraChartLiveHelper?.SetOps(_settings.Cam1_Ops);
             _muraChartLiveHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _liveOverviewHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
 
             // 抓圖進行中設定變更 → 立刻在 CSV 插入 #CFG
             if (_liveCameraManager?.IsLiveGrabbing == true)
@@ -688,19 +715,37 @@ namespace AniloxRoll.Monitor.Forms
             listViewEngine.Columns.Add("參數", 160);
             listViewEngine.Columns.Add("值",    90);
 
-            listViewEngine.Items.Add(new ListViewItem(new[] { "MaxWidth",          InspectionEngineConfig.MaxWidth.ToString() }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "MaxHeight",         InspectionEngineConfig.MaxHeight.ToString() }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "MaxThumbnailSide",  InspectionEngineConfig.MaxThumbnailSide.ToString() }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "DefaultBgSigma",    InspectionEngineConfig.DefaultBgSigma.ToString() }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "DefaultRidgeSigma", InspectionEngineConfig.DefaultRidgeSigma.ToString() }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "DefaultHessianMax", InspectionEngineConfig.DefaultHessianMaxFactor.ToString() }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "DefaultRidgeMode",  InspectionEngineConfig.DefaultRidgeMode }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "MaxWidth",            InspectionEngineConfig.MaxWidth.ToString() }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "MaxHeight",           InspectionEngineConfig.MaxHeight.ToString() }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "MaxThumbnailSide",    InspectionEngineConfig.MaxThumbnailSide.ToString() }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "DefaultBgSigma",      InspectionEngineConfig.DefaultBgSigma.ToString() }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "DefaultRidgeSigma",   InspectionEngineConfig.DefaultRidgeSigma.ToString() }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "DefaultHessianMax",   InspectionEngineConfig.DefaultHessianMaxFactor.ToString() }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "DefaultRidgeMode",    InspectionEngineConfig.DefaultRidgeMode }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "SaveResizeScale",     InspectionEngineConfig.DefaultSaveResizeScale.ToString() }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "SaveJpgQuality",      InspectionEngineConfig.DefaultSaveJpgQuality.ToString() }));
             AutoFitListViewColumns(listViewEngine);
+
+            // ── 圖表引擎常數 ────────────────────────────────────────────────
+            listViewChartConst.Columns.Add("參數", 160);
+            listViewChartConst.Columns.Add("值",    90);
+            listViewChartConst.Items.Add(new ListViewItem(new[] { "MaxOverviewPoints", MaxOverviewPoints.ToString() }));
+            listViewChartConst.Items.Add(new ListViewItem(new[] { "TelemetryInterval", "500 ms" }));
+            listViewChartConst.Items.Add(new ListViewItem(new[] { "OverviewRefresh",   "FPS-sync" }));
+            listViewChartConst.Items.Add(new ListViewItem(new[] { "DownsampleMode",    "Max-Window" }));
+            listViewChartConst.Items.Add(new ListViewItem(new[] { "OverlapMean",       "Average" }));
+            listViewChartConst.Items.Add(new ListViewItem(new[] { "OverlapMax",        "Maximum" }));
+            AutoFitListViewColumns(listViewChartConst);
 
             // ── Telemetry Timer（每 500ms 更新 ListView + SyncFromHardware）─
             _telemetryTimer = new System.Windows.Forms.Timer { Interval = 500 };
             _telemetryTimer.Tick += TelemetryTimer_Tick;
             _telemetryTimer.Start();
+
+            // ── Live Overview Timer（chartLiveOverview 全覽圖，動態跟隨最大 FPS）──
+            _liveOverviewTimer = new System.Windows.Forms.Timer { Interval = 100 };
+            _liveOverviewTimer.Tick += LiveOverviewTimer_Tick;
+            _liveOverviewTimer.Start();
         }
 
         // ==========================================
@@ -722,7 +767,34 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             if (_liveCameraManager.IsAllocated)
+            {
                 SyncCameraParamsFromHardware();
+
+                // 動態調整 Live Overview Timer：跟隨最大 FPS，下限 50ms（20Hz），上限 500ms（2Hz）
+                double maxFps = 0;
+                foreach (var cam in _liveCameraManager.Cameras)
+                {
+                    double fps = cam.CurrentFps;
+                    if (fps > maxFps) maxFps = fps;
+                }
+                if (maxFps > 0.1 && _liveOverviewTimer != null)
+                {
+                    int interval = Math.Max(50, Math.Min(500, (int)(1000.0 / maxFps)));
+                    if (_liveOverviewTimer.Interval != interval)
+                        _liveOverviewTimer.Interval = interval;
+                }
+            }
+
+        }
+
+        private void LiveOverviewTimer_Tick(object sender, EventArgs e)
+        {
+            if (_liveCameraManager == null || _liveCameraManager.IsReleasing) return;
+            if (!_liveOverviewDirty || _liveOverviewHelper == null || _settings == null) return;
+            _liveOverviewDirty = false;
+            UpdateOverviewChart(_liveCurveMean, _liveCurveMax,
+                _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray(),
+                _settings.ErrorValueMean, _settings.ErrorValueMax, _liveOverviewHelper);
         }
 
         // ==========================================
@@ -1314,10 +1386,10 @@ namespace AniloxRoll.Monitor.Forms
             _muraChartHelper?.SetOps(_settings.Cam1_Ops);
             _muraChartHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
             // 清除全覽圖
-            if (_stitchedOverviewHelper != null && chart1.ChartAreas.Count > 0)
+            if (_stitchedOverviewHelper != null && chartOverview.ChartAreas.Count > 0)
             {
-                chart1.Series["Mean"].Points.Clear();
-                chart1.Series["Max"].Points.Clear();
+                chartOverview.Series["Mean"].Points.Clear();
+                chartOverview.Series["Max"].Points.Clear();
             }
             SetGroupBoxActive(grpReviewGrabNav, false); SetGroupBoxActive(grpReviewTimePeriod, true);
         }
@@ -1343,6 +1415,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private void SetActiveStatGroupBox(GroupBox active)
         {
+            _activeStatMode = active;
             foreach (var box in new[] { groupBoxGrabIdRange, grpDataSingleSheet, groupBoxTimeRange })
                 SetGroupBoxActive(box, box == active);
         }
@@ -1452,8 +1525,8 @@ namespace AniloxRoll.Monitor.Forms
 
             if (images == null || images.Count == 0)
             {
-                chart1.Series["Mean"].Points.Clear();
-                chart1.Series["Max"].Points.Clear();
+                chartOverview.Series["Mean"].Points.Clear();
+                chartOverview.Series["Max"].Points.Clear();
                 return;
             }
 
@@ -1479,37 +1552,56 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         /// <summary>
-        /// 將 7 台相機的曲線依機台布局位置合併到 chart1（全覽圖）。
-        /// 重疊區域：Mean 取平均、Max 取最大值。
+        /// 將 7 台相機的曲線依機台布局位置合併到全覽圖。
+        /// 重疊區域：Mean 取平均、Max 取最大值。target 預設 chart1（回顧），可指定 chartLiveOverview（即時）。
         /// </summary>
         private void UpdateOverviewChart(float[][] allMean, float[][] allMax,
-            double[] opsArr, double[] posArr, float errMean, float errMax)
+            double[] opsArr, double[] posArr, float errMean, float errMax,
+            MuraChartHelper target = null)
         {
-            if (_stitchedOverviewHelper == null || allMean == null) return;
+            target = target ?? _stitchedOverviewHelper;
+            if (target == null || allMean == null) return;
 
-            // 最細 OPS 作為統一格點
+            // 全域範圍：涵蓋全部 7 台位置，缺圖用現有影像寬度平均類推
+            double sumWidthMm = 0;
+            int widthCount = 0;
             double minOpsUm = double.MaxValue;
             for (int i = 0; i < 7; i++)
+            {
                 if (opsArr[i] > 0 && opsArr[i] < minOpsUm) minOpsUm = opsArr[i];
+                var curve = allMean[i];
+                if (curve != null && curve.Length > 0)
+                {
+                    sumWidthMm += curve.Length * (opsArr[i] / 1000.0);
+                    widthCount++;
+                }
+            }
             if (minOpsUm <= 0 || minOpsUm == double.MaxValue) minOpsUm = 33.0;
-            double gridMm = minOpsUm / 1000.0;
+            double avgWidthMm = widthCount > 0 ? sumWidthMm / widthCount : 400.0;
 
-            // 全域範圍
             double globalMin = double.MaxValue, globalMax = double.MinValue;
             for (int i = 0; i < 7; i++)
             {
-                var curve = allMean[i];
-                if (curve == null || curve.Length == 0) continue;
                 double camStart = posArr[i];
-                double camEnd   = camStart + curve.Length * (opsArr[i] / 1000.0);
+                var curve = allMean[i];
+                double camEnd = (curve != null && curve.Length > 0)
+                    ? camStart + curve.Length * (opsArr[i] / 1000.0)
+                    : camStart + avgWidthMm;
                 if (camStart < globalMin) globalMin = camStart;
                 if (camEnd   > globalMax) globalMax = camEnd;
             }
             if (globalMin >= globalMax) return;
 
-            int totalLen = (int)Math.Ceiling((globalMax - globalMin) / gridMm);
-            if (totalLen <= 0 || totalLen > 2000000) return;
+            // 格點間距：至少 OPS 精度，但上限 MaxOverviewPoints 點
+            double gridMm = Math.Max(minOpsUm / 1000.0, (globalMax - globalMin) / MaxOverviewPoints);
 
+            int totalLen = (int)Math.Ceiling((globalMax - globalMin) / gridMm);
+            if (totalLen <= 0 || totalLen > MaxOverviewPoints + 1) return;
+
+            // 兩層合併：
+            // 1) bin 內降解析（同一台相機多點 → 1 bin）→ max-window 保峰值
+            // 2) 相機重疊（多台相機同一 bin）→ Mean 取平均、Max 取最大值
+            // 先逐台 max-window 到暫存，再跨台合併
             var mergedMean   = new float[totalLen];
             var mergedMax    = new float[totalLen];
             var overlapCount = new int[totalLen];
@@ -1523,16 +1615,33 @@ namespace AniloxRoll.Monitor.Forms
                 double camOpsMm = opsArr[i] / 1000.0;
                 double camStart = posArr[i];
 
+                // 逐台 max-window：同一台相機多個原始點落入同一 bin 時取最大值
+                var camBinMean = new float[totalLen];
+                var camBinMax  = new float[totalLen];
+                var camBinHit  = new bool[totalLen];
+
                 for (int j = 0; j < curveMean.Length; j++)
                 {
                     int idx = (int)((camStart + j * camOpsMm - globalMin) / gridMm);
                     if (idx < 0 || idx >= totalLen) continue;
 
-                    mergedMean[idx]   += curveMean[j];
-                    overlapCount[idx] += 1;
+                    if (!camBinHit[idx] || curveMean[j] > camBinMean[idx])
+                        camBinMean[idx] = curveMean[j];
 
                     float mv = (curveMax != null && j < curveMax.Length) ? curveMax[j] : 0;
-                    if (mv > mergedMax[idx]) mergedMax[idx] = mv;
+                    if (!camBinHit[idx] || mv > camBinMax[idx])
+                        camBinMax[idx] = mv;
+
+                    camBinHit[idx] = true;
+                }
+
+                // 跨台合併：Mean 累加（後面除 count）、Max 取最大值
+                for (int k = 0; k < totalLen; k++)
+                {
+                    if (!camBinHit[k]) continue;
+                    mergedMean[k] += camBinMean[k];
+                    overlapCount[k] += 1;
+                    if (camBinMax[k] > mergedMax[k]) mergedMax[k] = camBinMax[k];
                 }
             }
 
@@ -1540,9 +1649,10 @@ namespace AniloxRoll.Monitor.Forms
             for (int i = 0; i < totalLen; i++)
                 if (overlapCount[i] > 1) mergedMean[i] /= overlapCount[i];
 
-            _stitchedOverviewHelper.SetOps(minOpsUm);
-            _stitchedOverviewHelper.SetThresholds(errMean, errMax);
-            _stitchedOverviewHelper.UpdateData(mergedMean, mergedMax, globalMin);
+            // 降解析後每點間距 = gridMm，轉回 μm 給 MuraChartHelper
+            target.SetOps(gridMm * 1000.0);
+            target.SetThresholds(errMean, errMax);
+            target.UpdateData(mergedMean, mergedMax, globalMin);
         }
 
         /// <summary>
@@ -1674,8 +1784,9 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (string.IsNullOrWhiteSpace(_statsDataRootPath)) return;
 
-            // 序號模式（cbGrabIdStart/2 已設定）
-            if (cbGrabIdStart.SelectedIndex >= 0 && cbGrabIdEnd.SelectedIndex >= 0
+            // 序號模式（groupBoxGrabIdRange 或 grpDataSingleSheet 活動中）
+            if (_activeStatMode != groupBoxTimeRange
+                && cbGrabIdStart.SelectedIndex >= 0 && cbGrabIdEnd.SelectedIndex >= 0
                 && _grabIdInfos.Count > 0)
             {
                 var startInfo = _grabIdInfos[cbGrabIdStart.SelectedIndex];
@@ -1694,11 +1805,32 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
 
-            // 時間模式（fallback）
+            // 時間模式
             if (!TryParseStatDateTime(out DateTime start, out DateTime end)) return;
-            var statsTime = InspectionStatisticsService.Compute(_statsDataRootPath, start, end);
-            _statsPresenter.Update(statsTime);
-            _currentDetails = new List<GrabDetail>();
+
+            // 找出時間範圍內的序號，用序號邏輯統計（同一序號同一相機一票否決）
+            var grabInfosInRange = _grabIdInfos
+                .Where(g => g.Earliest <= end && g.Latest >= start).ToList();
+
+            if (grabInfosInRange.Count > 0)
+            {
+                int startNum = grabInfosInRange.Min(g => g.GrabNum);
+                int endNum   = grabInfosInRange.Max(g => g.GrabNum);
+
+                var stats   = InspectionStatisticsService.ComputeByGrabIdRange(
+                    _statsDataRootPath, startNum, endNum);
+                var details = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
+                    _statsDataRootPath, startNum, endNum);
+
+                _statsPresenter.Update(stats);
+                _currentDetails = details;
+            }
+            else
+            {
+                var statsTime = InspectionStatisticsService.Compute(_statsDataRootPath, start, end);
+                _statsPresenter.Update(statsTime);
+                _currentDetails = new List<GrabDetail>();
+            }
             ApplyFailFilter();
         }
 
@@ -1710,10 +1842,10 @@ namespace AniloxRoll.Monitor.Forms
             listViewGrabDetail.Columns.Clear();
             listViewGrabDetail.Items.Clear();
 
-            listViewGrabDetail.Columns.Add("序號");
+            listViewGrabDetail.Columns.Add("料件序號", -1, HorizontalAlignment.Center);
             for (int i = 1; i <= 7; i++)
-                listViewGrabDetail.Columns.Add($"CAM{i}");
-            AutoFitListViewColumns(listViewGrabDetail);
+                listViewGrabDetail.Columns.Add($"{i}", -1, HorizontalAlignment.Center);
+            FitListViewColumnsProportional(listViewGrabDetail);
         }
 
         private static readonly System.Drawing.Color _detailPass  = System.Drawing.Color.FromArgb(232, 245, 233);
@@ -1763,6 +1895,39 @@ namespace AniloxRoll.Monitor.Forms
                 lv.AutoResizeColumn(i, ColumnHeaderAutoResizeStyle.HeaderSize);
                 if (contentWidth > lv.Columns[i].Width)
                     lv.Columns[i].Width = contentWidth;
+            }
+        }
+
+        /// <summary>
+        /// 依欄位標題文字長度按比例分配 ListView 欄寬，填滿控制項寬度（不出現水平捲軸）。
+        /// </summary>
+        private static void FitListViewColumnsProportional(ListView lv)
+        {
+            if (lv.Columns.Count == 0) return;
+            int available = lv.ClientSize.Width - SystemInformation.VerticalScrollBarWidth;
+            if (available <= 0) return;
+
+            using (var g = lv.CreateGraphics())
+            {
+                var weights = new float[lv.Columns.Count];
+                float totalWeight = 0;
+                for (int i = 0; i < lv.Columns.Count; i++)
+                {
+                    float w = g.MeasureString(lv.Columns[i].Text + "WW", lv.Font).Width;
+                    weights[i] = w;
+                    totalWeight += w;
+                }
+                if (totalWeight <= 0) return;
+
+                int assigned = 0;
+                for (int i = 0; i < lv.Columns.Count; i++)
+                {
+                    int colW = (i < lv.Columns.Count - 1)
+                        ? (int)(available * weights[i] / totalWeight)
+                        : available - assigned;
+                    lv.Columns[i].Width = Math.Max(20, colW);
+                    assigned += lv.Columns[i].Width;
+                }
             }
         }
 

@@ -28,21 +28,21 @@
         /// </summary>
         private void InitializeComponent()
         {
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea1 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend1 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series1 = new System.Windows.Forms.DataVisualization.Charting.Series();
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea2 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend2 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series2 = new System.Windows.Forms.DataVisualization.Charting.Series();
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea3 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend3 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series3 = new System.Windows.Forms.DataVisualization.Charting.Series();
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea4 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend4 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series4 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea17 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend17 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series17 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea18 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend18 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series18 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea19 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend19 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series19 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea20 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend20 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series20 = new System.Windows.Forms.DataVisualization.Charting.Series();
             this.tabMain = new System.Windows.Forms.TabControl();
             this.tabPageLiveView = new System.Windows.Forms.TabPage();
-            this.chart2 = new System.Windows.Forms.DataVisualization.Charting.Chart();
+            this.chartLiveOverview = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.muraChartLive = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.checkBoxEnableImageProcessing = new System.Windows.Forms.CheckBox();
             this.btnCameraFree = new System.Windows.Forms.Button();
@@ -56,7 +56,7 @@
             this.panelLiveCam2 = new System.Windows.Forms.Panel();
             this.panelLiveCam1 = new System.Windows.Forms.Panel();
             this.tabPageReview = new System.Windows.Forms.TabPage();
-            this.chart1 = new System.Windows.Forms.DataVisualization.Charting.Chart();
+            this.chartOverview = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.grpReviewTimePeriod = new System.Windows.Forms.GroupBox();
             this.cbYear = new System.Windows.Forms.ComboBox();
             this.btnPeriodNext = new System.Windows.Forms.Button();
@@ -89,22 +89,20 @@
             this.cbReviewGrabId = new System.Windows.Forms.ComboBox();
             this.btnGrabIdPrev = new System.Windows.Forms.Button();
             this.btnGrabIdNext = new System.Windows.Forms.Button();
-            this.canvasMain = new AOI.SDK.UI.SmartCanvas();
             this.tabPageData = new System.Windows.Forms.TabPage();
             this.panelStatCam7 = new System.Windows.Forms.Panel();
-            this.label54 = new System.Windows.Forms.Label();
-            this.label55 = new System.Windows.Forms.Label();
-            this.label56 = new System.Windows.Forms.Label();
+            this.lblChartMonthlyUnit = new System.Windows.Forms.Label();
+            this.lblChartDailyUnit = new System.Windows.Forms.Label();
+            this.lblChartYearlyUnit = new System.Windows.Forms.Label();
             this.grpDataSingleSheet = new System.Windows.Forms.GroupBox();
             this.btnGrabIdDataPrev = new System.Windows.Forms.Button();
             this.btnGrabIdDataNext = new System.Windows.Forms.Button();
             this.cbDataGrabId = new System.Windows.Forms.ComboBox();
-            this.lblDataGrabId = new System.Windows.Forms.Label();
-            this.label51 = new System.Windows.Forms.Label();
+            this.lblChartNavMonth = new System.Windows.Forms.Label();
             this.cbChartYear = new System.Windows.Forms.ComboBox();
-            this.label52 = new System.Windows.Forms.Label();
+            this.lblChartNavDay = new System.Windows.Forms.Label();
             this.cbChartMonth = new System.Windows.Forms.ComboBox();
-            this.label53 = new System.Windows.Forms.Label();
+            this.lblChartNavYear = new System.Windows.Forms.Label();
             this.cbChartDay = new System.Windows.Forms.ComboBox();
             this.chartYearly = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.chartMonthly = new System.Windows.Forms.DataVisualization.Charting.Chart();
@@ -114,17 +112,17 @@
             this.groupBoxGrabIdRange = new System.Windows.Forms.GroupBox();
             this.cbGrabIdStart = new System.Windows.Forms.ComboBox();
             this.cbGrabIdEnd = new System.Windows.Forms.ComboBox();
-            this.label49 = new System.Windows.Forms.Label();
-            this.label50 = new System.Windows.Forms.Label();
+            this.lblGrabIdEndLabel = new System.Windows.Forms.Label();
+            this.lblGrabIdStartLabel = new System.Windows.Forms.Label();
             this.groupBoxTimeRange = new System.Windows.Forms.GroupBox();
-            this.label48 = new System.Windows.Forms.Label();
-            this.label47 = new System.Windows.Forms.Label();
-            this.label41 = new System.Windows.Forms.Label();
-            this.label42 = new System.Windows.Forms.Label();
-            this.label43 = new System.Windows.Forms.Label();
-            this.label44 = new System.Windows.Forms.Label();
-            this.label45 = new System.Windows.Forms.Label();
-            this.label46 = new System.Windows.Forms.Label();
+            this.lblEndTimeHeader = new System.Windows.Forms.Label();
+            this.lblStartTimeHeader = new System.Windows.Forms.Label();
+            this.lblEndSec = new System.Windows.Forms.Label();
+            this.lblEndMin = new System.Windows.Forms.Label();
+            this.lblEndHour = new System.Windows.Forms.Label();
+            this.lblEndDay = new System.Windows.Forms.Label();
+            this.lblEndMonth = new System.Windows.Forms.Label();
+            this.lblEndYear = new System.Windows.Forms.Label();
             this.cbStartYear = new System.Windows.Forms.ComboBox();
             this.cbStartMonth = new System.Windows.Forms.ComboBox();
             this.cbStartDay = new System.Windows.Forms.ComboBox();
@@ -153,27 +151,27 @@
             this.tabPageCamera = new System.Windows.Forms.TabPage();
             this.tabControlCamTabs = new System.Windows.Forms.TabControl();
             this.tabPageExposure = new System.Windows.Forms.TabPage();
-            this.panelStatCam74 = new System.Windows.Forms.Panel();
+            this.panelExpCam7 = new System.Windows.Forms.Panel();
             this.label13 = new System.Windows.Forms.Label();
             this.trackBarExpCam7 = new System.Windows.Forms.TrackBar();
             this.numExpCam7 = new System.Windows.Forms.NumericUpDown();
             this.label14 = new System.Windows.Forms.Label();
-            this.panelStatCam73 = new System.Windows.Forms.Panel();
+            this.panelExpCam6 = new System.Windows.Forms.Panel();
             this.label11 = new System.Windows.Forms.Label();
             this.trackBarExpCam6 = new System.Windows.Forms.TrackBar();
             this.numExpCam6 = new System.Windows.Forms.NumericUpDown();
             this.label12 = new System.Windows.Forms.Label();
-            this.panelStatCam72 = new System.Windows.Forms.Panel();
+            this.panelExpCam5 = new System.Windows.Forms.Panel();
             this.label9 = new System.Windows.Forms.Label();
             this.trackBarExpCam5 = new System.Windows.Forms.TrackBar();
             this.numExpCam5 = new System.Windows.Forms.NumericUpDown();
             this.label10 = new System.Windows.Forms.Label();
-            this.panelStatCam71 = new System.Windows.Forms.Panel();
+            this.panelExpCam4 = new System.Windows.Forms.Panel();
             this.label7 = new System.Windows.Forms.Label();
             this.trackBarExpCam4 = new System.Windows.Forms.TrackBar();
             this.numExpCam4 = new System.Windows.Forms.NumericUpDown();
             this.label8 = new System.Windows.Forms.Label();
-            this.panelStatCam70 = new System.Windows.Forms.Panel();
+            this.panelExpCam3 = new System.Windows.Forms.Panel();
             this.label5 = new System.Windows.Forms.Label();
             this.trackBarExpCam3 = new System.Windows.Forms.TrackBar();
             this.numExpCam3 = new System.Windows.Forms.NumericUpDown();
@@ -183,84 +181,86 @@
             this.trackBarExpCam2 = new System.Windows.Forms.TrackBar();
             this.numExpCam2 = new System.Windows.Forms.NumericUpDown();
             this.label4 = new System.Windows.Forms.Label();
-            this.panelExposure = new System.Windows.Forms.Panel();
+            this.panelExpCam1 = new System.Windows.Forms.Panel();
             this.label2 = new System.Windows.Forms.Label();
             this.trackBarExpCam1 = new System.Windows.Forms.TrackBar();
             this.numExpCam1 = new System.Windows.Forms.NumericUpDown();
             this.lblExposure = new System.Windows.Forms.Label();
             this.tabPageLineRate = new System.Windows.Forms.TabPage();
-            this.panelStatCam75 = new System.Windows.Forms.Panel();
+            this.panelLrCam7 = new System.Windows.Forms.Panel();
             this.label15 = new System.Windows.Forms.Label();
             this.trackBarLrCam7 = new System.Windows.Forms.TrackBar();
             this.numLrCam7 = new System.Windows.Forms.NumericUpDown();
             this.label16 = new System.Windows.Forms.Label();
-            this.panelStatCam76 = new System.Windows.Forms.Panel();
+            this.panelLrCam6 = new System.Windows.Forms.Panel();
             this.label17 = new System.Windows.Forms.Label();
             this.trackBarLrCam6 = new System.Windows.Forms.TrackBar();
             this.numLrCam6 = new System.Windows.Forms.NumericUpDown();
             this.label18 = new System.Windows.Forms.Label();
-            this.panelStatCam77 = new System.Windows.Forms.Panel();
+            this.panelLrCam5 = new System.Windows.Forms.Panel();
             this.label19 = new System.Windows.Forms.Label();
             this.trackBarLrCam5 = new System.Windows.Forms.TrackBar();
             this.numLrCam5 = new System.Windows.Forms.NumericUpDown();
             this.label20 = new System.Windows.Forms.Label();
-            this.panelStatCam78 = new System.Windows.Forms.Panel();
+            this.panelLrCam4 = new System.Windows.Forms.Panel();
             this.label21 = new System.Windows.Forms.Label();
             this.trackBarLrCam4 = new System.Windows.Forms.TrackBar();
             this.numLrCam4 = new System.Windows.Forms.NumericUpDown();
             this.label22 = new System.Windows.Forms.Label();
-            this.panelStatCam79 = new System.Windows.Forms.Panel();
+            this.panelLrCam3 = new System.Windows.Forms.Panel();
             this.label23 = new System.Windows.Forms.Label();
             this.trackBarLrCam3 = new System.Windows.Forms.TrackBar();
             this.numLrCam3 = new System.Windows.Forms.NumericUpDown();
             this.label24 = new System.Windows.Forms.Label();
-            this.panelStatCam60 = new System.Windows.Forms.Panel();
+            this.panelLrCam2 = new System.Windows.Forms.Panel();
             this.label25 = new System.Windows.Forms.Label();
             this.trackBarLrCam2 = new System.Windows.Forms.TrackBar();
             this.numLrCam2 = new System.Windows.Forms.NumericUpDown();
             this.label26 = new System.Windows.Forms.Label();
-            this.panelGrabHeight = new System.Windows.Forms.Panel();
+            this.panelLrCam1 = new System.Windows.Forms.Panel();
             this.label27 = new System.Windows.Forms.Label();
             this.trackBarLrCam1 = new System.Windows.Forms.TrackBar();
             this.numLrCam1 = new System.Windows.Forms.NumericUpDown();
             this.lblGrabHeight = new System.Windows.Forms.Label();
             this.tabPageGrabHeight = new System.Windows.Forms.TabPage();
-            this.panelStatCam61 = new System.Windows.Forms.Panel();
+            this.panelHtCam7 = new System.Windows.Forms.Panel();
             this.label1 = new System.Windows.Forms.Label();
             this.trackBarHtCam7 = new System.Windows.Forms.TrackBar();
             this.numHtCam7 = new System.Windows.Forms.NumericUpDown();
             this.label28 = new System.Windows.Forms.Label();
-            this.panelStatCam62 = new System.Windows.Forms.Panel();
+            this.panelHtCam6 = new System.Windows.Forms.Panel();
             this.label29 = new System.Windows.Forms.Label();
             this.trackBarHtCam6 = new System.Windows.Forms.TrackBar();
             this.numHtCam6 = new System.Windows.Forms.NumericUpDown();
             this.label30 = new System.Windows.Forms.Label();
-            this.panelStatCam63 = new System.Windows.Forms.Panel();
+            this.panelHtCam5 = new System.Windows.Forms.Panel();
             this.label31 = new System.Windows.Forms.Label();
             this.trackBarHtCam5 = new System.Windows.Forms.TrackBar();
             this.numHtCam5 = new System.Windows.Forms.NumericUpDown();
             this.label32 = new System.Windows.Forms.Label();
-            this.panelStatCam64 = new System.Windows.Forms.Panel();
+            this.panelHtCam4 = new System.Windows.Forms.Panel();
             this.label33 = new System.Windows.Forms.Label();
             this.trackBarHtCam4 = new System.Windows.Forms.TrackBar();
             this.numHtCam4 = new System.Windows.Forms.NumericUpDown();
             this.label34 = new System.Windows.Forms.Label();
-            this.panelStatCam65 = new System.Windows.Forms.Panel();
+            this.panelHtCam3 = new System.Windows.Forms.Panel();
             this.label35 = new System.Windows.Forms.Label();
             this.trackBarHtCam3 = new System.Windows.Forms.TrackBar();
             this.numHtCam3 = new System.Windows.Forms.NumericUpDown();
             this.label36 = new System.Windows.Forms.Label();
-            this.panelStatCam66 = new System.Windows.Forms.Panel();
+            this.panelHtCam2 = new System.Windows.Forms.Panel();
             this.label37 = new System.Windows.Forms.Label();
             this.trackBarHtCam2 = new System.Windows.Forms.TrackBar();
             this.numHtCam2 = new System.Windows.Forms.NumericUpDown();
             this.label38 = new System.Windows.Forms.Label();
-            this.panelStatCam67 = new System.Windows.Forms.Panel();
+            this.panelHtCam1 = new System.Windows.Forms.Panel();
             this.label39 = new System.Windows.Forms.Label();
             this.trackBarHtCam1 = new System.Windows.Forms.TrackBar();
             this.numHtCam1 = new System.Windows.Forms.NumericUpDown();
             this.label40 = new System.Windows.Forms.Label();
             this.tabPageSystem = new System.Windows.Forms.TabPage();
+            this.listViewChartConst = new System.Windows.Forms.ListView();
+            this.lblChartConst = new System.Windows.Forms.Label();
             this.listViewEngine = new System.Windows.Forms.ListView();
             this.lblEngineConst = new System.Windows.Forms.Label();
             this.listViewCameras = new System.Windows.Forms.ListView();
@@ -268,12 +268,13 @@
             this.panelStatusBar = new System.Windows.Forms.Panel();
             this.lblStatusGrab = new System.Windows.Forms.Label();
             this.backgroundWorker1 = new System.ComponentModel.BackgroundWorker();
+            this.canvasMain = new AOI.SDK.UI.SmartCanvas();
             this.tabMain.SuspendLayout();
             this.tabPageLiveView.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.chart2)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.chartLiveOverview)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.muraChartLive)).BeginInit();
             this.tabPageReview.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.chart1)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.chartOverview)).BeginInit();
             this.grpReviewTimePeriod.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.chartMura)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam1)).BeginInit();
@@ -284,7 +285,6 @@
             ((System.ComponentModel.ISupportInitialize)(this.pbCam6)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam7)).BeginInit();
             this.grpReviewGrabNav.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).BeginInit();
             this.tabPageData.SuspendLayout();
             this.grpDataSingleSheet.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.chartYearly)).BeginInit();
@@ -298,73 +298,74 @@
             this.tabPageCamera.SuspendLayout();
             this.tabControlCamTabs.SuspendLayout();
             this.tabPageExposure.SuspendLayout();
-            this.panelStatCam74.SuspendLayout();
+            this.panelExpCam7.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarExpCam7)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numExpCam7)).BeginInit();
-            this.panelStatCam73.SuspendLayout();
+            this.panelExpCam6.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarExpCam6)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numExpCam6)).BeginInit();
-            this.panelStatCam72.SuspendLayout();
+            this.panelExpCam5.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarExpCam5)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numExpCam5)).BeginInit();
-            this.panelStatCam71.SuspendLayout();
+            this.panelExpCam4.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarExpCam4)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numExpCam4)).BeginInit();
-            this.panelStatCam70.SuspendLayout();
+            this.panelExpCam3.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarExpCam3)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numExpCam3)).BeginInit();
             this.panelExpCam2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarExpCam2)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numExpCam2)).BeginInit();
-            this.panelExposure.SuspendLayout();
+            this.panelExpCam1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarExpCam1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numExpCam1)).BeginInit();
             this.tabPageLineRate.SuspendLayout();
-            this.panelStatCam75.SuspendLayout();
+            this.panelLrCam7.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarLrCam7)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numLrCam7)).BeginInit();
-            this.panelStatCam76.SuspendLayout();
+            this.panelLrCam6.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarLrCam6)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numLrCam6)).BeginInit();
-            this.panelStatCam77.SuspendLayout();
+            this.panelLrCam5.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarLrCam5)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numLrCam5)).BeginInit();
-            this.panelStatCam78.SuspendLayout();
+            this.panelLrCam4.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarLrCam4)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numLrCam4)).BeginInit();
-            this.panelStatCam79.SuspendLayout();
+            this.panelLrCam3.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarLrCam3)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numLrCam3)).BeginInit();
-            this.panelStatCam60.SuspendLayout();
+            this.panelLrCam2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarLrCam2)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numLrCam2)).BeginInit();
-            this.panelGrabHeight.SuspendLayout();
+            this.panelLrCam1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarLrCam1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numLrCam1)).BeginInit();
             this.tabPageGrabHeight.SuspendLayout();
-            this.panelStatCam61.SuspendLayout();
+            this.panelHtCam7.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarHtCam7)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam7)).BeginInit();
-            this.panelStatCam62.SuspendLayout();
+            this.panelHtCam6.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarHtCam6)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam6)).BeginInit();
-            this.panelStatCam63.SuspendLayout();
+            this.panelHtCam5.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarHtCam5)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam5)).BeginInit();
-            this.panelStatCam64.SuspendLayout();
+            this.panelHtCam4.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarHtCam4)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam4)).BeginInit();
-            this.panelStatCam65.SuspendLayout();
+            this.panelHtCam3.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarHtCam3)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam3)).BeginInit();
-            this.panelStatCam66.SuspendLayout();
+            this.panelHtCam2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarHtCam2)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam2)).BeginInit();
-            this.panelStatCam67.SuspendLayout();
+            this.panelHtCam1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarHtCam1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam1)).BeginInit();
             this.tabPageSystem.SuspendLayout();
             this.panelStatusBar.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).BeginInit();
             this.SuspendLayout();
             // 
             // tabMain
@@ -383,7 +384,7 @@
             // 
             // tabPageLiveView
             // 
-            this.tabPageLiveView.Controls.Add(this.chart2);
+            this.tabPageLiveView.Controls.Add(this.chartLiveOverview);
             this.tabPageLiveView.Controls.Add(this.muraChartLive);
             this.tabPageLiveView.Controls.Add(this.checkBoxEnableImageProcessing);
             this.tabPageLiveView.Controls.Add(this.btnCameraFree);
@@ -404,38 +405,38 @@
             this.tabPageLiveView.Text = "即時監控";
             this.tabPageLiveView.UseVisualStyleBackColor = true;
             // 
-            // chart2
+            // chartLiveOverview
             // 
-            this.chart2.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
+            this.chartLiveOverview.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            chartArea1.Name = "ChartArea1";
-            this.chart2.ChartAreas.Add(chartArea1);
-            legend1.Name = "Legend1";
-            this.chart2.Legends.Add(legend1);
-            this.chart2.Location = new System.Drawing.Point(6, 532);
-            this.chart2.Name = "chart2";
-            series1.ChartArea = "ChartArea1";
-            series1.Legend = "Legend1";
-            series1.Name = "Series1";
-            this.chart2.Series.Add(series1);
-            this.chart2.Size = new System.Drawing.Size(888, 96);
-            this.chart2.TabIndex = 18;
-            this.chart2.Text = "chart1";
+            chartArea17.Name = "ChartArea1";
+            this.chartLiveOverview.ChartAreas.Add(chartArea17);
+            legend17.Name = "Legend1";
+            this.chartLiveOverview.Legends.Add(legend17);
+            this.chartLiveOverview.Location = new System.Drawing.Point(6, 88);
+            this.chartLiveOverview.Name = "chartLiveOverview";
+            series17.ChartArea = "ChartArea1";
+            series17.Legend = "Legend1";
+            series17.Name = "Series1";
+            this.chartLiveOverview.Series.Add(series17);
+            this.chartLiveOverview.Size = new System.Drawing.Size(888, 96);
+            this.chartLiveOverview.TabIndex = 18;
+            this.chartLiveOverview.Text = "chart1";
             // 
             // muraChartLive
             // 
             this.muraChartLive.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            chartArea2.Name = "ChartArea1";
-            this.muraChartLive.ChartAreas.Add(chartArea2);
-            legend2.Name = "Legend1";
-            this.muraChartLive.Legends.Add(legend2);
-            this.muraChartLive.Location = new System.Drawing.Point(6, 431);
+            chartArea18.Name = "ChartArea1";
+            this.muraChartLive.ChartAreas.Add(chartArea18);
+            legend18.Name = "Legend1";
+            this.muraChartLive.Legends.Add(legend18);
+            this.muraChartLive.Location = new System.Drawing.Point(6, 529);
             this.muraChartLive.Name = "muraChartLive";
-            series2.ChartArea = "ChartArea1";
-            series2.Legend = "Legend1";
-            series2.Name = "Series1";
-            this.muraChartLive.Series.Add(series2);
+            series18.ChartArea = "ChartArea1";
+            series18.Legend = "Legend1";
+            series18.Name = "Series1";
+            this.muraChartLive.Series.Add(series18);
             this.muraChartLive.Size = new System.Drawing.Size(888, 96);
             this.muraChartLive.TabIndex = 17;
             this.muraChartLive.Text = "chart1";
@@ -478,7 +479,7 @@
             this.panelMainDisplay.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelMainDisplay.Location = new System.Drawing.Point(6, 92);
+            this.panelMainDisplay.Location = new System.Drawing.Point(6, 190);
             this.panelMainDisplay.Name = "panelMainDisplay";
             this.panelMainDisplay.Size = new System.Drawing.Size(888, 333);
             this.panelMainDisplay.TabIndex = 1;
@@ -534,7 +535,7 @@
             // 
             // tabPageReview
             // 
-            this.tabPageReview.Controls.Add(this.chart1);
+            this.tabPageReview.Controls.Add(this.chartOverview);
             this.tabPageReview.Controls.Add(this.grpReviewTimePeriod);
             this.tabPageReview.Controls.Add(this.lblImageFormat);
             this.tabPageReview.Controls.Add(this.lblImageScale);
@@ -559,23 +560,23 @@
             this.tabPageReview.Text = "影像回顧";
             this.tabPageReview.UseVisualStyleBackColor = true;
             // 
-            // chart1
+            // chartOverview
             // 
-            this.chart1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
+            this.chartOverview.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            chartArea3.Name = "ChartArea1";
-            this.chart1.ChartAreas.Add(chartArea3);
-            legend3.Name = "Legend1";
-            this.chart1.Legends.Add(legend3);
-            this.chart1.Location = new System.Drawing.Point(6, 93);
-            this.chart1.Name = "chart1";
-            series3.ChartArea = "ChartArea1";
-            series3.Legend = "Legend1";
-            series3.Name = "Series1";
-            this.chart1.Series.Add(series3);
-            this.chart1.Size = new System.Drawing.Size(888, 96);
-            this.chart1.TabIndex = 57;
-            this.chart1.Text = "chart1";
+            chartArea19.Name = "ChartArea1";
+            this.chartOverview.ChartAreas.Add(chartArea19);
+            legend19.Name = "Legend1";
+            this.chartOverview.Legends.Add(legend19);
+            this.chartOverview.Location = new System.Drawing.Point(6, 93);
+            this.chartOverview.Name = "chartOverview";
+            series19.ChartArea = "ChartArea1";
+            series19.Legend = "Legend1";
+            series19.Name = "Series1";
+            this.chartOverview.Series.Add(series19);
+            this.chartOverview.Size = new System.Drawing.Size(888, 96);
+            this.chartOverview.TabIndex = 57;
+            this.chartOverview.Text = "chart1";
             // 
             // grpReviewTimePeriod
             // 
@@ -746,16 +747,16 @@
             // 
             this.chartMura.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            chartArea4.Name = "ChartArea1";
-            this.chartMura.ChartAreas.Add(chartArea4);
-            legend4.Name = "Legend1";
-            this.chartMura.Legends.Add(legend4);
+            chartArea20.Name = "ChartArea1";
+            this.chartMura.ChartAreas.Add(chartArea20);
+            legend20.Name = "Legend1";
+            this.chartMura.Legends.Add(legend20);
             this.chartMura.Location = new System.Drawing.Point(6, 529);
             this.chartMura.Name = "chartMura";
-            series4.ChartArea = "ChartArea1";
-            series4.Legend = "Legend1";
-            series4.Name = "Series1";
-            this.chartMura.Series.Add(series4);
+            series20.ChartArea = "ChartArea1";
+            series20.Legend = "Legend1";
+            series20.Name = "Series1";
+            this.chartMura.Series.Add(series20);
             this.chartMura.Size = new System.Drawing.Size(888, 96);
             this.chartMura.TabIndex = 16;
             this.chartMura.Text = "chart1";
@@ -895,31 +896,18 @@
             this.btnGrabIdNext.Text = ">";
             this.btnGrabIdNext.UseVisualStyleBackColor = true;
             // 
-            // canvasMain
-            // 
-            this.canvasMain.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.canvasMain.BackColor = System.Drawing.Color.Black;
-            this.canvasMain.Cursor = System.Windows.Forms.Cursors.Cross;
-            this.canvasMain.Location = new System.Drawing.Point(5, 195);
-            this.canvasMain.Name = "canvasMain";
-            this.canvasMain.Size = new System.Drawing.Size(888, 333);
-            this.canvasMain.TabIndex = 7;
-            this.canvasMain.TabStop = false;
-            // 
             // tabPageData
             // 
             this.tabPageData.Controls.Add(this.panelStatCam7);
-            this.tabPageData.Controls.Add(this.label54);
-            this.tabPageData.Controls.Add(this.label55);
-            this.tabPageData.Controls.Add(this.label56);
+            this.tabPageData.Controls.Add(this.lblChartMonthlyUnit);
+            this.tabPageData.Controls.Add(this.lblChartDailyUnit);
+            this.tabPageData.Controls.Add(this.lblChartYearlyUnit);
             this.tabPageData.Controls.Add(this.grpDataSingleSheet);
-            this.tabPageData.Controls.Add(this.label51);
+            this.tabPageData.Controls.Add(this.lblChartNavMonth);
             this.tabPageData.Controls.Add(this.cbChartYear);
-            this.tabPageData.Controls.Add(this.label52);
+            this.tabPageData.Controls.Add(this.lblChartNavDay);
             this.tabPageData.Controls.Add(this.cbChartMonth);
-            this.tabPageData.Controls.Add(this.label53);
+            this.tabPageData.Controls.Add(this.lblChartNavYear);
             this.tabPageData.Controls.Add(this.cbChartDay);
             this.tabPageData.Controls.Add(this.chartYearly);
             this.tabPageData.Controls.Add(this.chartMonthly);
@@ -950,32 +938,32 @@
             this.panelStatCam7.Size = new System.Drawing.Size(120, 80);
             this.panelStatCam7.TabIndex = 3;
             // 
-            // label54
+            // lblChartMonthlyUnit
             // 
-            this.label54.AutoSize = true;
-            this.label54.Location = new System.Drawing.Point(995, 575);
-            this.label54.Name = "label54";
-            this.label54.Size = new System.Drawing.Size(22, 15);
-            this.label54.TabIndex = 53;
-            this.label54.Text = "日";
+            this.lblChartMonthlyUnit.AutoSize = true;
+            this.lblChartMonthlyUnit.Location = new System.Drawing.Point(995, 575);
+            this.lblChartMonthlyUnit.Name = "lblChartMonthlyUnit";
+            this.lblChartMonthlyUnit.Size = new System.Drawing.Size(22, 15);
+            this.lblChartMonthlyUnit.TabIndex = 53;
+            this.lblChartMonthlyUnit.Text = "日";
             // 
-            // label55
+            // lblChartDailyUnit
             // 
-            this.label55.AutoSize = true;
-            this.label55.Location = new System.Drawing.Point(14, 613);
-            this.label55.Name = "label55";
-            this.label55.Size = new System.Drawing.Size(22, 15);
-            this.label55.TabIndex = 52;
-            this.label55.Text = "時";
+            this.lblChartDailyUnit.AutoSize = true;
+            this.lblChartDailyUnit.Location = new System.Drawing.Point(14, 613);
+            this.lblChartDailyUnit.Name = "lblChartDailyUnit";
+            this.lblChartDailyUnit.Size = new System.Drawing.Size(22, 15);
+            this.lblChartDailyUnit.TabIndex = 52;
+            this.lblChartDailyUnit.Text = "時";
             // 
-            // label56
+            // lblChartYearlyUnit
             // 
-            this.label56.AutoSize = true;
-            this.label56.Location = new System.Drawing.Point(14, 415);
-            this.label56.Name = "label56";
-            this.label56.Size = new System.Drawing.Size(22, 15);
-            this.label56.TabIndex = 51;
-            this.label56.Text = "月";
+            this.lblChartYearlyUnit.AutoSize = true;
+            this.lblChartYearlyUnit.Location = new System.Drawing.Point(14, 415);
+            this.lblChartYearlyUnit.Name = "lblChartYearlyUnit";
+            this.lblChartYearlyUnit.Size = new System.Drawing.Size(22, 15);
+            this.lblChartYearlyUnit.TabIndex = 51;
+            this.lblChartYearlyUnit.Text = "月";
             // 
             // grpDataSingleSheet
             // 
@@ -984,17 +972,16 @@
             this.grpDataSingleSheet.Controls.Add(this.btnGrabIdDataPrev);
             this.grpDataSingleSheet.Controls.Add(this.btnGrabIdDataNext);
             this.grpDataSingleSheet.Controls.Add(this.cbDataGrabId);
-            this.grpDataSingleSheet.Controls.Add(this.lblDataGrabId);
-            this.grpDataSingleSheet.Location = new System.Drawing.Point(844, 221);
+            this.grpDataSingleSheet.Location = new System.Drawing.Point(552, 242);
             this.grpDataSingleSheet.Name = "grpDataSingleSheet";
-            this.grpDataSingleSheet.Size = new System.Drawing.Size(130, 115);
+            this.grpDataSingleSheet.Size = new System.Drawing.Size(115, 92);
             this.grpDataSingleSheet.TabIndex = 50;
             this.grpDataSingleSheet.TabStop = false;
-            this.grpDataSingleSheet.Text = "單片分類";
+            this.grpDataSingleSheet.Text = "序號選擇";
             // 
             // btnGrabIdDataPrev
             // 
-            this.btnGrabIdDataPrev.Location = new System.Drawing.Point(17, 66);
+            this.btnGrabIdDataPrev.Location = new System.Drawing.Point(17, 50);
             this.btnGrabIdDataPrev.Name = "btnGrabIdDataPrev";
             this.btnGrabIdDataPrev.Size = new System.Drawing.Size(44, 28);
             this.btnGrabIdDataPrev.TabIndex = 43;
@@ -1003,7 +990,7 @@
             // 
             // btnGrabIdDataNext
             // 
-            this.btnGrabIdDataNext.Location = new System.Drawing.Point(63, 66);
+            this.btnGrabIdDataNext.Location = new System.Drawing.Point(65, 50);
             this.btnGrabIdDataNext.Name = "btnGrabIdDataNext";
             this.btnGrabIdDataNext.Size = new System.Drawing.Size(44, 28);
             this.btnGrabIdDataNext.TabIndex = 44;
@@ -1013,72 +1000,63 @@
             // cbDataGrabId
             // 
             this.cbDataGrabId.FormattingEnabled = true;
-            this.cbDataGrabId.Location = new System.Drawing.Point(17, 39);
+            this.cbDataGrabId.Location = new System.Drawing.Point(17, 21);
             this.cbDataGrabId.Name = "cbDataGrabId";
-            this.cbDataGrabId.Size = new System.Drawing.Size(100, 23);
+            this.cbDataGrabId.Size = new System.Drawing.Size(77, 23);
             this.cbDataGrabId.TabIndex = 42;
             // 
-            // lblDataGrabId
+            // lblChartNavMonth
             // 
-            this.lblDataGrabId.AutoSize = true;
-            this.lblDataGrabId.Location = new System.Drawing.Point(15, 21);
-            this.lblDataGrabId.Name = "lblDataGrabId";
-            this.lblDataGrabId.Size = new System.Drawing.Size(37, 15);
-            this.lblDataGrabId.TabIndex = 40;
-            this.lblDataGrabId.Text = "序號";
-            // 
-            // label51
-            // 
-            this.label51.AutoSize = true;
-            this.label51.Location = new System.Drawing.Point(995, 475);
-            this.label51.Name = "label51";
-            this.label51.Size = new System.Drawing.Size(22, 15);
-            this.label51.TabIndex = 42;
-            this.label51.Text = "月";
+            this.lblChartNavMonth.AutoSize = true;
+            this.lblChartNavMonth.Location = new System.Drawing.Point(995, 475);
+            this.lblChartNavMonth.Name = "lblChartNavMonth";
+            this.lblChartNavMonth.Size = new System.Drawing.Size(22, 15);
+            this.lblChartNavMonth.TabIndex = 42;
+            this.lblChartNavMonth.Text = "月";
             // 
             // cbChartYear
             // 
             this.cbChartYear.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.cbChartYear.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbChartYear.Location = new System.Drawing.Point(929, 375);
+            this.cbChartYear.Location = new System.Drawing.Point(940, 375);
             this.cbChartYear.Name = "cbChartYear";
-            this.cbChartYear.Size = new System.Drawing.Size(61, 23);
+            this.cbChartYear.Size = new System.Drawing.Size(50, 23);
             this.cbChartYear.TabIndex = 43;
             // 
-            // label52
+            // lblChartNavDay
             // 
-            this.label52.AutoSize = true;
-            this.label52.Location = new System.Drawing.Point(14, 514);
-            this.label52.Name = "label52";
-            this.label52.Size = new System.Drawing.Size(22, 15);
-            this.label52.TabIndex = 41;
-            this.label52.Text = "日";
+            this.lblChartNavDay.AutoSize = true;
+            this.lblChartNavDay.Location = new System.Drawing.Point(14, 514);
+            this.lblChartNavDay.Name = "lblChartNavDay";
+            this.lblChartNavDay.Size = new System.Drawing.Size(22, 15);
+            this.lblChartNavDay.TabIndex = 41;
+            this.lblChartNavDay.Text = "日";
             // 
             // cbChartMonth
             // 
             this.cbChartMonth.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.cbChartMonth.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbChartMonth.Location = new System.Drawing.Point(928, 472);
+            this.cbChartMonth.Location = new System.Drawing.Point(939, 472);
             this.cbChartMonth.Name = "cbChartMonth";
-            this.cbChartMonth.Size = new System.Drawing.Size(61, 23);
+            this.cbChartMonth.Size = new System.Drawing.Size(50, 23);
             this.cbChartMonth.TabIndex = 46;
             // 
-            // label53
+            // lblChartNavYear
             // 
-            this.label53.AutoSize = true;
-            this.label53.Location = new System.Drawing.Point(993, 378);
-            this.label53.Name = "label53";
-            this.label53.Size = new System.Drawing.Size(22, 15);
-            this.label53.TabIndex = 40;
-            this.label53.Text = "年";
+            this.lblChartNavYear.AutoSize = true;
+            this.lblChartNavYear.Location = new System.Drawing.Point(993, 378);
+            this.lblChartNavYear.Name = "lblChartNavYear";
+            this.lblChartNavYear.Size = new System.Drawing.Size(22, 15);
+            this.lblChartNavYear.TabIndex = 40;
+            this.lblChartNavYear.Text = "年";
             // 
             // cbChartDay
             // 
             this.cbChartDay.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.cbChartDay.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbChartDay.Location = new System.Drawing.Point(928, 572);
+            this.cbChartDay.Location = new System.Drawing.Point(939, 572);
             this.cbChartDay.Name = "cbChartDay";
-            this.cbChartDay.Size = new System.Drawing.Size(61, 23);
+            this.cbChartDay.Size = new System.Drawing.Size(50, 23);
             this.cbChartDay.TabIndex = 49;
             // 
             // chartYearly
@@ -1130,7 +1108,7 @@
             this.listViewGrabDetail.HideSelection = false;
             this.listViewGrabDetail.Location = new System.Drawing.Point(6, 92);
             this.listViewGrabDetail.Name = "listViewGrabDetail";
-            this.listViewGrabDetail.Size = new System.Drawing.Size(376, 244);
+            this.listViewGrabDetail.Size = new System.Drawing.Size(385, 244);
             this.listViewGrabDetail.TabIndex = 37;
             this.listViewGrabDetail.UseCompatibleStateImageBehavior = false;
             // 
@@ -1140,19 +1118,19 @@
             | System.Windows.Forms.AnchorStyles.Right)));
             this.groupBoxGrabIdRange.Controls.Add(this.cbGrabIdStart);
             this.groupBoxGrabIdRange.Controls.Add(this.cbGrabIdEnd);
-            this.groupBoxGrabIdRange.Controls.Add(this.label49);
-            this.groupBoxGrabIdRange.Controls.Add(this.label50);
-            this.groupBoxGrabIdRange.Location = new System.Drawing.Point(844, 93);
+            this.groupBoxGrabIdRange.Controls.Add(this.lblGrabIdEndLabel);
+            this.groupBoxGrabIdRange.Controls.Add(this.lblGrabIdStartLabel);
+            this.groupBoxGrabIdRange.Location = new System.Drawing.Point(397, 242);
             this.groupBoxGrabIdRange.Name = "groupBoxGrabIdRange";
-            this.groupBoxGrabIdRange.Size = new System.Drawing.Size(130, 122);
+            this.groupBoxGrabIdRange.Size = new System.Drawing.Size(149, 92);
             this.groupBoxGrabIdRange.TabIndex = 36;
             this.groupBoxGrabIdRange.TabStop = false;
-            this.groupBoxGrabIdRange.Text = "序號分類";
+            this.groupBoxGrabIdRange.Text = "序號範圍";
             // 
             // cbGrabIdStart
             // 
             this.cbGrabIdStart.FormattingEnabled = true;
-            this.cbGrabIdStart.Location = new System.Drawing.Point(18, 37);
+            this.cbGrabIdStart.Location = new System.Drawing.Point(52, 24);
             this.cbGrabIdStart.Name = "cbGrabIdStart";
             this.cbGrabIdStart.Size = new System.Drawing.Size(76, 23);
             this.cbGrabIdStart.TabIndex = 42;
@@ -1160,41 +1138,41 @@
             // cbGrabIdEnd
             // 
             this.cbGrabIdEnd.FormattingEnabled = true;
-            this.cbGrabIdEnd.Location = new System.Drawing.Point(18, 81);
+            this.cbGrabIdEnd.Location = new System.Drawing.Point(52, 52);
             this.cbGrabIdEnd.Name = "cbGrabIdEnd";
             this.cbGrabIdEnd.Size = new System.Drawing.Size(76, 23);
             this.cbGrabIdEnd.TabIndex = 43;
             // 
-            // label49
+            // lblGrabIdEndLabel
             // 
-            this.label49.AutoSize = true;
-            this.label49.Location = new System.Drawing.Point(15, 63);
-            this.label49.Name = "label49";
-            this.label49.Size = new System.Drawing.Size(67, 15);
-            this.label49.TabIndex = 41;
-            this.label49.Text = "結束序號";
+            this.lblGrabIdEndLabel.AutoSize = true;
+            this.lblGrabIdEndLabel.Location = new System.Drawing.Point(9, 55);
+            this.lblGrabIdEndLabel.Name = "lblGrabIdEndLabel";
+            this.lblGrabIdEndLabel.Size = new System.Drawing.Size(37, 15);
+            this.lblGrabIdEndLabel.TabIndex = 41;
+            this.lblGrabIdEndLabel.Text = "結束";
             // 
-            // label50
+            // lblGrabIdStartLabel
             // 
-            this.label50.AutoSize = true;
-            this.label50.Location = new System.Drawing.Point(15, 19);
-            this.label50.Name = "label50";
-            this.label50.Size = new System.Drawing.Size(67, 15);
-            this.label50.TabIndex = 40;
-            this.label50.Text = "開始序號";
+            this.lblGrabIdStartLabel.AutoSize = true;
+            this.lblGrabIdStartLabel.Location = new System.Drawing.Point(9, 29);
+            this.lblGrabIdStartLabel.Name = "lblGrabIdStartLabel";
+            this.lblGrabIdStartLabel.Size = new System.Drawing.Size(37, 15);
+            this.lblGrabIdStartLabel.TabIndex = 40;
+            this.lblGrabIdStartLabel.Text = "開始";
             // 
             // groupBoxTimeRange
             // 
             this.groupBoxTimeRange.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.groupBoxTimeRange.Controls.Add(this.label48);
-            this.groupBoxTimeRange.Controls.Add(this.label47);
-            this.groupBoxTimeRange.Controls.Add(this.label41);
-            this.groupBoxTimeRange.Controls.Add(this.label42);
-            this.groupBoxTimeRange.Controls.Add(this.label43);
-            this.groupBoxTimeRange.Controls.Add(this.label44);
-            this.groupBoxTimeRange.Controls.Add(this.label45);
-            this.groupBoxTimeRange.Controls.Add(this.label46);
+            this.groupBoxTimeRange.Controls.Add(this.lblEndTimeHeader);
+            this.groupBoxTimeRange.Controls.Add(this.lblStartTimeHeader);
+            this.groupBoxTimeRange.Controls.Add(this.lblEndSec);
+            this.groupBoxTimeRange.Controls.Add(this.lblEndMin);
+            this.groupBoxTimeRange.Controls.Add(this.lblEndHour);
+            this.groupBoxTimeRange.Controls.Add(this.lblEndDay);
+            this.groupBoxTimeRange.Controls.Add(this.lblEndMonth);
+            this.groupBoxTimeRange.Controls.Add(this.lblEndYear);
             this.groupBoxTimeRange.Controls.Add(this.cbStartYear);
             this.groupBoxTimeRange.Controls.Add(this.cbStartMonth);
             this.groupBoxTimeRange.Controls.Add(this.cbStartDay);
@@ -1207,84 +1185,84 @@
             this.groupBoxTimeRange.Controls.Add(this.cbEndDay);
             this.groupBoxTimeRange.Controls.Add(this.cbEndYear);
             this.groupBoxTimeRange.Controls.Add(this.cbEndMonth);
-            this.groupBoxTimeRange.Location = new System.Drawing.Point(644, 93);
+            this.groupBoxTimeRange.Location = new System.Drawing.Point(673, 93);
             this.groupBoxTimeRange.Name = "groupBoxTimeRange";
-            this.groupBoxTimeRange.Size = new System.Drawing.Size(194, 243);
+            this.groupBoxTimeRange.Size = new System.Drawing.Size(201, 243);
             this.groupBoxTimeRange.TabIndex = 35;
             this.groupBoxTimeRange.TabStop = false;
-            this.groupBoxTimeRange.Text = "時序分類";
+            this.groupBoxTimeRange.Text = "時序範圍";
             // 
-            // label48
+            // lblEndTimeHeader
             // 
-            this.label48.AutoSize = true;
-            this.label48.Location = new System.Drawing.Point(88, 20);
-            this.label48.Name = "label48";
-            this.label48.Size = new System.Drawing.Size(67, 15);
-            this.label48.TabIndex = 39;
-            this.label48.Text = "結束時間";
+            this.lblEndTimeHeader.AutoSize = true;
+            this.lblEndTimeHeader.Location = new System.Drawing.Point(88, 20);
+            this.lblEndTimeHeader.Name = "lblEndTimeHeader";
+            this.lblEndTimeHeader.Size = new System.Drawing.Size(67, 15);
+            this.lblEndTimeHeader.TabIndex = 39;
+            this.lblEndTimeHeader.Text = "結束時間";
             // 
-            // label47
+            // lblStartTimeHeader
             // 
-            this.label47.AutoSize = true;
-            this.label47.Location = new System.Drawing.Point(15, 21);
-            this.label47.Name = "label47";
-            this.label47.Size = new System.Drawing.Size(67, 15);
-            this.label47.TabIndex = 36;
-            this.label47.Text = "開始時間";
+            this.lblStartTimeHeader.AutoSize = true;
+            this.lblStartTimeHeader.Location = new System.Drawing.Point(15, 21);
+            this.lblStartTimeHeader.Name = "lblStartTimeHeader";
+            this.lblStartTimeHeader.Size = new System.Drawing.Size(67, 15);
+            this.lblStartTimeHeader.TabIndex = 36;
+            this.lblStartTimeHeader.Text = "開始時間";
             // 
-            // label41
+            // lblEndSec
             // 
-            this.label41.AutoSize = true;
-            this.label41.Location = new System.Drawing.Point(158, 196);
-            this.label41.Name = "label41";
-            this.label41.Size = new System.Drawing.Size(22, 15);
-            this.label41.TabIndex = 38;
-            this.label41.Text = "秒";
+            this.lblEndSec.AutoSize = true;
+            this.lblEndSec.Location = new System.Drawing.Point(158, 196);
+            this.lblEndSec.Name = "lblEndSec";
+            this.lblEndSec.Size = new System.Drawing.Size(22, 15);
+            this.lblEndSec.TabIndex = 38;
+            this.lblEndSec.Text = "秒";
             // 
-            // label42
+            // lblEndMin
             // 
-            this.label42.AutoSize = true;
-            this.label42.Location = new System.Drawing.Point(158, 167);
-            this.label42.Name = "label42";
-            this.label42.Size = new System.Drawing.Size(22, 15);
-            this.label42.TabIndex = 37;
-            this.label42.Text = "分";
+            this.lblEndMin.AutoSize = true;
+            this.lblEndMin.Location = new System.Drawing.Point(158, 167);
+            this.lblEndMin.Name = "lblEndMin";
+            this.lblEndMin.Size = new System.Drawing.Size(22, 15);
+            this.lblEndMin.TabIndex = 37;
+            this.lblEndMin.Text = "分";
             // 
-            // label43
+            // lblEndHour
             // 
-            this.label43.AutoSize = true;
-            this.label43.Location = new System.Drawing.Point(158, 138);
-            this.label43.Name = "label43";
-            this.label43.Size = new System.Drawing.Size(22, 15);
-            this.label43.TabIndex = 36;
-            this.label43.Text = "時";
+            this.lblEndHour.AutoSize = true;
+            this.lblEndHour.Location = new System.Drawing.Point(158, 138);
+            this.lblEndHour.Name = "lblEndHour";
+            this.lblEndHour.Size = new System.Drawing.Size(22, 15);
+            this.lblEndHour.TabIndex = 36;
+            this.lblEndHour.Text = "時";
             // 
-            // label44
+            // lblEndDay
             // 
-            this.label44.AutoSize = true;
-            this.label44.Location = new System.Drawing.Point(158, 100);
-            this.label44.Name = "label44";
-            this.label44.Size = new System.Drawing.Size(22, 15);
-            this.label44.TabIndex = 35;
-            this.label44.Text = "日";
+            this.lblEndDay.AutoSize = true;
+            this.lblEndDay.Location = new System.Drawing.Point(158, 100);
+            this.lblEndDay.Name = "lblEndDay";
+            this.lblEndDay.Size = new System.Drawing.Size(22, 15);
+            this.lblEndDay.TabIndex = 35;
+            this.lblEndDay.Text = "日";
             // 
-            // label45
+            // lblEndMonth
             // 
-            this.label45.AutoSize = true;
-            this.label45.Location = new System.Drawing.Point(158, 68);
-            this.label45.Name = "label45";
-            this.label45.Size = new System.Drawing.Size(22, 15);
-            this.label45.TabIndex = 34;
-            this.label45.Text = "月";
+            this.lblEndMonth.AutoSize = true;
+            this.lblEndMonth.Location = new System.Drawing.Point(158, 68);
+            this.lblEndMonth.Name = "lblEndMonth";
+            this.lblEndMonth.Size = new System.Drawing.Size(22, 15);
+            this.lblEndMonth.TabIndex = 34;
+            this.lblEndMonth.Text = "月";
             // 
-            // label46
+            // lblEndYear
             // 
-            this.label46.AutoSize = true;
-            this.label46.Location = new System.Drawing.Point(158, 42);
-            this.label46.Name = "label46";
-            this.label46.Size = new System.Drawing.Size(22, 15);
-            this.label46.TabIndex = 33;
-            this.label46.Text = "年";
+            this.lblEndYear.AutoSize = true;
+            this.lblEndYear.Location = new System.Drawing.Point(158, 42);
+            this.lblEndYear.Name = "lblEndYear";
+            this.lblEndYear.Size = new System.Drawing.Size(22, 15);
+            this.lblEndYear.TabIndex = 33;
+            this.lblEndYear.Text = "年";
             // 
             // cbStartYear
             // 
@@ -1399,9 +1377,9 @@
             this.listViewStats.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Left)));
             this.listViewStats.HideSelection = false;
-            this.listViewStats.Location = new System.Drawing.Point(388, 92);
+            this.listViewStats.Location = new System.Drawing.Point(397, 93);
             this.listViewStats.Name = "listViewStats";
-            this.listViewStats.Size = new System.Drawing.Size(250, 244);
+            this.listViewStats.Size = new System.Drawing.Size(270, 142);
             this.listViewStats.TabIndex = 9;
             this.listViewStats.UseCompatibleStateImageBehavior = false;
             // 
@@ -1522,13 +1500,13 @@
             // 
             // tabPageExposure
             // 
-            this.tabPageExposure.Controls.Add(this.panelStatCam74);
-            this.tabPageExposure.Controls.Add(this.panelStatCam73);
-            this.tabPageExposure.Controls.Add(this.panelStatCam72);
-            this.tabPageExposure.Controls.Add(this.panelStatCam71);
-            this.tabPageExposure.Controls.Add(this.panelStatCam70);
+            this.tabPageExposure.Controls.Add(this.panelExpCam7);
+            this.tabPageExposure.Controls.Add(this.panelExpCam6);
+            this.tabPageExposure.Controls.Add(this.panelExpCam5);
+            this.tabPageExposure.Controls.Add(this.panelExpCam4);
+            this.tabPageExposure.Controls.Add(this.panelExpCam3);
             this.tabPageExposure.Controls.Add(this.panelExpCam2);
-            this.tabPageExposure.Controls.Add(this.panelExposure);
+            this.tabPageExposure.Controls.Add(this.panelExpCam1);
             this.tabPageExposure.Location = new System.Drawing.Point(4, 25);
             this.tabPageExposure.Name = "tabPageExposure";
             this.tabPageExposure.Padding = new System.Windows.Forms.Padding(3);
@@ -1537,19 +1515,19 @@
             this.tabPageExposure.Text = "曝光時間";
             this.tabPageExposure.UseVisualStyleBackColor = true;
             // 
-            // panelStatCam74
+            // panelExpCam7
             // 
-            this.panelStatCam74.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelExpCam7.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelStatCam74.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelStatCam74.Controls.Add(this.label13);
-            this.panelStatCam74.Controls.Add(this.trackBarExpCam7);
-            this.panelStatCam74.Controls.Add(this.numExpCam7);
-            this.panelStatCam74.Controls.Add(this.label14);
-            this.panelStatCam74.Location = new System.Drawing.Point(0, 438);
-            this.panelStatCam74.Name = "panelStatCam74";
-            this.panelStatCam74.Size = new System.Drawing.Size(199, 69);
-            this.panelStatCam74.TabIndex = 4;
+            this.panelExpCam7.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelExpCam7.Controls.Add(this.label13);
+            this.panelExpCam7.Controls.Add(this.trackBarExpCam7);
+            this.panelExpCam7.Controls.Add(this.numExpCam7);
+            this.panelExpCam7.Controls.Add(this.label14);
+            this.panelExpCam7.Location = new System.Drawing.Point(0, 438);
+            this.panelExpCam7.Name = "panelExpCam7";
+            this.panelExpCam7.Size = new System.Drawing.Size(199, 69);
+            this.panelExpCam7.TabIndex = 4;
             // 
             // label13
             // 
@@ -1567,7 +1545,7 @@
             this.trackBarExpCam7.Maximum = 2000;
             this.trackBarExpCam7.Minimum = 1;
             this.trackBarExpCam7.Name = "trackBarExpCam7";
-            this.trackBarExpCam7.Size = new System.Drawing.Size(248, 30);
+            this.trackBarExpCam7.Size = new System.Drawing.Size(190, 30);
             this.trackBarExpCam7.TabIndex = 2;
             this.trackBarExpCam7.TickFrequency = 200;
             this.trackBarExpCam7.Value = 50;
@@ -1586,7 +1564,7 @@
             0,
             0});
             this.numExpCam7.Name = "numExpCam7";
-            this.numExpCam7.Size = new System.Drawing.Size(90, 25);
+            this.numExpCam7.Size = new System.Drawing.Size(70, 25);
             this.numExpCam7.TabIndex = 1;
             this.numExpCam7.Value = new decimal(new int[] {
             50,
@@ -1603,19 +1581,19 @@
             this.label14.TabIndex = 0;
             this.label14.Text = "CAM7";
             // 
-            // panelStatCam73
+            // panelExpCam6
             // 
-            this.panelStatCam73.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelExpCam6.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelStatCam73.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelStatCam73.Controls.Add(this.label11);
-            this.panelStatCam73.Controls.Add(this.trackBarExpCam6);
-            this.panelStatCam73.Controls.Add(this.numExpCam6);
-            this.panelStatCam73.Controls.Add(this.label12);
-            this.panelStatCam73.Location = new System.Drawing.Point(0, 365);
-            this.panelStatCam73.Name = "panelStatCam73";
-            this.panelStatCam73.Size = new System.Drawing.Size(199, 69);
-            this.panelStatCam73.TabIndex = 4;
+            this.panelExpCam6.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelExpCam6.Controls.Add(this.label11);
+            this.panelExpCam6.Controls.Add(this.trackBarExpCam6);
+            this.panelExpCam6.Controls.Add(this.numExpCam6);
+            this.panelExpCam6.Controls.Add(this.label12);
+            this.panelExpCam6.Location = new System.Drawing.Point(0, 365);
+            this.panelExpCam6.Name = "panelExpCam6";
+            this.panelExpCam6.Size = new System.Drawing.Size(199, 69);
+            this.panelExpCam6.TabIndex = 4;
             // 
             // label11
             // 
@@ -1633,7 +1611,7 @@
             this.trackBarExpCam6.Maximum = 2000;
             this.trackBarExpCam6.Minimum = 1;
             this.trackBarExpCam6.Name = "trackBarExpCam6";
-            this.trackBarExpCam6.Size = new System.Drawing.Size(248, 30);
+            this.trackBarExpCam6.Size = new System.Drawing.Size(190, 30);
             this.trackBarExpCam6.TabIndex = 2;
             this.trackBarExpCam6.TickFrequency = 200;
             this.trackBarExpCam6.Value = 50;
@@ -1652,7 +1630,7 @@
             0,
             0});
             this.numExpCam6.Name = "numExpCam6";
-            this.numExpCam6.Size = new System.Drawing.Size(90, 25);
+            this.numExpCam6.Size = new System.Drawing.Size(70, 25);
             this.numExpCam6.TabIndex = 1;
             this.numExpCam6.Value = new decimal(new int[] {
             50,
@@ -1669,19 +1647,19 @@
             this.label12.TabIndex = 0;
             this.label12.Text = "CAM6";
             // 
-            // panelStatCam72
+            // panelExpCam5
             // 
-            this.panelStatCam72.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelExpCam5.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelStatCam72.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelStatCam72.Controls.Add(this.label9);
-            this.panelStatCam72.Controls.Add(this.trackBarExpCam5);
-            this.panelStatCam72.Controls.Add(this.numExpCam5);
-            this.panelStatCam72.Controls.Add(this.label10);
-            this.panelStatCam72.Location = new System.Drawing.Point(0, 292);
-            this.panelStatCam72.Name = "panelStatCam72";
-            this.panelStatCam72.Size = new System.Drawing.Size(199, 69);
-            this.panelStatCam72.TabIndex = 4;
+            this.panelExpCam5.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelExpCam5.Controls.Add(this.label9);
+            this.panelExpCam5.Controls.Add(this.trackBarExpCam5);
+            this.panelExpCam5.Controls.Add(this.numExpCam5);
+            this.panelExpCam5.Controls.Add(this.label10);
+            this.panelExpCam5.Location = new System.Drawing.Point(0, 292);
+            this.panelExpCam5.Name = "panelExpCam5";
+            this.panelExpCam5.Size = new System.Drawing.Size(199, 69);
+            this.panelExpCam5.TabIndex = 4;
             // 
             // label9
             // 
@@ -1699,7 +1677,7 @@
             this.trackBarExpCam5.Maximum = 2000;
             this.trackBarExpCam5.Minimum = 1;
             this.trackBarExpCam5.Name = "trackBarExpCam5";
-            this.trackBarExpCam5.Size = new System.Drawing.Size(248, 30);
+            this.trackBarExpCam5.Size = new System.Drawing.Size(190, 30);
             this.trackBarExpCam5.TabIndex = 2;
             this.trackBarExpCam5.TickFrequency = 200;
             this.trackBarExpCam5.Value = 50;
@@ -1718,7 +1696,7 @@
             0,
             0});
             this.numExpCam5.Name = "numExpCam5";
-            this.numExpCam5.Size = new System.Drawing.Size(90, 25);
+            this.numExpCam5.Size = new System.Drawing.Size(70, 25);
             this.numExpCam5.TabIndex = 1;
             this.numExpCam5.Value = new decimal(new int[] {
             50,
@@ -1735,19 +1713,19 @@
             this.label10.TabIndex = 0;
             this.label10.Text = "CAM5";
             // 
-            // panelStatCam71
+            // panelExpCam4
             // 
-            this.panelStatCam71.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelExpCam4.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelStatCam71.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelStatCam71.Controls.Add(this.label7);
-            this.panelStatCam71.Controls.Add(this.trackBarExpCam4);
-            this.panelStatCam71.Controls.Add(this.numExpCam4);
-            this.panelStatCam71.Controls.Add(this.label8);
-            this.panelStatCam71.Location = new System.Drawing.Point(0, 219);
-            this.panelStatCam71.Name = "panelStatCam71";
-            this.panelStatCam71.Size = new System.Drawing.Size(199, 69);
-            this.panelStatCam71.TabIndex = 4;
+            this.panelExpCam4.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelExpCam4.Controls.Add(this.label7);
+            this.panelExpCam4.Controls.Add(this.trackBarExpCam4);
+            this.panelExpCam4.Controls.Add(this.numExpCam4);
+            this.panelExpCam4.Controls.Add(this.label8);
+            this.panelExpCam4.Location = new System.Drawing.Point(0, 219);
+            this.panelExpCam4.Name = "panelExpCam4";
+            this.panelExpCam4.Size = new System.Drawing.Size(199, 69);
+            this.panelExpCam4.TabIndex = 4;
             // 
             // label7
             // 
@@ -1765,7 +1743,7 @@
             this.trackBarExpCam4.Maximum = 2000;
             this.trackBarExpCam4.Minimum = 1;
             this.trackBarExpCam4.Name = "trackBarExpCam4";
-            this.trackBarExpCam4.Size = new System.Drawing.Size(248, 30);
+            this.trackBarExpCam4.Size = new System.Drawing.Size(190, 30);
             this.trackBarExpCam4.TabIndex = 2;
             this.trackBarExpCam4.TickFrequency = 200;
             this.trackBarExpCam4.Value = 50;
@@ -1784,7 +1762,7 @@
             0,
             0});
             this.numExpCam4.Name = "numExpCam4";
-            this.numExpCam4.Size = new System.Drawing.Size(90, 25);
+            this.numExpCam4.Size = new System.Drawing.Size(70, 25);
             this.numExpCam4.TabIndex = 1;
             this.numExpCam4.Value = new decimal(new int[] {
             50,
@@ -1801,19 +1779,19 @@
             this.label8.TabIndex = 0;
             this.label8.Text = "CAM4";
             // 
-            // panelStatCam70
+            // panelExpCam3
             // 
-            this.panelStatCam70.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelExpCam3.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelStatCam70.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelStatCam70.Controls.Add(this.label5);
-            this.panelStatCam70.Controls.Add(this.trackBarExpCam3);
-            this.panelStatCam70.Controls.Add(this.numExpCam3);
-            this.panelStatCam70.Controls.Add(this.label6);
-            this.panelStatCam70.Location = new System.Drawing.Point(0, 146);
-            this.panelStatCam70.Name = "panelStatCam70";
-            this.panelStatCam70.Size = new System.Drawing.Size(199, 69);
-            this.panelStatCam70.TabIndex = 4;
+            this.panelExpCam3.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelExpCam3.Controls.Add(this.label5);
+            this.panelExpCam3.Controls.Add(this.trackBarExpCam3);
+            this.panelExpCam3.Controls.Add(this.numExpCam3);
+            this.panelExpCam3.Controls.Add(this.label6);
+            this.panelExpCam3.Location = new System.Drawing.Point(0, 146);
+            this.panelExpCam3.Name = "panelExpCam3";
+            this.panelExpCam3.Size = new System.Drawing.Size(199, 69);
+            this.panelExpCam3.TabIndex = 4;
             // 
             // label5
             // 
@@ -1831,7 +1809,7 @@
             this.trackBarExpCam3.Maximum = 2000;
             this.trackBarExpCam3.Minimum = 1;
             this.trackBarExpCam3.Name = "trackBarExpCam3";
-            this.trackBarExpCam3.Size = new System.Drawing.Size(248, 30);
+            this.trackBarExpCam3.Size = new System.Drawing.Size(190, 30);
             this.trackBarExpCam3.TabIndex = 2;
             this.trackBarExpCam3.TickFrequency = 200;
             this.trackBarExpCam3.Value = 50;
@@ -1850,7 +1828,7 @@
             0,
             0});
             this.numExpCam3.Name = "numExpCam3";
-            this.numExpCam3.Size = new System.Drawing.Size(90, 25);
+            this.numExpCam3.Size = new System.Drawing.Size(70, 25);
             this.numExpCam3.TabIndex = 1;
             this.numExpCam3.Value = new decimal(new int[] {
             50,
@@ -1897,7 +1875,7 @@
             this.trackBarExpCam2.Maximum = 2000;
             this.trackBarExpCam2.Minimum = 1;
             this.trackBarExpCam2.Name = "trackBarExpCam2";
-            this.trackBarExpCam2.Size = new System.Drawing.Size(248, 30);
+            this.trackBarExpCam2.Size = new System.Drawing.Size(190, 30);
             this.trackBarExpCam2.TabIndex = 2;
             this.trackBarExpCam2.TickFrequency = 200;
             this.trackBarExpCam2.Value = 50;
@@ -1916,7 +1894,7 @@
             0,
             0});
             this.numExpCam2.Name = "numExpCam2";
-            this.numExpCam2.Size = new System.Drawing.Size(90, 25);
+            this.numExpCam2.Size = new System.Drawing.Size(70, 25);
             this.numExpCam2.TabIndex = 1;
             this.numExpCam2.Value = new decimal(new int[] {
             50,
@@ -1933,19 +1911,19 @@
             this.label4.TabIndex = 0;
             this.label4.Text = "CAM2";
             // 
-            // panelExposure
+            // panelExpCam1
             // 
-            this.panelExposure.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelExpCam1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelExposure.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelExposure.Controls.Add(this.label2);
-            this.panelExposure.Controls.Add(this.trackBarExpCam1);
-            this.panelExposure.Controls.Add(this.numExpCam1);
-            this.panelExposure.Controls.Add(this.lblExposure);
-            this.panelExposure.Location = new System.Drawing.Point(0, 0);
-            this.panelExposure.Name = "panelExposure";
-            this.panelExposure.Size = new System.Drawing.Size(199, 69);
-            this.panelExposure.TabIndex = 0;
+            this.panelExpCam1.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelExpCam1.Controls.Add(this.label2);
+            this.panelExpCam1.Controls.Add(this.trackBarExpCam1);
+            this.panelExpCam1.Controls.Add(this.numExpCam1);
+            this.panelExpCam1.Controls.Add(this.lblExposure);
+            this.panelExpCam1.Location = new System.Drawing.Point(0, 0);
+            this.panelExpCam1.Name = "panelExpCam1";
+            this.panelExpCam1.Size = new System.Drawing.Size(199, 69);
+            this.panelExpCam1.TabIndex = 0;
             // 
             // label2
             // 
@@ -1963,7 +1941,7 @@
             this.trackBarExpCam1.Maximum = 2000;
             this.trackBarExpCam1.Minimum = 1;
             this.trackBarExpCam1.Name = "trackBarExpCam1";
-            this.trackBarExpCam1.Size = new System.Drawing.Size(248, 30);
+            this.trackBarExpCam1.Size = new System.Drawing.Size(190, 30);
             this.trackBarExpCam1.TabIndex = 2;
             this.trackBarExpCam1.TickFrequency = 200;
             this.trackBarExpCam1.Value = 50;
@@ -1982,7 +1960,7 @@
             0,
             0});
             this.numExpCam1.Name = "numExpCam1";
-            this.numExpCam1.Size = new System.Drawing.Size(90, 25);
+            this.numExpCam1.Size = new System.Drawing.Size(70, 25);
             this.numExpCam1.TabIndex = 1;
             this.numExpCam1.Value = new decimal(new int[] {
             50,
@@ -2001,34 +1979,34 @@
             // 
             // tabPageLineRate
             // 
-            this.tabPageLineRate.Controls.Add(this.panelStatCam75);
-            this.tabPageLineRate.Controls.Add(this.panelStatCam76);
-            this.tabPageLineRate.Controls.Add(this.panelStatCam77);
-            this.tabPageLineRate.Controls.Add(this.panelStatCam78);
-            this.tabPageLineRate.Controls.Add(this.panelStatCam79);
-            this.tabPageLineRate.Controls.Add(this.panelStatCam60);
-            this.tabPageLineRate.Controls.Add(this.panelGrabHeight);
+            this.tabPageLineRate.Controls.Add(this.panelLrCam7);
+            this.tabPageLineRate.Controls.Add(this.panelLrCam6);
+            this.tabPageLineRate.Controls.Add(this.panelLrCam5);
+            this.tabPageLineRate.Controls.Add(this.panelLrCam4);
+            this.tabPageLineRate.Controls.Add(this.panelLrCam3);
+            this.tabPageLineRate.Controls.Add(this.panelLrCam2);
+            this.tabPageLineRate.Controls.Add(this.panelLrCam1);
             this.tabPageLineRate.Location = new System.Drawing.Point(4, 25);
             this.tabPageLineRate.Name = "tabPageLineRate";
             this.tabPageLineRate.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPageLineRate.Size = new System.Drawing.Size(282, 526);
+            this.tabPageLineRate.Size = new System.Drawing.Size(199, 596);
             this.tabPageLineRate.TabIndex = 1;
             this.tabPageLineRate.Text = "線掃速率";
             this.tabPageLineRate.UseVisualStyleBackColor = true;
             // 
-            // panelStatCam75
+            // panelLrCam7
             // 
-            this.panelStatCam75.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelLrCam7.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelStatCam75.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelStatCam75.Controls.Add(this.label15);
-            this.panelStatCam75.Controls.Add(this.trackBarLrCam7);
-            this.panelStatCam75.Controls.Add(this.numLrCam7);
-            this.panelStatCam75.Controls.Add(this.label16);
-            this.panelStatCam75.Location = new System.Drawing.Point(0, 438);
-            this.panelStatCam75.Name = "panelStatCam75";
-            this.panelStatCam75.Size = new System.Drawing.Size(254, 69);
-            this.panelStatCam75.TabIndex = 6;
+            this.panelLrCam7.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelLrCam7.Controls.Add(this.label15);
+            this.panelLrCam7.Controls.Add(this.trackBarLrCam7);
+            this.panelLrCam7.Controls.Add(this.numLrCam7);
+            this.panelLrCam7.Controls.Add(this.label16);
+            this.panelLrCam7.Location = new System.Drawing.Point(0, 438);
+            this.panelLrCam7.Name = "panelLrCam7";
+            this.panelLrCam7.Size = new System.Drawing.Size(199, 69);
+            this.panelLrCam7.TabIndex = 6;
             // 
             // label15
             // 
@@ -2046,7 +2024,7 @@
             this.trackBarLrCam7.Maximum = 2000;
             this.trackBarLrCam7.Minimum = 1;
             this.trackBarLrCam7.Name = "trackBarLrCam7";
-            this.trackBarLrCam7.Size = new System.Drawing.Size(248, 30);
+            this.trackBarLrCam7.Size = new System.Drawing.Size(190, 30);
             this.trackBarLrCam7.TabIndex = 2;
             this.trackBarLrCam7.TickFrequency = 200;
             this.trackBarLrCam7.Value = 50;
@@ -2065,7 +2043,7 @@
             0,
             0});
             this.numLrCam7.Name = "numLrCam7";
-            this.numLrCam7.Size = new System.Drawing.Size(90, 25);
+            this.numLrCam7.Size = new System.Drawing.Size(70, 25);
             this.numLrCam7.TabIndex = 1;
             this.numLrCam7.Value = new decimal(new int[] {
             3000,
@@ -2082,19 +2060,19 @@
             this.label16.TabIndex = 0;
             this.label16.Text = "CAM7";
             // 
-            // panelStatCam76
+            // panelLrCam6
             // 
-            this.panelStatCam76.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelLrCam6.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelStatCam76.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelStatCam76.Controls.Add(this.label17);
-            this.panelStatCam76.Controls.Add(this.trackBarLrCam6);
-            this.panelStatCam76.Controls.Add(this.numLrCam6);
-            this.panelStatCam76.Controls.Add(this.label18);
-            this.panelStatCam76.Location = new System.Drawing.Point(0, 365);
-            this.panelStatCam76.Name = "panelStatCam76";
-            this.panelStatCam76.Size = new System.Drawing.Size(254, 69);
-            this.panelStatCam76.TabIndex = 7;
+            this.panelLrCam6.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelLrCam6.Controls.Add(this.label17);
+            this.panelLrCam6.Controls.Add(this.trackBarLrCam6);
+            this.panelLrCam6.Controls.Add(this.numLrCam6);
+            this.panelLrCam6.Controls.Add(this.label18);
+            this.panelLrCam6.Location = new System.Drawing.Point(0, 365);
+            this.panelLrCam6.Name = "panelLrCam6";
+            this.panelLrCam6.Size = new System.Drawing.Size(199, 69);
+            this.panelLrCam6.TabIndex = 7;
             // 
             // label17
             // 
@@ -2112,7 +2090,7 @@
             this.trackBarLrCam6.Maximum = 2000;
             this.trackBarLrCam6.Minimum = 1;
             this.trackBarLrCam6.Name = "trackBarLrCam6";
-            this.trackBarLrCam6.Size = new System.Drawing.Size(248, 30);
+            this.trackBarLrCam6.Size = new System.Drawing.Size(190, 30);
             this.trackBarLrCam6.TabIndex = 2;
             this.trackBarLrCam6.TickFrequency = 200;
             this.trackBarLrCam6.Value = 50;
@@ -2131,7 +2109,7 @@
             0,
             0});
             this.numLrCam6.Name = "numLrCam6";
-            this.numLrCam6.Size = new System.Drawing.Size(90, 25);
+            this.numLrCam6.Size = new System.Drawing.Size(70, 25);
             this.numLrCam6.TabIndex = 1;
             this.numLrCam6.Value = new decimal(new int[] {
             3000,
@@ -2148,19 +2126,19 @@
             this.label18.TabIndex = 0;
             this.label18.Text = "CAM6";
             // 
-            // panelStatCam77
+            // panelLrCam5
             // 
-            this.panelStatCam77.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelLrCam5.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelStatCam77.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelStatCam77.Controls.Add(this.label19);
-            this.panelStatCam77.Controls.Add(this.trackBarLrCam5);
-            this.panelStatCam77.Controls.Add(this.numLrCam5);
-            this.panelStatCam77.Controls.Add(this.label20);
-            this.panelStatCam77.Location = new System.Drawing.Point(0, 292);
-            this.panelStatCam77.Name = "panelStatCam77";
-            this.panelStatCam77.Size = new System.Drawing.Size(254, 69);
-            this.panelStatCam77.TabIndex = 8;
+            this.panelLrCam5.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelLrCam5.Controls.Add(this.label19);
+            this.panelLrCam5.Controls.Add(this.trackBarLrCam5);
+            this.panelLrCam5.Controls.Add(this.numLrCam5);
+            this.panelLrCam5.Controls.Add(this.label20);
+            this.panelLrCam5.Location = new System.Drawing.Point(0, 292);
+            this.panelLrCam5.Name = "panelLrCam5";
+            this.panelLrCam5.Size = new System.Drawing.Size(199, 69);
+            this.panelLrCam5.TabIndex = 8;
             // 
             // label19
             // 
@@ -2178,7 +2156,7 @@
             this.trackBarLrCam5.Maximum = 2000;
             this.trackBarLrCam5.Minimum = 1;
             this.trackBarLrCam5.Name = "trackBarLrCam5";
-            this.trackBarLrCam5.Size = new System.Drawing.Size(248, 30);
+            this.trackBarLrCam5.Size = new System.Drawing.Size(190, 30);
             this.trackBarLrCam5.TabIndex = 2;
             this.trackBarLrCam5.TickFrequency = 200;
             this.trackBarLrCam5.Value = 50;
@@ -2197,7 +2175,7 @@
             0,
             0});
             this.numLrCam5.Name = "numLrCam5";
-            this.numLrCam5.Size = new System.Drawing.Size(90, 25);
+            this.numLrCam5.Size = new System.Drawing.Size(70, 25);
             this.numLrCam5.TabIndex = 1;
             this.numLrCam5.Value = new decimal(new int[] {
             3000,
@@ -2214,19 +2192,19 @@
             this.label20.TabIndex = 0;
             this.label20.Text = "CAM5";
             // 
-            // panelStatCam78
+            // panelLrCam4
             // 
-            this.panelStatCam78.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelLrCam4.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelStatCam78.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelStatCam78.Controls.Add(this.label21);
-            this.panelStatCam78.Controls.Add(this.trackBarLrCam4);
-            this.panelStatCam78.Controls.Add(this.numLrCam4);
-            this.panelStatCam78.Controls.Add(this.label22);
-            this.panelStatCam78.Location = new System.Drawing.Point(0, 219);
-            this.panelStatCam78.Name = "panelStatCam78";
-            this.panelStatCam78.Size = new System.Drawing.Size(254, 69);
-            this.panelStatCam78.TabIndex = 9;
+            this.panelLrCam4.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelLrCam4.Controls.Add(this.label21);
+            this.panelLrCam4.Controls.Add(this.trackBarLrCam4);
+            this.panelLrCam4.Controls.Add(this.numLrCam4);
+            this.panelLrCam4.Controls.Add(this.label22);
+            this.panelLrCam4.Location = new System.Drawing.Point(0, 219);
+            this.panelLrCam4.Name = "panelLrCam4";
+            this.panelLrCam4.Size = new System.Drawing.Size(199, 69);
+            this.panelLrCam4.TabIndex = 9;
             // 
             // label21
             // 
@@ -2244,7 +2222,7 @@
             this.trackBarLrCam4.Maximum = 2000;
             this.trackBarLrCam4.Minimum = 1;
             this.trackBarLrCam4.Name = "trackBarLrCam4";
-            this.trackBarLrCam4.Size = new System.Drawing.Size(248, 30);
+            this.trackBarLrCam4.Size = new System.Drawing.Size(190, 30);
             this.trackBarLrCam4.TabIndex = 2;
             this.trackBarLrCam4.TickFrequency = 200;
             this.trackBarLrCam4.Value = 50;
@@ -2263,7 +2241,7 @@
             0,
             0});
             this.numLrCam4.Name = "numLrCam4";
-            this.numLrCam4.Size = new System.Drawing.Size(90, 25);
+            this.numLrCam4.Size = new System.Drawing.Size(70, 25);
             this.numLrCam4.TabIndex = 1;
             this.numLrCam4.Value = new decimal(new int[] {
             3000,
@@ -2280,19 +2258,19 @@
             this.label22.TabIndex = 0;
             this.label22.Text = "CAM4";
             // 
-            // panelStatCam79
+            // panelLrCam3
             // 
-            this.panelStatCam79.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelLrCam3.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelStatCam79.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelStatCam79.Controls.Add(this.label23);
-            this.panelStatCam79.Controls.Add(this.trackBarLrCam3);
-            this.panelStatCam79.Controls.Add(this.numLrCam3);
-            this.panelStatCam79.Controls.Add(this.label24);
-            this.panelStatCam79.Location = new System.Drawing.Point(0, 146);
-            this.panelStatCam79.Name = "panelStatCam79";
-            this.panelStatCam79.Size = new System.Drawing.Size(254, 69);
-            this.panelStatCam79.TabIndex = 10;
+            this.panelLrCam3.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelLrCam3.Controls.Add(this.label23);
+            this.panelLrCam3.Controls.Add(this.trackBarLrCam3);
+            this.panelLrCam3.Controls.Add(this.numLrCam3);
+            this.panelLrCam3.Controls.Add(this.label24);
+            this.panelLrCam3.Location = new System.Drawing.Point(0, 146);
+            this.panelLrCam3.Name = "panelLrCam3";
+            this.panelLrCam3.Size = new System.Drawing.Size(199, 69);
+            this.panelLrCam3.TabIndex = 10;
             // 
             // label23
             // 
@@ -2310,7 +2288,7 @@
             this.trackBarLrCam3.Maximum = 2000;
             this.trackBarLrCam3.Minimum = 1;
             this.trackBarLrCam3.Name = "trackBarLrCam3";
-            this.trackBarLrCam3.Size = new System.Drawing.Size(248, 30);
+            this.trackBarLrCam3.Size = new System.Drawing.Size(190, 30);
             this.trackBarLrCam3.TabIndex = 2;
             this.trackBarLrCam3.TickFrequency = 200;
             this.trackBarLrCam3.Value = 50;
@@ -2329,7 +2307,7 @@
             0,
             0});
             this.numLrCam3.Name = "numLrCam3";
-            this.numLrCam3.Size = new System.Drawing.Size(90, 25);
+            this.numLrCam3.Size = new System.Drawing.Size(70, 25);
             this.numLrCam3.TabIndex = 1;
             this.numLrCam3.Value = new decimal(new int[] {
             3000,
@@ -2346,19 +2324,19 @@
             this.label24.TabIndex = 0;
             this.label24.Text = "CAM3";
             // 
-            // panelStatCam60
+            // panelLrCam2
             // 
-            this.panelStatCam60.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelLrCam2.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelStatCam60.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelStatCam60.Controls.Add(this.label25);
-            this.panelStatCam60.Controls.Add(this.trackBarLrCam2);
-            this.panelStatCam60.Controls.Add(this.numLrCam2);
-            this.panelStatCam60.Controls.Add(this.label26);
-            this.panelStatCam60.Location = new System.Drawing.Point(0, 73);
-            this.panelStatCam60.Name = "panelStatCam60";
-            this.panelStatCam60.Size = new System.Drawing.Size(254, 69);
-            this.panelStatCam60.TabIndex = 11;
+            this.panelLrCam2.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelLrCam2.Controls.Add(this.label25);
+            this.panelLrCam2.Controls.Add(this.trackBarLrCam2);
+            this.panelLrCam2.Controls.Add(this.numLrCam2);
+            this.panelLrCam2.Controls.Add(this.label26);
+            this.panelLrCam2.Location = new System.Drawing.Point(0, 73);
+            this.panelLrCam2.Name = "panelLrCam2";
+            this.panelLrCam2.Size = new System.Drawing.Size(199, 69);
+            this.panelLrCam2.TabIndex = 11;
             // 
             // label25
             // 
@@ -2376,7 +2354,7 @@
             this.trackBarLrCam2.Maximum = 2000;
             this.trackBarLrCam2.Minimum = 1;
             this.trackBarLrCam2.Name = "trackBarLrCam2";
-            this.trackBarLrCam2.Size = new System.Drawing.Size(248, 30);
+            this.trackBarLrCam2.Size = new System.Drawing.Size(190, 30);
             this.trackBarLrCam2.TabIndex = 2;
             this.trackBarLrCam2.TickFrequency = 200;
             this.trackBarLrCam2.Value = 50;
@@ -2395,7 +2373,7 @@
             0,
             0});
             this.numLrCam2.Name = "numLrCam2";
-            this.numLrCam2.Size = new System.Drawing.Size(90, 25);
+            this.numLrCam2.Size = new System.Drawing.Size(70, 25);
             this.numLrCam2.TabIndex = 1;
             this.numLrCam2.Value = new decimal(new int[] {
             3000,
@@ -2412,19 +2390,19 @@
             this.label26.TabIndex = 0;
             this.label26.Text = "CAM2";
             // 
-            // panelGrabHeight
+            // panelLrCam1
             // 
-            this.panelGrabHeight.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelLrCam1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelGrabHeight.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelGrabHeight.Controls.Add(this.label27);
-            this.panelGrabHeight.Controls.Add(this.trackBarLrCam1);
-            this.panelGrabHeight.Controls.Add(this.numLrCam1);
-            this.panelGrabHeight.Controls.Add(this.lblGrabHeight);
-            this.panelGrabHeight.Location = new System.Drawing.Point(0, 0);
-            this.panelGrabHeight.Name = "panelGrabHeight";
-            this.panelGrabHeight.Size = new System.Drawing.Size(254, 69);
-            this.panelGrabHeight.TabIndex = 5;
+            this.panelLrCam1.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelLrCam1.Controls.Add(this.label27);
+            this.panelLrCam1.Controls.Add(this.trackBarLrCam1);
+            this.panelLrCam1.Controls.Add(this.numLrCam1);
+            this.panelLrCam1.Controls.Add(this.lblGrabHeight);
+            this.panelLrCam1.Location = new System.Drawing.Point(0, 0);
+            this.panelLrCam1.Name = "panelLrCam1";
+            this.panelLrCam1.Size = new System.Drawing.Size(199, 69);
+            this.panelLrCam1.TabIndex = 5;
             // 
             // label27
             // 
@@ -2442,7 +2420,7 @@
             this.trackBarLrCam1.Maximum = 10000;
             this.trackBarLrCam1.Minimum = 100;
             this.trackBarLrCam1.Name = "trackBarLrCam1";
-            this.trackBarLrCam1.Size = new System.Drawing.Size(248, 30);
+            this.trackBarLrCam1.Size = new System.Drawing.Size(190, 30);
             this.trackBarLrCam1.TabIndex = 2;
             this.trackBarLrCam1.TickFrequency = 200;
             this.trackBarLrCam1.Value = 100;
@@ -2461,7 +2439,7 @@
             0,
             0});
             this.numLrCam1.Name = "numLrCam1";
-            this.numLrCam1.Size = new System.Drawing.Size(90, 25);
+            this.numLrCam1.Size = new System.Drawing.Size(70, 25);
             this.numLrCam1.TabIndex = 1;
             this.numLrCam1.Value = new decimal(new int[] {
             3000,
@@ -2480,34 +2458,34 @@
             // 
             // tabPageGrabHeight
             // 
-            this.tabPageGrabHeight.Controls.Add(this.panelStatCam61);
-            this.tabPageGrabHeight.Controls.Add(this.panelStatCam62);
-            this.tabPageGrabHeight.Controls.Add(this.panelStatCam63);
-            this.tabPageGrabHeight.Controls.Add(this.panelStatCam64);
-            this.tabPageGrabHeight.Controls.Add(this.panelStatCam65);
-            this.tabPageGrabHeight.Controls.Add(this.panelStatCam66);
-            this.tabPageGrabHeight.Controls.Add(this.panelStatCam67);
+            this.tabPageGrabHeight.Controls.Add(this.panelHtCam7);
+            this.tabPageGrabHeight.Controls.Add(this.panelHtCam6);
+            this.tabPageGrabHeight.Controls.Add(this.panelHtCam5);
+            this.tabPageGrabHeight.Controls.Add(this.panelHtCam4);
+            this.tabPageGrabHeight.Controls.Add(this.panelHtCam3);
+            this.tabPageGrabHeight.Controls.Add(this.panelHtCam2);
+            this.tabPageGrabHeight.Controls.Add(this.panelHtCam1);
             this.tabPageGrabHeight.Location = new System.Drawing.Point(4, 25);
             this.tabPageGrabHeight.Name = "tabPageGrabHeight";
             this.tabPageGrabHeight.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPageGrabHeight.Size = new System.Drawing.Size(282, 526);
+            this.tabPageGrabHeight.Size = new System.Drawing.Size(199, 596);
             this.tabPageGrabHeight.TabIndex = 2;
             this.tabPageGrabHeight.Text = "擷取高度";
             this.tabPageGrabHeight.UseVisualStyleBackColor = true;
             // 
-            // panelStatCam61
+            // panelHtCam7
             // 
-            this.panelStatCam61.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelHtCam7.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelStatCam61.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelStatCam61.Controls.Add(this.label1);
-            this.panelStatCam61.Controls.Add(this.trackBarHtCam7);
-            this.panelStatCam61.Controls.Add(this.numHtCam7);
-            this.panelStatCam61.Controls.Add(this.label28);
-            this.panelStatCam61.Location = new System.Drawing.Point(0, 438);
-            this.panelStatCam61.Name = "panelStatCam61";
-            this.panelStatCam61.Size = new System.Drawing.Size(254, 69);
-            this.panelStatCam61.TabIndex = 6;
+            this.panelHtCam7.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelHtCam7.Controls.Add(this.label1);
+            this.panelHtCam7.Controls.Add(this.trackBarHtCam7);
+            this.panelHtCam7.Controls.Add(this.numHtCam7);
+            this.panelHtCam7.Controls.Add(this.label28);
+            this.panelHtCam7.Location = new System.Drawing.Point(0, 438);
+            this.panelHtCam7.Name = "panelHtCam7";
+            this.panelHtCam7.Size = new System.Drawing.Size(199, 69);
+            this.panelHtCam7.TabIndex = 6;
             // 
             // label1
             // 
@@ -2525,7 +2503,7 @@
             this.trackBarHtCam7.Maximum = 2000;
             this.trackBarHtCam7.Minimum = 1;
             this.trackBarHtCam7.Name = "trackBarHtCam7";
-            this.trackBarHtCam7.Size = new System.Drawing.Size(248, 30);
+            this.trackBarHtCam7.Size = new System.Drawing.Size(190, 30);
             this.trackBarHtCam7.TabIndex = 2;
             this.trackBarHtCam7.TickFrequency = 200;
             this.trackBarHtCam7.Value = 50;
@@ -2544,7 +2522,7 @@
             0,
             0});
             this.numHtCam7.Name = "numHtCam7";
-            this.numHtCam7.Size = new System.Drawing.Size(90, 25);
+            this.numHtCam7.Size = new System.Drawing.Size(70, 25);
             this.numHtCam7.TabIndex = 1;
             this.numHtCam7.Value = new decimal(new int[] {
             2000,
@@ -2561,19 +2539,19 @@
             this.label28.TabIndex = 0;
             this.label28.Text = "CAM7";
             // 
-            // panelStatCam62
+            // panelHtCam6
             // 
-            this.panelStatCam62.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelHtCam6.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelStatCam62.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelStatCam62.Controls.Add(this.label29);
-            this.panelStatCam62.Controls.Add(this.trackBarHtCam6);
-            this.panelStatCam62.Controls.Add(this.numHtCam6);
-            this.panelStatCam62.Controls.Add(this.label30);
-            this.panelStatCam62.Location = new System.Drawing.Point(0, 365);
-            this.panelStatCam62.Name = "panelStatCam62";
-            this.panelStatCam62.Size = new System.Drawing.Size(254, 69);
-            this.panelStatCam62.TabIndex = 7;
+            this.panelHtCam6.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelHtCam6.Controls.Add(this.label29);
+            this.panelHtCam6.Controls.Add(this.trackBarHtCam6);
+            this.panelHtCam6.Controls.Add(this.numHtCam6);
+            this.panelHtCam6.Controls.Add(this.label30);
+            this.panelHtCam6.Location = new System.Drawing.Point(0, 365);
+            this.panelHtCam6.Name = "panelHtCam6";
+            this.panelHtCam6.Size = new System.Drawing.Size(199, 69);
+            this.panelHtCam6.TabIndex = 7;
             // 
             // label29
             // 
@@ -2591,7 +2569,7 @@
             this.trackBarHtCam6.Maximum = 2000;
             this.trackBarHtCam6.Minimum = 1;
             this.trackBarHtCam6.Name = "trackBarHtCam6";
-            this.trackBarHtCam6.Size = new System.Drawing.Size(248, 30);
+            this.trackBarHtCam6.Size = new System.Drawing.Size(190, 30);
             this.trackBarHtCam6.TabIndex = 2;
             this.trackBarHtCam6.TickFrequency = 200;
             this.trackBarHtCam6.Value = 50;
@@ -2610,7 +2588,7 @@
             0,
             0});
             this.numHtCam6.Name = "numHtCam6";
-            this.numHtCam6.Size = new System.Drawing.Size(90, 25);
+            this.numHtCam6.Size = new System.Drawing.Size(70, 25);
             this.numHtCam6.TabIndex = 1;
             this.numHtCam6.Value = new decimal(new int[] {
             2000,
@@ -2627,19 +2605,19 @@
             this.label30.TabIndex = 0;
             this.label30.Text = "CAM6";
             // 
-            // panelStatCam63
+            // panelHtCam5
             // 
-            this.panelStatCam63.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelHtCam5.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelStatCam63.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelStatCam63.Controls.Add(this.label31);
-            this.panelStatCam63.Controls.Add(this.trackBarHtCam5);
-            this.panelStatCam63.Controls.Add(this.numHtCam5);
-            this.panelStatCam63.Controls.Add(this.label32);
-            this.panelStatCam63.Location = new System.Drawing.Point(0, 292);
-            this.panelStatCam63.Name = "panelStatCam63";
-            this.panelStatCam63.Size = new System.Drawing.Size(254, 69);
-            this.panelStatCam63.TabIndex = 8;
+            this.panelHtCam5.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelHtCam5.Controls.Add(this.label31);
+            this.panelHtCam5.Controls.Add(this.trackBarHtCam5);
+            this.panelHtCam5.Controls.Add(this.numHtCam5);
+            this.panelHtCam5.Controls.Add(this.label32);
+            this.panelHtCam5.Location = new System.Drawing.Point(0, 292);
+            this.panelHtCam5.Name = "panelHtCam5";
+            this.panelHtCam5.Size = new System.Drawing.Size(199, 69);
+            this.panelHtCam5.TabIndex = 8;
             // 
             // label31
             // 
@@ -2657,7 +2635,7 @@
             this.trackBarHtCam5.Maximum = 2000;
             this.trackBarHtCam5.Minimum = 1;
             this.trackBarHtCam5.Name = "trackBarHtCam5";
-            this.trackBarHtCam5.Size = new System.Drawing.Size(248, 30);
+            this.trackBarHtCam5.Size = new System.Drawing.Size(190, 30);
             this.trackBarHtCam5.TabIndex = 2;
             this.trackBarHtCam5.TickFrequency = 200;
             this.trackBarHtCam5.Value = 50;
@@ -2676,7 +2654,7 @@
             0,
             0});
             this.numHtCam5.Name = "numHtCam5";
-            this.numHtCam5.Size = new System.Drawing.Size(90, 25);
+            this.numHtCam5.Size = new System.Drawing.Size(70, 25);
             this.numHtCam5.TabIndex = 1;
             this.numHtCam5.Value = new decimal(new int[] {
             2000,
@@ -2693,19 +2671,19 @@
             this.label32.TabIndex = 0;
             this.label32.Text = "CAM5";
             // 
-            // panelStatCam64
+            // panelHtCam4
             // 
-            this.panelStatCam64.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelHtCam4.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelStatCam64.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelStatCam64.Controls.Add(this.label33);
-            this.panelStatCam64.Controls.Add(this.trackBarHtCam4);
-            this.panelStatCam64.Controls.Add(this.numHtCam4);
-            this.panelStatCam64.Controls.Add(this.label34);
-            this.panelStatCam64.Location = new System.Drawing.Point(0, 219);
-            this.panelStatCam64.Name = "panelStatCam64";
-            this.panelStatCam64.Size = new System.Drawing.Size(254, 69);
-            this.panelStatCam64.TabIndex = 9;
+            this.panelHtCam4.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelHtCam4.Controls.Add(this.label33);
+            this.panelHtCam4.Controls.Add(this.trackBarHtCam4);
+            this.panelHtCam4.Controls.Add(this.numHtCam4);
+            this.panelHtCam4.Controls.Add(this.label34);
+            this.panelHtCam4.Location = new System.Drawing.Point(0, 219);
+            this.panelHtCam4.Name = "panelHtCam4";
+            this.panelHtCam4.Size = new System.Drawing.Size(199, 69);
+            this.panelHtCam4.TabIndex = 9;
             // 
             // label33
             // 
@@ -2723,7 +2701,7 @@
             this.trackBarHtCam4.Maximum = 2000;
             this.trackBarHtCam4.Minimum = 1;
             this.trackBarHtCam4.Name = "trackBarHtCam4";
-            this.trackBarHtCam4.Size = new System.Drawing.Size(248, 30);
+            this.trackBarHtCam4.Size = new System.Drawing.Size(190, 30);
             this.trackBarHtCam4.TabIndex = 2;
             this.trackBarHtCam4.TickFrequency = 200;
             this.trackBarHtCam4.Value = 50;
@@ -2742,7 +2720,7 @@
             0,
             0});
             this.numHtCam4.Name = "numHtCam4";
-            this.numHtCam4.Size = new System.Drawing.Size(90, 25);
+            this.numHtCam4.Size = new System.Drawing.Size(70, 25);
             this.numHtCam4.TabIndex = 1;
             this.numHtCam4.Value = new decimal(new int[] {
             2000,
@@ -2759,19 +2737,19 @@
             this.label34.TabIndex = 0;
             this.label34.Text = "CAM4";
             // 
-            // panelStatCam65
+            // panelHtCam3
             // 
-            this.panelStatCam65.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelHtCam3.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelStatCam65.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelStatCam65.Controls.Add(this.label35);
-            this.panelStatCam65.Controls.Add(this.trackBarHtCam3);
-            this.panelStatCam65.Controls.Add(this.numHtCam3);
-            this.panelStatCam65.Controls.Add(this.label36);
-            this.panelStatCam65.Location = new System.Drawing.Point(0, 146);
-            this.panelStatCam65.Name = "panelStatCam65";
-            this.panelStatCam65.Size = new System.Drawing.Size(254, 69);
-            this.panelStatCam65.TabIndex = 10;
+            this.panelHtCam3.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelHtCam3.Controls.Add(this.label35);
+            this.panelHtCam3.Controls.Add(this.trackBarHtCam3);
+            this.panelHtCam3.Controls.Add(this.numHtCam3);
+            this.panelHtCam3.Controls.Add(this.label36);
+            this.panelHtCam3.Location = new System.Drawing.Point(0, 146);
+            this.panelHtCam3.Name = "panelHtCam3";
+            this.panelHtCam3.Size = new System.Drawing.Size(199, 69);
+            this.panelHtCam3.TabIndex = 10;
             // 
             // label35
             // 
@@ -2789,7 +2767,7 @@
             this.trackBarHtCam3.Maximum = 2000;
             this.trackBarHtCam3.Minimum = 1;
             this.trackBarHtCam3.Name = "trackBarHtCam3";
-            this.trackBarHtCam3.Size = new System.Drawing.Size(248, 30);
+            this.trackBarHtCam3.Size = new System.Drawing.Size(190, 30);
             this.trackBarHtCam3.TabIndex = 2;
             this.trackBarHtCam3.TickFrequency = 200;
             this.trackBarHtCam3.Value = 50;
@@ -2808,7 +2786,7 @@
             0,
             0});
             this.numHtCam3.Name = "numHtCam3";
-            this.numHtCam3.Size = new System.Drawing.Size(90, 25);
+            this.numHtCam3.Size = new System.Drawing.Size(70, 25);
             this.numHtCam3.TabIndex = 1;
             this.numHtCam3.Value = new decimal(new int[] {
             2000,
@@ -2825,19 +2803,19 @@
             this.label36.TabIndex = 0;
             this.label36.Text = "CAM3";
             // 
-            // panelStatCam66
+            // panelHtCam2
             // 
-            this.panelStatCam66.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelHtCam2.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelStatCam66.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelStatCam66.Controls.Add(this.label37);
-            this.panelStatCam66.Controls.Add(this.trackBarHtCam2);
-            this.panelStatCam66.Controls.Add(this.numHtCam2);
-            this.panelStatCam66.Controls.Add(this.label38);
-            this.panelStatCam66.Location = new System.Drawing.Point(0, 73);
-            this.panelStatCam66.Name = "panelStatCam66";
-            this.panelStatCam66.Size = new System.Drawing.Size(254, 69);
-            this.panelStatCam66.TabIndex = 11;
+            this.panelHtCam2.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelHtCam2.Controls.Add(this.label37);
+            this.panelHtCam2.Controls.Add(this.trackBarHtCam2);
+            this.panelHtCam2.Controls.Add(this.numHtCam2);
+            this.panelHtCam2.Controls.Add(this.label38);
+            this.panelHtCam2.Location = new System.Drawing.Point(0, 73);
+            this.panelHtCam2.Name = "panelHtCam2";
+            this.panelHtCam2.Size = new System.Drawing.Size(199, 69);
+            this.panelHtCam2.TabIndex = 11;
             // 
             // label37
             // 
@@ -2855,7 +2833,7 @@
             this.trackBarHtCam2.Maximum = 2000;
             this.trackBarHtCam2.Minimum = 1;
             this.trackBarHtCam2.Name = "trackBarHtCam2";
-            this.trackBarHtCam2.Size = new System.Drawing.Size(248, 30);
+            this.trackBarHtCam2.Size = new System.Drawing.Size(190, 30);
             this.trackBarHtCam2.TabIndex = 2;
             this.trackBarHtCam2.TickFrequency = 200;
             this.trackBarHtCam2.Value = 50;
@@ -2874,7 +2852,7 @@
             0,
             0});
             this.numHtCam2.Name = "numHtCam2";
-            this.numHtCam2.Size = new System.Drawing.Size(90, 25);
+            this.numHtCam2.Size = new System.Drawing.Size(70, 25);
             this.numHtCam2.TabIndex = 1;
             this.numHtCam2.Value = new decimal(new int[] {
             2000,
@@ -2891,19 +2869,19 @@
             this.label38.TabIndex = 0;
             this.label38.Text = "CAM2";
             // 
-            // panelStatCam67
+            // panelHtCam1
             // 
-            this.panelStatCam67.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.panelHtCam1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.panelStatCam67.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelStatCam67.Controls.Add(this.label39);
-            this.panelStatCam67.Controls.Add(this.trackBarHtCam1);
-            this.panelStatCam67.Controls.Add(this.numHtCam1);
-            this.panelStatCam67.Controls.Add(this.label40);
-            this.panelStatCam67.Location = new System.Drawing.Point(0, 0);
-            this.panelStatCam67.Name = "panelStatCam67";
-            this.panelStatCam67.Size = new System.Drawing.Size(254, 69);
-            this.panelStatCam67.TabIndex = 5;
+            this.panelHtCam1.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelHtCam1.Controls.Add(this.label39);
+            this.panelHtCam1.Controls.Add(this.trackBarHtCam1);
+            this.panelHtCam1.Controls.Add(this.numHtCam1);
+            this.panelHtCam1.Controls.Add(this.label40);
+            this.panelHtCam1.Location = new System.Drawing.Point(0, 0);
+            this.panelHtCam1.Name = "panelHtCam1";
+            this.panelHtCam1.Size = new System.Drawing.Size(199, 69);
+            this.panelHtCam1.TabIndex = 5;
             // 
             // label39
             // 
@@ -2921,7 +2899,7 @@
             this.trackBarHtCam1.Maximum = 2000;
             this.trackBarHtCam1.Minimum = 1;
             this.trackBarHtCam1.Name = "trackBarHtCam1";
-            this.trackBarHtCam1.Size = new System.Drawing.Size(248, 30);
+            this.trackBarHtCam1.Size = new System.Drawing.Size(190, 30);
             this.trackBarHtCam1.TabIndex = 2;
             this.trackBarHtCam1.TickFrequency = 200;
             this.trackBarHtCam1.Value = 50;
@@ -2940,7 +2918,7 @@
             0,
             0});
             this.numHtCam1.Name = "numHtCam1";
-            this.numHtCam1.Size = new System.Drawing.Size(90, 25);
+            this.numHtCam1.Size = new System.Drawing.Size(70, 25);
             this.numHtCam1.TabIndex = 1;
             this.numHtCam1.Value = new decimal(new int[] {
             2000,
@@ -2959,6 +2937,8 @@
             // 
             // tabPageSystem
             // 
+            this.tabPageSystem.Controls.Add(this.listViewChartConst);
+            this.tabPageSystem.Controls.Add(this.lblChartConst);
             this.tabPageSystem.Controls.Add(this.listViewEngine);
             this.tabPageSystem.Controls.Add(this.lblEngineConst);
             this.tabPageSystem.Controls.Add(this.listViewCameras);
@@ -2970,6 +2950,30 @@
             this.tabPageSystem.Text = "系統資訊";
             this.tabPageSystem.UseVisualStyleBackColor = true;
             // 
+            // listViewChartConst
+            // 
+            this.listViewChartConst.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.listViewChartConst.FullRowSelect = true;
+            this.listViewChartConst.GridLines = true;
+            this.listViewChartConst.HideSelection = false;
+            this.listViewChartConst.Location = new System.Drawing.Point(4, 418);
+            this.listViewChartConst.Name = "listViewChartConst";
+            this.listViewChartConst.Size = new System.Drawing.Size(201, 171);
+            this.listViewChartConst.TabIndex = 5;
+            this.listViewChartConst.UseCompatibleStateImageBehavior = false;
+            this.listViewChartConst.View = System.Windows.Forms.View.Details;
+            // 
+            // lblChartConst
+            // 
+            this.lblChartConst.AutoSize = true;
+            this.lblChartConst.Font = new System.Drawing.Font("新細明體", 9F, System.Drawing.FontStyle.Bold);
+            this.lblChartConst.Location = new System.Drawing.Point(4, 398);
+            this.lblChartConst.Name = "lblChartConst";
+            this.lblChartConst.Size = new System.Drawing.Size(135, 15);
+            this.lblChartConst.TabIndex = 4;
+            this.lblChartConst.Text = "【圖表引擎常數】";
+            // 
             // listViewEngine
             // 
             this.listViewEngine.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
@@ -2977,9 +2981,9 @@
             this.listViewEngine.FullRowSelect = true;
             this.listViewEngine.GridLines = true;
             this.listViewEngine.HideSelection = false;
-            this.listViewEngine.Location = new System.Drawing.Point(3, 336);
+            this.listViewEngine.Location = new System.Drawing.Point(4, 224);
             this.listViewEngine.Name = "listViewEngine";
-            this.listViewEngine.Size = new System.Drawing.Size(201, 200);
+            this.listViewEngine.Size = new System.Drawing.Size(201, 171);
             this.listViewEngine.TabIndex = 3;
             this.listViewEngine.UseCompatibleStateImageBehavior = false;
             this.listViewEngine.View = System.Windows.Forms.View.Details;
@@ -2988,7 +2992,7 @@
             // 
             this.lblEngineConst.AutoSize = true;
             this.lblEngineConst.Font = new System.Drawing.Font("新細明體", 9F, System.Drawing.FontStyle.Bold);
-            this.lblEngineConst.Location = new System.Drawing.Point(3, 316);
+            this.lblEngineConst.Location = new System.Drawing.Point(4, 204);
             this.lblEngineConst.Name = "lblEngineConst";
             this.lblEngineConst.Size = new System.Drawing.Size(135, 15);
             this.lblEngineConst.TabIndex = 2;
@@ -3003,7 +3007,7 @@
             this.listViewCameras.HideSelection = false;
             this.listViewCameras.Location = new System.Drawing.Point(3, 25);
             this.listViewCameras.Name = "listViewCameras";
-            this.listViewCameras.Size = new System.Drawing.Size(201, 271);
+            this.listViewCameras.Size = new System.Drawing.Size(201, 172);
             this.listViewCameras.TabIndex = 1;
             this.listViewCameras.UseCompatibleStateImageBehavior = false;
             this.listViewCameras.View = System.Windows.Forms.View.Details;
@@ -3041,6 +3045,19 @@
             this.lblStatusGrab.Text = "● 待機";
             this.lblStatusGrab.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             // 
+            // canvasMain
+            // 
+            this.canvasMain.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.canvasMain.BackColor = System.Drawing.Color.Black;
+            this.canvasMain.Cursor = System.Windows.Forms.Cursors.Cross;
+            this.canvasMain.Location = new System.Drawing.Point(5, 195);
+            this.canvasMain.Name = "canvasMain";
+            this.canvasMain.Size = new System.Drawing.Size(888, 333);
+            this.canvasMain.TabIndex = 7;
+            this.canvasMain.TabStop = false;
+            // 
             // AniloxRollForm
             // 
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
@@ -3055,10 +3072,10 @@
             this.tabMain.ResumeLayout(false);
             this.tabPageLiveView.ResumeLayout(false);
             this.tabPageLiveView.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.chart2)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.chartLiveOverview)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.muraChartLive)).EndInit();
             this.tabPageReview.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)(this.chart1)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.chartOverview)).EndInit();
             this.grpReviewTimePeriod.ResumeLayout(false);
             this.grpReviewTimePeriod.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.chartMura)).EndInit();
@@ -3070,11 +3087,9 @@
             ((System.ComponentModel.ISupportInitialize)(this.pbCam6)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam7)).EndInit();
             this.grpReviewGrabNav.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).EndInit();
             this.tabPageData.ResumeLayout(false);
             this.tabPageData.PerformLayout();
             this.grpDataSingleSheet.ResumeLayout(false);
-            this.grpDataSingleSheet.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.chartYearly)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.chartMonthly)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.chartDaily)).EndInit();
@@ -3089,95 +3104,96 @@
             this.tabPageCamera.ResumeLayout(false);
             this.tabControlCamTabs.ResumeLayout(false);
             this.tabPageExposure.ResumeLayout(false);
-            this.panelStatCam74.ResumeLayout(false);
-            this.panelStatCam74.PerformLayout();
+            this.panelExpCam7.ResumeLayout(false);
+            this.panelExpCam7.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarExpCam7)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numExpCam7)).EndInit();
-            this.panelStatCam73.ResumeLayout(false);
-            this.panelStatCam73.PerformLayout();
+            this.panelExpCam6.ResumeLayout(false);
+            this.panelExpCam6.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarExpCam6)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numExpCam6)).EndInit();
-            this.panelStatCam72.ResumeLayout(false);
-            this.panelStatCam72.PerformLayout();
+            this.panelExpCam5.ResumeLayout(false);
+            this.panelExpCam5.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarExpCam5)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numExpCam5)).EndInit();
-            this.panelStatCam71.ResumeLayout(false);
-            this.panelStatCam71.PerformLayout();
+            this.panelExpCam4.ResumeLayout(false);
+            this.panelExpCam4.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarExpCam4)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numExpCam4)).EndInit();
-            this.panelStatCam70.ResumeLayout(false);
-            this.panelStatCam70.PerformLayout();
+            this.panelExpCam3.ResumeLayout(false);
+            this.panelExpCam3.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarExpCam3)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numExpCam3)).EndInit();
             this.panelExpCam2.ResumeLayout(false);
             this.panelExpCam2.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarExpCam2)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numExpCam2)).EndInit();
-            this.panelExposure.ResumeLayout(false);
-            this.panelExposure.PerformLayout();
+            this.panelExpCam1.ResumeLayout(false);
+            this.panelExpCam1.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarExpCam1)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numExpCam1)).EndInit();
             this.tabPageLineRate.ResumeLayout(false);
-            this.panelStatCam75.ResumeLayout(false);
-            this.panelStatCam75.PerformLayout();
+            this.panelLrCam7.ResumeLayout(false);
+            this.panelLrCam7.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarLrCam7)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numLrCam7)).EndInit();
-            this.panelStatCam76.ResumeLayout(false);
-            this.panelStatCam76.PerformLayout();
+            this.panelLrCam6.ResumeLayout(false);
+            this.panelLrCam6.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarLrCam6)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numLrCam6)).EndInit();
-            this.panelStatCam77.ResumeLayout(false);
-            this.panelStatCam77.PerformLayout();
+            this.panelLrCam5.ResumeLayout(false);
+            this.panelLrCam5.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarLrCam5)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numLrCam5)).EndInit();
-            this.panelStatCam78.ResumeLayout(false);
-            this.panelStatCam78.PerformLayout();
+            this.panelLrCam4.ResumeLayout(false);
+            this.panelLrCam4.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarLrCam4)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numLrCam4)).EndInit();
-            this.panelStatCam79.ResumeLayout(false);
-            this.panelStatCam79.PerformLayout();
+            this.panelLrCam3.ResumeLayout(false);
+            this.panelLrCam3.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarLrCam3)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numLrCam3)).EndInit();
-            this.panelStatCam60.ResumeLayout(false);
-            this.panelStatCam60.PerformLayout();
+            this.panelLrCam2.ResumeLayout(false);
+            this.panelLrCam2.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarLrCam2)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numLrCam2)).EndInit();
-            this.panelGrabHeight.ResumeLayout(false);
-            this.panelGrabHeight.PerformLayout();
+            this.panelLrCam1.ResumeLayout(false);
+            this.panelLrCam1.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarLrCam1)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numLrCam1)).EndInit();
             this.tabPageGrabHeight.ResumeLayout(false);
-            this.panelStatCam61.ResumeLayout(false);
-            this.panelStatCam61.PerformLayout();
+            this.panelHtCam7.ResumeLayout(false);
+            this.panelHtCam7.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarHtCam7)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam7)).EndInit();
-            this.panelStatCam62.ResumeLayout(false);
-            this.panelStatCam62.PerformLayout();
+            this.panelHtCam6.ResumeLayout(false);
+            this.panelHtCam6.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarHtCam6)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam6)).EndInit();
-            this.panelStatCam63.ResumeLayout(false);
-            this.panelStatCam63.PerformLayout();
+            this.panelHtCam5.ResumeLayout(false);
+            this.panelHtCam5.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarHtCam5)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam5)).EndInit();
-            this.panelStatCam64.ResumeLayout(false);
-            this.panelStatCam64.PerformLayout();
+            this.panelHtCam4.ResumeLayout(false);
+            this.panelHtCam4.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarHtCam4)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam4)).EndInit();
-            this.panelStatCam65.ResumeLayout(false);
-            this.panelStatCam65.PerformLayout();
+            this.panelHtCam3.ResumeLayout(false);
+            this.panelHtCam3.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarHtCam3)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam3)).EndInit();
-            this.panelStatCam66.ResumeLayout(false);
-            this.panelStatCam66.PerformLayout();
+            this.panelHtCam2.ResumeLayout(false);
+            this.panelHtCam2.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarHtCam2)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam2)).EndInit();
-            this.panelStatCam67.ResumeLayout(false);
-            this.panelStatCam67.PerformLayout();
+            this.panelHtCam1.ResumeLayout(false);
+            this.panelHtCam1.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarHtCam1)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam1)).EndInit();
             this.tabPageSystem.ResumeLayout(false);
             this.tabPageSystem.PerformLayout();
             this.panelStatusBar.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -3235,7 +3251,7 @@
         private System.Windows.Forms.TabPage tabPageInspSettings;
         private System.Windows.Forms.TabPage tabPageCamera;
         private System.Windows.Forms.TabPage tabPageSystem;
-        private System.Windows.Forms.Panel panelExposure;
+        private System.Windows.Forms.Panel panelExpCam1;
         private System.Windows.Forms.Label lblExposure;
         private System.Windows.Forms.NumericUpDown numExpCam1;
         private System.Windows.Forms.TrackBar trackBarExpCam1;
@@ -3247,27 +3263,27 @@
         private System.Windows.Forms.TabPage tabPageExposure;
         private System.Windows.Forms.TabPage tabPageLineRate;
         private System.Windows.Forms.TabPage tabPageGrabHeight;
-        private System.Windows.Forms.Panel panelStatCam74;
+        private System.Windows.Forms.Panel panelExpCam7;
         private System.Windows.Forms.Label label13;
         private System.Windows.Forms.TrackBar trackBarExpCam7;
         private System.Windows.Forms.NumericUpDown numExpCam7;
         private System.Windows.Forms.Label label14;
-        private System.Windows.Forms.Panel panelStatCam73;
+        private System.Windows.Forms.Panel panelExpCam6;
         private System.Windows.Forms.Label label11;
         private System.Windows.Forms.TrackBar trackBarExpCam6;
         private System.Windows.Forms.NumericUpDown numExpCam6;
         private System.Windows.Forms.Label label12;
-        private System.Windows.Forms.Panel panelStatCam72;
+        private System.Windows.Forms.Panel panelExpCam5;
         private System.Windows.Forms.Label label9;
         private System.Windows.Forms.TrackBar trackBarExpCam5;
         private System.Windows.Forms.NumericUpDown numExpCam5;
         private System.Windows.Forms.Label label10;
-        private System.Windows.Forms.Panel panelStatCam71;
+        private System.Windows.Forms.Panel panelExpCam4;
         private System.Windows.Forms.Label label7;
         private System.Windows.Forms.TrackBar trackBarExpCam4;
         private System.Windows.Forms.NumericUpDown numExpCam4;
         private System.Windows.Forms.Label label8;
-        private System.Windows.Forms.Panel panelStatCam70;
+        private System.Windows.Forms.Panel panelExpCam3;
         private System.Windows.Forms.Label label5;
         private System.Windows.Forms.TrackBar trackBarExpCam3;
         private System.Windows.Forms.NumericUpDown numExpCam3;
@@ -3278,72 +3294,72 @@
         private System.Windows.Forms.NumericUpDown numExpCam2;
         private System.Windows.Forms.Label label4;
         private System.Windows.Forms.Label label2;
-        private System.Windows.Forms.Panel panelStatCam75;
+        private System.Windows.Forms.Panel panelLrCam7;
         private System.Windows.Forms.Label label15;
         private System.Windows.Forms.TrackBar trackBarLrCam7;
         private System.Windows.Forms.NumericUpDown numLrCam7;
         private System.Windows.Forms.Label label16;
-        private System.Windows.Forms.Panel panelStatCam76;
+        private System.Windows.Forms.Panel panelLrCam6;
         private System.Windows.Forms.Label label17;
         private System.Windows.Forms.TrackBar trackBarLrCam6;
         private System.Windows.Forms.NumericUpDown numLrCam6;
         private System.Windows.Forms.Label label18;
-        private System.Windows.Forms.Panel panelStatCam77;
+        private System.Windows.Forms.Panel panelLrCam5;
         private System.Windows.Forms.Label label19;
         private System.Windows.Forms.TrackBar trackBarLrCam5;
         private System.Windows.Forms.NumericUpDown numLrCam5;
         private System.Windows.Forms.Label label20;
-        private System.Windows.Forms.Panel panelStatCam78;
+        private System.Windows.Forms.Panel panelLrCam4;
         private System.Windows.Forms.Label label21;
         private System.Windows.Forms.TrackBar trackBarLrCam4;
         private System.Windows.Forms.NumericUpDown numLrCam4;
         private System.Windows.Forms.Label label22;
-        private System.Windows.Forms.Panel panelStatCam79;
+        private System.Windows.Forms.Panel panelLrCam3;
         private System.Windows.Forms.Label label23;
         private System.Windows.Forms.TrackBar trackBarLrCam3;
         private System.Windows.Forms.NumericUpDown numLrCam3;
         private System.Windows.Forms.Label label24;
-        private System.Windows.Forms.Panel panelStatCam60;
+        private System.Windows.Forms.Panel panelLrCam2;
         private System.Windows.Forms.Label label25;
         private System.Windows.Forms.TrackBar trackBarLrCam2;
         private System.Windows.Forms.NumericUpDown numLrCam2;
         private System.Windows.Forms.Label label26;
-        private System.Windows.Forms.Panel panelGrabHeight;
+        private System.Windows.Forms.Panel panelLrCam1;
         private System.Windows.Forms.Label label27;
         private System.Windows.Forms.TrackBar trackBarLrCam1;
         private System.Windows.Forms.NumericUpDown numLrCam1;
         private System.Windows.Forms.Label lblGrabHeight;
-        private System.Windows.Forms.Panel panelStatCam61;
+        private System.Windows.Forms.Panel panelHtCam7;
         private System.Windows.Forms.Label label1;
         private System.Windows.Forms.TrackBar trackBarHtCam7;
         private System.Windows.Forms.NumericUpDown numHtCam7;
         private System.Windows.Forms.Label label28;
-        private System.Windows.Forms.Panel panelStatCam62;
+        private System.Windows.Forms.Panel panelHtCam6;
         private System.Windows.Forms.Label label29;
         private System.Windows.Forms.TrackBar trackBarHtCam6;
         private System.Windows.Forms.NumericUpDown numHtCam6;
         private System.Windows.Forms.Label label30;
-        private System.Windows.Forms.Panel panelStatCam63;
+        private System.Windows.Forms.Panel panelHtCam5;
         private System.Windows.Forms.Label label31;
         private System.Windows.Forms.TrackBar trackBarHtCam5;
         private System.Windows.Forms.NumericUpDown numHtCam5;
         private System.Windows.Forms.Label label32;
-        private System.Windows.Forms.Panel panelStatCam64;
+        private System.Windows.Forms.Panel panelHtCam4;
         private System.Windows.Forms.Label label33;
         private System.Windows.Forms.TrackBar trackBarHtCam4;
         private System.Windows.Forms.NumericUpDown numHtCam4;
         private System.Windows.Forms.Label label34;
-        private System.Windows.Forms.Panel panelStatCam65;
+        private System.Windows.Forms.Panel panelHtCam3;
         private System.Windows.Forms.Label label35;
         private System.Windows.Forms.TrackBar trackBarHtCam3;
         private System.Windows.Forms.NumericUpDown numHtCam3;
         private System.Windows.Forms.Label label36;
-        private System.Windows.Forms.Panel panelStatCam66;
+        private System.Windows.Forms.Panel panelHtCam2;
         private System.Windows.Forms.Label label37;
         private System.Windows.Forms.TrackBar trackBarHtCam2;
         private System.Windows.Forms.NumericUpDown numHtCam2;
         private System.Windows.Forms.Label label38;
-        private System.Windows.Forms.Panel panelStatCam67;
+        private System.Windows.Forms.Panel panelHtCam1;
         private System.Windows.Forms.Label label39;
         private System.Windows.Forms.TrackBar trackBarHtCam1;
         private System.Windows.Forms.NumericUpDown numHtCam1;
@@ -3373,17 +3389,17 @@
         private System.Windows.Forms.GroupBox groupBoxGrabIdRange;
         private System.Windows.Forms.ComboBox cbGrabIdStart;
         private System.Windows.Forms.ComboBox cbGrabIdEnd;
-        private System.Windows.Forms.Label label49;
-        private System.Windows.Forms.Label label50;
+        private System.Windows.Forms.Label lblGrabIdEndLabel;
+        private System.Windows.Forms.Label lblGrabIdStartLabel;
         private System.Windows.Forms.GroupBox groupBoxTimeRange;
-        private System.Windows.Forms.Label label48;
-        private System.Windows.Forms.Label label47;
-        private System.Windows.Forms.Label label41;
-        private System.Windows.Forms.Label label42;
-        private System.Windows.Forms.Label label43;
-        private System.Windows.Forms.Label label44;
-        private System.Windows.Forms.Label label45;
-        private System.Windows.Forms.Label label46;
+        private System.Windows.Forms.Label lblEndTimeHeader;
+        private System.Windows.Forms.Label lblStartTimeHeader;
+        private System.Windows.Forms.Label lblEndSec;
+        private System.Windows.Forms.Label lblEndMin;
+        private System.Windows.Forms.Label lblEndHour;
+        private System.Windows.Forms.Label lblEndDay;
+        private System.Windows.Forms.Label lblEndMonth;
+        private System.Windows.Forms.Label lblEndYear;
         private System.Windows.Forms.ListView listViewGrabDetail;
         private System.Windows.Forms.Panel panelStatusBar;
         private System.Windows.Forms.Label lblStatusGrab;
@@ -3392,25 +3408,26 @@
         private System.Windows.Forms.ComboBox cbChartYear;
         private System.Windows.Forms.ComboBox cbChartMonth;
         private System.Windows.Forms.ComboBox cbChartDay;
-        private System.Windows.Forms.Label label51;
-        private System.Windows.Forms.Label label52;
-        private System.Windows.Forms.Label label53;
+        private System.Windows.Forms.Label lblChartNavMonth;
+        private System.Windows.Forms.Label lblChartNavDay;
+        private System.Windows.Forms.Label lblChartNavYear;
         private System.Windows.Forms.GroupBox grpDataSingleSheet;
         private System.Windows.Forms.Button btnGrabIdDataPrev;
         private System.Windows.Forms.Button btnGrabIdDataNext;
         private System.Windows.Forms.ComboBox cbDataGrabId;
-        private System.Windows.Forms.Label lblDataGrabId;
         private System.Windows.Forms.GroupBox grpReviewGrabNav;
         private System.Windows.Forms.ComboBox cbReviewGrabId;
         private System.Windows.Forms.Button btnGrabIdPrev;
         private System.Windows.Forms.Button btnGrabIdNext;
-        private System.Windows.Forms.Label label54;
-        private System.Windows.Forms.Label label55;
-        private System.Windows.Forms.Label label56;
+        private System.Windows.Forms.Label lblChartMonthlyUnit;
+        private System.Windows.Forms.Label lblChartDailyUnit;
+        private System.Windows.Forms.Label lblChartYearlyUnit;
         private System.Windows.Forms.GroupBox grpReviewTimePeriod;
         private System.ComponentModel.BackgroundWorker backgroundWorker1;
         private System.Windows.Forms.DataVisualization.Charting.Chart muraChartLive;
-        private System.Windows.Forms.DataVisualization.Charting.Chart chart1;
-        private System.Windows.Forms.DataVisualization.Charting.Chart chart2;
+        private System.Windows.Forms.DataVisualization.Charting.Chart chartOverview;
+        private System.Windows.Forms.DataVisualization.Charting.Chart chartLiveOverview;
+        private System.Windows.Forms.ListView listViewChartConst;
+        private System.Windows.Forms.Label lblChartConst;
     }
 }

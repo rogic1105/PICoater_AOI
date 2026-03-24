@@ -405,13 +405,17 @@ namespace AniloxRoll.Monitor.Core.Services
 
         /// <summary>
         /// 掃描所有 CSV，篩選落在 [start, end] 的紀錄，
-        /// 對每筆呼叫 onRecord(timestamp, isFail)。
+        /// 以 (GrabId, CamId) 為單位分組：同一序號同一相機任一張超標即 Fail（一票否決），
+        /// 每個 (GrabId, CamId) 呼叫一次 onRecord(timestamp, isFail)。
         /// </summary>
         private static void ScanCsvByDateRange(
             string captureRootPath, DateTime start, DateTime end,
             Action<DateTime, bool> onRecord)
         {
             if (string.IsNullOrWhiteSpace(captureRootPath) || !Directory.Exists(captureRootPath)) return;
+
+            // key = (grabId, camId) → (earliest timestamp, hasFail)
+            var groups = new Dictionary<(string grabId, int camId), (DateTime ts, bool hasFail)>();
 
             foreach (string csvPath in Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories))
             {
@@ -425,11 +429,20 @@ namespace AniloxRoll.Monitor.Core.Services
                         string line;
                         while ((line = sr.ReadLine()) != null)
                         {
-                            if (!TryParseLine(line, out _, out string fileName,
+                            if (!TryParseLine(line, out string grabId, out string fileName,
                                 out int maxExceed, out int meanExceed)) continue;
                             if (!TryParseFileNameDateTime(fileName, out DateTime ts)) continue;
                             if (ts < start || ts > end) continue;
-                            onRecord(ts, maxExceed > 0 || meanExceed > 0);
+                            if (!TryExtractCamId(fileName, out int camId)) continue;
+
+                            var key = (grabId, camId);
+                            bool thisFail = maxExceed > 0 || meanExceed > 0;
+
+                            if (!groups.TryGetValue(key, out var prev))
+                                groups[key] = (ts, thisFail);
+                            else
+                                groups[key] = (prev.ts < ts ? prev.ts : ts,
+                                               prev.hasFail || thisFail);
                         }
                     }
                 }
@@ -438,6 +451,9 @@ namespace AniloxRoll.Monitor.Core.Services
                     Trace.WriteLine($"[InspectionStatisticsService.ScanCsvByDateRange] {csvPath}: {ex.GetType().Name}: {ex.Message}");
                 }
             }
+
+            foreach (var kv in groups)
+                onRecord(kv.Value.ts, kv.Value.hasFail);
         }
 
         // ── 私有輔助 ──────────────────────────────────────────────────────

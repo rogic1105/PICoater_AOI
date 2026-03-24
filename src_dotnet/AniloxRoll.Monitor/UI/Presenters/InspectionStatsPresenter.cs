@@ -49,15 +49,15 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _listView.Columns.Clear();
             _listView.Items.Clear();
 
-            _listView.Columns.Add("相機");
-            _listView.Columns.Add("Pass");
-            _listView.Columns.Add("Fail");
-            _listView.Columns.Add("Total");
-            _listView.Columns.Add("無異常");
+            _listView.Columns.Add("相機", -1, HorizontalAlignment.Center);
+            _listView.Columns.Add("Pass", -1, HorizontalAlignment.Center);
+            _listView.Columns.Add("Fail", -1, HorizontalAlignment.Center);
+            _listView.Columns.Add("Total", -1, HorizontalAlignment.Center);
+            _listView.Columns.Add("無異常", -1, HorizontalAlignment.Center);
 
             for (int i = 1; i <= 7; i++)
             {
-                var item = new ListViewItem($"CAM{i}");
+                var item = new ListViewItem($"{i}");
                 item.SubItems.Add("—");
                 item.SubItems.Add("—");
                 item.SubItems.Add("—");
@@ -65,14 +65,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _listView.Items.Add(item);
             }
 
-            // 初始欄寬：依標題與初始內容自動最適配
-            for (int i = 0; i < _listView.Columns.Count; i++)
-            {
-                _listView.AutoResizeColumn(i, ColumnHeaderAutoResizeStyle.ColumnContent);
-                int w = _listView.Columns[i].Width;
-                _listView.AutoResizeColumn(i, ColumnHeaderAutoResizeStyle.HeaderSize);
-                if (w > _listView.Columns[i].Width) _listView.Columns[i].Width = w;
-            }
+            // 依欄位標題文字長度按比例分配寬度，填滿控制項（不出現水平捲軸）
+            FitColumnsProportional();
         }
 
         private void InitCards()
@@ -173,6 +167,36 @@ namespace AniloxRoll.Monitor.UI.Presenters
             item.BackColor = s.PassRate >= 0.95f ? Color.FromArgb(232, 245, 233)
                            : s.PassRate >= 0.80f ? Color.FromArgb(255, 243, 224)
                                                  : Color.FromArgb(255, 235, 238);
+        }
+
+        private void FitColumnsProportional()
+        {
+            if (_listView.Columns.Count == 0) return;
+            int available = _listView.ClientSize.Width - SystemInformation.VerticalScrollBarWidth;
+            if (available <= 0) return;
+
+            using (var g = _listView.CreateGraphics())
+            {
+                var weights = new float[_listView.Columns.Count];
+                float totalWeight = 0;
+                for (int i = 0; i < _listView.Columns.Count; i++)
+                {
+                    float w = g.MeasureString(_listView.Columns[i].Text + "WW", _listView.Font).Width;
+                    weights[i] = w;
+                    totalWeight += w;
+                }
+                if (totalWeight <= 0) return;
+
+                int assigned = 0;
+                for (int i = 0; i < _listView.Columns.Count; i++)
+                {
+                    int colW = (i < _listView.Columns.Count - 1)
+                        ? (int)(available * weights[i] / totalWeight)
+                        : available - assigned;
+                    _listView.Columns[i].Width = Math.Max(20, colW);
+                    assigned += _listView.Columns[i].Width;
+                }
+            }
         }
     }
 }
