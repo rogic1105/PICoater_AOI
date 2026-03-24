@@ -1372,3 +1372,73 @@ WinForms `AutoScaleMode = Font`（預設）會在 Load 時依 DPI/字體縮放�
 ### ListView 欄寬自適配
 - `FitListViewColumnsProportional(ListView)`：用 `Graphics.MeasureString` 量測標題文字寬度，按比例分配欄寬填滿控制項（無水平捲軸）
 - WinForms 限制：Column 0 強制左對齊；Column 1+ 支援 `HorizontalAlignment.Center`
+
+---
+
+## GPU 強化圖 Pipeline（PICoaterDetector）
+
+Raw image 經過 GPU pipeline 產生強化圖（ridge image）+ Mean/Max 曲線。
+
+### 完整流程
+
+```
+Raw Image (8-bit grayscale, Pinned Memory)
+  │
+  ├─ CoreCV_FastReadBMP → _inputBuffer
+  ├─ cudaMemcpy (Host → Device)
+  │
+  ╔══ PICoaterDetector::Run() ══════════════════════════════════╗
+  ║                                                             ║
+  ║  1. calcColumnMeans_RemoveOutliers_gpu()                    ║
+  ║     → 每行(column)平均值，去除離群值 (σ_col=1)              ║
+  ║                                                             ║
+  ║  2. calcColumnBackground_u8_gpu()                           ║
+  ║     → Mura圖 = 原圖 - 行平均（去背景）                      ║
+  ║                                                             ║
+  ║  3. hessianRidge_u8_gpu()                                   ║
+  ║     ├─ gaussianBlur_gpu (σ=RidgeSigma)                      ║
+  ║     ├─ computeHessianResponse_gpu (eigenvalues)             ║
+  ║     └─ ridge extraction (mode=RidgeMode)                    ║
+  ║     → 強化圖 (ridge image)                                  ║
+  ║                                                             ║
+  ║  4. calcColumnMeans_gpu(ridge) → MuraCurveMean              ║
+  ║  5. calcColumnMax_gpu(ridge)  → MuraCurveMax                ║
+  ║                                                             ║
+  ╚═════════════════════════════════════════════════════════════╝
+  │
+  ├─ cudaMemcpy (Device → Host)
+  │   → _ridgeBuffer, _curveMeanBuffer, _curveMaxBuffer
+  │
+  └─ Create8bppBitmap + Marshal.Copy
+     → InspectionData { Image, MuraCurveMean, MuraCurveMax }
+```
+
+### 參數對照
+
+| 參數 | 值 | 來源 | 可調 |
+|------|------|------|------|
+| σ_col（離群值去除） | 1 | hardcoded in .cu | ✗ |
+| BgSigmaFactor | 2.0 | `InspectionEngineConfig.DefaultBgSigma` | ✗ |
+| RidgeSigma | 9.0 | `InspectionEngineConfig.DefaultRidgeSigma` | ✗ |
+| RidgeMode | "vertical" | `InspectionEngineConfig.DefaultRidgeMode` | ✗ |
+| HessianMaxFactor | 2.0 (default) | `InspectionRecipe.HessianMaxFactor` → PropertyGrid | ✓ |
+| ErrorValueMean | 0.3 (default) | `InspectionRecipe` → PropertyGrid | ✓（閾值，不影響 GPU） |
+| ErrorValueMax | 0.5 (default) | `InspectionRecipe` → PropertyGrid | ✓（閾值，不影響 GPU） |
+
+### 關鍵檔案
+
+| 檔案 | 職責 |
+|------|------|
+| `src_native/modules/GetPICoaterBackground/src/Module_GetPICoaterBackground.cu` | GPU kernel：5 步驟實作 |
+| `src_native/c_api/picoater_api/src/export_api.cpp` | Native C API：cudaMemcpy + pipeline 調度 |
+| `sdk/AOI_SDK/core_cv/include/core_cv/imgproc/core_background.hpp` | mean/background/max 函式宣告 |
+| `sdk/AOI_SDK/core_cv/include/core_cv/imgproc/core_features.hpp` | hessianRidge 函式宣告 |
+| `src_dotnet/AniloxRoll.Monitor/ImageProcessing/InspectionEngine.ImageProcessing.cs` | C# 入口：ProcessImage / RunInspectionFullRes |
+| `src_dotnet/AniloxRoll.Monitor/Services/AoiService.cs` | C# ↔ Native P/Invoke wrapper |
+
+### 效能計時
+
+```
+[FullRes] mode=True  | IO=  17ms | GPU=  22ms | BMP=  28ms | Copy=  0ms | Total=   69ms  (14288x9003)
+```
+- IO = CoreCV_FastReadBMP, GPU = 完整 pipeline (步驟 1–5), BMP = Create8bppBitmap + Marshal.Copy
