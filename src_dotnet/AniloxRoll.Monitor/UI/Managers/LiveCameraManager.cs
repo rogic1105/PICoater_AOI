@@ -49,6 +49,10 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// 參數：(cameraId, curveMean_raw255, curveMax_raw255)</summary>
         public event Action<int, float[], float[]> OnLiveCurveData;
 
+        /// <summary>每幀 GPU pipeline 完成後觸發（MIL 回呼執行緒）。
+        /// 參數：(cameraId, rowCurveMean_raw255, rowCurveMax_raw255)</summary>
+        public event Action<int, float[], float[]> OnLiveRowCurveData;
+
         /// <summary>
         /// 正在執行釋放流程時為 true，防止 Timer Tick 在資源已釋放後繼續存取相機。
         /// 同 CameraSession.IsReleasing。
@@ -169,6 +173,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.SetLineRateHz(_cameraLineRateHz[camIdx]);  // 記錄 _appliedLineRateHz（CLProtocol 就緒後自動重套）
                 cam.HessianSigma         = InspectionEngineConfig.DefaultRidgeSigma;
                 cam.HessianFixedMax      = InspectionEngineConfig.DefaultHessianMaxFactor;
+                cam.RidgeMode            = InspectionEngineConfig.DefaultRidgeMode;
                 cam.SaveResizeScale      = _saveResizeScale;
                 cam.SaveJpgQuality       = _saveJpgQuality;
                 cam.TimestampCoordinator = _timestampCoordinator;
@@ -179,6 +184,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                     OnInspectionResult?.Invoke(camId, fn, mp, xp);
                 cam.OnLiveCurveData      += (camId, mean, max) =>
                     OnLiveCurveData?.Invoke(camId, mean, max);
+                cam.OnLiveRowCurveData   += (camId, mean, max) =>
+                    OnLiveRowCurveData?.Invoke(camId, mean, max);
                 cam.Initialize();
                 _cameras.Add(cam);
             }
@@ -282,6 +289,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             float hessianMaxFactor = settings.HessianMaxFactor > 0
                 ? settings.HessianMaxFactor
                 : InspectionEngineConfig.DefaultHessianMaxFactor;
+            string ridgeMode = InspectionRecipe.RidgeDirectionToNative(settings.RidgeDir);
 
             foreach (var cam in _cameras)
             {
@@ -292,6 +300,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.CameraGrabHeight     = _cameraGrabHeight[camIdx];
                 cam.HessianSigma         = InspectionEngineConfig.DefaultRidgeSigma;
                 cam.HessianFixedMax      = hessianMaxFactor;
+                cam.RidgeMode            = ridgeMode;
                 cam.SaveResizeScale      = _saveResizeScale;
                 cam.SaveJpgQuality       = _saveJpgQuality;
                 cam.TimestampCoordinator = _timestampCoordinator;

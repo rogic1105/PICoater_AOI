@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <cuda_runtime.h>
-#include <vector> // ·s¼W
+#include <vector> // ï¿½sï¿½W
 
 namespace picoater {
 
@@ -12,7 +12,7 @@ namespace picoater {
 
         void Initialize(int width, int height);
 
-        // ­ì¦³ªº GPU Run
+        // ï¿½ì¦³ï¿½ï¿½ GPU Run
         void Run(
             const uint8_t* d_in,
             uint8_t* d_bg_out,
@@ -20,6 +20,8 @@ namespace picoater {
             uint8_t* d_ridge_out,
             float* d_mura_curve_mean,
             float* d_mura_curve_max,
+            float* d_mura_row_curve_mean,
+            float* d_mura_row_curve_max,
             float bgSigmaFactor,
             float ridgeSigma,
             float hessianMaxFactor,
@@ -27,11 +29,11 @@ namespace picoater {
             cudaStream_t stream = 0
         );
 
-        // [·s¼W] CPU Run ¤¶­±
-        // ¥ý¥u¶]«e¨â¨B¨Ã¦s¹Ï
+        // [ï¿½sï¿½W] CPU Run ï¿½ï¿½ï¿½ï¿½
+        // ï¿½ï¿½ï¿½uï¿½]ï¿½eï¿½ï¿½Bï¿½Ã¦sï¿½ï¿½
         void RunCPU(
             const uint8_t* h_in,
-            uint8_t* h_mura_out, // ³o¸Ì¹ïÀ³ GPU ªº d_mura_out
+            uint8_t* h_mura_out, // ï¿½oï¿½Ì¹ï¿½ï¿½ï¿½ GPU ï¿½ï¿½ d_mura_out
             float bgSigmaFactor
         );
 
@@ -52,8 +54,8 @@ namespace picoater {
         float* d_hessian_f32_ = nullptr;
         float* d_hessian_resp_ = nullptr;
 
-        // [·s¼W] CPU Buffers
-        // ¨Ï¥Î std::vector ºÞ²z¸û¤è«K¡A¦Û°ÊÄÀ©ñ
+        // [ï¿½sï¿½W] CPU Buffers
+        // ï¿½Ï¥ï¿½ std::vector ï¿½Þ²zï¿½ï¿½ï¿½ï¿½Kï¿½Aï¿½Û°ï¿½ï¿½ï¿½ï¿½ï¿½
         std::vector<float> h_col_mean;
     };
 }

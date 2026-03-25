@@ -7,12 +7,12 @@
 
 namespace core {
 
-    // [Traits] ¨M©w²Ö¥[¾¹«¬§O
-    template <typename T> struct AccumulatorTraits { using Type = float; }; // ¹w³] float (µ¹ float ¿é¤J¥Î)
-    template <> struct AccumulatorTraits<uint8_t> { using Type = uint32_t; }; // ¯S¤Æ uint8 -> uint32
+    // [Traits] ï¿½Mï¿½wï¿½Ö¥[ï¿½ï¿½ï¿½ï¿½ï¿½O
+    template <typename T> struct AccumulatorTraits { using Type = float; }; // ï¿½wï¿½] float (ï¿½ï¿½ float ï¿½ï¿½Jï¿½ï¿½)
+    template <> struct AccumulatorTraits<uint8_t> { using Type = uint32_t; }; // ï¿½Sï¿½ï¿½ uint8 -> uint32
     template <> struct AccumulatorTraits<double> { using Type = double; };
 
-    // 1. ¤@¯ë¥­§¡ Kernel
+    // 1. ï¿½@ï¿½ë¥­ï¿½ï¿½ Kernel
     template <typename T>
     __global__ void k_calcColumnMeans(
         const T* __restrict__ src,
@@ -21,27 +21,27 @@ namespace core {
     ) {
         int col = blockIdx.x * blockDim.x + threadIdx.x;
 
-        // [¦w¥þÀË¬d 1] X ¶b¶V¬É«OÅ@
+        // [ï¿½wï¿½ï¿½ï¿½Ë¬d 1] X ï¿½bï¿½Vï¿½É«Oï¿½@
         if (col >= W) return;
 
         using SumType = typename AccumulatorTraits<T>::Type;
         SumType sum = 0;
 
-        // [¦w¥þÀË¬d 2] ¨¾¤îªÅ«ü¼Ð (Áö¤£±`¨£¦ý¯à±Ï©R)
+        // [ï¿½wï¿½ï¿½ï¿½Ë¬d 2] ï¿½ï¿½ï¿½ï¿½Å«ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½`ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï©R)
         if (src == nullptr || dst == nullptr) return;
 
-        // §ï¥Îª½±µ¯Á¤Þ­pºâ¡AÁ×§K«ü¼Ð²Ö¥[³y¦¨ªº¼ç¦b¿ù¦ì
-        // ³oºØ¼gªk¹ï½sÄ¶¾¹Àu¤Æ¨Ó»¡¬O¤@¼Ëªº¡A¦ý debug §óª½Æ[
+        // ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Þ­pï¿½ï¿½Aï¿½×§Kï¿½ï¿½ï¿½Ð²Ö¥[ï¿½yï¿½ï¿½ï¿½ï¿½ï¿½ï¿½bï¿½ï¿½ï¿½ï¿½
+        // ï¿½oï¿½Ø¼gï¿½kï¿½ï¿½sÄ¶ï¿½ï¿½ï¿½uï¿½Æ¨Ó»ï¿½ï¿½Oï¿½@ï¿½Ëªï¿½ï¿½Aï¿½ï¿½ debug ï¿½ï¿½ï¿½[
         for (int y = 0; y < H; ++y) {
-            // [¦w¥þÀË¬d 3] ­pºâ¯Á¤Þ¡A½T«O¦bÅÞ¿è½d³ò¤º
-            // size_t ¨¾¤î int * int ·¸¦ì (ÁöµM 1.2»õ¹³¯À¤£·|·¸¦ì¡A¦ý¦n²ßºD)
+            // [ï¿½wï¿½ï¿½ï¿½Ë¬d 3] ï¿½pï¿½ï¿½ï¿½ï¿½Þ¡Aï¿½Tï¿½Oï¿½bï¿½Þ¿ï¿½dï¿½ï¿½
+            // size_t ï¿½ï¿½ï¿½ï¿½ int * int ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½M 1.2ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½|ï¿½ï¿½ï¿½ï¿½Aï¿½ï¿½ï¿½nï¿½ßºD)
             size_t idx = (size_t)y * W + col;
 
-            // Åª¨ú
+            // Åªï¿½ï¿½
             sum += src[idx];
         }
 
-        // ¼g¤Jµ²ªG
+        // ï¿½gï¿½Jï¿½ï¿½ï¿½G
         dst[col] = (float)sum / (float)H;
     }
 
@@ -55,17 +55,17 @@ namespace core {
         if (col >= W) return;
         if (src == nullptr || dst == nullptr) return;
 
-        // ¨¾§b¡G¦pªG°ª«×¬°0¡A³]¬°0
+        // ï¿½ï¿½ï¿½bï¿½Gï¿½pï¿½Gï¿½ï¿½ï¿½×¬ï¿½0ï¿½Aï¿½]ï¿½ï¿½0
         if (H <= 0) {
             dst[col] = 0.0f;
             return;
         }
 
-        // 1. ¥H²Ä¤@­Ó row ªº­È§@¬°ªì©l³Ì¤j­È
-        // ³o¸Ìª½±µÂà«¬¬° float ¶i¦æ¤ñ¸û¡A»P dst Ãþ«¬¤@­P
+        // 1. ï¿½Hï¿½Ä¤@ï¿½ï¿½ row ï¿½ï¿½ï¿½È§@ï¿½ï¿½ï¿½ï¿½lï¿½Ì¤jï¿½ï¿½
+        // ï¿½oï¿½Ìªï¿½ï¿½ï¿½ï¿½à«¬ï¿½ï¿½ float ï¿½iï¿½ï¿½ï¿½ï¿½ï¿½Aï¿½P dst ï¿½ï¿½ï¿½ï¿½ï¿½@ï¿½P
         float max_val = (float)src[col];
 
-        // 2. ¹M¾ú³Ñ¤Uªº row
+        // 2. ï¿½Mï¿½ï¿½ï¿½Ñ¤Uï¿½ï¿½ row
         for (int y = 1; y < H; ++y) {
             size_t idx = (size_t)y * W + col;
             float val = (float)src[idx];
@@ -74,13 +74,13 @@ namespace core {
             }
         }
 
-        // 3. ¼g¤Jµ²ªG
+        // 3. ï¿½gï¿½Jï¿½ï¿½ï¿½G
         dst[col] = max_val;
     }
 
 
 
-    // 2. [­×§ï] ¥h°£Â÷¸s­È Kernel (ªx«¬¤Æ)
+    // 2. [ï¿½×§ï¿½] ï¿½hï¿½ï¿½ï¿½ï¿½ï¿½sï¿½ï¿½ Kernel (ï¿½xï¿½ï¿½ï¿½ï¿½)
     template <typename T>
     __global__ void k_calcColumnMeans_RemoveOutliers(
         const T* __restrict__ src,
@@ -91,17 +91,17 @@ namespace core {
         int col = blockIdx.x * blockDim.x + threadIdx.x;
         if (col >= W) return;
 
-        // ©w¸q²Ö¥[«¬§O
+        // ï¿½wï¿½qï¿½Ö¥[ï¿½ï¿½ï¿½O
         using SumType = typename AccumulatorTraits<T>::Type;
 
-        // --- [Pass 1] ­pºâ Mean & StdDev ---
+        // --- [Pass 1] ï¿½pï¿½ï¿½ Mean & StdDev ---
         SumType sum = 0;
-        SumType sq_sum = 0; // ¥­¤è©M
+        SumType sq_sum = 0; // ï¿½ï¿½ï¿½ï¿½M
 
         const T* col_ptr = src + col;
 
         for (int y = 0; y < H; ++y) {
-            // Âà«¬¬° SumType ¨¾¤î·¸¦ì (¨Ò¦p uint8 -> uint32)
+            // ï¿½à«¬ï¿½ï¿½ SumType ï¿½ï¿½ï¿½î·¸ï¿½ï¿½ (ï¿½Ò¦p uint8 -> uint32)
             SumType val = (SumType)(*col_ptr);
             sum += val;
             sq_sum += val * val;
@@ -110,12 +110,12 @@ namespace core {
 
         float mean = (float)sum / (float)H;
 
-        // ÅÜ²§¼Æ = E[X^2] - (E[X])^2
+        // ï¿½Ü²ï¿½ï¿½ï¿½ = E[X^2] - (E[X])^2
         float variance = ((float)sq_sum / (float)H) - (mean * mean);
         if (variance < 0.0f) variance = 0.0f;
         float std_dev = sqrtf(variance);
 
-        // --- [Pass 2] ¹LÂo ---
+        // --- [Pass 2] ï¿½Lï¿½o ---
         float limit = sigma_threshold * std_dev;
         float lower_bound = mean - limit;
         float upper_bound = mean + limit;
@@ -138,11 +138,11 @@ namespace core {
             dst[col] = clean_sum / (float)clean_count;
         }
         else {
-            dst[col] = mean; // ¨¾§b
+            dst[col] = mean; // ï¿½ï¿½ï¿½b
         }
     }
 
-    // 3. ­I´º¬Û´î («O«ù¤£ÅÜ)
+    // 3. ï¿½Iï¿½ï¿½ï¿½Û´ï¿½ (ï¿½Oï¿½ï¿½ï¿½ï¿½ï¿½ï¿½)
     __global__ void k_calcColumnBackground(
         const uint8_t* __restrict__ input_image,
         const float* __restrict__ column_means,
@@ -164,6 +164,53 @@ namespace core {
 
         output_image[idx] = (uint8_t)result;
     }
+
+    // Row-wise mean: 1 thread per row, iterate columns (contiguous memory â†’ good coalescing)
+    template <typename T>
+    __global__ void k_calcRowMeans(
+        const T* __restrict__ src,
+        float* __restrict__ dst,
+        int W, int H
+    ) {
+        int row = blockIdx.x * blockDim.x + threadIdx.x;
+        if (row >= H) return;
+        if (src == nullptr || dst == nullptr) return;
+
+        using SumType = typename AccumulatorTraits<T>::Type;
+        SumType sum = 0;
+        size_t base = (size_t)row * W;
+        for (int x = 0; x < W; ++x) {
+            sum += src[base + x];
+        }
+        dst[row] = (float)sum / (float)W;
+    }
+
+    // Row-wise max: 1 thread per row
+    template <typename T>
+    __global__ void k_calcRowMax(
+        const T* __restrict__ src,
+        float* __restrict__ dst,
+        int W, int H
+    ) {
+        int row = blockIdx.x * blockDim.x + threadIdx.x;
+        if (row >= H) return;
+        if (src == nullptr || dst == nullptr) return;
+        if (W <= 0) { dst[row] = 0.0f; return; }
+
+        size_t base = (size_t)row * W;
+        float max_val = (float)src[base];
+        for (int x = 1; x < W; ++x) {
+            float val = (float)src[base + x];
+            if (val > max_val) max_val = val;
+        }
+        dst[row] = max_val;
+    }
+
+    template __global__ void k_calcRowMeans<uint8_t>(const uint8_t* __restrict__, float* __restrict__, int, int);
+    template __global__ void k_calcRowMeans<float>(const float* __restrict__, float* __restrict__, int, int);
+
+    template __global__ void k_calcRowMax<uint8_t>(const uint8_t* __restrict__, float* __restrict__, int, int);
+    template __global__ void k_calcRowMax<float>(const float* __restrict__, float* __restrict__, int, int);
 
     template __global__ void k_calcColumnMeans<uint8_t>(const uint8_t* __restrict__, float* __restrict__, int, int);
     template __global__ void k_calcColumnMeans<float>(const float* __restrict__, float* __restrict__, int, int);

@@ -48,8 +48,21 @@ CoreCVWrapper.CoreCV_FastReadBMP(...)
 `NativeBufferPool` 的所有 buffer 使用 `CoreCV_AllocPinned`（cudaMallocHost），確保 H↔D memcpy 走 DMA 加速：
 
 ```
-_inputBuffer, _muraBuffer, _ridgeBuffer, _thumbnailBuffer, _curveMeanBuffer, _curveMaxBuffer
+_inputBuffer, _muraBuffer, _ridgeBuffer, _thumbnailBuffer, _curveMeanBuffer, _curveMaxBuffer,
+_curveRowMeanBuffer, _curveRowMaxBuffer
 ```
+
+### CUDA Pipeline V/H Ridge 分離（永遠雙方向）
+
+**Pipeline 永遠以 `"vertical+horizontal"` 模式執行**，確保 V/H 影像與曲線皆存檔。`RidgeDirection` recipe 設定僅影響 UI 顯示，不影響 pipeline 計算。
+
+`PICoaterDetector::Run`（`Module_GetPICoaterBackground.cu`）流程：
+1. Column mean background removal → `d_mura_out`（去背圖）
+2. Gaussian blur（一次，V/H 共用）→ `d_hessian_f32_`
+3. `computeHessianResponse_gpu(VERTICAL)` → `d_ridge_out` + col curves（`calcColumnMeans`/`calcColumnMax`）
+4. `computeHessianResponse_gpu(HORIZONTAL)` → `d_mura_out`（覆蓋去背圖）+ row curves（`calcRowMeans`/`calcRowMax`）
+
+C# 端對應：`_ridgeBuffer` = vertical ridge，`_muraBuffer` = horizontal ridge
 
 ### 影像處理順序
 
@@ -143,11 +156,12 @@ Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×741），�
 **Grab ID 拼接模式（`_stitchedImages` 欄位）**：
 - `_stitchedImages != null` 表示目前為拼接模式；`null` = 一般模式
 - `LoadGrabStitchedViewAsync(grabId, hintFrom, hintTo, enableProcess)` → `LoadImagePathsForGrabId`（掃 CSV）→ 依模式分支：
-  - **JPEG 路徑**：`StitchCamera(paths, useProcessed: enableProcess)`（_proc.jpg 若存在則替代 _raw.jpg）
+  - **JPEG 路徑**：`StitchCamera(paths, useProcessed: enableProcess)`（_proc_v.jpg 若存在則替代 _raw.jpg）
   - **BMP 原圖**：`StitchCamera(paths, bmpLoader: LoadBmpAtScale)`
   - **BMP 處理**：`StitchCamera(paths, bmpLoader: ProcessBmpAtScale)`（逐張 GPU pipeline + resize，再拼接）
   - 完成後 `RotateFlip(RotateNoneFlipY)` 對齊取像時序
-- `MergeCurves`：載入每張影像的 `_mean.bin`/`_max.bin`，全解析度合併（Mean=平均、Max=取最大），存入 `_stitchedCurveMean[7]`/`_stitchedCurveMax[7]`
+- `MergeCurves`：載入每張影像的 `_mean_v.bin`/`_max_v.bin`，全解析度合併（Mean=平均、Max=取最大），存入 `_stitchedCurveMean[7]`/`_stitchedCurveMax[7]`
+- `MergeRowCurves`：載入 `_mean_h.bin`/`_max_h.bin`，垂直拼接（concatenation），存入 `_stitchedRowCurveMean[7]`/`_stitchedRowCurveMax[7]`
 - `ShowStitchedCameraInCanvas`：設 `_imageScaleFactor=DefaultSaveResizeScale` + `_currentCameraIndex` 後 `FitToScreen()`，再以合併曲線更新 chartMura
 - `btnShowOriginal`/`btnShowProcessed`：若 `_stitchedImages != null` → `ReloadCurrentStitchedView(false/true)`；否則走原圖路徑
 - `ClearStitchedMode()`：先 null `canvasMain.Image` + `_galleryManager.ClearImages()` 再 Dispose 所有 bitmaps；在所有一般載入路徑前呼叫（propertyGrid / btnSelectFolder / btnShowOriginal / btnShowProcessed / btnPeriodPrev / btnPeriodNext）
@@ -503,14 +517,20 @@ sdk/AOI_SDK/src_dotnet/MilGrabSample/MilGrabSample/
 
 時間戳精確到毫秒（`.fff`），同 Line Rate 的相機由 `CaptureTimestampCoordinator` 協調共用同一 `.fff`（100ms 容差）。
 
-**一律存檔的 4 個檔案**（不管 `SaveOriginalBmp` 設定）：
+**一律存檔的 7 個檔案**（不管 `SaveOriginalBmp` 設定）：
 ```
 {CaptureRootPath}\{yyyy}\{yyyyMM}\{yyyyMMdd}\
-    {yyyyMMdd_HHmmss.fff}-{CameraId}_raw.jpg   ← 縮小版原圖（GPU resize，1/SaveResizeScale）
-    {yyyyMMdd_HHmmss.fff}-{CameraId}_proc.jpg  ← 縮小版處理圖
-    {yyyyMMdd_HHmmss.fff}-{CameraId}_mean.bin  ← Mura Mean 曲線（全解析度長度）
-    {yyyyMMdd_HHmmss.fff}-{CameraId}_max.bin   ← Mura Max 曲線（全解析度長度）
+    {yyyyMMdd_HHmmss.fff}-{CameraId}_raw.jpg      ← 縮小版原圖（GPU resize，1/SaveResizeScale）
+    {yyyyMMdd_HHmmss.fff}-{CameraId}_proc_v.jpg   ← 切向（vertical）ridge 處理圖
+    {yyyyMMdd_HHmmss.fff}-{CameraId}_proc_h.jpg   ← 法向（horizontal）ridge 處理圖
+    {yyyyMMdd_HHmmss.fff}-{CameraId}_mean_v.bin   ← 切向 Mura Mean 曲線（全解析度長度）
+    {yyyyMMdd_HHmmss.fff}-{CameraId}_max_v.bin    ← 切向 Mura Max 曲線（全解析度長度）
+    {yyyyMMdd_HHmmss.fff}-{CameraId}_mean_h.bin   ← 法向 Mura Mean 曲線（全解析度長度）
+    {yyyyMMdd_HHmmss.fff}-{CameraId}_max_h.bin    ← 法向 Mura Max 曲線（全解析度長度）
 ```
+- `_v` 後綴 = vertical（切向），對應 `chartMuraVertical`（chartMura）
+- `_h` 後綴 = horizontal（法向），對應 `chartMuraHorizontal`
+- `_proc_h.jpg` 來源：CUDA `d_mura_out` 存放水平 ridge 圖（pipeline 永遠跑雙方向），resize 後存檔
 
 **額外檔案**（`SaveOriginalBmp = true` 時）：
 ```
@@ -543,7 +563,7 @@ magic(4)="MCBF" | version(4=int) | scale_factor(4=float) | array_length(4=int) |
 ### ImageRepository 掃描邏輯
 
 同時掃 `*_raw.jpg` + `*.bmp`，兩種格式可在同一根目錄共存，`ParsePath` regex 兩種皆可 match。
-`*_proc.jpg`、`*_mean.bin`、`*_max.bin` 不被收入（不符合 glob 模式）。
+`*_proc_v.jpg`、`*_proc_h.jpg`、`*_v.bin`、`*_h.bin` 不被收入（不符合 glob 模式）。
 
 **JPG 優先規則**：`GetImages()` 同一相機同時存在 JPG 與 BMP 時，優先回傳 JPG（讀取速度快，走 `LoadFromPrecomputedFiles` 不需 GPU）。避免 `.ToDictionary()` 重複 key 崩潰。
 

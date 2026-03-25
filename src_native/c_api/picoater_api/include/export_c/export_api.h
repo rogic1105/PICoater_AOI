@@ -28,6 +28,8 @@ typedef struct AoiOutputBuffersC {
     uint8_t* ridge_data;
     float* mura_curve_mean;
     float* mura_curve_max;
+    float* mura_row_curve_mean;
+    float* mura_row_curve_max;
     void* stream;
 } AoiOutputBuffersC;
 

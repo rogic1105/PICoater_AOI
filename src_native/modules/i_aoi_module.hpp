@@ -27,6 +27,8 @@ struct AoiOutputBuffers {
   uint8_t* ridge_data = nullptr;
   float* mura_curve_mean = nullptr;
   float* mura_curve_max = nullptr;
+  float* mura_row_curve_mean = nullptr;
+  float* mura_row_curve_max = nullptr;
 
   void* stream = nullptr;
 };

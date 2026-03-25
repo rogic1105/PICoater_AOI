@@ -30,8 +30,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public InspectionSettings Settings { get; set; }
         public ToolStripStatusLabel StatusLabel { get; set; }
         public PictureBox[] CameraPanels { get; set; }
-        public Label ImageFormatLabel { get; set; }
-        public Label ImageScaleLabel { get; set; }
+        public RowMuraChartHelper MuraChartHorizontalHelper { get; set; }
     }
 
     public class FormInteractionHelper
@@ -45,10 +44,10 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private readonly DateTimeNavigator _timeNavigator;
         private readonly ThumbnailGridPresenter _galleryManager;
         private readonly MuraChartHelper _muraChartHelper;
+        private readonly RowMuraChartHelper _muraChartHorizontalHelper;
         private readonly InspectionSettings _settings;
         private readonly CanvasInteractionHelper _canvasHelper;
-        private readonly Label _imageFormatLabel;
-        private readonly Label _imageScaleLabel;
+        private string _imageInfoSuffix = "";
 
         private bool _isProcessedMode = false;
         private bool _isBusy = false;
@@ -66,9 +65,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             _timeNavigator = context.TimeNavigator;
             _galleryManager = context.GalleryManager;
             _muraChartHelper = context.MuraChartHelper;
+            _muraChartHorizontalHelper = context.MuraChartHorizontalHelper;
             _settings = context.Settings;
-            _imageFormatLabel = context.ImageFormatLabel;
-            _imageScaleLabel = context.ImageScaleLabel;
 
             _canvasHelper = new CanvasInteractionHelper(
                 context.Canvas,
@@ -97,7 +95,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             _inspectionService.UpdateAlgorithmParams(
                 _settings.HessianMaxFactor,
                 _settings.ErrorValueMean,
-                _settings.ErrorValueMax
+                _settings.ErrorValueMax,
+                InspectionRecipe.RidgeDirectionToNative(_settings.RidgeDir)
             );
         }
 
@@ -160,10 +159,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 {
                     _canvasHelper.SetImageScaleFactor(data.ScaleFactor);
 
-                    if (_imageFormatLabel != null)
-                        _imageFormatLabel.Text = data.IsCompressedJpeg ? "壓縮 JPEG" : "原始 BMP";
-                    if (_imageScaleLabel != null)
-                        _imageScaleLabel.Text = $"縮放: {data.ScaleFactor}x";
+                    _imageInfoSuffix = $" | {(data.IsCompressedJpeg ? "JPEG" : "BMP")} {data.ScaleFactor}x";
+                    _canvasHelper.ImageInfoSuffix = _imageInfoSuffix;
 
                     sw.Restart();
                     _canvasHelper.UpdateCanvas(data.Image);
@@ -185,11 +182,15 @@ namespace AniloxRoll.Monitor.UI.Widgets
                             startPos, leftMm, rightMm);
                         chartMs = sw.ElapsedMilliseconds;
                     }
+
+                    // 更新法向（水平）Mura 曲線圖
+                    if (_muraChartHorizontalHelper != null && data.MuraRowCurveMean != null)
+                        _muraChartHorizontalHelper.UpdateData(data.MuraRowCurveMean, data.MuraRowCurveMax);
                 }
                 else
                 {
-                    if (_imageFormatLabel != null) _imageFormatLabel.Text = "";
-                    if (_imageScaleLabel != null)  _imageScaleLabel.Text  = "";
+                    _imageInfoSuffix = "";
+                    _canvasHelper.ImageInfoSuffix = _imageInfoSuffix;
                 }
 
                 Console.WriteLine(

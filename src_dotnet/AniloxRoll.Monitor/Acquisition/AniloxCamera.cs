@@ -55,6 +55,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         public double BinarizeThreshold { get; set; } = 128.0;
         public double HessianSigma { get; set; } = 85;
         public double HessianFixedMax { get; set; } = 1.0;
+        public string RidgeMode { get; set; } = "vertical";
 
         // ==================== CLProtocol ====================
         /// <summary>CLProtocol（GenICam Camera Link）是否已成功啟用。</summary>
@@ -155,6 +156,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>每幀 GPU pipeline 完成後觸發（MIL 回呼執行緒）。
         /// 參數：(cameraId, curveMean_raw255, curveMax_raw255)</summary>
         public event Action<int, float[], float[]> OnLiveCurveData;
+        public event Action<int, float[], float[]> OnLiveRowCurveData;
 
         private float _lastMeanPeak = 0f;
         private float _lastMaxPeak  = 0f;
@@ -770,8 +772,10 @@ namespace AniloxRoll.Monitor.Core.Camera
                     MIL.MbufGet2d(srcBuffer, 0, 0, _frameWidth, _frameHeight, _hostInputBuffer);
                     Marshal.Copy(_hostInputBuffer, 0, picoaterInputBuffer, _hostInputBuffer.Length);
 
-                    IntPtr picoaterCurveMean = _nativeBufferPool.CurveMeanBuffer;
-                    IntPtr picoaterCurveMax  = _nativeBufferPool.CurveMaxBuffer;
+                    IntPtr picoaterCurveMean    = _nativeBufferPool.CurveMeanBuffer;
+                    IntPtr picoaterCurveMax     = _nativeBufferPool.CurveMaxBuffer;
+                    IntPtr picoaterRowCurveMean = _nativeBufferPool.CurveRowMeanBuffer;
+                    IntPtr picoaterRowCurveMax  = _nativeBufferPool.CurveRowMaxBuffer;
 
                     _aoiService.ProcessImage(new AoiProcessRequest
                     {
@@ -784,19 +788,21 @@ namespace AniloxRoll.Monitor.Core.Camera
                         },
                         Output = new AoiProcessRequest.OutputBuffers
                         {
-                            BackgroundData = IntPtr.Zero,
-                            MuraData       = IntPtr.Zero,
-                            RidgeData      = picoaterRidgeBuffer,
-                            MuraCurveMean  = picoaterCurveMean,
-                            MuraCurveMax   = picoaterCurveMax,
-                            Stream         = IntPtr.Zero
+                            BackgroundData   = IntPtr.Zero,
+                            MuraData         = _nativeBufferPool.MuraBuffer,
+                            RidgeData        = picoaterRidgeBuffer,
+                            MuraCurveMean    = picoaterCurveMean,
+                            MuraCurveMax     = picoaterCurveMax,
+                            MuraRowCurveMean = picoaterRowCurveMean,
+                            MuraRowCurveMax  = picoaterRowCurveMax,
+                            Stream           = IntPtr.Zero
                         },
                         Params = new AoiProcessRequest.AlgorithmParams
                         {
                             BgSigmaFactor  = 2.0f,
                             RidgeSigma     = (float)HessianSigma,
                             HessianMaxFactor = (float)HessianFixedMax,
-                            RidgeMode      = "vertical"
+                            RidgeMode      = "vertical+horizontal"  // 永遠計算雙方向，確保 V/H 皆可存檔
                         }
                     });
 
@@ -818,6 +824,17 @@ namespace AniloxRoll.Monitor.Core.Camera
                         _lastMaxPeak  = xp / 255f;
 
                         OnLiveCurveData?.Invoke(CameraId, meanArr, maxArr);
+
+                        // Row curves (horizontal data)
+                        int rowCurveLen = _frameHeight;
+                        if (rowCurveLen > 0 && picoaterRowCurveMean != IntPtr.Zero && picoaterRowCurveMax != IntPtr.Zero)
+                        {
+                            float[] rowMeanArr = new float[rowCurveLen];
+                            float[] rowMaxArr  = new float[rowCurveLen];
+                            Marshal.Copy(picoaterRowCurveMean, rowMeanArr, 0, rowCurveLen);
+                            Marshal.Copy(picoaterRowCurveMax,  rowMaxArr,  0, rowCurveLen);
+                            OnLiveRowCurveData?.Invoke(CameraId, rowMeanArr, rowMaxArr);
+                        }
                     }
 
                     Marshal.Copy(picoaterRidgeBuffer, _hostOutputBuffer, 0, _hostOutputBuffer.Length);
@@ -862,10 +879,13 @@ namespace AniloxRoll.Monitor.Core.Camera
 
                 string baseName = $"{now:yyyyMMdd_HHmmss.fff}-{CameraId}";
 
-                byte[] rawBytes = null, procBytes = null;
+                byte[] rawBytes = null, procVBytes = null, procHBytes = null;
                 float[] meanArr = null, maxArr = null;
+                float[] rowMeanArr = null, rowMaxArr = null;
                 int rw = _resizeWidth, rh = _resizeHeight;
                 bool hasResizeData = false;
+
+                // Pipeline 永遠跑 "vertical+horizontal"，因此 _ridgeBuffer=V, _muraBuffer=H，一律存 7 檔
 
                 lock (_picoaterLock)
                 {
@@ -874,22 +894,30 @@ namespace AniloxRoll.Monitor.Core.Camera
                         _procResizeBuf != IntPtr.Zero)
                     {
                         hasResizeData = true;
+                        int pixels = rw * rh;
 
-                        // GPU resize（快速，在 callback 執行緒完成）
+                        // GPU resize raw → _rawResizeBuf
                         NativeMethods.CoreCV_Resize_GPU(
                             _nativeBufferPool.InputBuffer, _frameWidth, _frameHeight,
                             _rawResizeBuf, rw, rh);
+                        rawBytes = new byte[pixels];
+                        Marshal.Copy(_rawResizeBuf, rawBytes, 0, pixels);
+
+                        // _ridgeBuffer = vertical ridge → _proc_v.jpg
                         NativeMethods.CoreCV_Resize_GPU(
                             _nativeBufferPool.RidgeBuffer, _frameWidth, _frameHeight,
                             _procResizeBuf, rw, rh);
+                        procVBytes = new byte[pixels];
+                        Marshal.Copy(_procResizeBuf, procVBytes, 0, pixels);
 
-                        // 複製至 managed 陣列，讓 callback 可以立即返回，I/O 移至 Task.Run
-                        int pixels = rw * rh;
-                        rawBytes  = new byte[pixels];
-                        procBytes = new byte[pixels];
-                        Marshal.Copy(_rawResizeBuf,  rawBytes,  0, pixels);
-                        Marshal.Copy(_procResizeBuf, procBytes, 0, pixels);
+                        // _muraBuffer = horizontal ridge → _proc_h.jpg
+                        NativeMethods.CoreCV_Resize_GPU(
+                            _nativeBufferPool.MuraBuffer, _frameWidth, _frameHeight,
+                            _rawResizeBuf, rw, rh);
+                        procHBytes = new byte[pixels];
+                        Marshal.Copy(_rawResizeBuf, procHBytes, 0, pixels);
 
+                        // Col curves（vertical ridge）
                         int curveLen = _nativeBufferPool.CurveBufferSize / sizeof(float);
                         if (curveLen > 0 &&
                             _nativeBufferPool.CurveMeanBuffer != IntPtr.Zero &&
@@ -899,6 +927,18 @@ namespace AniloxRoll.Monitor.Core.Camera
                             maxArr  = new float[curveLen];
                             Marshal.Copy(_nativeBufferPool.CurveMeanBuffer, meanArr, 0, curveLen);
                             Marshal.Copy(_nativeBufferPool.CurveMaxBuffer,  maxArr,  0, curveLen);
+                        }
+
+                        // Row curves（horizontal ridge）
+                        int rowCurveLen = _nativeBufferPool.CurveRowBufferSize / sizeof(float);
+                        if (rowCurveLen > 0 &&
+                            _nativeBufferPool.CurveRowMeanBuffer != IntPtr.Zero &&
+                            _nativeBufferPool.CurveRowMaxBuffer  != IntPtr.Zero)
+                        {
+                            rowMeanArr = new float[rowCurveLen];
+                            rowMaxArr  = new float[rowCurveLen];
+                            Marshal.Copy(_nativeBufferPool.CurveRowMeanBuffer, rowMeanArr, 0, rowCurveLen);
+                            Marshal.Copy(_nativeBufferPool.CurveRowMaxBuffer,  rowMaxArr,  0, rowCurveLen);
                         }
                     }
                 }
@@ -921,23 +961,36 @@ namespace AniloxRoll.Monitor.Core.Camera
                     }
 
                     // 其餘 I/O 移至背景執行緒，callback 立即返回，不阻塞連續抓圖
-                    // 不管 UseCompressedCapture，一律存 _raw.jpg / _proc.jpg / _mean.bin / _max.bin
                     Task.Run(() =>
                     {
                         try
                         {
                             Directory.CreateDirectory(saveDir);
-                            SaveJpegFromBytes(rawBytes,  rw, rh,
-                                Path.Combine(saveDir, baseName + "_raw.jpg"),  quality);
-                            SaveJpegFromBytes(procBytes, rw, rh,
-                                Path.Combine(saveDir, baseName + "_proc.jpg"), quality);
+                            SaveJpegFromBytes(rawBytes, rw, rh,
+                                Path.Combine(saveDir, baseName + "_raw.jpg"), quality);
+
+                            if (procVBytes != null)
+                                SaveJpegFromBytes(procVBytes, rw, rh,
+                                    Path.Combine(saveDir, baseName + "_proc_v.jpg"), quality);
+
+                            if (procHBytes != null)
+                                SaveJpegFromBytes(procHBytes, rw, rh,
+                                    Path.Combine(saveDir, baseName + "_proc_h.jpg"), quality);
 
                             if (meanArr != null)
                             {
                                 SaveCurveBinFromArray(meanArr, scale,
-                                    Path.Combine(saveDir, baseName + "_mean.bin"));
+                                    Path.Combine(saveDir, baseName + "_mean_v.bin"));
                                 SaveCurveBinFromArray(maxArr,  scale,
-                                    Path.Combine(saveDir, baseName + "_max.bin"));
+                                    Path.Combine(saveDir, baseName + "_max_v.bin"));
+                            }
+
+                            if (rowMeanArr != null)
+                            {
+                                SaveCurveBinFromArray(rowMeanArr, scale,
+                                    Path.Combine(saveDir, baseName + "_mean_h.bin"));
+                                SaveCurveBinFromArray(rowMaxArr,  scale,
+                                    Path.Combine(saveDir, baseName + "_max_h.bin"));
                             }
 
                             OnInspectionResult?.Invoke(camId, baseName, meanPeak, maxPeak);

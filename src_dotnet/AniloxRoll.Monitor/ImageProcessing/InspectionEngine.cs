@@ -18,6 +18,8 @@ namespace AniloxRoll.Monitor.Core.Services
         private IntPtr _ridgeBuffer => _bufferPool.RidgeBuffer;
         private IntPtr _curveMeanBuffer => _bufferPool.CurveMeanBuffer;
         private IntPtr _curveMaxBuffer => _bufferPool.CurveMaxBuffer;
+        private IntPtr _curveRowMeanBuffer => _bufferPool.CurveRowMeanBuffer;
+        private IntPtr _curveRowMaxBuffer => _bufferPool.CurveRowMaxBuffer;
 
         private ulong _imgBufferSize => _bufferPool.ImageBufferSize;
         private int _thumbnailBufferSize => _bufferPool.ThumbnailBufferSize;
@@ -64,6 +66,8 @@ namespace AniloxRoll.Monitor.Core.Services
                             RidgeData = _ridgeBuffer,
                             MuraCurveMean = _curveMeanBuffer,
                             MuraCurveMax = _curveMaxBuffer,
+                            MuraRowCurveMean = _curveRowMeanBuffer,
+                            MuraRowCurveMax = _curveRowMaxBuffer,
                             Stream = IntPtr.Zero
                         },
                         Params = new AoiProcessRequest.AlgorithmParams

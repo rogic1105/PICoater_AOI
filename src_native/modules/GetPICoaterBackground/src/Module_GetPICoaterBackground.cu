@@ -6,13 +6,13 @@
 #include "core_cv/imgproc/core_filters.hpp"
 #include "core_cv/imgproc/core_background.hpp"
 #include "core_cv/imgproc/core_features.hpp"
-#include "core_cv/imgproc/core_utils.hpp" // [·s¼W] for overlay_heatmap_gpu
+#include "core_cv/imgproc/core_utils.hpp" // [ï¿½sï¿½W] for overlay_heatmap_gpu
 
 #include "cpp_utils/timer_utils.hpp"
 
 namespace picoater {
 
-    // [Helper] °O¾ÐÅé¹ï»ô­pºâ¤u¨ã (¹ï»ô¨ì 256 bytes¡A²Å¦X CUDA ³Ì¨Î¦s¨ú²É«×)
+    // [Helper] ï¿½Oï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½pï¿½ï¿½uï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½ 256 bytesï¿½Aï¿½Å¦X CUDA ï¿½Ì¨Î¦sï¿½ï¿½ï¿½É«ï¿½)
     inline size_t alignUp(size_t offset, size_t alignment = 256) {
         return (offset + alignment - 1) & ~(alignment - 1);
     }
@@ -21,12 +21,12 @@ namespace picoater {
     PICoaterDetector::~PICoaterDetector() { Release(); }
 
     void PICoaterDetector::Release() {
-        // ¥u»Ý­nÄÀ©ñ "¾Ö¦³Åv" ªº°O¾ÐÅé
+        // ï¿½uï¿½Ý­nï¿½ï¿½ï¿½ï¿½ "ï¿½Ö¦ï¿½ï¿½v" ï¿½ï¿½ï¿½Oï¿½ï¿½ï¿½ï¿½
         if (d_col_mean) cudaFree(d_col_mean);
         if (d_col_bg_) cudaFree(d_col_bg_);
         if (d_blur_tmp_) cudaFree(d_blur_tmp_);
 
-        // [ÃöÁä] ¥u»Ý­nÄÀ©ñÁ` workspace¡A¤º³¡ªº«ü¼Ð¥u¬O­É¥Î¦ì§}¡A¤£»Ý­n free
+        // [ï¿½ï¿½ï¿½ï¿½] ï¿½uï¿½Ý­nï¿½ï¿½ï¿½ï¿½ï¿½` workspaceï¿½Aï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð¥uï¿½Oï¿½É¥Î¦ï¿½}ï¿½Aï¿½ï¿½ï¿½Ý­n free
         if (d_workspace_) cudaFree(d_workspace_);
 
         d_col_mean = nullptr;
@@ -34,7 +34,7 @@ namespace picoater {
         d_blur_tmp_ = nullptr;
         d_workspace_ = nullptr;
 
-        // Âk¹s«ü¼Ð¡AÁ×§KÄaªÅ
+        // ï¿½kï¿½sï¿½ï¿½ï¿½Ð¡Aï¿½×§Kï¿½aï¿½ï¿½
         d_hessian_u8_ = nullptr;
         d_hessian_f32_ = nullptr;
         d_hessian_resp_ = nullptr;
@@ -52,7 +52,7 @@ namespace picoater {
         CUDA_CHECK(cudaMalloc(&d_col_bg_, num_pixels * sizeof(uint8_t)));
         CUDA_CHECK(cudaMalloc(&d_blur_tmp_, num_pixels * sizeof(uint8_t)));
 
-        // --- ­pºâ Hessian »Ý­nªº°¾²¾ (¥Î©ó«ü¬£«ü¼Ð) ---
+        // --- ï¿½pï¿½ï¿½ Hessian ï¿½Ý­nï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ (ï¿½Î©ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½) ---
         size_t offset = 0;
         auto alignUp = [](size_t off) { return (off + 255) & ~255; };
 
@@ -65,20 +65,20 @@ namespace picoater {
         size_t off_resp = alignUp(offset);
         offset = off_resp + num_pixels * sizeof(float);
 
-        size_t hessian_req_size = offset; // Hessian »Ý­n³o»ò¦h
+        size_t hessian_req_size = offset; // Hessian ï¿½Ý­nï¿½oï¿½ï¿½h
 
-        // --- ­pºâ Gaussian »Ý­nªº¤j¤p ---
-        // Gaussian »Ý­n 3 ­Ó float buffer + mask (°²³] mask 1KB)
+        // --- ï¿½pï¿½ï¿½ Gaussian ï¿½Ý­nï¿½ï¿½ï¿½jï¿½p ---
+        // Gaussian ï¿½Ý­n 3 ï¿½ï¿½ float buffer + mask (ï¿½ï¿½ï¿½] mask 1KB)
         size_t gaussian_req_size = (num_pixels * sizeof(float)) * 3 + 1024;
 
-        // [ÃöÁä] Á`¤j¤p¨ú¨âªÌ¤§³Ì¤j­È
+        // [ï¿½ï¿½ï¿½ï¿½] ï¿½`ï¿½jï¿½pï¿½ï¿½ï¿½ï¿½Ì¤ï¿½ï¿½Ì¤jï¿½ï¿½
         size_t total_size = (gaussian_req_size > hessian_req_size) ? gaussian_req_size : hessian_req_size;
 
-        // --- ³æ¦¸¤À°t ---
+        // --- ï¿½æ¦¸ï¿½ï¿½ï¿½t ---
         CUDA_CHECK(cudaMalloc(&d_workspace_, total_size));
 
-        // --- «ü¼Ð«ü¬£ (µ¹ Hessian ¥Î) ---
-        // ³o¨Ç«ü¼Ð¦b Run Hessian ®É·|¥Î¨ì
+        // --- ï¿½ï¿½ï¿½Ð«ï¿½ï¿½ï¿½ (ï¿½ï¿½ Hessian ï¿½ï¿½) ---
+        // ï¿½oï¿½Ç«ï¿½ï¿½Ð¦b Run Hessian ï¿½É·|ï¿½Î¨ï¿½
         uint8_t* base = (uint8_t*)d_workspace_;
         d_hessian_u8_ = (uint8_t*)(base + off_u8);
         d_hessian_f32_ = (float*)(base + off_f32);
@@ -92,6 +92,8 @@ namespace picoater {
         uint8_t* d_ridge_out,
         float* d_mura_curve_mean,
 		float* d_mura_curve_max,
+        float* d_mura_row_curve_mean,
+        float* d_mura_row_curve_max,
         float bgSigmaFactor,
         float ridgeSigma,
         float hessianMaxFactor,
@@ -102,61 +104,61 @@ namespace picoater {
 
         int sigma_col = 1;
 
-        // [·s¼W] Á`¯Ó®É´ú¶q (³o·|¥]¦í¾ã­Ó Run)
         TIME_SCOPE_MS_SYNC("Total Run Time", cudaStreamSynchronize(stream));
 
-        // ¨BÆJ 1: ­pºâ¦C¥­§¡ (Column Means)
-        {
-            //TIME_SCOPE_MS_SYNC("      1. Calc Column Means", cudaStreamSynchronize(stream));
-            core::calcColumnMeans_RemoveOutliers_gpu(d_in, d_col_mean, m_width, m_height, sigma_col, stream);
-        }
+        // Step 1: Column Means
+        core::calcColumnMeans_RemoveOutliers_gpu(d_in, d_col_mean, m_width, m_height, sigma_col, stream);
 
-        // ¨BÆJ 2: ­pºâ­I´º»P Mura (Background & Mura)
-        {
-            //TIME_SCOPE_MS_SYNC("      2. Calc Background & Mura", cudaStreamSynchronize(stream));
-            core::calcColumnBackground_u8_gpu(d_in, d_col_mean, d_mura_out, m_width, m_height, stream);
-        }
+        // Step 2: Background Removal â†’ d_mura_out (bg-removed image)
+        core::calcColumnBackground_u8_gpu(d_in, d_col_mean, d_mura_out, m_width, m_height, stream);
 
-        // ¨BÆJ 3: Hessian Ridge Detection
-        {
-            //TIME_SCOPE_MS_SYNC("      3. Hessian Ridge", cudaStreamSynchronize(stream));
-            core::hessianRidge_u8_gpu(
-                d_mura_out,
-                d_ridge_out,
-                m_width, m_height,
-                ridgeSigma,
-                ridgeMode,
-                hessianMaxFactor,
-                d_hessian_f32_,
-                d_hessian_resp_,
-                stream,
-                d_workspace_
-            );
-        }
+        // Step 3: Gaussian blur (once, shared by all ridge directions)
+        int ksize = (int)(6.0f * ridgeSigma + 1.0f);
+        if (ksize % 2 == 0) ksize++;
+        core::gaussianBlur_gpu<uint8_t, float>(
+            d_mura_out, d_hessian_f32_, m_width, m_height, ridgeSigma, ksize, stream, d_workspace_);
 
-        // ¨BÆJ 4: Hessian Ridge Detection ¤§col mean
-        {
-            //TIME_SCOPE_MS_SYNC("      4. Hessian Ridge col mean", cudaStreamSynchronize(stream));
+        // Parse ridgeMode: "vertical", "horizontal", "vertical+horizontal"
+        bool doVertical   = (strcmp(ridgeMode, "vertical") == 0 || strcmp(ridgeMode, "vertical+horizontal") == 0);
+        bool doHorizontal = (strcmp(ridgeMode, "horizontal") == 0 || strcmp(ridgeMode, "vertical+horizontal") == 0);
+
+        float scale_factor = 255.0f / hessianMaxFactor;
+        int num_pixels = m_width * m_height;
+
+        // Step 4: Vertical ridge â†’ d_ridge_out + col curves
+        if (doVertical) {
+            core::computeHessianResponse_gpu(d_hessian_f32_, d_hessian_resp_, m_width, m_height,
+                                             core::detectionMode::VERTICAL, stream);
+            core::scale_clamp_f32_to_u8_gpu(d_hessian_resp_, d_ridge_out, num_pixels, scale_factor, stream);
+
             core::calcColumnMeans_gpu<uint8_t>(
-                d_ridge_out,
-                d_mura_curve_mean,
-                m_width,
-                m_height,
-                stream,
-                d_workspace_
-            );
+                d_ridge_out, d_mura_curve_mean, m_width, m_height, stream, d_workspace_);
+            core::calcColumnMax_gpu<uint8_t>(
+                d_ridge_out, d_mura_curve_max, m_width, m_height, stream);
         }
 
-        // ¨BÆJ 5: Hessian Ridge Detection ¤§col max
-        {
-            //TIME_SCOPE_MS_SYNC("      4. Hessian Ridge col mean", cudaStreamSynchronize(stream));
-            core::calcColumnMax_gpu<uint8_t>(
-                d_ridge_out,
-                d_mura_curve_max,
-                m_width,
-                m_height,
-                stream
-            );
+        // Step 5: Horizontal ridge + row curves
+        if (doHorizontal) {
+            core::computeHessianResponse_gpu(d_hessian_f32_, d_hessian_resp_, m_width, m_height,
+                                             core::detectionMode::HORIZONTAL, stream);
+
+            if (doVertical) {
+                // vertical+horizontal: horizontal image â†’ d_mura_out (overwrite bg-removed, already consumed)
+                core::scale_clamp_f32_to_u8_gpu(d_hessian_resp_, d_mura_out, num_pixels, scale_factor, stream);
+
+                if (d_mura_row_curve_mean != nullptr)
+                    core::calcRowMeans_gpu<uint8_t>(d_mura_out, d_mura_row_curve_mean, m_width, m_height, stream);
+                if (d_mura_row_curve_max != nullptr)
+                    core::calcRowMax_gpu<uint8_t>(d_mura_out, d_mura_row_curve_max, m_width, m_height, stream);
+            } else {
+                // horizontal only: horizontal image â†’ d_ridge_out (main output)
+                core::scale_clamp_f32_to_u8_gpu(d_hessian_resp_, d_ridge_out, num_pixels, scale_factor, stream);
+
+                if (d_mura_row_curve_mean != nullptr)
+                    core::calcRowMeans_gpu<uint8_t>(d_ridge_out, d_mura_row_curve_mean, m_width, m_height, stream);
+                if (d_mura_row_curve_max != nullptr)
+                    core::calcRowMax_gpu<uint8_t>(d_ridge_out, d_mura_row_curve_max, m_width, m_height, stream);
+            }
         }
 
     }

@@ -68,19 +68,15 @@ def compute_hessian_ridge(image: np.ndarray,
         dyy = cv2.Sobel(smooth, cv2.CV_32F, 0, 2, ksize=3)
         response = np.abs(dxx) + np.abs(dyy)
 
-    # 3. Fixed Scaling (取代原本的 normalize)
-    # 公式: Output = (Response / Fixed_Max) * 255
-    # 例如: Response=0.5, Max=1.0 -> Output=127.5
-    scale_factor = 255.0 / fixed_max_val
-    resp_scaled = response * scale_factor
-    
-    # 4. Clip to 0-255 (超過上限的就切平在 255)
-    resp_fixed = np.clip(resp_scaled, 0, 255).astype(np.uint8)
-    return resp_fixed
+    # 3. Fixed Scaling
+
+    resp_scaled = response / fixed_max_val
+
+    return resp_scaled
 
 # --- 新增函數 ---
 
-def plot_and_save_statistics(mean_arr: np.ndarray, max_arr: np.ndarray, min_arr: np.ndarray, 
+def plot_and_save_statistics(mean_arr: np.ndarray, max_arr: np.ndarray, 
                              ops_um: float, output_path: str):
     """
     繪製平均值與標準差圖表，橫軸單位為 mm。
@@ -96,20 +92,14 @@ def plot_and_save_statistics(mean_arr: np.ndarray, max_arr: np.ndarray, min_arr:
     
     # 繪製平均線
     plt.plot(x_mm, mean_arr, label='Column Mean', color='blue', linewidth=1.5)
-    
-    # 繪製標準差範圍 (虛線)
-    upper_bound = max_arr
-    lower_bound = min_arr
-    
-    plt.plot(x_mm, upper_bound, label='Max', color='orange', linestyle='--', linewidth=1)
-    plt.plot(x_mm, lower_bound, label='Min', color='orange', linestyle='--', linewidth=1)
-    
-    # 填充中間區域 (可選，讓圖更清楚)
-    plt.fill_between(x_mm, lower_bound, upper_bound, color='orange', alpha=0.1)
+    # 繪製極值
+    plt.plot(x_mm, max_arr, label='Max', color='orange', linestyle='--', linewidth=1)
+
 
     plt.title("Column Intensity Statistics (Ridge Response)")
     plt.xlabel("Position (mm)")
-    plt.ylabel("Intensity / Std Dev")
+    plt.ylabel("Intensity")
+    plt.ylim(0,1)
     plt.legend()
     plt.grid(True, linestyle=':', alpha=0.6)
     
@@ -182,9 +172,13 @@ def main():
     # --- 4. Hessian Matrix Ridge Detection ---
     time_start = time.time()
     res_v = compute_hessian_ridge(bg_removed, sigma=9.0, mode='vertical')
+    res_h =  compute_hessian_ridge(bg_removed, sigma=9.0, mode='horizontal')
+    res_b = compute_hessian_ridge(bg_removed, sigma=9.0, mode='both')
     time_end = time.time()
     print(f"  [Timing] Hessian Ridge Detection took {time_end - time_start:.3f} seconds.")
     cv2.imwrite(os.path.join(OUTPUT_DIR, "step4_res_v.png"), res_v)
+    cv2.imwrite(os.path.join(OUTPUT_DIR, "step4_res_h.png"), res_h)
+    cv2.imwrite(os.path.join(OUTPUT_DIR, "step4_res_b.png"), res_b)
 
     
     # --- 5. 統計分析 (Mean & Std) ---
@@ -192,29 +186,38 @@ def main():
     # 計算每個 Column 的平均值與標準差
     col_mean = np.mean(res_v, axis=0) # Shape: (width,)
     col_max = np.max(res_v, axis=0)   # Shape: (width,)
-    col_min = np.min(res_v, axis=0)   # Shape: (width,)
+
+    row_mean = np.mean(res_h, axis=1) # Shape: (height,)
+    row_max = np.max(res_h, axis=1)   # Shape: (height,)
+
     
     # 5.1 繪製圖表
-    plot_path = os.path.join(OUTPUT_DIR, "step5_statistics_plot.png")
-    plot_and_save_statistics(col_mean, col_max, col_min, OPS, plot_path)
+    plot_path_v = os.path.join(OUTPUT_DIR, "step5_statistics_plot_v.png")
+    plot_path_h = os.path.join(OUTPUT_DIR, "step5_statistics_plot_h.png")
+    plot_and_save_statistics(col_mean, col_max, OPS, plot_path_v)
+    plot_and_save_statistics(row_mean, row_max, OPS, plot_path_h)
     
     # 5.2 寫入 CSV
-    csv_mean_path = os.path.join(OUTPUT_DIR, "record_mean.csv")
-    csv_max_path = os.path.join(OUTPUT_DIR, "record_max.csv")
-    csv_min_path = os.path.join(OUTPUT_DIR, "record_min.csv")
+    csv_mean_path = os.path.join(OUTPUT_DIR, "colMean.csv")
+    csv_max_path = os.path.join(OUTPUT_DIR, "Colmax.csv")
+    csv_min_path = os.path.join(OUTPUT_DIR, "rowMean.csv")
+    csv_max_path = os.path.join(OUTPUT_DIR, "rowmax.csv")
+    
 
     
     save_array_to_csv(col_mean, csv_mean_path)
     save_array_to_csv(col_max, csv_max_path)
-    save_array_to_csv(col_min, csv_min_path)
+    save_array_to_csv(row_mean, csv_min_path)
+    save_array_to_csv(row_max, csv_max_path)
+
     
     # --- 6. 熱力圖疊加 (Overlay) ---
     # 設定顯示範圍 (可以根據 res_v 的 histogram 調整，這裡示範 0-100 讓特徵更明顯)
     # 如果要看全範圍就設 0, 255
-    OVERLAY_LOWER = 20
-    heatmap_result = overlay_heatmap(src_img, res_v, lower_limit=OVERLAY_LOWER, alpha=0.3)
-    cv2.imwrite(os.path.join(OUTPUT_DIR, "step6_heatmap_overlay.png"), heatmap_result)
-    print(f"[Done] All artifacts saved to {OUTPUT_DIR}")
+    # OVERLAY_LOWER = 20
+    # heatmap_result = overlay_heatmap(src_img, res_v, lower_limit=OVERLAY_LOWER, alpha=0.3)
+    # cv2.imwrite(os.path.join(OUTPUT_DIR, "step6_heatmap_overlay.png"), heatmap_result)
+    # print(f"[Done] All artifacts saved to {OUTPUT_DIR}")
 
 if __name__ == "__main__":
     main()

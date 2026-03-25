@@ -11,6 +11,8 @@ namespace AniloxRoll.Monitor.Core.Services
         private IntPtr _ridgeBuffer = IntPtr.Zero;
         private IntPtr _curveMeanBuffer = IntPtr.Zero;
         private IntPtr _curveMaxBuffer = IntPtr.Zero;
+        private IntPtr _curveRowMeanBuffer = IntPtr.Zero;
+        private IntPtr _curveRowMaxBuffer = IntPtr.Zero;
 
         public IntPtr InputBuffer => _inputBuffer;
         public IntPtr ThumbnailBuffer => _thumbnailBuffer;
@@ -18,10 +20,13 @@ namespace AniloxRoll.Monitor.Core.Services
         public IntPtr RidgeBuffer => _ridgeBuffer;
         public IntPtr CurveMeanBuffer => _curveMeanBuffer;
         public IntPtr CurveMaxBuffer => _curveMaxBuffer;
+        public IntPtr CurveRowMeanBuffer => _curveRowMeanBuffer;
+        public IntPtr CurveRowMaxBuffer => _curveRowMaxBuffer;
 
         public ulong ImageBufferSize { get; }
         public int ThumbnailBufferSize { get; }
         public int CurveBufferSize { get; }
+        public int CurveRowBufferSize { get; }
 
         private bool _isDisposed;
 
@@ -30,15 +35,18 @@ namespace AniloxRoll.Monitor.Core.Services
             ImageBufferSize = (ulong)(maxWidth * maxHeight);
             ThumbnailBufferSize = maxThumbnailSide * maxThumbnailSide;
             CurveBufferSize = maxWidth * sizeof(float);
+            CurveRowBufferSize = maxHeight * sizeof(float);
 
             // 使用 CUDA Pinned Memory（cudaMallocHost），讓 H<->D memcpy 走非同步 DMA，
             // 對應 de24f715 版本的 PICoater_AllocPinned 設計。
-            _inputBuffer     = AllocatePinned(ImageBufferSize);
-            _muraBuffer      = AllocatePinned(ImageBufferSize);
-            _ridgeBuffer     = AllocatePinned(ImageBufferSize);
-            _thumbnailBuffer = AllocatePinned((ulong)ThumbnailBufferSize);
-            _curveMeanBuffer = AllocatePinned((ulong)CurveBufferSize);
-            _curveMaxBuffer  = AllocatePinned((ulong)CurveBufferSize);
+            _inputBuffer        = AllocatePinned(ImageBufferSize);
+            _muraBuffer         = AllocatePinned(ImageBufferSize);
+            _ridgeBuffer        = AllocatePinned(ImageBufferSize);
+            _thumbnailBuffer    = AllocatePinned((ulong)ThumbnailBufferSize);
+            _curveMeanBuffer    = AllocatePinned((ulong)CurveBufferSize);
+            _curveMaxBuffer     = AllocatePinned((ulong)CurveBufferSize);
+            _curveRowMeanBuffer = AllocatePinned((ulong)CurveRowBufferSize);
+            _curveRowMaxBuffer  = AllocatePinned((ulong)CurveRowBufferSize);
         }
 
         public void Dispose()
@@ -52,6 +60,8 @@ namespace AniloxRoll.Monitor.Core.Services
             FreePinned(ref _ridgeBuffer);
             FreePinned(ref _curveMeanBuffer);
             FreePinned(ref _curveMaxBuffer);
+            FreePinned(ref _curveRowMeanBuffer);
+            FreePinned(ref _curveRowMaxBuffer);
         }
 
         private static IntPtr AllocatePinned(ulong size)

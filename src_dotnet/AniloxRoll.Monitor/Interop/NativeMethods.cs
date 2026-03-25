@@ -22,6 +22,8 @@ namespace AniloxRoll.Monitor.Core.Interop
         public IntPtr RidgeData;
         public IntPtr MuraCurveMean;
         public IntPtr MuraCurveMax;
+        public IntPtr MuraRowCurveMean;
+        public IntPtr MuraRowCurveMax;
         public IntPtr Stream;
     }
 

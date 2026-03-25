@@ -26,6 +26,8 @@ struct AoiPipelineContext {
   uint8_t* d_ridge = nullptr;
   float* d_curve_mean = nullptr;
   float* d_curve_max = nullptr;
+  float* d_row_curve_mean = nullptr;
+  float* d_row_curve_max = nullptr;
 
   ~AoiPipelineContext() { ReleaseBuffers(); }
 
@@ -36,6 +38,8 @@ struct AoiPipelineContext {
     if (d_ridge != nullptr) cudaFree(d_ridge);
     if (d_curve_mean != nullptr) cudaFree(d_curve_mean);
     if (d_curve_max != nullptr) cudaFree(d_curve_max);
+    if (d_row_curve_mean != nullptr) cudaFree(d_row_curve_mean);
+    if (d_row_curve_max != nullptr) cudaFree(d_row_curve_max);
 
     d_input = nullptr;
     d_background = nullptr;
@@ -43,6 +47,8 @@ struct AoiPipelineContext {
     d_ridge = nullptr;
     d_curve_mean = nullptr;
     d_curve_max = nullptr;
+    d_row_curve_mean = nullptr;
+    d_row_curve_max = nullptr;
     width = 0;
     height = 0;
     image_size = 0;
@@ -69,7 +75,9 @@ struct AoiPipelineContext {
         cudaMalloc(&d_mura, image_size) != cudaSuccess ||
         cudaMalloc(&d_ridge, image_size) != cudaSuccess ||
         cudaMalloc(&d_curve_mean, width * sizeof(float)) != cudaSuccess ||
-        cudaMalloc(&d_curve_max, width * sizeof(float)) != cudaSuccess) {
+        cudaMalloc(&d_curve_max, width * sizeof(float)) != cudaSuccess ||
+        cudaMalloc(&d_row_curve_mean, height * sizeof(float)) != cudaSuccess ||
+        cudaMalloc(&d_row_curve_max, height * sizeof(float)) != cudaSuccess) {
       *error = "Failed to allocate internal CUDA buffers for pipeline processing.";
       ReleaseBuffers();
       return false;
@@ -141,6 +149,8 @@ int PICoaterAPI_ProcessPipeline(AoiPipelineHandle handle,
   output_image.ridge_data = context->d_ridge;
   output_image.mura_curve_mean = context->d_curve_mean;
   output_image.mura_curve_max = context->d_curve_max;
+  output_image.mura_row_curve_mean = context->d_row_curve_mean;
+  output_image.mura_row_curve_max = context->d_row_curve_max;
   output_image.stream = output->stream != nullptr ? output->stream : input->stream;
 
   if (!context->pipeline.Process(input_image, algo_params, &output_image)) {
@@ -189,6 +199,24 @@ int PICoaterAPI_ProcessPipeline(AoiPipelineHandle handle,
                  input->width * sizeof(float),
                  cudaMemcpyDeviceToHost) != cudaSuccess) {
     context->last_error = "Failed to copy mura max curve output to host.";
+    return -2;
+  }
+
+  if (output->mura_row_curve_mean != nullptr &&
+      cudaMemcpy(output->mura_row_curve_mean,
+                 context->d_row_curve_mean,
+                 input->height * sizeof(float),
+                 cudaMemcpyDeviceToHost) != cudaSuccess) {
+    context->last_error = "Failed to copy row mean curve output to host.";
+    return -2;
+  }
+
+  if (output->mura_row_curve_max != nullptr &&
+      cudaMemcpy(output->mura_row_curve_max,
+                 context->d_row_curve_max,
+                 input->height * sizeof(float),
+                 cudaMemcpyDeviceToHost) != cudaSuccess) {
+    context->last_error = "Failed to copy row max curve output to host.";
     return -2;
   }
 

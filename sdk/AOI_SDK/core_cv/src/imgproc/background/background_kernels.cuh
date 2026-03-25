@@ -6,7 +6,7 @@
 
 namespace core {
 
-    // ¤@¯ë¥­§¡ (ªx«¬)
+    // ï¿½@ï¿½ë¥­ï¿½ï¿½ (ï¿½xï¿½ï¿½)
     template <typename T>
     __global__ void k_calcColumnMeans(
         const T* __restrict__ src,
@@ -21,7 +21,7 @@ namespace core {
         int W, int H
     );
 
-    // [­×§ï] ¥h°£Â÷¸s­È¥­§¡ (§ï¬°ªx«¬¡A¤ä´© uint8 ©M float)
+    // [ï¿½×§ï¿½] ï¿½hï¿½ï¿½ï¿½ï¿½ï¿½sï¿½È¥ï¿½ï¿½ï¿½ (ï¿½ï¬°ï¿½xï¿½ï¿½ï¿½Aï¿½ä´© uint8 ï¿½M float)
     template <typename T>
     __global__ void k_calcColumnMeans_RemoveOutliers(
         const T* __restrict__ src,
@@ -30,7 +30,23 @@ namespace core {
         float sigma_threshold
     );
 
-    // ­I´º¬Û´î (¿é¤J uint8, ¿é¥X uint8) - «O«ù¤£ÅÜ
+    // Row-wise mean (1 thread per row)
+    template <typename T>
+    __global__ void k_calcRowMeans(
+        const T* __restrict__ src,
+        float* __restrict__ dst,
+        int W, int H
+    );
+
+    // Row-wise max (1 thread per row)
+    template <typename T>
+    __global__ void k_calcRowMax(
+        const T* __restrict__ src,
+        float* __restrict__ dst,
+        int W, int H
+    );
+
+    // ï¿½Iï¿½ï¿½ï¿½Û´ï¿½ (ï¿½ï¿½J uint8, ï¿½ï¿½X uint8) - ï¿½Oï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     __global__ void k_calcColumnBackground(
         const uint8_t* __restrict__ input_image,
         const float* __restrict__ column_means,

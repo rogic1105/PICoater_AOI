@@ -100,9 +100,13 @@ namespace AniloxRoll.Monitor.Core.Data
 
             // Recipe
             sb.AppendLine("  \"Recipe\": {");
+            sb.AppendLine($"    \"Algorithm\": \"{R.Algorithm}\",");
+            sb.AppendLine($"    \"RidgeDir\": \"{R.RidgeDir}\",");
             sb.AppendLine($"    \"HessianMaxFactor\": {F(R.HessianMaxFactor)},");
             sb.AppendLine($"    \"ErrorValueMean\": {F(R.ErrorValueMean)},");
             sb.AppendLine($"    \"ErrorValueMax\": {F(R.ErrorValueMax)},");
+            sb.AppendLine($"    \"BackgroundSampleRows\": {R.BackgroundSampleRows},");
+            sb.AppendLine($"    \"AniloxRollSpeedMPerMin\": {D(R.AniloxRollSpeedMPerMin)},");
             sb.AppendLine($"    \"SaveResizeScale\": {R.SaveResizeScale},");
             sb.AppendLine($"    \"SaveJpgQuality\": {R.SaveJpgQuality}");
             sb.AppendLine("  },");
@@ -210,11 +214,26 @@ namespace AniloxRoll.Monitor.Core.Data
         private static InspectionRecipe ParseRecipe(string json)
         {
             string obj = ExtractObject(json, "Recipe");
+
+            BackgroundAlgorithm algo = BackgroundAlgorithm.SingleFrameBgSub;
+            string algoStr = GetString(obj, "Algorithm", "SingleFrameBgSub");
+            if (!System.Enum.TryParse(algoStr, true, out algo))
+                algo = BackgroundAlgorithm.SingleFrameBgSub;
+
+            RidgeDirection ridgeDir = RidgeDirection.Vertical;
+            string ridgeDirStr = GetString(obj, "RidgeDir", "Vertical");
+            if (!System.Enum.TryParse(ridgeDirStr, true, out ridgeDir))
+                ridgeDir = RidgeDirection.Vertical;
+
             return new InspectionRecipe
             {
+                Algorithm        = algo,
+                RidgeDir         = ridgeDir,
                 HessianMaxFactor = GetFloat(obj, "HessianMaxFactor", 5.0f),
                 ErrorValueMean   = GetFloat(obj, "ErrorValueMean",   1.0f),
                 ErrorValueMax    = GetFloat(obj, "ErrorValueMax",     2.0f),
+                BackgroundSampleRows = GetInt(obj, "BackgroundSampleRows", 10000),
+                AniloxRollSpeedMPerMin = GetDouble(obj, "AniloxRollSpeedMPerMin", 10.0),
                 SaveResizeScale  = GetInt  (obj, "SaveResizeScale",   5),
                 SaveJpgQuality   = GetInt  (obj, "SaveJpgQuality",    90),
             };

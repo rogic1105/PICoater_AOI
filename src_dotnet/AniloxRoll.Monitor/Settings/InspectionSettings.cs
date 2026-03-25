@@ -45,9 +45,13 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category("1. 機台佈局 / Start (mm)")][DisplayName("Cam 7")] public double Cam7_Pos { get => MachineLayout.Cam7_Pos; set => MachineLayout.Cam7_Pos = value; }
 
         // ===== 2. 檢測配方 =====
-        [Category("2. 檢測配方")][DisplayName("平均閾值")] public float ErrorValueMean   { get => Recipe.ErrorValueMean;   set => Recipe.ErrorValueMean   = value; }
-        [Category("2. 檢測配方")][DisplayName("最大閾值")] public float ErrorValueMax    { get => Recipe.ErrorValueMax;    set => Recipe.ErrorValueMax    = value; }
-        [Category("2. 檢測配方")][DisplayName("正規值")] public float HessianMaxFactor { get => Recipe.HessianMaxFactor; set => Recipe.HessianMaxFactor = value; }
+        [Category("2. 檢測配方")][DisplayName("去背演算法")]   public BackgroundAlgorithm Algorithm       { get => Recipe.Algorithm;       set => Recipe.Algorithm       = value; }
+        [Category("2. 檢測配方")][DisplayName("Ridge 方向")]   public RidgeDirection      RidgeDir        { get => Recipe.RidgeDir;        set => Recipe.RidgeDir        = value; }
+        [Category("2. 檢測配方")][DisplayName("平均閾值")]     public float ErrorValueMean   { get => Recipe.ErrorValueMean;   set => Recipe.ErrorValueMean   = value; }
+        [Category("2. 檢測配方")][DisplayName("最大閾值")]     public float ErrorValueMax    { get => Recipe.ErrorValueMax;    set => Recipe.ErrorValueMax    = value; }
+        [Category("2. 檢測配方")][DisplayName("正規值")]       public float HessianMaxFactor { get => Recipe.HessianMaxFactor; set => Recipe.HessianMaxFactor = value; }
+        [Category("2. 檢測配方")][DisplayName("背景取樣列數")] public int   BackgroundSampleRows { get => Recipe.BackgroundSampleRows; set => Recipe.BackgroundSampleRows = value; }
+        [Category("2. 檢測配方")][DisplayName("A輪速度 (m/min)")] public double AniloxRollSpeedMPerMin { get => Recipe.AniloxRollSpeedMPerMin; set => Recipe.AniloxRollSpeedMPerMin = value; }
 
 
         // ===== 3. 儲存設定 =====

@@ -121,6 +121,7 @@
     </Compile>
     <Compile Include="UI\Managers\LiveCameraManager.cs" />
     <Compile Include="UI\Widgets\MuraChartHelper.cs" />
+    <Compile Include="UI\Widgets\RowMuraChartHelper.cs" />
     <Compile Include="UI\Widgets\GrabImageStitcher.cs" />
     <Compile Include="UI\Widgets\ProportionalScaler.cs" />
     <Compile Include="UI\Presenters\InspectionStatsPresenter.cs" />

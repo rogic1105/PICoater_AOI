@@ -17,12 +17,15 @@ namespace AniloxRoll.Monitor.Core.Services
         private float _hessianMaxFactor = 5.0f;
         private float _errorMean = 1.0f;
         private float _errorMax = 2.0f;
+        private string _ridgeMode = InspectionEngineConfig.DefaultRidgeMode;
 
-        public void UpdateAlgorithmParams(float hessianFactor, float errMean, float errMax)
+        public void UpdateAlgorithmParams(float hessianFactor, float errMean, float errMax,
+            string ridgeMode = null)
         {
             _hessianMaxFactor = hessianFactor;
             _errorMean = errMean;
             _errorMax = errMax;
+            if (ridgeMode != null) _ridgeMode = ridgeMode;
         }
 
         // [新增] 記錄當前檢視模式 (true=Processed/Normal, false=Original/UpsideDown)
@@ -94,7 +97,7 @@ namespace AniloxRoll.Monitor.Core.Services
             // ProcessImage -> 會執行翻轉 (變正常)
             // LoadThumbnailOnly -> 不執行翻轉 (保持顛倒)
             results[index] = enableProcessing
-                ? _sharedProcessor.ProcessImage(path, 1000, _hessianMaxFactor)
+                ? _sharedProcessor.ProcessImage(path, 1000, _hessianMaxFactor, _ridgeMode)
                 : _sharedProcessor.LoadThumbnailOnly(path, 1000);
 
             if (results[index] != null)
@@ -109,7 +112,7 @@ namespace AniloxRoll.Monitor.Core.Services
             var path = GetFilePath(index);
             if (string.IsNullOrEmpty(path)) return null;
 
-            return _sharedProcessor.RunInspectionFullRes(path, _isProcessedMode, _hessianMaxFactor); // <--- 確認這裡
+            return _sharedProcessor.RunInspectionFullRes(path, _isProcessedMode, _hessianMaxFactor, _ridgeMode);
         }
 
         /// <summary>
@@ -122,7 +125,7 @@ namespace AniloxRoll.Monitor.Core.Services
         public Bitmap ProcessBmpAtScale(string path, int scale,
             out float[] curveMean, out float[] curveMax) =>
             _sharedProcessor.ProcessBmpAtScale(path, scale, _hessianMaxFactor,
-                out curveMean, out curveMax);
+                out curveMean, out curveMax, _ridgeMode);
 
         public void Dispose()
         {

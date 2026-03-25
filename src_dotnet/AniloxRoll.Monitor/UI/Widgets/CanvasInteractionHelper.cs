@@ -29,6 +29,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
         public void SetImageScaleFactor(int scale) => _imageScaleFactor = Math.Max(1, scale);
 
+        public string ImageInfoSuffix { get; set; } = "";
+
         private float _savedZoom = 1.0f;
         private PointF _savedPan = PointF.Empty;
         private bool _shouldRestoreView = false;
@@ -240,7 +242,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 $"範圍:{_currentViewLeftMm:F1}~{_currentViewRightMm:F1} mm | " +
                 $"座標: ({info.ImageX}, {info.ImageY}) | " +
                 $"亮度: {info.PixelColor.R} | " +
-                $"倍率:{info.Zoom:F2}x";
+                $"倍率:{info.Zoom:F2}x{ImageInfoSuffix}";
         }
 
         /// <summary>事件處理：canvas.EdgeReached → 切換至相鄰相機。</summary>

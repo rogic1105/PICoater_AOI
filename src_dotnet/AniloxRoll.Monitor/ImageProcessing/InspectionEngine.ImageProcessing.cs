@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
 using AniloxRoll.Monitor.Core.Data;
@@ -79,7 +80,8 @@ namespace AniloxRoll.Monitor.Core.Services
             });
         }
 
-        public TimedResult<InspectionData> ProcessImage(string filePath, int targetThumbWidth, float hessianFactor)
+        public TimedResult<InspectionData> ProcessImage(string filePath, int targetThumbWidth, float hessianFactor,
+            string ridgeMode = null)
         {
             if (_isDisposed) throw new ObjectDisposedException(nameof(InspectionEngine));
 
@@ -116,6 +118,8 @@ namespace AniloxRoll.Monitor.Core.Services
                         RidgeData = _ridgeBuffer,
                         MuraCurveMean = _curveMeanBuffer,
                         MuraCurveMax = _curveMaxBuffer,
+                        MuraRowCurveMean = _curveRowMeanBuffer,
+                        MuraRowCurveMax = _curveRowMaxBuffer,
                         Stream = IntPtr.Zero
                     },
                     Params = new AoiProcessRequest.AlgorithmParams
@@ -123,7 +127,7 @@ namespace AniloxRoll.Monitor.Core.Services
                         BgSigmaFactor = InspectionEngineConfig.DefaultBgSigma,
                         RidgeSigma = InspectionEngineConfig.DefaultRidgeSigma,
                         HessianMaxFactor = hessianFactor,
-                        RidgeMode = InspectionEngineConfig.DefaultRidgeMode
+                        RidgeMode = "vertical+horizontal"  // 永遠計算雙方向
                     }
                 });
                 stopwatch.Stop();
@@ -143,17 +147,24 @@ namespace AniloxRoll.Monitor.Core.Services
                 // CoreCV_Resize_GPU 輸出為 bottom-up，此應用刻意保持翻轉（取像時序）
                 Bitmap thumb = ImageUtils.Create8bppBitmap(_thumbnailBuffer, targetThumbWidth, thumbH);
 
+                // Pipeline 永遠跑 "vertical+horizontal"，一律讀取 V/H 曲線
                 float[] curveMean = new float[w];
+                float[] curveMax  = new float[w];
                 Marshal.Copy(_curveMeanBuffer, curveMean, 0, w);
+                Marshal.Copy(_curveMaxBuffer,  curveMax,  0, w);
 
-                float[] curveMax = new float[w];
-                Marshal.Copy(_curveMaxBuffer, curveMax, 0, w);
+                float[] rowCurveMean = new float[h];
+                float[] rowCurveMax  = new float[h];
+                Marshal.Copy(_curveRowMeanBuffer, rowCurveMean, 0, h);
+                Marshal.Copy(_curveRowMaxBuffer,  rowCurveMax,  0, h);
 
                 var data = new InspectionData
                 {
                     Image = thumb,
                     MuraCurveMean = curveMean,
-                    MuraCurveMax = curveMax
+                    MuraCurveMax = curveMax,
+                    MuraRowCurveMean = rowCurveMean,
+                    MuraRowCurveMax = rowCurveMax
                 };
 
                 stopwatch.Stop();
@@ -163,7 +174,8 @@ namespace AniloxRoll.Monitor.Core.Services
             });
         }
 
-        public InspectionData RunInspectionFullRes(string filePath, bool isProcessedMode, float hessianFactor)
+        public InspectionData RunInspectionFullRes(string filePath, bool isProcessedMode, float hessianFactor,
+            string ridgeMode = null)
         {
             if (_isDisposed) return null;
             if (!File.Exists(filePath)) return null;
@@ -187,18 +199,22 @@ namespace AniloxRoll.Monitor.Core.Services
                 Bitmap bmp;
                 float[] curveMean = null;
                 float[] curveMax  = null;
+                float[] rowCurveMean = null;
+                float[] rowCurveMax  = null;
                 long gpuMs = 0, bmpMs = 0, copyMs = 0;
 
-                string basePath   = Path.Combine(Path.GetDirectoryName(filePath),
-                                        Path.GetFileNameWithoutExtension(filePath));
-                string meanBinPath = basePath + "_mean.bin";
-                string maxBinPath  = basePath + "_max.bin";
+                // Pipeline 永遠跑 "vertical+horizontal"，一律產生 V/H 曲線
+                string basePath       = Path.Combine(Path.GetDirectoryName(filePath),
+                                          Path.GetFileNameWithoutExtension(filePath));
+                string meanBinPath    = basePath + "_mean_v.bin";
+                string maxBinPath     = basePath + "_max_v.bin";
+                string rowMeanBinPath = basePath + "_mean_h.bin";
+                string rowMaxBinPath  = basePath + "_max_h.bin";
 
                 if (isProcessedMode)
                 {
-                    // 處理模式：跑 GPU，用 _ridgeBuffer 當圖片
                     sw.Restart();
-                    RunGpuPipeline(w, h, hessianFactor);
+                    RunGpuPipeline(w, h, hessianFactor, ridgeMode);
                     gpuMs = sw.ElapsedMilliseconds;
 
                     sw.Restart();
@@ -210,29 +226,37 @@ namespace AniloxRoll.Monitor.Core.Services
                     curveMax  = new float[w];
                     Marshal.Copy(_curveMeanBuffer, curveMean, 0, w);
                     Marshal.Copy(_curveMaxBuffer,  curveMax,  0, w);
-                    copyMs = sw.ElapsedMilliseconds;
-
-                    // 存 .bin 供下次原圖模式直接讀取
                     if (!File.Exists(meanBinPath)) SaveCurveBin(curveMean, 1, meanBinPath);
                     if (!File.Exists(maxBinPath))  SaveCurveBin(curveMax,  1, maxBinPath);
+
+                    rowCurveMean = new float[h];
+                    rowCurveMax  = new float[h];
+                    Marshal.Copy(_curveRowMeanBuffer, rowCurveMean, 0, h);
+                    Marshal.Copy(_curveRowMaxBuffer,  rowCurveMax,  0, h);
+                    if (!File.Exists(rowMeanBinPath)) SaveCurveBin(rowCurveMean, 1, rowMeanBinPath);
+                    if (!File.Exists(rowMaxBinPath))  SaveCurveBin(rowCurveMax,  1, rowMaxBinPath);
+                    copyMs = sw.ElapsedMilliseconds;
                 }
                 else
                 {
-                    // 原圖模式：圖片用 _inputBuffer（快），曲線優先讀 .bin，沒有才跑 GPU
                     sw.Restart();
                     bmp = ImageUtils.Create8bppBitmap(_inputBuffer, w, h, flipY: false);
                     bmpMs = sw.ElapsedMilliseconds;
 
-                    if (File.Exists(meanBinPath) && File.Exists(maxBinPath))
+                    if (File.Exists(meanBinPath) || File.Exists(basePath + "_mean.bin") ||
+                        File.Exists(rowMeanBinPath) || File.Exists(basePath + "_row_mean.bin"))
                     {
-                        curveMean = LoadCurveBin(meanBinPath);
-                        curveMax  = LoadCurveBin(maxBinPath);
+                        // 從 .bin 讀取（新格式優先，舊格式向後相容）
+                        curveMean    = LoadCurveBinCompat(basePath, "_mean_v.bin", "_mean.bin");
+                        curveMax     = LoadCurveBinCompat(basePath, "_max_v.bin", "_max.bin");
+                        rowCurveMean = LoadCurveBinCompat(basePath, "_mean_h.bin", "_row_mean.bin");
+                        rowCurveMax  = LoadCurveBinCompat(basePath, "_max_h.bin", "_row_max.bin");
                     }
                     else
                     {
-                        // .bin 不存在：背景計算並存檔，下次直接讀
+                        // .bin 不存在：跑 GPU 並存檔
                         sw.Restart();
-                        RunGpuPipeline(w, h, hessianFactor);
+                        RunGpuPipeline(w, h, hessianFactor, ridgeMode);
                         gpuMs = sw.ElapsedMilliseconds;
 
                         sw.Restart();
@@ -240,10 +264,16 @@ namespace AniloxRoll.Monitor.Core.Services
                         curveMax  = new float[w];
                         Marshal.Copy(_curveMeanBuffer, curveMean, 0, w);
                         Marshal.Copy(_curveMaxBuffer,  curveMax,  0, w);
-                        copyMs = sw.ElapsedMilliseconds;
-
                         SaveCurveBin(curveMean, 1, meanBinPath);
                         SaveCurveBin(curveMax,  1, maxBinPath);
+
+                        rowCurveMean = new float[h];
+                        rowCurveMax  = new float[h];
+                        Marshal.Copy(_curveRowMeanBuffer, rowCurveMean, 0, h);
+                        Marshal.Copy(_curveRowMaxBuffer,  rowCurveMax,  0, h);
+                        SaveCurveBin(rowCurveMean, 1, rowMeanBinPath);
+                        SaveCurveBin(rowCurveMax,  1, rowMaxBinPath);
+                        copyMs = sw.ElapsedMilliseconds;
                     }
                 }
 
@@ -257,6 +287,8 @@ namespace AniloxRoll.Monitor.Core.Services
                     Image = bmp,
                     MuraCurveMean = curveMean,
                     MuraCurveMax = curveMax,
+                    MuraRowCurveMean = rowCurveMean,
+                    MuraRowCurveMax = rowCurveMax,
                     IsCompressedJpeg = false,
                     ScaleFactor = 1
                 };
@@ -288,14 +320,15 @@ namespace AniloxRoll.Monitor.Core.Services
             catch { return new TimedResult<InspectionData>(); }
         }
 
-        /// <summary>從 _proc.jpg + .bin 讀取縮圖與曲線，用於批次縮圖牆（處理模式）。</summary>
+        /// <summary>從 _proc_v.jpg + .bin 讀取縮圖與曲線，用於批次縮圖牆（處理模式）。</summary>
         private static TimedResult<InspectionData> LoadProcessedThumbnailFromJpeg(string rawJpgPath, int targetThumbWidth)
         {
             var sw = Stopwatch.StartNew();
             try
             {
                 string baseNoSuffix = rawJpgPath.Substring(0, rawJpgPath.Length - "_raw.jpg".Length);
-                string procJpgPath  = baseNoSuffix + "_proc.jpg";
+                string procJpgPath  = baseNoSuffix + "_proc_v.jpg";
+                if (!File.Exists(procJpgPath)) procJpgPath = baseNoSuffix + "_proc.jpg"; // 向後相容
                 string imgPath      = File.Exists(procJpgPath) ? procJpgPath : rawJpgPath;
 
                 Bitmap srcBmp;
@@ -310,28 +343,39 @@ namespace AniloxRoll.Monitor.Core.Services
                     g.DrawImage(srcBmp, 0, 0, targetThumbWidth, thumbH);
                 srcBmp.Dispose();
 
-                float[] curveMean = LoadCurveBin(baseNoSuffix + "_mean.bin");
-                float[] curveMax  = LoadCurveBin(baseNoSuffix + "_max.bin");
+                float[] curveMean    = LoadCurveBinCompat(baseNoSuffix, "_mean_v.bin", "_mean.bin");
+                float[] curveMax     = LoadCurveBinCompat(baseNoSuffix, "_max_v.bin", "_max.bin");
+                float[] rowCurveMean = LoadCurveBinCompat(baseNoSuffix, "_mean_h.bin", "_row_mean.bin");
+                float[] rowCurveMax  = LoadCurveBinCompat(baseNoSuffix, "_max_h.bin", "_row_max.bin");
                 long bmpMs = sw.ElapsedMilliseconds;
 
                 return new TimedResult<InspectionData>(
-                    new InspectionData { Image = thumb, MuraCurveMean = curveMean, MuraCurveMax = curveMax },
+                    new InspectionData
+                    {
+                        Image = thumb,
+                        MuraCurveMean = curveMean,
+                        MuraCurveMax = curveMax,
+                        MuraRowCurveMean = rowCurveMean,
+                        MuraRowCurveMax = rowCurveMax
+                    },
                     ioMs, 0, bmpMs);
             }
             catch { return new TimedResult<InspectionData>(); }
         }
 
         /// <summary>
-        /// 載入預先存好的新格式檔案（_raw.jpg / _proc.jpg / _mean.bin / _max.bin），無需 GPU。
+        /// 載入預先存好的新格式檔案（_raw.jpg / _proc_v.jpg / _mean_v.bin / _max_v.bin），無需 GPU。
         /// </summary>
         private static InspectionData LoadFromPrecomputedFiles(string rawJpgPath, bool isProcessedMode)
         {
             var swTotal = Stopwatch.StartNew();
 
             string baseNoSuffix = rawJpgPath.Substring(0, rawJpgPath.Length - "_raw.jpg".Length);
-            string procJpgPath  = baseNoSuffix + "_proc.jpg";
-            string meanBinPath  = baseNoSuffix + "_mean.bin";
-            string maxBinPath   = baseNoSuffix + "_max.bin";
+            string procJpgPath  = File.Exists(baseNoSuffix + "_proc_v.jpg")
+                ? baseNoSuffix + "_proc_v.jpg"
+                : baseNoSuffix + "_proc.jpg"; // 向後相容
+            string meanBinPath  = ResolveCompatPath(baseNoSuffix, "_mean_v.bin", "_mean.bin");
+            string maxBinPath   = ResolveCompatPath(baseNoSuffix, "_max_v.bin", "_max.bin");
 
             string imgPath = (isProcessedMode && File.Exists(procJpgPath)) ? procJpgPath : rawJpgPath;
 
@@ -345,8 +389,10 @@ namespace AniloxRoll.Monitor.Core.Services
             }
             catch { return null; }
 
-            float[] curveMean = LoadCurveBin(meanBinPath);
-            float[] curveMax  = LoadCurveBin(maxBinPath);
+            float[] curveMean    = LoadCurveBin(meanBinPath);
+            float[] curveMax     = LoadCurveBin(maxBinPath);
+            float[] rowCurveMean = LoadCurveBinCompat(baseNoSuffix, "_mean_h.bin", "_row_mean.bin");
+            float[] rowCurveMax  = LoadCurveBinCompat(baseNoSuffix, "_max_h.bin", "_row_max.bin");
 
             Console.WriteLine(
                 $"[FullRes-New] mode={isProcessedMode,-5} | Total={swTotal.ElapsedMilliseconds,4}ms  ({bmp.Width}x{bmp.Height})");
@@ -360,12 +406,14 @@ namespace AniloxRoll.Monitor.Core.Services
                 Image = bmp,
                 MuraCurveMean = curveMean,
                 MuraCurveMax = curveMax,
+                MuraRowCurveMean = rowCurveMean,
+                MuraRowCurveMax = rowCurveMax,
                 IsCompressedJpeg = true,
                 ScaleFactor = scaleFactor
             };
         }
 
-        private void RunGpuPipeline(int w, int h, float hessianFactor)
+        private void RunGpuPipeline(int w, int h, float hessianFactor, string ridgeMode = null)
         {
             _aoiService.ProcessImage(new AoiProcessRequest
             {
@@ -378,19 +426,21 @@ namespace AniloxRoll.Monitor.Core.Services
                 },
                 Output = new AoiProcessRequest.OutputBuffers
                 {
-                    BackgroundData = IntPtr.Zero,
-                    MuraData       = _muraBuffer,
-                    RidgeData      = _ridgeBuffer,
-                    MuraCurveMean  = _curveMeanBuffer,
-                    MuraCurveMax   = _curveMaxBuffer,
-                    Stream         = IntPtr.Zero
+                    BackgroundData   = IntPtr.Zero,
+                    MuraData         = _muraBuffer,
+                    RidgeData        = _ridgeBuffer,
+                    MuraCurveMean    = _curveMeanBuffer,
+                    MuraCurveMax     = _curveMaxBuffer,
+                    MuraRowCurveMean = _curveRowMeanBuffer,
+                    MuraRowCurveMax  = _curveRowMaxBuffer,
+                    Stream           = IntPtr.Zero
                 },
                 Params = new AoiProcessRequest.AlgorithmParams
                 {
                     BgSigmaFactor    = InspectionEngineConfig.DefaultBgSigma,
                     RidgeSigma       = InspectionEngineConfig.DefaultRidgeSigma,
                     HessianMaxFactor = hessianFactor,
-                    RidgeMode        = InspectionEngineConfig.DefaultRidgeMode
+                    RidgeMode        = "vertical+horizontal"  // 永遠計算雙方向，確保 V/H 皆可存檔
                 }
             });
         }
@@ -400,7 +450,7 @@ namespace AniloxRoll.Monitor.Core.Services
         /// 曲線保持全解析度（用於 MergeCurves），同時存 .bin 供下次原圖模式讀取。
         /// </summary>
         public Bitmap ProcessBmpAtScale(string path, int scale, float hessianFactor,
-            out float[] curveMean, out float[] curveMax)
+            out float[] curveMean, out float[] curveMax, string ridgeMode = null)
         {
             curveMean = null;
             curveMax  = null;
@@ -412,29 +462,89 @@ namespace AniloxRoll.Monitor.Core.Services
                     path, out int w, out int h, _inputBuffer, (int)_imgBufferSize);
                 if (!ok) return null;
 
-                RunGpuPipeline(w, h, hessianFactor);
+                // Pipeline 永遠跑 "vertical+horizontal"，一律產生 V/H 曲線與圖片
+                RunGpuPipeline(w, h, hessianFactor, ridgeMode);
 
-                // 曲線（全解析度）
+                string basePath       = Path.Combine(Path.GetDirectoryName(path),
+                                           Path.GetFileNameWithoutExtension(path));
+
+                // Col curves（vertical 方向）
                 curveMean = new float[w];
                 curveMax  = new float[w];
                 Marshal.Copy(_curveMeanBuffer, curveMean, 0, w);
                 Marshal.Copy(_curveMaxBuffer,  curveMax,  0, w);
-
-                // 存 .bin 供下次原圖模式直接讀取
-                string basePath    = Path.Combine(Path.GetDirectoryName(path),
-                                        Path.GetFileNameWithoutExtension(path));
-                string meanBinPath = basePath + "_mean.bin";
-                string maxBinPath  = basePath + "_max.bin";
+                string meanBinPath = basePath + "_mean_v.bin";
+                string maxBinPath  = basePath + "_max_v.bin";
                 if (!File.Exists(meanBinPath)) SaveCurveBin(curveMean, 1, meanBinPath);
                 if (!File.Exists(maxBinPath))  SaveCurveBin(curveMax,  1, maxBinPath);
 
-                // 縮圖：從 _ridgeBuffer（處理結果）resize
+                // Row curves（horizontal 方向）
+                float[] rowMean = new float[h];
+                float[] rowMax  = new float[h];
+                Marshal.Copy(_curveRowMeanBuffer, rowMean, 0, h);
+                Marshal.Copy(_curveRowMaxBuffer,  rowMax,  0, h);
+                string rowMeanBinPath = basePath + "_mean_h.bin";
+                string rowMaxBinPath  = basePath + "_max_h.bin";
+                if (!File.Exists(rowMeanBinPath)) SaveCurveBin(rowMean, 1, rowMeanBinPath);
+                if (!File.Exists(rowMaxBinPath))  SaveCurveBin(rowMax,  1, rowMaxBinPath);
+
                 int dstW = Math.Max(1, w / scale);
                 int dstH = Math.Max(1, h / scale);
-                // 用 _muraBuffer 作為 resize 目標（與 LoadBitmapAtScale 相同策略）
+
+                // _muraBuffer = horizontal ridge → _proc_h.jpg（先存，resize 前 _muraBuffer 還沒被覆蓋）
+                string procHPath = basePath + "_proc_h.jpg";
+                if (!File.Exists(procHPath))
+                {
+                    int retH = NativeMethods.CoreCV_Resize_GPU(_muraBuffer, w, h, _inputBuffer, dstW, dstH);
+                    if (retH == 0)
+                    {
+                        using (var bmpH = ImageUtils.Create8bppBitmap(_inputBuffer, dstW, dstH, flipY: true))
+                        using (var bmp24 = new Bitmap(dstW, dstH, PixelFormat.Format24bppRgb))
+                        using (var g = Graphics.FromImage(bmp24))
+                        {
+                            g.DrawImage(bmpH, 0, 0, dstW, dstH);
+                            SaveBitmapAsJpeg(bmp24, procHPath, 90);
+                        }
+                    }
+                }
+
+                // _ridgeBuffer = vertical ridge → resize 至 _muraBuffer 作為回傳 Bitmap + 存 _proc_v.jpg
                 int ret = NativeMethods.CoreCV_Resize_GPU(_ridgeBuffer, w, h, _muraBuffer, dstW, dstH);
                 if (ret != 0) return null;
+
+                string procVPath = basePath + "_proc_v.jpg";
+                if (!File.Exists(procVPath))
+                {
+                    using (var bmpProc = ImageUtils.Create8bppBitmap(_muraBuffer, dstW, dstH, flipY: true))
+                    using (var bmp24 = new Bitmap(dstW, dstH, PixelFormat.Format24bppRgb))
+                    using (var g = Graphics.FromImage(bmp24))
+                    {
+                        g.DrawImage(bmpProc, 0, 0, dstW, dstH);
+                        SaveBitmapAsJpeg(bmp24, procVPath, 90);
+                    }
+                }
+
                 return ImageUtils.Create8bppBitmap(_muraBuffer, dstW, dstH, flipY: true);
+            }
+        }
+
+        private static void SaveBitmapAsJpeg(Bitmap bmp, string path, int quality)
+        {
+            try
+            {
+                ImageCodecInfo codec = null;
+                foreach (var c in ImageCodecInfo.GetImageEncoders())
+                    if (c.FormatID == ImageFormat.Jpeg.Guid) { codec = c; break; }
+                if (codec == null) { bmp.Save(path); return; }
+                using (var ep = new EncoderParameters(1))
+                {
+                    ep.Param[0] = new EncoderParameter(Encoder.Quality, (long)quality);
+                    bmp.Save(path, codec, ep);
+                }
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"[InspectionEngine.SaveBitmapAsJpeg] {ex.Message}");
             }
         }
 
@@ -501,6 +611,21 @@ namespace AniloxRoll.Monitor.Core.Services
                 }
             }
             catch { return null; }
+        }
+
+        /// <summary>向後相容：優先讀新命名，不存在則嘗試舊命名。</summary>
+        private static float[] LoadCurveBinCompat(string baseNoSuffix, string newSuffix, string oldSuffix)
+        {
+            string path = baseNoSuffix + newSuffix;
+            if (File.Exists(path)) return LoadCurveBin(path);
+            return LoadCurveBin(baseNoSuffix + oldSuffix);
+        }
+
+        /// <summary>向後相容：優先回傳新命名路徑，不存在則回傳舊命名路徑。</summary>
+        private static string ResolveCompatPath(string baseNoSuffix, string newSuffix, string oldSuffix)
+        {
+            string path = baseNoSuffix + newSuffix;
+            return File.Exists(path) ? path : baseNoSuffix + oldSuffix;
         }
 
     }

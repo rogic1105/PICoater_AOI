@@ -98,7 +98,9 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 string loadPath = path;
                 if (useProcessed)
                 {
-                    string procPath = path.Substring(0, path.Length - "_raw.jpg".Length) + "_proc.jpg";
+                    string baseName = path.Substring(0, path.Length - "_raw.jpg".Length);
+                    string procPath = baseName + "_proc_v.jpg";
+                    if (!File.Exists(procPath)) procPath = baseName + "_proc.jpg"; // 向後相容
                     if (File.Exists(procPath)) loadPath = procPath;
                 }
                 byte[] bytes = File.ReadAllBytes(loadPath);

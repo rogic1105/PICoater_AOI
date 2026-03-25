@@ -23,6 +23,8 @@ namespace AniloxRoll.Monitor.Core.Services
             public IntPtr RidgeData { get; set; }
             public IntPtr MuraCurveMean { get; set; }
             public IntPtr MuraCurveMax { get; set; }
+            public IntPtr MuraRowCurveMean { get; set; }
+            public IntPtr MuraRowCurveMax { get; set; }
             public IntPtr Stream { get; set; }
         }
 
@@ -93,6 +95,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 RidgeData = request.Output.RidgeData,
                 MuraCurveMean = request.Output.MuraCurveMean,
                 MuraCurveMax = request.Output.MuraCurveMax,
+                MuraRowCurveMean = request.Output.MuraRowCurveMean,
+                MuraRowCurveMax = request.Output.MuraRowCurveMax,
                 Stream = request.Output.Stream != IntPtr.Zero ? request.Output.Stream : request.Input.Stream
             };
 

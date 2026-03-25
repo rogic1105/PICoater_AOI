@@ -30,6 +30,8 @@ namespace AniloxRoll.Monitor.Forms
         private MuraChartHelper _muraChartLiveHelper;
         private MuraChartHelper _stitchedOverviewHelper;
         private MuraChartHelper _liveOverviewHelper;
+        private RowMuraChartHelper _rowChartLiveHelper;
+        private RowMuraChartHelper _muraChartHorizontalHelper;
         private LiveCameraManager _liveCameraManager;
         private ProportionalScaler _scaler;
 
@@ -91,6 +93,8 @@ namespace AniloxRoll.Monitor.Forms
         private Bitmap[] _stitchedImages;
         private float[][] _stitchedCurveMean;
         private float[][] _stitchedCurveMax;
+        private float[][] _stitchedRowCurveMean;
+        private float[][] _stitchedRowCurveMax;
         private CsvConfigSnapshot _currentGrabConfig;
 
 
@@ -126,7 +130,7 @@ namespace AniloxRoll.Monitor.Forms
         private void InitUiLayer()
         {
             _dateTimeNavigator = new DateTimeNavigator(
-                _imageRepository, cbYear, cbMonth, cbDay, cbHour, cbMin, cbSec);
+                _imageRepository, cbDate, cbTime);
 
             _galleryManager = new ThumbnailGridPresenter();
             _galleryManager.Initialize(new PictureBox[] {
@@ -136,11 +140,11 @@ namespace AniloxRoll.Monitor.Forms
             _presenter = new AniloxRollPresenter(
                 _imageRepository, _inspectionService, _dateTimeNavigator, _galleryManager);
 
-            _muraChartHelper = new MuraChartHelper(this.chartMura);
+            _muraChartHelper = new MuraChartHelper(this.chartMuraVertical);
             _muraChartHelper.SetOps(_settings.Cam1_Ops);
             _muraChartHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
 
-            _muraChartLiveHelper = new MuraChartHelper(this.muraChartLive);
+            _muraChartLiveHelper = new MuraChartHelper(this.muraChartVerticalLive);
             _muraChartLiveHelper.SetOps(_settings.Cam1_Ops);
             _muraChartLiveHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
 
@@ -153,6 +157,14 @@ namespace AniloxRoll.Monitor.Forms
             _liveOverviewHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
             if (chartLiveOverview.ChartAreas.Count > 0)
                 chartLiveOverview.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
+
+            _rowChartLiveHelper = new RowMuraChartHelper(this.muraChartHorizontalLive);
+            _rowChartLiveHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+
+            _muraChartHorizontalHelper = new RowMuraChartHelper(this.chartMuraHorizontal);
+            _muraChartHorizontalHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+
+            UpdateRowChartPitch();
 
             checkBoxEnableImageProcessing.Checked =
                 UserSessionState.GetLastEnableImageProcessing(checkBoxEnableImageProcessing.Checked);
@@ -181,8 +193,7 @@ namespace AniloxRoll.Monitor.Forms
                 Settings         = _settings,
                 StatusLabel      = lblPixelInfo,
                 CameraPanels     = new[] { pbCam1, pbCam2, pbCam3, pbCam4, pbCam5, pbCam6, pbCam7 },
-                ImageFormatLabel = lblImageFormat,
-                ImageScaleLabel  = lblImageScale
+                MuraChartHorizontalHelper = _muraChartHorizontalHelper,
             });
             _interactionHelper.ApplySettingsToService();
 
@@ -221,7 +232,8 @@ namespace AniloxRoll.Monitor.Forms
             );
             _liveCameraManager.SetCaptureSettings(_settings);
             _liveCameraManager.OnInspectionResult += OnCameraInspectionResult;
-            _liveCameraManager.OnLiveCurveData   += OnLiveCurveData;
+            _liveCameraManager.OnLiveCurveData      += OnLiveCurveData;
+            _liveCameraManager.OnLiveRowCurveData   += OnLiveRowCurveData;
 
             FormClosed += (_, __) =>
             {
@@ -323,6 +335,30 @@ namespace AniloxRoll.Monitor.Forms
                 startPos, double.NaN, double.NaN);
         }
 
+        private void OnLiveRowCurveData(int camId, float[] meanArr, float[] maxArr)
+        {
+            if (camId != _liveCameraManager.SelectedMainCameraId) return;
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action<int, float[], float[]>(OnLiveRowCurveData), camId, meanArr, maxArr);
+                return;
+            }
+
+            _rowChartLiveHelper?.UpdateData(meanArr, maxArr);
+        }
+
+        /// <summary>用 A輪速度 和選中相機的取樣頻率（Line Rate）更新法向圖表座標。</summary>
+        private void UpdateRowChartPitch()
+        {
+            if (_settings == null) return;
+            double lineRateHz = _settings.Acquisition.CameraLineRateHz[0]; // CAM1 master
+            _rowChartLiveHelper?.SetRowPitchFromSpeed(
+                _settings.AniloxRollSpeedMPerMin, lineRateHz);
+            _muraChartHorizontalHelper?.SetRowPitchFromSpeed(
+                _settings.AniloxRollSpeedMPerMin, lineRateHz);
+        }
+
         private void btnCameraFree_Click(object sender, EventArgs e)
         {
             _liveCameraManager.FreeCameras();
@@ -349,7 +385,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private void checkBoxEnableImageProcessing_CheckedChanged(object sender, EventArgs e)
         {
-            _liveCameraManager.SetImageProcessingEnabled(checkBoxEnableImageProcessing.Checked);
+            _liveCameraManager?.SetImageProcessingEnabled(checkBoxEnableImageProcessing.Checked);
             UserSessionState.SetLastEnableImageProcessing(checkBoxEnableImageProcessing.Checked);
             UserSessionState.Save();
         }
@@ -358,9 +394,11 @@ namespace AniloxRoll.Monitor.Forms
         // 因此兩種形式都放入集合，避免版本差異導致漏判。
         private static readonly HashSet<string> RecipePropertyNames = new HashSet<string>(StringComparer.Ordinal)
         {
-            nameof(InspectionRecipe.HessianMaxFactor), "Hessian Max Factor",
-            nameof(InspectionRecipe.ErrorValueMean),   "Error Value Mean",
-            nameof(InspectionRecipe.ErrorValueMax),    "Error Value Max",
+            nameof(InspectionRecipe.HessianMaxFactor), "Hessian Max Factor", "正規值",
+            nameof(InspectionRecipe.ErrorValueMean),   "Error Value Mean",   "平均閾值",
+            nameof(InspectionRecipe.ErrorValueMax),    "Error Value Max",    "最大閾值",
+            nameof(InspectionRecipe.Algorithm),        "去背演算法",
+            nameof(InspectionRecipe.RidgeDir),         "Ridge 方向",
         };
 
         private async void _propertyGrid_PropertyValueChanged(object s, PropertyValueChangedEventArgs e)
@@ -371,6 +409,9 @@ namespace AniloxRoll.Monitor.Forms
             _muraChartLiveHelper?.SetOps(_settings.Cam1_Ops);
             _muraChartLiveHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
             _liveOverviewHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _rowChartLiveHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _muraChartHorizontalHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            UpdateRowChartPitch();
 
             // 抓圖進行中設定變更 → 立刻在 CSV 插入 #CFG
             if (_liveCameraManager?.IsLiveGrabbing == true)
@@ -404,7 +445,7 @@ namespace AniloxRoll.Monitor.Forms
                 {
                     _statsDataRootPath  = reviewPath;
                     _statAvailableTimes = InspectionStatisticsService.LoadAvailableTimes(reviewPath);
-                    _grabIdInfos        = InspectionStatisticsService.LoadGrabIdInfos(reviewPath);
+                    _grabIdInfos        = InspectionStatisticsService.LoadGrabIdInfosDescending(reviewPath);
 
                     _statComboUpdating = true;
                     try
@@ -424,19 +465,18 @@ namespace AniloxRoll.Monitor.Forms
                         UpdateGrabIdNavState();
                         if (cbGrabIdStart.Items.Count > 0)
                         {
-                            cbGrabIdStart.SelectedIndex = 0;
-                            cbGrabIdEnd.SelectedIndex = cbGrabIdEnd.Items.Count - 1;
-                        }
-                        if (_statAvailableTimes.Count > 0)
-                        {
-                            SetCombosToDateTime(true,  _statAvailableTimes.Min);
-                            SetCombosToDateTime(false, _statAvailableTimes.Max);
-                            DoRefreshCombos(true,  0);
-                            DoRefreshCombos(false, 0);
+                            cbGrabIdStart.SelectedIndex = cbGrabIdStart.Items.Count - 1;
+                            cbGrabIdEnd.SelectedIndex = 0;
                         }
                     }
                     finally { _statComboUpdating = false; }
-                    PopulateChartNavigators();
+
+                    // 填充日期/時間 ComboBox（全範圍）
+                    if (_statAvailableTimes.Count > 0)
+                        PopulateStatDateCombos(_statAvailableTimes.Min, _statAvailableTimes.Max);
+
+                    PopulateChartNavigators(_statAvailableTimes.Count > 0
+                        ? (DateTime?)_statAvailableTimes.Max : null);
                     RefreshStats();
                 }
             }
@@ -627,6 +667,7 @@ namespace AniloxRoll.Monitor.Forms
                     if (!_dragging.Contains(_lrBars[idx]))
                         _liveCameraManager?.SetLineRateForCamera(camId, _lrBars[idx].Value);
                     UpdateExpMaxAndClampColor(idx, CalcExpMax());
+                    if (idx == 0) UpdateRowChartPitch();
                     syncLr = false;
                 };
                 _lrNums[idx].ValueChanged += (s, e) =>
@@ -638,6 +679,7 @@ namespace AniloxRoll.Monitor.Forms
                     ConfigManager.SaveAcquisitionSettings(acq);
                     _liveCameraManager?.SetLineRateForCamera(camId, v);
                     UpdateExpMaxAndClampColor(idx, CalcExpMax());
+                    if (idx == 0) UpdateRowChartPitch();
                     syncLr = false;
                 };
 
@@ -835,8 +877,7 @@ namespace AniloxRoll.Monitor.Forms
             // 滾輪上滾 = 數值增加（反轉 ComboBox 預設行為）
             foreach (var cb in new[] {
                 cbChartYear, cbChartMonth, cbChartDay,
-                cbStartYear, cbStartMonth, cbStartDay, cbStartHour, cbStartMin, cbStartSec,
-                cbEndYear,   cbEndMonth,   cbEndDay,   cbEndHour,   cbEndMin,   cbEndSec,
+                cbStartDate, cbStartTime, cbEndDate, cbEndTime,
                 cbGrabIdStart, cbGrabIdEnd, cbDataGrabId, cbReviewGrabId })
                 _wheelInterceptors.Add(new ComboBoxWheelReverser(cb));
 
@@ -852,66 +893,35 @@ namespace AniloxRoll.Monitor.Forms
 
         private void PopulateStatDateCombos(DateTime start, DateTime end)
         {
-            // Year
-            int curYear = DateTime.Today.Year;
-            cbStartYear.Items.Clear(); cbEndYear.Items.Clear();
-            for (int y = curYear - 5; y <= curYear + 1; y++)
-            {
-                cbStartYear.Items.Add(y.ToString());
-                cbEndYear.Items.Add(y.ToString());
-            }
-            cbStartYear.Text = start.Year.ToString();
-            cbEndYear.Text   = end.Year.ToString();
+            var dates = GetAvailableDateStrings();
+            string startDateStr = start.ToString("yyyy-MM-dd");
+            string endDateStr   = end.ToString("yyyy-MM-dd");
+            string startTimeStr = start.ToString("HH:mm:ss");
+            string endTimeStr   = end.ToString("HH:mm:ss");
 
-            // Month
-            cbStartMonth.Items.Clear(); cbEndMonth.Items.Clear();
-            for (int m = 1; m <= 12; m++)
-            {
-                cbStartMonth.Items.Add(m.ToString("D2"));
-                cbEndMonth.Items.Add(m.ToString("D2"));
-            }
-            cbStartMonth.Text = start.Month.ToString("D2");
-            cbEndMonth.Text   = end.Month.ToString("D2");
+            // Start
+            cbStartDate.Items.Clear();
+            cbStartDate.Items.AddRange(dates.ToArray());
+            int si = dates.IndexOf(startDateStr);
+            cbStartDate.SelectedIndex = si >= 0 ? si : (dates.Count > 0 ? dates.Count - 1 : -1);
+            RefreshStatTimeCombo(cbStartDate, cbStartTime, startTimeStr);
 
-            // Day
-            cbStartDay.Items.Clear(); cbEndDay.Items.Clear();
-            for (int d = 1; d <= 31; d++)
-            {
-                cbStartDay.Items.Add(d.ToString("D2"));
-                cbEndDay.Items.Add(d.ToString("D2"));
-            }
-            cbStartDay.Text = start.Day.ToString("D2");
-            cbEndDay.Text   = end.Day.ToString("D2");
+            // End（降序：第一筆 = 最新）
+            cbEndDate.Items.Clear();
+            cbEndDate.Items.AddRange(dates.ToArray());
+            int ei = dates.IndexOf(endDateStr);
+            cbEndDate.SelectedIndex = ei >= 0 ? ei : (dates.Count > 0 ? 0 : -1);
+            RefreshStatTimeCombo(cbEndDate, cbEndTime, endTimeStr);
+        }
 
-            // Hour
-            cbStartHour.Items.Clear(); cbEndHour.Items.Clear();
-            for (int h = 0; h <= 23; h++)
-            {
-                cbStartHour.Items.Add(h.ToString("D2"));
-                cbEndHour.Items.Add(h.ToString("D2"));
-            }
-            cbStartHour.Text = start.Hour.ToString("D2");
-            cbEndHour.Text   = end.Hour.ToString("D2");
-
-            // Min
-            cbStartMin.Items.Clear(); cbEndMin.Items.Clear();
-            for (int mn = 0; mn <= 59; mn++)
-            {
-                cbStartMin.Items.Add(mn.ToString("D2"));
-                cbEndMin.Items.Add(mn.ToString("D2"));
-            }
-            cbStartMin.Text = start.Minute.ToString("D2");
-            cbEndMin.Text   = end.Minute.ToString("D2");
-
-            // Sec
-            cbStartSec.Items.Clear(); cbEndSec.Items.Clear();
-            for (int s = 0; s <= 59; s++)
-            {
-                cbStartSec.Items.Add(s.ToString("D2"));
-                cbEndSec.Items.Add(s.ToString("D2"));
-            }
-            cbStartSec.Text = start.Second.ToString("D2");
-            cbEndSec.Text   = end.Second.ToString("D2");
+        private void RefreshStatTimeCombo(ComboBox dateCb, ComboBox timeCb, string preferred)
+        {
+            var times = GetAvailableTimeStrings(dateCb.Text);
+            timeCb.Items.Clear();
+            timeCb.Items.AddRange(times.ToArray());
+            if (times.Count == 0) return;
+            int idx = times.IndexOf(preferred);
+            timeCb.SelectedIndex = idx >= 0 ? idx : (times.Count > 0 ? 0 : -1);
         }
 
         private void BtnSelectDataFolder_Click(object sender, EventArgs e)
@@ -928,7 +938,7 @@ namespace AniloxRoll.Monitor.Forms
                 {
                     _statsDataRootPath  = dlg.SelectedPath;
                     _statAvailableTimes = InspectionStatisticsService.LoadAvailableTimes(_statsDataRootPath);
-                    _grabIdInfos        = InspectionStatisticsService.LoadGrabIdInfos(_statsDataRootPath);
+                    _grabIdInfos        = InspectionStatisticsService.LoadGrabIdInfosDescending(_statsDataRootPath);
 
                     // 同步 Review tab：載入圖片索引 + 時間導航
                     UserSessionState.SetLastDataPath(_statsDataRootPath);
@@ -955,22 +965,20 @@ namespace AniloxRoll.Monitor.Forms
                         UpdateGrabIdNavState();
                         if (cbGrabIdStart.Items.Count > 0)
                         {
-                            cbGrabIdStart.SelectedIndex = 0;
-                            cbGrabIdEnd.SelectedIndex = cbGrabIdEnd.Items.Count - 1;
+                            cbGrabIdStart.SelectedIndex = cbGrabIdStart.Items.Count - 1;
+                            cbGrabIdEnd.SelectedIndex = 0;
                         }
 
-                        // 時間 ComboBox 設為全範圍
-                        if (_statAvailableTimes.Count > 0)
-                        {
-                            SetCombosToDateTime(true,  _statAvailableTimes.Min);
-                            SetCombosToDateTime(false, _statAvailableTimes.Max);
-                            DoRefreshCombos(true,  0);
-                            DoRefreshCombos(false, 0);
-                        }
                     }
                     finally { _statComboUpdating = false; }
+
+                    // 填充日期/時間 ComboBox（全範圍）
+                    if (_statAvailableTimes.Count > 0)
+                        PopulateStatDateCombos(_statAvailableTimes.Min, _statAvailableTimes.Max);
+
                     SetActiveStatGroupBox(groupBoxGrabIdRange);
-                    PopulateChartNavigators();
+                    PopulateChartNavigators(_statAvailableTimes.Count > 0
+                        ? (DateTime?)_statAvailableTimes.Max : null);
                     RefreshStats();
                 }
             }
@@ -980,29 +988,25 @@ namespace AniloxRoll.Monitor.Forms
         private bool TryParseStatDateTime(out DateTime start, out DateTime end)
         {
             start = end = DateTime.MinValue;
-            if (!TryBuildDateTime(cbStartYear, cbStartMonth, cbStartDay,
-                                  cbStartHour, cbStartMin, cbStartSec, out start)) return false;
-            if (!TryBuildDateTime(cbEndYear,   cbEndMonth,   cbEndDay,
-                                  cbEndHour,   cbEndMin,     cbEndSec,   out end))   return false;
-            // 秒級 ComboBox 無毫秒，將 end 推至該秒末尾以涵蓋所有毫秒
-            end = end.AddMilliseconds(999);
+            if (!TryBuildDateTimeFromCombos(cbStartDate, cbStartTime, out start)) return false;
+            if (!TryBuildDateTimeFromCombos(cbEndDate,   cbEndTime,   out end))   return false;
+            // 若無毫秒精度，將 end 推至該秒末尾以涵蓋所有毫秒
+            if (end.Millisecond == 0) end = end.AddMilliseconds(999);
             return start <= end;
         }
 
-        private static bool TryBuildDateTime(
-            ComboBox year, ComboBox month, ComboBox day,
-            ComboBox hour, ComboBox min,  ComboBox sec,
-            out DateTime result)
+        private static bool TryBuildDateTimeFromCombos(ComboBox dateCb, ComboBox timeCb, out DateTime result)
         {
             result = DateTime.MinValue;
-            if (!int.TryParse(year.Text,  out int y)) return false;
-            if (!int.TryParse(month.Text, out int mo)) return false;
-            if (!int.TryParse(day.Text,   out int d))  return false;
-            if (!int.TryParse(hour.Text,  out int h))  return false;
-            if (!int.TryParse(min.Text,   out int mn)) return false;
-            if (!int.TryParse(sec.Text,   out int s))  return false;
-            try { result = new DateTime(y, mo, d, h, mn, s); return true; }
-            catch { return false; }
+            string dateText = dateCb.Text ?? "";
+            string timeText = timeCb.Text ?? "";
+            string combined = dateText + " " + timeText;
+            // 嘗試 "yyyy-MM-dd HH:mm:ss.fff" 或 "yyyy-MM-dd HH:mm:ss"
+            if (DateTime.TryParseExact(combined, new[] { "yyyy-MM-dd HH:mm:ss.fff", "yyyy-MM-dd HH:mm:ss" },
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out result))
+                return true;
+            return false;
         }
 
         // ==========================================
@@ -1011,19 +1015,10 @@ namespace AniloxRoll.Monitor.Forms
 
         private void WireStatDateCombos()
         {
-            cbStartYear.SelectedIndexChanged  += (s, e) => OnStartComboChanged(1);
-            cbStartMonth.SelectedIndexChanged += (s, e) => OnStartComboChanged(2);
-            cbStartDay.SelectedIndexChanged   += (s, e) => OnStartComboChanged(3);
-            cbStartHour.SelectedIndexChanged  += (s, e) => OnStartComboChanged(4);
-            cbStartMin.SelectedIndexChanged   += (s, e) => OnStartComboChanged(5);
-            cbStartSec.SelectedIndexChanged   += (s, e) => OnStartComboChanged(6);
-
-            cbEndYear.SelectedIndexChanged    += (s, e) => OnEndComboChanged(1);
-            cbEndMonth.SelectedIndexChanged   += (s, e) => OnEndComboChanged(2);
-            cbEndDay.SelectedIndexChanged     += (s, e) => OnEndComboChanged(3);
-            cbEndHour.SelectedIndexChanged    += (s, e) => OnEndComboChanged(4);
-            cbEndMin.SelectedIndexChanged     += (s, e) => OnEndComboChanged(5);
-            cbEndSec.SelectedIndexChanged     += (s, e) => OnEndComboChanged(6);
+            cbStartDate.SelectedIndexChanged += (s, e) => OnStartComboChanged(1);
+            cbStartTime.SelectedIndexChanged += (s, e) => OnStartComboChanged(2);
+            cbEndDate.SelectedIndexChanged   += (s, e) => OnEndComboChanged(1);
+            cbEndTime.SelectedIndexChanged   += (s, e) => OnEndComboChanged(2);
         }
 
         private void OnStartComboChanged(int fromLevel)
@@ -1033,7 +1028,11 @@ namespace AniloxRoll.Monitor.Forms
             if (_statAvailableTimes.Count > 0)
             {
                 _statComboUpdating = true;
-                try { DoRefreshCombos(true, fromLevel); ClampEndToStart(); }
+                try
+                {
+                    if (fromLevel <= 1) RefreshStatTimeCombo(cbStartDate, cbStartTime, cbStartTime.Text);
+                    ClampEndToStart();
+                }
                 finally { _statComboUpdating = false; }
             }
             RefreshStats();
@@ -1046,103 +1045,54 @@ namespace AniloxRoll.Monitor.Forms
             if (_statAvailableTimes.Count > 0)
             {
                 _statComboUpdating = true;
-                try { DoRefreshCombos(false, fromLevel); ClampStartToEnd(); }
+                try
+                {
+                    if (fromLevel <= 1) RefreshStatTimeCombo(cbEndDate, cbEndTime, cbEndTime.Text);
+                    ClampStartToEnd();
+                }
                 finally { _statComboUpdating = false; }
             }
             RefreshStats();
         }
 
-        /// <summary>
-        /// 從 fromLevel 開始（含）向下重建 isStart 側的 ComboBox Items，
-        /// 只保留 _statAvailableTimes 中實際存在的選項。
-        /// </summary>
-        private void DoRefreshCombos(bool isStart, int fromLevel)
-        {
-            var cbs = isStart
-                ? new[] { cbStartYear, cbStartMonth, cbStartDay, cbStartHour, cbStartMin, cbStartSec }
-                : new[] { cbEndYear,   cbEndMonth,   cbEndDay,   cbEndHour,   cbEndMin,   cbEndSec   };
-
-            // 先讀取目前文字（作為偏好值）
-            int[] cur = new int[6];
-            for (int i = 0; i < 6; i++) int.TryParse(cbs[i].Text, out cur[i]);
-
-            if (fromLevel <= 0) RefillCombo(cbs[0], GetAvailableYears(),                            cur[0], "");
-            if (!int.TryParse(cbs[0].Text, out int y))  return;
-
-            if (fromLevel <= 1) RefillCombo(cbs[1], GetAvailableMonths(y),                         cur[1], "D2");
-            if (!int.TryParse(cbs[1].Text, out int mo)) return;
-
-            if (fromLevel <= 2) RefillCombo(cbs[2], GetAvailableDays(y, mo),                       cur[2], "D2");
-            if (!int.TryParse(cbs[2].Text, out int d))  return;
-
-            if (fromLevel <= 3) RefillCombo(cbs[3], GetAvailableHours(y, mo, d),                   cur[3], "D2");
-            if (!int.TryParse(cbs[3].Text, out int h))  return;
-
-            if (fromLevel <= 4) RefillCombo(cbs[4], GetAvailableMinutes(y, mo, d, h),              cur[4], "D2");
-            if (!int.TryParse(cbs[4].Text, out int mi)) return;
-
-            if (fromLevel <= 5) RefillCombo(cbs[5], GetAvailableSeconds(y, mo, d, h, mi),          cur[5], "D2");
-        }
-
-        private static void RefillCombo(ComboBox cb, List<int> values, int preferred, string fmt)
-        {
-            string target = preferred > 0 ? preferred.ToString(fmt) : cb.Text;
-            cb.Items.Clear();
-            foreach (int v in values) cb.Items.Add(v.ToString(fmt));
-            int idx = cb.Items.IndexOf(target);
-            cb.SelectedIndex = idx >= 0 ? idx : (cb.Items.Count > 0 ? 0 : -1);
-        }
-
         private void SetCombosToDateTime(bool isStart, DateTime dt)
         {
+            string dateStr = dt.ToString("yyyy-MM-dd");
+            string timeStr = dt.ToString("HH:mm:ss");
             if (isStart)
             {
-                cbStartYear.Text  = dt.Year.ToString();
-                cbStartMonth.Text = dt.Month.ToString("D2");
-                cbStartDay.Text   = dt.Day.ToString("D2");
-                cbStartHour.Text  = dt.Hour.ToString("D2");
-                cbStartMin.Text   = dt.Minute.ToString("D2");
-                cbStartSec.Text   = dt.Second.ToString("D2");
+                if (cbStartDate.Items.Contains(dateStr)) cbStartDate.SelectedItem = dateStr;
+                else cbStartDate.Text = dateStr;
+                RefreshStatTimeCombo(cbStartDate, cbStartTime, timeStr);
             }
             else
             {
-                cbEndYear.Text  = dt.Year.ToString();
-                cbEndMonth.Text = dt.Month.ToString("D2");
-                cbEndDay.Text   = dt.Day.ToString("D2");
-                cbEndHour.Text  = dt.Hour.ToString("D2");
-                cbEndMin.Text   = dt.Minute.ToString("D2");
-                cbEndSec.Text   = dt.Second.ToString("D2");
+                if (cbEndDate.Items.Contains(dateStr)) cbEndDate.SelectedItem = dateStr;
+                else cbEndDate.Text = dateStr;
+                RefreshStatTimeCombo(cbEndDate, cbEndTime, timeStr);
             }
         }
 
         /// <summary>若 start > end，將 end 推至最近的可用時間 ≥ start。</summary>
         private void ClampEndToStart()
         {
-            if (!TryBuildDateTime(cbStartYear, cbStartMonth, cbStartDay,
-                                  cbStartHour, cbStartMin, cbStartSec, out DateTime start)) return;
-            if (!TryBuildDateTime(cbEndYear, cbEndMonth, cbEndDay,
-                                  cbEndHour, cbEndMin, cbEndSec, out DateTime end)) return;
+            if (!TryBuildDateTimeFromCombos(cbStartDate, cbStartTime, out DateTime start)) return;
+            if (!TryBuildDateTimeFromCombos(cbEndDate,   cbEndTime,   out DateTime end))   return;
             if (start <= end) return;
-
             var view = _statAvailableTimes.GetViewBetween(start, DateTime.MaxValue);
             DateTime newEnd = view.Count > 0 ? view.Min : _statAvailableTimes.Max;
             SetCombosToDateTime(false, newEnd);
-            DoRefreshCombos(false, 0);
         }
 
         /// <summary>若 end < start，將 start 推至最近的可用時間 ≤ end。</summary>
         private void ClampStartToEnd()
         {
-            if (!TryBuildDateTime(cbStartYear, cbStartMonth, cbStartDay,
-                                  cbStartHour, cbStartMin, cbStartSec, out DateTime start)) return;
-            if (!TryBuildDateTime(cbEndYear, cbEndMonth, cbEndDay,
-                                  cbEndHour, cbEndMin, cbEndSec, out DateTime end)) return;
+            if (!TryBuildDateTimeFromCombos(cbStartDate, cbStartTime, out DateTime start)) return;
+            if (!TryBuildDateTimeFromCombos(cbEndDate,   cbEndTime,   out DateTime end))   return;
             if (start <= end) return;
-
             var view = _statAvailableTimes.GetViewBetween(DateTime.MinValue, end);
             DateTime newStart = view.Count > 0 ? view.Max : _statAvailableTimes.Min;
             SetCombosToDateTime(true, newStart);
-            DoRefreshCombos(true, 0);
         }
 
         /// <summary>
@@ -1158,13 +1108,13 @@ namespace AniloxRoll.Monitor.Forms
             int idx2 = cbGrabIdEnd.SelectedIndex;
             if (idx1 < 0 || idx2 < 0) return;
 
-            // 強制 cbGrabIdStart ≤ cbGrabIdEnd
+            // 強制 cbGrabIdStart（舊）≥ cbGrabIdEnd（新）in descending index
             _statComboUpdating = true;
             try
             {
-                if (isStart && idx1 > idx2)
+                if (isStart && idx1 < idx2)
                     cbGrabIdEnd.SelectedIndex = idx1;
-                else if (!isStart && idx2 < idx1)
+                else if (!isStart && idx2 > idx1)
                     cbGrabIdStart.SelectedIndex = idx2;
 
                 // 更新 cbStart/cbEnd 時間
@@ -1172,11 +1122,6 @@ namespace AniloxRoll.Monitor.Forms
                 var endInfo   = _grabIdInfos[cbGrabIdEnd.SelectedIndex];
                 SetCombosToDateTime(true,  startInfo.Earliest);
                 SetCombosToDateTime(false, endInfo.Latest);
-                if (_statAvailableTimes.Count > 0)
-                {
-                    DoRefreshCombos(true,  0);
-                    DoRefreshCombos(false, 0);
-                }
             }
             finally { _statComboUpdating = false; }
 
@@ -1200,11 +1145,6 @@ namespace AniloxRoll.Monitor.Forms
                 var info = _grabIdInfos[idx];
                 SetCombosToDateTime(true,  info.Earliest);
                 SetCombosToDateTime(false, info.Latest);
-                if (_statAvailableTimes.Count > 0)
-                {
-                    DoRefreshCombos(true,  0);
-                    DoRefreshCombos(false, 0);
-                }
             }
             finally { _statComboUpdating = false; }
 
@@ -1266,11 +1206,6 @@ namespace AniloxRoll.Monitor.Forms
                         cbGrabIdEnd.SelectedIndex   = idx;
                         SetCombosToDateTime(true,  info.Earliest);
                         SetCombosToDateTime(false, info.Latest);
-                        if (_statAvailableTimes.Count > 0)
-                        {
-                            DoRefreshCombos(true,  0);
-                            DoRefreshCombos(false, 0);
-                        }
                     }
                     finally { _statComboUpdating = false; }
                     RefreshStats();
@@ -1296,8 +1231,10 @@ namespace AniloxRoll.Monitor.Forms
             try
             {
                 long csvMs = 0, stitchMs = 0;
-                float[][] newCurveMean = new float[7][];
-                float[][] newCurveMax  = new float[7][];
+                float[][] newCurveMean    = new float[7][];
+                float[][] newCurveMax     = new float[7][];
+                float[][] newRowCurveMean = new float[7][];
+                float[][] newRowCurveMax  = new float[7][];
                 CsvConfigSnapshot grabCfg = null;
                 var newImages = await Task.Run(() =>
                 {
@@ -1342,6 +1279,7 @@ namespace AniloxRoll.Monitor.Forms
                                         useProcessed: enableProcess);
                                 }
                                 MergeCurves(paths, out newCurveMean[i], out newCurveMax[i]);
+                                MergeRowCurves(paths, out newRowCurveMean[i], out newRowCurveMax[i]);
                             }
                             catch (Exception ex)
                             {
@@ -1356,8 +1294,10 @@ namespace AniloxRoll.Monitor.Forms
 
                 ClearStitchedMode();
                 _stitchedImages    = newImages;
-                _stitchedCurveMean = newCurveMean;
-                _stitchedCurveMax  = newCurveMax;
+                _stitchedCurveMean    = newCurveMean;
+                _stitchedCurveMax     = newCurveMax;
+                _stitchedRowCurveMean = newRowCurveMean;
+                _stitchedRowCurveMax  = newRowCurveMax;
                 _currentGrabConfig = grabCfg;
                 SetGroupBoxActive(grpReviewGrabNav, true); SetGroupBoxActive(grpReviewTimePeriod, false);
                 _galleryManager.SetImages(_stitchedImages);
@@ -1379,8 +1319,10 @@ namespace AniloxRoll.Monitor.Forms
             _galleryManager.ClearImages();
             foreach (var bmp in _stitchedImages) bmp?.Dispose();
             _stitchedImages = null;
-            _stitchedCurveMean = null;
-            _stitchedCurveMax = null;
+            _stitchedCurveMean    = null;
+            _stitchedCurveMax     = null;
+            _stitchedRowCurveMean = null;
+            _stitchedRowCurveMax  = null;
             _currentGrabConfig = null;
             // 恢復 chart 為當前設定（stitch mode 可能改用了歷史 #CFG 的 Ops/閾值）
             _muraChartHelper?.SetOps(_settings.Cam1_Ops);
@@ -1479,6 +1421,17 @@ namespace AniloxRoll.Monitor.Forms
                 _interactionHelper.TryComputeCurrentViewRange(idx, out double leftMm, out double rightMm);
                 _muraChartHelper.UpdateDataAndView(mean, max, startPos, leftMm, rightMm);
             }
+
+            // 更新法向（水平）Mura 曲線圖
+            if (_muraChartHorizontalHelper != null)
+            {
+                float[] rowMean = (_stitchedRowCurveMean != null && idx >= 0 && idx < _stitchedRowCurveMean.Length)
+                    ? _stitchedRowCurveMean[idx] : null;
+                float[] rowMax = (_stitchedRowCurveMax != null && idx >= 0 && idx < _stitchedRowCurveMax.Length)
+                    ? _stitchedRowCurveMax[idx] : null;
+                if (rowMean != null)
+                    _muraChartHorizontalHelper.UpdateData(rowMean, rowMax);
+            }
         }
 
         /// <summary>
@@ -1542,8 +1495,10 @@ namespace AniloxRoll.Monitor.Forms
                     basePath = System.IO.Path.Combine(
                         System.IO.Path.GetDirectoryName(path),
                         System.IO.Path.GetFileNameWithoutExtension(path));
-                curveMean[i] = InspectionEngine.LoadCurveBin(basePath + "_mean.bin");
-                curveMax[i]  = InspectionEngine.LoadCurveBin(basePath + "_max.bin");
+                curveMean[i] = InspectionEngine.LoadCurveBin(basePath + "_mean_v.bin")
+                            ?? InspectionEngine.LoadCurveBin(basePath + "_mean.bin");
+                curveMax[i]  = InspectionEngine.LoadCurveBin(basePath + "_max_v.bin")
+                            ?? InspectionEngine.LoadCurveBin(basePath + "_max.bin");
             }
 
             UpdateOverviewChart(curveMean, curveMax,
@@ -1679,8 +1634,10 @@ namespace AniloxRoll.Monitor.Forms
                         System.IO.Path.GetDirectoryName(path),
                         System.IO.Path.GetFileNameWithoutExtension(path));
 
-                var mean = InspectionEngine.LoadCurveBin(basePath + "_mean.bin");
-                var max  = InspectionEngine.LoadCurveBin(basePath + "_max.bin");
+                var mean = InspectionEngine.LoadCurveBin(basePath + "_mean_v.bin")
+                        ?? InspectionEngine.LoadCurveBin(basePath + "_mean.bin");
+                var max  = InspectionEngine.LoadCurveBin(basePath + "_max_v.bin")
+                        ?? InspectionEngine.LoadCurveBin(basePath + "_max.bin");
                 if (mean != null && max != null && mean.Length > 0)
                 {
                     allMean.Add(mean);
@@ -1706,6 +1663,57 @@ namespace AniloxRoll.Monitor.Forms
                 }
                 mergedMean[x] = count > 0 ? sumMean / count : 0;
                 mergedMax[x]  = maxVal > float.MinValue ? maxVal : 0;
+            }
+        }
+
+        /// <summary>
+        /// Row 曲線合併：多張影像的 row curves 依時間順序串接（非 per-index 平均），
+        /// 因為每張圖代表不同的法向（axial）位置。
+        /// </summary>
+        private static void MergeRowCurves(IList<string> imagePaths,
+            out float[] mergedMean, out float[] mergedMax)
+        {
+            mergedMean = null;
+            mergedMax  = null;
+
+            var allMean = new List<float[]>();
+            var allMax  = new List<float[]>();
+
+            foreach (string path in imagePaths)
+            {
+                string basePath;
+                if (path.EndsWith("_raw.jpg", StringComparison.OrdinalIgnoreCase))
+                    basePath = path.Substring(0, path.Length - "_raw.jpg".Length);
+                else
+                    basePath = System.IO.Path.Combine(
+                        System.IO.Path.GetDirectoryName(path),
+                        System.IO.Path.GetFileNameWithoutExtension(path));
+
+                var mean = InspectionEngine.LoadCurveBin(basePath + "_mean_h.bin")
+                        ?? InspectionEngine.LoadCurveBin(basePath + "_row_mean.bin");
+                var max  = InspectionEngine.LoadCurveBin(basePath + "_max_h.bin")
+                        ?? InspectionEngine.LoadCurveBin(basePath + "_row_max.bin");
+                if (mean != null && max != null && mean.Length > 0)
+                {
+                    allMean.Add(mean);
+                    allMax.Add(max);
+                }
+            }
+
+            if (allMean.Count == 0) return;
+
+            // 串接：每張圖的 row curves 依序接起來（對應 GrabImageStitcher 的垂直拼接）
+            int totalLen = 0;
+            foreach (var a in allMean) totalLen += a.Length;
+
+            mergedMean = new float[totalLen];
+            mergedMax  = new float[totalLen];
+            int offset = 0;
+            for (int j = 0; j < allMean.Count; j++)
+            {
+                Array.Copy(allMean[j], 0, mergedMean, offset, allMean[j].Length);
+                Array.Copy(allMax[j],  0, mergedMax,  offset, allMax[j].Length);
+                offset += allMean[j].Length;
             }
         }
 
@@ -2106,30 +2114,41 @@ namespace AniloxRoll.Monitor.Forms
         /// <summary>
         /// 將 values 填入 cb（帶 _chartNavUpdating guard 防 cascade），選取最後一筆。
         /// </summary>
-        private void RefillChartComboBox(ComboBox cb, List<int> values)
+        private void RefillChartComboBox(ComboBox cb, List<int> values, int preferred = -1)
         {
             _chartNavUpdating = true;
             cb.Items.Clear();
             foreach (var v in values) cb.Items.Add(v.ToString());
-            cb.SelectedIndex = values.Count > 0 ? values.Count - 1 : -1;
+            if (preferred >= 0)
+            {
+                int idx = values.IndexOf(preferred);
+                cb.SelectedIndex = idx >= 0 ? idx : (values.Count > 0 ? values.Count - 1 : -1);
+            }
+            else
+            {
+                cb.SelectedIndex = values.Count > 0 ? values.Count - 1 : -1;
+            }
             _chartNavUpdating = false;
         }
 
         /// <summary>資料夾載入後，以 CSV 中實際存在的年份初始化三列導航。</summary>
-        private void PopulateChartNavigators()
+        private void PopulateChartNavigators() => PopulateChartNavigators(null);
+
+        private void PopulateChartNavigators(DateTime? hintDate)
         {
             _chartYears = GetAvailableYears();
-            RefillChartComboBox(cbChartYear, _chartYears);
-            OnChartYearIndexChanged();
+            RefillChartComboBox(cbChartYear, _chartYears, hintDate?.Year ?? -1);
+            OnChartYearIndexChanged(hintDate);
         }
 
-        private void OnChartYearIndexChanged()
+        private void OnChartYearIndexChanged() => OnChartYearIndexChanged(null);
+        private void OnChartYearIndexChanged(DateTime? hint)
         {
             int idx = cbChartYear.SelectedIndex;
             bool ok = idx >= 0 && idx < _chartYears.Count;
 
             _chartMonths = ok ? GetAvailableMonths(_chartYears[idx]) : new List<int>();
-            RefillChartComboBox(cbChartMonth, _chartMonths);
+            RefillChartComboBox(cbChartMonth, _chartMonths, hint?.Month ?? -1);
 
             if (!ok) return;
             int year = _chartYears[idx];
@@ -2137,17 +2156,18 @@ namespace AniloxRoll.Monitor.Forms
                 InspectionStatisticsService.ComputeGroupedByMonthOfYear(_statsDataRootPath,
                     new DateTime(year, 1, 1), new DateTime(year, 12, 31, 23, 59, 59)));
 
-            OnChartMonthIndexChanged();
+            OnChartMonthIndexChanged(hint);
         }
 
-        private void OnChartMonthIndexChanged()
+        private void OnChartMonthIndexChanged() => OnChartMonthIndexChanged(null);
+        private void OnChartMonthIndexChanged(DateTime? hint)
         {
             int idx  = cbChartMonth.SelectedIndex;
             int yIdx = cbChartYear.SelectedIndex;
             bool ok  = idx >= 0 && idx < _chartMonths.Count && yIdx >= 0;
 
             _chartDays = ok ? GetAvailableDays(_chartYears[yIdx], _chartMonths[idx]) : new List<int>();
-            RefillChartComboBox(cbChartDay, _chartDays);
+            RefillChartComboBox(cbChartDay, _chartDays, hint?.Day ?? -1);
 
             if (!ok) return;
             int year    = _chartYears[yIdx];
@@ -2177,7 +2197,19 @@ namespace AniloxRoll.Monitor.Forms
                     new DateTime(year, month, day), new DateTime(year, month, day, 23, 59, 59)));
         }
 
-        // ── Available values helpers ──────────────────────────────────────
+        // ── Available date/time string helpers (stat 2-combo) ─────────────
+
+        private List<string> GetAvailableDateStrings() =>
+            _statAvailableTimes.Select(t => t.ToString("yyyy-MM-dd")).Distinct()
+                .OrderByDescending(x => x).ToList();
+
+        private List<string> GetAvailableTimeStrings(string dateStr) =>
+            _statAvailableTimes
+                .Where(t => t.ToString("yyyy-MM-dd") == dateStr)
+                .Select(t => t.ToString("HH:mm:ss"))
+                .Distinct().OrderByDescending(x => x).ToList();
+
+        // ── Available values helpers (period charts) ─────────────────────
 
         private List<int> GetAvailableYears() =>
             _statAvailableTimes.Select(t => t.Year).Distinct().ToList();

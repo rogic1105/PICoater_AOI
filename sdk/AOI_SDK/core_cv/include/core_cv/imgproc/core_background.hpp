@@ -15,6 +15,12 @@ namespace core {
     void calcColumnBackground_u8_gpu(const uint8_t* d_in, const float* d_mean, uint8_t* d_out, int W, int H, cudaStream_t s);
 
     template <typename T>
+    void calcRowMeans_gpu(const T* d_in, float* d_out, int W, int H, cudaStream_t stream);
+
+    template <typename T>
+    void calcRowMax_gpu(const T* d_in, float* d_out, int W, int H, cudaStream_t stream);
+
+    template <typename T>
     void calcColumnMeans_RemoveOutliers_gpu(const T* d_in, float* d_out, int W, int H, float sigma_threshold, cudaStream_t stream);
 
 
@@ -22,8 +28,8 @@ namespace core {
     // CPU Host Implementations 
     // ==========================================
 
-    // ­pºâ¦C¥­§¡ (²¾°£Â÷¸s­È) - CPU ª©¥»
-    // stride ¹w³]¬° W¡A¦pªG¹Ï¤ù¦³ padding ¥i¥H¶Ç¤J¹ê»Ú stride
+    // ï¿½pï¿½ï¿½Cï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½sï¿½ï¿½) - CPU ï¿½ï¿½ï¿½ï¿½
+    // stride ï¿½wï¿½]ï¿½ï¿½ Wï¿½Aï¿½pï¿½Gï¿½Ï¤ï¿½ï¿½ï¿½ padding ï¿½iï¿½Hï¿½Ç¤Jï¿½ï¿½ï¿½ stride
     void calcColumnMeans_RemoveOutliers_cpu(
         const uint8_t* h_in,
         float* h_out,
@@ -33,7 +39,7 @@ namespace core {
         float sigma_threshold
     );
 
-    // ­pºâ­I´º (Mura) - CPU ª©¥»
+    // ï¿½pï¿½ï¿½Iï¿½ï¿½ (Mura) - CPU ï¿½ï¿½ï¿½ï¿½
     void calcColumnBackground_u8_cpu(
         const uint8_t* h_in,
         const float* h_mean,

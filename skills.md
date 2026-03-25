@@ -689,7 +689,10 @@ Directory.GetFiles(root, "*_raw.jpg", AllDirectories)
 
 ### SaveOriginalBmp（原 UseCompressedCapture 反轉）
 
-- `SaveOriginalBmp=false`（預設）：只存 4 檔（`_raw.jpg`/`_proc.jpg`/`_mean.bin`/`_max.bin`）
+- `SaveOriginalBmp=false`（預設）：存 7 檔（`_raw.jpg`/`_proc_v.jpg`/`_proc_h.jpg`/`_mean_v.bin`/`_max_v.bin`/`_mean_h.bin`/`_max_h.bin`）
+  - `_v` = 切向（vertical）ridge，對應 `chartMuraVertical`
+  - `_h` = 法向（horizontal）ridge，對應 `chartMuraHorizontal`
+  - `_proc_h.jpg` 由 `MuraBuffer`（水平 ridge 圖，pipeline 永遠跑 `"vertical+horizontal"` 雙方向）resize 後存檔
 - `SaveOriginalBmp=true`：額外同步匯出全解析度 `.bmp`（MIL `MbufExport` 必須在 callback 同步，因 `sourceBuffer` 會被 MIL 回收）
 - JSON 向後相容：讀取時若有 `SaveOriginalBmp` key 直接用，否則讀 `UseCompressedCapture` 並反轉
 
@@ -1387,30 +1390,34 @@ Raw Image (8-bit grayscale, Pinned Memory)
   ├─ CoreCV_FastReadBMP → _inputBuffer
   ├─ cudaMemcpy (Host → Device)
   │
-  ╔══ PICoaterDetector::Run() ══════════════════════════════════╗
+  ╔══ PICoaterDetector::Run("vertical+horizontal") ═════════════╗
   ║                                                             ║
   ║  1. calcColumnMeans_RemoveOutliers_gpu()                    ║
   ║     → 每行(column)平均值，去除離群值 (σ_col=1)              ║
   ║                                                             ║
   ║  2. calcColumnBackground_u8_gpu()                           ║
-  ║     → Mura圖 = 原圖 - 行平均（去背景）                      ║
+  ║     → d_mura_out = 原圖 - 行平均（去背景）                  ║
   ║                                                             ║
-  ║  3. hessianRidge_u8_gpu()                                   ║
-  ║     ├─ gaussianBlur_gpu (σ=RidgeSigma)                      ║
-  ║     ├─ computeHessianResponse_gpu (eigenvalues)             ║
-  ║     └─ ridge extraction (mode=RidgeMode)                    ║
-  ║     → 強化圖 (ridge image)                                  ║
+  ║  3. gaussianBlur_gpu (σ=RidgeSigma)（一次，V/H 共用）       ║
+  ║     → d_hessian_f32_                                        ║
   ║                                                             ║
-  ║  4. calcColumnMeans_gpu(ridge) → MuraCurveMean              ║
-  ║  5. calcColumnMax_gpu(ridge)  → MuraCurveMax                ║
+  ║  4. computeHessianResponse_gpu(VERTICAL)                    ║
+  ║     → d_ridge_out（vertical ridge）                         ║
+  ║     → calcColumnMeans_gpu → MuraCurveMean                   ║
+  ║     → calcColumnMax_gpu  → MuraCurveMax                     ║
+  ║                                                             ║
+  ║  5. computeHessianResponse_gpu(HORIZONTAL)                  ║
+  ║     → d_mura_out（horizontal ridge，覆蓋去背圖）            ║
+  ║     → calcRowMeans_gpu → MuraRowCurveMean                   ║
+  ║     → calcRowMax_gpu  → MuraRowCurveMax                     ║
   ║                                                             ║
   ╚═════════════════════════════════════════════════════════════╝
   │
   ├─ cudaMemcpy (Device → Host)
-  │   → _ridgeBuffer, _curveMeanBuffer, _curveMaxBuffer
+  │   → _ridgeBuffer(V), _muraBuffer(H), col/row curve buffers
   │
   └─ Create8bppBitmap + Marshal.Copy
-     → InspectionData { Image, MuraCurveMean, MuraCurveMax }
+     → InspectionData { Image, MuraCurveMean/Max, MuraRowCurveMean/Max }
 ```
 
 ### 參數對照
@@ -1420,7 +1427,7 @@ Raw Image (8-bit grayscale, Pinned Memory)
 | σ_col（離群值去除） | 1 | hardcoded in .cu | ✗ |
 | BgSigmaFactor | 2.0 | `InspectionEngineConfig.DefaultBgSigma` | ✗ |
 | RidgeSigma | 9.0 | `InspectionEngineConfig.DefaultRidgeSigma` | ✗ |
-| RidgeMode | "vertical" | `InspectionEngineConfig.DefaultRidgeMode` | ✗ |
+| RidgeMode | "vertical+horizontal" | hardcoded（永遠雙方向） | ✗ |
 | HessianMaxFactor | 2.0 (default) | `InspectionRecipe.HessianMaxFactor` → PropertyGrid | ✓ |
 | ErrorValueMean | 0.3 (default) | `InspectionRecipe` → PropertyGrid | ✓（閾值，不影響 GPU） |
 | ErrorValueMax | 0.5 (default) | `InspectionRecipe` → PropertyGrid | ✓（閾值，不影響 GPU） |

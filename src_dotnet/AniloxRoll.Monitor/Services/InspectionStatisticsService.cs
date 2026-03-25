@@ -299,6 +299,14 @@ namespace AniloxRoll.Monitor.Core.Services
             return result;
         }
 
+        /// <summary>降序版本（最新在前）。</summary>
+        public static List<GrabIdInfo> LoadGrabIdInfosDescending(string captureRootPath)
+        {
+            var list = LoadGrabIdInfos(captureRootPath);
+            list.Reverse();
+            return list;
+        }
+
         /// <summary>
         /// 遞迴掃描所有 CSV，回傳所有不重複的精確時間（秒）排序集合。
         /// </summary>
