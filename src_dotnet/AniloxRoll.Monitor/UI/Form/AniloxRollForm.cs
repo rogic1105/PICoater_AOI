@@ -225,6 +225,7 @@ namespace AniloxRoll.Monitor.Forms
 
             _dateTimeNavigator.PeriodSelectionChanged += _presenter.UpdatePeriodNavigationState;
             _dateTimeNavigator.PeriodSelectionChanged += SyncGrabIdFromTimeCombos;
+            _dateTimeNavigator.PeriodSelectionChanged += OnPeriodComboChanged;
             _presenter.PeriodNavigationStateChanged   += (canLast, canNext) =>
             {
                 btnPeriodPrev.Enabled = canLast;
@@ -539,6 +540,19 @@ namespace AniloxRoll.Monitor.Forms
 
         private async void btnPeriodNext_Click(object sender, EventArgs e)
         { ClearStitchedMode(); await _presenter.MovePeriodAsync(+1, _lastReviewProcessedMode, _interactionHelper.LoadImages); UpdateOverviewChartFromRepository(); }
+
+        /// <summary>cbDate/cbTime 手動滾動時載入對應圖片（同 btnPeriodPrev/Next）。
+        /// _syncingGrabIdNav 時跳過（由 OnReviewGrabIdChanged 等程式碼觸發的 NavigateToDateTime）。</summary>
+        private async void OnPeriodComboChanged()
+        {
+            if (_syncingGrabIdNav) return;
+            if (_imageRepository.FileCount == 0) return;
+            ClearStitchedMode();
+            SetGroupBoxActive(grpReviewGrabNav, false);
+            SetGroupBoxActive(grpReviewTimePeriod, true);
+            await _presenter.LoadImagesWithPeriodLockAsync(_lastReviewProcessedMode, _interactionHelper.LoadImages);
+            UpdateOverviewChartFromRepository();
+        }
 
         // ==========================================
         // --- 右側面板：初始化 ---
@@ -916,11 +930,9 @@ namespace AniloxRoll.Monitor.Forms
             cbChartYear.SelectedIndexChanged  += (s, e) => { if (!_chartNavUpdating) OnChartYearIndexChanged();  };
             cbChartMonth.SelectedIndexChanged += (s, e) => { if (!_chartNavUpdating) OnChartMonthIndexChanged(); };
             cbChartDay.SelectedIndexChanged   += (s, e) => { if (!_chartNavUpdating) OnChartDayIndexChanged();   };
-            // 滾輪上滾 = 數值增加（反轉 ComboBox 預設行為）
-            foreach (var cb in new[] {
-                cbChartYear, cbChartMonth, cbChartDay,
-                cbStartDate, cbStartTime, cbEndDate, cbEndTime,
-                cbGrabIdStart, cbGrabIdEnd, cbDataGrabId, cbReviewGrabId })
+            // 滾輪上滾 = 數值增加（反轉 ComboBox 預設行為）——僅用於升序排列的 ComboBox
+            // cbDate/cbTime/cbStart*/cbEnd*/cbGrabId* 為降序（newest first），使用預設方向（上滾=newer）
+            foreach (var cb in new[] { cbChartYear, cbChartMonth, cbChartDay })
                 _wheelInterceptors.Add(new ComboBoxWheelReverser(cb));
 
             cbGrabIdStart.SelectedIndexChanged  += (s, e) => OnGrabIdComboChanged(isStart: true);
@@ -1009,6 +1021,7 @@ namespace AniloxRoll.Monitor.Forms
                         {
                             cbGrabIdStart.SelectedIndex = cbGrabIdStart.Items.Count - 1;
                             cbGrabIdEnd.SelectedIndex = 0;
+                            cbDataGrabId.SelectedIndex = cbGrabIdStart.SelectedIndex;
                         }
 
                     }

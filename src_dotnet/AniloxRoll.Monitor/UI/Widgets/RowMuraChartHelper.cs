@@ -223,8 +223,9 @@ namespace AniloxRoll.Monitor.UI.Widgets
         {
             if (e.ChartElement != _chart.ChartAreas[0]) return;
             var g = e.ChartGraphics.Graphics;
-            // Y 軸頂端（左上角）繪製 "mm"（Y=0 顯示在上方）
-            g.DrawString("mm", _unitFont, _unitBrush, 2, 1);
+            // Y 軸底端（左下角）繪製 "mm"
+            var sz = g.MeasureString("mm", _unitFont);
+            g.DrawString("mm", _unitFont, _unitBrush, 2, _chart.Height - sz.Height - 1);
         }
 
         // ── ChartArea ─────────────────────────────────────────────────────────
