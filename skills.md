@@ -1449,3 +1449,24 @@ Raw Image (8-bit grayscale, Pinned Memory)
 [FullRes] mode=True  | IO=  17ms | GPU=  22ms | BMP=  28ms | Copy=  0ms | Total=   69ms  (14288x9003)
 ```
 - IO = CoreCV_FastReadBMP, GPU = 完整 pipeline (步驟 1–5), BMP = Create8bppBitmap + Marshal.Copy
+
+---
+
+## WinForms Chart IsReversed 陷阱
+
+**問題**：`AxisY.IsReversed = true` 會讓 X 軸跳到 chart 頂部（因為 X 軸 crossing 預設在 Y minimum，而 IsReversed 把 Y minimum 顯示在頂部）。設定 `AxisX.Crossing = double.MaxValue` 或動態值都容易造成其他副作用。
+
+**解法**：若只需要 Y 軸標籤顯示「0 在上、max 在下」，不要用 `IsReversed`。改用 `Customize` 事件攔截自動生成的標籤，替換文字為 `totalValue - originalValue`：
+
+```csharp
+_chart.Customize += (s, e) =>
+{
+    foreach (CustomLabel label in _chart.ChartAreas[0].AxisY.CustomLabels)
+    {
+        double mid = (label.FromPosition + label.ToPosition) / 2.0;
+        label.Text = (_totalMm - mid).ToString("F0");
+    }
+};
+```
+
+資料和 zoom 邏輯完全不變，僅改變顯示。

@@ -13,6 +13,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private readonly InspectionSettings _settings;
         private readonly ToolStripStatusLabel _statusLabel;
         private readonly MuraChartHelper _muraChartHelper;
+        private readonly RowMuraChartHelper _rowMuraChartHelper;
         private readonly PictureBox[] _cameraPanels;
         private readonly ThumbnailGridPresenter _galleryManager;
 
@@ -50,6 +51,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             InspectionSettings settings,
             ToolStripStatusLabel statusLabel,
             MuraChartHelper muraChartHelper,
+            RowMuraChartHelper rowMuraChartHelper,
             PictureBox[] cameraPanels,
             ThumbnailGridPresenter galleryManager)
         {
@@ -57,6 +59,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             _settings = settings;
             _statusLabel = statusLabel;
             _muraChartHelper = muraChartHelper;
+            _rowMuraChartHelper = rowMuraChartHelper;
             _cameraPanels = cameraPanels ?? Array.Empty<PictureBox>();
             _galleryManager = galleryManager;
         }
@@ -196,15 +199,36 @@ namespace AniloxRoll.Monitor.UI.Widgets
             return true;
         }
 
-        /// <summary>從目前 canvas 狀態更新 chartMura 視野範圍（滑鼠移動以外的呼叫點）。</summary>
+        /// <summary>從目前 canvas 狀態更新 chartMura / chartMuraHorizontal 視野範圍。</summary>
         public void RefreshChartRange()
         {
-            if (_muraChartHelper == null) return;
-            if (!TryComputeCurrentViewRange(_currentCameraIndex, out double leftMm, out double rightMm)) return;
+            if (_canvas.Image == null) return;
 
-            _currentViewLeftMm  = leftMm;
-            _currentViewRightMm = rightMm;
-            _muraChartHelper.UpdateViewRange(leftMm, rightMm);
+            if (_muraChartHelper != null &&
+                TryComputeCurrentViewRange(_currentCameraIndex, out double leftMm, out double rightMm))
+            {
+                _currentViewLeftMm  = leftMm;
+                _currentViewRightMm = rightMm;
+                _muraChartHelper.UpdateViewRange(leftMm, rightMm);
+            }
+
+            RefreshRowChartRange();
+        }
+
+        /// <summary>從目前 canvas 狀態單獨更新 chartMuraHorizontal Y 軸視野範圍。</summary>
+        public void RefreshRowChartRange()
+        {
+            if (_rowMuraChartHelper == null || _canvas.Image == null) return;
+            double rowPitch = _rowMuraChartHelper.RowPitchMm;
+            if (rowPitch <= 0) return;
+
+            float zoom = _canvas.Zoom;
+            if (zoom <= 0) return;
+
+            PointF pan = _canvas.PanOffset;
+            double pixelTop = (0              - pan.Y) / zoom * _imageScaleFactor;
+            double pixelBot = (_canvas.Height - pan.Y) / zoom * _imageScaleFactor;
+            _rowMuraChartHelper.UpdateViewRange(pixelTop * rowPitch, pixelBot * rowPitch);
         }
 
         /// <summary>事件處理：canvas.StatusChanged → 更新 status bar 與 chart 視野範圍。</summary>
@@ -224,6 +248,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
             // 若圖像為縮小版（新格式 JPEG），需乘以縮放倍率還原成全解析度座標
             double physicalX = startPosMm + (info.ImageX * _imageScaleFactor * opsInMm);
+            double rowPitchMm = _rowMuraChartHelper?.RowPitchMm ?? 0;
+            double physicalY = info.ImageY * _imageScaleFactor * rowPitchMm;
 
             if (info.Zoom > 0)
             {
@@ -234,12 +260,38 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 _currentViewRightMm = startPosMm + (pixelRight * opsInMm);
 
                 if (!_suppressChartSync)
+                {
                     _muraChartHelper?.UpdateViewRange(_currentViewLeftMm, _currentViewRightMm);
+
+                    // 法向（水平）Mura 曲線：canvas 垂直 viewport → chart Y 軸同步
+                    // 傳入 canvas pixel mm（不 clamp），UpdateViewRange 內部反轉 + 補償
+                    if (_rowMuraChartHelper != null)
+                    {
+                        double rowPitch = _rowMuraChartHelper.RowPitchMm;
+                        if (rowPitch > 0)
+                        {
+                            double pixelTop = (0              - info.PanOffset.Y) / info.Zoom * _imageScaleFactor;
+                            double pixelBot = (_canvas.Height - info.PanOffset.Y) / info.Zoom * _imageScaleFactor;
+                            _rowMuraChartHelper.UpdateViewRange(pixelTop * rowPitch, pixelBot * rowPitch);
+                        }
+                    }
+                }
+            }
+
+            // Y 軸視野範圍（mm）
+            double viewTopMm = 0, viewBotMm = 0;
+            if (info.Zoom > 0 && rowPitchMm > 0)
+            {
+                double pixelTop = (0              - info.PanOffset.Y) / info.Zoom * _imageScaleFactor;
+                double pixelBot = (_canvas.Height - info.PanOffset.Y) / info.Zoom * _imageScaleFactor;
+                viewTopMm = pixelTop * rowPitchMm;
+                viewBotMm = pixelBot * rowPitchMm;
             }
 
             _statusLabel.Text =
-                $"位置:{physicalX:F2} mm | " +
-                $"範圍:{_currentViewLeftMm:F1}~{_currentViewRightMm:F1} mm | " +
+                $"位置:({physicalX:F2}, {physicalY:F2}) mm | " +
+                $"X範圍:{_currentViewLeftMm:F1}~{_currentViewRightMm:F1} mm | " +
+                $"Y範圍:{viewTopMm:F1}~{viewBotMm:F1} mm | " +
                 $"座標: ({info.ImageX}, {info.ImageY}) | " +
                 $"亮度: {info.PixelColor.R} | " +
                 $"倍率:{info.Zoom:F2}x{ImageInfoSuffix}";

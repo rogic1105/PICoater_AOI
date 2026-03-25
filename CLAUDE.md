@@ -163,8 +163,8 @@ Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×741），�
 - `MergeCurves`：載入每張影像的 `_mean_v.bin`/`_max_v.bin`，全解析度合併（Mean=平均、Max=取最大），存入 `_stitchedCurveMean[7]`/`_stitchedCurveMax[7]`
 - `MergeRowCurves`：載入 `_mean_h.bin`/`_max_h.bin`，垂直拼接（concatenation），存入 `_stitchedRowCurveMean[7]`/`_stitchedRowCurveMax[7]`
 - `ShowStitchedCameraInCanvas`：設 `_imageScaleFactor=DefaultSaveResizeScale` + `_currentCameraIndex` 後 `FitToScreen()`，再以合併曲線更新 chartMura
-- `btnShowOriginal`/`btnShowProcessed`：若 `_stitchedImages != null` → `ReloadCurrentStitchedView(false/true)`；否則走原圖路徑
-- `ClearStitchedMode()`：先 null `canvasMain.Image` + `_galleryManager.ClearImages()` 再 Dispose 所有 bitmaps；在所有一般載入路徑前呼叫（propertyGrid / btnSelectFolder / btnShowOriginal / btnShowProcessed / btnPeriodPrev / btnPeriodNext）
+- `checkBoxShowProcessed`（CheckBox）：勾選/取消 → `checkBoxShowProcessed_CheckedChanged` → 合圖路徑走 `ReloadCurrentStitchedView(checked)`，一般路徑走 `LoadImagesWithPeriodLockAsync(checked)`；`_syncingProcessedCheckbox` guard 防程式碼設定 `.Checked` 時重複觸發
+- `ClearStitchedMode()`：先 null `canvasMain.Image` + `_galleryManager.ClearImages()` 再 Dispose 所有 bitmaps；在所有一般載入路徑前呼叫（propertyGrid / btnSelectFolder / btnPeriodPrev / btnPeriodNext）
 - `SelectionChanged` handler 以 `_stitchedImages != null` 分支：拼接模式呼叫 `ShowStitchedCameraInCanvas(idx)`，一般模式呼叫 `_interactionHelper.OnGallerySelectionChanged(idx)`
 
 **cbReviewGrabId ↔ cbDataGrabId 雙向同步**：
@@ -196,10 +196,9 @@ btnSelectDataFolder ─┬─→ LoadDirectoryAndInitNavigator (Review tab)
                      ├─→ PopulateChartNavigators() + RefreshStats()
                      └─→ 高亮 groupBoxGrabIdRange
 
-btnShowOriginal / btnShowProcessed
-  ├─ _stitchedImages != null（合圖路徑）→ ReloadCurrentStitchedView(false/true)
-  │    → LoadGrabStitchedViewAsync(enableProcess)
-  └─ _stitchedImages == null（原圖路徑）→ LoadImagesWithPeriodLockAsync(false/true)
+checkBoxShowProcessed.CheckedChanged
+  ├─ _stitchedImages != null（合圖路徑）→ ReloadCurrentStitchedView(checked)
+  └─ _stitchedImages == null（原圖路徑）→ LoadImagesWithPeriodLockAsync(checked)
 
 btnPeriodPrev / btnPeriodNext → ClearStitchedMode() → MovePeriodAsync
 
@@ -229,6 +228,7 @@ Gallery SelectionChanged
 Guard flags：
 - `_syncingGrabIdNav`：防止 cbReviewGrabId ↔ 時間 ComboBox 迴圈
 - `_syncingGrabIdCross`：防止 cbReviewGrabId ↔ cbDataGrabId 迴圈
+- `_syncingProcessedCheckbox`：防止程式碼設定 `checkBoxShowProcessed.Checked` 時觸發 `CheckedChanged`
 - `_statComboUpdating`：防止 stat ComboBox cascade 重複觸發
 - `_chartNavUpdating`：防止 chart 年月日 ComboBox cascade 重複觸發
 
@@ -567,12 +567,29 @@ magic(4)="MCBF" | version(4=int) | scale_factor(4=float) | array_length(4=int) |
 
 **JPG 優先規則**：`GetImages()` 同一相機同時存在 JPG 與 BMP 時，優先回傳 JPG（讀取速度快，走 `LoadFromPrecomputedFiles` 不需 GPU）。避免 `.ToDictionary()` 重複 key 崩潰。
 
-### CanvasInteractionHelper 跨倍率 View 保存
+### CanvasInteractionHelper 跨倍率 View 保存 + Chart 視野同步
 
 `SaveViewIfNeeded` → 把 pixel viewport 轉換成 mm 世界座標存檔；
 `UpdateCanvas` → 用新圖的 `_imageScaleFactor` 把 mm 反算回 pixel zoom/pan。
 Y 軸用 `_savedYCenterFraction`（圖片高度中心分率）保持垂直位置。
 `SaveViewIfNeeded` 在 `_imageScaleFactor` 更新前呼叫，`UpdateCanvas` 在更新後呼叫（呼叫順序由 `FormInteractionHelper.LoadImages` → `OnGallerySelectionChanged` 保證）。
+
+**Chart 視野同步**：`UpdateCanvasInfo`（canvas.StatusChanged 事件）同時更新：
+- `MuraChartHelper`（chartMuraVertical）：X 軸 = canvas 水平 viewport mm
+- `RowMuraChartHelper`（chartMuraHorizontal）：Y 軸 = canvas 垂直 viewport mm（`pixelTop/Bot * rowPitchMm`）
+- Status bar：`位置:(X, Y) mm`（X = startPosMm + pixel*ops，Y = pixel*rowPitch）
+- `_suppressChartSync` flag 防止 FitToScreen/SetView 觸發的 StatusChanged 與手動 chart 更新衝突
+
+### RowMuraChartHelper InnerPlotPosition 補償
+
+與 `MuraChartHelper` 同理：PostPaint 首次渲染後量測 InnerPlotPosition，凍結版面比例（`_cachedFTop`/`_cachedFBottom`），`GetAdjustedZoom` 套用補償使 chart 控件邊緣對齊 canvas 邊緣。
+
+**Y 軸標籤反轉**：透過 `Customize` 事件將每個 Y 標籤文字替換為 `totalMm - value`，使視覺上 0 在上、max 在下（匹配 canvas Y=0 在頂部），而不使用 `IsReversed`（避免 X 軸跳到頂部的副作用）。
+
+**SwitchRidgeDirection 三態切換**：
+- 未勾選強化圖 → 自動勾選 `checkBoxShowProcessed` + 設方向
+- 已勾選且點同方向 → 取消勾選（回原圖）
+- 已勾選且點不同方向 → 切換方向，重新載入處理圖
 
 ---
 

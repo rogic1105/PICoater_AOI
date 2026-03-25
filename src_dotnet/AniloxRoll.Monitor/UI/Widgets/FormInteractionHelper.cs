@@ -73,6 +73,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 context.Settings,
                 context.StatusLabel,
                 context.MuraChartHelper,
+                context.MuraChartHorizontalHelper,
                 context.CameraPanels,
                 context.GalleryManager);
         }
@@ -87,6 +88,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         }
         public bool TryComputeCurrentViewRange(int cameraIndex, out double leftMm, out double rightMm)
             => _canvasHelper.TryComputeCurrentViewRange(cameraIndex, out leftMm, out rightMm);
+        public void RefreshRowChartRange() => _canvasHelper.RefreshRowChartRange();
 
         // ── 設定 ─────────────────────────────────────────────────────────
         public void ApplySettingsToService()
@@ -185,9 +187,12 @@ namespace AniloxRoll.Monitor.UI.Widgets
                         chartMs = sw.ElapsedMilliseconds;
                     }
 
-                    // 更新法向（水平）Mura 曲線圖
+                    // 更新法向（水平）Mura 曲線圖 + Y 軸視野同步
                     if (_muraChartHorizontalHelper != null && data.MuraRowCurveMean != null)
+                    {
                         _muraChartHorizontalHelper.UpdateData(data.MuraRowCurveMean, data.MuraRowCurveMax);
+                        _canvasHelper.RefreshRowChartRange();
+                    }
                 }
                 else
                 {

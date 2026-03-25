@@ -82,6 +82,7 @@ namespace AniloxRoll.Monitor.Forms
         private readonly List<Image> _thumbnailCache = new List<Image>();
         private InspectionSettings _settings;
         private bool _lastReviewProcessedMode = false;
+        private bool _syncingProcessedCheckbox = false;
         /// <summary>"v" = vertical ridge（預設），"h" = horizontal ridge。控制 canvasMain 處理圖方向。</summary>
         private string _activeRidgeDirection = "v";
 
@@ -192,7 +193,7 @@ namespace AniloxRoll.Monitor.Forms
             {
                 Form             = this,
                 Canvas           = canvasMain,
-                ButtonsToLock    = new Button[] { btnShowOriginal, btnShowProcessed, btnSelectFolder },
+                ButtonsToLock    = new Button[] { btnSelectFolder },
                 ThumbnailCache   = _thumbnailCache,
                 Presenter        = _presenter,
                 InspectionService = _inspectionService,
@@ -434,6 +435,9 @@ namespace AniloxRoll.Monitor.Forms
             if (isRecipeChange && _imageRepository.FileCount > 0)
             {
                 _lastReviewProcessedMode = true;
+                _syncingProcessedCheckbox = true;
+                try { checkBoxShowProcessed.Checked = true; }
+                finally { _syncingProcessedCheckbox = false; }
                 ClearStitchedMode();
                 await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
                 UpdateOverviewChartFromRepository();
@@ -446,6 +450,9 @@ namespace AniloxRoll.Monitor.Forms
             _interactionHelper.SelectAndLoadFolder();
             _presenter.UpdatePeriodNavigationState();
             _lastReviewProcessedMode = false;
+            _syncingProcessedCheckbox = true;
+            try { checkBoxShowProcessed.Checked = false; }
+            finally { _syncingProcessedCheckbox = false; }
 
             // 同步載入序號清單並填充所有序號 ComboBox（Review + Data）
             if (_imageRepository.FileCount > 0)
@@ -498,29 +505,19 @@ namespace AniloxRoll.Monitor.Forms
             UpdateOverviewChartFromRepository();
         }
 
-        private async void btnShowOriginal_Click(object sender, EventArgs e)
+        private async void checkBoxShowProcessed_CheckedChanged(object sender, EventArgs e)
         {
+            if (_syncingProcessedCheckbox) return;
+            bool enableProcess = checkBoxShowProcessed.Checked;
+            UpdateRidgeDirectionVisual(enableProcess ? _activeRidgeDirection : null);
             if (_stitchedImages != null)
             {
-                await ReloadCurrentStitchedView(false);
+                await ReloadCurrentStitchedView(enableProcess);
                 return;
             }
-            _lastReviewProcessedMode = false;
+            _lastReviewProcessedMode = enableProcess;
             ClearStitchedMode();
-            await _presenter.LoadImagesWithPeriodLockAsync(false, _interactionHelper.LoadImages);
-            UpdateOverviewChartFromRepository();
-        }
-
-        private async void btnShowProcessed_Click(object sender, EventArgs e)
-        {
-            if (_stitchedImages != null)
-            {
-                await ReloadCurrentStitchedView(true);
-                return;
-            }
-            _lastReviewProcessedMode = true;
-            ClearStitchedMode();
-            await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
+            await _presenter.LoadImagesWithPeriodLockAsync(enableProcess, _interactionHelper.LoadImages);
             UpdateOverviewChartFromRepository();
         }
 
@@ -1226,7 +1223,7 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         private Task LoadGrabStitchedViewAsync(string grabId, DateTime hintFrom, DateTime hintTo)
-            => LoadGrabStitchedViewAsync(grabId, hintFrom, hintTo, false);
+            => LoadGrabStitchedViewAsync(grabId, hintFrom, hintTo, _lastReviewProcessedMode);
 
         private async Task LoadGrabStitchedViewAsync(string grabId, DateTime hintFrom, DateTime hintTo,
             bool enableProcess)
@@ -1237,6 +1234,9 @@ namespace AniloxRoll.Monitor.Forms
 
             _interactionHelper.SetUiLoadingState(true);
             _lastReviewProcessedMode = enableProcess;
+            _syncingProcessedCheckbox = true;
+            try { checkBoxShowProcessed.Checked = enableProcess; }
+            finally { _syncingProcessedCheckbox = false; }
             var swTotal = Stopwatch.StartNew();
             try
             {
@@ -1421,36 +1421,62 @@ namespace AniloxRoll.Monitor.Forms
                 ? System.Drawing.Color.FromArgb(230, 240, 255) : System.Drawing.SystemColors.Control;
         }
 
-        /// <summary>切換 canvasMain 的 V/H 處理圖方向，點選 chartMuraVertical/Horizontal 觸發。</summary>
+        /// <summary>
+        /// 切換 canvasMain 的 V/H 處理圖方向，點選 chartMuraVertical/Horizontal 觸發。
+        /// 未勾選強化圖時：自動勾選 + 設方向。
+        /// 已勾選強化圖且點同方向：取消勾選（回原圖）。
+        /// 已勾選強化圖且點不同方向：切換方向。
+        /// </summary>
         private async void SwitchRidgeDirection(string dir)
         {
-            if (dir == _activeRidgeDirection) return;
-            if (!_lastReviewProcessedMode) return; // 原圖模式不需切換
+            if (!_lastReviewProcessedMode)
+            {
+                // 未勾選 → 自動勾選 + 設方向
+                _activeRidgeDirection = dir;
+                _interactionHelper.SetRidgeDirection(dir);
+                UpdateRidgeDirectionVisual(dir);
+                checkBoxShowProcessed.Checked = true; // 觸發 CheckedChanged → 載入處理圖
+                return;
+            }
 
+            if (dir == _activeRidgeDirection)
+            {
+                // 同方向再點一次 → 取消勾選（回原圖）
+                UpdateRidgeDirectionVisual(null);
+                checkBoxShowProcessed.Checked = false; // 觸發 CheckedChanged → 載入原圖
+                return;
+            }
+
+            // 不同方向 → 切換（重新載入處理圖）
             _activeRidgeDirection = dir;
             _interactionHelper.SetRidgeDirection(dir);
-
-            // 視覺回饋：活動方向的 chart 加深背景
-            chartMuraVertical.BackColor = (dir == "v")
-                ? System.Drawing.Color.FromArgb(230, 240, 255) : System.Drawing.SystemColors.Control;
-            chartMuraHorizontal.BackColor = (dir == "h")
-                ? System.Drawing.Color.FromArgb(230, 240, 255) : System.Drawing.SystemColors.Control;
+            UpdateRidgeDirectionVisual(dir);
 
             if (_stitchedImages != null)
             {
-                // 合圖路徑：重新拼接（帶新方向）
-                var info = cbReviewGrabId.SelectedItem as GrabIdInfo;
-                if (info != null)
+                // cbReviewGrabId.Items 為 string，用 _grabIdInfos[idx] 取得完整資訊
+                int idx = cbReviewGrabId.SelectedIndex;
+                if (idx >= 0 && idx < _grabIdInfos.Count)
                 {
-                    string grabId = info.GrabId;
-                    await LoadGrabStitchedViewAsync(grabId, info.Earliest, info.Latest, true);
+                    var info = _grabIdInfos[idx];
+                    await LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest, true);
                 }
             }
             else
             {
-                // 原圖路徑：重新載入當前選中的圖片
-                _interactionHelper.OnGallerySelectionChanged(_galleryManager?.SelectedIndex ?? 0);
+                // 非合圖路徑：重新載入所有處理圖（方向已更新）
+                ClearStitchedMode();
+                await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
+                UpdateOverviewChartFromRepository();
             }
+        }
+
+        private void UpdateRidgeDirectionVisual(string dir)
+        {
+            chartMuraVertical.BackColor = (dir == "v")
+                ? System.Drawing.Color.FromArgb(230, 240, 255) : System.Drawing.SystemColors.Control;
+            chartMuraHorizontal.BackColor = (dir == "h")
+                ? System.Drawing.Color.FromArgb(230, 240, 255) : System.Drawing.SystemColors.Control;
         }
 
         private void ShowStitchedCameraInCanvas(int idx)
@@ -1502,7 +1528,10 @@ namespace AniloxRoll.Monitor.Forms
                 float[] rowMax = (_stitchedRowCurveMax != null && idx >= 0 && idx < _stitchedRowCurveMax.Length)
                     ? _stitchedRowCurveMax[idx] : null;
                 if (rowMean != null)
+                {
                     _muraChartHorizontalHelper.UpdateData(rowMean, rowMax);
+                    _interactionHelper.RefreshRowChartRange();
+                }
             }
         }
 

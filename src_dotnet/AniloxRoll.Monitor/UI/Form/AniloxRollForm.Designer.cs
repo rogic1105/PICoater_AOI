@@ -73,9 +73,8 @@
             this.btnPeriodPrev = new System.Windows.Forms.Button();
             this.chartMuraVertical = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.btnSelectFolder = new System.Windows.Forms.Button();
-            this.btnShowProcessed = new System.Windows.Forms.Button();
+            this.checkBoxShowProcessed = new System.Windows.Forms.CheckBox();
             this.pbCam1 = new System.Windows.Forms.PictureBox();
-            this.btnShowOriginal = new System.Windows.Forms.Button();
             this.pbCam2 = new System.Windows.Forms.PictureBox();
             this.pbCam3 = new System.Windows.Forms.PictureBox();
             this.pbCam4 = new System.Windows.Forms.PictureBox();
@@ -555,9 +554,8 @@
             this.tabPageReview.Controls.Add(this.grpReviewTimePeriod);
             this.tabPageReview.Controls.Add(this.chartMuraVertical);
             this.tabPageReview.Controls.Add(this.btnSelectFolder);
-            this.tabPageReview.Controls.Add(this.btnShowProcessed);
+            this.tabPageReview.Controls.Add(this.checkBoxShowProcessed);
             this.tabPageReview.Controls.Add(this.pbCam1);
-            this.tabPageReview.Controls.Add(this.btnShowOriginal);
             this.tabPageReview.Controls.Add(this.pbCam2);
             this.tabPageReview.Controls.Add(this.pbCam3);
             this.tabPageReview.Controls.Add(this.pbCam4);
@@ -571,7 +569,7 @@
             this.tabPageReview.Padding = new System.Windows.Forms.Padding(3);
             this.tabPageReview.Size = new System.Drawing.Size(1020, 631);
             this.tabPageReview.TabIndex = 1;
-            this.tabPageReview.Text = "影像回顧";
+            this.tabPageReview.Text = "歷史查詢";
             this.tabPageReview.UseVisualStyleBackColor = true;
             // 
             // chartMuraHorizontal
@@ -582,13 +580,13 @@
             this.chartMuraHorizontal.ChartAreas.Add(chartArea4);
             legend4.Name = "Legend1";
             this.chartMuraHorizontal.Legends.Add(legend4);
-            this.chartMuraHorizontal.Location = new System.Drawing.Point(899, 195);
+            this.chartMuraHorizontal.Location = new System.Drawing.Point(901, 195);
             this.chartMuraHorizontal.Name = "chartMuraHorizontal";
             series4.ChartArea = "ChartArea1";
             series4.Legend = "Legend1";
             series4.Name = "Series1";
             this.chartMuraHorizontal.Series.Add(series4);
-            this.chartMuraHorizontal.Size = new System.Drawing.Size(111, 333);
+            this.chartMuraHorizontal.Size = new System.Drawing.Size(109, 333);
             this.chartMuraHorizontal.TabIndex = 58;
             this.chartMuraHorizontal.Text = "chart1";
             // 
@@ -690,16 +688,17 @@
             this.btnSelectFolder.UseVisualStyleBackColor = true;
             this.btnSelectFolder.Click += new System.EventHandler(this.btnSelectFolder_Click);
             // 
-            // btnShowProcessed
+            // checkBoxShowProcessed
             // 
-            this.btnShowProcessed.Font = new System.Drawing.Font("微軟正黑體", 10.2F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(136)));
-            this.btnShowProcessed.Location = new System.Drawing.Point(954, 43);
-            this.btnShowProcessed.Name = "btnShowProcessed";
-            this.btnShowProcessed.Size = new System.Drawing.Size(62, 27);
-            this.btnShowProcessed.TabIndex = 22;
-            this.btnShowProcessed.Text = "強化圖";
-            this.btnShowProcessed.UseVisualStyleBackColor = true;
-            this.btnShowProcessed.Click += new System.EventHandler(this.btnShowProcessed_Click);
+            this.checkBoxShowProcessed.AutoSize = true;
+            this.checkBoxShowProcessed.Font = new System.Drawing.Font("微軟正黑體", 10.2F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(136)));
+            this.checkBoxShowProcessed.Location = new System.Drawing.Point(900, 46);
+            this.checkBoxShowProcessed.Name = "checkBoxShowProcessed";
+            this.checkBoxShowProcessed.Size = new System.Drawing.Size(83, 26);
+            this.checkBoxShowProcessed.TabIndex = 21;
+            this.checkBoxShowProcessed.Text = "強化圖";
+            this.checkBoxShowProcessed.UseVisualStyleBackColor = true;
+            this.checkBoxShowProcessed.CheckedChanged += new System.EventHandler(this.checkBoxShowProcessed_CheckedChanged);
             // 
             // pbCam1
             // 
@@ -709,17 +708,6 @@
             this.pbCam1.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             this.pbCam1.TabIndex = 8;
             this.pbCam1.TabStop = false;
-            // 
-            // btnShowOriginal
-            // 
-            this.btnShowOriginal.Font = new System.Drawing.Font("微軟正黑體", 10.2F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(136)));
-            this.btnShowOriginal.Location = new System.Drawing.Point(900, 43);
-            this.btnShowOriginal.Name = "btnShowOriginal";
-            this.btnShowOriginal.Size = new System.Drawing.Size(52, 27);
-            this.btnShowOriginal.TabIndex = 21;
-            this.btnShowOriginal.Text = "原圖";
-            this.btnShowOriginal.UseVisualStyleBackColor = true;
-            this.btnShowOriginal.Click += new System.EventHandler(this.btnShowOriginal_Click);
             // 
             // pbCam2
             // 
@@ -846,7 +834,7 @@
             this.tabPageData.Name = "tabPageData";
             this.tabPageData.Size = new System.Drawing.Size(1020, 631);
             this.tabPageData.TabIndex = 2;
-            this.tabPageData.Text = "檢測數據";
+            this.tabPageData.Text = "檢測報表";
             this.tabPageData.UseVisualStyleBackColor = true;
             // 
             // panelStatCam7
@@ -2866,6 +2854,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.chartLiveOverview)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.muraChartVerticalLive)).EndInit();
             this.tabPageReview.ResumeLayout(false);
+            this.tabPageReview.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.chartMuraHorizontal)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.chartOverview)).EndInit();
             this.grpReviewTimePeriod.ResumeLayout(false);
@@ -3004,8 +2993,7 @@
         private System.Windows.Forms.PictureBox pbCam1;
         private System.Windows.Forms.ComboBox cbDate;
         private System.Windows.Forms.ComboBox cbTime;
-        private System.Windows.Forms.Button btnShowProcessed;
-        private System.Windows.Forms.Button btnShowOriginal;
+        private System.Windows.Forms.CheckBox checkBoxShowProcessed;
         private System.Windows.Forms.Button btnSelectFolder;
         private System.Windows.Forms.StatusStrip statusBarMain;
         private System.Windows.Forms.ToolStripStatusLabel lblPixelInfo;
