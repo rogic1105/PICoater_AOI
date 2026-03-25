@@ -129,7 +129,7 @@ Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×741），�
 |-------------|----------|--------|------|
 | `tabPageInspSettings` | 檢測設定 | `propertyGridSettings`（Dock=Fill） | `InspectionSettings`（MachineLayout / Recipe / Storage）— **Acquisition 已隱藏（[Browsable(false)]）** |
 | `tabPageCamera` | 相機參數 | `tabControlCamTabs`（嵌套） | 曝光時間 / 線掃速率 / 擷取高度 各 7 台（**唯一設定入口**） |
-| `tabPageSystem` | 系統資訊 | `listViewCameras` + `listViewEngine` + `listViewChartConst` | SystemSettings.CameraDevices + InspectionEngineConfig 常數 + 圖表引擎常數 |
+| `tabPageSystem` | 系統資訊 | `listViewCameras` + `listViewEngine` + `listViewChartConst` + `listViewHardware` | SystemSettings.CameraDevices + InspectionEngineConfig 常數 + 圖表引擎常數 + 硬體參數（螢幕尺寸/解析度/DPI） |
 
 `tabPageCamera` 內嵌 `tabControlCamTabs`，含 3 個子 Tab：
 
@@ -577,7 +577,9 @@ Y 軸用 `_savedYCenterFraction`（圖片高度中心分率）保持垂直位置
 **Chart 視野同步**：`UpdateCanvasInfo`（canvas.StatusChanged 事件）同時更新：
 - `MuraChartHelper`（chartMuraVertical）：X 軸 = canvas 水平 viewport mm
 - `RowMuraChartHelper`（chartMuraHorizontal）：Y 軸 = canvas 垂直 viewport mm（`pixelTop/Bot * rowPitchMm`）
-- Status bar：`位置:(X, Y) mm`（X = startPosMm + pixel*ops，Y = pixel*rowPitch）
+- Status bar：`位置:(X, Y) mm | X範圍 | Y範圍 | 座標 | 亮度 | 實體倍率`
+  - 實體倍率 = `(zoom × screenMmPerPx) / (imageScaleFactor × opsInMm)`，1.0x = 螢幕 1cm = 實際 1cm
+  - `screenMmPerPx` 由 `GetDeviceCaps(HORZSIZE/HORZRES)` 計算，啟動時傳入 CanvasInteractionHelper
 - `_suppressChartSync` flag 防止 FitToScreen/SetView 觸發的 StatusChanged 與手動 chart 更新衝突
 
 ### RowMuraChartHelper InnerPlotPosition 補償

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using AniloxRoll.Monitor.Core.Data;
@@ -17,6 +18,10 @@ namespace AniloxRoll.Monitor.Forms
 {
     public partial class AniloxRollForm : Form
     {
+        [DllImport("gdi32.dll")] private static extern int GetDeviceCaps(IntPtr hdc, int index);
+        [DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr hwnd);
+        [DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr hwnd, IntPtr hdc);
+
         // --- 核心服務 ---
         private readonly ImageRepository _imageRepository = new ImageRepository();
         private BatchInspectionService _inspectionService;
@@ -785,6 +790,36 @@ namespace AniloxRoll.Monitor.Forms
             listViewChartConst.Items.Add(new ListViewItem(new[] { "OverlapMean",       "Average" }));
             listViewChartConst.Items.Add(new ListViewItem(new[] { "OverlapMax",        "Maximum" }));
             AutoFitListViewColumns(listViewChartConst);
+
+            // ── 硬體參數（螢幕 + 未來 PLC）──────────────────────────────────
+            listViewHardware.Columns.Add("參數", 120);
+            listViewHardware.Columns.Add("值",   120);
+            try
+            {
+                IntPtr hdc = GetDC(IntPtr.Zero);
+                int horzMm   = GetDeviceCaps(hdc, 4);   // HORZSIZE (mm)
+                int vertMm   = GetDeviceCaps(hdc, 6);   // VERTSIZE (mm)
+                int horzPx   = GetDeviceCaps(hdc, 8);   // HORZRES (px, 含 DPI 縮放)
+                int vertPx   = GetDeviceCaps(hdc, 10);  // VERTRES (px, 含 DPI 縮放)
+                int logDpiX  = GetDeviceCaps(hdc, 88);  // LOGPIXELSX
+                int logDpiY  = GetDeviceCaps(hdc, 90);  // LOGPIXELSY
+                ReleaseDC(IntPtr.Zero, hdc);
+
+                int nativeW  = (int)Math.Round(horzPx * logDpiX / 96.0);
+                int nativeH  = (int)Math.Round(vertPx * logDpiY / 96.0);
+                int scalePct = (int)Math.Round(logDpiX / 96.0 * 100);
+
+                double screenMmPerPx = (double)horzMm / horzPx;
+                listViewHardware.Items.Add(new ListViewItem(new[] { "ScreenSize",   $"{horzMm / 10.0:F1} × {vertMm / 10.0:F1} cm" }));
+                listViewHardware.Items.Add(new ListViewItem(new[] { "NativeRes",    $"{nativeW} × {nativeH}" }));
+                listViewHardware.Items.Add(new ListViewItem(new[] { "EffectiveRes", $"{horzPx} × {vertPx}" }));
+                listViewHardware.Items.Add(new ListViewItem(new[] { "DpiScale",     $"{scalePct}%" }));
+                listViewHardware.Items.Add(new ListViewItem(new[] { "mm/px",        $"{screenMmPerPx:F4}" }));
+
+                _interactionHelper?.SetScreenMmPerPixel(screenMmPerPx);
+            }
+            catch { /* 非關鍵資訊，忽略 */ }
+            AutoFitListViewColumns(listViewHardware);
 
             // ── Telemetry Timer（每 500ms 更新 ListView + SyncFromHardware）─
             _telemetryTimer = new System.Windows.Forms.Timer { Interval = 500 };

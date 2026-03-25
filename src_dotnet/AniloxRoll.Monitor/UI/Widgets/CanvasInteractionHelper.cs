@@ -30,6 +30,11 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
         public void SetImageScaleFactor(int scale) => _imageScaleFactor = Math.Max(1, scale);
 
+        /// <summary>螢幕每邏輯像素對應的實體 mm（用於計算實體倍率）。</summary>
+        private double _screenMmPerPx = 0;
+
+        public void SetScreenMmPerPixel(double mmPerPx) => _screenMmPerPx = mmPerPx;
+
         public string ImageInfoSuffix { get; set; } = "";
 
         private float _savedZoom = 1.0f;
@@ -288,13 +293,21 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 viewBotMm = pixelBot * rowPitchMm;
             }
 
+            // 實體倍率：螢幕上 1mm = 實際 1mm 時為 1.0x
+            string magStr = "-";
+            if (info.Zoom > 0 && _screenMmPerPx > 0 && opsInMm > 0)
+            {
+                double physicalMag = (info.Zoom * _screenMmPerPx) / (_imageScaleFactor * opsInMm);
+                magStr = $"{physicalMag:F2}x";
+            }
+
             _statusLabel.Text =
                 $"位置:({physicalX:F2}, {physicalY:F2}) mm | " +
                 $"X範圍:{_currentViewLeftMm:F1}~{_currentViewRightMm:F1} mm | " +
                 $"Y範圍:{viewTopMm:F1}~{viewBotMm:F1} mm | " +
                 $"座標: ({info.ImageX}, {info.ImageY}) | " +
                 $"亮度: {info.PixelColor.R} | " +
-                $"倍率:{info.Zoom:F2}x{ImageInfoSuffix}";
+                $"實體倍率:{magStr}{ImageInfoSuffix}";
         }
 
         /// <summary>事件處理：canvas.EdgeReached → 切換至相鄰相機。</summary>
