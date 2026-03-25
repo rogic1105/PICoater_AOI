@@ -142,6 +142,28 @@ namespace AniloxRoll.Monitor.Core.Camera
             }
         }
 
+        // ==================== Secondary Display Geometry ====================
+
+        /// <summary>
+        /// 查詢副顯示器（panelMainDisplay）的 zoom/pan 狀態。
+        /// MIL M_SCALE_DISPLAY + M_MOUSE_USE 會隨使用者滾輪操作改變。
+        /// </summary>
+        public bool TryGetSecondaryDisplayGeometry(
+            out double zoomX, out double zoomY, out double panX, out double panY)
+        {
+            zoomX = zoomY = panX = panY = 0;
+            if (_milSecondaryDisplay == MIL.M_NULL) return false;
+            try
+            {
+                MIL.MdispInquire(_milSecondaryDisplay, MIL.M_ZOOM_FACTOR_X, ref zoomX);
+                MIL.MdispInquire(_milSecondaryDisplay, MIL.M_ZOOM_FACTOR_Y, ref zoomY);
+                MIL.MdispInquire(_milSecondaryDisplay, MIL.M_PAN_OFFSET_X, ref panX);
+                MIL.MdispInquire(_milSecondaryDisplay, MIL.M_PAN_OFFSET_Y, ref panY);
+                return zoomX > 0 && zoomY > 0;
+            }
+            catch { return false; }
+        }
+
         // ==================== Delegates / Events ====================
         private MIL_DISP_HOOK_FUNCTION_PTR _mouseStatusDelegate;
         private MIL_DISP_HOOK_FUNCTION_PTR _mouseClickDelegate;

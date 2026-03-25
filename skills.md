@@ -1195,6 +1195,34 @@ area.AxisX.MinorGrid.LineColor = Color.FromArgb(220, 220, 220);
 
 ---
 
+## MIL Display Zoom/Pan 查詢（Live Chart 對齊）
+
+### 問題
+
+`panelMainDisplay` 使用 MIL `M_SCALE_DISPLAY` + `M_CENTER_DISPLAY` + `M_MOUSE_USE`，使用者可用滾輪縮放/平移。靜態計算 `min(panelW/imgW, panelH/imgH)` 只在初始 fit-to-screen 時正確，滾輪操作後失效。
+
+### 解法：MdispInquire 即時查詢
+
+```csharp
+// AniloxCamera.TryGetSecondaryDisplayGeometry()
+MIL.MdispInquire(displayId, MIL.M_ZOOM_FACTOR_X, ref zoomX);  // display pixel / buffer pixel
+MIL.MdispInquire(displayId, MIL.M_ZOOM_FACTOR_Y, ref zoomY);
+MIL.MdispInquire(displayId, MIL.M_PAN_OFFSET_X, ref panX);    // buffer pixel at display left edge
+MIL.MdispInquire(displayId, MIL.M_PAN_OFFSET_Y, ref panY);    // buffer pixel at display top edge
+```
+
+Panel 邊緣 → buffer pixel → mm：
+```csharp
+double leftPixel  = panX;
+double rightPixel = panX + panelWidth / zoomX;
+double viewLeftMm  = startPos + leftPixel  * opsInMm;
+double viewRightMm = startPos + rightPixel * opsInMm;
+```
+
+**陷阱**：滑鼠在 MIL 顯示的非影像區域（黑邊）時，`MouseStatusHandler` 回傳 `pixelValue = -1`。座標不可靠，需靠 `MdispInquire` 反推。
+
+---
+
 ## AcquisitionSettings 初始值與 Validate fallback 一致性
 
 `AcquisitionSettings.cs` 的屬性初始值（`= new int[] {...}`）必須與 `Validate()` fallback 一致，確保：

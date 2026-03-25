@@ -293,7 +293,9 @@ InitializeSystem()
 
 **重要**：`tabControlRight` 的所有控制項**必須宣告在 `InitializeComponent()`**（Designer.cs），才能在 VS Designer 顯示。事件繫結（需要 `_settings`、`_liveCameraManager`）保留在 code-behind。
 
-**tabPageLiveView 面板命名**：`panelLiveCam1–7`（各相機縮圖容器，148×111）；`panelMainDisplay`（主顯示，1072×347）；`muraChartLive`（即時 Mura 曲線圖，Anchor=Bottom|Left|Right，由 `_muraChartLiveHelper` 管理，`OnLiveCurveData` 事件驅動，只顯示 `SelectedMainCameraId` 的曲線）；`chartLiveOverview`（即時全覽圖，Zoomable=false，由 `_liveOverviewHelper` 管理，`_liveOverviewTimer` 驅動，動態跟隨最大 FPS 50–500ms，兩層 max-window 合併）。`LiveCameraManager` 接收 `panelLiveCam1–7` 陣列與 `panelMainDisplay`。
+**tabPageLiveView 面板命名**：`panelLiveCam1–7`（各相機縮圖容器，148×111）；`panelMainDisplay`（主顯示，1072×347）；`muraChartVerticalLive`（即時切向 Mura 曲線圖，Anchor=Bottom|Left|Right，由 `_muraChartLiveHelper` 管理，`OnLiveCurveData` 事件驅動，只顯示 `SelectedMainCameraId` 的曲線）；`muraChartHorizontalLive`（即時法向 Mura 曲線圖，由 `_rowChartLiveHelper` 管理，`OnLiveRowCurveData` 事件驅動）；`chartLiveOverview`（即時全覽圖，Zoomable=false，由 `_liveOverviewHelper` 管理，`_liveOverviewTimer` 驅動，動態跟隨最大 FPS 50–500ms，兩層 max-window 合併）。`LiveCameraManager` 接收 `panelLiveCam1–7` 陣列與 `panelMainDisplay`。
+
+**Live Chart ↔ panelMainDisplay 對齊**：`OnLiveCurveData` / `OnLiveRowCurveData` 透過 `AniloxCamera.TryGetSecondaryDisplayGeometry()` 查詢 MIL 副顯示器的即時 `M_ZOOM_FACTOR_X/Y` + `M_PAN_OFFSET_X/Y`，將 panel 邊緣轉換為 mm 後傳入 chart helper 的 `UpdateDataAndView` / `UpdateViewRange`，搭配 InnerPlotPosition 補償對齊。MIL `M_MOUSE_USE` 啟用後使用者滾輪操作會即時更新 zoom/pan，chart 每幀同步。per-camera OPS 在每幀呼叫 `SetOps` 更新（替代原先固定 `Cam1_Ops`）。
 
 **曝光上限計算**：`CalcExpMax(lrHz) = clamp(floor(900000/lrHz), 1, 10000)`。LR 改變時呼叫 `ApplyExpMax()` 更新所有 7 台曝光 TrackBar/NumericUpDown 的 Maximum 並夾緊現有值。
 
@@ -449,6 +451,7 @@ IsReleasing = true  →  Timer.Stop()
 | `GetMemoryFreeMB()` | `MsysInquire(M_MEMORY_FREE)` | 板卡可用記憶體（MB） |
 | `GetPcieNumberOfLanes()` | `MsysInquire(M_PCIE_NUMBER_OF_LANES)` | PCIe 通道數 |
 | `GetPcieSpeed()` | `MsysInquire(M_PCIE_SPEED)` | "Gen1"/"Gen2"/"Gen3" |
+| `TryGetSecondaryDisplayGeometry()` | `MdispInquire(M_ZOOM_FACTOR_X/Y, M_PAN_OFFSET_X/Y)` | 副顯示器 zoom/pan 狀態（隨使用者滾輪變化） |
 
 ### 已知 MIL .NET Wrapper 限制
 

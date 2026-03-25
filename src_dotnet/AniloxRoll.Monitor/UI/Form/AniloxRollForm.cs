@@ -6,6 +6,7 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.State;
@@ -344,12 +345,39 @@ namespace AniloxRoll.Monitor.Forms
 
             if (_muraChartLiveHelper == null || _settings == null) return;
 
+            double[] opsUmArr       = _settings.GetCameraOpsUmArray();
             double[] startPositions = _settings.GetCameraStartPositionMmArray();
+
+            double opsUm = (cameraIndex >= 0 && cameraIndex < opsUmArr.Length)
+                ? opsUmArr[cameraIndex] : _settings.Cam1_Ops;
+            double opsInMm  = opsUm / 1000.0;
             double startPos = (cameraIndex >= 0 && cameraIndex < startPositions.Length)
                 ? startPositions[cameraIndex] : 0;
 
+            _muraChartLiveHelper.SetOps(opsUm);
+
+            // 查詢 MIL 副顯示器的實際 zoom/pan（隨使用者滾輪操作即時變化）
+            // panOffsetX = 面板左邊緣對應的 buffer pixel X
+            // rightPixel = panOffsetX + panelWidth / zoomX
+            double viewLeftMm = double.NaN, viewRightMm = double.NaN;
+
+            AniloxCamera liveCam = null;
+            foreach (var c in _liveCameraManager.Cameras)
+                if (c.CameraId == camId) { liveCam = c; break; }
+
+            if (liveCam != null && opsInMm > 0 &&
+                liveCam.TryGetSecondaryDisplayGeometry(
+                    out double milZoomX, out double milZoomY, out double milPanX, out double milPanY))
+            {
+                double panelW = panelMainDisplay.Width;
+                double leftPixel  = milPanX;
+                double rightPixel = milPanX + panelW / milZoomX;
+                viewLeftMm  = startPos + leftPixel  * opsInMm;
+                viewRightMm = startPos + rightPixel * opsInMm;
+            }
+
             _muraChartLiveHelper.UpdateDataAndView(meanArr, maxArr,
-                startPos, double.NaN, double.NaN);
+                startPos, viewLeftMm, viewRightMm);
         }
 
         private void OnLiveRowCurveData(int camId, float[] meanArr, float[] maxArr)
@@ -362,7 +390,24 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
 
-            _rowChartLiveHelper?.UpdateData(meanArr, maxArr);
+            if (_rowChartLiveHelper == null) return;
+            _rowChartLiveHelper.UpdateData(meanArr, maxArr);
+
+            // 同步 Y 軸視野：查詢 MIL 副顯示器 zoom/pan，以 panel 上下邊緣的 mm 值對齊
+            AniloxCamera liveCam = null;
+            foreach (var c in _liveCameraManager.Cameras)
+                if (c.CameraId == camId) { liveCam = c; break; }
+
+            double rowPitch = _rowChartLiveHelper.RowPitchMm;
+            if (liveCam != null && rowPitch > 0 &&
+                liveCam.TryGetSecondaryDisplayGeometry(
+                    out double milZoomX, out double milZoomY, out double milPanX, out double milPanY))
+            {
+                double panelH  = panelMainDisplay.Height;
+                double topPixel = milPanY;
+                double botPixel = milPanY + panelH / milZoomY;
+                _rowChartLiveHelper.UpdateViewRange(topPixel * rowPitch, botPixel * rowPitch);
+            }
         }
 
         /// <summary>用 A輪速度 和選中相機的取樣頻率（Line Rate）更新法向圖表座標。</summary>
