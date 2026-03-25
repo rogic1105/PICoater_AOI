@@ -28,6 +28,9 @@ namespace AniloxRoll.Monitor.Core.Services
             if (ridgeMode != null) _ridgeMode = ridgeMode;
         }
 
+        private string _ridgeDirection = "v"; // "v" or "h"
+        public void SetRidgeDirection(string dir) { if (dir != null) _ridgeDirection = dir; }
+
         // [新增] 記錄當前檢視模式 (true=Processed/Normal, false=Original/UpsideDown)
         private bool _isProcessedMode = false;
 
@@ -112,7 +115,7 @@ namespace AniloxRoll.Monitor.Core.Services
             var path = GetFilePath(index);
             if (string.IsNullOrEmpty(path)) return null;
 
-            return _sharedProcessor.RunInspectionFullRes(path, _isProcessedMode, _hessianMaxFactor, _ridgeMode);
+            return _sharedProcessor.RunInspectionFullRes(path, _isProcessedMode, _hessianMaxFactor, _ridgeMode, _ridgeDirection);
         }
 
         /// <summary>

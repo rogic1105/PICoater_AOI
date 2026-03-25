@@ -100,6 +100,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             );
         }
 
+        public void SetRidgeDirection(string dir) => _inspectionService?.SetRidgeDirection(dir);
+
         public void HandleSettingsChanged()
         {
             if (_settings == null) return;

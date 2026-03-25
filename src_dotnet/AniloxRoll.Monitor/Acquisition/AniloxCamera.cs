@@ -56,6 +56,8 @@ namespace AniloxRoll.Monitor.Core.Camera
         public double HessianSigma { get; set; } = 85;
         public double HessianFixedMax { get; set; } = 1.0;
         public string RidgeMode { get; set; } = "vertical";
+        /// <summary>Live 顯示方向："v" = vertical ridge, "h" = horizontal ridge。</summary>
+        public string LiveDisplayDirection { get; set; } = "v";
 
         // ==================== CLProtocol ====================
         /// <summary>CLProtocol（GenICam Camera Link）是否已成功啟用。</summary>
@@ -837,7 +839,11 @@ namespace AniloxRoll.Monitor.Core.Camera
                         }
                     }
 
-                    Marshal.Copy(picoaterRidgeBuffer, _hostOutputBuffer, 0, _hostOutputBuffer.Length);
+                    // LiveDisplayDirection 控制顯示 V 或 H ridge
+                    IntPtr displaySrc = (LiveDisplayDirection == "h")
+                        ? _nativeBufferPool.MuraBuffer   // horizontal ridge
+                        : picoaterRidgeBuffer;            // vertical ridge（預設）
+                    Marshal.Copy(displaySrc, _hostOutputBuffer, 0, _hostOutputBuffer.Length);
                     MIL.MbufPut2d(dstBuffer, 0, 0, _frameWidth, _frameHeight, _hostOutputBuffer);
                     return true;
                 }

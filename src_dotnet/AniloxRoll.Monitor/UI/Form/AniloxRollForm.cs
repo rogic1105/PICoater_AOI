@@ -82,6 +82,8 @@ namespace AniloxRoll.Monitor.Forms
         private readonly List<Image> _thumbnailCache = new List<Image>();
         private InspectionSettings _settings;
         private bool _lastReviewProcessedMode = false;
+        /// <summary>"v" = vertical ridge（預設），"h" = horizontal ridge。控制 canvasMain 處理圖方向。</summary>
+        private string _activeRidgeDirection = "v";
 
         // --- Live 全覽圖：每台相機最新曲線快取 ---
         private readonly float[][] _liveCurveMean = new float[7][];
@@ -165,6 +167,14 @@ namespace AniloxRoll.Monitor.Forms
             _muraChartHorizontalHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
 
             UpdateRowChartPitch();
+
+            // Review tab chart 點選切換 V/H 處理圖方向
+            chartMuraVertical.MouseClick += (s, e) => SwitchRidgeDirection("v");
+            chartMuraHorizontal.MouseClick += (s, e) => SwitchRidgeDirection("h");
+
+            // Live tab chart 點選切換 V/H 處理圖方向
+            muraChartVerticalLive.MouseClick += (s, e) => SwitchLiveDisplayDirection("v");
+            muraChartHorizontalLive.MouseClick += (s, e) => SwitchLiveDisplayDirection("h");
 
             checkBoxEnableImageProcessing.Checked =
                 UserSessionState.GetLastEnableImageProcessing(checkBoxEnableImageProcessing.Checked);
@@ -1231,6 +1241,7 @@ namespace AniloxRoll.Monitor.Forms
             try
             {
                 long csvMs = 0, stitchMs = 0;
+                string ridgeDir = _activeRidgeDirection; // 快照 UI 狀態
                 float[][] newCurveMean    = new float[7][];
                 float[][] newCurveMax     = new float[7][];
                 float[][] newRowCurveMean = new float[7][];
@@ -1260,23 +1271,40 @@ namespace AniloxRoll.Monitor.Forms
                                 if (enableProcess && isBmp && _inspectionService != null)
                                 {
                                     // BMP 處理模式：逐張 GPU pipeline + resize，再拼接
+                                    // ProcessBmpAtScale 回傳 V ridge 並同時存 _proc_v.jpg + _proc_h.jpg
+                                    string capturedDir = ridgeDir;
                                     Func<string, Bitmap> procLoader = (p) =>
                                     {
                                         var bmp = _inspectionService.ProcessBmpAtScale(p, scale,
                                             out float[] m, out float[] x);
-                                        // 曲線在 MergeCurves 統一處理（.bin 已在 ProcessBmpAtScale 存好）
+                                        if (capturedDir == "h" && bmp != null)
+                                        {
+                                            // H 方向：ProcessBmpAtScale 已存好 _proc_h.jpg，從磁碟載入
+                                            string baseName = System.IO.Path.Combine(
+                                                System.IO.Path.GetDirectoryName(p),
+                                                System.IO.Path.GetFileNameWithoutExtension(p));
+                                            string procH = baseName + "_proc_h.jpg";
+                                            if (System.IO.File.Exists(procH))
+                                            {
+                                                bmp.Dispose();
+                                                byte[] bytes = System.IO.File.ReadAllBytes(procH);
+                                                using (var ms = new System.IO.MemoryStream(bytes))
+                                                    return new Bitmap(ms);
+                                            }
+                                        }
                                         return bmp;
                                     };
-                                    imgs[i] = GrabImageStitcher.StitchCamera(paths, scale, procLoader);
+                                    imgs[i] = GrabImageStitcher.StitchCamera(paths, scale, procLoader,
+                                        ridgeDirection: ridgeDir);
                                 }
                                 else
                                 {
-                                    // JPEG 路徑（含 _proc.jpg 切換）或 BMP 原圖路徑
+                                    // JPEG 路徑（含 _proc_v/h.jpg 切換）或 BMP 原圖路徑
                                     Func<string, Bitmap> bmpLoader = _inspectionService != null
                                         ? (Func<string, Bitmap>)(p => _inspectionService.LoadBmpAtScale(p, scale))
                                         : null;
                                     imgs[i] = GrabImageStitcher.StitchCamera(paths, scale, bmpLoader,
-                                        useProcessed: enableProcess);
+                                        useProcessed: enableProcess, ridgeDirection: ridgeDir);
                                 }
                                 MergeCurves(paths, out newCurveMean[i], out newCurveMax[i]);
                                 MergeRowCurves(paths, out newRowCurveMean[i], out newRowCurveMax[i]);
@@ -1379,6 +1407,50 @@ namespace AniloxRoll.Monitor.Forms
                 g.FillRectangle(bgBrush, 6, 0, textSize.Width + 2, textH);
             using (var textBrush = new SolidBrush(_activeGrpBorder))
                 g.DrawString(box.Text, box.Font, textBrush, 8, 0);
+        }
+
+        /// <summary>切換 Live 顯示的 V/H 處理圖方向，點選 muraChartVerticalLive/HorizontalLive 觸發。</summary>
+        private void SwitchLiveDisplayDirection(string dir)
+        {
+            _liveCameraManager?.SetLiveDisplayDirection(dir);
+
+            // 視覺回饋
+            muraChartVerticalLive.BackColor = (dir == "v")
+                ? System.Drawing.Color.FromArgb(230, 240, 255) : System.Drawing.SystemColors.Control;
+            muraChartHorizontalLive.BackColor = (dir == "h")
+                ? System.Drawing.Color.FromArgb(230, 240, 255) : System.Drawing.SystemColors.Control;
+        }
+
+        /// <summary>切換 canvasMain 的 V/H 處理圖方向，點選 chartMuraVertical/Horizontal 觸發。</summary>
+        private async void SwitchRidgeDirection(string dir)
+        {
+            if (dir == _activeRidgeDirection) return;
+            if (!_lastReviewProcessedMode) return; // 原圖模式不需切換
+
+            _activeRidgeDirection = dir;
+            _interactionHelper.SetRidgeDirection(dir);
+
+            // 視覺回饋：活動方向的 chart 加深背景
+            chartMuraVertical.BackColor = (dir == "v")
+                ? System.Drawing.Color.FromArgb(230, 240, 255) : System.Drawing.SystemColors.Control;
+            chartMuraHorizontal.BackColor = (dir == "h")
+                ? System.Drawing.Color.FromArgb(230, 240, 255) : System.Drawing.SystemColors.Control;
+
+            if (_stitchedImages != null)
+            {
+                // 合圖路徑：重新拼接（帶新方向）
+                var info = cbReviewGrabId.SelectedItem as GrabIdInfo;
+                if (info != null)
+                {
+                    string grabId = info.GrabId;
+                    await LoadGrabStitchedViewAsync(grabId, info.Earliest, info.Latest, true);
+                }
+            }
+            else
+            {
+                // 原圖路徑：重新載入當前選中的圖片
+                _interactionHelper.OnGallerySelectionChanged(_galleryManager?.SelectedIndex ?? 0);
+            }
         }
 
         private void ShowStitchedCameraInCanvas(int idx)

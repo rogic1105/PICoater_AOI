@@ -29,14 +29,16 @@ namespace AniloxRoll.Monitor.UI.Widgets
         /// 拼接同一相機的多張影像（依 sortedPaths 順序，第一張在最上方）。
         /// bmpLoader：BMP 檔案的快速載入器（CoreCV_FastReadBMP + GPU resize）；
         ///            為 null 時退回 GDI+ 路徑（慢）。
-        /// useProcessed：true 時 _raw.jpg 改讀 _proc.jpg（若存在）；BMP 路徑不受影響。
+        /// useProcessed：true 時 _raw.jpg 改讀 _proc_v/h.jpg（若存在）；BMP 路徑不受影響。
+        /// ridgeDirection：處理圖方向 "v"（預設）或 "h"。
         /// 若只有一張則直接回傳該張的 Bitmap。全部失敗則回傳 null。
         /// </summary>
         public static Bitmap StitchCamera(
             IList<string> sortedPaths,
             int bmpResizeScale = InspectionEngineConfig.DefaultSaveResizeScale,
             Func<string, Bitmap> bmpLoader = null,
-            bool useProcessed = false)
+            bool useProcessed = false,
+            string ridgeDirection = "v")
         {
             var images = new List<Bitmap>();
             int refW = 0, refH = 0;
@@ -46,7 +48,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 if (!File.Exists(path)) continue;
                 try
                 {
-                    var bmp = LoadCameraImage(path, bmpResizeScale, bmpLoader, useProcessed);
+                    var bmp = LoadCameraImage(path, bmpResizeScale, bmpLoader, useProcessed, ridgeDirection);
                     if (bmp == null) continue;
                     images.Add(bmp);
                     if (refW == 0) { refW = bmp.Width; refH = bmp.Height; }
@@ -91,7 +93,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         }
 
         private static Bitmap LoadCameraImage(string path, int bmpResizeScale,
-            Func<string, Bitmap> bmpLoader, bool useProcessed)
+            Func<string, Bitmap> bmpLoader, bool useProcessed, string ridgeDirection = "v")
         {
             if (path.EndsWith("_raw.jpg", StringComparison.OrdinalIgnoreCase))
             {
@@ -99,7 +101,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 if (useProcessed)
                 {
                     string baseName = path.Substring(0, path.Length - "_raw.jpg".Length);
-                    string procPath = baseName + "_proc_v.jpg";
+                    string procSuffix = (ridgeDirection == "h") ? "_proc_h.jpg" : "_proc_v.jpg";
+                    string procPath = baseName + procSuffix;
                     if (!File.Exists(procPath)) procPath = baseName + "_proc.jpg"; // 向後相容
                     if (File.Exists(procPath)) loadPath = procPath;
                 }

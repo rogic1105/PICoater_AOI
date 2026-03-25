@@ -175,14 +175,14 @@ namespace AniloxRoll.Monitor.Core.Services
         }
 
         public InspectionData RunInspectionFullRes(string filePath, bool isProcessedMode, float hessianFactor,
-            string ridgeMode = null)
+            string ridgeMode = null, string ridgeDirection = "v")
         {
             if (_isDisposed) return null;
             if (!File.Exists(filePath)) return null;
 
             // 新格式：預先存好的 JPEG + .bin，不需要 GPU，直接載入
             if (filePath.EndsWith("_raw.jpg", StringComparison.OrdinalIgnoreCase))
-                return LoadFromPrecomputedFiles(filePath, isProcessedMode);
+                return LoadFromPrecomputedFiles(filePath, isProcessedMode, ridgeDirection);
 
             // 舊格式：BMP 讀取 + 視需要跑 GPU Pipeline（向下相容）
             lock (_lock)
@@ -218,7 +218,9 @@ namespace AniloxRoll.Monitor.Core.Services
                     gpuMs = sw.ElapsedMilliseconds;
 
                     sw.Restart();
-                    bmp = ImageUtils.Create8bppBitmap(_ridgeBuffer, w, h, flipY: false);
+                    // ridgeDirection: "v" → _ridgeBuffer（vertical），"h" → _muraBuffer（horizontal）
+                    IntPtr displayBuffer = (ridgeDirection == "h") ? _muraBuffer : _ridgeBuffer;
+                    bmp = ImageUtils.Create8bppBitmap(displayBuffer, w, h, flipY: false);
                     bmpMs = sw.ElapsedMilliseconds;
 
                     sw.Restart();
@@ -364,15 +366,19 @@ namespace AniloxRoll.Monitor.Core.Services
         }
 
         /// <summary>
-        /// 載入預先存好的新格式檔案（_raw.jpg / _proc_v.jpg / _mean_v.bin / _max_v.bin），無需 GPU。
+        /// 載入預先存好的新格式檔案（_raw.jpg / _proc_v.jpg / _proc_h.jpg / .bin），無需 GPU。
+        /// ridgeDirection: "v" = vertical, "h" = horizontal（控制處理模式顯示哪張）。
         /// </summary>
-        private static InspectionData LoadFromPrecomputedFiles(string rawJpgPath, bool isProcessedMode)
+        private static InspectionData LoadFromPrecomputedFiles(string rawJpgPath, bool isProcessedMode,
+            string ridgeDirection = "v")
         {
             var swTotal = Stopwatch.StartNew();
 
             string baseNoSuffix = rawJpgPath.Substring(0, rawJpgPath.Length - "_raw.jpg".Length);
-            string procJpgPath  = File.Exists(baseNoSuffix + "_proc_v.jpg")
-                ? baseNoSuffix + "_proc_v.jpg"
+            // 依方向選擇處理圖：_proc_v.jpg 或 _proc_h.jpg
+            string procSuffix = (ridgeDirection == "h") ? "_proc_h.jpg" : "_proc_v.jpg";
+            string procJpgPath  = File.Exists(baseNoSuffix + procSuffix)
+                ? baseNoSuffix + procSuffix
                 : baseNoSuffix + "_proc.jpg"; // 向後相容
             string meanBinPath  = ResolveCompatPath(baseNoSuffix, "_mean_v.bin", "_mean.bin");
             string maxBinPath   = ResolveCompatPath(baseNoSuffix, "_max_v.bin", "_max.bin");

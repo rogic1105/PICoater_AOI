@@ -275,6 +275,12 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.EnableImageProcessing = enable;
         }
 
+        public void SetLiveDisplayDirection(string dir)
+        {
+            foreach (var cam in _cameras)
+                cam.LiveDisplayDirection = dir;
+        }
+
         /// <summary>
         /// 套用設定至所有相機。
         /// 曝光：直接呼叫 SetExposureUs（live CLProtocol 路徑，可即時生效）。
