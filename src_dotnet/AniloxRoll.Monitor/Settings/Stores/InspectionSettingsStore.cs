@@ -75,6 +75,7 @@ namespace AniloxRoll.Monitor.Core.Data
         {
             var L = s.MachineLayout ?? new MachineLayoutConfig();
             var R = s.Recipe        ?? new InspectionRecipe();
+            var C = s.Chart         ?? new ChartSettings();
             var T = s.Storage       ?? new StorageSettings();
 
             var sb = new StringBuilder();
@@ -111,6 +112,14 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"SaveJpgQuality\": {R.SaveJpgQuality}");
             sb.AppendLine("  },");
 
+            // Chart
+            sb.AppendLine("  \"Chart\": {");
+            sb.AppendLine($"    \"ScaleMode\": \"{C.ScaleMode}\",");
+            sb.AppendLine($"    \"YearlyYMax\": {C.YearlyYMax},");
+            sb.AppendLine($"    \"MonthlyYMax\": {C.MonthlyYMax},");
+            sb.AppendLine($"    \"DailyYMax\": {C.DailyYMax}");
+            sb.AppendLine("  },");
+
             // Storage
             sb.AppendLine("  \"Storage\": {");
             sb.AppendLine($"    \"EnableAutoCapture\": {(T.EnableAutoCapture ? "true" : "false")},");
@@ -134,6 +143,7 @@ namespace AniloxRoll.Monitor.Core.Data
             {
                 MachineLayout = ParseMachineLayout(json),
                 Recipe        = ParseRecipe(json),
+                Chart         = ParseChart(json),
                 Storage       = ParseStorage(json),
             };
             return settings;
@@ -236,6 +246,24 @@ namespace AniloxRoll.Monitor.Core.Data
                 AniloxRollSpeedMPerMin = GetDouble(obj, "AniloxRollSpeedMPerMin", 10.0),
                 SaveResizeScale  = GetInt  (obj, "SaveResizeScale",   5),
                 SaveJpgQuality   = GetInt  (obj, "SaveJpgQuality",    90),
+            };
+        }
+
+        private static ChartSettings ParseChart(string json)
+        {
+            string obj = ExtractObject(json, "Chart");
+
+            ChartScaleMode mode = ChartScaleMode.Fixed;
+            string modeStr = GetString(obj, "ScaleMode", "Fixed");
+            if (!System.Enum.TryParse(modeStr, true, out mode))
+                mode = ChartScaleMode.Fixed;
+
+            return new ChartSettings
+            {
+                ScaleMode   = mode,
+                YearlyYMax  = GetInt(obj, "YearlyYMax",  60000),
+                MonthlyYMax = GetInt(obj, "MonthlyYMax",  2000),
+                DailyYMax   = GetInt(obj, "DailyYMax",     300),
             };
         }
 

@@ -486,6 +486,19 @@ namespace AniloxRoll.Monitor.Forms
                 _inspectionLogService?.ForceWriteConfig(CsvConfigSnapshot.FromSettings(_settings));
 
             string changedPropertyName = e?.ChangedItem?.PropertyDescriptor?.Name ?? string.Empty;
+
+            // 圖表設定變更 → 立刻套用
+            if (changedPropertyName == nameof(InspectionSettings.ChartScaleMode))
+            {
+                ApplyChartScaleFromSettings();
+            }
+            else if (changedPropertyName == nameof(InspectionSettings.ChartYearlyYMax))
+                ApplyFixedScale(chartYearly, _settings.Chart.YearlyYMax);
+            else if (changedPropertyName == nameof(InspectionSettings.ChartMonthlyYMax))
+                ApplyFixedScale(chartMonthly, _settings.Chart.MonthlyYMax);
+            else if (changedPropertyName == nameof(InspectionSettings.ChartDailyYMax))
+                ApplyFixedScale(chartDaily, _settings.Chart.DailyYMax);
+
             bool isRecipeChange = RecipePropertyNames.Contains(changedPropertyName);
 
             // 有影像且為配方參數變更 → 重載（始終用 processed 模式，因為配方只影響演算法輸出）
@@ -2190,9 +2203,54 @@ namespace AniloxRoll.Monitor.Forms
 
         private void InitPeriodCharts()
         {
-            InitOneChart(chartYearly,  yDefault: 60000, xCount: 12, xStart: 1);  // 月份 1-12
-            InitOneChart(chartMonthly, yDefault: 2000,  xCount: 31, xStart: 1);  // 日期 1-31
-            InitOneChart(chartDaily,   yDefault: 300,   xCount: 24, xStart: 0);  // 小時 0-23
+            var cs = _settings.Chart;
+            InitOneChart(chartYearly,  yDefault: cs.YearlyYMax,  xCount: 12, xStart: 1);  // 月份 1-12
+            InitOneChart(chartMonthly, yDefault: cs.MonthlyYMax, xCount: 31, xStart: 1);  // 日期 1-31
+            InitOneChart(chartDaily,   yDefault: cs.DailyYMax,   xCount: 24, xStart: 0);  // 小時 0-23
+
+            // ScaleMode=Auto 時，初始即套用自動範圍（空資料 → 預設 niceMax=5）
+            if (cs.ScaleMode == ChartScaleMode.Auto)
+            {
+                var empty = new List<PeriodStats>();
+                ApplyAutoScale(chartYearly,  empty);
+                ApplyAutoScale(chartMonthly, empty);
+                ApplyAutoScale(chartDaily,   empty);
+            }
+
+            chartYearly.MouseClick  -= PeriodChart_ToggleAutoScale;
+            chartMonthly.MouseClick -= PeriodChart_ToggleAutoScale;
+            chartDaily.MouseClick   -= PeriodChart_ToggleAutoScale;
+            chartYearly.MouseClick  += PeriodChart_ToggleAutoScale;
+            chartMonthly.MouseClick += PeriodChart_ToggleAutoScale;
+            chartDaily.MouseClick   += PeriodChart_ToggleAutoScale;
+        }
+
+        private void PeriodChart_ToggleAutoScale(object sender, System.Windows.Forms.MouseEventArgs e)
+        {
+            var chart = (System.Windows.Forms.DataVisualization.Charting.Chart)sender;
+            if (chart.ChartAreas.Count == 0) return;
+
+            bool isAuto = "auto".Equals(chart.Tag)
+                       || _settings.Chart.ScaleMode == ChartScaleMode.Auto;
+
+            if (isAuto)
+            {
+                int fixedMax = chart == chartYearly  ? _settings.Chart.YearlyYMax
+                             : chart == chartMonthly ? _settings.Chart.MonthlyYMax
+                             :                         _settings.Chart.DailyYMax;
+                ApplyFixedScale(chart, fixedMax);
+            }
+            else
+            {
+                chart.Tag = "auto";
+                // 從目前資料重新計算自動範圍
+                var data = new List<PeriodStats>();
+                var sPass = chart.Series["合格"];
+                var sFail = chart.Series["異常"];
+                for (int i = 0; i < sPass.Points.Count; i++)
+                    data.Add(new PeriodStats { Label = "", Pass = (int)sPass.Points[i].YValues[0], Fail = (int)sFail.Points[i].YValues[0] });
+                ApplyAutoScale(chart, data);
+            }
         }
 
         private static void InitOneChart(
@@ -2302,7 +2360,7 @@ namespace AniloxRoll.Monitor.Forms
             FillPeriodChart(chartDaily,   byHour);   // 時
         }
 
-        private static void FillPeriodChart(
+        private void FillPeriodChart(
             System.Windows.Forms.DataVisualization.Charting.Chart chart,
             List<PeriodStats> data)
         {
@@ -2316,8 +2374,15 @@ namespace AniloxRoll.Monitor.Forms
                 sFail.Points.AddXY(p.Label, p.Fail);
             }
 
-            // 動態計算 Y2 軸：5 等分格線，只顯示 0 和 max 兩個標籤
-            // Maximum 比 niceMax 多 5%，讓最頂格線上方留約半個字元的空白
+            // 自動範圍：全域設定為 Auto 或單圖被點擊切換為 auto
+            if (_settings.Chart.ScaleMode == ChartScaleMode.Auto || "auto".Equals(chart.Tag))
+                ApplyAutoScale(chart, data);
+        }
+
+        private static void ApplyAutoScale(
+            System.Windows.Forms.DataVisualization.Charting.Chart chart,
+            List<PeriodStats> data)
+        {
             int maxTotal = 0;
             foreach (var p in data)
                 maxTotal = Math.Max(maxTotal, p.Pass + p.Fail);
@@ -2325,15 +2390,51 @@ namespace AniloxRoll.Monitor.Forms
             var area     = chart.ChartAreas["Main"];
             double yMax  = niceMax * 1.05;
             double yStep = niceMax / 5.0;
-            // Primary 軸（AxisY）驅動格線：scale 與 Y2 保持同步
             area.AxisY.Maximum               = yMax;
             area.AxisY.Interval              = yStep;
             area.AxisY.MajorGrid.Interval    = yStep;
-            // Secondary 軸（AxisY2）顯示右側標籤
             area.AxisY2.Maximum              = yMax;
             area.AxisY2.Interval             = yStep;
             area.AxisY2.MajorGrid.Interval   = yStep;
             area.AxisY2.LabelStyle.Interval  = niceMax;
+        }
+
+        private void ApplyFixedScale(
+            System.Windows.Forms.DataVisualization.Charting.Chart chart, int fixedMax)
+        {
+            chart.Tag = null;
+            var area = chart.ChartAreas["Main"];
+            double yStep = fixedMax / 5.0;
+            area.AxisY.Maximum               = fixedMax;
+            area.AxisY.Interval              = yStep;
+            area.AxisY.MajorGrid.Interval    = yStep;
+            area.AxisY2.Maximum              = fixedMax;
+            area.AxisY2.Interval             = yStep;
+            area.AxisY2.MajorGrid.Interval   = yStep;
+            area.AxisY2.LabelStyle.Interval  = fixedMax;
+        }
+
+        private void ApplyChartScaleFromSettings()
+        {
+            if (_settings.Chart.ScaleMode == ChartScaleMode.Fixed)
+            {
+                ApplyFixedScale(chartYearly,  _settings.Chart.YearlyYMax);
+                ApplyFixedScale(chartMonthly, _settings.Chart.MonthlyYMax);
+                ApplyFixedScale(chartDaily,   _settings.Chart.DailyYMax);
+            }
+            else
+            {
+                foreach (var chart in new[] { chartYearly, chartMonthly, chartDaily })
+                {
+                    if (chart.ChartAreas.Count == 0) continue;
+                    var sPass = chart.Series["合格"];
+                    var sFail = chart.Series["異常"];
+                    var data = new List<PeriodStats>();
+                    for (int i = 0; i < sPass.Points.Count; i++)
+                        data.Add(new PeriodStats { Label = "", Pass = (int)sPass.Points[i].YValues[0], Fail = (int)sFail.Points[i].YValues[0] });
+                    ApplyAutoScale(chart, data);
+                }
+            }
         }
 
         // ── 圖表導航列（◄ 年/月/日 ►）────────────────────────────────────

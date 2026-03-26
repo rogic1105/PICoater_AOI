@@ -41,6 +41,7 @@ PICoater_AOI/
 | `Acquisition/CaptureTimestampCoordinator.cs` | 多相機存檔時間戳同步 |
 | `UI/Managers/LiveCameraManager.cs` | 多台相機生命週期管理 |
 | `Settings/InspectionSettings.cs` | 根設定物件 |
+| `Settings/Models/ChartSettings.cs` | 圖表 Y 軸範圍設定（ChartScaleMode + YMax） |
 | `Settings/Stores/AcquisitionSettingsStore.cs` | 讀寫 acquisition-settings.json |
 | `UI/State/UserSessionState.cs` | UI session 持久化 → session-state.json |
 | `ImageCatalog/ImageRepository.cs` | 掃描目錄建立索引 |

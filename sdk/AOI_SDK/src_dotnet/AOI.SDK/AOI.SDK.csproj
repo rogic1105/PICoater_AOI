@@ -81,7 +81,8 @@
     <Compile Include="Core\GPUHelper.cs" />
     <Compile Include="Core\GPUProcessor.cs" />
     <Compile Include="Core\Models\TimedResult.cs" />
-    <!-- SmartCanvas.cs moved to AniloxRoll.Monitor to avoid Matrox design-time load failure -->
+    <!-- SmartCanvas.cs is linked directly by consumer projects (AniloxRoll.Monitor, TestApp)
+         to avoid Matrox design-time load failure when included in AOI.SDK.dll -->
     <Compile Include="Utils\FileUtils.cs" />
     <Compile Include="Utils\ImageUtils.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

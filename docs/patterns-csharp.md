@@ -83,7 +83,7 @@ Solution 將 `Debug|x64` 映射為 `Debug|Any CPU`（Platform="Any CPU" 含空�
 
 | 檔案 | 對應 Tab | 內容 |
 |------|---------|------|
-| `Config\inspection-settings.json` | tabPageInspSettings（PropertyGrid） | MachineLayout + Recipe + Storage |
+| `Config\inspection-settings.json` | tabPageInspSettings（PropertyGrid） | MachineLayout + Recipe + Chart + Storage |
 | `Config\acquisition-settings.json` | tabPageCamera（TrackBar） | CameraGrabHeight[7] + CameraExposureTimeUs[7] + CameraLineRateHz[7] |
 | `Config\system-settings.json` | tabPageSystem（唯讀） | 相機硬體拓樸 |
 
@@ -92,6 +92,7 @@ Solution 將 `Debug|x64` 映射為 `Debug|Any CPU`（Platform="Any CPU" 含空�
 - 存檔在 **`ValueChanged`** 觸發（不用 `MouseUp`）：TrackBar 快速拖曳放開不在控制項範圍內時 `MouseUp` 不一定觸發
 - **`AcquisitionSettingsStore` 不使用 `JavaScriptSerializer`**：改用手刻 `SerializeJson` / `ParseJson`（Regex 解析陣列，`InvariantCulture` 解析 double），原因：`user.config` 損毀時 `new JavaScriptSerializer()` 拋 `ConfigurationErrorsException`
 - **`InspectionSettingsStore` 同樣不使用 `JavaScriptSerializer`**：手刻 `SerializeJson` + `ParseJson`
+- **PropertyGrid 所有設定都必須持久化**：新增 Category/屬性時，必須同步更新 `InspectionSettingsStore` 的 `SerializeJson` + `ParseJson`，確保數值有記憶功能
 
 ### AcquisitionSettings 初始值與 Validate fallback 一致性
 

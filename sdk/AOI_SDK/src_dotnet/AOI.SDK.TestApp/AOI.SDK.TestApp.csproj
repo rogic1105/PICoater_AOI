@@ -8,7 +8,7 @@
     <OutputType>WinExe</OutputType>
     <RootNamespace>AOI.SDK.TestApp</RootNamespace>
     <AssemblyName>AOI.SDK.TestApp</AssemblyName>
-    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <Deterministic>true</Deterministic>
@@ -64,6 +64,9 @@
     </Compile>
     <Compile Include="Forms\SdkForm.Designer.cs">
       <DependentUpon>SdkForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="..\AOI.SDK\UI\SmartCanvas.cs">
+      <Link>UI\SmartCanvas.cs</Link>
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
