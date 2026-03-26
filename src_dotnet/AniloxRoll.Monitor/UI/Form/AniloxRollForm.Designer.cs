@@ -85,7 +85,6 @@
             this.cbReviewGrabId = new System.Windows.Forms.ComboBox();
             this.btnGrabIdPrev = new System.Windows.Forms.Button();
             this.btnGrabIdNext = new System.Windows.Forms.Button();
-            this.canvasMain = new AOI.SDK.UI.SmartCanvas();
             this.tabPageData = new System.Windows.Forms.TabPage();
             this.panelStatCam7 = new System.Windows.Forms.Panel();
             this.lblChartMonthlyUnit = new System.Windows.Forms.Label();
@@ -253,6 +252,7 @@
             this.panelStatusBar = new System.Windows.Forms.Panel();
             this.lblStatusGrab = new System.Windows.Forms.Label();
             this.backgroundWorker1 = new System.ComponentModel.BackgroundWorker();
+            this.canvasMain = new AOI.SDK.UI.SmartCanvas();
             this.tabMain.SuspendLayout();
             this.tabPageLiveView.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.muraChartHorizontalLive)).BeginInit();
@@ -271,7 +271,6 @@
             ((System.ComponentModel.ISupportInitialize)(this.pbCam6)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam7)).BeginInit();
             this.grpReviewGrabNav.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).BeginInit();
             this.tabPageData.SuspendLayout();
             this.grpDataSingleSheet.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.chartYearly)).BeginInit();
@@ -352,6 +351,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam1)).BeginInit();
             this.tabPageSystem.SuspendLayout();
             this.panelStatusBar.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).BeginInit();
             this.SuspendLayout();
             // 
             // tabMain
@@ -395,10 +395,10 @@
             // 
             // btnGetBackground
             // 
-            this.btnGetBackground.Location = new System.Drawing.Point(900, 118);
+            this.btnGetBackground.Location = new System.Drawing.Point(930, 103);
             this.btnGetBackground.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.btnGetBackground.Name = "btnGetBackground";
-            this.btnGetBackground.Size = new System.Drawing.Size(114, 45);
+            this.btnGetBackground.Size = new System.Drawing.Size(49, 45);
             this.btnGetBackground.TabIndex = 20;
             this.btnGetBackground.Text = "取得背景";
             this.btnGetBackground.UseVisualStyleBackColor = true;
@@ -470,10 +470,10 @@
             // 
             // btnCameraFree
             // 
-            this.btnCameraFree.Location = new System.Drawing.Point(900, 65);
+            this.btnCameraFree.Location = new System.Drawing.Point(900, 48);
             this.btnCameraFree.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.btnCameraFree.Name = "btnCameraFree";
-            this.btnCameraFree.Size = new System.Drawing.Size(114, 45);
+            this.btnCameraFree.Size = new System.Drawing.Size(114, 38);
             this.btnCameraFree.TabIndex = 5;
             this.btnCameraFree.Text = "Free";
             this.btnCameraFree.UseVisualStyleBackColor = true;
@@ -484,7 +484,7 @@
             this.btnCameraGrab.Location = new System.Drawing.Point(900, 7);
             this.btnCameraGrab.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.btnCameraGrab.Name = "btnCameraGrab";
-            this.btnCameraGrab.Size = new System.Drawing.Size(114, 50);
+            this.btnCameraGrab.Size = new System.Drawing.Size(114, 42);
             this.btnCameraGrab.TabIndex = 4;
             this.btnCameraGrab.Text = "Grab";
             this.btnCameraGrab.UseVisualStyleBackColor = true;
@@ -803,19 +803,6 @@
             this.btnGrabIdNext.TabIndex = 2;
             this.btnGrabIdNext.Text = ">";
             this.btnGrabIdNext.UseVisualStyleBackColor = true;
-            // 
-            // canvasMain
-            // 
-            this.canvasMain.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.canvasMain.BackColor = System.Drawing.Color.Black;
-            this.canvasMain.Cursor = System.Windows.Forms.Cursors.Cross;
-            this.canvasMain.Location = new System.Drawing.Point(5, 195);
-            this.canvasMain.Name = "canvasMain";
-            this.canvasMain.Size = new System.Drawing.Size(888, 333);
-            this.canvasMain.TabIndex = 7;
-            this.canvasMain.TabStop = false;
             // 
             // tabPageData
             // 
@@ -2864,6 +2851,19 @@
             this.lblStatusGrab.Text = "● 待機";
             this.lblStatusGrab.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             // 
+            // canvasMain
+            // 
+            this.canvasMain.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.canvasMain.BackColor = System.Drawing.Color.Black;
+            this.canvasMain.Cursor = System.Windows.Forms.Cursors.Cross;
+            this.canvasMain.Location = new System.Drawing.Point(5, 195);
+            this.canvasMain.Name = "canvasMain";
+            this.canvasMain.Size = new System.Drawing.Size(888, 333);
+            this.canvasMain.TabIndex = 7;
+            this.canvasMain.TabStop = false;
+            // 
             // AniloxRollForm
             // 
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
@@ -2895,7 +2895,6 @@
             ((System.ComponentModel.ISupportInitialize)(this.pbCam6)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pbCam7)).EndInit();
             this.grpReviewGrabNav.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).EndInit();
             this.tabPageData.ResumeLayout(false);
             this.tabPageData.PerformLayout();
             this.grpDataSingleSheet.ResumeLayout(false);
@@ -3002,6 +3001,7 @@
             this.tabPageSystem.ResumeLayout(false);
             this.tabPageSystem.PerformLayout();
             this.panelStatusBar.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.canvasMain)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
