@@ -34,6 +34,7 @@ namespace AniloxRoll.Monitor.Core.Interop
         public float RidgeSigma;
         public float HessianMaxFactor;
         public IntPtr RidgeMode;
+        public IntPtr PrecomputedColMean;  // host float*, size = width. IntPtr.Zero = per-frame mode.
     }
 
     internal static class NativeMethods
@@ -84,6 +85,13 @@ namespace AniloxRoll.Monitor.Core.Interop
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         public static extern void PICoaterAPI_DestroyPipeline(IntPtr handle);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int PICoaterAPI_ComputeColumnMean(
+            IntPtr handle,
+            ref AoiInputImageNative input,
+            float bgSigmaFactor,
+            IntPtr outColMean);  // host float*, size = width
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr PICoaterAPI_CreateMockPlc();

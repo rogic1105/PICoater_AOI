@@ -53,7 +53,7 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category("2. 檢測配方")][DisplayName("平均閾值")]     public float ErrorValueMean   { get => Recipe.ErrorValueMean;   set => Recipe.ErrorValueMean   = value; }
         [Category("2. 檢測配方")][DisplayName("最大閾值")]     public float ErrorValueMax    { get => Recipe.ErrorValueMax;    set => Recipe.ErrorValueMax    = value; }
         [Category("2. 檢測配方")][DisplayName("正規值")]       public float HessianMaxFactor { get => Recipe.HessianMaxFactor; set => Recipe.HessianMaxFactor = value; }
-        [Category("2. 檢測配方")][DisplayName("背景取樣列數")] public int   BackgroundSampleRows { get => Recipe.BackgroundSampleRows; set => Recipe.BackgroundSampleRows = value; }
+        [Category("2. 檢測配方")][DisplayName("背景取樣秒數")] public int   BackgroundSampleSeconds { get => Recipe.BackgroundSampleSeconds; set => Recipe.BackgroundSampleSeconds = value; }
         [Category("2. 檢測配方")][DisplayName("A輪速度 (m/min)")] public double AniloxRollSpeedMPerMin { get => Recipe.AniloxRollSpeedMPerMin; set => Recipe.AniloxRollSpeedMPerMin = value; }
 
 
@@ -66,7 +66,8 @@ namespace AniloxRoll.Monitor.Core.Data
         // ===== 4. 儲存設定 =====
         [Category("4. 儲存設定")][DisplayName("存檔")]       public bool   EnableAutoCapture    { get => Storage.EnableAutoCapture;    set => Storage.EnableAutoCapture    = value; }
         [Category("4. 儲存設定")][DisplayName("存原圖")]     public bool   SaveOriginalBmp      { get => Storage.SaveOriginalBmp;      set => Storage.SaveOriginalBmp      = value; }
-        [Category("4. 儲存設定")][DisplayName("存檔目錄")] public string CaptureRootPath { get => Storage.CaptureRootPath; set => Storage.CaptureRootPath = value; }
+        [Category("4. 儲存設定")][DisplayName("存圖目錄")]   public string CaptureRootPath { get => Storage.CaptureRootPath; set => Storage.CaptureRootPath = value; }
+        [Category("4. 儲存設定")][DisplayName("存背景目錄")] public string BackgroundPath  { get => Storage.BackgroundPath;  set => Storage.BackgroundPath  = value; }
 
     }
 }

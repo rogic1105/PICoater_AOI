@@ -111,7 +111,7 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
                 ridgeSigma,
                 hessianMaxFactor,
                 ridgeMode,
-                0);
+                nullptr, 0);
         }
 
         // --- F. �U�����G (Device -> Pinned) ---
@@ -324,7 +324,7 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath, const int NUM_CA
             shared_ctx.d_in, shared_ctx.d_bg, shared_ctx.d_mura, shared_ctx.d_ridge,
             shared_ctx.d_mura_curve_mean, shared_ctx.d_mura_curve_max,
             shared_ctx.d_mura_row_curve_mean, shared_ctx.d_mura_row_curve_max,
-            2.0f, 9.0f, 1.0f, "vertical", shared_ctx.stream
+            2.0f, 9.0f, 1.0f, "vertical", nullptr, shared_ctx.stream
         );
         checkCudaErrors(cudaStreamSynchronize(shared_ctx.stream));
     }
@@ -347,7 +347,7 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath, const int NUM_CA
                 shared_ctx.d_in, shared_ctx.d_bg, shared_ctx.d_mura, shared_ctx.d_ridge,
                 shared_ctx.d_mura_curve_mean, shared_ctx.d_mura_curve_max,
                 shared_ctx.d_mura_row_curve_mean, shared_ctx.d_mura_row_curve_max,
-                2.0f, 9.0f, 1.0f, "vertical", shared_ctx.stream
+                2.0f, 9.0f, 1.0f, "vertical", nullptr, shared_ctx.stream
             );
 
             // C. Resize

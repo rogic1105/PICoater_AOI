@@ -27,6 +27,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         private MIL_ID _ownerSystemId = MIL.M_NULL;
         private MIL_ID[] _milGrabBuffers = new MIL_ID[2];
         private MIL_ID _milDisplayBuffer = MIL.M_NULL;
+        private MIL_ID _milLastGrabBuffer = MIL.M_NULL;  // hook 中暫存最近一幀原圖
         private MIL_INT _milGrabBufferListSize = 2;
 
         // ==================== State ====================
@@ -58,6 +59,12 @@ namespace AniloxRoll.Monitor.Core.Camera
         public string RidgeMode { get; set; } = "vertical";
         /// <summary>Live 顯示方向："v" = vertical ridge, "h" = horizontal ridge。</summary>
         public string LiveDisplayDirection { get; set; } = "v";
+
+        /// <summary>
+        /// 預算背景 column mean（pinned host float*，size = frameWidth）。
+        /// 非 IntPtr.Zero 時，pipeline 跳過每幀 column mean 計算，使用此固定背景。
+        /// </summary>
+        public IntPtr PrecomputedColMean { get; set; } = IntPtr.Zero;
 
         // ==================== CLProtocol ====================
         /// <summary>CLProtocol（GenICam Camera Link）是否已成功啟用。</summary>
@@ -466,6 +473,7 @@ namespace AniloxRoll.Monitor.Core.Camera
             }
             if (_milDisplayBuffer != MIL.M_NULL) { MIL.MbufFree(_milDisplayBuffer); _milDisplayBuffer = MIL.M_NULL; }
             if (_milProcBuffer    != MIL.M_NULL) { MIL.MbufFree(_milProcBuffer);    _milProcBuffer    = MIL.M_NULL; }
+            _milLastGrabBuffer = MIL.M_NULL;  // 不 free（它是 grab buffer 之一，已在上面釋放）
 
             FreeResizeBuffers();
             lock (_picoaterLock)
@@ -757,6 +765,7 @@ namespace AniloxRoll.Monitor.Core.Camera
 
             MIL_ID modifiedBuffer = MIL.M_NULL;
             MIL.MdigGetHookInfo(eventId, MIL.M_MODIFIED_BUFFER + MIL.M_BUFFER_ID, ref modifiedBuffer);
+            cam._milLastGrabBuffer = modifiedBuffer;
 
             if (modifiedBuffer != MIL.M_NULL && cam._milProcBuffer != MIL.M_NULL && cam._milDisplayBuffer != MIL.M_NULL)
             {
@@ -826,7 +835,8 @@ namespace AniloxRoll.Monitor.Core.Camera
                             BgSigmaFactor  = 2.0f,
                             RidgeSigma     = (float)HessianSigma,
                             HessianMaxFactor = (float)HessianFixedMax,
-                            RidgeMode      = "vertical+horizontal"  // 永遠計算雙方向，確保 V/H 皆可存檔
+                            RidgeMode      = "vertical+horizontal",  // 永遠計算雙方向，確保 V/H 皆可存檔
+                            PrecomputedColMean = PrecomputedColMean
                         }
                     });
 
@@ -873,6 +883,57 @@ namespace AniloxRoll.Monitor.Core.Camera
                 {
                     System.Diagnostics.Trace.WriteLine(
                         $"[CAM{CameraId}] TryApplyPicoaterRidge failed: {ex.GetType().Name}: {ex.Message}");
+                    return false;
+                }
+            }
+        }
+
+        // ==================== Background Column Mean ====================
+
+        /// <summary>
+        /// 計算當前 grab buffer 的 column mean（不跑完整 pipeline）。
+        /// 結果寫入呼叫端提供的 float[] outColMean（長度 = FrameWidth）。
+        /// 必須在相機已 allocate 且 grab 中呼叫。
+        /// </summary>
+        public bool TryComputeColumnMean(float[] outColMean)
+        {
+            if (_frameWidth <= 0 || _frameHeight <= 0) return false;
+            if (_hostInputBuffer == null) return false;
+            if (outColMean == null || outColMean.Length < _frameWidth) return false;
+
+            lock (_picoaterLock)
+            {
+                if (_nativeBufferPool == null) return false;
+
+                IntPtr inputBuffer = _nativeBufferPool.InputBuffer;
+                if (inputBuffer == IntPtr.Zero) return false;
+
+                try
+                {
+                    // 從最近 grab 到的原始影像（hook 中暫存）取資料
+                    MIL_ID srcBuf = _milLastGrabBuffer;
+                    if (srcBuf == MIL.M_NULL) return false;
+
+                    MIL.MbufGet2d(srcBuf, 0, 0, _frameWidth, _frameHeight, _hostInputBuffer);
+                    Marshal.Copy(_hostInputBuffer, 0, inputBuffer, _hostInputBuffer.Length);
+
+                    // host float buffer for result
+                    IntPtr hColMean = Marshal.AllocHGlobal(_frameWidth * sizeof(float));
+                    try
+                    {
+                        _aoiService.ComputeColumnMean(_frameWidth, _frameHeight, inputBuffer, 2.0f, hColMean);
+                        Marshal.Copy(hColMean, outColMean, 0, _frameWidth);
+                        return true;
+                    }
+                    finally
+                    {
+                        Marshal.FreeHGlobal(hColMean);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Trace.WriteLine(
+                        $"[CAM{CameraId}] TryComputeColumnMean failed: {ex.Message}");
                     return false;
                 }
             }

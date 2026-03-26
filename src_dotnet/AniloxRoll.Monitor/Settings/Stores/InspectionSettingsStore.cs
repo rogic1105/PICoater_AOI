@@ -106,7 +106,7 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"HessianMaxFactor\": {F(R.HessianMaxFactor)},");
             sb.AppendLine($"    \"ErrorValueMean\": {F(R.ErrorValueMean)},");
             sb.AppendLine($"    \"ErrorValueMax\": {F(R.ErrorValueMax)},");
-            sb.AppendLine($"    \"BackgroundSampleRows\": {R.BackgroundSampleRows},");
+            sb.AppendLine($"    \"BackgroundSampleSeconds\": {R.BackgroundSampleSeconds},");
             sb.AppendLine($"    \"AniloxRollSpeedMPerMin\": {D(R.AniloxRollSpeedMPerMin)},");
             sb.AppendLine($"    \"SaveResizeScale\": {R.SaveResizeScale},");
             sb.AppendLine($"    \"SaveJpgQuality\": {R.SaveJpgQuality}");
@@ -124,7 +124,8 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine("  \"Storage\": {");
             sb.AppendLine($"    \"EnableAutoCapture\": {(T.EnableAutoCapture ? "true" : "false")},");
             sb.AppendLine($"    \"CaptureRootPath\": \"{EscapeJson(T.CaptureRootPath)}\",");
-            sb.AppendLine($"    \"SaveOriginalBmp\": {(T.SaveOriginalBmp ? "true" : "false")}");
+            sb.AppendLine($"    \"SaveOriginalBmp\": {(T.SaveOriginalBmp ? "true" : "false")},");
+            sb.AppendLine($"    \"BackgroundPath\": \"{EscapeJson(T.BackgroundPath)}\"");
             sb.AppendLine("  }");
 
             sb.Append("}");
@@ -242,7 +243,10 @@ namespace AniloxRoll.Monitor.Core.Data
                 HessianMaxFactor = GetFloat(obj, "HessianMaxFactor", 5.0f),
                 ErrorValueMean   = GetFloat(obj, "ErrorValueMean",   1.0f),
                 ErrorValueMax    = GetFloat(obj, "ErrorValueMax",     2.0f),
-                BackgroundSampleRows = GetInt(obj, "BackgroundSampleRows", 10000),
+                // 向後相容：舊 JSON 用 BackgroundSampleRows，新 JSON 用 BackgroundSampleSeconds
+                BackgroundSampleSeconds = obj.Contains("BackgroundSampleSeconds")
+                    ? GetInt(obj, "BackgroundSampleSeconds", 3)
+                    : 3,
                 AniloxRollSpeedMPerMin = GetDouble(obj, "AniloxRollSpeedMPerMin", 10.0),
                 SaveResizeScale  = GetInt  (obj, "SaveResizeScale",   5),
                 SaveJpgQuality   = GetInt  (obj, "SaveJpgQuality",    90),
@@ -278,6 +282,7 @@ namespace AniloxRoll.Monitor.Core.Data
                 SaveOriginalBmp      = obj.Contains("SaveOriginalBmp")
                     ? GetBool(obj, "SaveOriginalBmp", false)
                     : !GetBool(obj, "UseCompressedCapture", true),
+                BackgroundPath       = GetString(obj, "BackgroundPath", @"D:\AniloxCaptures\bg"),
             };
         }
     }

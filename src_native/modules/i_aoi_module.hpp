@@ -39,6 +39,10 @@ struct AoiAlgorithmParams {
   float ridge_sigma = 1.0f;
   float hessian_max_factor = 1.0f;
   const char* ridge_mode = "dark";
+
+  // Pre-computed column mean (GPU pointer). When non-null, skip per-frame
+  // calcColumnMeans and use this directly for background subtraction.
+  const float* precomputed_col_mean = nullptr;
 };
 
 class IAoiModule {

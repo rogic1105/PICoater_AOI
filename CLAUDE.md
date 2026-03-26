@@ -15,7 +15,7 @@ PICoater_AOI/
 
 | DLL | 函式 | 用途 |
 |-----|------|------|
-| `picoater_api.dll` | `PICoaterAPI_CreatePipeline` / `ProcessPipeline` / `DestroyPipeline` | GPU 檢測 pipeline |
+| `picoater_api.dll` | `PICoaterAPI_CreatePipeline` / `ProcessPipeline` / `DestroyPipeline` / `ComputeColumnMean` | GPU 檢測 pipeline |
 | `core_cv_api.dll` | `CoreCV_AllocPinned` / `CoreCV_FreePinned` | CUDA pinned memory 管理 |
 | `core_cv_api.dll` | `CoreCV_FastReadBMP` | 快速讀取 BMP（繞過 GDI+） |
 | `core_cv_api.dll` | `CoreCV_Resize_GPU` | GPU 縮圖 |
@@ -45,12 +45,13 @@ PICoater_AOI/
 | `Settings/Stores/AcquisitionSettingsStore.cs` | 讀寫 acquisition-settings.json |
 | `UI/State/UserSessionState.cs` | UI session 持久化 → session-state.json |
 | `ImageCatalog/ImageRepository.cs` | 掃描目錄建立索引 |
+| `Services/AoiService.cs` | C# ↔ Native P/Invoke wrapper（ProcessImage + ComputeColumnMean） |
 | `Services/InspectionLogService.cs` | 每日 CSV 寫入 |
 | `Services/InspectionStatisticsService.cs` | CSV 統計服務 |
 | `Services/CsvConfigSnapshot.cs` | 不可變設定快照 |
 | `UI/Widgets/GrabImageStitcher.cs` | 多張影像垂直拼接 |
 | `UI/Widgets/ProportionalScaler.cs` | Form 等比例縮放 |
-| `sdk/AOI_SDK/src_dotnet/AOI.SDK/UI/SmartCanvas.cs` | PictureBox 子類：zoom/pan/edge |
+| `sdk/AOI_SDK/src_dotnet/AOI.SDK/UI/SmartCanvas.cs` | PictureBox 子類：zoom/pan/edge/ClampPan |
 
 > 路徑前綴 `src_dotnet/AniloxRoll.Monitor/` 省略以節省空間。
 
@@ -65,7 +66,7 @@ PICoater_AOI/
 | 文件 | 內容 | 何時讀取 |
 |------|------|---------|
 | [`docs/architecture-ui.md`](docs/architecture-ui.md) | 右側面板、tabMain、控制項觸發關係圖、Guard flags、V/H 顯示決策矩陣、ProportionalScaler | 修改 UI 控制項、事件流程、Form 佈局時 |
-| [`docs/architecture-image-pipeline.md`](docs/architecture-image-pipeline.md) | GPU pipeline、Buffer 映射、V/H ridge、存檔格式、.bin 格式、ImageRepository | 修改影像處理、存檔格式、pipeline 參數時 |
+| [`docs/architecture-image-pipeline.md`](docs/architecture-image-pipeline.md) | GPU pipeline、Buffer 映射、V/H ridge、存檔格式、.bin 格式、ImageRepository、StandardBgSub | 修改影像處理、存檔格式、pipeline 參數、背景去除模式時 |
 | [`docs/architecture-acquisition.md`](docs/architecture-acquisition.md) | MIL 取像、AniloxCamera、CLProtocol、Telemetry、SetGrabHeight、MilGrabSample | 修改相機控制、MIL 資源管理、Telemetry 時 |
 | [`docs/architecture-data-stats.md`](docs/architecture-data-stats.md) | tabPageData、統計模式、CSV 架構、Period Charts | 修改統計功能、CSV 格式、圖表時 |
 | [`docs/MIL_API_Reference.md`](docs/MIL_API_Reference.md) | MIL .NET API 完整參考（常數、方法、範例） | 查詢 MIL API 用法時 |

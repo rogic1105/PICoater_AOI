@@ -222,6 +222,17 @@ IsReleasing = true  →  Timer.Stop()
 
 ---
 
+## AniloxCamera StandardBgSub 支援
+
+- `PrecomputedColMean`（IntPtr property）：由 `LoadBackgroundBins` 設定，`ProcessImage` 傳遞到 `AoiService`
+- `_milLastGrabBuffer`（MIL_ID）：MIL hook callback 中儲存原始 `modifiedBuffer`（在 ridge 處理前），供 `TryComputeColumnMean()` 讀取原始影像數據
+- `TryComputeColumnMean()`：從 `_milLastGrabBuffer`（非 `_milProcBuffer`）讀取 → `AoiService.ComputeColumnMean()` → 回傳 `float[width]`
+- `FreeGrabBuffers` 重置 `_milLastGrabBuffer = MIL.M_NULL`
+
+**注意**：不可從 `_milProcBuffer` 讀取 column mean — 該 buffer 已經過 ridge 處理，近乎全零。
+
+---
+
 ## 已知 MIL .NET Wrapper 限制
 
 - `M_LINE_RATE` / `M_LINE_RATE_CURRENT` / `M_GRAB_SIZE_Y` 常數**不存在**於 .NET wrapper，不可使用。

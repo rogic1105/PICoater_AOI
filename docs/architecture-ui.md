@@ -259,6 +259,45 @@ Guard flags：
 
 ---
 
+## 背景預覽模式（btnViewBackground / btnGetBackground）
+
+### btnGetBackground
+
+- 確認 `Algorithm == StandardBgSub`，確保相機已 allocate+grab
+- 按鈕文字倒數顯示（`"採集中 {remaining}s"`）
+- 採集完成 → 停止 grab → 自動呼叫 `btnViewBackground_Click`
+
+### btnViewBackground（Toggle）
+
+開啟預覽：
+1. 載入 `bg_{width}_{camId}.bin` → `ExpandColMeanToBitmap`（float→8bpp Bitmap，高度=grabHeight）
+2. `panelLiveCam1–7`：建立 PictureBox overlay（`Dock=Fill, StretchImage, BringToFront`），點擊切換主顯示
+3. `panelMainDisplay`：建立 SmartCanvas overlay（`Dock=Fill, ClampPan=true, BringToFront`），支援 zoom/pan
+4. 先 detach MIL secondary display（避免 native window z-order 衝突）
+5. `lblPixelInfo` 顯示 `"背景預覽 [CAM N] | X: ..., Y: ... | 灰階值: ... | 縮放: ...x"`
+
+關閉預覽（再次按 / btnCameraGrab）：
+- `ClearBackgroundPreview()`：移除所有 overlay PictureBox/SmartCanvas，dispose bitmaps
+
+### PictureBox Overlay 模式
+
+MIL native display 使用 `MdispSelectWindow` 綁定 panel Handle，建立的子視窗在 z-order 最上層。
+managed PictureBox 無法覆蓋它。解法：
+1. 先 detach MIL display（`MdispSelectWindow(M_NULL)`）
+2. 建立 PictureBox/SmartCanvas（`Dock=Fill`）
+3. `BringToFront()` 確保覆蓋原有子控制項
+
+### UI 鎖定邏輯（StandardBgSub）
+
+`UpdateStandardBgSubLockState()`：
+- `Algorithm == StandardBgSub` 且無 bin → `btnCameraGrab` disabled, `btnGetBackground` enabled
+- `Algorithm == StandardBgSub` 且有 bin → 全部解鎖
+- 其他算法 → `btnGetBackground` disabled
+
+PropertyGrid 變更觸發重新檢查。
+
+---
+
 ## 參數分類（UI 可調 vs JSON 限定）
 
 | 類別 | 參數 | 位置 |

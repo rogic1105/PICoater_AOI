@@ -12,7 +12,7 @@ namespace picoater {
 
         void Initialize(int width, int height);
 
-        // �즳�� GPU Run
+        // GPU Run
         void Run(
             const uint8_t* d_in,
             uint8_t* d_bg_out,
@@ -26,6 +26,7 @@ namespace picoater {
             float ridgeSigma,
             float hessianMaxFactor,
             const char* ridgeMode,
+            const float* d_precomputed_col_mean = nullptr,
             cudaStream_t stream = 0
         );
 

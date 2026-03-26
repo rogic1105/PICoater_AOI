@@ -5,6 +5,8 @@
 #include <memory>
 #include <string>
 
+#include "core_cv/imgproc/core_background.hpp"
+
 #include "../../../modules/GetPICoaterBackground/include/module_get_picoater_background.hpp"
 #include "../../../pipeline/aoi_pipeline.hpp"
 #include "../../../plc/i_plc_adapter.hpp"
@@ -135,11 +137,24 @@ int PICoaterAPI_ProcessPipeline(AoiPipelineHandle handle,
   input_image.data = context->d_input;
   input_image.stream = input->stream;
 
+  // Pre-computed column mean: copy from host to GPU if provided
+  if (params->precomputed_col_mean != nullptr) {
+    if (cudaMemcpy(context->d_curve_mean,
+                   params->precomputed_col_mean,
+                   input->width * sizeof(float),
+                   cudaMemcpyHostToDevice) != cudaSuccess) {
+      context->last_error = "Failed to copy precomputed column mean to GPU.";
+      return -2;
+    }
+  }
+
   picoater::aoi::AoiAlgorithmParams algo_params;
   algo_params.bg_sigma_factor = params->bg_sigma_factor;
   algo_params.ridge_sigma = params->ridge_sigma;
   algo_params.hessian_max_factor = params->hessian_max_factor;
   algo_params.ridge_mode = params->ridge_mode;
+  algo_params.precomputed_col_mean =
+      params->precomputed_col_mean != nullptr ? context->d_curve_mean : nullptr;
 
   picoater::aoi::AoiOutputBuffers output_image;
   output_image.width = output->width > 0 ? output->width : input->width;
@@ -282,6 +297,48 @@ int PICoaterAPI_PlcWriteBit(PlcAdapterHandle handle, int address, bool value) {
 
   auto* context = reinterpret_cast<PlcAdapterContext*>(handle);
   return context->adapter->WriteBit(address, value) ? 0 : -2;
+}
+
+int PICoaterAPI_ComputeColumnMean(AoiPipelineHandle handle,
+                                  const AoiInputImageC* input,
+                                  float bg_sigma_factor,
+                                  float* out_col_mean) {
+  if (handle == nullptr || input == nullptr || out_col_mean == nullptr ||
+      input->data == nullptr) {
+    return -1;
+  }
+
+  auto* context = reinterpret_cast<AoiPipelineContext*>(handle);
+
+  if (!context->EnsureBuffers(input->width, input->height,
+                              &context->last_error)) {
+    return -2;
+  }
+
+  if (cudaMemcpy(context->d_input, input->data, context->image_size,
+                 cudaMemcpyHostToDevice) != cudaSuccess) {
+    context->last_error = "Failed to copy input image for column mean.";
+    return -2;
+  }
+
+  int sigma_col = static_cast<int>(bg_sigma_factor);
+  if (sigma_col < 1) sigma_col = 1;
+
+  // Only Step 1: compute column means with outlier removal
+  core::calcColumnMeans_RemoveOutliers_gpu<uint8_t>(
+      context->d_input, context->d_curve_mean, input->width, input->height,
+      sigma_col, nullptr);
+  cudaDeviceSynchronize();
+
+  if (cudaMemcpy(out_col_mean, context->d_curve_mean,
+                 input->width * sizeof(float),
+                 cudaMemcpyDeviceToHost) != cudaSuccess) {
+    context->last_error = "Failed to copy column mean to host.";
+    return -2;
+  }
+
+  context->last_error.clear();
+  return 0;
 }
 
 }  // extern "C"

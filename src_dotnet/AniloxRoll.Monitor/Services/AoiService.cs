@@ -34,6 +34,7 @@ namespace AniloxRoll.Monitor.Core.Services
             public float RidgeSigma { get; set; }
             public float HessianMaxFactor { get; set; }
             public string RidgeMode { get; set; } = "dark";
+            public IntPtr PrecomputedColMean { get; set; } = IntPtr.Zero;
         }
 
         public InputImage Input { get; set; } = new InputImage();
@@ -113,7 +114,8 @@ namespace AniloxRoll.Monitor.Core.Services
                     BgSigmaFactor = request.Params.BgSigmaFactor,
                     RidgeSigma = request.Params.RidgeSigma,
                     HessianMaxFactor = request.Params.HessianMaxFactor,
-                    RidgeMode = ridgeModePtr
+                    RidgeMode = ridgeModePtr,
+                    PrecomputedColMean = request.Params.PrecomputedColMean
                 };
 
                 int result = NativeMethods.PICoaterAPI_ProcessPipeline(
@@ -134,6 +136,26 @@ namespace AniloxRoll.Monitor.Core.Services
                     Marshal.FreeHGlobal(ridgeModePtr);
                 }
             }
+        }
+
+        /// <summary>
+        /// 計算單幀影像的 column mean（去除離群值）。
+        /// outColMean 必須是 host 端 float buffer，大小 = width。
+        /// </summary>
+        public void ComputeColumnMean(int width, int height, IntPtr inputData, float bgSigmaFactor, IntPtr outColMean)
+        {
+            EnsureInitialized();
+            var input = new AoiInputImageNative
+            {
+                Width = width,
+                Height = height,
+                Data = inputData,
+                Stream = IntPtr.Zero
+            };
+            int result = NativeMethods.PICoaterAPI_ComputeColumnMean(
+                _pipelineHandle, ref input, bgSigmaFactor, outColMean);
+            if (result != 0)
+                throw new InvalidOperationException(GetLastError());
         }
 
         public string GetLastError()

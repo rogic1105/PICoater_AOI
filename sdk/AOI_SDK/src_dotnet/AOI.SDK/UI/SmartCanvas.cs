@@ -40,6 +40,12 @@ namespace AOI.SDK.UI
         public float Zoom => _zoom;
         public PointF PanOffset => _panOffset;
 
+        /// <summary>
+        /// 啟用後 pan 限制在控制項邊界內（影像不會拖出可見區域），
+        /// 行為與 MIL M_CENTER_DISPLAY 一致。預設 false（自由拖曳）。
+        /// </summary>
+        public bool ClampPan { get; set; } = false;
+
         public SmartCanvas()
         {
             this.DoubleBuffered = true;
@@ -111,10 +117,11 @@ namespace AOI.SDK.UI
                 _panOffset.X += e.X - _lastMousePos.X;
                 _panOffset.Y += e.Y - _lastMousePos.Y;
                 _lastMousePos = e.Location;
+                if (ClampPan) ApplyPanClamp();
                 this.Invalidate();
 
                 // [新增] 檢查是否拉到邊界
-                CheckEdgeTrigger();
+                if (!ClampPan) CheckEdgeTrigger();
             }
 
             if (this.Image != null)
@@ -200,9 +207,39 @@ namespace AOI.SDK.UI
 
             _panOffset.X = e.X - (e.X - _panOffset.X) * scaleChange;
             _panOffset.Y = e.Y - (e.Y - _panOffset.Y) * scaleChange;
+            if (ClampPan) ApplyPanClamp();
 
             this.Invalidate();
             TriggerStatusChange();
+        }
+
+        /// <summary>
+        /// 限制 pan 使影像不會被拖出控制項邊界。
+        /// 影像比控制項小時置中；比控制項大時限制邊緣。
+        /// </summary>
+        private void ApplyPanClamp()
+        {
+            if (this.Image == null) return;
+            float drawW = this.Image.Width * _zoom;
+            float drawH = this.Image.Height * _zoom;
+
+            // X 軸
+            if (drawW <= this.Width)
+                _panOffset.X = (this.Width - drawW) / 2;   // 置中
+            else
+            {
+                if (_panOffset.X > 0) _panOffset.X = 0;                          // 左邊緣
+                if (_panOffset.X + drawW < this.Width) _panOffset.X = this.Width - drawW;  // 右邊緣
+            }
+
+            // Y 軸
+            if (drawH <= this.Height)
+                _panOffset.Y = (this.Height - drawH) / 2;  // 置中
+            else
+            {
+                if (_panOffset.Y > 0) _panOffset.Y = 0;
+                if (_panOffset.Y + drawH < this.Height) _panOffset.Y = this.Height - drawH;
+            }
         }
 
         protected override void OnPaint(PaintEventArgs pe)

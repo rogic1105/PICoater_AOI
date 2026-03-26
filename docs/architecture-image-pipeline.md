@@ -108,6 +108,59 @@ Raw Image (8-bit grayscale, Pinned Memory)
 
 ---
 
+## StandardBgSub 模式（預算背景去除）
+
+### 概念
+
+預設模式 `SingleFrameBgSub`：每幀獨立計算 column mean → 去背。`StandardBgSub` 模式：使用預先採集的背景 bin 檔作為固定 `col_mean`，取代每幀動態計算。
+
+### Pipeline 流程差異
+
+Step 1 條件分支（`Module_GetPICoaterBackground.cu`）：
+- `precomputed_col_mean == nullptr`：原有 `calcColumnMeans_RemoveOutliers_gpu()`
+- `precomputed_col_mean != nullptr`：`cudaMemcpyAsync(d_col_mean, d_precomputed, D→D)` 跳過計算
+
+### C API
+
+- `PICoaterAPI_ComputeColumnMean(handle, input, bg_sigma_factor, out_col_mean)`：只跑 Step 1，回傳 `float[width]` host buffer
+- `PICoaterAPI_ProcessPipeline`：`AoiAlgorithmParamsC.precomputed_col_mean` 非 null 時，先 H→D copy 到 `d_curve_mean`
+
+### 背景 bin 格式
+
+檔名：`bg_{width}_{cameraId}.bin`，存於 `StorageSettings.BackgroundPath`（預設 `D:\AniloxCaptures\bg`）。
+
+格式同 MCBF：`magic(4)="MCBF" | version(4=int) | scale_factor(4=float,固定1.0) | array_length(4=int) | float[width]`
+
+### 背景採集流程（btnGetBackground）
+
+1. 確認 `Algorithm == StandardBgSub`，確保相機已 allocate + grab
+2. 持續 `BackgroundSampleSeconds` 秒收集幀
+3. 每幀呼叫 `AniloxCamera.TryComputeColumnMean()` → `float[width]`
+4. 多幀 column mean 在 CPU 端逐元素平均
+5. 存為 MCBF `.bin` 到 `BackgroundPath/bg_{width}_{camId}.bin`
+6. 停止 grab，自動呼叫 btnViewBackground 預覽
+
+### 背景載入（LoadBackgroundBins）
+
+Form 啟動 / 切換 StandardBgSub / btnCameraGrab 時：
+- 掃描 `BackgroundPath` 下 `bg_{width}_{camId}.bin`
+- 載入 → `CoreCV_AllocPinned` → pinned buffer → `cam.PrecomputedColMean`
+- `ProcessImage` 自動傳遞 `Params.PrecomputedColMean` 到 native pipeline
+
+### 相關檔案
+
+| 檔案 | 職責 |
+|------|------|
+| `i_aoi_module.hpp` | `AoiAlgorithmParams.precomputed_col_mean` |
+| `export_api.h` / `.cpp` | C API：`ComputeColumnMean` + `precomputed_col_mean` 傳遞 |
+| `Module_GetPICoaterBackground.cu` | Step 1 條件跳過 |
+| `NativeMethods.cs` | P/Invoke：`PICoaterAPI_ComputeColumnMean` + struct 新增欄位 |
+| `AoiService.cs` | `ComputeColumnMean()` + `AlgorithmParams.PrecomputedColMean` |
+| `AniloxCamera.cs` | `PrecomputedColMean` property + `TryComputeColumnMean()` |
+| `AniloxRollForm.cs` | `btnGetBackground_Click` + `LoadBackgroundBins` + `btnViewBackground_Click` |
+
+---
+
 ## MIL 與 GPU 記憶體類型對照
 
 | 類型 | API | 說明 | 適用場景 |

@@ -28,7 +28,7 @@ namespace AniloxRoll.Monitor.Core.Data
         [DisplayName("Hessian Max Factor")] public float HessianMaxFactor { get; set; } = 1.0f;
         [DisplayName("Error Value Mean")] public float ErrorValueMean { get; set; } = 0.3f;
         [DisplayName("Error Value Max")] public float ErrorValueMax { get; set; } = 0.5f;
-        [DisplayName("背景取樣列數")]  public int BackgroundSampleRows { get; set; } = 10000;
+        [DisplayName("背景取樣秒數")]  public int BackgroundSampleSeconds { get; set; } = 3;
         [DisplayName("A輪速度 (m/min)")]  public double AniloxRollSpeedMPerMin { get; set; } = 10.0;
 
         /// <summary>存檔縮小倍率。原圖寬高各除以此值後存成 JPEG。唯一預設值來源：InspectionEngineConfig.DefaultSaveResizeScale。</summary>
@@ -42,7 +42,7 @@ namespace AniloxRoll.Monitor.Core.Data
             if (HessianMaxFactor <= 0) HessianMaxFactor = 1.0f;
             if (ErrorValueMean <= 0) ErrorValueMean = 0.3f;
             if (ErrorValueMax <= 0) ErrorValueMax = 0.5f;
-            if (BackgroundSampleRows < 100) BackgroundSampleRows = 10000;
+            if (BackgroundSampleSeconds < 1) BackgroundSampleSeconds = 3;
             if (AniloxRollSpeedMPerMin <= 0) AniloxRollSpeedMPerMin = 10.0;
             if (SaveResizeScale <= 0) SaveResizeScale = InspectionEngineConfig.DefaultSaveResizeScale;
             if (SaveJpgQuality  < 1 || SaveJpgQuality > 100) SaveJpgQuality = InspectionEngineConfig.DefaultSaveJpgQuality;

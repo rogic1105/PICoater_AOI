@@ -59,6 +59,7 @@ bool GetPICoaterBackgroundModule::Process(const AoiInputImage& input_image,
       params.ridge_sigma,
       params.hessian_max_factor,
       params.ridge_mode == nullptr ? kDefaultRidgeMode : params.ridge_mode,
+      params.precomputed_col_mean,
       reinterpret_cast<cudaStream_t>(input_image.stream));
 
   last_error_.clear();

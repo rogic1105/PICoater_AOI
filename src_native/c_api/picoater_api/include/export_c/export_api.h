@@ -38,6 +38,7 @@ typedef struct AoiAlgorithmParamsC {
     float ridge_sigma;
     float hessian_max_factor;
     const char* ridge_mode;
+    const float* precomputed_col_mean;  // host pointer, size = width. NULL = per-frame mode.
 } AoiAlgorithmParamsC;
 
 PICOATER_API AoiPipelineHandle PICoaterAPI_CreatePipeline();
@@ -51,6 +52,12 @@ PICOATER_API int PICoaterAPI_ProcessPipeline(
 PICOATER_API const char* PICoaterAPI_GetLastError(AoiPipelineHandle handle);
 
 PICOATER_API void PICoaterAPI_DestroyPipeline(AoiPipelineHandle handle);
+
+PICOATER_API int PICoaterAPI_ComputeColumnMean(
+    AoiPipelineHandle handle,
+    const AoiInputImageC* input,
+    float bg_sigma_factor,
+    float* out_col_mean);  /* host buffer, size = input->width */
 
 PICOATER_API PlcAdapterHandle PICoaterAPI_CreateMockPlc();
 

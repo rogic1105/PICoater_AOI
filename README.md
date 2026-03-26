@@ -39,7 +39,7 @@ PICoater_AOI/
 |------|------|
 | UI | C# WinForms (.NET Framework 4.8) |
 | 相機 | Matrox MIL 10.x（Camera Link + CLProtocol） |
-| GPU | CUDA（Hessian Ridge Detection、Background Removal） |
+| GPU | CUDA（Hessian Ridge Detection、Background Removal、StandardBgSub） |
 | 存檔 | JPEG + .bin 曲線（GPU resize 1/5x），可選 BMP 原圖 |
 
 ## 4. 系統需求 (Prerequisites)

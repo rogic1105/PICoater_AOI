@@ -98,6 +98,7 @@ namespace picoater {
         float ridgeSigma,
         float hessianMaxFactor,
         const char* ridgeMode,
+        const float* d_precomputed_col_mean,
         cudaStream_t stream
     ) {
         if (m_width == 0) return;
@@ -106,8 +107,13 @@ namespace picoater {
 
         TIME_SCOPE_MS_SYNC("Total Run Time", cudaStreamSynchronize(stream));
 
-        // Step 1: Column Means
-        core::calcColumnMeans_RemoveOutliers_gpu(d_in, d_col_mean, m_width, m_height, sigma_col, stream);
+        // Step 1: Column Means (skip if precomputed background provided)
+        if (d_precomputed_col_mean != nullptr) {
+            cudaMemcpyAsync(d_col_mean, d_precomputed_col_mean,
+                            m_width * sizeof(float), cudaMemcpyDeviceToDevice, stream);
+        } else {
+            core::calcColumnMeans_RemoveOutliers_gpu(d_in, d_col_mean, m_width, m_height, sigma_col, stream);
+        }
 
         // Step 2: Background Removal → d_mura_out (bg-removed image)
         core::calcColumnBackground_u8_gpu(d_in, d_col_mean, d_mura_out, m_width, m_height, stream);

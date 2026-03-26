@@ -1,13 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using AOI.SDK.UI;
+using AOI.SDK.Utils;
 using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Data;
+using AniloxRoll.Monitor.Core.Interop;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.State;
 using AniloxRoll.Monitor.UI.Managers;
@@ -252,6 +256,9 @@ namespace AniloxRoll.Monitor.Forms
             );
             _liveCameraManager.SetCaptureSettings(_settings);
             _liveCameraManager.OnInspectionResult += OnCameraInspectionResult;
+            btnGetBackground.Click += btnGetBackground_Click;
+            btnViewBackground.Click += btnViewBackground_Click;
+            UpdateStandardBgSubLockState();
             _liveCameraManager.OnLiveCurveData      += OnLiveCurveData;
             _liveCameraManager.OnLiveRowCurveData   += OnLiveRowCurveData;
 
@@ -259,6 +266,7 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _telemetryTimer?.Stop();
                 _liveOverviewTimer?.Stop();
+                FreePrecomputedColMeanBuffers();
                 _liveCameraManager.FreeCameras();
             };
         }
@@ -275,6 +283,14 @@ namespace AniloxRoll.Monitor.Forms
 
         private void btnCameraGrab_Click(object sender, EventArgs e)
         {
+            // 背景預覽中按 Grab → 先清除預覽並 Free，讓 MIL 能重新初始化
+            if (_bgPreviewActive)
+            {
+                ClearBackgroundPreview();
+                _liveCameraManager.FreeCameras();
+                _telemetryPresenter?.ResetAll();
+            }
+
             bool wasGrabbing = _liveCameraManager.IsLiveGrabbing;
 
             if (!_liveCameraManager.IsAllocated)
@@ -282,6 +298,7 @@ namespace AniloxRoll.Monitor.Forms
                 try
                 {
                     _liveCameraManager.EnsureAllocatedAndToggleGrab(checkBoxEnableImageProcessing.Checked);
+                    LoadBackgroundBins();
                 }
                 catch (Exception ex)
                 {
@@ -425,9 +442,423 @@ namespace AniloxRoll.Monitor.Forms
 
         private void btnCameraFree_Click(object sender, EventArgs e)
         {
+            ClearBackgroundPreview();
             _liveCameraManager.FreeCameras();
             _telemetryPresenter?.ResetAll();
             UpdateGrabButton(false);
+        }
+
+        /// <summary>
+        /// 取得背景：啟動 grab → 採集 N 秒 → 多幀平均 column mean → 存 MCBF bin。
+        /// </summary>
+        private async void btnGetBackground_Click(object sender, EventArgs e)
+        {
+            if (_settings.Recipe.Algorithm != BackgroundAlgorithm.StandardBgSub)
+            {
+                MessageBox.Show("請先將去背演算法切換為「標準去背」。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // 確保相機已 allocate
+            if (!_liveCameraManager.IsAllocated)
+            {
+                try
+                {
+                    _liveCameraManager.EnsureAllocatedAndToggleGrab(false); // 不需影像處理
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"相機配置失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+            }
+
+            // 確保 grab 中
+            if (!_liveCameraManager.IsLiveGrabbing)
+            {
+                _liveCameraManager.ToggleGrab();
+                UpdateGrabButton(true);
+            }
+
+            btnGetBackground.Enabled = false;
+            btnCameraGrab.Enabled = false;
+            btnCameraFree.Enabled = false;
+
+            int sampleSeconds = Math.Max(1, _settings.Recipe.BackgroundSampleSeconds);
+            string bgDir = _settings.Storage.BackgroundPath;
+
+            try
+            {
+                if (!Directory.Exists(bgDir))
+                    Directory.CreateDirectory(bgDir);
+
+                var cameras = _liveCameraManager.Cameras;
+                int camCount = cameras.Count;
+
+                double[][] accum = new double[camCount][];
+                int[] frameCount = new int[camCount];
+
+                // 採集 sampleSeconds 秒，按鈕顯示倒數
+                var sw = Stopwatch.StartNew();
+                int lastShown = -1;
+                while (sw.Elapsed.TotalSeconds < sampleSeconds)
+                {
+                    int remaining = sampleSeconds - (int)sw.Elapsed.TotalSeconds;
+                    if (remaining != lastShown)
+                    {
+                        lastShown = remaining;
+                        btnGetBackground.Text = $"採集中 {remaining}s";
+                    }
+
+                    await Task.Delay(100);
+
+                    for (int i = 0; i < camCount; i++)
+                    {
+                        var cam = cameras[i];
+                        if (cam.FrameWidth <= 0) continue;
+
+                        if (accum[i] == null)
+                            accum[i] = new double[cam.FrameWidth];
+
+                        float[] colMean = new float[cam.FrameWidth];
+                        if (cam.TryComputeColumnMean(colMean))
+                        {
+                            for (int c = 0; c < cam.FrameWidth; c++)
+                                accum[i][c] += colMean[c];
+                            frameCount[i]++;
+                        }
+                    }
+                }
+
+                // 平均並存檔
+                for (int i = 0; i < camCount; i++)
+                {
+                    if (frameCount[i] == 0 || accum[i] == null) continue;
+
+                    var cam = cameras[i];
+                    float[] avgColMean = new float[cam.FrameWidth];
+                    double invN = 1.0 / frameCount[i];
+                    for (int c = 0; c < cam.FrameWidth; c++)
+                        avgColMean[c] = (float)(accum[i][c] * invN);
+
+                    string binPath = Path.Combine(bgDir, $"bg_{cam.FrameWidth}_{cam.CameraId}.bin");
+                    SaveBackgroundBin(avgColMean, binPath);
+                }
+
+                // 載入到各相機
+                LoadBackgroundBins();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"背景採集失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                btnGetBackground.Text = "取得背景";
+                btnGetBackground.Enabled = true;
+
+                // 採集完成後一律停止 grab
+                if (_liveCameraManager.IsLiveGrabbing)
+                {
+                    _liveCameraManager.ToggleGrab();
+                    UpdateGrabButton(false);
+                }
+
+                UpdateStandardBgSubLockState();
+            }
+
+            // 採集完成後直接預覽
+            btnViewBackground_Click(btnViewBackground, EventArgs.Empty);
+        }
+
+        /// <summary>MCBF 格式存 background column mean。</summary>
+        private static void SaveBackgroundBin(float[] data, string path)
+        {
+            using (var bw = new BinaryWriter(File.Open(path, FileMode.Create, FileAccess.Write)))
+            {
+                bw.Write(new byte[] { (byte)'M', (byte)'C', (byte)'B', (byte)'F' });
+                bw.Write(1);                    // version
+                bw.Write(1.0f);                 // scale_factor (1 = 全解析度)
+                bw.Write(data.Length);           // array_length
+                foreach (float v in data) bw.Write(v);
+            }
+        }
+
+        /// <summary>
+        /// 從 BackgroundPath 載入各相機的 bg bin → pinned buffer → 設定到 AniloxCamera.PrecomputedColMean。
+        /// </summary>
+        private void LoadBackgroundBins()
+        {
+            if (_settings.Recipe.Algorithm != BackgroundAlgorithm.StandardBgSub)
+            {
+                // 非 StandardBgSub 模式：清除所有預算背景
+                foreach (var cam in _liveCameraManager.Cameras)
+                    cam.PrecomputedColMean = IntPtr.Zero;
+                return;
+            }
+
+            string bgDir = _settings.Storage.BackgroundPath;
+            if (!Directory.Exists(bgDir)) return;
+
+            foreach (var cam in _liveCameraManager.Cameras)
+            {
+                if (cam.FrameWidth <= 0) continue;
+
+                string binPath = Path.Combine(bgDir, $"bg_{cam.FrameWidth}_{cam.CameraId}.bin");
+                float[] colMean = InspectionEngine.LoadCurveBin(binPath);
+                if (colMean != null && colMean.Length == cam.FrameWidth)
+                {
+                    // 分配 pinned memory 並複製
+                    IntPtr pinned = NativeMethods.CoreCV_AllocPinned((ulong)(cam.FrameWidth * sizeof(float)));
+                    if (pinned != IntPtr.Zero)
+                    {
+                        Marshal.Copy(colMean, 0, pinned, colMean.Length);
+
+                        // 釋放舊的（如果有）
+                        if (cam.PrecomputedColMean != IntPtr.Zero)
+                            NativeMethods.CoreCV_FreePinned(cam.PrecomputedColMean);
+
+                        cam.PrecomputedColMean = pinned;
+                    }
+                }
+            }
+        }
+
+        /// <summary>釋放所有相機的 PrecomputedColMean pinned buffer。</summary>
+        private void FreePrecomputedColMeanBuffers()
+        {
+            if (_liveCameraManager == null) return;
+            foreach (var cam in _liveCameraManager.Cameras)
+            {
+                if (cam.PrecomputedColMean != IntPtr.Zero)
+                {
+                    NativeMethods.CoreCV_FreePinned(cam.PrecomputedColMean);
+                    cam.PrecomputedColMean = IntPtr.Zero;
+                }
+            }
+        }
+
+        /// <summary>
+        /// StandardBgSub 時檢查是否有 bin → 控制按鈕鎖定狀態。
+        /// </summary>
+        private void UpdateStandardBgSubLockState()
+        {
+            if (_settings.Recipe.Algorithm != BackgroundAlgorithm.StandardBgSub)
+            {
+                // 非 StandardBgSub：正常解鎖
+                btnCameraGrab.Enabled = true;
+                btnCameraFree.Enabled = true;
+                btnGetBackground.Enabled = true;
+                return;
+            }
+
+            // 檢查是否有任何 bg bin
+            string bgDir = _settings.Storage.BackgroundPath;
+            bool hasBin = false;
+            if (Directory.Exists(bgDir))
+            {
+                var files = Directory.GetFiles(bgDir, "bg_*.bin");
+                hasBin = files.Length > 0;
+            }
+
+            btnGetBackground.Enabled = true;
+            btnCameraGrab.Enabled = hasBin;
+            btnCameraFree.Enabled = hasBin;
+        }
+
+        // --- 背景預覽狀態 ---
+        private Bitmap[] _bgPreviewBitmaps;
+        private bool _bgPreviewActive;
+        private PictureBox[] _bgPreviewBoxes;      // panelLiveCam 上的 overlay
+        private SmartCanvas _bgPreviewMainCanvas;  // panelMainDisplay 上的 SmartCanvas（支援縮放/拖曳）
+        private int _bgPreviewSelectedCamIndex;    // 目前預覽中的相機 index (0-based)
+
+        /// <summary>
+        /// 預覽背景：讀取各相機的 bg bin → 擴展為 width × grabHeight 灰階影像。
+        /// 用 PictureBox 疊在 panelLiveCam 上方，SmartCanvas 疊在 panelMainDisplay 上方（支援縮放拖曳）。
+        /// 點選 panelLiveCam 可切換 panelMainDisplay。再按一次清除預覽。
+        /// </summary>
+        private void btnViewBackground_Click(object sender, EventArgs e)
+        {
+            if (_bgPreviewActive)
+            {
+                ClearBackgroundPreview();
+                return;
+            }
+
+            string bgDir = _settings.Storage.BackgroundPath;
+            if (!Directory.Exists(bgDir))
+            {
+                MessageBox.Show("背景目錄不存在。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // 先卸載 MIL secondary display，避免 native window 和 overlay 衝突
+            if (_liveCameraManager.IsAllocated)
+            {
+                foreach (var cam in _liveCameraManager.Cameras)
+                    cam.SetSecondaryDisplay(IntPtr.Zero);
+            }
+
+            Panel[] livePanels = GetLivePanels();
+            int[] grabHeights = _settings.Acquisition.CameraGrabHeight;
+            _bgPreviewBitmaps = new Bitmap[livePanels.Length];
+            _bgPreviewBoxes = new PictureBox[livePanels.Length];
+            int firstValid = -1;
+
+            for (int i = 0; i < livePanels.Length; i++)
+            {
+                int camId = i + 1;
+                string[] matches = Directory.GetFiles(bgDir, $"bg_*_{camId}.bin");
+                if (matches.Length == 0) continue;
+
+                float[] colMean = InspectionEngine.LoadCurveBin(matches[0]);
+                if (colMean == null || colMean.Length == 0) continue;
+
+                int height = (i < grabHeights.Length && grabHeights[i] > 0) ? grabHeights[i] : 3000;
+                Bitmap bmp = ExpandColMeanToBitmap(colMean, colMean.Length, height);
+                _bgPreviewBitmaps[i] = bmp;
+
+                // PictureBox 疊在 panel 最上層，攔截所有滑鼠事件
+                var pb = new PictureBox
+                {
+                    Dock = DockStyle.Fill,
+                    Image = bmp,
+                    SizeMode = PictureBoxSizeMode.StretchImage,
+                    Tag = i
+                };
+                pb.Click += BgPreviewPanel_Click;
+                livePanels[i].Controls.Add(pb);
+                pb.BringToFront();
+                _bgPreviewBoxes[i] = pb;
+
+                if (firstValid < 0) firstValid = i;
+            }
+
+            if (firstValid >= 0)
+            {
+                // SmartCanvas 覆蓋 panelMainDisplay：支援滑鼠滾輪縮放 + 左鍵拖曳
+                _bgPreviewMainCanvas = new SmartCanvas { Dock = DockStyle.Fill, ClampPan = true };
+                _bgPreviewMainCanvas.Image = _bgPreviewBitmaps[firstValid];
+                _bgPreviewMainCanvas.StatusChanged += BgPreviewCanvas_StatusChanged;
+                panelMainDisplay.Controls.Add(_bgPreviewMainCanvas);
+                _bgPreviewMainCanvas.BringToFront();
+                _bgPreviewMainCanvas.FitToScreen();
+                _bgPreviewActive = true;
+                _bgPreviewSelectedCamIndex = firstValid;
+            }
+            else
+            {
+                _bgPreviewBitmaps = null;
+                _bgPreviewBoxes = null;
+                MessageBox.Show("未找到背景 bin 檔。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+
+        /// <summary>點選 panelLiveCam 上的 PictureBox → 切換 panelMainDisplay 顯示該相機背景。</summary>
+        private void BgPreviewPanel_Click(object sender, EventArgs e)
+        {
+            if (!_bgPreviewActive || _bgPreviewBitmaps == null || _bgPreviewMainCanvas == null) return;
+
+            var pb = sender as PictureBox;
+            if (pb?.Tag is int idx && idx >= 0 && idx < _bgPreviewBitmaps.Length && _bgPreviewBitmaps[idx] != null)
+            {
+                _bgPreviewMainCanvas.Image = _bgPreviewBitmaps[idx];
+                _bgPreviewMainCanvas.FitToScreen();
+                _bgPreviewSelectedCamIndex = idx;
+            }
+        }
+
+        /// <summary>SmartCanvas 滑鼠移動時更新 lblPixelInfo。</summary>
+        private void BgPreviewCanvas_StatusChanged(CanvasInfo info)
+        {
+            if (lblPixelInfo == null) return;
+
+            int camId = _bgPreviewSelectedCamIndex + 1;
+            string text;
+            if (info.ImageX < 0 || info.ImageY < 0 ||
+                _bgPreviewMainCanvas?.Image == null ||
+                info.ImageX >= _bgPreviewMainCanvas.Image.Width ||
+                info.ImageY >= _bgPreviewMainCanvas.Image.Height)
+            {
+                text = $"背景預覽 [CAM {camId}] | 游標超出影像範圍";
+            }
+            else
+            {
+                int gray = info.PixelColor.R;  // 8bpp grayscale: R=G=B
+                text = $"背景預覽 [CAM {camId}] | X: {info.ImageX}, Y: {info.ImageY} | 灰階值: {gray} | 縮放: {info.Zoom:F2}x";
+            }
+
+            if (InvokeRequired)
+                BeginInvoke(new Action(() => lblPixelInfo.Text = text));
+            else
+                lblPixelInfo.Text = text;
+        }
+
+        /// <summary>清除所有面板的背景預覽。</summary>
+        private void ClearBackgroundPreview()
+        {
+            // 移除 panelLiveCam 上的 overlay PictureBox
+            Panel[] livePanels = GetLivePanels();
+            if (_bgPreviewBoxes != null)
+            {
+                for (int i = 0; i < _bgPreviewBoxes.Length; i++)
+                {
+                    var pb = _bgPreviewBoxes[i];
+                    if (pb == null) continue;
+                    pb.Click -= BgPreviewPanel_Click;
+                    pb.Image = null;
+                    livePanels[i].Controls.Remove(pb);
+                    pb.Dispose();
+                }
+                _bgPreviewBoxes = null;
+            }
+
+            // 移除 panelMainDisplay 上的 SmartCanvas
+            if (_bgPreviewMainCanvas != null)
+            {
+                _bgPreviewMainCanvas.StatusChanged -= BgPreviewCanvas_StatusChanged;
+                _bgPreviewMainCanvas.Image = null;
+                panelMainDisplay.Controls.Remove(_bgPreviewMainCanvas);
+                _bgPreviewMainCanvas.Dispose();
+                _bgPreviewMainCanvas = null;
+            }
+
+            // Dispose bitmaps
+            if (_bgPreviewBitmaps != null)
+            {
+                foreach (var bmp in _bgPreviewBitmaps)
+                    bmp?.Dispose();
+                _bgPreviewBitmaps = null;
+            }
+
+            _bgPreviewActive = false;
+        }
+
+        private Panel[] GetLivePanels() => new[]
+        {
+            panelLiveCam1, panelLiveCam2, panelLiveCam3,
+            panelLiveCam4, panelLiveCam5, panelLiveCam6, panelLiveCam7
+        };
+
+        /// <summary>
+        /// 將 float[] column mean 擴展為 width×height 的 8bpp 灰階 Bitmap。
+        /// 每列（row）相同：pixel[x] = clamp(colMean[x], 0, 255)。
+        /// </summary>
+        private static Bitmap ExpandColMeanToBitmap(float[] colMean, int width, int height)
+        {
+            byte[] row = new byte[width];
+            for (int x = 0; x < width; x++)
+            {
+                float v = colMean[x];
+                row[x] = v <= 0 ? (byte)0 : v >= 255 ? (byte)255 : (byte)(v + 0.5f);
+            }
+
+            byte[] pixels = new byte[width * height];
+            for (int y = 0; y < height; y++)
+                Buffer.BlockCopy(row, 0, pixels, y * width, width);
+
+            return ImageUtils.Create8bppBitmap(pixels, width, height);
         }
 
         private void UpdateGrabButton(bool isGrabbing)
@@ -498,6 +929,14 @@ namespace AniloxRoll.Monitor.Forms
                 ApplyFixedScale(chartMonthly, _settings.Chart.MonthlyYMax);
             else if (changedPropertyName == nameof(InspectionSettings.ChartDailyYMax))
                 ApplyFixedScale(chartDaily, _settings.Chart.DailyYMax);
+
+            // 演算法切換 → 更新 UI 鎖定 + 載入/清除背景 bin
+            if (changedPropertyName == nameof(InspectionRecipe.Algorithm) ||
+                changedPropertyName == "去背演算法")
+            {
+                if (_liveCameraManager.IsAllocated) LoadBackgroundBins();
+                UpdateStandardBgSubLockState();
+            }
 
             bool isRecipeChange = RecipePropertyNames.Contains(changedPropertyName);
 
