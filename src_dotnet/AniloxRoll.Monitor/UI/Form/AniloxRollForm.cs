@@ -91,6 +91,8 @@ namespace AniloxRoll.Monitor.Forms
         private bool _syncingProcessedCheckbox = false;
         /// <summary>"v" = vertical ridge（預設），"h" = horizontal ridge。控制 canvasMain 處理圖方向。</summary>
         private string _activeRidgeDirection = "v";
+        /// <summary>"v" = vertical ridge（預設），"h" = horizontal ridge。控制 Live 顯示方向。</summary>
+        private string _liveDisplayDirection = "v";
 
         // --- Live 全覽圖：每台相機最新曲線快取 ---
         private readonly float[][] _liveCurveMean = new float[7][];
@@ -447,9 +449,13 @@ namespace AniloxRoll.Monitor.Forms
 
         private void checkBoxEnableImageProcessing_CheckedChanged(object sender, EventArgs e)
         {
-            _liveCameraManager?.SetImageProcessingEnabled(checkBoxEnableImageProcessing.Checked);
-            UserSessionState.SetLastEnableImageProcessing(checkBoxEnableImageProcessing.Checked);
+            bool enabled = checkBoxEnableImageProcessing.Checked;
+            _liveCameraManager?.SetImageProcessingEnabled(enabled);
+            UserSessionState.SetLastEnableImageProcessing(enabled);
             UserSessionState.Save();
+
+            // 同步 chart 背景色：取消勾選時清除高亮
+            UpdateLiveDirectionVisual(enabled ? _liveDisplayDirection : null);
         }
 
         // PropertyGrid 回傳的 ChangedItem.PropertyDescriptor.Name 可能是 MemberName 或 DisplayName 其中之一，
@@ -1502,12 +1508,39 @@ namespace AniloxRoll.Monitor.Forms
                 g.DrawString(box.Text, box.Font, textBrush, 8, 0);
         }
 
-        /// <summary>切換 Live 顯示的 V/H 處理圖方向，點選 muraChartVerticalLive/HorizontalLive 觸發。</summary>
+        /// <summary>
+        /// 切換 Live 顯示的 V/H 處理圖方向，點選 muraChartVerticalLive/HorizontalLive 觸發。
+        /// 三態邏輯同 Review tab 的 SwitchRidgeDirection：
+        /// 未勾選 → 自動勾選 + 設方向；同方向 → 取消勾選；不同方向 → 切換。
+        /// </summary>
         private void SwitchLiveDisplayDirection(string dir)
         {
-            _liveCameraManager?.SetLiveDisplayDirection(dir);
+            if (!checkBoxEnableImageProcessing.Checked)
+            {
+                // 未勾選 → 自動勾選 + 設方向
+                _liveDisplayDirection = dir;
+                _liveCameraManager?.SetLiveDisplayDirection(dir);
+                UpdateLiveDirectionVisual(dir);
+                checkBoxEnableImageProcessing.Checked = true; // 觸發 CheckedChanged
+                return;
+            }
 
-            // 視覺回饋
+            if (dir == _liveDisplayDirection)
+            {
+                // 同方向再點一次 → 取消勾選（回原圖）
+                UpdateLiveDirectionVisual(null);
+                checkBoxEnableImageProcessing.Checked = false; // 觸發 CheckedChanged
+                return;
+            }
+
+            // 不同方向 → 切換（不改 checkbox）
+            _liveDisplayDirection = dir;
+            _liveCameraManager?.SetLiveDisplayDirection(dir);
+            UpdateLiveDirectionVisual(dir);
+        }
+
+        private void UpdateLiveDirectionVisual(string dir)
+        {
             muraChartVerticalLive.BackColor = (dir == "v")
                 ? System.Drawing.Color.FromArgb(230, 240, 255) : System.Drawing.SystemColors.Control;
             muraChartHorizontalLive.BackColor = (dir == "h")

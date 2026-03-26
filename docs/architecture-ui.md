@@ -224,6 +224,39 @@ Guard flags：
 
 **曝光上限計算**：`CalcExpMax(lrHz) = clamp(floor(900000/lrHz), 1, 10000)`。LR 改變時呼叫 `ApplyExpMax()` 更新所有 7 台曝光 TrackBar/NumericUpDown 的 Maximum 並夾緊現有值。
 
+### SwitchLiveDisplayDirection 三態切換（Live tab）
+
+與 Review tab 的 `SwitchRidgeDirection` 相同邏輯，控制 Live 顯示的 V/H 處理圖方向：
+
+- `_liveDisplayDirection`（`"v"` / `"h"`）：控制 Live 顯示方向
+- `checkBoxEnableImageProcessing`：對應 Review 的 `checkBoxShowProcessed`
+
+**三態邏輯**：
+1. 未勾選 → 自動勾選 `checkBoxEnableImageProcessing` + 設方向
+2. 已勾選且點同方向 → 取消勾選（回原圖）
+3. 已勾選且點不同方向 → 切換方向（不改 checkbox）
+
+**與 Review 的差異**：Live tab 不需重新載入影像，`AniloxCamera.ProcessingFunction` 每幀檢查 `EnableImageProcessing` 和 `LiveDisplayDirection`，下一幀自動更新 MIL 顯示 buffer。
+
+**觸發流程**：
+```
+點擊 muraChartVerticalLive ──→ SwitchLiveDisplayDirection("v") ──┐
+點擊 muraChartHorizontalLive → SwitchLiveDisplayDirection("h") ──┤
+                                                                  ▼
+                            ┌─────────────────────────────────────────────────┐
+                            │ Case1: 未勾選 → 設方向 + checkbox=true          │
+                            │ Case2: 同方向 → checkbox=false                  │
+                            │ Case3: 不同方向 → SetLiveDisplayDirection（不改cb）│
+                            └──────────────┬──────────────────────────────────┘
+                                           ▼
+                     checkBoxEnableImageProcessing_CheckedChanged
+                                   (Case1/2 觸發)
+                                           │
+                         SetImageProcessingEnabled + UpdateLiveDirectionVisual
+```
+
+**Chart 背景色**：`_liveDisplayDirection == "v"` → `muraChartVerticalLive` 淺藍；`"h"` → `muraChartHorizontalLive` 淺藍；`checkbox=false` → 兩者皆預設色。
+
 ---
 
 ## 參數分類（UI 可調 vs JSON 限定）
