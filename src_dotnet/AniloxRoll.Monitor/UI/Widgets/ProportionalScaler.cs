@@ -64,6 +64,17 @@ namespace AniloxRoll.Monitor.UI.Widgets
             {
                 if (_records.ContainsKey(c)) continue;
 
+                // Dock != None 或 TabPage：由 Layout 引擎/TabControl 全權管理，Scaler 不介入。
+                // 容器型控制項（TabControl、Panel、TabPage 等）仍遞迴找出子控制項；
+                // 複雜控制項（PropertyGrid 等）自行管理內部佈局，不可遞迴否則破壞 internal controls。
+                if (c.Dock != DockStyle.None || c is TabPage)
+                {
+                    bool isLayoutContainer = (c is TabControl || c is Panel || c is GroupBox || c is SplitContainer);
+                    if (isLayoutContainer)
+                        RecordRecursive(c);
+                    continue;
+                }
+
                 Control p = c.Parent;
                 if (p == null) continue;
                 float pw = p.ClientSize.Width;
@@ -112,7 +123,14 @@ namespace AniloxRoll.Monitor.UI.Widgets
         {
             foreach (Control c in parent.Controls)
             {
-                if (!_records.TryGetValue(c, out ControlRecord rec)) continue;
+                if (!_records.TryGetValue(c, out ControlRecord rec))
+                {
+                    // Dock/TabPage 控制項未記錄；只遞迴容器型控制項，
+                    // 避免進入 PropertyGrid 等複雜控制項的 internal controls。
+                    if (c is TabControl || c is Panel || c is GroupBox || c is SplitContainer)
+                        ScaleRecursive(c, formSize);
+                    continue;
+                }
 
                 Control p = c.Parent;
                 if (p == null) continue;
