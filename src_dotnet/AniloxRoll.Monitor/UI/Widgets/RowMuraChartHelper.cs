@@ -244,7 +244,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             area.InnerPlotPosition.X      = 15f;   // 左邊界
             area.InnerPlotPosition.Y      = 2f;
             area.InnerPlotPosition.Width  = 78f;   // 右邊界留 7%
-            area.InnerPlotPosition.Height = 80f;   // 下邊界留 18%
+            area.InnerPlotPosition.Height = 88f;   // 下邊界留 10%
 
             // X 軸（底部）= curve value（0–1+）
             area.AxisX.Minimum                  = 0;

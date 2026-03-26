@@ -286,7 +286,7 @@ namespace AniloxRoll.Monitor.Forms
             // 背景預覽中按 Grab → 先清除預覽並 Free，讓 MIL 能重新初始化
             if (_bgPreviewActive)
             {
-                ClearBackgroundPreview();
+                ClearBackgroundPreview(restoreMilDisplay: true);
                 _liveCameraManager.FreeCameras();
                 _telemetryPresenter?.ResetAll();
             }
@@ -459,6 +459,9 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
 
+            // 先清除舊的背景預覽（釋放 overlay + 恢復 MIL display）
+            if (_bgPreviewActive) ClearBackgroundPreview();
+
             // 確保相機已 allocate
             if (!_liveCameraManager.IsAllocated)
             {
@@ -515,7 +518,7 @@ namespace AniloxRoll.Monitor.Forms
                     for (int i = 0; i < camCount; i++)
                     {
                         var cam = cameras[i];
-                        if (cam.FrameWidth <= 0) continue;
+                        if (!cam.IsConnected || cam.FrameWidth <= 0) continue;
 
                         if (accum[i] == null)
                             accum[i] = new double[cam.FrameWidth];
@@ -567,7 +570,8 @@ namespace AniloxRoll.Monitor.Forms
                 UpdateStandardBgSubLockState();
             }
 
-            // 採集完成後直接預覽
+            // 採集完成後直接預覽（先清除舊預覽，確保每次都重新開啟）
+            if (_bgPreviewActive) ClearBackgroundPreview();
             btnViewBackground_Click(btnViewBackground, EventArgs.Empty);
         }
 
@@ -652,24 +656,34 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
 
-            // 檢查是否有任何 bg bin
+            // 檢查已連線的相機是否都有對應的 bg bin
             string bgDir = _settings.Storage.BackgroundPath;
-            bool hasBin = false;
-            if (Directory.Exists(bgDir))
+            bool allConnectedHaveBin = true;
+            if (_liveCameraManager?.IsAllocated == true)
             {
-                var files = Directory.GetFiles(bgDir, "bg_*.bin");
-                hasBin = files.Length > 0;
+                foreach (var cam in _liveCameraManager.Cameras)
+                {
+                    if (!cam.IsConnected) continue; // 斷線相機不考慮
+                    if (cam.FrameWidth <= 0) continue;
+                    string binPath = Path.Combine(bgDir, $"bg_{cam.FrameWidth}_{cam.CameraId}.bin");
+                    if (!File.Exists(binPath)) { allConnectedHaveBin = false; break; }
+                }
+            }
+            else
+            {
+                // 尚未 allocate：檢查目錄下是否有任何 bin
+                allConnectedHaveBin = Directory.Exists(bgDir) && Directory.GetFiles(bgDir, "bg_*.bin").Length > 0;
             }
 
             btnGetBackground.Enabled = true;
-            btnCameraGrab.Enabled = hasBin;
-            btnCameraFree.Enabled = hasBin;
+            btnCameraGrab.Enabled = allConnectedHaveBin;
+            btnCameraFree.Enabled = allConnectedHaveBin;
         }
 
         // --- 背景預覽狀態 ---
         private Bitmap[] _bgPreviewBitmaps;
         private bool _bgPreviewActive;
-        private PictureBox[] _bgPreviewBoxes;      // panelLiveCam 上的 overlay
+        private SmartCanvas[] _bgPreviewBoxes;      // panelLiveCam 上的 overlay（SmartCanvas with ClampPan）
         private SmartCanvas _bgPreviewMainCanvas;  // panelMainDisplay 上的 SmartCanvas（支援縮放/拖曳）
         private int _bgPreviewSelectedCamIndex;    // 目前預覽中的相機 index (0-based)
 
@@ -680,11 +694,9 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private void btnViewBackground_Click(object sender, EventArgs e)
         {
+            // 先清除舊預覽（釋放 overlay + 恢復 MIL display），再重新載入
             if (_bgPreviewActive)
-            {
                 ClearBackgroundPreview();
-                return;
-            }
 
             string bgDir = _settings.Storage.BackgroundPath;
             if (!Directory.Exists(bgDir))
@@ -693,17 +705,25 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
 
-            // 先卸載 MIL secondary display，避免 native window 和 overlay 衝突
+            // 先卸載 MIL primary + secondary display，避免 native window 殘影
             if (_liveCameraManager.IsAllocated)
             {
                 foreach (var cam in _liveCameraManager.Cameras)
+                {
+                    cam.SetPrimaryDisplayVisible(false);
                     cam.SetSecondaryDisplay(IntPtr.Zero);
+                }
             }
 
+            // 清除殘留的最後一幀（MIL native window detach 後面板不會自動重繪）
+            panelMainDisplay.Invalidate();
+            panelMainDisplay.Update();
+
             Panel[] livePanels = GetLivePanels();
+            foreach (var p in livePanels) { p.Invalidate(); p.Update(); }
             int[] grabHeights = _settings.Acquisition.CameraGrabHeight;
             _bgPreviewBitmaps = new Bitmap[livePanels.Length];
-            _bgPreviewBoxes = new PictureBox[livePanels.Length];
+            _bgPreviewBoxes = new SmartCanvas[livePanels.Length];
             int firstValid = -1;
 
             for (int i = 0; i < livePanels.Length; i++)
@@ -719,18 +739,20 @@ namespace AniloxRoll.Monitor.Forms
                 Bitmap bmp = ExpandColMeanToBitmap(colMean, colMean.Length, height);
                 _bgPreviewBitmaps[i] = bmp;
 
-                // PictureBox 疊在 panel 最上層，攔截所有滑鼠事件
-                var pb = new PictureBox
+                // SmartCanvas 疊在 panel 最上層（ClampPan 模式，同 grab 的 MIL 顯示行為）
+                var sc = new SmartCanvas
                 {
                     Dock = DockStyle.Fill,
-                    Image = bmp,
-                    SizeMode = PictureBoxSizeMode.StretchImage,
-                    Tag = i
+                    ClampPan = true,
+                    Tag = i,
+                    BackColor = Color.Black
                 };
-                pb.Click += BgPreviewPanel_Click;
-                livePanels[i].Controls.Add(pb);
-                pb.BringToFront();
-                _bgPreviewBoxes[i] = pb;
+                sc.Image = bmp;
+                livePanels[i].Controls.Add(sc);
+                sc.BringToFront();
+                sc.FitToScreen();
+                sc.Click += BgPreviewPanel_Click;
+                _bgPreviewBoxes[i] = sc;
 
                 if (firstValid < 0) firstValid = i;
             }
@@ -760,8 +782,8 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (!_bgPreviewActive || _bgPreviewBitmaps == null || _bgPreviewMainCanvas == null) return;
 
-            var pb = sender as PictureBox;
-            if (pb?.Tag is int idx && idx >= 0 && idx < _bgPreviewBitmaps.Length && _bgPreviewBitmaps[idx] != null)
+            var sc = sender as SmartCanvas;
+            if (sc?.Tag is int idx && idx >= 0 && idx < _bgPreviewBitmaps.Length && _bgPreviewBitmaps[idx] != null)
             {
                 _bgPreviewMainCanvas.Image = _bgPreviewBitmaps[idx];
                 _bgPreviewMainCanvas.FitToScreen();
@@ -795,21 +817,25 @@ namespace AniloxRoll.Monitor.Forms
                 lblPixelInfo.Text = text;
         }
 
-        /// <summary>清除所有面板的背景預覽。</summary>
-        private void ClearBackgroundPreview()
+        /// <summary>
+        /// 清除所有面板的背景預覽。
+        /// restoreMilDisplay=true 時恢復 MIL display（用於 btnCameraGrab 等需要回到即時畫面的場景）。
+        /// 預設 false，避免在即將重新進入預覽時產生殘影。
+        /// </summary>
+        private void ClearBackgroundPreview(bool restoreMilDisplay = false)
         {
-            // 移除 panelLiveCam 上的 overlay PictureBox
+            // 移除 panelLiveCam 上的 overlay SmartCanvas
             Panel[] livePanels = GetLivePanels();
             if (_bgPreviewBoxes != null)
             {
                 for (int i = 0; i < _bgPreviewBoxes.Length; i++)
                 {
-                    var pb = _bgPreviewBoxes[i];
-                    if (pb == null) continue;
-                    pb.Click -= BgPreviewPanel_Click;
-                    pb.Image = null;
-                    livePanels[i].Controls.Remove(pb);
-                    pb.Dispose();
+                    var sc = _bgPreviewBoxes[i];
+                    if (sc == null) continue;
+                    sc.Click -= BgPreviewPanel_Click;
+                    sc.Image = null;
+                    livePanels[i].Controls.Remove(sc);
+                    sc.Dispose();
                 }
                 _bgPreviewBoxes = null;
             }
@@ -833,6 +859,14 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             _bgPreviewActive = false;
+
+            if (restoreMilDisplay && _liveCameraManager?.IsAllocated == true)
+            {
+                // 恢復 primary display（panelLiveCam）+ secondary display（panelMainDisplay）
+                foreach (var cam in _liveCameraManager.Cameras)
+                    cam.SetPrimaryDisplayVisible(true);
+                _liveCameraManager.RefreshMainDisplay();
+            }
         }
 
         private Panel[] GetLivePanels() => new[]
@@ -864,6 +898,9 @@ namespace AniloxRoll.Monitor.Forms
         private void UpdateGrabButton(bool isGrabbing)
         {
             btnCameraGrab.Text = isGrabbing ? "停止抓取" : "開始抓取";
+            // 抓取中：凍結取得背景/預覽背景；停止後解鎖
+            btnGetBackground.Enabled = !isGrabbing;
+            btnViewBackground.Enabled = !isGrabbing;
             if (isGrabbing)
             {
                 lblStatusGrab.Text      = "● 相機抓取中";
@@ -875,6 +912,7 @@ namespace AniloxRoll.Monitor.Forms
                 lblStatusGrab.Text      = "● 待機";
                 lblStatusGrab.BackColor = Color.FromArgb(117, 117, 117); // IEC 白/灰：中性待機
                 lblStatusGrab.ForeColor = Color.White;
+                UpdateStandardBgSubLockState(); // 停止後依 bin 狀態重新檢查
             }
         }
 

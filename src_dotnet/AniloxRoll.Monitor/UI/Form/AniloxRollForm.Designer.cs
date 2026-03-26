@@ -822,6 +822,7 @@
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.canvasMain.BackColor = System.Drawing.Color.Black;
+            this.canvasMain.ClampPan = false;
             this.canvasMain.Cursor = System.Windows.Forms.Cursors.Cross;
             this.canvasMain.Location = new System.Drawing.Point(5, 195);
             this.canvasMain.Name = "canvasMain";

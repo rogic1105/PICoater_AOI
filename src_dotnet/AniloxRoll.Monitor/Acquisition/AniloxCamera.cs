@@ -265,6 +265,29 @@ namespace AniloxRoll.Monitor.Core.Camera
             }
         }
 
+        // ==================== Primary Display (panelLiveCam) ====================
+
+        /// <summary>
+        /// Detach / restore primary display（panelLiveCam 上的 MIL 顯示）。
+        /// visible=false → MdispSelectWindow(M_NULL)，visible=true → 重新綁定原 panel。
+        /// </summary>
+        public void SetPrimaryDisplayVisible(bool visible)
+        {
+            if (_milDisplay == MIL.M_NULL) return;
+            if (visible)
+            {
+                if (_panelHandle != IntPtr.Zero && _milDisplayBuffer != MIL.M_NULL)
+                {
+                    MIL.MdispSelectWindow(_milDisplay, _milDisplayBuffer, _panelHandle);
+                    MIL.MdispControl(_milDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
+                }
+            }
+            else
+            {
+                MIL.MdispSelectWindow(_milDisplay, MIL.M_NULL, IntPtr.Zero);
+            }
+        }
+
         // ==================== Secondary Display ====================
         public void SetSecondaryDisplay(IntPtr handle)
         {
