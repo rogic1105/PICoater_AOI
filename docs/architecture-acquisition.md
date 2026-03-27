@@ -54,14 +54,47 @@ SetUserGrabIntent(true)
        ├─ IsLive = true
        └─ StartCLProtocolAsync()                   // 所有資源就緒後才啟動
               └─ Task.Run(TryEnableCLProtocol)     // 背景執行，不阻塞 UI
-                   ├─ MdigControl(M_GC_CLPROTOCOL_DEVICE_ID, "M_DEFAULT")
-                   ├─ MdigControl(M_GC_CLPROTOCOL, M_ENABLE)  // 耗時 1–2 秒
+                   ├─ lock(_clProtocolInitLock)     // static lock 序列化同卡多 digitizer
+                   ├─ MdigInquire(M_GC_CLPROTOCOL_DEVICE_ID_NUM)  // 列舉可用 Device ID
+                   ├─ MdigInquire(M_GC_CLPROTOCOL_DEVICE_ID)      // 取得 Device ID 字串
+                   ├─ MdigControl(M_GC_CLPROTOCOL_DEVICE_ID, deviceId) // 明確指定（非 M_DEFAULT）
+                   ├─ MdigControl(M_GC_CLPROTOCOL, M_ENABLE)      // 耗時 1–2 秒
                    ├─ _clProtocolEnabled = true
                    ├─ SetExposureUs(_appliedExposureUs)    // 重套曝光（改走 Feature API）
                    └─ SetLineRateHz(_appliedLineRateHz)    // 重套線掃速率（CLProtocol 才能設）
 ```
 
 `_clProtocolInitStarted`（`volatile bool`）guard 防止 ToggleGrab 重複觸發。
+
+### CLProtocol Device ID 列舉（重要）
+
+**Quad 卡上 `"M_DEFAULT"` 對 DevNum >= 2 的 digitizer 無效**，必須明確列舉再指定。
+依照 MIL 官方範例 `CLProtocol.cpp` 的做法：
+
+```csharp
+private static readonly object _clProtocolInitLock = new object();
+
+private void TryEnableCLProtocol()
+{
+    lock (_clProtocolInitLock)  // 序列化，避免同卡 digitizer 搶 MIL 內部鎖
+    {
+        MIL_INT numDevIds = 0;
+        MIL.MdigInquire(_milDigitizer, MIL.M_GC_CLPROTOCOL_DEVICE_ID_NUM, ref numDevIds);
+        if (numDevIds > 0)
+        {
+            var devId = new StringBuilder(512);
+            MIL.MdigInquire(_milDigitizer, MIL.M_GC_CLPROTOCOL_DEVICE_ID, devId);
+            MIL.MdigControl(_milDigitizer, MIL.M_GC_CLPROTOCOL_DEVICE_ID, devId.ToString());
+        }
+        else
+        {
+            MIL.MdigControl(_milDigitizer, MIL.M_GC_CLPROTOCOL_DEVICE_ID, "M_DEFAULT");
+        }
+        MIL.MdigControl(_milDigitizer, MIL.M_GC_CLPROTOCOL, MIL.M_ENABLE);
+        _clProtocolEnabled = true;
+    }
+}
+```
 
 ### 為什麼 CLProtocol 必須延遲到第一次抓圖？
 

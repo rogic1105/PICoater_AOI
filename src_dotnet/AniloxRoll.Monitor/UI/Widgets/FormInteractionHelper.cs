@@ -89,6 +89,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public bool TryComputeCurrentViewRange(int cameraIndex, out double leftMm, out double rightMm)
             => _canvasHelper.TryComputeCurrentViewRange(cameraIndex, out leftMm, out rightMm);
         public void RefreshRowChartRange() => _canvasHelper.RefreshRowChartRange();
+        public void SaveCanvasView() => _canvasHelper.SaveViewIfNeeded();
+        public void RestoreCanvasViewOrFit() => _canvasHelper.RestoreViewOrFitToScreen();
         public void SetScreenMmPerPixel(double mmPerPx) => _canvasHelper.SetScreenMmPerPixel(mmPerPx);
 
         // ── 設定 ─────────────────────────────────────────────────────────

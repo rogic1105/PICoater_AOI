@@ -124,6 +124,19 @@ LoadImages() → SaveViewIfNeeded()       ← 舊 scaleFactor
                        → UpdateCanvas(newImage)       ← 用新 sf 還原
 ```
 
+**注意**：`SaveViewIfNeeded()` 在 `Image == null` 時直接 return，**不會**重置
+`_shouldRestoreView` 旗標。這是因為 `ClearStitchedMode()` 會先清空 Image，
+若 reset flag 則之前存好的 view 會被覆蓋。
+
+**適用場景**：不只 `checkBoxShowProcessed` 切換，所有導覽控制項都保留 view：
+- `btnPeriodPrev/Next`、`cbDate/cbTime`（period 模式）
+- `cbReviewGrabId`、`btnGrabIdPrev/Next`（stitched 模式）
+- `checkBoxShowProcessed`（兩種模式都適用）
+
+**Stitched 模式路徑**：Form 端呼叫 `SaveCanvasView()` → `LoadGrabStitchedViewAsync` →
+`ShowStitchedCameraInCanvas` 呼叫 `RestoreViewOrFitToScreen()`（不經 ClearCanvas，
+因為 stitched 圖片由 `_stitchedImages[]` 管理，不應被 dispose）。
+
 Fallback：settings 不可用時退回 pixel zoom/pan 直接還原（同倍率仍正確）。
 
 ---

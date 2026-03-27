@@ -1072,15 +1072,16 @@ namespace AniloxRoll.Monitor.Forms
         {
             int idx = cbReviewGrabId.SelectedIndex;
             if (idx < 0 || idx >= _grabIdInfos.Count) return;
+            _interactionHelper.SaveCanvasView();
             var info = _grabIdInfos[idx];
             await LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest, enableProcess);
         }
 
         private async void btnPeriodPrev_Click(object sender, EventArgs e)
-        { ClearStitchedMode(); await _presenter.MovePeriodAsync(-1, _lastReviewProcessedMode, _interactionHelper.LoadImages); UpdateOverviewChartFromRepository(); }
+        { _interactionHelper.SaveCanvasView(); ClearStitchedMode(); await _presenter.MovePeriodAsync(-1, _lastReviewProcessedMode, _interactionHelper.LoadImages); UpdateOverviewChartFromRepository(); }
 
         private async void btnPeriodNext_Click(object sender, EventArgs e)
-        { ClearStitchedMode(); await _presenter.MovePeriodAsync(+1, _lastReviewProcessedMode, _interactionHelper.LoadImages); UpdateOverviewChartFromRepository(); }
+        { _interactionHelper.SaveCanvasView(); ClearStitchedMode(); await _presenter.MovePeriodAsync(+1, _lastReviewProcessedMode, _interactionHelper.LoadImages); UpdateOverviewChartFromRepository(); }
 
         /// <summary>cbDate/cbTime 手動滾動時載入對應圖片（同 btnPeriodPrev/Next）。
         /// _syncingGrabIdNav 時跳過（由 OnReviewGrabIdChanged 等程式碼觸發的 NavigateToDateTime）。</summary>
@@ -1088,6 +1089,7 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (_syncingGrabIdNav) return;
             if (_imageRepository.FileCount == 0) return;
+            _interactionHelper.SaveCanvasView();
             ClearStitchedMode();
             SetGroupBoxActive(grpReviewGrabNav, false);
             SetGroupBoxActive(grpReviewTimePeriod, true);
@@ -1780,6 +1782,7 @@ namespace AniloxRoll.Monitor.Forms
             int idx = cbReviewGrabId.SelectedIndex;
             if (idx < 0 || idx >= _grabIdInfos.Count) return;
 
+            _interactionHelper.SaveCanvasView();
             var info = _grabIdInfos[idx];
             _syncingGrabIdNav = true;
             try { _interactionHelper.NavigateToDateTime(info.Earliest); }
@@ -2105,7 +2108,7 @@ namespace AniloxRoll.Monitor.Forms
                 InspectionEngineConfig.DefaultSaveResizeScale, idx);
 
             canvasMain.Image = bmp;
-            if (bmp != null) canvasMain.FitToScreen();
+            if (bmp != null) _interactionHelper.RestoreCanvasViewOrFit();
 
             // 更新 MuraChart（含 X 軸範圍，與 Period 模式一致）
             // 若有 #CFG 設定快照，用抓圖當時的 Ops/Pos/閾值；否則 fallback 到當前 _settings

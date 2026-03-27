@@ -14,6 +14,11 @@ namespace AniloxRoll.Monitor.Core.Camera
 {
     public class AniloxCamera : IDisposable
     {
+        // CLProtocol 初始化在背景 Task.Run 中執行，
+        // 同一張卡的多個 digitizer 同時呼叫 M_GC_CLPROTOCOL, M_ENABLE 會搶 MIL 內部鎖導致失敗。
+        // 以 static lock 序列化，確保每台相機依序完成初始化。
+        private static readonly object _clProtocolInitLock = new object();
+
         // ==================== MIL Resources ====================
         private MIL_ID _milDigitizer = MIL.M_NULL;
         private MIL_ID _milDisplay = MIL.M_NULL;
@@ -351,26 +356,57 @@ namespace AniloxRoll.Monitor.Core.Camera
         private void TryEnableCLProtocol()
         {
             if (_milDigitizer == MIL.M_NULL) return;
-            try
-            {
-                MIL.MdigControl(_milDigitizer, MIL.M_GC_CLPROTOCOL_DEVICE_ID, "M_DEFAULT");
-                MIL.MdigControl(_milDigitizer, MIL.M_GC_CLPROTOCOL, MIL.M_ENABLE);
-                _clProtocolEnabled = true;
 
-                // CLProtocol 就緒後重新套用曝光與線掃速率（改走 Feature API）
-                if (!_isReleased)
-                {
-                    if (_appliedExposureUs > 0)
-                        SetExposureUs(_appliedExposureUs);
-                    if (_appliedLineRateHz > 0)
-                        SetLineRateHz(_appliedLineRateHz);
-                }
-            }
-            catch (Exception ex)
+            // 序列化：同卡多 digitizer 並行會搶 MIL 內部鎖導致失敗
+            lock (_clProtocolInitLock)
             {
-                _clProtocolEnabled = false;
-                System.Diagnostics.Trace.WriteLine(
-                    $"[CAM{CameraId}] CLProtocol init failed: {ex.GetType().Name}: {ex.Message}");
+                if (_isReleased) return;
+                try
+                {
+                    // 列舉此 digitizer 可用的 CLProtocol Device ID
+                    MIL_INT numDevIds = 0;
+                    MIL.MdigInquire(_milDigitizer, MIL.M_GC_CLPROTOCOL_DEVICE_ID_NUM, ref numDevIds);
+                    System.Diagnostics.Trace.WriteLine(
+                        $"[CAM{CameraId}] CLProtocol: {numDevIds} device ID(s) available.");
+
+                    if (numDevIds > 0)
+                    {
+                        // 列舉所有 Device ID 並選用第一個
+                        var devId = new System.Text.StringBuilder(512);
+                        MIL.MdigInquire(_milDigitizer, MIL.M_GC_CLPROTOCOL_DEVICE_ID, devId);
+                        string selectedId = devId.ToString();
+                        System.Diagnostics.Trace.WriteLine(
+                            $"[CAM{CameraId}] CLProtocol: using device ID = \"{selectedId}\"");
+                        MIL.MdigControl(_milDigitizer, MIL.M_GC_CLPROTOCOL_DEVICE_ID, selectedId);
+                    }
+                    else
+                    {
+                        // 無列舉結果，fallback 到 M_DEFAULT
+                        System.Diagnostics.Trace.WriteLine(
+                            $"[CAM{CameraId}] CLProtocol: no enumerated IDs, falling back to M_DEFAULT.");
+                        MIL.MdigControl(_milDigitizer, MIL.M_GC_CLPROTOCOL_DEVICE_ID, "M_DEFAULT");
+                    }
+
+                    MIL.MdigControl(_milDigitizer, MIL.M_GC_CLPROTOCOL, MIL.M_ENABLE);
+                    _clProtocolEnabled = true;
+                    System.Diagnostics.Trace.WriteLine(
+                        $"[CAM{CameraId}] CLProtocol enabled successfully.");
+
+                    // CLProtocol 就緒後重新套用曝光與線掃速率（改走 Feature API）
+                    if (!_isReleased)
+                    {
+                        if (_appliedExposureUs > 0)
+                            SetExposureUs(_appliedExposureUs);
+                        if (_appliedLineRateHz > 0)
+                            SetLineRateHz(_appliedLineRateHz);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _clProtocolEnabled = false;
+                    System.Diagnostics.Trace.WriteLine(
+                        $"[CAM{CameraId}] CLProtocol init failed: {ex.GetType().Name}: {ex.Message}");
+                }
             }
         }
 

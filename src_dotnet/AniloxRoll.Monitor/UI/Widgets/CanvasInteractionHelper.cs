@@ -74,7 +74,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         /// <summary>在載入新圖前呼叫，以世界座標（mm）記住目前 viewport，支援跨倍率還原。</summary>
         public void SaveViewIfNeeded()
         {
-            if (_canvas.Image == null) { _shouldRestoreView = false; return; }
+            if (_canvas.Image == null) return; // 不重置 flag，保留先前的存檔
 
             // 嘗試以 mm 世界座標儲存（跨倍率安全）
             _savedViewLeftMm = double.NaN;
@@ -132,6 +132,15 @@ namespace AniloxRoll.Monitor.UI.Widgets
             ClearCanvas();
             _canvas.Image = newImage;
 
+            RestoreViewOrFitToScreen();
+        }
+
+        /// <summary>依 SaveViewIfNeeded 決定還原縮放或 FitToScreen。
+        /// 用於 UpdateCanvas 內部，也供 stitched mode 外部呼叫（不經 ClearCanvas）。</summary>
+        public void RestoreViewOrFitToScreen()
+        {
+            if (_canvas.Image == null) return;
+
             _suppressChartSync = true;
             try
             {
@@ -157,7 +166,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
                             {
                                 float zoom  = (float)(_canvas.Width / widthPx);
                                 float panX  = (float)(-leftPx * zoom);
-                                float yCenterPx = (float)(_savedYCenterFraction * newImage.Height);
+                                float yCenterPx = (float)(_savedYCenterFraction * _canvas.Image.Height);
                                 float panY  = (float)(_canvas.Height / 2.0 - yCenterPx * zoom);
                                 _canvas.SetView(zoom, new PointF(panX, panY));
                                 return;
