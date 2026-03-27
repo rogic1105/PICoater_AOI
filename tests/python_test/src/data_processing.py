@@ -84,7 +84,9 @@ def plot_comparison(arr_orig: np.ndarray, arr_comp: np.ndarray, arr_resized: np.
     x_mm_resized = x_indices_resized * ops_um * mag_reshape / 1000.0
     
     plt.plot(x_mm_resized, arr_resized, label=f'Resized (1/{mag_reshape} scale)', color='green', linewidth=1, linestyle=':')
-    plt.plot(x_mm_resized, arr_orig_resized, label=f'Orig->Resized (1/{mag_reshape})', color='purple', linewidth=1, linestyle=(0, (3, 1, 1, 1, 1, 1)))
+
+    x_mm_orig_resized = np.arange(len(arr_orig_resized)) * ops_um * mag_reshape / 1000.0
+    plt.plot(x_mm_orig_resized, arr_orig_resized, label=f'Orig->Resized (1/{mag_reshape})', color='purple', linewidth=1, linestyle=(0, (3, 1, 1, 1, 1, 1)))
 
     plt.title(title)
     plt.xlabel("Position (mm)")

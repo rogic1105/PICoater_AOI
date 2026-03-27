@@ -1,9 +1,45 @@
+using System;
 using System.ComponentModel;
+using System.Globalization;
+using System.Linq;
+using System.Reflection;
 using AniloxRoll.Monitor.Core.Services;
 
 namespace AniloxRoll.Monitor.Core.Data
 {
+    /// <summary>讓 PropertyGrid 下拉顯示 [Description] 文字而非 enum 名稱。</summary>
+    public class EnumDescriptionConverter : EnumConverter
+    {
+        public EnumDescriptionConverter(Type type) : base(type) { }
+
+        public override object ConvertTo(ITypeDescriptorContext context, CultureInfo culture, object value, Type destinationType)
+        {
+            if (destinationType == typeof(string) && value != null)
+            {
+                var fi = value.GetType().GetField(value.ToString());
+                var attr = fi?.GetCustomAttribute<DescriptionAttribute>();
+                if (attr != null) return attr.Description;
+            }
+            return base.ConvertTo(context, culture, value, destinationType);
+        }
+
+        public override object ConvertFrom(ITypeDescriptorContext context, CultureInfo culture, object value)
+        {
+            if (value is string s)
+            {
+                foreach (var fi in EnumType.GetFields(BindingFlags.Public | BindingFlags.Static))
+                {
+                    var attr = fi.GetCustomAttribute<DescriptionAttribute>();
+                    if (attr != null && attr.Description == s)
+                        return fi.GetValue(null);
+                }
+            }
+            return base.ConvertFrom(context, culture, value);
+        }
+    }
+
     /// <summary>去背演算法選項。</summary>
+    [TypeConverter(typeof(EnumDescriptionConverter))]
     public enum BackgroundAlgorithm
     {
         /// <summary>單張去背：每幀獨立計算 column mean 後減去。</summary>

@@ -92,6 +92,7 @@
     <Compile Include="Settings\Models\AcquisitionSettings.cs" />
     <Compile Include="Settings\Models\InspectionRecipe.cs" />
     <Compile Include="Settings\Models\ChartSettings.cs" />
+    <Compile Include="Settings\Models\MuraChartConfig.cs" />
     <Compile Include="Settings\Models\StorageSettings.cs" />
     <Compile Include="Settings\Services\ConfigManager.cs" />
     <Compile Include="Settings\System\CameraHardwareConfig.cs" />

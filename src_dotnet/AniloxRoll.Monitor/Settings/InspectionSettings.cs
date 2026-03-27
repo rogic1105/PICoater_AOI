@@ -50,18 +50,25 @@ namespace AniloxRoll.Monitor.Core.Data
         // ===== 2. 檢測配方 =====
         [Category("2. 檢測配方")][DisplayName("去背演算法")]   public BackgroundAlgorithm Algorithm       { get => Recipe.Algorithm;       set => Recipe.Algorithm       = value; }
         [Category("2. 檢測配方")][DisplayName("Ridge 方向")]   public RidgeDirection      RidgeDir        { get => Recipe.RidgeDir;        set => Recipe.RidgeDir        = value; }
-        [Category("2. 檢測配方")][DisplayName("平均閾值")]     public float ErrorValueMean   { get => Recipe.ErrorValueMean;   set => Recipe.ErrorValueMean   = value; }
-        [Category("2. 檢測配方")][DisplayName("最大閾值")]     public float ErrorValueMax    { get => Recipe.ErrorValueMax;    set => Recipe.ErrorValueMax    = value; }
         [Category("2. 檢測配方")][DisplayName("正規值")]       public float HessianMaxFactor { get => Recipe.HessianMaxFactor; set => Recipe.HessianMaxFactor = value; }
         [Category("2. 檢測配方")][DisplayName("背景取樣秒數")] public int   BackgroundSampleSeconds { get => Recipe.BackgroundSampleSeconds; set => Recipe.BackgroundSampleSeconds = value; }
         [Category("2. 檢測配方")][DisplayName("A輪速度 (m/min)")] public double AniloxRollSpeedMPerMin { get => Recipe.AniloxRollSpeedMPerMin; set => Recipe.AniloxRollSpeedMPerMin = value; }
 
-
         // ===== 3. 圖表設定 =====
-        [Category("3. 圖表設定")][DisplayName("數量範圍")] public ChartScaleMode ChartScaleMode { get => Chart.ScaleMode; set => Chart.ScaleMode = value; }
-        [Category("3. 圖表設定")][DisplayName("月產量")]   public int ChartYearlyYMax  { get => Chart.YearlyYMax;  set => Chart.YearlyYMax  = value; }
-        [Category("3. 圖表設定")][DisplayName("日產量")]   public int ChartMonthlyYMax { get => Chart.MonthlyYMax; set => Chart.MonthlyYMax = value; }
-        [Category("3. 圖表設定")][DisplayName("時產量")]   public int ChartDailyYMax   { get => Chart.DailyYMax;   set => Chart.DailyYMax   = value; }
+        [Category("3. 圖表設定")][DisplayName("統計圖表")]
+        public ChartSettings StatisticsChart => Chart;
+
+        private MuraChartConfig _muraChart;
+        [Category("3. 圖表設定")][DisplayName("Mura 圖表")]
+        public MuraChartConfig MuraChart => _muraChart ?? (_muraChart = new MuraChartConfig(Recipe));
+
+        // 向後相容：程式碼中直接存取的快捷屬性
+        [Browsable(false)] public ChartScaleMode ChartScaleMode { get => Chart.ScaleMode; set => Chart.ScaleMode = value; }
+        [Browsable(false)] public int ChartYearlyYMax  { get => Chart.YearlyYMax;  set => Chart.YearlyYMax  = value; }
+        [Browsable(false)] public int ChartMonthlyYMax { get => Chart.MonthlyYMax; set => Chart.MonthlyYMax = value; }
+        [Browsable(false)] public int ChartDailyYMax   { get => Chart.DailyYMax;   set => Chart.DailyYMax   = value; }
+        [Browsable(false)] public float ErrorValueMean { get => Recipe.ErrorValueMean; set => Recipe.ErrorValueMean = value; }
+        [Browsable(false)] public float ErrorValueMax  { get => Recipe.ErrorValueMax;  set => Recipe.ErrorValueMax  = value; }
 
         // ===== 4. 儲存設定 =====
         [Category("4. 儲存設定")][DisplayName("存檔")]       public bool   EnableAutoCapture    { get => Storage.EnableAutoCapture;    set => Storage.EnableAutoCapture    = value; }

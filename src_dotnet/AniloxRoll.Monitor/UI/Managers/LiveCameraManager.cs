@@ -33,6 +33,8 @@ namespace AniloxRoll.Monitor.UI.Managers
         private double[] _cameraLineRateHz     = new double[7];
         private int _saveResizeScale = InspectionEngineConfig.DefaultSaveResizeScale;
         private int _saveJpgQuality  = InspectionEngineConfig.DefaultSaveJpgQuality;
+        private float _hessianMaxFactor = InspectionEngineConfig.DefaultHessianMaxFactor;
+        private string _ridgeMode = InspectionEngineConfig.DefaultRidgeMode;
         private readonly CaptureTimestampCoordinator _timestampCoordinator = new CaptureTimestampCoordinator();
 
         public bool IsAllocated    { get; private set; } = false;
@@ -172,8 +174,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.CameraExposureTimeUs = _cameraExposureTimeUs[camIdx]; // Initialize() 會呼叫 SetExposureUs 套用
                 cam.SetLineRateHz(_cameraLineRateHz[camIdx]);  // 記錄 _appliedLineRateHz（CLProtocol 就緒後自動重套）
                 cam.HessianSigma         = InspectionEngineConfig.DefaultRidgeSigma;
-                cam.HessianFixedMax      = InspectionEngineConfig.DefaultHessianMaxFactor;
-                cam.RidgeMode            = InspectionEngineConfig.DefaultRidgeMode;
+                cam.HessianFixedMax      = _hessianMaxFactor;
+                cam.RidgeMode            = _ridgeMode;
                 cam.SaveResizeScale      = _saveResizeScale;
                 cam.SaveJpgQuality       = _saveJpgQuality;
                 cam.TimestampCoordinator = _timestampCoordinator;
@@ -292,11 +294,6 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             UpdateCaptureSettingsCache(settings);
 
-            float hessianMaxFactor = settings.HessianMaxFactor > 0
-                ? settings.HessianMaxFactor
-                : InspectionEngineConfig.DefaultHessianMaxFactor;
-            string ridgeMode = InspectionRecipe.RidgeDirectionToNative(settings.RidgeDir);
-
             foreach (var cam in _cameras)
             {
                 int camIdx = cam.CameraId - 1;
@@ -305,8 +302,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.CaptureRootPath      = _captureRootPath;
                 cam.CameraGrabHeight     = _cameraGrabHeight[camIdx];
                 cam.HessianSigma         = InspectionEngineConfig.DefaultRidgeSigma;
-                cam.HessianFixedMax      = hessianMaxFactor;
-                cam.RidgeMode            = ridgeMode;
+                cam.HessianFixedMax      = _hessianMaxFactor;
+                cam.RidgeMode            = _ridgeMode;
                 cam.SaveResizeScale      = _saveResizeScale;
                 cam.SaveJpgQuality       = _saveJpgQuality;
                 cam.TimestampCoordinator = _timestampCoordinator;
@@ -412,6 +409,10 @@ namespace AniloxRoll.Monitor.UI.Managers
             _cameraLineRateHz     = settings.Acquisition.CameraLineRateHz;
             _saveResizeScale      = settings.Recipe?.SaveResizeScale ?? InspectionEngineConfig.DefaultSaveResizeScale;
             _saveJpgQuality       = settings.Recipe?.SaveJpgQuality  ?? InspectionEngineConfig.DefaultSaveJpgQuality;
+            _hessianMaxFactor     = settings.HessianMaxFactor > 0
+                ? settings.HessianMaxFactor
+                : InspectionEngineConfig.DefaultHessianMaxFactor;
+            _ridgeMode            = InspectionRecipe.RidgeDirectionToNative(settings.RidgeDir);
         }
 
         // ==================== Display Switching ====================
