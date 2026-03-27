@@ -242,6 +242,7 @@ namespace AniloxRoll.Monitor.Forms
 
             canvasMain.StatusChanged += _interactionHelper.UpdateCanvasInfo;
             canvasMain.EdgeReached   += _interactionHelper.NavigateCamera;
+            canvasMain.DoubleClick   += (s, e) => { if (canvasMain.Image != null) canvasMain.FitToScreen(); };
         }
 
         /// <summary>相機層：LiveCameraManager 與 FormClosed 清理。</summary>
@@ -2070,6 +2071,7 @@ namespace AniloxRoll.Monitor.Forms
             _activeRidgeDirection = dir;
             _interactionHelper.SetRidgeDirection(dir);
             UpdateRidgeDirectionVisual(dir);
+            _interactionHelper.SaveCanvasView();
 
             if (_stitchedImages != null)
             {

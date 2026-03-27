@@ -29,9 +29,12 @@ namespace AniloxRoll.Monitor.UI.Navigators
             _cbDate.SelectedIndexChanged += (s, e) =>
             {
                 if (!_updating) UpdateTimeCombo();
-                OnPeriodSelectionChanged();
+                if (!_updating) OnPeriodSelectionChanged();
             };
-            _cbTime.SelectedIndexChanged += (s, e) => OnPeriodSelectionChanged();
+            _cbTime.SelectedIndexChanged += (s, e) =>
+            {
+                if (!_updating) OnPeriodSelectionChanged();
+            };
         }
 
         private void OnPeriodSelectionChanged() => PeriodSelectionChanged?.Invoke();
@@ -50,10 +53,10 @@ namespace AniloxRoll.Monitor.UI.Navigators
                 string lastDate = BuildLastDate();
                 int idx = dates.IndexOf(lastDate);
                 _cbDate.SelectedIndex = idx >= 0 ? idx : 0;
+
+                UpdateTimeCombo();
             }
             finally { _updating = false; }
-
-            UpdateTimeCombo();
         }
 
         private void UpdateTimeCombo()
@@ -140,16 +143,21 @@ namespace AniloxRoll.Monitor.UI.Navigators
 
         public void SetPeriodToCombo(DateTime dt)
         {
-            string dateStr = dt.ToString("yyyy-MM-dd");
-            string timeStr = dt.ToString("HH:mm:ss.fff");
-            if (_cbDate.Items.Contains(dateStr))
-                _cbDate.SelectedItem = dateStr;
-            else
-                _cbDate.Text = dateStr;
-            if (_cbTime.Items.Contains(timeStr))
-                _cbTime.SelectedItem = timeStr;
-            else
-                _cbTime.Text = timeStr;
+            _updating = true;
+            try
+            {
+                string dateStr = dt.ToString("yyyy-MM-dd");
+                string timeStr = dt.ToString("HH:mm:ss.fff");
+                if (_cbDate.Items.Contains(dateStr))
+                    _cbDate.SelectedItem = dateStr;
+                else
+                    _cbDate.Text = dateStr;
+                if (_cbTime.Items.Contains(timeStr))
+                    _cbTime.SelectedItem = timeStr;
+                else
+                    _cbTime.Text = timeStr;
+            }
+            finally { _updating = false; }
         }
 
         // ── 內部解析 ────────────────────────────────────────────────
