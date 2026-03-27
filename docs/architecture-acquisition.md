@@ -509,3 +509,43 @@ ApplyGrabState()（第一次 MdigGrab）：
 | [15] | PCIe Speed | `MsysInquire(M_PCIE_SPEED)` | Gen1/2/3 |
 
 **維護注意**：新增或移除欄位時，`Initialize()`（`for i < N`）、`Update()`（各 SubItems[n]）、`ResetAll()`（`for i <= N`）三處必須同步修改。
+
+---
+
+## PLC 連動（PlcGrabController）
+
+### IO Mapping（ET-7044 Modbus TCP）
+
+| IO | 方向 | 用途 |
+|----|------|------|
+| DI-0 | PLC → PC | PLC ALIVE（PLC 心跳） |
+| DI-1 | PLC → PC | START（上升/下降緣觸發 Grab） |
+| DO-0 | PC → PLC | PC ALIVE（Form 開啟 = High） |
+| DO-1 | PC → PLC | MURA（檢測到瑕疵 = High） |
+| DO-2 | PC → PLC | PC BUSY（Grab 中 = High） |
+
+### FSM 狀態
+
+```
+Initial → Ready ←→ Run → Stop → Ready
+           ↕               ↕
+         PLCErr           MURA
+           ↕
+         PCErr (自動重連)
+```
+
+### 整合流程
+
+1. `AniloxRollForm.InitPlcController()` 在 `InitServiceLayer()` 末端呼叫
+2. 非阻塞嘗試連線（3s timeout），失敗每 5s 背景重試
+3. 連上後 `btnCameraGrab` 顯示 "PLC 控制中"，DI START 上升緣 → `btnCameraGrab_Click`，下降緣 → 再次觸發停止
+4. 斷線自動退回 UI 按鈕模式
+5. MURA 判定：`meanPeak > ErrorValueMean || maxPeak > ErrorValueMax` → `NotifyMuraDetected()`
+
+### PlcBridge.Core
+
+共用 Modbus TCP 通訊庫（`src_dotnet/PlcBridge/PlcBridge.Core/`）：
+
+- `IcpDasModbusTcpClient`：FC1（Read Coils）/FC2（Read DI）/FC5（Write Single Coil），Transaction ID 追蹤，timeout 保護
+- `PlcLogger`：Thread-safe 日誌，`FilePrefix` 區分不同應用
+- 預設 IP：`192.168.255.1:502`

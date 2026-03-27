@@ -19,7 +19,8 @@ PICoater_AOI/
 │   ├── modules/         # 各式檢測功能模組 (如 GetPICoaterBackground)
 │   └── c_api/           # 導出給 C# 使用的 DLL 介面層
 ├── src_dotnet/          # [介面] C# 使用者介面
-│   └── AniloxRoll.Monitor/ # 主程式 (WinForms)
+│   ├── AniloxRoll.Monitor/ # 主程式 (WinForms)
+│   └── PlcBridge/       # PLC Modbus TCP 通訊 (Core / ManualControl / Automation)
 ├── tests/               # [測試] C++ 單元測試與整合測試
 │   └── cpp_test         # (picoater_tests)
 ├── docs/                # 架構與模式文件

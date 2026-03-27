@@ -101,6 +101,7 @@
     <Compile Include="Services\AoiService.cs" />
     <Compile Include="Services\CsvConfigSnapshot.cs" />
     <Compile Include="Services\InspectionLogService.cs" />
+    <Compile Include="Services\PlcGrabController.cs" />
     <Compile Include="Services\InspectionStatisticsService.cs" />
     <Compile Include="Services\PlcService.cs" />
     <Compile Include="ImageProcessing\BatchInspectionService.cs" />
@@ -166,6 +167,10 @@
     <ProjectReference Include="..\..\sdk\AOI_SDK\src_dotnet\AOI.SDK\AOI.SDK.csproj">
       <Project>{27263c11-7fef-4076-a2f1-f412bb496df3}</Project>
       <Name>AOI.SDK</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\PlcBridge\PlcBridge.Core\PlcBridge.Core.csproj">
+      <Project>{A1B2C3D4-1111-2222-3333-444455556666}</Project>
+      <Name>PlcBridge.Core</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup />

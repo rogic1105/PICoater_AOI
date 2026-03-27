@@ -71,6 +71,9 @@ namespace AniloxRoll.Monitor.Forms
         private InspectionLogService _inspectionLogService;
         private string _currentGrabId;
 
+        // --- PLC 連動 ---
+        private PlcGrabController _plcGrabController;
+
         // --- 統計 ---
         private InspectionStatsPresenter    _statsPresenter;
         private string                      _statsDataRootPath   = string.Empty;
@@ -139,6 +142,81 @@ namespace AniloxRoll.Monitor.Forms
             _inspectionLogService = new InspectionLogService(
                 () => _settings?.CaptureRootPath ?? string.Empty,
                 UserSessionState.LastGrabIdNum);
+
+            InitPlcController();
+        }
+
+        /// <summary>初始化 PLC 連動：自動偵測連線，連上後以 DI START 控制 Grab。</summary>
+        private void InitPlcController()
+        {
+            if (!_settings.PlcEnabled) return;
+
+            _plcGrabController = new PlcGrabController();
+
+            _plcGrabController.OnStartRequested += () =>
+            {
+                if (InvokeRequired) { BeginInvoke(new Action(PlcStartGrab)); return; }
+                PlcStartGrab();
+            };
+
+            _plcGrabController.OnStopRequested += () =>
+            {
+                if (InvokeRequired) { BeginInvoke(new Action(PlcStopGrab)); return; }
+                PlcStopGrab();
+            };
+
+            _plcGrabController.OnStateChanged += state =>
+            {
+                if (InvokeRequired) { BeginInvoke(new Action<string>(UpdatePlcStateLabel), state); return; }
+                UpdatePlcStateLabel(state);
+            };
+
+            _plcGrabController.OnConnectionChanged += connected =>
+            {
+                if (InvokeRequired) { BeginInvoke(new Action<bool>(UpdatePlcConnectionUi), connected); return; }
+                UpdatePlcConnectionUi(connected);
+            };
+
+            // 背景嘗試連線（不阻塞 Form 顯示）
+            _ = _plcGrabController.StartAsync(_settings.PlcIp, _settings.PlcPort);
+        }
+
+        private void PlcStartGrab()
+        {
+            if (_liveCameraManager == null || _liveCameraManager.IsLiveGrabbing) return;
+            btnCameraGrab_Click(null, null);
+            _ = _plcGrabController?.NotifyGrabStarted();
+        }
+
+        private void PlcStopGrab()
+        {
+            if (_liveCameraManager == null || !_liveCameraManager.IsLiveGrabbing) return;
+            btnCameraGrab_Click(null, null); // toggle → stop
+            _ = _plcGrabController?.NotifyGrabStopped();
+        }
+
+        private void UpdatePlcStateLabel(string state)
+        {
+            lblStatusGrab.Text = _plcGrabController?.IsConnected == true
+                ? $"● PLC: {state}"
+                : lblStatusGrab.Text;
+        }
+
+        private void UpdatePlcConnectionUi(bool connected)
+        {
+            // PLC 連上時 btnCameraGrab 顯示為 PLC 控制模式
+            if (connected)
+            {
+                btnCameraGrab.Text = "PLC 控制中";
+                btnCameraGrab.BackColor = Color.FromArgb(0, 122, 204);
+                btnCameraGrab.ForeColor = Color.White;
+            }
+            else
+            {
+                UpdateGrabButton(_liveCameraManager?.IsLiveGrabbing ?? false);
+                btnCameraGrab.BackColor = SystemColors.Control;
+                btnCameraGrab.ForeColor = SystemColors.ControlText;
+            }
         }
 
         /// <summary>UI 層：Presenter、Helper、PropertyGrid、Canvas 事件。</summary>
@@ -312,10 +390,15 @@ namespace AniloxRoll.Monitor.Forms
                 }
             };
 
-            FormClosed += (_, __) =>
+            FormClosed += async (_, __) =>
             {
                 _telemetryTimer?.Stop();
                 _liveOverviewTimer?.Stop();
+                if (_plcGrabController != null)
+                {
+                    await _plcGrabController.StopAsync();
+                    _plcGrabController.Dispose();
+                }
                 FreePrecomputedColMeanBuffers();
                 _liveCameraManager.FreeCameras();
             };
@@ -390,6 +473,13 @@ namespace AniloxRoll.Monitor.Forms
                 idx >= 0 && idx < _settings.Acquisition.CameraExposureTimeUs.Length
                     ? _settings.Acquisition.CameraExposureTimeUs[idx] : 0,
                 CsvConfigSnapshot.FromSettings(_settings));
+
+            // PLC MURA 信號：任一相機超過閾值即通知
+            if (_plcGrabController?.IsConnected == true)
+            {
+                bool isMura = meanPeak > _settings.ErrorValueMean || maxPeak > _settings.ErrorValueMax;
+                if (isMura) _ = _plcGrabController.NotifyMuraDetected();
+            }
         }
 
         private void OnLiveCurveData(int camId, float[] meanArr, float[] maxArr)
