@@ -64,6 +64,10 @@ namespace AniloxRoll.Monitor.UI.Managers
         private int _selectedMainCameraId = 1;
         public int SelectedMainCameraId => _selectedMainCameraId;
 
+        private InspectionSettings _inspectionSettings;
+        private double _screenMmPerPx;
+        private WheelZoomFilter _wheelFilter;
+
         public LiveCameraManager(
             Form mainForm,
             Panel[] cameraPanels,
@@ -79,6 +83,9 @@ namespace AniloxRoll.Monitor.UI.Managers
             _mainDisplayPanel = mainDisplayPanel;
             _updatePixelInfoCallback = updatePixelInfoCallback;
             _mainDisplayPanel.BackColor = Color.Black;
+
+            _wheelFilter = new WheelZoomFilter(this);
+            Application.AddMessageFilter(_wheelFilter);
 
             for (int i = 0; i < 7; i++)
                 SetupLivePanel(cameraPanels[i], i + 1);
@@ -288,9 +295,12 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// 曝光：直接呼叫 SetExposureUs（live CLProtocol 路徑，可即時生效）。
         /// Grab Height：僅更新快取，物理變更請呼叫 SetGrabHeightForAll() 或 ReinitializeForAcquisitionSettings()。
         /// </summary>
+        public void SetScreenMmPerPixel(double mmPerPx) => _screenMmPerPx = mmPerPx;
+
         public void SetCaptureSettings(InspectionSettings settings)
         {
             if (settings == null) return;
+            _inspectionSettings = settings;
 
             UpdateCaptureSettingsCache(settings);
 
@@ -434,6 +444,13 @@ namespace AniloxRoll.Monitor.UI.Managers
             SwitchMainDisplay(_selectedMainCameraId);
         }
 
+        /// <summary>重置主顯示器（MIL secondary display）的縮放/平移為 fit-to-window。</summary>
+        public void ResetMainDisplayView()
+        {
+            var cam = _cameras.Find(c => c.CameraId == _selectedMainCameraId);
+            cam?.ResetSecondaryDisplayView();
+        }
+
         private void SwitchMainDisplay(int cameraIndex)
         {
             if (_mainForm.InvokeRequired)
@@ -470,9 +487,68 @@ namespace AniloxRoll.Monitor.UI.Managers
                 return;
             }
 
-            string infoText = pixelValue == -1
-                ? $"即時影像 [CAM {camId}] | 游標超出影像範圍"
-                : $"即時影像 [CAM {camId}] | X: {x}, Y: {y} | 灰階值: {pixelValue}";
+            string infoText;
+            if (pixelValue == -1)
+            {
+                infoText = $"即時影像 [CAM {camId}] | 游標超出影像範圍";
+            }
+            else
+            {
+                int camIdx = camId - 1;
+                var s = _inspectionSettings;
+                double[] opsUmArr  = s?.GetCameraOpsUmArray();
+                double[] startMmArr = s?.GetCameraStartPositionMmArray();
+
+                if (opsUmArr == null || camIdx < 0 || camIdx >= opsUmArr.Length)
+                {
+                    infoText = $"即時影像 [CAM {camId}] | 座標: ({x}, {y}) | 亮度: {pixelValue}";
+                }
+                else
+                {
+                    double opsInMm    = opsUmArr[camIdx] / 1000.0;
+                    double startPosMm = startMmArr[camIdx];
+                    double physicalX  = startPosMm + x * opsInMm;
+                    double lineRateHz = (camIdx < _cameraLineRateHz.Length) ? _cameraLineRateHz[camIdx] : 0;
+                    double speedMPerMin = s.AniloxRollSpeedMPerMin;
+                    double rowPitchMm = (speedMPerMin > 0 && lineRateHz > 0)
+                        ? (speedMPerMin / 60.0 * 1000.0) / lineRateHz : 0;
+                    double physicalY  = y * rowPitchMm;
+
+                    // MIL display zoom/pan → 視野範圍
+                    string rangeStr = "";
+                    string magStr = "-";
+                    var cam = _cameras.Find(c => c.CameraId == camId);
+                    if (cam != null && cam.TryGetSecondaryDisplayGeometry(
+                            out double zoomX, out _, out double panOffX, out double panOffY))
+                    {
+                        double panelW = _mainDisplayPanel.Width;
+                        double panelH = _mainDisplayPanel.Height;
+                        double viewLeftMm  = startPosMm + (panOffX) * opsInMm;
+                        double viewRightMm = startPosMm + (panOffX + panelW / zoomX) * opsInMm;
+                        rangeStr = $"X範圍:{viewLeftMm:F1}~{viewRightMm:F1} mm | ";
+
+                        if (rowPitchMm > 0)
+                        {
+                            double viewTopMm = panOffY * rowPitchMm;
+                            double viewBotMm = (panOffY + panelH / zoomX) * rowPitchMm;
+                            rangeStr += $"Y範圍:{viewTopMm:F1}~{viewBotMm:F1} mm | ";
+                        }
+
+                        if (_screenMmPerPx > 0 && opsInMm > 0)
+                        {
+                            double physicalMag = (zoomX * _screenMmPerPx) / opsInMm;
+                            magStr = $"{physicalMag:F2}x";
+                        }
+                    }
+
+                    infoText = $"即時影像 [CAM {camId}] | " +
+                               $"位置:({physicalX:F2}, {physicalY:F2}) mm | " +
+                               rangeStr +
+                               $"座標: ({x}, {y}) | " +
+                               $"亮度: {pixelValue} | " +
+                               $"實體倍率:{magStr}";
+                }
+            }
 
             _updatePixelInfoCallback?.Invoke(infoText);
         }
@@ -533,6 +609,94 @@ namespace AniloxRoll.Monitor.UI.Managers
             {
                 label.Text      = $"{cameraIndex}: {statusText}";
                 label.ForeColor = color;
+            }
+        }
+
+        // ==================== Physical Magnification 1x ====================
+
+        /// <summary>設定主顯示 zoom 使實體倍率 = 1x（螢幕 1mm = 實際 1mm）。</summary>
+        public void SetPhysicalMagnification1x()
+        {
+            if (!IsLiveGrabbing || _screenMmPerPx <= 0) return;
+            int camIdx = _selectedMainCameraId - 1;
+            var s = _inspectionSettings;
+            double[] opsUmArr = s?.GetCameraOpsUmArray();
+            if (opsUmArr == null || camIdx < 0 || camIdx >= opsUmArr.Length) return;
+
+            double opsInMm = opsUmArr[camIdx] / 1000.0;
+            if (opsInMm <= 0) return;
+
+            // physicalMag = zoom * screenMmPerPx / opsInMm = 1  →  zoom = opsInMm / screenMmPerPx
+            double zoom1x = opsInMm / _screenMmPerPx;
+
+            var cam = _cameras.Find(c => c.CameraId == _selectedMainCameraId);
+            if (cam == null) return;
+
+            // 以面板中心為基準
+            double cx = _mainDisplayPanel.Width / 2.0;
+            double cy = _mainDisplayPanel.Height / 2.0;
+
+            if (cam.TryGetSecondaryDisplayGeometry(out double curZoom, out _, out double curPanX, out double curPanY) && curZoom > 0)
+            {
+                double imgCx = curPanX + cx / curZoom;
+                double imgCy = curPanY + cy / curZoom;
+                double newPanX = imgCx - cx / zoom1x;
+                double newPanY = imgCy - cy / zoom1x;
+                cam.SetSecondaryDisplayZoom(zoom1x, newPanX, newPanY);
+            }
+            else
+            {
+                cam.SetSecondaryDisplayZoom(zoom1x, 0, 0);
+            }
+        }
+
+        // ==================== Custom Wheel Zoom ====================
+
+        internal void ApplyCustomZoom(int wheelDelta)
+        {
+            if (!IsLiveGrabbing) return;
+            var cam = _cameras.Find(c => c.CameraId == _selectedMainCameraId);
+            if (cam == null) return;
+            if (!cam.TryGetSecondaryDisplayGeometry(out double zoomX, out _, out double panX, out double panY))
+                return;
+
+            double factor = wheelDelta > 0 ? 1.1 : (1.0 / 1.1);
+            double newZoom = zoomX * factor;
+            if (newZoom < 0.05) newZoom = 0.05;
+            if (newZoom > 32.0) newZoom = 32.0;
+
+            // 以面板中心為縮放基準點
+            double cx = _mainDisplayPanel.Width / 2.0;
+            double cy = _mainDisplayPanel.Height / 2.0;
+            double imgX = panX + cx / zoomX;
+            double imgY = panY + cy / zoomX;
+            double newPanX = imgX - cx / newZoom;
+            double newPanY = imgY - cy / newZoom;
+
+            cam.SetSecondaryDisplayZoom(newZoom, newPanX, newPanY);
+        }
+
+        /// <summary>攔截 panelMainDisplay 上的 WM_MOUSEWHEEL，用 1.1x 步長取代 MIL 預設的整數倍跳躍。</summary>
+        private class WheelZoomFilter : IMessageFilter
+        {
+            private const int WM_MOUSEWHEEL = 0x020A;
+            private readonly LiveCameraManager _mgr;
+
+            public WheelZoomFilter(LiveCameraManager mgr) => _mgr = mgr;
+
+            public bool PreFilterMessage(ref Message m)
+            {
+                if (m.Msg != WM_MOUSEWHEEL) return false;
+                if (!_mgr.IsLiveGrabbing) return false;
+
+                var panel = _mgr._mainDisplayPanel;
+                var screenPt = Cursor.Position;
+                if (!panel.RectangleToScreen(panel.ClientRectangle).Contains(screenPt))
+                    return false;
+
+                int delta = (short)(m.WParam.ToInt64() >> 16);
+                _mgr.ApplyCustomZoom(delta);
+                return true; // 攔截訊息，不讓 MIL 處理
             }
         }
     }

@@ -176,6 +176,34 @@ namespace AniloxRoll.Monitor.Core.Camera
             catch { return false; }
         }
 
+        /// <summary>設定副顯示器的縮放與平移（用於自訂滾輪縮放）。
+        /// 用 M_UPDATE DISABLE/ENABLE 批次更新，避免 zoom+pan 分兩次 redraw 閃爍。</summary>
+        public void SetSecondaryDisplayZoom(double zoom, double panX, double panY)
+        {
+            if (_milSecondaryDisplay == MIL.M_NULL) return;
+            try
+            {
+                MIL.MdispControl(_milSecondaryDisplay, MIL.M_UPDATE, MIL.M_DISABLE);
+                MIL.MdispControl(_milSecondaryDisplay, MIL.M_CENTER_DISPLAY, MIL.M_DISABLE);
+                MIL.MdispZoom(_milSecondaryDisplay, zoom, zoom);
+                MIL.MdispPan(_milSecondaryDisplay, panX, panY);
+                MIL.MdispControl(_milSecondaryDisplay, MIL.M_UPDATE, MIL.M_ENABLE);
+            }
+            catch { }
+        }
+
+        /// <summary>重置副顯示器的縮放/平移為 fit-to-window（與 SetSecondaryDisplay 初始化一致）。</summary>
+        public void ResetSecondaryDisplayView()
+        {
+            if (_milSecondaryDisplay == MIL.M_NULL) return;
+            try
+            {
+                MIL.MdispControl(_milSecondaryDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
+                MIL.MdispControl(_milSecondaryDisplay, MIL.M_CENTER_DISPLAY, MIL.M_ENABLE);
+            }
+            catch { }
+        }
+
         // ==================== Delegates / Events ====================
         private MIL_DISP_HOOK_FUNCTION_PTR _mouseStatusDelegate;
         private MIL_DISP_HOOK_FUNCTION_PTR _mouseClickDelegate;

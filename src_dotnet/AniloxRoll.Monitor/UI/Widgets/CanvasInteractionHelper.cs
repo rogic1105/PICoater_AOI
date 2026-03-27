@@ -34,6 +34,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private double _screenMmPerPx = 0;
 
         public void SetScreenMmPerPixel(double mmPerPx) => _screenMmPerPx = mmPerPx;
+        public double ScreenMmPerPixel => _screenMmPerPx;
 
         public string ImageInfoSuffix { get; set; } = "";
 
@@ -317,6 +318,31 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 $"座標: ({info.ImageX}, {info.ImageY}) | " +
                 $"亮度: {info.PixelColor.R} | " +
                 $"實體倍率:{magStr}{ImageInfoSuffix}";
+        }
+
+        /// <summary>將 canvas 設為實體倍率 1x（畫面中心不動）。</summary>
+        public void SetPhysicalMagnification1x()
+        {
+            if (_canvas.Image == null || _settings == null) return;
+
+            double[] opsUmArr = _settings.GetCameraOpsUmArray();
+            if (_currentCameraIndex < 0 || _currentCameraIndex >= opsUmArr.Length) return;
+
+            double opsInMm = opsUmArr[_currentCameraIndex] / 1000.0;
+            if (opsInMm <= 0 || _screenMmPerPx <= 0) return;
+
+            float zoom1x = (float)(_imageScaleFactor * opsInMm / _screenMmPerPx);
+
+            float oldZoom = _canvas.Zoom;
+            PointF oldPan = _canvas.PanOffset;
+            float cx = _canvas.Width / 2f;
+            float cy = _canvas.Height / 2f;
+            float imgCx = (cx - oldPan.X) / oldZoom;
+            float imgCy = (cy - oldPan.Y) / oldZoom;
+            float newPanX = cx - imgCx * zoom1x;
+            float newPanY = cy - imgCy * zoom1x;
+
+            _canvas.SetView(zoom1x, new PointF(newPanX, newPanY));
         }
 
         /// <summary>事件處理：canvas.EdgeReached → 切換至相鄰相機。</summary>

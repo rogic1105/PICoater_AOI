@@ -242,7 +242,26 @@ namespace AniloxRoll.Monitor.Forms
 
             canvasMain.StatusChanged += _interactionHelper.UpdateCanvasInfo;
             canvasMain.EdgeReached   += _interactionHelper.NavigateCamera;
-            canvasMain.DoubleClick   += (s, e) => { if (canvasMain.Image != null) canvasMain.FitToScreen(); };
+            int _canvasClickCount = 0;
+            int _canvasLastClickTick = 0;
+            canvasMain.MouseDown += (s, e) =>
+            {
+                if (e.Button != MouseButtons.Left) return;
+                int now = Environment.TickCount;
+                if (now - _canvasLastClickTick > SystemInformation.DoubleClickTime)
+                    _canvasClickCount = 0;
+                _canvasLastClickTick = now;
+                _canvasClickCount++;
+                if (_canvasClickCount == 2)
+                {
+                    if (canvasMain.Image != null) canvasMain.FitToScreen();
+                }
+                else if (_canvasClickCount >= 3)
+                {
+                    _canvasClickCount = 0;
+                    _interactionHelper?.SetCanvasPhysicalMag1x();
+                }
+            };
         }
 
         /// <summary>相機層：LiveCameraManager 與 FormClosed 清理。</summary>
@@ -262,6 +281,36 @@ namespace AniloxRoll.Monitor.Forms
             UpdateStandardBgSubLockState();
             _liveCameraManager.OnLiveCurveData      += OnLiveCurveData;
             _liveCameraManager.OnLiveRowCurveData   += OnLiveRowCurveData;
+
+            int _panelClickCount = 0;
+            int _panelLastClickTick = 0;
+            panelMainDisplay.MouseDown += (s, e) =>
+            {
+                if (e.Button != MouseButtons.Left) return;
+                int now = Environment.TickCount;
+                if (now - _panelLastClickTick > SystemInformation.DoubleClickTime)
+                    _panelClickCount = 0;
+                _panelLastClickTick = now;
+                _panelClickCount++;
+
+                if (_panelClickCount == 2)
+                {
+                    // 雙擊：FitToScreen
+                    if (_bgPreviewMainCanvas != null && _bgPreviewActive)
+                        _bgPreviewMainCanvas.FitToScreen();
+                    else if (_liveCameraManager.IsLiveGrabbing)
+                        _liveCameraManager.ResetMainDisplayView();
+                }
+                else if (_panelClickCount >= 3)
+                {
+                    // 三擊：實體倍率 1x
+                    _panelClickCount = 0;
+                    if (_liveCameraManager.IsLiveGrabbing)
+                        _liveCameraManager.SetPhysicalMagnification1x();
+                    else if (_bgPreviewMainCanvas != null && _bgPreviewActive)
+                        SetBgPreviewPhysicalMag1x();
+                }
+            };
 
             FormClosed += (_, __) =>
             {
@@ -792,12 +841,13 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        /// <summary>SmartCanvas 滑鼠移動時更新 lblPixelInfo。</summary>
+        /// <summary>SmartCanvas 滑鼠移動時更新 lblPixelInfo（與 canvasMain 同格式：mm 座標 + 範圍 + 倍率）。</summary>
         private void BgPreviewCanvas_StatusChanged(CanvasInfo info)
         {
             if (lblPixelInfo == null) return;
 
-            int camId = _bgPreviewSelectedCamIndex + 1;
+            int camIdx = _bgPreviewSelectedCamIndex;
+            int camId = camIdx + 1;
             string text;
             if (info.ImageX < 0 || info.ImageY < 0 ||
                 _bgPreviewMainCanvas?.Image == null ||
@@ -806,16 +856,101 @@ namespace AniloxRoll.Monitor.Forms
             {
                 text = $"背景預覽 [CAM {camId}] | 游標超出影像範圍";
             }
+            else if (_settings == null)
+            {
+                int gray = info.PixelColor.R;
+                text = $"背景預覽 [CAM {camId}] | 座標: ({info.ImageX}, {info.ImageY}) | 亮度: {gray} | 縮放: {info.Zoom:F2}x";
+            }
             else
             {
-                int gray = info.PixelColor.R;  // 8bpp grayscale: R=G=B
-                text = $"背景預覽 [CAM {camId}] | X: {info.ImageX}, Y: {info.ImageY} | 灰階值: {gray} | 縮放: {info.Zoom:F2}x";
+                double[] opsUmArr  = _settings.GetCameraOpsUmArray();
+                double[] startMmArr = _settings.GetCameraStartPositionMmArray();
+                if (camIdx < 0 || camIdx >= opsUmArr.Length)
+                {
+                    int gray = info.PixelColor.R;
+                    text = $"背景預覽 [CAM {camId}] | 座標: ({info.ImageX}, {info.ImageY}) | 亮度: {gray} | 縮放: {info.Zoom:F2}x";
+                }
+                else
+                {
+                    double opsInMm    = opsUmArr[camIdx] / 1000.0;
+                    double startPosMm = startMmArr[camIdx];
+
+                    // 背景圖為全解析度，scaleFactor = 1
+                    double physicalX = startPosMm + info.ImageX * opsInMm;
+                    double rowPitchMm = _interactionHelper?.RowPitchMm ?? 0;
+                    double physicalY = info.ImageY * rowPitchMm;
+
+                    // 視野範圍
+                    double viewLeftMm = 0, viewRightMm = 0;
+                    double viewTopMm = 0, viewBotMm = 0;
+                    if (info.Zoom > 0)
+                    {
+                        double pixelLeft  = (0                            - info.PanOffset.X) / info.Zoom;
+                        double pixelRight = (_bgPreviewMainCanvas.Width   - info.PanOffset.X) / info.Zoom;
+                        viewLeftMm  = startPosMm + pixelLeft  * opsInMm;
+                        viewRightMm = startPosMm + pixelRight * opsInMm;
+
+                        if (rowPitchMm > 0)
+                        {
+                            double pixelTop = (0                            - info.PanOffset.Y) / info.Zoom;
+                            double pixelBot = (_bgPreviewMainCanvas.Height  - info.PanOffset.Y) / info.Zoom;
+                            viewTopMm = pixelTop * rowPitchMm;
+                            viewBotMm = pixelBot * rowPitchMm;
+                        }
+                    }
+
+                    // 實體倍率
+                    double screenMmPerPx = _interactionHelper?.ScreenMmPerPixel ?? 0;
+                    string magStr = "-";
+                    if (info.Zoom > 0 && screenMmPerPx > 0 && opsInMm > 0)
+                    {
+                        double physicalMag = (info.Zoom * screenMmPerPx) / opsInMm;
+                        magStr = $"{physicalMag:F2}x";
+                    }
+
+                    text = $"背景預覽 [CAM {camId}] | " +
+                           $"位置:({physicalX:F2}, {physicalY:F2}) mm | " +
+                           $"X範圍:{viewLeftMm:F1}~{viewRightMm:F1} mm | " +
+                           $"Y範圍:{viewTopMm:F1}~{viewBotMm:F1} mm | " +
+                           $"座標: ({info.ImageX}, {info.ImageY}) | " +
+                           $"亮度: {info.PixelColor.R} | " +
+                           $"實體倍率:{magStr}";
+                }
             }
 
             if (InvokeRequired)
                 BeginInvoke(new Action(() => lblPixelInfo.Text = text));
             else
                 lblPixelInfo.Text = text;
+        }
+
+        /// <summary>背景預覽模式：將 panelMainDisplay 上的 SmartCanvas 設為實體倍率 1x（畫面中心不動）。</summary>
+        private void SetBgPreviewPhysicalMag1x()
+        {
+            if (_bgPreviewMainCanvas?.Image == null || _settings == null) return;
+
+            int camIdx = _bgPreviewSelectedCamIndex;
+            double[] opsUmArr = _settings.GetCameraOpsUmArray();
+            if (camIdx < 0 || camIdx >= opsUmArr.Length) return;
+
+            double opsInMm = opsUmArr[camIdx] / 1000.0;
+            double screenMmPerPx = _interactionHelper?.ScreenMmPerPixel ?? 0;
+            if (opsInMm <= 0 || screenMmPerPx <= 0) return;
+
+            // scaleFactor=1 for background preview
+            float zoom1x = (float)(opsInMm / screenMmPerPx);
+
+            // keep center of current view stable
+            float oldZoom = _bgPreviewMainCanvas.Zoom;
+            PointF oldPan = _bgPreviewMainCanvas.PanOffset;
+            float cx = _bgPreviewMainCanvas.Width / 2f;
+            float cy = _bgPreviewMainCanvas.Height / 2f;
+            float imgCx = (cx - oldPan.X) / oldZoom;
+            float imgCy = (cy - oldPan.Y) / oldZoom;
+            float newPanX = cx - imgCx * zoom1x;
+            float newPanY = cy - imgCy * zoom1x;
+
+            _bgPreviewMainCanvas.SetView(zoom1x, new PointF(newPanX, newPanY));
         }
 
         /// <summary>
@@ -1375,6 +1510,7 @@ namespace AniloxRoll.Monitor.Forms
                 listViewHardware.Items.Add(new ListViewItem(new[] { "mm/px",        $"{screenMmPerPx:F4}" }));
 
                 _interactionHelper?.SetScreenMmPerPixel(screenMmPerPx);
+                _liveCameraManager?.SetScreenMmPerPixel(screenMmPerPx);
             }
             catch { /* 非關鍵資訊，忽略 */ }
             AutoFitListViewColumns(listViewHardware);
@@ -2707,13 +2843,18 @@ namespace AniloxRoll.Monitor.Forms
             chartDaily.MouseClick   += PeriodChart_ToggleAutoScale;
         }
 
+        private int _lastChartToggleTick;
+
         private void PeriodChart_ToggleAutoScale(object sender, System.Windows.Forms.MouseEventArgs e)
         {
+            int now = Environment.TickCount;
+            if (now - _lastChartToggleTick < 500) return;
+            _lastChartToggleTick = now;
+
             var chart = (System.Windows.Forms.DataVisualization.Charting.Chart)sender;
             if (chart.ChartAreas.Count == 0) return;
 
-            bool isAuto = "auto".Equals(chart.Tag)
-                       || _settings.Chart.ScaleMode == ChartScaleMode.Auto;
+            bool isAuto = "auto".Equals(chart.Tag);
 
             if (isAuto)
             {
@@ -2724,8 +2865,7 @@ namespace AniloxRoll.Monitor.Forms
             }
             else
             {
-                chart.Tag = "auto";
-                // 從目前資料重新計算自動範圍
+                // 從目前資料重新計算自動範圍（ApplyAutoScale 內設 Tag="auto"）
                 var data = new List<PeriodStats>();
                 var sPass = chart.Series["合格"];
                 var sFail = chart.Series["異常"];
@@ -2865,6 +3005,7 @@ namespace AniloxRoll.Monitor.Forms
             System.Windows.Forms.DataVisualization.Charting.Chart chart,
             List<PeriodStats> data)
         {
+            chart.Tag = "auto";
             int maxTotal = 0;
             foreach (var p in data)
                 maxTotal = Math.Max(maxTotal, p.Pass + p.Fail);

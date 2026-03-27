@@ -286,7 +286,15 @@ IsReleasing = true  →  Timer.Stop()
 
 ## MIL Display Zoom/Pan 查詢（Live Chart 對齊）
 
-`panelMainDisplay` 使用 MIL `M_SCALE_DISPLAY` + `M_CENTER_DISPLAY` + `M_MOUSE_USE`，使用者可用滾輪縮放/平移。
+`panelMainDisplay` 使用 MIL `M_SCALE_DISPLAY` + `M_CENTER_DISPLAY` + `M_MOUSE_USE`。
+
+**自訂滾輪縮放**：`WheelZoomFilter`（`IMessageFilter`）攔截 `WM_MOUSEWHEEL`，以 1.1x 步長取代 MIL 預設的整數倍跳躍。
+- `ApplyCustomZoom` 呼叫 `AniloxCamera.SetSecondaryDisplayZoom`，以 `M_UPDATE DISABLE/ENABLE` 批次更新避免閃爍。
+- `IntPtr.ToInt64()` 取代 `(int)WParam` 避免 x64 `OverflowException`。
+
+**重置 / 實體倍率 1x**：
+- `ResetMainDisplayView()`：`M_SCALE_DISPLAY M_ONCE` + `M_CENTER_DISPLAY M_ENABLE`（fit-to-window + 置中）
+- `SetPhysicalMagnification1x()`：`zoom = opsInMm / screenMmPerPx`，以面板中心為基準計算 pan。
 
 ### 解法：MdispInquire 即時查詢
 

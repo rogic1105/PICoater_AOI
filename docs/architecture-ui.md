@@ -337,7 +337,19 @@ Y 軸用 `_savedYCenterFraction`（圖片高度中心分率）保持垂直位置
 - Status bar：`位置:(X, Y) mm | X範圍 | Y範圍 | 座標 | 亮度 | 實體倍率`
   - 實體倍率 = `(zoom × screenMmPerPx) / (imageScaleFactor × opsInMm)`，1.0x = 螢幕 1cm = 實際 1cm
   - `screenMmPerPx` 由 `GetDeviceCaps(HORZSIZE/HORZRES)` 計算，啟動時傳入 CanvasInteractionHelper
+  - panelMainDisplay 背景預覽 / MIL 即時影像也使用相同格式的 status bar
 - `_suppressChartSync` flag 防止 FitToScreen/SetView 觸發的 StatusChanged 與手動 chart 更新衝突
+
+**滑鼠手勢**：
+- canvasMain / panelMainDisplay：雙擊 → FitToScreen，三擊 → 實體倍率 1x（畫面中心不動）
+  - canvasMain：`CanvasInteractionHelper.SetPhysicalMagnification1x()` — `zoom = scaleFactor × opsInMm / screenMmPerPx`
+  - panelMainDisplay（MIL live）：`LiveCameraManager.SetPhysicalMagnification1x()` — `zoom = opsInMm / screenMmPerPx`
+  - panelMainDisplay（背景預覽）：`SetBgPreviewPhysicalMag1x()` — 同公式，scaleFactor=1
+
+**Period Chart Y 軸 Auto/Fixed 切換**：
+- 每張 chart 以 `chart.Tag = "auto"` / `null` 作為單一狀態源（不依賴全域 `_settings.Chart.ScaleMode`）
+- `ApplyAutoScale` 設定 `chart.Tag = "auto"`，避免 Fixed→Auto 切換需要兩次點擊
+- 500ms throttle（`_lastChartToggleTick`）防止快速連點
 
 ### RowMuraChartHelper InnerPlotPosition 補償
 
