@@ -30,15 +30,20 @@ namespace AniloxRoll.Monitor.Core.Services
 
         private bool _lastDiStart;
         private bool _isPcAlive;
-        private string _currentState = "Initial";
-        private string _plcIp = "192.168.1.1";
+        private PlcState _currentState = PlcState.Disconnected;
+        private string _plcIp = "192.168.255.1";
         private int _plcPort = 502;
+
+        // DO 狀態追蹤（供 IO 快照使用）
+        private bool _doPcAlive;
+        private bool _doMura;
+        private bool _doPcBusy;
 
         /// <summary>PLC 是否已連線。</summary>
         public bool IsConnected => _plc.IsConnected;
 
         /// <summary>目前 FSM 狀態。</summary>
-        public string CurrentState => _currentState;
+        public PlcState CurrentState => _currentState;
 
         /// <summary>PLC START 上升緣 → 要求開始 Grab。</summary>
         public event Action OnStartRequested;
@@ -47,10 +52,13 @@ namespace AniloxRoll.Monitor.Core.Services
         public event Action OnStopRequested;
 
         /// <summary>狀態變更通知（UI 更新用）。</summary>
-        public event Action<string> OnStateChanged;
+        public event Action<PlcState> OnStateChanged;
 
         /// <summary>連線狀態變更（connected / disconnected）。</summary>
         public event Action<bool> OnConnectionChanged;
+
+        /// <summary>每次 PollTick 結束時發送所有 IO 快照。</summary>
+        public event Action<PlcIoSnapshot> OnIoUpdated;
 
         public PlcGrabController()
         {
@@ -63,7 +71,7 @@ namespace AniloxRoll.Monitor.Core.Services
             _reconnectTimer.Tick += async (s, e) => await ReconnectTick();
         }
 
-        /// <summary>啟動：嘗試連線 PLC，成功則進入 Ready 狀態，失敗則啟動背景重連。</summary>
+        /// <summary>啟動：嘗試連線 PLC，成功則進入 Idle 狀態，失敗則啟動背景重連。</summary>
         public async Task StartAsync(string ip, int port = 502)
         {
             _plcIp = ip;
@@ -72,7 +80,7 @@ namespace AniloxRoll.Monitor.Core.Services
             bool ok = await _plc.ConnectAsync(ip, port, 3000);
             if (ok)
             {
-                await EnterReady();
+                await EnterIdle();
                 _pollTimer.Start();
                 OnConnectionChanged?.Invoke(true);
                 PlcLogger.Info($"PLC connected: {ip}:{port}");
@@ -100,7 +108,10 @@ namespace AniloxRoll.Monitor.Core.Services
                 catch { }
             }
             _isPcAlive = false;
-            SetState("Closed");
+            _doPcAlive = false;
+            _doMura = false;
+            _doPcBusy = false;
+            SetState(PlcState.Closed);
             _plc.Dispose();
             OnConnectionChanged?.Invoke(false);
         }
@@ -109,7 +120,11 @@ namespace AniloxRoll.Monitor.Core.Services
         public async Task NotifyGrabStarted()
         {
             if (!_plc.IsConnected) return;
-            try { await _plc.WriteDo(DO_PC_BUSY, true); }
+            try
+            {
+                await _plc.WriteDo(DO_PC_BUSY, true);
+                _doPcBusy = true;
+            }
             catch (Exception ex) { PlcLogger.Error("WriteDo PC_BUSY=true failed", ex); }
         }
 
@@ -117,7 +132,11 @@ namespace AniloxRoll.Monitor.Core.Services
         public async Task NotifyGrabStopped()
         {
             if (!_plc.IsConnected) return;
-            try { await _plc.WriteDo(DO_PC_BUSY, false); }
+            try
+            {
+                await _plc.WriteDo(DO_PC_BUSY, false);
+                _doPcBusy = false;
+            }
             catch (Exception ex) { PlcLogger.Error("WriteDo PC_BUSY=false failed", ex); }
         }
 
@@ -125,7 +144,11 @@ namespace AniloxRoll.Monitor.Core.Services
         public async Task NotifyMuraDetected()
         {
             if (!_plc.IsConnected) return;
-            try { await _plc.WriteDo(DO_MURA, true); }
+            try
+            {
+                await _plc.WriteDo(DO_MURA, true);
+                _doMura = true;
+            }
             catch (Exception ex) { PlcLogger.Error("WriteDo MURA=true failed", ex); }
         }
 
@@ -133,23 +156,30 @@ namespace AniloxRoll.Monitor.Core.Services
         public async Task ClearMura()
         {
             if (!_plc.IsConnected) return;
-            try { await _plc.WriteDo(DO_MURA, false); }
+            try
+            {
+                await _plc.WriteDo(DO_MURA, false);
+                _doMura = false;
+            }
             catch (Exception ex) { PlcLogger.Error("WriteDo MURA=false failed", ex); }
         }
 
         // ── 內部 FSM ──────────────────────────────────────────────────
 
-        private async Task EnterReady()
+        private async Task EnterIdle()
         {
             await _plc.WriteDo(DO_PC_ALIVE, true);
             _isPcAlive = true;
+            _doPcAlive = true;
             await _plc.WriteDo(DO_MURA, false);
+            _doMura = false;
             await _plc.WriteDo(DO_PC_BUSY, false);
+            _doPcBusy = false;
             _lastDiStart = false;
-            SetState("Ready");
+            SetState(PlcState.Idle);
         }
 
-        private void SetState(string state)
+        private void SetState(PlcState state)
         {
             if (_currentState == state) return;
             PlcLogger.Info($"PLC State: {_currentState} -> {state}");
@@ -157,78 +187,103 @@ namespace AniloxRoll.Monitor.Core.Services
             OnStateChanged?.Invoke(state);
         }
 
+        private void FireIoSnapshot(bool diPlcAlive, bool diStart)
+        {
+            OnIoUpdated?.Invoke(new PlcIoSnapshot
+            {
+                DiPlcAlive = diPlcAlive,
+                DiStart    = diStart,
+                DoPcAlive  = _doPcAlive,
+                DoMura     = _doMura,
+                DoPcBusy   = _doPcBusy
+            });
+        }
+
         private async Task PollTick()
         {
             _pollTimer.Stop();
             try
             {
+                // ReadDiStatuses 產生 Modbus 流量，同時餵 ET-7044 Host Watchdog
                 var diStates = await _plc.ReadDiStatuses();
                 if (diStates == null || diStates.Length < 2) return;
 
                 bool plcAlive = diStates[DI_PLC_ALIVE];
                 bool diStart  = diStates[DI_START];
 
-                // PLC ALIVE 消失 → PLCErr
-                if (_isPcAlive && !plcAlive && _currentState != "PLCErr" && _currentState != "PCErr")
+                // PLC ALIVE 消失 → Faulted
+                if (_isPcAlive && !plcAlive && _currentState != PlcState.Faulted && _currentState != PlcState.CommLost)
                 {
-                    PlcLogger.Warn("PLC ALIVE lost → PLCErr");
-                    SetState("PLCErr");
+                    PlcLogger.Warn("PLC ALIVE lost → Faulted");
+                    SetState(PlcState.Faulted);
                     try
                     {
                         await _plc.WriteDo(DO_MURA, false);
+                        _doMura = false;
                         await _plc.WriteDo(DO_PC_BUSY, false);
+                        _doPcBusy = false;
                     }
                     catch { }
                     OnStopRequested?.Invoke();
+                    FireIoSnapshot(plcAlive, diStart);
                     _pollTimer.Start();
                     return;
                 }
 
                 // PLC ALIVE 恢復
-                if (_currentState == "PLCErr" && plcAlive && _isPcAlive)
+                if (_currentState == PlcState.Faulted && plcAlive && _isPcAlive)
                 {
-                    PlcLogger.Info("PLC ALIVE restored → Ready");
-                    SetState("Ready");
+                    PlcLogger.Info("PLC ALIVE restored → Idle");
+                    SetState(PlcState.Idle);
                     _lastDiStart = diStart;
+                    FireIoSnapshot(plcAlive, diStart);
                     _pollTimer.Start();
                     return;
                 }
 
-                if (_currentState == "PLCErr" || _currentState == "PCErr")
+                if (_currentState == PlcState.Faulted || _currentState == PlcState.CommLost)
                 {
+                    FireIoSnapshot(plcAlive, diStart);
                     _pollTimer.Start();
                     return;
                 }
 
                 // START 上升緣 → 開始 Grab
-                if (!_lastDiStart && diStart && (_currentState == "Ready"))
+                if (!_lastDiStart && diStart && _currentState == PlcState.Idle)
                 {
                     PlcLogger.Info("START rising edge → Start Grab");
-                    SetState("Run");
+                    SetState(PlcState.Running);
                     OnStartRequested?.Invoke();
                 }
 
                 // START 下降緣 → 停止 Grab
-                if (_lastDiStart && !diStart && (_currentState == "Run" || _currentState == "MURA"))
+                if (_lastDiStart && !diStart && (_currentState == PlcState.Running || _currentState == PlcState.Faulted))
                 {
                     PlcLogger.Info("START falling edge → Stop Grab");
-                    SetState("Stop");
+                    SetState(PlcState.Stopping);
                     OnStopRequested?.Invoke();
                     await ClearMura();
                     await NotifyGrabStopped();
-                    SetState("Ready");
+                    // Keepalive：多次 WriteDo 後補一次讀取，確保 1.5s Watchdog 不逾時
+                    await _plc.ReadDiStatuses();
+                    SetState(PlcState.Idle);
                 }
 
                 _lastDiStart = diStart;
+                FireIoSnapshot(plcAlive, diStart);
                 _pollTimer.Start();
             }
             catch (Exception ex)
             {
-                PlcLogger.Error("PLC polling error → PCErr", ex);
-                SetState("PCErr");
+                PlcLogger.Error("PLC polling error → CommLost", ex);
+                SetState(PlcState.CommLost);
                 _isPcAlive = false;
+                _doPcAlive = false;
+                _doMura = false;
+                _doPcBusy = false;
                 OnConnectionChanged?.Invoke(false);
                 OnStopRequested?.Invoke();
+                FireIoSnapshot(false, false);
                 _plc.Dispose();
                 _reconnectTimer.Start();
             }
@@ -241,7 +296,7 @@ namespace AniloxRoll.Monitor.Core.Services
             if (ok)
             {
                 PlcLogger.Info("PLC reconnected successfully.");
-                await EnterReady();
+                await EnterIdle();
                 _pollTimer.Start();
                 OnConnectionChanged?.Invoke(true);
             }

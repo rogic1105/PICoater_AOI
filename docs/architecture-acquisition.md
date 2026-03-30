@@ -524,15 +524,31 @@ ApplyGrabState()（第一次 MdigGrab）：
 | DO-1 | PC → PLC | MURA（檢測到瑕疵 = High） |
 | DO-2 | PC → PLC | PC BUSY（Grab 中 = High） |
 
-### FSM 狀態
+### PlcState Enum（FSM 狀態）
+
+定義於 `Services/PlcState.cs`：
+
+| Enum | 中文 | 說明 | DO 輸出 |
+|------|------|------|---------|
+| `Disconnected` | 未連線 | 初始/連線失敗，背景重連 | 全 LOW |
+| `Idle` | 待機 | 已連線，等待 DI_START ↑ | PC_ALIVE=1 |
+| `Running` | 取像中 | Grab 執行中 | PC_ALIVE=1, BUSY=1 |
+| `Stopping` | 停止中 | 過渡態：清除後回 Idle | (過渡) |
+| `Faulted` | PLC 故障 | DI_PLC_ALIVE 消失 | PC_ALIVE=1 (保持) |
+| `CommLost` | 通訊中斷 | TCP 例外，自動重連 | 全 LOW |
+| `Closed` | 已關閉 | StopAsync() 呼叫 | 全 LOW |
 
 ```
-Initial → Ready ←→ Run → Stop → Ready
-           ↕               ↕
-         PLCErr           MURA
-           ↕
-         PCErr (自動重連)
+Disconnected → Idle ←→ Running → Stopping → Idle
+                ↕                    ↕
+              Faulted              MURA (via NotifyMuraDetected)
+                ↕
+              CommLost (自動重連)
 ```
+
+### PlcIoSnapshot
+
+`PlcGrabController` 每次 PollTick 結束時透過 `OnIoUpdated` 事件發布 `PlcIoSnapshot`（5 個 bool：DiPlcAlive, DiStart, DoPcAlive, DoMura, DoPcBusy），UI 據此更新 IO LED 燈號。
 
 ### 整合流程
 
@@ -541,6 +557,11 @@ Initial → Ready ←→ Run → Stop → Ready
 3. 連上後 `btnCameraGrab` 顯示 "PLC 控制中"，DI START 上升緣 → `btnCameraGrab_Click`，下降緣 → 再次觸發停止
 4. 斷線自動退回 UI 按鈕模式
 5. MURA 判定：`meanPeak > ErrorValueMean || maxPeak > ErrorValueMax` → `NotifyMuraDetected()`
+6. panelStatusBar 顯示：`lblPlcConn`（連線燈）+ `lblPlcState`（FSM 狀態燈）+ 5 顆 IO LED + `lblStatusGrab`（Grab 狀態）
+
+### Watchdog 注意事項
+
+ET-7044 Host Watchdog（暫存器 40257）在無 Modbus 流量時觸發 DO Safe Value（全 OFF）。Stop 序列含多次 WriteDo，`PlcGrabController` 在 Stop 結束後補一次 `ReadDiStatuses()` 作為 keepalive，避免逾時。
 
 ### PlcBridge.Core
 

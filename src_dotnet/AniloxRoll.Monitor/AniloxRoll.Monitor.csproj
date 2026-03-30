@@ -102,6 +102,7 @@
     <Compile Include="Services\CsvConfigSnapshot.cs" />
     <Compile Include="Services\InspectionLogService.cs" />
     <Compile Include="Services\PlcGrabController.cs" />
+    <Compile Include="Services\PlcState.cs" />
     <Compile Include="Services\InspectionStatisticsService.cs" />
     <Compile Include="Services\PlcService.cs" />
     <Compile Include="ImageProcessing\BatchInspectionService.cs" />

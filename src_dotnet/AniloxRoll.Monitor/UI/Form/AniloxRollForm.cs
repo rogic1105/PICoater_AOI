@@ -167,7 +167,7 @@ namespace AniloxRoll.Monitor.Forms
 
             _plcGrabController.OnStateChanged += state =>
             {
-                if (InvokeRequired) { BeginInvoke(new Action<string>(UpdatePlcStateLabel), state); return; }
+                if (InvokeRequired) { BeginInvoke(new Action<PlcState>(UpdatePlcStateLabel), state); return; }
                 UpdatePlcStateLabel(state);
             };
 
@@ -175,6 +175,12 @@ namespace AniloxRoll.Monitor.Forms
             {
                 if (InvokeRequired) { BeginInvoke(new Action<bool>(UpdatePlcConnectionUi), connected); return; }
                 UpdatePlcConnectionUi(connected);
+            };
+
+            _plcGrabController.OnIoUpdated += snapshot =>
+            {
+                if (InvokeRequired) { BeginInvoke(new Action<PlcIoSnapshot>(UpdatePlcIoLeds), snapshot); return; }
+                UpdatePlcIoLeds(snapshot);
             };
 
             // 背景嘗試連線（不阻塞 Form 顯示）
@@ -195,28 +201,76 @@ namespace AniloxRoll.Monitor.Forms
             _ = _plcGrabController?.NotifyGrabStopped();
         }
 
-        private void UpdatePlcStateLabel(string state)
+        private void UpdatePlcStateLabel(PlcState state)
         {
-            lblStatusGrab.Text = _plcGrabController?.IsConnected == true
-                ? $"● PLC: {state}"
-                : lblStatusGrab.Text;
+            string text;
+            Color bgColor;
+            switch (state)
+            {
+                case PlcState.Idle:
+                    text = "Idle 待機";
+                    bgColor = Color.FromArgb(56, 142, 60);   // IEC 綠
+                    break;
+                case PlcState.Running:
+                    text = "Running 取像中";
+                    bgColor = Color.FromArgb(0, 122, 204);   // 藍
+                    break;
+                case PlcState.Stopping:
+                    text = "Stopping 停止中";
+                    bgColor = Color.FromArgb(249, 168, 37);  // IEC 黃
+                    break;
+                case PlcState.Faulted:
+                    text = "Faulted PLC故障";
+                    bgColor = Color.FromArgb(198, 40, 40);   // IEC 紅
+                    break;
+                case PlcState.CommLost:
+                    text = "CommLost 通訊中斷";
+                    bgColor = Color.FromArgb(198, 40, 40);   // IEC 紅
+                    break;
+                default: // Disconnected, Closed
+                    text = state.ToString();
+                    bgColor = Color.FromArgb(117, 117, 117); // 灰
+                    break;
+            }
+            lblPlcState.Text = $"● {text}";
+            lblPlcState.BackColor = bgColor;
         }
 
         private void UpdatePlcConnectionUi(bool connected)
         {
-            // PLC 連上時 btnCameraGrab 顯示為 PLC 控制模式
             if (connected)
             {
+                lblPlcConn.Text = "● PLC 已連線";
+                lblPlcConn.BackColor = Color.FromArgb(56, 142, 60);  // IEC 綠
                 btnCameraGrab.Text = "PLC 控制中";
                 btnCameraGrab.BackColor = Color.FromArgb(0, 122, 204);
                 btnCameraGrab.ForeColor = Color.White;
             }
             else
             {
+                lblPlcConn.Text = "● PLC 離線";
+                lblPlcConn.BackColor = Color.FromArgb(117, 117, 117);
                 UpdateGrabButton(_liveCameraManager?.IsLiveGrabbing ?? false);
                 btnCameraGrab.BackColor = SystemColors.Control;
                 btnCameraGrab.ForeColor = SystemColors.ControlText;
             }
+        }
+
+        private void UpdatePlcIoLeds(PlcIoSnapshot io)
+        {
+            SetIoLed(lblIoDiAlive,   io.DiPlcAlive);
+            SetIoLed(lblIoDiStart,   io.DiStart);
+            SetIoLed(lblIoDoPcAlive, io.DoPcAlive);
+            SetIoLed(lblIoDoMura,    io.DoMura);
+            SetIoLed(lblIoDoPcBusy,  io.DoPcBusy);
+        }
+
+        private static readonly Color _ledOn  = Color.FromArgb(56, 142, 60);  // IEC 綠
+        private static readonly Color _ledOff = Color.FromArgb(60, 60, 60);   // 暗灰
+
+        private static void SetIoLed(Label lbl, bool on)
+        {
+            lbl.BackColor = on ? _ledOn : _ledOff;
         }
 
         /// <summary>UI 層：Presenter、Helper、PropertyGrid、Canvas 事件。</summary>

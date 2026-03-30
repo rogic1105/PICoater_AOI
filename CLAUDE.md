@@ -53,7 +53,8 @@ PICoater_AOI/
 | `Services/AoiService.cs` | C# ↔ Native P/Invoke wrapper（ProcessImage + ComputeColumnMean） |
 | `Services/InspectionLogService.cs` | 每日 CSV 寫入 |
 | `Services/InspectionStatisticsService.cs` | CSV 統計服務 |
-| `Services/PlcGrabController.cs` | PLC-Grab 連動：DI START 邊緣觸發、FSM、自動重連 |
+| `Services/PlcState.cs` | PlcState enum（FSM 狀態）+ PlcIoSnapshot struct（IO 快照） |
+| `Services/PlcGrabController.cs` | PLC-Grab 連動：PlcState FSM、IO 追蹤、Watchdog keepalive |
 | `Services/CsvConfigSnapshot.cs` | 不可變設定快照 |
 | `UI/Widgets/GrabImageStitcher.cs` | 多張影像垂直拼接 |
 | `UI/Widgets/ProportionalScaler.cs` | Form 等比例縮放 |
@@ -73,7 +74,8 @@ PICoater_AOI/
 |------|------|---------|
 | [`docs/architecture-ui.md`](docs/architecture-ui.md) | 右側面板、tabMain、控制項觸發關係圖、Guard flags、V/H 顯示決策矩陣、ProportionalScaler | 修改 UI 控制項、事件流程、Form 佈局時 |
 | [`docs/architecture-image-pipeline.md`](docs/architecture-image-pipeline.md) | GPU pipeline、Buffer 映射、V/H ridge、存檔格式、.bin 格式、ImageRepository、StandardBgSub | 修改影像處理、存檔格式、pipeline 參數、背景去除模式時 |
-| [`docs/architecture-acquisition.md`](docs/architecture-acquisition.md) | MIL 取像、AniloxCamera、CLProtocol、Telemetry、SetGrabHeight、MilGrabSample、PLC 連動 | 修改相機控制、MIL 資源管理、Telemetry、PLC 整合時 |
+| [`docs/architecture-acquisition.md`](docs/architecture-acquisition.md) | MIL 取像、AniloxCamera、CLProtocol、Telemetry、SetGrabHeight、MilGrabSample、PLC 連動（PlcState FSM、IO 快照、Watchdog） | 修改相機控制、MIL 資源管理、Telemetry、PLC 整合時 |
+| [`docs/plc_diagrams.html`](docs/plc_diagrams.html) | PLC FSM 視覺化：State Machine / SFC / Ladder / Timing 圖（純 SVG/HTML，離線可看） | 檢視 PLC 狀態機邏輯時 |
 | [`docs/architecture-data-stats.md`](docs/architecture-data-stats.md) | tabPageData、統計模式、CSV 架構、Period Charts | 修改統計功能、CSV 格式、圖表時 |
 | [`docs/MIL_API_Reference.md`](docs/MIL_API_Reference.md) | MIL .NET API 完整參考（常數、方法、範例） | 查詢 MIL API 用法時 |
 

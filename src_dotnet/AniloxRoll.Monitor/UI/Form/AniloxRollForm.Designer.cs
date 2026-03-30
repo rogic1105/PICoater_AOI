@@ -252,6 +252,14 @@
             this.listViewCameras = new System.Windows.Forms.ListView();
             this.lblCamHardware = new System.Windows.Forms.Label();
             this.panelStatusBar = new System.Windows.Forms.Panel();
+            this.lblPlcConn = new System.Windows.Forms.Label();
+            this.lblPlcState = new System.Windows.Forms.Label();
+            this.panelPlcIo = new System.Windows.Forms.Panel();
+            this.lblIoDiAlive = new System.Windows.Forms.Label();
+            this.lblIoDiStart = new System.Windows.Forms.Label();
+            this.lblIoDoPcAlive = new System.Windows.Forms.Label();
+            this.lblIoDoMura = new System.Windows.Forms.Label();
+            this.lblIoDoPcBusy = new System.Windows.Forms.Label();
             this.lblStatusGrab = new System.Windows.Forms.Label();
             this.backgroundWorker1 = new System.ComponentModel.BackgroundWorker();
             this.tabMain.SuspendLayout();
@@ -353,6 +361,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam1)).BeginInit();
             this.tabPageSystem.SuspendLayout();
             this.panelStatusBar.SuspendLayout();
+            this.panelPlcIo.SuspendLayout();
             this.SuspendLayout();
             // 
             // tabMain
@@ -2853,26 +2862,141 @@
             this.lblCamHardware.Size = new System.Drawing.Size(103, 15);
             this.lblCamHardware.TabIndex = 0;
             this.lblCamHardware.Text = "【相機設定】";
-            // 
+            //
             // panelStatusBar
-            // 
+            // (Dock=Left 子控制項由最後加入者排最左)
+            //
             this.panelStatusBar.Controls.Add(this.lblStatusGrab);
+            this.panelStatusBar.Controls.Add(this.panelPlcIo);
+            this.panelStatusBar.Controls.Add(this.lblPlcState);
+            this.panelStatusBar.Controls.Add(this.lblPlcConn);
             this.panelStatusBar.Dock = System.Windows.Forms.DockStyle.Top;
             this.panelStatusBar.Location = new System.Drawing.Point(0, 0);
             this.panelStatusBar.Name = "panelStatusBar";
             this.panelStatusBar.Size = new System.Drawing.Size(1262, 32);
             this.panelStatusBar.TabIndex = 17;
-            // 
+            //
+            // lblPlcConn
+            //
+            this.lblPlcConn.BackColor = System.Drawing.Color.FromArgb(117, 117, 117);
+            this.lblPlcConn.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lblPlcConn.Dock = System.Windows.Forms.DockStyle.Left;
+            this.lblPlcConn.ForeColor = System.Drawing.Color.White;
+            this.lblPlcConn.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F);
+            this.lblPlcConn.Location = new System.Drawing.Point(0, 0);
+            this.lblPlcConn.Name = "lblPlcConn";
+            this.lblPlcConn.Size = new System.Drawing.Size(130, 32);
+            this.lblPlcConn.TabIndex = 1;
+            this.lblPlcConn.Text = "● PLC: --";
+            this.lblPlcConn.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            //
+            // lblPlcState
+            //
+            this.lblPlcState.BackColor = System.Drawing.Color.FromArgb(117, 117, 117);
+            this.lblPlcState.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lblPlcState.Dock = System.Windows.Forms.DockStyle.Left;
+            this.lblPlcState.ForeColor = System.Drawing.Color.White;
+            this.lblPlcState.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F);
+            this.lblPlcState.Location = new System.Drawing.Point(130, 0);
+            this.lblPlcState.Name = "lblPlcState";
+            this.lblPlcState.Size = new System.Drawing.Size(150, 32);
+            this.lblPlcState.TabIndex = 2;
+            this.lblPlcState.Text = "● State: --";
+            this.lblPlcState.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            //
+            // panelPlcIo
+            //
+            this.panelPlcIo.Controls.Add(this.lblIoDoPcBusy);
+            this.panelPlcIo.Controls.Add(this.lblIoDoMura);
+            this.panelPlcIo.Controls.Add(this.lblIoDoPcAlive);
+            this.panelPlcIo.Controls.Add(this.lblIoDiStart);
+            this.panelPlcIo.Controls.Add(this.lblIoDiAlive);
+            this.panelPlcIo.Dock = System.Windows.Forms.DockStyle.Left;
+            this.panelPlcIo.Location = new System.Drawing.Point(280, 0);
+            this.panelPlcIo.Name = "panelPlcIo";
+            this.panelPlcIo.Size = new System.Drawing.Size(280, 32);
+            this.panelPlcIo.TabIndex = 3;
+            //
+            // lblIoDiAlive
+            //
+            this.lblIoDiAlive.BackColor = System.Drawing.Color.FromArgb(60, 60, 60);
+            this.lblIoDiAlive.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lblIoDiAlive.Dock = System.Windows.Forms.DockStyle.Left;
+            this.lblIoDiAlive.Font = new System.Drawing.Font("Microsoft Sans Serif", 7F);
+            this.lblIoDiAlive.ForeColor = System.Drawing.Color.White;
+            this.lblIoDiAlive.Location = new System.Drawing.Point(0, 0);
+            this.lblIoDiAlive.Name = "lblIoDiAlive";
+            this.lblIoDiAlive.Size = new System.Drawing.Size(56, 32);
+            this.lblIoDiAlive.TabIndex = 0;
+            this.lblIoDiAlive.Text = "DI0\r\nALIVE";
+            this.lblIoDiAlive.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            //
+            // lblIoDiStart
+            //
+            this.lblIoDiStart.BackColor = System.Drawing.Color.FromArgb(60, 60, 60);
+            this.lblIoDiStart.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lblIoDiStart.Dock = System.Windows.Forms.DockStyle.Left;
+            this.lblIoDiStart.Font = new System.Drawing.Font("Microsoft Sans Serif", 7F);
+            this.lblIoDiStart.ForeColor = System.Drawing.Color.White;
+            this.lblIoDiStart.Location = new System.Drawing.Point(56, 0);
+            this.lblIoDiStart.Name = "lblIoDiStart";
+            this.lblIoDiStart.Size = new System.Drawing.Size(56, 32);
+            this.lblIoDiStart.TabIndex = 1;
+            this.lblIoDiStart.Text = "DI1\r\nSTART";
+            this.lblIoDiStart.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            //
+            // lblIoDoPcAlive
+            //
+            this.lblIoDoPcAlive.BackColor = System.Drawing.Color.FromArgb(60, 60, 60);
+            this.lblIoDoPcAlive.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lblIoDoPcAlive.Dock = System.Windows.Forms.DockStyle.Left;
+            this.lblIoDoPcAlive.Font = new System.Drawing.Font("Microsoft Sans Serif", 7F);
+            this.lblIoDoPcAlive.ForeColor = System.Drawing.Color.White;
+            this.lblIoDoPcAlive.Location = new System.Drawing.Point(112, 0);
+            this.lblIoDoPcAlive.Name = "lblIoDoPcAlive";
+            this.lblIoDoPcAlive.Size = new System.Drawing.Size(56, 32);
+            this.lblIoDoPcAlive.TabIndex = 2;
+            this.lblIoDoPcAlive.Text = "DO0\r\nPC ALV";
+            this.lblIoDoPcAlive.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            //
+            // lblIoDoMura
+            //
+            this.lblIoDoMura.BackColor = System.Drawing.Color.FromArgb(60, 60, 60);
+            this.lblIoDoMura.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lblIoDoMura.Dock = System.Windows.Forms.DockStyle.Left;
+            this.lblIoDoMura.Font = new System.Drawing.Font("Microsoft Sans Serif", 7F);
+            this.lblIoDoMura.ForeColor = System.Drawing.Color.White;
+            this.lblIoDoMura.Location = new System.Drawing.Point(168, 0);
+            this.lblIoDoMura.Name = "lblIoDoMura";
+            this.lblIoDoMura.Size = new System.Drawing.Size(56, 32);
+            this.lblIoDoMura.TabIndex = 3;
+            this.lblIoDoMura.Text = "DO1\r\nMURA";
+            this.lblIoDoMura.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            //
+            // lblIoDoPcBusy
+            //
+            this.lblIoDoPcBusy.BackColor = System.Drawing.Color.FromArgb(60, 60, 60);
+            this.lblIoDoPcBusy.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lblIoDoPcBusy.Dock = System.Windows.Forms.DockStyle.Left;
+            this.lblIoDoPcBusy.Font = new System.Drawing.Font("Microsoft Sans Serif", 7F);
+            this.lblIoDoPcBusy.ForeColor = System.Drawing.Color.White;
+            this.lblIoDoPcBusy.Location = new System.Drawing.Point(224, 0);
+            this.lblIoDoPcBusy.Name = "lblIoDoPcBusy";
+            this.lblIoDoPcBusy.Size = new System.Drawing.Size(56, 32);
+            this.lblIoDoPcBusy.TabIndex = 4;
+            this.lblIoDoPcBusy.Text = "DO2\r\nBUSY";
+            this.lblIoDoPcBusy.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            //
             // lblStatusGrab
-            // 
+            //
             this.lblStatusGrab.BackColor = System.Drawing.Color.Gray;
             this.lblStatusGrab.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.lblStatusGrab.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblStatusGrab.ForeColor = System.Drawing.Color.White;
-            this.lblStatusGrab.Location = new System.Drawing.Point(0, 0);
+            this.lblStatusGrab.Location = new System.Drawing.Point(560, 0);
             this.lblStatusGrab.Name = "lblStatusGrab";
             this.lblStatusGrab.Padding = new System.Windows.Forms.Padding(0, 0, 12, 0);
-            this.lblStatusGrab.Size = new System.Drawing.Size(1262, 32);
+            this.lblStatusGrab.Size = new System.Drawing.Size(702, 32);
             this.lblStatusGrab.TabIndex = 0;
             this.lblStatusGrab.Text = "● 待機";
             this.lblStatusGrab.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
@@ -3014,6 +3138,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam1)).EndInit();
             this.tabPageSystem.ResumeLayout(false);
             this.tabPageSystem.PerformLayout();
+            this.panelPlcIo.ResumeLayout(false);
             this.panelStatusBar.ResumeLayout(false);
             this.ResumeLayout(false);
             this.PerformLayout();
@@ -3198,6 +3323,14 @@
         private System.Windows.Forms.Label lblEndTimeHeader;
         private System.Windows.Forms.ListView listViewGrabDetail;
         private System.Windows.Forms.Panel panelStatusBar;
+        private System.Windows.Forms.Label lblPlcConn;
+        private System.Windows.Forms.Label lblPlcState;
+        private System.Windows.Forms.Panel panelPlcIo;
+        private System.Windows.Forms.Label lblIoDiAlive;
+        private System.Windows.Forms.Label lblIoDiStart;
+        private System.Windows.Forms.Label lblIoDoPcAlive;
+        private System.Windows.Forms.Label lblIoDoMura;
+        private System.Windows.Forms.Label lblIoDoPcBusy;
         private System.Windows.Forms.Label lblStatusGrab;
         private System.Windows.Forms.ComboBox cbChartYear;
         private System.Windows.Forms.ComboBox cbChartMonth;
