@@ -17,20 +17,20 @@ set "LOG=test_overnight.log"
 if "%choice%"=="1" (
     echo.
     echo [%date% %time%] Running unit tests...
-    dotnet test %TEST_PROJ% -p:Configuration=Release --filter "TestCategory!=Stress"
+    dotnet test %TEST_PROJ% -p:Configuration=Release -v normal --filter "TestCategory!=Stress"
 )
 if "%choice%"=="2" (
     echo.
     echo [%date% %time%] Running stress tests...
     echo === Started: %date% %time% === > %LOG%
-    powershell -Command "dotnet test %TEST_PROJ% -p:Configuration=Release --filter 'TestCategory=Stress' 2>&1 | Tee-Object -FilePath %LOG% -Append"
+    powershell -Command "dotnet test %TEST_PROJ% -p:Configuration=Release -v normal --filter 'TestCategory=Stress' 2>&1 | Tee-Object -FilePath %LOG% -Append"
     echo === Finished: %date% %time% === >> %LOG%
 )
 if "%choice%"=="3" (
     echo.
     echo [%date% %time%] Running all tests...
     echo === Started: %date% %time% === > %LOG%
-    powershell -Command "dotnet test %TEST_PROJ% -p:Configuration=Release 2>&1 | Tee-Object -FilePath %LOG% -Append"
+    powershell -Command "dotnet test %TEST_PROJ% -p:Configuration=Release -v normal 2>&1 | Tee-Object -FilePath %LOG% -Append"
     echo === Finished: %date% %time% === >> %LOG%
 )
 if "%choice%"=="4" exit /b
