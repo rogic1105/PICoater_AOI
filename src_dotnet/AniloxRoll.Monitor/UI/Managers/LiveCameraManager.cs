@@ -43,6 +43,15 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// <summary>目前已初始化的相機清單（唯讀），供 LiveTelemetryPresenter 查詢 Telemetry。</summary>
         public IReadOnlyList<AniloxCamera> Cameras => _cameras.AsReadOnly();
 
+        /// <summary>預期相機數量（由硬體設定決定）。</summary>
+        public int ExpectedCameraCount => _cameraHardwareConfigs?.Count ?? 0;
+
+        /// <summary>目前已連線的相機數量（每 500ms 更新）。</summary>
+        public int ConnectedCameraCount { get; private set; }
+
+        /// <summary>連線數變更時通知 UI。參數：(connected, expected)。</summary>
+        public event Action<int, int> OnCameraCountChanged;
+
         /// <summary>每台相機存檔並完成 inspection 後觸發。
         /// 參數：(cameraId, fileNameWithoutExt, meanPeak_0to1, maxPeak_0to1)</summary>
         public event Action<int, string, float, float> OnInspectionResult;
@@ -203,6 +212,10 @@ namespace AniloxRoll.Monitor.UI.Managers
             _cameraStatusTimer.Start();
             UpdateCameraStatus("已配置", Color.White);
             SwitchMainDisplay(_selectedMainCameraId);
+
+            // 初始化後立即發布相機數量（分配成功不代表已連線，Timer 會持續更新）
+            ConnectedCameraCount = _cameras.Count;
+            OnCameraCountChanged?.Invoke(_cameras.Count, ExpectedCameraCount);
         }
 
         // ==================== Grab Control ====================
@@ -589,6 +602,16 @@ namespace AniloxRoll.Monitor.UI.Managers
                     : Color.Red;
 
                 UpdateSingleCameraStatus(cam.CameraId, statusText, color);
+            }
+
+            // 彙總連線數，變化時通知 UI
+            int connected = 0;
+            foreach (var cam in snapshot)
+                if (cam.IsConnected) connected++;
+            if (connected != ConnectedCameraCount)
+            {
+                ConnectedCameraCount = connected;
+                OnCameraCountChanged?.Invoke(connected, ExpectedCameraCount);
             }
         }
 

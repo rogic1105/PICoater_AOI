@@ -2,7 +2,14 @@
 
 ## AniloxRoll.Monitor 右側參數面板（tabControlRight）
 
-頂部有 `panelStatusBar`（Dock=Top，Height=32），內含 `lblStatusGrab`（Dock=Fill，IEC 60073 訊號燈，待機=灰、抓取中=綠）。
+頂部有 `panelStatusBar`（TableLayoutPanel，Dock=Top，Height=32，4 欄各 25%），由左到右：
+
+| 欄 | 控制項 | 內容 |
+|----|--------|------|
+| 0 | `lblCamCount` | 相機連線數 `CAM: N/7`（綠=全連、黃=部分、紅=全斷） |
+| 1 | `lblPlcState` | FSM 狀態（PlcState enum → 色碼文字） |
+| 2 | `lblPlcConn` | PLC 連線狀態（綠=已連線、灰=未連線） |
+| 3 | `panelPlcIo` | TableLayoutPanel 5 欄各 20%，5 個 IO LED（DI0:PLC_ALV, DI1:START, DO0:PC_ALV, DO1:MURA_NG, DO2:PC_BSY） |
 
 Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×741），包含 3 個 Tab：
 
@@ -10,7 +17,7 @@ Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×741），�
 |-------------|----------|--------|------|
 | `tabPageInspSettings` | 檢測設定 | `propertyGridSettings`（Dock=Fill） | `InspectionSettings`（MachineLayout / Recipe / Storage）— **Acquisition 已隱藏（[Browsable(false)]）** |
 | `tabPageCamera` | 相機參數 | `tabControlCamTabs`（嵌套） | 曝光時間 / 線掃速率 / 擷取高度 各 7 台（**唯一設定入口**） |
-| `tabPageSystem` | 系統資訊 | `listViewCameras` + `listViewEngine` + `listViewChartConst` + `listViewHardware` | SystemSettings.CameraDevices + InspectionEngineConfig 常數 + 圖表引擎常數 + 硬體參數（螢幕尺寸/解析度/DPI） |
+| `tabPageSystem` | 系統資訊 | `listViewCameras` + `listViewEngine` + `listViewChartConst` + `listViewHardware` | SystemSettings.CameraDevices + InspectionEngineConfig 常數 + 圖表引擎常數 + 硬體參數（螢幕尺寸/解析度/DPI + PLC 型號/IP/Port/Poll/Reconnect/Timeout/IO mapping） |
 
 `tabPageCamera` 內嵌 `tabControlCamTabs`，含 3 個子 Tab：
 

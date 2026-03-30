@@ -45,6 +45,24 @@ namespace AniloxRoll.Monitor.Core.Services
         /// <summary>目前 FSM 狀態。</summary>
         public PlcState CurrentState => _currentState;
 
+        /// <summary>硬體型號。</summary>
+        public string Model => "ET-7044";
+
+        /// <summary>Poll 週期（ms）。</summary>
+        public int PollIntervalMs => _pollTimer.Interval;
+
+        /// <summary>重連週期（ms）。</summary>
+        public int ReconnectIntervalMs => _reconnectTimer.Interval;
+
+        /// <summary>讀寫逾時（ms）。</summary>
+        public int ReadWriteTimeoutMs => _plc.ReadWriteTimeoutMs;
+
+        /// <summary>目前連線 IP。</summary>
+        public string PlcIp => _plcIp;
+
+        /// <summary>目前連線 Port。</summary>
+        public int PlcPort => _plcPort;
+
         /// <summary>PLC START 上升緣 → 要求開始 Grab。</summary>
         public event Action OnStartRequested;
 

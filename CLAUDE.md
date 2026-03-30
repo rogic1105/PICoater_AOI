@@ -43,7 +43,7 @@ PICoater_AOI/
 | `UI/Presenters/LiveTelemetryPresenter.cs` | 16 欄即時 Telemetry |
 | `Acquisition/AniloxCamera.cs` | 單台相機 MIL 資源封裝 |
 | `Acquisition/CaptureTimestampCoordinator.cs` | 多相機存檔時間戳同步 |
-| `UI/Managers/LiveCameraManager.cs` | 多台相機生命週期管理 |
+| `UI/Managers/LiveCameraManager.cs` | 多台相機生命週期管理、連線數監控（OnCameraCountChanged） |
 | `Settings/InspectionSettings.cs` | 根設定物件 |
 | `Settings/Models/ChartSettings.cs` | 圖表 Y 軸範圍設定（ChartScaleMode + YMax） |
 | `Settings/Models/MuraChartConfig.cs` | Mura 圖表閾值 PropertyGrid 展開代理 |

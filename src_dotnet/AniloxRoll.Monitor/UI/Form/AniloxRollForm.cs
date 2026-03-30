@@ -273,6 +273,17 @@ namespace AniloxRoll.Monitor.Forms
             lbl.BackColor = on ? _ledOn : _ledOff;
         }
 
+        private void UpdateCamCountLabel(int connected, int expected)
+        {
+            lblCamCount.Text = $"CAM: {connected}/{expected}";
+            if (connected >= expected)
+                lblCamCount.BackColor = Color.FromArgb(56, 142, 60);   // 綠：全連
+            else if (connected > 0)
+                lblCamCount.BackColor = Color.FromArgb(249, 168, 37);  // 黃：部分連線
+            else
+                lblCamCount.BackColor = Color.FromArgb(198, 40, 40);   // 紅：全斷
+        }
+
         /// <summary>UI 層：Presenter、Helper、PropertyGrid、Canvas 事件。</summary>
         private void InitUiLayer()
         {
@@ -413,6 +424,11 @@ namespace AniloxRoll.Monitor.Forms
             UpdateStandardBgSubLockState();
             _liveCameraManager.OnLiveCurveData      += OnLiveCurveData;
             _liveCameraManager.OnLiveRowCurveData   += OnLiveRowCurveData;
+            _liveCameraManager.OnCameraCountChanged += (connected, expected) =>
+            {
+                if (InvokeRequired) { BeginInvoke(new Action<int, int>(UpdateCamCountLabel), connected, expected); return; }
+                UpdateCamCountLabel(connected, expected);
+            };
 
             int _panelClickCount = 0;
             int _panelLastClickTick = 0;
@@ -1181,17 +1197,8 @@ namespace AniloxRoll.Monitor.Forms
             // 抓取中：凍結取得背景/預覽背景；停止後解鎖
             btnGetBackground.Enabled = !isGrabbing;
             btnViewBackground.Enabled = !isGrabbing;
-            if (isGrabbing)
+            if (!isGrabbing)
             {
-                lblStatusGrab.Text      = "● 相機抓取中";
-                lblStatusGrab.BackColor = Color.FromArgb(56, 142, 60);   // IEC 綠：運轉中
-                lblStatusGrab.ForeColor = Color.White;
-            }
-            else
-            {
-                lblStatusGrab.Text      = "● 待機";
-                lblStatusGrab.BackColor = Color.FromArgb(117, 117, 117); // IEC 白/灰：中性待機
-                lblStatusGrab.ForeColor = Color.White;
                 UpdateStandardBgSubLockState(); // 停止後依 bin 狀態重新檢查
             }
         }
@@ -1657,6 +1664,19 @@ namespace AniloxRoll.Monitor.Forms
                 _liveCameraManager?.SetScreenMmPerPixel(screenMmPerPx);
             }
             catch { /* 非關鍵資訊，忽略 */ }
+
+            // ── PLC 參數 ──
+            if (_plcGrabController != null)
+            {
+                listViewHardware.Items.Add(new ListViewItem(new[] { "PLC_Model",     _plcGrabController.Model }));
+                listViewHardware.Items.Add(new ListViewItem(new[] { "PLC_IP",        _plcGrabController.PlcIp }));
+                listViewHardware.Items.Add(new ListViewItem(new[] { "PLC_Port",      _plcGrabController.PlcPort.ToString() }));
+                listViewHardware.Items.Add(new ListViewItem(new[] { "PLC_Poll",      $"{_plcGrabController.PollIntervalMs} ms" }));
+                listViewHardware.Items.Add(new ListViewItem(new[] { "PLC_Reconnect", $"{_plcGrabController.ReconnectIntervalMs} ms" }));
+                listViewHardware.Items.Add(new ListViewItem(new[] { "PLC_Timeout",   $"{_plcGrabController.ReadWriteTimeoutMs} ms" }));
+                listViewHardware.Items.Add(new ListViewItem(new[] { "PLC_DI",        "2 ch (DI0:PLC_ALV, DI1:START)" }));
+                listViewHardware.Items.Add(new ListViewItem(new[] { "PLC_DO",        "3 ch (DO0:PC_ALV, DO1:MURA_NG, DO2:PC_BSY)" }));
+            }
             AutoFitListViewColumns(listViewHardware);
 
             // ── Telemetry Timer（每 500ms 更新 ListView + SyncFromHardware）─
@@ -1763,10 +1783,10 @@ namespace AniloxRoll.Monitor.Forms
             cbGrabIdEnd.SelectedIndexChanged    += (s, e) => OnGrabIdComboChanged(isStart: false);
             cbDataGrabId.SelectedIndexChanged   += (s, e) => OnSingleSheetComboChanged();
             cbReviewGrabId.SelectedIndexChanged += (s, e) => OnReviewGrabIdChanged();
-            btnGrabIdPrev.Click             += (s, e) => StepReviewGrabId(-1);
-            btnGrabIdNext.Click             += (s, e) => StepReviewGrabId(+1);
-            btnGrabIdDataPrev.Click         += (s, e) => StepDataGrabId(-1);
-            btnGrabIdDataNext.Click         += (s, e) => StepDataGrabId(+1);
+            btnGrabIdPrev.Click             += (s, e) => StepReviewGrabId(+1);
+            btnGrabIdNext.Click             += (s, e) => StepReviewGrabId(-1);
+            btnGrabIdDataPrev.Click         += (s, e) => StepDataGrabId(+1);
+            btnGrabIdDataNext.Click         += (s, e) => StepDataGrabId(-1);
         }
 
         private void PopulateStatDateCombos(DateTime start, DateTime end)
@@ -2043,6 +2063,7 @@ namespace AniloxRoll.Monitor.Forms
                         _interactionHelper.NavigateToDateTime(info.Earliest);
                     }
                     finally { _syncingGrabIdNav = false; }
+                    _presenter.UpdatePeriodNavigationState();
                     UpdateGrabIdNavState();
                     SetGroupBoxActive(grpReviewGrabNav, true);
                     SetGroupBoxActive(grpReviewTimePeriod, false);
@@ -2068,6 +2089,7 @@ namespace AniloxRoll.Monitor.Forms
             _syncingGrabIdNav = true;
             try { _interactionHelper.NavigateToDateTime(info.Earliest); }
             finally { _syncingGrabIdNav = false; }
+            _presenter.UpdatePeriodNavigationState();
 
             await LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest);
 
@@ -2739,8 +2761,9 @@ namespace AniloxRoll.Monitor.Forms
         {
             int idx   = cbReviewGrabId.SelectedIndex;
             int count = cbReviewGrabId.Items.Count;
-            btnGrabIdPrev.Enabled = idx > 0;
-            btnGrabIdNext.Enabled = idx >= 0 && idx < count - 1;
+            // 降序：Prev(+1)=更舊=更大 index，Next(-1)=更新=更小 index
+            btnGrabIdPrev.Enabled = idx >= 0 && idx < count - 1;
+            btnGrabIdNext.Enabled = idx > 0;
             UpdateDataGrabIdNavState();
         }
 
@@ -2748,8 +2771,8 @@ namespace AniloxRoll.Monitor.Forms
         {
             int idx   = cbDataGrabId.SelectedIndex;
             int count = cbDataGrabId.Items.Count;
-            btnGrabIdDataPrev.Enabled = idx > 0;
-            btnGrabIdDataNext.Enabled = count > 0 && idx < count - 1;
+            btnGrabIdDataPrev.Enabled = idx >= 0 && idx < count - 1;
+            btnGrabIdDataNext.Enabled = idx > 0;
         }
 
         /// <summary>
