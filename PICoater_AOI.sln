@@ -70,6 +70,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AOI.SDK", "sdk\AOI_SDK\src_
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MilGrabSample", "sdk\AOI_SDK\src_dotnet\MilGrabSample\MilGrabSample\MilGrabSample.csproj", "{9E9F5938-3FD6-4E47-BF50-675C286D72DF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AniloxRoll.Monitor.Tests", "tests\dotnet_test\AniloxRoll.Monitor.Tests\AniloxRoll.Monitor.Tests.csproj", "{B2C3D4E5-2222-3333-4444-555566667777}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Release|x64 = Release|x64
@@ -231,6 +233,18 @@ Global
 		{A1B2C3D4-1111-2222-3333-444455556666}.Release|x64.Build.0 = Release|x64
 		{A1B2C3D4-1111-2222-3333-444455556666}.Release|x86.ActiveCfg = Release|Any CPU
 		{A1B2C3D4-1111-2222-3333-444455556666}.Release|x86.Build.0 = Release|Any CPU
+		{B2C3D4E5-2222-3333-4444-555566667777}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B2C3D4E5-2222-3333-4444-555566667777}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B2C3D4E5-2222-3333-4444-555566667777}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B2C3D4E5-2222-3333-4444-555566667777}.Debug|x64.Build.0 = Debug|Any CPU
+		{B2C3D4E5-2222-3333-4444-555566667777}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B2C3D4E5-2222-3333-4444-555566667777}.Debug|x86.Build.0 = Debug|Any CPU
+		{B2C3D4E5-2222-3333-4444-555566667777}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B2C3D4E5-2222-3333-4444-555566667777}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B2C3D4E5-2222-3333-4444-555566667777}.Release|x64.ActiveCfg = Release|Any CPU
+		{B2C3D4E5-2222-3333-4444-555566667777}.Release|x64.Build.0 = Release|Any CPU
+		{B2C3D4E5-2222-3333-4444-555566667777}.Release|x86.ActiveCfg = Release|Any CPU
+		{B2C3D4E5-2222-3333-4444-555566667777}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

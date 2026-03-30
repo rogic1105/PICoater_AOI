@@ -24,7 +24,7 @@ namespace AniloxRoll.Monitor.Core.Services
         private const int DO_MURA      = 1;
         private const int DO_PC_BUSY   = 2;
 
-        private readonly IcpDasModbusTcpClient _plc = new IcpDasModbusTcpClient();
+        private readonly IModbusTcpClient _plc;
         private readonly Timer _pollTimer;
         private readonly Timer _reconnectTimer;
 
@@ -78,8 +78,11 @@ namespace AniloxRoll.Monitor.Core.Services
         /// <summary>每次 PollTick 結束時發送所有 IO 快照。</summary>
         public event Action<PlcIoSnapshot> OnIoUpdated;
 
-        public PlcGrabController()
+        public PlcGrabController() : this(new IcpDasModbusTcpClient()) { }
+
+        internal PlcGrabController(IModbusTcpClient plcClient)
         {
+            _plc = plcClient;
             _plc.ReadWriteTimeoutMs = 2000;
 
             _pollTimer = new Timer { Interval = 500 };
@@ -217,7 +220,7 @@ namespace AniloxRoll.Monitor.Core.Services
             });
         }
 
-        private async Task PollTick()
+        internal async Task PollTick()
         {
             _pollTimer.Stop();
             try
@@ -307,7 +310,7 @@ namespace AniloxRoll.Monitor.Core.Services
             }
         }
 
-        private async Task ReconnectTick()
+        internal async Task ReconnectTick()
         {
             _reconnectTimer.Stop();
             bool ok = await _plc.ConnectAsync(_plcIp, _plcPort, 3000);

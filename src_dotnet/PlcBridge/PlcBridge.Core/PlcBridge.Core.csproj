@@ -54,6 +54,7 @@
     <Reference Include="System.Core" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="IModbusTcpClient.cs" />
     <Compile Include="IcpDasModbusTcpClient.cs" />
     <Compile Include="PlcLogger.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

@@ -21,8 +21,9 @@ PICoater_AOI/
 ├── src_dotnet/          # [介面] C# 使用者介面
 │   ├── AniloxRoll.Monitor/ # 主程式 (WinForms)
 │   └── PlcBridge/       # PLC Modbus TCP 通訊 (Core / ManualControl / Automation)
-├── tests/               # [測試] C++ 單元測試與整合測試
-│   └── cpp_test         # (picoater_tests)
+├── tests/               # [測試] C++ / C# 單元測試與壓力測試
+│   ├── cpp_test         # (picoater_tests)
+│   └── dotnet_test/AniloxRoll.Monitor.Tests/ # NUnit 3.x + Moq 4.x
 ├── docs/                # 架構與模式文件
 ├── third_party/         # 第三方函式庫 (如 stb_image)
 └── Directory.Build.props # 全域 MSBuild 設定檔
@@ -67,6 +68,17 @@ PICoater_AOI/
 ### C++ 模組測試 (底層驗證)
 * **專案**: `picoater_tests`
 * 驗證 CUDA 演算法是否正確，不涉及 GUI。
+
+### C# 單元 + 壓力測試
+* **專案**: `AniloxRoll.Monitor.Tests`（NUnit 3.x + Moq 4.x）
+* 40 個單元測試 + 6 個壓力測試（PLC FSM、CSV、Settings 讀寫）
+```bash
+# 快速單元測試（~2 秒）
+dotnet test tests/dotnet_test/AniloxRoll.Monitor.Tests/AniloxRoll.Monitor.Tests.csproj -p:Configuration=Release --filter "TestCategory!=Stress"
+
+# 壓力測試（~12 小時）
+dotnet test tests/dotnet_test/AniloxRoll.Monitor.Tests/AniloxRoll.Monitor.Tests.csproj -p:Configuration=Release --filter "TestCategory=Stress"
+```
 
 ### C# GUI (主程式)
 * **專案**: `AniloxRoll.Monitor`

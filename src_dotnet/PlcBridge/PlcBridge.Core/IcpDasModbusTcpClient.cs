@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace PlcBridge.Core
 {
-    public class IcpDasModbusTcpClient : IDisposable
+    public class IcpDasModbusTcpClient : IModbusTcpClient
     {
         private TcpClient _client;
         private NetworkStream _stream;
