@@ -22,12 +22,12 @@ if "%choice%"=="1" (
 if "%choice%"=="2" (
     echo.
     echo [%date% %time%] Running stress tests...
-    powershell -Command "$OutputEncoding = [Console]::OutputEncoding = [Text.Encoding]::UTF8; '=== Started: ' + (Get-Date) + ' ===' | Out-File -FilePath '%LOG%' -Encoding utf8; dotnet test %TEST_PROJ% -p:Configuration=Release -v normal --filter 'TestCategory=Stress' 2>&1 | Tee-Object -FilePath '%LOG%' -Append -Encoding utf8; '=== Finished: ' + (Get-Date) + ' ===' | Out-File -FilePath '%LOG%' -Append -Encoding utf8"
+    powershell -Command "[Console]::OutputEncoding = [Text.Encoding]::UTF8; $log = '%LOG%'; '=== Started: ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + ' ===' | Out-File $log -Encoding utf8; dotnet test %TEST_PROJ% -p:Configuration=Release -v normal --filter 'TestCategory=Stress' 2>&1 | ForEach-Object { $_; $_ | Out-File $log -Append -Encoding utf8 }; '=== Finished: ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + ' ===' | Out-File $log -Append -Encoding utf8"
 )
 if "%choice%"=="3" (
     echo.
     echo [%date% %time%] Running all tests...
-    powershell -Command "$OutputEncoding = [Console]::OutputEncoding = [Text.Encoding]::UTF8; '=== Started: ' + (Get-Date) + ' ===' | Out-File -FilePath '%LOG%' -Encoding utf8; dotnet test %TEST_PROJ% -p:Configuration=Release -v normal 2>&1 | Tee-Object -FilePath '%LOG%' -Append -Encoding utf8; '=== Finished: ' + (Get-Date) + ' ===' | Out-File -FilePath '%LOG%' -Append -Encoding utf8"
+    powershell -Command "[Console]::OutputEncoding = [Text.Encoding]::UTF8; $log = '%LOG%'; '=== Started: ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + ' ===' | Out-File $log -Encoding utf8; dotnet test %TEST_PROJ% -p:Configuration=Release -v normal 2>&1 | ForEach-Object { $_; $_ | Out-File $log -Append -Encoding utf8 }; '=== Finished: ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + ' ===' | Out-File $log -Append -Encoding utf8"
 )
 if "%choice%"=="4" exit /b
 
