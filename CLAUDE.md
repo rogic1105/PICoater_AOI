@@ -37,7 +37,7 @@ PICoater_AOI/
 | `ImageProcessing/InspectionEngine.ImageProcessing.cs` | 縮圖/全解析度影像處理 |
 | `ImageProcessing/InspectionEngineConfig.cs` | MaxWidth=16384, MaxHeight=10000, DefaultSaveResizeScale=5 |
 | `ImageProcessing/BatchInspectionService.cs` | Parallel.For 批次縮圖 |
-| `UI/Form/AniloxRollForm.cs` | Form 邏輯：事件、InitializeSystem、Period Charts |
+| `UI/Form/AniloxRollForm.cs` | Form 邏輯：事件、InitializeSystem、Period Charts；內含 helpers: `BindBidirectionalSync`（TrackBar↔NUD 同步）、`GetCurveBasePath`、`PopulateAllGrabIdCombos`、`SetChartYRange`、`FindCameraById`、`MultiClickDetector`（inner class） |
 | `UI/Form/AniloxRollForm.Designer.cs` | Form 控制項佈局（VS Designer） |
 | `UI/Widgets/FormInteractionHelper.cs` | UI 互動、gallery 選擇、計時 |
 | `UI/Presenters/LiveTelemetryPresenter.cs` | 16 欄即時 Telemetry |

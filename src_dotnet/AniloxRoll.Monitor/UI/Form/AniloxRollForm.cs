@@ -96,16 +96,31 @@ namespace AniloxRoll.Monitor.Forms
         private InspectionSettings _settings;
         private bool _lastReviewProcessedMode = false;
         private bool _syncingProcessedCheckbox = false;
+        private bool IsStandardBgSubEnabled =>
+            _settings?.Recipe?.Algorithm == BackgroundAlgorithm.StandardBgSub;
+
         /// <summary>"v" = vertical ridge（預設），"h" = horizontal ridge。控制 canvasMain 處理圖方向。</summary>
         private string _activeRidgeDirection = "v";
         /// <summary>"v" = vertical ridge（預設），"h" = horizontal ridge。控制 Live 顯示方向。</summary>
         private string _liveDisplayDirection = "v";
 
-        // --- Live 全覽圖：每台相機最新曲線快取 ---
-        private readonly float[][] _liveCurveMean = new float[7][];
-        private readonly float[][] _liveCurveMax  = new float[7][];
-        private volatile bool _liveOverviewDirty;
+        // --- 常數 ---
+        private const int CameraCount = 7;
         private const int MaxOverviewPoints = 2000;
+        private const int TickFreq = 1000;
+
+        // --- IEC 60073 色碼 ---
+        private static readonly Color IecGreen    = Color.FromArgb(56, 142, 60);
+        private static readonly Color IecBlue     = Color.FromArgb(0, 122, 204);
+        private static readonly Color IecYellow   = Color.FromArgb(249, 168, 37);
+        private static readonly Color IecRed      = Color.FromArgb(198, 40, 40);
+        private static readonly Color IecGray     = Color.FromArgb(117, 117, 117);
+        private static readonly Color IecDarkGray = Color.FromArgb(60, 60, 60);
+
+        // --- Live 全覽圖：每台相機最新曲線快取 ---
+        private readonly float[][] _liveCurveMean = new float[CameraCount][];
+        private readonly float[][] _liveCurveMax  = new float[CameraCount][];
+        private volatile bool _liveOverviewDirty;
 
         // --- Grab ID 拼接模式（null = 一般模式）---
         private Bitmap[] _stitchedImages;
@@ -209,27 +224,27 @@ namespace AniloxRoll.Monitor.Forms
             {
                 case PlcState.Idle:
                     text = "Idle 待機";
-                    bgColor = Color.FromArgb(56, 142, 60);   // IEC 綠
+                    bgColor = IecGreen;   // IEC 綠
                     break;
                 case PlcState.Running:
                     text = "Running 取像中";
-                    bgColor = Color.FromArgb(0, 122, 204);   // 藍
+                    bgColor = IecBlue;   // 藍
                     break;
                 case PlcState.Stopping:
                     text = "Stopping 停止中";
-                    bgColor = Color.FromArgb(249, 168, 37);  // IEC 黃
+                    bgColor = IecYellow;  // IEC 黃
                     break;
                 case PlcState.Faulted:
                     text = "Faulted PLC故障";
-                    bgColor = Color.FromArgb(198, 40, 40);   // IEC 紅
+                    bgColor = IecRed;   // IEC 紅
                     break;
                 case PlcState.CommLost:
                     text = "CommLost 通訊中斷";
-                    bgColor = Color.FromArgb(198, 40, 40);   // IEC 紅
+                    bgColor = IecRed;   // IEC 紅
                     break;
                 default: // Disconnected, Closed
                     text = state.ToString();
-                    bgColor = Color.FromArgb(117, 117, 117); // 灰
+                    bgColor = IecGray; // 灰
                     break;
             }
             lblPlcState.Text = $"● {text}";
@@ -241,15 +256,15 @@ namespace AniloxRoll.Monitor.Forms
             if (connected)
             {
                 lblPlcConn.Text = "● PLC 已連線";
-                lblPlcConn.BackColor = Color.FromArgb(56, 142, 60);  // IEC 綠
+                lblPlcConn.BackColor = IecGreen;  // IEC 綠
                 btnCameraGrab.Text = "PLC 控制中";
-                btnCameraGrab.BackColor = Color.FromArgb(0, 122, 204);
+                btnCameraGrab.BackColor = IecBlue;
                 btnCameraGrab.ForeColor = Color.White;
             }
             else
             {
                 lblPlcConn.Text = "● PLC 離線";
-                lblPlcConn.BackColor = Color.FromArgb(117, 117, 117);
+                lblPlcConn.BackColor = IecGray;
                 UpdateGrabButton(_liveCameraManager?.IsLiveGrabbing ?? false);
                 btnCameraGrab.BackColor = SystemColors.Control;
                 btnCameraGrab.ForeColor = SystemColors.ControlText;
@@ -265,23 +280,20 @@ namespace AniloxRoll.Monitor.Forms
             SetIoLed(lblIoDoPcBusy,  io.DoPcBusy);
         }
 
-        private static readonly Color _ledOn  = Color.FromArgb(56, 142, 60);  // IEC 綠
-        private static readonly Color _ledOff = Color.FromArgb(60, 60, 60);   // 暗灰
-
         private static void SetIoLed(Label lbl, bool on)
         {
-            lbl.BackColor = on ? _ledOn : _ledOff;
+            lbl.BackColor = on ? IecGreen : IecDarkGray;
         }
 
         private void UpdateCamCountLabel(int connected, int expected)
         {
             lblCamCount.Text = $"CAM: {connected}/{expected}";
             if (connected >= expected)
-                lblCamCount.BackColor = Color.FromArgb(56, 142, 60);   // 綠：全連
+                lblCamCount.BackColor = IecGreen;   // 綠：全連
             else if (connected > 0)
-                lblCamCount.BackColor = Color.FromArgb(249, 168, 37);  // 黃：部分連線
+                lblCamCount.BackColor = IecYellow;  // 黃：部分連線
             else
-                lblCamCount.BackColor = Color.FromArgb(198, 40, 40);   // 紅：全斷
+                lblCamCount.BackColor = IecRed;   // 紅：全斷
         }
 
         /// <summary>UI 層：Presenter、Helper、PropertyGrid、Canvas 事件。</summary>
@@ -385,23 +397,18 @@ namespace AniloxRoll.Monitor.Forms
 
             canvasMain.StatusChanged += _interactionHelper.UpdateCanvasInfo;
             canvasMain.EdgeReached   += _interactionHelper.NavigateCamera;
-            int _canvasClickCount = 0;
-            int _canvasLastClickTick = 0;
+            var canvasClicker = new MultiClickDetector();
             canvasMain.MouseDown += (s, e) =>
             {
                 if (e.Button != MouseButtons.Left) return;
-                int now = Environment.TickCount;
-                if (now - _canvasLastClickTick > SystemInformation.DoubleClickTime)
-                    _canvasClickCount = 0;
-                _canvasLastClickTick = now;
-                _canvasClickCount++;
-                if (_canvasClickCount == 2)
+                int clicks = canvasClicker.RegisterClick();
+                if (clicks == 2)
                 {
                     if (canvasMain.Image != null) canvasMain.FitToScreen();
                 }
-                else if (_canvasClickCount >= 3)
+                else if (clicks >= 3)
                 {
-                    _canvasClickCount = 0;
+                    canvasClicker.Reset();
                     _interactionHelper?.SetCanvasPhysicalMag1x();
                 }
             };
@@ -430,29 +437,22 @@ namespace AniloxRoll.Monitor.Forms
                 UpdateCamCountLabel(connected, expected);
             };
 
-            int _panelClickCount = 0;
-            int _panelLastClickTick = 0;
+            var panelClicker = new MultiClickDetector();
             panelMainDisplay.MouseDown += (s, e) =>
             {
                 if (e.Button != MouseButtons.Left) return;
-                int now = Environment.TickCount;
-                if (now - _panelLastClickTick > SystemInformation.DoubleClickTime)
-                    _panelClickCount = 0;
-                _panelLastClickTick = now;
-                _panelClickCount++;
+                int clicks = panelClicker.RegisterClick();
 
-                if (_panelClickCount == 2)
+                if (clicks == 2)
                 {
-                    // 雙擊：FitToScreen
                     if (_bgPreviewMainCanvas != null && _bgPreviewActive)
                         _bgPreviewMainCanvas.FitToScreen();
                     else if (_liveCameraManager.IsLiveGrabbing)
                         _liveCameraManager.ResetMainDisplayView();
                 }
-                else if (_panelClickCount >= 3)
+                else if (clicks >= 3)
                 {
-                    // 三擊：實體倍率 1x
-                    _panelClickCount = 0;
+                    panelClicker.Reset();
                     if (_liveCameraManager.IsLiveGrabbing)
                         _liveCameraManager.SetPhysicalMagnification1x();
                     else if (_bgPreviewMainCanvas != null && _bgPreviewActive)
@@ -556,7 +556,7 @@ namespace AniloxRoll.Monitor.Forms
         {
             // 快取每台相機最新曲線（callback 執行緒，只是 ref 賦值）
             int cameraIndex = camId - 1;
-            if (cameraIndex >= 0 && cameraIndex < 7)
+            if (cameraIndex >= 0 && cameraIndex < CameraCount)
             {
                 _liveCurveMean[cameraIndex] = meanArr;
                 _liveCurveMax[cameraIndex]  = maxArr;
@@ -590,9 +590,7 @@ namespace AniloxRoll.Monitor.Forms
             // rightPixel = panOffsetX + panelWidth / zoomX
             double viewLeftMm = double.NaN, viewRightMm = double.NaN;
 
-            AniloxCamera liveCam = null;
-            foreach (var c in _liveCameraManager.Cameras)
-                if (c.CameraId == camId) { liveCam = c; break; }
+            var liveCam = FindCameraById(camId);
 
             if (liveCam != null && opsInMm > 0 &&
                 liveCam.TryGetSecondaryDisplayGeometry(
@@ -623,9 +621,7 @@ namespace AniloxRoll.Monitor.Forms
             _rowChartLiveHelper.UpdateData(meanArr, maxArr);
 
             // 同步 Y 軸視野：查詢 MIL 副顯示器 zoom/pan，以 panel 上下邊緣的 mm 值對齊
-            AniloxCamera liveCam = null;
-            foreach (var c in _liveCameraManager.Cameras)
-                if (c.CameraId == camId) { liveCam = c; break; }
+            var liveCam = FindCameraById(camId);
 
             double rowPitch = _rowChartLiveHelper.RowPitchMm;
             if (liveCam != null && rowPitch > 0 &&
@@ -663,7 +659,7 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private async void btnGetBackground_Click(object sender, EventArgs e)
         {
-            if (_settings.Recipe.Algorithm != BackgroundAlgorithm.StandardBgSub)
+            if (!IsStandardBgSubEnabled)
             {
                 MessageBox.Show("請先將去背演算法切換為「標準去背」。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
@@ -803,7 +799,7 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private void LoadBackgroundBins()
         {
-            if (_settings.Recipe.Algorithm != BackgroundAlgorithm.StandardBgSub)
+            if (!IsStandardBgSubEnabled)
             {
                 // 非 StandardBgSub 模式：清除所有預算背景
                 foreach (var cam in _liveCameraManager.Cameras)
@@ -857,7 +853,7 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private void UpdateStandardBgSubLockState()
         {
-            if (_settings.Recipe.Algorithm != BackgroundAlgorithm.StandardBgSub)
+            if (!IsStandardBgSubEnabled)
             {
                 // 非 StandardBgSub：正常解鎖
                 btnCameraGrab.Enabled = true;
@@ -1227,6 +1223,8 @@ namespace AniloxRoll.Monitor.Forms
 
         private async void _propertyGrid_PropertyValueChanged(object s, PropertyValueChangedEventArgs e)
         {
+            try
+            {
             _interactionHelper.HandleSettingsChanged();
             _liveCameraManager?.SetCaptureSettings(_settings);
             _muraChartHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
@@ -1277,10 +1275,14 @@ namespace AniloxRoll.Monitor.Forms
                 UpdateOverviewChartFromRepository();
                 _interactionHelper.RefreshCurrentCanvasResult();
             }
+            }
+            catch (Exception ex) { Trace.WriteLine($"[PropertyValueChanged] {ex}"); }
         }
 
         private async void btnSelectFolder_Click(object sender, EventArgs e)
         {
+            try
+            {
             _interactionHelper.SelectAndLoadFolder();
             _presenter.UpdatePeriodNavigationState();
             _lastReviewProcessedMode = false;
@@ -1298,29 +1300,7 @@ namespace AniloxRoll.Monitor.Forms
                     _statAvailableTimes = InspectionStatisticsService.LoadAvailableTimes(reviewPath);
                     _grabIdInfos        = InspectionStatisticsService.LoadGrabIdInfosDescending(reviewPath);
 
-                    _statComboUpdating = true;
-                    try
-                    {
-                        cbReviewGrabId.Items.Clear();
-                        cbGrabIdStart.Items.Clear();
-                        cbGrabIdEnd.Items.Clear();
-                        cbDataGrabId.Items.Clear();
-                        foreach (var info in _grabIdInfos)
-                        {
-                            cbReviewGrabId.Items.Add(info.GrabId);
-                            cbGrabIdStart.Items.Add(info.GrabId);
-                            cbGrabIdEnd.Items.Add(info.GrabId);
-                            cbDataGrabId.Items.Add(info.GrabId);
-                        }
-                        SyncGrabIdFromTimeCombos();
-                        UpdateGrabIdNavState();
-                        if (cbGrabIdStart.Items.Count > 0)
-                        {
-                            cbGrabIdStart.SelectedIndex = cbGrabIdStart.Items.Count - 1;
-                            cbGrabIdEnd.SelectedIndex = 0;
-                        }
-                    }
-                    finally { _statComboUpdating = false; }
+                    PopulateAllGrabIdCombos();
 
                     // 填充日期/時間 ComboBox（全範圍）
                     if (_statAvailableTimes.Count > 0)
@@ -1333,15 +1313,18 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             ClearStitchedMode();
-            SetGroupBoxActive(grpReviewTimePeriod, true);
-            SetGroupBoxActive(grpReviewGrabNav, false);
+            SetReviewGroupBoxes(false);
             await _presenter.LoadImagesWithPeriodLockAsync(false, _interactionHelper.LoadImages);
             UpdateOverviewChartFromRepository();
+            }
+            catch (Exception ex) { Trace.WriteLine($"[btnSelectFolder_Click] {ex}"); }
         }
 
         private async void checkBoxShowProcessed_CheckedChanged(object sender, EventArgs e)
         {
             if (_syncingProcessedCheckbox) return;
+            try
+            {
             bool enableProcess = checkBoxShowProcessed.Checked;
             UpdateRidgeDirectionVisual(enableProcess ? _activeRidgeDirection : null);
             if (_stitchedImages != null)
@@ -1353,6 +1336,8 @@ namespace AniloxRoll.Monitor.Forms
             ClearStitchedMode();
             await _presenter.LoadImagesWithPeriodLockAsync(enableProcess, _interactionHelper.LoadImages);
             UpdateOverviewChartFromRepository();
+            }
+            catch (Exception ex) { Trace.WriteLine($"[checkBoxShowProcessed] {ex}"); }
         }
 
         private async Task ReloadCurrentStitchedView(bool enableProcess)
@@ -1365,10 +1350,10 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         private async void btnPeriodPrev_Click(object sender, EventArgs e)
-        { _interactionHelper.SaveCanvasView(); ClearStitchedMode(); await _presenter.MovePeriodAsync(-1, _lastReviewProcessedMode, _interactionHelper.LoadImages); UpdateOverviewChartFromRepository(); }
+        { try { _interactionHelper.SaveCanvasView(); ClearStitchedMode(); await _presenter.MovePeriodAsync(-1, _lastReviewProcessedMode, _interactionHelper.LoadImages); UpdateOverviewChartFromRepository(); } catch (Exception ex) { Trace.WriteLine($"[btnPeriodPrev] {ex}"); } }
 
         private async void btnPeriodNext_Click(object sender, EventArgs e)
-        { _interactionHelper.SaveCanvasView(); ClearStitchedMode(); await _presenter.MovePeriodAsync(+1, _lastReviewProcessedMode, _interactionHelper.LoadImages); UpdateOverviewChartFromRepository(); }
+        { try { _interactionHelper.SaveCanvasView(); ClearStitchedMode(); await _presenter.MovePeriodAsync(+1, _lastReviewProcessedMode, _interactionHelper.LoadImages); UpdateOverviewChartFromRepository(); } catch (Exception ex) { Trace.WriteLine($"[btnPeriodNext] {ex}"); } }
 
         /// <summary>cbDate/cbTime 手動滾動時載入對應圖片（同 btnPeriodPrev/Next）。
         /// _syncingGrabIdNav 時跳過（由 OnReviewGrabIdChanged 等程式碼觸發的 NavigateToDateTime）。</summary>
@@ -1376,12 +1361,15 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (_syncingGrabIdNav) return;
             if (_imageRepository.FileCount == 0) return;
+            try
+            {
             _interactionHelper.SaveCanvasView();
             ClearStitchedMode();
-            SetGroupBoxActive(grpReviewGrabNav, false);
-            SetGroupBoxActive(grpReviewTimePeriod, true);
+            SetReviewGroupBoxes(false);
             await _presenter.LoadImagesWithPeriodLockAsync(_lastReviewProcessedMode, _interactionHelper.LoadImages);
             UpdateOverviewChartFromRepository();
+            }
+            catch (Exception ex) { Trace.WriteLine($"[OnPeriodComboChanged] {ex}"); }
         }
 
         // ==========================================
@@ -1440,7 +1428,6 @@ namespace AniloxRoll.Monitor.Forms
             const int LrMax     = 10000;   // Hz
             const int HtMin     =   100;   // px
             const int HtMax     = 10000;   // px
-            const int TickFreq  =  1000;
 
             // ── 7 台相機控制項陣列（存為 Form 欄位，供 SyncFromCamera 存取）────
             var acq = _settings.Acquisition;
@@ -1451,7 +1438,7 @@ namespace AniloxRoll.Monitor.Forms
             _htBars  = new[] { trackBarHtCam1,  trackBarHtCam2,  trackBarHtCam3,  trackBarHtCam4,  trackBarHtCam5,  trackBarHtCam6,  trackBarHtCam7  };
             _htNums  = new[] { numHtCam1,       numHtCam2,       numHtCam3,       numHtCam4,       numHtCam5,       numHtCam6,       numHtCam7       };
 
-            for (int i = 0; i < 7; i++)
+            for (int i = 0; i < CameraCount; i++)
             {
                 int idx   = i;
                 int camId = i + 1;
@@ -1465,122 +1452,75 @@ namespace AniloxRoll.Monitor.Forms
 
                 // ── 曝光時間 ────────────────────────────────────────────
                 int expMax = CalcExpMax();
-                int expVal = (int)Math.Max(ExpMin, Math.Min(expMax, acq.CameraExposureTimeUs[idx]));
-                _expBars[idx].Minimum = ExpMin; _expBars[idx].Maximum = expMax; _expBars[idx].TickFrequency = TickFreq;
-                _expNums[idx].Minimum = ExpMin; _expNums[idx].Maximum = expMax;
-                _expBars[idx].Value   = expVal; _expNums[idx].Value   = expVal;
-
-                bool syncExp = false;
-                _expBars[idx].MouseDown  += (s, e) => _dragging.Add(_expBars[idx]);
-                _expBars[idx].MouseUp    += (s, e) =>
-                {
-                    _dragging.Remove(_expBars[idx]);
-                    // 拖曳結束：補送一次硬體寫入（拖曳中被抑制）
-                    _liveCameraManager?.SetExposureForCamera(camId, _expBars[idx].Value);
-                    _liveCameraManager?.SwitchToCamera(camId);
-                };
-                _expBars[idx].ValueChanged += (s, e) =>
-                {
-                    if (syncExp || _syncingFromHw) return; syncExp = true;
-                    _expNums[idx].Value = _expBars[idx].Value;
-                    acq.CameraExposureTimeUs[idx] = _expBars[idx].Value;
-                    ConfigManager.SaveAcquisitionSettings(acq);
-                    if (!_dragging.Contains(_expBars[idx]))
-                        _liveCameraManager?.SetExposureForCamera(camId, _expBars[idx].Value);
-                    syncExp = false;
-                };
-                _expNums[idx].ValueChanged += (s, e) =>
-                {
-                    if (syncExp || _syncingFromHw) return; syncExp = true;
-                    int v = (int)_expNums[idx].Value;
-                    _expBars[idx].Value = Math.Max(ExpMin, Math.Min(_expBars[idx].Maximum, v));
-                    acq.CameraExposureTimeUs[idx] = v;
-                    ConfigManager.SaveAcquisitionSettings(acq);
-                    _liveCameraManager?.SetExposureForCamera(camId, v);
-                    syncExp = false;
-                };
+                BindBidirectionalSync(_expBars[idx], _expNums[idx], camId,
+                    ExpMin, expMax, (int)acq.CameraExposureTimeUs[idx],
+                    v => { acq.CameraExposureTimeUs[idx] = v; ConfigManager.SaveAcquisitionSettings(acq); },
+                    v => _liveCameraManager?.SetExposureForCamera(camId, v));
 
                 // ── 線掃速率 ────────────────────────────────────────────
-                int lrVal = (int)Math.Max(LrMin, Math.Min(LrMax, acq.CameraLineRateHz[idx]));
-                _lrBars[idx].Minimum = LrMin; _lrBars[idx].Maximum = LrMax; _lrBars[idx].TickFrequency = TickFreq;
-                _lrNums[idx].Minimum = LrMin; _lrNums[idx].Maximum = LrMax;
-                _lrBars[idx].Value   = lrVal; _lrNums[idx].Value   = lrVal;
-
-                bool syncLr = false;
-                _lrBars[idx].MouseDown += (s, e) => _dragging.Add(_lrBars[idx]);
-                _lrBars[idx].MouseUp   += (s, e) =>
-                {
-                    _dragging.Remove(_lrBars[idx]);
-                    _liveCameraManager?.SetLineRateForCamera(camId, _lrBars[idx].Value);
-                    _liveCameraManager?.SwitchToCamera(camId);
-                };
-                _lrBars[idx].ValueChanged += (s, e) =>
-                {
-                    if (syncLr || _syncingFromHw) return; syncLr = true;
-                    _lrNums[idx].Value = _lrBars[idx].Value;
-                    acq.CameraLineRateHz[idx] = _lrBars[idx].Value;
-                    ConfigManager.SaveAcquisitionSettings(acq);
-                    if (!_dragging.Contains(_lrBars[idx]))
-                        _liveCameraManager?.SetLineRateForCamera(camId, _lrBars[idx].Value);
-                    UpdateExpMaxAndClampColor(idx, CalcExpMax());
-                    if (idx == 0) UpdateRowChartPitch();
-                    syncLr = false;
-                };
-                _lrNums[idx].ValueChanged += (s, e) =>
-                {
-                    if (syncLr || _syncingFromHw) return; syncLr = true;
-                    int v = (int)_lrNums[idx].Value;
-                    _lrBars[idx].Value = Math.Max(LrMin, Math.Min(LrMax, v));
-                    acq.CameraLineRateHz[idx] = v;
-                    ConfigManager.SaveAcquisitionSettings(acq);
-                    _liveCameraManager?.SetLineRateForCamera(camId, v);
-                    UpdateExpMaxAndClampColor(idx, CalcExpMax());
-                    if (idx == 0) UpdateRowChartPitch();
-                    syncLr = false;
-                };
+                BindBidirectionalSync(_lrBars[idx], _lrNums[idx], camId,
+                    LrMin, LrMax, (int)acq.CameraLineRateHz[idx],
+                    v => { acq.CameraLineRateHz[idx] = v; ConfigManager.SaveAcquisitionSettings(acq); },
+                    v => _liveCameraManager?.SetLineRateForCamera(camId, v),
+                    () => { UpdateExpMaxAndClampColor(idx, CalcExpMax()); if (idx == 0) UpdateRowChartPitch(); });
 
                 // ── 擷取高度 ────────────────────────────────────────────
-                int htVal = Math.Max(HtMin, Math.Min(HtMax, acq.CameraGrabHeight[idx]));
-                _htBars[idx].Minimum = HtMin; _htBars[idx].Maximum = HtMax; _htBars[idx].TickFrequency = TickFreq;
+                BindBidirectionalSync(_htBars[idx], _htNums[idx], camId,
+                    HtMin, HtMax, acq.CameraGrabHeight[idx],
+                    v => { acq.CameraGrabHeight[idx] = v; ConfigManager.SaveAcquisitionSettings(acq); },
+                    v => _liveCameraManager?.SetGrabHeightForCamera(camId, v),
+                    () => _liveCameraManager?.RefreshMainDisplay());
                 _htBars[idx].SmallChange = 64; _htBars[idx].LargeChange = 512;
-                _htNums[idx].Minimum = HtMin; _htNums[idx].Maximum = HtMax;
-                _htBars[idx].Value   = htVal; _htNums[idx].Value   = htVal;
-
-                bool syncHt = false;
-                _htBars[idx].MouseDown += (s, e) => _dragging.Add(_htBars[idx]);
-                _htBars[idx].MouseUp   += (s, e) =>
-                {
-                    _dragging.Remove(_htBars[idx]);
-                    // SetGrabHeight 代價高（重分配 Buffer），拖曳結束才執行一次
-                    _liveCameraManager?.SetGrabHeightForCamera(camId, _htBars[idx].Value);
-                    _liveCameraManager?.SwitchToCamera(camId);
-                };
-                _htBars[idx].ValueChanged += (s, e) =>
-                {
-                    if (syncHt || _syncingFromHw) return; syncHt = true;
-                    _htNums[idx].Value = _htBars[idx].Value;
-                    acq.CameraGrabHeight[idx] = _htBars[idx].Value;
-                    ConfigManager.SaveAcquisitionSettings(acq);
-                    if (!_dragging.Contains(_htBars[idx]))
-                        _liveCameraManager?.SetGrabHeightForCamera(camId, _htBars[idx].Value);
-                    syncHt = false;
-                };
-                _htNums[idx].ValueChanged += (s, e) =>
-                {
-                    if (syncHt || _syncingFromHw) return; syncHt = true;
-                    int v = (int)_htNums[idx].Value;
-                    _htBars[idx].Value = Math.Max(HtMin, Math.Min(HtMax, v));
-                    acq.CameraGrabHeight[idx] = v;
-                    ConfigManager.SaveAcquisitionSettings(acq);
-                    _liveCameraManager?.SetGrabHeightForCamera(camId, v);
-                    syncHt = false;
-                };
             }
 
             // 滾輪每格移動 1（攔截原生 3 格行為）
             RegisterWheelInterceptors(_expBars);
             RegisterWheelInterceptors(_lrBars);
             RegisterWheelInterceptors(_htBars);
+        }
+
+        /// <summary>
+        /// TrackBar ↔ NumericUpDown 雙向同步綁定：
+        /// 拖曳中抑制硬體寫入，拖曳結束/NUD 變更時才寫入。
+        /// </summary>
+        private void BindBidirectionalSync(
+            TrackBar bar, NumericUpDown num, int camId,
+            int min, int max, int initialValue,
+            Action<int> saveSetting, Action<int> writeHardware,
+            Action postAction = null)
+        {
+            int clamped = Math.Max(min, Math.Min(max, initialValue));
+            bar.Minimum = min; bar.Maximum = max; bar.TickFrequency = TickFreq;
+            num.Minimum = min; num.Maximum = max;
+            bar.Value = clamped; num.Value = clamped;
+
+            bool syncing = false;
+            bar.MouseDown += (s, e) => _dragging.Add(bar);
+            bar.MouseUp += (s, e) =>
+            {
+                _dragging.Remove(bar);
+                writeHardware(bar.Value);
+                _liveCameraManager?.SwitchToCamera(camId);
+            };
+            bar.ValueChanged += (s, e) =>
+            {
+                if (syncing || _syncingFromHw) return; syncing = true;
+                num.Value = bar.Value;
+                saveSetting(bar.Value);
+                if (!_dragging.Contains(bar)) writeHardware(bar.Value);
+                postAction?.Invoke();
+                syncing = false;
+            };
+            num.ValueChanged += (s, e) =>
+            {
+                if (syncing || _syncingFromHw) return; syncing = true;
+                int v = (int)num.Value;
+                bar.Value = Math.Max(min, Math.Min(max, v));
+                saveSetting(v);
+                writeHardware(v);
+                postAction?.Invoke();
+                syncing = false;
+            };
         }
 
         /// <summary>
@@ -1845,31 +1785,7 @@ namespace AniloxRoll.Monitor.Forms
                     _presenter.UpdatePeriodNavigationState();
 
                     // 填充序號 ComboBox
-                    _statComboUpdating = true;
-                    try
-                    {
-                        cbGrabIdStart.Items.Clear();
-                        cbGrabIdEnd.Items.Clear();
-                        cbDataGrabId.Items.Clear();
-                        cbReviewGrabId.Items.Clear();
-                        foreach (var info in _grabIdInfos)
-                        {
-                            cbGrabIdStart.Items.Add(info.GrabId);
-                            cbGrabIdEnd.Items.Add(info.GrabId);
-                            cbDataGrabId.Items.Add(info.GrabId);
-                            cbReviewGrabId.Items.Add(info.GrabId);
-                        }
-                        SyncGrabIdFromTimeCombos();
-                        UpdateGrabIdNavState();
-                        if (cbGrabIdStart.Items.Count > 0)
-                        {
-                            cbGrabIdStart.SelectedIndex = cbGrabIdStart.Items.Count - 1;
-                            cbGrabIdEnd.SelectedIndex = 0;
-                            cbDataGrabId.SelectedIndex = cbGrabIdStart.SelectedIndex;
-                        }
-
-                    }
-                    finally { _statComboUpdating = false; }
+                    PopulateAllGrabIdCombos(selectDataGrabId: true);
 
                     // 填充日期/時間 ComboBox（全範圍）
                     if (_statAvailableTimes.Count > 0)
@@ -2032,6 +1948,8 @@ namespace AniloxRoll.Monitor.Forms
             UpdateDataGrabIdNavState();
             if (_statComboUpdating || _grabIdInfos.Count == 0) return;
             if (_syncingGrabIdCross) return;
+            try
+            {
             SetActiveStatGroupBox(grpDataSingleSheet);
             int idx = cbDataGrabId.SelectedIndex;
             if (idx < 0) return;
@@ -2065,12 +1983,13 @@ namespace AniloxRoll.Monitor.Forms
                     finally { _syncingGrabIdNav = false; }
                     _presenter.UpdatePeriodNavigationState();
                     UpdateGrabIdNavState();
-                    SetGroupBoxActive(grpReviewGrabNav, true);
-                    SetGroupBoxActive(grpReviewTimePeriod, false);
+                    SetReviewGroupBoxes(true);
                     await LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest);
                 }
                 finally { _syncingGrabIdCross = false; }
             }
+            }
+            catch (Exception ex) { Trace.WriteLine($"[OnSingleSheetComboChanged] {ex}"); }
         }
 
         // ── 影像回顧 序號跳轉 ─────────────────────────────────────────────
@@ -2084,6 +2003,8 @@ namespace AniloxRoll.Monitor.Forms
             int idx = cbReviewGrabId.SelectedIndex;
             if (idx < 0 || idx >= _grabIdInfos.Count) return;
 
+            try
+            {
             _interactionHelper.SaveCanvasView();
             var info = _grabIdInfos[idx];
             _syncingGrabIdNav = true;
@@ -2115,6 +2036,8 @@ namespace AniloxRoll.Monitor.Forms
                 }
                 finally { _syncingGrabIdCross = false; }
             }
+            }
+            catch (Exception ex) { Trace.WriteLine($"[OnReviewGrabIdChanged] {ex}"); }
         }
 
         private Task LoadGrabStitchedViewAsync(string grabId, DateTime hintFrom, DateTime hintTo)
@@ -2137,10 +2060,10 @@ namespace AniloxRoll.Monitor.Forms
             {
                 long csvMs = 0, stitchMs = 0;
                 string ridgeDir = _activeRidgeDirection; // 快照 UI 狀態
-                float[][] newCurveMean    = new float[7][];
-                float[][] newCurveMax     = new float[7][];
-                float[][] newRowCurveMean = new float[7][];
-                float[][] newRowCurveMax  = new float[7][];
+                float[][] newCurveMean    = new float[CameraCount][];
+                float[][] newCurveMax     = new float[CameraCount][];
+                float[][] newRowCurveMean = new float[CameraCount][];
+                float[][] newRowCurveMax  = new float[CameraCount][];
                 CsvConfigSnapshot grabCfg = null;
                 var newImages = await Task.Run(() =>
                 {
@@ -2153,8 +2076,8 @@ namespace AniloxRoll.Monitor.Forms
 
                     var swStitch = Stopwatch.StartNew();
                     int scale = InspectionEngineConfig.DefaultSaveResizeScale;
-                    var imgs = new Bitmap[7];
-                    for (int i = 0; i < 7; i++)
+                    var imgs = new Bitmap[CameraCount];
+                    for (int i = 0; i < CameraCount; i++)
                     {
                         int camId = i + 1;
                         if (grouped.TryGetValue(camId, out var paths) && paths.Count > 0)
@@ -2222,7 +2145,7 @@ namespace AniloxRoll.Monitor.Forms
                 _stitchedRowCurveMean = newRowCurveMean;
                 _stitchedRowCurveMax  = newRowCurveMax;
                 _currentGrabConfig = grabCfg;
-                SetGroupBoxActive(grpReviewGrabNav, true); SetGroupBoxActive(grpReviewTimePeriod, false);
+                SetReviewGroupBoxes(true);
                 _galleryManager.SetImages(_stitchedImages);
                 ShowStitchedCameraInCanvas(_galleryManager.SelectedIndex);
                 UpdateStitchedOverviewChart();
@@ -2256,7 +2179,7 @@ namespace AniloxRoll.Monitor.Forms
                 chartOverview.Series["Mean"].Points.Clear();
                 chartOverview.Series["Max"].Points.Clear();
             }
-            SetGroupBoxActive(grpReviewGrabNav, false); SetGroupBoxActive(grpReviewTimePeriod, true);
+            SetReviewGroupBoxes(false);
         }
 
         // ── GroupBox 綠色高亮指示 ───────────────────────────────────────────
@@ -2351,6 +2274,8 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private async void SwitchRidgeDirection(string dir)
         {
+            try
+            {
             if (!_lastReviewProcessedMode)
             {
                 // 未勾選 → 自動勾選 + 設方向
@@ -2392,6 +2317,8 @@ namespace AniloxRoll.Monitor.Forms
                 await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
                 UpdateOverviewChartFromRepository();
             }
+            }
+            catch (Exception ex) { Trace.WriteLine($"[SwitchRidgeDirection] {ex}"); }
         }
 
         private void UpdateRidgeDirectionVisual(string dir)
@@ -2507,18 +2434,12 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
 
-            var curveMean = new float[7][];
-            var curveMax  = new float[7][];
-            for (int i = 0; i < 7; i++)
+            var curveMean = new float[CameraCount][];
+            var curveMax  = new float[CameraCount][];
+            for (int i = 0; i < CameraCount; i++)
             {
                 if (!images.TryGetValue(i + 1, out string path)) continue;
-                string basePath;
-                if (path.EndsWith("_raw.jpg", StringComparison.OrdinalIgnoreCase))
-                    basePath = path.Substring(0, path.Length - "_raw.jpg".Length);
-                else
-                    basePath = System.IO.Path.Combine(
-                        System.IO.Path.GetDirectoryName(path),
-                        System.IO.Path.GetFileNameWithoutExtension(path));
+                string basePath = GetCurveBasePath(path);
                 curveMean[i] = InspectionEngine.LoadCurveBin(basePath + "_mean_v.bin")
                             ?? InspectionEngine.LoadCurveBin(basePath + "_mean.bin");
                 curveMax[i]  = InspectionEngine.LoadCurveBin(basePath + "_max_v.bin")
@@ -2545,7 +2466,7 @@ namespace AniloxRoll.Monitor.Forms
             double sumWidthMm = 0;
             int widthCount = 0;
             double minOpsUm = double.MaxValue;
-            for (int i = 0; i < 7; i++)
+            for (int i = 0; i < CameraCount; i++)
             {
                 if (opsArr[i] > 0 && opsArr[i] < minOpsUm) minOpsUm = opsArr[i];
                 var curve = allMean[i];
@@ -2559,7 +2480,7 @@ namespace AniloxRoll.Monitor.Forms
             double avgWidthMm = widthCount > 0 ? sumWidthMm / widthCount : 400.0;
 
             double globalMin = double.MaxValue, globalMax = double.MinValue;
-            for (int i = 0; i < 7; i++)
+            for (int i = 0; i < CameraCount; i++)
             {
                 double camStart = posArr[i];
                 var curve = allMean[i];
@@ -2585,7 +2506,7 @@ namespace AniloxRoll.Monitor.Forms
             var mergedMax    = new float[totalLen];
             var overlapCount = new int[totalLen];
 
-            for (int i = 0; i < 7; i++)
+            for (int i = 0; i < CameraCount; i++)
             {
                 var curveMean = allMean[i];
                 if (curveMean == null || curveMean.Length == 0) continue;
@@ -2650,14 +2571,7 @@ namespace AniloxRoll.Monitor.Forms
 
             foreach (string path in imagePaths)
             {
-                string basePath;
-                if (path.EndsWith("_raw.jpg", StringComparison.OrdinalIgnoreCase))
-                    basePath = path.Substring(0, path.Length - "_raw.jpg".Length);
-                else
-                    basePath = System.IO.Path.Combine(
-                        System.IO.Path.GetDirectoryName(path),
-                        System.IO.Path.GetFileNameWithoutExtension(path));
-
+                string basePath = GetCurveBasePath(path);
                 var mean = InspectionEngine.LoadCurveBin(basePath + "_mean_v.bin")
                         ?? InspectionEngine.LoadCurveBin(basePath + "_mean.bin");
                 var max  = InspectionEngine.LoadCurveBin(basePath + "_max_v.bin")
@@ -2705,14 +2619,7 @@ namespace AniloxRoll.Monitor.Forms
 
             foreach (string path in imagePaths)
             {
-                string basePath;
-                if (path.EndsWith("_raw.jpg", StringComparison.OrdinalIgnoreCase))
-                    basePath = path.Substring(0, path.Length - "_raw.jpg".Length);
-                else
-                    basePath = System.IO.Path.Combine(
-                        System.IO.Path.GetDirectoryName(path),
-                        System.IO.Path.GetFileNameWithoutExtension(path));
-
+                string basePath = GetCurveBasePath(path);
                 var mean = InspectionEngine.LoadCurveBin(basePath + "_mean_h.bin")
                         ?? InspectionEngine.LoadCurveBin(basePath + "_row_mean.bin");
                 var max  = InspectionEngine.LoadCurveBin(basePath + "_max_h.bin")
@@ -2876,7 +2783,7 @@ namespace AniloxRoll.Monitor.Forms
             listViewGrabDetail.Items.Clear();
 
             listViewGrabDetail.Columns.Add("料件序號", -1, HorizontalAlignment.Center);
-            for (int i = 1; i <= 7; i++)
+            for (int i = 1; i <= CameraCount; i++)
                 listViewGrabDetail.Columns.Add($"{i}", -1, HorizontalAlignment.Center);
             FitListViewColumnsProportional(listViewGrabDetail);
         }
@@ -2895,7 +2802,7 @@ namespace AniloxRoll.Monitor.Forms
                 var item = new ListViewItem(d.GrabId);
                 bool rowHasFail = false;
 
-                for (int i = 0; i < 7; i++)
+                for (int i = 0; i < CameraCount; i++)
                 {
                     if (d.CamResult[i] == null)
                     {
@@ -3177,31 +3084,28 @@ namespace AniloxRoll.Monitor.Forms
             foreach (var p in data)
                 maxTotal = Math.Max(maxTotal, p.Pass + p.Fail);
             int niceMax = Math.Max(5, (int)(Math.Ceiling(maxTotal / 5.0) * 5));
-            var area     = chart.ChartAreas["Main"];
-            double yMax  = niceMax * 1.05;
-            double yStep = niceMax / 5.0;
-            area.AxisY.Maximum               = yMax;
-            area.AxisY.Interval              = yStep;
-            area.AxisY.MajorGrid.Interval    = yStep;
-            area.AxisY2.Maximum              = yMax;
-            area.AxisY2.Interval             = yStep;
-            area.AxisY2.MajorGrid.Interval   = yStep;
-            area.AxisY2.LabelStyle.Interval  = niceMax;
+            SetChartYRange(chart, niceMax * 1.05, niceMax / 5.0, niceMax);
         }
 
         private void ApplyFixedScale(
             System.Windows.Forms.DataVisualization.Charting.Chart chart, int fixedMax)
         {
             chart.Tag = null;
+            SetChartYRange(chart, fixedMax, fixedMax / 5.0, fixedMax);
+        }
+
+        private static void SetChartYRange(
+            System.Windows.Forms.DataVisualization.Charting.Chart chart,
+            double yMax, double yStep, double labelInterval)
+        {
             var area = chart.ChartAreas["Main"];
-            double yStep = fixedMax / 5.0;
-            area.AxisY.Maximum               = fixedMax;
-            area.AxisY.Interval              = yStep;
-            area.AxisY.MajorGrid.Interval    = yStep;
-            area.AxisY2.Maximum              = fixedMax;
-            area.AxisY2.Interval             = yStep;
-            area.AxisY2.MajorGrid.Interval   = yStep;
-            area.AxisY2.LabelStyle.Interval  = fixedMax;
+            area.AxisY.Maximum             = yMax;
+            area.AxisY.Interval            = yStep;
+            area.AxisY.MajorGrid.Interval  = yStep;
+            area.AxisY2.Maximum             = yMax;
+            area.AxisY2.Interval            = yStep;
+            area.AxisY2.MajorGrid.Interval  = yStep;
+            area.AxisY2.LabelStyle.Interval = labelInterval;
         }
 
         private void ApplyChartScaleFromSettings()
@@ -3428,54 +3332,115 @@ namespace AniloxRoll.Monitor.Forms
             var acq     = _settings?.Acquisition;
             if (acq == null) return;
 
-            for (int idx = 0; idx < 7; idx++)
+            for (int idx = 0; idx < CameraCount; idx++)
             {
-                int camId = idx + 1;
-
-                // 依 CameraId 找相機
-                Core.Camera.AniloxCamera cam = null;
-                for (int k = 0; k < cameras.Count; k++)
-                    if (cameras[k].CameraId == camId) { cam = cameras[k]; break; }
-                if (cam == null) continue;
-
-                // Sync 曝光
-                if (!_dragging.Contains(_expBars[idx]))
+                try
                 {
-                    double hwExp = cam.GetMeasuredExposureUs();
-                    if (hwExp > 0)
-                    {
-                        int clamped = Math.Max(_expBars[idx].Minimum, Math.Min(_expBars[idx].Maximum, (int)hwExp));
-                        double diff = Math.Abs(clamped - _expBars[idx].Value) / (double)Math.Max(1, _expBars[idx].Value);
-                        if (diff > 0.05)
-                        {
-                            _syncingFromHw = true;
-                            _expBars[idx].Value = clamped;
-                            _expNums[idx].Value = clamped;
-                            acq.CameraExposureTimeUs[idx] = clamped;
-                            _syncingFromHw = false;
-                        }
-                    }
+                    var cam = FindCameraById(idx + 1);
+                    if (cam == null) continue;
+
+                    SyncHardwareParam(_expBars[idx], _expNums[idx],
+                        cam.GetMeasuredExposureUs(), v => acq.CameraExposureTimeUs[idx] = v);
+
+                    SyncHardwareParam(_lrBars[idx], _lrNums[idx],
+                        cam.GetLineRateHz(), v => acq.CameraLineRateHz[idx] = v);
                 }
+                catch (Exception ex) { Debug.WriteLine($"[SyncHw] CAM{idx + 1}: {ex.Message}"); }
+            }
+        }
 
-                // Sync 線掃速率
-                if (!_dragging.Contains(_lrBars[idx]))
+        // ── Helper Methods ──────────────────────────────────────────
+
+        private void SyncHardwareParam(TrackBar bar, NumericUpDown nud, double hwValue, Action<int> saveSetting)
+        {
+            if (_dragging.Contains(bar) || hwValue <= 0) return;
+            int clamped = Math.Max(bar.Minimum, Math.Min(bar.Maximum, (int)hwValue));
+            double diff = Math.Abs(clamped - bar.Value) / (double)Math.Max(1, bar.Value);
+            if (diff <= 0.05) return;
+            _syncingFromHw = true;
+            bar.Value = clamped;
+            nud.Value = clamped;
+            saveSetting(clamped);
+            _syncingFromHw = false;
+        }
+
+        /// <summary>
+        /// 從影像路徑取得 .bin 曲線的 basePath：
+        /// _raw.jpg → strip suffix；其餘 → Path without extension。
+        /// </summary>
+        private static string GetCurveBasePath(string imagePath)
+        {
+            if (imagePath.EndsWith("_raw.jpg", StringComparison.OrdinalIgnoreCase))
+                return imagePath.Substring(0, imagePath.Length - "_raw.jpg".Length);
+            return System.IO.Path.Combine(
+                System.IO.Path.GetDirectoryName(imagePath),
+                System.IO.Path.GetFileNameWithoutExtension(imagePath));
+        }
+
+        private AniloxCamera FindCameraById(int camId)
+        {
+            if (_liveCameraManager?.Cameras == null) return null;
+            foreach (var c in _liveCameraManager.Cameras)
+                if (c.CameraId == camId) return c;
+            return null;
+        }
+
+        /// <summary>
+        /// 填充 4 個序號 ComboBox（Review + Data），同步導航狀態。
+        /// selectDataGrabId=true 時同步選取 cbDataGrabId（BtnSelectDataFolder 用）。
+        /// </summary>
+        private void PopulateAllGrabIdCombos(bool selectDataGrabId = false)
+        {
+            _statComboUpdating = true;
+            try
+            {
+                cbReviewGrabId.Items.Clear();
+                cbGrabIdStart.Items.Clear();
+                cbGrabIdEnd.Items.Clear();
+                cbDataGrabId.Items.Clear();
+                foreach (var info in _grabIdInfos)
                 {
-                    double hwLr = cam.GetLineRateHz();
-                    if (hwLr > 0)
-                    {
-                        int clamped = Math.Max(_lrBars[idx].Minimum, Math.Min(_lrBars[idx].Maximum, (int)hwLr));
-                        double diff = Math.Abs(clamped - _lrBars[idx].Value) / (double)Math.Max(1, _lrBars[idx].Value);
-                        if (diff > 0.05)
-                        {
-                            _syncingFromHw = true;
-                            _lrBars[idx].Value = clamped;
-                            _lrNums[idx].Value = clamped;
-                            acq.CameraLineRateHz[idx] = clamped;
-                            _syncingFromHw = false;
-                        }
-                    }
+                    cbReviewGrabId.Items.Add(info.GrabId);
+                    cbGrabIdStart.Items.Add(info.GrabId);
+                    cbGrabIdEnd.Items.Add(info.GrabId);
+                    cbDataGrabId.Items.Add(info.GrabId);
+                }
+                SyncGrabIdFromTimeCombos();
+                UpdateGrabIdNavState();
+                if (cbGrabIdStart.Items.Count > 0)
+                {
+                    cbGrabIdStart.SelectedIndex = cbGrabIdStart.Items.Count - 1;
+                    cbGrabIdEnd.SelectedIndex = 0;
+                    if (selectDataGrabId)
+                        cbDataGrabId.SelectedIndex = cbGrabIdStart.SelectedIndex;
                 }
             }
+            finally { _statComboUpdating = false; }
+        }
+
+        private void SetReviewGroupBoxes(bool grabNavActive)
+        {
+            SetGroupBoxActive(grpReviewGrabNav, grabNavActive);
+            SetGroupBoxActive(grpReviewTimePeriod, !grabNavActive);
+        }
+
+        // ── Inner Classes ───────────────────────────────────────────
+
+        private sealed class MultiClickDetector
+        {
+            private int _clickCount;
+            private int _lastClickTick;
+
+            public int RegisterClick()
+            {
+                int now = Environment.TickCount;
+                if (now - _lastClickTick > SystemInformation.DoubleClickTime)
+                    _clickCount = 0;
+                _lastClickTick = now;
+                return ++_clickCount;
+            }
+
+            public void Reset() => _clickCount = 0;
         }
     }
 }

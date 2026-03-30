@@ -133,50 +133,23 @@ private void AutoFitPropertyGridLabelColumn(PropertyGrid grid)
 
 ---
 
-## TrackBar + NumericUpDown 雙向同步
+## TrackBar + NumericUpDown 雙向同步（`BindBidirectionalSync`）
 
-避免互觸無窮迴圈的 pattern（用 captured local bool）：
-
-```csharp
-bool syncing = false;
-trackBar.ValueChanged += (s, e) => {
-    if (syncing) return;
-    syncing = true;
-    numericUpDown.Value = trackBar.Value;
-    syncing = false;
-};
-numericUpDown.ValueChanged += (s, e) => {
-    if (syncing) return;
-    syncing = true;
-    trackBar.Value = Math.Max(trackBar.Minimum, Math.Min(trackBar.Maximum, (int)numericUpDown.Value));
-    syncing = false;
-};
-```
-
-`syncing` 是 lambda 捕獲的 local 變數，兩個 lambda 共用同一個 heap slot。
-
-### TrackBar 拖曳偵測模式
-
-拖曳期間抑制硬體寫入（避免每個中間值都呼叫 SetGrabHeight / SetExposureUs）：
+三組 TrackBar↔NUD 同步（曝光/線掃/高度）已統一為 `BindBidirectionalSync` helper：
 
 ```csharp
-private readonly HashSet<TrackBar> _dragging = new HashSet<TrackBar>();
-
-bar.MouseDown  += (s, e) => _dragging.Add(bar);
-bar.MouseUp    += (s, e) =>
-{
-    _dragging.Remove(bar);
-    _liveCameraManager?.SetXxxForCamera(camId, bar.Value);
-};
-bar.ValueChanged += (s, e) =>
-{
-    if (sync || _syncingFromHw) return;
-    if (!_dragging.Contains(bar))
-        _liveCameraManager?.SetXxxForCamera(camId, bar.Value);
-};
+private void BindBidirectionalSync(
+    TrackBar bar, NumericUpDown num, int camId,
+    int min, int max, int initialValue,
+    Action<int> saveSetting, Action<int> writeHardware,
+    Action postAction = null)
 ```
 
-- `HashSet<TrackBar>` per Form，7 台 TrackBar 共用
+- `syncing` 是 helper 內的 captured local，防止 bar↔num 互觸無窮迴圈
+- `_syncingFromHw` 全域 flag 防止 `SyncCameraParamsFromHardware` 回寫時重複觸發
+- 拖曳期間（`_dragging.Contains(bar)`）抑制 `writeHardware`，`MouseUp` 時補送一次
+- `postAction`：LR 用於 `UpdateExpMaxAndClampColor` + `UpdateRowChartPitch`；Height 用於 `RefreshMainDisplay()`（SetGrabHeight 重建 display buffer 後需重新綁定 secondary display）
+- `_dragging`: `HashSet<TrackBar>` per Form，7 台 TrackBar 共用
 - `SetGrabHeight` 特別受益：拖曳期間完全不執行（Buffer 重分配代價高）
 
 ### TrackBar 滑鼠滾輪每格 = 1
