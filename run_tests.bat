@@ -11,28 +11,27 @@ echo  4. Exit
 echo.
 set /p choice="Select (1-4): "
 
+set "TEST_PROJ=tests/dotnet_test/AniloxRoll.Monitor.Tests/AniloxRoll.Monitor.Tests.csproj"
+set "LOG=test_overnight.log"
+
 if "%choice%"=="1" (
     echo.
     echo [%date% %time%] Running unit tests...
-    dotnet test tests/dotnet_test/AniloxRoll.Monitor.Tests/AniloxRoll.Monitor.Tests.csproj -p:Configuration=Release --filter "TestCategory!=Stress"
+    dotnet test %TEST_PROJ% -p:Configuration=Release --filter "TestCategory!=Stress"
 )
 if "%choice%"=="2" (
     echo.
-    echo [%date% %time%] Running stress tests... log: test_overnight.log
-    echo === Started: %date% %time% === > test_overnight.log
-    dotnet test tests/dotnet_test/AniloxRoll.Monitor.Tests/AniloxRoll.Monitor.Tests.csproj -p:Configuration=Release --filter "TestCategory=Stress" 2>&1 >> test_overnight.log
-    echo === Finished: %date% %time% === >> test_overnight.log
-    echo.
-    echo Done. Results in test_overnight.log
+    echo [%date% %time%] Running stress tests...
+    echo === Started: %date% %time% === > %LOG%
+    powershell -Command "dotnet test %TEST_PROJ% -p:Configuration=Release --filter 'TestCategory=Stress' 2>&1 | Tee-Object -FilePath %LOG% -Append"
+    echo === Finished: %date% %time% === >> %LOG%
 )
 if "%choice%"=="3" (
     echo.
-    echo [%date% %time%] Running all tests... log: test_overnight.log
-    echo === Started: %date% %time% === > test_overnight.log
-    dotnet test tests/dotnet_test/AniloxRoll.Monitor.Tests/AniloxRoll.Monitor.Tests.csproj -p:Configuration=Release 2>&1 >> test_overnight.log
-    echo === Finished: %date% %time% === >> test_overnight.log
-    echo.
-    echo Done. Results in test_overnight.log
+    echo [%date% %time%] Running all tests...
+    echo === Started: %date% %time% === > %LOG%
+    powershell -Command "dotnet test %TEST_PROJ% -p:Configuration=Release 2>&1 | Tee-Object -FilePath %LOG% -Append"
+    echo === Finished: %date% %time% === >> %LOG%
 )
 if "%choice%"=="4" exit /b
 
