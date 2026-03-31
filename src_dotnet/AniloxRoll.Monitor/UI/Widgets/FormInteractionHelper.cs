@@ -49,6 +49,15 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private readonly CanvasInteractionHelper _canvasHelper;
         private string _imageInfoSuffix = "";
 
+        /// <summary>
+        /// 回顧資料夾的 CSV #CFG 快照。設定後，chart/canvas 優先使用 CFG 的 Ops/Pos/閾值。
+        /// </summary>
+        public CsvConfigSnapshot ReviewConfig
+        {
+            get => _canvasHelper.ReviewConfig;
+            set => _canvasHelper.ReviewConfig = value;
+        }
+
         private bool _isProcessedMode = false;
         private bool _isBusy = false;
 
@@ -179,14 +188,20 @@ namespace AniloxRoll.Monitor.UI.Widgets
                     if (_muraChartHelper != null && _settings != null)
                     {
                         sw.Restart();
-                        double[] cameraStartPositionMmArray = _settings.GetCameraStartPositionMmArray();
-                        double startPos = (index >= 0 && index < cameraStartPositionMmArray.Length)
-                            ? cameraStartPositionMmArray[index] : 0;
+                        var cfg = ReviewConfig;
+                        double[] posArr = cfg?.CamPos ?? _settings.GetCameraStartPositionMmArray();
+                        double startPos = (index >= 0 && index < posArr.Length)
+                            ? posArr[index] : 0;
 
-                        // FitToScreen/SetView 同步更新 Zoom/PanOffset，
-                        // UpdateDataAndView 在 SuspendUpdates/ResumeUpdates 內一次完成資料+縮放，
-                        // 且 RefreshThresholds 已從 UpdateDataAndView 移除（threshold 未改變不需重算），
-                        // 故整個 chart 只 redraw 一次，不閃爍。
+                        // 回顧模式：chart 使用 CFG 的 Ops/閾值
+                        if (cfg != null)
+                        {
+                            double opsUm = (index >= 0 && index < cfg.CamOps.Length)
+                                ? cfg.CamOps[index] : _settings.Cam1_Ops;
+                            _muraChartHelper.SetOps(opsUm);
+                            _muraChartHelper.SetThresholds(cfg.ErrorValueMean, cfg.ErrorValueMax);
+                        }
+
                         _canvasHelper.TryComputeCurrentViewRange(index, out double leftMm, out double rightMm);
                         _muraChartHelper.UpdateDataAndView(data.MuraCurveMean, data.MuraCurveMax,
                             startPos, leftMm, rightMm);

@@ -1,4 +1,5 @@
 using AniloxRoll.Monitor.Core.Data;
+using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.Presenters;
 using AOI.SDK.UI;
 using System;
@@ -70,6 +71,15 @@ namespace AniloxRoll.Monitor.UI.Widgets
             _galleryManager = galleryManager;
         }
 
+        /// <summary>回顧時的 CSV #CFG 快照；非 null 時優先使用其 Ops/Pos/閾值。</summary>
+        public CsvConfigSnapshot ReviewConfig { get; set; }
+
+        private double[] GetEffectiveOpsArray() =>
+            ReviewConfig?.CamOps ?? _settings?.GetCameraOpsUmArray() ?? new double[7];
+
+        private double[] GetEffectivePosArray() =>
+            ReviewConfig?.CamPos ?? _settings?.GetCameraStartPositionMmArray() ?? new double[7];
+
         public void SetCurrentCameraIndex(int index) => _currentCameraIndex = index;
 
         /// <summary>在載入新圖前呼叫，以世界座標（mm）記住目前 viewport，支援跨倍率還原。</summary>
@@ -81,8 +91,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             _savedViewLeftMm = double.NaN;
             if (_settings != null && _currentCameraIndex >= 0)
             {
-                double[] opsUm  = _settings.GetCameraOpsUmArray();
-                double[] startMm = _settings.GetCameraStartPositionMmArray();
+                double[] opsUm  = GetEffectiveOpsArray();
+                double[] startMm = GetEffectivePosArray();
                 if (_currentCameraIndex < opsUm.Length)
                 {
                     double opsInMm    = opsUm[_currentCameraIndex] / 1000.0;
@@ -152,8 +162,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
                     // 優先：以 mm 世界座標還原（支援 1x↔5x 等跨倍率跳轉）
                     if (!double.IsNaN(_savedViewLeftMm) && _settings != null && _currentCameraIndex >= 0)
                     {
-                        double[] opsUm      = _settings.GetCameraOpsUmArray();
-                        double[] startMmArr = _settings.GetCameraStartPositionMmArray();
+                        double[] opsUm      = GetEffectiveOpsArray();
+                        double[] startMmArr = GetEffectivePosArray();
                         if (_currentCameraIndex < opsUm.Length)
                         {
                             double opsInMm    = opsUm[_currentCameraIndex] / 1000.0;
@@ -195,8 +205,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             leftMm = rightMm = 0;
             if (_settings == null || _canvas.Image == null) return false;
 
-            double[] opsUmArray   = _settings.GetCameraOpsUmArray();
-            double[] startMmArray = _settings.GetCameraStartPositionMmArray();
+            double[] opsUmArray   = GetEffectiveOpsArray();
+            double[] startMmArray = GetEffectivePosArray();
             if (cameraIndex < 0 || cameraIndex >= opsUmArray.Length) return false;
 
             float zoom = _canvas.Zoom;
@@ -251,8 +261,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
         {
             if (_settings == null || _statusLabel == null) return;
 
-            double[] cameraOpsUmArray = _settings.GetCameraOpsUmArray();
-            double[] cameraStartPositionMmArray = _settings.GetCameraStartPositionMmArray();
+            double[] cameraOpsUmArray = GetEffectiveOpsArray();
+            double[] cameraStartPositionMmArray = GetEffectivePosArray();
 
             if (_currentCameraIndex < 0 || _currentCameraIndex >= cameraOpsUmArray.Length)
                 return;
@@ -325,7 +335,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         {
             if (_canvas.Image == null || _settings == null) return;
 
-            double[] opsUmArr = _settings.GetCameraOpsUmArray();
+            double[] opsUmArr = GetEffectiveOpsArray();
             if (_currentCameraIndex < 0 || _currentCameraIndex >= opsUmArr.Length) return;
 
             double opsInMm = opsUmArr[_currentCameraIndex] / 1000.0;

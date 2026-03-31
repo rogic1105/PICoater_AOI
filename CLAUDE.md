@@ -10,6 +10,8 @@ PICoater_AOI/
 │   ├── PlcBridge.ManualControl/     ← 手動 DI/DO 控制工具
 │   └── PlcBridge.Automation/        ← FSM 狀態機自動控制工具
 ├── tests/dotnet_test/AniloxRoll.Monitor.Tests/ ← NUnit 單元 + 壓力測試
+├── tests/python_test/               ← Python 測試/工具腳本
+├── TestRunner/                      ← 測試啟動器（雙擊 TestRunner.bat）
 ├── src_native/                      ← C++ pipeline 實作
 └── sdk/AOI_SDK/                     ← 共用 SDK (core_cv_api / AOI.SDK)
 ```
@@ -40,7 +42,8 @@ PICoater_AOI/
 | `ImageProcessing/BatchInspectionService.cs` | Parallel.For 批次縮圖 |
 | `UI/Form/AniloxRollForm.cs` | Form 邏輯：事件、InitializeSystem、Period Charts；內含 helpers: `BindBidirectionalSync`（TrackBar↔NUD 同步）、`GetCurveBasePath`、`PopulateAllGrabIdCombos`、`SetChartYRange`、`FindCameraById`、`MultiClickDetector`（inner class） |
 | `UI/Form/AniloxRollForm.Designer.cs` | Form 控制項佈局（VS Designer） |
-| `UI/Widgets/FormInteractionHelper.cs` | UI 互動、gallery 選擇、計時 |
+| `UI/Widgets/FormInteractionHelper.cs` | UI 互動、gallery 選擇、計時；ReviewConfig 代理 |
+| `UI/Widgets/CanvasInteractionHelper.cs` | Canvas zoom/pan 事件、mm 座標換算；ReviewConfig → GetEffectiveOps/Pos |
 | `UI/Presenters/LiveTelemetryPresenter.cs` | 16 欄即時 Telemetry |
 | `Acquisition/AniloxCamera.cs` | 單台相機 MIL 資源封裝 |
 | `Acquisition/CaptureTimestampCoordinator.cs` | 多相機存檔時間戳同步 |
@@ -53,7 +56,7 @@ PICoater_AOI/
 | `ImageCatalog/ImageRepository.cs` | 掃描目錄建立索引 |
 | `Services/AoiService.cs` | C# ↔ Native P/Invoke wrapper（ProcessImage + ComputeColumnMean） |
 | `Services/InspectionLogService.cs` | 每日 CSV 寫入 |
-| `Services/InspectionStatisticsService.cs` | CSV 統計服務 |
+| `Services/InspectionStatisticsService.cs` | CSV 統計服務；LoadConfigForDate（按日期載入 #CFG） |
 | `Services/PlcState.cs` | PlcState enum（FSM 狀態）+ PlcIoSnapshot struct（IO 快照） |
 | `Services/PlcGrabController.cs` | PLC-Grab 連動：PlcState FSM、IO 追蹤、Watchdog keepalive；支援 IModbusTcpClient 注入測試 |
 | `Services/CsvConfigSnapshot.cs` | 不可變設定快照 |
@@ -74,7 +77,7 @@ PICoater_AOI/
 | `InspectionLogServiceTests.cs` | CSV 寫入、#CFG 插入、Pass/Fail 判定 |
 | `InspectionStatisticsServiceTests.cs` | 時間/序號統計、veto 邏輯、Period 分組 |
 | `PlcGrabControllerTests.cs` | FSM 狀態機：連線、邊緣偵測、故障恢復、CommLost |
-| `StressTests.cs` | 長時間壓力：PLC 100 萬循環、CSV 50 萬筆、Settings 14.5 萬讀寫 |
+| `StressTests.cs` | 長時間壓力：PLC 100 萬循環、CSV 50 萬筆、Settings 14.5 萬讀寫；STRESS_MINUTES 環境變數控制時長 |
 
 ---
 

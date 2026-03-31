@@ -1314,7 +1314,7 @@ namespace AniloxRoll.Monitor.Forms
 
             ClearStitchedMode();
             SetReviewGroupBoxes(false);
-            await _presenter.LoadImagesWithPeriodLockAsync(false, _interactionHelper.LoadImages);
+            await _presenter.LoadImagesWithPeriodLockAsync(false, LoadImagesWithReviewConfig);
             UpdateOverviewChartFromRepository();
             }
             catch (Exception ex) { Trace.WriteLine($"[btnSelectFolder_Click] {ex}"); }
@@ -1349,11 +1349,37 @@ namespace AniloxRoll.Monitor.Forms
             await LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest, enableProcess);
         }
 
+        /// <summary>
+        /// 從當前 Period 日期的 CSV 載入 #CFG，更新 ReviewConfig。
+        /// 應在每次 Period 切換或資料夾載入後呼叫。
+        /// </summary>
+        private void RefreshReviewConfigForCurrentPeriod()
+        {
+            string rootPath = UserSessionState.LastDataPath;
+            if (string.IsNullOrWhiteSpace(rootPath)) { _interactionHelper.ReviewConfig = null; return; }
+
+            var periodDate = _dateTimeNavigator.GetCurrentPeriodOrDefault(DateTime.MinValue);
+            if (periodDate == DateTime.MinValue) { _interactionHelper.ReviewConfig = null; return; }
+
+            var cfg = InspectionStatisticsService.LoadConfigForDate(rootPath, periodDate);
+            _interactionHelper.ReviewConfig = cfg;
+        }
+
+        /// <summary>
+        /// 包裝 LoadImages：先刷新 ReviewConfig（navigator 已指向新日期），再載入影像。
+        /// 確保 OnGallerySelectionChanged 觸發時 ReviewConfig 已是正確的 CFG。
+        /// </summary>
+        private async Task LoadImagesWithReviewConfig(bool enableProcess)
+        {
+            RefreshReviewConfigForCurrentPeriod();
+            await _interactionHelper.LoadImages(enableProcess);
+        }
+
         private async void btnPeriodPrev_Click(object sender, EventArgs e)
-        { try { _interactionHelper.SaveCanvasView(); ClearStitchedMode(); await _presenter.MovePeriodAsync(-1, _lastReviewProcessedMode, _interactionHelper.LoadImages); UpdateOverviewChartFromRepository(); } catch (Exception ex) { Trace.WriteLine($"[btnPeriodPrev] {ex}"); } }
+        { try { _interactionHelper.SaveCanvasView(); ClearStitchedMode(); await _presenter.MovePeriodAsync(-1, _lastReviewProcessedMode, LoadImagesWithReviewConfig); UpdateOverviewChartFromRepository(); } catch (Exception ex) { Trace.WriteLine($"[btnPeriodPrev] {ex}"); } }
 
         private async void btnPeriodNext_Click(object sender, EventArgs e)
-        { try { _interactionHelper.SaveCanvasView(); ClearStitchedMode(); await _presenter.MovePeriodAsync(+1, _lastReviewProcessedMode, _interactionHelper.LoadImages); UpdateOverviewChartFromRepository(); } catch (Exception ex) { Trace.WriteLine($"[btnPeriodNext] {ex}"); } }
+        { try { _interactionHelper.SaveCanvasView(); ClearStitchedMode(); await _presenter.MovePeriodAsync(+1, _lastReviewProcessedMode, LoadImagesWithReviewConfig); UpdateOverviewChartFromRepository(); } catch (Exception ex) { Trace.WriteLine($"[btnPeriodNext] {ex}"); } }
 
         /// <summary>cbDate/cbTime 手動滾動時載入對應圖片（同 btnPeriodPrev/Next）。
         /// _syncingGrabIdNav 時跳過（由 OnReviewGrabIdChanged 等程式碼觸發的 NavigateToDateTime）。</summary>
@@ -1366,7 +1392,7 @@ namespace AniloxRoll.Monitor.Forms
             _interactionHelper.SaveCanvasView();
             ClearStitchedMode();
             SetReviewGroupBoxes(false);
-            await _presenter.LoadImagesWithPeriodLockAsync(_lastReviewProcessedMode, _interactionHelper.LoadImages);
+            await _presenter.LoadImagesWithPeriodLockAsync(_lastReviewProcessedMode, LoadImagesWithReviewConfig);
             UpdateOverviewChartFromRepository();
             }
             catch (Exception ex) { Trace.WriteLine($"[OnPeriodComboChanged] {ex}"); }
@@ -2446,9 +2472,18 @@ namespace AniloxRoll.Monitor.Forms
                             ?? InspectionEngine.LoadCurveBin(basePath + "_max.bin");
             }
 
-            UpdateOverviewChart(curveMean, curveMax,
-                _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray(),
-                _settings.ErrorValueMean, _settings.ErrorValueMax);
+            var cfg = _interactionHelper?.ReviewConfig;
+            if (cfg != null)
+            {
+                UpdateOverviewChart(curveMean, curveMax,
+                    cfg.CamOps, cfg.CamPos, cfg.ErrorValueMean, cfg.ErrorValueMax);
+            }
+            else
+            {
+                UpdateOverviewChart(curveMean, curveMax,
+                    _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray(),
+                    _settings.ErrorValueMean, _settings.ErrorValueMax);
+            }
         }
 
         /// <summary>

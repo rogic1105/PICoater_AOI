@@ -691,5 +691,85 @@ namespace AniloxRoll.Monitor.Core.Services
 
             return null;
         }
+
+        /// <summary>
+        /// 載入指定日期的 #CFG（從 {root}/{yyyy}/{yyyyMM}/{yyyyMMdd}.csv 讀取最後一個 #CFG 列）。
+        /// 回傳 null 表示找不到 #CFG。
+        /// </summary>
+        public static CsvConfigSnapshot LoadConfigForDate(string captureRootPath, DateTime date)
+        {
+            if (string.IsNullOrWhiteSpace(captureRootPath) || !Directory.Exists(captureRootPath))
+                return null;
+
+            // CSV 路徑：{root}/{yyyy}/{yyyyMM}/{yyyyMMdd}.csv
+            string ymd = date.ToString("yyyyMMdd");
+            string ym  = date.ToString("yyyyMM");
+            string y   = date.ToString("yyyy");
+            string csvPath = Path.Combine(captureRootPath, y, ym, ymd + ".csv");
+
+            return LoadConfigFromCsv(csvPath);
+        }
+
+        /// <summary>
+        /// 從單一 CSV 檔讀取最後一個 #CFG 列。
+        /// 回傳 null 表示找不到 #CFG 或檔案不存在。
+        /// </summary>
+        public static CsvConfigSnapshot LoadConfigFromCsv(string csvPath)
+        {
+            if (string.IsNullOrWhiteSpace(csvPath) || !File.Exists(csvPath))
+                return null;
+
+            CsvConfigSnapshot latest = null;
+            try
+            {
+                using (var sr = new StreamReader(csvPath))
+                {
+                    string line;
+                    while ((line = sr.ReadLine()) != null)
+                    {
+                        if (line.StartsWith("#CFG,") &&
+                            CsvConfigSnapshot.TryParse(line, out var cfg))
+                            latest = cfg;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine(
+                    $"[InspectionStatisticsService.LoadConfigFromCsv] {csvPath}: {ex.GetType().Name}: {ex.Message}");
+            }
+
+            return latest;
+        }
+
+        /// <summary>
+        /// 載入指定目錄下最新的 #CFG（掃描所有 CSV，取最後一個 #CFG 列）。
+        /// 回傳 null 表示找不到 #CFG。
+        /// </summary>
+        public static CsvConfigSnapshot LoadLatestConfig(string captureRootPath)
+        {
+            if (string.IsNullOrWhiteSpace(captureRootPath) || !Directory.Exists(captureRootPath))
+                return null;
+
+            CsvConfigSnapshot latest = null;
+            try
+            {
+                var csvFiles = Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories);
+                Array.Sort(csvFiles, StringComparer.OrdinalIgnoreCase);
+
+                foreach (string csvPath in csvFiles)
+                {
+                    var cfg = LoadConfigFromCsv(csvPath);
+                    if (cfg != null) latest = cfg;
+                }
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine(
+                    $"[InspectionStatisticsService.LoadLatestConfig] {ex.GetType().Name}: {ex.Message}");
+            }
+
+            return latest;
+        }
     }
 }

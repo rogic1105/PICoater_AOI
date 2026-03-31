@@ -26,6 +26,7 @@ PICoater_AOI/
 │   └── dotnet_test/AniloxRoll.Monitor.Tests/ # NUnit 3.x + Moq 4.x
 ├── docs/                # 架構與模式文件
 ├── third_party/         # 第三方函式庫 (如 stb_image)
+├── TestRunner/          # 測試啟動器（雙擊 TestRunner.bat 執行）
 └── Directory.Build.props # 全域 MSBuild 設定檔
 ```
 
@@ -72,11 +73,46 @@ PICoater_AOI/
 ### C# 單元 + 壓力測試
 * **專案**: `AniloxRoll.Monitor.Tests`（NUnit 3.x + Moq 4.x）
 * 40 個單元測試 + 6 個壓力測試（PLC FSM、CSV、Settings 讀寫）
+
+#### 使用 TestRunner（推薦）
+
+雙擊 **`TestRunner/TestRunner.bat`** 即可選擇測試模式：
+
+```
+ 1. Unit tests only    (~2 sec)     ← 快速單元測試
+ 2. Stress tests only               ← 僅壓力測試
+ 3. All tests                        ← 全部（先 unit 再 stress，不交錯）
+ 4. Exit
+```
+
+選擇壓力測試後會詢問要跑幾分鐘（預設 60 分鐘），例如：
+- `1` = 快速驗證（~1 分鐘）
+- `60` = 標準壓力（~1 小時）
+- `1440` = 整天跑（~24 小時）
+
+| 檔案 | 用途 |
+|------|------|
+| `TestRunner/TestRunner.bat` | 測試啟動器（雙擊執行） |
+| `TestRunner/TestRunner.ps1` | PowerShell 輔助腳本（bat 內部呼叫，處理 UTF-8 log） |
+| `TestRunner/TestRunner.log` | 測試結果 log（自動產生，已加入 .gitignore） |
+
+壓力測試執行時會即時顯示每 10% 的進度：
+```
+[11:07:13] ▶ SettingsRW  cycles=2,500  est=10s
+  [11:07:14]   SettingsRW  10%  (250/2,500)
+  [11:07:14]   SettingsRW  20%  (500/2,500)
+  ...
+[11:07:20] ✔ SettingsRW  elapsed=6.6s
+```
+
+#### 使用 CLI
+
 ```bash
 # 快速單元測試（~2 秒）
 dotnet test tests/dotnet_test/AniloxRoll.Monitor.Tests/AniloxRoll.Monitor.Tests.csproj -p:Configuration=Release --filter "TestCategory!=Stress"
 
-# 壓力測試（~12 小時）
+# 壓力測試（自訂分鐘數，透過環境變數 STRESS_MINUTES）
+set STRESS_MINUTES=60
 dotnet test tests/dotnet_test/AniloxRoll.Monitor.Tests/AniloxRoll.Monitor.Tests.csproj -p:Configuration=Release --filter "TestCategory=Stress"
 ```
 

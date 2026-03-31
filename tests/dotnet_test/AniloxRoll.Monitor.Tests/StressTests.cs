@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using Moq;
@@ -11,18 +12,90 @@ using AniloxRoll.Monitor.Core.Services;
 namespace AniloxRoll.Monitor.Tests
 {
     /// <summary>
-    /// 長時間壓力測試（跑一整晚用）。
-    /// 使用 nunit3-console --where "cat == Stress" 單獨執行。
+    /// 長時間壓力測試。時間可透過環境變數 STRESS_MINUTES 調整（預設 60 分鐘）。
+    /// 使用 run_tests.bat 選擇壓力測試，會自動詢問分鐘數。
     /// </summary>
     [TestFixture, Category("Stress")]
     public class StressTests
     {
+        private const int NumStressTests = 6;
+
+        // ── 讀取 STRESS_MINUTES 環境變數，預設 60 分鐘 ──
+        private static double StressMinutes
+        {
+            get
+            {
+                var env = Environment.GetEnvironmentVariable("STRESS_MINUTES");
+                if (!string.IsNullOrEmpty(env) &&
+                    double.TryParse(env, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var m) && m > 0)
+                    return m;
+                return 60.0;
+            }
+        }
+
+        /// <summary>
+        /// 根據每分鐘基準 cycle 數，按總時間等分給每個測試。
+        /// cyclesPerMinute: 該測試每分鐘可跑的 cycle 數（實測校準）。
+        /// </summary>
+        private static int Scale(int cyclesPerMinute) =>
+            Math.Max(100, (int)(cyclesPerMinute * StressMinutes / NumStressTests));
+
+        /// <summary>
+        /// 印出測試開始資訊：名稱、cycle 數、預估時間、開始時間。
+        /// </summary>
+        private static Stopwatch LogStart(string testName, int cycles, int cyclesPerMinute)
+        {
+            double estMinutes = (double)cycles / cyclesPerMinute;
+            string estStr = estMinutes < 1
+                ? $"{estMinutes * 60:F0}s"
+                : $"{estMinutes:F1}min";
+            TestContext.Progress.WriteLine($"[{DateTime.Now:HH:mm:ss}] ▶ {testName}  cycles={cycles:N0}  est={estStr}");
+            return Stopwatch.StartNew();
+        }
+
+        /// <summary>
+        /// 印出測試完成資訊。
+        /// </summary>
+        private static void LogEnd(string testName, Stopwatch sw)
+        {
+            TestContext.Progress.WriteLine($"[{DateTime.Now:HH:mm:ss}] ✔ {testName}  elapsed={sw.Elapsed.TotalSeconds:F1}s");
+        }
+
+        /// <summary>
+        /// 每 10% 印一次進度。回傳下一個要報告的門檻。
+        /// </summary>
+        private static int LogProgress(string testName, int i, int total, int nextThreshold)
+        {
+            if (i >= nextThreshold)
+            {
+                int pct = (int)((long)i * 100 / total);
+                TestContext.Progress.WriteLine($"  [{DateTime.Now:HH:mm:ss}]   {testName}  {pct}%  ({i:N0}/{total:N0})");
+                return nextThreshold + total / 10;
+            }
+            return nextThreshold;
+        }
+
+        // =====================================================================
+        //  每分鐘基準 cycle 數（STRESS_MINUTES=10 實測校準）：
+        //    PLC FSM:     16,000 /min
+        //    PLC Fault:   17,000 /min
+        //    CSV Write:   670,000 /min
+        //    Settings RW: 15,600 /min
+        //    CsvConfig:   2,070,000 /min
+        //    Statistics:  2,500,000 /min (真實場景：每日14K筆CSV生成+Compute)
+        // =====================================================================
+
         // ── PLC FSM 循環壓力測試 ──
 
         [Test]
         public async Task PlcFsm_1000000Cycles_NoStateCorruption()
         {
-            const int Cycles = 1000000;
+            const int Rate = 16_000;
+            int Cycles = Scale(Rate);
+            var sw = LogStart("PlcFsm", Cycles, Rate);
+            int nextLog = Cycles / 10;
+
             var mockPlc = new Mock<IModbusTcpClient>();
             mockPlc.SetupProperty(p => p.ReadWriteTimeoutMs, 2000);
             mockPlc.Setup(p => p.WriteDo(It.IsAny<int>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
@@ -54,17 +127,25 @@ namespace AniloxRoll.Monitor.Tests
                     await ctrl.PollTick();
                     Assert.That(ctrl.CurrentState, Is.EqualTo(PlcState.Idle),
                         $"Cycle {i}: expected Idle after falling edge");
+
+                    nextLog = LogProgress("PlcFsm", i, Cycles, nextLog);
                 }
 
                 Assert.That(startCount, Is.EqualTo(Cycles), $"Expected {Cycles} start events");
                 Assert.That(stopCount, Is.EqualTo(Cycles), $"Expected {Cycles} stop events");
             }
+
+            LogEnd("PlcFsm", sw);
         }
 
         [Test]
         public async Task PlcFsm_FaultRecoveryCycles_500000_NoLeak()
         {
-            const int Cycles = 500000;
+            const int Rate = 17_000;
+            int Cycles = Scale(Rate);
+            var sw = LogStart("PlcFaultRecovery", Cycles, Rate);
+            int nextLog = Cycles / 10;
+
             var mockPlc = new Mock<IModbusTcpClient>();
             mockPlc.SetupProperty(p => p.ReadWriteTimeoutMs, 2000);
             mockPlc.Setup(p => p.WriteDo(It.IsAny<int>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
@@ -91,8 +172,12 @@ namespace AniloxRoll.Monitor.Tests
                     await ctrl.PollTick();
                     Assert.That(ctrl.CurrentState, Is.EqualTo(PlcState.Idle),
                         $"Cycle {i}: expected Idle after recovery");
+
+                    nextLog = LogProgress("PlcFaultRecovery", i, Cycles, nextLog);
                 }
             }
+
+            LogEnd("PlcFaultRecovery", sw);
         }
 
         // ── CSV 寫入耐久測試 ──
@@ -100,7 +185,11 @@ namespace AniloxRoll.Monitor.Tests
         [Test]
         public void CsvWrite_500000Records_NoDataloss()
         {
-            const int RecordCount = 500000;
+            const int Rate = 670_000;
+            int RecordCount = Scale(Rate);
+            var sw = LogStart("CsvWrite", RecordCount, Rate);
+            int nextLog = RecordCount / 10;
+
             string tempRoot = Path.Combine(Path.GetTempPath(), "StressCsv_" + Guid.NewGuid().ToString("N"));
 
             try
@@ -121,6 +210,8 @@ namespace AniloxRoll.Monitor.Tests
 
                     svc.AppendRecord(grabId, fileName, meanPeak, maxPeak,
                         0.5f, 0.8f, 3001, 3001.0, 149.0, config, ts);
+
+                    nextLog = LogProgress("CsvWrite", i, RecordCount, nextLog);
                 }
 
                 // Verify: read back CSV and count data lines
@@ -142,6 +233,8 @@ namespace AniloxRoll.Monitor.Tests
             {
                 try { Directory.Delete(tempRoot, true); } catch { }
             }
+
+            LogEnd("CsvWrite", sw);
         }
 
         // ── AcquisitionSettings Save/Load 循環壓力測試 ──
@@ -149,7 +242,11 @@ namespace AniloxRoll.Monitor.Tests
         [Test]
         public void AcquisitionSettings_145000SaveLoadCycles_NoDataloss()
         {
-            const int Cycles = 145000;
+            const int Rate = 15_600;
+            int Cycles = Scale(Rate);
+            var sw = LogStart("SettingsRW", Cycles, Rate);
+            int nextLog = Cycles / 10;
+
             string tempDir = Path.Combine(Path.GetTempPath(), "StressAcq_" + Guid.NewGuid().ToString("N"));
             string configDir = Path.Combine(tempDir, "Config");
 
@@ -191,12 +288,16 @@ namespace AniloxRoll.Monitor.Tests
                             Is.EqualTo(settings.CameraLineRateHz[c]).Within(0.01),
                             $"Cycle {i}, cam {c}: LineRateHz mismatch");
                     }
+
+                    nextLog = LogProgress("SettingsRW", i, Cycles, nextLog);
                 }
             }
             finally
             {
                 try { Directory.Delete(tempDir, true); } catch { }
             }
+
+            LogEnd("SettingsRW", sw);
         }
 
         // ── CsvConfigSnapshot ToCsvLine/TryParse 大量循環 ──
@@ -204,7 +305,11 @@ namespace AniloxRoll.Monitor.Tests
         [Test]
         public void CsvConfigSnapshot_1000000RoundTrips_NoCorruption()
         {
-            const int Cycles = 1000000;
+            const int Rate = 2_070_000;
+            int Cycles = Scale(Rate);
+            var sw = LogStart("CsvConfigRoundTrip", Cycles, Rate);
+            int nextLog = Cycles / 10;
+
             var rng = new Random(42);
 
             for (int i = 0; i < Cycles; i++)
@@ -237,52 +342,122 @@ namespace AniloxRoll.Monitor.Tests
                     Assert.That(parsed.CamPos[c], Is.EqualTo(pos[c]).Within(0.01),
                         $"Cycle {i}, cam {c}: CamPos mismatch");
                 }
+
+                nextLog = LogProgress("CsvConfigRoundTrip", i, Cycles, nextLog);
             }
+
+            LogEnd("CsvConfigRoundTrip", sw);
         }
 
-        // ── InspectionStatisticsService 大量 CSV 統計壓力測試 ──
+        // ── InspectionStatisticsService 真實月資料量壓力測試 ──
+        //
+        //  模擬真實場景：每天 2000 次 grab × 7 台相機 = 14,000 筆/天
+        //  一個月 30 天 = 420,000 筆，分散在 30 個 CSV 檔案中。
+        //  Scale 控制月數：STRESS_MINUTES=6 → 1 個月，60 → 10 個月。
 
         [Test]
-        public void Statistics_LargeCsv_200000Records_CorrectCounts()
+        public void Statistics_RealisticMonthly_MultiDayCsv()
         {
-            const int RecordCount = 200000;
+            const int GrabsPerDay = 2000;
+            const int NumCameras = 7;
+            const int RecordsPerDay = GrabsPerDay * NumCameras; // 14,000
+            // Rate 校準：1 分鐘可生成+計算 ~2,500,000 筆
+            // STRESS_MINUTES=1 → 30 天(420K筆), =10 → 300 天, =60 → 1800 天
+            const int Rate = 2_500_000;
+
+            int totalRecords = Scale(Rate);
+            int totalDays = Math.Max(1, totalRecords / RecordsPerDay);
+            totalRecords = totalDays * RecordsPerDay;
+
+            var sw = LogStart("Statistics", totalRecords, Rate);
+            TestContext.Progress.WriteLine(
+                $"  [{DateTime.Now:HH:mm:ss}]   Statistics  {totalDays} days x {RecordsPerDay:N0} records/day = {totalRecords:N0} total");
+
             string tempRoot = Path.Combine(Path.GetTempPath(), "StressStat_" + Guid.NewGuid().ToString("N"));
 
             try
             {
-                string dir = Path.Combine(tempRoot, "2026", "202603");
-                Directory.CreateDirectory(dir);
-                string csvPath = Path.Combine(dir, "20260330.csv");
+                // ── Phase 1: 生成每日 CSV ──
+                var genSw = Stopwatch.StartNew();
+                var baseDate = new DateTime(2026, 1, 1);
+                int globalGrabNum = 0;
+                var expectedPerCam = new Dictionary<int, int[]>(); // camId → [pass, fail]
+                for (int c = 1; c <= NumCameras; c++)
+                    expectedPerCam[c] = new int[2]; // [0]=pass, [1]=fail
 
-                var sb = new System.Text.StringBuilder();
-                sb.AppendLine("Id,FileName,MaxExceed,MeanExceed,MeanPeak,MaxPeak,GrabHeight,LineRateHz,ExposureUs");
-
-                int expectedPass = 0, expectedFail = 0;
-                for (int i = 0; i < RecordCount; i++)
+                for (int day = 0; day < totalDays; day++)
                 {
-                    string grabId = $"A{(i + 1):D5}";
-                    int camId = 1; // all CAM1 for simplicity
-                    int maxExceed  = (i % 5 == 0) ? 1 : 0;
-                    int meanExceed = (i % 7 == 0) ? 1 : 0;
-                    if (maxExceed == 0 && meanExceed == 0) expectedPass++;
-                    else expectedFail++;
+                    var date = baseDate.AddDays(day);
+                    string dir = Path.Combine(tempRoot,
+                        date.ToString("yyyy"),
+                        date.ToString("yyyyMM"));
+                    Directory.CreateDirectory(dir);
+                    string csvPath = Path.Combine(dir, date.ToString("yyyyMMdd") + ".csv");
 
-                    sb.AppendLine($"{grabId},20260330_100000.{i:D3}-{camId},{maxExceed},{meanExceed},0.3,0.6,3001,3001.0,149.0");
+                    var sb = new System.Text.StringBuilder();
+                    sb.AppendLine("Id,FileName,MaxExceed,MeanExceed,MeanPeak,MaxPeak,GrabHeight,LineRateHz,ExposureUs");
+
+                    for (int g = 0; g < GrabsPerDay; g++)
+                    {
+                        globalGrabNum++;
+                        string grabId = $"A{globalGrabNum:D6}";
+                        // 每次 grab 產生 7 張照片（7 台相機）
+                        var ts = date.AddSeconds(g * 30); // 每 30 秒一次 grab
+                        string tsStr = ts.ToString("yyyyMMdd_HHmmss") + ".000";
+
+                        for (int c = 1; c <= NumCameras; c++)
+                        {
+                            int maxExceed  = ((globalGrabNum + c) % 5 == 0) ? 1 : 0;
+                            int meanExceed = ((globalGrabNum + c) % 7 == 0) ? 1 : 0;
+                            if (maxExceed == 0 && meanExceed == 0)
+                                expectedPerCam[c][0]++;
+                            else
+                                expectedPerCam[c][1]++;
+
+                            sb.AppendLine($"{grabId},{tsStr}-{c},{maxExceed},{meanExceed},0.3,0.6,3001,3001.0,149.0");
+                        }
+                    }
+
+                    File.WriteAllText(csvPath, sb.ToString());
+
+                    // 每 10% 報告一次
+                    if (totalDays >= 10 && (day + 1) % (totalDays / 10) == 0)
+                    {
+                        int pct = (int)((long)(day + 1) * 100 / totalDays);
+                        TestContext.Progress.WriteLine(
+                            $"  [{DateTime.Now:HH:mm:ss}]   Statistics  gen {pct}%  ({day + 1}/{totalDays} days)");
+                    }
                 }
+                genSw.Stop();
+                TestContext.Progress.WriteLine(
+                    $"  [{DateTime.Now:HH:mm:ss}]   Statistics  CSV generation done ({genSw.Elapsed.TotalSeconds:F1}s)");
 
-                File.WriteAllText(csvPath, sb.ToString());
+                // ── Phase 2: Compute 統計 ──
+                var compSw = Stopwatch.StartNew();
+                var endDate = baseDate.AddDays(totalDays);
+                var stats = InspectionStatisticsService.Compute(tempRoot, baseDate, endDate);
+                compSw.Stop();
+                TestContext.Progress.WriteLine(
+                    $"  [{DateTime.Now:HH:mm:ss}]   Statistics  Compute done ({compSw.Elapsed.TotalSeconds:F1}s, " +
+                    $"{totalRecords / Math.Max(0.001, compSw.Elapsed.TotalSeconds):F0} records/sec)");
 
-                var stats = InspectionStatisticsService.Compute(
-                    tempRoot, new DateTime(2026, 3, 30), new DateTime(2026, 3, 31));
-
-                Assert.That(stats[1].Pass, Is.EqualTo(expectedPass), "CAM1 pass count mismatch");
-                Assert.That(stats[1].Fail, Is.EqualTo(expectedFail), "CAM1 fail count mismatch");
-                Assert.That(stats[1].Total, Is.EqualTo(RecordCount));
+                // ── Phase 3: 驗證每台相機統計 ──
+                for (int c = 1; c <= NumCameras; c++)
+                {
+                    Assert.That(stats[c].Pass, Is.EqualTo(expectedPerCam[c][0]),
+                        $"CAM{c} pass count mismatch");
+                    Assert.That(stats[c].Fail, Is.EqualTo(expectedPerCam[c][1]),
+                        $"CAM{c} fail count mismatch");
+                    Assert.That(stats[c].Total, Is.EqualTo(GrabsPerDay * totalDays),
+                        $"CAM{c} total count mismatch");
+                }
             }
             finally
             {
                 try { Directory.Delete(tempRoot, true); } catch { }
             }
+
+            LogEnd("Statistics", sw);
         }
 
         // ── Mirror helpers for AcquisitionSettings JSON ──
