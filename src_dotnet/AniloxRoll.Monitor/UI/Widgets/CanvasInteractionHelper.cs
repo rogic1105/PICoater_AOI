@@ -330,8 +330,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 $"實體倍率:{magStr}{ImageInfoSuffix}";
         }
 
-        /// <summary>將 canvas 設為實體倍率 1x（畫面中心不動）。</summary>
-        public void SetPhysicalMagnification1x()
+        /// <summary>將 canvas 設為實體倍率 1x，滑鼠所指的影像位置移到 canvas 中央。</summary>
+        public void SetPhysicalMagnification1x(Point mouseLocation)
         {
             if (_canvas.Image == null || _settings == null) return;
 
@@ -343,14 +343,17 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
             float zoom1x = (float)(_imageScaleFactor * opsInMm / _screenMmPerPx);
 
+            // 滑鼠下的影像座標
             float oldZoom = _canvas.Zoom;
             PointF oldPan = _canvas.PanOffset;
+            float imgX = (mouseLocation.X - oldPan.X) / oldZoom;
+            float imgY = (mouseLocation.Y - oldPan.Y) / oldZoom;
+
+            // 該影像點放到 canvas 中央
             float cx = _canvas.Width / 2f;
             float cy = _canvas.Height / 2f;
-            float imgCx = (cx - oldPan.X) / oldZoom;
-            float imgCy = (cy - oldPan.Y) / oldZoom;
-            float newPanX = cx - imgCx * zoom1x;
-            float newPanY = cy - imgCy * zoom1x;
+            float newPanX = cx - imgX * zoom1x;
+            float newPanY = cy - imgY * zoom1x;
 
             _canvas.SetView(zoom1x, new PointF(newPanX, newPanY));
         }

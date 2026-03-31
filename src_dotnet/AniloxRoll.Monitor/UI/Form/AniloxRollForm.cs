@@ -401,15 +401,18 @@ namespace AniloxRoll.Monitor.Forms
             canvasMain.MouseDown += (s, e) =>
             {
                 if (e.Button != MouseButtons.Left) return;
-                int clicks = canvasClicker.RegisterClick();
+                int clicks = canvasClicker.RegisterClick(e.Location);
                 if (clicks == 2)
                 {
-                    if (canvasMain.Image != null) canvasMain.FitToScreen();
+                    // 非 FitToScreen → 回到 FitToScreen；已 FitToScreen → 無動作
+                    // 不消費，讓 count 能繼續累積到 3（三擊覆蓋雙擊效果）
+                    if (canvasMain.Image != null && !IsCanvasFitToScreen())
+                        canvasMain.FitToScreen();
                 }
                 else if (clicks >= 3)
                 {
-                    canvasClicker.Reset();
-                    _interactionHelper?.SetCanvasPhysicalMag1x();
+                    canvasClicker.Consume();
+                    _interactionHelper?.SetCanvasPhysicalMag1x(e.Location);
                 }
             };
         }
@@ -441,7 +444,7 @@ namespace AniloxRoll.Monitor.Forms
             panelMainDisplay.MouseDown += (s, e) =>
             {
                 if (e.Button != MouseButtons.Left) return;
-                int clicks = panelClicker.RegisterClick();
+                int clicks = panelClicker.RegisterClick(e.Location);
 
                 if (clicks == 2)
                 {
@@ -452,7 +455,7 @@ namespace AniloxRoll.Monitor.Forms
                 }
                 else if (clicks >= 3)
                 {
-                    panelClicker.Reset();
+                    panelClicker.Consume();
                     if (_liveCameraManager.IsLiveGrabbing)
                         _liveCameraManager.SetPhysicalMagnification1x();
                     else if (_bgPreviewMainCanvas != null && _bgPreviewActive)
@@ -3461,21 +3464,55 @@ namespace AniloxRoll.Monitor.Forms
 
         // ── Inner Classes ───────────────────────────────────────────
 
+        private bool IsCanvasFitToScreen()
+        {
+            if (canvasMain.Image == null) return false;
+            float ratioW = (float)canvasMain.Width / canvasMain.Image.Width;
+            float ratioH = (float)canvasMain.Height / canvasMain.Image.Height;
+            float fitZoom = Math.Min(ratioW, ratioH) * 0.95f;
+            if (Math.Abs(canvasMain.Zoom - fitZoom) > 0.001f) return false;
+
+            float drawW = canvasMain.Image.Width * fitZoom;
+            float drawH = canvasMain.Image.Height * fitZoom;
+            float fitPanX = (canvasMain.Width - drawW) / 2f;
+            float fitPanY = (canvasMain.Height - drawH) / 2f;
+            var pan = canvasMain.PanOffset;
+            return Math.Abs(pan.X - fitPanX) < 1f && Math.Abs(pan.Y - fitPanY) < 1f;
+        }
+
         private sealed class MultiClickDetector
         {
+            private const int ClickIntervalMs = 300;
             private int _clickCount;
             private int _lastClickTick;
+            private Point _lastClickPos;
+            private bool _consumed;
 
-            public int RegisterClick()
+            public int RegisterClick(Point pos)
             {
                 int now = Environment.TickCount;
-                if (now - _lastClickTick > SystemInformation.DoubleClickTime)
+                int dx = pos.X - _lastClickPos.X;
+                int dy = pos.Y - _lastClickPos.Y;
+                int distSq = dx * dx + dy * dy;
+                int threshold = SystemInformation.DoubleClickSize.Width;
+
+                if (_consumed
+                    || now - _lastClickTick > ClickIntervalMs
+                    || distSq > threshold * threshold)
+                {
                     _clickCount = 0;
+                    _consumed = false;
+                }
+
                 _lastClickTick = now;
+                _lastClickPos = pos;
                 return ++_clickCount;
             }
 
-            public void Reset() => _clickCount = 0;
+            /// <summary>標記本輪點擊已消費，下次 RegisterClick 從 1 重新開始。</summary>
+            public void Consume() => _consumed = true;
+
+            public void Reset() { _clickCount = 0; _consumed = false; }
         }
     }
 }

@@ -103,7 +103,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public void SetScreenMmPerPixel(double mmPerPx) => _canvasHelper.SetScreenMmPerPixel(mmPerPx);
         public double ScreenMmPerPixel => _canvasHelper.ScreenMmPerPixel;
         public double RowPitchMm => _muraChartHorizontalHelper?.RowPitchMm ?? 0;
-        public void SetCanvasPhysicalMag1x() => _canvasHelper.SetPhysicalMagnification1x();
+        public void SetCanvasPhysicalMag1x(Point mouseLocation) => _canvasHelper.SetPhysicalMagnification1x(mouseLocation);
 
         // ── 設定 ─────────────────────────────────────────────────────────
         public void ApplySettingsToService()
