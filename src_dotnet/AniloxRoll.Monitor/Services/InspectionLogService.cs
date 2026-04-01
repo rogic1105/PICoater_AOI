@@ -8,7 +8,7 @@ namespace AniloxRoll.Monitor.Core.Services
 {
     /// <summary>
     /// 逐圖檢測結果記錄服務。
-    /// 每次抓圖事件分配一個唯一編號（A00001 起），
+    /// 每次抓圖事件分配一個以首筆擷取時間為基礎的序號（yyMMdd-HHmmss），
     /// 並以 CSV 格式寫入 {CaptureRootPath}\{YYYY}\{YYYYMM}\{YYYYMMDD}.csv。
     /// </summary>
     public class InspectionLogService
@@ -16,7 +16,6 @@ namespace AniloxRoll.Monitor.Core.Services
         private const string Header =
             "Id,FileName,MaxExceed,MeanExceed,MeanPeak,MaxPeak,GrabHeight,LineRateHz,ExposureUs";
 
-        private int _lastIdNum;
         private readonly Func<string> _getCaptureRoot;
         private readonly object _csvLock = new object();
 
@@ -24,28 +23,25 @@ namespace AniloxRoll.Monitor.Core.Services
         private string _lastWrittenConfigKey;
         private string _lastCsvPath;
 
-        /// <summary>
         /// <param name="getCaptureRoot">取得 CaptureRootPath 的委派（支援動態更新）</param>
-        /// <param name="startIdNum">從 session-state 讀回的上次編號，下次 NextGrabId() 從 +1 開始</param>
-        /// </summary>
-        public InspectionLogService(Func<string> getCaptureRoot, int startIdNum = 0)
+        public InspectionLogService(Func<string> getCaptureRoot)
         {
             _getCaptureRoot = getCaptureRoot ?? (() => string.Empty);
-            _lastIdNum = startIdNum;
         }
 
-        public int LastIdNum => _lastIdNum;
-
         /// <summary>
-        /// 產生下一個抓圖編號（e.g. A00001），同時持久化計數器。
+        /// 產生抓圖序號（yyMMdd-HHmmss），以當前時間為基礎。
         /// 每次按下「開始抓取」呼叫一次。
         /// </summary>
         public string NextGrabId()
         {
-            _lastIdNum++;
-            UI.State.UserSessionState.SetLastGrabIdNum(_lastIdNum);
-            UI.State.UserSessionState.Save();
-            return FormatId(_lastIdNum);
+            return FormatGrabId(DateTime.Now);
+        }
+
+        /// <summary>將 DateTime 格式化為 GrabId（yyMMdd-HHmmss）。</summary>
+        internal static string FormatGrabId(DateTime dt)
+        {
+            return dt.ToString("yyMMdd-HHmmss", CultureInfo.InvariantCulture);
         }
 
         /// <summary>
@@ -183,6 +179,5 @@ namespace AniloxRoll.Monitor.Core.Services
             }
         }
 
-        private static string FormatId(int n) => $"A{n:D5}";
     }
 }

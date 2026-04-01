@@ -71,7 +71,7 @@ namespace AniloxRoll.Monitor.Forms
         private InspectionLogService _inspectionLogService;
         private string _currentGrabId;
 
-        // --- PLC 連動 ---
+        // --- IO 連動 ---
         private PlcGrabController _plcGrabController;
 
         // --- 統計 ---
@@ -155,13 +155,12 @@ namespace AniloxRoll.Monitor.Forms
         {
             _inspectionService    = new BatchInspectionService();
             _inspectionLogService = new InspectionLogService(
-                () => _settings?.CaptureRootPath ?? string.Empty,
-                UserSessionState.LastGrabIdNum);
+                () => _settings?.CaptureRootPath ?? string.Empty);
 
             InitPlcController();
         }
 
-        /// <summary>初始化 PLC 連動：自動偵測連線，連上後以 DI START 控制 Grab。</summary>
+        /// <summary>初始化 IO 連動：自動偵測連線，連上後以 DI START 控制 Grab。</summary>
         private void InitPlcController()
         {
             if (!_settings.PlcEnabled) return;
@@ -235,7 +234,7 @@ namespace AniloxRoll.Monitor.Forms
                     bgColor = IecYellow;  // IEC 黃
                     break;
                 case PlcState.Faulted:
-                    text = "Faulted PLC故障";
+                    text = "Faulted IO故障";
                     bgColor = IecRed;   // IEC 紅
                     break;
                 case PlcState.CommLost:
@@ -255,15 +254,15 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (connected)
             {
-                lblPlcConn.Text = "● PLC 已連線";
+                lblPlcConn.Text = "● IO 已連線";
                 lblPlcConn.BackColor = IecGreen;  // IEC 綠
-                btnCameraGrab.Text = "PLC 控制中";
+                btnCameraGrab.Text = "IO 控制中";
                 btnCameraGrab.BackColor = IecBlue;
                 btnCameraGrab.ForeColor = Color.White;
             }
             else
             {
-                lblPlcConn.Text = "● PLC 離線";
+                lblPlcConn.Text = "● IO 離線";
                 lblPlcConn.BackColor = IecGray;
                 UpdateGrabButton(_liveCameraManager?.IsLiveGrabbing ?? false);
                 btnCameraGrab.BackColor = SystemColors.Control;
@@ -404,10 +403,11 @@ namespace AniloxRoll.Monitor.Forms
                 int clicks = canvasClicker.RegisterClick(e.Location);
                 if (clicks == 2)
                 {
-                    // 非 FitToScreen → 回到 FitToScreen；已 FitToScreen → 無動作
-                    // 不消費，讓 count 能繼續累積到 3（三擊覆蓋雙擊效果）
                     if (canvasMain.Image != null && !IsCanvasFitToScreen())
+                    {
                         canvasMain.FitToScreen();
+                        canvasClicker.Consume();   // 歸零，防止下一下誤觸三擊
+                    }
                 }
                 else if (clicks >= 3)
                 {
@@ -547,11 +547,37 @@ namespace AniloxRoll.Monitor.Forms
                     ? _settings.Acquisition.CameraExposureTimeUs[idx] : 0,
                 CsvConfigSnapshot.FromSettings(_settings));
 
-            // PLC MURA 信號：任一相機超過閾值即通知
+            // IO MURA 信號：任一相機超過閾值即通知
             if (_plcGrabController?.IsConnected == true)
             {
                 bool isMura = meanPeak > _settings.ErrorValueMean || maxPeak > _settings.ErrorValueMax;
                 if (isMura) _ = _plcGrabController.NotifyMuraDetected();
+            }
+        }
+
+        /// <summary>
+        /// Live 曲線閾值判斷（callback 執行緒呼叫，V/H 共用）。
+        /// 陣列為 0-255，閾值為 0-1，取陣列 max 後除以 255 比較。
+        /// 任一方向超標即觸發 DO_MURA H，維持到 grab 結束。
+        /// </summary>
+        private void CheckLiveMura(float[] meanArr, float[] maxArr)
+        {
+            if (_plcGrabController?.IsConnected != true) return;
+            if (_settings == null) return;
+            if (!_liveCameraManager.IsLiveGrabbing) return;
+
+            float meanPeak = 0f, maxPeak = 0f;
+            if (meanArr != null) { for (int i = 0; i < meanArr.Length; i++) if (meanArr[i] > meanPeak) meanPeak = meanArr[i]; }
+            if (maxArr  != null) { for (int i = 0; i < maxArr.Length;  i++) if (maxArr[i]  > maxPeak)  maxPeak  = maxArr[i];  }
+            meanPeak /= 255f;
+            maxPeak  /= 255f;
+
+            if (meanPeak > _settings.ErrorValueMean || maxPeak > _settings.ErrorValueMax)
+            {
+                // fire-and-forget; 寫入失敗不應影響取像流程
+                _ = _plcGrabController.NotifyMuraDetected().ContinueWith(
+                    t => { /* swallow — PollTick 會偵測真正的 CommLost */ },
+                    TaskContinuationOptions.OnlyOnFaulted);
             }
         }
 
@@ -565,6 +591,9 @@ namespace AniloxRoll.Monitor.Forms
                 _liveCurveMax[cameraIndex]  = maxArr;
                 _liveOverviewDirty = true;
             }
+
+            // Live Mura 判斷（callback 執行緒，所有相機都檢查）
+            CheckLiveMura(meanArr, maxArr);
 
             // 只有選中相機才 marshal 到 UI 執行緒更新 muraChartLive
             if (camId != _liveCameraManager.SelectedMainCameraId) return;
@@ -612,6 +641,9 @@ namespace AniloxRoll.Monitor.Forms
 
         private void OnLiveRowCurveData(int camId, float[] meanArr, float[] maxArr)
         {
+            // Live Mura 判斷（水平方向）
+            CheckLiveMura(meanArr, maxArr);
+
             if (camId != _liveCameraManager.SelectedMainCameraId) return;
 
             if (InvokeRequired)
@@ -1604,7 +1636,7 @@ namespace AniloxRoll.Monitor.Forms
             listViewChartConst.Items.Add(new ListViewItem(new[] { "OverlapMax",        "Maximum" }));
             AutoFitListViewColumns(listViewChartConst);
 
-            // ── 硬體參數（螢幕 + 未來 PLC）──────────────────────────────────
+            // ── 硬體參數（螢幕 + IO 模組）──────────────────────────────────
             listViewHardware.Columns.Add("參數", 120);
             listViewHardware.Columns.Add("值",   120);
             try
@@ -1634,17 +1666,17 @@ namespace AniloxRoll.Monitor.Forms
             }
             catch { /* 非關鍵資訊，忽略 */ }
 
-            // ── PLC 參數 ──
+            // ── IO 模組參數 ──
             if (_plcGrabController != null)
             {
-                listViewHardware.Items.Add(new ListViewItem(new[] { "PLC_Model",     _plcGrabController.Model }));
-                listViewHardware.Items.Add(new ListViewItem(new[] { "PLC_IP",        _plcGrabController.PlcIp }));
-                listViewHardware.Items.Add(new ListViewItem(new[] { "PLC_Port",      _plcGrabController.PlcPort.ToString() }));
-                listViewHardware.Items.Add(new ListViewItem(new[] { "PLC_Poll",      $"{_plcGrabController.PollIntervalMs} ms" }));
-                listViewHardware.Items.Add(new ListViewItem(new[] { "PLC_Reconnect", $"{_plcGrabController.ReconnectIntervalMs} ms" }));
-                listViewHardware.Items.Add(new ListViewItem(new[] { "PLC_Timeout",   $"{_plcGrabController.ReadWriteTimeoutMs} ms" }));
-                listViewHardware.Items.Add(new ListViewItem(new[] { "PLC_DI",        "2 ch (DI0:PLC_ALV, DI1:START)" }));
-                listViewHardware.Items.Add(new ListViewItem(new[] { "PLC_DO",        "3 ch (DO0:PC_ALV, DO1:MURA_NG, DO2:PC_BSY)" }));
+                listViewHardware.Items.Add(new ListViewItem(new[] { "IO_Model",     _plcGrabController.Model }));
+                listViewHardware.Items.Add(new ListViewItem(new[] { "IO_IP",        _plcGrabController.PlcIp }));
+                listViewHardware.Items.Add(new ListViewItem(new[] { "IO_Port",      _plcGrabController.PlcPort.ToString() }));
+                listViewHardware.Items.Add(new ListViewItem(new[] { "IO_Poll",      $"{_plcGrabController.PollIntervalMs} ms" }));
+                listViewHardware.Items.Add(new ListViewItem(new[] { "IO_Reconnect", $"{_plcGrabController.ReconnectIntervalMs} ms" }));
+                listViewHardware.Items.Add(new ListViewItem(new[] { "IO_Timeout",   $"{_plcGrabController.ReadWriteTimeoutMs} ms" }));
+                listViewHardware.Items.Add(new ListViewItem(new[] { "IO_DI",        "2 ch (DI0:DEV_ALV, DI1:START)" }));
+                listViewHardware.Items.Add(new ListViewItem(new[] { "IO_DO",        "3 ch (DO0:PC_ALV, DO1:MURA_NG, DO2:PC_BSY)" }));
             }
             AutoFitListViewColumns(listViewHardware);
 
@@ -2769,13 +2801,11 @@ namespace AniloxRoll.Monitor.Forms
             {
                 var startInfo = _grabIdInfos[cbGrabIdStart.SelectedIndex];
                 var endInfo   = _grabIdInfos[cbGrabIdEnd.SelectedIndex];
-                int startNum  = startInfo.GrabNum;
-                int endNum    = endInfo.GrabNum;
 
                 var stats   = InspectionStatisticsService.ComputeByGrabIdRange(
-                    _statsDataRootPath, startNum, endNum);
+                    _statsDataRootPath, startInfo.GrabId, endInfo.GrabId);
                 var details = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
-                    _statsDataRootPath, startNum, endNum);
+                    _statsDataRootPath, startInfo.GrabId, endInfo.GrabId);
 
                 _statsPresenter.Update(stats);
                 _currentDetails = details;
@@ -2792,13 +2822,13 @@ namespace AniloxRoll.Monitor.Forms
 
             if (grabInfosInRange.Count > 0)
             {
-                int startNum = grabInfosInRange.Min(g => g.GrabNum);
-                int endNum   = grabInfosInRange.Max(g => g.GrabNum);
+                string startId = grabInfosInRange.OrderBy(g => g.GrabId, StringComparer.Ordinal).First().GrabId;
+                string endId   = grabInfosInRange.OrderBy(g => g.GrabId, StringComparer.Ordinal).Last().GrabId;
 
                 var stats   = InspectionStatisticsService.ComputeByGrabIdRange(
-                    _statsDataRootPath, startNum, endNum);
+                    _statsDataRootPath, startId, endId);
                 var details = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
-                    _statsDataRootPath, startNum, endNum);
+                    _statsDataRootPath, startId, endId);
 
                 _statsPresenter.Update(stats);
                 _currentDetails = details;

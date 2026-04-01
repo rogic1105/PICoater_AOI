@@ -512,17 +512,19 @@ ApplyGrabState()（第一次 MdigGrab）：
 
 ---
 
-## PLC 連動（PlcGrabController）
+## IO 模組連動（PlcGrabController）
+
+使用 IO 模組（ET-7044 Modbus TCP）與設備(nakan)溝通，非 PLC 直連。
 
 ### IO Mapping（ET-7044 Modbus TCP）
 
 | IO | 方向 | 用途 |
 |----|------|------|
-| DI-0 | PLC → PC | PLC ALIVE（PLC 心跳） |
-| DI-1 | PLC → PC | START（上升/下降緣觸發 Grab） |
-| DO-0 | PC → PLC | PC ALIVE（Form 開啟 = High） |
-| DO-1 | PC → PLC | MURA（檢測到瑕疵 = High） |
-| DO-2 | PC → PLC | PC BUSY（Grab 中 = High） |
+| DI-0 | 設備 → PC | DEV ALIVE（設備心跳） |
+| DI-1 | 設備 → PC | START（上升/下降緣觸發 Grab） |
+| DO-0 | PC → 設備 | PC ALIVE（Form 開啟 = High） |
+| DO-1 | PC → 設備 | MURA（檢測到瑕疵 = High，設備端處理） |
+| DO-2 | PC → 設備 | PC BUSY（Grab 中 = High） |
 
 ### PlcState Enum（FSM 狀態）
 
@@ -534,7 +536,7 @@ ApplyGrabState()（第一次 MdigGrab）：
 | `Idle` | 待機 | 已連線，等待 DI_START ↑ | PC_ALIVE=1 |
 | `Running` | 取像中 | Grab 執行中 | PC_ALIVE=1, BUSY=1 |
 | `Stopping` | 停止中 | 過渡態：清除後回 Idle | (過渡) |
-| `Faulted` | PLC 故障 | DI_PLC_ALIVE 消失 | PC_ALIVE=1 (保持) |
+| `Faulted` | IO 故障 | DI_DEV_ALIVE 消失 | PC_ALIVE=1 (保持) |
 | `CommLost` | 通訊中斷 | TCP 例外，自動重連 | 全 LOW |
 | `Closed` | 已關閉 | StopAsync() 呼叫 | 全 LOW |
 
@@ -554,10 +556,17 @@ Disconnected → Idle ←→ Running → Stopping → Idle
 
 1. `AniloxRollForm.InitPlcController()` 在 `InitServiceLayer()` 末端呼叫
 2. 非阻塞嘗試連線（3s timeout），失敗每 5s 背景重試
-3. 連上後 `btnCameraGrab` 顯示 "PLC 控制中"，DI START 上升緣 → `btnCameraGrab_Click`，下降緣 → 再次觸發停止
+3. 連上後 `btnCameraGrab` 顯示 "IO 控制中"，DI START 上升緣 → `btnCameraGrab_Click`，下降緣 → 再次觸發停止
 4. 斷線自動退回 UI 按鈕模式
-5. MURA 判定：`meanPeak > ErrorValueMean || maxPeak > ErrorValueMax` → `NotifyMuraDetected()`
-6. panelStatusBar 顯示：`lblPlcConn`（連線燈）+ `lblPlcState`（FSM 狀態燈）+ 5 顆 IO LED + `lblStatusGrab`（Grab 狀態）
+5. MURA 判定（兩條路徑）：
+   - **Live 即時路徑**：`CheckLiveMura()`（callback 執行緒），V/H 曲線任一超標 → `NotifyMuraDetected()`（fire-and-forget，失敗不影響取像）
+   - **存檔路徑**：`OnCameraInspectionResult` → `NotifyMuraDetected()`
+6. DO_MURA 不觸發 PC 端任何動作，由設備端(nakan)處理
+7. panelStatusBar 顯示：`lblPlcConn`（IO 連線燈）+ `lblPlcState`（FSM 狀態燈）+ 5 顆 IO LED + `lblStatusGrab`（Grab 狀態）
+
+### Modbus 並行安全
+
+`IcpDasModbusTcpClient.SendAndReceive()` 使用 `SemaphoreSlim` 序列化所有 Modbus 交易，防止 callback 執行緒的 `NotifyMuraDetected` 與 UI 執行緒的 `PollTick` 同時存取 `NetworkStream` 導致 NullReferenceException。
 
 ### Watchdog 注意事項
 
@@ -567,6 +576,6 @@ ET-7044 Host Watchdog（暫存器 40257）在無 Modbus 流量時觸發 DO Safe 
 
 共用 Modbus TCP 通訊庫（`src_dotnet/PlcBridge/PlcBridge.Core/`）：
 
-- `IcpDasModbusTcpClient`：FC1（Read Coils）/FC2（Read DI）/FC5（Write Single Coil），Transaction ID 追蹤，timeout 保護
+- `IcpDasModbusTcpClient`：FC1（Read Coils）/FC2（Read DI）/FC5（Write Single Coil），Transaction ID 追蹤，timeout 保護，SemaphoreSlim 序列化
 - `PlcLogger`：Thread-safe 日誌，`FilePrefix` 區分不同應用
 - 預設 IP：`192.168.255.1:502`

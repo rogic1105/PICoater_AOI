@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Linq;
 using System.Net.Sockets;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace PlcBridge.Core
@@ -11,6 +12,7 @@ namespace PlcBridge.Core
         private TcpClient _client;
         private NetworkStream _stream;
         private ushort _transactionId = 0;
+        private readonly SemaphoreSlim _txLock = new SemaphoreSlim(1, 1);
 
         /// <summary>讀寫逾時（ms），預設 2000。由各 App 的 AppSettings 設定。</summary>
         public int ReadWriteTimeoutMs { get; set; } = 2000;
@@ -93,10 +95,14 @@ namespace PlcBridge.Core
             if (!IsConnected) throw new InvalidOperationException("Not connected");
 
             int timeoutMs = ReadWriteTimeoutMs;
-
+            await _txLock.WaitAsync().ConfigureAwait(false);
             try
             {
-                var writeTask = _stream.WriteAsync(send, 0, send.Length);
+                // 取得鎖後再次確認連線（可能在等鎖期間被其他執行緒 Dispose）
+                var stream = _stream;
+                if (stream == null) throw new InvalidOperationException("Not connected");
+
+                var writeTask = stream.WriteAsync(send, 0, send.Length);
                 if (await Task.WhenAny(writeTask, Task.Delay(timeoutMs)) != writeTask)
                 {
                     Dispose();
@@ -108,7 +114,7 @@ namespace PlcBridge.Core
                 int totalRead = 0;
                 while (totalRead < expected)
                 {
-                    var readTask = _stream.ReadAsync(res, totalRead, expected - totalRead);
+                    var readTask = stream.ReadAsync(res, totalRead, expected - totalRead);
                     if (await Task.WhenAny(readTask, Task.Delay(timeoutMs)) != readTask)
                     {
                         Dispose();
@@ -133,6 +139,10 @@ namespace PlcBridge.Core
             {
                 Dispose();
                 throw;
+            }
+            finally
+            {
+                _txLock.Release();
             }
         }
 

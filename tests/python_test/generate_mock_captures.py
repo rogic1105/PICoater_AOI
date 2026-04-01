@@ -257,7 +257,10 @@ def main():
     # 處理每台相機（一個資料夾 = 一個序號）
     records = []
     for i, group in enumerate(cam_groups):
-        grab_id = f"A{i + 1:05d}"
+        # GrabId = 首筆擷取時間 yyMMdd-HHmmss
+        first_bmp = os.path.basename(group["bmp_paths"][0])
+        first_dt, _ = parse_timestamp(first_bmp)
+        grab_id = first_dt.strftime("%y%m%d-%H%M%S")
         record = process_cam(
             group["bmp_paths"],
             group["cam_id"],

@@ -42,7 +42,7 @@
 
 - 路徑：`{CaptureRootPath}\{YYYY}\{YYYYMM}\{YYYYMMDD}.csv`
 - 欄位：`Id, FileName, MaxExceed, MeanExceed, MeanPeak, MaxPeak, GrabHeight, LineRateHz, ExposureUs`（Pass = MaxExceed + MeanExceed 均為 0）
-- ID 格式：`A00001`（5 位數字，跨日不重置），計數器持久化至 `session-state.json` 的 `LastGrabIdNum`
+- ID 格式：`yyMMdd-HHmmss`（時間戳，如 `260401-130511`），由 `FormatGrabId(DateTime)` 產生
 - `btnCameraGrab_Click` 開始抓取時呼叫 `NextGrabId()` → `_currentGrabId`
 - CSV 寫入時機：`AniloxCamera.TrySaveCapture()` 實際存檔後，透過 `OnInspectionResult` 事件逐層傳遞至 Form
 
@@ -50,15 +50,15 @@
 
 - 遞迴掃描 `Directory.GetFiles(root, "*.csv", SearchOption.AllDirectories)`，兩種統計模式：
   - `Compute(root, start, end)`：時間範圍過濾，分母 = 張數，每筆獨立判斷
-  - `ComputeByGrabIdRange(root, startNum, endNum)`：序號範圍過濾，分母 = 唯一序號數，一票否決
-  - `ComputeDetailedByGrabIdRange(root, startNum, endNum)`：回傳 `List<GrabDetail>`（逐序號×CAM1~7 的 `bool?`）
+  - `ComputeByGrabIdRange(root, startGrabId, endGrabId)`：序號範圍過濾（字串 Ordinal 比較），分母 = 唯一序號數，一票否決
+  - `ComputeDetailedByGrabIdRange(root, startGrabId, endGrabId)`：回傳 `List<GrabDetail>`（逐序號×CAM1~7 的 `bool?`）
 - `LoadGrabIdInfos(root)` → `List<GrabIdInfo>`（每個序號的 Earliest/Latest 時間）
 - `LoadAvailableTimes(root)` → `SortedSet<DateTime>`（全部時間戳，供 cascading comboBox 使用）
 - **`LoadImagePathsForGrabId`**（回傳 `Dictionary<int,List<string>>` camId→排序路徑）
 - **`LoadConfigForGrabId`**（回傳該序號最近的 `#CFG` 快照）
-- CSV 格式：`Id,FileName,MaxExceed,MeanExceed`；FileName = `YYYYMMDD_HHMMSS-camId`；Id = `A00001`
+- CSV 格式：`Id,FileName,MaxExceed,MeanExceed`；FileName = `YYYYMMDD_HHMMSS-camId`；Id = `yyMMdd-HHmmss`
 - 從 FileName 提取 CamId：`fileName.LastIndexOf('-')` 後的數字
-- 序號數字提取：`ParseGrabIdNum("A00008")` → `8`（Substring(1) parse int）
+- GrabId 為字串，字典序 = 時間序（`StringComparer.Ordinal`）
 
 ---
 

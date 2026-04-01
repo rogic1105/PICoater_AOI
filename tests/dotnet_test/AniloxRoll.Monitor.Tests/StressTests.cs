@@ -195,14 +195,15 @@ namespace AniloxRoll.Monitor.Tests
             try
             {
                 Directory.CreateDirectory(tempRoot);
-                var svc = new InspectionLogService(() => tempRoot, startIdNum: 0);
+                var svc = new InspectionLogService(() => tempRoot);
                 var ts = new DateTime(2026, 3, 30, 10, 0, 0, 0);
                 var config = new CsvConfigSnapshot(
                     new double[7], new double[7], 1.0f, 0.5f, 0.8f, ts);
 
                 for (int i = 0; i < RecordCount; i++)
                 {
-                    string grabId = $"A{(i + 1):D5}";
+                    var grabTs = ts.AddSeconds(i);
+                    string grabId = InspectionLogService.FormatGrabId(grabTs);
                     int camId = (i % 7) + 1;
                     string fileName = $"{ts:yyyyMMdd_HHmmss}.{i:D3}-{camId}";
                     float meanPeak = (i % 2 == 0) ? 0.3f : 0.7f;
@@ -380,7 +381,7 @@ namespace AniloxRoll.Monitor.Tests
                 // ── Phase 1: 生成每日 CSV ──
                 var genSw = Stopwatch.StartNew();
                 var baseDate = new DateTime(2026, 1, 1);
-                int globalGrabNum = 0;
+                int globalGrabIdx = 0;
                 var expectedPerCam = new Dictionary<int, int[]>(); // camId → [pass, fail]
                 for (int c = 1; c <= NumCameras; c++)
                     expectedPerCam[c] = new int[2]; // [0]=pass, [1]=fail
@@ -399,16 +400,16 @@ namespace AniloxRoll.Monitor.Tests
 
                     for (int g = 0; g < GrabsPerDay; g++)
                     {
-                        globalGrabNum++;
-                        string grabId = $"A{globalGrabNum:D6}";
+                        globalGrabIdx++;
                         // 每次 grab 產生 7 張照片（7 台相機）
                         var ts = date.AddSeconds(g * 30); // 每 30 秒一次 grab
+                        string grabId = InspectionLogService.FormatGrabId(ts);
                         string tsStr = ts.ToString("yyyyMMdd_HHmmss") + ".000";
 
                         for (int c = 1; c <= NumCameras; c++)
                         {
-                            int maxExceed  = ((globalGrabNum + c) % 5 == 0) ? 1 : 0;
-                            int meanExceed = ((globalGrabNum + c) % 7 == 0) ? 1 : 0;
+                            int maxExceed  = ((globalGrabIdx + c) % 5 == 0) ? 1 : 0;
+                            int meanExceed = ((globalGrabIdx + c) % 7 == 0) ? 1 : 0;
                             if (maxExceed == 0 && meanExceed == 0)
                                 expectedPerCam[c][0]++;
                             else

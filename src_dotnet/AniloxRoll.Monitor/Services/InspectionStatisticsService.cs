@@ -22,7 +22,6 @@ namespace AniloxRoll.Monitor.Core.Services
     public class GrabDetail
     {
         public string  GrabId    { get; set; }
-        public int     GrabNum   { get; set; }
         public bool?[] CamResult { get; } = new bool?[7];
     }
 
@@ -30,7 +29,6 @@ namespace AniloxRoll.Monitor.Core.Services
     public class GrabIdInfo
     {
         public string   GrabId   { get; set; }
-        public int      GrabNum  { get; set; }   // 從 "A00008" 提取的數字
         public DateTime Earliest { get; set; }
         public DateTime Latest   { get; set; }
     }
@@ -105,13 +103,13 @@ namespace AniloxRoll.Monitor.Core.Services
         // ── 序號範圍統計（新模式：以唯一序號為分母）────────────────────────
 
         /// <summary>
-        /// 遞迴掃描所有 CSV，統計序號落在 [startGrabNum, endGrabNum] 的紀錄。
+        /// 遞迴掃描所有 CSV，統計序號落在 [startGrabId, endGrabId]（字串比較）的紀錄。
         /// 分母 = 唯一序號數；同一序號同一相機只要任一張超標即為 Fail。
         /// </summary>
         public static Dictionary<int, CameraStats> ComputeByGrabIdRange(
             string captureRootPath,
-            int    startGrabNum,
-            int    endGrabNum)
+            string startGrabId,
+            string endGrabId)
         {
             var stats = new Dictionary<int, CameraStats>();
             for (int i = 1; i <= 7; i++)
@@ -120,8 +118,11 @@ namespace AniloxRoll.Monitor.Core.Services
             if (string.IsNullOrWhiteSpace(captureRootPath) || !Directory.Exists(captureRootPath))
                 return stats;
 
-            // grabNum → camId → hasFail
-            var grabCamFail = new Dictionary<int, Dictionary<int, bool>>();
+            string lo = StringComparer.Ordinal.Compare(startGrabId, endGrabId) <= 0 ? startGrabId : endGrabId;
+            string hi = lo == startGrabId ? endGrabId : startGrabId;
+
+            // grabId → camId → hasFail
+            var grabCamFail = new Dictionary<string, Dictionary<int, bool>>(StringComparer.Ordinal);
 
             foreach (string csvPath in Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories))
             {
@@ -138,13 +139,13 @@ namespace AniloxRoll.Monitor.Core.Services
                             if (!TryParseLine(line, out string grabId, out string fileName,
                                 out int maxExceed, out int meanExceed)) continue;
 
-                            int grabNum = ParseGrabIdNum(grabId);
-                            if (grabNum < startGrabNum || grabNum > endGrabNum) continue;
+                            if (StringComparer.Ordinal.Compare(grabId, lo) < 0 ||
+                                StringComparer.Ordinal.Compare(grabId, hi) > 0) continue;
 
                             if (!TryExtractCamId(fileName, out int camId)) continue;
 
-                            if (!grabCamFail.TryGetValue(grabNum, out var camMap))
-                                grabCamFail[grabNum] = camMap = new Dictionary<int, bool>();
+                            if (!grabCamFail.TryGetValue(grabId, out var camMap))
+                                grabCamFail[grabId] = camMap = new Dictionary<int, bool>();
 
                             bool thisFail = maxExceed > 0 || meanExceed > 0;
                             if (!camMap.TryGetValue(camId, out bool prev))
@@ -160,7 +161,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 }
             }
 
-            // 彙總：每個 (grabNum, camId) 算一次 Pass 或 Fail
+            // 彙總：每個 (grabId, camId) 算一次 Pass 或 Fail
             foreach (var grabKv in grabCamFail)
             {
                 foreach (var camKv in grabKv.Value)
@@ -177,20 +178,23 @@ namespace AniloxRoll.Monitor.Core.Services
         // ── 逐序號詳細結果 ───────────────────────────────────────────────
 
         /// <summary>
-        /// 遞迴掃描所有 CSV，回傳 [startGrabNum, endGrabNum] 範圍內每個序號
+        /// 遞迴掃描所有 CSV，回傳 [startGrabId, endGrabId]（字串比較）範圍內每個序號
         /// 對 CAM1~7 的 Pass/Fail 結果，依序號排序。
         /// 同一序號同一相機任一張超標即為 Fail（一票否決）。
         /// </summary>
         public static List<GrabDetail> ComputeDetailedByGrabIdRange(
             string captureRootPath,
-            int    startGrabNum,
-            int    endGrabNum)
+            string startGrabId,
+            string endGrabId)
         {
-            // grabNum → GrabDetail
-            var dict = new SortedDictionary<int, GrabDetail>();
+            // grabId → GrabDetail（字串排序 = 時間排序）
+            var dict = new SortedDictionary<string, GrabDetail>(StringComparer.Ordinal);
 
             if (string.IsNullOrWhiteSpace(captureRootPath) || !Directory.Exists(captureRootPath))
                 return new List<GrabDetail>();
+
+            string lo = StringComparer.Ordinal.Compare(startGrabId, endGrabId) <= 0 ? startGrabId : endGrabId;
+            string hi = lo == startGrabId ? endGrabId : startGrabId;
 
             foreach (string csvPath in Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories))
             {
@@ -207,16 +211,16 @@ namespace AniloxRoll.Monitor.Core.Services
                             if (!TryParseLine(line, out string grabId, out string fileName,
                                 out int maxExceed, out int meanExceed)) continue;
 
-                            int grabNum = ParseGrabIdNum(grabId);
-                            if (grabNum < startGrabNum || grabNum > endGrabNum) continue;
+                            if (StringComparer.Ordinal.Compare(grabId, lo) < 0 ||
+                                StringComparer.Ordinal.Compare(grabId, hi) > 0) continue;
 
                             if (!TryExtractCamId(fileName, out int camId)) continue;
                             if (camId < 1 || camId > 7) continue;
 
-                            if (!dict.TryGetValue(grabNum, out var detail))
+                            if (!dict.TryGetValue(grabId, out var detail))
                             {
-                                detail = new GrabDetail { GrabId = grabId, GrabNum = grabNum };
-                                dict[grabNum] = detail;
+                                detail = new GrabDetail { GrabId = grabId };
+                                dict[grabId] = detail;
                             }
 
                             int idx = camId - 1;
@@ -240,12 +244,12 @@ namespace AniloxRoll.Monitor.Core.Services
         // ── 載入輔助資料 ─────────────────────────────────────────────────
 
         /// <summary>
-        /// 遞迴掃描所有 CSV，回傳每個序號的最早/最晚時間，依序號排序。
+        /// 遞迴掃描所有 CSV，回傳每個序號的最早/最晚時間，依 GrabId 字串排序（= 時間排序）。
         /// </summary>
         public static List<GrabIdInfo> LoadGrabIdInfos(string captureRootPath)
         {
-            // grabNum → (grabId string, earliest, latest)
-            var dict = new SortedDictionary<int, (string grabId, DateTime earliest, DateTime latest)>();
+            // grabId → (earliest, latest)
+            var dict = new SortedDictionary<string, (DateTime earliest, DateTime latest)>(StringComparer.Ordinal);
 
             if (string.IsNullOrWhiteSpace(captureRootPath) || !Directory.Exists(captureRootPath))
                 return new List<GrabIdInfo>();
@@ -261,20 +265,18 @@ namespace AniloxRoll.Monitor.Core.Services
                         while ((line = sr.ReadLine()) != null)
                         {
                             if (!TryParseLine(line, out string grabId, out string fileName, out _, out _)) continue;
+                            if (string.IsNullOrEmpty(grabId)) continue;
                             if (!TryParseFileNameDateTime(fileName, out DateTime dt)) continue;
 
-                            int grabNum = ParseGrabIdNum(grabId);
-                            if (grabNum < 0) continue;
-
-                            if (dict.TryGetValue(grabNum, out var existing))
+                            if (dict.TryGetValue(grabId, out var existing))
                             {
-                                dict[grabNum] = (existing.grabId,
+                                dict[grabId] = (
                                     dt < existing.earliest ? dt : existing.earliest,
                                     dt > existing.latest   ? dt : existing.latest);
                             }
                             else
                             {
-                                dict[grabNum] = (grabId, dt, dt);
+                                dict[grabId] = (dt, dt);
                             }
                         }
                     }
@@ -290,8 +292,7 @@ namespace AniloxRoll.Monitor.Core.Services
             {
                 result.Add(new GrabIdInfo
                 {
-                    GrabId   = kv.Value.grabId,
-                    GrabNum  = kv.Key,
+                    GrabId   = kv.Key,
                     Earliest = kv.Value.earliest,
                     Latest   = kv.Value.latest
                 });
@@ -465,13 +466,6 @@ namespace AniloxRoll.Monitor.Core.Services
         }
 
         // ── 私有輔助 ──────────────────────────────────────────────────────
-
-        /// <summary>從序號字串（e.g. "A00008"）提取數字部分。</summary>
-        internal static int ParseGrabIdNum(string grabId)
-        {
-            if (string.IsNullOrEmpty(grabId) || grabId.Length < 2) return -1;
-            return int.TryParse(grabId.Substring(1), out int n) ? n : -1;
-        }
 
         /// <summary>
         /// 從 FileName（e.g. "20260316_102301.123-3"）解析出完整 DateTime（精確到毫秒）。

@@ -1,6 +1,7 @@
 ﻿// AOI_SDK\src_dotnet\AOI.SDK.UI\SmartCanvas.cs
 
 using System;
+using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
@@ -18,6 +19,13 @@ namespace AOI.SDK.UI
 
     public class SmartCanvas : PictureBox
     {
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public new Cursor Cursor
+        {
+            get => base.Cursor;
+            set => base.Cursor = value;
+        }
+
         private float _zoom = 1.0f;
         private PointF _panOffset = PointF.Empty;
         private bool _isDragging = false;
@@ -50,8 +58,37 @@ namespace AOI.SDK.UI
         {
             this.DoubleBuffered = true;
             this.SizeMode = PictureBoxSizeMode.Normal;
-            this.Cursor = Cursors.Cross;
+            this.Cursor = CreateCrosshairCursor(31, 2, Color.White);
             this.BackColor = Color.Black;
+        }
+
+        private static Cursor CreateCrosshairCursor(int size, int lineWidth, Color foreColor)
+        {
+            if (size % 2 == 0) size++;          // 確保奇數，十字正中央
+            int half = size / 2;
+            int outlineWidth = lineWidth + 2;   // 黑邊比白線各多 1px
+
+            using (var bmp = new Bitmap(size, size))
+            {
+                bmp.SetPixel(0, 0, Color.FromArgb(1, 0, 0, 0)); // 強制非全透明，防止 Windows icon 反色
+
+                using (var g = Graphics.FromImage(bmp))
+                {
+                    // 先畫黑色描邊（較粗）
+                    using (var outline = new Pen(Color.Black, outlineWidth))
+                    {
+                        g.DrawLine(outline, half, 0, half, size - 1);
+                        g.DrawLine(outline, 0, half, size - 1, half);
+                    }
+                    // 再畫白色前景（較細，疊在上面）
+                    using (var fore = new Pen(foreColor, lineWidth))
+                    {
+                        g.DrawLine(fore, half, 0, half, size - 1);
+                        g.DrawLine(fore, 0, half, size - 1, half);
+                    }
+                }
+                return new Cursor(bmp.GetHicon());
+            }
         }
 
         private void TriggerStatusChange()

@@ -76,10 +76,10 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category("4. 儲存設定")][DisplayName("存圖目錄")]   public string CaptureRootPath { get => Storage.CaptureRootPath; set => Storage.CaptureRootPath = value; }
         [Category("4. 儲存設定")][DisplayName("存背景目錄")] public string BackgroundPath  { get => Storage.BackgroundPath;  set => Storage.BackgroundPath  = value; }
 
-        // ===== 5. PLC 設定 =====
-        [Category("5. PLC 設定")][DisplayName("啟用 PLC")]  public bool   PlcEnabled { get; set; } = true;
-        [Category("5. PLC 設定")][DisplayName("PLC IP")]    public string PlcIp      { get; set; } = "192.168.255.1";
-        [Category("5. PLC 設定")][DisplayName("PLC Port")]  public int    PlcPort    { get; set; } = 502;
+        // ===== 5. IO 模組設定 =====
+        [Category("5. IO 模組設定")][DisplayName("啟用 IO")]  public bool   PlcEnabled { get; set; } = true;
+        [Category("5. IO 模組設定")][DisplayName("IO IP")]    public string PlcIp      { get; set; } = "192.168.255.1";
+        [Category("5. IO 模組設定")][DisplayName("IO Port")]  public int    PlcPort    { get; set; } = 502;
 
     }
 }

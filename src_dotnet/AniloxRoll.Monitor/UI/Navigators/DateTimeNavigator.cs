@@ -138,6 +138,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
             UserSessionState.SaveDateTimeSelection(
                 dt.ToString("yyyy"), dt.ToString("MM"), dt.ToString("dd"),
                 dt.ToString("HH"), dt.ToString("mm"), dt.ToString("ss.fff"));
+            UserSessionState.Save();
             Initialize(dt.ToString("yyyy"));
         }
 

@@ -40,7 +40,7 @@ PICoater_AOI/
 | `ImageProcessing/InspectionEngine.ImageProcessing.cs` | 縮圖/全解析度影像處理 |
 | `ImageProcessing/InspectionEngineConfig.cs` | MaxWidth=16384, MaxHeight=10000, DefaultSaveResizeScale=5 |
 | `ImageProcessing/BatchInspectionService.cs` | Parallel.For 批次縮圖 |
-| `UI/Form/AniloxRollForm.cs` | Form 邏輯：事件、InitializeSystem、Period Charts；內含 helpers: `BindBidirectionalSync`（TrackBar↔NUD 同步）、`GetCurveBasePath`、`PopulateAllGrabIdCombos`、`SetChartYRange`、`FindCameraById`、`MultiClickDetector`（inner class） |
+| `UI/Form/AniloxRollForm.cs` | Form 邏輯：事件、InitializeSystem、Period Charts；內含 helpers: `BindBidirectionalSync`、`GetCurveBasePath`、`PopulateAllGrabIdCombos`、`SetChartYRange`、`FindCameraById`、`MultiClickDetector`、`CheckLiveMura`（Live 即時閾值→DO_MURA） |
 | `UI/Form/AniloxRollForm.Designer.cs` | Form 控制項佈局（VS Designer） |
 | `UI/Widgets/FormInteractionHelper.cs` | UI 互動、gallery 選擇、計時；ReviewConfig 代理 |
 | `UI/Widgets/CanvasInteractionHelper.cs` | Canvas zoom/pan 事件、mm 座標換算；ReviewConfig → GetEffectiveOps/Pos |
@@ -55,14 +55,14 @@ PICoater_AOI/
 | `UI/State/UserSessionState.cs` | UI session 持久化 → session-state.json |
 | `ImageCatalog/ImageRepository.cs` | 掃描目錄建立索引 |
 | `Services/AoiService.cs` | C# ↔ Native P/Invoke wrapper（ProcessImage + ComputeColumnMean） |
-| `Services/InspectionLogService.cs` | 每日 CSV 寫入 |
+| `Services/InspectionLogService.cs` | 每日 CSV 寫入；GrabId = `yyMMdd-HHmmss` 時間戳格式 |
 | `Services/InspectionStatisticsService.cs` | CSV 統計服務；LoadConfigForDate（按日期載入 #CFG） |
 | `Services/PlcState.cs` | PlcState enum（FSM 狀態）+ PlcIoSnapshot struct（IO 快照） |
-| `Services/PlcGrabController.cs` | PLC-Grab 連動：PlcState FSM、IO 追蹤、Watchdog keepalive；支援 IModbusTcpClient 注入測試 |
+| `Services/PlcGrabController.cs` | IO-Grab 連動：PlcState FSM、IO 追蹤、Watchdog keepalive；支援 IModbusTcpClient 注入測試 |
 | `Services/CsvConfigSnapshot.cs` | 不可變設定快照 |
 | `UI/Widgets/GrabImageStitcher.cs` | 多張影像垂直拼接 |
 | `UI/Widgets/ProportionalScaler.cs` | Form 等比例縮放 |
-| `sdk/AOI_SDK/src_dotnet/AOI.SDK/UI/SmartCanvas.cs` | PictureBox 子類：zoom/pan/edge/ClampPan |
+| `sdk/AOI_SDK/src_dotnet/AOI.SDK/UI/SmartCanvas.cs` | PictureBox 子類：zoom/pan/edge/ClampPan；自訂白底黑邊十字游標 |
 
 > 路徑前綴 `src_dotnet/AniloxRoll.Monitor/` 省略以節省空間。
 

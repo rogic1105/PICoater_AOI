@@ -382,7 +382,6 @@ namespace AOI.SDK.TestApp.Forms
             // canvasMain
             // 
             this.canvasMain.BackColor = System.Drawing.Color.Black;
-            this.canvasMain.Cursor = System.Windows.Forms.Cursors.Cross;
             this.canvasMain.Dock = System.Windows.Forms.DockStyle.Fill;
             this.canvasMain.Location = new System.Drawing.Point(0, 0);
             this.canvasMain.Name = "canvasMain";

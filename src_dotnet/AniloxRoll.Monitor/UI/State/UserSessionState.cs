@@ -113,17 +113,11 @@ namespace AniloxRoll.Monitor.UI.State
             return string.IsNullOrEmpty(raw) ? fallback : (bool.TryParse(raw, out bool v) && v);
         }
 
-        public static int LastGrabIdNum =>
-            int.TryParse(Get("LastGrabIdNum"), out int v) ? v : 0;
-
         public static void SetLastDataPath(string path)
             => _data["LastDataPath"] = path ?? string.Empty;
 
         public static void SetLastEnableImageProcessing(bool enabled)
             => _data["LastEnableImageProcessing"] = enabled.ToString();
-
-        public static void SetLastGrabIdNum(int num)
-            => _data["LastGrabIdNum"] = num.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
         public static void SaveDateTimeSelection(string year, string month, string day,
                                                   string hour, string min, string sec)
