@@ -8,6 +8,16 @@ namespace AniloxRoll.Monitor.Core.Data
         [Description("產量")] Fixed
     }
 
+    /// <summary>
+    /// 合圖方式：垂直（每台相機多張垂直拼接，gallery 切換）、全域（水平合併為全域圖，GrabId 模式先垂直拼接再合併）。
+    /// </summary>
+    [TypeConverter(typeof(EnumDescriptionConverter))]
+    public enum StitchMode
+    {
+        [Description("垂直")] Vertical,
+        [Description("全域")] Global
+    }
+
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public class ChartSettings
     {
@@ -15,7 +25,6 @@ namespace AniloxRoll.Monitor.Core.Data
         [DisplayName("月產量")]   public int YearlyYMax  { get; set; } = 60000;
         [DisplayName("日產量")]   public int MonthlyYMax { get; set; } = 2000;
         [DisplayName("時產量")]   public int DailyYMax   { get; set; } = 300;
-
         public void Validate()
         {
             if (YearlyYMax  <= 0) YearlyYMax  = 60000;

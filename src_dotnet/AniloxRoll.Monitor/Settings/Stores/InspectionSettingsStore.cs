@@ -76,6 +76,7 @@ namespace AniloxRoll.Monitor.Core.Data
             var L = s.MachineLayout ?? new MachineLayoutConfig();
             var R = s.Recipe        ?? new InspectionRecipe();
             var C = s.Chart         ?? new ChartSettings();
+            var V = s.ImageView     ?? new ImageViewSettings();
             var T = s.Storage       ?? new StorageSettings();
 
             var sb = new StringBuilder();
@@ -120,6 +121,11 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"DailyYMax\": {C.DailyYMax}");
             sb.AppendLine("  },");
 
+            // ImageView
+            sb.AppendLine("  \"ImageView\": {");
+            sb.AppendLine($"    \"StitchMode\": \"{V.StitchMode}\"");
+            sb.AppendLine("  },");
+
             // Storage
             sb.AppendLine("  \"Storage\": {");
             sb.AppendLine($"    \"EnableAutoCapture\": {(T.EnableAutoCapture ? "true" : "false")},");
@@ -145,6 +151,7 @@ namespace AniloxRoll.Monitor.Core.Data
                 MachineLayout = ParseMachineLayout(json),
                 Recipe        = ParseRecipe(json),
                 Chart         = ParseChart(json),
+                ImageView     = ParseImageView(json),
                 Storage       = ParseStorage(json),
             };
             return settings;
@@ -268,6 +275,26 @@ namespace AniloxRoll.Monitor.Core.Data
                 YearlyYMax  = GetInt(obj, "YearlyYMax",  60000),
                 MonthlyYMax = GetInt(obj, "MonthlyYMax",  2000),
                 DailyYMax   = GetInt(obj, "DailyYMax",     300),
+            };
+        }
+
+        private static ImageViewSettings ParseImageView(string json)
+        {
+            // 優先從 ImageView 區塊讀取；向後相容：舊 JSON 的 StitchMode 放在 Chart 區塊
+            string obj = ExtractObject(json, "ImageView");
+            string src = !string.IsNullOrEmpty(obj) ? obj : ExtractObject(json, "Chart");
+
+            StitchMode stitchMode = StitchMode.Vertical;
+            string stitchStr = GetString(src, "StitchMode", "Vertical");
+            // 向後相容：舊設定的 "Horizontal" 對映到 Global
+            if (string.Equals(stitchStr, "Horizontal", System.StringComparison.OrdinalIgnoreCase))
+                stitchMode = StitchMode.Global;
+            else if (!System.Enum.TryParse(stitchStr, true, out stitchMode))
+                stitchMode = StitchMode.Vertical;
+
+            return new ImageViewSettings
+            {
+                StitchMode = stitchMode,
             };
         }
 

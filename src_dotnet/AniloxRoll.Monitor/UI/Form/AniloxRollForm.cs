@@ -129,6 +129,11 @@ namespace AniloxRoll.Monitor.Forms
         private float[][] _stitchedRowCurveMean;
         private float[][] _stitchedRowCurveMax;
         private CsvConfigSnapshot _currentGrabConfig;
+        /// <summary>全域合圖：垂直拼接後再水平合併的結果（僅 Global 模式使用）。</summary>
+        private Bitmap _globalMergedImage;
+        /// <summary>Period 模式全域合圖：多相機單張水平合併的結果（StitchMode.Global + Period 瀏覽）。</summary>
+        private Bitmap _periodMergedImage;
+        private PictureBox[] _cameraPanels;
 
 
         public AniloxRollForm()
@@ -301,10 +306,11 @@ namespace AniloxRoll.Monitor.Forms
             _dateTimeNavigator = new DateTimeNavigator(
                 _imageRepository, cbDate, cbTime);
 
-            _galleryManager = new ThumbnailGridPresenter();
-            _galleryManager.Initialize(new PictureBox[] {
+            _cameraPanels = new PictureBox[] {
                 pbCam1, pbCam2, pbCam3, pbCam4, pbCam5, pbCam6, pbCam7
-            });
+            };
+            _galleryManager = new ThumbnailGridPresenter();
+            _galleryManager.Initialize(_cameraPanels);
 
             _presenter = new AniloxRollPresenter(
                 _imageRepository, _inspectionService, _dateTimeNavigator, _galleryManager);
@@ -369,7 +375,7 @@ namespace AniloxRoll.Monitor.Forms
                 MuraChartHelper  = _muraChartHelper,
                 Settings         = _settings,
                 StatusLabel      = lblPixelInfo,
-                CameraPanels     = new[] { pbCam1, pbCam2, pbCam3, pbCam4, pbCam5, pbCam6, pbCam7 },
+                CameraPanels     = _cameraPanels,
                 MuraChartHorizontalHelper = _muraChartHorizontalHelper,
             });
             _interactionHelper.ApplySettingsToService();
@@ -378,6 +384,8 @@ namespace AniloxRoll.Monitor.Forms
             _presenter.LogReported      += OnPresenterLogReported;
             _galleryManager.SelectionChanged += idx =>
             {
+                if (_globalMergedImage != null || _periodMergedImage != null)
+                    return; // 全域模式：canvasMain 顯示合併圖，gallery 點選不切換
                 if (_stitchedImages != null)
                     ShowStitchedCameraInCanvas(idx);
                 else
@@ -1307,6 +1315,7 @@ namespace AniloxRoll.Monitor.Forms
                 finally { _syncingProcessedCheckbox = false; }
                 ClearStitchedMode();
                 await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
+                ApplyGlobalMergeIfNeeded();
                 UpdateOverviewChartFromRepository();
                 _interactionHelper.RefreshCurrentCanvasResult();
             }
@@ -1350,6 +1359,7 @@ namespace AniloxRoll.Monitor.Forms
             ClearStitchedMode();
             SetReviewGroupBoxes(false);
             await _presenter.LoadImagesWithPeriodLockAsync(false, LoadImagesWithReviewConfig);
+            ApplyGlobalMergeIfNeeded();
             UpdateOverviewChartFromRepository();
             }
             catch (Exception ex) { Trace.WriteLine($"[btnSelectFolder_Click] {ex}"); }
@@ -1370,6 +1380,7 @@ namespace AniloxRoll.Monitor.Forms
             _lastReviewProcessedMode = enableProcess;
             ClearStitchedMode();
             await _presenter.LoadImagesWithPeriodLockAsync(enableProcess, _interactionHelper.LoadImages);
+            ApplyGlobalMergeIfNeeded();
             UpdateOverviewChartFromRepository();
             }
             catch (Exception ex) { Trace.WriteLine($"[checkBoxShowProcessed] {ex}"); }
@@ -1411,10 +1422,10 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         private async void btnPeriodPrev_Click(object sender, EventArgs e)
-        { try { _interactionHelper.SaveCanvasView(); ClearStitchedMode(); await _presenter.MovePeriodAsync(-1, _lastReviewProcessedMode, LoadImagesWithReviewConfig); UpdateOverviewChartFromRepository(); } catch (Exception ex) { Trace.WriteLine($"[btnPeriodPrev] {ex}"); } }
+        { try { _interactionHelper.SaveCanvasView(); ClearStitchedMode(); await _presenter.MovePeriodAsync(-1, _lastReviewProcessedMode, LoadImagesWithReviewConfig); ApplyGlobalMergeIfNeeded(); UpdateOverviewChartFromRepository(); } catch (Exception ex) { Trace.WriteLine($"[btnPeriodPrev] {ex}"); } }
 
         private async void btnPeriodNext_Click(object sender, EventArgs e)
-        { try { _interactionHelper.SaveCanvasView(); ClearStitchedMode(); await _presenter.MovePeriodAsync(+1, _lastReviewProcessedMode, LoadImagesWithReviewConfig); UpdateOverviewChartFromRepository(); } catch (Exception ex) { Trace.WriteLine($"[btnPeriodNext] {ex}"); } }
+        { try { _interactionHelper.SaveCanvasView(); ClearStitchedMode(); await _presenter.MovePeriodAsync(+1, _lastReviewProcessedMode, LoadImagesWithReviewConfig); ApplyGlobalMergeIfNeeded(); UpdateOverviewChartFromRepository(); } catch (Exception ex) { Trace.WriteLine($"[btnPeriodNext] {ex}"); } }
 
         /// <summary>cbDate/cbTime 手動滾動時載入對應圖片（同 btnPeriodPrev/Next）。
         /// _syncingGrabIdNav 時跳過（由 OnReviewGrabIdChanged 等程式碼觸發的 NavigateToDateTime）。</summary>
@@ -1428,9 +1439,63 @@ namespace AniloxRoll.Monitor.Forms
             ClearStitchedMode();
             SetReviewGroupBoxes(false);
             await _presenter.LoadImagesWithPeriodLockAsync(_lastReviewProcessedMode, LoadImagesWithReviewConfig);
+            ApplyGlobalMergeIfNeeded();
             UpdateOverviewChartFromRepository();
             }
             catch (Exception ex) { Trace.WriteLine($"[OnPeriodComboChanged] {ex}"); }
+        }
+
+        /// <summary>
+        /// Period 全域模式：從 gallery（pbCam1~7）的單張影像建立水平合圖，顯示在 canvasMain。
+        /// gallery 維持原本的單張顯示。僅在 StitchMode == Global 且非 GrabId 合圖路徑時生效。
+        /// </summary>
+        private void ApplyGlobalMergeIfNeeded()
+        {
+            if (_settings.StitchMode != StitchMode.Global) return;
+
+            var cfg = _interactionHelper.ReviewConfig;
+            double[] opsArr = cfg?.CamOps ?? _settings.GetCameraOpsUmArray();
+            double[] posArr = cfg?.CamPos ?? _settings.GetCameraStartPositionMmArray();
+            int scale = InspectionEngineConfig.DefaultSaveResizeScale;
+
+            // 從 Repository 取路徑，以統一 scale 載入（PictureBox 的圖為 thumbnail，尺寸不可預測）
+            var filesMap = _imageRepository.GetImages(
+                _dateTimeNavigator.GetCurrentYear(),
+                _dateTimeNavigator.GetCurrentMonth(),
+                _dateTimeNavigator.GetCurrentDay(),
+                _dateTimeNavigator.GetCurrentHour(),
+                _dateTimeNavigator.GetCurrentMin(),
+                _dateTimeNavigator.GetCurrentSec());
+            if (filesMap == null || filesMap.Count == 0) return;
+
+            Func<string, Bitmap> bmpLoader = _inspectionService != null
+                ? (Func<string, Bitmap>)(p => _inspectionService.LoadBmpAtScale(p, scale))
+                : null;
+
+            var camImages = new Bitmap[CameraCount];
+            for (int i = 0; i < CameraCount; i++)
+            {
+                if (filesMap.TryGetValue(i + 1, out string path))
+                {
+                    try
+                    {
+                        camImages[i] = GrabImageStitcher.LoadCameraImage(path, scale, bmpLoader,
+                            useProcessed: _lastReviewProcessedMode, ridgeDirection: _activeRidgeDirection);
+                    }
+                    catch (Exception ex)
+                    {
+                        Trace.WriteLine($"[GlobalMerge] CAM{i + 1}: {ex.GetType().Name}: {ex.Message}");
+                    }
+                }
+            }
+
+            _periodMergedImage = GrabImageStitcher.MergeHorizontal(camImages, opsArr, posArr, scale);
+
+            // 合圖完成後釋放載入的暫存影像
+            foreach (var img in camImages) img?.Dispose();
+
+            if (_periodMergedImage != null)
+                ShowMergedImageInCanvas(_periodMergedImage, opsArr, posArr);
         }
 
         // ==========================================
@@ -1786,6 +1851,8 @@ namespace AniloxRoll.Monitor.Forms
             cbReviewGrabId.SelectedIndexChanged += (s, e) => OnReviewGrabIdChanged();
             btnGrabIdPrev.Click             += (s, e) => StepReviewGrabId(+1);
             btnGrabIdNext.Click             += (s, e) => StepReviewGrabId(-1);
+            grpReviewGrabNav.Click          += (s, e) => OnReviewGrabIdChanged();
+            grpReviewTimePeriod.Click       += (s, e) => OnPeriodComboChanged();
             btnGrabIdDataPrev.Click         += (s, e) => StepDataGrabId(+1);
             btnGrabIdDataNext.Click         += (s, e) => StepDataGrabId(-1);
         }
@@ -2206,9 +2273,31 @@ namespace AniloxRoll.Monitor.Forms
                 _stitchedRowCurveMean = newRowCurveMean;
                 _stitchedRowCurveMax  = newRowCurveMax;
                 _currentGrabConfig = grabCfg;
+                _interactionHelper.ReviewConfig = grabCfg;
                 SetReviewGroupBoxes(true);
+
+                // 全域模式：先計算合圖再 SetImages，
+                // 讓 SelectionChanged handler 的 _globalMergedImage != null 判斷成立而跳過，
+                // 避免 ShowStitchedCameraInCanvas 先載入單台圖像再被合圖覆蓋造成閃爍。
+                double[] opsArr = null, posArr = null;
+                if (_settings.StitchMode == StitchMode.Global)
+                {
+                    opsArr = grabCfg?.CamOps ?? _settings.GetCameraOpsUmArray();
+                    posArr = grabCfg?.CamPos ?? _settings.GetCameraStartPositionMmArray();
+                    _globalMergedImage = GrabImageStitcher.MergeHorizontal(
+                        _stitchedImages, opsArr, posArr, InspectionEngineConfig.DefaultSaveResizeScale);
+                }
+
                 _galleryManager.SetImages(_stitchedImages);
-                ShowStitchedCameraInCanvas(_galleryManager.SelectedIndex);
+
+                if (_globalMergedImage != null)
+                {
+                    ShowMergedImageInCanvas(_globalMergedImage, opsArr, posArr);
+                }
+                else
+                {
+                    ShowStitchedCameraInCanvas(_galleryManager.SelectedIndex);
+                }
                 UpdateStitchedOverviewChart();
 
                 Trace.WriteLine($"[StitchView] {grabId} proc={enableProcess} | CSV={csvMs}ms | Stitch={stitchMs}ms | Total={swTotal.ElapsedMilliseconds}ms");
@@ -2219,8 +2308,60 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
+        /// <summary>
+        /// 啟用合圖模式的 chartOverview 座標聯動：
+        /// 計算全域最小位置與參考解析度，設定 canvas 座標覆寫並啟用 zoom。
+        /// </summary>
+        /// <summary>將合併圖顯示在 canvasMain 並啟用 chartOverview 聯動。</summary>
+        private void ShowMergedImageInCanvas(Bitmap mergedImage, double[] opsArr, double[] posArr)
+        {
+            int scale = InspectionEngineConfig.DefaultSaveResizeScale;
+            _interactionHelper.SetCanvasScaleAndCamera(scale, 0);
+            EnableMergedOverviewSync(opsArr, posArr);
+            canvasMain.Image = mergedImage;
+            _interactionHelper.RestoreCanvasViewOrFit();
+        }
+
+        private void EnableMergedOverviewSync(double[] opsArr, double[] posArr)
+        {
+            double globalMinMm = double.MaxValue;
+            double refOpsUm = opsArr[0];
+            for (int i = 0; i < opsArr.Length && i < CameraCount; i++)
+                if (posArr[i] < globalMinMm) globalMinMm = posArr[i];
+            if (globalMinMm == double.MaxValue) globalMinMm = 0;
+
+            _interactionHelper.SetMergedMode(_stitchedOverviewHelper, globalMinMm, refOpsUm);
+            if (chartOverview.ChartAreas.Count > 0)
+                chartOverview.ChartAreas[0].AxisX.ScaleView.Zoomable = true;
+        }
+
+        /// <summary>離開合圖模式：清除座標覆寫、停用互動 zoom。
+        /// 不重設 ScaleView（ZoomReset）：避免 await 期間 message pump 渲染出全範圍閃爍，
+        /// 由後續 UpdateDataAndView 原子性地取代資料與 zoom。</summary>
+        private void DisableMergedOverviewSync()
+        {
+            _interactionHelper.ClearMergedMode();
+            if (chartOverview.ChartAreas.Count > 0)
+            {
+                chartOverview.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
+            }
+        }
+
         private void ClearStitchedMode()
         {
+            DisableMergedOverviewSync();
+            if (_globalMergedImage != null)
+            {
+                if (canvasMain.Image == _globalMergedImage) canvasMain.Image = null;
+                _globalMergedImage.Dispose();
+                _globalMergedImage = null;
+            }
+            if (_periodMergedImage != null)
+            {
+                if (canvasMain.Image == _periodMergedImage) canvasMain.Image = null;
+                _periodMergedImage.Dispose();
+                _periodMergedImage = null;
+            }
             if (_stitchedImages == null) return;
             canvasMain.Image = null;
             _galleryManager.ClearImages();
@@ -2234,12 +2375,10 @@ namespace AniloxRoll.Monitor.Forms
             // 恢復 chart 為當前設定（stitch mode 可能改用了歷史 #CFG 的 Ops/閾值）
             _muraChartHelper?.SetOps(_settings.Cam1_Ops);
             _muraChartHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
-            // 清除全覽圖
-            if (_stitchedOverviewHelper != null && chartOverview.ChartAreas.Count > 0)
-            {
-                chartOverview.Series["Mean"].Points.Clear();
-                chartOverview.Series["Max"].Points.Clear();
-            }
+            // 全覽圖資料不在此清除：所有 ClearStitchedMode 的呼叫端
+            // 都會接續 UpdateOverviewChartFromRepository / UpdateStitchedOverviewChart，
+            // 由 UpdateDataAndView 在 SuspendUpdates 內原子性地清除+重綁，
+            // 避免 await 期間 message pump 渲染出空圖 / 全範圍閃爍。
             SetReviewGroupBoxes(false);
         }
 
@@ -2376,6 +2515,7 @@ namespace AniloxRoll.Monitor.Forms
                 // 非合圖路徑：重新載入所有處理圖（方向已更新）
                 ClearStitchedMode();
                 await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
+                ApplyGlobalMergeIfNeeded();
                 UpdateOverviewChartFromRepository();
             }
             }
@@ -2492,6 +2632,8 @@ namespace AniloxRoll.Monitor.Forms
             {
                 chartOverview.Series["Mean"].Points.Clear();
                 chartOverview.Series["Max"].Points.Clear();
+                if (chartOverview.ChartAreas.Count > 0)
+                    chartOverview.ChartAreas[0].AxisX.ScaleView.ZoomReset();
                 return;
             }
 
@@ -2622,7 +2764,12 @@ namespace AniloxRoll.Monitor.Forms
             // 降解析後每點間距 = gridMm，轉回 μm 給 MuraChartHelper
             target.SetOps(gridMm * 1000.0);
             target.SetThresholds(errMean, errMax);
-            target.UpdateData(mergedMean, mergedMax, globalMin);
+
+            // 合圖模式：帶入 canvas 當前視野，資料+zoom 單次重繪避免閃爍
+            double viewLeft = double.NaN, viewRight = double.NaN;
+            if (_settings.StitchMode != StitchMode.Vertical)
+                _interactionHelper.TryComputeCurrentViewRange(0, out viewLeft, out viewRight);
+            target.UpdateDataAndView(mergedMean, mergedMax, globalMin, viewLeft, viewRight);
         }
 
         /// <summary>

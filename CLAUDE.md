@@ -40,7 +40,7 @@ PICoater_AOI/
 | `ImageProcessing/InspectionEngine.ImageProcessing.cs` | 縮圖/全解析度影像處理 |
 | `ImageProcessing/InspectionEngineConfig.cs` | MaxWidth=16384, MaxHeight=10000, DefaultSaveResizeScale=5 |
 | `ImageProcessing/BatchInspectionService.cs` | Parallel.For 批次縮圖 |
-| `UI/Form/AniloxRollForm.cs` | Form 邏輯：事件、InitializeSystem、Period Charts；內含 helpers: `BindBidirectionalSync`、`GetCurveBasePath`、`PopulateAllGrabIdCombos`、`SetChartYRange`、`FindCameraById`、`MultiClickDetector`、`CheckLiveMura`（Live 即時閾值→DO_MURA） |
+| `UI/Form/AniloxRollForm.cs` | Form 邏輯：事件、InitializeSystem、Period Charts；內含 helpers: `BindBidirectionalSync`、`GetCurveBasePath`、`PopulateAllGrabIdCombos`、`SetChartYRange`、`FindCameraById`、`MultiClickDetector`、`CheckLiveMura`（Live 即時閾值→DO_MURA）、`ApplyGlobalMergeIfNeeded`（Period 全域合圖） |
 | `UI/Form/AniloxRollForm.Designer.cs` | Form 控制項佈局（VS Designer） |
 | `UI/Widgets/FormInteractionHelper.cs` | UI 互動、gallery 選擇、計時；ReviewConfig 代理 |
 | `UI/Widgets/CanvasInteractionHelper.cs` | Canvas zoom/pan 事件、mm 座標換算；ReviewConfig → GetEffectiveOps/Pos |
@@ -49,7 +49,8 @@ PICoater_AOI/
 | `Acquisition/CaptureTimestampCoordinator.cs` | 多相機存檔時間戳同步 |
 | `UI/Managers/LiveCameraManager.cs` | 多台相機生命週期管理、連線數監控（OnCameraCountChanged） |
 | `Settings/InspectionSettings.cs` | 根設定物件 |
-| `Settings/Models/ChartSettings.cs` | 圖表 Y 軸範圍設定（ChartScaleMode + YMax） |
+| `Settings/Models/ChartSettings.cs` | 圖表 Y 軸範圍設定（ChartScaleMode + YMax）；StitchMode enum（Vertical / Global） |
+| `Settings/Models/ImageViewSettings.cs` | 合圖方式設定（StitchMode） |
 | `Settings/Models/MuraChartConfig.cs` | Mura 圖表閾值 PropertyGrid 展開代理 |
 | `Settings/Stores/AcquisitionSettingsStore.cs` | 讀寫 acquisition-settings.json |
 | `UI/State/UserSessionState.cs` | UI session 持久化 → session-state.json |
@@ -60,7 +61,7 @@ PICoater_AOI/
 | `Services/PlcState.cs` | PlcState enum（FSM 狀態）+ PlcIoSnapshot struct（IO 快照） |
 | `Services/PlcGrabController.cs` | IO-Grab 連動：PlcState FSM、IO 追蹤、Watchdog keepalive；支援 IModbusTcpClient 注入測試 |
 | `Services/CsvConfigSnapshot.cs` | 不可變設定快照 |
-| `UI/Widgets/GrabImageStitcher.cs` | 多張影像垂直拼接 |
+| `UI/Widgets/GrabImageStitcher.cs` | 多張影像垂直拼接 + MergeHorizontal 全域合圖；LoadCameraImage（internal） |
 | `UI/Widgets/ProportionalScaler.cs` | Form 等比例縮放 |
 | `sdk/AOI_SDK/src_dotnet/AOI.SDK/UI/SmartCanvas.cs` | PictureBox 子類：zoom/pan/edge/ClampPan；自訂白底黑邊十字游標 |
 
@@ -103,6 +104,28 @@ PICoater_AOI/
 | [`docs/patterns-csharp.md`](docs/patterns-csharp.md) | C# 命名、WinForms Designer、PropertyGrid、TrackBar、Settings 持久化、Anchor、Exception Handling | 開發 C#/WinForms 功能時 |
 | [`docs/patterns-performance.md`](docs/patterns-performance.md) | SmartCanvas 拖曳、Chart sync 壓制、跨倍率 View 保存、MuraChart 軸線/閾值/InnerPlotPosition、全覽圖合併 | 效能問題排查、Chart 對齊修改時 |
 | [`docs/patterns-mil.md`](docs/patterns-mil.md) | MIL 初始化順序、CLProtocol 時序、記憶體類型、Timer 競爭、資源釋放 | MIL 相關開發、資源管理時 |
+
+---
+
+## 實作指引
+
+### 狀態機邏輯
+
+實作 click counting、mode transition、status flag 等狀態機時：
+1. 先列出完整的**狀態轉移表**（State + Event → Next State + Action）
+2. 與使用者確認後再寫 code
+3. 避免用 AND 條件做安全檢查（容易漏邊界情況），優先用比值/閾值比較
+
+### Build 驗證
+
+- 修改 `.cs`、`.csproj`、`.sln` 後**立即 build** 確認零錯誤
+- 不得在 VS 的 reserved ImportGroup 放自訂 Import
+- Build 命令：`"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe"` + 專案路徑
+
+### UI 開發
+
+- Chart 對齊、座標換算等優先用**即時查詢**（如 MdispInquire、InnerPlotPosition），不要用靜態快取值
+- 複雜 UI 行為（zoom/pan 聯動、多 chart 同步）修改前先讀 `docs/patterns-performance.md`
 
 ---
 

@@ -92,7 +92,99 @@ namespace AniloxRoll.Monitor.UI.Widgets
             return result;
         }
 
-        private static Bitmap LoadCameraImage(string path, int bmpResizeScale,
+        /// <summary>
+        /// 將多台相機的影像水平合併為一張全域圖。
+        /// 重疊規則：相鄰相機重疊區域各取一半（中點分界），無重疊則留黑。
+        /// opsUm[i]：第 i 台相機的解析度（um/pixel）。
+        /// posMm[i]：第 i 台相機的起始位置（mm）。
+        /// scaleFactor：影像已縮小的倍率（用於將 pixel 換算回實際 mm）。
+        /// </summary>
+        public static Bitmap MergeHorizontal(
+            Bitmap[] cameraImages, double[] opsUm, double[] posMm, int scaleFactor)
+        {
+            if (cameraImages == null) return null;
+
+            // 收集有效影像、計算全域範圍與 pixel 偏移（single pass + deferred xOffset）
+            var validCams = new List<(Bitmap bmp, double posMm)>();
+            double globalMinMm = double.MaxValue;
+            double globalMaxMm = double.MinValue;
+            double refOpsPxMm = 0;
+            int maxH = 0;
+
+            for (int i = 0; i < cameraImages.Length; i++)
+            {
+                if (cameraImages[i] == null) continue;
+                double ops = (i < opsUm.Length) ? opsUm[i] : opsUm[0];
+                double pos = (i < posMm.Length) ? posMm[i] : 0;
+                double widthMm = cameraImages[i].Width * ops * scaleFactor / 1000.0;
+                double endMm = pos + widthMm;
+                if (pos < globalMinMm) globalMinMm = pos;
+                if (endMm > globalMaxMm) globalMaxMm = endMm;
+                if (refOpsPxMm == 0) refOpsPxMm = ops * scaleFactor / 1000.0;
+                if (cameraImages[i].Height > maxH) maxH = cameraImages[i].Height;
+                validCams.Add((cameraImages[i], pos));
+            }
+
+            if (refOpsPxMm == 0 || validCams.Count == 0) return null;
+
+            int totalW = (int)Math.Ceiling((globalMaxMm - globalMinMm) / refOpsPxMm);
+            if (totalW <= 0 || maxH <= 0) return null;
+
+            var entries = new List<(Bitmap bmp, int xOffset)>(validCams.Count);
+            for (int i = 0; i < validCams.Count; i++)
+            {
+                int xOff = (int)Math.Round((validCams[i].posMm - globalMinMm) / refOpsPxMm);
+                entries.Add((validCams[i].bmp, xOff));
+            }
+
+            // 按 xOffset 排序，計算每台相機的有效繪製範圍
+            entries.Sort((a, b) => a.xOffset.CompareTo(b.xOffset));
+            int n = entries.Count;
+            var drawLeft  = new int[n];
+            var drawRight = new int[n];
+            for (int i = 0; i < n; i++)
+            {
+                drawLeft[i]  = entries[i].xOffset;
+                drawRight[i] = entries[i].xOffset + entries[i].bmp.Width;
+            }
+
+            // 重疊區域各取一半（中點分界）
+            for (int i = 0; i < n - 1; i++)
+            {
+                int rightEdge = entries[i].xOffset + entries[i].bmp.Width;
+                int leftEdge  = entries[i + 1].xOffset;
+                int overlap   = rightEdge - leftEdge;
+                if (overlap > 0)
+                {
+                    int mid = leftEdge + overlap / 2;
+                    drawRight[i]     = Math.Min(drawRight[i], mid);
+                    drawLeft[i + 1]  = Math.Max(drawLeft[i + 1], mid);
+                }
+                // overlap <= 0：間隙留黑（ARGB 預設透明/黑）
+            }
+
+            var result = new Bitmap(totalW, maxH, PixelFormat.Format32bppArgb);
+            using (var g = Graphics.FromImage(result))
+            {
+                g.InterpolationMode = InterpolationMode.NearestNeighbor;
+                g.PixelOffsetMode = PixelOffsetMode.Half;
+                for (int i = 0; i < n; i++)
+                {
+                    var (bmp, xOff) = entries[i];
+                    int srcLeft  = drawLeft[i] - xOff;
+                    int srcWidth = drawRight[i] - drawLeft[i];
+                    if (srcWidth <= 0) continue;
+                    g.DrawImage(bmp,
+                        new Rectangle(drawLeft[i], 0, srcWidth, bmp.Height),
+                        new Rectangle(srcLeft, 0, srcWidth, bmp.Height),
+                        GraphicsUnit.Pixel);
+                }
+            }
+
+            return result;
+        }
+
+        internal static Bitmap LoadCameraImage(string path, int bmpResizeScale,
             Func<string, Bitmap> bmpLoader, bool useProcessed, string ridgeDirection = "v")
         {
             if (path.EndsWith("_raw.jpg", StringComparison.OrdinalIgnoreCase))
