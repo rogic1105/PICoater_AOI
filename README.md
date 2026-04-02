@@ -116,6 +116,66 @@ set STRESS_MINUTES=60
 dotnet test tests/dotnet_test/AniloxRoll.Monitor.Tests/AniloxRoll.Monitor.Tests.csproj -p:Configuration=Release --filter "TestCategory=Stress"
 ```
 
+### Mock Data 產生器
+
+`tests/python_test/generate_mock_captures.py` — 從原始 BMP 影像產生 AniloxRoll.Monitor 可讀取的存檔格式（JPG + .bin 曲線 + CSV）。
+
+```bash
+cd tests/python_test
+python generate_mock_captures.py <input_dir> <output_dir>
+```
+
+#### 支援兩種 Input 格式
+
+**1. 扁平模式**（推薦）— 檔名含 camId，每張獨立 GrabId：
+```
+input_dir/
+├── 20251117_111952.447-1.bmp    ← CAM1
+├── 20251117_111952.447-2.bmp    ← CAM2
+├── 20251117_111952.447-3.bmp    ← CAM3
+├── 20251117_111958.759-1.bmp
+├── ...
+```
+```bash
+python generate_mock_captures.py "C:/Users/User/Downloads/mura" "D:/AniloxCaptures"
+```
+
+**2. CAM 子目錄模式** — 所有相機視為同一序號（共用 GrabId），可垂直合圖：
+```
+input_dir/
+├── CAM1/
+│   ├── 20251117_111919.181.bmp
+│   ├── 20251117_111925.929.bmp
+│   └── 20251117_111932.600.bmp
+├── CAM2/
+│   └── ...
+└── CAM3/
+    └── ...
+```
+```bash
+python generate_mock_captures.py "D:/MockData" "D:/AniloxCaptures"
+```
+GrabId 取自 CAM1 的最早時間戳（模擬單次 DO_PC_BUSY 觸發）。
+
+#### 每張 BMP 的產出
+
+| 檔案 | 說明 |
+|------|------|
+| `{ts}-{camId}_raw.jpg` | 原圖縮圖（1/5，JPEG Q90） |
+| `{ts}-{camId}_proc_v.jpg` | V 方向 Hessian Ridge 處理圖 |
+| `{ts}-{camId}_proc_h.jpg` | H 方向 Hessian Ridge 處理圖 |
+| `{ts}-{camId}_mean_v.bin` | V 方向 Column Mean 曲線（MCBF） |
+| `{ts}-{camId}_max_v.bin` | V 方向 Column Max 曲線 |
+| `{ts}-{camId}_mean_h.bin` | H 方向 Row Mean 曲線 |
+| `{ts}-{camId}_max_h.bin` | H 方向 Row Max 曲線 |
+| `{yyyyMMdd}.csv` | 每日檢測紀錄（含 #CFG 設定行） |
+
+#### 相依套件
+
+```bash
+pip install numpy opencv-python
+```
+
 ### C# GUI (主程式)
 * **專案**: `AniloxRoll.Monitor`
 * 程式啟動時自動載入 `picoater_api.dll` 及 `core_cv_api.dll`。
