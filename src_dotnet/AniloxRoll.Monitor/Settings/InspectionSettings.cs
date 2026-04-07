@@ -11,6 +11,7 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public AcquisitionSettings Acquisition   { get; set; } = new AcquisitionSettings();
         [Browsable(false)] public InspectionRecipe    Recipe        { get; set; } = new InspectionRecipe();
         [Browsable(false)] public ChartSettings       Chart         { get; set; } = new ChartSettings();
+        [Browsable(false)] public ImageViewSettings   ImageView     { get; set; } = new ImageViewSettings();
         [Browsable(false)] public StorageSettings     Storage       { get; set; } = new StorageSettings();
 
         public void Validate()
@@ -19,12 +20,14 @@ namespace AniloxRoll.Monitor.Core.Data
             if (Acquisition == null) Acquisition = new AcquisitionSettings();
             if (Recipe == null) Recipe = new InspectionRecipe();
             if (Chart == null) Chart = new ChartSettings();
+            if (ImageView == null) ImageView = new ImageViewSettings();
             if (Storage == null) Storage = new StorageSettings();
 
             MachineLayout.Validate();
             Acquisition.Validate();
             Recipe.Validate();
             Chart.Validate();
+            ImageView.Validate();
             Storage.Validate();
         }
 
@@ -62,11 +65,15 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category("3. 圖表設定")][DisplayName("Mura 圖表")]
         public MuraChartConfig MuraChart => _muraChart ?? (_muraChart = new MuraChartConfig(Recipe));
 
+        [Category("3. 圖表設定")][DisplayName("圖面")]
+        public ImageViewSettings ImageViewDisplay => ImageView;
+
         // 向後相容：程式碼中直接存取的快捷屬性
         [Browsable(false)] public ChartScaleMode ChartScaleMode { get => Chart.ScaleMode; set => Chart.ScaleMode = value; }
         [Browsable(false)] public int ChartYearlyYMax  { get => Chart.YearlyYMax;  set => Chart.YearlyYMax  = value; }
         [Browsable(false)] public int ChartMonthlyYMax { get => Chart.MonthlyYMax; set => Chart.MonthlyYMax = value; }
         [Browsable(false)] public int ChartDailyYMax   { get => Chart.DailyYMax;   set => Chart.DailyYMax   = value; }
+        [Browsable(false)] public StitchMode StitchMode { get => ImageView.StitchMode; set => ImageView.StitchMode = value; }
         [Browsable(false)] public float ErrorValueMean { get => Recipe.ErrorValueMean; set => Recipe.ErrorValueMean = value; }
         [Browsable(false)] public float ErrorValueMax  { get => Recipe.ErrorValueMax;  set => Recipe.ErrorValueMax  = value; }
 

@@ -97,6 +97,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         }
         public bool TryComputeCurrentViewRange(int cameraIndex, out double leftMm, out double rightMm)
             => _canvasHelper.TryComputeCurrentViewRange(cameraIndex, out leftMm, out rightMm);
+        public void RefreshChartRange() => _canvasHelper.RefreshChartRange();
         public void RefreshRowChartRange() => _canvasHelper.RefreshRowChartRange();
         public void SaveCanvasView() => _canvasHelper.SaveViewIfNeeded();
         public void RestoreCanvasViewOrFit() => _canvasHelper.RestoreViewOrFitToScreen();
@@ -104,6 +105,20 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public double ScreenMmPerPixel => _canvasHelper.ScreenMmPerPixel;
         public double RowPitchMm => _muraChartHorizontalHelper?.RowPitchMm ?? 0;
         public void SetCanvasPhysicalMag1x(Point mouseLocation) => _canvasHelper.SetPhysicalMagnification1x(mouseLocation);
+
+        /// <summary>設定全域/水平合圖模式：chartOverview 與 canvas 座標聯動。</summary>
+        public void SetMergedMode(MuraChartHelper overviewHelper, double startMm, double opsUm)
+        {
+            _canvasHelper.OverviewChartHelper = overviewHelper;
+            _canvasHelper.SetMergedCoordinates(startMm, opsUm);
+        }
+
+        /// <summary>離開合圖模式：清除 chartOverview 聯動與座標覆寫。</summary>
+        public void ClearMergedMode()
+        {
+            _canvasHelper.OverviewChartHelper = null;
+            _canvasHelper.ClearMergedCoordinates();
+        }
 
         // ── 設定 ─────────────────────────────────────────────────────────
         public void ApplySettingsToService()
@@ -145,6 +160,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public void SetUiLoadingState(bool isBusy)
         {
             _isBusy = isBusy;
+            if (!_form.IsHandleCreated) return;
             if (_form.InvokeRequired)
             {
                 _form.Invoke(new Action<bool>(SetUiLoadingState), isBusy);
@@ -169,7 +185,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             try
             {
                 var sw = Stopwatch.StartNew();
-                InspectionData data = _inspectionService.RunInspectionFullRes(index);
+                InspectionData data = _inspectionService?.RunInspectionFullRes(index);
                 long fullResMs = sw.ElapsedMilliseconds;
 
                 long canvasMs = 0, chartMs = 0;

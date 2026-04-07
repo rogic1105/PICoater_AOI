@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using System.Management;
 using System.Windows.Forms;
 using AOI.SDK.UI;
 using AOI.SDK.Utils;
@@ -66,6 +67,10 @@ namespace AniloxRoll.Monitor.Forms
         private LiveTelemetryPresenter _telemetryPresenter;
         private System.Windows.Forms.Timer _telemetryTimer;
         private System.Windows.Forms.Timer _liveOverviewTimer;
+
+        // --- Resource Monitor ---
+        private ListViewItem _resMonRawSize, _resMonGpuTime, _resMonSaveSize;
+        private ListViewItem _resMonDiskWrite, _resMonFrames, _resMonRamUsed, _resMonVramEst;
 
         // --- 檢測日誌 ---
         private InspectionLogService _inspectionLogService;
@@ -148,6 +153,7 @@ namespace AniloxRoll.Monitor.Forms
         private void InitializeSystem()
         {
             if (_settings == null) _settings = ConfigManager.LoadInspectionSettings();
+            AniloxCamera.InitResourceLog(_settings?.CaptureRootPath);
             InitServiceLayer();
             InitUiLayer();
             InitCameraLayer();
@@ -158,7 +164,15 @@ namespace AniloxRoll.Monitor.Forms
         /// <summary>純業務服務：不依賴任何 UI 控制項。</summary>
         private void InitServiceLayer()
         {
-            _inspectionService    = new BatchInspectionService();
+            try
+            {
+                _inspectionService = new BatchInspectionService();
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"[InitServiceLayer] GPU 初始化失敗（無獨顯？），BMP 處理功能不可用: {ex.Message}");
+                _inspectionService = null;
+            }
             _inspectionLogService = new InspectionLogService(
                 () => _settings?.CaptureRootPath ?? string.Empty);
 
@@ -1701,9 +1715,172 @@ namespace AniloxRoll.Monitor.Forms
             listViewChartConst.Items.Add(new ListViewItem(new[] { "OverlapMax",        "Maximum" }));
             AutoFitListViewColumns(listViewChartConst);
 
-            // ── 硬體參數（螢幕 + IO 模組）──────────────────────────────────
+            // ── 硬體參數 ─────────────────────────────────────────────────
             listViewHardware.Columns.Add("參數", 120);
             listViewHardware.Columns.Add("值",   120);
+
+            // ── CPU / RAM ──
+            try
+            {
+                using (var cpuSearcher = new ManagementObjectSearcher("SELECT Name, NumberOfCores, NumberOfLogicalProcessors FROM Win32_Processor"))
+                foreach (var obj in cpuSearcher.Get())
+                {
+                    listViewHardware.Items.Add(new ListViewItem(new[] { "CPU",       obj["Name"]?.ToString().Trim() ?? "N/A" }));
+                    listViewHardware.Items.Add(new ListViewItem(new[] { "CPU_Cores",  $"{obj["NumberOfCores"]}C / {obj["NumberOfLogicalProcessors"]}T" }));
+                    break; // 只取第一顆
+                }
+
+                using (var memSearcher = new ManagementObjectSearcher("SELECT Capacity, Speed, SMBIOSMemoryType FROM Win32_PhysicalMemory"))
+                {
+                    var sticks = memSearcher.Get().Cast<ManagementObject>().ToArray();
+                    int count = sticks.Length;
+                    ulong totalBytes = 0;
+                    int speed = 0;
+                    int memType = 0;
+                    foreach (var stick in sticks)
+                    {
+                        totalBytes += (ulong)stick["Capacity"];
+                        if (speed == 0 && stick["Speed"] != null)
+                            speed = Convert.ToInt32(stick["Speed"]);
+                        if (memType == 0 && stick["SMBIOSMemoryType"] != null)
+                            memType = Convert.ToInt32(stick["SMBIOSMemoryType"]);
+                    }
+                    double perStickGb = count > 0 ? (totalBytes / (double)count) / (1024.0 * 1024 * 1024) : 0;
+                    string ddrGen = memType == 34 ? "DDR5" : memType == 26 ? "DDR4" : memType == 24 ? "DDR3" : "DDR";
+                    string speedStr = speed > 0 ? $"-{speed}" : "";
+                    listViewHardware.Items.Add(new ListViewItem(new[] { "RAM",
+                        $"{totalBytes / (1024.0 * 1024 * 1024):F0} GB ({count}×{perStickGb:F0}GB {ddrGen}{speedStr})" }));
+                }
+            }
+            catch { /* WMI 非關鍵，忽略 */ }
+
+            // ── GPU ──
+            try
+            {
+                // Registry 查 64-bit VRAM（qwMemorySize），避免 WMI uint32 溢位
+                var regVram = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+                try
+                {
+                    using (var videoKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"))
+                    if (videoKey != null)
+                    {
+                        foreach (string sub in videoKey.GetSubKeyNames())
+                        {
+                            if (!int.TryParse(sub, out _)) continue;
+                            using (var sk = videoKey.OpenSubKey(sub))
+                            {
+                                if (sk == null) continue;
+                                string desc = sk.GetValue("DriverDesc") as string;
+                                if (string.IsNullOrEmpty(desc)) continue;
+                                object qw = sk.GetValue("HardwareInformation.qwMemorySize");
+                                if (qw is long qwVal && qwVal > 0)
+                                    regVram[desc] = qwVal;
+                                else if (qw is byte[] qwBytes && qwBytes.Length >= 8)
+                                    regVram[desc] = BitConverter.ToInt64(qwBytes, 0);
+                            }
+                        }
+                    }
+                }
+                catch { /* registry 非關鍵 */ }
+
+                using (var gpuSearcher = new ManagementObjectSearcher("SELECT Name, AdapterRAM FROM Win32_VideoController"))
+                foreach (ManagementObject obj in gpuSearcher.Get())
+                {
+                    string gpuName = obj["Name"]?.ToString() ?? "N/A";
+                    long vramBytes;
+                    if (regVram.TryGetValue(gpuName, out long regBytes) && regBytes > 0)
+                        vramBytes = regBytes;
+                    else
+                        vramBytes = Convert.ToUInt32(obj["AdapterRAM"]);
+
+                    double vramGb = vramBytes / (1024.0 * 1024 * 1024);
+                    string vramStr = vramGb >= 1.0 ? $"{vramGb:F1} GB" : $"{vramBytes / (1024.0 * 1024):F0} MB";
+                    listViewHardware.Items.Add(new ListViewItem(new[] { "GPU",      gpuName }));
+                    listViewHardware.Items.Add(new ListViewItem(new[] { "GPU_VRAM", vramStr }));
+                }
+            }
+            catch { /* WMI 非關鍵，忽略 */ }
+
+            // ── Grabber（PCIe frame grabber）──
+            try
+            {
+                using (var grabSearcher = new ManagementObjectSearcher(
+                    "SELECT Name, DeviceID FROM Win32_PnPEntity WHERE Name LIKE '%frame grabber%' OR Name LIKE '%Frame Grabber%'"))
+                foreach (ManagementObject obj in grabSearcher.Get())
+                {
+                    string grabName = obj["Name"]?.ToString() ?? "N/A";
+                    string devId = obj["DeviceID"]?.ToString() ?? "";
+                    listViewHardware.Items.Add(new ListViewItem(new[] { "Grabber", grabName }));
+
+                    if (!devId.StartsWith("PCI\\", StringComparison.OrdinalIgnoreCase)) continue;
+
+                    // PCIe link speed/width via PowerShell Get-PnpDeviceProperty
+                    try
+                    {
+                        var psi = new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = "powershell.exe",
+                            Arguments = $"-NoProfile -Command \"Get-PnpDeviceProperty -InstanceId '{devId}' | " +
+                                "Where-Object { $_.KeyName -match 'CurrentLinkSpeed|CurrentLinkWidth' } | " +
+                                "ForEach-Object { $_.KeyName + '=' + $_.Data }\"",
+                            RedirectStandardOutput = true,
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        };
+                        using (var proc = System.Diagnostics.Process.Start(psi))
+                        {
+                            string output = proc.StandardOutput.ReadToEnd();
+                            proc.WaitForExit(5000);
+
+                            int linkSpeed = 0, linkWidth = 0;
+                            foreach (string line in output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                            {
+                                var parts = line.Split('=');
+                                if (parts.Length != 2) continue;
+                                if (parts[0].Contains("CurrentLinkSpeed")) int.TryParse(parts[1].Trim(), out linkSpeed);
+                                if (parts[0].Contains("CurrentLinkWidth")) int.TryParse(parts[1].Trim(), out linkWidth);
+                            }
+
+                            if (linkSpeed > 0 && linkWidth > 0)
+                            {
+                                string[] genNames = { "?", "Gen1", "Gen2", "Gen3", "Gen4", "Gen5" };
+                                double[] genGTs = { 0, 2.5, 5, 8, 16, 32 };
+                                string gen = linkSpeed < genNames.Length ? genNames[linkSpeed] : $"Gen{linkSpeed}";
+                                double bwGBs = linkSpeed < genGTs.Length
+                                    ? genGTs[linkSpeed] * linkWidth * 0.8 / 8.0   // 8b/10b for Gen1-2, 128b/130b for Gen3+
+                                    : 0;
+                                if (linkSpeed >= 3 && linkSpeed < genGTs.Length)
+                                    bwGBs = genGTs[linkSpeed] * linkWidth * (128.0 / 130.0) / 8.0;
+
+                                listViewHardware.Items.Add(new ListViewItem(new[] {
+                                    "Grabber_PCIe", $"{gen} x{linkWidth} ({bwGBs:F1} GB/s)" }));
+                            }
+                        }
+                    }
+                    catch { /* PowerShell 非關鍵 */ }
+                }
+            }
+            catch { }
+
+            // ── 磁碟（所有固定碟） ──
+            try
+            {
+                string capRoot = _settings?.CaptureRootPath ?? @"D:\AniloxCaptures";
+                string capDrive = Path.GetPathRoot(capRoot)?.TrimEnd('\\') ?? "";
+                foreach (var di in DriveInfo.GetDrives())
+                {
+                    if (di.DriveType != DriveType.Fixed || !di.IsReady) continue;
+                    double totalGb = di.TotalSize / (1024.0 * 1024 * 1024);
+                    double freeGb  = di.AvailableFreeSpace / (1024.0 * 1024 * 1024);
+                    string label   = di.Name.TrimEnd('\\');
+                    string suffix  = label.Equals(capDrive, StringComparison.OrdinalIgnoreCase) ? " [存圖]" : "";
+                    listViewHardware.Items.Add(new ListViewItem(new[] {
+                        $"Disk_{label}", $"{di.DriveFormat}  {freeGb:F1} / {totalGb:F1} GB free{suffix}" }));
+                }
+            }
+            catch { /* 非關鍵，忽略 */ }
+
+            // ── 螢幕 ──
             try
             {
                 IntPtr hdc = GetDC(IntPtr.Zero);
@@ -1743,6 +1920,15 @@ namespace AniloxRoll.Monitor.Forms
                 listViewHardware.Items.Add(new ListViewItem(new[] { "IO_DI",        "2 ch (DI0:DEV_ALV, DI1:START)" }));
                 listViewHardware.Items.Add(new ListViewItem(new[] { "IO_DO",        "3 ch (DO0:PC_ALV, DO1:MURA_NG, DO2:PC_BSY)" }));
             }
+            // ── Resource Monitor（即時資源用量，Timer 更新）──
+            listViewHardware.Items.Add(new ListViewItem(new[] { "───", "── Resource Monitor ──" }));
+            _resMonRawSize     = AddResMonItem("RawSize",     "—");
+            _resMonGpuTime     = AddResMonItem("GPU_Time",    "—");
+            _resMonSaveSize    = AddResMonItem("Save/Frame",  "—");
+            _resMonDiskWrite   = AddResMonItem("DiskWrite",   "—");
+            _resMonFrames      = AddResMonItem("Frames",      "—");
+            _resMonRamUsed     = AddResMonItem("RAM_Used",    "—");
+            _resMonVramEst     = AddResMonItem("VRAM_Est",    "—");
             AutoFitListViewColumns(listViewHardware);
 
             // ── Telemetry Timer（每 500ms 更新 ListView + SyncFromHardware）─
@@ -1793,6 +1979,67 @@ namespace AniloxRoll.Monitor.Forms
                 }
             }
 
+            // ── Resource Monitor 更新 ──
+            UpdateResourceMonitor();
+        }
+
+        private ListViewItem AddResMonItem(string key, string value)
+        {
+            var item = new ListViewItem(new[] { key, value });
+            listViewHardware.Items.Add(item);
+            return item;
+        }
+
+        private void UpdateResourceMonitor()
+        {
+            try
+            {
+                var cameras = _liveCameraManager?.Cameras;
+                if (cameras == null || cameras.Count == 0) return;
+
+                // 取第一台有效相機的 frame size
+                int w = 0, h = 0;
+                long maxGpuMs = 0;
+                long totalSaveBytes = 0;
+                long totalFrames = 0;
+                long lastSaveBytes = 0;
+
+                foreach (var cam in cameras)
+                {
+                    if (cam == null) continue;
+                    if (cam.FrameWidth > 0 && w == 0) { w = cam.FrameWidth; h = cam.FrameHeight; }
+                    if (cam.LastGpuTimeMs > maxGpuMs) maxGpuMs = cam.LastGpuTimeMs;
+                    if (cam.LastSaveBytesTotal > lastSaveBytes) lastSaveBytes = cam.LastSaveBytesTotal;
+                    totalSaveBytes += cam.SessionSaveBytes;
+                    totalFrames += cam.SessionFrameCount;
+                }
+
+                long rawBytes = (long)w * h;
+                double rawMB = rawBytes / (1024.0 * 1024);
+
+                _resMonRawSize.SubItems[1].Text = w > 0 ? $"{w}×{h} = {rawMB:F1} MB" : "—";
+                _resMonGpuTime.SubItems[1].Text = maxGpuMs > 0 ? $"{maxGpuMs} ms" : "—";
+                _resMonSaveSize.SubItems[1].Text = lastSaveBytes > 0 ? $"{lastSaveBytes / 1024.0:F0} KB" : "—";
+                _resMonDiskWrite.SubItems[1].Text = totalSaveBytes > 0
+                    ? $"{totalSaveBytes / (1024.0 * 1024 * 1024):F2} GB ({totalFrames} frames)"
+                    : "—";
+                _resMonFrames.SubItems[1].Text = totalFrames > 0 ? $"{totalFrames}" : "—";
+
+                // RAM: process working set
+                long ramBytes = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64;
+                _resMonRamUsed.SubItems[1].Text = $"{ramBytes / (1024.0 * 1024):F0} MB";
+
+                // VRAM: 根據演算法計算（6×W×H + Gaussian workspace 3×W×H×4）
+                if (w > 0)
+                {
+                    long pixels = (long)w * h;
+                    long fixedBuf = pixels * 6;                      // 6 個 uint8 buffer
+                    long workspace = pixels * 4 * 3;                 // Gaussian: 3 個 float buffer
+                    long vramTotal = fixedBuf + workspace + 200L * 1024 * 1024; // + CUDA runtime ~200MB
+                    _resMonVramEst.SubItems[1].Text = $"~{vramTotal / (1024.0 * 1024):F0} MB (est.)";
+                }
+            }
+            catch { /* 非關鍵，忽略 */ }
         }
 
         private void LiveOverviewTimer_Tick(object sender, EventArgs e)
@@ -2187,6 +2434,7 @@ namespace AniloxRoll.Monitor.Forms
             try
             {
                 long csvMs = 0, stitchMs = 0;
+                int totalImgCount = 0;
                 string ridgeDir = _activeRidgeDirection; // 快照 UI 狀態
                 float[][] newCurveMean    = new float[CameraCount][];
                 float[][] newCurveMax     = new float[CameraCount][];
@@ -2201,6 +2449,7 @@ namespace AniloxRoll.Monitor.Forms
                     grabCfg = InspectionStatisticsService.LoadConfigForGrabId(
                         root, grabId, hintFrom, hintTo);
                     csvMs = swCsv.ElapsedMilliseconds;
+                    foreach (var kv in grouped) totalImgCount += kv.Value.Count;
 
                     var swStitch = Stopwatch.StartNew();
                     int scale = InspectionEngineConfig.DefaultSaveResizeScale;
@@ -2301,6 +2550,30 @@ namespace AniloxRoll.Monitor.Forms
                 UpdateStitchedOverviewChart();
 
                 Trace.WriteLine($"[StitchView] {grabId} proc={enableProcess} | CSV={csvMs}ms | Stitch={stitchMs}ms | Total={swTotal.ElapsedMilliseconds}ms");
+
+                // Resource log: 讀圖操作
+                int loadedCams = 0, finalW = 0, finalH = 0;
+                for (int i = 0; i < newImages.Length; i++)
+                {
+                    if (newImages[i] != null)
+                    {
+                        loadedCams++;
+                        if (finalW == 0) { finalW = newImages[i].Width; finalH = newImages[i].Height; }
+                    }
+                }
+                string mode;
+                if (_globalMergedImage != null)
+                {
+                    mode = "Global";
+                    finalW = _globalMergedImage.Width;
+                    finalH = _globalMergedImage.Height;
+                }
+                else
+                {
+                    mode = (totalImgCount > loadedCams) ? "Stitch" : "Single";
+                }
+                AniloxCamera.AppendReviewResourceLog(mode, loadedCams, totalImgCount,
+                    finalW, finalH, swTotal.ElapsedMilliseconds);
             }
             finally
             {

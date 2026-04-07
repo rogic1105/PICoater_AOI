@@ -37,7 +37,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             // 啟動時 WarmUp
             Task.Run(() =>
             {
-                try { _inspectionService.WarmUp(); }
+                try { _inspectionService?.WarmUp(); }
                 catch (Exception ex)
                 {
                     System.Diagnostics.Trace.WriteLine(

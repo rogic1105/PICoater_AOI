@@ -72,6 +72,7 @@
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Web.Extensions" />
     <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Management" />
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
@@ -92,6 +93,7 @@
     <Compile Include="Settings\Models\AcquisitionSettings.cs" />
     <Compile Include="Settings\Models\InspectionRecipe.cs" />
     <Compile Include="Settings\Models\ChartSettings.cs" />
+    <Compile Include="Settings\Models\ImageViewSettings.cs" />
     <Compile Include="Settings\Models\MuraChartConfig.cs" />
     <Compile Include="Settings\Models\StorageSettings.cs" />
     <Compile Include="Settings\Services\ConfigManager.cs" />

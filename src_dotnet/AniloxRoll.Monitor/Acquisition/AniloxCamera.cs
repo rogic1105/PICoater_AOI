@@ -141,6 +141,16 @@ namespace AniloxRoll.Monitor.Core.Camera
             return null;
         }
 
+        // ==================== Resource Monitor ====================
+        /// <summary>最近一幀 GPU ProcessPipeline 耗時（ms）。</summary>
+        public long LastGpuTimeMs { get; private set; }
+        /// <summary>最近一幀存檔總大小（bytes，含 raw + proc + bin）。</summary>
+        public long LastSaveBytesTotal { get; private set; }
+        /// <summary>本次 session 累計存檔大小（bytes）。</summary>
+        public long SessionSaveBytes { get; private set; }
+        /// <summary>本次 session 累計存檔幀數。</summary>
+        public long SessionFrameCount { get; private set; }
+
         // ==================== FPS（來自 MdigInquire，同 MilCameraUnit）====================
         /// <summary>目前實際量測的 FPS（MdigInquire M_PROCESS_FRAME_RATE）。抓圖未啟動時回傳 0。</summary>
         public double CurrentFps
@@ -897,6 +907,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                     IntPtr picoaterRowCurveMean = _nativeBufferPool.CurveRowMeanBuffer;
                     IntPtr picoaterRowCurveMax  = _nativeBufferPool.CurveRowMaxBuffer;
 
+                    var swGpu = System.Diagnostics.Stopwatch.StartNew();
                     _aoiService.ProcessImage(new AoiProcessRequest
                     {
                         Input = new AoiProcessRequest.InputImage
@@ -926,6 +937,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                             PrecomputedColMean = PrecomputedColMean
                         }
                     });
+                    LastGpuTimeMs = swGpu.ElapsedMilliseconds;
 
                     // 從 Mura 曲線計算 peak（0-1 normalized），供 OnInspectionResult 使用
                     int curveLen = _nativeBufferPool.CurveBufferSize / sizeof(float);
@@ -1126,6 +1138,8 @@ namespace AniloxRoll.Monitor.Core.Camera
                 int   scale    = _saveResizeScale;
                 int   quality  = _saveJpgQuality;
                 bool  alsoBmp  = SaveOriginalBmp;
+                int   origW   = _frameWidth;
+                int   origH   = _frameHeight;
 
                 if (hasResizeData)
                 {
@@ -1168,6 +1182,21 @@ namespace AniloxRoll.Monitor.Core.Camera
                                 SaveCurveBinFromArray(rowMaxArr,  scale,
                                     Path.Combine(saveDir, baseName + "_max_h.bin"));
                             }
+
+                            // Resource monitor: 計算本幀存檔總大小（排除 .bmp 原圖）
+                            long frameBytes = 0;
+                            foreach (var f in Directory.GetFiles(saveDir, baseName + "*"))
+                            {
+                                if (f.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase)) continue;
+                                frameBytes += new FileInfo(f).Length;
+                            }
+                            LastSaveBytesTotal = frameBytes;
+                            SessionSaveBytes += frameBytes;
+                            SessionFrameCount++;
+
+                            // Resource log: 寫入 CSV
+                            long ramMB = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / (1024 * 1024);
+                            AppendResourceLog(camId, origW, origH, LastGpuTimeMs, frameBytes, SessionSaveBytes, SessionFrameCount, ramMB);
 
                             OnInspectionResult?.Invoke(camId, baseName, meanPeak, maxPeak);
                         }
@@ -1219,6 +1248,145 @@ namespace AniloxRoll.Monitor.Core.Camera
                 NativeMethods.CoreCV_FreePinned(_procResizeBuf);
                 _procResizeBuf = IntPtr.Zero;
             }
+        }
+
+        // ==================== Resource Log ====================
+        private static readonly object _resourceLogLock = new object();
+        private static string _resourceLogPath;
+        private static bool _resourceLogInitialized;
+
+        // CPU% 計算用：追蹤上次取樣的 ProcessorTime 和時間戳
+        private static TimeSpan _lastCpuTime;
+        private static DateTime _lastCpuSample;
+        private static int _cpuCoreCount;
+
+        // VRAM 查詢用：快取結果（nvidia-smi 有開銷，最多每 2 秒查一次）
+        private static long _cachedVramMB;
+        private static DateTime _lastVramQuery;
+        private static readonly TimeSpan VramQueryInterval = TimeSpan.FromSeconds(2);
+
+        /// <summary>初始化 resource log 檔案（啟動時呼叫一次）。</summary>
+        public static void InitResourceLog(string captureRootPath)
+        {
+            try
+            {
+                // 優先用存圖根目錄，fallback 到程式目錄
+                string baseDir = !string.IsNullOrEmpty(captureRootPath) && Directory.Exists(Path.GetPathRoot(captureRootPath))
+                    ? captureRootPath
+                    : AppDomain.CurrentDomain.BaseDirectory;
+                string dir = Path.Combine(baseDir, "logs");
+                Directory.CreateDirectory(dir);
+                _resourceLogPath = Path.Combine(dir, $"resource-monitor-{DateTime.Now:yyyyMMdd-HHmmss}.csv");
+
+                // 初始化 CPU 基準
+                var proc = System.Diagnostics.Process.GetCurrentProcess();
+                _lastCpuTime = proc.TotalProcessorTime;
+                _lastCpuSample = DateTime.UtcNow;
+                _cpuCoreCount = Environment.ProcessorCount;
+
+                // 寫入 header
+                lock (_resourceLogLock)
+                {
+                    using (var sw = new StreamWriter(_resourceLogPath, append: false))
+                    {
+                        sw.WriteLine("Timestamp,Mode,CamId,Width,Height,RawMB,GpuMs,SaveKB,SessionGB,SessionFrames,RamMB,CpuPct,VramMB");
+                    }
+                }
+
+                _resourceLogInitialized = true;
+                System.Diagnostics.Trace.WriteLine($"[ResourceLog] 已建立: {_resourceLogPath}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine($"[ResourceLog] 初始化失敗: {ex.Message}");
+            }
+        }
+
+        private static void AppendResourceLog(int camId, int w, int h, long gpuMs, long saveBytes,
+            long sessionBytes, long sessionFrames, long ramMB)
+        {
+            WriteResourceLine("Grab", camId, w, h, gpuMs, saveBytes, sessionBytes, sessionFrames, ramMB);
+        }
+
+        /// <summary>Review 操作的 resource log（讀圖合圖/單張）。
+        /// mode: "Stitch"（多張合圖）、"Single"（單張讀取）、"Global"（全域水平合圖）。
+        /// camCount: 載入的相機數；imgCount: 載入的總影像數。
+        /// w/h: 最終影像尺寸；loadMs: 總載入時間。</summary>
+        public static void AppendReviewResourceLog(string mode, int camCount, int imgCount,
+            int w, int h, long loadMs)
+        {
+            long ramMB = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / (1024 * 1024);
+            WriteResourceLine(mode, camCount, w, h, loadMs, 0, 0, imgCount, ramMB);
+        }
+
+        /// <summary>查詢 CPU 使用率（本程序，所有核心平均）。</summary>
+        private static double GetCpuPercent()
+        {
+            try
+            {
+                var proc = System.Diagnostics.Process.GetCurrentProcess();
+                var now = DateTime.UtcNow;
+                var cpuTime = proc.TotalProcessorTime;
+                double elapsed = (now - _lastCpuSample).TotalMilliseconds;
+                if (elapsed < 10) return 0; // 間隔太短，跳過
+                double cpuUsed = (cpuTime - _lastCpuTime).TotalMilliseconds;
+                _lastCpuTime = cpuTime;
+                _lastCpuSample = now;
+                // 除以核心數得到整機百分比（0~100）
+                return cpuUsed / elapsed / _cpuCoreCount * 100.0;
+            }
+            catch { return 0; }
+        }
+
+        /// <summary>查詢 GPU VRAM 使用量（MB），透過 nvidia-smi，帶快取。</summary>
+        private static long GetVramMB()
+        {
+            try
+            {
+                if ((DateTime.UtcNow - _lastVramQuery) < VramQueryInterval)
+                    return _cachedVramMB;
+
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "nvidia-smi",
+                    Arguments = "--query-gpu=memory.used --format=csv,noheader,nounits",
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                using (var p = System.Diagnostics.Process.Start(psi))
+                {
+                    string output = p.StandardOutput.ReadToEnd().Trim();
+                    p.WaitForExit(2000);
+                    if (long.TryParse(output, out long mb))
+                        _cachedVramMB = mb;
+                }
+                _lastVramQuery = DateTime.UtcNow;
+                return _cachedVramMB;
+            }
+            catch { return _cachedVramMB; }
+        }
+
+        private static void WriteResourceLine(string mode, int id, int w, int h, long gpuMs, long saveBytes,
+            long sessionBytes, long frames, long ramMB)
+        {
+            if (!_resourceLogInitialized) return;
+            try
+            {
+                double cpuPct = GetCpuPercent();
+                long vramMB = GetVramMB();
+                lock (_resourceLogLock)
+                {
+                    using (var sw = new StreamWriter(_resourceLogPath, append: true))
+                    {
+                        sw.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff},{mode},{id},{w},{h}," +
+                            $"{(long)w * h / (1024.0 * 1024):F1},{gpuMs},{saveBytes / 1024.0:F0}," +
+                            $"{sessionBytes / (1024.0 * 1024 * 1024):F3},{frames},{ramMB}," +
+                            $"{cpuPct:F1},{vramMB}");
+                    }
+                }
+            }
+            catch { /* log 失敗不影響主程式 */ }
         }
 
         /// <summary>

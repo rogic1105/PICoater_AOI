@@ -59,12 +59,13 @@ namespace AniloxRoll.Monitor.UI.Navigators
             finally { _updating = false; }
         }
 
-        private void UpdateTimeCombo()
+        private void UpdateTimeCombo(bool autoSelect = true)
         {
             var times = _repository.GetTimesForDate(_cbDate.Text);
             _cbTime.Items.Clear();
             _cbTime.Items.AddRange(times.ToArray());
             if (times.Count == 0) return;
+            if (!autoSelect) return;
 
             string lastTime = BuildLastTime();
             int idx = times.IndexOf(lastTime);
@@ -153,6 +154,10 @@ namespace AniloxRoll.Monitor.UI.Navigators
                     _cbDate.SelectedItem = dateStr;
                 else
                     _cbDate.Text = dateStr;
+
+                // 日期變更後必須刷新 time combo 的 Items，否則殘留前一天的時間列表
+                UpdateTimeCombo(autoSelect: false);
+
                 if (_cbTime.Items.Contains(timeStr))
                     _cbTime.SelectedItem = timeStr;
                 else

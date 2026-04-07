@@ -22,6 +22,25 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private double _currentViewLeftMm = 0;
         private double _currentViewRightMm = 0;
 
+        /// <summary>全域/水平合圖模式：同步 chartOverview X 軸視野。</summary>
+        public MuraChartHelper OverviewChartHelper { get; set; }
+
+        // 合圖模式座標覆寫：合圖 pixel 0 對應的 mm 起始位置與解析度
+        private double? _mergedStartMm;
+        private double? _mergedOpsUm;
+
+        public void SetMergedCoordinates(double startMm, double opsUm)
+        {
+            _mergedStartMm = startMm;
+            _mergedOpsUm = opsUm;
+        }
+
+        public void ClearMergedCoordinates()
+        {
+            _mergedStartMm = null;
+            _mergedOpsUm = null;
+        }
+
         /// <summary>
         /// 顯示圖像相對於全解析度的縮放倍率。
         /// 新格式 JPEG 為 5（寬高各縮小5倍），舊格式 BMP 為 1。
@@ -80,6 +99,30 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private double[] GetEffectivePosArray() =>
             ReviewConfig?.CamPos ?? _settings?.GetCameraStartPositionMmArray() ?? new double[7];
 
+        /// <summary>
+        /// 取得目前模式的座標參數（mm/pixel 解析度與起始位置）。
+        /// 合圖模式使用全域座標，否則依相機索引查陣列。
+        /// </summary>
+        private bool TryGetEffectiveCoordinates(out double opsInMm, out double startPosMm)
+        {
+            opsInMm = 0; startPosMm = 0;
+            if (_mergedStartMm.HasValue && _mergedOpsUm.HasValue)
+            {
+                opsInMm    = _mergedOpsUm.Value / 1000.0;
+                startPosMm = _mergedStartMm.Value;
+                return true;
+            }
+            double[] opsUm   = GetEffectiveOpsArray();
+            double[] startMm = GetEffectivePosArray();
+            if (_currentCameraIndex >= 0 && _currentCameraIndex < opsUm.Length)
+            {
+                opsInMm    = opsUm[_currentCameraIndex] / 1000.0;
+                startPosMm = startMm[_currentCameraIndex];
+                return true;
+            }
+            return false;
+        }
+
         public void SetCurrentCameraIndex(int index) => _currentCameraIndex = index;
 
         /// <summary>在載入新圖前呼叫，以世界座標（mm）記住目前 viewport，支援跨倍率還原。</summary>
@@ -89,31 +132,24 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
             // 嘗試以 mm 世界座標儲存（跨倍率安全）
             _savedViewLeftMm = double.NaN;
-            if (_settings != null && _currentCameraIndex >= 0)
+            if (_settings != null && _currentCameraIndex >= 0 &&
+                TryGetEffectiveCoordinates(out double opsInMm, out double startPosMm))
             {
-                double[] opsUm  = GetEffectiveOpsArray();
-                double[] startMm = GetEffectivePosArray();
-                if (_currentCameraIndex < opsUm.Length)
-                {
-                    double opsInMm    = opsUm[_currentCameraIndex] / 1000.0;
-                    double startPosMm = startMm[_currentCameraIndex];
-                    float  zoom       = _canvas.Zoom;
-                    PointF pan        = _canvas.PanOffset;
+                float  zoom       = _canvas.Zoom;
+                PointF pan        = _canvas.PanOffset;
 
-                    double pixelLeft  = (0              - pan.X) / zoom * _imageScaleFactor;
-                    double pixelRight = (_canvas.Width  - pan.X) / zoom * _imageScaleFactor;
-                    _savedViewLeftMm  = startPosMm + pixelLeft  * opsInMm;
-                    _savedViewRightMm = startPosMm + pixelRight * opsInMm;
+                double pixelLeft  = (0              - pan.X) / zoom * _imageScaleFactor;
+                double pixelRight = (_canvas.Width  - pan.X) / zoom * _imageScaleFactor;
+                _savedViewLeftMm  = startPosMm + pixelLeft  * opsInMm;
+                _savedViewRightMm = startPosMm + pixelRight * opsInMm;
 
-                    // Y：以圖片高度中心分率保存（0=頂, 0.5=中, 1=底）
-                    double yCenterPx = (_canvas.Height / 2.0 - pan.Y) / zoom;
-                    _savedYCenterFraction = _canvas.Image.Height > 0
-                        ? yCenterPx / _canvas.Image.Height
-                        : 0.5;
-                }
+                // Y：以圖片高度中心分率保存（0=頂, 0.5=中, 1=底）
+                double yCenterPx = (_canvas.Height / 2.0 - pan.Y) / zoom;
+                _savedYCenterFraction = _canvas.Image.Height > 0
+                    ? yCenterPx / _canvas.Image.Height
+                    : 0.5;
             }
 
-            // Pixel fallback（萬一 settings 不可用）
             _savedZoom = _canvas.Zoom;
             _savedPan  = _canvas.PanOffset;
             _shouldRestoreView = true;
@@ -158,35 +194,46 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 if (_shouldRestoreView)
                 {
                     _shouldRestoreView = false;
+                    bool restored = false;
 
                     // 優先：以 mm 世界座標還原（支援 1x↔5x 等跨倍率跳轉）
-                    if (!double.IsNaN(_savedViewLeftMm) && _settings != null && _currentCameraIndex >= 0)
+                    if (!double.IsNaN(_savedViewLeftMm) && _settings != null && _currentCameraIndex >= 0 &&
+                        TryGetEffectiveCoordinates(out double opsInMm, out double startPosMm) &&
+                        _canvas.Image != null)
                     {
-                        double[] opsUm      = GetEffectiveOpsArray();
-                        double[] startMmArr = GetEffectivePosArray();
-                        if (_currentCameraIndex < opsUm.Length)
+                        double leftPx  = (_savedViewLeftMm  - startPosMm) / (opsInMm * _imageScaleFactor);
+                        double rightPx = (_savedViewRightMm - startPosMm) / (opsInMm * _imageScaleFactor);
+                        double widthPx = rightPx - leftPx;
+
+                        if (widthPx > 0)
                         {
-                            double opsInMm    = opsUm[_currentCameraIndex] / 1000.0;
-                            double startPosMm = startMmArr[_currentCameraIndex];
+                            int imgW = _canvas.Image.Width;
+                            int imgH = _canvas.Image.Height;
+                            float zoom  = (float)(_canvas.Width / widthPx);
+                            float panX  = (float)(-leftPx * zoom);
+                            float yCenterPx = (float)(_savedYCenterFraction * imgH);
+                            float panY  = (float)(_canvas.Height / 2.0 - yCenterPx * zoom);
 
-                            double leftPx  = (_savedViewLeftMm  - startPosMm) / (opsInMm * _imageScaleFactor);
-                            double rightPx = (_savedViewRightMm - startPosMm) / (opsInMm * _imageScaleFactor);
-                            double widthPx = rightPx - leftPx;
+                            // 安全檢查：與 FitToScreen zoom 比較
+                            float fitZoom = Math.Min(
+                                (float)_canvas.Width  / imgW,
+                                (float)_canvas.Height / imgH);
+                            float imgScreenW = imgW * zoom;
+                            float imgScreenH = imgH * zoom;
+                            bool zoomTooSmall  = fitZoom > 0 && zoom < fitZoom * 0.8f;
+                            bool outOfBoundsX  = (panX + imgScreenW < 0) || (panX > _canvas.Width);
+                            bool outOfBoundsY  = (panY + imgScreenH < 0) || (panY > _canvas.Height);
 
-                            if (widthPx > 0)
+                            if (!zoomTooSmall && !outOfBoundsX && !outOfBoundsY)
                             {
-                                float zoom  = (float)(_canvas.Width / widthPx);
-                                float panX  = (float)(-leftPx * zoom);
-                                float yCenterPx = (float)(_savedYCenterFraction * _canvas.Image.Height);
-                                float panY  = (float)(_canvas.Height / 2.0 - yCenterPx * zoom);
                                 _canvas.SetView(zoom, new PointF(panX, panY));
-                                return;
+                                restored = true;
                             }
                         }
                     }
 
-                    // Fallback：pixel 直接還原（同倍率，或 settings 不可用）
-                    _canvas.SetView(_savedZoom, _savedPan);
+                    if (!restored)
+                        _canvas.FitToScreen();
                 }
                 else
                 {
@@ -205,16 +252,11 @@ namespace AniloxRoll.Monitor.UI.Widgets
             leftMm = rightMm = 0;
             if (_settings == null || _canvas.Image == null) return false;
 
-            double[] opsUmArray   = GetEffectiveOpsArray();
-            double[] startMmArray = GetEffectivePosArray();
-            if (cameraIndex < 0 || cameraIndex >= opsUmArray.Length) return false;
-
             float zoom = _canvas.Zoom;
             if (zoom <= 0) return false;
+            if (!TryGetEffectiveCoordinates(out double opsInMm, out double startPosMm)) return false;
 
-            double opsInMm    = opsUmArray[cameraIndex] / 1000.0;
-            double startPosMm = startMmArray[cameraIndex];
-            PointF pan        = _canvas.PanOffset;
+            PointF pan = _canvas.PanOffset;
 
             double pixelLeft  = (0             - pan.X) / zoom * _imageScaleFactor;
             double pixelRight = (_canvas.Width - pan.X) / zoom * _imageScaleFactor;
@@ -224,17 +266,17 @@ namespace AniloxRoll.Monitor.UI.Widgets
             return true;
         }
 
-        /// <summary>從目前 canvas 狀態更新 chartMura / chartMuraHorizontal 視野範圍。</summary>
+        /// <summary>從目前 canvas 狀態更新 chartMura / chartMuraHorizontal / chartOverview 視野範圍。</summary>
         public void RefreshChartRange()
         {
             if (_canvas.Image == null) return;
 
-            if (_muraChartHelper != null &&
-                TryComputeCurrentViewRange(_currentCameraIndex, out double leftMm, out double rightMm))
+            if (TryComputeCurrentViewRange(_currentCameraIndex, out double leftMm, out double rightMm))
             {
                 _currentViewLeftMm  = leftMm;
                 _currentViewRightMm = rightMm;
-                _muraChartHelper.UpdateViewRange(leftMm, rightMm);
+                _muraChartHelper?.UpdateViewRange(leftMm, rightMm);
+                OverviewChartHelper?.UpdateViewRange(leftMm, rightMm);
             }
 
             RefreshRowChartRange();
@@ -260,16 +302,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public void UpdateCanvasInfo(CanvasInfo info)
         {
             if (_settings == null || _statusLabel == null) return;
-
-            double[] cameraOpsUmArray = GetEffectiveOpsArray();
-            double[] cameraStartPositionMmArray = GetEffectivePosArray();
-
-            if (_currentCameraIndex < 0 || _currentCameraIndex >= cameraOpsUmArray.Length)
-                return;
-
-            double opsInUm = cameraOpsUmArray[_currentCameraIndex];
-            double opsInMm = opsInUm / 1000.0;
-            double startPosMm = cameraStartPositionMmArray[_currentCameraIndex];
+            if (!TryGetEffectiveCoordinates(out double opsInMm, out double startPosMm)) return;
 
             // 若圖像為縮小版（新格式 JPEG），需乘以縮放倍率還原成全解析度座標
             double physicalX = startPosMm + (info.ImageX * _imageScaleFactor * opsInMm);
@@ -287,6 +320,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 if (!_suppressChartSync)
                 {
                     _muraChartHelper?.UpdateViewRange(_currentViewLeftMm, _currentViewRightMm);
+                    OverviewChartHelper?.UpdateViewRange(_currentViewLeftMm, _currentViewRightMm);
 
                     // 法向（水平）Mura 曲線：canvas 垂直 viewport → chart Y 軸同步
                     // 傳入 canvas pixel mm（不 clamp），UpdateViewRange 內部反轉 + 補償
