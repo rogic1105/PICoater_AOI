@@ -32,7 +32,107 @@
 
 - 7 個 Panel 卡片：BackColor = 綠(≥95%) / 橙(80-95%) / 紅(<80%) / 灰(無資料)
 - `listViewStats` 5 欄彙總：相機 / Pass / Fail / Total / 良率（序號模式下分母=唯一序號數）
-- `listViewGrabDetail` 逐序號明細：序號 + CAM1~7（Pass/Fail/—），整行紅底 = 任一 CAM Fail
+- `listViewGrabDetail` 逐序號明細：序號 + CAM1~7（Pass/Fail/—），整行紅底 RGB(255,235,238) = 任一 CAM Fail，全 Pass 行綠底 RGB(232,245,233)
+
+---
+
+## 控制項觸發關係圖
+
+```
+btnSelectDataFolder_Click
+  ├─→ FolderBrowserDialog → LoadAvailableTimes + LoadGrabIdInfos
+  ├─→ _interactionHelper.LoadDirectoryAndInitNavigator（同步 Review tab）
+  ├─→ 填充 cbGrabIdStart / cbGrabIdEnd / cbDataGrabId / cbReviewGrabId
+  ├─→ 填充 cbStartDate~Sec / cbEndDate~Sec（全範圍）
+  ├─→ PopulateChartNavigators() → cbChartYear cascade
+  ├─→ RefreshStats()
+  └─→ 高亮 groupBoxGrabIdRange
+
+btnQueryStats_Click → RefreshStats()
+
+btnShowFail_Click（Toggle）
+  ├─ _showFailOnly = !_showFailOnly
+  ├─ Text = "篩選異常" ↔ "顯示全部"
+  ├─ BackColor = 淺紅 / 預設
+  └─ ApplyFailFilter() → 重新填充 listViewGrabDetail
+
+cbGrabIdStart / cbGrabIdEnd → OnGrabIdComboChanged(isStart)
+  ├─ 強制 start ≤ end（index 倒序，自動 swap）
+  ├─ 同步時間 ComboBox（SetCombosToDateTime）
+  ├─ RefreshStats()
+  └─ 高亮 groupBoxGrabIdRange
+
+cbDataGrabId → OnSingleSheetComboChanged()
+  ├─ 鎖定 cbGrabIdStart = cbGrabIdEnd = 同一序號
+  ├─ 同步時間 ComboBox
+  ├─ RefreshStats()
+  ├─ 高亮 grpDataSingleSheet
+  └─ 跨 tab 同步（_syncingGrabIdCross guard）：
+      ├─ cbReviewGrabId.SelectedIndex = idx
+      ├─ NavigateToDateTime(info.Earliest)
+      └─ LoadGrabStitchedViewAsync(grabId)
+
+cbStartDate/Time → OnStartComboChanged(fromLevel)
+  ├─ Cascade：Date 變更 → 刷新 Time items
+  ├─ ClampEndToStart（確保 end ≥ start）
+  ├─ 高亮 groupBoxTimeRange
+  └─ RefreshStats()
+
+cbEndDate/Time → OnEndComboChanged(fromLevel)
+  ├─ Cascade + ClampStartToEnd（確保 start ≤ end）
+  ├─ 高亮 groupBoxTimeRange
+  └─ RefreshStats()
+
+cbChartYear → OnChartYearIndexChanged（_chartNavUpdating guard）
+  ├─ 填充 cbChartMonth
+  ├─ FillPeriodChart(chartYearly, ComputeGroupedByMonthOfYear)
+  └─ Cascade → OnChartMonthIndexChanged
+
+cbChartMonth → OnChartMonthIndexChanged
+  ├─ 填充 cbChartDay
+  ├─ FillPeriodChart(chartMonthly, ComputeGroupedByDayOfMonth)
+  └─ Cascade → OnChartDayIndexChanged
+
+cbChartDay → OnChartDayIndexChanged
+  └─ FillPeriodChart(chartDaily, ComputeGroupedByHourOfDay)
+
+btnChartYearPrev/Next → cbChartYear.SelectedIndex ± 1 → cascade
+btnChartMonthPrev/Next → cbChartMonth.SelectedIndex ± 1 → cascade
+btnChartDayPrev/Next → cbChartDay.SelectedIndex ± 1 → cascade
+
+chartYearly/Monthly/Daily.MouseClick → PeriodChart_ToggleAutoScale
+  ├─ 500ms throttle（_lastChartToggleTick）
+  ├─ chart.Tag == "auto" → ApplyFixedScale（使用 settings Y-max）
+  └─ chart.Tag == null → ApplyAutoScale（從資料計算 niceMax，設 Tag="auto"）
+```
+
+### RefreshStats() 三模式邏輯
+
+```
+RefreshStats()
+  ├─ 序號模式（_activeStatMode != groupBoxTimeRange）
+  │   └─ ComputeByGrabIdRange(startGrabId, endGrabId) + ComputeDetailedByGrabIdRange
+  │
+  ├─ 時間模式（_activeStatMode == groupBoxTimeRange）
+  │   ├─ Parse start/end DateTime from combos
+  │   ├─ 找時間範圍內的 GrabIds
+  │   └─ ComputeByGrabIdRange（轉換為序號基準）
+  │
+  └─ Output：
+      ├─ _statsPresenter.Update(summary) → panelStatCam1~7 + listViewStats
+      ├─ _currentDetails = detailedList
+      └─ ApplyFailFilter() → UpdateGrabDetailListView()
+```
+
+### 跨 Tab 同步（Review ↔ Data）
+
+| 方向 | 觸發 | 同步內容 | Guard |
+|------|------|---------|-------|
+| Review → Data | `OnReviewGrabIdChanged` | cbDataGrabId + cbGrabIdStart/End + 時間 + RefreshStats + 高亮 grpDataSingleSheet | `_syncingGrabIdCross` |
+| Data → Review | `OnSingleSheetComboChanged` | cbReviewGrabId + NavigateToDateTime + LoadGrabStitchedViewAsync | `_syncingGrabIdCross` |
+| 時間 → GrabId | `SyncGrabIdFromTimeCombos` | 找包含該時間的 grabId → cbReviewGrabId | `_syncingGrabIdNav` |
+| btnSelectFolder | Review tab 載入 | 同時填充 Data tab 所有 ComboBox + RefreshStats | — |
+| btnSelectDataFolder | Data tab 載入 | 同時設定 Review tab ImageRepository + TimeNavigator | — |
 
 ---
 

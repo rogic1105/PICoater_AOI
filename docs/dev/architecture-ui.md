@@ -4,12 +4,24 @@
 
 頂部有 `panelStatusBar`（TableLayoutPanel，Dock=Top，Height=32，4 欄各 25%），由左到右：
 
-| 欄 | 控制項 | 內容 |
-|----|--------|------|
-| 0 | `lblCamCount` | 相機連線數 `CAM: N/7`（綠=全連、黃=部分、紅=全斷） |
-| 1 | `lblPlcState` | FSM 狀態（PlcState enum → 色碼文字） |
-| 2 | `lblPlcConn` | PLC 連線狀態（綠=已連線、灰=未連線） |
-| 3 | `panelPlcIo` | TableLayoutPanel 5 欄各 20%，5 個 IO LED（DI0:PLC_ALV, DI1:START, DO0:PC_ALV, DO1:MURA_NG, DO2:PC_BSY） |
+| 欄 | 控制項 | 內容 | 更新觸發 |
+|----|--------|------|---------|
+| 0 | `lblCamCount` | `CAM: N/7`（綠=全連、黃=部分、紅=全斷） | `LiveCameraManager.OnCameraCountChanged`（500ms CameraStatusTimer） |
+| 1 | `lblPlcState` | `● {state}` — Idle 綠 / Running 藍 / Stopping 黃 / Faulted 紅 / CommLost 紅 | `PlcGrabController.OnStateChanged`（~500ms PollTick） |
+| 2 | `lblPlcConn` | `● IO 已連線` 綠 / `● IO 離線` 灰；連線時同時鎖定 btnCameraGrab（Text="IO 控制中"） | `PlcGrabController.OnConnectionChanged` |
+| 3 | `panelPlcIo` | 5 LED（BackColor 綠/暗灰），固定文字 DI0~DO2 | `PlcGrabController.OnIoUpdated`（每次 PollTick 的 `FireIoSnapshot`） |
+
+### 底部狀態列（lblPixelInfo）
+
+`ToolStripStatusLabel`，3 條獨立更新路徑：
+
+| 來源 | 觸發事件 | 格式 |
+|------|---------|------|
+| **Live 即時影像** | `AniloxCamera.OnMouseDataChanged` → `LiveCameraManager.HandleMouseDataChanged` → callback | `即時影像 [CAM N] \| 位置:(X, Y) mm \| X範圍 \| Y範圍 \| 座標 \| 亮度 \| 實體倍率` |
+| **Review canvasMain** | `canvasMain.StatusChanged` → `CanvasInteractionHelper.UpdateCanvasInfo` | `位置:(X, Y) mm \| X範圍 \| Y範圍 \| 座標 \| 亮度 \| 實體倍率` |
+| **背景預覽** | `_bgPreviewMainCanvas.StatusChanged` → `BgPreviewCanvas_StatusChanged` | `背景預覽 [CAM N] \| 位置:(X, Y) mm \| X範圍 \| Y範圍 \| 座標 \| 亮度 \| 實體倍率` |
+
+游標超出影像範圍時顯示 `"... | 游標超出影像範圍"`。所有路徑均透過 `BeginInvoke` 確保 UI thread 更新。
 
 Form 右側固定有 `tabControlRight`（Location=1209,37，Size=276×741），包含 3 個 Tab：
 
@@ -137,6 +149,11 @@ Guard flags：
 - `_syncingProcessedCheckbox`：防止程式碼設定 `checkBoxShowProcessed.Checked` 時觸發 `CheckedChanged`
 - `_statComboUpdating`：防止 stat ComboBox cascade 重複觸發
 - `_chartNavUpdating`：防止 chart 年月日 ComboBox cascade 重複觸發
+- `_suppressChartSync`：防止 FitToScreen/SetView 觸發的 StatusChanged 與手動 chart 更新衝突
+- `_dragging`（HashSet\<TrackBar\>）：TrackBar 拖曳中延遲硬體寫入
+- `_syncingFromHw`：防止 TelemetryTimer 回讀硬體值時觸發 ValueChanged 寫回硬體
+- `_liveOverviewDirty`（volatile bool）：曲線回呼 → 設 true，LiveOverviewTimer 消費後清除
+- `_showFailOnly`：listViewGrabDetail 篩選 toggle 狀態
 
 ---
 
@@ -231,6 +248,100 @@ Guard flags：
 
 **曝光上限計算**：`CalcExpMax(lrHz) = clamp(floor(900000/lrHz), 1, 10000)`。LR 改變時呼叫 `ApplyExpMax()` 更新所有 7 台曝光 TrackBar/NumericUpDown 的 Maximum 並夾緊現有值。
 
+### Live tab 控制項觸發關係圖
+
+```
+btnCameraGrab_Click
+  ├─ IF _bgPreviewActive → ClearBackgroundPreview(restoreMilDisplay:true) + FreeCameras
+  ├─ IF !IsAllocated → EnsureAllocatedAndToggleGrab(enableProcessing) + LoadBackgroundBins
+  │   └─ AllocateCameras → ToggleGrab → StartGrab
+  │       └─ foreach cam: SetUserGrabIntent(true) → MIL capture pipeline 啟動
+  ├─ ELSE → ToggleGrab（切換抓取/停止）
+  ├─ 首次 grab → _currentGrabId = NextGrabId()
+  └─ UpdateGrabButton(isGrabbing)
+      ├─ Text = "停止抓取" / "開始抓取"
+      └─ btnGetBackground/btnViewBackground.Enabled = !isGrabbing
+
+btnCameraFree_Click
+  ├─ ClearBackgroundPreview()
+  ├─ _liveCameraManager.FreeCameras()
+  │   └─ Stop timer → IsLiveGrabbing=false → cam.Free() → ClearSystems
+  ├─ _telemetryPresenter.ResetAll() → ListView 全部 "-"
+  └─ UpdateGrabButton(false)
+
+btnGetBackground_Click
+  ├─ 確認 Algorithm == StandardBgSub
+  ├─ 確保 Allocated + Grabbing
+  ├─ Disable btnGetBackground / btnCameraGrab / btnCameraFree
+  ├─ 採集迴圈：Text = "採集中 {remaining}s"
+  │   └─ foreach cam: TryComputeColumnMean → 累加 → 平均
+  ├─ SaveBackgroundBin → LoadBackgroundBins
+  ├─ FINALLY: 恢復按鈕 → ToggleGrab(stop) → UpdateStandardBgSubLockState
+  └─ 自動呼叫 btnViewBackground_Click → 開啟預覽
+
+btnViewBackground_Click（Toggle）
+  ├─ IF _bgPreviewActive → ClearBackgroundPreview(); return
+  ├─ Detach MIL display（SetPrimaryDisplayVisible(false) + SetSecondaryDisplay(Zero)）
+  ├─ 載入 bg_*.bin → ExpandColMeanToBitmap × 7
+  ├─ panelLiveCam1–7：SmartCanvas overlay + Click → BgPreviewPanel_Click
+  ├─ panelMainDisplay：SmartCanvas overlay + StatusChanged → BgPreviewCanvas_StatusChanged
+  └─ _bgPreviewActive = true
+
+checkBoxEnableImageProcessing_CheckedChanged
+  ├─ _liveCameraManager.SetImageProcessingEnabled(enabled)
+  │   └─ foreach cam: EnableImageProcessing = enabled
+  ├─ UserSessionState.Save()
+  └─ UpdateLiveDirectionVisual(enabled ? _liveDisplayDirection : null)
+
+panelLiveCam{N}.Click → SwitchMainDisplay(cameraIndex)
+  ├─ _selectedMainCameraId = cameraIndex
+  ├─ 高亮選中 panel（PapayaWhip），其他暗色
+  └─ cam.SetSecondaryDisplay(mainDisplayPanel.Handle)
+
+panelMainDisplay.MouseDown（MultiClickDetector）
+  ├─ 雙擊 → FitToScreen / ResetMainDisplayView
+  └─ 三擊 → SetPhysicalMagnification1x（1 screen mm = 1 real mm）
+
+BgPreviewPanel_Click（背景預覽時 panelLiveCam 點擊）
+  └─ _bgPreviewMainCanvas.Image = _bgPreviewBitmaps[idx] → FitToScreen
+```
+
+### Live tab GPU 回呼鏈
+
+```
+GPU Pipeline（MIL callback thread）
+  │
+  ├─→ OnLiveCurveData(camId, meanArr, maxArr)
+  │    ├─ Cache: _liveCurveMean[camId] = meanArr
+  │    ├─ _liveOverviewDirty = true
+  │    ├─ CheckLiveMura → IF peak > threshold → _plcGrabController.NotifyMuraDetected()
+  │    ├─ IF camId != SelectedMainCameraId → return
+  │    ├─ BeginInvoke → UI thread
+  │    ├─ SetOps(opsUm)
+  │    ├─ TryGetSecondaryDisplayGeometry → viewLeftMm/viewRightMm
+  │    └─ _muraChartLiveHelper.UpdateDataAndView(mean, max, startPos, viewLeft, viewRight)
+  │
+  ├─→ OnLiveRowCurveData(camId, meanArr, maxArr)
+  │    ├─ CheckLiveMura → same as above
+  │    ├─ IF camId != SelectedMainCameraId → return
+  │    ├─ BeginInvoke → UI thread
+  │    ├─ _rowChartLiveHelper.UpdateData(mean, max)
+  │    └─ TryGetSecondaryDisplayGeometry → topMm/botMm → UpdateViewRange
+  │
+  └─→ OnCameraInspectionResult(camId, fileName, meanPeak, maxPeak)
+       ├─ _inspectionLogService.AppendRecord(...) → CSV 寫入
+       └─ IF isMura → _plcGrabController.NotifyMuraDetected() → DO_MURA
+```
+
+### Live tab Timer 驅動更新
+
+| Timer | 間隔 | Handler | 更新內容 |
+|-------|------|---------|---------|
+| `CameraStatusTimer` | 500ms | `CameraStatusTimer_Tick` | panelLiveCam 狀態標籤（"Live \| FPS: N" / "Ready" / "Offline"）；偵測斷線自動重連 `ApplyGrabState`；`OnCameraCountChanged` → `lblCamCount` |
+| `_telemetryTimer` | 500ms | `TelemetryTimer_Tick` | `listViewCameras` 16 欄（FPS/LR/Exp/Temp/PCIe 等）；`SyncCameraParamsFromHardware`（drift > 5% 回寫 UI，`_syncingFromHw` guard）；動態調整 `_liveOverviewTimer.Interval`（50–500ms） |
+| `_liveOverviewTimer` | 50–500ms | `LiveOverviewTimer_Tick` | `chartLiveOverview`（IF `_liveOverviewDirty`）；7 台曲線 max-window merge → 全覽圖 |
+| PLC Poll | ~500ms | `PlcGrabController.PollTick` | `lblPlcState`（via `OnStateChanged`）；`lblPlcConn`（via `OnConnectionChanged`）；`panelPlcIo` 5 LED（via `OnIoUpdated`） |
+
 ### SwitchLiveDisplayDirection 三態切換（Live tab）
 
 與 Review tab 的 `SwitchRidgeDirection` 相同邏輯，控制 Live 顯示的 V/H 處理圖方向：
@@ -318,16 +429,100 @@ PropertyGrid 變更觸發重新檢查。
 
 ---
 
-## 右側面板初始化流程（code-behind）
+## InitializeSystem 全流程
 
 ```
-InitializeSystem()
-  └─ InitializeRightPanelControls()
-       ├─ SetupCameraTab()   ← 設定範圍 + 套用初始值 + 繫結事件（寫回 _settings + LiveCameraManager）
-       └─ SetupSystemTab()   ← 填充 listViewCameras（SystemSettings）+ listViewEngine（InspectionEngineConfig + SaveResizeScale/SaveJpgQuality）+ listViewChartConst（圖表引擎常數：MaxOverviewPoints/DownsampleMode 等）
+Constructor → InitializeSystem()
+  ├─ 1. _settings = ConfigManager.LoadInspectionSettings()
+  │
+  ├─ 2. InitServiceLayer()
+  │     ├─ BatchInspectionService / InspectionLogService
+  │     └─ InitPlcController() → 背景自動連線
+  │
+  ├─ 3. InitUiLayer()
+  │     ├─ DateTimeNavigator + ThumbnailGridPresenter（7 camera gallery）
+  │     ├─ AniloxRollPresenter
+  │     ├─ 6 × MuraChartHelper（review V/H、live V/H、overview review/live）
+  │     ├─ FormInteractionHelper + 事件繫結
+  │     ├─ Canvas 雙擊/三擊 MultiClickDetector
+  │     ├─ Chart V/H 點擊 → SwitchRidgeDirection / SwitchLiveDisplayDirection
+  │     └─ PropertyGrid 繫結 + Gallery/Navigator 事件
+  │
+  ├─ 4. InitCameraLayer()
+  │     ├─ LiveCameraManager（panelLiveCam1–7 + panelMainDisplay）
+  │     ├─ 取像結果/曲線 callback 繫結
+  │     ├─ lblCamCount 更新 callback
+  │     ├─ 背景按鈕事件
+  │     ├─ FormClosed handler（timer stop + PLC shutdown + FreeCameras）
+  │     └─ panelMainDisplay 點擊手勢
+  │
+  ├─ 5. InitializeRightPanelControls()
+  │     ├─ SetupCameraTab() ← 7 台 Exp/LR/Ht 雙向繫結（BindBidirectionalSync）
+  │     │   └─ 各 TrackBar/NumericUpDown 互鎖：拖曳中不寫硬體，放開才寫
+  │     └─ SetupSystemTab()
+  │         ├─ listViewCameras（LiveTelemetryPresenter）+ 500ms timer 啟動
+  │         ├─ listViewEngine / listViewChartConst / listViewHardware
+  │         ├─ _liveOverviewTimer 啟動（初始 100ms）
+  │         └─ 統計 ComboBox / GrabId 事件繫結
+  │
+  └─ 6. SetupDataTab()
+        ├─ InspectionStatsPresenter + InitGrabDetailListView
+        ├─ Period charts 初始化（chartYearly/Monthly/Daily）
+        ├─ 時間 ComboBox 預填（今日 ±7 天）
+        └─ Chart 導航 ComboBox 事件繫結
+
+Form.Shown
+  └─ AutoFitPropertyGridLabelColumn（反射量測最長屬性名，MoveSplitterTo 自適配）
+
+ProportionalScaler.Initialize()
+  └─ 記錄所有控制項位置/大小為比例 → OnFormResize 按比例重算
 ```
 
 **重要**：`tabControlRight` 的所有控制項**必須宣告在 `InitializeComponent()`**（Designer.cs），才能在 VS Designer 顯示。事件繫結（需要 `_settings`、`_liveCameraManager`）保留在 code-behind。
+
+### BindBidirectionalSync（相機參數雙向繫結）
+
+每組 TrackBar + NumericUpDown 透過 `BindBidirectionalSync()` 互鎖：
+- **TrackBar.ValueChanged** → 同步 NUD + 存 `_settings`；`_dragging` HashSet 中則延遲寫硬體
+- **TrackBar.MouseDown** → 加入 `_dragging`
+- **TrackBar.MouseUp** → 移出 `_dragging` + 寫硬體 + `SwitchToCamera(camId)`
+- **NUD.ValueChanged** → clamp + 同步 TrackBar + 存 `_settings` + 立即寫硬體
+- **TrackBarWheelInterceptor**：每 wheel notch = ±1（覆蓋 Windows 預設 ±3）
+- **LR 變更** → `UpdateExpMaxAndClampColor(idx, CalcExpMax())`；CAM1 → `UpdateRowChartPitch()`
+- **TelemetryTimer 回讀**：`SyncCameraParamsFromHardware()` 每 500ms 比對硬體值，drift > 5% 回寫 UI（`_syncingFromHw` guard 防寫回硬體）
+
+### PropertyGrid 變更效果（PropertyValueChanged）
+
+```
+PropertyValueChanged
+  ├─ _interactionHelper.HandleSettingsChanged()
+  ├─ _liveCameraManager.SetCaptureSettings(_settings)
+  ├─ 所有 ChartHelper 更新閾值
+  ├─ UpdateRowChartPitch()
+  ├─ IF 正在 grab → _inspectionLogService.ForceWriteConfig（插入 #CFG）
+  │
+  ├─ 特定屬性分支：
+  │   ├─ ChartScaleMode → ApplyChartScaleFromSettings()
+  │   ├─ ChartYearlyYMax / ChartMonthlyYMax / ChartDailyYMax → ApplyFixedScale(chart, value)
+  │   ├─ Algorithm → LoadBackgroundBins() + UpdateStandardBgSubLockState()
+  │   └─ Recipe 參數（HessianMaxFactor / ErrorValue / RidgeDir）
+  │       ├─ checkBoxShowProcessed.Checked = true（強制）
+  │       ├─ ClearStitchedMode()
+  │       ├─ LoadImagesWithPeriodLockAsync(true) → 重新處理
+  │       ├─ ApplyGlobalMergeIfNeeded()
+  │       └─ UpdateOverviewChartFromRepository()
+  │
+  └─ 跨 tab 影響：Review tab 重載影像 + Data tab chart 刻度更新
+```
+
+### FormClosed 清理
+
+```
+FormClosed → _telemetryTimer.Stop → _liveOverviewTimer.Stop
+           → PlcGrabController.StopAsync + Dispose
+           → FreePrecomputedColMeanBuffers
+           → LiveCameraManager.FreeCameras（MIL 資源釋放）
+```
 
 ---
 

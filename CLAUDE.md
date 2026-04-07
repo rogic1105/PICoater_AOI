@@ -84,26 +84,41 @@ PICoater_AOI/
 
 ## 文件路由索引
 
-詳細架構與模式文件位於 `docs/`，**不會自動載入**（節省 token），需要時再讀取：
+詳細架構與模式文件位於 `docs/dev/`（Claude Code 開發用），**不會自動載入**（節省 token），需要時再讀取。`docs/user-manual/` 保留給使用者操作說明書（功能穩定後撰寫）。
+
+**user-manual 更新規則**：撰寫或更新 `docs/user-manual/` 時，必須同時比對 `docs/dev/` 和實際程式碼，確保說明書反映當前功能狀態，不可只參考 dev 文件（dev 文件本身可能滯後）。
+
+### 按 Tab 查文件（快速入口）
+
+| UI 區域 | 主要文件 | 涵蓋內容 |
+|---------|---------|---------|
+| **tabPageLiveView（即時監控）** | [`docs/dev/architecture-ui.md`](docs/dev/architecture-ui.md) § tabPageLiveView | btnCameraGrab/Free、GPU callback 鏈、Timer 驅動、panel 點擊、方向切換、背景預覽 |
+| **tabPageReview（歷史查詢）** | [`docs/dev/architecture-ui.md`](docs/dev/architecture-ui.md) § tabPageReview | btnSelectFolder、Period/GrabId 導航、Gallery→Canvas→Chart 流程、V/H 決策矩陣、合圖模式 |
+| **tabPageData（檢測報表）** | [`docs/dev/architecture-data-stats.md`](docs/dev/architecture-data-stats.md) | btnSelectDataFolder、統計三模式、listView、Period Charts、時間 cascade、cross-tab 同步 |
+| **tabControlRight（右側設定面板）** | [`docs/dev/architecture-ui.md`](docs/dev/architecture-ui.md) § tabControlRight | PropertyGrid 變更效果、相機參數雙向繫結、系統 ListView |
+| **panelStatusBar（上方狀態列）** | [`docs/dev/architecture-ui.md`](docs/dev/architecture-ui.md) § panelStatusBar | lblCamCount/PlcState/PlcConn/PlcIo 更新觸發源 |
+| **lblPixelInfo（下方狀態列）** | [`docs/dev/architecture-ui.md`](docs/dev/architecture-ui.md) § 底部狀態列 | 3 條更新路徑（Live/Review/背景預覽） |
+| **InitializeSystem（啟動流程）** | [`docs/dev/architecture-ui.md`](docs/dev/architecture-ui.md) § InitializeSystem | 完整初始化順序 + FormClosed 清理 |
+| **Review ↔ Data 跨 Tab 同步** | [`docs/dev/architecture-data-stats.md`](docs/dev/architecture-data-stats.md) § 跨 Tab 同步 | 雙向 GrabId 同步、時間同步、Guard flags |
 
 ### 架構文件
 
 | 文件 | 內容 | 何時讀取 |
 |------|------|---------|
-| [`docs/architecture-ui.md`](docs/architecture-ui.md) | 右側面板、tabMain、控制項觸發關係圖、Guard flags、V/H 顯示決策矩陣、ProportionalScaler | 修改 UI 控制項、事件流程、Form 佈局時 |
-| [`docs/architecture-image-pipeline.md`](docs/architecture-image-pipeline.md) | GPU pipeline、Buffer 映射、V/H ridge、存檔格式、.bin 格式、ImageRepository、StandardBgSub | 修改影像處理、存檔格式、pipeline 參數、背景去除模式時 |
-| [`docs/architecture-acquisition.md`](docs/architecture-acquisition.md) | MIL 取像、AniloxCamera、CLProtocol、Telemetry、SetGrabHeight、MilGrabSample、PLC 連動（PlcState FSM、IO 快照、Watchdog） | 修改相機控制、MIL 資源管理、Telemetry、PLC 整合時 |
-| [`docs/plc_diagrams.html`](docs/plc_diagrams.html) | PLC FSM 視覺化：State Machine / SFC / Ladder / Timing 圖（純 SVG/HTML，離線可看） | 檢視 PLC 狀態機邏輯時 |
-| [`docs/architecture-data-stats.md`](docs/architecture-data-stats.md) | tabPageData、統計模式、CSV 架構、Period Charts | 修改統計功能、CSV 格式、圖表時 |
-| [`docs/MIL_API_Reference.md`](docs/MIL_API_Reference.md) | MIL .NET API 完整參考（常數、方法、範例） | 查詢 MIL API 用法時 |
+| [`docs/dev/architecture-ui.md`](docs/dev/architecture-ui.md) | 右側面板、tabMain、控制項觸發關係圖、Guard flags、V/H 顯示決策矩陣、ProportionalScaler | 修改 UI 控制項、事件流程、Form 佈局時 |
+| [`docs/dev/architecture-image-pipeline.md`](docs/dev/architecture-image-pipeline.md) | GPU pipeline、Buffer 映射、V/H ridge、存檔格式、.bin 格式、ImageRepository、StandardBgSub | 修改影像處理、存檔格式、pipeline 參數、背景去除模式時 |
+| [`docs/dev/architecture-acquisition.md`](docs/dev/architecture-acquisition.md) | MIL 取像、AniloxCamera、CLProtocol、Telemetry、SetGrabHeight、MilGrabSample、PLC 連動（PlcState FSM、IO 快照、Watchdog） | 修改相機控制、MIL 資源管理、Telemetry、PLC 整合時 |
+| [`docs/user-manual/plc_diagrams.html`](docs/user-manual/plc_diagrams.html) | PLC FSM 視覺化：State Machine / SFC / Ladder / Timing 圖（純 SVG/HTML，離線可看） | 檢視 PLC 狀態機邏輯時（使用者用瀏覽器開啟；Claude 參考 `architecture-acquisition.md` 文字版） |
+| [`docs/dev/architecture-data-stats.md`](docs/dev/architecture-data-stats.md) | tabPageData、統計模式、CSV 架構、Period Charts | 修改統計功能、CSV 格式、圖表時 |
+| [`docs/dev/MIL_API_Reference.md`](docs/dev/MIL_API_Reference.md) | MIL .NET API 完整參考（常數、方法、範例） | 查詢 MIL API 用法時 |
 
 ### 模式文件
 
 | 文件 | 內容 | 何時讀取 |
 |------|------|---------|
-| [`docs/patterns-csharp.md`](docs/patterns-csharp.md) | C# 命名、WinForms Designer、PropertyGrid、TrackBar、Settings 持久化、Anchor、Exception Handling | 開發 C#/WinForms 功能時 |
-| [`docs/patterns-performance.md`](docs/patterns-performance.md) | SmartCanvas 拖曳、Chart sync 壓制、跨倍率 View 保存、MuraChart 軸線/閾值/InnerPlotPosition、全覽圖合併 | 效能問題排查、Chart 對齊修改時 |
-| [`docs/patterns-mil.md`](docs/patterns-mil.md) | MIL 初始化順序、CLProtocol 時序、記憶體類型、Timer 競爭、資源釋放 | MIL 相關開發、資源管理時 |
+| [`docs/dev/patterns-csharp.md`](docs/dev/patterns-csharp.md) | C# 命名、WinForms Designer、PropertyGrid、TrackBar、Settings 持久化、Anchor、Exception Handling | 開發 C#/WinForms 功能時 |
+| [`docs/dev/patterns-performance.md`](docs/dev/patterns-performance.md) | SmartCanvas 拖曳、Chart sync 壓制、跨倍率 View 保存、MuraChart 軸線/閾值/InnerPlotPosition、全覽圖合併 | 效能問題排查、Chart 對齊修改時 |
+| [`docs/dev/patterns-mil.md`](docs/dev/patterns-mil.md) | MIL 初始化順序、CLProtocol 時序、記憶體類型、Timer 競爭、資源釋放 | MIL 相關開發、資源管理時 |
 
 ---
 
@@ -125,7 +140,27 @@ PICoater_AOI/
 ### UI 開發
 
 - Chart 對齊、座標換算等優先用**即時查詢**（如 MdispInquire、InnerPlotPosition），不要用靜態快取值
-- 複雜 UI 行為（zoom/pan 聯動、多 chart 同步）修改前先讀 `docs/patterns-performance.md`
+- 複雜 UI 行為（zoom/pan 聯動、多 chart 同步）修改前先讀 `docs/dev/patterns-performance.md`
+
+### UI 輸入輸出文件同步
+
+`docs/dev/architecture-ui.md` 和 `docs/dev/architecture-data-stats.md` 記錄的是 btn/cb/event 的觸發流程與輸出對照，用於**快速定位**改動影響範圍。但文件可能滯後於程式碼：
+- **正常改動**：先查文件定位相關流程，再讀 code 確認，改完後更新文件
+- **流程不如預期 / debug**：**不可只信文件**，必須直接讀 `.cs` 原始碼全面追蹤實際呼叫鏈，文件僅作為起點參考
+
+修改任何 btn/cb/event handler 的觸發流程、Chart/ListView/Canvas/Label 的更新邏輯、Guard flag、跨 Tab 同步時，**必須同步更新對應文件**：
+
+| 改動範圍 | 更新目標 |
+|---------|---------|
+| tabPageLiveView 的 btn/cb/timer/callback | `docs/dev/architecture-ui.md` § tabPageLiveView |
+| tabPageReview 的 btn/cb/Gallery/Canvas/Chart | `docs/dev/architecture-ui.md` § tabPageReview |
+| tabPageData 的 btn/cb/ListView/Period Charts | `docs/dev/architecture-data-stats.md` |
+| tabControlRight 的 PropertyGrid/TrackBar/NUD | `docs/dev/architecture-ui.md` § tabControlRight |
+| panelStatusBar / lblPixelInfo 更新路徑 | `docs/dev/architecture-ui.md` § panelStatusBar / 底部狀態列 |
+| Guard flag 新增或移除 | `docs/dev/architecture-ui.md` § Guard flags |
+| 跨 Tab 同步邏輯（Review ↔ Data） | `docs/dev/architecture-data-stats.md` § 跨 Tab 同步 |
+| InitializeSystem 順序變更 | `docs/dev/architecture-ui.md` § InitializeSystem |
+| 新增/移除控制項 | `CLAUDE.md` 按 Tab 查文件路口 + 對應 docs |
 
 ---
 
@@ -136,7 +171,7 @@ PICoater_AOI/
 **每次 commit / push 前，必須先更新相關文件：**
 
 1. `CLAUDE.md` — 更新路由索引、關鍵檔案速查
-2. `docs/*.md` — 更新對應的架構或模式文件（根據改動內容選擇）
+2. `docs/dev/*.md` — 更新對應的架構或模式文件（根據改動內容選擇）
 3. `README.md` — 更新對外專案說明
 
 確保文件反映最新的程式碼狀態，讓下次對話能快速上手。
