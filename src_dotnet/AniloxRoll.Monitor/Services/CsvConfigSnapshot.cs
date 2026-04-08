@@ -6,24 +6,26 @@ using AniloxRoll.Monitor.Core.Data;
 namespace AniloxRoll.Monitor.Core.Services
 {
     /// <summary>
-    /// CSV #CFG 列的不可變快照，記錄 17 個全域設定值。
+    /// CSV #CFG 列的不可變快照，記錄全域設定值。
     /// </summary>
     public class CsvConfigSnapshot
     {
         public double[] CamOps { get; }   // length 7
         public double[] CamPos { get; }   // length 7
+        public int[] CamGrabHeight { get; } // length 7, 取像寬度（line scan 行數）
         public float HessianMaxFactor { get; }
         public float ErrorValueMean { get; }
         public float ErrorValueMax { get; }
         public DateTime Timestamp { get; }
 
         public CsvConfigSnapshot(
-            double[] camOps, double[] camPos,
+            double[] camOps, double[] camPos, int[] camGrabHeight,
             float hessianMaxFactor, float errorValueMean, float errorValueMax,
             DateTime timestamp)
         {
             CamOps = camOps ?? new double[7];
             CamPos = camPos ?? new double[7];
+            CamGrabHeight = camGrabHeight ?? new int[7];
             HessianMaxFactor = hessianMaxFactor;
             ErrorValueMean = errorValueMean;
             ErrorValueMax = errorValueMax;
@@ -36,6 +38,7 @@ namespace AniloxRoll.Monitor.Core.Services
             return new CsvConfigSnapshot(
                 s.GetCameraOpsUmArray(),
                 s.GetCameraStartPositionMmArray(),
+                (int[])s.Acquisition?.CameraGrabHeight?.Clone(),
                 s.HessianMaxFactor,
                 s.ErrorValueMean,
                 s.ErrorValueMax,
@@ -50,6 +53,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 var sb = new StringBuilder(256);
                 for (int i = 0; i < 7; i++) sb.Append(CamOps[i].ToString("F2")).Append(',');
                 for (int i = 0; i < 7; i++) sb.Append(CamPos[i].ToString("F2")).Append(',');
+                for (int i = 0; i < 7; i++) sb.Append(CamGrabHeight[i]).Append(',');
                 sb.Append(HessianMaxFactor.ToString("F4")).Append(',');
                 sb.Append(ErrorValueMean.ToString("F4")).Append(',');
                 sb.Append(ErrorValueMax.ToString("F4"));
@@ -67,6 +71,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 sb.Append($",Cam{i + 1}_Ops={CamOps[i]:F2}");
             for (int i = 0; i < 7; i++)
                 sb.Append($",Cam{i + 1}_Pos={CamPos[i]:F2}");
+            for (int i = 0; i < 7; i++)
+                sb.Append($",Cam{i + 1}_GrabH={CamGrabHeight[i]}");
             sb.Append($",HessianMaxFactor={HessianMaxFactor:F4}");
             sb.Append($",ErrorValueMean={ErrorValueMean:F4}");
             sb.Append($",ErrorValueMax={ErrorValueMax:F4}");
@@ -89,6 +95,7 @@ namespace AniloxRoll.Monitor.Core.Services
 
             double[] ops = new double[7];
             double[] pos = new double[7];
+            int[] grabH = new int[7];
             float hessian = 0, errMean = 0, errMax = 0;
 
             for (int i = 2; i < parts.Length; i++)
@@ -111,6 +118,12 @@ namespace AniloxRoll.Monitor.Core.Services
                     if (camIdx >= 0 && camIdx < 7)
                         double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out pos[camIdx]);
                 }
+                else if (key.StartsWith("Cam") && key.EndsWith("_GrabH"))
+                {
+                    int camIdx = key[3] - '1';
+                    if (camIdx >= 0 && camIdx < 7)
+                        int.TryParse(val, NumberStyles.Integer, CultureInfo.InvariantCulture, out grabH[camIdx]);
+                }
                 else if (key == "HessianMaxFactor")
                     float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out hessian);
                 else if (key == "ErrorValueMean")
@@ -119,7 +132,7 @@ namespace AniloxRoll.Monitor.Core.Services
                     float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out errMax);
             }
 
-            result = new CsvConfigSnapshot(ops, pos, hessian, errMean, errMax, ts);
+            result = new CsvConfigSnapshot(ops, pos, grabH, hessian, errMean, errMax, ts);
             return true;
         }
     }

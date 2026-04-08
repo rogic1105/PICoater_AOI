@@ -73,6 +73,15 @@ namespace AniloxRoll.Monitor.UI.Managers
         private int _selectedMainCameraId = 1;
         public int SelectedMainCameraId => _selectedMainCameraId;
 
+        // --- Global merge（即時合圖）---
+        private MIL_ID _mergedBuffer  = MIL.M_NULL;
+        private MIL_ID _mergedDisplay = MIL.M_NULL;
+        public bool IsGlobalMergeActive { get; private set; }
+        private double _mergedMinStartMm;   // 合併座標系原點（mm）
+        private double _mergedRefOpsMm;     // 合併像素尺寸（mm/px）
+        private int    _mergedTotalW;       // 合併 buffer 寬度（px）
+        private MIL_DISP_HOOK_FUNCTION_PTR _mergedMouseDelegate;
+
         private InspectionSettings _inspectionSettings;
         private double _screenMmPerPx;
         private WheelZoomFilter _wheelFilter;
@@ -258,6 +267,9 @@ namespace AniloxRoll.Monitor.UI.Managers
             IsReleasing = true;
             _cameraStatusTimer.Stop();
             IsLiveGrabbing = false;
+
+            // 先停止 global merge（必須在 cam.Free 之前，因為 Free 會清除 _mergedTargetBuffer 指向的 buffer）
+            DisableGlobalMerge();
 
             foreach (var cam in _cameras)
                 cam.Free();
@@ -481,6 +493,9 @@ namespace AniloxRoll.Monitor.UI.Managers
                     : Color.FromArgb(32, 32, 32);
             }
 
+            // Global merge 時主畫面由合併 display 控制，不切換單台
+            if (IsGlobalMergeActive) return;
+
             foreach (var cam in _cameras)
             {
                 if (cam.CameraId == cameraIndex)
@@ -488,6 +503,253 @@ namespace AniloxRoll.Monitor.UI.Managers
                 else
                     cam.SetSecondaryDisplay(IntPtr.Zero);
             }
+        }
+
+        // ==================== Global Merge ====================
+
+        /// <summary>啟用即時全域合圖：分配合併 buffer，每幀 callback 自動 MbufCopyClip。</summary>
+        public void EnableGlobalMerge(double[] opsUm, double[] startPosMm)
+        {
+            if (IsGlobalMergeActive || _cameras.Count == 0) return;
+
+            // 參考像素尺寸（取第一台），計算各相機偏移與合併寬度
+            double refOpsMm = opsUm[0] / 1000.0;
+            double minStart = double.MaxValue, maxEnd = double.MinValue;
+            int maxH = 0;
+
+            foreach (var cam in _cameras)
+            {
+                int idx = cam.CameraId - 1;
+                double pos = (idx < startPosMm.Length) ? startPosMm[idx] : 0;
+                double ops = (idx < opsUm.Length) ? opsUm[idx] : opsUm[0];
+                double widthMm = cam.FrameWidth * ops / 1000.0;
+                if (pos < minStart) minStart = pos;
+                if (pos + widthMm > maxEnd) maxEnd = pos + widthMm;
+                if (cam.FrameHeight > maxH) maxH = cam.FrameHeight;
+            }
+
+            int totalW = (int)Math.Ceiling((maxEnd - minStart) / refOpsMm);
+            if (totalW <= 0 || maxH <= 0) return;
+
+            // 在第一台相機的 System 上分配合併 buffer + display
+            MIL_ID sysId = _cameras[0].OwnerSystemId;
+            if (sysId == MIL.M_NULL) return;
+
+            MIL.MbufAlloc2d(sysId, totalW, maxH, 8 + MIL.M_UNSIGNED,
+                MIL.M_IMAGE + MIL.M_DISP + MIL.M_PROC, ref _mergedBuffer);
+            MIL.MbufClear(_mergedBuffer, 0);
+
+            // 計算每台相機的偏移，按偏移排序後處理 overlap
+            var entries = new List<(AniloxCamera cam, int xOffset)>();
+            foreach (var cam in _cameras)
+            {
+                int idx = cam.CameraId - 1;
+                double pos = (idx < startPosMm.Length) ? startPosMm[idx] : 0;
+                int offsetX = (int)Math.Round((pos - minStart) / refOpsMm);
+                entries.Add((cam, offsetX));
+            }
+            entries.Sort((a, b) => a.xOffset.CompareTo(b.xOffset));
+
+            // 計算 drawLeft / drawRight（重疊區域中點分界，與 GrabImageStitcher.MergeHorizontal 一致）
+            int n = entries.Count;
+            var drawLeft  = new int[n];
+            var drawRight = new int[n];
+            for (int i = 0; i < n; i++)
+            {
+                drawLeft[i]  = 0;
+                drawRight[i] = entries[i].cam.FrameWidth;
+            }
+            for (int i = 0; i < n - 1; i++)
+            {
+                int rightEdge = entries[i].xOffset + entries[i].cam.FrameWidth;
+                int leftEdge  = entries[i + 1].xOffset;
+                int overlap   = rightEdge - leftEdge;
+                if (overlap > 0)
+                {
+                    int mid = leftEdge + overlap / 2;
+                    // 前相機：drawRight = mid 在全域座標，轉為 src 座標
+                    drawRight[i] = Math.Min(drawRight[i], mid - entries[i].xOffset);
+                    // 後相機：drawLeft = mid 在全域座標，轉為 src 座標
+                    drawLeft[i + 1] = Math.Max(drawLeft[i + 1], mid - entries[i + 1].xOffset);
+                }
+            }
+
+            // 設定每台相機的合併目標（含裁切範圍）
+            for (int i = 0; i < n; i++)
+            {
+                var cam = entries[i].cam;
+                cam._mergedTargetOffsetX = entries[i].xOffset;
+                cam._mergedSrcClipLeft   = drawLeft[i];
+                cam._mergedSrcClipWidth  = drawRight[i] - drawLeft[i];
+                cam._mergedTargetBuffer  = _mergedBuffer;
+            }
+
+            // 解除所有相機的 secondary display，改用合併 display
+            foreach (var cam in _cameras)
+                cam.SetSecondaryDisplay(IntPtr.Zero);
+
+            // 儲存座標系參數（供滑鼠回呼 + overview 計算）
+            _mergedMinStartMm = minStart;
+            _mergedRefOpsMm   = refOpsMm;
+            _mergedTotalW     = totalW;
+
+            MIL.MdispAlloc(sysId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref _mergedDisplay);
+            MIL.MdispSelectWindow(_mergedDisplay, _mergedBuffer, _mainDisplayPanel.Handle);
+            MIL.MdispControl(_mergedDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
+            MIL.MdispControl(_mergedDisplay, MIL.M_CENTER_DISPLAY, MIL.M_ENABLE);
+            MIL.MdispControl(_mergedDisplay, MIL.M_MOUSE_USE, MIL.M_ENABLE);
+
+            // Hook 滑鼠移動 → 更新 lblPixelInfo
+            _mergedMouseDelegate = new MIL_DISP_HOOK_FUNCTION_PTR(MergedMouseStatusHandler);
+            MIL.MdispHookFunction(_mergedDisplay, MIL.M_MOUSE_MOVE, _mergedMouseDelegate, IntPtr.Zero);
+
+            IsGlobalMergeActive = true;
+        }
+
+        /// <summary>停用即時全域合圖：釋放合併 buffer，恢復單台 secondary display。</summary>
+        public void DisableGlobalMerge()
+        {
+            if (!IsGlobalMergeActive) return;
+
+            // 先清除各相機的合併目標（停止 callback 中的 MbufCopyClip）
+            foreach (var cam in _cameras)
+            {
+                cam._mergedTargetBuffer = MIL.M_NULL;
+                cam._mergedSrcClipLeft  = 0;
+                cam._mergedSrcClipWidth = 0;
+            }
+
+            // Unhook 滑鼠 + 釋放合併 display + buffer
+            if (_mergedDisplay != MIL.M_NULL)
+            {
+                if (_mergedMouseDelegate != null)
+                    MIL.MdispHookFunction(_mergedDisplay, MIL.M_MOUSE_MOVE + MIL.M_UNHOOK,
+                        _mergedMouseDelegate, IntPtr.Zero);
+                MIL.MdispSelectWindow(_mergedDisplay, MIL.M_NULL, IntPtr.Zero);
+                MIL.MdispFree(_mergedDisplay);
+                _mergedDisplay = MIL.M_NULL;
+            }
+            _mergedMouseDelegate = null;
+            if (_mergedBuffer != MIL.M_NULL)
+            {
+                MIL.MbufFree(_mergedBuffer);
+                _mergedBuffer = MIL.M_NULL;
+            }
+
+            IsGlobalMergeActive = false;
+
+            // 恢復選中相機的 secondary display
+            SwitchMainDisplay(_selectedMainCameraId);
+        }
+
+        // ==================== Merged Display Mouse ====================
+
+        private MIL_INT MergedMouseStatusHandler(MIL_INT HookType, MIL_ID EventId, IntPtr UserPtr)
+        {
+            if (_mergedBuffer == MIL.M_NULL) return MIL.M_NULL;
+
+            double posX = 0, posY = 0;
+            MIL.MdispGetHookInfo(EventId, MIL.M_MOUSE_POSITION_BUFFER_X, ref posX);
+            MIL.MdispGetHookInfo(EventId, MIL.M_MOUSE_POSITION_BUFFER_Y, ref posY);
+
+            int x = (int)posX;
+            int y = (int)posY;
+            int pixelValue = -1;
+
+            if (x >= 0 && x < _mergedTotalW && y >= 0)
+            {
+                try
+                {
+                    byte[] data = new byte[1];
+                    MIL.MbufGet2d(_mergedBuffer, x, y, 1, 1, data);
+                    pixelValue = data[0];
+                }
+                catch { }
+            }
+
+            HandleMergedMouseData(x, y, pixelValue);
+            return MIL.M_NULL;
+        }
+
+        private void HandleMergedMouseData(int x, int y, int pixelValue)
+        {
+            if (_mainForm.InvokeRequired)
+            {
+                _mainForm.BeginInvoke(new Action(() => HandleMergedMouseData(x, y, pixelValue)));
+                return;
+            }
+
+            string infoText;
+            if (pixelValue == -1)
+            {
+                infoText = "即時影像 [全域合圖] | 游標超出影像範圍";
+            }
+            else
+            {
+                double physicalX = _mergedMinStartMm + x * _mergedRefOpsMm;
+
+                var s = _inspectionSettings;
+                double lineRateHz = (_cameraLineRateHz.Length > 0) ? _cameraLineRateHz[0] : 0;
+                double speedMPerMin = s?.AniloxRollSpeedMPerMin ?? 0;
+                double rowPitchMm = (speedMPerMin > 0 && lineRateHz > 0)
+                    ? (speedMPerMin / 60.0 * 1000.0) / lineRateHz : 0;
+                double physicalY = y * rowPitchMm;
+
+                // 合併 display zoom/pan → 視野範圍
+                string rangeStr = "";
+                string magStr = "-";
+                if (TryGetMergedViewRange(out double viewLeftMm, out double viewRightMm))
+                {
+                    rangeStr = $"X範圍:{viewLeftMm:F1}~{viewRightMm:F1} mm | ";
+
+                    double zoomX = 0;
+                    try { MIL.MdispInquire(_mergedDisplay, MIL.M_ZOOM_FACTOR_X, ref zoomX); } catch { }
+                    if (zoomX > 0 && rowPitchMm > 0)
+                    {
+                        double panOffY = 0;
+                        try { MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_Y, ref panOffY); } catch { }
+                        double viewTopMm = panOffY * rowPitchMm;
+                        double viewBotMm = (panOffY + _mainDisplayPanel.Height / zoomX) * rowPitchMm;
+                        rangeStr += $"Y範圍:{viewTopMm:F1}~{viewBotMm:F1} mm | ";
+                    }
+
+                    if (zoomX > 0 && _screenMmPerPx > 0 && _mergedRefOpsMm > 0)
+                    {
+                        double physicalMag = (zoomX * _screenMmPerPx) / _mergedRefOpsMm;
+                        magStr = $"{physicalMag:F2}x";
+                    }
+                }
+
+                infoText = $"即時影像 [全域合圖] | " +
+                           $"位置:({physicalX:F2}, {physicalY:F2}) mm | " +
+                           rangeStr +
+                           $"座標: ({x}, {y}) | " +
+                           $"亮度: {pixelValue} | " +
+                           $"實體倍率:{magStr}";
+            }
+
+            _updatePixelInfoCallback?.Invoke(infoText);
+        }
+
+        /// <summary>取得合併 display 的 X 視野範圍（mm），供 overview chart 聯動。</summary>
+        public bool TryGetMergedViewRange(out double leftMm, out double rightMm)
+        {
+            leftMm = rightMm = 0;
+            if (!IsGlobalMergeActive || _mergedDisplay == MIL.M_NULL) return false;
+            try
+            {
+                double zoomX = 0, panX = 0;
+                MIL.MdispInquire(_mergedDisplay, MIL.M_ZOOM_FACTOR_X, ref zoomX);
+                MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_X, ref panX);
+                if (zoomX <= 0) return false;
+
+                double pixelLeft  = panX;
+                double pixelRight = panX + _mainDisplayPanel.Width / zoomX;
+                leftMm  = _mergedMinStartMm + pixelLeft  * _mergedRefOpsMm;
+                rightMm = _mergedMinStartMm + pixelRight * _mergedRefOpsMm;
+                return true;
+            }
+            catch { return false; }
         }
 
         // ==================== Mouse Data ====================
@@ -678,25 +940,65 @@ namespace AniloxRoll.Monitor.UI.Managers
         internal void ApplyCustomZoom(int wheelDelta)
         {
             if (!IsLiveGrabbing) return;
+
+            double zoomX, panX, panY;
+
+            if (IsGlobalMergeActive && _mergedDisplay != MIL.M_NULL)
+            {
+                // Global merge 模式：zoom/pan 合併 display
+                try
+                {
+                    zoomX = panX = panY = 0;
+                    MIL.MdispInquire(_mergedDisplay, MIL.M_ZOOM_FACTOR_X, ref zoomX);
+                    MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_X, ref panX);
+                    MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_Y, ref panY);
+                }
+                catch { return; }
+                if (zoomX <= 0) zoomX = 1.0;
+
+                double factor = wheelDelta > 0 ? 1.1 : (1.0 / 1.1);
+                double newZoom = zoomX * factor;
+                if (newZoom < 0.05) newZoom = 0.05;
+                if (newZoom > 32.0) newZoom = 32.0;
+
+                double cx = _mainDisplayPanel.Width / 2.0;
+                double cy = _mainDisplayPanel.Height / 2.0;
+                double imgX = panX + cx / zoomX;
+                double imgY = panY + cy / zoomX;
+                double newPanX = imgX - cx / newZoom;
+                double newPanY = imgY - cy / newZoom;
+
+                try
+                {
+                    MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_DISABLE);
+                    MIL.MdispControl(_mergedDisplay, MIL.M_CENTER_DISPLAY, MIL.M_DISABLE);
+                    MIL.MdispZoom(_mergedDisplay, newZoom, newZoom);
+                    MIL.MdispPan(_mergedDisplay, newPanX, newPanY);
+                    MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_ENABLE);
+                }
+                catch { }
+                return;
+            }
+
             var cam = _cameras.Find(c => c.CameraId == _selectedMainCameraId);
             if (cam == null) return;
-            if (!cam.TryGetSecondaryDisplayGeometry(out double zoomX, out _, out double panX, out double panY))
+            if (!cam.TryGetSecondaryDisplayGeometry(out zoomX, out _, out panX, out panY))
                 return;
 
-            double factor = wheelDelta > 0 ? 1.1 : (1.0 / 1.1);
-            double newZoom = zoomX * factor;
-            if (newZoom < 0.05) newZoom = 0.05;
-            if (newZoom > 32.0) newZoom = 32.0;
+            double factor2 = wheelDelta > 0 ? 1.1 : (1.0 / 1.1);
+            double newZoom2 = zoomX * factor2;
+            if (newZoom2 < 0.05) newZoom2 = 0.05;
+            if (newZoom2 > 32.0) newZoom2 = 32.0;
 
             // 以面板中心為縮放基準點
-            double cx = _mainDisplayPanel.Width / 2.0;
-            double cy = _mainDisplayPanel.Height / 2.0;
-            double imgX = panX + cx / zoomX;
-            double imgY = panY + cy / zoomX;
-            double newPanX = imgX - cx / newZoom;
-            double newPanY = imgY - cy / newZoom;
+            double cx2 = _mainDisplayPanel.Width / 2.0;
+            double cy2 = _mainDisplayPanel.Height / 2.0;
+            double imgX2 = panX + cx2 / zoomX;
+            double imgY2 = panY + cy2 / zoomX;
+            double newPanX2 = imgX2 - cx2 / newZoom2;
+            double newPanY2 = imgY2 - cy2 / newZoom2;
 
-            cam.SetSecondaryDisplayZoom(newZoom, newPanX, newPanY);
+            cam.SetSecondaryDisplayZoom(newZoom2, newPanX2, newPanY2);
         }
 
         /// <summary>攔截 panelMainDisplay 上的 WM_MOUSEWHEEL，用 1.1x 步長取代 MIL 預設的整數倍跳躍。</summary>

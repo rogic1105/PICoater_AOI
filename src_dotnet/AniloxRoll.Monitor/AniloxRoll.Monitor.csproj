@@ -121,15 +121,19 @@
     <Compile Include="UI\Presenters\AniloxRollPresenter.cs" />
     <Compile Include="UI\Presenters\LiveTelemetryPresenter.cs" />
     <Compile Include="UI\Widgets\CanvasInteractionHelper.cs" />
+    <Compile Include="UI\Widgets\EventGuard.cs" />
     <Compile Include="UI\Widgets\FormInteractionHelper.cs" />
     <Compile Include="..\..\sdk\AOI_SDK\src_dotnet\AOI.SDK\UI\SmartCanvas.cs">
       <Link>UI\Widgets\SmartCanvas.cs</Link>
     </Compile>
     <Compile Include="UI\Managers\LiveCameraManager.cs" />
     <Compile Include="UI\Widgets\MuraChartHelper.cs" />
+    <Compile Include="UI\Widgets\OverviewChartManager.cs" />
     <Compile Include="UI\Widgets\RowMuraChartHelper.cs" />
     <Compile Include="UI\Widgets\GrabImageStitcher.cs" />
     <Compile Include="UI\Widgets\ProportionalScaler.cs" />
+    <Compile Include="UI\Presenters\DataStatisticsPresenter.cs" />
+    <Compile Include="UI\Presenters\ReviewStitchCoordinator.cs" />
     <Compile Include="UI\Presenters\InspectionStatsPresenter.cs" />
     <Compile Include="UI\Presenters\ThumbnailGridPresenter.cs" />
     <Compile Include="UI\Navigators\DateTimeNavigator.cs" />

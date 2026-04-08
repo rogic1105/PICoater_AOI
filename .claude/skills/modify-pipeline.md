@@ -1,0 +1,63 @@
+# modify-pipeline
+
+修改影像處理 pipeline、Buffer 管理、存檔格式相關程式碼。
+
+## 使用時機
+
+修改 GPU pipeline、NativeBufferPool、InspectionEngine、AoiService、存檔格式或 ImageRepository 時。
+
+## 關鍵檔案
+
+- `ImageProcessing/InspectionEngine.ImageProcessing.cs` — 縮圖/全解析度處理入口
+- `ImageProcessing/InspectionEngineConfig.cs` — MaxWidth=16384, MaxHeight=10000, DefaultSaveResizeScale=5
+- `ImageProcessing/NativeBufferPool.cs` — CUDA pinned buffer（8 個 buffer）
+- `ImageProcessing/BatchInspectionService.cs` — Parallel.For 批次縮圖
+- `Services/AoiService.cs` — C# ↔ Native P/Invoke wrapper
+- `Interop/NativeMethods.cs` — 唯一 P/Invoke 宣告點
+- `ImageCatalog/ImageRepository.cs` — 掃描目錄建索引
+- `Acquisition/AniloxCamera.cs` — TrySaveCapture、ProcessingFunction
+
+## 注意事項
+
+### GPU Pipeline（永遠雙方向）
+- Pipeline 永遠以 `"vertical+horizontal"` 執行，`RidgeDirection` 只影響 UI 顯示
+- 流程：`calcColumnMeans_RemoveOutliers` → `calcColumnBackground` → `gaussianBlur`（一次共用）→ `computeHessianResponse(V)` → `computeHessianResponse(H)`
+- `_ridgeBuffer` = vertical ridge，`_muraBuffer` = horizontal ridge（步驟 5 覆蓋去背圖）
+
+### CUDA Pinned Memory
+- 所有 NativeBufferPool buffer 使用 `CoreCV_AllocPinned`（cudaMallocHost）
+- NativeBufferPool.Dispose：`_isDisposed = true` 必須在所有 `FreePinned` 之前設定（防重複 Free）
+
+### 存檔格式（TrySaveCapture）
+- 7 個固定檔案：`_raw.jpg`, `_proc_v.jpg`, `_proc_h.jpg`, `_mean_v.bin`, `_max_v.bin`, `_mean_h.bin`, `_max_h.bin`
+- 額外（`SaveOriginalBmp=true`）：全解析度 `.bmp`（必須在 callback 同步完成）
+- JPEG 寫入移至 `Task.Run` 背景執行；BMP 匯出同步（`sourceBuffer` 會被 MIL 回收）
+- 時間戳精確到毫秒（`.fff`），同 Line Rate 相機由 `CaptureTimestampCoordinator` 協調
+
+### .bin 檔案格式
+```
+magic(4)="MCBF" | version(4=int) | scale_factor(4=float) | array_length(4=int) | float[]
+```
+- `scale_factor` = `SaveResizeScale`；曲線長度 = 全解析度圖寬
+
+### ImageRepository 掃描
+- 同時掃 `*_raw.jpg` + `*.bmp`，兩格式共存
+- **JPG 優先**：同相機同時存在 JPG+BMP 時，回傳 JPG（避免 duplicate key 崩潰）
+- `_proc_*.jpg` 和 `*.bin` 不被收入索引
+
+### StandardBgSub 模式
+- `precomputed_col_mean != nullptr` → 跳過動態 column mean 計算
+- bg bin 路徑：`bg_{width}_{cameraId}.bin`
+- `TryComputeColumnMean` 從 `_milLastGrabBuffer`（原始）讀取，不可從 `_milProcBuffer`（已處理，近乎全零）
+
+### ProcessingFunction 行為
+- **不管 `EnableImageProcessing` 一律執行 GPU 處理**
+- `EnableImageProcessing` 只控制「顯示原圖還是處理圖」
+- 目的：即使 checkbox 未勾選也能計算 Mura peak 值供 CSV 判斷
+
+## 步驟
+
+1. 讀取要修改的 pipeline 階段
+2. 確認 buffer 映射是否正確
+3. 修改 + build 驗證（Release|x64）
+4. 若修改 native API，同步更新 `/add-native-api` skill 的範本

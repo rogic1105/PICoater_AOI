@@ -497,7 +497,7 @@
             this.btnCameraFree.Name = "btnCameraFree";
             this.btnCameraFree.Size = new System.Drawing.Size(114, 38);
             this.btnCameraFree.TabIndex = 5;
-            this.btnCameraFree.Text = "Free";
+            this.btnCameraFree.Text = "釋放相機";
             this.btnCameraFree.UseVisualStyleBackColor = true;
             this.btnCameraFree.Click += new System.EventHandler(this.btnCameraFree_Click);
             // 
@@ -508,7 +508,7 @@
             this.btnCameraGrab.Name = "btnCameraGrab";
             this.btnCameraGrab.Size = new System.Drawing.Size(114, 42);
             this.btnCameraGrab.TabIndex = 4;
-            this.btnCameraGrab.Text = "Grab";
+            this.btnCameraGrab.Text = "開始抓取";
             this.btnCameraGrab.UseVisualStyleBackColor = true;
             this.btnCameraGrab.Click += new System.EventHandler(this.btnCameraGrab_Click);
             // 
@@ -708,7 +708,7 @@
             this.btnSelectFolder.Name = "btnSelectFolder";
             this.btnSelectFolder.Size = new System.Drawing.Size(115, 37);
             this.btnSelectFolder.TabIndex = 23;
-            this.btnSelectFolder.Text = "讀取資料夾";
+            this.btnSelectFolder.Text = "讀取資料";
             this.btnSelectFolder.UseVisualStyleBackColor = true;
             this.btnSelectFolder.Click += new System.EventHandler(this.btnSelectFolder_Click);
             // 
@@ -1177,14 +1177,12 @@
             // 
             // btnSelectDataFolder
             // 
-            this.btnSelectDataFolder.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnSelectDataFolder.Font = new System.Drawing.Font("新細明體", 8F);
-            this.btnSelectDataFolder.Location = new System.Drawing.Point(900, 6);
+            this.btnSelectDataFolder.Font = new System.Drawing.Font("微軟正黑體", 10.2F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(136)));
+            this.btnSelectDataFolder.Location = new System.Drawing.Point(900, 3);
             this.btnSelectDataFolder.Name = "btnSelectDataFolder";
-            this.btnSelectDataFolder.Size = new System.Drawing.Size(115, 39);
+            this.btnSelectDataFolder.Size = new System.Drawing.Size(115, 37);
             this.btnSelectDataFolder.TabIndex = 34;
-            this.btnSelectDataFolder.Text = "讀取資料夾";
+            this.btnSelectDataFolder.Text = "讀取資料";
             this.btnSelectDataFolder.UseVisualStyleBackColor = true;
             // 
             // listViewStats

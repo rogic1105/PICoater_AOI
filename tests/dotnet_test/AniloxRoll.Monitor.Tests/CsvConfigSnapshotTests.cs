@@ -13,7 +13,8 @@ namespace AniloxRoll.Monitor.Tests
             var ops = new double[] { 1.11, 2.22, 3.33, 4.44, 5.55, 6.66, 7.77 };
             var pos = new double[] { 10.5, 20.5, 30.5, 40.5, 50.5, 60.5, 70.5 };
             var ts = new DateTime(2026, 3, 30, 14, 30, 45, 123);
-            var snap = new CsvConfigSnapshot(ops, pos, 1.2345f, 0.5678f, 0.9012f, ts);
+            var grabH = new int[] { 3001, 3001, 3001, 3001, 3001, 3001, 3001 };
+            var snap = new CsvConfigSnapshot(ops, pos, grabH, 1.2345f, 0.5678f, 0.9012f, ts);
 
             string csv = snap.ToCsvLine();
             Assert.That(csv.StartsWith("#CFG,"), Is.True);
@@ -30,6 +31,7 @@ namespace AniloxRoll.Monitor.Tests
             {
                 Assert.That(parsed.CamOps[i], Is.EqualTo(ops[i]).Within(0.01));
                 Assert.That(parsed.CamPos[i], Is.EqualTo(pos[i]).Within(0.01));
+                Assert.That(parsed.CamGrabHeight[i], Is.EqualTo(grabH[i]));
             }
         }
 
@@ -38,8 +40,8 @@ namespace AniloxRoll.Monitor.Tests
         {
             var ops = new double[] { 1, 2, 3, 4, 5, 6, 7 };
             var pos = new double[] { 10, 20, 30, 40, 50, 60, 70 };
-            var a = new CsvConfigSnapshot(ops, pos, 1.0f, 2.0f, 3.0f, DateTime.Now);
-            var b = new CsvConfigSnapshot(ops, pos, 1.0f, 2.0f, 3.0f, DateTime.Now.AddHours(1));
+            var a = new CsvConfigSnapshot(ops, pos, null, 1.0f, 2.0f, 3.0f, DateTime.Now);
+            var b = new CsvConfigSnapshot(ops, pos, null, 1.0f, 2.0f, 3.0f, DateTime.Now.AddHours(1));
             Assert.That(a.ContentKey, Is.EqualTo(b.ContentKey));
         }
 
@@ -49,8 +51,8 @@ namespace AniloxRoll.Monitor.Tests
             var ops1 = new double[] { 1, 2, 3, 4, 5, 6, 7 };
             var ops2 = new double[] { 1, 2, 3, 4, 5, 6, 8 };
             var pos = new double[] { 10, 20, 30, 40, 50, 60, 70 };
-            var a = new CsvConfigSnapshot(ops1, pos, 1.0f, 2.0f, 3.0f, DateTime.Now);
-            var b = new CsvConfigSnapshot(ops2, pos, 1.0f, 2.0f, 3.0f, DateTime.Now);
+            var a = new CsvConfigSnapshot(ops1, pos, null, 1.0f, 2.0f, 3.0f, DateTime.Now);
+            var b = new CsvConfigSnapshot(ops2, pos, null, 1.0f, 2.0f, 3.0f, DateTime.Now);
             Assert.That(a.ContentKey, Is.Not.EqualTo(b.ContentKey));
         }
 
@@ -66,9 +68,10 @@ namespace AniloxRoll.Monitor.Tests
         [Test]
         public void Constructor_NullArrays_DefaultsToEmpty()
         {
-            var snap = new CsvConfigSnapshot(null, null, 0, 0, 0, DateTime.Now);
+            var snap = new CsvConfigSnapshot(null, null, null, 0, 0, 0, DateTime.Now);
             Assert.That(snap.CamOps.Length, Is.EqualTo(7));
             Assert.That(snap.CamPos.Length, Is.EqualTo(7));
+            Assert.That(snap.CamGrabHeight.Length, Is.EqualTo(7));
         }
     }
 }

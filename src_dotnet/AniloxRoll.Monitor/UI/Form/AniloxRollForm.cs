@@ -80,38 +80,20 @@ namespace AniloxRoll.Monitor.Forms
         private PlcGrabController _plcGrabController;
 
         // --- 統計 ---
-        private InspectionStatsPresenter    _statsPresenter;
-        private string                      _statsDataRootPath   = string.Empty;
-        private SortedSet<DateTime>         _statAvailableTimes  = new SortedSet<DateTime>();
-        private List<GrabIdInfo>            _grabIdInfos         = new List<GrabIdInfo>();
-        private bool                        _statComboUpdating;
-        private GroupBox                    _activeStatMode;
-        private bool                        _syncingGrabIdNav;
-        private bool                        _syncingGrabIdCross;
-        private List<GrabDetail>            _currentDetails      = new List<GrabDetail>();
-        private bool                        _showFailOnly        = false;
-        // --- 圖表導航狀態 ---
-        private List<int> _chartYears  = new List<int>();
-        private List<int> _chartMonths = new List<int>();
-        private List<int> _chartDays   = new List<int>();
-        private bool      _chartNavUpdating = false;
+        private DataStatisticsPresenter _dataStatsPresenter;
 
         // --- 資料緩存 ---
         private readonly List<Image> _thumbnailCache = new List<Image>();
         private InspectionSettings _settings;
-        private bool _lastReviewProcessedMode = false;
-        private bool _syncingProcessedCheckbox = false;
+        private readonly EventGuard _processedCheckboxGuard = new EventGuard();
         private bool IsStandardBgSubEnabled =>
             _settings?.Recipe?.Algorithm == BackgroundAlgorithm.StandardBgSub;
 
-        /// <summary>"v" = vertical ridge（預設），"h" = horizontal ridge。控制 canvasMain 處理圖方向。</summary>
-        private string _activeRidgeDirection = "v";
         /// <summary>"v" = vertical ridge（預設），"h" = horizontal ridge。控制 Live 顯示方向。</summary>
         private string _liveDisplayDirection = "v";
 
         // --- 常數 ---
         private const int CameraCount = 7;
-        private const int MaxOverviewPoints = 2000;
         private const int TickFreq = 1000;
 
         // --- IEC 60073 色碼 ---
@@ -127,17 +109,8 @@ namespace AniloxRoll.Monitor.Forms
         private readonly float[][] _liveCurveMax  = new float[CameraCount][];
         private volatile bool _liveOverviewDirty;
 
-        // --- Grab ID 拼接模式（null = 一般模式）---
-        private Bitmap[] _stitchedImages;
-        private float[][] _stitchedCurveMean;
-        private float[][] _stitchedCurveMax;
-        private float[][] _stitchedRowCurveMean;
-        private float[][] _stitchedRowCurveMax;
-        private CsvConfigSnapshot _currentGrabConfig;
-        /// <summary>全域合圖：垂直拼接後再水平合併的結果（僅 Global 模式使用）。</summary>
-        private Bitmap _globalMergedImage;
-        /// <summary>Period 模式全域合圖：多相機單張水平合併的結果（StitchMode.Global + Period 瀏覽）。</summary>
-        private Bitmap _periodMergedImage;
+        // --- Review tab 拼接管理 ---
+        private ReviewStitchCoordinator _stitchCoordinator;
         private PictureBox[] _cameraPanels;
 
 
@@ -370,7 +343,17 @@ namespace AniloxRoll.Monitor.Forms
             propertyGridSettings.SelectedObject = _settings;
             propertyGridSettings.ToolbarVisible = false;
             propertyGridSettings.PropertySort   = System.Windows.Forms.PropertySort.Categorized;
-            propertyGridSettings.CollapseAllGridItems();
+            propertyGridSettings.ExpandAllGridItems();
+            // 展開第一層後，收合所有子項目（第二層以下）
+            foreach (GridItem cat in propertyGridSettings.SelectedGridItem?.Parent?.GridItems
+                     ?? (System.Collections.IEnumerable)Array.Empty<GridItem>())
+            {
+                foreach (GridItem prop in cat.GridItems)
+                {
+                    if (prop.GridItemType == GridItemType.Category || prop.Expandable)
+                        prop.Expanded = false;
+                }
+            }
             propertyGridSettings.PropertyValueChanged -= _propertyGrid_PropertyValueChanged;
             propertyGridSettings.PropertyValueChanged += _propertyGrid_PropertyValueChanged;
             AutoFitPropertyGridLabelColumn(propertyGridSettings);
@@ -394,20 +377,45 @@ namespace AniloxRoll.Monitor.Forms
             });
             _interactionHelper.ApplySettingsToService();
 
+            _stitchCoordinator = new ReviewStitchCoordinator(new ReviewStitchContext
+            {
+                Canvas                    = canvasMain,
+                ChartOverview             = chartOverview,
+                ChartMuraVertical         = chartMuraVertical,
+                ChartMuraHorizontal       = chartMuraHorizontal,
+                CheckBoxShowProcessed     = checkBoxShowProcessed,
+                InteractionHelper         = _interactionHelper,
+                MuraChartHelper           = _muraChartHelper,
+                MuraChartHorizontalHelper = _muraChartHorizontalHelper,
+                StitchedOverviewHelper    = _stitchedOverviewHelper,
+                GalleryManager            = _galleryManager,
+                InspectionService         = _inspectionService,
+                ImageRepository           = _imageRepository,
+                DataStatsPresenter        = _dataStatsPresenter,
+                Settings                  = _settings,
+                DateTimeNavigator         = _dateTimeNavigator,
+                ProcessedCheckboxGuard    = _processedCheckboxGuard,
+                CameraCount               = CameraCount,
+            });
+
             _presenter.BusyStateChanged += _interactionHelper.SetUiLoadingState;
             _presenter.LogReported      += OnPresenterLogReported;
             _galleryManager.SelectionChanged += idx =>
             {
-                if (_globalMergedImage != null || _periodMergedImage != null)
+                if (_stitchCoordinator.IsGlobalMerged || _stitchCoordinator.IsPeriodMerged)
                     return; // 全域模式：canvasMain 顯示合併圖，gallery 點選不切換
-                if (_stitchedImages != null)
-                    ShowStitchedCameraInCanvas(idx);
+                if (_stitchCoordinator.IsStitchMode)
+                    _stitchCoordinator.ShowStitchedCameraInCanvas(idx);
                 else
                     _interactionHelper.OnGallerySelectionChanged(idx);
             };
 
             _dateTimeNavigator.PeriodSelectionChanged += _presenter.UpdatePeriodNavigationState;
-            _dateTimeNavigator.PeriodSelectionChanged += SyncGrabIdFromTimeCombos;
+            _dateTimeNavigator.PeriodSelectionChanged += () =>
+            {
+                var current = _dateTimeNavigator.GetCurrentPeriodOrDefault(DateTime.MinValue);
+                if (current != DateTime.MinValue) _dataStatsPresenter.SyncGrabIdFromTime(current);
+            };
             _dateTimeNavigator.PeriodSelectionChanged += OnPeriodComboChanged;
             _presenter.PeriodNavigationStateChanged   += (canLast, canNext) =>
             {
@@ -616,6 +624,9 @@ namespace AniloxRoll.Monitor.Forms
 
             // Live Mura 判斷（callback 執行緒，所有相機都檢查）
             CheckLiveMura(meanArr, maxArr);
+
+            // Global 模式不更新 Live mura 垂直圖（單台資料無意義）
+            if (_settings.StitchMode == StitchMode.Global) return;
 
             // 只有選中相機才 marshal 到 UI 執行緒更新 muraChartLive
             if (camId != _liveCameraManager.SelectedMainCameraId) return;
@@ -1298,17 +1309,54 @@ namespace AniloxRoll.Monitor.Forms
 
             string changedPropertyName = e?.ChangedItem?.PropertyDescriptor?.Name ?? string.Empty;
 
+            // StitchMode 變更 → 清除/恢復 mura 圖 + 重新載入回顧主畫面 + Live 合圖切換
+            if (changedPropertyName == nameof(InspectionSettings.StitchMode))
+            {
+                // Live tab：即時全域合圖
+                if (_settings.StitchMode == StitchMode.Global && _liveCameraManager?.IsAllocated == true)
+                    _liveCameraManager.EnableGlobalMerge(
+                        _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
+                else
+                    _liveCameraManager?.DisableGlobalMerge();
+
+                if (_settings.StitchMode == StitchMode.Global)
+                {
+                    chartMuraVertical.Series["Mean"].Points.Clear();
+                    chartMuraVertical.Series["Max"].Points.Clear();
+                    muraChartVerticalLive.Series["Mean"].Points.Clear();
+                    muraChartVerticalLive.Series["Max"].Points.Clear();
+                }
+
+                // 根據當前選中的回顧縮圖重新載入回顧主畫面
+                if (_stitchCoordinator.IsStitchMode)
+                {
+                    int idx = _galleryManager?.SelectedIndex ?? 0;
+                    if (_settings.StitchMode == StitchMode.Global)
+                        _stitchCoordinator.ApplyGlobalMergeIfNeeded();
+                    else
+                        _stitchCoordinator.ShowStitchedCameraInCanvas(idx);
+                }
+                else if (_imageRepository.FileCount > 0)
+                {
+                    _stitchCoordinator.ClearStitchedMode();
+                    await _presenter.LoadImagesWithPeriodLockAsync(
+                        _stitchCoordinator.LastReviewProcessedMode, _interactionHelper.LoadImages);
+                    _stitchCoordinator.ApplyGlobalMergeIfNeeded();
+                    _stitchCoordinator.UpdateOverviewChartFromRepository();
+                }
+            }
+
             // 圖表設定變更 → 立刻套用
             if (changedPropertyName == nameof(InspectionSettings.ChartScaleMode))
             {
-                ApplyChartScaleFromSettings();
+                _dataStatsPresenter.ApplyChartScaleFromSettings();
             }
             else if (changedPropertyName == nameof(InspectionSettings.ChartYearlyYMax))
-                ApplyFixedScale(chartYearly, _settings.Chart.YearlyYMax);
+                _dataStatsPresenter.ApplyFixedScaleForChart("Yearly", _settings.Chart.YearlyYMax);
             else if (changedPropertyName == nameof(InspectionSettings.ChartMonthlyYMax))
-                ApplyFixedScale(chartMonthly, _settings.Chart.MonthlyYMax);
+                _dataStatsPresenter.ApplyFixedScaleForChart("Monthly", _settings.Chart.MonthlyYMax);
             else if (changedPropertyName == nameof(InspectionSettings.ChartDailyYMax))
-                ApplyFixedScale(chartDaily, _settings.Chart.DailyYMax);
+                _dataStatsPresenter.ApplyFixedScaleForChart("Daily", _settings.Chart.DailyYMax);
 
             // 演算法切換 → 更新 UI 鎖定 + 載入/清除背景 bin
             if (changedPropertyName == nameof(InspectionRecipe.Algorithm) ||
@@ -1323,14 +1371,13 @@ namespace AniloxRoll.Monitor.Forms
             // 有影像且為配方參數變更 → 重載（始終用 processed 模式，因為配方只影響演算法輸出）
             if (isRecipeChange && _imageRepository.FileCount > 0)
             {
-                _lastReviewProcessedMode = true;
-                _syncingProcessedCheckbox = true;
-                try { checkBoxShowProcessed.Checked = true; }
-                finally { _syncingProcessedCheckbox = false; }
-                ClearStitchedMode();
+                _stitchCoordinator.LastReviewProcessedMode = true;
+                using (_processedCheckboxGuard.Enter())
+                    checkBoxShowProcessed.Checked = true;
+                _stitchCoordinator.ClearStitchedMode();
                 await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
-                ApplyGlobalMergeIfNeeded();
-                UpdateOverviewChartFromRepository();
+                _stitchCoordinator.ApplyGlobalMergeIfNeeded();
+                _stitchCoordinator.UpdateOverviewChartFromRepository();
                 _interactionHelper.RefreshCurrentCanvasResult();
             }
             }
@@ -1343,59 +1390,49 @@ namespace AniloxRoll.Monitor.Forms
             {
             _interactionHelper.SelectAndLoadFolder();
             _presenter.UpdatePeriodNavigationState();
-            _lastReviewProcessedMode = false;
-            _syncingProcessedCheckbox = true;
-            try { checkBoxShowProcessed.Checked = false; }
-            finally { _syncingProcessedCheckbox = false; }
+            _stitchCoordinator.LastReviewProcessedMode = false;
+            using (_processedCheckboxGuard.Enter())
+                checkBoxShowProcessed.Checked = false;
 
             // 同步載入序號清單並填充所有序號 ComboBox（Review + Data）
             if (_imageRepository.FileCount > 0)
             {
                 var reviewPath = UserSessionState.LastDataPath;
                 if (!string.IsNullOrWhiteSpace(reviewPath))
-                {
-                    _statsDataRootPath  = reviewPath;
-                    _statAvailableTimes = InspectionStatisticsService.LoadAvailableTimes(reviewPath);
-                    _grabIdInfos        = InspectionStatisticsService.LoadGrabIdInfosDescending(reviewPath);
+                    _dataStatsPresenter.SyncFromReviewFolder(reviewPath);
 
-                    PopulateAllGrabIdCombos();
-
-                    // 填充日期/時間 ComboBox（全範圍）
-                    if (_statAvailableTimes.Count > 0)
-                        PopulateStatDateCombos(_statAvailableTimes.Min, _statAvailableTimes.Max);
-
-                    PopulateChartNavigators(_statAvailableTimes.Count > 0
-                        ? (DateTime?)_statAvailableTimes.Max : null);
-                    RefreshStats();
-                }
+                // Initialize 期間 _updating=true 不觸發 PeriodSelectionChanged，手動同步
+                var current = _dateTimeNavigator.GetCurrentPeriodOrDefault(DateTime.MinValue);
+                if (current != DateTime.MinValue)
+                    _dataStatsPresenter.SyncGrabIdFromTime(current);
             }
 
-            ClearStitchedMode();
-            SetReviewGroupBoxes(false);
+            _stitchCoordinator.ClearStitchedMode();
+            _dataStatsPresenter.SetReviewGroupBoxes(false);
             await _presenter.LoadImagesWithPeriodLockAsync(false, LoadImagesWithReviewConfig);
-            ApplyGlobalMergeIfNeeded();
-            UpdateOverviewChartFromRepository();
+            _stitchCoordinator.ApplyGlobalMergeIfNeeded();
+            _stitchCoordinator.UpdateOverviewChartFromRepository();
             }
             catch (Exception ex) { Trace.WriteLine($"[btnSelectFolder_Click] {ex}"); }
         }
 
         private async void checkBoxShowProcessed_CheckedChanged(object sender, EventArgs e)
         {
-            if (_syncingProcessedCheckbox) return;
+            if (_processedCheckboxGuard.IsSet) return;
             try
             {
             bool enableProcess = checkBoxShowProcessed.Checked;
-            UpdateRidgeDirectionVisual(enableProcess ? _activeRidgeDirection : null);
-            if (_stitchedImages != null)
+            UpdateRidgeDirectionVisual(enableProcess ? _stitchCoordinator.ActiveRidgeDirection : null);
+            if (_stitchCoordinator.IsStitchMode)
             {
                 await ReloadCurrentStitchedView(enableProcess);
                 return;
             }
-            _lastReviewProcessedMode = enableProcess;
-            ClearStitchedMode();
+            _stitchCoordinator.LastReviewProcessedMode = enableProcess;
+            _stitchCoordinator.ClearStitchedMode();
             await _presenter.LoadImagesWithPeriodLockAsync(enableProcess, _interactionHelper.LoadImages);
-            ApplyGlobalMergeIfNeeded();
-            UpdateOverviewChartFromRepository();
+            _stitchCoordinator.ApplyGlobalMergeIfNeeded();
+            _stitchCoordinator.UpdateOverviewChartFromRepository();
             }
             catch (Exception ex) { Trace.WriteLine($"[checkBoxShowProcessed] {ex}"); }
         }
@@ -1403,10 +1440,10 @@ namespace AniloxRoll.Monitor.Forms
         private async Task ReloadCurrentStitchedView(bool enableProcess)
         {
             int idx = cbReviewGrabId.SelectedIndex;
-            if (idx < 0 || idx >= _grabIdInfos.Count) return;
+            if (idx < 0 || idx >= _dataStatsPresenter.GrabIdInfos.Count) return;
             _interactionHelper.SaveCanvasView();
-            var info = _grabIdInfos[idx];
-            await LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest, enableProcess);
+            var info = _dataStatsPresenter.GrabIdInfos[idx];
+            await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest, enableProcess);
         }
 
         /// <summary>
@@ -1436,82 +1473,28 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         private async void btnPeriodPrev_Click(object sender, EventArgs e)
-        { try { _interactionHelper.SaveCanvasView(); ClearStitchedMode(); await _presenter.MovePeriodAsync(-1, _lastReviewProcessedMode, LoadImagesWithReviewConfig); ApplyGlobalMergeIfNeeded(); UpdateOverviewChartFromRepository(); } catch (Exception ex) { Trace.WriteLine($"[btnPeriodPrev] {ex}"); } }
+        { try { _interactionHelper.SaveCanvasView(); _stitchCoordinator.ClearStitchedMode(); await _presenter.MovePeriodAsync(-1, _stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig); _stitchCoordinator.ApplyGlobalMergeIfNeeded(); _stitchCoordinator.UpdateOverviewChartFromRepository(); } catch (Exception ex) { Trace.WriteLine($"[btnPeriodPrev] {ex}"); } }
 
         private async void btnPeriodNext_Click(object sender, EventArgs e)
-        { try { _interactionHelper.SaveCanvasView(); ClearStitchedMode(); await _presenter.MovePeriodAsync(+1, _lastReviewProcessedMode, LoadImagesWithReviewConfig); ApplyGlobalMergeIfNeeded(); UpdateOverviewChartFromRepository(); } catch (Exception ex) { Trace.WriteLine($"[btnPeriodNext] {ex}"); } }
+        { try { _interactionHelper.SaveCanvasView(); _stitchCoordinator.ClearStitchedMode(); await _presenter.MovePeriodAsync(+1, _stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig); _stitchCoordinator.ApplyGlobalMergeIfNeeded(); _stitchCoordinator.UpdateOverviewChartFromRepository(); } catch (Exception ex) { Trace.WriteLine($"[btnPeriodNext] {ex}"); } }
 
         /// <summary>cbDate/cbTime 手動滾動時載入對應圖片（同 btnPeriodPrev/Next）。
-        /// _syncingGrabIdNav 時跳過（由 OnReviewGrabIdChanged 等程式碼觸發的 NavigateToDateTime）。</summary>
+        /// _dataStatsPresenter.GrabIdNavGuard 時跳過（由 OnReviewGrabIdChanged 等程式碼觸發的 NavigateToDateTime）。</summary>
         private async void OnPeriodComboChanged()
         {
-            if (_syncingGrabIdNav) return;
+            if (_dataStatsPresenter.GrabIdNavGuard.IsSet) return;
             if (_imageRepository.FileCount == 0) return;
             try
             {
             _interactionHelper.SaveCanvasView();
-            ClearStitchedMode();
-            SetReviewGroupBoxes(false);
-            await _presenter.LoadImagesWithPeriodLockAsync(_lastReviewProcessedMode, LoadImagesWithReviewConfig);
-            ApplyGlobalMergeIfNeeded();
-            UpdateOverviewChartFromRepository();
+            _stitchCoordinator.ClearStitchedMode();
+            _dataStatsPresenter.SetReviewGroupBoxes(false);
+            await _presenter.LoadImagesWithPeriodLockAsync(_stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig);
+            _stitchCoordinator.ApplyGlobalMergeIfNeeded();
+            _stitchCoordinator.UpdateOverviewChartFromRepository();
             }
             catch (Exception ex) { Trace.WriteLine($"[OnPeriodComboChanged] {ex}"); }
         }
-
-        /// <summary>
-        /// Period 全域模式：從 gallery（pbCam1~7）的單張影像建立水平合圖，顯示在 canvasMain。
-        /// gallery 維持原本的單張顯示。僅在 StitchMode == Global 且非 GrabId 合圖路徑時生效。
-        /// </summary>
-        private void ApplyGlobalMergeIfNeeded()
-        {
-            if (_settings.StitchMode != StitchMode.Global) return;
-
-            var cfg = _interactionHelper.ReviewConfig;
-            double[] opsArr = cfg?.CamOps ?? _settings.GetCameraOpsUmArray();
-            double[] posArr = cfg?.CamPos ?? _settings.GetCameraStartPositionMmArray();
-            int scale = InspectionEngineConfig.DefaultSaveResizeScale;
-
-            // 從 Repository 取路徑，以統一 scale 載入（PictureBox 的圖為 thumbnail，尺寸不可預測）
-            var filesMap = _imageRepository.GetImages(
-                _dateTimeNavigator.GetCurrentYear(),
-                _dateTimeNavigator.GetCurrentMonth(),
-                _dateTimeNavigator.GetCurrentDay(),
-                _dateTimeNavigator.GetCurrentHour(),
-                _dateTimeNavigator.GetCurrentMin(),
-                _dateTimeNavigator.GetCurrentSec());
-            if (filesMap == null || filesMap.Count == 0) return;
-
-            Func<string, Bitmap> bmpLoader = _inspectionService != null
-                ? (Func<string, Bitmap>)(p => _inspectionService.LoadBmpAtScale(p, scale))
-                : null;
-
-            var camImages = new Bitmap[CameraCount];
-            for (int i = 0; i < CameraCount; i++)
-            {
-                if (filesMap.TryGetValue(i + 1, out string path))
-                {
-                    try
-                    {
-                        camImages[i] = GrabImageStitcher.LoadCameraImage(path, scale, bmpLoader,
-                            useProcessed: _lastReviewProcessedMode, ridgeDirection: _activeRidgeDirection);
-                    }
-                    catch (Exception ex)
-                    {
-                        Trace.WriteLine($"[GlobalMerge] CAM{i + 1}: {ex.GetType().Name}: {ex.Message}");
-                    }
-                }
-            }
-
-            _periodMergedImage = GrabImageStitcher.MergeHorizontal(camImages, opsArr, posArr, scale);
-
-            // 合圖完成後釋放載入的暫存影像
-            foreach (var img in camImages) img?.Dispose();
-
-            if (_periodMergedImage != null)
-                ShowMergedImageInCanvas(_periodMergedImage, opsArr, posArr);
-        }
-
         // ==========================================
         // --- 右側面板：初始化 ---
         // ==========================================
@@ -1707,7 +1690,7 @@ namespace AniloxRoll.Monitor.Forms
             // ── 圖表引擎常數 ────────────────────────────────────────────────
             listViewChartConst.Columns.Add("參數", 160);
             listViewChartConst.Columns.Add("值",    90);
-            listViewChartConst.Items.Add(new ListViewItem(new[] { "MaxOverviewPoints", MaxOverviewPoints.ToString() }));
+            listViewChartConst.Items.Add(new ListViewItem(new[] { "MaxOverviewPoints", "2000" }));
             listViewChartConst.Items.Add(new ListViewItem(new[] { "TelemetryInterval", "500 ms" }));
             listViewChartConst.Items.Add(new ListViewItem(new[] { "OverviewRefresh",   "FPS-sync" }));
             listViewChartConst.Items.Add(new ListViewItem(new[] { "DownsampleMode",    "Max-Window" }));
@@ -2047,9 +2030,10 @@ namespace AniloxRoll.Monitor.Forms
             if (_liveCameraManager == null || _liveCameraManager.IsReleasing) return;
             if (!_liveOverviewDirty || _liveOverviewHelper == null || _settings == null) return;
             _liveOverviewDirty = false;
-            UpdateOverviewChart(_liveCurveMean, _liveCurveMax,
+            OverviewChartManager.UpdateOverviewChart(_liveCurveMean, _liveCurveMax,
                 _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray(),
-                _settings.ErrorValueMean, _settings.ErrorValueMax, _liveOverviewHelper);
+                _settings.ErrorValueMean, _settings.ErrorValueMax,
+                _liveOverviewHelper, CameraCount, _settings.StitchMode, LiveViewRangeProvider);
         }
 
         // ==========================================
@@ -2066,639 +2050,92 @@ namespace AniloxRoll.Monitor.Forms
 
         private void SetupDataTab()
         {
-            _statsPresenter = new InspectionStatsPresenter(
-                listViewStats,
-                new[] { panelStatCam1, panelStatCam2, panelStatCam3, panelStatCam4,
-                        panelStatCam5, panelStatCam6, panelStatCam7 });
-            _statsPresenter.Initialize();
+            _dataStatsPresenter = new DataStatisticsPresenter(new DataStatisticsContext
+            {
+                CbStartDate = cbStartDate, CbStartTime = cbStartTime,
+                CbEndDate = cbEndDate, CbEndTime = cbEndTime,
+                CbGrabIdStart = cbGrabIdStart, CbGrabIdEnd = cbGrabIdEnd,
+                CbDataGrabId = cbDataGrabId, CbReviewGrabId = cbReviewGrabId,
+                BtnGrabIdPrev = btnGrabIdPrev, BtnGrabIdNext = btnGrabIdNext,
+                BtnGrabIdDataPrev = btnGrabIdDataPrev, BtnGrabIdDataNext = btnGrabIdDataNext,
+                BtnSelectDataFolder = btnSelectDataFolder, BtnShowFail = btnShowFail,
+                GroupBoxGrabIdRange = groupBoxGrabIdRange, GrpDataSingleSheet = grpDataSingleSheet,
+                GroupBoxTimeRange = groupBoxTimeRange,
+                GrpReviewGrabNav = grpReviewGrabNav, GrpReviewTimePeriod = grpReviewTimePeriod,
+                ListViewStats = listViewStats, ListViewGrabDetail = listViewGrabDetail,
+                PanelStatCams = new[] { panelStatCam1, panelStatCam2, panelStatCam3,
+                                        panelStatCam4, panelStatCam5, panelStatCam6, panelStatCam7 },
+                ChartYearly = chartYearly, ChartMonthly = chartMonthly, ChartDaily = chartDaily,
+                CbChartYear = cbChartYear, CbChartMonth = cbChartMonth, CbChartDay = cbChartDay,
+                Settings = _settings, CameraCount = CameraCount,
+            });
+            _dataStatsPresenter.Initialize();
 
-            // 預設時間：開始 = 今天 00:00，結束 = 今天 23:59
-            DateTime today = DateTime.Today;
-            PopulateStatDateCombos(today.AddDays(-7), today);
+            // 延遲注入：_stitchCoordinator 在 InitUiLayer 初始化時 _dataStatsPresenter 尚未建立
+            _stitchCoordinator.SetDataStatsPresenter(_dataStatsPresenter);
 
-            // 預設資料夾與 CaptureRootPath 相同
-            _statsDataRootPath = _settings?.CaptureRootPath ?? string.Empty;
-
-            btnSelectDataFolder.Click += BtnSelectDataFolder_Click;
-            btnShowFail.Click         += BtnShowFail_Click;
-            WireStatDateCombos();
-            InitGrabDetailListView();
-            InitPeriodCharts();
-            cbChartYear.SelectedIndexChanged  += (s, e) => { if (!_chartNavUpdating) OnChartYearIndexChanged();  };
-            cbChartMonth.SelectedIndexChanged += (s, e) => { if (!_chartNavUpdating) OnChartMonthIndexChanged(); };
-            cbChartDay.SelectedIndexChanged   += (s, e) => { if (!_chartNavUpdating) OnChartDayIndexChanged();   };
             // 滾輪上滾 = 數值增加（反轉 ComboBox 預設行為）——僅用於升序排列的 ComboBox
-            // cbDate/cbTime/cbStart*/cbEnd*/cbGrabId* 為降序（newest first），使用預設方向（上滾=newer）
             foreach (var cb in new[] { cbChartYear, cbChartMonth, cbChartDay })
                 _wheelInterceptors.Add(new ComboBoxWheelReverser(cb));
 
-            cbGrabIdStart.SelectedIndexChanged  += (s, e) => OnGrabIdComboChanged(isStart: true);
-            cbGrabIdEnd.SelectedIndexChanged    += (s, e) => OnGrabIdComboChanged(isStart: false);
-            cbDataGrabId.SelectedIndexChanged   += (s, e) => OnSingleSheetComboChanged();
-            cbReviewGrabId.SelectedIndexChanged += (s, e) => OnReviewGrabIdChanged();
-            btnGrabIdPrev.Click             += (s, e) => StepReviewGrabId(+1);
-            btnGrabIdNext.Click             += (s, e) => StepReviewGrabId(-1);
-            grpReviewGrabNav.Click          += (s, e) => OnReviewGrabIdChanged();
-            grpReviewTimePeriod.Click       += (s, e) => OnPeriodComboChanged();
-            btnGrabIdDataPrev.Click         += (s, e) => StepDataGrabId(+1);
-            btnGrabIdDataNext.Click         += (s, e) => StepDataGrabId(-1);
+            // 跨 Tab 事件
+            _dataStatsPresenter.GrabIdSelectedFromData += OnDataGrabIdSelected;
+            _dataStatsPresenter.GrabIdSelectedFromReview += OnReviewGrabIdSelected;
+            _dataStatsPresenter.PeriodComboManualChanged += OnPeriodComboChanged;
+            _dataStatsPresenter.DataFolderSelected += OnDataFolderSelected;
         }
 
-        private void PopulateStatDateCombos(DateTime start, DateTime end)
+        private async void OnDataGrabIdSelected(string grabId, DateTime earliest, DateTime latest, int idx)
         {
-            var dates = GetAvailableDateStrings();
-            string startDateStr = start.ToString("yyyy-MM-dd");
-            string endDateStr   = end.ToString("yyyy-MM-dd");
-            string startTimeStr = start.ToString("HH:mm:ss");
-            string endTimeStr   = end.ToString("HH:mm:ss");
-
-            // Start
-            cbStartDate.Items.Clear();
-            cbStartDate.Items.AddRange(dates.ToArray());
-            int si = dates.IndexOf(startDateStr);
-            cbStartDate.SelectedIndex = si >= 0 ? si : (dates.Count > 0 ? dates.Count - 1 : -1);
-            RefreshStatTimeCombo(cbStartDate, cbStartTime, startTimeStr);
-
-            // End（降序：第一筆 = 最新）
-            cbEndDate.Items.Clear();
-            cbEndDate.Items.AddRange(dates.ToArray());
-            int ei = dates.IndexOf(endDateStr);
-            cbEndDate.SelectedIndex = ei >= 0 ? ei : (dates.Count > 0 ? 0 : -1);
-            RefreshStatTimeCombo(cbEndDate, cbEndTime, endTimeStr);
-        }
-
-        private void RefreshStatTimeCombo(ComboBox dateCb, ComboBox timeCb, string preferred)
-        {
-            var times = GetAvailableTimeStrings(dateCb.Text);
-            timeCb.Items.Clear();
-            timeCb.Items.AddRange(times.ToArray());
-            if (times.Count == 0) return;
-            int idx = times.IndexOf(preferred);
-            timeCb.SelectedIndex = idx >= 0 ? idx : (times.Count > 0 ? 0 : -1);
-        }
-
-        private void BtnSelectDataFolder_Click(object sender, EventArgs e)
-        {
-            using (var dlg = new FolderBrowserDialog())
-            {
-                dlg.Description       = "選擇 AniloxCaptures 根目錄";
-                dlg.SelectedPath      = string.IsNullOrWhiteSpace(_statsDataRootPath)
-                    ? (_settings?.CaptureRootPath ?? string.Empty)
-                    : _statsDataRootPath;
-                dlg.ShowNewFolderButton = false;
-
-                if (dlg.ShowDialog() == DialogResult.OK)
-                {
-                    _statsDataRootPath  = dlg.SelectedPath;
-                    _statAvailableTimes = InspectionStatisticsService.LoadAvailableTimes(_statsDataRootPath);
-                    _grabIdInfos        = InspectionStatisticsService.LoadGrabIdInfosDescending(_statsDataRootPath);
-
-                    // 同步 Review tab：載入圖片索引 + 時間導航
-                    UserSessionState.SetLastDataPath(_statsDataRootPath);
-                    UserSessionState.Save();
-                    _interactionHelper.LoadDirectoryAndInitNavigator(_statsDataRootPath);
-                    _presenter.UpdatePeriodNavigationState();
-
-                    // 填充序號 ComboBox
-                    PopulateAllGrabIdCombos(selectDataGrabId: true);
-
-                    // 填充日期/時間 ComboBox（全範圍）
-                    if (_statAvailableTimes.Count > 0)
-                        PopulateStatDateCombos(_statAvailableTimes.Min, _statAvailableTimes.Max);
-
-                    SetActiveStatGroupBox(groupBoxGrabIdRange);
-                    PopulateChartNavigators(_statAvailableTimes.Count > 0
-                        ? (DateTime?)_statAvailableTimes.Max : null);
-                    RefreshStats();
-                }
-            }
-        }
-
-
-        private bool TryParseStatDateTime(out DateTime start, out DateTime end)
-        {
-            start = end = DateTime.MinValue;
-            if (!TryBuildDateTimeFromCombos(cbStartDate, cbStartTime, out start)) return false;
-            if (!TryBuildDateTimeFromCombos(cbEndDate,   cbEndTime,   out end))   return false;
-            // 若無毫秒精度，將 end 推至該秒末尾以涵蓋所有毫秒
-            if (end.Millisecond == 0) end = end.AddMilliseconds(999);
-            return start <= end;
-        }
-
-        private static bool TryBuildDateTimeFromCombos(ComboBox dateCb, ComboBox timeCb, out DateTime result)
-        {
-            result = DateTime.MinValue;
-            string dateText = dateCb.Text ?? "";
-            string timeText = timeCb.Text ?? "";
-            string combined = dateText + " " + timeText;
-            // 嘗試 "yyyy-MM-dd HH:mm:ss.fff" 或 "yyyy-MM-dd HH:mm:ss"
-            if (DateTime.TryParseExact(combined, new[] { "yyyy-MM-dd HH:mm:ss.fff", "yyyy-MM-dd HH:mm:ss" },
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    System.Globalization.DateTimeStyles.None, out result))
-                return true;
-            return false;
-        }
-
-        // ==========================================
-        // --- 統計 Tab：Cascading ComboBox 邏輯 ---
-        // ==========================================
-
-        private void WireStatDateCombos()
-        {
-            cbStartDate.SelectedIndexChanged += (s, e) => OnStartComboChanged(1);
-            cbStartTime.SelectedIndexChanged += (s, e) => OnStartComboChanged(2);
-            cbEndDate.SelectedIndexChanged   += (s, e) => OnEndComboChanged(1);
-            cbEndTime.SelectedIndexChanged   += (s, e) => OnEndComboChanged(2);
-        }
-
-        private void OnStartComboChanged(int fromLevel)
-        {
-            if (_statComboUpdating) return;
-            SetActiveStatGroupBox(groupBoxTimeRange);
-            if (_statAvailableTimes.Count > 0)
-            {
-                _statComboUpdating = true;
-                try
-                {
-                    if (fromLevel <= 1) RefreshStatTimeCombo(cbStartDate, cbStartTime, cbStartTime.Text);
-                    ClampEndToStart();
-                }
-                finally { _statComboUpdating = false; }
-            }
-            RefreshStats();
-        }
-
-        private void OnEndComboChanged(int fromLevel)
-        {
-            if (_statComboUpdating) return;
-            SetActiveStatGroupBox(groupBoxTimeRange);
-            if (_statAvailableTimes.Count > 0)
-            {
-                _statComboUpdating = true;
-                try
-                {
-                    if (fromLevel <= 1) RefreshStatTimeCombo(cbEndDate, cbEndTime, cbEndTime.Text);
-                    ClampStartToEnd();
-                }
-                finally { _statComboUpdating = false; }
-            }
-            RefreshStats();
-        }
-
-        private void SetCombosToDateTime(bool isStart, DateTime dt)
-        {
-            string dateStr = dt.ToString("yyyy-MM-dd");
-            string timeStr = dt.ToString("HH:mm:ss");
-            if (isStart)
-            {
-                if (cbStartDate.Items.Contains(dateStr)) cbStartDate.SelectedItem = dateStr;
-                else cbStartDate.Text = dateStr;
-                RefreshStatTimeCombo(cbStartDate, cbStartTime, timeStr);
-            }
-            else
-            {
-                if (cbEndDate.Items.Contains(dateStr)) cbEndDate.SelectedItem = dateStr;
-                else cbEndDate.Text = dateStr;
-                RefreshStatTimeCombo(cbEndDate, cbEndTime, timeStr);
-            }
-        }
-
-        /// <summary>若 start > end，將 end 推至最近的可用時間 ≥ start。</summary>
-        private void ClampEndToStart()
-        {
-            if (!TryBuildDateTimeFromCombos(cbStartDate, cbStartTime, out DateTime start)) return;
-            if (!TryBuildDateTimeFromCombos(cbEndDate,   cbEndTime,   out DateTime end))   return;
-            if (start <= end) return;
-            var view = _statAvailableTimes.GetViewBetween(start, DateTime.MaxValue);
-            DateTime newEnd = view.Count > 0 ? view.Min : _statAvailableTimes.Max;
-            SetCombosToDateTime(false, newEnd);
-        }
-
-        /// <summary>若 end < start，將 start 推至最近的可用時間 ≤ end。</summary>
-        private void ClampStartToEnd()
-        {
-            if (!TryBuildDateTimeFromCombos(cbStartDate, cbStartTime, out DateTime start)) return;
-            if (!TryBuildDateTimeFromCombos(cbEndDate,   cbEndTime,   out DateTime end))   return;
-            if (start <= end) return;
-            var view = _statAvailableTimes.GetViewBetween(DateTime.MinValue, end);
-            DateTime newStart = view.Count > 0 ? view.Max : _statAvailableTimes.Min;
-            SetCombosToDateTime(true, newStart);
-        }
-
-        /// <summary>
-        /// cbGrabIdStart（序號起）或 cbGrabIdEnd（序號迄）變更時：
-        /// 強制 start ≤ end、更新 cbStart/cbEnd 時間、重新統計。
-        /// </summary>
-        private void OnGrabIdComboChanged(bool isStart)
-        {
-            if (_statComboUpdating || _grabIdInfos.Count == 0) return;
-            SetActiveStatGroupBox(groupBoxGrabIdRange);
-
-            int idx1 = cbGrabIdStart.SelectedIndex;
-            int idx2 = cbGrabIdEnd.SelectedIndex;
-            if (idx1 < 0 || idx2 < 0) return;
-
-            // 強制 cbGrabIdStart（舊）≥ cbGrabIdEnd（新）in descending index
-            _statComboUpdating = true;
             try
             {
-                if (isStart && idx1 < idx2)
-                    cbGrabIdEnd.SelectedIndex = idx1;
-                else if (!isStart && idx2 > idx1)
-                    cbGrabIdStart.SelectedIndex = idx2;
-
-                // 更新 cbStart/cbEnd 時間
-                var startInfo = _grabIdInfos[cbGrabIdStart.SelectedIndex];
-                var endInfo   = _grabIdInfos[cbGrabIdEnd.SelectedIndex];
-                SetCombosToDateTime(true,  startInfo.Earliest);
-                SetCombosToDateTime(false, endInfo.Latest);
-            }
-            finally { _statComboUpdating = false; }
-
-            RefreshStats();
-        }
-
-        private async void OnSingleSheetComboChanged()
-        {
-            UpdateDataGrabIdNavState();
-            if (_statComboUpdating || _grabIdInfos.Count == 0) return;
-            if (_syncingGrabIdCross) return;
-            try
-            {
-            SetActiveStatGroupBox(grpDataSingleSheet);
-            int idx = cbDataGrabId.SelectedIndex;
-            if (idx < 0) return;
-
-            _statComboUpdating = true;
-            try
-            {
-                cbGrabIdStart.SelectedIndex = idx;
-                cbGrabIdEnd.SelectedIndex   = idx;
-                var info = _grabIdInfos[idx];
-                SetCombosToDateTime(true,  info.Earliest);
-                SetCombosToDateTime(false, info.Latest);
-            }
-            finally { _statComboUpdating = false; }
-
-            RefreshStats();
-
-            // 同步 cbReviewGrabId（影像回顧）+ 拼接顯示
-            if (!_syncingGrabIdCross && cbReviewGrabId.Items.Count > 0 && idx < cbReviewGrabId.Items.Count)
-            {
-                _syncingGrabIdCross = true;
-                try
+                using (_dataStatsPresenter.GrabIdCrossGuard.Enter())
                 {
-                    var info = _grabIdInfos[idx];
-                    _syncingGrabIdNav = true;
-                    try
+                    using (_dataStatsPresenter.GrabIdNavGuard.Enter())
                     {
                         cbReviewGrabId.SelectedIndex = idx;
-                        _interactionHelper.NavigateToDateTime(info.Earliest);
+                        _interactionHelper.NavigateToDateTime(earliest);
                     }
-                    finally { _syncingGrabIdNav = false; }
                     _presenter.UpdatePeriodNavigationState();
-                    UpdateGrabIdNavState();
-                    SetReviewGroupBoxes(true);
-                    await LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest);
+                    _dataStatsPresenter.UpdateGrabIdNavState();
+                    _dataStatsPresenter.SetReviewGroupBoxes(true);
+                    await _stitchCoordinator.LoadGrabStitchedViewAsync(grabId, earliest, latest);
                 }
-                finally { _syncingGrabIdCross = false; }
             }
-            }
-            catch (Exception ex) { Trace.WriteLine($"[OnSingleSheetComboChanged] {ex}"); }
+            catch (Exception ex) { Trace.WriteLine($"[OnDataGrabIdSelected] {ex}"); }
         }
 
-        // ── 影像回顧 序號跳轉 ─────────────────────────────────────────────
-
-        private async void OnReviewGrabIdChanged()
+        private async void OnReviewGrabIdSelected(string grabId, DateTime earliest, DateTime latest, int idx)
         {
-            UpdateGrabIdNavState();
-            if (_syncingGrabIdNav) return;
-            if (_syncingGrabIdCross) return;
-            if (_grabIdInfos.Count == 0) return;
-            int idx = cbReviewGrabId.SelectedIndex;
-            if (idx < 0 || idx >= _grabIdInfos.Count) return;
-
             try
             {
-            _interactionHelper.SaveCanvasView();
-            var info = _grabIdInfos[idx];
-            _syncingGrabIdNav = true;
-            try { _interactionHelper.NavigateToDateTime(info.Earliest); }
-            finally { _syncingGrabIdNav = false; }
+                _interactionHelper.SaveCanvasView();
+                using (_dataStatsPresenter.GrabIdNavGuard.Enter())
+                    _interactionHelper.NavigateToDateTime(earliest);
+                _presenter.UpdatePeriodNavigationState();
+
+                await _stitchCoordinator.LoadGrabStitchedViewAsync(grabId, earliest, latest);
+
+                // 同步 Data tab
+                if (!_dataStatsPresenter.GrabIdCrossGuard.IsSet
+                    && cbDataGrabId.Items.Count > 0 && idx < cbDataGrabId.Items.Count)
+                {
+                    var info = _dataStatsPresenter.GrabIdInfos[idx];
+                    _dataStatsPresenter.SyncDataGrabIdFromReview(idx, info);
+                }
+            }
+            catch (Exception ex) { Trace.WriteLine($"[OnReviewGrabIdSelected] {ex}"); }
+        }
+
+        private void OnDataFolderSelected(string path)
+        {
+            // 同步 Review tab
+            UserSessionState.SetLastDataPath(path);
+            UserSessionState.Save();
+            _interactionHelper.LoadDirectoryAndInitNavigator(path);
             _presenter.UpdatePeriodNavigationState();
-
-            await LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest);
-
-            // 同步 cbDataGrabId（單片資訊）+ 統計
-            if (!_syncingGrabIdCross && cbDataGrabId.Items.Count > 0 && idx < cbDataGrabId.Items.Count)
-            {
-                _syncingGrabIdCross = true;
-                try
-                {
-                    cbDataGrabId.SelectedIndex = idx;
-                    // 同步序號範圍 + 時間 + 統計
-                    _statComboUpdating = true;
-                    try
-                    {
-                        cbGrabIdStart.SelectedIndex = idx;
-                        cbGrabIdEnd.SelectedIndex   = idx;
-                        SetCombosToDateTime(true,  info.Earliest);
-                        SetCombosToDateTime(false, info.Latest);
-                    }
-                    finally { _statComboUpdating = false; }
-                    RefreshStats();
-                    SetActiveStatGroupBox(grpDataSingleSheet);
-                }
-                finally { _syncingGrabIdCross = false; }
-            }
-            }
-            catch (Exception ex) { Trace.WriteLine($"[OnReviewGrabIdChanged] {ex}"); }
         }
 
-        private Task LoadGrabStitchedViewAsync(string grabId, DateTime hintFrom, DateTime hintTo)
-            => LoadGrabStitchedViewAsync(grabId, hintFrom, hintTo, _lastReviewProcessedMode);
-
-        private async Task LoadGrabStitchedViewAsync(string grabId, DateTime hintFrom, DateTime hintTo,
-            bool enableProcess)
-        {
-            string root = !string.IsNullOrWhiteSpace(UserSessionState.LastDataPath)
-                          ? UserSessionState.LastDataPath : _statsDataRootPath;
-            if (string.IsNullOrWhiteSpace(root)) return;
-
-            _interactionHelper.SetUiLoadingState(true);
-            _lastReviewProcessedMode = enableProcess;
-            _syncingProcessedCheckbox = true;
-            try { checkBoxShowProcessed.Checked = enableProcess; }
-            finally { _syncingProcessedCheckbox = false; }
-            var swTotal = Stopwatch.StartNew();
-            try
-            {
-                long csvMs = 0, stitchMs = 0;
-                int totalImgCount = 0;
-                string ridgeDir = _activeRidgeDirection; // 快照 UI 狀態
-                float[][] newCurveMean    = new float[CameraCount][];
-                float[][] newCurveMax     = new float[CameraCount][];
-                float[][] newRowCurveMean = new float[CameraCount][];
-                float[][] newRowCurveMax  = new float[CameraCount][];
-                CsvConfigSnapshot grabCfg = null;
-                var newImages = await Task.Run(() =>
-                {
-                    var swCsv = Stopwatch.StartNew();
-                    var grouped = InspectionStatisticsService.LoadImagePathsForGrabId(
-                        root, grabId, hintFrom, hintTo);
-                    grabCfg = InspectionStatisticsService.LoadConfigForGrabId(
-                        root, grabId, hintFrom, hintTo);
-                    csvMs = swCsv.ElapsedMilliseconds;
-                    foreach (var kv in grouped) totalImgCount += kv.Value.Count;
-
-                    var swStitch = Stopwatch.StartNew();
-                    int scale = InspectionEngineConfig.DefaultSaveResizeScale;
-                    var imgs = new Bitmap[CameraCount];
-                    for (int i = 0; i < CameraCount; i++)
-                    {
-                        int camId = i + 1;
-                        if (grouped.TryGetValue(camId, out var paths) && paths.Count > 0)
-                        {
-                            try
-                            {
-                                bool isBmp = paths[0].EndsWith(".bmp", StringComparison.OrdinalIgnoreCase);
-
-                                if (enableProcess && isBmp && _inspectionService != null)
-                                {
-                                    // BMP 處理模式：逐張 GPU pipeline + resize，再拼接
-                                    // ProcessBmpAtScale 回傳 V ridge 並同時存 _proc_v.jpg + _proc_h.jpg
-                                    string capturedDir = ridgeDir;
-                                    Func<string, Bitmap> procLoader = (p) =>
-                                    {
-                                        var bmp = _inspectionService.ProcessBmpAtScale(p, scale,
-                                            out float[] m, out float[] x);
-                                        if (capturedDir == "h" && bmp != null)
-                                        {
-                                            // H 方向：ProcessBmpAtScale 已存好 _proc_h.jpg，從磁碟載入
-                                            string baseName = System.IO.Path.Combine(
-                                                System.IO.Path.GetDirectoryName(p),
-                                                System.IO.Path.GetFileNameWithoutExtension(p));
-                                            string procH = baseName + "_proc_h.jpg";
-                                            if (System.IO.File.Exists(procH))
-                                            {
-                                                bmp.Dispose();
-                                                byte[] bytes = System.IO.File.ReadAllBytes(procH);
-                                                using (var ms = new System.IO.MemoryStream(bytes))
-                                                    return new Bitmap(ms);
-                                            }
-                                        }
-                                        return bmp;
-                                    };
-                                    imgs[i] = GrabImageStitcher.StitchCamera(paths, scale, procLoader,
-                                        ridgeDirection: ridgeDir);
-                                }
-                                else
-                                {
-                                    // JPEG 路徑（含 _proc_v/h.jpg 切換）或 BMP 原圖路徑
-                                    Func<string, Bitmap> bmpLoader = _inspectionService != null
-                                        ? (Func<string, Bitmap>)(p => _inspectionService.LoadBmpAtScale(p, scale))
-                                        : null;
-                                    imgs[i] = GrabImageStitcher.StitchCamera(paths, scale, bmpLoader,
-                                        useProcessed: enableProcess, ridgeDirection: ridgeDir);
-                                }
-                                MergeCurves(paths, out newCurveMean[i], out newCurveMax[i]);
-                                MergeRowCurves(paths, out newRowCurveMean[i], out newRowCurveMax[i]);
-                            }
-                            catch (Exception ex)
-                            {
-                                System.Diagnostics.Trace.WriteLine(
-                                    $"[StitchView] CAM{camId}: {ex.GetType().Name}: {ex.Message}");
-                            }
-                        }
-                    }
-                    stitchMs = swStitch.ElapsedMilliseconds;
-                    return imgs;
-                });
-
-                ClearStitchedMode();
-                _stitchedImages    = newImages;
-                _stitchedCurveMean    = newCurveMean;
-                _stitchedCurveMax     = newCurveMax;
-                _stitchedRowCurveMean = newRowCurveMean;
-                _stitchedRowCurveMax  = newRowCurveMax;
-                _currentGrabConfig = grabCfg;
-                _interactionHelper.ReviewConfig = grabCfg;
-                SetReviewGroupBoxes(true);
-
-                // 全域模式：先計算合圖再 SetImages，
-                // 讓 SelectionChanged handler 的 _globalMergedImage != null 判斷成立而跳過，
-                // 避免 ShowStitchedCameraInCanvas 先載入單台圖像再被合圖覆蓋造成閃爍。
-                double[] opsArr = null, posArr = null;
-                if (_settings.StitchMode == StitchMode.Global)
-                {
-                    opsArr = grabCfg?.CamOps ?? _settings.GetCameraOpsUmArray();
-                    posArr = grabCfg?.CamPos ?? _settings.GetCameraStartPositionMmArray();
-                    _globalMergedImage = GrabImageStitcher.MergeHorizontal(
-                        _stitchedImages, opsArr, posArr, InspectionEngineConfig.DefaultSaveResizeScale);
-                }
-
-                _galleryManager.SetImages(_stitchedImages);
-
-                if (_globalMergedImage != null)
-                {
-                    ShowMergedImageInCanvas(_globalMergedImage, opsArr, posArr);
-                }
-                else
-                {
-                    ShowStitchedCameraInCanvas(_galleryManager.SelectedIndex);
-                }
-                UpdateStitchedOverviewChart();
-
-                Trace.WriteLine($"[StitchView] {grabId} proc={enableProcess} | CSV={csvMs}ms | Stitch={stitchMs}ms | Total={swTotal.ElapsedMilliseconds}ms");
-
-                // Resource log: 讀圖操作
-                int loadedCams = 0, finalW = 0, finalH = 0;
-                for (int i = 0; i < newImages.Length; i++)
-                {
-                    if (newImages[i] != null)
-                    {
-                        loadedCams++;
-                        if (finalW == 0) { finalW = newImages[i].Width; finalH = newImages[i].Height; }
-                    }
-                }
-                string mode;
-                if (_globalMergedImage != null)
-                {
-                    mode = "Global";
-                    finalW = _globalMergedImage.Width;
-                    finalH = _globalMergedImage.Height;
-                }
-                else
-                {
-                    mode = (totalImgCount > loadedCams) ? "Stitch" : "Single";
-                }
-                AniloxCamera.AppendReviewResourceLog(mode, loadedCams, totalImgCount,
-                    finalW, finalH, swTotal.ElapsedMilliseconds);
-            }
-            finally
-            {
-                _interactionHelper.SetUiLoadingState(false);
-            }
-        }
-
-        /// <summary>
-        /// 啟用合圖模式的 chartOverview 座標聯動：
-        /// 計算全域最小位置與參考解析度，設定 canvas 座標覆寫並啟用 zoom。
-        /// </summary>
-        /// <summary>將合併圖顯示在 canvasMain 並啟用 chartOverview 聯動。</summary>
-        private void ShowMergedImageInCanvas(Bitmap mergedImage, double[] opsArr, double[] posArr)
-        {
-            int scale = InspectionEngineConfig.DefaultSaveResizeScale;
-            _interactionHelper.SetCanvasScaleAndCamera(scale, 0);
-            EnableMergedOverviewSync(opsArr, posArr);
-            canvasMain.Image = mergedImage;
-            _interactionHelper.RestoreCanvasViewOrFit();
-        }
-
-        private void EnableMergedOverviewSync(double[] opsArr, double[] posArr)
-        {
-            double globalMinMm = double.MaxValue;
-            double refOpsUm = opsArr[0];
-            for (int i = 0; i < opsArr.Length && i < CameraCount; i++)
-                if (posArr[i] < globalMinMm) globalMinMm = posArr[i];
-            if (globalMinMm == double.MaxValue) globalMinMm = 0;
-
-            _interactionHelper.SetMergedMode(_stitchedOverviewHelper, globalMinMm, refOpsUm);
-            if (chartOverview.ChartAreas.Count > 0)
-                chartOverview.ChartAreas[0].AxisX.ScaleView.Zoomable = true;
-        }
-
-        /// <summary>離開合圖模式：清除座標覆寫、停用互動 zoom。
-        /// 不重設 ScaleView（ZoomReset）：避免 await 期間 message pump 渲染出全範圍閃爍，
-        /// 由後續 UpdateDataAndView 原子性地取代資料與 zoom。</summary>
-        private void DisableMergedOverviewSync()
-        {
-            _interactionHelper.ClearMergedMode();
-            if (chartOverview.ChartAreas.Count > 0)
-            {
-                chartOverview.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
-            }
-        }
-
-        private void ClearStitchedMode()
-        {
-            DisableMergedOverviewSync();
-            if (_globalMergedImage != null)
-            {
-                if (canvasMain.Image == _globalMergedImage) canvasMain.Image = null;
-                _globalMergedImage.Dispose();
-                _globalMergedImage = null;
-            }
-            if (_periodMergedImage != null)
-            {
-                if (canvasMain.Image == _periodMergedImage) canvasMain.Image = null;
-                _periodMergedImage.Dispose();
-                _periodMergedImage = null;
-            }
-            if (_stitchedImages == null) return;
-            canvasMain.Image = null;
-            _galleryManager.ClearImages();
-            foreach (var bmp in _stitchedImages) bmp?.Dispose();
-            _stitchedImages = null;
-            _stitchedCurveMean    = null;
-            _stitchedCurveMax     = null;
-            _stitchedRowCurveMean = null;
-            _stitchedRowCurveMax  = null;
-            _currentGrabConfig = null;
-            // 恢復 chart 為當前設定（stitch mode 可能改用了歷史 #CFG 的 Ops/閾值）
-            _muraChartHelper?.SetOps(_settings.Cam1_Ops);
-            _muraChartHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
-            // 全覽圖資料不在此清除：所有 ClearStitchedMode 的呼叫端
-            // 都會接續 UpdateOverviewChartFromRepository / UpdateStitchedOverviewChart，
-            // 由 UpdateDataAndView 在 SuspendUpdates 內原子性地清除+重綁，
-            // 避免 await 期間 message pump 渲染出空圖 / 全範圍閃爍。
-            SetReviewGroupBoxes(false);
-        }
-
-        // ── GroupBox 綠色高亮指示 ───────────────────────────────────────────
-
-        private static readonly Color _activeGrpFill   = Color.FromArgb(220, 248, 225);
-        private static readonly Color _activeGrpBorder = Color.FromArgb(0, 140, 60);
-
-        private void SetGroupBoxActive(GroupBox box, bool active)
-        {
-            if (active)
-            {
-                box.Paint -= ActiveGroupBox_Paint;
-                box.Paint += ActiveGroupBox_Paint;
-            }
-            else
-            {
-                box.Paint -= ActiveGroupBox_Paint;
-            }
-            box.Invalidate();
-        }
-
-        private void SetActiveStatGroupBox(GroupBox active)
-        {
-            _activeStatMode = active;
-            foreach (var box in new[] { groupBoxGrabIdRange, grpDataSingleSheet, groupBoxTimeRange })
-                SetGroupBoxActive(box, box == active);
-        }
-
-        private static void ActiveGroupBox_Paint(object sender, PaintEventArgs e)
-        {
-            var g = e.Graphics;
-            var box = (GroupBox)sender;
-            int textH = (int)g.MeasureString(box.Text, box.Font).Height;
-            int midY = textH / 2;
-
-            using (var brush = new SolidBrush(_activeGrpFill))
-                g.FillRectangle(brush, 0, midY, box.Width, box.Height - midY);
-            using (var pen = new Pen(_activeGrpBorder, 1.5f))
-                g.DrawRectangle(pen, 0, midY, box.Width - 1, box.Height - midY - 1);
-
-            var textSize = g.MeasureString(box.Text, box.Font);
-            using (var bgBrush = new SolidBrush(_activeGrpFill))
-                g.FillRectangle(bgBrush, 6, 0, textSize.Width + 2, textH);
-            using (var textBrush = new SolidBrush(_activeGrpBorder))
-                g.DrawString(box.Text, box.Font, textBrush, 8, 0);
-        }
 
         /// <summary>
         /// 切換 Live 顯示的 V/H 處理圖方向，點選 muraChartVerticalLive/HorizontalLive 觸發。
@@ -2711,7 +2148,6 @@ namespace AniloxRoll.Monitor.Forms
             {
                 // 未勾選 → 自動勾選 + 設方向
                 _liveDisplayDirection = dir;
-                _liveCameraManager?.SetLiveDisplayDirection(dir);
                 UpdateLiveDirectionVisual(dir);
                 checkBoxEnableImageProcessing.Checked = true; // 觸發 CheckedChanged
                 return;
@@ -2725,9 +2161,8 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
 
-            // 不同方向 → 切換（不改 checkbox）
+            // 不同方向 → 切換
             _liveDisplayDirection = dir;
-            _liveCameraManager?.SetLiveDisplayDirection(dir);
             UpdateLiveDirectionVisual(dir);
         }
 
@@ -2749,17 +2184,17 @@ namespace AniloxRoll.Monitor.Forms
         {
             try
             {
-            if (!_lastReviewProcessedMode)
+            if (!_stitchCoordinator.LastReviewProcessedMode)
             {
                 // 未勾選 → 自動勾選 + 設方向
-                _activeRidgeDirection = dir;
+                _stitchCoordinator.ActiveRidgeDirection = dir;
                 _interactionHelper.SetRidgeDirection(dir);
                 UpdateRidgeDirectionVisual(dir);
                 checkBoxShowProcessed.Checked = true; // 觸發 CheckedChanged → 載入處理圖
                 return;
             }
 
-            if (dir == _activeRidgeDirection)
+            if (dir == _stitchCoordinator.ActiveRidgeDirection)
             {
                 // 同方向再點一次 → 取消勾選（回原圖）
                 UpdateRidgeDirectionVisual(null);
@@ -2768,28 +2203,26 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             // 不同方向 → 切換（重新載入處理圖）
-            _activeRidgeDirection = dir;
+            _stitchCoordinator.ActiveRidgeDirection = dir;
             _interactionHelper.SetRidgeDirection(dir);
             UpdateRidgeDirectionVisual(dir);
             _interactionHelper.SaveCanvasView();
 
-            if (_stitchedImages != null)
+            if (_stitchCoordinator.IsStitchMode)
             {
-                // cbReviewGrabId.Items 為 string，用 _grabIdInfos[idx] 取得完整資訊
                 int idx = cbReviewGrabId.SelectedIndex;
-                if (idx >= 0 && idx < _grabIdInfos.Count)
+                if (idx >= 0 && idx < _dataStatsPresenter.GrabIdInfos.Count)
                 {
-                    var info = _grabIdInfos[idx];
-                    await LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest, true);
+                    var info = _dataStatsPresenter.GrabIdInfos[idx];
+                    await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest, true);
                 }
             }
             else
             {
-                // 非合圖路徑：重新載入所有處理圖（方向已更新）
-                ClearStitchedMode();
+                _stitchCoordinator.ClearStitchedMode();
                 await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
-                ApplyGlobalMergeIfNeeded();
-                UpdateOverviewChartFromRepository();
+                _stitchCoordinator.ApplyGlobalMergeIfNeeded();
+                _stitchCoordinator.UpdateOverviewChartFromRepository();
             }
             }
             catch (Exception ex) { Trace.WriteLine($"[SwitchRidgeDirection] {ex}"); }
@@ -2799,951 +2232,10 @@ namespace AniloxRoll.Monitor.Forms
         {
             chartMuraVertical.BackColor = (dir == "v")
                 ? System.Drawing.Color.FromArgb(230, 240, 255) : System.Drawing.SystemColors.Control;
-            chartMuraHorizontal.BackColor = (dir == "h")
-                ? System.Drawing.Color.FromArgb(230, 240, 255) : System.Drawing.SystemColors.Control;
+            if (chartMuraHorizontal != null)
+                chartMuraHorizontal.BackColor = (dir == "h")
+                    ? System.Drawing.Color.FromArgb(230, 240, 255) : System.Drawing.SystemColors.Control;
         }
-
-        private void ShowStitchedCameraInCanvas(int idx)
-        {
-            if (_stitchedImages == null) return;
-            var bmp = (idx >= 0 && idx < _stitchedImages.Length) ? _stitchedImages[idx] : null;
-
-            // 設定 scaleFactor 和 cameraIndex，FitToScreen 觸發 StatusChanged 時 mm 換算才正確
-            _interactionHelper.SetCanvasScaleAndCamera(
-                InspectionEngineConfig.DefaultSaveResizeScale, idx);
-
-            canvasMain.Image = bmp;
-            if (bmp != null) _interactionHelper.RestoreCanvasViewOrFit();
-
-            // 更新 MuraChart（含 X 軸範圍，與 Period 模式一致）
-            // 若有 #CFG 設定快照，用抓圖當時的 Ops/Pos/閾值；否則 fallback 到當前 _settings
-            if (_muraChartHelper != null && _settings != null)
-            {
-                float[] mean = (_stitchedCurveMean != null && idx >= 0 && idx < _stitchedCurveMean.Length)
-                    ? _stitchedCurveMean[idx] : null;
-                float[] max = (_stitchedCurveMax != null && idx >= 0 && idx < _stitchedCurveMax.Length)
-                    ? _stitchedCurveMax[idx] : null;
-
-                double[] posArr;
-                if (_currentGrabConfig != null)
-                {
-                    double opsUm = (idx >= 0 && idx < _currentGrabConfig.CamOps.Length)
-                        ? _currentGrabConfig.CamOps[idx] : _settings.Cam1_Ops;
-                    _muraChartHelper.SetOps(opsUm);
-                    _muraChartHelper.SetThresholds(
-                        _currentGrabConfig.ErrorValueMean, _currentGrabConfig.ErrorValueMax);
-                    posArr = _currentGrabConfig.CamPos;
-                }
-                else
-                {
-                    posArr = _settings.GetCameraStartPositionMmArray();
-                }
-
-                double startPos = (idx >= 0 && idx < posArr.Length) ? posArr[idx] : 0;
-                _interactionHelper.TryComputeCurrentViewRange(idx, out double leftMm, out double rightMm);
-                _muraChartHelper.UpdateDataAndView(mean, max, startPos, leftMm, rightMm);
-            }
-
-            // 更新法向（水平）Mura 曲線圖
-            if (_muraChartHorizontalHelper != null)
-            {
-                float[] rowMean = (_stitchedRowCurveMean != null && idx >= 0 && idx < _stitchedRowCurveMean.Length)
-                    ? _stitchedRowCurveMean[idx] : null;
-                float[] rowMax = (_stitchedRowCurveMax != null && idx >= 0 && idx < _stitchedRowCurveMax.Length)
-                    ? _stitchedRowCurveMax[idx] : null;
-                if (rowMean != null)
-                {
-                    _muraChartHorizontalHelper.UpdateData(rowMean, rowMax);
-                    _interactionHelper.RefreshRowChartRange();
-                }
-            }
-        }
-
-        /// <summary>
-        /// 合圖路徑：用 _stitchedCurveMean/Max 更新 chart1 全覽圖。
-        /// </summary>
-        private void UpdateStitchedOverviewChart()
-        {
-            if (_stitchedCurveMean == null) return;
-
-            double[] opsArr, posArr;
-            float errMean, errMax;
-            if (_currentGrabConfig != null)
-            {
-                opsArr  = _currentGrabConfig.CamOps;
-                posArr  = _currentGrabConfig.CamPos;
-                errMean = _currentGrabConfig.ErrorValueMean;
-                errMax  = _currentGrabConfig.ErrorValueMax;
-            }
-            else
-            {
-                opsArr  = _settings.GetCameraOpsUmArray();
-                posArr  = _settings.GetCameraStartPositionMmArray();
-                errMean = _settings.ErrorValueMean;
-                errMax  = _settings.ErrorValueMax;
-            }
-
-            UpdateOverviewChart(_stitchedCurveMean, _stitchedCurveMax, opsArr, posArr, errMean, errMax);
-        }
-
-        /// <summary>
-        /// 原圖路徑：從當前 Repository 時間點讀取 7 台 .bin 曲線更新 chart1 全覽圖。
-        /// </summary>
-        private void UpdateOverviewChartFromRepository()
-        {
-            if (_stitchedOverviewHelper == null || _stitchedImages != null) return;
-
-            var images = _imageRepository.GetImages(
-                _dateTimeNavigator.GetCurrentYear(),
-                _dateTimeNavigator.GetCurrentMonth(),
-                _dateTimeNavigator.GetCurrentDay(),
-                _dateTimeNavigator.GetCurrentHour(),
-                _dateTimeNavigator.GetCurrentMin(),
-                _dateTimeNavigator.GetCurrentSec());
-
-            if (images == null || images.Count == 0)
-            {
-                chartOverview.Series["Mean"].Points.Clear();
-                chartOverview.Series["Max"].Points.Clear();
-                if (chartOverview.ChartAreas.Count > 0)
-                    chartOverview.ChartAreas[0].AxisX.ScaleView.ZoomReset();
-                return;
-            }
-
-            var curveMean = new float[CameraCount][];
-            var curveMax  = new float[CameraCount][];
-            for (int i = 0; i < CameraCount; i++)
-            {
-                if (!images.TryGetValue(i + 1, out string path)) continue;
-                string basePath = GetCurveBasePath(path);
-                curveMean[i] = InspectionEngine.LoadCurveBin(basePath + "_mean_v.bin")
-                            ?? InspectionEngine.LoadCurveBin(basePath + "_mean.bin");
-                curveMax[i]  = InspectionEngine.LoadCurveBin(basePath + "_max_v.bin")
-                            ?? InspectionEngine.LoadCurveBin(basePath + "_max.bin");
-            }
-
-            var cfg = _interactionHelper?.ReviewConfig;
-            if (cfg != null)
-            {
-                UpdateOverviewChart(curveMean, curveMax,
-                    cfg.CamOps, cfg.CamPos, cfg.ErrorValueMean, cfg.ErrorValueMax);
-            }
-            else
-            {
-                UpdateOverviewChart(curveMean, curveMax,
-                    _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray(),
-                    _settings.ErrorValueMean, _settings.ErrorValueMax);
-            }
-        }
-
-        /// <summary>
-        /// 將 7 台相機的曲線依機台布局位置合併到全覽圖。
-        /// 重疊區域：Mean 取平均、Max 取最大值。target 預設 chart1（回顧），可指定 chartLiveOverview（即時）。
-        /// </summary>
-        private void UpdateOverviewChart(float[][] allMean, float[][] allMax,
-            double[] opsArr, double[] posArr, float errMean, float errMax,
-            MuraChartHelper target = null)
-        {
-            target = target ?? _stitchedOverviewHelper;
-            if (target == null || allMean == null) return;
-
-            // 全域範圍：涵蓋全部 7 台位置，缺圖用現有影像寬度平均類推
-            double sumWidthMm = 0;
-            int widthCount = 0;
-            double minOpsUm = double.MaxValue;
-            for (int i = 0; i < CameraCount; i++)
-            {
-                if (opsArr[i] > 0 && opsArr[i] < minOpsUm) minOpsUm = opsArr[i];
-                var curve = allMean[i];
-                if (curve != null && curve.Length > 0)
-                {
-                    sumWidthMm += curve.Length * (opsArr[i] / 1000.0);
-                    widthCount++;
-                }
-            }
-            if (minOpsUm <= 0 || minOpsUm == double.MaxValue) minOpsUm = 33.0;
-            double avgWidthMm = widthCount > 0 ? sumWidthMm / widthCount : 400.0;
-
-            double globalMin = double.MaxValue, globalMax = double.MinValue;
-            for (int i = 0; i < CameraCount; i++)
-            {
-                double camStart = posArr[i];
-                var curve = allMean[i];
-                double camEnd = (curve != null && curve.Length > 0)
-                    ? camStart + curve.Length * (opsArr[i] / 1000.0)
-                    : camStart + avgWidthMm;
-                if (camStart < globalMin) globalMin = camStart;
-                if (camEnd   > globalMax) globalMax = camEnd;
-            }
-            if (globalMin >= globalMax) return;
-
-            // 格點間距：至少 OPS 精度，但上限 MaxOverviewPoints 點
-            double gridMm = Math.Max(minOpsUm / 1000.0, (globalMax - globalMin) / MaxOverviewPoints);
-
-            int totalLen = (int)Math.Ceiling((globalMax - globalMin) / gridMm);
-            if (totalLen <= 0 || totalLen > MaxOverviewPoints + 1) return;
-
-            // 兩層合併：
-            // 1) bin 內降解析（同一台相機多點 → 1 bin）→ max-window 保峰值
-            // 2) 相機重疊（多台相機同一 bin）→ Mean 取平均、Max 取最大值
-            // 先逐台 max-window 到暫存，再跨台合併
-            var mergedMean   = new float[totalLen];
-            var mergedMax    = new float[totalLen];
-            var overlapCount = new int[totalLen];
-
-            for (int i = 0; i < CameraCount; i++)
-            {
-                var curveMean = allMean[i];
-                if (curveMean == null || curveMean.Length == 0) continue;
-                var curveMax = (allMax != null && i < allMax.Length) ? allMax[i] : null;
-
-                double camOpsMm = opsArr[i] / 1000.0;
-                double camStart = posArr[i];
-
-                // 逐台 max-window：同一台相機多個原始點落入同一 bin 時取最大值
-                var camBinMean = new float[totalLen];
-                var camBinMax  = new float[totalLen];
-                var camBinHit  = new bool[totalLen];
-
-                for (int j = 0; j < curveMean.Length; j++)
-                {
-                    int idx = (int)((camStart + j * camOpsMm - globalMin) / gridMm);
-                    if (idx < 0 || idx >= totalLen) continue;
-
-                    if (!camBinHit[idx] || curveMean[j] > camBinMean[idx])
-                        camBinMean[idx] = curveMean[j];
-
-                    float mv = (curveMax != null && j < curveMax.Length) ? curveMax[j] : 0;
-                    if (!camBinHit[idx] || mv > camBinMax[idx])
-                        camBinMax[idx] = mv;
-
-                    camBinHit[idx] = true;
-                }
-
-                // 跨台合併：Mean 累加（後面除 count）、Max 取最大值
-                for (int k = 0; k < totalLen; k++)
-                {
-                    if (!camBinHit[k]) continue;
-                    mergedMean[k] += camBinMean[k];
-                    overlapCount[k] += 1;
-                    if (camBinMax[k] > mergedMax[k]) mergedMax[k] = camBinMax[k];
-                }
-            }
-
-            // 重疊區域 Mean 取平均
-            for (int i = 0; i < totalLen; i++)
-                if (overlapCount[i] > 1) mergedMean[i] /= overlapCount[i];
-
-            // 降解析後每點間距 = gridMm，轉回 μm 給 MuraChartHelper
-            target.SetOps(gridMm * 1000.0);
-            target.SetThresholds(errMean, errMax);
-
-            // 合圖模式：帶入 canvas 當前視野，資料+zoom 單次重繪避免閃爍
-            double viewLeft = double.NaN, viewRight = double.NaN;
-            if (_settings.StitchMode != StitchMode.Vertical)
-                _interactionHelper.TryComputeCurrentViewRange(0, out viewLeft, out viewRight);
-            target.UpdateDataAndView(mergedMean, mergedMax, globalMin, viewLeft, viewRight);
-        }
-
-        /// <summary>
-        /// 載入多張影像的 .bin 曲線，Mean 取平均、Max 取最大值。
-        /// 曲線保持全解析度（mm 座標由 MuraChart 映射，不需與圖片 pixel 對齊）。
-        /// </summary>
-        private static void MergeCurves(IList<string> imagePaths,
-            out float[] mergedMean, out float[] mergedMax)
-        {
-            mergedMean = null;
-            mergedMax  = null;
-
-            var allMean = new List<float[]>();
-            var allMax  = new List<float[]>();
-            int curveLen = 0;
-
-            foreach (string path in imagePaths)
-            {
-                string basePath = GetCurveBasePath(path);
-                var mean = InspectionEngine.LoadCurveBin(basePath + "_mean_v.bin")
-                        ?? InspectionEngine.LoadCurveBin(basePath + "_mean.bin");
-                var max  = InspectionEngine.LoadCurveBin(basePath + "_max_v.bin")
-                        ?? InspectionEngine.LoadCurveBin(basePath + "_max.bin");
-                if (mean != null && max != null && mean.Length > 0)
-                {
-                    allMean.Add(mean);
-                    allMax.Add(max);
-                    if (curveLen == 0) curveLen = mean.Length;
-                }
-            }
-
-            if (allMean.Count == 0 || curveLen == 0) return;
-
-            // 合併：Mean 取全部平均，Max 取全部最大值
-            mergedMean = new float[curveLen];
-            mergedMax  = new float[curveLen];
-            for (int x = 0; x < curveLen; x++)
-            {
-                float sumMean = 0;
-                float maxVal  = float.MinValue;
-                int count = 0;
-                for (int j = 0; j < allMean.Count; j++)
-                {
-                    if (x < allMean[j].Length) { sumMean += allMean[j][x]; count++; }
-                    if (x < allMax[j].Length && allMax[j][x] > maxVal) maxVal = allMax[j][x];
-                }
-                mergedMean[x] = count > 0 ? sumMean / count : 0;
-                mergedMax[x]  = maxVal > float.MinValue ? maxVal : 0;
-            }
-        }
-
-        /// <summary>
-        /// Row 曲線合併：多張影像的 row curves 依時間順序串接（非 per-index 平均），
-        /// 因為每張圖代表不同的法向（axial）位置。
-        /// </summary>
-        private static void MergeRowCurves(IList<string> imagePaths,
-            out float[] mergedMean, out float[] mergedMax)
-        {
-            mergedMean = null;
-            mergedMax  = null;
-
-            var allMean = new List<float[]>();
-            var allMax  = new List<float[]>();
-
-            foreach (string path in imagePaths)
-            {
-                string basePath = GetCurveBasePath(path);
-                var mean = InspectionEngine.LoadCurveBin(basePath + "_mean_h.bin")
-                        ?? InspectionEngine.LoadCurveBin(basePath + "_row_mean.bin");
-                var max  = InspectionEngine.LoadCurveBin(basePath + "_max_h.bin")
-                        ?? InspectionEngine.LoadCurveBin(basePath + "_row_max.bin");
-                if (mean != null && max != null && mean.Length > 0)
-                {
-                    allMean.Add(mean);
-                    allMax.Add(max);
-                }
-            }
-
-            if (allMean.Count == 0) return;
-
-            // 串接：每張圖的 row curves 依序接起來（對應 GrabImageStitcher 的垂直拼接）
-            int totalLen = 0;
-            foreach (var a in allMean) totalLen += a.Length;
-
-            mergedMean = new float[totalLen];
-            mergedMax  = new float[totalLen];
-            int offset = 0;
-            for (int j = 0; j < allMean.Count; j++)
-            {
-                Array.Copy(allMean[j], 0, mergedMean, offset, allMean[j].Length);
-                Array.Copy(allMax[j],  0, mergedMax,  offset, allMax[j].Length);
-                offset += allMean[j].Length;
-            }
-        }
-
-        private void StepReviewGrabId(int delta)
-        {
-            if (_grabIdInfos.Count == 0) return;
-            int next = cbReviewGrabId.SelectedIndex + delta;
-            if (next >= 0 && next < cbReviewGrabId.Items.Count)
-                cbReviewGrabId.SelectedIndex = next;   // triggers OnReviewGrabIdChanged
-        }
-
-        private void StepDataGrabId(int delta)
-        {
-            if (_grabIdInfos.Count == 0) return;
-            int next = cbDataGrabId.SelectedIndex + delta;
-            if (next >= 0 && next < cbDataGrabId.Items.Count)
-                cbDataGrabId.SelectedIndex = next;   // triggers OnSingleSheetComboChanged
-        }
-
-        private void UpdateGrabIdNavState()
-        {
-            int idx   = cbReviewGrabId.SelectedIndex;
-            int count = cbReviewGrabId.Items.Count;
-            // 降序：Prev(+1)=更舊=更大 index，Next(-1)=更新=更小 index
-            btnGrabIdPrev.Enabled = idx >= 0 && idx < count - 1;
-            btnGrabIdNext.Enabled = idx > 0;
-            UpdateDataGrabIdNavState();
-        }
-
-        private void UpdateDataGrabIdNavState()
-        {
-            int idx   = cbDataGrabId.SelectedIndex;
-            int count = cbDataGrabId.Items.Count;
-            btnGrabIdDataPrev.Enabled = idx >= 0 && idx < count - 1;
-            btnGrabIdDataNext.Enabled = idx > 0;
-        }
-
-        /// <summary>
-        /// 時間 ComboBox 變更時，同步 cbReviewGrabId 到包含該時間的序號。
-        /// </summary>
-        private void SyncGrabIdFromTimeCombos()
-        {
-            if (_syncingGrabIdNav || _grabIdInfos.Count == 0) return;
-            DateTime current = _dateTimeNavigator.GetCurrentPeriodOrDefault(DateTime.MinValue);
-            if (current == DateTime.MinValue) return;
-
-            // 找包含 current 的 grab ID（Earliest ≤ current ≤ Latest），
-            // 若無精確匹配則找 Earliest 最接近且 ≤ current 的
-            int bestIdx = -1;
-            long bestDiff = long.MaxValue;
-            for (int i = 0; i < _grabIdInfos.Count; i++)
-            {
-                var info = _grabIdInfos[i];
-                if (current >= info.Earliest && current <= info.Latest)
-                {
-                    bestIdx = i;
-                    break;
-                }
-                long diff = Math.Abs(current.Ticks - info.Earliest.Ticks);
-                if (diff < bestDiff)
-                {
-                    bestDiff = diff;
-                    bestIdx = i;
-                }
-            }
-
-            if (bestIdx >= 0 && bestIdx < cbReviewGrabId.Items.Count
-                && bestIdx != cbReviewGrabId.SelectedIndex)
-            {
-                _syncingGrabIdNav = true;
-                try { cbReviewGrabId.SelectedIndex = bestIdx; }
-                finally { _syncingGrabIdNav = false; }
-            }
-        }
-
-        private void RefreshStats()
-        {
-            if (string.IsNullOrWhiteSpace(_statsDataRootPath)) return;
-
-            // 序號模式（groupBoxGrabIdRange 或 grpDataSingleSheet 活動中）
-            if (_activeStatMode != groupBoxTimeRange
-                && cbGrabIdStart.SelectedIndex >= 0 && cbGrabIdEnd.SelectedIndex >= 0
-                && _grabIdInfos.Count > 0)
-            {
-                var startInfo = _grabIdInfos[cbGrabIdStart.SelectedIndex];
-                var endInfo   = _grabIdInfos[cbGrabIdEnd.SelectedIndex];
-
-                var stats   = InspectionStatisticsService.ComputeByGrabIdRange(
-                    _statsDataRootPath, startInfo.GrabId, endInfo.GrabId);
-                var details = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
-                    _statsDataRootPath, startInfo.GrabId, endInfo.GrabId);
-
-                _statsPresenter.Update(stats);
-                _currentDetails = details;
-                ApplyFailFilter();
-                return;
-            }
-
-            // 時間模式
-            if (!TryParseStatDateTime(out DateTime start, out DateTime end)) return;
-
-            // 找出時間範圍內的序號，用序號邏輯統計（同一序號同一相機一票否決）
-            var grabInfosInRange = _grabIdInfos
-                .Where(g => g.Earliest <= end && g.Latest >= start).ToList();
-
-            if (grabInfosInRange.Count > 0)
-            {
-                string startId = grabInfosInRange.OrderBy(g => g.GrabId, StringComparer.Ordinal).First().GrabId;
-                string endId   = grabInfosInRange.OrderBy(g => g.GrabId, StringComparer.Ordinal).Last().GrabId;
-
-                var stats   = InspectionStatisticsService.ComputeByGrabIdRange(
-                    _statsDataRootPath, startId, endId);
-                var details = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
-                    _statsDataRootPath, startId, endId);
-
-                _statsPresenter.Update(stats);
-                _currentDetails = details;
-            }
-            else
-            {
-                var statsTime = InspectionStatisticsService.Compute(_statsDataRootPath, start, end);
-                _statsPresenter.Update(statsTime);
-                _currentDetails = new List<GrabDetail>();
-            }
-            ApplyFailFilter();
-        }
-
-        private void InitGrabDetailListView()
-        {
-            listViewGrabDetail.View          = View.Details;
-            listViewGrabDetail.FullRowSelect = true;
-            listViewGrabDetail.GridLines     = true;
-            listViewGrabDetail.Columns.Clear();
-            listViewGrabDetail.Items.Clear();
-
-            listViewGrabDetail.Columns.Add("料件序號", -1, HorizontalAlignment.Center);
-            for (int i = 1; i <= CameraCount; i++)
-                listViewGrabDetail.Columns.Add($"{i}", -1, HorizontalAlignment.Center);
-            FitListViewColumnsProportional(listViewGrabDetail);
-        }
-
-        private static readonly System.Drawing.Color _detailPass  = System.Drawing.Color.FromArgb(232, 245, 233);
-        private static readonly System.Drawing.Color _detailFail  = System.Drawing.Color.FromArgb(255, 235, 238);
-        private static readonly System.Drawing.Color _detailEmpty = SystemColors.Window;
-
-        private void UpdateGrabDetailListView(List<GrabDetail> details)
-        {
-            listViewGrabDetail.BeginUpdate();
-            listViewGrabDetail.Items.Clear();
-
-            foreach (var d in details)
-            {
-                var item = new ListViewItem(d.GrabId);
-                bool rowHasFail = false;
-
-                for (int i = 0; i < CameraCount; i++)
-                {
-                    if (d.CamResult[i] == null)
-                    {
-                        item.SubItems.Add("—");
-                    }
-                    else if (d.CamResult[i] == false)
-                    {
-                        item.SubItems.Add("Pass");
-                    }
-                    else
-                    {
-                        item.SubItems.Add("Fail");
-                        rowHasFail = true;
-                    }
-                }
-
-                item.BackColor = rowHasFail ? _detailFail : _detailPass;
-                listViewGrabDetail.Items.Add(item);
-            }
-
-            listViewGrabDetail.EndUpdate();
-        }
-
-        private static void AutoFitListViewColumns(ListView lv)
-        {
-            for (int i = 0; i < lv.Columns.Count; i++)
-            {
-                lv.AutoResizeColumn(i, ColumnHeaderAutoResizeStyle.ColumnContent);
-                int contentWidth = lv.Columns[i].Width;
-                lv.AutoResizeColumn(i, ColumnHeaderAutoResizeStyle.HeaderSize);
-                if (contentWidth > lv.Columns[i].Width)
-                    lv.Columns[i].Width = contentWidth;
-            }
-        }
-
-        /// <summary>
-        /// 依欄位標題文字長度按比例分配 ListView 欄寬，填滿控制項寬度（不出現水平捲軸）。
-        /// </summary>
-        private static void FitListViewColumnsProportional(ListView lv)
-        {
-            if (lv.Columns.Count == 0) return;
-            int available = lv.ClientSize.Width - SystemInformation.VerticalScrollBarWidth;
-            if (available <= 0) return;
-
-            using (var g = lv.CreateGraphics())
-            {
-                var weights = new float[lv.Columns.Count];
-                float totalWeight = 0;
-                for (int i = 0; i < lv.Columns.Count; i++)
-                {
-                    float w = g.MeasureString(lv.Columns[i].Text + "WW", lv.Font).Width;
-                    weights[i] = w;
-                    totalWeight += w;
-                }
-                if (totalWeight <= 0) return;
-
-                int assigned = 0;
-                for (int i = 0; i < lv.Columns.Count; i++)
-                {
-                    int colW = (i < lv.Columns.Count - 1)
-                        ? (int)(available * weights[i] / totalWeight)
-                        : available - assigned;
-                    lv.Columns[i].Width = Math.Max(20, colW);
-                    assigned += lv.Columns[i].Width;
-                }
-            }
-        }
-
-        // ── 異常篩選 ─────────────────────────────────────────────────────
-
-        private void BtnShowFail_Click(object sender, EventArgs e)
-        {
-            _showFailOnly = !_showFailOnly;
-            btnShowFail.Text      = _showFailOnly ? "顯示全部" : "篩選異常";
-            btnShowFail.BackColor = _showFailOnly
-                ? System.Drawing.Color.FromArgb(255, 235, 238)
-                : SystemColors.Control;
-            ApplyFailFilter();
-        }
-
-        private void ApplyFailFilter()
-        {
-            var toShow = _showFailOnly
-                ? _currentDetails.Where(d => d.CamResult.Any(r => r == true)).ToList()
-                : _currentDetails;
-            UpdateGrabDetailListView(toShow);
-        }
-
-        // ── 趨勢圖（年 / 月 / 日）────────────────────────────────────────
-
-        private void InitPeriodCharts()
-        {
-            var cs = _settings.Chart;
-            InitOneChart(chartYearly,  yDefault: cs.YearlyYMax,  xCount: 12, xStart: 1);  // 月份 1-12
-            InitOneChart(chartMonthly, yDefault: cs.MonthlyYMax, xCount: 31, xStart: 1);  // 日期 1-31
-            InitOneChart(chartDaily,   yDefault: cs.DailyYMax,   xCount: 24, xStart: 0);  // 小時 0-23
-
-            // ScaleMode=Auto 時，初始即套用自動範圍（空資料 → 預設 niceMax=5）
-            if (cs.ScaleMode == ChartScaleMode.Auto)
-            {
-                var empty = new List<PeriodStats>();
-                ApplyAutoScale(chartYearly,  empty);
-                ApplyAutoScale(chartMonthly, empty);
-                ApplyAutoScale(chartDaily,   empty);
-            }
-
-            chartYearly.MouseClick  -= PeriodChart_ToggleAutoScale;
-            chartMonthly.MouseClick -= PeriodChart_ToggleAutoScale;
-            chartDaily.MouseClick   -= PeriodChart_ToggleAutoScale;
-            chartYearly.MouseClick  += PeriodChart_ToggleAutoScale;
-            chartMonthly.MouseClick += PeriodChart_ToggleAutoScale;
-            chartDaily.MouseClick   += PeriodChart_ToggleAutoScale;
-        }
-
-        private int _lastChartToggleTick;
-
-        private void PeriodChart_ToggleAutoScale(object sender, System.Windows.Forms.MouseEventArgs e)
-        {
-            int now = Environment.TickCount;
-            if (now - _lastChartToggleTick < 500) return;
-            _lastChartToggleTick = now;
-
-            var chart = (System.Windows.Forms.DataVisualization.Charting.Chart)sender;
-            if (chart.ChartAreas.Count == 0) return;
-
-            bool isAuto = "auto".Equals(chart.Tag);
-
-            if (isAuto)
-            {
-                int fixedMax = chart == chartYearly  ? _settings.Chart.YearlyYMax
-                             : chart == chartMonthly ? _settings.Chart.MonthlyYMax
-                             :                         _settings.Chart.DailyYMax;
-                ApplyFixedScale(chart, fixedMax);
-            }
-            else
-            {
-                // 從目前資料重新計算自動範圍（ApplyAutoScale 內設 Tag="auto"）
-                var data = new List<PeriodStats>();
-                var sPass = chart.Series["合格"];
-                var sFail = chart.Series["異常"];
-                for (int i = 0; i < sPass.Points.Count; i++)
-                    data.Add(new PeriodStats { Label = "", Pass = (int)sPass.Points[i].YValues[0], Fail = (int)sFail.Points[i].YValues[0] });
-                ApplyAutoScale(chart, data);
-            }
-        }
-
-        private static void InitOneChart(
-            System.Windows.Forms.DataVisualization.Charting.Chart chart,
-            int xLabelAngle = 0,
-            int yDefault    = 10,
-            int xCount      = 0,
-            int xStart      = 1)
-        {
-            chart.ChartAreas.Clear();
-            chart.Series.Clear();
-            chart.Legends.Clear();
-            chart.Titles.Clear();
-
-            var area = new System.Windows.Forms.DataVisualization.Charting.ChartArea("Main");
-            // X 軸：格線（垂直虛線）、刻度、每格顯示標籤、小字型
-            area.AxisX.MajorGrid.Enabled        = true;
-            area.AxisX.MajorGrid.LineColor      = System.Drawing.Color.FromArgb(220, 220, 220);
-            area.AxisX.MajorGrid.LineDashStyle  = System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Dot;
-            area.AxisX.MajorTickMark.Enabled    = true;
-            area.AxisX.MajorTickMark.LineColor  = System.Drawing.Color.FromArgb(120, 120, 120);
-            area.AxisX.IsMarginVisible          = false;
-            area.AxisX.Interval                 = 1;
-            area.AxisX.LabelStyle.Angle         = xLabelAngle;
-            area.AxisX.LabelStyle.Font          = new System.Drawing.Font("Arial", 5f);
-            // Y 軸（左）：完全隱藏
-            area.AxisY.LineColor                = System.Drawing.Color.Transparent;
-            area.AxisY.MajorGrid.Enabled        = false;
-            area.AxisY.MajorTickMark.Enabled    = false;
-            area.AxisY.MinorTickMark.Enabled    = false;
-            area.AxisY.LabelStyle.Enabled       = false;
-            area.AxisY.Minimum                  = 0;
-            // Y 軸（left/Primary）：格線由此軸驅動，但標籤隱藏
-            // 與 chartMura 相同策略：Primary 軸提供格線，Secondary 軸提供右側標籤
-            area.AxisY.Interval              = yDefault / 5.0;
-            area.AxisY.Maximum               = yDefault;
-            area.AxisY.MajorGrid.Enabled     = true;
-            area.AxisY.MajorGrid.LineColor   = System.Drawing.Color.FromArgb(220, 220, 220);
-            area.AxisY.MajorGrid.LineDashStyle =
-                System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Dot;
-            // Y2 軸（right/Secondary）：顯示右側標籤；格線由 AxisY 驅動故此處關閉
-            area.AxisY2.Enabled                 = System.Windows.Forms.DataVisualization.Charting.AxisEnabled.True;
-            area.AxisY2.MajorGrid.Enabled       = false;
-            area.AxisY2.MajorTickMark.Enabled   = true;
-            area.AxisY2.MajorTickMark.LineColor = System.Drawing.Color.FromArgb(120, 120, 120);
-            area.AxisY2.LabelStyle.Font         = new System.Drawing.Font("Arial", 5f);
-            area.AxisY2.Minimum                 = 0;
-            area.AxisY2.Maximum                 = yDefault;
-            area.AxisY2.Interval                = yDefault / 5.0;
-            area.AxisY2.LabelStyle.Interval     = yDefault;
-            // 縮小 InnerPlotPosition，左邊界最小化（Y 軸在右側不佔左邊空間）
-            area.InnerPlotPosition.Auto     = false;
-            area.InnerPlotPosition.X        = 0f;
-            area.InnerPlotPosition.Y        = 12f;
-            area.InnerPlotPosition.Width    = 93f;
-            area.InnerPlotPosition.Height   = 66f;
-            chart.ChartAreas.Add(area);
-
-            // Legend 放在圖表內右上角，透明背景
-            var legend = new System.Windows.Forms.DataVisualization.Charting.Legend("L");
-            legend.IsDockedInsideChartArea  = true;
-            legend.DockedToChartArea        = "Main";
-            legend.Docking                  = System.Windows.Forms.DataVisualization.Charting.Docking.Top;
-            legend.Alignment                = System.Drawing.StringAlignment.Far;
-            legend.Font                     = new System.Drawing.Font("Arial", 6.5f);
-            legend.BackColor                = System.Drawing.Color.Transparent;
-            legend.BorderColor              = System.Drawing.Color.Transparent;
-            chart.Legends.Add(legend);
-
-            var sPass = new System.Windows.Forms.DataVisualization.Charting.Series("合格");
-            sPass.ChartType  = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.StackedColumn;
-            sPass.Color      = System.Drawing.Color.FromArgb(102, 187, 106);
-            sPass.ChartArea  = "Main";
-            sPass.Legend     = "L";
-            sPass.YAxisType  = System.Windows.Forms.DataVisualization.Charting.AxisType.Secondary;
-            chart.Series.Add(sPass);
-
-            var sFail = new System.Windows.Forms.DataVisualization.Charting.Series("異常");
-            sFail.ChartType  = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.StackedColumn;
-            sFail.Color      = System.Drawing.Color.FromArgb(239, 83, 80);
-            sFail.ChartArea  = "Main";
-            sFail.Legend     = "L";
-            sFail.YAxisType  = System.Windows.Forms.DataVisualization.Charting.AxisType.Secondary;
-            chart.Series.Add(sFail);
-
-            // 預填 0 值佔位：建立 X category 軸，讓 grid/tick/axis 在空圖時就能渲染
-            // FillPeriodChart 載入真實資料前會先 Points.Clear()，不影響顯示
-            if (xCount > 0)
-            {
-                for (int i = 0; i < xCount; i++)
-                {
-                    sPass.Points.AddXY((xStart + i).ToString(), 0);
-                    sFail.Points.AddXY((xStart + i).ToString(), 0);
-                }
-            }
-            // 無標題
-        }
-
-        private void UpdatePeriodCharts(DateTime start, DateTime end)
-        {
-            var byMonth = InspectionStatisticsService.ComputeGroupedByMonthOfYear(_statsDataRootPath, start, end);
-            var byDay   = InspectionStatisticsService.ComputeGroupedByDayOfMonth(_statsDataRootPath,  start, end);
-            var byHour  = InspectionStatisticsService.ComputeGroupedByHourOfDay(_statsDataRootPath,   start, end);
-
-            FillPeriodChart(chartYearly,  byMonth);  // 月
-            FillPeriodChart(chartMonthly, byDay);    // 日
-            FillPeriodChart(chartDaily,   byHour);   // 時
-        }
-
-        private void FillPeriodChart(
-            System.Windows.Forms.DataVisualization.Charting.Chart chart,
-            List<PeriodStats> data)
-        {
-            var sPass = chart.Series["合格"];
-            var sFail = chart.Series["異常"];
-            sPass.Points.Clear();
-            sFail.Points.Clear();
-            foreach (var p in data)
-            {
-                sPass.Points.AddXY(p.Label, p.Pass);
-                sFail.Points.AddXY(p.Label, p.Fail);
-            }
-
-            // 自動範圍：全域設定為 Auto 或單圖被點擊切換為 auto
-            if (_settings.Chart.ScaleMode == ChartScaleMode.Auto || "auto".Equals(chart.Tag))
-                ApplyAutoScale(chart, data);
-        }
-
-        private static void ApplyAutoScale(
-            System.Windows.Forms.DataVisualization.Charting.Chart chart,
-            List<PeriodStats> data)
-        {
-            chart.Tag = "auto";
-            int maxTotal = 0;
-            foreach (var p in data)
-                maxTotal = Math.Max(maxTotal, p.Pass + p.Fail);
-            int niceMax = Math.Max(5, (int)(Math.Ceiling(maxTotal / 5.0) * 5));
-            SetChartYRange(chart, niceMax * 1.05, niceMax / 5.0, niceMax);
-        }
-
-        private void ApplyFixedScale(
-            System.Windows.Forms.DataVisualization.Charting.Chart chart, int fixedMax)
-        {
-            chart.Tag = null;
-            SetChartYRange(chart, fixedMax, fixedMax / 5.0, fixedMax);
-        }
-
-        private static void SetChartYRange(
-            System.Windows.Forms.DataVisualization.Charting.Chart chart,
-            double yMax, double yStep, double labelInterval)
-        {
-            var area = chart.ChartAreas["Main"];
-            area.AxisY.Maximum             = yMax;
-            area.AxisY.Interval            = yStep;
-            area.AxisY.MajorGrid.Interval  = yStep;
-            area.AxisY2.Maximum             = yMax;
-            area.AxisY2.Interval            = yStep;
-            area.AxisY2.MajorGrid.Interval  = yStep;
-            area.AxisY2.LabelStyle.Interval = labelInterval;
-        }
-
-        private void ApplyChartScaleFromSettings()
-        {
-            if (_settings.Chart.ScaleMode == ChartScaleMode.Fixed)
-            {
-                ApplyFixedScale(chartYearly,  _settings.Chart.YearlyYMax);
-                ApplyFixedScale(chartMonthly, _settings.Chart.MonthlyYMax);
-                ApplyFixedScale(chartDaily,   _settings.Chart.DailyYMax);
-            }
-            else
-            {
-                foreach (var chart in new[] { chartYearly, chartMonthly, chartDaily })
-                {
-                    if (chart.ChartAreas.Count == 0) continue;
-                    var sPass = chart.Series["合格"];
-                    var sFail = chart.Series["異常"];
-                    var data = new List<PeriodStats>();
-                    for (int i = 0; i < sPass.Points.Count; i++)
-                        data.Add(new PeriodStats { Label = "", Pass = (int)sPass.Points[i].YValues[0], Fail = (int)sFail.Points[i].YValues[0] });
-                    ApplyAutoScale(chart, data);
-                }
-            }
-        }
-
-        // ── 圖表導航列（◄ 年/月/日 ►）────────────────────────────────────
-
-        /// <summary>
-        /// 將 values 填入 cb（帶 _chartNavUpdating guard 防 cascade），選取最後一筆。
-        /// </summary>
-        private void RefillChartComboBox(ComboBox cb, List<int> values, int preferred = -1)
-        {
-            _chartNavUpdating = true;
-            cb.Items.Clear();
-            foreach (var v in values) cb.Items.Add(v.ToString());
-            if (preferred >= 0)
-            {
-                int idx = values.IndexOf(preferred);
-                cb.SelectedIndex = idx >= 0 ? idx : (values.Count > 0 ? values.Count - 1 : -1);
-            }
-            else
-            {
-                cb.SelectedIndex = values.Count > 0 ? values.Count - 1 : -1;
-            }
-            _chartNavUpdating = false;
-        }
-
-        /// <summary>資料夾載入後，以 CSV 中實際存在的年份初始化三列導航。</summary>
-        private void PopulateChartNavigators() => PopulateChartNavigators(null);
-
-        private void PopulateChartNavigators(DateTime? hintDate)
-        {
-            _chartYears = GetAvailableYears();
-            RefillChartComboBox(cbChartYear, _chartYears, hintDate?.Year ?? -1);
-            OnChartYearIndexChanged(hintDate);
-        }
-
-        private void OnChartYearIndexChanged() => OnChartYearIndexChanged(null);
-        private void OnChartYearIndexChanged(DateTime? hint)
-        {
-            int idx = cbChartYear.SelectedIndex;
-            bool ok = idx >= 0 && idx < _chartYears.Count;
-
-            _chartMonths = ok ? GetAvailableMonths(_chartYears[idx]) : new List<int>();
-            RefillChartComboBox(cbChartMonth, _chartMonths, hint?.Month ?? -1);
-
-            if (!ok) return;
-            int year = _chartYears[idx];
-            FillPeriodChart(chartYearly,
-                InspectionStatisticsService.ComputeGroupedByMonthOfYear(_statsDataRootPath,
-                    new DateTime(year, 1, 1), new DateTime(year, 12, 31, 23, 59, 59)));
-
-            OnChartMonthIndexChanged(hint);
-        }
-
-        private void OnChartMonthIndexChanged() => OnChartMonthIndexChanged(null);
-        private void OnChartMonthIndexChanged(DateTime? hint)
-        {
-            int idx  = cbChartMonth.SelectedIndex;
-            int yIdx = cbChartYear.SelectedIndex;
-            bool ok  = idx >= 0 && idx < _chartMonths.Count && yIdx >= 0;
-
-            _chartDays = ok ? GetAvailableDays(_chartYears[yIdx], _chartMonths[idx]) : new List<int>();
-            RefillChartComboBox(cbChartDay, _chartDays, hint?.Day ?? -1);
-
-            if (!ok) return;
-            int year    = _chartYears[yIdx];
-            int month   = _chartMonths[idx];
-            int lastDay = DateTime.DaysInMonth(year, month);
-            FillPeriodChart(chartMonthly,
-                InspectionStatisticsService.ComputeGroupedByDayOfMonth(_statsDataRootPath,
-                    new DateTime(year, month, 1), new DateTime(year, month, lastDay, 23, 59, 59)));
-
-            OnChartDayIndexChanged();
-        }
-
-        private void OnChartDayIndexChanged()
-        {
-            int dIdx = cbChartDay.SelectedIndex;
-            int mIdx = cbChartMonth.SelectedIndex;
-            int yIdx = cbChartYear.SelectedIndex;
-            bool ok  = dIdx >= 0 && mIdx >= 0 && yIdx >= 0
-                    && dIdx < _chartDays.Count && mIdx < _chartMonths.Count && yIdx < _chartYears.Count;
-
-            if (!ok) return;
-            int year  = _chartYears[yIdx];
-            int month = _chartMonths[mIdx];
-            int day   = _chartDays[dIdx];
-            FillPeriodChart(chartDaily,
-                InspectionStatisticsService.ComputeGroupedByHourOfDay(_statsDataRootPath,
-                    new DateTime(year, month, day), new DateTime(year, month, day, 23, 59, 59)));
-        }
-
-        // ── Available date/time string helpers (stat 2-combo) ─────────────
-
-        private List<string> GetAvailableDateStrings() =>
-            _statAvailableTimes.Select(t => t.ToString("yyyy-MM-dd")).Distinct()
-                .OrderByDescending(x => x).ToList();
-
-        private List<string> GetAvailableTimeStrings(string dateStr) =>
-            _statAvailableTimes
-                .Where(t => t.ToString("yyyy-MM-dd") == dateStr)
-                .Select(t => t.ToString("HH:mm:ss"))
-                .Distinct().OrderByDescending(x => x).ToList();
-
-        // ── Available values helpers (period charts) ─────────────────────
-
-        private List<int> GetAvailableYears() =>
-            _statAvailableTimes.Select(t => t.Year).Distinct().ToList();
-
-        private List<int> GetAvailableMonths(int y) =>
-            _statAvailableTimes.Where(t => t.Year == y)
-                               .Select(t => t.Month).Distinct().ToList();
-
-        private List<int> GetAvailableDays(int y, int mo) =>
-            _statAvailableTimes.Where(t => t.Year == y && t.Month == mo)
-                               .Select(t => t.Day).Distinct().ToList();
-
-        private List<int> GetAvailableHours(int y, int mo, int d) =>
-            _statAvailableTimes.Where(t => t.Year == y && t.Month == mo && t.Day == d)
-                               .Select(t => t.Hour).Distinct().ToList();
-
-        private List<int> GetAvailableMinutes(int y, int mo, int d, int h) =>
-            _statAvailableTimes.Where(t => t.Year == y && t.Month == mo && t.Day == d && t.Hour == h)
-                               .Select(t => t.Minute).Distinct().ToList();
-
-        private List<int> GetAvailableSeconds(int y, int mo, int d, int h, int mi) =>
-            _statAvailableTimes.Where(t => t.Year == y && t.Month == mo && t.Day == d
-                                        && t.Hour == h && t.Minute == mi)
-                               .Select(t => t.Second).Distinct().ToList();
 
         // ── TrackBar 滾輪：每格僅移動 1 ──────────────────────────────────
         private void RegisterWheelInterceptors(TrackBar[] bars)
@@ -3853,16 +2345,25 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         /// <summary>
-        /// 從影像路徑取得 .bin 曲線的 basePath：
-        /// _raw.jpg → strip suffix；其餘 → Path without extension。
+        /// Live overview 用：Global 模式從合併 display 取視野，否則返回 NaN（Vertical 模式 X 軸固定）。
         /// </summary>
-        private static string GetCurveBasePath(string imagePath)
+        private double LiveViewRangeProvider(int cameraIndex, bool isLeft, double defaultValue)
         {
-            if (imagePath.EndsWith("_raw.jpg", StringComparison.OrdinalIgnoreCase))
-                return imagePath.Substring(0, imagePath.Length - "_raw.jpg".Length);
-            return System.IO.Path.Combine(
-                System.IO.Path.GetDirectoryName(imagePath),
-                System.IO.Path.GetFileNameWithoutExtension(imagePath));
+            if (_liveCameraManager?.IsGlobalMergeActive == true &&
+                _liveCameraManager.TryGetMergedViewRange(out double left, out double right))
+                return isLeft ? left : right;
+            return defaultValue;
+        }
+
+        /// <summary>
+        /// OverviewChartManager 用的 viewRange 代理：將 TryComputeCurrentViewRange 包裝為 Func。
+        /// </summary>
+        private double ViewRangeProvider(int cameraIndex, bool isLeft, double defaultValue)
+        {
+            if (_interactionHelper == null) return defaultValue;
+            if (!_interactionHelper.TryComputeCurrentViewRange(cameraIndex, out double left, out double right))
+                return defaultValue;
+            return isLeft ? left : right;
         }
 
         private AniloxCamera FindCameraById(int camId)
@@ -3873,43 +2374,18 @@ namespace AniloxRoll.Monitor.Forms
             return null;
         }
 
-        /// <summary>
-        /// 填充 4 個序號 ComboBox（Review + Data），同步導航狀態。
-        /// selectDataGrabId=true 時同步選取 cbDataGrabId（BtnSelectDataFolder 用）。
-        /// </summary>
-        private void PopulateAllGrabIdCombos(bool selectDataGrabId = false)
-        {
-            _statComboUpdating = true;
-            try
-            {
-                cbReviewGrabId.Items.Clear();
-                cbGrabIdStart.Items.Clear();
-                cbGrabIdEnd.Items.Clear();
-                cbDataGrabId.Items.Clear();
-                foreach (var info in _grabIdInfos)
-                {
-                    cbReviewGrabId.Items.Add(info.GrabId);
-                    cbGrabIdStart.Items.Add(info.GrabId);
-                    cbGrabIdEnd.Items.Add(info.GrabId);
-                    cbDataGrabId.Items.Add(info.GrabId);
-                }
-                SyncGrabIdFromTimeCombos();
-                UpdateGrabIdNavState();
-                if (cbGrabIdStart.Items.Count > 0)
-                {
-                    cbGrabIdStart.SelectedIndex = cbGrabIdStart.Items.Count - 1;
-                    cbGrabIdEnd.SelectedIndex = 0;
-                    if (selectDataGrabId)
-                        cbDataGrabId.SelectedIndex = cbGrabIdStart.SelectedIndex;
-                }
-            }
-            finally { _statComboUpdating = false; }
-        }
+        // ── Helper Methods ──────────────────────────────────────────
 
-        private void SetReviewGroupBoxes(bool grabNavActive)
+        private static void AutoFitListViewColumns(ListView lv)
         {
-            SetGroupBoxActive(grpReviewGrabNav, grabNavActive);
-            SetGroupBoxActive(grpReviewTimePeriod, !grabNavActive);
+            for (int i = 0; i < lv.Columns.Count; i++)
+            {
+                lv.AutoResizeColumn(i, ColumnHeaderAutoResizeStyle.ColumnContent);
+                int contentWidth = lv.Columns[i].Width;
+                lv.AutoResizeColumn(i, ColumnHeaderAutoResizeStyle.HeaderSize);
+                if (contentWidth > lv.Columns[i].Width)
+                    lv.Columns[i].Width = contentWidth;
+            }
         }
 
         // ── Inner Classes ───────────────────────────────────────────

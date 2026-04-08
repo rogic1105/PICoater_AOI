@@ -95,6 +95,17 @@ namespace AniloxRoll.Monitor.Core.Camera
         public int FrameWidth  => _frameWidth;
         public int FrameHeight => _frameHeight;
 
+        /// <summary>Global merge 用：目標合併 buffer（由 LiveCameraManager 設定）。M_NULL 時不執行合併複製。</summary>
+        internal MIL_ID _mergedTargetBuffer = MIL.M_NULL;
+        /// <summary>Global merge 用：此相機在合併 buffer 中的 X 偏移（像素）。</summary>
+        internal int _mergedTargetOffsetX = 0;
+        /// <summary>Global merge 用：來源裁切起始 X（像素，含 overlap 分割）。</summary>
+        internal int _mergedSrcClipLeft = 0;
+        /// <summary>Global merge 用：來源裁切寬度（像素，含 overlap 分割）。</summary>
+        internal int _mergedSrcClipWidth = 0;
+        /// <summary>此相機所屬的 MIL System ID。</summary>
+        public MIL_ID OwnerSystemId => _ownerSystemId;
+
         private byte[] _hostInputBuffer = null;
         private byte[] _hostOutputBuffer = null;
 
@@ -874,6 +885,26 @@ namespace AniloxRoll.Monitor.Core.Camera
                     MIL.MbufCopy(cam._milProcBuffer, cam._milDisplayBuffer);
                 else
                     MIL.MbufCopy(modifiedBuffer, cam._milDisplayBuffer);
+
+                // Global merge：裁切後複製到合併 buffer 的對應位置
+                MIL_ID mergedBuf = cam._mergedTargetBuffer;
+                if (mergedBuf != MIL.M_NULL)
+                {
+                    int clipLeft  = cam._mergedSrcClipLeft;
+                    int clipWidth = cam._mergedSrcClipWidth;
+                    int dstX      = cam._mergedTargetOffsetX + clipLeft;
+                    if (clipWidth > 0 && clipLeft >= 0 && clipLeft + clipWidth <= cam._frameWidth)
+                    {
+                        MIL_ID childBuf = MIL.M_NULL;
+                        MIL.MbufChild2d(cam._milDisplayBuffer, clipLeft, 0,
+                            clipWidth, cam._frameHeight, ref childBuf);
+                        if (childBuf != MIL.M_NULL)
+                        {
+                            MIL.MbufCopyClip(childBuf, mergedBuf, dstX, 0);
+                            MIL.MbufFree(childBuf);
+                        }
+                    }
+                }
 
                 cam.TrySaveCapture(modifiedBuffer);
             }
