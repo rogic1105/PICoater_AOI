@@ -535,6 +535,11 @@ namespace AniloxRoll.Monitor.Forms
                 {
                     _liveCameraManager.EnsureAllocatedAndToggleGrab(checkBoxEnableImageProcessing.Checked);
                     LoadBackgroundBins();
+
+                    // 初次分配即為 Global 模式 → 立即啟用即時合圖
+                    if (_settings.StitchMode == StitchMode.Global)
+                        _liveCameraManager.EnableGlobalMerge(
+                            _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
                 }
                 catch (Exception ex)
                 {
@@ -1344,6 +1349,15 @@ namespace AniloxRoll.Monitor.Forms
                     _stitchCoordinator.ApplyGlobalMergeIfNeeded();
                     _stitchCoordinator.UpdateOverviewChartFromRepository();
                 }
+            }
+
+            // OPS/Start 變更 → 即時更新全域合圖佈局（下一幀生效）
+            string parentLabel = e?.ChangedItem?.Parent?.Label ?? string.Empty;
+            if (parentLabel == "OPS (um)" || parentLabel == "Start (mm)")
+            {
+                if (_liveCameraManager?.IsGlobalMergeActive == true)
+                    _liveCameraManager.RefreshGlobalMergeLayout(
+                        _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
             }
 
             // 圖表設定變更 → 立刻套用

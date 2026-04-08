@@ -51,7 +51,7 @@ PICoater_AOI/
 | `UI/Presenters/LiveTelemetryPresenter.cs` | 16 欄即時 Telemetry |
 | `Acquisition/AniloxCamera.cs` | 單台相機 MIL 資源封裝；Global merge 時每幀 MbufChild2d + MbufCopyClip（含 overlap 裁切）到合併 buffer |
 | `Acquisition/CaptureTimestampCoordinator.cs` | 多相機存檔時間戳同步 |
-| `UI/Managers/LiveCameraManager.cs` | 多台相機生命週期管理、連線數監控（OnCameraCountChanged）、即時全域合圖（EnableGlobalMerge / DisableGlobalMerge）、合圖 zoom/pan（WheelZoomFilter）、合圖滑鼠座標（MergedMouseStatusHandler）、合圖 overview 聯動（TryGetMergedViewRange） |
+| `UI/Managers/LiveCameraManager.cs` | 多台相機生命週期管理、連線數監控（OnCameraCountChanged）、即時全域合圖（EnableGlobalMerge / DisableGlobalMerge / RefreshGlobalMergeLayout）、合圖 zoom/pan（WheelZoomFilter）、合圖滑鼠座標（MergedMouseStatusHandler）、合圖 overview 聯動（TryGetMergedViewRange） |
 | `Settings/InspectionSettings.cs` | 根設定物件 |
 | `Settings/Models/ChartSettings.cs` | 圖表 Y 軸範圍設定（ChartScaleMode + YMax）；StitchMode enum（Vertical / Global） |
 | `Settings/Models/ImageViewSettings.cs` | 合圖方式設定（StitchMode） |

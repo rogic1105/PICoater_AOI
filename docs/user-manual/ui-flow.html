@@ -1,7 +1,8 @@
 <!DOCTYPE html>
+
 <html lang="zh-TW">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8"/>
 <title>AniloxRoll Monitor — UI 事件流程圖</title>
 <style>
 :root {
@@ -31,11 +32,16 @@ h2.open::before { content: "▾ "; }
 .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 0; font-size: 0.85em; }
 .legend-item { display: flex; align-items: center; gap: 4px; }
 .legend-box { width: 16px; height: 16px; border-radius: 3px; border: 2px solid; }
+
+/* === 流程群組基本樣式 === */
 .flow-group { margin: 16px 0; border: 1px solid #ddd; border-radius: 8px; background: #fff; padding: 16px; }
-.flow-title { font-weight: bold; font-size: 1.05em; margin-bottom: 12px; color: #1565c0; }
-.flow-row { display: flex; align-items: flex-start; gap: 8px; margin: 6px 0; }
-.flow-row .arrow { color: var(--arrow); font-weight: bold; min-width: 20px; text-align: center; padding-top: 4px; }
-.box { padding: 6px 10px; border-radius: 5px; border: 2px solid; font-size: 0.9em; line-height: 1.4; }
+.flow-title { font-weight: bold; font-size: 1.05em; margin-bottom: 12px; color: #1565c0;
+              cursor: pointer; user-select: text; }
+.flow-title::before { content: "▾ "; color: #90a4ae; font-size: 0.9em; }
+.flow-group.collapsed > .flow-title { margin-bottom: 0; }
+.flow-group.collapsed > .flow-title::before { content: "▸ "; }
+.flow-group.collapsed > :not(.flow-title) { display: none !important; }
+.box { padding: 6px 10px; border-radius: 5px; border: 2px solid; font-size: 0.9em; line-height: 1.4; max-width: 600px; }
 .box.input { background: var(--input-bg); border-color: var(--input-border); }
 .box.action { background: var(--action-bg); border-color: var(--action-border); }
 .box.output { background: var(--output-bg); border-color: var(--output-border); }
@@ -43,11 +49,84 @@ h2.open::before { content: "▾ "; }
 .box.sync { background: var(--sync-bg); border-color: var(--sync-border); }
 .box.condition { background: var(--cond-bg); border-color: var(--cond-border); font-weight: bold; }
 .box code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-size: 0.85em; }
-.outputs { display: flex; flex-wrap: wrap; gap: 4px; }
-.outputs .box { font-size: 0.82em; padding: 3px 8px; }
-.flow-indent { margin-left: 28px; }
-.sep { border-top: 1px dashed #ccc; margin: 12px 0; }
+.box a { color: #1565c0; text-decoration: none; border-bottom: 1px dashed #1565c0; }
+.box a:hover { color: #0d47a1; border-bottom-style: solid; }
 .note { font-size: 0.82em; color: #777; margin-top: 4px; }
+
+/* === SFC-style 垂直流程佈局 === */
+.vflow { display: flex; flex-direction: column; align-items: center; }
+.flow-group.vflow { padding: 16px; }
+.vflow .flow-title { align-self: center; }
+.vflow > .box { min-width: 300px; text-align: center; }
+
+/* SFC 連接線：CSS 繪製垂直線 + 箭頭 */
+.v-arrow {
+  position: relative; width: 2px; height: 28px; background: var(--arrow);
+  align-self: center; margin: 0; font-size: 0; color: transparent; overflow: visible;
+}
+.v-arrow::after {
+  content: ''; position: absolute; bottom: -1px; left: 50%; transform: translateX(-50%);
+  border-left: 5px solid transparent; border-right: 5px solid transparent;
+  border-top: 7px solid var(--arrow);
+}
+.v-arrow[data-label]::before {
+  content: attr(data-label); position: absolute; left: 14px; top: 50%;
+  transform: translateY(-50%); white-space: nowrap;
+  font-size: 12px; font-weight: bold; color: var(--arrow);
+}
+
+/* SFC 平行輸出（綠色雙線） */
+.out-par { display: flex; flex-direction: column; gap: 2px; align-self: center;
+           border-left: 4px double #2e7d32; padding: 6px 12px; margin: 0; }
+.out-par > .box { font-size: 0.85em; padding: 4px 8px; }
+
+/* SFC 串接步驟（藍線 + 自動編號） */
+.out-seq { display: flex; flex-direction: column; gap: 2px; align-self: center;
+           border-left: 3px solid #1565c0; padding: 6px 12px; margin: 0; counter-reset: seq-step; }
+.out-seq > .box { font-size: 0.85em; padding: 4px 8px; }
+.out-seq > .box::before { counter-increment: seq-step; content: counter(seq-step) ". ";
+                          font-weight: bold; color: #1565c0; }
+
+/* SFC 分支：上下水平條（diverge / converge）+ 並排路徑 */
+.v-branch { position: relative; display: flex; gap: 20px; justify-content: center;
+            padding: 16px 0; margin: 0; flex-wrap: wrap; }
+.v-branch::before { content: ''; position: absolute; top: 0; left: 0; right: 0;
+                    height: 3px; background: var(--arrow); }
+.v-branch::after  { content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+                    height: 3px; background: var(--arrow); }
+.v-branch-path { display: flex; flex-direction: column; align-items: center; gap: 6px;
+                 padding: 8px 16px; min-width: 160px; }
+.v-branch-path::before, .v-branch-path::after {
+  content: ''; width: 2px; height: 10px; background: var(--arrow); flex-shrink: 0;
+}
+.v-branch-path .box { font-size: 0.85em; }
+
+/* 分支標籤 */
+.branch-label { font-size: 0.82em; font-weight: bold; padding: 2px 10px; border-radius: 3px;
+                display: inline-block; }
+.branch-label.yes  { background: #c8e6c9; color: #1b5e20; }
+.branch-label.no   { background: #ffcdd2; color: #b71c1c; }
+.branch-label.elif { background: #fff9c4; color: #f57f17; }
+
+/* SFC 可折疊子流程 */
+details.subflow { margin: 4px 0; align-self: center; }
+details.subflow > summary {
+  cursor: pointer; font-size: 0.88em; font-weight: bold; color: #e65100;
+  padding: 6px 16px; border-radius: 4px; background: #fff3e0;
+  border: 2px solid #e65100; list-style: none; text-align: center;
+}
+details.subflow > summary::before { content: "▸ "; }
+details.subflow[open] > summary::before { content: "▾ "; }
+details.subflow > summary::-webkit-details-marker { display: none; }
+details.subflow > .vflow { padding: 8px 0; }
+details.subflow > .subflow-body { margin-top: 6px; padding-left: 16px;
+                                  border-left: 2px solid #e65100; }
+details.subflow > .subflow-body .box { font-size: 0.82em; margin: 3px 0; }
+
+/* SFC 引用來源（系統流程頂部） */
+.ref-list { font-size: 0.82em; color: #888; margin: 4px 0 8px; }
+.ref-list a { color: #1565c0; text-decoration: none; border-bottom: 1px dashed #1565c0; }
+.ref-list a:hover { border-bottom-style: solid; }
 
 /* === 檢視模式切換 === */
 .view-toggle { display: inline-flex; border: 2px solid #1565c0; border-radius: 6px; overflow: hidden; margin: 8px 0 16px; }
@@ -62,798 +141,940 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 </style>
 </head>
 <body class="operator-mode">
-
 <h1>AniloxRoll Monitor — UI 事件流程圖</h1>
 <p style="color:#666; margin-bottom:8px;">每個流程：<strong>操作</strong> → <strong>畫面變化</strong>。</p>
-
 <div class="view-toggle">
-  <button class="active" onclick="setMode('operator')">操作員檢視</button>
-  <button onclick="setMode('developer')">開發者檢視</button>
+<button class="active" onclick="setMode('operator')">操作員檢視</button>
+<button onclick="setMode('developer')">開發者檢視</button>
 </div>
-
 <div class="legend">
-  <div class="legend-item"><div class="legend-box" style="background:var(--input-bg);border-color:var(--input-border)"></div>操作（使用者動作）</div>
-  <div class="legend-item dev"><div class="legend-box" style="background:var(--action-bg);border-color:var(--action-border)"></div>動作（程式方法）</div>
-  <div class="legend-item"><div class="legend-box" style="background:var(--output-bg);border-color:var(--output-border)"></div>結果（畫面更新）</div>
-  <div class="legend-item"><div class="legend-box" style="background:var(--cond-bg);border-color:var(--cond-border)"></div>參數條件（設定分支）</div>
-  <div class="legend-item dev"><div class="legend-box" style="background:var(--guard-bg);border-color:var(--guard-border)"></div>Guard（防重複觸發）</div>
-  <div class="legend-item dev"><div class="legend-box" style="background:var(--sync-bg);border-color:var(--sync-border)"></div>跨 Tab 同步</div>
+<div class="legend-item">
+<div class="legend-box" style="background:var(--input-bg);border-color:var(--input-border)"></div>操作（使用者動作）</div>
+<div class="legend-item dev">
+<div class="legend-box" style="background:var(--action-bg);border-color:var(--action-border)"></div>動作（程式方法）</div>
+<div class="legend-item">
+<div class="legend-box" style="background:var(--output-bg);border-color:var(--output-border)"></div>結果（畫面更新）</div>
+<div class="legend-item">
+<div class="legend-box" style="background:var(--cond-bg);border-color:var(--cond-border)"></div>參數條件（設定分支）</div>
+<div class="legend-item dev">
+<div class="legend-box" style="background:var(--guard-bg);border-color:var(--guard-border)"></div>Guard（防重複觸發）</div>
+<div class="legend-item dev">
+<div class="legend-box" style="background:var(--sync-bg);border-color:var(--sync-border)"></div>跨 Tab 同步</div>
+<div class="legend-item dev"><span style="border-left:4px double #2e7d32;padding-left:4px;font-size:0.85em">∥</span> 平行（同時發生）</div>
+<div class="legend-item dev"><span style="border-left:3px solid #1565c0;padding-left:4px;font-size:0.85em">1. 2.</span> 串接（依序執行）</div>
+<div class="legend-item dev"><span style="display:inline-block;width:2px;height:16px;background:var(--arrow);vertical-align:middle;margin-right:6px"></span> SFC 連接線</div>
+<div class="legend-item dev"><span style="display:inline-block;width:30px;height:3px;background:var(--arrow);vertical-align:middle;margin-right:4px"></span> 分支條（diverge / converge）</div>
 </div>
-
 <!-- ===== 即時監控 ===== -->
 <h2 onclick="toggle(this)">即時監控（Live）</h2>
 <div class="tab-section">
-
-<div class="flow-group">
-  <div class="flow-title">開始抓取 <code>btnCameraGrab</code></div>
-  <div class="flow-row">
-    <div class="box input">按下【開始抓取】</div>
-    <div class="arrow dev">→</div>
-    <div class="box action dev">EnsureAllocatedAndToggleGrab → LoadBackgroundBins → NextGrabId</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">監控主畫面：MIL 即時影像</div>
-      <div class="box output">監控縮圖1~7：各相機即時影像</div>
-      <div class="box output">開始抓取 → 文字改為「停止抓取」</div>
-    </div>
-  </div>
-  <div class="note dev">背景按鈕（取得背景、預覽背景）變灰，抓取中不可操作。再按一次停止抓取。</div>
+<div class="flow-group vflow" id="btn-camera-grab">
+<div class="flow-title">開始抓取 <code>btnCameraGrab</code></div>
+<div class="box input">按下【開始抓取】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">EnsureAllocatedAndToggleGrab</div>
+<div class="v-arrow dev" data-label="串接"></div>
+<div class="out-seq dev">
+<div class="box action">LoadBackgroundBins</div>
+<div class="box action">NextGrabId（分配抓圖編號）</div>
 </div>
-
-<div class="flow-group dev">
-  <div class="flow-title">即時 GPU 回呼（每幀自動觸發）</div>
-  <div class="flow-row">
-    <div class="box input">GPU 取像完成 → 曲線資料回呼</div>
-    <div class="arrow">→</div>
-    <div class="box action">快取曲線 → CheckLiveMura → BeginInvoke 到 UI</div>
-  </div>
-  <div class="flow-indent">
-    <div class="flow-row"><div class="arrow">→</div>
-      <div class="outputs">
-        <div class="box output">監控全覽圖：7 台合併曲線（Timer 驅動 50~500ms）</div>
-      </div>
-    </div>
-    <div class="flow-row">
-      <div class="box condition">合圖方式-垂直</div>
-      <div class="arrow">→</div>
-      <div class="outputs">
-        <div class="box output">監控切向曲線圖：Mean/Max 更新</div>
-        <div class="box output">監控法向曲線圖：Mean/Max 更新</div>
-      </div>
-    </div>
-    <div class="flow-row">
-      <div class="box condition">合圖方式-全域</div>
-      <div class="arrow">→</div>
-      <div class="outputs">
-        <div class="box output">監控切向曲線圖：不更新（保持清空）</div>
-        <div class="box output">監控法向曲線圖：正常更新</div>
-      </div>
-    </div>
-  </div>
+<div class="v-arrow dev" data-label="分支：合圖方式"></div>
+<div class="v-branch dev">
+<div class="v-branch-path">
+<span class="branch-label yes">全域</span>
+<div class="box action"><a href="#live-global-merge">→ 即時全域合圖</a></div>
 </div>
-
-<div class="flow-group">
-  <div class="flow-title">監控強化 <code>checkBoxEnableImageProcessing</code></div>
-  <div class="flow-row">
-    <div class="box input">勾選【監控強化】</div>
-    <div class="arrow dev">→</div>
-    <div class="box action dev">SetImageProcessingEnabled(true) → UpdateLiveDirectionVisual</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">監控主畫面：顯示處理圖（下一幀生效）</div>
-      <div class="box output">監控切向曲線圖/監控法向曲線圖：背景色高亮（藍）</div>
-    </div>
-  </div>
+<div class="v-branch-path">
+<span class="branch-label no">垂直</span>
+<details class="subflow" open="">
+<summary>單台 MIL 顯示</summary>
+<div class="vflow">
+<div class="box action">AllocateCameras（首次按下時）</div>
+<div class="v-arrow" data-label="串接"></div>
+<div class="out-seq">
+<div class="box action">CameraSystemManager.Initialize()（MIL Application）</div>
+<div class="box action">MsysAlloc × N（按 SystemNum 分配 MIL System）</div>
 </div>
-
-<div class="flow-group">
-  <div class="flow-title">監控切向曲線圖/監控法向曲線圖 點擊 → 三態切換</div>
-  <div class="flow-row">
-    <div class="box input">點擊【監控切向曲線圖】</div>
-    <div class="arrow dev">→</div>
-    <div class="box action dev">SwitchLiveDisplayDirection("v")</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">監控主畫面：切換 原圖/V處理圖/H處理圖</div>
-      <div class="box output">曲線背景色：對應方向高亮藍色</div>
-    </div>
-  </div>
-  <div class="flow-indent dev">
-    <div class="flow-row"><div class="arrow">→</div>
-      <div class="box action">① 未勾選→自動勾選+設方向 ② 同方向→取消勾選 ③ 不同方向→切換</div>
-    </div>
-  </div>
+<div class="v-arrow" data-label="每台相機"></div>
+<div class="out-seq">
+<div class="box action">new AniloxCamera → 設定參數（曝光/線掃/高度/Hessian/Ridge）</div>
+<div class="box action">cam.Initialize()</div>
 </div>
-
-<div class="flow-group">
-  <div class="flow-title">取得背景 <code>btnGetBackground</code></div>
-  <div class="flow-row">
-    <div class="box input">按下【取得背景】</div>
-    <div class="arrow dev">→</div>
-    <div class="box action dev">採集 N 秒 → 平均 column mean → 存 .bin</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">按鈕文字倒數「採集中 Ns」</div>
-      <div class="box output">完成後自動觸發【預覽背景】</div>
-    </div>
-  </div>
-  <div class="note dev">需先在檢測設定選擇 Algorithm = StandardBgSub</div>
+<div class="v-arrow"></div>
+<details class="subflow">
+<summary>cam.Initialize 細節</summary>
+<div class="vflow">
+<div class="out-seq">
+<div class="box action">MdigAlloc（Digitizer 分配）</div>
+<div class="box action">SetGrabHeight → MdigControl(M_SOURCE_SIZE_Y)</div>
+<div class="box action">MdispAlloc × 2（primary + secondary Display）</div>
+<div class="box action">MbufAlloc2d × N（GrabBuffer + DisplayBuffer + ProcBuffer）</div>
+<div class="box action">MdispSelectWindow(primary, displayBuffer, panelLiveCam)（縮圖綁定）</div>
+<div class="box action">MdispHookFunction(M_MOUSE_MOVE / M_MOUSE_LEFT_BUTTON_DOWN)</div>
+<div class="box action">SetExposureUs（初始曝光）</div>
 </div>
-
-<div class="flow-group">
-  <div class="flow-title">預覽背景 <code>btnViewBackground</code>（Toggle）</div>
-  <div class="flow-row">
-    <div class="box input">按下【預覽背景】</div>
-    <div class="arrow dev">→</div>
-    <div class="box action dev">Detach MIL → 載入 bg .bin → ExpandColMeanToBitmap</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">監控縮圖1~7：overlay 背景圖（可點擊切換）</div>
-      <div class="box output">監控主畫面：overlay SmartCanvas 背景圖</div>
-      <div class="box output">座標狀態列：顯示「背景預覽 [CAM N]」</div>
-    </div>
-  </div>
-  <div class="note">再按一次或按【開始抓取】會關閉預覽。</div>
 </div>
-
-<div class="flow-group">
-  <div class="flow-title">監控縮圖點擊</div>
-  <div class="flow-row">
-    <div class="box input">點擊【監控縮圖】N</div>
-    <div class="arrow dev">→</div>
-    <div class="box action dev">SwitchMainDisplay(N)</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">監控主畫面：切換到 CAM N</div>
-      <div class="box output">選中縮圖：PapayaWhip 高亮</div>
-    </div>
-  </div>
-  <div class="flow-indent">
-    <div class="flow-row">
-      <div class="box condition">合圖方式-垂直</div>
-      <div class="arrow">→</div>
-      <div class="outputs">
-        <div class="box output">監控切向曲線圖/監控法向曲線圖：切換到 CAM N 資料</div>
-      </div>
-    </div>
-    <div class="flow-row">
-      <div class="box condition">合圖方式-全域</div>
-      <div class="arrow">→</div>
-      <div class="outputs">
-        <div class="box output">監控主畫面：保持全域合圖（僅切換高亮）</div>
-        <div class="box output">監控切向曲線圖：保持清空</div>
-        <div class="box output">監控法向曲線圖：切換到 CAM N 資料</div>
-      </div>
-    </div>
-  </div>
+</details>
+<div class="v-arrow"></div>
+<div class="box action">SwitchMainDisplay(_selectedMainCameraId)</div>
+<div class="v-arrow"></div>
+<details class="subflow">
+<summary>SwitchMainDisplay 細節</summary>
+<div class="vflow">
+<div class="box action">選中相機：SetSecondaryDisplay(panelMainDisplay.Handle)（主畫面綁定）</div>
+<div class="box action">其他相機：RemoveSecondaryDisplay()（移除主畫面綁定）</div>
+<div class="box action">選中縮圖標籤：背景色 PapayaWhip（高亮）</div>
 </div>
-
-<div class="flow-group">
-  <div class="flow-title">監控主畫面手勢</div>
-  <div class="flow-row">
-    <div class="box input">雙擊【監控主畫面】</div>
-    <div class="arrow">→</div>
-    <div class="box output">自動填滿</div>
-  </div>
-  <div class="flow-row">
-    <div class="box input">三擊【監控主畫面】</div>
-    <div class="arrow">→</div>
-    <div class="box output">實體倍率 1:1（螢幕 1cm = 實際 1cm）</div>
-  </div>
+</details>
+<div class="v-arrow"></div>
+<div class="box action">ToggleGrab → StartGrab</div>
+<div class="v-arrow" data-label="每台相機"></div>
+<div class="box action">cam.SetUserGrabIntent(true) → MdigProcess(M_START)</div>
+<div class="v-arrow" data-label="每幀回呼"></div>
+<details class="subflow">
+<summary>ProcessingFunction（per-frame）</summary>
+<div class="vflow">
+<div class="out-seq">
+<div class="box action">MbufCopy(grabBuffer → procBuffer)</div>
+<div class="box action">GPU Pipeline（若啟用強化：ProcessImage + ComputeColumnMean）</div>
+<div class="box action">MbufCopy(procBuffer → displayBuffer)（MIL 自動更新畫面）</div>
 </div>
-
-<div class="flow-group dev">
-  <div class="flow-title">即時全域合圖（系統流程）<code>EnableGlobalMerge / DisableGlobalMerge</code></div>
-  <div class="note">合圖方式 = 全域時，由 StitchMode 變更觸發。使用 MIL MbufChild2d + MbufCopyClip 在 GPU 端完成跨相機合圖（含 overlap 分割），不經 CPU。</div>
-  <div class="flow-row">
-    <div class="box action">EnableGlobalMerge：根據 OPS/Start 計算各相機 X 偏移 + overlap 中點分界 → MbufAlloc2d 合併 buffer → MdispSelectWindow → Hook M_MOUSE_MOVE</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">監控主畫面：7 台即時合圖（每幀 MbufChild2d 裁切 + MbufCopyClip 到合併 buffer）</div>
-    </div>
-  </div>
-  <div class="flow-row">
-    <div class="box action">滑鼠移動 → MergedMouseStatusHandler：buffer 座標 → mm 座標</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">座標狀態列：位置(mm) + X/Y範圍 + 實體倍率</div>
-    </div>
-  </div>
-  <div class="flow-row">
-    <div class="box action">滾輪縮放 → WheelZoomFilter → MdispZoom/MdispPan（_mergedDisplay）</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">監控主畫面：縮放/平移合圖影像</div>
-      <div class="box output">監控全覽圖：X 軸隨合圖 zoom 聯動（LiveViewRangeProvider → TryGetMergedViewRange）</div>
-    </div>
-  </div>
-  <div class="flow-row">
-    <div class="box action">OnLiveCurveData <code>→ return</code></div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">監控切向曲線圖：不更新（單台資料無意義）</div>
-    </div>
-  </div>
-  <div class="flow-row">
-    <div class="box action">OnLiveRowCurveData / UpdateLiveOverviewChart（不受影響）</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">監控法向曲線圖：正常更新</div>
-      <div class="box output">監控全覽圖：正常更新（7 台合併曲線）</div>
-    </div>
-  </div>
-  <div class="flow-row">
-    <div class="box action">SwitchMainDisplay：僅切換高亮縮圖，不切換主畫面</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">選中縮圖：PapayaWhip 高亮（但主畫面保持合圖）</div>
-    </div>
-  </div>
-  <div class="sep"></div>
-  <div class="flow-row">
-    <div class="box action">DisableGlobalMerge：Unhook M_MOUSE_MOVE → MbufFree 合併 buffer → 恢復 SwitchMainDisplay 單台顯示</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">監控主畫面：恢復為單台 MIL 即時影像</div>
-    </div>
-  </div>
+<div class="v-arrow" data-label="平行"></div>
+<div class="out-par">
+<div class="box action">OnLiveCurveData（Mean/Max 曲線 → 監控切向曲線圖）</div>
+<div class="box action">OnLiveRowCurveData（水平曲線 → 監控法向曲線圖）</div>
+<div class="box action">OnMouseDataChanged（座標 → lblPixelInfo）</div>
+<div class="box action">OnInspectionResult（Mura 判定 → CheckLiveMura → DO_MURA）</div>
 </div>
-
-</div><!-- /Live -->
-
+</div>
+</details>
+</div>
+</details>
+</div>
+</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">UpdateGrabButton(isGrabbing=true)</div>
+<div class="v-arrow" data-label="平行"></div>
+<div class="out-par">
+<div class="box output">監控主畫面：MIL 即時影像</div>
+<div class="box output">監控縮圖1~7：各相機即時影像</div>
+<div class="box output">【開始抓取】→ 文字改為「停止抓取」</div>
+<div class="box output">【取得背景】：變灰（不可操作）</div>
+<div class="box output">【預覽背景】：變灰（不可操作）</div>
+</div>
+</div>
+<div class="flow-group vflow">
+<div class="flow-title">停止抓取 <code>btnCameraGrab（再按一次）</code></div>
+<div class="box input">按下【停止抓取】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">ToggleGrab</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">UpdateGrabButton(isGrabbing=false)</div>
+<div class="v-arrow" data-label="平行"></div>
+<div class="out-par">
+<div class="box output">監控主畫面：停止更新（保留最後一幀）</div>
+<div class="box output">【停止抓取】→ 文字改為「開始抓取」</div>
+<div class="box output">【取得背景】：恢復可操作</div>
+<div class="box output">【預覽背景】：恢復可操作</div>
+</div>
+<details class="subflow dev">
+<summary>UpdateStandardBgSubLockState</summary>
+<div class="vflow" style="align-items:flex-start; padding:8px 0 8px 16px; border-left:2px solid #e65100;">
+<div class="box action" style="font-size:0.82em">依 .bin 背景檔案存在狀態重新檢查按鈕啟用/禁用</div>
+<div class="v-arrow"></div>
+<div class="box action" style="font-size:0.82em">所有已連線相機都有 .bin → 【釋放相機】啟用</div>
+<div class="v-arrow"></div>
+<div class="box action" style="font-size:0.82em">缺少 .bin 的相機 → 【釋放相機】禁用</div>
+</div>
+</details>
+</div>
+<div class="flow-group vflow dev">
+<div class="flow-title">即時 GPU 回呼（每幀自動觸發）</div>
+<div class="box input">GPU 取像完成 → 曲線資料回呼</div>
+<div class="v-arrow"></div>
+<div class="box action">快取曲線 → CheckLiveMura → BeginInvoke 到 UI</div>
+<div class="v-arrow" data-label="分支"></div>
+<div class="v-branch">
+<div class="v-branch-path"><span class="branch-label yes">垂直</span>
+<div class="out-par">
+<div class="box output">監控切向曲線圖：Mean/Max 更新</div>
+<div class="box output">監控法向曲線圖：Mean/Max 更新</div>
+</div>
+</div>
+<div class="v-branch-path"><span class="branch-label no">全域</span>
+<div class="out-par">
+<div class="box output">監控切向曲線圖：不更新（保持清空）</div>
+<div class="box output">監控法向曲線圖：正常更新</div>
+</div>
+</div></div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">監控全覽圖：7 台合併曲線（Timer 驅動 50~500ms）</div>
+</div>
+</div>
+<div class="flow-group vflow">
+<div class="flow-title">監控強化 <code>checkBoxEnableImageProcessing</code></div>
+<div class="box input">勾選【監控強化】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">SetImageProcessingEnabled(true) → UpdateLiveDirectionVisual</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">監控主畫面：顯示處理圖（下一幀生效）</div>
+<div class="box output">監控切向曲線圖/監控法向曲線圖：背景色高亮（藍）</div>
+</div>
+</div>
+<div class="flow-group vflow">
+<div class="flow-title">監控切向曲線圖/監控法向曲線圖 點擊 → 三態切換</div>
+<div class="box input">點擊【監控切向曲線圖】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">SwitchLiveDisplayDirection("v")</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">監控主畫面：切換 原圖/V處理圖/H處理圖</div>
+<div class="box output">曲線背景色：對應方向高亮藍色</div>
+</div>
+<div class="v-arrow"></div>
+<div class="box action">① 未勾選→自動勾選+設方向 ② 同方向→取消勾選 ③ 不同方向→切換</div>
+</div>
+<div class="flow-group vflow">
+<div class="flow-title">取得背景 <code>btnGetBackground</code></div>
+<div class="box input">按下【取得背景】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">採集 N 秒 → 平均 column mean → 存 .bin</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">按鈕文字倒數「採集中 Ns」</div>
+<div class="box output">完成後自動觸發【預覽背景】</div>
+</div>
+<div class="note dev">需先在檢測設定選擇 Algorithm = StandardBgSub</div>
+</div>
+<div class="flow-group vflow">
+<div class="flow-title">預覽背景 <code>btnViewBackground</code>（Toggle）</div>
+<div class="box input">按下【預覽背景】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">Detach MIL → 載入 bg .bin → ExpandColMeanToBitmap</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">監控縮圖1~7：overlay 背景圖（可點擊切換）</div>
+<div class="box output">監控主畫面：overlay SmartCanvas 背景圖</div>
+<div class="box output">座標狀態列：顯示「背景預覽 [CAM N]」</div>
+</div>
+<div class="note">再按一次或按【開始抓取】會關閉預覽。</div>
+</div>
+<div class="flow-group vflow" id="live-thumbnail-click">
+<div class="flow-title">監控縮圖點擊</div>
+<div class="box input">點擊【監控縮圖】N</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">SwitchMainDisplay(N)</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">監控主畫面：切換到 CAM N</div>
+<div class="box output">選中縮圖：PapayaWhip 高亮</div>
+</div>
+<div class="v-arrow" data-label="分支"></div>
+<div class="v-branch">
+<div class="v-branch-path"><span class="branch-label yes">垂直</span>
+<div class="out-par">
+<div class="box output">監控切向曲線圖/監控法向曲線圖：切換到 CAM N 資料</div>
+</div>
+</div>
+<div class="v-branch-path"><span class="branch-label no">全域</span>
+<div class="out-par">
+<div class="box output">監控主畫面：保持<a href="#live-global-merge">全域合圖</a>（僅切換高亮）</div>
+<div class="box output">監控切向曲線圖：保持清空</div>
+<div class="box output">監控法向曲線圖：切換到 CAM N 資料</div>
+</div>
+</div></div>
+</div>
+<div class="flow-group vflow">
+<div class="flow-title">監控主畫面手勢</div>
+<div class="box input">雙擊【監控主畫面】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">ResetMainDisplayView</div>
+<div class="v-arrow"></div>
+<div class="box output">自動填滿</div>
+<div class="v-arrow"></div>
+<div class="box action">單台：cam.ResetSecondaryDisplayView（M_SCALE_DISPLAY = M_ONCE + M_CENTER_DISPLAY）</div>
+<div class="v-arrow"></div>
+<div class="box action">全域合圖：_mergedDisplay（M_SCALE_DISPLAY = M_ONCE + M_CENTER_DISPLAY）</div>
+<div class="box input">三擊【監控主畫面】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">SetPhysicalMagnification1x</div>
+<div class="v-arrow"></div>
+<div class="box output">實體倍率 1:1（螢幕 1cm = 實際 1cm）</div>
+<div class="v-arrow"></div>
+<div class="box action">zoom = opsInMm / screenMmPerPx，以面板中心為基準計算 pan 偏移</div>
+<div class="v-arrow"></div>
+<div class="box action">單台：opsInMm = 選中相機的 OPS / 1000</div>
+<div class="v-arrow"></div>
+<div class="box action">全域合圖：opsInMm = _mergedRefOpsMm（第一台相機 OPS / 1000）</div>
+<div class="box input">滾輪【監控主畫面】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">WheelZoomFilter → ApplyCustomZoom</div>
+<div class="v-arrow"></div>
+<div class="box output">1.1x 步進縮放（以面板中心為基準）</div>
+<div class="v-arrow"></div>
+<div class="box action">factor = 1.1（上滾放大）/ 1/1.1（下滾縮小），zoom 範圍 0.05~32.0</div>
+<div class="v-arrow"></div>
+<div class="box action">pan 基準：imgX = panX + panelW/2 / oldZoom → newPanX = imgX - panelW/2 / newZoom</div>
+<div class="v-arrow"></div>
+<div class="box action">單台：cam.SetSecondaryDisplayZoom（M_UPDATE DISABLE → MdispZoom + MdispPan → M_UPDATE ENABLE）</div>
+<div class="v-arrow"></div>
+<div class="box action">全域合圖：直接操作 _mergedDisplay（MdispZoom + MdispPan，同上 DISABLE/ENABLE 防閃爍）</div>
+<div class="box input">滑鼠移動【監控主畫面】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">HandleMouseDataChanged / MergedMouseStatusHandler</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">座標狀態列：位置(mm) + 座標(px) + 亮度 + X/Y 範圍 + 實體倍率</div>
+</div>
+<div class="v-arrow"></div>
+<div class="box action">單台：physicalX = startPosMm + x × opsInMm，physicalY = y × rowPitchMm</div>
+<div class="v-arrow"></div>
+<div class="box action">全域合圖：physicalX = _mergedMinStartMm + x × _mergedRefOpsMm，physicalY = y × rowPitchMm</div>
+<div class="v-arrow"></div>
+<div class="box action">視野範圍：viewLeftMm = startMm + panOffX × opsMm，viewRightMm = startMm + (panOffX + panelW / zoom) × opsMm</div>
+<div class="v-arrow"></div>
+<div class="box action">實體倍率 = zoom × screenMmPerPx / opsInMm</div>
+</div>
+<div class="flow-group vflow dev" id="live-global-merge">
+<div class="flow-title">即時全域合圖（系統流程）<code>EnableGlobalMerge / DisableGlobalMerge</code></div>
+<div class="ref-list">引用：<a href="#btn-camera-grab">開始抓取</a> · <a href="#live-thumbnail-click">監控縮圖點擊</a> · <a href="#settings-changed">檢測設定變更</a></div>
+<div class="note">合圖方式 = 全域時觸發。觸發時機：① StitchMode 變更（_propertyGrid_PropertyValueChanged）② 首次開始抓取（btnCameraGrab_Click 分配相機後）。使用 MIL MbufChild2d + MbufCopyClip 在 GPU 端完成跨相機合圖，不經 CPU。</div>
+<!-- ── EnableGlobalMerge 初始化 ── -->
+<div class="box action">EnableGlobalMerge(opsUm[], startPosMm[])</div>
+<div class="v-arrow"></div>
+<div class="box action">refOpsMm = opsUm[0] / 1000（參考像素尺寸，取第一台相機）</div>
+<div class="v-arrow"></div>
+<div class="box action">遍歷所有相機：widthMm = FrameWidth × ops / 1000 → 計算 minStart / maxEnd / maxH</div>
+<div class="v-arrow"></div>
+<div class="box action">totalW = ceil((maxEnd - minStart) / refOpsMm)，maxH = 最高相機高度</div>
+<div class="v-arrow"></div>
+<div class="box action">各相機 xOffset = round((pos - minStart) / refOpsMm)，按 xOffset 排序</div>
+<div class="v-arrow"></div>
+<div class="box action">Overlap 分割：相鄰相機 overlap = rightEdge - leftEdge（前相機右邊 - 後相機左邊）</div>
+<div class="v-arrow"></div>
+<div class="box action">overlap &gt; 0 → mid = leftEdge + overlap / 2（整數截斷）；前相機 drawRight = mid，後相機 drawLeft = mid</div>
+<div class="v-arrow"></div>
+<div class="box action">每台相機存 _mergedSrcClipLeft / _mergedSrcClipWidth（來源裁切區域）</div>
+<div class="v-arrow"></div>
+<div class="box action">MbufAlloc2d(sysId=System0, totalW, maxH, 8+M_UNSIGNED, M_IMAGE+M_DISP+M_PROC) → _mergedBuffer</div>
+<div class="v-arrow"></div>
+<div class="box action">MbufClear(_mergedBuffer, 0)（黑底）</div>
+<div class="v-arrow"></div>
+<div class="box action">儲存座標系：_mergedMinStartMm / _mergedRefOpsMm / _mergedTotalW</div>
+<div class="v-arrow"></div>
+<div class="box action">解除所有相機 secondary display（SetSecondaryDisplay(IntPtr.Zero)）</div>
+<div class="v-arrow"></div>
+<div class="box action">MdispAlloc → MdispSelectWindow(_mergedDisplay, _mergedBuffer, mainPanel.Handle)</div>
+<div class="v-arrow"></div>
+<div class="box action">MdispControl：M_SCALE_DISPLAY=M_ONCE + M_CENTER_DISPLAY + M_MOUSE_USE</div>
+<div class="v-arrow"></div>
+<div class="box action">MdispHookFunction(_mergedDisplay, M_MOUSE_MOVE, MergedMouseStatusHandler) → 座標狀態列</div>
+<!-- ── 每幀回呼 ── -->
+<div class="v-arrow"></div>
+<div class="box action">每幀 ProcessingFunction callback（每台相機獨立觸發）</div>
+<div class="v-arrow"></div>
+<div class="box action">GPU 處理 → MbufCopy 到 _milDisplayBuffer（正常流程）</div>
+<div class="v-arrow"></div>
+<div class="box action">_mergedTargetBuffer ≠ M_NULL →</div>
+<div class="v-arrow"></div>
+<div class="box action">MbufChild2d(_milDisplayBuffer, clipLeft, 0, clipWidth, frameHeight) → childBuf（裁切子 buffer）</div>
+<div class="v-arrow"></div>
+<div class="box action">dstX = _mergedTargetOffsetX + clipLeft</div>
+<div class="v-arrow"></div>
+<div class="box action">MbufCopyClip(childBuf, _mergedBuffer, dstX, 0)（GPU→GPU，跨 System 由 MIL DMA 路由）</div>
+<div class="v-arrow"></div>
+<div class="box action">MbufFree(childBuf)（每幀建立/釋放，MIL 內部快取）</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">監控主畫面：7 台即時合圖（重疊區域中點分界，前相機取左、後相機取右）</div>
+</div>
+<!-- ── 座標聯動 ── -->
+<div class="v-arrow"></div>
+<div class="box action">LiveOverviewTimer_Tick → UpdateOverviewChart(LiveViewRangeProvider)</div>
+<div class="v-arrow"></div>
+<div class="box action">LiveViewRangeProvider：IsGlobalMergeActive → TryGetMergedViewRange</div>
+<div class="v-arrow"></div>
+<div class="box action">viewLeftMm = _mergedMinStartMm + panOffX × _mergedRefOpsMm</div>
+<div class="v-arrow"></div>
+<div class="box action">viewRightMm = _mergedMinStartMm + (panOffX + panelW / zoomX) × _mergedRefOpsMm</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">監控全覽圖：X 軸隨合圖 display zoom/pan 同步</div>
+</div>
+<!-- ── 不受影響的流程 ── -->
+<div class="v-arrow"></div>
+<div class="box action">OnLiveCurveData <code>→ return</code>（StitchMode == Global 時跳過 UI chart 更新）</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">監控切向曲線圖：不更新（單台資料無意義）</div>
+</div>
+<div class="box action">OnLiveRowCurveData / UpdateLiveOverviewChart（不受 StitchMode 影響）</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">監控法向曲線圖：正常更新</div>
+<div class="box output">監控全覽圖：正常更新（7 台合併曲線）</div>
+</div>
+<div class="box action">SwitchMainDisplay：IsGlobalMergeActive → return（僅切換高亮縮圖）</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">選中縮圖：PapayaWhip 高亮（主畫面保持合圖不切換）</div>
+</div>
+<!-- ── DisableGlobalMerge ── -->
+<div class="v-arrow"></div>
+<div class="box action">DisableGlobalMerge</div>
+<div class="v-arrow"></div>
+<div class="box action">各相機 _mergedTargetBuffer = M_NULL（停止 callback 中的合併複製）</div>
+<div class="v-arrow"></div>
+<div class="box action">各相機 _mergedSrcClipLeft = 0, _mergedSrcClipWidth = 0</div>
+<div class="v-arrow"></div>
+<div class="box action">MdispHookFunction(M_MOUSE_MOVE + M_UNHOOK)（解除滑鼠 hook）</div>
+<div class="v-arrow"></div>
+<div class="box action">MdispSelectWindow(M_NULL) → MdispFree(_mergedDisplay)</div>
+<div class="v-arrow"></div>
+<div class="box action">MbufFree(_mergedBuffer)</div>
+<div class="v-arrow"></div>
+<div class="box action">SwitchMainDisplay(_selectedMainCameraId)（恢復選中相機的 secondary display）</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">監控主畫面：恢復為單台 MIL 即時影像</div>
+</div>
+</div>
+</div>
+<!-- /Live -->
 <!-- ===== 歷史查詢 ===== -->
 <h2 onclick="toggle(this)">歷史查詢（Review）</h2>
 <div class="tab-section">
-
-<div class="flow-group">
-  <div class="flow-title">讀取資料 <code>btnSelectFolder</code>（Review）/ <code>btnSelectDataFolder</code>（Data）</div>
-  <div class="flow-row">
-    <div class="box input">按下【讀取資料】→ 選擇資料夾</div>
-    <div class="arrow dev">→</div>
-    <div class="box action dev">ImageRepository.LoadDirectory → TimeNavigator.Initialize</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">時段日期/時間：填入最早日期時間</div>
-      <div class="box output">單片序號：填入最早序號</div>
-      <div class="box output">回顧縮圖1~7：載入圖片</div>
-      <div class="box output">回顧全覽圖：7 台合併曲線</div>
-      <div class="box output">上一/下一時段：根據是否有前後時段決定可用</div>
-      <div class="box output">上一/下一序號：根據是否有前後序號決定可用</div>
-    </div>
-  </div>
-  <div class="flow-indent">
-    <div class="flow-row">
-      <div class="box condition">合圖方式-垂直</div>
-      <div class="arrow">→</div>
-      <div class="outputs">
-        <div class="box output">回顧主畫面：第一台相機影像</div>
-        <div class="box output">回顧切向曲線圖/回顧法向曲線圖：Mean/Max 曲線</div>
-      </div>
-    </div>
-    <div class="flow-row">
-      <div class="box condition">合圖方式-全域</div>
-      <div class="arrow">→</div>
-      <div class="outputs">
-        <div class="box output">回顧主畫面：全域合圖</div>
-        <div class="box output">回顧切向曲線圖：清空</div>
-        <div class="box output">回顧法向曲線圖：正常載入</div>
-        <div class="box output">回顧全覽圖：正常載入</div>
-      </div>
-    </div>
-  </div>
-  <div class="flow-indent dev">
-    <div class="flow-row"><div class="arrow">→</div>
-      <div class="box sync">同步 Data tab：填充起始/結束序號、時間、良率圖導航 → 刷新統計</div>
-    </div>
-  </div>
+<div class="flow-group vflow" id="review-load-data">
+<div class="flow-title">讀取資料 <code>btnSelectFolder</code>（Review）/ <code>btnSelectDataFolder</code>（Data）</div>
+<div class="box input">按下【讀取資料】→ 選擇資料夾</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">ImageRepository.LoadDirectory → TimeNavigator.Initialize</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">時段日期/時間：填入最早日期時間</div>
+<div class="box output">單片序號：填入最早序號</div>
+<div class="box output">回顧縮圖1~7：載入圖片</div>
+<div class="box output">回顧全覽圖：7 台合併曲線</div>
+<div class="box output">上一/下一時段：根據是否有前後時段決定可用</div>
+<div class="box output">上一/下一序號：根據是否有前後序號決定可用</div>
 </div>
-
-<div class="flow-group">
-  <div class="flow-title">時段導航 <code>btnPeriodPrev/Next</code> + <code>cbDate/cbTime</code></div>
-  <div class="flow-row">
-    <div class="box input">按【上一時段】/【下一時段】或切換【時段日期】/【時段時間】</div>
-    <div class="arrow dev">→</div>
-    <div class="box action dev">ClearStitchedMode → MovePeriodAsync → LoadImages</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">回顧縮圖1~7：更新影像</div>
-      <div class="box output">回顧全覽圖：重新合併曲線</div>
-      <div class="box output">時段群組：綠色高亮</div>
-    </div>
-  </div>
-  <div class="flow-indent">
-    <div class="flow-row">
-      <div class="box condition">合圖方式-垂直</div>
-      <div class="arrow">→</div>
-      <div class="outputs">
-        <div class="box output">回顧主畫面：第一台相機影像</div>
-        <div class="box output">回顧切向曲線圖/回顧法向曲線圖：更新 Mean/Max 曲線</div>
-      </div>
-    </div>
-    <div class="flow-row">
-      <div class="box condition">合圖方式-全域</div>
-      <div class="arrow">→</div>
-      <div class="outputs">
-        <div class="box output">回顧主畫面：全域合圖</div>
-        <div class="box output">回顧切向曲線圖：清空</div>
-        <div class="box output">回顧法向曲線圖：正常載入</div>
-        <div class="box output">回顧全覽圖：正常載入</div>
-      </div>
-    </div>
-  </div>
+<div class="v-arrow" data-label="分支"></div>
+<div class="v-branch">
+<div class="v-branch-path"><span class="branch-label yes">垂直</span>
+<div class="out-par">
+<div class="box output">回顧主畫面：第一台相機影像</div>
+<div class="box output">回顧切向曲線圖/回顧法向曲線圖：Mean/Max 曲線</div>
 </div>
-
-<div class="flow-group">
-  <div class="flow-title">單片序號導航 <code>cbReviewGrabId</code> + <code>btnGrabIdPrev/Next</code></div>
-  <div class="flow-row">
-    <div class="box input">選擇【單片序號】或按【上一序號】/【下一序號】</div>
-    <div class="arrow dev">→</div>
-    <div class="box action dev">NavigateToDateTime → LoadGrabStitchedViewAsync</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">回顧縮圖1~7：拼接圖</div>
-      <div class="box output">回顧全覽圖：拼接曲線合併</div>
-      <div class="box output">單片群組：綠色高亮</div>
-    </div>
-  </div>
-  <div class="flow-indent">
-    <div class="flow-row">
-      <div class="box condition">合圖方式-垂直</div>
-      <div class="arrow">→</div>
-      <div class="outputs">
-        <div class="box output">回顧主畫面：選中相機的拼接影像</div>
-        <div class="box output">回顧切向曲線圖/回顧法向曲線圖：歷史 OPS/閾值</div>
-      </div>
-    </div>
-    <div class="flow-row">
-      <div class="box condition">合圖方式-全域</div>
-      <div class="arrow">→</div>
-      <div class="outputs">
-        <div class="box output">回顧主畫面：全域合圖</div>
-        <div class="box output">回顧切向曲線圖：清空</div>
-        <div class="box output">回顧法向曲線圖：正常載入</div>
-        <div class="box output">回顧全覽圖：正常載入</div>
-      </div>
-    </div>
-  </div>
-  <div class="flow-indent dev">
-    <div class="flow-row"><div class="arrow">→</div>
-      <div class="box sync">同步 Data tab：報表序號 + 起始/結束序號 + 時間 → 刷新統計</div>
-    </div>
-    <div class="flow-row"><div class="arrow">→</div>
-      <div class="box guard">_grabIdCrossGuard + _grabIdNavGuard 防迴圈</div>
-    </div>
-  </div>
 </div>
-
-<div class="flow-group">
-  <div class="flow-title">回顧縮圖點擊 <code>Gallery SelectionChanged</code></div>
-  <div class="flow-row">
-    <div class="box input">點擊【回顧縮圖】N</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">座標狀態列：位置 / 座標 / 亮度 / 倍率 / 格式</div>
-    </div>
-  </div>
-  <div class="flow-indent">
-    <div class="flow-row">
-      <div class="box condition">合圖方式-垂直</div>
-      <div class="arrow">→</div>
-      <div class="outputs">
-        <div class="box output">回顧主畫面：切換到 CAM N 影像</div>
-        <div class="box output">回顧切向曲線圖/回顧法向曲線圖：CAM N Mean/Max</div>
-      </div>
-    </div>
-    <div class="flow-row">
-      <div class="box condition">合圖方式-全域</div>
-      <div class="arrow">→</div>
-      <div class="outputs">
-        <div class="box output">回顧主畫面：保持全域合圖（不切換）</div>
-        <div class="box output">回顧切向曲線圖：清空</div>
-        <div class="box output">回顧法向曲線圖：正常載入</div>
-      </div>
-    </div>
-  </div>
-  <div class="flow-indent dev">
-    <div class="flow-row"><div class="arrow">→</div>
-      <div class="box action dev">Stitch 模式 → ShowStitchedCameraInCanvas(N)<br>一般模式 → OnGallerySelectionChanged(N) → RunInspectionFullRes</div>
-    </div>
-  </div>
+<div class="v-branch-path"><span class="branch-label no">全域</span>
+<div class="out-par">
+<div class="box output">回顧主畫面：<a href="#review-global-merge">全域合圖</a></div>
+<div class="box output">回顧切向曲線圖：清空</div>
+<div class="box output">回顧法向曲線圖：正常載入</div>
+<div class="box output">回顧全覽圖：正常載入</div>
 </div>
-
-<div class="flow-group">
-  <div class="flow-title">回顧強化 <code>checkBoxShowProcessed</code></div>
-  <div class="flow-row">
-    <div class="box input">勾選/取消【回顧強化】</div>
-    <div class="arrow dev">→</div>
-    <div class="box action dev">Stitch → ReloadCurrentStitchedView<br>一般 → LoadImagesWithPeriodLockAsync</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">回顧縮圖1~7：原圖 ↔ 處理圖</div>
-      <div class="box output">回顧主畫面：原圖 ↔ 處理圖（保持 zoom/pan）</div>
-      <div class="box output">曲線背景色：V 高亮藍 / H 高亮藍 / 預設</div>
-    </div>
-  </div>
-  <div class="flow-indent dev">
-    <div class="flow-row"><div class="arrow">→</div>
-      <div class="box guard">_processedCheckboxGuard 防程式碼設定時觸發</div>
-    </div>
-  </div>
+</div></div>
+<div class="v-arrow"></div>
+<div class="box sync">同步 Data tab：填充起始/結束序號、時間、良率圖導航 → 刷新統計</div>
 </div>
-
-<div class="flow-group">
-  <div class="flow-title">回顧切向曲線圖/回顧法向曲線圖 點擊 → 三態切換</div>
-  <div class="flow-row">
-    <div class="box input">點擊【回顧切向曲線圖】</div>
-    <div class="arrow dev">→</div>
-    <div class="box action dev">SwitchRidgeDirection("v")</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">回顧主畫面：原圖 / V 處理圖 / H 處理圖</div>
-      <div class="box output">曲線背景色：對應方向高亮</div>
-    </div>
-  </div>
-  <div class="flow-indent dev">
-    <div class="flow-row"><div class="arrow">→</div>
-      <div class="box action">① 未勾選→自動勾選+設方向 ② 同方向→取消勾選 ③ 不同方向→切換</div>
-    </div>
-  </div>
+<div class="flow-group vflow" id="review-period-nav">
+<div class="flow-title">時段導航 <code>btnPeriodPrev/Next</code> + <code>cbDate/cbTime</code></div>
+<div class="box input">按【上一時段】/【下一時段】或切換【時段日期】/【時段時間】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">ClearStitchedMode → MovePeriodAsync → LoadImages</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">回顧縮圖1~7：更新影像</div>
+<div class="box output">回顧全覽圖：重新合併曲線</div>
+<div class="box output">時段群組：綠色高亮</div>
 </div>
-
-<div class="flow-group">
-  <div class="flow-title">回顧主畫面手勢</div>
-  <div class="flow-row">
-    <div class="box input">雙擊【回顧主畫面】</div>
-    <div class="arrow">→</div>
-    <div class="box output">自動填滿</div>
-  </div>
-  <div class="flow-row">
-    <div class="box input">三擊【回顧主畫面】</div>
-    <div class="arrow">→</div>
-    <div class="box output">實體倍率 1:1</div>
-  </div>
-  <div class="flow-row">
-    <div class="box input">拖曳/滾輪【回顧主畫面】</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">回顧切向曲線圖：X 軸同步 canvas 水平範圍</div>
-      <div class="box output">回顧法向曲線圖：Y 軸同步 canvas 垂直範圍</div>
-      <div class="box output">座標狀態列：即時更新</div>
-    </div>
-  </div>
-  <div class="note dev">Vertical 模式：全覽圖 X 軸固定，不隨 canvas zoom。Global 模式：全覽圖隨動。</div>
+<div class="v-arrow" data-label="分支"></div>
+<div class="v-branch">
+<div class="v-branch-path"><span class="branch-label yes">垂直</span>
+<div class="out-par">
+<div class="box output">回顧主畫面：第一台相機影像</div>
+<div class="box output">回顧切向曲線圖/回顧法向曲線圖：更新 Mean/Max 曲線</div>
 </div>
-
-<div class="flow-group dev">
-  <div class="flow-title">全域合圖（系統流程）<code>ApplyGlobalMergeIfNeeded</code></div>
-  <div class="note">由讀取資料、時段導航、單片序號導航、StitchMode 變更等流程在結尾呼叫。僅當合圖方式 = 全域時執行。</div>
-  <div class="flow-row">
-    <div class="box guard">合圖方式 ≠ 全域 → 不執行（直接返回）</div>
-  </div>
-  <div class="flow-row">
-    <div class="box action">讀取當前時段 7 台相機影像 → 根據檢測設定 OPS/Start 合圖，缺圖則以 CFG 記錄的取像寬度補齊空白 → GrabImageStitcher.MergeHorizontal</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">回顧主畫面：全域合圖（水平合併 7 台影像）</div>
-    </div>
-  </div>
-  <div class="flow-row">
-    <div class="box action">清空切向曲線圖（單台資料無意義）</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">回顧切向曲線圖：清空</div>
-    </div>
-  </div>
-  <div class="flow-row">
-    <div class="box action">EnableMergedOverviewSync</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">回顧全覽圖：同步 canvas 水平範圍（Global 隨動）</div>
-    </div>
-  </div>
 </div>
-
-</div><!-- /Review -->
-
+<div class="v-branch-path"><span class="branch-label no">全域</span>
+<div class="out-par">
+<div class="box output">回顧主畫面：<a href="#review-global-merge">全域合圖</a></div>
+<div class="box output">回顧切向曲線圖：清空</div>
+<div class="box output">回顧法向曲線圖：正常載入</div>
+<div class="box output">回顧全覽圖：正常載入</div>
+</div>
+</div></div>
+</div>
+<div class="flow-group vflow" id="review-grabid-nav">
+<div class="flow-title">單片序號導航 <code>cbReviewGrabId</code> + <code>btnGrabIdPrev/Next</code></div>
+<div class="box input">選擇【單片序號】或按【上一序號】/【下一序號】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">NavigateToDateTime → LoadGrabStitchedViewAsync</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">回顧縮圖1~7：拼接圖</div>
+<div class="box output">回顧全覽圖：拼接曲線合併</div>
+<div class="box output">單片群組：綠色高亮</div>
+</div>
+<div class="v-arrow" data-label="分支"></div>
+<div class="v-branch">
+<div class="v-branch-path"><span class="branch-label yes">垂直</span>
+<div class="out-par">
+<div class="box output">回顧主畫面：選中相機的拼接影像</div>
+<div class="box output">回顧切向曲線圖/回顧法向曲線圖：歷史 OPS/閾值</div>
+</div>
+</div>
+<div class="v-branch-path"><span class="branch-label no">全域</span>
+<div class="out-par">
+<div class="box output">回顧主畫面：<a href="#review-global-merge">全域合圖</a></div>
+<div class="box output">回顧切向曲線圖：清空</div>
+<div class="box output">回顧法向曲線圖：正常載入</div>
+<div class="box output">回顧全覽圖：正常載入</div>
+</div>
+</div></div>
+<div class="v-arrow"></div>
+<div class="box sync">同步 Data tab：報表序號 + 起始/結束序號 + 時間 → 刷新統計</div>
+<div class="v-arrow"></div>
+<div class="box guard">_grabIdCrossGuard + _grabIdNavGuard 防迴圈</div>
+</div>
+<div class="flow-group vflow" id="review-thumbnail-click">
+<div class="flow-title">回顧縮圖點擊 <code>Gallery SelectionChanged</code></div>
+<div class="box input">點擊【回顧縮圖】N</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">座標狀態列：位置 / 座標 / 亮度 / 倍率 / 格式</div>
+</div>
+<div class="v-arrow" data-label="分支"></div>
+<div class="v-branch">
+<div class="v-branch-path"><span class="branch-label yes">垂直</span>
+<div class="out-par">
+<div class="box output">回顧主畫面：切換到 CAM N 影像</div>
+<div class="box output">回顧切向曲線圖/回顧法向曲線圖：CAM N Mean/Max</div>
+</div>
+</div>
+<div class="v-branch-path"><span class="branch-label no">全域</span>
+<div class="out-par">
+<div class="box output">回顧主畫面：保持<a href="#review-global-merge">全域合圖</a>（不切換）</div>
+<div class="box output">回顧切向曲線圖：清空</div>
+<div class="box output">回顧法向曲線圖：正常載入</div>
+</div>
+</div></div>
+<div class="v-arrow"></div>
+<div class="box action dev">Stitch 模式 → ShowStitchedCameraInCanvas(N)<br/>一般模式 → OnGallerySelectionChanged(N) → RunInspectionFullRes</div>
+</div>
+<div class="flow-group vflow">
+<div class="flow-title">回顧強化 <code>checkBoxShowProcessed</code></div>
+<div class="box input">勾選/取消【回顧強化】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">Stitch → ReloadCurrentStitchedView<br/>一般 → LoadImagesWithPeriodLockAsync</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">回顧縮圖1~7：原圖 ↔ 處理圖</div>
+<div class="box output">回顧主畫面：原圖 ↔ 處理圖（保持 zoom/pan）</div>
+<div class="box output">曲線背景色：V 高亮藍 / H 高亮藍 / 預設</div>
+</div>
+<div class="v-arrow"></div>
+<div class="box guard">_processedCheckboxGuard 防程式碼設定時觸發</div>
+</div>
+<div class="flow-group vflow">
+<div class="flow-title">回顧切向曲線圖/回顧法向曲線圖 點擊 → 三態切換</div>
+<div class="box input">點擊【回顧切向曲線圖】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">SwitchRidgeDirection("v")</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">回顧主畫面：原圖 / V 處理圖 / H 處理圖</div>
+<div class="box output">曲線背景色：對應方向高亮</div>
+</div>
+<div class="v-arrow"></div>
+<div class="box action">① 未勾選→自動勾選+設方向 ② 同方向→取消勾選 ③ 不同方向→切換</div>
+</div>
+<div class="flow-group vflow">
+<div class="flow-title">回顧主畫面手勢</div>
+<div class="box input">雙擊【回顧主畫面】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">canvasMain.FitToScreen()</div>
+<div class="v-arrow"></div>
+<div class="box output">自動填滿</div>
+<div class="v-arrow"></div>
+<div class="box action">已是 fit-to-screen → 忽略（Consume 歸零防誤觸三擊）</div>
+<div class="box input">三擊【回顧主畫面】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">SetCanvasPhysicalMag1x</div>
+<div class="v-arrow"></div>
+<div class="box output">實體倍率 1:1</div>
+<div class="v-arrow"></div>
+<div class="box action">zoom = opsInMm / screenMmPerPx，以滑鼠位置為基準計算 pan 偏移</div>
+<div class="box input">拖曳/滾輪【回顧主畫面】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">RefreshChartRange → TryComputeCurrentViewRange</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">回顧切向曲線圖：X 軸同步 canvas 水平範圍</div>
+<div class="box output">回顧法向曲線圖：Y 軸同步 canvas 垂直範圍</div>
+<div class="box output">座標狀態列：即時更新</div>
+</div>
+<div class="v-arrow"></div>
+<div class="box action">pixelLeft = -panX / zoom，pixelRight = pixelLeft + canvasW / zoom</div>
+<div class="v-arrow"></div>
+<div class="box action">leftMm = startPosMm + pixelLeft × opsInMm，rightMm = startPosMm + pixelRight × opsInMm</div>
+<div class="note dev">Vertical 模式：全覽圖 X 軸固定，不隨 canvas zoom（ViewRangeProvider 回傳 NaN → ZoomReset）。Global 模式：全覽圖隨動。</div>
+</div>
+<div class="flow-group vflow dev" id="review-global-merge">
+<div class="flow-title">全域合圖（系統流程）<code>ApplyGlobalMergeIfNeeded</code></div>
+<div class="ref-list">引用：<a href="#review-load-data">讀取資料</a> · <a href="#review-period-nav">時段導航</a> · <a href="#review-grabid-nav">單片序號導航</a> · <a href="#review-thumbnail-click">回顧縮圖點擊</a> · <a href="#settings-changed">檢測設定變更</a></div>
+<div class="note">由讀取資料、時段導航、單片序號導航、StitchMode 變更等流程在結尾呼叫。僅當合圖方式 = 全域時執行。</div>
+<div class="box guard">合圖方式 ≠ 全域 → 不執行（直接返回）</div>
+<div class="box action">讀取當前時段 7 台相機影像 → 根據檢測設定 OPS/Start 合圖，缺圖則以 CFG 記錄的取像寬度補齊空白 → GrabImageStitcher.MergeHorizontal</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">回顧主畫面：全域合圖（水平合併 7 台影像）</div>
+</div>
+<div class="box action">清空切向曲線圖（單台資料無意義）</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">回顧切向曲線圖：清空</div>
+</div>
+<div class="box action">EnableMergedOverviewSync</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">回顧全覽圖：同步 canvas 水平範圍（Global 隨動）</div>
+</div>
+</div>
+</div>
+<!-- /Review -->
 <!-- ===== 檢測報表 ===== -->
 <h2 onclick="toggle(this)">檢測報表（Data）</h2>
 <div class="tab-section">
-
-<div class="flow-group">
-  <div class="flow-title">讀取資料 <code>btnSelectDataFolder</code>（從 Data tab 觸發）</div>
-  <div class="flow-row">
-    <div class="box input">按下【讀取資料】→ 選擇資料夾</div>
-    <div class="arrow dev">→</div>
-    <div class="box action dev">LoadAvailableTimes + LoadGrabIdInfos → PopulateChartNavigators → RefreshStats</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">起始/結束序號：填入全範圍</div>
-      <div class="box output">起始/結束日期時間：填入全範圍</div>
-      <div class="box output">報表序號 + 單片序號：填入全部序號</div>
-      <div class="box output">良率卡片1~7：顏色+數字更新</div>
-      <div class="box output">彙總列表：相機/Pass/Fail/Total/良率</div>
-      <div class="box output">明細列表：逐序號明細</div>
-      <div class="box output">良率年/月/日圖：填入統計資料</div>
-      <div class="box output">年/月/日圖導航：填入可選範圍</div>
-    </div>
-  </div>
-  <div class="flow-indent dev">
-    <div class="flow-row"><div class="arrow">→</div>
-      <div class="box sync">同步 Review tab：設定 ImageRepository + TimeNavigator</div>
-    </div>
-  </div>
+<div class="flow-group vflow">
+<div class="flow-title">讀取資料 <code>btnSelectDataFolder</code>（從 Data tab 觸發）</div>
+<div class="box input">按下【讀取資料】→ 選擇資料夾</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">LoadAvailableTimes + LoadGrabIdInfos → PopulateChartNavigators → RefreshStats</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">起始/結束序號：填入全範圍</div>
+<div class="box output">起始/結束日期時間：填入全範圍</div>
+<div class="box output">報表序號 + 單片序號：填入全部序號</div>
+<div class="box output">良率卡片1~7：顏色+數字更新</div>
+<div class="box output">彙總列表：相機/Pass/Fail/Total/良率</div>
+<div class="box output">明細列表：逐序號明細</div>
+<div class="box output">良率年/月/日圖：填入統計資料</div>
+<div class="box output">年/月/日圖導航：填入可選範圍</div>
 </div>
-
-<div class="flow-group">
-  <div class="flow-title">序號範圍選擇 <code>cbGrabIdStart/End</code></div>
-  <div class="flow-row">
-    <div class="box input">選擇【起始序號】或【結束序號】</div>
-    <div class="arrow dev">→</div>
-    <div class="box action dev">強制 start ≤ end → SetCombosToDateTime → RefreshStats</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">起始/結束日期時間：同步更新</div>
-      <div class="box output">良率卡片 + 彙總列表 + 明細列表：刷新</div>
-      <div class="box output">序號範圍群組：綠色高亮</div>
-    </div>
-  </div>
-  <div class="flow-indent dev">
-    <div class="flow-row"><div class="arrow">→</div>
-      <div class="box guard">_statComboGuard 防 cascade 重複</div>
-    </div>
-  </div>
+<div class="v-arrow"></div>
+<div class="box sync">同步 Review tab：設定 ImageRepository + TimeNavigator</div>
 </div>
-
-<div class="flow-group">
-  <div class="flow-title">序號選擇 <code>cbDataGrabId</code></div>
-  <div class="flow-row">
-    <div class="box input">選擇【報表序號】或按【報表上一序號】/【報表下一序號】</div>
-    <div class="arrow dev">→</div>
-    <div class="box action dev">鎖定 start=end=同序號 → RefreshStats</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">起始/結束序號 + 日期時間：同步到該序號</div>
-      <div class="box output">良率卡片 + 列表：刷新（單片統計）</div>
-      <div class="box output">序號選擇群組：綠色高亮</div>
-    </div>
-  </div>
-  <div class="flow-indent dev">
-    <div class="flow-row"><div class="arrow">→</div>
-      <div class="box sync">同步 Review tab：單片序號 + 導航時間 + 載入拼接圖</div>
-    </div>
-    <div class="flow-row"><div class="arrow">→</div>
-      <div class="box guard">_grabIdCrossGuard 防 Review ↔ Data 迴圈</div>
-    </div>
-  </div>
+<div class="flow-group vflow">
+<div class="flow-title">序號範圍選擇 <code>cbGrabIdStart/End</code></div>
+<div class="box input">選擇【起始序號】或【結束序號】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">強制 start ≤ end → SetCombosToDateTime → RefreshStats</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">起始/結束日期時間：同步更新</div>
+<div class="box output">良率卡片 + 彙總列表 + 明細列表：刷新</div>
+<div class="box output">序號範圍群組：綠色高亮</div>
 </div>
-
-<div class="flow-group">
-  <div class="flow-title">時序範圍選擇 <code>cbStartDate~cbEndTime</code></div>
-  <div class="flow-row">
-    <div class="box input">選擇【起始日期】/【起始時間】/【結束日期】/【結束時間】</div>
-    <div class="arrow dev">→</div>
-    <div class="box action dev">Cascade 子項 → ClampEndToStart/ClampStartToEnd → RefreshStats</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">良率卡片 + 列表：刷新（時間範圍統計）</div>
-      <div class="box output">時序範圍群組：綠色高亮</div>
-    </div>
-  </div>
-  <div class="flow-indent dev">
-    <div class="flow-row"><div class="arrow">→</div>
-      <div class="box guard">_statComboGuard 防 cascade 重複</div>
-    </div>
-  </div>
+<div class="v-arrow"></div>
+<div class="box guard">_statComboGuard 防 cascade 重複</div>
 </div>
-
-<div class="flow-group">
-  <div class="flow-title">良率圖導航 <code>cbChartYear/Month/Day</code></div>
-  <div class="flow-row">
-    <div class="box input">選擇【年圖導航】</div>
-    <div class="arrow dev">→</div>
-    <div class="box action dev">FillPeriodChart(chartYearly) → 填充月份 → cascade</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">良率年圖：紅綠柱狀圖更新</div>
-      <div class="box output">月圖導航：填入該年的月份</div>
-      <div class="box output">良率月圖 → 良率日圖：cascade 更新</div>
-    </div>
-  </div>
-  <div class="flow-indent dev">
-    <div class="flow-row"><div class="arrow">→</div>
-      <div class="box guard">_chartNavGuard 防 cascade 重複觸發</div>
-    </div>
-  </div>
-  <div class="note dev">點擊良率圖本身可 Toggle Auto/Fixed Y 軸刻度（500ms 防抖）。</div>
+<div class="flow-group vflow">
+<div class="flow-title">序號選擇 <code>cbDataGrabId</code></div>
+<div class="box input">選擇【報表序號】或按【報表上一序號】/【報表下一序號】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">鎖定 start=end=同序號 → RefreshStats</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">起始/結束序號 + 日期時間：同步到該序號</div>
+<div class="box output">良率卡片 + 列表：刷新（單片統計）</div>
+<div class="box output">序號選擇群組：綠色高亮</div>
 </div>
-
-<div class="flow-group">
-  <div class="flow-title">篩選異常 <code>btnShowFail</code></div>
-  <div class="flow-row">
-    <div class="box input">按下【篩選異常】</div>
-    <div class="arrow dev">→</div>
-    <div class="box action dev">Toggle _showFailOnly → ApplyFailFilter</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">明細列表：只顯示有 Fail 的序號（或全部）</div>
-      <div class="box output">按鈕文字：「篩選異常」↔「顯示全部」</div>
-      <div class="box output">按鈕背景：淺紅 ↔ 預設</div>
-    </div>
-  </div>
+<div class="v-arrow"></div>
+<div class="box sync">同步 Review tab：單片序號 + 導航時間 + 載入拼接圖</div>
+<div class="v-arrow"></div>
+<div class="box guard">_grabIdCrossGuard 防 Review ↔ Data 迴圈</div>
 </div>
-
-</div><!-- /Data -->
-
+<div class="flow-group vflow">
+<div class="flow-title">時序範圍選擇 <code>cbStartDate~cbEndTime</code></div>
+<div class="box input">選擇【起始日期】/【起始時間】/【結束日期】/【結束時間】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">Cascade 子項 → ClampEndToStart/ClampStartToEnd → RefreshStats</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">良率卡片 + 列表：刷新（時間範圍統計）</div>
+<div class="box output">時序範圍群組：綠色高亮</div>
+</div>
+<div class="v-arrow"></div>
+<div class="box guard">_statComboGuard 防 cascade 重複</div>
+</div>
+<div class="flow-group vflow">
+<div class="flow-title">良率圖導航 <code>cbChartYear/Month/Day</code></div>
+<div class="box input">選擇【年圖導航】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">FillPeriodChart(chartYearly) → 填充月份 → cascade</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">良率年圖：紅綠柱狀圖更新</div>
+<div class="box output">月圖導航：填入該年的月份</div>
+<div class="box output">良率月圖 → 良率日圖：cascade 更新</div>
+</div>
+<div class="v-arrow"></div>
+<div class="box guard">_chartNavGuard 防 cascade 重複觸發</div>
+<div class="note dev">點擊良率圖本身可 Toggle Auto/Fixed Y 軸刻度（500ms 防抖）。</div>
+</div>
+<div class="flow-group vflow">
+<div class="flow-title">篩選異常 <code>btnShowFail</code></div>
+<div class="box input">按下【篩選異常】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">Toggle _showFailOnly → ApplyFailFilter</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">明細列表：只顯示有 Fail 的序號（或全部）</div>
+<div class="box output">按鈕文字：「篩選異常」↔「顯示全部」</div>
+<div class="box output">按鈕背景：淺紅 ↔ 預設</div>
+</div>
+</div>
+</div>
+<!-- /Data -->
 <!-- ===== 右側面板 ===== -->
 <h2 onclick="toggle(this)">設定面板</h2>
 <div class="tab-section">
+<div class="flow-group vflow" id="settings-changed">
+<div class="flow-title">檢測設定變更 <code>propertyGridSettings</code></div>
+<div class="box input">修改【檢測設定】任一屬性</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">HandleSettingsChanged → SetCaptureSettings → 更新所有 ChartHelper 閾值</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">所有曲線圖閾值線：更新位置</div>
+<div class="box output dev">（抓取中）CSV 插入 #CFG 設定快照</div>
+</div>
+<div class="v-arrow"></div>
+<div class="box input">修改 Recipe 參數（HessianMaxFactor / ErrorValue / RidgeDir）</div>
+<div class="v-arrow"></div>
+<div class="box action">強制勾選回顧強化 → ClearStitchedMode → 重新處理影像</div>
+<div class="box input">修改合圖方式（垂直 ↔ 全域）</div>
+<div class="v-arrow" data-label="分支"></div>
+<div class="v-branch">
+<div class="v-branch-path"><span class="branch-label yes">垂直</span>
+<div class="out-par">
+<div class="box output">回顧主畫面：切回單台相機影像</div>
+<div class="box output">回顧切向曲線圖/回顧法向曲線圖：自動恢復</div>
+<div class="box output">回顧全覽圖：同步更新</div>
+<div class="box output">監控主畫面：恢復單台 MIL 即時影像</div>
+</div>
+</div>
+<div class="v-branch-path"><span class="branch-label no">全域</span>
+<div class="out-par">
+<div class="box output">回顧主畫面：<a href="#review-global-merge">全域合圖</a></div>
+<div class="box output">回顧切向曲線圖：清空</div>
+<div class="box output">回顧法向曲線圖：正常載入</div>
+<div class="box output">監控主畫面：<a href="#live-global-merge">即時全域合圖</a></div>
+<div class="box output">監控切向曲線圖：清空</div>
+<div class="box output">回顧全覽圖：同步更新</div>
+</div>
+</div></div>
+<div class="box input">修改 OPS / Start</div>
+<div class="v-arrow" data-label="分支"></div>
+<div class="v-branch">
+<div class="v-branch-path">
+<span class="branch-label yes">合圖方式-全域</span>
+<div class="out-par">
+<div class="box action">RefreshGlobalMergeLayout（下一幀生效）</div>
+<div class="box output">監控主畫面：全域合圖佈局即時更新</div>
+</div>
+</div>
+<div class="v-branch-path">
+<span class="branch-label no">合圖方式-垂直</span>
+<div class="out-par">
+<div class="box output">不影響 Live（座標換算自動取新值）</div>
+</div>
+</div>
+</div>
+<div class="box input">修改 Algorithm</div>
+<div class="v-arrow"></div>
+<div class="box action">LoadBackgroundBins / ClearBackgroundBins → UpdateStandardBgSubLockState</div>
+<div class="box input">修改 ChartScaleMode / YMax</div>
+<div class="v-arrow"></div>
+<div class="box output">良率年/月/日圖：切換 Auto/Fixed 刻度</div>
+</div>
+<div class="flow-group vflow">
+<div class="flow-title">相機參數滑桿 <code>trackBarExp/Lr/Ht</code></div>
+<div class="box input">拖曳或輸入【曝光滑桿】/【線掃滑桿】/【高度滑桿】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">同步 TrackBar ↔ NUD → 存 JSON → 寫硬體</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">TrackBar + 數值：同步更新</div>
+<div class="box output">（線掃改變時）曝光上限：重算 + 夾緊</div>
+<div class="box output dev">acquisition-settings.json：即時存檔</div>
+</div>
+<div class="v-arrow"></div>
+<div class="box guard">拖曳中不寫硬體，放開才寫。_syncingFromHw 防 Telemetry 回寫。</div>
+</div>
+<div class="flow-group vflow dev">
+<div class="flow-title">Telemetry Timer（500ms 自動）</div>
+<div class="box input">Timer Tick（每 500ms）</div>
+<div class="v-arrow"></div>
+<div class="box action">讀硬體值 → Update ListView → SyncCameraParamsFromHardware</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">Telemetry 列表：FPS/LR/Exp/Temp 等 16 欄</div>
+<div class="box output">（差距&gt;5%）曝光/線掃滑桿：回寫 UI</div>
+<div class="box output">相機數狀態：CAM: N/7</div>
+</div>
+</div>
+</div>
+<!-- /Right Panel -->
 
-<div class="flow-group">
-  <div class="flow-title">檢測設定變更 <code>propertyGridSettings</code></div>
-  <div class="flow-row">
-    <div class="box input">修改【檢測設定】任一屬性</div>
-    <div class="arrow dev">→</div>
-    <div class="box action dev">HandleSettingsChanged → SetCaptureSettings → 更新所有 ChartHelper 閾值</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">所有曲線圖閾值線：更新位置</div>
-      <div class="box output dev">（抓取中）CSV 插入 #CFG 設定快照</div>
-    </div>
-  </div>
-  <div class="sep dev"></div>
-  <div class="flow-indent dev">
-    <div class="flow-row">
-      <div class="box input">修改 Recipe 參數（HessianMaxFactor / ErrorValue / RidgeDir）</div>
-      <div class="arrow">→</div>
-      <div class="box action">強制勾選回顧強化 → ClearStitchedMode → 重新處理影像</div>
-    </div>
-    <div class="flow-row">
-      <div class="box input">修改合圖方式（垂直 ↔ 全域）</div>
-    </div>
-    <div class="flow-indent">
-      <div class="flow-row">
-        <div class="box condition">合圖方式-垂直</div>
-        <div class="arrow">→</div>
-        <div class="outputs">
-          <div class="box output">回顧主畫面：切回單台相機影像</div>
-          <div class="box output">回顧切向曲線圖/回顧法向曲線圖：自動恢復</div>
-          <div class="box output">回顧全覽圖：同步更新</div>
-          <div class="box output">監控主畫面：恢復單台 MIL 即時影像</div>
-        </div>
-      </div>
-      <div class="flow-row">
-        <div class="box condition">合圖方式-全域</div>
-        <div class="arrow">→</div>
-        <div class="outputs">
-          <div class="box output">回顧主畫面：全域合圖</div>
-          <div class="box output">回顧切向曲線圖：清空</div>
-          <div class="box output">回顧法向曲線圖：正常載入</div>
-          <div class="box output">監控主畫面：即時全域合圖（MbufCopyClip）</div>
-          <div class="box output">監控切向曲線圖：清空</div>
-          <div class="box output">回顧全覽圖：同步更新</div>
-        </div>
-      </div>
-    </div>
-    <div class="flow-row">
-      <div class="box input">修改 Algorithm</div>
-      <div class="arrow">→</div>
-      <div class="box action">LoadBackgroundBins / ClearBackgroundBins → UpdateStandardBgSubLockState</div>
-    </div>
-    <div class="flow-row">
-      <div class="box input">修改 ChartScaleMode / YMax</div>
-      <div class="arrow">→</div>
-      <div class="box output">良率年/月/日圖：切換 Auto/Fixed 刻度</div>
-    </div>
-  </div>
+<!-- ===== 系統監控 ===== -->
+<h2 class="dev" onclick="toggle(this)">系統監控</h2>
+<div class="tab-section dev">
+
+<div class="flow-group vflow">
+<div class="flow-title">Resource Log 初始化 <code>AniloxCamera.InitResourceLog</code></div>
+<div class="box input">程式啟動（InitializeSystem）</div>
+<div class="v-arrow"></div>
+<div class="box action">InitResourceLog(captureRootPath)</div>
+<div class="v-arrow" data-label="串接"></div>
+<div class="out-seq">
+<div class="box action">建立 logs/ 目錄（存圖根目錄下，fallback 到程式目錄）</div>
+<div class="box action">建立 resource-monitor-yyyyMMdd-HHmmss.csv</div>
+<div class="box action">寫入 CSV header</div>
+<div class="box action">初始化 CPU 基準（TotalProcessorTime + ProcessorCount）</div>
+</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">CSV 欄位：Timestamp, Mode, CamId, Width, Height, RawMB, GpuMs, SaveKB, SessionGB, SessionFrames, RamMB, CpuPct, VramMB</div>
+</div>
 </div>
 
-<div class="flow-group">
-  <div class="flow-title">相機參數滑桿 <code>trackBarExp/Lr/Ht</code></div>
-  <div class="flow-row">
-    <div class="box input">拖曳或輸入【曝光滑桿】/【線掃滑桿】/【高度滑桿】</div>
-    <div class="arrow dev">→</div>
-    <div class="box action dev">同步 TrackBar ↔ NUD → 存 JSON → 寫硬體</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">TrackBar + 數值：同步更新</div>
-      <div class="box output">（線掃改變時）曝光上限：重算 + 夾緊</div>
-      <div class="box output dev">acquisition-settings.json：即時存檔</div>
-    </div>
-  </div>
-  <div class="flow-indent dev">
-    <div class="flow-row"><div class="arrow">→</div>
-      <div class="box guard">拖曳中不寫硬體，放開才寫。_syncingFromHw 防 Telemetry 回寫。</div>
-    </div>
-  </div>
+<div class="flow-group vflow">
+<div class="flow-title">Live 取像 Resource Log（每幀自動記錄）</div>
+<div class="box input">ProcessingFunction 存檔完成（TrySaveCapture）</div>
+<div class="v-arrow" data-label="量測"></div>
+<div class="out-seq">
+<div class="box action">GPU 運算時間：Stopwatch 包夾 GPU Pipeline（ProcessImage + ComputeColumnMean）</div>
+<div class="box action">存檔大小：統計該幀所有輸出檔案（排除 .bmp）</div>
+<div class="box action">Session 累計：SessionSaveBytes += frameBytes, SessionFrameCount++</div>
+<div class="box action">RAM 使用量：Process.GetCurrentProcess().WorkingSet64</div>
+<div class="box action">CPU 使用率：(TotalProcessorTime 差值) / 時間差 / 核心數 × 100%</div>
+<div class="box action">VRAM 使用量：nvidia-smi --query-gpu=memory.used（快取 2 秒）</div>
+</div>
+<div class="v-arrow"></div>
+<div class="box action">AppendResourceLog → WriteResourceLine</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">CSV 追加一行：Mode=Grab, CamId, Width×Height, GpuMs, SaveKB, SessionGB, RamMB, CpuPct, VramMB</div>
+</div>
 </div>
 
-<div class="flow-group dev">
-  <div class="flow-title">Telemetry Timer（500ms 自動）</div>
-  <div class="flow-row">
-    <div class="box input">Timer Tick（每 500ms）</div>
-    <div class="arrow">→</div>
-    <div class="box action">讀硬體值 → Update ListView → SyncCameraParamsFromHardware</div>
-  </div>
-  <div class="flow-indent">
-    <div class="flow-row"><div class="arrow">→</div>
-      <div class="outputs">
-        <div class="box output">Telemetry 列表：FPS/LR/Exp/Temp 等 16 欄</div>
-        <div class="box output">（差距&gt;5%）曝光/線掃滑桿：回寫 UI</div>
-        <div class="box output">相機數狀態：CAM: N/7</div>
-      </div>
-    </div>
-  </div>
+<div class="flow-group vflow">
+<div class="flow-title">Review 操作 Resource Log</div>
+<div class="box input">拼接讀圖 / 單張讀圖 / 全域合圖 完成</div>
+<div class="v-arrow"></div>
+<div class="box action">AppendReviewResourceLog(mode, camCount, imgCount, w, h, loadMs)</div>
+<div class="v-arrow" data-label="量測"></div>
+<div class="out-seq">
+<div class="box action">載入時間：Stopwatch 包夾整個讀圖流程</div>
+<div class="box action">RAM 使用量：Process.WorkingSet64</div>
+<div class="box action">CPU / VRAM：同 Live（共用 GetCpuPercent / GetVramMB）</div>
+</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">CSV 追加一行：Mode=Stitch/Single/Global, CamCount, Width×Height, LoadMs, RamMB, CpuPct, VramMB</div>
+</div>
+<div class="note">觸發點：ReviewStitchCoordinator.LoadGrabStitchedViewAsync 結尾</div>
 </div>
 
-</div><!-- /Right Panel -->
+<div class="flow-group vflow">
+<div class="flow-title">Review 運算計時 <code>InspectionEngine.ExecuteTimedOperation</code></div>
+<div class="box input">回顧強化開啟時，點擊縮圖或切換序號</div>
+<div class="v-arrow"></div>
+<div class="box action">RunInspectionFullRes / ProcessImageFullRes</div>
+<div class="v-arrow" data-label="分段計時"></div>
+<div class="out-seq">
+<div class="box action">IO 時間：CoreCV_FastReadBMP 讀取 BMP（或 LoadFromPrecomputedFiles 讀 .bin）</div>
+<div class="box action">GPU 時間：RunGpuPipeline（ProcessImage + ComputeColumnMean）</div>
+<div class="box action">BMP 時間：Create8bppBitmap + Marshal.Copy 曲線資料</div>
+</div>
+<div class="v-arrow"></div>
+<div class="box action">回傳 TimedResult&lt;T&gt;（IoDurationMs / ComputeDurationMs / BitmapDurationMs）</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">座標狀態列：顯示運算時間（IO + GPU + BMP ms）</div>
+</div>
+</div>
+
+<div class="flow-group vflow">
+<div class="flow-title">量測項目與來源一覽</div>
+<div class="box action">GPU 運算時間 — Stopwatch 包夾 Pipeline（Live: AniloxCamera, Review: InspectionEngine）</div>
+<div class="box action">CPU 使用率 — Process.TotalProcessorTime 差值 ÷ 時間差 ÷ 核心數 × 100%</div>
+<div class="box action">RAM 使用量 — Process.GetCurrentProcess().WorkingSet64（MB）</div>
+<div class="box action">VRAM 使用量 — nvidia-smi --query-gpu=memory.used（快取 2 秒，避免開銷）</div>
+<div class="box action">磁碟用量 — SessionSaveBytes 累計（每幀存檔大小加總）</div>
+<div class="box action">IO 讀取時間 — Stopwatch 包夾 FastReadBMP / .bin 讀取</div>
+</div>
+
+</div><!-- /系統監控 -->
 
 <!-- ===== 跨 Tab 同步 ===== -->
 <h2 class="dev" onclick="toggle(this)">跨 Tab 同步</h2>
 <div class="tab-section dev">
-
-<div class="flow-group">
-  <div class="flow-title">Review → Data 同步</div>
-  <div class="flow-row">
-    <div class="box input">Review 選擇【單片序號】</div>
-    <div class="arrow">→</div>
-    <div class="box sync">GrabIdSelectedFromReview 事件</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">報表序號 + 起始/結束序號：同步</div>
-      <div class="box output">起始/結束日期時間：同步</div>
-      <div class="box output">良率卡片 + 列表：刷新</div>
-      <div class="box output">序號選擇群組：綠色高亮</div>
-    </div>
-  </div>
+<div class="flow-group vflow">
+<div class="flow-title">Review → Data 同步</div>
+<div class="box input">Review 選擇【單片序號】</div>
+<div class="v-arrow"></div>
+<div class="box sync">GrabIdSelectedFromReview 事件</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">報表序號 + 起始/結束序號：同步</div>
+<div class="box output">起始/結束日期時間：同步</div>
+<div class="box output">良率卡片 + 列表：刷新</div>
+<div class="box output">序號選擇群組：綠色高亮</div>
 </div>
-
-<div class="flow-group">
-  <div class="flow-title">Data → Review 同步</div>
-  <div class="flow-row">
-    <div class="box input">Data 選擇【報表序號】</div>
-    <div class="arrow">→</div>
-    <div class="box sync">GrabIdSelectedFromData 事件</div>
-    <div class="arrow">→</div>
-    <div class="outputs">
-      <div class="box output">單片序號：同步</div>
-      <div class="box output">時段日期/時間：導航到該時間</div>
-      <div class="box output">回顧主畫面 + 縮圖：載入拼接圖</div>
-      <div class="box output">單片群組：綠色高亮</div>
-    </div>
-  </div>
 </div>
-
-<div class="flow-group">
-  <div class="flow-title">讀取資料 → 雙向填充</div>
-  <div class="flow-row">
-    <div class="box input">Review tab【讀取資料】</div>
-    <div class="arrow">→</div>
-    <div class="box sync">SyncFromReviewFolder</div>
-    <div class="arrow">→</div>
-    <div class="box output">Data tab：全部序號/時間 ComboBox + 良率圖 + 統計</div>
-  </div>
-  <div class="flow-row" style="margin-top: 8px;">
-    <div class="box input">Data tab【讀取資料】</div>
-    <div class="arrow">→</div>
-    <div class="box sync">DataFolderSelected 事件</div>
-    <div class="arrow">→</div>
-    <div class="box output">Review tab：ImageRepository + TimeNavigator</div>
-  </div>
+<div class="flow-group vflow">
+<div class="flow-title">Data → Review 同步</div>
+<div class="box input">Data 選擇【報表序號】</div>
+<div class="v-arrow"></div>
+<div class="box sync">GrabIdSelectedFromData 事件</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">單片序號：同步</div>
+<div class="box output">時段日期/時間：導航到該時間</div>
+<div class="box output">回顧主畫面 + 縮圖：載入拼接圖</div>
+<div class="box output">單片群組：綠色高亮</div>
 </div>
-
-<div class="flow-group">
-  <div class="flow-title">Guard 防護一覽</div>
-  <div class="flow-row"><div class="box guard">_grabIdCrossGuard — 防 Review ↔ Data 序號同步迴圈</div></div>
-  <div class="flow-row"><div class="box guard">_grabIdNavGuard — 防 時間 ComboBox ↔ 序號 ComboBox 迴圈</div></div>
-  <div class="flow-row"><div class="box guard">_statComboGuard — 防 stat ComboBox cascade 重複觸發</div></div>
-  <div class="flow-row"><div class="box guard">_chartNavGuard — 防 良率圖年月日 cascade 重複觸發</div></div>
-  <div class="flow-row"><div class="box guard">_processedCheckboxGuard — 防程式碼設定 checkbox 時觸發 CheckedChanged</div></div>
-  <div class="flow-row"><div class="box guard">_suppressChartSync — 防 FitToScreen 觸發的 chart 同步</div></div>
-  <div class="flow-row"><div class="box guard">_syncingFromHw — 防 Telemetry 回讀時觸發 ValueChanged 寫硬體</div></div>
 </div>
-
-</div><!-- /Cross-tab -->
-
+<div class="flow-group vflow">
+<div class="flow-title">讀取資料 → 雙向填充</div>
+<div class="box input">Review tab【讀取資料】</div>
+<div class="v-arrow"></div>
+<div class="box sync">SyncFromReviewFolder</div>
+<div class="v-arrow"></div>
+<div class="box output">Data tab：全部序號/時間 ComboBox + 良率圖 + 統計</div>
+<div class="box input">Data tab【讀取資料】</div>
+<div class="v-arrow"></div>
+<div class="box sync">DataFolderSelected 事件</div>
+<div class="v-arrow"></div>
+<div class="box output">Review tab：ImageRepository + TimeNavigator</div>
+</div>
+<div class="flow-group vflow">
+<div class="flow-title">Guard 防護一覽</div>
+<div class="box guard">_grabIdCrossGuard — 防 Review ↔ Data 序號同步迴圈</div>
+<div class="box guard">_grabIdNavGuard — 防 時間 ComboBox ↔ 序號 ComboBox 迴圈</div>
+<div class="box guard">_statComboGuard — 防 stat ComboBox cascade 重複觸發</div>
+<div class="box guard">_chartNavGuard — 防 良率圖年月日 cascade 重複觸發</div>
+<div class="box guard">_processedCheckboxGuard — 防程式碼設定 checkbox 時觸發 CheckedChanged</div>
+<div class="box guard">_suppressChartSync — 防 FitToScreen 觸發的 chart 同步</div>
+<div class="box guard">_syncingFromHw — 防 Telemetry 回讀時觸發 ValueChanged 寫硬體</div>
+</div>
+</div>
+<!-- /Cross-tab -->
 <script>
 function toggle(h2) {
   h2.classList.toggle('open');
@@ -866,7 +1087,29 @@ function setMode(mode) {
 }
 // 預設全展開
 document.querySelectorAll('h2:not(.dev)').forEach(h => { h.classList.add('open'); h.nextElementSibling.classList.add('open'); });
+// flow-group 預設全部縮合
+document.querySelectorAll('.flow-group').forEach(fg => fg.classList.add('collapsed'));
+document.querySelectorAll('.flow-group > .flow-title').forEach(t => {
+  t.addEventListener('click', () => t.parentElement.classList.toggle('collapsed'));
+});
+// 超連結點擊：展開目標 flow-group + 所屬 tab-section
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    const target = document.querySelector(a.getAttribute('href'));
+    if (!target) return;
+    // 展開所屬 tab-section + h2
+    const section = target.closest('.tab-section');
+    if (section && !section.classList.contains('open')) {
+      section.classList.add('open');
+      section.previousElementSibling.classList.add('open');
+    }
+    // 展開目標 flow-group
+    const fg = target.classList.contains('flow-group') ? target : target.closest('.flow-group');
+    if (fg) fg.classList.remove('collapsed');
+    // 延遲捲動（等 DOM 展開）
+    setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  });
+});
 </script>
-
 </body>
 </html>

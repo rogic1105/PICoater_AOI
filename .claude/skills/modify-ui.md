@@ -39,8 +39,11 @@
 ### StitchMode 行為
 - **Global 模式**：
   - Live：`EnableGlobalMerge` → 監控主畫面即時合圖（MbufChild2d + MbufCopyClip，含 overlap 分割）；muraChartVerticalLive 不更新；chartLiveOverview X 軸隨合併 display zoom 聯動（`LiveViewRangeProvider` → `TryGetMergedViewRange`）；lblPixelInfo 由 `_mergedDisplay` 的 `M_MOUSE_MOVE` hook 更新（mm 座標）
+  - Live 手勢：雙擊=`ResetMainDisplayView`（fit-to-window）、三擊=`SetPhysicalMagnification1x`（1:1）、滾輪=`ApplyCustomZoom`（1.1x 步進），Global/單台共用邏輯
+  - Live 初始化：`btnCameraGrab_Click` 首次分配相機後，若已為 Global 模式則立即 `EnableGlobalMerge`
   - Review：`ApplyGlobalMergeIfNeeded` → 回顧主畫面全域合圖；chartMuraVertical 清空；chartMuraHorizontal 正常載入
   - 切換時立即觸發（`_propertyGrid_PropertyValueChanged`）
+  - OPS/Start 變更：Global 啟用中 → `RefreshGlobalMergeLayout`（暫停複製→重算 clip→buffer 大小變則重分配→恢復，下一幀生效）
 - **Vertical 模式**：overview X 軸固定（不隨 canvas zoom）；muraVertical/Horizontal 隨動；Live 單台 MIL 顯示
 
 ### SwitchRidgeDirection 三態切換

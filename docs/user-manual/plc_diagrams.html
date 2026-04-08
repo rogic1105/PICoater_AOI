@@ -5,17 +5,17 @@
 <title>PICoater AOI — PLC FSM Diagrams</title>
 <style>
   :root {
-    --bg: #1e1e2e;
-    --surface: #282840;
-    --border: #444;
-    --text: #e0e0e0;
-    --accent: #7aa2f7;
-    --green: #9ece6a;
-    --red: #f7768e;
-    --yellow: #e0af68;
-    --orange: #ff9e64;
-    --cyan: #7dcfff;
-    --purple: #bb9af7;
+    --bg: #fafafa;
+    --surface: #ffffff;
+    --border: #ddd;
+    --text: #333;
+    --accent: #1565c0;
+    --green: #2e7d32;
+    --red: #c62828;
+    --yellow: #f9a825;
+    --orange: #e65100;
+    --cyan: #0277bd;
+    --purple: #6a1b9a;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -37,25 +37,25 @@
   }
   /* ── Enum Reference ── */
   .enum-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
-  .enum-table th { background: #333; color: var(--accent); padding: 8px 12px; text-align: left; }
-  .enum-table td { padding: 6px 12px; border-bottom: 1px solid #333; }
-  .enum-table tr:hover td { background: #2a2a44; }
-  .enum-table code { color: var(--cyan); background: #1a1a30; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
+  .enum-table th { background: #e3f2fd; color: var(--accent); padding: 8px 12px; text-align: left; }
+  .enum-table td { padding: 6px 12px; border-bottom: 1px solid #ddd; }
+  .enum-table tr:hover td { background: #f0f0f5; }
+  .enum-table code { color: var(--cyan); background: #e8eaf6; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
 
   /* ── SFC ── */
   .sfc { display: flex; flex-direction: column; align-items: center; gap: 0; font-family: Consolas, monospace; }
   .sfc-step {
-    width: 280px; border: 3px solid var(--accent); background: #1a1a3a;
+    width: 280px; border: 3px solid var(--accent); background: #e3f2fd;
     text-align: center; padding: 10px 16px; font-weight: bold; font-size: 14px;
     position: relative;
   }
-  .sfc-step.active { border-color: var(--green); background: #1a2a1a; }
-  .sfc-step.error { border-color: var(--red); background: #2a1a1a; }
+  .sfc-step.active { border-color: var(--green); background: #e8f5e9; }
+  .sfc-step.error { border-color: var(--red); background: #fce4ec; }
   .sfc-step.initial { border: 3px double var(--accent); }
   .sfc-action {
-    width: 280px; border: 1px solid #666; border-left: 3px solid var(--yellow);
-    background: #222238; text-align: left; padding: 6px 12px;
-    font-size: 12px; color: #bbb;
+    width: 280px; border: 1px solid #ccc; border-left: 3px solid var(--orange);
+    background: #fff3e0; text-align: left; padding: 6px 12px;
+    font-size: 12px; color: #555;
   }
   .sfc-trans {
     width: 180px; height: 4px; background: var(--text); position: relative;
@@ -86,22 +86,22 @@
   .ladder { font-family: Consolas, monospace; font-size: 14px; line-height: 1.4; }
   .rung {
     display: flex; align-items: center; padding: 8px 0;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid #ddd;
   }
   .rung-num { color: #666; width: 40px; text-align: center; flex-shrink: 0; }
   .rail-l, .rail-r { color: var(--accent); font-weight: bold; flex-shrink: 0; }
   .wire { color: #666; }
   .contact { color: var(--green); font-weight: bold; }
   .contact-nc { color: var(--red); font-weight: bold; }
-  .coil { color: var(--yellow); font-weight: bold; }
+  .coil { color: var(--orange); font-weight: bold; }
   .rung-content { flex: 1; white-space: pre; overflow-x: auto; }
   .ladder-legend { margin-top: 16px; font-size: 13px; color: #888; }
   .ladder-legend span { margin-right: 24px; }
 
   .io-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
-  .io-table th { background: #333; color: var(--accent); padding: 8px 12px; text-align: left; }
-  .io-table td { padding: 6px 12px; border-bottom: 1px solid #333; }
-  .io-table tr:hover td { background: #2a2a44; }
+  .io-table th { background: #e3f2fd; color: var(--accent); padding: 8px 12px; text-align: left; }
+  .io-table td { padding: 6px 12px; border-bottom: 1px solid #ddd; }
+  .io-table tr:hover td { background: #f0f0f5; }
 
   .note { color: #888; font-size: 13px; margin-top: 8px; font-style: italic; }
   .note-en { color: #666; font-size: 12px; }
@@ -158,13 +158,13 @@
   <svg viewBox="0 0 920 540" width="100%" style="max-width:920px; display:block; margin:0 auto;">
     <defs>
       <marker id="ah-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-        <path d="M0,1 L9,5 L0,9 Z" fill="#7aa2f7"/>
+        <path d="M0,1 L9,5 L0,9 Z" fill="#1565c0"/>
       </marker>
       <marker id="ah-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-        <path d="M0,1 L9,5 L0,9 Z" fill="#f7768e"/>
+        <path d="M0,1 L9,5 L0,9 Z" fill="#e53935"/>
       </marker>
       <marker id="ah-grn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-        <path d="M0,1 L9,5 L0,9 Z" fill="#9ece6a"/>
+        <path d="M0,1 L9,5 L0,9 Z" fill="#43a047"/>
       </marker>
       <marker id="ah-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
         <path d="M0,1 L9,5 L0,9 Z" fill="#666"/>
@@ -173,104 +173,104 @@
 
     <!-- ── State boxes ── -->
     <!-- Disconnected -->
-    <rect x="360" y="16" width="200" height="44" rx="8" fill="#1a1a3a" stroke="#7aa2f7" stroke-width="2" stroke-dasharray="6 3"/>
-    <text x="460" y="35" text-anchor="middle" fill="#7aa2f7" font-size="14" font-weight="bold">Disconnected</text>
+    <rect x="360" y="16" width="200" height="44" rx="8" fill="#e3f2fd" stroke="#1565c0" stroke-width="2" stroke-dasharray="6 3"/>
+    <text x="460" y="35" text-anchor="middle" fill="#1565c0" font-size="14" font-weight="bold">Disconnected</text>
     <text x="460" y="52" text-anchor="middle" fill="#888" font-size="11">未連線</text>
 
     <!-- Idle -->
-    <rect x="90" y="141" width="160" height="58" rx="8" fill="#1a2a1a" stroke="#9ece6a" stroke-width="2.5"/>
-    <text x="170" y="164" text-anchor="middle" fill="#9ece6a" font-size="15" font-weight="bold">Idle</text>
-    <text x="170" y="181" text-anchor="middle" fill="#bbb" font-size="11">待機</text>
+    <rect x="90" y="141" width="160" height="58" rx="8" fill="#e8f5e9" stroke="#43a047" stroke-width="2.5"/>
+    <text x="170" y="164" text-anchor="middle" fill="#43a047" font-size="15" font-weight="bold">Idle</text>
+    <text x="170" y="181" text-anchor="middle" fill="#555" font-size="11">待機</text>
     <text x="170" y="194" text-anchor="middle" fill="#666" font-size="10">PC_ALIVE=1</text>
 
     <!-- Running -->
-    <rect x="375" y="141" width="170" height="58" rx="8" fill="#1a2a1a" stroke="#9ece6a" stroke-width="2.5"/>
-    <text x="460" y="164" text-anchor="middle" fill="#9ece6a" font-size="15" font-weight="bold">Running</text>
-    <text x="460" y="181" text-anchor="middle" fill="#bbb" font-size="11">取像中</text>
+    <rect x="375" y="141" width="170" height="58" rx="8" fill="#e8f5e9" stroke="#43a047" stroke-width="2.5"/>
+    <text x="460" y="164" text-anchor="middle" fill="#43a047" font-size="15" font-weight="bold">Running</text>
+    <text x="460" y="181" text-anchor="middle" fill="#555" font-size="11">取像中</text>
     <text x="460" y="194" text-anchor="middle" fill="#666" font-size="10">BUSY=1</text>
 
     <!-- MURA -->
-    <rect x="655" y="141" width="130" height="58" rx="8" fill="#2a1a1a" stroke="#f7768e" stroke-width="2.5"/>
-    <text x="720" y="164" text-anchor="middle" fill="#f7768e" font-size="15" font-weight="bold">MURA</text>
-    <text x="720" y="181" text-anchor="middle" fill="#bbb" font-size="11">瑕疵</text>
+    <rect x="655" y="141" width="130" height="58" rx="8" fill="#fce4ec" stroke="#e53935" stroke-width="2.5"/>
+    <text x="720" y="164" text-anchor="middle" fill="#e53935" font-size="15" font-weight="bold">MURA</text>
+    <text x="720" y="181" text-anchor="middle" fill="#555" font-size="11">瑕疵</text>
     <text x="720" y="194" text-anchor="middle" fill="#666" font-size="10">MURA=1</text>
 
     <!-- Stopping -->
-    <rect x="375" y="286" width="170" height="52" rx="8" fill="#1a1a3a" stroke="#7aa2f7" stroke-width="2"/>
-    <text x="460" y="308" text-anchor="middle" fill="#7aa2f7" font-size="14" font-weight="bold">Stopping</text>
+    <rect x="375" y="286" width="170" height="52" rx="8" fill="#e3f2fd" stroke="#1565c0" stroke-width="2"/>
+    <text x="460" y="308" text-anchor="middle" fill="#1565c0" font-size="14" font-weight="bold">Stopping</text>
     <text x="460" y="326" text-anchor="middle" fill="#888" font-size="11">停止中</text>
 
     <!-- Faulted -->
-    <rect x="65" y="421" width="210" height="58" rx="8" fill="#2a1a1a" stroke="#f7768e" stroke-width="2.5"/>
-    <text x="170" y="444" text-anchor="middle" fill="#f7768e" font-size="14" font-weight="bold">Faulted</text>
-    <text x="170" y="462" text-anchor="middle" fill="#bbb" font-size="11">PLC 故障</text>
+    <rect x="65" y="421" width="210" height="58" rx="8" fill="#fce4ec" stroke="#e53935" stroke-width="2.5"/>
+    <text x="170" y="444" text-anchor="middle" fill="#e53935" font-size="14" font-weight="bold">Faulted</text>
+    <text x="170" y="462" text-anchor="middle" fill="#555" font-size="11">PLC 故障</text>
     <text x="170" y="475" text-anchor="middle" fill="#666" font-size="10">PC_ALIVE=1 (保持)</text>
 
     <!-- CommLost -->
-    <rect x="620" y="421" width="210" height="58" rx="8" fill="#2a1a1a" stroke="#f7768e" stroke-width="2.5"/>
-    <text x="725" y="444" text-anchor="middle" fill="#f7768e" font-size="14" font-weight="bold">CommLost</text>
-    <text x="725" y="462" text-anchor="middle" fill="#bbb" font-size="11">通訊中斷</text>
+    <rect x="620" y="421" width="210" height="58" rx="8" fill="#fce4ec" stroke="#e53935" stroke-width="2.5"/>
+    <text x="725" y="444" text-anchor="middle" fill="#e53935" font-size="14" font-weight="bold">CommLost</text>
+    <text x="725" y="462" text-anchor="middle" fill="#555" font-size="11">通訊中斷</text>
     <text x="725" y="475" text-anchor="middle" fill="#666" font-size="10">全 LOW (TCP 斷線)</text>
 
     <!-- ── Normal flow (solid blue) ── -->
 
     <!-- 1. Disconnected → Idle -->
-    <path d="M460,60 V108 H170 V141" fill="none" stroke="#7aa2f7" stroke-width="2" marker-end="url(#ah-blue)"/>
-    <text x="320" y="102" text-anchor="middle" fill="#7aa2f7" font-size="11">連線成功 Connect OK</text>
+    <path d="M460,60 V108 H170 V141" fill="none" stroke="#1565c0" stroke-width="2" marker-end="url(#ah-blue)"/>
+    <text x="320" y="102" text-anchor="middle" fill="#1565c0" font-size="11">連線成功 Connect OK</text>
 
     <!-- 2. Idle → Running -->
-    <path d="M250,170 H375" fill="none" stroke="#7aa2f7" stroke-width="2" marker-end="url(#ah-blue)"/>
-    <text x="312" y="162" text-anchor="middle" fill="#e0af68" font-size="11">DI_START ↑ 上升緣</text>
+    <path d="M250,170 H375" fill="none" stroke="#1565c0" stroke-width="2" marker-end="url(#ah-blue)"/>
+    <text x="312" y="162" text-anchor="middle" fill="#e65100" font-size="11">DI_START ↑ 上升緣</text>
 
     <!-- 3. Running → MURA -->
-    <path d="M545,170 H655" fill="none" stroke="#7aa2f7" stroke-width="2" marker-end="url(#ah-blue)"/>
-    <text x="600" y="162" text-anchor="middle" fill="#e0af68" font-size="11">檢出瑕疵 Defect</text>
+    <path d="M545,170 H655" fill="none" stroke="#1565c0" stroke-width="2" marker-end="url(#ah-blue)"/>
+    <text x="600" y="162" text-anchor="middle" fill="#e65100" font-size="11">檢出瑕疵 Defect</text>
 
     <!-- 4. Running → Stopping -->
-    <path d="M460,199 V286" fill="none" stroke="#7aa2f7" stroke-width="2" marker-end="url(#ah-blue)"/>
-    <text x="468" y="248" text-anchor="start" fill="#e0af68" font-size="11">DI_START ↓</text>
-    <text x="468" y="262" text-anchor="start" fill="#e0af68" font-size="11">下降緣</text>
+    <path d="M460,199 V286" fill="none" stroke="#1565c0" stroke-width="2" marker-end="url(#ah-blue)"/>
+    <text x="468" y="248" text-anchor="start" fill="#e65100" font-size="11">DI_START ↓</text>
+    <text x="468" y="262" text-anchor="start" fill="#e65100" font-size="11">下降緣</text>
 
     <!-- 5. MURA → Stopping -->
-    <path d="M720,199 V312 H545" fill="none" stroke="#7aa2f7" stroke-width="2" marker-end="url(#ah-blue)"/>
-    <text x="640" y="260" text-anchor="middle" fill="#e0af68" font-size="11">DI_START ↓ 下降緣</text>
+    <path d="M720,199 V312 H545" fill="none" stroke="#1565c0" stroke-width="2" marker-end="url(#ah-blue)"/>
+    <text x="640" y="260" text-anchor="middle" fill="#e65100" font-size="11">DI_START ↓ 下降緣</text>
 
     <!-- 6. Stopping → Idle (loop back, left side) -->
-    <path d="M375,312 H55 V170 H90" fill="none" stroke="#7aa2f7" stroke-width="2" marker-end="url(#ah-blue)"/>
-    <text x="215" y="330" text-anchor="middle" fill="#9ece6a" font-size="11">清除完成 Cleanup done</text>
+    <path d="M375,312 H55 V170 H90" fill="none" stroke="#1565c0" stroke-width="2" marker-end="url(#ah-blue)"/>
+    <text x="215" y="330" text-anchor="middle" fill="#43a047" font-size="11">清除完成 Cleanup done</text>
 
     <!-- ── Error entry (dashed red) ── -->
 
     <!-- 7. Normal states → Faulted (left channel, x=135) -->
-    <path d="M135,199 V421" fill="none" stroke="#f7768e" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah-red)"/>
-    <rect x="13" y="280" width="120" height="38" rx="4" fill="#1e1e2e" fill-opacity="0.9" stroke="none"/>
-    <text x="73" y="295" text-anchor="middle" fill="#f7768e" font-size="10">DI_PLC_ALIVE=0</text>
-    <text x="73" y="310" text-anchor="middle" fill="#f7768e" font-size="10">PLC 心跳消失</text>
+    <path d="M135,199 V421" fill="none" stroke="#e53935" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah-red)"/>
+    <rect x="13" y="280" width="120" height="38" rx="4" fill="#fafafa" fill-opacity="0.9" stroke="none"/>
+    <text x="73" y="295" text-anchor="middle" fill="#e53935" font-size="10">DI_PLC_ALIVE=0</text>
+    <text x="73" y="310" text-anchor="middle" fill="#e53935" font-size="10">PLC 心跳消失</text>
 
     <!-- 8. Normal states → CommLost (right channel, x=755) -->
-    <path d="M755,199 V421" fill="none" stroke="#f7768e" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah-red)"/>
-    <rect x="790" y="280" width="115" height="38" rx="4" fill="#1e1e2e" fill-opacity="0.9" stroke="none"/>
-    <text x="847" y="295" text-anchor="middle" fill="#f7768e" font-size="10">TCP Exception</text>
-    <text x="847" y="310" text-anchor="middle" fill="#f7768e" font-size="10">通訊例外</text>
+    <path d="M755,199 V421" fill="none" stroke="#e53935" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah-red)"/>
+    <rect x="790" y="280" width="115" height="38" rx="4" fill="#fafafa" fill-opacity="0.9" stroke="none"/>
+    <text x="847" y="295" text-anchor="middle" fill="#e53935" font-size="10">TCP Exception</text>
+    <text x="847" y="310" text-anchor="middle" fill="#e53935" font-size="10">通訊例外</text>
 
     <!-- ── Recovery (dashed green) ── -->
 
     <!-- 9. Faulted → Idle (right channel, x=205) -->
-    <path d="M205,421 V199" fill="none" stroke="#9ece6a" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah-grn)"/>
-    <rect x="210" y="332" width="140" height="28" rx="4" fill="#1e1e2e" fill-opacity="0.9" stroke="none"/>
-    <text x="280" y="344" text-anchor="middle" fill="#9ece6a" font-size="10">DI_PLC_ALIVE=1</text>
-    <text x="280" y="356" text-anchor="middle" fill="#9ece6a" font-size="10">心跳恢復 Restored</text>
+    <path d="M205,421 V199" fill="none" stroke="#43a047" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah-grn)"/>
+    <rect x="210" y="332" width="140" height="28" rx="4" fill="#fafafa" fill-opacity="0.9" stroke="none"/>
+    <text x="280" y="344" text-anchor="middle" fill="#43a047" font-size="10">DI_PLC_ALIVE=1</text>
+    <text x="280" y="356" text-anchor="middle" fill="#43a047" font-size="10">心跳恢復 Restored</text>
 
     <!-- 10. CommLost → Idle (route around bottom-left) -->
-    <path d="M725,479 V510 H35 V155 H90" fill="none" stroke="#9ece6a" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah-grn)"/>
-    <rect x="300" y="513" width="155" height="16" rx="4" fill="#1e1e2e" fill-opacity="0.9" stroke="none"/>
-    <text x="377" y="524" text-anchor="middle" fill="#9ece6a" font-size="10">重連成功 Reconnect OK</text>
+    <path d="M725,479 V510 H35 V155 H90" fill="none" stroke="#43a047" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah-grn)"/>
+    <rect x="300" y="513" width="155" height="16" rx="4" fill="#fafafa" fill-opacity="0.9" stroke="none"/>
+    <text x="377" y="524" text-anchor="middle" fill="#43a047" font-size="10">重連成功 Reconnect OK</text>
 
     <!-- ── Cross-error (dashed red) ── -->
 
     <!-- 11. Faulted → CommLost -->
-    <path d="M275,450 H620" fill="none" stroke="#f7768e" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah-red)"/>
-    <text x="447" y="443" text-anchor="middle" fill="#f7768e" font-size="10">TCP Exception 通訊例外</text>
+    <path d="M275,450 H620" fill="none" stroke="#e53935" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah-red)"/>
+    <text x="447" y="443" text-anchor="middle" fill="#e53935" font-size="10">TCP Exception 通訊例外</text>
 
     <!-- ── Annotations ── -->
     <text x="565" y="46" text-anchor="start" fill="#666" font-size="10" font-style="italic">(連線失敗 5s 重試 Retry on fail)</text>
@@ -278,11 +278,11 @@
     <text x="835" y="475" text-anchor="start" fill="#666" font-size="10" font-style="italic"> 重試)</text>
 
     <!-- ── Legend ── -->
-    <line x1="375" y1="530" x2="415" y2="530" stroke="#7aa2f7" stroke-width="2"/>
+    <line x1="375" y1="530" x2="415" y2="530" stroke="#1565c0" stroke-width="2"/>
     <text x="420" y="534" fill="#888" font-size="11">正常流程 Normal</text>
-    <line x1="530" y1="530" x2="570" y2="530" stroke="#f7768e" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <line x1="530" y1="530" x2="570" y2="530" stroke="#e53935" stroke-width="1.5" stroke-dasharray="6 4"/>
     <text x="575" y="534" fill="#888" font-size="11">錯誤 Error</text>
-    <line x1="640" y1="530" x2="680" y2="530" stroke="#9ece6a" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <line x1="640" y1="530" x2="680" y2="530" stroke="#43a047" stroke-width="1.5" stroke-dasharray="6 4"/>
     <text x="685" y="534" fill="#888" font-size="11">恢復 Recovery</text>
   </svg>
   <p class="note" style="text-align:center; margin-top:12px;">StopAsync() → Closed 已關閉 (程式關閉時清除所有 DO，斷開連線)</p>
@@ -517,21 +517,21 @@
      ════════════════════════════════════════════════════════════════ -->
 <h2>4. IO Timing Diagram 時序圖</h2>
 <div class="diagram-container">
-<pre style="font-family: Consolas, monospace; font-size: 13px; line-height: 1.5; color: #ccc;">
+<pre style="font-family: Consolas, monospace; font-size: 13px; line-height: 1.5; color: #555;">
 TIME ──────────────►  連線 Connect  開始取像    檢出瑕疵       停止取像      PLC 心跳消失   心跳恢復
                         │        Start Grab  MURA Detect   Stop Grab   PLC ALIVE Lost  Recover
                         ▼           ▼            ▼              ▼            ▼             ▼
-DI_PLC_ALIVE  ____<span style="color:#9ece6a">██████████████████████████████████████████████████████</span>____<span style="color:#f7768e">________</span><span style="color:#9ece6a">██████████</span>
-DI_START      ______________<span style="color:#9ece6a">████████████████████████████████████</span>__________________________________
+DI_PLC_ALIVE  ____<span style="color:#43a047">██████████████████████████████████████████████████████</span>____<span style="color:#e53935">________</span><span style="color:#43a047">██████████</span>
+DI_START      ______________<span style="color:#43a047">████████████████████████████████████</span>__________________________________
                             ↑                                  ↓
                      上升緣 rising                       下降緣 falling
 
-DO_PC_ALIVE   ______<span style="color:#7aa2f7">██████████████████████████████████████████████████████████████████████████</span>
-DO_PC_BUSY    __________________<span style="color:#e0af68">████████████████████████████████</span>__________________________________
-DO_MURA       ______________________________<span style="color:#f7768e">████████████████████</span>__________________________________
+DO_PC_ALIVE   ______<span style="color:#1565c0">██████████████████████████████████████████████████████████████████████████</span>
+DO_PC_BUSY    __________________<span style="color:#e65100">████████████████████████████████</span>__________________________________
+DO_MURA       ______________________________<span style="color:#e53935">████████████████████</span>__________________________________
 
-PlcState      <span style="color:#666">Disc.</span>  <span style="color:#7aa2f7">Idle</span>     <span style="color:#9ece6a">Running</span>        <span style="color:#f7768e">MURA</span>      <span style="color:#e0af68">Stopping</span> <span style="color:#7aa2f7">Idle</span>  <span style="color:#f7768e">Faulted</span>   <span style="color:#7aa2f7">Idle</span>
-              <span style="color:#666">未連線</span>  <span style="color:#7aa2f7">待機</span>     <span style="color:#9ece6a">取像中</span>         <span style="color:#f7768e">瑕疵</span>       <span style="color:#e0af68">停止中</span>  <span style="color:#7aa2f7">待機</span>   <span style="color:#f7768e">PLC故障</span>   <span style="color:#7aa2f7">待機</span>
+PlcState      <span style="color:#666">Disc.</span>  <span style="color:#1565c0">Idle</span>     <span style="color:#43a047">Running</span>        <span style="color:#e53935">MURA</span>      <span style="color:#e65100">Stopping</span> <span style="color:#1565c0">Idle</span>  <span style="color:#e53935">Faulted</span>   <span style="color:#1565c0">Idle</span>
+              <span style="color:#666">未連線</span>  <span style="color:#1565c0">待機</span>     <span style="color:#43a047">取像中</span>         <span style="color:#e53935">瑕疵</span>       <span style="color:#e65100">停止中</span>  <span style="color:#1565c0">待機</span>   <span style="color:#e53935">PLC故障</span>   <span style="color:#1565c0">待機</span>
 </pre>
 </div>
 

@@ -472,6 +472,16 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// <summary>重置主顯示器（MIL secondary display）的縮放/平移為 fit-to-window。</summary>
         public void ResetMainDisplayView()
         {
+            if (IsGlobalMergeActive && _mergedDisplay != MIL.M_NULL)
+            {
+                try
+                {
+                    MIL.MdispControl(_mergedDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
+                    MIL.MdispControl(_mergedDisplay, MIL.M_CENTER_DISPLAY, MIL.M_ENABLE);
+                }
+                catch { }
+                return;
+            }
             var cam = _cameras.Find(c => c.CameraId == _selectedMainCameraId);
             cam?.ResetSecondaryDisplayView();
         }
@@ -640,6 +650,103 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             // 恢復選中相機的 secondary display
             SwitchMainDisplay(_selectedMainCameraId);
+        }
+
+        /// <summary>OPS/Start 變更時，重新計算全域合圖佈局（下一幀生效）。</summary>
+        public void RefreshGlobalMergeLayout(double[] opsUm, double[] startPosMm)
+        {
+            if (!IsGlobalMergeActive || _cameras.Count == 0) return;
+
+            // ① 暫停所有相機的合併複製（callback 中 _mergedTargetBuffer == M_NULL → 跳過）
+            foreach (var cam in _cameras)
+                cam._mergedTargetBuffer = MIL.M_NULL;
+
+            // ② 重算座標系
+            double refOpsMm = opsUm[0] / 1000.0;
+            double minStart = double.MaxValue, maxEnd = double.MinValue;
+            int maxH = 0;
+            foreach (var cam in _cameras)
+            {
+                int idx = cam.CameraId - 1;
+                double pos = (idx < startPosMm.Length) ? startPosMm[idx] : 0;
+                double ops = (idx < opsUm.Length) ? opsUm[idx] : opsUm[0];
+                double widthMm = cam.FrameWidth * ops / 1000.0;
+                if (pos < minStart) minStart = pos;
+                if (pos + widthMm > maxEnd) maxEnd = pos + widthMm;
+                if (cam.FrameHeight > maxH) maxH = cam.FrameHeight;
+            }
+            int totalW = (int)Math.Ceiling((maxEnd - minStart) / refOpsMm);
+            if (totalW <= 0 || maxH <= 0) return;
+
+            // ③ buffer 大小改變 → 重新分配
+            if (totalW != _mergedTotalW)
+            {
+                MIL_ID sysId = _cameras[0].OwnerSystemId;
+                if (sysId == MIL.M_NULL) return;
+
+                // 暫時解除 display 綁定
+                MIL.MdispSelectWindow(_mergedDisplay, MIL.M_NULL, IntPtr.Zero);
+                MIL.MbufFree(_mergedBuffer);
+                _mergedBuffer = MIL.M_NULL;
+
+                MIL.MbufAlloc2d(sysId, totalW, maxH, 8 + MIL.M_UNSIGNED,
+                    MIL.M_IMAGE + MIL.M_DISP + MIL.M_PROC, ref _mergedBuffer);
+                MIL.MbufClear(_mergedBuffer, 0);
+
+                // 重新綁定 display
+                MIL.MdispSelectWindow(_mergedDisplay, _mergedBuffer, _mainDisplayPanel.Handle);
+                MIL.MdispControl(_mergedDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
+            }
+            else
+            {
+                MIL.MbufClear(_mergedBuffer, 0);
+            }
+
+            // ④ 重算 overlap + clip（與 EnableGlobalMerge 相同邏輯）
+            var entries = new List<(AniloxCamera cam, int xOffset)>();
+            foreach (var cam in _cameras)
+            {
+                int idx = cam.CameraId - 1;
+                double pos = (idx < startPosMm.Length) ? startPosMm[idx] : 0;
+                int offsetX = (int)Math.Round((pos - minStart) / refOpsMm);
+                entries.Add((cam, offsetX));
+            }
+            entries.Sort((a, b) => a.xOffset.CompareTo(b.xOffset));
+
+            int n = entries.Count;
+            var drawLeft  = new int[n];
+            var drawRight = new int[n];
+            for (int i = 0; i < n; i++)
+            {
+                drawLeft[i]  = 0;
+                drawRight[i] = entries[i].cam.FrameWidth;
+            }
+            for (int i = 0; i < n - 1; i++)
+            {
+                int rightEdge = entries[i].xOffset + entries[i].cam.FrameWidth;
+                int leftEdge  = entries[i + 1].xOffset;
+                int overlap   = rightEdge - leftEdge;
+                if (overlap > 0)
+                {
+                    int mid = leftEdge + overlap / 2;
+                    drawRight[i]     = Math.Min(drawRight[i], mid - entries[i].xOffset);
+                    drawLeft[i + 1]  = Math.Max(drawLeft[i + 1], mid - entries[i + 1].xOffset);
+                }
+            }
+
+            // ⑤ 更新座標系 + 各相機 clip，然後恢復合併複製
+            _mergedMinStartMm = minStart;
+            _mergedRefOpsMm   = refOpsMm;
+            _mergedTotalW     = totalW;
+
+            for (int i = 0; i < n; i++)
+            {
+                var cam = entries[i].cam;
+                cam._mergedTargetOffsetX = entries[i].xOffset;
+                cam._mergedSrcClipLeft   = drawLeft[i];
+                cam._mergedSrcClipWidth  = drawRight[i] - drawLeft[i];
+                cam._mergedTargetBuffer  = _mergedBuffer;  // 恢復：下一幀開始使用新佈局
+            }
         }
 
         // ==================== Merged Display Mouse ====================
@@ -903,6 +1010,38 @@ namespace AniloxRoll.Monitor.UI.Managers
         public void SetPhysicalMagnification1x()
         {
             if (!IsLiveGrabbing || _screenMmPerPx <= 0) return;
+
+            if (IsGlobalMergeActive && _mergedDisplay != MIL.M_NULL)
+            {
+                if (_mergedRefOpsMm <= 0) return;
+                double zoom1x = _mergedRefOpsMm / _screenMmPerPx;
+
+                double cx = _mainDisplayPanel.Width / 2.0;
+                double cy = _mainDisplayPanel.Height / 2.0;
+
+                try
+                {
+                    double curZoom = 0, curPanX = 0, curPanY = 0;
+                    MIL.MdispInquire(_mergedDisplay, MIL.M_ZOOM_FACTOR_X, ref curZoom);
+                    MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_X, ref curPanX);
+                    MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_Y, ref curPanY);
+                    if (curZoom <= 0) curZoom = 1.0;
+
+                    double imgCx = curPanX + cx / curZoom;
+                    double imgCy = curPanY + cy / curZoom;
+                    double newPanX = imgCx - cx / zoom1x;
+                    double newPanY = imgCy - cy / zoom1x;
+
+                    MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_DISABLE);
+                    MIL.MdispControl(_mergedDisplay, MIL.M_CENTER_DISPLAY, MIL.M_DISABLE);
+                    MIL.MdispZoom(_mergedDisplay, zoom1x, zoom1x);
+                    MIL.MdispPan(_mergedDisplay, newPanX, newPanY);
+                    MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_ENABLE);
+                }
+                catch { }
+                return;
+            }
+
             int camIdx = _selectedMainCameraId - 1;
             var s = _inspectionSettings;
             double[] opsUmArr = s?.GetCameraOpsUmArray();
@@ -912,26 +1051,26 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (opsInMm <= 0) return;
 
             // physicalMag = zoom * screenMmPerPx / opsInMm = 1  →  zoom = opsInMm / screenMmPerPx
-            double zoom1x = opsInMm / _screenMmPerPx;
+            double zoom1xCam = opsInMm / _screenMmPerPx;
 
             var cam = _cameras.Find(c => c.CameraId == _selectedMainCameraId);
             if (cam == null) return;
 
             // 以面板中心為基準
-            double cx = _mainDisplayPanel.Width / 2.0;
-            double cy = _mainDisplayPanel.Height / 2.0;
+            double cxCam = _mainDisplayPanel.Width / 2.0;
+            double cyCam = _mainDisplayPanel.Height / 2.0;
 
-            if (cam.TryGetSecondaryDisplayGeometry(out double curZoom, out _, out double curPanX, out double curPanY) && curZoom > 0)
+            if (cam.TryGetSecondaryDisplayGeometry(out double curZoomCam, out _, out double curPanXCam, out double curPanYCam) && curZoomCam > 0)
             {
-                double imgCx = curPanX + cx / curZoom;
-                double imgCy = curPanY + cy / curZoom;
-                double newPanX = imgCx - cx / zoom1x;
-                double newPanY = imgCy - cy / zoom1x;
-                cam.SetSecondaryDisplayZoom(zoom1x, newPanX, newPanY);
+                double imgCx = curPanXCam + cxCam / curZoomCam;
+                double imgCy = curPanYCam + cyCam / curZoomCam;
+                double newPanX = imgCx - cxCam / zoom1xCam;
+                double newPanY = imgCy - cyCam / zoom1xCam;
+                cam.SetSecondaryDisplayZoom(zoom1xCam, newPanX, newPanY);
             }
             else
             {
-                cam.SetSecondaryDisplayZoom(zoom1x, 0, 0);
+                cam.SetSecondaryDisplayZoom(zoom1xCam, 0, 0);
             }
         }
 
