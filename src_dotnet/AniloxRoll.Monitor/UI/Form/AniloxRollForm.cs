@@ -127,6 +127,13 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (_settings == null) _settings = ConfigManager.LoadInspectionSettings();
             AniloxCamera.InitResourceLog(_settings?.CaptureRootPath);
+            AniloxCamera.GetUiStateCallback = () =>
+            {
+                bool live = _liveCameraManager?.IsLiveGrabbing ?? false;
+                bool review = _imageRepository?.FileCount > 0;
+                string stitch = _settings?.StitchMode.ToString() ?? "?";
+                return $"{(live ? "T" : "F")},{(review ? "T" : "F")},{stitch}";
+            };
             InitServiceLayer();
             InitUiLayer();
             InitCameraLayer();

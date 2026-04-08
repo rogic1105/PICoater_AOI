@@ -948,7 +948,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 </div>
 <div class="v-arrow"></div>
 <div class="out-par">
-<div class="box output">CSV 欄位：Timestamp, Mode, CamId, Width, Height, RawMB, GpuMs, SaveKB, SessionGB, SessionFrames, RamMB, CpuPct, VramMB</div>
+<div class="box output">CSV 欄位：Timestamp, Mode, CamId, Width, Height, RawMB, GpuMs, SaveKB, SessionGB, SessionFrames, RamMB, CpuPct, VramMB, Live, Review, StitchMode</div>
 </div>
 </div>
 
@@ -1017,6 +1017,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box action">VRAM 使用量 — nvidia-smi --query-gpu=memory.used（快取 2 秒，避免開銷）</div>
 <div class="box action">磁碟用量 — SessionSaveBytes 累計（每幀存檔大小加總）</div>
 <div class="box action">IO 讀取時間 — Stopwatch 包夾 FastReadBMP / .bin 讀取</div>
+<div class="box action">UI 狀態 — Live(T/F), Review(T/F), StitchMode(Vertical/Global)（Form 注入 callback）</div>
 </div>
 
 </div><!-- /系統監控 -->

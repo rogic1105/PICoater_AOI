@@ -1291,6 +1291,9 @@ namespace AniloxRoll.Monitor.Core.Camera
         private static DateTime _lastCpuSample;
         private static int _cpuCoreCount;
 
+        // UI 狀態回呼：由 Form 注入，回傳 "Live=T,Review=F,Stitch=Global" 格式
+        public static Func<string> GetUiStateCallback { get; set; }
+
         // VRAM 查詢用：快取結果（nvidia-smi 有開銷，最多每 2 秒查一次）
         private static long _cachedVramMB;
         private static DateTime _lastVramQuery;
@@ -1320,7 +1323,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                 {
                     using (var sw = new StreamWriter(_resourceLogPath, append: false))
                     {
-                        sw.WriteLine("Timestamp,Mode,CamId,Width,Height,RawMB,GpuMs,SaveKB,SessionGB,SessionFrames,RamMB,CpuPct,VramMB");
+                        sw.WriteLine("Timestamp,Mode,CamId,Width,Height,RawMB,GpuMs,SaveKB,SessionGB,SessionFrames,RamMB,CpuPct,VramMB,Live,Review,StitchMode");
                     }
                 }
 
@@ -1406,6 +1409,8 @@ namespace AniloxRoll.Monitor.Core.Camera
             {
                 double cpuPct = GetCpuPercent();
                 long vramMB = GetVramMB();
+                string uiState = "";
+                try { uiState = GetUiStateCallback?.Invoke() ?? ""; } catch { }
                 lock (_resourceLogLock)
                 {
                     using (var sw = new StreamWriter(_resourceLogPath, append: true))
@@ -1413,7 +1418,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                         sw.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff},{mode},{id},{w},{h}," +
                             $"{(long)w * h / (1024.0 * 1024):F1},{gpuMs},{saveBytes / 1024.0:F0}," +
                             $"{sessionBytes / (1024.0 * 1024 * 1024):F3},{frames},{ramMB}," +
-                            $"{cpuPct:F1},{vramMB}");
+                            $"{cpuPct:F1},{vramMB},{uiState}");
                     }
                 }
             }
