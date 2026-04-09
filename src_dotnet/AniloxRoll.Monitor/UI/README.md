@@ -20,7 +20,9 @@
 
 - `Widgets/`
   - `FormInteractionHelper.cs`
-  - `MuraChartHelper.cs`
+  - `ColumnCurveChartHelper.cs`
+  - `RowCurveChartHelper.cs`
+  - `CurveMergeHelper.cs`
 
 - `State/`
   - `UserSessionState.cs`

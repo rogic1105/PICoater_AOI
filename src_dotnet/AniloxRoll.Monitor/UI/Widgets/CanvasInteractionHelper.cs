@@ -13,8 +13,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private readonly SmartCanvas _canvas;
         private readonly InspectionSettings _settings;
         private readonly ToolStripStatusLabel _statusLabel;
-        private readonly MuraChartHelper _muraChartHelper;
-        private readonly RowMuraChartHelper _rowMuraChartHelper;
+        private readonly ColumnCurveChartHelper _columnChartHelper;
+        private readonly RowCurveChartHelper _rowChartHelper;
         private readonly PictureBox[] _cameraPanels;
         private readonly ThumbnailGridPresenter _galleryManager;
 
@@ -23,7 +23,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private double _currentViewRightMm = 0;
 
         /// <summary>全域/水平合圖模式：同步 chartOverview X 軸視野。</summary>
-        public MuraChartHelper OverviewChartHelper { get; set; }
+        public ColumnCurveChartHelper OverviewChartHelper { get; set; }
 
         // 合圖模式座標覆寫：合圖 pixel 0 對應的 mm 起始位置與解析度
         private double? _mergedStartMm;
@@ -76,16 +76,16 @@ namespace AniloxRoll.Monitor.UI.Widgets
             SmartCanvas canvas,
             InspectionSettings settings,
             ToolStripStatusLabel statusLabel,
-            MuraChartHelper muraChartHelper,
-            RowMuraChartHelper rowMuraChartHelper,
+            ColumnCurveChartHelper columnChartHelper,
+            RowCurveChartHelper rowChartHelper,
             PictureBox[] cameraPanels,
             ThumbnailGridPresenter galleryManager)
         {
             _canvas = canvas;
             _settings = settings;
             _statusLabel = statusLabel;
-            _muraChartHelper = muraChartHelper;
-            _rowMuraChartHelper = rowMuraChartHelper;
+            _columnChartHelper = columnChartHelper;
+            _rowChartHelper = rowChartHelper;
             _cameraPanels = cameraPanels ?? Array.Empty<PictureBox>();
             _galleryManager = galleryManager;
         }
@@ -125,10 +125,14 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
         public void SetCurrentCameraIndex(int index) => _currentCameraIndex = index;
 
-        /// <summary>在載入新圖前呼叫，以世界座標（mm）記住目前 viewport，支援跨倍率還原。</summary>
+        /// <summary>在載入新圖前呼叫，以世界座標（mm）記住目前 viewport，支援跨倍率還原。
+        /// Global 模式下不保留位置（導航後一律 FitToScreen）。</summary>
         public void SaveViewIfNeeded()
         {
             if (_canvas.Image == null) return; // 不重置 flag，保留先前的存檔
+
+            // Global 模式：導航後一律 FitToScreen，不記錄位置
+            if (_settings?.StitchMode == StitchMode.Global) return;
 
             // 嘗試以 mm 世界座標儲存（跨倍率安全）
             _savedViewLeftMm = double.NaN;
@@ -275,7 +279,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             {
                 _currentViewLeftMm  = leftMm;
                 _currentViewRightMm = rightMm;
-                _muraChartHelper?.UpdateViewRange(leftMm, rightMm);
+                _columnChartHelper?.UpdateViewRange(leftMm, rightMm);
                 OverviewChartHelper?.UpdateViewRange(leftMm, rightMm);
             }
 
@@ -285,8 +289,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
         /// <summary>從目前 canvas 狀態單獨更新 chartMuraHorizontal Y 軸視野範圍。</summary>
         public void RefreshRowChartRange()
         {
-            if (_rowMuraChartHelper == null || _canvas.Image == null) return;
-            double rowPitch = _rowMuraChartHelper.RowPitchMm;
+            if (_rowChartHelper == null || _canvas.Image == null) return;
+            double rowPitch = _rowChartHelper.RowPitchMm;
             if (rowPitch <= 0) return;
 
             float zoom = _canvas.Zoom;
@@ -295,7 +299,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             PointF pan = _canvas.PanOffset;
             double pixelTop = (0              - pan.Y) / zoom * _imageScaleFactor;
             double pixelBot = (_canvas.Height - pan.Y) / zoom * _imageScaleFactor;
-            _rowMuraChartHelper.UpdateViewRange(pixelTop * rowPitch, pixelBot * rowPitch);
+            _rowChartHelper.UpdateViewRange(pixelTop * rowPitch, pixelBot * rowPitch);
         }
 
         /// <summary>事件處理：canvas.StatusChanged → 更新 status bar 與 chart 視野範圍。</summary>
@@ -306,7 +310,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
             // 若圖像為縮小版（新格式 JPEG），需乘以縮放倍率還原成全解析度座標
             double physicalX = startPosMm + (info.ImageX * _imageScaleFactor * opsInMm);
-            double rowPitchMm = _rowMuraChartHelper?.RowPitchMm ?? 0;
+            double rowPitchMm = _rowChartHelper?.RowPitchMm ?? 0;
             double physicalY = info.ImageY * _imageScaleFactor * rowPitchMm;
 
             if (info.Zoom > 0)
@@ -319,19 +323,19 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
                 if (!_suppressChartSync)
                 {
-                    _muraChartHelper?.UpdateViewRange(_currentViewLeftMm, _currentViewRightMm);
+                    _columnChartHelper?.UpdateViewRange(_currentViewLeftMm, _currentViewRightMm);
                     OverviewChartHelper?.UpdateViewRange(_currentViewLeftMm, _currentViewRightMm);
 
                     // 法向（水平）Mura 曲線：canvas 垂直 viewport → chart Y 軸同步
                     // 傳入 canvas pixel mm（不 clamp），UpdateViewRange 內部反轉 + 補償
-                    if (_rowMuraChartHelper != null)
+                    if (_rowChartHelper != null)
                     {
-                        double rowPitch = _rowMuraChartHelper.RowPitchMm;
+                        double rowPitch = _rowChartHelper.RowPitchMm;
                         if (rowPitch > 0)
                         {
                             double pixelTop = (0              - info.PanOffset.Y) / info.Zoom * _imageScaleFactor;
                             double pixelBot = (_canvas.Height - info.PanOffset.Y) / info.Zoom * _imageScaleFactor;
-                            _rowMuraChartHelper.UpdateViewRange(pixelTop * rowPitch, pixelBot * rowPitch);
+                            _rowChartHelper.UpdateViewRange(pixelTop * rowPitch, pixelBot * rowPitch);
                         }
                     }
                 }

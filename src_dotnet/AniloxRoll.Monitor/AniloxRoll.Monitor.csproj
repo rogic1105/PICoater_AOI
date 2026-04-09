@@ -127,9 +127,10 @@
       <Link>UI\Widgets\SmartCanvas.cs</Link>
     </Compile>
     <Compile Include="UI\Managers\LiveCameraManager.cs" />
-    <Compile Include="UI\Widgets\MuraChartHelper.cs" />
-    <Compile Include="UI\Widgets\OverviewChartManager.cs" />
-    <Compile Include="UI\Widgets\RowMuraChartHelper.cs" />
+    <Compile Include="UI\Widgets\ColumnCurveChartHelper.cs" />
+    <Compile Include="UI\Widgets\CurveMergeHelper.cs" />
+    <Compile Include="UI\Widgets\RowCurveChartHelper.cs" />
+    <Compile Include="UI\Widgets\BitmapPool.cs" />
     <Compile Include="UI\Widgets\GrabImageStitcher.cs" />
     <Compile Include="UI\Widgets\ProportionalScaler.cs" />
     <Compile Include="UI\Presenters\DataStatisticsPresenter.cs" />

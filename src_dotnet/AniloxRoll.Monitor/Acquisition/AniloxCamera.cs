@@ -1323,7 +1323,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                 {
                     using (var sw = new StreamWriter(_resourceLogPath, append: false))
                     {
-                        sw.WriteLine("Timestamp,Mode,CamId,Width,Height,RawMB,GpuMs,SaveKB,SessionGB,SessionFrames,RamMB,CpuPct,VramMB,Live,Review,StitchMode");
+                        sw.WriteLine("Timestamp,Mode,CamId,Width,Height,RawMB,ProcessMs,SaveKB,SessionGB,SessionFrames,RamMB,CpuPct,VramMB,Live,Review,StitchMode");
                     }
                 }
 
@@ -1336,10 +1336,10 @@ namespace AniloxRoll.Monitor.Core.Camera
             }
         }
 
-        private static void AppendResourceLog(int camId, int w, int h, long gpuMs, long saveBytes,
+        private static void AppendResourceLog(int camId, int w, int h, long processMs, long saveBytes,
             long sessionBytes, long sessionFrames, long ramMB)
         {
-            WriteResourceLine("Grab", camId, w, h, gpuMs, saveBytes, sessionBytes, sessionFrames, ramMB);
+            WriteResourceLine("Grab", camId, w, h, processMs, saveBytes, sessionBytes, sessionFrames, ramMB);
         }
 
         /// <summary>Review 操作的 resource log（讀圖合圖/單張）。
@@ -1401,7 +1401,7 @@ namespace AniloxRoll.Monitor.Core.Camera
             catch { return _cachedVramMB; }
         }
 
-        private static void WriteResourceLine(string mode, int id, int w, int h, long gpuMs, long saveBytes,
+        private static void WriteResourceLine(string mode, int id, int w, int h, long processMs, long saveBytes,
             long sessionBytes, long frames, long ramMB)
         {
             if (!_resourceLogInitialized) return;
@@ -1416,7 +1416,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                     using (var sw = new StreamWriter(_resourceLogPath, append: true))
                     {
                         sw.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff},{mode},{id},{w},{h}," +
-                            $"{(long)w * h / (1024.0 * 1024):F1},{gpuMs},{saveBytes / 1024.0:F0}," +
+                            $"{(long)w * h / (1024.0 * 1024):F1},{processMs},{saveBytes / 1024.0:F0}," +
                             $"{sessionBytes / (1024.0 * 1024 * 1024):F3},{frames},{ramMB}," +
                             $"{cpuPct:F1},{vramMB},{uiState}");
                     }
@@ -1428,25 +1428,35 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>
         /// 將 8-bit 灰階 byte[] 存成 JPEG（在 Task.Run 背景執行緒呼叫）。
         /// GDI+ JPEG encoder 需要 24bpp，透過 GCHandle pin + Graphics.DrawImage 轉換。
+        /// bmp24 使用 ThreadStatic 重用，避免每幀分配 ~469 MB LOH 觸發 Gen2 GC。
         /// </summary>
+        [ThreadStatic] private static Bitmap _reuseBmp24;
+        [ThreadStatic] private static int _reuseBmp24W, _reuseBmp24H;
+
         private static void SaveJpegFromBytes(byte[] data, int w, int h, string path, int quality)
         {
             var gch = GCHandle.Alloc(data, GCHandleType.Pinned);
             try
             {
-                using (var bmp8  = ImageUtils.Create8bppBitmap(gch.AddrOfPinnedObject(), w, h))
-                using (var bmp24 = new Bitmap(w, h, PixelFormat.Format24bppRgb))
-                using (var g     = Graphics.FromImage(bmp24))
+                using (var bmp8 = ImageUtils.Create8bppBitmap(gch.AddrOfPinnedObject(), w, h))
                 {
-                    g.DrawImage(bmp8, 0, 0, w, h);
+                    if (_reuseBmp24 == null || _reuseBmp24W != w || _reuseBmp24H != h)
+                    {
+                        _reuseBmp24?.Dispose();
+                        _reuseBmp24 = new Bitmap(w, h, PixelFormat.Format24bppRgb);
+                        _reuseBmp24W = w;
+                        _reuseBmp24H = h;
+                    }
+                    using (var g = Graphics.FromImage(_reuseBmp24))
+                        g.DrawImage(bmp8, 0, 0, w, h);
 
                     var codec = GetJpegEncoder();
-                    if (codec == null) { bmp24.Save(path); return; }
+                    if (codec == null) { _reuseBmp24.Save(path); return; }
 
                     using (var ep = new EncoderParameters(1))
                     {
                         ep.Param[0] = new EncoderParameter(Encoder.Quality, (long)quality);
-                        bmp24.Save(path, codec, ep);
+                        _reuseBmp24.Save(path, codec, ep);
                     }
                 }
             }

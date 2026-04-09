@@ -8,7 +8,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
     /// <summary>
     /// chartMura 封裝：右側 Y 軸、X/Y grid、Mean/Max 曲線、紅色閾值線。
     /// </summary>
-    public class MuraChartHelper
+    public class ColumnCurveChartHelper
     {
         private readonly Chart _chart;
 
@@ -29,7 +29,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private double _logicalLeftMm  = double.NaN;
         private double _logicalRightMm = double.NaN;
 
-        public MuraChartHelper(Chart chart)
+        public ColumnCurveChartHelper(Chart chart)
         {
             _chart = chart;
             Build();

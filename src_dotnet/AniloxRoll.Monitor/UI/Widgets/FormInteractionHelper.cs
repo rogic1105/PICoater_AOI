@@ -26,11 +26,11 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public ImageRepository ImageRepository { get; set; }
         public DateTimeNavigator TimeNavigator { get; set; }
         public ThumbnailGridPresenter GalleryManager { get; set; }
-        public MuraChartHelper MuraChartHelper { get; set; }
+        public ColumnCurveChartHelper ColumnChartHelper { get; set; }
         public InspectionSettings Settings { get; set; }
         public ToolStripStatusLabel StatusLabel { get; set; }
         public PictureBox[] CameraPanels { get; set; }
-        public RowMuraChartHelper MuraChartHorizontalHelper { get; set; }
+        public RowCurveChartHelper RowChartHelper { get; set; }
     }
 
     public class FormInteractionHelper
@@ -43,8 +43,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private readonly ImageRepository _imageRepository;
         private readonly DateTimeNavigator _timeNavigator;
         private readonly ThumbnailGridPresenter _galleryManager;
-        private readonly MuraChartHelper _muraChartHelper;
-        private readonly RowMuraChartHelper _muraChartHorizontalHelper;
+        private readonly ColumnCurveChartHelper _columnChartHelper;
+        private readonly RowCurveChartHelper _rowChartHelper;
         private readonly InspectionSettings _settings;
         private readonly CanvasInteractionHelper _canvasHelper;
         private string _imageInfoSuffix = "";
@@ -73,16 +73,16 @@ namespace AniloxRoll.Monitor.UI.Widgets
             _imageRepository = context.ImageRepository;
             _timeNavigator = context.TimeNavigator;
             _galleryManager = context.GalleryManager;
-            _muraChartHelper = context.MuraChartHelper;
-            _muraChartHorizontalHelper = context.MuraChartHorizontalHelper;
+            _columnChartHelper = context.ColumnChartHelper;
+            _rowChartHelper = context.RowChartHelper;
             _settings = context.Settings;
 
             _canvasHelper = new CanvasInteractionHelper(
                 context.Canvas,
                 context.Settings,
                 context.StatusLabel,
-                context.MuraChartHelper,
-                context.MuraChartHorizontalHelper,
+                context.ColumnChartHelper,
+                context.RowChartHelper,
                 context.CameraPanels,
                 context.GalleryManager);
         }
@@ -103,11 +103,11 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public void RestoreCanvasViewOrFit() => _canvasHelper.RestoreViewOrFitToScreen();
         public void SetScreenMmPerPixel(double mmPerPx) => _canvasHelper.SetScreenMmPerPixel(mmPerPx);
         public double ScreenMmPerPixel => _canvasHelper.ScreenMmPerPixel;
-        public double RowPitchMm => _muraChartHorizontalHelper?.RowPitchMm ?? 0;
+        public double RowPitchMm => _rowChartHelper?.RowPitchMm ?? 0;
         public void SetCanvasPhysicalMag1x(Point mouseLocation) => _canvasHelper.SetPhysicalMagnification1x(mouseLocation);
 
         /// <summary>設定全域/水平合圖模式：chartOverview 與 canvas 座標聯動。</summary>
-        public void SetMergedMode(MuraChartHelper overviewHelper, double startMm, double opsUm)
+        public void SetMergedMode(ColumnCurveChartHelper overviewHelper, double startMm, double opsUm)
         {
             _canvasHelper.OverviewChartHelper = overviewHelper;
             _canvasHelper.SetMergedCoordinates(startMm, opsUm);
@@ -139,7 +139,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             if (_settings == null) return;
             ConfigManager.SaveInspectionSettings(_settings);
             ApplySettingsToService();
-            _muraChartHelper?.SetOps(_settings.Cam1_Ops);
+            _columnChartHelper?.SetOps(_settings.Cam1_Ops);
             _canvasHelper.Invalidate();
         }
 
@@ -201,7 +201,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
                     _canvasHelper.UpdateCanvas(data.Image);
                     canvasMs = sw.ElapsedMilliseconds;
 
-                    if (_muraChartHelper != null && _settings != null)
+                    if (_columnChartHelper != null && _settings != null)
                     {
                         sw.Restart();
                         var cfg = ReviewConfig;
@@ -214,20 +214,20 @@ namespace AniloxRoll.Monitor.UI.Widgets
                         {
                             double opsUm = (index >= 0 && index < cfg.CamOps.Length)
                                 ? cfg.CamOps[index] : _settings.Cam1_Ops;
-                            _muraChartHelper.SetOps(opsUm);
-                            _muraChartHelper.SetThresholds(cfg.ErrorValueMean, cfg.ErrorValueMax);
+                            _columnChartHelper.SetOps(opsUm);
+                            _columnChartHelper.SetThresholds(cfg.ErrorValueMean, cfg.ErrorValueMax);
                         }
 
                         _canvasHelper.TryComputeCurrentViewRange(index, out double leftMm, out double rightMm);
-                        _muraChartHelper.UpdateDataAndView(data.MuraCurveMean, data.MuraCurveMax,
+                        _columnChartHelper.UpdateDataAndView(data.MuraCurveMean, data.MuraCurveMax,
                             startPos, leftMm, rightMm);
                         chartMs = sw.ElapsedMilliseconds;
                     }
 
                     // 更新法向（水平）Mura 曲線圖 + Y 軸視野同步
-                    if (_muraChartHorizontalHelper != null && data.MuraRowCurveMean != null)
+                    if (_rowChartHelper != null && data.MuraRowCurveMean != null)
                     {
-                        _muraChartHorizontalHelper.UpdateData(data.MuraRowCurveMean, data.MuraRowCurveMax);
+                        _rowChartHelper.UpdateData(data.MuraRowCurveMean, data.MuraRowCurveMax);
                         _canvasHelper.RefreshRowChartRange();
                     }
                 }

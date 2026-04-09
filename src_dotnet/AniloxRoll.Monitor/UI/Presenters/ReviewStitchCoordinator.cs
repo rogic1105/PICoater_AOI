@@ -25,9 +25,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public CheckBox CheckBoxShowProcessed { get; set; }
 
         public FormInteractionHelper InteractionHelper { get; set; }
-        public MuraChartHelper MuraChartHelper { get; set; }
-        public RowMuraChartHelper MuraChartHorizontalHelper { get; set; }
-        public MuraChartHelper StitchedOverviewHelper { get; set; }
+        public ColumnCurveChartHelper ColumnChartHelper { get; set; }
+        public RowCurveChartHelper RowChartHelper { get; set; }
+        public ColumnCurveChartHelper OverviewHelper { get; set; }
         public ThumbnailGridPresenter GalleryManager { get; set; }
 
         public BatchInspectionService InspectionService { get; set; }
@@ -171,8 +171,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                                     imgs[i] = GrabImageStitcher.StitchCamera(paths, scale, bmpLoader,
                                         useProcessed: enableProcess, ridgeDirection: ridgeDir);
                                 }
-                                OverviewChartManager.MergeCurves(paths, out newCurveMean[i], out newCurveMax[i]);
-                                OverviewChartManager.MergeRowCurves(paths, out newRowCurveMean[i], out newRowCurveMax[i]);
+                                CurveMergeHelper.MergeCurves(paths, out newCurveMean[i], out newCurveMax[i]);
+                                CurveMergeHelper.MergeRowCurves(paths, out newRowCurveMean[i], out newRowCurveMax[i]);
                             }
                             catch (Exception ex)
                             {
@@ -193,7 +193,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _stitchedRowCurveMax  = newRowCurveMax;
                 _currentGrabConfig = grabCfg;
                 _ctx.InteractionHelper.ReviewConfig = grabCfg;
-                _ctx.DataStatsPresenter.SetReviewGroupBoxes(true);
+                _ctx.DataStatsPresenter?.SetReviewGroupBoxes(true);
 
                 double[] opsArr = null, posArr = null;
                 if (_ctx.Settings.StitchMode == StitchMode.Global)
@@ -209,6 +209,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 if (_globalMergedImage != null)
                 {
                     ShowMergedImageInCanvas(_globalMergedImage, opsArr, posArr);
+                    // Global 模式：7 台 row curves 重疊合併
+                    UpdateGlobalRowChart();
                 }
                 else
                 {
@@ -266,7 +268,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 if (posArr[i] < globalMinMm) globalMinMm = posArr[i];
             if (globalMinMm == double.MaxValue) globalMinMm = 0;
 
-            _ctx.InteractionHelper.SetMergedMode(_ctx.StitchedOverviewHelper, globalMinMm, refOpsUm);
+            _ctx.InteractionHelper.SetMergedMode(_ctx.OverviewHelper, globalMinMm, refOpsUm);
             if (_ctx.ChartOverview.ChartAreas.Count > 0)
                 _ctx.ChartOverview.ChartAreas[0].AxisX.ScaleView.Zoomable = true;
         }
@@ -289,28 +291,42 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (_globalMergedImage != null)
             {
                 if (_ctx.Canvas.Image == _globalMergedImage) _ctx.Canvas.Image = null;
-                _globalMergedImage.Dispose();
+                Widgets.BitmapPool.Return(_globalMergedImage);
                 _globalMergedImage = null;
             }
             if (_periodMergedImage != null)
             {
                 if (_ctx.Canvas.Image == _periodMergedImage) _ctx.Canvas.Image = null;
-                _periodMergedImage.Dispose();
+                Widgets.BitmapPool.Return(_periodMergedImage);
                 _periodMergedImage = null;
             }
             if (_stitchedImages == null) return;
             _ctx.Canvas.Image = null;
             _ctx.GalleryManager.ClearImages();
-            foreach (var bmp in _stitchedImages) bmp?.Dispose();
+            foreach (var bmp in _stitchedImages) Widgets.BitmapPool.Return(bmp);
             _stitchedImages = null;
             _stitchedCurveMean    = null;
             _stitchedCurveMax     = null;
             _stitchedRowCurveMean = null;
             _stitchedRowCurveMax  = null;
             _currentGrabConfig = null;
-            _ctx.MuraChartHelper?.SetOps(_ctx.Settings.Cam1_Ops);
-            _ctx.MuraChartHelper?.SetThresholds(_ctx.Settings.ErrorValueMean, _ctx.Settings.ErrorValueMax);
+            _ctx.ColumnChartHelper?.SetOps(_ctx.Settings.Cam1_Ops);
+            _ctx.ColumnChartHelper?.SetThresholds(_ctx.Settings.ErrorValueMean, _ctx.Settings.ErrorValueMax);
             _ctx.DataStatsPresenter?.SetReviewGroupBoxes(false);
+        }
+
+        /// <summary>Global 模式：7 台 row curves 重疊合併後更新法向曲線圖。</summary>
+        private void UpdateGlobalRowChart()
+        {
+            if (_ctx.RowChartHelper == null || _stitchedRowCurveMean == null) return;
+            CurveMergeHelper.MergeRowCurvesOverlap(
+                _stitchedRowCurveMean, _stitchedRowCurveMax,
+                _ctx.CameraCount, out float[] mergedMean, out float[] mergedMax);
+            if (mergedMean != null)
+            {
+                _ctx.RowChartHelper.UpdateData(mergedMean, mergedMax);
+                _ctx.InteractionHelper.RefreshRowChartRange();
+            }
         }
 
         /// <summary>
@@ -337,9 +353,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 errMax  = _ctx.Settings.ErrorValueMax;
             }
 
-            OverviewChartManager.UpdateOverviewChart(_stitchedCurveMean, _stitchedCurveMax,
+            CurveMergeHelper.UpdateOverviewChart(_stitchedCurveMean, _stitchedCurveMax,
                 opsArr, posArr, errMean, errMax,
-                _ctx.StitchedOverviewHelper, _ctx.CameraCount, _ctx.Settings.StitchMode,
+                _ctx.OverviewHelper, _ctx.CameraCount, _ctx.Settings.StitchMode,
                 ViewRangeProvider);
         }
 
@@ -361,7 +377,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _ctx.ChartMuraVertical.Series["Mean"].Points.Clear();
                 _ctx.ChartMuraVertical.Series["Max"].Points.Clear();
             }
-            else if (_ctx.MuraChartHelper != null && _ctx.Settings != null)
+            else if (_ctx.ColumnChartHelper != null && _ctx.Settings != null)
             {
                 // Vertical 模式：正常載入切向曲線
                 float[] mean = (_stitchedCurveMean != null && idx >= 0 && idx < _stitchedCurveMean.Length)
@@ -374,8 +390,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 {
                     double opsUm = (idx >= 0 && idx < _currentGrabConfig.CamOps.Length)
                         ? _currentGrabConfig.CamOps[idx] : _ctx.Settings.Cam1_Ops;
-                    _ctx.MuraChartHelper.SetOps(opsUm);
-                    _ctx.MuraChartHelper.SetThresholds(
+                    _ctx.ColumnChartHelper.SetOps(opsUm);
+                    _ctx.ColumnChartHelper.SetThresholds(
                         _currentGrabConfig.ErrorValueMean, _currentGrabConfig.ErrorValueMax);
                     posArr = _currentGrabConfig.CamPos;
                 }
@@ -386,20 +402,29 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
                 double startPos = (idx >= 0 && idx < posArr.Length) ? posArr[idx] : 0;
                 _ctx.InteractionHelper.TryComputeCurrentViewRange(idx, out double leftMm, out double rightMm);
-                _ctx.MuraChartHelper.UpdateDataAndView(mean, max, startPos, leftMm, rightMm);
+                _ctx.ColumnChartHelper.UpdateDataAndView(mean, max, startPos, leftMm, rightMm);
             }
 
-            // 法向曲線圖：兩種模式都載入
-            if (_ctx.MuraChartHorizontalHelper != null)
+            // 法向曲線圖
+            if (_ctx.RowChartHelper != null)
             {
-                float[] rowMean = (_stitchedRowCurveMean != null && idx >= 0 && idx < _stitchedRowCurveMean.Length)
-                    ? _stitchedRowCurveMean[idx] : null;
-                float[] rowMax = (_stitchedRowCurveMax != null && idx >= 0 && idx < _stitchedRowCurveMax.Length)
-                    ? _stitchedRowCurveMax[idx] : null;
-                if (rowMean != null)
+                if (_ctx.Settings.StitchMode == StitchMode.Global)
                 {
-                    _ctx.MuraChartHorizontalHelper.UpdateData(rowMean, rowMax);
-                    _ctx.InteractionHelper.RefreshRowChartRange();
+                    // Global 模式：7 台 row curves 重疊合併
+                    UpdateGlobalRowChart();
+                }
+                else
+                {
+                    // Vertical 模式：單台 row curves
+                    float[] rowMean = (_stitchedRowCurveMean != null && idx >= 0 && idx < _stitchedRowCurveMean.Length)
+                        ? _stitchedRowCurveMean[idx] : null;
+                    float[] rowMax = (_stitchedRowCurveMax != null && idx >= 0 && idx < _stitchedRowCurveMax.Length)
+                        ? _stitchedRowCurveMax[idx] : null;
+                    if (rowMean != null)
+                    {
+                        _ctx.RowChartHelper.UpdateData(rowMean, rowMax);
+                        _ctx.InteractionHelper.RefreshRowChartRange();
+                    }
                 }
             }
         }
@@ -464,7 +489,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// </summary>
         public void UpdateOverviewChartFromRepository()
         {
-            if (_ctx.StitchedOverviewHelper == null || _stitchedImages != null) return;
+            if (_ctx.OverviewHelper == null || _stitchedImages != null) return;
 
             var images = _ctx.ImageRepository.GetImages(
                 _ctx.DateTimeNavigator.GetCurrentYear(),
@@ -489,7 +514,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             for (int i = 0; i < camCount; i++)
             {
                 if (!images.TryGetValue(i + 1, out string path)) continue;
-                string basePath = OverviewChartManager.GetCurveBasePath(path);
+                string basePath = CurveMergeHelper.GetCurveBasePath(path);
                 curveMean[i] = InspectionEngine.LoadCurveBin(basePath + "_mean_v.bin")
                             ?? InspectionEngine.LoadCurveBin(basePath + "_mean.bin");
                 curveMax[i]  = InspectionEngine.LoadCurveBin(basePath + "_max_v.bin")
@@ -499,16 +524,16 @@ namespace AniloxRoll.Monitor.UI.Presenters
             var reviewCfg = _ctx.InteractionHelper?.ReviewConfig;
             if (reviewCfg != null)
             {
-                OverviewChartManager.UpdateOverviewChart(curveMean, curveMax,
+                CurveMergeHelper.UpdateOverviewChart(curveMean, curveMax,
                     reviewCfg.CamOps, reviewCfg.CamPos, reviewCfg.ErrorValueMean, reviewCfg.ErrorValueMax,
-                    _ctx.StitchedOverviewHelper, camCount, _ctx.Settings.StitchMode, ViewRangeProvider);
+                    _ctx.OverviewHelper, camCount, _ctx.Settings.StitchMode, ViewRangeProvider);
             }
             else
             {
-                OverviewChartManager.UpdateOverviewChart(curveMean, curveMax,
+                CurveMergeHelper.UpdateOverviewChart(curveMean, curveMax,
                     _ctx.Settings.GetCameraOpsUmArray(), _ctx.Settings.GetCameraStartPositionMmArray(),
                     _ctx.Settings.ErrorValueMean, _ctx.Settings.ErrorValueMax,
-                    _ctx.StitchedOverviewHelper, camCount, _ctx.Settings.StitchMode, ViewRangeProvider);
+                    _ctx.OverviewHelper, camCount, _ctx.Settings.StitchMode, ViewRangeProvider);
             }
         }
 

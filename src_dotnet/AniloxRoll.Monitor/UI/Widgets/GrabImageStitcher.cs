@@ -68,7 +68,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 return images[0];
             }
 
-            var result = new Bitmap(refW, refH * images.Count, PixelFormat.Format32bppArgb);
+            var result = BitmapPool.Rent(refW, refH * images.Count);
             try
             {
                 using (var g = Graphics.FromImage(result))
@@ -163,7 +163,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 // overlap <= 0：間隙留黑（ARGB 預設透明/黑）
             }
 
-            var result = new Bitmap(totalW, maxH, PixelFormat.Format32bppArgb);
+            var result = BitmapPool.Rent(totalW, maxH);
             using (var g = Graphics.FromImage(result))
             {
                 g.InterpolationMode = InterpolationMode.NearestNeighbor;

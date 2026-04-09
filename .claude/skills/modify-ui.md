@@ -15,7 +15,9 @@
 - `UI/Widgets/EventGuard.cs` — using 語法 bool guard（取代散落 flag）
 - `UI/Presenters/ReviewStitchCoordinator.cs` — Review 拼接管理、合圖、overview 聯動
 - `UI/Presenters/DataStatisticsPresenter.cs` — Data tab 統計、跨 Tab 同步
-- `UI/Widgets/OverviewChartManager.cs` — 全覽圖合併演算法
+- `UI/Widgets/ColumnCurveChartHelper.cs` — 切向 mura 曲線圖（單台 + 全覽圖共用）
+- `UI/Widgets/RowCurveChartHelper.cs` — 法向 mura 曲線圖
+- `UI/Widgets/CurveMergeHelper.cs` — 全覽圖合併演算法
 - `UI/Widgets/ProportionalScaler.cs` — Form 等比例縮放
 
 ## 注意事項

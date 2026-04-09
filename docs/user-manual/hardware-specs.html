@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PICoater AOI — 硬體規格與資源實測報告</title>
+<style>
+  :root {
+    --bg: #f8f9fa; --card: #fff; --border: #dee2e6;
+    --text: #212529; --muted: #6c757d;
+    --ok: #28a745; --warn: #ffc107; --fail: #dc3545;
+    --blue: #0d6efd; --teal: #0dcaf0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", "Microsoft JhengHei", sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 20px; }
+  .container { max-width: 1200px; margin: 0 auto; }
+  h1 { font-size: 1.8rem; margin-bottom: 8px; }
+  h2 { font-size: 1.4rem; margin: 32px 0 12px; padding-bottom: 6px; border-bottom: 2px solid var(--blue); }
+  h3 { font-size: 1.1rem; margin: 20px 0 8px; color: var(--muted); }
+  .subtitle { color: var(--muted); margin-bottom: 24px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin-bottom: 12px; }
+  th, td { border: 1px solid var(--border); padding: 6px 10px; text-align: center; }
+  th { background: #e9ecef; font-weight: 600; white-space: nowrap; }
+  td:first-child, th:first-child { text-align: left; }
+  .ok { color: var(--ok); font-weight: 600; }
+  .warn { color: #b8860b; font-weight: 600; }
+  .fail { color: var(--fail); font-weight: 600; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; }
+  .tag-ok { background: #d4edda; color: #155724; }
+  .tag-warn { background: #fff3cd; color: #856404; }
+  .tag-fail { background: #f8d7da; color: #721c24; }
+  .tag-info { background: #cce5ff; color: #004085; }
+  .note { background: #fff3cd; border-left: 4px solid var(--warn); padding: 10px 14px; margin: 10px 0; font-size: 0.88rem; border-radius: 0 4px 4px 0; }
+  .note-info { background: #cce5ff; border-left-color: var(--blue); }
+  .note-danger { background: #f8d7da; border-left-color: var(--fail); }
+  .toc { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; }
+  .toc ul { list-style: none; padding-left: 0; columns: 2; }
+  .toc li { margin: 4px 0; }
+  .toc a { color: var(--blue); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } .toc ul { columns: 1; } }
+  .highlight-row { background: #e8f5e9; }
+  .danger-row { background: #fce4ec; }
+  details { margin: 8px 0; }
+  summary { cursor: pointer; font-weight: 600; color: var(--blue); }
+  footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>PICoater AOI — 硬體規格與資源實測報告</h1>
+<p class="subtitle">測試日期：2026-04-09 ｜ 測試分支：<code>pseudo-test/7cam-from-2cam</code> ｜ 文件版本：v1.0</p>
+<div class="note-info note">本報告資料來自分支 <code>pseudo-test/7cam-from-2cam</code> 的實測結果（2 台實體相機 + 模擬 6 條額外 GPU pipeline）。原始數據留存於該分支的 <code>.claude/resource-analysis.md</code> 和 <code>.claude/resource-comparison.md</code>。</div>
+
+<!-- TOC -->
+<div class="toc">
+  <strong>目錄</strong>
+  <ul>
+    <li><a href="#sys">1. 測試系統配置</a></li>
+    <li><a href="#method">2. 測試方法</a></li>
+    <li><a href="#raw1">3. 第一輪實測數據（2 台相機）</a></li>
+    <li><a href="#raw2">4. 第二輪實測數據（模擬 8 台）</a></li>
+    <li><a href="#ram">5. RAM 分析</a></li>
+    <li><a href="#vram">6. VRAM 分析</a></li>
+    <li><a href="#storage">7. Storage 分析</a></li>
+    <li><a href="#cpu">8. CPU 分析</a></li>
+    <li><a href="#gpu">9. GPU 運算分析</a></li>
+    <li><a href="#camera">10. 相機與 Grabber 規格</a></li>
+    <li><a href="#alt-cpu">11. CPU 替代方案</a></li>
+    <li><a href="#recommend">12. 建議配置總表</a></li>
+    <li><a href="#lifetime">13. 儲存壽命預估</a></li>
+    <li><a href="#tradeoff">14. 功能取捨決策</a></li>
+    <li><a href="#bugs">15. 已知問題與 Bug</a></li>
+  </ul>
+</div>
+
+<!-- 1. 系統配置 -->
+<h2 id="sys">1. 測試系統配置</h2>
+<div class="card">
+<table>
+  <tr><th style="width:140px">項目</th><th>規格</th></tr>
+  <tr><td>CPU</td><td>Intel Core Ultra 7 265K · 20C (8P+12E) / 20T · 3.9 GHz base / 5.5 GHz boost · PassMark 58,701</td></tr>
+  <tr><td>RAM</td><td>128 GB DDR5-5600（2 × 64 GB，雙通道）</td></tr>
+  <tr><td>GPU</td><td>NVIDIA GeForce RTX 5080 · 16 GB GDDR7</td></tr>
+  <tr><td>Storage</td><td>2 × Crucial P3 Plus 2TB NVMe（seq write ~4 GB/s，TBW 440 TB）</td></tr>
+  <tr><td>Grabber</td><td>Matrox Radient eV-CL（Dual Base CameraLink）</td></tr>
+  <tr><td>OS</td><td>Windows 11</td></tr>
+</table>
+</div>
+
+<!-- 2. 測試方法 -->
+<h2 id="method">2. 測試方法</h2>
+<div class="card">
+  <h3>第一輪：2 台相機實測</h3>
+  <p>2 台實體相機直接測試，無模擬。混合操作（Live + Review + 存圖 + 參數調整）。</p>
+
+  <h3>第二輪：模擬 8 台（≈ 7 台）</h3>
+  <p>每台實體相機額外建立 <strong>3 組 GPU pipeline + NativeBufferPool</strong>，每幀跑 <strong>4 次 ProcessImage + 4 組存檔</strong>（BMP + JPG）。
+  2 台 × 4 = 8 條 pipeline。</p>
+
+  <div class="note-info note">
+    模擬包含完整 GPU pipeline（AoiService + NativeBufferPool + ProcessImage），但<strong>不含 MIL grab/display buffer</strong>。
+    因此 VRAM 數據需從第一輪 2 台實測外推，而非直接取模擬值。
+  </div>
+
+  <h3>測試條件定義</h3>
+  <table>
+    <tr><th>名稱</th><th>解析度 (LR × Ht)</th><th>Raw MB/張</th><th>存 BMP</th><th>存 JPG + .bin</th></tr>
+    <tr><td>效能全開</td><td>10000 × 10000</td><td>156.3</td><td>選配</td><td>固定（~1.2–1.7 MB）</td></tr>
+    <tr><td>效能平衡</td><td>3000 × 3000</td><td>46.9</td><td>選配</td><td>固定（~0.5–0.6 MB）</td></tr>
+  </table>
+</div>
+
+<!-- 3. 第一輪原始數據 -->
+<h2 id="raw1">3. 第一輪實測數據（2 台相機）</h2>
+<div class="card">
+  <h3>記憶體</h3>
+  <table>
+    <tr><th>指標</th><th>Run1 全開+存BMP</th><th>Run2 全開</th><th>Run3 平衡+存BMP</th><th>Run4 平衡</th></tr>
+    <tr><td>RAM 起始 (GB)</td><td>11.75</td><td>11.76</td><td>4.04</td><td>4.03</td></tr>
+    <tr><td>RAM 峰值 (GB)</td><td>16.30</td><td>17.22</td><td>6.15</td><td>5.71</td></tr>
+    <tr><td>RAM 增量 (GB)</td><td>4.55</td><td>5.47</td><td>2.11</td><td>1.68</td></tr>
+    <tr><td>RAM 結尾 (GB)</td><td>16.11</td><td>5.44</td><td>5.44</td><td>5.32</td></tr>
+    <tr><td>VRAM (GB)</td><td>6.87~6.89</td><td>6.86~6.89</td><td>3.02~3.04</td><td>3.01~3.02</td></tr>
+  </table>
+
+  <h3>CPU / 處理時間</h3>
+  <table>
+    <tr><th>指標</th><th>Run1 全開+存BMP</th><th>Run2 全開</th><th>Run3 平衡+存BMP</th><th>Run4 平衡</th></tr>
+    <tr><td>CPU 穩態 (%)</td><td>20~30</td><td>20~30</td><td>10~37</td><td>6~10</td></tr>
+    <tr><td>ProcessMs 穩態</td><td>40~100</td><td>70~100</td><td>18~44</td><td>31~53</td></tr>
+    <tr><td>ProcessMs GC spike</td><td>225</td><td>174~177</td><td>163~177</td><td>150~177</td></tr>
+    <tr><td>Global 合圖最大 (ms)</td><td>4563 (24000h)</td><td>3902 (28000h)</td><td>1250 (12600h)</td><td>1230 (12600h)</td></tr>
+  </table>
+
+  <h3>幀率</h3>
+  <table>
+    <tr><th>指標</th><th>Run1 全開+存BMP</th><th>Run2 全開</th><th>Run3 平衡+存BMP</th><th>Run4 平衡</th></tr>
+    <tr><td>Cam1 / Cam2 幀數</td><td>38 / 35</td><td>31 / 31</td><td>27 / 33</td><td>28 / 28</td></tr>
+    <tr><td>Cam1/Cam2 同步</td><td class="warn">不同步 (差3)</td><td class="ok">同步</td><td class="warn">不同步 (差6)</td><td class="ok">同步</td></tr>
+    <tr><td>測試時長 (秒)</td><td>~43</td><td>~32</td><td>~23</td><td>~29</td></tr>
+    <tr><td>fps (每台)</td><td>~0.9</td><td>~1.0</td><td>~1.2</td><td>~1.0</td></tr>
+  </table>
+
+  <div class="note">
+    存 BMP 時 Cam1/Cam2 幀率不同步，原因為磁碟 IO 阻塞存檔線程。不存 BMP 時完美同步。
+  </div>
+</div>
+
+<!-- 4. 第二輪原始數據 -->
+<h2 id="raw2">4. 第二輪實測數據（模擬 8 台）</h2>
+<div class="card">
+  <h3>記憶體</h3>
+  <table>
+    <tr><th>指標</th><th>Run1 平衡+存BMP</th><th>Run2 平衡</th><th>Run3 全開+存BMP</th><th>Run4 全開</th><th>Run5 純回顧</th></tr>
+    <tr><td>RAM 起始 (GB)</td><td>5.73</td><td>5.72</td><td>25.10</td><td>24.95</td><td>1.07</td></tr>
+    <tr><td>RAM 峰值 (GB)</td><td>7.44</td><td>7.58</td><td>27.68</td><td>28.07</td><td>3.26</td></tr>
+    <tr><td>RAM 增量 (GB)</td><td>1.71</td><td>1.86</td><td>2.58</td><td>3.12</td><td>2.19</td></tr>
+    <tr><td>VRAM (GB)</td><td class="ok">8.17~8.19</td><td class="ok">8.18~8.19</td><td class="fail">15.88~15.91</td><td class="fail">15.81~15.83</td><td class="ok">0.75</td></tr>
+  </table>
+
+  <h3>CPU / 處理時間</h3>
+  <table>
+    <tr><th>指標</th><th>Run1 平衡+存BMP</th><th>Run2 平衡</th><th>Run3 全開+存BMP</th><th>Run4 全開</th><th>Run5 純回顧</th></tr>
+    <tr><td>CPU 穩態 (%)</td><td>7~19</td><td>7~22</td><td>12~25</td><td>12~27</td><td>3~8</td></tr>
+    <tr><td>ProcessMs 穩態</td><td>130~165</td><td>130~174</td><td class="fail">2000~4700</td><td class="fail">2000~4700</td><td>—</td></tr>
+    <tr><td>Global 合圖最大 (ms)</td><td>1015</td><td>1068</td><td>2252</td><td>2696</td><td>3362</td></tr>
+  </table>
+
+  <h3>幀率</h3>
+  <table>
+    <tr><th>指標</th><th>Run1 平衡+存BMP</th><th>Run2 平衡</th><th>Run3 全開+存BMP</th><th>Run4 全開</th><th>Run5 純回顧</th></tr>
+    <tr><td>Cam1 / Cam2 幀數</td><td>27 / 27</td><td>34 / 34</td><td>18 / 18</td><td>17 / 19</td><td>—</td></tr>
+    <tr><td>測試時長 (秒)</td><td>~32</td><td>~38</td><td>~81</td><td>~66</td><td>~29</td></tr>
+    <tr><td>fps (每台)</td><td>~0.85</td><td>~0.9</td><td class="fail">~0.22</td><td class="fail">~0.26</td><td>—</td></tr>
+  </table>
+
+  <div class="note-danger note">
+    10000h 模式 fps 從 ~1.0 降至 ~0.25，因 4 次 ProcessImage 在 picoaterLock 內串行，GPU 成為瓶頸。
+    VRAM 10000h 用了 15.9/16.0 GB（99%），幾乎滿載。
+  </div>
+</div>
+
+<!-- 5. RAM -->
+<h2 id="ram">5. RAM 分析</h2>
+<div class="card">
+  <table>
+    <tr><th>情境</th><th>實測峰值</th><th>佔 128 GB</th><th>最低需求</th><th>建議</th></tr>
+    <tr><td>7 台 全開 + Review</td><td>28.1 GB</td><td>22%</td><td>32 GB</td><td>32 GB DDR5 雙通道</td></tr>
+    <tr><td>7 台 平衡 + Review</td><td>7.6 GB</td><td>6%</td><td>16 GB</td><td>16 GB DDR5 雙通道</td></tr>
+    <tr><td>純回顧電腦</td><td>3.3 GB</td><td>—</td><td>8 GB</td><td>8~16 GB DDR4 雙通道</td></tr>
+  </table>
+  <div class="note-info note">
+    DDR 頻率（DDR4-3200 vs DDR5-5600）對本應用影響可忽略，CPU 穩態僅用 22~49%，記憶體頻寬遠未飽和。<strong>雙通道比高頻率更重要</strong>——單通道頻寬砍半可能影響大圖搬運。
+  </div>
+</div>
+
+<!-- 6. VRAM -->
+<h2 id="vram">6. VRAM 分析</h2>
+<div class="card">
+  <h3>每台相機 VRAM 占用（從 2 台實測外推）</h3>
+  <table>
+    <tr><th>來源</th><th>全開 (10000h)</th><th>平衡 (3000h)</th></tr>
+    <tr><td>基底（無相機）</td><td>0.75 GB</td><td>0.75 GB</td></tr>
+    <tr><td>2 台實測</td><td>6.9 GB</td><td>3.0 GB</td></tr>
+    <tr><td><strong>每台相機</strong></td><td><strong>(6.9 − 0.75) / 2 = 3.1 GB</strong></td><td><strong>(3.0 − 0.75) / 2 = 1.1 GB</strong></td></tr>
+    <tr><td><strong>7 台外推</strong></td><td><strong>0.75 + 7 × 3.1 = 22.4 GB</strong></td><td><strong>0.75 + 7 × 1.1 = 8.5 GB</strong></td></tr>
+  </table>
+
+  <table>
+    <tr><th>情境</th><th>VRAM 需求</th><th>RTX 5080 (16 GB)</th><th>狀態</th></tr>
+    <tr class="danger-row"><td>7 台 效能全開</td><td><strong>22.4 GB</strong></td><td>140%</td><td><span class="tag tag-fail">不足，需 24 GB+</span></td></tr>
+    <tr class="highlight-row"><td>7 台 效能平衡</td><td><strong>8.5 GB</strong></td><td>53%</td><td><span class="tag tag-ok">充裕</span></td></tr>
+    <tr class="highlight-row"><td>純回顧電腦</td><td>0.75 GB</td><td>—</td><td><span class="tag tag-ok">內顯即可</span></td></tr>
+  </table>
+
+  <div class="note-danger note">
+    22.4 GB 是從 2 台實測外推（含 MIL grab/display buffer），比模擬的 15.9 GB 更準確。模擬 pipeline 不含 MIL buffer，因此低估了實際需求。
+  </div>
+</div>
+
+<!-- 7. Storage -->
+<h2 id="storage">7. Storage 分析</h2>
+<div class="card">
+  <h3>每張影像存檔量（單張 / 單台相機）</h3>
+  <table>
+    <tr><th>存檔項目</th><th>效能全開 (10000h)</th><th>效能平衡 (3000h)</th></tr>
+    <tr><td>BMP 原檔（選配）</td><td>156.3 MB</td><td>46.9 MB</td></tr>
+    <tr><td>JPG + .bin（固定）</td><td>~1.5 MB</td><td>~0.5 MB</td></tr>
+  </table>
+
+  <h3>寫入速率</h3>
+  <table>
+    <tr><th>情境</th><th>寫入速率</th><th>佔 SSD 4 GB/s</th><th>狀態</th></tr>
+    <tr><td>7 台 平衡 + 存 BMP</td><td>~340 MB/s</td><td>8%</td><td><span class="tag tag-ok">充裕</span></td></tr>
+    <tr><td>7 台 全開 + 存 BMP</td><td>~315 MB/s</td><td>8%</td><td><span class="tag tag-ok">充裕（fps 受限）</span></td></tr>
+    <tr><td>7 台 不存 BMP</td><td>~4~12 MB/s</td><td>&lt;1%</td><td><span class="tag tag-ok">SATA SSD 即可</span></td></tr>
+  </table>
+
+  <div class="note">
+    存 BMP 時觀察到 2 台相機幀率不同步（差 3~6 幀），原因為 IO 排隊。不存 BMP 時完美同步。
+  </div>
+</div>
+
+<!-- 8. CPU -->
+<h2 id="cpu">8. CPU 分析</h2>
+<div class="card">
+  <table>
+    <tr><th>情境</th><th>265K 實測</th><th>狀態</th></tr>
+    <tr><td>7 台 效能全開</td><td>12~27%</td><td><span class="tag tag-ok">充裕</span></td></tr>
+    <tr><td>7 台 效能平衡</td><td>7~22%</td><td><span class="tag tag-ok">充裕</span></td></tr>
+    <tr><td>純回顧電腦</td><td>3~8%</td><td><span class="tag tag-ok">低階 CPU 即可</span></td></tr>
+  </table>
+  <div class="note-info note">
+    CPU 不是瓶頸。模擬 8 台的穩態 CPU 反而沒有顯著增加，因為 GPU 串行處理拉長了每幀間隔，JPEG 編碼的併發度受限。Server GC 已啟用，GC spike 控制在 225 ms 以內。
+  </div>
+</div>
+
+<!-- 9. GPU -->
+<h2 id="gpu">9. GPU 運算分析</h2>
+<div class="card">
+  <h3>處理時間與 fps</h3>
+  <table>
+    <tr><th>情境</th><th>ProcessMs</th><th>fps</th><th>狀態</th></tr>
+    <tr><td>7 台 效能全開</td><td>2000~4700 ms</td><td>0.25~1.0</td><td><span class="tag tag-warn">可能不足</span></td></tr>
+    <tr class="highlight-row"><td>7 台 效能平衡</td><td>130~165 ms</td><td>~0.9</td><td><span class="tag tag-ok">充裕</span></td></tr>
+    <tr><td>純回顧</td><td>合圖 1.3~3.4 s</td><td>—</td><td><span class="tag tag-ok">可接受</span></td></tr>
+  </table>
+
+  <h3>降 fps 根因</h3>
+  <p>10000h 模式下，4 次 ProcessImage 在 <code>picoaterLock</code> 內串行執行：</p>
+  <ul style="margin: 8px 0 8px 20px;">
+    <li>單次 ProcessImage ≈ 500~1200 ms（16384 × 10000 大圖）</li>
+    <li>4 次串行 ≈ 2000~4700 ms → fps 降至 ~0.25</li>
+  </ul>
+  <p>3000h 模式下單次 ≈ 30~40 ms，4 次串行 ≈ 130~165 ms → fps 維持 ~0.9。</p>
+
+  <h3>GPU 使用率</h3>
+  <p>目前 resource log 僅記錄 VRAM（MB），<strong>未記錄 GPU 運算使用率（%）</strong>。可透過 nvidia-smi <code>utilization.gpu</code> 加入，待後續補充。</p>
+  <table>
+    <tr><th>模式</th><th>ProcessMs</th><th>取像間隔</th><th>GPU 忙碌比（推估）</th></tr>
+    <tr><td>2 台 全開</td><td>70~100 ms</td><td>~1000 ms</td><td>~10%</td></tr>
+    <tr><td>2 台 平衡</td><td>18~53 ms</td><td>~1000 ms</td><td>~5%</td></tr>
+    <tr><td>8 台模擬 全開</td><td>2000~4700 ms</td><td>3500~4000 ms</td><td class="fail">&gt;100% (瓶頸)</td></tr>
+    <tr><td>8 台模擬 平衡</td><td>130~165 ms</td><td>~1100 ms</td><td>~15%</td></tr>
+  </table>
+</div>
+
+<!-- 10. 相機與 Grabber -->
+<h2 id="camera">10. 相機與 Grabber 規格</h2>
+<div class="card">
+  <h3>Grabber 板卡</h3>
+  <table>
+    <tr><th style="width:160px">項目</th><th>規格</th></tr>
+    <tr><td>型號</td><td>Matrox Radient eV-CL</td></tr>
+    <tr><td>介面</td><td>CameraLink Dual Base</td></tr>
+    <tr><td>MIL System Type</td><td>M_SYSTEM_RADIENTEVCL</td></tr>
+    <tr><td>Pixel Clock</td><td>~85 MHz（DCF: PCK_FREQ = 0x510FF40）</td></tr>
+    <tr><td>有效頻寬</td><td>2 port × 85 MHz = 170 MHz</td></tr>
+    <tr><td>系統數量</td><td>2 組（SystemNum 0 + 1），共接 7 台相機</td></tr>
+  </table>
+
+  <h3>Line Rate 上限</h3>
+  <table>
+    <tr><th>參數</th><th>值</th><th>說明</th></tr>
+    <tr><td>DCF HSYNC_FREQ</td><td>0x2887 = <strong>10,375 Hz</strong></td><td>水平同步 = 硬體 line rate 配置</td></tr>
+    <tr><td>UI 滑桿上限</td><td>10,000 Hz</td><td>軟體限制（已接近硬體上限）</td></tr>
+    <tr><td>理論最大值</td><td>16384 px ÷ 170 MHz ≈ <strong>10,400 Hz</strong></td><td>CameraLink Dual Base 頻寬極限</td></tr>
+    <tr><td>曝光上限</td><td>floor(900000 / lineRateHz) μs</td><td>lineRate=10000 → 曝光 max 90 μs</td></tr>
+  </table>
+
+  <div class="note-info note">
+    目前 10,000 Hz 已接近 Dual Base CameraLink 頻寬極限。要再提高需要：
+    <ul style="margin-top:4px;">
+      <li>縮減影像寬度（ROI）——例如 8192 px 可到 ~20,000 Hz</li>
+      <li>換更高頻寬介面（CoaXPress）——需換 grabber + 相機</li>
+    </ul>
+  </div>
+
+  <h3>GenICam 控制</h3>
+  <table>
+    <tr><th>Feature</th><th>用途</th><th>控制方式</th></tr>
+    <tr><td>AcquisitionLineRate</td><td>Line Rate (Hz)</td><td>MdigControlFeature</td></tr>
+    <tr><td>ExposureTime</td><td>曝光時間 (μs)</td><td>MdigControlFeature</td></tr>
+    <tr><td>—</td><td>查詢 Feature 最大值</td><td>MdigInquireFeature + M_FEATURE_MAX</td></tr>
+  </table>
+
+  <h3>DCF 檔案位置</h3>
+  <p><code>C:\Users\User\Downloads\dcf\Radient_Config.dcf</code></p>
+</div>
+
+<!-- 11. CPU 替代方案 -->
+<h2 id="alt-cpu">11. CPU 替代方案評估</h2>
+<div class="card">
+  <table>
+    <tr><th></th><th>Core Ultra 7 265K<br><span style="font-weight:normal;color:var(--muted)">(目前測試機)</span></th><th>Xeon W5-2445<br><span style="font-weight:normal;color:var(--muted)">(檢測機候選)</span></th><th>i5-13500TE<br><span style="font-weight:normal;color:var(--muted)">(儲存機候選)</span></th></tr>
+    <tr><td>核心/線程</td><td>20C (8P+12E) / 20T</td><td>10C / 20T</td><td>14C (6P+8E) / 20T</td></tr>
+    <tr><td>基頻/睿頻</td><td>3.9 / 5.5 GHz</td><td>3.1 / 4.6 GHz</td><td>1.3 / 4.5 GHz</td></tr>
+    <tr><td>TDP</td><td>125W (MTP 250W)</td><td>175W (MTP 210W)</td><td><strong>35W</strong></td></tr>
+    <tr><td>PassMark</td><td>58,701</td><td>32,194</td><td>~20,000 (估)</td></tr>
+    <tr><td>相對多線程性能</td><td>100%</td><td><strong>55%</strong></td><td><strong>~34%</strong></td></tr>
+  </table>
+
+  <h3>換機後 CPU 使用率預估</h3>
+  <table>
+    <tr><th>情境</th><th>265K 實測</th><th>W5-2445 預估 (÷0.55)</th><th>i5-13500TE 預估 (÷0.34)</th></tr>
+    <tr><td>7 台 效能全開</td><td>27%</td><td><strong>49%</strong></td><td>—</td></tr>
+    <tr><td>7 台 效能平衡</td><td>22%</td><td><strong>40%</strong></td><td>—</td></tr>
+    <tr><td>純回顧</td><td>8%</td><td>—</td><td><strong>24%</strong></td></tr>
+  </table>
+</div>
+
+<!-- 12. 建議配置總表 -->
+<h2 id="recommend">12. 建議配置總表</h2>
+<div class="card">
+  <table>
+    <tr>
+      <th></th>
+      <th>Run1<br>平衡+存BMP</th>
+      <th style="background:#d4edda">Run2<br>平衡 (推薦)</th>
+      <th>Run3<br>全開+存BMP</th>
+      <th>Run4<br>全開</th>
+      <th>Run5<br>純回顧</th>
+    </tr>
+    <tr><td><strong>功能</strong></td><td>7台 3000h<br>存原圖</td><td>7台 3000h</td><td>7台 10000h<br>存原圖</td><td>7台 10000h</td><td>僅回顧合圖</td></tr>
+    <tr><td><strong>CPU</strong></td><td>W5-2445</td><td>W5-2445</td><td>W5-2445</td><td>W5-2445</td><td>i5-13500TE</td></tr>
+    <tr><td><strong>CPU 預估</strong></td><td>~40%</td><td>~40%</td><td>~49%</td><td>~49%</td><td>~24%</td></tr>
+    <tr><td><strong>RAM</strong></td><td>16 GB DDR5<br>雙通道</td><td>16 GB DDR5<br>雙通道</td><td>32 GB DDR5<br>雙通道</td><td>32 GB DDR5<br>雙通道</td><td>8 GB DDR4<br>雙通道</td></tr>
+    <tr><td><strong>RAM 峰值</strong></td><td>7.6 GB</td><td>7.6 GB</td><td>27.7 GB</td><td>28.1 GB</td><td>3.3 GB</td></tr>
+    <tr><td><strong>GPU</strong></td><td>RTX 5080<br>(16 GB)</td><td>RTX 5080<br>(16 GB)</td><td class="fail">需 24 GB+</td><td class="fail">需 24 GB+</td><td>內顯</td></tr>
+    <tr><td><strong>VRAM</strong></td><td>8.5 GB (53%)</td><td>8.5 GB (53%)</td><td class="fail">22.4 GB (140%)</td><td class="fail">22.4 GB (140%)</td><td>0.75 GB</td></tr>
+    <tr><td><strong>Storage</strong></td><td>NVMe 2TB</td><td>SATA SSD</td><td>NVMe 2TB</td><td>SATA SSD</td><td>SATA SSD</td></tr>
+    <tr><td><strong>寫入速率</strong></td><td>~340 MB/s</td><td>~4 MB/s</td><td>~315 MB/s</td><td>~12 MB/s</td><td>讀取為主</td></tr>
+    <tr><td><strong>fps</strong></td><td>~0.9</td><td>~0.9</td><td class="fail">0.25~1.0</td><td class="fail">0.25~1.0</td><td>—</td></tr>
+    <tr><td><strong>ProcessMs</strong></td><td>130~165 ms</td><td>130~165 ms</td><td>2000~4700 ms</td><td>2000~4700 ms</td><td>合圖 1.3~3.4 s</td></tr>
+    <tr><td><strong>可行性</strong></td>
+      <td><span class="tag tag-ok">可行</span></td>
+      <td><span class="tag tag-ok">最佳</span></td>
+      <td><span class="tag tag-fail">VRAM 不足</span></td>
+      <td><span class="tag tag-fail">VRAM 不足</span></td>
+      <td><span class="tag tag-ok">低成本</span></td>
+    </tr>
+  </table>
+  <div class="note-info note">
+    <ul style="margin-left: 16px;">
+      <li>Run1~Run4 的 RAM 峰值已包含 <strong>Live + Review 同時操作</strong>的實測值</li>
+      <li>Run3/Run4（全開 10000h）需 22.4 GB VRAM，RTX 5080 不足，需升級至 RTX A5000 (24 GB) 或同級以上</li>
+      <li><strong>Run2（平衡 不存 BMP）為最佳方案</strong>：資源最低、fps 穩定、無 IO 瓶頸</li>
+    </ul>
+  </div>
+</div>
+
+<!-- 13. 儲存壽命 -->
+<h2 id="lifetime">13. 儲存壽命預估</h2>
+<div class="card">
+  <p>前提：每天 <strong>14,000 張</strong>照片（7 台相機合計），SSD = Crucial P3 Plus 2TB（TBW = 440 TB）</p>
+
+  <h3>每日寫入量</h3>
+  <table>
+    <tr><th></th><th>Run1 平衡+存BMP</th><th>Run2 平衡</th><th>Run3 全開+存BMP</th><th>Run4 全開</th></tr>
+    <tr><td>每張寫入</td><td>47.4 MB</td><td>0.5 MB</td><td>157.8 MB</td><td>1.5 MB</td></tr>
+    <tr><td><strong>每日寫入</strong></td><td><strong>664 GB</strong></td><td><strong>7 GB</strong></td><td><strong>2,209 GB</strong></td><td><strong>21 GB</strong></td></tr>
+  </table>
+
+  <h3>磁碟壽命</h3>
+  <table>
+    <tr><th></th><th>Run1 平衡+存BMP</th><th>Run2 平衡</th><th>Run3 全開+存BMP</th><th>Run4 全開</th></tr>
+    <tr><td>2TB 容量用完</td><td class="fail">3 天</td><td class="ok">285 天</td><td class="fail">&lt;1 天</td><td class="ok">95 天</td></tr>
+    <tr><td>SSD TBW 壽命</td><td class="warn">1.8 年</td><td class="ok">172 年</td><td class="fail">0.5 年</td><td class="ok">57 年</td></tr>
+  </table>
+
+  <h3>結論</h3>
+  <table>
+    <tr><th>情境</th><th>容量瓶頸</th><th>壽命瓶頸</th><th>建議</th></tr>
+    <tr class="highlight-row"><td>Run2 平衡 不存BMP</td><td>285天/2TB</td><td>172年</td><td><span class="tag tag-ok">單顆 2TB 可撐近一年，定期清理或網路備份</span></td></tr>
+    <tr><td>Run4 全開 不存BMP</td><td>95天/2TB</td><td>57年</td><td><span class="tag tag-ok">三個月清理一次，或加大容量</span></td></tr>
+    <tr><td>Run1 平衡+存BMP</td><td>3天/2TB</td><td>1.8年</td><td><span class="tag tag-warn">需每日網路傳輸至儲存機</span></td></tr>
+    <tr class="danger-row"><td>Run3 全開+存BMP</td><td>&lt;1天/2TB</td><td>0.5年</td><td><span class="tag tag-fail">單機不可行，需即時串流或 RAID</span></td></tr>
+  </table>
+</div>
+
+<!-- 14. 功能取捨 -->
+<h2 id="tradeoff">14. 功能取捨決策</h2>
+<div class="card">
+  <table>
+    <tr><th>可砍功能</th><th>解決的瓶頸</th><th>影響</th></tr>
+    <tr><td>效能全開 (10000h)</td><td>VRAM 不足、GPU fps 不足</td><td>檢測解析度降低，但 3000h 對多數缺陷已足夠</td></tr>
+    <tr><td>存 BMP 原檔</td><td>磁碟 IO、幀率不同步、SSD 壽命</td><td>無法回溯原始影像，但 JPG + .bin 仍保留</td></tr>
+    <tr><td>Live 時同時 Review</td><td>RAM 峰值降低</td><td>操作流程受限，需停止取像才能回顧</td></tr>
+  </table>
+  <div class="note-danger note">
+    <strong>強化 mura（GPU pipeline）為核心檢測功能，不可省略。</strong>
+  </div>
+</div>
+
+<!-- 15. Bugs -->
+<h2 id="bugs">15. 已知問題與 Bug</h2>
+<div class="card">
+
+  <h3>Bug 1：ClearStitchedMode null reference</h3>
+  <table>
+    <tr><th style="width:100px">檔案</th><td><code>UI/Presenters/ReviewStitchCoordinator.cs</code> line ~313</td></tr>
+    <tr><th>現象</th><td><code>_ctx.DataStatsPresenter.SetReviewGroupBoxes(false)</code> 在延遲注入尚未完成時觸發 NullReferenceException</td></tr>
+    <tr><th>修復</th><td>改為 <code>_ctx.DataStatsPresenter?.SetReviewGroupBoxes(false)</code></td></tr>
+    <tr><th>狀態</th><td><span class="tag tag-warn">已列入 Plan，待修復</span></td></tr>
+  </table>
+
+  <h3>Bug 2：Global 模式下 Mura 垂直圖顯示無意義資料</h3>
+  <table>
+    <tr><th style="width:100px">影響控制項</th><td>Live: <code>muraChartVerticalLive</code>、Review: <code>chartMuraVertical</code></td></tr>
+    <tr><th>現象</th><td>Global（全域合圖）模式下，mura 垂直圖仍顯示單台相機資料，但此資料在全域合圖語境下無意義</td></tr>
+    <tr><th>修復</th><td>Global 模式下清除圖表資料、StitchMode 切換時立即反映</td></tr>
+    <tr><th>狀態</th><td><span class="tag tag-warn">已列入 Plan，待修復</span></td></tr>
+  </table>
+
+  <h3>Bug 3：存 BMP 時相機幀率不同步</h3>
+  <table>
+    <tr><th style="width:100px">現象</th><td>存 BMP 原檔時 Cam1/Cam2 幀率差 3~6 幀（不存 BMP 時完美同步）</td></tr>
+    <tr><th>原因</th><td>磁碟 IO 阻塞存檔線程，不同相機的 BMP 寫入耗時不一致</td></tr>
+    <tr><th>影響</th><td>單片檢測的時間戳可能略有偏差，但不影響檢測結果</td></tr>
+    <tr><th>狀態</th><td><span class="tag tag-info">已知限制，非 bug</span> — 不存 BMP 即可避免</td></tr>
+  </table>
+
+  <h3>Bug 4：10000h 模式 GPU 串行導致 fps 驟降</h3>
+  <table>
+    <tr><th style="width:100px">現象</th><td>7 台全開模式 fps 從 ~1.0 降至 ~0.25</td></tr>
+    <tr><th>原因</th><td>多台相機的 ProcessImage 在 <code>picoaterLock</code> 內串行執行，GPU 無法並行</td></tr>
+    <tr><th>影響</th><td>全開模式的即時性大幅降低</td></tr>
+    <tr><th>狀態</th><td><span class="tag tag-info">架構限制</span> — 使用平衡模式 (3000h) 可避免</td></tr>
+  </table>
+
+  <h3>Bug 5：GPU 使用率未記錄</h3>
+  <table>
+    <tr><th style="width:100px">現象</th><td>Resource log CSV 記錄了 VRAM (MB) 但未記錄 GPU 運算使用率 (%)</td></tr>
+    <tr><th>建議</th><td>透過 nvidia-smi <code>utilization.gpu</code> 或 NVML API 加入</td></tr>
+    <tr><th>狀態</th><td><span class="tag tag-warn">待實作</span></td></tr>
+  </table>
+
+  <h3>Bug 6：chartOverview 初始載入閃爍</h3>
+  <table>
+    <tr><th style="width:100px">現象</th><td>Review tab 的 chartOverview 在初次載入時會閃爍</td></tr>
+    <tr><th>修復</th><td>已於 commit <code>cb3674c</code> 修復</td></tr>
+    <tr><th>狀態</th><td><span class="tag tag-ok">已修復</span></td></tr>
+  </table>
+
+</div>
+
+<footer>
+  <p>PICoater AOI 硬體規格與資源實測報告 · 測試日期 2026-04-09 · 文件版本 v1.0</p>
+  <p>測試環境：pseudo-test/7cam-from-2cam 分支 · 2 台實體相機 + 模擬 6 條額外 GPU pipeline</p>
+</footer>
+
+</div>
+</body>
+</html>

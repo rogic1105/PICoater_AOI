@@ -27,6 +27,6 @@
    | `GPU` 大 | CUDA pipeline 慢 | 確認 AoiService 參數正確；確認 CUDA stream 沒有意外同步 |
    | `BMP` 大 | Create8bppBitmap 慢 | 確認用 ImageUtils.Create8bppBitmap（MemoryCopy 路徑），非 GDI+ pixel 迴圈 |
    | `Canvas` 大 | FitToScreen/SetView 慢 | 確認 _shouldRestoreView 邏輯正確；避免多次 Invalidate |
-   | `Chart` 大 | MuraChartHelper 慢 | 確認 UpdateData/UpdateViewRange 不重繪整個 chart；考慮延遲更新 |
+   | `Chart` 大 | ColumnCurveChartHelper 慢 | 確認 UpdateData/UpdateViewRange 不重繪整個 chart；考慮延遲更新 |
 
 4. **目標值**：`[OnSelect] Total` ≤ 200ms（使用者感知 ≤ 0.5s 含縮圖階段）

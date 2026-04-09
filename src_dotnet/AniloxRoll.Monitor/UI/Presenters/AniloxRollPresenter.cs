@@ -75,8 +75,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
                 BusyStateChanged?.Invoke(false);
 
-                // 自動選取第一張，觸發大圖檢視
-                _galleryManager.Select(_galleryManager.SelectedIndex, triggerEvent: true);
+                // 更新縮圖選取框（不觸發事件，由呼叫端根據 StitchMode 決定顯示方式）
+                _galleryManager.Select(_galleryManager.SelectedIndex, triggerEvent: false);
 
                 string logText = string.Join(Environment.NewLine, logs.OrderBy(x => x));
                 LogReported?.Invoke($"Total Duration: {sw.ElapsedMilliseconds} ms\n{logText}");

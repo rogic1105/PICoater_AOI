@@ -45,7 +45,9 @@ PICoater_AOI/
 | `UI/Widgets/FormInteractionHelper.cs` | UI 互動、gallery 選擇、計時；ReviewConfig 代理 |
 | `UI/Widgets/CanvasInteractionHelper.cs` | Canvas zoom/pan 事件、mm 座標換算；ReviewConfig → GetEffectiveOps/Pos |
 | `UI/Widgets/EventGuard.cs` | 可重入 bool 旗標（EventGuard + EventGuardScope），using 語法自動還原 |
-| `UI/Widgets/OverviewChartManager.cs` | 全覽圖合併演算法 + .bin 曲線讀取（UpdateOverviewChart、MergeCurves、MergeRowCurves、GetCurveBasePath） |
+| `UI/Widgets/ColumnCurveChartHelper.cs` | 切向（X 軸）mura 曲線圖：單台 + 全覽圖共用，含閾值線、zoom 同步 |
+| `UI/Widgets/RowCurveChartHelper.cs` | 法向（Y 軸）mura 曲線圖：座標反轉、InnerPlot 補償 |
+| `UI/Widgets/CurveMergeHelper.cs` | 全覽圖合併演算法 + .bin 曲線讀取（UpdateOverviewChart、MergeCurves、MergeRowCurves、GetCurveBasePath） |
 | `UI/Presenters/DataStatisticsPresenter.cs` | Data tab 統計邏輯：統計計算、combo 串聯、Period Charts、跨 Tab 同步事件 |
 | `UI/Presenters/ReviewStitchCoordinator.cs` | Review tab 拼接管理：LoadGrabStitchedViewAsync、合圖、ClearStitchedMode、overview chart 聯動 |
 | `UI/Presenters/LiveTelemetryPresenter.cs` | 16 欄即時 Telemetry |
@@ -187,14 +189,14 @@ PICoater_AOI/
 | 回顧法向曲線圖 | `chartMuraHorizontal` | Chart | — |
 | 回顧全覽圖 | `chartOverview` | Chart | — |
 | 時段群組 | `grpReviewTimePeriod` | GroupBox | 時序 |
-| 時段日期 | `cbDate` | ComboBox | — |
-| 時段時間 | `cbTime` | ComboBox | — |
-| 上一時段 | `btnPeriodPrev` | Button | < |
-| 下一時段 | `btnPeriodNext` | Button | > |
+| 時段日期（時序cb） | `cbDate` | ComboBox | — |
+| 時段時間（時序cb） | `cbTime` | ComboBox | — |
+| 上一時段（上下鍵） | `btnPeriodPrev` | Button | < |
+| 下一時段（上下鍵） | `btnPeriodNext` | Button | > |
 | 單片群組 | `grpReviewGrabNav` | GroupBox | 單片 |
-| 單片序號 | `cbReviewGrabId` | ComboBox | — |
-| 上一序號 | `btnGrabIdPrev` | Button | < |
-| 下一序號 | `btnGrabIdNext` | Button | > |
+| 單片序號（序號cb） | `cbReviewGrabId` | ComboBox | — |
+| 上一序號（上下鍵） | `btnGrabIdPrev` | Button | < |
+| 下一序號（上下鍵） | `btnGrabIdNext` | Button | > |
 
 ### 檢測報表（tabPageData）
 

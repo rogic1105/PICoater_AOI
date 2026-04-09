@@ -37,12 +37,12 @@ namespace AniloxRoll.Monitor.Forms
         private ThumbnailGridPresenter _galleryManager;
         private AniloxRollPresenter _presenter;
         private FormInteractionHelper _interactionHelper;
-        private MuraChartHelper _muraChartHelper;
-        private MuraChartHelper _muraChartLiveHelper;
-        private MuraChartHelper _stitchedOverviewHelper;
-        private MuraChartHelper _liveOverviewHelper;
-        private RowMuraChartHelper _rowChartLiveHelper;
-        private RowMuraChartHelper _muraChartHorizontalHelper;
+        private ColumnCurveChartHelper _reviewColumnChartHelper;
+        private ColumnCurveChartHelper _liveColumnChartHelper;
+        private ColumnCurveChartHelper _reviewOverviewHelper;
+        private ColumnCurveChartHelper _liveOverviewHelper;
+        private RowCurveChartHelper _liveRowChartHelper;
+        private RowCurveChartHelper _reviewRowChartHelper;
         private LiveCameraManager _liveCameraManager;
         private ProportionalScaler _scaler;
 
@@ -53,6 +53,13 @@ namespace AniloxRoll.Monitor.Forms
         private NumericUpDown[] _lrNums;
         private TrackBar[]      _htBars;
         private NumericUpDown[] _htNums;
+        // --- CAM All 控制項 ---
+        private TrackBar      _expAllBar;
+        private NumericUpDown _expAllNum;
+        private TrackBar      _lrAllBar;
+        private NumericUpDown _lrAllNum;
+        private TrackBar      _htAllBar;
+        private NumericUpDown _htAllNum;
 
         // --- 拖曳偵測：拖曳中時抑制硬體寫入 ---
         private readonly HashSet<TrackBar> _dragging = new HashSet<TrackBar>();
@@ -309,29 +316,29 @@ namespace AniloxRoll.Monitor.Forms
             _presenter = new AniloxRollPresenter(
                 _imageRepository, _inspectionService, _dateTimeNavigator, _galleryManager);
 
-            _muraChartHelper = new MuraChartHelper(this.chartMuraVertical);
-            _muraChartHelper.SetOps(_settings.Cam1_Ops);
-            _muraChartHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _reviewColumnChartHelper = new ColumnCurveChartHelper(this.chartMuraVertical);
+            _reviewColumnChartHelper.SetOps(_settings.Cam1_Ops);
+            _reviewColumnChartHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
 
-            _muraChartLiveHelper = new MuraChartHelper(this.muraChartVerticalLive);
-            _muraChartLiveHelper.SetOps(_settings.Cam1_Ops);
-            _muraChartLiveHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _liveColumnChartHelper = new ColumnCurveChartHelper(this.muraChartVerticalLive);
+            _liveColumnChartHelper.SetOps(_settings.Cam1_Ops);
+            _liveColumnChartHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
 
-            _stitchedOverviewHelper = new MuraChartHelper(this.chartOverview);
-            _stitchedOverviewHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _reviewOverviewHelper = new ColumnCurveChartHelper(this.chartOverview);
+            _reviewOverviewHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
             if (chartOverview.ChartAreas.Count > 0)
                 chartOverview.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
 
-            _liveOverviewHelper = new MuraChartHelper(this.chartLiveOverview);
+            _liveOverviewHelper = new ColumnCurveChartHelper(this.chartLiveOverview);
             _liveOverviewHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
             if (chartLiveOverview.ChartAreas.Count > 0)
                 chartLiveOverview.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
 
-            _rowChartLiveHelper = new RowMuraChartHelper(this.muraChartHorizontalLive);
-            _rowChartLiveHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _liveRowChartHelper = new RowCurveChartHelper(this.muraChartHorizontalLive);
+            _liveRowChartHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
 
-            _muraChartHorizontalHelper = new RowMuraChartHelper(this.chartMuraHorizontal);
-            _muraChartHorizontalHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _reviewRowChartHelper = new RowCurveChartHelper(this.chartMuraHorizontal);
+            _reviewRowChartHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
 
             UpdateRowChartPitch();
 
@@ -376,11 +383,11 @@ namespace AniloxRoll.Monitor.Forms
                 ImageRepository  = _imageRepository,
                 TimeNavigator    = _dateTimeNavigator,
                 GalleryManager   = _galleryManager,
-                MuraChartHelper  = _muraChartHelper,
+                ColumnChartHelper  = _reviewColumnChartHelper,
                 Settings         = _settings,
                 StatusLabel      = lblPixelInfo,
                 CameraPanels     = _cameraPanels,
-                MuraChartHorizontalHelper = _muraChartHorizontalHelper,
+                RowChartHelper = _reviewRowChartHelper,
             });
             _interactionHelper.ApplySettingsToService();
 
@@ -392,9 +399,9 @@ namespace AniloxRoll.Monitor.Forms
                 ChartMuraHorizontal       = chartMuraHorizontal,
                 CheckBoxShowProcessed     = checkBoxShowProcessed,
                 InteractionHelper         = _interactionHelper,
-                MuraChartHelper           = _muraChartHelper,
-                MuraChartHorizontalHelper = _muraChartHorizontalHelper,
-                StitchedOverviewHelper    = _stitchedOverviewHelper,
+                ColumnChartHelper         = _reviewColumnChartHelper,
+                RowChartHelper            = _reviewRowChartHelper,
+                OverviewHelper            = _reviewOverviewHelper,
                 GalleryManager            = _galleryManager,
                 InspectionService         = _inspectionService,
                 ImageRepository           = _imageRepository,
@@ -649,7 +656,7 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
 
-            if (_muraChartLiveHelper == null || _settings == null) return;
+            if (_liveColumnChartHelper == null || _settings == null) return;
 
             double[] opsUmArr       = _settings.GetCameraOpsUmArray();
             double[] startPositions = _settings.GetCameraStartPositionMmArray();
@@ -660,7 +667,7 @@ namespace AniloxRoll.Monitor.Forms
             double startPos = (cameraIndex >= 0 && cameraIndex < startPositions.Length)
                 ? startPositions[cameraIndex] : 0;
 
-            _muraChartLiveHelper.SetOps(opsUm);
+            _liveColumnChartHelper.SetOps(opsUm);
 
             // 查詢 MIL 副顯示器的實際 zoom/pan（隨使用者滾輪操作即時變化）
             // panOffsetX = 面板左邊緣對應的 buffer pixel X
@@ -680,7 +687,7 @@ namespace AniloxRoll.Monitor.Forms
                 viewRightMm = startPos + rightPixel * opsInMm;
             }
 
-            _muraChartLiveHelper.UpdateDataAndView(meanArr, maxArr,
+            _liveColumnChartHelper.UpdateDataAndView(meanArr, maxArr,
                 startPos, viewLeftMm, viewRightMm);
         }
 
@@ -697,13 +704,13 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
 
-            if (_rowChartLiveHelper == null) return;
-            _rowChartLiveHelper.UpdateData(meanArr, maxArr);
+            if (_liveRowChartHelper == null) return;
+            _liveRowChartHelper.UpdateData(meanArr, maxArr);
 
             // 同步 Y 軸視野：查詢 MIL 副顯示器 zoom/pan，以 panel 上下邊緣的 mm 值對齊
             var liveCam = FindCameraById(camId);
 
-            double rowPitch = _rowChartLiveHelper.RowPitchMm;
+            double rowPitch = _liveRowChartHelper.RowPitchMm;
             if (liveCam != null && rowPitch > 0 &&
                 liveCam.TryGetSecondaryDisplayGeometry(
                     out double milZoomX, out double milZoomY, out double milPanX, out double milPanY))
@@ -711,7 +718,7 @@ namespace AniloxRoll.Monitor.Forms
                 double panelH  = panelMainDisplay.Height;
                 double topPixel = milPanY;
                 double botPixel = milPanY + panelH / milZoomY;
-                _rowChartLiveHelper.UpdateViewRange(topPixel * rowPitch, botPixel * rowPitch);
+                _liveRowChartHelper.UpdateViewRange(topPixel * rowPitch, botPixel * rowPitch);
             }
         }
 
@@ -720,9 +727,9 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (_settings == null) return;
             double lineRateHz = _settings.Acquisition.CameraLineRateHz[0]; // CAM1 master
-            _rowChartLiveHelper?.SetRowPitchFromSpeed(
+            _liveRowChartHelper?.SetRowPitchFromSpeed(
                 _settings.AniloxRollSpeedMPerMin, lineRateHz);
-            _muraChartHorizontalHelper?.SetRowPitchFromSpeed(
+            _reviewRowChartHelper?.SetRowPitchFromSpeed(
                 _settings.AniloxRollSpeedMPerMin, lineRateHz);
         }
 
@@ -1307,12 +1314,12 @@ namespace AniloxRoll.Monitor.Forms
             {
             _interactionHelper.HandleSettingsChanged();
             _liveCameraManager?.SetCaptureSettings(_settings);
-            _muraChartHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
-            _muraChartLiveHelper?.SetOps(_settings.Cam1_Ops);
-            _muraChartLiveHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _reviewColumnChartHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _liveColumnChartHelper?.SetOps(_settings.Cam1_Ops);
+            _liveColumnChartHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
             _liveOverviewHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
-            _rowChartLiveHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
-            _muraChartHorizontalHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _liveRowChartHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _reviewRowChartHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
             UpdateRowChartPitch();
 
             // 抓圖進行中設定變更 → 立刻在 CSV 插入 #CFG
@@ -1353,8 +1360,7 @@ namespace AniloxRoll.Monitor.Forms
                     _stitchCoordinator.ClearStitchedMode();
                     await _presenter.LoadImagesWithPeriodLockAsync(
                         _stitchCoordinator.LastReviewProcessedMode, _interactionHelper.LoadImages);
-                    _stitchCoordinator.ApplyGlobalMergeIfNeeded();
-                    _stitchCoordinator.UpdateOverviewChartFromRepository();
+                    ApplyPostLoadDisplay();
                 }
             }
 
@@ -1397,9 +1403,7 @@ namespace AniloxRoll.Monitor.Forms
                     checkBoxShowProcessed.Checked = true;
                 _stitchCoordinator.ClearStitchedMode();
                 await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
-                _stitchCoordinator.ApplyGlobalMergeIfNeeded();
-                _stitchCoordinator.UpdateOverviewChartFromRepository();
-                _interactionHelper.RefreshCurrentCanvasResult();
+                ApplyPostLoadDisplay();
             }
             }
             catch (Exception ex) { Trace.WriteLine($"[PropertyValueChanged] {ex}"); }
@@ -1431,8 +1435,7 @@ namespace AniloxRoll.Monitor.Forms
             _stitchCoordinator.ClearStitchedMode();
             _dataStatsPresenter.SetReviewGroupBoxes(false);
             await _presenter.LoadImagesWithPeriodLockAsync(false, LoadImagesWithReviewConfig);
-            _stitchCoordinator.ApplyGlobalMergeIfNeeded();
-            _stitchCoordinator.UpdateOverviewChartFromRepository();
+            ApplyPostLoadDisplay();
             }
             catch (Exception ex) { Trace.WriteLine($"[btnSelectFolder_Click] {ex}"); }
         }
@@ -1452,8 +1455,7 @@ namespace AniloxRoll.Monitor.Forms
             _stitchCoordinator.LastReviewProcessedMode = enableProcess;
             _stitchCoordinator.ClearStitchedMode();
             await _presenter.LoadImagesWithPeriodLockAsync(enableProcess, _interactionHelper.LoadImages);
-            _stitchCoordinator.ApplyGlobalMergeIfNeeded();
-            _stitchCoordinator.UpdateOverviewChartFromRepository();
+            ApplyPostLoadDisplay();
             }
             catch (Exception ex) { Trace.WriteLine($"[checkBoxShowProcessed] {ex}"); }
         }
@@ -1493,11 +1495,25 @@ namespace AniloxRoll.Monitor.Forms
             await _interactionHelper.LoadImages(enableProcess);
         }
 
+        /// <summary>
+        /// 載入影像後，根據 StitchMode 決定顯示方式：
+        /// Vertical → 觸發 gallery 選取顯示單台影像；Global → 合圖顯示。
+        /// 最後更新全覽圖。
+        /// </summary>
+        private void ApplyPostLoadDisplay()
+        {
+            if (_settings.StitchMode == StitchMode.Global)
+                _stitchCoordinator.ApplyGlobalMergeIfNeeded();
+            else
+                _interactionHelper.RefreshCurrentCanvasResult();
+            _stitchCoordinator.UpdateOverviewChartFromRepository();
+        }
+
         private async void btnPeriodPrev_Click(object sender, EventArgs e)
-        { try { _interactionHelper.SaveCanvasView(); _stitchCoordinator.ClearStitchedMode(); await _presenter.MovePeriodAsync(-1, _stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig); _stitchCoordinator.ApplyGlobalMergeIfNeeded(); _stitchCoordinator.UpdateOverviewChartFromRepository(); } catch (Exception ex) { Trace.WriteLine($"[btnPeriodPrev] {ex}"); } }
+        { try { _interactionHelper.SaveCanvasView(); _stitchCoordinator.ClearStitchedMode(); await _presenter.MovePeriodAsync(-1, _stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig); ApplyPostLoadDisplay(); } catch (Exception ex) { Trace.WriteLine($"[btnPeriodPrev] {ex}"); } }
 
         private async void btnPeriodNext_Click(object sender, EventArgs e)
-        { try { _interactionHelper.SaveCanvasView(); _stitchCoordinator.ClearStitchedMode(); await _presenter.MovePeriodAsync(+1, _stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig); _stitchCoordinator.ApplyGlobalMergeIfNeeded(); _stitchCoordinator.UpdateOverviewChartFromRepository(); } catch (Exception ex) { Trace.WriteLine($"[btnPeriodNext] {ex}"); } }
+        { try { _interactionHelper.SaveCanvasView(); _stitchCoordinator.ClearStitchedMode(); await _presenter.MovePeriodAsync(+1, _stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig); ApplyPostLoadDisplay(); } catch (Exception ex) { Trace.WriteLine($"[btnPeriodNext] {ex}"); } }
 
         /// <summary>cbDate/cbTime 手動滾動時載入對應圖片（同 btnPeriodPrev/Next）。
         /// _dataStatsPresenter.GrabIdNavGuard 時跳過（由 OnReviewGrabIdChanged 等程式碼觸發的 NavigateToDateTime）。</summary>
@@ -1511,8 +1527,7 @@ namespace AniloxRoll.Monitor.Forms
             _stitchCoordinator.ClearStitchedMode();
             _dataStatsPresenter.SetReviewGroupBoxes(false);
             await _presenter.LoadImagesWithPeriodLockAsync(_stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig);
-            _stitchCoordinator.ApplyGlobalMergeIfNeeded();
-            _stitchCoordinator.UpdateOverviewChartFromRepository();
+            ApplyPostLoadDisplay();
             }
             catch (Exception ex) { Trace.WriteLine($"[OnPeriodComboChanged] {ex}"); }
         }
@@ -1582,6 +1597,15 @@ namespace AniloxRoll.Monitor.Forms
             _htBars  = new[] { trackBarHtCam1,  trackBarHtCam2,  trackBarHtCam3,  trackBarHtCam4,  trackBarHtCam5,  trackBarHtCam6,  trackBarHtCam7  };
             _htNums  = new[] { numHtCam1,       numHtCam2,       numHtCam3,       numHtCam4,       numHtCam5,       numHtCam6,       numHtCam7       };
 
+            // ── CAM All 控制項事件綁定（控制項已在 Designer.cs 定義）──────────
+            _expAllBar = trackBarExpAll; _expAllNum = numExpAll;
+            _lrAllBar  = trackBarLrAll;  _lrAllNum  = numLrAll;
+            _htAllBar  = trackBarHtAll;  _htAllNum  = numHtAll;
+
+            BindAllSync(_expAllBar, _expAllNum, _expBars, _expNums);
+            BindAllSync(_lrAllBar,  _lrAllNum,  _lrBars,  _lrNums);
+            BindAllSync(_htAllBar,  _htAllNum,  _htBars,  _htNums);
+
             for (int i = 0; i < CameraCount; i++)
             {
                 int idx   = i;
@@ -1613,14 +1637,43 @@ namespace AniloxRoll.Monitor.Forms
                     HtMin, HtMax, acq.CameraGrabHeight[idx],
                     v => { acq.CameraGrabHeight[idx] = v; ConfigManager.SaveAcquisitionSettings(acq); },
                     v => _liveCameraManager?.SetGrabHeightForCamera(camId, v),
-                    () => _liveCameraManager?.RefreshMainDisplay());
+                    () => {
+                        _liveCameraManager?.RefreshMainDisplay();
+                        if (_settings.StitchMode == StitchMode.Global && _liveCameraManager?.IsGlobalMergeActive == true)
+                            _liveCameraManager.RefreshGlobalMergeLayout(_settings.Ops.ToArray(), _settings.StartPosition.ToArray());
+                    });
                 _htBars[idx].SmallChange = 64; _htBars[idx].LargeChange = 512;
             }
+
+            // ── CAM All 範圍設定 ──────────────────────────────────────────
+            int expAllMax = ExpMaxCap;
+            for (int i = 0; i < CameraCount; i++)
+            {
+                int lrHz = (int)acq.CameraLineRateHz[i];
+                int m = lrHz <= 0 ? ExpMaxCap : Math.Max(ExpMin, Math.Min(ExpMaxCap, (int)(900000.0 / lrHz)));
+                if (m < expAllMax) expAllMax = m;
+            }
+            _expAllBar.Minimum = ExpMin; _expAllBar.Maximum = expAllMax;
+            _expAllNum.Minimum = ExpMin; _expAllNum.Maximum = expAllMax;
+            _expAllBar.Value = Math.Max(ExpMin, Math.Min(expAllMax, (int)acq.CameraExposureTimeUs[0]));
+            _expAllNum.Value = _expAllBar.Value;
+
+            _lrAllBar.Minimum = LrMin; _lrAllBar.Maximum = LrMax;
+            _lrAllNum.Minimum = LrMin; _lrAllNum.Maximum = LrMax;
+            _lrAllBar.Value = Math.Max(LrMin, Math.Min(LrMax, (int)acq.CameraLineRateHz[0]));
+            _lrAllNum.Value = _lrAllBar.Value;
+
+            _htAllBar.Minimum = HtMin; _htAllBar.Maximum = HtMax;
+            _htAllNum.Minimum = HtMin; _htAllNum.Maximum = HtMax;
+            _htAllBar.Value = Math.Max(HtMin, Math.Min(HtMax, acq.CameraGrabHeight[0]));
+            _htAllNum.Value = _htAllBar.Value;
+            _htAllBar.SmallChange = 64; _htAllBar.LargeChange = 512;
 
             // 滾輪每格移動 1（攔截原生 3 格行為）
             RegisterWheelInterceptors(_expBars);
             RegisterWheelInterceptors(_lrBars);
             RegisterWheelInterceptors(_htBars);
+            RegisterWheelInterceptors(new[] { _expAllBar, _lrAllBar, _htAllBar });
         }
 
         /// <summary>
@@ -1668,6 +1721,30 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         /// <summary>
+        /// CAM All → CAM1~7 同步：拖曳/輸入 All 控制項時同步更新所有相機。
+        /// </summary>
+        private void BindAllSync(TrackBar barAll, NumericUpDown numAll,
+            TrackBar[] bars, NumericUpDown[] nums)
+        {
+            bool allSyncing = false;
+            barAll.ValueChanged += (s, e) => {
+                if (allSyncing || _syncingFromHw) return; allSyncing = true;
+                numAll.Value = barAll.Value;
+                for (int j = 0; j < bars.Length; j++)
+                    nums[j].Value = barAll.Value;
+                allSyncing = false;
+            };
+            numAll.ValueChanged += (s, e) => {
+                if (allSyncing || _syncingFromHw) return; allSyncing = true;
+                int v = (int)numAll.Value;
+                barAll.Value = Math.Max(barAll.Minimum, Math.Min(barAll.Maximum, v));
+                for (int j = 0; j < bars.Length; j++)
+                    nums[j].Value = v;
+                allSyncing = false;
+            };
+        }
+
+        /// <summary>
         /// 更新曝光 TrackBar/NUD 的 Maximum；若現有值被夾緊則將 NUD 背景色改為 OrangeRed，
         /// 否則恢復預設白色。由 LR ValueChanged 呼叫。
         /// </summary>
@@ -1684,6 +1761,22 @@ namespace AniloxRoll.Monitor.Forms
             else
             {
                 _expNums[idx].BackColor = SystemColors.Window;
+            }
+            UpdateExpAllMax();
+        }
+
+        private void UpdateExpAllMax()
+        {
+            if (_expAllBar == null || _expBars == null) return;
+            int minMax = _expBars[0].Maximum;
+            for (int i = 1; i < _expBars.Length; i++)
+                if (_expBars[i].Maximum < minMax) minMax = _expBars[i].Maximum;
+            _expAllBar.Maximum = minMax;
+            _expAllNum.Maximum = minMax;
+            if (_expAllBar.Value > minMax)
+            {
+                _expAllBar.Value = minMax;
+                _expAllNum.Value = minMax;
             }
         }
 
@@ -2051,7 +2144,7 @@ namespace AniloxRoll.Monitor.Forms
             if (_liveCameraManager == null || _liveCameraManager.IsReleasing) return;
             if (!_liveOverviewDirty || _liveOverviewHelper == null || _settings == null) return;
             _liveOverviewDirty = false;
-            OverviewChartManager.UpdateOverviewChart(_liveCurveMean, _liveCurveMax,
+            CurveMergeHelper.UpdateOverviewChart(_liveCurveMean, _liveCurveMax,
                 _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray(),
                 _settings.ErrorValueMean, _settings.ErrorValueMax,
                 _liveOverviewHelper, CameraCount, _settings.StitchMode, LiveViewRangeProvider);
@@ -2242,8 +2335,7 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _stitchCoordinator.ClearStitchedMode();
                 await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
-                _stitchCoordinator.ApplyGlobalMergeIfNeeded();
-                _stitchCoordinator.UpdateOverviewChartFromRepository();
+                ApplyPostLoadDisplay();
             }
             }
             catch (Exception ex) { Trace.WriteLine($"[SwitchRidgeDirection] {ex}"); }
@@ -2377,7 +2469,7 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         /// <summary>
-        /// OverviewChartManager 用的 viewRange 代理：將 TryComputeCurrentViewRange 包裝為 Func。
+        /// CurveMergeHelper 用的 viewRange 代理：將 TryComputeCurrentViewRange 包裝為 Func。
         /// </summary>
         private double ViewRangeProvider(int cameraIndex, bool isLeft, double defaultValue)
         {

@@ -80,6 +80,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private double _mergedMinStartMm;   // 合併座標系原點（mm）
         private double _mergedRefOpsMm;     // 合併像素尺寸（mm/px）
         private int    _mergedTotalW;       // 合併 buffer 寬度（px）
+        private int    _mergedTotalH;       // 合併 buffer 高度（px）
         private MIL_DISP_HOOK_FUNCTION_PTR _mergedMouseDelegate;
 
         private InspectionSettings _inspectionSettings;
@@ -602,6 +603,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _mergedMinStartMm = minStart;
             _mergedRefOpsMm   = refOpsMm;
             _mergedTotalW     = totalW;
+            _mergedTotalH     = maxH;
 
             MIL.MdispAlloc(sysId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref _mergedDisplay);
             MIL.MdispSelectWindow(_mergedDisplay, _mergedBuffer, _mainDisplayPanel.Handle);
@@ -679,7 +681,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (totalW <= 0 || maxH <= 0) return;
 
             // ③ buffer 大小改變 → 重新分配
-            if (totalW != _mergedTotalW)
+            if (totalW != _mergedTotalW || maxH != _mergedTotalH)
             {
                 MIL_ID sysId = _cameras[0].OwnerSystemId;
                 if (sysId == MIL.M_NULL) return;
@@ -738,6 +740,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _mergedMinStartMm = minStart;
             _mergedRefOpsMm   = refOpsMm;
             _mergedTotalW     = totalW;
+            _mergedTotalH     = maxH;
 
             for (int i = 0; i < n; i++)
             {

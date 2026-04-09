@@ -11,7 +11,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
     /// Y 軸標籤反轉：視覺上 0 在上、max 在下（透過 Customize 事件修改標籤文字）。
     /// InnerPlotPosition 補償機制對齊 canvas 垂直 viewport。
     /// </summary>
-    public class RowMuraChartHelper
+    public class RowCurveChartHelper
     {
         private readonly Chart _chart;
         private float  _errorValueMean = 1.0f;
@@ -32,7 +32,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private double _logicalTopMm  = double.NaN;
         private double _logicalBotMm  = double.NaN;
 
-        public RowMuraChartHelper(Chart chart)
+        public RowCurveChartHelper(Chart chart)
         {
             _chart = chart;
             Build();
@@ -120,7 +120,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         /// data 不反轉（row i → Y=i*rowPitch），IsReversed=true 使 Y=0 在上方。
         /// 反轉：chartHighY = totalMm - canvasTopMm → chart 視覺上方（小 Y with IsReversed），
         ///        chartLowY  = totalMm - canvasBotMm → chart 視覺下方（大 Y with IsReversed）。
-        /// 再套用 InnerPlotPosition 比例補償（與 MuraChartHelper.GetAdjustedZoom 同理）。
+        /// 再套用 InnerPlotPosition 比例補償（與 ColumnCurveChartHelper.GetAdjustedZoom 同理）。
         /// </summary>
         private void GetAdjustedZoom(double canvasTopMm, double canvasBotMm,
                                      out double zoomMin, out double zoomMax)

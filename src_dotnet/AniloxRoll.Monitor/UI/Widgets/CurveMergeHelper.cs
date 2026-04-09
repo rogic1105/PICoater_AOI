@@ -10,7 +10,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
     /// 全覽圖合併演算法與 .bin 曲線讀取：
     /// 將 7 台相機的 mura 曲線依機台布局位置合併到全覽圖。
     /// </summary>
-    public static class OverviewChartManager
+    public static class CurveMergeHelper
     {
         private const int MaxOverviewPoints = 2000;
 
@@ -22,7 +22,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             float[][] allMean, float[][] allMax,
             double[] opsArr, double[] posArr,
             float errMean, float errMax,
-            MuraChartHelper target,
+            ColumnCurveChartHelper target,
             int cameraCount,
             StitchMode stitchMode,
             Func<int, bool, double, double> viewRangeProvider)
@@ -213,6 +213,53 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 Array.Copy(allMax[j], 0, mergedMax, offset, allMax[j].Length);
                 offset += allMean[j].Length;
             }
+        }
+
+        /// <summary>
+        /// 多台相機 Row 曲線重疊合併（Global 模式用）：
+        /// 所有曲線靠上對齊（index 0），取最大長度保留全部資料。
+        /// 重疊區 Mean 取平均、Max 取最大值；非重疊區保留有資料的相機值。
+        /// </summary>
+        public static void MergeRowCurvesOverlap(float[][] allMean, float[][] allMax,
+            int cameraCount, out float[] mergedMean, out float[] mergedMax)
+        {
+            mergedMean = null;
+            mergedMax = null;
+
+            int maxLen = 0;
+            int validCount = 0;
+            for (int i = 0; i < cameraCount; i++)
+            {
+                if (allMean != null && i < allMean.Length && allMean[i] != null && allMean[i].Length > 0)
+                {
+                    if (allMean[i].Length > maxLen) maxLen = allMean[i].Length;
+                    validCount++;
+                }
+            }
+            if (validCount == 0 || maxLen <= 0) return;
+
+            mergedMean = new float[maxLen];
+            mergedMax = new float[maxLen];
+            var count = new int[maxLen];
+
+            for (int i = 0; i < cameraCount; i++)
+            {
+                if (allMean == null || i >= allMean.Length || allMean[i] == null) continue;
+                var curveMean = allMean[i];
+                var curveMax = (allMax != null && i < allMax.Length) ? allMax[i] : null;
+                int len = curveMean.Length;
+
+                for (int j = 0; j < len; j++)
+                {
+                    mergedMean[j] += curveMean[j];
+                    count[j]++;
+                    float mv = (curveMax != null && j < curveMax.Length) ? curveMax[j] : 0;
+                    if (mv > mergedMax[j]) mergedMax[j] = mv;
+                }
+            }
+
+            for (int j = 0; j < maxLen; j++)
+                if (count[j] > 1) mergedMean[j] /= count[j];
         }
 
         /// <summary>
