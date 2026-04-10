@@ -752,6 +752,74 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box output">回顧全覽圖：同步 canvas 水平範圍（Global 隨動）</div>
 </div>
 </div>
+
+<div class="flow-group vflow dev" id="pseudo-test-phantom">
+<div class="flow-title">Pseudo-test：Phantom Camera 模擬（系統流程）<code>AllocateCameras / ProcessingFunction / TrySaveCapture</code></div>
+<div class="note note-danger"><strong>⚠ 此流程僅存在於 <code>pseudo-test/7cam-from-2cam</code> 分支</strong>，main 分支不含 phantom 機制。本節文件保留於 main 是為了讓任何人查閱 pseudo-test 報告（hardware-specs.html）時，可在同一份 ui-flow 文件中對照測試流程。如需重現，請 <code>git checkout pseudo-test/7cam-from-2cam</code>。</div>
+<div class="note">用 1~2 台實體相機模擬 7 台完整流程。只有 CAM1、CAM2 有 digitizer，CAM3~7 為 phantom（有 display+buffer 無 digitizer）。</div>
+
+<div class="v-arrow" data-label="① 資源配置（AllocateCameras）"></div>
+<div class="box action dev">迴圈 system-settings.json 7 筆 CameraDevices</div>
+<div class="v-arrow"></div>
+<div class="v-branch">
+<div class="v-branch-path"><span class="branch-label yes">SystemNum 成功</span>
+<div class="box action dev">檢查 usedDevices：(actualSysNum, DevNum) 是否已佔用</div>
+<div class="v-branch">
+<div class="v-branch-path"><span class="branch-label yes">未佔用</span>
+<div class="box action dev">cam.Initialize() → MdigAlloc</div>
+<div class="v-branch">
+<div class="v-branch-path"><span class="branch-label yes">成功 + CheckPresence = true</span>
+<div class="box action dev">加入 usedDevices → 實體相機（source）</div>
+</div>
+<div class="v-branch-path"><span class="branch-label no">成功但 CheckPresence = false</span>
+<div class="box action dev">ReleaseDigitizerForPhantom() → 釋放 digitizer/pipeline，保留 display+buffer，標記 IsPhantom</div>
+</div>
+<div class="v-branch-path"><span class="branch-label no">MdigAlloc 失敗 / 例外</span>
+<div class="box action dev">FrameWidth = 0 → 待第二輪 InitializePhantom</div>
+</div>
+</div>
+</div>
+<div class="v-branch-path"><span class="branch-label no">已佔用（fallback DevNum 衝突）</span>
+<div class="box action dev">跳過 Initialize → 待第二輪 InitializePhantom</div>
+</div>
+</div>
+</div>
+<div class="v-branch-path"><span class="branch-label no">SystemNum 失敗</span>
+<div class="box action dev">Fallback 借用第一個成功的 system → actualSysNum 重對映</div>
+</div>
+</div>
+
+<div class="v-arrow" data-label="② Phantom 分配（第二輪）"></div>
+<div class="box action dev">source = 非 phantom 且 FrameWidth &gt; 0 的相機，按 CameraId 排序</div>
+<div class="v-arrow"></div>
+<div class="box action dev">phantom 交替分配：CameraId 奇數 → source1(CAM1)、偶數 → source2(CAM2)</div>
+<div class="v-arrow"></div>
+<div class="box action dev">FrameWidth == 0 的 phantom → InitializePhantom（分配 display+buffer）<br>已有 display+buffer 的 phantom（ReleaseDigitizerForPhantom）→ 跳過</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">CAM1._phantomCameras = [CAM3, CAM5, CAM7]</div>
+<div class="box output">CAM2._phantomCameras = [CAM4, CAM6]</div>
+</div>
+
+<div class="v-arrow" data-label="③ Live 監控（ProcessingFunction callback）"></div>
+<div class="box action dev">source 的每幀 callback → ReceivePhantomFrame(source)<br>MbufCopy(source.displayBuffer → phantom.displayBuffer) → 縮圖面板即時更新</div>
+<div class="v-arrow"></div>
+<div class="box action dev">Global merge 時 phantom 也執行 MbufCopyClip 到各自的 merge 位置</div>
+
+<div class="v-arrow" data-label="④ 存檔（TrySaveCapture）"></div>
+<div class="box action dev">source 存完自己（-1 或 -2）後，迴圈 _phantomCameras</div>
+<div class="v-arrow"></div>
+<div class="box action dev">用相同 rawBytes/procVBytes/procHBytes/curve 資料，<br>檔名改為 phantom 的 CameraId（-3~-7）</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">CAM1 → 存 -1, -3, -5, -7（4 份）</div>
+<div class="box output">CAM2 → 存 -2, -4, -6（3 份）</div>
+<div class="box output">OnInspectionResult 對每個 CameraId 觸發 → CSV 記錄 7 筆</div>
+</div>
+
+<div class="v-arrow" data-label="⑤ 回顧"></div>
+<div class="box action">已有 7 份存檔 → 走原始 7 台流程（ImageRepository / ReviewStitchCoordinator），不需 pseudo 合併</div>
+</div>
 </div>
 <!-- /Review -->
 <!-- ===== 檢測報表 ===== -->
