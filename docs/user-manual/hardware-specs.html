@@ -53,7 +53,9 @@
 
 <h1>PICoater AOI — 硬體規格與資源實測報告</h1>
 <p class="subtitle">測試日期：2026-04-09 ｜ 測試分支：<code>pseudo-test/7cam-from-2cam</code> ｜ 文件版本：v1.0</p>
-<div class="note-info note">本報告資料來自分支 <code>pseudo-test/7cam-from-2cam</code> 的實測結果（2 台實體相機 + 模擬 6 條額外 GPU pipeline）。原始數據留存於該分支的 <code>.claude/resource-analysis.md</code> 和 <code>.claude/resource-comparison.md</code>。</div>
+<div class="note-danger note">
+  <strong>⚠ 重現測試需切換分支：</strong>本報告資料來自 <code>pseudo-test/7cam-from-2cam</code> 分支（2 台實體相機模擬 7 台 GPU pipeline）。<strong>main 分支只跑 2 台實體相機，無法重現本報告的 7 cam 負載數值</strong>。如需重跑 / 驗證 / 補測，請先 <code>git checkout pseudo-test/7cam-from-2cam</code>。原始數據留存於該分支的 <code>.claude/resource-analysis.md</code> 和 <code>.claude/resource-comparison.md</code>。
+</div>
 
 <!-- TOC -->
 <div class="toc">

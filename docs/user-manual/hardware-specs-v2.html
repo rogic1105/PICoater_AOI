@@ -54,6 +54,10 @@
 <h1>PICoater AOI — 硬體規格與資源實測報告 v2</h1>
 <p class="subtitle">測試日期：2026-04-10 ｜ 測試分支：<code>pseudo-test/7cam-from-2cam</code> ｜ 文件版本：v2.0（Phantom 7 cam 完整模擬）</p>
 
+<div class="note-danger note">
+  <strong>⚠ 重現測試需切換分支：</strong>本報告資料來自 <code>pseudo-test/7cam-from-2cam</code> 分支的 Phantom Camera 機制（2 台實體相機 + 5 台 phantom，共 7 套完整 GPU pipeline）。<strong>main 分支不含 phantom 機制，只能跑 2 台實體相機，無法重現本報告 7 cam 負載數值</strong>。如需重跑 / 驗證 / 補測，請先 <code>git checkout pseudo-test/7cam-from-2cam</code>。
+</div>
+
 <div class="note-ok note">
   <strong>測試架構：Phantom Camera 7 台完整模擬。</strong>2 台實體相機 + 5 台 phantom，共 7 個 AniloxCamera 物件、7 套 MIL display + proc + NativeBufferPool、每 cycle 7 次 ProcessImage、7 份存檔。所有資源指標<strong>直接量測</strong>，VRAM 透過 Windows Performance Counter「GPU Process Memory \ Dedicated Usage」取得真實 per-process 數值。
 </div>
