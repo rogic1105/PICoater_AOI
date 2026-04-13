@@ -86,6 +86,10 @@ namespace AniloxRoll.Monitor.Forms
         private InspectionLogService _inspectionLogService;
         private string _currentGrabId;
 
+        // --- 儲存管理 ---
+        private StorageRetentionService _retentionService;
+        private RemoteCopyService _remoteCopyService;
+
         // --- IO 連動 ---
         private PlcGrabController _plcGrabController;
 
@@ -165,6 +169,17 @@ namespace AniloxRoll.Monitor.Forms
             }
             _inspectionLogService = new InspectionLogService(
                 () => _settings?.CaptureRootPath ?? string.Empty);
+
+            // 循環儲存 + 遠端複製
+            _retentionService = new StorageRetentionService(
+                getRootPath:        () => _settings?.CaptureRootPath ?? string.Empty,
+                getMaxBytes:        () => (long)(_settings?.LocalMaxGB ?? 500) * 1024L * 1024L * 1024L,
+                getFailProtectDays: () => _settings?.FailProtectDays ?? 30);
+            _retentionService.Start();
+
+            _remoteCopyService = new RemoteCopyService(
+                getRemotePath: () => _settings?.RemotePath ?? string.Empty,
+                getLocalRoot:  () => _settings?.CaptureRootPath ?? string.Empty);
 
             InitPlcController();
         }
@@ -475,6 +490,7 @@ namespace AniloxRoll.Monitor.Forms
                 pixelText => { if (lblPixelInfo != null) lblPixelInfo.Text = pixelText; }
             );
             _liveCameraManager.SetCaptureSettings(_settings);
+            _liveCameraManager.OnFilesSaved = files => _remoteCopyService?.EnqueueFiles(files);
             _liveCameraManager.OnInspectionResult += OnCameraInspectionResult;
             btnGetBackground.Click += btnGetBackground_Click;
             btnViewBackground.Click += btnViewBackground_Click;
@@ -521,6 +537,8 @@ namespace AniloxRoll.Monitor.Forms
                 }
                 FreePrecomputedColMeanBuffers();
                 _liveCameraManager.FreeCameras();
+                _retentionService?.Dispose();
+                _remoteCopyService?.Dispose();
             };
         }
 
@@ -1428,7 +1446,7 @@ namespace AniloxRoll.Monitor.Forms
                         _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
             }
 
-            // 圖表設定變更 → 立刻套用
+            // 檢測報表設定變更 → 立刻套用
             if (changedPropertyName == nameof(InspectionSettings.ChartScaleMode))
             {
                 _dataStatsPresenter.ApplyChartScaleFromSettings();

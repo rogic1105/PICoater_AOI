@@ -64,6 +64,9 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// 參數：(cameraId, rowCurveMean_raw255, rowCurveMax_raw255)</summary>
         public event Action<int, float[], float[]> OnLiveRowCurveData;
 
+        /// <summary>存檔完成回呼：傳入已儲存的檔案路徑陣列（供遠端複製佇列）。</summary>
+        public Action<string[]> OnFilesSaved { get; set; }
+
         /// <summary>
         /// 正在執行釋放流程時為 true，防止 Timer Tick 在資源已釋放後繼續存取相機。
         /// 同 CameraSession.IsReleasing。
@@ -215,6 +218,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                     OnLiveCurveData?.Invoke(camId, mean, max);
                 cam.OnLiveRowCurveData   += (camId, mean, max) =>
                     OnLiveRowCurveData?.Invoke(camId, mean, max);
+                cam.OnFilesSaved = OnFilesSaved;
                 cam.Initialize();
                 _cameras.Add(cam);
             }

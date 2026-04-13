@@ -254,6 +254,9 @@ namespace AniloxRoll.Monitor.Core.Camera
         public event Action<int, float[], float[]> OnLiveCurveData;
         public event Action<int, float[], float[]> OnLiveRowCurveData;
 
+        /// <summary>存檔完成回呼：傳入已儲存的檔案路徑陣列（供遠端複製佇列）。</summary>
+        public Action<string[]> OnFilesSaved { get; set; }
+
         private float _lastMeanPeak = 0f;
         private float _lastMaxPeak  = 0f;
 
@@ -1204,7 +1207,8 @@ namespace AniloxRoll.Monitor.Core.Camera
                         CameraId = camId, OrigWidth = origW, OrigHeight = origH,
                         MeanPeak = meanPeak, MaxPeak = maxPeak,
                         GpuTimeMs = LastGpuTimeMs,
-                        OnResult = OnInspectionResult
+                        OnResult = OnInspectionResult,
+                        OnFilesSaved = OnFilesSaved
                     };
 
                     var saver = _frameSaver;

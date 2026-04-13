@@ -57,15 +57,15 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category("2. 檢測配方")][DisplayName("背景取樣秒數")] public int   BackgroundSampleSeconds { get => Recipe.BackgroundSampleSeconds; set => Recipe.BackgroundSampleSeconds = value; }
         [Category("2. 檢測配方")][DisplayName("A輪速度 (m/min)")] public double AniloxRollSpeedMPerMin { get => Recipe.AniloxRollSpeedMPerMin; set => Recipe.AniloxRollSpeedMPerMin = value; }
 
-        // ===== 3. 圖表設定 =====
-        [Category("3. 圖表設定")][DisplayName("統計圖表")]
+        // ===== 3. 檢測報表設定 =====
+        [Category("3. 檢測報表設定")][DisplayName("統計圖表")]
         public ChartSettings StatisticsChart => Chart;
 
         private MuraChartConfig _muraChart;
-        [Category("3. 圖表設定")][DisplayName("Mura 圖表")]
+        [Category("3. 檢測報表設定")][DisplayName("Mura 圖表")]
         public MuraChartConfig MuraChart => _muraChart ?? (_muraChart = new MuraChartConfig(Recipe));
 
-        [Category("3. 圖表設定")][DisplayName("圖面")]
+        [Category("3. 檢測報表設定")][DisplayName("圖面")]
         public ImageViewSettings ImageViewDisplay => ImageView;
 
         // 向後相容：程式碼中直接存取的快捷屬性
@@ -82,6 +82,9 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category("4. 儲存設定")][DisplayName("存原圖")]     public bool   SaveOriginalBmp      { get => Storage.SaveOriginalBmp;      set => Storage.SaveOriginalBmp      = value; }
         [Category("4. 儲存設定")][DisplayName("存圖目錄")]   public string CaptureRootPath { get => Storage.CaptureRootPath; set => Storage.CaptureRootPath = value; }
         [Category("4. 儲存設定")][DisplayName("存背景目錄")] public string BackgroundPath  { get => Storage.BackgroundPath;  set => Storage.BackgroundPath  = value; }
+        [Category("4. 儲存設定")][DisplayName("本地上限(GB)")]   public int    LocalMaxGB      { get => Storage.LocalMaxGB;      set => Storage.LocalMaxGB      = value; }
+        [Category("4. 儲存設定")][DisplayName("異常保護天數")]    public int    FailProtectDays { get => Storage.FailProtectDays; set => Storage.FailProtectDays = value; }
+        [Category("4. 儲存設定")][DisplayName("遠端路徑")]       public string RemotePath      { get => Storage.RemotePath;      set => Storage.RemotePath      = value; }
 
         // ===== 5. IO 模組設定 =====
         [Category("5. IO 模組設定")][DisplayName("啟用 IO")]  public bool   PlcEnabled { get; set; } = true;

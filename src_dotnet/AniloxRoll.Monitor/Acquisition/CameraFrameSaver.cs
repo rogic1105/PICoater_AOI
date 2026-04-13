@@ -76,6 +76,13 @@ namespace AniloxRoll.Monitor.Core.Camera
             AppendResourceLog(ctx.CameraId, ctx.OrigWidth, ctx.OrigHeight,
                 ctx.GpuTimeMs, frameBytes, SessionSaveBytes, SessionFrameCount, ramMB);
 
+            // 通知遠端複製佇列
+            if (ctx.OnFilesSaved != null)
+            {
+                var savedFiles = Directory.GetFiles(ctx.SaveDir, ctx.BaseName + "*");
+                ctx.OnFilesSaved(savedFiles);
+            }
+
             ctx.OnResult?.Invoke(ctx.CameraId, ctx.BaseName, ctx.MeanPeak, ctx.MaxPeak);
         }
 
@@ -316,5 +323,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         public float MaxPeak;
         public long GpuTimeMs;
         public Action<int, string, float, float> OnResult;
+        /// <summary>存檔完成後回呼，傳入已儲存的檔案路徑陣列（供遠端複製佇列用）。</summary>
+        public Action<string[]> OnFilesSaved;
     }
 }

@@ -73,6 +73,8 @@ PICoater_AOI/
 | `Services/PlcState.cs` | PlcState enum（FSM 狀態）+ PlcIoSnapshot struct（IO 快照） |
 | `Services/PlcGrabController.cs` | IO-Grab 連動：PlcState FSM、IO 追蹤、Watchdog keepalive；支援 IModbusTcpClient 注入測試 |
 | `Services/CsvConfigSnapshot.cs` | 不可變設定快照（CamOps/CamPos/CamGrabHeight/Hessian/ErrorValue） |
+| `Services/StorageRetentionService.cs` | 循環儲存：Timer 定期掃描磁碟用量，刪除最舊日期資料夾影像，保護 CSV 與 Fail 影像 |
+| `Services/RemoteCopyService.cs` | 背景遠端複製：ConcurrentQueue + 背景執行緒，File.Copy 含重試（3 次） |
 | `UI/Widgets/GrabImageStitcher.cs` | 多張影像垂直拼接 + MergeHorizontal 全域合圖；LoadCameraImage（internal） |
 | `UI/Widgets/ProportionalScaler.cs` | Form 等比例縮放 |
 | `sdk/AOI_SDK/src_dotnet/AOI.SDK/UI/SmartCanvas.cs` | PictureBox 子類：zoom/pan/edge/ClampPan；自訂白底黑邊十字游標 |
@@ -133,7 +135,7 @@ PICoater_AOI/
 | 背景取樣秒數 | `BackgroundSampleSeconds` | 3 | StandardBgSub 採集時間 |
 | A輪速度 (m/min) | `AniloxRollSpeedMPerMin` | 10.0 | Anilox 輪速 |
 
-### 3. 圖表設定
+### 3. 檢測報表設定
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
@@ -153,6 +155,9 @@ PICoater_AOI/
 | 存原圖 | `SaveOriginalBmp` | false | 額外存原始 BMP |
 | 存圖目錄 | `CaptureRootPath` | D:\AniloxCaptures | 存檔根目錄 |
 | 存背景目錄 | `BackgroundPath` | D:\AniloxCaptures\bg | 背景 .bin 目錄 |
+| 本地上限(GB) | `LocalMaxGB` | 500 | 循環儲存上限，超過時刪除最舊日期 |
+| 異常保護天數 | `FailProtectDays` | 30 | Fail 影像保護天數，不被循環刪除 |
+| 遠端路徑 | `RemotePath` | "" | 遠端複製目標路徑（空=不複製） |
 
 ### 5. IO 模組設定
 
