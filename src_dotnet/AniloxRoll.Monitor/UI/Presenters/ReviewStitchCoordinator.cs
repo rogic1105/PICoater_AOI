@@ -241,7 +241,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 {
                     mode = (totalImgCount > loadedCams) ? "Stitch" : "Single";
                 }
-                Core.Camera.AniloxCamera.AppendReviewResourceLog(mode, loadedCams, totalImgCount,
+                Core.Camera.CameraFrameSaver.AppendReviewResourceLog(mode, loadedCams, totalImgCount,
                     finalW, finalH, swTotal.ElapsedMilliseconds);
             }
             finally

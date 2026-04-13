@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace AniloxRoll.Monitor.Core.Data
@@ -10,7 +9,6 @@ namespace AniloxRoll.Monitor.Core.Data
     /// AcquisitionSettings 儲存層。
     /// 讀寫 Config\acquisition-settings.json（與 exe 同目錄）。
     /// 對應 tabPageCamera（TrackBar）的所有取像參數。
-    /// 不使用 JavaScriptSerializer（會存取 ConfigurationManager，user.config 損毀時失敗）。
     /// </summary>
     public static class AcquisitionSettingsStore
     {
@@ -19,51 +17,26 @@ namespace AniloxRoll.Monitor.Core.Data
 
         public static AcquisitionSettings Load()
         {
-            try
-            {
-                if (!File.Exists(FullConfigPath))
-                {
-                    var defaults = new AcquisitionSettings();
-                    defaults.Validate();
-                    Save(defaults);
-                    return defaults;
-                }
+            var settings = SettingsStoreHelper.LoadJsonFile(
+                FullConfigPath,
+                ParseJson,
+                () => { var d = new AcquisitionSettings(); d.Validate(); return d; });
 
-                string json = File.ReadAllText(FullConfigPath, Encoding.UTF8);
-                if (string.IsNullOrWhiteSpace(json)) return new AcquisitionSettings();
+            if (settings != null) settings.Validate();
 
-                var result = ParseJson(json);
-                if (result == null) return new AcquisitionSettings();
-                result.Validate();
-                return result;
-            }
-            catch
-            {
-                return new AcquisitionSettings();
-            }
+            // 檔案不存在時自動建立預設檔
+            if (!File.Exists(FullConfigPath))
+                Save(settings);
+
+            return settings;
         }
 
         public static void Save(AcquisitionSettings settings)
         {
-            try
-            {
-                if (settings == null) settings = new AcquisitionSettings();
-                settings.Validate();
-
-                string dir = Path.GetDirectoryName(FullConfigPath);
-                Directory.CreateDirectory(dir);
-                byte[] bytes = new UTF8Encoding(false).GetBytes(SerializeJson(settings));
-                using (var fs = new FileStream(FullConfigPath, FileMode.Create,
-                                               FileAccess.Write, FileShare.ReadWrite))
-                {
-                    fs.Write(bytes, 0, bytes.Length);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Trace.WriteLine(
-                    $"[AcquisitionSettingsStore.Save] {ex.GetType().Name}: {ex.Message}");
-            }
+            if (settings == null) settings = new AcquisitionSettings();
+            settings.Validate();
+            SettingsStoreHelper.SaveJsonFile(FullConfigPath, SerializeJson(settings),
+                nameof(AcquisitionSettingsStore));
         }
 
         // ── 序列化 ─────────────────────────────────────────────────────────

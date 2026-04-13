@@ -147,6 +147,10 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <button class="active" onclick="setMode('operator')">操作員檢視</button>
 <button onclick="setMode('developer')">開發者檢視</button>
 </div>
+<div class="view-toggle" style="margin-left:12px;">
+<button onclick="expandAll()">全部展開</button>
+<button onclick="collapseAll()">全部合併</button>
+</div>
 <div class="legend">
 <div class="legend-item">
 <div class="legend-box" style="background:var(--input-bg);border-color:var(--input-border)"></div>操作（使用者動作）</div>
@@ -471,6 +475,18 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box action">MdispControl：M_SCALE_DISPLAY=M_ONCE + M_CENTER_DISPLAY + M_MOUSE_USE</div>
 <div class="v-arrow"></div>
 <div class="box action">MdispHookFunction(_mergedDisplay, M_MOUSE_MOVE, MergedMouseStatusHandler) → 座標狀態列</div>
+<!-- ── 顯示同步機制 ── -->
+<div class="v-arrow"></div>
+<div class="box action">MdispControl(_mergedDisplay, M_UPDATE, M_DISABLE)（關閉自動刷新）</div>
+<div class="v-arrow"></div>
+<div class="box sync">啟動 _mergedDisplayTimer（33ms ≈ 30fps）→ 定時呼叫 MdispControl(M_UPDATE, M_NOW)</div>
+<div class="v-arrow"></div>
+<div class="note" style="margin:4px 0;font-size:0.85em;color:#6a1b9a;">
+  <b>為何需要定時刷新？</b>多台相機的 ProcessingFunction callback 各自獨立觸發 MbufCopyClip。
+  若 MIL display 保持自動刷新（預設），每次 MbufCopyClip 都觸發 repaint，
+  導致畫面在各台相機寫入間交替刷新（視覺上呈現閃爍/非同步）。
+  關閉自動刷新 + 定時手動刷新可確保每次顯示的是所有相機的最新合成結果。
+</div>
 <!-- ── 每幀回呼 ── -->
 <div class="v-arrow"></div>
 <div class="box action">每幀 ProcessingFunction callback（每台相機獨立觸發）</div>
@@ -486,6 +502,8 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box action">MbufCopyClip(childBuf, _mergedBuffer, dstX, 0)（GPU→GPU，跨 System 由 MIL DMA 路由）</div>
 <div class="v-arrow"></div>
 <div class="box action">MbufFree(childBuf)（每幀建立/釋放，MIL 內部快取）</div>
+<div class="v-arrow"></div>
+<div class="box sync">buffer 已更新但 display 不立即刷新 → 等待 _mergedDisplayTimer 下次 tick</div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">監控主畫面：7 台即時合圖（重疊區域中點分界，前相機取左、後相機取右）</div>
@@ -525,9 +543,9 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="v-arrow"></div>
 <div class="box action">DisableGlobalMerge</div>
 <div class="v-arrow"></div>
-<div class="box action">各相機 _mergedTargetBuffer = M_NULL（停止 callback 中的合併複製）</div>
+<div class="box action">_mergedDisplayTimer.Stop() + Dispose()（停止定時刷新）</div>
 <div class="v-arrow"></div>
-<div class="box action">各相機 _mergedSrcClipLeft = 0, _mergedSrcClipWidth = 0</div>
+<div class="box action">各相機 ClearMergeTarget()（_mergedTargetBuffer = M_NULL → 停止 callback 合併複製）</div>
 <div class="v-arrow"></div>
 <div class="box action">MdispHookFunction(M_MOUSE_MOVE + M_UNHOOK)（解除滑鼠 hook）</div>
 <div class="v-arrow"></div>
@@ -1174,6 +1192,12 @@ function setMode(mode) {
   document.body.className = mode === 'operator' ? 'operator-mode' : '';
   document.querySelectorAll('.view-toggle button').forEach(b => b.classList.remove('active'));
   document.querySelector(`.view-toggle button:${mode === 'operator' ? 'first' : 'last'}-child`).classList.add('active');
+}
+function expandAll() {
+  document.querySelectorAll('.flow-group').forEach(fg => fg.classList.remove('collapsed'));
+}
+function collapseAll() {
+  document.querySelectorAll('.flow-group').forEach(fg => fg.classList.add('collapsed'));
 }
 // 預設全展開
 document.querySelectorAll('h2:not(.dev)').forEach(h => { h.classList.add('open'); h.nextElementSibling.classList.add('open'); });

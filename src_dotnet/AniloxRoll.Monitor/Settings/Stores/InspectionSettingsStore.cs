@@ -2,14 +2,12 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace AniloxRoll.Monitor.Core.Data
 {
     /// <summary>
     /// InspectionSettings 儲存層（MachineLayout + Recipe + Storage）。
     /// 讀寫 Config\inspection-settings.json（與 exe 同目錄）。
-    /// 不使用 JavaScriptSerializer（user.config 損毀時拋 ConfigurationErrorsException）。
     /// </summary>
     public static class InspectionSettingsStore
     {
@@ -20,53 +18,28 @@ namespace AniloxRoll.Monitor.Core.Data
 
         public static InspectionSettings Load()
         {
-            try
-            {
-                if (!File.Exists(FullConfigPath))
-                {
-                    var defaults = new InspectionSettings();
-                    defaults.Validate();
-                    Save(defaults);
-                    return defaults;
-                }
+            var settings = SettingsStoreHelper.LoadJsonFile(
+                FullConfigPath,
+                ParseJson,
+                () => { var d = new InspectionSettings(); d.Validate(); return d; });
 
-                string json = File.ReadAllText(FullConfigPath, Encoding.UTF8);
-                if (string.IsNullOrWhiteSpace(json)) return new InspectionSettings();
+            if (settings != null) settings.Validate();
 
-                var settings = ParseJson(json);
-                if (settings == null) return new InspectionSettings();
-                settings.Validate();
-                return settings;
-            }
-            catch
-            {
-                return new InspectionSettings();
-            }
+            // 檔案不存在時自動建立預設檔
+            if (!File.Exists(FullConfigPath))
+                Save(settings);
+
+            return settings;
         }
 
         // ── Save ──────────────────────────────────────────────────────────
 
         public static void Save(InspectionSettings settings)
         {
-            try
-            {
-                if (settings == null) settings = new InspectionSettings();
-                settings.Validate();
-
-                string dir = Path.GetDirectoryName(FullConfigPath);
-                Directory.CreateDirectory(dir);
-                byte[] bytes = new UTF8Encoding(false).GetBytes(SerializeJson(settings));
-                using (var fs = new FileStream(FullConfigPath, FileMode.Create,
-                                               FileAccess.Write, FileShare.ReadWrite))
-                {
-                    fs.Write(bytes, 0, bytes.Length);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Trace.WriteLine(
-                    $"[InspectionSettingsStore.Save] {ex.GetType().Name}: {ex.Message}");
-            }
+            if (settings == null) settings = new InspectionSettings();
+            settings.Validate();
+            SettingsStoreHelper.SaveJsonFile(FullConfigPath, SerializeJson(settings),
+                nameof(InspectionSettingsStore));
         }
 
         // ── 序列化 ────────────────────────────────────────────────────────
@@ -129,9 +102,9 @@ namespace AniloxRoll.Monitor.Core.Data
             // Storage
             sb.AppendLine("  \"Storage\": {");
             sb.AppendLine($"    \"EnableAutoCapture\": {(T.EnableAutoCapture ? "true" : "false")},");
-            sb.AppendLine($"    \"CaptureRootPath\": \"{EscapeJson(T.CaptureRootPath)}\",");
+            sb.AppendLine($"    \"CaptureRootPath\": \"{SettingsStoreHelper.EscapeJson(T.CaptureRootPath)}\",");
             sb.AppendLine($"    \"SaveOriginalBmp\": {(T.SaveOriginalBmp ? "true" : "false")},");
-            sb.AppendLine($"    \"BackgroundPath\": \"{EscapeJson(T.BackgroundPath)}\"");
+            sb.AppendLine($"    \"BackgroundPath\": \"{SettingsStoreHelper.EscapeJson(T.BackgroundPath)}\"");
             sb.AppendLine("  }");
 
             sb.Append("}");
@@ -140,13 +113,12 @@ namespace AniloxRoll.Monitor.Core.Data
 
         private static string D(double v) => v.ToString("G", CultureInfo.InvariantCulture);
         private static string F(float  v) => v.ToString("G", CultureInfo.InvariantCulture);
-        private static string EscapeJson(string s) => (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"");
 
         // ── 解析 ──────────────────────────────────────────────────────────
 
         private static InspectionSettings ParseJson(string json)
         {
-            var settings = new InspectionSettings
+            return new InspectionSettings
             {
                 MachineLayout = ParseMachineLayout(json),
                 Recipe        = ParseRecipe(json),
@@ -154,92 +126,41 @@ namespace AniloxRoll.Monitor.Core.Data
                 ImageView     = ParseImageView(json),
                 Storage       = ParseStorage(json),
             };
-            return settings;
-        }
-
-        /// <summary>從整體 JSON 中提取指定頂層 key 的物件內容（支援多行）。</summary>
-        private static string ExtractObject(string json, string key)
-        {
-            var m = Regex.Match(json,
-                "\"" + key + "\"\\s*:\\s*\\{([^}]*)\\}",
-                RegexOptions.Singleline);
-            return m.Success ? m.Groups[1].Value : string.Empty;
-        }
-
-        private static double GetDouble(string obj, string key, double fallback)
-        {
-            var m = Regex.Match(obj, "\"" + key + "\"\\s*:\\s*([\\d.eE+\\-]+)");
-            if (!m.Success) return fallback;
-            return double.TryParse(m.Groups[1].Value, NumberStyles.Any,
-                CultureInfo.InvariantCulture, out double v) ? v : fallback;
-        }
-
-        private static int GetInt(string obj, string key, int fallback)
-        {
-            var m = Regex.Match(obj, "\"" + key + "\"\\s*:\\s*([\\d]+)");
-            if (!m.Success) return fallback;
-            return int.TryParse(m.Groups[1].Value, out int v) ? v : fallback;
-        }
-
-        private static float GetFloat(string obj, string key, float fallback)
-        {
-            var m = Regex.Match(obj, "\"" + key + "\"\\s*:\\s*([\\d.eE+\\-]+)");
-            if (!m.Success) return fallback;
-            return float.TryParse(m.Groups[1].Value, NumberStyles.Any,
-                CultureInfo.InvariantCulture, out float v) ? v : fallback;
-        }
-
-        private static bool GetBool(string obj, string key, bool fallback)
-        {
-            var m = Regex.Match(obj, "\"" + key + "\"\\s*:\\s*(true|false)",
-                RegexOptions.IgnoreCase);
-            if (!m.Success) return fallback;
-            return string.Equals(m.Groups[1].Value, "true", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static string GetString(string obj, string key, string fallback)
-        {
-            var m = Regex.Match(obj, "\"" + key + "\"\\s*:\\s*\"([^\"]*)\"");
-            if (!m.Success) return fallback;
-            return m.Groups[1].Value
-                .Replace("\\\\", "\x00BS\x00")
-                .Replace("\\\"", "\"")
-                .Replace("\x00BS\x00", "\\");
         }
 
         private static MachineLayoutConfig ParseMachineLayout(string json)
         {
-            string obj = ExtractObject(json, "MachineLayout");
+            string obj = SettingsStoreHelper.ExtractObject(json, "MachineLayout");
             return new MachineLayoutConfig
             {
-                Cam1_Ops = GetDouble(obj, "Cam1_Ops", 33.0),
-                Cam2_Ops = GetDouble(obj, "Cam2_Ops", 33.0),
-                Cam3_Ops = GetDouble(obj, "Cam3_Ops", 33.0),
-                Cam4_Ops = GetDouble(obj, "Cam4_Ops", 33.0),
-                Cam5_Ops = GetDouble(obj, "Cam5_Ops", 33.0),
-                Cam6_Ops = GetDouble(obj, "Cam6_Ops", 33.0),
-                Cam7_Ops = GetDouble(obj, "Cam7_Ops", 33.0),
-                Cam1_Pos = GetDouble(obj, "Cam1_Pos",    0.0),
-                Cam2_Pos = GetDouble(obj, "Cam2_Pos",  400.0),
-                Cam3_Pos = GetDouble(obj, "Cam3_Pos",  800.0),
-                Cam4_Pos = GetDouble(obj, "Cam4_Pos", 1200.0),
-                Cam5_Pos = GetDouble(obj, "Cam5_Pos", 1600.0),
-                Cam6_Pos = GetDouble(obj, "Cam6_Pos", 2000.0),
-                Cam7_Pos = GetDouble(obj, "Cam7_Pos", 2400.0),
+                Cam1_Ops = SettingsStoreHelper.GetDouble(obj, "Cam1_Ops", 33.0),
+                Cam2_Ops = SettingsStoreHelper.GetDouble(obj, "Cam2_Ops", 33.0),
+                Cam3_Ops = SettingsStoreHelper.GetDouble(obj, "Cam3_Ops", 33.0),
+                Cam4_Ops = SettingsStoreHelper.GetDouble(obj, "Cam4_Ops", 33.0),
+                Cam5_Ops = SettingsStoreHelper.GetDouble(obj, "Cam5_Ops", 33.0),
+                Cam6_Ops = SettingsStoreHelper.GetDouble(obj, "Cam6_Ops", 33.0),
+                Cam7_Ops = SettingsStoreHelper.GetDouble(obj, "Cam7_Ops", 33.0),
+                Cam1_Pos = SettingsStoreHelper.GetDouble(obj, "Cam1_Pos",    0.0),
+                Cam2_Pos = SettingsStoreHelper.GetDouble(obj, "Cam2_Pos",  400.0),
+                Cam3_Pos = SettingsStoreHelper.GetDouble(obj, "Cam3_Pos",  800.0),
+                Cam4_Pos = SettingsStoreHelper.GetDouble(obj, "Cam4_Pos", 1200.0),
+                Cam5_Pos = SettingsStoreHelper.GetDouble(obj, "Cam5_Pos", 1600.0),
+                Cam6_Pos = SettingsStoreHelper.GetDouble(obj, "Cam6_Pos", 2000.0),
+                Cam7_Pos = SettingsStoreHelper.GetDouble(obj, "Cam7_Pos", 2400.0),
             };
         }
 
         private static InspectionRecipe ParseRecipe(string json)
         {
-            string obj = ExtractObject(json, "Recipe");
+            string obj = SettingsStoreHelper.ExtractObject(json, "Recipe");
 
             BackgroundAlgorithm algo = BackgroundAlgorithm.SingleFrameBgSub;
-            string algoStr = GetString(obj, "Algorithm", "SingleFrameBgSub");
+            string algoStr = SettingsStoreHelper.GetString(obj, "Algorithm", "SingleFrameBgSub");
             if (!System.Enum.TryParse(algoStr, true, out algo))
                 algo = BackgroundAlgorithm.SingleFrameBgSub;
 
             RidgeDirection ridgeDir = RidgeDirection.Vertical;
-            string ridgeDirStr = GetString(obj, "RidgeDir", "Vertical");
+            string ridgeDirStr = SettingsStoreHelper.GetString(obj, "RidgeDir", "Vertical");
             if (!System.Enum.TryParse(ridgeDirStr, true, out ridgeDir))
                 ridgeDir = RidgeDirection.Vertical;
 
@@ -247,45 +168,47 @@ namespace AniloxRoll.Monitor.Core.Data
             {
                 Algorithm        = algo,
                 RidgeDir         = ridgeDir,
-                HessianMaxFactor = GetFloat(obj, "HessianMaxFactor", 5.0f),
-                ErrorValueMean   = GetFloat(obj, "ErrorValueMean",   1.0f),
-                ErrorValueMax    = GetFloat(obj, "ErrorValueMax",     2.0f),
+                HessianMaxFactor = SettingsStoreHelper.GetFloat(obj, "HessianMaxFactor", 5.0f),
+                ErrorValueMean   = SettingsStoreHelper.GetFloat(obj, "ErrorValueMean",   1.0f),
+                ErrorValueMax    = SettingsStoreHelper.GetFloat(obj, "ErrorValueMax",     2.0f),
                 // 向後相容：舊 JSON 用 BackgroundSampleRows，新 JSON 用 BackgroundSampleSeconds
                 BackgroundSampleSeconds = obj.Contains("BackgroundSampleSeconds")
-                    ? GetInt(obj, "BackgroundSampleSeconds", 3)
+                    ? SettingsStoreHelper.GetInt(obj, "BackgroundSampleSeconds", 3)
                     : 3,
-                AniloxRollSpeedMPerMin = GetDouble(obj, "AniloxRollSpeedMPerMin", 10.0),
-                SaveResizeScale  = GetInt  (obj, "SaveResizeScale",   5),
-                SaveJpgQuality   = GetInt  (obj, "SaveJpgQuality",    90),
+                AniloxRollSpeedMPerMin = SettingsStoreHelper.GetDouble(obj, "AniloxRollSpeedMPerMin", 10.0),
+                SaveResizeScale  = SettingsStoreHelper.GetInt(obj, "SaveResizeScale",   5),
+                SaveJpgQuality   = SettingsStoreHelper.GetInt(obj, "SaveJpgQuality",    90),
             };
         }
 
         private static ChartSettings ParseChart(string json)
         {
-            string obj = ExtractObject(json, "Chart");
+            string obj = SettingsStoreHelper.ExtractObject(json, "Chart");
 
             ChartScaleMode mode = ChartScaleMode.Fixed;
-            string modeStr = GetString(obj, "ScaleMode", "Fixed");
+            string modeStr = SettingsStoreHelper.GetString(obj, "ScaleMode", "Fixed");
             if (!System.Enum.TryParse(modeStr, true, out mode))
                 mode = ChartScaleMode.Fixed;
 
             return new ChartSettings
             {
                 ScaleMode   = mode,
-                YearlyYMax  = GetInt(obj, "YearlyYMax",  60000),
-                MonthlyYMax = GetInt(obj, "MonthlyYMax",  2000),
-                DailyYMax   = GetInt(obj, "DailyYMax",     300),
+                YearlyYMax  = SettingsStoreHelper.GetInt(obj, "YearlyYMax",  60000),
+                MonthlyYMax = SettingsStoreHelper.GetInt(obj, "MonthlyYMax",  2000),
+                DailyYMax   = SettingsStoreHelper.GetInt(obj, "DailyYMax",     300),
             };
         }
 
         private static ImageViewSettings ParseImageView(string json)
         {
             // 優先從 ImageView 區塊讀取；向後相容：舊 JSON 的 StitchMode 放在 Chart 區塊
-            string obj = ExtractObject(json, "ImageView");
-            string src = !string.IsNullOrEmpty(obj) ? obj : ExtractObject(json, "Chart");
+            string obj = SettingsStoreHelper.ExtractObject(json, "ImageView");
+            string src = !string.IsNullOrEmpty(obj)
+                ? obj
+                : SettingsStoreHelper.ExtractObject(json, "Chart");
 
             StitchMode stitchMode = StitchMode.Vertical;
-            string stitchStr = GetString(src, "StitchMode", "Vertical");
+            string stitchStr = SettingsStoreHelper.GetString(src, "StitchMode", "Vertical");
             // 向後相容：舊設定的 "Horizontal" 對映到 Global
             if (string.Equals(stitchStr, "Horizontal", System.StringComparison.OrdinalIgnoreCase))
                 stitchMode = StitchMode.Global;
@@ -300,16 +223,16 @@ namespace AniloxRoll.Monitor.Core.Data
 
         private static StorageSettings ParseStorage(string json)
         {
-            string obj = ExtractObject(json, "Storage");
+            string obj = SettingsStoreHelper.ExtractObject(json, "Storage");
             return new StorageSettings
             {
-                EnableAutoCapture    = GetBool  (obj, "EnableAutoCapture",    false),
-                CaptureRootPath      = GetString(obj, "CaptureRootPath",      @"D:\AniloxCaptures"),
+                EnableAutoCapture    = SettingsStoreHelper.GetBool  (obj, "EnableAutoCapture",    false),
+                CaptureRootPath      = SettingsStoreHelper.GetString(obj, "CaptureRootPath",      @"D:\AniloxCaptures"),
                 // 向後相容：舊 JSON 有 UseCompressedCapture（true=壓縮），反轉為 SaveOriginalBmp
                 SaveOriginalBmp      = obj.Contains("SaveOriginalBmp")
-                    ? GetBool(obj, "SaveOriginalBmp", false)
-                    : !GetBool(obj, "UseCompressedCapture", true),
-                BackgroundPath       = GetString(obj, "BackgroundPath", @"D:\AniloxCaptures\bg"),
+                    ? SettingsStoreHelper.GetBool(obj, "SaveOriginalBmp", false)
+                    : !SettingsStoreHelper.GetBool(obj, "UseCompressedCapture", true),
+                BackgroundPath       = SettingsStoreHelper.GetString(obj, "BackgroundPath", @"D:\AniloxCaptures\bg"),
             };
         }
     }

@@ -77,6 +77,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Acquisition\AniloxCamera.cs" />
+    <Compile Include="Acquisition\CameraFrameSaver.cs" />
     <Compile Include="Acquisition\CaptureTimestampCoordinator.cs" />
     <Compile Include="ImageProcessing\MIL\CameraImageProcessor.cs" />
     <Compile Include="Acquisition\CameraSystemManager.cs" />
@@ -87,6 +88,7 @@
     <Compile Include="Settings\Providers\InspectionSettingsDefaultsProvider.cs" />
     <Compile Include="Settings\Stores\AcquisitionSettingsStore.cs" />
     <Compile Include="Settings\Stores\InspectionSettingsStore.cs" />
+    <Compile Include="Settings\Stores\SettingsStoreHelper.cs" />
     <Compile Include="Settings\Utilities\JsonConfigLoader.cs" />
     <Compile Include="Settings\State\UserSettingsService.cs" />
     <Compile Include="Settings\Models\MachineLayoutConfig.cs" />
@@ -130,7 +132,11 @@
     <Compile Include="UI\Widgets\ColumnCurveChartHelper.cs" />
     <Compile Include="UI\Widgets\CurveMergeHelper.cs" />
     <Compile Include="UI\Widgets\RowCurveChartHelper.cs" />
+    <Compile Include="UI\Widgets\BaseCurveChartHelper.cs" />
     <Compile Include="UI\Widgets\BitmapPool.cs" />
+    <Compile Include="UI\Widgets\TrackBarWheelInterceptor.cs" />
+    <Compile Include="UI\Widgets\ComboBoxWheelReverser.cs" />
+    <Compile Include="UI\Widgets\MultiClickDetector.cs" />
     <Compile Include="UI\Widgets\GrabImageStitcher.cs" />
     <Compile Include="UI\Widgets\ProportionalScaler.cs" />
     <Compile Include="UI\Presenters\DataStatisticsPresenter.cs" />

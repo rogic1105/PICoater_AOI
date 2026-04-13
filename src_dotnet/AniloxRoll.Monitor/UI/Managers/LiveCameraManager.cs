@@ -82,6 +82,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private int    _mergedTotalW;       // 合併 buffer 寬度（px）
         private int    _mergedTotalH;       // 合併 buffer 高度（px）
         private MIL_DISP_HOOK_FUNCTION_PTR _mergedMouseDelegate;
+        private Timer _mergedDisplayTimer;  // 定時刷新合圖 display（取代 MIL 自動刷新，避免多相機非同步閃爍）
 
         private InspectionSettings _inspectionSettings;
         private double _screenMmPerPx;
@@ -480,7 +481,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                     MIL.MdispControl(_mergedDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
                     MIL.MdispControl(_mergedDisplay, MIL.M_CENTER_DISPLAY, MIL.M_ENABLE);
                 }
-                catch { }
+                catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.ResetView] {ex.GetType().Name}: {ex.Message}"); }
                 return;
             }
             var cam = _cameras.Find(c => c.CameraId == _selectedMainCameraId);
@@ -589,10 +590,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             for (int i = 0; i < n; i++)
             {
                 var cam = entries[i].cam;
-                cam._mergedTargetOffsetX = entries[i].xOffset;
-                cam._mergedSrcClipLeft   = drawLeft[i];
-                cam._mergedSrcClipWidth  = drawRight[i] - drawLeft[i];
-                cam._mergedTargetBuffer  = _mergedBuffer;
+                cam.SetMergeTarget(_mergedBuffer, entries[i].xOffset, drawLeft[i], drawRight[i] - drawLeft[i]);
             }
 
             // 解除所有相機的 secondary display，改用合併 display
@@ -611,6 +609,14 @@ namespace AniloxRoll.Monitor.UI.Managers
             MIL.MdispControl(_mergedDisplay, MIL.M_CENTER_DISPLAY, MIL.M_ENABLE);
             MIL.MdispControl(_mergedDisplay, MIL.M_MOUSE_USE, MIL.M_ENABLE);
 
+            // 關閉 MIL 自動刷新（每次 MbufCopyClip 都會觸發 repaint，多相機非同步導致閃爍）
+            MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_DISABLE);
+
+            // 改用定時器手動刷新（~30fps），確保每次顯示的是所有相機的最新合成結果
+            _mergedDisplayTimer = new Timer { Interval = 33 };
+            _mergedDisplayTimer.Tick += MergedDisplayTimer_Tick;
+            _mergedDisplayTimer.Start();
+
             // Hook 滑鼠移動 → 更新 lblPixelInfo
             _mergedMouseDelegate = new MIL_DISP_HOOK_FUNCTION_PTR(MergedMouseStatusHandler);
             MIL.MdispHookFunction(_mergedDisplay, MIL.M_MOUSE_MOVE, _mergedMouseDelegate, IntPtr.Zero);
@@ -623,13 +629,17 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (!IsGlobalMergeActive) return;
 
+            // 停止定時刷新
+            if (_mergedDisplayTimer != null)
+            {
+                _mergedDisplayTimer.Stop();
+                _mergedDisplayTimer.Dispose();
+                _mergedDisplayTimer = null;
+            }
+
             // 先清除各相機的合併目標（停止 callback 中的 MbufCopyClip）
             foreach (var cam in _cameras)
-            {
-                cam._mergedTargetBuffer = MIL.M_NULL;
-                cam._mergedSrcClipLeft  = 0;
-                cam._mergedSrcClipWidth = 0;
-            }
+                cam.ClearMergeTarget();
 
             // Unhook 滑鼠 + 釋放合併 display + buffer
             if (_mergedDisplay != MIL.M_NULL)
@@ -661,7 +671,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             // ① 暫停所有相機的合併複製（callback 中 _mergedTargetBuffer == M_NULL → 跳過）
             foreach (var cam in _cameras)
-                cam._mergedTargetBuffer = MIL.M_NULL;
+                cam.ClearMergeTarget();
 
             // ② 重算座標系
             double refOpsMm = opsUm[0] / 1000.0;
@@ -745,11 +755,17 @@ namespace AniloxRoll.Monitor.UI.Managers
             for (int i = 0; i < n; i++)
             {
                 var cam = entries[i].cam;
-                cam._mergedTargetOffsetX = entries[i].xOffset;
-                cam._mergedSrcClipLeft   = drawLeft[i];
-                cam._mergedSrcClipWidth  = drawRight[i] - drawLeft[i];
-                cam._mergedTargetBuffer  = _mergedBuffer;  // 恢復：下一幀開始使用新佈局
+                cam.SetMergeTarget(_mergedBuffer, entries[i].xOffset, drawLeft[i], drawRight[i] - drawLeft[i]);
             }
+        }
+
+        // ==================== Merged Display Refresh ====================
+
+        private void MergedDisplayTimer_Tick(object sender, EventArgs e)
+        {
+            if (_mergedDisplay == MIL.M_NULL) return;
+            try { MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_NOW); }
+            catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.MergedDisplayTimer] {ex.GetType().Name}: {ex.Message}"); }
         }
 
         // ==================== Merged Display Mouse ====================
@@ -774,7 +790,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                     MIL.MbufGet2d(_mergedBuffer, x, y, 1, 1, data);
                     pixelValue = data[0];
                 }
-                catch { }
+                catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.MergedMouseStatus] {ex.GetType().Name}: {ex.Message}"); }
             }
 
             HandleMergedMouseData(x, y, pixelValue);
@@ -813,11 +829,13 @@ namespace AniloxRoll.Monitor.UI.Managers
                     rangeStr = $"X範圍:{viewLeftMm:F1}~{viewRightMm:F1} mm | ";
 
                     double zoomX = 0;
-                    try { MIL.MdispInquire(_mergedDisplay, MIL.M_ZOOM_FACTOR_X, ref zoomX); } catch { }
+                    try { MIL.MdispInquire(_mergedDisplay, MIL.M_ZOOM_FACTOR_X, ref zoomX); }
+                    catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.MergedMouseStatus.ZoomInquire] {ex.GetType().Name}: {ex.Message}"); }
                     if (zoomX > 0 && rowPitchMm > 0)
                     {
                         double panOffY = 0;
-                        try { MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_Y, ref panOffY); } catch { }
+                        try { MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_Y, ref panOffY); }
+                        catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.MergedMouseStatus.PanInquire] {ex.GetType().Name}: {ex.Message}"); }
                         double viewTopMm = panOffY * rowPitchMm;
                         double viewBotMm = (panOffY + _mainDisplayPanel.Height / zoomX) * rowPitchMm;
                         rangeStr += $"Y範圍:{viewTopMm:F1}~{viewBotMm:F1} mm | ";
@@ -859,7 +877,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 rightMm = _mergedMinStartMm + pixelRight * _mergedRefOpsMm;
                 return true;
             }
-            catch { return false; }
+            catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.TryGetMergedViewRange] {ex.GetType().Name}: {ex.Message}"); return false; }
         }
 
         // ==================== Mouse Data ====================
@@ -953,7 +971,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             // foreach 拋出 InvalidOperationException 或存取已釋放的相機物件。
             AniloxCamera[] snapshot;
             try { snapshot = _cameras.ToArray(); }
-            catch { return; }
+            catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.CameraStatusTimer] {ex.GetType().Name}: {ex.Message}"); return; }
 
             foreach (var cam in snapshot)
             {
@@ -1041,7 +1059,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                     MIL.MdispPan(_mergedDisplay, newPanX, newPanY);
                     MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_ENABLE);
                 }
-                catch { }
+                catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.Set1xZoom.Merged] {ex.GetType().Name}: {ex.Message}"); }
                 return;
             }
 
@@ -1095,7 +1113,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                     MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_X, ref panX);
                     MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_Y, ref panY);
                 }
-                catch { return; }
+                catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.ApplyCustomZoom.Inquire] {ex.GetType().Name}: {ex.Message}"); return; }
                 if (zoomX <= 0) zoomX = 1.0;
 
                 double factor = wheelDelta > 0 ? 1.1 : (1.0 / 1.1);
@@ -1118,7 +1136,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                     MIL.MdispPan(_mergedDisplay, newPanX, newPanY);
                     MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_ENABLE);
                 }
-                catch { }
+                catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.ApplyCustomZoom.Apply] {ex.GetType().Name}: {ex.Message}"); }
                 return;
             }
 

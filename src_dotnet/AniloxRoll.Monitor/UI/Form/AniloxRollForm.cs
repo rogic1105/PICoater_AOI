@@ -133,8 +133,8 @@ namespace AniloxRoll.Monitor.Forms
         private void InitializeSystem()
         {
             if (_settings == null) _settings = ConfigManager.LoadInspectionSettings();
-            AniloxCamera.InitResourceLog(_settings?.CaptureRootPath);
-            AniloxCamera.GetUiStateCallback = () =>
+            CameraFrameSaver.InitResourceLog(_settings?.CaptureRootPath);
+            CameraFrameSaver.GetUiStateCallback = () =>
             {
                 bool live = _liveCameraManager?.IsLiveGrabbing ?? false;
                 bool review = _imageRepository?.FileCount > 0;
@@ -2357,65 +2357,6 @@ namespace AniloxRoll.Monitor.Forms
                 _wheelInterceptors.Add(new TrackBarWheelInterceptor(bar));
         }
 
-        /// <summary>
-        /// 攔截原生 WM_MOUSEWHEEL：Windows TRACKBAR 每個滾輪 notch 會送出 3 個
-        /// TB_LINEUP/TB_LINEDOWN（等同 3 × SmallChange），此攔截器改為每格僅移動 1。
-        /// </summary>
-        private sealed class TrackBarWheelInterceptor : NativeWindow
-        {
-            private const int WM_MOUSEWHEEL = 0x020A;
-            private readonly TrackBar _bar;
-
-            public TrackBarWheelInterceptor(TrackBar bar)
-            {
-                _bar = bar;
-                AssignHandle(bar.Handle);
-                bar.HandleCreated   += (s, e) => AssignHandle(_bar.Handle);
-                bar.HandleDestroyed += (s, e) => ReleaseHandle();
-            }
-
-            protected override void WndProc(ref Message m)
-            {
-                if (m.Msg == WM_MOUSEWHEEL)
-                {
-                    int delta = (short)(((long)m.WParam >> 16) & 0xFFFF);
-                    _bar.Value = Math.Max(_bar.Minimum, Math.Min(_bar.Maximum, _bar.Value + Math.Sign(delta)));
-                    return; // 跳過原生 3 格行為
-                }
-                base.WndProc(ref m);
-            }
-        }
-
-        /// <summary>
-        /// 反轉 ComboBox 滾輪方向：上滾 (delta &gt; 0) → SelectedIndex 增加（數值變大）。
-        /// 預設 ComboBox 行為是上滾減少 index，此攔截器直接處理後 return，略過原生訊息。
-        /// </summary>
-        private sealed class ComboBoxWheelReverser : NativeWindow
-        {
-            private const int WM_MOUSEWHEEL = 0x020A;
-            private readonly ComboBox _cb;
-
-            public ComboBoxWheelReverser(ComboBox cb)
-            {
-                _cb = cb;
-                AssignHandle(cb.Handle);
-                cb.HandleCreated   += (s, e) => AssignHandle(_cb.Handle);
-                cb.HandleDestroyed += (s, e) => ReleaseHandle();
-            }
-
-            protected override void WndProc(ref Message m)
-            {
-                if (m.Msg == WM_MOUSEWHEEL)
-                {
-                    int delta  = (short)(((long)m.WParam >> 16) & 0xFFFF);
-                    int newIdx = _cb.SelectedIndex + Math.Sign(delta); // 正 delta = 上滾 = index++
-                    if (newIdx >= 0 && newIdx < _cb.Items.Count)
-                        _cb.SelectedIndex = newIdx;
-                    return; // 跳過原生行為（原生是上滾 index--）
-                }
-                base.WndProc(ref m);
-            }
-        }
 
         private void SyncCameraParamsFromHardware()
         {
@@ -2519,39 +2460,5 @@ namespace AniloxRoll.Monitor.Forms
             return Math.Abs(pan.X - fitPanX) < 1f && Math.Abs(pan.Y - fitPanY) < 1f;
         }
 
-        private sealed class MultiClickDetector
-        {
-            private const int ClickIntervalMs = 300;
-            private int _clickCount;
-            private int _lastClickTick;
-            private Point _lastClickPos;
-            private bool _consumed;
-
-            public int RegisterClick(Point pos)
-            {
-                int now = Environment.TickCount;
-                int dx = pos.X - _lastClickPos.X;
-                int dy = pos.Y - _lastClickPos.Y;
-                int distSq = dx * dx + dy * dy;
-                int threshold = SystemInformation.DoubleClickSize.Width;
-
-                if (_consumed
-                    || now - _lastClickTick > ClickIntervalMs
-                    || distSq > threshold * threshold)
-                {
-                    _clickCount = 0;
-                    _consumed = false;
-                }
-
-                _lastClickTick = now;
-                _lastClickPos = pos;
-                return ++_clickCount;
-            }
-
-            /// <summary>標記本輪點擊已消費，下次 RegisterClick 從 1 重新開始。</summary>
-            public void Consume() => _consumed = true;
-
-            public void Reset() { _clickCount = 0; _consumed = false; }
-        }
     }
 }

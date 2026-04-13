@@ -319,7 +319,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 return new TimedResult<InspectionData>(
                     new InspectionData { Image = thumb }, ioMs, 0, bmpMs);
             }
-            catch { return new TimedResult<InspectionData>(); }
+            catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[InspectionEngine.LoadRawThumbnailFromJpeg] {ex.GetType().Name}: {ex.Message}"); return new TimedResult<InspectionData>(); }
         }
 
         /// <summary>從 _proc_v.jpg + .bin 讀取縮圖與曲線，用於批次縮圖牆（處理模式）。</summary>
@@ -362,7 +362,7 @@ namespace AniloxRoll.Monitor.Core.Services
                     },
                     ioMs, 0, bmpMs);
             }
-            catch { return new TimedResult<InspectionData>(); }
+            catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[InspectionEngine.LoadProcessedThumbnailFromJpeg] {ex.GetType().Name}: {ex.Message}"); return new TimedResult<InspectionData>(); }
         }
 
         /// <summary>
@@ -393,7 +393,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 using (var ms = new MemoryStream(bytes))
                     bmp = new Bitmap(ms);
             }
-            catch { return null; }
+            catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[InspectionEngine.LoadFromPrecomputedFiles] {ex.GetType().Name}: {ex.Message}"); return null; }
 
             float[] curveMean    = LoadCurveBin(meanBinPath);
             float[] curveMax     = LoadCurveBin(maxBinPath);

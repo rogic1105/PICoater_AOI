@@ -1,51 +1,35 @@
 using System;
 using System.Drawing;
-using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
 
 namespace AniloxRoll.Monitor.UI.Widgets
 {
     /// <summary>
-    /// chartMura 封裝：右側 Y 軸、X/Y grid、Mean/Max 曲線、紅色閾值線。
+    /// 切向（tangential）Mura 曲線圖：X 軸 = 位置 mm，Y 軸 = normalized value。
+    /// 右側 Y2 軸顯示刻度、紅色閾值線、InnerPlotPosition 補償對齊 canvas 水平 viewport。
     /// </summary>
-    public class ColumnCurveChartHelper
+    public class ColumnCurveChartHelper : BaseCurveChartHelper
     {
-        private readonly Chart _chart;
-
         private double _opsInMm        = 0.01;
         private double _dataMinX       = 0;
         private double _dataMaxX       = 100;
-        private float  _errorValueMean = 1.0f;
-        private float  _errorValueMax  = 2.0f;
 
-        // InnerPlotPosition 補償：plot 區域佔控制項的比例（PostPaint 首次量測後凍結）。
-        // 預設 [0,1] = 無補償，安全地用於首次渲染前的 zoom 計算。
+        // InnerPlotPosition 補償（水平方向）
         private double _cachedFLeft              = 0.0;
         private double _cachedFRight             = 1.0;
-        private bool   _innerPlotPositionFrozen  = false;
 
-        // 上次設定的「邏輯視野」（canvas 的 leftMm/rightMm），
-        // 供 PostPaint 凍結後透過 BeginInvoke 補正 zoom 使用。
+        // 上次設定的「邏輯視野」（canvas 的 leftMm/rightMm）
         private double _logicalLeftMm  = double.NaN;
         private double _logicalRightMm = double.NaN;
 
-        public ColumnCurveChartHelper(Chart chart)
+        public ColumnCurveChartHelper(Chart chart) : base(chart)
         {
-            _chart = chart;
             Build();
         }
 
         // ── 公開設定 ─────────────────────────────────────────────────────────
 
         public void SetOps(double opsInUm) => _opsInMm = opsInUm / 1000.0;
-
-        /// <summary>更新閾值（PropertyGrid 修改配方後呼叫）。</summary>
-        public void SetThresholds(float errorValueMean, float errorValueMax)
-        {
-            _errorValueMean = errorValueMean;
-            _errorValueMax  = errorValueMax;
-            RefreshThresholds();
-        }
 
         // ── 資料更新 ──────────────────────────────────────────────────────────
 
@@ -114,7 +98,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 area.AxisX.ScaleView.ZoomReset();
             }
 
-            _chart.Series.ResumeUpdates();   // 單次重繪
+            _chart.Series.ResumeUpdates();
         }
 
         // ── Canvas 聯動（X 軸 zoom）────────────────────────────────────────────
@@ -140,24 +124,14 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
         // ── InnerPlotPosition 補償 ────────────────────────────────────────────
 
-        /// <summary>
-        /// 首次有效渲染後：量測 InnerPlotPosition、凍結版面（Auto=false）、
-        /// 若快取值改變則透過 BeginInvoke 補正當下 zoom。
-        /// <para>
-        /// 凍結後（_innerPlotPositionFrozen=true）不再進入此邏輯，
-        /// 確保 _cachedFLeft/_cachedFRight 在整個會話中固定不變，
-        /// 防止 zoom 變更導致 InnerPlotPosition 微幅改動、進而 UpdateViewRange 跳動。
-        /// </para>
-        /// </summary>
-        private void OnPostPaint(object sender, ChartPaintEventArgs e)
+        protected override void OnPostPaint(object sender, ChartPaintEventArgs e)
         {
             if (_innerPlotPositionFrozen) return;
             if (_chart.ChartAreas.Count == 0) return;
 
             var inner = _chart.ChartAreas[0].InnerPlotPosition;
-            if (inner.Width < 1.0) return;   // 尚未初始化，保留預設 [0,1]
+            if (inner.Width < 1.0) return;
 
-            // 左邊界額外留白：~0.5% ≈ 半個字元（1070px chart → ~5px）
             const float leftPadding = 0.5f;
 
             double newFLeft  = (inner.X + leftPadding) / 100.0;
@@ -169,7 +143,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
             _cachedFRight = newFRight;
             _innerPlotPositionFrozen = true;
 
-            // 凍結版面：套用左邊界額外留白，防止 zoom/data 改變後 chart engine 重算
             var area = _chart.ChartAreas[0];
             area.InnerPlotPosition.Auto   = false;
             area.InnerPlotPosition.X      = inner.X + leftPadding;
@@ -177,7 +150,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
             area.InnerPlotPosition.Width  = Math.Max(1f, inner.Width - leftPadding);
             area.InnerPlotPosition.Height = inner.Height;
 
-            // 若快取改變（首次量測到有效值）且已有邏輯視野，透過 BeginInvoke 補正
             if (changed && !double.IsNaN(_logicalLeftMm) && _logicalLeftMm < _logicalRightMm)
             {
                 double left  = _logicalLeftMm;
@@ -186,24 +158,16 @@ namespace AniloxRoll.Monitor.UI.Widgets
             }
         }
 
-        private static readonly Font _unitFont  = new Font("Segoe UI", 7f);
-        private static readonly Brush _unitBrush = new SolidBrush(Color.Gray);
-
-        private void OnPostPaintUnit(object sender, ChartPaintEventArgs e)
+        protected override void OnPostPaintUnit(object sender, ChartPaintEventArgs e)
         {
             if (e.ChartElement != _chart.ChartAreas[0]) return;
             var g = e.ChartGraphics.Graphics;
-            // X 軸最右端繪製 "mm"
             float chartW = _chart.Width;
             float chartH = _chart.Height;
-            var sz = g.MeasureString("mm", _unitFont);
-            g.DrawString("mm", _unitFont, _unitBrush, chartW - sz.Width - 2, chartH - sz.Height - 1);
+            var sz = g.MeasureString("mm", UnitFont);
+            g.DrawString("mm", UnitFont, UnitBrush, chartW - sz.Width - 2, chartH - sz.Height - 1);
         }
 
-        /// <summary>
-        /// 以最新的 _cachedFLeft/_cachedFRight 重算並套用 zoom。
-        /// 由 OnPostPaint 透過 BeginInvoke 非同步呼叫，不在 PostPaint 內直接改 zoom。
-        /// </summary>
         private void ReapplyZoom(double logicalLeft, double logicalRight)
         {
             GetAdjustedZoom(logicalLeft, logicalRight, out double zMin, out double zMax);
@@ -218,16 +182,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
             }
         }
 
-        /// <summary>
-        /// 根據快取的 InnerPlotPosition 計算補償後的 ScaleView.Zoom 範圍，
-        /// 使圖表控制項的左右邊緣對應 leftMm / rightMm（與 canvas 對齊）。
-        /// <para>
-        /// ScaleView.Zoom(min, max) 將 min/max 對應到 plot 區域的邊緣，
-        /// 而非控制項邊緣。補償公式（推導見 skills.md）：
-        /// zoomMin = leftMm + fLeft  × (rightMm - leftMm)
-        /// zoomMax = leftMm + fRight × (rightMm - leftMm)
-        /// </para>
-        /// </summary>
         private void GetAdjustedZoom(double leftMm, double rightMm,
                                      out double zoomMin, out double zoomMax)
         {
@@ -236,25 +190,9 @@ namespace AniloxRoll.Monitor.UI.Widgets
             zoomMax = leftMm + _cachedFRight * s;
         }
 
-        // ── 建立 ──────────────────────────────────────────────────────────────
+        // ── 方向特定實作 ─────────────────────────────────────────────────────
 
-        private void Build()
-        {
-            _chart.Series.Clear();
-            _chart.ChartAreas.Clear();
-            _chart.Legends.Clear();
-            _chart.Margin  = new Padding(0);
-            _chart.Padding = new Padding(0);
-
-            _chart.ChartAreas.Add(BuildChartArea());
-            AddSeries();
-            RefreshThresholds();
-            _chart.PostPaint += OnPostPaint;
-
-            _chart.PostPaint += OnPostPaintUnit;
-        }
-
-        private static ChartArea BuildChartArea()
+        protected override ChartArea BuildChartArea()
         {
             var area = new ChartArea("Main");
             area.Position.Auto   = false;
@@ -263,13 +201,12 @@ namespace AniloxRoll.Monitor.UI.Widgets
             area.Position.Width  = 100f;
             area.Position.Height = 100f;
 
-            // X 軸：整數標籤
             area.AxisX.Minimum                  = 0;
             area.AxisX.Maximum                  = 100;
             area.AxisX.IsMarginVisible          = false;
             area.AxisX.LabelStyle.Format        = "F0";
             area.AxisX.IsLabelAutoFit           = true;
-            area.AxisX.LabelAutoFitMinFontSize  = 6;   // 允許縮小字體 → auto 可選更密 interval
+            area.AxisX.LabelAutoFitMinFontSize  = 6;
             area.AxisX.MajorGrid.Enabled        = true;
             area.AxisX.MajorGrid.LineColor      = Color.FromArgb(220, 220, 220);
             area.AxisX.MinorGrid.Enabled        = true;
@@ -277,8 +214,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
             area.AxisX.ScrollBar.Enabled        = false;
             area.AxisX.ScaleView.Zoomable       = true;
 
-            // AxisY（左）：完全不顯示（軸線/刻度/標籤全隱藏）
-            // 仍需設定 scale，否則 grid 和 StripLines 無法渲染
             area.AxisY.Minimum                    = 0;
             area.AxisY.Interval                   = 0.2;
             area.AxisY.LabelStyle.Enabled         = false;
@@ -288,7 +223,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
             area.AxisY.MajorGrid.Enabled          = true;
             area.AxisY.MajorGrid.LineColor        = Color.FromArgb(220, 220, 220);
 
-            // AxisY2（右）：顯示右側刻度標籤（小數第一位），不畫 grid
             area.AxisY2.Enabled            = AxisEnabled.True;
             area.AxisY2.Minimum            = 0;
             area.AxisY2.Interval           = 0.2;
@@ -298,56 +232,28 @@ namespace AniloxRoll.Monitor.UI.Widgets
             return area;
         }
 
-        private void AddSeries()
+        protected override void AddAnchorSeries()
         {
-            // AxisY（Primary）需要有 series 才會啟動 scale → grid / StripLines 才會渲染。
-            // 加透明 anchor 並跨越完整 Y 範圍，確保啟動時 scale 正確建立。
             var anchorY = new Series("_anchorY")
             {
-                ChartType         = SeriesChartType.Point,
-                YAxisType         = AxisType.Primary,
-                Color             = Color.Transparent,
-                MarkerSize        = 0,
-                IsVisibleInLegend = false
+                ChartType = SeriesChartType.Point, YAxisType = AxisType.Primary,
+                Color = Color.Transparent, MarkerSize = 0, IsVisibleInLegend = false
             };
             anchorY.Points.AddXY(0, 0);
-            anchorY.Points.AddXY(0, 2.2);   // 建立 Y 範圍上界
+            anchorY.Points.AddXY(0, 2.2);
             _chart.Series.Add(anchorY);
 
-            // AxisY2（Secondary）同樣需要 anchor 才會顯示右側標籤。
             var anchorY2 = new Series("_anchorY2")
             {
-                ChartType         = SeriesChartType.Point,
-                YAxisType         = AxisType.Secondary,
-                Color             = Color.Transparent,
-                MarkerSize        = 0,
-                IsVisibleInLegend = false
+                ChartType = SeriesChartType.Point, YAxisType = AxisType.Secondary,
+                Color = Color.Transparent, MarkerSize = 0, IsVisibleInLegend = false
             };
             anchorY2.Points.AddXY(0, 0);
             anchorY2.Points.AddXY(0, 2.2);
             _chart.Series.Add(anchorY2);
-
-            // Mean / Max 曲線綁 Primary，與 AxisY grid / StripLines 對齊
-            _chart.Series.Add(new Series("Mean")
-            {
-                ChartType       = SeriesChartType.FastLine,
-                Color           = Color.DeepSkyBlue,
-                BorderDashStyle = ChartDashStyle.Dash,
-                YAxisType       = AxisType.Primary
-            });
-
-            _chart.Series.Add(new Series("Max")
-            {
-                ChartType       = SeriesChartType.FastLine,
-                Color           = Color.Blue,
-                BorderDashStyle = ChartDashStyle.Solid,
-                YAxisType       = AxisType.Primary
-            });
         }
 
-        // ── 閾值線 ────────────────────────────────────────────────────────────
-
-        private void RefreshThresholds()
+        protected override void RefreshThresholds()
         {
             if (_chart.ChartAreas.Count == 0) return;
 
@@ -355,23 +261,12 @@ namespace AniloxRoll.Monitor.UI.Widgets
             var axisY = area.AxisY;
 
             axisY.StripLines.Clear();
-            axisY.StripLines.Add(MakeStripLine(_errorValueMax,  ChartDashStyle.Solid));   // 紅色實線
-            axisY.StripLines.Add(MakeStripLine(_errorValueMean, ChartDashStyle.Dash));    // 紅色虛線
+            axisY.StripLines.Add(MakeStripLine(_errorValueMax,  ChartDashStyle.Solid));
+            axisY.StripLines.Add(MakeStripLine(_errorValueMean, ChartDashStyle.Dash));
 
             double yMax = Math.Max(1.0, Math.Max(_errorValueMean, _errorValueMax) * 1.1);
             area.AxisY.Maximum  = yMax;
             area.AxisY2.Maximum = yMax;
         }
-
-        private static StripLine MakeStripLine(double offset, ChartDashStyle dash) => new StripLine
-        {
-            IntervalOffset  = offset,
-            StripWidth      = 0,
-            Interval        = 0,
-            BorderColor     = Color.Red,
-            BorderWidth     = 1,
-            BorderDashStyle = dash,
-            BackColor       = Color.Transparent,
-        };
     }
 }

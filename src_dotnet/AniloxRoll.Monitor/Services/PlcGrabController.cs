@@ -126,7 +126,7 @@ namespace AniloxRoll.Monitor.Core.Services
                     await _plc.WriteDo(DO_MURA, false);
                     await _plc.WriteDo(DO_PC_BUSY, false);
                 }
-                catch { }
+                catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[PlcGrabController.Close] {ex.GetType().Name}: {ex.Message}"); }
             }
             _isPcAlive = false;
             _doPcAlive = false;
@@ -244,7 +244,7 @@ namespace AniloxRoll.Monitor.Core.Services
                         await _plc.WriteDo(DO_PC_BUSY, false);
                         _doPcBusy = false;
                     }
-                    catch { }
+                    catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[PlcGrabController.Poll.StopCleanup] {ex.GetType().Name}: {ex.Message}"); }
                     OnStopRequested?.Invoke();
                     FireIoSnapshot(plcAlive, diStart);
                     _pollTimer.Start();
