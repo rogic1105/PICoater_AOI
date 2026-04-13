@@ -880,6 +880,25 @@ namespace AniloxRoll.Monitor.UI.Managers
             catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.TryGetMergedViewRange] {ex.GetType().Name}: {ex.Message}"); return false; }
         }
 
+        /// <summary>取得合併 display 的 Y 視野範圍（pixel），供法向曲線圖聯動。</summary>
+        public bool TryGetMergedViewRangeY(out double topPixel, out double botPixel)
+        {
+            topPixel = botPixel = 0;
+            if (!IsGlobalMergeActive || _mergedDisplay == MIL.M_NULL) return false;
+            try
+            {
+                double zoomY = 0, panY = 0;
+                MIL.MdispInquire(_mergedDisplay, MIL.M_ZOOM_FACTOR_Y, ref zoomY);
+                MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_Y, ref panY);
+                if (zoomY <= 0) return false;
+
+                topPixel = panY;
+                botPixel = panY + _mainDisplayPanel.Height / zoomY;
+                return true;
+            }
+            catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.TryGetMergedViewRangeY] {ex.GetType().Name}: {ex.Message}"); return false; }
+        }
+
         // ==================== Mouse Data ====================
 
         private void HandleMouseDataChanged(int camId, int x, int y, int pixelValue)

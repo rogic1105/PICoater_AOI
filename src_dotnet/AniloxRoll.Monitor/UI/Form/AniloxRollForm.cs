@@ -44,6 +44,9 @@ namespace AniloxRoll.Monitor.Forms
         private RowCurveChartHelper _liveRowChartHelper;
         private RowCurveChartHelper _reviewRowChartHelper;
         private LiveCameraManager _liveCameraManager;
+        // Global merge 用：快取各相機 row curve 資料，合併後更新圖表
+        private readonly Dictionary<int, float[]> _liveRowMeanCache = new Dictionary<int, float[]>();
+        private readonly Dictionary<int, float[]> _liveRowMaxCache  = new Dictionary<int, float[]>();
         private ProportionalScaler _scaler;
 
         // --- 相機參數控制項陣列（供 SyncFromCamera 存取）---
@@ -696,8 +699,6 @@ namespace AniloxRoll.Monitor.Forms
             // Live Mura 判斷（水平方向）
             CheckLiveMura(meanArr, maxArr);
 
-            if (camId != _liveCameraManager.SelectedMainCameraId) return;
-
             if (InvokeRequired)
             {
                 BeginInvoke(new Action<int, float[], float[]>(OnLiveRowCurveData), camId, meanArr, maxArr);
@@ -705,21 +706,71 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             if (_liveRowChartHelper == null) return;
-            _liveRowChartHelper.UpdateData(meanArr, maxArr);
 
-            // 同步 Y 軸視野：查詢 MIL 副顯示器 zoom/pan，以 panel 上下邊緣的 mm 值對齊
-            var liveCam = FindCameraById(camId);
+            bool isGlobal = _liveCameraManager?.IsGlobalMergeActive == true;
 
-            double rowPitch = _liveRowChartHelper.RowPitchMm;
-            if (liveCam != null && rowPitch > 0 &&
-                liveCam.TryGetSecondaryDisplayGeometry(
-                    out double milZoomX, out double milZoomY, out double milPanX, out double milPanY))
+            if (isGlobal)
             {
-                double panelH  = panelMainDisplay.Height;
-                double topPixel = milPanY;
-                double botPixel = milPanY + panelH / milZoomY;
-                _liveRowChartHelper.UpdateViewRange(topPixel * rowPitch, botPixel * rowPitch);
+                // 全域模式：快取每台相機資料，合併後更新（mean 取 mean, max 取 max）
+                _liveRowMeanCache[camId] = meanArr;
+                _liveRowMaxCache[camId]  = maxArr;
+                MergeAndUpdateLiveRowChart();
+
+                // 同步 Y 軸視野：查詢 _mergedDisplay 的 zoom/pan
+                double rowPitch = _liveRowChartHelper.RowPitchMm;
+                if (rowPitch > 0 && _liveCameraManager.TryGetMergedViewRangeY(
+                    out double topPixel, out double botPixel))
+                {
+                    _liveRowChartHelper.UpdateViewRange(topPixel * rowPitch, botPixel * rowPitch);
+                }
             }
+            else
+            {
+                // 垂直模式：只顯示選中相機
+                if (camId != _liveCameraManager.SelectedMainCameraId) return;
+                _liveRowChartHelper.UpdateData(meanArr, maxArr);
+
+                // 同步 Y 軸視野：查詢 MIL 副顯示器 zoom/pan
+                var liveCam = FindCameraById(camId);
+                double rowPitch = _liveRowChartHelper.RowPitchMm;
+                if (liveCam != null && rowPitch > 0 &&
+                    liveCam.TryGetSecondaryDisplayGeometry(
+                        out double milZoomX, out double milZoomY, out double milPanX, out double milPanY))
+                {
+                    double panelH  = panelMainDisplay.Height;
+                    double topPixel = milPanY;
+                    double botPixel = milPanY + panelH / milZoomY;
+                    _liveRowChartHelper.UpdateViewRange(topPixel * rowPitch, botPixel * rowPitch);
+                }
+            }
+        }
+
+        /// <summary>合併所有快取的 row curve 資料：mean 取平均、max 取最大值。</summary>
+        private void MergeAndUpdateLiveRowChart()
+        {
+            if (_liveRowMeanCache.Count == 0) return;
+
+            // 取最短長度對齊
+            int minLen = int.MaxValue;
+            foreach (var arr in _liveRowMeanCache.Values)
+                if (arr.Length < minLen) minLen = arr.Length;
+            if (minLen <= 0 || minLen == int.MaxValue) return;
+
+            float[] mergedMean = new float[minLen];
+            float[] mergedMax  = new float[minLen];
+
+            int camCount = _liveRowMeanCache.Count;
+            foreach (var arr in _liveRowMeanCache.Values)
+                for (int i = 0; i < minLen; i++)
+                    mergedMean[i] += arr[i];
+            for (int i = 0; i < minLen; i++)
+                mergedMean[i] /= camCount;
+
+            foreach (var arr in _liveRowMaxCache.Values)
+                for (int i = 0; i < minLen; i++)
+                    if (arr[i] > mergedMax[i]) mergedMax[i] = arr[i];
+
+            _liveRowChartHelper.UpdateData(mergedMean, mergedMax);
         }
 
         /// <summary>用 A輪速度 和選中相機的取樣頻率（Line Rate）更新法向圖表座標。</summary>
@@ -1336,7 +1387,11 @@ namespace AniloxRoll.Monitor.Forms
                     _liveCameraManager.EnableGlobalMerge(
                         _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
                 else
+                {
                     _liveCameraManager?.DisableGlobalMerge();
+                    _liveRowMeanCache.Clear();
+                    _liveRowMaxCache.Clear();
+                }
 
                 if (_settings.StitchMode == StitchMode.Global)
                 {
