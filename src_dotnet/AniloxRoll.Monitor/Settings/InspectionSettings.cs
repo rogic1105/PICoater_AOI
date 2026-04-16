@@ -56,6 +56,8 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category("2. 檢測配方")][DisplayName("正規值")]       public float HessianMaxFactor { get => Recipe.HessianMaxFactor; set => Recipe.HessianMaxFactor = value; }
         [Category("2. 檢測配方")][DisplayName("背景取樣秒數")] public int   BackgroundSampleSeconds { get => Recipe.BackgroundSampleSeconds; set => Recipe.BackgroundSampleSeconds = value; }
         [Category("2. 檢測配方")][DisplayName("A輪速度 (m/min)")] public double AniloxRollSpeedMPerMin { get => Recipe.AniloxRollSpeedMPerMin; set => Recipe.AniloxRollSpeedMPerMin = value; }
+        [Category("2. 檢測配方")][DisplayName("監控強化")]        public bool   EnableMuraEnhance     { get => Recipe.EnableMuraEnhance;     set => Recipe.EnableMuraEnhance     = value; }
+        [Category("2. 檢測配方")][DisplayName("回顧強化")]        public bool   EnableReviewEnhance   { get => Recipe.EnableReviewEnhance;   set => Recipe.EnableReviewEnhance   = value; }
 
         // ===== 3. 檢測報表設定 =====
         [Category("3. 檢測報表設定")][DisplayName("統計圖表")]

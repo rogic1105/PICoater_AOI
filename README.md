@@ -188,8 +188,8 @@ pip install numpy opencv-python
 |------|------|
 | `docs/architecture-ui.md` | UI 架構、控制項觸發關係 |
 | `docs/architecture-image-pipeline.md` | GPU pipeline、存檔格式 |
-| `docs/architecture-acquisition.md` | MIL 取像模組、PLC FSM（PlcState enum、IO 快照、Watchdog） |
-| `docs/plc_diagrams.html` | PLC 狀態機視覺化（State Machine / SFC / Ladder / Timing） |
+| `docs/architecture-acquisition.md` | MIL 取像模組、IO FSM（PlcState enum、IO 快照、Watchdog） |
+| `docs/user-manual/io_diagrams.html` | IO 狀態機視覺化（State Machine / SFC / Ladder / Timing） |
 | `docs/architecture-data-stats.md` | 統計與 CSV |
 | `docs/MIL_API_Reference.md` | MIL API 參考 |
 | `docs/patterns-csharp.md` | C#/WinForms 開發模式 |

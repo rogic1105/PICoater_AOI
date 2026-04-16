@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>PICoater AOI — IO FSM Diagrams</title>
+<style>
+  :root {
+    --bg: #fafafa;
+    --surface: #ffffff;
+    --border: #ddd;
+    --text: #333;
+    --accent: #1565c0;
+    --green: #2e7d32;
+    --red: #c62828;
+    --yellow: #f9a825;
+    --orange: #e65100;
+    --cyan: #0277bd;
+    --purple: #6a1b9a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+    background: var(--bg); color: var(--text);
+    padding: 32px; line-height: 1.6;
+  }
+  h1 { text-align: center; color: var(--accent); margin-bottom: 8px; font-size: 28px; }
+  .subtitle { text-align: center; color: #888; margin-bottom: 40px; font-size: 14px; }
+  h2 {
+    color: var(--accent); border-bottom: 2px solid var(--accent);
+    padding-bottom: 6px; margin: 40px 0 20px;
+    font-size: 22px;
+  }
+  .diagram-container {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 32px; margin-bottom: 32px;
+    overflow-x: auto;
+  }
+  /* ── Enum Reference ── */
+  .enum-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  .enum-table th { background: #e3f2fd; color: var(--accent); padding: 8px 12px; text-align: left; }
+  .enum-table td { padding: 6px 12px; border-bottom: 1px solid #ddd; }
+  .enum-table tr:hover td { background: #f0f0f5; }
+  .enum-table code { color: var(--cyan); background: #e8eaf6; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
+
+  /* ── SFC ── */
+  .sfc { display: flex; flex-direction: column; align-items: center; gap: 0; font-family: Consolas, monospace; }
+  .sfc-step {
+    width: 280px; border: 3px solid var(--accent); background: #e3f2fd;
+    text-align: center; padding: 10px 16px; font-weight: bold; font-size: 14px;
+    position: relative;
+  }
+  .sfc-step.active { border-color: var(--green); background: #e8f5e9; }
+  .sfc-step.error { border-color: var(--red); background: #fce4ec; }
+  .sfc-step.initial { border: 3px double var(--accent); }
+  .sfc-action {
+    width: 280px; border: 1px solid #ccc; border-left: 3px solid var(--orange);
+    background: #fff3e0; text-align: left; padding: 6px 12px;
+    font-size: 12px; color: #555;
+  }
+  .sfc-trans {
+    width: 180px; height: 4px; background: var(--text); position: relative;
+    margin: 0 auto;
+  }
+  .sfc-trans-label {
+    font-size: 12px; color: var(--yellow); text-align: center;
+    padding: 4px 0; white-space: nowrap;
+  }
+  .sfc-arrow {
+    width: 2px; height: 20px; background: var(--text); margin: 0 auto;
+    position: relative;
+  }
+  .sfc-arrow::after {
+    content: ''; position: absolute; bottom: -1px; left: -5px;
+    border-left: 6px solid transparent; border-right: 6px solid transparent;
+    border-top: 8px solid var(--text);
+  }
+  .sfc-branch { display: flex; gap: 40px; align-items: flex-start; justify-content: center; }
+  .sfc-branch-col { display: flex; flex-direction: column; align-items: center; gap: 0; }
+  .sfc-diverge, .sfc-converge {
+    width: 620px; height: 3px; background: var(--text); margin: 8px auto;
+    position: relative;
+  }
+  .sfc-diverge::before { content: '='; position: absolute; top: -10px; left: 50%; color: var(--text); font-weight: bold; transform: translateX(-50%); }
+
+  .io-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  .io-table th { background: #e3f2fd; color: var(--accent); padding: 8px 12px; text-align: left; }
+  .io-table td { padding: 6px 12px; border-bottom: 1px solid #ddd; }
+  .io-table tr:hover td { background: #f0f0f5; }
+
+  .note { color: #888; font-size: 13px; margin-top: 8px; font-style: italic; }
+  .note-en { color: #666; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<h1>PICoater AOI — IO FSM Diagrams</h1>
+<p class="subtitle">IoGrabController 狀態機（ET-7044 IO 模組 ↔ 設備 Nakan） — Timing / UML / State Machine / SFC</p>
+
+<!-- ════════════════════════════════════════════════════════════════
+     0. ENUM REFERENCE
+     ════════════════════════════════════════════════════════════════ -->
+<h2>0. IoState Enum 對照表</h2>
+<div class="diagram-container">
+  <table class="enum-table">
+    <tr><th>Enum</th><th>原名</th><th>中文</th><th>說明</th><th>DO 輸出</th></tr>
+    <tr>
+      <td><code>IoState.Disconnected</code></td><td>Initial</td><td>未連線</td>
+      <td>尚未連線或連線失敗，背景重連中</td><td>全 LOW</td>
+    </tr>
+    <tr>
+      <td><code>IoState.Idle</code></td><td>Ready</td><td>待機</td>
+      <td>已連線，等待 DI_INSPECT_START 上升緣</td><td>PC_ALIVE=1</td>
+    </tr>
+    <tr>
+      <td><code>IoState.Running</code></td><td>Run</td><td>取像中</td>
+      <td>Grab 執行中，等待停止或瑕疵</td><td>PC_ALIVE=1, BUSY=1</td>
+    </tr>
+    <tr>
+      <td><code>IoState.Stopping</code></td><td>Stop</td><td>停止中</td>
+      <td>過渡態：清除 MURA/BUSY 後回 Idle</td><td>(過渡)</td>
+    </tr>
+    <tr>
+      <td><code>IoState.Faulted</code></td><td>DevOff</td><td>設備離線</td>
+      <td>DI_NAKAN_ALIVE 消失（設備未開機/斷線），保持 PC_ALIVE 等恢復</td><td>PC_ALIVE=1</td>
+    </tr>
+    <tr>
+      <td><code>IoState.CommLost</code></td><td>PCErr</td><td>通訊中斷</td>
+      <td>TCP 例外，釋放連線，背景重連</td><td>全 LOW (連線已斷)</td>
+    </tr>
+    <tr>
+      <td><code>IoState.Closed</code></td><td>Closed</td><td>已關閉</td>
+      <td>明確呼叫 StopAsync() 關閉</td><td>全 LOW</td>
+    </tr>
+  </table>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════
+     1. IO TIMING DIAGRAM (SVG waveforms + causal arrows)
+     ════════════════════════════════════════════════════════════════ -->
+<h2>1. IO Timing Diagram 時序圖（含因果關係箭頭）</h2>
+<div class="diagram-container">
+  <svg viewBox="0 0 960 510" width="100%" style="max-width:960px; display:block; margin:0 auto;" font-family="'Segoe UI','Microsoft JhengHei',sans-serif">
+    <defs>
+      <marker id="tm-cause" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L9,5 L0,10 Z" fill="#e65100"/>
+      </marker>
+      <marker id="tm-fault" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L9,5 L0,10 Z" fill="#c62828"/>
+      </marker>
+      <marker id="tm-rec" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L9,5 L0,10 Z" fill="#2e7d32"/>
+      </marker>
+    </defs>
+
+    <!-- row background stripes -->
+    <rect x="140" y="50"  width="760" height="50" fill="#fafafa"/>
+    <rect x="140" y="115" width="760" height="50" fill="#ffffff"/>
+    <rect x="140" y="180" width="760" height="50" fill="#fafafa"/>
+    <rect x="140" y="245" width="760" height="50" fill="#ffffff"/>
+    <rect x="140" y="310" width="760" height="50" fill="#fafafa"/>
+
+    <!-- event vertical guidelines (dashed) -->
+    <g stroke="#ccc" stroke-width="1" stroke-dasharray="3 3">
+      <line x1="200" y1="50"  x2="200" y2="425"/>
+      <line x1="260" y1="50"  x2="260" y2="425"/>
+      <line x1="340" y1="50"  x2="340" y2="425"/>
+      <line x1="370" y1="50"  x2="370" y2="425"/>
+      <line x1="480" y1="50"  x2="480" y2="425"/>
+      <line x1="590" y1="50"  x2="590" y2="425"/>
+      <line x1="620" y1="50"  x2="620" y2="425"/>
+      <line x1="730" y1="50"  x2="730" y2="425"/>
+      <line x1="820" y1="50"  x2="820" y2="425"/>
+    </g>
+
+    <!-- event labels (top) -->
+    <g font-size="11" fill="#333" text-anchor="middle" font-weight="bold">
+      <text x="200" y="18">① 設備開機</text>
+      <text x="260" y="18">② PC 連線</text>
+      <text x="340" y="18">③ START↑</text>
+      <text x="480" y="18">④ MURA</text>
+      <text x="590" y="18">⑤ START↓</text>
+      <text x="730" y="18">⑥ 斷電</text>
+      <text x="820" y="18">⑦ 恢復</text>
+    </g>
+    <g font-size="9" fill="#999" text-anchor="middle">
+      <text x="200" y="32">Device ON</text>
+      <text x="260" y="32">PC Connect</text>
+      <text x="340" y="32">Start Grab</text>
+      <text x="480" y="32">Defect</text>
+      <text x="590" y="32">Stop Grab</text>
+      <text x="730" y="32">Dev OFF</text>
+      <text x="820" y="32">Recover</text>
+    </g>
+
+    <!-- row labels (left column) -->
+    <g font-size="11" fill="#333">
+      <text x="130" y="82" text-anchor="end" font-weight="bold">DI_NAKAN_ALIVE</text>
+      <text x="130" y="96" text-anchor="end" fill="#888" font-size="10">DI-0 · Nakan → PC</text>
+
+      <text x="130" y="147" text-anchor="end" font-weight="bold">DI_INSPECT_START</text>
+      <text x="130" y="161" text-anchor="end" fill="#888" font-size="10">DI-1 · Nakan → PC</text>
+
+      <text x="130" y="212" text-anchor="end" font-weight="bold">DO_PC_ALIVE</text>
+      <text x="130" y="226" text-anchor="end" fill="#888" font-size="10">DO-0 · PC → Nakan</text>
+
+      <text x="130" y="277" text-anchor="end" font-weight="bold">DO_PC_INSPECT</text>
+      <text x="130" y="291" text-anchor="end" fill="#888" font-size="10">DO-2 · PC → Nakan</text>
+
+      <text x="130" y="342" text-anchor="end" font-weight="bold">DO_MURA_DETECTED</text>
+      <text x="130" y="356" text-anchor="end" fill="#888" font-size="10">DO-1 · PC → Nakan</text>
+
+      <text x="130" y="408" text-anchor="end" font-weight="bold">IoState</text>
+      <text x="130" y="422" text-anchor="end" fill="#888" font-size="10">IPC 視角 FSM</text>
+    </g>
+
+    <!-- zero lines (HIGH/LOW midline) -->
+    <g stroke="#ddd" stroke-width="0.8" stroke-dasharray="2 2">
+      <line x1="140" y1="75"  x2="900" y2="75"/>
+      <line x1="140" y1="140" x2="900" y2="140"/>
+      <line x1="140" y1="205" x2="900" y2="205"/>
+      <line x1="140" y1="270" x2="900" y2="270"/>
+      <line x1="140" y1="335" x2="900" y2="335"/>
+    </g>
+
+    <!-- waveform: DI_NAKAN_ALIVE (green) -->
+    <path d="M140,88 L200,88 L200,63 L730,63 L730,88 L820,88 L820,63 L900,63"
+          fill="none" stroke="#2e7d32" stroke-width="2.5"/>
+
+    <!-- waveform: DI_INSPECT_START (orange) -->
+    <path d="M140,153 L340,153 L340,128 L590,128 L590,153 L900,153"
+          fill="none" stroke="#e65100" stroke-width="2.5"/>
+
+    <!-- waveform: DO_PC_ALIVE (blue) — 保持 HIGH 即使 Faulted -->
+    <path d="M140,218 L260,218 L260,193 L900,193"
+          fill="none" stroke="#1565c0" stroke-width="2.5"/>
+
+    <!-- waveform: DO_PC_INSPECT (purple) -->
+    <path d="M140,283 L370,283 L370,258 L620,258 L620,283 L900,283"
+          fill="none" stroke="#6a1b9a" stroke-width="2.5"/>
+
+    <!-- waveform: DO_MURA_DETECTED (red) -->
+    <path d="M140,348 L480,348 L480,323 L620,323 L620,348 L900,348"
+          fill="none" stroke="#c62828" stroke-width="2.5"/>
+
+    <!-- HIGH/LOW labels on right -->
+    <g font-size="9" fill="#888">
+      <text x="905" y="67">H</text><text x="905" y="92">L</text>
+      <text x="905" y="132">H</text><text x="905" y="157">L</text>
+      <text x="905" y="197">H</text><text x="905" y="222">L</text>
+      <text x="905" y="262">H</text><text x="905" y="287">L</text>
+      <text x="905" y="327">H</text><text x="905" y="352">L</text>
+    </g>
+
+    <!-- IoState bar -->
+    <g>
+      <rect x="140" y="385" width="120" height="40" fill="#eeeeee" stroke="#bdbdbd"/>
+      <text x="200" y="410" text-anchor="middle" font-size="11" fill="#666">Disconnected</text>
+
+      <rect x="260" y="385" width="80"  height="40" fill="#e3f2fd" stroke="#90caf9"/>
+      <text x="300" y="410" text-anchor="middle" font-size="12" fill="#1565c0">Idle</text>
+
+      <rect x="340" y="385" width="140" height="40" fill="#e8f5e9" stroke="#81c784"/>
+      <text x="410" y="410" text-anchor="middle" font-size="12" fill="#2e7d32">Running</text>
+
+      <rect x="480" y="385" width="110" height="40" fill="#fce4ec" stroke="#ef9a9a"/>
+      <text x="535" y="410" text-anchor="middle" font-size="12" fill="#c62828">MURA</text>
+
+      <rect x="590" y="385" width="140" height="40" fill="#e3f2fd" stroke="#90caf9"/>
+      <text x="660" y="410" text-anchor="middle" font-size="12" fill="#1565c0">Idle</text>
+
+      <rect x="730" y="385" width="90"  height="40" fill="#fce4ec" stroke="#ef9a9a"/>
+      <text x="775" y="410" text-anchor="middle" font-size="11" fill="#c62828">Faulted</text>
+
+      <rect x="820" y="385" width="80"  height="40" fill="#e3f2fd" stroke="#90caf9"/>
+      <text x="860" y="410" text-anchor="middle" font-size="12" fill="#1565c0">Idle</text>
+    </g>
+
+    <!-- ═══ CAUSAL ARROWS (dashed, curved) ═══ -->
+    <!-- C1: DI_INSPECT_START↑ (340,128) → DO_PC_INSPECT↑ (370,258)  【觸發取像→BUSY 上升】 -->
+    <path d="M340,128 C 352,175 352,215 370,258"
+          fill="none" stroke="#e65100" stroke-width="1.5" stroke-dasharray="4 2" marker-end="url(#tm-cause)"/>
+    <text x="300" y="195" font-size="9" fill="#e65100" text-anchor="start">觸發 BUSY</text>
+    <text x="300" y="208" font-size="9" fill="#e65100" text-anchor="start" font-style="italic">≤ 500ms</text>
+
+    <!-- C2: DI_INSPECT_START↓ (590,153) → DO_PC_INSPECT↓ (620,258) -->
+    <path d="M590,153 C 602,200 602,225 620,258"
+          fill="none" stroke="#e65100" stroke-width="1.5" stroke-dasharray="4 2" marker-end="url(#tm-cause)"/>
+    <text x="555" y="210" font-size="9" fill="#e65100" text-anchor="start">清 BUSY</text>
+    <text x="555" y="223" font-size="9" fill="#e65100" text-anchor="start" font-style="italic">≤ 500ms</text>
+
+    <!-- C3: DI_INSPECT_START↓ (590,153) → DO_MURA_DETECTED↓ (620,323) -->
+    <path d="M590,153 C 650,240 650,300 620,323"
+          fill="none" stroke="#e65100" stroke-width="1.5" stroke-dasharray="4 2" marker-end="url(#tm-cause)"/>
+    <text x="630" y="250" font-size="9" fill="#e65100" text-anchor="start">清 MURA</text>
+
+    <!-- C4: DI_NAKAN_ALIVE↓ (730,88) → IoState Faulted (775,385) -->
+    <path d="M730,88 C 748,220 760,340 775,385"
+          fill="none" stroke="#c62828" stroke-width="1.5" stroke-dasharray="4 2" marker-end="url(#tm-fault)"/>
+    <text x="735" y="230" font-size="9" fill="#c62828" text-anchor="start">→ Faulted</text>
+
+    <!-- C5: DI_NAKAN_ALIVE↑ (820,63) → IoState Idle (860,385) -->
+    <path d="M820,63 C 840,200 850,340 860,385"
+          fill="none" stroke="#2e7d32" stroke-width="1.5" stroke-dasharray="4 2" marker-end="url(#tm-rec)"/>
+    <text x="828" y="230" font-size="9" fill="#2e7d32" text-anchor="start">→ Idle</text>
+
+    <!-- C6: DO_MURA_DETECTED↑ internal (no DI trigger — IPC camera threshold) -->
+    <text x="490" y="318" font-size="9" fill="#c62828" font-style="italic">(IPC 內部閾值觸發)</text>
+
+    <!-- Legend -->
+    <g transform="translate(140, 470)">
+      <line x1="0" y1="0" x2="30" y2="0" stroke="#e65100" stroke-width="1.5" stroke-dasharray="4 2" marker-end="url(#tm-cause)"/>
+      <text x="36" y="4" font-size="11" fill="#666">訊號邊緣觸發 edge causality</text>
+
+      <line x1="220" y1="0" x2="250" y2="0" stroke="#c62828" stroke-width="1.5" stroke-dasharray="4 2" marker-end="url(#tm-fault)"/>
+      <text x="256" y="4" font-size="11" fill="#666">錯誤觸發 fault</text>
+
+      <line x1="380" y1="0" x2="410" y2="0" stroke="#2e7d32" stroke-width="1.5" stroke-dasharray="4 2" marker-end="url(#tm-rec)"/>
+      <text x="416" y="4" font-size="11" fill="#666">恢復觸發 recover</text>
+
+      <text x="540" y="4" font-size="10" fill="#888" font-style="italic">poll 週期 500ms，實際延遲 ≤ 500ms</text>
+    </g>
+  </svg>
+  <p class="note" style="text-align:center; margin-top:12px;">
+    橙色虛線＝訊號邊緣因果關係（<code>DI_INSPECT_START↑</code> → <code>DO_PC_INSPECT↑</code> 等）；
+    ⑥ 斷電時 <code>DO_PC_ALIVE</code> <strong>保持 HIGH</strong>（依 IO 模組規則）
+  </p>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════
+     2. UML SEQUENCE DIAGRAM — 3 lifelines (IPC ↔ ET-7044 ↔ Nakan)
+     ════════════════════════════════════════════════════════════════ -->
+<h2>2. UML Sequence Diagram 訊息序列圖（含連線媒介）</h2>
+<div class="diagram-container">
+  <svg viewBox="0 0 980 1200" width="100%" style="max-width:980px; display:block; margin:0 auto;" font-family="'Segoe UI','Microsoft JhengHei',sans-serif">
+    <defs>
+      <marker id="sq-solid" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L9,5 L0,10 Z" fill="#1565c0"/>
+      </marker>
+      <marker id="sq-dash" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L9,5 L0,10 Z" fill="#666"/>
+      </marker>
+      <marker id="sq-elec" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L9,5 L0,10 Z" fill="#e65100"/>
+      </marker>
+      <marker id="sq-err" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L9,5 L0,10 Z" fill="#c62828"/>
+      </marker>
+      <marker id="sq-self" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L9,5 L0,10 Z" fill="#1565c0"/>
+      </marker>
+      <marker id="sq-self-err" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L9,5 L0,10 Z" fill="#c62828"/>
+      </marker>
+    </defs>
+
+    <!-- ═══ Lifeline headers ═══ -->
+    <g>
+      <rect x="80"  y="60" width="180" height="56" fill="#e3f2fd" stroke="#1565c0" stroke-width="2" rx="6"/>
+      <text x="170" y="82" text-anchor="middle" font-size="14" font-weight="bold" fill="#1565c0">IPC</text>
+      <text x="170" y="100" text-anchor="middle" font-size="11" fill="#555">AniloxRoll.Monitor</text>
+      <text x="170" y="112" text-anchor="middle" font-size="10" fill="#888">C# / WinForms</text>
+
+      <rect x="410" y="60" width="180" height="56" fill="#fff3e0" stroke="#e65100" stroke-width="2" rx="6"/>
+      <text x="500" y="82" text-anchor="middle" font-size="14" font-weight="bold" fill="#e65100">ET-7044</text>
+      <text x="500" y="100" text-anchor="middle" font-size="11" fill="#555">IO 模組</text>
+      <text x="500" y="112" text-anchor="middle" font-size="10" fill="#888">Modbus TCP slave</text>
+
+      <rect x="740" y="60" width="180" height="56" fill="#fce4ec" stroke="#c62828" stroke-width="2" rx="6"/>
+      <text x="830" y="82" text-anchor="middle" font-size="14" font-weight="bold" fill="#c62828">Nakan</text>
+      <text x="830" y="100" text-anchor="middle" font-size="11" fill="#555">設備 Device</text>
+      <text x="830" y="112" text-anchor="middle" font-size="10" fill="#888">black-box 黑盒</text>
+    </g>
+
+    <!-- ═══ Connection media labels (between lifelines) ═══ -->
+    <g>
+      <!-- IPC ↔ ET-7044: Modbus TCP over RJ45 -->
+      <rect x="270" y="128" width="130" height="34" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.5" rx="4"/>
+      <text x="335" y="142" text-anchor="middle" font-size="11" font-weight="bold" fill="#1565c0">Modbus TCP</text>
+      <text x="335" y="156" text-anchor="middle" font-size="10" fill="#555">RJ45 乙太網路</text>
+
+      <!-- ET-7044 ↔ Nakan: DI/DO electrical lines -->
+      <rect x="600" y="128" width="130" height="34" fill="#fff3e0" stroke="#e65100" stroke-width="1.5" rx="4"/>
+      <text x="665" y="142" text-anchor="middle" font-size="11" font-weight="bold" fill="#e65100">DI/DO 電氣信號</text>
+      <text x="665" y="156" text-anchor="middle" font-size="10" fill="#555">5 點銅線</text>
+    </g>
+
+    <!-- Nakan note -->
+    <g>
+      <rect x="745" y="125" width="180" height="34" fill="#fffde7" stroke="#f9a825" stroke-width="1" stroke-dasharray="3 2" rx="4"/>
+      <text x="835" y="139" text-anchor="middle" font-size="10" fill="#795548">〔內部接線方式不明〕</text>
+      <text x="835" y="153" text-anchor="middle" font-size="10" fill="#795548">僅知 5 個 IO 點位</text>
+    </g>
+
+    <!-- ═══ Lifelines (dashed verticals) ═══ -->
+    <g stroke="#aaa" stroke-width="1" stroke-dasharray="4 3">
+      <line x1="170" y1="170" x2="170" y2="1160"/>
+      <line x1="500" y1="170" x2="500" y2="1160"/>
+      <line x1="830" y1="170" x2="830" y2="1160"/>
+    </g>
+
+    <!-- ═══ PHASE 1: Device Power On ═══ -->
+    <g>
+      <line x1="40" y1="195" x2="940" y2="195" stroke="#bbb" stroke-width="1" stroke-dasharray="8 4"/>
+      <rect x="360" y="183" width="260" height="24" fill="#ffffff" stroke="#bbb" rx="4"/>
+      <text x="490" y="200" text-anchor="middle" font-size="12" font-weight="bold" fill="#555">① 設備開機 Device Power On</text>
+    </g>
+    <line x1="820" y1="230" x2="510" y2="230" stroke="#e65100" stroke-width="1.6" marker-end="url(#sq-elec)"/>
+    <text x="665" y="224" text-anchor="middle" font-size="11" fill="#e65100">電位 HIGH → DI-0 腳位 (DEV_ALIVE)</text>
+
+    <!-- ═══ PHASE 2: PC Boot &amp; Connect ═══ -->
+    <g>
+      <line x1="40" y1="260" x2="940" y2="260" stroke="#bbb" stroke-width="1" stroke-dasharray="8 4"/>
+      <rect x="360" y="248" width="260" height="24" fill="#ffffff" stroke="#bbb" rx="4"/>
+      <text x="490" y="265" text-anchor="middle" font-size="12" font-weight="bold" fill="#555">② PC 啟動連線 PC Boot &amp; Connect</text>
+    </g>
+    <line x1="180" y1="295" x2="490" y2="295" stroke="#1565c0" stroke-width="1.6" marker-end="url(#sq-solid)"/>
+    <text x="335" y="289" text-anchor="middle" font-size="11" fill="#1565c0">ConnectAsync(IP, 502) · TCP 三向交握</text>
+
+    <line x1="180" y1="325" x2="490" y2="325" stroke="#1565c0" stroke-width="1.6" marker-end="url(#sq-solid)"/>
+    <text x="335" y="319" text-anchor="middle" font-size="11" fill="#1565c0">FC2 Read DI (500ms poll)</text>
+    <line x1="490" y1="345" x2="180" y2="345" stroke="#666" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#sq-dash)"/>
+    <text x="335" y="360" text-anchor="middle" font-size="10" fill="#666" font-style="italic">return DI[0]=1, DI[1]=0</text>
+
+    <!-- IPC self: EnterIdle -->
+    <path d="M170,380 C 230,380 230,402 170,402" fill="none" stroke="#1565c0" stroke-width="1.4" marker-end="url(#sq-self)"/>
+    <text x="235" y="391" font-size="11" fill="#1565c0">EnterIdle() — state: Disconnected → Idle</text>
+
+    <line x1="180" y1="425" x2="490" y2="425" stroke="#1565c0" stroke-width="1.6" marker-end="url(#sq-solid)"/>
+    <text x="335" y="419" text-anchor="middle" font-size="11" fill="#1565c0">FC5 Write DO-0 = 1 (PC_ALIVE)</text>
+
+    <line x1="510" y1="455" x2="820" y2="455" stroke="#e65100" stroke-width="1.6" marker-end="url(#sq-elec)"/>
+    <text x="665" y="449" text-anchor="middle" font-size="11" fill="#e65100">電位 HIGH → DO-0 腳位</text>
+
+    <!-- ═══ PHASE 3: Start Grab ═══ -->
+    <g>
+      <line x1="40" y1="490" x2="940" y2="490" stroke="#bbb" stroke-width="1" stroke-dasharray="8 4"/>
+      <rect x="360" y="478" width="260" height="24" fill="#ffffff" stroke="#bbb" rx="4"/>
+      <text x="490" y="495" text-anchor="middle" font-size="12" font-weight="bold" fill="#555">③ 操作員按下啟動 Start Grab</text>
+    </g>
+    <line x1="820" y1="525" x2="510" y2="525" stroke="#e65100" stroke-width="1.6" marker-end="url(#sq-elec)"/>
+    <text x="665" y="519" text-anchor="middle" font-size="11" fill="#e65100">電位 HIGH → DI-1 腳位 (START)</text>
+
+    <line x1="180" y1="555" x2="490" y2="555" stroke="#1565c0" stroke-width="1.6" marker-end="url(#sq-solid)"/>
+    <text x="335" y="549" text-anchor="middle" font-size="11" fill="#1565c0">FC2 Read DI (下次 poll)</text>
+    <line x1="490" y1="575" x2="180" y2="575" stroke="#666" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#sq-dash)"/>
+    <text x="335" y="590" text-anchor="middle" font-size="10" fill="#666" font-style="italic">return DI[1]=1 (偵測到 rising edge)</text>
+
+    <path d="M170,615 C 240,615 240,637 170,637" fill="none" stroke="#1565c0" stroke-width="1.4" marker-end="url(#sq-self)"/>
+    <text x="245" y="626" font-size="11" fill="#1565c0">DI_INSPECT_START ↑ → state: Idle→Running · OnStartRequested()</text>
+
+    <line x1="180" y1="660" x2="490" y2="660" stroke="#1565c0" stroke-width="1.6" marker-end="url(#sq-solid)"/>
+    <text x="335" y="654" text-anchor="middle" font-size="11" fill="#1565c0">FC5 Write DO-2 = 1 (PC_BUSY)</text>
+
+    <line x1="510" y1="690" x2="820" y2="690" stroke="#e65100" stroke-width="1.6" marker-end="url(#sq-elec)"/>
+    <text x="665" y="684" text-anchor="middle" font-size="11" fill="#e65100">電位 HIGH → DO-2 腳位</text>
+
+    <!-- ═══ PHASE 4: MURA Detect ═══ -->
+    <g>
+      <line x1="40" y1="725" x2="940" y2="725" stroke="#bbb" stroke-width="1" stroke-dasharray="8 4"/>
+      <rect x="360" y="713" width="260" height="24" fill="#ffffff" stroke="#bbb" rx="4"/>
+      <text x="490" y="730" text-anchor="middle" font-size="12" font-weight="bold" fill="#555">④ MURA 偵測 Defect Detection</text>
+    </g>
+    <path d="M170,755 C 240,755 240,777 170,777" fill="none" stroke="#c62828" stroke-width="1.4" marker-end="url(#sq-self-err)"/>
+    <text x="245" y="766" font-size="11" fill="#c62828">CheckLiveMura: colMax / colMean &gt; ErrorValue 閾值</text>
+    <text x="245" y="782" font-size="10" fill="#888">※【暫停檢測】啟用時 CheckLiveMura 直接 return，不觸發 DO 寫入</text>
+
+    <line x1="180" y1="810" x2="490" y2="810" stroke="#1565c0" stroke-width="1.6" marker-end="url(#sq-solid)"/>
+    <text x="335" y="804" text-anchor="middle" font-size="11" fill="#1565c0">FC5 Write DO-1 = 1 (MURA)</text>
+
+    <line x1="510" y1="840" x2="820" y2="840" stroke="#e65100" stroke-width="1.6" marker-end="url(#sq-elec)"/>
+    <text x="665" y="834" text-anchor="middle" font-size="11" fill="#e65100">電位 HIGH → DO-1 腳位</text>
+
+    <!-- ═══ PHASE 5: Stop ═══ -->
+    <g>
+      <line x1="40" y1="875" x2="940" y2="875" stroke="#bbb" stroke-width="1" stroke-dasharray="8 4"/>
+      <rect x="360" y="863" width="260" height="24" fill="#ffffff" stroke="#bbb" rx="4"/>
+      <text x="490" y="880" text-anchor="middle" font-size="12" font-weight="bold" fill="#555">⑤ 操作員停止 Stop Grab</text>
+    </g>
+    <line x1="820" y1="910" x2="510" y2="910" stroke="#e65100" stroke-width="1.6" marker-end="url(#sq-elec)"/>
+    <text x="665" y="904" text-anchor="middle" font-size="11" fill="#e65100">電位 LOW → DI-1 腳位</text>
+
+    <line x1="180" y1="950" x2="490" y2="950" stroke="#1565c0" stroke-width="1.6" marker-end="url(#sq-solid)"/>
+    <text x="335" y="934" text-anchor="middle" font-size="11" fill="#1565c0">FC2 Read DI</text>
+    <line x1="490" y1="960" x2="180" y2="960" stroke="#666" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#sq-dash)"/>
+    <text x="335" y="975" text-anchor="middle" font-size="10" fill="#666" font-style="italic">return DI[1]=0 (偵測到 falling edge)</text>
+
+    <path d="M170,1000 C 240,1000 240,1022 170,1022" fill="none" stroke="#1565c0" stroke-width="1.4" marker-end="url(#sq-self)"/>
+    <text x="245" y="1011" font-size="11" fill="#1565c0">DI_INSPECT_START ↓ → Running→Stopping→Idle · OnStopRequested()</text>
+
+    <line x1="180" y1="1045" x2="490" y2="1045" stroke="#1565c0" stroke-width="1.6" marker-end="url(#sq-solid)"/>
+    <text x="335" y="1039" text-anchor="middle" font-size="11" fill="#1565c0">FC5 Write DO-2=0, DO-1=0</text>
+
+    <line x1="510" y1="1075" x2="820" y2="1075" stroke="#e65100" stroke-width="1.6" marker-end="url(#sq-elec)"/>
+    <text x="665" y="1069" text-anchor="middle" font-size="11" fill="#e65100">電位 LOW → DO-1, DO-2 腳位</text>
+
+    <!-- ═══ PHASE 6: Dev Off / Recover ═══ -->
+    <g>
+      <line x1="40" y1="1110" x2="940" y2="1110" stroke="#bbb" stroke-width="1" stroke-dasharray="8 4"/>
+      <rect x="340" y="1098" width="300" height="24" fill="#ffffff" stroke="#bbb" rx="4"/>
+      <text x="490" y="1115" text-anchor="middle" font-size="12" font-weight="bold" fill="#555">⑥ 設備斷電／恢復 Dev OFF / Recover</text>
+    </g>
+    <line x1="820" y1="1145" x2="510" y2="1145" stroke="#c62828" stroke-width="1.6" marker-end="url(#sq-err)"/>
+    <text x="665" y="1139" text-anchor="middle" font-size="11" fill="#c62828">電位 LOW → DI-0 (設備斷電)</text>
+
+    <path d="M170,1162 C 240,1162 240,1180 170,1180" fill="none" stroke="#c62828" stroke-width="1.4" marker-end="url(#sq-self-err)"/>
+    <text x="245" y="1173" font-size="11" fill="#c62828">FC2 poll DI[0]=0 → state: Idle→Faulted (保持 PC_ALIVE)</text>
+
+  </svg>
+  <p class="note" style="text-align:center; margin-top:12px;">
+    <span style="color:#1565c0; font-weight:bold;">藍色</span> = Modbus TCP 訊息（IPC ↔ ET-7044，FC2 讀 DI / FC5 寫 DO）·
+    <span style="color:#e65100; font-weight:bold;">橙色</span> = DI/DO 電氣信號（ET-7044 ↔ Nakan）·
+    <span style="color:#666;">虛線</span> = return 回覆封包 ·
+    <span style="color:#c62828;">紅色</span> = 錯誤路徑
+  </p>
+
+  <table class="io-table" style="margin-top:20px;">
+    <tr><th>圖中術語</th><th>白話說明</th></tr>
+    <tr>
+      <td><code>ConnectAsync(IP, 502)</code></td>
+      <td>程式透過網路連線到 ET-7044 模組。IP 是模組的網路位址（預設 192.168.255.1），502 是 Modbus 通訊的固定 port 號</td>
+    </tr>
+    <tr>
+      <td>TCP 三向交握</td>
+      <td>網路連線建立前的「確認彼此都在」程序 — 電腦先喊「我要連」，模組回「收到，我也準備好」，電腦再回「OK 開始」。三步完成後才算連線成功</td>
+    </tr>
+    <tr>
+      <td><code>FC2</code> Read DI</td>
+      <td>Modbus 指令碼 2 號 — 「讀取輸入」。程式每 500ms 用這個指令問 ET-7044：「現在 DI 腳位的狀態是什麼？」</td>
+    </tr>
+    <tr>
+      <td><code>FC5</code> Write DO</td>
+      <td>Modbus 指令碼 5 號 — 「寫入輸出」。程式用這個指令命令 ET-7044：「把某個 DO 腳位設成 HIGH 或 LOW」</td>
+    </tr>
+    <tr>
+      <td><code>return DI[0]=1, DI[1]=0</code></td>
+      <td>ET-7044 回覆 FC2 的結果。DI[0]=1 代表 DI_NAKAN_ALIVE 是 HIGH（設備有開機），DI[1]=0 代表 DI_INSPECT_START 是 LOW（還沒按啟動）</td>
+    </tr>
+    <tr>
+      <td><code>EnterIdle()</code></td>
+      <td>程式內部動作：連線成功且確認設備存在後，狀態從「未連線」切到「待機」，同時送出 PC_ALIVE 信號告知設備「我準備好了」</td>
+    </tr>
+  </table>
+</div>
+
+     3. STATE MACHINE DIAGRAM (Pure SVG — orthogonal lines)
+     ════════════════════════════════════════════════════════════════ -->
+<h2>3. State Machine Diagram 狀態機圖</h2>
+<div class="diagram-container">
+  <svg viewBox="0 0 920 540" width="100%" style="max-width:920px; display:block; margin:0 auto;">
+    <defs>
+      <marker id="ah-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,1 L9,5 L0,9 Z" fill="#1565c0"/>
+      </marker>
+      <marker id="ah-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,1 L9,5 L0,9 Z" fill="#e53935"/>
+      </marker>
+      <marker id="ah-grn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,1 L9,5 L0,9 Z" fill="#43a047"/>
+      </marker>
+      <marker id="ah-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,1 L9,5 L0,9 Z" fill="#666"/>
+      </marker>
+    </defs>
+
+    <!-- ── State boxes ── -->
+    <!-- Disconnected -->
+    <rect x="360" y="16" width="200" height="44" rx="8" fill="#e3f2fd" stroke="#1565c0" stroke-width="2" stroke-dasharray="6 3"/>
+    <text x="460" y="35" text-anchor="middle" fill="#1565c0" font-size="14" font-weight="bold">Disconnected</text>
+    <text x="460" y="52" text-anchor="middle" fill="#888" font-size="11">未連線</text>
+
+    <!-- Idle -->
+    <rect x="90" y="141" width="160" height="58" rx="8" fill="#e8f5e9" stroke="#43a047" stroke-width="2.5"/>
+    <text x="170" y="164" text-anchor="middle" fill="#43a047" font-size="15" font-weight="bold">Idle</text>
+    <text x="170" y="181" text-anchor="middle" fill="#555" font-size="11">待機</text>
+    <text x="170" y="194" text-anchor="middle" fill="#666" font-size="10">PC_ALIVE=1</text>
+
+    <!-- Running -->
+    <rect x="375" y="141" width="170" height="58" rx="8" fill="#e8f5e9" stroke="#43a047" stroke-width="2.5"/>
+    <text x="460" y="164" text-anchor="middle" fill="#43a047" font-size="15" font-weight="bold">Running</text>
+    <text x="460" y="181" text-anchor="middle" fill="#555" font-size="11">取像中</text>
+    <text x="460" y="194" text-anchor="middle" fill="#666" font-size="10">BUSY=1</text>
+
+    <!-- MURA -->
+    <rect x="655" y="141" width="130" height="58" rx="8" fill="#fce4ec" stroke="#e53935" stroke-width="2.5"/>
+    <text x="720" y="164" text-anchor="middle" fill="#e53935" font-size="15" font-weight="bold">MURA</text>
+    <text x="720" y="181" text-anchor="middle" fill="#555" font-size="11">瑕疵</text>
+    <text x="720" y="194" text-anchor="middle" fill="#666" font-size="10">MURA=1</text>
+
+    <!-- Stopping -->
+    <rect x="375" y="286" width="170" height="52" rx="8" fill="#e3f2fd" stroke="#1565c0" stroke-width="2"/>
+    <text x="460" y="308" text-anchor="middle" fill="#1565c0" font-size="14" font-weight="bold">Stopping</text>
+    <text x="460" y="326" text-anchor="middle" fill="#888" font-size="11">停止中</text>
+
+    <!-- Faulted -->
+    <rect x="65" y="421" width="210" height="58" rx="8" fill="#fce4ec" stroke="#e53935" stroke-width="2.5"/>
+    <text x="170" y="444" text-anchor="middle" fill="#e53935" font-size="14" font-weight="bold">Faulted</text>
+    <text x="170" y="462" text-anchor="middle" fill="#555" font-size="11">設備離線</text>
+    <text x="170" y="475" text-anchor="middle" fill="#666" font-size="10">PC_ALIVE=1 (保持)</text>
+
+    <!-- CommLost -->
+    <rect x="620" y="421" width="210" height="58" rx="8" fill="#fce4ec" stroke="#e53935" stroke-width="2.5"/>
+    <text x="725" y="444" text-anchor="middle" fill="#e53935" font-size="14" font-weight="bold">CommLost</text>
+    <text x="725" y="462" text-anchor="middle" fill="#555" font-size="11">通訊中斷</text>
+    <text x="725" y="475" text-anchor="middle" fill="#666" font-size="10">全 LOW (TCP 斷線)</text>
+
+    <!-- ── Normal flow (solid blue) ── -->
+
+    <!-- 1. Disconnected → Idle -->
+    <path d="M460,60 V108 H170 V141" fill="none" stroke="#1565c0" stroke-width="2" marker-end="url(#ah-blue)"/>
+    <text x="320" y="102" text-anchor="middle" fill="#1565c0" font-size="11">連線成功 Connect OK</text>
+
+    <!-- 2. Idle → Running -->
+    <path d="M250,170 H375" fill="none" stroke="#1565c0" stroke-width="2" marker-end="url(#ah-blue)"/>
+    <text x="312" y="162" text-anchor="middle" fill="#e65100" font-size="11">DI_INSPECT_START ↑ 上升緣</text>
+
+    <!-- 3. Running → MURA -->
+    <path d="M545,170 H655" fill="none" stroke="#1565c0" stroke-width="2" marker-end="url(#ah-blue)"/>
+    <text x="600" y="162" text-anchor="middle" fill="#e65100" font-size="11">檢出瑕疵 Defect</text>
+    <text x="600" y="138" text-anchor="middle" fill="#c62828" font-size="9">※【暫停檢測】時抑制</text>
+
+    <!-- 4. Running → Stopping -->
+    <path d="M460,199 V286" fill="none" stroke="#1565c0" stroke-width="2" marker-end="url(#ah-blue)"/>
+    <text x="468" y="248" text-anchor="start" fill="#e65100" font-size="11">DI_INSPECT_START ↓</text>
+    <text x="468" y="262" text-anchor="start" fill="#e65100" font-size="11">下降緣</text>
+
+    <!-- 5. MURA → Stopping -->
+    <path d="M720,199 V312 H545" fill="none" stroke="#1565c0" stroke-width="2" marker-end="url(#ah-blue)"/>
+    <text x="640" y="260" text-anchor="middle" fill="#e65100" font-size="11">DI_INSPECT_START ↓ 下降緣</text>
+
+    <!-- 6. Stopping → Idle (loop back, left side) -->
+    <path d="M375,312 H55 V170 H90" fill="none" stroke="#1565c0" stroke-width="2" marker-end="url(#ah-blue)"/>
+    <text x="215" y="330" text-anchor="middle" fill="#43a047" font-size="11">清除完成 Cleanup done</text>
+
+    <!-- ── Error entry (dashed red) ── -->
+
+    <!-- 7. Normal states → Faulted (left channel, x=135) -->
+    <path d="M135,199 V421" fill="none" stroke="#e53935" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah-red)"/>
+    <rect x="13" y="280" width="120" height="38" rx="4" fill="#fafafa" fill-opacity="0.9" stroke="none"/>
+    <text x="73" y="295" text-anchor="middle" fill="#e53935" font-size="10">DI_NAKAN_ALIVE=0</text>
+    <text x="73" y="310" text-anchor="middle" fill="#e53935" font-size="10">設備信號消失</text>
+
+    <!-- 8. Normal states → CommLost (right channel, x=755) -->
+    <path d="M755,199 V421" fill="none" stroke="#e53935" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah-red)"/>
+    <rect x="790" y="280" width="115" height="38" rx="4" fill="#fafafa" fill-opacity="0.9" stroke="none"/>
+    <text x="847" y="295" text-anchor="middle" fill="#e53935" font-size="10">TCP Exception</text>
+    <text x="847" y="310" text-anchor="middle" fill="#e53935" font-size="10">通訊例外</text>
+
+    <!-- ── Recovery (dashed green) ── -->
+
+    <!-- 9. Faulted → Idle (right channel, x=205) -->
+    <path d="M205,421 V199" fill="none" stroke="#43a047" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah-grn)"/>
+    <rect x="210" y="332" width="140" height="28" rx="4" fill="#fafafa" fill-opacity="0.9" stroke="none"/>
+    <text x="280" y="344" text-anchor="middle" fill="#43a047" font-size="10">DI_NAKAN_ALIVE=1</text>
+    <text x="280" y="356" text-anchor="middle" fill="#43a047" font-size="10">設備信號恢復 Restored</text>
+
+    <!-- 10. CommLost → Idle (route around bottom-left) -->
+    <path d="M725,479 V510 H35 V155 H90" fill="none" stroke="#43a047" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah-grn)"/>
+    <rect x="300" y="513" width="155" height="16" rx="4" fill="#fafafa" fill-opacity="0.9" stroke="none"/>
+    <text x="377" y="524" text-anchor="middle" fill="#43a047" font-size="10">重連成功 Reconnect OK</text>
+
+    <!-- ── Cross-error (dashed red) ── -->
+
+    <!-- 11. Faulted → CommLost -->
+    <path d="M275,450 H620" fill="none" stroke="#e53935" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah-red)"/>
+    <text x="447" y="443" text-anchor="middle" fill="#e53935" font-size="10">TCP Exception 通訊例外</text>
+
+    <!-- ── Annotations ── -->
+    <text x="565" y="46" text-anchor="start" fill="#666" font-size="10" font-style="italic">(連線失敗 5s 重試 Retry on fail)</text>
+    <text x="835" y="462" text-anchor="start" fill="#666" font-size="10" font-style="italic">(5s</text>
+    <text x="835" y="475" text-anchor="start" fill="#666" font-size="10" font-style="italic"> 重試)</text>
+
+    <!-- ── Legend ── -->
+    <line x1="375" y1="530" x2="415" y2="530" stroke="#1565c0" stroke-width="2"/>
+    <text x="420" y="534" fill="#888" font-size="11">正常流程 Normal</text>
+    <line x1="530" y1="530" x2="570" y2="530" stroke="#e53935" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <text x="575" y="534" fill="#888" font-size="11">錯誤 Error</text>
+    <line x1="640" y1="530" x2="680" y2="530" stroke="#43a047" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <text x="685" y="534" fill="#888" font-size="11">恢復 Recovery</text>
+  </svg>
+  <p class="note" style="text-align:center; margin-top:12px;">StopAsync() → Closed 已關閉 (程式關閉時清除所有 DO，斷開連線)</p>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════
+     2. SFC (Sequential Function Chart) — IEC 61131-3 Style
+     ════════════════════════════════════════════════════════════════ -->
+<h2>4. SFC — Sequential Function Chart 順序功能圖 (IEC 61131-3)</h2>
+<div class="diagram-container">
+  <div class="sfc">
+
+    <!-- S0: Disconnected -->
+    <div class="sfc-step initial" style="border-style: double;">S0 — Disconnected 未連線</div>
+    <div class="sfc-action">
+      N: StartAsync(ip, port) 嘗試連線<br>
+      N: ReconnectTimer ← 5s interval 背景重連
+    </div>
+
+    <div class="sfc-arrow"></div>
+    <div class="sfc-trans"></div>
+    <div class="sfc-trans-label">T0: ConnectAsync() == OK 連線成功</div>
+    <div class="sfc-arrow"></div>
+
+    <!-- S1: Idle -->
+    <div class="sfc-step active">S1 — Idle 待機</div>
+    <div class="sfc-action">
+      N: DO PC_ALIVE ← HIGH &emsp; PC 存活信號<br>
+      N: DO MURA ← LOW &emsp;&emsp;&ensp; 清除瑕疵信號<br>
+      N: DO PC_BUSY ← LOW &emsp;&ensp; 清除忙碌信號<br>
+      N: _lastDiStart ← false &emsp;&ensp; 重置邊緣偵測<br>
+      N: PollTimer.Start(500ms) &ensp; 開始輪詢
+    </div>
+
+    <div class="sfc-arrow"></div>
+    <div class="sfc-trans"></div>
+    <div class="sfc-trans-label">T1: DI_INSPECT_START ↑ rising edge 上升緣 AND State == Idle</div>
+    <div class="sfc-arrow"></div>
+
+    <!-- S2: Running -->
+    <div class="sfc-step active">S2 — Running 取像中</div>
+    <div class="sfc-action">
+      P1: OnStartRequested → 觸發 Grab 開始<br>
+      N: DO PC_BUSY ← HIGH &emsp; 忙碌信號
+    </div>
+
+    <div class="sfc-arrow"></div>
+
+    <!-- Diverge: MURA or Stop -->
+    <div class="sfc-diverge"></div>
+    <div class="sfc-branch">
+      <!-- Left: MURA -->
+      <div class="sfc-branch-col">
+        <div class="sfc-trans-label">T2a: meanPeak > ErrMean 均值超標<br>OR maxPeak > ErrMax 峰值超標<br><span style="color:#c62828;">※ 【暫停檢測】啟用時此轉移被抑制</span></div>
+        <div class="sfc-arrow"></div>
+        <div class="sfc-step error">S3 — MURA 瑕疵</div>
+        <div class="sfc-action">
+          P1: DO MURA ← HIGH &emsp; 瑕疵信號<br>
+          N: 保持 PC_BUSY = HIGH Keep BUSY
+        </div>
+        <div class="sfc-arrow"></div>
+        <div class="sfc-trans-label">T3: DI_INSPECT_START ↓ falling edge 下降緣</div>
+      </div>
+      <!-- Right: Normal stop -->
+      <div class="sfc-branch-col">
+        <div class="sfc-trans-label">T2b: DI_INSPECT_START ↓ falling edge 下降緣<br>(無瑕疵 no MURA)</div>
+        <div class="sfc-arrow"></div>
+        <div class="sfc-step">S4 — Stopping 停止中</div>
+        <div class="sfc-action">
+          P1: OnStopRequested → 觸發 Grab 停止<br>
+          N: ClearMura → DO MURA ← LOW 清除瑕疵<br>
+          N: DO PC_BUSY ← LOW &emsp;&emsp;&ensp; 清除忙碌
+        </div>
+        <div class="sfc-arrow"></div>
+        <div class="sfc-trans-label">T4: Cleanup complete 清除完成</div>
+      </div>
+    </div>
+    <div class="sfc-converge"></div>
+
+    <div class="sfc-arrow"></div>
+    <div class="sfc-trans-label" style="font-size: 14px; color: var(--green);">↑ 回到 S1 Idle 待機 / Return to S1</div>
+
+    <div style="height: 32px;"></div>
+
+    <!-- Error paths -->
+    <div style="display: flex; gap: 40px; justify-content: center;">
+      <div style="display: flex; flex-direction: column; align-items: center;">
+        <div class="sfc-step error">S5 — Faulted 設備離線</div>
+        <div class="sfc-action">
+          P1: DO MURA ← LOW &emsp;&ensp; 清除瑕疵 Clear MURA<br>
+          P1: DO PC_BUSY ← LOW &ensp; 清除忙碌 Clear BUSY<br>
+          P1: OnStopRequested &emsp;&ensp; 緊急停止 Emergency stop<br>
+          N: 保持 PC_ALIVE = HIGH &ensp; Keep PC alive<br>
+          N: 持續 Polling &emsp;&emsp;&emsp;&emsp; Continue polling
+        </div>
+        <div class="sfc-arrow"></div>
+        <div class="sfc-trans"></div>
+        <div class="sfc-trans-label">T5: DI_NAKAN_ALIVE restored 設備信號恢復</div>
+        <div class="sfc-trans-label" style="color: var(--green);">→ 回到 S1 Idle / Return to S1</div>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center;">
+        <div class="sfc-step error">S6 — CommLost 通訊中斷</div>
+        <div class="sfc-action">
+          P1: _plc.Dispose() &emsp;&emsp;&emsp; 釋放 TCP Release TCP<br>
+          P1: OnConnectionChanged(false) 通知 UI<br>
+          P1: OnStopRequested &emsp;&emsp;&ensp; 緊急停止 Emergency stop<br>
+          N: ReconnectTimer ← 5s &emsp; 背景重連 Auto reconnect
+        </div>
+        <div class="sfc-arrow"></div>
+        <div class="sfc-trans"></div>
+        <div class="sfc-trans-label">T6: ReconnectAsync OK 重連成功</div>
+        <div class="sfc-trans-label" style="color: var(--green);">→ 回到 S1 Idle / Return to S1</div>
+      </div>
+    </div>
+
+    <div style="height: 16px;"></div>
+    <div class="note">
+      SFC 動作限定符 Action Qualifiers — N: 非儲存 Non-stored (持續執行 continuous)&emsp; P1: 上升脈衝 Pulse rising (進入時執行一次 execute once on entry)
+    </div>
+  </div>
+</div>
+
+<!-- No external JS required — all diagrams are pure HTML/SVG/CSS -->
+
+</body>
+</html>

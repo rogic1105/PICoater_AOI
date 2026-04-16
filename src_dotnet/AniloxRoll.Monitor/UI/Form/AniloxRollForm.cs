@@ -91,7 +91,7 @@ namespace AniloxRoll.Monitor.Forms
         private RemoteCopyService _remoteCopyService;
 
         // --- IO 連動 ---
-        private PlcGrabController _plcGrabController;
+        private IoGrabController _plcGrabController;
 
         // --- 統計 ---
         private DataStatisticsPresenter _dataStatsPresenter;
@@ -99,7 +99,6 @@ namespace AniloxRoll.Monitor.Forms
         // --- 資料緩存 ---
         private readonly List<Image> _thumbnailCache = new List<Image>();
         private InspectionSettings _settings;
-        private readonly EventGuard _processedCheckboxGuard = new EventGuard();
         private bool IsStandardBgSubEnabled =>
             _settings?.Recipe?.Algorithm == BackgroundAlgorithm.StandardBgSub;
 
@@ -122,6 +121,7 @@ namespace AniloxRoll.Monitor.Forms
         private readonly float[][] _liveCurveMean = new float[CameraCount][];
         private readonly float[][] _liveCurveMax  = new float[CameraCount][];
         private volatile bool _liveOverviewDirty;
+        private bool _isMuraDetectPaused;
 
         // --- Review tab 拼接管理 ---
         private ReviewStitchCoordinator _stitchCoordinator;
@@ -189,7 +189,7 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (!_settings.PlcEnabled) return;
 
-            _plcGrabController = new PlcGrabController();
+            _plcGrabController = new IoGrabController();
 
             _plcGrabController.OnStartRequested += () =>
             {
@@ -205,7 +205,7 @@ namespace AniloxRoll.Monitor.Forms
 
             _plcGrabController.OnStateChanged += state =>
             {
-                if (InvokeRequired) { BeginInvoke(new Action<PlcState>(UpdatePlcStateLabel), state); return; }
+                if (InvokeRequired) { BeginInvoke(new Action<IoState>(UpdatePlcStateLabel), state); return; }
                 UpdatePlcStateLabel(state);
             };
 
@@ -217,7 +217,7 @@ namespace AniloxRoll.Monitor.Forms
 
             _plcGrabController.OnIoUpdated += snapshot =>
             {
-                if (InvokeRequired) { BeginInvoke(new Action<PlcIoSnapshot>(UpdatePlcIoLeds), snapshot); return; }
+                if (InvokeRequired) { BeginInvoke(new Action<IoSnapshot>(UpdatePlcIoLeds), snapshot); return; }
                 UpdatePlcIoLeds(snapshot);
             };
 
@@ -239,29 +239,29 @@ namespace AniloxRoll.Monitor.Forms
             _ = _plcGrabController?.NotifyGrabStopped();
         }
 
-        private void UpdatePlcStateLabel(PlcState state)
+        private void UpdatePlcStateLabel(IoState state)
         {
             string text;
             Color bgColor;
             switch (state)
             {
-                case PlcState.Idle:
+                case IoState.Idle:
                     text = "Idle 待機";
                     bgColor = IecGreen;   // IEC 綠
                     break;
-                case PlcState.Running:
+                case IoState.Running:
                     text = "Running 取像中";
                     bgColor = IecBlue;   // 藍
                     break;
-                case PlcState.Stopping:
+                case IoState.Stopping:
                     text = "Stopping 停止中";
                     bgColor = IecYellow;  // IEC 黃
                     break;
-                case PlcState.Faulted:
+                case IoState.Faulted:
                     text = "Faulted IO故障";
                     bgColor = IecRed;   // IEC 紅
                     break;
-                case PlcState.CommLost:
+                case IoState.CommLost:
                     text = "CommLost 通訊中斷";
                     bgColor = IecRed;   // IEC 紅
                     break;
@@ -294,13 +294,13 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        private void UpdatePlcIoLeds(PlcIoSnapshot io)
+        private void UpdatePlcIoLeds(IoSnapshot io)
         {
-            SetIoLed(lblIoDiAlive,   io.DiPlcAlive);
-            SetIoLed(lblIoDiStart,   io.DiStart);
+            SetIoLed(lblIoDiAlive,   io.DiNakanAlive);
+            SetIoLed(lblIoDiStart,   io.DiInspectStart);
             SetIoLed(lblIoDoPcAlive, io.DoPcAlive);
-            SetIoLed(lblIoDoMura,    io.DoMura);
-            SetIoLed(lblIoDoPcBusy,  io.DoPcBusy);
+            SetIoLed(lblIoDoMura,    io.DoMuraDetected);
+            SetIoLed(lblIoDoPcBusy,  io.DoPcInspect);
         }
 
         private static void SetIoLed(Label lbl, bool on)
@@ -368,9 +368,6 @@ namespace AniloxRoll.Monitor.Forms
             muraChartVerticalLive.MouseClick += (s, e) => SwitchLiveDisplayDirection("v");
             muraChartHorizontalLive.MouseClick += (s, e) => SwitchLiveDisplayDirection("h");
 
-            checkBoxEnableImageProcessing.Checked =
-                UserSessionState.GetLastEnableImageProcessing(checkBoxEnableImageProcessing.Checked);
-
             // PropertyGrid：Categorized 排序（維持宣告順序），預設摺疊
             propertyGridSettings.SelectedObject = _settings;
             propertyGridSettings.ToolbarVisible = false;
@@ -415,7 +412,6 @@ namespace AniloxRoll.Monitor.Forms
                 ChartOverview             = chartOverview,
                 ChartMuraVertical         = chartMuraVertical,
                 ChartMuraHorizontal       = chartMuraHorizontal,
-                CheckBoxShowProcessed     = checkBoxShowProcessed,
                 InteractionHelper         = _interactionHelper,
                 ColumnChartHelper         = _reviewColumnChartHelper,
                 RowChartHelper            = _reviewRowChartHelper,
@@ -426,7 +422,6 @@ namespace AniloxRoll.Monitor.Forms
                 DataStatsPresenter        = _dataStatsPresenter,
                 Settings                  = _settings,
                 DateTimeNavigator         = _dateTimeNavigator,
-                ProcessedCheckboxGuard    = _processedCheckboxGuard,
                 CameraCount               = CameraCount,
             });
 
@@ -568,7 +563,7 @@ namespace AniloxRoll.Monitor.Forms
             {
                 try
                 {
-                    _liveCameraManager.EnsureAllocatedAndToggleGrab(checkBoxEnableImageProcessing.Checked);
+                    _liveCameraManager.EnsureAllocatedAndToggleGrab(_settings.EnableMuraEnhance);
                     LoadBackgroundBins();
 
                     // 初次分配即為 Global 模式 → 立即啟用即時合圖
@@ -628,10 +623,11 @@ namespace AniloxRoll.Monitor.Forms
         /// <summary>
         /// Live 曲線閾值判斷（callback 執行緒呼叫，V/H 共用）。
         /// 陣列為 0-255，閾值為 0-1，取陣列 max 後除以 255 比較。
-        /// 任一方向超標即觸發 DO_MURA H，維持到 grab 結束。
+        /// 任一方向超標即觸發 DO_MURA_DETECTED H，維持到 grab 結束。
         /// </summary>
         private void CheckLiveMura(float[] meanArr, float[] maxArr)
         {
+            if (_isMuraDetectPaused) return;
             if (_plcGrabController?.IsConnected != true) return;
             if (_settings == null) return;
             if (!_liveCameraManager.IsLiveGrabbing) return;
@@ -1355,15 +1351,28 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        private void checkBoxEnableImageProcessing_CheckedChanged(object sender, EventArgs e)
+        private void ApplyMuraEnhance(bool enabled)
         {
-            bool enabled = checkBoxEnableImageProcessing.Checked;
             _liveCameraManager?.SetImageProcessingEnabled(enabled);
-            UserSessionState.SetLastEnableImageProcessing(enabled);
-            UserSessionState.Save();
-
-            // 同步 chart 背景色：取消勾選時清除高亮
             UpdateLiveDirectionVisual(enabled ? _liveDisplayDirection : null);
+        }
+
+        private void btnMuraDetectPause_Click(object sender, EventArgs e)
+        {
+            _isMuraDetectPaused = !_isMuraDetectPaused;
+            if (_isMuraDetectPaused)
+            {
+                btnMuraDetectPause.Text = "恢復檢測";
+                btnMuraDetectPause.BackColor = System.Drawing.Color.Tomato;
+                btnMuraDetectPause.ForeColor = System.Drawing.Color.White;
+            }
+            else
+            {
+                btnMuraDetectPause.Text = "暫停檢測";
+                btnMuraDetectPause.BackColor = System.Drawing.SystemColors.Control;
+                btnMuraDetectPause.ForeColor = System.Drawing.SystemColors.ControlText;
+                btnMuraDetectPause.UseVisualStyleBackColor = true;
+            }
         }
 
         // PropertyGrid 回傳的 ChangedItem.PropertyDescriptor.Name 可能是 MemberName 或 DisplayName 其中之一，
@@ -1458,6 +1467,12 @@ namespace AniloxRoll.Monitor.Forms
             else if (changedPropertyName == nameof(InspectionSettings.ChartDailyYMax))
                 _dataStatsPresenter.ApplyFixedScaleForChart("Daily", _settings.Chart.DailyYMax);
 
+            if (changedPropertyName == nameof(InspectionSettings.EnableMuraEnhance))
+                ApplyMuraEnhance(_settings.EnableMuraEnhance);
+
+            if (changedPropertyName == nameof(InspectionSettings.EnableReviewEnhance))
+                _ = ApplyReviewEnhance(_settings.EnableReviewEnhance);
+
             // 演算法切換 → 更新 UI 鎖定 + 載入/清除背景 bin
             if (changedPropertyName == nameof(InspectionRecipe.Algorithm) ||
                 changedPropertyName == "去背演算法")
@@ -1472,8 +1487,8 @@ namespace AniloxRoll.Monitor.Forms
             if (isRecipeChange && _imageRepository.FileCount > 0)
             {
                 _stitchCoordinator.LastReviewProcessedMode = true;
-                using (_processedCheckboxGuard.Enter())
-                    checkBoxShowProcessed.Checked = true;
+                _settings.EnableReviewEnhance = true;
+                propertyGridSettings.Refresh();
                 _stitchCoordinator.ClearStitchedMode();
                 await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
                 ApplyPostLoadDisplay();
@@ -1489,8 +1504,8 @@ namespace AniloxRoll.Monitor.Forms
             _interactionHelper.SelectAndLoadFolder();
             _presenter.UpdatePeriodNavigationState();
             _stitchCoordinator.LastReviewProcessedMode = false;
-            using (_processedCheckboxGuard.Enter())
-                checkBoxShowProcessed.Checked = false;
+            _settings.EnableReviewEnhance = false;
+            propertyGridSettings.Refresh();
 
             // 同步載入序號清單並填充所有序號 ComboBox（Review + Data）
             if (_imageRepository.FileCount > 0)
@@ -1513,12 +1528,10 @@ namespace AniloxRoll.Monitor.Forms
             catch (Exception ex) { Trace.WriteLine($"[btnSelectFolder_Click] {ex}"); }
         }
 
-        private async void checkBoxShowProcessed_CheckedChanged(object sender, EventArgs e)
+        private async Task ApplyReviewEnhance(bool enableProcess)
         {
-            if (_processedCheckboxGuard.IsSet) return;
             try
             {
-            bool enableProcess = checkBoxShowProcessed.Checked;
             UpdateRidgeDirectionVisual(enableProcess ? _stitchCoordinator.ActiveRidgeDirection : null);
             if (_stitchCoordinator.IsStitchMode)
             {
@@ -1530,7 +1543,7 @@ namespace AniloxRoll.Monitor.Forms
             await _presenter.LoadImagesWithPeriodLockAsync(enableProcess, _interactionHelper.LoadImages);
             ApplyPostLoadDisplay();
             }
-            catch (Exception ex) { Trace.WriteLine($"[checkBoxShowProcessed] {ex}"); }
+            catch (Exception ex) { Trace.WriteLine($"[ApplyReviewEnhance] {ex}"); }
         }
 
         private async Task ReloadCurrentStitchedView(bool enableProcess)
@@ -2331,24 +2344,23 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private void SwitchLiveDisplayDirection(string dir)
         {
-            if (!checkBoxEnableImageProcessing.Checked)
+            if (!_settings.EnableMuraEnhance)
             {
-                // 未勾選 → 自動勾選 + 設方向
                 _liveDisplayDirection = dir;
-                UpdateLiveDirectionVisual(dir);
-                checkBoxEnableImageProcessing.Checked = true; // 觸發 CheckedChanged
+                _settings.EnableMuraEnhance = true;
+                ApplyMuraEnhance(true);
+                propertyGridSettings.Refresh();
                 return;
             }
 
             if (dir == _liveDisplayDirection)
             {
-                // 同方向再點一次 → 取消勾選（回原圖）
-                UpdateLiveDirectionVisual(null);
-                checkBoxEnableImageProcessing.Checked = false; // 觸發 CheckedChanged
+                _settings.EnableMuraEnhance = false;
+                ApplyMuraEnhance(false);
+                propertyGridSettings.Refresh();
                 return;
             }
 
-            // 不同方向 → 切換
             _liveDisplayDirection = dir;
             UpdateLiveDirectionVisual(dir);
         }
@@ -2373,19 +2385,21 @@ namespace AniloxRoll.Monitor.Forms
             {
             if (!_stitchCoordinator.LastReviewProcessedMode)
             {
-                // 未勾選 → 自動勾選 + 設方向
                 _stitchCoordinator.ActiveRidgeDirection = dir;
                 _interactionHelper.SetRidgeDirection(dir);
                 UpdateRidgeDirectionVisual(dir);
-                checkBoxShowProcessed.Checked = true; // 觸發 CheckedChanged → 載入處理圖
+                _settings.EnableReviewEnhance = true;
+                propertyGridSettings.Refresh();
+                _ = ApplyReviewEnhance(true);
                 return;
             }
 
             if (dir == _stitchCoordinator.ActiveRidgeDirection)
             {
-                // 同方向再點一次 → 取消勾選（回原圖）
                 UpdateRidgeDirectionVisual(null);
-                checkBoxShowProcessed.Checked = false; // 觸發 CheckedChanged → 載入原圖
+                _settings.EnableReviewEnhance = false;
+                propertyGridSettings.Refresh();
+                _ = ApplyReviewEnhance(false);
                 return;
             }
 

@@ -9,11 +9,11 @@ using AniloxRoll.Monitor.Core.Services;
 namespace AniloxRoll.Monitor.Tests
 {
     [TestFixture]
-    public class PlcGrabControllerTests
+    public class IoGrabControllerTests
     {
         private Mock<IModbusTcpClient> _mockPlc;
-        private PlcGrabController _ctrl;
-        private List<PlcState> _stateLog;
+        private IoGrabController _ctrl;
+        private List<IoState> _stateLog;
         private int _startCount;
         private int _stopCount;
 
@@ -24,8 +24,8 @@ namespace AniloxRoll.Monitor.Tests
             _mockPlc.SetupProperty(p => p.ReadWriteTimeoutMs, 2000);
             _mockPlc.Setup(p => p.WriteDo(It.IsAny<int>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
 
-            _ctrl = new PlcGrabController(_mockPlc.Object);
-            _stateLog = new List<PlcState>();
+            _ctrl = new IoGrabController(_mockPlc.Object);
+            _stateLog = new List<IoState>();
             _startCount = 0;
             _stopCount = 0;
 
@@ -55,8 +55,8 @@ namespace AniloxRoll.Monitor.Tests
                 .ReturnsAsync(true);
 
             await _ctrl.StartAsync("192.168.255.1");
-            Assert.That(_ctrl.CurrentState, Is.EqualTo(PlcState.Idle));
-            Assert.That(_stateLog, Does.Contain(PlcState.Idle));
+            Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Idle));
+            Assert.That(_stateLog, Does.Contain(IoState.Idle));
         }
 
         [Test]
@@ -66,7 +66,7 @@ namespace AniloxRoll.Monitor.Tests
                 .ReturnsAsync(false);
 
             await _ctrl.StartAsync("192.168.255.1");
-            Assert.That(_ctrl.CurrentState, Is.EqualTo(PlcState.Disconnected));
+            Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Disconnected));
         }
 
         // ── START 上升/下降緣 ──
@@ -79,7 +79,7 @@ namespace AniloxRoll.Monitor.Tests
             SetupDiStatuses(true, true); // PLC_ALIVE=true, START=true (rising edge)
             await _ctrl.PollTick();
 
-            Assert.That(_ctrl.CurrentState, Is.EqualTo(PlcState.Running));
+            Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Running));
             Assert.That(_startCount, Is.EqualTo(1));
         }
 
@@ -91,12 +91,12 @@ namespace AniloxRoll.Monitor.Tests
             // Rising edge → Running
             SetupDiStatuses(true, true);
             await _ctrl.PollTick();
-            Assert.That(_ctrl.CurrentState, Is.EqualTo(PlcState.Running));
+            Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Running));
 
             // Falling edge → Idle (via Stopping)
             SetupDiStatuses(true, false);
             await _ctrl.PollTick();
-            Assert.That(_ctrl.CurrentState, Is.EqualTo(PlcState.Idle));
+            Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Idle));
             Assert.That(_stopCount, Is.EqualTo(1));
         }
 
@@ -122,7 +122,7 @@ namespace AniloxRoll.Monitor.Tests
             SetupDiStatuses(false, false); // PLC_ALIVE lost
             await _ctrl.PollTick();
 
-            Assert.That(_ctrl.CurrentState, Is.EqualTo(PlcState.Faulted));
+            Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Faulted));
             Assert.That(_stopCount, Is.EqualTo(1), "Should fire stop on fault");
         }
 
@@ -134,12 +134,12 @@ namespace AniloxRoll.Monitor.Tests
             // Fault
             SetupDiStatuses(false, false);
             await _ctrl.PollTick();
-            Assert.That(_ctrl.CurrentState, Is.EqualTo(PlcState.Faulted));
+            Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Faulted));
 
             // Restore
             SetupDiStatuses(true, false);
             await _ctrl.PollTick();
-            Assert.That(_ctrl.CurrentState, Is.EqualTo(PlcState.Idle));
+            Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Idle));
         }
 
         // ── CommLost ──
@@ -153,7 +153,7 @@ namespace AniloxRoll.Monitor.Tests
                 .ThrowsAsync(new TimeoutException("Read timeout"));
 
             await _ctrl.PollTick();
-            Assert.That(_ctrl.CurrentState, Is.EqualTo(PlcState.CommLost));
+            Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.CommLost));
             Assert.That(_stopCount, Is.EqualTo(1));
         }
 
@@ -166,7 +166,7 @@ namespace AniloxRoll.Monitor.Tests
                 .ReturnsAsync(true);
 
             await _ctrl.ReconnectTick();
-            Assert.That(_ctrl.CurrentState, Is.EqualTo(PlcState.Idle));
+            Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Idle));
         }
 
         [Test]
@@ -177,13 +177,13 @@ namespace AniloxRoll.Monitor.Tests
 
             await _ctrl.ReconnectTick();
             // State shouldn't change from whatever it was
-            Assert.That(_ctrl.CurrentState, Is.Not.EqualTo(PlcState.Idle));
+            Assert.That(_ctrl.CurrentState, Is.Not.EqualTo(IoState.Idle));
         }
 
         // ── DO 通知 ──
 
         [Test]
-        public async Task NotifyGrabStarted_WritesDoPcBusy()
+        public async Task NotifyGrabStarted_WritesDoPcInspect()
         {
             _mockPlc.Setup(p => p.IsConnected).Returns(true);
             await _ctrl.NotifyGrabStarted();
@@ -191,7 +191,7 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
-        public async Task NotifyMuraDetected_WritesDoMura()
+        public async Task NotifyMuraDetected_WritesMuraDetected()
         {
             _mockPlc.Setup(p => p.IsConnected).Returns(true);
             await _ctrl.NotifyMuraDetected();
@@ -205,14 +205,14 @@ namespace AniloxRoll.Monitor.Tests
         {
             await ConnectAndEnterIdle();
 
-            PlcIoSnapshot? captured = null;
+            IoSnapshot? captured = null;
             _ctrl.OnIoUpdated += snap => captured = snap;
 
             SetupDiStatuses(true, false);
             await _ctrl.PollTick();
 
             Assert.That(captured, Is.Not.Null);
-            Assert.That(captured.Value.DiPlcAlive, Is.True);
+            Assert.That(captured.Value.DiNakanAlive, Is.True);
             Assert.That(captured.Value.DoPcAlive, Is.True);
         }
 
@@ -234,9 +234,9 @@ namespace AniloxRoll.Monitor.Tests
 
             Assert.That(_stateLog, Is.EqualTo(new[]
             {
-                PlcState.Running,
-                PlcState.Stopping,
-                PlcState.Idle
+                IoState.Running,
+                IoState.Stopping,
+                IoState.Idle
             }));
         }
 

@@ -66,6 +66,8 @@ namespace AniloxRoll.Monitor.Core.Data
         [DisplayName("Error Value Max")] public float ErrorValueMax { get; set; } = 0.5f;
         [DisplayName("背景取樣秒數")]  public int BackgroundSampleSeconds { get; set; } = 3;
         [DisplayName("A輪速度 (m/min)")]  public double AniloxRollSpeedMPerMin { get; set; } = 10.0;
+        [DisplayName("監控強化")]         public bool EnableMuraEnhance { get; set; } = false;
+        [DisplayName("回顧強化")]         public bool EnableReviewEnhance { get; set; } = false;
 
         /// <summary>存檔縮小倍率。原圖寬高各除以此值後存成 JPEG。唯一預設值來源：InspectionEngineConfig.DefaultSaveResizeScale。</summary>
         [Browsable(false)] public int SaveResizeScale { get; set; } = InspectionEngineConfig.DefaultSaveResizeScale;

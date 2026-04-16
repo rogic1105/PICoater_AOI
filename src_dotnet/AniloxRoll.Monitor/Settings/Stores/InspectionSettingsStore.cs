@@ -105,6 +105,13 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"CaptureRootPath\": \"{SettingsStoreHelper.EscapeJson(T.CaptureRootPath)}\",");
             sb.AppendLine($"    \"SaveOriginalBmp\": {(T.SaveOriginalBmp ? "true" : "false")},");
             sb.AppendLine($"    \"BackgroundPath\": \"{SettingsStoreHelper.EscapeJson(T.BackgroundPath)}\"");
+            sb.AppendLine("  },");
+
+            // PLC
+            sb.AppendLine("  \"Plc\": {");
+            sb.AppendLine($"    \"Enabled\": {(s.PlcEnabled ? "true" : "false")},");
+            sb.AppendLine($"    \"Ip\": \"{SettingsStoreHelper.EscapeJson(s.PlcIp)}\",");
+            sb.AppendLine($"    \"Port\": {s.PlcPort}");
             sb.AppendLine("  }");
 
             sb.Append("}");
@@ -125,6 +132,9 @@ namespace AniloxRoll.Monitor.Core.Data
                 Chart         = ParseChart(json),
                 ImageView     = ParseImageView(json),
                 Storage       = ParseStorage(json),
+                PlcEnabled    = ParsePlcEnabled(json),
+                PlcIp         = ParsePlcIp(json),
+                PlcPort       = ParsePlcPort(json),
             };
         }
 
@@ -234,6 +244,24 @@ namespace AniloxRoll.Monitor.Core.Data
                     : !SettingsStoreHelper.GetBool(obj, "UseCompressedCapture", true),
                 BackgroundPath       = SettingsStoreHelper.GetString(obj, "BackgroundPath", @"D:\AniloxCaptures\bg"),
             };
+        }
+
+        private static bool ParsePlcEnabled(string json)
+        {
+            string obj = SettingsStoreHelper.ExtractObject(json, "Plc");
+            return SettingsStoreHelper.GetBool(obj, "Enabled", true);
+        }
+
+        private static string ParsePlcIp(string json)
+        {
+            string obj = SettingsStoreHelper.ExtractObject(json, "Plc");
+            return SettingsStoreHelper.GetString(obj, "Ip", "192.168.255.1");
+        }
+
+        private static int ParsePlcPort(string json)
+        {
+            string obj = SettingsStoreHelper.ExtractObject(json, "Plc");
+            return SettingsStoreHelper.GetInt(obj, "Port", 502);
         }
     }
 }

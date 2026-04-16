@@ -316,16 +316,40 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box output">監控全覽圖：7 台合併曲線 + 閾值線（Timer 驅動 50~500ms）</div>
 </div>
 </div>
-<div class="flow-group vflow">
-<div class="flow-title">監控強化 <code>checkBoxEnableImageProcessing</code></div>
-<div class="box input">勾選【監控強化】</div>
+<div class="flow-group vflow" id="mura-detect-pause">
+<div class="flow-title">暫停檢測 <code>btnMuraDetectPause</code></div>
+<div class="box input">按下【暫停檢測】</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">SetImageProcessingEnabled(true) → UpdateLiveDirectionVisual</div>
+<div class="box action dev">_isMuraDetectPaused = true</div>
+<div class="v-arrow" data-label="平行"></div>
+<div class="out-par">
+<div class="box output">【暫停檢測】→ 文字改為「恢復檢測」，紅底白字</div>
+<div class="box output">CheckLiveMura 跳過 → DO_MURA_DETECTED 不會被寫入</div>
+</div>
+<div class="note">用途：測試或調機時避免 DO_MURA_DETECTED 持續觸發 Nakan alarm。取像與曲線圖不受影響，僅暫停 IO 輸出。</div>
+</div>
+<div class="flow-group vflow" id="mura-detect-resume">
+<div class="flow-title">恢復檢測 <code>btnMuraDetectPause（再按一次）</code></div>
+<div class="box input">按下【恢復檢測】</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">_isMuraDetectPaused = false</div>
+<div class="v-arrow" data-label="平行"></div>
+<div class="out-par">
+<div class="box output">【恢復檢測】→ 文字改為「暫停檢測」，恢復預設外觀</div>
+<div class="box output">CheckLiveMura 恢復正常 → DO_MURA_DETECTED 正常輸出</div>
+</div>
+</div>
+<div class="flow-group vflow">
+<div class="flow-title">監控強化 <code>EnableMuraEnhance</code>（檢測設定）</div>
+<div class="box input">在【檢測設定】將「監控強化」設為 True</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">ApplyMuraEnhance(true) → SetImageProcessingEnabled + UpdateLiveDirectionVisual</div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">監控主畫面：顯示處理圖（下一幀生效）</div>
 <div class="box output">監控切向曲線圖/監控法向曲線圖：背景色高亮（藍）</div>
 </div>
+<div class="note">也可點擊監控曲線圖觸發（三態切換自動開關此設定）。設定值持久化於 JSON，下次開程式自動套用。</div>
 </div>
 <div class="flow-group vflow">
 <div class="flow-title">監控切向曲線圖/監控法向曲線圖 點擊 → 三態切換</div>
@@ -692,8 +716,8 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box action dev">Stitch 模式 → ShowStitchedCameraInCanvas(N)<br/>一般模式 → OnGallerySelectionChanged(N) → RunInspectionFullRes</div>
 </div>
 <div class="flow-group vflow">
-<div class="flow-title">回顧強化 <code>checkBoxShowProcessed</code></div>
-<div class="box input">勾選/取消【回顧強化】</div>
+<div class="flow-title">回顧強化 <code>EnableReviewEnhance</code>（檢測設定）</div>
+<div class="box input">在【檢測設定】將「回顧強化」設為 True / False</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">Stitch → ReloadCurrentStitchedView<br/>一般 → LoadImagesWithPeriodLockAsync</div>
 <div class="v-arrow"></div>
@@ -950,7 +974,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="v-arrow"></div>
 <div class="box input">修改 Recipe 參數（HessianMaxFactor / ErrorValue / RidgeDir）</div>
 <div class="v-arrow"></div>
-<div class="box action">強制勾選回顧強化 → ClearStitchedMode → 重新處理影像</div>
+<div class="box action">強制啟用回顧強化 → ClearStitchedMode → 重新處理影像</div>
 <div class="box input">修改合圖方式（垂直 ↔ 全域）</div>
 <div class="v-arrow" data-label="分支"></div>
 <div class="v-branch">
@@ -995,6 +1019,9 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box input">修改 ChartScaleMode / YMax</div>
 <div class="v-arrow"></div>
 <div class="box output">良率年/月/日圖：切換 Auto/Fixed 刻度</div>
+<div class="box input">修改 LocalMaxGB / FailProtectDays / RemotePath</div>
+<div class="v-arrow"></div>
+<div class="box output dev">Func delegate 即時取值 → StorageRetentionService 下次 Tick 生效 / RemoteCopyService 下次 Enqueue 生效</div>
 </div>
 <div class="flow-group vflow">
 <div class="flow-title">相機參數滑桿 <code>trackBarExp/Lr/Ht</code></div>
@@ -1076,6 +1103,10 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box output">CSV 追加一行：Mode=Grab, CamId, Width×Height, ProcessMs, SaveKB, SessionGB, RamMB, CpuPct, VramMB</div>
 </div>
 <div class="note dev">JPEG 存檔時的 8→24bpp 轉換 Bitmap（469 MB @ 16384×10000）使用 [ThreadStatic] 重用，避免每幀 LOH 分配觸發 Gen2 GC 尖峰。</div>
+<div class="v-arrow dev" data-label="串接"></div>
+<div class="box action dev">OnFilesSaved 回呼 → RemoteCopyService.EnqueueFiles</div>
+<div class="v-arrow dev"></div>
+<div class="box output dev">已存檔的檔案路徑排入遠端複製佇列（RemotePath 為空時跳過）</div>
 </div>
 
 <div class="flow-group vflow">
@@ -1099,7 +1130,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 
 <div class="flow-group vflow">
 <div class="flow-title">Review 運算計時 <code>InspectionEngine.ExecuteTimedOperation</code></div>
-<div class="box input">回顧強化開啟時，點擊縮圖或切換序號</div>
+<div class="box input">回顧強化（EnableReviewEnhance）開啟時，點擊縮圖或切換序號</div>
 <div class="v-arrow"></div>
 <div class="box action">RunInspectionFullRes / ProcessImageFullRes</div>
 <div class="v-arrow" data-label="分段計時"></div>
@@ -1125,6 +1156,41 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box action">磁碟用量 — SessionSaveBytes 累計（每幀存檔大小加總）</div>
 <div class="box action">IO 讀取時間 — Stopwatch 包夾 FastReadBMP / .bin 讀取</div>
 <div class="box action">UI 狀態 — Live(T/F), Review(T/F), StitchMode(Vertical/Global)（Form 注入 callback）</div>
+</div>
+
+<div class="flow-group vflow" id="storage-retention">
+<div class="flow-title">循環儲存 <code>StorageRetentionService</code></div>
+<div class="box input">Timer Tick（每 30 分鐘）</div>
+<div class="v-arrow" data-label="串接"></div>
+<div class="out-seq">
+<div class="box action">掃描 CaptureRootPath 磁碟用量（YYYY/YYYYMM/YYYYMMDD 目錄結構）</div>
+<div class="box action">超過 LocalMaxGB → 從最舊日期資料夾開始刪除影像（.jpg / .bmp / .bin）</div>
+</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">CSV 永不刪除</div>
+<div class="box output">FailProtectDays 內的 Fail 影像不刪除（讀 CSV 的 MaxExceed / MeanExceed 判定）</div>
+</div>
+<div class="v-arrow"></div>
+<div class="box output dev">OnCleanupCompleted 事件（清理日期資料夾數 / 釋放空間）</div>
+<div class="note dev">ExtractGrabIdFromFileName 將檔名 yyyyMMdd_HHmmss.fff-N_suffix 轉為 GrabId（yyMMdd-HHmmss）格式，用於比對 CSV 中的 Fail 記錄。</div>
+</div>
+
+<div class="flow-group vflow" id="remote-copy">
+<div class="flow-title">遠端複製 <code>RemoteCopyService</code></div>
+<div class="box input">CameraFrameSaver.OnFilesSaved 回呼（存檔完成後）</div>
+<div class="v-arrow" data-label="串接"></div>
+<div class="out-seq">
+<div class="box action">EnqueueFiles → ConcurrentQueue 排入</div>
+<div class="box action">背景執行緒 File.Copy（保持相對目錄結構）</div>
+<div class="box action">失敗重試 3 次，間隔 2 秒</div>
+</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">檔案複製到 RemotePath</div>
+<div class="box output">累計統計：TotalCopiedFiles / TotalCopiedBytes / TotalFailedFiles</div>
+</div>
+<div class="note dev">BelowNormal 執行緒優先級，不影響取像效能。遠端清理由儲存電腦自行負責。</div>
 </div>
 
 </div><!-- /系統監控 -->

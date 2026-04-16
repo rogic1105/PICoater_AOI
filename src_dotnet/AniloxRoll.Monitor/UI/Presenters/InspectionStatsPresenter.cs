@@ -53,7 +53,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _listView.Columns.Add("Pass", -1, HorizontalAlignment.Center);
             _listView.Columns.Add("Fail", -1, HorizontalAlignment.Center);
             _listView.Columns.Add("Total", -1, HorizontalAlignment.Center);
-            _listView.Columns.Add("無異常", -1, HorizontalAlignment.Center);
+            _listView.Columns.Add("合格率", -1, HorizontalAlignment.Center);
 
             for (int i = 1; i <= 7; i++)
             {

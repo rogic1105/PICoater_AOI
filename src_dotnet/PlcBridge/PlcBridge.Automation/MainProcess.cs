@@ -11,12 +11,12 @@ namespace PlcBridge.Automation
         private readonly Action<string> _updateStatusCallback;
 
         // IO Mapping
-        public const int DI_PLC_ALIVE = 0;
-        public const int DI_START = 1;
+        public const int DI_NAKAN_ALIVE   = 0;
+        public const int DI_INSPECT_START = 1;
 
-        public const int DO_PC_ALIVE = 0;
-        public const int DO_MURA = 1;
-        public const int DO_PC_BUSY = 2;
+        public const int DO_PC_ALIVE      = 0;
+        public const int DO_MURA_DETECTED = 1;
+        public const int DO_PC_INSPECT    = 2;
 
         private string _currentStatus = "Initial";
         private bool _lastDiStart = false;
@@ -43,8 +43,8 @@ namespace PlcBridge.Automation
             {
                 await _plc.WriteDo(DO_PC_ALIVE, true);
                 _isPcAlive = true;
-                await _plc.WriteDo(DO_MURA, false);
-                await _plc.WriteDo(DO_PC_BUSY, false);
+                await _plc.WriteDo(DO_MURA_DETECTED, false);
+                await _plc.WriteDo(DO_PC_INSPECT, false);
                 SetStatus("Ready");
             }
         }
@@ -53,7 +53,7 @@ namespace PlcBridge.Automation
         {
             if (_currentStatus == "Run" && _plc.IsConnected)
             {
-                await _plc.WriteDo(DO_MURA, true);
+                await _plc.WriteDo(DO_MURA_DETECTED, true);
                 SetStatus("MURA");
             }
         }
@@ -73,8 +73,8 @@ namespace PlcBridge.Automation
                 PlcLogger.Info("Recovering from PCErr.");
                 await _plc.WriteDo(DO_PC_ALIVE, true);
                 _isPcAlive = true;
-                await _plc.WriteDo(DO_MURA, false);
-                await _plc.WriteDo(DO_PC_BUSY, false);
+                await _plc.WriteDo(DO_MURA_DETECTED, false);
+                await _plc.WriteDo(DO_PC_INSPECT, false);
                 SetStatus("Ready");
             }
         }
@@ -83,8 +83,8 @@ namespace PlcBridge.Automation
         {
             if (diStates == null || diStates.Length < 8) return Task.CompletedTask;
 
-            bool currentDiStart = diStates[DI_START];
-            bool currentPlcAlive = diStates[DI_PLC_ALIVE];
+            bool currentDiStart = diStates[DI_INSPECT_START];
+            bool currentPlcAlive = diStates[DI_NAKAN_ALIVE];
 
             if (_isPcAlive && !currentPlcAlive && _currentStatus != "PLCErr" && _currentStatus != "PCErr")
             {
@@ -122,8 +122,8 @@ namespace PlcBridge.Automation
 
                 if (_plc.IsConnected)
                 {
-                    await _plc.WriteDo(DO_MURA, false);
-                    await _plc.WriteDo(DO_PC_BUSY, false);
+                    await _plc.WriteDo(DO_MURA_DETECTED, false);
+                    await _plc.WriteDo(DO_PC_INSPECT, false);
                 }
             }
             catch (SocketException ex) { PlcLogger.Error("ExecutePlcErrorSequence socket error", ex); }
@@ -136,7 +136,7 @@ namespace PlcBridge.Automation
             {
                 PlcLogger.Info("START signal detected, beginning inspection.");
                 SetStatus("Start");
-                if (_plc.IsConnected) await _plc.WriteDo(DO_PC_BUSY, true);
+                if (_plc.IsConnected) await _plc.WriteDo(DO_PC_INSPECT, true);
 
                 _isInspecting = true;
                 _inspectCount = 0;
@@ -159,8 +159,8 @@ namespace PlcBridge.Automation
 
                 if (_plc.IsConnected)
                 {
-                    await _plc.WriteDo(DO_MURA, false);
-                    await _plc.WriteDo(DO_PC_BUSY, false);
+                    await _plc.WriteDo(DO_MURA_DETECTED, false);
+                    await _plc.WriteDo(DO_PC_INSPECT, false);
                 }
 
                 await Task.Delay(1000);
@@ -189,8 +189,8 @@ namespace PlcBridge.Automation
             {
                 await _plc.WriteDo(DO_PC_ALIVE, false);
                 _isPcAlive = false;
-                await _plc.WriteDo(DO_MURA, false);
-                await _plc.WriteDo(DO_PC_BUSY, false);
+                await _plc.WriteDo(DO_MURA_DETECTED, false);
+                await _plc.WriteDo(DO_PC_INSPECT, false);
             }
             SetStatus("Closed");
         }

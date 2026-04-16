@@ -22,8 +22,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public Chart ChartOverview { get; set; }
         public Chart ChartMuraVertical { get; set; }
         public Chart ChartMuraHorizontal { get; set; }
-        public CheckBox CheckBoxShowProcessed { get; set; }
-
         public FormInteractionHelper InteractionHelper { get; set; }
         public ColumnCurveChartHelper ColumnChartHelper { get; set; }
         public RowCurveChartHelper RowChartHelper { get; set; }
@@ -36,8 +34,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         public InspectionSettings Settings { get; set; }
         public DateTimeNavigator DateTimeNavigator { get; set; }
-        public EventGuard ProcessedCheckboxGuard { get; set; }
-
         public int CameraCount { get; set; }
     }
 
@@ -100,8 +96,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             _ctx.InteractionHelper.SetUiLoadingState(true);
             LastReviewProcessedMode = enableProcess;
-            using (_ctx.ProcessedCheckboxGuard.Enter())
-                _ctx.CheckBoxShowProcessed.Checked = enableProcess;
+            _ctx.Settings.EnableReviewEnhance = enableProcess;
             var swTotal = Stopwatch.StartNew();
             try
             {

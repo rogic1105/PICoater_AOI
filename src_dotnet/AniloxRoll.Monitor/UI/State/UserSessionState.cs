@@ -104,20 +104,8 @@ namespace AniloxRoll.Monitor.UI.State
         public static string LastHour                  => Get("LastHour");
         public static string LastMin                   => Get("LastMin");
         public static string LastSec                   => Get("LastSec");
-        public static bool   LastEnableImageProcessing =>
-            bool.TryParse(Get("LastEnableImageProcessing"), out bool v) && v;
-
-        public static bool GetLastEnableImageProcessing(bool fallback)
-        {
-            string raw = Get("LastEnableImageProcessing");
-            return string.IsNullOrEmpty(raw) ? fallback : (bool.TryParse(raw, out bool v) && v);
-        }
-
         public static void SetLastDataPath(string path)
             => _data["LastDataPath"] = path ?? string.Empty;
-
-        public static void SetLastEnableImageProcessing(bool enabled)
-            => _data["LastEnableImageProcessing"] = enabled.ToString();
 
         public static void SaveDateTimeSelection(string year, string month, string day,
                                                   string hour, string min, string sec)

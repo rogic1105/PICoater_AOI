@@ -11,11 +11,11 @@
 - `Acquisition/AniloxCamera.cs` — 單台相機 MIL 資源封裝
 - `Acquisition/CaptureTimestampCoordinator.cs` — 多相機時間戳同步
 - `UI/Managers/LiveCameraManager.cs` — 多台相機生命週期管理
-- `Services/PlcGrabController.cs` — PLC FSM、IO 追蹤、Watchdog
-- `Services/PlcState.cs` — PlcState enum + PlcIoSnapshot
+- `Services/IoGrabController.cs` — IO FSM、IO 追蹤、Watchdog
+- `Services/IoState.cs` — IoState enum + IoSnapshot
 - `UI/Presenters/LiveTelemetryPresenter.cs` — 16 欄即時 Telemetry
 - `Settings/Stores/AcquisitionSettingsStore.cs` — acquisition-settings.json
-- `docs/MIL_API_Reference.md` — MIL .NET API 完整參考
+- `docs/dev/MIL_API_Reference.md` — MIL .NET API 完整參考
 
 ## MIL 初始化順序（不可打亂）
 
@@ -98,7 +98,7 @@ _isReleased = true → MdigProcess(M_STOP)
 
 - PlcState FSM：Idle → Running → Stopping → Faulted / CommLost
 - IO 快照 5 LED：DI0(GRAB), DI1(STOP), DI2(MURA_ACK), DO0(READY), DO1(MURA)
-- DO_MURA 不中斷取像（MIL callback 仍持續運作）
+- DO_MURA_DETECTED 不中斷取像（MIL callback 仍持續運作）
 - ET-7044 模組 IP 可設，PollTick ~500ms
 
 ## 步驟

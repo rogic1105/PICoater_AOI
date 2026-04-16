@@ -48,12 +48,12 @@
             System.Windows.Forms.DataVisualization.Charting.Series series6 = new System.Windows.Forms.DataVisualization.Charting.Series();
             this.tabMain = new System.Windows.Forms.TabControl();
             this.tabPageLiveView = new System.Windows.Forms.TabPage();
+            this.btnMuraDetectPause = new System.Windows.Forms.Button();
             this.btnViewBackground = new System.Windows.Forms.Button();
             this.btnGetBackground = new System.Windows.Forms.Button();
             this.muraChartHorizontalLive = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.chartLiveOverview = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.muraChartVerticalLive = new System.Windows.Forms.DataVisualization.Charting.Chart();
-            this.checkBoxEnableImageProcessing = new System.Windows.Forms.CheckBox();
             this.btnCameraFree = new System.Windows.Forms.Button();
             this.btnCameraGrab = new System.Windows.Forms.Button();
             this.panelMainDisplay = new System.Windows.Forms.Panel();
@@ -74,7 +74,6 @@
             this.btnPeriodPrev = new System.Windows.Forms.Button();
             this.chartMuraVertical = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.btnSelectFolder = new System.Windows.Forms.Button();
-            this.checkBoxShowProcessed = new System.Windows.Forms.CheckBox();
             this.pbCam1 = new System.Windows.Forms.PictureBox();
             this.pbCam2 = new System.Windows.Forms.PictureBox();
             this.pbCam3 = new System.Windows.Forms.PictureBox();
@@ -405,12 +404,12 @@
             // 
             // tabPageLiveView
             // 
+            this.tabPageLiveView.Controls.Add(this.btnMuraDetectPause);
             this.tabPageLiveView.Controls.Add(this.btnViewBackground);
             this.tabPageLiveView.Controls.Add(this.btnGetBackground);
             this.tabPageLiveView.Controls.Add(this.muraChartHorizontalLive);
             this.tabPageLiveView.Controls.Add(this.chartLiveOverview);
             this.tabPageLiveView.Controls.Add(this.muraChartVerticalLive);
-            this.tabPageLiveView.Controls.Add(this.checkBoxEnableImageProcessing);
             this.tabPageLiveView.Controls.Add(this.btnCameraFree);
             this.tabPageLiveView.Controls.Add(this.btnCameraGrab);
             this.tabPageLiveView.Controls.Add(this.panelMainDisplay);
@@ -428,6 +427,17 @@
             this.tabPageLiveView.TabIndex = 0;
             this.tabPageLiveView.Text = "即時監控";
             this.tabPageLiveView.UseVisualStyleBackColor = true;
+            // 
+            // btnMuraDetectPause
+            // 
+            this.btnMuraDetectPause.Location = new System.Drawing.Point(900, 88);
+            this.btnMuraDetectPause.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
+            this.btnMuraDetectPause.Name = "btnMuraDetectPause";
+            this.btnMuraDetectPause.Size = new System.Drawing.Size(114, 38);
+            this.btnMuraDetectPause.TabIndex = 22;
+            this.btnMuraDetectPause.Text = "暫停檢測";
+            this.btnMuraDetectPause.UseVisualStyleBackColor = true;
+            this.btnMuraDetectPause.Click += new System.EventHandler(this.btnMuraDetectPause_Click);
             // 
             // btnViewBackground
             // 
@@ -502,18 +512,7 @@
             this.muraChartVerticalLive.Size = new System.Drawing.Size(888, 96);
             this.muraChartVerticalLive.TabIndex = 17;
             this.muraChartVerticalLive.Text = "chart1";
-            // 
-            // checkBoxEnableImageProcessing
-            // 
-            this.checkBoxEnableImageProcessing.AutoSize = true;
-            this.checkBoxEnableImageProcessing.Location = new System.Drawing.Point(900, 93);
-            this.checkBoxEnableImageProcessing.Name = "checkBoxEnableImageProcessing";
-            this.checkBoxEnableImageProcessing.Size = new System.Drawing.Size(88, 19);
-            this.checkBoxEnableImageProcessing.TabIndex = 8;
-            this.checkBoxEnableImageProcessing.Text = "強化mura";
-            this.checkBoxEnableImageProcessing.UseVisualStyleBackColor = true;
-            this.checkBoxEnableImageProcessing.CheckedChanged += new System.EventHandler(this.checkBoxEnableImageProcessing_CheckedChanged);
-            // 
+            //
             // btnCameraFree
             // 
             this.btnCameraFree.Location = new System.Drawing.Point(900, 48);
@@ -602,7 +601,6 @@
             this.tabPageReview.Controls.Add(this.grpReviewTimePeriod);
             this.tabPageReview.Controls.Add(this.chartMuraVertical);
             this.tabPageReview.Controls.Add(this.btnSelectFolder);
-            this.tabPageReview.Controls.Add(this.checkBoxShowProcessed);
             this.tabPageReview.Controls.Add(this.pbCam1);
             this.tabPageReview.Controls.Add(this.pbCam2);
             this.tabPageReview.Controls.Add(this.pbCam3);
@@ -735,19 +733,7 @@
             this.btnSelectFolder.Text = "讀取資料";
             this.btnSelectFolder.UseVisualStyleBackColor = true;
             this.btnSelectFolder.Click += new System.EventHandler(this.btnSelectFolder_Click);
-            // 
-            // checkBoxShowProcessed
-            // 
-            this.checkBoxShowProcessed.AutoSize = true;
-            this.checkBoxShowProcessed.Font = new System.Drawing.Font("微軟正黑體", 10.2F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(136)));
-            this.checkBoxShowProcessed.Location = new System.Drawing.Point(907, 44);
-            this.checkBoxShowProcessed.Name = "checkBoxShowProcessed";
-            this.checkBoxShowProcessed.Size = new System.Drawing.Size(107, 26);
-            this.checkBoxShowProcessed.TabIndex = 21;
-            this.checkBoxShowProcessed.Text = "強化mura";
-            this.checkBoxShowProcessed.UseVisualStyleBackColor = true;
-            this.checkBoxShowProcessed.CheckedChanged += new System.EventHandler(this.checkBoxShowProcessed_CheckedChanged);
-            // 
+            //
             // pbCam1
             // 
             this.pbCam1.Location = new System.Drawing.Point(6, 6);
@@ -1087,9 +1073,9 @@
             this.groupBoxGrabIdRange.Controls.Add(this.cbGrabIdEnd);
             this.groupBoxGrabIdRange.Controls.Add(this.lblGrabIdEndLabel);
             this.groupBoxGrabIdRange.Controls.Add(this.lblGrabIdStartLabel);
-            this.groupBoxGrabIdRange.Location = new System.Drawing.Point(745, 384);
+            this.groupBoxGrabIdRange.Location = new System.Drawing.Point(718, 384);
             this.groupBoxGrabIdRange.Name = "groupBoxGrabIdRange";
-            this.groupBoxGrabIdRange.Size = new System.Drawing.Size(149, 92);
+            this.groupBoxGrabIdRange.Size = new System.Drawing.Size(176, 92);
             this.groupBoxGrabIdRange.TabIndex = 36;
             this.groupBoxGrabIdRange.TabStop = false;
             this.groupBoxGrabIdRange.Text = "序號範圍";
@@ -1099,7 +1085,7 @@
             this.cbGrabIdStart.FormattingEnabled = true;
             this.cbGrabIdStart.Location = new System.Drawing.Point(52, 24);
             this.cbGrabIdStart.Name = "cbGrabIdStart";
-            this.cbGrabIdStart.Size = new System.Drawing.Size(76, 23);
+            this.cbGrabIdStart.Size = new System.Drawing.Size(104, 23);
             this.cbGrabIdStart.TabIndex = 42;
             // 
             // cbGrabIdEnd
@@ -1107,7 +1093,7 @@
             this.cbGrabIdEnd.FormattingEnabled = true;
             this.cbGrabIdEnd.Location = new System.Drawing.Point(52, 52);
             this.cbGrabIdEnd.Name = "cbGrabIdEnd";
-            this.cbGrabIdEnd.Size = new System.Drawing.Size(76, 23);
+            this.cbGrabIdEnd.Size = new System.Drawing.Size(104, 23);
             this.cbGrabIdEnd.TabIndex = 43;
             // 
             // lblGrabIdEndLabel
@@ -1138,9 +1124,9 @@
             this.groupBoxTimeRange.Controls.Add(this.lblEndTimeHeader);
             this.groupBoxTimeRange.Controls.Add(this.cbEndDate);
             this.groupBoxTimeRange.Controls.Add(this.cbEndTime);
-            this.groupBoxTimeRange.Location = new System.Drawing.Point(745, 482);
+            this.groupBoxTimeRange.Location = new System.Drawing.Point(718, 482);
             this.groupBoxTimeRange.Name = "groupBoxTimeRange";
-            this.groupBoxTimeRange.Size = new System.Drawing.Size(270, 92);
+            this.groupBoxTimeRange.Size = new System.Drawing.Size(297, 92);
             this.groupBoxTimeRange.TabIndex = 35;
             this.groupBoxTimeRange.TabStop = false;
             this.groupBoxTimeRange.Text = "時序範圍";
@@ -1216,7 +1202,7 @@
             this.listViewStats.HideSelection = false;
             this.listViewStats.Location = new System.Drawing.Point(397, 384);
             this.listViewStats.Name = "listViewStats";
-            this.listViewStats.Size = new System.Drawing.Size(342, 244);
+            this.listViewStats.Size = new System.Drawing.Size(293, 244);
             this.listViewStats.TabIndex = 9;
             this.listViewStats.UseCompatibleStateImageBehavior = false;
             // 
@@ -3186,7 +3172,7 @@
             this.lblIoDiAlive.Name = "lblIoDiAlive";
             this.lblIoDiAlive.Size = new System.Drawing.Size(57, 32);
             this.lblIoDiAlive.TabIndex = 0;
-            this.lblIoDiAlive.Text = "DI0\r\nDEV_ALV";
+            this.lblIoDiAlive.Text = "DI0\r\nNKN_ALV";
             this.lblIoDiAlive.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
             // lblIoDiStart
@@ -3200,7 +3186,7 @@
             this.lblIoDiStart.Name = "lblIoDiStart";
             this.lblIoDiStart.Size = new System.Drawing.Size(57, 32);
             this.lblIoDiStart.TabIndex = 1;
-            this.lblIoDiStart.Text = "DI1\r\nSTART";
+            this.lblIoDiStart.Text = "DI1\r\nINSPECT";
             this.lblIoDiStart.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
             // lblIoDoPcAlive
@@ -3228,7 +3214,7 @@
             this.lblIoDoMura.Name = "lblIoDoMura";
             this.lblIoDoMura.Size = new System.Drawing.Size(57, 32);
             this.lblIoDoMura.TabIndex = 3;
-            this.lblIoDoMura.Text = "DO1\r\nMURA_NG";
+            this.lblIoDoMura.Text = "DO1\r\nMURA_DET";
             this.lblIoDoMura.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
             // lblIoDoPcBusy
@@ -3242,7 +3228,7 @@
             this.lblIoDoPcBusy.Name = "lblIoDoPcBusy";
             this.lblIoDoPcBusy.Size = new System.Drawing.Size(59, 32);
             this.lblIoDoPcBusy.TabIndex = 4;
-            this.lblIoDoPcBusy.Text = "DO2\r\nPC_BSY";
+            this.lblIoDoPcBusy.Text = "DO2\r\nINSPECT";
             this.lblIoDoPcBusy.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
             // AniloxRollForm
@@ -3415,7 +3401,6 @@
         private System.Windows.Forms.PictureBox pbCam1;
         private System.Windows.Forms.ComboBox cbDate;
         private System.Windows.Forms.ComboBox cbTime;
-        private System.Windows.Forms.CheckBox checkBoxShowProcessed;
         private System.Windows.Forms.Button btnSelectFolder;
         private System.Windows.Forms.StatusStrip statusBarMain;
         private System.Windows.Forms.ToolStripStatusLabel lblPixelInfo;
@@ -3435,7 +3420,6 @@
         private System.Windows.Forms.Panel panelLiveCam2;
         private System.Windows.Forms.Button btnCameraFree;
         private System.Windows.Forms.Button btnCameraGrab;
-        private System.Windows.Forms.CheckBox checkBoxEnableImageProcessing;
         private System.Windows.Forms.Button btnPeriodPrev;
         private System.Windows.Forms.Button btnPeriodNext;
         private System.Windows.Forms.TabControl tabControlRight;
@@ -3633,5 +3617,6 @@
         private System.Windows.Forms.ListView listViewHardware;
         private System.Windows.Forms.Label label41;
         private System.Windows.Forms.Button btnViewBackground;
+        private System.Windows.Forms.Button btnMuraDetectPause;
     }
 }

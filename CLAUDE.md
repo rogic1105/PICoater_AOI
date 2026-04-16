@@ -40,7 +40,7 @@ PICoater_AOI/
 | `ImageProcessing/InspectionEngine.ImageProcessing.cs` | 縮圖/全解析度影像處理 |
 | `ImageProcessing/InspectionEngineConfig.cs` | MaxWidth=16384, MaxHeight=10000, DefaultSaveResizeScale=5 |
 | `ImageProcessing/BatchInspectionService.cs` | Parallel.For 批次縮圖 |
-| `UI/Form/AniloxRollForm.cs` | Form 邏輯：事件、InitializeSystem；內含 helpers: `BindBidirectionalSync`、`SetChartYRange`、`FindCameraById`、`CheckLiveMura`（Live 即時閾值→DO_MURA） |
+| `UI/Form/AniloxRollForm.cs` | Form 邏輯：事件、InitializeSystem；內含 helpers: `BindBidirectionalSync`、`SetChartYRange`、`FindCameraById`、`CheckLiveMura`（Live 即時閾值→DO_MURA_DETECTED） |
 | `UI/Form/AniloxRollForm.Designer.cs` | Form 控制項佈局（VS Designer） |
 | `UI/Widgets/FormInteractionHelper.cs` | UI 互動、gallery 選擇、計時；ReviewConfig 代理 |
 | `UI/Widgets/CanvasInteractionHelper.cs` | Canvas zoom/pan 事件、mm 座標換算；ReviewConfig → GetEffectiveOps/Pos |
@@ -70,8 +70,8 @@ PICoater_AOI/
 | `Services/AoiService.cs` | C# ↔ Native P/Invoke wrapper（ProcessImage + ComputeColumnMean） |
 | `Services/InspectionLogService.cs` | 每日 CSV 寫入；GrabId = `yyMMdd-HHmmss` 時間戳格式 |
 | `Services/InspectionStatisticsService.cs` | CSV 統計服務；LoadConfigForDate（按日期載入 #CFG） |
-| `Services/PlcState.cs` | PlcState enum（FSM 狀態）+ PlcIoSnapshot struct（IO 快照） |
-| `Services/PlcGrabController.cs` | IO-Grab 連動：PlcState FSM、IO 追蹤、Watchdog keepalive；支援 IModbusTcpClient 注入測試 |
+| `Services/IoState.cs` | IoState enum（FSM 狀態）+ IoSnapshot struct（IO 快照） |
+| `Services/IoGrabController.cs` | IO-Grab 連動：IoState FSM、IO 追蹤、Watchdog keepalive；支援 IModbusTcpClient 注入測試 |
 | `Services/CsvConfigSnapshot.cs` | 不可變設定快照（CamOps/CamPos/CamGrabHeight/Hessian/ErrorValue） |
 | `Services/StorageRetentionService.cs` | 循環儲存：Timer 定期掃描磁碟用量，刪除最舊日期資料夾影像，保護 CSV 與 Fail 影像 |
 | `Services/RemoteCopyService.cs` | 背景遠端複製：ConcurrentQueue + 背景執行緒，File.Copy 含重試（3 次） |
@@ -91,7 +91,7 @@ PICoater_AOI/
 | `AcquisitionSettingsTests.cs` | Validate fallback、JSON Save/Load |
 | `InspectionLogServiceTests.cs` | CSV 寫入、#CFG 插入、Pass/Fail 判定 |
 | `InspectionStatisticsServiceTests.cs` | 時間/序號統計、veto 邏輯、Period 分組 |
-| `PlcGrabControllerTests.cs` | FSM 狀態機：連線、邊緣偵測、故障恢復、CommLost |
+| `IoGrabControllerTests.cs` | FSM 狀態機：連線、邊緣偵測、故障恢復、CommLost |
 | `StressTests.cs` | 長時間壓力：PLC 100 萬循環、CSV 50 萬筆、Settings 14.5 萬讀寫；STRESS_MINUTES 環境變數控制時長 |
 
 ---
@@ -134,6 +134,8 @@ PICoater_AOI/
 | 正規值 | `HessianMaxFactor` | 1.0 | Hessian 正規化係數 |
 | 背景取樣秒數 | `BackgroundSampleSeconds` | 3 | StandardBgSub 採集時間 |
 | A輪速度 (m/min) | `AniloxRollSpeedMPerMin` | 10.0 | Anilox 輪速 |
+| 監控強化 | `EnableMuraEnhance` | false | 即時影像強化 Mura（原 checkBoxEnableImageProcessing） |
+| 回顧強化 | `EnableReviewEnhance` | false | 回顧影像強化 Mura（原 checkBoxShowProcessed） |
 
 ### 3. 檢測報表設定
 
@@ -179,7 +181,6 @@ PICoater_AOI/
 |---------|------|------|---------|
 | 開始抓取 | `btnCameraGrab` | Button | 開始抓取 / 停止抓取 |
 | 釋放相機 | `btnCameraFree` | Button | 釋放相機 |
-| 監控強化 | `checkBoxEnableImageProcessing` | CheckBox | 強化mura |
 | 取得背景 | `btnGetBackground` | Button | 取得背景 |
 | 預覽背景 | `btnViewBackground` | Button | 預覽背景 |
 | 監控主畫面 | `panelMainDisplay` | Panel | — |
@@ -187,13 +188,13 @@ PICoater_AOI/
 | 監控切向曲線圖 | `muraChartVerticalLive` | Chart | — |
 | 監控法向曲線圖 | `muraChartHorizontalLive` | Chart | — |
 | 監控全覽圖 | `chartLiveOverview` | Chart | — |
+| 暫停檢測 | `btnMuraDetectPause` | Button | 暫停檢測 / 恢復檢測 |
 
 ### 歷史查詢（tabPageReview）
 
 | 標準名稱 | Name | 類型 | 畫面文字 |
 |---------|------|------|---------|
 | 讀取資料 | `btnSelectFolder`（Review）/ `btnSelectDataFolder`（Data） | Button | 讀取資料 |
-| 回顧強化 | `checkBoxShowProcessed` | CheckBox | 強化mura |
 | 回顧縮圖1~7 | `pbCam1~7` | PictureBox | — |
 | 回顧主畫面 | `canvasMain` | SmartCanvas | — |
 | 回顧切向曲線圖 | `chartMuraVertical` | Chart | — |
@@ -277,12 +278,19 @@ PICoater_AOI/
 
 | 文件 | 用途 |
 |------|------|
-| [`docs/MIL_API_Reference.md`](docs/MIL_API_Reference.md) | MIL .NET API 完整參考（常數、方法、範例） |
-| [`docs/user-manual/plc_diagrams.html`](docs/user-manual/plc_diagrams.html) | PLC FSM 視覺化（瀏覽器開啟） |
+| [`docs/dev/MIL_API_Reference.md`](docs/dev/MIL_API_Reference.md) | MIL .NET API 完整參考（常數、方法、範例） |
+| [`docs/dev/system-resources.md`](docs/dev/system-resources.md) | 系統資源用量（GPU/CPU/RAM 評估） |
+| [`docs/user-manual/io_diagrams.html`](docs/user-manual/io_diagrams.html) | IO FSM 視覺化（ET-7044 ↔ 設備 Nakan，瀏覽器開啟） |
 
 ### docs/ 目錄定位
 
-`docs/` 為**使用者操作說明書**，面向操作人員而非開發者。開發知識統一放 `.claude/skills/`。
+```
+docs/
+├── dev/            ← 開發者/部署參考（API、硬體規格評估）
+└── user-manual/    ← 操作員說明書（UI 流程、IO 圖、硬體規格）
+```
+
+開發知識統一放 `.claude/skills/`，`docs/dev/` 放大型參考文件。
 
 **撰寫/更新 docs/ 規則**：必須比對實際程式碼確認功能狀態，不可只參考 skills（skills 本身可能滯後）。
 

@@ -21,8 +21,8 @@ namespace AniloxRoll.Monitor.Core.Services
         private Timer _timer;
         private volatile bool _running;
 
-        /// <summary>最近一次清理刪除的檔案數。</summary>
-        public int LastCleanedFileCount { get; private set; }
+        /// <summary>最近一次清理的日期資料夾數。</summary>
+        public int LastCleanedDayFolders { get; private set; }
         /// <summary>最近一次清理釋放的空間（bytes）。</summary>
         public long LastCleanedBytes { get; private set; }
         /// <summary>最近一次掃描的總用量（bytes）。</summary>
@@ -79,7 +79,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 var failGrabIds = CollectFailGrabIds(root, protectCutoff);
 
                 // 4. 從最舊開始刪，直到低於上限
-                int deletedFiles = 0;
+                int deletedDayFolders = 0;
                 long deletedBytes = 0;
 
                 foreach (var dayFolder in dayFolders)
@@ -94,20 +94,20 @@ namespace AniloxRoll.Monitor.Core.Services
                     {
                         deletedBytes += freed;
                         totalBytes -= freed;
-                        deletedFiles++;
+                        deletedDayFolders++;
 
                         // 如果資料夾只剩 CSV，也算清理完成
                         TryRemoveEmptyImageFolder(dayFolder.Path);
                     }
                 }
 
-                LastCleanedFileCount = deletedFiles;
+                LastCleanedDayFolders = deletedDayFolders;
                 LastCleanedBytes = deletedBytes;
                 LastScannedTotalBytes = totalBytes;
 
                 var result = new RetentionCleanupResult
                 {
-                    DeletedFiles = deletedFiles,
+                    DeletedDayFolders = deletedDayFolders,
                     FreedBytes = deletedBytes,
                     RemainingBytes = totalBytes,
                     MaxBytes = maxBytes
@@ -346,7 +346,7 @@ namespace AniloxRoll.Monitor.Core.Services
 
     public class RetentionCleanupResult
     {
-        public int DeletedFiles { get; set; }
+        public int DeletedDayFolders { get; set; }
         public long FreedBytes { get; set; }
         public long RemainingBytes { get; set; }
         public long MaxBytes { get; set; }

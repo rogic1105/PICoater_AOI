@@ -16,13 +16,13 @@ namespace AniloxRoll.Monitor.Core.Services
     ///   DO-1: MURA         (PC → PLC, 檢測到瑕疵 = High)
     ///   DO-2: PC BUSY      (PC → PLC, Grab 中 = High)
     /// </summary>
-    public class PlcGrabController : IDisposable
+    public class IoGrabController : IDisposable
     {
-        private const int DI_PLC_ALIVE = 0;
-        private const int DI_START     = 1;
-        private const int DO_PC_ALIVE  = 0;
-        private const int DO_MURA      = 1;
-        private const int DO_PC_BUSY   = 2;
+        private const int DI_NAKAN_ALIVE   = 0;
+        private const int DI_INSPECT_START = 1;
+        private const int DO_PC_ALIVE      = 0;
+        private const int DO_MURA_DETECTED = 1;
+        private const int DO_PC_INSPECT    = 2;
 
         private readonly IModbusTcpClient _plc;
         private readonly Timer _pollTimer;
@@ -30,7 +30,7 @@ namespace AniloxRoll.Monitor.Core.Services
 
         private bool _lastDiStart;
         private bool _isPcAlive;
-        private PlcState _currentState = PlcState.Disconnected;
+        private IoState _currentState = IoState.Disconnected;
         private string _plcIp = "192.168.255.1";
         private int _plcPort = 502;
 
@@ -43,7 +43,7 @@ namespace AniloxRoll.Monitor.Core.Services
         public bool IsConnected => _plc.IsConnected;
 
         /// <summary>目前 FSM 狀態。</summary>
-        public PlcState CurrentState => _currentState;
+        public IoState CurrentState => _currentState;
 
         /// <summary>硬體型號。</summary>
         public string Model => "ET-7044";
@@ -70,17 +70,17 @@ namespace AniloxRoll.Monitor.Core.Services
         public event Action OnStopRequested;
 
         /// <summary>狀態變更通知（UI 更新用）。</summary>
-        public event Action<PlcState> OnStateChanged;
+        public event Action<IoState> OnStateChanged;
 
         /// <summary>連線狀態變更（connected / disconnected）。</summary>
         public event Action<bool> OnConnectionChanged;
 
         /// <summary>每次 PollTick 結束時發送所有 IO 快照。</summary>
-        public event Action<PlcIoSnapshot> OnIoUpdated;
+        public event Action<IoSnapshot> OnIoUpdated;
 
-        public PlcGrabController() : this(new IcpDasModbusTcpClient()) { }
+        public IoGrabController() : this(new IcpDasModbusTcpClient()) { }
 
-        internal PlcGrabController(IModbusTcpClient plcClient)
+        internal IoGrabController(IModbusTcpClient plcClient)
         {
             _plc = plcClient;
             _plc.ReadWriteTimeoutMs = 2000;
@@ -123,16 +123,16 @@ namespace AniloxRoll.Monitor.Core.Services
                 try
                 {
                     await _plc.WriteDo(DO_PC_ALIVE, false);
-                    await _plc.WriteDo(DO_MURA, false);
-                    await _plc.WriteDo(DO_PC_BUSY, false);
+                    await _plc.WriteDo(DO_MURA_DETECTED, false);
+                    await _plc.WriteDo(DO_PC_INSPECT, false);
                 }
-                catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[PlcGrabController.Close] {ex.GetType().Name}: {ex.Message}"); }
+                catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[IoGrabController.Close] {ex.GetType().Name}: {ex.Message}"); }
             }
             _isPcAlive = false;
             _doPcAlive = false;
             _doMura = false;
             _doPcBusy = false;
-            SetState(PlcState.Closed);
+            SetState(IoState.Closed);
             _plc.Dispose();
             OnConnectionChanged?.Invoke(false);
         }
@@ -143,7 +143,7 @@ namespace AniloxRoll.Monitor.Core.Services
             if (!_plc.IsConnected) return;
             try
             {
-                await _plc.WriteDo(DO_PC_BUSY, true);
+                await _plc.WriteDo(DO_PC_INSPECT, true);
                 _doPcBusy = true;
             }
             catch (Exception ex) { PlcLogger.Error("WriteDo PC_BUSY=true failed", ex); }
@@ -155,7 +155,7 @@ namespace AniloxRoll.Monitor.Core.Services
             if (!_plc.IsConnected) return;
             try
             {
-                await _plc.WriteDo(DO_PC_BUSY, false);
+                await _plc.WriteDo(DO_PC_INSPECT, false);
                 _doPcBusy = false;
             }
             catch (Exception ex) { PlcLogger.Error("WriteDo PC_BUSY=false failed", ex); }
@@ -167,7 +167,7 @@ namespace AniloxRoll.Monitor.Core.Services
             if (!_plc.IsConnected) return;
             try
             {
-                await _plc.WriteDo(DO_MURA, true);
+                await _plc.WriteDo(DO_MURA_DETECTED, true);
                 _doMura = true;
             }
             catch (Exception ex) { PlcLogger.Error("WriteDo MURA=true failed", ex); }
@@ -179,7 +179,7 @@ namespace AniloxRoll.Monitor.Core.Services
             if (!_plc.IsConnected) return;
             try
             {
-                await _plc.WriteDo(DO_MURA, false);
+                await _plc.WriteDo(DO_MURA_DETECTED, false);
                 _doMura = false;
             }
             catch (Exception ex) { PlcLogger.Error("WriteDo MURA=false failed", ex); }
@@ -192,15 +192,15 @@ namespace AniloxRoll.Monitor.Core.Services
             await _plc.WriteDo(DO_PC_ALIVE, true);
             _isPcAlive = true;
             _doPcAlive = true;
-            await _plc.WriteDo(DO_MURA, false);
+            await _plc.WriteDo(DO_MURA_DETECTED, false);
             _doMura = false;
-            await _plc.WriteDo(DO_PC_BUSY, false);
+            await _plc.WriteDo(DO_PC_INSPECT, false);
             _doPcBusy = false;
             _lastDiStart = false;
-            SetState(PlcState.Idle);
+            SetState(IoState.Idle);
         }
 
-        private void SetState(PlcState state)
+        private void SetState(IoState state)
         {
             if (_currentState == state) return;
             PlcLogger.Info($"PLC State: {_currentState} -> {state}");
@@ -210,13 +210,13 @@ namespace AniloxRoll.Monitor.Core.Services
 
         private void FireIoSnapshot(bool diPlcAlive, bool diStart)
         {
-            OnIoUpdated?.Invoke(new PlcIoSnapshot
+            OnIoUpdated?.Invoke(new IoSnapshot
             {
-                DiPlcAlive = diPlcAlive,
-                DiStart    = diStart,
+                DiNakanAlive = diPlcAlive,
+                DiInspectStart = diStart,
                 DoPcAlive  = _doPcAlive,
-                DoMura     = _doMura,
-                DoPcBusy   = _doPcBusy
+                DoMuraDetected = _doMura,
+                DoPcInspect = _doPcBusy
             });
         }
 
@@ -229,22 +229,22 @@ namespace AniloxRoll.Monitor.Core.Services
                 var diStates = await _plc.ReadDiStatuses();
                 if (diStates == null || diStates.Length < 2) return;
 
-                bool plcAlive = diStates[DI_PLC_ALIVE];
-                bool diStart  = diStates[DI_START];
+                bool plcAlive = diStates[DI_NAKAN_ALIVE];
+                bool diStart  = diStates[DI_INSPECT_START];
 
                 // PLC ALIVE 消失 → Faulted
-                if (_isPcAlive && !plcAlive && _currentState != PlcState.Faulted && _currentState != PlcState.CommLost)
+                if (_isPcAlive && !plcAlive && _currentState != IoState.Faulted && _currentState != IoState.CommLost)
                 {
                     PlcLogger.Warn("PLC ALIVE lost → Faulted");
-                    SetState(PlcState.Faulted);
+                    SetState(IoState.Faulted);
                     try
                     {
-                        await _plc.WriteDo(DO_MURA, false);
+                        await _plc.WriteDo(DO_MURA_DETECTED, false);
                         _doMura = false;
-                        await _plc.WriteDo(DO_PC_BUSY, false);
+                        await _plc.WriteDo(DO_PC_INSPECT, false);
                         _doPcBusy = false;
                     }
-                    catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[PlcGrabController.Poll.StopCleanup] {ex.GetType().Name}: {ex.Message}"); }
+                    catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[IoGrabController.Poll.StopCleanup] {ex.GetType().Name}: {ex.Message}"); }
                     OnStopRequested?.Invoke();
                     FireIoSnapshot(plcAlive, diStart);
                     _pollTimer.Start();
@@ -252,17 +252,17 @@ namespace AniloxRoll.Monitor.Core.Services
                 }
 
                 // PLC ALIVE 恢復
-                if (_currentState == PlcState.Faulted && plcAlive && _isPcAlive)
+                if (_currentState == IoState.Faulted && plcAlive && _isPcAlive)
                 {
                     PlcLogger.Info("PLC ALIVE restored → Idle");
-                    SetState(PlcState.Idle);
+                    SetState(IoState.Idle);
                     _lastDiStart = diStart;
                     FireIoSnapshot(plcAlive, diStart);
                     _pollTimer.Start();
                     return;
                 }
 
-                if (_currentState == PlcState.Faulted || _currentState == PlcState.CommLost)
+                if (_currentState == IoState.Faulted || _currentState == IoState.CommLost)
                 {
                     FireIoSnapshot(plcAlive, diStart);
                     _pollTimer.Start();
@@ -270,24 +270,24 @@ namespace AniloxRoll.Monitor.Core.Services
                 }
 
                 // START 上升緣 → 開始 Grab
-                if (!_lastDiStart && diStart && _currentState == PlcState.Idle)
+                if (!_lastDiStart && diStart && _currentState == IoState.Idle)
                 {
                     PlcLogger.Info("START rising edge → Start Grab");
-                    SetState(PlcState.Running);
+                    SetState(IoState.Running);
                     OnStartRequested?.Invoke();
                 }
 
                 // START 下降緣 → 停止 Grab
-                if (_lastDiStart && !diStart && (_currentState == PlcState.Running || _currentState == PlcState.Faulted))
+                if (_lastDiStart && !diStart && (_currentState == IoState.Running || _currentState == IoState.Faulted))
                 {
                     PlcLogger.Info("START falling edge → Stop Grab");
-                    SetState(PlcState.Stopping);
+                    SetState(IoState.Stopping);
                     OnStopRequested?.Invoke();
                     await ClearMura();
                     await NotifyGrabStopped();
                     // Keepalive：多次 WriteDo 後補一次讀取，確保 1.5s Watchdog 不逾時
                     await _plc.ReadDiStatuses();
-                    SetState(PlcState.Idle);
+                    SetState(IoState.Idle);
                 }
 
                 _lastDiStart = diStart;
@@ -297,7 +297,7 @@ namespace AniloxRoll.Monitor.Core.Services
             catch (Exception ex)
             {
                 PlcLogger.Error("PLC polling error → CommLost", ex);
-                SetState(PlcState.CommLost);
+                SetState(IoState.CommLost);
                 _isPcAlive = false;
                 _doPcAlive = false;
                 _doMura = false;

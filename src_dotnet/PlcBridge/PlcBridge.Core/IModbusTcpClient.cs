@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 namespace PlcBridge.Core
 {
     /// <summary>
-    /// Modbus TCP 客戶端介面，供 PlcGrabController 注入測試用 mock。
+    /// Modbus TCP 客戶端介面，供 IoGrabController 注入測試用 mock。
     /// </summary>
     public interface IModbusTcpClient : IDisposable
     {
