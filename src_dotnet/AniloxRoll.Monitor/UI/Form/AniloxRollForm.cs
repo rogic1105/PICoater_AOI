@@ -92,6 +92,7 @@ namespace AniloxRoll.Monitor.Forms
 
         // --- IO 連動 ---
         private IoGrabController _plcGrabController;
+        private LightController _lightController;
 
         // --- 統計 ---
         private DataStatisticsPresenter _dataStatsPresenter;
@@ -182,6 +183,7 @@ namespace AniloxRoll.Monitor.Forms
                 getLocalRoot:  () => _settings?.CaptureRootPath ?? string.Empty);
 
             InitPlcController();
+            InitLightController();
         }
 
         /// <summary>初始化 IO 連動：自動偵測連線，連上後以 DI START 控制 Grab。</summary>
@@ -225,9 +227,21 @@ namespace AniloxRoll.Monitor.Forms
             _ = _plcGrabController.StartAsync(_settings.PlcIp, _settings.PlcPort);
         }
 
+        private void InitLightController()
+        {
+            if (!_settings.LightEnabled) return;
+            _lightController = new LightController();
+            if (!_lightController.Connect(_settings.LightComPort))
+            {
+                System.Diagnostics.Trace.WriteLine("[Light] 光源控制器連線失敗: " + _settings.LightComPort);
+                _lightController = null;
+            }
+        }
+
         private void PlcStartGrab()
         {
             if (_liveCameraManager == null || _liveCameraManager.IsLiveGrabbing) return;
+            LightTurnOn();
             btnCameraGrab_Click(null, null);
             _ = _plcGrabController?.NotifyGrabStarted();
         }
@@ -237,6 +251,21 @@ namespace AniloxRoll.Monitor.Forms
             if (_liveCameraManager == null || !_liveCameraManager.IsLiveGrabbing) return;
             btnCameraGrab_Click(null, null); // toggle → stop
             _ = _plcGrabController?.NotifyGrabStopped();
+            LightTurnOff();
+        }
+
+        private void LightTurnOn()
+        {
+            if (_lightController == null || !_lightController.IsConnected) return;
+            _lightController.TurnOn(1, _settings.LightBrightnessCh1);
+            _lightController.TurnOn(2, _settings.LightBrightnessCh2);
+        }
+
+        private void LightTurnOff()
+        {
+            if (_lightController == null || !_lightController.IsConnected) return;
+            _lightController.TurnOff(1);
+            _lightController.TurnOff(2);
         }
 
         private void UpdatePlcStateLabel(IoState state)
@@ -532,6 +561,7 @@ namespace AniloxRoll.Monitor.Forms
                 }
                 FreePrecomputedColMeanBuffers();
                 _liveCameraManager.FreeCameras();
+                _lightController?.Dispose();
                 _retentionService?.Dispose();
                 _remoteCopyService?.Dispose();
             };

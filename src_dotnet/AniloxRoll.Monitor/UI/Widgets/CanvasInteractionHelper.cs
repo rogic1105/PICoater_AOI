@@ -58,7 +58,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
         public string ImageInfoSuffix { get; set; } = "";
 
-        private float _savedZoom = 1.0f;
+        private float _savedZoom = 0f;
         private PointF _savedPan = PointF.Empty;
         private bool _shouldRestoreView = false;
 
@@ -130,9 +130,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public void SaveViewIfNeeded()
         {
             if (_canvas.Image == null) return; // 不重置 flag，保留先前的存檔
-
-            // Global 模式：導航後一律 FitToScreen，不記錄位置
-            if (_settings?.StitchMode == StitchMode.Global) return;
 
             // 嘗試以 mm 世界座標儲存（跨倍率安全）
             _savedViewLeftMm = double.NaN;
@@ -236,7 +233,9 @@ namespace AniloxRoll.Monitor.UI.Widgets
                         }
                     }
 
-                    if (!restored)
+                    if (!restored && _savedZoom > 0)
+                        _canvas.SetView(_savedZoom, _savedPan);
+                    else if (!restored)
                         _canvas.FitToScreen();
                 }
                 else

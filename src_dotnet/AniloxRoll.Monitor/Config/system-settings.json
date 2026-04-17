@@ -5,49 +5,49 @@
       "SystemDescriptor": "M_SYSTEM_RADIENTEVCL",
       "SystemNum": 0,
       "DevNum": 0,
-      "DcfPath": "C:\\Users\\User\\Downloads\\dcf\\Radient_Config.dcf"
+      "DcfPath": "D:\\AniloxCaptures\\dcf\\Radient_Config.dcf"
     },
     {
       "Id": 2,
       "SystemDescriptor": "M_SYSTEM_RADIENTEVCL",
       "SystemNum": 0,
       "DevNum": 1,
-      "DcfPath": "C:\\Users\\User\\Downloads\\dcf\\Radient_Config.dcf"
+      "DcfPath": "D:\\AniloxCaptures\\dcf\\Radient_Config.dcf"
     },
     {
       "Id": 3,
       "SystemDescriptor": "M_SYSTEM_RADIENTEVCL",
       "SystemNum": 0,
       "DevNum": 2,
-      "DcfPath": "C:\\Users\\User\\Downloads\\dcf\\Radient_Config.dcf"
+      "DcfPath": "D:\\AniloxCaptures\\dcf\\Radient_Config.dcf"
     },
     {
       "Id": 4,
       "SystemDescriptor": "M_SYSTEM_RADIENTEVCL",
       "SystemNum": 0,
       "DevNum": 3,
-      "DcfPath": "C:\\Users\\User\\Downloads\\dcf\\Radient_Config.dcf"
+      "DcfPath": "D:\\AniloxCaptures\\dcf\\Radient_Config.dcf"
     },
     {
       "Id": 5,
       "SystemDescriptor": "M_SYSTEM_RADIENTEVCL",
       "SystemNum": 1,
       "DevNum": 0,
-      "DcfPath": "C:\\Users\\User\\Downloads\\dcf\\Radient_Config.dcf"
+      "DcfPath": "D:\\AniloxCaptures\\dcf\\Radient_Config.dcf"
     },
     {
       "Id": 6,
       "SystemDescriptor": "M_SYSTEM_RADIENTEVCL",
       "SystemNum": 1,
       "DevNum": 1,
-      "DcfPath": "C:\\Users\\User\\Downloads\\dcf\\Radient_Config.dcf"
+      "DcfPath": "D:\\AniloxCaptures\\dcf\\Radient_Config.dcf"
     },
     {
       "Id": 7,
       "SystemDescriptor": "M_SYSTEM_RADIENTEVCL",
       "SystemNum": 1,
       "DevNum": 2,
-      "DcfPath": "C:\\Users\\User\\Downloads\\dcf\\Radient_Config.dcf"
+      "DcfPath": "D:\\AniloxCaptures\\dcf\\Radient_Config.dcf"
     }
   ]
 }

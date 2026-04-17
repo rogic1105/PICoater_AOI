@@ -83,7 +83,9 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"BackgroundSampleSeconds\": {R.BackgroundSampleSeconds},");
             sb.AppendLine($"    \"AniloxRollSpeedMPerMin\": {D(R.AniloxRollSpeedMPerMin)},");
             sb.AppendLine($"    \"SaveResizeScale\": {R.SaveResizeScale},");
-            sb.AppendLine($"    \"SaveJpgQuality\": {R.SaveJpgQuality}");
+            sb.AppendLine($"    \"SaveJpgQuality\": {R.SaveJpgQuality},");
+            sb.AppendLine($"    \"EnableMuraEnhance\": {(R.EnableMuraEnhance ? "true" : "false")},");
+            sb.AppendLine($"    \"EnableReviewEnhance\": {(R.EnableReviewEnhance ? "true" : "false")}");
             sb.AppendLine("  },");
 
             // Chart
@@ -104,7 +106,10 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"EnableAutoCapture\": {(T.EnableAutoCapture ? "true" : "false")},");
             sb.AppendLine($"    \"CaptureRootPath\": \"{SettingsStoreHelper.EscapeJson(T.CaptureRootPath)}\",");
             sb.AppendLine($"    \"SaveOriginalBmp\": {(T.SaveOriginalBmp ? "true" : "false")},");
-            sb.AppendLine($"    \"BackgroundPath\": \"{SettingsStoreHelper.EscapeJson(T.BackgroundPath)}\"");
+            sb.AppendLine($"    \"BackgroundPath\": \"{SettingsStoreHelper.EscapeJson(T.BackgroundPath)}\",");
+            sb.AppendLine($"    \"LocalMaxGB\": {T.LocalMaxGB},");
+            sb.AppendLine($"    \"FailProtectDays\": {T.FailProtectDays},");
+            sb.AppendLine($"    \"RemotePath\": \"{SettingsStoreHelper.EscapeJson(T.RemotePath)}\"");
             sb.AppendLine("  },");
 
             // PLC
@@ -112,6 +117,21 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"Enabled\": {(s.PlcEnabled ? "true" : "false")},");
             sb.AppendLine($"    \"Ip\": \"{SettingsStoreHelper.EscapeJson(s.PlcIp)}\",");
             sb.AppendLine($"    \"Port\": {s.PlcPort}");
+            sb.AppendLine("  },");
+
+            // CameraParam
+            var P = s.CameraParam ?? new CameraParamSettings();
+            sb.AppendLine("  \"CameraParam\": {");
+            sb.AppendLine($"    \"DcfPath\": \"{SettingsStoreHelper.EscapeJson(P.DcfPath)}\"");
+            sb.AppendLine("  },");
+
+            // Light
+            var LT = s.Light ?? new LightSettings();
+            sb.AppendLine("  \"Light\": {");
+            sb.AppendLine($"    \"Enabled\": {(LT.Enabled ? "true" : "false")},");
+            sb.AppendLine($"    \"ComPort\": \"{SettingsStoreHelper.EscapeJson(LT.ComPort)}\",");
+            sb.AppendLine($"    \"BrightnessCh1\": {LT.BrightnessCh1},");
+            sb.AppendLine($"    \"BrightnessCh2\": {LT.BrightnessCh2}");
             sb.AppendLine("  }");
 
             sb.Append("}");
@@ -132,6 +152,8 @@ namespace AniloxRoll.Monitor.Core.Data
                 Chart         = ParseChart(json),
                 ImageView     = ParseImageView(json),
                 Storage       = ParseStorage(json),
+                CameraParam   = ParseCameraParam(json),
+                Light         = ParseLight(json),
                 PlcEnabled    = ParsePlcEnabled(json),
                 PlcIp         = ParsePlcIp(json),
                 PlcPort       = ParsePlcPort(json),
@@ -186,8 +208,10 @@ namespace AniloxRoll.Monitor.Core.Data
                     ? SettingsStoreHelper.GetInt(obj, "BackgroundSampleSeconds", 3)
                     : 3,
                 AniloxRollSpeedMPerMin = SettingsStoreHelper.GetDouble(obj, "AniloxRollSpeedMPerMin", 10.0),
-                SaveResizeScale  = SettingsStoreHelper.GetInt(obj, "SaveResizeScale",   5),
-                SaveJpgQuality   = SettingsStoreHelper.GetInt(obj, "SaveJpgQuality",    90),
+                SaveResizeScale      = SettingsStoreHelper.GetInt(obj, "SaveResizeScale",   5),
+                SaveJpgQuality       = SettingsStoreHelper.GetInt(obj, "SaveJpgQuality",    90),
+                EnableMuraEnhance    = SettingsStoreHelper.GetBool(obj, "EnableMuraEnhance",    false),
+                EnableReviewEnhance  = SettingsStoreHelper.GetBool(obj, "EnableReviewEnhance",  false),
             };
         }
 
@@ -243,6 +267,30 @@ namespace AniloxRoll.Monitor.Core.Data
                     ? SettingsStoreHelper.GetBool(obj, "SaveOriginalBmp", false)
                     : !SettingsStoreHelper.GetBool(obj, "UseCompressedCapture", true),
                 BackgroundPath       = SettingsStoreHelper.GetString(obj, "BackgroundPath", @"D:\AniloxCaptures\bg"),
+                LocalMaxGB           = SettingsStoreHelper.GetInt   (obj, "LocalMaxGB",       500),
+                FailProtectDays      = SettingsStoreHelper.GetInt   (obj, "FailProtectDays",    30),
+                RemotePath           = SettingsStoreHelper.GetString(obj, "RemotePath",        ""),
+            };
+        }
+
+        private static CameraParamSettings ParseCameraParam(string json)
+        {
+            string obj = SettingsStoreHelper.ExtractObject(json, "CameraParam");
+            return new CameraParamSettings
+            {
+                DcfPath = SettingsStoreHelper.GetString(obj, "DcfPath", @"D:\AniloxCaptures\dcf\Radient_Config.dcf"),
+            };
+        }
+
+        private static LightSettings ParseLight(string json)
+        {
+            string obj = SettingsStoreHelper.ExtractObject(json, "Light");
+            return new LightSettings
+            {
+                Enabled        = SettingsStoreHelper.GetBool  (obj, "Enabled",        false),
+                ComPort        = SettingsStoreHelper.GetString(obj, "ComPort",         "COM1"),
+                BrightnessCh1  = SettingsStoreHelper.GetInt   (obj, "BrightnessCh1",  128),
+                BrightnessCh2  = SettingsStoreHelper.GetInt   (obj, "BrightnessCh2",  128),
             };
         }
 

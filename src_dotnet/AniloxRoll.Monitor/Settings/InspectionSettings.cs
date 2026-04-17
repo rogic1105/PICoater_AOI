@@ -13,6 +13,8 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public ChartSettings       Chart         { get; set; } = new ChartSettings();
         [Browsable(false)] public ImageViewSettings   ImageView     { get; set; } = new ImageViewSettings();
         [Browsable(false)] public StorageSettings     Storage       { get; set; } = new StorageSettings();
+        [Browsable(false)] public CameraParamSettings CameraParam   { get; set; } = new CameraParamSettings();
+        [Browsable(false)] public LightSettings      Light         { get; set; } = new LightSettings();
 
         public void Validate()
         {
@@ -22,6 +24,8 @@ namespace AniloxRoll.Monitor.Core.Data
             if (Chart == null) Chart = new ChartSettings();
             if (ImageView == null) ImageView = new ImageViewSettings();
             if (Storage == null) Storage = new StorageSettings();
+            if (CameraParam == null) CameraParam = new CameraParamSettings();
+            if (Light == null) Light = new LightSettings();
 
             MachineLayout.Validate();
             Acquisition.Validate();
@@ -29,6 +33,8 @@ namespace AniloxRoll.Monitor.Core.Data
             Chart.Validate();
             ImageView.Validate();
             Storage.Validate();
+            CameraParam.Validate();
+            Light.Validate();
         }
 
         public double[] GetCameraOpsUmArray() => MachineLayout.GetCameraOpsUmArray();
@@ -93,5 +99,15 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category("5. IO 模組設定")][DisplayName("IO IP")]    public string PlcIp      { get; set; } = "192.168.255.1";
         [Category("5. IO 模組設定")][DisplayName("IO Port")]  public int    PlcPort    { get; set; } = 502;
 
+        // ===== 6. 相機參數設定 =====
+        [Category("6. 相機參數設定")][DisplayName("設定檔")]
+        [Editor("System.Windows.Forms.Design.FileNameEditor, System.Design, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a", typeof(System.Drawing.Design.UITypeEditor))]
+        public string DcfPath { get => CameraParam.DcfPath; set => CameraParam.DcfPath = value; }
+
+        // ===== 7. 光源設定 =====
+        [Category("7. 光源設定")][DisplayName("啟用光源")]   public bool   LightEnabled      { get => Light.Enabled;      set => Light.Enabled      = value; }
+        [Category("7. 光源設定")][DisplayName("COM Port")]   public string LightComPort      { get => Light.ComPort;      set => Light.ComPort      = value; }
+        [Category("7. 光源設定")][DisplayName("亮度 CH1")]   public int    LightBrightnessCh1 { get => Light.BrightnessCh1; set => Light.BrightnessCh1 = value; }
+        [Category("7. 光源設定")][DisplayName("亮度 CH2")]   public int    LightBrightnessCh2 { get => Light.BrightnessCh2; set => Light.BrightnessCh2 = value; }
     }
 }

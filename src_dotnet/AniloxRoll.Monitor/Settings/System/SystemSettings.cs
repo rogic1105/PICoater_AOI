@@ -16,13 +16,13 @@ namespace AniloxRoll.Monitor.Core.Data
             {
                 CameraDevices = new List<CameraHardwareConfig>
                 {
-                    new CameraHardwareConfig { Id = 1, SystemDescriptor = MIL.M_SYSTEM_RADIENTEVCL, SystemNum = 0, DevNum = MIL.M_DEV0, DcfPath = @"C:\Users\User\Downloads\dcf\Radient_Config.dcf" },
-                    new CameraHardwareConfig { Id = 2, SystemDescriptor = MIL.M_SYSTEM_RADIENTEVCL, SystemNum = 0, DevNum = MIL.M_DEV1, DcfPath = @"C:\Users\User\Downloads\dcf\Radient_Config.dcf" },
-                    new CameraHardwareConfig { Id = 3, SystemDescriptor = MIL.M_SYSTEM_RADIENTEVCL, SystemNum = 0, DevNum = MIL.M_DEV2, DcfPath = @"C:\Users\User\Downloads\dcf\Radient_Config.dcf" },
-                    new CameraHardwareConfig { Id = 4, SystemDescriptor = MIL.M_SYSTEM_RADIENTEVCL, SystemNum = 0, DevNum = MIL.M_DEV3, DcfPath = @"C:\Users\User\Downloads\dcf\Radient_Config.dcf" },
-                    new CameraHardwareConfig { Id = 5, SystemDescriptor = MIL.M_SYSTEM_RADIENTEVCL, SystemNum = 1, DevNum = MIL.M_DEV0, DcfPath = @"C:\Users\User\Downloads\dcf\Radient_Config.dcf" },
-                    new CameraHardwareConfig { Id = 6, SystemDescriptor = MIL.M_SYSTEM_RADIENTEVCL, SystemNum = 1, DevNum = MIL.M_DEV1, DcfPath = @"C:\Users\User\Downloads\dcf\Radient_Config.dcf" },
-                    new CameraHardwareConfig { Id = 7, SystemDescriptor = MIL.M_SYSTEM_RADIENTEVCL, SystemNum = 1, DevNum = MIL.M_DEV2, DcfPath = @"C:\Users\User\Downloads\dcf\Radient_Config.dcf" }
+                    new CameraHardwareConfig { Id = 1, SystemDescriptor = MIL.M_SYSTEM_RADIENTEVCL, SystemNum = 0, DevNum = MIL.M_DEV0, DcfPath = @"D:\AniloxCaptures\dcf\Radient_Config.dcf" },
+                    new CameraHardwareConfig { Id = 2, SystemDescriptor = MIL.M_SYSTEM_RADIENTEVCL, SystemNum = 0, DevNum = MIL.M_DEV1, DcfPath = @"D:\AniloxCaptures\dcf\Radient_Config.dcf" },
+                    new CameraHardwareConfig { Id = 3, SystemDescriptor = MIL.M_SYSTEM_RADIENTEVCL, SystemNum = 0, DevNum = MIL.M_DEV2, DcfPath = @"D:\AniloxCaptures\dcf\Radient_Config.dcf" },
+                    new CameraHardwareConfig { Id = 4, SystemDescriptor = MIL.M_SYSTEM_RADIENTEVCL, SystemNum = 0, DevNum = MIL.M_DEV3, DcfPath = @"D:\AniloxCaptures\dcf\Radient_Config.dcf" },
+                    new CameraHardwareConfig { Id = 5, SystemDescriptor = MIL.M_SYSTEM_RADIENTEVCL, SystemNum = 1, DevNum = MIL.M_DEV0, DcfPath = @"D:\AniloxCaptures\dcf\Radient_Config.dcf" },
+                    new CameraHardwareConfig { Id = 6, SystemDescriptor = MIL.M_SYSTEM_RADIENTEVCL, SystemNum = 1, DevNum = MIL.M_DEV1, DcfPath = @"D:\AniloxCaptures\dcf\Radient_Config.dcf" },
+                    new CameraHardwareConfig { Id = 7, SystemDescriptor = MIL.M_SYSTEM_RADIENTEVCL, SystemNum = 1, DevNum = MIL.M_DEV2, DcfPath = @"D:\AniloxCaptures\dcf\Radient_Config.dcf" }
                 }
             };
 

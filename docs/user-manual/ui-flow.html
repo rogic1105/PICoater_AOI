@@ -339,6 +339,23 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box output">CheckLiveMura 恢復正常 → DO_MURA_DETECTED 正常輸出</div>
 </div>
 </div>
+<div class="flow-group vflow" id="light-control">
+<div class="flow-title">光源控制 <code>LightController</code></div>
+<div class="box input">IO 模組 DI_INSPECT_START 上升緣（PlcStartGrab）</div>
+<div class="v-arrow dev"></div>
+<div class="out-seq dev">
+<div class="box action">LightTurnOn → TurnOn(CH1, 亮度) + TurnOn(CH2, 亮度)</div>
+<div class="box action">btnCameraGrab_Click → 開始取像</div>
+</div>
+<div class="v-arrow dev" data-label="取像結束"></div>
+<div class="box input">IO 模組 DI_INSPECT_START 下降緣（PlcStopGrab）</div>
+<div class="v-arrow dev"></div>
+<div class="out-seq dev">
+<div class="box action">btnCameraGrab_Click → 停止取像</div>
+<div class="box action">LightTurnOff → TurnOff(CH1) + TurnOff(CH2)</div>
+</div>
+<div class="note">光源控制器 LTS-3DPA24，RS-232（9600/8N1）。啟用光源 = True 且 COM Port 連線成功時才動作。設定值於【檢測設定】→「7. 光源設定」。</div>
+</div>
 <div class="flow-group vflow">
 <div class="flow-title">監控強化 <code>EnableMuraEnhance</code>（檢測設定）</div>
 <div class="box input">在【檢測設定】將「監控強化」設為 True</div>
@@ -649,7 +666,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 </div>
 <div class="v-branch-path"><span class="branch-label no">全域</span>
 <div class="out-par">
-<div class="box output">回顧主畫面：<a href="#review-global-merge">全域合圖</a>（FitToScreen，不保留位置）</div>
+<div class="box output">回顧主畫面：<a href="#review-global-merge">全域合圖</a>（保留先前視野位置）</div>
 <div class="box output">回顧切向曲線圖：清空（單台資料無意義）</div>
 <div class="box output">回顧法向曲線圖：7 台靠上對齊，重疊區 Mean 平均/Max 取 Max，非重疊區保留</div>
 <div class="box output">回顧全覽圖：7 台按位置串接，重疊區 Mean 平均/Max 取 Max</div>
@@ -679,7 +696,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 </div>
 <div class="v-branch-path"><span class="branch-label no">全域</span>
 <div class="out-par">
-<div class="box output">回顧主畫面：<a href="#review-global-merge">全域合圖</a>（FitToScreen，不保留位置）</div>
+<div class="box output">回顧主畫面：<a href="#review-global-merge">全域合圖</a>（保留先前視野位置）</div>
 <div class="box output">回顧切向曲線圖：清空（單台資料無意義）</div>
 <div class="box output">回顧法向曲線圖：7 台靠上對齊，重疊區 Mean 平均/Max 取 Max，非重疊區保留</div>
 <div class="box output">回顧全覽圖：7 台按位置串接，重疊區 Mean 平均/Max 取 Max</div>

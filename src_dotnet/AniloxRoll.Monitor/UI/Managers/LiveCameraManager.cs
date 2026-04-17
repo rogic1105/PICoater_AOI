@@ -35,6 +35,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private int _saveJpgQuality  = InspectionEngineConfig.DefaultSaveJpgQuality;
         private float _hessianMaxFactor = InspectionEngineConfig.DefaultHessianMaxFactor;
         private string _ridgeMode = InspectionEngineConfig.DefaultRidgeMode;
+        private string _dcfPath = string.Empty;
         private readonly CaptureTimestampCoordinator _timestampCoordinator = new CaptureTimestampCoordinator();
 
         public bool IsAllocated    { get; private set; } = false;
@@ -188,11 +189,12 @@ namespace AniloxRoll.Monitor.UI.Managers
                     !_cameraStatusLabels.ContainsKey(cfg.Id))
                     continue;
 
+                string dcf = !string.IsNullOrEmpty(_dcfPath) ? _dcfPath : cfg.DcfPath;
                 var cam = new AniloxCamera(
                     currentSysId,
                     cfg.Id,
                     cfg.DevNum,
-                    cfg.DcfPath,
+                    dcf,
                     displayPanel.Handle,
                     enableImageProcessing);
 
@@ -454,6 +456,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 ? settings.HessianMaxFactor
                 : InspectionEngineConfig.DefaultHessianMaxFactor;
             _ridgeMode            = InspectionRecipe.RidgeDirectionToNative(settings.RidgeDir);
+            _dcfPath              = settings.DcfPath ?? string.Empty;
         }
 
         // ==================== Display Switching ====================
