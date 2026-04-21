@@ -1259,6 +1259,111 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 
 </div><!-- /系統監控 -->
 
+<!-- ===== 網路部署 ===== -->
+<h2 class="dev" onclick="toggle(this)">網路部署（儲存機 + 檢測機）</h2>
+<div class="tab-section dev">
+
+<div class="flow-group vflow" id="deploy-architecture">
+<div class="flow-title">網路架構</div>
+<div class="box input">檢測機（PICoater 主機） + 儲存機 + Switch</div>
+<div class="v-arrow" data-label="雙網段"></div>
+<div class="out-par">
+<div class="box output">192.168.255.x — PLC 控制網段（ET-7044 + Nakan）</div>
+<div class="box output">192.168.10.x — 儲存網段（檢測機 .10 ↔ 儲存機 .20）</div>
+</div>
+<div class="v-arrow"></div>
+<div class="out-seq">
+<div class="box action">檢測機：單張 NIC 掛兩個 IP（secondary IP 別名）— PLC IP 不動，新增 192.168.10.10</div>
+<div class="box action">儲存機：固定 IP 192.168.10.20 + SMB 共用 C:\AniloxStorage</div>
+<div class="box action">RemoteCopyService 走 \\192.168.10.20\AniloxStorage 匿名 Guest SMB</div>
+</div>
+<div class="note dev">未來雙口工業電腦：把兩個 IP 拆到兩張實體卡即可，程式不改。</div>
+</div>
+
+<div class="flow-group vflow" id="deploy-storage-pc">
+<div class="flow-title">儲存機一次設定 <code>deploy/storage-pc/run_setup.bat</code></div>
+<div class="box input">雙擊 run_setup.bat（自動提權 UAC；兩步驟連跑）</div>
+<div class="v-arrow" data-label="讀取"></div>
+<div class="box action">storage-config.json（NicName / IpAddress / StorageFolder / ShareName）</div>
+<div class="v-arrow" data-label="Step 1：網路 + 共用"></div>
+<div class="out-seq">
+<div class="box action">[1/6] 設定固定 IP（New-NetIPAddress 192.168.10.20/24）</div>
+<div class="box action">[2/6] 建立共用資料夾（StorageFolder，預設 C:\AniloxStorage）</div>
+<div class="box action">[3/6] 授予 NTFS 權限（Everyone Modify）</div>
+<div class="box action">[4/6] 建立 SMB 共用（New-SmbShare AniloxStorage）</div>
+<div class="box action">[5/6] 開放防火牆（File and Printer Sharing 全部 profile）</div>
+<div class="box action">[6/6] 網路設定檔切 Private（Set-NetConnectionProfile）</div>
+</div>
+<div class="v-arrow" data-label="Step 2：匿名 Guest"></div>
+<div class="out-seq">
+<div class="box action">[1/5] 啟用 SMB Server Guest（Set-SmbServerConfiguration -EnableGuestAccess；舊 Windows 才需要）</div>
+<div class="box action">[2/5] 啟用 Guest 本機帳號（Enable-LocalUser -Name 'Guest'）</div>
+<div class="box action">[3/5] 授予 Guest SMB 共用 Full（Grant-SmbShareAccess）</div>
+<div class="box action">[4/5] 授予 Guest NTFS Modify（FileSystemAccessRule）</div>
+<div class="box action">[5/5] secedit 修正 Guest 網路登入權利（自 SeDenyNetworkLogonRight 移除，加入 SeNetworkLogonRight）</div>
+</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">\\192.168.10.20\AniloxStorage 可匿名存取</div>
+<div class="box output">C:\AniloxStorage 為本機根目錄</div>
+</div>
+<div class="note dev">[Step2 5/5] 是關鍵：Windows 預設把 Guest 放在 SeDenyNetworkLogonRight（拒絕從網路存取此電腦）。只啟用 Guest + 給 ACL 還不夠，一定要改這個原則。secedit 匯出時 Guest 可能以名字或 *SID 兩種形式出現，兩種都要比對移除。</div>
+<div class="note dev">PowerShell 5.1 中文 Windows 陷阱：JSON 讀檔必須用 [System.IO.File]::ReadAllText(path, UTF8)，否則 Big5 解碼中文 NicName 會亂碼。.ps1 檔本身必須 UTF-8 with BOM。.bat 檔必須純 ASCII。</div>
+</div>
+
+<div class="flow-group vflow" id="deploy-inspection-pc">
+<div class="flow-title">檢測機一次設定 <code>deploy/inspection-pc/run_setup.bat</code></div>
+<div class="box input">雙擊 run_setup.bat（自動提權；兩步驟連跑）</div>
+<div class="v-arrow" data-label="讀取"></div>
+<div class="box action">inspection-config.json（PlcSubnetPrefix / StorageIp / VerifyPingTarget）</div>
+<div class="v-arrow" data-label="Step 1：NIC secondary IP"></div>
+<div class="out-seq">
+<div class="box action">自動找出 PLC NIC（Get-NetIPAddress -Like PlcSubnetPrefix*）</div>
+<div class="box action">New-NetIPAddress -InterfaceAlias $nic -IPAddress 192.168.10.10 -PrefixLength 24（新增別名，不動原 PLC IP）</div>
+<div class="box action">Test-Connection 驗證 ping 儲存機 192.168.10.20</div>
+</div>
+<div class="v-arrow" data-label="Step 2：Guest SMB Client"></div>
+<div class="out-seq">
+<div class="box action">[1/3] HKLM\SYSTEM\...\LanmanWorkstation\Parameters\AllowInsecureGuestAuth = 1</div>
+<div class="box action">[2/3] HKLM\SOFTWARE\Policies\Microsoft\Windows\LanmanWorkstation\AllowInsecureGuestAuth = 1（GPO 覆寫）</div>
+<div class="box action">[3/3] net use * /delete /y（清除舊連線快取）</div>
+</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">同一張 NIC 同時可達 PLC + 儲存網段（Modbus TCP 不中斷）</div>
+<div class="box output">Win+R 輸入 \\192.168.10.20\AniloxStorage 直接開啟（不被 Win10/11 預設擋匿名）</div>
+</div>
+<div class="note dev">若仍要求帳密，執行 gpupdate /force 或重開機。</div>
+</div>
+
+<div class="flow-group vflow" id="deploy-verify">
+<div class="flow-title">部署驗證流程</div>
+<div class="out-seq">
+<div class="box action">1. 儲存機：雙擊 deploy\storage-pc\run_setup.bat（完成 Step 1+2）</div>
+<div class="box action">2. 檢測機：雙擊 deploy\inspection-pc\run_setup.bat（完成 Step 1+2）</div>
+<div class="box action">3. 檢測機 PowerShell：Test-NetConnection -Port 445 -ComputerName 192.168.10.20 → TcpTestSucceeded = True</div>
+<div class="box action">4. 檢測機 PowerShell：Out-File -FilePath \\192.168.10.20\AniloxStorage\test.txt -InputObject "hello" → 不報錯</div>
+<div class="box action">5. 檢測機 PICoater：屬性 → 儲存設定 → 遠端路徑 = \\192.168.10.20\AniloxStorage</div>
+<div class="box action">6. 啟用存檔，抓一張圖 → 儲存機 C:\AniloxStorage\&lt;date&gt;\ 出現檔案</div>
+</div>
+<div class="v-arrow"></div>
+<div class="box output">RemoteCopyService 走背景執行緒（BelowNormal 優先級），失敗重試 3 次，不影響取像效能</div>
+<div class="note dev">若抓圖後儲存機沒檔案：看 PICoater Trace log 有無 [RemoteCopy] Failed after... 字樣。</div>
+</div>
+
+<div class="flow-group vflow" id="deploy-troubleshoot">
+<div class="flow-title">常見問題排查</div>
+<div class="box guard">PowerShell 閃退 — ExecutionPolicy 擋；用 .bat 包 -ExecutionPolicy Bypass + pause</div>
+<div class="box guard">.bat 中文亂碼「不是內部或外部命令」— CMD 用 Big5 讀 .bat；必須純 ASCII</div>
+<div class="box guard">.ps1 parse error — PS 5.1 用 Big5 讀 UTF-8；必須 UTF-8 with BOM（EF BB BF）</div>
+<div class="box guard">JSON 中文亂碼「找不到網卡: 銋云...」— Get-Content 預設 ANSI；改 [System.IO.File]::ReadAllText(path, UTF8)</div>
+<div class="box guard">「登入失敗: 未授與使用者這個電腦所要求的登入類型」— Guest 在 SeDenyNetworkLogonRight；跑 setup_guest.ps1 [5/5] 修正</div>
+<div class="box guard">儲存機多張 NIC（Ethernet + Wi-Fi）— 編輯 storage-config.json 指定 NicName（例 "乙太網路"）</div>
+<div class="box guard">EnableGuestAccess 參數不存在警告 — 新版 Windows 移除；非關鍵，try/catch 吞掉</div>
+</div>
+
+</div><!-- /網路部署 -->
+
 <!-- ===== 跨 Tab 同步 ===== -->
 <h2 class="dev" onclick="toggle(this)">跨 Tab 同步</h2>
 <div class="tab-section dev">

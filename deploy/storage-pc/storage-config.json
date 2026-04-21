@@ -1,0 +1,9 @@
+{
+  "NicName": "乙太網路",
+  "IpAddress": "192.168.10.20",
+  "PrefixLength": 24,
+  "Gateway": "",
+  "StorageFolder": "D:\\AniloxStorage",
+  "ShareName": "AniloxStorage",
+  "AllowedUser": "Everyone"
+}

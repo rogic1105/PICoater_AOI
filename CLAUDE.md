@@ -12,6 +12,9 @@ PICoater_AOI/
 ├── tests/dotnet_test/AniloxRoll.Monitor.Tests/ ← NUnit 單元 + 壓力測試
 ├── tests/python_test/               ← Python 測試/工具腳本
 ├── TestRunner/                      ← 測試啟動器（雙擊 TestRunner.bat）
+├── deploy/                          ← 現場部署腳本（PowerShell + JSON 參數）
+│   ├── storage-pc/                  ← 儲存機：固定 IP + SMB 共用 + 防火牆 + Guest 匿名（secedit）
+│   └── inspection-pc/               ← 檢測機：單 NIC 雙 IP 別名 + Client 端匿名 Guest SMB
 ├── src_native/                      ← C++ pipeline 實作
 └── sdk/AOI_SDK/                     ← 共用 SDK (core_cv_api / AOI.SDK)
 ```
@@ -291,6 +294,7 @@ PICoater_AOI/
 | Commit 前文件更新 | `/update-docs` | 批次更新 CLAUDE.md + skills |
 | 提交推送 | `/commit` | build + 文件 + conventional commit |
 | 控制項別名記錄 | `/alias-log` | 對話中新稱呼 → 更新速查表 + 建議標準名稱 |
+| 現場部署 / 網路 / SMB | `/deploy-network` | 雙網段架構、單 NIC 雙 IP、匿名 Guest SMB、編碼陷阱（bat ASCII / ps1 UTF-8 BOM / JSON UTF-8 讀法）、secedit SeDenyNetworkLogonRight |
 
 ### 參考文件（僅供查閱，不自動載入）
 

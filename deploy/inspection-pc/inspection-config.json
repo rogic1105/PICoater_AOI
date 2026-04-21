@@ -1,0 +1,6 @@
+{
+  "PlcSubnetPrefix": "192.168.255.",
+  "StorageIp": "192.168.10.10",
+  "StoragePrefixLength": 24,
+  "VerifyPingTarget": "192.168.10.20"
+}
