@@ -341,10 +341,57 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 </div>
 <div class="flow-group vflow" id="light-control">
 <div class="flow-title">光源控制 <code>LightController</code></div>
+<div class="box input">程式啟動（InitLightController）</div>
+<div class="v-arrow dev" data-label="啟用光源=True"></div>
+<div class="box action dev">AutoDetect(preferredCom=設定 COM, channel=設定 Channel)</div>
+<div class="v-arrow dev"></div>
+<div class="out-seq dev">
+<div class="box action">步驟 1：對設定 COM 發送 cmd=4（read brightness）</div>
+<div class="box action">步驟 2：驗證 8-byte 回應（prefix '$' + cmd echo '4' + channel echo + XOR checksum，PDF §4.1.4 表-4）</div>
+</div>
+<div class="v-arrow dev" data-label="分支"></div>
+<div class="v-branch">
+<div class="v-branch-path"><span class="branch-label yes">驗證通過</span>
+<div class="box output">光源就緒（ActiveComPort = 設定 COM）</div>
+</div>
+<div class="v-branch-path"><span class="branch-label no">驗證失敗</span>
+<div class="box action dev">掃描 SerialPort.GetPortNames() 其餘 port，逐個重複 probe</div>
+<div class="v-arrow dev" data-label="掃描結果"></div>
+<div class="v-branch">
+<div class="v-branch-path"><span class="branch-label yes">找到</span>
+<div class="out-seq">
+<div class="box output">光源就緒（ActiveComPort = 找到的 COM）</div>
+<div class="box output">自動更新 <code>LightComPort</code> 設定（下次啟動直接命中）</div>
+</div>
+</div>
+<div class="v-branch-path"><span class="branch-label no">找不到</span>
+<div class="box output">光源 NA（Trace 記錄、_lightController = null，後續取像不觸發光源）</div>
+</div>
+</div>
+</div>
+</div>
+<div class="v-arrow"></div>
+<div class="box input">【檢測設定】PropertyGrid 變更（HandleLightSettingsChanged，立即生效，不需重啟）</div>
+<div class="v-arrow dev" data-label="依變更欄位分派"></div>
+<div class="v-branch">
+<div class="v-branch-path"><span class="branch-label yes">啟用光源 false→true</span>
+<div class="box action dev">InitLightController → AutoDetect（同啟動流程）</div>
+</div>
+<div class="v-branch-path"><span class="branch-label no">啟用光源 true→false</span>
+<div class="box action dev">Dispose 連線，_lightController = null</div>
+</div>
+<div class="v-branch-path"><span class="branch-label yes">COM Port / 通道變更</span>
+<div class="box action dev">Dispose 現有連線 → 重新 InitLightController（重試偵測）</div>
+</div>
+<div class="v-branch-path"><span class="branch-label yes">亮度變更</span>
+<div class="box action dev">SetBrightness(Channel, Brightness) → 立即套用到硬體（僅在已連線時）</div>
+</div>
+</div>
+<div class="v-arrow"></div>
 <div class="box input">IO 模組 DI_INSPECT_START 上升緣（PlcStartGrab）</div>
 <div class="v-arrow dev"></div>
 <div class="out-seq dev">
-<div class="box action">LightTurnOn → TurnOn(CH1, 亮度) + TurnOn(CH2, 亮度)</div>
+<div class="box action">LightTurnOn → TurnOn(Channel, Brightness)</div>
 <div class="box action">btnCameraGrab_Click → 開始取像</div>
 </div>
 <div class="v-arrow dev" data-label="取像結束"></div>
@@ -352,9 +399,9 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="v-arrow dev"></div>
 <div class="out-seq dev">
 <div class="box action">btnCameraGrab_Click → 停止取像</div>
-<div class="box action">LightTurnOff → TurnOff(CH1) + TurnOff(CH2)</div>
+<div class="box action">LightTurnOff → TurnOff(Channel)</div>
 </div>
-<div class="note">光源控制器 LTS-3DPA24，RS-232（9600/8N1）。啟用光源 = True 且 COM Port 連線成功時才動作。設定值於【檢測設定】→「7. 光源設定」。</div>
+<div class="note">光源控制器 LTS-3DPA24，RS-232（9600/8N1），單通道機型 Channel=1、亮度 0~255。啟用光源 = True 時啟動自動偵測；NA 不影響取像（僅不觸發光源開關）。<strong>PropertyGrid 變更即時生效</strong>：啟用切換立即連線/斷線、COM/通道變更立即重新偵測、亮度變更立即套用硬體，不需重啟程式。設定值於【檢測設定】→「7. 光源設定」。</div>
 </div>
 <div class="flow-group vflow">
 <div class="flow-title">監控強化 <code>EnableMuraEnhance</code>（檢測設定）</div>
@@ -986,7 +1033,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">所有曲線圖閾值線：更新位置</div>
-<div class="box output dev">（抓取中）CSV 插入 #CFG 設定快照</div>
+<div class="box output dev">（抓取中）CSV 插入 #CFG 設定快照：timestamp + 機台佈局 OPS×7 / Start×7 + 相機參數 曝光×7 / 線掃×7 / 高度×7 + 正規值 + Mura 閾值（平均/最大）。新檔、換日、或任一欄位變更時寫入一列 #CFG</div>
 </div>
 <div class="v-arrow"></div>
 <div class="box input">修改 Recipe 參數（HessianMaxFactor / ErrorValue / RidgeDir）</div>

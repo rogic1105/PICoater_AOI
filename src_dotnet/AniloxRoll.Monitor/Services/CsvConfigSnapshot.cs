@@ -12,7 +12,9 @@ namespace AniloxRoll.Monitor.Core.Services
     {
         public double[] CamOps { get; }   // length 7
         public double[] CamPos { get; }   // length 7
-        public int[] CamGrabHeight { get; } // length 7, 取像寬度（line scan 行數）
+        public int[] CamGrabHeight { get; }    // length 7，高度滑桿（line scan 行數）
+        public double[] CamExposureUs { get; } // length 7，曝光滑桿（μs）
+        public double[] CamLineRateHz { get; } // length 7，線掃滑桿（Hz）
         public float HessianMaxFactor { get; }
         public float ErrorValueMean { get; }
         public float ErrorValueMax { get; }
@@ -20,12 +22,15 @@ namespace AniloxRoll.Monitor.Core.Services
 
         public CsvConfigSnapshot(
             double[] camOps, double[] camPos, int[] camGrabHeight,
+            double[] camExposureUs, double[] camLineRateHz,
             float hessianMaxFactor, float errorValueMean, float errorValueMax,
             DateTime timestamp)
         {
             CamOps = camOps ?? new double[7];
             CamPos = camPos ?? new double[7];
             CamGrabHeight = camGrabHeight ?? new int[7];
+            CamExposureUs = camExposureUs ?? new double[7];
+            CamLineRateHz = camLineRateHz ?? new double[7];
             HessianMaxFactor = hessianMaxFactor;
             ErrorValueMean = errorValueMean;
             ErrorValueMax = errorValueMax;
@@ -39,6 +44,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 s.GetCameraOpsUmArray(),
                 s.GetCameraStartPositionMmArray(),
                 (int[])s.Acquisition?.CameraGrabHeight?.Clone(),
+                (double[])s.Acquisition?.CameraExposureTimeUs?.Clone(),
+                (double[])s.Acquisition?.CameraLineRateHz?.Clone(),
                 s.HessianMaxFactor,
                 s.ErrorValueMean,
                 s.ErrorValueMax,
@@ -54,6 +61,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 for (int i = 0; i < 7; i++) sb.Append(CamOps[i].ToString("F2")).Append(',');
                 for (int i = 0; i < 7; i++) sb.Append(CamPos[i].ToString("F2")).Append(',');
                 for (int i = 0; i < 7; i++) sb.Append(CamGrabHeight[i]).Append(',');
+                for (int i = 0; i < 7; i++) sb.Append(CamExposureUs[i].ToString("F2")).Append(',');
+                for (int i = 0; i < 7; i++) sb.Append(CamLineRateHz[i].ToString("F2")).Append(',');
                 sb.Append(HessianMaxFactor.ToString("F4")).Append(',');
                 sb.Append(ErrorValueMean.ToString("F4")).Append(',');
                 sb.Append(ErrorValueMax.ToString("F4"));
@@ -73,6 +82,10 @@ namespace AniloxRoll.Monitor.Core.Services
                 sb.Append($",Cam{i + 1}_Pos={CamPos[i]:F2}");
             for (int i = 0; i < 7; i++)
                 sb.Append($",Cam{i + 1}_GrabH={CamGrabHeight[i]}");
+            for (int i = 0; i < 7; i++)
+                sb.Append($",Cam{i + 1}_Exp={CamExposureUs[i]:F2}");
+            for (int i = 0; i < 7; i++)
+                sb.Append($",Cam{i + 1}_Lr={CamLineRateHz[i]:F2}");
             sb.Append($",HessianMaxFactor={HessianMaxFactor:F4}");
             sb.Append($",ErrorValueMean={ErrorValueMean:F4}");
             sb.Append($",ErrorValueMax={ErrorValueMax:F4}");
@@ -86,7 +99,7 @@ namespace AniloxRoll.Monitor.Core.Services
             if (string.IsNullOrEmpty(line) || !line.StartsWith("#CFG,")) return false;
 
             string[] parts = line.Split(',');
-            // #CFG, timestamp, 17 key=value pairs
+            // #CFG, timestamp, key=value pairs（最少 17 個，向下相容舊格式；新格式 31 個）
             if (parts.Length < 19) return false;
 
             if (!DateTime.TryParseExact(parts[1].Trim(), "yyyy-MM-ddTHH:mm:ss.fff",
@@ -96,6 +109,8 @@ namespace AniloxRoll.Monitor.Core.Services
             double[] ops = new double[7];
             double[] pos = new double[7];
             int[] grabH = new int[7];
+            double[] expUs = new double[7];
+            double[] lrHz = new double[7];
             float hessian = 0, errMean = 0, errMax = 0;
 
             for (int i = 2; i < parts.Length; i++)
@@ -124,6 +139,18 @@ namespace AniloxRoll.Monitor.Core.Services
                     if (camIdx >= 0 && camIdx < 7)
                         int.TryParse(val, NumberStyles.Integer, CultureInfo.InvariantCulture, out grabH[camIdx]);
                 }
+                else if (key.StartsWith("Cam") && key.EndsWith("_Exp"))
+                {
+                    int camIdx = key[3] - '1';
+                    if (camIdx >= 0 && camIdx < 7)
+                        double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out expUs[camIdx]);
+                }
+                else if (key.StartsWith("Cam") && key.EndsWith("_Lr"))
+                {
+                    int camIdx = key[3] - '1';
+                    if (camIdx >= 0 && camIdx < 7)
+                        double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out lrHz[camIdx]);
+                }
                 else if (key == "HessianMaxFactor")
                     float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out hessian);
                 else if (key == "ErrorValueMean")
@@ -132,7 +159,7 @@ namespace AniloxRoll.Monitor.Core.Services
                     float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out errMax);
             }
 
-            result = new CsvConfigSnapshot(ops, pos, grabH, hessian, errMean, errMax, ts);
+            result = new CsvConfigSnapshot(ops, pos, grabH, expUs, lrHz, hessian, errMean, errMax, ts);
             return true;
         }
     }

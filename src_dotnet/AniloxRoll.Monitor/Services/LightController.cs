@@ -13,11 +13,15 @@ namespace AniloxRoll.Monitor.Core.Services
     {
         private const int BaudRate = 9600;
         private const int ResponseTimeoutMs = 1000;
+        private const int ProbeTimeoutMs = 400;
 
         private SerialPort _port;
         private readonly object _lock = new object();
 
         public bool IsConnected => _port != null && _port.IsOpen;
+
+        /// <summary>連線成功後記錄實際使用的 COM port（可能與 settings 不同，由 AutoDetect 決定）。</summary>
+        public string ActiveComPort { get; private set; }
 
         public bool Connect(string comPort)
         {
@@ -34,6 +38,7 @@ namespace AniloxRoll.Monitor.Core.Services
                         WriteTimeout = ResponseTimeoutMs
                     };
                     _port.Open();
+                    ActiveComPort = comPort;
                     Trace.WriteLine($"[LightController] Connected: {comPort}");
                     return true;
                 }
@@ -43,6 +48,121 @@ namespace AniloxRoll.Monitor.Core.Services
                     return false;
                 }
             }
+        }
+
+        /// <summary>
+        /// 自動偵測：先試 preferredComPort，失敗則掃描所有可用 port。
+        /// 成功會維持連線；失敗回傳 null 且 IsConnected=false。
+        /// </summary>
+        /// <param name="preferredComPort">檢測設定記錄的 COM（優先嘗試）</param>
+        /// <param name="channel">要探測的通道（與設定一致）</param>
+        /// <returns>連線成功的 COM port 名稱；NA 回傳 null</returns>
+        public string AutoDetect(string preferredComPort, int channel)
+        {
+            // 1. 先試設定檔記錄的 port
+            if (!string.IsNullOrWhiteSpace(preferredComPort) &&
+                TryProbeAndConnect(preferredComPort, channel, out _))
+            {
+                Trace.WriteLine($"[LightController] AutoDetect: 使用設定 {preferredComPort}");
+                return preferredComPort;
+            }
+
+            // 2. 掃描所有可用 port（排除已試過的 preferred）
+            string[] ports = SerialPort.GetPortNames();
+            Array.Sort(ports);
+            foreach (string p in ports)
+            {
+                if (string.Equals(p, preferredComPort, StringComparison.OrdinalIgnoreCase)) continue;
+                if (TryProbeAndConnect(p, channel, out _))
+                {
+                    Trace.WriteLine($"[LightController] AutoDetect: 掃描找到 {p}（設定原為 {preferredComPort}）");
+                    return p;
+                }
+            }
+
+            Trace.WriteLine($"[LightController] AutoDetect: 掃描完 {ports.Length} port，無光源回應 (NA)");
+            ActiveComPort = null;
+            return null;
+        }
+
+        /// <summary>
+        /// 對指定 port 送出 cmd=4 (read brightness) 並嚴格驗證回應 8-byte。
+        /// 通過則保持連線（外部可直接使用），失敗則關閉 port。
+        /// </summary>
+        private bool TryProbeAndConnect(string comPort, int channel, out byte readBrightness)
+        {
+            readBrightness = 0;
+            SerialPort tmp = null;
+            try
+            {
+                tmp = new SerialPort(comPort, BaudRate, Parity.None, 8, StopBits.One)
+                {
+                    ReadTimeout = ProbeTimeoutMs,
+                    WriteTimeout = ProbeTimeoutMs
+                };
+                tmp.Open();
+
+                string probe = BuildCommand(4, channel, 0);
+                tmp.DiscardInBuffer();
+                tmp.Write(probe);
+
+                var buf = new byte[8];
+                int read = 0;
+                var sw = Stopwatch.StartNew();
+                while (read < 8 && sw.ElapsedMilliseconds < ProbeTimeoutMs)
+                {
+                    if (tmp.BytesToRead > 0)
+                        read += tmp.Read(buf, read, Math.Min(tmp.BytesToRead, 8 - read));
+                }
+
+                if (!ValidateReadResponse(buf, read, channel, out readBrightness))
+                {
+                    tmp.Close();
+                    tmp.Dispose();
+                    return false;
+                }
+
+                // 驗證通過 → 取代當前連線
+                lock (_lock)
+                {
+                    if (_port != null && _port.IsOpen) _port.Close();
+                    _port = tmp;
+                    _port.ReadTimeout = ResponseTimeoutMs;
+                    _port.WriteTimeout = ResponseTimeoutMs;
+                    ActiveComPort = comPort;
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"[LightController] Probe {comPort} failed: {ex.GetType().Name}");
+                try { tmp?.Close(); } catch { }
+                tmp?.Dispose();
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 嚴格驗證 read brightness 回應（PDF §4.1.4 表-4 格式）：
+        /// 8 bytes，格式 `$ + '4' + ch + 0XX + checksum`，checksum = XOR 前 6 bytes。
+        /// </summary>
+        internal static bool ValidateReadResponse(byte[] buf, int length, int expectedChannel, out byte value)
+        {
+            value = 0;
+            if (buf == null || length < 8) return false;
+            if (buf[0] != (byte)'$') return false;
+            if (buf[1] != (byte)'4') return false;
+            if (buf[2] != (byte)('0' + expectedChannel)) return false;
+            if (buf[3] != (byte)'0') return false;
+
+            byte xor = 0;
+            for (int i = 0; i < 6; i++) xor ^= buf[i];
+            string expectedCks = xor.ToString("X2");
+            if ((char)buf[6] != expectedCks[0] || (char)buf[7] != expectedCks[1]) return false;
+
+            string hex = "" + (char)buf[4] + (char)buf[5];
+            return byte.TryParse(hex, System.Globalization.NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture, out value);
         }
 
         public void Disconnect()
@@ -57,6 +177,10 @@ namespace AniloxRoll.Monitor.Core.Services
                 catch (Exception ex)
                 {
                     Trace.WriteLine($"[LightController] Disconnect error: {ex.Message}");
+                }
+                finally
+                {
+                    ActiveComPort = null;
                 }
             }
         }

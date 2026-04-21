@@ -198,7 +198,7 @@ namespace AniloxRoll.Monitor.Tests
                 var svc = new InspectionLogService(() => tempRoot);
                 var ts = new DateTime(2026, 3, 30, 10, 0, 0, 0);
                 var config = new CsvConfigSnapshot(
-                    new double[7], new double[7], null, 1.0f, 0.5f, 0.8f, ts);
+                    new double[7], new double[7], null, null, null, 1.0f, 0.5f, 0.8f, ts);
 
                 for (int i = 0; i < RecordCount; i++)
                 {
@@ -323,8 +323,14 @@ namespace AniloxRoll.Monitor.Tests
                     pos[c] = Math.Round(rng.NextDouble() * 200, 2);
                 }
                 var grabH = new int[7];
+                var expUs = new double[7];
+                var lrHz = new double[7];
                 for (int c2 = 0; c2 < 7; c2++)
+                {
                     grabH[c2] = rng.Next(1000, 10000);
+                    expUs[c2] = Math.Round(rng.NextDouble() * 500, 2);
+                    lrHz[c2] = Math.Round(rng.NextDouble() * 10000, 2);
+                }
                 float hessian = (float)Math.Round(rng.NextDouble() * 5, 4);
                 float errMean = (float)Math.Round(rng.NextDouble() * 2, 4);
                 float errMax  = (float)Math.Round(rng.NextDouble() * 3, 4);
@@ -332,7 +338,7 @@ namespace AniloxRoll.Monitor.Tests
                 // Truncate to millisecond precision
                 ts = new DateTime(ts.Year, ts.Month, ts.Day, ts.Hour, ts.Minute, ts.Second, ts.Millisecond);
 
-                var snap = new CsvConfigSnapshot(ops, pos, grabH, hessian, errMean, errMax, ts);
+                var snap = new CsvConfigSnapshot(ops, pos, grabH, expUs, lrHz, hessian, errMean, errMax, ts);
                 string csv = snap.ToCsvLine();
                 bool ok = CsvConfigSnapshot.TryParse(csv, out var parsed);
 
@@ -347,6 +353,10 @@ namespace AniloxRoll.Monitor.Tests
                         $"Cycle {i}, cam {c}: CamPos mismatch");
                     Assert.That(parsed.CamGrabHeight[c], Is.EqualTo(grabH[c]),
                         $"Cycle {i}, cam {c}: CamGrabHeight mismatch");
+                    Assert.That(parsed.CamExposureUs[c], Is.EqualTo(expUs[c]).Within(0.01),
+                        $"Cycle {i}, cam {c}: CamExposureUs mismatch");
+                    Assert.That(parsed.CamLineRateHz[c], Is.EqualTo(lrHz[c]).Within(0.01),
+                        $"Cycle {i}, cam {c}: CamLineRateHz mismatch");
                 }
 
                 nextLog = LogProgress("CsvConfigRoundTrip", i, Cycles, nextLog);

@@ -105,9 +105,9 @@ namespace AniloxRoll.Monitor.Core.Data
         public string DcfPath { get => CameraParam.DcfPath; set => CameraParam.DcfPath = value; }
 
         // ===== 7. 光源設定 =====
-        [Category("7. 光源設定")][DisplayName("啟用光源")]   public bool   LightEnabled      { get => Light.Enabled;      set => Light.Enabled      = value; }
-        [Category("7. 光源設定")][DisplayName("COM Port")]   public string LightComPort      { get => Light.ComPort;      set => Light.ComPort      = value; }
-        [Category("7. 光源設定")][DisplayName("亮度 CH1")]   public int    LightBrightnessCh1 { get => Light.BrightnessCh1; set => Light.BrightnessCh1 = value; }
-        [Category("7. 光源設定")][DisplayName("亮度 CH2")]   public int    LightBrightnessCh2 { get => Light.BrightnessCh2; set => Light.BrightnessCh2 = value; }
+        [Category("7. 光源設定")][DisplayName("啟用光源")]   public bool   LightEnabled    { get => Light.Enabled;    set => Light.Enabled    = value; }
+        [Category("7. 光源設定")][DisplayName("COM Port")]   public string LightComPort   { get => Light.ComPort;    set => Light.ComPort    = value; }
+        [Category("7. 光源設定")][DisplayName("通道")]       public int    LightChannel    { get => Light.Channel;    set => Light.Channel    = value; }
+        [Category("7. 光源設定")][DisplayName("亮度")]       public int    LightBrightness { get => Light.Brightness; set => Light.Brightness = value; }
     }
 }

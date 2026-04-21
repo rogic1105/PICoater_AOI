@@ -130,8 +130,8 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine("  \"Light\": {");
             sb.AppendLine($"    \"Enabled\": {(LT.Enabled ? "true" : "false")},");
             sb.AppendLine($"    \"ComPort\": \"{SettingsStoreHelper.EscapeJson(LT.ComPort)}\",");
-            sb.AppendLine($"    \"BrightnessCh1\": {LT.BrightnessCh1},");
-            sb.AppendLine($"    \"BrightnessCh2\": {LT.BrightnessCh2}");
+            sb.AppendLine($"    \"Channel\": {LT.Channel},");
+            sb.AppendLine($"    \"Brightness\": {LT.Brightness}");
             sb.AppendLine("  }");
 
             sb.Append("}");
@@ -287,10 +287,10 @@ namespace AniloxRoll.Monitor.Core.Data
             string obj = SettingsStoreHelper.ExtractObject(json, "Light");
             return new LightSettings
             {
-                Enabled        = SettingsStoreHelper.GetBool  (obj, "Enabled",        false),
-                ComPort        = SettingsStoreHelper.GetString(obj, "ComPort",         "COM1"),
-                BrightnessCh1  = SettingsStoreHelper.GetInt   (obj, "BrightnessCh1",  128),
-                BrightnessCh2  = SettingsStoreHelper.GetInt   (obj, "BrightnessCh2",  128),
+                Enabled    = SettingsStoreHelper.GetBool  (obj, "Enabled",    false),
+                ComPort    = SettingsStoreHelper.GetString(obj, "ComPort",    "COM1"),
+                Channel    = SettingsStoreHelper.GetInt   (obj, "Channel",    1),
+                Brightness = SettingsStoreHelper.GetInt   (obj, "Brightness", 128),
             };
         }
 

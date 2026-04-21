@@ -64,7 +64,7 @@ PICoater_AOI/
 | `Settings/Models/ImageViewSettings.cs` | 合圖方式設定（StitchMode） |
 | `Settings/Models/MuraChartConfig.cs` | Mura 圖表閾值 PropertyGrid 展開代理 |
 | `Settings/Models/CameraParamSettings.cs` | DCF 設定檔路徑 |
-| `Settings/Models/LightSettings.cs` | 光源控制器設定（COM Port、亮度 CH1/CH2） |
+| `Settings/Models/LightSettings.cs` | 光源控制器設定（COM Port、Channel、Brightness） |
 | `Settings/Stores/SettingsStoreHelper.cs` | Settings Load/Save 共用 helper：JSON 檔案 I/O、regex 解析工具方法 |
 | `Settings/Stores/AcquisitionSettingsStore.cs` | 讀寫 acquisition-settings.json |
 | `UI/State/UserSessionState.cs` | UI session 持久化 → session-state.json |
@@ -74,10 +74,10 @@ PICoater_AOI/
 | `Services/InspectionStatisticsService.cs` | CSV 統計服務；LoadConfigForDate（按日期載入 #CFG） |
 | `Services/IoState.cs` | IoState enum（FSM 狀態）+ IoSnapshot struct（IO 快照） |
 | `Services/IoGrabController.cs` | IO-Grab 連動：IoState FSM、IO 追蹤、Watchdog keepalive；支援 IModbusTcpClient 注入測試 |
-| `Services/CsvConfigSnapshot.cs` | 不可變設定快照（CamOps/CamPos/CamGrabHeight/Hessian/ErrorValue） |
+| `Services/CsvConfigSnapshot.cs` | 不可變設定快照（CamOps/CamPos/CamGrabHeight/CamExposureUs/CamLineRateHz/Hessian/ErrorValue） |
 | `Services/StorageRetentionService.cs` | 循環儲存：Timer 定期掃描磁碟用量，刪除最舊日期資料夾影像，保護 CSV 與 Fail 影像 |
 | `Services/RemoteCopyService.cs` | 背景遠端複製：ConcurrentQueue + 背景執行緒，File.Copy 含重試（3 次） |
-| `Services/LightController.cs` | LTS-3DPA24 光源控制器 RS-232 通訊：TurnOn/TurnOff/SetBrightness，跟隨 IO Grab 開關 |
+| `Services/LightController.cs` | LTS-3DPA24 光源控制器 RS-232 通訊：AutoDetect（先試設定 COM 再掃描）、嚴格 probe（PDF §4.1.4 表-4 驗證：8-byte、cmd/ch echo、XOR checksum）、TurnOn/Off/SetBrightness，跟隨 IO Grab 開關 |
 | `UI/Widgets/GrabImageStitcher.cs` | 多張影像垂直拼接 + MergeHorizontal 全域合圖；LoadCameraImage（internal） |
 | `UI/Widgets/ProportionalScaler.cs` | Form 等比例縮放 |
 | `sdk/AOI_SDK/src_dotnet/AOI.SDK/UI/SmartCanvas.cs` | PictureBox 子類：zoom/pan/edge/ClampPan；自訂白底黑邊十字游標 |
@@ -183,9 +183,9 @@ PICoater_AOI/
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
 | 啟用光源 | `LightEnabled` | false | 啟用 LTS-3DPA24 光源控制器 |
-| COM Port | `LightComPort` | COM1 | RS-232 連接埠 |
-| 亮度 CH1 | `LightBrightnessCh1` | 128 | 通道 1 亮度（0~255） |
-| 亮度 CH2 | `LightBrightnessCh2` | 128 | 通道 2 亮度（0~255） |
+| COM Port | `LightComPort` | COM1 | RS-232 連接埠；啟動時先試此 port，失敗則自動掃描所有 port（找到後更新此欄位） |
+| 通道 | `LightChannel` | 1 | 使用通道（單通道機型固定 1） |
+| 亮度 | `LightBrightness` | 128 | 亮度（0~255） |
 
 ---
 

@@ -231,10 +231,21 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (!_settings.LightEnabled) return;
             _lightController = new LightController();
-            if (!_lightController.Connect(_settings.LightComPort))
+
+            // 先試檢測設定的 COM，失敗則掃描所有 port
+            string found = _lightController.AutoDetect(_settings.LightComPort, _settings.LightChannel);
+            if (found == null)
             {
-                System.Diagnostics.Trace.WriteLine("[Light] 光源控制器連線失敗: " + _settings.LightComPort);
+                System.Diagnostics.Trace.WriteLine("[Light] 光源控制器: NA（設定 " + _settings.LightComPort + " + 全 port 掃描均無回應）");
+                _lightController.Dispose();
                 _lightController = null;
+                return;
+            }
+
+            // 掃描找到但非原設定 → 更新記錄的 COM（下次啟動直接命中）
+            if (!string.Equals(found, _settings.LightComPort, StringComparison.OrdinalIgnoreCase))
+            {
+                _settings.LightComPort = found;
             }
         }
 
@@ -257,15 +268,52 @@ namespace AniloxRoll.Monitor.Forms
         private void LightTurnOn()
         {
             if (_lightController == null || !_lightController.IsConnected) return;
-            _lightController.TurnOn(1, _settings.LightBrightnessCh1);
-            _lightController.TurnOn(2, _settings.LightBrightnessCh2);
+            _lightController.TurnOn(_settings.LightChannel, _settings.LightBrightness);
         }
 
         private void LightTurnOff()
         {
             if (_lightController == null || !_lightController.IsConnected) return;
-            _lightController.TurnOff(1);
-            _lightController.TurnOff(2);
+            _lightController.TurnOff(_settings.LightChannel);
+        }
+
+        /// <summary>
+        /// 光源 PropertyGrid 變更 → 立即生效：
+        /// - LightEnabled false→true：啟動偵測；true→false：關閉連線
+        /// - COM Port / 通道變更：重新偵測
+        /// - 亮度變更：立即套用到硬體（若正在點燈，連同 TurnOn 更新輸出）
+        /// </summary>
+        private void HandleLightSettingsChanged(string changedPropertyName)
+        {
+            switch (changedPropertyName)
+            {
+                case nameof(InspectionSettings.LightEnabled):
+                    if (_settings.LightEnabled)
+                    {
+                        if (_lightController == null) InitLightController();
+                    }
+                    else
+                    {
+                        _lightController?.Dispose();
+                        _lightController = null;
+                    }
+                    break;
+
+                case nameof(InspectionSettings.LightComPort):
+                case nameof(InspectionSettings.LightChannel):
+                    if (_settings.LightEnabled)
+                    {
+                        _lightController?.Dispose();
+                        _lightController = null;
+                        InitLightController();
+                    }
+                    break;
+
+                case nameof(InspectionSettings.LightBrightness):
+                    if (_lightController != null && _lightController.IsConnected)
+                        _lightController.SetBrightness(_settings.LightChannel, _settings.LightBrightness);
+                    break;
+            }
         }
 
         private void UpdatePlcStateLabel(IoState state)
@@ -1496,6 +1544,9 @@ namespace AniloxRoll.Monitor.Forms
                 _dataStatsPresenter.ApplyFixedScaleForChart("Monthly", _settings.Chart.MonthlyYMax);
             else if (changedPropertyName == nameof(InspectionSettings.ChartDailyYMax))
                 _dataStatsPresenter.ApplyFixedScaleForChart("Daily", _settings.Chart.DailyYMax);
+
+            // 光源設定即時生效（啟用切換、COM/通道重新偵測、亮度立即套用）
+            HandleLightSettingsChanged(changedPropertyName);
 
             if (changedPropertyName == nameof(InspectionSettings.EnableMuraEnhance))
                 ApplyMuraEnhance(_settings.EnableMuraEnhance);
