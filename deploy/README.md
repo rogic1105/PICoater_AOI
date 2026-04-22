@@ -33,24 +33,28 @@
      "Gateway": "",
      "StorageFolder": "C:\\AniloxStorage",
      "ShareName": "AniloxStorage",
-     "AllowedUser": "Everyone"
+     "AllowedUser": "Everyone",
+     "RdpEnabled": true,
+     "RdpUser": "admin",
+     "RdpPassword": "admin"
    }
    ```
    - `NicName`：如果只有一張網卡可不填（自動選）；有 Wi-Fi 請明確指定（中文 OK）
    - `StorageFolder`：改成現場儲存機實際可用的磁碟（例 `"D:\\AniloxStorage"`）
+   - `RdpUser` / `RdpPassword`：遠端桌面帳密（**內網專用弱密碼**；要更安全自己改）
 3. **雙擊 `run_setup.bat`**（系統會跳 UAC，同意）
 4. 看到 `All Done. Press any key to close...` 代表成功
 5. 驗證：在儲存機本機跑 `ipconfig` 確認 IP = 192.168.10.20
 
-**run_setup.bat 會自動做這兩件事**：
+**run_setup.bat 會自動做這三件事**：
 
-| Step 1 — 網路 + SMB 共用（setup_storage_pc.ps1） | Step 2 — 匿名 Guest 存取（setup_guest.ps1） |
-|---|---|
-| 設固定 IP | 啟用 Guest 本機帳號 |
-| 建立 `C:\AniloxStorage` + NTFS Everyone Modify | 授予 Guest SMB Full + NTFS Modify |
-| 建立 SMB 共用 `AniloxStorage` | **secedit 把 Guest 從「拒絕網路登入」移除** |
-| 開放防火牆 File and Printer Sharing | 加入「允許網路登入」 |
-| 網路設定檔切 Private | gpupdate /force |
+| Step 1 — 網路 + SMB 共用<br>（setup_storage_pc.ps1） | Step 2 — 匿名 Guest 存取<br>（setup_guest.ps1） | Step 3 — 遠端桌面<br>（setup_rdp.ps1） |
+|---|---|---|
+| 設固定 IP | 啟用 Guest 本機帳號 | 關閉密碼複雜度規則（允許弱密碼） |
+| 建立 `C:\AniloxStorage` + NTFS Everyone Modify | 授予 Guest SMB Full + NTFS Modify | 建立 `admin`/`admin` 帳號（密碼永不過期） |
+| 建立 SMB 共用 `AniloxStorage` | **secedit 把 Guest 從「拒絕網路登入」移除** | 加入 Administrators + Remote Desktop Users |
+| 開放防火牆 File and Printer Sharing | 加入「允許網路登入」 | fDenyTSConnections = 0、關閉 NLA |
+| 網路設定檔切 Private | gpupdate /force | 開放 Remote Desktop 防火牆 |
 
 ### ② 檢測機（一次執行 run_setup.bat 搞定）
 
@@ -77,7 +81,13 @@
 | 新增 IP 別名 192.168.10.10（不動 PLC IP） | GPO 位置覆寫同樣值 |
 | ping 儲存機驗證 | `net use * /delete /y` 清除快取 |
 
-### ③ 驗證連線
+### ③ 遠端桌面連線（選用，維運用）
+
+在**檢測機**（或任何同網段 PC）Win+R 打 `mstsc` → 電腦填 `192.168.10.20` → 帳號 `admin`、密碼 `admin` → 連進儲存機桌面。
+
+---
+
+### ④ 驗證連線
 
 在**檢測機** PowerShell（**不用管理員**）：
 
@@ -94,7 +104,7 @@ Out-File -FilePath \\192.168.10.20\AniloxStorage\test.txt -InputObject "hello"
 #   應直接開啟，不要求帳密
 ```
 
-### ④ 啟用 PICoater 遠端複製
+### ⑤ 啟用 PICoater 遠端複製
 
 1. 開 PICoater
 2. 右側屬性面板 → **儲存設定 → 遠端路徑** 填：
@@ -114,10 +124,11 @@ Out-File -FilePath \\192.168.10.20\AniloxStorage\test.txt -InputObject "hello"
 ```
 deploy/
 ├── storage-pc/
-│   ├── run_setup.bat            ← 雙擊入口（一次跑完兩支 .ps1）
-│   ├── storage-config.json      ← 參數（NicName / IP / 資料夾 / 共用名）
+│   ├── run_setup.bat            ← 雙擊入口（一次跑完三支 .ps1）
+│   ├── storage-config.json      ← 參數（NicName / IP / 資料夾 / 共用名 / RDP 帳密）
 │   ├── setup_storage_pc.ps1     ← Step 1：網路 + 共用
-│   └── setup_guest.ps1          ← Step 2：Guest 匿名 + secedit
+│   ├── setup_guest.ps1          ← Step 2：Guest 匿名 + secedit
+│   └── setup_rdp.ps1            ← Step 3：遠端桌面 + RDP 帳號
 └── inspection-pc/
     ├── run_setup.bat            ← 雙擊入口（一次跑完兩支 .ps1）
     ├── inspection-config.json   ← 參數（PLC 前綴 / 儲存 IP）
@@ -150,8 +161,11 @@ deploy/
 - 允許匿名 Guest SMB → **不可暴露到網際網路或公司內網**
 - 儲存機只連那條儲存 switch，不要插公司 LAN
 - `AllowInsecureGuestAuth` 僅開在檢測機（會降低該機 Client 安全性，但本機不會成為攻擊標的）
+- RDP 帳密 `admin`/`admin` + 關閉 NLA + 關閉密碼複雜度 → **只因內網隔離才敢這樣設**
 
-如果未來要上公司網：改用帳密認證（新增 `inspection` 帳號 + 密碼），拿掉 `setup_guest.ps1` 的匿名設定，同時改寫 `RemoteCopyService` 支援 `net use` 帶憑證。
+如果未來要上公司網（或要加強安全）：
+- Guest 匿名 SMB → 改帳密認證（新增 `inspection` 帳號 + 密碼），拿掉 `setup_guest.ps1` 的匿名設定，同時改寫 `RemoteCopyService` 支援 `net use` 帶憑證
+- RDP → 改強密碼（storage-config.json 的 `RdpPassword`），把 `setup_rdp.ps1` 的 `UserAuthentication` 改回 `1`（要求 NLA），把 `PasswordComplexity` 改回 `1`
 
 ---
 

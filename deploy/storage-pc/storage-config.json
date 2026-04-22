@@ -5,5 +5,8 @@
   "Gateway": "",
   "StorageFolder": "D:\\AniloxStorage",
   "ShareName": "AniloxStorage",
-  "AllowedUser": "Everyone"
+  "AllowedUser": "Everyone",
+  "RdpEnabled": true,
+  "RdpUser": "admin",
+  "RdpPassword": "admin"
 }

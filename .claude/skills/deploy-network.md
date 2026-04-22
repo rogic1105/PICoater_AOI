@@ -20,10 +20,11 @@
 
 | 位置 | 職責 |
 |------|------|
-| `deploy/storage-pc/storage-config.json` | 儲存機參數（NicName / IpAddress / StorageFolder / ShareName） |
+| `deploy/storage-pc/storage-config.json` | 儲存機參數（NicName / IpAddress / StorageFolder / ShareName / RdpUser / RdpPassword） |
 | `deploy/storage-pc/setup_storage_pc.ps1` | 儲存機主設定（IP / 資料夾 / NTFS / SMB / 防火牆 / Private profile） |
 | `deploy/storage-pc/setup_guest.ps1` | 儲存機 Guest 匿名（Server Guest / 本機帳號 / SMB ACL / NTFS / secedit） |
-| `deploy/storage-pc/run_setup.bat` | 一次跑完兩支 .ps1（自動提權 UAC） |
+| `deploy/storage-pc/setup_rdp.ps1` | 儲存機遠端桌面（關閉密碼複雜度 / 建 admin 帳號 / RDP 服務 / 防火牆） |
+| `deploy/storage-pc/run_setup.bat` | 一次跑完三支 .ps1（自動提權 UAC） |
 | `deploy/inspection-pc/inspection-config.json` | 檢測機參數（PlcSubnetPrefix / StorageIp / VerifyPingTarget） |
 | `deploy/inspection-pc/setup_inspection_nic.ps1` | 自動找 PLC NIC 加 secondary IP |
 | `deploy/inspection-pc/setup_guest.ps1` | 檢測機 Client `AllowInsecureGuestAuth = 1` + GPO 覆寫 + 清除連線快取 |

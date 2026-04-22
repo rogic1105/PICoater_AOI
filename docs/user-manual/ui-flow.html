@@ -1282,9 +1282,9 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 
 <div class="flow-group vflow" id="deploy-storage-pc">
 <div class="flow-title">儲存機一次設定 <code>deploy/storage-pc/run_setup.bat</code></div>
-<div class="box input">雙擊 run_setup.bat（自動提權 UAC；兩步驟連跑）</div>
+<div class="box input">雙擊 run_setup.bat（自動提權 UAC；三步驟連跑）</div>
 <div class="v-arrow" data-label="讀取"></div>
-<div class="box action">storage-config.json（NicName / IpAddress / StorageFolder / ShareName）</div>
+<div class="box action">storage-config.json（NicName / IpAddress / StorageFolder / ShareName / RdpUser / RdpPassword）</div>
 <div class="v-arrow" data-label="Step 1：網路 + 共用"></div>
 <div class="out-seq">
 <div class="box action">[1/6] 設定固定 IP（New-NetIPAddress 192.168.10.20/24）</div>
@@ -1302,12 +1302,22 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box action">[4/5] 授予 Guest NTFS Modify（FileSystemAccessRule）</div>
 <div class="box action">[5/5] secedit 修正 Guest 網路登入權利（自 SeDenyNetworkLogonRight 移除，加入 SeNetworkLogonRight）</div>
 </div>
+<div class="v-arrow" data-label="Step 3：遠端桌面"></div>
+<div class="out-seq">
+<div class="box action">[1/5] secedit 關閉密碼複雜度 + 最短長度（允許弱密碼如 admin/admin）</div>
+<div class="box action">[2/5] New-LocalUser 或 Set-LocalUser（帳號名取 RdpUser，密碼取 RdpPassword，PasswordNeverExpires）</div>
+<div class="box action">[3/5] Add-LocalGroupMember → Administrators + Remote Desktop Users</div>
+<div class="box action">[4/5] fDenyTSConnections=0 + UserAuthentication=0（關閉 NLA，內網方便）</div>
+<div class="box action">[5/5] Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'</div>
+</div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">\\192.168.10.20\AniloxStorage 可匿名存取</div>
 <div class="box output">C:\AniloxStorage 為本機根目錄</div>
+<div class="box output">mstsc 192.168.10.20 可用（帳密 admin / admin）</div>
 </div>
 <div class="note dev">[Step2 5/5] 是關鍵：Windows 預設把 Guest 放在 SeDenyNetworkLogonRight（拒絕從網路存取此電腦）。只啟用 Guest + 給 ACL 還不夠，一定要改這個原則。secedit 匯出時 Guest 可能以名字或 *SID 兩種形式出現，兩種都要比對移除。</div>
+<div class="note dev">[Step3] RDP 帳密 admin/admin 是內網專用弱密碼設計。要上公司網請改強密碼並把 UserAuthentication 改回 1（要求 NLA）、PasswordComplexity 改回 1。</div>
 <div class="note dev">PowerShell 5.1 中文 Windows 陷阱：JSON 讀檔必須用 [System.IO.File]::ReadAllText(path, UTF8)，否則 Big5 解碼中文 NicName 會亂碼。.ps1 檔本身必須 UTF-8 with BOM。.bat 檔必須純 ASCII。</div>
 </div>
 
