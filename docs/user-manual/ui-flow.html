@@ -1103,26 +1103,47 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="flow-group vflow">
 <div class="flow-title">相機參數滑桿 <code>trackBarExp/Lr/Ht</code></div>
 <div class="box input">拖曳或輸入【曝光滑桿】/【線掃滑桿】/【高度滑桿】</div>
-<div class="v-arrow dev"></div>
-<div class="box action dev">同步 TrackBar ↔ NUD → 存 JSON → 寫硬體</div>
-<div class="v-arrow"></div>
-<div class="out-par">
-<div class="box output">TrackBar + 數值：同步更新</div>
-<div class="box output">（線掃改變時）曝光上限：重算 + 夾緊</div>
-<div class="box output dev">acquisition-settings.json：即時存檔</div>
+<div class="v-arrow dev" data-label="依輸入方式分派"></div>
+<div class="v-branch">
+<div class="v-branch-path"><span class="branch-label yes">滑鼠拖曳</span>
+<div class="box action dev">MouseDown 加入 _dragging → 拖曳中只更新 UI 不寫硬體 → MouseUp 立即寫硬體</div>
+</div>
+<div class="v-branch-path"><span class="branch-label yes">滾輪 / 鍵盤箭頭 / NUD 打字</span>
+<div class="box action dev">每次 ValueChanged 重啟 1s debounce timer，最後一次值勝出</div>
+</div>
 </div>
 <div class="v-arrow"></div>
-<div class="box guard">拖曳中不寫硬體，放開才寫。_syncingFromHw 防 Telemetry 回寫。</div>
+<div class="out-par">
+<div class="box output">TrackBar + 數值：同步更新（即時）</div>
+<div class="box output">（線掃改變時）曝光上限：重算 + 夾緊</div>
+<div class="box output dev">acquisition-settings.json：即時存檔</div>
+<div class="box output">寫硬體後 postAction：HT 改變 → RefreshMainDisplay 重新載入主畫面 buffer</div>
+</div>
+<div class="v-arrow"></div>
+<div class="box guard">拖曳中不寫硬體（_dragging）；非拖曳輸入 1s debounce 避免高頻 MIL 寫入造成卡頓。_syncingFromHw 防 Telemetry 回寫。調整參數不再自動切換縮圖選擇（保持使用者當前主畫面）。</div>
 <div class="box input">拖曳或輸入 CAM ALL 滑桿（曝光/速率/高度 各一組）</div>
-<div class="v-arrow dev"></div>
-<div class="box action dev">BindAllSync：ALL bar/num ValueChanged → 逐台設定 nums[j].Value</div>
+<div class="v-arrow dev" data-label="依輸入方式分派"></div>
+<div class="v-branch">
+<div class="v-branch-path"><span class="branch-label yes">滑鼠拖曳</span>
+<div class="box action dev">拖曳中 CAM1~7 bar/num 凍結；MouseUp → Apply()</div>
+</div>
+<div class="v-branch-path"><span class="branch-label yes">滾輪 / 鍵盤箭頭 / NUD 打字</span>
+<div class="box action dev">1s debounce → Apply()</div>
+</div>
+</div>
+<div class="v-arrow dev" data-label="Apply(v) 三步驟"></div>
+<div class="out-seq dev">
+<div class="box action">① writeHardwareForCam(j, v) × 7：寫硬體</div>
+<div class="box action">② saveSettingForCam(j, v) × 7：存 JSON</div>
+<div class="box action">③ _syncingFromHw=true 同步 CAM1~7 bar/num 顯示 → postWriteAll（如：HT 的 RefreshMainDisplay）</div>
+</div>
 <div class="v-arrow"></div>
 <div class="out-par">
-<div class="box output">CAM1~7 TrackBar + 數值：全部同步更新</div>
+<div class="box output">CAM1~7 TrackBar + 數值：硬體寫完才同步（避免 UI 比硬體快）</div>
 <div class="box output">（ALL 曝光上限 = 各台曝光上限的最小值，隨線掃動態更新）</div>
 </div>
 <div class="v-arrow"></div>
-<div class="box guard">allSyncing 防 ALL ↔ 各台迴圈。_syncingFromHw 防 Telemetry 回寫。</div>
+<div class="box guard">allSyncing 防 ALL ↔ 各台迴圈；_syncingFromHw 防 ① 寫硬體後同步 UI 時觸發 BindBidirectionalSync 重複寫入。</div>
 </div>
 <div class="flow-group vflow dev">
 <div class="flow-title">Telemetry Timer（500ms 自動）</div>

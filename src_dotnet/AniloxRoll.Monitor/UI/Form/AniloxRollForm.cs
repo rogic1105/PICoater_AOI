@@ -1894,9 +1894,29 @@ namespace AniloxRoll.Monitor.Forms
             _lrAllBar  = trackBarLrAll;  _lrAllNum  = numLrAll;
             _htAllBar  = trackBarHtAll;  _htAllNum  = numHtAll;
 
-            BindAllSync(_expAllBar, _expAllNum, _expBars, _expNums);
-            BindAllSync(_lrAllBar,  _lrAllNum,  _lrBars,  _lrNums);
-            BindAllSync(_htAllBar,  _htAllNum,  _htBars,  _htNums);
+            BindAllSync(_expAllBar, _expAllNum, _expBars, _expNums,
+                (j, v) => _liveCameraManager?.SetExposureForCamera(j + 1, v),
+                (j, v) => { acq.CameraExposureTimeUs[j] = v; ConfigManager.SaveAcquisitionSettings(acq); });
+
+            BindAllSync(_lrAllBar, _lrAllNum, _lrBars, _lrNums,
+                (j, v) => _liveCameraManager?.SetLineRateForCamera(j + 1, v),
+                (j, v) => { acq.CameraLineRateHz[j] = v; ConfigManager.SaveAcquisitionSettings(acq); },
+                () => {
+                    // 同步所有 cam 的 exp max（每台 LR 都同值，算一次套到所有 cam）
+                    int newMax = (int)acq.CameraLineRateHz[0];
+                    int expMax = newMax <= 0 ? ExpMaxCap : Math.Max(ExpMin, Math.Min(ExpMaxCap, (int)(900000.0 / newMax)));
+                    for (int i = 0; i < CameraCount; i++) UpdateExpMaxAndClampColor(i, expMax);
+                    UpdateRowChartPitch();
+                });
+
+            BindAllSync(_htAllBar, _htAllNum, _htBars, _htNums,
+                (j, v) => _liveCameraManager?.SetGrabHeightForCamera(j + 1, v),
+                (j, v) => { acq.CameraGrabHeight[j] = v; ConfigManager.SaveAcquisitionSettings(acq); },
+                () => {
+                    _liveCameraManager?.RefreshMainDisplay();
+                    if (_settings.StitchMode == StitchMode.Global && _liveCameraManager?.IsGlobalMergeActive == true)
+                        _liveCameraManager.RefreshGlobalMergeLayout(_settings.Ops.ToArray(), _settings.StartPosition.ToArray());
+                });
 
             for (int i = 0; i < CameraCount; i++)
             {
@@ -1970,7 +1990,8 @@ namespace AniloxRoll.Monitor.Forms
 
         /// <summary>
         /// TrackBar ↔ NumericUpDown 雙向同步綁定：
-        /// 拖曳中抑制硬體寫入，拖曳結束/NUD 變更時才寫入。
+        /// - 拖曳中：抑制硬體寫入，MouseUp 立即寫入。
+        /// - 滾輪 / 鍵盤箭頭 / NUD 輸入：1 秒 debounce 才寫硬體（避免高頻 MIL 寫入造成卡頓）。
         /// </summary>
         private void BindBidirectionalSync(
             TrackBar bar, NumericUpDown num, int camId,
@@ -1984,19 +2005,43 @@ namespace AniloxRoll.Monitor.Forms
             bar.Value = clamped; num.Value = clamped;
 
             bool syncing = false;
+
+            // 滾輪/鍵盤/NUD 等非拖曳輸入 → 1s debounce 才寫硬體
+            var debounce = new System.Windows.Forms.Timer { Interval = 1000 };
+            int pendingValue = clamped;
+            bool hasPending = false;
+            debounce.Tick += (s, e) =>
+            {
+                debounce.Stop();
+                if (!hasPending) return;
+                hasPending = false;
+                writeHardware(pendingValue);
+                postAction?.Invoke();   // 硬體寫完後再 refresh（例：HT 改變後重新載入主畫面 buffer）
+            };
+            void ScheduleWrite(int v)
+            {
+                pendingValue = v;
+                hasPending = true;
+                debounce.Stop();
+                debounce.Start();
+            }
+
             bar.MouseDown += (s, e) => _dragging.Add(bar);
             bar.MouseUp += (s, e) =>
             {
                 _dragging.Remove(bar);
+                // 拖曳結束 → 立即寫入並取消 debounce
+                debounce.Stop();
+                hasPending = false;
                 writeHardware(bar.Value);
-                _liveCameraManager?.SwitchToCamera(camId);
+                postAction?.Invoke();   // 硬體寫完後再 refresh（例：HT 改變後重新載入主畫面 buffer）
             };
             bar.ValueChanged += (s, e) =>
             {
                 if (syncing || _syncingFromHw) return; syncing = true;
                 num.Value = bar.Value;
                 saveSetting(bar.Value);
-                if (!_dragging.Contains(bar)) writeHardware(bar.Value);
+                if (!_dragging.Contains(bar)) ScheduleWrite(bar.Value);
                 postAction?.Invoke();
                 syncing = false;
             };
@@ -2006,32 +2051,85 @@ namespace AniloxRoll.Monitor.Forms
                 int v = (int)num.Value;
                 bar.Value = Math.Max(min, Math.Min(max, v));
                 saveSetting(v);
-                writeHardware(v);
+                ScheduleWrite(v);
                 postAction?.Invoke();
                 syncing = false;
             };
         }
 
         /// <summary>
-        /// CAM All → CAM1~7 同步：拖曳/輸入 All 控制項時同步更新所有相機。
+        /// CAM All → CAM1~7 同步：
+        /// - 拖曳 All：MouseUp 才寫硬體；滾輪/鍵盤/NUD：1s debounce 才寫硬體。
+        /// - 寫硬體完成後才同步 CAM1~7 的 bar/num 顯示（避免 UI 比硬體快）。
         /// </summary>
         private void BindAllSync(TrackBar barAll, NumericUpDown numAll,
-            TrackBar[] bars, NumericUpDown[] nums)
+            TrackBar[] bars, NumericUpDown[] nums,
+            Action<int, int> writeHardwareForCam,    // (camIdx0based, value)
+            Action<int, int> saveSettingForCam,      // (camIdx0based, value)
+            Action postWriteAll = null)
         {
             bool allSyncing = false;
+            var debounce = new System.Windows.Forms.Timer { Interval = 1000 };
+            int pendingValue = barAll.Value;
+            bool hasPending = false;
+
+            void Apply(int v)
+            {
+                // 1. 寫硬體（所有 7 台）
+                for (int j = 0; j < bars.Length; j++)
+                    writeHardwareForCam(j, v);
+                // 2. 寫 settings
+                for (int j = 0; j < bars.Length; j++)
+                    saveSettingForCam(j, v);
+                // 3. 同步 cam 的 bar/num 顯示（用 _syncingFromHw 跳過 BindBidirectionalSync 的 ScheduleWrite/saveSetting）
+                _syncingFromHw = true;
+                try
+                {
+                    for (int j = 0; j < bars.Length; j++)
+                    {
+                        int clamped = Math.Max(bars[j].Minimum, Math.Min(bars[j].Maximum, v));
+                        bars[j].Value = clamped;
+                        nums[j].Value = clamped;
+                    }
+                }
+                finally { _syncingFromHw = false; }
+                postWriteAll?.Invoke();
+            }
+
+            debounce.Tick += (s, e) =>
+            {
+                debounce.Stop();
+                if (!hasPending) return;
+                hasPending = false;
+                Apply(pendingValue);
+            };
+            void Schedule(int v)
+            {
+                pendingValue = v;
+                hasPending = true;
+                debounce.Stop();
+                debounce.Start();
+            }
+
+            barAll.MouseDown += (s, e) => _dragging.Add(barAll);
+            barAll.MouseUp += (s, e) =>
+            {
+                _dragging.Remove(barAll);
+                debounce.Stop();
+                hasPending = false;
+                Apply(barAll.Value);
+            };
             barAll.ValueChanged += (s, e) => {
                 if (allSyncing || _syncingFromHw) return; allSyncing = true;
                 numAll.Value = barAll.Value;
-                for (int j = 0; j < bars.Length; j++)
-                    nums[j].Value = barAll.Value;
+                if (!_dragging.Contains(barAll)) Schedule(barAll.Value);
                 allSyncing = false;
             };
             numAll.ValueChanged += (s, e) => {
                 if (allSyncing || _syncingFromHw) return; allSyncing = true;
                 int v = (int)numAll.Value;
                 barAll.Value = Math.Max(barAll.Minimum, Math.Min(barAll.Maximum, v));
-                for (int j = 0; j < bars.Length; j++)
-                    nums[j].Value = v;
+                Schedule(v);
                 allSyncing = false;
             };
         }
