@@ -165,6 +165,52 @@ namespace AniloxRoll.Monitor.Core.Services
                 System.Globalization.CultureInfo.InvariantCulture, out value);
         }
 
+        /// <summary>
+        /// 向裝置送 read brightness 並驗證 8-byte 回應。失敗時關閉 port（IsConnected 變 false）。
+        /// 用於定期健康檢查：SerialPort.IsOpen 偵測不到實體拔線，必須實際溝通才算數。
+        /// </summary>
+        public bool Probe(int channel)
+        {
+            // lock 被佔用 = SendCommand/ReadBrightness 正在執行 = I/O 剛發生 = 線還通
+            // 直接跳過這輪，避免與取像期間的光源開關操作競爭（不影響取像時序）
+            if (!System.Threading.Monitor.TryEnter(_lock, 0))
+                return true;
+            try
+            {
+                if (_port == null || !_port.IsOpen) return false;
+                try
+                {
+                    string cmd = BuildCommand(4, channel, 0);
+                    _port.DiscardInBuffer();
+                    _port.Write(cmd);
+
+                    var buf = new byte[8];
+                    int read = 0;
+                    var sw = Stopwatch.StartNew();
+                    while (read < 8 && sw.ElapsedMilliseconds < ProbeTimeoutMs)
+                    {
+                        if (_port.BytesToRead > 0)
+                            read += _port.Read(buf, read, Math.Min(_port.BytesToRead, 8 - read));
+                    }
+
+                    byte dummy;
+                    if (ValidateReadResponse(buf, read, channel, out dummy)) return true;
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine($"[LightController] Probe error: {ex.Message}");
+                }
+
+                // 回應不符或 I/O 例外 → 視為斷線，關閉 port
+                try { _port.Close(); } catch { }
+                return false;
+            }
+            finally
+            {
+                System.Threading.Monitor.Exit(_lock);
+            }
+        }
+
         public void Disconnect()
         {
             lock (_lock)

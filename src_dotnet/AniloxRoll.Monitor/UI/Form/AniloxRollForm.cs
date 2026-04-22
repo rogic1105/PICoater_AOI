@@ -322,30 +322,13 @@ namespace AniloxRoll.Monitor.Forms
             Color bgColor;
             switch (state)
             {
-                case IoState.Idle:
-                    text = "Idle 待機";
-                    bgColor = IecGreen;   // IEC 綠
-                    break;
-                case IoState.Running:
-                    text = "Running 取像中";
-                    bgColor = IecBlue;   // 藍
-                    break;
-                case IoState.Stopping:
-                    text = "Stopping 停止中";
-                    bgColor = IecYellow;  // IEC 黃
-                    break;
-                case IoState.Faulted:
-                    text = "Faulted IO故障";
-                    bgColor = IecRed;   // IEC 紅
-                    break;
-                case IoState.CommLost:
-                    text = "CommLost 通訊中斷";
-                    bgColor = IecRed;   // IEC 紅
-                    break;
-                default: // Disconnected, Closed
-                    text = state.ToString();
-                    bgColor = IecGray; // 灰
-                    break;
+                case IoState.Idle:      text = "Idle 待機"; bgColor = IecGreen;  break;
+                case IoState.Running:   text = "取像中";   bgColor = IecBlue;   break;
+                case IoState.Stopping:  text = "停止中";   bgColor = IecYellow; break;
+                case IoState.Faulted:   text = "設備離線"; bgColor = IecRed;    break;
+                case IoState.CommLost:  text = "通訊中斷"; bgColor = IecRed;    break;
+                case IoState.Closed:    text = "已關閉";   bgColor = IecGray;   break;
+                default:                text = "未連線";   bgColor = IecGray;   break;  // Disconnected
             }
             lblPlcState.Text = $"● {text}";
             lblPlcState.BackColor = bgColor;
@@ -371,6 +354,148 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
+        private void UpdateLightConnLabel()
+        {
+            if (_settings == null || !_settings.LightEnabled)
+            {
+                lblLightConn.Text = "● 光源 停用";
+                lblLightConn.BackColor = IecGray;
+                return;
+            }
+            if (_lightController != null && _lightController.IsConnected)
+            {
+                lblLightConn.Text = "● 光源 已連線";
+                lblLightConn.BackColor = IecGreen;
+            }
+            else
+            {
+                lblLightConn.Text = "● 光源 離線";
+                lblLightConn.BackColor = IecRed;
+            }
+        }
+
+        private int _storageProbeTickCounter;
+        private volatile bool _storageProbeInFlight;
+        private int _lightProbeTickCounter;
+        private volatile bool _lightProbeInFlight;
+
+        private void UpdateStorageConnLabel(bool? connected)
+        {
+            string path = _settings?.RemotePath ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                lblStorageConn.Text = "● 儲存電腦 停用";
+                lblStorageConn.BackColor = IecGray;
+                return;
+            }
+            if (connected == true)
+            {
+                lblStorageConn.Text = "● 儲存電腦 已連線";
+                lblStorageConn.BackColor = IecGreen;
+            }
+            else if (connected == false)
+            {
+                lblStorageConn.Text = "● 儲存電腦 離線";
+                lblStorageConn.BackColor = IecRed;
+            }
+            // connected == null：保留上次結果（probe 還沒回來）
+        }
+
+        /// <summary>
+        /// 由 TelemetryTimer_Tick 每 500ms 呼叫。光源每 5 秒背景 probe 一次（SerialPort.IsOpen 偵測不到拔線，
+        /// 必須實際送命令驗證）；儲存機每 5 秒背景 probe 一次（UNC Directory.Exists 可能阻塞，不可在 UI thread）。
+        /// </summary>
+        private void UpdateConnectionStatusLabels()
+        {
+            // 光源：先同步更新（用 IsConnected 快取結果），再 2 秒背景實測 / 重連
+            // （Probe 用 TryEnter，與取像時 SendCommand 不會競爭，可放心高頻）
+            UpdateLightConnLabel();
+            if (++_lightProbeTickCounter >= 4)
+            {
+                _lightProbeTickCounter = 0;
+                if (_settings != null && _settings.LightEnabled && !_lightProbeInFlight)
+                {
+                    _lightProbeInFlight = true;
+                    int channel = _settings.LightChannel;
+                    string preferredPort = _settings.LightComPort;
+                    var lc = _lightController;
+                    System.Threading.Tasks.Task.Run(() =>
+                    {
+                        try
+                        {
+                            if (lc != null && lc.IsConnected)
+                            {
+                                // 已連線 → 實測（拔線會被 Probe 偵測，內部關 port）
+                                lc.Probe(channel);
+                            }
+                            else
+                            {
+                                // 未連線 → 嘗試重連（背景 AutoDetect，成功才接管欄位）
+                                var fresh = new LightController();
+                                string found = fresh.AutoDetect(preferredPort, channel);
+                                if (found != null && !IsDisposed && !Disposing)
+                                {
+                                    try
+                                    {
+                                        BeginInvoke(new Action(() =>
+                                        {
+                                            if (_settings != null && _settings.LightEnabled)
+                                            {
+                                                _lightController?.Dispose();
+                                                _lightController = fresh;
+                                                if (!string.Equals(found, _settings.LightComPort, StringComparison.OrdinalIgnoreCase))
+                                                    _settings.LightComPort = found;
+                                            }
+                                            else
+                                            {
+                                                fresh.Dispose();
+                                            }
+                                        }));
+                                    }
+                                    catch (InvalidOperationException) { fresh.Dispose(); }
+                                }
+                                else
+                                {
+                                    fresh.Dispose();
+                                }
+                            }
+                        }
+                        catch { /* Probe/AutoDetect 內已處理例外，這裡保險 */ }
+                        finally { _lightProbeInFlight = false; }
+
+                        if (IsDisposed || Disposing) return;
+                        try { BeginInvoke(new Action(UpdateLightConnLabel)); }
+                        catch (InvalidOperationException) { }
+                    });
+                }
+            }
+
+            // 儲存機：每 5 秒背景 probe UNC 路徑
+            if (++_storageProbeTickCounter < 10) return;
+            _storageProbeTickCounter = 0;
+
+            string path = _settings?.RemotePath ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                UpdateStorageConnLabel(null);
+                return;
+            }
+            if (_storageProbeInFlight) return;
+            _storageProbeInFlight = true;
+
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                bool ok;
+                try { ok = System.IO.Directory.Exists(path); }
+                catch { ok = false; }
+                finally { _storageProbeInFlight = false; }
+
+                if (IsDisposed || Disposing) return;
+                try { BeginInvoke(new Action<bool?>(UpdateStorageConnLabel), (bool?)ok); }
+                catch (InvalidOperationException) { }
+            });
+        }
+
         private void UpdatePlcIoLeds(IoSnapshot io)
         {
             SetIoLed(lblIoDiAlive,   io.DiNakanAlive);
@@ -387,7 +512,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private void UpdateCamCountLabel(int connected, int expected)
         {
-            lblCamCount.Text = $"CAM: {connected}/{expected}";
+            lblCamCount.Text = $"相機: {connected}/{expected}";
             if (connected >= expected)
                 lblCamCount.BackColor = IecGreen;   // 綠：全連
             else if (connected > 0)
@@ -2214,6 +2339,9 @@ namespace AniloxRoll.Monitor.Forms
 
         private void TelemetryTimer_Tick(object sender, EventArgs e)
         {
+            // 連線狀態不受相機釋放影響，先於 gate 更新
+            UpdateConnectionStatusLabels();
+
             if (_liveCameraManager == null || _liveCameraManager.IsReleasing) return;
 
             _telemetryPresenter?.Update(_liveCameraManager.Cameras);

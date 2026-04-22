@@ -269,9 +269,11 @@ PICoater_AOI/
 | 圖表常數列表 | `listViewChartConst` | ListView | — |
 | 硬體參數列表 | `listViewHardware` | ListView | — |
 | 座標狀態列 | `lblPixelInfo` | Label | 位置:... |
-| 相機數狀態 | `lblCamCount` | Label | CAM: N/7 |
-| PLC 狀態 | `lblPlcState` | Label | ● State: -- |
+| 相機數狀態 | `lblCamCount` | Label | 相機: N/7 |
+| PLC 狀態 | `lblPlcState` | Label | ● 狀態: -- |
 | IO 連線狀態 | `lblPlcConn` | Label | ● IO: -- |
+| 光源連線狀態 | `lblLightConn` | Label | ● 光源: -- |
+| 儲存電腦連線狀態 | `lblStorageConn` | Label | ● 儲存電腦: -- |
 | IO 燈號 | `lblIoDiAlive~lblIoDoPcBusy` | Label×5 | DI0~DO2 |
 
 ---
