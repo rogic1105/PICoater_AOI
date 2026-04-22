@@ -76,10 +76,22 @@ if ($user) {
 # ── 3. 加入 Administrators + Remote Desktop Users ─
 # 中文 Windows 下這些 group 顯示名會翻譯成中文（例「系統管理員」），按英文名字找會失敗。
 # 用 well-known SID 查實際名字：Administrators=S-1-5-32-544, Remote Desktop Users=S-1-5-32-555
+# 某些 OEM 改動過的 Windows（例 MSI）可能缺 Remote Desktop Users 群組；但只要帳號在
+# Administrators，RDP 仍可用，所以 RDU 群組是 best-effort：找不到就跳過並提示。
 Write-Host "[3/5] 加入群組..."
-$adminGroupName = (Get-LocalGroup -SID 'S-1-5-32-544').Name
-$rduGroupName   = (Get-LocalGroup -SID 'S-1-5-32-555').Name
-foreach ($gn in @($adminGroupName, $rduGroupName)) {
+$groupsToJoin = @()
+$adminGroup = Get-LocalGroup -SID 'S-1-5-32-544' -ErrorAction SilentlyContinue
+if ($adminGroup) { $groupsToJoin += $adminGroup.Name }
+else { Write-Host "  (警告) 找不到 Administrators 群組（SID S-1-5-32-544）— 系統異常" -ForegroundColor Red }
+
+$rduGroup = Get-LocalGroup -SID 'S-1-5-32-555' -ErrorAction SilentlyContinue
+if ($rduGroup) {
+    $groupsToJoin += $rduGroup.Name
+} else {
+    Write-Host "  (info) 本機無 Remote Desktop Users 群組（OEM Windows 常見）；因帳號已在 Administrators，RDP 仍可用" -ForegroundColor Yellow
+}
+
+foreach ($gn in $groupsToJoin) {
     try {
         Add-LocalGroupMember -Group $gn -Member $rdpUser -ErrorAction Stop
         Write-Host ("  -> " + $gn + " OK") -ForegroundColor Green
@@ -112,9 +124,15 @@ $r2 = (Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server\
 Write-Host ("  fDenyTSConnections = " + $r1 + "  (0 = 已啟用)")
 Write-Host ("  UserAuthentication = " + $r2 + "  (0 = 不要求 NLA)")
 
-Write-Host ""
-Write-Host ("[驗證] " + $rduGroupName + " 成員：") -ForegroundColor Cyan
-Get-LocalGroupMember -SID 'S-1-5-32-555' | Format-Table Name, ObjectClass -AutoSize
+if ($rduGroup) {
+    Write-Host ""
+    Write-Host ("[驗證] " + $rduGroup.Name + " 成員：") -ForegroundColor Cyan
+    Get-LocalGroupMember -SID 'S-1-5-32-555' | Format-Table Name, ObjectClass -AutoSize
+} else {
+    Write-Host ""
+    Write-Host ("[驗證] Administrators 成員（本機無 Remote Desktop Users 群組）：") -ForegroundColor Cyan
+    Get-LocalGroupMember -SID 'S-1-5-32-544' | Format-Table Name, ObjectClass -AutoSize
+}
 
 Write-Host ""
 Write-Host "[完成] RDP 已開放。" -ForegroundColor Cyan

@@ -46,15 +46,15 @@
 4. 看到 `All Done. Press any key to close...` 代表成功
 5. 驗證：在儲存機本機跑 `ipconfig` 確認 IP = 192.168.10.20
 
-**run_setup.bat 會自動做這三件事**：
+**run_setup.bat 會自動做這四件事**：
 
-| Step 1 — 網路 + SMB 共用<br>（setup_storage_pc.ps1） | Step 2 — 匿名 Guest 存取<br>（setup_guest.ps1） | Step 3 — 遠端桌面<br>（setup_rdp.ps1） |
-|---|---|---|
-| 設固定 IP | 啟用 Guest 本機帳號 | 關閉密碼複雜度規則（允許弱密碼） |
-| 建立 `C:\AniloxStorage` + NTFS Everyone Modify | 授予 Guest SMB Full + NTFS Modify | 建立 `aroll`/`aroll` 帳號（密碼永不過期） |
-| 建立 SMB 共用 `AniloxStorage` | **secedit 把 Guest 從「拒絕網路登入」移除** | 加入 Administrators + Remote Desktop Users |
-| 開放防火牆 File and Printer Sharing | 加入「允許網路登入」 | fDenyTSConnections = 0、關閉 NLA |
-| 網路設定檔切 Private | gpupdate /force | 開放 Remote Desktop 防火牆 |
+| Step 1 — 網路 + SMB 共用<br>（setup_storage_pc.ps1） | Step 2 — 匿名 Guest 存取<br>（setup_guest.ps1） | Step 3 — 遠端桌面<br>（setup_rdp.ps1） | Step 4 — 關閉自動休眠<br>（setup_nosleep.ps1） |
+|---|---|---|---|
+| 設固定 IP | 啟用 Guest 本機帳號 | 關閉密碼複雜度規則（允許弱密碼） | standby-timeout = 0 |
+| 建立 `C:\AniloxStorage` + NTFS Everyone Modify | 授予 Guest SMB Full + NTFS Modify | 建立 `aroll`/`aroll` 帳號（密碼永不過期） | hibernate-timeout = 0 |
+| 建立 SMB 共用 `AniloxStorage` | **secedit 把 Guest 從「拒絕網路登入」移除** | 加入 Administrators + Remote Desktop Users | disk-timeout = 0 |
+| 開放防火牆 File and Printer Sharing | 加入「允許網路登入」 | fDenyTSConnections = 0、關閉 NLA | （AC / DC 都設） |
+| 網路設定檔切 Private | gpupdate /force | 開放 Remote Desktop 防火牆 | 目的：SMB 隨時可存取 |
 
 ### ② 檢測機（一次執行 run_setup.bat 搞定）
 
@@ -73,13 +73,14 @@
 3. **雙擊 `run_setup.bat`**（跳 UAC，同意）
 4. 看 `ping 192.168.10.20 → OK` 代表儲存機可達
 
-**run_setup.bat 會自動做這兩件事**：
+**run_setup.bat 會自動做這三件事**：
 
-| Step 1 — NIC secondary IP（setup_inspection_nic.ps1） | Step 2 — Client 匿名 SMB（setup_guest.ps1） |
-|---|---|
-| 找到 PLC 那張 NIC | 登錄檔 `AllowInsecureGuestAuth = 1` |
-| 新增 IP 別名 192.168.10.10（不動 PLC IP） | GPO 位置覆寫同樣值 |
-| ping 儲存機驗證 | `net use * /delete /y` 清除快取 |
+| Step 1 — NIC secondary IP<br>（setup_inspection_nic.ps1） | Step 2 — Client 匿名 SMB<br>（setup_guest.ps1） | Step 3 — 關閉自動休眠<br>（setup_nosleep.ps1） |
+|---|---|---|
+| 找到 PLC 那張 NIC | 登錄檔 `AllowInsecureGuestAuth = 1` | standby-timeout = 0 |
+| 新增 IP 別名 192.168.10.10（不動 PLC IP） | GPO 位置覆寫同樣值 | hibernate-timeout = 0 |
+| ping 儲存機驗證 | `net use * /delete /y` 清除快取 | disk-timeout = 0 |
+| | | 目的：取像 / 遠端複製不中斷 |
 
 ### ③ 遠端桌面連線（選用，維運用）
 
@@ -124,16 +125,18 @@ Out-File -FilePath \\192.168.10.20\AniloxStorage\test.txt -InputObject "hello"
 ```
 deploy/
 ├── storage-pc/
-│   ├── run_setup.bat            ← 雙擊入口（一次跑完三支 .ps1）
+│   ├── run_setup.bat            ← 雙擊入口（一次跑完四支 .ps1）
 │   ├── storage-config.json      ← 參數（NicName / IP / 資料夾 / 共用名 / RDP 帳密）
 │   ├── setup_storage_pc.ps1     ← Step 1：網路 + 共用
 │   ├── setup_guest.ps1          ← Step 2：Guest 匿名 + secedit
-│   └── setup_rdp.ps1            ← Step 3：遠端桌面 + RDP 帳號
+│   ├── setup_rdp.ps1            ← Step 3：遠端桌面 + RDP 帳號
+│   └── setup_nosleep.ps1        ← Step 4：關閉自動睡眠 / 休眠 / 硬碟停轉
 └── inspection-pc/
-    ├── run_setup.bat            ← 雙擊入口（一次跑完兩支 .ps1）
+    ├── run_setup.bat            ← 雙擊入口（一次跑完三支 .ps1）
     ├── inspection-config.json   ← 參數（PLC 前綴 / 儲存 IP）
     ├── setup_inspection_nic.ps1 ← Step 1：NIC secondary IP
-    └── setup_guest.ps1          ← Step 2：Client 匿名 SMB
+    ├── setup_guest.ps1          ← Step 2：Client 匿名 SMB
+    └── setup_nosleep.ps1        ← Step 3：關閉自動睡眠 / 休眠 / 硬碟停轉
 ```
 
 ---
@@ -150,6 +153,7 @@ deploy/
 | 檢測機連 SMB 仍要帳密 | Client 端 AllowInsecureGuestAuth 未套用 | `gpupdate /force` 或重開機 |
 | 「登入失敗: 未授與使用者這個電腦所要求的登入類型」 | Guest 被鎖在 `SeDenyNetworkLogonRight` | 重跑儲存機 `run_setup.bat`（Step 2 [5/5] 會修） |
 | `EnableGuestAccess` 參數不存在警告 | 新版 Windows 移除該參數 | 可忽略（非關鍵，Guest 帳號 + ACL 已足夠） |
+| `Get-LocalGroup : 找不到群組 S-1-5-32-555` | OEM 改動過的 Windows（例 MSI）缺 Remote Desktop Users 群組 | 腳本已容錯；帳號在 Administrators 即可 RDP |
 | 抓圖後儲存機沒檔案 | 遠端路徑錯 / 網路暫斷 | 看 PICoater Trace log 有無 `[RemoteCopy] Failed after...` |
 
 ---

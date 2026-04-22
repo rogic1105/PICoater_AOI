@@ -23,12 +23,14 @@
 | `deploy/storage-pc/storage-config.json` | 儲存機參數（NicName / IpAddress / StorageFolder / ShareName / RdpUser / RdpPassword） |
 | `deploy/storage-pc/setup_storage_pc.ps1` | 儲存機主設定（IP / 資料夾 / NTFS / SMB / 防火牆 / Private profile） |
 | `deploy/storage-pc/setup_guest.ps1` | 儲存機 Guest 匿名（Server Guest / 本機帳號 / SMB ACL / NTFS / secedit） |
-| `deploy/storage-pc/setup_rdp.ps1` | 儲存機遠端桌面（關閉密碼複雜度 / 建 admin 帳號 / RDP 服務 / 防火牆） |
-| `deploy/storage-pc/run_setup.bat` | 一次跑完三支 .ps1（自動提權 UAC） |
+| `deploy/storage-pc/setup_rdp.ps1` | 儲存機遠端桌面（關閉密碼複雜度 / 建 aroll 帳號 / RDP 服務 / 防火牆） |
+| `deploy/storage-pc/setup_nosleep.ps1` | 關閉自動睡眠 / 休眠 / 硬碟停轉（powercfg，AC+DC 都設 0） |
+| `deploy/storage-pc/run_setup.bat` | 一次跑完四支 .ps1（自動提權 UAC） |
 | `deploy/inspection-pc/inspection-config.json` | 檢測機參數（PlcSubnetPrefix / StorageIp / VerifyPingTarget） |
 | `deploy/inspection-pc/setup_inspection_nic.ps1` | 自動找 PLC NIC 加 secondary IP |
 | `deploy/inspection-pc/setup_guest.ps1` | 檢測機 Client `AllowInsecureGuestAuth = 1` + GPO 覆寫 + 清除連線快取 |
-| `deploy/inspection-pc/run_setup.bat` | 一次跑完 NIC 設定 + Guest SMB |
+| `deploy/inspection-pc/setup_nosleep.ps1` | 關閉自動睡眠 / 休眠 / 硬碟停轉（與儲存機同一份） |
+| `deploy/inspection-pc/run_setup.bat` | 一次跑完 NIC 設定 + Guest SMB + 關閉休眠 |
 
 ## 編碼陷阱（必須嚴守）
 
@@ -89,10 +91,19 @@ $guestTokens = @('Guest', '*' + $guestSid, 'Guests', '*S-1-5-32-546')
 # 然後在 Where-Object { $guestTokens -notcontains $_ } 過濾
 ```
 
+## 關閉自動休眠（setup_nosleep.ps1）
+
+兩台電腦都加：`powercfg /change` 把 `standby-timeout` / `hibernate-timeout` / `disk-timeout` 的 AC 與 DC 值全設 0。
+
+- 儲存機：SMB 必須隨時可被存取，睡眠會讓檢測機存檔失敗
+- 檢測機：長時間取像 / RemoteCopyService 背景複製中不可被系統中斷
+
+**不動的設定**：螢幕 timeout（螢幕仍可關閉省電）、電源/蓋子按鈕動作（使用者主動關機仍有效）、hibernate file 本身（保留，只是超時設 0 永不觸發）。
+
 ## 驗證順序
 
-1. 儲存機雙擊 `run_setup.bat`（兩步驟自動連跑）
-2. 檢測機雙擊 `run_setup.bat`（兩步驟自動連跑）
+1. 儲存機雙擊 `run_setup.bat`（四步驟自動連跑）
+2. 檢測機雙擊 `run_setup.bat`（三步驟自動連跑）
 3. 檢測機 PowerShell：
    ```powershell
    Test-NetConnection -Port 445 -ComputerName 192.168.10.20  # TcpTestSucceeded = True
@@ -114,6 +125,7 @@ $guestTokens = @('Guest', '*' + $guestSid, 'Guests', '*S-1-5-32-546')
 | `登入失敗: 未授與使用者這個電腦所要求的登入類型` | Guest 在 SeDenyNetworkLogonRight | 跑 `setup_guest.ps1` [5/5] |
 | 儲存機偵測多張 NIC 退出 | Ethernet + Wi-Fi 都在 | 編輯 `storage-config.json` 指定 `NicName`（例 `"乙太網路"`） |
 | `EnableGuestAccess` 參數不存在警告 | 新版 Windows 移除該參數 | 非關鍵，try/catch 吞掉（重點在 Guest 帳號 + ACL） |
+| `Get-LocalGroup : 找不到群組 S-1-5-32-555` | OEM 改動過的 Windows（例 MSI）缺 Remote Desktop Users 群組 | `setup_rdp.ps1` 已容錯：帳號只加 Administrators 即可；Administrator 不需要 RDU 群組也能 RDP |
 
 ## RemoteCopyService（對應程式端）
 

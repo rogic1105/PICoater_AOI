@@ -1282,7 +1282,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 
 <div class="flow-group vflow" id="deploy-storage-pc">
 <div class="flow-title">儲存機一次設定 <code>deploy/storage-pc/run_setup.bat</code></div>
-<div class="box input">雙擊 run_setup.bat（自動提權 UAC；三步驟連跑）</div>
+<div class="box input">雙擊 run_setup.bat（自動提權 UAC；四步驟連跑）</div>
 <div class="v-arrow" data-label="讀取"></div>
 <div class="box action">storage-config.json（NicName / IpAddress / StorageFolder / ShareName / RdpUser / RdpPassword）</div>
 <div class="v-arrow" data-label="Step 1：網路 + 共用"></div>
@@ -1310,11 +1310,19 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box action">[4/5] fDenyTSConnections=0 + UserAuthentication=0（關閉 NLA，內網方便）</div>
 <div class="box action">[5/5] Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'</div>
 </div>
+<div class="v-arrow" data-label="Step 4：關閉自動休眠"></div>
+<div class="out-seq">
+<div class="box action">[1/4] powercfg /change standby-timeout-ac/dc 0（永不睡眠）</div>
+<div class="box action">[2/4] powercfg /change hibernate-timeout-ac/dc 0（永不休眠）</div>
+<div class="box action">[3/4] powercfg /change disk-timeout-ac/dc 0（硬碟永不停轉）</div>
+<div class="box action">[4/4] powercfg /getactivescheme 驗證目前電源計畫</div>
+</div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">\\192.168.10.20\AniloxStorage 可匿名存取</div>
 <div class="box output">C:\AniloxStorage 為本機根目錄</div>
-<div class="box output">mstsc 192.168.10.20 可用（帳密 admin / admin）</div>
+<div class="box output">mstsc 192.168.10.20 可用（帳密 aroll / aroll）</div>
+<div class="box output">系統永不自動睡眠（SMB 隨時可存取）</div>
 </div>
 <div class="note dev">[Step2 5/5] 是關鍵：Windows 預設把 Guest 放在 SeDenyNetworkLogonRight（拒絕從網路存取此電腦）。只啟用 Guest + 給 ACL 還不夠，一定要改這個原則。secedit 匯出時 Guest 可能以名字或 *SID 兩種形式出現，兩種都要比對移除。</div>
 <div class="note dev">[Step3] RDP 帳密 aroll/aroll 是內網專用弱密碼設計。要上公司網請改強密碼並把 UserAuthentication 改回 1（要求 NLA）、PasswordComplexity 改回 1。</div>
@@ -1323,7 +1331,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 
 <div class="flow-group vflow" id="deploy-inspection-pc">
 <div class="flow-title">檢測機一次設定 <code>deploy/inspection-pc/run_setup.bat</code></div>
-<div class="box input">雙擊 run_setup.bat（自動提權；兩步驟連跑）</div>
+<div class="box input">雙擊 run_setup.bat（自動提權；三步驟連跑）</div>
 <div class="v-arrow" data-label="讀取"></div>
 <div class="box action">inspection-config.json（PlcSubnetPrefix / StorageIp / VerifyPingTarget）</div>
 <div class="v-arrow" data-label="Step 1：NIC secondary IP"></div>
@@ -1338,10 +1346,18 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box action">[2/3] HKLM\SOFTWARE\Policies\Microsoft\Windows\LanmanWorkstation\AllowInsecureGuestAuth = 1（GPO 覆寫）</div>
 <div class="box action">[3/3] net use * /delete /y（清除舊連線快取）</div>
 </div>
+<div class="v-arrow" data-label="Step 3：關閉自動休眠"></div>
+<div class="out-seq">
+<div class="box action">[1/4] powercfg /change standby-timeout-ac/dc 0（永不睡眠）</div>
+<div class="box action">[2/4] powercfg /change hibernate-timeout-ac/dc 0（永不休眠）</div>
+<div class="box action">[3/4] powercfg /change disk-timeout-ac/dc 0（硬碟永不停轉）</div>
+<div class="box action">[4/4] powercfg /getactivescheme 驗證目前電源計畫</div>
+</div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">同一張 NIC 同時可達 PLC + 儲存網段（Modbus TCP 不中斷）</div>
 <div class="box output">Win+R 輸入 \\192.168.10.20\AniloxStorage 直接開啟（不被 Win10/11 預設擋匿名）</div>
+<div class="box output">系統永不自動睡眠（取像 / 遠端複製不中斷）</div>
 </div>
 <div class="note dev">若仍要求帳密，執行 gpupdate /force 或重開機。</div>
 </div>
@@ -1349,8 +1365,8 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="flow-group vflow" id="deploy-verify">
 <div class="flow-title">部署驗證流程</div>
 <div class="out-seq">
-<div class="box action">1. 儲存機：雙擊 deploy\storage-pc\run_setup.bat（完成 Step 1+2）</div>
-<div class="box action">2. 檢測機：雙擊 deploy\inspection-pc\run_setup.bat（完成 Step 1+2）</div>
+<div class="box action">1. 儲存機：雙擊 deploy\storage-pc\run_setup.bat（完成 Step 1~4）</div>
+<div class="box action">2. 檢測機：雙擊 deploy\inspection-pc\run_setup.bat（完成 Step 1~3）</div>
 <div class="box action">3. 檢測機 PowerShell：Test-NetConnection -Port 445 -ComputerName 192.168.10.20 → TcpTestSucceeded = True</div>
 <div class="box action">4. 檢測機 PowerShell：Out-File -FilePath \\192.168.10.20\AniloxStorage\test.txt -InputObject "hello" → 不報錯</div>
 <div class="box action">5. 檢測機 PICoater：屬性 → 儲存設定 → 遠端路徑 = \\192.168.10.20\AniloxStorage</div>
