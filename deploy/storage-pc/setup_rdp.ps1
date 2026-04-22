@@ -2,7 +2,7 @@
 # 依賴先跑過 setup_storage_pc.ps1（讀同一份 storage-config.json）
 #
 # 內網專用設計：
-# - switch 不對外，帳密可以簡單（預設 admin/admin）
+# - switch 不對外，帳密可以簡單（預設 aroll/aroll）
 # - 若要換強密碼，改 storage-config.json 的 RdpUser/RdpPassword 再重跑即可
 
 function Die([string]$msg) { Write-Host ("[FAIL] " + $msg) -ForegroundColor Red; exit 1 }

@@ -35,8 +35,8 @@
      "ShareName": "AniloxStorage",
      "AllowedUser": "Everyone",
      "RdpEnabled": true,
-     "RdpUser": "admin",
-     "RdpPassword": "admin"
+     "RdpUser": "aroll",
+     "RdpPassword": "aroll"
    }
    ```
    - `NicName`：如果只有一張網卡可不填（自動選）；有 Wi-Fi 請明確指定（中文 OK）
@@ -51,7 +51,7 @@
 | Step 1 — 網路 + SMB 共用<br>（setup_storage_pc.ps1） | Step 2 — 匿名 Guest 存取<br>（setup_guest.ps1） | Step 3 — 遠端桌面<br>（setup_rdp.ps1） |
 |---|---|---|
 | 設固定 IP | 啟用 Guest 本機帳號 | 關閉密碼複雜度規則（允許弱密碼） |
-| 建立 `C:\AniloxStorage` + NTFS Everyone Modify | 授予 Guest SMB Full + NTFS Modify | 建立 `admin`/`admin` 帳號（密碼永不過期） |
+| 建立 `C:\AniloxStorage` + NTFS Everyone Modify | 授予 Guest SMB Full + NTFS Modify | 建立 `aroll`/`aroll` 帳號（密碼永不過期） |
 | 建立 SMB 共用 `AniloxStorage` | **secedit 把 Guest 從「拒絕網路登入」移除** | 加入 Administrators + Remote Desktop Users |
 | 開放防火牆 File and Printer Sharing | 加入「允許網路登入」 | fDenyTSConnections = 0、關閉 NLA |
 | 網路設定檔切 Private | gpupdate /force | 開放 Remote Desktop 防火牆 |
@@ -83,7 +83,7 @@
 
 ### ③ 遠端桌面連線（選用，維運用）
 
-在**檢測機**（或任何同網段 PC）Win+R 打 `mstsc` → 電腦填 `192.168.10.20` → 帳號 `admin`、密碼 `admin` → 連進儲存機桌面。
+在**檢測機**（或任何同網段 PC）Win+R 打 `mstsc` → 電腦填 `192.168.10.20` → 帳號 `aroll`、密碼 `aroll` → 連進儲存機桌面。
 
 ---
 

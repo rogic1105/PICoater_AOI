@@ -7,6 +7,6 @@
   "ShareName": "AniloxStorage",
   "AllowedUser": "Everyone",
   "RdpEnabled": true,
-  "RdpUser": "admin",
-  "RdpPassword": "admin"
+  "RdpUser": "aroll",
+  "RdpPassword": "aroll"
 }
