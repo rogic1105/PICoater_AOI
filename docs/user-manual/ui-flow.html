@@ -388,6 +388,19 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 </div>
 </div>
 <div class="v-arrow"></div>
+<div class="box input">Telemetry Timer（每 2 秒背景 probe / 重連）</div>
+<div class="v-arrow dev"></div>
+<div class="v-branch">
+<div class="v-branch-path"><span class="branch-label yes">已連線</span>
+<div class="box action dev">Probe(channel) 用 Monitor.TryEnter(_lock, 0) → 取像中 SendCommand 佔用 lock 時跳過該輪（不影響取像時序）；驗證失敗則關 port</div>
+</div>
+<div class="v-branch-path"><span class="branch-label no">未連線（含啟動時光源未上電 / 拔線後重接）</span>
+<div class="box action dev">背景建立新 LightController + AutoDetect → 成功則 BeginInvoke 接管欄位</div>
+</div>
+</div>
+<div class="v-arrow"></div>
+<div class="box output">光源連線狀態（lblLightConn）即時更新</div>
+<div class="v-arrow"></div>
 <div class="box input">IO 模組 DI_INSPECT_START 上升緣（PlcStartGrab）</div>
 <div class="v-arrow dev"></div>
 <div class="out-seq dev">
@@ -401,7 +414,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box action">btnCameraGrab_Click → 停止取像</div>
 <div class="box action">LightTurnOff → TurnOff(Channel)</div>
 </div>
-<div class="note">光源控制器 LTS-3DPA24，RS-232（9600/8N1），單通道機型 Channel=1、亮度 0~255。啟用光源 = True 時啟動自動偵測；NA 不影響取像（僅不觸發光源開關）。<strong>PropertyGrid 變更即時生效</strong>：啟用切換立即連線/斷線、COM/通道變更立即重新偵測、亮度變更立即套用硬體，不需重啟程式。設定值於【檢測設定】→「7. 光源設定」。</div>
+<div class="note">光源控制器 LTS-3DPA24，RS-232（9600/8N1），單通道機型 Channel=1、亮度 0~255。啟用光源 = True 時啟動自動偵測；NA 不影響取像（僅不觸發光源開關）。<strong>PropertyGrid 變更即時生效</strong>：啟用切換立即連線/斷線、COM/通道變更立即重新偵測、亮度變更立即套用硬體，不需重啟程式。<strong>連線狀態自動維護</strong>：每 2 秒背景 probe 偵測拔線、未連線時自動 AutoDetect 重連（包含程式啟動時光源未上電的情境），完全不需重啟。設定值於【檢測設定】→「7. 光源設定」。</div>
 </div>
 <div class="flow-group vflow">
 <div class="flow-title">監控強化 <code>EnableMuraEnhance</code>（檢測設定）</div>
@@ -1120,7 +1133,9 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="out-par">
 <div class="box output">Telemetry 列表：FPS/LR/Exp/Temp 等 16 欄</div>
 <div class="box output">（差距&gt;5%）曝光/線掃滑桿：回寫 UI</div>
-<div class="box output">相機數狀態：CAM: N/7</div>
+<div class="box output">相機數狀態：相機: N/7</div>
+<div class="box output">光源連線狀態（每 2s 背景 probe / 自動重連）</div>
+<div class="box output">儲存電腦連線狀態（每 5s 背景 UNC 探測）</div>
 </div>
 </div>
 </div>
