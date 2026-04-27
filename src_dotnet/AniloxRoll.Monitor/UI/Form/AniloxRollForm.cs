@@ -800,20 +800,28 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (string.IsNullOrEmpty(_currentGrabId)) return;
             int idx = camId - 1;
-            _inspectionLogService?.AppendRecord(
-                _currentGrabId,
-                fileNameNoExt,
-                meanPeak,
-                maxPeak,
-                _settings.ErrorValueMean,
-                _settings.ErrorValueMax,
-                idx >= 0 && idx < _settings.Acquisition.CameraGrabHeight.Length
-                    ? _settings.Acquisition.CameraGrabHeight[idx] : 0,
-                idx >= 0 && idx < _settings.Acquisition.CameraLineRateHz.Length
-                    ? _settings.Acquisition.CameraLineRateHz[idx] : 0,
-                idx >= 0 && idx < _settings.Acquisition.CameraExposureTimeUs.Length
-                    ? _settings.Acquisition.CameraExposureTimeUs[idx] : 0,
-                CsvConfigSnapshot.FromSettings(_settings));
+            if (_inspectionLogService != null)
+            {
+                _inspectionLogService.AppendRecord(
+                    _currentGrabId,
+                    fileNameNoExt,
+                    meanPeak,
+                    maxPeak,
+                    _settings.ErrorValueMean,
+                    _settings.ErrorValueMax,
+                    idx >= 0 && idx < _settings.Acquisition.CameraGrabHeight.Length
+                        ? _settings.Acquisition.CameraGrabHeight[idx] : 0,
+                    idx >= 0 && idx < _settings.Acquisition.CameraLineRateHz.Length
+                        ? _settings.Acquisition.CameraLineRateHz[idx] : 0,
+                    idx >= 0 && idx < _settings.Acquisition.CameraExposureTimeUs.Length
+                        ? _settings.Acquisition.CameraExposureTimeUs[idx] : 0,
+                    CsvConfigSnapshot.FromSettings(_settings));
+
+                // CSV 寫完後排入遠端複製佇列（CSV 在 month 目錄，不在 OnFilesSaved 的 day 目錄）
+                string csvPath = _inspectionLogService.LastCsvPath;
+                if (!string.IsNullOrEmpty(csvPath))
+                    _remoteCopyService?.EnqueueFile(csvPath);
+            }
 
             // IO MURA 信號：任一相機超過閾值即通知
             if (_plcGrabController?.IsConnected == true)

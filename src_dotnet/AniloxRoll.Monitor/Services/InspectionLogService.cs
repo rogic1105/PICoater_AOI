@@ -23,6 +23,9 @@ namespace AniloxRoll.Monitor.Core.Services
         private string _lastWrittenConfigKey;
         private string _lastCsvPath;
 
+        /// <summary>最近一次成功寫入的 CSV 完整路徑（供呼叫端排入遠端複製佇列）。</summary>
+        public string LastCsvPath => _lastCsvPath;
+
         /// <param name="getCaptureRoot">取得 CaptureRootPath 的委派（支援動態更新）</param>
         public InspectionLogService(Func<string> getCaptureRoot)
         {
