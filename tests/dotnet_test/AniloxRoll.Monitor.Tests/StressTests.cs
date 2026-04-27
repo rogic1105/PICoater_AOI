@@ -103,14 +103,14 @@ namespace AniloxRoll.Monitor.Tests
                 .ReturnsAsync(true);
             mockPlc.Setup(p => p.IsConnected).Returns(true);
 
-            using (var ctrl = new PlcGrabController(mockPlc.Object))
+            using (var ctrl = new IoGrabController(mockPlc.Object))
             {
                 int startCount = 0, stopCount = 0;
                 ctrl.OnStartRequested += () => startCount++;
                 ctrl.OnStopRequested  += () => stopCount++;
 
                 await ctrl.StartAsync("192.168.255.1");
-                Assert.That(ctrl.CurrentState, Is.EqualTo(PlcState.Idle));
+                Assert.That(ctrl.CurrentState, Is.EqualTo(IoState.Idle));
 
                 for (int i = 0; i < Cycles; i++)
                 {
@@ -118,14 +118,14 @@ namespace AniloxRoll.Monitor.Tests
                     mockPlc.Setup(p => p.ReadDiStatuses())
                         .ReturnsAsync(new bool[] { true, true, false, false, false, false, false, false });
                     await ctrl.PollTick();
-                    Assert.That(ctrl.CurrentState, Is.EqualTo(PlcState.Running),
+                    Assert.That(ctrl.CurrentState, Is.EqualTo(IoState.Running),
                         $"Cycle {i}: expected Running after rising edge");
 
                     // Falling edge → Idle
                     mockPlc.Setup(p => p.ReadDiStatuses())
                         .ReturnsAsync(new bool[] { true, false, false, false, false, false, false, false });
                     await ctrl.PollTick();
-                    Assert.That(ctrl.CurrentState, Is.EqualTo(PlcState.Idle),
+                    Assert.That(ctrl.CurrentState, Is.EqualTo(IoState.Idle),
                         $"Cycle {i}: expected Idle after falling edge");
 
                     nextLog = LogProgress("PlcFsm", i, Cycles, nextLog);
@@ -153,7 +153,7 @@ namespace AniloxRoll.Monitor.Tests
                 .ReturnsAsync(true);
             mockPlc.Setup(p => p.IsConnected).Returns(true);
 
-            using (var ctrl = new PlcGrabController(mockPlc.Object))
+            using (var ctrl = new IoGrabController(mockPlc.Object))
             {
                 await ctrl.StartAsync("192.168.255.1");
 
@@ -163,14 +163,14 @@ namespace AniloxRoll.Monitor.Tests
                     mockPlc.Setup(p => p.ReadDiStatuses())
                         .ReturnsAsync(new bool[] { false, false, false, false, false, false, false, false });
                     await ctrl.PollTick();
-                    Assert.That(ctrl.CurrentState, Is.EqualTo(PlcState.Faulted),
+                    Assert.That(ctrl.CurrentState, Is.EqualTo(IoState.Faulted),
                         $"Cycle {i}: expected Faulted");
 
                     // PLC ALIVE restored → Idle
                     mockPlc.Setup(p => p.ReadDiStatuses())
                         .ReturnsAsync(new bool[] { true, false, false, false, false, false, false, false });
                     await ctrl.PollTick();
-                    Assert.That(ctrl.CurrentState, Is.EqualTo(PlcState.Idle),
+                    Assert.That(ctrl.CurrentState, Is.EqualTo(IoState.Idle),
                         $"Cycle {i}: expected Idle after recovery");
 
                     nextLog = LogProgress("PlcFaultRecovery", i, Cycles, nextLog);

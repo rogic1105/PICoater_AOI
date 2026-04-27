@@ -260,7 +260,7 @@ namespace AniloxRoll.Monitor.Core.Data
             string obj = SettingsStoreHelper.ExtractObject(json, "Storage");
             return new StorageSettings
             {
-                EnableAutoCapture    = SettingsStoreHelper.GetBool  (obj, "EnableAutoCapture",    false),
+                EnableAutoCapture    = SettingsStoreHelper.GetBool  (obj, "EnableAutoCapture",    true),
                 CaptureRootPath      = SettingsStoreHelper.GetString(obj, "CaptureRootPath",      @"D:\AniloxCaptures"),
                 // 向後相容：舊 JSON 有 UseCompressedCapture（true=壓縮），反轉為 SaveOriginalBmp
                 SaveOriginalBmp      = obj.Contains("SaveOriginalBmp")
@@ -269,7 +269,7 @@ namespace AniloxRoll.Monitor.Core.Data
                 BackgroundPath       = SettingsStoreHelper.GetString(obj, "BackgroundPath", @"D:\AniloxCaptures\bg"),
                 LocalMaxGB           = SettingsStoreHelper.GetInt   (obj, "LocalMaxGB",       500),
                 FailProtectDays      = SettingsStoreHelper.GetInt   (obj, "FailProtectDays",    30),
-                RemotePath           = SettingsStoreHelper.GetString(obj, "RemotePath",        ""),
+                RemotePath           = SettingsStoreHelper.GetString(obj, "RemotePath",        @"\\192.168.10.20\AniloxStorage"),
             };
         }
 
@@ -287,8 +287,8 @@ namespace AniloxRoll.Monitor.Core.Data
             string obj = SettingsStoreHelper.ExtractObject(json, "Light");
             return new LightSettings
             {
-                Enabled    = SettingsStoreHelper.GetBool  (obj, "Enabled",    false),
-                ComPort    = SettingsStoreHelper.GetString(obj, "ComPort",    "COM1"),
+                Enabled    = SettingsStoreHelper.GetBool  (obj, "Enabled",    true),
+                ComPort    = SettingsStoreHelper.GetString(obj, "ComPort",    "COM17"),
                 Channel    = SettingsStoreHelper.GetInt   (obj, "Channel",    1),
                 Brightness = SettingsStoreHelper.GetInt   (obj, "Brightness", 128),
             };

@@ -159,13 +159,13 @@ PICoater_AOI/
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
-| 存檔 | `EnableAutoCapture` | false | 取像時自動存檔 |
+| 存檔 | `EnableAutoCapture` | true | 取像時自動存檔 |
 | 存原圖 | `SaveOriginalBmp` | false | 額外存原始 BMP |
 | 存圖目錄 | `CaptureRootPath` | D:\AniloxCaptures | 存檔根目錄 |
 | 存背景目錄 | `BackgroundPath` | D:\AniloxCaptures\bg | 背景 .bin 目錄 |
 | 本地上限(GB) | `LocalMaxGB` | 500 | 循環儲存上限，超過時刪除最舊日期 |
 | 異常保護天數 | `FailProtectDays` | 30 | Fail 影像保護天數，不被循環刪除 |
-| 遠端路徑 | `RemotePath` | "" | 遠端複製目標路徑（空=不複製） |
+| 遠端路徑 | `RemotePath` | \\192.168.10.20\AniloxStorage | 遠端複製目標路徑（空=不複製） |
 
 ### 5. IO 模組設定
 
@@ -185,8 +185,8 @@ PICoater_AOI/
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
-| 啟用光源 | `LightEnabled` | false | 啟用 LTS-3DPA24 光源控制器 |
-| COM Port | `LightComPort` | COM1 | RS-232 連接埠；啟動時先試此 port，失敗則自動掃描所有 port（找到後更新此欄位） |
+| 啟用光源 | `LightEnabled` | true | 啟用 LTS-3DPA24 光源控制器 |
+| COM Port | `LightComPort` | COM17 | RS-232 連接埠；啟動時先試此 port，失敗則自動掃描所有 port（找到後更新此欄位） |
 | 通道 | `LightChannel` | 1 | 使用通道（單通道機型固定 1） |
 | 亮度 | `LightBrightness` | 128 | 亮度（0~255） |
 

@@ -7,11 +7,11 @@ namespace AniloxRoll.Monitor.Core.Data
     public class LightSettings
     {
         [Browsable(false)]
-        public bool Enabled { get; set; } = false;
+        public bool Enabled { get; set; } = true;
 
         /// <summary>設定檔記錄的 COM port。啟動時先試此 port，失敗則掃描所有可用 port。</summary>
         [Browsable(false)]
-        public string ComPort { get; set; } = "COM1";
+        public string ComPort { get; set; } = "COM17";
 
         /// <summary>通道（LTS-3DPA24 單通道機型固定 1）。</summary>
         [Browsable(false)]

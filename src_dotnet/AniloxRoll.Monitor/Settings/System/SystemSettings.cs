@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using Matrox.MatroxImagingLibrary;
 
 namespace AniloxRoll.Monitor.Core.Data
@@ -26,9 +28,16 @@ namespace AniloxRoll.Monitor.Core.Data
                 }
             };
 
+            string fullPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"Config\system-settings.json");
+
             var loaded = JsonConfigLoader.LoadOrDefault("Config\\system-settings.json", fallback);
-            if (loaded.CameraDevices == null || loaded.CameraDevices.Count == 0) return fallback;
-            return loaded;
+            bool useDefault = loaded.CameraDevices == null || loaded.CameraDevices.Count == 0;
+
+            // 檔案不存在時自動建立預設檔
+            if (!File.Exists(fullPath))
+                JsonConfigLoader.SaveJson(fullPath, fallback);
+
+            return useDefault ? fallback : loaded;
         }
     }
 }
