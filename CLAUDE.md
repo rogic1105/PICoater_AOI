@@ -145,14 +145,14 @@ PICoater_AOI/
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
 | 去背演算法 | `Algorithm` | SingleFrameBgSub | None / SingleFrameBgSub / StandardBgSub |
-| Ridge 方向 | `RidgeDir` | Vertical | Vertical / Horizontal / Both |
+| Ridge方向 | `RidgeDir` | Vertical | Vertical / Horizontal / Both |
 | 正規值 | `HessianMaxFactor` | 1.0 | Hessian 正規化係數 |
-| 背景取樣秒數 | `BackgroundSampleSeconds` | 3 | StandardBgSub 採集時間 |
-| A輪速度 (m/min) | `AniloxRollSpeedMPerMin` | 10.0 | Anilox 輪速 |
+| 取樣秒數 | `BackgroundSampleSeconds` | 3 | StandardBgSub 採集時間 |
+| 輪速 (m/min) | `AniloxRollSpeedMPerMin` | 10.0 | Anilox 輪速 |
 | 監控強化 | `EnableMuraEnhance` | false | 即時影像強化 Mura（原 checkBoxEnableImageProcessing） |
 | 回顧強化 | `EnableReviewEnhance` | false | 回顧影像強化 Mura（原 checkBoxShowProcessed） |
 
-### 3. 檢測報表設定
+### 3. 報表設定
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
@@ -172,11 +172,11 @@ PICoater_AOI/
 | 存原圖 | `SaveOriginalBmp` | false | 額外存原始 BMP |
 | 存圖目錄 | `CaptureRootPath` | D:\AniloxCaptures | 存檔根目錄 |
 | 存背景目錄 | `BackgroundPath` | D:\AniloxCaptures\bg | 背景 .bin 目錄 |
-| 本地預留磁碟空間 (GB) | `LocalMinFreeGB` | 100 | 磁碟可用空間低於此值觸發循環儲存，刪最舊日期影像（CSV 保留） |
+| 預留空間 (GB) | `LocalMinFreeGB` | 100 | 磁碟可用空間低於此值觸發循環儲存，刪最舊日期影像（CSV 保留） |
 | 遠端路徑 | `RemotePath` | \\192.168.10.20\AniloxStorage | 遠端複製目標路徑（空=不複製） |
-| 遠端 Config 路徑 | `RemoteConfigPath` | \\192.168.10.20\AniloxConfig | 儲存機 AniloxConfig SMB 路徑；Inspection PC 每 10 grab 寫 cleanup-request.flag |
+| 遠端設定路徑 | `RemoteConfigPath` | \\192.168.10.20\AniloxConfig | 儲存機 AniloxConfig SMB 路徑；Inspection PC 每 10 grab 寫 cleanup-request.flag |
 
-### 5. IO 模組設定
+### 5. IO設定
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
@@ -184,7 +184,7 @@ PICoater_AOI/
 | IO IP | `PlcIp` | 192.168.255.1 | ET-7044 IP |
 | IO Port | `PlcPort` | 502 | Modbus TCP port |
 
-### 6. 相機參數設定
+### 6. 相機設定
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|

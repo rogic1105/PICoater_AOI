@@ -70,23 +70,23 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public double Cam7_Ops { get => MachineLayout.Cam7_Ops; set => MachineLayout.Cam7_Ops = value; }
 
         // ===== 2. 檢測配方 =====
-        [Category("2. 檢測配方")][DisplayName("去背演算法")]   public BackgroundAlgorithm Algorithm       { get => Recipe.Algorithm;       set => Recipe.Algorithm       = value; }
-        [Category("2. 檢測配方")][DisplayName("Ridge 方向")]   public RidgeDirection      RidgeDir        { get => Recipe.RidgeDir;        set => Recipe.RidgeDir        = value; }
-        [Category("2. 檢測配方")][DisplayName("正規值")]       public float HessianMaxFactor { get => Recipe.HessianMaxFactor; set => Recipe.HessianMaxFactor = value; }
-        [Category("2. 檢測配方")][DisplayName("背景取樣秒數")] public int   BackgroundSampleSeconds { get => Recipe.BackgroundSampleSeconds; set => Recipe.BackgroundSampleSeconds = value; }
-        [Category("2. 檢測配方")][DisplayName("A輪速度 (m/min)")] public double AniloxRollSpeedMPerMin { get => Recipe.AniloxRollSpeedMPerMin; set => Recipe.AniloxRollSpeedMPerMin = value; }
+        [Category("2. 檢測配方")][DisplayName("去背演算法")]  public BackgroundAlgorithm Algorithm       { get => Recipe.Algorithm;       set => Recipe.Algorithm       = value; }
+        [Category("2. 檢測配方")][DisplayName("Ridge方向")]   public RidgeDirection      RidgeDir        { get => Recipe.RidgeDir;        set => Recipe.RidgeDir        = value; }
+        [Category("2. 檢測配方")][DisplayName("正規值")]      public float HessianMaxFactor { get => Recipe.HessianMaxFactor; set => Recipe.HessianMaxFactor = value; }
+        [Category("2. 檢測配方")][DisplayName("取樣秒數")]    public int   BackgroundSampleSeconds { get => Recipe.BackgroundSampleSeconds; set => Recipe.BackgroundSampleSeconds = value; }
+        [Category("2. 檢測配方")][DisplayName("輪速 (m/min)")] public double AniloxRollSpeedMPerMin { get => Recipe.AniloxRollSpeedMPerMin; set => Recipe.AniloxRollSpeedMPerMin = value; }
         [Category("2. 檢測配方")][DisplayName("監控強化")]        public bool   EnableMuraEnhance     { get => Recipe.EnableMuraEnhance;     set => Recipe.EnableMuraEnhance     = value; }
         [Category("2. 檢測配方")][DisplayName("回顧強化")]        public bool   EnableReviewEnhance   { get => Recipe.EnableReviewEnhance;   set => Recipe.EnableReviewEnhance   = value; }
 
-        // ===== 3. 檢測報表設定 =====
-        [Category("3. 檢測報表設定")][DisplayName("統計圖表")]
+        // ===== 3. 報表設定 =====
+        [Category("3. 報表設定")][DisplayName("統計圖表")]
         public ChartSettings StatisticsChart => Chart;
 
         private MuraChartConfig _muraChart;
-        [Category("3. 檢測報表設定")][DisplayName("Mura 圖表")]
+        [Category("3. 報表設定")][DisplayName("Mura 圖表")]
         public MuraChartConfig MuraChart => _muraChart ?? (_muraChart = new MuraChartConfig(Recipe));
 
-        [Category("3. 檢測報表設定")][DisplayName("主畫面")]
+        [Category("3. 報表設定")][DisplayName("主畫面")]
         public ImageViewSettings ImageViewDisplay => ImageView;
 
         // 向後相容：程式碼中直接存取的快捷屬性
@@ -103,17 +103,17 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category("4. 儲存設定")][DisplayName("存原圖")]     public bool   SaveOriginalBmp      { get => Storage.SaveOriginalBmp;      set => Storage.SaveOriginalBmp      = value; }
         [Category("4. 儲存設定")][DisplayName("存圖目錄")]   public string CaptureRootPath { get => Storage.CaptureRootPath; set => Storage.CaptureRootPath = value; }
         [Category("4. 儲存設定")][DisplayName("存背景目錄")] public string BackgroundPath  { get => Storage.BackgroundPath;  set => Storage.BackgroundPath  = value; }
-        [Category("4. 儲存設定")][DisplayName("本地預留磁碟空間 (GB)")] public int LocalMinFreeGB { get => Storage.LocalMinFreeGB; set => Storage.LocalMinFreeGB = value; }
-        [Category("4. 儲存設定")][DisplayName("遠端路徑")]         public string RemotePath        { get => Storage.RemotePath;        set => Storage.RemotePath        = value; }
-        [Category("4. 儲存設定")][DisplayName("遠端 Config 路徑")] public string RemoteConfigPath  { get => Storage.RemoteConfigPath;  set => Storage.RemoteConfigPath  = value; }
+        [Category("4. 儲存設定")][DisplayName("預留空間 (GB)")]  public int LocalMinFreeGB { get => Storage.LocalMinFreeGB; set => Storage.LocalMinFreeGB = value; }
+        [Category("4. 儲存設定")][DisplayName("遠端路徑")]        public string RemotePath        { get => Storage.RemotePath;        set => Storage.RemotePath        = value; }
+        [Category("4. 儲存設定")][DisplayName("遠端設定路徑")]    public string RemoteConfigPath  { get => Storage.RemoteConfigPath;  set => Storage.RemoteConfigPath  = value; }
 
-        // ===== 5. IO 模組設定 =====
-        [Category("5. IO 模組設定")][DisplayName("啟用 IO")]  public bool   PlcEnabled { get; set; } = true;
-        [Category("5. IO 模組設定")][DisplayName("IO IP")]    public string PlcIp      { get; set; } = "192.168.255.1";
-        [Category("5. IO 模組設定")][DisplayName("IO Port")]  public int    PlcPort    { get; set; } = 502;
+        // ===== 5. IO設定 =====
+        [Category("5. IO設定")][DisplayName("啟用 IO")]  public bool   PlcEnabled { get; set; } = true;
+        [Category("5. IO設定")][DisplayName("IO IP")]    public string PlcIp      { get; set; } = "192.168.255.1";
+        [Category("5. IO設定")][DisplayName("IO Port")]  public int    PlcPort    { get; set; } = 502;
 
-        // ===== 6. 相機參數設定 =====
-        [Category("6. 相機參數設定")][DisplayName("設定檔")]
+        // ===== 6. 相機設定 =====
+        [Category("6. 相機設定")][DisplayName("設定檔")]
         [Editor("System.Windows.Forms.Design.FileNameEditor, System.Design, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a", typeof(System.Drawing.Design.UITypeEditor))]
         public string DcfPath { get => CameraParam.DcfPath; set => CameraParam.DcfPath = value; }
 

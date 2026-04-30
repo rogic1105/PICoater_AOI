@@ -700,9 +700,9 @@
             // btnSelectFolder
             // 
             this.btnSelectFolder.Font = new System.Drawing.Font("微軟正黑體", 10.2F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(136)));
-            this.btnSelectFolder.Location = new System.Drawing.Point(900, 3);
+            this.btnSelectFolder.Location = new System.Drawing.Point(900, 6);
             this.btnSelectFolder.Name = "btnSelectFolder";
-            this.btnSelectFolder.Size = new System.Drawing.Size(115, 37);
+            this.btnSelectFolder.Size = new System.Drawing.Size(115, 81);
             this.btnSelectFolder.TabIndex = 23;
             this.btnSelectFolder.Text = "讀取資料";
             this.btnSelectFolder.UseVisualStyleBackColor = true;
