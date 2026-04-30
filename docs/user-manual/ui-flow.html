@@ -215,7 +215,29 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box action">MbufAlloc2d × N（GrabBuffer + DisplayBuffer + ProcBuffer）</div>
 <div class="box action">MdispSelectWindow(primary, displayBuffer, panelLiveCam)（縮圖綁定）</div>
 <div class="box action">MdispHookFunction(M_MOUSE_MOVE / M_MOUSE_LEFT_BUTTON_DOWN)</div>
-<div class="box action">SetExposureUs（初始曝光）</div>
+<div class="box action">SetExposureUs（初始曝光，走 legacy MdigControl 路徑）</div>
+</div>
+</div>
+</details>
+<details class="subflow">
+<summary>CLProtocol 背景初始化（曝光 Race 說明）</summary>
+<div class="vflow">
+<div class="out-seq">
+<div class="box action">MdigProcess(M_START) → StartCLProtocolAsync()（背景 Task）</div>
+<div class="box guard">_clProtocolInitStarted=true, _clProtocolInitDone=false → IsHwParamsStable=false → SyncCameraParamsFromHardware 跳過此相機</div>
+</div>
+<div class="v-arrow" data-label="成功路徑"></div>
+<div class="out-seq">
+<div class="box action">MdigControl(M_GC_CLPROTOCOL, M_ENABLE) 成功</div>
+<div class="box action">SetExposureUs(appliedExposureUs)（CLProtocol Feature API 重新套用）</div>
+<div class="box action">_clProtocolInitDone=true → IsHwParamsStable=true</div>
+<div class="box output">SyncHw 讀 ExposureTime feature → 與已套用值相符 → 不覆寫</div>
+</div>
+<div class="v-arrow" data-label="失敗/逾時路徑"></div>
+<div class="out-seq">
+<div class="box action">_clProtocolEnabled=false, _clProtocolInitDone=true</div>
+<div class="box guard">GetMeasuredExposureUs() 回傳 0（不走 M_EXPOSURE_TIME 硬體回讀，避免相機預設值 50µs 覆寫 JSON）</div>
+<div class="box output">SyncHw 因 hwValue=0 跳過 → JSON 設定與滑桿維持原值</div>
 </div>
 </div>
 </details>
@@ -1156,7 +1178,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">Telemetry 列表：FPS/LR/Exp/Temp 等 16 欄</div>
-<div class="box output">（差距&gt;5%）曝光/線掃滑桿：回寫 UI</div>
+<div class="box output">（差距&gt;5%）曝光/線掃滑桿：回寫 UI（CLProtocol 未就緒時 IsHwParamsStable=false 跳過；無 CLProtocol 時 GetMeasuredExposureUs=0 跳過）</div>
 <div class="box output">相機數狀態：相機: N/7</div>
 <div class="box output">光源連線狀態（每 2s 背景 probe / 自動重連）</div>
 <div class="box output">儲存電腦連線狀態（每 5s 背景 UNC 探測）</div>

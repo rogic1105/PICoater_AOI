@@ -419,7 +419,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                         $"[CAM{CameraId}] CLProtocol 初始化逾時（>10s）。" +
                         "CLProtocol 已停用，曝光/線掃速率維持 fallback 路徑。");
                     // 逾時：標記為穩定，SyncHardwareParam 不再等待
-                    // （_clProtocolEnabled=false，GetMeasuredExposureUs 走 legacy 路徑回傳 0，SyncHw 自動跳過）
+                    // （_clProtocolEnabled=false，GetMeasuredExposureUs 回傳 0，SyncHw 自動跳過）
                     _clProtocolInitDone = true;
                     // _clProtocolEnabled 保持 false；initTask 繼續在背景等待硬體回應，
                     // 若最終完成，TryEnableCLProtocol 仍會套用設定（late init）。
@@ -526,8 +526,9 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>
         /// 從硬體讀回目前曝光時間（μs）。
         /// CLProtocol 已啟用：MdigInquireFeature("ExposureTime")，直接為 μs。
-        /// CLProtocol 未啟用：MdigInquire(M_EXPOSURE_TIME) 回傳 ns 後除以 1000；
-        ///   Camera Link 無 CLProtocol 時硬體通常回傳 0。
+        /// CLProtocol 未啟用：回傳 0，使 SyncHardwareParam 跳過（避免相機預設值覆寫 JSON 設定）。
+        ///   Camera Link 無 CLProtocol 時 M_EXPOSURE_TIME 回傳相機出廠預設（非已套用值），
+        ///   不可用於反向同步。
         /// </summary>
         public double GetMeasuredExposureUs()
         {
@@ -542,9 +543,9 @@ namespace AniloxRoll.Monitor.Core.Camera
             }
             else
             {
-                double valNs = 0;
-                MIL.MdigInquire(_milDigitizer, MIL.M_EXPOSURE_TIME, ref valNs);
-                return valNs > 0 ? valNs / 1000.0 : 0;
+                // 無 CLProtocol 時 M_EXPOSURE_TIME 回傳相機預設值（非 SetExposureUs 所設的值），
+                // 回傳 0 讓 SyncHardwareParam 的 hwValue<=0 guard 跳過，避免覆寫 JSON 設定。
+                return 0;
             }
         }
 
