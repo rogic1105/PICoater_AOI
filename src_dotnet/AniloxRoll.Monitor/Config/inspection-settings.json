@@ -1,0 +1,65 @@
+{
+  "MachineLayout": {
+    "Cam1_Ops": 33,
+    "Cam2_Ops": 33,
+    "Cam3_Ops": 33,
+    "Cam4_Ops": 33,
+    "Cam5_Ops": 33,
+    "Cam6_Ops": 33,
+    "Cam7_Ops": 33,
+    "Cam1_Pos": 0,
+    "Cam2_Pos": 400,
+    "Cam3_Pos": 800,
+    "Cam4_Pos": 1200,
+    "Cam5_Pos": 1600,
+    "Cam6_Pos": 2000,
+    "Cam7_Pos": 2400,
+    "TrimHeadMm": 0,
+    "TrimTailMm": 0
+  },
+  "Recipe": {
+    "Algorithm": "SingleFrameBgSub",
+    "RidgeDir": "Both",
+    "HessianMaxFactor": 0.3,
+    "ErrorValueMean": 0.2,
+    "ErrorValueMax": 0.4,
+    "BackgroundSampleSeconds": 3,
+    "AniloxRollSpeedMPerMin": 40,
+    "SaveResizeScale": 5,
+    "SaveJpgQuality": 90,
+    "EnableMuraEnhance": false,
+    "EnableReviewEnhance": false
+  },
+  "Chart": {
+    "ScaleMode": "Auto",
+    "YearlyYMax": 50000,
+    "MonthlyYMax": 2000,
+    "DailyYMax": 300
+  },
+  "ImageView": {
+    "StitchMode": "Vertical"
+  },
+  "Storage": {
+    "EnableAutoCapture": true,
+    "CaptureRootPath": "D:\\AniloxCaptures",
+    "SaveOriginalBmp": false,
+    "BackgroundPath": "D:\\AniloxCaptures\\bg",
+    "LocalMinFreeGB": 100,
+    "RemotePath": "\\\\192.168.10.20\\AniloxStorage",
+    "RemoteConfigPath": "\\\\192.168.10.20\\AniloxConfig"
+  },
+  "Plc": {
+    "Enabled": true,
+    "Ip": "192.168.255.1",
+    "Port": 502
+  },
+  "CameraParam": {
+    "DcfPath": "D:\\AniloxCaptures\\dcf\\Radient_Config.dcf"
+  },
+  "Light": {
+    "Enabled": true,
+    "ComPort": "COM17",
+    "Channel": 1,
+    "Brightness": 255
+  }
+}

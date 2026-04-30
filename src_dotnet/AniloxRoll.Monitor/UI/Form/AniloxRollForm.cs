@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Diagnostics;
@@ -81,14 +82,21 @@ namespace AniloxRoll.Monitor.Forms
         // --- Resource Monitor ---
         private ListViewItem _resMonRawSize, _resMonGpuTime, _resMonSaveSize;
         private ListViewItem _resMonDiskWrite, _resMonFrames, _resMonRamUsed, _resMonVramEst;
+        private ListViewItem _storageDiskFreeRow, _storageLastCleanRow;
 
         // --- 檢測日誌 ---
         private InspectionLogService _inspectionLogService;
         private string _currentGrabId;
 
+        // --- App Mode ---
+        private AppModeConfig _appMode;
+        private CleanupFlagWatcher _cleanupFlagWatcher;
+
         // --- 儲存管理 ---
         private StorageRetentionService _retentionService;
         private RemoteCopyService _remoteCopyService;
+        private int _completedGrabCount;
+        private DateTime _lastGrabEventTime;
 
         // --- IO 連動 ---
         private IoGrabController _plcGrabController;
@@ -140,7 +148,9 @@ namespace AniloxRoll.Monitor.Forms
 
         private void InitializeSystem()
         {
+            _appMode = AppModeConfig.Load();
             if (_settings == null) _settings = ConfigManager.LoadInspectionSettings();
+            _settings.AppRole = _appMode?.Role ?? MachineRole.Inspection;
             CameraFrameSaver.InitResourceLog(_settings?.CaptureRootPath);
             CameraFrameSaver.GetUiStateCallback = () =>
             {
@@ -151,9 +161,13 @@ namespace AniloxRoll.Monitor.Forms
             };
             InitServiceLayer();
             InitUiLayer();
-            InitCameraLayer();
+            if (_appMode?.Role != MachineRole.Storage)
+                InitCameraLayer();
+            else
+                RegisterStorageModeCleanup();
             InitializeRightPanelControls();
             SetupDataTab();
+            ApplyStorageModeUi();
         }
 
         /// <summary>純業務服務：不依賴任何 UI 控制項。</summary>
@@ -171,19 +185,31 @@ namespace AniloxRoll.Monitor.Forms
             _inspectionLogService = new InspectionLogService(
                 () => _settings?.CaptureRootPath ?? string.Empty);
 
-            // 循環儲存 + 遠端複製
+            // 循環儲存（事件驅動：grab 結束 / watchdog / 每 10 grab / 啟動時各觸發一次）
             _retentionService = new StorageRetentionService(
-                getRootPath:        () => _settings?.CaptureRootPath ?? string.Empty,
-                getMaxBytes:        () => (long)(_settings?.LocalMaxGB ?? 500) * 1024L * 1024L * 1024L,
-                getFailProtectDays: () => _settings?.FailProtectDays ?? 30);
-            _retentionService.Start();
+                getRootPath:     () => GetStorageRetentionRoot(),
+                getMinFreeBytes: () => (long)(_settings?.LocalMinFreeGB ?? 100) * 1024L * 1024L * 1024L);
 
-            _remoteCopyService = new RemoteCopyService(
-                getRemotePath: () => _settings?.RemotePath ?? string.Empty,
-                getLocalRoot:  () => _settings?.CaptureRootPath ?? string.Empty);
+            if (_appMode?.Role == MachineRole.Storage)
+            {
+                // Storage 模式：輪詢旗標觸發清理
+                _cleanupFlagWatcher = new CleanupFlagWatcher(
+                    () => _appMode.LocalConfigFolder,
+                    _retentionService);
+                _cleanupFlagWatcher.Start();
+            }
+            else
+            {
+                // Inspection 模式：遠端複製 + PLC + 光源
+                _remoteCopyService = new RemoteCopyService(
+                    getRemotePath: () => _settings?.RemotePath ?? string.Empty,
+                    getLocalRoot:  () => _settings?.CaptureRootPath ?? string.Empty);
+                InitPlcController();
+                InitLightController();
+            }
 
-            InitPlcController();
-            InitLightController();
+            // 啟動時執行一次清理（雙模式共用）
+            Task.Run(() => _retentionService.RunCleanup());
         }
 
         /// <summary>初始化 IO 連動：自動偵測連線，連上後以 DI START 控制 Grab。</summary>
@@ -312,6 +338,7 @@ namespace AniloxRoll.Monitor.Forms
                 case nameof(InspectionSettings.LightBrightness):
                     if (_lightController != null && _lightController.IsConnected)
                         _lightController.SetBrightness(_settings.LightChannel, _settings.LightBrightness);
+                    UpdateLightConnLabel();
                     break;
             }
         }
@@ -364,7 +391,7 @@ namespace AniloxRoll.Monitor.Forms
             }
             if (_lightController != null && _lightController.IsConnected)
             {
-                lblLightConn.Text = "● 光源 已連線";
+                lblLightConn.Text = $"● 光源 已連線 ({_settings.LightBrightness})";
                 lblLightConn.BackColor = IecGreen;
             }
             else
@@ -407,6 +434,36 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private void UpdateConnectionStatusLabels()
         {
+            if (_appMode?.Role == MachineRole.Storage)
+            {
+                if (_storageDiskFreeRow != null)
+                {
+                    try
+                    {
+                        string root = GetStorageRetentionRoot();
+                        if (!string.IsNullOrWhiteSpace(root))
+                        {
+                            var di = new System.IO.DriveInfo(
+                                System.IO.Path.GetPathRoot(System.IO.Path.GetFullPath(root)));
+                            double freeGb  = di.AvailableFreeSpace / (1024.0 * 1024 * 1024);
+                            double totalGb = di.TotalSize           / (1024.0 * 1024 * 1024);
+                            _storageDiskFreeRow.SubItems[1].Text = $"{freeGb:F1} / {totalGb:F1} GB";
+                        }
+                    }
+                    catch { }
+                }
+                return;
+            }
+
+            // Grab watchdog：取像中超過 30 秒沒有 result callback → 觸發循環儲存
+            if (_liveCameraManager?.IsLiveGrabbing == true &&
+                _lastGrabEventTime != DateTime.MinValue &&
+                (DateTime.UtcNow - _lastGrabEventTime).TotalSeconds > 30)
+            {
+                _lastGrabEventTime = DateTime.UtcNow;
+                Task.Run(() => _retentionService?.RunCleanup());
+            }
+
             // 光源：先同步更新（用 IsConnected 快取結果），再 2 秒背景實測 / 重連
             // （Probe 用 TryEnter，與取像時 SendCommand 不會競爭，可放心高頻）
             UpdateLightConnLabel();
@@ -737,6 +794,7 @@ namespace AniloxRoll.Monitor.Forms
                 _lightController?.Dispose();
                 _retentionService?.Dispose();
                 _remoteCopyService?.Dispose();
+                _cleanupFlagWatcher?.Dispose();
             };
         }
 
@@ -789,6 +847,10 @@ namespace AniloxRoll.Monitor.Forms
             if (!wasGrabbing && _liveCameraManager.IsLiveGrabbing)
                 _currentGrabId = _inspectionLogService.NextGrabId();
 
+            // 剛從「抓取中」→「停止」：觸發循環儲存 + 通知儲存機清理
+            if (wasGrabbing && !_liveCameraManager.IsLiveGrabbing)
+                TriggerRetentionAndFlagAsync();
+
             UpdateGrabButton(_liveCameraManager.IsLiveGrabbing);
         }
 
@@ -829,6 +891,84 @@ namespace AniloxRoll.Monitor.Forms
                 bool isMura = meanPeak > _settings.ErrorValueMean || maxPeak > _settings.ErrorValueMax;
                 if (isMura) _ = _plcGrabController.NotifyMuraDetected();
             }
+
+            // 抓圖計數器 + watchdog 時間戳（Inspection 模式）
+            if (_appMode?.Role != MachineRole.Storage)
+            {
+                _lastGrabEventTime = DateTime.UtcNow;
+                int count = System.Threading.Interlocked.Increment(ref _completedGrabCount);
+                if (count % 10 == 0)
+                    TriggerRetentionAndFlagAsync();
+            }
+        }
+
+        private void TriggerRetentionAndFlagAsync()
+        {
+            Task.Run(() => _retentionService?.RunCleanup());
+            WriteFlagToRemoteAsync();
+        }
+
+        private void WriteFlagToRemoteAsync()
+        {
+            string configPath = _settings?.RemoteConfigPath ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(configPath)) return;
+
+            Task.Run(() =>
+            {
+                try
+                {
+                    string flagPath = Path.Combine(configPath, "cleanup-request.flag");
+                    File.WriteAllText(flagPath, DateTime.UtcNow.ToString("O"),
+                        System.Text.Encoding.UTF8);
+                }
+                catch (Exception ex)
+                {
+                    Trace.TraceWarning($"[RetentionFlag] 寫旗標失敗: {ex.Message}");
+                }
+            });
+        }
+
+        private void ApplyStorageModeUi()
+        {
+            if (_appMode?.Role != MachineRole.Storage) return;
+
+            tabMain.TabPages.Remove(tabPageLiveView);
+            tabControlRight.TabPages.Remove(tabPageCamera);
+
+            // PropertyGrid：隱藏 IO / 相機 / 光源三個大類
+            TypeDescriptor.AddProvider(
+                new StorageModeSettingsFilter(TypeDescriptor.GetProvider(_settings)), _settings);
+            propertyGridSettings.Refresh();
+
+            lblCamCount.Visible      = false;
+            lblStorageConn.Visible   = false;
+
+            lblPlcState.Visible    = false;
+            lblPlcConn.Visible     = false;
+            lblLightConn.Visible   = false;
+            lblIoDiAlive.Visible   = false;
+            lblIoDiStart.Visible   = false;
+            lblIoDoPcAlive.Visible = false;
+            lblIoDoMura.Visible    = false;
+            lblIoDoPcBusy.Visible  = false;
+        }
+
+        private string GetStorageRetentionRoot()
+        {
+            if (_appMode?.Role == MachineRole.Storage &&
+                !string.IsNullOrWhiteSpace(_appMode.StorageFolderPath))
+                return _appMode.StorageFolderPath;
+            return _settings?.CaptureRootPath ?? string.Empty;
+        }
+
+        private void RegisterStorageModeCleanup()
+        {
+            FormClosed += (_, __) =>
+            {
+                _telemetryTimer?.Stop();
+                _retentionService?.Dispose();
+                _cleanupFlagWatcher?.Dispose();
+            };
         }
 
         /// <summary>
@@ -1617,6 +1757,17 @@ namespace AniloxRoll.Monitor.Forms
 
             string changedPropertyName = e?.ChangedItem?.PropertyDescriptor?.Name ?? string.Empty;
 
+            // 機台角色變更 → 寫 app-mode.json，不影響 inspection-settings.json
+            if (changedPropertyName == nameof(InspectionSettings.AppRole))
+            {
+                if (_appMode == null) _appMode = new AppModeConfig();
+                _appMode.Role = _settings.AppRole;
+                _appMode.Save();
+                MessageBox.Show("機台角色已儲存，重新開啟程式後生效。",
+                    "機台設定", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
             // StitchMode 變更 → 清除/恢復 mura 圖 + 重新載入回顧主畫面 + Live 合圖切換
             if (changedPropertyName == nameof(InspectionSettings.StitchMode))
             {
@@ -2197,18 +2348,14 @@ namespace AniloxRoll.Monitor.Forms
             listViewEngine.Items.Add(new ListViewItem(new[] { "DefaultRidgeMode",    InspectionEngineConfig.DefaultRidgeMode }));
             listViewEngine.Items.Add(new ListViewItem(new[] { "SaveResizeScale",     InspectionEngineConfig.DefaultSaveResizeScale.ToString() }));
             listViewEngine.Items.Add(new ListViewItem(new[] { "SaveJpgQuality",      InspectionEngineConfig.DefaultSaveJpgQuality.ToString() }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "───", "── 圖表引擎 ──" }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "MaxOverviewPoints", "2000" }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "TelemetryInterval", "500 ms" }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "OverviewRefresh",   "FPS-sync" }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "DownsampleMode",    "Max-Window" }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "OverlapMean",       "Average" }));
+            listViewEngine.Items.Add(new ListViewItem(new[] { "OverlapMax",        "Maximum" }));
             AutoFitListViewColumns(listViewEngine);
-
-            // ── 圖表引擎常數 ────────────────────────────────────────────────
-            listViewChartConst.Columns.Add("參數", 160);
-            listViewChartConst.Columns.Add("值",    90);
-            listViewChartConst.Items.Add(new ListViewItem(new[] { "MaxOverviewPoints", "2000" }));
-            listViewChartConst.Items.Add(new ListViewItem(new[] { "TelemetryInterval", "500 ms" }));
-            listViewChartConst.Items.Add(new ListViewItem(new[] { "OverviewRefresh",   "FPS-sync" }));
-            listViewChartConst.Items.Add(new ListViewItem(new[] { "DownsampleMode",    "Max-Window" }));
-            listViewChartConst.Items.Add(new ListViewItem(new[] { "OverlapMean",       "Average" }));
-            listViewChartConst.Items.Add(new ListViewItem(new[] { "OverlapMax",        "Maximum" }));
-            AutoFitListViewColumns(listViewChartConst);
 
             // ── 硬體參數 ─────────────────────────────────────────────────
             listViewHardware.Columns.Add("參數", 120);
@@ -2403,27 +2550,33 @@ namespace AniloxRoll.Monitor.Forms
             }
             catch { /* 非關鍵資訊，忽略 */ }
 
-            // ── IO 模組參數 ──
-            if (_plcGrabController != null)
+            // ── Storage 模式：磁碟 + 清理狀態（即時，Timer 更新）──
+            if (_appMode?.Role == MachineRole.Storage)
             {
-                listViewHardware.Items.Add(new ListViewItem(new[] { "IO_Model",     _plcGrabController.Model }));
-                listViewHardware.Items.Add(new ListViewItem(new[] { "IO_IP",        _plcGrabController.PlcIp }));
-                listViewHardware.Items.Add(new ListViewItem(new[] { "IO_Port",      _plcGrabController.PlcPort.ToString() }));
-                listViewHardware.Items.Add(new ListViewItem(new[] { "IO_Poll",      $"{_plcGrabController.PollIntervalMs} ms" }));
-                listViewHardware.Items.Add(new ListViewItem(new[] { "IO_Reconnect", $"{_plcGrabController.ReconnectIntervalMs} ms" }));
-                listViewHardware.Items.Add(new ListViewItem(new[] { "IO_Timeout",   $"{_plcGrabController.ReadWriteTimeoutMs} ms" }));
-                listViewHardware.Items.Add(new ListViewItem(new[] { "IO_DI",        "2 ch (DI0:DEV_ALV, DI1:START)" }));
-                listViewHardware.Items.Add(new ListViewItem(new[] { "IO_DO",        "3 ch (DO0:PC_ALV, DO1:MURA_NG, DO2:PC_BSY)" }));
+                listViewHardware.Items.Add(new ListViewItem(new[] { "───", "── Storage 狀態 ──" }));
+                _storageDiskFreeRow  = AddResMonItem("Disk_Free",    "—");
+                _storageLastCleanRow = AddResMonItem("Last_Cleanup", "—");
+                _retentionService.OnCleanupCompleted += r =>
+                {
+                    if (_storageLastCleanRow == null) return;
+                    string text = r.FreedBytes > 0
+                        ? $"{r.DeletedDayFolders} folders, {r.FreedBytes / (1024.0 * 1024):F1} MB  ({DateTime.Now:HH:mm:ss})"
+                        : $"OK  ({DateTime.Now:HH:mm:ss})";
+                    BeginInvoke((Action)(() => _storageLastCleanRow.SubItems[1].Text = text));
+                };
             }
-            // ── Resource Monitor（即時資源用量，Timer 更新）──
-            listViewHardware.Items.Add(new ListViewItem(new[] { "───", "── Resource Monitor ──" }));
-            _resMonRawSize     = AddResMonItem("RawSize",     "—");
-            _resMonGpuTime     = AddResMonItem("GPU_Time",    "—");
-            _resMonSaveSize    = AddResMonItem("Save/Frame",  "—");
-            _resMonDiskWrite   = AddResMonItem("DiskWrite",   "—");
-            _resMonFrames      = AddResMonItem("Frames",      "—");
-            _resMonRamUsed     = AddResMonItem("RAM_Used",    "—");
-            _resMonVramEst     = AddResMonItem("VRAM_Est",    "—");
+            else
+            {
+                // ── Resource Monitor（即時資源用量，Timer 更新）──
+                listViewHardware.Items.Add(new ListViewItem(new[] { "───", "── Resource Monitor ──" }));
+                _resMonRawSize     = AddResMonItem("RawSize",     "—");
+                _resMonGpuTime     = AddResMonItem("GPU_Time",    "—");
+                _resMonSaveSize    = AddResMonItem("Save/Frame",  "—");
+                _resMonDiskWrite   = AddResMonItem("DiskWrite",   "—");
+                _resMonFrames      = AddResMonItem("Frames",      "—");
+                _resMonRamUsed     = AddResMonItem("RAM_Used",    "—");
+                _resMonVramEst     = AddResMonItem("VRAM_Est",    "—");
+            }
             AutoFitListViewColumns(listViewHardware);
 
             // ── Telemetry Timer（每 500ms 更新 ListView + SyncFromHardware）─
@@ -2515,6 +2668,7 @@ namespace AniloxRoll.Monitor.Forms
                 long rawBytes = (long)w * h;
                 double rawMB = rawBytes / (1024.0 * 1024);
 
+                if (_resMonRawSize == null) return;
                 _resMonRawSize.SubItems[1].Text = w > 0 ? $"{w}×{h} = {rawMB:F1} MB" : "—";
                 _resMonGpuTime.SubItems[1].Text = maxGpuMs > 0 ? $"{maxGpuMs} ms" : "—";
                 _resMonSaveSize.SubItems[1].Text = lastSaveBytes > 0 ? $"{lastSaveBytes / 1024.0:F0} KB" : "—";
@@ -2774,6 +2928,7 @@ namespace AniloxRoll.Monitor.Forms
                 {
                     var cam = FindCameraById(idx + 1);
                     if (cam == null) continue;
+                    if (!cam.IsHwParamsStable) continue;
 
                     SyncHardwareParam(_expBars[idx], _expNums[idx],
                         cam.GetMeasuredExposureUs(), v => acq.CameraExposureTimeUs[idx] = v);
@@ -2845,6 +3000,43 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         // ── Inner Classes ───────────────────────────────────────────
+
+        /// <summary>
+        /// Storage 模式 PropertyGrid 過濾器：隱藏 IO / 相機 / 光源三個大類。
+        /// 使用 TypeDescriptor instance-level provider，不影響 Inspection 模式。
+        /// </summary>
+        private sealed class StorageModeSettingsFilter : TypeDescriptionProvider
+        {
+            private static readonly HashSet<string> Hidden = new HashSet<string>
+            {
+                "5. IO 模組設定",
+                "6. 相機參數設定",
+                "7. 光源設定"
+            };
+
+            public StorageModeSettingsFilter(TypeDescriptionProvider parent) : base(parent) { }
+
+            public override ICustomTypeDescriptor GetTypeDescriptor(Type objectType, object instance)
+                => new FilteredDescriptor(base.GetTypeDescriptor(objectType, instance));
+
+            private sealed class FilteredDescriptor : CustomTypeDescriptor
+            {
+                public FilteredDescriptor(ICustomTypeDescriptor parent) : base(parent) { }
+
+                public override PropertyDescriptorCollection GetProperties()
+                    => Filter(base.GetProperties());
+                public override PropertyDescriptorCollection GetProperties(Attribute[] attributes)
+                    => Filter(base.GetProperties(attributes));
+
+                private static PropertyDescriptorCollection Filter(PropertyDescriptorCollection all)
+                {
+                    var visible = all.Cast<PropertyDescriptor>()
+                        .Where(p => !Hidden.Contains(p.Category))
+                        .ToArray();
+                    return new PropertyDescriptorCollection(visible);
+                }
+            }
+        }
 
         private bool IsCanvasFitToScreen()
         {

@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8"/>
+<title>AniloxRoll Monitor — 儲存流程</title>
+<style>
+:root {
+  --insp-bg:   #e3f2fd; --insp-border:  #1565c0;
+  --store-bg:  #f3e5f5; --store-border: #6a1b9a;
+  --queue-bg:  #fff3e0; --queue-border: #e65100;
+  --ok-bg:     #e8f5e9; --ok-border:    #2e7d32;
+  --warn-bg:   #fce4ec; --warn-border:  #c62828;
+  --cond-bg:   #fff8e1; --cond-border:  #f9a825;
+  --tbd-bg:    #f5f5f5; --tbd-border:   #9e9e9e;
+  --arrow: #546e7a;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "Microsoft JhengHei", "Segoe UI", sans-serif; background: #fafafa; color: #333; padding: 20px; max-width: 1100px; }
+h1 { font-size: 1.6em; margin-bottom: 6px; }
+.subtitle { color: #666; margin-bottom: 16px; font-size: 0.9em; }
+h2 { font-size: 1.2em; margin: 22px 0 8px; padding: 6px 12px; background: #37474f; color: #fff; border-radius: 4px; cursor: pointer; user-select: none; }
+h2:hover { background: #455a64; }
+h2::before { content: "▸ "; }
+h2.open::before { content: "▾ "; }
+.section { display: none; padding: 8px 0 16px; }
+.section.open { display: block; }
+
+.legend { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; font-size: 0.83em; }
+.legend-item { display: flex; align-items: center; gap: 5px; }
+.legend-box { width: 14px; height: 14px; border-radius: 3px; border: 2px solid; flex-shrink: 0; }
+
+.box { padding: 7px 12px; border-radius: 5px; border: 2px solid; font-size: 0.88em; line-height: 1.5; }
+.box.insp  { background: var(--insp-bg);  border-color: var(--insp-border); }
+.box.store { background: var(--store-bg); border-color: var(--store-border); }
+.box.queue { background: var(--queue-bg); border-color: var(--queue-border); }
+.box.ok    { background: var(--ok-bg);    border-color: var(--ok-border); }
+.box.warn  { background: var(--warn-bg);  border-color: var(--warn-border); }
+.box.cond  { background: var(--cond-bg);  border-color: var(--cond-border); font-weight: bold; }
+.box.tbd   { background: var(--tbd-bg);   border-color: var(--tbd-border); font-style: italic; }
+.box code  { background: rgba(0,0,0,0.07); padding: 1px 5px; border-radius: 3px; font-size: 0.85em; font-style: normal; }
+.note { font-size: 0.8em; color: #777; margin-top: 4px; }
+
+.vflow { display: flex; flex-direction: column; align-items: center; }
+.vflow > .box { min-width: 260px; text-align: center; }
+.v-arrow {
+  position: relative; width: 2px; height: 24px; background: var(--arrow);
+  align-self: center; overflow: visible; font-size: 0; color: transparent;
+}
+.v-arrow::after {
+  content: ''; position: absolute; bottom: -1px; left: 50%; transform: translateX(-50%);
+  border-left: 5px solid transparent; border-right: 5px solid transparent;
+  border-top: 7px solid var(--arrow);
+}
+.v-arrow[data-label]::before {
+  content: attr(data-label); position: absolute; left: 10px; top: 50%;
+  transform: translateY(-50%); white-space: nowrap;
+  font-size: 0.75em; font-weight: bold; color: var(--arrow);
+}
+
+.v-branch { position: relative; display: flex; gap: 16px; justify-content: center;
+            padding: 14px 0; flex-wrap: wrap; align-items: flex-start; }
+.v-branch::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--arrow); }
+.v-branch::after  { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--arrow); }
+.v-branch-path { display: flex; flex-direction: column; align-items: center; gap: 6px;
+                 padding: 8px 12px; min-width: 160px; }
+.v-branch-path::before, .v-branch-path::after {
+  content: ''; width: 2px; height: 10px; background: var(--arrow); flex-shrink: 0;
+}
+.branch-label { font-size: 0.8em; font-weight: bold; padding: 2px 8px; border-radius: 3px; display: inline-block; }
+.branch-label.yes   { background: #c8e6c9; color: #1b5e20; }
+.branch-label.no    { background: #ffcdd2; color: #b71c1c; }
+.branch-label.retry { background: #fff9c4; color: #f57f17; }
+
+.out-par { display: flex; flex-direction: column; gap: 3px; align-self: center;
+           border-left: 4px double #2e7d32; padding: 4px 10px; }
+.out-par > .box { font-size: 0.84em; padding: 4px 10px; }
+
+details.subflow { margin: 4px 0; align-self: center; min-width: 260px; }
+details.subflow > summary {
+  cursor: pointer; font-size: 0.86em; font-weight: bold; color: #e65100;
+  padding: 5px 14px; border-radius: 4px; background: #fff3e0;
+  border: 2px solid #e65100; list-style: none; text-align: center;
+}
+details.subflow > summary::before { content: "▸ "; }
+details.subflow[open] > summary::before { content: "▾ "; }
+details.subflow > summary::-webkit-details-marker { display: none; }
+details.subflow > .vflow { padding: 6px 0; }
+
+.dual-grid { display: grid; grid-template-columns: 1fr 64px 1fr; gap: 0; margin: 14px 0; align-items: start; }
+.arch-box { border-radius: 10px; padding: 14px; }
+.arch-box.insp-box  { background: var(--insp-bg);  border: 2px solid var(--insp-border); }
+.arch-box.store-box { background: var(--store-bg); border: 2px solid var(--store-border); }
+.arch-box h3 { font-size: 0.98em; margin-bottom: 8px; }
+.arch-mid { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px 0; gap: 6px; }
+.net-arrow { font-size: 1.4em; color: var(--arrow); }
+.net-label { font-size: 0.72em; color: #666; text-align: center; }
+.attr-list { list-style: none; font-size: 0.83em; line-height: 1.9; }
+.attr-list li::before { content: "• "; color: #777; }
+.attr-list li code { background: rgba(0,0,0,0.07); padding: 1px 5px; border-radius: 3px; font-size: 0.9em; }
+.attr-list li.check::before { content: "✓ "; color: #2e7d32; font-weight: bold; }
+.attr-list li.cross::before { content: "✗ "; color: #c62828; font-weight: bold; }
+
+.feature-table { width: 100%; border-collapse: collapse; font-size: 0.86em; margin: 12px 0; }
+.feature-table th { background: #455a64; color: #fff; padding: 6px 12px; text-align: left; }
+.feature-table td { padding: 5px 12px; border-bottom: 1px solid #eee; }
+.feature-table tr:hover td { background: #f9f9f9; }
+.tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 0.82em; font-weight: bold; }
+.tag.on   { background: #c8e6c9; color: #1b5e20; }
+.tag.off  { background: #ffcdd2; color: #b71c1c; }
+.tag.done { background: #c8e6c9; color: #1b5e20; }
+.tag.tbd  { background: #fff9c4; color: #b36a00; }
+.tag.none { background: #ffcdd2; color: #b71c1c; }
+.tag.fixed { background: #e1f5fe; color: #01579b; }
+
+.design-box { border: 2px dashed var(--tbd-border); border-radius: 8px; padding: 12px 14px;
+              margin: 12px 0; background: var(--tbd-bg); }
+.design-box h4 { font-size: 0.93em; color: #555; margin-bottom: 6px; }
+.design-box p  { font-size: 0.85em; color: #555; margin-bottom: 6px; line-height: 1.6; }
+
+.status-table { width: 100%; border-collapse: collapse; font-size: 0.86em; margin: 12px 0; }
+.status-table th { background: #455a64; color: #fff; padding: 6px 12px; text-align: left; }
+.status-table td { padding: 5px 12px; border-bottom: 1px solid #eee; vertical-align: top; }
+.status-table tr:hover td { background: #f5f5f5; }
+
+.fsm-grid { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; align-items: center; }
+.fsm-state { border-radius: 50px; padding: 5px 14px; border: 2px solid; font-size: 0.83em; font-weight: bold; }
+.fsm-state.s-queue   { background: var(--queue-bg); border-color: var(--queue-border); }
+.fsm-state.s-copying { background: var(--insp-bg);  border-color: var(--insp-border); }
+.fsm-state.s-ok      { background: var(--ok-bg);    border-color: var(--ok-border); }
+.fsm-state.s-skip    { background: var(--warn-bg);  border-color: var(--warn-border); }
+.fsm-arrow { font-size: 1.1em; color: var(--arrow); }
+
+.flow-group { margin: 12px 0; border: 1px solid #ddd; border-radius: 8px; background: #fff; padding: 12px; }
+.flow-title { font-weight: bold; font-size: 0.95em; margin-bottom: 10px; color: #1565c0; }
+
+.side-by-side { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 12px 0; }
+.side-box { border-radius: 8px; padding: 12px; }
+.side-box.insp-box  { background: #f0f7ff; border: 2px solid var(--insp-border); }
+.side-box.store-box { background: #faf0ff; border: 2px solid var(--store-border); }
+.side-box h4 { font-size: 0.88em; margin-bottom: 8px; }
+
+.toolbar { display: flex; gap: 8px; margin-bottom: 16px; }
+.toolbar button { padding: 5px 14px; border: 2px solid #1565c0; border-radius: 4px;
+                  background: #fff; color: #1565c0; cursor: pointer; font-family: inherit; font-size: 0.85em; }
+.toolbar button:hover { background: #e3f2fd; }
+
+.warn-box { background: #fff8e1; border: 2px solid #f9a825; border-radius: 6px;
+            padding: 8px 12px; margin: 8px 0; font-size: 0.85em; line-height: 1.6; }
+.bug-box { background: #fce4ec; border: 2px solid #c62828; border-radius: 6px;
+           padding: 8px 12px; margin: 8px 0; font-size: 0.85em; line-height: 1.6; }
+.decision-tag { display: inline-block; background: #e8f5e9; border: 1px solid #2e7d32;
+                border-radius: 4px; padding: 1px 7px; font-size: 0.8em; color: #1b5e20; margin-left: 4px; }
+</style>
+</head>
+<body>
+<h1>AniloxRoll Monitor — 儲存流程</h1>
+<p class="subtitle">版本：2026-04-30 ｜ 雙機同程式，Config 控制功能開關；無 Timer，事件驅動</p>
+
+<div class="toolbar">
+  <button onclick="expandAll()">全部展開</button>
+  <button onclick="collapseAll()">全部合併</button>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-box" style="background:var(--insp-bg);border-color:var(--insp-border)"></div>檢測機</div>
+  <div class="legend-item"><div class="legend-box" style="background:var(--store-bg);border-color:var(--store-border)"></div>儲存機</div>
+  <div class="legend-item"><div class="legend-box" style="background:var(--queue-bg);border-color:var(--queue-border)"></div>佇列 / 傳輸</div>
+  <div class="legend-item"><div class="legend-box" style="background:var(--ok-bg);border-color:var(--ok-border)"></div>成功 / 完成</div>
+  <div class="legend-item"><div class="legend-box" style="background:var(--warn-bg);border-color:var(--warn-border)"></div>刪除 / 警告</div>
+  <div class="legend-item"><div class="legend-box" style="background:var(--cond-bg);border-color:var(--cond-border)"></div>條件判斷</div>
+  <div class="legend-item"><div class="legend-box" style="background:var(--tbd-bg);border-color:var(--tbd-border)"></div>🔲 待確認</div>
+</div>
+
+<!-- ===== 1. 雙機架構總覽 ===== -->
+<h2 onclick="toggle(this)">1. 雙機架構總覽</h2>
+<div class="section">
+  <p class="note" style="margin-bottom:10px">兩台機器執行<strong>同一個 AniloxRoll.Monitor.exe</strong>，由 <code>Config/app-mode.json</code>（部署時寫入）決定功能範圍。若檔案不存在 → 預設 Inspection mode。</p>
+
+  <div class="dual-grid">
+    <div class="arch-box insp-box">
+      <h3>🖥 檢測機（Inspection mode）</h3>
+      <ul class="attr-list">
+        <li>存檔根目錄：<code>D:\AniloxCaptures\</code></li>
+        <li>最少剩餘空間：<code>LocalMinFreeGB</code>（預設 100 GB）</li>
+        <li>遠端路徑：<code>\\192.168.10.20\AniloxStorage</code></li>
+        <li>遠端 Config：<code>\\192.168.10.20\AniloxConfig</code></li>
+      </ul>
+      <br>
+      <ul class="attr-list">
+        <li class="check">即時監控（Live tab）</li>
+        <li class="check">歷史查詢 / 檢測報表</li>
+        <li class="check">全部設定（PropertyGrid）</li>
+        <li class="check">MIL 相機 / GPU / PLC / 光源</li>
+        <li class="check">RemoteCopyService（佇列→複製）</li>
+        <li class="check">StorageRetentionService（事件觸發）</li>
+      </ul>
+    </div>
+    <div class="arch-mid">
+      <span class="net-arrow">⇄</span>
+      <span class="net-label">SMB<br>1 Gbps</span>
+      <span style="font-size:0.8em;color:#546e7a;margin-top:8px;text-align:center">📄 cleanup-request.flag<br>→ AniloxConfig</span>
+    </div>
+    <div class="arch-box store-box">
+      <h3>🗄 儲存機（Storage mode）</h3>
+      <ul class="attr-list">
+        <li>存檔根目錄：<code>D:\AniloxStorage\</code>（本地路徑）</li>
+        <li>最少剩餘空間：各自獨立設定</li>
+        <li>RemotePath：空（不往外複製）</li>
+      </ul>
+      <br>
+      <ul class="attr-list">
+        <li class="cross">Live tab（隱藏）</li>
+        <li class="check">歷史查詢 / 檢測報表</li>
+        <li class="check">全部設定（PropertyGrid，同 Inspection）</li>
+        <li class="cross">MIL / GPU / PLC / 光源（完全跳過）</li>
+        <li class="cross">RemoteCopyService（不啟動）</li>
+        <li class="check">StorageRetentionService（Polling 觸發）</li>
+        <li class="check">狀態列顯示「Storage 模式」</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="warn-box">
+    ⚠ PropertyGrid：兩機顯示相同設定項目（不動態隱藏，簡化實作）。儲存機的 Camera / IO / Light 設定值不影響任何執行路徑，因硬體初始化已被跳過。
+  </div>
+</div>
+
+<!-- ===== 2. App Mode Config ===== -->
+<h2 onclick="toggle(this)">2. App Mode Config（部署設定）</h2>
+<div class="section">
+  <div class="side-by-side">
+    <div class="side-box insp-box">
+      <h4>檢測機 <code>Config/app-mode.json</code></h4>
+      <pre style="font-size:0.82em;background:#f0f7ff;padding:8px;border-radius:4px;line-height:1.8">{
+  "MachineRole": "Inspection",
+  "CaptureRootPath": "D:\\AniloxCaptures",
+  "LocalMinFreeGB": 100
+}</pre>
+    </div>
+    <div class="side-box store-box">
+      <h4>儲存機 <code>Config/app-mode.json</code></h4>
+      <pre style="font-size:0.82em;background:#faf0ff;padding:8px;border-radius:4px;line-height:1.8">{
+  "MachineRole": "Storage",
+  "CaptureRootPath": "D:\\AniloxStorage",
+  "LocalMinFreeGB": 200
+}</pre>
+    </div>
+  </div>
+
+  <div class="flow-group">
+    <div class="flow-title">功能開關對照</div>
+    <table class="feature-table">
+      <thead><tr><th>功能 / UI 元素</th><th>Inspection</th><th>Storage</th><th>說明</th></tr></thead>
+      <tbody>
+        <tr><td>tabPageLiveView（即時監控）</td><td><span class="tag on">啟用</span></td><td><span class="tag off">隱藏</span></td><td>啟動時隱藏，非動態切換</td></tr>
+        <tr><td>tabPageReview / tabPageData</td><td><span class="tag on">啟用</span></td><td><span class="tag on">啟用</span></td><td>兩機都需要</td></tr>
+        <tr><td>PropertyGrid（所有設定項目）</td><td><span class="tag on">全顯</span></td><td><span class="tag on">全顯</span></td><td>不動態篩選，簡化實作</td></tr>
+        <tr><td>lblPlcState / lblPlcConn / lblLightConn / IO 燈號</td><td><span class="tag on">啟用</span></td><td><span class="tag off">隱藏</span></td><td>Storage mode 無硬體</td></tr>
+        <tr><td>lblStorageConn</td><td><span class="tag on">UNC probe 5 秒</span></td><td><span class="tag on">顯示「Storage 模式」</span></td><td></td></tr>
+        <tr><td>MIL 相機 / GPU / PLC / 光源 init</td><td><span class="tag on">執行</span></td><td><span class="tag off">完全跳過</span></td><td>IHardwareInitializer 介面隔離</td></tr>
+        <tr><td>RemoteCopyService</td><td><span class="tag on">啟動</span></td><td><span class="tag off">不啟動</span></td><td>RemotePath 空時 EnqueueFiles 也直接 return</td></tr>
+        <tr><td>StorageRetentionService</td><td><span class="tag on">啟動</span></td><td><span class="tag on">啟動</span></td><td>兩機各自管本地空間</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="flow-group">
+    <div class="flow-title">IHardwareInitializer 介面隔離（Storage mode crash 防護）</div>
+    <div class="attr-list" style="font-size:0.86em;line-height:2.0">
+      <li>定義 <code>IHardwareInitializer</code> 介面，包含 Camera / PLC / 光源 init 方法</li>
+      <li>Inspection mode：注入 <code>RealHardwareInitializer</code>（現有 init 邏輯）</li>
+      <li>Storage mode：注入 <code>NullHardwareInitializer</code>（全部 no-op）</li>
+      <li>新增硬體 init 路徑時，強制在 <code>NullHardwareInitializer</code> 加空實作 → 開發者必須意識到 Storage 分支</li>
+    </div>
+  </div>
+
+  <div class="flow-group">
+    <div class="flow-title">Deploy 腳本更新點（<code>deploy/</code>）</div>
+    <ul class="attr-list" style="font-size:0.86em;line-height:2.0">
+      <li><code>storage-pc/setup_storage_pc.ps1</code>：部署後寫入 <code>Config\app-mode.json</code>（Storage mode）</li>
+      <li><code>inspection-pc/</code>：部署後寫入 <code>Config\app-mode.json</code>（Inspection mode）</li>
+      <li><code>storage-pc/storage-config.json</code>：補充 <code>AppMinFreeGB</code>、<code>AppCaptureRootPath</code> 欄位</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ===== 3. 主流程：每幀存檔 ===== -->
+<h2 onclick="toggle(this)">3. 主流程：每幀存檔（Grab → 佇列）</h2>
+<div class="section">
+  <p class="note" style="margin-bottom:10px">Inspection mode 專屬。每幀在 <code>Task.Run</code> 背景執行緒觸發，不阻塞取像主迴圈。</p>
+  <div class="flow-group">
+    <div class="flow-title">CameraFrameSaver.SaveCapture → RemoteCopyService.EnqueueFiles</div>
+    <div class="vflow">
+      <div class="box insp">AniloxCamera 取像完成（MIL MbufCopy → byte[]；GPU → float[]）</div>
+      <div class="v-arrow"></div>
+      <div class="box insp"><code>CameraFrameSaver.SaveCapture(ctx)</code>（Task.Run 背景）</div>
+      <div class="v-arrow"></div>
+      <div class="vflow" style="width:100%;align-items:center">
+        <div class="box insp" style="text-align:left">
+          本地存檔（<code>CaptureRootPath\YYYY\YYYYMM\YYYYMMDD\</code>）
+          <div class="out-par" style="margin-top:6px">
+            <div class="box insp"><code>{GrabId}_raw.jpg</code></div>
+            <div class="box insp"><code>{GrabId}_proc_v/h.jpg</code>（若啟用強化）</div>
+            <div class="box insp"><code>{GrabId}_mean/max_v/h.bin</code></div>
+          </div>
+        </div>
+      </div>
+      <div class="v-arrow"></div>
+      <div class="box queue"><code>OnFilesSaved</code> → <code>RemoteCopyService.EnqueueFiles(savedFiles)</code><br>
+        <span class="note">若 RemotePath 空 → 直接 return；佇列無上限，斷線期間持續累積，重連後自動消化</span>
+      </div>
+      <div class="v-arrow"></div>
+      <div class="box insp">累計已完成幀數 <code>_completedGrabCount++</code><br>
+        <span class="note">每 10 次 grab（≈ 10 × 7 × 每幀檔案數 個檔案）→ 寫 cleanup-request.flag（背景，見第 5 節）</span>
+      </div>
+      <div class="v-arrow"></div>
+      <div class="box ok">本幀完成</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 4. 佇列傳輸流程 ===== -->
+<h2 onclick="toggle(this)">4. 佇列傳輸流程（背景常駐，Inspection mode）</h2>
+<div class="section">
+  <div class="flow-group">
+    <div class="flow-title">佇列項目生命週期</div>
+    <div class="fsm-grid">
+      <div><div class="fsm-state s-queue">QUEUED</div><div class="note" style="text-align:center">EnqueueFiles</div></div>
+      <span class="fsm-arrow">→</span>
+      <div><div class="fsm-state s-copying">COPYING</div><div class="note" style="text-align:center">worker 取出</div></div>
+      <span class="fsm-arrow">→</span>
+      <div><div class="fsm-state s-ok">CONFIRMED</div><div class="note" style="text-align:center">File.Copy 成功<br>= 確認收到</div></div>
+      <span style="color:#9e9e9e;font-size:1.1em;align-self:flex-start;margin-top:6px">|</span>
+      <div><div class="fsm-state s-skip">SKIPPED</div><div class="note" style="text-align:center">本地檔案已被<br>Retention 刪除</div></div>
+    </div>
+    <div class="note" style="margin-top:6px">
+      ★ 被動策略：worker 取出時若 <code>!File.Exists(localPath)</code> → 直接 SKIPPED，不重試。容量優先，偶爾缺失 OK。<br>
+      ★ 佇列無上限：SMB 斷線期間無限累積；重連後 worker 自動處理，此時 File.Exists 過濾已刪檔案。
+    </div>
+  </div>
+
+  <div class="flow-group">
+    <div class="flow-title">Worker Loop（RemoteCopyService）</div>
+    <div class="vflow">
+      <div class="box queue">等待訊號（ManualResetEventSlim，最多 5 秒 timeout）</div>
+      <div class="v-arrow"></div>
+      <div class="box cond">佇列非空？</div>
+      <div class="v-branch">
+        <div class="v-branch-path">
+          <span class="branch-label no">空</span>
+          <div class="box queue">繼續等待</div>
+        </div>
+        <div class="v-branch-path">
+          <span class="branch-label yes">有</span>
+          <div class="v-arrow"></div>
+          <div class="box insp">取出 LocalPath</div>
+          <div class="v-arrow"></div>
+          <div class="box cond">本地檔案存在？</div>
+          <div class="v-branch">
+            <div class="v-branch-path">
+              <span class="branch-label no">不存在</span>
+              <div class="box warn">SKIPPED（被 Retention 刪除）<br>不重試，直接下一項</div>
+            </div>
+            <div class="v-branch-path">
+              <span class="branch-label yes">存在</span>
+              <div class="v-arrow"></div>
+              <details class="subflow">
+                <summary>File.Copy + 最多 3 次重試</summary>
+                <div class="vflow">
+                  <div class="v-arrow"></div>
+                  <div class="box queue"><code>Directory.CreateDirectory(destDir)</code></div>
+                  <div class="v-arrow"></div>
+                  <div class="box queue"><code>File.Copy(src, dest, overwrite:true)</code></div>
+                  <div class="v-arrow"></div>
+                  <div class="box cond">成功？</div>
+                  <div class="v-branch">
+                    <div class="v-branch-path">
+                      <span class="branch-label yes">成功</span>
+                      <div class="box ok">CONFIRMED<br>TotalCopiedFiles++</div>
+                    </div>
+                    <div class="v-branch-path">
+                      <span class="branch-label retry">失敗 ≤ 3</span>
+                      <div class="box warn">等 2 秒後重試</div>
+                    </div>
+                    <div class="v-branch-path">
+                      <span class="branch-label no">失敗 3 次</span>
+                      <div class="box warn">TotalFailedFiles++<br>Trace 記錄，繼續下一項</div>
+                    </div>
+                  </div>
+                  <div class="v-arrow"></div>
+                </div>
+              </details>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="v-arrow" data-label="繼續下一項"></div>
+      <div class="box queue">回到佇列頂端</div>
+    </div>
+  </div>
+
+  <div class="bug-box">
+    🐛 <strong>已知 Bug（待修）</strong>：<code>StorageRetentionService._running</code> 使用 <code>volatile bool</code> 的 check-then-set 不是原子操作。
+    若兩個觸發同時進入會各自通過 <code>if (_running) return</code> 判斷。
+    修法：改用 <code>int _running</code> + <code>Interlocked.CompareExchange(ref _running, 1, 0) != 0</code>。
+  </div>
+</div>
+
+<!-- ===== 5. 循環儲存（事件驅動，無 Timer） ===== -->
+<h2 onclick="toggle(this)">5. 循環儲存（事件驅動，無 Timer）</h2>
+<div class="section">
+  <div class="flow-group">
+    <div class="flow-title">觸發時機設計</div>
+    <div class="side-by-side">
+      <div class="side-box insp-box">
+        <h4>檢測機觸發點</h4>
+        <ul class="attr-list" style="font-size:0.84em;line-height:2.1">
+          <li>【停止抓取】按下（btnCameraGrab 停止）</li>
+          <li>每幀完成後：每累積 10 次 grab 寫一次 flag</li>
+          <li>Grab 異常：距上次 grab 完成 &gt; 30 秒仍在運行 → 觸發一次<br>
+            <span class="note">正常 grab ≈ 10 秒；超過 30 秒代表卡住或異常</span>
+          </li>
+          <li>App 啟動時執行一次（Startup recovery）</li>
+        </ul>
+      </div>
+      <div class="side-box store-box">
+        <h4>儲存機觸發點</h4>
+        <ul class="attr-list" style="font-size:0.84em;line-height:2.1">
+          <li>Polling 60 秒掃描一次 <code>AniloxConfig\cleanup-request.flag</code></li>
+          <li>找到 flag → RunCleanup() → 刪除 flag（ACK）</li>
+          <li>App 啟動時掃描殘留 flag 並補跑（Recovery）</li>
+          <li>App 啟動時執行一次 RunCleanup()（上次未清理補收）</li>
+        </ul>
+        <p class="note" style="margin-top:6px">Polling 比 FileSystemWatcher 更可靠：高 I/O 時 FSW 內部 buffer 可能溢出導致漏報；Polling 不依賴事件通知。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="flow-group">
+    <div class="flow-title">空間清理流程（兩機相同邏輯，各讀自己的 app-mode.json）</div>
+    <div class="vflow">
+      <div class="box insp">RunCleanup() 被呼叫（任一觸發點）</div>
+      <div class="v-arrow"></div>
+      <div class="box cond">Interlocked 確保只有一個執行緒進入</div>
+      <div class="v-arrow"></div>
+      <div class="box insp">DriveInfo(CaptureRootPath).AvailableFreeSpace</div>
+      <div class="v-arrow"></div>
+      <div class="box cond">可用空間 ≥ LocalMinFreeGB？</div>
+      <div class="v-branch">
+        <div class="v-branch-path">
+          <span class="branch-label yes">充足，結束</span>
+          <div class="box ok">不刪除</div>
+        </div>
+        <div class="v-branch-path">
+          <span class="branch-label no">不足</span>
+          <div class="v-arrow"></div>
+          <div class="box warn">找最舊日資料夾並刪除 .jpg / .bmp / .bin<br>
+            <span class="note">CSV 永不刪除；空目錄自動移除</span>
+          </div>
+          <div class="v-arrow"></div>
+          <div class="box cond">現在充足？</div>
+          <div class="v-branch">
+            <div class="v-branch-path">
+              <span class="branch-label yes">充足</span>
+              <div class="box ok">OnCleanupCompleted 事件</div>
+            </div>
+            <div class="v-branch-path">
+              <span class="branch-label no">仍不足</span>
+              <div class="box warn">繼續刪下一個最舊日</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flow-group">
+    <div class="flow-title">cleanup-request.flag 寫入流程（Inspection 機，每 10 次 grab）</div>
+    <div class="vflow">
+      <div class="box insp">_completedGrabCount % 10 == 0（或停止抓取）</div>
+      <div class="v-arrow"></div>
+      <div class="box queue">Task.Run（不阻塞 UI / 取像流程）<br>
+        <span class="note">CancellationToken timeout = 5 秒</span>
+      </div>
+      <div class="v-arrow"></div>
+      <div class="box cond">SMB 寫入成功？</div>
+      <div class="v-branch">
+        <div class="v-branch-path">
+          <span class="branch-label yes">成功</span>
+          <div class="box ok">flag 已寫入<br>儲存機 60 秒內 Polling 偵測到</div>
+        </div>
+        <div class="v-branch-path">
+          <span class="branch-label no">失敗 / timeout</span>
+          <div class="box warn">Trace.Warning 記錄<br>靠儲存機 Startup Recovery 補</div>
+        </div>
+      </div>
+    </div>
+    <div class="note" style="margin-top:6px">
+      ★ flag 寫入是「盡力而為」通知，失敗不影響停止取像的主流程。<br>
+      ★ 儲存機 Polling 60 秒 = 最慢 60 秒後清理，對空間管理完全可接受。
+    </div>
+  </div>
+
+  <div class="warn-box">
+    ⚠ 競態：Retention 刪除某日檔案時，RemoteCopyService 佇列可能還有那批檔案待傳。
+    策略：空間優先，被動跳過（File.Exists 為 false → SKIPPED）。實際場域中舊資料超過一定時間已無實用價值。
+  </div>
+</div>
+
+<!-- ===== 6. 連線狀態回報 ===== -->
+<h2 onclick="toggle(this)">6. 連線狀態回報（lblStorageConn）</h2>
+<div class="section">
+  <p class="note" style="margin-bottom:10px">lblStorageConn 已實作（Designer.cs 完整），每 500ms tick → 每 5 秒背景 probe。</p>
+
+  <div class="side-by-side">
+    <div class="side-box insp-box">
+      <h4>Inspection mode（現行）</h4>
+      <ul class="attr-list" style="font-size:0.84em;line-height:2.0">
+        <li>背景 Task：<code>Directory.Exists(RemotePath)</code>（UNC）</li>
+        <li>連線 → <span style="background:#c8e6c9;padding:1px 6px;border-radius:3px">● 儲存電腦 已連線</span></li>
+        <li>離線 → <span style="background:#ffcdd2;padding:1px 6px;border-radius:3px">● 儲存電腦 離線</span></li>
+        <li>停用（RemotePath 空）→ <span style="background:#eee;padding:1px 6px;border-radius:3px">● 儲存電腦 停用</span></li>
+        <li>probe 進行中 → 保留上次顯示（null 不更新）</li>
+      </ul>
+    </div>
+    <div class="side-box store-box">
+      <h4>Storage mode（需實作）</h4>
+      <ul class="attr-list" style="font-size:0.84em;line-height:2.0">
+        <li>不 probe（RemotePath 為空，App 也不往外連）</li>
+        <li>啟動後固定顯示：<span style="background:#c8e6c9;padding:1px 6px;border-radius:3px">● Storage 模式</span></li>
+        <li>其餘硬體狀態列（PLC / 光源）隱藏</li>
+      </ul>
+      <p class="note" style="margin-top:6px">「無 MIL / 無相機」的顯示方式待確認，後續視設計調整。</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 7. 實作狀態 ===== -->
+<h2 onclick="toggle(this)">7. 實作狀態</h2>
+<div class="section">
+  <table class="status-table">
+    <thead>
+      <tr><th>功能</th><th>狀態</th><th>對應檔案</th><th>備註</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>每幀本地存檔（jpg / bin）</td><td><span class="tag done">✓ 完成</span></td><td><code>CameraFrameSaver.cs</code></td><td></td></tr>
+      <tr><td>RemoteCopyService（佇列 + File.Copy）</td><td><span class="tag done">✓ 完成</span></td><td><code>RemoteCopyService.cs</code></td><td>Storage mode 不啟動</td></tr>
+      <tr><td>StorageRetentionService（刪最舊日）</td><td><span class="tag done">✓ 完成</span></td><td><code>StorageRetentionService.cs</code></td><td>Timer 已移除，純事件驅動</td></tr>
+      <tr><td>lblStorageConn UNC probe（Inspection）</td><td><span class="tag done">✓ 完成</span></td><td><code>AniloxRollForm.cs</code></td><td>Storage mode 跳過 probe</td></tr>
+      <tr><td>SMB deploy（網路 / 共用）</td><td><span class="tag done">✓ 完成</span></td><td><code>deploy/storage-pc/</code></td><td>已驗證；新增 AniloxConfig 共用</td></tr>
+      <tr><td>🐛 _running volatile bool → Interlocked</td><td><span class="tag done">✓ 完成</span></td><td><code>StorageRetentionService.cs</code></td><td>Interlocked.CompareExchange 原子操作</td></tr>
+      <tr><td>StorageRetentionService 移除 Timer → 事件觸發</td><td><span class="tag done">✓ 完成</span></td><td><code>StorageRetentionService.cs</code></td><td>移除 Start()/Timer；啟動時 Task.Run 一次</td></tr>
+      <tr><td>Grab 超過 30 秒 Watchdog → RunCleanup()</td><td><span class="tag done">✓ 完成</span></td><td><code>AniloxRollForm.cs</code></td><td>TelemetryTimer tick 中檢查 _lastGrabEventTime</td></tr>
+      <tr><td>每 10 grab → 寫 cleanup-request.flag</td><td><span class="tag done">✓ 完成</span></td><td><code>AniloxRollForm.cs</code></td><td>OnCameraInspectionResult 累計；Task.Run 非同步寫旗標</td></tr>
+      <tr><td>Config/app-mode.json 讀取與 MachineRole 分流</td><td><span class="tag done">✓ 完成</span></td><td><code>Settings/Models/AppModeConfig.cs</code></td><td>缺少檔案 → 預設 Inspection</td></tr>
+      <tr><td>InitializeSystem() 按 MachineRole 分流</td><td><span class="tag done">✓ 完成</span></td><td><code>AniloxRollForm.cs</code></td><td>InitServiceLayer() 分支；無 IHardwareInitializer（不需要）</td></tr>
+      <tr><td>Storage mode UI（隱藏 Live tab / 硬體狀態列）</td><td><span class="tag done">✓ 完成</span></td><td><code>AniloxRollForm.cs ApplyStorageModeUi()</code></td><td>啟動時靜態隱藏</td></tr>
+      <tr><td>lblStorageConn Storage mode 顯示「Storage 模式」</td><td><span class="tag done">✓ 完成</span></td><td><code>AniloxRollForm.cs ApplyStorageModeUi()</code></td><td>IecGreen 固定顯示</td></tr>
+      <tr><td>Storage 機 Polling 60 秒偵測 flag</td><td><span class="tag done">✓ 完成</span></td><td><code>Services/CleanupFlagWatcher.cs</code></td><td>背景執行緒輪詢；啟動時掃描殘留</td></tr>
+      <tr><td>Startup Recovery（掃描殘留 flag + RunCleanup）</td><td><span class="tag done">✓ 完成</span></td><td><code>CleanupFlagWatcher.Start() + InitServiceLayer()</code></td><td>雙模式啟動時各執行一次 RunCleanup</td></tr>
+      <tr><td>deploy 腳本寫入 app-mode.json</td><td><span class="tag done">✓ 完成</span></td><td><code>deploy/storage-pc/setup_storage_pc.ps1<br/>deploy/inspection-pc/setup_appmode.ps1</code></td><td>AppDir 參數指定安裝目錄</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+function toggle(h2) {
+  const sec = h2.nextElementSibling;
+  const open = h2.classList.toggle('open');
+  sec.classList.toggle('open', open);
+}
+function expandAll() {
+  document.querySelectorAll('h2').forEach(h2 => {
+    h2.classList.add('open');
+    h2.nextElementSibling.classList.add('open');
+  });
+}
+function collapseAll() {
+  document.querySelectorAll('h2').forEach(h2 => {
+    h2.classList.remove('open');
+    h2.nextElementSibling.classList.remove('open');
+  });
+}
+document.querySelectorAll('h2')[0]?.click();
+document.querySelectorAll('h2')[1]?.click();
+document.querySelectorAll('h2')[6]?.click();
+</script>
+</body>
+</html>

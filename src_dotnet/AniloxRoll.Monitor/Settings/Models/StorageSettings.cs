@@ -10,17 +10,17 @@ namespace AniloxRoll.Monitor.Core.Data
         [DisplayName("存圖目錄")]   public string CaptureRootPath { get; set; } = @"D:\AniloxCaptures";
         [DisplayName("存背景目錄")] public string BackgroundPath { get; set; } = @"D:\AniloxCaptures\bg";
 
-        [DisplayName("本地上限(GB)")]   public int LocalMaxGB { get; set; } = 500;
-        [DisplayName("異常保護天數")]    public int FailProtectDays { get; set; } = 30;
-        [DisplayName("遠端路徑")]       public string RemotePath { get; set; } = @"\\192.168.10.20\AniloxStorage";
+        [DisplayName("本地預留磁碟空間")] public int LocalMinFreeGB { get; set; } = 100;
+        [DisplayName("遠端路徑")]         public string RemotePath       { get; set; } = @"\\192.168.10.20\AniloxStorage";
+        [DisplayName("遠端 Config 路徑")] public string RemoteConfigPath { get; set; } = @"\\192.168.10.20\AniloxConfig";
 
         public void Validate()
         {
             if (string.IsNullOrWhiteSpace(CaptureRootPath)) CaptureRootPath = @"D:\AniloxCaptures";
             if (string.IsNullOrWhiteSpace(BackgroundPath)) BackgroundPath = @"D:\AniloxCaptures\bg";
-            if (LocalMaxGB < 1) LocalMaxGB = 500;
-            if (FailProtectDays < 0) FailProtectDays = 30;
+            if (LocalMinFreeGB < 1) LocalMinFreeGB = 100;
             if (RemotePath == null) RemotePath = @"\\192.168.10.20\AniloxStorage";
+            if (RemoteConfigPath == null) RemoteConfigPath = @"\\192.168.10.20\AniloxConfig";
         }
 
         public override string ToString() => "Storage";

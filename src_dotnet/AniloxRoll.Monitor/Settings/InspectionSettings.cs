@@ -40,12 +40,25 @@ namespace AniloxRoll.Monitor.Core.Data
         public double[] GetCameraOpsUmArray() => MachineLayout.GetCameraOpsUmArray();
         public double[] GetCameraStartPositionMmArray() => MachineLayout.GetCameraStartPositionMmArray();
 
+        // ===== 0. 機台設定（寫入 app-mode.json，不存入 inspection-settings.json）=====
+        [Category("0. 機台設定")]
+        [DisplayName("機台角色")]
+        [Description("Inspection = 檢測機；Storage = 儲存機。變更後重開程式生效。")]
+        public MachineRole AppRole { get; set; } = MachineRole.Inspection;
+
         // ===== 1. 機台佈局 =====
         [Category("1. 機台佈局")][DisplayName("OPS (um)")]
         public CameraOpsConfig Ops => MachineLayout.Ops;
 
         [Category("1. 機台佈局")][DisplayName("Start (mm)")]
         public CameraStartPositionConfig StartPosition => MachineLayout.StartPosition;
+
+        [Category("1. 機台佈局")][DisplayName("Crop")]
+        public CameraCropConfig Crop => MachineLayout.Crop;
+
+        // 向後相容：CsvConfigSnapshot.FromSettings 直接取值
+        [Browsable(false)] public double TrimHeadMm => MachineLayout.TrimHeadMm;
+        [Browsable(false)] public double TrimTailMm => MachineLayout.TrimTailMm;
 
         // 向後相容：程式碼中直接存取的快捷屬性
         [Browsable(false)] public double Cam1_Ops { get => MachineLayout.Cam1_Ops; set => MachineLayout.Cam1_Ops = value; }
@@ -73,7 +86,7 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category("3. 檢測報表設定")][DisplayName("Mura 圖表")]
         public MuraChartConfig MuraChart => _muraChart ?? (_muraChart = new MuraChartConfig(Recipe));
 
-        [Category("3. 檢測報表設定")][DisplayName("圖面")]
+        [Category("3. 檢測報表設定")][DisplayName("主畫面")]
         public ImageViewSettings ImageViewDisplay => ImageView;
 
         // 向後相容：程式碼中直接存取的快捷屬性
@@ -90,9 +103,9 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category("4. 儲存設定")][DisplayName("存原圖")]     public bool   SaveOriginalBmp      { get => Storage.SaveOriginalBmp;      set => Storage.SaveOriginalBmp      = value; }
         [Category("4. 儲存設定")][DisplayName("存圖目錄")]   public string CaptureRootPath { get => Storage.CaptureRootPath; set => Storage.CaptureRootPath = value; }
         [Category("4. 儲存設定")][DisplayName("存背景目錄")] public string BackgroundPath  { get => Storage.BackgroundPath;  set => Storage.BackgroundPath  = value; }
-        [Category("4. 儲存設定")][DisplayName("本地上限(GB)")]   public int    LocalMaxGB      { get => Storage.LocalMaxGB;      set => Storage.LocalMaxGB      = value; }
-        [Category("4. 儲存設定")][DisplayName("異常保護天數")]    public int    FailProtectDays { get => Storage.FailProtectDays; set => Storage.FailProtectDays = value; }
-        [Category("4. 儲存設定")][DisplayName("遠端路徑")]       public string RemotePath      { get => Storage.RemotePath;      set => Storage.RemotePath      = value; }
+        [Category("4. 儲存設定")][DisplayName("本地預留磁碟空間 (GB)")] public int LocalMinFreeGB { get => Storage.LocalMinFreeGB; set => Storage.LocalMinFreeGB = value; }
+        [Category("4. 儲存設定")][DisplayName("遠端路徑")]         public string RemotePath        { get => Storage.RemotePath;        set => Storage.RemotePath        = value; }
+        [Category("4. 儲存設定")][DisplayName("遠端 Config 路徑")] public string RemoteConfigPath  { get => Storage.RemoteConfigPath;  set => Storage.RemoteConfigPath  = value; }
 
         // ===== 5. IO 模組設定 =====
         [Category("5. IO 模組設定")][DisplayName("啟用 IO")]  public bool   PlcEnabled { get; set; } = true;

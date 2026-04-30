@@ -70,7 +70,9 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"Cam4_Pos\": {D(L.Cam4_Pos)},");
             sb.AppendLine($"    \"Cam5_Pos\": {D(L.Cam5_Pos)},");
             sb.AppendLine($"    \"Cam6_Pos\": {D(L.Cam6_Pos)},");
-            sb.AppendLine($"    \"Cam7_Pos\": {D(L.Cam7_Pos)}");
+            sb.AppendLine($"    \"Cam7_Pos\": {D(L.Cam7_Pos)},");
+            sb.AppendLine($"    \"TrimHeadMm\": {D(L.TrimHeadMm)},");
+            sb.AppendLine($"    \"TrimTailMm\": {D(L.TrimTailMm)}");
             sb.AppendLine("  },");
 
             // Recipe
@@ -107,9 +109,9 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"CaptureRootPath\": \"{SettingsStoreHelper.EscapeJson(T.CaptureRootPath)}\",");
             sb.AppendLine($"    \"SaveOriginalBmp\": {(T.SaveOriginalBmp ? "true" : "false")},");
             sb.AppendLine($"    \"BackgroundPath\": \"{SettingsStoreHelper.EscapeJson(T.BackgroundPath)}\",");
-            sb.AppendLine($"    \"LocalMaxGB\": {T.LocalMaxGB},");
-            sb.AppendLine($"    \"FailProtectDays\": {T.FailProtectDays},");
-            sb.AppendLine($"    \"RemotePath\": \"{SettingsStoreHelper.EscapeJson(T.RemotePath)}\"");
+            sb.AppendLine($"    \"LocalMinFreeGB\": {T.LocalMinFreeGB},");
+            sb.AppendLine($"    \"RemotePath\": \"{SettingsStoreHelper.EscapeJson(T.RemotePath)}\",");
+            sb.AppendLine($"    \"RemoteConfigPath\": \"{SettingsStoreHelper.EscapeJson(T.RemoteConfigPath)}\"");
             sb.AppendLine("  },");
 
             // PLC
@@ -178,7 +180,9 @@ namespace AniloxRoll.Monitor.Core.Data
                 Cam4_Pos = SettingsStoreHelper.GetDouble(obj, "Cam4_Pos", 1200.0),
                 Cam5_Pos = SettingsStoreHelper.GetDouble(obj, "Cam5_Pos", 1600.0),
                 Cam6_Pos = SettingsStoreHelper.GetDouble(obj, "Cam6_Pos", 2000.0),
-                Cam7_Pos = SettingsStoreHelper.GetDouble(obj, "Cam7_Pos", 2400.0),
+                Cam7_Pos    = SettingsStoreHelper.GetDouble(obj, "Cam7_Pos",    2400.0),
+                TrimHeadMm  = SettingsStoreHelper.GetDouble(obj, "TrimHeadMm",  0.0),
+                TrimTailMm  = SettingsStoreHelper.GetDouble(obj, "TrimTailMm",  0.0),
             };
         }
 
@@ -267,9 +271,9 @@ namespace AniloxRoll.Monitor.Core.Data
                     ? SettingsStoreHelper.GetBool(obj, "SaveOriginalBmp", false)
                     : !SettingsStoreHelper.GetBool(obj, "UseCompressedCapture", true),
                 BackgroundPath       = SettingsStoreHelper.GetString(obj, "BackgroundPath", @"D:\AniloxCaptures\bg"),
-                LocalMaxGB           = SettingsStoreHelper.GetInt   (obj, "LocalMaxGB",       500),
-                FailProtectDays      = SettingsStoreHelper.GetInt   (obj, "FailProtectDays",    30),
+                LocalMinFreeGB       = SettingsStoreHelper.GetInt   (obj, "LocalMinFreeGB",    100),
                 RemotePath           = SettingsStoreHelper.GetString(obj, "RemotePath",        @"\\192.168.10.20\AniloxStorage"),
+                RemoteConfigPath     = SettingsStoreHelper.GetString(obj, "RemoteConfigPath",  @"\\192.168.10.20\AniloxConfig"),
             };
         }
 

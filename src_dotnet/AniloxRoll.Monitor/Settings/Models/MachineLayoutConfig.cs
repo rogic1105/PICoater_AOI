@@ -39,10 +39,26 @@ namespace AniloxRoll.Monitor.Core.Data
     }
 
     [TypeConverter(typeof(ExpandableObjectConverter))]
+    public class CameraCropConfig
+    {
+        [DisplayName("去頭 (mm)")] public double TrimHeadMm { get; set; } = 0.0;
+        [DisplayName("去尾 (mm)")] public double TrimTailMm { get; set; } = 0.0;
+
+        public void Validate()
+        {
+            if (TrimHeadMm < 0) TrimHeadMm = 0;
+            if (TrimTailMm < 0) TrimTailMm = 0;
+        }
+
+        public override string ToString() => "";
+    }
+
+    [TypeConverter(typeof(ExpandableObjectConverter))]
     public class MachineLayoutConfig
     {
         public CameraOpsConfig Ops { get; set; } = new CameraOpsConfig();
         public CameraStartPositionConfig StartPosition { get; set; } = new CameraStartPositionConfig();
+        public CameraCropConfig Crop { get; set; } = new CameraCropConfig();
 
         // 向後相容：舊 JSON 欄位名稱對應
         [Browsable(false)] public double Cam1_Ops { get => Ops.Cam1; set => Ops.Cam1 = value; }
@@ -64,8 +80,13 @@ namespace AniloxRoll.Monitor.Core.Data
         {
             if (Ops == null) Ops = new CameraOpsConfig();
             if (StartPosition == null) StartPosition = new CameraStartPositionConfig();
+            if (Crop == null) Crop = new CameraCropConfig();
             Ops.Validate();
+            Crop.Validate();
         }
+
+        [Browsable(false)] public double TrimHeadMm { get => Crop.TrimHeadMm; set => Crop.TrimHeadMm = value; }
+        [Browsable(false)] public double TrimTailMm { get => Crop.TrimTailMm; set => Crop.TrimTailMm = value; }
 
         public double[] GetCameraOpsUmArray() => Ops.ToArray();
         public double[] GetCameraStartPositionMmArray() => StartPosition.ToArray();

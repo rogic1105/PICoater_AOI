@@ -75,6 +75,14 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>CLProtocol（GenICam Camera Link）是否已成功啟用。</summary>
         private bool _clProtocolEnabled = false;
         private volatile bool _clProtocolInitStarted = false;
+        /// <summary>
+        /// CLProtocol 初始化流程（含參數套用）已完成（成功、失敗或逾時）。
+        /// false 時 SyncCameraParamsFromHardware 應跳過此相機，避免在 _clProtocolEnabled=true
+        /// 但 SetExposureUs 尚未呼叫的窗口期間讀到相機預設值並覆寫 JSON 設定。
+        /// </summary>
+        private volatile bool _clProtocolInitDone = false;
+        /// <summary>CLProtocol 初始化（含參數重套）已完成，可安全從硬體讀回參數。</summary>
+        public bool IsHwParamsStable => !_clProtocolInitStarted || _clProtocolInitDone;
         /// <summary>最後一次 SetExposureUs 寫入的曝光值（μs）。不依賴硬體回讀。</summary>
         private double _appliedExposureUs = 0;
         /// <summary>最後一次 SetLineRateHz 寫入的線掃速率（Hz）。CLProtocol 就緒後重新套用。</summary>
@@ -410,6 +418,9 @@ namespace AniloxRoll.Monitor.Core.Camera
                     System.Diagnostics.Trace.WriteLine(
                         $"[CAM{CameraId}] CLProtocol 初始化逾時（>10s）。" +
                         "CLProtocol 已停用，曝光/線掃速率維持 fallback 路徑。");
+                    // 逾時：標記為穩定，SyncHardwareParam 不再等待
+                    // （_clProtocolEnabled=false，GetMeasuredExposureUs 走 legacy 路徑回傳 0，SyncHw 自動跳過）
+                    _clProtocolInitDone = true;
                     // _clProtocolEnabled 保持 false；initTask 繼續在背景等待硬體回應，
                     // 若最終完成，TryEnableCLProtocol 仍會套用設定（late init）。
                 }
@@ -463,10 +474,13 @@ namespace AniloxRoll.Monitor.Core.Camera
                         if (_appliedLineRateHz > 0)
                             SetLineRateHz(_appliedLineRateHz);
                     }
+                    // 參數套用完成後才標記穩定，SyncCameraParamsFromHardware 方可讀回硬體值
+                    _clProtocolInitDone = true;
                 }
                 catch (Exception ex)
                 {
                     _clProtocolEnabled = false;
+                    _clProtocolInitDone = true; // 失敗時亦標記完成，避免 SyncHw 永遠等待
                     System.Diagnostics.Trace.WriteLine(
                         $"[CAM{CameraId}] CLProtocol init failed: {ex.GetType().Name}: {ex.Message}");
                 }

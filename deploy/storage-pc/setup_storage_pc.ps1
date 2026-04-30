@@ -40,7 +40,10 @@ Write-Host ("  IpAddress       = " + $cfg.IpAddress + "/" + $cfg.PrefixLength)
 Write-Host ("  Gateway         = " + $cfg.Gateway)
 Write-Host ("  StorageFolder   = " + $cfg.StorageFolder)
 Write-Host ("  ShareName       = " + $cfg.ShareName)
+Write-Host ("  ConfigFolder    = " + $cfg.ConfigFolder)
+Write-Host ("  ConfigShareName = " + $cfg.ConfigShareName)
 Write-Host ("  AllowedUser     = " + $cfg.AllowedUser)
+Write-Host ("  AppDir          = " + $cfg.AppDir + "  (空=不寫 app-mode.json)")
 Write-Host ""
 
 # ── 1. 選 NIC ────────────────────────────────
@@ -61,7 +64,7 @@ if (-not (Get-NetAdapter -Name $nicName -ErrorAction SilentlyContinue)) {
 }
 
 # ── 2. 固定 IP ───────────────────────────────
-Write-Host "[1/6] 套用固定 IP..."
+Write-Host "[1/7] 套用固定 IP..."
 Get-NetIPAddress -InterfaceAlias $nicName -AddressFamily IPv4 -ErrorAction SilentlyContinue |
     Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
 Get-NetRoute -InterfaceAlias $nicName -AddressFamily IPv4 -ErrorAction SilentlyContinue |
@@ -80,14 +83,14 @@ New-NetIPAddress @newIpArgs | Out-Null
 Write-Host ("  -> " + $cfg.IpAddress + "/" + $cfg.PrefixLength + " on " + $nicName) -ForegroundColor Green
 
 # ── 3. 建立資料夾 ────────────────────────────
-Write-Host "[2/6] 建立資料夾..."
+Write-Host "[2/7] 建立資料夾..."
 if (-not (Test-Path $cfg.StorageFolder)) {
     New-Item -ItemType Directory -Path $cfg.StorageFolder -Force | Out-Null
 }
 Write-Host ("  -> " + $cfg.StorageFolder) -ForegroundColor Green
 
 # ── 4. NTFS 權限 ─────────────────────────────
-Write-Host "[3/6] 設定 NTFS 權限..."
+Write-Host "[3/7] 設定 NTFS 權限..."
 $acl = Get-Acl $cfg.StorageFolder
 $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
     $cfg.AllowedUser, 'Modify', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
@@ -96,7 +99,7 @@ Set-Acl -Path $cfg.StorageFolder -AclObject $acl
 Write-Host ("  -> " + $cfg.AllowedUser + " : Modify") -ForegroundColor Green
 
 # ── 5. SMB 共用 ──────────────────────────────
-Write-Host "[4/6] 設定 SMB 共用..."
+Write-Host "[4/6] 設定 SMB 共用 (AniloxStorage)..."
 $existing = Get-SmbShare -Name $cfg.ShareName -ErrorAction SilentlyContinue
 if ($existing) {
     Remove-SmbShare -Name $cfg.ShareName -Force
@@ -104,13 +107,30 @@ if ($existing) {
 New-SmbShare -Name $cfg.ShareName -Path $cfg.StorageFolder -FullAccess $cfg.AllowedUser | Out-Null
 Write-Host ("  -> \\" + $env:COMPUTERNAME + "\" + $cfg.ShareName) -ForegroundColor Green
 
+# AniloxConfig 共用（供 Inspection PC 寫旗標）
+if ($cfg.ConfigFolder -and $cfg.ConfigShareName) {
+    Write-Host "[4b] 設定 SMB 共用 (AniloxConfig)..."
+    if (-not (Test-Path $cfg.ConfigFolder)) {
+        New-Item -ItemType Directory -Path $cfg.ConfigFolder -Force | Out-Null
+    }
+    $acl2 = Get-Acl $cfg.ConfigFolder
+    $rule2 = New-Object System.Security.AccessControl.FileSystemAccessRule(
+        $cfg.AllowedUser, 'Modify', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+    $acl2.SetAccessRule($rule2)
+    Set-Acl -Path $cfg.ConfigFolder -AclObject $acl2
+    $existingCfgShare = Get-SmbShare -Name $cfg.ConfigShareName -ErrorAction SilentlyContinue
+    if ($existingCfgShare) { Remove-SmbShare -Name $cfg.ConfigShareName -Force }
+    New-SmbShare -Name $cfg.ConfigShareName -Path $cfg.ConfigFolder -FullAccess $cfg.AllowedUser | Out-Null
+    Write-Host ("  -> \\" + $env:COMPUTERNAME + "\" + $cfg.ConfigShareName) -ForegroundColor Green
+}
+
 # ── 6. 防火牆 + 網路設定檔 ───────────────────
-Write-Host "[5/6] 開放 SMB 防火牆規則..."
+Write-Host "[5/7] 開放 SMB 防火牆規則..."
 Enable-NetFirewallRule -DisplayGroup "檔案及印表機共用" -ErrorAction SilentlyContinue
 Enable-NetFirewallRule -DisplayGroup "File and Printer Sharing" -ErrorAction SilentlyContinue
 Write-Host "  -> File and Printer Sharing 已啟用" -ForegroundColor Green
 
-Write-Host "[6/6] 設定網路設定檔為「私人」..."
+Write-Host "[6/7] 設定網路設定檔為「私人」..."
 try {
     Set-NetConnectionProfile -InterfaceAlias $nicName -NetworkCategory Private -ErrorAction Stop
     Write-Host "  -> Private" -ForegroundColor Green
@@ -137,6 +157,39 @@ try {
     Write-Host ("[驗證] 寫入測試: FAIL - " + $_.Exception.Message) -ForegroundColor Red
 }
 
+# ── 7. App 部署：寫 app-mode.json + 移除 MIL DLL ────
+# Matrox MIL 是 C++/CLI 混合組件：DLL 載入時即觸發授權檢查，與是否呼叫 MappAlloc 無關。
+# Storage 模式不需要 MIL，刪除 DLL 以避免授權對話框。
+if ($cfg.AppDir) {
+    # 7a. 寫入 app-mode.json
+    $cfgDir = Join-Path $cfg.AppDir 'Config'
+    if (-not (Test-Path $cfgDir)) {
+        New-Item -ItemType Directory -Path $cfgDir -Force | Out-Null
+    }
+    $appModeJson = @"
+{
+  "Role": "Storage",
+  "LocalConfigFolder": "$($cfg.ConfigFolder.Replace('\','\\'))",
+  "StorageFolderPath": "$($cfg.StorageFolder.Replace('\','\\'))"
+}
+"@
+    $appModeFile = Join-Path $cfgDir 'app-mode.json'
+    [System.IO.File]::WriteAllText($appModeFile, $appModeJson, [System.Text.Encoding]::UTF8)
+    Write-Host ("[7a] 已寫入 app-mode.json -> " + $appModeFile) -ForegroundColor Green
+
+    # 7b. 移除 MIL DLL（C++/CLI 混合組件，載入時即觸發授權對話框）
+    $milDll = Join-Path $cfg.AppDir 'Matrox.MatroxImagingLibrary.dll'
+    if (Test-Path $milDll) {
+        Remove-Item $milDll -Force
+        Write-Host ("[7b] 已移除 " + $milDll) -ForegroundColor Green
+    } else {
+        Write-Host "[7b] Matrox.MatroxImagingLibrary.dll 不存在，略過" -ForegroundColor Cyan
+    }
+} else {
+    Write-Host "[7] AppDir 未設定，跳過 app-mode.json 與 MIL DLL 清除（請手動設定）" -ForegroundColor Yellow
+}
+
 Write-Host ""
 Write-Host "[Setup] 完成！" -ForegroundColor Cyan
 Write-Host ("         檢測機 PropertyGrid「遠端路徑」請填: \\" + $cfg.IpAddress + "\" + $cfg.ShareName)
+Write-Host ("         檢測機 PropertyGrid「遠端 Config 路徑」請填: \\" + $cfg.IpAddress + "\" + $cfg.ConfigShareName)

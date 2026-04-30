@@ -47,7 +47,7 @@ namespace AniloxRoll.Monitor.Tests
             var svc = new InspectionLogService(() => _tempRoot);
             var ts = new DateTime(2026, 3, 30, 10, 15, 30, 500);
             var config = new CsvConfigSnapshot(
-                new double[7], new double[7], null, null, null, 1.0f, 0.5f, 0.8f, ts);
+                new double[7], new double[7], null, null, null, 1.0f, 0.5f, 0.8f, 0.0, 0.0, ts);
 
             string grabId = InspectionLogService.FormatGrabId(ts);
             svc.AppendRecord(grabId, "20260330_101530.500-1",
@@ -69,7 +69,7 @@ namespace AniloxRoll.Monitor.Tests
             var svc = new InspectionLogService(() => _tempRoot);
             var ts = new DateTime(2026, 3, 30, 10, 0, 0, 0);
             var config = new CsvConfigSnapshot(
-                new double[7], new double[7], null, null, null, 1.0f, 0.5f, 0.8f, ts);
+                new double[7], new double[7], null, null, null, 1.0f, 0.5f, 0.8f, 0.0, 0.0, ts);
 
             string grabId = InspectionLogService.FormatGrabId(ts);
             svc.AppendRecord(grabId, "20260330_100000.000-1",
@@ -92,9 +92,9 @@ namespace AniloxRoll.Monitor.Tests
             var svc = new InspectionLogService(() => _tempRoot);
             var ts = new DateTime(2026, 3, 30, 10, 0, 0, 0);
             var config1 = new CsvConfigSnapshot(
-                new double[] { 1, 2, 3, 4, 5, 6, 7 }, new double[7], null, null, null, 1.0f, 0.5f, 0.8f, ts);
+                new double[] { 1, 2, 3, 4, 5, 6, 7 }, new double[7], null, null, null, 1.0f, 0.5f, 0.8f, 0.0, 0.0, ts);
             var config2 = new CsvConfigSnapshot(
-                new double[] { 10, 20, 30, 40, 50, 60, 70 }, new double[7], null, null, null, 2.0f, 0.6f, 0.9f, ts);
+                new double[] { 10, 20, 30, 40, 50, 60, 70 }, new double[7], null, null, null, 2.0f, 0.6f, 0.9f, 0.0, 0.0, ts);
 
             string id1 = InspectionLogService.FormatGrabId(ts);
             string id2 = InspectionLogService.FormatGrabId(ts.AddSeconds(1));
@@ -118,7 +118,7 @@ namespace AniloxRoll.Monitor.Tests
             var svc = new InspectionLogService(() => _tempRoot);
             var ts = new DateTime(2026, 3, 30, 10, 0, 0, 0);
             var config = new CsvConfigSnapshot(
-                new double[7], new double[7], null, null, null, 1.0f, 0.5f, 0.8f, ts);
+                new double[7], new double[7], null, null, null, 1.0f, 0.5f, 0.8f, 0.0, 0.0, ts);
 
             string id1 = InspectionLogService.FormatGrabId(ts);
             string id2 = InspectionLogService.FormatGrabId(ts.AddSeconds(1));

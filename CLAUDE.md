@@ -77,8 +77,10 @@ PICoater_AOI/
 | `Services/InspectionStatisticsService.cs` | CSV 統計服務；LoadConfigForDate（按日期載入 #CFG） |
 | `Services/IoState.cs` | IoState enum（FSM 狀態）+ IoSnapshot struct（IO 快照） |
 | `Services/IoGrabController.cs` | IO-Grab 連動：IoState FSM、IO 追蹤、Watchdog keepalive；支援 IModbusTcpClient 注入測試 |
-| `Services/CsvConfigSnapshot.cs` | 不可變設定快照（CamOps/CamPos/CamGrabHeight/CamExposureUs/CamLineRateHz/Hessian/ErrorValue） |
-| `Services/StorageRetentionService.cs` | 循環儲存：Timer 定期掃描磁碟用量，刪除最舊日期資料夾影像，保護 CSV 與 Fail 影像 |
+| `Services/CsvConfigSnapshot.cs` | 不可變設定快照（CamOps/CamPos/CamGrabHeight/CamExposureUs/CamLineRateHz/Hessian/ErrorValue/TrimHead/TrimTail） |
+| `Services/StorageRetentionService.cs` | 循環儲存：事件驅動（grab 結束/每 10 grab/watchdog），磁碟可用空間低於門檻時刪最舊日期資料夾影像，保留 CSV |
+| `Services/CleanupFlagWatcher.cs` | Storage PC 專用：每 10 秒自主查空間 + 清理；同時輪詢 cleanup-request.flag（Inspection PC 寫入）立即觸發 |
+| `Settings/Models/AppModeConfig.cs` | 機台角色設定：Role（Inspection/Storage）、LocalConfigFolder、StorageFolderPath；Load/Save → Config\app-mode.json |
 | `Services/RemoteCopyService.cs` | 背景遠端複製：ConcurrentQueue + 背景執行緒，File.Copy 含重試（3 次） |
 | `Services/LightController.cs` | LTS-3DPA24 光源控制器 RS-232 通訊：AutoDetect（先試設定 COM 再掃描）、嚴格 probe（PDF §4.1.4 表-4 驗證：8-byte、cmd/ch echo、XOR checksum）、TurnOn/Off/SetBrightness，跟隨 IO Grab 開關 |
 | `UI/Widgets/GrabImageStitcher.cs` | 多張影像垂直拼接 + MergeHorizontal 全域合圖；LoadCameraImage（internal） |
@@ -124,12 +126,19 @@ PICoater_AOI/
 
 使用者在【檢測設定】看到的參數。溝通格式：「屬性名-值」（例如「正規值-0.2」「存檔-T」）。
 
+### 0. 機台設定
+
+| 顯示名稱 | 屬性 | 預設值 | 說明 |
+|---------|------|--------|------|
+| 機台角色 | `AppRole` | Inspection | Inspection / Storage；變更後寫 app-mode.json，重開程式生效 |
+
 ### 1. 機台佈局
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
 | OPS (um) | `Ops.Cam1~7` | 33.0 | 各相機像素尺寸（展開 Cam 1~7） |
 | Start (mm) | `StartPosition.Cam1~7` | 0/400/800/1200/1600/2000/2400 | 各相機起始位置 |
+| Crop | `Crop.TrimHeadMm` / `Crop.TrimTailMm` | 0.0 | 展開後顯示「去頭 (mm)」（CAM1 左側）/ 「去尾 (mm)」（CAM7 右側） |
 
 ### 2. 檢測配方
 
@@ -153,7 +162,7 @@ PICoater_AOI/
 | 統計圖表 > 時產量 | `Chart.DailyYMax` | 300 | 良率日圖 Y 軸上限 |
 | Mura 圖表 > 平均閾值 | `ErrorValueMean` | 0.3 | 曲線圖 Mean 閾值線 |
 | Mura 圖表 > 最大閾值 | `ErrorValueMax` | 0.5 | 曲線圖 Max 閾值線 |
-| 圖面 > 合圖方式 | `StitchMode` | Vertical | Vertical / Global |
+| 主畫面 > 合圖方式 | `StitchMode` | Vertical | Vertical / Global |
 
 ### 4. 儲存設定
 
@@ -163,9 +172,9 @@ PICoater_AOI/
 | 存原圖 | `SaveOriginalBmp` | false | 額外存原始 BMP |
 | 存圖目錄 | `CaptureRootPath` | D:\AniloxCaptures | 存檔根目錄 |
 | 存背景目錄 | `BackgroundPath` | D:\AniloxCaptures\bg | 背景 .bin 目錄 |
-| 本地上限(GB) | `LocalMaxGB` | 500 | 循環儲存上限，超過時刪除最舊日期 |
-| 異常保護天數 | `FailProtectDays` | 30 | Fail 影像保護天數，不被循環刪除 |
+| 本地預留磁碟空間 (GB) | `LocalMinFreeGB` | 100 | 磁碟可用空間低於此值觸發循環儲存，刪最舊日期影像（CSV 保留） |
 | 遠端路徑 | `RemotePath` | \\192.168.10.20\AniloxStorage | 遠端複製目標路徑（空=不複製） |
+| 遠端 Config 路徑 | `RemoteConfigPath` | \\192.168.10.20\AniloxConfig | 儲存機 AniloxConfig SMB 路徑；Inspection PC 每 10 grab 寫 cleanup-request.flag |
 
 ### 5. IO 模組設定
 

@@ -259,8 +259,6 @@
             this.tabPageSystem = new System.Windows.Forms.TabPage();
             this.listViewHardware = new System.Windows.Forms.ListView();
             this.label41 = new System.Windows.Forms.Label();
-            this.listViewChartConst = new System.Windows.Forms.ListView();
-            this.lblChartConst = new System.Windows.Forms.Label();
             this.listViewEngine = new System.Windows.Forms.ListView();
             this.lblEngineConst = new System.Windows.Forms.Label();
             this.listViewCameras = new System.Windows.Forms.ListView();
@@ -2971,8 +2969,6 @@
             // 
             this.tabPageSystem.Controls.Add(this.listViewHardware);
             this.tabPageSystem.Controls.Add(this.label41);
-            this.tabPageSystem.Controls.Add(this.listViewChartConst);
-            this.tabPageSystem.Controls.Add(this.lblChartConst);
             this.tabPageSystem.Controls.Add(this.listViewEngine);
             this.tabPageSystem.Controls.Add(this.lblEngineConst);
             this.tabPageSystem.Controls.Add(this.listViewCameras);
@@ -3008,30 +3004,7 @@
             this.label41.TabIndex = 6;
             this.label41.Text = "【硬體參數】";
             // 
-            // listViewChartConst
-            // 
-            this.listViewChartConst.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.listViewChartConst.FullRowSelect = true;
-            this.listViewChartConst.GridLines = true;
-            this.listViewChartConst.HideSelection = false;
-            this.listViewChartConst.Location = new System.Drawing.Point(3, 358);
-            this.listViewChartConst.Name = "listViewChartConst";
-            this.listViewChartConst.Size = new System.Drawing.Size(201, 116);
-            this.listViewChartConst.TabIndex = 5;
-            this.listViewChartConst.UseCompatibleStateImageBehavior = false;
-            this.listViewChartConst.View = System.Windows.Forms.View.Details;
-            // 
-            // lblChartConst
-            // 
-            this.lblChartConst.AutoSize = true;
-            this.lblChartConst.Font = new System.Drawing.Font("新細明體", 9F, System.Drawing.FontStyle.Bold);
-            this.lblChartConst.Location = new System.Drawing.Point(4, 340);
-            this.lblChartConst.Name = "lblChartConst";
-            this.lblChartConst.Size = new System.Drawing.Size(135, 15);
-            this.lblChartConst.TabIndex = 4;
-            this.lblChartConst.Text = "【圖表引擎常數】";
-            // 
+            //
             // listViewEngine
             // 
             this.listViewEngine.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
@@ -3041,7 +3014,7 @@
             this.listViewEngine.HideSelection = false;
             this.listViewEngine.Location = new System.Drawing.Point(3, 187);
             this.listViewEngine.Name = "listViewEngine";
-            this.listViewEngine.Size = new System.Drawing.Size(201, 150);
+            this.listViewEngine.Size = new System.Drawing.Size(201, 284);
             this.listViewEngine.TabIndex = 3;
             this.listViewEngine.UseCompatibleStateImageBehavior = false;
             this.listViewEngine.View = System.Windows.Forms.View.Details;
@@ -3641,8 +3614,6 @@
         private System.Windows.Forms.DataVisualization.Charting.Chart muraChartVerticalLive;
         private System.Windows.Forms.DataVisualization.Charting.Chart chartOverview;
         private System.Windows.Forms.DataVisualization.Charting.Chart chartLiveOverview;
-        private System.Windows.Forms.ListView listViewChartConst;
-        private System.Windows.Forms.Label lblChartConst;
         private System.Windows.Forms.DataVisualization.Charting.Chart muraChartHorizontalLive;
         private System.Windows.Forms.Button btnGetBackground;
         private System.Windows.Forms.DataVisualization.Charting.Chart chartMuraHorizontal;

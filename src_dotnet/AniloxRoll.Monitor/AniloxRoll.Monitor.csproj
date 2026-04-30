@@ -98,6 +98,7 @@
     <Compile Include="Settings\Models\ChartSettings.cs" />
     <Compile Include="Settings\Models\ImageViewSettings.cs" />
     <Compile Include="Settings\Models\MuraChartConfig.cs" />
+    <Compile Include="Settings\Models\AppModeConfig.cs" />
     <Compile Include="Settings\Models\StorageSettings.cs" />
     <Compile Include="Settings\Models\CameraParamSettings.cs" />
     <Compile Include="Settings\Models\LightSettings.cs" />
@@ -110,6 +111,7 @@
     <Compile Include="Services\InspectionLogService.cs" />
     <Compile Include="Services\IoGrabController.cs" />
     <Compile Include="Services\StorageRetentionService.cs" />
+    <Compile Include="Services\CleanupFlagWatcher.cs" />
     <Compile Include="Services\RemoteCopyService.cs" />
     <Compile Include="Services\IoState.cs" />
     <Compile Include="Services\LightController.cs" />
@@ -180,6 +182,21 @@
   <ItemGroup>
     <None Include="App.config" />
     <None Include="Config\system-settings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Config\inspection-settings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Config\inspection-settings.defaults.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Config\acquisition-settings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Config\session-state.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Config\app-mode.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

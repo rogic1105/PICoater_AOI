@@ -15,6 +15,19 @@ namespace AniloxRoll.Monitor
         [STAThread]
         static void Main()
         {
+            // Storage 模式不部署 MIL DLL；若其他路徑意外觸發載入，給出明確錯誤而非 crash
+            AppDomain.CurrentDomain.AssemblyResolve += (_, args) =>
+            {
+                if (args.Name != null && args.Name.StartsWith("Matrox.MatroxImagingLibrary",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    System.Diagnostics.Trace.TraceWarning(
+                        "[Program] Matrox.MatroxImagingLibrary 不存在（Storage 模式）。" +
+                        "請確認 InitCameraLayer 在 Storage 模式已跳過。");
+                }
+                return null;
+            };
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             TryDeleteCorruptedUserConfig();

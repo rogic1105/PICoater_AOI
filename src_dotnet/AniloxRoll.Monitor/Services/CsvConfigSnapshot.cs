@@ -18,12 +18,15 @@ namespace AniloxRoll.Monitor.Core.Services
         public float HessianMaxFactor { get; }
         public float ErrorValueMean { get; }
         public float ErrorValueMax { get; }
+        public double TrimHeadMm { get; }
+        public double TrimTailMm { get; }
         public DateTime Timestamp { get; }
 
         public CsvConfigSnapshot(
             double[] camOps, double[] camPos, int[] camGrabHeight,
             double[] camExposureUs, double[] camLineRateHz,
             float hessianMaxFactor, float errorValueMean, float errorValueMax,
+            double trimHeadMm, double trimTailMm,
             DateTime timestamp)
         {
             CamOps = camOps ?? new double[7];
@@ -34,6 +37,8 @@ namespace AniloxRoll.Monitor.Core.Services
             HessianMaxFactor = hessianMaxFactor;
             ErrorValueMean = errorValueMean;
             ErrorValueMax = errorValueMax;
+            TrimHeadMm = trimHeadMm;
+            TrimTailMm = trimTailMm;
             Timestamp = timestamp;
         }
 
@@ -49,6 +54,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 s.HessianMaxFactor,
                 s.ErrorValueMean,
                 s.ErrorValueMax,
+                s.TrimHeadMm,
+                s.TrimTailMm,
                 DateTime.Now);
         }
 
@@ -65,7 +72,9 @@ namespace AniloxRoll.Monitor.Core.Services
                 for (int i = 0; i < 7; i++) sb.Append(CamLineRateHz[i].ToString("F2")).Append(',');
                 sb.Append(HessianMaxFactor.ToString("F4")).Append(',');
                 sb.Append(ErrorValueMean.ToString("F4")).Append(',');
-                sb.Append(ErrorValueMax.ToString("F4"));
+                sb.Append(ErrorValueMax.ToString("F4")).Append(',');
+                sb.Append(TrimHeadMm.ToString("F2")).Append(',');
+                sb.Append(TrimTailMm.ToString("F2"));
                 return sb.ToString();
             }
         }
@@ -89,6 +98,8 @@ namespace AniloxRoll.Monitor.Core.Services
             sb.Append($",HessianMaxFactor={HessianMaxFactor:F4}");
             sb.Append($",ErrorValueMean={ErrorValueMean:F4}");
             sb.Append($",ErrorValueMax={ErrorValueMax:F4}");
+            sb.Append($",TrimHead={TrimHeadMm:F2}");
+            sb.Append($",TrimTail={TrimTailMm:F2}");
             return sb.ToString();
         }
 
@@ -112,6 +123,7 @@ namespace AniloxRoll.Monitor.Core.Services
             double[] expUs = new double[7];
             double[] lrHz = new double[7];
             float hessian = 0, errMean = 0, errMax = 0;
+            double trimHead = 0, trimTail = 0;
 
             for (int i = 2; i < parts.Length; i++)
             {
@@ -157,9 +169,13 @@ namespace AniloxRoll.Monitor.Core.Services
                     float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out errMean);
                 else if (key == "ErrorValueMax")
                     float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out errMax);
+                else if (key == "TrimHead")
+                    double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out trimHead);
+                else if (key == "TrimTail")
+                    double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out trimTail);
             }
 
-            result = new CsvConfigSnapshot(ops, pos, grabH, expUs, lrHz, hessian, errMean, errMax, ts);
+            result = new CsvConfigSnapshot(ops, pos, grabH, expUs, lrHz, hessian, errMean, errMax, trimHead, trimTail, ts);
             return true;
         }
     }

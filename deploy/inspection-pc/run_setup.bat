@@ -4,6 +4,7 @@ REM Step 1: IO NIC IP (192.168.255.10 for IO module)
 REM Step 2: NIC secondary IP (Storage subnet 192.168.10.10)
 REM Step 3: Allow anonymous Guest SMB client
 REM Step 4: Disable auto sleep / hibernate
+REM Step 5: Write app-mode.json (Role = Inspection)
 
 net session >nul 2>&1
 if %errorLevel% neq 0 (
@@ -39,6 +40,13 @@ echo  Inspection PC Setup  (Step 4/4: Disable Sleep)
 echo ==========================================
 echo.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup_nosleep.ps1"
+
+echo.
+echo ==========================================
+echo  Inspection PC Setup  (Step 5/5: App Mode)
+echo ==========================================
+echo.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup_appmode.ps1"
 
 echo.
 echo ==========================================

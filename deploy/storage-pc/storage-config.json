@@ -5,7 +5,10 @@
   "Gateway": "",
   "StorageFolder": "D:\\AniloxStorage",
   "ShareName": "AniloxStorage",
+  "ConfigFolder": "D:\\AniloxConfig",
+  "ConfigShareName": "AniloxConfig",
   "AllowedUser": "Everyone",
+  "AppDir": "D:\\AniloxMonitor",
   "RdpEnabled": true,
   "RdpUser": "aroll",
   "RdpPassword": "aroll"

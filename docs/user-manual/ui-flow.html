@@ -1046,7 +1046,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">所有曲線圖閾值線：更新位置</div>
-<div class="box output dev">（抓取中）CSV 插入 #CFG 設定快照：timestamp + 機台佈局 OPS×7 / Start×7 + 相機參數 曝光×7 / 線掃×7 / 高度×7 + 正規值 + Mura 閾值（平均/最大）。新檔、換日、或任一欄位變更時寫入一列 #CFG</div>
+<div class="box output dev">（抓取中）CSV 插入 #CFG 設定快照：timestamp + 機台佈局 OPS×7 / Start×7 / TrimHead / TrimTail + 相機參數 曝光×7 / 線掃×7 / 高度×7 + 正規值 + Mura 閾值（平均/最大）。新檔、換日、或任一欄位變更時寫入一列 #CFG</div>
 </div>
 <div class="v-arrow"></div>
 <div class="box input">修改 Recipe 參數（HessianMaxFactor / ErrorValue / RidgeDir）</div>
@@ -1090,13 +1090,16 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 </div>
 </div>
 </div>
+<div class="box input">修改 Crop（去頭 / 去尾）</div>
+<div class="v-arrow"></div>
+<div class="box output dev">僅記錄至 #CFG（TrimHead / TrimTail）；pipeline 影像裁切尚未實作，設定值留作後續使用</div>
 <div class="box input">修改 Algorithm</div>
 <div class="v-arrow"></div>
 <div class="box action">LoadBackgroundBins / ClearBackgroundBins → UpdateStandardBgSubLockState</div>
 <div class="box input">修改 ChartScaleMode / YMax</div>
 <div class="v-arrow"></div>
 <div class="box output">良率年/月/日圖：切換 Auto/Fixed 刻度</div>
-<div class="box input">修改 LocalMaxGB / FailProtectDays / RemotePath</div>
+<div class="box input">修改 LocalMinFreeGB / RemotePath</div>
 <div class="v-arrow"></div>
 <div class="box output dev">Func delegate 即時取值 → StorageRetentionService 下次 Tick 生效 / RemoteCopyService 下次 Enqueue 生效</div>
 </div>
@@ -1264,16 +1267,14 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="v-arrow" data-label="串接"></div>
 <div class="out-seq">
 <div class="box action">掃描 CaptureRootPath 磁碟用量（YYYY/YYYYMM/YYYYMMDD 目錄結構）</div>
-<div class="box action">超過 LocalMaxGB → 從最舊日期資料夾開始刪除影像（.jpg / .bmp / .bin）</div>
+<div class="box action">可用空間低於 LocalMinFreeGB → 從最舊日期資料夾開始刪除影像（.jpg / .bmp / .bin）</div>
 </div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">CSV 永不刪除</div>
-<div class="box output">FailProtectDays 內的 Fail 影像不刪除（讀 CSV 的 MaxExceed / MeanExceed 判定）</div>
 </div>
 <div class="v-arrow"></div>
 <div class="box output dev">OnCleanupCompleted 事件（清理日期資料夾數 / 釋放空間）</div>
-<div class="note dev">ExtractGrabIdFromFileName 將檔名 yyyyMMdd_HHmmss.fff-N_suffix 轉為 GrabId（yyMMdd-HHmmss）格式，用於比對 CSV 中的 Fail 記錄。</div>
 </div>
 
 <div class="flow-group vflow" id="remote-copy">
