@@ -172,14 +172,26 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <!-- ===== 即時監控 ===== -->
 <h2 onclick="toggle(this)">即時監控（Live）</h2>
 <div class="tab-section">
+<div class="flow-group vflow dev">
+<div class="flow-title">程式啟動 — 自動分配相機 <code>Shown → AutoAllocateCameras</code></div>
+<div class="box input">Form.Shown 事件</div>
+<div class="v-arrow"></div>
+<div class="box action">AllocateCameras（MdigAlloc × 7，不啟動 Grab）</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box action">LoadBackgroundBins</div>
+<div class="box action">EnableGlobalMerge（若 StitchMode=Global）</div>
+</div>
+<div class="v-arrow"></div>
+<div class="box output">相機數狀態：相機: N/7（Cable 是否接上即可得知，不需 Grab）</div>
+</div>
 <div class="flow-group vflow" id="btn-camera-grab">
 <div class="flow-title">開始抓取 <code>btnCameraGrab</code></div>
 <div class="box input">按下【開始抓取】</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">EnsureAllocatedAndToggleGrab</div>
+<div class="box action dev">ToggleGrab（相機已由啟動時自動分配；僅 bg preview 退出或啟動分配失敗時走 EnsureAllocatedAndToggleGrab fallback）</div>
 <div class="v-arrow dev" data-label="串接"></div>
 <div class="out-seq dev">
-<div class="box action">LoadBackgroundBins</div>
 <div class="box action">NextGrabId（分配抓圖編號）</div>
 </div>
 <div class="v-arrow dev" data-label="分支：合圖方式"></div>
@@ -193,12 +205,6 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <details class="subflow" open="">
 <summary>單台 MIL 顯示</summary>
 <div class="vflow">
-<div class="box action">AllocateCameras（首次按下時）</div>
-<div class="v-arrow" data-label="串接"></div>
-<div class="out-seq">
-<div class="box action">CameraSystemManager.Initialize()（MIL Application）</div>
-<div class="box action">MsysAlloc × N（按 SystemNum 分配 MIL System）</div>
-</div>
 <div class="v-arrow" data-label="每台相機"></div>
 <div class="out-seq">
 <div class="box action">new AniloxCamera → 設定參數（曝光/線掃/高度/Hessian/Ridge）</div>
@@ -308,9 +314,9 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="vflow" style="align-items:flex-start; padding:8px 0 8px 16px; border-left:2px solid #e65100;">
 <div class="box action" style="font-size:0.82em">依 .bin 背景檔案存在狀態重新檢查按鈕啟用/禁用</div>
 <div class="v-arrow"></div>
-<div class="box action" style="font-size:0.82em">所有已連線相機都有 .bin → 【釋放相機】啟用</div>
+<div class="box action" style="font-size:0.82em">所有已連線相機都有 .bin → 【開始抓取】啟用</div>
 <div class="v-arrow"></div>
-<div class="box action" style="font-size:0.82em">缺少 .bin 的相機 → 【釋放相機】禁用</div>
+<div class="box action" style="font-size:0.82em">缺少 .bin 的相機 → 【開始抓取】禁用</div>
 </div>
 </details>
 </div>

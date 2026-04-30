@@ -397,7 +397,7 @@ namespace AniloxRoll.Monitor.Forms
             else
             {
                 lblLightConn.Text = "● 光源 離線";
-                lblLightConn.BackColor = IecRed;
+                lblLightConn.BackColor = IecGray;
             }
         }
 
@@ -558,13 +558,29 @@ namespace AniloxRoll.Monitor.Forms
             SetIoLed(lblIoDiAlive,   io.DiNakanAlive);
             SetIoLed(lblIoDiStart,   io.DiInspectStart);
             SetIoLed(lblIoDoPcAlive, io.DoPcAlive);
-            SetIoLed(lblIoDoMura,    io.DoMuraDetected);
+            UpdateMuraLed(io.DoMuraDetected);
             SetIoLed(lblIoDoPcBusy,  io.DoPcInspect);
         }
 
         private static void SetIoLed(Label lbl, bool on)
         {
             lbl.BackColor = on ? IecGreen : IecDarkGray;
+        }
+
+        private void UpdateMuraLed(bool doMuraOn)
+        {
+            if (_isMuraDetectPaused)
+            {
+                lblIoDoMura.BackColor = IecYellow;
+                lblIoDoMura.ForeColor = Color.Black;
+                lblIoDoMura.Text = "DO1\r\nMURA ⏸";
+            }
+            else
+            {
+                lblIoDoMura.BackColor = doMuraOn ? IecGreen : IecDarkGray;
+                lblIoDoMura.ForeColor = Color.White;
+                lblIoDoMura.Text = "DO1\r\nMURA_DET";
+            }
         }
 
         private void UpdateCamCountLabel(int connected, int expected)
@@ -796,6 +812,30 @@ namespace AniloxRoll.Monitor.Forms
                 _remoteCopyService?.Dispose();
                 _cleanupFlagWatcher?.Dispose();
             };
+
+            // 程式啟動後自動分配相機（不 Grab），讓 lblCamCount 在按下【開始抓取】前就能顯示連線狀態
+            Shown += (s, e) => AutoAllocateCameras();
+        }
+
+        /// <summary>
+        /// 啟動時自動分配相機資源（不啟動 Grab）。
+        /// 同時載入背景 .bin 與初始化 Global merge，使後續按【開始抓取】直接進入 ToggleGrab。
+        /// </summary>
+        private void AutoAllocateCameras()
+        {
+            if (_liveCameraManager == null || _liveCameraManager.IsAllocated) return;
+            try
+            {
+                _liveCameraManager.AllocateCameras(_settings.EnableMuraEnhance);
+                LoadBackgroundBins();
+                if (_settings.StitchMode == StitchMode.Global)
+                    _liveCameraManager.EnableGlobalMerge(
+                        _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"[AutoAllocateCameras] {ex.GetType().Name}: {ex.Message}");
+            }
         }
 
 
@@ -1149,14 +1189,6 @@ namespace AniloxRoll.Monitor.Forms
                 _settings.AniloxRollSpeedMPerMin, lineRateHz);
         }
 
-        private void btnCameraFree_Click(object sender, EventArgs e)
-        {
-            ClearBackgroundPreview();
-            _liveCameraManager.FreeCameras();
-            _telemetryPresenter?.ResetAll();
-            UpdateGrabButton(false);
-        }
-
         /// <summary>
         /// 取得背景：啟動 grab → 採集 N 秒 → 多幀平均 column mean → 存 MCBF bin。
         /// </summary>
@@ -1194,7 +1226,6 @@ namespace AniloxRoll.Monitor.Forms
 
             btnGetBackground.Enabled = false;
             btnCameraGrab.Enabled = false;
-            btnCameraFree.Enabled = false;
 
             int sampleSeconds = Math.Max(1, _settings.Recipe.BackgroundSampleSeconds);
             string bgDir = _settings.Storage.BackgroundPath;
@@ -1360,7 +1391,6 @@ namespace AniloxRoll.Monitor.Forms
             {
                 // 非 StandardBgSub：正常解鎖
                 btnCameraGrab.Enabled = true;
-                btnCameraFree.Enabled = true;
                 btnGetBackground.Enabled = true;
                 return;
             }
@@ -1386,7 +1416,6 @@ namespace AniloxRoll.Monitor.Forms
 
             btnGetBackground.Enabled = true;
             btnCameraGrab.Enabled = allConnectedHaveBin;
-            btnCameraFree.Enabled = allConnectedHaveBin;
         }
 
         // --- 背景預覽狀態 ---
@@ -1708,22 +1737,10 @@ namespace AniloxRoll.Monitor.Forms
             UpdateLiveDirectionVisual(enabled ? _liveDisplayDirection : null);
         }
 
-        private void btnMuraDetectPause_Click(object sender, EventArgs e)
+        private void lblIoDoMura_Click(object sender, EventArgs e)
         {
             _isMuraDetectPaused = !_isMuraDetectPaused;
-            if (_isMuraDetectPaused)
-            {
-                btnMuraDetectPause.Text = "恢復檢測";
-                btnMuraDetectPause.BackColor = System.Drawing.Color.Tomato;
-                btnMuraDetectPause.ForeColor = System.Drawing.Color.White;
-            }
-            else
-            {
-                btnMuraDetectPause.Text = "暫停檢測";
-                btnMuraDetectPause.BackColor = System.Drawing.SystemColors.Control;
-                btnMuraDetectPause.ForeColor = System.Drawing.SystemColors.ControlText;
-                btnMuraDetectPause.UseVisualStyleBackColor = true;
-            }
+            UpdateMuraLed(false);
         }
 
         // PropertyGrid 回傳的 ChangedItem.PropertyDescriptor.Name 可能是 MemberName 或 DisplayName 其中之一，

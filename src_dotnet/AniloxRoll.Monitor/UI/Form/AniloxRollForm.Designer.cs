@@ -48,13 +48,11 @@
             System.Windows.Forms.DataVisualization.Charting.Series series6 = new System.Windows.Forms.DataVisualization.Charting.Series();
             this.tabMain = new System.Windows.Forms.TabControl();
             this.tabPageLiveView = new System.Windows.Forms.TabPage();
-            this.btnMuraDetectPause = new System.Windows.Forms.Button();
             this.btnViewBackground = new System.Windows.Forms.Button();
             this.btnGetBackground = new System.Windows.Forms.Button();
             this.muraChartHorizontalLive = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.chartLiveOverview = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.muraChartVerticalLive = new System.Windows.Forms.DataVisualization.Charting.Chart();
-            this.btnCameraFree = new System.Windows.Forms.Button();
             this.btnCameraGrab = new System.Windows.Forms.Button();
             this.panelMainDisplay = new System.Windows.Forms.Panel();
             this.panelLiveCam7 = new System.Windows.Forms.Panel();
@@ -404,13 +402,11 @@
             // 
             // tabPageLiveView
             // 
-            this.tabPageLiveView.Controls.Add(this.btnMuraDetectPause);
             this.tabPageLiveView.Controls.Add(this.btnViewBackground);
             this.tabPageLiveView.Controls.Add(this.btnGetBackground);
             this.tabPageLiveView.Controls.Add(this.muraChartHorizontalLive);
             this.tabPageLiveView.Controls.Add(this.chartLiveOverview);
             this.tabPageLiveView.Controls.Add(this.muraChartVerticalLive);
-            this.tabPageLiveView.Controls.Add(this.btnCameraFree);
             this.tabPageLiveView.Controls.Add(this.btnCameraGrab);
             this.tabPageLiveView.Controls.Add(this.panelMainDisplay);
             this.tabPageLiveView.Controls.Add(this.panelLiveCam7);
@@ -428,33 +424,22 @@
             this.tabPageLiveView.Text = "即時監控";
             this.tabPageLiveView.UseVisualStyleBackColor = true;
             // 
-            // btnMuraDetectPause
-            // 
-            this.btnMuraDetectPause.Location = new System.Drawing.Point(900, 88);
-            this.btnMuraDetectPause.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
-            this.btnMuraDetectPause.Name = "btnMuraDetectPause";
-            this.btnMuraDetectPause.Size = new System.Drawing.Size(114, 38);
-            this.btnMuraDetectPause.TabIndex = 22;
-            this.btnMuraDetectPause.Text = "暫停檢測";
-            this.btnMuraDetectPause.UseVisualStyleBackColor = true;
-            this.btnMuraDetectPause.Click += new System.EventHandler(this.btnMuraDetectPause_Click);
-            // 
             // btnViewBackground
             // 
-            this.btnViewBackground.Location = new System.Drawing.Point(900, 530);
+            this.btnViewBackground.Location = new System.Drawing.Point(900, 125);
             this.btnViewBackground.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.btnViewBackground.Name = "btnViewBackground";
-            this.btnViewBackground.Size = new System.Drawing.Size(114, 45);
+            this.btnViewBackground.Size = new System.Drawing.Size(114, 26);
             this.btnViewBackground.TabIndex = 21;
             this.btnViewBackground.Text = "預覽背景";
             this.btnViewBackground.UseVisualStyleBackColor = true;
             // 
             // btnGetBackground
             // 
-            this.btnGetBackground.Location = new System.Drawing.Point(900, 582);
+            this.btnGetBackground.Location = new System.Drawing.Point(900, 159);
             this.btnGetBackground.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.btnGetBackground.Name = "btnGetBackground";
-            this.btnGetBackground.Size = new System.Drawing.Size(114, 45);
+            this.btnGetBackground.Size = new System.Drawing.Size(114, 26);
             this.btnGetBackground.TabIndex = 20;
             this.btnGetBackground.Text = "取得背景";
             this.btnGetBackground.UseVisualStyleBackColor = true;
@@ -512,24 +497,13 @@
             this.muraChartVerticalLive.Size = new System.Drawing.Size(888, 96);
             this.muraChartVerticalLive.TabIndex = 17;
             this.muraChartVerticalLive.Text = "chart1";
-            //
-            // btnCameraFree
-            // 
-            this.btnCameraFree.Location = new System.Drawing.Point(900, 48);
-            this.btnCameraFree.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
-            this.btnCameraFree.Name = "btnCameraFree";
-            this.btnCameraFree.Size = new System.Drawing.Size(114, 38);
-            this.btnCameraFree.TabIndex = 5;
-            this.btnCameraFree.Text = "釋放相機";
-            this.btnCameraFree.UseVisualStyleBackColor = true;
-            this.btnCameraFree.Click += new System.EventHandler(this.btnCameraFree_Click);
             // 
             // btnCameraGrab
             // 
             this.btnCameraGrab.Location = new System.Drawing.Point(900, 7);
             this.btnCameraGrab.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.btnCameraGrab.Name = "btnCameraGrab";
-            this.btnCameraGrab.Size = new System.Drawing.Size(114, 42);
+            this.btnCameraGrab.Size = new System.Drawing.Size(114, 79);
             this.btnCameraGrab.TabIndex = 4;
             this.btnCameraGrab.Text = "開始抓取";
             this.btnCameraGrab.UseVisualStyleBackColor = true;
@@ -733,7 +707,7 @@
             this.btnSelectFolder.Text = "讀取資料";
             this.btnSelectFolder.UseVisualStyleBackColor = true;
             this.btnSelectFolder.Click += new System.EventHandler(this.btnSelectFolder_Click);
-            //
+            // 
             // pbCam1
             // 
             this.pbCam1.Location = new System.Drawing.Point(6, 6);
@@ -3004,7 +2978,6 @@
             this.label41.TabIndex = 6;
             this.label41.Text = "【硬體參數】";
             // 
-            //
             // listViewEngine
             // 
             this.listViewEngine.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
@@ -3085,7 +3058,7 @@
             this.lblCamCount.ForeColor = System.Drawing.Color.White;
             this.lblCamCount.Location = new System.Drawing.Point(3, 0);
             this.lblCamCount.Name = "lblCamCount";
-            this.lblCamCount.Size = new System.Drawing.Size(309, 32);
+            this.lblCamCount.Size = new System.Drawing.Size(170, 32);
             this.lblCamCount.TabIndex = 0;
             this.lblCamCount.Text = "相機: --/7";
             this.lblCamCount.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -3097,9 +3070,9 @@
             this.lblPlcState.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblPlcState.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F);
             this.lblPlcState.ForeColor = System.Drawing.Color.White;
-            this.lblPlcState.Location = new System.Drawing.Point(318, 0);
+            this.lblPlcState.Location = new System.Drawing.Point(179, 0);
             this.lblPlcState.Name = "lblPlcState";
-            this.lblPlcState.Size = new System.Drawing.Size(309, 32);
+            this.lblPlcState.Size = new System.Drawing.Size(170, 32);
             this.lblPlcState.TabIndex = 2;
             this.lblPlcState.Text = "● 狀態: --";
             this.lblPlcState.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -3111,37 +3084,41 @@
             this.lblPlcConn.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblPlcConn.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F);
             this.lblPlcConn.ForeColor = System.Drawing.Color.White;
-            this.lblPlcConn.Location = new System.Drawing.Point(633, 0);
+            this.lblPlcConn.Location = new System.Drawing.Point(355, 0);
             this.lblPlcConn.Name = "lblPlcConn";
-            this.lblPlcConn.Size = new System.Drawing.Size(309, 32);
+            this.lblPlcConn.Size = new System.Drawing.Size(170, 32);
             this.lblPlcConn.TabIndex = 3;
             this.lblPlcConn.Text = "● IO: --";
             this.lblPlcConn.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-            //
+            // 
             // lblLightConn
-            //
+            // 
             this.lblLightConn.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(117)))), ((int)(((byte)(117)))), ((int)(((byte)(117)))));
             this.lblLightConn.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.lblLightConn.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblLightConn.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F);
             this.lblLightConn.ForeColor = System.Drawing.Color.White;
+            this.lblLightConn.Location = new System.Drawing.Point(531, 0);
             this.lblLightConn.Name = "lblLightConn";
+            this.lblLightConn.Size = new System.Drawing.Size(170, 32);
             this.lblLightConn.TabIndex = 4;
             this.lblLightConn.Text = "● 光源: --";
             this.lblLightConn.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-            //
+            // 
             // lblStorageConn
-            //
+            // 
             this.lblStorageConn.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(117)))), ((int)(((byte)(117)))), ((int)(((byte)(117)))));
             this.lblStorageConn.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.lblStorageConn.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblStorageConn.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F);
             this.lblStorageConn.ForeColor = System.Drawing.Color.White;
+            this.lblStorageConn.Location = new System.Drawing.Point(707, 0);
             this.lblStorageConn.Name = "lblStorageConn";
+            this.lblStorageConn.Size = new System.Drawing.Size(170, 32);
             this.lblStorageConn.TabIndex = 5;
             this.lblStorageConn.Text = "● 儲存電腦: --";
             this.lblStorageConn.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-            //
+            // 
             // panelPlcIo
             // 
             this.panelPlcIo.ColumnCount = 5;
@@ -3156,12 +3133,12 @@
             this.panelPlcIo.Controls.Add(this.lblIoDoMura, 3, 0);
             this.panelPlcIo.Controls.Add(this.lblIoDoPcBusy, 4, 0);
             this.panelPlcIo.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.panelPlcIo.Location = new System.Drawing.Point(945, 0);
+            this.panelPlcIo.Location = new System.Drawing.Point(880, 0);
             this.panelPlcIo.Margin = new System.Windows.Forms.Padding(0);
             this.panelPlcIo.Name = "panelPlcIo";
             this.panelPlcIo.RowCount = 1;
             this.panelPlcIo.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.panelPlcIo.Size = new System.Drawing.Size(317, 32);
+            this.panelPlcIo.Size = new System.Drawing.Size(382, 32);
             this.panelPlcIo.TabIndex = 1;
             // 
             // lblIoDiAlive
@@ -3173,7 +3150,7 @@
             this.lblIoDiAlive.ForeColor = System.Drawing.Color.White;
             this.lblIoDiAlive.Location = new System.Drawing.Point(3, 0);
             this.lblIoDiAlive.Name = "lblIoDiAlive";
-            this.lblIoDiAlive.Size = new System.Drawing.Size(57, 32);
+            this.lblIoDiAlive.Size = new System.Drawing.Size(70, 32);
             this.lblIoDiAlive.TabIndex = 0;
             this.lblIoDiAlive.Text = "DI0\r\nNKN_ALV";
             this.lblIoDiAlive.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -3185,9 +3162,9 @@
             this.lblIoDiStart.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblIoDiStart.Font = new System.Drawing.Font("Microsoft Sans Serif", 7F);
             this.lblIoDiStart.ForeColor = System.Drawing.Color.White;
-            this.lblIoDiStart.Location = new System.Drawing.Point(66, 0);
+            this.lblIoDiStart.Location = new System.Drawing.Point(79, 0);
             this.lblIoDiStart.Name = "lblIoDiStart";
-            this.lblIoDiStart.Size = new System.Drawing.Size(57, 32);
+            this.lblIoDiStart.Size = new System.Drawing.Size(70, 32);
             this.lblIoDiStart.TabIndex = 1;
             this.lblIoDiStart.Text = "DI1\r\nINSPECT";
             this.lblIoDiStart.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -3199,9 +3176,9 @@
             this.lblIoDoPcAlive.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblIoDoPcAlive.Font = new System.Drawing.Font("Microsoft Sans Serif", 7F);
             this.lblIoDoPcAlive.ForeColor = System.Drawing.Color.White;
-            this.lblIoDoPcAlive.Location = new System.Drawing.Point(129, 0);
+            this.lblIoDoPcAlive.Location = new System.Drawing.Point(155, 0);
             this.lblIoDoPcAlive.Name = "lblIoDoPcAlive";
-            this.lblIoDoPcAlive.Size = new System.Drawing.Size(57, 32);
+            this.lblIoDoPcAlive.Size = new System.Drawing.Size(70, 32);
             this.lblIoDoPcAlive.TabIndex = 2;
             this.lblIoDoPcAlive.Text = "DO0\r\nPC_ALV";
             this.lblIoDoPcAlive.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -3210,15 +3187,17 @@
             // 
             this.lblIoDoMura.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(60)))), ((int)(((byte)(60)))));
             this.lblIoDoMura.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lblIoDoMura.Cursor = System.Windows.Forms.Cursors.Hand;
             this.lblIoDoMura.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblIoDoMura.Font = new System.Drawing.Font("Microsoft Sans Serif", 7F);
             this.lblIoDoMura.ForeColor = System.Drawing.Color.White;
-            this.lblIoDoMura.Location = new System.Drawing.Point(192, 0);
+            this.lblIoDoMura.Location = new System.Drawing.Point(231, 0);
             this.lblIoDoMura.Name = "lblIoDoMura";
-            this.lblIoDoMura.Size = new System.Drawing.Size(57, 32);
+            this.lblIoDoMura.Size = new System.Drawing.Size(70, 32);
             this.lblIoDoMura.TabIndex = 3;
             this.lblIoDoMura.Text = "DO1\r\nMURA_DET";
             this.lblIoDoMura.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            this.lblIoDoMura.Click += new System.EventHandler(this.lblIoDoMura_Click);
             // 
             // lblIoDoPcBusy
             // 
@@ -3227,9 +3206,9 @@
             this.lblIoDoPcBusy.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblIoDoPcBusy.Font = new System.Drawing.Font("Microsoft Sans Serif", 7F);
             this.lblIoDoPcBusy.ForeColor = System.Drawing.Color.White;
-            this.lblIoDoPcBusy.Location = new System.Drawing.Point(255, 0);
+            this.lblIoDoPcBusy.Location = new System.Drawing.Point(307, 0);
             this.lblIoDoPcBusy.Name = "lblIoDoPcBusy";
-            this.lblIoDoPcBusy.Size = new System.Drawing.Size(59, 32);
+            this.lblIoDoPcBusy.Size = new System.Drawing.Size(72, 32);
             this.lblIoDoPcBusy.TabIndex = 4;
             this.lblIoDoPcBusy.Text = "DO2\r\nINSPECT";
             this.lblIoDoPcBusy.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -3247,12 +3226,10 @@
             this.Text = "AniloxRoll Monitor";
             this.tabMain.ResumeLayout(false);
             this.tabPageLiveView.ResumeLayout(false);
-            this.tabPageLiveView.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.muraChartHorizontalLive)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.chartLiveOverview)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.muraChartVerticalLive)).EndInit();
             this.tabPageReview.ResumeLayout(false);
-            this.tabPageReview.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.chartMuraHorizontal)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.chartOverview)).EndInit();
             this.grpReviewTimePeriod.ResumeLayout(false);
@@ -3421,7 +3398,6 @@
         private System.Windows.Forms.Panel panelLiveCam4;
         private System.Windows.Forms.Panel panelLiveCam3;
         private System.Windows.Forms.Panel panelLiveCam2;
-        private System.Windows.Forms.Button btnCameraFree;
         private System.Windows.Forms.Button btnCameraGrab;
         private System.Windows.Forms.Button btnPeriodPrev;
         private System.Windows.Forms.Button btnPeriodNext;
@@ -3620,6 +3596,5 @@
         private System.Windows.Forms.ListView listViewHardware;
         private System.Windows.Forms.Label label41;
         private System.Windows.Forms.Button btnViewBackground;
-        private System.Windows.Forms.Button btnMuraDetectPause;
     }
 }

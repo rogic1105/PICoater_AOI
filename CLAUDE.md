@@ -210,7 +210,6 @@ PICoater_AOI/
 | 標準名稱 | Name | 類型 | 畫面文字 |
 |---------|------|------|---------|
 | 開始抓取 | `btnCameraGrab` | Button | 開始抓取 / 停止抓取 |
-| 釋放相機 | `btnCameraFree` | Button | 釋放相機 |
 | 取得背景 | `btnGetBackground` | Button | 取得背景 |
 | 預覽背景 | `btnViewBackground` | Button | 預覽背景 |
 | 監控主畫面 | `panelMainDisplay` | Panel | — |
@@ -218,7 +217,7 @@ PICoater_AOI/
 | 監控切向曲線圖 | `muraChartVerticalLive` | Chart | — |
 | 監控法向曲線圖 | `muraChartHorizontalLive` | Chart | — |
 | 監控全覽圖 | `chartLiveOverview` | Chart | — |
-| 暫停檢測 | `btnMuraDetectPause` | Button | 暫停檢測 / 恢復檢測 |
+| 暫停 Mura 檢測 | `lblIoDoMura`（點擊切換） | Label | DO1 MURA_DET / DO1 MURA ⏸（黃底=暫停中） |
 
 ### 歷史查詢（tabPageReview）
 
