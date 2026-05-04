@@ -797,6 +797,175 @@
   </div>
 </div>
 
+<!-- ════════════════════════════════════════════════════════════════
+     5. GRAB 控制與光源聯動架構
+     ════════════════════════════════════════════════════════════════ -->
+<h2>5. Grab 控制與光源聯動架構</h2>
+<div class="diagram-container">
+  <p style="margin-bottom:16px; font-size:14px; color:#555;">
+    IO 與手動兩條路徑都匯入同一個 <code>btnCameraGrab_Click()</code>，光源開關統一在按鈕邏輯內處理，不依賴觸發來源。
+  </p>
+
+  <svg viewBox="0 0 900 340" width="100%" style="max-width:900px; display:block; margin:0 auto;" font-family="'Segoe UI','Microsoft JhengHei',sans-serif">
+    <defs>
+      <marker id="g-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,1 L9,5 L0,9 Z" fill="#1565c0"/>
+      </marker>
+      <marker id="g-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,1 L9,5 L0,9 Z" fill="#e65100"/>
+      </marker>
+      <marker id="g-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,1 L9,5 L0,9 Z" fill="#2e7d32"/>
+      </marker>
+      <marker id="g-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,1 L9,5 L0,9 Z" fill="#c62828"/>
+      </marker>
+    </defs>
+
+    <!-- ── IO 路徑 (上半) ── -->
+    <!-- DI_INSPECT_START ↑ -->
+    <rect x="20" y="30" width="170" height="50" rx="6" fill="#fff3e0" stroke="#e65100" stroke-width="2"/>
+    <text x="105" y="52" text-anchor="middle" font-size="12" font-weight="bold" fill="#e65100">DI_INSPECT_START ↑</text>
+    <text x="105" y="69" text-anchor="middle" font-size="11" fill="#777">Nakan → ET-7044 → IPC</text>
+
+    <!-- → PlcStartGrab -->
+    <line x1="190" y1="55" x2="255" y2="55" stroke="#e65100" stroke-width="1.8" marker-end="url(#g-orange)"/>
+    <rect x="258" y="30" width="140" height="50" rx="6" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.5"/>
+    <text x="328" y="52" text-anchor="middle" font-size="12" font-weight="bold" fill="#1565c0">PlcStartGrab()</text>
+    <text x="328" y="68" text-anchor="middle" font-size="10" fill="#888">_isIoSuspended 守衛</text>
+
+    <!-- → btnCameraGrab_Click -->
+    <line x1="398" y1="55" x2="460" y2="55" stroke="#1565c0" stroke-width="1.8" marker-end="url(#g-blue)"/>
+
+    <!-- ── 手動路徑 (中段) ── -->
+    <rect x="20" y="145" width="170" height="50" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"/>
+    <text x="105" y="165" text-anchor="middle" font-size="12" font-weight="bold" fill="#2e7d32">btnCameraGrab 點擊</text>
+    <text x="105" y="182" text-anchor="middle" font-size="11" fill="#777">IO 未連線 / IO 暫停中</text>
+
+    <line x1="190" y1="170" x2="460" y2="100" stroke="#2e7d32" stroke-width="1.8" stroke-dasharray="5 3" marker-end="url(#g-green)"/>
+
+    <!-- ── btnCameraGrab_Click (中央) ── -->
+    <rect x="463" y="20" width="180" height="200" rx="8" fill="#f3e5f5" stroke="#6a1b9a" stroke-width="2"/>
+    <text x="553" y="45" text-anchor="middle" font-size="13" font-weight="bold" fill="#6a1b9a">btnCameraGrab_Click()</text>
+    <line x1="480" y1="54" x2="626" y2="54" stroke="#6a1b9a" stroke-width="1" stroke-dasharray="3 2"/>
+    <text x="553" y="80"  text-anchor="middle" font-size="11" fill="#555">ToggleGrab()</text>
+    <text x="553" y="100" text-anchor="middle" font-size="11" fill="#2e7d32">▶ 開始：LightTurnOn()</text>
+    <text x="553" y="118" text-anchor="middle" font-size="10" fill="#888">  NextGrabId()</text>
+    <text x="553" y="142" text-anchor="middle" font-size="11" fill="#c62828">■ 停止：LightTurnOff()</text>
+    <text x="553" y="160" text-anchor="middle" font-size="10" fill="#888">  TriggerRetention()</text>
+    <text x="553" y="184" text-anchor="middle" font-size="11" fill="#555">UpdateGrabButton()</text>
+
+    <!-- → LightController (右下) -->
+    <line x1="643" y1="100" x2="720" y2="100" stroke="#2e7d32" stroke-width="1.8" marker-end="url(#g-green)"/>
+    <rect x="723" y="75" width="155" height="50" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5"/>
+    <text x="800" y="97" text-anchor="middle" font-size="12" font-weight="bold" fill="#2e7d32">LightController</text>
+    <text x="800" y="113" text-anchor="middle" font-size="11" fill="#555">RS-232 LTS-3DPA24</text>
+
+    <!-- → Camera (右上) -->
+    <line x1="643" y1="60" x2="720" y2="60" stroke="#1565c0" stroke-width="1.8" marker-end="url(#g-blue)"/>
+    <rect x="723" y="35" width="155" height="50" rx="6" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.5"/>
+    <text x="800" y="57" text-anchor="middle" font-size="12" font-weight="bold" fill="#1565c0">LiveCameraManager</text>
+    <text x="800" y="73" text-anchor="middle" font-size="11" fill="#555">MIL Grab 開始/停止</text>
+
+    <!-- → 停止路徑：DI_INSPECT_START ↓ -->
+    <rect x="20" y="255" width="170" height="50" rx="6" fill="#fff3e0" stroke="#e65100" stroke-width="2"/>
+    <text x="105" y="277" text-anchor="middle" font-size="12" font-weight="bold" fill="#e65100">DI_INSPECT_START ↓</text>
+    <text x="105" y="293" text-anchor="middle" font-size="11" fill="#777">停止觸發</text>
+
+    <rect x="258" y="255" width="140" height="50" rx="6" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.5"/>
+    <text x="328" y="277" text-anchor="middle" font-size="12" font-weight="bold" fill="#1565c0">PlcStopGrab()</text>
+    <text x="328" y="293" text-anchor="middle" font-size="10" fill="#888">_isIoSuspended 守衛</text>
+
+    <line x1="190" y1="280" x2="255" y2="280" stroke="#e65100" stroke-width="1.8" marker-end="url(#g-orange)"/>
+    <line x1="398" y1="280" x2="520" y2="222" stroke="#1565c0" stroke-width="1.8" marker-end="url(#g-blue)"/>
+
+    <!-- Note -->
+    <text x="450" y="320" text-anchor="middle" font-size="10" fill="#888" font-style="italic">光源開關統一在 btnCameraGrab_Click 內，不論 IO 或手動觸發路徑皆相同</text>
+  </svg>
+
+  <table class="io-table" style="margin-top:20px;">
+    <tr><th>觸發源</th><th>開始抓取</th><th>停止抓取</th><th>btnCameraGrab 狀態</th></tr>
+    <tr>
+      <td>IO 已連線（正常）</td>
+      <td>DI_INSPECT_START ↑ → PlcStartGrab → btnClick → <strong>LightTurnOn</strong></td>
+      <td>DI_INSPECT_START ↓ → PlcStopGrab → btnClick → <strong>LightTurnOff</strong></td>
+      <td>Disabled「IO 控制中」藍底</td>
+    </tr>
+    <tr>
+      <td>IO 未連線 / IO 暫停</td>
+      <td>手動點按鈕 → btnClick → <strong>LightTurnOn</strong></td>
+      <td>再點一次 → btnClick → <strong>LightTurnOff</strong></td>
+      <td>Enabled 正常可點擊</td>
+    </tr>
+    <tr>
+      <td>IO 暫停（_isIoSuspended）</td>
+      <td colspan="2">PlcStartGrab / PlcStopGrab 直接 return，IO DI 訊號被忽略</td>
+      <td>Enabled 手動控制</td>
+    </tr>
+  </table>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════
+     6. IO 暫停模式（lblPlcConn 點擊）
+     ════════════════════════════════════════════════════════════════ -->
+<h2>6. IO 暫停模式 — <code>lblPlcConn</code> 點擊切換</h2>
+<div class="diagram-container">
+  <p style="margin-bottom:16px; font-size:14px; color:#555;">
+    點擊狀態列的 IO 連線燈即可暫停 IO 控制（軟體層旗標），PLC TCP 連線與 keepalive DO_PC_ALIVE 保持不變。再點一次恢復。
+  </p>
+
+  <svg viewBox="0 0 860 260" width="100%" style="max-width:860px; display:block; margin:0 auto;" font-family="'Segoe UI','Microsoft JhengHei',sans-serif">
+    <defs>
+      <marker id="s-blue"   viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 Z" fill="#1565c0"/></marker>
+      <marker id="s-yellow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 Z" fill="#e65100"/></marker>
+      <marker id="s-green"  viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 Z" fill="#2e7d32"/></marker>
+    </defs>
+
+    <!-- State: IO 已連線 -->
+    <rect x="30" y="80" width="200" height="100" rx="10" fill="#e3f2fd" stroke="#1565c0" stroke-width="2.5"/>
+    <text x="130" y="108" text-anchor="middle" font-size="14" font-weight="bold" fill="#1565c0">IO 已連線</text>
+    <line x1="50" y1="116" x2="210" y2="116" stroke="#1565c0" stroke-width="1" stroke-dasharray="3 2"/>
+    <text x="130" y="132" text-anchor="middle" font-size="11" fill="#555">● IO 已連線（綠底）</text>
+    <text x="130" y="148" text-anchor="middle" font-size="11" fill="#555">btnCameraGrab Disabled</text>
+    <text x="130" y="163" text-anchor="middle" font-size="10" fill="#888">DI 訊號正常處理</text>
+
+    <!-- State: IO 暫停中 -->
+    <rect x="620" y="80" width="210" height="110" rx="10" fill="#fffde7" stroke="#f9a825" stroke-width="2.5"/>
+    <text x="725" y="108" text-anchor="middle" font-size="14" font-weight="bold" fill="#795548">IO 暫停 ⏸</text>
+    <line x1="640" y1="116" x2="810" y2="116" stroke="#f9a825" stroke-width="1" stroke-dasharray="3 2"/>
+    <text x="725" y="132" text-anchor="middle" font-size="11" fill="#555">● IO 暫停 ⏸（黃底黑字）</text>
+    <text x="725" y="148" text-anchor="middle" font-size="11" fill="#2e7d32">btnCameraGrab Enabled</text>
+    <text x="725" y="163" text-anchor="middle" font-size="10" fill="#888">DI 訊號忽略（旗標守衛）</text>
+    <text x="725" y="178" text-anchor="middle" font-size="10" fill="#888">TCP / DO_PC_ALIVE 維持</text>
+
+    <!-- 暫停箭頭 -->
+    <path d="M230,110 C 400,50 500,50 620,110" fill="none" stroke="#f9a825" stroke-width="2" marker-end="url(#s-yellow)"/>
+    <text x="425" y="48" text-anchor="middle" font-size="12" font-weight="bold" fill="#795548">點擊 lblPlcConn</text>
+    <text x="425" y="64" text-anchor="middle" font-size="11" fill="#888">_isIoSuspended = true</text>
+    <text x="425" y="78" text-anchor="middle" font-size="10" fill="#888">lblPlcConn → 黃底「● IO 暫停 ⏸」</text>
+
+    <!-- 恢復箭頭 -->
+    <path d="M620,160 C 500,220 400,220 230,160" fill="none" stroke="#1565c0" stroke-width="2" marker-end="url(#s-blue)"/>
+    <text x="425" y="210" text-anchor="middle" font-size="12" font-weight="bold" fill="#1565c0">再次點擊 lblPlcConn</text>
+    <text x="425" y="226" text-anchor="middle" font-size="11" fill="#888">_isIoSuspended = false</text>
+    <text x="425" y="240" text-anchor="middle" font-size="10" fill="#888">UpdatePlcConnectionUi(IsConnected) 還原</text>
+  </svg>
+
+  <table class="io-table" style="margin-top:20px;">
+    <tr><th>項目</th><th>正常（IO 已連線）</th><th>暫停中（_isIoSuspended）</th></tr>
+    <tr><td><code>lblPlcConn</code> 外觀</td><td>綠底白字「● IO 已連線」</td><td>黃底黑字「● IO 暫停 ⏸」</td></tr>
+    <tr><td><code>btnCameraGrab</code></td><td>Disabled「IO 控制中」藍底</td><td>Enabled 可手動點擊</td></tr>
+    <tr><td>PlcStartGrab / PlcStopGrab</td><td>正常執行</td><td>直接 return，DI 觸發無效</td></tr>
+    <tr><td>TCP 連線</td><td>維持</td><td>維持（不斷線）</td></tr>
+    <tr><td>DO_PC_ALIVE keepalive</td><td>持續輸出 HIGH</td><td>持續輸出 HIGH</td></tr>
+    <tr><td>UpdatePlcConnectionUi callback</td><td>正常更新 UI</td><td>直接 return，不覆寫暫停狀態</td></tr>
+    <tr><td>UpdateStandardBgSubLockState</td><td>IO 連線守衛：不覆寫 Enabled</td><td>守衛解除，可正常管理 Enabled</td></tr>
+  </table>
+  <p class="note" style="margin-top:12px;">
+    典型使用場景：現場調機時需要手動控制取像，但不想真正斷開 PLC 連線（避免設備誤判 PC 離線）。
+  </p>
+</div>
+
 <!-- No external JS required — all diagrams are pure HTML/SVG/CSS -->
 
 </body>

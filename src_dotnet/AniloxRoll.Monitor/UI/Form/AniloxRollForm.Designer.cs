@@ -1021,7 +1021,7 @@
             this.btnShowFail.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.btnShowFail.Font = new System.Drawing.Font("新細明體", 8F);
-            this.btnShowFail.Location = new System.Drawing.Point(900, 51);
+            this.btnShowFail.Location = new System.Drawing.Point(718, 580);
             this.btnShowFail.Name = "btnShowFail";
             this.btnShowFail.Size = new System.Drawing.Size(115, 33);
             this.btnShowFail.TabIndex = 41;
@@ -1162,9 +1162,9 @@
             // btnSelectDataFolder
             // 
             this.btnSelectDataFolder.Font = new System.Drawing.Font("微軟正黑體", 10.2F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(136)));
-            this.btnSelectDataFolder.Location = new System.Drawing.Point(900, 3);
+            this.btnSelectDataFolder.Location = new System.Drawing.Point(900, 6);
             this.btnSelectDataFolder.Name = "btnSelectDataFolder";
-            this.btnSelectDataFolder.Size = new System.Drawing.Size(115, 37);
+            this.btnSelectDataFolder.Size = new System.Drawing.Size(115, 80);
             this.btnSelectDataFolder.TabIndex = 34;
             this.btnSelectDataFolder.Text = "讀取資料";
             this.btnSelectDataFolder.UseVisualStyleBackColor = true;
@@ -3081,6 +3081,7 @@
             // 
             this.lblPlcConn.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(117)))), ((int)(((byte)(117)))), ((int)(((byte)(117)))));
             this.lblPlcConn.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lblPlcConn.Cursor = System.Windows.Forms.Cursors.Hand;
             this.lblPlcConn.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblPlcConn.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F);
             this.lblPlcConn.ForeColor = System.Drawing.Color.White;
@@ -3090,6 +3091,7 @@
             this.lblPlcConn.TabIndex = 3;
             this.lblPlcConn.Text = "● IO: --";
             this.lblPlcConn.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            this.lblPlcConn.Click += new System.EventHandler(this.lblPlcConn_Click);
             // 
             // lblLightConn
             // 

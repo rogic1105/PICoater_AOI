@@ -131,6 +131,7 @@ namespace AniloxRoll.Monitor.Forms
         private readonly float[][] _liveCurveMax  = new float[CameraCount][];
         private volatile bool _liveOverviewDirty;
         private bool _isMuraDetectPaused;
+        private bool _isIoSuspended;
 
         // --- Review tab 拼接管理 ---
         private ReviewStitchCoordinator _stitchCoordinator;
@@ -277,18 +278,18 @@ namespace AniloxRoll.Monitor.Forms
 
         private void PlcStartGrab()
         {
+            if (_isIoSuspended) return;
             if (_liveCameraManager == null || _liveCameraManager.IsLiveGrabbing) return;
-            LightTurnOn();
             btnCameraGrab_Click(null, null);
             _ = _plcGrabController?.NotifyGrabStarted();
         }
 
         private void PlcStopGrab()
         {
+            if (_isIoSuspended) return;
             if (_liveCameraManager == null || !_liveCameraManager.IsLiveGrabbing) return;
-            btnCameraGrab_Click(null, null); // toggle → stop
+            btnCameraGrab_Click(null, null);
             _ = _plcGrabController?.NotifyGrabStopped();
-            LightTurnOff();
         }
 
         private void LightTurnOn()
@@ -363,10 +364,12 @@ namespace AniloxRoll.Monitor.Forms
 
         private void UpdatePlcConnectionUi(bool connected)
         {
+            if (_isIoSuspended) return;
             if (connected)
             {
                 lblPlcConn.Text = "● IO 已連線";
-                lblPlcConn.BackColor = IecGreen;  // IEC 綠
+                lblPlcConn.BackColor = IecGreen;
+                btnCameraGrab.Enabled = false;
                 btnCameraGrab.Text = "IO 控制中";
                 btnCameraGrab.BackColor = IecBlue;
                 btnCameraGrab.ForeColor = Color.White;
@@ -375,6 +378,7 @@ namespace AniloxRoll.Monitor.Forms
             {
                 lblPlcConn.Text = "● IO 離線";
                 lblPlcConn.BackColor = IecGray;
+                btnCameraGrab.Enabled = true;
                 UpdateGrabButton(_liveCameraManager?.IsLiveGrabbing ?? false);
                 btnCameraGrab.BackColor = SystemColors.Control;
                 btnCameraGrab.ForeColor = SystemColors.ControlText;
@@ -883,13 +887,19 @@ namespace AniloxRoll.Monitor.Forms
                 _liveCameraManager.ToggleGrab();
             }
 
-            // 剛從「未抓取」→「抓取中」：分配新的抓圖編號
+            // 剛從「未抓取」→「抓取中」：開燈 + 分配新的抓圖編號
             if (!wasGrabbing && _liveCameraManager.IsLiveGrabbing)
+            {
+                LightTurnOn();
                 _currentGrabId = _inspectionLogService.NextGrabId();
+            }
 
-            // 剛從「抓取中」→「停止」：觸發循環儲存 + 通知儲存機清理
+            // 剛從「抓取中」→「停止」：關燈 + 觸發循環儲存 + 通知儲存機清理
             if (wasGrabbing && !_liveCameraManager.IsLiveGrabbing)
+            {
+                LightTurnOff();
                 TriggerRetentionAndFlagAsync();
+            }
 
             UpdateGrabButton(_liveCameraManager.IsLiveGrabbing);
         }
@@ -1387,6 +1397,9 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private void UpdateStandardBgSubLockState()
         {
+            // IO 已連線且未暫停：btnCameraGrab 由 IO 連線邏輯控制，不覆寫
+            if (_plcGrabController?.IsConnected == true && !_isIoSuspended) return;
+
             if (!IsStandardBgSubEnabled)
             {
                 // 非 StandardBgSub：正常解鎖
@@ -1741,6 +1754,26 @@ namespace AniloxRoll.Monitor.Forms
         {
             _isMuraDetectPaused = !_isMuraDetectPaused;
             UpdateMuraLed(false);
+        }
+
+        private void lblPlcConn_Click(object sender, EventArgs e)
+        {
+            if (_plcGrabController == null) return;
+            _isIoSuspended = !_isIoSuspended;
+            if (_isIoSuspended)
+            {
+                lblPlcConn.BackColor = IecYellow;
+                lblPlcConn.ForeColor = Color.Black;
+                lblPlcConn.Text = "● IO 暫停 ⏸";
+                btnCameraGrab.Enabled = true;
+                UpdateGrabButton(_liveCameraManager?.IsLiveGrabbing ?? false);
+                btnCameraGrab.BackColor = SystemColors.Control;
+                btnCameraGrab.ForeColor = SystemColors.ControlText;
+            }
+            else
+            {
+                UpdatePlcConnectionUi(_plcGrabController.IsConnected);
+            }
         }
 
         // PropertyGrid 回傳的 ChangedItem.PropertyDescriptor.Name 可能是 MemberName 或 DisplayName 其中之一，
