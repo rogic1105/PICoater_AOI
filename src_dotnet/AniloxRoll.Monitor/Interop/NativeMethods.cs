@@ -99,6 +99,15 @@ namespace AniloxRoll.Monitor.Core.Interop
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         public static extern void PICoaterAPI_DestroyPlc(IntPtr handle);
 
+        // =====================================================
+        // user32.dll — 捲軸位置讀寫（PropertyGrid 保持捲軸用）
+        // =====================================================
+        [DllImport("user32.dll")]
+        public static extern int GetScrollPos(IntPtr hWnd, int nBar);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         public static extern int PICoaterAPI_PlcConnect(IntPtr handle);
 

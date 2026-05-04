@@ -85,93 +85,10 @@ namespace AniloxRoll.Monitor.Core.Services
         {
             if (_isDisposed) throw new ObjectDisposedException(nameof(InspectionEngine));
 
-            // 新格式：從預存 JPEG + .bin 載入，無需 GPU
             if (filePath.EndsWith("_raw.jpg", StringComparison.OrdinalIgnoreCase))
                 return LoadProcessedThumbnailFromJpeg(filePath, targetThumbWidth);
 
-            return ExecuteTimedOperation<InspectionData>(filePath, (stopwatch) =>
-            {
-                // [IO] 使用 CoreCV_FastReadBMP 讀入 Pinned Memory
-                stopwatch.Start();
-                bool readSuccess = NativeMethods.CoreCV_FastReadBMP(
-                    filePath, out int w, out int h, _inputBuffer, (int)_imgBufferSize);
-                stopwatch.Stop();
-                long ioTime = stopwatch.ElapsedMilliseconds;
-
-                if (!readSuccess) return (null, ioTime, 0, 0);
-
-                // [GPU] CUDA 全尺寸檢測 Pipeline (背景去除 + Ridge 增強)
-                stopwatch.Restart();
-                _aoiService.ProcessImage(new AoiProcessRequest
-                {
-                    Input = new AoiProcessRequest.InputImage
-                    {
-                        Width = w,
-                        Height = h,
-                        Data = _inputBuffer,
-                        Stream = IntPtr.Zero
-                    },
-                    Output = new AoiProcessRequest.OutputBuffers
-                    {
-                        BackgroundData = IntPtr.Zero,
-                        MuraData = _muraBuffer,
-                        RidgeData = _ridgeBuffer,
-                        MuraCurveMean = _curveMeanBuffer,
-                        MuraCurveMax = _curveMaxBuffer,
-                        MuraRowCurveMean = _curveRowMeanBuffer,
-                        MuraRowCurveMax = _curveRowMaxBuffer,
-                        Stream = IntPtr.Zero
-                    },
-                    Params = new AoiProcessRequest.AlgorithmParams
-                    {
-                        BgSigmaFactor = InspectionEngineConfig.DefaultBgSigma,
-                        RidgeSigma = InspectionEngineConfig.DefaultRidgeSigma,
-                        HessianMaxFactor = hessianFactor,
-                        RidgeMode = "vertical+horizontal"  // 永遠計算雙方向
-                    }
-                });
-                stopwatch.Stop();
-                long algoTime = stopwatch.ElapsedMilliseconds;
-
-                // [BMP + GPU 縮圖] 對應 de24f715 的 PICoater_Run_WithThumb 設計：
-                // 在 GPU 上將 ridge 結果縮圖，再建立 Bitmap 供縮圖牆顯示。
-                stopwatch.Restart();
-                int thumbH = (int)((float)h / w * targetThumbWidth);
-
-                int resizeRet = NativeMethods.CoreCV_Resize_GPU(
-                    _ridgeBuffer, w, h,
-                    _thumbnailBuffer, targetThumbWidth, thumbH);
-
-                if (resizeRet != 0) throw new InvalidOperationException($"GPU Resize Error: {resizeRet}");
-
-                // CoreCV_Resize_GPU 輸出為 bottom-up，此應用刻意保持翻轉（取像時序）
-                Bitmap thumb = ImageUtils.Create8bppBitmap(_thumbnailBuffer, targetThumbWidth, thumbH);
-
-                // Pipeline 永遠跑 "vertical+horizontal"，一律讀取 V/H 曲線
-                float[] curveMean = new float[w];
-                float[] curveMax  = new float[w];
-                Marshal.Copy(_curveMeanBuffer, curveMean, 0, w);
-                Marshal.Copy(_curveMaxBuffer,  curveMax,  0, w);
-
-                float[] rowCurveMean = new float[h];
-                float[] rowCurveMax  = new float[h];
-                Marshal.Copy(_curveRowMeanBuffer, rowCurveMean, 0, h);
-                Marshal.Copy(_curveRowMaxBuffer,  rowCurveMax,  0, h);
-
-                var data = new InspectionData
-                {
-                    Image = thumb,
-                    MuraCurveMean = curveMean,
-                    MuraCurveMax = curveMax,
-                    MuraRowCurveMean = rowCurveMean,
-                    MuraRowCurveMax = rowCurveMax
-                };
-
-                stopwatch.Stop();
-                long bmpTime = stopwatch.ElapsedMilliseconds;
-
-                return (data, ioTime, algoTime, bmpTime);
-            });
+            return new TimedResult<InspectionData>();
         }
 
         public InspectionData RunInspectionFullRes(string filePath, bool isProcessedMode, float hessianFactor,
@@ -180,121 +97,10 @@ namespace AniloxRoll.Monitor.Core.Services
             if (_isDisposed) return null;
             if (!File.Exists(filePath)) return null;
 
-            // 新格式：預先存好的 JPEG + .bin，不需要 GPU，直接載入
             if (filePath.EndsWith("_raw.jpg", StringComparison.OrdinalIgnoreCase))
                 return LoadFromPrecomputedFiles(filePath, isProcessedMode, ridgeDirection);
 
-            // 舊格式：BMP 讀取 + 視需要跑 GPU Pipeline（向下相容）
-            lock (_lock)
-            {
-                var swTotal = Stopwatch.StartNew();
-                var sw = Stopwatch.StartNew();
-
-                bool readSuccess = NativeMethods.CoreCV_FastReadBMP(
-                    filePath, out int w, out int h, _inputBuffer, (int)_imgBufferSize);
-                long ioMs = sw.ElapsedMilliseconds;
-
-                if (!readSuccess) return null;
-
-                Bitmap bmp;
-                float[] curveMean = null;
-                float[] curveMax  = null;
-                float[] rowCurveMean = null;
-                float[] rowCurveMax  = null;
-                long gpuMs = 0, bmpMs = 0, copyMs = 0;
-
-                // Pipeline 永遠跑 "vertical+horizontal"，一律產生 V/H 曲線
-                string basePath       = Path.Combine(Path.GetDirectoryName(filePath),
-                                          Path.GetFileNameWithoutExtension(filePath));
-                string meanBinPath    = basePath + "_mean_v.bin";
-                string maxBinPath     = basePath + "_max_v.bin";
-                string rowMeanBinPath = basePath + "_mean_h.bin";
-                string rowMaxBinPath  = basePath + "_max_h.bin";
-
-                if (isProcessedMode)
-                {
-                    sw.Restart();
-                    RunGpuPipeline(w, h, hessianFactor, ridgeMode);
-                    gpuMs = sw.ElapsedMilliseconds;
-
-                    sw.Restart();
-                    // ridgeDirection: "v" → _ridgeBuffer（vertical），"h" → _muraBuffer（horizontal）
-                    IntPtr displayBuffer = (ridgeDirection == "h") ? _muraBuffer : _ridgeBuffer;
-                    bmp = ImageUtils.Create8bppBitmap(displayBuffer, w, h, flipY: false);
-                    bmpMs = sw.ElapsedMilliseconds;
-
-                    sw.Restart();
-                    curveMean = new float[w];
-                    curveMax  = new float[w];
-                    Marshal.Copy(_curveMeanBuffer, curveMean, 0, w);
-                    Marshal.Copy(_curveMaxBuffer,  curveMax,  0, w);
-                    if (!File.Exists(meanBinPath)) SaveCurveBin(curveMean, 1, meanBinPath);
-                    if (!File.Exists(maxBinPath))  SaveCurveBin(curveMax,  1, maxBinPath);
-
-                    rowCurveMean = new float[h];
-                    rowCurveMax  = new float[h];
-                    Marshal.Copy(_curveRowMeanBuffer, rowCurveMean, 0, h);
-                    Marshal.Copy(_curveRowMaxBuffer,  rowCurveMax,  0, h);
-                    if (!File.Exists(rowMeanBinPath)) SaveCurveBin(rowCurveMean, 1, rowMeanBinPath);
-                    if (!File.Exists(rowMaxBinPath))  SaveCurveBin(rowCurveMax,  1, rowMaxBinPath);
-                    copyMs = sw.ElapsedMilliseconds;
-                }
-                else
-                {
-                    sw.Restart();
-                    bmp = ImageUtils.Create8bppBitmap(_inputBuffer, w, h, flipY: false);
-                    bmpMs = sw.ElapsedMilliseconds;
-
-                    if (File.Exists(meanBinPath) || File.Exists(basePath + "_mean.bin") ||
-                        File.Exists(rowMeanBinPath) || File.Exists(basePath + "_row_mean.bin"))
-                    {
-                        // 從 .bin 讀取（新格式優先，舊格式向後相容）
-                        curveMean    = LoadCurveBinCompat(basePath, "_mean_v.bin", "_mean.bin");
-                        curveMax     = LoadCurveBinCompat(basePath, "_max_v.bin", "_max.bin");
-                        rowCurveMean = LoadCurveBinCompat(basePath, "_mean_h.bin", "_row_mean.bin");
-                        rowCurveMax  = LoadCurveBinCompat(basePath, "_max_h.bin", "_row_max.bin");
-                    }
-                    else
-                    {
-                        // .bin 不存在：跑 GPU 並存檔
-                        sw.Restart();
-                        RunGpuPipeline(w, h, hessianFactor, ridgeMode);
-                        gpuMs = sw.ElapsedMilliseconds;
-
-                        sw.Restart();
-                        curveMean = new float[w];
-                        curveMax  = new float[w];
-                        Marshal.Copy(_curveMeanBuffer, curveMean, 0, w);
-                        Marshal.Copy(_curveMaxBuffer,  curveMax,  0, w);
-                        SaveCurveBin(curveMean, 1, meanBinPath);
-                        SaveCurveBin(curveMax,  1, maxBinPath);
-
-                        rowCurveMean = new float[h];
-                        rowCurveMax  = new float[h];
-                        Marshal.Copy(_curveRowMeanBuffer, rowCurveMean, 0, h);
-                        Marshal.Copy(_curveRowMaxBuffer,  rowCurveMax,  0, h);
-                        SaveCurveBin(rowCurveMean, 1, rowMeanBinPath);
-                        SaveCurveBin(rowCurveMax,  1, rowMaxBinPath);
-                        copyMs = sw.ElapsedMilliseconds;
-                    }
-                }
-
-                Console.WriteLine(
-                    $"[FullRes] mode={isProcessedMode,-5} | " +
-                    $"IO={ioMs,4}ms | GPU={gpuMs,4}ms | BMP={bmpMs,4}ms | Copy={copyMs,3}ms | " +
-                    $"Total={swTotal.ElapsedMilliseconds,5}ms  ({w}x{h})");
-
-                return new InspectionData
-                {
-                    Image = bmp,
-                    MuraCurveMean = curveMean,
-                    MuraCurveMax = curveMax,
-                    MuraRowCurveMean = rowCurveMean,
-                    MuraRowCurveMax = rowCurveMax,
-                    IsCompressedJpeg = false,
-                    ScaleFactor = 1
-                };
-            }
+            return null;
         }
 
         /// <summary>從 _raw.jpg 讀取縮圖（不含處理結果），用於批次縮圖牆。</summary>
@@ -619,6 +425,25 @@ namespace AniloxRoll.Monitor.Core.Services
                     for (int i = 0; i < len; i++)
                         arr[i] = br.ReadSingle();
                     return arr;
+                }
+            }
+            catch { return null; }
+        }
+
+        internal static (int Light, float ExposureUs)? ReadBgBinMeta(string path)
+        {
+            if (!File.Exists(path)) return null;
+            try
+            {
+                using (var br = new BinaryReader(File.OpenRead(path)))
+                {
+                    byte[] magic = br.ReadBytes(4);
+                    if (magic[0] != 'M' || magic[1] != 'C' || magic[2] != 'B' || magic[3] != 'F') return null;
+                    if (br.ReadInt32() < 2) return null; // version
+                    br.ReadSingle();                     // scale_factor
+                    int light = br.ReadInt32();
+                    float exposureUs = br.ReadSingle();
+                    return (light, exposureUs);
                 }
             }
             catch { return null; }

@@ -187,31 +187,21 @@ namespace AniloxRoll.Monitor.UI.Widgets
         internal static Bitmap LoadCameraImage(string path, int bmpResizeScale,
             Func<string, Bitmap> bmpLoader, bool useProcessed, string ridgeDirection = "v")
         {
-            if (path.EndsWith("_raw.jpg", StringComparison.OrdinalIgnoreCase))
+            if (!path.EndsWith("_raw.jpg", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            string loadPath = path;
+            if (useProcessed)
             {
-                string loadPath = path;
-                if (useProcessed)
-                {
-                    string baseName = path.Substring(0, path.Length - "_raw.jpg".Length);
-                    string procSuffix = (ridgeDirection == "h") ? "_proc_h.jpg" : "_proc_v.jpg";
-                    string procPath = baseName + procSuffix;
-                    if (!File.Exists(procPath)) procPath = baseName + "_proc.jpg"; // 向後相容
-                    if (File.Exists(procPath)) loadPath = procPath;
-                }
-                byte[] bytes = File.ReadAllBytes(loadPath);
-                using (var ms = new MemoryStream(bytes))
-                    return new Bitmap(ms);
+                string baseName = path.Substring(0, path.Length - "_raw.jpg".Length);
+                string procSuffix = (ridgeDirection == "h") ? "_proc_h.jpg" : "_proc_v.jpg";
+                string procPath = baseName + procSuffix;
+                if (!File.Exists(procPath)) procPath = baseName + "_proc.jpg";
+                if (File.Exists(procPath)) loadPath = procPath;
             }
-
-            // BMP：優先用 bmpLoader（CoreCV_FastReadBMP + GPU resize），fallback GDI+
-            Bitmap resized = bmpLoader != null
-                ? bmpLoader(path)
-                : LoadGdiBmpResized(path, bmpResizeScale);
-
-            if (resized == null) return null;
-
-            // 縮小後重新以 JPEG 95% 編碼再解碼，對齊 _raw.jpg 的視覺品質
-            return ReencodeAsJpeg(resized, 95);
+            byte[] bytes = File.ReadAllBytes(loadPath);
+            using (var ms = new MemoryStream(bytes))
+                return new Bitmap(ms);
         }
 
         /// <summary>GDI+ fallback：當 bmpLoader 為 null 時使用。</summary>

@@ -27,10 +27,7 @@ namespace AniloxRoll.Monitor.Core.Data
             _metadataCache.Clear();
             if (!Directory.Exists(rootPath)) return;
 
-            // 同時掃描新格式（*_raw.jpg）與舊格式（*.bmp），合併後由 ParsePath 統一解析
-            var files = Directory.GetFiles(rootPath, "*_raw.jpg", SearchOption.AllDirectories)
-                .Concat(Directory.GetFiles(rootPath, "*.bmp", SearchOption.AllDirectories))
-                .ToArray();
+            var files = Directory.GetFiles(rootPath, "*_raw.jpg", SearchOption.AllDirectories);
 
             _metadataCache = files.AsParallel()
                 .Select(f =>
@@ -142,8 +139,6 @@ namespace AniloxRoll.Monitor.Core.Data
             catch { return null; }
         }
 
-        // 查詢特定時間點的所有相機圖片（s 格式為 "ss.fff"）
-        // 同一相機同時存在 JPG 與 BMP 時，優先回傳 JPG（讀取速度較快）
         public Dictionary<int, string> GetImages(string y, string m, string d, string h, string min, string sFff)
         {
             string sec = sFff, ms = "";
@@ -157,12 +152,6 @@ namespace AniloxRoll.Monitor.Core.Data
             {
                 if (x.Year != y || x.Month != m || x.Day != d || x.Hour != h || x.Minute != min || x.Second != sec || x.Millisecond != ms)
                     continue;
-                // JPG 優先：若已有 JPG 不被 BMP 覆寫；若已有 BMP 可被 JPG 覆寫
-                if (result.TryGetValue(x.CameraId, out string existing))
-                {
-                    bool existingIsJpg = existing.EndsWith("_raw.jpg", StringComparison.OrdinalIgnoreCase);
-                    if (existingIsJpg) continue; // 已是 JPG，不覆寫
-                }
                 result[x.CameraId] = x.FullPath;
             }
             return result;

@@ -306,13 +306,15 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="out-par">
 <div class="box output">監控主畫面：停止更新（保留最後一幀）</div>
 <div class="box output">【停止抓取】→ 文字改為「開始抓取」</div>
-<div class="box output">【取得背景】：恢復可操作</div>
+<div class="box output">【取得背景】：光源已連線（或停用）時恢復可操作，否則維持灰色</div>
 <div class="box output">【預覽背景】：恢復可操作</div>
 </div>
 <details class="subflow dev">
 <summary>UpdateStandardBgSubLockState</summary>
 <div class="vflow" style="align-items:flex-start; padding:8px 0 8px 16px; border-left:2px solid #e65100;">
-<div class="box action" style="font-size:0.82em">依 .bin 背景檔案存在狀態重新檢查按鈕啟用/禁用</div>
+<div class="box action" style="font-size:0.82em">依 .bin 背景檔案 + 光源連線狀態重新檢查按鈕啟用/禁用</div>
+<div class="v-arrow"></div>
+<div class="box action" style="font-size:0.82em">【取得背景】：光源已連線（或 LightEnabled = false）→ 啟用；否則禁用</div>
 <div class="v-arrow"></div>
 <div class="box action" style="font-size:0.82em">所有已連線相機都有 .bin → 【開始抓取】啟用</div>
 <div class="v-arrow"></div>
@@ -454,7 +456,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box output">監控主畫面：顯示處理圖（下一幀生效）</div>
 <div class="box output">監控切向曲線圖/監控法向曲線圖：背景色高亮（藍）</div>
 </div>
-<div class="note">也可點擊監控曲線圖觸發（三態切換自動開關此設定）。設定值持久化於 JSON，下次開程式自動套用。</div>
+<div class="note">也可點擊監控曲線圖觸發（三態切換自動開關此設定）。設定值持久化於 JSON；開程式時若為 True，InitUiLayer 末尾呼叫 UpdateLiveDirectionVisual 預先上底色（方向為 _liveDisplayDirection 預設 "v"）。</div>
 </div>
 <div class="flow-group vflow">
 <div class="flow-title">監控切向曲線圖/監控法向曲線圖 點擊 → 三態切換</div>
@@ -468,12 +470,15 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 </div>
 <div class="v-arrow"></div>
 <div class="box action">① 未勾選→自動勾選+設方向 ② 同方向→取消勾選 ③ 不同方向→切換</div>
+<div class="note dev">EnableMuraEnhance 變更後呼叫 <code>RefreshPropertyGridKeepScroll()</code>：以 <code>WM_SETREDRAW=0</code> 凍結 PropertyGridView → <code>propertyGridSettings.Refresh()</code> → 直接還原 <code>VScrollBar.Value</code>（PropertyGridView 用 child VScrollBar 而非 window standard scrollbar，<code>GetScrollPos(gridView.Handle)</code> 永遠回傳 0，必須遍歷 Controls 取 VScrollBar）→ 解凍 + Invalidate()，避免 Refresh() 內部 scroll-to-selected 跳位。</div>
 </div>
 <div class="flow-group vflow">
 <div class="flow-title">取得背景 <code>btnGetBackground</code></div>
 <div class="box input">按下【取得背景】</div>
 <div class="v-arrow"></div>
 <div class="box guard">Guard：Algorithm = StandardBgSub 才可執行</div>
+<div class="v-arrow"></div>
+<div class="box guard">Guard：光源連線（LightEnabled = false 時豁免）</div>
 <div class="v-arrow"></div>
 <div class="box action">自動開燈（LightTurnOn）</div>
 <div class="v-arrow dev"></div>
@@ -844,6 +849,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 </div>
 <div class="v-arrow"></div>
 <div class="box guard">_processedCheckboxGuard 防程式碼設定時觸發</div>
+<div class="note">開程式時若為 True，InitUiLayer 末尾呼叫 UpdateRidgeDirectionVisual 預先上底色（方向為 ActiveRidgeDirection 預設 "v"）。</div>
 </div>
 <div class="flow-group vflow">
 <div class="flow-title">回顧切向曲線圖/回顧法向曲線圖 點擊 → 三態切換</div>
@@ -857,6 +863,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 </div>
 <div class="v-arrow"></div>
 <div class="box action">① 未勾選→自動勾選+設方向 ② 同方向→取消勾選 ③ 不同方向→切換</div>
+<div class="note dev">同 監控曲線圖，呼叫 <code>RefreshPropertyGridKeepScroll()</code> 避免 PropertyGrid 捲軸跳位（同上機制）。</div>
 </div>
 <div class="flow-group vflow">
 <div class="flow-title">回顧主畫面手勢</div>

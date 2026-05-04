@@ -130,42 +130,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                         {
                             try
                             {
-                                bool isBmp = paths[0].EndsWith(".bmp", StringComparison.OrdinalIgnoreCase);
-
-                                if (enableProcess && isBmp && inspSvc != null)
-                                {
-                                    string capturedDir = ridgeDir;
-                                    Func<string, Bitmap> procLoader = (p) =>
-                                    {
-                                        var bmp = inspSvc.ProcessBmpAtScale(p, scale,
-                                            out float[] m, out float[] x);
-                                        if (capturedDir == "h" && bmp != null)
-                                        {
-                                            string baseName = System.IO.Path.Combine(
-                                                System.IO.Path.GetDirectoryName(p),
-                                                System.IO.Path.GetFileNameWithoutExtension(p));
-                                            string procH = baseName + "_proc_h.jpg";
-                                            if (System.IO.File.Exists(procH))
-                                            {
-                                                bmp.Dispose();
-                                                byte[] bytes = System.IO.File.ReadAllBytes(procH);
-                                                using (var ms = new System.IO.MemoryStream(bytes))
-                                                    return new Bitmap(ms);
-                                            }
-                                        }
-                                        return bmp;
-                                    };
-                                    imgs[i] = GrabImageStitcher.StitchCamera(paths, scale, procLoader,
-                                        ridgeDirection: ridgeDir);
-                                }
-                                else
-                                {
-                                    Func<string, Bitmap> bmpLoader = inspSvc != null
-                                        ? (Func<string, Bitmap>)(p => inspSvc.LoadBmpAtScale(p, scale))
-                                        : null;
-                                    imgs[i] = GrabImageStitcher.StitchCamera(paths, scale, bmpLoader,
-                                        useProcessed: enableProcess, ridgeDirection: ridgeDir);
-                                }
+                                imgs[i] = GrabImageStitcher.StitchCamera(paths, scale, null,
+                                    useProcessed: enableProcess, ridgeDirection: ridgeDir);
                                 CurveMergeHelper.MergeCurves(paths, out newCurveMean[i], out newCurveMax[i]);
                                 CurveMergeHelper.MergeRowCurves(paths, out newRowCurveMean[i], out newRowCurveMax[i]);
                             }

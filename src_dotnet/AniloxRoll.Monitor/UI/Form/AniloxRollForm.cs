@@ -111,6 +111,9 @@ namespace AniloxRoll.Monitor.Forms
         private bool IsStandardBgSubEnabled =>
             _settings?.Recipe?.Algorithm == BackgroundAlgorithm.StandardBgSub;
 
+        private bool IsLightReadyForBg =>
+            !(_settings?.LightEnabled == true) || (_lightController != null && _lightController.IsConnected);
+
         /// <summary>"v" = vertical ridge（預設），"h" = horizontal ridge。控制 Live 顯示方向。</summary>
         private string _liveDisplayDirection = "v";
 
@@ -403,6 +406,8 @@ namespace AniloxRoll.Monitor.Forms
                 lblLightConn.Text = "● 光源 離線";
                 lblLightConn.BackColor = IecGray;
             }
+
+            UpdateStandardBgSubLockState();
         }
 
         private int _storageProbeTickCounter;
@@ -751,6 +756,9 @@ namespace AniloxRoll.Monitor.Forms
                     _interactionHelper?.SetCanvasPhysicalMag1x(e.Location);
                 }
             };
+
+            UpdateLiveDirectionVisual(_settings.EnableMuraEnhance ? _liveDisplayDirection : null);
+            UpdateRidgeDirectionVisual(_settings.EnableReviewEnhance ? _stitchCoordinator.ActiveRidgeDirection : null);
         }
 
         /// <summary>相機層：LiveCameraManager 與 FormClosed 清理。</summary>
@@ -1380,6 +1388,19 @@ namespace AniloxRoll.Monitor.Forms
                     }
                 }
             }
+
+            UpdateViewBackgroundButtonText();
+        }
+
+        private void UpdateViewBackgroundButtonText()
+        {
+            string bgDir = _settings.Storage.BackgroundPath;
+            string[] bins = Directory.Exists(bgDir) ? Directory.GetFiles(bgDir, "bg_*.bin") : Array.Empty<string>();
+            if (bins.Length == 0) { lblBgBinInfo.Text = ""; return; }
+            var meta = InspectionEngine.ReadBgBinMeta(bins[0]);
+            lblBgBinInfo.Text = meta.HasValue
+                ? $"光源{meta.Value.Light} 曝光{(int)meta.Value.ExposureUs}us"
+                : "";
         }
 
         /// <summary>釋放所有相機的 PrecomputedColMean pinned buffer。</summary>
@@ -1406,9 +1427,9 @@ namespace AniloxRoll.Monitor.Forms
 
             if (!IsStandardBgSubEnabled)
             {
-                // 非 StandardBgSub：正常解鎖
+                // 非 StandardBgSub：正常解鎖（仍需光源就緒）
                 btnCameraGrab.Enabled = true;
-                btnGetBackground.Enabled = true;
+                btnGetBackground.Enabled = IsLightReadyForBg;
                 return;
             }
 
@@ -1431,7 +1452,7 @@ namespace AniloxRoll.Monitor.Forms
                 allConnectedHaveBin = Directory.Exists(bgDir) && Directory.GetFiles(bgDir, "bg_*.bin").Length > 0;
             }
 
-            btnGetBackground.Enabled = true;
+            btnGetBackground.Enabled = IsLightReadyForBg;
             btnCameraGrab.Enabled = allConnectedHaveBin;
         }
 
@@ -2872,7 +2893,7 @@ namespace AniloxRoll.Monitor.Forms
                 _liveDisplayDirection = dir;
                 _settings.EnableMuraEnhance = true;
                 ApplyMuraEnhance(true);
-                propertyGridSettings.Refresh();
+                RefreshPropertyGridKeepScroll();
                 return;
             }
 
@@ -2880,7 +2901,7 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _settings.EnableMuraEnhance = false;
                 ApplyMuraEnhance(false);
-                propertyGridSettings.Refresh();
+                RefreshPropertyGridKeepScroll();
                 return;
             }
 
@@ -2912,7 +2933,7 @@ namespace AniloxRoll.Monitor.Forms
                 _interactionHelper.SetRidgeDirection(dir);
                 UpdateRidgeDirectionVisual(dir);
                 _settings.EnableReviewEnhance = true;
-                propertyGridSettings.Refresh();
+                RefreshPropertyGridKeepScroll();
                 _ = ApplyReviewEnhance(true);
                 return;
             }
@@ -2921,7 +2942,7 @@ namespace AniloxRoll.Monitor.Forms
             {
                 UpdateRidgeDirectionVisual(null);
                 _settings.EnableReviewEnhance = false;
-                propertyGridSettings.Refresh();
+                RefreshPropertyGridKeepScroll();
                 _ = ApplyReviewEnhance(false);
                 return;
             }
@@ -2958,6 +2979,46 @@ namespace AniloxRoll.Monitor.Forms
             if (chartMuraHorizontal != null)
                 chartMuraHorizontal.BackColor = (dir == "h")
                     ? System.Drawing.Color.FromArgb(230, 240, 255) : System.Drawing.SystemColors.Control;
+        }
+
+        private void RefreshPropertyGridKeepScroll()
+        {
+            const int WM_SETREDRAW = 0x000B;
+
+            // 找 PropertyGridView（內部 GridView 控制項）
+            Control gridView = null;
+            foreach (Control c in propertyGridSettings.Controls)
+                if (c.GetType().Name == "PropertyGridView") { gridView = c; break; }
+
+            if (gridView == null) { propertyGridSettings.Refresh(); return; }
+
+            // PropertyGridView 用的是 VScrollBar child control，不是 window standard scrollbar。
+            // GetScrollPos(gridView.Handle, SB_VERT) 始終回傳 0；必須直接讀 VScrollBar.Value。
+            System.Windows.Forms.ScrollBar scrollBar = null;
+            foreach (Control c in gridView.Controls)
+                if (c is System.Windows.Forms.VScrollBar)
+                    { scrollBar = (System.Windows.Forms.VScrollBar)c; break; }
+
+            int scrollPos = scrollBar?.Value ?? 0;
+
+            // 凍結重繪 → Refresh() 期間 scroll-to-selected 只改內部狀態，不觸發 OnPaint
+            NativeMethods.SendMessage(gridView.Handle, WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);
+            try
+            {
+                propertyGridSettings.Refresh();
+                // 直接設 scrollBar.Value：比 SendMessage 更可靠，確保 topRow 同步更新
+                if (scrollBar != null)
+                {
+                    int max = Math.Max(0, scrollBar.Maximum - scrollBar.LargeChange + 1);
+                    scrollBar.Value = Math.Max(0, Math.Min(scrollPos, max));
+                }
+            }
+            finally
+            {
+                // 解凍並觸發一次 repaint（scroll 已在正確位置）
+                NativeMethods.SendMessage(gridView.Handle, WM_SETREDRAW, new IntPtr(1), IntPtr.Zero);
+                gridView.Invalidate(true);
+            }
         }
 
         // ── TrackBar 滾輪：每格僅移動 1 ──────────────────────────────────
