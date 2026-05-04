@@ -227,6 +227,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             area.AxisY2.Minimum            = 0;
             area.AxisY2.Interval           = 0.2;
             area.AxisY2.LabelStyle.Format  = "F1";
+            area.AxisY2.LabelStyle.Angle   = 0;
+            area.AxisY2.IsLabelAutoFit     = false;
             area.AxisY2.MajorGrid.Enabled  = false;
 
             return area;

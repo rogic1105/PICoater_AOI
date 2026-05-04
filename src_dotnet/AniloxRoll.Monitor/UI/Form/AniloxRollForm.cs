@@ -1227,10 +1227,11 @@ namespace AniloxRoll.Monitor.Forms
                 }
             }
 
-            // 確保 grab 中
+            // 確保 grab 中，同步開燈
             if (!_liveCameraManager.IsLiveGrabbing)
             {
                 _liveCameraManager.ToggleGrab();
+                LightTurnOn();
                 UpdateGrabButton(true);
             }
 
@@ -1295,7 +1296,7 @@ namespace AniloxRoll.Monitor.Forms
                         avgColMean[c] = (float)(accum[i][c] * invN);
 
                     string binPath = Path.Combine(bgDir, $"bg_{cam.FrameWidth}_{cam.CameraId}.bin");
-                    SaveBackgroundBin(avgColMean, binPath);
+                    SaveBackgroundBin(avgColMean, binPath, _settings.LightBrightness, (float)cam.CameraExposureTimeUs); // LightBrightness = light controller level (0-255)
                 }
 
                 // 載入到各相機
@@ -1314,6 +1315,7 @@ namespace AniloxRoll.Monitor.Forms
                 if (_liveCameraManager.IsLiveGrabbing)
                 {
                     _liveCameraManager.ToggleGrab();
+                    LightTurnOff();
                     UpdateGrabButton(false);
                 }
 
@@ -1325,15 +1327,17 @@ namespace AniloxRoll.Monitor.Forms
             btnViewBackground_Click(btnViewBackground, EventArgs.Empty);
         }
 
-        /// <summary>MCBF 格式存 background column mean。</summary>
-        private static void SaveBackgroundBin(float[] data, string path)
+        /// <summary>MCBF v2 格式存 background column mean（含光源等級與曝光時間）。</summary>
+        private static void SaveBackgroundBin(float[] data, string path, int lightLevel, float exposureUs)
         {
             using (var bw = new BinaryWriter(File.Open(path, FileMode.Create, FileAccess.Write)))
             {
                 bw.Write(new byte[] { (byte)'M', (byte)'C', (byte)'B', (byte)'F' });
-                bw.Write(1);                    // version
+                bw.Write(2);                    // version 2
                 bw.Write(1.0f);                 // scale_factor (1 = 全解析度)
-                bw.Write(data.Length);           // array_length
+                bw.Write(lightLevel);           // light controller level (0-255)
+                bw.Write(exposureUs);           // camera exposure (µs)
+                bw.Write(data.Length);          // array_length
                 foreach (float v in data) bw.Write(v);
             }
         }

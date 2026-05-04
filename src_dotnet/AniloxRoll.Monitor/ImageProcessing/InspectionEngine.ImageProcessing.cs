@@ -607,8 +607,13 @@ namespace AniloxRoll.Monitor.Core.Services
                     byte[] magic = br.ReadBytes(4);
                     if (magic[0] != 'M' || magic[1] != 'C' || magic[2] != 'B' || magic[3] != 'F')
                         return null;
-                    br.ReadInt32();    // version
-                    br.ReadSingle();   // scale_factor（保存供日後使用）
+                    int version = br.ReadInt32();
+                    br.ReadSingle();   // scale_factor
+                    if (version >= 2)
+                    {
+                        br.ReadInt32();  // lightLevel (light controller 0-255)
+                        br.ReadSingle(); // exposureUs
+                    }
                     int len = br.ReadInt32();
                     float[] arr = new float[len];
                     for (int i = 0; i < len; i++)

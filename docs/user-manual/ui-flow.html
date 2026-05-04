@@ -472,14 +472,25 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="flow-group vflow">
 <div class="flow-title">取得背景 <code>btnGetBackground</code></div>
 <div class="box input">按下【取得背景】</div>
+<div class="v-arrow"></div>
+<div class="box guard">Guard：Algorithm = StandardBgSub 才可執行</div>
+<div class="v-arrow"></div>
+<div class="box action">自動開燈（LightTurnOn）</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">採集 N 秒 → 平均 column mean → 存 .bin</div>
+<div class="box action dev">ToggleGrab（若未 grab）→ 採集 N 秒 → 平均 column mean</div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">按鈕文字倒數「採集中 Ns」</div>
+</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">SaveBackgroundBin v2：magic(MCBF) + version(2) + scale_factor(1.0f) + lightLevel(int32, 光源控制器等級 0-255) + exposureUs(float, µs) + array_length + float[]</div>
+<div class="v-arrow"></div>
+<div class="box action">自動關燈（LightTurnOff）</div>
+<div class="v-arrow"></div>
+<div class="out-par">
 <div class="box output">完成後自動觸發【預覽背景】</div>
 </div>
-<div class="note dev">需先在檢測設定選擇 Algorithm = StandardBgSub</div>
+<div class="note">亮度（光源設定 &gt; 亮度）與曝光時間（相機參數）會一起存入背景檔；若事後調整這兩個參數，需重新取背景。</div>
 </div>
 <div class="flow-group vflow">
 <div class="flow-title">預覽背景 <code>btnViewBackground</code>（Toggle）</div>
