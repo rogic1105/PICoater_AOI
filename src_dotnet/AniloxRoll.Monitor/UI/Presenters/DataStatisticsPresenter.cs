@@ -627,10 +627,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     if (d.CamResult[i] == null)
                         item.SubItems.Add("—");
                     else if (d.CamResult[i] == false)
-                        item.SubItems.Add("Pass");
+                        item.SubItems.Add("○");
                     else
                     {
-                        item.SubItems.Add("Fail");
+                        item.SubItems.Add("×");
                         rowHasFail = true;
                     }
                 }
@@ -640,9 +640,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
 
             lv.EndUpdate();
+            lv.AutoResizeColumns(ColumnHeaderAutoResizeStyle.ColumnContent);
         }
 
-        public static void FitListViewColumnsProportional(ListView lv)
+        public static void FitListViewColumnsProportional(ListView lv, bool useContent = false)
         {
             if (lv.Columns.Count == 0) return;
             int available = lv.ClientSize.Width - SystemInformation.VerticalScrollBarWidth;
@@ -655,6 +656,16 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 for (int i = 0; i < lv.Columns.Count; i++)
                 {
                     float w = g.MeasureString(lv.Columns[i].Text + "WW", lv.Font).Width;
+                    if (useContent)
+                    {
+                        foreach (ListViewItem item in lv.Items)
+                        {
+                            string text = i == 0 ? item.Text
+                                        : i < item.SubItems.Count ? item.SubItems[i].Text : "";
+                            float cw = g.MeasureString(text + "WW", lv.Font).Width;
+                            if (cw > w) w = cw;
+                        }
+                    }
                     weights[i] = w;
                     totalWeight += w;
                 }
@@ -744,7 +755,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private void BtnShowFail_Click(object sender, EventArgs e)
         {
             _showFailOnly = !_showFailOnly;
-            _ctx.BtnShowFail.Text = _showFailOnly ? "顯示全部" : "篩選異常";
+            _ctx.BtnShowFail.Text = _showFailOnly ? "○ 顯示全部" : "△ 顯示異常";
             _ctx.BtnShowFail.BackColor = _showFailOnly
                 ? Color.FromArgb(255, 235, 238)
                 : SystemColors.Control;
@@ -832,7 +843,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             area.AxisX.IsMarginVisible = false;
             area.AxisX.Interval = 1;
             area.AxisX.LabelStyle.Angle = xLabelAngle;
-            area.AxisX.LabelStyle.Font = new Font("Arial", 5f);
+            area.AxisX.IsLabelAutoFit = false;
+            area.AxisX.LabelStyle.Font = new Font("Arial", 10f);
             area.AxisY.LineColor = Color.Transparent;
             area.AxisY.MajorGrid.Enabled = false;
             area.AxisY.MajorTickMark.Enabled = false;

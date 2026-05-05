@@ -21,7 +21,8 @@ namespace AniloxRoll.Monitor.UI.Managers
         private List<CameraHardwareConfig> _cameraHardwareConfigs;
         private Dictionary<int, MIL_ID> _allocatedSystems = new Dictionary<int, MIL_ID>();
 
-        private readonly Dictionary<int, Panel> _liveViewPanels  = new Dictionary<int, Panel>();
+        private readonly Dictionary<int, Panel> _liveViewPanels    = new Dictionary<int, Panel>();
+        private readonly Dictionary<int, Panel> _liveParentPanels  = new Dictionary<int, Panel>();
         private readonly Dictionary<int, Label> _cameraStatusLabels = new Dictionary<int, Label>();
 
         private Timer _cameraStatusTimer;
@@ -125,6 +126,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private void SetupLivePanel(Panel parentPanel, int cameraIndex)
         {
             parentPanel.BackColor = Color.Black;
+            parentPanel.Padding   = new Padding(2);
             parentPanel.Controls.Clear();
 
             var displayPanel = new Panel
@@ -140,17 +142,19 @@ namespace AniloxRoll.Monitor.UI.Managers
                 ForeColor = Color.DarkGray,
                 BackColor = Color.FromArgb(32, 32, 32),
                 TextAlign = ContentAlignment.MiddleCenter,
-                Font      = new Font("Segoe UI", 7.5f, FontStyle.Bold)
+                Font      = new Font("Segoe UI", 10f, FontStyle.Regular)
             };
 
             displayPanel.MouseClick += (s, e) => SwitchMainDisplay(cameraIndex);
             status.MouseClick       += (s, e) => SwitchMainDisplay(cameraIndex);
+            parentPanel.Paint       += (s, e) => OnLivePanelPaint(s, e, cameraIndex);
 
             parentPanel.Controls.Add(displayPanel);
             parentPanel.Controls.Add(status);
             displayPanel.BringToFront();
 
             _liveViewPanels[cameraIndex]     = displayPanel;
+            _liveParentPanels[cameraIndex]   = parentPanel;
             _cameraStatusLabels[cameraIndex] = status;
         }
 
@@ -495,6 +499,19 @@ namespace AniloxRoll.Monitor.UI.Managers
             cam?.ResetSecondaryDisplayView();
         }
 
+        private void OnLivePanelPaint(object sender, PaintEventArgs e, int cameraIndex)
+        {
+            if (!(sender is Panel panel)) return;
+            bool isSelected = cameraIndex == _selectedMainCameraId;
+            Color borderColor = isSelected ? Color.Orange : Color.FromArgb(60, 60, 60);
+            int   borderWidth = isSelected ? 3 : 1;
+            ControlPaint.DrawBorder(e.Graphics, panel.ClientRectangle,
+                borderColor, borderWidth, ButtonBorderStyle.Solid,
+                borderColor, borderWidth, ButtonBorderStyle.Solid,
+                borderColor, borderWidth, ButtonBorderStyle.Solid,
+                borderColor, borderWidth, ButtonBorderStyle.Solid);
+        }
+
         private void SwitchMainDisplay(int cameraIndex)
         {
             if (_mainForm.InvokeRequired)
@@ -505,12 +522,8 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             _selectedMainCameraId = cameraIndex;
 
-            foreach (var kvp in _cameraStatusLabels)
-            {
-                kvp.Value.BackColor = (kvp.Key == cameraIndex)
-                    ? Color.PapayaWhip
-                    : Color.FromArgb(32, 32, 32);
-            }
+            foreach (var kvp in _liveParentPanels)
+                kvp.Value.Invalidate();
 
             // Global merge 時主畫面由合併 display 控制，不切換單台
             if (IsGlobalMergeActive) return;
@@ -1009,13 +1022,12 @@ namespace AniloxRoll.Monitor.UI.Managers
                 if (isConnected && cam.UserWantsGrab && !cam.IsLive)
                     cam.ApplyGrabState();
 
-                string fpsText    = cam.IsLive ? $" | FPS: {cam.CurrentFps:F1}" : "";
                 string statusText = isConnected
-                    ? (cam.IsLive ? $"Live{fpsText}" : "Ready")
-                    : "Offline";
+                    ? (cam.IsLive ? $"FPS: {cam.CurrentFps:F1}" : "就緒")
+                    : "斷線";
                 Color color = isConnected
-                    ? (cam.IsLive ? Color.Green : Color.Yellow)
-                    : Color.Red;
+                    ? (cam.IsLive ? Color.LightGreen : Color.Yellow)
+                    : Color.Pink;
 
                 UpdateSingleCameraStatus(cam.CameraId, statusText, color);
             }

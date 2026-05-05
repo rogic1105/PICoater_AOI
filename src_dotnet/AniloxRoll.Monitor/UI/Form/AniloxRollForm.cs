@@ -380,7 +380,7 @@ namespace AniloxRoll.Monitor.Forms
                 case IoState.Closed:    text = "已關閉";   bgColor = IecGray;   break;
                 default:                text = "未連線";   bgColor = IecGray;   break;  // Disconnected
             }
-            lblPlcState.Text = $"● {text}";
+            lblPlcState.Text = $"〔{text}〕";
             lblPlcState.BackColor = bgColor;
         }
 
@@ -593,6 +593,10 @@ namespace AniloxRoll.Monitor.Forms
 
         private static void SetIoLed(Label lbl, bool on)
         {
+            string[] parts = lbl.Text.Split(new[] { "\r\n" }, StringSplitOptions.None);
+            string id   = parts[0].TrimStart('◎', '×', ' ');
+            string name = parts.Length > 1 ? parts[1] : "";
+            lbl.Text = (on ? "◎ " : "× ") + id + "\r\n" + name;
             lbl.BackColor = on ? IecGreen : IecDarkGray;
         }
 
@@ -602,13 +606,13 @@ namespace AniloxRoll.Monitor.Forms
             {
                 lblIoDoMura.BackColor = IecYellow;
                 lblIoDoMura.ForeColor = Color.Black;
-                lblIoDoMura.Text = "DO1\r\nMURA ⏸";
+                lblIoDoMura.Text = "⏸ DO1\r\nMURA_DET";
             }
             else
             {
                 lblIoDoMura.BackColor = doMuraOn ? IecGreen : IecDarkGray;
                 lblIoDoMura.ForeColor = Color.White;
-                lblIoDoMura.Text = "DO1\r\nMURA_DET";
+                lblIoDoMura.Text = (doMuraOn ? "◎ " : "× ") + "DO1\r\nMURA_DET";
             }
         }
 
@@ -1822,7 +1826,7 @@ namespace AniloxRoll.Monitor.Forms
                 btnCameraGrab.BackColor = SystemColors.Control;
                 btnCameraGrab.ForeColor = SystemColors.ControlText;
                 // 暫停 = 等同 IO 離線：重置狀態燈和所有 IO 燈號
-                lblPlcState.Text = "● 已關閉";
+                lblPlcState.Text = "〔已關閉〕";
                 lblPlcState.BackColor = IecGray;
                 SetIoLed(lblIoDiAlive,   false);
                 SetIoLed(lblIoDiStart,   false);
