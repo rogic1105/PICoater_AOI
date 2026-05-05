@@ -63,7 +63,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
             for (int i = 0; i < n; i++)
             {
-                double yMm = i * _rowPitchMm;
+                double yMm = (n - 1 - i) * _rowPitchMm;
                 double xMean = meanData[i] / 255.0;
                 meanSeries.Points.AddXY(xMean, yMm);
                 if (maxData != null && i < maxData.Length)

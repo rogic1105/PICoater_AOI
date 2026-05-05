@@ -114,6 +114,26 @@ namespace AniloxRoll.Monitor.Forms
         private bool IsLightReadyForBg =>
             !(_settings?.LightEnabled == true) || (_lightController != null && _lightController.IsConnected);
 
+        private bool _autoStartGrabAfterBg;
+
+        private bool IsBgBinReady()
+        {
+            if (!IsStandardBgSubEnabled) return true;
+            string bgDir = _settings.Storage.BackgroundPath;
+            if (_liveCameraManager?.IsAllocated == true)
+            {
+                foreach (var cam in _liveCameraManager.Cameras)
+                {
+                    if (!cam.IsConnected) continue;
+                    if (cam.FrameWidth <= 0) continue;
+                    string binPath = Path.Combine(bgDir, $"bg_{cam.FrameWidth}_{cam.CameraId}.bin");
+                    if (!File.Exists(binPath)) return false;
+                }
+                return true;
+            }
+            return Directory.Exists(bgDir) && Directory.GetFiles(bgDir, "bg_*.bin").Length > 0;
+        }
+
         /// <summary>"v" = vertical ridge（預設），"h" = horizontal ridge。控制 Live 顯示方向。</summary>
         private string _liveDisplayDirection = "v";
 
@@ -301,6 +321,13 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (_isIoSuspended) return;
             if (_liveCameraManager == null || _liveCameraManager.IsLiveGrabbing) return;
+            if (IsStandardBgSubEnabled && !IsBgBinReady())
+            {
+                System.Diagnostics.Trace.TraceWarning("[PlcStartGrab] StandardBgSub 無背景 bin，自動取得背景後接續 grab");
+                _autoStartGrabAfterBg = true;
+                btnGetBackground_Click(null, null);
+                return;
+            }
             btnCameraGrab_Click(null, null);
             _ = _plcGrabController?.NotifyGrabStarted();
         }
@@ -887,7 +914,7 @@ namespace AniloxRoll.Monitor.Forms
         // --- 相機按鈕事件 ---
         // ==========================================
 
-        private void btnCameraGrab_Click(object sender, EventArgs e)
+        private async void btnCameraGrab_Click(object sender, EventArgs e)
         {
             // 背景預覽中按 Grab → 先清除預覽並 Free，讓 MIL 能重新初始化
             if (_bgPreviewActive)
@@ -898,6 +925,14 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             bool wasGrabbing = _liveCameraManager.IsLiveGrabbing;
+
+            // 啟動路徑：先亮燈 → 等光源穩定 → 再開始 grab
+            if (!wasGrabbing)
+            {
+                LightTurnOn();
+                int warmup = _settings?.LightWarmupMs ?? 0;
+                if (warmup > 0) await Task.Delay(warmup);
+            }
 
             if (!_liveCameraManager.IsAllocated)
             {
@@ -913,6 +948,7 @@ namespace AniloxRoll.Monitor.Forms
                 }
                 catch (Exception ex)
                 {
+                    LightTurnOff();
                     MessageBox.Show($"相機配置失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
@@ -922,10 +958,9 @@ namespace AniloxRoll.Monitor.Forms
                 _liveCameraManager.ToggleGrab();
             }
 
-            // 剛從「未抓取」→「抓取中」：開燈 + 分配新的抓圖編號
+            // 剛從「未抓取」→「抓取中」：分配新的抓圖編號（燈已在上方開啟）
             if (!wasGrabbing && _liveCameraManager.IsLiveGrabbing)
             {
-                LightTurnOn();
                 _currentGrabId = _inspectionLogService.NextGrabId();
             }
 
@@ -1264,11 +1299,13 @@ namespace AniloxRoll.Monitor.Forms
                 }
             }
 
-            // 確保 grab 中，同步開燈
+            // 確保 grab 中，先開燈等穩定再開始
             if (!_liveCameraManager.IsLiveGrabbing)
             {
-                _liveCameraManager.ToggleGrab();
                 LightTurnOn();
+                int warmup = _settings?.LightWarmupMs ?? 0;
+                if (warmup > 0) await Task.Delay(warmup);
+                _liveCameraManager.ToggleGrab();
                 UpdateGrabButton(true);
             }
 
@@ -1357,6 +1394,15 @@ namespace AniloxRoll.Monitor.Forms
                 }
 
                 UpdateStandardBgSubLockState();
+            }
+
+            if (_autoStartGrabAfterBg)
+            {
+                _autoStartGrabAfterBg = false;
+                _liveCameraManager.FreeCameras();
+                btnCameraGrab_Click(null, null);
+                _ = _plcGrabController?.NotifyGrabStarted();
+                return;
             }
 
             // 採集完成後直接預覽（先清除舊預覽，確保每次都重新開啟）
@@ -1464,27 +1510,8 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
 
-            // 檢查已連線的相機是否都有對應的 bg bin
-            string bgDir = _settings.Storage.BackgroundPath;
-            bool allConnectedHaveBin = true;
-            if (_liveCameraManager?.IsAllocated == true)
-            {
-                foreach (var cam in _liveCameraManager.Cameras)
-                {
-                    if (!cam.IsConnected) continue; // 斷線相機不考慮
-                    if (cam.FrameWidth <= 0) continue;
-                    string binPath = Path.Combine(bgDir, $"bg_{cam.FrameWidth}_{cam.CameraId}.bin");
-                    if (!File.Exists(binPath)) { allConnectedHaveBin = false; break; }
-                }
-            }
-            else
-            {
-                // 尚未 allocate：檢查目錄下是否有任何 bin
-                allConnectedHaveBin = Directory.Exists(bgDir) && Directory.GetFiles(bgDir, "bg_*.bin").Length > 0;
-            }
-
             btnGetBackground.Enabled = IsLightReadyForBg;
-            btnCameraGrab.Enabled = allConnectedHaveBin;
+            btnCameraGrab.Enabled = IsBgBinReady();
         }
 
         // --- 背景預覽狀態 ---

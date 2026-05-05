@@ -656,7 +656,7 @@
             this.grpReviewTimePeriod.Size = new System.Drawing.Size(119, 102);
             this.grpReviewTimePeriod.TabIndex = 56;
             this.grpReviewTimePeriod.TabStop = false;
-            this.grpReviewTimePeriod.Text = "時序範圍";
+            this.grpReviewTimePeriod.Text = "時序選擇";
             // 
             // cbDate
             // 
@@ -890,7 +890,7 @@
             // lblChartMonthlyUnit
             // 
             this.lblChartMonthlyUnit.AutoSize = true;
-            this.lblChartMonthlyUnit.Location = new System.Drawing.Point(993, 447);
+            this.lblChartMonthlyUnit.Location = new System.Drawing.Point(978, 482);
             this.lblChartMonthlyUnit.Name = "lblChartMonthlyUnit";
             this.lblChartMonthlyUnit.Size = new System.Drawing.Size(22, 15);
             this.lblChartMonthlyUnit.TabIndex = 53;
@@ -899,7 +899,7 @@
             // lblChartDailyUnit
             // 
             this.lblChartDailyUnit.AutoSize = true;
-            this.lblChartDailyUnit.Location = new System.Drawing.Point(298, 466);
+            this.lblChartDailyUnit.Location = new System.Drawing.Point(298, 511);
             this.lblChartDailyUnit.Name = "lblChartDailyUnit";
             this.lblChartDailyUnit.Size = new System.Drawing.Size(22, 15);
             this.lblChartDailyUnit.TabIndex = 52;
@@ -908,7 +908,7 @@
             // lblChartYearlyUnit
             // 
             this.lblChartYearlyUnit.AutoSize = true;
-            this.lblChartYearlyUnit.Location = new System.Drawing.Point(298, 266);
+            this.lblChartYearlyUnit.Location = new System.Drawing.Point(298, 285);
             this.lblChartYearlyUnit.Name = "lblChartYearlyUnit";
             this.lblChartYearlyUnit.Size = new System.Drawing.Size(22, 15);
             this.lblChartYearlyUnit.TabIndex = 51;
@@ -957,7 +957,7 @@
             // lblChartNavMonth
             // 
             this.lblChartNavMonth.AutoSize = true;
-            this.lblChartNavMonth.Location = new System.Drawing.Point(993, 347);
+            this.lblChartNavMonth.Location = new System.Drawing.Point(978, 369);
             this.lblChartNavMonth.Name = "lblChartNavMonth";
             this.lblChartNavMonth.Size = new System.Drawing.Size(22, 15);
             this.lblChartNavMonth.TabIndex = 42;
@@ -967,7 +967,7 @@
             // 
             this.cbChartYear.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.cbChartYear.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbChartYear.Location = new System.Drawing.Point(963, 224);
+            this.cbChartYear.Location = new System.Drawing.Point(963, 230);
             this.cbChartYear.Name = "cbChartYear";
             this.cbChartYear.Size = new System.Drawing.Size(50, 23);
             this.cbChartYear.TabIndex = 43;
@@ -975,7 +975,7 @@
             // lblChartNavDay
             // 
             this.lblChartNavDay.AutoSize = true;
-            this.lblChartNavDay.Location = new System.Drawing.Point(298, 365);
+            this.lblChartNavDay.Location = new System.Drawing.Point(298, 398);
             this.lblChartNavDay.Name = "lblChartNavDay";
             this.lblChartNavDay.Size = new System.Drawing.Size(22, 15);
             this.lblChartNavDay.TabIndex = 41;
@@ -985,7 +985,7 @@
             // 
             this.cbChartMonth.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.cbChartMonth.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbChartMonth.Location = new System.Drawing.Point(962, 321);
+            this.cbChartMonth.Location = new System.Drawing.Point(963, 343);
             this.cbChartMonth.Name = "cbChartMonth";
             this.cbChartMonth.Size = new System.Drawing.Size(50, 23);
             this.cbChartMonth.TabIndex = 46;
@@ -993,7 +993,7 @@
             // lblChartNavYear
             // 
             this.lblChartNavYear.AutoSize = true;
-            this.lblChartNavYear.Location = new System.Drawing.Point(991, 250);
+            this.lblChartNavYear.Location = new System.Drawing.Point(978, 256);
             this.lblChartNavYear.Name = "lblChartNavYear";
             this.lblChartNavYear.Size = new System.Drawing.Size(22, 15);
             this.lblChartNavYear.TabIndex = 40;
@@ -1003,7 +1003,7 @@
             // 
             this.cbChartDay.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.cbChartDay.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbChartDay.Location = new System.Drawing.Point(962, 421);
+            this.cbChartDay.Location = new System.Drawing.Point(963, 456);
             this.cbChartDay.Name = "cbChartDay";
             this.cbChartDay.Size = new System.Drawing.Size(50, 23);
             this.cbChartDay.TabIndex = 49;
@@ -1014,7 +1014,7 @@
             | System.Windows.Forms.AnchorStyles.Right)));
             this.chartYearly.Location = new System.Drawing.Point(296, 195);
             this.chartYearly.Name = "chartYearly";
-            this.chartYearly.Size = new System.Drawing.Size(721, 90);
+            this.chartYearly.Size = new System.Drawing.Size(721, 105);
             this.chartYearly.TabIndex = 38;
             this.chartYearly.Text = "chartYearly";
             // 
@@ -1022,9 +1022,9 @@
             // 
             this.chartMonthly.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.chartMonthly.Location = new System.Drawing.Point(296, 293);
+            this.chartMonthly.Location = new System.Drawing.Point(296, 308);
             this.chartMonthly.Name = "chartMonthly";
-            this.chartMonthly.Size = new System.Drawing.Size(721, 90);
+            this.chartMonthly.Size = new System.Drawing.Size(721, 105);
             this.chartMonthly.TabIndex = 39;
             this.chartMonthly.Text = "chartMonthly";
             // 
@@ -1032,9 +1032,9 @@
             // 
             this.chartDaily.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.chartDaily.Location = new System.Drawing.Point(296, 391);
+            this.chartDaily.Location = new System.Drawing.Point(296, 421);
             this.chartDaily.Name = "chartDaily";
-            this.chartDaily.Size = new System.Drawing.Size(721, 90);
+            this.chartDaily.Size = new System.Drawing.Size(721, 105);
             this.chartDaily.TabIndex = 40;
             this.chartDaily.Text = "chartDaily";
             // 
@@ -1069,7 +1069,7 @@
             this.groupBoxGrabIdRange.Controls.Add(this.cbGrabIdEnd);
             this.groupBoxGrabIdRange.Controls.Add(this.lblGrabIdEndLabel);
             this.groupBoxGrabIdRange.Controls.Add(this.lblGrabIdStartLabel);
-            this.groupBoxGrabIdRange.Location = new System.Drawing.Point(430, 508);
+            this.groupBoxGrabIdRange.Location = new System.Drawing.Point(628, 532);
             this.groupBoxGrabIdRange.Name = "groupBoxGrabIdRange";
             this.groupBoxGrabIdRange.Size = new System.Drawing.Size(176, 92);
             this.groupBoxGrabIdRange.TabIndex = 36;
@@ -1120,9 +1120,9 @@
             this.groupBoxTimeRange.Controls.Add(this.lblEndTimeHeader);
             this.groupBoxTimeRange.Controls.Add(this.cbEndDate);
             this.groupBoxTimeRange.Controls.Add(this.cbEndTime);
-            this.groupBoxTimeRange.Location = new System.Drawing.Point(680, 508);
+            this.groupBoxTimeRange.Location = new System.Drawing.Point(810, 532);
             this.groupBoxTimeRange.Name = "groupBoxTimeRange";
-            this.groupBoxTimeRange.Size = new System.Drawing.Size(297, 92);
+            this.groupBoxTimeRange.Size = new System.Drawing.Size(203, 92);
             this.groupBoxTimeRange.TabIndex = 35;
             this.groupBoxTimeRange.TabStop = false;
             this.groupBoxTimeRange.Text = "時序範圍";
@@ -1130,7 +1130,7 @@
             // lblStartTimeHeader
             // 
             this.lblStartTimeHeader.AutoSize = true;
-            this.lblStartTimeHeader.Location = new System.Drawing.Point(48, 19);
+            this.lblStartTimeHeader.Location = new System.Drawing.Point(6, 19);
             this.lblStartTimeHeader.Name = "lblStartTimeHeader";
             this.lblStartTimeHeader.Size = new System.Drawing.Size(67, 15);
             this.lblStartTimeHeader.TabIndex = 36;
@@ -1140,7 +1140,7 @@
             // 
             this.cbStartDate.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cbStartDate.FormattingEnabled = true;
-            this.cbStartDate.Location = new System.Drawing.Point(48, 37);
+            this.cbStartDate.Location = new System.Drawing.Point(6, 37);
             this.cbStartDate.Name = "cbStartDate";
             this.cbStartDate.Size = new System.Drawing.Size(90, 23);
             this.cbStartDate.TabIndex = 21;
@@ -1149,7 +1149,7 @@
             // 
             this.cbStartTime.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cbStartTime.FormattingEnabled = true;
-            this.cbStartTime.Location = new System.Drawing.Point(48, 63);
+            this.cbStartTime.Location = new System.Drawing.Point(6, 63);
             this.cbStartTime.Name = "cbStartTime";
             this.cbStartTime.Size = new System.Drawing.Size(90, 23);
             this.cbStartTime.TabIndex = 22;
@@ -1157,7 +1157,7 @@
             // lblEndTimeHeader
             // 
             this.lblEndTimeHeader.AutoSize = true;
-            this.lblEndTimeHeader.Location = new System.Drawing.Point(172, 19);
+            this.lblEndTimeHeader.Location = new System.Drawing.Point(100, 19);
             this.lblEndTimeHeader.Name = "lblEndTimeHeader";
             this.lblEndTimeHeader.Size = new System.Drawing.Size(67, 15);
             this.lblEndTimeHeader.TabIndex = 39;
@@ -1167,7 +1167,7 @@
             // 
             this.cbEndDate.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cbEndDate.FormattingEnabled = true;
-            this.cbEndDate.Location = new System.Drawing.Point(172, 37);
+            this.cbEndDate.Location = new System.Drawing.Point(100, 37);
             this.cbEndDate.Name = "cbEndDate";
             this.cbEndDate.Size = new System.Drawing.Size(90, 23);
             this.cbEndDate.TabIndex = 27;
@@ -1176,7 +1176,7 @@
             // 
             this.cbEndTime.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cbEndTime.FormattingEnabled = true;
-            this.cbEndTime.Location = new System.Drawing.Point(172, 63);
+            this.cbEndTime.Location = new System.Drawing.Point(100, 63);
             this.cbEndTime.Name = "cbEndTime";
             this.cbEndTime.Size = new System.Drawing.Size(90, 23);
             this.cbEndTime.TabIndex = 28;

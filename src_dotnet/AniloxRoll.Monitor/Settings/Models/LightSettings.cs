@@ -21,6 +21,10 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)]
         public int Brightness { get; set; } = 128;
 
+        /// <summary>開燈後等待光源穩定的延遲（ms）。Grab 啟動前插入此延遲。</summary>
+        [Browsable(false)]
+        public int WarmupMs { get; set; } = 300;
+
         public void Validate()
         {
             if (string.IsNullOrWhiteSpace(ComPort)) ComPort = "COM1";
@@ -28,6 +32,7 @@ namespace AniloxRoll.Monitor.Core.Data
             if (Channel > 4) Channel = 4;
             if (Brightness < 0) Brightness = 0;
             if (Brightness > 255) Brightness = 255;
+            if (WarmupMs < 0) WarmupMs = 0;
         }
     }
 }
