@@ -175,6 +175,101 @@ namespace AniloxRoll.Monitor.Core.Services
             return stats;
         }
 
+        // ── Mura 空間分布曲線（.bin 抽樣平均）──────────────────────────────
+
+        /// <summary>
+        /// 從指定 grabIdInfos 讀取每台相機的 _mean_v.bin / _max_v.bin，按位置平均後返回。
+        /// grabIds 由呼叫方依三種模式完成抽樣（≤50 筆）。
+        /// 值域：0-255（raw，與 ColumnCurveChartHelper 一致）。
+        /// </summary>
+        public static (Dictionary<int, float[]> Mean, Dictionary<int, float[]> Max)
+            LoadAvgMuraProfile(string rootPath, IList<GrabIdInfo> grabIds)
+        {
+            var accMean  = new Dictionary<int, float[]>();
+            var accMax   = new Dictionary<int, float[]>();
+            var counts   = new Dictionary<int, int>();
+
+            foreach (var info in grabIds)
+            {
+                string dateDir = Path.Combine(rootPath,
+                    info.Earliest.ToString("yyyy"),
+                    info.Earliest.ToString("yyyyMM"),
+                    info.Earliest.ToString("yyyyMMdd"));
+                if (!Directory.Exists(dateDir)) continue;
+
+                string prefix = info.Earliest.ToString("yyyyMMdd_HHmmss");
+
+                for (int camId = 1; camId <= 7; camId++)
+                {
+                    string[] mFiles = Directory.GetFiles(dateDir, $"{prefix}*-{camId}_mean_v.bin");
+                    string[] xFiles = Directory.GetFiles(dateDir, $"{prefix}*-{camId}_max_v.bin");
+                    if (mFiles.Length == 0) continue;
+
+                    float[] mean = TryLoadBin(mFiles[0]);
+                    if (mean == null || mean.Length == 0) continue;
+                    float[] max  = xFiles.Length > 0 ? TryLoadBin(xFiles[0]) : null;
+
+                    if (!accMean.TryGetValue(camId, out float[] am))
+                    {
+                        accMean[camId] = new float[mean.Length];
+                        accMax[camId]  = new float[mean.Length];
+                        counts[camId]  = 0;
+                    }
+                    else if (am.Length != mean.Length)
+                        continue;
+
+                    float[] sumM = accMean[camId];
+                    float[] sumX = accMax[camId];
+                    for (int j = 0; j < mean.Length; j++)
+                    {
+                        sumM[j] += mean[j];
+                        if (max != null && j < max.Length && max[j] > sumX[j]) sumX[j] = max[j];
+                    }
+                    counts[camId]++;
+                }
+            }
+
+            var resultMean = new Dictionary<int, float[]>();
+            var resultMax  = new Dictionary<int, float[]>();
+            foreach (var kvp in accMean)
+            {
+                int n = counts[kvp.Key];
+                if (n == 0) continue;
+                float[] avgM = new float[kvp.Value.Length];
+                for (int j = 0; j < avgM.Length; j++)
+                    avgM[j] = kvp.Value[j] / n;
+                resultMean[kvp.Key] = avgM;
+                resultMax[kvp.Key]  = accMax[kvp.Key];   // max 取各幀最大值（非平均）
+            }
+            return (resultMean, resultMax);
+        }
+
+        private static float[] TryLoadBin(string path)
+        {
+            // MCBF: magic(4) + version(4) + scale_factor(4f) + [v2: light(4)+exposure(4f)] + length(4) + float[]
+            // scale_factor 僅作 metadata，不參與讀值（與 InspectionEngine.LoadCurveBin 相同）
+            try
+            {
+                using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+                using (var br = new BinaryReader(fs))
+                {
+                    if (fs.Length < 16) return null;
+                    var magic = br.ReadBytes(4);
+                    if (magic[0] != 'M' || magic[1] != 'C' || magic[2] != 'B' || magic[3] != 'F') return null;
+                    int version = br.ReadInt32();
+                    br.ReadSingle();  // scale_factor (ignored)
+                    if (version >= 2) { br.ReadInt32(); br.ReadSingle(); }  // lightLevel + exposureUs
+                    int length = br.ReadInt32();
+                    if (length <= 0 || length > 200000) return null;
+                    var arr = new float[length];
+                    for (int i = 0; i < length; i++)
+                        arr[i] = br.ReadSingle();
+                    return arr;
+                }
+            }
+            catch { return null; }
+        }
+
         // ── 逐序號詳細結果 ───────────────────────────────────────────────
 
         /// <summary>

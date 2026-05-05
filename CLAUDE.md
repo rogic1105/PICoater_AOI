@@ -55,7 +55,7 @@ PICoater_AOI/
 | `UI/Widgets/ComboBoxWheelReverser.cs` | ComboBox 滑鼠滾輪方向反轉（從 AniloxRollForm 提取） |
 | `UI/Widgets/MultiClickDetector.cs` | 多擊偵測器：雙擊/三擊辨識（從 AniloxRollForm 提取） |
 | `UI/Widgets/CurveMergeHelper.cs` | 全覽圖合併演算法 + .bin 曲線讀取（UpdateOverviewChart、MergeCurves、MergeRowCurves、GetCurveBasePath） |
-| `UI/Presenters/DataStatisticsPresenter.cs` | Data tab 統計邏輯：統計計算、combo 串聯、Period Charts、跨 Tab 同步事件 |
+| `UI/Presenters/DataStatisticsPresenter.cs` | Data tab 統計邏輯：統計計算、combo 串聯、Period Charts、Mura 空間分布圖（chartMuraProfile）、跨 Tab 同步事件 |
 | `UI/Presenters/ReviewStitchCoordinator.cs` | Review tab 拼接管理：LoadGrabStitchedViewAsync、合圖、ClearStitchedMode、overview chart 聯動 |
 | `UI/Presenters/LiveTelemetryPresenter.cs` | 16 欄即時 Telemetry |
 | `Acquisition/AniloxCamera.cs` | 單台相機 MIL 資源封裝；Global merge 時每幀 MbufChild2d + MbufCopyClip（含 overlap 裁切）到合併 buffer；SetMergeTarget/ClearMergeTarget 封裝 merge 欄位 |
@@ -74,7 +74,7 @@ PICoater_AOI/
 | `ImageCatalog/ImageRepository.cs` | 掃描目錄建立索引 |
 | `Services/AoiService.cs` | C# ↔ Native P/Invoke wrapper（ProcessImage + ComputeColumnMean） |
 | `Services/InspectionLogService.cs` | 每日 CSV 寫入；GrabId = `yyMMdd-HHmmss` 時間戳格式 |
-| `Services/InspectionStatisticsService.cs` | CSV 統計服務；LoadConfigForDate（按日期載入 #CFG） |
+| `Services/InspectionStatisticsService.cs` | CSV 統計服務；LoadConfigForDate（按日期載入 #CFG）；LoadAvgMuraProfile（抽樣 .bin 平均空間曲線） |
 | `Services/IoState.cs` | IoState enum（FSM 狀態）+ IoSnapshot struct（IO 快照） |
 | `Services/IoGrabController.cs` | IO-Grab 連動：IoState FSM、IO 追蹤、Watchdog keepalive；支援 IModbusTcpClient 注入測試 |
 | `Services/CsvConfigSnapshot.cs` | 不可變設定快照（CamOps/CamPos/CamGrabHeight/CamExposureUs/CamLineRateHz/Hessian/ErrorValue/TrimHead/TrimTail） |
@@ -245,7 +245,7 @@ PICoater_AOI/
 |---------|------|------|---------|
 | 篩選異常 | `btnShowFail` | Button | 篩選異常 / 顯示全部 |
 | 良率卡片1~7 | `panelStatCam1~7` | Panel | — |
-| 彙總列表 | `listViewStats` | ListView | — |
+| Mura 空間分布圖 | `chartMuraProfile` | Chart | — |
 | 明細列表 | `listViewGrabDetail` | ListView | — |
 | 序號範圍群組 | `groupBoxGrabIdRange` | GroupBox | 序號範圍 |
 | 起始序號 | `cbGrabIdStart` | ComboBox | — |

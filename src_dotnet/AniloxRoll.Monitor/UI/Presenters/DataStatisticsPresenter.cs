@@ -44,10 +44,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public GroupBox GrpReviewGrabNav { get; set; }
         public GroupBox GrpReviewTimePeriod { get; set; }
 
-        // --- 統計 ListView ---
-        public ListView ListViewStats { get; set; }
+        // --- 統計 ---
         public ListView ListViewGrabDetail { get; set; }
         public Panel[] PanelStatCams { get; set; }
+        public Chart ChartMuraProfile { get; set; }
 
         // --- 趨勢圖 ---
         public Chart ChartYearly { get; set; }
@@ -95,6 +95,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         private int _lastChartToggleTick;
 
+        // --- Mura Profile Chart ---
+        private ColumnCurveChartHelper _muraProfileHelper;
+
         // --- 常數 ---
         private static readonly Color _detailPass = Color.FromArgb(232, 245, 233);
         private static readonly Color _detailFail = Color.FromArgb(255, 235, 238);
@@ -120,8 +123,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public DataStatisticsPresenter(DataStatisticsContext ctx)
         {
             _ctx = ctx ?? throw new ArgumentNullException(nameof(ctx));
-            _statsPresenter = new InspectionStatsPresenter(
-                ctx.ListViewStats, ctx.PanelStatCams);
+            _statsPresenter = new InspectionStatsPresenter(ctx.PanelStatCams);
             _activeStatMode = ctx.GroupBoxGrabIdRange;
         }
 
@@ -142,6 +144,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _ctx.BtnShowFail.Click += BtnShowFail_Click;
             WireStatDateCombos();
             InitGrabDetailListView();
+            InitMuraProfileChart();
             InitPeriodCharts();
             _ctx.CbChartYear.SelectedIndexChanged += (s, e) => { if (!_chartNavGuard.IsSet) OnChartYearIndexChanged(); };
             _ctx.CbChartMonth.SelectedIndexChanged += (s, e) => { if (!_chartNavGuard.IsSet) OnChartMonthIndexChanged(); };
@@ -529,6 +532,12 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _statsPresenter.Update(stats);
                 _currentDetails = details;
                 ApplyFailFilter();
+
+                int si = _ctx.CbGrabIdStart.SelectedIndex;
+                int ei = _ctx.CbGrabIdEnd.SelectedIndex;
+                int lo = Math.Min(si, ei); int hi = Math.Max(si, ei);
+                var rangeInfos = _grabIdInfos.GetRange(lo, hi - lo + 1);
+                UpdateMuraProfileChart(EvenSample(rangeInfos, 50));
                 return;
             }
 
@@ -549,12 +558,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
                 _statsPresenter.Update(stats);
                 _currentDetails = details;
+                UpdateMuraProfileChart(EvenSample(grabInfosInRange, 10));
             }
             else
             {
                 var statsTime = InspectionStatisticsService.Compute(_statsDataRootPath, start, end);
                 _statsPresenter.Update(statsTime);
                 _currentDetails = new List<GrabDetail>();
+                ClearMuraProfileChart();
             }
             ApplyFailFilter();
         }
@@ -659,6 +670,71 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     assigned += lv.Columns[i].Width;
                 }
             }
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        // Mura 空間分布曲線圖（拼接式，與 chartLiveOverview 相同格式）
+        // ══════════════════════════════════════════════════════════════
+
+        private void InitMuraProfileChart()
+        {
+            if (_ctx.ChartMuraProfile == null) return;
+            _muraProfileHelper = new ColumnCurveChartHelper(_ctx.ChartMuraProfile);
+        }
+
+        private void UpdateMuraProfileChart(IList<GrabIdInfo> grabIds)
+        {
+            if (_muraProfileHelper == null || _ctx.Settings == null) return;
+
+            var (meanDict, maxDict) = InspectionStatisticsService.LoadAvgMuraProfile(
+                _statsDataRootPath, grabIds);
+            if (meanDict.Count == 0) return;
+
+            int camCount = _ctx.CameraCount;
+            var allMean = new float[camCount][];
+            var allMax  = new float[camCount][];
+            for (int i = 0; i < camCount; i++)
+            {
+                meanDict.TryGetValue(i + 1, out allMean[i]);
+                maxDict.TryGetValue(i + 1, out allMax[i]);
+            }
+
+            CurveMergeHelper.UpdateOverviewChart(
+                allMean, allMax,
+                _ctx.Settings.GetCameraOpsUmArray(),
+                _ctx.Settings.GetCameraStartPositionMmArray(),
+                _ctx.Settings.ErrorValueMean, _ctx.Settings.ErrorValueMax,
+                _muraProfileHelper, camCount,
+                StitchMode.Vertical, null);
+        }
+
+        /// <summary>
+        /// SingleSheet 模式：直接使用 Review tab 已載入的曲線資料，
+        /// 確保 chartMuraProfile 與 chartOverview 完全一致（相同 OPS/Pos 與原始數值）。
+        /// </summary>
+        public void SyncMuraProfileFromReview(float[][] mean, float[][] max,
+            double[] ops, double[] pos, float errMean, float errMax)
+        {
+            if (_muraProfileHelper == null) return;
+            CurveMergeHelper.UpdateOverviewChart(mean, max, ops, pos, errMean, errMax,
+                _muraProfileHelper, _ctx.CameraCount, StitchMode.Vertical, null);
+        }
+
+        private void ClearMuraProfileChart()
+        {
+            if (_ctx.ChartMuraProfile == null) return;
+            foreach (var s in _ctx.ChartMuraProfile.Series)
+                s.Points.Clear();
+        }
+
+        private static List<T> EvenSample<T>(IList<T> list, int maxCount)
+        {
+            if (list.Count <= maxCount) return new List<T>(list);
+            var result = new List<T>(maxCount);
+            double step = (list.Count - 1.0) / (maxCount - 1);
+            for (int i = 0; i < maxCount; i++)
+                result.Add(list[(int)Math.Round(i * step)]);
+            return result;
         }
 
         // ══════════════════════════════════════════════════════════════

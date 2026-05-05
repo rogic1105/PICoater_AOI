@@ -369,6 +369,33 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box output">CheckLiveMura 恢復正常 → DO_MURA_DETECTED 正常輸出</div>
 </div>
 </div>
+<div class="flow-group vflow" id="io-suspend">
+<div class="flow-title">IO 暫停 <code>lblPlcConn（點擊切換）</code></div>
+<div class="box input">點擊【IO 連線狀態】→ _isIoSuspended = true</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">_isIoSuspended = true；UpdateGrabButton → UpdateStandardBgSubLockState（直接返回 Enabled=true）</div>
+<div class="v-arrow" data-label="平行"></div>
+<div class="out-par">
+<div class="box output">【IO 連線狀態】→「● IO 暫停 ⏸」黃底黑字</div>
+<div class="box output">【開始抓取】→ Enabled=true，可手動操作（不受 StandardBgSub bin 限制）</div>
+<div class="box output">lblPlcState →「● 已關閉」灰底（凍結，PLC timer 不再更新）</div>
+<div class="box output">DI0 DI1 DO0 DO2 DO1 → 全滅（灰）並凍結</div>
+<div class="box output">PlcStartGrab / PlcStopGrab → 因 _isIoSuspended 直接 return，IO 無法觸發取像</div>
+</div>
+<div class="note">用途：IO 已連線時讓操作員暫時接管手動控制（例如調機、試跑），等同 IO 斷線外觀。再次點擊恢復 IO 控制。</div>
+</div>
+<div class="flow-group vflow" id="io-resume">
+<div class="flow-title">恢復 IO <code>lblPlcConn（再按一次）</code></div>
+<div class="box input">再次點擊【IO 連線狀態】→ _isIoSuspended = false</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">UpdatePlcConnectionUi(IsConnected)</div>
+<div class="v-arrow" data-label="平行"></div>
+<div class="out-par">
+<div class="box output">【IO 連線狀態】→ 回到「● IO 已連線」綠底 / 「● IO 離線」灰底</div>
+<div class="box output">【開始抓取】→ IO 已連線則 Disabled（由 IO 控制）</div>
+<div class="box output">lblPlcState、IO 燈號 → 下次 PLC poll（≤500ms）自動補回真實值</div>
+</div>
+</div>
 <div class="flow-group vflow" id="light-control">
 <div class="flow-title">光源控制 <code>LightController</code></div>
 <div class="box input">程式啟動（InitLightController）</div>
@@ -1000,8 +1027,8 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box output">起始/結束序號：填入全範圍</div>
 <div class="box output">起始/結束日期時間：填入全範圍</div>
 <div class="box output">報表序號 + 單片序號：填入全部序號</div>
-<div class="box output">良率卡片1~7：顏色+數字更新</div>
-<div class="box output">彙總列表：相機/Pass/Fail/Total/良率</div>
+<div class="box output">良率卡片1~7【panelStatCam1~7】：顏色+數字更新</div>
+<div class="box output">【chartMuraProfile】Mura 空間分布圖：拼接式平均曲線（≤50 grab 均勻取樣）</div>
 <div class="box output">明細列表：逐序號明細</div>
 <div class="box output">良率年/月/日圖：填入統計資料</div>
 <div class="box output">年/月/日圖導航：填入可選範圍</div>
@@ -1017,7 +1044,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">起始/結束日期時間：同步更新</div>
-<div class="box output">良率卡片 + 彙總列表 + 明細列表：刷新</div>
+<div class="box output">良率卡片 + Mura 空間分布圖（≤50 grab 均勻取樣）+ 明細列表：刷新</div>
 <div class="box output">序號範圍群組：綠色高亮</div>
 </div>
 <div class="v-arrow"></div>
@@ -1031,11 +1058,13 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">起始/結束序號 + 日期時間：同步到該序號</div>
-<div class="box output">良率卡片 + 列表：刷新（單片統計）</div>
+<div class="box output">良率卡片 + 明細列表：刷新（單片統計）</div>
 <div class="box output">序號選擇群組：綠色高亮</div>
 </div>
 <div class="v-arrow"></div>
 <div class="box sync">同步 Review tab：單片序號 + 導航時間 + 載入拼接圖</div>
+<div class="v-arrow"></div>
+<div class="box output">【chartMuraProfile】← StitchedCurveUpdated 事件同步：與【chartOverview】完全相同（採用歷史 OPS/Pos 設定）</div>
 <div class="v-arrow"></div>
 <div class="box guard">_grabIdCrossGuard 防 Review ↔ Data 迴圈</div>
 </div>
@@ -1046,7 +1075,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box action dev">Cascade 子項 → ClampEndToStart/ClampStartToEnd → RefreshStats</div>
 <div class="v-arrow"></div>
 <div class="out-par">
-<div class="box output">良率卡片 + 列表：刷新（時間範圍統計）</div>
+<div class="box output">良率卡片 + Mura 空間分布圖（≤10 grab 均勻取樣，無 grabId 則清空）+ 明細列表：刷新</div>
 <div class="box output">時序範圍群組：綠色高亮</div>
 </div>
 <div class="v-arrow"></div>

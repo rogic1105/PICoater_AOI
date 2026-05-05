@@ -141,9 +141,27 @@ namespace AniloxRoll.Monitor.Forms
         private PictureBox[] _cameraPanels;
 
 
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            base.OnFormClosing(e);
+            // 先停止所有背景服務，避免非 UI 執行緒在 Handle 銷毀後呼叫 BeginInvoke
+            try { if (_liveCameraManager?.IsLiveGrabbing == true) _liveCameraManager.StopGrab(); } catch { }
+            try { _plcGrabController?.Dispose(); _plcGrabController = null; } catch { }
+            try { _telemetryTimer?.Stop(); } catch { }
+            try { _liveOverviewTimer?.Stop(); } catch { }
+            try { _lightController?.Dispose(); _lightController = null; } catch { }
+        }
+
         public AniloxRollForm()
         {
             InitializeComponent();
+            try
+            {
+                using (var stream = System.Reflection.Assembly.GetExecutingAssembly()
+                    .GetManifestResourceStream("AniloxRoll.Monitor.Resources.app.ico"))
+                    if (stream != null) this.Icon = new System.Drawing.Icon(stream);
+            }
+            catch { }
             InitializeSystem();
             _scaler = new ProportionalScaler(this);
             _scaler.Initialize();
@@ -349,6 +367,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private void UpdatePlcStateLabel(IoState state)
         {
+            if (_isIoSuspended) return;
             string text;
             Color bgColor;
             switch (state)
@@ -564,6 +583,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private void UpdatePlcIoLeds(IoSnapshot io)
         {
+            if (_isIoSuspended) return;
             SetIoLed(lblIoDiAlive,   io.DiNakanAlive);
             SetIoLed(lblIoDiStart,   io.DiInspectStart);
             SetIoLed(lblIoDoPcAlive, io.DoPcAlive);
@@ -709,6 +729,9 @@ namespace AniloxRoll.Monitor.Forms
                 CameraCount               = CameraCount,
             });
 
+            _stitchCoordinator.StitchedCurveUpdated += (mean, max, ops, pos, errMean, errMax) =>
+                _dataStatsPresenter?.SyncMuraProfileFromReview(mean, max, ops, pos, errMean, errMax);
+
             _presenter.BusyStateChanged += _interactionHelper.SetUiLoadingState;
             _presenter.LogReported      += OnPresenterLogReported;
             _galleryManager.SelectionChanged += idx =>
@@ -781,7 +804,7 @@ namespace AniloxRoll.Monitor.Forms
             _liveCameraManager.OnLiveRowCurveData   += OnLiveRowCurveData;
             _liveCameraManager.OnCameraCountChanged += (connected, expected) =>
             {
-                if (InvokeRequired) { BeginInvoke(new Action<int, int>(UpdateCamCountLabel), connected, expected); return; }
+                if (InvokeRequired) { if (!IsHandleCreated || IsDisposed || Disposing) return; BeginInvoke(new Action<int, int>(UpdateCamCountLabel), connected, expected); return; }
                 UpdateCamCountLabel(connected, expected);
             };
 
@@ -1078,6 +1101,7 @@ namespace AniloxRoll.Monitor.Forms
 
             if (InvokeRequired)
             {
+                if (!IsHandleCreated || IsDisposed || Disposing) return;
                 BeginInvoke(new Action<int, float[], float[]>(OnLiveCurveData), camId, meanArr, maxArr);
                 return;
             }
@@ -1124,6 +1148,7 @@ namespace AniloxRoll.Monitor.Forms
 
             if (InvokeRequired)
             {
+                if (!IsHandleCreated || IsDisposed || Disposing) return;
                 BeginInvoke(new Action<int, float[], float[]>(OnLiveRowCurveData), camId, meanArr, maxArr);
                 return;
             }
@@ -1424,6 +1449,8 @@ namespace AniloxRoll.Monitor.Forms
         {
             // IO 已連線且未暫停：btnCameraGrab 由 IO 連線邏輯控制，不覆寫
             if (_plcGrabController?.IsConnected == true && !_isIoSuspended) return;
+            // IO 暫停模式：交由使用者手動控制，不受 StandardBgSub bin 限制
+            if (_isIoSuspended) { btnCameraGrab.Enabled = true; return; }
 
             if (!IsStandardBgSubEnabled)
             {
@@ -1794,6 +1821,14 @@ namespace AniloxRoll.Monitor.Forms
                 UpdateGrabButton(_liveCameraManager?.IsLiveGrabbing ?? false);
                 btnCameraGrab.BackColor = SystemColors.Control;
                 btnCameraGrab.ForeColor = SystemColors.ControlText;
+                // 暫停 = 等同 IO 離線：重置狀態燈和所有 IO 燈號
+                lblPlcState.Text = "● 已關閉";
+                lblPlcState.BackColor = IecGray;
+                SetIoLed(lblIoDiAlive,   false);
+                SetIoLed(lblIoDiStart,   false);
+                SetIoLed(lblIoDoPcAlive, false);
+                SetIoLed(lblIoDoPcBusy,  false);
+                UpdateMuraLed(false);
             }
             else
             {
@@ -2806,9 +2841,10 @@ namespace AniloxRoll.Monitor.Forms
                 GroupBoxGrabIdRange = groupBoxGrabIdRange, GrpDataSingleSheet = grpDataSingleSheet,
                 GroupBoxTimeRange = groupBoxTimeRange,
                 GrpReviewGrabNav = grpReviewGrabNav, GrpReviewTimePeriod = grpReviewTimePeriod,
-                ListViewStats = listViewStats, ListViewGrabDetail = listViewGrabDetail,
+                ListViewGrabDetail = listViewGrabDetail,
                 PanelStatCams = new[] { panelStatCam1, panelStatCam2, panelStatCam3,
                                         panelStatCam4, panelStatCam5, panelStatCam6, panelStatCam7 },
+                ChartMuraProfile = chartMuraProfile,
                 ChartYearly = chartYearly, ChartMonthly = chartMonthly, ChartDaily = chartDaily,
                 CbChartYear = cbChartYear, CbChartMonth = cbChartMonth, CbChartDay = cbChartDay,
                 Settings = _settings, CameraCount = CameraCount,

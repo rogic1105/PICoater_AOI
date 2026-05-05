@@ -67,6 +67,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// <summary>目前的 ridge 方向（"v" 或 "h"）。</summary>
         public string ActiveRidgeDirection { get; set; } = "v";
 
+        /// <summary>
+        /// UpdateStitchedOverviewChart 完成後觸發，傳遞與 chartOverview 相同的曲線資料，
+        /// 供外部（AniloxRollForm）同步 chartMuraProfile。
+        /// 參數：(mean[][], max[][], opsUm[], startPosMm[], errMean, errMax)
+        /// </summary>
+        public event Action<float[][], float[][], double[], double[], float, float> StitchedCurveUpdated;
+
         public ReviewStitchCoordinator(ReviewStitchContext ctx)
         {
             _ctx = ctx;
@@ -318,6 +325,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 opsArr, posArr, errMean, errMax,
                 _ctx.OverviewHelper, _ctx.CameraCount, _ctx.Settings.StitchMode,
                 ViewRangeProvider);
+
+            StitchedCurveUpdated?.Invoke(_stitchedCurveMean, _stitchedCurveMax, opsArr, posArr, errMean, errMax);
         }
 
         /// <summary>顯示單台相機拼接影像，並更新對應的 mura chart。</summary>
