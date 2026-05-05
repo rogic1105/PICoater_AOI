@@ -55,6 +55,7 @@ Solution 映射 `Debug|x64` → `Debug|Any CPU`（含空格），`AllowUnsafeBlo
 - `[Browsable(false)]` 隱藏但仍可讀寫
 - `PropertySort.Categorized`（不加 Alphabetical）保留宣告順序
 - 欄位寬度用反射 `MoveSplitterTo`（indent=16 + rightMargin=8）
+- **scroll 捲到頂**：`ExpandAllGridItems()` 後 scroll 停在最後一項。`VScrollBar` 是內部 `GridView` 的子控制項，外層 `Controls` 找不到。Fix：在 `Shown` 事件設 `SelectedGridItem` 到第一個屬性（PropertyGrid 會自動捲動）。層級：`SelectedGridItem.Parent` = 當前 category，`.Parent.Parent` = 根節點，`GridItems[0].GridItems[0]` = 第一 category 第一屬性。不可在 constructor 用 `BeginInvoke`（handle 尚未建立）。
 
 ### ListView AutoFit
 `AutoResizeColumn(ColumnContent)` vs `AutoResizeColumn(HeaderSize)` 取 max。

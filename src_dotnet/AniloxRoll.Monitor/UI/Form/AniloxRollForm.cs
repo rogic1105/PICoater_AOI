@@ -185,7 +185,23 @@ namespace AniloxRoll.Monitor.Forms
             InitializeSystem();
             _scaler = new ProportionalScaler(this);
             _scaler.Initialize();
-            Shown += (s, e) => AutoFitPropertyGridLabelColumn(propertyGridSettings);
+            Shown += (s, e) =>
+            {
+                AutoFitPropertyGridLabelColumn(propertyGridSettings);
+                // 選取第一個 category 的第一個屬性，PropertyGrid 會自動捲動到頂
+                // 層級：SelectedGridItem → parent(category) → parent.Parent(root) → [0](第一 category) → [0](第一屬性)
+                try
+                {
+                    var root = propertyGridSettings.SelectedGridItem?.Parent?.Parent;
+                    if (root?.GridItems?.Count > 0)
+                    {
+                        var firstCat = root.GridItems[0];
+                        if (firstCat.GridItems.Count > 0)
+                            propertyGridSettings.SelectedGridItem = firstCat.GridItems[0];
+                    }
+                }
+                catch { }
+            };
         }
 
         private void InitializeSystem()
@@ -722,6 +738,7 @@ namespace AniloxRoll.Monitor.Forms
             propertyGridSettings.PropertyValueChanged += _propertyGrid_PropertyValueChanged;
             AutoFitPropertyGridLabelColumn(propertyGridSettings);
 
+
             _interactionHelper = new FormInteractionHelper(new FormInteractionContext
             {
                 Form             = this,
@@ -1092,16 +1109,20 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         /// <summary>
-        /// Live 曲線閾值判斷（callback 執行緒呼叫，V/H 共用）。
+        /// Live 曲線閾值判斷（callback 執行緒呼叫）。
+        /// direction: "v"=垂直, "h"=水平；依 CheckLiveMura 設定的「檢測方向」決定是否觸發 DO1。
         /// 陣列為 0-255，閾值為 0-1，取陣列 max 後除以 255 比較。
-        /// 任一方向超標即觸發 DO_MURA_DETECTED H，維持到 grab 結束。
         /// </summary>
-        private void CheckLiveMura(float[] meanArr, float[] maxArr)
+        private void CheckLiveMura(float[] meanArr, float[] maxArr, string direction)
         {
             if (_isMuraDetectPaused) return;
             if (_plcGrabController?.IsConnected != true) return;
             if (_settings == null) return;
             if (!_liveCameraManager.IsLiveGrabbing) return;
+
+            var ridgeDir = _settings.RidgeDir;
+            if (direction == "v" && ridgeDir == RidgeDirection.Horizontal) return;
+            if (direction == "h" && ridgeDir == RidgeDirection.Vertical)   return;
 
             float meanPeak = 0f, maxPeak = 0f;
             if (meanArr != null) { for (int i = 0; i < meanArr.Length; i++) if (meanArr[i] > meanPeak) meanPeak = meanArr[i]; }
@@ -1130,7 +1151,7 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             // Live Mura 判斷（callback 執行緒，所有相機都檢查）
-            CheckLiveMura(meanArr, maxArr);
+            CheckLiveMura(meanArr, maxArr, "v");
 
             // Global 模式不更新 Live mura 垂直圖（單台資料無意義）
             if (_settings.StitchMode == StitchMode.Global) return;
@@ -1183,7 +1204,7 @@ namespace AniloxRoll.Monitor.Forms
         private void OnLiveRowCurveData(int camId, float[] meanArr, float[] maxArr)
         {
             // Live Mura 判斷（水平方向）
-            CheckLiveMura(meanArr, maxArr);
+            CheckLiveMura(meanArr, maxArr, "h");
 
             if (InvokeRequired)
             {

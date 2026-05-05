@@ -617,13 +617,13 @@
             this.chartMuraHorizontal.ChartAreas.Add(chartArea4);
             legend4.Name = "Legend1";
             this.chartMuraHorizontal.Legends.Add(legend4);
-            this.chartMuraHorizontal.Location = new System.Drawing.Point(899, 190);
+            this.chartMuraHorizontal.Location = new System.Drawing.Point(897, 190);
             this.chartMuraHorizontal.Name = "chartMuraHorizontal";
             series4.ChartArea = "ChartArea1";
             series4.Legend = "Legend1";
             series4.Name = "Series1";
             this.chartMuraHorizontal.Series.Add(series4);
-            this.chartMuraHorizontal.Size = new System.Drawing.Size(114, 333);
+            this.chartMuraHorizontal.Size = new System.Drawing.Size(117, 333);
             this.chartMuraHorizontal.TabIndex = 58;
             this.chartMuraHorizontal.Text = "chart1";
             // 

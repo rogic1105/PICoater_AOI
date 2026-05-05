@@ -145,14 +145,12 @@ PICoater_AOI/
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
 | 去背演算法 | `Algorithm` | SingleFrameBgSub | None / SingleFrameBgSub / StandardBgSub |
-| Ridge方向 | `RidgeDir` | Vertical | Vertical / Horizontal / Both |
+| 檢測方向 | `RidgeDir` | Vertical | 垂直 / 水平 / 雙向；決定哪個方向 Mura 超標才觸發 DO1 |
 | 正規值 | `HessianMaxFactor` | 1.0 | Hessian 正規化係數 |
 | 取樣秒數 | `BackgroundSampleSeconds` | 3 | StandardBgSub 採集時間 |
 | 輪速 (m/min) | `AniloxRollSpeedMPerMin` | 10.0 | Anilox 輪速 |
-| 監控強化 | `EnableMuraEnhance` | false | 即時影像強化 Mura（原 checkBoxEnableImageProcessing） |
-| 回顧強化 | `EnableReviewEnhance` | false | 回顧影像強化 Mura（原 checkBoxShowProcessed） |
 
-### 3. 報表設定
+### 3. 圖表設定
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
@@ -163,6 +161,8 @@ PICoater_AOI/
 | Mura 圖表 > 平均閾值 | `ErrorValueMean` | 0.3 | 曲線圖 Mean 閾值線 |
 | Mura 圖表 > 最大閾值 | `ErrorValueMax` | 0.5 | 曲線圖 Max 閾值線 |
 | 主畫面 > 合圖方式 | `StitchMode` | Vertical | Vertical / Global |
+| 監控強化 | `EnableMuraEnhance` | false | 即時影像強化 Mura |
+| 回顧強化 | `EnableReviewEnhance` | false | 回顧影像強化 Mura |
 
 ### 4. 儲存設定
 

@@ -85,9 +85,7 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"BackgroundSampleSeconds\": {R.BackgroundSampleSeconds},");
             sb.AppendLine($"    \"AniloxRollSpeedMPerMin\": {D(R.AniloxRollSpeedMPerMin)},");
             sb.AppendLine($"    \"SaveResizeScale\": {R.SaveResizeScale},");
-            sb.AppendLine($"    \"SaveJpgQuality\": {R.SaveJpgQuality},");
-            sb.AppendLine($"    \"EnableMuraEnhance\": {(R.EnableMuraEnhance ? "true" : "false")},");
-            sb.AppendLine($"    \"EnableReviewEnhance\": {(R.EnableReviewEnhance ? "true" : "false")}");
+            sb.AppendLine($"    \"SaveJpgQuality\": {R.SaveJpgQuality}");
             sb.AppendLine("  },");
 
             // Chart
@@ -100,7 +98,9 @@ namespace AniloxRoll.Monitor.Core.Data
 
             // ImageView
             sb.AppendLine("  \"ImageView\": {");
-            sb.AppendLine($"    \"StitchMode\": \"{V.StitchMode}\"");
+            sb.AppendLine($"    \"StitchMode\": \"{V.StitchMode}\",");
+            sb.AppendLine($"    \"EnableMuraEnhance\": {(V.EnableMuraEnhance ? "true" : "false")},");
+            sb.AppendLine($"    \"EnableReviewEnhance\": {(V.EnableReviewEnhance ? "true" : "false")}");
             sb.AppendLine("  },");
 
             // Storage
@@ -214,8 +214,6 @@ namespace AniloxRoll.Monitor.Core.Data
                 AniloxRollSpeedMPerMin = SettingsStoreHelper.GetDouble(obj, "AniloxRollSpeedMPerMin", 10.0),
                 SaveResizeScale      = SettingsStoreHelper.GetInt(obj, "SaveResizeScale",   5),
                 SaveJpgQuality       = SettingsStoreHelper.GetInt(obj, "SaveJpgQuality",    90),
-                EnableMuraEnhance    = SettingsStoreHelper.GetBool(obj, "EnableMuraEnhance",    false),
-                EnableReviewEnhance  = SettingsStoreHelper.GetBool(obj, "EnableReviewEnhance",  false),
             };
         }
 
@@ -253,9 +251,15 @@ namespace AniloxRoll.Monitor.Core.Data
             else if (!System.Enum.TryParse(stitchStr, true, out stitchMode))
                 stitchMode = StitchMode.Vertical;
 
+            // 向後相容：EnableMuraEnhance/EnableReviewEnhance 原在 Recipe 區塊
+            string recipeObj = SettingsStoreHelper.ExtractObject(json, "Recipe");
             return new ImageViewSettings
             {
-                StitchMode = stitchMode,
+                StitchMode          = stitchMode,
+                EnableMuraEnhance   = SettingsStoreHelper.GetBool(obj, "EnableMuraEnhance",
+                                          SettingsStoreHelper.GetBool(recipeObj, "EnableMuraEnhance",   false)),
+                EnableReviewEnhance = SettingsStoreHelper.GetBool(obj, "EnableReviewEnhance",
+                                          SettingsStoreHelper.GetBool(recipeObj, "EnableReviewEnhance", false)),
             };
         }
 

@@ -26,9 +26,7 @@
     "BackgroundSampleSeconds": 3,
     "AniloxRollSpeedMPerMin": 40,
     "SaveResizeScale": 5,
-    "SaveJpgQuality": 90,
-    "EnableMuraEnhance": false,
-    "EnableReviewEnhance": false
+    "SaveJpgQuality": 90
   },
   "Chart": {
     "ScaleMode": "Auto",
@@ -37,7 +35,9 @@
     "DailyYMax": 300
   },
   "ImageView": {
-    "StitchMode": "Vertical"
+    "StitchMode": "Vertical",
+    "EnableMuraEnhance": false,
+    "EnableReviewEnhance": false
   },
   "Storage": {
     "EnableAutoCapture": true,
