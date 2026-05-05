@@ -189,7 +189,11 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="flow-title">開始抓取 <code>btnCameraGrab</code></div>
 <div class="box input">按下【開始抓取】</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">ToggleGrab（相機已由啟動時自動分配；僅 bg preview 退出或啟動分配失敗時走 EnsureAllocatedAndToggleGrab fallback）</div>
+<div class="out-seq dev">
+<div class="box action">LightTurnOn → TurnOn(Channel, Brightness)</div>
+<div class="box action">await Task.Delay(LightWarmupMs)（預設 300ms，PropertyGrid「暖機延遲」可調）</div>
+<div class="box action">ToggleGrab（相機已由啟動時自動分配；僅 bg preview 退出或啟動分配失敗時走 EnsureAllocatedAndToggleGrab fallback）</div>
+</div>
 <div class="v-arrow dev" data-label="串接"></div>
 <div class="out-seq dev">
 <div class="box action">NextGrabId（分配抓圖編號）</div>
@@ -459,10 +463,17 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box output">光源連線狀態（lblLightConn）即時更新</div>
 <div class="v-arrow"></div>
 <div class="box input">IO 模組 DI_INSPECT_START 上升緣（PlcStartGrab）</div>
-<div class="v-arrow dev"></div>
-<div class="out-seq dev">
-<div class="box action">LightTurnOn → TurnOn(Channel, Brightness)</div>
-<div class="box action">btnCameraGrab_Click → 開始取像</div>
+<div class="v-arrow dev" data-label="分支"></div>
+<div class="v-branch dev">
+<div class="v-branch-path"><span class="branch-label elif">StandardBgSub + 無 bin</span>
+<div class="out-seq">
+<div class="box action">btnGetBackground_Click（自動採集背景）</div>
+<div class="box action">採集完成 → FreeCameras → btnCameraGrab_Click（接續正式 grab）</div>
+</div>
+</div>
+<div class="v-branch-path"><span class="branch-label yes">正常</span>
+<div class="box action">btnCameraGrab_Click（LightTurnOn → await warmup → ToggleGrab）</div>
+</div>
 </div>
 <div class="v-arrow dev" data-label="取像結束"></div>
 <div class="box input">IO 模組 DI_INSPECT_START 下降緣（PlcStopGrab）</div>
@@ -508,6 +519,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box guard">Guard：光源連線（LightEnabled = false 時豁免）</div>
 <div class="v-arrow"></div>
 <div class="box action">自動開燈（LightTurnOn）</div>
+<div class="box action">await Task.Delay(LightWarmupMs)（等光源穩定）</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">ToggleGrab（若未 grab）→ 採集 N 秒 → 平均 column mean</div>
 <div class="v-arrow"></div>
