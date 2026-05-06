@@ -156,7 +156,6 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category("4. 儲存設定")][DisplayName("存檔")][TypeConverter(typeof(BoolYesNoConverter))]          public bool   EnableAutoCapture    { get => Storage.EnableAutoCapture;    set => Storage.EnableAutoCapture    = value; }
         [Category("4. 儲存設定")][DisplayName("存原圖")][TypeConverter(typeof(BoolYesNoConverter))]        public bool   SaveOriginalBmp      { get => Storage.SaveOriginalBmp;      set => Storage.SaveOriginalBmp      = value; }
         [Category("4. 儲存設定")][DisplayName("存檔目錄")]      public string CaptureRootPath      { get => Storage.CaptureRootPath;      set => Storage.CaptureRootPath      = value; }
-        [Category("4. 儲存設定")][DisplayName("存背景目錄")]    public string BackgroundPath       { get => Storage.BackgroundPath;       set => Storage.BackgroundPath       = value; }
         [Category("4. 儲存設定")][DisplayName("預留空間 (GB)")][TypeConverter(typeof(LeftAlignNumericConverter))] public int    LocalMinFreeGB       { get => Storage.LocalMinFreeGB;       set => Storage.LocalMinFreeGB       = value; }
         [Category("4. 儲存設定")][DisplayName("遠端路徑")]      public string RemotePath           { get => Storage.RemotePath;           set => Storage.RemotePath           = value; }
         // 開發者設定：PropertyGrid 不顯示，部署時直接改 JSON

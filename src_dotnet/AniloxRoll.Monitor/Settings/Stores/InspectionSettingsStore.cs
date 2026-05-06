@@ -108,7 +108,6 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"EnableAutoCapture\": {(T.EnableAutoCapture ? "true" : "false")},");
             sb.AppendLine($"    \"CaptureRootPath\": \"{SettingsStoreHelper.EscapeJson(T.CaptureRootPath)}\",");
             sb.AppendLine($"    \"SaveOriginalBmp\": {(T.SaveOriginalBmp ? "true" : "false")},");
-            sb.AppendLine($"    \"BackgroundPath\": \"{SettingsStoreHelper.EscapeJson(T.BackgroundPath)}\",");
             sb.AppendLine($"    \"LocalMinFreeGB\": {T.LocalMinFreeGB},");
             sb.AppendLine($"    \"RemotePath\": \"{SettingsStoreHelper.EscapeJson(T.RemotePath)}\",");
             sb.AppendLine($"    \"RemoteConfigPath\": \"{SettingsStoreHelper.EscapeJson(T.RemoteConfigPath)}\"");
@@ -275,7 +274,6 @@ namespace AniloxRoll.Monitor.Core.Data
                 SaveOriginalBmp      = obj.Contains("SaveOriginalBmp")
                     ? SettingsStoreHelper.GetBool(obj, "SaveOriginalBmp", InspectionDefaults.SaveOriginalBmp)
                     : !SettingsStoreHelper.GetBool(obj, "UseCompressedCapture", true),
-                BackgroundPath       = SettingsStoreHelper.GetString(obj, "BackgroundPath",   InspectionDefaults.BackgroundPath),
                 LocalMinFreeGB       = SettingsStoreHelper.GetInt   (obj, "LocalMinFreeGB",   InspectionDefaults.LocalMinFreeGB),
                 RemotePath           = SettingsStoreHelper.GetString(obj, "RemotePath",       InspectionDefaults.RemotePath),
                 RemoteConfigPath     = SettingsStoreHelper.GetString(obj, "RemoteConfigPath", InspectionDefaults.RemoteConfigPath),

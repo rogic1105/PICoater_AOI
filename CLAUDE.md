@@ -138,7 +138,7 @@ PICoater_AOI/
 |---------|------|--------|------|
 | ── OPS (um) ── | （分隔列，唯讀） | — | — |
 | Cam 1~7 | `ab_OpsCam1~ah_OpsCam7` | 33.0 | 各相機像素尺寸 |
-| A輪速度 (m/min) | `ai_OpsSpeed` → `AniloxRollSpeedMPerMin` | 10.0 | Anilox 輪速 |
+| A輪速度 (m/min) | `ai_OpsSpeed` → `AniloxRollSpeedMPerMin` | 40.0 | Anilox 輪速 |
 | ── Start (mm) ── | （分隔列，唯讀） | — | — |
 | Cam 1~7 | `bb_StartCam1~bh_StartCam7` | 0/400/800/1200/1600/2000/2400 | 各相機起始位置 |
 | ── Crop (mm) ── | （分隔列，唯讀） | — | — |
@@ -151,11 +151,11 @@ PICoater_AOI/
 |---------|------|--------|------|
 | ── 演算法 ── | （分隔列，唯讀） | — | — |
 | 去背演算法 | `db_Algorithm` → `Algorithm` | SingleFrameBgSub | None / SingleFrameBgSub / StandardBgSub |
-| 正規值 | `dc_HessianMaxFactor` → `HessianMaxFactor` | 1.0 | Hessian 正規化係數 |
+| 正規值 | `dc_HessianMaxFactor` → `HessianMaxFactor` | 0.3 | Hessian 正規化係數 |
 | ── 檢出標準 ── | （分隔列，唯讀） | — | — |
-| 檢出方向 | `eb_RidgeDir` → `RidgeDir` | Vertical | 垂直 / 水平 / 全部；決定哪個方向 Mura 超標才觸發 DO1 |
-| 平均閾值 | `ec_ErrorValueMean` → `ErrorValueMean` | 0.3 | 曲線圖 Mean 閾值線 |
-| 最大閾值 | `ed_ErrorValueMax` → `ErrorValueMax` | 0.5 | 曲線圖 Max 閾值線 |
+| 檢出方向 | `eb_RidgeDir` → `RidgeDir` | Both | 垂直 / 水平 / 全部；決定哪個方向 Mura 超標才觸發 DO1 |
+| 平均閾值 | `ec_ErrorValueMean` → `ErrorValueMean` | 0.2 | 曲線圖 Mean 閾值線 |
+| 最大閾值 | `ed_ErrorValueMax` → `ErrorValueMax` | 0.4 | 曲線圖 Max 閾值線 |
 | ── 背景校正 ── | （分隔列，唯讀） | — | — |
 | 取時間 (sec) | `fb_BackgroundSampleSeconds` → `BackgroundSampleSeconds` | 3 | StandardBgSub 採集時間 |
 
@@ -164,8 +164,8 @@ PICoater_AOI/
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
 | ── 檢測報表 ── | （分隔列，唯讀） | — | — |
-| y座標 | `gb_ChartScaleMode` → `ChartScaleMode` | Fixed | Auto / Fixed |
-| 月產量 | `gc_YearlyYMax` → `ChartYearlyYMax` | 60000 | 良率年圖 Y 軸上限 |
+| y座標 | `gb_ChartScaleMode` → `ChartScaleMode` | Auto | Auto / Fixed |
+| 月產量 | `gc_YearlyYMax` → `ChartYearlyYMax` | 50000 | 良率年圖 Y 軸上限 |
 | 日產量 | `gd_MonthlyYMax` → `ChartMonthlyYMax` | 2000 | 良率月圖 Y 軸上限 |
 | 時產量 | `ge_DailyYMax` → `ChartDailyYMax` | 300 | 良率日圖 Y 軸上限 |
 | ── 主畫面 ── | （分隔列，唯讀） | — | — |
@@ -180,10 +180,10 @@ PICoater_AOI/
 | 存檔 | `EnableAutoCapture` | true | 取像時自動存檔 |
 | 存原圖 | `SaveOriginalBmp` | false | 額外存原始 BMP |
 | 存檔目錄 | `CaptureRootPath` | D:\AniloxCaptures | 存檔根目錄 |
-| 存背景目錄 | `BackgroundPath` | D:\AniloxCaptures\bg | 背景 .bin 目錄 |
+| 存背景目錄 | （自動推算） | `CaptureRootPath\bg` | 只讀，不顯示於 PropertyGrid |
 | 預留空間 (GB) | `LocalMinFreeGB` | 100 | 磁碟可用空間低於此值觸發循環儲存，刪最舊日期影像（CSV 保留） |
 | 遠端路徑 | `RemotePath` | \\192.168.10.20\AniloxStorage | 遠端複製目標路徑（空=不複製） |
-| 遠端設定路徑 | `RemoteConfigPath` | \\192.168.10.20\AniloxConfig | 儲存機 AniloxConfig SMB 路徑；Inspection PC 每 10 grab 寫 cleanup-request.flag |
+| 遠端設定路徑 | `RemoteConfigPath` | （由 RemotePath 自動推算） | [Browsable(false)] 開發者設定，改 JSON 生效；空值時自動從 RemotePath 的伺服器 IP 推算 |
 
 ### 5. 相機設定
 
@@ -198,7 +198,7 @@ PICoater_AOI/
 | 啟用光源 | `LightEnabled` | true | 啟用 LTS-3DPA24 光源控制器 |
 | COM Port | `LightComPort` | COM17 | RS-232 連接埠；啟動時先試此 port，失敗則自動掃描所有 port（找到後更新此欄位） |
 | 通道 | `LightChannel` | 1 | 使用通道（單通道機型固定 1） |
-| 亮度 | `LightBrightness` | 128 | 亮度（0~255） |
+| 亮度 | `LightBrightness` | 255 | 亮度（0~255） |
 | 暖機延遲 (ms) | `LightWarmupMs` | 300 | 開燈後等待光源穩定的延遲；Grab 啟動前插入此延遲 |
 
 ### 7. IO 設定

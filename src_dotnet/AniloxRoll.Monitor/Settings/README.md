@@ -56,4 +56,3 @@
 ## JSON 設定檔
 
 - `Config/system-settings.json`：相機硬體參數（SystemSettings）。
-- `Config/inspection-settings.defaults.json`：PropertyGrid 預設值（InspectionSettings defaults）。

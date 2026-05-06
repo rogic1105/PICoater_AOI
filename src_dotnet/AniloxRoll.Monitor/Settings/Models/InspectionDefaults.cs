@@ -21,16 +21,16 @@ namespace AniloxRoll.Monitor.Core.Data
 
         // ── 2. 檢測配方 ────────────────────────────────────────────────────
         public static readonly BackgroundAlgorithm Algorithm  = BackgroundAlgorithm.SingleFrameBgSub; // 去背演算法
-        public static readonly RidgeDirection       RidgeDir  = RidgeDirection.Vertical;              // 檢出方向
-        public const float  HessianMaxFactor        = 1.0f;   // 正規值
-        public const float  ErrorValueMean          = 0.3f;   // Mura 圖表 > 平均閾值
-        public const float  ErrorValueMax           = 0.5f;   // Mura 圖表 > 最大閾值
+        public static readonly RidgeDirection       RidgeDir  = RidgeDirection.Both;                 // 檢出方向
+        public const float  HessianMaxFactor        = 0.3f;   // 正規值
+        public const float  ErrorValueMean          = 0.2f;   // Mura 圖表 > 平均閾值
+        public const float  ErrorValueMax           = 0.4f;   // Mura 圖表 > 最大閾值
         public const int    BackgroundSampleSeconds = 3;      // 取樣秒數
-        public const double AniloxRollSpeedMPerMin  = 10.0;   // 輪速 (m/min)
+        public const double AniloxRollSpeedMPerMin  = 40.0;   // 輪速 (m/min)
 
         // ── 3. 圖表設定 ────────────────────────────────────────────────────
-        public static readonly ChartScaleMode ScaleMode = ChartScaleMode.Fixed;      // 統計圖表 > 數量範圍
-        public const int YearlyYMax  = 60000;      // 統計圖表 > 月產量
+        public static readonly ChartScaleMode ScaleMode = ChartScaleMode.Auto;       // 統計圖表 > 數量範圍
+        public const int YearlyYMax  = 50000;      // 統計圖表 > 月產量
         public const int MonthlyYMax = 2000;       // 統計圖表 > 日產量
         public const int DailyYMax   = 300;        // 統計圖表 > 時產量
         public static readonly StitchMode DefaultStitch = StitchMode.Vertical;     // 主畫面 > 合圖方式
@@ -41,7 +41,6 @@ namespace AniloxRoll.Monitor.Core.Data
         public const bool   EnableAutoCapture = true;                              // 存檔
         public const bool   SaveOriginalBmp   = false;                             // 存原圖
         public const string CaptureRootPath   = @"D:\AniloxCaptures";             // 存圖目錄
-        public const string BackgroundPath    = @"D:\AniloxCaptures\bg";          // 存背景目錄
         public const int    LocalMinFreeGB    = 100;                               // 預留空間 (GB)
         public const string RemotePath        = @"\\192.168.10.20\AniloxStorage"; // 遠端路徑
         public const string RemoteConfigPath  = @"\\192.168.10.20\AniloxConfig";  // 遠端設定路徑
@@ -58,7 +57,7 @@ namespace AniloxRoll.Monitor.Core.Data
         public const bool   LightEnabled    = true;    // 啟用光源
         public const string LightComPort    = "COM17"; // COM Port
         public const int    LightChannel    = 1;       // 通道
-        public const int    LightBrightness = 128;     // 亮度
+        public const int    LightBrightness = 255;     // 亮度
         public const int    LightWarmupMs   = 300;     // 暖機延遲 (ms)
     }
 }

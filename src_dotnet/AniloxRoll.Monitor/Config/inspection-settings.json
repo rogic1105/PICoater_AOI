@@ -43,7 +43,6 @@
     "EnableAutoCapture": true,
     "CaptureRootPath": "D:\\AniloxCaptures",
     "SaveOriginalBmp": false,
-    "BackgroundPath": "D:\\AniloxCaptures\\bg",
     "LocalMinFreeGB": 100,
     "RemotePath": "\\\\192.168.10.20\\AniloxStorage",
     "RemoteConfigPath": "\\\\192.168.10.20\\AniloxConfig"
