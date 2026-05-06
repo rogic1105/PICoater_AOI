@@ -2,47 +2,47 @@ using System.ComponentModel;
 
 namespace AniloxRoll.Monitor.Core.Data
 {
-    [TypeConverter(typeof(ExpandableObjectConverter))]
+    [TypeConverter(typeof(ExpandableLeftAlignConverter))]
     public class CameraOpsConfig
     {
-        [DisplayName("Cam 1")] public double Cam1 { get; set; } = 33.0;
-        [DisplayName("Cam 2")] public double Cam2 { get; set; } = 33.0;
-        [DisplayName("Cam 3")] public double Cam3 { get; set; } = 33.0;
-        [DisplayName("Cam 4")] public double Cam4 { get; set; } = 33.0;
-        [DisplayName("Cam 5")] public double Cam5 { get; set; } = 33.0;
-        [DisplayName("Cam 6")] public double Cam6 { get; set; } = 33.0;
-        [DisplayName("Cam 7")] public double Cam7 { get; set; } = 33.0;
+        [DisplayName("Cam 1")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam1 { get; set; } = InspectionDefaults.CamOps;
+        [DisplayName("Cam 2")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam2 { get; set; } = InspectionDefaults.CamOps;
+        [DisplayName("Cam 3")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam3 { get; set; } = InspectionDefaults.CamOps;
+        [DisplayName("Cam 4")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam4 { get; set; } = InspectionDefaults.CamOps;
+        [DisplayName("Cam 5")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam5 { get; set; } = InspectionDefaults.CamOps;
+        [DisplayName("Cam 6")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam6 { get; set; } = InspectionDefaults.CamOps;
+        [DisplayName("Cam 7")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam7 { get; set; } = InspectionDefaults.CamOps;
 
         public void Validate()
         {
-            if (Cam1 <= 0) Cam1 = 33.0; if (Cam2 <= 0) Cam2 = 33.0; if (Cam3 <= 0) Cam3 = 33.0;
-            if (Cam4 <= 0) Cam4 = 33.0; if (Cam5 <= 0) Cam5 = 33.0; if (Cam6 <= 0) Cam6 = 33.0; if (Cam7 <= 0) Cam7 = 33.0;
+            if (Cam1 <= 0) Cam1 = InspectionDefaults.CamOps; if (Cam2 <= 0) Cam2 = InspectionDefaults.CamOps; if (Cam3 <= 0) Cam3 = InspectionDefaults.CamOps;
+            if (Cam4 <= 0) Cam4 = InspectionDefaults.CamOps; if (Cam5 <= 0) Cam5 = InspectionDefaults.CamOps; if (Cam6 <= 0) Cam6 = InspectionDefaults.CamOps; if (Cam7 <= 0) Cam7 = InspectionDefaults.CamOps;
         }
 
         public double[] ToArray() => new[] { Cam1, Cam2, Cam3, Cam4, Cam5, Cam6, Cam7 };
         public override string ToString() => "";
     }
 
-    [TypeConverter(typeof(ExpandableObjectConverter))]
+    [TypeConverter(typeof(ExpandableLeftAlignConverter))]
     public class CameraStartPositionConfig
     {
-        [DisplayName("Cam 1")] public double Cam1 { get; set; } = 0.0;
-        [DisplayName("Cam 2")] public double Cam2 { get; set; } = 400.0;
-        [DisplayName("Cam 3")] public double Cam3 { get; set; } = 800.0;
-        [DisplayName("Cam 4")] public double Cam4 { get; set; } = 1200.0;
-        [DisplayName("Cam 5")] public double Cam5 { get; set; } = 1600.0;
-        [DisplayName("Cam 6")] public double Cam6 { get; set; } = 2000.0;
-        [DisplayName("Cam 7")] public double Cam7 { get; set; } = 2400.0;
+        [DisplayName("Cam 1")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam1 { get; set; } = InspectionDefaults.CamPos_Cam1;
+        [DisplayName("Cam 2")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam2 { get; set; } = InspectionDefaults.CamPos_Cam2;
+        [DisplayName("Cam 3")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam3 { get; set; } = InspectionDefaults.CamPos_Cam3;
+        [DisplayName("Cam 4")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam4 { get; set; } = InspectionDefaults.CamPos_Cam4;
+        [DisplayName("Cam 5")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam5 { get; set; } = InspectionDefaults.CamPos_Cam5;
+        [DisplayName("Cam 6")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam6 { get; set; } = InspectionDefaults.CamPos_Cam6;
+        [DisplayName("Cam 7")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam7 { get; set; } = InspectionDefaults.CamPos_Cam7;
 
         public double[] ToArray() => new[] { Cam1, Cam2, Cam3, Cam4, Cam5, Cam6, Cam7 };
         public override string ToString() => "";
     }
 
-    [TypeConverter(typeof(ExpandableObjectConverter))]
+    [TypeConverter(typeof(ExpandableLeftAlignConverter))]
     public class CameraCropConfig
     {
-        [DisplayName("去頭 (mm)")] public double TrimHeadMm { get; set; } = 0.0;
-        [DisplayName("去尾 (mm)")] public double TrimTailMm { get; set; } = 0.0;
+        [DisplayName("去頭")][TypeConverter(typeof(LeftAlignNumericConverter))] public double TrimHeadMm { get; set; } = 0.0;
+        [DisplayName("去尾")][TypeConverter(typeof(LeftAlignNumericConverter))] public double TrimTailMm { get; set; } = 0.0;
 
         public void Validate()
         {

@@ -49,23 +49,24 @@ namespace AniloxRoll.Monitor.Core.Data
     }
 
     /// <summary>檢測方向：決定哪個方向的 Mura 超標才觸發 DO_MURA_DETECTED。</summary>
+    [TypeConverter(typeof(EnumDescriptionConverter))]
     public enum RidgeDirection
     {
         [Description("垂直")]   Vertical,
         [Description("水平")]   Horizontal,
-        [Description("雙向")]   Both
+        [Description("全部")]   Both
     }
 
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public class InspectionRecipe
     {
-        [DisplayName("去背演算法")]    public BackgroundAlgorithm Algorithm { get; set; } = BackgroundAlgorithm.SingleFrameBgSub;
-        [DisplayName("Ridge 方向")]    public RidgeDirection RidgeDir { get; set; } = RidgeDirection.Vertical;
-        [DisplayName("Hessian Max Factor")] public float HessianMaxFactor { get; set; } = 1.0f;
-        [DisplayName("Error Value Mean")] public float ErrorValueMean { get; set; } = 0.3f;
-        [DisplayName("Error Value Max")] public float ErrorValueMax { get; set; } = 0.5f;
-        [DisplayName("背景取樣秒數")]  public int BackgroundSampleSeconds { get; set; } = 3;
-        [DisplayName("A輪速度 (m/min)")]  public double AniloxRollSpeedMPerMin { get; set; } = 10.0;
+        [DisplayName("去背演算法")]    public BackgroundAlgorithm Algorithm { get; set; } = InspectionDefaults.Algorithm;
+        [DisplayName("Ridge 方向")]    public RidgeDirection RidgeDir { get; set; } = InspectionDefaults.RidgeDir;
+        [DisplayName("Hessian Max Factor")] public float HessianMaxFactor { get; set; } = InspectionDefaults.HessianMaxFactor;
+        [DisplayName("Error Value Mean")] public float ErrorValueMean { get; set; } = InspectionDefaults.ErrorValueMean;
+        [DisplayName("Error Value Max")] public float ErrorValueMax { get; set; } = InspectionDefaults.ErrorValueMax;
+        [DisplayName("背景取樣秒數")]  public int BackgroundSampleSeconds { get; set; } = InspectionDefaults.BackgroundSampleSeconds;
+        [DisplayName("A輪速度 (m/min)")]  public double AniloxRollSpeedMPerMin { get; set; } = InspectionDefaults.AniloxRollSpeedMPerMin;
 
         /// <summary>存檔縮小倍率。原圖寬高各除以此值後存成 JPEG。唯一預設值來源：InspectionEngineConfig.DefaultSaveResizeScale。</summary>
         [Browsable(false)] public int SaveResizeScale { get; set; } = InspectionEngineConfig.DefaultSaveResizeScale;
@@ -75,11 +76,11 @@ namespace AniloxRoll.Monitor.Core.Data
 
         public void Validate()
         {
-            if (HessianMaxFactor <= 0) HessianMaxFactor = 1.0f;
-            if (ErrorValueMean <= 0) ErrorValueMean = 0.3f;
-            if (ErrorValueMax <= 0) ErrorValueMax = 0.5f;
-            if (BackgroundSampleSeconds < 1) BackgroundSampleSeconds = 3;
-            if (AniloxRollSpeedMPerMin <= 0) AniloxRollSpeedMPerMin = 10.0;
+            if (HessianMaxFactor <= 0) HessianMaxFactor = InspectionDefaults.HessianMaxFactor;
+            if (ErrorValueMean <= 0) ErrorValueMean = InspectionDefaults.ErrorValueMean;
+            if (ErrorValueMax <= 0) ErrorValueMax = InspectionDefaults.ErrorValueMax;
+            if (BackgroundSampleSeconds < 1) BackgroundSampleSeconds = InspectionDefaults.BackgroundSampleSeconds;
+            if (AniloxRollSpeedMPerMin <= 0) AniloxRollSpeedMPerMin = InspectionDefaults.AniloxRollSpeedMPerMin;
             if (SaveResizeScale <= 0) SaveResizeScale = InspectionEngineConfig.DefaultSaveResizeScale;
             if (SaveJpgQuality  < 1 || SaveJpgQuality > 100) SaveJpgQuality = InspectionEngineConfig.DefaultSaveJpgQuality;
         }

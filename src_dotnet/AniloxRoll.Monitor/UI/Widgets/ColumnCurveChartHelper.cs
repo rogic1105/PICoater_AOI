@@ -215,6 +215,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             area.AxisX.ScaleView.Zoomable       = true;
 
             area.AxisY.Minimum                    = 0;
+            area.AxisY.Maximum                    = 1.0;
             area.AxisY.Interval                   = 0.2;
             area.AxisY.LabelStyle.Enabled         = false;
             area.AxisY.LineColor                  = Color.Transparent;
@@ -225,6 +226,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
             area.AxisY2.Enabled            = AxisEnabled.True;
             area.AxisY2.Minimum            = 0;
+            area.AxisY2.Maximum            = 1.0;
             area.AxisY2.Interval           = 0.2;
             area.AxisY2.LabelStyle.Format  = "F1";
             area.AxisY2.LabelStyle.Angle   = 0;
@@ -242,7 +244,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 Color = Color.Transparent, MarkerSize = 0, IsVisibleInLegend = false
             };
             anchorY.Points.AddXY(0, 0);
-            anchorY.Points.AddXY(0, 2.2);
+            anchorY.Points.AddXY(0, 1.0);
             _chart.Series.Add(anchorY);
 
             var anchorY2 = new Series("_anchorY2")
@@ -251,7 +253,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 Color = Color.Transparent, MarkerSize = 0, IsVisibleInLegend = false
             };
             anchorY2.Points.AddXY(0, 0);
-            anchorY2.Points.AddXY(0, 2.2);
+            anchorY2.Points.AddXY(0, 1.0);
             _chart.Series.Add(anchorY2);
         }
 

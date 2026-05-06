@@ -57,6 +57,51 @@ Solution 映射 `Debug|x64` → `Debug|Any CPU`（含空格），`AllowUnsafeBlo
 - 欄位寬度用反射 `MoveSplitterTo`（indent=16 + rightMargin=8）
 - **scroll 捲到頂**：`ExpandAllGridItems()` 後 scroll 停在最後一項。`VScrollBar` 是內部 `GridView` 的子控制項，外層 `Controls` 找不到。Fix：在 `Shown` 事件設 `SelectedGridItem` 到第一個屬性（PropertyGrid 會自動捲動）。層級：`SelectedGridItem.Parent` = 當前 category，`.Parent.Parent` = 根節點，`GridItems[0].GridItems[0]` = 第一 category 第一屬性。不可在 constructor 用 `BeginInvoke`（handle 尚未建立）。
 
+### PropertyGrid 動態說明欄（TypeDescriptionProvider）
+
+點選屬性時在底部說明欄動態顯示目前值，用 `TypeDescriptionProvider` + `PropertyDescriptor` wrapper 實作。
+
+**⚠️ 陷阱：`[TypeDescriptionProvider]` 屬性的循環參考**
+```csharp
+// ❌ 錯誤：_base 在 class 載入時呼叫 GetProvider，
+//         因屬性已存在，GetProvider 又回傳自己 → instance 永遠 null
+[TypeDescriptionProvider(typeof(MyProvider))]
+class MySettings { }
+
+class MyProvider : TypeDescriptionProvider {
+    private static readonly TypeDescriptionProvider _base =
+        TypeDescriptor.GetProvider(typeof(MySettings)); // ← 循環！
+    public MyProvider() : base(_base) { }
+}
+```
+
+**✅ 正確：per-instance 模式（parent 明確傳入）**
+```csharp
+// 不加 [TypeDescriptionProvider] 屬性
+class MySettings { }
+
+class MyProvider : TypeDescriptionProvider {
+    private readonly MySettings _s;
+    public MyProvider(TypeDescriptionProvider parent, MySettings s)
+        : base(parent) { _s = s; }
+    public override ICustomTypeDescriptor GetTypeDescriptor(Type t, object inst)
+        => new DynamicDescriptor(base.GetTypeDescriptor(t, inst), _s);
+}
+
+// 在 Form 初始化，SelectedObject 設定前呼叫：
+TypeDescriptor.AddProvider(
+    new MyProvider(TypeDescriptor.GetProvider(_settings), _settings), _settings);
+propertyGridSettings.SelectedObject = _settings;
+```
+
+**實作重點**
+- `DynamicDescriptor : CustomTypeDescriptor` — 覆寫 `GetProperties()` 與 `GetProperties(Attribute[])` 兩個多載，用 `new PropertyDescriptorCollection(arr)` 回傳包裝後的陣列
+- `ValueDescriptor : PropertyDescriptor` — 用 `base(inner)` 複製原本屬性（名稱、屬性集），只覆寫 `Description`
+- `Description` 取目前值：`_inner.GetValue(_s)`；bool → `"是"/"否"`；enum → 反射讀 `[Description]` 屬性
+- 標題列（`[ReadOnly(true)]` 分隔符）名稱以 `"Header"` 結尾，**不包裝**，說明欄保持空白
+- `GetValue` 用 `try/catch` 包裹，失敗回傳 `""`
+- 多個 per-instance provider 可疊加（如同時有過濾器 `StorageModeSettingsFilter`），後加的為最外層
+
 ### ListView AutoFit
 `AutoResizeColumn(ColumnContent)` vs `AutoResizeColumn(HeaderSize)` 取 max。
 動態更新的 ListView 只在第一次 Tick 後 fit 一次（`_fitDone` flag）。

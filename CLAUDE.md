@@ -136,33 +136,42 @@ PICoater_AOI/
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
-| OPS (um) | `Ops.Cam1~7` | 33.0 | 各相機像素尺寸（展開 Cam 1~7） |
-| Start (mm) | `StartPosition.Cam1~7` | 0/400/800/1200/1600/2000/2400 | 各相機起始位置 |
-| Crop | `Crop.TrimHeadMm` / `Crop.TrimTailMm` | 0.0 | 展開後顯示「去頭 (mm)」（CAM1 左側）/ 「去尾 (mm)」（CAM7 右側） |
+| ── OPS (um) ── | （分隔列，唯讀） | — | — |
+| Cam 1~7 | `ab_OpsCam1~ah_OpsCam7` | 33.0 | 各相機像素尺寸 |
+| A輪速度 (m/min) | `ai_OpsSpeed` → `AniloxRollSpeedMPerMin` | 10.0 | Anilox 輪速 |
+| ── Start (mm) ── | （分隔列，唯讀） | — | — |
+| Cam 1~7 | `bb_StartCam1~bh_StartCam7` | 0/400/800/1200/1600/2000/2400 | 各相機起始位置 |
+| ── Crop (mm) ── | （分隔列，唯讀） | — | — |
+| 去頭 | `cb_CropHead` → `Crop.TrimHeadMm` | 0.0 | CAM1 左側裁切 |
+| 去尾 | `cc_CropTail` → `Crop.TrimTailMm` | 0.0 | CAM7 右側裁切 |
 
-### 2. 檢測配方
+### 2. 檢測設定
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
-| 去背演算法 | `Algorithm` | SingleFrameBgSub | None / SingleFrameBgSub / StandardBgSub |
-| 檢測方向 | `RidgeDir` | Vertical | 垂直 / 水平 / 雙向；決定哪個方向 Mura 超標才觸發 DO1 |
-| 正規值 | `HessianMaxFactor` | 1.0 | Hessian 正規化係數 |
-| 取樣秒數 | `BackgroundSampleSeconds` | 3 | StandardBgSub 採集時間 |
-| 輪速 (m/min) | `AniloxRollSpeedMPerMin` | 10.0 | Anilox 輪速 |
+| ── 演算法 ── | （分隔列，唯讀） | — | — |
+| 去背演算法 | `db_Algorithm` → `Algorithm` | SingleFrameBgSub | None / SingleFrameBgSub / StandardBgSub |
+| 正規值 | `dc_HessianMaxFactor` → `HessianMaxFactor` | 1.0 | Hessian 正規化係數 |
+| ── 檢出標準 ── | （分隔列，唯讀） | — | — |
+| 檢出方向 | `eb_RidgeDir` → `RidgeDir` | Vertical | 垂直 / 水平 / 全部；決定哪個方向 Mura 超標才觸發 DO1 |
+| 平均閾值 | `ec_ErrorValueMean` → `ErrorValueMean` | 0.3 | 曲線圖 Mean 閾值線 |
+| 最大閾值 | `ed_ErrorValueMax` → `ErrorValueMax` | 0.5 | 曲線圖 Max 閾值線 |
+| ── 背景校正 ── | （分隔列，唯讀） | — | — |
+| 取時間 (sec) | `fb_BackgroundSampleSeconds` → `BackgroundSampleSeconds` | 3 | StandardBgSub 採集時間 |
 
 ### 3. 圖表設定
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
-| 統計圖表 > 數量範圍 | `Chart.ScaleMode` | Fixed | Auto / Fixed |
-| 統計圖表 > 月產量 | `Chart.YearlyYMax` | 60000 | 良率年圖 Y 軸上限 |
-| 統計圖表 > 日產量 | `Chart.MonthlyYMax` | 2000 | 良率月圖 Y 軸上限 |
-| 統計圖表 > 時產量 | `Chart.DailyYMax` | 300 | 良率日圖 Y 軸上限 |
-| Mura 圖表 > 平均閾值 | `ErrorValueMean` | 0.3 | 曲線圖 Mean 閾值線 |
-| Mura 圖表 > 最大閾值 | `ErrorValueMax` | 0.5 | 曲線圖 Max 閾值線 |
-| 主畫面 > 合圖方式 | `StitchMode` | Vertical | Vertical / Global |
-| 監控強化 | `EnableMuraEnhance` | false | 即時影像強化 Mura |
-| 回顧強化 | `EnableReviewEnhance` | false | 回顧影像強化 Mura |
+| ── 檢測報表 ── | （分隔列，唯讀） | — | — |
+| y座標 | `gb_ChartScaleMode` → `ChartScaleMode` | Fixed | Auto / Fixed |
+| 月產量 | `gc_YearlyYMax` → `ChartYearlyYMax` | 60000 | 良率年圖 Y 軸上限 |
+| 日產量 | `gd_MonthlyYMax` → `ChartMonthlyYMax` | 2000 | 良率月圖 Y 軸上限 |
+| 時產量 | `ge_DailyYMax` → `ChartDailyYMax` | 300 | 良率日圖 Y 軸上限 |
+| ── 主畫面 ── | （分隔列，唯讀） | — | — |
+| 合圖方式 | `hb_StitchMode` → `StitchMode` | Vertical | Vertical / Global |
+| 監控強化 | `hc_EnableMuraEnhance` → `EnableMuraEnhance` | false | 即時影像強化 Mura |
+| 回顧強化 | `hd_EnableReviewEnhance` → `EnableReviewEnhance` | false | 回顧影像強化 Mura |
 
 ### 4. 儲存設定
 
@@ -170,27 +179,19 @@ PICoater_AOI/
 |---------|------|--------|------|
 | 存檔 | `EnableAutoCapture` | true | 取像時自動存檔 |
 | 存原圖 | `SaveOriginalBmp` | false | 額外存原始 BMP |
-| 存圖目錄 | `CaptureRootPath` | D:\AniloxCaptures | 存檔根目錄 |
+| 存檔目錄 | `CaptureRootPath` | D:\AniloxCaptures | 存檔根目錄 |
 | 存背景目錄 | `BackgroundPath` | D:\AniloxCaptures\bg | 背景 .bin 目錄 |
 | 預留空間 (GB) | `LocalMinFreeGB` | 100 | 磁碟可用空間低於此值觸發循環儲存，刪最舊日期影像（CSV 保留） |
 | 遠端路徑 | `RemotePath` | \\192.168.10.20\AniloxStorage | 遠端複製目標路徑（空=不複製） |
 | 遠端設定路徑 | `RemoteConfigPath` | \\192.168.10.20\AniloxConfig | 儲存機 AniloxConfig SMB 路徑；Inspection PC 每 10 grab 寫 cleanup-request.flag |
 
-### 5. IO設定
-
-| 顯示名稱 | 屬性 | 預設值 | 說明 |
-|---------|------|--------|------|
-| 啟用 IO | `PlcEnabled` | true | 啟用 PLC Modbus TCP |
-| IO IP | `PlcIp` | 192.168.255.1 | ET-7044 IP |
-| IO Port | `PlcPort` | 502 | Modbus TCP port |
-
-### 6. 相機設定
+### 5. 相機設定
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
 | 設定檔 | `DcfPath` | D:\AniloxCaptures\dcf\Radient_Config.dcf | MIL Digitizer DCF 檔案路徑 |
 
-### 7. 光源設定
+### 6. 光源設定
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
@@ -198,6 +199,15 @@ PICoater_AOI/
 | COM Port | `LightComPort` | COM17 | RS-232 連接埠；啟動時先試此 port，失敗則自動掃描所有 port（找到後更新此欄位） |
 | 通道 | `LightChannel` | 1 | 使用通道（單通道機型固定 1） |
 | 亮度 | `LightBrightness` | 128 | 亮度（0~255） |
+| 暖機延遲 (ms) | `LightWarmupMs` | 300 | 開燈後等待光源穩定的延遲；Grab 啟動前插入此延遲 |
+
+### 7. IO 設定
+
+| 顯示名稱 | 屬性 | 預設值 | 說明 |
+|---------|------|--------|------|
+| 啟用 IO | `PlcEnabled` | true | 啟用 PLC Modbus TCP |
+| IO IP | `PlcIp` | 192.168.255.1 | ET-7044 IP |
+| IO Port | `PlcPort` | 502 | Modbus TCP port |
 
 ---
 

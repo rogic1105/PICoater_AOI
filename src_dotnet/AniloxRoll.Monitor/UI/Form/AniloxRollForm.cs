@@ -719,6 +719,11 @@ namespace AniloxRoll.Monitor.Forms
             muraChartVerticalLive.MouseClick += (s, e) => SwitchLiveDisplayDirection("v");
             muraChartHorizontalLive.MouseClick += (s, e) => SwitchLiveDisplayDirection("h");
 
+            // PropertyGrid：動態標題說明（點選 ─ X ─ 時，底部說明欄顯示當前參數值）
+            TypeDescriptor.AddProvider(
+                new InspectionSettingsDescriptionProvider(TypeDescriptor.GetProvider(_settings), _settings),
+                _settings);
+
             // PropertyGrid：Categorized 排序（維持宣告順序），預設摺疊
             propertyGridSettings.SelectedObject = _settings;
             propertyGridSettings.ToolbarVisible = false;

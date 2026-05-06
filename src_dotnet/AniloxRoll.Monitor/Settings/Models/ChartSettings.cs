@@ -18,18 +18,18 @@ namespace AniloxRoll.Monitor.Core.Data
         [Description("全域")] Global
     }
 
-    [TypeConverter(typeof(ExpandableObjectConverter))]
+    [TypeConverter(typeof(ExpandableLeftAlignConverter))]
     public class ChartSettings
     {
-        [DisplayName("數量範圍")] public ChartScaleMode ScaleMode { get; set; } = ChartScaleMode.Fixed;
-        [DisplayName("月產量")]   public int YearlyYMax  { get; set; } = 60000;
-        [DisplayName("日產量")]   public int MonthlyYMax { get; set; } = 2000;
-        [DisplayName("時產量")]   public int DailyYMax   { get; set; } = 300;
+        [DisplayName("數量範圍")] public ChartScaleMode ScaleMode  { get; set; } = InspectionDefaults.ScaleMode;
+        [DisplayName("月產量")][TypeConverter(typeof(LeftAlignNumericConverter))] public int YearlyYMax  { get; set; } = InspectionDefaults.YearlyYMax;
+        [DisplayName("日產量")][TypeConverter(typeof(LeftAlignNumericConverter))] public int MonthlyYMax { get; set; } = InspectionDefaults.MonthlyYMax;
+        [DisplayName("時產量")][TypeConverter(typeof(LeftAlignNumericConverter))] public int DailyYMax   { get; set; } = InspectionDefaults.DailyYMax;
         public void Validate()
         {
-            if (YearlyYMax  <= 0) YearlyYMax  = 60000;
-            if (MonthlyYMax <= 0) MonthlyYMax = 2000;
-            if (DailyYMax   <= 0) DailyYMax   = 300;
+            if (YearlyYMax  <= 0) YearlyYMax  = InspectionDefaults.YearlyYMax;
+            if (MonthlyYMax <= 0) MonthlyYMax = InspectionDefaults.MonthlyYMax;
+            if (DailyYMax   <= 0) DailyYMax   = InspectionDefaults.DailyYMax;
         }
 
         public override string ToString() => "";

@@ -7,11 +7,11 @@ namespace AniloxRoll.Monitor.Core.Data
     public class CameraParamSettings
     {
         [Browsable(false)]
-        public string DcfPath { get; set; } = @"D:\AniloxCaptures\dcf\Radient_Config.dcf";
+        public string DcfPath { get; set; } = InspectionDefaults.DcfPath;
 
         public void Validate()
         {
-            if (string.IsNullOrWhiteSpace(DcfPath)) DcfPath = @"D:\AniloxCaptures\dcf\Radient_Config.dcf";
+            if (string.IsNullOrWhiteSpace(DcfPath)) DcfPath = InspectionDefaults.DcfPath;
         }
     }
 }

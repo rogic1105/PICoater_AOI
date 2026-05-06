@@ -133,7 +133,8 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"Enabled\": {(LT.Enabled ? "true" : "false")},");
             sb.AppendLine($"    \"ComPort\": \"{SettingsStoreHelper.EscapeJson(LT.ComPort)}\",");
             sb.AppendLine($"    \"Channel\": {LT.Channel},");
-            sb.AppendLine($"    \"Brightness\": {LT.Brightness}");
+            sb.AppendLine($"    \"Brightness\": {LT.Brightness},");
+            sb.AppendLine($"    \"WarmupMs\": {LT.WarmupMs}");
             sb.AppendLine("  }");
 
             sb.Append("}");
@@ -167,22 +168,22 @@ namespace AniloxRoll.Monitor.Core.Data
             string obj = SettingsStoreHelper.ExtractObject(json, "MachineLayout");
             return new MachineLayoutConfig
             {
-                Cam1_Ops = SettingsStoreHelper.GetDouble(obj, "Cam1_Ops", 33.0),
-                Cam2_Ops = SettingsStoreHelper.GetDouble(obj, "Cam2_Ops", 33.0),
-                Cam3_Ops = SettingsStoreHelper.GetDouble(obj, "Cam3_Ops", 33.0),
-                Cam4_Ops = SettingsStoreHelper.GetDouble(obj, "Cam4_Ops", 33.0),
-                Cam5_Ops = SettingsStoreHelper.GetDouble(obj, "Cam5_Ops", 33.0),
-                Cam6_Ops = SettingsStoreHelper.GetDouble(obj, "Cam6_Ops", 33.0),
-                Cam7_Ops = SettingsStoreHelper.GetDouble(obj, "Cam7_Ops", 33.0),
-                Cam1_Pos = SettingsStoreHelper.GetDouble(obj, "Cam1_Pos",    0.0),
-                Cam2_Pos = SettingsStoreHelper.GetDouble(obj, "Cam2_Pos",  400.0),
-                Cam3_Pos = SettingsStoreHelper.GetDouble(obj, "Cam3_Pos",  800.0),
-                Cam4_Pos = SettingsStoreHelper.GetDouble(obj, "Cam4_Pos", 1200.0),
-                Cam5_Pos = SettingsStoreHelper.GetDouble(obj, "Cam5_Pos", 1600.0),
-                Cam6_Pos = SettingsStoreHelper.GetDouble(obj, "Cam6_Pos", 2000.0),
-                Cam7_Pos    = SettingsStoreHelper.GetDouble(obj, "Cam7_Pos",    2400.0),
-                TrimHeadMm  = SettingsStoreHelper.GetDouble(obj, "TrimHeadMm",  0.0),
-                TrimTailMm  = SettingsStoreHelper.GetDouble(obj, "TrimTailMm",  0.0),
+                Cam1_Ops = SettingsStoreHelper.GetDouble(obj, "Cam1_Ops", InspectionDefaults.CamOps),
+                Cam2_Ops = SettingsStoreHelper.GetDouble(obj, "Cam2_Ops", InspectionDefaults.CamOps),
+                Cam3_Ops = SettingsStoreHelper.GetDouble(obj, "Cam3_Ops", InspectionDefaults.CamOps),
+                Cam4_Ops = SettingsStoreHelper.GetDouble(obj, "Cam4_Ops", InspectionDefaults.CamOps),
+                Cam5_Ops = SettingsStoreHelper.GetDouble(obj, "Cam5_Ops", InspectionDefaults.CamOps),
+                Cam6_Ops = SettingsStoreHelper.GetDouble(obj, "Cam6_Ops", InspectionDefaults.CamOps),
+                Cam7_Ops = SettingsStoreHelper.GetDouble(obj, "Cam7_Ops", InspectionDefaults.CamOps),
+                Cam1_Pos = SettingsStoreHelper.GetDouble(obj, "Cam1_Pos", InspectionDefaults.CamPos_Cam1),
+                Cam2_Pos = SettingsStoreHelper.GetDouble(obj, "Cam2_Pos", InspectionDefaults.CamPos_Cam2),
+                Cam3_Pos = SettingsStoreHelper.GetDouble(obj, "Cam3_Pos", InspectionDefaults.CamPos_Cam3),
+                Cam4_Pos = SettingsStoreHelper.GetDouble(obj, "Cam4_Pos", InspectionDefaults.CamPos_Cam4),
+                Cam5_Pos = SettingsStoreHelper.GetDouble(obj, "Cam5_Pos", InspectionDefaults.CamPos_Cam5),
+                Cam6_Pos = SettingsStoreHelper.GetDouble(obj, "Cam6_Pos", InspectionDefaults.CamPos_Cam6),
+                Cam7_Pos    = SettingsStoreHelper.GetDouble(obj, "Cam7_Pos",    InspectionDefaults.CamPos_Cam7),
+                TrimHeadMm  = SettingsStoreHelper.GetDouble(obj, "TrimHeadMm",  InspectionDefaults.TrimHeadMm),
+                TrimTailMm  = SettingsStoreHelper.GetDouble(obj, "TrimTailMm",  InspectionDefaults.TrimTailMm),
             };
         }
 
@@ -204,14 +205,14 @@ namespace AniloxRoll.Monitor.Core.Data
             {
                 Algorithm        = algo,
                 RidgeDir         = ridgeDir,
-                HessianMaxFactor = SettingsStoreHelper.GetFloat(obj, "HessianMaxFactor", 5.0f),
-                ErrorValueMean   = SettingsStoreHelper.GetFloat(obj, "ErrorValueMean",   1.0f),
-                ErrorValueMax    = SettingsStoreHelper.GetFloat(obj, "ErrorValueMax",     2.0f),
+                HessianMaxFactor = SettingsStoreHelper.GetFloat(obj, "HessianMaxFactor", InspectionDefaults.HessianMaxFactor),
+                ErrorValueMean   = SettingsStoreHelper.GetFloat(obj, "ErrorValueMean",   InspectionDefaults.ErrorValueMean),
+                ErrorValueMax    = SettingsStoreHelper.GetFloat(obj, "ErrorValueMax",     InspectionDefaults.ErrorValueMax),
                 // 向後相容：舊 JSON 用 BackgroundSampleRows，新 JSON 用 BackgroundSampleSeconds
                 BackgroundSampleSeconds = obj.Contains("BackgroundSampleSeconds")
-                    ? SettingsStoreHelper.GetInt(obj, "BackgroundSampleSeconds", 3)
-                    : 3,
-                AniloxRollSpeedMPerMin = SettingsStoreHelper.GetDouble(obj, "AniloxRollSpeedMPerMin", 10.0),
+                    ? SettingsStoreHelper.GetInt(obj, "BackgroundSampleSeconds", InspectionDefaults.BackgroundSampleSeconds)
+                    : InspectionDefaults.BackgroundSampleSeconds,
+                AniloxRollSpeedMPerMin = SettingsStoreHelper.GetDouble(obj, "AniloxRollSpeedMPerMin", InspectionDefaults.AniloxRollSpeedMPerMin),
                 SaveResizeScale      = SettingsStoreHelper.GetInt(obj, "SaveResizeScale",   5),
                 SaveJpgQuality       = SettingsStoreHelper.GetInt(obj, "SaveJpgQuality",    90),
             };
@@ -229,9 +230,9 @@ namespace AniloxRoll.Monitor.Core.Data
             return new ChartSettings
             {
                 ScaleMode   = mode,
-                YearlyYMax  = SettingsStoreHelper.GetInt(obj, "YearlyYMax",  60000),
-                MonthlyYMax = SettingsStoreHelper.GetInt(obj, "MonthlyYMax",  2000),
-                DailyYMax   = SettingsStoreHelper.GetInt(obj, "DailyYMax",     300),
+                YearlyYMax  = SettingsStoreHelper.GetInt(obj, "YearlyYMax",  InspectionDefaults.YearlyYMax),
+                MonthlyYMax = SettingsStoreHelper.GetInt(obj, "MonthlyYMax", InspectionDefaults.MonthlyYMax),
+                DailyYMax   = SettingsStoreHelper.GetInt(obj, "DailyYMax",   InspectionDefaults.DailyYMax),
             };
         }
 
@@ -268,16 +269,16 @@ namespace AniloxRoll.Monitor.Core.Data
             string obj = SettingsStoreHelper.ExtractObject(json, "Storage");
             return new StorageSettings
             {
-                EnableAutoCapture    = SettingsStoreHelper.GetBool  (obj, "EnableAutoCapture",    true),
-                CaptureRootPath      = SettingsStoreHelper.GetString(obj, "CaptureRootPath",      @"D:\AniloxCaptures"),
+                EnableAutoCapture    = SettingsStoreHelper.GetBool  (obj, "EnableAutoCapture",    InspectionDefaults.EnableAutoCapture),
+                CaptureRootPath      = SettingsStoreHelper.GetString(obj, "CaptureRootPath",      InspectionDefaults.CaptureRootPath),
                 // 向後相容：舊 JSON 有 UseCompressedCapture（true=壓縮），反轉為 SaveOriginalBmp
                 SaveOriginalBmp      = obj.Contains("SaveOriginalBmp")
-                    ? SettingsStoreHelper.GetBool(obj, "SaveOriginalBmp", false)
+                    ? SettingsStoreHelper.GetBool(obj, "SaveOriginalBmp", InspectionDefaults.SaveOriginalBmp)
                     : !SettingsStoreHelper.GetBool(obj, "UseCompressedCapture", true),
-                BackgroundPath       = SettingsStoreHelper.GetString(obj, "BackgroundPath", @"D:\AniloxCaptures\bg"),
-                LocalMinFreeGB       = SettingsStoreHelper.GetInt   (obj, "LocalMinFreeGB",    100),
-                RemotePath           = SettingsStoreHelper.GetString(obj, "RemotePath",        @"\\192.168.10.20\AniloxStorage"),
-                RemoteConfigPath     = SettingsStoreHelper.GetString(obj, "RemoteConfigPath",  @"\\192.168.10.20\AniloxConfig"),
+                BackgroundPath       = SettingsStoreHelper.GetString(obj, "BackgroundPath",   InspectionDefaults.BackgroundPath),
+                LocalMinFreeGB       = SettingsStoreHelper.GetInt   (obj, "LocalMinFreeGB",   InspectionDefaults.LocalMinFreeGB),
+                RemotePath           = SettingsStoreHelper.GetString(obj, "RemotePath",       InspectionDefaults.RemotePath),
+                RemoteConfigPath     = SettingsStoreHelper.GetString(obj, "RemoteConfigPath", InspectionDefaults.RemoteConfigPath),
             };
         }
 
@@ -286,7 +287,7 @@ namespace AniloxRoll.Monitor.Core.Data
             string obj = SettingsStoreHelper.ExtractObject(json, "CameraParam");
             return new CameraParamSettings
             {
-                DcfPath = SettingsStoreHelper.GetString(obj, "DcfPath", @"D:\AniloxCaptures\dcf\Radient_Config.dcf"),
+                DcfPath = SettingsStoreHelper.GetString(obj, "DcfPath", InspectionDefaults.DcfPath),
             };
         }
 
@@ -295,29 +296,30 @@ namespace AniloxRoll.Monitor.Core.Data
             string obj = SettingsStoreHelper.ExtractObject(json, "Light");
             return new LightSettings
             {
-                Enabled    = SettingsStoreHelper.GetBool  (obj, "Enabled",    true),
-                ComPort    = SettingsStoreHelper.GetString(obj, "ComPort",    "COM17"),
-                Channel    = SettingsStoreHelper.GetInt   (obj, "Channel",    1),
-                Brightness = SettingsStoreHelper.GetInt   (obj, "Brightness", 128),
+                Enabled    = SettingsStoreHelper.GetBool  (obj, "Enabled",    InspectionDefaults.LightEnabled),
+                ComPort    = SettingsStoreHelper.GetString(obj, "ComPort",    InspectionDefaults.LightComPort),
+                Channel    = SettingsStoreHelper.GetInt   (obj, "Channel",    InspectionDefaults.LightChannel),
+                Brightness = SettingsStoreHelper.GetInt   (obj, "Brightness", InspectionDefaults.LightBrightness),
+                WarmupMs   = SettingsStoreHelper.GetInt   (obj, "WarmupMs",   InspectionDefaults.LightWarmupMs),
             };
         }
 
         private static bool ParsePlcEnabled(string json)
         {
             string obj = SettingsStoreHelper.ExtractObject(json, "Plc");
-            return SettingsStoreHelper.GetBool(obj, "Enabled", true);
+            return SettingsStoreHelper.GetBool(obj, "Enabled", InspectionDefaults.PlcEnabled);
         }
 
         private static string ParsePlcIp(string json)
         {
             string obj = SettingsStoreHelper.ExtractObject(json, "Plc");
-            return SettingsStoreHelper.GetString(obj, "Ip", "192.168.255.1");
+            return SettingsStoreHelper.GetString(obj, "Ip", InspectionDefaults.PlcIp);
         }
 
         private static int ParsePlcPort(string json)
         {
             string obj = SettingsStoreHelper.ExtractObject(json, "Plc");
-            return SettingsStoreHelper.GetInt(obj, "Port", 502);
+            return SettingsStoreHelper.GetInt(obj, "Port", InspectionDefaults.PlcPort);
         }
     }
 }

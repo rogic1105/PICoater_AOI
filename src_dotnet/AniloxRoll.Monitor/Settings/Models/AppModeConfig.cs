@@ -1,6 +1,13 @@
+using System.ComponentModel;
+
 namespace AniloxRoll.Monitor.Core.Data
 {
-    public enum MachineRole { Inspection, Storage }
+    [TypeConverter(typeof(EnumDescriptionConverter))]
+    public enum MachineRole
+    {
+        [Description("檢測模式")] Inspection,
+        [Description("儲存模式")] Storage
+    }
 
     /// <summary>
     /// 讀取 Config\app-mode.json 決定本機角色。
