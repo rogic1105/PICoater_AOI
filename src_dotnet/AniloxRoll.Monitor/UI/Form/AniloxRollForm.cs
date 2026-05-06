@@ -1052,7 +1052,10 @@ namespace AniloxRoll.Monitor.Forms
 
         private void WriteFlagToRemoteAsync()
         {
+            // JSON 有設定就用，否則從 RemotePath 推算（同 IP，固定 AniloxConfig share）
             string configPath = _settings?.RemoteConfigPath ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(configPath))
+                configPath = DeriveFlagSharePath(_settings?.RemotePath);
             if (string.IsNullOrWhiteSpace(configPath)) return;
 
             Task.Run(() =>
@@ -1093,6 +1096,15 @@ namespace AniloxRoll.Monitor.Forms
             lblIoDoPcAlive.Visible = false;
             lblIoDoMura.Visible    = false;
             lblIoDoPcBusy.Visible  = false;
+        }
+
+        // \\server\share → \\server\AniloxConfig（cleanup-request.flag 目標）
+        private static string DeriveFlagSharePath(string remotePath)
+        {
+            if (string.IsNullOrWhiteSpace(remotePath)) return "";
+            var parts = remotePath.TrimStart('\\').Split('\\');
+            return parts.Length < 1 || string.IsNullOrEmpty(parts[0])
+                ? "" : $@"\\{parts[0]}\AniloxConfig";
         }
 
         private string GetStorageRetentionRoot()

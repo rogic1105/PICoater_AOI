@@ -159,7 +159,8 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category("4. 儲存設定")][DisplayName("存背景目錄")]    public string BackgroundPath       { get => Storage.BackgroundPath;       set => Storage.BackgroundPath       = value; }
         [Category("4. 儲存設定")][DisplayName("預留空間 (GB)")][TypeConverter(typeof(LeftAlignNumericConverter))] public int    LocalMinFreeGB       { get => Storage.LocalMinFreeGB;       set => Storage.LocalMinFreeGB       = value; }
         [Category("4. 儲存設定")][DisplayName("遠端路徑")]      public string RemotePath           { get => Storage.RemotePath;           set => Storage.RemotePath           = value; }
-        [Category("4. 儲存設定")][DisplayName("遠端設定路徑")]  public string RemoteConfigPath     { get => Storage.RemoteConfigPath;     set => Storage.RemoteConfigPath     = value; }
+        // 開發者設定：PropertyGrid 不顯示，部署時直接改 JSON
+        [Browsable(false)] public string RemoteConfigPath { get => Storage.RemoteConfigPath; set => Storage.RemoteConfigPath = value; }
 
         // ===== 5. 相機設定 =====
         [Category("5. 相機設定")][DisplayName("設定檔")]
