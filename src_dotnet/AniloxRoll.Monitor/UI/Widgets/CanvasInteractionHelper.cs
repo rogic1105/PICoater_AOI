@@ -279,7 +279,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 _currentViewLeftMm  = leftMm;
                 _currentViewRightMm = rightMm;
                 _columnChartHelper?.UpdateViewRange(leftMm, rightMm);
-                OverviewChartHelper?.UpdateViewRange(leftMm, rightMm);
+                if (_settings?.StitchMode == StitchMode.Global)
+                    OverviewChartHelper?.UpdateViewRange(leftMm, rightMm);
             }
 
             RefreshRowChartRange();
@@ -323,7 +324,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 if (!_suppressChartSync)
                 {
                     _columnChartHelper?.UpdateViewRange(_currentViewLeftMm, _currentViewRightMm);
-                    OverviewChartHelper?.UpdateViewRange(_currentViewLeftMm, _currentViewRightMm);
+                    if (_settings?.StitchMode == StitchMode.Global)
+                        OverviewChartHelper?.UpdateViewRange(_currentViewLeftMm, _currentViewRightMm);
 
                     // 法向（水平）Mura 曲線：canvas 垂直 viewport → chart Y 軸同步
                     // 傳入 canvas pixel mm（不 clamp），UpdateViewRange 內部反轉 + 補償

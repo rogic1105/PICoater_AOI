@@ -925,15 +925,15 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box action dev">RefreshChartRange → TryComputeCurrentViewRange</div>
 <div class="v-arrow"></div>
 <div class="out-par">
-<div class="box output">回顧切向曲線圖：X 軸同步 canvas 水平範圍</div>
+<div class="box output">回顧切向曲線圖：X 軸同步 canvas 水平範圍（Vertical / Global 皆同步）</div>
 <div class="box output">回顧法向曲線圖：Y 軸同步 canvas 垂直範圍</div>
+<div class="box output">回顧全覽圖：<b>Global 模式</b>のみ X 軸隨 canvas 水平範圍同步；<b>Vertical 模式</b>固定不隨動（CanvasInteractionHelper 以 StitchMode == Global 為條件才呼叫 OverviewChartHelper.UpdateViewRange）</div>
 <div class="box output">座標狀態列：即時更新</div>
 </div>
 <div class="v-arrow"></div>
 <div class="box action">pixelLeft = -panX / zoom，pixelRight = pixelLeft + canvasW / zoom</div>
 <div class="v-arrow"></div>
 <div class="box action">leftMm = startPosMm + pixelLeft × opsInMm，rightMm = startPosMm + pixelRight × opsInMm</div>
-<div class="note dev">Vertical 模式：全覽圖 X 軸固定，不隨 canvas zoom（ViewRangeProvider 回傳 NaN → ZoomReset）。Global 模式：全覽圖隨動。</div>
 </div>
 <div class="flow-group vflow dev" id="review-global-merge">
 <div class="flow-title">全域合圖（系統流程）<code>ApplyGlobalMergeIfNeeded</code></div>
