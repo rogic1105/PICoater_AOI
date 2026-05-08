@@ -400,6 +400,27 @@ namespace AniloxRoll.Monitor.UI.Presenters
         }
 
         /// <summary>
+        /// Stitch 模式（cbReviewGrabId 已載入）切換到 Global：
+        /// 直接用記憶體中的 _stitchedImages 合圖，不重新讀碟。
+        /// </summary>
+        public void MergeAndShowFromStitchedImages()
+        {
+            if (_stitchedImages == null) return;
+            var cfg = _ctx.InteractionHelper.ReviewConfig;
+            double[] opsArr = cfg?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
+            double[] posArr = cfg?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
+            int scale = InspectionEngineConfig.DefaultSaveResizeScale;
+
+            _globalMergedImage?.Dispose();
+            _globalMergedImage = GrabImageStitcher.MergeHorizontal(_stitchedImages, opsArr, posArr, scale);
+            if (_globalMergedImage != null)
+                ShowMergedImageInCanvas(_globalMergedImage, opsArr, posArr);
+
+            _ctx.ChartMuraVertical.Series["Mean"].Points.Clear();
+            _ctx.ChartMuraVertical.Series["Max"].Points.Clear();
+        }
+
+        /// <summary>
         /// 原圖路徑（非 Stitch）：合併全域圖（Period 切換用）。
         /// </summary>
         public void ApplyGlobalMergeIfNeeded()

@@ -938,7 +938,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="flow-group vflow dev" id="review-global-merge">
 <div class="flow-title">全域合圖（系統流程）<code>ApplyGlobalMergeIfNeeded</code></div>
 <div class="ref-list">引用：<a href="#review-load-data">讀取資料</a> · <a href="#review-period-nav">時段導航</a> · <a href="#review-grabid-nav">單片序號導航</a> · <a href="#review-thumbnail-click">回顧縮圖點擊</a> · <a href="#settings-changed">檢測設定變更</a></div>
-<div class="note">由讀取資料、時段導航、單片序號導航、StitchMode 變更等流程在結尾呼叫。僅當合圖方式 = 全域時執行。</div>
+<div class="note">由讀取資料、時段導航在結尾呼叫。僅當合圖方式 = 全域時執行。<br>⚠ StitchMode 切換到全域 且 IsStitchMode=true（序號模式）時，改呼叫 MergeAndShowFromStitchedImages（用記憶體快取，不走此函式）；否則才呼叫此函式由 DateTimeNavigator 讀碟。</div>
 <div class="box guard">合圖方式 ≠ 全域 → 不執行（直接返回）</div>
 <div class="box action">讀取當前時段 7 台相機影像 → 根據檢測設定 OPS/Start 合圖，缺圖則以 CFG 記錄的取像寬度補齊空白 → GrabImageStitcher.MergeHorizontal</div>
 <div class="v-arrow"></div>
@@ -1144,22 +1144,37 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="v-branch">
 <div class="v-branch-path"><span class="branch-label yes">垂直</span>
 <div class="out-par">
-<div class="box output">回顧主畫面：切回單台相機影像</div>
+<div class="box output">回顧主畫面：切回單台相機影像（使用記憶體快取 _stitchedImages[idx]，不重讀碟）</div>
 <div class="box output">回顧切向曲線圖/回顧法向曲線圖：自動恢復</div>
 <div class="box output">回顧全覽圖：同步更新</div>
 <div class="box output">監控主畫面：恢復單台 MIL 即時影像</div>
 </div>
 </div>
 <div class="v-branch-path"><span class="branch-label no">全域</span>
+<div class="v-arrow" data-label="分支：是否已在序號模式（IsStitchMode）"></div>
+<div class="v-branch">
+<div class="v-branch-path"><span class="branch-label yes">序號模式（cbReviewGrabId 已載入）</span>
 <div class="out-par">
-<div class="box output">回顧主畫面：<a href="#review-global-merge">全域合圖</a></div>
+<div class="box action">MergeAndShowFromStitchedImages（直接用記憶體 _stitchedImages 合圖，不重讀碟）</div>
+<div class="box output">回顧主畫面：全域合圖（當前序號的 7 台影像）</div>
+</div>
+</div>
+<div class="v-branch-path"><span class="branch-label no">時段模式 或 尚未載入</span>
+<div class="out-par">
+<div class="box action"><a href="#review-global-merge">ApplyGlobalMergeIfNeeded</a>（由 DateTimeNavigator 讀碟合圖）</div>
+<div class="box output">回顧主畫面：全域合圖（當前時段的 7 台影像）</div>
+</div>
+</div>
+</div>
+<div class="out-par">
 <div class="box output">回顧切向曲線圖：清空</div>
 <div class="box output">回顧法向曲線圖：正常載入</div>
 <div class="box output">監控主畫面：<a href="#live-global-merge">即時全域合圖</a></div>
 <div class="box output">監控切向曲線圖：清空</div>
 <div class="box output">回顧全覽圖：同步更新</div>
 </div>
-</div></div>
+</div>
+</div>
 <div class="box input">修改 OPS / Start</div>
 <div class="v-arrow" data-label="分支"></div>
 <div class="v-branch">

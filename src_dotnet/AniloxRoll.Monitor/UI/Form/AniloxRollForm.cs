@@ -1948,7 +1948,7 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             // StitchMode 變更 → 清除/恢復 mura 圖 + 重新載入回顧主畫面 + Live 合圖切換
-            if (changedPropertyName == nameof(InspectionSettings.StitchMode))
+            if (changedPropertyName == nameof(InspectionSettings.hb_StitchMode))
             {
                 // Live tab：即時全域合圖
                 if (_settings.StitchMode == StitchMode.Global && _liveCameraManager?.IsAllocated == true)
@@ -1974,7 +1974,7 @@ namespace AniloxRoll.Monitor.Forms
                 {
                     int idx = _galleryManager?.SelectedIndex ?? 0;
                     if (_settings.StitchMode == StitchMode.Global)
-                        _stitchCoordinator.ApplyGlobalMergeIfNeeded();
+                        _stitchCoordinator.MergeAndShowFromStitchedImages(); // 用記憶體快取合圖，不重讀碟
                     else
                         _stitchCoordinator.ShowStitchedCameraInCanvas(idx);
                 }
@@ -1997,24 +1997,24 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             // 檢測報表設定變更 → 立刻套用
-            if (changedPropertyName == nameof(InspectionSettings.ChartScaleMode))
+            if (changedPropertyName == nameof(InspectionSettings.gb_ChartScaleMode))
             {
                 _dataStatsPresenter.ApplyChartScaleFromSettings();
             }
-            else if (changedPropertyName == nameof(InspectionSettings.ChartYearlyYMax))
+            else if (changedPropertyName == nameof(InspectionSettings.gc_YearlyYMax))
                 _dataStatsPresenter.ApplyFixedScaleForChart("Yearly", _settings.Chart.YearlyYMax);
-            else if (changedPropertyName == nameof(InspectionSettings.ChartMonthlyYMax))
+            else if (changedPropertyName == nameof(InspectionSettings.gd_MonthlyYMax))
                 _dataStatsPresenter.ApplyFixedScaleForChart("Monthly", _settings.Chart.MonthlyYMax);
-            else if (changedPropertyName == nameof(InspectionSettings.ChartDailyYMax))
+            else if (changedPropertyName == nameof(InspectionSettings.ge_DailyYMax))
                 _dataStatsPresenter.ApplyFixedScaleForChart("Daily", _settings.Chart.DailyYMax);
 
             // 光源設定即時生效（啟用切換、COM/通道重新偵測、亮度立即套用）
             HandleLightSettingsChanged(changedPropertyName);
 
-            if (changedPropertyName == nameof(InspectionSettings.EnableMuraEnhance))
+            if (changedPropertyName == nameof(InspectionSettings.hc_EnableMuraEnhance))
                 ApplyMuraEnhance(_settings.EnableMuraEnhance);
 
-            if (changedPropertyName == nameof(InspectionSettings.EnableReviewEnhance))
+            if (changedPropertyName == nameof(InspectionSettings.hd_EnableReviewEnhance))
                 _ = ApplyReviewEnhance(_settings.EnableReviewEnhance);
 
             // 演算法切換 → 更新 UI 鎖定 + 載入/清除背景 bin
