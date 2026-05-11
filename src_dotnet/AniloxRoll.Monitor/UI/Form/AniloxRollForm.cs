@@ -682,6 +682,18 @@ namespace AniloxRoll.Monitor.Forms
             _galleryManager = new ThumbnailGridPresenter();
             _galleryManager.Initialize(_cameraPanels);
 
+            // Global 模式時回顧縮圖加橘色外框（同曲線圖 highlight 色）
+            foreach (var pb in _cameraPanels)
+            {
+                pb.Paint += (s, pe) =>
+                {
+                    if (_settings?.StitchMode != StitchMode.Global) return;
+                    var ctrl = (Control)s;
+                    using (var pen = new System.Drawing.Pen(System.Drawing.Color.FromArgb(255, 140, 0), 3))
+                        pe.Graphics.DrawRectangle(pen, 1, 1, ctrl.Width - 3, ctrl.Height - 3);
+                };
+            }
+
             _presenter = new AniloxRollPresenter(
                 _imageRepository, _inspectionService, _dateTimeNavigator, _galleryManager);
 
@@ -3105,6 +3117,9 @@ namespace AniloxRoll.Monitor.Forms
                     _stitchCoordinator.LastReviewProcessedMode, _interactionHelper.LoadImages);
                 ApplyPostLoadDisplay();
             }
+
+            // 重繪縮圖外框（Global→橘色，Vertical→無框）
+            foreach (var pb in _cameraPanels) pb.Invalidate();
 
             // 切換合圖方式後主畫面 fit to screen
             if (canvasMain.Image != null)
