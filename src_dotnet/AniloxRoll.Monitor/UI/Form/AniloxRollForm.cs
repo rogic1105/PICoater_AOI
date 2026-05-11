@@ -842,7 +842,7 @@ namespace AniloxRoll.Monitor.Forms
             };
 
             UpdateLiveDirectionVisual(_settings.EnableMuraEnhance ? _liveDisplayDirection : null);
-            UpdateRidgeDirectionVisual(_settings.EnableReviewEnhance ? _stitchCoordinator.ActiveRidgeDirection : null);
+            UpdateRidgeDirectionVisual(null); // 開程式時尚無資料，highlight 不預先上色；待實際套用強化後才顯示
         }
 
         /// <summary>相機層：LiveCameraManager 與 FormClosed 清理。</summary>
@@ -1995,8 +1995,11 @@ namespace AniloxRoll.Monitor.Forms
                 }
 
                 // highlight 跟著 StitchMode 移位（Vertical↔Global 時重繪底色）
-                UpdateRidgeDirectionVisual(
-                    _settings.EnableReviewEnhance ? _stitchCoordinator.ActiveRidgeDirection : null);
+                // 以實際生效狀態判斷：period 模式看 LastReviewProcessedMode，stitch 模式看 EnableReviewEnhance
+                bool enhanceActive = _stitchCoordinator.IsStitchMode
+                    ? _settings.EnableReviewEnhance
+                    : _stitchCoordinator.LastReviewProcessedMode;
+                UpdateRidgeDirectionVisual(enhanceActive ? _stitchCoordinator.ActiveRidgeDirection : null);
             }
 
             // OPS/Start 變更 → 即時更新全域合圖佈局（下一幀生效）
