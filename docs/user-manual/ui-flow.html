@@ -567,8 +567,10 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 </div>
 </div>
 <div class="v-branch-path"><span class="branch-label no">全域</span>
+<div class="box action dev">PanMergedDisplayToCameraCenter(N) → 平移到 CAM N 中心（保持縮放）</div>
 <div class="out-par">
-<div class="box output">監控主畫面：保持<a href="#live-global-merge">全域合圖</a>（僅切換高亮）</div>
+<div class="box output">監控主畫面：保持<a href="#live-global-merge">全域合圖</a>，視野平移到 CAM N 中心</div>
+<div class="box output">選中縮圖：橘色外框高亮</div>
 <div class="box output">監控切向曲線圖：保持清空</div>
 <div class="box output">監控法向曲線圖：切換到 CAM N 資料</div>
 </div>
@@ -653,6 +655,8 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="v-arrow"></div>
 <div class="box action">儲存座標系：_mergedMinStartMm / _mergedRefOpsMm / _mergedTotalW</div>
 <div class="v-arrow"></div>
+<div class="box action">儲存槽位陣列：_mergedSlotStartsMm[i] / _mergedSlotEndsMm[i]（含空缺，共 N 槽）</div>
+<div class="v-arrow"></div>
 <div class="box action">解除所有相機 secondary display（SetSecondaryDisplay(IntPtr.Zero)）</div>
 <div class="v-arrow"></div>
 <div class="box action">MdispAlloc → MdispSelectWindow(_mergedDisplay, _mergedBuffer, mainPanel.Handle)</div>
@@ -719,10 +723,32 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box output">監控法向曲線圖：正常更新</div>
 <div class="box output">監控全覽圖：正常更新（7 台合併曲線）</div>
 </div>
-<div class="box action">SwitchMainDisplay：IsGlobalMergeActive → return（僅切換高亮縮圖）</div>
+<!-- ── 縮圖←→主畫面雙向同步 ── -->
+<div class="box action">SwitchMainDisplay：IsGlobalMergeActive → PanMergedDisplayToCameraCenter(N)</div>
+<div class="v-arrow"></div>
+<div class="box action">centerMm = (_mergedSlotStartsMm[N-1] + _mergedSlotEndsMm[N-1]) / 2</div>
+<div class="v-arrow"></div>
+<div class="box action">MdispInquire(M_ZOOM_FACTOR_X / M_PAN_OFFSET_Y)（保留現有縮放與 Y pan）</div>
+<div class="v-arrow"></div>
+<div class="box action">newPanX = centerPx - viewW/2，clamp [0, totalW - viewW]</div>
+<div class="v-arrow"></div>
+<div class="box action">MdispControl(M_UPDATE DISABLE) → MdispPan(newPanX, panY) → MdispControl(M_UPDATE ENABLE)</div>
 <div class="v-arrow"></div>
 <div class="out-par">
-<div class="box output">選中縮圖：PapayaWhip 高亮（主畫面保持合圖不切換）</div>
+<div class="box output">監控主畫面：平移到 CAM N 中心（縮放不變）</div>
+<div class="box output">選中縮圖：橘色外框高亮</div>
+</div>
+<div class="v-arrow"></div>
+<div class="box sync">_mergedDisplayTimer.Tick（33ms）→ UpdateSelectedCameraFromViewCenter</div>
+<div class="v-arrow"></div>
+<div class="box action">TryGetMergedViewRange → centerMm = (leftMm + rightMm) / 2</div>
+<div class="v-arrow"></div>
+<div class="box action">遍歷 _mergedSlotStartsMm[]：找距離 centerMm 最近的槽位 bestIdx</div>
+<div class="v-arrow"></div>
+<div class="box action">_selectedMainCameraId = bestIdx + 1（有變化才更新）→ liveParentPanels.Invalidate()</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">選中縮圖：橘色外框隨合圖視野中心自動切換</div>
 </div>
 <!-- ── DisableGlobalMerge ── -->
 <div class="v-arrow"></div>

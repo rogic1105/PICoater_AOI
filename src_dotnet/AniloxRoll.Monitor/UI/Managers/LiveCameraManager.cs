@@ -86,6 +86,8 @@ namespace AniloxRoll.Monitor.UI.Managers
         private double _mergedRefOpsMm;     // 合併像素尺寸（mm/px）
         private int    _mergedTotalW;       // 合併 buffer 寬度（px）
         private int    _mergedTotalH;       // 合併 buffer 高度（px）
+        private double[] _mergedSlotStartsMm;  // 7 槽位起始 mm（含空缺）
+        private double[] _mergedSlotEndsMm;    // 7 槽位結束 mm（含空缺）
         private MIL_DISP_HOOK_FUNCTION_PTR _mergedMouseDelegate;
         private Timer _mergedDisplayTimer;  // 定時刷新合圖 display（取代 MIL 自動刷新，避免多相機非同步閃爍）
 
@@ -525,8 +527,12 @@ namespace AniloxRoll.Monitor.UI.Managers
             foreach (var kvp in _liveParentPanels)
                 kvp.Value.Invalidate();
 
-            // Global merge 時主畫面由合併 display 控制，不切換單台
-            if (IsGlobalMergeActive) return;
+            // Global merge 時主畫面由合併 display 控制，不切換單台；但 pan 到相機中心
+            if (IsGlobalMergeActive)
+            {
+                PanMergedDisplayToCameraCenter(cameraIndex);
+                return;
+            }
 
             foreach (var cam in _cameras)
             {
@@ -549,6 +555,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             double minStart = double.MaxValue, maxEnd = double.MinValue;
             int maxH = 0;
 
+            _mergedSlotStartsMm = new double[opsUm.Length];
+            _mergedSlotEndsMm   = new double[opsUm.Length];
             for (int i = 0; i < opsUm.Length; i++)
             {
                 double pos = (i < startPosMm.Length) ? startPosMm[i] : 0;
@@ -558,6 +566,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                 double widthMm = widthPx * ops / 1000.0;
                 if (pos < minStart) minStart = pos;
                 if (pos + widthMm > maxEnd) maxEnd = pos + widthMm;
+                _mergedSlotStartsMm[i] = pos;
+                _mergedSlotEndsMm[i]   = pos + widthMm;
             }
             // Pass 2：在線相機取最大高度
             foreach (var cam in _cameras)
@@ -682,6 +692,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             }
 
             IsGlobalMergeActive = false;
+            _mergedSlotStartsMm = null;
+            _mergedSlotEndsMm   = null;
 
             // 恢復選中相機的 secondary display
             SwitchMainDisplay(_selectedMainCameraId);
@@ -700,6 +712,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             double refOpsMm = opsUm[0] / 1000.0;
             double minStart = double.MaxValue, maxEnd = double.MinValue;
             int maxH = 0;
+            _mergedSlotStartsMm = new double[opsUm.Length];
+            _mergedSlotEndsMm   = new double[opsUm.Length];
             for (int i = 0; i < opsUm.Length; i++)
             {
                 double pos = (i < startPosMm.Length) ? startPosMm[i] : 0;
@@ -709,6 +723,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                 double widthMm = widthPx * ops / 1000.0;
                 if (pos < minStart) minStart = pos;
                 if (pos + widthMm > maxEnd) maxEnd = pos + widthMm;
+                _mergedSlotStartsMm[i] = pos;
+                _mergedSlotEndsMm[i]   = pos + widthMm;
             }
             foreach (var cam in _cameras)
                 if (cam.FrameHeight > maxH) maxH = cam.FrameHeight;
@@ -791,6 +807,49 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (_mergedDisplay == MIL.M_NULL) return;
             try { MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_NOW); }
             catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.MergedDisplayTimer] {ex.GetType().Name}: {ex.Message}"); }
+            UpdateSelectedCameraFromViewCenter();
+        }
+
+        private void PanMergedDisplayToCameraCenter(int camIdx)
+        {
+            if (_mergedDisplay == MIL.M_NULL || _mergedSlotStartsMm == null) return;
+            int i = camIdx - 1;
+            if (i < 0 || i >= _mergedSlotStartsMm.Length) return;
+            try
+            {
+                double centerMm = (_mergedSlotStartsMm[i] + _mergedSlotEndsMm[i]) / 2.0;
+                double centerPx = (centerMm - _mergedMinStartMm) / _mergedRefOpsMm;
+                double zoomX = 0, panY = 0;
+                MIL.MdispInquire(_mergedDisplay, MIL.M_ZOOM_FACTOR_X, ref zoomX);
+                MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_Y, ref panY);
+                if (zoomX <= 0) return;
+                double viewW  = _mainDisplayPanel.Width / zoomX;
+                double newPanX = Math.Max(0, Math.Min(_mergedTotalW - viewW, centerPx - viewW / 2.0));
+                MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_DISABLE);
+                MIL.MdispControl(_mergedDisplay, MIL.M_CENTER_DISPLAY, MIL.M_DISABLE);
+                MIL.MdispPan(_mergedDisplay, newPanX, panY);
+                MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_ENABLE);
+            }
+            catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.PanToCenter] {ex.GetType().Name}: {ex.Message}"); }
+        }
+
+        private void UpdateSelectedCameraFromViewCenter()
+        {
+            if (_mergedSlotStartsMm == null) return;
+            if (!TryGetMergedViewRange(out double leftMm, out double rightMm)) return;
+            double centerMm = (leftMm + rightMm) / 2.0;
+            int bestIdx = 0;
+            double bestDist = double.MaxValue;
+            for (int i = 0; i < _mergedSlotStartsMm.Length; i++)
+            {
+                double dist = Math.Abs(centerMm - (_mergedSlotStartsMm[i] + _mergedSlotEndsMm[i]) / 2.0);
+                if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+            }
+            int newId = bestIdx + 1;
+            if (newId == _selectedMainCameraId) return;
+            _selectedMainCameraId = newId;
+            foreach (var kvp in _liveParentPanels)
+                kvp.Value.Invalidate();
         }
 
         // ==================== Merged Display Mouse ====================
