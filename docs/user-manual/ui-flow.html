@@ -889,6 +889,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="v-arrow"></div>
 <div class="box guard">_processedCheckboxGuard 防程式碼設定時觸發</div>
 <div class="note">開程式時 InitUiLayer 末尾固定以 null 呼叫 UpdateRidgeDirectionVisual（不論 EnableReviewEnhance 設定值），因尚無資料，不預上底色。Highlight 待實際套用強化後（ApplyReviewEnhance 或 SwitchRidgeDirection）才顯示。</div>
+<div class="note dev">UpdateRidgeDirectionVisual 實作：作用中 → BackColor = Color.FromArgb(230,240,255)、BorderlineColor = Color.FromArgb(255,140,0)（橘色）、BorderlineWidth = 2、DashStyle = Solid。非作用中 → BackColor = SystemColors.Control、BorderlineColor = Transparent、BorderlineWidth = 1、DashStyle = NotSet。</div>
 </div>
 <div class="flow-group vflow">
 <div class="flow-title">回顧曲線圖點擊 → 三態切換（依合圖方式路由）</div>
