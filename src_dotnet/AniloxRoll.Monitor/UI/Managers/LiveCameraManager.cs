@@ -544,21 +544,24 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (IsGlobalMergeActive || _cameras.Count == 0) return;
 
-            // 參考像素尺寸（取第一台），計算各相機偏移與合併寬度
+            // Pass 1：ALL slots（含空缺）計算全域範圍；空缺槽以 MaxWidth 作為標準寬度
             double refOpsMm = opsUm[0] / 1000.0;
             double minStart = double.MaxValue, maxEnd = double.MinValue;
             int maxH = 0;
 
-            foreach (var cam in _cameras)
+            for (int i = 0; i < opsUm.Length; i++)
             {
-                int idx = cam.CameraId - 1;
-                double pos = (idx < startPosMm.Length) ? startPosMm[idx] : 0;
-                double ops = (idx < opsUm.Length) ? opsUm[idx] : opsUm[0];
-                double widthMm = cam.FrameWidth * ops / 1000.0;
+                double pos = (i < startPosMm.Length) ? startPosMm[i] : 0;
+                double ops = opsUm[i];
+                var liveCam = _cameras.Find(c => c.CameraId == i + 1);
+                double widthPx = (liveCam != null) ? liveCam.FrameWidth : InspectionEngineConfig.MaxWidth;
+                double widthMm = widthPx * ops / 1000.0;
                 if (pos < minStart) minStart = pos;
                 if (pos + widthMm > maxEnd) maxEnd = pos + widthMm;
-                if (cam.FrameHeight > maxH) maxH = cam.FrameHeight;
             }
+            // Pass 2：在線相機取最大高度
+            foreach (var cam in _cameras)
+                if (cam.FrameHeight > maxH) maxH = cam.FrameHeight;
 
             int totalW = (int)Math.Ceiling((maxEnd - minStart) / refOpsMm);
             if (totalW <= 0 || maxH <= 0) return;
@@ -693,20 +696,22 @@ namespace AniloxRoll.Monitor.UI.Managers
             foreach (var cam in _cameras)
                 cam.ClearMergeTarget();
 
-            // ② 重算座標系
+            // ② 重算座標系（Pass 1: ALL slots；Pass 2: 在線相機取高度）
             double refOpsMm = opsUm[0] / 1000.0;
             double minStart = double.MaxValue, maxEnd = double.MinValue;
             int maxH = 0;
-            foreach (var cam in _cameras)
+            for (int i = 0; i < opsUm.Length; i++)
             {
-                int idx = cam.CameraId - 1;
-                double pos = (idx < startPosMm.Length) ? startPosMm[idx] : 0;
-                double ops = (idx < opsUm.Length) ? opsUm[idx] : opsUm[0];
-                double widthMm = cam.FrameWidth * ops / 1000.0;
+                double pos = (i < startPosMm.Length) ? startPosMm[i] : 0;
+                double ops = opsUm[i];
+                var liveCam = _cameras.Find(c => c.CameraId == i + 1);
+                double widthPx = (liveCam != null) ? liveCam.FrameWidth : InspectionEngineConfig.MaxWidth;
+                double widthMm = widthPx * ops / 1000.0;
                 if (pos < minStart) minStart = pos;
                 if (pos + widthMm > maxEnd) maxEnd = pos + widthMm;
-                if (cam.FrameHeight > maxH) maxH = cam.FrameHeight;
             }
+            foreach (var cam in _cameras)
+                if (cam.FrameHeight > maxH) maxH = cam.FrameHeight;
             int totalW = (int)Math.Ceiling((maxEnd - minStart) / refOpsMm);
             if (totalW <= 0 || maxH <= 0) return;
 
