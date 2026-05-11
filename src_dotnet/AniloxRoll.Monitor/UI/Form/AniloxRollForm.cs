@@ -92,9 +92,6 @@ namespace AniloxRoll.Monitor.Forms
         private AppModeConfig _appMode;
         private CleanupFlagWatcher _cleanupFlagWatcher;
 
-        // --- 回顧縮圖雙向同步 (Global 模式) ---
-        private int _selectedReviewCamIdx = -1;
-
         // --- 儲存管理 ---
         private StorageRetentionService _retentionService;
         private RemoteCopyService _remoteCopyService;
@@ -685,20 +682,6 @@ namespace AniloxRoll.Monitor.Forms
             _galleryManager = new ThumbnailGridPresenter();
             _galleryManager.Initialize(_cameraPanels);
 
-            // Global 模式時選中縮圖加橘色外框（視野中心最近相機）
-            foreach (var pb in _cameraPanels)
-            {
-                pb.Paint += (s, pe) =>
-                {
-                    if (_settings?.StitchMode != StitchMode.Global) return;
-                    int pbIdx = Array.IndexOf(_cameraPanels, (PictureBox)s);
-                    if (pbIdx != _selectedReviewCamIdx) return;
-                    var ctrl = (Control)s;
-                    using (var pen = new System.Drawing.Pen(System.Drawing.Color.FromArgb(255, 140, 0), 3))
-                        pe.Graphics.DrawRectangle(pen, 1, 1, ctrl.Width - 3, ctrl.Height - 3);
-                };
-            }
-
             _presenter = new AniloxRollPresenter(
                 _imageRepository, _inspectionService, _dateTimeNavigator, _galleryManager);
 
@@ -836,13 +819,11 @@ namespace AniloxRoll.Monitor.Forms
             _presenter.LogReported      += OnPresenterLogReported;
             _galleryManager.SelectionChanged += idx =>
             {
-                if (_stitchCoordinator.IsGlobalMerged)
+                if (_stitchCoordinator.IsGlobalMerged || _stitchCoordinator.IsPeriodMerged)
                 {
                     PanCanvasToReviewCameraCenter(idx);
                     return;
                 }
-                if (_stitchCoordinator.IsPeriodMerged)
-                    return;
                 if (_stitchCoordinator.IsStitchMode)
                     _stitchCoordinator.ShowStitchedCameraInCanvas(idx);
                 else
@@ -3170,8 +3151,7 @@ namespace AniloxRoll.Monitor.Forms
                 ApplyPostLoadDisplay();
             }
 
-            // 重繪縮圖外框（Global→選中相機橘色，Vertical→無框）
-            if (_settings.StitchMode != StitchMode.Global) _selectedReviewCamIdx = -1;
+            // 重繪縮圖外框（切換 StitchMode 後橘框隨之更新）
             foreach (var pb in _cameraPanels) pb.Invalidate();
 
             // 切換合圖方式後主畫面 fit to screen
@@ -3363,7 +3343,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private void PanCanvasToReviewCameraCenter(int camIdx)
         {
-            if (!_stitchCoordinator.IsGlobalMerged) return;
+            if (!_stitchCoordinator.IsGlobalMerged && !_stitchCoordinator.IsPeriodMerged) return;
             if (!TryGetMergedReviewCoords(out double globalMinMm, out double refOpsMm)) return;
             var posArr = GetReviewPosArray();
             var opsArr = GetReviewOpsArray();
@@ -3378,7 +3358,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private void UpdateSelectedReviewCamFromViewCenter(CanvasInfo info)
         {
-            if (!_stitchCoordinator.IsGlobalMerged) return;
+            if (!_stitchCoordinator.IsGlobalMerged && !_stitchCoordinator.IsPeriodMerged) return;
             if (!TryGetMergedReviewCoords(out double globalMinMm, out double refOpsMm)) return;
             var posArr = GetReviewPosArray();
             var opsArr = GetReviewOpsArray();
@@ -3396,9 +3376,8 @@ namespace AniloxRoll.Monitor.Forms
                 if (dist < bestDist) { bestDist = dist; bestIdx = i; }
             }
 
-            if (_selectedReviewCamIdx == bestIdx) return;
-            _selectedReviewCamIdx = bestIdx;
-            foreach (var pb in _cameraPanels) pb.Invalidate();
+            if (bestIdx == _galleryManager.SelectedIndex) return;
+            _galleryManager.Select(bestIdx, triggerEvent: false);
         }
 
         // ── Helper Methods ──────────────────────────────────────────
