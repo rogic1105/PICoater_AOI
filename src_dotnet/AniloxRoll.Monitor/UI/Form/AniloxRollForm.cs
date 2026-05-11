@@ -711,15 +711,22 @@ namespace AniloxRoll.Monitor.Forms
 
             UpdateRowChartPitch();
 
-            // Review tab chart 點選切換 V/H 處理圖方向
-            // Vertical 模式：點 chartMuraVertical 切換強化；Global 模式：改由 chartOverview 接手
+            // Review tab chart 點選：
+            //   Vertical：chartMuraVertical → 切換強化；chartOverview（非強化時）→ 切到 Global
+            //   Global：chartOverview → 切換強化；chartMuraVertical（非強化時）→ 切回 Vertical
             chartMuraVertical.MouseClick += (s, e) =>
             {
-                if (_settings?.StitchMode == StitchMode.Vertical) SwitchRidgeDirection("v");
+                if (_settings?.StitchMode == StitchMode.Vertical)
+                    SwitchRidgeDirection("v");
+                else if (_settings?.StitchMode == StitchMode.Global && !IsEnhanceDisplayActive)
+                    _ = TrySwitchStitchModeAsync(StitchMode.Vertical);
             };
             chartOverview.MouseClick += (s, e) =>
             {
-                if (_settings?.StitchMode == StitchMode.Global) SwitchRidgeDirection("v");
+                if (_settings?.StitchMode == StitchMode.Global)
+                    SwitchRidgeDirection("v");
+                else if (_settings?.StitchMode == StitchMode.Vertical && !IsEnhanceDisplayActive)
+                    _ = TrySwitchStitchModeAsync(StitchMode.Global);
             };
             chartMuraHorizontal.MouseClick += (s, e) => SwitchRidgeDirection("h");
 
@@ -1957,50 +1964,7 @@ namespace AniloxRoll.Monitor.Forms
 
             // StitchMode 變更 → 清除/恢復 mura 圖 + 重新載入回顧主畫面 + Live 合圖切換
             if (changedPropertyName == nameof(InspectionSettings.hb_StitchMode))
-            {
-                // Live tab：即時全域合圖
-                if (_settings.StitchMode == StitchMode.Global && _liveCameraManager?.IsAllocated == true)
-                    _liveCameraManager.EnableGlobalMerge(
-                        _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
-                else
-                {
-                    _liveCameraManager?.DisableGlobalMerge();
-                    _liveRowMeanCache.Clear();
-                    _liveRowMaxCache.Clear();
-                }
-
-                if (_settings.StitchMode == StitchMode.Global)
-                {
-                    chartMuraVertical.Series["Mean"].Points.Clear();
-                    chartMuraVertical.Series["Max"].Points.Clear();
-                    muraChartVerticalLive.Series["Mean"].Points.Clear();
-                    muraChartVerticalLive.Series["Max"].Points.Clear();
-                }
-
-                // 根據當前選中的回顧縮圖重新載入回顧主畫面
-                if (_stitchCoordinator.IsStitchMode)
-                {
-                    int idx = _galleryManager?.SelectedIndex ?? 0;
-                    if (_settings.StitchMode == StitchMode.Global)
-                        _stitchCoordinator.MergeAndShowFromStitchedImages(); // 用記憶體快取合圖，不重讀碟
-                    else
-                        _stitchCoordinator.ShowStitchedCameraInCanvas(idx);
-                }
-                else if (_imageRepository.FileCount > 0)
-                {
-                    _stitchCoordinator.ClearStitchedMode();
-                    await _presenter.LoadImagesWithPeriodLockAsync(
-                        _stitchCoordinator.LastReviewProcessedMode, _interactionHelper.LoadImages);
-                    ApplyPostLoadDisplay();
-                }
-
-                // highlight 跟著 StitchMode 移位（Vertical↔Global 時重繪底色）
-                // 以實際生效狀態判斷：period 模式看 LastReviewProcessedMode，stitch 模式看 EnableReviewEnhance
-                bool enhanceActive = _stitchCoordinator.IsStitchMode
-                    ? _settings.EnableReviewEnhance
-                    : _stitchCoordinator.LastReviewProcessedMode;
-                UpdateRidgeDirectionVisual(enhanceActive ? _stitchCoordinator.ActiveRidgeDirection : null);
-            }
+                await OnStitchModeChangedAsync();
 
             // OPS/Start 變更 → 即時更新全域合圖佈局（下一幀生效）
             string parentLabel = e?.ChangedItem?.Parent?.Label ?? string.Empty;
@@ -3090,6 +3054,61 @@ namespace AniloxRoll.Monitor.Forms
             }
             }
             catch (Exception ex) { Trace.WriteLine($"[SwitchRidgeDirection] {ex}"); }
+        }
+
+        private bool IsEnhanceDisplayActive =>
+            _stitchCoordinator.IsStitchMode
+                ? _settings.EnableReviewEnhance
+                : _stitchCoordinator.LastReviewProcessedMode;
+
+        private async Task TrySwitchStitchModeAsync(StitchMode newMode)
+        {
+            _settings.hb_StitchMode = newMode;
+            RefreshPropertyGridKeepScroll();
+            await OnStitchModeChangedAsync();
+        }
+
+        private async Task OnStitchModeChangedAsync()
+        {
+            // Live tab：即時全域合圖
+            if (_settings.StitchMode == StitchMode.Global && _liveCameraManager?.IsAllocated == true)
+                _liveCameraManager.EnableGlobalMerge(
+                    _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
+            else
+            {
+                _liveCameraManager?.DisableGlobalMerge();
+                _liveRowMeanCache.Clear();
+                _liveRowMaxCache.Clear();
+            }
+
+            if (_settings.StitchMode == StitchMode.Global)
+            {
+                chartMuraVertical.Series["Mean"].Points.Clear();
+                chartMuraVertical.Series["Max"].Points.Clear();
+                muraChartVerticalLive.Series["Mean"].Points.Clear();
+                muraChartVerticalLive.Series["Max"].Points.Clear();
+            }
+
+            // 根據當前選中的回顧縮圖重新載入回顧主畫面
+            if (_stitchCoordinator.IsStitchMode)
+            {
+                int idx = _galleryManager?.SelectedIndex ?? 0;
+                if (_settings.StitchMode == StitchMode.Global)
+                    _stitchCoordinator.MergeAndShowFromStitchedImages();
+                else
+                    _stitchCoordinator.ShowStitchedCameraInCanvas(idx);
+            }
+            else if (_imageRepository.FileCount > 0)
+            {
+                _stitchCoordinator.ClearStitchedMode();
+                await _presenter.LoadImagesWithPeriodLockAsync(
+                    _stitchCoordinator.LastReviewProcessedMode, _interactionHelper.LoadImages);
+                ApplyPostLoadDisplay();
+            }
+
+            // highlight 跟著 StitchMode 移位
+            UpdateRidgeDirectionVisual(
+                IsEnhanceDisplayActive ? _stitchCoordinator.ActiveRidgeDirection : null);
         }
 
         private void UpdateRidgeDirectionVisual(string dir)

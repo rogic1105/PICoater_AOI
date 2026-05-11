@@ -892,8 +892,8 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="note dev">UpdateRidgeDirectionVisual 實作：作用中 → BackColor = Color.FromArgb(230,240,255)、BorderlineColor = Color.FromArgb(255,140,0)（橘色）、BorderlineWidth = 2、DashStyle = Solid。非作用中 → BackColor = SystemColors.Control、BorderlineColor = Transparent、BorderlineWidth = 1、DashStyle = NotSet。</div>
 </div>
 <div class="flow-group vflow">
-<div class="flow-title">回顧曲線圖點擊 → 三態切換（依合圖方式路由）</div>
-<div class="box condition">合圖方式 = Vertical？</div>
+<div class="flow-title">回顧曲線圖點擊 → 三態切換 / 合圖方式切換（依合圖方式路由）</div>
+<div class="box condition">合圖方式 × 強化狀態（IsEnhanceDisplayActive）？</div>
 <div class="out-par">
 <div>
 <div class="box input">點擊【回顧切向曲線圖】（Vertical 模式）</div>
@@ -906,6 +906,18 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box action dev">SwitchRidgeDirection("v")</div>
 </div>
 <div>
+<div class="box input">點擊【回顧全覽圖】（Vertical 模式 且 非強化狀態）</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">TrySwitchStitchModeAsync(Global)</div>
+<div class="box output">合圖方式自動切換為全域；PropertyGrid 同步更新</div>
+</div>
+<div>
+<div class="box input">點擊【回顧切向曲線圖】（Global 模式 且 非強化狀態）</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">TrySwitchStitchModeAsync(Vertical)</div>
+<div class="box output">合圖方式自動切換為垂直；PropertyGrid 同步更新</div>
+</div>
+<div>
 <div class="box input">點擊【回顧法向曲線圖】（任何模式）</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">SwitchRidgeDirection("h")</div>
@@ -913,12 +925,12 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 </div>
 <div class="v-arrow"></div>
 <div class="out-par">
-<div class="box output">回顧主畫面：原圖 / V 處理圖 / H 處理圖</div>
-<div class="box output">作用中曲線圖：淺藍底色 + 橘色外框（UpdateRidgeDirectionVisual；Vertical V=【回顧切向曲線圖】，Global V=【回顧全覽圖】，H=【回顧法向曲線圖】）</div>
+<div class="box output">強化切換：回顧主畫面 原圖 / V 處理圖 / H 處理圖；作用中曲線圖 淺藍底色 + 橘色外框</div>
+<div class="box output">合圖切換：等同在 PropertyGrid 修改合圖方式（執行 OnStitchModeChangedAsync）</div>
 </div>
 <div class="v-arrow"></div>
-<div class="box action">① 未勾選→自動勾選+設方向 ② 同方向→取消勾選 ③ 不同方向→切換</div>
-<div class="note dev">InitUiLayer 中 chartMuraVertical.MouseClick 以 StitchMode==Vertical 為條件呼叫 SwitchRidgeDirection("v")；chartOverview.MouseClick 以 StitchMode==Global 為條件呼叫；chartMuraHorizontal.MouseClick 無條件呼叫 SwitchRidgeDirection("h")。呼叫 <code>RefreshPropertyGridKeepScroll()</code> 避免 PropertyGrid 捲軸跳位。</div>
+<div class="box action">強化：① 未勾選→自動勾選+設方向 ② 同方向→取消勾選 ③ 不同方向→切換</div>
+<div class="note dev">IsEnhanceDisplayActive = IsStitchMode ? EnableReviewEnhance : LastReviewProcessedMode。TrySwitchStitchModeAsync：設 _settings.hb_StitchMode → RefreshPropertyGridKeepScroll → OnStitchModeChangedAsync（原 PropertyGrid handler 同一邏輯提取為共用方法）。</div>
 </div>
 <div class="flow-group vflow">
 <div class="flow-title">回顧主畫面手勢</div>
