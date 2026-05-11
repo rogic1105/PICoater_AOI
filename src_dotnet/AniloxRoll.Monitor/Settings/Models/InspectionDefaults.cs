@@ -33,7 +33,7 @@ namespace AniloxRoll.Monitor.Core.Data
         public const int YearlyYMax  = 50000;      // 統計圖表 > 月產量
         public const int MonthlyYMax = 2000;       // 統計圖表 > 日產量
         public const int DailyYMax   = 300;        // 統計圖表 > 時產量
-        public static readonly StitchMode DefaultStitch = StitchMode.Vertical;     // 主畫面 > 合圖方式
+        public static readonly StitchMode DefaultStitch = StitchMode.Global;        // 主畫面 > 合圖方式
         public const bool EnableMuraEnhance   = false;       // 監控強化
         public const bool EnableReviewEnhance = false;       // 回顧強化
 

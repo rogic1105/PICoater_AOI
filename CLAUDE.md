@@ -169,7 +169,7 @@ PICoater_AOI/
 | 日產量 | `gd_MonthlyYMax` → `ChartMonthlyYMax` | 2000 | 良率月圖 Y 軸上限 |
 | 時產量 | `ge_DailyYMax` → `ChartDailyYMax` | 300 | 良率日圖 Y 軸上限 |
 | ── 主畫面 ── | （分隔列，唯讀） | — | — |
-| 合圖方式 | `hb_StitchMode` → `StitchMode` | Vertical | Vertical / Global |
+| 合圖方式 | `hb_StitchMode` → `StitchMode` | Global | Vertical / Global |
 | 監控強化 | `hc_EnableMuraEnhance` → `EnableMuraEnhance` | false | 即時影像強化 Mura |
 | 回顧強化 | `hd_EnableReviewEnhance` → `EnableReviewEnhance` | false | 回顧影像強化 Mura |
 

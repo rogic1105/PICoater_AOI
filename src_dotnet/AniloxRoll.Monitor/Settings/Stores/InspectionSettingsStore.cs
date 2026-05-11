@@ -243,13 +243,13 @@ namespace AniloxRoll.Monitor.Core.Data
                 ? obj
                 : SettingsStoreHelper.ExtractObject(json, "Chart");
 
-            StitchMode stitchMode = StitchMode.Vertical;
-            string stitchStr = SettingsStoreHelper.GetString(src, "StitchMode", "Vertical");
+            StitchMode stitchMode = StitchMode.Global;
+            string stitchStr = SettingsStoreHelper.GetString(src, "StitchMode", "Global");
             // 向後相容：舊設定的 "Horizontal" 對映到 Global
             if (string.Equals(stitchStr, "Horizontal", System.StringComparison.OrdinalIgnoreCase))
                 stitchMode = StitchMode.Global;
             else if (!System.Enum.TryParse(stitchStr, true, out stitchMode))
-                stitchMode = StitchMode.Vertical;
+                stitchMode = StitchMode.Global;
 
             // 向後相容：EnableMuraEnhance/EnableReviewEnhance 原在 Recipe 區塊
             string recipeObj = SettingsStoreHelper.ExtractObject(json, "Recipe");
