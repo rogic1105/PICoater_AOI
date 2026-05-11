@@ -712,7 +712,15 @@ namespace AniloxRoll.Monitor.Forms
             UpdateRowChartPitch();
 
             // Review tab chart 點選切換 V/H 處理圖方向
-            chartMuraVertical.MouseClick += (s, e) => SwitchRidgeDirection("v");
+            // Vertical 模式：點 chartMuraVertical 切換強化；Global 模式：改由 chartOverview 接手
+            chartMuraVertical.MouseClick += (s, e) =>
+            {
+                if (_settings?.StitchMode == StitchMode.Vertical) SwitchRidgeDirection("v");
+            };
+            chartOverview.MouseClick += (s, e) =>
+            {
+                if (_settings?.StitchMode == StitchMode.Global) SwitchRidgeDirection("v");
+            };
             chartMuraHorizontal.MouseClick += (s, e) => SwitchRidgeDirection("h");
 
             // Live tab chart 點選切換 V/H 處理圖方向
@@ -1985,6 +1993,10 @@ namespace AniloxRoll.Monitor.Forms
                         _stitchCoordinator.LastReviewProcessedMode, _interactionHelper.LoadImages);
                     ApplyPostLoadDisplay();
                 }
+
+                // highlight 跟著 StitchMode 移位（Vertical↔Global 時重繪底色）
+                UpdateRidgeDirectionVisual(
+                    _settings.EnableReviewEnhance ? _stitchCoordinator.ActiveRidgeDirection : null);
             }
 
             // OPS/Start 變更 → 即時更新全域合圖佈局（下一幀生效）
@@ -3079,11 +3091,39 @@ namespace AniloxRoll.Monitor.Forms
 
         private void UpdateRidgeDirectionVisual(string dir)
         {
-            chartMuraVertical.BackColor = (dir == "v")
-                ? System.Drawing.Color.FromArgb(230, 240, 255) : System.Drawing.SystemColors.Control;
+            var highlight   = System.Drawing.Color.FromArgb(230, 240, 255);
+            var normal      = System.Drawing.SystemColors.Control;
+            var orangeBorder = System.Drawing.Color.FromArgb(255, 140, 0);
+            var noColor     = System.Drawing.Color.Transparent;
+            bool isGlobal   = _settings?.StitchMode == StitchMode.Global;
+
+            bool vVertActive = !isGlobal && dir == "v";
+            bool vGlobActive =  isGlobal && dir == "v";
+            bool hActive     = dir == "h";
+
+            chartMuraVertical.BackColor           = vVertActive ? highlight : normal;
+            chartMuraVertical.BorderlineColor     = vVertActive ? orangeBorder : noColor;
+            chartMuraVertical.BorderlineWidth     = vVertActive ? 2 : 1;
+            chartMuraVertical.BorderlineDashStyle = vVertActive
+                ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
+                : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
+
+            chartOverview.BackColor           = vGlobActive ? highlight : normal;
+            chartOverview.BorderlineColor     = vGlobActive ? orangeBorder : noColor;
+            chartOverview.BorderlineWidth     = vGlobActive ? 2 : 1;
+            chartOverview.BorderlineDashStyle = vGlobActive
+                ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
+                : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
+
             if (chartMuraHorizontal != null)
-                chartMuraHorizontal.BackColor = (dir == "h")
-                    ? System.Drawing.Color.FromArgb(230, 240, 255) : System.Drawing.SystemColors.Control;
+            {
+                chartMuraHorizontal.BackColor           = hActive ? highlight : normal;
+                chartMuraHorizontal.BorderlineColor     = hActive ? orangeBorder : noColor;
+                chartMuraHorizontal.BorderlineWidth     = hActive ? 2 : 1;
+                chartMuraHorizontal.BorderlineDashStyle = hActive
+                    ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
+                    : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
+            }
         }
 
         private void RefreshPropertyGridKeepScroll()

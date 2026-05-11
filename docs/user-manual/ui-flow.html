@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 
 <html lang="zh-TW">
 <head>
@@ -504,7 +504,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">監控主畫面：切換 原圖/V處理圖/H處理圖</div>
-<div class="box output">曲線背景色：對應方向高亮藍色</div>
+<div class="box output">作用中曲線圖：淺藍底色 + 橘色外框；Vertical 模式 V=【監控切向曲線圖】，Global 模式 V=【監控全覽圖】，H=【監控法向曲線圖】</div>
 </div>
 <div class="v-arrow"></div>
 <div class="box action">① 未勾選→自動勾選+設方向 ② 同方向→取消勾選 ③ 不同方向→切換</div>
@@ -884,25 +884,40 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="out-par">
 <div class="box output">回顧縮圖1~7：原圖 ↔ 處理圖</div>
 <div class="box output">回顧主畫面：原圖 ↔ 處理圖（保持 zoom/pan）</div>
-<div class="box output">曲線背景色：V 高亮藍 / H 高亮藍 / 預設</div>
+<div class="box output">作用中曲線圖：淺藍底色 + 橘色外框（UpdateRidgeDirectionVisual：BackColor + BorderlineColor）；Vertical 模式 V=【回顧切向曲線圖】，Global 模式 V=【回顧全覽圖】，H=【回顧法向曲線圖】</div>
 </div>
 <div class="v-arrow"></div>
 <div class="box guard">_processedCheckboxGuard 防程式碼設定時觸發</div>
 <div class="note">開程式時若為 True，InitUiLayer 末尾呼叫 UpdateRidgeDirectionVisual 預先上底色（方向為 ActiveRidgeDirection 預設 "v"）。</div>
 </div>
 <div class="flow-group vflow">
-<div class="flow-title">回顧切向曲線圖/回顧法向曲線圖 點擊 → 三態切換</div>
-<div class="box input">點擊【回顧切向曲線圖】</div>
+<div class="flow-title">回顧曲線圖點擊 → 三態切換（依合圖方式路由）</div>
+<div class="box condition">合圖方式 = Vertical？</div>
+<div class="out-par">
+<div>
+<div class="box input">點擊【回顧切向曲線圖】（Vertical 模式）</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">SwitchRidgeDirection("v")</div>
+</div>
+<div>
+<div class="box input">點擊【回顧全覽圖】（Global 模式，接手切向強化功能）</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">SwitchRidgeDirection("v")</div>
+</div>
+<div>
+<div class="box input">點擊【回顧法向曲線圖】（任何模式）</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">SwitchRidgeDirection("h")</div>
+</div>
+</div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">回顧主畫面：原圖 / V 處理圖 / H 處理圖</div>
-<div class="box output">曲線背景色：對應方向高亮</div>
+<div class="box output">作用中曲線圖：淺藍底色 + 橘色外框（UpdateRidgeDirectionVisual；Vertical V=【回顧切向曲線圖】，Global V=【回顧全覽圖】，H=【回顧法向曲線圖】）</div>
 </div>
 <div class="v-arrow"></div>
 <div class="box action">① 未勾選→自動勾選+設方向 ② 同方向→取消勾選 ③ 不同方向→切換</div>
-<div class="note dev">同 監控曲線圖，呼叫 <code>RefreshPropertyGridKeepScroll()</code> 避免 PropertyGrid 捲軸跳位（同上機制）。</div>
+<div class="note dev">InitUiLayer 中 chartMuraVertical.MouseClick 以 StitchMode==Vertical 為條件呼叫 SwitchRidgeDirection("v")；chartOverview.MouseClick 以 StitchMode==Global 為條件呼叫；chartMuraHorizontal.MouseClick 無條件呼叫 SwitchRidgeDirection("h")。呼叫 <code>RefreshPropertyGridKeepScroll()</code> 避免 PropertyGrid 捲軸跳位。</div>
 </div>
 <div class="flow-group vflow">
 <div class="flow-title">回顧主畫面手勢</div>
