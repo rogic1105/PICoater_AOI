@@ -968,10 +968,14 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="ref-list">引用：<a href="#review-load-data">讀取資料</a> · <a href="#review-period-nav">時段導航</a> · <a href="#review-grabid-nav">單片序號導航</a> · <a href="#review-thumbnail-click">回顧縮圖點擊</a> · <a href="#settings-changed">檢測設定變更</a></div>
 <div class="note">由讀取資料、時段導航在結尾呼叫。僅當合圖方式 = 全域時執行。<br>⚠ StitchMode 切換到全域 且 IsStitchMode=true（序號模式）時，改呼叫 MergeAndShowFromStitchedImages（用記憶體快取，不走此函式）；否則才呼叫此函式由 DateTimeNavigator 讀碟。</div>
 <div class="box guard">合圖方式 ≠ 全域 → 不執行（直接返回）</div>
-<div class="box action">讀取當前時段 7 台相機影像 → 根據檢測設定 OPS/Start 合圖，缺圖則以 CFG 記錄的取像寬度補齊空白 → GrabImageStitcher.MergeHorizontal</div>
+<div class="box action">讀取當前時段 7 台相機影像 → 根據檢測設定 OPS/Start 合圖 → GrabImageStitcher.MergeHorizontal</div>
+<div class="note dev">MergeHorizontal 兩階段：<br>
+Pass 1（全域範圍）：遍歷所有 7 個槽位，空缺槽以 <code>InspectionEngineConfig.MaxWidth / scaleFactor</code> 作為標準寬（等同取像寬度 16384 px 縮放後），確保 canvas 橫跨完整 7 台佈局；<br>
+Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺槽位保持黑色背景。<br>
+效果：FitToScreen 使用七台完整寬度，缺圖相機顯示為黑色空白區。</div>
 <div class="v-arrow"></div>
 <div class="out-par">
-<div class="box output">回顧主畫面：全域合圖（水平合併 7 台影像）</div>
+<div class="box output">回顧主畫面：全域合圖（7 台完整佈局，缺圖補黑色空白，FitToScreen 顯示完整範圍）</div>
 </div>
 <div class="box action">清空切向曲線圖（單台資料無意義）</div>
 <div class="v-arrow"></div>

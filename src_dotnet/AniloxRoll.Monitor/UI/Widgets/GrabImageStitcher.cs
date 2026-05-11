@@ -104,23 +104,33 @@ namespace AniloxRoll.Monitor.UI.Widgets
         {
             if (cameraImages == null) return null;
 
-            // 收集有效影像、計算全域範圍與 pixel 偏移（single pass + deferred xOffset）
-            var validCams = new List<(Bitmap bmp, double posMm)>();
+            // Pass 1：ALL slots（含空缺）計算全域 mm 範圍；空缺槽以 MaxWidth 為標準寬度
             double globalMinMm = double.MaxValue;
             double globalMaxMm = double.MinValue;
             double refOpsPxMm = 0;
+
+            for (int i = 0; i < cameraImages.Length; i++)
+            {
+                double ops = (i < opsUm.Length) ? opsUm[i] : opsUm[0];
+                double pos = (i < posMm.Length) ? posMm[i] : 0;
+                double storedWidthPx = (cameraImages[i] != null)
+                    ? cameraImages[i].Width
+                    : InspectionEngineConfig.MaxWidth / (double)scaleFactor;
+                double widthMm = storedWidthPx * ops * scaleFactor / 1000.0;
+                double endMm = pos + widthMm;
+                if (pos < globalMinMm) globalMinMm = pos;
+                if (endMm > globalMaxMm) globalMaxMm = endMm;
+                if (refOpsPxMm == 0) refOpsPxMm = ops * scaleFactor / 1000.0;
+            }
+
+            // Pass 2：只收集有影像的相機（供後續繪製）
+            var validCams = new List<(Bitmap bmp, double posMm)>();
             int maxH = 0;
 
             for (int i = 0; i < cameraImages.Length; i++)
             {
                 if (cameraImages[i] == null) continue;
-                double ops = (i < opsUm.Length) ? opsUm[i] : opsUm[0];
                 double pos = (i < posMm.Length) ? posMm[i] : 0;
-                double widthMm = cameraImages[i].Width * ops * scaleFactor / 1000.0;
-                double endMm = pos + widthMm;
-                if (pos < globalMinMm) globalMinMm = pos;
-                if (endMm > globalMaxMm) globalMaxMm = endMm;
-                if (refOpsPxMm == 0) refOpsPxMm = ops * scaleFactor / 1000.0;
                 if (cameraImages[i].Height > maxH) maxH = cameraImages[i].Height;
                 validCams.Add((cameraImages[i], pos));
             }
