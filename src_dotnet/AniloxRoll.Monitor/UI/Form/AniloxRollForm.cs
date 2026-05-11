@@ -687,7 +687,7 @@ namespace AniloxRoll.Monitor.Forms
             {
                 pb.Paint += (s, pe) =>
                 {
-                    if (_settings?.StitchMode != StitchMode.Global) return;
+                    if (_settings?.StitchMode != StitchMode.Global || ((PictureBox)s).Image == null) return;
                     var ctrl = (Control)s;
                     using (var pen = new System.Drawing.Pen(System.Drawing.Color.FromArgb(255, 140, 0), 3))
                         pe.Graphics.DrawRectangle(pen, 1, 1, ctrl.Width - 3, ctrl.Height - 3);
