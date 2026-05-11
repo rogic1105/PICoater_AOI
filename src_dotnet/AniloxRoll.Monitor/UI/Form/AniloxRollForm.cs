@@ -92,6 +92,9 @@ namespace AniloxRoll.Monitor.Forms
         private AppModeConfig _appMode;
         private CleanupFlagWatcher _cleanupFlagWatcher;
 
+        // --- 回顧縮圖雙向同步 (Global 模式) ---
+        private int _selectedReviewCamIdx = -1;
+
         // --- 儲存管理 ---
         private StorageRetentionService _retentionService;
         private RemoteCopyService _remoteCopyService;
@@ -682,12 +685,14 @@ namespace AniloxRoll.Monitor.Forms
             _galleryManager = new ThumbnailGridPresenter();
             _galleryManager.Initialize(_cameraPanels);
 
-            // Global 模式時回顧縮圖加橘色外框（同曲線圖 highlight 色）
+            // Global 模式時選中縮圖加橘色外框（視野中心最近相機）
             foreach (var pb in _cameraPanels)
             {
                 pb.Paint += (s, pe) =>
                 {
-                    if (_settings?.StitchMode != StitchMode.Global || ((PictureBox)s).Image == null) return;
+                    if (_settings?.StitchMode != StitchMode.Global) return;
+                    int pbIdx = Array.IndexOf(_cameraPanels, (PictureBox)s);
+                    if (pbIdx != _selectedReviewCamIdx) return;
                     var ctrl = (Control)s;
                     using (var pen = new System.Drawing.Pen(System.Drawing.Color.FromArgb(255, 140, 0), 3))
                         pe.Graphics.DrawRectangle(pen, 1, 1, ctrl.Width - 3, ctrl.Height - 3);
@@ -742,8 +747,23 @@ namespace AniloxRoll.Monitor.Forms
             };
             chartMuraHorizontal.MouseClick += (s, e) => SwitchRidgeDirection("h");
 
-            // Live tab chart 點選切換 V/H 處理圖方向
-            muraChartVerticalLive.MouseClick += (s, e) => SwitchLiveDisplayDirection("v");
+            // Live tab chart 點選：
+            //   Vertical：muraChartVerticalLive → 切換強化；chartLiveOverview（非強化時）→ 切到 Global
+            //   Global：chartLiveOverview → 切換強化；muraChartVerticalLive（非強化時）→ 切回 Vertical
+            muraChartVerticalLive.MouseClick += (s, e) =>
+            {
+                if (_settings?.StitchMode == StitchMode.Vertical)
+                    SwitchLiveDisplayDirection("v");
+                else if (_settings?.StitchMode == StitchMode.Global && !_settings.EnableMuraEnhance)
+                    _ = TrySwitchStitchModeAsync(StitchMode.Vertical);
+            };
+            chartLiveOverview.MouseClick += (s, e) =>
+            {
+                if (_settings?.StitchMode == StitchMode.Global)
+                    SwitchLiveDisplayDirection("v");
+                else if (_settings?.StitchMode == StitchMode.Vertical && !_settings.EnableMuraEnhance)
+                    _ = TrySwitchStitchModeAsync(StitchMode.Global);
+            };
             muraChartHorizontalLive.MouseClick += (s, e) => SwitchLiveDisplayDirection("h");
 
             // PropertyGrid：動態標題說明（點選 ─ X ─ 時，底部說明欄顯示當前參數值）
@@ -816,8 +836,13 @@ namespace AniloxRoll.Monitor.Forms
             _presenter.LogReported      += OnPresenterLogReported;
             _galleryManager.SelectionChanged += idx =>
             {
-                if (_stitchCoordinator.IsGlobalMerged || _stitchCoordinator.IsPeriodMerged)
-                    return; // 全域模式：canvasMain 顯示合併圖，gallery 點選不切換
+                if (_stitchCoordinator.IsGlobalMerged)
+                {
+                    PanCanvasToReviewCameraCenter(idx);
+                    return;
+                }
+                if (_stitchCoordinator.IsPeriodMerged)
+                    return;
                 if (_stitchCoordinator.IsStitchMode)
                     _stitchCoordinator.ShowStitchedCameraInCanvas(idx);
                 else
@@ -839,6 +864,7 @@ namespace AniloxRoll.Monitor.Forms
             _presenter.UpdatePeriodNavigationState();
 
             canvasMain.StatusChanged += _interactionHelper.UpdateCanvasInfo;
+            canvasMain.StatusChanged += UpdateSelectedReviewCamFromViewCenter;
             canvasMain.EdgeReached   += _interactionHelper.NavigateCamera;
             var canvasClicker = new MultiClickDetector();
             canvasMain.MouseDown += (s, e) =>
@@ -3144,7 +3170,8 @@ namespace AniloxRoll.Monitor.Forms
                 ApplyPostLoadDisplay();
             }
 
-            // 重繪縮圖外框（Global→橘色，Vertical→無框）
+            // 重繪縮圖外框（Global→選中相機橘色，Vertical→無框）
+            if (_settings.StitchMode != StitchMode.Global) _selectedReviewCamIdx = -1;
             foreach (var pb in _cameraPanels) pb.Invalidate();
 
             // 切換合圖方式後主畫面 fit to screen
@@ -3310,6 +3337,68 @@ namespace AniloxRoll.Monitor.Forms
             foreach (var c in _liveCameraManager.Cameras)
                 if (c.CameraId == camId) return c;
             return null;
+        }
+
+        // ── 回顧縮圖↔主畫面雙向同步（Global 模式）──────────────────
+
+        private double[] GetReviewOpsArray() =>
+            _interactionHelper?.ReviewConfig?.CamOps ?? _settings?.GetCameraOpsUmArray() ?? new double[7];
+
+        private double[] GetReviewPosArray() =>
+            _interactionHelper?.ReviewConfig?.CamPos ?? _settings?.GetCameraStartPositionMmArray() ?? new double[7];
+
+        private bool TryGetMergedReviewCoords(out double globalMinMm, out double refOpsMm)
+        {
+            globalMinMm = 0; refOpsMm = 0;
+            var opsArr = GetReviewOpsArray();
+            var posArr = GetReviewPosArray();
+            if (opsArr == null || opsArr.Length == 0 || opsArr[0] <= 0) return false;
+            globalMinMm = double.MaxValue;
+            for (int i = 0; i < posArr.Length; i++)
+                if (posArr[i] < globalMinMm) globalMinMm = posArr[i];
+            if (globalMinMm == double.MaxValue) { globalMinMm = 0; }
+            refOpsMm = opsArr[0] * InspectionEngineConfig.DefaultSaveResizeScale / 1000.0;
+            return refOpsMm > 0;
+        }
+
+        private void PanCanvasToReviewCameraCenter(int camIdx)
+        {
+            if (!_stitchCoordinator.IsGlobalMerged) return;
+            if (!TryGetMergedReviewCoords(out double globalMinMm, out double refOpsMm)) return;
+            var posArr = GetReviewPosArray();
+            var opsArr = GetReviewOpsArray();
+            if (camIdx < 0 || camIdx >= posArr.Length) return;
+
+            double slotWidthMm = InspectionEngineConfig.MaxWidth * opsArr[camIdx] / 1000.0;
+            double camCenterMm = posArr[camIdx] + slotWidthMm / 2.0;
+            double camCenterPx = (camCenterMm - globalMinMm) / refOpsMm;
+            float newPanX = canvasMain.Width / 2.0f - (float)(camCenterPx * canvasMain.Zoom);
+            canvasMain.SetView(canvasMain.Zoom, new System.Drawing.PointF(newPanX, canvasMain.PanOffset.Y));
+        }
+
+        private void UpdateSelectedReviewCamFromViewCenter(CanvasInfo info)
+        {
+            if (!_stitchCoordinator.IsGlobalMerged) return;
+            if (!TryGetMergedReviewCoords(out double globalMinMm, out double refOpsMm)) return;
+            var posArr = GetReviewPosArray();
+            var opsArr = GetReviewOpsArray();
+
+            double centerPx = (canvasMain.Width / 2.0f - info.PanOffset.X) / info.Zoom;
+            double centerMm = globalMinMm + centerPx * refOpsMm;
+
+            int bestIdx = 0;
+            double bestDist = double.MaxValue;
+            for (int i = 0; i < posArr.Length; i++)
+            {
+                double slotWidthMm = InspectionEngineConfig.MaxWidth * opsArr[i] / 1000.0;
+                double slotCenterMm = posArr[i] + slotWidthMm / 2.0;
+                double dist = Math.Abs(centerMm - slotCenterMm);
+                if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+            }
+
+            if (_selectedReviewCamIdx == bestIdx) return;
+            _selectedReviewCamIdx = bestIdx;
+            foreach (var pb in _cameraPanels) pb.Invalidate();
         }
 
         // ── Helper Methods ──────────────────────────────────────────

@@ -893,14 +893,16 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 </div>
 </div>
 <div class="v-branch-path"><span class="branch-label no">全域</span>
+<div class="box action dev">PanCanvasToReviewCameraCenter(N) → 平移到 CAM N 中心（保持縮放）</div>
 <div class="out-par">
-<div class="box output">回顧主畫面：保持<a href="#review-global-merge">全域合圖</a>（不切換）</div>
+<div class="box output">回顧主畫面：保持<a href="#review-global-merge">全域合圖</a>，視野平移到 CAM N 中心</div>
+<div class="box output">選中縮圖：橘色外框高亮（_selectedReviewCamIdx）</div>
 <div class="box output">回顧切向曲線圖：清空</div>
 <div class="box output">回顧法向曲線圖：正常載入</div>
 </div>
 </div></div>
 <div class="v-arrow"></div>
-<div class="box action dev">Stitch 模式 → ShowStitchedCameraInCanvas(N)<br/>一般模式 → OnGallerySelectionChanged(N) → RunInspectionFullRes</div>
+<div class="box action dev">全域模式 → PanCanvasToReviewCameraCenter(N) + return<br/>非全域 Stitch 模式 → ShowStitchedCameraInCanvas(N)<br/>一般模式 → OnGallerySelectionChanged(N) → RunInspectionFullRes</div>
 </div>
 <div class="flow-group vflow">
 <div class="flow-title">回顧強化 <code>EnableReviewEnhance</code>（檢測設定）</div>
@@ -958,6 +960,40 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="v-arrow"></div>
 <div class="box action">強化：① 未勾選→自動勾選+設方向 ② 同方向→取消勾選 ③ 不同方向→切換</div>
 <div class="note dev">IsEnhanceDisplayActive = IsStitchMode ? EnableReviewEnhance : LastReviewProcessedMode。TrySwitchStitchModeAsync：設 _settings.hb_StitchMode → RefreshPropertyGridKeepScroll → OnStitchModeChangedAsync（原 PropertyGrid handler 同一邏輯提取為共用方法）。</div>
+</div>
+<div class="flow-group vflow">
+<div class="flow-title">監控曲線圖點擊 → 三態切換 / 合圖方式切換（依合圖方式路由）</div>
+<div class="box condition">合圖方式 × 強化狀態（_settings.EnableMuraEnhance）？</div>
+<div class="out-par">
+<div>
+<div class="box input">點擊【監控切向曲線圖】（Vertical 模式）</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">SwitchLiveDisplayDirection("v")</div>
+</div>
+<div>
+<div class="box input">點擊【監控全覽圖】（Global 模式，接手切向強化功能）</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">SwitchLiveDisplayDirection("v")</div>
+</div>
+<div>
+<div class="box input">點擊【監控全覽圖】（Vertical 模式 且 非強化狀態）</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">TrySwitchStitchModeAsync(Global)</div>
+<div class="box output">合圖方式自動切換為全域；PropertyGrid 同步更新</div>
+</div>
+<div>
+<div class="box input">點擊【監控切向曲線圖】（Global 模式 且 非強化狀態）</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">TrySwitchStitchModeAsync(Vertical)</div>
+<div class="box output">合圖方式自動切換為垂直；PropertyGrid 同步更新</div>
+</div>
+<div>
+<div class="box input">點擊【監控法向曲線圖】（任何模式）</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">SwitchLiveDisplayDirection("h")</div>
+</div>
+</div>
+<div class="note dev">同 Review tab 邏輯，守衛條件改用 _settings.EnableMuraEnhance（Live 的強化狀態），而非 IsEnhanceDisplayActive（後者為回顧 Stitch 模式專用）。</div>
 </div>
 <div class="flow-group vflow">
 <div class="flow-title">回顧主畫面手勢</div>
@@ -1235,7 +1271,7 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 </div>
 </div>
 <div class="v-arrow dev"></div>
-<div class="box output">回顧縮圖1~7：Global 模式時有圖片的 pbCam 加橘色外框（Paint event，Image != null 才繪製）；切回 Vertical 時移除（Invalidate 重繪）</div>
+<div class="box output">回顧縮圖1~7：Global 模式時 <b>_selectedReviewCamIdx</b> 對應的 pbCam 加橘色外框（Paint event，按索引比對）；拖曳回顧主畫面 → canvasMain.StatusChanged → UpdateSelectedReviewCamFromViewCenter → 依視野中心最近槽位更新橘框；切回 Vertical 時重設 _selectedReviewCamIdx = -1 後 Invalidate 移除橘框</div>
 <div class="box output">回顧主畫面：canvasMain.FitToScreen()</div>
 <div class="box output">曲線圖 highlight（UpdateRidgeDirectionVisual）：以實際生效狀態判斷——stitch 模式看 EnableReviewEnhance；period 模式看 LastReviewProcessedMode；未生效時傳 null（清除 highlight）</div>
 <div class="box input">修改 OPS / Start</div>
