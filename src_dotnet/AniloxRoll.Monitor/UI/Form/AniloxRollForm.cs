@@ -3106,6 +3106,10 @@ namespace AniloxRoll.Monitor.Forms
                 ApplyPostLoadDisplay();
             }
 
+            // 切換合圖方式後主畫面 fit to screen
+            if (canvasMain.Image != null)
+                canvasMain.FitToScreen();
+
             // highlight 跟著 StitchMode 移位
             UpdateRidgeDirectionVisual(
                 IsEnhanceDisplayActive ? _stitchCoordinator.ActiveRidgeDirection : null);
