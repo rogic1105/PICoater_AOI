@@ -2131,10 +2131,32 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         private async void btnPeriodPrev_Click(object sender, EventArgs e)
-        { try { _interactionHelper.SaveCanvasView(); _stitchCoordinator.ClearStitchedMode(); await _presenter.MovePeriodAsync(-1, _stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig); ApplyPostLoadDisplay(); } catch (Exception ex) { Trace.WriteLine($"[btnPeriodPrev] {ex}"); } }
+        {
+            try
+            {
+                bool wasStitch = _stitchCoordinator.IsStitchMode;
+                _interactionHelper.SaveCanvasView();
+                _stitchCoordinator.ClearStitchedMode();
+                await _presenter.MovePeriodAsync(-1, _stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig);
+                ApplyPostLoadDisplay();
+                if (wasStitch && canvasMain.Image != null) canvasMain.FitToScreen();
+            }
+            catch (Exception ex) { Trace.WriteLine($"[btnPeriodPrev] {ex}"); }
+        }
 
         private async void btnPeriodNext_Click(object sender, EventArgs e)
-        { try { _interactionHelper.SaveCanvasView(); _stitchCoordinator.ClearStitchedMode(); await _presenter.MovePeriodAsync(+1, _stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig); ApplyPostLoadDisplay(); } catch (Exception ex) { Trace.WriteLine($"[btnPeriodNext] {ex}"); } }
+        {
+            try
+            {
+                bool wasStitch = _stitchCoordinator.IsStitchMode;
+                _interactionHelper.SaveCanvasView();
+                _stitchCoordinator.ClearStitchedMode();
+                await _presenter.MovePeriodAsync(+1, _stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig);
+                ApplyPostLoadDisplay();
+                if (wasStitch && canvasMain.Image != null) canvasMain.FitToScreen();
+            }
+            catch (Exception ex) { Trace.WriteLine($"[btnPeriodNext] {ex}"); }
+        }
 
         /// <summary>cbDate/cbTime 手動滾動時載入對應圖片（同 btnPeriodPrev/Next）。
         /// _dataStatsPresenter.GrabIdNavGuard 時跳過（由 OnReviewGrabIdChanged 等程式碼觸發的 NavigateToDateTime）。</summary>
@@ -2144,11 +2166,13 @@ namespace AniloxRoll.Monitor.Forms
             if (_imageRepository.FileCount == 0) return;
             try
             {
+            bool wasStitch = _stitchCoordinator.IsStitchMode;
             _interactionHelper.SaveCanvasView();
             _stitchCoordinator.ClearStitchedMode();
             _dataStatsPresenter.SetReviewGroupBoxes(false);
             await _presenter.LoadImagesWithPeriodLockAsync(_stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig);
             ApplyPostLoadDisplay();
+            if (wasStitch && canvasMain.Image != null) canvasMain.FitToScreen();
             }
             catch (Exception ex) { Trace.WriteLine($"[OnPeriodComboChanged] {ex}"); }
         }

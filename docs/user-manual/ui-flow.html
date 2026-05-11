@@ -801,7 +801,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="v-branch">
 <div class="v-branch-path"><span class="branch-label yes">垂直</span>
 <div class="out-par">
-<div class="box output">回顧主畫面：第一台相機影像（保留先前視野位置）</div>
+<div class="box output">回顧主畫面：第一台相機影像（保留先前視野位置；若從序號模式切換過來則 FitToScreen）</div>
 <div class="box output">回顧切向曲線圖：多幀 Mean 取平均、Max 取 Max</div>
 <div class="box output">回顧法向曲線圖：多幀 row curves 串接</div>
 <div class="box output">回顧全覽圖：X 軸固定（依 CFG 的 ImageWidth × OPS + Start 涵蓋 7 台 FOV）</div>
@@ -809,7 +809,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 </div>
 <div class="v-branch-path"><span class="branch-label no">全域</span>
 <div class="out-par">
-<div class="box output">回顧主畫面：<a href="#review-global-merge">全域合圖</a>（保留先前視野位置）</div>
+<div class="box output">回顧主畫面：<a href="#review-global-merge">全域合圖</a>（保留先前視野位置；若從序號模式切換過來則 FitToScreen）</div>
 <div class="box output">回顧切向曲線圖：清空（單台資料無意義）</div>
 <div class="box output">回顧法向曲線圖：7 台靠上對齊，重疊區 Mean 平均/Max 取 Max，非重疊區保留</div>
 <div class="box output">回顧全覽圖：7 台按位置串接，重疊區 Mean 平均/Max 取 Max</div>
@@ -831,7 +831,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="v-branch">
 <div class="v-branch-path"><span class="branch-label yes">垂直</span>
 <div class="out-par">
-<div class="box output">回顧主畫面：選中相機的拼接影像（保留先前視野位置）</div>
+<div class="box output">回顧主畫面：選中相機的拼接影像（FitToScreen）</div>
 <div class="box output">回顧切向曲線圖：多幀 Mean 取平均、Max 取 Max（歷史 OPS/閾值）</div>
 <div class="box output">回顧法向曲線圖：多幀 row curves 串接</div>
 <div class="box output">回顧全覽圖：X 軸固定（依 CFG 的 ImageWidth × OPS + Start 涵蓋 7 台 FOV）</div>
@@ -839,7 +839,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 </div>
 <div class="v-branch-path"><span class="branch-label no">全域</span>
 <div class="out-par">
-<div class="box output">回顧主畫面：<a href="#review-global-merge">全域合圖</a>（保留先前視野位置）</div>
+<div class="box output">回顧主畫面：<a href="#review-global-merge">全域合圖</a>（FitToScreen）</div>
 <div class="box output">回顧切向曲線圖：清空（單台資料無意義）</div>
 <div class="box output">回顧法向曲線圖：7 台靠上對齊，重疊區 Mean 平均/Max 取 Max，非重疊區保留</div>
 <div class="box output">回顧全覽圖：7 台按位置串接，重疊區 Mean 平均/Max 取 Max</div>
