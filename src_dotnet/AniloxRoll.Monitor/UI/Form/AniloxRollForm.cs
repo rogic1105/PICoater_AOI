@@ -2940,6 +2940,7 @@ namespace AniloxRoll.Monitor.Forms
                     _dataStatsPresenter.UpdateGrabIdNavState();
                     _dataStatsPresenter.SetReviewGroupBoxes(true);
                     await _stitchCoordinator.LoadGrabStitchedViewAsync(grabId, earliest, latest);
+                    if (canvasMain.Image != null) canvasMain.FitToScreen();
                 }
             }
             catch (Exception ex) { Trace.WriteLine($"[OnDataGrabIdSelected] {ex}"); }
@@ -2955,6 +2956,7 @@ namespace AniloxRoll.Monitor.Forms
                 _presenter.UpdatePeriodNavigationState();
 
                 await _stitchCoordinator.LoadGrabStitchedViewAsync(grabId, earliest, latest);
+                if (canvasMain.Image != null) canvasMain.FitToScreen();
 
                 // 同步 Data tab
                 if (!_dataStatsPresenter.GrabIdCrossGuard.IsSet
