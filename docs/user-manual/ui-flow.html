@@ -634,7 +634,8 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="v-arrow"></div>
 <div class="box action">refOpsMm = opsUm[0] / 1000（參考像素尺寸，取第一台相機）</div>
 <div class="v-arrow"></div>
-<div class="box action">遍歷所有相機：widthMm = FrameWidth × ops / 1000 → 計算 minStart / maxEnd / maxH</div>
+<div class="box action">Pass 1（全域範圍）：遍歷所有 opsUm[] 槽位（含空缺相機），空缺槽以 <code>InspectionEngineConfig.MaxWidth</code> 作為標準寬 → 計算 minStart / maxEnd；Pass 2：只從在線相機取 maxH</div>
+<div class="note dev">空缺相機區域由 MbufClear(0) 保持黑色，FitToScreen 顯示完整 7 台範圍。OPS/Start 取自當前檢測設定（非 CFG）。</div>
 <div class="v-arrow"></div>
 <div class="box action">totalW = ceil((maxEnd - minStart) / refOpsMm)，maxH = 最高相機高度</div>
 <div class="v-arrow"></div>
@@ -1098,7 +1099,7 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <div class="flow-title">序號選擇 <code>cbDataGrabId</code></div>
 <div class="box input">選擇【報表序號】或按【報表上一序號】/【報表下一序號】</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">鎖定 start=end=同序號 → RefreshStats</div>
+<div class="box action dev">鎖定 start=end=同序號 → RefreshStats（單片模式跳過 UpdateMuraProfileChart，由後續 StitchedCurveUpdated 一次性更新）</div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">起始/結束序號 + 日期時間：同步到該序號</div>
@@ -1108,7 +1109,7 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <div class="v-arrow"></div>
 <div class="box sync">同步 Review tab：單片序號 + 導航時間 + 載入拼接圖</div>
 <div class="v-arrow"></div>
-<div class="box output">【chartMuraProfile】← StitchedCurveUpdated 事件同步：與【chartOverview】完全相同（採用歷史 OPS/Pos 設定）</div>
+<div class="box output">【chartMuraProfile】← StitchedCurveUpdated 事件同步：與【chartOverview】完全相同（採用歷史 OPS/Pos 設定），一步到位不重算</div>
 <div class="v-arrow"></div>
 <div class="box guard">_grabIdCrossGuard 防 Review ↔ Data 迴圈</div>
 </div>
