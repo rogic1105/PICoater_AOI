@@ -101,6 +101,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public void RefreshRowChartRange() => _canvasHelper.RefreshRowChartRange();
         public void SaveCanvasView() => _canvasHelper.SaveViewIfNeeded();
         public void RestoreCanvasViewOrFit() => _canvasHelper.RestoreViewOrFitToScreen();
+        public void ClearCanvasView() => _canvasHelper.ClearSavedView();
         public void SetScreenMmPerPixel(double mmPerPx) => _canvasHelper.SetScreenMmPerPixel(mmPerPx);
         public double ScreenMmPerPixel => _canvasHelper.ScreenMmPerPixel;
         public double RowPitchMm => _rowChartHelper?.RowPitchMm ?? 0;

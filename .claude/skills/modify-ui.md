@@ -41,17 +41,20 @@
 ### StitchMode 行為
 - **Global 模式**：
   - Live：`EnableGlobalMerge` → 監控主畫面即時合圖（MbufChild2d + MbufCopyClip，含 overlap 分割）；muraChartVerticalLive 不更新；chartLiveOverview X 軸隨合併 display zoom 聯動（`LiveViewRangeProvider` → `TryGetMergedViewRange`）；lblPixelInfo 由 `_mergedDisplay` 的 `M_MOUSE_MOVE` hook 更新（mm 座標）
-  - Live 手勢：雙擊=`ResetMainDisplayView`（fit-to-window）、三擊=`SetPhysicalMagnification1x`（1:1）、滾輪=`ApplyCustomZoom`（1.1x 步進），Global/單台共用邏輯
+  - Live 手勢:雙擊=`ResetMainDisplayView`（fit-to-window）、三擊=`SetPhysicalMagnification1x`（1:1）、滾輪=`ApplyCustomZoom`（1.1x 步進），Global/單台共用邏輯
   - Live 初始化：`btnCameraGrab_Click` 首次分配相機後，若已為 Global 模式則立即 `EnableGlobalMerge`
   - Review：`ApplyGlobalMergeIfNeeded` → 回顧主畫面全域合圖；chartMuraVertical 清空；chartMuraHorizontal 正常載入
   - 切換時立即觸發（`_propertyGrid_PropertyValueChanged`）
   - OPS/Start 變更：Global 啟用中 → `RefreshGlobalMergeLayout`（暫停複製→重算 clip→buffer 大小變則重分配→恢復，下一幀生效）
 - **Vertical 模式**：overview X 軸固定（不隨 canvas zoom）；muraVertical/Horizontal 隨動；Live 單台 MIL 顯示
+- **Global → Vertical 切換**：必須呼叫 `ReviewStitchCoordinator.DisposeGlobalMergedImage()` 清掉殘留 `_globalMergedImage` / `_periodMergedImage`。否則 IsGlobalMerged 仍為 true，會誤觸發其他守門條件（`UpdateSelectedReviewCamFromViewCenter` 現已改用 `StitchMode == Global` 判斷，但 bitmap 仍須釋放避免佔記憶體）。
 
 ### SwitchRidgeDirection 三態切換
 1. 未勾選 → 自動勾選 + 設方向
 2. 已勾選 + 同方向 → 取消勾選（回原圖）
 3. 已勾選 + 不同方向 → 切換方向（不改 checkbox）
+- **視野保留**：所有切換路徑（含 `ApplyReviewEnhance` → `ReloadCurrentStitchedView`）在重載前先 `SaveCanvasView()` 存檔；`LoadGrabStitchedViewAsync` 內部以 `ShowStitchedCameraInCanvas(idx, resetView: false)` 顯示，不抹掉 saved view，由 `RestoreCanvasViewOrFit()` 還原。`ShowStitchedCameraInCanvas` 預設 `resetView=true`（pbCam 切換相機時 Vertical 強制 fit to screen），呼叫端要保留視野必須明確傳 `false`。
+- **視覺一致性**：Review tab `UpdateRidgeDirectionVisual(dir)` 與 Live tab `UpdateLiveDirectionVisual()` 兩版本邏輯對稱（淡藍底 + 橘色外框 BorderlineColor=`FromArgb(255,140,0)` Width=2 Solid）；新增/修改方向視覺時兩邊同步維護。Live 版自行從 `_settings.EnableMuraEnhance` + `_liveDisplayDirection` 推斷 dir；Review 版由呼叫端傳入。
 
 ### Chart 對齊與效能
 - Chart X/Y 軸與 Canvas 對齊：用 `InnerPlotPosition`（PostPaint 首次快取後凍結），不用靜態值

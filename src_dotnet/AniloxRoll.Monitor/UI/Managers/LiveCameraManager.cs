@@ -69,6 +69,9 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// <summary>存檔完成回呼：傳入已儲存的檔案路徑陣列（供遠端複製佇列）。</summary>
         public Action<string[]> OnFilesSaved { get; set; }
 
+        /// <summary>Vertical 模式滾輪縮放後立即觸發，讓 chart 不必等下一幀 callback 就同步視野。</summary>
+        public Action OnAfterVerticalZoom { get; set; }
+
         /// <summary>
         /// 正在執行釋放流程時為 true，防止 Timer Tick 在資源已釋放後繼續存取相機。
         /// 同 CameraSession.IsReleasing。
@@ -77,6 +80,9 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         private int _selectedMainCameraId = 1;
         public int SelectedMainCameraId => _selectedMainCameraId;
+
+        /// <summary>使用者明確點選的相機 ID（不受 Global 模式視野中心 timer 影響）。</summary>
+        private int _userSelectedMainCameraId = 1;
 
         // --- Global merge（即時合圖）---
         private MIL_ID _mergedBuffer  = MIL.M_NULL;
@@ -523,6 +529,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             }
 
             _selectedMainCameraId = cameraIndex;
+            _userSelectedMainCameraId = cameraIndex;
 
             foreach (var kvp in _liveParentPanels)
                 kvp.Value.Invalidate();
@@ -695,8 +702,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             _mergedSlotStartsMm = null;
             _mergedSlotEndsMm   = null;
 
-            // 恢復選中相機的 secondary display
-            SwitchMainDisplay(_selectedMainCameraId);
+            // 恢復使用者明確點選的相機 secondary display（_selectedMainCameraId 可能已被視野中心 timer 改寫）
+            SwitchMainDisplay(_userSelectedMainCameraId);
         }
 
         /// <summary>OPS/Start 變更時，重新計算全域合圖佈局（下一幀生效）。</summary>
@@ -1261,6 +1268,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             double newPanY2 = imgY2 - cy2 / newZoom2;
 
             cam.SetSecondaryDisplayZoom(newZoom2, newPanX2, newPanY2);
+            OnAfterVerticalZoom?.Invoke();
         }
 
         /// <summary>攔截 panelMainDisplay 上的 WM_MOUSEWHEEL，用 1.1x 步長取代 MIL 預設的整數倍跳躍。</summary>

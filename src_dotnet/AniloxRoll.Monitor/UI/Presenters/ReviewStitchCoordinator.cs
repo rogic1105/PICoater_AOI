@@ -182,7 +182,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 }
                 else
                 {
-                    ShowStitchedCameraInCanvas(_ctx.GalleryManager.SelectedIndex);
+                    ShowStitchedCameraInCanvas(_ctx.GalleryManager.SelectedIndex, resetView: false);
                 }
                 UpdateStitchedOverviewChart();
 
@@ -253,7 +253,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
         }
 
-        public void ClearStitchedMode()
+        /// <summary>切到 Vertical 時清掉殘留的 Global/Period 合圖 bitmap（保留 _stitchedImages 與曲線）。</summary>
+        public void DisposeGlobalMergedImage()
         {
             DisableMergedOverviewSync();
             if (_globalMergedImage != null)
@@ -268,6 +269,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 Widgets.BitmapPool.Return(_periodMergedImage);
                 _periodMergedImage = null;
             }
+        }
+
+        public void ClearStitchedMode()
+        {
+            DisposeGlobalMergedImage();
             if (_stitchedImages == null) return;
             _ctx.Canvas.Image = null;
             _ctx.GalleryManager.ClearImages();
@@ -329,8 +335,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
             StitchedCurveUpdated?.Invoke(_stitchedCurveMean, _stitchedCurveMax, opsArr, posArr, errMean, errMax);
         }
 
-        /// <summary>顯示單台相機拼接影像，並更新對應的 mura chart。</summary>
-        public void ShowStitchedCameraInCanvas(int idx)
+        /// <summary>顯示單台相機拼接影像，並更新對應的 mura chart。
+        /// resetView=true（pbCam 切換相機）：Vertical 模式強制 fit to screen。
+        /// resetView=false（強化方向重載）：尊重呼叫端 SaveCanvasView 的視野存檔。</summary>
+        public void ShowStitchedCameraInCanvas(int idx, bool resetView = true)
         {
             if (_stitchedImages == null) return;
             var bmp = (idx >= 0 && idx < _stitchedImages.Length) ? _stitchedImages[idx] : null;
@@ -339,7 +347,12 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 InspectionEngineConfig.DefaultSaveResizeScale, idx);
 
             _ctx.Canvas.Image = bmp;
-            if (bmp != null) _ctx.InteractionHelper.RestoreCanvasViewOrFit();
+            if (bmp != null)
+            {
+                if (resetView && _ctx.Settings.StitchMode == StitchMode.Vertical)
+                    _ctx.InteractionHelper.ClearCanvasView();
+                _ctx.InteractionHelper.RestoreCanvasViewOrFit();
+            }
 
             if (_ctx.Settings.StitchMode == StitchMode.Global)
             {

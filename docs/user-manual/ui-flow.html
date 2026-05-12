@@ -851,7 +851,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="flow-title">單片序號導航 <code>cbReviewGrabId</code> + <code>btnGrabIdPrev/Next</code></div>
 <div class="box input">選擇【單片序號】或按【上一序號】/【下一序號】</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">NavigateToDateTime → LoadGrabStitchedViewAsync</div>
+<div class="box action dev">NavigateToDateTime → LoadGrabStitchedViewAsync（內部以 resetView=false 顯示，視野存檔由呼叫端 SaveCanvasView 決定；首次載入無存檔 → FitToScreen）</div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">回顧縮圖1~7：拼接圖</div>
@@ -892,7 +892,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="v-branch">
 <div class="v-branch-path"><span class="branch-label yes">垂直</span>
 <div class="out-par">
-<div class="box output">回顧主畫面：切換到 CAM N 影像</div>
+<div class="box output">回顧主畫面：切換到 CAM N 影像（FitToScreen）</div>
 <div class="box output">回顧切向曲線圖/回顧法向曲線圖：CAM N Mean/Max</div>
 </div>
 </div>
@@ -906,7 +906,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 </div>
 </div></div>
 <div class="v-arrow"></div>
-<div class="box action dev">IsGlobalMerged || IsPeriodMerged → PanCanvasToReviewCameraCenter(N) + return<br/>非合圖 Stitch 模式 → ShowStitchedCameraInCanvas(N)<br/>一般模式 → OnGallerySelectionChanged(N) → RunInspectionFullRes</div>
+<div class="box action dev">IsGlobalMerged || IsPeriodMerged → PanCanvasToReviewCameraCenter(N) + return<br/>非合圖 Stitch 模式 → ShowStitchedCameraInCanvas(N)（resetView=true 預設：Vertical 強制 fit to screen）<br/>一般模式 → OnGallerySelectionChanged(N) → RunInspectionFullRes</div>
 </div>
 <div class="flow-group vflow">
 <div class="flow-title">回顧強化 <code>EnableReviewEnhance</code>（檢測設定）</div>
@@ -916,7 +916,8 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">回顧縮圖1~7：原圖 ↔ 處理圖</div>
-<div class="box output">回顧主畫面：原圖 ↔ 處理圖（保持 zoom/pan）</div>
+<div class="box output">回顧主畫面：原圖 ↔ 處理圖（保持 zoom/pan；點 chartMura V/H 三態切換亦同）</div>
+<div class="note dev">視野保留機制：SwitchRidgeDirection / ReloadCurrentStitchedView 在重載前呼叫 SaveCanvasView 存檔；LoadGrabStitchedViewAsync 內部以 ShowStitchedCameraInCanvas(idx, resetView: false) 顯示，不抹掉 saved view，最後 RestoreCanvasViewOrFit 還原視野。</div>
 <div class="box output">作用中曲線圖：淺藍底色 + 橘色外框（UpdateRidgeDirectionVisual：BackColor + BorderlineColor）；Vertical 模式 V=【回顧切向曲線圖】，Global 模式 V=【回顧全覽圖】，H=【回顧法向曲線圖】</div>
 </div>
 <div class="v-arrow"></div>
@@ -1243,11 +1244,13 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <div class="v-branch">
 <div class="v-branch-path"><span class="branch-label yes">垂直</span>
 <div class="out-par">
+<div class="box action dev">DisposeGlobalMergedImage（清掉殘留 _globalMergedImage / _periodMergedImage，保留 _stitchedImages 與曲線）</div>
 <div class="box output">回顧主畫面：切回單台相機影像（使用記憶體快取 _stitchedImages[idx]，不重讀碟）</div>
 <div class="box output">回顧切向曲線圖/回顧法向曲線圖：自動恢復</div>
 <div class="box output">回顧全覽圖：同步更新</div>
 <div class="box output">監控主畫面：恢復單台 MIL 即時影像</div>
 </div>
+<div class="note dev">必須清殘留 bitmap：UpdateSelectedReviewCamFromViewCenter 的舊版守門條件曾用 IsGlobalMerged || IsPeriodMerged，殘留會在 Vertical 模式 zoom/pan 時誤觸發 pbCam 橘框切換。現守門已改為 StitchMode == Global（見下方「拖曳回顧主畫面 → UpdateSelectedReviewCamFromViewCenter」描述），但 bitmap 仍應釋放以免佔記憶體。</div>
 </div>
 <div class="v-branch-path"><span class="branch-label no">全域</span>
 <div class="v-arrow" data-label="分支：是否已在序號模式（IsStitchMode）"></div>
@@ -1275,7 +1278,7 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 </div>
 </div>
 <div class="v-arrow dev"></div>
-<div class="box output">回顧縮圖1~7：Global 模式時橘色外框由 ThumbnailGridPresenter.OnPreviewPaint（Tag == "Selected"）繪製；拖曳回顧主畫面 → canvasMain.StatusChanged → UpdateSelectedReviewCamFromViewCenter → 依視野中心最近槽位 → _galleryManager.Select(bestIdx, false) 更新 Tag → 重繪橘框。觸發條件：IsGlobalMerged || IsPeriodMerged（序號模式 / 時段模式均適用）</div>
+<div class="box output">回顧縮圖1~7：Global 模式時橘色外框由 ThumbnailGridPresenter.OnPreviewPaint（Tag == "Selected"）繪製；拖曳回顧主畫面 → canvasMain.StatusChanged → UpdateSelectedReviewCamFromViewCenter → 依視野中心最近槽位 → _galleryManager.Select(bestIdx, false) 更新 Tag → 重繪橘框。觸發條件：StitchMode == Global（序號模式 / 時段模式均適用；Vertical 模式不聯動）</div>
 <div class="box output">回顧主畫面：canvasMain.FitToScreen()</div>
 <div class="box output">曲線圖 highlight（UpdateRidgeDirectionVisual）：以實際生效狀態判斷——stitch 模式看 EnableReviewEnhance；period 模式看 LastReviewProcessedMode；未生效時傳 null（清除 highlight）</div>
 <div class="box input">修改 OPS / Start</div>

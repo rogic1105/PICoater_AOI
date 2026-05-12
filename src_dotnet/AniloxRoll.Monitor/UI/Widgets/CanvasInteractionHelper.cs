@@ -125,6 +125,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
         public void SetCurrentCameraIndex(int index) => _currentCameraIndex = index;
 
+        public void ClearSavedView() => _shouldRestoreView = false;
+
         /// <summary>在載入新圖前呼叫，以世界座標（mm）記住目前 viewport，支援跨倍率還原。
         /// Global 模式下不保留位置（導航後一律 FitToScreen）。</summary>
         public void SaveViewIfNeeded()

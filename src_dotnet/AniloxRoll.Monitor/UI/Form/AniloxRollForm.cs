@@ -867,8 +867,8 @@ namespace AniloxRoll.Monitor.Forms
                 }
             };
 
-            UpdateLiveDirectionVisual(_settings.EnableMuraEnhance ? _liveDisplayDirection : null);
-            UpdateRidgeDirectionVisual(null); // 開程式時尚無資料，highlight 不預先上色；待實際套用強化後才顯示
+            UpdateLiveDirectionVisual();
+            UpdateRidgeDirectionVisual(null); // dir=null：無強化橘框，底色依 StitchMode 上色
         }
 
         /// <summary>相機層：LiveCameraManager 與 FormClosed 清理。</summary>
@@ -889,6 +889,17 @@ namespace AniloxRoll.Monitor.Forms
             UpdateStandardBgSubLockState();
             _liveCameraManager.OnLiveCurveData      += OnLiveCurveData;
             _liveCameraManager.OnLiveRowCurveData   += OnLiveRowCurveData;
+            _liveCameraManager.OnAfterVerticalZoom   = () =>
+            {
+                if (_settings?.StitchMode != StitchMode.Vertical) return;
+                int camId = _liveCameraManager.SelectedMainCameraId;
+                int idx   = camId - 1;
+                if (idx < 0 || idx >= CameraCount) return;
+                var mean = _liveCurveMean[idx];
+                var max  = _liveCurveMax[idx];
+                if (mean == null) return;
+                OnLiveCurveData(camId, mean, max);
+            };
             _liveCameraManager.OnCameraCountChanged += (connected, expected) =>
             {
                 if (InvokeRequired) { if (!IsHandleCreated || IsDisposed || Disposing) return; BeginInvoke(new Action<int, int>(UpdateCamCountLabel), connected, expected); return; }
@@ -1902,7 +1913,7 @@ namespace AniloxRoll.Monitor.Forms
         private void ApplyMuraEnhance(bool enabled)
         {
             _liveCameraManager?.SetImageProcessingEnabled(enabled);
-            UpdateLiveDirectionVisual(enabled ? _liveDisplayDirection : null);
+            UpdateLiveDirectionVisual();
         }
 
         private void lblIoDoMura_Click(object sender, EventArgs e)
@@ -3036,15 +3047,42 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             _liveDisplayDirection = dir;
-            UpdateLiveDirectionVisual(dir);
+            UpdateLiveDirectionVisual();
         }
 
-        private void UpdateLiveDirectionVisual(string dir)
+        private void UpdateLiveDirectionVisual()
         {
-            muraChartVerticalLive.BackColor = (dir == "v")
-                ? System.Drawing.Color.FromArgb(230, 240, 255) : System.Drawing.SystemColors.Control;
-            muraChartHorizontalLive.BackColor = (dir == "h")
-                ? System.Drawing.Color.FromArgb(230, 240, 255) : System.Drawing.SystemColors.Control;
+            var highlight    = System.Drawing.Color.FromArgb(230, 240, 255);
+            var normal       = System.Drawing.SystemColors.Control;
+            var orangeBorder = System.Drawing.Color.FromArgb(255, 140, 0);
+            var noColor      = System.Drawing.Color.Transparent;
+            bool isGlobal    = _settings?.StitchMode == StitchMode.Global;
+
+            string dir = (_settings?.EnableMuraEnhance == true) ? _liveDisplayDirection : null;
+            bool vVertActive = !isGlobal && dir == "v";
+            bool vGlobActive =  isGlobal && dir == "v";
+            bool hActive     = dir == "h";
+
+            muraChartVerticalLive.BackColor           = !isGlobal ? highlight : normal;
+            muraChartVerticalLive.BorderlineColor     = vVertActive ? orangeBorder : noColor;
+            muraChartVerticalLive.BorderlineWidth     = vVertActive ? 2 : 1;
+            muraChartVerticalLive.BorderlineDashStyle = vVertActive
+                ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
+                : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
+
+            chartLiveOverview.BackColor           = isGlobal ? highlight : normal;
+            chartLiveOverview.BorderlineColor     = vGlobActive ? orangeBorder : noColor;
+            chartLiveOverview.BorderlineWidth     = vGlobActive ? 2 : 1;
+            chartLiveOverview.BorderlineDashStyle = vGlobActive
+                ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
+                : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
+
+            muraChartHorizontalLive.BackColor           = normal;
+            muraChartHorizontalLive.BorderlineColor     = hActive ? orangeBorder : noColor;
+            muraChartHorizontalLive.BorderlineWidth     = hActive ? 2 : 1;
+            muraChartHorizontalLive.BorderlineDashStyle = hActive
+                ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
+                : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
         }
 
         /// <summary>
@@ -3142,7 +3180,10 @@ namespace AniloxRoll.Monitor.Forms
                 if (_settings.StitchMode == StitchMode.Global)
                     _stitchCoordinator.MergeAndShowFromStitchedImages();
                 else
+                {
+                    _stitchCoordinator.DisposeGlobalMergedImage();
                     _stitchCoordinator.ShowStitchedCameraInCanvas(idx);
+                }
             }
             else if (_imageRepository.FileCount > 0)
             {
@@ -3159,31 +3200,34 @@ namespace AniloxRoll.Monitor.Forms
             if (canvasMain.Image != null)
                 canvasMain.FitToScreen();
 
-            // highlight 跟著 StitchMode 移位
+            // 底色（藍）依 StitchMode；橘框依強化狀態
             UpdateRidgeDirectionVisual(
                 IsEnhanceDisplayActive ? _stitchCoordinator.ActiveRidgeDirection : null);
+            UpdateLiveDirectionVisual();
         }
 
         private void UpdateRidgeDirectionVisual(string dir)
         {
-            var highlight   = System.Drawing.Color.FromArgb(230, 240, 255);
-            var normal      = System.Drawing.SystemColors.Control;
+            var highlight    = System.Drawing.Color.FromArgb(230, 240, 255);
+            var normal       = System.Drawing.SystemColors.Control;
             var orangeBorder = System.Drawing.Color.FromArgb(255, 140, 0);
-            var noColor     = System.Drawing.Color.Transparent;
-            bool isGlobal   = _settings?.StitchMode == StitchMode.Global;
+            var noColor      = System.Drawing.Color.Transparent;
+            bool isGlobal    = _settings?.StitchMode == StitchMode.Global;
 
+            // 橘框：強化方向（同前）
             bool vVertActive = !isGlobal && dir == "v";
             bool vGlobActive =  isGlobal && dir == "v";
             bool hActive     = dir == "h";
 
-            chartMuraVertical.BackColor           = vVertActive ? highlight : normal;
+            // 淡藍底色：合圖方式指示（Vertical → 切向圖；Global → 全覽圖）
+            chartMuraVertical.BackColor           = !isGlobal ? highlight : normal;
             chartMuraVertical.BorderlineColor     = vVertActive ? orangeBorder : noColor;
             chartMuraVertical.BorderlineWidth     = vVertActive ? 2 : 1;
             chartMuraVertical.BorderlineDashStyle = vVertActive
                 ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
                 : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
 
-            chartOverview.BackColor           = vGlobActive ? highlight : normal;
+            chartOverview.BackColor           = isGlobal ? highlight : normal;
             chartOverview.BorderlineColor     = vGlobActive ? orangeBorder : noColor;
             chartOverview.BorderlineWidth     = vGlobActive ? 2 : 1;
             chartOverview.BorderlineDashStyle = vGlobActive
@@ -3192,7 +3236,7 @@ namespace AniloxRoll.Monitor.Forms
 
             if (chartMuraHorizontal != null)
             {
-                chartMuraHorizontal.BackColor           = hActive ? highlight : normal;
+                chartMuraHorizontal.BackColor           = normal; // 法向圖不需合圖模式底色
                 chartMuraHorizontal.BorderlineColor     = hActive ? orangeBorder : noColor;
                 chartMuraHorizontal.BorderlineWidth     = hActive ? 2 : 1;
                 chartMuraHorizontal.BorderlineDashStyle = hActive
@@ -3359,7 +3403,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private void UpdateSelectedReviewCamFromViewCenter(CanvasInfo info)
         {
-            if (!_stitchCoordinator.IsGlobalMerged && !_stitchCoordinator.IsPeriodMerged) return;
+            if (_settings?.StitchMode != StitchMode.Global) return;
             if (!TryGetMergedReviewCoords(out double globalMinMm, out double refOpsMm)) return;
             var posArr = GetReviewPosArray();
             var opsArr = GetReviewOpsArray();
