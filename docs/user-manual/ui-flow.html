@@ -896,13 +896,13 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box action dev">PanCanvasToReviewCameraCenter(N) → 平移到 CAM N 中心（保持縮放）</div>
 <div class="out-par">
 <div class="box output">回顧主畫面：保持<a href="#review-global-merge">全域合圖</a>，視野平移到 CAM N 中心</div>
-<div class="box output">選中縮圖：橘色外框高亮（_selectedReviewCamIdx）</div>
+<div class="box output">選中縮圖：橘色外框高亮（_galleryManager.Select(N, false)）</div>
 <div class="box output">回顧切向曲線圖：清空</div>
 <div class="box output">回顧法向曲線圖：正常載入</div>
 </div>
 </div></div>
 <div class="v-arrow"></div>
-<div class="box action dev">全域模式 → PanCanvasToReviewCameraCenter(N) + return<br/>非全域 Stitch 模式 → ShowStitchedCameraInCanvas(N)<br/>一般模式 → OnGallerySelectionChanged(N) → RunInspectionFullRes</div>
+<div class="box action dev">IsGlobalMerged || IsPeriodMerged → PanCanvasToReviewCameraCenter(N) + return<br/>非合圖 Stitch 模式 → ShowStitchedCameraInCanvas(N)<br/>一般模式 → OnGallerySelectionChanged(N) → RunInspectionFullRes</div>
 </div>
 <div class="flow-group vflow">
 <div class="flow-title">回顧強化 <code>EnableReviewEnhance</code>（檢測設定）</div>
@@ -1271,7 +1271,7 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 </div>
 </div>
 <div class="v-arrow dev"></div>
-<div class="box output">回顧縮圖1~7：Global 模式時 <b>_selectedReviewCamIdx</b> 對應的 pbCam 加橘色外框（Paint event，按索引比對）；拖曳回顧主畫面 → canvasMain.StatusChanged → UpdateSelectedReviewCamFromViewCenter → 依視野中心最近槽位更新橘框；切回 Vertical 時重設 _selectedReviewCamIdx = -1 後 Invalidate 移除橘框</div>
+<div class="box output">回顧縮圖1~7：Global 模式時橘色外框由 ThumbnailGridPresenter.OnPreviewPaint（Tag == "Selected"）繪製；拖曳回顧主畫面 → canvasMain.StatusChanged → UpdateSelectedReviewCamFromViewCenter → 依視野中心最近槽位 → _galleryManager.Select(bestIdx, false) 更新 Tag → 重繪橘框。觸發條件：IsGlobalMerged || IsPeriodMerged（序號模式 / 時段模式均適用）</div>
 <div class="box output">回顧主畫面：canvasMain.FitToScreen()</div>
 <div class="box output">曲線圖 highlight（UpdateRidgeDirectionVisual）：以實際生效狀態判斷——stitch 模式看 EnableReviewEnhance；period 模式看 LastReviewProcessedMode；未生效時傳 null（清除 highlight）</div>
 <div class="box input">修改 OPS / Start</div>
