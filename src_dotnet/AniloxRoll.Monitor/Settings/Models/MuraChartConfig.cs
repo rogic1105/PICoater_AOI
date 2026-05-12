@@ -16,8 +16,10 @@ namespace AniloxRoll.Monitor.Core.Data
             _recipe = recipe;
         }
 
-        [DisplayName("平均閾值")][TypeConverter(typeof(LeftAlignNumericConverter))] public float ErrorValueMean { get => _recipe.ErrorValueMean; set => _recipe.ErrorValueMean = value; }
-        [DisplayName("最大閾值")][TypeConverter(typeof(LeftAlignNumericConverter))] public float ErrorValueMax  { get => _recipe.ErrorValueMax;  set => _recipe.ErrorValueMax  = value; }
+        [DisplayName("垂直平均閾值")][TypeConverter(typeof(LeftAlignNumericConverter))] public float ErrorValueMeanV { get => _recipe.ErrorValueMeanV; set => _recipe.ErrorValueMeanV = value; }
+        [DisplayName("垂直最大閾值")][TypeConverter(typeof(LeftAlignNumericConverter))] public float ErrorValueMaxV  { get => _recipe.ErrorValueMaxV;  set => _recipe.ErrorValueMaxV  = value; }
+        [DisplayName("水平平均閾值")][TypeConverter(typeof(LeftAlignNumericConverter))] public float ErrorValueMeanH { get => _recipe.ErrorValueMeanH; set => _recipe.ErrorValueMeanH = value; }
+        [DisplayName("水平最大閾值")][TypeConverter(typeof(LeftAlignNumericConverter))] public float ErrorValueMaxH  { get => _recipe.ErrorValueMaxH;  set => _recipe.ErrorValueMaxH  = value; }
 
         public override string ToString() => "";
     }

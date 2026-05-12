@@ -125,10 +125,11 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public void ApplySettingsToService()
         {
             if (_inspectionService == null || _settings == null) return;
+            // Pipeline 用 V 閾值（pipeline 主處理方向，閾值在 UI/chart/DO 判斷用，pipeline 不依賴）
             _inspectionService.UpdateAlgorithmParams(
                 _settings.HessianMaxFactor,
-                _settings.ErrorValueMean,
-                _settings.ErrorValueMax,
+                _settings.ErrorValueMeanV,
+                _settings.ErrorValueMaxV,
                 InspectionRecipe.RidgeDirectionToNative(_settings.RidgeDir)
             );
         }
@@ -216,7 +217,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
                             double opsUm = (index >= 0 && index < cfg.CamOps.Length)
                                 ? cfg.CamOps[index] : _settings.Cam1_Ops;
                             _columnChartHelper.SetOps(opsUm);
-                            _columnChartHelper.SetThresholds(cfg.ErrorValueMean, cfg.ErrorValueMax);
+                            _columnChartHelper.SetThresholds(cfg.ErrorValueMeanV, cfg.ErrorValueMaxV);
                         }
 
                         _canvasHelper.TryComputeCurrentViewRange(index, out double leftMm, out double rightMm);

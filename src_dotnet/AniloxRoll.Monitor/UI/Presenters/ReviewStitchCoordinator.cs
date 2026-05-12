@@ -285,7 +285,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _stitchedRowCurveMax  = null;
             _currentGrabConfig = null;
             _ctx.ColumnChartHelper?.SetOps(_ctx.Settings.Cam1_Ops);
-            _ctx.ColumnChartHelper?.SetThresholds(_ctx.Settings.ErrorValueMean, _ctx.Settings.ErrorValueMax);
+            _ctx.ColumnChartHelper?.SetThresholds(_ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV);
             _ctx.DataStatsPresenter?.SetReviewGroupBoxes(false);
         }
 
@@ -316,15 +316,15 @@ namespace AniloxRoll.Monitor.UI.Presenters
             {
                 opsArr  = _currentGrabConfig.CamOps;
                 posArr  = _currentGrabConfig.CamPos;
-                errMean = _currentGrabConfig.ErrorValueMean;
-                errMax  = _currentGrabConfig.ErrorValueMax;
+                errMean = _currentGrabConfig.ErrorValueMeanV;
+                errMax  = _currentGrabConfig.ErrorValueMaxV;
             }
             else
             {
                 opsArr  = _ctx.Settings.GetCameraOpsUmArray();
                 posArr  = _ctx.Settings.GetCameraStartPositionMmArray();
-                errMean = _ctx.Settings.ErrorValueMean;
-                errMax  = _ctx.Settings.ErrorValueMax;
+                errMean = _ctx.Settings.ErrorValueMeanV;
+                errMax  = _ctx.Settings.ErrorValueMaxV;
             }
 
             CurveMergeHelper.UpdateOverviewChart(_stitchedCurveMean, _stitchedCurveMax,
@@ -375,7 +375,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                         ? _currentGrabConfig.CamOps[idx] : _ctx.Settings.Cam1_Ops;
                     _ctx.ColumnChartHelper.SetOps(opsUm);
                     _ctx.ColumnChartHelper.SetThresholds(
-                        _currentGrabConfig.ErrorValueMean, _currentGrabConfig.ErrorValueMax);
+                        _currentGrabConfig.ErrorValueMeanV, _currentGrabConfig.ErrorValueMaxV);
                     posArr = _currentGrabConfig.CamPos;
                 }
                 else
@@ -529,14 +529,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (reviewCfg != null)
             {
                 CurveMergeHelper.UpdateOverviewChart(curveMean, curveMax,
-                    reviewCfg.CamOps, reviewCfg.CamPos, reviewCfg.ErrorValueMean, reviewCfg.ErrorValueMax,
+                    reviewCfg.CamOps, reviewCfg.CamPos, reviewCfg.ErrorValueMeanV, reviewCfg.ErrorValueMaxV,
                     _ctx.OverviewHelper, camCount, _ctx.Settings.StitchMode, ViewRangeProvider);
             }
             else
             {
                 CurveMergeHelper.UpdateOverviewChart(curveMean, curveMax,
                     _ctx.Settings.GetCameraOpsUmArray(), _ctx.Settings.GetCameraStartPositionMmArray(),
-                    _ctx.Settings.ErrorValueMean, _ctx.Settings.ErrorValueMax,
+                    _ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV,
                     _ctx.OverviewHelper, camCount, _ctx.Settings.StitchMode, ViewRangeProvider);
             }
         }

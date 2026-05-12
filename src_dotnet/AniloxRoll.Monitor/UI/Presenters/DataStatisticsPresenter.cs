@@ -717,7 +717,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 allMean, allMax,
                 _ctx.Settings.GetCameraOpsUmArray(),
                 _ctx.Settings.GetCameraStartPositionMmArray(),
-                _ctx.Settings.ErrorValueMean, _ctx.Settings.ErrorValueMax,
+                _ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV,
                 _muraProfileHelper, camCount,
                 StitchMode.Vertical, null);
         }

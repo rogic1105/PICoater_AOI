@@ -691,27 +691,27 @@ namespace AniloxRoll.Monitor.Forms
 
             _reviewColumnChartHelper = new ColumnCurveChartHelper(this.chartMuraVertical);
             _reviewColumnChartHelper.SetOps(_settings.Cam1_Ops);
-            _reviewColumnChartHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _reviewColumnChartHelper.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
 
             _liveColumnChartHelper = new ColumnCurveChartHelper(this.muraChartVerticalLive);
             _liveColumnChartHelper.SetOps(_settings.Cam1_Ops);
-            _liveColumnChartHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _liveColumnChartHelper.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
 
             _reviewOverviewHelper = new ColumnCurveChartHelper(this.chartOverview);
-            _reviewOverviewHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _reviewOverviewHelper.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
             if (chartOverview.ChartAreas.Count > 0)
                 chartOverview.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
 
             _liveOverviewHelper = new ColumnCurveChartHelper(this.chartLiveOverview);
-            _liveOverviewHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _liveOverviewHelper.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
             if (chartLiveOverview.ChartAreas.Count > 0)
                 chartLiveOverview.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
 
             _liveRowChartHelper = new RowCurveChartHelper(this.muraChartHorizontalLive);
-            _liveRowChartHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _liveRowChartHelper.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
 
             _reviewRowChartHelper = new RowCurveChartHelper(this.chartMuraHorizontal);
-            _reviewRowChartHelper.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _reviewRowChartHelper.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
 
             UpdateRowChartPitch();
 
@@ -1057,13 +1057,14 @@ namespace AniloxRoll.Monitor.Forms
             int idx = camId - 1;
             if (_inspectionLogService != null)
             {
+                // OnCameraInspectionResult 的 meanPeak/maxPeak 為 V 方向（pipeline 主處理方向），用 V 閾值記錄
                 _inspectionLogService.AppendRecord(
                     _currentGrabId,
                     fileNameNoExt,
                     meanPeak,
                     maxPeak,
-                    _settings.ErrorValueMean,
-                    _settings.ErrorValueMax,
+                    _settings.ErrorValueMeanV,
+                    _settings.ErrorValueMaxV,
                     idx >= 0 && idx < _settings.Acquisition.CameraGrabHeight.Length
                         ? _settings.Acquisition.CameraGrabHeight[idx] : 0,
                     idx >= 0 && idx < _settings.Acquisition.CameraLineRateHz.Length
@@ -1081,7 +1082,8 @@ namespace AniloxRoll.Monitor.Forms
             // IO MURA 信號：任一相機超過閾值即通知
             if (_plcGrabController?.IsConnected == true)
             {
-                bool isMura = meanPeak > _settings.ErrorValueMean || maxPeak > _settings.ErrorValueMax;
+                // meanPeak/maxPeak 為 V 方向，按 V 閾值判定
+                bool isMura = meanPeak > _settings.ErrorValueMeanV || maxPeak > _settings.ErrorValueMaxV;
                 if (isMura) _ = _plcGrabController.NotifyMuraDetected();
             }
 
@@ -1198,7 +1200,11 @@ namespace AniloxRoll.Monitor.Forms
             meanPeak /= 255f;
             maxPeak  /= 255f;
 
-            if (meanPeak > _settings.ErrorValueMean || maxPeak > _settings.ErrorValueMax)
+            // 依 direction 用對應方向閾值
+            float thMean = direction == "h" ? _settings.ErrorValueMeanH : _settings.ErrorValueMeanV;
+            float thMax  = direction == "h" ? _settings.ErrorValueMaxH  : _settings.ErrorValueMaxV;
+
+            if (meanPeak > thMean || maxPeak > thMax)
             {
                 // fire-and-forget; 寫入失敗不應影響取像流程
                 _ = _plcGrabController.NotifyMuraDetected().ContinueWith(
@@ -1961,8 +1967,10 @@ namespace AniloxRoll.Monitor.Forms
         private static readonly HashSet<string> RecipePropertyNames = new HashSet<string>(StringComparer.Ordinal)
         {
             nameof(InspectionRecipe.HessianMaxFactor), "Hessian Max Factor", "正規值",
-            nameof(InspectionRecipe.ErrorValueMean),   "Error Value Mean",   "平均閾值",
-            nameof(InspectionRecipe.ErrorValueMax),    "Error Value Max",    "最大閾值",
+            nameof(InspectionRecipe.ErrorValueMeanV),  "Error Value Mean V", "垂直平均閾值",
+            nameof(InspectionRecipe.ErrorValueMaxV),   "Error Value Max V",  "垂直最大閾值",
+            nameof(InspectionRecipe.ErrorValueMeanH),  "Error Value Mean H", "水平平均閾值",
+            nameof(InspectionRecipe.ErrorValueMaxH),   "Error Value Max H",  "水平最大閾值",
             nameof(InspectionRecipe.Algorithm),        "去背演算法",
             nameof(InspectionRecipe.RidgeDir),         "Ridge 方向",
         };
@@ -1993,12 +2001,12 @@ namespace AniloxRoll.Monitor.Forms
             {
             _interactionHelper.HandleSettingsChanged();
             _liveCameraManager?.SetCaptureSettings(_settings);
-            _reviewColumnChartHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _reviewColumnChartHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
             _liveColumnChartHelper?.SetOps(_settings.Cam1_Ops);
-            _liveColumnChartHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
-            _liveOverviewHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
-            _liveRowChartHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
-            _reviewRowChartHelper?.SetThresholds(_settings.ErrorValueMean, _settings.ErrorValueMax);
+            _liveColumnChartHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
+            _liveOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
+            _liveRowChartHelper?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
+            _reviewRowChartHelper?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
             UpdateRowChartPitch();
 
             // 抓圖進行中設定變更 → 立刻在 CSV 插入 #CFG
@@ -2940,7 +2948,7 @@ namespace AniloxRoll.Monitor.Forms
             _liveOverviewDirty = false;
             CurveMergeHelper.UpdateOverviewChart(_liveCurveMean, _liveCurveMax,
                 _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray(),
-                _settings.ErrorValueMean, _settings.ErrorValueMax,
+                _settings.ErrorValueMeanV, _settings.ErrorValueMaxV,
                 _liveOverviewHelper, CameraCount, _settings.StitchMode, LiveViewRangeProvider);
         }
 

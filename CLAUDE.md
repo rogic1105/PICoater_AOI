@@ -154,8 +154,10 @@ PICoater_AOI/
 | 正規值 | `dc_HessianMaxFactor` → `HessianMaxFactor` | 0.3 | Hessian 正規化係數 |
 | ── 檢出標準 ── | （分隔列，唯讀） | — | — |
 | 檢出方向 | `eb_RidgeDir` → `RidgeDir` | Both | 垂直 / 水平 / 全部；決定哪個方向 Mura 超標才觸發 DO1 |
-| 平均閾值 | `ec_ErrorValueMean` → `ErrorValueMean` | 0.2 | 曲線圖 Mean 閾值線 |
-| 最大閾值 | `ed_ErrorValueMax` → `ErrorValueMax` | 0.4 | 曲線圖 Max 閾值線 |
+| 垂直平均閾值 | `ec_ErrorValueMeanV` → `ErrorValueMeanV` | 0.2 | V chart (chartMuraVertical / chartOverview / chartLiveOverview / muraChartVerticalLive) Mean 閾值線；CheckLiveMura V 方向 DO 判定 |
+| 垂直最大閾值 | `ed_ErrorValueMaxV` → `ErrorValueMaxV` | 0.4 | V chart Max 閾值線；CheckLiveMura V 方向 DO 判定 |
+| 水平平均閾值 | `ee_ErrorValueMeanH` → `ErrorValueMeanH` | 0.2 | H chart (chartMuraHorizontal / muraChartHorizontalLive) Mean 閾值線；CheckLiveMura H 方向 DO 判定 |
+| 水平最大閾值 | `ef_ErrorValueMaxH` → `ErrorValueMaxH` | 0.4 | H chart Max 閾值線；CheckLiveMura H 方向 DO 判定 |
 | ── 背景校正 ── | （分隔列，唯讀） | — | — |
 | 取時間 (sec) | `fb_BackgroundSampleSeconds` → `BackgroundSampleSeconds` | 3 | StandardBgSub 採集時間 |
 

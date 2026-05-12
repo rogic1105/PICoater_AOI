@@ -80,8 +80,10 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"Algorithm\": \"{R.Algorithm}\",");
             sb.AppendLine($"    \"RidgeDir\": \"{R.RidgeDir}\",");
             sb.AppendLine($"    \"HessianMaxFactor\": {F(R.HessianMaxFactor)},");
-            sb.AppendLine($"    \"ErrorValueMean\": {F(R.ErrorValueMean)},");
-            sb.AppendLine($"    \"ErrorValueMax\": {F(R.ErrorValueMax)},");
+            sb.AppendLine($"    \"ErrorValueMeanV\": {F(R.ErrorValueMeanV)},");
+            sb.AppendLine($"    \"ErrorValueMaxV\": {F(R.ErrorValueMaxV)},");
+            sb.AppendLine($"    \"ErrorValueMeanH\": {F(R.ErrorValueMeanH)},");
+            sb.AppendLine($"    \"ErrorValueMaxH\": {F(R.ErrorValueMaxH)},");
             sb.AppendLine($"    \"BackgroundSampleSeconds\": {R.BackgroundSampleSeconds},");
             sb.AppendLine($"    \"AniloxRollSpeedMPerMin\": {D(R.AniloxRollSpeedMPerMin)},");
             sb.AppendLine($"    \"SaveResizeScale\": {R.SaveResizeScale},");
@@ -205,8 +207,15 @@ namespace AniloxRoll.Monitor.Core.Data
                 Algorithm        = algo,
                 RidgeDir         = ridgeDir,
                 HessianMaxFactor = SettingsStoreHelper.GetFloat(obj, "HessianMaxFactor", InspectionDefaults.HessianMaxFactor),
-                ErrorValueMean   = SettingsStoreHelper.GetFloat(obj, "ErrorValueMean",   InspectionDefaults.ErrorValueMean),
-                ErrorValueMax    = SettingsStoreHelper.GetFloat(obj, "ErrorValueMax",     InspectionDefaults.ErrorValueMax),
+                // 向後相容：舊 JSON 用 ErrorValueMean/Max 兩鍵，新 JSON 用 V/H 各自的 4 鍵
+                ErrorValueMeanV  = SettingsStoreHelper.GetFloat(obj, "ErrorValueMeanV",
+                                       SettingsStoreHelper.GetFloat(obj, "ErrorValueMean", InspectionDefaults.ErrorValueMeanV)),
+                ErrorValueMaxV   = SettingsStoreHelper.GetFloat(obj, "ErrorValueMaxV",
+                                       SettingsStoreHelper.GetFloat(obj, "ErrorValueMax",  InspectionDefaults.ErrorValueMaxV)),
+                ErrorValueMeanH  = SettingsStoreHelper.GetFloat(obj, "ErrorValueMeanH",
+                                       SettingsStoreHelper.GetFloat(obj, "ErrorValueMean", InspectionDefaults.ErrorValueMeanH)),
+                ErrorValueMaxH   = SettingsStoreHelper.GetFloat(obj, "ErrorValueMaxH",
+                                       SettingsStoreHelper.GetFloat(obj, "ErrorValueMax",  InspectionDefaults.ErrorValueMaxH)),
                 // 向後相容：舊 JSON 用 BackgroundSampleRows，新 JSON 用 BackgroundSampleSeconds
                 BackgroundSampleSeconds = obj.Contains("BackgroundSampleSeconds")
                     ? SettingsStoreHelper.GetInt(obj, "BackgroundSampleSeconds", InspectionDefaults.BackgroundSampleSeconds)

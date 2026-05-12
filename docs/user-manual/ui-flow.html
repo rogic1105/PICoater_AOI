@@ -1245,7 +1245,8 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <div class="box action dev">HandleSettingsChanged → SetCaptureSettings → 更新所有 ChartHelper 閾值</div>
 <div class="v-arrow"></div>
 <div class="out-par">
-<div class="box output">所有曲線圖閾值線：更新位置</div>
+<div class="box output">曲線圖閾值線：V chart (chartMuraVertical / chartOverview / chartLiveOverview / muraChartVerticalLive) 用【垂直平均閾值】+【垂直最大閾值】；H chart (chartMuraHorizontal / muraChartHorizontalLive) 用【水平平均閾值】+【水平最大閾值】</div>
+<div class="note dev">DO_MURA_DETECTED 觸發：CheckLiveMura 依 direction (v/h) 取對應方向閾值；RidgeDir=Both 時兩方向各自判定（任一超標即觸發）。OnCameraInspectionResult（存檔後 callback）的 meanPeak/maxPeak 為 V 方向，按 V 閾值判定並記錄到 CSV。</div>
 <div class="box output dev">（抓取中）CSV 插入 #CFG 設定快照：timestamp + 機台佈局 OPS×7 / Start×7 / TrimHead / TrimTail + 相機參數 曝光×7 / 線掃×7 / 高度×7 + 正規值 + Mura 閾值（平均/最大）。新檔、換日、或任一欄位變更時寫入一列 #CFG</div>
 </div>
 <div class="v-arrow"></div>

@@ -16,8 +16,10 @@ namespace AniloxRoll.Monitor.Core.Services
         public double[] CamExposureUs { get; } // length 7，曝光滑桿（μs）
         public double[] CamLineRateHz { get; } // length 7，線掃滑桿（Hz）
         public float HessianMaxFactor { get; }
-        public float ErrorValueMean { get; }
-        public float ErrorValueMax { get; }
+        public float ErrorValueMeanV { get; }  // 垂直平均閾值
+        public float ErrorValueMaxV  { get; }  // 垂直最大閾值
+        public float ErrorValueMeanH { get; }  // 水平平均閾值
+        public float ErrorValueMaxH  { get; }  // 水平最大閾值
         public double TrimHeadMm { get; }
         public double TrimTailMm { get; }
         public DateTime Timestamp { get; }
@@ -25,7 +27,9 @@ namespace AniloxRoll.Monitor.Core.Services
         public CsvConfigSnapshot(
             double[] camOps, double[] camPos, int[] camGrabHeight,
             double[] camExposureUs, double[] camLineRateHz,
-            float hessianMaxFactor, float errorValueMean, float errorValueMax,
+            float hessianMaxFactor,
+            float errorValueMeanV, float errorValueMaxV,
+            float errorValueMeanH, float errorValueMaxH,
             double trimHeadMm, double trimTailMm,
             DateTime timestamp)
         {
@@ -35,8 +39,10 @@ namespace AniloxRoll.Monitor.Core.Services
             CamExposureUs = camExposureUs ?? new double[7];
             CamLineRateHz = camLineRateHz ?? new double[7];
             HessianMaxFactor = hessianMaxFactor;
-            ErrorValueMean = errorValueMean;
-            ErrorValueMax = errorValueMax;
+            ErrorValueMeanV = errorValueMeanV;
+            ErrorValueMaxV  = errorValueMaxV;
+            ErrorValueMeanH = errorValueMeanH;
+            ErrorValueMaxH  = errorValueMaxH;
             TrimHeadMm = trimHeadMm;
             TrimTailMm = trimTailMm;
             Timestamp = timestamp;
@@ -52,8 +58,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 (double[])s.Acquisition?.CameraExposureTimeUs?.Clone(),
                 (double[])s.Acquisition?.CameraLineRateHz?.Clone(),
                 s.HessianMaxFactor,
-                s.ErrorValueMean,
-                s.ErrorValueMax,
+                s.ErrorValueMeanV, s.ErrorValueMaxV,
+                s.ErrorValueMeanH, s.ErrorValueMaxH,
                 s.TrimHeadMm,
                 s.TrimTailMm,
                 DateTime.Now);
@@ -71,8 +77,10 @@ namespace AniloxRoll.Monitor.Core.Services
                 for (int i = 0; i < 7; i++) sb.Append(CamExposureUs[i].ToString("F2")).Append(',');
                 for (int i = 0; i < 7; i++) sb.Append(CamLineRateHz[i].ToString("F2")).Append(',');
                 sb.Append(HessianMaxFactor.ToString("F4")).Append(',');
-                sb.Append(ErrorValueMean.ToString("F4")).Append(',');
-                sb.Append(ErrorValueMax.ToString("F4")).Append(',');
+                sb.Append(ErrorValueMeanV.ToString("F4")).Append(',');
+                sb.Append(ErrorValueMaxV.ToString("F4")).Append(',');
+                sb.Append(ErrorValueMeanH.ToString("F4")).Append(',');
+                sb.Append(ErrorValueMaxH.ToString("F4")).Append(',');
                 sb.Append(TrimHeadMm.ToString("F2")).Append(',');
                 sb.Append(TrimTailMm.ToString("F2"));
                 return sb.ToString();
@@ -96,21 +104,22 @@ namespace AniloxRoll.Monitor.Core.Services
             for (int i = 0; i < 7; i++)
                 sb.Append($",Cam{i + 1}_Lr={CamLineRateHz[i]:F2}");
             sb.Append($",HessianMaxFactor={HessianMaxFactor:F4}");
-            sb.Append($",ErrorValueMean={ErrorValueMean:F4}");
-            sb.Append($",ErrorValueMax={ErrorValueMax:F4}");
+            sb.Append($",ErrorValueMeanV={ErrorValueMeanV:F4}");
+            sb.Append($",ErrorValueMaxV={ErrorValueMaxV:F4}");
+            sb.Append($",ErrorValueMeanH={ErrorValueMeanH:F4}");
+            sb.Append($",ErrorValueMaxH={ErrorValueMaxH:F4}");
             sb.Append($",TrimHead={TrimHeadMm:F2}");
             sb.Append($",TrimTail={TrimTailMm:F2}");
             return sb.ToString();
         }
 
-        /// <summary>從 #CFG 列解析。</summary>
+        /// <summary>從 #CFG 列解析。舊版 CSV 只有 ErrorValueMean/Max 兩欄位，V 與 H 都填同值。</summary>
         public static bool TryParse(string line, out CsvConfigSnapshot result)
         {
             result = null;
             if (string.IsNullOrEmpty(line) || !line.StartsWith("#CFG,")) return false;
 
             string[] parts = line.Split(',');
-            // #CFG, timestamp, key=value pairs（最少 17 個，向下相容舊格式；新格式 31 個）
             if (parts.Length < 19) return false;
 
             if (!DateTime.TryParseExact(parts[1].Trim(), "yyyy-MM-ddTHH:mm:ss.fff",
@@ -122,7 +131,11 @@ namespace AniloxRoll.Monitor.Core.Services
             int[] grabH = new int[7];
             double[] expUs = new double[7];
             double[] lrHz = new double[7];
-            float hessian = 0, errMean = 0, errMax = 0;
+            float hessian = 0;
+            float meanV = 0, maxV = 0, meanH = 0, maxH = 0;
+            bool hasMeanV = false, hasMaxV = false, hasMeanH = false, hasMaxH = false;
+            float legacyMean = 0, legacyMax = 0;
+            bool hasLegacyMean = false, hasLegacyMax = false;
             double trimHead = 0, trimTail = 0;
 
             for (int i = 2; i < parts.Length; i++)
@@ -165,17 +178,32 @@ namespace AniloxRoll.Monitor.Core.Services
                 }
                 else if (key == "HessianMaxFactor")
                     float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out hessian);
+                else if (key == "ErrorValueMeanV")
+                { float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out meanV); hasMeanV = true; }
+                else if (key == "ErrorValueMaxV")
+                { float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out maxV); hasMaxV = true; }
+                else if (key == "ErrorValueMeanH")
+                { float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out meanH); hasMeanH = true; }
+                else if (key == "ErrorValueMaxH")
+                { float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out maxH); hasMaxH = true; }
                 else if (key == "ErrorValueMean")
-                    float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out errMean);
+                { float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out legacyMean); hasLegacyMean = true; }
                 else if (key == "ErrorValueMax")
-                    float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out errMax);
+                { float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out legacyMax); hasLegacyMax = true; }
                 else if (key == "TrimHead")
                     double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out trimHead);
                 else if (key == "TrimTail")
                     double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out trimTail);
             }
 
-            result = new CsvConfigSnapshot(ops, pos, grabH, expUs, lrHz, hessian, errMean, errMax, trimHead, trimTail, ts);
+            // 舊 CSV 相容：未指定 V/H 欄位時，用 legacy 單值填入 V 與 H
+            if (!hasMeanV && hasLegacyMean) meanV = legacyMean;
+            if (!hasMeanH && hasLegacyMean) meanH = legacyMean;
+            if (!hasMaxV  && hasLegacyMax)  maxV  = legacyMax;
+            if (!hasMaxH  && hasLegacyMax)  maxH  = legacyMax;
+
+            result = new CsvConfigSnapshot(ops, pos, grabH, expUs, lrHz,
+                hessian, meanV, maxV, meanH, maxH, trimHead, trimTail, ts);
             return true;
         }
     }

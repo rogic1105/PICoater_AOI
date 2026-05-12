@@ -103,10 +103,14 @@ namespace AniloxRoll.Monitor.Core.Data
         public string ea_DetectionHeader => "";
         [Category("2. 檢測設定")][DisplayName("檢出方向")]
         public RidgeDirection eb_RidgeDir { get => Recipe.RidgeDir; set => Recipe.RidgeDir = value; }
-        [Category("2. 檢測設定")][DisplayName("平均閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
-        public float ec_ErrorValueMean { get => Recipe.ErrorValueMean; set => Recipe.ErrorValueMean = value; }
-        [Category("2. 檢測設定")][DisplayName("最大閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
-        public float ed_ErrorValueMax { get => Recipe.ErrorValueMax; set => Recipe.ErrorValueMax = value; }
+        [Category("2. 檢測設定")][DisplayName("垂直平均閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        public float ec_ErrorValueMeanV { get => Recipe.ErrorValueMeanV; set => Recipe.ErrorValueMeanV = value; }
+        [Category("2. 檢測設定")][DisplayName("垂直最大閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        public float ed_ErrorValueMaxV  { get => Recipe.ErrorValueMaxV;  set => Recipe.ErrorValueMaxV  = value; }
+        [Category("2. 檢測設定")][DisplayName("水平平均閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        public float ee_ErrorValueMeanH { get => Recipe.ErrorValueMeanH; set => Recipe.ErrorValueMeanH = value; }
+        [Category("2. 檢測設定")][DisplayName("水平最大閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        public float ef_ErrorValueMaxH  { get => Recipe.ErrorValueMaxH;  set => Recipe.ErrorValueMaxH  = value; }
 
         [Category("2. 檢測設定")][DisplayName("─ 背景校正 ─")][ReadOnly(true)]
         public string fa_BgHeader => "";
@@ -149,8 +153,10 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public int ChartMonthlyYMax { get => Chart.MonthlyYMax; set => Chart.MonthlyYMax = value; }
         [Browsable(false)] public int ChartDailyYMax   { get => Chart.DailyYMax;   set => Chart.DailyYMax   = value; }
         [Browsable(false)] public StitchMode StitchMode { get => ImageView.StitchMode; set => ImageView.StitchMode = value; }
-        [Browsable(false)] public float ErrorValueMean { get => Recipe.ErrorValueMean; set => Recipe.ErrorValueMean = value; }
-        [Browsable(false)] public float ErrorValueMax  { get => Recipe.ErrorValueMax;  set => Recipe.ErrorValueMax  = value; }
+        [Browsable(false)] public float ErrorValueMeanV { get => Recipe.ErrorValueMeanV; set => Recipe.ErrorValueMeanV = value; }
+        [Browsable(false)] public float ErrorValueMaxV  { get => Recipe.ErrorValueMaxV;  set => Recipe.ErrorValueMaxV  = value; }
+        [Browsable(false)] public float ErrorValueMeanH { get => Recipe.ErrorValueMeanH; set => Recipe.ErrorValueMeanH = value; }
+        [Browsable(false)] public float ErrorValueMaxH  { get => Recipe.ErrorValueMaxH;  set => Recipe.ErrorValueMaxH  = value; }
 
         // ===== 4. 儲存設定 =====
         [Category("4. 儲存設定")][DisplayName("存檔")][TypeConverter(typeof(BoolYesNoConverter))]          public bool   EnableAutoCapture    { get => Storage.EnableAutoCapture;    set => Storage.EnableAutoCapture    = value; }
