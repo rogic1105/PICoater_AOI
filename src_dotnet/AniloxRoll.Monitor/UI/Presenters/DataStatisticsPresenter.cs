@@ -1134,6 +1134,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
             SetGroupBoxActive(_ctx.GrpReviewTimePeriod, !grabNavActive);
         }
 
+        /// <summary>讀取資料後預設切到單片模式：觸發 cbDataGrabId SelectedIndexChanged →
+        /// OnSingleSheetComboChanged → SetActiveStatGroupBox(GrpDataSingleSheet) + RefreshStats。</summary>
+        public void SelectLatestInSingleSheetMode()
+        {
+            if (_ctx.CbDataGrabId.Items.Count > 0)
+                _ctx.CbDataGrabId.SelectedIndex = 0;
+        }
+
         private void SetActiveStatGroupBox(GroupBox active)
         {
             _activeStatMode = active;

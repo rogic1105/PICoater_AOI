@@ -2063,7 +2063,8 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             _stitchCoordinator.ClearStitchedMode();
-            _dataStatsPresenter.SetReviewGroupBoxes(false);
+            _dataStatsPresenter.SetReviewGroupBoxes(true);
+            _dataStatsPresenter.SelectLatestInSingleSheetMode();
             await _presenter.LoadImagesWithPeriodLockAsync(false, LoadImagesWithReviewConfig);
             ApplyPostLoadDisplay();
             }
