@@ -137,6 +137,10 @@ namespace AniloxRoll.Monitor.Forms
         /// <summary>"v" = vertical ridge（預設），"h" = horizontal ridge。控制 Live 顯示方向。</summary>
         private string _liveDisplayDirection = "v";
 
+        /// <summary>Data tab 變更 cbDataGrabId 後 cbReviewGrabId 已同步但 canvasMain 尚未更新；
+        /// 待使用者切到 Review tab 時才載圖。</summary>
+        private bool _reviewDirty = false;
+
         // --- 常數 ---
         private const int CameraCount = 7;
         private const int TickFreq = 1000;
@@ -2966,9 +2970,25 @@ namespace AniloxRoll.Monitor.Forms
             _dataStatsPresenter.GrabIdSelectedFromReview += OnReviewGrabIdSelected;
             _dataStatsPresenter.PeriodComboManualChanged += OnPeriodComboChanged;
             _dataStatsPresenter.DataFolderSelected += OnDataFolderSelected;
+
+            // Data → Review tab 切換時，若有 pending grabId 才載圖（避免 Data 操作中等待 IO）
+            tabMain.SelectedIndexChanged += async (s, e) =>
+            {
+                if (tabMain.SelectedTab != tabPageReview || !_reviewDirty) return;
+                int idx = cbReviewGrabId.SelectedIndex;
+                if (idx < 0 || idx >= _dataStatsPresenter.GrabIdInfos.Count) return;
+                _reviewDirty = false;
+                var info = _dataStatsPresenter.GrabIdInfos[idx];
+                try
+                {
+                    await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest);
+                    if (canvasMain.Image != null) canvasMain.FitToScreen();
+                }
+                catch (Exception ex) { Trace.WriteLine($"[tabMain → Review] {ex}"); }
+            };
         }
 
-        private async void OnDataGrabIdSelected(string grabId, DateTime earliest, DateTime latest, int idx)
+        private void OnDataGrabIdSelected(string grabId, DateTime earliest, DateTime latest, int idx)
         {
             try
             {
@@ -2982,8 +3002,7 @@ namespace AniloxRoll.Monitor.Forms
                     _presenter.UpdatePeriodNavigationState();
                     _dataStatsPresenter.UpdateGrabIdNavState();
                     _dataStatsPresenter.SetReviewGroupBoxes(true);
-                    await _stitchCoordinator.LoadGrabStitchedViewAsync(grabId, earliest, latest);
-                    if (canvasMain.Image != null) canvasMain.FitToScreen();
+                    _reviewDirty = true;
                 }
             }
             catch (Exception ex) { Trace.WriteLine($"[OnDataGrabIdSelected] {ex}"); }
@@ -3000,6 +3019,7 @@ namespace AniloxRoll.Monitor.Forms
 
                 await _stitchCoordinator.LoadGrabStitchedViewAsync(grabId, earliest, latest);
                 if (canvasMain.Image != null) canvasMain.FitToScreen();
+                _reviewDirty = false;
 
                 // 同步 Data tab
                 if (!_dataStatsPresenter.GrabIdCrossGuard.IsSet

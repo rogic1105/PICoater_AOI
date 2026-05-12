@@ -537,9 +537,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 int ei = _ctx.CbGrabIdEnd.SelectedIndex;
                 int lo = Math.Min(si, ei); int hi = Math.Max(si, ei);
                 var rangeInfos = _grabIdInfos.GetRange(lo, hi - lo + 1);
-                // 單片模式：mura profile 由 SyncMuraProfileFromReview（Review 同步）負責，此處略過避免重算
-                if (_activeStatMode != _ctx.GrpDataSingleSheet)
-                    UpdateMuraProfileChart(EvenSample(rangeInfos, 50));
+                // 單片模式也立即更新 chartMuraProfile（Data cb 變更不載圖，但 mura profile 要即時反映）；
+                // 後續若使用者切到 Review tab 觸發 LoadGrabStitchedViewAsync，SyncMuraProfileFromReview
+                // 會以 stitch 版資料覆蓋，確保與 chartOverview 一致。
+                UpdateMuraProfileChart(EvenSample(rangeInfos, 50));
                 return;
             }
 

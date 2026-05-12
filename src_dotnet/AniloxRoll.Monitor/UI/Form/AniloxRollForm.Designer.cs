@@ -929,21 +929,20 @@
             // 
             // grpDataSingleSheet
             // 
-            this.grpDataSingleSheet.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
+            this.grpDataSingleSheet.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.grpDataSingleSheet.Controls.Add(this.btnGrabIdDataPrev);
             this.grpDataSingleSheet.Controls.Add(this.btnGrabIdDataNext);
             this.grpDataSingleSheet.Controls.Add(this.cbDataGrabId);
-            this.grpDataSingleSheet.Location = new System.Drawing.Point(898, 92);
+            this.grpDataSingleSheet.Location = new System.Drawing.Point(899, 93);
             this.grpDataSingleSheet.Name = "grpDataSingleSheet";
-            this.grpDataSingleSheet.Size = new System.Drawing.Size(115, 92);
+            this.grpDataSingleSheet.Size = new System.Drawing.Size(118, 96);
             this.grpDataSingleSheet.TabIndex = 50;
             this.grpDataSingleSheet.TabStop = false;
             this.grpDataSingleSheet.Text = "序號選擇";
             // 
             // btnGrabIdDataPrev
             // 
-            this.btnGrabIdDataPrev.Location = new System.Drawing.Point(6, 52);
+            this.btnGrabIdDataPrev.Location = new System.Drawing.Point(10, 50);
             this.btnGrabIdDataPrev.Name = "btnGrabIdDataPrev";
             this.btnGrabIdDataPrev.Size = new System.Drawing.Size(44, 28);
             this.btnGrabIdDataPrev.TabIndex = 43;
@@ -952,7 +951,7 @@
             // 
             // btnGrabIdDataNext
             // 
-            this.btnGrabIdDataNext.Location = new System.Drawing.Point(65, 52);
+            this.btnGrabIdDataNext.Location = new System.Drawing.Point(70, 50);
             this.btnGrabIdDataNext.Name = "btnGrabIdDataNext";
             this.btnGrabIdDataNext.Size = new System.Drawing.Size(44, 28);
             this.btnGrabIdDataNext.TabIndex = 44;
@@ -962,9 +961,9 @@
             // cbDataGrabId
             // 
             this.cbDataGrabId.FormattingEnabled = true;
-            this.cbDataGrabId.Location = new System.Drawing.Point(6, 24);
+            this.cbDataGrabId.Location = new System.Drawing.Point(10, 21);
             this.cbDataGrabId.Name = "cbDataGrabId";
-            this.cbDataGrabId.Size = new System.Drawing.Size(101, 23);
+            this.cbDataGrabId.Size = new System.Drawing.Size(104, 23);
             this.cbDataGrabId.TabIndex = 42;
             // 
             // lblChartNavMonth

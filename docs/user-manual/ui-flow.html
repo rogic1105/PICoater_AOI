@@ -1163,20 +1163,21 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <div class="box guard">_statComboGuard 防 cascade 重複</div>
 </div>
 <div class="flow-group vflow">
-<div class="flow-title">序號選擇 <code>cbDataGrabId</code></div>
+<div class="flow-title">序號選擇 <code>cbDataGrabId</code>（cb 值即時、主畫面延後）</div>
 <div class="box input">選擇【報表序號】或按【報表上一序號】/【報表下一序號】</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">鎖定 start=end=同序號 → RefreshStats（單片模式跳過 UpdateMuraProfileChart，由後續 StitchedCurveUpdated 一次性更新）</div>
+<div class="box action dev">鎖定 start=end=同序號 → RefreshStats → UpdateMuraProfileChart（LoadAvgMuraProfile，從 .bin 抽樣即時計算）</div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">起始/結束序號 + 日期時間：同步到該序號</div>
 <div class="box output">良率卡片 + 明細列表：刷新（單片統計）</div>
+<div class="box output">【chartMuraProfile】Mura 空間分布圖：立即用該 grab 的 mura 曲線更新（LoadAvgMuraProfile）</div>
 <div class="box output">序號選擇群組：綠色高亮</div>
 </div>
 <div class="v-arrow"></div>
-<div class="box sync">同步 Review tab：單片序號 + 導航時間 + 載入拼接圖</div>
+<div class="box sync">同步 Review tab：cbReviewGrabId（值同步，GrabIdNavGuard 抑制觸發）+ 時段日期/時間 → 設 _reviewDirty=true（不立即載入主畫面）</div>
 <div class="v-arrow"></div>
-<div class="box output">【chartMuraProfile】← StitchedCurveUpdated 事件同步：與【chartOverview】完全相同（採用歷史 OPS/Pos 設定），一步到位不重算</div>
+<div class="note">主畫面渲染延後：避免 Data tab 操作中等待 IO；待使用者切到 Review tab 時由 tabMain.SelectedIndexChanged 觸發 LoadGrabStitchedViewAsync，再由 StitchedCurveUpdated → SyncMuraProfileFromReview 用 stitch 版資料覆寫【chartMuraProfile】（與【chartOverview】對齊）。</div>
 <div class="v-arrow"></div>
 <div class="box guard">_grabIdCrossGuard 防 Review ↔ Data 迴圈</div>
 </div>
@@ -1652,16 +1653,26 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 </div>
 </div>
 <div class="flow-group vflow">
-<div class="flow-title">Data → Review 同步</div>
+<div class="flow-title">Data → Review 同步（cb 值即時、主畫面延後）</div>
 <div class="box input">Data 選擇【報表序號】</div>
 <div class="v-arrow"></div>
 <div class="box sync">GrabIdSelectedFromData 事件</div>
 <div class="v-arrow"></div>
 <div class="out-par">
-<div class="box output">單片序號：同步</div>
+<div class="box output">單片序號 cbReviewGrabId：值同步（GrabIdNavGuard 抑制 SelectedIndexChanged）</div>
 <div class="box output">時段日期/時間：導航到該時間</div>
-<div class="box output">回顧主畫面 + 縮圖：載入拼接圖</div>
+<div class="box output">良率卡片 + 明細列表 + chartMuraProfile：立即刷新</div>
 <div class="box output">單片群組：綠色高亮</div>
+<div class="box output dev">_reviewDirty = true（回顧主畫面延後渲染，不立即 LoadGrabStitchedViewAsync）</div>
+</div>
+<div class="v-arrow"></div>
+<div class="box input">使用者切到 Review tab</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">tabMain.SelectedIndexChanged：SelectedTab == tabPageReview &amp;&amp; _reviewDirty → LoadGrabStitchedViewAsync(cbReviewGrabId 當前 idx 對應 GrabIdInfo) → FitToScreen → _reviewDirty=false</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">回顧主畫面 + 縮圖：載入拼接圖</div>
+<div class="box output">chartMuraProfile：StitchedCurveUpdated → SyncMuraProfileFromReview 用 stitch 版資料覆寫（與 chartOverview 對齊）</div>
 </div>
 </div>
 <div class="flow-group vflow">
