@@ -129,6 +129,7 @@
             this.panelStatCam2 = new System.Windows.Forms.Panel();
             this.panelStatCam1 = new System.Windows.Forms.Panel();
             this.propertyGridSettings = new System.Windows.Forms.PropertyGrid();
+            this.helpRichText = new System.Windows.Forms.RichTextBox();
             this.statusBarMain = new System.Windows.Forms.StatusStrip();
             this.lblPixelInfo = new System.Windows.Forms.ToolStripStatusLabel();
             this.tabControlRight = new System.Windows.Forms.TabControl();
@@ -1244,14 +1245,28 @@
             this.panelStatCam1.Name = "panelStatCam1";
             this.panelStatCam1.Size = new System.Drawing.Size(120, 80);
             this.panelStatCam1.TabIndex = 2;
-            // 
+            //
             // propertyGridSettings
-            // 
+            //
             this.propertyGridSettings.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.propertyGridSettings.HelpVisible = false;
             this.propertyGridSettings.Location = new System.Drawing.Point(3, 3);
             this.propertyGridSettings.Name = "propertyGridSettings";
             this.propertyGridSettings.Size = new System.Drawing.Size(207, 625);
             this.propertyGridSettings.TabIndex = 0;
+            //
+            // helpRichText
+            //
+            this.helpRichText.BackColor = System.Drawing.SystemColors.Control;
+            this.helpRichText.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.helpRichText.DetectUrls = false;
+            this.helpRichText.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this.helpRichText.HideSelection = false;
+            this.helpRichText.Name = "helpRichText";
+            this.helpRichText.ReadOnly = true;
+            this.helpRichText.Size = new System.Drawing.Size(207, 60);
+            this.helpRichText.TabStop = false;
+            this.helpRichText.Text = "";
             // 
             // statusBarMain
             // 
@@ -1287,6 +1302,7 @@
             // tabPageInspSettings
             // 
             this.tabPageInspSettings.Controls.Add(this.propertyGridSettings);
+            this.tabPageInspSettings.Controls.Add(this.helpRichText);
             this.tabPageInspSettings.Location = new System.Drawing.Point(4, 25);
             this.tabPageInspSettings.Name = "tabPageInspSettings";
             this.tabPageInspSettings.Padding = new System.Windows.Forms.Padding(3);
@@ -3416,6 +3432,7 @@
         private System.Windows.Forms.DataVisualization.Charting.Chart chartDaily;
         private System.Windows.Forms.Button btnShowFail;
         private System.Windows.Forms.PropertyGrid propertyGridSettings;
+        private System.Windows.Forms.RichTextBox helpRichText;
         private System.Windows.Forms.Panel panelLiveCam1;
         private System.Windows.Forms.Panel panelMainDisplay;
         private System.Windows.Forms.Panel panelLiveCam7;

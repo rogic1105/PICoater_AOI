@@ -775,6 +775,8 @@ namespace AniloxRoll.Monitor.Forms
             }
             propertyGridSettings.PropertyValueChanged -= _propertyGrid_PropertyValueChanged;
             propertyGridSettings.PropertyValueChanged += _propertyGrid_PropertyValueChanged;
+            propertyGridSettings.SelectedGridItemChanged -= PropertyGridSettings_SelectedGridItemChanged;
+            propertyGridSettings.SelectedGridItemChanged += PropertyGridSettings_SelectedGridItemChanged;
             AutoFitPropertyGridLabelColumn(propertyGridSettings);
 
 
@@ -1964,6 +1966,26 @@ namespace AniloxRoll.Monitor.Forms
             nameof(InspectionRecipe.Algorithm),        "去背演算法",
             nameof(InspectionRecipe.RidgeDir),         "Ridge 方向",
         };
+
+        private void PropertyGridSettings_SelectedGridItemChanged(object sender, SelectedGridItemChangedEventArgs e)
+        {
+            var item = e.NewSelection;
+            helpRichText.Clear();
+            if (item?.PropertyDescriptor == null) return;
+
+            string title = string.IsNullOrEmpty(item.Label) ? item.PropertyDescriptor.DisplayName : item.Label;
+            string desc = item.PropertyDescriptor.Description ?? string.Empty;
+
+            var titleFont = new System.Drawing.Font(helpRichText.Font, System.Drawing.FontStyle.Bold);
+            helpRichText.SelectionFont = titleFont;
+            helpRichText.AppendText(title);
+            helpRichText.SelectionFont = helpRichText.Font;
+            if (!string.IsNullOrEmpty(desc))
+            {
+                helpRichText.AppendText(Environment.NewLine);
+                helpRichText.AppendText(desc);
+            }
+        }
 
         private async void _propertyGrid_PropertyValueChanged(object s, PropertyValueChangedEventArgs e)
         {

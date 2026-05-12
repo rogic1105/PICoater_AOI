@@ -279,6 +279,7 @@ PICoater_AOI/
 | 標準名稱 | Name | 類型 | 畫面文字 |
 |---------|------|------|---------|
 | 檢測設定 | `propertyGridSettings` | PropertyGrid | — |
+| 說明文字 | `helpRichText` | RichTextBox | — |
 | 曝光滑桿1~7 | `trackBarExpCam1~7` + `numExpCam1~7` | TrackBar+NUD | — |
 | 線掃滑桿1~7 | `trackBarLrCam1~7` + `numLrCam1~7` | TrackBar+NUD | — |
 | 高度滑桿1~7 | `trackBarHtCam1~7` + `numHtCam1~7` | TrackBar+NUD | — |

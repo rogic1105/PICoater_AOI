@@ -1226,6 +1226,18 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <!-- ===== 右側面板 ===== -->
 <h2 onclick="toggle(this)">設定面板</h2>
 <div class="tab-section">
+<div class="flow-group vflow">
+<div class="flow-title">說明文字 <code>helpRichText</code>（PropertyGrid 內建 DocCommentArea 已隱藏）</div>
+<div class="box input">在【檢測設定】點選任一屬性</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">propertyGridSettings.SelectedGridItemChanged → 取 GridItem.PropertyDescriptor (DisplayName + Description) → 寫入【說明文字】RichTextBox（標題粗體 + 描述普通字體）</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">【說明文字】下方 60px 區域顯示該屬性的標題與描述</div>
+<div class="box output">文字可反白選取 + Ctrl+C 複製（ReadOnly=true 不影響選取）</div>
+</div>
+<div class="note dev">propertyGridSettings.HelpVisible=false 隱藏 WinForms 內建說明欄（內部用 Label 不可選取）；自訂 helpRichText (Dock=Bottom, Height=60, BorderStyle=FixedSingle, BackColor=SystemColors.Control) 取代之，提供可選取的文字。tabPageInspSettings 中 propertyGridSettings 先 Add (Dock=Fill)，helpRichText 後 Add (Dock=Bottom) — Bottom 取底部 60px，Fill 取剩餘上方空間。</div>
+</div>
 <div class="flow-group vflow" id="settings-changed">
 <div class="flow-title">檢測設定變更 <code>propertyGridSettings</code></div>
 <div class="box input">修改【檢測設定】任一屬性</div>
