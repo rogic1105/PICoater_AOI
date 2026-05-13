@@ -17,10 +17,10 @@ namespace AniloxRoll.Monitor.Core.Data
     {
         public MachineRole Role { get; set; } = MachineRole.Inspection;
 
-        /// <summary>Storage 模式：AniloxConfig 共用資料夾的本機路徑（供 CleanupFlagWatcher 使用）。</summary>
-        public string LocalConfigFolder { get; set; } = @"D:\AniloxConfig";
+        /// <summary>Storage 模式：本機 Config 子目錄路徑（供 CleanupFlagWatcher 監看 cleanup-request.flag）。</summary>
+        public string LocalConfigFolder { get; set; } = @"D:\Anilox\Config";
 
-        /// <summary>Storage 模式：循環儲存的根目錄（例如 D:\AniloxStorage）。空字串時 fallback 至 CaptureRootPath。</summary>
+        /// <summary>Storage 模式：循環儲存的根目錄（例如 D:\Anilox\Captures）。空字串時 fallback 至 CaptureRootPath。</summary>
         public string StorageFolderPath { get; set; } = string.Empty;
 
         public static AppModeConfig Load()

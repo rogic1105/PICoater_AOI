@@ -15,7 +15,7 @@ if (-not (Test-Path $cfgDir)) {
 $json = @'
 {
   "Role": "Inspection",
-  "LocalConfigFolder": "D:\\AniloxConfig"
+  "LocalConfigFolder": "D:\\Anilox\\Config"
 }
 '@
 

@@ -8,8 +8,9 @@
 #   IpAddress       固定 IP（儲存網段，例 192.168.10.20）
 #   PrefixLength    子網遮罩長度（24 對應 255.255.255.0）
 #   Gateway         預設閘道（空=不設）
-#   StorageFolder   要共用的資料夾路徑
-#   ShareName       SMB 共用名稱
+#   AniloxRoot      Anilox 根目錄（如 D:\Anilox），對應單一 SMB share
+#   ShareName       SMB 共用名稱（如 Anilox）
+#   Subdirs         要建立的子目錄陣列（如 ["Captures", "Config"]）
 #   AllowedUser     授權使用者（Everyone 或特定帳號）
 
 param(
@@ -38,10 +39,9 @@ Write-Host ("[Setup] 讀取設定: " + $Config) -ForegroundColor Cyan
 Write-Host ("  NicName         = " + $cfg.NicName + "  (空=自動)")
 Write-Host ("  IpAddress       = " + $cfg.IpAddress + "/" + $cfg.PrefixLength)
 Write-Host ("  Gateway         = " + $cfg.Gateway)
-Write-Host ("  StorageFolder   = " + $cfg.StorageFolder)
+Write-Host ("  AniloxRoot      = " + $cfg.AniloxRoot)
 Write-Host ("  ShareName       = " + $cfg.ShareName)
-Write-Host ("  ConfigFolder    = " + $cfg.ConfigFolder)
-Write-Host ("  ConfigShareName = " + $cfg.ConfigShareName)
+Write-Host ("  Subdirs         = " + ($cfg.Subdirs -join ', '))
 Write-Host ("  AllowedUser     = " + $cfg.AllowedUser)
 Write-Host ("  AppDir          = " + $cfg.AppDir + "  (空=不寫 app-mode.json)")
 Write-Host ""
@@ -82,47 +82,37 @@ if ($cfg.Gateway) { $newIpArgs.DefaultGateway = $cfg.Gateway }
 New-NetIPAddress @newIpArgs | Out-Null
 Write-Host ("  -> " + $cfg.IpAddress + "/" + $cfg.PrefixLength + " on " + $nicName) -ForegroundColor Green
 
-# ── 3. 建立資料夾 ────────────────────────────
-Write-Host "[2/7] 建立資料夾..."
-if (-not (Test-Path $cfg.StorageFolder)) {
-    New-Item -ItemType Directory -Path $cfg.StorageFolder -Force | Out-Null
+# ── 3. 建立 Anilox 根目錄 + 子目錄 ──────────────
+Write-Host "[2/7] 建立資料夾結構..."
+if (-not (Test-Path $cfg.AniloxRoot)) {
+    New-Item -ItemType Directory -Path $cfg.AniloxRoot -Force | Out-Null
 }
-Write-Host ("  -> " + $cfg.StorageFolder) -ForegroundColor Green
+Write-Host ("  -> " + $cfg.AniloxRoot) -ForegroundColor Green
+foreach ($sub in $cfg.Subdirs) {
+    $subPath = Join-Path $cfg.AniloxRoot $sub
+    if (-not (Test-Path $subPath)) {
+        New-Item -ItemType Directory -Path $subPath -Force | Out-Null
+    }
+    Write-Host ("  -> " + $subPath) -ForegroundColor Green
+}
 
 # ── 4. NTFS 權限 ─────────────────────────────
 Write-Host "[3/7] 設定 NTFS 權限..."
-$acl = Get-Acl $cfg.StorageFolder
+$acl = Get-Acl $cfg.AniloxRoot
 $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
     $cfg.AllowedUser, 'Modify', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
 $acl.SetAccessRule($rule)
-Set-Acl -Path $cfg.StorageFolder -AclObject $acl
-Write-Host ("  -> " + $cfg.AllowedUser + " : Modify") -ForegroundColor Green
+Set-Acl -Path $cfg.AniloxRoot -AclObject $acl
+Write-Host ("  -> " + $cfg.AllowedUser + " : Modify (含子目錄繼承)") -ForegroundColor Green
 
-# ── 5. SMB 共用 ──────────────────────────────
-Write-Host "[4/6] 設定 SMB 共用 (AniloxStorage)..."
+# ── 5. SMB 共用（單一 share Anilox，內含 Captures/Config 子目錄）─────────────
+Write-Host ("[4/6] 設定 SMB 共用 (" + $cfg.ShareName + ")...")
 $existing = Get-SmbShare -Name $cfg.ShareName -ErrorAction SilentlyContinue
 if ($existing) {
     Remove-SmbShare -Name $cfg.ShareName -Force
 }
-New-SmbShare -Name $cfg.ShareName -Path $cfg.StorageFolder -FullAccess $cfg.AllowedUser | Out-Null
-Write-Host ("  -> \\" + $env:COMPUTERNAME + "\" + $cfg.ShareName) -ForegroundColor Green
-
-# AniloxConfig 共用（供 Inspection PC 寫旗標）
-if ($cfg.ConfigFolder -and $cfg.ConfigShareName) {
-    Write-Host "[4b] 設定 SMB 共用 (AniloxConfig)..."
-    if (-not (Test-Path $cfg.ConfigFolder)) {
-        New-Item -ItemType Directory -Path $cfg.ConfigFolder -Force | Out-Null
-    }
-    $acl2 = Get-Acl $cfg.ConfigFolder
-    $rule2 = New-Object System.Security.AccessControl.FileSystemAccessRule(
-        $cfg.AllowedUser, 'Modify', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
-    $acl2.SetAccessRule($rule2)
-    Set-Acl -Path $cfg.ConfigFolder -AclObject $acl2
-    $existingCfgShare = Get-SmbShare -Name $cfg.ConfigShareName -ErrorAction SilentlyContinue
-    if ($existingCfgShare) { Remove-SmbShare -Name $cfg.ConfigShareName -Force }
-    New-SmbShare -Name $cfg.ConfigShareName -Path $cfg.ConfigFolder -FullAccess $cfg.AllowedUser | Out-Null
-    Write-Host ("  -> \\" + $env:COMPUTERNAME + "\" + $cfg.ConfigShareName) -ForegroundColor Green
-}
+New-SmbShare -Name $cfg.ShareName -Path $cfg.AniloxRoot -FullAccess $cfg.AllowedUser | Out-Null
+Write-Host ("  -> \\" + $env:COMPUTERNAME + "\" + $cfg.ShareName + " → " + $cfg.AniloxRoot) -ForegroundColor Green
 
 # ── 6. 防火牆 + 網路設定檔 ───────────────────
 Write-Host "[5/7] 開放 SMB 防火牆規則..."
@@ -148,7 +138,7 @@ Get-NetIPAddress -InterfaceAlias $nicName -AddressFamily IPv4 |
 Write-Host "[驗證] SMB 共用：" -ForegroundColor Cyan
 Get-SmbShare -Name $cfg.ShareName | Format-Table Name, Path, ScopeName -AutoSize
 
-$testFile = Join-Path $cfg.StorageFolder '__write_test.txt'
+$testFile = Join-Path $cfg.AniloxRoot '__write_test.txt'
 try {
     "ok $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" | Out-File -FilePath $testFile -Encoding utf8
     Remove-Item $testFile -Force
@@ -166,11 +156,14 @@ if ($cfg.AppDir) {
     if (-not (Test-Path $cfgDir)) {
         New-Item -ItemType Directory -Path $cfgDir -Force | Out-Null
     }
+    # LocalConfigFolder = AniloxRoot\Config；StorageFolderPath = AniloxRoot\Captures
+    $localConfigDir = (Join-Path $cfg.AniloxRoot 'Config').Replace('\','\\')
+    $storageDir     = (Join-Path $cfg.AniloxRoot 'Captures').Replace('\','\\')
     $appModeJson = @"
 {
   "Role": "Storage",
-  "LocalConfigFolder": "$($cfg.ConfigFolder.Replace('\','\\'))",
-  "StorageFolderPath": "$($cfg.StorageFolder.Replace('\','\\'))"
+  "LocalConfigFolder": "$localConfigDir",
+  "StorageFolderPath": "$storageDir"
 }
 "@
     $appModeFile = Join-Path $cfgDir 'app-mode.json'
@@ -191,5 +184,5 @@ if ($cfg.AppDir) {
 
 Write-Host ""
 Write-Host "[Setup] 完成！" -ForegroundColor Cyan
-Write-Host ("         檢測機 PropertyGrid「遠端路徑」請填: \\" + $cfg.IpAddress + "\" + $cfg.ShareName)
-Write-Host ("         檢測機 PropertyGrid「遠端 Config 路徑」請填: \\" + $cfg.IpAddress + "\" + $cfg.ConfigShareName)
+Write-Host ("         檢測機 PropertyGrid「遠端路徑」請填: \\" + $cfg.IpAddress + "\" + $cfg.ShareName + "\Captures")
+Write-Host ("         檢測機 PropertyGrid「遠端 Config 路徑」（如顯示）: \\" + $cfg.IpAddress + "\" + $cfg.ShareName + "\Config")

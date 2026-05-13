@@ -187,8 +187,8 @@ PICoater_AOI/
 | Logs 目錄 | （computed）| `{AniloxRoot}\Logs` | Resource Log；不顯示 |
 | Dcf 目錄 | （computed）| `{AniloxRoot}\Dcf` | MIL DCF；不顯示 |
 | 預留空間 (GB) | `LocalMinFreeGB` | 100 | 磁碟可用空間低於此值觸發循環儲存，刪最舊日期影像（CSV 保留） |
-| 遠端路徑 | `RemotePath` | \\192.168.10.20\AniloxStorage | 遠端複製目標路徑（空=不複製） |
-| 遠端設定路徑 | `RemoteConfigPath` | （由 RemotePath 自動推算） | [Browsable(false)] 開發者設定，改 JSON 生效；空值時自動從 RemotePath 的伺服器 IP 推算 |
+| 遠端路徑 | `RemotePath` | \\192.168.10.20\Anilox\Captures | 遠端複製目標路徑（空=不複製）。單一 SMB share `Anilox` 子目錄 |
+| 遠端設定路徑 | `RemoteConfigPath` | \\192.168.10.20\Anilox\Config | [Browsable(false)] 開發者設定；cleanup-request.flag 寫入位置 |
 
 ### 5. 相機設定
 

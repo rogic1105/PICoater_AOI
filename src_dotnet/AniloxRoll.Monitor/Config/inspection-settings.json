@@ -46,8 +46,8 @@
     "AniloxRootPath": "D:\\Anilox",
     "SaveOriginalBmp": false,
     "LocalMinFreeGB": 100,
-    "RemotePath": "\\\\192.168.10.20\\AniloxStorage",
-    "RemoteConfigPath": "\\\\192.168.10.20\\AniloxConfig"
+    "RemotePath": "\\\\192.168.10.20\\Anilox\\Captures",
+    "RemoteConfigPath": "\\\\192.168.10.20\\Anilox\\Config"
   },
   "Plc": {
     "Enabled": true,

@@ -14,7 +14,7 @@
 
 **單 NIC 雙 IP 別名**：檢測機只有一張 NIC，用 `New-NetIPAddress` 加 secondary IP（PLC IP 不動）。未來換雙口工業電腦時，把兩個 IP 拆到兩張實體卡即可，**程式不用改**。
 
-**匿名 SMB**：`RemoteCopyService` 走 `\\192.168.10.20\AniloxStorage`，使用 Guest 帳號不帶憑證。Windows 10/11 預設雙邊都擋，需同時改檢測機（Client 端 `AllowInsecureGuestAuth`）+ 儲存機（Server 端 Guest 帳號啟用 + ACL + SeDenyNetworkLogonRight 清除）。
+**匿名 SMB**：`RemoteCopyService` 走 `\\192.168.10.20\Anilox\Captures`，使用 Guest 帳號不帶憑證。Windows 10/11 預設雙邊都擋，需同時改檢測機（Client 端 `AllowInsecureGuestAuth`）+ 儲存機（Server 端 Guest 帳號啟用 + ACL + SeDenyNetworkLogonRight 清除）。
 
 ## 檔案清單
 
@@ -107,10 +107,10 @@ $guestTokens = @('Guest', '*' + $guestSid, 'Guests', '*S-1-5-32-546')
 3. 檢測機 PowerShell：
    ```powershell
    Test-NetConnection -Port 445 -ComputerName 192.168.10.20  # TcpTestSucceeded = True
-   Out-File -FilePath \\192.168.10.20\AniloxStorage\test.txt -InputObject "hello"  # 無錯誤
+   Out-File -FilePath \\192.168.10.20\Anilox\Captures\test.txt -InputObject "hello"  # 無錯誤
    ```
-4. PICoater 屬性 → 儲存設定 → 遠端路徑 = `\\192.168.10.20\AniloxStorage`
-5. 抓圖 → 儲存機 `C:\AniloxStorage\<date>\` 出現檔案
+4. PICoater 屬性 → 儲存設定 → 遠端路徑 = `\\192.168.10.20\Anilox\Captures`
+5. 抓圖 → 儲存機 `D:\Anilox\Captures\<yyyy>\<yyyyMM>\<yyyyMMdd>\` 出現檔案
 
 **失敗排查**：看 PICoater Trace log 有無 `[RemoteCopy] Failed after...`。
 

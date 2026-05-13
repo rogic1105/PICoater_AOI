@@ -9,7 +9,7 @@
 │  檢測機 PC   │ ─────── PLC ──────→ │ ET-7044  │──→ Nakan
 │ (PICoater)   │
 │              │    192.168.10.x     ┌──────────┐
-│              │ ────── SMB ──────→  │ 儲存機    │  C:\AniloxStorage
+│              │ ────── SMB ──────→  │ 儲存機    │  D:\Anilox\{Captures,Config}
 │  192.168     │                     │192.168    │
 │  .255.x +    │                     │.10.20     │
 │  .10.10      │                     └──────────┘
@@ -31,8 +31,9 @@
      "IpAddress": "192.168.10.20",
      "PrefixLength": 24,
      "Gateway": "",
-     "StorageFolder": "C:\\AniloxStorage",
-     "ShareName": "AniloxStorage",
+     "AniloxRoot": "D:\\Anilox",
+     "ShareName": "Anilox",
+     "Subdirs": ["Captures", "Config"],
      "AllowedUser": "Everyone",
      "RdpEnabled": true,
      "RdpUser": "aroll",
@@ -40,7 +41,8 @@
    }
    ```
    - `NicName`：如果只有一張網卡可不填（自動選）；有 Wi-Fi 請明確指定（中文 OK）
-   - `StorageFolder`：改成現場儲存機實際可用的磁碟（例 `"D:\\AniloxStorage"`）
+   - `AniloxRoot`：儲存機本機 Anilox 根目錄（會建立子目錄 + 對應單一 SMB share）
+   - `ShareName` / `Subdirs`：SMB 共用名稱 = AniloxRoot，子目錄含 `Captures`（影像）與 `Config`（cleanup flag）
    - `RdpUser` / `RdpPassword`：遠端桌面帳密（**內網專用弱密碼**；要更安全自己改）
 3. **雙擊 `run_setup.bat`**（系統會跳 UAC，同意）
 4. 看到 `All Done. Press any key to close...` 代表成功
@@ -51,8 +53,8 @@
 | Step 1 — 網路 + SMB 共用<br>（setup_storage_pc.ps1） | Step 2 — 匿名 Guest 存取<br>（setup_guest.ps1） | Step 3 — 遠端桌面<br>（setup_rdp.ps1） | Step 4 — 關閉自動休眠<br>（setup_nosleep.ps1） |
 |---|---|---|---|
 | 設固定 IP | 啟用 Guest 本機帳號 | 關閉密碼複雜度規則（允許弱密碼） | standby-timeout = 0 |
-| 建立 `C:\AniloxStorage` + NTFS Everyone Modify | 授予 Guest SMB Full + NTFS Modify | 建立 `aroll`/`aroll` 帳號（密碼永不過期） | hibernate-timeout = 0 |
-| 建立 SMB 共用 `AniloxStorage` | **secedit 把 Guest 從「拒絕網路登入」移除** | 加入 Administrators + Remote Desktop Users | disk-timeout = 0 |
+| 建立 `D:\Anilox\{Captures,Config}` + NTFS Everyone Modify（含繼承）| 授予 Guest SMB Full + NTFS Modify | 建立 `aroll`/`aroll` 帳號（密碼永不過期） | hibernate-timeout = 0 |
+| 建立單一 SMB 共用 `Anilox` → `D:\Anilox` | **secedit 把 Guest 從「拒絕網路登入」移除** | 加入 Administrators + Remote Desktop Users | disk-timeout = 0 |
 | 開放防火牆 File and Printer Sharing | 加入「允許網路登入」 | fDenyTSConnections = 0、關閉 NLA | （AC / DC 都設） |
 | 網路設定檔切 Private | gpupdate /force | 開放 Remote Desktop 防火牆 | 目的：SMB 隨時可存取 |
 
@@ -98,11 +100,11 @@ Test-NetConnection -Port 445 -ComputerName 192.168.10.20
 #   TcpTestSucceeded : True
 
 # 2. 可匿名寫入？
-Out-File -FilePath \\192.168.10.20\AniloxStorage\test.txt -InputObject "hello"
+Out-File -FilePath \\192.168.10.20\Anilox\Captures\test.txt -InputObject "hello"
 #   無錯誤 → OK
 
-# 3. Win+R 打 \\192.168.10.20\AniloxStorage
-#   應直接開啟，不要求帳密
+# 3. Win+R 打 \\192.168.10.20\Anilox
+#   應直接開啟，看到 Captures + Config 子目錄，不要求帳密
 ```
 
 ### ⑤ 啟用 PICoater 遠端複製
@@ -110,11 +112,11 @@ Out-File -FilePath \\192.168.10.20\AniloxStorage\test.txt -InputObject "hello"
 1. 開 PICoater
 2. 右側屬性面板 → **儲存設定 → 遠端路徑** 填：
    ```
-   \\192.168.10.20\AniloxStorage
+   \\192.168.10.20\Anilox\Captures
    ```
 3. **存檔** 打勾
 4. 抓一張圖
-5. 到儲存機看 `C:\AniloxStorage\<yyyyMMdd>\...` 有檔案 = 完成
+5. 到儲存機看 `D:\Anilox\Captures\<yyyy>\<yyyyMM>\<yyyyMMdd>\...` 有檔案 = 完成
 
 背景複製：`RemoteCopyService` 用 ConcurrentQueue + BelowNormal 執行緒，失敗會重試 3 次，**不影響取像效能**。
 
