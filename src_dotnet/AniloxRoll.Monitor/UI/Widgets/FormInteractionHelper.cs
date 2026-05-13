@@ -266,7 +266,9 @@ namespace AniloxRoll.Monitor.UI.Widgets
             using (var fbd = new FolderBrowserDialog())
             {
                 string preferredPath = UserSessionState.LastDataPath;
-                if (!Directory.Exists(preferredPath)) preferredPath = @"D:\AniloxCaptures";
+                if (!Directory.Exists(preferredPath)) preferredPath = _settings?.CaptureRootPath;
+                if (string.IsNullOrEmpty(preferredPath) || !Directory.Exists(preferredPath))
+                    preferredPath = @"D:\Anilox\Captures";
                 if (Directory.Exists(preferredPath))
                     fbd.SelectedPath = preferredPath;
 
@@ -275,10 +277,19 @@ namespace AniloxRoll.Monitor.UI.Widgets
                     int lastCameraIndex = _galleryManager.SelectedIndex;
                     if (lastCameraIndex < 0) lastCameraIndex = 0;
 
-                    UserSessionState.SetLastDataPath(fbd.SelectedPath);
+                    // 路徑修正：使用者選的目錄無 yyyy 子目錄但底下有 Captures\yyyy → 自動往下走
+                    // (使用者誤選 D:\Anilox 時自動轉成 D:\Anilox\Captures)
+                    string selectedPath = fbd.SelectedPath;
+                    if (!HasYearSubdir(selectedPath))
+                    {
+                        string capturesSub = Path.Combine(selectedPath, "Captures");
+                        if (HasYearSubdir(capturesSub)) selectedPath = capturesSub;
+                    }
+
+                    UserSessionState.SetLastDataPath(selectedPath);
                     UserSessionState.Save();
 
-                    _imageRepository.LoadDirectory(fbd.SelectedPath);
+                    _imageRepository.LoadDirectory(selectedPath);
                     if (_imageRepository.FileCount == 0)
                     {
                         MessageBox.Show(_form, "該路徑下無符合格式的圖片！");
@@ -291,6 +302,22 @@ namespace AniloxRoll.Monitor.UI.Widgets
                     _canvasHelper.SetCurrentCameraIndex(lastCameraIndex);
                 }
             }
+        }
+
+        /// <summary>判斷指定目錄下是否有「4 位數字」的子目錄（即 yyyy）。</summary>
+        private static bool HasYearSubdir(string path)
+        {
+            if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) return false;
+            try
+            {
+                foreach (var d in Directory.GetDirectories(path))
+                {
+                    string name = Path.GetFileName(d);
+                    if (name.Length == 4 && int.TryParse(name, out _)) return true;
+                }
+            }
+            catch { /* 權限或 IO 失敗忽略 */ }
+            return false;
         }
 
         // ── 資源清理 ──────────────────────────────────────────────────────

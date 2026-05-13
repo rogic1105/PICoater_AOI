@@ -779,6 +779,8 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="flow-title">讀取資料 <code>btnSelectFolder</code>（Review）/ <code>btnSelectDataFolder</code>（Data）</div>
 <div class="box input">按下【讀取資料】→ 選擇資料夾</div>
 <div class="v-arrow dev"></div>
+<div class="box action dev">SelectAndLoadFolder 智慧修正：若選的目錄無 yyyy 子目錄但底下有 Captures\yyyy → 自動轉用 {selected}\Captures（修正使用者誤選 D:\Anilox 而非 D:\Anilox\Captures 的狀況）</div>
+<div class="v-arrow dev"></div>
 <div class="box action dev">ImageRepository.LoadDirectory → TimeNavigator.Initialize</div>
 <div class="v-arrow"></div>
 <div class="out-par">
@@ -1406,7 +1408,8 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <div class="box action">InitResourceLog(captureRootPath)</div>
 <div class="v-arrow" data-label="串接"></div>
 <div class="out-seq">
-<div class="box action">建立 Logs/ 目錄（AniloxRoot 下，預設 D:\Anilox\Logs；磁碟不存在時 EnsureAniloxFolderStructure 已 fallback 到 C:）</div>
+<div class="box action">EnsureAniloxFolderStructure：建立 Captures/Logs/Bg/Dcf 子目錄；偵測磁碟不存在 → 換 C 槽 + MessageBox + 寫回 settings；自動遷移舊版 D:\AniloxCaptures\{dcf,bg} → 新位置（一次性）；檢查 DCF 檔存在，缺失時設 _dcfMissing 旗標</div>
+<div class="box action">建立 Logs/ 目錄（AniloxRoot 下，預設 D:\Anilox\Logs）</div>
 <div class="box action">MergeOldResourceLogs：把「昨天以前」的 resource-monitor-yyyyMMdd-HHmmss.csv 小檔，按日合併成 resource-monitor-yyyyMMdd.csv（同日多個小檔依時間升序 append，header 只保留一份），合併成功後刪除原始小檔。今天的檔不動。</div>
 <div class="box action">建立 resource-monitor-yyyyMMdd-HHmmss.csv（本次啟動的新小檔）</div>
 <div class="box action">寫入 CSV header</div>

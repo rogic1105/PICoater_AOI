@@ -53,7 +53,7 @@ namespace AniloxRoll.Monitor.Core.Data
         public const int    PlcPort    = 502;              // IO Port
 
         // ── 6. 相機設定 ────────────────────────────────────────────────────
-        public const string DcfPath = @"D:\AniloxCaptures\dcf\Radient_Config.dcf"; // 設定檔
+        public const string DcfPath = @"D:\Anilox\Dcf\Radient_Config.dcf"; // 設定檔
 
         // ── 7. 光源設定 ────────────────────────────────────────────────────
         public const bool   LightEnabled    = true;    // 啟用光源

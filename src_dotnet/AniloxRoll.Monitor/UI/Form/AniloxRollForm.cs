@@ -231,6 +231,10 @@ namespace AniloxRoll.Monitor.Forms
             InitializeRightPanelControls();
             SetupDataTab();
             ApplyStorageModeUi();
+
+            // DCF 缺失警語：UI 已建立，立即顯示
+            if (_dcfMissing && _appMode?.Role != MachineRole.Storage)
+                UpdateCamCountLabel(0, CameraCount);
         }
 
         /// <summary>確保 Anilox 資料根目錄與子目錄存在。
@@ -263,10 +267,49 @@ namespace AniloxRoll.Monitor.Forms
                 Directory.CreateDirectory(_settings.Storage.LogsPath);
                 Directory.CreateDirectory(_settings.Storage.BackgroundPath);
                 Directory.CreateDirectory(_settings.Storage.DcfDirPath);
+
+                // 一次性遷移：舊版 D:\AniloxCaptures\{dcf,bg} → D:\Anilox\{Dcf,Bg}
+                // 只在新目錄為空時遷移，避免覆蓋使用者已建立的新內容
+                string rootDrive = Path.GetPathRoot(aniloxRoot)?.TrimEnd('\\') ?? "D:";
+                string legacyCaptures = Path.Combine(rootDrive + "\\", "AniloxCaptures");
+                if (Directory.Exists(legacyCaptures))
+                {
+                    MigrateLegacySubdir(Path.Combine(legacyCaptures, "dcf"), _settings.Storage.DcfDirPath);
+                    MigrateLegacySubdir(Path.Combine(legacyCaptures, "bg"),  _settings.Storage.BackgroundPath);
+                }
+
+                // 檢查 DCF 檔是否存在；不存在時設旗標，lblCamCount 之後會顯示警語
+                string dcfPath = _settings?.CameraParam?.DcfPath;
+                _dcfMissing = !string.IsNullOrWhiteSpace(dcfPath) && !File.Exists(dcfPath);
+                if (_dcfMissing)
+                    Trace.WriteLine($"[EnsureAniloxFolderStructure] DCF 缺失: {dcfPath}");
             }
             catch (Exception ex)
             {
                 Trace.WriteLine($"[EnsureAniloxFolderStructure] {ex}");
+            }
+        }
+
+        /// <summary>把 legacy 目錄內所有檔案拷貝到 new 目錄（只在 new 為空時執行）。</summary>
+        private static void MigrateLegacySubdir(string legacyDir, string newDir)
+        {
+            try
+            {
+                if (!Directory.Exists(legacyDir)) return;
+                if (Directory.Exists(newDir) && Directory.GetFiles(newDir).Length > 0) return; // 新目錄非空，不覆蓋
+
+                Directory.CreateDirectory(newDir);
+                foreach (var src in Directory.GetFiles(legacyDir))
+                {
+                    string dst = Path.Combine(newDir, Path.GetFileName(src));
+                    if (!File.Exists(dst))
+                        File.Copy(src, dst);
+                }
+                Trace.WriteLine($"[Migrate] {legacyDir} → {newDir}");
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"[Migrate] {legacyDir} failed: {ex.Message}");
             }
         }
 
@@ -701,8 +744,17 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
+        /// <summary>DCF 檔不存在時設為 true，UpdateCamCountLabel 改顯示警語而非相機數量。</summary>
+        private bool _dcfMissing = false;
+
         private void UpdateCamCountLabel(int connected, int expected)
         {
+            if (_dcfMissing)
+            {
+                lblCamCount.Text = "⚠ DCF 缺失";
+                lblCamCount.BackColor = IecRed;
+                return;
+            }
             lblCamCount.Text = $"相機: {connected}/{expected}";
             if (connected >= expected)
                 lblCamCount.BackColor = IecGreen;   // 綠：全連
