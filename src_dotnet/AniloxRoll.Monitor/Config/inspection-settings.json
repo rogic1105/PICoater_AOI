@@ -37,7 +37,7 @@
     "DailyYMax": 300
   },
   "ImageView": {
-    "StitchMode": "Vertical",
+    "StitchMode": "Global",
     "EnableMuraEnhance": false,
     "EnableReviewEnhance": false
   },

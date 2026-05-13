@@ -787,35 +787,43 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box output">上一/下一時段：根據是否有前後時段決定可用</div>
 <div class="box output">上一/下一序號：根據是否有前後序號決定可用</div>
 </div>
-<div class="v-arrow"></div>
-<div class="box action">回顧縮圖1~7：載入圖片 → 自動選取第一張縮圖（triggerEvent: true → <a href="#review-thumbnail-click">回顧縮圖點擊</a>）</div>
-<div class="v-arrow"></div>
-<div class="out-par">
-<div class="box output">回顧主畫面：第一台相機影像（FitToScreen）</div>
-<div class="box output">回顧切向曲線圖：單台 Mean/Max 曲線</div>
-<div class="box output">回顧法向曲線圖：單台 row curves</div>
-</div>
-<div class="v-arrow" data-label="分支"></div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">ClearStitchedMode → SetReviewGroupBoxes(true)（【單片群組】+【序號選擇群組】綠色高亮，預設為 grpReviewGrabNav 模式）</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">SelectLatestInSingleSheetMode → cbDataGrabId.SelectedIndex = 0（同步 cbReviewGrabId；OnDataGrabIdSelected 只設 _reviewDirty=true，不立即載圖）</div>
+<div class="v-arrow" data-label="分支：序號有無"></div>
+<div class="v-branch">
+<div class="v-branch-path"><span class="branch-label yes">有序號（預設路徑）</span>
+<div class="box action dev">直接 LoadGrabStitchedViewAsync(cbReviewGrabId 當前 GrabIdInfo) → FitToScreen → _reviewDirty=false</div>
+<div class="v-arrow" data-label="分支：合圖方式"></div>
 <div class="v-branch">
 <div class="v-branch-path"><span class="branch-label yes">垂直</span>
 <div class="out-par">
-<div class="box output">回顧全覽圖：閾值線 + 7 台各自 Mean 平均/Max 取 Max 後合併，X 軸固定（依 CFG 的 ImageWidth × OPS + Start 涵蓋 7 台 FOV）</div>
+<div class="box output">回顧縮圖1~7：拼接圖</div>
+<div class="box output">回顧主畫面：選中相機的拼接影像（FitToScreen）</div>
+<div class="box output">回顧切向曲線圖：多幀 Mean 平均/Max 取 Max</div>
+<div class="box output">回顧法向曲線圖：多幀 row curves 串接</div>
+<div class="box output">回顧全覽圖：閾值線 + X 軸固定（依 CFG 的 ImageWidth × OPS + Start 涵蓋 7 台 FOV）</div>
 </div>
 </div>
 <div class="v-branch-path"><span class="branch-label no">全域</span>
 <div class="out-par">
-<div class="box output">回顧主畫面：覆蓋為<a href="#review-global-merge">全域合圖</a>（FitToScreen）</div>
+<div class="box output">回顧縮圖1~7：拼接圖</div>
+<div class="box output">回顧主畫面：<a href="#review-global-merge">全域合圖</a>（FitToScreen）</div>
 <div class="box output">回顧切向曲線圖：清空（單台資料無意義）</div>
-<div class="box output">回顧法向曲線圖：7 台 row curves 靠上對齊，重疊區 Mean 平均/Max 取 Max，非重疊區保留</div>
-<div class="box output">回顧全覽圖：閾值線 + 7 台按位置串接，重疊區 Mean 平均/Max 取 Max</div>
+<div class="box output">回顧法向曲線圖：7 台靠上對齊，重疊區 Mean 平均/Max 取 Max</div>
+<div class="box output">回顧全覽圖：閾值線 + 7 台按位置串接</div>
 </div>
-</div></div>
+</div>
+</div>
+</div>
+<div class="v-branch-path"><span class="branch-label no">無序號（資料夾無資料 fallback）</span>
+<div class="box action dev">LoadImagesWithPeriodLockAsync + ApplyPostLoadDisplay（period 模式）</div>
+</div>
+</div>
+<div class="note dev">為什麼 btnSelectFolder_Click 要明確呼叫 LoadGrabStitchedViewAsync：OnDataGrabIdSelected 為 Data tab 延後渲染而設計（只設 _reviewDirty=true），但讀資料是 Review tab 操作，需要立即看圖。若僅依賴 SelectLatestInSingleSheetMode → 走 LoadImagesWithPeriodLockAsync → ApplyPostLoadDisplay，會載成 period 全域合圖（grpReviewTimePeriod 模式），與 UI 高亮的 grpReviewGrabNav 不一致。</div>
 <div class="v-arrow"></div>
 <div class="box sync">同步 Data tab：填充起始/結束序號、時間、良率圖導航 → 刷新統計</div>
-<div class="v-arrow"></div>
-<div class="box action dev">SetReviewGroupBoxes(true) → 【單片群組】綠色高亮（預設）</div>
-<div class="v-arrow"></div>
-<div class="box action dev">SelectLatestInSingleSheetMode → cbDataGrabId.SelectedIndex = 0 → OnSingleSheetComboChanged → 【序號選擇群組】綠色高亮（預設）</div>
 </div>
 <div class="flow-group vflow" id="review-period-nav">
 <div class="flow-title">時段導航 <code>btnPeriodPrev/Next</code> + <code>cbDate/cbTime</code></div>

@@ -2110,8 +2110,24 @@ namespace AniloxRoll.Monitor.Forms
             _stitchCoordinator.ClearStitchedMode();
             _dataStatsPresenter.SetReviewGroupBoxes(true);
             _dataStatsPresenter.SelectLatestInSingleSheetMode();
-            await _presenter.LoadImagesWithPeriodLockAsync(false, LoadImagesWithReviewConfig);
-            ApplyPostLoadDisplay();
+
+            // 讀取資料預設為 grpReviewGrabNav（單片序號模式），直接載入 stitch 合圖；
+            // OnDataGrabIdSelected 只設 _reviewDirty=true（為了 Data tab 操作延後渲染），
+            // 此處（Review tab 操作）需明確觸發載入。
+            int reviewIdx = cbReviewGrabId.SelectedIndex;
+            if (reviewIdx >= 0 && reviewIdx < _dataStatsPresenter.GrabIdInfos.Count)
+            {
+                var info = _dataStatsPresenter.GrabIdInfos[reviewIdx];
+                await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest);
+                if (canvasMain.Image != null) canvasMain.FitToScreen();
+                _reviewDirty = false;
+            }
+            else
+            {
+                // 資料夾無序號 → period 模式 fallback
+                await _presenter.LoadImagesWithPeriodLockAsync(false, LoadImagesWithReviewConfig);
+                ApplyPostLoadDisplay();
+            }
             }
             catch (Exception ex) { Trace.WriteLine($"[btnSelectFolder_Click] {ex}"); }
         }

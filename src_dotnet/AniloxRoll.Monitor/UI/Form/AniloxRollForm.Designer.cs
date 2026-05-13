@@ -665,7 +665,7 @@
             this.cbDate.FormattingEnabled = true;
             this.cbDate.Location = new System.Drawing.Point(6, 17);
             this.cbDate.Name = "cbDate";
-            this.cbDate.Size = new System.Drawing.Size(97, 23);
+            this.cbDate.Size = new System.Drawing.Size(108, 23);
             this.cbDate.TabIndex = 15;
             // 
             // cbTime
@@ -674,12 +674,12 @@
             this.cbTime.FormattingEnabled = true;
             this.cbTime.Location = new System.Drawing.Point(6, 46);
             this.cbTime.Name = "cbTime";
-            this.cbTime.Size = new System.Drawing.Size(97, 23);
+            this.cbTime.Size = new System.Drawing.Size(107, 23);
             this.cbTime.TabIndex = 16;
             // 
             // btnPeriodNext
             // 
-            this.btnPeriodNext.Location = new System.Drawing.Point(56, 68);
+            this.btnPeriodNext.Location = new System.Drawing.Point(69, 68);
             this.btnPeriodNext.Name = "btnPeriodNext";
             this.btnPeriodNext.Size = new System.Drawing.Size(44, 28);
             this.btnPeriodNext.TabIndex = 31;
@@ -1245,26 +1245,28 @@
             this.panelStatCam1.Name = "panelStatCam1";
             this.panelStatCam1.Size = new System.Drawing.Size(120, 80);
             this.panelStatCam1.TabIndex = 2;
-            //
+            // 
             // propertyGridSettings
-            //
+            // 
             this.propertyGridSettings.Dock = System.Windows.Forms.DockStyle.Fill;
             this.propertyGridSettings.HelpVisible = false;
             this.propertyGridSettings.Location = new System.Drawing.Point(3, 3);
             this.propertyGridSettings.Name = "propertyGridSettings";
-            this.propertyGridSettings.Size = new System.Drawing.Size(207, 625);
+            this.propertyGridSettings.Size = new System.Drawing.Size(207, 565);
             this.propertyGridSettings.TabIndex = 0;
-            //
+            // 
             // helpRichText
-            //
+            // 
             this.helpRichText.BackColor = System.Drawing.SystemColors.Control;
             this.helpRichText.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.helpRichText.DetectUrls = false;
             this.helpRichText.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.helpRichText.HideSelection = false;
+            this.helpRichText.Location = new System.Drawing.Point(3, 568);
             this.helpRichText.Name = "helpRichText";
             this.helpRichText.ReadOnly = true;
             this.helpRichText.Size = new System.Drawing.Size(207, 60);
+            this.helpRichText.TabIndex = 1;
             this.helpRichText.TabStop = false;
             this.helpRichText.Text = "";
             // 
