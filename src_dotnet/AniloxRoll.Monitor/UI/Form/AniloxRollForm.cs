@@ -213,7 +213,8 @@ namespace AniloxRoll.Monitor.Forms
             _appMode = AppModeConfig.Load();
             if (_settings == null) _settings = ConfigManager.LoadInspectionSettings();
             _settings.AppRole = _appMode?.Role ?? MachineRole.Inspection;
-            CameraFrameSaver.InitResourceLog(_settings?.CaptureRootPath);
+            EnsureAniloxFolderStructure();
+            CameraFrameSaver.InitResourceLog(_settings?.Storage?.LogsPath);
             CameraFrameSaver.GetUiStateCallback = () =>
             {
                 bool live = _liveCameraManager?.IsLiveGrabbing ?? false;
@@ -230,6 +231,43 @@ namespace AniloxRoll.Monitor.Forms
             InitializeRightPanelControls();
             SetupDataTab();
             ApplyStorageModeUi();
+        }
+
+        /// <summary>確保 Anilox 資料根目錄與子目錄存在。
+        /// AniloxRootPath 的磁碟不存在時，把磁碟換成 C:（如 D:\Anilox → C:\Anilox），
+        /// MessageBox 告知 + 寫回 settings.json。建立 Captures/Logs/Bg/Dcf 子目錄。</summary>
+        private void EnsureAniloxFolderStructure()
+        {
+            try
+            {
+                string aniloxRoot = _settings?.Storage?.AniloxRootPath;
+                if (string.IsNullOrWhiteSpace(aniloxRoot)) return;
+
+                // 檢查磁碟是否存在
+                string drive = Path.GetPathRoot(aniloxRoot);
+                if (!string.IsNullOrEmpty(drive) && !Directory.Exists(drive))
+                {
+                    // 換成 C 槽，保留後段路徑
+                    string newRoot = "C:" + aniloxRoot.Substring(drive.Length - 1);
+                    MessageBox.Show(
+                        $"{drive} 不存在，Anilox 根目錄改用：{newRoot}\n請至檢測設定 → 儲存設定 修正路徑。",
+                        "資料夾 fallback", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    _settings.Storage.AniloxRootPath = newRoot;
+                    aniloxRoot = newRoot;
+                    ConfigManager.SaveInspectionSettings(_settings);
+                }
+
+                // 建立所有子目錄
+                Directory.CreateDirectory(aniloxRoot);
+                Directory.CreateDirectory(_settings.Storage.CaptureRootPath);
+                Directory.CreateDirectory(_settings.Storage.LogsPath);
+                Directory.CreateDirectory(_settings.Storage.BackgroundPath);
+                Directory.CreateDirectory(_settings.Storage.DcfDirPath);
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"[EnsureAniloxFolderStructure] {ex}");
+            }
         }
 
         /// <summary>純業務服務：不依賴任何 UI 控制項。</summary>

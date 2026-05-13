@@ -43,7 +43,7 @@
   },
   "Storage": {
     "EnableAutoCapture": true,
-    "CaptureRootPath": "D:\\AniloxCaptures",
+    "AniloxRootPath": "D:\\Anilox",
     "SaveOriginalBmp": false,
     "LocalMinFreeGB": 100,
     "RemotePath": "\\\\192.168.10.20\\AniloxStorage",
@@ -55,7 +55,7 @@
     "Port": 502
   },
   "CameraParam": {
-    "DcfPath": "D:\\AniloxCaptures\\dcf\\Radient_Config.dcf"
+    "DcfPath": "D:\\Anilox\\Dcf\\Radient_Config.dcf"
   },
   "Light": {
     "Enabled": true,

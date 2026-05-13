@@ -108,7 +108,7 @@ namespace AniloxRoll.Monitor.Core.Data
             // Storage
             sb.AppendLine("  \"Storage\": {");
             sb.AppendLine($"    \"EnableAutoCapture\": {(T.EnableAutoCapture ? "true" : "false")},");
-            sb.AppendLine($"    \"CaptureRootPath\": \"{SettingsStoreHelper.EscapeJson(T.CaptureRootPath)}\",");
+            sb.AppendLine($"    \"AniloxRootPath\": \"{SettingsStoreHelper.EscapeJson(T.AniloxRootPath)}\",");
             sb.AppendLine($"    \"SaveOriginalBmp\": {(T.SaveOriginalBmp ? "true" : "false")},");
             sb.AppendLine($"    \"LocalMinFreeGB\": {T.LocalMinFreeGB},");
             sb.AppendLine($"    \"RemotePath\": \"{SettingsStoreHelper.EscapeJson(T.RemotePath)}\",");
@@ -275,10 +275,14 @@ namespace AniloxRoll.Monitor.Core.Data
         private static StorageSettings ParseStorage(string json)
         {
             string obj = SettingsStoreHelper.ExtractObject(json, "Storage");
+            // 向後相容：舊 JSON 用 CaptureRootPath (D:\AniloxCaptures)，新 JSON 用 AniloxRootPath (D:\Anilox)。
+            // 舊版讀取時推回：AniloxRootPath = CaptureRootPath 的父目錄（D:\AniloxCaptures → D:\），不對；
+            // 直接 fallback InspectionDefaults.AniloxRootPath（D:\Anilox）較合理（舊資料不動，新資料用新位置）。
+            string aniloxRoot = SettingsStoreHelper.GetString(obj, "AniloxRootPath", InspectionDefaults.AniloxRootPath);
             return new StorageSettings
             {
                 EnableAutoCapture    = SettingsStoreHelper.GetBool  (obj, "EnableAutoCapture",    InspectionDefaults.EnableAutoCapture),
-                CaptureRootPath      = SettingsStoreHelper.GetString(obj, "CaptureRootPath",      InspectionDefaults.CaptureRootPath),
+                AniloxRootPath       = aniloxRoot,
                 // 向後相容：舊 JSON 有 UseCompressedCapture（true=壓縮），反轉為 SaveOriginalBmp
                 SaveOriginalBmp      = obj.Contains("SaveOriginalBmp")
                     ? SettingsStoreHelper.GetBool(obj, "SaveOriginalBmp", InspectionDefaults.SaveOriginalBmp)

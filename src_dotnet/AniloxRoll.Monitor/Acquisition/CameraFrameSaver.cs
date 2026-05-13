@@ -179,15 +179,18 @@ namespace AniloxRoll.Monitor.Core.Camera
         private static DateTime _lastVramQuery;
         private static readonly TimeSpan VramQueryInterval = TimeSpan.FromSeconds(2);
 
-        /// <summary>初始化 resource log 檔案（啟動時呼叫一次）。</summary>
-        public static void InitResourceLog(string captureRootPath)
+        /// <summary>初始化 resource log 檔案（啟動時呼叫一次）。
+        /// 傳入完整的 logs 目錄路徑（如 D:\Anilox\Logs），呼叫端負責 AniloxRoot fallback 與目錄建立。</summary>
+        public static void InitResourceLog(string logsPath)
         {
             try
             {
-                string baseDir = !string.IsNullOrEmpty(captureRootPath) && Directory.Exists(Path.GetPathRoot(captureRootPath))
-                    ? captureRootPath
-                    : AppDomain.CurrentDomain.BaseDirectory;
-                string dir = Path.Combine(baseDir, "logs");
+                if (string.IsNullOrWhiteSpace(logsPath))
+                {
+                    System.Diagnostics.Trace.WriteLine("[ResourceLog] logsPath 空，初始化跳過");
+                    return;
+                }
+                string dir = logsPath;
                 Directory.CreateDirectory(dir);
 
                 // 啟動時把「昨天以前」的多個 resource-monitor-yyyyMMdd-HHmmss.csv 合成

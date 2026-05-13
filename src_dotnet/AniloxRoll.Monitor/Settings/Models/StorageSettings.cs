@@ -8,10 +8,15 @@ namespace AniloxRoll.Monitor.Core.Data
     {
         [DisplayName("存檔")]     public bool EnableAutoCapture { get; set; } = InspectionDefaults.EnableAutoCapture;
         [DisplayName("存原圖")]   public bool SaveOriginalBmp { get; set; } = InspectionDefaults.SaveOriginalBmp;
-        [DisplayName("存圖目錄")] public string CaptureRootPath { get; set; } = InspectionDefaults.CaptureRootPath;
 
-        // 自動推算，不需獨立設定
-        public string BackgroundPath => Path.Combine(CaptureRootPath, "bg");
+        /// <summary>Anilox 資料根目錄（如 D:\Anilox），Captures/Bg/Dcf/Logs 為其子目錄。</summary>
+        [DisplayName("Anilox 根目錄")] public string AniloxRootPath { get; set; } = InspectionDefaults.AniloxRootPath;
+
+        // 子目錄路徑均由 AniloxRootPath 推算（PropertyGrid 不顯示，避免使用者改錯）
+        [Browsable(false)] public string CaptureRootPath => Path.Combine(AniloxRootPath, "Captures");
+        [Browsable(false)] public string BackgroundPath  => Path.Combine(AniloxRootPath, "Bg");
+        [Browsable(false)] public string LogsPath        => Path.Combine(AniloxRootPath, "Logs");
+        [Browsable(false)] public string DcfDirPath      => Path.Combine(AniloxRootPath, "Dcf");
 
         [DisplayName("本地預留磁碟空間")] public int LocalMinFreeGB { get; set; } = InspectionDefaults.LocalMinFreeGB;
         [DisplayName("遠端路徑")]         public string RemotePath       { get; set; } = InspectionDefaults.RemotePath;
@@ -19,7 +24,7 @@ namespace AniloxRoll.Monitor.Core.Data
 
         public void Validate()
         {
-            if (string.IsNullOrWhiteSpace(CaptureRootPath)) CaptureRootPath = InspectionDefaults.CaptureRootPath;
+            if (string.IsNullOrWhiteSpace(AniloxRootPath)) AniloxRootPath = InspectionDefaults.AniloxRootPath;
             if (LocalMinFreeGB < 1) LocalMinFreeGB = InspectionDefaults.LocalMinFreeGB;
             if (RemotePath == null) RemotePath = InspectionDefaults.RemotePath;
             if (RemoteConfigPath == null) RemoteConfigPath = InspectionDefaults.RemoteConfigPath;

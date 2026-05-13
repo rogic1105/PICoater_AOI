@@ -181,8 +181,11 @@ PICoater_AOI/
 |---------|------|--------|------|
 | 存檔 | `EnableAutoCapture` | true | 取像時自動存檔 |
 | 存原圖 | `SaveOriginalBmp` | false | 額外存原始 BMP |
-| 存檔目錄 | `CaptureRootPath` | D:\AniloxCaptures | 存檔根目錄 |
-| 存背景目錄 | （自動推算） | `CaptureRootPath\bg` | 只讀，不顯示於 PropertyGrid |
+| Anilox 根目錄 | `AniloxRootPath` | D:\Anilox | 資料根目錄；磁碟不存在時自動 fallback 到 C:\Anilox + MessageBox + 寫回 settings |
+| 存檔目錄 | （computed）| `{AniloxRoot}\Captures` | 影像 + 統計 CSV；不顯示於 PropertyGrid |
+| 存背景目錄 | （computed）| `{AniloxRoot}\Bg` | StandardBgSub 背景影像；不顯示 |
+| Logs 目錄 | （computed）| `{AniloxRoot}\Logs` | Resource Log；不顯示 |
+| Dcf 目錄 | （computed）| `{AniloxRoot}\Dcf` | MIL DCF；不顯示 |
 | 預留空間 (GB) | `LocalMinFreeGB` | 100 | 磁碟可用空間低於此值觸發循環儲存，刪最舊日期影像（CSV 保留） |
 | 遠端路徑 | `RemotePath` | \\192.168.10.20\AniloxStorage | 遠端複製目標路徑（空=不複製） |
 | 遠端設定路徑 | `RemoteConfigPath` | （由 RemotePath 自動推算） | [Browsable(false)] 開發者設定，改 JSON 生效；空值時自動從 RemotePath 的伺服器 IP 推算 |
