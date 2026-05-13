@@ -189,6 +189,11 @@ namespace AniloxRoll.Monitor.Core.Camera
                     : AppDomain.CurrentDomain.BaseDirectory;
                 string dir = Path.Combine(baseDir, "logs");
                 Directory.CreateDirectory(dir);
+
+                // 啟動時把「昨天以前」的多個 resource-monitor-yyyyMMdd-HHmmss.csv 合成
+                // 以日為單位的 resource-monitor-yyyyMMdd.csv（今天的檔不動，可能還在被別的程式寫入）
+                MergeOldResourceLogs(dir);
+
                 _resourceLogPath = Path.Combine(dir, $"resource-monitor-{DateTime.Now:yyyyMMdd-HHmmss}.csv");
 
                 var proc = System.Diagnostics.Process.GetCurrentProcess();
@@ -210,6 +215,95 @@ namespace AniloxRoll.Monitor.Core.Camera
             catch (Exception ex)
             {
                 System.Diagnostics.Trace.WriteLine($"[ResourceLog] 初始化失敗: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 將 logs/ 內「昨天以前」的 resource-monitor-yyyyMMdd-HHmmss.csv 小檔，
+        /// 按日合併成 resource-monitor-yyyyMMdd.csv。合併成功後刪除原始小檔。
+        /// 排除「今天」的檔（程式可能還在寫）。
+        /// </summary>
+        private static void MergeOldResourceLogs(string logDir)
+        {
+            const string prefix = "resource-monitor-";
+            if (!Directory.Exists(logDir)) return;
+
+            string today = DateTime.Now.ToString("yyyyMMdd");
+
+            // Group: yyyyMMdd → 該日的所有小檔（含 HHmmss 的）
+            var grouped = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<string>>();
+            foreach (var file in Directory.GetFiles(logDir, prefix + "*.csv"))
+            {
+                string name = Path.GetFileNameWithoutExtension(file);
+                if (!name.StartsWith(prefix)) continue;
+                string rest = name.Substring(prefix.Length);
+                if (rest.Length <= 8) continue;                 // "yyyyMMdd" 是已合併目標檔，跳過
+                if (rest.Length < 9 || rest[8] != '-') continue; // 需為 yyyyMMdd-HHmmss 形式
+                string datePart = rest.Substring(0, 8);
+                if (!System.Text.RegularExpressions.Regex.IsMatch(datePart, @"^\d{8}$")) continue;
+                if (datePart == today) continue;                 // 今天的不動
+
+                if (!grouped.TryGetValue(datePart, out var list))
+                {
+                    list = new System.Collections.Generic.List<string>();
+                    grouped[datePart] = list;
+                }
+                list.Add(file);
+            }
+
+            foreach (var kv in grouped)
+            {
+                string datePart = kv.Key;
+                var files = kv.Value;
+                files.Sort();  // 按檔名升序 = 時間升序（HHmmss）
+
+                string targetPath = Path.Combine(logDir, $"{prefix}{datePart}.csv");
+                bool targetExisted = File.Exists(targetPath);
+
+                try
+                {
+                    using (var sw = new StreamWriter(targetPath, append: true))
+                    {
+                        foreach (var src in files)
+                        {
+                            bool firstLine = true;
+                            using (var sr = new StreamReader(src))
+                            {
+                                string line;
+                                while ((line = sr.ReadLine()) != null)
+                                {
+                                    if (firstLine)
+                                    {
+                                        firstLine = false;
+                                        if (!targetExisted)
+                                        {
+                                            sw.WriteLine(line);  // 第一個檔的 header 寫入
+                                            targetExisted = true;
+                                        }
+                                        // 已寫過 header → 跳過後續檔的 header
+                                    }
+                                    else
+                                    {
+                                        sw.WriteLine(line);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 合併成功 → 刪除原始小檔
+                    int deleted = 0;
+                    foreach (var src in files)
+                    {
+                        try { File.Delete(src); deleted++; }
+                        catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"[ResourceLog] Delete {Path.GetFileName(src)} failed: {ex.Message}"); }
+                    }
+                    System.Diagnostics.Trace.WriteLine($"[ResourceLog] Merged {deleted} files → {Path.GetFileName(targetPath)}");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Trace.WriteLine($"[ResourceLog] Merge {datePart} failed: {ex.Message}");
+                }
             }
         }
 

@@ -1407,7 +1407,8 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <div class="v-arrow" data-label="串接"></div>
 <div class="out-seq">
 <div class="box action">建立 logs/ 目錄（存圖根目錄下，fallback 到程式目錄）</div>
-<div class="box action">建立 resource-monitor-yyyyMMdd-HHmmss.csv</div>
+<div class="box action">MergeOldResourceLogs：把「昨天以前」的 resource-monitor-yyyyMMdd-HHmmss.csv 小檔，按日合併成 resource-monitor-yyyyMMdd.csv（同日多個小檔依時間升序 append，header 只保留一份），合併成功後刪除原始小檔。今天的檔不動。</div>
+<div class="box action">建立 resource-monitor-yyyyMMdd-HHmmss.csv（本次啟動的新小檔）</div>
 <div class="box action">寫入 CSV header</div>
 <div class="box action">初始化 CPU 基準（TotalProcessorTime + ProcessorCount）</div>
 </div>
