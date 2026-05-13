@@ -69,7 +69,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 // 複雜控制項（PropertyGrid 等）自行管理內部佈局，不可遞迴否則破壞 internal controls。
                 if (c.Dock != DockStyle.None || c is TabPage)
                 {
-                    bool isLayoutContainer = (c is TabControl || c is Panel || c is GroupBox || c is SplitContainer);
+                    bool isLayoutContainer = (c is TabControl || c is Panel || c is GroupBox || c is SplitContainer || c is TabPage);
                     if (isLayoutContainer)
                         RecordRecursive(c);
                     continue;
@@ -127,7 +127,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 {
                     // Dock/TabPage 控制項未記錄；只遞迴容器型控制項，
                     // 避免進入 PropertyGrid 等複雜控制項的 internal controls。
-                    if (c is TabControl || c is Panel || c is GroupBox || c is SplitContainer)
+                    if (c is TabControl || c is Panel || c is GroupBox || c is SplitContainer || c is TabPage)
                         ScaleRecursive(c, formSize);
                     continue;
                 }
@@ -170,7 +170,14 @@ namespace AniloxRoll.Monitor.UI.Widgets
                     {
                         if (!_initialized) return;
                         var tab = tc.SelectedTab;
-                        if (tab != null) RecordRecursive(tab);
+                        if (tab == null) return;
+                        // 補記錄（動態新增 control 用）+ 重新 scale：
+                        // WinForms TabControl 對 inactive TabPage 有 lazy layout，maximize 時
+                        // ScaleRecursive 寫入的 Bounds 可能在 TabPage 變 active 時被 layout 引擎
+                        // reset 回 Anchor (Top|Left) 預設位置 → 切 tab 看不到放大。
+                        // 切 tab 時主動重 scale 該 tab，依當前 Form 尺寸恢復正確比例。
+                        RecordRecursive(tab);
+                        ScaleRecursive(tab, _form.ClientSize);
                     };
                 }
                 HookTabControls(c);

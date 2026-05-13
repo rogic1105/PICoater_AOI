@@ -71,8 +71,11 @@
 - `SaveViewIfNeeded()` 在 `Image == null` 時 return 但不重置 `_shouldRestoreView`
 
 ### ProportionalScaler
-- `AutoScaleMode = None`，Scaler 全權接管；不可混用 Anchor
-- TabControl 延遲頁面在首次切頁時才記錄
+- `AutoScaleMode = None`，Scaler 全權接管；不可混用 Anchor（Anchor 被 RecordRecursive 改成 `Top|Left`）
+- `TabPage` 加入 `isLayoutContainer` 名單（同 TabControl/Panel/GroupBox/SplitContainer），Initialize 時遞迴記錄所有 TabPage 內 controls
+- TabControl `SelectedIndexChanged` 觸發時除 `RecordRecursive(tab)` 外，主動 `ScaleRecursive(tab, _form.ClientSize)` 重 scale 該 tab。WinForms 對 inactive TabPage 有 lazy layout，maximize 時寫入的 Bounds 可能在 TabPage 變 active 時被 layout 引擎重設回 `Top|Left` Anchor 預設位置 → 不切 tab 直接 maximize 看不到放大；切 tab 主動 scale 解決此問題
+- `_scaler.Initialize()` 在建構子內呼叫（非 Shown 內）：須早於任何 Resize 事件才能正確記錄 baseSize 與 Designer 預設 Bounds 作為 ratio 基準
+- 機台角色 = Storage 時 `ApplyStorageModeUi` 在 Scaler 建立前移除 `tabPageLiveView`，Scaler 自動只處理剩下 2 個 tab
 
 ### Chart ZoomReset/Clear 禁忌
 - 不可在 `await` 前執行 chart clear/reset（會被後續 `UpdateDataAndView` 覆蓋）
