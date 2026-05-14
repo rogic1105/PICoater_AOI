@@ -24,6 +24,13 @@
 - 流程：`calcColumnMeans_RemoveOutliers` → `calcColumnBackground` → `gaussianBlur`（一次共用）→ `computeHessianResponse(V)` → `computeHessianResponse(H)`
 - `_ridgeBuffer` = vertical ridge，`_muraBuffer` = horizontal ridge（步驟 5 覆蓋去背圖）
 
+### 曲線中性化（峰值保留，無 clamp）
+- 曲線（`mura_curve_mean/max`、`mura_row_curve_mean/max`）從 **`d_hessian_resp_` 原始 float Hessian response** 計算，**在 scale+clamp 到 u8 之前**
+- 計算後套用 `scale_f32_inplace_gpu(..., scale_factor)` 做純 scalar 乘法（`scale_factor = 255/正規值`），**不 clamp** → 峰值保留、.bin 值可超過 255
+- u8 ridge 影像（`d_ridge_out` / `d_mura_out`）仍走 `scale_clamp_f32_to_u8_gpu` 顯示路徑，不影響 `.bin`
+- inline kernel `k_scale_f32_inplace` 定義在 `Module_GetPICoaterBackground.cu` 本檔內（不暴露到 SDK header）
+- 「正規值」是 capture-time 參數（演算法靈敏度校準），baked 進 `.bin` 是預期行為；不要試圖在 view-time 重新縮放（會擴散依賴到 chart/CSV/CheckLiveMura 多處，維護成本高 — 參考 memory `project_normalization_255_history`）
+
 ### CUDA Pinned Memory
 - 所有 NativeBufferPool buffer 使用 `CoreCV_AllocPinned`（cudaMallocHost）
 - NativeBufferPool.Dispose：`_isDisposed = true` 必須在所有 `FreePinned` 之前設定（防重複 Free）

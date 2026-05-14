@@ -17,6 +17,19 @@ namespace picoater {
         return (offset + alignment - 1) & ~(alignment - 1);
     }
 
+    // [中性化曲線] 對 float 陣列就地乘上 scale_factor，不 clamp（保留峰值資訊）
+    __global__ void k_scale_f32_inplace(float* d, int N, float s) {
+        int i = blockIdx.x * blockDim.x + threadIdx.x;
+        if (i < N) d[i] *= s;
+    }
+
+    inline void scale_f32_inplace_gpu(float* d_buf, int N, float scale, cudaStream_t stream) {
+        if (d_buf == nullptr || N <= 0) return;
+        int block = 256;
+        int grid  = (N + block - 1) / block;
+        k_scale_f32_inplace<<<grid, block, 0, stream>>>(d_buf, N, scale);
+    }
+
     PICoaterDetector::PICoaterDetector() {}
     PICoaterDetector::~PICoaterDetector() { Release(); }
 
@@ -135,12 +148,18 @@ namespace picoater {
         if (doVertical) {
             core::computeHessianResponse_gpu(d_hessian_f32_, d_hessian_resp_, m_width, m_height,
                                              core::detectionMode::VERTICAL, stream);
-            core::scale_clamp_f32_to_u8_gpu(d_hessian_resp_, d_ridge_out, num_pixels, scale_factor, stream);
 
-            core::calcColumnMeans_gpu<uint8_t>(
-                d_ridge_out, d_mura_curve_mean, m_width, m_height, stream, d_workspace_);
-            core::calcColumnMax_gpu<uint8_t>(
-                d_ridge_out, d_mura_curve_max, m_width, m_height, stream);
+            // [中性化] 曲線從原始 float Hessian response 計算（在 clamp+u8 量化之前），
+            // 再套用 255/正規值 純 scale（不 clamp），保留峰值資訊以利後驗調整閾值。
+            core::calcColumnMeans_gpu<float>(
+                d_hessian_resp_, d_mura_curve_mean, m_width, m_height, stream, d_workspace_);
+            core::calcColumnMax_gpu<float>(
+                d_hessian_resp_, d_mura_curve_max, m_width, m_height, stream);
+            scale_f32_inplace_gpu(d_mura_curve_mean, m_width, scale_factor, stream);
+            scale_f32_inplace_gpu(d_mura_curve_max,  m_width, scale_factor, stream);
+
+            // u8 ridge 影像（顯示用，仍走 scale+clamp 路徑）
+            core::scale_clamp_f32_to_u8_gpu(d_hessian_resp_, d_ridge_out, num_pixels, scale_factor, stream);
         }
 
         // Step 5: Horizontal ridge + row curves
@@ -148,22 +167,23 @@ namespace picoater {
             core::computeHessianResponse_gpu(d_hessian_f32_, d_hessian_resp_, m_width, m_height,
                                              core::detectionMode::HORIZONTAL, stream);
 
+            // [中性化] 列曲線從原始 float Hessian response 計算，再套用 255/正規值 純 scale（不 clamp）
+            if (d_mura_row_curve_mean != nullptr) {
+                core::calcRowMeans_gpu<float>(d_hessian_resp_, d_mura_row_curve_mean, m_width, m_height, stream);
+                scale_f32_inplace_gpu(d_mura_row_curve_mean, m_height, scale_factor, stream);
+            }
+            if (d_mura_row_curve_max != nullptr) {
+                core::calcRowMax_gpu<float>(d_hessian_resp_, d_mura_row_curve_max, m_width, m_height, stream);
+                scale_f32_inplace_gpu(d_mura_row_curve_max, m_height, scale_factor, stream);
+            }
+
+            // u8 ridge 影像（顯示用）
             if (doVertical) {
                 // vertical+horizontal: horizontal image → d_mura_out (overwrite bg-removed, already consumed)
                 core::scale_clamp_f32_to_u8_gpu(d_hessian_resp_, d_mura_out, num_pixels, scale_factor, stream);
-
-                if (d_mura_row_curve_mean != nullptr)
-                    core::calcRowMeans_gpu<uint8_t>(d_mura_out, d_mura_row_curve_mean, m_width, m_height, stream);
-                if (d_mura_row_curve_max != nullptr)
-                    core::calcRowMax_gpu<uint8_t>(d_mura_out, d_mura_row_curve_max, m_width, m_height, stream);
             } else {
                 // horizontal only: horizontal image → d_ridge_out (main output)
                 core::scale_clamp_f32_to_u8_gpu(d_hessian_resp_, d_ridge_out, num_pixels, scale_factor, stream);
-
-                if (d_mura_row_curve_mean != nullptr)
-                    core::calcRowMeans_gpu<uint8_t>(d_ridge_out, d_mura_row_curve_mean, m_width, m_height, stream);
-                if (d_mura_row_curve_max != nullptr)
-                    core::calcRowMax_gpu<uint8_t>(d_ridge_out, d_mura_row_curve_max, m_width, m_height, stream);
             }
         }
 
