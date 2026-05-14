@@ -124,7 +124,7 @@ PICoater_AOI/
 
 ## 檢測參數速查（PropertyGrid 屬性）
 
-使用者在【檢測設定】看到的參數。溝通格式：「屬性名-值」（例如「正規值-0.2」「存檔-T」）。
+使用者在【檢測設定】看到的參數。溝通格式：「屬性名-值」（例如「垂直正規值-0.2」「存檔-T」）。
 
 ### 0. 機台設定
 
@@ -151,7 +151,8 @@ PICoater_AOI/
 |---------|------|--------|------|
 | ── 演算法 ── | （分隔列，唯讀） | — | — |
 | 去背演算法 | `db_Algorithm` → `Algorithm` | SingleFrameBgSub | None / SingleFrameBgSub / StandardBgSub |
-| 正規值 | `dc_HessianMaxFactor` → `HessianMaxFactor` | 0.3 | Hessian 正規化係數 |
+| 垂直正規值 | `dc_HessianMaxFactorV` → `HessianMaxFactorV` | 0.3 | V Hessian 正規化係數；同時是 capture 時送進 native 的單一 HM（baked-in .bin）|
+| 水平正規值 | `dd_HessianMaxFactorH` → `HessianMaxFactorH` | 0.3 | H Hessian 正規化係數（view-time only，僅作 row chart 顯示縮放）|
 | ── 檢出標準 ── | （分隔列，唯讀） | — | — |
 | 檢出方向 | `eb_RidgeDir` → `RidgeDir` | Both | 垂直 / 水平 / 全部；決定哪個方向 Mura 超標才觸發 DO1 |
 | 垂直平均閾值 | `ec_ErrorValueMeanV` → `ErrorValueMeanV` | 0.2 | V chart (chartMuraVertical / chartOverview / chartLiveOverview / muraChartVerticalLive) Mean 閾值線；CheckLiveMura V 方向 DO 判定 |

@@ -127,7 +127,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             if (_inspectionService == null || _settings == null) return;
             // Pipeline 用 V 閾值（pipeline 主處理方向，閾值在 UI/chart/DO 判斷用，pipeline 不依賴）
             _inspectionService.UpdateAlgorithmParams(
-                _settings.HessianMaxFactor,
+                _settings.HessianMaxFactorV,
                 _settings.ErrorValueMeanV,
                 _settings.ErrorValueMaxV,
                 InspectionRecipe.RidgeDirectionToNative(_settings.RidgeDir)

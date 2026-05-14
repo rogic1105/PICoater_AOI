@@ -218,7 +218,8 @@ def write_csv(records, output_root):
             for c in range(1, 8):
                 pos_mm = (c - 1) * cam_width_mm
                 cfg_parts.append(f"Cam{c}_Pos={pos_mm:.2f}")
-            cfg_parts.append(f"HessianMaxFactor={HESSIAN_MAX_FACTOR:.4f}")
+            cfg_parts.append(f"HessianMaxFactorV={HESSIAN_MAX_FACTOR:.4f}")
+            cfg_parts.append(f"HessianMaxFactorH={HESSIAN_MAX_FACTOR:.4f}")
             cfg_parts.append(f"ErrorValueMean={ERROR_VALUE_MEAN:.4f}")
             cfg_parts.append(f"ErrorValueMax={ERROR_VALUE_MAX:.4f}")
             f.write(",".join(cfg_parts) + "\n")

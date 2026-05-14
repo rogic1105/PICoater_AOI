@@ -15,7 +15,10 @@ namespace AniloxRoll.Monitor.Core.Services
         public int[] CamGrabHeight { get; }    // length 7，高度滑桿（line scan 行數）
         public double[] CamExposureUs { get; } // length 7，曝光滑桿（μs）
         public double[] CamLineRateHz { get; } // length 7，線掃滑桿（Hz）
-        public float HessianMaxFactor { get; }
+        /// <summary>垂直正規值 — 同時是 capture 時送進 native 的單一 HM，bin 中 baked-in 的縮放係數。</summary>
+        public float HessianMaxFactorV { get; }
+        /// <summary>水平正規值 — view-time only，僅供 H 曲線顯示縮放參考。</summary>
+        public float HessianMaxFactorH { get; }
         public float ErrorValueMeanV { get; }  // 垂直平均閾值
         public float ErrorValueMaxV  { get; }  // 垂直最大閾值
         public float ErrorValueMeanH { get; }  // 水平平均閾值
@@ -27,7 +30,7 @@ namespace AniloxRoll.Monitor.Core.Services
         public CsvConfigSnapshot(
             double[] camOps, double[] camPos, int[] camGrabHeight,
             double[] camExposureUs, double[] camLineRateHz,
-            float hessianMaxFactor,
+            float hessianMaxFactorV, float hessianMaxFactorH,
             float errorValueMeanV, float errorValueMaxV,
             float errorValueMeanH, float errorValueMaxH,
             double trimHeadMm, double trimTailMm,
@@ -38,7 +41,8 @@ namespace AniloxRoll.Monitor.Core.Services
             CamGrabHeight = camGrabHeight ?? new int[7];
             CamExposureUs = camExposureUs ?? new double[7];
             CamLineRateHz = camLineRateHz ?? new double[7];
-            HessianMaxFactor = hessianMaxFactor;
+            HessianMaxFactorV = hessianMaxFactorV;
+            HessianMaxFactorH = hessianMaxFactorH;
             ErrorValueMeanV = errorValueMeanV;
             ErrorValueMaxV  = errorValueMaxV;
             ErrorValueMeanH = errorValueMeanH;
@@ -57,7 +61,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 (int[])s.Acquisition?.CameraGrabHeight?.Clone(),
                 (double[])s.Acquisition?.CameraExposureTimeUs?.Clone(),
                 (double[])s.Acquisition?.CameraLineRateHz?.Clone(),
-                s.HessianMaxFactor,
+                s.HessianMaxFactorV, s.HessianMaxFactorH,
                 s.ErrorValueMeanV, s.ErrorValueMaxV,
                 s.ErrorValueMeanH, s.ErrorValueMaxH,
                 s.TrimHeadMm,
@@ -76,7 +80,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 for (int i = 0; i < 7; i++) sb.Append(CamGrabHeight[i]).Append(',');
                 for (int i = 0; i < 7; i++) sb.Append(CamExposureUs[i].ToString("F2")).Append(',');
                 for (int i = 0; i < 7; i++) sb.Append(CamLineRateHz[i].ToString("F2")).Append(',');
-                sb.Append(HessianMaxFactor.ToString("F4")).Append(',');
+                sb.Append(HessianMaxFactorV.ToString("F4")).Append(',');
+                sb.Append(HessianMaxFactorH.ToString("F4")).Append(',');
                 sb.Append(ErrorValueMeanV.ToString("F4")).Append(',');
                 sb.Append(ErrorValueMaxV.ToString("F4")).Append(',');
                 sb.Append(ErrorValueMeanH.ToString("F4")).Append(',');
@@ -103,7 +108,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 sb.Append($",Cam{i + 1}_Exp={CamExposureUs[i]:F2}");
             for (int i = 0; i < 7; i++)
                 sb.Append($",Cam{i + 1}_Lr={CamLineRateHz[i]:F2}");
-            sb.Append($",HessianMaxFactor={HessianMaxFactor:F4}");
+            sb.Append($",HessianMaxFactorV={HessianMaxFactorV:F4}");
+            sb.Append($",HessianMaxFactorH={HessianMaxFactorH:F4}");
             sb.Append($",ErrorValueMeanV={ErrorValueMeanV:F4}");
             sb.Append($",ErrorValueMaxV={ErrorValueMaxV:F4}");
             sb.Append($",ErrorValueMeanH={ErrorValueMeanH:F4}");
@@ -131,7 +137,10 @@ namespace AniloxRoll.Monitor.Core.Services
             int[] grabH = new int[7];
             double[] expUs = new double[7];
             double[] lrHz = new double[7];
-            float hessian = 0;
+            float hessianV = 0, hessianH = 0;
+            bool hasHessianV = false, hasHessianH = false;
+            float legacyHessian = 0;
+            bool hasLegacyHessian = false;
             float meanV = 0, maxV = 0, meanH = 0, maxH = 0;
             bool hasMeanV = false, hasMaxV = false, hasMeanH = false, hasMaxH = false;
             float legacyMean = 0, legacyMax = 0;
@@ -176,8 +185,12 @@ namespace AniloxRoll.Monitor.Core.Services
                     if (camIdx >= 0 && camIdx < 7)
                         double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out lrHz[camIdx]);
                 }
+                else if (key == "HessianMaxFactorV")
+                { float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out hessianV); hasHessianV = true; }
+                else if (key == "HessianMaxFactorH")
+                { float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out hessianH); hasHessianH = true; }
                 else if (key == "HessianMaxFactor")
-                    float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out hessian);
+                { float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out legacyHessian); hasLegacyHessian = true; }
                 else if (key == "ErrorValueMeanV")
                 { float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out meanV); hasMeanV = true; }
                 else if (key == "ErrorValueMaxV")
@@ -201,9 +214,11 @@ namespace AniloxRoll.Monitor.Core.Services
             if (!hasMeanH && hasLegacyMean) meanH = legacyMean;
             if (!hasMaxV  && hasLegacyMax)  maxV  = legacyMax;
             if (!hasMaxH  && hasLegacyMax)  maxH  = legacyMax;
+            if (!hasHessianV && hasLegacyHessian) hessianV = legacyHessian;
+            if (!hasHessianH && hasLegacyHessian) hessianH = legacyHessian;
 
             result = new CsvConfigSnapshot(ops, pos, grabH, expUs, lrHz,
-                hessian, meanV, maxV, meanH, maxH, trimHead, trimTail, ts);
+                hessianV, hessianH, meanV, maxV, meanH, maxH, trimHead, trimTail, ts);
             return true;
         }
     }

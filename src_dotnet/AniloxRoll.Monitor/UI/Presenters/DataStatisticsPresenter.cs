@@ -517,6 +517,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
         {
             if (string.IsNullOrWhiteSpace(_statsDataRootPath)) return;
 
+            // view-time threshold context：以當前 Settings 的閾值 + 垂直正規值即時重算 Pass/Fail，
+            // 不再用 CSV 內的 MaxExceed/MeanExceed（那是 capture-time baked-in）。
+            var ctx = new ThresholdContext(
+                _ctx.Settings.HessianMaxFactorV,
+                _ctx.Settings.ErrorValueMeanV,
+                _ctx.Settings.ErrorValueMaxV);
+
             if (_activeStatMode != _ctx.GroupBoxTimeRange
                 && _ctx.CbGrabIdStart.SelectedIndex >= 0 && _ctx.CbGrabIdEnd.SelectedIndex >= 0
                 && _grabIdInfos.Count > 0)
@@ -525,9 +532,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 var endInfo = _grabIdInfos[_ctx.CbGrabIdEnd.SelectedIndex];
 
                 var stats = InspectionStatisticsService.ComputeByGrabIdRange(
-                    _statsDataRootPath, startInfo.GrabId, endInfo.GrabId);
+                    _statsDataRootPath, startInfo.GrabId, endInfo.GrabId, ctx);
                 var details = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
-                    _statsDataRootPath, startInfo.GrabId, endInfo.GrabId);
+                    _statsDataRootPath, startInfo.GrabId, endInfo.GrabId, ctx);
 
                 _statsPresenter.Update(stats);
                 _currentDetails = details;
@@ -537,9 +544,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 int ei = _ctx.CbGrabIdEnd.SelectedIndex;
                 int lo = Math.Min(si, ei); int hi = Math.Max(si, ei);
                 var rangeInfos = _grabIdInfos.GetRange(lo, hi - lo + 1);
-                // 單片模式也立即更新 chartMuraProfile（Data cb 變更不載圖，但 mura profile 要即時反映）；
-                // 後續若使用者切到 Review tab 觸發 LoadGrabStitchedViewAsync，SyncMuraProfileFromReview
-                // 會以 stitch 版資料覆蓋，確保與 chartOverview 一致。
                 UpdateMuraProfileChart(EvenSample(rangeInfos, 50));
                 return;
             }
@@ -555,9 +559,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 string endId = grabInfosInRange.OrderBy(g => g.GrabId, StringComparer.Ordinal).Last().GrabId;
 
                 var stats = InspectionStatisticsService.ComputeByGrabIdRange(
-                    _statsDataRootPath, startId, endId);
+                    _statsDataRootPath, startId, endId, ctx);
                 var details = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
-                    _statsDataRootPath, startId, endId);
+                    _statsDataRootPath, startId, endId, ctx);
 
                 _statsPresenter.Update(stats);
                 _currentDetails = details;
@@ -565,7 +569,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
             else
             {
-                var statsTime = InspectionStatisticsService.Compute(_statsDataRootPath, start, end);
+                var statsTime = InspectionStatisticsService.Compute(_statsDataRootPath, start, end, ctx);
                 _statsPresenter.Update(statsTime);
                 _currentDetails = new List<GrabDetail>();
                 ClearMuraProfileChart();
@@ -705,15 +709,49 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 return;
             }
 
-            // 始終顯示「最新一筆」單 grab 的 stitch-style 視圖（與 chartOverview 對齊）。
-            // _grabIdInfos / rangeInfos / grabInfosInRange 皆為 descending 排序，[0] = 最新。
-            // 多 grab 平均會稀釋峰值（曲線平緩接近 0），不符合使用者直覺需求。
-            UpdateMuraProfileForSingleGrab(grabIds[0]);
+            // 單片模式（GrpDataSingleSheet：cbDataGrabId 或 cbReviewGrabId 觸發）：
+            //   顯示「最新一筆」單 grab 的 stitch-style 視圖（與 chartOverview 對齊），
+            //   並套用 view-time 正規值 rescale（HM_capture / HM_current）讓改 PropertyGrid
+            //   正規值時曲線坡度立即變化。
+            // 範圍/時間模式（GroupBoxGrabIdRange / GroupBoxTimeRange）：
+            //   保留舊統計法 — LoadAvgMuraProfile 多 grab 平均，當作歷史快照不做 rescale
+            //   （跨 grab HM_capture 可能不同，rescale 沒乾淨語意）。
+            if (_activeStatMode == _ctx.GrpDataSingleSheet)
+            {
+                UpdateMuraProfileForSingleGrab(grabIds[0]);
+                return;
+            }
+
+            // ── 範圍/時間模式：舊 aggregate 邏輯 ──
+            var (meanDict, maxDict) = InspectionStatisticsService.LoadAvgMuraProfile(
+                _statsDataRootPath, grabIds);
+            if (meanDict.Count == 0)
+            {
+                ClearMuraProfileChart();
+                return;
+            }
+            int camCount = _ctx.CameraCount;
+            var allMean = new float[camCount][];
+            var allMax  = new float[camCount][];
+            for (int i = 0; i < camCount; i++)
+            {
+                meanDict.TryGetValue(i + 1, out allMean[i]);
+                maxDict.TryGetValue(i + 1, out allMax[i]);
+            }
+            CurveMergeHelper.UpdateOverviewChart(
+                allMean, allMax,
+                _ctx.Settings.GetCameraOpsUmArray(),
+                _ctx.Settings.GetCameraStartPositionMmArray(),
+                _ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV,
+                _muraProfileHelper, camCount,
+                StitchMode.Vertical, null);
         }
 
         /// <summary>
         /// 用單一 grab 的 .bin（MergeCurves 合多 capture）+ 該 grab 的 CSV #CFG OPS/Pos
         /// 更新 chartMuraProfile，與 chartOverview 完全對齊。不依賴 canvasMain 是否載入。
+        /// 套用 view-time 正規值 rescale：display = (bin/255) × (HM_capture / HM_current)；
+        /// 改 PropertyGrid 正規值會立刻反映在曲線坡度上。
         /// </summary>
         private void UpdateMuraProfileForSingleGrab(GrabIdInfo info)
         {
@@ -735,10 +773,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     CurveMergeHelper.MergeCurves(paths, out allMean[i], out allMax[i]);
             }
 
+            // view-time 正規值 rescale：chartMuraProfile 是垂直曲線，用 V 的 capture/current ratio
+            float captureHm = grabCfg?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
+            ApplyHessianRescale(allMean, allMax, captureHm, _ctx.Settings.HessianMaxFactorV);
+
             double[] ops = grabCfg?.CamOps  ?? _ctx.Settings.GetCameraOpsUmArray();
             double[] pos = grabCfg?.CamPos  ?? _ctx.Settings.GetCameraStartPositionMmArray();
-            float errMean = grabCfg?.ErrorValueMeanV ?? _ctx.Settings.ErrorValueMeanV;
-            float errMax  = grabCfg?.ErrorValueMaxV  ?? _ctx.Settings.ErrorValueMaxV;
+            float errMean = _ctx.Settings.ErrorValueMeanV;  // view-time 閾值用當前 Settings
+            float errMax  = _ctx.Settings.ErrorValueMaxV;
 
             CurveMergeHelper.UpdateOverviewChart(
                 allMean, allMax, ops, pos, errMean, errMax,
@@ -747,8 +789,47 @@ namespace AniloxRoll.Monitor.UI.Presenters
         }
 
         /// <summary>
-        /// SingleSheet 模式：直接使用 Review tab 已載入的曲線資料，
-        /// 確保 chartMuraProfile 與 chartOverview 完全一致（相同 OPS/Pos 與原始數值）。
+        /// 對 7 台相機的曲線陣列就地套用 (HM_capture / HM_current) ratio。
+        /// ratio=1 時略過（不浪費 CPU）。
+        /// </summary>
+        internal static void ApplyHessianRescale(float[][] allMean, float[][] allMax,
+            float captureHm, float currentHm)
+        {
+            if (captureHm <= 0f || currentHm <= 0f) return;
+            float ratio = captureHm / currentHm;
+            if (Math.Abs(ratio - 1.0f) < 0.0001f) return;
+            for (int i = 0; i < allMean.Length; i++)
+            {
+                if (allMean[i] != null)
+                    for (int j = 0; j < allMean[i].Length; j++) allMean[i][j] *= ratio;
+            }
+            for (int i = 0; i < allMax.Length; i++)
+            {
+                if (allMax[i] != null)
+                    for (int j = 0; j < allMax[i].Length; j++) allMax[i][j] *= ratio;
+            }
+        }
+
+        /// <summary>
+        /// 由 PropertyGrid 變更觸發：刷新 chartMuraProfile 的閾值線 + view-time 正規值 rescale。
+        /// 不重做 RefreshStats（避免重算統計）；只重畫 chart。
+        /// </summary>
+        public void RefreshMuraProfileForSettingsChange()
+        {
+            if (_muraProfileHelper == null) return;
+            _muraProfileHelper.SetThresholds(_ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV);
+            // 單片模式才需要按 HM 重算曲線坡度；aggregate 模式維持快照
+            if (_activeStatMode == _ctx.GrpDataSingleSheet
+                && _ctx.CbDataGrabId.SelectedIndex >= 0
+                && _ctx.CbDataGrabId.SelectedIndex < _grabIdInfos.Count)
+            {
+                UpdateMuraProfileForSingleGrab(_grabIdInfos[_ctx.CbDataGrabId.SelectedIndex]);
+            }
+        }
+
+        /// <summary>
+        /// SingleSheet 模式：直接使用 Review tab 已載入的曲線資料（已套 view-time HM rescale），
+        /// 確保 chartMuraProfile 與 chartOverview 完全一致（相同 OPS/Pos 與顯示值）。
         /// </summary>
         public void SyncMuraProfileFromReview(float[][] mean, float[][] max,
             double[] ops, double[] pos, float errMean, float errMax)
@@ -1052,11 +1133,23 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             if (!ok) return;
             int year = _chartYears[idx];
+            var ctx = BuildThresholdContext();
             FillPeriodChart(_ctx.ChartYearly,
                 InspectionStatisticsService.ComputeGroupedByMonthOfYear(_statsDataRootPath,
-                    new DateTime(year, 1, 1), new DateTime(year, 12, 31, 23, 59, 59)));
+                    new DateTime(year, 1, 1), new DateTime(year, 12, 31, 23, 59, 59), ctx));
 
             OnChartMonthIndexChanged(hint);
+        }
+
+        private ThresholdContext BuildThresholdContext() => new ThresholdContext(
+            _ctx.Settings.HessianMaxFactorV,
+            _ctx.Settings.ErrorValueMeanV,
+            _ctx.Settings.ErrorValueMaxV);
+
+        /// <summary>由 PropertyGrid 變更觸發：重畫 chartYearly/Monthly/Daily（以當前 Settings 重算 Pass/Fail）。</summary>
+        public void RefreshPeriodCharts()
+        {
+            if (_ctx.CbChartYear?.SelectedIndex >= 0) OnChartYearIndexChanged();
         }
 
         private void OnChartMonthIndexChanged() => OnChartMonthIndexChanged(null);
@@ -1075,7 +1168,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             int lastDay = DateTime.DaysInMonth(year, month);
             FillPeriodChart(_ctx.ChartMonthly,
                 InspectionStatisticsService.ComputeGroupedByDayOfMonth(_statsDataRootPath,
-                    new DateTime(year, month, 1), new DateTime(year, month, lastDay, 23, 59, 59)));
+                    new DateTime(year, month, 1), new DateTime(year, month, lastDay, 23, 59, 59),
+                    BuildThresholdContext()));
 
             OnChartDayIndexChanged();
         }
@@ -1094,7 +1188,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             int day = _chartDays[dIdx];
             FillPeriodChart(_ctx.ChartDaily,
                 InspectionStatisticsService.ComputeGroupedByHourOfDay(_statsDataRootPath,
-                    new DateTime(year, month, day), new DateTime(year, month, day, 23, 59, 59)));
+                    new DateTime(year, month, day), new DateTime(year, month, day, 23, 59, 59),
+                    BuildThresholdContext()));
         }
 
         // ══════════════════════════════════════════════════════════════

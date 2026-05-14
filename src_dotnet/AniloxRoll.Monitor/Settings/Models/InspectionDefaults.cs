@@ -22,7 +22,8 @@ namespace AniloxRoll.Monitor.Core.Data
         // ── 2. 檢測配方 ────────────────────────────────────────────────────
         public static readonly BackgroundAlgorithm Algorithm  = BackgroundAlgorithm.SingleFrameBgSub; // 去背演算法
         public static readonly RidgeDirection       RidgeDir  = RidgeDirection.Both;                 // 檢出方向
-        public const float  HessianMaxFactor        = 0.3f;   // 正規值
+        public const float  HessianMaxFactorV       = 0.3f;   // 垂直正規值（同時當作 capture-time 送進 native 的 HM）
+        public const float  HessianMaxFactorH       = 0.3f;   // 水平正規值（view-time only，僅作 H 曲線顯示縮放）
         public const float  ErrorValueMeanV         = 0.2f;   // Mura 圖表 > 垂直平均閾值
         public const float  ErrorValueMaxV          = 0.4f;   // Mura 圖表 > 垂直最大閾值
         public const float  ErrorValueMeanH         = 0.2f;   // Mura 圖表 > 水平平均閾值

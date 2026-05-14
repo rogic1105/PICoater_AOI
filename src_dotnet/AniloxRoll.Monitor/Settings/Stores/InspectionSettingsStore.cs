@@ -79,7 +79,8 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine("  \"Recipe\": {");
             sb.AppendLine($"    \"Algorithm\": \"{R.Algorithm}\",");
             sb.AppendLine($"    \"RidgeDir\": \"{R.RidgeDir}\",");
-            sb.AppendLine($"    \"HessianMaxFactor\": {F(R.HessianMaxFactor)},");
+            sb.AppendLine($"    \"HessianMaxFactorV\": {F(R.HessianMaxFactorV)},");
+            sb.AppendLine($"    \"HessianMaxFactorH\": {F(R.HessianMaxFactorH)},");
             sb.AppendLine($"    \"ErrorValueMeanV\": {F(R.ErrorValueMeanV)},");
             sb.AppendLine($"    \"ErrorValueMaxV\": {F(R.ErrorValueMaxV)},");
             sb.AppendLine($"    \"ErrorValueMeanH\": {F(R.ErrorValueMeanH)},");
@@ -206,7 +207,11 @@ namespace AniloxRoll.Monitor.Core.Data
             {
                 Algorithm        = algo,
                 RidgeDir         = ridgeDir,
-                HessianMaxFactor = SettingsStoreHelper.GetFloat(obj, "HessianMaxFactor", InspectionDefaults.HessianMaxFactor),
+                // 向後相容：舊 JSON 用單一 HessianMaxFactor，新 JSON 用 V/H 各自的 2 鍵
+                HessianMaxFactorV = SettingsStoreHelper.GetFloat(obj, "HessianMaxFactorV",
+                                        SettingsStoreHelper.GetFloat(obj, "HessianMaxFactor", InspectionDefaults.HessianMaxFactorV)),
+                HessianMaxFactorH = SettingsStoreHelper.GetFloat(obj, "HessianMaxFactorH",
+                                        SettingsStoreHelper.GetFloat(obj, "HessianMaxFactor", InspectionDefaults.HessianMaxFactorH)),
                 // 向後相容：舊 JSON 用 ErrorValueMean/Max 兩鍵，新 JSON 用 V/H 各自的 4 鍵
                 ErrorValueMeanV  = SettingsStoreHelper.GetFloat(obj, "ErrorValueMeanV",
                                        SettingsStoreHelper.GetFloat(obj, "ErrorValueMean", InspectionDefaults.ErrorValueMeanV)),

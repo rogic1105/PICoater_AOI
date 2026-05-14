@@ -464,8 +464,9 @@ namespace AniloxRoll.Monitor.UI.Managers
             _cameraLineRateHz     = settings.Acquisition.CameraLineRateHz;
             _saveResizeScale      = settings.Recipe?.SaveResizeScale ?? InspectionEngineConfig.DefaultSaveResizeScale;
             _saveJpgQuality       = settings.Recipe?.SaveJpgQuality  ?? InspectionEngineConfig.DefaultSaveJpgQuality;
-            _hessianMaxFactor     = settings.HessianMaxFactor > 0
-                ? settings.HessianMaxFactor
+            // capture-time HM 用 V（baked 進 .bin）；H 為 view-time only，不送進 native
+            _hessianMaxFactor     = settings.HessianMaxFactorV > 0
+                ? settings.HessianMaxFactorV
                 : InspectionEngineConfig.DefaultHessianMaxFactor;
             _ridgeMode            = InspectionRecipe.RidgeDirectionToNative(settings.RidgeDir);
             _dcfPath              = settings.DcfPath ?? string.Empty;

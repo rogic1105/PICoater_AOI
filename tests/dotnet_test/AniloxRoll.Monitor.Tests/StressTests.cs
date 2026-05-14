@@ -198,7 +198,7 @@ namespace AniloxRoll.Monitor.Tests
                 var svc = new InspectionLogService(() => tempRoot);
                 var ts = new DateTime(2026, 3, 30, 10, 0, 0, 0);
                 var config = new CsvConfigSnapshot(
-                    new double[7], new double[7], null, null, null, 1.0f, 0.5f, 0.8f, 0.5f, 0.8f, 0.0, 0.0, ts);
+                    new double[7], new double[7], null, null, null, 1.0f, 1.0f, 0.5f, 0.8f, 0.5f, 0.8f, 0.0, 0.0, ts);
 
                 for (int i = 0; i < RecordCount; i++)
                 {
@@ -338,7 +338,7 @@ namespace AniloxRoll.Monitor.Tests
                 // Truncate to millisecond precision
                 ts = new DateTime(ts.Year, ts.Month, ts.Day, ts.Hour, ts.Minute, ts.Second, ts.Millisecond);
 
-                var snap = new CsvConfigSnapshot(ops, pos, grabH, expUs, lrHz, hessian, errMean, errMax, errMean, errMax, 0.0, 0.0, ts);
+                var snap = new CsvConfigSnapshot(ops, pos, grabH, expUs, lrHz, hessian, hessian, errMean, errMax, errMean, errMax, 0.0, 0.0, ts);
                 string csv = snap.ToCsvLine();
                 bool ok = CsvConfigSnapshot.TryParse(csv, out var parsed);
 

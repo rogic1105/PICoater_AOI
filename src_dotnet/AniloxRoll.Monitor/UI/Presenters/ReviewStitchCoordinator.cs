@@ -289,7 +289,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _ctx.DataStatsPresenter?.SetReviewGroupBoxes(false);
         }
 
-        /// <summary>Global 模式：7 台 row curves 重疊合併後更新法向曲線圖。</summary>
+        /// <summary>Global 模式：7 台 row curves 重疊合併後更新法向曲線圖。
+        /// row chart 是水平 (row) 曲線 → 用 (HM_V_capture / HM_H_current) ratio rescale，
+        /// 讓 PropertyGrid 改水平正規值時 H 曲線坡度立即變化。
+        /// 公式：bin baked-in 的縮放是 HM_V_capture（native 只用單一 HM=V），
+        /// view-time 想要的目標是 HM_H_current，所以 ratio = HM_V_capture / HM_H_current。</summary>
         private void UpdateGlobalRowChart()
         {
             if (_ctx.RowChartHelper == null || _stitchedRowCurveMean == null) return;
@@ -298,41 +302,87 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _ctx.CameraCount, out float[] mergedMean, out float[] mergedMax);
             if (mergedMean != null)
             {
+                float captureHmV = _currentGrabConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
+                ApplySingleCurveRescale(mergedMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
+                ApplySingleCurveRescale(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
                 _ctx.RowChartHelper.UpdateData(mergedMean, mergedMax);
                 _ctx.InteractionHelper.RefreshRowChartRange();
             }
         }
 
+        private static void ApplySingleCurveRescale(float[] data, float captureHm, float currentHm)
+        {
+            if (data == null) return;
+            if (captureHm <= 0f || currentHm <= 0f) return;
+            float ratio = captureHm / currentHm;
+            if (Math.Abs(ratio - 1f) < 0.0001f) return;
+            for (int i = 0; i < data.Length; i++) data[i] *= ratio;
+        }
+
         /// <summary>
         /// 合圖路徑：用 _stitchedCurveMean/Max 更新 chart1 全覽圖。
+        /// 套用 view-time 正規值 rescale + 當前閾值：
+        ///   - 曲線：(bin/255) × (HM_capture / HM_current) ← 改 PropertyGrid 正規值會立即反映坡度
+        ///   - 閾值線：用 _ctx.Settings 的當前 ErrorValueMeanV/MaxV ← 改 PropertyGrid 閾值會立即移動門檻線
+        ///   - OPS/Pos：用該 grab 的 #CFG 快照（與資料一起 baked-in，不可後驗調整）
         /// </summary>
         public void UpdateStitchedOverviewChart()
         {
             if (_stitchedCurveMean == null) return;
 
             double[] opsArr, posArr;
-            float errMean, errMax;
+            float captureHm;
             if (_currentGrabConfig != null)
             {
-                opsArr  = _currentGrabConfig.CamOps;
-                posArr  = _currentGrabConfig.CamPos;
-                errMean = _currentGrabConfig.ErrorValueMeanV;
-                errMax  = _currentGrabConfig.ErrorValueMaxV;
+                opsArr    = _currentGrabConfig.CamOps;
+                posArr    = _currentGrabConfig.CamPos;
+                captureHm = _currentGrabConfig.HessianMaxFactorV;
             }
             else
             {
-                opsArr  = _ctx.Settings.GetCameraOpsUmArray();
-                posArr  = _ctx.Settings.GetCameraStartPositionMmArray();
-                errMean = _ctx.Settings.ErrorValueMeanV;
-                errMax  = _ctx.Settings.ErrorValueMaxV;
+                opsArr    = _ctx.Settings.GetCameraOpsUmArray();
+                posArr    = _ctx.Settings.GetCameraStartPositionMmArray();
+                captureHm = _ctx.Settings.HessianMaxFactorV;
             }
+            // 閾值固定用當前 Settings（view-time 可調），不再從 _currentGrabConfig 取
+            float errMean = _ctx.Settings.ErrorValueMeanV;
+            float errMax  = _ctx.Settings.ErrorValueMaxV;
 
-            CurveMergeHelper.UpdateOverviewChart(_stitchedCurveMean, _stitchedCurveMax,
+            // chartOverview 是垂直 (column) 曲線 → 用 V 的 capture/current ratio
+            var displayMean = CloneAndRescale(_stitchedCurveMean, captureHm, _ctx.Settings.HessianMaxFactorV);
+            var displayMax  = CloneAndRescale(_stitchedCurveMax,  captureHm, _ctx.Settings.HessianMaxFactorV);
+
+            CurveMergeHelper.UpdateOverviewChart(displayMean, displayMax,
                 opsArr, posArr, errMean, errMax,
                 _ctx.OverviewHelper, _ctx.CameraCount, _ctx.Settings.StitchMode,
                 ViewRangeProvider);
 
-            StitchedCurveUpdated?.Invoke(_stitchedCurveMean, _stitchedCurveMax, opsArr, posArr, errMean, errMax);
+            StitchedCurveUpdated?.Invoke(displayMean, displayMax, opsArr, posArr, errMean, errMax);
+        }
+
+        /// <summary>
+        /// 複製曲線陣列並套用 (HM_capture / HM_current) ratio，保留快取不變。
+        /// </summary>
+        private static float[][] CloneAndRescale(float[][] src, float captureHm, float currentHm)
+        {
+            if (src == null) return null;
+            var dst = new float[src.Length][];
+            float ratio = (captureHm > 0f && currentHm > 0f) ? captureHm / currentHm : 1f;
+            bool noOp = Math.Abs(ratio - 1f) < 0.0001f;
+            for (int i = 0; i < src.Length; i++)
+            {
+                if (src[i] == null) continue;
+                dst[i] = new float[src[i].Length];
+                if (noOp)
+                {
+                    Array.Copy(src[i], dst[i], src[i].Length);
+                }
+                else
+                {
+                    for (int j = 0; j < src[i].Length; j++) dst[i][j] = src[i][j] * ratio;
+                }
+            }
+            return dst;
         }
 
         /// <summary>顯示單台相機拼接影像，並更新對應的 mura chart。
@@ -354,62 +404,111 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _ctx.InteractionHelper.RestoreCanvasViewOrFit();
             }
 
+            UpdatePerCameraCharts(idx);
+        }
+
+        /// <summary>
+        /// 更新單台相機的 chartMuraVertical（V）+ chartMuraHorizontal（H）。
+        /// 套用 view-time 正規值 rescale：
+        ///   - V 曲線：(bin/255) × (HM_V_capture / HM_V_current) → 改 PropertyGrid 垂直正規值生效
+        ///   - H 曲線：(bin/255) × (HM_V_capture / HM_H_current) → 改 PropertyGrid 水平正規值生效
+        /// 閾值線用當前 Settings（view-time tunable）。
+        /// </summary>
+        public void UpdatePerCameraCharts(int idx)
+        {
+            if (_stitchedImages == null) return;
+
+            // 切向 (Column / V)
             if (_ctx.Settings.StitchMode == StitchMode.Global)
             {
-                // Global 模式：切向曲線圖清空（單台資料無意義），法向曲線圖正常載入
-                _ctx.ChartMuraVertical.Series["Mean"].Points.Clear();
-                _ctx.ChartMuraVertical.Series["Max"].Points.Clear();
+                // Global 模式：單台切向資料無意義，清空
+                if (_ctx.ChartMuraVertical != null)
+                {
+                    _ctx.ChartMuraVertical.Series["Mean"].Points.Clear();
+                    _ctx.ChartMuraVertical.Series["Max"].Points.Clear();
+                }
             }
             else if (_ctx.ColumnChartHelper != null && _ctx.Settings != null)
             {
-                // Vertical 模式：正常載入切向曲線
                 float[] mean = (_stitchedCurveMean != null && idx >= 0 && idx < _stitchedCurveMean.Length)
                     ? _stitchedCurveMean[idx] : null;
                 float[] max = (_stitchedCurveMax != null && idx >= 0 && idx < _stitchedCurveMax.Length)
                     ? _stitchedCurveMax[idx] : null;
 
                 double[] posArr;
+                float captureHmV;
                 if (_currentGrabConfig != null)
                 {
                     double opsUm = (idx >= 0 && idx < _currentGrabConfig.CamOps.Length)
                         ? _currentGrabConfig.CamOps[idx] : _ctx.Settings.Cam1_Ops;
                     _ctx.ColumnChartHelper.SetOps(opsUm);
-                    _ctx.ColumnChartHelper.SetThresholds(
-                        _currentGrabConfig.ErrorValueMeanV, _currentGrabConfig.ErrorValueMaxV);
                     posArr = _currentGrabConfig.CamPos;
+                    captureHmV = _currentGrabConfig.HessianMaxFactorV;
                 }
                 else
                 {
                     posArr = _ctx.Settings.GetCameraStartPositionMmArray();
+                    captureHmV = _ctx.Settings.HessianMaxFactorV;
                 }
+                // 閾值固定用當前 Settings（view-time tunable）
+                _ctx.ColumnChartHelper.SetThresholds(
+                    _ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV);
+
+                var displayMean = Clone1DAndRescale(mean, captureHmV, _ctx.Settings.HessianMaxFactorV);
+                var displayMax  = Clone1DAndRescale(max,  captureHmV, _ctx.Settings.HessianMaxFactorV);
 
                 double startPos = (idx >= 0 && idx < posArr.Length) ? posArr[idx] : 0;
                 _ctx.InteractionHelper.TryComputeCurrentViewRange(idx, out double leftMm, out double rightMm);
-                _ctx.ColumnChartHelper.UpdateDataAndView(mean, max, startPos, leftMm, rightMm);
+                _ctx.ColumnChartHelper.UpdateDataAndView(displayMean, displayMax, startPos, leftMm, rightMm);
             }
 
-            // 法向曲線圖
+            // 法向 (Row / H)
             if (_ctx.RowChartHelper != null)
             {
                 if (_ctx.Settings.StitchMode == StitchMode.Global)
                 {
-                    // Global 模式：7 台 row curves 重疊合併
                     UpdateGlobalRowChart();
                 }
                 else
                 {
-                    // Vertical 模式：單台 row curves
                     float[] rowMean = (_stitchedRowCurveMean != null && idx >= 0 && idx < _stitchedRowCurveMean.Length)
                         ? _stitchedRowCurveMean[idx] : null;
                     float[] rowMax = (_stitchedRowCurveMax != null && idx >= 0 && idx < _stitchedRowCurveMax.Length)
                         ? _stitchedRowCurveMax[idx] : null;
                     if (rowMean != null)
                     {
-                        _ctx.RowChartHelper.UpdateData(rowMean, rowMax);
+                        float captureHmV = _currentGrabConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
+                        var displayMean = Clone1DAndRescale(rowMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
+                        var displayMax  = Clone1DAndRescale(rowMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
+                        _ctx.RowChartHelper.UpdateData(displayMean, displayMax);
                         _ctx.InteractionHelper.RefreshRowChartRange();
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// 由 PropertyGrid 變更觸發：重畫當前選中相機的 V/H per-camera charts。
+        /// 不重設 canvas view（避免使用者 zoom/pan 被打斷）。
+        /// </summary>
+        public void RefreshCurrentCameraChartsForSettingsChange()
+        {
+            if (_stitchedImages == null) return;
+            int idx = _ctx.GalleryManager.SelectedIndex;
+            if (idx < 0) idx = 0;
+            UpdatePerCameraCharts(idx);
+        }
+
+        /// <summary>複製 float[] 並套 (HM_capture/HM_current) ratio，保留原快取不被改動。</summary>
+        private static float[] Clone1DAndRescale(float[] src, float captureHm, float currentHm)
+        {
+            if (src == null) return null;
+            float ratio = (captureHm > 0f && currentHm > 0f) ? captureHm / currentHm : 1f;
+            bool noOp = Math.Abs(ratio - 1f) < 0.0001f;
+            var dst = new float[src.Length];
+            if (noOp) { Array.Copy(src, dst, src.Length); return dst; }
+            for (int i = 0; i < src.Length; i++) dst[i] = src[i] * ratio;
+            return dst;
         }
 
         /// <summary>

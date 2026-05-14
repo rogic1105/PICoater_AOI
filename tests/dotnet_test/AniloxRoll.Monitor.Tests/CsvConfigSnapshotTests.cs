@@ -16,7 +16,7 @@ namespace AniloxRoll.Monitor.Tests
             var grabH = new int[] { 3001, 3001, 3001, 3001, 3001, 3001, 3001 };
             var expUs = new double[] { 149, 150, 151, 152, 153, 154, 155 };
             var lrHz = new double[] { 3001, 3002, 3003, 3004, 3005, 3006, 3007 };
-            var snap = new CsvConfigSnapshot(ops, pos, grabH, expUs, lrHz, 1.2345f,
+            var snap = new CsvConfigSnapshot(ops, pos, grabH, expUs, lrHz, 1.2345f, 1.6789f,
                 0.5678f, 0.9012f, 0.5678f, 0.9012f, 5.0, 3.5, ts);
 
             string csv = snap.ToCsvLine();
@@ -26,7 +26,8 @@ namespace AniloxRoll.Monitor.Tests
             Assert.That(ok, Is.True);
 
             Assert.That(parsed.Timestamp, Is.EqualTo(ts));
-            Assert.That(parsed.HessianMaxFactor, Is.EqualTo(1.2345f).Within(0.001f));
+            Assert.That(parsed.HessianMaxFactorV, Is.EqualTo(1.2345f).Within(0.001f));
+            Assert.That(parsed.HessianMaxFactorH, Is.EqualTo(1.6789f).Within(0.001f));
             Assert.That(parsed.ErrorValueMeanV, Is.EqualTo(0.5678f).Within(0.001f));
             Assert.That(parsed.ErrorValueMaxV,  Is.EqualTo(0.9012f).Within(0.001f));
             Assert.That(parsed.ErrorValueMeanH, Is.EqualTo(0.5678f).Within(0.001f));
@@ -49,8 +50,8 @@ namespace AniloxRoll.Monitor.Tests
         {
             var ops = new double[] { 1, 2, 3, 4, 5, 6, 7 };
             var pos = new double[] { 10, 20, 30, 40, 50, 60, 70 };
-            var a = new CsvConfigSnapshot(ops, pos, null, null, null, 1.0f, 2.0f, 3.0f, 2.0f, 3.0f, 0.0, 0.0, DateTime.Now);
-            var b = new CsvConfigSnapshot(ops, pos, null, null, null, 1.0f, 2.0f, 3.0f, 2.0f, 3.0f, 0.0, 0.0, DateTime.Now.AddHours(1));
+            var a = new CsvConfigSnapshot(ops, pos, null, null, null, 1.0f, 1.5f, 2.0f, 3.0f, 2.0f, 3.0f, 0.0, 0.0, DateTime.Now);
+            var b = new CsvConfigSnapshot(ops, pos, null, null, null, 1.0f, 1.5f, 2.0f, 3.0f, 2.0f, 3.0f, 0.0, 0.0, DateTime.Now.AddHours(1));
             Assert.That(a.ContentKey, Is.EqualTo(b.ContentKey));
         }
 
@@ -60,8 +61,8 @@ namespace AniloxRoll.Monitor.Tests
             var ops1 = new double[] { 1, 2, 3, 4, 5, 6, 7 };
             var ops2 = new double[] { 1, 2, 3, 4, 5, 6, 8 };
             var pos = new double[] { 10, 20, 30, 40, 50, 60, 70 };
-            var a = new CsvConfigSnapshot(ops1, pos, null, null, null, 1.0f, 2.0f, 3.0f, 2.0f, 3.0f, 0.0, 0.0, DateTime.Now);
-            var b = new CsvConfigSnapshot(ops2, pos, null, null, null, 1.0f, 2.0f, 3.0f, 2.0f, 3.0f, 0.0, 0.0, DateTime.Now);
+            var a = new CsvConfigSnapshot(ops1, pos, null, null, null, 1.0f, 1.5f, 2.0f, 3.0f, 2.0f, 3.0f, 0.0, 0.0, DateTime.Now);
+            var b = new CsvConfigSnapshot(ops2, pos, null, null, null, 1.0f, 1.5f, 2.0f, 3.0f, 2.0f, 3.0f, 0.0, 0.0, DateTime.Now);
             Assert.That(a.ContentKey, Is.Not.EqualTo(b.ContentKey));
         }
 
@@ -77,7 +78,7 @@ namespace AniloxRoll.Monitor.Tests
         [Test]
         public void Constructor_NullArrays_DefaultsToEmpty()
         {
-            var snap = new CsvConfigSnapshot(null, null, null, null, null, 0, 0, 0, 0, 0, 0.0, 0.0, DateTime.Now);
+            var snap = new CsvConfigSnapshot(null, null, null, null, null, 0, 0, 0, 0, 0, 0, 0.0, 0.0, DateTime.Now);
             Assert.That(snap.CamOps.Length, Is.EqualTo(7));
             Assert.That(snap.CamPos.Length, Is.EqualTo(7));
             Assert.That(snap.CamGrabHeight.Length, Is.EqualTo(7));

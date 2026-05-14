@@ -26,7 +26,7 @@ namespace AniloxRoll.Monitor.Core.Data
         public override string ToString() => "";
     }
 
-    // 演算法展開：去背演算法 + 正規值
+    // 演算法展開：去背演算法 + 正規值（V/H）
     [TypeConverter(typeof(ExpandableLeftAlignConverter))]
     public class AlgorithmDisplayConfig
     {
@@ -36,8 +36,11 @@ namespace AniloxRoll.Monitor.Core.Data
         [DisplayName("去背演算法")]
         public BackgroundAlgorithm Algorithm { get => _recipe.Algorithm; set => _recipe.Algorithm = value; }
 
-        [DisplayName("正規值")][TypeConverter(typeof(LeftAlignNumericConverter))]
-        public float HessianMaxFactor { get => _recipe.HessianMaxFactor; set => _recipe.HessianMaxFactor = value; }
+        [DisplayName("垂直正規值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        public float HessianMaxFactorV { get => _recipe.HessianMaxFactorV; set => _recipe.HessianMaxFactorV = value; }
+
+        [DisplayName("水平正規值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        public float HessianMaxFactorH { get => _recipe.HessianMaxFactorH; set => _recipe.HessianMaxFactorH = value; }
 
         public override string ToString() => "";
     }

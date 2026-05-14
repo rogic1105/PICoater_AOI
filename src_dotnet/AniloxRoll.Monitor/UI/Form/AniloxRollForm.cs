@@ -2056,7 +2056,8 @@ namespace AniloxRoll.Monitor.Forms
         // 因此兩種形式都放入集合，避免版本差異導致漏判。
         private static readonly HashSet<string> RecipePropertyNames = new HashSet<string>(StringComparer.Ordinal)
         {
-            nameof(InspectionRecipe.HessianMaxFactor), "Hessian Max Factor", "正規值",
+            nameof(InspectionRecipe.HessianMaxFactorV), "Hessian Max Factor V", "垂直正規值",
+            nameof(InspectionRecipe.HessianMaxFactorH), "Hessian Max Factor H", "水平正規值",
             nameof(InspectionRecipe.ErrorValueMeanV),  "Error Value Mean V", "垂直平均閾值",
             nameof(InspectionRecipe.ErrorValueMaxV),   "Error Value Max V",  "垂直最大閾值",
             nameof(InspectionRecipe.ErrorValueMeanH),  "Error Value Mean H", "水平平均閾值",
@@ -2099,6 +2100,22 @@ namespace AniloxRoll.Monitor.Forms
             _liveRowChartHelper?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
             _reviewRowChartHelper?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
             UpdateRowChartPitch();
+
+            // chartMuraProfile：閾值線同步 + 單片模式時 view-time 正規值 rescale
+            _dataStatsPresenter?.RefreshMuraProfileForSettingsChange();
+
+            // Review 拼接 chartOverview + per-camera 切向/法向：套 view-time 正規值 rescale + 當前閾值
+            // → 改 PropertyGrid 正規值/閾值會立即反映在所有曲線坡度與門檻線上
+            if (_stitchCoordinator?.IsStitchMode == true)
+            {
+                _stitchCoordinator.UpdateStitchedOverviewChart();          // chartOverview
+                _stitchCoordinator.RefreshCurrentCameraChartsForSettingsChange(); // chartMuraVertical + chartMuraHorizontal
+            }
+
+            // Data tab 統計：用當前 Settings 重算 Pass/Fail（panelStatCam / listViewGrabDetail）
+            // 並重畫 chartYearly/Monthly/Daily（透過 OnChartYearIndexChanged 級聯重算）
+            _dataStatsPresenter?.RefreshStats();
+            _dataStatsPresenter?.RefreshPeriodCharts();
 
             // 抓圖進行中設定變更 → 立刻在 CSV 插入 #CFG
             if (_liveCameraManager?.IsLiveGrabbing == true)

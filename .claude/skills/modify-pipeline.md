@@ -29,7 +29,15 @@
 - 計算後套用 `scale_f32_inplace_gpu(..., scale_factor)` 做純 scalar 乘法（`scale_factor = 255/正規值`），**不 clamp** → 峰值保留、.bin 值可超過 255
 - u8 ridge 影像（`d_ridge_out` / `d_mura_out`）仍走 `scale_clamp_f32_to_u8_gpu` 顯示路徑，不影響 `.bin`
 - inline kernel `k_scale_f32_inplace` 定義在 `Module_GetPICoaterBackground.cu` 本檔內（不暴露到 SDK header）
-- 「正規值」是 capture-time 參數（演算法靈敏度校準），baked 進 `.bin` 是預期行為；不要試圖在 view-time 重新縮放（會擴散依賴到 chart/CSV/CheckLiveMura 多處，維護成本高 — 參考 memory `project_normalization_255_history`）
+
+### 正規值 V/H 分離（C# 層）
+- Settings 拆分為 `HessianMaxFactorV`（垂直）+ `HessianMaxFactorH`（水平），native 端介面（`AoiAlgorithmParams.HessianMaxFactor`）維持單一欄位
+- **Capture 時** 送進 native 的單一 HM = `HessianMaxFactorV` → bin 中 baked-in 的縮放係數是 `255/HessianMaxFactorV`
+- **View 時** rescale 公式：
+  - V 曲線（chartMuraVertical / chartOverview / chartMuraProfile / muraChartVerticalLive）：`display = (bin/255) × (HM_V_capture / HM_V_current)` — 改 V 即時生效
+  - H 曲線（chartMuraHorizontal / row chart）：`display = (bin/255) × (HM_V_capture / HM_H_current)` — 改 H 即時生效；公式 numerator 用 V_capture 因為 bin 是被 V baked-in
+- 改 PropertyGrid 正規值 V/H 時，Form 的 `_propertyGrid_PropertyValueChanged` 呼叫 `RefreshMuraProfileForSettingsChange` + `_stitchCoordinator.UpdateStitchedOverviewChart` 立即重畫
+- CSV `#CFG` 記錄兩個欄位 `HessianMaxFactorV`、`HessianMaxFactorH`；舊單一 `HessianMaxFactor` 欄位讀檔時 fallback 到 V=H=該值
 
 ### CUDA Pinned Memory
 - 所有 NativeBufferPool buffer 使用 `CoreCV_AllocPinned`（cudaMallocHost）

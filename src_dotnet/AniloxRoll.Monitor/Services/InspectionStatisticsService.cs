@@ -42,6 +42,36 @@ namespace AniloxRoll.Monitor.Core.Services
     }
 
     /// <summary>
+    /// View-time Pass/Fail 重算 context：以「當前 Settings」的閾值 + 正規值，
+    /// 對 CSV 內 raw peak（capture-time 已 baked by HM_V_capture）重算判定，
+    /// 而非沿用 CSV 內 MaxExceed/MeanExceed（capture-time 寫死）。
+    /// 公式：display_peak = raw_peak × (HM_V_capture / HM_V_current)，
+    ///       isFail = display_peak > current_threshold。
+    /// 傳 null → 沿用 CSV 內 MaxExceed/MeanExceed（legacy capture-time 判定）。
+    /// </summary>
+    public class ThresholdContext
+    {
+        public float CurrentHmV     { get; }
+        public float CurrentErrMean { get; }
+        public float CurrentErrMax  { get; }
+
+        public ThresholdContext(float currentHmV, float currentErrMean, float currentErrMax)
+        {
+            CurrentHmV     = currentHmV;
+            CurrentErrMean = currentErrMean;
+            CurrentErrMax  = currentErrMax;
+        }
+
+        public bool IsFail(float meanPeak, float maxPeak, float captureHmV)
+        {
+            float ratio = (captureHmV > 0f && CurrentHmV > 0f) ? captureHmV / CurrentHmV : 1f;
+            float displayMean = meanPeak * ratio;
+            float displayMax  = maxPeak  * ratio;
+            return displayMean > CurrentErrMean || displayMax > CurrentErrMax;
+        }
+    }
+
+    /// <summary>
     /// 從每日 CSV（{YYYYMMDD}.csv）讀取資料，計算各相機的 Pass/Fail 統計。
     /// CSV 格式：Id,FileName,MaxExceed,MeanExceed
     /// </summary>
@@ -56,7 +86,8 @@ namespace AniloxRoll.Monitor.Core.Services
         public static Dictionary<int, CameraStats> Compute(
             string   captureRootPath,
             DateTime start,
-            DateTime end)
+            DateTime end,
+            ThresholdContext ctx = null)
         {
             var stats = new Dictionary<int, CameraStats>();
             for (int i = 1; i <= 7; i++)
@@ -71,14 +102,15 @@ namespace AniloxRoll.Monitor.Core.Services
                 {
                     using (var sr = new StreamReader(csvPath))
                     {
-                        string header = sr.ReadLine();
-                        if (header == null) continue;
-
+                        float captureHmV = ctx?.CurrentHmV ?? 0f; // 還沒讀到 #CFG 前先用 current（ratio=1）
                         string line;
                         while ((line = sr.ReadLine()) != null)
                         {
-                            if (!TryParseLine(line, out _, out string fileName,
-                                out int maxExceed, out int meanExceed)) continue;
+                            if (TryUpdateHmFromCfg(line, ref captureHmV)) continue;
+                            if (!TryParseLineEx(line, out _, out string fileName,
+                                out int maxExceed, out int meanExceed,
+                                out float meanPeak, out float maxPeak,
+                                out _, out _, out _)) continue;
 
                             if (!TryParseFileNameDateTime(fileName, out DateTime ts)) continue;
                             if (ts < start || ts > end) continue;
@@ -86,8 +118,11 @@ namespace AniloxRoll.Monitor.Core.Services
                             if (!TryExtractCamId(fileName, out int camId)) continue;
                             if (!stats.TryGetValue(camId, out var s)) continue;
 
-                            if (maxExceed == 0 && meanExceed == 0) s.Pass++;
-                            else                                    s.Fail++;
+                            bool isFail = ctx != null
+                                ? ctx.IsFail(meanPeak, maxPeak, captureHmV)
+                                : (maxExceed > 0 || meanExceed > 0);
+                            if (isFail) s.Fail++;
+                            else        s.Pass++;
                         }
                     }
                 }
@@ -100,6 +135,17 @@ namespace AniloxRoll.Monitor.Core.Services
             return stats;
         }
 
+        /// <summary>
+        /// 偵測 #CFG 列並更新 captureHmV。回傳 true 表示這行是 #CFG（呼叫端應 continue 不當資料列處理）。
+        /// </summary>
+        private static bool TryUpdateHmFromCfg(string line, ref float captureHmV)
+        {
+            if (string.IsNullOrEmpty(line) || !line.StartsWith("#CFG,")) return false;
+            if (CsvConfigSnapshot.TryParse(line, out var cfg) && cfg.HessianMaxFactorV > 0f)
+                captureHmV = cfg.HessianMaxFactorV;
+            return true;
+        }
+
         // ── 序號範圍統計（新模式：以唯一序號為分母）────────────────────────
 
         /// <summary>
@@ -109,7 +155,8 @@ namespace AniloxRoll.Monitor.Core.Services
         public static Dictionary<int, CameraStats> ComputeByGrabIdRange(
             string captureRootPath,
             string startGrabId,
-            string endGrabId)
+            string endGrabId,
+            ThresholdContext ctx = null)
         {
             var stats = new Dictionary<int, CameraStats>();
             for (int i = 1; i <= 7; i++)
@@ -130,14 +177,15 @@ namespace AniloxRoll.Monitor.Core.Services
                 {
                     using (var sr = new StreamReader(csvPath))
                     {
-                        string header = sr.ReadLine();
-                        if (header == null) continue;
-
+                        float captureHmV = ctx?.CurrentHmV ?? 0f;
                         string line;
                         while ((line = sr.ReadLine()) != null)
                         {
-                            if (!TryParseLine(line, out string grabId, out string fileName,
-                                out int maxExceed, out int meanExceed)) continue;
+                            if (TryUpdateHmFromCfg(line, ref captureHmV)) continue;
+                            if (!TryParseLineEx(line, out string grabId, out string fileName,
+                                out int maxExceed, out int meanExceed,
+                                out float meanPeak, out float maxPeak,
+                                out _, out _, out _)) continue;
 
                             if (StringComparer.Ordinal.Compare(grabId, lo) < 0 ||
                                 StringComparer.Ordinal.Compare(grabId, hi) > 0) continue;
@@ -147,7 +195,9 @@ namespace AniloxRoll.Monitor.Core.Services
                             if (!grabCamFail.TryGetValue(grabId, out var camMap))
                                 grabCamFail[grabId] = camMap = new Dictionary<int, bool>();
 
-                            bool thisFail = maxExceed > 0 || meanExceed > 0;
+                            bool thisFail = ctx != null
+                                ? ctx.IsFail(meanPeak, maxPeak, captureHmV)
+                                : (maxExceed > 0 || meanExceed > 0);
                             if (!camMap.TryGetValue(camId, out bool prev))
                                 camMap[camId] = thisFail;
                             else if (thisFail)
@@ -280,7 +330,8 @@ namespace AniloxRoll.Monitor.Core.Services
         public static List<GrabDetail> ComputeDetailedByGrabIdRange(
             string captureRootPath,
             string startGrabId,
-            string endGrabId)
+            string endGrabId,
+            ThresholdContext ctx = null)
         {
             // grabId → GrabDetail（字串排序 = 時間排序）
             var dict = new SortedDictionary<string, GrabDetail>(StringComparer.Ordinal);
@@ -297,14 +348,15 @@ namespace AniloxRoll.Monitor.Core.Services
                 {
                     using (var sr = new StreamReader(csvPath))
                     {
-                        string header = sr.ReadLine();
-                        if (header == null) continue;
-
+                        float captureHmV = ctx?.CurrentHmV ?? 0f;
                         string line;
                         while ((line = sr.ReadLine()) != null)
                         {
-                            if (!TryParseLine(line, out string grabId, out string fileName,
-                                out int maxExceed, out int meanExceed)) continue;
+                            if (TryUpdateHmFromCfg(line, ref captureHmV)) continue;
+                            if (!TryParseLineEx(line, out string grabId, out string fileName,
+                                out int maxExceed, out int meanExceed,
+                                out float meanPeak, out float maxPeak,
+                                out _, out _, out _)) continue;
 
                             if (StringComparer.Ordinal.Compare(grabId, lo) < 0 ||
                                 StringComparer.Ordinal.Compare(grabId, hi) > 0) continue;
@@ -319,7 +371,9 @@ namespace AniloxRoll.Monitor.Core.Services
                             }
 
                             int idx = camId - 1;
-                            bool thisFail = maxExceed > 0 || meanExceed > 0;
+                            bool thisFail = ctx != null
+                                ? ctx.IsFail(meanPeak, maxPeak, captureHmV)
+                                : (maxExceed > 0 || meanExceed > 0);
                             if (detail.CamResult[idx] == null)
                                 detail.CamResult[idx] = thisFail;
                             else if (thisFail)
@@ -457,14 +511,15 @@ namespace AniloxRoll.Monitor.Core.Services
         /// 按月份（1–12）彙總 Pass/Fail，固定回傳 12 筆，無資料月份為 0。
         /// </summary>
         public static List<PeriodStats> ComputeGroupedByMonthOfYear(
-            string captureRootPath, DateTime start, DateTime end)
+            string captureRootPath, DateTime start, DateTime end,
+            ThresholdContext ctx = null)
         {
             var counts = new (int Pass, int Fail)[13]; // index 1-12
             ScanCsvByDateRange(captureRootPath, start, end, (ts, isFail) =>
             {
                 if (isFail) counts[ts.Month].Fail++;
                 else        counts[ts.Month].Pass++;
-            });
+            }, ctx);
             var result = new List<PeriodStats>(12);
             for (int m = 1; m <= 12; m++)
                 result.Add(new PeriodStats { Label = m.ToString(), Pass = counts[m].Pass, Fail = counts[m].Fail });
@@ -475,14 +530,15 @@ namespace AniloxRoll.Monitor.Core.Services
         /// 按日期（1–31）彙總 Pass/Fail，固定回傳 31 筆，無資料日期為 0。
         /// </summary>
         public static List<PeriodStats> ComputeGroupedByDayOfMonth(
-            string captureRootPath, DateTime start, DateTime end)
+            string captureRootPath, DateTime start, DateTime end,
+            ThresholdContext ctx = null)
         {
             var counts = new (int Pass, int Fail)[32]; // index 1-31
             ScanCsvByDateRange(captureRootPath, start, end, (ts, isFail) =>
             {
                 if (isFail) counts[ts.Day].Fail++;
                 else        counts[ts.Day].Pass++;
-            });
+            }, ctx);
             var result = new List<PeriodStats>(31);
             for (int d = 1; d <= 31; d++)
                 result.Add(new PeriodStats { Label = d.ToString(), Pass = counts[d].Pass, Fail = counts[d].Fail });
@@ -493,14 +549,15 @@ namespace AniloxRoll.Monitor.Core.Services
         /// 按小時（0–23）彙總 Pass/Fail，固定回傳 24 筆，無資料小時為 0。
         /// </summary>
         public static List<PeriodStats> ComputeGroupedByHourOfDay(
-            string captureRootPath, DateTime start, DateTime end)
+            string captureRootPath, DateTime start, DateTime end,
+            ThresholdContext ctx = null)
         {
             var counts = new (int Pass, int Fail)[24]; // index 0-23
             ScanCsvByDateRange(captureRootPath, start, end, (ts, isFail) =>
             {
                 if (isFail) counts[ts.Hour].Fail++;
                 else        counts[ts.Hour].Pass++;
-            });
+            }, ctx);
             var result = new List<PeriodStats>(24);
             for (int h = 0; h < 24; h++)
                 result.Add(new PeriodStats { Label = h.ToString(), Pass = counts[h].Pass, Fail = counts[h].Fail });
@@ -514,7 +571,8 @@ namespace AniloxRoll.Monitor.Core.Services
         /// </summary>
         private static void ScanCsvByDateRange(
             string captureRootPath, DateTime start, DateTime end,
-            Action<DateTime, bool> onRecord)
+            Action<DateTime, bool> onRecord,
+            ThresholdContext ctx = null)
         {
             if (string.IsNullOrWhiteSpace(captureRootPath) || !Directory.Exists(captureRootPath)) return;
 
@@ -527,20 +585,23 @@ namespace AniloxRoll.Monitor.Core.Services
                 {
                     using (var sr = new StreamReader(csvPath))
                     {
-                        string header = sr.ReadLine();
-                        if (header == null) continue;
-
+                        float captureHmV = ctx?.CurrentHmV ?? 0f;
                         string line;
                         while ((line = sr.ReadLine()) != null)
                         {
-                            if (!TryParseLine(line, out string grabId, out string fileName,
-                                out int maxExceed, out int meanExceed)) continue;
+                            if (TryUpdateHmFromCfg(line, ref captureHmV)) continue;
+                            if (!TryParseLineEx(line, out string grabId, out string fileName,
+                                out int maxExceed, out int meanExceed,
+                                out float meanPeak, out float maxPeak,
+                                out _, out _, out _)) continue;
                             if (!TryParseFileNameDateTime(fileName, out DateTime ts)) continue;
                             if (ts < start || ts > end) continue;
                             if (!TryExtractCamId(fileName, out int camId)) continue;
 
                             var key = (grabId, camId);
-                            bool thisFail = maxExceed > 0 || meanExceed > 0;
+                            bool thisFail = ctx != null
+                                ? ctx.IsFail(meanPeak, maxPeak, captureHmV)
+                                : (maxExceed > 0 || meanExceed > 0);
 
                             if (!groups.TryGetValue(key, out var prev))
                                 groups[key] = (ts, thisFail);

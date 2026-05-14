@@ -62,7 +62,8 @@ namespace AniloxRoll.Monitor.Core.Data
     {
         [DisplayName("去背演算法")]    public BackgroundAlgorithm Algorithm { get; set; } = InspectionDefaults.Algorithm;
         [DisplayName("Ridge 方向")]    public RidgeDirection RidgeDir { get; set; } = InspectionDefaults.RidgeDir;
-        [DisplayName("Hessian Max Factor")] public float HessianMaxFactor { get; set; } = InspectionDefaults.HessianMaxFactor;
+        [DisplayName("Hessian Max Factor V")] public float HessianMaxFactorV { get; set; } = InspectionDefaults.HessianMaxFactorV;
+        [DisplayName("Hessian Max Factor H")] public float HessianMaxFactorH { get; set; } = InspectionDefaults.HessianMaxFactorH;
         [DisplayName("Error Value Mean V")] public float ErrorValueMeanV { get; set; } = InspectionDefaults.ErrorValueMeanV;
         [DisplayName("Error Value Max V")]  public float ErrorValueMaxV  { get; set; } = InspectionDefaults.ErrorValueMaxV;
         [DisplayName("Error Value Mean H")] public float ErrorValueMeanH { get; set; } = InspectionDefaults.ErrorValueMeanH;
@@ -78,7 +79,8 @@ namespace AniloxRoll.Monitor.Core.Data
 
         public void Validate()
         {
-            if (HessianMaxFactor <= 0) HessianMaxFactor = InspectionDefaults.HessianMaxFactor;
+            if (HessianMaxFactorV <= 0) HessianMaxFactorV = InspectionDefaults.HessianMaxFactorV;
+            if (HessianMaxFactorH <= 0) HessianMaxFactorH = InspectionDefaults.HessianMaxFactorH;
             if (ErrorValueMeanV <= 0) ErrorValueMeanV = InspectionDefaults.ErrorValueMeanV;
             if (ErrorValueMaxV  <= 0) ErrorValueMaxV  = InspectionDefaults.ErrorValueMaxV;
             if (ErrorValueMeanH <= 0) ErrorValueMeanH = InspectionDefaults.ErrorValueMeanH;

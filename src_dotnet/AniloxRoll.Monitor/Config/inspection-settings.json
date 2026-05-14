@@ -20,7 +20,8 @@
   "Recipe": {
     "Algorithm": "SingleFrameBgSub",
     "RidgeDir": "Both",
-    "HessianMaxFactor": 0.3,
+    "HessianMaxFactorV": 0.3,
+    "HessianMaxFactorH": 0.3,
     "ErrorValueMeanV": 0.2,
     "ErrorValueMaxV": 0.4,
     "ErrorValueMeanH": 0.2,

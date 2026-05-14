@@ -96,8 +96,10 @@ namespace AniloxRoll.Monitor.Core.Data
         public string da_AlgorithmHeader => "";
         [Category("2. 檢測設定")][DisplayName("去背演算法")]
         public BackgroundAlgorithm db_Algorithm { get => Recipe.Algorithm; set => Recipe.Algorithm = value; }
-        [Category("2. 檢測設定")][DisplayName("正規值")][TypeConverter(typeof(LeftAlignNumericConverter))]
-        public float dc_HessianMaxFactor { get => Recipe.HessianMaxFactor; set => Recipe.HessianMaxFactor = value; }
+        [Category("2. 檢測設定")][DisplayName("垂直正規值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        public float dc_HessianMaxFactorV { get => Recipe.HessianMaxFactorV; set => Recipe.HessianMaxFactorV = value; }
+        [Category("2. 檢測設定")][DisplayName("水平正規值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        public float dd_HessianMaxFactorH { get => Recipe.HessianMaxFactorH; set => Recipe.HessianMaxFactorH = value; }
 
         [Category("2. 檢測設定")][DisplayName("─ 檢出標準 ─")][ReadOnly(true)]
         public string ea_DetectionHeader => "";
@@ -120,7 +122,8 @@ namespace AniloxRoll.Monitor.Core.Data
         // 向後相容：程式碼中直接存取的快捷屬性
         [Browsable(false)] public BackgroundAlgorithm Algorithm       { get => Recipe.Algorithm;       set => Recipe.Algorithm       = value; }
         [Browsable(false)] public RidgeDirection      RidgeDir        { get => Recipe.RidgeDir;        set => Recipe.RidgeDir        = value; }
-        [Browsable(false)] public float  HessianMaxFactor       { get => Recipe.HessianMaxFactor;       set => Recipe.HessianMaxFactor       = value; }
+        [Browsable(false)] public float  HessianMaxFactorV      { get => Recipe.HessianMaxFactorV;      set => Recipe.HessianMaxFactorV      = value; }
+        [Browsable(false)] public float  HessianMaxFactorH      { get => Recipe.HessianMaxFactorH;      set => Recipe.HessianMaxFactorH      = value; }
         [Browsable(false)] public int    BackgroundSampleSeconds { get => Recipe.BackgroundSampleSeconds; set => Recipe.BackgroundSampleSeconds = value; }
         [Browsable(false)] public double AniloxRollSpeedMPerMin  { get => Recipe.AniloxRollSpeedMPerMin;  set => Recipe.AniloxRollSpeedMPerMin  = value; }
 
