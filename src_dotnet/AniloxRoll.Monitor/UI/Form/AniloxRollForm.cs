@@ -2094,6 +2094,7 @@ namespace AniloxRoll.Monitor.Forms
             _reviewColumnChartHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
             _liveColumnChartHelper?.SetOps(_settings.Cam1_Ops);
             _liveColumnChartHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
+            _reviewOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
             _liveOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
             _liveRowChartHelper?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
             _reviewRowChartHelper?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
