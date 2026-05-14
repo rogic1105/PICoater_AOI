@@ -160,6 +160,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _ctx.GrpReviewTimePeriod.Click += (s, e) => PeriodComboManualChanged?.Invoke();
             _ctx.BtnGrabIdDataPrev.Click += (s, e) => StepDataGrabId(+1);
             _ctx.BtnGrabIdDataNext.Click += (s, e) => StepDataGrabId(-1);
+
+            // Data tab：點選 GroupBox 標題切換 active stat 模式（與 GrpReviewGrabNav.Click 相同模式）
+            _ctx.GrpDataSingleSheet.Click   += (s, e) => SwitchActiveStatGroupBox(_ctx.GrpDataSingleSheet);
+            _ctx.GroupBoxGrabIdRange.Click  += (s, e) => SwitchActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);
+            _ctx.GroupBoxTimeRange.Click    += (s, e) => SwitchActiveStatGroupBox(_ctx.GroupBoxTimeRange);
         }
 
         // ══════════════════════════════════════════════════════════════
@@ -194,14 +199,26 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _statAvailableTimes = InspectionStatisticsService.LoadAvailableTimes(path);
             _grabIdInfos = InspectionStatisticsService.LoadGrabIdInfosDescending(path);
 
-            PopulateAllGrabIdCombos(selectDataGrabId: true);
+            PopulateAllGrabIdCombos(selectDataGrabId: false);
 
             if (_statAvailableTimes.Count > 0)
                 PopulateStatDateCombos(_statAvailableTimes.Min, _statAvailableTimes.Max);
 
-            SetActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);
             PopulateChartNavigators(_statAvailableTimes.Count > 0
                 ? (DateTime?)_statAvailableTimes.Max : null);
+
+            // 預設單片模式（與 Review tab btnSelectFolder 一致）— 最新一筆 grab（descending [0]）。
+            // 對齊 cbGrabIdStart=End=0 → RefreshStats 的單片分支取得單 grab 範圍。
+            SetActiveStatGroupBox(_ctx.GrpDataSingleSheet);
+            if (_grabIdInfos.Count > 0)
+            {
+                using (StatComboGuard.Enter())
+                {
+                    _ctx.CbGrabIdStart.SelectedIndex = 0;
+                    _ctx.CbGrabIdEnd.SelectedIndex = 0;
+                    _ctx.CbDataGrabId.SelectedIndex = 0;
+                }
+            }
             RefreshStats();
         }
 
@@ -1267,6 +1284,17 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _activeStatMode = active;
             foreach (var box in new[] { _ctx.GroupBoxGrabIdRange, _ctx.GrpDataSingleSheet, _ctx.GroupBoxTimeRange })
                 SetGroupBoxActive(box, box == active);
+        }
+
+        /// <summary>
+        /// 由 GroupBox.Click 觸發：切換 active 模式並重算統計（panelStatCam / listViewGrabDetail
+        /// / chartMuraProfile / chartYearly 等）。已是 active 則無動作。
+        /// </summary>
+        private void SwitchActiveStatGroupBox(GroupBox target)
+        {
+            if (target == null || _activeStatMode == target) return;
+            SetActiveStatGroupBox(target);
+            RefreshStats();
         }
 
         // ── GroupBox 綠色高亮 ─────────────────────────────────────────

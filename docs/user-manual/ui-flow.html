@@ -1143,13 +1143,14 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <div class="flow-title">讀取資料 <code>btnSelectDataFolder</code>（從 Data tab 觸發）</div>
 <div class="box input">按下【讀取資料】→ 選擇資料夾</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">LoadAvailableTimes + LoadGrabIdInfos → PopulateChartNavigators → RefreshStats</div>
+<div class="box action dev">LoadAvailableTimes + LoadGrabIdInfos → PopulateChartNavigators → SetActiveStatGroupBox(GrpDataSingleSheet) → cbGrabIdStart=End=cbDataGrabId=0 (descending [0]=最新) → RefreshStats</div>
 <div class="v-arrow"></div>
 <div class="out-par">
-<div class="box output">起始/結束序號：填入全範圍</div>
+<div class="box output">起始/結束序號：填入全範圍，初值對齊到最新一筆（單片模式）</div>
 <div class="box output">起始/結束日期時間：填入全範圍</div>
-<div class="box output">報表序號 + 單片序號：填入全部序號</div>
-<div class="box output">良率卡片1~7【panelStatCam1~7】：顏色+數字更新</div>
+<div class="box output">報表序號 + 單片序號：填入全部序號，預設選最新一筆</div>
+<div class="box output">【單片群組 grpDataSingleSheet】綠色高亮（預設 active 模式 — 與 Review tab btnSelectFolder 行為對齊）</div>
+<div class="box output">良率卡片1~7【panelStatCam1~7】：顯示最新單筆的 Pass/Fail（單片模式分母=1）</div>
 <div class="box output">【chartMuraProfile】Mura 空間分布圖：最新單 grab stitch 視圖（MergeCurves + 該 grab #CFG OPS/Pos，與【chartOverview】對齊）</div>
 <div class="box output">明細列表：逐序號明細</div>
 <div class="box output">良率年/月/日圖：填入統計資料</div>
@@ -1157,6 +1158,19 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 </div>
 <div class="v-arrow"></div>
 <div class="box sync">同步 Review tab：設定 ImageRepository + TimeNavigator</div>
+</div>
+
+<div class="flow-group vflow">
+<div class="flow-title">統計模式切換（點選 GroupBox 標題）</div>
+<div class="box input">點【單片群組】 / 【序號範圍群組】 / 【時序範圍群組】 任一 GroupBox 標題區</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">SwitchActiveStatGroupBox(target) → SetActiveStatGroupBox + RefreshStats（若已是 active 則 no-op）</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">三個 GroupBox 之一綠色高亮（active），另兩個取消高亮</div>
+<div class="box output">panelStatCam / listViewGrabDetail / chartMuraProfile 依新 active 模式重算（單片=取 cbDataGrabId，序號範圍=取 cbGrabIdStart/End，時序範圍=取 cbStartDate~cbEndTime）</div>
+</div>
+<div class="note dev">與 Review tab 的 grpReviewGrabNav.Click（OnReviewGrabIdChanged）/ grpReviewTimePeriod.Click（PeriodComboManualChanged）對等：GroupBox 標題本身可點 = 模式切換器。</div>
 </div>
 <div class="flow-group vflow">
 <div class="flow-title">序號範圍選擇 <code>cbGrabIdStart/End</code></div>

@@ -16,6 +16,9 @@
 ## 注意事項
 
 ### 統計模式（`_activeStatMode` 追蹤）
+- 三模式：`GrpDataSingleSheet`（單片，cbDataGrabId 驅動）、`GroupBoxGrabIdRange`（序號範圍，cbGrabIdStart/End 驅動）、`GroupBoxTimeRange`（時序範圍，cbStartDate~cbEndTime 驅動）
+- **三個 GroupBox 標題都可點切模式**（`SwitchActiveStatGroupBox`）— 與 Review tab 的 `grpReviewGrabNav.Click` 對等
+- `btnSelectDataFolder` 預設進入 `GrpDataSingleSheet` 模式 + 最新一筆（descending [0]）— 與 Review tab `btnSelectFolder` 行為對齊
 - **序號模式**：`ComputeByGrabIdRange` — 分母=唯一序號數，同序號同相機一票否決
 - **時間模式**：找時間範圍內 GrabIds → 同樣用 `ComputeByGrabIdRange`
 - Period Charts（`ScanCsvByDateRange`）同樣用 (GrabId, CamId) 一票否決
