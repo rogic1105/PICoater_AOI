@@ -74,7 +74,7 @@ PICoater_AOI/
 | `ImageCatalog/ImageRepository.cs` | 掃描目錄建立索引 |
 | `Services/AoiService.cs` | C# ↔ Native P/Invoke wrapper（ProcessImage + ComputeColumnMean） |
 | `Services/InspectionLogService.cs` | 每日 CSV 寫入；GrabId = `yyMMdd-HHmmss` 時間戳格式 |
-| `Services/InspectionStatisticsService.cs` | CSV 統計服務；LoadConfigForDate（按日期載入 #CFG）；LoadAvgMuraProfile（抽樣 .bin 平均空間曲線） |
+| `Services/InspectionStatisticsService.cs` | CSV 統計服務；LoadConfigForDate（按日期載入 #CFG）；LoadConfigForGrabId / LoadImagePathsForGrabId（單 grab 取 #CFG 與 .bin 路徑，供 chartMuraProfile 對齊 chartOverview） |
 | `Services/IoState.cs` | IoState enum（FSM 狀態）+ IoSnapshot struct（IO 快照） |
 | `Services/IoGrabController.cs` | IO-Grab 連動：IoState FSM、IO 追蹤、Watchdog keepalive；支援 IModbusTcpClient 注入測試 |
 | `Services/CsvConfigSnapshot.cs` | 不可變設定快照（CamOps/CamPos/CamGrabHeight/CamExposureUs/CamLineRateHz/Hessian/ErrorValue/TrimHead/TrimTail） |

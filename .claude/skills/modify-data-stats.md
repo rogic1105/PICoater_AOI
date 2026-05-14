@@ -9,7 +9,7 @@
 ## 關鍵檔案
 
 - `UI/Presenters/DataStatisticsPresenter.cs` — Data tab 統計、combo 串聯、Period Charts、跨 Tab 同步
-- `Services/InspectionStatisticsService.cs` — CSV 統計服務、LoadConfigForDate
+- `Services/InspectionStatisticsService.cs` — CSV 統計服務、LoadConfigForDate、LoadConfigForGrabId、LoadImagePathsForGrabId
 - `Services/InspectionLogService.cs` — 每日 CSV 寫入、GrabId 格式
 - `Services/CsvConfigSnapshot.cs` — 不可變設定快照
 
@@ -34,6 +34,12 @@
 - `FillPeriodChart` 先 clear 再填真實資料
 - `niceMax = max(5, ceil(maxTotal/5)*5)`，AxisY 和 AxisY2 兩軸 Maximum/Interval 必須同步
 - chart.Tag = `"auto"` 代表 AutoScale 模式，null = FixedScale
+
+### chartMuraProfile（Mura 空間分布圖）
+- **永遠**顯示「最新一筆」單 grab 的 stitch 視圖（不再多 grab 平均；多 grab 平均會稀釋峰值）
+- 觸發點：`RefreshStats` → `UpdateMuraProfileChart(grabIds)` → 取 `grabIds[0]`（descending order = 最新）→ `UpdateMuraProfileForSingleGrab(info)`
+- 資料來源：`LoadConfigForGrabId`（取該 grab 的 #CFG OPS/Pos）+ `LoadImagePathsForGrabId` + `CurveMergeHelper.MergeCurves`（合該 grab 內所有 capture）→ 與 `ReviewStitchCoordinator.UpdateStitchedOverviewChart` 同源 → chart 與 chartOverview 對齊
+- 不依賴 canvasMain — Data tab 操作即時顯示對齊圖；Review tab 載入後 `SyncMuraProfileFromReview` 覆寫為同源資料，無視覺差
 
 ### 跨 Tab 同步
 | 方向 | Guard |

@@ -1150,7 +1150,7 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <div class="box output">起始/結束日期時間：填入全範圍</div>
 <div class="box output">報表序號 + 單片序號：填入全部序號</div>
 <div class="box output">良率卡片1~7【panelStatCam1~7】：顏色+數字更新</div>
-<div class="box output">【chartMuraProfile】Mura 空間分布圖：拼接式平均曲線（≤50 grab 均勻取樣）</div>
+<div class="box output">【chartMuraProfile】Mura 空間分布圖：最新單 grab stitch 視圖（MergeCurves + 該 grab #CFG OPS/Pos，與【chartOverview】對齊）</div>
 <div class="box output">明細列表：逐序號明細</div>
 <div class="box output">良率年/月/日圖：填入統計資料</div>
 <div class="box output">年/月/日圖導航：填入可選範圍</div>
@@ -1166,7 +1166,7 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">起始/結束日期時間：同步更新</div>
-<div class="box output">良率卡片 + Mura 空間分布圖（≤50 grab 均勻取樣）+ 明細列表：刷新</div>
+<div class="box output">良率卡片 + 明細列表：刷新（範圍統計）；【chartMuraProfile】：顯示範圍內**最新**一筆 grab 的 stitch 視圖（不再多 grab 平均）</div>
 <div class="box output">序號範圍群組：綠色高亮</div>
 </div>
 <div class="v-arrow"></div>
@@ -1176,18 +1176,18 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <div class="flow-title">序號選擇 <code>cbDataGrabId</code>（cb 值即時、主畫面延後）</div>
 <div class="box input">選擇【報表序號】或按【報表上一序號】/【報表下一序號】</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">鎖定 start=end=同序號 → RefreshStats → UpdateMuraProfileChart（LoadAvgMuraProfile，從 .bin 抽樣即時計算）</div>
+<div class="box action dev">鎖定 start=end=同序號 → RefreshStats → UpdateMuraProfileChart → UpdateMuraProfileForSingleGrab（MergeCurves + 該 grab #CFG OPS/Pos，與 chartOverview 對齊）</div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">起始/結束序號 + 日期時間：同步到該序號</div>
 <div class="box output">良率卡片 + 明細列表：刷新（單片統計）</div>
-<div class="box output">【chartMuraProfile】Mura 空間分布圖：立即用該 grab 的 mura 曲線更新（LoadAvgMuraProfile）</div>
+<div class="box output">【chartMuraProfile】Mura 空間分布圖：立即用該 grab 的 stitch 視圖更新（不依賴 canvasMain 是否載入）</div>
 <div class="box output">序號選擇群組：綠色高亮</div>
 </div>
 <div class="v-arrow"></div>
 <div class="box sync">同步 Review tab：cbReviewGrabId（值同步，GrabIdNavGuard 抑制觸發）+ 時段日期/時間 → 設 _reviewDirty=true（不立即載入主畫面）</div>
 <div class="v-arrow"></div>
-<div class="note">主畫面渲染延後：避免 Data tab 操作中等待 IO；待使用者切到 Review tab 時由 tabMain.SelectedIndexChanged 觸發 LoadGrabStitchedViewAsync，再由 StitchedCurveUpdated → SyncMuraProfileFromReview 用 stitch 版資料覆寫【chartMuraProfile】（與【chartOverview】對齊）。</div>
+<div class="note">主畫面（canvasMain）渲染延後：避免 Data tab 操作中等待 IO；待使用者切到 Review tab 時由 tabMain.SelectedIndexChanged 觸發 LoadGrabStitchedViewAsync。chartMuraProfile 不依賴此延後路徑 — Data tab 操作時就用 UpdateMuraProfileForSingleGrab 立即顯示對齊圖；Review tab 載入完成後 StitchedCurveUpdated → SyncMuraProfileFromReview 會以同源資料覆寫（結果不變）。</div>
 <div class="v-arrow"></div>
 <div class="box guard">_grabIdCrossGuard 防 Review ↔ Data 迴圈</div>
 </div>
@@ -1697,7 +1697,7 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">回顧主畫面 + 縮圖：載入拼接圖</div>
-<div class="box output">chartMuraProfile：StitchedCurveUpdated → SyncMuraProfileFromReview 用 stitch 版資料覆寫（與 chartOverview 對齊）</div>
+<div class="box output">chartMuraProfile：StitchedCurveUpdated → SyncMuraProfileFromReview 同源資料覆寫（Data tab 操作時已用 UpdateMuraProfileForSingleGrab 顯示相同內容，此步無視覺變化）</div>
 </div>
 </div>
 <div class="flow-group vflow">

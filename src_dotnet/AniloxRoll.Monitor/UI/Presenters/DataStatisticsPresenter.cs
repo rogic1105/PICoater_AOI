@@ -699,27 +699,51 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private void UpdateMuraProfileChart(IList<GrabIdInfo> grabIds)
         {
             if (_muraProfileHelper == null || _ctx.Settings == null) return;
+            if (grabIds == null || grabIds.Count == 0)
+            {
+                ClearMuraProfileChart();
+                return;
+            }
 
-            var (meanDict, maxDict) = InspectionStatisticsService.LoadAvgMuraProfile(
-                _statsDataRootPath, grabIds);
-            if (meanDict.Count == 0) return;
+            // 始終顯示「最新一筆」單 grab 的 stitch-style 視圖（與 chartOverview 對齊）。
+            // _grabIdInfos / rangeInfos / grabInfosInRange 皆為 descending 排序，[0] = 最新。
+            // 多 grab 平均會稀釋峰值（曲線平緩接近 0），不符合使用者直覺需求。
+            UpdateMuraProfileForSingleGrab(grabIds[0]);
+        }
+
+        /// <summary>
+        /// 用單一 grab 的 .bin（MergeCurves 合多 capture）+ 該 grab 的 CSV #CFG OPS/Pos
+        /// 更新 chartMuraProfile，與 chartOverview 完全對齊。不依賴 canvasMain 是否載入。
+        /// </summary>
+        private void UpdateMuraProfileForSingleGrab(GrabIdInfo info)
+        {
+            if (_muraProfileHelper == null || _ctx.Settings == null) return;
+            if (string.IsNullOrWhiteSpace(_statsDataRootPath)) return;
+
+            var grabCfg = InspectionStatisticsService.LoadConfigForGrabId(
+                _statsDataRootPath, info.GrabId, info.Earliest, info.Latest);
+            var grouped = InspectionStatisticsService.LoadImagePathsForGrabId(
+                _statsDataRootPath, info.GrabId, info.Earliest, info.Latest);
 
             int camCount = _ctx.CameraCount;
             var allMean = new float[camCount][];
             var allMax  = new float[camCount][];
             for (int i = 0; i < camCount; i++)
             {
-                meanDict.TryGetValue(i + 1, out allMean[i]);
-                maxDict.TryGetValue(i + 1, out allMax[i]);
+                int camId = i + 1;
+                if (grouped.TryGetValue(camId, out var paths) && paths.Count > 0)
+                    CurveMergeHelper.MergeCurves(paths, out allMean[i], out allMax[i]);
             }
 
+            double[] ops = grabCfg?.CamOps  ?? _ctx.Settings.GetCameraOpsUmArray();
+            double[] pos = grabCfg?.CamPos  ?? _ctx.Settings.GetCameraStartPositionMmArray();
+            float errMean = grabCfg?.ErrorValueMeanV ?? _ctx.Settings.ErrorValueMeanV;
+            float errMax  = grabCfg?.ErrorValueMaxV  ?? _ctx.Settings.ErrorValueMaxV;
+
             CurveMergeHelper.UpdateOverviewChart(
-                allMean, allMax,
-                _ctx.Settings.GetCameraOpsUmArray(),
-                _ctx.Settings.GetCameraStartPositionMmArray(),
-                _ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV,
+                allMean, allMax, ops, pos, errMean, errMax,
                 _muraProfileHelper, camCount,
-                StitchMode.Vertical, null);
+                _ctx.Settings.StitchMode, null);
         }
 
         /// <summary>
