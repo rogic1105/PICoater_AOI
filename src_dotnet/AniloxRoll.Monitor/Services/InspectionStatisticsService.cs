@@ -915,7 +915,7 @@ namespace AniloxRoll.Monitor.Core.Services
             try
             {
                 var csvFiles = Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories);
-                Array.Sort(csvFiles, StringComparer.OrdinalIgnoreCase);
+                Array.Sort(csvFiles, StringComparer.Ordinal);  // B-L1：跟其他 4 處統一
 
                 foreach (string csvPath in csvFiles)
                 {

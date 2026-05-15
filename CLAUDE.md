@@ -78,6 +78,7 @@ PICoater_AOI/
 | `Services/IoState.cs` | IoState enum（FSM 狀態）+ IoSnapshot struct（IO 快照） |
 | `Services/IoGrabController.cs` | IO-Grab 連動：IoState FSM、IO 追蹤、Watchdog keepalive；支援 IModbusTcpClient 注入測試 |
 | `Services/CsvConfigSnapshot.cs` | 不可變設定快照（CamOps/CamPos/CamGrabHeight/CamExposureUs/CamLineRateHz/Hessian/ErrorValue/TrimHead/TrimTail） |
+| `Services/HessianRescaleHelper.cs` | View-time HM rescale 共用：Ratio / IsNoOp / RescaleInPlace1D\|2D / CloneAndRescale1D\|2D — 5 個公式單一來源 |
 | `Services/StorageRetentionService.cs` | 循環儲存：事件驅動（grab 結束/每 10 grab/watchdog），磁碟可用空間低於門檻時刪最舊日期資料夾影像，保留 CSV |
 | `Services/CleanupFlagWatcher.cs` | Storage PC 專用：每 10 秒自主查空間 + 清理；同時輪詢 cleanup-request.flag（Inspection PC 寫入）立即觸發 |
 | `Settings/Models/AppModeConfig.cs` | 機台角色設定：Role（Inspection/Storage）、LocalConfigFolder、StorageFolderPath；Load/Save → Config\app-mode.json |

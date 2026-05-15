@@ -1164,10 +1164,12 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <div class="flow-title">統計模式切換（點選 GroupBox 標題）</div>
 <div class="box input">點【單片群組】 / 【序號範圍群組】 / 【時序範圍群組】 任一 GroupBox 標題區</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">SwitchActiveStatGroupBox(target) → SetActiveStatGroupBox + RefreshStats（若已是 active 則 no-op）</div>
+<div class="box action dev">SwitchActiveStatGroupBox(target) → SetActiveStatGroupBox + 攤開範圍 + RefreshStats（若已是 active 則 no-op）</div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">三個 GroupBox 之一綠色高亮（active），另兩個取消高亮</div>
+<div class="box output">切到【序號範圍群組】：cbGrabIdStart=最舊、cbGrabIdEnd=最新（descending order [last]/[0]）</div>
+<div class="box output">切到【時序範圍群組】：cbStartDate/Time + cbEndDate/Time 攤開到 _statAvailableTimes.Min/Max（資料夾完整時間範圍）— 避免承襲單片模式的單一秒級切片</div>
 <div class="box output">panelStatCam / listViewGrabDetail / chartMuraProfile 依新 active 模式重算（單片=取 cbDataGrabId，序號範圍=取 cbGrabIdStart/End，時序範圍=取 cbStartDate~cbEndTime）</div>
 </div>
 <div class="note dev">與 Review tab 的 grpReviewGrabNav.Click（OnReviewGrabIdChanged）/ grpReviewTimePeriod.Click（PeriodComboManualChanged）對等：GroupBox 標題本身可點 = 模式切換器。</div>

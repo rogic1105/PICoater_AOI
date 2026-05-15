@@ -44,6 +44,15 @@
 - 資料來源：`LoadConfigForGrabId`（取該 grab 的 #CFG OPS/Pos）+ `LoadImagePathsForGrabId` + `CurveMergeHelper.MergeCurves`（合該 grab 內所有 capture）→ 與 `ReviewStitchCoordinator.UpdateStitchedOverviewChart` 同源 → chart 與 chartOverview 對齊
 - 不依賴 canvasMain — Data tab 操作即時顯示對齊圖；Review tab 載入後 `SyncMuraProfileFromReview` 覆寫為同源資料，無視覺差
 
+### CSV 讀寫並發保護
+- 所有新增的 CSV reader 用 `InspectionStatisticsService.OpenCsvShared(path)` 而非 `new StreamReader(path)` — 內部用 `FileShare.ReadWrite` 對齊 writer 端，避免跨 process race（Storage PC 讀 vs Inspection PC 寫）。Writer 端 `InspectionLogService` 已同樣指定 `FileShare.ReadWrite`。
+- 新增依時間掃 CSV 的方法時，要 `Array.Sort(csvFiles, StringComparer.Ordinal)` 使 captureHmV 跨日邊界正確沿用 — 路徑 `{yyyy}\{yyyyMM}\{yyyyMMdd}.csv` 字串序 = 時間序。
+
+### PropertyGrid → Stats 重算的 debounce
+- PropertyGrid 任何變更觸發 `RefreshStats + RefreshPeriodCharts` 都應走 `AniloxRollForm.ScheduleStatsRefresh()`（300ms debounce），而非直接呼叫 `_dataStatsPresenter.RefreshStats()`。
+- 拖 slider 時連續變更會被合併為 1 次 CSV scan，避免每 tick full scan 造成 UI 凍結。
+- 失敗時連續每 5 次彈 MessageBox 通知使用者（不淹沒對話框）。
+
 ### 跨 Tab 同步
 | 方向 | Guard |
 |------|-------|

@@ -179,7 +179,7 @@ namespace AniloxRoll.Monitor.Forms
             try { if (_liveCameraManager?.IsLiveGrabbing == true) _liveCameraManager.StopGrab(); } catch { }
             try { _telemetryTimer?.Stop(); } catch { }
             try { _liveOverviewTimer?.Stop(); } catch { }
-            try { _statsRefreshDebouncer?.Stop(); } catch { }                                // H3 debouncer 停
+            try { _statsRefreshDebouncer?.Stop(); _statsRefreshDebouncer?.Dispose(); _statsRefreshDebouncer = null; } catch { }  // H3 + round-2 H3 補 Dispose
             try { _cleanupFlagWatcher?.Dispose(); _cleanupFlagWatcher = null; } catch { }  // M3: 10 秒輪詢提前停
         }
 
@@ -233,8 +233,7 @@ namespace AniloxRoll.Monitor.Forms
             InitUiLayer();
             if (_appMode?.Role != MachineRole.Storage)
                 InitCameraLayer();
-            else
-                RegisterStorageModeCleanup();
+            // Storage 模式：cleanup 統一在主 FormClosed handler 處理（H1 + B-M1 修正）
             InitializeRightPanelControls();
             SetupDataTab();
             ApplyStorageModeUi();
@@ -1266,16 +1265,6 @@ namespace AniloxRoll.Monitor.Forms
             return _settings?.CaptureRootPath ?? string.Empty;
         }
 
-        private void RegisterStorageModeCleanup()
-        {
-            FormClosed += (_, __) =>
-            {
-                _telemetryTimer?.Stop();
-                _retentionService?.Dispose();
-                _cleanupFlagWatcher?.Dispose();
-            };
-        }
-
         /// <summary>
         /// Live 曲線閾值判斷（callback 執行緒呼叫）。
         /// direction: "v"=垂直, "h"=水平；依 CheckLiveMura 設定的「檢測方向」決定是否觸發 DO1。
@@ -2064,6 +2053,7 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         /// <summary>H3：debounce 統計重算 — 300ms 內合併多次 PropertyGrid 變更。</summary>
+        private int _statsRefreshFailCount;
         private void ScheduleStatsRefresh()
         {
             if (_statsRefreshDebouncer == null)
@@ -2076,8 +2066,16 @@ namespace AniloxRoll.Monitor.Forms
                     {
                         _dataStatsPresenter?.RefreshStats();
                         _dataStatsPresenter?.RefreshPeriodCharts();
+                        _statsRefreshFailCount = 0;
                     }
-                    catch (Exception ex) { Trace.WriteLine($"[ScheduleStatsRefresh] {ex}"); }
+                    catch (Exception ex)
+                    {
+                        Trace.WriteLine($"[ScheduleStatsRefresh] {ex}");
+                        // B-M2：連續失敗時通知 user（每 5 次彈一次，避免狂彈）
+                        if (++_statsRefreshFailCount % 5 == 1)
+                            MessageBox.Show($"統計刷新失敗（已失敗 {_statsRefreshFailCount} 次）：\n{ex.Message}",
+                                "Data tab 統計", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
                 };
             }
             _statsRefreshDebouncer.Stop();

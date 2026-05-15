@@ -661,8 +661,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private void UpdateGrabDetailListView(List<GrabDetail> details)
         {
             var lv = _ctx.ListViewGrabDetail;
-            // H5：重填前先取消訂閱，避免 BeginUpdate/EndUpdate 之間 selection 還原誤觸發
+            // H5 + B-M3：重填前 unsubscribe，try/finally 保證 subscription 一定接回，
+            // 即使 lv.Items.Add 或 AutoResizeColumns 拋 exception（如 disposed control）
             lv.SelectedIndexChanged -= OnGrabDetailRowSelected;
+            try
+            {
             lv.BeginUpdate();
             lv.Items.Clear();
             lv.SelectedIndices.Clear();
@@ -691,7 +694,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             lv.EndUpdate();
             lv.AutoResizeColumns(ColumnHeaderAutoResizeStyle.ColumnContent);
-            lv.SelectedIndexChanged += OnGrabDetailRowSelected;
+            }
+            finally
+            {
+                lv.SelectedIndexChanged += OnGrabDetailRowSelected;
+            }
         }
 
         public static void FitListViewColumnsProportional(ListView lv, bool useContent = false)

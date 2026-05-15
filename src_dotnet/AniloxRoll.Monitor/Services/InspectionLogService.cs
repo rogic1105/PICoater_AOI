@@ -100,7 +100,10 @@ namespace AniloxRoll.Monitor.Core.Services
                     bool isNewFile = !File.Exists(csvPath);
                     bool isNewDay  = !string.Equals(_lastCsvPath, csvPath, StringComparison.OrdinalIgnoreCase);
 
-                    using (var sw = new StreamWriter(csvPath, append: true, new UTF8Encoding(false)))
+                    // B-H1：FileShare.ReadWrite 對齊 reader 端的 OpenCsvShared，避免跨 process race
+                    // 造成 reader 偶發 IOException。
+                    using (var fs = new FileStream(csvPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
+                    using (var sw = new StreamWriter(fs, new UTF8Encoding(false)))
                     {
                         // 新檔案或新的一天 → 寫 #CFG + header
                         if (isNewFile || isNewDay)
@@ -160,10 +163,12 @@ namespace AniloxRoll.Monitor.Core.Services
                         string.Equals(_lastCsvPath, csvPath, StringComparison.OrdinalIgnoreCase))
                         return; // 沒有變更，不寫
 
-                    using (var sw = new StreamWriter(csvPath, append: true, new UTF8Encoding(false)))
+                    bool isNewFile = !File.Exists(csvPath) ||
+                        new FileInfo(csvPath).Length == 0;
+                    // B-H1：FileShare.ReadWrite 對齊 reader 端
+                    using (var fs = new FileStream(csvPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
+                    using (var sw = new StreamWriter(fs, new UTF8Encoding(false)))
                     {
-                        bool isNewFile = !File.Exists(csvPath) ||
-                            new FileInfo(csvPath).Length == 0;
 
                         if (isNewFile)
                             sw.WriteLine(Header);
