@@ -1186,6 +1186,21 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <div class="v-arrow"></div>
 <div class="box guard">_statComboGuard 防 cascade 重複</div>
 </div>
+
+<div class="flow-group vflow">
+<div class="flow-title">點選明細列表 <code>listViewGrabDetail</code> row</div>
+<div class="box input">點選【明細列表】任一料件序號 row</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">OnGrabDetailRowSelected → 取出 row.Text(grabId) → IndexOf → 設 cbDataGrabId.SelectedIndex → OnSingleSheetComboChanged 接手</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">報表序號 cbDataGrabId 對齊到該序號</div>
+<div class="box output">切到單片模式（GrpDataSingleSheet 綠色高亮）</div>
+<div class="box output">chartMuraProfile / 良率卡片 / 明細列表自動刷新單片視圖</div>
+<div class="box output">同步 cbReviewGrabId（_reviewDirty=true，canvas 延後到切 Review tab 時載入）</div>
+</div>
+<div class="note dev">H5 防護：UpdateGrabDetailListView 重填明細時先 unsubscribe SelectedIndexChanged，避免 BeginUpdate/EndUpdate 之間 selection 還原誤觸發。</div>
+</div>
 <div class="flow-group vflow">
 <div class="flow-title">序號選擇 <code>cbDataGrabId</code>（cb 值即時、主畫面延後）</div>
 <div class="box input">選擇【報表序號】或按【報表上一序號】/【報表下一序號】</div>
@@ -1278,6 +1293,15 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 </div>
 <div class="v-arrow"></div>
 <div class="box input">修改 Recipe 參數（HessianMaxFactorV/H / ErrorValue / RidgeDir）</div>
+<div class="v-arrow"></div>
+<div class="box input">修改機台角色 <code>AppRole</code>（Inspection / Storage）</div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">寫 Config\app-mode.json → MessageBox「重開生效」 → return（不繼續處理其他變更）</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">下次啟動讀 app-mode.json 決定模式：Inspection 顯示完整檢測介面、Storage 隱藏 Live tab 只開背景服務</div>
+</div>
+<div class="note dev">Storage PC 模式：StorageRetentionService + CleanupFlagWatcher 每 10 秒查空間 + 輪詢 cleanup-request.flag；Live tab 隱藏避免誤觸取像。</div>
 <div class="v-arrow"></div>
 <div class="box action">強制啟用回顧強化 → ClearStitchedMode → 重新處理影像</div>
 <div class="box input">修改合圖方式（垂直 ↔ 全域）</div>

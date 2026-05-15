@@ -141,6 +141,12 @@ namespace AniloxRoll.Monitor.Forms
         /// 待使用者切到 Review tab 時才載圖。</summary>
         private bool _reviewDirty = false;
 
+        /// <summary>
+        /// H3 fix：PropertyValueChanged 觸發的 full CSV scan（RefreshStats + RefreshPeriodCharts）
+        /// 用 debounce 合併多次連續變更（如 slider 拖拽）。300ms 內未再觸發才執行，避免 UI 凍結。
+        /// </summary>
+        private Timer _statsRefreshDebouncer;
+
         // --- 常數 ---
         private const int CameraCount = 7;
         private const int TickFreq = 1000;
@@ -168,12 +174,13 @@ namespace AniloxRoll.Monitor.Forms
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             base.OnFormClosing(e);
-            // 先停止所有背景服務，避免非 UI 執行緒在 Handle 銷毀後呼叫 BeginInvoke
+            // Closing 階段：只「停止」非 UI 執行緒活動（避免 Handle 銷毀後它們還在 BeginInvoke）。
+            // Dispose 留到 FormClosed 統一處理，避免雙路徑釋放重疊。
             try { if (_liveCameraManager?.IsLiveGrabbing == true) _liveCameraManager.StopGrab(); } catch { }
-            try { _plcGrabController?.Dispose(); _plcGrabController = null; } catch { }
             try { _telemetryTimer?.Stop(); } catch { }
             try { _liveOverviewTimer?.Stop(); } catch { }
-            try { _lightController?.Dispose(); _lightController = null; } catch { }
+            try { _statsRefreshDebouncer?.Stop(); } catch { }                                // H3 debouncer 停
+            try { _cleanupFlagWatcher?.Dispose(); _cleanupFlagWatcher = null; } catch { }  // M3: 10 秒輪詢提前停
         }
 
         public AniloxRollForm()
@@ -1027,22 +1034,20 @@ namespace AniloxRoll.Monitor.Forms
 
             FormClosed += async (_, __) =>
             {
-                _telemetryTimer?.Stop();
-                _liveOverviewTimer?.Stop();
+                // Closed 階段：統一 Dispose 路徑（Closing 已負責停止活動，這裡不重複 Stop）
                 if (_plcGrabController != null)
                 {
-                    await _plcGrabController.StopAsync();
+                    try { await _plcGrabController.StopAsync(); } catch { }
                     _plcGrabController.Dispose();
+                    _plcGrabController = null;
                 }
                 FreePrecomputedColMeanBuffers();
                 _liveCameraManager.FreeCameras();
-                // 在相機釋放後再 dispose CUDA pipeline（依賴關係安全）
-                // commit 9dbac3e 刪 CleanupSystem 後沒人接手 → CUDA pinned memory 不會主動釋放
+                // 相機釋放後再 dispose CUDA pipeline（依賴關係安全；C2 修正）
                 _inspectionService?.Dispose();
-                _lightController?.Dispose();
-                _retentionService?.Dispose();
-                _remoteCopyService?.Dispose();
-                _cleanupFlagWatcher?.Dispose();
+                _lightController?.Dispose();   _lightController = null;
+                _retentionService?.Dispose();  _retentionService = null;
+                _remoteCopyService?.Dispose(); _remoteCopyService = null;
             };
 
             // 程式啟動後自動分配相機（不 Grab），讓 lblCamCount 在按下【開始抓取】前就能顯示連線狀態
@@ -1314,6 +1319,9 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _liveCurveMean[cameraIndex] = meanArr;
                 _liveCurveMax[cameraIndex]  = maxArr;
+                // M8: memory barrier 確保 UI thread 透過 volatile _liveOverviewDirty 讀到 dirty=true 時，
+                // array reference 寫入已完成（避免讀到舊指標）
+                System.Threading.Interlocked.MemoryBarrier();
                 _liveOverviewDirty = true;
             }
 
@@ -2055,6 +2063,27 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
+        /// <summary>H3：debounce 統計重算 — 300ms 內合併多次 PropertyGrid 變更。</summary>
+        private void ScheduleStatsRefresh()
+        {
+            if (_statsRefreshDebouncer == null)
+            {
+                _statsRefreshDebouncer = new Timer { Interval = 300 };
+                _statsRefreshDebouncer.Tick += (_, __) =>
+                {
+                    _statsRefreshDebouncer.Stop();
+                    try
+                    {
+                        _dataStatsPresenter?.RefreshStats();
+                        _dataStatsPresenter?.RefreshPeriodCharts();
+                    }
+                    catch (Exception ex) { Trace.WriteLine($"[ScheduleStatsRefresh] {ex}"); }
+                };
+            }
+            _statsRefreshDebouncer.Stop();
+            _statsRefreshDebouncer.Start();
+        }
+
         // PropertyGrid 回傳的 ChangedItem.PropertyDescriptor.Name 可能是 MemberName 或 DisplayName 其中之一，
         // 因此兩種形式都放入集合，避免版本差異導致漏判。
         private static readonly HashSet<string> RecipePropertyNames = new HashSet<string>(StringComparer.Ordinal)
@@ -2115,10 +2144,9 @@ namespace AniloxRoll.Monitor.Forms
                 _stitchCoordinator.RefreshCurrentCameraChartsForSettingsChange(); // chartMuraVertical + chartMuraHorizontal
             }
 
-            // Data tab 統計：用當前 Settings 重算 Pass/Fail（panelStatCam / listViewGrabDetail）
-            // 並重畫 chartYearly/Monthly/Daily（透過 OnChartYearIndexChanged 級聯重算）
-            _dataStatsPresenter?.RefreshStats();
-            _dataStatsPresenter?.RefreshPeriodCharts();
+            // Data tab 統計：debounce 300ms 後重算（panelStatCam / listViewGrabDetail
+            // / chartYearly/Monthly/Daily — 每次 full CSV scan）。連續拖 slider 時合併為 1 次。
+            ScheduleStatsRefresh();
 
             // 抓圖進行中設定變更 → 立刻在 CSV 插入 #CFG
             if (_liveCameraManager?.IsLiveGrabbing == true)

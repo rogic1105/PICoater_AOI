@@ -303,20 +303,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (mergedMean != null)
             {
                 float captureHmV = _currentGrabConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
-                ApplySingleCurveRescale(mergedMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
-                ApplySingleCurveRescale(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
+                HessianRescaleHelper.RescaleInPlace1D(mergedMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
+                HessianRescaleHelper.RescaleInPlace1D(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
                 _ctx.RowChartHelper.UpdateData(mergedMean, mergedMax);
                 _ctx.InteractionHelper.RefreshRowChartRange();
             }
-        }
-
-        private static void ApplySingleCurveRescale(float[] data, float captureHm, float currentHm)
-        {
-            if (data == null) return;
-            if (captureHm <= 0f || currentHm <= 0f) return;
-            float ratio = captureHm / currentHm;
-            if (Math.Abs(ratio - 1f) < 0.0001f) return;
-            for (int i = 0; i < data.Length; i++) data[i] *= ratio;
         }
 
         /// <summary>
@@ -349,8 +340,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             float errMax  = _ctx.Settings.ErrorValueMaxV;
 
             // chartOverview 是垂直 (column) 曲線 → 用 V 的 capture/current ratio
-            var displayMean = CloneAndRescale(_stitchedCurveMean, captureHm, _ctx.Settings.HessianMaxFactorV);
-            var displayMax  = CloneAndRescale(_stitchedCurveMax,  captureHm, _ctx.Settings.HessianMaxFactorV);
+            var displayMean = HessianRescaleHelper.CloneAndRescale2D(_stitchedCurveMean, captureHm, _ctx.Settings.HessianMaxFactorV);
+            var displayMax  = HessianRescaleHelper.CloneAndRescale2D(_stitchedCurveMax,  captureHm, _ctx.Settings.HessianMaxFactorV);
 
             CurveMergeHelper.UpdateOverviewChart(displayMean, displayMax,
                 opsArr, posArr, errMean, errMax,
@@ -360,30 +351,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
             StitchedCurveUpdated?.Invoke(displayMean, displayMax, opsArr, posArr, errMean, errMax);
         }
 
-        /// <summary>
-        /// 複製曲線陣列並套用 (HM_capture / HM_current) ratio，保留快取不變。
-        /// </summary>
-        private static float[][] CloneAndRescale(float[][] src, float captureHm, float currentHm)
-        {
-            if (src == null) return null;
-            var dst = new float[src.Length][];
-            float ratio = (captureHm > 0f && currentHm > 0f) ? captureHm / currentHm : 1f;
-            bool noOp = Math.Abs(ratio - 1f) < 0.0001f;
-            for (int i = 0; i < src.Length; i++)
-            {
-                if (src[i] == null) continue;
-                dst[i] = new float[src[i].Length];
-                if (noOp)
-                {
-                    Array.Copy(src[i], dst[i], src[i].Length);
-                }
-                else
-                {
-                    for (int j = 0; j < src[i].Length; j++) dst[i][j] = src[i][j] * ratio;
-                }
-            }
-            return dst;
-        }
 
         /// <summary>顯示單台相機拼接影像，並更新對應的 mura chart。
         /// resetView=true（pbCam 切換相機）：Vertical 模式強制 fit to screen。
@@ -454,8 +421,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _ctx.ColumnChartHelper.SetThresholds(
                     _ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV);
 
-                var displayMean = Clone1DAndRescale(mean, captureHmV, _ctx.Settings.HessianMaxFactorV);
-                var displayMax  = Clone1DAndRescale(max,  captureHmV, _ctx.Settings.HessianMaxFactorV);
+                var displayMean = HessianRescaleHelper.CloneAndRescale1D(mean, captureHmV, _ctx.Settings.HessianMaxFactorV);
+                var displayMax  = HessianRescaleHelper.CloneAndRescale1D(max,  captureHmV, _ctx.Settings.HessianMaxFactorV);
 
                 double startPos = (idx >= 0 && idx < posArr.Length) ? posArr[idx] : 0;
                 _ctx.InteractionHelper.TryComputeCurrentViewRange(idx, out double leftMm, out double rightMm);
@@ -478,8 +445,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     if (rowMean != null)
                     {
                         float captureHmV = _currentGrabConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
-                        var displayMean = Clone1DAndRescale(rowMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
-                        var displayMax  = Clone1DAndRescale(rowMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
+                        var displayMean = HessianRescaleHelper.CloneAndRescale1D(rowMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
+                        var displayMax  = HessianRescaleHelper.CloneAndRescale1D(rowMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
                         _ctx.RowChartHelper.UpdateData(displayMean, displayMax);
                         _ctx.InteractionHelper.RefreshRowChartRange();
                     }
@@ -497,18 +464,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
             int idx = _ctx.GalleryManager.SelectedIndex;
             if (idx < 0) idx = 0;
             UpdatePerCameraCharts(idx);
-        }
-
-        /// <summary>複製 float[] 並套 (HM_capture/HM_current) ratio，保留原快取不被改動。</summary>
-        private static float[] Clone1DAndRescale(float[] src, float captureHm, float currentHm)
-        {
-            if (src == null) return null;
-            float ratio = (captureHm > 0f && currentHm > 0f) ? captureHm / currentHm : 1f;
-            bool noOp = Math.Abs(ratio - 1f) < 0.0001f;
-            var dst = new float[src.Length];
-            if (noOp) { Array.Copy(src, dst, src.Length); return dst; }
-            for (int i = 0; i < src.Length; i++) dst[i] = src[i] * ratio;
-            return dst;
         }
 
         /// <summary>

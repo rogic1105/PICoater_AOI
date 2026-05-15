@@ -369,16 +369,6 @@ namespace AniloxRoll.Monitor.UI.Managers
         }
 
         /// <summary>
-        /// 對所有相機同時設定曝光時間（μs）。
-        /// </summary>
-        public void SetExposureForAll(double exposureUs)
-        {
-            for (int i = 0; i < _cameraExposureTimeUs.Length; i++) _cameraExposureTimeUs[i] = exposureUs;
-            foreach (var cam in _cameras)
-                cam.SetExposureUs(exposureUs);
-        }
-
-        /// <summary>
         /// 對指定相機設定 Line Rate（Hz），需 CLProtocol 已啟用。
         /// 同 CameraSession.SetLineRateForCamera()。
         /// </summary>
@@ -395,16 +385,6 @@ namespace AniloxRoll.Monitor.UI.Managers
         public void SetGrabHeightForCamera(int camId, int height)
         {
             FindCamera(camId)?.SetGrabHeight(height);
-        }
-
-        /// <summary>
-        /// 對所有相機同時變更 Grab 高度（px）。
-        /// </summary>
-        public void SetGrabHeightForAll(int height)
-        {
-            for (int i = 0; i < _cameraGrabHeight.Length; i++) _cameraGrabHeight[i] = height;
-            foreach (var cam in _cameras)
-                cam.SetGrabHeight(height);
         }
 
         private AniloxCamera FindCamera(int camId)

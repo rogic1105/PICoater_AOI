@@ -323,6 +323,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
             RefreshStats();
         }
 
+        /// <summary>
+        /// 程式化把日期時間 combo 對齊到指定 DateTime（**不會觸發 OnStart/EndComboChanged 切換到 TimeRange 模式**）。
+        /// 呼叫端必須已包在 `StatComboGuard.Enter()` 內 — H4：guard 邊界很重要，新增 caller 時務必確認。
+        /// </summary>
         private void SetCombosToDateTime(bool isStart, DateTime dt)
         {
             string dateStr = dt.ToString("yyyy-MM-dd");
@@ -657,8 +661,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private void UpdateGrabDetailListView(List<GrabDetail> details)
         {
             var lv = _ctx.ListViewGrabDetail;
+            // H5：重填前先取消訂閱，避免 BeginUpdate/EndUpdate 之間 selection 還原誤觸發
+            lv.SelectedIndexChanged -= OnGrabDetailRowSelected;
             lv.BeginUpdate();
             lv.Items.Clear();
+            lv.SelectedIndices.Clear();
 
             foreach (var d in details)
             {
@@ -684,6 +691,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             lv.EndUpdate();
             lv.AutoResizeColumns(ColumnHeaderAutoResizeStyle.ColumnContent);
+            lv.SelectedIndexChanged += OnGrabDetailRowSelected;
         }
 
         public static void FitListViewColumnsProportional(ListView lv, bool useContent = false)
@@ -811,7 +819,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             // view-time 正規值 rescale：chartMuraProfile 是垂直曲線，用 V 的 capture/current ratio
             float captureHm = grabCfg?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
-            ApplyHessianRescale(allMean, allMax, captureHm, _ctx.Settings.HessianMaxFactorV);
+            HessianRescaleHelper.RescaleInPlace2D(allMean, allMax, captureHm, _ctx.Settings.HessianMaxFactorV);
 
             double[] ops = grabCfg?.CamOps  ?? _ctx.Settings.GetCameraOpsUmArray();
             double[] pos = grabCfg?.CamPos  ?? _ctx.Settings.GetCameraStartPositionMmArray();
@@ -822,28 +830,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 allMean, allMax, ops, pos, errMean, errMax,
                 _muraProfileHelper, camCount,
                 _ctx.Settings.StitchMode, null);
-        }
-
-        /// <summary>
-        /// 對 7 台相機的曲線陣列就地套用 (HM_capture / HM_current) ratio。
-        /// ratio=1 時略過（不浪費 CPU）。
-        /// </summary>
-        internal static void ApplyHessianRescale(float[][] allMean, float[][] allMax,
-            float captureHm, float currentHm)
-        {
-            if (captureHm <= 0f || currentHm <= 0f) return;
-            float ratio = captureHm / currentHm;
-            if (Math.Abs(ratio - 1.0f) < 0.0001f) return;
-            for (int i = 0; i < allMean.Length; i++)
-            {
-                if (allMean[i] != null)
-                    for (int j = 0; j < allMean[i].Length; j++) allMean[i][j] *= ratio;
-            }
-            for (int i = 0; i < allMax.Length; i++)
-            {
-                if (allMax[i] != null)
-                    for (int j = 0; j < allMax[i].Length; j++) allMax[i][j] *= ratio;
-            }
         }
 
         /// <summary>

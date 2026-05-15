@@ -335,8 +335,10 @@ PICoater_AOI/
 
 ```
 docs/
-├── dev/            ← 開發者/部署參考（API、硬體規格評估）
-└── user-manual/    ← 操作員說明書（UI 流程、IO 圖、硬體規格）
+├── config/         ← inspection-settings.json / acquisition-settings.json / dcf 範例
+├── dev/            ← 開發者/部署參考（MIL/CLProtocol API、廠商 Grabber/LTS_3DPA24 規格書、code review 紀錄）
+├── sample/        ← 示範程式（AOI.SDK.TestApp — 不參與 build，未來分離回 AOI_SDK repo）
+└── user-manual/    ← 操作員說明書（UI 流程、IO 圖、硬體規格、lib/ 渲染資源）
 ```
 
 開發知識統一放 `.claude/skills/`，`docs/dev/` 放大型參考文件。

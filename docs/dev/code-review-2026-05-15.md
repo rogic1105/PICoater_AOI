@@ -1,5 +1,16 @@
 # Code Review 報告 — 2026-05-15
 
+> **處理狀態（2026-05-15 同日修完）**：
+> - Critical 2/2 修畢（commit fee451f）
+> - High 6/6 修畢（H1+H2+H3+H4+H5+H6）
+> - Medium 9 修 6（M1+M2+M3+M4+M5+M8）；M6 / M7 / M9 標記 TODO（見最後）
+> - Low 6 修 4（L1+L5+L6+L3 確認 done）；L2 / L4 標記 TODO
+> - 整批修法見 commit history `git log --oneline` 5/15 commit 群
+
+---
+
+
+
 對最近 5 個 commit（10f0b6d V/H 分離 / 9f9ee47 GroupBox 可點 / 866d02e repo 整理 / 0e01f95 listView fix / 9dbac3e dead code 清理）以及周邊整體進行 review。
 
 ## 摘要
@@ -186,3 +197,18 @@ C1 建議重設到 [min, max]，但使用者習慣若是「上次 TimeRange 設�
 
 PropertyGrid 是否允許輸入 0？`ApplyHessianRescale` 有 `captureHm <= 0f` 檢查（會跳過 rescale），但若 currentHm=0 設定後，view-time 顯示曲線會保留 capture-time baked 值（不縮放）— 視覺上看起來「正規值無效」，可能讓使用者誤以為功能壞掉。
 建議：PropertyGrid 加 `[Range(0.001f, 10f)]` 或 Validate 在 InspectionSettings 防 0。
+
+
+---
+
+## 未修 TODO（壓力測試後再評估）
+
+- **M6** `LoadGrabIdInfos` `Directory.GetFiles AllDirectories` — 對 500+ 天資料慢，
+  但屬於 cold path（btnSelectDataFolder 才呼叫）。要做的話需要先用 LoadAvailableTimes
+  挑出涉及日期再 GetFiles by date — 改動較大，等實際遇到瓶頸再做。
+- **M7** `_currentDetails` / `_grabIdInfos` 跨 thread — 現在 UI thread only 不算 race，
+  但若未來把 RefreshStats 改 async（H3 後續延伸），這裡會立刻變 race。標記注意。
+- **M9** PopulateAllGrabIdCombos vs LoadDataFolder 微小語意差別 — 目前運作正確，
+  refactor 風險 > 收益。
+- **L2** PropertyValueChanged > 100 行未拆 — 程式碼結構問題、不影響正確性。
+- **L4** 同 L1（已完成）。

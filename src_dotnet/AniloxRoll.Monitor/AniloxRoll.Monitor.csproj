@@ -122,6 +122,7 @@
     <Compile Include="Services\IoState.cs" />
     <Compile Include="Services\LightController.cs" />
     <Compile Include="Services\InspectionStatisticsService.cs" />
+    <Compile Include="Services\HessianRescaleHelper.cs" />
     <Compile Include="ImageProcessing\BatchInspectionService.cs" />
     <Compile Include="ImageProcessing\InspectionEngine.cs" />
     <Compile Include="ImageProcessing\NativeBufferPool.cs" />

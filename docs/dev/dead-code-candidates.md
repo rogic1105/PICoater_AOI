@@ -3,10 +3,16 @@
 生成日期：2026-05-15
 用 `tests/python_test/find_dead_code.py` 掃出引用次數 ≤ 1（即只剩定義本身、沒有任何 caller）。
 
-**清理結果**：原 35 個候選 → 4 個框架介面（保留）+ 31 個已刪。
-再掃一次 + 一個衍生死碼（`ReinitializeForAcquisitionSettings`）也一併刪除。
+**清理結果**：
+- 第一輪（commit 9dbac3e）：35 → 4 框架（保留）+ 31 刪 + 1 衍生（ReinitializeForAcquisitionSettings）
+- 第二輪（commit code-review fixes）：又刪 2 個（SetExposureForAll / SetGrabHeightForAll，L1）
 
-清理方式：功能導向、一次性。若有功能缺失再補回（屬於平常改功能時舊東西沒徹底刪的問題）。
+最後 find_dead_code 重掃只剩 4 個框架介面：
+- BoolYesNoConverter.GetStandardValues（TypeConverter override）
+- DcfFileEditor.GetEditStyle / EditValue（UITypeEditor override）
+- LiveCameraManager.WheelZoomFilter.PreFilterMessage（IMessageFilter）
+
+清理方式：功能導向、一次性。若有功能缺失再補回。
 
 ---
 

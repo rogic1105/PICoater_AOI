@@ -77,6 +77,16 @@ namespace AniloxRoll.Monitor.Core.Services
     /// </summary>
     public static class InspectionStatisticsService
     {
+        /// <summary>
+        /// 共用的 CSV 讀取 helper — 用 FileShare.ReadWrite 開檔，避免與 InspectionLogService
+        /// 寫入競爭（特別是 Storage PC 讀 / Inspection PC 寫的跨 process 情境）。
+        /// </summary>
+        private static StreamReader OpenCsvShared(string path)
+        {
+            var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            return new StreamReader(fs);
+        }
+
         // ── 時間範圍統計（舊模式：以張數為分母）────────────────────────────
 
         /// <summary>
@@ -96,13 +106,16 @@ namespace AniloxRoll.Monitor.Core.Services
             if (string.IsNullOrWhiteSpace(captureRootPath) || !Directory.Exists(captureRootPath))
                 return stats;
 
-            foreach (string csvPath in Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories))
+            // M5: 跨 CSV 檔保留 captureHmV（按日期排序）
+            float captureHmV = ctx?.CurrentHmV ?? 0f;
+            var csvFiles = Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories);
+            Array.Sort(csvFiles, StringComparer.Ordinal);
+            foreach (string csvPath in csvFiles)
             {
                 try
                 {
-                    using (var sr = new StreamReader(csvPath))
+                    using (var sr = OpenCsvShared(csvPath))
                     {
-                        float captureHmV = ctx?.CurrentHmV ?? 0f; // 還沒讀到 #CFG 前先用 current（ratio=1）
                         string line;
                         while ((line = sr.ReadLine()) != null)
                         {
@@ -171,13 +184,16 @@ namespace AniloxRoll.Monitor.Core.Services
             // grabId → camId → hasFail
             var grabCamFail = new Dictionary<string, Dictionary<int, bool>>(StringComparer.Ordinal);
 
-            foreach (string csvPath in Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories))
+            // M5: 跨 CSV 檔保留 captureHmV（按日期排序）
+            float captureHmV = ctx?.CurrentHmV ?? 0f;
+            var csvFiles = Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories);
+            Array.Sort(csvFiles, StringComparer.Ordinal);
+            foreach (string csvPath in csvFiles)
             {
                 try
                 {
-                    using (var sr = new StreamReader(csvPath))
+                    using (var sr = OpenCsvShared(csvPath))
                     {
-                        float captureHmV = ctx?.CurrentHmV ?? 0f;
                         string line;
                         while ((line = sr.ReadLine()) != null)
                         {
@@ -342,13 +358,16 @@ namespace AniloxRoll.Monitor.Core.Services
             string lo = StringComparer.Ordinal.Compare(startGrabId, endGrabId) <= 0 ? startGrabId : endGrabId;
             string hi = lo == startGrabId ? endGrabId : startGrabId;
 
-            foreach (string csvPath in Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories))
+            // M5: 跨 CSV 檔保留 captureHmV（按日期排序）
+            float captureHmV = ctx?.CurrentHmV ?? 0f;
+            var csvFiles = Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories);
+            Array.Sort(csvFiles, StringComparer.Ordinal);
+            foreach (string csvPath in csvFiles)
             {
                 try
                 {
-                    using (var sr = new StreamReader(csvPath))
+                    using (var sr = OpenCsvShared(csvPath))
                     {
-                        float captureHmV = ctx?.CurrentHmV ?? 0f;
                         string line;
                         while ((line = sr.ReadLine()) != null)
                         {
@@ -407,7 +426,7 @@ namespace AniloxRoll.Monitor.Core.Services
             {
                 try
                 {
-                    using (var sr = new StreamReader(csvPath))
+                    using (var sr = OpenCsvShared(csvPath))
                     {
                         sr.ReadLine(); // skip header
                         string line;
@@ -470,7 +489,7 @@ namespace AniloxRoll.Monitor.Core.Services
             {
                 try
                 {
-                    using (var sr = new StreamReader(csvPath))
+                    using (var sr = OpenCsvShared(csvPath))
                     {
                         sr.ReadLine();
                         string line;
@@ -566,13 +585,17 @@ namespace AniloxRoll.Monitor.Core.Services
             // key = (grabId, camId) → (earliest timestamp, hasFail)
             var groups = new Dictionary<(string grabId, int camId), (DateTime ts, bool hasFail)>();
 
-            foreach (string csvPath in Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories))
+            // M5: 跨 CSV 檔保留 captureHmV — 若 day1.csv 結尾沒 #CFG、day2.csv 開頭也沒 #CFG，
+            // 沿用 day1 最後一筆。CSV 路徑按字串排序 = 按日期排序（yyyy/yyyyMM/yyyyMMdd.csv）。
+            float captureHmV = ctx?.CurrentHmV ?? 0f;
+            var csvFiles = Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories);
+            Array.Sort(csvFiles, StringComparer.Ordinal);
+            foreach (string csvPath in csvFiles)
             {
                 try
                 {
-                    using (var sr = new StreamReader(csvPath))
+                    using (var sr = OpenCsvShared(csvPath))
                     {
-                        float captureHmV = ctx?.CurrentHmV ?? 0f;
                         string line;
                         while ((line = sr.ReadLine()) != null)
                         {
@@ -720,7 +743,7 @@ namespace AniloxRoll.Monitor.Core.Services
             {
                 try
                 {
-                    using (var sr = new StreamReader(csvPath))
+                    using (var sr = OpenCsvShared(csvPath))
                     {
                         sr.ReadLine(); // skip header
                         string line;
@@ -803,7 +826,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 try
                 {
                     CsvConfigSnapshot lastCfg = null;
-                    using (var sr = new StreamReader(csvPath))
+                    using (var sr = OpenCsvShared(csvPath))
                     {
                         string line;
                         while ((line = sr.ReadLine()) != null)
@@ -859,7 +882,7 @@ namespace AniloxRoll.Monitor.Core.Services
             CsvConfigSnapshot latest = null;
             try
             {
-                using (var sr = new StreamReader(csvPath))
+                using (var sr = OpenCsvShared(csvPath))
                 {
                     string line;
                     while ((line = sr.ReadLine()) != null)

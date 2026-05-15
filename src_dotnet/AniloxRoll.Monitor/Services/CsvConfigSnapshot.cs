@@ -74,20 +74,22 @@ namespace AniloxRoll.Monitor.Core.Services
         {
             get
             {
+                // L5: 用 "R"（round-trip）保證 float 精度不丟失（F4 對 0.0001 級會截斷成相同 key）
                 var sb = new StringBuilder(256);
-                for (int i = 0; i < 7; i++) sb.Append(CamOps[i].ToString("F2")).Append(',');
-                for (int i = 0; i < 7; i++) sb.Append(CamPos[i].ToString("F2")).Append(',');
+                var inv = CultureInfo.InvariantCulture;
+                for (int i = 0; i < 7; i++) sb.Append(CamOps[i].ToString("R", inv)).Append(',');
+                for (int i = 0; i < 7; i++) sb.Append(CamPos[i].ToString("R", inv)).Append(',');
                 for (int i = 0; i < 7; i++) sb.Append(CamGrabHeight[i]).Append(',');
-                for (int i = 0; i < 7; i++) sb.Append(CamExposureUs[i].ToString("F2")).Append(',');
-                for (int i = 0; i < 7; i++) sb.Append(CamLineRateHz[i].ToString("F2")).Append(',');
-                sb.Append(HessianMaxFactorV.ToString("F4")).Append(',');
-                sb.Append(HessianMaxFactorH.ToString("F4")).Append(',');
-                sb.Append(ErrorValueMeanV.ToString("F4")).Append(',');
-                sb.Append(ErrorValueMaxV.ToString("F4")).Append(',');
-                sb.Append(ErrorValueMeanH.ToString("F4")).Append(',');
-                sb.Append(ErrorValueMaxH.ToString("F4")).Append(',');
-                sb.Append(TrimHeadMm.ToString("F2")).Append(',');
-                sb.Append(TrimTailMm.ToString("F2"));
+                for (int i = 0; i < 7; i++) sb.Append(CamExposureUs[i].ToString("R", inv)).Append(',');
+                for (int i = 0; i < 7; i++) sb.Append(CamLineRateHz[i].ToString("R", inv)).Append(',');
+                sb.Append(HessianMaxFactorV.ToString("R", inv)).Append(',');
+                sb.Append(HessianMaxFactorH.ToString("R", inv)).Append(',');
+                sb.Append(ErrorValueMeanV.ToString("R", inv)).Append(',');
+                sb.Append(ErrorValueMaxV.ToString("R", inv)).Append(',');
+                sb.Append(ErrorValueMeanH.ToString("R", inv)).Append(',');
+                sb.Append(ErrorValueMaxH.ToString("R", inv)).Append(',');
+                sb.Append(TrimHeadMm.ToString("R", inv)).Append(',');
+                sb.Append(TrimTailMm.ToString("R", inv));
                 return sb.ToString();
             }
         }
@@ -196,6 +198,15 @@ namespace AniloxRoll.Monitor.Core.Services
                 else if (key == "TrimTail")
                     double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out trimTail);
             }
+
+            // M4: V/H 互補 — 若只寫了一邊（不太可能但理論上會發生），鏡像到另一邊
+            // 避免 hessianH=0 導致下游 rescale ratio 變成 1 退回原 baked-in 值
+            if (hessianV > 0f && hessianH <= 0f) hessianH = hessianV;
+            else if (hessianH > 0f && hessianV <= 0f) hessianV = hessianH;
+            if (meanV > 0f && meanH <= 0f) meanH = meanV;
+            else if (meanH > 0f && meanV <= 0f) meanV = meanH;
+            if (maxV > 0f && maxH <= 0f) maxH = maxV;
+            else if (maxH > 0f && maxV <= 0f) maxV = maxH;
 
             result = new CsvConfigSnapshot(ops, pos, grabH, expUs, lrHz,
                 hessianV, hessianH, meanV, maxV, meanH, maxH, trimHead, trimTail, ts);
