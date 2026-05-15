@@ -420,19 +420,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
         }
 
-        /// <summary>由 Form 呼叫：Data→Review 同步完成後設定 combo + nav 狀態。</summary>
-        public void SyncReviewGrabIdFromData(int idx, GrabIdInfo info)
-        {
-            using (GrabIdCrossGuard.Enter())
-            {
-                using (GrabIdNavGuard.Enter())
-                {
-                    _ctx.CbReviewGrabId.SelectedIndex = idx;
-                }
-                UpdateGrabIdNavState();
-                SetReviewGroupBoxes(true);
-            }
-        }
 
         private void OnReviewGrabIdChanged()
         {
@@ -1321,11 +1308,21 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// <summary>
         /// 由 GroupBox.Click 觸發：切換 active 模式並重算統計（panelStatCam / listViewGrabDetail
         /// / chartMuraProfile / chartYearly 等）。已是 active 則無動作。
+        /// 切到序號範圍模式時自動把起始/結束序號攤開到 [最舊, 最新]，避免承襲單片模式的單筆設定。
         /// </summary>
         private void SwitchActiveStatGroupBox(GroupBox target)
         {
             if (target == null || _activeStatMode == target) return;
             SetActiveStatGroupBox(target);
+
+            if (target == _ctx.GroupBoxGrabIdRange && _grabIdInfos.Count > 0)
+            {
+                using (StatComboGuard.Enter())
+                {
+                    _ctx.CbGrabIdStart.SelectedIndex = _grabIdInfos.Count - 1; // descending 最後一筆 = 最舊
+                    _ctx.CbGrabIdEnd.SelectedIndex = 0;                        // descending 第一筆 = 最新
+                }
+            }
             RefreshStats();
         }
 

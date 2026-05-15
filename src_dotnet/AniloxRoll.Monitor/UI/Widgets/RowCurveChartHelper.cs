@@ -32,12 +32,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
             _chart.Customize += OnCustomizeLabels;
         }
 
-        public void SetRowPitch(double rowPitchMm)
-        {
-            if (rowPitchMm > 0)
-                _rowPitchMm = rowPitchMm;
-        }
-
         public void SetRowPitchFromSpeed(double speedMPerMin, double lineRateHz)
         {
             if (speedMPerMin > 0 && lineRateHz > 0)

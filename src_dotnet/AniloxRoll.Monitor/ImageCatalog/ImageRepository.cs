@@ -63,14 +63,6 @@ namespace AniloxRoll.Monitor.Core.Data
             };
         }
 
-        // 下拉選單資料來源
-        public List<string> GetYears() => _metadataCache.Select(x => x.Year).Distinct().OrderBy(x => x).ToList();
-        public List<string> GetMonths(string y) => _metadataCache.Where(x => x.Year == y).Select(x => x.Month).Distinct().OrderBy(x => x).ToList();
-        public List<string> GetDays(string y, string m) => _metadataCache.Where(x => x.Year == y && x.Month == m).Select(x => x.Day).Distinct().OrderBy(x => x).ToList();
-        public List<string> GetHours(string y, string m, string d) => _metadataCache.Where(x => x.Year == y && x.Month == m && x.Day == d).Select(x => x.Hour).Distinct().OrderBy(x => x).ToList();
-        public List<string> GetMinutes(string y, string m, string d, string h) => _metadataCache.Where(x => x.Year == y && x.Month == m && x.Day == d && x.Hour == h).Select(x => x.Minute).Distinct().OrderBy(x => x).ToList();
-        public List<string> GetSeconds(string y, string m, string d, string h, string min) => _metadataCache.Where(x => x.Year == y && x.Month == m && x.Day == d && x.Hour == h && x.Minute == min).Select(x => x.Second + "." + x.Millisecond).Distinct().OrderBy(x => x).ToList();
-
         // ── 簡化 ComboBox 介面（cbDate + cbTime）──────────────────────────
 
         /// <summary>回傳所有不重複日期（YYYY-MM-DD），已排序。</summary>
@@ -89,16 +81,6 @@ namespace AniloxRoll.Monitor.Core.Data
                 .Distinct()
                 .OrderByDescending(x => x)
                 .ToList();
-
-        /// <summary>以 DateTime 查詢所有相機圖片（供簡化 ComboBox 使用）。</summary>
-        public Dictionary<int, string> GetImagesByDateTime(DateTime dt)
-        {
-            string y = dt.ToString("yyyy"), m = dt.ToString("MM"), d = dt.ToString("dd"),
-                   h = dt.ToString("HH"), min = dt.ToString("mm"),
-                   sFff = dt.ToString("ss") + "." + dt.ToString("fff");
-            return GetImages(y, m, d, h, min, sFff);
-        }
-
 
         public List<DateTime> GetAvailablePeriods()
         {

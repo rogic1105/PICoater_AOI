@@ -81,13 +81,11 @@
     <Compile Include="Acquisition\AniloxCamera.cs" />
     <Compile Include="Acquisition\CameraFrameSaver.cs" />
     <Compile Include="Acquisition\CaptureTimestampCoordinator.cs" />
-    <Compile Include="ImageProcessing\MIL\CameraImageProcessor.cs" />
     <Compile Include="Acquisition\CameraSystemManager.cs" />
     <Compile Include="ImageCatalog\ImageMetadata.cs" />
     <Compile Include="ImageCatalog\ImageRepository.cs" />
     <Compile Include="Acquisition\Inspection\InspectionData.cs" />
     <Compile Include="Settings\InspectionSettings.cs" />
-    <Compile Include="Settings\Providers\InspectionSettingsDefaultsProvider.cs" />
     <Compile Include="Settings\Stores\AcquisitionSettingsStore.cs" />
     <Compile Include="Settings\Stores\InspectionSettingsStore.cs" />
     <Compile Include="Settings\Stores\SettingsStoreHelper.cs" />
@@ -124,7 +122,6 @@
     <Compile Include="Services\IoState.cs" />
     <Compile Include="Services\LightController.cs" />
     <Compile Include="Services\InspectionStatisticsService.cs" />
-    <Compile Include="Services\PlcService.cs" />
     <Compile Include="ImageProcessing\BatchInspectionService.cs" />
     <Compile Include="ImageProcessing\InspectionEngine.cs" />
     <Compile Include="ImageProcessing\NativeBufferPool.cs" />

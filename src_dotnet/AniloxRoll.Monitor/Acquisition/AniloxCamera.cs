@@ -43,7 +43,6 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         // ==================== Settings ====================
         public bool EnableImageProcessing { get; set; } = true;
-        public bool EnableHessian { get; set; } = true;
         public bool EnableAutoCapture { get; set; } = false;
         public bool SaveOriginalBmp { get; set; } = false;
         public string CaptureRootPath { get; set; } = string.Empty;
@@ -58,7 +57,6 @@ namespace AniloxRoll.Monitor.Core.Camera
             set => _appliedExposureUs = value;
         }
 
-        public double BinarizeThreshold { get; set; } = 128.0;
         public double HessianSigma { get; set; } = 85;
         public double HessianFixedMax { get; set; } = 1.0;
         public string RidgeMode { get; set; } = "vertical";
@@ -761,14 +759,6 @@ namespace AniloxRoll.Monitor.Core.Camera
             return (long)val / (1024 * 1024);
         }
 
-        /// <summary>取得板卡總記憶體（MB）。</summary>
-        public long GetMemorySizeMB()
-        {
-            if (_ownerSystemId == MIL.M_NULL) return -1;
-            MIL_INT val = 0;
-            MIL.MsysInquire(_ownerSystemId, MIL.M_MEMORY_SIZE, ref val);
-            return (long)val;
-        }
 
         /// <summary>取得 PCIe 通道數。</summary>
         public int GetPcieNumberOfLanes()
@@ -839,13 +829,6 @@ namespace AniloxRoll.Monitor.Core.Camera
         }
 
         // ==================== Grab Control ====================
-
-        /// <summary>套用曝光設定（live 調整用，CLProtocol 自動選路）。Grab Height 請改用 SetGrabHeight()。</summary>
-        public void ApplyAcquisitionSettings()
-        {
-            if (_appliedExposureUs > 0)
-                SetExposureUs(_appliedExposureUs);
-        }
 
         public void SetUserGrabIntent(bool enable)
         {

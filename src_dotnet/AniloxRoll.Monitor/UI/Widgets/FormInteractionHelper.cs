@@ -342,10 +342,5 @@ namespace AniloxRoll.Monitor.UI.Widgets
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, blocking: false);
         }
 
-        public void CleanupSystem()
-        {
-            ClearOldImages();
-            _inspectionService?.Dispose();
-        }
     }
 }

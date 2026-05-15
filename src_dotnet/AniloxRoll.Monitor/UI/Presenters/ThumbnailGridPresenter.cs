@@ -89,14 +89,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
         }
 
-        public InspectionData GetCurrentSelectionData()
-        {
-            if (_currentResults == null || _selectedIndex < 0 || _selectedIndex >= _currentResults.Length)
-                return null;
-
-            return _currentResults[_selectedIndex]?.Data;
-        }
-
         /// <summary>
         /// 設定選取並更新 UI
         /// </summary>

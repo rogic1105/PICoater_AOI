@@ -49,15 +49,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
             HookTabControls(_form);
         }
 
-        /// <summary>
-        /// 動態新增控制項後呼叫，補記錄該控制項及其子控制項。
-        /// </summary>
-        public void RegisterControl(Control ctrl)
-        {
-            if (!_initialized || ctrl == null) return;
-            RecordRecursive(ctrl);
-        }
-
         private void RecordRecursive(Control parent)
         {
             foreach (Control c in parent.Controls)

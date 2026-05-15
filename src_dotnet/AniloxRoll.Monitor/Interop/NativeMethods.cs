@@ -93,12 +93,6 @@ namespace AniloxRoll.Monitor.Core.Interop
             float bgSigmaFactor,
             IntPtr outColMean);  // host float*, size = width
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        public static extern IntPtr PICoaterAPI_CreateMockPlc();
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        public static extern void PICoaterAPI_DestroyPlc(IntPtr handle);
-
         // =====================================================
         // user32.dll — 捲軸位置讀寫（PropertyGrid 保持捲軸用）
         // =====================================================
@@ -107,20 +101,5 @@ namespace AniloxRoll.Monitor.Core.Interop
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int PICoaterAPI_PlcConnect(IntPtr handle);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int PICoaterAPI_PlcReadBit(
-            IntPtr handle,
-            int address,
-            [MarshalAs(UnmanagedType.I1)] out bool value);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int PICoaterAPI_PlcWriteBit(
-            IntPtr handle,
-            int address,
-            [MarshalAs(UnmanagedType.I1)] bool value);
     }
 }

@@ -20,6 +20,5 @@ namespace AniloxRoll.Monitor.Core.Data
         public static void SaveAcquisitionSettings(AcquisitionSettings settings)
             => AcquisitionSettingsStore.Save(settings);
 
-        public static SystemSettings LoadSystemSettings() => SystemSettings.CreateDefault();
     }
 }

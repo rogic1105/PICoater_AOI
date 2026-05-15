@@ -329,17 +329,6 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.EnableImageProcessing = enable;
         }
 
-        public void SetLiveDisplayDirection(string dir)
-        {
-            foreach (var cam in _cameras)
-                cam.LiveDisplayDirection = dir;
-        }
-
-        /// <summary>
-        /// 套用設定至所有相機。
-        /// 曝光：直接呼叫 SetExposureUs（live CLProtocol 路徑，可即時生效）。
-        /// Grab Height：僅更新快取，物理變更請呼叫 SetGrabHeightForAll() 或 ReinitializeForAcquisitionSettings()。
-        /// </summary>
         public void SetScreenMmPerPixel(double mmPerPx) => _screenMmPerPx = mmPerPx;
 
         public void SetCaptureSettings(InspectionSettings settings)
@@ -399,16 +388,6 @@ namespace AniloxRoll.Monitor.UI.Managers
         }
 
         /// <summary>
-        /// 對所有相機同時設定 Line Rate（Hz）。
-        /// </summary>
-        public void SetLineRateForAll(double hz)
-        {
-            for (int i = 0; i < _cameraLineRateHz.Length; i++) _cameraLineRateHz[i] = hz;
-            foreach (var cam in _cameras)
-                cam.SetLineRateHz(hz);
-        }
-
-        /// <summary>
         /// 對指定相機變更 Grab 高度（px）。
         /// 內部走 Stop → Free → Realloc → Restart 完整流程（由 AniloxCamera.SetGrabHeight 處理）。
         /// 同 CameraSession.SetGrabHeightForCamera()。
@@ -435,24 +414,6 @@ namespace AniloxRoll.Monitor.UI.Managers
             return null;
         }
 
-        /// <summary>
-        /// 完整重新初始化相機（適用於需要變更硬體拓樸或無法 live 套用的情境）。
-        /// 單純曝光變更請用 SetExposureForAll()；Grab Height 變更請用 SetGrabHeightForAll()。
-        /// </summary>
-        public void ReinitializeForAcquisitionSettings(bool enableImageProcessing, InspectionSettings settings)
-        {
-            bool wasLive = IsLiveGrabbing;
-            if (wasLive) StopGrab();
-
-            UpdateCaptureSettingsCache(settings);
-
-            FreeCameras();
-            AllocateCameras(enableImageProcessing);
-            SetCaptureSettings(settings);
-
-            if (wasLive) StartGrab();
-        }
-
         private void UpdateCaptureSettingsCache(InspectionSettings settings)
         {
             if (settings == null) return;
@@ -475,14 +436,6 @@ namespace AniloxRoll.Monitor.UI.Managers
         // ==================== Display Switching ====================
 
         /// <summary>
-        /// 切換主顯示到指定相機，並更新選取記錄。
-        /// 用於 SetGrabHeight 完成後立即顯示該相機畫面。
-        /// </summary>
-        public void SwitchToCamera(int cameraId)
-        {
-            SwitchMainDisplay(cameraId);
-        }
-
         /// <summary>
         /// 重新套用目前選定相機的主顯示，用於 SetGrabHeight 後重新綁定畫面。
         /// </summary>

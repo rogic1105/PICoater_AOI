@@ -491,19 +491,6 @@ namespace AniloxRoll.Monitor.Core.Services
             return times;
         }
 
-        /// <summary>取得資料夾內所有 CSV 紀錄的最早與最新時間。</summary>
-        public static bool TryGetDateRange(
-            string captureRootPath,
-            out DateTime earliest,
-            out DateTime latest)
-        {
-            var times = LoadAvailableTimes(captureRootPath);
-            earliest = latest = DateTime.MinValue;
-            if (times.Count == 0) return false;
-            earliest = times.Min;
-            latest   = times.Max;
-            return true;
-        }
 
         // ── 時間週期分組統計（月份 / 日期 / 小時，固定完整軸）────────────────
 

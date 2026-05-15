@@ -214,54 +214,5 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 return new Bitmap(ms);
         }
 
-        /// <summary>GDI+ fallback：當 bmpLoader 為 null 時使用。</summary>
-        private static Bitmap LoadGdiBmpResized(string path, int scale)
-        {
-            using (var orig = new Bitmap(path))
-            {
-                int w = Math.Max(1, orig.Width  / scale);
-                int h = Math.Max(1, orig.Height / scale);
-                var resized = new Bitmap(w, h, PixelFormat.Format32bppArgb);
-                using (var g = Graphics.FromImage(resized))
-                {
-                    g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                    g.PixelOffsetMode   = PixelOffsetMode.Half;
-                    g.DrawImage(orig,
-                        new Rectangle(0, 0, w, h),
-                        new Rectangle(0, 0, orig.Width, orig.Height),
-                        GraphicsUnit.Pixel);
-                }
-                return resized;
-            }
-        }
-
-        /// <summary>
-        /// 將 Bitmap 以 JPEG quality 重新編碼再解碼。
-        /// GDI+ JPEG encoder 不支援 8bpp indexed，先轉 24bpp RGB。
-        /// </summary>
-        private static Bitmap ReencodeAsJpeg(Bitmap src, int quality)
-        {
-            if (_jpegCodec == null) return src; // codec 找不到時直接回傳
-
-            Bitmap toEncode = src;
-            if (src.PixelFormat == PixelFormat.Format8bppIndexed)
-            {
-                // 8bpp → 24bpp（GDI+ JPEG 不接受 indexed format）
-                toEncode = new Bitmap(src.Width, src.Height, PixelFormat.Format24bppRgb);
-                using (var g = Graphics.FromImage(toEncode))
-                    g.DrawImage(src, 0, 0);
-                src.Dispose();
-            }
-
-            var encoderParams = new EncoderParameters(1);
-            encoderParams.Param[0] = new EncoderParameter(Encoder.Quality, (long)quality);
-            using (var ms = new MemoryStream())
-            {
-                toEncode.Save(ms, _jpegCodec, encoderParams);
-                toEncode.Dispose();
-                ms.Position = 0;
-                return new Bitmap(ms);
-            }
-        }
     }
 }
