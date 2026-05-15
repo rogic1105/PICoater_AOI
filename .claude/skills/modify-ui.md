@@ -8,17 +8,8 @@
 
 ## 關鍵檔案
 
-- `UI/Form/AniloxRollForm.cs` — 事件繫結、InitializeSystem、PropertyValueChanged
-- `UI/Form/AniloxRollForm.Designer.cs` — 控制項佈局（VS Designer）
-- `UI/Widgets/FormInteractionHelper.cs` — UI 互動、gallery 選擇、ReviewConfig 代理
-- `UI/Widgets/CanvasInteractionHelper.cs` — zoom/pan、mm 座標、跨倍率 View 保存
-- `UI/Widgets/EventGuard.cs` — using 語法 bool guard（取代散落 flag）
-- `UI/Presenters/ReviewStitchCoordinator.cs` — Review 拼接管理、合圖、overview 聯動
-- `UI/Presenters/DataStatisticsPresenter.cs` — Data tab 統計、跨 Tab 同步
-- `UI/Widgets/ColumnCurveChartHelper.cs` — 切向 mura 曲線圖（單台 + 全覽圖共用）
-- `UI/Widgets/RowCurveChartHelper.cs` — 法向 mura 曲線圖
-- `UI/Widgets/CurveMergeHelper.cs` — 全覽圖合併演算法
-- `UI/Widgets/ProportionalScaler.cs` — Form 等比例縮放
+→ 見 `CLAUDE.md` §關鍵檔案速查（subset：`UI/Form/*` + `UI/Widgets/*` + `UI/Presenters/*`）。
+→ UI 流程行為與控制項互動見 `docs/user-manual/ui-flow.html`（真相來源）。
 
 ## 注意事項
 

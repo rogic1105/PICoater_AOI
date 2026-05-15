@@ -8,10 +8,8 @@
 
 ## 關鍵檔案
 
-- `UI/Presenters/DataStatisticsPresenter.cs` — Data tab 統計、combo 串聯、Period Charts、跨 Tab 同步
-- `Services/InspectionStatisticsService.cs` — CSV 統計服務、LoadConfigForDate、LoadConfigForGrabId、LoadImagePathsForGrabId
-- `Services/InspectionLogService.cs` — 每日 CSV 寫入、GrabId 格式
-- `Services/CsvConfigSnapshot.cs` — 不可變設定快照
+→ 見 `CLAUDE.md` §關鍵檔案速查（subset：`UI/Presenters/DataStatisticsPresenter` + `Services/Inspection*Service` + `Services/CsvConfigSnapshot`）。
+→ Data tab 流程行為見 `docs/user-manual/ui-flow.html` §檢測報表（Data）。
 
 ## 注意事項
 

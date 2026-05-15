@@ -127,6 +127,9 @@ PICoater_AOI/
 
 使用者在【檢測設定】看到的參數。溝通格式：「屬性名-值」（例如「垂直正規值-0.2」「存檔-T」）。
 
+**範圍**：此表只列「**what** — 參數是什麼 / 預設值 / 屬性名映射」。
+**互動行為與 chart 聯動**統一在 `docs/user-manual/ui-flow.html`（單一真相）；不在表格內重複描述。
+
 ### 0. 機台設定
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
@@ -152,14 +155,14 @@ PICoater_AOI/
 |---------|------|--------|------|
 | ── 演算法 ── | （分隔列，唯讀） | — | — |
 | 去背演算法 | `db_Algorithm` → `Algorithm` | SingleFrameBgSub | None / SingleFrameBgSub / StandardBgSub |
-| 垂直正規值 | `dc_HessianMaxFactorV` → `HessianMaxFactorV` | 0.3 | V Hessian 正規化係數；同時是 capture 時送進 native 的單一 HM（baked-in .bin）|
-| 水平正規值 | `dd_HessianMaxFactorH` → `HessianMaxFactorH` | 0.3 | H Hessian 正規化係數（view-time only，僅作 row chart 顯示縮放）|
+| 垂直正規值 | `dc_HessianMaxFactorV` → `HessianMaxFactorV` | 0.3 | V Hessian 正規化係數（capture-time baked-in） |
+| 水平正規值 | `dd_HessianMaxFactorH` → `HessianMaxFactorH` | 0.3 | H Hessian 正規化係數（view-time only） |
 | ── 檢出標準 ── | （分隔列，唯讀） | — | — |
-| 檢出方向 | `eb_RidgeDir` → `RidgeDir` | Both | 垂直 / 水平 / 全部；決定哪個方向 Mura 超標才觸發 DO1 |
-| 垂直平均閾值 | `ec_ErrorValueMeanV` → `ErrorValueMeanV` | 0.2 | V chart (chartMuraVertical / chartOverview / chartLiveOverview / muraChartVerticalLive) Mean 閾值線；CheckLiveMura V 方向 DO 判定 |
-| 垂直最大閾值 | `ed_ErrorValueMaxV` → `ErrorValueMaxV` | 0.4 | V chart Max 閾值線；CheckLiveMura V 方向 DO 判定 |
-| 水平平均閾值 | `ee_ErrorValueMeanH` → `ErrorValueMeanH` | 0.2 | H chart (chartMuraHorizontal / muraChartHorizontalLive) Mean 閾值線；CheckLiveMura H 方向 DO 判定 |
-| 水平最大閾值 | `ef_ErrorValueMaxH` → `ErrorValueMaxH` | 0.4 | H chart Max 閾值線；CheckLiveMura H 方向 DO 判定 |
+| 檢出方向 | `eb_RidgeDir` → `RidgeDir` | Both | 垂直 / 水平 / 全部 |
+| 垂直平均閾值 | `ec_ErrorValueMeanV` → `ErrorValueMeanV` | 0.2 | V chart Mean 閾值線 |
+| 垂直最大閾值 | `ed_ErrorValueMaxV` → `ErrorValueMaxV` | 0.4 | V chart Max 閾值線 |
+| 水平平均閾值 | `ee_ErrorValueMeanH` → `ErrorValueMeanH` | 0.2 | H chart Mean 閾值線 |
+| 水平最大閾值 | `ef_ErrorValueMaxH` → `ErrorValueMaxH` | 0.4 | H chart Max 閾值線 |
 | ── 背景校正 ── | （分隔列，唯讀） | — | — |
 | 取時間 (sec) | `fb_BackgroundSampleSeconds` → `BackgroundSampleSeconds` | 3 | StandardBgSub 採集時間 |
 
@@ -328,9 +331,15 @@ PICoater_AOI/
 
 | 文件 | 用途 |
 |------|------|
-| [`docs/dev/MIL_API_Reference.md`](docs/dev/MIL_API_Reference.md) | MIL .NET API 完整參考（常數、方法、範例） |
-| [`docs/dev/system-resources.md`](docs/dev/system-resources.md) | 系統資源用量（GPU/CPU/RAM 評估） |
-| [`docs/user-manual/io_diagrams.html`](docs/user-manual/io_diagrams.html) | IO FSM 視覺化（ET-7044 ↔ 設備 Nakan，瀏覽器開啟） |
+| [`docs/user-manual/ui-flow.html`](docs/user-manual/ui-flow.html) | **UI 互動流程設計檔（單一真相）**，1800+ 行，瀏覽器開啟 |
+| [`docs/user-manual/io_diagrams.html`](docs/user-manual/io_diagrams.html) | IO FSM 視覺化（ET-7044 ↔ 設備 Nakan）|
+| [`docs/user-manual/storage-flow.html`](docs/user-manual/storage-flow.html) | Storage PC 雙寫架構流程圖 |
+| [`docs/user-manual/hardware-specs.html`](docs/user-manual/hardware-specs.html) | 7 相機 + Grabber + 光源 + PLC 硬體規格 |
+| [`docs/dev/MIL_API_Reference.md`](docs/dev/MIL_API_Reference.md) | MIL .NET API 完整參考（常數、方法、範例）|
+| [`docs/dev/system-resources.md`](docs/dev/system-resources.md) | 系統資源用量（GPU/CPU/RAM 評估）|
+| [`docs/dev/stress-test-plan.md`](docs/dev/stress-test-plan.md) | 壓力測試規劃（Phase 0~6 + 監控腳本）|
+| `docs/dev/CLProtocol/` / `docs/dev/Grabber/` / `docs/dev/LTS_3DPA24/` | 廠商規格書與示範程式 |
+| `docs/dev/archive/` | 歷史 review 紀錄（code-review-2026-05-15 等）|
 
 ### docs/ 目錄定位
 

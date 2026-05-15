@@ -8,14 +8,9 @@
 
 ## 關鍵檔案
 
-- `Acquisition/AniloxCamera.cs` — 單台相機 MIL 資源封裝
-- `Acquisition/CaptureTimestampCoordinator.cs` — 多相機時間戳同步
-- `UI/Managers/LiveCameraManager.cs` — 多台相機生命週期管理
-- `Services/IoGrabController.cs` — IO FSM、IO 追蹤、Watchdog
-- `Services/IoState.cs` — IoState enum + IoSnapshot
-- `UI/Presenters/LiveTelemetryPresenter.cs` — 16 欄即時 Telemetry
-- `Settings/Stores/AcquisitionSettingsStore.cs` — acquisition-settings.json
-- `docs/dev/MIL_API_Reference.md` — MIL .NET API 完整參考
+→ 見 `CLAUDE.md` §關鍵檔案速查（subset：`Acquisition/*` + `UI/Managers/LiveCameraManager` + `Services/IoGrabController` + `Services/IoState` + `UI/Presenters/LiveTelemetryPresenter` + `Settings/Stores/AcquisitionSettingsStore`）。
+→ MIL .NET API 完整參考 `docs/dev/MIL_API_Reference.md`。
+→ IO FSM 視覺化 `docs/user-manual/io_diagrams.html`。
 
 ## MIL 初始化順序（不可打亂）
 

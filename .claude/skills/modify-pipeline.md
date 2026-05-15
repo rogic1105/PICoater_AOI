@@ -8,14 +8,8 @@
 
 ## 關鍵檔案
 
-- `ImageProcessing/InspectionEngine.ImageProcessing.cs` — 縮圖/全解析度處理入口
-- `ImageProcessing/InspectionEngineConfig.cs` — MaxWidth=16384, MaxHeight=10000, DefaultSaveResizeScale=5
-- `ImageProcessing/NativeBufferPool.cs` — CUDA pinned buffer（8 個 buffer）
-- `ImageProcessing/BatchInspectionService.cs` — Parallel.For 批次縮圖
-- `Services/AoiService.cs` — C# ↔ Native P/Invoke wrapper
-- `Interop/NativeMethods.cs` — 唯一 P/Invoke 宣告點
-- `ImageCatalog/ImageRepository.cs` — 掃描目錄建索引
-- `Acquisition/AniloxCamera.cs` — TrySaveCapture、ProcessingFunction
+→ 見 `CLAUDE.md` §關鍵檔案速查（subset：`ImageProcessing/*` + `Services/AoiService` + `Interop/NativeMethods` + `ImageCatalog/ImageRepository`）。
+→ Native pipeline 細節見 `src_native/modules/GetPICoaterBackground/` 與 `docs/dev/MIL_API_Reference.md`。
 
 ## 注意事項
 
