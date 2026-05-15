@@ -61,7 +61,7 @@
 - `_suppressChartSync`：`UpdateCanvas` 中壓制 `FitToScreen` 觸發的 chart sync，只在呼叫端做一次 `UpdateDataAndView`
 - StripLines 必須放在 AxisY（Primary），AxisY2 初始化時不渲染
 - `RefreshThresholds()` 不可放在 `UpdateDataAndView()` 末尾（會在 ResumeUpdates 後多一次 redraw）
-- **`BaseCurveChartHelper` 預設值必須與 `InspectionRecipe` 預設值一致**：`Build()` 呼叫 `RefreshThresholds()` 時使用 `_errorValueMean`/`_errorValueMax` 計算初始 Y 軸（`yMax = max(1.0, errorValueMax × 1.1)`）。若修改 `InspectionRecipe.ErrorValueMean/Max` 預設值，`BaseCurveChartHelper` 的對應欄位也要同步（目前均為 `0.3f`/`0.5f`）。
+- **`BaseCurveChartHelper` 預設值**：runtime 會被 owner 的 `RefreshThresholds(real values)` 覆寫，預設值只在 `Build()` 初始 Y 軸計算前短暫使用（`yMax = max(1.0, errorValueMax × 1.1)`）。目前為 `0.2f` / `0.4f`，與 `InspectionDefaults.ErrorValueMeanV/MaxV` 對齊。修改時兩邊同步即可，不影響 runtime 行為。
 - AxisY2 必須有 anchor series 否則 scale 不初始化
 - Y 軸標籤反轉用 `Customize` 事件替換文字，不用 `IsReversed`（會讓 X 軸跳頂部）
 

@@ -12,8 +12,10 @@ namespace AniloxRoll.Monitor.UI.Widgets
     public abstract class BaseCurveChartHelper
     {
         protected readonly Chart _chart;
-        protected float _errorValueMean = 0.3f;
-        protected float _errorValueMax  = 0.5f;
+        // 與 InspectionDefaults.ErrorValueMeanV/MaxV 對齊；runtime 會被 owner 的 RefreshThresholds() 覆寫，
+        // 此預設值只在 Build() 初始 Y 軸計算前短暫使用
+        protected float _errorValueMean = 0.2f;
+        protected float _errorValueMax  = 0.4f;
         protected bool  _innerPlotPositionFrozen = false;
 
         protected static readonly Font  UnitFont  = new Font("Segoe UI", 7f);

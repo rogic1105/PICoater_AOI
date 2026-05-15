@@ -58,7 +58,7 @@ PICoater_AOI/
 | `UI/Presenters/DataStatisticsPresenter.cs` | Data tab 統計邏輯：統計計算、combo 串聯、Period Charts、Mura 空間分布圖（chartMuraProfile）、跨 Tab 同步事件 |
 | `UI/Presenters/ReviewStitchCoordinator.cs` | Review tab 拼接管理：LoadGrabStitchedViewAsync、合圖、ClearStitchedMode、overview chart 聯動 |
 | `UI/Presenters/LiveTelemetryPresenter.cs` | 16 欄即時 Telemetry |
-| `Acquisition/AniloxCamera.cs` | 單台相機 MIL 資源封裝；Global merge 時每幀 MbufChild2d + MbufCopyClip（含 overlap 裁切）到合併 buffer；SetMergeTarget/ClearMergeTarget 封裝 merge 欄位 |
+| `Acquisition/AniloxCamera.cs` | 單台相機 MIL 資源封裝；Global merge child-buffer 來源（其他細節見 LiveCameraManager）|
 | `Acquisition/CameraFrameSaver.cs` | 存檔 I/O：SaveCapture（背景執行緒）、SaveJpegFromBytes、SaveCurveBinFromArray、Resource Log（CSV: CPU%/RAM/VRAM/GPU ms/Live/Review/StitchMode；啟動時 MergeOldResourceLogs 把「昨天以前」的小檔按日合併為 resource-monitor-yyyyMMdd.csv） |
 | `Acquisition/CaptureTimestampCoordinator.cs` | 多相機存檔時間戳同步 |
 | `UI/Managers/LiveCameraManager.cs` | 多台相機生命週期管理、連線數監控（OnCameraCountChanged）、即時全域合圖（EnableGlobalMerge / DisableGlobalMerge / RefreshGlobalMergeLayout）、合圖 zoom/pan（WheelZoomFilter）、合圖滑鼠座標（MergedMouseStatusHandler）、合圖 overview 聯動（TryGetMergedViewRange）、顯示同步 Timer（_mergedDisplayTimer） |
