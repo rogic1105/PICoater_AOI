@@ -207,24 +207,13 @@ namespace AniloxRoll.Monitor.Core.Data
             {
                 Algorithm        = algo,
                 RidgeDir         = ridgeDir,
-                // 向後相容：舊 JSON 用單一 HessianMaxFactor，新 JSON 用 V/H 各自的 2 鍵
-                HessianMaxFactorV = SettingsStoreHelper.GetFloat(obj, "HessianMaxFactorV",
-                                        SettingsStoreHelper.GetFloat(obj, "HessianMaxFactor", InspectionDefaults.HessianMaxFactorV)),
-                HessianMaxFactorH = SettingsStoreHelper.GetFloat(obj, "HessianMaxFactorH",
-                                        SettingsStoreHelper.GetFloat(obj, "HessianMaxFactor", InspectionDefaults.HessianMaxFactorH)),
-                // 向後相容：舊 JSON 用 ErrorValueMean/Max 兩鍵，新 JSON 用 V/H 各自的 4 鍵
-                ErrorValueMeanV  = SettingsStoreHelper.GetFloat(obj, "ErrorValueMeanV",
-                                       SettingsStoreHelper.GetFloat(obj, "ErrorValueMean", InspectionDefaults.ErrorValueMeanV)),
-                ErrorValueMaxV   = SettingsStoreHelper.GetFloat(obj, "ErrorValueMaxV",
-                                       SettingsStoreHelper.GetFloat(obj, "ErrorValueMax",  InspectionDefaults.ErrorValueMaxV)),
-                ErrorValueMeanH  = SettingsStoreHelper.GetFloat(obj, "ErrorValueMeanH",
-                                       SettingsStoreHelper.GetFloat(obj, "ErrorValueMean", InspectionDefaults.ErrorValueMeanH)),
-                ErrorValueMaxH   = SettingsStoreHelper.GetFloat(obj, "ErrorValueMaxH",
-                                       SettingsStoreHelper.GetFloat(obj, "ErrorValueMax",  InspectionDefaults.ErrorValueMaxH)),
-                // 向後相容：舊 JSON 用 BackgroundSampleRows，新 JSON 用 BackgroundSampleSeconds
-                BackgroundSampleSeconds = obj.Contains("BackgroundSampleSeconds")
-                    ? SettingsStoreHelper.GetInt(obj, "BackgroundSampleSeconds", InspectionDefaults.BackgroundSampleSeconds)
-                    : InspectionDefaults.BackgroundSampleSeconds,
+                HessianMaxFactorV = SettingsStoreHelper.GetFloat(obj, "HessianMaxFactorV", InspectionDefaults.HessianMaxFactorV),
+                HessianMaxFactorH = SettingsStoreHelper.GetFloat(obj, "HessianMaxFactorH", InspectionDefaults.HessianMaxFactorH),
+                ErrorValueMeanV  = SettingsStoreHelper.GetFloat(obj, "ErrorValueMeanV", InspectionDefaults.ErrorValueMeanV),
+                ErrorValueMaxV   = SettingsStoreHelper.GetFloat(obj, "ErrorValueMaxV",  InspectionDefaults.ErrorValueMaxV),
+                ErrorValueMeanH  = SettingsStoreHelper.GetFloat(obj, "ErrorValueMeanH", InspectionDefaults.ErrorValueMeanH),
+                ErrorValueMaxH   = SettingsStoreHelper.GetFloat(obj, "ErrorValueMaxH",  InspectionDefaults.ErrorValueMaxH),
+                BackgroundSampleSeconds = SettingsStoreHelper.GetInt(obj, "BackgroundSampleSeconds", InspectionDefaults.BackgroundSampleSeconds),
                 AniloxRollSpeedMPerMin = SettingsStoreHelper.GetDouble(obj, "AniloxRollSpeedMPerMin", InspectionDefaults.AniloxRollSpeedMPerMin),
                 SaveResizeScale      = SettingsStoreHelper.GetInt(obj, "SaveResizeScale",   5),
                 SaveJpgQuality       = SettingsStoreHelper.GetInt(obj, "SaveJpgQuality",    90),

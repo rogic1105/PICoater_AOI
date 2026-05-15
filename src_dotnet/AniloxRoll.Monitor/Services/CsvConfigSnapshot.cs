@@ -119,7 +119,7 @@ namespace AniloxRoll.Monitor.Core.Services
             return sb.ToString();
         }
 
-        /// <summary>從 #CFG 列解析。舊版 CSV 只有 ErrorValueMean/Max 兩欄位，V 與 H 都填同值。</summary>
+        /// <summary>從 #CFG 列解析。只支援新格式（V/H 分裂）。未認得的欄位忽略。</summary>
         public static bool TryParse(string line, out CsvConfigSnapshot result)
         {
             result = null;
@@ -138,13 +138,7 @@ namespace AniloxRoll.Monitor.Core.Services
             double[] expUs = new double[7];
             double[] lrHz = new double[7];
             float hessianV = 0, hessianH = 0;
-            bool hasHessianV = false, hasHessianH = false;
-            float legacyHessian = 0;
-            bool hasLegacyHessian = false;
             float meanV = 0, maxV = 0, meanH = 0, maxH = 0;
-            bool hasMeanV = false, hasMaxV = false, hasMeanH = false, hasMaxH = false;
-            float legacyMean = 0, legacyMax = 0;
-            bool hasLegacyMean = false, hasLegacyMax = false;
             double trimHead = 0, trimTail = 0;
 
             for (int i = 2; i < parts.Length; i++)
@@ -186,36 +180,22 @@ namespace AniloxRoll.Monitor.Core.Services
                         double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out lrHz[camIdx]);
                 }
                 else if (key == "HessianMaxFactorV")
-                { float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out hessianV); hasHessianV = true; }
+                    float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out hessianV);
                 else if (key == "HessianMaxFactorH")
-                { float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out hessianH); hasHessianH = true; }
-                else if (key == "HessianMaxFactor")
-                { float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out legacyHessian); hasLegacyHessian = true; }
+                    float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out hessianH);
                 else if (key == "ErrorValueMeanV")
-                { float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out meanV); hasMeanV = true; }
+                    float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out meanV);
                 else if (key == "ErrorValueMaxV")
-                { float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out maxV); hasMaxV = true; }
+                    float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out maxV);
                 else if (key == "ErrorValueMeanH")
-                { float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out meanH); hasMeanH = true; }
+                    float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out meanH);
                 else if (key == "ErrorValueMaxH")
-                { float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out maxH); hasMaxH = true; }
-                else if (key == "ErrorValueMean")
-                { float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out legacyMean); hasLegacyMean = true; }
-                else if (key == "ErrorValueMax")
-                { float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out legacyMax); hasLegacyMax = true; }
+                    float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out maxH);
                 else if (key == "TrimHead")
                     double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out trimHead);
                 else if (key == "TrimTail")
                     double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out trimTail);
             }
-
-            // 舊 CSV 相容：未指定 V/H 欄位時，用 legacy 單值填入 V 與 H
-            if (!hasMeanV && hasLegacyMean) meanV = legacyMean;
-            if (!hasMeanH && hasLegacyMean) meanH = legacyMean;
-            if (!hasMaxV  && hasLegacyMax)  maxV  = legacyMax;
-            if (!hasMaxH  && hasLegacyMax)  maxH  = legacyMax;
-            if (!hasHessianV && hasLegacyHessian) hessianV = legacyHessian;
-            if (!hasHessianH && hasLegacyHessian) hessianH = legacyHessian;
 
             result = new CsvConfigSnapshot(ops, pos, grabH, expUs, lrHz,
                 hessianV, hessianH, meanV, maxV, meanH, maxH, trimHead, trimTail, ts);
