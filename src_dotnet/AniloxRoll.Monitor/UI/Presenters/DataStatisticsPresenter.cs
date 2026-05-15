@@ -245,23 +245,30 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         private void PopulateStatDateCombos(DateTime start, DateTime end)
         {
-            var dates = GetAvailableDateStrings();
-            string startDateStr = start.ToString("yyyy-MM-dd");
-            string endDateStr = end.ToString("yyyy-MM-dd");
-            string startTimeStr = start.ToString("HH:mm:ss");
-            string endTimeStr = end.ToString("HH:mm:ss");
+            // 包 StatComboGuard 抑制 cbStartDate/Time + cbEndDate/Time 的 SelectedIndexChanged：
+            // 避免程式化填充觸發 OnStartComboChanged → SetActiveStatGroupBox(TimeRange) +
+            // RefreshStats 級聯（4 次 RefreshStats 用大時間範圍掃 CSV 灌大量資料進 listView，
+            // 隨後 LoadDataFolder 才設回 SingleSheet 收回 — listViewGrabDetail「瞬間爆量再縮回」）。
+            using (StatComboGuard.Enter())
+            {
+                var dates = GetAvailableDateStrings();
+                string startDateStr = start.ToString("yyyy-MM-dd");
+                string endDateStr = end.ToString("yyyy-MM-dd");
+                string startTimeStr = start.ToString("HH:mm:ss");
+                string endTimeStr = end.ToString("HH:mm:ss");
 
-            _ctx.CbStartDate.Items.Clear();
-            _ctx.CbStartDate.Items.AddRange(dates.ToArray());
-            int si = dates.IndexOf(startDateStr);
-            _ctx.CbStartDate.SelectedIndex = si >= 0 ? si : (dates.Count > 0 ? dates.Count - 1 : -1);
-            RefreshStatTimeCombo(_ctx.CbStartDate, _ctx.CbStartTime, startTimeStr);
+                _ctx.CbStartDate.Items.Clear();
+                _ctx.CbStartDate.Items.AddRange(dates.ToArray());
+                int si = dates.IndexOf(startDateStr);
+                _ctx.CbStartDate.SelectedIndex = si >= 0 ? si : (dates.Count > 0 ? dates.Count - 1 : -1);
+                RefreshStatTimeCombo(_ctx.CbStartDate, _ctx.CbStartTime, startTimeStr);
 
-            _ctx.CbEndDate.Items.Clear();
-            _ctx.CbEndDate.Items.AddRange(dates.ToArray());
-            int ei = dates.IndexOf(endDateStr);
-            _ctx.CbEndDate.SelectedIndex = ei >= 0 ? ei : (dates.Count > 0 ? 0 : -1);
-            RefreshStatTimeCombo(_ctx.CbEndDate, _ctx.CbEndTime, endTimeStr);
+                _ctx.CbEndDate.Items.Clear();
+                _ctx.CbEndDate.Items.AddRange(dates.ToArray());
+                int ei = dates.IndexOf(endDateStr);
+                _ctx.CbEndDate.SelectedIndex = ei >= 0 ? ei : (dates.Count > 0 ? 0 : -1);
+                RefreshStatTimeCombo(_ctx.CbEndDate, _ctx.CbEndTime, endTimeStr);
+            }
         }
 
         private void RefreshStatTimeCombo(ComboBox dateCb, ComboBox timeCb, string preferred)
@@ -633,6 +640,31 @@ namespace AniloxRoll.Monitor.UI.Presenters
             for (int i = 1; i <= _ctx.CameraCount; i++)
                 lv.Columns.Add($"{i}", -1, HorizontalAlignment.Center);
             FitListViewColumnsProportional(lv);
+
+            // 點選明細列表的列 → 切換到單片模式並把 cbDataGrabId 對齊該序號
+            // （與 cbDataGrabId 變更的流程共用：OnSingleSheetComboChanged 會 sync cbReviewGrabId、
+            // 設 _reviewDirty=true、刷新 chartMuraProfile）
+            lv.SelectedIndexChanged += OnGrabDetailRowSelected;
+        }
+
+        private void OnGrabDetailRowSelected(object sender, EventArgs e)
+        {
+            if (StatComboGuard.IsSet) return;
+            var lv = _ctx.ListViewGrabDetail;
+            if (lv.SelectedItems.Count == 0) return;
+            string grabId = lv.SelectedItems[0].Text;
+            if (string.IsNullOrEmpty(grabId)) return;
+
+            int idx = _ctx.CbDataGrabId.Items.IndexOf(grabId);
+            if (idx < 0) return;
+            if (_ctx.CbDataGrabId.SelectedIndex == idx)
+            {
+                // SelectedIndex 沒變 → 不會觸發 OnSingleSheetComboChanged，但仍需確保 active 模式為單片
+                if (_activeStatMode != _ctx.GrpDataSingleSheet)
+                    SwitchActiveStatGroupBox(_ctx.GrpDataSingleSheet);
+                return;
+            }
+            _ctx.CbDataGrabId.SelectedIndex = idx; // → OnSingleSheetComboChanged 接手
         }
 
         private void UpdateGrabDetailListView(List<GrabDetail> details)
