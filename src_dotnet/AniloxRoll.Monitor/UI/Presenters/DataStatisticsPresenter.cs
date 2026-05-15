@@ -1308,7 +1308,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// <summary>
         /// 由 GroupBox.Click 觸發：切換 active 模式並重算統計（panelStatCam / listViewGrabDetail
         /// / chartMuraProfile / chartYearly 等）。已是 active 則無動作。
-        /// 切到序號範圍模式時自動把起始/結束序號攤開到 [最舊, 最新]，避免承襲單片模式的單筆設定。
+        /// 切到範圍類模式時把對應 combo 攤開到資料夾的完整範圍（避免承襲單片模式的單筆設定）：
+        ///   - GroupBoxGrabIdRange：cbGrabIdStart = 最舊、cbGrabIdEnd = 最新
+        ///   - GroupBoxTimeRange：cbStartDate/Time = _statAvailableTimes.Min、cbEndDate/Time = Max
         /// </summary>
         private void SwitchActiveStatGroupBox(GroupBox target)
         {
@@ -1322,6 +1324,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     _ctx.CbGrabIdStart.SelectedIndex = _grabIdInfos.Count - 1; // descending 最後一筆 = 最舊
                     _ctx.CbGrabIdEnd.SelectedIndex = 0;                        // descending 第一筆 = 最新
                 }
+            }
+            else if (target == _ctx.GroupBoxTimeRange && _statAvailableTimes.Count > 0)
+            {
+                // PopulateStatDateCombos 內已包 StatComboGuard，外面不必再包
+                PopulateStatDateCombos(_statAvailableTimes.Min, _statAvailableTimes.Max);
             }
             RefreshStats();
         }

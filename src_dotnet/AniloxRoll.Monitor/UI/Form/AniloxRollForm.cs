@@ -1036,6 +1036,9 @@ namespace AniloxRoll.Monitor.Forms
                 }
                 FreePrecomputedColMeanBuffers();
                 _liveCameraManager.FreeCameras();
+                // 在相機釋放後再 dispose CUDA pipeline（依賴關係安全）
+                // commit 9dbac3e 刪 CleanupSystem 後沒人接手 → CUDA pinned memory 不會主動釋放
+                _inspectionService?.Dispose();
                 _lightController?.Dispose();
                 _retentionService?.Dispose();
                 _remoteCopyService?.Dispose();
