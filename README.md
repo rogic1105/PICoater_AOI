@@ -13,8 +13,7 @@ PICoater_AOI/
 │   ├── framework        # 測試框架
 │   ├── cpp_utils        # C++ 工具庫
 │   └── src_dotnet/
-│       ├── AOI.SDK/     # .NET SDK（SmartCanvas 等）
-│       └── MilGrabSample/ # MIL 相機擷取參考實作
+│       └── AOI.SDK/     # .NET SDK（SmartCanvas 等）
 ├── src_native/          # [演算法] 專案特定的 C++ 模組
 │   ├── modules/         # 各式檢測功能模組 (如 GetPICoaterBackground)
 │   └── c_api/           # 導出給 C# 使用的 DLL 介面層
@@ -25,6 +24,10 @@ PICoater_AOI/
 │   ├── cpp_test         # (picoater_tests)
 │   └── dotnet_test/AniloxRoll.Monitor.Tests/ # NUnit 3.x + Moq 4.x
 ├── docs/                # 架構與模式文件
+│   ├── sample/          # 示範程式（AOI.SDK.TestApp — 不參與主 build，未來會分離回 AOI_SDK repo）
+│   ├── config/          # config / dcf 範例
+│   ├── dev/             # 廠商規格書、CLProtocol 範例、Grabber / 光源控制器手冊
+│   └── user-manual/     # 操作員說明書 + IO 圖 + 硬體規格
 ├── third_party/         # 第三方函式庫 (如 stb_image)
 ├── TestRunner/          # 測試啟動器（雙擊 TestRunner.bat 執行）
 └── Directory.Build.props # 全域 MSBuild 設定檔
