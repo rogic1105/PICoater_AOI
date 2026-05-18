@@ -833,20 +833,27 @@ namespace AniloxRoll.Monitor.Forms
             // Live tab chart 點選：
             //   Vertical：muraChartVerticalLive → 切換強化；chartLiveOverview → 切到 Global
             //   Global：chartLiveOverview → 切換強化；muraChartVerticalLive → 切回 Vertical
-            // 切換 StitchMode 不被 EnableMuraEnhance 擋住（強化中也可切，避免「點了沒反應」）
+            // 強化中點對方 chart 時：**先同步關掉強化**（避免 callback BeginInvoke 與
+            // OnStitchModeChangedAsync 重新配置 MIL display 競態），再 async 切 StitchMode。
             muraChartVerticalLive.MouseClick += (s, e) =>
             {
                 if (_settings?.StitchMode == StitchMode.Vertical)
                     SwitchLiveDisplayDirection("v");
                 else if (_settings?.StitchMode == StitchMode.Global)
+                {
+                    CancelEnhanceIfActive();
                     _ = TrySwitchStitchModeAsync(StitchMode.Vertical);
+                }
             };
             chartLiveOverview.MouseClick += (s, e) =>
             {
                 if (_settings?.StitchMode == StitchMode.Global)
                     SwitchLiveDisplayDirection("v");
                 else if (_settings?.StitchMode == StitchMode.Vertical)
+                {
+                    CancelEnhanceIfActive();
                     _ = TrySwitchStitchModeAsync(StitchMode.Global);
+                }
             };
             muraChartHorizontalLive.MouseClick += (s, e) => SwitchLiveDisplayDirection("h");
 
@@ -2017,6 +2024,20 @@ namespace AniloxRoll.Monitor.Forms
         {
             _liveCameraManager?.SetImageProcessingEnabled(enabled);
             UpdateLiveDirectionVisual();
+        }
+
+        /// <summary>
+        /// 在執行 TrySwitchStitchModeAsync 前同步取消強化，避免：
+        ///   1. enhance callback BeginInvoke 與 stitch mode 重新配置 MIL display 競態
+        ///   2. 切 mode 後強化狀態殘留導致 UI 顯示不一致
+        /// 沒在強化中時 no-op。
+        /// </summary>
+        private void CancelEnhanceIfActive()
+        {
+            if (_settings == null || !_settings.EnableMuraEnhance) return;
+            _settings.EnableMuraEnhance = false;
+            ApplyMuraEnhance(false);
+            RefreshPropertyGridKeepScroll();
         }
 
         private void lblIoDoMura_Click(object sender, EventArgs e)

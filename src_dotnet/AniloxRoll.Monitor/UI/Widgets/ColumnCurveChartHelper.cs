@@ -154,7 +154,9 @@ namespace AniloxRoll.Monitor.UI.Widgets
             {
                 double left  = _logicalLeftMm;
                 double right = _logicalRightMm;
-                _chart.BeginInvoke(new Action(() => ReapplyZoom(left, right)));
+                // 守 IsHandleCreated：StitchMode 切換期 chart 可能正在 re-layout，handle 短暫無效
+                if (_chart.IsHandleCreated && !_chart.IsDisposed)
+                    _chart.BeginInvoke(new Action(() => ReapplyZoom(left, right)));
             }
         }
 

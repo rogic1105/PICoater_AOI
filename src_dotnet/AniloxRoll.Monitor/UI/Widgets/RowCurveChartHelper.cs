@@ -122,15 +122,19 @@ namespace AniloxRoll.Monitor.UI.Widgets
             {
                 double top = _logicalTopMm;
                 double bot = _logicalBotMm;
-                _chart.BeginInvoke(new Action(() =>
+                // 守 IsHandleCreated：StitchMode 切換期 chart 可能正在 re-layout，handle 短暫無效
+                if (_chart.IsHandleCreated && !_chart.IsDisposed)
                 {
-                    GetAdjustedZoom(top, bot, out double zMin, out double zMax);
-                    var axisY = _chart.ChartAreas[0].AxisY;
-                    axisY.Minimum = Math.Min(0, zMin);
-                    axisY.Maximum = Math.Max(_totalMm, zMax);
-                    try { axisY.ScaleView.Zoom(zMin, zMax); }
-                    catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[RowCurveChartHelper.OnPostPaint] {ex.GetType().Name}: {ex.Message}"); }
-                }));
+                    _chart.BeginInvoke(new Action(() =>
+                    {
+                        GetAdjustedZoom(top, bot, out double zMin, out double zMax);
+                        var axisY = _chart.ChartAreas[0].AxisY;
+                        axisY.Minimum = Math.Min(0, zMin);
+                        axisY.Maximum = Math.Max(_totalMm, zMax);
+                        try { axisY.ScaleView.Zoom(zMin, zMax); }
+                        catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[RowCurveChartHelper.OnPostPaint] {ex.GetType().Name}: {ex.Message}"); }
+                    }));
+                }
             }
         }
 
