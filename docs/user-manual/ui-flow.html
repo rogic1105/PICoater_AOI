@@ -991,13 +991,13 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box action dev">SwitchLiveDisplayDirection("v")</div>
 </div>
 <div>
-<div class="box input">點擊【監控全覽圖】（Vertical 模式 且 非強化狀態）</div>
+<div class="box input">點擊【監控全覽圖】（Vertical 模式；強化中也可切）</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">TrySwitchStitchModeAsync(Global)</div>
 <div class="box output">合圖方式自動切換為全域；PropertyGrid 同步更新</div>
 </div>
 <div>
-<div class="box input">點擊【監控切向曲線圖】（Global 模式 且 非強化狀態）</div>
+<div class="box input">點擊【監控切向曲線圖】（Global 模式；強化中也可切）</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">TrySwitchStitchModeAsync(Vertical)</div>
 <div class="box output">合圖方式自動切換為垂直；PropertyGrid 同步更新</div>
@@ -1008,7 +1008,7 @@ body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
 <div class="box action dev">SwitchLiveDisplayDirection("h")</div>
 </div>
 </div>
-<div class="note dev">同 Review tab 邏輯，守衛條件改用 _settings.EnableMuraEnhance（Live 的強化狀態），而非 IsEnhanceDisplayActive（後者為回顧 Stitch 模式專用）。</div>
+<div class="note dev">2026-05-18 更新：拿掉「強化中才能切 StitchMode」的 guard — 之前若有橘框（強化 active）點對方 chart 完全沒反應，是經典「點了沒回饋」UX 反模式。現在強化中也可切合圖方式，PropertyGrid 同步更新；強化方向若不適用新模式由 SwitchLiveDisplayDirection 自然關閉。</div>
 </div>
 <div class="flow-group vflow">
 <div class="flow-title">回顧主畫面手勢</div>

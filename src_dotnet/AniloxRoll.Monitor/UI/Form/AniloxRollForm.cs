@@ -831,20 +831,21 @@ namespace AniloxRoll.Monitor.Forms
             chartMuraHorizontal.MouseClick += (s, e) => SwitchRidgeDirection("h");
 
             // Live tab chart 點選：
-            //   Vertical：muraChartVerticalLive → 切換強化；chartLiveOverview（非強化時）→ 切到 Global
-            //   Global：chartLiveOverview → 切換強化；muraChartVerticalLive（非強化時）→ 切回 Vertical
+            //   Vertical：muraChartVerticalLive → 切換強化；chartLiveOverview → 切到 Global
+            //   Global：chartLiveOverview → 切換強化；muraChartVerticalLive → 切回 Vertical
+            // 切換 StitchMode 不被 EnableMuraEnhance 擋住（強化中也可切，避免「點了沒反應」）
             muraChartVerticalLive.MouseClick += (s, e) =>
             {
                 if (_settings?.StitchMode == StitchMode.Vertical)
                     SwitchLiveDisplayDirection("v");
-                else if (_settings?.StitchMode == StitchMode.Global && !_settings.EnableMuraEnhance)
+                else if (_settings?.StitchMode == StitchMode.Global)
                     _ = TrySwitchStitchModeAsync(StitchMode.Vertical);
             };
             chartLiveOverview.MouseClick += (s, e) =>
             {
                 if (_settings?.StitchMode == StitchMode.Global)
                     SwitchLiveDisplayDirection("v");
-                else if (_settings?.StitchMode == StitchMode.Vertical && !_settings.EnableMuraEnhance)
+                else if (_settings?.StitchMode == StitchMode.Vertical)
                     _ = TrySwitchStitchModeAsync(StitchMode.Global);
             };
             muraChartHorizontalLive.MouseClick += (s, e) => SwitchLiveDisplayDirection("h");
