@@ -833,27 +833,21 @@ namespace AniloxRoll.Monitor.Forms
             // Live tab chart 點選：
             //   Vertical：muraChartVerticalLive → 切換強化；chartLiveOverview → 切到 Global
             //   Global：chartLiveOverview → 切換強化；muraChartVerticalLive → 切回 Vertical
-            // 強化中點對方 chart 時：**先同步關掉強化**（避免 callback BeginInvoke 與
-            // OnStitchModeChangedAsync 重新配置 MIL display 競態），再 async 切 StitchMode。
+            // 強化中點對方 chart 時：用 SwitchStitchModeWithEnhanceSequence 安全序列化，
+            // 避免 callback thread 在轉場期 BeginInvoke 到 chart handle 不穩定的視窗。
             muraChartVerticalLive.MouseClick += (s, e) =>
             {
                 if (_settings?.StitchMode == StitchMode.Vertical)
                     SwitchLiveDisplayDirection("v");
                 else if (_settings?.StitchMode == StitchMode.Global)
-                {
-                    CancelEnhanceIfActive();
-                    _ = TrySwitchStitchModeAsync(StitchMode.Vertical);
-                }
+                    _ = SwitchStitchModeWithEnhanceSequence(StitchMode.Vertical);
             };
             chartLiveOverview.MouseClick += (s, e) =>
             {
                 if (_settings?.StitchMode == StitchMode.Global)
                     SwitchLiveDisplayDirection("v");
                 else if (_settings?.StitchMode == StitchMode.Vertical)
-                {
-                    CancelEnhanceIfActive();
-                    _ = TrySwitchStitchModeAsync(StitchMode.Global);
-                }
+                    _ = SwitchStitchModeWithEnhanceSequence(StitchMode.Global);
             };
             muraChartHorizontalLive.MouseClick += (s, e) => SwitchLiveDisplayDirection("h");
 
@@ -2027,17 +2021,39 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         /// <summary>
-        /// 在執行 TrySwitchStitchModeAsync 前同步取消強化，避免：
-        ///   1. enhance callback BeginInvoke 與 stitch mode 重新配置 MIL display 競態
-        ///   2. 切 mode 後強化狀態殘留導致 UI 顯示不一致
-        /// 沒在強化中時 no-op。
+        /// 安全序列化：Live chart 點選切 StitchMode 時，若同時要關掉強化，
+        /// 必須先把 callback thread 的 chart 更新訂閱斷開（C），避免轉場期間 callback
+        /// BeginInvoke 到 chart handle 不穩定的視窗。
+        /// 並把 UpdateLiveDirectionVisual 延後到 OnStitchModeChangedAsync 之後一次性執行（D），
+        /// 減少 Border 屬性變更引起的 paint storm。
         /// </summary>
-        private void CancelEnhanceIfActive()
+        private async Task SwitchStitchModeWithEnhanceSequence(StitchMode newMode)
         {
-            if (_settings == null || !_settings.EnableMuraEnhance) return;
-            _settings.EnableMuraEnhance = false;
-            ApplyMuraEnhance(false);
-            RefreshPropertyGridKeepScroll();
+            if (_settings == null) return;
+
+            bool wasEnhanced = _settings.EnableMuraEnhance;
+            // C：先 unsubscribe — callback thread 在轉場期間不會 BeginInvoke 到 UI/chart
+            _liveCameraManager.OnLiveCurveData    -= OnLiveCurveData;
+            _liveCameraManager.OnLiveRowCurveData -= OnLiveRowCurveData;
+            try
+            {
+                if (wasEnhanced)
+                {
+                    // D：只翻 flag + 通知 native pipeline，不立即跑 UpdateLiveDirectionVisual
+                    _settings.EnableMuraEnhance = false;
+                    _liveCameraManager?.SetImageProcessingEnabled(false);
+                }
+                _settings.hb_StitchMode = newMode;
+                RefreshPropertyGridKeepScroll();
+                await OnStitchModeChangedAsync();
+            }
+            finally
+            {
+                // Resubscribe + 一次性更新 visual（D 的延後執行點）
+                _liveCameraManager.OnLiveCurveData    += OnLiveCurveData;
+                _liveCameraManager.OnLiveRowCurveData += OnLiveRowCurveData;
+                UpdateLiveDirectionVisual();
+            }
         }
 
         private void lblIoDoMura_Click(object sender, EventArgs e)
