@@ -92,6 +92,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
         internal readonly EventGuard GrabIdNavGuard = new EventGuard();
         internal readonly EventGuard GrabIdCrossGuard = new EventGuard();
         private readonly EventGuard _chartNavGuard = new EventGuard();
+        // listViewGrabDetail commit 時設 true：OnSingleSheetComboChanged 跳過範圍 cb 同步，
+        // 保留使用者目前的 cbGrabIdStart/End + cbStartDate/Time + cbEndDate/Time 不變。
+        private bool _suppressRangeOnSingleSheetSync;
 
         private int _lastChartToggleTick;
 
@@ -404,13 +407,16 @@ namespace AniloxRoll.Monitor.UI.Presenters
             int idx = _ctx.CbDataGrabId.SelectedIndex;
             if (idx < 0) return;
 
-            using (StatComboGuard.Enter())
+            if (!_suppressRangeOnSingleSheetSync)
             {
-                _ctx.CbGrabIdStart.SelectedIndex = idx;
-                _ctx.CbGrabIdEnd.SelectedIndex = idx;
-                var info = _grabIdInfos[idx];
-                SetCombosToDateTime(true, info.Earliest);
-                SetCombosToDateTime(false, info.Latest);
+                using (StatComboGuard.Enter())
+                {
+                    _ctx.CbGrabIdStart.SelectedIndex = idx;
+                    _ctx.CbGrabIdEnd.SelectedIndex = idx;
+                    var info = _grabIdInfos[idx];
+                    SetCombosToDateTime(true, info.Earliest);
+                    SetCombosToDateTime(false, info.Latest);
+                }
             }
 
             RefreshStats();
@@ -632,14 +638,16 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 lv.Columns.Add($"{i}", -1, HorizontalAlignment.Center);
             FitListViewColumnsProportional(lv);
 
-            // 點選明細列表的列 → 切換到單片模式並把 cbDataGrabId 對齊該序號
-            // （與 cbDataGrabId 變更的流程共用：OnSingleSheetComboChanged 會 sync cbReviewGrabId、
-            // 設 _reviewDirty=true、刷新 chartMuraProfile）
-            lv.SelectedIndexChanged += OnGrabDetailRowSelected;
+            // 點選明細列表的列 → MouseDown 時 ListView 預設視覺先反白（顯示被選中），
+            // MouseUp 才 commit 切到該序號（與 cbDataGrabId 變更流程共用 OnSingleSheetComboChanged）。
+            // commit 時包 _suppressRangeOnSingleSheetSync 跳過範圍 cb 同步，
+            // 保留 cbGrabIdStart/End + cbStartDate/Time + cbEndDate/Time 不變。
+            lv.MouseUp += OnGrabDetailRowCommitted;
         }
 
-        private void OnGrabDetailRowSelected(object sender, EventArgs e)
+        private void OnGrabDetailRowCommitted(object sender, MouseEventArgs e)
         {
+            if (e.Button != MouseButtons.Left) return;
             if (StatComboGuard.IsSet) return;
             var lv = _ctx.ListViewGrabDetail;
             if (lv.SelectedItems.Count == 0) return;
@@ -655,17 +663,17 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     SwitchActiveStatGroupBox(_ctx.GrpDataSingleSheet);
                 return;
             }
-            _ctx.CbDataGrabId.SelectedIndex = idx; // → OnSingleSheetComboChanged 接手
+            _suppressRangeOnSingleSheetSync = true;
+            try { _ctx.CbDataGrabId.SelectedIndex = idx; } // → OnSingleSheetComboChanged 接手
+            finally { _suppressRangeOnSingleSheetSync = false; }
         }
 
         private void UpdateGrabDetailListView(List<GrabDetail> details)
         {
             var lv = _ctx.ListViewGrabDetail;
-            // H5 + B-M3：重填前 unsubscribe，try/finally 保證 subscription 一定接回，
-            // 即使 lv.Items.Add 或 AutoResizeColumns 拋 exception（如 disposed control）
-            lv.SelectedIndexChanged -= OnGrabDetailRowSelected;
-            try
-            {
+            // 改用 MouseUp 訂閱後，Items.Clear/Add 不會觸發 commit 路徑，
+            // 不需 unsubscribe/resubscribe；BeginUpdate/EndUpdate 包住批量重填，
+            // SelectedIndices.Clear() 避免殘留高亮。
             lv.BeginUpdate();
             lv.Items.Clear();
             lv.SelectedIndices.Clear();
@@ -694,11 +702,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             lv.EndUpdate();
             lv.AutoResizeColumns(ColumnHeaderAutoResizeStyle.ColumnContent);
-            }
-            finally
-            {
-                lv.SelectedIndexChanged += OnGrabDetailRowSelected;
-            }
         }
 
         public static void FitListViewColumnsProportional(ListView lv, bool useContent = false)

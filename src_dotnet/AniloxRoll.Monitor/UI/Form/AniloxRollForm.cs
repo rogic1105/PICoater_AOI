@@ -186,6 +186,15 @@ namespace AniloxRoll.Monitor.Forms
         public AniloxRollForm()
         {
             InitializeComponent();
+            // 啟動 banner log — 用來驗證 user 跑的是不是新 build
+            try
+            {
+                System.IO.File.AppendAllText(@"D:\Anilox\stitch-debug.log",
+                    $"========== AniloxRoll.Monitor started at {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} ==========" + Environment.NewLine);
+            }
+            catch { }
+            // 全域 mouse-down 攔截：記錄每次左鍵按下命中的控制項，用來診斷 Live chart click 失蹤。
+            try { Application.AddMessageFilter(new GlobalMouseLogger()); } catch { }
             try
             {
                 using (var stream = System.Reflection.Assembly.GetExecutingAssembly()
@@ -811,43 +820,42 @@ namespace AniloxRoll.Monitor.Forms
 
             UpdateRowChartPitch();
 
-            // Review tab chart 點選：
-            //   Vertical：chartMuraVertical → 切換強化；chartOverview（非強化時）→ 切到 Global
-            //   Global：chartOverview → 切換強化；chartMuraVertical（非強化時）→ 切回 Vertical
+            // Review tab chart 點選（統一語意：點 chart 等於設定「目標 StitchMode + 是否強化 + 方向」）：
+            //   chartMuraVertical：
+            //     同 mode (Vertical) → SwitchRidgeDirection("v") 切換強化方向
+            //     不同 mode (Global) → 切回 Vertical（強化中也適用，順便關 enhance）
+            //   chartOverview：對稱（同/不同 mode 行為對調）
+            //   chartMuraHorizontal：永遠 toggle ridge dir = "h"
             chartMuraVertical.MouseClick += (s, e) =>
             {
-                if (_settings?.StitchMode == StitchMode.Vertical)
-                    SwitchRidgeDirection("v");
-                else if (_settings?.StitchMode == StitchMode.Global && !IsEnhanceDisplayActive)
-                    _ = TrySwitchStitchModeAsync(StitchMode.Vertical);
+                LogClick("chartMuraVertical.MouseClick", e);
+                if (_settings?.StitchMode == StitchMode.Vertical) SwitchRidgeDirection("v");
+                else if (_settings?.StitchMode == StitchMode.Global) _ = SwitchReviewStitchModeAndDisableEnhance(StitchMode.Vertical);
             };
             chartOverview.MouseClick += (s, e) =>
             {
-                if (_settings?.StitchMode == StitchMode.Global)
-                    SwitchRidgeDirection("v");
-                else if (_settings?.StitchMode == StitchMode.Vertical && !IsEnhanceDisplayActive)
-                    _ = TrySwitchStitchModeAsync(StitchMode.Global);
+                LogClick("chartOverview.MouseClick", e);
+                if (_settings?.StitchMode == StitchMode.Global) SwitchRidgeDirection("v");
+                else if (_settings?.StitchMode == StitchMode.Vertical) _ = SwitchReviewStitchModeAndDisableEnhance(StitchMode.Global);
             };
             chartMuraHorizontal.MouseClick += (s, e) => SwitchRidgeDirection("h");
 
-            // Live tab chart 點選：
-            //   Vertical：muraChartVerticalLive → 切換強化；chartLiveOverview → 切到 Global
-            //   Global：chartLiveOverview → 切換強化；muraChartVerticalLive → 切回 Vertical
-            // 強化中點對方 chart 時：用 SwitchStitchModeWithEnhanceSequence 安全序列化，
-            // 避免 callback thread 在轉場期 BeginInvoke 到 chart handle 不穩定的視窗。
+            // Live tab chart 點選（同 Review tab 語意，只是底層 apply 函式不同）：
+            //   muraChartVerticalLive：
+            //     同 mode (Vertical) → SwitchLiveDisplayDirection("v")
+            //     不同 mode (Global) → SwitchStitchModeWithEnhanceSequence(Vertical)（內含關 enhance）
+            //   chartLiveOverview：對稱
             muraChartVerticalLive.MouseClick += (s, e) =>
             {
-                if (_settings?.StitchMode == StitchMode.Vertical)
-                    SwitchLiveDisplayDirection("v");
-                else if (_settings?.StitchMode == StitchMode.Global)
-                    _ = SwitchStitchModeWithEnhanceSequence(StitchMode.Vertical);
+                LogClick("muraChartVerticalLive.MouseClick", e);
+                if (_settings?.StitchMode == StitchMode.Vertical) SwitchLiveDisplayDirection("v");
+                else if (_settings?.StitchMode == StitchMode.Global) _ = SwitchStitchModeWithEnhanceSequence(StitchMode.Vertical);
             };
             chartLiveOverview.MouseClick += (s, e) =>
             {
-                if (_settings?.StitchMode == StitchMode.Global)
-                    SwitchLiveDisplayDirection("v");
-                else if (_settings?.StitchMode == StitchMode.Vertical)
-                    _ = SwitchStitchModeWithEnhanceSequence(StitchMode.Global);
+                LogClick("chartLiveOverview.MouseClick", e);
+                if (_settings?.StitchMode == StitchMode.Global) SwitchLiveDisplayDirection("v");
+                else if (_settings?.StitchMode == StitchMode.Vertical) _ = SwitchStitchModeWithEnhanceSequence(StitchMode.Global);
             };
             muraChartHorizontalLive.MouseClick += (s, e) => SwitchLiveDisplayDirection("h");
 
@@ -1053,6 +1061,24 @@ namespace AniloxRoll.Monitor.Forms
 
             // 程式啟動後自動分配相機（不 Grab），讓 lblCamCount 在按下【開始抓取】前就能顯示連線狀態
             Shown += (s, e) => AutoAllocateCameras();
+
+            // commit 5b769f4 把 Live tab 加進 ProportionalScaler 後，panelMainDisplay 在 z-order 上層
+            // 縮放時幾何疊到 chart 區、MIL window 吃掉 hit-test → chart click handler 完全不觸發。
+            // 修法：Shown + Resize 後把 chart 提到 z-order 最上層，hit-test 順序就會正確。
+            Shown    += (s, e) => BringLiveChartsToFront();
+            Resize   += (s, e) => BringLiveChartsToFront();
+        }
+
+        private void BringLiveChartsToFront()
+        {
+            try
+            {
+                chartLiveOverview?.BringToFront();
+                muraChartVerticalLive?.BringToFront();
+                muraChartHorizontalLive?.BringToFront();
+                LogClick("BringLiveChartsToFront() called");
+            }
+            catch (Exception ex) { LogClick("BringLiveChartsToFront throw: " + ex.Message); }
         }
 
         /// <summary>
@@ -2026,33 +2052,102 @@ namespace AniloxRoll.Monitor.Forms
         /// BeginInvoke 到 chart handle 不穩定的視窗。
         /// 並把 UpdateLiveDirectionVisual 延後到 OnStitchModeChangedAsync 之後一次性執行（D），
         /// 減少 Border 屬性變更引起的 paint storm。
+        ///
+        /// **DEBUG**：每步驟 Trace.WriteLine + 寫 D:\Anilox\stitch-debug.log；
+        /// 任何 exception 抓到後彈 MessageBox 顯示完整 stack trace，並寫 log 檔。
         /// </summary>
+        private static void LogClick(string msg, MouseEventArgs e = null)
+        {
+            string suffix = e != null ? $" (Button={e.Button} Loc={e.X},{e.Y})" : "";
+            string line = $"[{DateTime.Now:HH:mm:ss.fff}] [Click] {msg}{suffix}";
+            try { System.IO.File.AppendAllText(@"D:\Anilox\stitch-debug.log", line + Environment.NewLine); } catch { }
+        }
+
+        /// <summary>
+        /// 全域 IMessageFilter：log 每次 WM_LBUTTONDOWN 命中的控制項 + 螢幕座標。
+        /// 用來診斷 Live chart click 為什麼沒觸發 MouseClick（panel/MIL native window 截獲？
+        /// chart 內部吞掉？bounds 重疊？）。試一次就能看出 click 去了哪裡。
+        /// </summary>
+        private sealed class GlobalMouseLogger : IMessageFilter
+        {
+            private const int WM_LBUTTONDOWN = 0x0201;
+            public bool PreFilterMessage(ref Message m)
+            {
+                if (m.Msg == WM_LBUTTONDOWN)
+                {
+                    try
+                    {
+                        var c = Control.FromHandle(m.HWnd);
+                        var pt = Cursor.Position;
+                        string name = c?.Name ?? "(null)";
+                        string type = c?.GetType().Name ?? "(no-type)";
+                        string line = $"[{DateTime.Now:HH:mm:ss.fff}] [MsgFilter] WM_LBUTTONDOWN hwnd=0x{m.HWnd.ToInt64():X} ctl={name}({type}) screen=({pt.X},{pt.Y})";
+                        System.IO.File.AppendAllText(@"D:\Anilox\stitch-debug.log", line + Environment.NewLine);
+                    }
+                    catch { }
+                }
+                return false; // 不攔截，繼續傳遞
+            }
+        }
+
         private async Task SwitchStitchModeWithEnhanceSequence(StitchMode newMode)
         {
             if (_settings == null) return;
 
+            void Step(string msg)
+            {
+                string line = $"[{DateTime.Now:HH:mm:ss.fff}] [StitchSwitch→{newMode}] {msg}";
+                System.Diagnostics.Trace.WriteLine(line);
+                try { System.IO.File.AppendAllText(@"D:\Anilox\stitch-debug.log", line + Environment.NewLine); } catch { }
+            }
+
+            Step("ENTER (wasEnhanced=" + _settings.EnableMuraEnhance + " curStitchMode=" + _settings.StitchMode + ")");
             bool wasEnhanced = _settings.EnableMuraEnhance;
-            // C：先 unsubscribe — callback thread 在轉場期間不會 BeginInvoke 到 UI/chart
-            _liveCameraManager.OnLiveCurveData    -= OnLiveCurveData;
-            _liveCameraManager.OnLiveRowCurveData -= OnLiveRowCurveData;
+
             try
             {
+                Step("step 1: unsubscribe OnLiveCurveData/OnLiveRowCurveData");
+                _liveCameraManager.OnLiveCurveData    -= OnLiveCurveData;
+                _liveCameraManager.OnLiveRowCurveData -= OnLiveRowCurveData;
+
                 if (wasEnhanced)
                 {
-                    // D：只翻 flag + 通知 native pipeline，不立即跑 UpdateLiveDirectionVisual
+                    Step("step 2a: _settings.EnableMuraEnhance = false");
                     _settings.EnableMuraEnhance = false;
+                    Step("step 2b: SetImageProcessingEnabled(false)");
                     _liveCameraManager?.SetImageProcessingEnabled(false);
                 }
+                else { Step("step 2: enhance was off, skip"); }
+
+                Step("step 3: _settings.hb_StitchMode = " + newMode);
                 _settings.hb_StitchMode = newMode;
+
+                Step("step 4: RefreshPropertyGridKeepScroll");
                 RefreshPropertyGridKeepScroll();
+
+                Step("step 5: await OnStitchModeChangedAsync (start)");
                 await OnStitchModeChangedAsync();
+                Step("step 5: await OnStitchModeChangedAsync (done)");
+            }
+            catch (Exception ex)
+            {
+                string full = $"EXCEPTION at SwitchStitchModeWithEnhanceSequence:\n{ex}";
+                Step(full);
+                try
+                {
+                    MessageBox.Show(full, "切換 StitchMode 異常", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+                catch { }
             }
             finally
             {
-                // Resubscribe + 一次性更新 visual（D 的延後執行點）
+                Step("step 6: resubscribe events");
                 _liveCameraManager.OnLiveCurveData    += OnLiveCurveData;
                 _liveCameraManager.OnLiveRowCurveData += OnLiveRowCurveData;
-                UpdateLiveDirectionVisual();
+                Step("step 7: UpdateLiveDirectionVisual");
+                try { UpdateLiveDirectionVisual(); }
+                catch (Exception ex) { Step("UpdateLiveDirectionVisual throw: " + ex); }
+                Step("EXIT (newStitchMode=" + _settings.StitchMode + " EnableMuraEnhance=" + _settings.EnableMuraEnhance + ")");
             }
         }
 
@@ -3393,7 +3488,33 @@ namespace AniloxRoll.Monitor.Forms
             await OnStitchModeChangedAsync();
         }
 
-        private async Task OnStitchModeChangedAsync()
+        /// <summary>
+        /// Review tab：點對方 chart 切 StitchMode 時順便關 enhance。
+        /// 對應 Live tab 的 SwitchStitchModeWithEnhanceSequence。
+        /// 一次性從硬碟 reload 原圖 + 切 mode，避免「先用緩存 merge 顯示強化版、再 reload 顯示原圖」的兩段閃爍。
+        /// </summary>
+        private async Task SwitchReviewStitchModeAndDisableEnhance(StitchMode newMode)
+        {
+            if (_settings == null) return;
+            bool wasStitchMode = _stitchCoordinator.IsStitchMode;
+            _settings.EnableReviewEnhance              = false;
+            _stitchCoordinator.LastReviewProcessedMode = false;
+            UpdateRidgeDirectionVisual(null);
+            _settings.hb_StitchMode = newMode;
+            RefreshPropertyGridKeepScroll();
+
+            // stitch mode：跳過 OnStitchModeChangedAsync 內的緩存 merge（line 3534-3544），
+            // 直接從硬碟 reload 原圖（enableProcess=false）。一次到位無中間態。
+            await OnStitchModeChangedAsync(skipStitchedImageRefresh: wasStitchMode);
+            if (wasStitchMode && _stitchCoordinator.IsStitchMode)
+            {
+                await ReloadCurrentStitchedView(false);
+                // ShowStitchedCameraInCanvas(resetView: false) 在 Vertical 不 fit；切 StitchMode 後一律 fit。
+                if (canvasMain.Image != null) canvasMain.FitToScreen();
+            }
+        }
+
+        private async Task OnStitchModeChangedAsync(bool skipStitchedImageRefresh = false)
         {
             // Live tab：即時全域合圖
             if (_settings.StitchMode == StitchMode.Global && _liveCameraManager?.IsAllocated == true)
@@ -3417,13 +3538,18 @@ namespace AniloxRoll.Monitor.Forms
             // 根據當前選中的回顧縮圖重新載入回顧主畫面
             if (_stitchCoordinator.IsStitchMode)
             {
-                int idx = _galleryManager?.SelectedIndex ?? 0;
-                if (_settings.StitchMode == StitchMode.Global)
-                    _stitchCoordinator.MergeAndShowFromStitchedImages();
-                else
+                // skipStitchedImageRefresh=true：caller 自己會 LoadGrabStitchedViewAsync 重 load，
+                // 跳過這裡的緩存 merge 避免「先顯示緩存再 reload」兩段閃爍。
+                if (!skipStitchedImageRefresh)
                 {
-                    _stitchCoordinator.DisposeGlobalMergedImage();
-                    _stitchCoordinator.ShowStitchedCameraInCanvas(idx);
+                    int idx = _galleryManager?.SelectedIndex ?? 0;
+                    if (_settings.StitchMode == StitchMode.Global)
+                        _stitchCoordinator.MergeAndShowFromStitchedImages();
+                    else
+                    {
+                        _stitchCoordinator.DisposeGlobalMergedImage();
+                        _stitchCoordinator.ShowStitchedCameraInCanvas(idx);
+                    }
                 }
             }
             else if (_imageRepository.FileCount > 0)
@@ -3438,7 +3564,8 @@ namespace AniloxRoll.Monitor.Forms
             foreach (var pb in _cameraPanels) pb.Invalidate();
 
             // 切換合圖方式後主畫面 fit to screen
-            if (canvasMain.Image != null)
+            // skipStitchedImageRefresh=true：caller 自己會 reload 新原圖再 fit，這裡 fit 會作用在舊強化版 image 上，跳過。
+            if (!skipStitchedImageRefresh && canvasMain.Image != null)
                 canvasMain.FitToScreen();
 
             // 底色（藍）依 StitchMode；橘框依強化狀態
