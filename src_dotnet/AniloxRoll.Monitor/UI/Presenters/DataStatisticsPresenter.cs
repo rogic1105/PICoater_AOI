@@ -757,24 +757,27 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private void UpdateMuraProfileChart(IList<GrabIdInfo> grabIds)
         {
             if (_muraProfileHelper == null || _ctx.Settings == null) return;
+
+            // 單片模式（GrpDataSingleSheet）：永遠用 cbDataGrabId.SelectedIndex 對應 grab，不依賴 caller 傳入的 grabIds。
+            // 原因：listViewGrabDetail 點選時 _suppressRangeOnSingleSheetSync=true 跳過範圍 cb 同步，
+            // 但 caller 仍會用舊 cbGrabIdStart/End 範圍呼這函式 → 若用 grabIds[0] 會顯示舊範圍的第一筆而非剛點的 grab。
+            // view-time 正規值 rescale（HM_capture / HM_current）讓改 PropertyGrid 正規值時曲線坡度立即變化。
+            if (_activeStatMode == _ctx.GrpDataSingleSheet)
+            {
+                int singleIdx = _ctx.CbDataGrabId.SelectedIndex;
+                if (singleIdx >= 0 && singleIdx < _grabIdInfos.Count)
+                    UpdateMuraProfileForSingleGrab(_grabIdInfos[singleIdx]);
+                else
+                    ClearMuraProfileChart();
+                return;
+            }
+
             if (grabIds == null || grabIds.Count == 0)
             {
                 ClearMuraProfileChart();
                 return;
             }
-
-            // 單片模式（GrpDataSingleSheet：cbDataGrabId 或 cbReviewGrabId 觸發）：
-            //   顯示「最新一筆」單 grab 的 stitch-style 視圖（與 chartOverview 對齊），
-            //   並套用 view-time 正規值 rescale（HM_capture / HM_current）讓改 PropertyGrid
-            //   正規值時曲線坡度立即變化。
-            // 範圍/時間模式（GroupBoxGrabIdRange / GroupBoxTimeRange）：
-            //   保留舊統計法 — LoadAvgMuraProfile 多 grab 平均，當作歷史快照不做 rescale
-            //   （跨 grab HM_capture 可能不同，rescale 沒乾淨語意）。
-            if (_activeStatMode == _ctx.GrpDataSingleSheet)
-            {
-                UpdateMuraProfileForSingleGrab(grabIds[0]);
-                return;
-            }
+            // 範圍/時間模式：aggregate 多 grab 平均，當作歷史快照不做 view-time rescale
 
             // ── 範圍/時間模式：舊 aggregate 邏輯 ──
             var (meanDict, maxDict) = InspectionStatisticsService.LoadAvgMuraProfile(

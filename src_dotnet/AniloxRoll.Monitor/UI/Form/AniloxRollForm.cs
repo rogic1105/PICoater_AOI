@@ -3663,6 +3663,17 @@ namespace AniloxRoll.Monitor.Forms
             GridItem found = FindGridItemRecursive(root, propertyName);
             if (found == null) return;  // PG 不顯示此 property（Browsable false）— 無需 refresh
 
+            // 保 scroll position：set SelectedGridItem 會 trigger PG auto-scroll 到該 cell（若不在 viewport 內）。
+            // 找內部 PropertyGridView + VScrollBar，trick 完恢復原 scroll，避免使用者看到 PG 跳動。
+            Control gridView = null;
+            foreach (Control c in propertyGridSettings.Controls)
+                if (c.GetType().Name == "PropertyGridView") { gridView = c; break; }
+            System.Windows.Forms.ScrollBar scrollBar = null;
+            if (gridView != null)
+                foreach (Control c in gridView.Controls)
+                    if (c is System.Windows.Forms.VScrollBar) { scrollBar = (System.Windows.Forms.VScrollBar)c; break; }
+            int scrollPos = scrollBar?.Value ?? 0;
+
             var saved = propertyGridSettings.SelectedGridItem;
             _suppressGridSelChange = true;
             try
@@ -3670,6 +3681,11 @@ namespace AniloxRoll.Monitor.Forms
                 propertyGridSettings.SelectedGridItem = found;
                 if (saved != null && saved != found)
                     propertyGridSettings.SelectedGridItem = saved;
+                if (scrollBar != null)
+                {
+                    int max = Math.Max(0, scrollBar.Maximum - scrollBar.LargeChange + 1);
+                    scrollBar.Value = Math.Max(0, Math.Min(scrollPos, max));
+                }
             }
             finally { _suppressGridSelChange = false; }
         }
