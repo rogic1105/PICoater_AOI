@@ -545,6 +545,25 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _ctx.Settings.ErrorValueMeanV,
                 _ctx.Settings.ErrorValueMaxV);
 
+            // SingleSheet mode：用 cbDataGrabId.SelectedIndex 算單 grab stats（start=end=該 grab）。
+            // 不靠 cbGrabIdStart/End 範圍，這樣 listViewGrabDetail 點選後（_suppressRangeOnSingleSheetSync=true
+            // 跳過 range cb 同步）stats 仍對齊到剛點的單 grab。
+            if (_activeStatMode == _ctx.GrpDataSingleSheet
+                && _ctx.CbDataGrabId.SelectedIndex >= 0
+                && _ctx.CbDataGrabId.SelectedIndex < _grabIdInfos.Count)
+            {
+                var grab = _grabIdInfos[_ctx.CbDataGrabId.SelectedIndex];
+                var stats = InspectionStatisticsService.ComputeByGrabIdRange(
+                    _statsDataRootPath, grab.GrabId, grab.GrabId, ctx);
+                var details = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
+                    _statsDataRootPath, grab.GrabId, grab.GrabId, ctx);
+                _statsPresenter.Update(stats);
+                _currentDetails = details;
+                ApplyFailFilter();
+                UpdateMuraProfileChart(null);  // SingleSheet branch 內自己查 cbDataGrabId 取 grab
+                return;
+            }
+
             if (_activeStatMode != _ctx.GroupBoxTimeRange
                 && _ctx.CbGrabIdStart.SelectedIndex >= 0 && _ctx.CbGrabIdEnd.SelectedIndex >= 0
                 && _grabIdInfos.Count > 0)
@@ -645,6 +664,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             lv.MouseUp += OnGrabDetailRowCommitted;
         }
 
+        private string _lastListViewSelectedGrabId;
+
         private void OnGrabDetailRowCommitted(object sender, MouseEventArgs e)
         {
             if (e.Button != MouseButtons.Left) return;
@@ -654,17 +675,31 @@ namespace AniloxRoll.Monitor.UI.Presenters
             string grabId = lv.SelectedItems[0].Text;
             if (string.IsNullOrEmpty(grabId)) return;
 
+            // Toggle：第二次點同 row + 已是 SingleSheet → 切回 GroupBoxGrabIdRange（範圍模式，stats 用 cbGrabIdStart/End）
+            if (grabId == _lastListViewSelectedGrabId && _activeStatMode == _ctx.GrpDataSingleSheet)
+            {
+                _lastListViewSelectedGrabId = null;
+                lv.SelectedIndices.Clear();  // 清掉反白，視覺回到「無選中」
+                SwitchActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);
+                RefreshStats();
+                return;
+            }
+            _lastListViewSelectedGrabId = grabId;
+
             int idx = _ctx.CbDataGrabId.Items.IndexOf(grabId);
             if (idx < 0) return;
             if (_ctx.CbDataGrabId.SelectedIndex == idx)
             {
                 // SelectedIndex 沒變 → 不會觸發 OnSingleSheetComboChanged，但仍需確保 active 模式為單片
                 if (_activeStatMode != _ctx.GrpDataSingleSheet)
+                {
                     SwitchActiveStatGroupBox(_ctx.GrpDataSingleSheet);
+                    RefreshStats();  // 切 mode 後 stats + chartMuraProfile 對齊單片
+                }
                 return;
             }
             _suppressRangeOnSingleSheetSync = true;
-            try { _ctx.CbDataGrabId.SelectedIndex = idx; } // → OnSingleSheetComboChanged 接手
+            try { _ctx.CbDataGrabId.SelectedIndex = idx; } // → OnSingleSheetComboChanged 接手（內含 RefreshStats）
             finally { _suppressRangeOnSingleSheetSync = false; }
         }
 
