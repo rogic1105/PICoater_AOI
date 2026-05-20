@@ -229,9 +229,11 @@ namespace AniloxRoll.Monitor.Forms
         {
             _appMode = AppModeConfig.Load();
             if (_settings == null) _settings = ConfigManager.LoadInspectionSettings();
+            // Bootstrap 階段例外：SettingsHub 在下行才建構，這條直接賦值是不可避免的（合理 SSoT 違反）。
+            // AppRole 來自 app-mode.json（外部檔），啟動時同步進 InspectionSettings 記憶體；
+            // 後續若使用者透過 PG 改 AppRole，會走 Hub 正常管線。
             _settings.AppRole = _appMode?.Role ?? MachineRole.Inspection;
             // L2 SettingsHub：所有 setting 變更走 Changed event，OnSettingChanged 接管 Apply* 副作用。
-            // Step 1：雛形 + 空訂閱（Step 2 才把 PropertyValueChanged 的 case 搬進來）。
             _settingsHub = new AniloxRoll.Monitor.Settings.Services.SettingsHub(_settings);
             _settingsHub.Changed += OnSettingChanged;
             EnsureAniloxFolderStructure();
@@ -2242,13 +2244,18 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
+        // 序列化 OnSettingChanged：避免連點 chart click 觸發多個 reload 並行 race（Claude review A1）
+        private readonly System.Threading.SemaphoreSlim _onSettingChangedSemaphore = new System.Threading.SemaphoreSlim(1, 1);
+
         /// <summary>
         /// L2 SettingsHub Changed event 的唯一訂閱者：所有 setting 變更的副作用都跑這個 switch。
         /// 來源不論：PropertyGrid（NotifyExternalChange）/ chart click（Set / SetBatch+inline）/ AutoDetect 回寫（Set）。
         /// 副作用順序：共用前段（chart 閾值、Live 設定、統計） → 個別 case dispatch（早退：AppRole）。
+        /// SemaphoreSlim 序列化：連點時排隊處理，避免多個 reload 並行 race。
         /// </summary>
         private async void OnSettingChanged(AniloxRoll.Monitor.Settings.Services.SettingChange c)
         {
+            await _onSettingChangedSemaphore.WaitAsync().ConfigureAwait(true);
             try
             {
                 // ── 共用副作用（任何 setting 變更都跑） ────────────────────────
@@ -2331,6 +2338,7 @@ namespace AniloxRoll.Monitor.Forms
                 // TODO：未來實作「重算 .bin curve」時在此分支補上。原本 pre-existing 的 reload 行為移除。
             }
             catch (Exception ex) { Trace.WriteLine($"[OnSettingChanged {c?.Name}] {ex}"); }
+            finally { _onSettingChangedSemaphore.Release(); }
         }
 
         // OPS/Start setting 名稱清單（用來判斷是不是「機台佈局」群組的 setting）
@@ -3516,24 +3524,29 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (_settings == null) return;
             bool wasStitchMode = _stitchCoordinator.IsStitchMode;
-            _settingsHub.SetBatch(s =>
-            {
-                s.EnableReviewEnhance = false;
-                s.hb_StitchMode       = newMode;
-            });
-            _stitchCoordinator.LastReviewProcessedMode = false;
-            UpdateRidgeDirectionVisual(null);
-            RefreshGridItem(nameof(InspectionSettings.hd_EnableReviewEnhance));
-            RefreshGridItem(nameof(InspectionSettings.hb_StitchMode));
 
-            // stitch mode：跳過 OnStitchModeChangedAsync 內的緩存 merge，
-            // 直接從硬碟 reload 原圖（enableProcess=false）一次到位。
-            await OnStitchModeChangedAsync(skipStitchedImageRefresh: wasStitchMode);
-            if (wasStitchMode && _stitchCoordinator.IsStitchMode)
+            // Commit-on-end：transition 期間隱藏 canvas，避免「先顯示舊強化版緩存、再 reload 原圖」中間幀閃。
+            canvasMain.Visible = false;
+            try
             {
-                await ReloadCurrentStitchedView(false);
-                if (canvasMain.Image != null) canvasMain.FitToScreen();
+                _settingsHub.SetBatch(s =>
+                {
+                    s.EnableReviewEnhance = false;
+                    s.hb_StitchMode       = newMode;
+                });
+                _stitchCoordinator.LastReviewProcessedMode = false;
+                UpdateRidgeDirectionVisual(null);
+                RefreshGridItem(nameof(InspectionSettings.hd_EnableReviewEnhance));
+                RefreshGridItem(nameof(InspectionSettings.hb_StitchMode));
+
+                await OnStitchModeChangedAsync(skipStitchedImageRefresh: wasStitchMode);
+                if (wasStitchMode && _stitchCoordinator.IsStitchMode)
+                {
+                    await ReloadCurrentStitchedView(false);
+                    if (canvasMain.Image != null) canvasMain.FitToScreen();
+                }
             }
+            finally { canvasMain.Visible = true; }
         }
 
         private async Task OnStitchModeChangedAsync(bool skipStitchedImageRefresh = false)

@@ -13,6 +13,33 @@
 
 ## 注意事項
 
+### L2 SSoT 原子結構（最重要 — 改 setting 必看 CLAUDE.md §架構原則）
+
+所有 setting 變更走 `SettingsHub`（`Settings/Services/SettingsHub.cs`）：
+
+| API | 用途 | 副作用 |
+|---|---|---|
+| `Hub.Set<V>(s => s.X, value)` | 程式碼路徑（AutoDetect 回寫、fallback、單 setting 變更）| save disk + raise event（Source=Programmatic）|
+| `Hub.SetBatch(s => { ... })` | 多 setting 嚴格 transition 順序，caller 自己 await | save once，**不** raise event |
+| `Hub.NotifyExternalChange(name, old, new)` | PropertyGrid 改值（setter 已寫 memory）| save disk + raise event（Source=PropertyGrid）|
+
+`Form.OnSettingChanged(SettingChange c)` 是唯一訂閱者：共用前段（chart 閾值同步、Live SetCaptureSettings、ScheduleStatsRefresh 等）+ switch case（StitchMode/EnableEnhance/Algorithm/OPS-Start/Light 等個別 dispatch）。
+
+**chart click / 按鈕 click 改 setting** — 永遠走 Hub，**不要** 直接 `_settings.X = ...`：
+- 用 wrapper alias name（`s.hc_EnableMuraEnhance` 不是 `s.EnableMuraEnhance`）— PG GridItem.PropertyDescriptor.Name 是 wrapper name，OnSettingChanged case 也比對 wrapper name
+- SetBatch 後手動 `RefreshGridItem(nameof(...))` 同步 PG 顯示（SetBatch 不 raise event）
+
+**RefreshGridItem(name) trick** — 比 `propertyGridSettings.Refresh()` 精準：
+- 找對應 GridItem → 暫時 `SelectedGridItem = found` 觸發 PG 內建 force re-read value → restore
+- 只動單 cell、不全 Refresh、不閃、scroll 保留
+- `_suppressGridSelChange` flag 抑制 SelectedGridItemChanged 副作用
+
+**Commit-on-end** — 複雜 transition（chart click 切 StitchMode + 關 enhance + reload + fit）期間 `canvasMain.Visible = false` 包 try/finally 避免中間幀閃。
+
+**`async void OnSettingChanged` 防 race** — 用 SemaphoreSlim 序列化，連點時排隊處理。
+
+bootstrap 例外（line 232 AppRole）：Hub 還沒建構，加註解標明合理 bypass。
+
 ### Guard Flags（EventGuard 模式）
 - 所有 guard 使用 `EventGuard` 類 + `using (guard.Scope())` 自動還原
 - `_statComboGuard` — stat ComboBox cascade 防重複

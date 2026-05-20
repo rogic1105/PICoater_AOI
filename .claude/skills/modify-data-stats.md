@@ -13,6 +13,21 @@
 
 ## 注意事項
 
+### listViewGrabDetail 點選 — MouseUp commit 模式
+
+- **訂閱 `MouseUp` 不是 `SelectedIndexChanged`** — 按下時 PG 預設反白顯示「被選中」，放開（Left button）才 commit 切 grabId
+- `OnGrabDetailRowCommitted` 內用 `_suppressRangeOnSingleSheetSync` flag 包住 `cbDataGrabId.SelectedIndex = idx`
+- `OnSingleSheetComboChanged` 看到 flag 跳過範圍 cb 同步（`cbGrabIdStart`/`End` + `cbStartDate`/`Time` + `cbEndDate`/`Time` 6 個）— **listView 點選時保留範圍 cb 不動**
+- 其他路徑（< > 按鈕、直接改 cbDataGrabId）正常同步範圍 cb
+- `UpdateGrabDetailListView` 重填時不需要 unsubscribe/resubscribe（MouseUp 不被 Items.Clear/Add 觸發）
+
+### Data tab 讀取資料 → Review tab 同步
+
+- `btnSelectDataFolder` 觸發 `DataFolderSelected` event → `AniloxRollForm.OnDataFolderSelected`
+- `OnDataFolderSelected` 是 async void，呼叫 `ResetAndLoadReviewAfterFolderChanged(dataPresenterAlreadySynced: true)` helper（與 Review tab `btnSelectFolder_Click` 共用 helper）
+- helper 內：state reset（合圖方式=全域、回顧強化=否）+ Live merge sync + chart series clear + DataPresenter `SyncGrabIdFromTime` + ClearStitchedMode + SetReviewGroupBoxes + SelectLatestInSingleSheetMode + LoadGrabStitchedViewAsync
+- `dataPresenterAlreadySynced=true` 跳過 `SyncFromReviewFolder` 避免 duplicate load
+
 ### 統計模式（`_activeStatMode` 追蹤）
 - 三模式：`GrpDataSingleSheet`（單片，cbDataGrabId 驅動）、`GroupBoxGrabIdRange`（序號範圍，cbGrabIdStart/End 驅動）、`GroupBoxTimeRange`（時序範圍，cbStartDate~cbEndTime 驅動）
 - **三個 GroupBox 標題都可點切模式**（`SwitchActiveStatGroupBox`）— 與 Review tab 的 `grpReviewGrabNav.Click` 對等
