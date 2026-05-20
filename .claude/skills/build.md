@@ -12,7 +12,7 @@
    ```
    cat > /tmp/build.bat << 'EOFBAT'
    @echo off
-   "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" "D:\Chunkuan\AUO\02_Projects_Active\PICoater\07_Source_Code_Repo\PICoater_AOI\src_dotnet\AniloxRoll.Monitor\AniloxRoll.Monitor.csproj" /p:Configuration=Release /p:Platform=x64 /v:minimal
+   "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" "D:\Chunkuan\AUO\02_Projects_Active\PICoater\07_Source_Code_Repo\PICoater_AOI\src\dotnet\AniloxRoll.Monitor\AniloxRoll.Monitor.csproj" /p:Configuration=Release /p:Platform=x64 /v:minimal
    EOFBAT
    cmd //c "$(cygpath -w /tmp/build.bat)"
    ```

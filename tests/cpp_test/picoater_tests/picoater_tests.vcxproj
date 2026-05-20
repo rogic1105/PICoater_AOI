@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -32,7 +32,7 @@
     <ProjectReference Include="..\..\..\sdk\AOI_SDK\framework\framework.vcxproj">
       <Project>{d3cc3425-9807-4866-aeb5-1f1dbc49523c}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\..\src_native\modules\GetPICoaterBackground\Module_GetPICoaterBackground.vcxproj">
+    <ProjectReference Include="..\..\..\src\native\modules\GetPICoaterBackground\Module_GetPICoaterBackground.vcxproj">
       <Project>{89631e35-4de2-4280-bb43-32d6dbdd4840}</Project>
     </ProjectReference>
   </ItemGroup>

@@ -10,7 +10,7 @@
 
 用法：
     python tests/python_test/find_dead_code.py [src_root]
-預設 src_root = src_dotnet/AniloxRoll.Monitor
+預設 src_root = src/dotnet/AniloxRoll.Monitor
 """
 
 import re
@@ -83,7 +83,7 @@ def count_references(name: str, all_text: str):
 
 
 def main():
-    src_root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("src_dotnet/AniloxRoll.Monitor")
+    src_root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("src/dotnet/AniloxRoll.Monitor")
     if not src_root.exists():
         print(f"ERROR: {src_root} not found")
         return 1
@@ -101,7 +101,7 @@ def main():
     # Step 2: 載入全 codebase 文字（包括 Designer.cs 因為它會引用我們的方法）
     # 不止主程式，也掃 tests 因為測試會引用 internal
     all_files = []
-    for root_dir in [Path("src_dotnet"), Path("tests/dotnet_test")]:
+    for root_dir in [Path("src/dotnet"), Path("tests/dotnet_test")]:
         if root_dir.exists():
             for p in root_dir.rglob("*.cs"):
                 if not any(d in p.parts for d in {"bin", "obj", "build", ".vs"}):

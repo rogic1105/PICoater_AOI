@@ -12,12 +12,12 @@ PICoater_AOI/
 │   ├── core_cv          # CUDA 底層運算庫
 │   ├── framework        # 測試框架
 │   ├── cpp_utils        # C++ 工具庫
-│   └── src_dotnet/
+│   └── src/dotnet/
 │       └── AOI.SDK/     # .NET SDK（SmartCanvas 等）
-├── src_native/          # [演算法] 專案特定的 C++ 模組
+├── src/native/          # [演算法] 專案特定的 C++ 模組
 │   ├── modules/         # 各式檢測功能模組 (如 GetPICoaterBackground)
 │   └── c_api/           # 導出給 C# 使用的 DLL 介面層
-├── src_dotnet/          # [介面] C# 使用者介面
+├── src/dotnet/          # [介面] C# 使用者介面
 │   ├── AniloxRoll.Monitor/ # 主程式 (WinForms)
 │   └── PlcBridge/       # PLC Modbus TCP 通訊 (Core / ManualControl / Automation)
 ├── tests/               # [測試] C++ / C# 單元測試與壓力測試
@@ -193,16 +193,14 @@ pip install numpy opencv-python
 | `docs/architecture-image-pipeline.md` | GPU pipeline、存檔格式 |
 | `docs/architecture-acquisition.md` | MIL 取像模組、IO FSM（PlcState enum、IO 快照、Watchdog） |
 | `docs/user-manual/io_diagrams.html` | IO 狀態機視覺化（State Machine / SFC / Ladder / Timing） |
-| `docs/architecture-data-stats.md` | 統計與 CSV |
-| `docs/MIL_API_Reference.md` | MIL API 參考 |
-| `docs/patterns-csharp.md` | C#/WinForms 開發模式 |
-| `docs/patterns-performance.md` | 效能優化模式 |
-| `docs/patterns-mil.md` | MIL 開發模式 |
+| `docs/dev/MIL_API_Reference.md` | MIL API 參考 |
+| `.claude/skills/*.md` | 開發模式（依修改範圍觸發對應 skill — 詳見 CLAUDE.md §Skills 路由）|
+| `CLAUDE.md` | Claude Code 規則 + 架構原則 + 控制項速查 + Skills 路由 |
 
 ## 8. 開發規範 (Development Guide)
 
 ### 加入新的 C++ 演算法
-1. 在 `src_native/modules` 下建立新的專案 (Static Library)。
+1. 在 `src/native/modules` 下建立新的專案 (Static Library)。
 2. 實作 `.hpp` 與 `.cu`（參考 `Module_GetPICoaterBackground`）。
 3. 在 `Directory.Build.props` 定義新模組的路徑變數。
 4. **重要**: 透過**專案參考**加入模組，切勿手動加入 `.lib`。

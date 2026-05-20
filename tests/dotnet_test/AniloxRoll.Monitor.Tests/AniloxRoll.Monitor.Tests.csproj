@@ -20,8 +20,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src_dotnet\AniloxRoll.Monitor\AniloxRoll.Monitor.csproj" />
-    <ProjectReference Include="..\..\..\src_dotnet\PlcBridge\PlcBridge.Core\PlcBridge.Core.csproj" />
+    <ProjectReference Include="..\..\..\src\dotnet\AniloxRoll.Monitor\AniloxRoll.Monitor.csproj" />
+    <ProjectReference Include="..\..\..\src\dotnet\PlcBridge\PlcBridge.Core\PlcBridge.Core.csproj" />
   </ItemGroup>
 
 </Project>

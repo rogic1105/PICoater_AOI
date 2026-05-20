@@ -1,4 +1,4 @@
-﻿// AOI_SDK\src_dotnet\AOI.SDK.TestApp\Form1.Designer.cs
+// AOI_SDK\src\dotnet\AOI.SDK.TestApp\Form1.Designer.cs
 
 namespace AOI.SDK.TestApp.Forms
 {

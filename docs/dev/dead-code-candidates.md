@@ -8,7 +8,7 @@
 python tests/python_test/find_dead_code.py [src_root]
 ```
 
-- 預設 `src_root = src_dotnet/AniloxRoll.Monitor`
+- 預設 `src_root = src/dotnet/AniloxRoll.Monitor`
 - 引用次數 ≤ 1（即只剩定義本身）= dead code 候選
 - 排除：`InitializeComponent` / `Dispose` / `Main` / 各 WinForms framework hook / `Properties` 目錄
 

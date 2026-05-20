@@ -40,8 +40,8 @@
 
 ```
 PICoater_AOI/
-├── src_dotnet/AniloxRoll.Monitor/   ← C# WinForms 應用程式
-├── src_dotnet/PlcBridge/            ← PLC Modbus TCP 通訊模組
+├── src/dotnet/AniloxRoll.Monitor/   ← C# WinForms 應用程式
+├── src/dotnet/PlcBridge/            ← PLC Modbus TCP 通訊模組
 │   ├── PlcBridge.Core/              ← 共用 Modbus TCP Client + Logger（IModbusTcpClient 介面）
 │   ├── PlcBridge.ManualControl/     ← 手動 DI/DO 控制工具
 │   └── PlcBridge.Automation/        ← FSM 狀態機自動控制工具
@@ -51,13 +51,13 @@ PICoater_AOI/
 ├── deploy/                          ← 現場部署腳本（PowerShell + JSON 參數）
 │   ├── storage-pc/                  ← 儲存機：固定 IP + SMB 共用 + 防火牆 + Guest 匿名（secedit）
 │   └── inspection-pc/               ← 檢測機：單 NIC 雙 IP 別名 + Client 端匿名 Guest SMB
-├── src_native/                      ← C++ pipeline 實作
+├── src/native/                      ← C++ pipeline 實作
 └── sdk/AOI_SDK/                     ← 共用 SDK (core_cv_api / AOI.SDK)
 ```
 
 ## Native API
 
-兩組 DLL，均宣告於 `src_dotnet/AniloxRoll.Monitor/Interop/NativeMethods.cs`：
+兩組 DLL，均宣告於 `src/dotnet/AniloxRoll.Monitor/Interop/NativeMethods.cs`：
 
 | DLL | 函式 | 用途 |
 |-----|------|------|
@@ -124,13 +124,13 @@ PICoater_AOI/
 | `UI/Widgets/ProportionalScaler.cs` | Form 等比例縮放 |
 | `sdk/AOI_SDK/src_dotnet/AOI.SDK/UI/SmartCanvas.cs` | PictureBox 子類：zoom/pan/edge/ClampPan；自訂白底黑邊十字游標 |
 
-> 路徑前綴 `src_dotnet/AniloxRoll.Monitor/` 省略以節省空間。
+> 路徑前綴 `src/dotnet/AniloxRoll.Monitor/` 省略以節省空間。
 
 ### 測試專案
 
 | 路徑 | 職責 |
 |------|------|
-| `src_dotnet/PlcBridge/PlcBridge.Core/IModbusTcpClient.cs` | Modbus TCP 介面（供 PlcGrabController mock 注入） |
+| `src/dotnet/PlcBridge/PlcBridge.Core/IModbusTcpClient.cs` | Modbus TCP 介面（供 PlcGrabController mock 注入） |
 | `tests/dotnet_test/AniloxRoll.Monitor.Tests/` | NUnit 3.x + Moq 4.x 測試專案 |
 | `CsvConfigSnapshotTests.cs` | #CFG round-trip、ContentKey |
 | `AcquisitionSettingsTests.cs` | Validate fallback、JSON Save/Load |

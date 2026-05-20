@@ -1,6 +1,6 @@
-﻿// PICoater_AOI\src_dotnet\AniloxRoll.Monitor\Program.cs
+// PICoater_AOI\src\dotnet\AniloxRoll.Monitor\Program.cs
 
-// PICoater_AOI\src_dotnet\AniloxRoll.Monitor\Program.cs
+// PICoater_AOI\src\dotnet\AniloxRoll.Monitor\Program.cs
 
 using System;
 using System.Configuration;

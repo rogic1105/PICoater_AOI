@@ -1,4 +1,4 @@
-﻿// AOI_SDK\src_dotnet\AOI.SDK.TestApp\MainForm.cs
+// AOI_SDK\src\dotnet\AOI.SDK.TestApp\MainForm.cs
 
 using System;
 using System.Diagnostics;

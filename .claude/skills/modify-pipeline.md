@@ -9,7 +9,7 @@
 ## 關鍵檔案
 
 → 見 `CLAUDE.md` §關鍵檔案速查（subset：`ImageProcessing/*` + `Services/AoiService` + `Interop/NativeMethods` + `ImageCatalog/ImageRepository`）。
-→ Native pipeline 細節見 `src_native/modules/GetPICoaterBackground/` 與 `docs/dev/MIL_API_Reference.md`。
+→ Native pipeline 細節見 `src/native/modules/GetPICoaterBackground/` 與 `docs/dev/MIL_API_Reference.md`。
 
 ## 注意事項
 

@@ -1,4 +1,4 @@
-﻿// AOI_SDK\src_dotnet\AOI.SDK.TestApp\Program.cs
+// AOI_SDK\src\dotnet\AOI.SDK.TestApp\Program.cs
 
 using System;
 using System.Windows.Forms;

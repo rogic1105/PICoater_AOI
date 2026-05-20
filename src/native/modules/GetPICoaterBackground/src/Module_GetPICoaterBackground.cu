@@ -1,4 +1,4 @@
-// PICoater_AOI\src_native\modules\GetPICoaterBackground\src\Module_GetPICoaterBackground.cu
+// PICoater_AOI\src\native\modules\GetPICoaterBackground\src\Module_GetPICoaterBackground.cu
 
 #include "Module_GetPICoaterBackground.hpp"
 #include "core_cv/base/cuda_utils.hpp"

@@ -20,7 +20,7 @@
 		<CoreCVTestsPath>$(AoiSdkPath)core_cv_tests\</CoreCVTestsPath>
 		<CppUtilsPath>$(AoiSdkPath)cpp_utils\</CppUtilsPath>
 		<FrameworkPath>$(AoiSdkPath)framework\</FrameworkPath>
-		<LocalModulesPath>$(EngRoot)src_native\modules\</LocalModulesPath>
+		<LocalModulesPath>$(EngRoot)src\native\modules\</LocalModulesPath>
 
 		<ThirdPartyPath>$(EngRoot)third_party\</ThirdPartyPath>
 		<StbPath>$(ThirdPartyPath)stb\include\</StbPath>
