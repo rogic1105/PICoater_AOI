@@ -809,6 +809,10 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="box action dev">SelectAndLoadFolder 智慧修正：若選的目錄無 yyyy 子目錄但底下有 Captures\yyyy → 自動轉用 {selected}\Captures（修正使用者誤選 D:\Anilox 而非 D:\Anilox\Captures 的狀況）</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">ImageRepository.LoadDirectory → TimeNavigator.Initialize</div>
+<div class="v-arrow dev" data-label="reset 預設"></div>
+<div class="box action dev">ResetAndLoadReviewAfterFolderChanged helper：Hub.SetBatch 一次 save 兩 setting + Live merge sync + chart clear + UpdateLiveDirectionVisual</div>
+<div class="setting-change"><span class="user">合圖方式: → 全域（reset 預設）</span><span class="dev">hb_StitchMode: → Global (Hub.SetBatch + RefreshGridItem)</span></div>
+<div class="setting-change"><span class="user">回顧強化: → 否（reset 預設）</span><span class="dev">hd_EnableReviewEnhance: → false (Hub.SetBatch + RefreshGridItem)</span></div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">時段日期/時間：填入最早日期時間</div>
@@ -970,72 +974,92 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="box input">點擊【回顧切向曲線圖】（Vertical 模式）</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">SwitchRidgeDirection("v")</div>
+<div class="setting-change"><span class="user">回顧強化: toggle</span><span class="dev">hd_EnableReviewEnhance: Hub.Set(toggle)</span></div>
 </div>
 <div>
-<div class="box input">點擊【回顧全覽圖】（Global 模式，接手切向強化功能）</div>
+<div class="box input">點擊【回顧全覽圖】（Global 模式）</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">SwitchRidgeDirection("v")</div>
+<div class="setting-change"><span class="user">回顧強化: toggle</span><span class="dev">hd_EnableReviewEnhance: Hub.Set(toggle)</span></div>
 </div>
 <div>
-<div class="box input">點擊【回顧全覽圖】（Vertical 模式 且 非強化狀態）</div>
+<div class="box input">點擊【回顧全覽圖】（Vertical 模式，含強化中）</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">TrySwitchStitchModeAsync(Global)</div>
-<div class="box output">合圖方式自動切換為全域；PropertyGrid 同步更新</div>
+<div class="box action dev">SwitchReviewStitchModeAndDisableEnhance(Global)</div>
+<div class="setting-change"><span class="user">合圖方式: 垂直 → 全域</span><span class="dev">hb_StitchMode: Vertical → Global</span></div>
+<div class="setting-change"><span class="user">回顧強化: 是 → 否（若原本強化中）</span><span class="dev">hd_EnableReviewEnhance: true → false (Hub.SetBatch)</span></div>
 </div>
 <div>
-<div class="box input">點擊【回顧切向曲線圖】（Global 模式 且 非強化狀態）</div>
+<div class="box input">點擊【回顧切向曲線圖】（Global 模式，含強化中）</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">TrySwitchStitchModeAsync(Vertical)</div>
-<div class="box output">合圖方式自動切換為垂直；PropertyGrid 同步更新</div>
+<div class="box action dev">SwitchReviewStitchModeAndDisableEnhance(Vertical)</div>
+<div class="setting-change"><span class="user">合圖方式: 全域 → 垂直</span><span class="dev">hb_StitchMode: Global → Vertical</span></div>
+<div class="setting-change"><span class="user">回顧強化: 是 → 否（若原本強化中）</span><span class="dev">hd_EnableReviewEnhance: true → false (Hub.SetBatch)</span></div>
 </div>
 <div>
 <div class="box input">點擊【回顧法向曲線圖】（任何模式）</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">SwitchRidgeDirection("h")</div>
+<div class="setting-change"><span class="user">回顧強化: toggle</span><span class="dev">hd_EnableReviewEnhance: Hub.Set(toggle)</span></div>
 </div>
 </div>
+<div class="v-arrow"></div>
+<div class="box action">setting 變更 → Hub.Changed event → OnSettingChanged 訂閱者反應</div>
 <div class="v-arrow"></div>
 <div class="out-par">
-<div class="box output">強化切換：回顧主畫面 原圖 / V 處理圖 / H 處理圖；作用中曲線圖 淺藍底色 + 橘色外框</div>
-<div class="box output">合圖切換：等同在 PropertyGrid 修改合圖方式（執行 OnStitchModeChangedAsync）；完成後 canvasMain.FitToScreen() + 縮圖橘框 Invalidate</div>
+<div class="box output">PropertyGrid 對應 cell 即時更新（RefreshGridItem trick 保 scroll，不全 Refresh、不閃）</div>
+<div class="box output">合圖方式變更 → OnStitchModeChangedAsync → 回顧主畫面 reload + FitToScreen + chart 清空（Global 時）</div>
+<div class="box output">回顧強化變更 → ApplyReviewEnhance → 回顧主畫面切原圖/V/H 處理圖；作用中曲線圖 淺藍底 + 橘框</div>
+<div class="box output">縮圖橘框 Invalidate</div>
 </div>
-<div class="v-arrow"></div>
-<div class="box action">強化：① 未勾選→自動勾選+設方向 ② 同方向→取消勾選 ③ 不同方向→切換</div>
-<div class="note dev">IsEnhanceDisplayActive = IsStitchMode ? EnableReviewEnhance : LastReviewProcessedMode。TrySwitchStitchModeAsync：設 _settings.hb_StitchMode → RefreshPropertyGridKeepScroll → OnStitchModeChangedAsync（原 PropertyGrid handler 同一邏輯提取為共用方法）。</div>
+<div class="note dev">SwitchReviewStitchModeAndDisableEnhance 用 Hub.SetBatch 一次 save 兩 setting，caller 自己 inline await transition 避免 event race；canvasMain.Visible=false 包 try/finally 達 commit-on-end 避免中間幀閃。三態邏輯：未勾選→自動勾選+設方向；同方向→取消勾選；不同方向→換方向。</div>
 </div>
 <div class="flow-group vflow">
-<div class="flow-title">監控曲線圖點擊 → 三態切換 / 合圖方式切換（依合圖方式路由）</div>
-<div class="box condition">合圖方式 × 強化狀態（_settings.EnableMuraEnhance）？</div>
+<div class="flow-title">監控曲線圖點擊 → setting 變更 → 訂閱者反應</div>
+<div class="box condition">點哪個曲線圖 × 當前合圖方式？</div>
 <div class="out-par">
 <div>
 <div class="box input">點擊【監控切向曲線圖】（Vertical 模式）</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">SwitchLiveDisplayDirection("v")</div>
+<div class="setting-change"><span class="user">監控強化: toggle</span><span class="dev">hc_EnableMuraEnhance: Hub.Set(toggle)</span></div>
 </div>
 <div>
-<div class="box input">點擊【監控全覽圖】（Global 模式，接手切向強化功能）</div>
+<div class="box input">點擊【監控全覽圖】（Global 模式）</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">SwitchLiveDisplayDirection("v")</div>
+<div class="setting-change"><span class="user">監控強化: toggle</span><span class="dev">hc_EnableMuraEnhance: Hub.Set(toggle)</span></div>
 </div>
 <div>
-<div class="box input">點擊【監控全覽圖】（Vertical 模式；強化中也可切）</div>
+<div class="box input">點擊【監控全覽圖】（Vertical 模式，含強化中）</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">TrySwitchStitchModeAsync(Global)</div>
-<div class="box output">合圖方式自動切換為全域；PropertyGrid 同步更新</div>
+<div class="box action dev">SwitchStitchModeWithEnhanceSequence(Global)</div>
+<div class="setting-change"><span class="user">合圖方式: 垂直 → 全域</span><span class="dev">hb_StitchMode: Vertical → Global</span></div>
+<div class="setting-change"><span class="user">監控強化: 是 → 否（若原本強化中）</span><span class="dev">hc_EnableMuraEnhance: true → false (Hub.SetBatch)</span></div>
 </div>
 <div>
-<div class="box input">點擊【監控切向曲線圖】（Global 模式；強化中也可切）</div>
+<div class="box input">點擊【監控切向曲線圖】（Global 模式，含強化中）</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">TrySwitchStitchModeAsync(Vertical)</div>
-<div class="box output">合圖方式自動切換為垂直；PropertyGrid 同步更新</div>
+<div class="box action dev">SwitchStitchModeWithEnhanceSequence(Vertical)</div>
+<div class="setting-change"><span class="user">合圖方式: 全域 → 垂直</span><span class="dev">hb_StitchMode: Global → Vertical</span></div>
+<div class="setting-change"><span class="user">監控強化: 是 → 否（若原本強化中）</span><span class="dev">hc_EnableMuraEnhance: true → false (Hub.SetBatch)</span></div>
 </div>
 <div>
 <div class="box input">點擊【監控法向曲線圖】（任何模式）</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">SwitchLiveDisplayDirection("h")</div>
+<div class="setting-change"><span class="user">監控強化: toggle</span><span class="dev">hc_EnableMuraEnhance: Hub.Set(toggle)</span></div>
 </div>
 </div>
-<div class="note dev">2026-05-18 更新：拿掉「強化中才能切 StitchMode」的 guard — 之前若有橘框（強化 active）點對方 chart 完全沒反應，是經典「點了沒回饋」UX 反模式。現在強化中也可切合圖方式，PropertyGrid 同步更新；強化方向若不適用新模式由 SwitchLiveDisplayDirection 自然關閉。</div>
+<div class="v-arrow"></div>
+<div class="box action">setting 變更 → Hub.Changed event → OnSettingChanged 訂閱者反應</div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">PropertyGrid 對應 cell TF 即時翻轉（RefreshGridItem trick）</div>
+<div class="box output">合圖方式變更 → OnStitchModeChangedAsync → Live merge enable/disable + chart clear</div>
+<div class="box output">監控強化變更 → ApplyMuraEnhance → SetImageProcessingEnabled + UpdateLiveDirectionVisual</div>
+</div>
+<div class="note dev">SwitchStitchModeWithEnhanceSequence 用 Hub.SetBatch + 暫時 unsubscribe OnLiveCurveData 避免轉場期 callback thread 對 chart handle 不穩定的 BeginInvoke；finally resubscribe + UpdateLiveDirectionVisual。2026-05-18 拿掉「強化中才能切 StitchMode」的 guard — 之前若有橘框點對方 chart 完全沒反應。</div>
 </div>
 <div class="flow-group vflow">
 <div class="flow-title">回顧主畫面手勢</div>
@@ -1339,6 +1363,45 @@ PropertyGrid → <code>NotifyExternalChange</code>；chart click / 程式碼 →
 </div>
 </div>
 <!-- /Settings Registry -->
+
+<!-- ===== Setting × 副作用矩陣（C-A）===== -->
+<h2 class="dev" onclick="toggle(this)">Setting × 副作用矩陣</h2>
+<div class="tab-section dev">
+<p style="font-size:0.88em; padding: 8px 0;">
+所有 setting 變更走 <code>SettingsHub</code>，<code>Form.OnSettingChanged</code> 是唯一 dispatch 點。
+共用前段（save disk、PG sync）所有 setting 都跑；個別副作用依 <code>c.Name</code> dispatch。
+</p>
+<table class="setting-table" style="font-size: 0.85em;">
+<tr>
+  <th style="width: 200px;">Setting</th>
+  <th style="text-align: center;">save<br/>disk</th>
+  <th style="text-align: center;">PG sync<br/>(RefreshGrid)</th>
+  <th style="text-align: center;">OnStitchMode<br/>Changed</th>
+  <th style="text-align: center;">ApplyMura<br/>Enhance</th>
+  <th style="text-align: center;">ApplyReview<br/>Enhance</th>
+  <th style="text-align: center;">Refresh<br/>GlobalMerge</th>
+  <th style="text-align: center;">chart 閾值<br/>+ Mura profile</th>
+  <th style="text-align: center;">stats<br/>refresh</th>
+  <th style="text-align: center;">其他</th>
+</tr>
+<tr><td><code>hb_StitchMode</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td>(經由)</td><td></td><td></td><td></td></tr>
+<tr><td><code>hc_EnableMuraEnhance</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td><code>hd_EnableReviewEnhance</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td></tr>
+<tr><td><code>ab_~ah_OpsCam1-7</code><br/><code>bb_~bh_StartCam1-7</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td style="text-align:center">✓</td><td></td><td></td><td></td></tr>
+<tr><td>正規值 <code>dc_/dd_</code><br/>閾值 <code>ec_/ed_/ee_/ef_</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td style="text-align:center">✓ (rescale)</td><td style="text-align:center">✓</td><td>RidgeDir <code>eb_</code></td></tr>
+<tr><td><code>db_Algorithm</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td></td><td></td><td>LoadBackgroundBins<br/>+ StandardBgSubLockState</td></tr>
+<tr><td><code>gb_ChartScaleMode</code><br/><code>gc_/gd_/ge_YMax</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td>chartYearly/<br/>Monthly/Daily Y 軸</td><td></td><td></td></tr>
+<tr><td><code>LightEnabled</code><br/><code>LightComPort</code><br/><code>LightChannel</code><br/><code>LightBrightness</code><br/><code>LightWarmupMs</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td></td><td></td><td>HandleLight<br/>SettingsChanged<br/>(Init/Brightness/...)</td></tr>
+<tr><td><code>PlcEnabled</code><br/><code>PlcIp</code> / <code>PlcPort</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td></td><td></td><td>PlcGrabController 重連</td></tr>
+<tr><td><code>AppRole</code></td><td style="text-align:center">✓</td><td>—</td><td></td><td></td><td></td><td></td><td></td><td></td><td>寫 app-mode.json + MessageBox<br/>(early return，下游不跑)</td></tr>
+<tr><td><code>AniloxRootPath</code> /<br/><code>LocalMinFreeGB</code> /<br/><code>RemotePath</code> / <code>RemoteConfigPath</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td></td><td></td><td>fallback / RemoteCopy<br/>/ CleanupFlagWatcher</td></tr>
+<tr><td><code>EnableAutoCapture</code> /<br/><code>SaveOriginalBmp</code> / <code>DcfPath</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td></td><td></td><td>下次 capture / 下次 MIL Allocate 生效</td></tr>
+</table>
+<div class="note dev" style="margin-top: 8px;">
+  共用前段：<code>HandleSettingsChanged</code>（ApplySettingsToService + Cam1_Ops + canvas invalidate）、所有 chart helper <code>SetThresholds</code>、<code>UpdateRowChartPitch</code>、<code>RefreshMuraProfileForSettingsChange</code>、<code>ScheduleStatsRefresh</code>、<code>ForceWriteConfig</code>（若 IsLiveGrabbing）。Source==Programmatic 才呼 <code>RefreshGridItem(c.Name)</code> 精準刷新單 PG cell。
+</div>
+</div>
+<!-- /Setting Matrix -->
 
 <!-- ===== 右側面板 ===== -->
 <h2 onclick="toggle(this)">設定面板</h2>
