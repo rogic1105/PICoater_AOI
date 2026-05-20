@@ -32,3 +32,5 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyVersion("1.0.0.0")]
 [assembly: AssemblyFileVersion("1.0.0.0")]
 [assembly: InternalsVisibleTo("AniloxRoll.Monitor.Tests")]
+[assembly: InternalsVisibleTo("AniloxRoll.Monitor.Integration.Tests")]
+[assembly: InternalsVisibleTo("AniloxRoll.Monitor.Stress.Tests")]

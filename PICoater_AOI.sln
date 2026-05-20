@@ -69,6 +69,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AOI.SDK", "sdk\AOI_SDK\src_
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AniloxRoll.Monitor.Tests", "tests\dotnet_test\AniloxRoll.Monitor.Tests\AniloxRoll.Monitor.Tests.csproj", "{B2C3D4E5-2222-3333-4444-555566667777}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AniloxRoll.Monitor.Integration.Tests", "tests\dotnet_test\AniloxRoll.Monitor.Integration.Tests\AniloxRoll.Monitor.Integration.Tests.csproj", "{E4F5A6B7-5555-6666-7777-88889999AAAA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AniloxRoll.Monitor.Stress.Tests", "tests\dotnet_test\AniloxRoll.Monitor.Stress.Tests\AniloxRoll.Monitor.Stress.Tests.csproj", "{F5A6B7C8-6666-7777-8888-9999AAAABBBB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Release|x64 = Release|x64
@@ -102,6 +106,10 @@ Global
 		{27263C11-7FEF-4076-A2F1-F412BB496DF3}.Release|x64.Build.0 = Release|x64
 		{B2C3D4E5-2222-3333-4444-555566667777}.Release|x64.ActiveCfg = Release|x64
 		{B2C3D4E5-2222-3333-4444-555566667777}.Release|x64.Build.0 = Release|x64
+		{E4F5A6B7-5555-6666-7777-88889999AAAA}.Release|x64.ActiveCfg = Release|x64
+		{E4F5A6B7-5555-6666-7777-88889999AAAA}.Release|x64.Build.0 = Release|x64
+		{F5A6B7C8-6666-7777-8888-9999AAAABBBB}.Release|x64.ActiveCfg = Release|x64
+		{F5A6B7C8-6666-7777-8888-9999AAAABBBB}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

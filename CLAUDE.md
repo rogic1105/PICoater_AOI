@@ -43,6 +43,36 @@ PICoater_AOI/
 - `sdk/` ↔ Nx `packages/` / .NET `lib/`（Microsoft）
 - `tools/` ↔ `tools/` / `bin/`（標準）
 
+## 架構原則：測試分層
+
+`tests/` 按「執行速度 / 副作用 / 失敗影響範圍」分三層 csproj：
+
+| 類型 | csproj | 內容 | 速度 | CI 跑時機 |
+|---|---|---|---|---|
+| **Unit** | `tests/dotnet_test/AniloxRoll.Monitor.Tests/` | 純邏輯、無 IO、無外部依賴（Mock 對外） | < 5ms / case | 每次 commit |
+| **Integration** | `tests/dotnet_test/AniloxRoll.Monitor.Integration.Tests/` | 含檔案 IO、JSON 讀寫、Mock 硬體 | < 1s / case | PR / nightly |
+| **Stress** | `tests/dotnet_test/AniloxRoll.Monitor.Stress.Tests/` | 長時間循環、Soak、Load | 數十秒～小時 | 週期跑（隔夜 / 週末 soak 24h） |
+
+**分類規則（測試該歸哪一類）：**
+- 用 `Mock<I*>` 注入 + 純函式驗證 → **Unit**
+- 用 `Path.GetTempFileName()` / `File.WriteAllText` / 讀寫 JSON / CSV → **Integration**
+- `for (i = 0; i < N_BIG; i++)` 或 `Task.Delay(minutes)` → **Stress**
+
+**新測試該寫哪一層？提問順序：**
+「這條測試需要設定外部資源（檔案 / mock 硬體）嗎？」→ 是 → Integration
+「這條會跑很久（> 1s）嗎？」→ 是 → Stress
+「都不是」→ Unit
+
+**InternalsVisibleTo**：`src/dotnet/AniloxRoll.Monitor/Properties/AssemblyInfo.cs` 同時 `InternalsVisibleTo` 三個 test assembly。新增第四個測試 csproj 時要加進去。
+
+**Cpp / Python 對等**：
+- `tests/cpp_test/` — C++ 單元（可再細分 Unit/Integration/Stress 子目錄）
+- `tests/python_test/` — Python 測試（pytest）
+
+**未來擴充**：
+- UI 自動化 → `tests/dotnet_test/AniloxRoll.Monitor.UITests/`（拆 csproj）
+- Benchmark → `tests/dotnet_test/AniloxRoll.Monitor.Benchmarks/`（BenchmarkDotNet）
+
 ## 架構原則：SSoT 原子結構
 
 所有「設定變更 → 副作用」流程必須遵守這個三層分工：
