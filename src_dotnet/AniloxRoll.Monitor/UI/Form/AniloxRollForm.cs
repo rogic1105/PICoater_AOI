@@ -436,7 +436,7 @@ namespace AniloxRoll.Monitor.Forms
             if (!string.Equals(found, _settings.LightComPort, StringComparison.OrdinalIgnoreCase))
             {
                 _settingsHub.SetBatch(s => s.LightComPort = found);
-                RefreshPropertyGridKeepScroll();
+                RefreshGridItem(nameof(InspectionSettings.LightComPort));
             }
         }
 
@@ -681,7 +681,7 @@ namespace AniloxRoll.Monitor.Forms
                                                 if (!string.Equals(found, _settings.LightComPort, StringComparison.OrdinalIgnoreCase))
                                                 {
                                                     _settingsHub.SetBatch(s => s.LightComPort = found);
-                                                    RefreshPropertyGridKeepScroll();
+                                                    RefreshGridItem(nameof(InspectionSettings.LightComPort));
                                                 }
                                             }
                                             else
@@ -2120,7 +2120,8 @@ namespace AniloxRoll.Monitor.Forms
                     s.hb_StitchMode = newMode;
                 });
                 if (wasEnhanced) _liveCameraManager?.SetImageProcessingEnabled(false);
-                RefreshPropertyGridKeepScroll();
+                if (wasEnhanced) RefreshGridItem(nameof(InspectionSettings.hc_EnableMuraEnhance));
+                RefreshGridItem(nameof(InspectionSettings.hb_StitchMode));
                 await OnStitchModeChangedAsync();
             }
             catch (Exception ex)
@@ -2219,8 +2220,10 @@ namespace AniloxRoll.Monitor.Forms
             nameof(InspectionRecipe.RidgeDir),         "Ridge 方向",
         };
 
+        private bool _suppressGridSelChange;
         private void PropertyGridSettings_SelectedGridItemChanged(object sender, SelectedGridItemChangedEventArgs e)
         {
+            if (_suppressGridSelChange) return;  // RefreshGridItem trick 暫時切 selection 不更新說明文字
             var item = e.NewSelection;
             helpRichText.Clear();
             if (item?.PropertyDescriptor == null) return;
@@ -2249,9 +2252,10 @@ namespace AniloxRoll.Monitor.Forms
             try
             {
                 // ── 共用副作用（任何 setting 變更都跑） ────────────────────────
-                // PropertyGrid 顯示同步：只在「程式碼路徑改值」時刷新（PropertyGrid 自己改值已自我更新，重複 refresh 會閃爍）。
+                // PropertyGrid 顯示同步：「程式碼路徑改值」時用精準 trick 重讀單 cell（不全 Refresh、不閃）。
+                // PropertyGrid 自己改值已自我更新該 cell，不需要外部處理。
                 if (c.Source == AniloxRoll.Monitor.Settings.Services.SettingSource.Programmatic)
-                    RefreshPropertyGridKeepScroll();
+                    RefreshGridItem(c.Name);
                 _interactionHelper.HandleSettingsChanged();
                 _liveCameraManager?.SetCaptureSettings(_settings);
                 _reviewColumnChartHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
@@ -2354,19 +2358,31 @@ namespace AniloxRoll.Monitor.Forms
         {
             try
             {
-            _interactionHelper.SelectAndLoadFolder();
-            _presenter.UpdatePeriodNavigationState();
+                _interactionHelper.SelectAndLoadFolder();
+                _presenter.UpdatePeriodNavigationState();
+                await ResetAndLoadReviewAfterFolderChanged(dataPresenterAlreadySynced: false);
+            }
+            catch (Exception ex) { Trace.WriteLine($"[btnSelectFolder_Click] {ex}"); }
+        }
+
+        /// <summary>
+        /// 載入 Anilox 資料夾後共用的 Review 重置 + 主畫面載入：
+        /// state reset（合圖方式=全域、回顧強化=否）、Live merge sync + chart clear、
+        /// DataPresenter 同步、Review 主畫面載入。
+        /// btnSelectFolder（Review tab）跟 OnDataFolderSelected（Data tab 觸發）共用。
+        /// </summary>
+        private async Task ResetAndLoadReviewAfterFolderChanged(bool dataPresenterAlreadySynced)
+        {
             _stitchCoordinator.LastReviewProcessedMode = false;
-            // L2 Step 4：讀取新資料夾 = 視為 fresh state，重置 setting 到預設值（合圖方式=全域、回顧強化=否）。
-            // SetBatch save once、不 raise event（避免 OnStitchModeChangedAsync 在 ImageRepository 尚未填好時 reload race）；
-            // Live tab 那邊的副作用（global merge enable + chart clear）手動補上。
             _settingsHub.SetBatch(s =>
             {
                 s.EnableReviewEnhance = false;
                 s.hb_StitchMode       = StitchMode.Global;
             });
-            RefreshPropertyGridKeepScroll();
-            // Codex P2 修法：手動同步 StitchMode 對 Live tab 的副作用（global merge state + chart series clear）
+            RefreshGridItem(nameof(InspectionSettings.hd_EnableReviewEnhance));
+            RefreshGridItem(nameof(InspectionSettings.hb_StitchMode));
+
+            // Live tab 副作用（SetBatch 沒 raise event，手動同步）
             if (_settings.StitchMode == StitchMode.Global && _liveCameraManager?.IsAllocated == true)
                 _liveCameraManager.EnableGlobalMerge(
                     _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
@@ -2381,14 +2397,16 @@ namespace AniloxRoll.Monitor.Forms
             }
             UpdateLiveDirectionVisual();
 
-            // 同步載入序號清單並填充所有序號 ComboBox（Review + Data）
+            // Data tab 已 LoadDataFolder 時跳過 SyncFromReviewFolder（避免 duplicate load）。
+            // SyncGrabIdFromTime 兩條路徑都需要（保持 DataPresenter 內部 _grabIdInfos 對齊 navigator 當前 period）。
             if (_imageRepository.FileCount > 0)
             {
-                var reviewPath = UserSessionState.LastDataPath;
-                if (!string.IsNullOrWhiteSpace(reviewPath))
-                    _dataStatsPresenter.SyncFromReviewFolder(reviewPath);
-
-                // Initialize 期間 _updating=true 不觸發 PeriodSelectionChanged，手動同步
+                if (!dataPresenterAlreadySynced)
+                {
+                    var reviewPath = UserSessionState.LastDataPath;
+                    if (!string.IsNullOrWhiteSpace(reviewPath))
+                        _dataStatsPresenter.SyncFromReviewFolder(reviewPath);
+                }
                 var current = _dateTimeNavigator.GetCurrentPeriodOrDefault(DateTime.MinValue);
                 if (current != DateTime.MinValue)
                     _dataStatsPresenter.SyncGrabIdFromTime(current);
@@ -2398,9 +2416,7 @@ namespace AniloxRoll.Monitor.Forms
             _dataStatsPresenter.SetReviewGroupBoxes(true);
             _dataStatsPresenter.SelectLatestInSingleSheetMode();
 
-            // 讀取資料預設為 grpReviewGrabNav（單片序號模式），直接載入 stitch 合圖；
-            // OnDataGrabIdSelected 只設 _reviewDirty=true（為了 Data tab 操作延後渲染），
-            // 此處（Review tab 操作）需明確觸發載入。
+            // 預設 grpReviewGrabNav（單片序號模式）→ 直接 LoadGrabStitchedViewAsync
             int reviewIdx = cbReviewGrabId.SelectedIndex;
             if (reviewIdx >= 0 && reviewIdx < _dataStatsPresenter.GrabIdInfos.Count)
             {
@@ -2415,8 +2431,6 @@ namespace AniloxRoll.Monitor.Forms
                 await _presenter.LoadImagesWithPeriodLockAsync(false, LoadImagesWithReviewConfig);
                 ApplyPostLoadDisplay();
             }
-            }
-            catch (Exception ex) { Trace.WriteLine($"[btnSelectFolder_Click] {ex}"); }
         }
 
         private async Task ApplyReviewEnhance(bool enableProcess)
@@ -3365,13 +3379,19 @@ namespace AniloxRoll.Monitor.Forms
             catch (Exception ex) { Trace.WriteLine($"[OnReviewGrabIdSelected] {ex}"); }
         }
 
-        private void OnDataFolderSelected(string path)
+        private async void OnDataFolderSelected(string path)
         {
-            // 同步 Review tab
-            UserSessionState.SetLastDataPath(path);
-            UserSessionState.Save();
-            _interactionHelper.LoadDirectoryAndInitNavigator(path);
-            _presenter.UpdatePeriodNavigationState();
+            try
+            {
+                // 同步 Review tab：先載入 ImageRepository + Navigator，再走共用 reset + 主畫面載入。
+                UserSessionState.SetLastDataPath(path);
+                UserSessionState.Save();
+                _interactionHelper.LoadDirectoryAndInitNavigator(path);
+                _presenter.UpdatePeriodNavigationState();
+                // DataPresenter 已透過 LoadDataFolder 同步 _grabIdInfos，skip SyncFromReviewFolder
+                await ResetAndLoadReviewAfterFolderChanged(dataPresenterAlreadySynced: true);
+            }
+            catch (Exception ex) { Trace.WriteLine($"[OnDataFolderSelected] {ex}"); }
         }
 
 
@@ -3503,7 +3523,8 @@ namespace AniloxRoll.Monitor.Forms
             });
             _stitchCoordinator.LastReviewProcessedMode = false;
             UpdateRidgeDirectionVisual(null);
-            RefreshPropertyGridKeepScroll();
+            RefreshGridItem(nameof(InspectionSettings.hd_EnableReviewEnhance));
+            RefreshGridItem(nameof(InspectionSettings.hb_StitchMode));
 
             // stitch mode：跳過 OnStitchModeChangedAsync 內的緩存 merge，
             // 直接從硬碟 reload 原圖（enableProcess=false）一次到位。
@@ -3614,25 +3635,59 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
+        /// <summary>
+        /// 精準 refresh 單一 PropertyGrid cell — 利用 PG 內建「SelectedGridItem 改變時 force 重讀 value」的行為。
+        /// 對比 Refresh() 整個 re-build grid items 造成閃爍，這個 trick 只動單 cell、不閃。
+        /// 來源：使用者觀察「點監控強化標題會更新」揭露的 PG 內建 mechanism。
+        /// </summary>
+        private void RefreshGridItem(string propertyName)
+        {
+            if (string.IsNullOrEmpty(propertyName)) return;
+            if (propertyGridSettings == null) return;
+            GridItem root = propertyGridSettings.SelectedGridItem;
+            while (root?.Parent != null) root = root.Parent;
+            if (root == null) return;
+            GridItem found = FindGridItemRecursive(root, propertyName);
+            if (found == null) return;  // PG 不顯示此 property（Browsable false）— 無需 refresh
+
+            var saved = propertyGridSettings.SelectedGridItem;
+            _suppressGridSelChange = true;
+            try
+            {
+                propertyGridSettings.SelectedGridItem = found;
+                if (saved != null && saved != found)
+                    propertyGridSettings.SelectedGridItem = saved;
+            }
+            finally { _suppressGridSelChange = false; }
+        }
+
+        private static GridItem FindGridItemRecursive(GridItem parent, string name)
+        {
+            if (parent == null) return null;
+            foreach (GridItem c in parent.GridItems)
+            {
+                if (c.PropertyDescriptor?.Name == name) return c;
+                var sub = FindGridItemRecursive(c, name);
+                if (sub != null) return sub;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 全 PG refresh + 保 scroll — fallback 用，極少場景才呼（多 setting 同時變且無法精準定位）。
+        /// 雙重 WM_SETREDRAW 凍結減少閃爍。
+        /// </summary>
         private void RefreshPropertyGridKeepScroll()
         {
             const int WM_SETREDRAW = 0x000B;
-
-            // 找 PropertyGridView（內部 GridView 控制項）
             Control gridView = null;
             foreach (Control c in propertyGridSettings.Controls)
                 if (c.GetType().Name == "PropertyGridView") { gridView = c; break; }
-
             if (gridView == null) { propertyGridSettings.Refresh(); return; }
-
-            // PropertyGridView 用的是 VScrollBar child control，必須直接讀 VScrollBar.Value 保 scroll
             System.Windows.Forms.ScrollBar scrollBar = null;
             foreach (Control c in gridView.Controls)
                 if (c is System.Windows.Forms.VScrollBar) { scrollBar = (System.Windows.Forms.VScrollBar)c; break; }
             int scrollPos = scrollBar?.Value ?? 0;
-
-            // 同時凍結 PG handle 跟 gridView handle：之前只凍 gridView 會讓 PG 其他子控制項（左側 category、底部 description）
-            // 在 Refresh() 期間仍 paint 造成可見閃爍。雙重凍結後整個區域只在最後一次 Invalidate 才 paint。
             propertyGridSettings.SuspendLayout();
             NativeMethods.SendMessage(propertyGridSettings.Handle, WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);
             NativeMethods.SendMessage(gridView.Handle, WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);

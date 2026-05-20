@@ -41,6 +41,21 @@ namespace AniloxRoll.Monitor.Settings.Services
         }
 
         /// <summary>
+        /// Runtime 設值（給自製 SettingsPanel 內 row 編輯用）。Source = PropertyGrid（view-edit 風格，
+        /// OnSettingChanged 內接收方判斷自己已 paint 不重複 refresh）。
+        /// </summary>
+        public void SetByName(string name, object value)
+        {
+            var prop = typeof(InspectionSettings).GetProperty(name);
+            if (prop == null) throw new ArgumentException($"unknown setting: {name}", nameof(name));
+            var oldVal = prop.GetValue(Settings);
+            if (Equals(oldVal, value)) return;
+            prop.SetValue(Settings, value);
+            ConfigManager.SaveInspectionSettings(Settings);
+            Changed?.Invoke(new SettingChange(name, oldVal, value, SettingSource.PropertyGrid));
+        }
+
+        /// <summary>
         /// 多 setting 一次 save、**不 raise event**。用在「caller 需要嚴格 transition 順序」場景
         /// （例 chart click 切 mode + 關 enhance：caller 自己 await reload + fit，避免 event handler race）。
         /// 想要 event-driven 場景請用 Set / NotifyExternalChange。
