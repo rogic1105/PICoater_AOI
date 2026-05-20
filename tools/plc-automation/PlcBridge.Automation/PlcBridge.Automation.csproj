@@ -73,7 +73,7 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\PlcBridge.Core\PlcBridge.Core.csproj">
+    <ProjectReference Include="..\..\..\sdk\PlcBridge\PlcBridge.Core\PlcBridge.Core.csproj">
       <Project>{A1B2C3D4-1111-2222-3333-444455556666}</Project>
       <Name>PlcBridge.Core</Name>
     </ProjectReference>

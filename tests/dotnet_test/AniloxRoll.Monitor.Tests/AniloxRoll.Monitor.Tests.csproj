@@ -21,7 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\dotnet\AniloxRoll.Monitor\AniloxRoll.Monitor.csproj" />
-    <ProjectReference Include="..\..\..\src\dotnet\PlcBridge\PlcBridge.Core\PlcBridge.Core.csproj" />
+    <ProjectReference Include="..\..\..\sdk\PlcBridge\PlcBridge.Core\PlcBridge.Core.csproj" />
   </ItemGroup>
 
 </Project>

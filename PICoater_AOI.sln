@@ -52,7 +52,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Code", "Code", "{800258B5-D
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Code", "Code", "{7BD6E3EB-B6A4-40D0-B7F4-96DCCB2798E0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PlcBridge.Core", "src\dotnet\PlcBridge\PlcBridge.Core\PlcBridge.Core.csproj", "{A1B2C3D4-1111-2222-3333-444455556666}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PlcBridge.Core", "sdk\PlcBridge\PlcBridge.Core\PlcBridge.Core.csproj", "{A1B2C3D4-1111-2222-3333-444455556666}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AniloxRoll.Monitor", "src\dotnet\AniloxRoll.Monitor\AniloxRoll.Monitor.csproj", "{9A193EE5-9D02-42B4-A3DF-D49D7D13EE9B}"
 	ProjectSection(ProjectDependencies) = postProject
