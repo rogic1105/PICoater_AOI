@@ -1208,7 +1208,14 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <div class="box output">年/月/日圖導航：填入可選範圍</div>
 </div>
 <div class="v-arrow"></div>
-<div class="box sync">同步 Review tab：設定 ImageRepository + TimeNavigator</div>
+<div class="box sync">DataFolderSelected event → AniloxRollForm.OnDataFolderSelected (async void) → 共用 ResetAndLoadReviewAfterFolderChanged helper（與 Review tab btnSelectFolder 同一條路徑）</div>
+<div class="setting-change"><span class="user">合圖方式: → 全域（reset 預設）</span><span class="dev">hb_StitchMode: → Global (Hub.SetBatch + RefreshGridItem)</span></div>
+<div class="setting-change"><span class="user">回顧強化: → 否（reset 預設）</span><span class="dev">hd_EnableReviewEnhance: → false (Hub.SetBatch + RefreshGridItem)</span></div>
+<div class="v-arrow"></div>
+<div class="out-par">
+<div class="box output">Review tab：ImageRepository + TimeNavigator 同步、Live merge state + chart series clear、回顧主畫面 reload 最新單 grab + FitToScreen</div>
+<div class="box output dev">helper 內 dataPresenterAlreadySynced=true 跳過 SyncFromReviewFolder 避免 duplicate load</div>
+</div>
 </div>
 
 <div class="flow-group vflow">
@@ -1419,10 +1426,14 @@ PropertyGrid → <code>NotifyExternalChange</code>；chart click / 程式碼 →
 <div class="note dev">propertyGridSettings.HelpVisible=false 隱藏 WinForms 內建說明欄（內部用 Label 不可選取）；自訂 helpRichText (Dock=Bottom, Height=60, BorderStyle=FixedSingle, BackColor=SystemColors.Control) 取代之，提供可選取的文字。tabPageInspSettings 中 propertyGridSettings 先 Add (Dock=Fill)，helpRichText 後 Add (Dock=Bottom) — Bottom 取底部 60px，Fill 取剩餘上方空間。</div>
 </div>
 <div class="flow-group vflow" id="settings-changed">
-<div class="flow-title">檢測設定變更 <code>propertyGridSettings</code></div>
+<div class="flow-title">檢測設定變更 <code>propertyGridSettings</code> → SettingsHub → 訂閱者</div>
 <div class="box input">修改【檢測設定】任一屬性</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">HandleSettingsChanged → SetCaptureSettings → 更新所有 ChartHelper 閾值 → 即時 view-time 重畫曲線坡度 + 重算 Pass/Fail 統計</div>
+<div class="box action dev">setter 寫 memory → PropertyValueChanged → Hub.NotifyExternalChange(name, old, new) → save inspection-settings.json + raise Changed event (Source=PropertyGrid)</div>
+<div class="setting-change"><span class="user">該屬性: 舊值 → 新值（自動寫盤 + 通知各 view）</span><span class="dev">SettingChange{Name, OldValue, NewValue, Source=PropertyGrid}</span></div>
+<div class="v-arrow dev"></div>
+<div class="box action dev">OnSettingChanged 接管：共用前段（chart 閾值同步、Live SetCaptureSettings、Mura profile refresh、ScheduleStatsRefresh）+ switch case 依 c.Name 分派個別副作用（見 §Setting × 副作用矩陣）</div>
+<div class="note dev">Source=PropertyGrid 跳過 RefreshGridItem（PG 自己改值已自我更新該 cell，避免重複 refresh 閃爍）。完整副作用對照見 §Setting × 副作用矩陣。</div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">曲線圖閾值線：V chart (chartMuraVertical / chartOverview / chartLiveOverview / muraChartVerticalLive / chartMuraProfile) 用【垂直平均閾值】+【垂直最大閾值】；H chart (chartMuraHorizontal / muraChartHorizontalLive) 用【水平平均閾值】+【水平最大閾值】</div>
@@ -1533,7 +1544,7 @@ PropertyGrid → <code>NotifyExternalChange</code>；chart click / 程式碼 →
 <div class="out-par">
 <div class="box output">TrackBar + 數值：同步更新（即時）</div>
 <div class="box output">（線掃改變時）曝光上限：重算 + 夾緊</div>
-<div class="box output dev">acquisition-settings.json：即時存檔</div>
+<div class="box output dev">acquisition-settings.json：即時存檔（注意：相機參數走 AcquisitionSettings 存獨立檔案，<b>不</b>走 SettingsHub / inspection-settings.json — Hub 是 PG-driven setting 用，TrackBar 直接寫 disk）</div>
 <div class="box output">寫硬體後 postAction：HT 改變 → RefreshMainDisplay 重新載入主畫面 buffer</div>
 </div>
 <div class="v-arrow"></div>
