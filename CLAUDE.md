@@ -1,5 +1,41 @@
 # PICoater AOI — Claude Code Rules
 
+## 架構原則：SSoT 原子結構
+
+所有「設定變更 → 副作用」流程必須遵守這個三層分工：
+
+```
+                   SettingsHub (state, SSoT)
+                          │
+                Changed event ↓
+        ┌─────────────┬────┴────┬─────────────┐
+        ↓             ↓         ↓             ↓
+   PropertyGrid   image       chart 閾值    其他副作用
+   (顯示)        (Mura on/off) (StripLines)  (save disk、reload、Live merge)
+```
+
+**規則：**
+
+1. **state 集中在 `SettingsHub`** — 所有 setting 變更走 `Set` / `SetBatch` / `NotifyExternalChange`。沒有任何路徑直接 `_settings.X = ...`（bootstrap 階段例外，但加註解標記）。
+
+2. **每個 UI 元件都是 view（搖桿）** — 按鈕、chart、滑桿、PropertyGrid 都是改 setting 的入口，不是邏輯擁有者。「點 chart 切 enhance」= 改 `EnableMuraEnhance`，副作用由 event 訂閱者跑，**不在 click handler 內 inline 跑副作用**。
+
+3. **副作用是 view 對 event 的反應** — `FitToScreen`、`OnStitchModeChangedAsync`、`ApplyMuraEnhance`、save disk、PropertyGrid 同步顯示 — 全部訂閱 `Changed` event。view layer 自己決定怎麼更新，**不互相直接呼叫**。
+
+4. **嚴格 transition 順序例外** — 多個 setting 同時變更且需要 atomic transition（如 chart click 同時改 StitchMode + EnableEnhance），用 `SetBatch`（save once、不 raise event），caller 自己 inline await transition 順序。這條 trade-off 要寫註解說明。
+
+5. **變更來源要可區分** — `SettingChange.Source` 標示 `PropertyGrid`（UI 自己已 paint）vs `Programmatic`（程式碼路徑，view 要被動 refresh）。避免重複刷新造成閃爍。
+
+**反模式：**
+
+- `click handler` 內 inline 改多個 setting + 呼多個 apply（過去 chart click 邏輯）
+- 跨層直接呼叫（如 chart click 直接 `await ApplyReviewEnhance(...)`，繞過 event）
+- view 之間互相 invalidate（image view 知道 chart 存在）
+- setting setter 寫 disk（save 屬 Hub 職責）
+
+**討論 / 設計時的提問順序：**
+「這是改哪個 setting？」 → 「副作用是什麼？」 → 「哪些 view 要更新？」— 而不是「按下按鈕跑哪些函式？」
+
 ## 專案結構
 
 ```

@@ -138,6 +138,33 @@ details.subflow > .subflow-body .box { font-size: 0.82em; margin: 3px 0; }
 body.operator-mode .dev { display: none !important; }
 body.operator-mode .flow-title code { display: none; }
 body.operator-mode .flow-row .arrow.dev-arrow { display: none !important; }
+
+/* === L2 SSoT：setting badge（標示流程節點改了哪個 setting） === */
+.setting-change {
+  display: inline-block;
+  background: #ede7f6;
+  border: 1px solid #5e35b1;
+  color: #311b92;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 0.85em;
+  margin: 3px 0;
+}
+.setting-change::before { content: "📝 "; }
+.setting-change .user { display: inline; }
+.setting-change .dev  { display: none; }
+body:not(.operator-mode) .setting-change .user { display: none; }
+body:not(.operator-mode) .setting-change .dev  { display: inline; }
+.setting-change .arrow { color: #888; margin: 0 4px; font-weight: bold; }
+
+/* Setting Registry 表格 */
+.setting-table { border-collapse: collapse; margin: 6px 0; font-size: 0.88em; width: 100%; max-width: 720px; }
+.setting-table th, .setting-table td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; vertical-align: top; }
+.setting-table th { background: #f5f5f5; width: 100px; white-space: nowrap; }
+.setting-table .user { display: inline; }
+.setting-table .dev  { display: none; }
+body:not(.operator-mode) .setting-table .user { display: none; }
+body:not(.operator-mode) .setting-table .dev  { display: inline; }
 </style>
 </head>
 <body class="operator-mode">
@@ -1264,6 +1291,55 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 </div>
 </div>
 <!-- /Data -->
+<!-- ===== 檢測設定 Registry（L2 SSoT） ===== -->
+<h2 onclick="toggle(this)">檢測設定（Settings Registry）</h2>
+<div class="tab-section">
+<p style="margin-bottom:12px;">
+<span class="user">所有【檢測設定】變更都會被自動儲存並套用，不管你是從哪裡改的（左側設定面板、點曲線圖、按按鈕都一樣）。</span>
+<span class="dev">所有 setting 變更走 <code>SettingsHub</code>：memory + disk (<code>inspection-settings.json</code>) + event 三步原子化。
+PropertyGrid → <code>NotifyExternalChange</code>；chart click / 程式碼 → <code>Set</code> / <code>SetBatch</code>；任一來源都觸發 <code>Form.OnSettingChanged</code> switch case，副作用集中那邊。</span>
+</p>
+
+<div class="flow-group vflow">
+<div class="flow-title">合圖方式 <span class="dev"><code>hb_StitchMode : StitchMode</code></span></div>
+<table class="setting-table">
+<tr><th>值</th><td><span class="user">全域 / 垂直</span><span class="dev"><code>Global</code> / <code>Vertical</code></span></td></tr>
+<tr><th>預設</th><td><span class="user">全域</span><span class="dev"><code>Global</code></span></td></tr>
+<tr><th>UI 入口</th><td><span class="user">設定面板、即時監控的【監控全覽圖】+【監控切向曲線圖】點擊、回顧的【回顧全覽圖】+【回顧切向曲線圖】點擊、【讀取資料】（重置為全域）</span><span class="dev"><code>propertyGridSettings</code>、<code>chartLiveOverview</code> click、<code>muraChartVerticalLive</code> click、<code>chartOverview</code> click、<code>chartMuraVertical</code> click、<code>btnSelectFolder_Click</code>（reset 為 <code>Global</code>）</span></td></tr>
+<tr><th>副作用</th><td><span class="user">即時監控切換合圖、曲線圖清空、回顧主畫面重載入</span><span class="dev"><code>OnStitchModeChangedAsync</code> → Live merge enable/disable + mura chart clear + 回顧主畫面 reload（stitch mode 走 <code>MergeAndShowFromStitchedImages</code>/<code>ShowStitchedCameraInCanvas</code>；強化中 chart click 切 mode 走 <code>skipStitchedImageRefresh=true</code> 旁路）</span></td></tr>
+</table>
+</div>
+
+<div class="flow-group vflow">
+<div class="flow-title">監控強化 <span class="dev"><code>hc_EnableMuraEnhance : bool</code></span></div>
+<table class="setting-table">
+<tr><th>值</th><td><span class="user">是 / 否</span><span class="dev"><code>true</code> / <code>false</code></span></td></tr>
+<tr><th>預設</th><td><span class="user">否</span><span class="dev"><code>false</code></span></td></tr>
+<tr><th>UI 入口</th><td><span class="user">設定面板、即時監控的曲線圖點擊（切換 V/H 強化）</span><span class="dev"><code>propertyGridSettings</code>、<code>SwitchLiveDisplayDirection</code>（chart click toggle）、<code>SwitchStitchModeWithEnhanceSequence</code>（切 mode 時自動關閉）</span></td></tr>
+<tr><th>副作用</th><td><span class="user">啟動或關閉 Mura 強化處理</span><span class="dev"><code>ApplyMuraEnhance</code> → <code>LiveCameraManager.SetImageProcessingEnabled</code> + <code>UpdateLiveDirectionVisual</code></span></td></tr>
+</table>
+</div>
+
+<div class="flow-group vflow">
+<div class="flow-title">回顧強化 <span class="dev"><code>hd_EnableReviewEnhance : bool</code></span></div>
+<table class="setting-table">
+<tr><th>值</th><td><span class="user">是 / 否</span><span class="dev"><code>true</code> / <code>false</code></span></td></tr>
+<tr><th>預設</th><td><span class="user">否</span><span class="dev"><code>false</code></span></td></tr>
+<tr><th>UI 入口</th><td><span class="user">設定面板、歷史查詢的曲線圖點擊（切換 V/H 強化）、【讀取資料】重置、配方參數變更（強制 = 是）</span><span class="dev"><code>propertyGridSettings</code>、<code>SwitchRidgeDirection</code>、<code>SwitchReviewStitchModeAndDisableEnhance</code>（切 mode 時自動關閉）、<code>btnSelectFolder_Click</code> reset、Recipe property 變更（reload 前 set <code>true</code>）</span></td></tr>
+<tr><th>副作用</th><td><span class="user">回顧主畫面切換原圖 ↔ 強化圖、重新載入</span><span class="dev"><code>ApplyReviewEnhance</code> → stitch mode 走 <code>ReloadCurrentStitchedView</code>；否則走 <code>LoadImagesWithPeriodLockAsync</code></span></td></tr>
+</table>
+</div>
+
+<div class="flow-group vflow">
+<div class="flow-title">其他 setting 一覽 <span class="dev"><code>see CLAUDE.md §檢測參數速查</code></span></div>
+<p style="font-size:0.88em; padding: 8px 0;">
+<span class="user">機台佈局（OPS/Start/A輪速度/去頭去尾）、檢測設定（演算法/正規值/閾值）、圖表 Y 軸、儲存路徑、相機 DCF、光源 COM/亮度、IO IP/Port、機台角色 — 所有設定都走相同的管線。詳見【檢測設定】面板。</span>
+<span class="dev">所有 setting 同樣走 <code>SettingsHub.Set</code> / <code>SetBatch</code> / <code>NotifyExternalChange</code>；副作用見 <code>OnSettingChanged</code> switch 對應 case：OPS/Start → <code>RefreshGlobalMergeLayout</code>、Algorithm → <code>LoadBackgroundBins</code>+<code>UpdateStandardBgSubLockState</code>、Light* → <code>HandleLightSettingsChanged</code>、g*YMax → <code>ApplyFixedScaleForChart</code>、Recipe* → <code>EnableReviewEnhance=true</code>+reload images。完整對照表見 <code>CLAUDE.md §檢測參數速查（PropertyGrid 屬性）</code>。</span>
+</p>
+</div>
+</div>
+<!-- /Settings Registry -->
+
 <!-- ===== 右側面板 ===== -->
 <h2 onclick="toggle(this)">設定面板</h2>
 <div class="tab-section">

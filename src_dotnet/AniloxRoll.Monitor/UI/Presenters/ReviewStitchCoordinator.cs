@@ -103,7 +103,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             _ctx.InteractionHelper.SetUiLoadingState(true);
             LastReviewProcessedMode = enableProcess;
-            _ctx.Settings.EnableReviewEnhance = enableProcess;
+            // L2 SSoT：setting 由 caller 透過 SettingsHub 設置，coordinator 不再 bypass Hub 直接寫 memory。
+            // caller 路徑：PropertyGrid → OnSettingChanged → ApplyReviewEnhance → ReloadCurrentStitchedView；
+            //              chart click → Hub.Set(hd_EnableReviewEnhance) → 同上。
             var swTotal = Stopwatch.StartNew();
             try
             {

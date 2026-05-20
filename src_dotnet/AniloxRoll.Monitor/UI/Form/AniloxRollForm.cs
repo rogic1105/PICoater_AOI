@@ -108,6 +108,7 @@ namespace AniloxRoll.Monitor.Forms
         // --- 資料緩存 ---
         private readonly List<Image> _thumbnailCache = new List<Image>();
         private InspectionSettings _settings;
+        private AniloxRoll.Monitor.Settings.Services.SettingsHub _settingsHub;
         private bool IsStandardBgSubEnabled =>
             _settings?.Recipe?.Algorithm == BackgroundAlgorithm.StandardBgSub;
 
@@ -229,6 +230,10 @@ namespace AniloxRoll.Monitor.Forms
             _appMode = AppModeConfig.Load();
             if (_settings == null) _settings = ConfigManager.LoadInspectionSettings();
             _settings.AppRole = _appMode?.Role ?? MachineRole.Inspection;
+            // L2 SettingsHub：所有 setting 變更走 Changed event，OnSettingChanged 接管 Apply* 副作用。
+            // Step 1：雛形 + 空訂閱（Step 2 才把 PropertyValueChanged 的 case 搬進來）。
+            _settingsHub = new AniloxRoll.Monitor.Settings.Services.SettingsHub(_settings);
+            _settingsHub.Changed += OnSettingChanged;
             EnsureAniloxFolderStructure();
             CameraFrameSaver.InitResourceLog(_settings?.Storage?.LogsPath);
             CameraFrameSaver.GetUiStateCallback = () =>
@@ -426,10 +431,12 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
 
-            // 掃描找到但非原設定 → 更新記錄的 COM（下次啟動直接命中）
+            // 掃描找到但非原設定 → 更新記錄的 COM（下次啟動直接命中）。
+            // 用 SetBatch（save only no event）避免遞迴：Hub.Set 會 raise event → HandleLightSettingsChanged 重 Init → 又呼此 AutoDetect。
             if (!string.Equals(found, _settings.LightComPort, StringComparison.OrdinalIgnoreCase))
             {
-                _settings.LightComPort = found;
+                _settingsHub.SetBatch(s => s.LightComPort = found);
+                RefreshPropertyGridKeepScroll();
             }
         }
 
@@ -672,7 +679,10 @@ namespace AniloxRoll.Monitor.Forms
                                                 _lightController?.Dispose();
                                                 _lightController = fresh;
                                                 if (!string.Equals(found, _settings.LightComPort, StringComparison.OrdinalIgnoreCase))
-                                                    _settings.LightComPort = found;
+                                                {
+                                                    _settingsHub.SetBatch(s => s.LightComPort = found);
+                                                    RefreshPropertyGridKeepScroll();
+                                                }
                                             }
                                             else
                                             {
@@ -2090,64 +2100,38 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
+        /// <summary>
+        /// Live chart 點選切 StitchMode 時，若同時要關掉強化，必須先把 callback thread 的 chart 更新訂閱斷開，
+        /// 避免轉場期間 callback BeginInvoke 到 chart handle 不穩定的視窗。
+        /// L2：setting 變更走 Hub.SetBatch 統一 save；副作用 transition 仍 inline await（避免 event race）。
+        /// </summary>
         private async Task SwitchStitchModeWithEnhanceSequence(StitchMode newMode)
         {
             if (_settings == null) return;
-
-            void Step(string msg)
-            {
-                string line = $"[{DateTime.Now:HH:mm:ss.fff}] [StitchSwitch→{newMode}] {msg}";
-                System.Diagnostics.Trace.WriteLine(line);
-                try { System.IO.File.AppendAllText(@"D:\Anilox\stitch-debug.log", line + Environment.NewLine); } catch { }
-            }
-
-            Step("ENTER (wasEnhanced=" + _settings.EnableMuraEnhance + " curStitchMode=" + _settings.StitchMode + ")");
             bool wasEnhanced = _settings.EnableMuraEnhance;
-
             try
             {
-                Step("step 1: unsubscribe OnLiveCurveData/OnLiveRowCurveData");
                 _liveCameraManager.OnLiveCurveData    -= OnLiveCurveData;
                 _liveCameraManager.OnLiveRowCurveData -= OnLiveRowCurveData;
 
-                if (wasEnhanced)
+                _settingsHub.SetBatch(s =>
                 {
-                    Step("step 2a: _settings.EnableMuraEnhance = false");
-                    _settings.EnableMuraEnhance = false;
-                    Step("step 2b: SetImageProcessingEnabled(false)");
-                    _liveCameraManager?.SetImageProcessingEnabled(false);
-                }
-                else { Step("step 2: enhance was off, skip"); }
-
-                Step("step 3: _settings.hb_StitchMode = " + newMode);
-                _settings.hb_StitchMode = newMode;
-
-                Step("step 4: RefreshPropertyGridKeepScroll");
+                    if (wasEnhanced) s.EnableMuraEnhance = false;
+                    s.hb_StitchMode = newMode;
+                });
+                if (wasEnhanced) _liveCameraManager?.SetImageProcessingEnabled(false);
                 RefreshPropertyGridKeepScroll();
-
-                Step("step 5: await OnStitchModeChangedAsync (start)");
                 await OnStitchModeChangedAsync();
-                Step("step 5: await OnStitchModeChangedAsync (done)");
             }
             catch (Exception ex)
             {
-                string full = $"EXCEPTION at SwitchStitchModeWithEnhanceSequence:\n{ex}";
-                Step(full);
-                try
-                {
-                    MessageBox.Show(full, "切換 StitchMode 異常", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-                catch { }
+                MessageBox.Show($"切換 StitchMode 異常:\n{ex}", "StitchMode", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
-                Step("step 6: resubscribe events");
                 _liveCameraManager.OnLiveCurveData    += OnLiveCurveData;
                 _liveCameraManager.OnLiveRowCurveData += OnLiveRowCurveData;
-                Step("step 7: UpdateLiveDirectionVisual");
-                try { UpdateLiveDirectionVisual(); }
-                catch (Exception ex) { Step("UpdateLiveDirectionVisual throw: " + ex); }
-                Step("EXIT (newStitchMode=" + _settings.StitchMode + " EnableMuraEnhance=" + _settings.EnableMuraEnhance + ")");
+                try { UpdateLiveDirectionVisual(); } catch (Exception ex) { Trace.WriteLine(ex); }
             }
         }
 
@@ -2215,10 +2199,16 @@ namespace AniloxRoll.Monitor.Forms
             _statsRefreshDebouncer.Start();
         }
 
-        // PropertyGrid 回傳的 ChangedItem.PropertyDescriptor.Name 可能是 MemberName 或 DisplayName 其中之一，
-        // 因此兩種形式都放入集合，避免版本差異導致漏判。
+        // Recipe property 名稱集（PropertyGrid wrapper aliases + InspectionRecipe.* 真名 + DisplayName）。
+        // 注意：Q2 移除 RecipeChange reload 分支後目前**沒有 caller**，保留待「重算 .bin curve」實作後使用。
         private static readonly HashSet<string> RecipePropertyNames = new HashSet<string>(StringComparer.Ordinal)
         {
+            // PropertyGrid wrapper aliases（實務上 PropertyGrid 改值送的就是這組）
+            "dc_HessianMaxFactorV", "dd_HessianMaxFactorH",
+            "db_Algorithm", "eb_RidgeDir",
+            "ec_ErrorValueMeanV", "ed_ErrorValueMaxV",
+            "ee_ErrorValueMeanH", "ef_ErrorValueMaxH",
+            // InspectionRecipe.* 真名（程式碼直接改 Recipe 時用）
             nameof(InspectionRecipe.HessianMaxFactorV), "Hessian Max Factor V", "垂直正規值",
             nameof(InspectionRecipe.HessianMaxFactorH), "Hessian Max Factor H", "水平正規值",
             nameof(InspectionRecipe.ErrorValueMeanV),  "Error Value Mean V", "垂直平均閾值",
@@ -2249,107 +2239,113 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        private async void _propertyGrid_PropertyValueChanged(object s, PropertyValueChangedEventArgs e)
+        /// <summary>
+        /// L2 SettingsHub Changed event 的唯一訂閱者：所有 setting 變更的副作用都跑這個 switch。
+        /// 來源不論：PropertyGrid（NotifyExternalChange）/ chart click（Set / SetBatch+inline）/ AutoDetect 回寫（Set）。
+        /// 副作用順序：共用前段（chart 閾值、Live 設定、統計） → 個別 case dispatch（早退：AppRole）。
+        /// </summary>
+        private async void OnSettingChanged(AniloxRoll.Monitor.Settings.Services.SettingChange c)
         {
             try
             {
-            _interactionHelper.HandleSettingsChanged();
-            _liveCameraManager?.SetCaptureSettings(_settings);
-            _reviewColumnChartHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-            _liveColumnChartHelper?.SetOps(_settings.Cam1_Ops);
-            _liveColumnChartHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-            _reviewOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-            _liveOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-            _liveRowChartHelper?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
-            _reviewRowChartHelper?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
-            UpdateRowChartPitch();
+                // ── 共用副作用（任何 setting 變更都跑） ────────────────────────
+                // PropertyGrid 顯示同步：只在「程式碼路徑改值」時刷新（PropertyGrid 自己改值已自我更新，重複 refresh 會閃爍）。
+                if (c.Source == AniloxRoll.Monitor.Settings.Services.SettingSource.Programmatic)
+                    RefreshPropertyGridKeepScroll();
+                _interactionHelper.HandleSettingsChanged();
+                _liveCameraManager?.SetCaptureSettings(_settings);
+                _reviewColumnChartHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
+                _liveColumnChartHelper?.SetOps(_settings.Cam1_Ops);
+                _liveColumnChartHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
+                _reviewOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
+                _liveOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
+                _liveRowChartHelper?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
+                _reviewRowChartHelper?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
+                UpdateRowChartPitch();
+                _dataStatsPresenter?.RefreshMuraProfileForSettingsChange();
+                if (_stitchCoordinator?.IsStitchMode == true)
+                {
+                    _stitchCoordinator.UpdateStitchedOverviewChart();
+                    _stitchCoordinator.RefreshCurrentCameraChartsForSettingsChange();
+                }
+                ScheduleStatsRefresh();
+                if (_liveCameraManager?.IsLiveGrabbing == true)
+                    _inspectionLogService?.ForceWriteConfig(CsvConfigSnapshot.FromSettings(_settings));
 
-            // chartMuraProfile：閾值線同步 + 單片模式時 view-time 正規值 rescale
-            _dataStatsPresenter?.RefreshMuraProfileForSettingsChange();
+                // ── 機台角色：寫 app-mode.json（早退） ────────────────────────
+                if (c.Name == nameof(InspectionSettings.AppRole))
+                {
+                    if (_appMode == null) _appMode = new AppModeConfig();
+                    _appMode.Role = _settings.AppRole;
+                    _appMode.Save();
+                    MessageBox.Show("機台角色已儲存，重新開啟程式後生效。",
+                        "機台設定", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
 
-            // Review 拼接 chartOverview + per-camera 切向/法向：套 view-time 正規值 rescale + 當前閾值
-            // → 改 PropertyGrid 正規值/閾值會立即反映在所有曲線坡度與門檻線上
-            if (_stitchCoordinator?.IsStitchMode == true)
-            {
-                _stitchCoordinator.UpdateStitchedOverviewChart();          // chartOverview
-                _stitchCoordinator.RefreshCurrentCameraChartsForSettingsChange(); // chartMuraVertical + chartMuraHorizontal
+                // ── StitchMode 變更 ────────────────────────────────────────────
+                if (c.Name == nameof(InspectionSettings.hb_StitchMode))
+                    await OnStitchModeChangedAsync();
+
+                // ── OPS/Start 變更 → Live 全域合圖佈局即時更新 ────────────────
+                if (OpsStartSettingNames.Contains(c.Name))
+                {
+                    if (_liveCameraManager?.IsGlobalMergeActive == true)
+                        _liveCameraManager.RefreshGlobalMergeLayout(
+                            _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
+                }
+
+                // ── 檢測報表設定 ──────────────────────────────────────────────
+                if (c.Name == nameof(InspectionSettings.gb_ChartScaleMode))
+                    _dataStatsPresenter.ApplyChartScaleFromSettings();
+                else if (c.Name == nameof(InspectionSettings.gc_YearlyYMax))
+                    _dataStatsPresenter.ApplyFixedScaleForChart("Yearly", _settings.Chart.YearlyYMax);
+                else if (c.Name == nameof(InspectionSettings.gd_MonthlyYMax))
+                    _dataStatsPresenter.ApplyFixedScaleForChart("Monthly", _settings.Chart.MonthlyYMax);
+                else if (c.Name == nameof(InspectionSettings.ge_DailyYMax))
+                    _dataStatsPresenter.ApplyFixedScaleForChart("Daily", _settings.Chart.DailyYMax);
+
+                // ── 光源設定 ──────────────────────────────────────────────────
+                HandleLightSettingsChanged(c.Name);
+
+                // ── 強化 setting ──────────────────────────────────────────────
+                if (c.Name == nameof(InspectionSettings.hc_EnableMuraEnhance))
+                    ApplyMuraEnhance(_settings.EnableMuraEnhance);
+                if (c.Name == nameof(InspectionSettings.hd_EnableReviewEnhance))
+                    await ApplyReviewEnhance(_settings.EnableReviewEnhance);
+
+                // ── Algorithm 變更 ────────────────────────────────────────────
+                if (c.Name == "db_Algorithm" || c.Name == nameof(InspectionRecipe.Algorithm) || c.Name == "去背演算法")
+                {
+                    if (_liveCameraManager.IsAllocated) LoadBackgroundBins();
+                    UpdateStandardBgSubLockState();
+                }
+
+                // ── Recipe 變更（正規值 / 閾值 / 演算法 / Ridge 方向） ─────────
+                // 影響：PASS/FAIL 判定 + 閾值線 + 曲線坡度（共用前段的 SetThresholds + UpdateStitchedOverviewChart 已處理）
+                // 不影響：影像 bytes（無需 reload 主畫面）。
+                // TODO：未來實作「重算 .bin curve」時在此分支補上。原本 pre-existing 的 reload 行為移除。
             }
+            catch (Exception ex) { Trace.WriteLine($"[OnSettingChanged {c?.Name}] {ex}"); }
+        }
 
-            // Data tab 統計：debounce 300ms 後重算（panelStatCam / listViewGrabDetail
-            // / chartYearly/Monthly/Daily — 每次 full CSV scan）。連續拖 slider 時合併為 1 次。
-            ScheduleStatsRefresh();
+        // OPS/Start setting 名稱清單（用來判斷是不是「機台佈局」群組的 setting）
+        private static readonly HashSet<string> OpsStartSettingNames = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "ab_OpsCam1", "ac_OpsCam2", "ad_OpsCam3", "ae_OpsCam4", "af_OpsCam5", "ag_OpsCam6", "ah_OpsCam7",
+            "bb_StartCam1", "bc_StartCam2", "bd_StartCam3", "be_StartCam4", "bf_StartCam5", "bg_StartCam6", "bh_StartCam7"
+        };
 
-            // 抓圖進行中設定變更 → 立刻在 CSV 插入 #CFG
-            if (_liveCameraManager?.IsLiveGrabbing == true)
-                _inspectionLogService?.ForceWriteConfig(CsvConfigSnapshot.FromSettings(_settings));
-
-            string changedPropertyName = e?.ChangedItem?.PropertyDescriptor?.Name ?? string.Empty;
-
-            // 機台角色變更 → 寫 app-mode.json，不影響 inspection-settings.json
-            if (changedPropertyName == nameof(InspectionSettings.AppRole))
+        /// <summary>
+        /// PropertyGrid 改值：setter 已寫 memory，這裡只負責把它導入 SettingsHub 走統一管線。
+        /// </summary>
+        private void _propertyGrid_PropertyValueChanged(object s, PropertyValueChangedEventArgs e)
+        {
+            try
             {
-                if (_appMode == null) _appMode = new AppModeConfig();
-                _appMode.Role = _settings.AppRole;
-                _appMode.Save();
-                MessageBox.Show("機台角色已儲存，重新開啟程式後生效。",
-                    "機台設定", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
-            // StitchMode 變更 → 清除/恢復 mura 圖 + 重新載入回顧主畫面 + Live 合圖切換
-            if (changedPropertyName == nameof(InspectionSettings.hb_StitchMode))
-                await OnStitchModeChangedAsync();
-
-            // OPS/Start 變更 → 即時更新全域合圖佈局（下一幀生效）
-            string parentLabel = e?.ChangedItem?.Parent?.Label ?? string.Empty;
-            if (parentLabel == "OPS (um)" || parentLabel == "Start (mm)")
-            {
-                if (_liveCameraManager?.IsGlobalMergeActive == true)
-                    _liveCameraManager.RefreshGlobalMergeLayout(
-                        _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
-            }
-
-            // 檢測報表設定變更 → 立刻套用
-            if (changedPropertyName == nameof(InspectionSettings.gb_ChartScaleMode))
-            {
-                _dataStatsPresenter.ApplyChartScaleFromSettings();
-            }
-            else if (changedPropertyName == nameof(InspectionSettings.gc_YearlyYMax))
-                _dataStatsPresenter.ApplyFixedScaleForChart("Yearly", _settings.Chart.YearlyYMax);
-            else if (changedPropertyName == nameof(InspectionSettings.gd_MonthlyYMax))
-                _dataStatsPresenter.ApplyFixedScaleForChart("Monthly", _settings.Chart.MonthlyYMax);
-            else if (changedPropertyName == nameof(InspectionSettings.ge_DailyYMax))
-                _dataStatsPresenter.ApplyFixedScaleForChart("Daily", _settings.Chart.DailyYMax);
-
-            // 光源設定即時生效（啟用切換、COM/通道重新偵測、亮度立即套用）
-            HandleLightSettingsChanged(changedPropertyName);
-
-            if (changedPropertyName == nameof(InspectionSettings.hc_EnableMuraEnhance))
-                ApplyMuraEnhance(_settings.EnableMuraEnhance);
-
-            if (changedPropertyName == nameof(InspectionSettings.hd_EnableReviewEnhance))
-                _ = ApplyReviewEnhance(_settings.EnableReviewEnhance);
-
-            // 演算法切換 → 更新 UI 鎖定 + 載入/清除背景 bin
-            if (changedPropertyName == nameof(InspectionRecipe.Algorithm) ||
-                changedPropertyName == "去背演算法")
-            {
-                if (_liveCameraManager.IsAllocated) LoadBackgroundBins();
-                UpdateStandardBgSubLockState();
-            }
-
-            bool isRecipeChange = RecipePropertyNames.Contains(changedPropertyName);
-
-            // 有影像且為配方參數變更 → 重載（始終用 processed 模式，因為配方只影響演算法輸出）
-            if (isRecipeChange && _imageRepository.FileCount > 0)
-            {
-                _stitchCoordinator.LastReviewProcessedMode = true;
-                _settings.EnableReviewEnhance = true;
-                propertyGridSettings.Refresh();
-                _stitchCoordinator.ClearStitchedMode();
-                await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
-                ApplyPostLoadDisplay();
-            }
+                string name = e?.ChangedItem?.PropertyDescriptor?.Name ?? string.Empty;
+                object newVal = e?.ChangedItem?.Value;
+                _settingsHub.NotifyExternalChange(name, e?.OldValue, newVal);
             }
             catch (Exception ex) { Trace.WriteLine($"[PropertyValueChanged] {ex}"); }
         }
@@ -2361,8 +2357,29 @@ namespace AniloxRoll.Monitor.Forms
             _interactionHelper.SelectAndLoadFolder();
             _presenter.UpdatePeriodNavigationState();
             _stitchCoordinator.LastReviewProcessedMode = false;
-            _settings.EnableReviewEnhance = false;
-            propertyGridSettings.Refresh();
+            // L2 Step 4：讀取新資料夾 = 視為 fresh state，重置 setting 到預設值（合圖方式=全域、回顧強化=否）。
+            // SetBatch save once、不 raise event（避免 OnStitchModeChangedAsync 在 ImageRepository 尚未填好時 reload race）；
+            // Live tab 那邊的副作用（global merge enable + chart clear）手動補上。
+            _settingsHub.SetBatch(s =>
+            {
+                s.EnableReviewEnhance = false;
+                s.hb_StitchMode       = StitchMode.Global;
+            });
+            RefreshPropertyGridKeepScroll();
+            // Codex P2 修法：手動同步 StitchMode 對 Live tab 的副作用（global merge state + chart series clear）
+            if (_settings.StitchMode == StitchMode.Global && _liveCameraManager?.IsAllocated == true)
+                _liveCameraManager.EnableGlobalMerge(
+                    _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
+            else
+                _liveCameraManager?.DisableGlobalMerge();
+            if (_settings.StitchMode == StitchMode.Global)
+            {
+                chartMuraVertical.Series["Mean"].Points.Clear();
+                chartMuraVertical.Series["Max"].Points.Clear();
+                muraChartVerticalLive.Series["Mean"].Points.Clear();
+                muraChartVerticalLive.Series["Max"].Points.Clear();
+            }
+            UpdateLiveDirectionVisual();
 
             // 同步載入序號清單並填充所有序號 ComboBox（Review + Data）
             if (_imageRepository.FileCount > 0)
@@ -3365,23 +3382,18 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private void SwitchLiveDisplayDirection(string dir)
         {
+            // 未強化 → 開啟並設方向；強化中同方向 → 關閉；強化中不同方向 → 換方向（不改 setting）
             if (!_settings.EnableMuraEnhance)
             {
                 _liveDisplayDirection = dir;
-                _settings.EnableMuraEnhance = true;
-                ApplyMuraEnhance(true);
-                RefreshPropertyGridKeepScroll();
+                _settingsHub.Set(s => s.hc_EnableMuraEnhance, true);   // event → ApplyMuraEnhance + UpdateLiveDirectionVisual
                 return;
             }
-
             if (dir == _liveDisplayDirection)
             {
-                _settings.EnableMuraEnhance = false;
-                ApplyMuraEnhance(false);
-                RefreshPropertyGridKeepScroll();
+                _settingsHub.Set(s => s.hc_EnableMuraEnhance, false);
                 return;
             }
-
             _liveDisplayDirection = dir;
             UpdateLiveDirectionVisual();
         }
@@ -3431,47 +3443,41 @@ namespace AniloxRoll.Monitor.Forms
         {
             try
             {
-            if (!_stitchCoordinator.LastReviewProcessedMode)
-            {
+                // 未強化 → 開啟並設方向；強化中同方向 → 關閉；強化中不同方向 → 換方向（reload）
+                if (!_stitchCoordinator.LastReviewProcessedMode)
+                {
+                    _stitchCoordinator.ActiveRidgeDirection = dir;
+                    _interactionHelper.SetRidgeDirection(dir);
+                    UpdateRidgeDirectionVisual(dir);
+                    _settingsHub.Set(s => s.hd_EnableReviewEnhance, true);  // event → ApplyReviewEnhance(true)
+                    return;
+                }
+                if (dir == _stitchCoordinator.ActiveRidgeDirection)
+                {
+                    UpdateRidgeDirectionVisual(null);
+                    _settingsHub.Set(s => s.hd_EnableReviewEnhance, false); // event → ApplyReviewEnhance(false)
+                    return;
+                }
+                // 不同方向：純 ridge dir 切換（沒有 setting 變更，直接 reload 處理圖）
                 _stitchCoordinator.ActiveRidgeDirection = dir;
                 _interactionHelper.SetRidgeDirection(dir);
                 UpdateRidgeDirectionVisual(dir);
-                _settings.EnableReviewEnhance = true;
-                RefreshPropertyGridKeepScroll();
-                _ = ApplyReviewEnhance(true);
-                return;
-            }
-
-            if (dir == _stitchCoordinator.ActiveRidgeDirection)
-            {
-                UpdateRidgeDirectionVisual(null);
-                _settings.EnableReviewEnhance = false;
-                RefreshPropertyGridKeepScroll();
-                _ = ApplyReviewEnhance(false);
-                return;
-            }
-
-            // 不同方向 → 切換（重新載入處理圖）
-            _stitchCoordinator.ActiveRidgeDirection = dir;
-            _interactionHelper.SetRidgeDirection(dir);
-            UpdateRidgeDirectionVisual(dir);
-            _interactionHelper.SaveCanvasView();
-
-            if (_stitchCoordinator.IsStitchMode)
-            {
-                int idx = cbReviewGrabId.SelectedIndex;
-                if (idx >= 0 && idx < _dataStatsPresenter.GrabIdInfos.Count)
+                _interactionHelper.SaveCanvasView();
+                if (_stitchCoordinator.IsStitchMode)
                 {
-                    var info = _dataStatsPresenter.GrabIdInfos[idx];
-                    await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest, true);
+                    int idx = cbReviewGrabId.SelectedIndex;
+                    if (idx >= 0 && idx < _dataStatsPresenter.GrabIdInfos.Count)
+                    {
+                        var info = _dataStatsPresenter.GrabIdInfos[idx];
+                        await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest, true);
+                    }
                 }
-            }
-            else
-            {
-                _stitchCoordinator.ClearStitchedMode();
-                await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
-                ApplyPostLoadDisplay();
-            }
+                else
+                {
+                    _stitchCoordinator.ClearStitchedMode();
+                    await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
+                    ApplyPostLoadDisplay();
+                }
             }
             catch (Exception ex) { Trace.WriteLine($"[SwitchRidgeDirection] {ex}"); }
         }
@@ -3480,13 +3486,6 @@ namespace AniloxRoll.Monitor.Forms
             _stitchCoordinator.IsStitchMode
                 ? _settings.EnableReviewEnhance
                 : _stitchCoordinator.LastReviewProcessedMode;
-
-        private async Task TrySwitchStitchModeAsync(StitchMode newMode)
-        {
-            _settings.hb_StitchMode = newMode;
-            RefreshPropertyGridKeepScroll();
-            await OnStitchModeChangedAsync();
-        }
 
         /// <summary>
         /// Review tab：點對方 chart 切 StitchMode 時順便關 enhance。
@@ -3497,19 +3496,21 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (_settings == null) return;
             bool wasStitchMode = _stitchCoordinator.IsStitchMode;
-            _settings.EnableReviewEnhance              = false;
+            _settingsHub.SetBatch(s =>
+            {
+                s.EnableReviewEnhance = false;
+                s.hb_StitchMode       = newMode;
+            });
             _stitchCoordinator.LastReviewProcessedMode = false;
             UpdateRidgeDirectionVisual(null);
-            _settings.hb_StitchMode = newMode;
             RefreshPropertyGridKeepScroll();
 
-            // stitch mode：跳過 OnStitchModeChangedAsync 內的緩存 merge（line 3534-3544），
-            // 直接從硬碟 reload 原圖（enableProcess=false）。一次到位無中間態。
+            // stitch mode：跳過 OnStitchModeChangedAsync 內的緩存 merge，
+            // 直接從硬碟 reload 原圖（enableProcess=false）一次到位。
             await OnStitchModeChangedAsync(skipStitchedImageRefresh: wasStitchMode);
             if (wasStitchMode && _stitchCoordinator.IsStitchMode)
             {
                 await ReloadCurrentStitchedView(false);
-                // ShowStitchedCameraInCanvas(resetView: false) 在 Vertical 不 fit；切 StitchMode 後一律 fit。
                 if (canvasMain.Image != null) canvasMain.FitToScreen();
             }
         }
@@ -3624,21 +3625,20 @@ namespace AniloxRoll.Monitor.Forms
 
             if (gridView == null) { propertyGridSettings.Refresh(); return; }
 
-            // PropertyGridView 用的是 VScrollBar child control，不是 window standard scrollbar。
-            // GetScrollPos(gridView.Handle, SB_VERT) 始終回傳 0；必須直接讀 VScrollBar.Value。
+            // PropertyGridView 用的是 VScrollBar child control，必須直接讀 VScrollBar.Value 保 scroll
             System.Windows.Forms.ScrollBar scrollBar = null;
             foreach (Control c in gridView.Controls)
-                if (c is System.Windows.Forms.VScrollBar)
-                    { scrollBar = (System.Windows.Forms.VScrollBar)c; break; }
-
+                if (c is System.Windows.Forms.VScrollBar) { scrollBar = (System.Windows.Forms.VScrollBar)c; break; }
             int scrollPos = scrollBar?.Value ?? 0;
 
-            // 凍結重繪 → Refresh() 期間 scroll-to-selected 只改內部狀態，不觸發 OnPaint
+            // 同時凍結 PG handle 跟 gridView handle：之前只凍 gridView 會讓 PG 其他子控制項（左側 category、底部 description）
+            // 在 Refresh() 期間仍 paint 造成可見閃爍。雙重凍結後整個區域只在最後一次 Invalidate 才 paint。
+            propertyGridSettings.SuspendLayout();
+            NativeMethods.SendMessage(propertyGridSettings.Handle, WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);
             NativeMethods.SendMessage(gridView.Handle, WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);
             try
             {
                 propertyGridSettings.Refresh();
-                // 直接設 scrollBar.Value：比 SendMessage 更可靠，確保 topRow 同步更新
                 if (scrollBar != null)
                 {
                     int max = Math.Max(0, scrollBar.Maximum - scrollBar.LargeChange + 1);
@@ -3647,9 +3647,10 @@ namespace AniloxRoll.Monitor.Forms
             }
             finally
             {
-                // 解凍並觸發一次 repaint（scroll 已在正確位置）
                 NativeMethods.SendMessage(gridView.Handle, WM_SETREDRAW, new IntPtr(1), IntPtr.Zero);
-                gridView.Invalidate(true);
+                NativeMethods.SendMessage(propertyGridSettings.Handle, WM_SETREDRAW, new IntPtr(1), IntPtr.Zero);
+                propertyGridSettings.ResumeLayout(false);
+                propertyGridSettings.Invalidate(true);
             }
         }
 

@@ -136,10 +136,13 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
         public void SetRidgeDirection(string dir) => _inspectionService?.SetRidgeDirection(dir);
 
+        /// <summary>
+        /// 套用 setting 變更的副作用。
+        /// L2：save disk 已由 SettingsHub 統一處理，這裡只做「應用到下游服務」。
+        /// </summary>
         public void HandleSettingsChanged()
         {
             if (_settings == null) return;
-            ConfigManager.SaveInspectionSettings(_settings);
             ApplySettingsToService();
             _columnChartHelper?.SetOps(_settings.Cam1_Ops);
             _canvasHelper.Invalidate();

@@ -109,6 +109,7 @@
     <Compile Include="Settings\Models\InspectionSettingsDescriptionProvider.cs" />
     <Compile Include="Settings\Models\DcfFileEditor.cs" />
     <Compile Include="Settings\Services\ConfigManager.cs" />
+    <Compile Include="Settings\Services\SettingsHub.cs" />
     <Compile Include="Settings\System\CameraHardwareConfig.cs" />
     <Compile Include="Settings\System\SystemSettings.cs" />
     <Compile Include="Interop\NativeMethods.cs" />
