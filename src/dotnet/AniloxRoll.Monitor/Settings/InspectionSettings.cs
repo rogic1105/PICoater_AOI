@@ -188,5 +188,10 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category("7. IO設定")][DisplayName("啟用 IO")][TypeConverter(typeof(BoolYesNoConverter))]  public bool   PlcEnabled { get; set; } = InspectionDefaults.PlcEnabled;
         [Category("7. IO設定")][DisplayName("IO IP")]    public string PlcIp      { get; set; } = InspectionDefaults.PlcIp;
         [Category("7. IO設定")][DisplayName("IO Port")][TypeConverter(typeof(LeftAlignNumericConverter))]  public int    PlcPort    { get; set; } = InspectionDefaults.PlcPort;
+
+        // ===== 8. 開發者（PG 隱藏，編輯 inspection-settings.json 啟用） =====
+        // FSM Action Logger 開關。對應 docs/dev/fsm/ + Services/UiActionLogger.cs。
+        // 預設 false（production 零 overhead）；改 true 後重啟程式生效，log 寫 D:\Anilox\Logs\ui-actions-YYYYMMDD.jsonl。
+        [Browsable(false)] public bool DebugUiActionLog { get; set; } = false;
     }
 }

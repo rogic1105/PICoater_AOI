@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8"/>
+<title>FSM Action Log Viewer</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "Microsoft JhengHei", "Segoe UI", sans-serif; background: #f5f5f5; padding: 16px; color: #222; }
+h1 { font-size: 1.4em; margin-bottom: 6px; }
+.subtitle { color: #666; font-size: 0.88em; margin-bottom: 12px; }
+.controls { background: #fff; padding: 12px; border-radius: 6px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.controls > div { margin: 6px 0; }
+input[type=file] { font-size: 0.88em; }
+button { padding: 5px 12px; border: 1px solid #888; background: #fff; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 0.88em; margin-right: 4px; }
+button:hover { background: #eee; }
+
+.summary { display: flex; gap: 16px; margin: 8px 0; flex-wrap: wrap; font-size: 0.9em; }
+.stat { padding: 4px 10px; border-radius: 4px; font-weight: bold; }
+.stat.total { background: #eceff1; color: #37474f; }
+.stat.ok    { background: #c8e6c9; color: #1b5e20; }
+.stat.fail  { background: #ffcdd2; color: #b71c1c; }
+.stat.view  { background: #fff9c4; color: #f57f17; }
+.stat.unknown { background: #ffe0b2; color: #e65100; }
+
+h2 { font-size: 1.05em; margin: 16px 0 6px; color: #37474f; }
+table { width: 100%; border-collapse: collapse; background: #fff; font-size: 0.84em; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+th, td { border: 1px solid #e0e0e0; padding: 4px 8px; text-align: left; }
+th { background: #455a64; color: #fff; position: sticky; top: 0; }
+tr.ok    { background: #f1f8e9; }
+tr.fail  { background: #ffebee; }
+tr.view  { background: #fffde7; }
+tr.unknown { background: #fff3e0; }
+.icon { font-weight: bold; }
+.icon.ok   { color: #1b5e20; }
+.icon.fail { color: #b71c1c; }
+.icon.view { color: #f57f17; }
+.icon.unknown { color: #e65100; }
+code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-size: 0.85em; font-family: 'Consolas', monospace; }
+
+.matrix-wrap { overflow-x: auto; }
+table.matrix th, table.matrix td { text-align: center; font-size: 0.82em; }
+table.matrix td.has { background: #c8e6c9; cursor: help; }
+table.matrix td.empty { background: #fafafa; color: #ccc; }
+</style>
+</head>
+<body>
+<h1>FSM Action Log Viewer</h1>
+<p class="subtitle">讀 <code>state-catalog.csv</code> + <code>transition-table.csv</code> + 拖入 <code>ui-actions-YYYYMMDD.jsonl</code>，自動標記 ✓/❌/⚠ — 沒列在 transition table 的 action 跑下去就是 ❌ unknown。</p>
+
+<div class="controls">
+<div><b>1. CSV 載入：</b>跟 viewer.html 同目錄會自動 fetch，下方手動覆寫</div>
+<div>State catalog: <input type="file" id="catalogFile" accept=".csv" onchange="loadCatalog(this)"></div>
+<div>Transition table: <input type="file" id="tableFile" accept=".csv" onchange="loadTable(this)"></div>
+<div><b>2. Log file：</b> <input type="file" id="logFile" accept=".jsonl,.log" onchange="loadLog(this)"></div>
+<div><button onclick="reloadCsv()">自動重載 CSV (同目錄)</button></div>
+</div>
+
+<div class="summary">
+  <span class="stat total">Total <span id="s-total">0</span></span>
+  <span class="stat ok">✓ Expected <span id="s-ok">0</span></span>
+  <span class="stat fail">❌ Unknown transition <span id="s-fail">0</span></span>
+  <span class="stat unknown">⚠ Unknown state <span id="s-unknown">0</span></span>
+  <span class="stat view">○ View-only <span id="s-view">0</span></span>
+</div>
+
+<h2>Log entries</h2>
+<table id="logTable">
+<thead><tr><th>#</th><th>Status</th><th>時間</th><th>Source</th><th>Setting</th><th>From state</th><th>To state</th><th>差異</th></tr></thead>
+<tbody></tbody>
+</table>
+
+<h2>Transition coverage matrix（每格 = 該 action 在該 state 跑過幾次）</h2>
+<div class="matrix-wrap"><table id="matrixTable" class="matrix"></table></div>
+
+<h2>State catalog</h2>
+<table id="catalogTable"></table>
+
+<h2>Transition table</h2>
+<table id="tableTable"></table>
+
+<script>
+let states = [];          // [{state_id, hb_StitchMode, hc, hd, note}, ...]
+let transitions = [];     // [{action, from, to, note}, ...]
+let logEntries = [];      // 從 .jsonl 載入
+
+function parseCsv(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.trim());
+  return lines.slice(1).map(line => {
+    const cols = line.split(',').map(c => c.trim());
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = cols[i] ?? '');
+    return obj;
+  });
+}
+
+async function autoFetch() {
+  try {
+    const c = await fetch('state-catalog.csv').then(r => r.text());
+    states = parseCsv(c);
+    renderCatalog();
+  } catch { /* user need to upload */ }
+  try {
+    const t = await fetch('transition-table.csv').then(r => r.text());
+    transitions = parseCsv(t);
+    renderTable();
+  } catch {}
+  rebuild();
+}
+
+function reloadCsv() { autoFetch(); }
+
+function loadCatalog(input) {
+  const f = input.files[0]; if (!f) return;
+  f.text().then(txt => { states = parseCsv(txt); renderCatalog(); rebuild(); });
+}
+function loadTable(input) {
+  const f = input.files[0]; if (!f) return;
+  f.text().then(txt => { transitions = parseCsv(txt); renderTable(); rebuild(); });
+}
+function loadLog(input) {
+  const f = input.files[0]; if (!f) return;
+  f.text().then(txt => {
+    logEntries = txt.trim().split(/\r?\n/).filter(l => l.length > 0).map(l => {
+      try { return JSON.parse(l); } catch { return null; }
+    }).filter(x => x);
+    rebuild();
+  });
+}
+
+function renderCatalog() {
+  if (states.length === 0) return;
+  const headers = Object.keys(states[0]);
+  let html = '<thead><tr>' + headers.map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
+  states.forEach(s => {
+    html += '<tr>' + headers.map(h => `<td>${s[h]}</td>`).join('') + '</tr>';
+  });
+  html += '</tbody>';
+  document.getElementById('catalogTable').innerHTML = html;
+}
+function renderTable() {
+  if (transitions.length === 0) return;
+  const headers = Object.keys(transitions[0]);
+  let html = '<thead><tr>' + headers.map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
+  transitions.forEach(t => {
+    html += '<tr>' + headers.map(h => `<td>${t[h]}</td>`).join('') + '</tr>';
+  });
+  html += '</tbody>';
+  document.getElementById('tableTable').innerHTML = html;
+}
+
+function findTransition(source, from, to) {
+  // PG path: source 是 SettingChange.Source=PropertyGrid 的 entry，setting 對應到 hb_/hc_/hd_
+  // 簡化：source 跟 transition table 的 action 完全比對
+  return transitions.find(t => t.action === source &&
+                               t.from === String(from) &&
+                               t.to === String(to));
+}
+
+function knownState(id) {
+  return states.some(s => s.state_id === String(id));
+}
+
+function classify(entry) {
+  // ViewOnly: from == to 且來自 view-only 動作（透過 changeSrc=ViewOnly 標記）
+  if (entry.changeSrc === 'ViewOnly') return 'view';
+  if (!knownState(entry.stateBefore) || !knownState(entry.stateAfter)) return 'unknown';
+  if (findTransition(entry.source, entry.stateBefore, entry.stateAfter)) return 'ok';
+  return 'fail';
+}
+
+function rebuild() {
+  let counts = { ok: 0, fail: 0, view: 0, unknown: 0 };
+  const tbody = document.querySelector('#logTable tbody');
+  tbody.innerHTML = '';
+
+  logEntries.forEach((e, i) => {
+    const cls = classify(e);
+    counts[cls]++;
+    const icon = { ok:'✓', fail:'❌', view:'○', unknown:'⚠' }[cls];
+    const fromStr = e.from === null ? '-' : `${e.from}`;
+    const toStr = e.to === null ? '-' : `${e.to}`;
+    const diff = e.stateBefore === e.stateAfter ? '(no change)' : `${e.stateBefore} → ${e.stateAfter}`;
+    tbody.innerHTML += `<tr class="${cls}">
+      <td>${i+1}</td>
+      <td class="icon ${cls}">${icon}</td>
+      <td>${e.ts}</td>
+      <td><code>${e.source}</code></td>
+      <td><code>${e.setting}</code> ${fromStr} → ${toStr}</td>
+      <td>${e.stateBefore}</td>
+      <td>${e.stateAfter}</td>
+      <td>${diff}</td>
+    </tr>`;
+  });
+
+  document.getElementById('s-total').textContent = logEntries.length;
+  document.getElementById('s-ok').textContent = counts.ok;
+  document.getElementById('s-fail').textContent = counts.fail;
+  document.getElementById('s-view').textContent = counts.view;
+  document.getElementById('s-unknown').textContent = counts.unknown;
+
+  renderMatrix();
+}
+
+function renderMatrix() {
+  const actions = [...new Set(transitions.map(t => t.action))];
+  const stateIds = states.map(s => s.state_id);
+  if (actions.length === 0 || stateIds.length === 0) {
+    document.getElementById('matrixTable').innerHTML = '<tr><td>等 catalog + transition CSV 載入</td></tr>';
+    return;
+  }
+  // 統計每個 (action, from_state) 的執行次數 + 是否在 expected table 內
+  const counts = {};
+  logEntries.forEach(e => {
+    const key = `${e.source}|${e.stateBefore}`;
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  const expected = {};
+  transitions.forEach(t => {
+    const key = `${t.action}|${t.from}`;
+    expected[key] = t.to;
+  });
+
+  let html = '<thead><tr><th>Action ↓ / From state →</th>';
+  stateIds.forEach(s => html += `<th>S${s}</th>`);
+  html += '</tr></thead><tbody>';
+  actions.forEach(a => {
+    html += `<tr><td style="text-align:left"><code>${a}</code></td>`;
+    stateIds.forEach(s => {
+      const key = `${a}|${s}`;
+      const hit = counts[key] || 0;
+      const exp = expected[key];
+      if (exp != null) {
+        html += `<td class="has" title="預期 → ${exp}，跑過 ${hit} 次">→${exp}${hit ? ' ('+hit+')' : ''}</td>`;
+      } else {
+        html += '<td class="empty">·</td>';
+      }
+    });
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  document.getElementById('matrixTable').innerHTML = html;
+}
+
+autoFetch();
+</script>
+</body>
+</html>

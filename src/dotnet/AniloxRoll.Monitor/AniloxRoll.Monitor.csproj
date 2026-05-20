@@ -114,6 +114,7 @@
     <Compile Include="Settings\System\SystemSettings.cs" />
     <Compile Include="Interop\NativeMethods.cs" />
     <Compile Include="Services\AoiService.cs" />
+    <Compile Include="Services\UiActionLogger.cs" />
     <Compile Include="Services\CsvConfigSnapshot.cs" />
     <Compile Include="Services\InspectionLogService.cs" />
     <Compile Include="Services\IoGrabController.cs" />

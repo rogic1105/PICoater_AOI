@@ -238,6 +238,10 @@ namespace AniloxRoll.Monitor.Forms
             // L2 SettingsHub：所有 setting 變更走 Changed event，OnSettingChanged 接管 Apply* 副作用。
             _settingsHub = new AniloxRoll.Monitor.Settings.Services.SettingsHub(_settings);
             _settingsHub.Changed += OnSettingChanged;
+            // FSM Action Logger（runtime flag，預設 Off 零 overhead）
+            UiActionLogger.Init(_settings);
+            UiActionLogger.Enabled = _settings.DebugUiActionLog;
+            if (UiActionLogger.Enabled) _settingsHub.Changed += UiActionLogger.OnSettingChanged;
             EnsureAniloxFolderStructure();
             CameraFrameSaver.InitResourceLog(_settings?.Storage?.LogsPath);
             CameraFrameSaver.GetUiStateCallback = () =>
@@ -842,17 +846,24 @@ namespace AniloxRoll.Monitor.Forms
             //   chartMuraHorizontal：永遠 toggle ridge dir = "h"
             chartMuraVertical.MouseClick += (s, e) =>
             {
+                UiActionLogger.SetSource("chartMuraVertical.Click");
                 LogClick("chartMuraVertical.MouseClick", e);
                 if (_settings?.StitchMode == StitchMode.Vertical) SwitchRidgeDirection("v");
                 else if (_settings?.StitchMode == StitchMode.Global) _ = SwitchReviewStitchModeAndDisableEnhance(StitchMode.Vertical);
             };
             chartOverview.MouseClick += (s, e) =>
             {
+                UiActionLogger.SetSource("chartOverview.Click");
                 LogClick("chartOverview.MouseClick", e);
                 if (_settings?.StitchMode == StitchMode.Global) SwitchRidgeDirection("v");
                 else if (_settings?.StitchMode == StitchMode.Vertical) _ = SwitchReviewStitchModeAndDisableEnhance(StitchMode.Global);
             };
-            chartMuraHorizontal.MouseClick += (s, e) => SwitchRidgeDirection("h");
+            chartMuraHorizontal.MouseClick += (s, e) =>
+            {
+                UiActionLogger.SetSource("chartMuraHorizontal.Click");
+                UiActionLogger.RecordViewOnly("chartMuraHorizontal.Click");
+                SwitchRidgeDirection("h");
+            };
 
             // Live tab chart 點選（同 Review tab 語意，只是底層 apply 函式不同）：
             //   muraChartVerticalLive：
@@ -861,17 +872,24 @@ namespace AniloxRoll.Monitor.Forms
             //   chartLiveOverview：對稱
             muraChartVerticalLive.MouseClick += (s, e) =>
             {
+                UiActionLogger.SetSource("muraChartVerticalLive.Click");
                 LogClick("muraChartVerticalLive.MouseClick", e);
                 if (_settings?.StitchMode == StitchMode.Vertical) SwitchLiveDisplayDirection("v");
                 else if (_settings?.StitchMode == StitchMode.Global) _ = SwitchStitchModeWithEnhanceSequence(StitchMode.Vertical);
             };
             chartLiveOverview.MouseClick += (s, e) =>
             {
+                UiActionLogger.SetSource("chartLiveOverview.Click");
                 LogClick("chartLiveOverview.MouseClick", e);
                 if (_settings?.StitchMode == StitchMode.Global) SwitchLiveDisplayDirection("v");
                 else if (_settings?.StitchMode == StitchMode.Vertical) _ = SwitchStitchModeWithEnhanceSequence(StitchMode.Global);
             };
-            muraChartHorizontalLive.MouseClick += (s, e) => SwitchLiveDisplayDirection("h");
+            muraChartHorizontalLive.MouseClick += (s, e) =>
+            {
+                UiActionLogger.SetSource("muraChartHorizontalLive.Click");
+                UiActionLogger.RecordViewOnly("muraChartHorizontalLive.Click");
+                SwitchLiveDisplayDirection("h");
+            };
 
             // PropertyGrid：動態標題說明（點選 ─ X ─ 時，底部說明欄顯示當前參數值）
             TypeDescriptor.AddProvider(
@@ -978,8 +996,10 @@ namespace AniloxRoll.Monitor.Forms
             {
                 if (e.Button != MouseButtons.Left) return;
                 int clicks = canvasClicker.RegisterClick(e.Location);
+                if (clicks == 1) UiActionLogger.RecordViewOnly("canvasMain.Drag");
                 if (clicks == 2)
                 {
+                    UiActionLogger.RecordViewOnly("canvasMain.DoubleClick");
                     if (canvasMain.Image != null && !IsCanvasFitToScreen())
                     {
                         canvasMain.FitToScreen();

@@ -1,0 +1,9 @@
+state_id,hb_StitchMode,hc_EnableMuraEnhance,hd_EnableReviewEnhance,note
+1,Vertical,F,F,預設啟動狀態
+2,Vertical,T,F,Vertical + Live 強化
+3,Vertical,F,T,Vertical + Review 強化
+4,Vertical,T,T,Vertical + 兩邊強化
+5,Global,F,F,Global 預設
+6,Global,T,F,Global + Live 強化
+7,Global,F,T,Global + Review 強化
+8,Global,T,T,Global + 兩邊強化
