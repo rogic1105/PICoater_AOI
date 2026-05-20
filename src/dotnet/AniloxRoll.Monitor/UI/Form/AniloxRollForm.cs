@@ -9,6 +9,8 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Management;
 using System.Windows.Forms;
+using StorageBridge.Core;
+using LightBridge.Core;
 using AOI.SDK.UI;
 using AOI.SDK.Utils;
 using AniloxRoll.Monitor.Core.Camera;

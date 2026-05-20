@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 
-namespace AniloxRoll.Monitor.Core.Services
+namespace StorageBridge.Core
 {
     /// <summary>
     /// 循環儲存管理：監控磁碟可用空間，低於門檻時從最舊的日資料夾開始刪除圖片。

@@ -54,6 +54,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Code", "Code", "{7BD6E3EB-B
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PlcBridge.Core", "sdk\PlcBridge\PlcBridge.Core\PlcBridge.Core.csproj", "{A1B2C3D4-1111-2222-3333-444455556666}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightBridge.Core", "sdk\LightBridge\LightBridge.Core\LightBridge.Core.csproj", "{C2D3E4F5-3333-4444-5555-666677778888}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StorageBridge.Core", "sdk\StorageBridge\StorageBridge.Core\StorageBridge.Core.csproj", "{D3E4F5A6-4444-5555-6666-777788889999}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AniloxRoll.Monitor", "src\dotnet\AniloxRoll.Monitor\AniloxRoll.Monitor.csproj", "{9A193EE5-9D02-42B4-A3DF-D49D7D13EE9B}"
 	ProjectSection(ProjectDependencies) = postProject
 		{AE695487-606D-41DC-8639-5DB96B92B89C} = {AE695487-606D-41DC-8639-5DB96B92B89C}
@@ -88,6 +92,10 @@ Global
 		{D3CC3425-9807-4866-AEB5-1F1DBC49523C}.Release|x64.Build.0 = Release|x64
 		{A1B2C3D4-1111-2222-3333-444455556666}.Release|x64.ActiveCfg = Release|x64
 		{A1B2C3D4-1111-2222-3333-444455556666}.Release|x64.Build.0 = Release|x64
+		{C2D3E4F5-3333-4444-5555-666677778888}.Release|x64.ActiveCfg = Release|x64
+		{C2D3E4F5-3333-4444-5555-666677778888}.Release|x64.Build.0 = Release|x64
+		{D3E4F5A6-4444-5555-6666-777788889999}.Release|x64.ActiveCfg = Release|x64
+		{D3E4F5A6-4444-5555-6666-777788889999}.Release|x64.Build.0 = Release|x64
 		{9A193EE5-9D02-42B4-A3DF-D49D7D13EE9B}.Release|x64.ActiveCfg = Release|x64
 		{9A193EE5-9D02-42B4-A3DF-D49D7D13EE9B}.Release|x64.Build.0 = Release|x64
 		{27263C11-7FEF-4076-A2F1-F412BB496DF3}.Release|x64.ActiveCfg = Release|x64

@@ -1,5 +1,48 @@
 # PICoater AOI — Claude Code Rules
 
+## 架構原則：repo 分層（src / sdk / tools / tests / docs）
+
+```
+PICoater_AOI/
+├── src/                  ← 應用程式（產品交付）
+│   ├── dotnet/AniloxRoll.Monitor/  ← C# WinForms 主應用
+│   └── native/                     ← C++ pipeline
+├── sdk/                  ← 可獨立 split 的 library（純函式庫，無 GUI、無 exe）
+│   ├── AOI_SDK/          ← 影像處理 SDK（CUDA / framework / cpp_utils）
+│   ├── PlcBridge/PlcBridge.Core/        ← Modbus PLC 通訊
+│   ├── LightBridge/LightBridge.Core/    ← RS-232 LTS-3DPA24 光源
+│   └── StorageBridge/StorageBridge.Core/ ← SMB + 檔案複製 + 循環儲存
+├── tools/                ← 內部工具（工程師 debug / 廠區維護 / 測試用 exe / 腳本）
+│   ├── plc-manual-control/   ← PLC 手動 DI/DO GUI（WinForms exe）
+│   ├── plc-automation/       ← PLC FSM 模擬工具（WinForms exe）
+│   ├── ps/                   ← PowerShell 腳本
+│   └── python/               ← Python 工具
+├── tests/                ← 純測試
+│   ├── dotnet_test/      ← NUnit 單元 + 壓力測試
+│   ├── cpp_test/         ← C++ 單元
+│   └── python_test/      ← Python 測試
+├── docs/                 ← 文件
+│   ├── config/           ← 設定 JSON 範例
+│   ├── dev/              ← 開發者參考（MIL API / 廠商規格書）
+│   ├── user-manual/      ← 操作員說明（ui-flow.html / hardware-specs）
+│   └── sample/           ← 範例程式（給 SDK 使用者參考的 demo）
+├── deploy/               ← 現場部署腳本（PowerShell + JSON）
+├── third_party/          ← 外部 lib（stb）
+└── .claude/skills/       ← Claude Code skills（按修改範圍觸發）
+```
+
+**核心分層原則（業界 monorepo + Codex/Gemini 共識）：**
+
+1. **library 跟 executable 實體分離** — sdk/ 只放 library（無 GUI、無 exe），exe/工具放 tools/。引用 sdk 的專案不會被迫拉 UI 依賴
+2. **sdk/ = 可獨立 split** — 每個元件 self-contained（有自己 Directory.Build.props / .gitignore 更好），未來可 split 為獨立 repo
+3. **依賴方向單向** — `src/ → sdk/ → third_party/`；**sdk/ 絕對不能反向依賴 src/**
+4. **新硬體 bridge 走 sdk/ 模板** — 見 [.claude/skills/add-hardware-bridge.md](.claude/skills/add-hardware-bridge.md)
+
+**業界對照：**
+- `src/` ↔ Nx `apps/` / .NET `src/`（dotnet/runtime）
+- `sdk/` ↔ Nx `packages/` / .NET `lib/`（Microsoft）
+- `tools/` ↔ `tools/` / `bin/`（標準）
+
 ## 架構原則：SSoT 原子結構
 
 所有「設定變更 → 副作用」流程必須遵守這個三層分工：

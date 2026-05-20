@@ -4,7 +4,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace AniloxRoll.Monitor.Core.Services
+namespace StorageBridge.Core
 {
     /// <summary>
     /// Storage PC 專用：每 10 秒自主檢查磁碟空間並觸發清理；

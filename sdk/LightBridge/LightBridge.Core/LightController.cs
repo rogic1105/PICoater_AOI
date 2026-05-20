@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.IO.Ports;
 using System.Text;
 
-namespace AniloxRoll.Monitor.Core.Services
+namespace LightBridge.Core
 {
     /// <summary>
     /// LTS-3DPA24 光源控制器 RS-232 通訊。

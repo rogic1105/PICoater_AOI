@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 
-namespace AniloxRoll.Monitor.Core.Services
+namespace StorageBridge.Core
 {
     /// <summary>
     /// 背景遠端複製服務：將存檔佇列化，背景執行緒逐一 File.Copy 到遠端路徑。
