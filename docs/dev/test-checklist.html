@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8"/>
+<title>PICoater AOI — E2E 驗收清單</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "Microsoft JhengHei", "Segoe UI", sans-serif; background: #f5f5f5; color: #222; padding: 20px; line-height: 1.5; }
+h1 { font-size: 1.6em; margin-bottom: 4px; }
+h2 { font-size: 1.2em; margin: 24px 0 8px; padding: 8px 12px; background: #37474f; color: #fff; border-radius: 4px; cursor: pointer; user-select: none; }
+h2::before { content: "▾ "; }
+h2.collapsed::before { content: "▸ "; }
+.subtitle { color: #666; font-size: 0.9em; margin-bottom: 12px; }
+
+.summary { background: #fff; padding: 14px 18px; border-radius: 8px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.summary-row { display: flex; gap: 24px; align-items: center; font-size: 0.95em; }
+.summary-stat { padding: 4px 10px; border-radius: 4px; font-weight: bold; }
+.summary-stat.total { background: #eceff1; color: #37474f; }
+.summary-stat.pass  { background: #c8e6c9; color: #1b5e20; }
+.summary-stat.fail  { background: #ffcdd2; color: #b71c1c; }
+.summary-stat.skip  { background: #fff9c4; color: #f57f17; }
+.summary-stat.todo  { background: #e0e0e0; color: #424242; }
+.actions { margin-left: auto; }
+.actions button { padding: 4px 10px; border: 1px solid #999; background: #fff; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 0.9em; }
+.actions button:hover { background: #eee; }
+
+.section { display: block; }
+.section.collapsed { display: none; }
+
+.case { background: #fff; border-radius: 6px; padding: 12px 16px; margin: 8px 0; box-shadow: 0 1px 2px rgba(0,0,0,.06); border-left: 5px solid #bdbdbd; }
+.case.pass { border-left-color: #2e7d32; }
+.case.fail { border-left-color: #c62828; background: #fff5f5; }
+.case.skip { border-left-color: #f9a825; }
+
+.case-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; cursor: pointer; user-select: none; }
+.case-head::before { content: "▾"; color: #999; font-size: 0.85em; }
+.case.collapsed .case-head::before { content: "▸"; }
+.case-id { font-family: 'Consolas', 'Courier New', monospace; font-weight: bold; color: #1565c0; min-width: 70px; }
+.case-title { flex: 1; font-weight: bold; }
+.case-status select { padding: 3px 6px; border: 1px solid #ccc; border-radius: 3px; font-family: inherit; font-size: 0.85em; }
+.case-tags { display: flex; gap: 4px; }
+.tag { font-size: 0.75em; padding: 2px 6px; border-radius: 3px; background: #eceff1; color: #455a64; }
+.tag.smoke { background: #b3e5fc; color: #01579b; }
+.tag.regression { background: #d1c4e9; color: #311b92; }
+.tag.hardware { background: #ffe0b2; color: #e65100; }
+
+.case-body { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #ddd; }
+.case.collapsed .case-body { display: none; }
+
+.case-body h4 { font-size: 0.9em; color: #555; margin: 8px 0 4px; font-weight: 600; }
+.case-body ol, .case-body ul { padding-left: 24px; font-size: 0.92em; }
+.case-body li { margin: 2px 0; }
+.case-body .expect { background: #e8f5e9; padding: 6px 10px; border-radius: 4px; border-left: 3px solid #2e7d32; margin-top: 4px; font-size: 0.92em; }
+.case-body .pre { background: #fffde7; padding: 6px 10px; border-radius: 4px; border-left: 3px solid #f9a825; margin-top: 4px; font-size: 0.92em; }
+.case-body .link { font-size: 0.85em; color: #666; margin-top: 8px; }
+.case-body .link a { color: #1565c0; text-decoration: none; border-bottom: 1px dashed #1565c0; }
+.case-body .notes { width: 100%; margin-top: 6px; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; font-size: 0.88em; resize: vertical; min-height: 32px; }
+.case-body .meta { font-size: 0.78em; color: #888; margin-top: 4px; }
+
+code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-size: 0.88em; font-family: 'Consolas', 'Courier New', monospace; }
+</style>
+</head>
+<body>
+<h1>PICoater AOI — E2E 驗收清單</h1>
+<p class="subtitle">每條 case 對應 <a href="../user-manual/ui-flow.html">ui-flow.html</a> 內的使用者流程。狀態 + 備註存於瀏覽器 localStorage，跨重新整理保留；換瀏覽器/清快取會清空。</p>
+
+<div class="summary">
+<div class="summary-row">
+  <span class="summary-stat total">Total <span id="stat-total">0</span></span>
+  <span class="summary-stat pass">PASS <span id="stat-pass">0</span></span>
+  <span class="summary-stat fail">FAIL <span id="stat-fail">0</span></span>
+  <span class="summary-stat skip">SKIP <span id="stat-skip">0</span></span>
+  <span class="summary-stat todo">TODO <span id="stat-todo">0</span></span>
+  <span class="actions">
+    <button onclick="expandAll()">全展開</button>
+    <button onclick="collapseAll()">全摺疊</button>
+    <button onclick="resetAll()">重置全部</button>
+    <button onclick="exportReport()">匯出報告</button>
+  </span>
+</div>
+</div>
+
+<h2 onclick="toggleSection(this)">即時監控 Live tab</h2>
+<div class="section">
+
+  <div class="case" data-id="E2E-L01">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-L01</span>
+      <span class="case-title">啟動程式 → 自動分配相機 → 相機數狀態正確</span>
+      <span class="case-tags"><span class="tag smoke">smoke</span><span class="tag hardware">hw</span></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <div class="pre"><b>前置：</b>7 台相機接好、CLProtocol 設定正確、無 grab 中</div>
+      <h4>步驟</h4>
+      <ol>
+        <li>啟動 AniloxRoll.Monitor.exe</li>
+        <li>觀察右下角 <code>lblCamCount</code> 標籤</li>
+      </ol>
+      <div class="expect"><b>預期：</b><code>相機: 7/7</code>（未 Grab 但纜線接上即可偵測連線）</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html#review-load-data">即時監控 §程式啟動 — 自動分配相機</a></div>
+      <textarea class="notes" placeholder="實測備註 / fail 情境"></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+  <div class="case" data-id="E2E-L02">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-L02</span>
+      <span class="case-title">按【開始抓取】→ 光源亮 → 等 300ms warmup → 第一幀畫面顯示</span>
+      <span class="case-tags"><span class="tag smoke">smoke</span><span class="tag hardware">hw</span></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <div class="pre"><b>前置：</b>相機已 AutoAllocate、光源 COM 連線正常、<code>lblLightConn</code> 顯示已連線</div>
+      <h4>步驟</h4>
+      <ol>
+        <li>按【開始抓取】</li>
+        <li>觀察光源 LED（物理光源）</li>
+        <li>觀察【監控主畫面】是否出現影像</li>
+      </ol>
+      <div class="expect"><b>預期：</b>光源先亮 → 約 300ms 後相機開始 grab → 主畫面出現連續更新的影像；【開始抓取】按鈕變【停止抓取】</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html#btn-camera-grab">即時監控 §開始抓取</a></div>
+      <textarea class="notes" placeholder="實測備註 / fail 情境"></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+  <div class="case" data-id="E2E-L03">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-L03</span>
+      <span class="case-title">抓取中改 PG 曝光 → 監控主畫面亮度變化 + CSV 插 #CFG</span>
+      <span class="case-tags"><span class="tag regression">regression</span></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <div class="pre"><b>前置：</b>Live grab 進行中、PG 上「曝光」可見</div>
+      <h4>步驟</h4>
+      <ol>
+        <li>拖曳【曝光滑桿1】從現值改到 +50%</li>
+        <li>放開滑桿等 1 秒（拖曳放開立刻寫硬體）</li>
+        <li>觀察【監控主畫面】亮度</li>
+        <li>關掉 grab，打開當天 CSV（<code>D:\Anilox\Captures\YYYY\MM\YYYY-MM-DD.csv</code>）</li>
+      </ol>
+      <div class="expect"><b>預期：</b>畫面立刻變亮 + CSV 內最新一行 <code>#CFG</code> 內曝光值對應新設定</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html#settings-changed">設定面板 §相機參數滑桿</a></div>
+      <textarea class="notes" placeholder=""></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+  <div class="case" data-id="E2E-L04">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-L04</span>
+      <span class="case-title">點【監控切向曲線圖】（Vertical 模式）→ 監控強化 toggle + PG TF 即時翻轉</span>
+      <span class="case-tags"><span class="tag regression">regression</span></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <div class="pre"><b>前置：</b>合圖方式 = 垂直、監控強化 = 否、Live grab 中</div>
+      <h4>步驟</h4>
+      <ol>
+        <li>點【監控切向曲線圖】一次</li>
+        <li>觀察【監控主畫面】是否切到處理圖（亮 mura 強化）</li>
+        <li>觀察 PG 上「監控強化」是否變 是</li>
+        <li>觀察【監控切向曲線圖】是否上橘色外框</li>
+        <li>再點一次 → 應該回到原圖、PG TF 變 否、橘框消失</li>
+      </ol>
+      <div class="expect"><b>預期：</b>每點一次 toggle，三項視覺（主畫面 / PG TF / 橘框）同步、不閃、PG scroll 位置保持</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html">即時監控 §監控曲線圖點擊</a></div>
+      <textarea class="notes" placeholder=""></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+  <div class="case" data-id="E2E-L05">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-L05</span>
+      <span class="case-title">點【監控全覽圖】（Vertical + 強化中）→ 切 Global + 關 enhance（一次到位）</span>
+      <span class="case-tags"><span class="tag regression">regression</span></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <div class="pre"><b>前置：</b>合圖方式 = 垂直、監控強化 = 是（橘框）、Live grab 中</div>
+      <h4>步驟</h4>
+      <ol>
+        <li>點【監控全覽圖】一次</li>
+        <li>觀察主畫面切換過程（有無「先顯示舊強化版 → 再切原圖」中間幀）</li>
+        <li>觀察 PG 上「合圖方式」、「監控強化」</li>
+      </ol>
+      <div class="expect"><b>預期：</b>合圖方式 → 全域；監控強化 → 否（兩個 PG cell 都翻）；主畫面一次到位 commit-on-end，無中間幀閃爍</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html">即時監控 §監控曲線圖點擊</a></div>
+      <textarea class="notes" placeholder=""></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+  <div class="case" data-id="E2E-L06">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-L06</span>
+      <span class="case-title">IO 收 PLC START → 自動 PlcStartGrab → 同 E2E-L02 流程</span>
+      <span class="case-tags"><span class="tag hardware">hw</span></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <div class="pre"><b>前置：</b>PLC 連線、<code>lblPlcConn</code> 已連線、未在 grab 中、IO 未暫停</div>
+      <h4>步驟</h4>
+      <ol>
+        <li>在 PLC 端觸發 DI START（rising edge）</li>
+        <li>觀察 AniloxRoll.Monitor 是否自動開始 grab（同 E2E-L02 視覺）</li>
+        <li>停止 DI START → 觀察是否自動停止 grab</li>
+      </ol>
+      <div class="expect"><b>預期：</b>DI START rising → 光源亮 + 相機 grab；DI START falling → 光源關 + grab 停</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html">即時監控 §IO 觸發抓取</a></div>
+      <textarea class="notes" placeholder=""></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+</div>
+
+<h2 onclick="toggleSection(this)">歷史查詢 Review tab</h2>
+<div class="section">
+
+  <div class="case" data-id="E2E-R01">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-R01</span>
+      <span class="case-title">按【讀取資料】→ 載入最新 grab + 合圖方式 reset Global + PG 同步</span>
+      <span class="case-tags"><span class="tag smoke">smoke</span></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <div class="pre"><b>前置：</b>有歷史資料的 Anilox 資料夾、當前合圖方式 = 垂直</div>
+      <h4>步驟</h4>
+      <ol>
+        <li>切到 Review tab</li>
+        <li>按【讀取資料】→ 選資料夾</li>
+        <li>觀察【回顧主畫面】、【回顧縮圖1~7】、PG「合圖方式」、PG「回顧強化」</li>
+      </ol>
+      <div class="expect"><b>預期：</b>主畫面顯示最新一筆 grab 的全域合圖、縮圖 7 張、PG 合圖方式 = 全域（reset）、回顧強化 = 否（reset）</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html#review-load-data">歷史查詢 §讀取資料</a></div>
+      <textarea class="notes" placeholder=""></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+  <div class="case" data-id="E2E-R02">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-R02</span>
+      <span class="case-title">點【回顧切向曲線圖】（強化中 + Global）→ 切 Vertical + 關 enhance（commit-on-end）</span>
+      <span class="case-tags"><span class="tag regression">regression</span></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <div class="pre"><b>前置：</b>已讀取資料、合圖方式 = 全域、回顧強化 = 是（橘框）</div>
+      <h4>步驟</h4>
+      <ol>
+        <li>點【回顧切向曲線圖】</li>
+        <li>觀察【回顧主畫面】切換過程（不該看到舊強化版緩存中間幀）</li>
+        <li>觀察 PG「合圖方式」「回顧強化」</li>
+      </ol>
+      <div class="expect"><b>預期：</b>主畫面一次到位顯示新 Vertical 原圖；PG 合圖方式 = 垂直、回顧強化 = 否；canvasMain.Visible=false 包 transition 期間無閃</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html">歷史查詢 §回顧曲線圖點擊</a></div>
+      <textarea class="notes" placeholder=""></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+  <div class="case" data-id="E2E-R03">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-R03</span>
+      <span class="case-title">上一/下一序號 → 主畫面 + chartMuraProfile 同步切換</span>
+      <span class="case-tags"></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <div class="pre"><b>前置：</b>Review tab 已載資料、單片模式</div>
+      <h4>步驟</h4>
+      <ol>
+        <li>按【上一序號 <】或【下一序號 ></li>
+        <li>觀察 cbReviewGrabId / cbDataGrabId 是否同步</li>
+        <li>觀察【回顧主畫面】、【chartMuraProfile】是否載入新 grab</li>
+      </ol>
+      <div class="expect"><b>預期：</b>所有序號 cb 同步、主畫面 + 切向 + 法向 + chartOverview + chartMuraProfile 全切換到新 grab</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html#review-grabid-nav">歷史查詢 §單片序號導航</a></div>
+      <textarea class="notes" placeholder=""></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+  <div class="case" data-id="E2E-R04">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-R04</span>
+      <span class="case-title">拖曳主畫面 → chartOverview X 軸跟動 + 縮圖橘框切到對應 CAM</span>
+      <span class="case-tags"></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <div class="pre"><b>前置：</b>Review tab Global mode、已載資料</div>
+      <h4>步驟</h4>
+      <ol>
+        <li>滑鼠拖曳【回顧主畫面】左右移動</li>
+        <li>觀察【回顧全覽圖】X 軸範圍是否跟著移動</li>
+        <li>觀察【回顧縮圖1~7】橘框是否切到中心點落在的 CAM</li>
+      </ol>
+      <div class="expect"><b>預期：</b>三者連動順暢、無遲滯</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html">歷史查詢 §拖曳回顧主畫面</a></div>
+      <textarea class="notes" placeholder=""></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+</div>
+
+<h2 onclick="toggleSection(this)">檢測報表 Data tab</h2>
+<div class="section">
+
+  <div class="case" data-id="E2E-D01">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-D01</span>
+      <span class="case-title">按【讀取資料】→ 同步 Review tab + 統計顯示</span>
+      <span class="case-tags"><span class="tag smoke">smoke</span></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <div class="pre"><b>前置：</b>Anilox 資料夾有資料、目前 Review tab 為空</div>
+      <h4>步驟</h4>
+      <ol>
+        <li>切到 Data tab</li>
+        <li>按【讀取資料】→ 選資料夾</li>
+        <li>觀察【明細列表】、【良率卡片】、【chartYearly/Monthly/Daily】</li>
+        <li>切到 Review tab → 觀察主畫面是否已載入</li>
+      </ol>
+      <div class="expect"><b>預期：</b>Data tab 統計填好、Review tab 主畫面顯示最新 grab、合圖方式 = 全域、回顧強化 = 否</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html">檢測報表 §讀取資料</a></div>
+      <textarea class="notes" placeholder=""></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+  <div class="case" data-id="E2E-D02">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-D02</span>
+      <span class="case-title">點 listViewGrabDetail row → 統計 + chartMuraProfile 對齊單片，範圍 cb 不變</span>
+      <span class="case-tags"><span class="tag regression">regression</span></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <div class="pre"><b>前置：</b>Data tab 載資料、目前在範圍模式或時序模式（cbGrabIdStart/End 已設定範圍）</div>
+      <h4>步驟</h4>
+      <ol>
+        <li>記下當前 cbGrabIdStart、cbGrabIdEnd、cbStartDate/Time、cbEndDate/Time 值</li>
+        <li>滑鼠按下 listView 任一 row（不放開）→ 觀察該 row 應該反白</li>
+        <li>放開滑鼠 → 觀察良率卡片 + chartMuraProfile</li>
+        <li>檢查 cbGrabIdStart/End、cbStartDate/Time、cbEndDate/Time 6 個 cb</li>
+      </ol>
+      <div class="expect"><b>預期：</b>放開才 commit、6 個 cb 值維持原狀、良率卡片改為單片 stats、chartMuraProfile 切到該 grab</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html">檢測報表 §明細列表點選</a></div>
+      <textarea class="notes" placeholder=""></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+  <div class="case" data-id="E2E-D03">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-D03</span>
+      <span class="case-title">二次點同 row → 切回範圍模式 + 範圍 stats</span>
+      <span class="case-tags"><span class="tag regression">regression</span></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <div class="pre"><b>前置：</b>E2E-D02 已執行完，當前是單片模式且 listView 有反白 row</div>
+      <h4>步驟</h4>
+      <ol>
+        <li>再點同一 row 一次</li>
+        <li>觀察 listView 反白是否消失</li>
+        <li>觀察 active GroupBox（綠色高亮）切到哪</li>
+        <li>觀察良率卡片是否重新計算（範圍 stats）</li>
+      </ol>
+      <div class="expect"><b>預期：</b>反白消失、GrpDataGrabIdRange 變綠（範圍模式 active）、卡片顯示 cbGrabIdStart/End 範圍 stats</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html">檢測報表 §明細列表點選</a></div>
+      <textarea class="notes" placeholder=""></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+</div>
+
+<h2 onclick="toggleSection(this)">設定面板 + Bridge</h2>
+<div class="section">
+
+  <div class="case" data-id="E2E-S01">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-S01</span>
+      <span class="case-title">PG 改任何值 → save disk + 副作用即時生效（不閃）</span>
+      <span class="case-tags"><span class="tag smoke">smoke</span></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <h4>步驟</h4>
+      <ol>
+        <li>PG 改「垂直平均閾值」從 0.2 → 0.25</li>
+        <li>觀察【監控切向曲線圖】閾值線位置</li>
+        <li>查看 <code>bin\x64\Release\Config\inspection-settings.json</code> 是否寫入新值</li>
+        <li>觀察 PG 改值瞬間，整個 PG 列表有無閃爍</li>
+      </ol>
+      <div class="expect"><b>預期：</b>閾值線立刻移動 + disk 寫入 + PG 列表不閃（只該 cell 自我更新）</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html#settings-changed">設定面板 §檢測設定變更</a></div>
+      <textarea class="notes" placeholder=""></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+  <div class="case" data-id="E2E-S02">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-S02</span>
+      <span class="case-title">LightComPort 改成不存在 → 重啟 → AutoDetect 找到實際 port → PG 更新 + disk 寫回</span>
+      <span class="case-tags"><span class="tag hardware">hw</span><span class="tag regression">regression</span></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <div class="pre"><b>前置：</b>光源實際接在某 COM（記為 COM17）</div>
+      <h4>步驟</h4>
+      <ol>
+        <li>關閉 exe</li>
+        <li>編輯 <code>bin\x64\Release\Config\inspection-settings.json</code>，<code>LightComPort</code> 改成 <code>COM99</code></li>
+        <li>啟動 exe → 觀察 <code>lblLightConn</code> 標籤</li>
+        <li>查看 PG「COM Port」欄位、查看 json 是否被寫回 COM17</li>
+      </ol>
+      <div class="expect"><b>預期：</b>啟動時掃描成功 → lblLightConn 已連線 → PG COM Port = COM17 → json 寫回 COM17</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html#settings-changed">設定面板 §光源 AutoDetect</a></div>
+      <textarea class="notes" placeholder=""></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+  <div class="case" data-id="E2E-S03">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-S03</span>
+      <span class="case-title">改 AppRole = Storage → MessageBox + 重開後 Live tab 隱藏</span>
+      <span class="case-tags"></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <h4>步驟</h4>
+      <ol>
+        <li>PG 改「機台角色」從 Inspection → Storage</li>
+        <li>觀察 MessageBox</li>
+        <li>關閉 exe 再啟動</li>
+        <li>觀察 Tab 是否只剩 Review + Data + 設定面板（Live tab 隱藏）</li>
+        <li>觀察 IO/光源/相機相關 label 是否隱藏</li>
+      </ol>
+      <div class="expect"><b>預期：</b>MessageBox 提示「重開生效」、重啟後進入 Storage 模式（無 Live、無硬體 service）</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html">設定面板 §機台角色</a></div>
+      <textarea class="notes" placeholder=""></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+</div>
+
+<h2 onclick="toggleSection(this)">跨 Tab 同步</h2>
+<div class="section">
+
+  <div class="case" data-id="E2E-X01">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-X01</span>
+      <span class="case-title">Review 選序號 → Data tab 序號 / 統計同步</span>
+      <span class="case-tags"></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <h4>步驟</h4>
+      <ol>
+        <li>Review tab 改 cbReviewGrabId（單片序號）</li>
+        <li>切到 Data tab</li>
+        <li>觀察 cbDataGrabId、cbGrabIdStart/End、良率卡片</li>
+      </ol>
+      <div class="expect"><b>預期：</b>Data tab 序號 cb 跟 Review 一致、卡片即時刷新</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html">跨 Tab 同步</a></div>
+      <textarea class="notes" placeholder=""></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+  <div class="case" data-id="E2E-X02">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-X02</span>
+      <span class="case-title">Data 選序號 → Review tab delay 渲染（切過去才 load）</span>
+      <span class="case-tags"></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <h4>步驟</h4>
+      <ol>
+        <li>當前在 Data tab</li>
+        <li>改 cbDataGrabId</li>
+        <li>觀察 Review tab 沒有立刻 load（節省 IO）</li>
+        <li>切到 Review tab → 應該載入剛選的 grab</li>
+      </ol>
+      <div class="expect"><b>預期：</b>Data tab 操作時 Review 不主動 load（_reviewDirty=true）；tab 切過去 onActivated 才 load</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html">跨 Tab 同步</a></div>
+      <textarea class="notes" placeholder=""></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+</div>
+
+<h2 onclick="toggleSection(this)">硬體整合</h2>
+<div class="section">
+
+  <div class="case" data-id="E2E-H01">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-H01</span>
+      <span class="case-title">PLC 連線 lblPlcConn 綠燈 → DI START 觸發抓取</span>
+      <span class="case-tags"><span class="tag hardware">hw</span></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <h4>步驟</h4>
+      <ol>
+        <li>啟動 exe</li>
+        <li>觀察 lblPlcConn 標籤狀態</li>
+        <li>觀察 lblIoDiAlive、lblIoDoPcAlive（IO 心跳）</li>
+        <li>PLC 端觸發 DI START</li>
+      </ol>
+      <div class="expect"><b>預期：</b>啟動 ~3 秒內 lblPlcConn 綠燈 + DI/DO 心跳燈交替；DI START 後自動 grab</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/io_diagrams.html">IO 圖</a></div>
+      <textarea class="notes" placeholder=""></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+  <div class="case" data-id="E2E-H02">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-H02</span>
+      <span class="case-title">光源 AutoDetect → lblLightConn 已連線</span>
+      <span class="case-tags"><span class="tag hardware">hw</span></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <h4>步驟</h4>
+      <ol>
+        <li>確保光源 USB 接好、電源開</li>
+        <li>啟動 exe</li>
+        <li>觀察 lblLightConn 標籤</li>
+      </ol>
+      <div class="expect"><b>預期：</b>lblLightConn 顯示「● 光源: 已連線」（綠）</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/hardware-specs.html">硬體規格 §光源</a></div>
+      <textarea class="notes" placeholder=""></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+  <div class="case" data-id="E2E-H03">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-H03</span>
+      <span class="case-title">Storage PC 模式 → Live tab 隱藏 + 10 秒 cleanup 輪詢</span>
+      <span class="case-tags"></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <div class="pre"><b>前置：</b>app-mode.json 內 Role=1 (Storage)</div>
+      <h4>步驟</h4>
+      <ol>
+        <li>啟動 exe</li>
+        <li>觀察 Tab 結構（只有 Review + Data + 設定）</li>
+        <li>觀察是否有 PLC / 光源 / 相機相關 label</li>
+        <li>用 Process Explorer 看是否 10 秒查空間一次</li>
+      </ol>
+      <div class="expect"><b>預期：</b>Live tab 不存在、硬體 label 隱藏、CleanupFlagWatcher 每 10 秒 tick</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/storage-flow.html">Storage flow</a></div>
+      <textarea class="notes" placeholder=""></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+  <div class="case" data-id="E2E-H04">
+    <div class="case-head" onclick="toggleCase(this)">
+      <span class="case-id">E2E-H04</span>
+      <span class="case-title">DO_MURA_DETECTED 觸發 → 不中斷取像</span>
+      <span class="case-tags"></span>
+      <span class="case-status"><select onchange="updateStatus(this)">
+        <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
+      </select></span>
+    </div>
+    <div class="case-body">
+      <div class="pre"><b>前置：</b>Live grab 中、有可觸發 mura 的樣品</div>
+      <h4>步驟</h4>
+      <ol>
+        <li>Live grab 中，把樣品移到觸發 mura</li>
+        <li>觀察 lblIoDoMura 標籤閃爍（DO_MURA_DETECTED）</li>
+        <li>觀察主畫面是否仍持續更新</li>
+      </ol>
+      <div class="expect"><b>預期：</b>DO 觸發但 grab 不中斷（PLC 收到信號做 Nakan 處置，相機繼續存）</div>
+      <div class="link">→ ui-flow: <a href="../user-manual/io_diagrams.html">IO 圖 §DO_MURA</a></div>
+      <textarea class="notes" placeholder=""></textarea>
+      <div class="meta"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const STORAGE_KEY = 'picoater_e2e_checklist_v1';
+
+function loadState() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; }
+}
+function saveState(state) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function caseId(el) {
+  const card = el.closest('.case');
+  return card?.dataset.id || '';
+}
+
+function updateStatus(sel) {
+  const card = sel.closest('.case');
+  const id = card.dataset.id;
+  card.classList.remove('pass', 'fail', 'skip');
+  if (sel.value !== 'todo') card.classList.add(sel.value);
+  const state = loadState();
+  state[id] = state[id] || {};
+  state[id].status = sel.value;
+  state[id].date = new Date().toISOString();
+  saveState(state);
+  refreshStats();
+  refreshMeta(card);
+}
+
+function onNotes(ta) {
+  const card = ta.closest('.case');
+  const id = card.dataset.id;
+  const state = loadState();
+  state[id] = state[id] || {};
+  state[id].notes = ta.value;
+  saveState(state);
+}
+
+function refreshMeta(card) {
+  const id = card.dataset.id;
+  const state = loadState();
+  const meta = card.querySelector('.meta');
+  if (!meta) return;
+  const s = state[id];
+  if (s && s.date) {
+    const d = new Date(s.date);
+    meta.textContent = `上次更新：${d.toLocaleString('zh-TW')}`;
+  } else meta.textContent = '';
+}
+
+function refreshStats() {
+  const all = document.querySelectorAll('.case');
+  let pass = 0, fail = 0, skip = 0, todo = 0;
+  all.forEach(c => {
+    const sel = c.querySelector('.case-status select');
+    const v = sel?.value || 'todo';
+    if (v === 'pass') pass++;
+    else if (v === 'fail') fail++;
+    else if (v === 'skip') skip++;
+    else todo++;
+  });
+  document.getElementById('stat-total').textContent = all.length;
+  document.getElementById('stat-pass').textContent = pass;
+  document.getElementById('stat-fail').textContent = fail;
+  document.getElementById('stat-skip').textContent = skip;
+  document.getElementById('stat-todo').textContent = todo;
+}
+
+function toggleCase(head) {
+  head.closest('.case').classList.toggle('collapsed');
+}
+function toggleSection(h2) {
+  h2.classList.toggle('collapsed');
+  h2.nextElementSibling.classList.toggle('collapsed');
+}
+function expandAll() {
+  document.querySelectorAll('.case.collapsed, .section.collapsed').forEach(e => e.classList.remove('collapsed'));
+  document.querySelectorAll('h2.collapsed').forEach(e => e.classList.remove('collapsed'));
+}
+function collapseAll() {
+  document.querySelectorAll('.case').forEach(e => e.classList.add('collapsed'));
+  document.querySelectorAll('.section').forEach(e => e.classList.add('collapsed'));
+  document.querySelectorAll('h2').forEach(e => e.classList.add('collapsed'));
+}
+function resetAll() {
+  if (!confirm('重置全部狀態跟備註？(localStorage 會清空)')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  document.querySelectorAll('.case-status select').forEach(s => { s.value = 'todo'; });
+  document.querySelectorAll('.case').forEach(c => c.classList.remove('pass','fail','skip'));
+  document.querySelectorAll('.notes').forEach(t => { t.value = ''; });
+  document.querySelectorAll('.meta').forEach(m => { m.textContent = ''; });
+  refreshStats();
+}
+function exportReport() {
+  const state = loadState();
+  const cases = document.querySelectorAll('.case');
+  const lines = [`PICoater E2E 驗收報告 — ${new Date().toLocaleString('zh-TW')}`, ''];
+  let counts = { pass: 0, fail: 0, skip: 0, todo: 0 };
+  cases.forEach(c => {
+    const id = c.dataset.id;
+    const title = c.querySelector('.case-title').textContent;
+    const s = state[id] || {};
+    const status = s.status || 'todo';
+    counts[status]++;
+    const symbol = { pass: '✓', fail: '✗', skip: '⚠', todo: '⬜' }[status];
+    lines.push(`${symbol} ${id} — ${title}`);
+    if (s.notes) lines.push(`   備註: ${s.notes}`);
+  });
+  lines.unshift(`Total ${cases.length} / PASS ${counts.pass} / FAIL ${counts.fail} / SKIP ${counts.skip} / TODO ${counts.todo}`, '');
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `picoater-e2e-${new Date().toISOString().slice(0,10)}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// 初始化：載入狀態 + notes change handler
+(function init() {
+  const state = loadState();
+  document.querySelectorAll('.case').forEach(c => {
+    const id = c.dataset.id;
+    const s = state[id];
+    if (s?.status) {
+      const sel = c.querySelector('.case-status select');
+      sel.value = s.status;
+      if (s.status !== 'todo') c.classList.add(s.status);
+    }
+    if (s?.notes) {
+      const ta = c.querySelector('.notes');
+      ta.value = s.notes;
+    }
+    refreshMeta(c);
+    const ta = c.querySelector('.notes');
+    if (ta) ta.addEventListener('input', () => onNotes(ta));
+  });
+  refreshStats();
+})();
+</script>
+</body>
+</html>
