@@ -30,10 +30,10 @@
     <ClInclude Include="..\..\plc\mock_plc_adapter.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\sdk\AOI_SDK\core_cv\core_cv.vcxproj">
+    <ProjectReference Include="..\..\..\..\sdk\AOI_SDK\core_cv\core_cv.vcxproj">
       <Project>{b39f6111-258b-48f8-8a3e-f940771a4d52}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\..\sdk\AOI_SDK\cpp_utils\cpp_utils.vcxproj">
+    <ProjectReference Include="..\..\..\..\sdk\AOI_SDK\cpp_utils\cpp_utils.vcxproj">
       <Project>{05db04fc-cc8e-2e92-8736-4d39cc68f27a}</Project>
     </ProjectReference>
     <ProjectReference Include="..\..\modules\GetPICoaterBackground\Module_GetPICoaterBackground.vcxproj">
