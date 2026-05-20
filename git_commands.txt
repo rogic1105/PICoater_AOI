@@ -1,2 +1,0 @@
-git submodule add https://github.com/rogic1105/AOI_SDK sdk/AOI_SDK
-git submodule update --init --recursive
