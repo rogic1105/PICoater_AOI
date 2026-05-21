@@ -50,7 +50,7 @@
     "RemotePath": "\\\\192.168.10.20\\Anilox\\Captures",
     "RemoteConfigPath": "\\\\192.168.10.20\\Anilox\\Config"
   },
-  "Plc": {
+  "Io": {
     "Enabled": true,
     "Ip": "192.168.255.1",
     "Port": 502

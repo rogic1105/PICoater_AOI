@@ -185,9 +185,9 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category("6. 光源設定")][DisplayName("暖機延遲 (ms)")][TypeConverter(typeof(LeftAlignNumericConverter))] public int    LightWarmupMs   { get => Light.WarmupMs;   set => Light.WarmupMs   = value; }
 
         // ===== 7. IO 設定 =====
-        [Category("7. IO設定")][DisplayName("啟用 IO")][TypeConverter(typeof(BoolYesNoConverter))]  public bool   PlcEnabled { get; set; } = InspectionDefaults.PlcEnabled;
-        [Category("7. IO設定")][DisplayName("IO IP")]    public string PlcIp      { get; set; } = InspectionDefaults.PlcIp;
-        [Category("7. IO設定")][DisplayName("IO Port")][TypeConverter(typeof(LeftAlignNumericConverter))]  public int    PlcPort    { get; set; } = InspectionDefaults.PlcPort;
+        [Category("7. IO設定")][DisplayName("啟用 IO")][TypeConverter(typeof(BoolYesNoConverter))]  public bool   IoEnabled { get; set; } = InspectionDefaults.IoEnabled;
+        [Category("7. IO設定")][DisplayName("IO IP")]    public string IoIp      { get; set; } = InspectionDefaults.IoIp;
+        [Category("7. IO設定")][DisplayName("IO Port")][TypeConverter(typeof(LeftAlignNumericConverter))]  public int    IoPort    { get; set; } = InspectionDefaults.IoPort;
 
         // ===== 8. 開發者（PG 隱藏，編輯 inspection-settings.json 啟用） =====
         // FSM Action Logger 開關。對應 docs/dev/fsm/ + Services/UiActionLogger.cs。

@@ -116,11 +116,11 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"RemoteConfigPath\": \"{SettingsStoreHelper.EscapeJson(T.RemoteConfigPath)}\"");
             sb.AppendLine("  },");
 
-            // PLC
-            sb.AppendLine("  \"Plc\": {");
-            sb.AppendLine($"    \"Enabled\": {(s.PlcEnabled ? "true" : "false")},");
-            sb.AppendLine($"    \"Ip\": \"{SettingsStoreHelper.EscapeJson(s.PlcIp)}\",");
-            sb.AppendLine($"    \"Port\": {s.PlcPort}");
+            // IO
+            sb.AppendLine("  \"Io\": {");
+            sb.AppendLine($"    \"Enabled\": {(s.IoEnabled ? "true" : "false")},");
+            sb.AppendLine($"    \"Ip\": \"{SettingsStoreHelper.EscapeJson(s.IoIp)}\",");
+            sb.AppendLine($"    \"Port\": {s.IoPort}");
             sb.AppendLine("  },");
 
             // CameraParam
@@ -162,9 +162,9 @@ namespace AniloxRoll.Monitor.Core.Data
                 Storage       = ParseStorage(json),
                 CameraParam   = ParseCameraParam(json),
                 Light         = ParseLight(json),
-                PlcEnabled    = ParsePlcEnabled(json),
-                PlcIp         = ParsePlcIp(json),
-                PlcPort       = ParsePlcPort(json),
+                IoEnabled    = ParseIoEnabled(json),
+                IoIp         = ParseIoIp(json),
+                IoPort       = ParseIoPort(json),
                 DebugUiActionLog = SettingsStoreHelper.GetBool(json, "DebugUiActionLog", false),
             };
         }
@@ -313,22 +313,22 @@ namespace AniloxRoll.Monitor.Core.Data
             };
         }
 
-        private static bool ParsePlcEnabled(string json)
+        // backward compat：新 json 用 "Io"，舊 deploy 還在 "Plc" 也能讀。
+        private static string ExtractIoObject(string json)
         {
-            string obj = SettingsStoreHelper.ExtractObject(json, "Plc");
-            return SettingsStoreHelper.GetBool(obj, "Enabled", InspectionDefaults.PlcEnabled);
+            string obj = SettingsStoreHelper.ExtractObject(json, "Io");
+            if (string.IsNullOrEmpty(obj))
+                obj = SettingsStoreHelper.ExtractObject(json, "Plc");
+            return obj;
         }
 
-        private static string ParsePlcIp(string json)
-        {
-            string obj = SettingsStoreHelper.ExtractObject(json, "Plc");
-            return SettingsStoreHelper.GetString(obj, "Ip", InspectionDefaults.PlcIp);
-        }
+        private static bool ParseIoEnabled(string json)
+            => SettingsStoreHelper.GetBool(ExtractIoObject(json), "Enabled", InspectionDefaults.IoEnabled);
 
-        private static int ParsePlcPort(string json)
-        {
-            string obj = SettingsStoreHelper.ExtractObject(json, "Plc");
-            return SettingsStoreHelper.GetInt(obj, "Port", InspectionDefaults.PlcPort);
-        }
+        private static string ParseIoIp(string json)
+            => SettingsStoreHelper.GetString(ExtractIoObject(json), "Ip", InspectionDefaults.IoIp);
+
+        private static int ParseIoPort(string json)
+            => SettingsStoreHelper.GetInt(ExtractIoObject(json), "Port", InspectionDefaults.IoPort);
     }
 }

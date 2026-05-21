@@ -268,11 +268,11 @@
             this.lblCamHardware = new System.Windows.Forms.Label();
             this.panelStatusBar = new System.Windows.Forms.TableLayoutPanel();
             this.lblCamCount = new System.Windows.Forms.Label();
-            this.lblPlcState = new System.Windows.Forms.Label();
-            this.lblPlcConn = new System.Windows.Forms.Label();
+            this.lblIoState = new System.Windows.Forms.Label();
+            this.lblIoConn = new System.Windows.Forms.Label();
             this.lblLightConn = new System.Windows.Forms.Label();
             this.lblStorageConn = new System.Windows.Forms.Label();
-            this.panelPlcIo = new System.Windows.Forms.TableLayoutPanel();
+            this.panelIo = new System.Windows.Forms.TableLayoutPanel();
             this.lblIoDiAlive = new System.Windows.Forms.Label();
             this.lblIoDiStart = new System.Windows.Forms.Label();
             this.lblIoDoPcAlive = new System.Windows.Forms.Label();
@@ -388,7 +388,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam1)).BeginInit();
             this.tabPageSystem.SuspendLayout();
             this.panelStatusBar.SuspendLayout();
-            this.panelPlcIo.SuspendLayout();
+            this.panelIo.SuspendLayout();
             this.SuspendLayout();
             // 
             // tabMain
@@ -3077,11 +3077,11 @@
             this.panelStatusBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 14F));
             this.panelStatusBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 30F));
             this.panelStatusBar.Controls.Add(this.lblCamCount, 0, 0);
-            this.panelStatusBar.Controls.Add(this.lblPlcState, 1, 0);
-            this.panelStatusBar.Controls.Add(this.lblPlcConn, 2, 0);
+            this.panelStatusBar.Controls.Add(this.lblIoState, 1, 0);
+            this.panelStatusBar.Controls.Add(this.lblIoConn, 2, 0);
             this.panelStatusBar.Controls.Add(this.lblLightConn, 3, 0);
             this.panelStatusBar.Controls.Add(this.lblStorageConn, 4, 0);
-            this.panelStatusBar.Controls.Add(this.panelPlcIo, 5, 0);
+            this.panelStatusBar.Controls.Add(this.panelIo, 5, 0);
             this.panelStatusBar.Dock = System.Windows.Forms.DockStyle.Top;
             this.panelStatusBar.Location = new System.Drawing.Point(0, 0);
             this.panelStatusBar.Name = "panelStatusBar";
@@ -3104,35 +3104,35 @@
             this.lblCamCount.Text = "相機: --/7";
             this.lblCamCount.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
-            // lblPlcState
+            // lblIoState
             // 
-            this.lblPlcState.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(117)))), ((int)(((byte)(117)))), ((int)(((byte)(117)))));
-            this.lblPlcState.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.lblPlcState.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblPlcState.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F);
-            this.lblPlcState.ForeColor = System.Drawing.Color.White;
-            this.lblPlcState.Location = new System.Drawing.Point(179, 0);
-            this.lblPlcState.Name = "lblPlcState";
-            this.lblPlcState.Size = new System.Drawing.Size(170, 32);
-            this.lblPlcState.TabIndex = 2;
-            this.lblPlcState.Text = "● 狀態: --";
-            this.lblPlcState.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            this.lblIoState.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(117)))), ((int)(((byte)(117)))), ((int)(((byte)(117)))));
+            this.lblIoState.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lblIoState.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblIoState.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F);
+            this.lblIoState.ForeColor = System.Drawing.Color.White;
+            this.lblIoState.Location = new System.Drawing.Point(179, 0);
+            this.lblIoState.Name = "lblIoState";
+            this.lblIoState.Size = new System.Drawing.Size(170, 32);
+            this.lblIoState.TabIndex = 2;
+            this.lblIoState.Text = "● 狀態: --";
+            this.lblIoState.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
-            // lblPlcConn
+            // lblIoConn
             // 
-            this.lblPlcConn.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(117)))), ((int)(((byte)(117)))), ((int)(((byte)(117)))));
-            this.lblPlcConn.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.lblPlcConn.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.lblPlcConn.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblPlcConn.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F);
-            this.lblPlcConn.ForeColor = System.Drawing.Color.White;
-            this.lblPlcConn.Location = new System.Drawing.Point(355, 0);
-            this.lblPlcConn.Name = "lblPlcConn";
-            this.lblPlcConn.Size = new System.Drawing.Size(170, 32);
-            this.lblPlcConn.TabIndex = 3;
-            this.lblPlcConn.Text = "● IO: --";
-            this.lblPlcConn.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-            this.lblPlcConn.Click += new System.EventHandler(this.lblPlcConn_Click);
+            this.lblIoConn.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(117)))), ((int)(((byte)(117)))), ((int)(((byte)(117)))));
+            this.lblIoConn.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lblIoConn.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.lblIoConn.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblIoConn.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F);
+            this.lblIoConn.ForeColor = System.Drawing.Color.White;
+            this.lblIoConn.Location = new System.Drawing.Point(355, 0);
+            this.lblIoConn.Name = "lblIoConn";
+            this.lblIoConn.Size = new System.Drawing.Size(170, 32);
+            this.lblIoConn.TabIndex = 3;
+            this.lblIoConn.Text = "● IO: --";
+            this.lblIoConn.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            this.lblIoConn.Click += new System.EventHandler(this.lblIoConn_Click);
             // 
             // lblLightConn
             // 
@@ -3162,27 +3162,27 @@
             this.lblStorageConn.Text = "● 儲存電腦: --";
             this.lblStorageConn.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
-            // panelPlcIo
+            // panelIo
             // 
-            this.panelPlcIo.ColumnCount = 5;
-            this.panelPlcIo.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
-            this.panelPlcIo.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
-            this.panelPlcIo.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
-            this.panelPlcIo.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
-            this.panelPlcIo.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
-            this.panelPlcIo.Controls.Add(this.lblIoDiAlive, 0, 0);
-            this.panelPlcIo.Controls.Add(this.lblIoDiStart, 1, 0);
-            this.panelPlcIo.Controls.Add(this.lblIoDoPcAlive, 2, 0);
-            this.panelPlcIo.Controls.Add(this.lblIoDoMura, 3, 0);
-            this.panelPlcIo.Controls.Add(this.lblIoDoPcBusy, 4, 0);
-            this.panelPlcIo.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.panelPlcIo.Location = new System.Drawing.Point(880, 0);
-            this.panelPlcIo.Margin = new System.Windows.Forms.Padding(0);
-            this.panelPlcIo.Name = "panelPlcIo";
-            this.panelPlcIo.RowCount = 1;
-            this.panelPlcIo.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.panelPlcIo.Size = new System.Drawing.Size(382, 32);
-            this.panelPlcIo.TabIndex = 1;
+            this.panelIo.ColumnCount = 5;
+            this.panelIo.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
+            this.panelIo.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
+            this.panelIo.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
+            this.panelIo.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
+            this.panelIo.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
+            this.panelIo.Controls.Add(this.lblIoDiAlive, 0, 0);
+            this.panelIo.Controls.Add(this.lblIoDiStart, 1, 0);
+            this.panelIo.Controls.Add(this.lblIoDoPcAlive, 2, 0);
+            this.panelIo.Controls.Add(this.lblIoDoMura, 3, 0);
+            this.panelIo.Controls.Add(this.lblIoDoPcBusy, 4, 0);
+            this.panelIo.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.panelIo.Location = new System.Drawing.Point(880, 0);
+            this.panelIo.Margin = new System.Windows.Forms.Padding(0);
+            this.panelIo.Name = "panelIo";
+            this.panelIo.RowCount = 1;
+            this.panelIo.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            this.panelIo.Size = new System.Drawing.Size(382, 32);
+            this.panelIo.TabIndex = 1;
             // 
             // lblIoDiAlive
             // 
@@ -3405,7 +3405,7 @@
             this.tabPageSystem.ResumeLayout(false);
             this.tabPageSystem.PerformLayout();
             this.panelStatusBar.ResumeLayout(false);
-            this.panelPlcIo.ResumeLayout(false);
+            this.panelIo.ResumeLayout(false);
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -3601,11 +3601,11 @@
         private System.Windows.Forms.Label lblEndTimeHeader;
         private System.Windows.Forms.ListView listViewGrabDetail;
         private System.Windows.Forms.TableLayoutPanel panelStatusBar;
-        private System.Windows.Forms.Label lblPlcConn;
-        private System.Windows.Forms.Label lblPlcState;
+        private System.Windows.Forms.Label lblIoConn;
+        private System.Windows.Forms.Label lblIoState;
         private System.Windows.Forms.Label lblLightConn;
         private System.Windows.Forms.Label lblStorageConn;
-        private System.Windows.Forms.TableLayoutPanel panelPlcIo;
+        private System.Windows.Forms.TableLayoutPanel panelIo;
         private System.Windows.Forms.Label lblIoDiAlive;
         private System.Windows.Forms.Label lblIoDiStart;
         private System.Windows.Forms.Label lblIoDoPcAlive;

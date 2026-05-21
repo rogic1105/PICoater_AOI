@@ -101,7 +101,7 @@ namespace AniloxRoll.Monitor.Forms
         private DateTime _lastGrabEventTime;
 
         // --- IO 連動 ---
-        private IoGrabController _plcGrabController;
+        private IoGrabController _ioGrabController;
         private LightController _lightController;
 
         // --- 統計 ---
@@ -371,11 +371,11 @@ namespace AniloxRoll.Monitor.Forms
             }
             else
             {
-                // Inspection 模式：遠端複製 + PLC + 光源
+                // Inspection 模式：遠端複製 + IO + 光源
                 _remoteCopyService = new RemoteCopyService(
                     getRemotePath: () => _settings?.RemotePath ?? string.Empty,
                     getLocalRoot:  () => _settings?.CaptureRootPath ?? string.Empty);
-                InitPlcController();
+                InitIoController();
                 InitLightController();
             }
 
@@ -384,44 +384,44 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         /// <summary>初始化 IO 連動：自動偵測連線，連上後以 DI START 控制 Grab。</summary>
-        private void InitPlcController()
+        private void InitIoController()
         {
-            if (!_settings.PlcEnabled) return;
+            if (!_settings.IoEnabled) return;
 
-            _plcGrabController = new IoGrabController();
+            _ioGrabController = new IoGrabController();
 
-            _plcGrabController.OnStartRequested += () =>
+            _ioGrabController.OnStartRequested += () =>
             {
-                if (InvokeRequired) { BeginInvoke(new Action(PlcStartGrab)); return; }
-                PlcStartGrab();
+                if (InvokeRequired) { BeginInvoke(new Action(IoStartGrab)); return; }
+                IoStartGrab();
             };
 
-            _plcGrabController.OnStopRequested += () =>
+            _ioGrabController.OnStopRequested += () =>
             {
-                if (InvokeRequired) { BeginInvoke(new Action(PlcStopGrab)); return; }
-                PlcStopGrab();
+                if (InvokeRequired) { BeginInvoke(new Action(IoStopGrab)); return; }
+                IoStopGrab();
             };
 
-            _plcGrabController.OnStateChanged += state =>
+            _ioGrabController.OnStateChanged += state =>
             {
-                if (InvokeRequired) { BeginInvoke(new Action<IoState>(UpdatePlcStateLabel), state); return; }
-                UpdatePlcStateLabel(state);
+                if (InvokeRequired) { BeginInvoke(new Action<IoState>(UpdateIoStateLabel), state); return; }
+                UpdateIoStateLabel(state);
             };
 
-            _plcGrabController.OnConnectionChanged += connected =>
+            _ioGrabController.OnConnectionChanged += connected =>
             {
-                if (InvokeRequired) { BeginInvoke(new Action<bool>(UpdatePlcConnectionUi), connected); return; }
-                UpdatePlcConnectionUi(connected);
+                if (InvokeRequired) { BeginInvoke(new Action<bool>(UpdateIoConnectionUi), connected); return; }
+                UpdateIoConnectionUi(connected);
             };
 
-            _plcGrabController.OnIoUpdated += snapshot =>
+            _ioGrabController.OnIoUpdated += snapshot =>
             {
-                if (InvokeRequired) { BeginInvoke(new Action<IoSnapshot>(UpdatePlcIoLeds), snapshot); return; }
-                UpdatePlcIoLeds(snapshot);
+                if (InvokeRequired) { BeginInvoke(new Action<IoSnapshot>(UpdateIoLeds), snapshot); return; }
+                UpdateIoLeds(snapshot);
             };
 
             // 背景嘗試連線（不阻塞 Form 顯示）
-            _ = _plcGrabController.StartAsync(_settings.PlcIp, _settings.PlcPort);
+            _ = _ioGrabController.StartAsync(_settings.IoIp, _settings.IoPort);
         }
 
         private void InitLightController()
@@ -448,27 +448,27 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        private void PlcStartGrab()
+        private void IoStartGrab()
         {
             if (_isIoSuspended) return;
             if (_liveCameraManager == null || _liveCameraManager.IsLiveGrabbing) return;
             if (IsStandardBgSubEnabled && !IsBgBinReady())
             {
-                System.Diagnostics.Trace.TraceWarning("[PlcStartGrab] StandardBgSub 無背景 bin，自動取得背景後接續 grab");
+                System.Diagnostics.Trace.TraceWarning("[IoStartGrab] StandardBgSub 無背景 bin，自動取得背景後接續 grab");
                 _autoStartGrabAfterBg = true;
                 btnGetBackground_Click(null, null);
                 return;
             }
             btnCameraGrab_Click(null, null);
-            _ = _plcGrabController?.NotifyGrabStarted();
+            _ = _ioGrabController?.NotifyGrabStarted();
         }
 
-        private void PlcStopGrab()
+        private void IoStopGrab()
         {
             if (_isIoSuspended) return;
             if (_liveCameraManager == null || !_liveCameraManager.IsLiveGrabbing) return;
             btnCameraGrab_Click(null, null);
-            _ = _plcGrabController?.NotifyGrabStopped();
+            _ = _ioGrabController?.NotifyGrabStopped();
         }
 
         private void LightTurnOn()
@@ -523,7 +523,7 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        private void UpdatePlcStateLabel(IoState state)
+        private void UpdateIoStateLabel(IoState state)
         {
             if (_isIoSuspended) return;
             string text;
@@ -538,17 +538,17 @@ namespace AniloxRoll.Monitor.Forms
                 case IoState.Closed:    text = "已關閉";   bgColor = IecGray;   break;
                 default:                text = "未連線";   bgColor = IecGray;   break;  // Disconnected
             }
-            lblPlcState.Text = $"〔{text}〕";
-            lblPlcState.BackColor = bgColor;
+            lblIoState.Text = $"〔{text}〕";
+            lblIoState.BackColor = bgColor;
         }
 
-        private void UpdatePlcConnectionUi(bool connected)
+        private void UpdateIoConnectionUi(bool connected)
         {
             if (_isIoSuspended) return;
             if (connected)
             {
-                lblPlcConn.Text = "● IO 已連線";
-                lblPlcConn.BackColor = IecGreen;
+                lblIoConn.Text = "● IO 已連線";
+                lblIoConn.BackColor = IecGreen;
                 btnCameraGrab.Enabled = false;
                 btnCameraGrab.Text = "IO 控制中";
                 btnCameraGrab.BackColor = IecBlue;
@@ -556,8 +556,8 @@ namespace AniloxRoll.Monitor.Forms
             }
             else
             {
-                lblPlcConn.Text = "● IO 離線";
-                lblPlcConn.BackColor = IecGray;
+                lblIoConn.Text = "● IO 離線";
+                lblIoConn.BackColor = IecGray;
                 btnCameraGrab.Enabled = true;
                 UpdateGrabButton(_liveCameraManager?.IsLiveGrabbing ?? false);
                 btnCameraGrab.BackColor = SystemColors.Control;
@@ -742,7 +742,7 @@ namespace AniloxRoll.Monitor.Forms
             });
         }
 
-        private void UpdatePlcIoLeds(IoSnapshot io)
+        private void UpdateIoLeds(IoSnapshot io)
         {
             if (_isIoSuspended) return;
             SetIoLed(lblIoDiAlive,   io.DiNakanAlive);
@@ -1078,11 +1078,11 @@ namespace AniloxRoll.Monitor.Forms
             FormClosed += async (_, __) =>
             {
                 // Closed 階段：統一 Dispose 路徑（Closing 已負責停止活動，這裡不重複 Stop）
-                if (_plcGrabController != null)
+                if (_ioGrabController != null)
                 {
-                    try { await _plcGrabController.StopAsync(); } catch { }
-                    _plcGrabController.Dispose();
-                    _plcGrabController = null;
+                    try { await _ioGrabController.StopAsync(); } catch { }
+                    _ioGrabController.Dispose();
+                    _ioGrabController = null;
                 }
                 FreePrecomputedColMeanBuffers();
                 _liveCameraManager.FreeCameras();
@@ -1239,11 +1239,11 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             // IO MURA 信號：任一相機超過閾值即通知
-            if (_plcGrabController?.IsConnected == true)
+            if (_ioGrabController?.IsConnected == true)
             {
                 // meanPeak/maxPeak 為 V 方向，按 V 閾值判定
                 bool isMura = meanPeak > _settings.ErrorValueMeanV || maxPeak > _settings.ErrorValueMaxV;
-                if (isMura) _ = _plcGrabController.NotifyMuraDetected();
+                if (isMura) _ = _ioGrabController.NotifyMuraDetected();
             }
 
             // 抓圖計數器 + watchdog 時間戳（Inspection 模式）
@@ -1300,8 +1300,8 @@ namespace AniloxRoll.Monitor.Forms
             lblCamCount.Visible      = false;
             lblStorageConn.Visible   = false;
 
-            lblPlcState.Visible    = false;
-            lblPlcConn.Visible     = false;
+            lblIoState.Visible    = false;
+            lblIoConn.Visible     = false;
             lblLightConn.Visible   = false;
             lblIoDiAlive.Visible   = false;
             lblIoDiStart.Visible   = false;
@@ -1335,7 +1335,7 @@ namespace AniloxRoll.Monitor.Forms
         private void CheckLiveMura(float[] meanArr, float[] maxArr, string direction)
         {
             if (_isMuraDetectPaused) return;
-            if (_plcGrabController?.IsConnected != true) return;
+            if (_ioGrabController?.IsConnected != true) return;
             if (_settings == null) return;
             if (!_liveCameraManager.IsLiveGrabbing) return;
 
@@ -1356,7 +1356,7 @@ namespace AniloxRoll.Monitor.Forms
             if (meanPeak > thMean || maxPeak > thMax)
             {
                 // fire-and-forget; 寫入失敗不應影響取像流程
-                _ = _plcGrabController.NotifyMuraDetected().ContinueWith(
+                _ = _ioGrabController.NotifyMuraDetected().ContinueWith(
                     t => { /* swallow — PollTick 會偵測真正的 CommLost */ },
                     TaskContinuationOptions.OnlyOnFaulted);
             }
@@ -1648,7 +1648,7 @@ namespace AniloxRoll.Monitor.Forms
                 _autoStartGrabAfterBg = false;
                 _liveCameraManager.FreeCameras();
                 btnCameraGrab_Click(null, null);
-                _ = _plcGrabController?.NotifyGrabStarted();
+                _ = _ioGrabController?.NotifyGrabStarted();
                 return;
             }
 
@@ -1745,7 +1745,7 @@ namespace AniloxRoll.Monitor.Forms
         private void UpdateStandardBgSubLockState()
         {
             // IO 已連線且未暫停：btnCameraGrab 由 IO 連線邏輯控制，不覆寫
-            if (_plcGrabController?.IsConnected == true && !_isIoSuspended) return;
+            if (_ioGrabController?.IsConnected == true && !_isIoSuspended) return;
             // IO 暫停模式：交由使用者手動控制，不受 StandardBgSub bin 限制
             if (_isIoSuspended) { btnCameraGrab.Enabled = true; return; }
 
@@ -2166,22 +2166,22 @@ namespace AniloxRoll.Monitor.Forms
             UpdateMuraLed(false);
         }
 
-        private void lblPlcConn_Click(object sender, EventArgs e)
+        private void lblIoConn_Click(object sender, EventArgs e)
         {
-            if (_plcGrabController == null) return;
+            if (_ioGrabController == null) return;
             _isIoSuspended = !_isIoSuspended;
             if (_isIoSuspended)
             {
-                lblPlcConn.BackColor = IecYellow;
-                lblPlcConn.ForeColor = Color.Black;
-                lblPlcConn.Text = "● IO 暫停 ⏸";
+                lblIoConn.BackColor = IecYellow;
+                lblIoConn.ForeColor = Color.Black;
+                lblIoConn.Text = "● IO 暫停 ⏸";
                 btnCameraGrab.Enabled = true;
                 UpdateGrabButton(_liveCameraManager?.IsLiveGrabbing ?? false);
                 btnCameraGrab.BackColor = SystemColors.Control;
                 btnCameraGrab.ForeColor = SystemColors.ControlText;
                 // 暫停 = 等同 IO 離線：重置狀態燈和所有 IO 燈號
-                lblPlcState.Text = "〔已關閉〕";
-                lblPlcState.BackColor = IecGray;
+                lblIoState.Text = "〔已關閉〕";
+                lblIoState.BackColor = IecGray;
                 SetIoLed(lblIoDiAlive,   false);
                 SetIoLed(lblIoDiStart,   false);
                 SetIoLed(lblIoDoPcAlive, false);
@@ -2190,7 +2190,7 @@ namespace AniloxRoll.Monitor.Forms
             }
             else
             {
-                UpdatePlcConnectionUi(_plcGrabController.IsConnected);
+                UpdateIoConnectionUi(_ioGrabController.IsConnected);
             }
         }
 

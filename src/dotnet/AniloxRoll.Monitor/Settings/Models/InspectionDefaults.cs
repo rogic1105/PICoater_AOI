@@ -49,9 +49,9 @@ namespace AniloxRoll.Monitor.Core.Data
         public const string RemoteConfigPath  = @"\\192.168.10.20\Anilox\Config";   // 遠端設定路徑
 
         // ── 5. IO 設定 ─────────────────────────────────────────────────────
-        public const bool   PlcEnabled = true;             // 啟用 IO
-        public const string PlcIp      = "192.168.255.1"; // IO IP
-        public const int    PlcPort    = 502;              // IO Port
+        public const bool   IoEnabled = true;             // 啟用 IO
+        public const string IoIp      = "192.168.255.1"; // IO IP
+        public const int    IoPort    = 502;              // IO Port
 
         // ── 6. 相機設定 ────────────────────────────────────────────────────
         public const string DcfPath = @"D:\Anilox\Dcf\Radient_Config.dcf"; // 設定檔

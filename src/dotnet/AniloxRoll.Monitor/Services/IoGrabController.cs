@@ -6,13 +6,13 @@ using IoBridge.Core;
 namespace AniloxRoll.Monitor.Core.Services
 {
     /// <summary>
-    /// PLC-PC 交握控制器：自動偵測 PLC 連線，連線時以 DI START 信號控制 Grab 啟停。
+    /// IO ↔ PC 交握控制器：自動偵測 IO module 連線，連線時以 DI START 信號控制 Grab 啟停。
     /// 未連線時退回 UI 按鈕控制。
     ///
     /// 背景監控 loop（Task.Run，不依賴 message pump），啟動時不論連線成功失敗都跑：
     ///   IsConnected → PollTick + Task.Delay(PollIntervalMs)
     ///   !IsConnected → ReconnectTick + Task.Delay(ReconnectIntervalMs)
-    /// 場景：程式先開啟、IO 後接 → loop 持續重連直到 PLC 上線，無需重啟程式。
+    /// 場景：程式先開啟、IO 後接 → loop 持續重連直到 IO module 上線，無需重啟程式。
     ///
     /// IO Mapping (ET-7044):
     ///   DI-0: PLC ALIVE   (PLC → PC)
@@ -44,7 +44,7 @@ namespace AniloxRoll.Monitor.Core.Services
         private bool _doMura;
         private bool _doPcBusy;
 
-        /// <summary>PLC 是否已連線。</summary>
+        /// <summary>IO module 是否已連線。</summary>
         public bool IsConnected => _plc.IsConnected;
 
         /// <summary>目前 FSM 狀態。</summary>
@@ -63,10 +63,10 @@ namespace AniloxRoll.Monitor.Core.Services
         public int ReadWriteTimeoutMs => _plc.ReadWriteTimeoutMs;
 
         /// <summary>目前連線 IP。</summary>
-        public string PlcIp => _plcIp;
+        public string IoIp => _plcIp;
 
         /// <summary>目前連線 Port。</summary>
-        public int PlcPort => _plcPort;
+        public int IoPort => _plcPort;
 
         /// <summary>PLC START 上升緣 → 要求開始 Grab。</summary>
         public event Action OnStartRequested;
@@ -98,7 +98,7 @@ namespace AniloxRoll.Monitor.Core.Services
             _plc.ReadWriteTimeoutMs = 2000;
         }
 
-        /// <summary>啟動：嘗試連線 PLC，不論成功失敗都啟動背景 loop（自動重連 + poll）。</summary>
+        /// <summary>啟動：嘗試連線 IO module，不論成功失敗都啟動背景 loop（自動重連 + poll）。</summary>
         public async Task StartAsync(string ip, int port = 502)
         {
             _plcIp = ip;
@@ -110,11 +110,11 @@ namespace AniloxRoll.Monitor.Core.Services
                 try { await EnterIdle(); }
                 catch (Exception ex) { IoLogger.Error("EnterIdle on initial connect failed", ex); }
                 OnConnectionChanged?.Invoke(true);
-                IoLogger.Info($"PLC connected: {ip}:{port}");
+                IoLogger.Info($"IO module connected: {ip}:{port}");
             }
             else
             {
-                IoLogger.Warn($"PLC initial connect failed ({ip}:{port}), background loop will retry every {ReconnectIntervalMs}ms.");
+                IoLogger.Warn($"IO module initial connect failed ({ip}:{port}), background loop will retry every {ReconnectIntervalMs}ms.");
             }
 
             // 啟動背景 loop —— 不依賴 message pump，跑在 thread pool 上。
@@ -183,7 +183,7 @@ namespace AniloxRoll.Monitor.Core.Services
             OnConnectionChanged?.Invoke(false);
         }
 
-        /// <summary>通知 PLC：Grab 已開始（PC BUSY = High）。</summary>
+        /// <summary>通知 IO：Grab 已開始（PC BUSY = High）。</summary>
         public async Task NotifyGrabStarted()
         {
             if (!_plc.IsConnected) return;
@@ -195,7 +195,7 @@ namespace AniloxRoll.Monitor.Core.Services
             catch (Exception ex) { IoLogger.Error("WriteDo PC_BUSY=true failed", ex); }
         }
 
-        /// <summary>通知 PLC：Grab 已停止（PC BUSY = Low）。</summary>
+        /// <summary>通知 IO：Grab 已停止（PC BUSY = Low）。</summary>
         public async Task NotifyGrabStopped()
         {
             if (!_plc.IsConnected) return;
@@ -207,7 +207,7 @@ namespace AniloxRoll.Monitor.Core.Services
             catch (Exception ex) { IoLogger.Error("WriteDo PC_BUSY=false failed", ex); }
         }
 
-        /// <summary>通知 PLC：檢測到 MURA（MURA = High）。</summary>
+        /// <summary>通知 IO：檢測到 MURA（MURA = High）。</summary>
         public async Task NotifyMuraDetected()
         {
             if (!_plc.IsConnected) return;
@@ -219,7 +219,7 @@ namespace AniloxRoll.Monitor.Core.Services
             catch (Exception ex) { IoLogger.Error("WriteDo MURA=true failed", ex); }
         }
 
-        /// <summary>通知 PLC：清除 MURA 信號（MURA = Low）。</summary>
+        /// <summary>通知 IO：清除 MURA 信號（MURA = Low）。</summary>
         public async Task ClearMura()
         {
             if (!_plc.IsConnected) return;
@@ -249,7 +249,7 @@ namespace AniloxRoll.Monitor.Core.Services
         private void SetState(IoState state)
         {
             if (_currentState == state) return;
-            IoLogger.Info($"PLC State: {_currentState} -> {state}");
+            IoLogger.Info($"IO State: {_currentState} -> {state}");
             _currentState = state;
             OnStateChanged?.Invoke(state);
         }
@@ -337,7 +337,7 @@ namespace AniloxRoll.Monitor.Core.Services
             }
             catch (Exception ex)
             {
-                IoLogger.Error("PLC polling error → CommLost", ex);
+                IoLogger.Error("IO polling error → CommLost", ex);
                 SetState(IoState.CommLost);
                 _isPcAlive = false;
                 _doPcAlive = false;
@@ -356,7 +356,7 @@ namespace AniloxRoll.Monitor.Core.Services
             bool ok = await _plc.ConnectAsync(_plcIp, _plcPort, 3000);
             if (ok)
             {
-                IoLogger.Info("PLC reconnected successfully.");
+                IoLogger.Info("IO module reconnected successfully.");
                 try { await EnterIdle(); }
                 catch (Exception ex) { IoLogger.Error("EnterIdle after reconnect failed", ex); }
                 OnConnectionChanged?.Invoke(true);
