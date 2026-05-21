@@ -35,6 +35,8 @@
 │   │   │   ├── matrox-grabber/
 │   │   │   └── matrox-clprotocol/
 │   │   └── README.md
+│   ├── Common/                  <span class="com">跨元件共用（含 vendored third-party）</span>
+│   │   └── stb/                 <span class="com">stb_image.h 等 application-wide build-time lib</span>
 │   └── docs/                     <span class="com">跨元件通用文件（本目錄）</span>
 │       ├── index.html
 │       ├── style-*.html          <span class="com">repo coding style atoms</span>
@@ -46,9 +48,7 @@
 │   ├── dev/                      <span class="com">應用層 dev 文件（MIL_API_Reference 等）</span>
 │   ├── user-manual/              <span class="com">操作員說明（ui-flow.html / hardware-specs）</span>
 │   └── sample/
-├── deploy/                       <span class="com">部署腳本（PowerShell + JSON）</span>
-└── third_party/                  <span class="com">純 build-time 依賴的廠商 lib</span>
-    └── stb/                      <span class="com">stb_image.h 等</span>
+└── deploy/                       <span class="com">部署腳本（PowerShell + JSON）</span>
 </code></pre>
 
 <h2>4.2 每個 top-level 目錄的職責</h2>
@@ -57,24 +57,29 @@
   <tr><th>目錄</th><th>放什麼</th><th>業界對照</th></tr>
   <tr><td><code>src/</code></td><td>應用程式（產品交付給客戶的主程式）</td><td>Nx apps/、.NET src/</td></tr>
   <tr><td><code>sdk/</code></td><td>我們寫的 library（無 GUI、無 exe，可獨立 split）</td><td>Nx packages/、.NET lib/</td></tr>
+  <tr><td><code>sdk/Common/</code></td><td>跨元件共用 + vendored third-party（stb 等）</td><td>.NET <code>Common/</code>、Java <code>common/</code></td></tr>
   <tr><td><code>sdk/docs/</code></td><td>跨元件通用工程經驗（本目錄）</td><td>—（前端常見每元件自己 docs/）</td></tr>
   <tr><td><code>tools/</code></td><td>內部工具 exe / 廠區維護 / 測試用 / 腳本</td><td>tools/、bin/</td></tr>
   <tr><td><code>tests/</code></td><td>純測試（Unit / Integration / Stress 子目錄）</td><td>tests/、test/、spec/</td></tr>
   <tr><td><code>docs/</code></td><td>應用文件（user-manual / 開發者參考）</td><td>docs/</td></tr>
   <tr><td><code>deploy/</code></td><td>現場部署腳本</td><td>infra/、ops/、scripts/</td></tr>
-  <tr><td><code>third_party/</code></td><td>純 build-time 依賴的廠商 lib（#include 用）</td><td>third_party/、vendor/、external/</td></tr>
 </table>
 
-<h2>4.3 sdk/ 跟 third_party/ 的分界</h2>
+<div class="info">
+<b>為什麼沒 top-level <code>third_party/</code>？</b>對齊 Lerna/Nx 派「廠商物品跟著使用者走」原則。
+我們只有 stb 一個 vendored lib 跨多處用，放 <code>sdk/Common/</code>（共用層）比 top-level 集中更乾淨。
+</div>
 
-<p>這是最常見搞混的地方。判斷依據：「<b>有沒有對應的 sdk/ 元件</b>」。</p>
+<h2>4.3 sdk/Common/ vs sdk/&lt;元件&gt;/vendor/ 的分界</h2>
+
+<p>這是最常見搞混的地方。判斷依據：「<b>有沒有對應的 sdk/ 元件</b>」+「<b>build-time 還是純參考</b>」。</p>
 
 <table>
   <tr><th>場景</th><th>放哪</th><th>理由</th></tr>
   <tr>
-    <td>廠商 SDK 用來 build（如 <code>stb_image.h</code> #include 進 C++ code）</td>
-    <td><code>third_party/&lt;lib&gt;/</code></td>
-    <td>純 build dependency，沒對應 sdk/ 元件</td>
+    <td>廠商 SDK 用來 build（如 <code>stb_image.h</code> #include 進 C++ code）跨元件共用</td>
+    <td><code>sdk/Common/&lt;lib&gt;/</code></td>
+    <td>application-wide build-time dependency，不專屬任何 sdk/ 元件</td>
   </tr>
   <tr>
     <td>廠商規格書 + 範例（對應某個 sdk/ 元件）</td>

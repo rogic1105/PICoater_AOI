@@ -133,7 +133,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(CudaToolkitIncludeDir);$(CUDA_PATH)\include;$(ThirdPartyPath);$(CommonLibPath)include;$(LocalModulesPath)Module_GetPICoaterBackground\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(CudaToolkitIncludeDir);$(CUDA_PATH)\include;$(SdkCommonPath);$(CommonLibPath)include;$(LocalModulesPath)Module_GetPICoaterBackground\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <AdditionalOptions>/wd4819 %(AdditionalOptions)</AdditionalOptions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
@@ -162,7 +162,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(CudaToolkitIncludeDir);$(CUDA_PATH)\include;$(ThirdPartyPath);$(CommonLibPath)include;$(LocalModulesPath)Module_GetPICoaterBackground\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(CudaToolkitIncludeDir);$(CUDA_PATH)\include;$(SdkCommonPath);$(CommonLibPath)include;$(LocalModulesPath)Module_GetPICoaterBackground\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/wd4819 %(AdditionalOptions)</AdditionalOptions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
     </ClCompile>

@@ -28,7 +28,6 @@ PICoater_AOI/
 │   ├── config/          # config / dcf 範例
 │   ├── dev/             # 廠商規格書、CLProtocol 範例、Grabber / 光源控制器手冊
 │   └── user-manual/     # 操作員說明書 + IO 圖 + 硬體規格
-├── third_party/         # 第三方函式庫 (如 stb_image)
 ├── TestRunner/          # 測試啟動器（雙擊 TestRunner.bat 執行）
 └── Directory.Build.props # 全域 MSBuild 設定檔
 ```

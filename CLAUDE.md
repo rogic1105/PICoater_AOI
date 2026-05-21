@@ -29,7 +29,7 @@ PICoater_AOI/
 │   ├── user-manual/      ← 操作員說明（ui-flow.html / hardware-specs）
 │   └── sample/           ← 範例程式（給 SDK 使用者參考的 demo）
 ├── deploy/               ← 現場部署腳本（PowerShell + JSON）
-├── third_party/          ← 外部 lib（stb）
+│   └── Common/           ← 跨元件共用（含 vendored third-party 如 stb）
 └── .claude/skills/       ← Claude Code skills（按修改範圍觸發）
 ```
 
@@ -37,7 +37,7 @@ PICoater_AOI/
 
 1. **library 跟 executable 實體分離** — sdk/ 只放 library（無 GUI、無 exe），exe/工具放 tools/。引用 sdk 的專案不會被迫拉 UI 依賴
 2. **sdk/ = 可獨立 split** — 每個元件 self-contained（有自己 Directory.Build.props / .gitignore 更好），未來可 split 為獨立 repo
-3. **依賴方向單向** — `src/ → sdk/ → third_party/`；**sdk/ 絕對不能反向依賴 src/**
+3. **依賴方向單向** — `src/ → sdk/`；sdk/ 內可用 `sdk/Common/`（共用 + vendored third-party）；**sdk/ 絕對不能反向依賴 src/**
 4. **新硬體 bridge 走 sdk/ 模板** — 見 [.claude/skills/add-hardware-bridge.md](.claude/skills/add-hardware-bridge.md)
 
 **業界對照：**
