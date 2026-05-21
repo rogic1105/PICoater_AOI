@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>FSM Action Log — Design — sdk/docs/</title>
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-e2e.html">E2E</a> ｜ 下一篇：<a href="testing-fsm-impl.html">FSM Impl</a></nav>
+
+<h1>FSM Action Log — Design<br><span class="small">用 transition table 把「UI 按下去看起來對」變成可驗證</span></h1>
+
+<h2>1. 動機</h2>
+
+<p><a href="testing-e2e.html">E2E checklist</a> 的問題：「我點了 chart → 切了 mode → 看起來對」這種「看起來對」沒有客觀標準。
+如果改了 click handler 邏輯，使用者點下去畫面看起來一樣但<b>內部 state 跑錯</b>，checklist 也標 ✓。</p>
+
+<p>解法：把 UI state 編成 <b>FSM（Finite State Machine）</b>，所有「(action, fromState) → toState」事先列在 transition-table.csv。
+runtime 用 logger 記錄真實 transition，跟 table 對比，自動標 ✓ / ❌ / ⚠。</p>
+
+<h2>2. 三個檔案 + 一個 viewer</h2>
+
+<table>
+  <tr><th>檔案</th><th>內容</th><th>寫一次後</th></tr>
+  <tr><td><code>state-catalog.csv</code></td><td>列出所有可能 state（n 個 setting 組合出 2^n 個 state）</td><td>新增 setting 才動</td></tr>
+  <tr><td><code>transition-table.csv</code></td><td>列出所有預期的 (action, from, to)</td><td>改 click handler 才動</td></tr>
+  <tr><td><code>logs/ui-actions-*.jsonl</code></td><td>runtime 寫入，每筆一行 JSON</td><td>每次 E2E 自動產生</td></tr>
+  <tr><td><code>viewer.html</code></td><td>瀏覽器開，fetch CSV + 拖入或自動載入 jsonl，自動標</td><td>一次寫好通用</td></tr>
+</table>
+
+<h2>3. state-catalog.csv 範例</h2>
+
+<pre><code>state_id,hb_StitchMode,hc_EnableMuraEnhance,hd_EnableReviewEnhance,note
+1,Vertical,F,F,預設啟動狀態
+2,Vertical,T,F,Vertical + Live 強化
+3,Vertical,F,T,Vertical + Review 強化
+4,Vertical,T,T,Vertical + 兩邊強化
+5,Global,F,F,Global 預設
+6,Global,T,F,Global + Live 強化
+7,Global,F,T,Global + Review 強化
+8,Global,T,T,Global + 兩邊強化</code></pre>
+
+<h2>4. transition-table.csv 範例</h2>
+
+<pre><code>action,from,to,note
+chartMuraVertical.Click,7,1,Global+Review強化 → V (順便關 Review)
+chartMuraVertical.Click,1,3,Vertical 點 Review V chart → 開 Review 強化
+chartOverview.Click,5,7,Global → 開 Review 強化
+chartOverview.Click,3,5,Vertical+Review強化 → Global (順便關 Review)
+canvasMain.DoubleClick,1,1,主畫面雙擊 FitToScreen（view-only，無 state 變化）</code></pre>
+
+<h2>5. viewer 標記</h2>
+
+<table>
+  <tr><th>標記</th><th>意義</th></tr>
+  <tr><td>✓ Expected</td><td>(action, from, to) 在 transition-table — 行為符合預期</td></tr>
+  <tr><td>❌ Unknown transition</td><td>from/to 都是 valid state，但組合不在 table — bug 或漏列</td></tr>
+  <tr><td>⚠ Unknown state</td><td>state_id 不在 catalog — setting 組合超出預期範圍</td></tr>
+  <tr><td>○ View-only</td><td>純視覺操作（雙擊、拖曳），不改 setting</td></tr>
+</table>
+
+<h2>6. 擴充規則</h2>
+
+<h3>加新 action（如新按鈕）</h3>
+在 <code>transition-table.csv</code> 加 row，列出該 action 在每個 state 應該轉到哪個 state。
+<b>沒填的 action 跑下去 viewer 標 ❌「unknown transition」自動提示你補</b>。
+
+<h3>加新 setting（PG 多一個 bool / enum）</h3>
+<ol>
+  <li>修改 <code>UiActionLogger.ComputeStateId()</code> — 加新 bit</li>
+  <li><code>state-catalog.csv</code> 加新欄位 + 擴充 state 列舉</li>
+  <li><code>transition-table.csv</code> 對應新增（舊 row 要更新 <code>from</code>/<code>to</code> 對應新 state_id）</li>
+</ol>
+
+<div class="bad">
+<b>反模式：</b>改 <code>ComputeStateId()</code> 但忘記同步 catalog → 所有舊 row 的 state_id 都對不上，viewer 一片 ⚠。
+</div>
+
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-e2e.html">E2E</a> ｜ 下一篇：<a href="testing-fsm-impl.html">FSM Impl</a></nav>
+</body>
+</html>

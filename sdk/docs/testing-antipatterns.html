@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>Testing Antipatterns — sdk/docs/</title>
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-playbook.html">Playbook</a></nav>
+
+<h1>Testing Antipatterns<br><span class="small">測試金字塔 + FSM 常見反模式</span></h1>
+
+<h2>1. 在 Unit Test 裡測 UI 顯示</h2>
+
+<div class="bad">
+WinForms 控制項要 message pump，Unit 沒 <code>Application.Run</code>。看到
+<code>Assert.That(form.btnSave.Enabled, Is.True)</code> → 升級到 <a href="testing-integration.html">Integration</a> 或 <a href="testing-e2e.html">E2E</a>。
+</div>
+
+<h2>2. Integration Test 直連真硬體</h2>
+
+<div class="bad">
+真 PLC / 真相機 = <a href="testing-e2e.html">E2E</a>，不是 Integration。Integration 用 mock <code>IModbusTcpClient</code>。
+真硬體 = 跑 CI 跑不動，現場才能驗證。
+</div>
+
+<h2>3. SetBatch 後忘記補 FSM entry</h2>
+
+<div class="bad">
+見 <a href="testing-fsm-impl.html">testing-fsm-impl.html §4</a>。SetBatch 不 raise event，logger 看不到，下次 Set 時 stateBefore 是 stale，viewer 誤標 ❌。<br>
+<b>修法：</b><code>OnSettingChanged</code> 開頭加 stale state 偵測（ComputeStateBefore reverse trick），補 (batch) entry。
+</div>
+
+<h2>4. transition-table 跟 ComputeStateId() 不同步</h2>
+
+<div class="bad">
+新增第 4 個 setting 但忘記擴充 state-catalog → 所有舊 row 的 from/to id 都對不上。
+<b>改 ComputeStateId() 時必須同步改 catalog + table</b>。
+</div>
+
+<h2>5. UI 觸發 inline 跑多個 apply</h2>
+
+<div class="bad">
+<pre><code>click handler {
+    Hub.Set(A, x);       <span class="com">// 改 state</span>
+    Hub.Set(B, y);
+    await ApplyA();      <span class="com">// 又跑副作用</span>
+    await ApplyB();
+}</code></pre>
+
+違反 SSoT view 不互呼。改成「Set 完讓 Changed event 跑 apply」或用 SetBatch + 嚴格 transition 註解。
+</div>
+
+<h2>6. Test 跟背景 loop race（flaky test）</h2>
+
+<div class="bad">
+新版 IoGrabController 用 <code>Task.Run + BackgroundLoop</code>（不用 WinForms Timer）。<br>
+Test 內呼 <code>await _ctrl.StartAsync(...)</code> 後背景 loop 跑，再手動呼 <code>await _ctrl.PollTick()</code> → 兩個並發 race，flaky test。<br>
+<b>修法：</b>SUT 加 <code>internal AutoBackgroundLoop</code> flag 預設 true，test SetUp 設 false 跳過背景 loop。
+</div>
+
+<h2>7. 不寫 InternalsVisibleTo → 改成 public「只為了讓 test 看到」</h2>
+
+<div class="bad">
+封裝破壞。改用 <code>InternalsVisibleTo</code> 保持 internal visibility。
+</div>
+
+<h2>8. 正確習慣（總結）</h2>
+
+<div class="good">
+<b>state-centric 設計提問順序：</b><br>
+「這是改哪個 state？」→「副作用是什麼？」→「哪些 view 要更新？」<br>
+而不是：「按下按鈕跑哪些函式？」
+</div>
+
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-playbook.html">Playbook</a></nav>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>Unit Test — sdk/docs/</title>
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-overview.html">Overview</a> ｜ 下一篇：<a href="testing-integration.html">Integration</a></nav>
+
+<h1>Unit Test<br><span class="small">純邏輯，無 IO、無 await time-based、無 UI</span></h1>
+
+<h2>1. 目的</h2>
+
+<p>驗證「純函式級」邏輯的正確性。<b>無 IO、無 time-based、無 UI</b>。所有對外依賴用 <code>Moq</code> 注入。</p>
+
+<h2>2. csproj 模板（.NET Framework 4.8 + NUnit 3）</h2>
+
+<pre><code>&lt;Project Sdk="Microsoft.NET.Sdk"&gt;
+  &lt;PropertyGroup&gt;
+    &lt;TargetFramework&gt;net48&lt;/TargetFramework&gt;
+    &lt;LangVersion&gt;7.3&lt;/LangVersion&gt;
+    &lt;Platforms&gt;x64&lt;/Platforms&gt;
+    &lt;OutputType&gt;Library&lt;/OutputType&gt;
+    &lt;IsPackable&gt;false&lt;/IsPackable&gt;
+  &lt;/PropertyGroup&gt;
+  &lt;ItemGroup&gt;
+    &lt;PackageReference Include="NUnit"             Version="3.14.0" /&gt;
+    &lt;PackageReference Include="NUnit3TestAdapter" Version="4.5.0" /&gt;
+    &lt;PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" /&gt;
+    &lt;PackageReference Include="Moq"               Version="4.20.70" /&gt;
+  &lt;/ItemGroup&gt;
+  &lt;ItemGroup&gt;
+    &lt;ProjectReference Include="..\..\..\src\dotnet\YourApp\YourApp.csproj" /&gt;
+  &lt;/ItemGroup&gt;
+&lt;/Project&gt;</code></pre>
+
+<h2>3. InternalsVisibleTo（讓 test 看到 internal 方法）</h2>
+
+<p>主專案的 <code>Properties\AssemblyInfo.cs</code> 加：</p>
+
+<pre><code>[assembly: InternalsVisibleTo("YourApp.Tests")]
+[assembly: InternalsVisibleTo("YourApp.Integration.Tests")]
+[assembly: InternalsVisibleTo("YourApp.Stress.Tests")]
+[assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")]  <span class="com">// Moq 需要</span></code></pre>
+
+<div class="bad">
+<b>反模式：</b>把 internal 改成 public「只為了讓 test 看到」。改用 <code>InternalsVisibleTo</code>，保持封裝。
+</div>
+
+<h2>4. 範例：FSM 邏輯 + Mock 注入</h2>
+
+<pre><code>[Test]
+public async Task FSM_GoesToIdle_OnConnect()
+{
+    var mockClient = new Mock&lt;IModbusTcpClient&gt;();
+    mockClient.Setup(c =&gt; c.ConnectAsync(It.IsAny&lt;string&gt;(), It.IsAny&lt;int&gt;(), It.IsAny&lt;int&gt;()))
+              .ReturnsAsync(true);
+    mockClient.Setup(c =&gt; c.IsConnected).Returns(true);
+
+    var ctrl = new PlcGrabController(mockClient.Object) { AutoBackgroundLoop = false };
+    await ctrl.StartAsync("192.168.1.1");
+
+    Assert.That(ctrl.State, Is.EqualTo(IoState.Idle));
+    mockClient.Verify(c =&gt; c.ConnectAsync("192.168.1.1", It.IsAny&lt;int&gt;(), It.IsAny&lt;int&gt;()), Times.Once);
+}</code></pre>
+
+<div class="tip">
+<b>背景 loop / Timer：</b>如果 SUT 內部有背景 loop（如 BackgroundLoop / Tick timer），test 內必須關掉
+（如本例 <code>AutoBackgroundLoop = false</code>），避免跟手動觸發的 method 並發 race 造成 flaky test。
+</div>
+
+<h2>5. 分類判斷</h2>
+
+<ul>
+  <li>用 <code>Mock&lt;I*&gt;</code> 注入 + 純函式驗證 → Unit ✓</li>
+  <li>用 <code>Path.GetTempFileName()</code> / <code>File.WriteAllText</code> → 改成 <a href="testing-integration.html">Integration</a></li>
+  <li><code>for (i = 0; i &lt; 1_000_000; i++)</code> / <code>Task.Delay(minutes)</code> → 改成 <a href="testing-stress.html">Stress</a></li>
+</ul>
+
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-overview.html">Overview</a> ｜ 下一篇：<a href="testing-integration.html">Integration</a></nav>
+</body>
+</html>

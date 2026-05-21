@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>Testing Overview — sdk/docs/</title>
+<link rel="stylesheet" href="_shared.css">
+<style>
+  .pyramid { display: flex; flex-direction: column; align-items: center; margin: 20px 0; gap: 4px; }
+  .pyramid div { padding: 10px 24px; text-align: center; font-weight: 600; color: #fff; border-radius: 4px; }
+  .l-fsm   { background: #6366f1; width: 35%; }
+  .l-e2e   { background: #ef4444; width: 50%; }
+  .l-int   { background: #f59e0b; width: 70%; }
+  .l-unit  { background: #10b981; width: 90%; }
+</style>
+</head>
+<body>
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 下一篇：<a href="testing-unit.html">Unit Test</a></nav>
+
+<h1>Testing Overview<br><span class="small">為什麼需要四層測試 + FSM Action Log</span></h1>
+
+<h2>1. 金字塔</h2>
+
+<div class="pyramid">
+  <div class="l-fsm">FSM Action Log（UI transition 自動驗證）</div>
+  <div class="l-e2e">E2E Manual Checklist（人工點操作）</div>
+  <div class="l-int">Integration（含檔案 IO / mock 硬體）</div>
+  <div class="l-unit">Unit（純邏輯 / 無外部依賴）</div>
+</div>
+
+<p>傳統金字塔只有底下三層。<b>FSM Action Log 是新增層</b>——把「點按鈕 → setting 變更 → 哪些狀態應該轉到哪些狀態」變成可驗證的 transition table，補上 E2E 一直無法自動覆蓋的「人工點操作」邏輯。</p>
+
+<h2>2. 對照表</h2>
+
+<table>
+  <tr><th>層</th><th>速度</th><th>覆蓋</th><th>適合驗證</th><th>不適合驗證</th></tr>
+  <tr>
+    <td><a href="testing-unit.html">Unit</a></td><td>&lt; 5ms / case</td><td>純函式、Hub.Set 邏輯、CSV 解析、FSM 邏輯</td>
+    <td>輸入→輸出的決定性轉換</td><td>UI 顯示、檔案 IO、time-based</td>
+  </tr>
+  <tr>
+    <td><a href="testing-integration.html">Integration</a></td><td>&lt; 1s / case</td><td>JSON Save/Load round-trip、CSV 寫入、PlcGrabController FSM + mock IModbusTcpClient</td>
+    <td>多元件協作 + IO 邊界</td><td>UI 互動、長時間</td>
+  </tr>
+  <tr>
+    <td><a href="testing-stress.html">Stress</a></td><td>數十秒~數小時</td><td>100 萬筆 Hub.Set / 50 萬 CSV、Soak 24h、PLC FSM 連續循環</td>
+    <td>記憶體洩漏、效能退化、長時間穩定</td><td>功能正確性</td>
+  </tr>
+  <tr>
+    <td><a href="testing-e2e.html">E2E Manual</a></td><td>數分鐘 / 全套</td><td>主畫面點 chart → mode 切換、PG 改值流程、IO 取像</td>
+    <td>UI 跨控制項聯動、跨倍率顯示、硬體串接</td><td>邊界值、回歸測試自動化</td>
+  </tr>
+  <tr>
+    <td><a href="testing-fsm-design.html">FSM Action Log</a></td><td>跑 E2E 同時產出</td><td>state 化 setting 組合 + transition table 對照</td>
+    <td>「點 X 應該到 Y」自動標 ✓/❌</td><td>連續行為、效能</td>
+  </tr>
+</table>
+
+<h2>3. 關鍵原則</h2>
+
+<div class="tip">
+<b>往金字塔上爬，每層成本變高（速度慢、撰寫貴、維護難）。所有能放下層的測試都放下層。</b><br>
+新功能寫測試的問句順序：「這條測試需要設定外部資源（檔案 / mock 硬體）嗎？」→ 是 → Integration ｜
+「會跑很久（&gt; 1s）嗎？」→ 是 → Stress ｜「都不是」→ Unit。
+</div>
+
+<h2>4. 跟其他 atom 的關係</h2>
+
+<table>
+  <tr><th>Atom</th><th>關係</th></tr>
+  <tr><td><a href="testing-playbook.html">testing-playbook.html</a></td><td>新專案落地 11 步驟（讀這篇後直接照做）</td></tr>
+  <tr><td><a href="testing-antipatterns.html">testing-antipatterns.html</a></td><td>常見錯誤分類，review 時引用</td></tr>
+  <tr><td><a href="testing-fsm-design.html">testing-fsm-design / impl</a></td><td>FSM Action Log 兩篇細節</td></tr>
+</table>
+
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 下一篇：<a href="testing-unit.html">Unit Test</a></nav>
+</body>
+</html>

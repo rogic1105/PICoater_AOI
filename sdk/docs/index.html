@@ -63,11 +63,51 @@
 </a>
 
 <h2>Testing & FSM</h2>
-<p class="small">測試金字塔 + FSM Action Log 自動驗證 UI transition。<b>尚未元子化</b>（待拆）。</p>
+<p class="small">測試金字塔 + FSM Action Log 自動驗證 UI transition。9 個 atom。</p>
 
-<a class="atom-card" href="testing-pyramid-and-fsm.html">
-  <b>Testing pyramid + FSM Action Log（單頁版）</b>
-  <span class="small">Unit / Integration / Stress / E2E + FSM action log；含新專案落地步驟。後續拆成 atom。</span>
+<a class="atom-card" href="testing-overview.html">
+  <b>1. Overview — 為什麼四層 + 金字塔</b>
+  <span class="small">傳統金字塔 + FSM 新層；各層對照表、適合驗證什麼、不適合什麼。</span>
+</a>
+
+<a class="atom-card" href="testing-unit.html">
+  <b>2. Unit Test — 純邏輯</b>
+  <span class="small">csproj 模板、InternalsVisibleTo、Moq 範例；&lt; 5ms / case，每次 commit 跑。</span>
+</a>
+
+<a class="atom-card" href="testing-integration.html">
+  <b>3. Integration Test — 含 IO</b>
+  <span class="small">JSON round-trip、CSV 寫入、mock 硬體；跟 Unit 的差別表；&lt; 1s / case。</span>
+</a>
+
+<a class="atom-card" href="testing-stress.html">
+  <b>4. Stress Test — 壓力 / Soak</b>
+  <span class="small">STRESS_MINUTES 環境變數控制；找記憶體洩漏、效能退化；不該測功能正確性。</span>
+</a>
+
+<a class="atom-card" href="testing-e2e.html">
+  <b>5. E2E Manual Checklist — 人工點操作</b>
+  <span class="small">HTML + localStorage 持久化勾選；case granularity 原則；配合 FSM Log 自動驗證。</span>
+</a>
+
+<a class="atom-card" href="testing-fsm-design.html">
+  <b>6. FSM Action Log — Design</b>
+  <span class="small">為什麼 UI state 變 FSM；state-catalog / transition-table CSV 格式；三類標記 ✓/❌/⚠/○。</span>
+</a>
+
+<a class="atom-card" href="testing-fsm-impl.html">
+  <b>7. FSM Action Log — Implementation</b>
+  <span class="small">UiActionLogger.cs + ComputeStateId() + viewer.html + ★ SetBatch 漏記坑跟 ComputeStateBefore 修法。</span>
+</a>
+
+<a class="atom-card" href="testing-playbook.html">
+  <b>8. Playbook — 新專案落地 11 步驟</b>
+  <span class="small">SSoT 前置 → 4 個 csproj → InternalsVisibleTo → UiActionLogger → CSV → DebugUiActionLog 開關。</span>
+</a>
+
+<a class="atom-card" href="testing-antipatterns.html">
+  <b>9. Antipatterns — 反模式</b>
+  <span class="small">Unit 測 UI 顯示、Integration 直連真硬體、SetBatch 漏 FSM entry、test 跟背景 loop race 等。</span>
 </a>
 
 <h2>跟其他文件的關係</h2>

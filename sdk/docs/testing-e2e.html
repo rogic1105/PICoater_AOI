@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>E2E Manual Checklist — sdk/docs/</title>
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-stress.html">Stress</a> ｜ 下一篇：<a href="testing-fsm-design.html">FSM Design</a></nav>
+
+<h1>E2E Manual Checklist<br><span class="small">人工點操作 — 真硬體 + 真 UI</span></h1>
+
+<h2>1. 為什麼還是要 manual</h2>
+
+<p>WinForms 的 UI 互動很難寫穩定的自動化測試（控制項 hierarchy 變動、async paint timing、跨倍率縮放）。
+真硬體（PLC / 光源 / 相機）也沒辦法在 CI 環境模擬。</p>
+
+<p>先用「人工 checklist + 結果勾選」確保可重現的驗證 protocol。E2E 跑同時打開 <a href="testing-fsm-design.html">FSM Action Log</a> 自動驗證 UI transition。</p>
+
+<h2>2. 用 HTML + localStorage 寫 checklist</h2>
+
+<p>放 <code>docs/user-manual/test-checklist.html</code>，每個 case 一行 <code>&lt;tr&gt;</code> + 三個 button（Pass / Fail / Skip），localStorage 持久化勾選結果跨 reload。範例：</p>
+
+<pre><code>&lt;tr data-case="C01"&gt;
+  &lt;td&gt;C01&lt;/td&gt;
+  &lt;td&gt;主畫面 fit：開檔→雙擊→fit→拖曳→雙擊恢復&lt;/td&gt;
+  &lt;td&gt;&lt;button onclick="mark('C01','pass')"&gt;✓&lt;/button&gt;
+      &lt;button onclick="mark('C01','fail')"&gt;✗&lt;/button&gt;
+      &lt;button onclick="mark('C01','skip')"&gt;–&lt;/button&gt;&lt;/td&gt;
+  &lt;td class="status" id="st-C01"&gt;&lt;/td&gt;
+&lt;/tr&gt;</code></pre>
+
+<pre><code>&lt;script&gt;
+function mark(id, status) {
+  localStorage.setItem('chk-' + id, status);
+  document.getElementById('st-' + id).textContent =
+    status === 'pass' ? '✓' : status === 'fail' ? '✗' : '–';
+}
+window.onload = () =&gt; document.querySelectorAll('tr[data-case]').forEach(tr =&gt; {
+  const id = tr.dataset.case;
+  const s = localStorage.getItem('chk-' + id);
+  if (s) document.getElementById('st-' + id).textContent =
+    s === 'pass' ? '✓' : s === 'fail' ? '✗' : '–';
+});
+&lt;/script&gt;</code></pre>
+
+<h2>3. 寫 checklist 的 case granularity</h2>
+
+<ul>
+  <li>每個 case 描述一個「使用者明確會做的動作」+「預期結果」</li>
+  <li>避免複合 case（測 5 件事一次 → 一個 fail 就無法判斷哪件）</li>
+  <li>保留人能讀的步驟，不要直接寫 code</li>
+  <li>步驟之間獨立（不要 case B 依賴 case A 的結果）</li>
+</ul>
+
+<div class="tip">
+<b>配合 <a href="testing-fsm-design.html">FSM Action Log</a></b>：跑 checklist 時打開 logger（PG 設 <code>DebugUiActionLog=true</code>），
+log 寫到 <code>docs/dev/fsm/logs/</code>。跑完後瀏覽器開 viewer.html 一鍵載入，
+看哪些 transition 標 ❌（漏列或設計 vs 實作矛盾）。
+</div>
+
+<h2>4. 跟其他層的關係</h2>
+
+<table>
+  <tr><th>Level</th><th>場景</th></tr>
+  <tr><td><a href="testing-unit.html">Unit</a></td><td>「按鈕 click handler 邏輯」抽出純函式，Unit 驗證</td></tr>
+  <tr><td><a href="testing-integration.html">Integration</a></td><td>「click handler → Hub.Set → JSON 持久化」整套</td></tr>
+  <tr><td><b>E2E（這篇）</b></td><td>「使用者點按鈕 → UI 跟著變 → 硬體真的動」</td></tr>
+  <tr><td><a href="testing-fsm-design.html">FSM Log</a></td><td>跑 E2E 時自動產出 transition 報告</td></tr>
+</table>
+
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-stress.html">Stress</a> ｜ 下一篇：<a href="testing-fsm-design.html">FSM Design</a></nav>
+</body>
+</html>

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>Integration Test — sdk/docs/</title>
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-unit.html">Unit</a> ｜ 下一篇：<a href="testing-stress.html">Stress</a></nav>
+
+<h1>Integration Test<br><span class="small">含檔案 IO、JSON round-trip、mock 硬體</span></h1>
+
+<h2>1. 目的</h2>
+
+<p>驗證「多元件協作 + 邊界 IO」是否正常。<b>允許檔案 IO、JSON round-trip、CSV 寫入、mock 硬體</b>。
+不允許真硬體連線（那是 <a href="testing-e2e.html">E2E</a>）。</p>
+
+<h2>2. 跟 Unit 的差別</h2>
+
+<table>
+  <tr><th>差異</th><th><a href="testing-unit.html">Unit</a></th><th>Integration</th></tr>
+  <tr><td>速度</td><td>&lt; 5ms</td><td>&lt; 1s（含 temp file 建立 / 寫入）</td></tr>
+  <tr><td>CI 跑時機</td><td>每次 commit</td><td>PR / nightly</td></tr>
+  <tr><td>依賴</td><td>純記憶體</td><td>檔案系統、process</td></tr>
+  <tr><td>失敗除錯</td><td>確定性，重跑必同結果</td><td>可能跟磁碟、權限有關</td></tr>
+</table>
+
+<h2>3. 範例：JSON Save/Load round-trip</h2>
+
+<pre><code>[Test]
+public void InspectionSettings_RoundTrip_PreservesAllFields()
+{
+    var temp = Path.GetTempFileName();
+    try
+    {
+        var original = new InspectionSettings
+        {
+            Recipe = { HessianMaxFactorV = 0.5f, ErrorValueMeanV = 0.3f },
+            Storage = { AniloxRootPath = @"D:\Test\Anilox" },
+            // ...
+        };
+        InspectionSettingsStore.SaveToPath(original, temp);
+        var loaded = InspectionSettingsStore.LoadFromPath(temp);
+
+        Assert.That(loaded.Recipe.HessianMaxFactorV, Is.EqualTo(original.Recipe.HessianMaxFactorV));
+        Assert.That(loaded.Storage.AniloxRootPath,    Is.EqualTo(original.Storage.AniloxRootPath));
+        <span class="com">// 所有欄位逐一驗證</span>
+    }
+    finally { File.Delete(temp); }
+}</code></pre>
+
+<h2>4. 典型適用場景</h2>
+
+<ul>
+  <li><b>JSON / CSV 序列化 round-trip</b> — 確認 Save → Load 還原所有欄位</li>
+  <li><b>檔案 schema 演進</b> — 加新欄位後舊 json 仍能讀，default value 補上</li>
+  <li><b>多元件協作</b> — Hub.Set → save disk → load 確認持久化</li>
+  <li><b>Mock 硬體</b> — <a href="testing-unit.html">Unit</a> 也做，但 Integration 可以加上「實際 socket 行為」（如 localhost TcpClient）</li>
+</ul>
+
+<div class="tip">
+<b>cleanup 重要：</b>每個 test 用 <code>Path.GetTempFileName()</code> 拿臨時檔，<code>try/finally</code> delete。
+不要寫到固定位置（會跟其他 test race）。
+</div>
+
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-unit.html">Unit</a> ｜ 下一篇：<a href="testing-stress.html">Stress</a></nav>
+</body>
+</html>

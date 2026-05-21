@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>Stress Test — sdk/docs/</title>
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-integration.html">Integration</a> ｜ 下一篇：<a href="testing-e2e.html">E2E</a></nav>
+
+<h1>Stress Test<br><span class="small">壓力 / Soak — 找跑久才出現的問題</span></h1>
+
+<h2>1. 目的</h2>
+
+<p>找出「跑久了才會出現」的問題：記憶體洩漏、GC 壓力、效能退化、long-tail latency。
+單元測試跑 5 個 case 不會看到的東西。</p>
+
+<h2>2. 環境變數控制時長</h2>
+
+<pre><code>[Test]
+public void PlcCommandLoop_NoMemoryLeak()
+{
+    int minutes = int.TryParse(Environment.GetEnvironmentVariable("STRESS_MINUTES"), out var m)
+                  ? m : 1;
+    var deadline = DateTime.UtcNow.AddMinutes(minutes);
+    var mock = new Mock&lt;IModbusTcpClient&gt;();
+    var ctrl = new PlcGrabController(mock.Object) { AutoBackgroundLoop = false };
+    long iterations = 0;
+
+    while (DateTime.UtcNow &lt; deadline)
+    {
+        ctrl.Tick();
+        iterations++;
+    }
+
+    Assert.That(iterations, Is.GreaterThan(100_000));
+    <span class="com">// 配合 dotMemory / PerfView 看 heap，CI 用 STRESS_MINUTES=1 快速跑</span>
+}</code></pre>
+
+<h2>3. 跑法</h2>
+
+<table>
+  <tr><th>場景</th><th>指令</th></tr>
+  <tr><td>CI 每次 commit（smoke）</td><td><code>STRESS_MINUTES=1</code></td></tr>
+  <tr><td>Nightly</td><td><code>STRESS_MINUTES=60</code>（1 小時）</td></tr>
+  <tr><td>Soak（週末）</td><td><code>STRESS_MINUTES=1440</code>（24 小時），手動跑單一 [Test]</td></tr>
+</table>
+
+<div class="tip">
+PowerShell：<code>$env:STRESS_MINUTES = '60'; dotnet test ...</code>
+</div>
+
+<h2>4. 量什麼</h2>
+
+<ul>
+  <li><b>iterations 數</b> — 確認跑了多少 cycle（防止 test 早早退出）</li>
+  <li><b>memory delta</b> — <code>GC.GetTotalMemory(true)</code> before / after，看記憶體有沒有持續成長</li>
+  <li><b>latency p99</b> — 收集每 cycle 耗時，計算 p99（找 long-tail）</li>
+  <li><b>外部觀測</b> — dotMemory snapshot 比較 baseline；PerfView CPU sampling 看熱點</li>
+</ul>
+
+<h2>5. 不該驗證什麼</h2>
+
+<div class="bad">
+Stress test <b>不該</b>驗證功能正確性。功能正確性是 <a href="testing-unit.html">Unit</a> 跟 <a href="testing-integration.html">Integration</a> 的事。
+Stress 只關心「跑久了會不會壞」。
+</div>
+
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-integration.html">Integration</a> ｜ 下一篇：<a href="testing-e2e.html">E2E</a></nav>
+</body>
+</html>

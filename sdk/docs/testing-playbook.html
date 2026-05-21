@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>Testing Playbook — sdk/docs/</title>
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-fsm-impl.html">FSM Impl</a> ｜ 下一篇：<a href="testing-antipatterns.html">Antipatterns</a></nav>
+
+<h1>Testing Playbook<br><span class="small">新專案落地 11 步驟</span></h1>
+
+<p>把整套測試金字塔 + FSM 複製到新專案的標準流程。讀完直接照做。</p>
+
+<h2>1. 前置：SSoT 架構（必要前提）</h2>
+
+<div class="info">
+<b>FSM 只能套在「SettingsHub 集中所有 state」的專案。</b>如果新專案的 setting 散在 form/control/code 各處改，先做 SSoT refactor，再加 FSM logger。
+</div>
+
+<p>SSoT 三層分工：</p>
+
+<pre><code>          SettingsHub (state, SSoT)
+                  │
+        Changed event ↓
+  ┌──────────┬──────┴──────┬──────────┐
+  ↓          ↓             ↓          ↓
+ view A   view B        view C    副作用 (save/reload/...)</code></pre>
+
+<p>規則：</p>
+<ol>
+  <li>所有變更走 Hub.Set / SetBatch / NotifyExternalChange，<b>無路徑直接 _settings.X = ...</b></li>
+  <li>UI 元件是搖桿：點按鈕 = 改 setting，<b>不在 click handler 內 inline 跑副作用</b></li>
+  <li>副作用是 view 對 Changed event 的反應</li>
+</ol>
+
+<h2>2. 步驟清單</h2>
+
+<table>
+  <tr><th>步驟</th><th>動作</th><th>產出</th></tr>
+  <tr><td>1</td><td>確認專案有 SettingsHub（或 SSoT 等價物）</td><td>—</td></tr>
+  <tr><td>2</td><td>建 4 個 csproj：<code>YourApp.Tests / Integration.Tests / Stress.Tests / UITests</code></td><td>tests/ 目錄</td></tr>
+  <tr><td>3</td><td>主專案 AssemblyInfo 加 <code>InternalsVisibleTo</code> 四條</td><td>—</td></tr>
+  <tr><td>4</td><td>每個硬體依賴抽介面（<code>IModbusTcpClient</code>...），主程式注入</td><td>讓 Unit 可 mock</td></tr>
+  <tr><td>5</td><td>新增 <code>UiActionLogger.cs</code>（複製 PICoater 版本，改 <code>ComputeStateId()</code>）</td><td>core logger</td></tr>
+  <tr><td>6</td><td>在 SettingsHub.Changed 訂閱 <code>UiActionLogger.OnSettingChanged</code></td><td>—</td></tr>
+  <tr><td>7</td><td>所有 click handler 開頭加 <code>UiActionLogger.SetSource("xxx.Click")</code></td><td>—</td></tr>
+  <tr><td>8</td><td>建 <code>docs/dev/fsm/</code>，放 <code>state-catalog.csv</code> + <code>transition-table.csv</code> + <code>viewer.html</code> + <code>README.md</code></td><td>FSM 對照表</td></tr>
+  <tr><td>9</td><td>在 InspectionSettings 加 <code>[Browsable(false)] DebugUiActionLog</code> 預設 false</td><td>開關</td></tr>
+  <tr><td>10</td><td>跑 E2E checklist，同時開 <code>DebugUiActionLog=true</code> 產生 log</td><td>jsonl</td></tr>
+  <tr><td>11</td><td>用瀏覽器開 viewer.html，按「載入今天 log」自動對照</td><td>✓/❌ 報告</td></tr>
+</table>
+
+<h2>3. ComputeStateId() 怎麼設計</h2>
+
+<p>用 bit 編碼把 n 個 bool / enum 壓成單一整數 + 1：見 <a href="testing-fsm-impl.html">testing-fsm-impl.html §2</a>。</p>
+
+<p>3 個 bool/enum = 8 state。state-catalog.csv 列舉這 8 個 row。</p>
+
+<div class="tip">
+<b>+1 是為了讓 state_id 從 1 開始</b>（人看 catalog 比較直觀，0 容易跟「未初始化」混淆）。
+</div>
+
+<h2>4. transition-table 怎麼填</h2>
+
+<p>對每個 click handler，回答兩個問題：</p>
+<ol>
+  <li>「在 state X 點這個 → 應該到 state ?」（n 個 state 就 n 個 row）</li>
+  <li>「有沒有 view-only 互動？」（如雙擊 fit、拖曳） → 列 (action, X, X) 表示無 state 變化</li>
+</ol>
+
+<p>不必一次填全，<b>沒填的 action 跑下去 viewer 會標 ❌「unknown transition」自動提示你補</b>。</p>
+
+<h2>5. csproj 模板</h2>
+
+<p>三個測試 csproj 共用模板（差別只在名稱）。完整見 <a href="testing-unit.html">testing-unit.html §2</a>。</p>
+
+<h2>6. 跑測試的快捷</h2>
+
+<table>
+  <tr><th>場景</th><th>指令</th></tr>
+  <tr><td>每次 commit（smoke）</td><td><code>dotnet test tests/Unit.csproj</code></td></tr>
+  <tr><td>PR / nightly</td><td><code>dotnet test tests/Integration.csproj</code></td></tr>
+  <tr><td>Soak（週末）</td><td><code>$env:STRESS_MINUTES='1440'; dotnet test tests/Stress.csproj</code></td></tr>
+  <tr><td>E2E + FSM</td><td>啟用 <code>DebugUiActionLog</code> 跑 exe → 看 viewer.html</td></tr>
+</table>
+
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-fsm-impl.html">FSM Impl</a> ｜ 下一篇：<a href="testing-antipatterns.html">Antipatterns</a></nav>
+</body>
+</html>
