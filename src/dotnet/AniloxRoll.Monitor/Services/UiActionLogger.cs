@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.IO;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using AniloxRoll.Monitor.Core.Data;
@@ -76,12 +77,41 @@ namespace AniloxRoll.Monitor.Core.Services
         public static void OnSettingChanged(SettingChange c)
         {
             if (!Enabled || _settings == null) return;
-            int newState = ComputeStateId();
             string source = _currentSource.Value ?? "(unknown)";
-            string entry = BuildJsonl(source, c.Name, c.OldValue, c.NewValue,
-                                      _lastStateId, newState, c.Source.ToString());
-            _queue.TryAdd(entry);
+            int newState = ComputeStateId();
+            int realBefore = ComputeStateBefore(c);
+
+            // 偵測 SetBatch 漏記：_lastStateId 卡在前次 raise event 的值，但 realBefore 已被
+            // SetBatch（不 raise event）改過。補一筆 "(batch)" entry 把隱形 transition 補上。
+            if (realBefore != _lastStateId)
+            {
+                _queue.TryAdd(BuildJsonl(source, "(batch)", null, null,
+                                         _lastStateId, realBefore, "Batch"));
+                _lastStateId = realBefore;
+            }
+
+            _queue.TryAdd(BuildJsonl(source, c.Name, c.OldValue, c.NewValue,
+                                     _lastStateId, newState, c.Source.ToString()));
             _lastStateId = newState;
+        }
+
+        // ── ComputeStateBefore：算「這次 c 套用前」的 state id ───────────────
+        // 進入 OnSettingChanged 時 _settings 已是 after-c。暫時 reverse c.Name 屬性到 c.OldValue
+        // 算 ComputeStateId，再還原。若 c.Name 不影響 state（例 ErrorValueMeanV）會等同 newState。
+        // 注意：Hub.Set 同步 raise event，期間 _settings 不會被其他 thread 改，reverse 安全。
+        private static int ComputeStateBefore(SettingChange c)
+        {
+            try
+            {
+                var prop = typeof(InspectionSettings).GetProperty(c.Name,
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                if (prop == null || !prop.CanWrite) return ComputeStateId();
+                prop.SetValue(_settings, c.OldValue);
+                int s = ComputeStateId();
+                prop.SetValue(_settings, c.NewValue);
+                return s;
+            }
+            catch { return ComputeStateId(); }
         }
 
         /// <summary>純 view-only 互動（雙擊 FitToScreen / 拖曳）— 不改 setting 但要記。</summary>
