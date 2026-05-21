@@ -12,7 +12,7 @@
 - `192.168.255.x` — PLC 控制（ET-7044 + Nakan）
 - `192.168.10.x` — 儲存（檢測機 .10 ↔ 儲存機 .20）
 
-**單 NIC 雙 IP 別名**：檢測機只有一張 NIC，用 `New-NetIPAddress` 加 secondary IP（PLC IP 不動）。未來換雙口工業電腦時，把兩個 IP 拆到兩張實體卡即可，**程式不用改**。
+**單 NIC 雙 IP 別名**：檢測機只有一張 NIC，用 `New-NetIPAddress` 加 secondary IP（IO IP 不動）。未來換雙口工業電腦時，把兩個 IP 拆到兩張實體卡即可，**程式不用改**。
 
 **匿名 SMB**：`RemoteCopyService` 走 `\\192.168.10.20\Anilox\Captures`，使用 Guest 帳號不帶憑證。Windows 10/11 預設雙邊都擋，需同時改檢測機（Client 端 `AllowInsecureGuestAuth`）+ 儲存機（Server 端 Guest 帳號啟用 + ACL + SeDenyNetworkLogonRight 清除）。
 

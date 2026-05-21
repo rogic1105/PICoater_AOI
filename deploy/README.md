@@ -80,7 +80,7 @@
 | Step 1 — NIC secondary IP<br>（setup_inspection_nic.ps1） | Step 2 — Client 匿名 SMB<br>（setup_guest.ps1） | Step 3 — 關閉自動休眠<br>（setup_nosleep.ps1） |
 |---|---|---|
 | 找到 PLC 那張 NIC | 登錄檔 `AllowInsecureGuestAuth = 1` | standby-timeout = 0 |
-| 新增 IP 別名 192.168.10.10（不動 PLC IP） | GPO 位置覆寫同樣值 | hibernate-timeout = 0 |
+| 新增 IP 別名 192.168.10.10（不動 IO IP） | GPO 位置覆寫同樣值 | hibernate-timeout = 0 |
 | ping 儲存機驗證 | `net use * /delete /y` 清除快取 | disk-timeout = 0 |
 | | | 目的：取像 / 遠端複製不中斷 |
 

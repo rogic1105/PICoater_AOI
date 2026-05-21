@@ -10,8 +10,8 @@ namespace IoBridge.Core
 
         private static readonly object _lock = new object();
 
-        /// <summary>Log 檔名前綴，預設 "PlcBridge"。各 App 可於啟動時設定。</summary>
-        public static string FilePrefix { get; set; } = "PlcBridge";
+        /// <summary>Log 檔名前綴，預設 "IoBridge"。各 App 可於啟動時設定。</summary>
+        public static string FilePrefix { get; set; } = "IoBridge";
 
         static IoLogger()
         {

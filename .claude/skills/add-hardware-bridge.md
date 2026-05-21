@@ -32,7 +32,7 @@ sdk/ExampleBridge/
     └── Properties/AssemblyInfo.cs
 ```
 
-### 2. csproj 模板（複製 sdk/Bridges/PlcBridge/PlcBridge.Core/PlcBridge.Core.csproj）
+### 2. csproj 模板（複製 sdk/Bridges/IoBridge/IoBridge.Core/IoBridge.Core.csproj）
 
 關鍵欄位：
 ```xml
@@ -119,7 +119,7 @@ public class ExampleGrabController
 
 ## 既有實例（複製模板用）
 
-- `sdk/Bridges/PlcBridge/PlcBridge.Core/` — Modbus TCP（含 `IModbusTcpClient` 介面）
+- `sdk/Bridges/IoBridge/IoBridge.Core/` — Modbus TCP（含 `IModbusTcpClient` 介面）
 - `sdk/Bridges/LightBridge/LightBridge.Core/` — LTS-3DPA24 RS-232
 - `sdk/Bridges/StorageBridge/StorageBridge.Core/` — SMB 檔案複製 + 循環儲存 + cleanup flag
 
@@ -127,10 +127,10 @@ public class ExampleGrabController
 
 | 元件 | 大小寫 | 範例 |
 |---|---|---|
-| sdk/ 子目錄 | 大駝峰 | `PlcBridge`、`LightBridge` |
-| sdk/ csproj | 大駝峰 + `.Core` | `PlcBridge.Core` |
-| tools/ 子目錄 | 小寫連字號 | `plc-manual-control`、`plc-automation` |
-| namespace | 跟 csproj 同 | `PlcBridge.Core`、`LightBridge.Core` |
+| sdk/ 子目錄 | 大駝峰 | `IoBridge`、`LightBridge` |
+| sdk/ csproj | 大駝峰 + `.Core` | `IoBridge.Core` |
+| tools/ 子目錄 | 小寫連字號 | `io-manual-control`、`io-automation` |
+| namespace | 跟 csproj 同 | `IoBridge.Core`、`LightBridge.Core` |
 
 ## 反模式
 

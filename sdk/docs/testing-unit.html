@@ -58,7 +58,7 @@ public async Task FSM_GoesToIdle_OnConnect()
               .ReturnsAsync(true);
     mockClient.Setup(c =&gt; c.IsConnected).Returns(true);
 
-    var ctrl = new PlcGrabController(mockClient.Object) { AutoBackgroundLoop = false };
+    var ctrl = new IoGrabController(mockClient.Object) { AutoBackgroundLoop = false };
     await ctrl.StartAsync("192.168.1.1");
 
     Assert.That(ctrl.State, Is.EqualTo(IoState.Idle));

@@ -26,7 +26,7 @@
 <h2>2. 為什麼單向</h2>
 
 <ul>
-  <li><b>Split 友善</b>：sdk/LightBridge 拿出去當獨立 repo 時不會拖著 src/ 走</li>
+  <li><b>Split 友善</b>：sdk/Bridges/LightBridge 拿出去當獨立 repo 時不會拖著 src/ 走</li>
   <li><b>編譯依賴清晰</b>：底層 build 完才能 build 上層，循環依賴不會發生</li>
   <li><b>測試獨立</b>：sdk/ 的單元測試不需要 src/ 的環境</li>
   <li><b>換上層不影響下層</b>：未來 src/ 從 WinForms 換 WPF / Avalonia，sdk/ 完全不動</li>
@@ -93,16 +93,16 @@ sdk/ 永遠不接觸 settings 物件本身。</p>
 
 <div class="bad">
 <pre><code><span class="com">// sdk/Bridges/LightBridge/LightBridge.Core/LightController.cs</span>
-using PlcBridge.Core;   <span class="com">// ❌ 一個 sdk/ 元件引用另一個</span></code></pre>
+using IoBridge.Core;   <span class="com">// ❌ 一個 sdk/ 元件引用另一個</span></code></pre>
 </div>
 
-<p>後果：拆 sdk/LightBridge 出去時拖著 sdk/PlcBridge 一起走，兩個元件變綁定。</p>
+<p>後果：拆 sdk/Bridges/LightBridge 出去時拖著 sdk/Bridges/IoBridge 一起走，兩個元件變綁定。</p>
 
 <div class="good">
 <b>解法（按合適度）：</b>
 <ol>
   <li><b>抽共用</b>：把共用邏輯抽到 <code>sdk/Common/Common.Core/</code>，兩邊都引用底層</li>
-  <li><b>傳基本型別</b>：不傳 PlcBridge 物件，傳 int / string / enum</li>
+  <li><b>傳基本型別</b>：不傳 IoBridge 物件，傳 int / string / enum</li>
   <li><b>應用層橋接</b>：src/ 同時引用兩個 sdk/，自己接（最常用）</li>
 </ol>
 </div>
@@ -115,8 +115,8 @@ using PlcBridge.Core;   <span class="com">// ❌ 一個 sdk/ 元件引用另一�
 grep -r "using AniloxRoll.Monitor" sdk/        <span class="com"># 應該 0 hits</span>
 
 <span class="com"># sdk/ 元件之間不能互相 using</span>
-grep -r "using LightBridge"   sdk/Bridges/PlcBridge/   <span class="com"># 應該 0 hits</span>
-grep -r "using PlcBridge"     sdk/Bridges/LightBridge/ <span class="com"># 應該 0 hits</span></code></pre>
+grep -r "using LightBridge"   sdk/Bridges/IoBridge/   <span class="com"># 應該 0 hits</span>
+grep -r "using IoBridge"     sdk/Bridges/LightBridge/ <span class="com"># 應該 0 hits</span></code></pre>
 
 <div class="tip">
 建議在 CI 加一條 lint：每次 PR 跑這幾個 grep，有 hit 就 fail。比 review 時靠人眼抓可靠。

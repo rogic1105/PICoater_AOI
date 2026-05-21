@@ -215,7 +215,7 @@ code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-
       </select></span>
     </div>
     <div class="case-body">
-      <div class="pre"><b>前置：</b>PLC 連線、<code>lblPlcConn</code> 已連線、未在 grab 中、IO 未暫停</div>
+      <div class="pre"><b>前置：</b>IO 連線、<code>lblIoConn</code> 已連線、未在 grab 中、IO 未暫停</div>
       <h4>步驟</h4>
       <ol>
         <li>在 PLC 端觸發 DI START（rising edge）</li>
@@ -549,7 +549,7 @@ code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-
   <div class="case" data-id="E2E-H01">
     <div class="case-head" onclick="toggleCase(this)">
       <span class="case-id">E2E-H01</span>
-      <span class="case-title">PLC 連線 lblPlcConn 綠燈 → DI START 觸發抓取</span>
+      <span class="case-title">IO 連線 lblIoConn 綠燈 → DI START 觸發抓取</span>
       <span class="case-tags"><span class="tag hardware">hw</span></span>
       <span class="case-status"><select onchange="updateStatus(this)">
         <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
@@ -559,11 +559,11 @@ code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-
       <h4>步驟</h4>
       <ol>
         <li>啟動 exe</li>
-        <li>觀察 lblPlcConn 標籤狀態</li>
+        <li>觀察 lblIoConn 標籤狀態</li>
         <li>觀察 lblIoDiAlive、lblIoDoPcAlive（IO 心跳）</li>
         <li>PLC 端觸發 DI START</li>
       </ol>
-      <div class="expect"><b>預期：</b>啟動 ~3 秒內 lblPlcConn 綠燈 + DI/DO 心跳燈交替；DI START 後自動 grab</div>
+      <div class="expect"><b>預期：</b>啟動 ~3 秒內 lblIoConn 綠燈 + DI/DO 心跳燈交替；DI START 後自動 grab</div>
       <div class="link">→ ui-flow: <a href="../user-manual/io_diagrams.html">IO 圖</a></div>
       <textarea class="notes" placeholder=""></textarea>
       <div class="meta"></div>

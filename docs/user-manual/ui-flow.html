@@ -401,7 +401,7 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 </div>
 </div>
 <div class="flow-group vflow" id="io-suspend">
-<div class="flow-title">IO 暫停 <code>lblPlcConn（點擊切換）</code></div>
+<div class="flow-title">IO 暫停 <code>lblIoConn（點擊切換）</code></div>
 <div class="box input">點擊【IO 連線狀態】→ _isIoSuspended = true</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">_isIoSuspended = true；UpdateGrabButton → UpdateStandardBgSubLockState（直接返回 Enabled=true）</div>
@@ -409,14 +409,14 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="out-par">
 <div class="box output">【IO 連線狀態】→「● IO 暫停 ⏸」黃底黑字</div>
 <div class="box output">【開始抓取】→ Enabled=true，可手動操作（不受 StandardBgSub bin 限制）</div>
-<div class="box output">lblPlcState →「● 已關閉」灰底（凍結，PLC timer 不再更新）</div>
+<div class="box output">lblIoState →「● 已關閉」灰底（凍結，PLC timer 不再更新）</div>
 <div class="box output">DI0 DI1 DO0 DO2 DO1 → 全滅（灰）並凍結</div>
 <div class="box output">PlcStartGrab / PlcStopGrab → 因 _isIoSuspended 直接 return，IO 無法觸發取像</div>
 </div>
 <div class="note">用途：IO 已連線時讓操作員暫時接管手動控制（例如調機、試跑），等同 IO 斷線外觀。再次點擊恢復 IO 控制。</div>
 </div>
 <div class="flow-group vflow" id="io-resume">
-<div class="flow-title">恢復 IO <code>lblPlcConn（再按一次）</code></div>
+<div class="flow-title">恢復 IO <code>lblIoConn（再按一次）</code></div>
 <div class="box input">再次點擊【IO 連線狀態】→ _isIoSuspended = false</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">UpdatePlcConnectionUi(IsConnected)</div>
@@ -424,7 +424,7 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="out-par">
 <div class="box output">【IO 連線狀態】→ 回到「● IO 已連線」綠底 / 「● IO 離線」灰底</div>
 <div class="box output">【開始抓取】→ IO 已連線則 Disabled（由 IO 控制）</div>
-<div class="box output">lblPlcState、IO 燈號 → 下次 PLC poll（≤500ms）自動補回真實值</div>
+<div class="box output">lblIoState、IO 燈號 → 下次 PLC poll（≤500ms）自動補回真實值</div>
 </div>
 </div>
 <div class="flow-group vflow" id="light-control">
@@ -1399,7 +1399,7 @@ PropertyGrid → <code>NotifyExternalChange</code>；chart click / 程式碼 →
 <tr><td><code>db_Algorithm</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td></td><td></td><td>LoadBackgroundBins<br/>+ StandardBgSubLockState</td></tr>
 <tr><td><code>gb_ChartScaleMode</code><br/><code>gc_/gd_/ge_YMax</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td>chartYearly/<br/>Monthly/Daily Y 軸</td><td></td><td></td></tr>
 <tr><td><code>LightEnabled</code><br/><code>LightComPort</code><br/><code>LightChannel</code><br/><code>LightBrightness</code><br/><code>LightWarmupMs</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td></td><td></td><td>HandleLight<br/>SettingsChanged<br/>(Init/Brightness/...)</td></tr>
-<tr><td><code>PlcEnabled</code><br/><code>PlcIp</code> / <code>PlcPort</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td></td><td></td><td>PlcGrabController 重連</td></tr>
+<tr><td><code>IoEnabled</code><br/><code>IoIp</code> / <code>IoPort</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td></td><td></td><td>IoGrabController 重連</td></tr>
 <tr><td><code>AppRole</code></td><td style="text-align:center">✓</td><td>—</td><td></td><td></td><td></td><td></td><td></td><td></td><td>寫 app-mode.json + MessageBox<br/>(early return，下游不跑)</td></tr>
 <tr><td><code>AniloxRootPath</code> /<br/><code>LocalMinFreeGB</code> /<br/><code>RemotePath</code> / <code>RemoteConfigPath</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td></td><td></td><td>fallback / RemoteCopy<br/>/ CleanupFlagWatcher</td></tr>
 <tr><td><code>EnableAutoCapture</code> /<br/><code>SaveOriginalBmp</code> / <code>DcfPath</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td></td><td></td><td>下次 capture / 下次 MIL Allocate 生效</td></tr>
@@ -1737,7 +1737,7 @@ PropertyGrid → <code>NotifyExternalChange</code>；chart click / 程式碼 →
 </div>
 <div class="v-arrow"></div>
 <div class="out-seq">
-<div class="box action">檢測機：單張 NIC 掛兩個 IP（secondary IP 別名）— PLC IP 不動，新增 192.168.10.10</div>
+<div class="box action">檢測機：單張 NIC 掛兩個 IP（secondary IP 別名）— IO IP 不動，新增 192.168.10.10</div>
 <div class="box action">儲存機：固定 IP 192.168.10.20 + SMB 共用 C:\AniloxStorage</div>
 <div class="box action">RemoteCopyService 走 \\192.168.10.20\AniloxStorage 匿名 Guest SMB</div>
 </div>
@@ -1801,7 +1801,7 @@ PropertyGrid → <code>NotifyExternalChange</code>；chart click / 程式碼 →
 <div class="v-arrow" data-label="Step 1：NIC secondary IP"></div>
 <div class="out-seq">
 <div class="box action">自動找出 PLC NIC（Get-NetIPAddress -Like PlcSubnetPrefix*）</div>
-<div class="box action">New-NetIPAddress -InterfaceAlias $nic -IPAddress 192.168.10.10 -PrefixLength 24（新增別名，不動原 PLC IP）</div>
+<div class="box action">New-NetIPAddress -InterfaceAlias $nic -IPAddress 192.168.10.10 -PrefixLength 24（新增別名，不動原 IO IP）</div>
 <div class="box action">Test-Connection 驗證 ping 儲存機 192.168.10.20</div>
 </div>
 <div class="v-arrow" data-label="Step 2：Guest SMB Client"></div>

@@ -146,8 +146,8 @@ D:.
 |       |   |   LightBridge.Core.pdb
 |       |   |   Matrox.MatroxImagingLibrary.dll
 |       |   |   Matrox.MatroxImagingLibrary.xml
-|       |   |   PlcBridge.Core.dll
-|       |   |   PlcBridge.Core.pdb
+|       |   |   IoBridge.Core.dll
+|       |   |   IoBridge.Core.pdb
 |       |   |   StorageBridge.Core.dll
 |       |   |   StorageBridge.Core.pdb
 |       |   |   
@@ -206,8 +206,8 @@ D:.
 |           |   picoater_tests.exp
 |           |   picoater_tests.lib
 |           |   picoater_tests.pdb
-|           |   PlcBridge.Core.dll
-|           |   PlcBridge.Core.pdb
+|           |   IoBridge.Core.dll
+|           |   IoBridge.Core.pdb
 |           |   StorageBridge.Core.dll
 |           |   StorageBridge.Core.pdb
 |           |   System.Runtime.CompilerServices.Unsafe.dll
@@ -981,11 +981,11 @@ D:.
 |   |   |               AssemblyInfo.cs
 |   |   |               
 |   |   +---PlcBridge
-|   |   |   \---PlcBridge.Core
+|   |   |   \---IoBridge.Core
 |   |   |       |   IcpDasModbusTcpClient.cs
 |   |   |       |   IModbusTcpClient.cs
-|   |   |       |   PlcBridge.Core.csproj
-|   |   |       |   PlcLogger.cs
+|   |   |       |   IoBridge.Core.csproj
+|   |   |       |   IoLogger.cs
 |   |   |       |   
 |   |   |       +---bin
 |   |   |       |   \---x64
@@ -994,44 +994,44 @@ D:.
 |   |   |       |   +---Any CPU
 |   |   |       |   |   \---Release
 |   |   |       |   |           .NETFramework,Version=v4.8.AssemblyAttributes.cs
-|   |   |       |   |           PlcBridge.Core.csproj.AssemblyReference.cache
-|   |   |       |   |           PlcBridge.Core.csproj.CoreCompileInputs.cache
-|   |   |       |   |           PlcBridge.Core.csproj.FileListAbsolute.txt
-|   |   |       |   |           PlcBridge.Core.dll
+|   |   |       |   |           IoBridge.Core.csproj.AssemblyReference.cache
+|   |   |       |   |           IoBridge.Core.csproj.CoreCompileInputs.cache
+|   |   |       |   |           IoBridge.Core.csproj.FileListAbsolute.txt
+|   |   |       |   |           IoBridge.Core.dll
 |   |   |       |   |           
 |   |   |       |   +---Debug
 |   |   |       |   |       .NETFramework,Version=v4.8.AssemblyAttributes.cs
-|   |   |       |   |       PlcBridge.Core.csproj.AssemblyReference.cache
-|   |   |       |   |       PlcBridge.Core.csproj.CoreCompileInputs.cache
-|   |   |       |   |       PlcBridge.Core.csproj.FileListAbsolute.txt
-|   |   |       |   |       PlcBridge.Core.dll
-|   |   |       |   |       PlcBridge.Core.pdb
+|   |   |       |   |       IoBridge.Core.csproj.AssemblyReference.cache
+|   |   |       |   |       IoBridge.Core.csproj.CoreCompileInputs.cache
+|   |   |       |   |       IoBridge.Core.csproj.FileListAbsolute.txt
+|   |   |       |   |       IoBridge.Core.dll
+|   |   |       |   |       IoBridge.Core.pdb
 |   |   |       |   |       
 |   |   |       |   +---Release
 |   |   |       |   |       .NETFramework,Version=v4.8.AssemblyAttributes.cs
-|   |   |       |   |       PlcBridge.Core.csproj.AssemblyReference.cache
-|   |   |       |   |       PlcBridge.Core.csproj.CoreCompileInputs.cache
-|   |   |       |   |       PlcBridge.Core.csproj.FileListAbsolute.txt
-|   |   |       |   |       PlcBridge.Core.dll
-|   |   |       |   |       PlcBridge.Core.pdb
+|   |   |       |   |       IoBridge.Core.csproj.AssemblyReference.cache
+|   |   |       |   |       IoBridge.Core.csproj.CoreCompileInputs.cache
+|   |   |       |   |       IoBridge.Core.csproj.FileListAbsolute.txt
+|   |   |       |   |       IoBridge.Core.dll
+|   |   |       |   |       IoBridge.Core.pdb
 |   |   |       |   |       
 |   |   |       |   \---x64
 |   |   |       |       +---Debug
 |   |   |       |       |       .NETFramework,Version=v4.8.AssemblyAttributes.cs
-|   |   |       |       |       PlcBridge.Core.csproj.AssemblyReference.cache
-|   |   |       |       |       PlcBridge.Core.csproj.CoreCompileInputs.cache
-|   |   |       |       |       PlcBridge.Core.csproj.FileListAbsolute.txt
-|   |   |       |       |       PlcBridge.Core.dll
-|   |   |       |       |       PlcBridge.Core.pdb
+|   |   |       |       |       IoBridge.Core.csproj.AssemblyReference.cache
+|   |   |       |       |       IoBridge.Core.csproj.CoreCompileInputs.cache
+|   |   |       |       |       IoBridge.Core.csproj.FileListAbsolute.txt
+|   |   |       |       |       IoBridge.Core.dll
+|   |   |       |       |       IoBridge.Core.pdb
 |   |   |       |       |       
 |   |   |       |       \---Release
 |   |   |       |           |   .NETFramework,Version=v4.8.AssemblyAttributes.cs
 |   |   |       |           |   DesignTimeResolveAssemblyReferencesInput.cache
-|   |   |       |           |   PlcBridge.Core.csproj.AssemblyReference.cache
-|   |   |       |           |   PlcBridge.Core.csproj.CoreCompileInputs.cache
-|   |   |       |           |   PlcBridge.Core.csproj.FileListAbsolute.txt
-|   |   |       |           |   PlcBridge.Core.dll
-|   |   |       |           |   PlcBridge.Core.pdb
+|   |   |       |           |   IoBridge.Core.csproj.AssemblyReference.cache
+|   |   |       |           |   IoBridge.Core.csproj.CoreCompileInputs.cache
+|   |   |       |           |   IoBridge.Core.csproj.FileListAbsolute.txt
+|   |   |       |           |   IoBridge.Core.dll
+|   |   |       |           |   IoBridge.Core.pdb
 |   |   |       |           |   
 |   |   |       |           \---TempPE
 |   |   |       \---Properties
@@ -1503,62 +1503,62 @@ D:.
 |                   
 \---tools
     +---plc-automation
-    |   \---PlcBridge.Automation
+    |   \---IoBridge.Automation
     |       |   App.config
     |       |   AppSettings.cs
     |       |   MainForm.cs
     |       |   MainForm.Designer.cs
     |       |   MainProcess.cs
-    |       |   PlcBridge.Automation.csproj
+    |       |   IoBridge.Automation.csproj
     |       |   Program.cs
     |       |   
     |       +---obj
     |       |   +---Debug
     |       |   |       .NETFramework,Version=v4.8.AssemblyAttributes.cs
-    |       |   |       PlcBridge.Automation.csproj.AssemblyReference.cache
-    |       |   |       PlcBridge.Automation.csproj.CoreCompileInputs.cache
-    |       |   |       PlcBridge.Automation.csproj.FileListAbsolute.txt
-    |       |   |       PlcBridge.Automation.exe
-    |       |   |       PlcBridge.Automation.pdb
+    |       |   |       IoBridge.Automation.csproj.AssemblyReference.cache
+    |       |   |       IoBridge.Automation.csproj.CoreCompileInputs.cache
+    |       |   |       IoBridge.Automation.csproj.FileListAbsolute.txt
+    |       |   |       IoBridge.Automation.exe
+    |       |   |       IoBridge.Automation.pdb
     |       |   |       
     |       |   \---x64
     |       |       \---Release
     |       |               .NETFramework,Version=v4.8.AssemblyAttributes.cs
-    |       |               PlcBridge.Automation.csproj.AssemblyReference.cache
-    |       |               PlcBridge.Automation.csproj.CoreCompileInputs.cache
-    |       |               PlcBridge.Automation.csproj.FileListAbsolute.txt
-    |       |               PlcBridge.Automation.exe
-    |       |               PlcBridge.Automation.pdb
+    |       |               IoBridge.Automation.csproj.AssemblyReference.cache
+    |       |               IoBridge.Automation.csproj.CoreCompileInputs.cache
+    |       |               IoBridge.Automation.csproj.FileListAbsolute.txt
+    |       |               IoBridge.Automation.exe
+    |       |               IoBridge.Automation.pdb
     |       |               
     |       \---Properties
     |               AssemblyInfo.cs
     |               
     +---plc-manual-control
-    |   \---PlcBridge.ManualControl
+    |   \---IoBridge.ManualControl
     |       |   App.config
     |       |   AppSettings.cs
     |       |   MainForm.cs
     |       |   MainForm.Designer.cs
-    |       |   PlcBridge.ManualControl.csproj
+    |       |   IoBridge.ManualControl.csproj
     |       |   Program.cs
     |       |   
     |       +---obj
     |       |   +---Debug
     |       |   |       .NETFramework,Version=v4.8.AssemblyAttributes.cs
-    |       |   |       PlcBridge.ManualControl.csproj.AssemblyReference.cache
-    |       |   |       PlcBridge.ManualControl.csproj.CoreCompileInputs.cache
-    |       |   |       PlcBridge.ManualControl.csproj.FileListAbsolute.txt
-    |       |   |       PlcBridge.ManualControl.exe
-    |       |   |       PlcBridge.ManualControl.pdb
+    |       |   |       IoBridge.ManualControl.csproj.AssemblyReference.cache
+    |       |   |       IoBridge.ManualControl.csproj.CoreCompileInputs.cache
+    |       |   |       IoBridge.ManualControl.csproj.FileListAbsolute.txt
+    |       |   |       IoBridge.ManualControl.exe
+    |       |   |       IoBridge.ManualControl.pdb
     |       |   |       
     |       |   \---x64
     |       |       \---Release
     |       |               .NETFramework,Version=v4.8.AssemblyAttributes.cs
-    |       |               PlcBridge.ManualControl.csproj.AssemblyReference.cache
-    |       |               PlcBridge.ManualControl.csproj.CoreCompileInputs.cache
-    |       |               PlcBridge.ManualControl.csproj.FileListAbsolute.txt
-    |       |               PlcBridge.ManualControl.exe
-    |       |               PlcBridge.ManualControl.pdb
+    |       |               IoBridge.ManualControl.csproj.AssemblyReference.cache
+    |       |               IoBridge.ManualControl.csproj.CoreCompileInputs.cache
+    |       |               IoBridge.ManualControl.csproj.FileListAbsolute.txt
+    |       |               IoBridge.ManualControl.exe
+    |       |               IoBridge.ManualControl.pdb
     |       |               
     |       \---Properties
     |               AssemblyInfo.cs

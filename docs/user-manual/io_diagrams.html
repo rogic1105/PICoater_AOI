@@ -914,9 +914,9 @@
 </div>
 
 <!-- ════════════════════════════════════════════════════════════════
-     6. IO 暫停模式（lblPlcConn 點擊）
+     6. IO 暫停模式（lblIoConn 點擊）
      ════════════════════════════════════════════════════════════════ -->
-<h2>6. IO 暫停模式 — <code>lblPlcConn</code> 點擊切換</h2>
+<h2>6. IO 暫停模式 — <code>lblIoConn</code> 點擊切換</h2>
 <div class="diagram-container">
   <p style="margin-bottom:16px; font-size:14px; color:#555;">
     點擊狀態列的 IO 連線燈即可暫停 IO 控制（軟體層旗標），PLC TCP 連線與 keepalive DO_PC_ALIVE 保持不變。再點一次恢復。
@@ -948,20 +948,20 @@
 
     <!-- 暫停箭頭 -->
     <path d="M230,110 C 400,50 500,50 620,110" fill="none" stroke="#f9a825" stroke-width="2" marker-end="url(#s-yellow)"/>
-    <text x="425" y="48" text-anchor="middle" font-size="12" font-weight="bold" fill="#795548">點擊 lblPlcConn</text>
+    <text x="425" y="48" text-anchor="middle" font-size="12" font-weight="bold" fill="#795548">點擊 lblIoConn</text>
     <text x="425" y="64" text-anchor="middle" font-size="11" fill="#888">_isIoSuspended = true</text>
-    <text x="425" y="78" text-anchor="middle" font-size="10" fill="#888">lblPlcConn → 黃底「● IO 暫停 ⏸」</text>
+    <text x="425" y="78" text-anchor="middle" font-size="10" fill="#888">lblIoConn → 黃底「● IO 暫停 ⏸」</text>
 
     <!-- 恢復箭頭 -->
     <path d="M620,160 C 500,220 400,220 230,160" fill="none" stroke="#1565c0" stroke-width="2" marker-end="url(#s-blue)"/>
-    <text x="425" y="210" text-anchor="middle" font-size="12" font-weight="bold" fill="#1565c0">再次點擊 lblPlcConn</text>
+    <text x="425" y="210" text-anchor="middle" font-size="12" font-weight="bold" fill="#1565c0">再次點擊 lblIoConn</text>
     <text x="425" y="226" text-anchor="middle" font-size="11" fill="#888">_isIoSuspended = false</text>
     <text x="425" y="240" text-anchor="middle" font-size="10" fill="#888">UpdatePlcConnectionUi(IsConnected) 還原</text>
   </svg>
 
   <table class="io-table" style="margin-top:20px;">
     <tr><th>項目</th><th>正常（IO 已連線）</th><th>暫停中（_isIoSuspended）</th></tr>
-    <tr><td><code>lblPlcConn</code> 外觀</td><td>綠底白字「● IO 已連線」</td><td>黃底黑字「● IO 暫停 ⏸」</td></tr>
+    <tr><td><code>lblIoConn</code> 外觀</td><td>綠底白字「● IO 已連線」</td><td>黃底黑字「● IO 暫停 ⏸」</td></tr>
     <tr><td><code>btnCameraGrab</code></td><td>Disabled「IO 控制中」藍底</td><td>Enabled 可手動點擊</td></tr>
     <tr><td>PlcStartGrab / PlcStopGrab</td><td>正常執行</td><td>直接 return，DI 觸發無效</td></tr>
     <tr><td>TCP 連線</td><td>維持</td><td>維持（不斷線）</td></tr>
@@ -970,7 +970,7 @@
     <tr><td>UpdateStandardBgSubLockState</td><td>IO 連線守衛：不覆寫 Enabled</td><td>守衛解除，可正常管理 Enabled</td></tr>
   </table>
   <p class="note" style="margin-top:12px;">
-    典型使用場景：現場調機時需要手動控制取像，但不想真正斷開 PLC 連線（避免設備誤判 PC 離線）。
+    典型使用場景：現場調機時需要手動控制取像，但不想真正斷開 IO 連線（避免設備誤判 PC 離線）。
   </p>
 </div>
 

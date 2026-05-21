@@ -38,11 +38,11 @@
     <td>輸入→輸出的決定性轉換</td><td>UI 顯示、檔案 IO、time-based</td>
   </tr>
   <tr>
-    <td><a href="testing-integration.html">Integration</a></td><td>&lt; 1s / case</td><td>JSON Save/Load round-trip、CSV 寫入、PlcGrabController FSM + mock IModbusTcpClient</td>
+    <td><a href="testing-integration.html">Integration</a></td><td>&lt; 1s / case</td><td>JSON Save/Load round-trip、CSV 寫入、IoGrabController FSM + mock IModbusTcpClient</td>
     <td>多元件協作 + IO 邊界</td><td>UI 互動、長時間</td>
   </tr>
   <tr>
-    <td><a href="testing-stress.html">Stress</a></td><td>數十秒~數小時</td><td>100 萬筆 Hub.Set / 50 萬 CSV、Soak 24h、PLC FSM 連續循環</td>
+    <td><a href="testing-stress.html">Stress</a></td><td>數十秒~數小時</td><td>100 萬筆 Hub.Set / 50 萬 CSV、Soak 24h、IO FSM 連續循環</td>
     <td>記憶體洩漏、效能退化、長時間穩定</td><td>功能正確性</td>
   </tr>
   <tr>

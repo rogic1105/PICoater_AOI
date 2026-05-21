@@ -23,7 +23,7 @@
 | P0-2 | 清空 `D:\Anilox\Captures` 確保 baseline | 資料夾大小 < 100MB |
 | P0-3 | 確認 `bin\x64\Release\` 內 native DLL 都是新版（picoater_api.dll、Module_GetPICoaterBackground.lib）| 時間戳比 commit `15b7902` 新 |
 | P0-4 | Storage PC 也是同版本程式 + 同 settings JSON | git commit hash 一致 |
-| P0-5 | PLC / 光源連線 OK（lblPlcConn / lblLightConn 綠色）| 連線狀態列綠燈 |
+| P0-5 | PLC / 光源連線 OK（lblIoConn / lblLightConn 綠色）| 連線狀態列綠燈 |
 | P0-6 | 開 Performance Monitor 監控：CPU、RAM、GPU、磁碟 IO、網路、Handle 數 | 啟動 baseline 記下 |
 
 ---

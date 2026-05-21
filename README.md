@@ -19,7 +19,7 @@ PICoater_AOI/
 │   └── c_api/           # 導出給 C# 使用的 DLL 介面層
 ├── src/dotnet/          # [介面] C# 使用者介面
 │   ├── AniloxRoll.Monitor/ # 主程式 (WinForms)
-│   └── PlcBridge/       # PLC Modbus TCP 通訊 (Core / ManualControl / Automation)
+│   └── IoBridge/       # IO Modbus TCP 通訊 (Core / ManualControl / Automation)
 ├── tests/               # [測試] C++ / C# 單元測試與壓力測試
 │   ├── cpp_test         # (picoater_tests)
 │   └── dotnet_test/AniloxRoll.Monitor.Tests/ # NUnit 3.x + Moq 4.x
@@ -74,7 +74,7 @@ PICoater_AOI/
 
 ### C# 單元 + 壓力測試
 * **專案**: `AniloxRoll.Monitor.Tests`（NUnit 3.x + Moq 4.x）
-* 40 個單元測試 + 6 個壓力測試（PLC FSM、CSV、Settings 讀寫）
+* 40 個單元測試 + 6 個壓力測試（IO FSM、CSV、Settings 讀寫）
 
 #### 使用 TestRunner（推薦）
 
@@ -190,7 +190,7 @@ pip install numpy opencv-python
 |------|------|
 | `docs/architecture-ui.md` | UI 架構、控制項觸發關係 |
 | `docs/architecture-image-pipeline.md` | GPU pipeline、存檔格式 |
-| `docs/architecture-acquisition.md` | MIL 取像模組、IO FSM（PlcState enum、IO 快照、Watchdog） |
+| `docs/architecture-acquisition.md` | MIL 取像模組、IO FSM（IoState enum、IO 快照、Watchdog） |
 | `docs/user-manual/io_diagrams.html` | IO 狀態機視覺化（State Machine / SFC / Ladder / Timing） |
 | `docs/dev/MIL_API_Reference.md` | MIL API 參考 |
 | `.claude/skills/*.md` | 開發模式（依修改範圍觸發對應 skill — 詳見 CLAUDE.md §Skills 路由）|

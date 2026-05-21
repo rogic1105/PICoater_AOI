@@ -10,13 +10,13 @@ PICoater_AOI/
 ├── sdk/                  ← 可獨立 split 的 library（純函式庫，無 GUI、無 exe）
 │   ├── AOI_SDK/          ← 影像處理 SDK（CUDA / framework / cpp_utils）
 │   ├── Bridges/          ← 對外設備 / 系統橋接層
-│   │   ├── PlcBridge/PlcBridge.Core/        ← Modbus PLC 通訊
+│   │   ├── IoBridge/IoBridge.Core/        ← Modbus IO 通訊
 │   │   ├── LightBridge/LightBridge.Core/    ← RS-232 LTS-3DPA24 光源
 │   │   └── StorageBridge/StorageBridge.Core/ ← SMB + 檔案複製 + 循環儲存
 │   └── docs/             ← 跨專案工程經驗（repo-style / testing pyramid / FSM）
 ├── tools/                ← 內部工具（工程師 debug / 廠區維護 / 測試用 exe / 腳本）
-│   ├── plc-manual-control/   ← PLC 手動 DI/DO GUI（WinForms exe）
-│   ├── plc-automation/       ← PLC FSM 模擬工具（WinForms exe）
+│   ├── io-manual-control/   ← IO 手動 DI/DO GUI（WinForms exe）
+│   ├── io-automation/       ← IO FSM 模擬工具（WinForms exe）
 │   ├── ps/                   ← PowerShell 腳本
 │   └── python/               ← Python 工具
 ├── tests/                ← 純測試
@@ -118,12 +118,12 @@ PICoater_AOI/
 ├── src/dotnet/AniloxRoll.Monitor/                 ← C# WinForms 應用程式
 ├── src/native/                                    ← C++ pipeline 實作
 ├── sdk/AOI_SDK/                                   ← 影像處理 SDK（core_cv_api / AOI.SDK / framework / cpp_utils）
-├── sdk/Bridges/PlcBridge/PlcBridge.Core/          ← Modbus TCP Client + IModbusTcpClient 介面
+├── sdk/Bridges/IoBridge/IoBridge.Core/          ← Modbus TCP Client + IModbusTcpClient 介面
 ├── sdk/Bridges/LightBridge/LightBridge.Core/      ← LTS-3DPA24 RS-232 光源
 ├── sdk/Bridges/StorageBridge/StorageBridge.Core/  ← SMB 檔案複製 + 循環儲存
 ├── sdk/docs/                                      ← 跨專案工程經驗（atomic html）
-├── tools/plc-manual-control/PlcBridge.ManualControl/  ← 手動 DI/DO GUI
-├── tools/plc-automation/PlcBridge.Automation/         ← FSM 模擬 GUI
+├── tools/io-manual-control/IoBridge.ManualControl/  ← 手動 DI/DO GUI
+├── tools/io-automation/IoBridge.Automation/         ← FSM 模擬 GUI
 ├── tests/dotnet_test/AniloxRoll.Monitor.{Tests,Integration.Tests,Stress.Tests}/  ← NUnit 三層
 ├── tests/python_test/               ← Python 測試/工具腳本
 ├── TestRunner/                      ← 測試啟動器（雙擊 TestRunner.bat）
@@ -207,7 +207,7 @@ PICoater_AOI/
 
 | 路徑 | 職責 |
 |------|------|
-| `sdk/Bridges/PlcBridge/PlcBridge.Core/IModbusTcpClient.cs` | Modbus TCP 介面（供 PlcGrabController mock 注入） |
+| `sdk/Bridges/IoBridge/IoBridge.Core/IModbusTcpClient.cs` | Modbus TCP 介面（供 IoGrabController mock 注入） |
 | `tests/dotnet_test/AniloxRoll.Monitor.Tests/` | NUnit 3.x + Moq 4.x 測試專案 |
 | `CsvConfigSnapshotTests.cs` | #CFG round-trip、ContentKey |
 | `AcquisitionSettingsTests.cs` | Validate fallback、JSON Save/Load |
@@ -328,9 +328,9 @@ PICoater_AOI/
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
-| 啟用 IO | `PlcEnabled` | true | 啟用 PLC Modbus TCP |
-| IO IP | `PlcIp` | 192.168.255.1 | ET-7044 IP |
-| IO Port | `PlcPort` | 502 | Modbus TCP port |
+| 啟用 IO | `IoEnabled` | true | 啟用 IO Modbus TCP |
+| IO IP | `IoIp` | 192.168.255.1 | ET-7044 IP |
+| IO Port | `IoPort` | 502 | Modbus TCP port |
 
 ---
 
@@ -412,8 +412,8 @@ PICoater_AOI/
 | 硬體參數列表 | `listViewHardware` | ListView | — |
 | 座標狀態列 | `lblPixelInfo` | Label | 位置:... |
 | 相機數狀態 | `lblCamCount` | Label | 相機: N/7 |
-| PLC 狀態 | `lblPlcState` | Label | ● 狀態: -- |
-| IO 連線狀態 | `lblPlcConn` | Label | ● IO: -- |
+| IO 狀態 | `lblIoState` | Label | ● 狀態: -- |
+| IO 連線狀態 | `lblIoConn` | Label | ● IO: -- |
 | 光源連線狀態 | `lblLightConn` | Label | ● 光源: -- |
 | 儲存電腦連線狀態 | `lblStorageConn` | Label | ● 儲存電腦: -- |
 | IO 燈號 | `lblIoDiAlive~lblIoDoPcBusy` | Label×5 | DI0~DO2 |
@@ -429,7 +429,7 @@ PICoater_AOI/
 | UI 控制項、事件、Chart、Canvas | `/modify-ui` | Guard flags、V/H 決策矩陣、StitchMode、Chart 對齊、跨倍率 View、ProportionalScaler |
 | Data tab 統計、CSV、Period Charts | `/modify-data-stats` | 統計三模式、CSV 格式、Period Charts、跨 Tab 同步 |
 | GPU pipeline、Buffer、存檔格式 | `/modify-pipeline` | CUDA pinned memory、V/H ridge、.bin 格式、ImageRepository、StandardBgSub |
-| MIL 取像、相機、CLProtocol、PLC | `/modify-acquisition` | 初始化順序、CLProtocol 延遲啟動、資源釋放、SetGrabHeight、PLC FSM |
+| MIL 取像、相機、CLProtocol、PLC | `/modify-acquisition` | 初始化順序、CLProtocol 延遲啟動、資源釋放、SetGrabHeight、IO FSM |
 | C# / WinForms 通用開發 | `/csharp-patterns` | 命名規則、Settings 持久化、WinForms 陷阱、Designer 規則 |
 | Native C API 新增/修改 | `/add-native-api` | P/Invoke 宣告、C++ 實作範本 |
 | 效能瓶頸排查 | `/perf-diagnose` | Stopwatch 計時、IO/GPU/UI 分層診斷 |

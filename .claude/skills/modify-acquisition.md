@@ -4,7 +4,7 @@
 
 ## 使用時機
 
-修改 AniloxCamera、LiveCameraManager、CameraSystemManager、PlcGrabController 或 MIL API 呼叫時。
+修改 AniloxCamera、LiveCameraManager、CameraSystemManager、IoGrabController 或 MIL API 呼叫時。
 
 ## 關鍵檔案
 
@@ -91,7 +91,7 @@ _isReleased = true → MdigProcess(M_STOP)
 
 ## PLC 連動
 
-- PlcState FSM：Idle → Running → Stopping → Faulted / CommLost
+- IoState FSM：Idle → Running → Stopping → Faulted / CommLost
 - IO 快照 5 LED：DI0(GRAB), DI1(STOP), DI2(MURA_ACK), DO0(READY), DO1(MURA)
 - DO_MURA_DETECTED 不中斷取像（MIL callback 仍持續運作）
 - ET-7044 模組 IP 可設，PollTick ~500ms

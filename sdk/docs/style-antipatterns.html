@@ -50,19 +50,19 @@ public LightController(string comPort, int baudRate, byte channel) { ... }
 
 <div class="bad">
 <pre><code>// sdk/Bridges/LightBridge/LightBridge.Core/LightController.cs
-using PlcBridge.Core;   // ❌ 一個 sdk/ 元件引用另一個</code></pre>
+using IoBridge.Core;   // ❌ 一個 sdk/ 元件引用另一個</code></pre>
 </div>
 
 <div class="good">
 <p>三種解法（按合適度）：</p>
 <ol>
   <li><b>抽共用 sdk/ 元件</b>：把共用邏輯抽到 <code>sdk/Common/Common.Core/</code>，兩邊都引用</li>
-  <li><b>傳基本型別</b>：不要傳 PlcBridge 物件，傳基本參數（int / string / enum）</li>
+  <li><b>傳基本型別</b>：不要傳 IoBridge 物件，傳基本參數（int / string / enum）</li>
   <li><b>應用層做橋接</b>：應用層 src/ 同時引用兩個 sdk/，自己接</li>
 </ol>
 </div>
 
-<p><b>為什麼：</b>sdk/LightBridge 要能單獨 split，不能拖著 PlcBridge 一起走。</p>
+<p><b>為什麼：</b>sdk/Bridges/LightBridge 要能單獨 split，不能拖著 IoBridge 一起走。</p>
 
 <h2>7.4 廠商規格書放 docs/dev/ 而不是 sdk/&lt;元件&gt;/vendor/</h2>
 

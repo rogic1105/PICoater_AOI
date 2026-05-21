@@ -24,7 +24,7 @@ public void PlcCommandLoop_NoMemoryLeak()
                   ? m : 1;
     var deadline = DateTime.UtcNow.AddMinutes(minutes);
     var mock = new Mock&lt;IModbusTcpClient&gt;();
-    var ctrl = new PlcGrabController(mock.Object) { AutoBackgroundLoop = false };
+    var ctrl = new IoGrabController(mock.Object) { AutoBackgroundLoop = false };
     long iterations = 0;
 
     while (DateTime.UtcNow &lt; deadline)
