@@ -4,11 +4,12 @@
 
 ## 啟用方式
 
-1. 編輯 `bin/x64/Release/Config/inspection-settings.json`，加：
+1. 編輯 `bin/x64/Release/Config/inspection-settings.json`，把
    ```json
-   "DebugUiActionLog": true
+   "DebugUiActionLog": false
    ```
-   （PG 上不顯示，純 dev 用）
+   改成 `true`（PG 上不顯示，純 dev 用）。
+   首次啟動 exe 後此欄位會自動補進 json（無需手動建立 key），第二次啟動才改成 true 也可以。
 2. 啟動 `AniloxRoll.Monitor.exe`
 3. 操作各種按鈕 / chart / PG 改值
 4. 關閉 exe（log 寫到 `D:\Anilox\Logs\ui-actions-YYYYMMDD.jsonl`）

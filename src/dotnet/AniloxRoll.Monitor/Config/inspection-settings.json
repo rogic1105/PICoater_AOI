@@ -62,6 +62,8 @@
     "Enabled": true,
     "ComPort": "COM17",
     "Channel": 1,
-    "Brightness": 255
-  }
+    "Brightness": 255,
+    "WarmupMs": 300
+  },
+  "DebugUiActionLog": false
 }
