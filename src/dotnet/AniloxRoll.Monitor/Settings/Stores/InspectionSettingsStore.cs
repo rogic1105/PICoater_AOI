@@ -137,7 +137,10 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"Channel\": {LT.Channel},");
             sb.AppendLine($"    \"Brightness\": {LT.Brightness},");
             sb.AppendLine($"    \"WarmupMs\": {LT.WarmupMs}");
-            sb.AppendLine("  }");
+            sb.AppendLine("  },");
+
+            // Debug flags（PG 隱藏，編輯 json 啟用）
+            sb.AppendLine($"  \"DebugUiActionLog\": {(s.DebugUiActionLog ? "true" : "false")}");
 
             sb.Append("}");
             return sb.ToString();
@@ -162,6 +165,7 @@ namespace AniloxRoll.Monitor.Core.Data
                 PlcEnabled    = ParsePlcEnabled(json),
                 PlcIp         = ParsePlcIp(json),
                 PlcPort       = ParsePlcPort(json),
+                DebugUiActionLog = SettingsStoreHelper.GetBool(json, "DebugUiActionLog", false),
             };
         }
 

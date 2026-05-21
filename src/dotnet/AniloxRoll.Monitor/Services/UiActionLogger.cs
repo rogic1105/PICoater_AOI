@@ -21,7 +21,26 @@ namespace AniloxRoll.Monitor.Core.Services
     {
         // ── 開關 + 路徑 ────────────────────────────────────────────────
         public static volatile bool Enabled;
-        public static string LogFolder = @"D:\Anilox\Logs";
+
+        // Log 路徑：自動偵測 dev (exe 在 repo bin/x64/Release) 或 prod。
+        // dev → 寫 docs/dev/fsm/logs/（跟 viewer.html 同層目錄樹，直接 fetch）
+        // prod → 寫 D:\Anilox\Logs\fsm\（跟其他 log 並列）
+        public static string LogFolder = DetectLogFolder();
+
+        private static string DetectLogFolder()
+        {
+            try
+            {
+                // 從 exe 位置往上找 3 層（bin/x64/Release → repo root）→ docs/dev/fsm/logs
+                var exeDir = AppDomain.CurrentDomain.BaseDirectory;
+                var repoRoot = Path.GetFullPath(Path.Combine(exeDir, "..", "..", ".."));
+                var devLogDir = Path.Combine(repoRoot, "docs", "dev", "fsm", "logs");
+                var viewerPath = Path.Combine(repoRoot, "docs", "dev", "fsm", "viewer.html");
+                if (File.Exists(viewerPath)) return devLogDir;  // dev：exe 在 repo 內
+            }
+            catch { }
+            return @"D:\Anilox\Logs\fsm";  // prod fallback
+        }
 
         // ── ThreadStatic / AsyncLocal source（跨 await 保留）─────────────
         private static readonly AsyncLocal<string> _currentSource = new AsyncLocal<string>();

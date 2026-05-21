@@ -3547,28 +3547,25 @@ namespace AniloxRoll.Monitor.Forms
             if (_settings == null) return;
             bool wasStitchMode = _stitchCoordinator.IsStitchMode;
 
-            // Commit-on-end：transition 期間隱藏 canvas，避免「先顯示舊強化版緩存、再 reload 原圖」中間幀閃。
-            canvasMain.Visible = false;
-            try
+            // 之前用 canvasMain.Visible=false 包 transition 想做 commit-on-end，但實測 reload 期間
+            // canvas 整個消失（黑屏）幾百 ms 反而比中間幀更難看。改回直接 transition，由 ReloadCurrentStitchedView
+            // 內 LoadGrabStitchedViewAsync 換 Image 時自然 paint 一次（短暫舊→新轉換可接受）。
+            _settingsHub.SetBatch(s =>
             {
-                _settingsHub.SetBatch(s =>
-                {
-                    s.EnableReviewEnhance = false;
-                    s.hb_StitchMode       = newMode;
-                });
-                _stitchCoordinator.LastReviewProcessedMode = false;
-                UpdateRidgeDirectionVisual(null);
-                RefreshGridItem(nameof(InspectionSettings.hd_EnableReviewEnhance));
-                RefreshGridItem(nameof(InspectionSettings.hb_StitchMode));
+                s.EnableReviewEnhance = false;
+                s.hb_StitchMode       = newMode;
+            });
+            _stitchCoordinator.LastReviewProcessedMode = false;
+            UpdateRidgeDirectionVisual(null);
+            RefreshGridItem(nameof(InspectionSettings.hd_EnableReviewEnhance));
+            RefreshGridItem(nameof(InspectionSettings.hb_StitchMode));
 
-                await OnStitchModeChangedAsync(skipStitchedImageRefresh: wasStitchMode);
-                if (wasStitchMode && _stitchCoordinator.IsStitchMode)
-                {
-                    await ReloadCurrentStitchedView(false);
-                    if (canvasMain.Image != null) canvasMain.FitToScreen();
-                }
+            await OnStitchModeChangedAsync(skipStitchedImageRefresh: wasStitchMode);
+            if (wasStitchMode && _stitchCoordinator.IsStitchMode)
+            {
+                await ReloadCurrentStitchedView(false);
+                if (canvasMain.Image != null) canvasMain.FitToScreen();
             }
-            finally { canvasMain.Visible = true; }
         }
 
         private async Task OnStitchModeChangedAsync(bool skipStitchedImageRefresh = false)

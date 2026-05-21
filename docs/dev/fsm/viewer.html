@@ -52,7 +52,9 @@ table.matrix td.empty { background: #fafafa; color: #ccc; }
 <div>State catalog: <input type="file" id="catalogFile" accept=".csv" onchange="loadCatalog(this)"></div>
 <div>Transition table: <input type="file" id="tableFile" accept=".csv" onchange="loadTable(this)"></div>
 <div><b>2. Log file：</b> <input type="file" id="logFile" accept=".jsonl,.log" onchange="loadLog(this)"></div>
-<div><button onclick="reloadCsv()">自動重載 CSV (同目錄)</button></div>
+<div><button onclick="reloadCsv()">自動重載 CSV</button>
+<button onclick="loadTodayLog()">📂 載入今天 log (logs/ui-actions-<span id="todayStr"></span>.jsonl)</button>
+<span id="loadStatus" style="margin-left:8px;color:#666;font-size:0.85em;"></span></div>
 </div>
 
 <div class="summary">
@@ -110,6 +112,30 @@ async function autoFetch() {
 }
 
 function reloadCsv() { autoFetch(); }
+
+function todayDateStr() {
+  const d = new Date();
+  return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+}
+
+async function loadTodayLog() {
+  const path = `logs/ui-actions-${todayDateStr()}.jsonl`;
+  const status = document.getElementById('loadStatus');
+  status.textContent = '載入中…';
+  try {
+    const txt = await fetch(path).then(r => {
+      if (!r.ok) throw new Error('404');
+      return r.text();
+    });
+    logEntries = txt.trim().split(/\r?\n/).filter(l => l.length > 0).map(l => {
+      try { return JSON.parse(l); } catch { return null; }
+    }).filter(x => x);
+    rebuild();
+    status.textContent = `✓ 載入 ${logEntries.length} 筆 (${path})`;
+  } catch (e) {
+    status.textContent = `✗ 找不到 ${path} — 確認 exe 在 repo 內跑、DebugUiActionLog=true、有跑過操作`;
+  }
+}
 
 function loadCatalog(input) {
   const f = input.files[0]; if (!f) return;
@@ -243,6 +269,7 @@ function renderMatrix() {
   document.getElementById('matrixTable').innerHTML = html;
 }
 
+document.getElementById('todayStr').textContent = todayDateStr();
 autoFetch();
 </script>
 </body>
