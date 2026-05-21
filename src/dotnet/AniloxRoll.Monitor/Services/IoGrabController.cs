@@ -1,6 +1,6 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Forms;
 using PlcBridge.Core;
 
 namespace AniloxRoll.Monitor.Core.Services
@@ -8,6 +8,11 @@ namespace AniloxRoll.Monitor.Core.Services
     /// <summary>
     /// PLC-PC 交握控制器：自動偵測 PLC 連線，連線時以 DI START 信號控制 Grab 啟停。
     /// 未連線時退回 UI 按鈕控制。
+    ///
+    /// 背景監控 loop（Task.Run，不依賴 message pump），啟動時不論連線成功失敗都跑：
+    ///   IsConnected → PollTick + Task.Delay(PollIntervalMs)
+    ///   !IsConnected → ReconnectTick + Task.Delay(ReconnectIntervalMs)
+    /// 場景：程式先開啟、IO 後接 → loop 持續重連直到 PLC 上線，無需重啟程式。
     ///
     /// IO Mapping (ET-7044):
     ///   DI-0: PLC ALIVE   (PLC → PC)
@@ -25,8 +30,8 @@ namespace AniloxRoll.Monitor.Core.Services
         private const int DO_PC_INSPECT    = 2;
 
         private readonly IModbusTcpClient _plc;
-        private readonly Timer _pollTimer;
-        private readonly Timer _reconnectTimer;
+        private CancellationTokenSource _bgCts;
+        private Task _bgTask;
 
         private bool _lastDiStart;
         private bool _isPcAlive;
@@ -49,10 +54,10 @@ namespace AniloxRoll.Monitor.Core.Services
         public string Model => "ET-7044";
 
         /// <summary>Poll 週期（ms）。</summary>
-        public int PollIntervalMs => _pollTimer.Interval;
+        public int PollIntervalMs { get; set; } = 500;
 
         /// <summary>重連週期（ms）。</summary>
-        public int ReconnectIntervalMs => _reconnectTimer.Interval;
+        public int ReconnectIntervalMs { get; set; } = 5000;
 
         /// <summary>讀寫逾時（ms）。</summary>
         public int ReadWriteTimeoutMs => _plc.ReadWriteTimeoutMs;
@@ -78,21 +83,22 @@ namespace AniloxRoll.Monitor.Core.Services
         /// <summary>每次 PollTick 結束時發送所有 IO 快照。</summary>
         public event Action<IoSnapshot> OnIoUpdated;
 
+        /// <summary>
+        /// 測試用：設 false 跳過 StartAsync 內的 BackgroundLoop 啟動，
+        /// test 可以手動呼 PollTick / ReconnectTick 而不會跟背景 loop race。
+        /// 生產代碼預設 true，不需碰。
+        /// </summary>
+        internal bool AutoBackgroundLoop { get; set; } = true;
+
         public IoGrabController() : this(new IcpDasModbusTcpClient()) { }
 
         internal IoGrabController(IModbusTcpClient plcClient)
         {
             _plc = plcClient;
             _plc.ReadWriteTimeoutMs = 2000;
-
-            _pollTimer = new Timer { Interval = 500 };
-            _pollTimer.Tick += async (s, e) => await PollTick();
-
-            _reconnectTimer = new Timer { Interval = 5000 };
-            _reconnectTimer.Tick += async (s, e) => await ReconnectTick();
         }
 
-        /// <summary>啟動：嘗試連線 PLC，成功則進入 Idle 狀態，失敗則啟動背景重連。</summary>
+        /// <summary>啟動：嘗試連線 PLC，不論成功失敗都啟動背景 loop（自動重連 + poll）。</summary>
         public async Task StartAsync(string ip, int port = 502)
         {
             _plcIp = ip;
@@ -101,23 +107,63 @@ namespace AniloxRoll.Monitor.Core.Services
             bool ok = await _plc.ConnectAsync(ip, port, 3000);
             if (ok)
             {
-                await EnterIdle();
-                _pollTimer.Start();
+                try { await EnterIdle(); }
+                catch (Exception ex) { PlcLogger.Error("EnterIdle on initial connect failed", ex); }
                 OnConnectionChanged?.Invoke(true);
                 PlcLogger.Info($"PLC connected: {ip}:{port}");
             }
             else
             {
-                PlcLogger.Warn($"PLC initial connect failed ({ip}:{port}), will retry in background.");
-                _reconnectTimer.Start();
+                PlcLogger.Warn($"PLC initial connect failed ({ip}:{port}), background loop will retry every {ReconnectIntervalMs}ms.");
+            }
+
+            // 啟動背景 loop —— 不依賴 message pump，跑在 thread pool 上。
+            // IsConnected=true → PollTick；IsConnected=false → ReconnectTick。
+            if (AutoBackgroundLoop)
+            {
+                _bgCts = new CancellationTokenSource();
+                _bgTask = Task.Run(() => BackgroundLoop(_bgCts.Token));
             }
         }
 
-        /// <summary>停止：清除所有 DO、斷線。</summary>
+        private async Task BackgroundLoop(CancellationToken ct)
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                try
+                {
+                    if (_plc.IsConnected)
+                    {
+                        await PollTick();
+                        try { await Task.Delay(PollIntervalMs, ct); } catch (OperationCanceledException) { break; }
+                    }
+                    else
+                    {
+                        await ReconnectTick();
+                        if (!_plc.IsConnected)
+                        {
+                            try { await Task.Delay(ReconnectIntervalMs, ct); } catch (OperationCanceledException) { break; }
+                        }
+                    }
+                }
+                catch (OperationCanceledException) { break; }
+                catch (Exception ex)
+                {
+                    PlcLogger.Error("BackgroundLoop unexpected error", ex);
+                    try { await Task.Delay(1000, ct); } catch { break; }
+                }
+            }
+        }
+
+        /// <summary>停止：清除所有 DO、斷線、停止背景 loop。</summary>
         public async Task StopAsync()
         {
-            _pollTimer.Stop();
-            _reconnectTimer.Stop();
+            _bgCts?.Cancel();
+            if (_bgTask != null)
+            {
+                try { await _bgTask; } catch { /* swallow — task cancelled or already faulted */ }
+            }
+
             if (_plc.IsConnected)
             {
                 try
@@ -222,7 +268,6 @@ namespace AniloxRoll.Monitor.Core.Services
 
         internal async Task PollTick()
         {
-            _pollTimer.Stop();
             try
             {
                 // ReadDiStatuses 產生 Modbus 流量，同時餵 ET-7044 Host Watchdog
@@ -247,7 +292,6 @@ namespace AniloxRoll.Monitor.Core.Services
                     catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[IoGrabController.Poll.StopCleanup] {ex.GetType().Name}: {ex.Message}"); }
                     OnStopRequested?.Invoke();
                     FireIoSnapshot(plcAlive, diStart);
-                    _pollTimer.Start();
                     return;
                 }
 
@@ -258,14 +302,12 @@ namespace AniloxRoll.Monitor.Core.Services
                     SetState(IoState.Idle);
                     _lastDiStart = diStart;
                     FireIoSnapshot(plcAlive, diStart);
-                    _pollTimer.Start();
                     return;
                 }
 
                 if (_currentState == IoState.Faulted || _currentState == IoState.CommLost)
                 {
                     FireIoSnapshot(plcAlive, diStart);
-                    _pollTimer.Start();
                     return;
                 }
 
@@ -292,7 +334,6 @@ namespace AniloxRoll.Monitor.Core.Services
 
                 _lastDiStart = diStart;
                 FireIoSnapshot(plcAlive, diStart);
-                _pollTimer.Start();
             }
             catch (Exception ex)
             {
@@ -306,33 +347,27 @@ namespace AniloxRoll.Monitor.Core.Services
                 OnStopRequested?.Invoke();
                 FireIoSnapshot(false, false);
                 _plc.Dispose();
-                _reconnectTimer.Start();
+                // BackgroundLoop 偵測 !IsConnected 後會自動走 ReconnectTick 路徑，不需手動排程。
             }
         }
 
         internal async Task ReconnectTick()
         {
-            _reconnectTimer.Stop();
             bool ok = await _plc.ConnectAsync(_plcIp, _plcPort, 3000);
             if (ok)
             {
                 PlcLogger.Info("PLC reconnected successfully.");
-                await EnterIdle();
-                _pollTimer.Start();
+                try { await EnterIdle(); }
+                catch (Exception ex) { PlcLogger.Error("EnterIdle after reconnect failed", ex); }
                 OnConnectionChanged?.Invoke(true);
             }
-            else
-            {
-                _reconnectTimer.Start();
-            }
+            // 失敗時不做任何事，BackgroundLoop 會 Task.Delay(ReconnectIntervalMs) 後再次呼叫。
         }
 
         public void Dispose()
         {
-            _pollTimer.Stop();
-            _pollTimer.Dispose();
-            _reconnectTimer.Stop();
-            _reconnectTimer.Dispose();
+            _bgCts?.Cancel();
+            _bgCts?.Dispose();
             _plc.Dispose();
         }
     }

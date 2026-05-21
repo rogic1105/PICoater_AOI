@@ -25,6 +25,8 @@ namespace AniloxRoll.Monitor.Tests
             _mockPlc.Setup(p => p.WriteDo(It.IsAny<int>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
 
             _ctrl = new IoGrabController(_mockPlc.Object);
+            // 關閉背景 loop，避免跟手動 PollTick / ReconnectTick race（純單元測試模式）
+            _ctrl.AutoBackgroundLoop = false;
             _stateLog = new List<IoState>();
             _startCount = 0;
             _stopCount = 0;

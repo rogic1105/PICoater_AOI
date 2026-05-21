@@ -103,7 +103,7 @@ namespace AniloxRoll.Monitor.Tests
                 .ReturnsAsync(true);
             mockPlc.Setup(p => p.IsConnected).Returns(true);
 
-            using (var ctrl = new IoGrabController(mockPlc.Object))
+            using (var ctrl = new IoGrabController(mockPlc.Object) { AutoBackgroundLoop = false })
             {
                 int startCount = 0, stopCount = 0;
                 ctrl.OnStartRequested += () => startCount++;
@@ -153,7 +153,7 @@ namespace AniloxRoll.Monitor.Tests
                 .ReturnsAsync(true);
             mockPlc.Setup(p => p.IsConnected).Returns(true);
 
-            using (var ctrl = new IoGrabController(mockPlc.Object))
+            using (var ctrl = new IoGrabController(mockPlc.Object) { AutoBackgroundLoop = false })
             {
                 await ctrl.StartAsync("192.168.255.1");
 
