@@ -1,7 +1,7 @@
 using System;
 using System.Threading.Tasks;
 
-namespace PlcBridge.Core
+namespace IoBridge.Core
 {
     /// <summary>
     /// Modbus TCP 客戶端介面，供 IoGrabController 注入測試用 mock。

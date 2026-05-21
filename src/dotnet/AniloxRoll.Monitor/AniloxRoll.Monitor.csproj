@@ -216,9 +216,9 @@
       <Project>{D3E4F5A6-4444-5555-6666-777788889999}</Project>
       <Name>StorageBridge.Core</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\..\sdk\Bridges\PlcBridge\PlcBridge.Core\PlcBridge.Core.csproj">
+    <ProjectReference Include="..\..\..\sdk\Bridges\IoBridge\IoBridge.Core\IoBridge.Core.csproj">
       <Project>{A1B2C3D4-1111-2222-3333-444455556666}</Project>
-      <Name>PlcBridge.Core</Name>
+      <Name>IoBridge.Core</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup />

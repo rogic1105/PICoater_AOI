@@ -1,6 +1,6 @@
 using System.Configuration;
 
-namespace PlcBridge.ManualControl
+namespace IoBridge.Automation
 {
     internal static class AppSettings
     {
@@ -8,6 +8,8 @@ namespace PlcBridge.ManualControl
         public static int PlcPort => GetInt("PLC_Port", 502);
         public static int PollIntervalMs => GetInt("PollIntervalMs", 500);
         public static int ConnectTimeoutMs => GetInt("ConnectTimeoutMs", 5000);
+        public static int ReconnectTimeoutMs => GetInt("ReconnectTimeoutMs", 3000);
+        public static int ReconnectIntervalMs => GetInt("ReconnectIntervalMs", 5000);
         public static int ReadWriteTimeoutMs => GetInt("ReadWriteTimeoutMs", 2000);
 
         private static string Get(string key, string defaultValue) =>

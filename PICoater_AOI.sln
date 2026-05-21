@@ -52,7 +52,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Code", "Code", "{800258B5-D
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Code", "Code", "{7BD6E3EB-B6A4-40D0-B7F4-96DCCB2798E0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PlcBridge.Core", "sdk\Bridges\PlcBridge\PlcBridge.Core\PlcBridge.Core.csproj", "{A1B2C3D4-1111-2222-3333-444455556666}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IoBridge.Core", "sdk\Bridges\IoBridge\IoBridge.Core\IoBridge.Core.csproj", "{A1B2C3D4-1111-2222-3333-444455556666}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightBridge.Core", "sdk\Bridges\LightBridge\LightBridge.Core\LightBridge.Core.csproj", "{C2D3E4F5-3333-4444-5555-666677778888}"
 EndProject

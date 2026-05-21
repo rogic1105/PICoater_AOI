@@ -6,8 +6,8 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{C3D4E5F6-3333-4444-5555-666677778888}</ProjectGuid>
     <OutputType>WinExe</OutputType>
-    <RootNamespace>PlcBridge.Automation</RootNamespace>
-    <AssemblyName>PlcBridge.Automation</AssemblyName>
+    <RootNamespace>IoBridge.Automation</RootNamespace>
+    <AssemblyName>IoBridge.Automation</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
@@ -73,9 +73,9 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\sdk\Bridges\PlcBridge\PlcBridge.Core\PlcBridge.Core.csproj">
+    <ProjectReference Include="..\..\..\sdk\Bridges\IoBridge\IoBridge.Core\IoBridge.Core.csproj">
       <Project>{A1B2C3D4-1111-2222-3333-444455556666}</Project>
-      <Name>PlcBridge.Core</Name>
+      <Name>IoBridge.Core</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

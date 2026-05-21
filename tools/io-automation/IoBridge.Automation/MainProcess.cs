@@ -1,9 +1,9 @@
 using System;
 using System.Net.Sockets;
 using System.Threading.Tasks;
-using PlcBridge.Core;
+using IoBridge.Core;
 
-namespace PlcBridge.Automation
+namespace IoBridge.Automation
 {
     public class MainProcess
     {
@@ -32,7 +32,7 @@ namespace PlcBridge.Automation
 
         private void SetStatus(string status)
         {
-            PlcLogger.Info($"State: {_currentStatus} -> {status}");
+            IoLogger.Info($"State: {_currentStatus} -> {status}");
             _currentStatus = status;
             _updateStatusCallback?.Invoke(status);
         }
@@ -60,7 +60,7 @@ namespace PlcBridge.Automation
 
         public void TriggerPcError()
         {
-            PlcLogger.Warn("PC connection lost, entering PCErr state.");
+            IoLogger.Warn("PC connection lost, entering PCErr state.");
             SetStatus("PCErr");
             _isInspecting = false;
             _isPcAlive = false;
@@ -70,7 +70,7 @@ namespace PlcBridge.Automation
         {
             if (_plc.IsConnected)
             {
-                PlcLogger.Info("Recovering from PCErr.");
+                IoLogger.Info("Recovering from PCErr.");
                 await _plc.WriteDo(DO_PC_ALIVE, true);
                 _isPcAlive = true;
                 await _plc.WriteDo(DO_MURA_DETECTED, false);
@@ -94,7 +94,7 @@ namespace PlcBridge.Automation
 
             if (_currentStatus == "PLCErr" && currentPlcAlive && _isPcAlive)
             {
-                PlcLogger.Info("PLC ALIVE restored, recovering from PLCErr.");
+                IoLogger.Info("PLC ALIVE restored, recovering from PLCErr.");
                 SetStatus("Ready");
                 return Task.CompletedTask;
             }
@@ -116,7 +116,7 @@ namespace PlcBridge.Automation
         {
             try
             {
-                PlcLogger.Warn("PLC ALIVE lost, entering PLCErr state.");
+                IoLogger.Warn("PLC ALIVE lost, entering PLCErr state.");
                 SetStatus("PLCErr");
                 _isInspecting = false;
 
@@ -126,15 +126,15 @@ namespace PlcBridge.Automation
                     await _plc.WriteDo(DO_PC_INSPECT, false);
                 }
             }
-            catch (SocketException ex) { PlcLogger.Error("ExecutePlcErrorSequence socket error", ex); }
-            catch (Exception ex) { PlcLogger.Error("ExecutePlcErrorSequence failed", ex); }
+            catch (SocketException ex) { IoLogger.Error("ExecutePlcErrorSequence socket error", ex); }
+            catch (Exception ex) { IoLogger.Error("ExecutePlcErrorSequence failed", ex); }
         }
 
         private async Task ExecuteStartSequence()
         {
             try
             {
-                PlcLogger.Info("START signal detected, beginning inspection.");
+                IoLogger.Info("START signal detected, beginning inspection.");
                 SetStatus("Start");
                 if (_plc.IsConnected) await _plc.WriteDo(DO_PC_INSPECT, true);
 
@@ -144,15 +144,15 @@ namespace PlcBridge.Automation
 
                 await SimulationLoop();
             }
-            catch (SocketException ex) { PlcLogger.Error("ExecuteStartSequence socket error", ex); }
-            catch (Exception ex) { PlcLogger.Error("ExecuteStartSequence failed", ex); }
+            catch (SocketException ex) { IoLogger.Error("ExecuteStartSequence socket error", ex); }
+            catch (Exception ex) { IoLogger.Error("ExecuteStartSequence failed", ex); }
         }
 
         private async Task ExecuteStopSequence()
         {
             try
             {
-                PlcLogger.Info("STOP signal detected, clearing inspection.");
+                IoLogger.Info("STOP signal detected, clearing inspection.");
                 SetStatus("Stop");
                 _isInspecting = false;
                 SetStatus("Clear");
@@ -166,20 +166,20 @@ namespace PlcBridge.Automation
                 await Task.Delay(1000);
                 SetStatus("Ready");
             }
-            catch (SocketException ex) { PlcLogger.Error("ExecuteStopSequence socket error", ex); }
-            catch (Exception ex) { PlcLogger.Error("ExecuteStopSequence failed", ex); }
+            catch (SocketException ex) { IoLogger.Error("ExecuteStopSequence socket error", ex); }
+            catch (Exception ex) { IoLogger.Error("ExecuteStopSequence failed", ex); }
         }
 
         private async Task SimulationLoop()
         {
-            PlcLogger.Info("=== Simulation Started ===");
+            IoLogger.Info("=== Simulation Started ===");
             while (_isInspecting)
             {
                 _inspectCount++;
-                PlcLogger.Info($"Simulating... Count: {_inspectCount}");
+                IoLogger.Info($"Simulating... Count: {_inspectCount}");
                 await Task.Delay(1000);
             }
-            PlcLogger.Info("=== Simulation Stopped ===");
+            IoLogger.Info("=== Simulation Stopped ===");
         }
 
         public async Task StopSystemAsync()

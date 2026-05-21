@@ -1,9 +1,9 @@
 using System;
 using System.IO;
 
-namespace PlcBridge.Core
+namespace IoBridge.Core
 {
-    public static class PlcLogger
+    public static class IoLogger
     {
         private static readonly string _logDir =
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
@@ -13,7 +13,7 @@ namespace PlcBridge.Core
         /// <summary>Log 檔名前綴，預設 "PlcBridge"。各 App 可於啟動時設定。</summary>
         public static string FilePrefix { get; set; } = "PlcBridge";
 
-        static PlcLogger()
+        static IoLogger()
         {
             try { Directory.CreateDirectory(_logDir); } catch { }
         }

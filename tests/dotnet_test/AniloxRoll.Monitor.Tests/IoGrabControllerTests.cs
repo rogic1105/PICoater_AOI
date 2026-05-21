@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Moq;
 using NUnit.Framework;
-using PlcBridge.Core;
+using IoBridge.Core;
 using AniloxRoll.Monitor.Core.Services;
 
 namespace AniloxRoll.Monitor.Tests

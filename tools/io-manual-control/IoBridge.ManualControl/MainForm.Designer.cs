@@ -1,4 +1,4 @@
-namespace PlcBridge.ManualControl
+namespace IoBridge.ManualControl
 {
     partial class MainForm
     {

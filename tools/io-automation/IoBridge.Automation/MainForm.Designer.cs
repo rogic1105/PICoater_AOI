@@ -1,4 +1,4 @@
-namespace PlcBridge.Automation
+namespace IoBridge.Automation
 {
     partial class MainForm
     {

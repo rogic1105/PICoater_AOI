@@ -6,9 +6,9 @@ using System.Net;
 using System.Net.Sockets;
 using System.Windows.Forms;
 using System.Threading.Tasks;
-using PlcBridge.Core;
+using IoBridge.Core;
 
-namespace PlcBridge.Automation
+namespace IoBridge.Automation
 {
     public partial class MainForm : Form
     {
@@ -42,8 +42,8 @@ namespace PlcBridge.Automation
             _timerScan.Tick += async (s, e) => await OnPollingTick();
             _timerReconnect.Tick += async (s, e) => await OnReconnectTick();
 
-            PlcLogger.FilePrefix = "Automation";
-            PlcLogger.Info("Application started.");
+            IoLogger.FilePrefix = "Automation";
+            IoLogger.Info("Application started.");
         }
 
         private void SetButtonState(Button btn, bool enabled, Color activeColor)
@@ -164,7 +164,7 @@ namespace PlcBridge.Automation
             {
                 try
                 {
-                    PlcLogger.Info($"Connected to {ip}:{AppSettings.PlcPort}");
+                    IoLogger.Info($"Connected to {ip}:{AppSettings.PlcPort}");
                     _mainProcess = new MainProcess(_plc, UpdateSystemStatusLabel);
                     await _mainProcess.StartSystemAsync();
                     _timerScan.Start();
@@ -173,18 +173,18 @@ namespace PlcBridge.Automation
                 }
                 catch (SocketException ex)
                 {
-                    PlcLogger.Error("Post-connect init socket error", ex);
+                    IoLogger.Error("Post-connect init socket error", ex);
                     HandleConnectionFail();
                 }
                 catch (Exception ex)
                 {
-                    PlcLogger.Error("Post-connect init failed", ex);
+                    IoLogger.Error("Post-connect init failed", ex);
                     HandleConnectionFail();
                 }
             }
             else
             {
-                PlcLogger.Warn($"Connection failed to {ip}:{AppSettings.PlcPort}");
+                IoLogger.Warn($"Connection failed to {ip}:{AppSettings.PlcPort}");
                 HandleConnectionFail();
                 MessageBox.Show("Connection Failed!", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
@@ -210,7 +210,7 @@ namespace PlcBridge.Automation
             else
                 UpdateSystemStatusLabel("Closed");
 
-            PlcLogger.Info("Disconnected by user.");
+            IoLogger.Info("Disconnected by user.");
             _plc.Dispose();
             ResetUI();
             SetButtonState(btnConnect, true, Col_Connect);
@@ -249,12 +249,12 @@ namespace PlcBridge.Automation
             }
             catch (SocketException ex)
             {
-                PlcLogger.Error("Polling socket error, triggering PCErr", ex);
+                IoLogger.Error("Polling socket error, triggering PCErr", ex);
                 HandlePollingError();
             }
             catch (Exception ex)
             {
-                PlcLogger.Error("Polling error, triggering PCErr", ex);
+                IoLogger.Error("Polling error, triggering PCErr", ex);
                 HandlePollingError();
             }
         }
@@ -285,13 +285,13 @@ namespace PlcBridge.Automation
 
             if (success)
             {
-                PlcLogger.Info("Reconnected successfully.");
+                IoLogger.Info("Reconnected successfully.");
                 if (_mainProcess != null) await _mainProcess.RecoverFromPcErrorAsync();
                 _timerScan.Start();
             }
             else
             {
-                PlcLogger.Warn("Reconnect attempt failed, retrying...");
+                IoLogger.Warn("Reconnect attempt failed, retrying...");
                 _timerReconnect.Start();
             }
         }

@@ -1,7 +1,7 @@
 using System;
 using System.Windows.Forms;
 
-namespace PlcBridge.ManualControl
+namespace IoBridge.Automation
 {
     static class Program
     {

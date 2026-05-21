@@ -6,9 +6,9 @@ using System.Net;
 using System.Net.Sockets;
 using System.Windows.Forms;
 using System.Threading.Tasks;
-using PlcBridge.Core;
+using IoBridge.Core;
 
-namespace PlcBridge.ManualControl
+namespace IoBridge.ManualControl
 {
     public partial class MainForm : Form
     {
@@ -30,8 +30,8 @@ namespace PlcBridge.ManualControl
 
             _timerScan.Tick += async (s, e) => await OnPollingTick();
 
-            PlcLogger.FilePrefix = "ManualControl";
-            PlcLogger.Info("Application started.");
+            IoLogger.FilePrefix = "ManualControl";
+            IoLogger.Info("Application started.");
         }
 
         private void InitDynamicControls()
@@ -106,7 +106,7 @@ namespace PlcBridge.ManualControl
             {
                 try
                 {
-                    PlcLogger.Info($"Connected to {ip}:{AppSettings.PlcPort}");
+                    IoLogger.Info($"Connected to {ip}:{AppSettings.PlcPort}");
                     var taskDO = _plc.ReadDoStatuses();
                     var taskDI = _plc.ReadDiStatuses();
                     await Task.WhenAll(taskDO, taskDI);
@@ -126,18 +126,18 @@ namespace PlcBridge.ManualControl
                 }
                 catch (SocketException ex)
                 {
-                    PlcLogger.Error("Post-connect read failed (socket)", ex);
+                    IoLogger.Error("Post-connect read failed (socket)", ex);
                     HandleConnectionFail();
                 }
                 catch (Exception ex)
                 {
-                    PlcLogger.Error("Post-connect init failed", ex);
+                    IoLogger.Error("Post-connect init failed", ex);
                     HandleConnectionFail();
                 }
             }
             else
             {
-                PlcLogger.Warn($"Connection failed to {ip}:{AppSettings.PlcPort}");
+                IoLogger.Warn($"Connection failed to {ip}:{AppSettings.PlcPort}");
                 HandleConnectionFail();
                 MessageBox.Show("Connection Failed! (Timeout)", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
@@ -160,7 +160,7 @@ namespace PlcBridge.ManualControl
             _plc.Dispose();
             ResetUI();
 
-            PlcLogger.Info("Disconnected by user.");
+            IoLogger.Info("Disconnected by user.");
             btnConnect.Enabled = true;
             btnConnect.BackColor = Color.LightSkyBlue;
             btnDisconnect.Enabled = false;
@@ -189,11 +189,11 @@ namespace PlcBridge.ManualControl
             }
             catch (SocketException ex)
             {
-                PlcLogger.Error($"WriteDo[{chk.Tag}] socket error", ex);
+                IoLogger.Error($"WriteDo[{chk.Tag}] socket error", ex);
             }
             catch (Exception ex)
             {
-                PlcLogger.Error($"WriteDo[{chk.Tag}] failed", ex);
+                IoLogger.Error($"WriteDo[{chk.Tag}] failed", ex);
             }
         }
 
@@ -212,12 +212,12 @@ namespace PlcBridge.ManualControl
             }
             catch (SocketException ex)
             {
-                PlcLogger.Error("Polling socket error, disconnecting", ex);
+                IoLogger.Error("Polling socket error, disconnecting", ex);
                 btnDisconnect_Click(null, null);
             }
             catch (Exception ex)
             {
-                PlcLogger.Error("Polling error, disconnecting", ex);
+                IoLogger.Error("Polling error, disconnecting", ex);
                 btnDisconnect_Click(null, null);
             }
         }

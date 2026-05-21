@@ -5,7 +5,7 @@ using System.IO;
 using System.Threading.Tasks;
 using Moq;
 using NUnit.Framework;
-using PlcBridge.Core;
+using IoBridge.Core;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
 
