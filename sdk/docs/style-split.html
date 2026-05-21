@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>Split — Repo Coding Style</title>
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="style-vendor.html">Vendor</a> ｜ 下一篇：<a href="style-antipatterns.html">Antipatterns</a></nav>
+
+<h1>6. Split<br><span class="small">未來把 sdk 元件拆獨立 repo 的流程</span></h1>
+
+<h2>6.1 為什麼能 split 是這套架構的核心</h2>
+
+<p>整個 Lerna/Nx 派的設計目標就是「<b>每個元件像獨立小 repo</b>」。
+sdk/ 元件 self-contained（code + vendor + docs 在同一目錄）就是為了這天。</p>
+
+<p>但實際 split 之前要先確認元件真的可獨立：</p>
+
+<h2>6.2 Split 前的檢查清單</h2>
+
+<table>
+  <tr><th>檢查項</th><th>怎麼確認</th></tr>
+  <tr>
+    <td>沒有反向依賴 src/</td>
+    <td><code>grep -r "using AniloxRoll.Monitor" sdk/Bridges/LightBridge/</code> → 應該 0 hit</td>
+  </tr>
+  <tr>
+    <td>沒有跨 sdk/ 元件依賴</td>
+    <td>看 <code>LightBridge.Core.csproj</code> 的 ProjectReference，不應該指向 <code>../PlcBridge/</code> 等</td>
+  </tr>
+  <tr>
+    <td>vendor/README.md 寫齊</td>
+    <td>新 repo 要能獨立理解廠商來源、版本、用途</td>
+  </tr>
+  <tr>
+    <td>tests/ 涵蓋率夠</td>
+    <td>獨立 repo 沒有 src/ 撐著，自己的 test 是唯一保障</td>
+  </tr>
+  <tr>
+    <td>README.md 寫齊 public API</td>
+    <td>未來變 NuGet package 的使用者只看 README</td>
+  </tr>
+</table>
+
+<h2>6.3 Split 步驟（用 git subtree）</h2>
+
+<pre><code><span class="com"># 1. 把 sdk/Bridges/LightBridge/ 抽成獨立 git history</span>
+git subtree split --prefix=sdk/Bridges/LightBridge -b lightbridge-split
+
+<span class="com"># 2. 推到新 remote</span>
+git remote add lightbridge-repo git@github.com:org/LightBridge.git
+git push lightbridge-repo lightbridge-split:main
+
+<span class="com"># 3. （可選）從本 repo 刪除，保留 git history 引用</span>
+git rm -r sdk/Bridges/LightBridge
+git commit -m "split: LightBridge → independent repo"</code></pre>
+
+<div class="tip">
+<b>不刪也可以：</b>保留 <code>sdk/Bridges/LightBridge/</code> 在本 repo 內，當作「<b>vendored 副本</b>」。
+新功能在獨立 repo 開發 + 發 NuGet，本 repo 拉 NuGet 用。
+直到下次重大重構才把舊的 sdk/Bridges/LightBridge/ 移除。
+</div>
+
+<h2>6.4 切換引用方式</h2>
+
+<p>本 repo 內原本：</p>
+<pre><code>&lt;ProjectReference Include="..\..\..\sdk\Bridges\LightBridge\LightBridge.Core\LightBridge.Core.csproj" /&gt;</code></pre>
+
+<p>切成 NuGet 後：</p>
+<pre><code>&lt;PackageReference Include="LightBridge.Core" Version="1.0.0" /&gt;</code></pre>
+
+<p>並設 NuGet feed 為團隊私有 feed（或 GitHub Packages）。</p>
+
+<h2>6.5 廠商規格書怎麼處理</h2>
+
+<p>Split 後 <code>sdk/Bridges/LightBridge/vendor/</code> 整包到新 repo。新 repo 通常會：</p>
+
+<ul>
+  <li><b>保留 vendor/</b>：跟著 code 走，新 repo 也能查規格書</li>
+  <li><b>升級 vendor/</b>：新 repo 維護者去廠商網站抓最新版替換</li>
+  <li><b>移除 vendor/</b>：規格書由廠商網站維護，新 repo 只 keep README.md 寫「規格書見廠商 URL」</li>
+</ul>
+
+<p>選哪個看新 repo 的維護需求。對<b>不會回頭更新</b>的廠商（產品 EOL），保留 vendor/ 最安全。</p>
+
+<h2>6.6 split 後本 repo 怎麼維護</h2>
+
+<ul>
+  <li>本 repo 的 <code>sdk/&lt;元件&gt;/</code> 變成「拉 NuGet 的引用點」，不再放 code</li>
+  <li><code>sdk/docs/</code>（本目錄）留下 — 其他 sdk/ 元件還會用</li>
+  <li>下次新增 sdk/ 元件時，仍然走 self-contained 流程，未來再 split</li>
+</ul>
+
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="style-vendor.html">Vendor</a> ｜ 下一篇：<a href="style-antipatterns.html">Antipatterns</a></nav>
+</body>
+</html>

@@ -1,0 +1,30 @@
+body { font-family: -apple-system, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+       max-width: 1100px; margin: 24px auto; padding: 0 24px; line-height: 1.55; color: #222; }
+h1 { border-bottom: 3px solid #2563eb; padding-bottom: 8px; }
+h2 { border-bottom: 1px solid #ddd; padding-bottom: 6px; margin-top: 36px; color: #1e40af; }
+h3 { color: #334155; margin-top: 24px; }
+h4 { margin-top: 16px; color: #475569; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.93em; }
+th, td { border: 1px solid #cbd5e1; padding: 6px 10px; text-align: left; vertical-align: top; }
+th { background: #f1f5f9; font-weight: 600; }
+td.c { text-align: center; }
+code { background: #f1f5f9; padding: 1px 6px; border-radius: 3px;
+       font-family: "Cascadia Code", Consolas, monospace; font-size: 0.9em; }
+pre { background: #1e293b; color: #e2e8f0; padding: 14px 18px; border-radius: 6px; overflow-x: auto;
+      font-family: "Cascadia Code", Consolas, monospace; font-size: 0.85em; line-height: 1.45; }
+pre code { background: none; color: inherit; padding: 0; }
+.tip   { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 10px 16px; margin: 12px 0; }
+.bad   { background: #fee2e2; border-left: 4px solid #ef4444; padding: 10px 16px; margin: 12px 0; }
+.good  { background: #d1fae5; border-left: 4px solid #10b981; padding: 10px 16px; margin: 12px 0; }
+.info  { background: #dbeafe; border-left: 4px solid #3b82f6; padding: 10px 16px; margin: 12px 0; }
+.small { font-size: 0.85em; color: #64748b; }
+.com   { color: #94a3b8; font-style: italic; }
+nav.atom-nav { margin: 20px 0; padding: 8px 16px; background: #f8fafc;
+               border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.9em; }
+nav.atom-nav a { margin: 0 8px; color: #2563eb; text-decoration: none; }
+nav.atom-nav a:hover { text-decoration: underline; }
+.atom-card { display: block; padding: 14px 18px; margin: 8px 0; background: #f8fafc;
+             border-left: 4px solid #2563eb; border-radius: 4px; text-decoration: none; color: #222; }
+.atom-card:hover { background: #e0e7ff; }
+.atom-card b { color: #1e40af; }
+.atom-card .small { display: block; margin-top: 4px; }

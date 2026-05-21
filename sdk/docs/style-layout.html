@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>Layout — Repo Coding Style</title>
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="style-choice.html">Choice</a> ｜ 下一篇：<a href="style-vendor.html">Vendor</a></nav>
+
+<h1>4. Layout<br><span class="small">具體目錄結構</span></h1>
+
+<h2>4.1 完整結構</h2>
+
+<pre><code>PICoater_AOI/
+├── src/                          <span class="com">應用程式（產品交付）</span>
+│   ├── dotnet/AniloxRoll.Monitor/
+│   └── native/
+├── sdk/                          <span class="com">我們寫的 library（可獨立 split）</span>
+│   ├── AOI_SDK/                  <span class="com">影像處理 SDK</span>
+│   ├── LightBridge/
+│   │   ├── LightBridge.Core/     <span class="com">code（純 .NET library）</span>
+│   │   ├── vendor/               <span class="com">★ 廠商東西（self-contained）</span>
+│   │   │   ├── README.md
+│   │   │   ├── manual/
+│   │   │   │   └── LTS_3DPA24_說明書.pdf
+│   │   │   └── samples/
+│   │   │       └── 光源控制 DEMO VC(3DPA)/
+│   │   └── README.md             <span class="com">元件總說明 + vendor ref</span>
+│   ├── PlcBridge/PlcBridge.Core/
+│   ├── StorageBridge/StorageBridge.Core/
+│   ├── Grabber/                  <span class="com">★ 殼目錄（未來收 GrabberBridge.Core）</span>
+│   │   ├── vendor/
+│   │   │   ├── README.md
+│   │   │   ├── matrox-grabber/
+│   │   │   └── matrox-clprotocol/
+│   │   └── README.md
+│   └── docs/                     <span class="com">跨元件通用文件（本目錄）</span>
+│       ├── index.html
+│       ├── style-*.html          <span class="com">repo coding style atoms</span>
+│       └── testing-*.html
+├── tools/                        <span class="com">內部工具 exe / 腳本</span>
+├── tests/                        <span class="com">純測試（Unit / Integration / Stress）</span>
+├── docs/                         <span class="com">應用文件（user-manual / dev 參考）</span>
+│   ├── config/                   <span class="com">設定 JSON 範例</span>
+│   ├── dev/                      <span class="com">應用層 dev 文件（MIL_API_Reference 等）</span>
+│   ├── user-manual/              <span class="com">操作員說明（ui-flow.html / hardware-specs）</span>
+│   └── sample/
+├── deploy/                       <span class="com">部署腳本（PowerShell + JSON）</span>
+└── third_party/                  <span class="com">純 build-time 依賴的廠商 lib</span>
+    └── stb/                      <span class="com">stb_image.h 等</span>
+</code></pre>
+
+<h2>4.2 每個 top-level 目錄的職責</h2>
+
+<table>
+  <tr><th>目錄</th><th>放什麼</th><th>業界對照</th></tr>
+  <tr><td><code>src/</code></td><td>應用程式（產品交付給客戶的主程式）</td><td>Nx apps/、.NET src/</td></tr>
+  <tr><td><code>sdk/</code></td><td>我們寫的 library（無 GUI、無 exe，可獨立 split）</td><td>Nx packages/、.NET lib/</td></tr>
+  <tr><td><code>sdk/docs/</code></td><td>跨元件通用工程經驗（本目錄）</td><td>—（前端常見每元件自己 docs/）</td></tr>
+  <tr><td><code>tools/</code></td><td>內部工具 exe / 廠區維護 / 測試用 / 腳本</td><td>tools/、bin/</td></tr>
+  <tr><td><code>tests/</code></td><td>純測試（Unit / Integration / Stress 子目錄）</td><td>tests/、test/、spec/</td></tr>
+  <tr><td><code>docs/</code></td><td>應用文件（user-manual / 開發者參考）</td><td>docs/</td></tr>
+  <tr><td><code>deploy/</code></td><td>現場部署腳本</td><td>infra/、ops/、scripts/</td></tr>
+  <tr><td><code>third_party/</code></td><td>純 build-time 依賴的廠商 lib（#include 用）</td><td>third_party/、vendor/、external/</td></tr>
+</table>
+
+<h2>4.3 sdk/ 跟 third_party/ 的分界</h2>
+
+<p>這是最常見搞混的地方。判斷依據：「<b>有沒有對應的 sdk/ 元件</b>」。</p>
+
+<table>
+  <tr><th>場景</th><th>放哪</th><th>理由</th></tr>
+  <tr>
+    <td>廠商 SDK 用來 build（如 <code>stb_image.h</code> #include 進 C++ code）</td>
+    <td><code>third_party/&lt;lib&gt;/</code></td>
+    <td>純 build dependency，沒對應 sdk/ 元件</td>
+  </tr>
+  <tr>
+    <td>廠商規格書 + 範例（對應某個 sdk/ 元件）</td>
+    <td><code>sdk/&lt;元件&gt;/vendor/</code></td>
+    <td>元件 self-contained，split 帶得走</td>
+  </tr>
+  <tr>
+    <td>廠商規格書 + 範例（沒對應的 sdk/ 元件，但未來可能有）</td>
+    <td>新建殼 <code>sdk/&lt;殼名&gt;/vendor/</code></td>
+    <td>預留未來收 code 的位置（如 sdk/Grabber/）</td>
+  </tr>
+</table>
+
+<div class="tip">
+<b>什麼是「殼目錄」？</b><br>
+有 <code>vendor/</code> 跟 <code>README.md</code>，但還沒有 <code>&lt;元件&gt;.Core/</code> code 的 sdk/ 元件目錄。
+理由：(1) 預留未來抽出 Bridge.Core 的位置；(2) sdk/ 整體結構統一（vendor/ 一律在 sdk/&lt;元件&gt;/ 內）。
+</div>
+
+<h2>4.4 docs/ vs sdk/docs/ vs sdk/&lt;元件&gt;/vendor/ 的差別</h2>
+
+<table>
+  <tr><th>位置</th><th>內容</th><th>誰用</th></tr>
+  <tr>
+    <td><code>docs/user-manual/</code></td>
+    <td>操作員說明（UI 流程、硬體規格、IO 圖）</td>
+    <td>現場操作員 + 客戶</td>
+  </tr>
+  <tr>
+    <td><code>docs/dev/</code></td>
+    <td>應用層 dev 文件（MIL_API_Reference、system-resources、code review 紀錄）</td>
+    <td>本專案 dev</td>
+  </tr>
+  <tr>
+    <td><code>sdk/docs/</code>（本目錄）</td>
+    <td>跨專案可複製的工程經驗（repo style、testing pyramid、FSM）</td>
+    <td>本專案 + 未來複製到的同類專案</td>
+  </tr>
+  <tr>
+    <td><code>sdk/&lt;元件&gt;/vendor/</code></td>
+    <td>對應該元件的廠商規格書 / 範例</td>
+    <td>修改該元件 code 時的參考</td>
+  </tr>
+</table>
+
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="style-choice.html">Choice</a> ｜ 下一篇：<a href="style-vendor.html">Vendor</a></nav>
+</body>
+</html>

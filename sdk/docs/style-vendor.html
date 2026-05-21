@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>Vendor — Repo Coding Style</title>
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="style-layout.html">Layout</a> ｜ 下一篇：<a href="style-split.html">Split</a></nav>
+
+<h1>5. Vendor<br><span class="small">vendor/ 子目錄規則 + README 模板</span></h1>
+
+<h2>5.1 標準子目錄</h2>
+
+<table>
+  <tr><th>子目錄</th><th>內容</th><th>必要？</th></tr>
+  <tr><td><code>vendor/README.md</code></td><td>廠商名、版本、來源、用途、最後更新</td><td>★ 必要</td></tr>
+  <tr><td><code>vendor/manual/</code></td><td>廠商規格書 PDF / 操作手冊</td><td>有就放</td></tr>
+  <tr><td><code>vendor/samples/</code></td><td>廠商示範程式（C++ / .NET / Python...）</td><td>有就放</td></tr>
+  <tr><td><code>vendor/headers/</code></td><td>廠商 header files（#include 用）</td><td>有就放</td></tr>
+  <tr><td><code>vendor/binaries/</code></td><td>廠商預編譯 dll / lib</td><td>有就放，注意 .gitignore</td></tr>
+  <tr><td><code>vendor/LICENSE.txt</code></td><td>廠商授權文件</td><td>有就放（合規）</td></tr>
+</table>
+
+<h2>5.2 多廠商怎麼分</h2>
+
+<p>當一個 sdk/ 元件對應多個廠商 SDK（如 <code>sdk/Grabber/</code> 同時包 Matrox Grabber 跟 Matrox CLProtocol），用子子目錄區分：</p>
+
+<pre><code>sdk/Grabber/vendor/
+├── README.md                   <span class="com">總說明，列出兩個子 SDK</span>
+├── matrox-grabber/
+│   ├── README.md               <span class="com">這個子 SDK 的細節</span>
+│   ├── manual/
+│   └── samples/
+└── matrox-clprotocol/
+    ├── README.md
+    ├── manual/
+    └── samples/</code></pre>
+
+<h2>5.3 vendor/ 內絕對不改</h2>
+
+<div class="bad">
+<b>反模式：</b>在 <code>vendor/</code> 內直接修改廠商 sample code「順便 fix 一個 bug」。
+這樣做廠商發新版時 diff 沒法乾淨 merge。
+</div>
+
+<div class="good">
+<b>正確做法：</b>
+<ul>
+  <li>vendor/ 內保持原樣（追廠商更新時整包替換）</li>
+  <li>需要改的話複製到 <code>sdk/&lt;元件&gt;/&lt;元件&gt;.Core/</code> 內變成「我們的 code」，diff 改在那邊</li>
+  <li>在 <code>&lt;元件&gt;.Core/</code> 的 code 加 comment 標「<code>// based on vendor/samples/foo.cpp §3.2</code>」</li>
+</ul>
+</div>
+
+<h2>5.4 sdk/&lt;元件&gt;/README.md 模板</h2>
+
+<pre><code># LightBridge
+
+LTS-3DPA24 光源控制器 .NET wrapper。RS-232 通訊，支援 AutoDetect COM port。
+
+## Layout
+- `LightBridge.Core/` — 純 .NET library，無 GUI 依賴
+- `vendor/` — 廠商規格書 + 範例（不參與 build，純參考）
+
+## Public API
+- `LightController.AutoDetect()` — 掃描所有 COM port 探測
+- `LightController.TurnOn()` / `TurnOff()`
+- `LightController.SetBrightness(0-255)`
+
+## Dependencies
+- .NET Framework 4.8
+- System.IO.Ports
+
+## Vendor reference
+- 廠商：LTS（Linkpark Technology Suzhou）
+- 型號：3DPA24 系列控制器
+- 規格書：`vendor/manual/`
+- DEMO：`vendor/samples/`
+
+## Split planning
+未來可獨立發佈為 NuGet package。Split 步驟見
+`sdk/docs/style-split.html`。
+</code></pre>
+
+<h2>5.5 vendor/README.md 模板</h2>
+
+<pre><code># LightBridge — Vendor Reference
+
+廠商給的東西（不參與 build）。需要更新時直接整包替換，
+<b>不要</b>在這個目錄內手動 patch。
+
+## Source
+- 廠商：LTS（Linkpark Technology Suzhou）
+- 取得方式：廠商隨機附 USB / 廠商網站下載
+- 取得日期：2025-05-13（DEMO）/ 2022-09-23（manual）
+
+## Contents
+- `manual/20220923 LTS_3DPA24系列控制器说明书.pdf` — RS-232 protocol 完整規格
+- `samples/光源控制 DEMO VC(3DPA) 20250513/` — 廠商 Visual C++ 示範程式
+
+## Used by
+- `../LightBridge.Core/LightController.cs` — protocol §4.1.4 8-byte 命令格式對照
+- 偵錯時對照 `samples/` 看 XOR checksum 計算
+
+## When to update
+- 廠商發新規格書 / 新 DEMO 時整包替換
+- <b>不要</b>在這目錄內手動改任何檔案
+</code></pre>
+
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="style-layout.html">Layout</a> ｜ 下一篇：<a href="style-split.html">Split</a></nav>
+</body>
+</html>

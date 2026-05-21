@@ -32,7 +32,7 @@ sdk/ExampleBridge/
     └── Properties/AssemblyInfo.cs
 ```
 
-### 2. csproj 模板（複製 sdk/PlcBridge/PlcBridge.Core/PlcBridge.Core.csproj）
+### 2. csproj 模板（複製 sdk/Bridges/PlcBridge/PlcBridge.Core/PlcBridge.Core.csproj）
 
 關鍵欄位：
 ```xml
@@ -119,9 +119,9 @@ public class ExampleGrabController
 
 ## 既有實例（複製模板用）
 
-- `sdk/PlcBridge/PlcBridge.Core/` — Modbus TCP（含 `IModbusTcpClient` 介面）
-- `sdk/LightBridge/LightBridge.Core/` — LTS-3DPA24 RS-232
-- `sdk/StorageBridge/StorageBridge.Core/` — SMB 檔案複製 + 循環儲存 + cleanup flag
+- `sdk/Bridges/PlcBridge/PlcBridge.Core/` — Modbus TCP（含 `IModbusTcpClient` 介面）
+- `sdk/Bridges/LightBridge/LightBridge.Core/` — LTS-3DPA24 RS-232
+- `sdk/Bridges/StorageBridge/StorageBridge.Core/` — SMB 檔案複製 + 循環儲存 + cleanup flag
 
 ## 命名規範
 

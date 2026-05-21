@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>Overview — Repo Coding Style</title>
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 下一篇：<a href="style-schools.html">Schools — 業界主流派對照</a></nav>
+
+<h1>1. Overview<br><span class="small">為什麼有這份 doc</span></h1>
+
+<h2>問題</h2>
+
+<p>同一個專案組裡的工程師（含獨立接案外包）對 repo 結構的習慣分歧很大。沒有明確規則時會發生：</p>
+
+<ul>
+  <li>廠商規格書放 <code>docs/</code>、<code>src/</code>、<code>third_party/</code>、<code>resources/</code> 各種地方</li>
+  <li>有人寫 library 放 <code>src/</code>，有人放 <code>lib/</code>，有人放 <code>packages/</code></li>
+  <li>測試 csproj 放 <code>tests/</code>、<code>test/</code>、<code>spec/</code> 都有</li>
+  <li>共用 utility 散在十幾個目錄</li>
+  <li>review 時花一半時間在「東西該放哪」的格式爭論</li>
+</ul>
+
+<h2>這份 doc 的角色</h2>
+
+<p>把「repo 怎麼長」變成一個團隊共識，新 agent / 新工程師加入後 5 分鐘看完就知道東西該放哪。</p>
+
+<div class="tip">
+<b>核心精神：</b>對齊「能 split 出去當獨立 repo」的元件導向風格（Lerna/Nx + .NET runtime），
+<b>不</b>對齊 Google monorepo 派。原因見 <a href="style-choice.html">Choice</a>。
+</div>
+
+<h2>什麼時候用</h2>
+
+<table>
+  <tr><th>場景</th><th>該做什麼</th></tr>
+  <tr>
+    <td>新工程師 onboarding</td>
+    <td>從 <a href="index.html">索引</a> 開始順序讀完 1-7 篇 atom</td>
+  </tr>
+  <tr>
+    <td>review 時看到「東西放哪」的爭論</td>
+    <td>引用對應 atom（如 vendor 規則）作 SSoT</td>
+  </tr>
+  <tr>
+    <td>新增 sdk/ 元件</td>
+    <td>看 <a href="style-layout.html">Layout</a> 跟 <a href="style-vendor.html">Vendor</a></td>
+  </tr>
+  <tr>
+    <td>想 split sdk 元件出去</td>
+    <td>看 <a href="style-split.html">Split</a></td>
+  </tr>
+  <tr>
+    <td>新專案要套用這套</td>
+    <td>整個 sdk/docs/ 目錄複製過去，照 atom 順序套</td>
+  </tr>
+</table>
+
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 下一篇：<a href="style-schools.html">Schools — 業界主流派對照</a></nav>
+</body>
+</html>

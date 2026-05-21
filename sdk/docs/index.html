@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>sdk/docs/ 索引</title>
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+
+<h1>sdk/docs/ 索引<br><span class="small">跨專案可複製的工程經驗（atomic doc）</span></h1>
+
+<p class="small">每份 html 聚焦一個主題，可獨立讀。從這頁進入或直接 deep-link 都可以。</p>
+
+<h2>Repo Coding Style</h2>
+<p class="small">Repo 結構慣例 — 為什麼 sdk/、third_party/、vendor/ 這樣擺。對齊 Lerna/Nx + .NET runtime 派（<b>不</b>對齊 Google monorepo）。</p>
+
+<a class="atom-card" href="style-overview.html">
+  <b>1. Overview — 為什麼有這份 doc</b>
+  <span class="small">解決多人協作時 repo 結構分歧；決定「對齊 Lerna/Nx 不對齊 Google」的脈絡。</span>
+</a>
+
+<a class="atom-card" href="style-schools.html">
+  <b>2. Schools — 業界主流派對照</b>
+  <span class="small">Google / Meta / Microsoft .NET / Lerna/Nx / JetBrains / Amazon 各自的 repo 結構哲學跟適用場景。</span>
+</a>
+
+<a class="atom-card" href="style-choice.html">
+  <b>3. Choice — 我們的選擇與理由</b>
+  <span class="small">為什麼小團隊 + 想 split 場景落在 Lerna/Nx 派；為什麼不選 Google。</span>
+</a>
+
+<a class="atom-card" href="style-layout.html">
+  <b>4. Layout — 具體目錄結構</b>
+  <span class="small">src/ sdk/ tools/ tests/ docs/ deploy/ third_party/ 分工；sdk/ 跟 third_party/ 的分界。</span>
+</a>
+
+<a class="atom-card" href="style-layering.html">
+  <b>4b. Layering — 依賴方向（單向 src/→sdk/→third_party/）</b>
+  <span class="small">為什麼 sdk/ 不能反向 using src/；橫向：跨 sdk/ 元件依賴也是違規；CI lint 一行 grep 檢查。</span>
+</a>
+
+<a class="atom-card" href="style-vendor.html">
+  <b>5. Vendor — vendor/ 子目錄規則 + README 模板</b>
+  <span class="small">sdk/&lt;元件&gt;/vendor/ 怎麼擺廠商規格書、範例、binary；README.md 必填欄位。</span>
+</a>
+
+<a class="atom-card" href="style-split.html">
+  <b>6. Split — 未來把 sdk 元件拆獨立 repo 的流程</b>
+  <span class="small">git subtree split 步驟；csproj ProjectReference → PackageReference 切換。</span>
+</a>
+
+<a class="atom-card" href="style-antipatterns.html">
+  <b>7. Antipatterns — 反模式</b>
+  <span class="small">sdk/ 反向依賴、vendor/ 內改廠商 code、跨 sdk/ 元件依賴、sdk/ 內放 GUI exe。</span>
+</a>
+
+<h2>Meta — 文件寫作風格</h2>
+<p class="small">給未來新增 atom 時用的判準。所有新文件寫之前先看這篇。</p>
+
+<a class="atom-card" href="doc-granularity.html">
+  <b>Atomic Doc Granularity — 文件原子化粒度</b>
+  <span class="small">「被引用次數 × 相關性」2×2 矩陣 + 5 個判斷問句 + 粒度層級對照。決定文件該不該拆 atom 的 SSoT。</span>
+</a>
+
+<h2>Testing & FSM</h2>
+<p class="small">測試金字塔 + FSM Action Log 自動驗證 UI transition。<b>尚未元子化</b>（待拆）。</p>
+
+<a class="atom-card" href="testing-pyramid-and-fsm.html">
+  <b>Testing pyramid + FSM Action Log（單頁版）</b>
+  <span class="small">Unit / Integration / Stress / E2E + FSM action log；含新專案落地步驟。後續拆成 atom。</span>
+</a>
+
+<h2>跟其他文件的關係</h2>
+
+<table>
+  <tr><th>文件</th><th>內容</th><th>跟本目錄的關係</th></tr>
+  <tr><td><code>CLAUDE.md</code>（專案根）</td><td>具體「怎麼擺」的細節（檔案速查、控制項對照）</td><td>本目錄是「為什麼這樣擺」的哲學</td></tr>
+  <tr><td><code>~/.claude/CLAUDE.md</code>（全域）</td><td>跨專案通用規則精煉版</td><td>本目錄是展開版</td></tr>
+  <tr><td><code>.claude/skills/</code></td><td>修改範圍對應的 skill 操作指南</td><td>具體實作步驟；本目錄是 SSoT 設計原則</td></tr>
+</table>
+
+<p class="small" style="margin-top:40px; border-top:1px solid #e2e8f0; padding-top:16px;">
+本目錄從 PICoater AOI 抽取，意圖是把這套架構複製到其他 .NET WinForms / 同類專案。
+有新規則時優先改本目錄，再 sync 回各專案的 CLAUDE.md。
+</p>
+
+</body>
+</html>

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>Antipatterns — Repo Coding Style</title>
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="style-split.html">Split</a></nav>
+
+<h1>7. Antipatterns<br><span class="small">反模式</span></h1>
+
+<p>這些是 review 時最常見的錯誤，列出來方便引用。</p>
+
+<h2>7.1 sdk/ 內 <code>using {AppNamespace};</code>（反向依賴）</h2>
+
+<div class="bad">
+<b>反模式</b>
+<pre><code>// sdk/Bridges/LightBridge/LightBridge.Core/LightController.cs
+using AniloxRoll.Monitor.Settings;   // ❌ sdk/ 引用了 src/
+
+public LightController(InspectionSettings settings) { ... }</code></pre>
+</div>
+
+<div class="good">
+<b>正確做法</b>
+<pre><code>// sdk/Bridges/LightBridge/LightBridge.Core/LightController.cs
+// 不引用 application namespace
+
+public LightController(string comPort, int baudRate, byte channel) { ... }
+// 應用層自己把 settings 解開傳基本參數進來</code></pre>
+</div>
+
+<p><b>為什麼：</b>sdk/ 元件要能獨立 split（變獨立 repo 或 NuGet package）。反向依賴 src/ = split 不出去。</p>
+
+<h2>7.2 在 vendor/ 內修改廠商 code</h2>
+
+<div class="bad">
+<b>反模式：</b>「我在 <code>vendor/samples/foo.cpp</code> 修了一個 bug，順手 push 上去」
+</div>
+
+<div class="good">
+<b>正確做法：</b>vendor/ 保持原樣。需要改的話複製到 <code>sdk/&lt;元件&gt;/&lt;元件&gt;.Core/</code> 變成「我們的 code」，在那邊改。
+</div>
+
+<p><b>為什麼：</b>廠商發新版時，vendor/ 整包替換 → 你的 patch 會被洗掉。
+複製到 Core/ 變我們的 code 後，廠商 vendor/ 升級不影響你的修改。</p>
+
+<h2>7.3 跨 sdk/ 元件依賴</h2>
+
+<div class="bad">
+<pre><code>// sdk/Bridges/LightBridge/LightBridge.Core/LightController.cs
+using PlcBridge.Core;   // ❌ 一個 sdk/ 元件引用另一個</code></pre>
+</div>
+
+<div class="good">
+<p>三種解法（按合適度）：</p>
+<ol>
+  <li><b>抽共用 sdk/ 元件</b>：把共用邏輯抽到 <code>sdk/Common/Common.Core/</code>，兩邊都引用</li>
+  <li><b>傳基本型別</b>：不要傳 PlcBridge 物件，傳基本參數（int / string / enum）</li>
+  <li><b>應用層做橋接</b>：應用層 src/ 同時引用兩個 sdk/，自己接</li>
+</ol>
+</div>
+
+<p><b>為什麼：</b>sdk/LightBridge 要能單獨 split，不能拖著 PlcBridge 一起走。</p>
+
+<h2>7.4 廠商規格書放 docs/dev/ 而不是 sdk/&lt;元件&gt;/vendor/</h2>
+
+<div class="bad">
+<pre><code>docs/dev/LTS_3DPA24/manual.pdf       ← 應該放 sdk/Bridges/LightBridge/vendor/manual/
+docs/dev/Matrox-Grabber/sample.cpp   ← 應該放 sdk/Grabber/vendor/matrox-grabber/samples/</code></pre>
+</div>
+
+<p><b>為什麼：</b>未來 split <code>sdk/Bridges/LightBridge/</code> 時廠商規格書孤兒留在原 repo。
+一開始就放對地方，split 時整包走。</p>
+
+<div class="info">
+<b>例外：</b><code>third_party/</code> 內的純 build-time lib（如 <code>stb_image.h</code>）沒對應 sdk/ 元件，
+就放 <code>third_party/&lt;lib&gt;/</code> 是對的。</div>
+
+<h2>7.5 sdk/&lt;元件&gt;/ 內放 GUI exe / WinForms csproj</h2>
+
+<div class="bad">
+<pre><code>sdk/Bridges/LightBridge/
+├── LightBridge.Core/         <span class="com">library OK</span>
+└── LightBridge.TestApp/      <span class="com">❌ WinForms exe 不該在這</span>
+    └── *.cs (WinForms)</code></pre>
+</div>
+
+<div class="good">
+<pre><code>sdk/Bridges/LightBridge/
+└── LightBridge.Core/         <span class="com">純 library</span>
+
+tools/
+└── lightbridge-test-gui/     <span class="com">WinForms 測試工具放這</span>
+    └── *.cs</code></pre>
+</div>
+
+<p><b>為什麼：</b>引用 <code>sdk/Bridges/LightBridge/</code> 的專案會被迫拉 WinForms 依賴。
+sdk/ 純 library（無 GUI、無 exe）才不污染下游。</p>
+
+<h2>7.6 元件 self-contained 的反義詞：分散</h2>
+
+<div class="bad">
+<pre><code>sdk/Bridges/LightBridge/LightBridge.Core/   <span class="com">code 在這</span>
+docs/dev/LTS_3DPA24/                 <span class="com">廠商規格書在這</span>
+tests/dotnet_test/LightBridge.Tests/ <span class="com">tests 在這</span>
+docs/api/LightBridge.md              <span class="com">API doc 在這</span></code></pre>
+<p>修改 LightBridge 時要跨 4 個目錄翻檔。</p>
+</div>
+
+<div class="good">
+<pre><code>sdk/Bridges/LightBridge/                    <span class="com">一個目錄看到全部</span>
+├── LightBridge.Core/               <span class="com">code</span>
+├── vendor/                          <span class="com">廠商規格書 + 範例</span>
+├── tests/                           <span class="com">（也可以放這，或統一在 tests/）</span>
+└── README.md                       <span class="com">API doc + 用法</span></code></pre>
+</div>
+
+<div class="tip">
+<b>tests/ 該在元件內還是統一目錄？</b><br>
+本專案目前統一在 <code>tests/dotnet_test/&lt;元件&gt;.Tests/</code>（方便 CI 統一跑、InternalsVisibleTo 設定統一）。
+這是務實妥協，<b>不</b>完全 self-contained 但夠用。
+未來如果某個 sdk/ 元件真的 split 出去，把對應的 test csproj 一起帶走即可。
+</div>
+
+<h2>7.7 正確習慣（總結）</h2>
+
+<div class="good">
+<b>進入 <code>sdk/&lt;元件&gt;/</code> 目錄後，眼前看到的就是全部</b> — code、docs、vendor、README。
+agent / 新工程師不用跨目錄找東西。
+review 時看到「東西放哪」的爭論，回到這條原則。
+</div>
+
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="style-split.html">Split</a></nav>
+</body>
+</html>

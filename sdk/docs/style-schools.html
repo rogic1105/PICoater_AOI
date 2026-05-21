@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>Schools — Repo Coding Style</title>
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="style-overview.html">Overview</a> ｜ 下一篇：<a href="style-choice.html">Choice</a></nav>
+
+<h1>2. Schools<br><span class="small">業界主流派對照</span></h1>
+
+<p>大型公司怎麼擺 repo 結構，<b>不是</b>「最佳實踐」一家獨大，而是分成兩大派、底層哲學完全不同。理解兩派差異才能選對自己的。</p>
+
+<h2>2.1 對照表</h2>
+
+<table>
+  <tr>
+    <th>風格</th>
+    <th class="c">third_party 集中</th>
+    <th class="c">元件 self-contained</th>
+    <th class="c">頻繁 split</th>
+    <th>Build tool</th>
+    <th>適合場景</th>
+  </tr>
+  <tr>
+    <td><b>Google</b> monorepo</td>
+    <td class="c">✓ 強制</td>
+    <td class="c">✗</td>
+    <td class="c">✗（不拆）</td>
+    <td>Bazel</td>
+    <td>巨大 monorepo、hermetic build</td>
+  </tr>
+  <tr>
+    <td><b>Meta</b> monorepo</td>
+    <td class="c">✓</td>
+    <td class="c">✗</td>
+    <td class="c">✗</td>
+    <td>Buck</td>
+    <td>同上</td>
+  </tr>
+  <tr>
+    <td><b>Microsoft .NET</b><br><span class="small">dotnet/runtime、Roslyn</span></td>
+    <td class="c">✗（用 NuGet）</td>
+    <td class="c">✓</td>
+    <td class="c">✓✓</td>
+    <td>MSBuild</td>
+    <td>分多 repo、NuGet 發佈</td>
+  </tr>
+  <tr>
+    <td><b>Lerna / Nx</b><br><span class="small">前端 monorepo 主流</span></td>
+    <td class="c">✗</td>
+    <td class="c">✓✓✓</td>
+    <td class="c">✓✓✓</td>
+    <td>npm workspaces</td>
+    <td>多 package、想獨立 publish</td>
+  </tr>
+  <tr>
+    <td><b>JetBrains</b> IntelliJ</td>
+    <td class="c">半（<code>lib/</code>）</td>
+    <td class="c">✓</td>
+    <td class="c">半</td>
+    <td>Gradle</td>
+    <td>plugin 生態系</td>
+  </tr>
+  <tr>
+    <td><b>Amazon</b></td>
+    <td class="c">wiki 不放 repo</td>
+    <td class="c">—</td>
+    <td class="c">n/a</td>
+    <td>—</td>
+    <td>一服務一 repo、不 monorepo</td>
+  </tr>
+</table>
+
+<h2>2.2 兩派的底層哲學</h2>
+
+<div class="info">
+<b>Google/Meta 派：「廠商 vs 我們」是最重要的隔離邊界。</b><br>
+所有廠商東西進 <code>third_party/</code>，build tool（Bazel/Buck）強制 hermetic build。
+<b>不 split</b> 是前提（monorepo 哲學）。每個元件依賴明確列在 BUILD file 內。
+</div>
+
+<div class="info">
+<b>Lerna/Nx/.NET 派：「元件 vs 元件」是最重要的隔離邊界。</b><br>
+每個 package 自包 code + docs + tests + 廠商 refs，<b>像獨立小 repo 一樣</b>，
+未來 npm publish / nuget pack / git split 都自然。
+</div>
+
+<h2>2.3 為什麼會分歧</h2>
+
+<p>分歧根源是「monorepo 拆不拆」這個前提：</p>
+
+<ul>
+  <li><b>不拆</b>（Google/Meta）：整個公司一個 repo，元件之間用 build tool 隔離，廠商集中是因為「廠商東西也要被 hermetic build 包進去」</li>
+  <li><b>會拆</b>（Lerna/Nx/.NET）：未來某個元件可能變獨立 repo / npm package / NuGet，所以每個元件自包，拆出去時一整包帶走</li>
+</ul>
+
+<p>選哪派的關鍵問句：「<b>3 年後這個 sdk 元件可能變獨立 repo 嗎？</b>」</p>
+
+<ul>
+  <li>會 → Lerna/Nx 派</li>
+  <li>不會 → Google 派（前提是有 Bazel/Buck）</li>
+</ul>
+
+<p>我們的答案見 <a href="style-choice.html">下一篇 Choice</a>。</p>
+
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="style-overview.html">Overview</a> ｜ 下一篇：<a href="style-choice.html">Choice</a></nav>
+</body>
+</html>

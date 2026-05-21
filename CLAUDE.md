@@ -9,9 +9,11 @@ PICoater_AOI/
 │   └── native/                     ← C++ pipeline
 ├── sdk/                  ← 可獨立 split 的 library（純函式庫，無 GUI、無 exe）
 │   ├── AOI_SDK/          ← 影像處理 SDK（CUDA / framework / cpp_utils）
-│   ├── PlcBridge/PlcBridge.Core/        ← Modbus PLC 通訊
-│   ├── LightBridge/LightBridge.Core/    ← RS-232 LTS-3DPA24 光源
-│   └── StorageBridge/StorageBridge.Core/ ← SMB + 檔案複製 + 循環儲存
+│   ├── Bridges/          ← 對外設備 / 系統橋接層
+│   │   ├── PlcBridge/PlcBridge.Core/        ← Modbus PLC 通訊
+│   │   ├── LightBridge/LightBridge.Core/    ← RS-232 LTS-3DPA24 光源
+│   │   └── StorageBridge/StorageBridge.Core/ ← SMB + 檔案複製 + 循環儲存
+│   └── docs/             ← 跨專案工程經驗（repo-style / testing pyramid / FSM）
 ├── tools/                ← 內部工具（工程師 debug / 廠區維護 / 測試用 exe / 腳本）
 │   ├── plc-manual-control/   ← PLC 手動 DI/DO GUI（WinForms exe）
 │   ├── plc-automation/       ← PLC FSM 模擬工具（WinForms exe）
@@ -113,19 +115,21 @@ PICoater_AOI/
 
 ```
 PICoater_AOI/
-├── src/dotnet/AniloxRoll.Monitor/   ← C# WinForms 應用程式
-├── src/dotnet/PlcBridge/            ← PLC Modbus TCP 通訊模組
-│   ├── PlcBridge.Core/              ← 共用 Modbus TCP Client + Logger（IModbusTcpClient 介面）
-│   ├── PlcBridge.ManualControl/     ← 手動 DI/DO 控制工具
-│   └── PlcBridge.Automation/        ← FSM 狀態機自動控制工具
-├── tests/dotnet_test/AniloxRoll.Monitor.Tests/ ← NUnit 單元 + 壓力測試
+├── src/dotnet/AniloxRoll.Monitor/                 ← C# WinForms 應用程式
+├── src/native/                                    ← C++ pipeline 實作
+├── sdk/AOI_SDK/                                   ← 影像處理 SDK（core_cv_api / AOI.SDK / framework / cpp_utils）
+├── sdk/Bridges/PlcBridge/PlcBridge.Core/          ← Modbus TCP Client + IModbusTcpClient 介面
+├── sdk/Bridges/LightBridge/LightBridge.Core/      ← LTS-3DPA24 RS-232 光源
+├── sdk/Bridges/StorageBridge/StorageBridge.Core/  ← SMB 檔案複製 + 循環儲存
+├── sdk/docs/                                      ← 跨專案工程經驗（atomic html）
+├── tools/plc-manual-control/PlcBridge.ManualControl/  ← 手動 DI/DO GUI
+├── tools/plc-automation/PlcBridge.Automation/         ← FSM 模擬 GUI
+├── tests/dotnet_test/AniloxRoll.Monitor.{Tests,Integration.Tests,Stress.Tests}/  ← NUnit 三層
 ├── tests/python_test/               ← Python 測試/工具腳本
 ├── TestRunner/                      ← 測試啟動器（雙擊 TestRunner.bat）
-├── deploy/                          ← 現場部署腳本（PowerShell + JSON 參數）
-│   ├── storage-pc/                  ← 儲存機：固定 IP + SMB 共用 + 防火牆 + Guest 匿名（secedit）
-│   └── inspection-pc/               ← 檢測機：單 NIC 雙 IP 別名 + Client 端匿名 Guest SMB
-├── src/native/                      ← C++ pipeline 實作
-└── sdk/AOI_SDK/                     ← 共用 SDK (core_cv_api / AOI.SDK)
+└── deploy/                          ← 現場部署腳本（PowerShell + JSON 參數）
+    ├── storage-pc/                  ← 儲存機：固定 IP + SMB 共用 + 防火牆 + Guest 匿名（secedit）
+    └── inspection-pc/               ← 檢測機：單 NIC 雙 IP 別名 + Client 端匿名 Guest SMB
 ```
 
 ## Native API
@@ -203,7 +207,7 @@ PICoater_AOI/
 
 | 路徑 | 職責 |
 |------|------|
-| `src/dotnet/PlcBridge/PlcBridge.Core/IModbusTcpClient.cs` | Modbus TCP 介面（供 PlcGrabController mock 注入） |
+| `sdk/Bridges/PlcBridge/PlcBridge.Core/IModbusTcpClient.cs` | Modbus TCP 介面（供 PlcGrabController mock 注入） |
 | `tests/dotnet_test/AniloxRoll.Monitor.Tests/` | NUnit 3.x + Moq 4.x 測試專案 |
 | `CsvConfigSnapshotTests.cs` | #CFG round-trip、ContentKey |
 | `AcquisitionSettingsTests.cs` | Validate fallback、JSON Save/Load |

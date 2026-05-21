@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>Atomic Doc Granularity — sdk/docs/</title>
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+<nav class="atom-nav"><a href="index.html">← 索引</a></nav>
+
+<h1>Atomic Doc Granularity<br><span class="small">文件原子化粒度 — meta-rule，給所有 sdk/docs/ atom 用</span></h1>
+
+<p>原子化文件沒有「最小越好」這回事。太細 → 碎片化、跨檔讀才懂；太粗 → 改一處影響全份、無法 deep-link。這篇是<b>寫 atom 前的判準</b>，避免每次拆 atom 都重新爭論。</p>
+
+<h2>1. 兩個判斷維度</h2>
+
+<table>
+  <tr><th>維度</th><th>定義</th><th>怎麼估</th></tr>
+  <tr>
+    <td><b>被引用次數</b></td>
+    <td>這段內容會被別處（其他 atom / CLAUDE.md / skills / PR review）連結引用的頻率</td>
+    <td>想像 6 個月內，會不會反復用 <code>&lt;a href&gt;</code> 指過來？</td>
+  </tr>
+  <tr>
+    <td><b>相關性</b></td>
+    <td>內容之間的耦合 — 改 A 通常也要改 B 嗎？</td>
+    <td>看 git history：經常同一個 commit 改的東西就是高相關</td>
+  </tr>
+</table>
+
+<h2>2. 2×2 矩陣</h2>
+
+<pre><code>                       相關性低                  相關性高
+                  ┌──────────────────────┬──────────────────────┐
+   被引用高     │  ★ 拆成 atom          │  合成 chapter         │
+                  │  (deep-link 友善)     │  (一起讀脈絡才完整)   │
+                  ├──────────────────────┼──────────────────────┤
+   被引用低     │  扁平段落              │  留在大檔內           │
+                  │  (不值得獨立檔)        │  (避免碎片化)         │
+                  └──────────────────────┴──────────────────────┘
+</code></pre>
+
+<h2>3. 粒度層級對照</h2>
+
+<table>
+  <tr><th>層級</th><th>檔案數</th><th>每檔行數</th><th>用例</th></tr>
+  <tr><td>Monolith</td><td>1</td><td>500+</td><td>整本書一份 PDF，廠商規格書</td></tr>
+  <tr><td>Chapter</td><td>2-5</td><td>200-500</td><td>大主題分章</td></tr>
+  <tr><td><b>Atom（推薦）</b></td><td>5-15</td><td>50-200</td><td>一篇回答一個問題</td></tr>
+  <tr><td>Cell</td><td>30+</td><td>&lt; 50</td><td>wiki 式 micro doc（容易過細）</td></tr>
+</table>
+
+<h2>4. 五個判斷問句</h2>
+
+<p>對每段內容問這 5 題，多數答「是」 → 拆出來當 atom；多數答「否」 → 留在大檔內。</p>
+
+<table>
+  <tr><th>問題</th><th>是 → 該拆</th></tr>
+  <tr><td>1. 會被別處連結引用嗎？</td><td>deep-link 友善</td></tr>
+  <tr><td>2. 未來會被部分複製到其他專案嗎？</td><td>個別複製方便</td></tr>
+  <tr><td>3. 不同段落會被不同人/不同時間維護嗎？</td><td>避免 merge conflict</td></tr>
+  <tr><td>4. 標題能 standalone 嗎？（不看上下文也說得通）</td><td>語意完整</td></tr>
+  <tr><td>5. 超過 200 行了嗎？</td><td>太大不好讀</td></tr>
+</table>
+
+<h2>5. Heuristic：## 章節 = 一個 atom</h2>
+
+<div class="tip">
+<b>實用快速判斷：</b>把內容寫成 markdown 後，<b>每個 <code>##</code> 大章節 = 一個 atom</b>。
+這也是本目錄 <code>style-*.html</code> 採用的粒度（原始大檔有 9 個 <code>##</code> → 拆成 7 個 atom，
+其中 §5 README 模板合進 §4 vendor，§8 反模式 + §9 alignment 各自獨立）。
+</div>
+
+<h2>6. 反模式</h2>
+
+<div class="bad">
+<h4>過細（Cell）</h4>
+症狀：
+<ul>
+  <li>「先點 A 才看得懂 B」— 用 5 個檔案說一件事</li>
+  <li>檔案多到 <code>index.html</code> 也讀不完</li>
+  <li>改一個觀念要動很多檔</li>
+</ul>
+</div>
+
+<div class="bad">
+<h4>過粗（Monolith）</h4>
+症狀：
+<ul>
+  <li>改一處全份重 review</li>
+  <li>無法 <code>&lt;a href="big.html#section-7"&gt;</code> 引用（連結不穩定，section id 容易跟著改）</li>
+  <li>多人同時改卡 merge conflict</li>
+</ul>
+</div>
+
+<h2>7. 實例對照（本目錄 style-* atom 的拆解依據）</h2>
+
+<table>
+  <tr><th>內容</th><th>被引用</th><th>相關性</th><th>結果</th><th>檔案</th></tr>
+  <tr>
+    <td>業界派系對照表</td>
+    <td>高（onboarding、PR 都會引）</td>
+    <td>低（自包）</td>
+    <td>★ 拆 atom</td>
+    <td><code>style-schools.html</code></td>
+  </tr>
+  <tr>
+    <td>為什麼選 Lerna/Nx</td>
+    <td>高（決策論據）</td>
+    <td>高（跟對照表並列）</td>
+    <td>合 chapter</td>
+    <td><code>style-choice.html</code>（含論據）</td>
+  </tr>
+  <tr>
+    <td>vendor/ 規則 + README 模板</td>
+    <td>中</td>
+    <td>高（一起改）</td>
+    <td>合 chapter</td>
+    <td><code>style-vendor.html</code>（合 5.1-5.5）</td>
+  </tr>
+  <tr>
+    <td>FSM SetBatch 已知坑</td>
+    <td>高（將來反復引用）</td>
+    <td>低（獨立 issue）</td>
+    <td>★ 拆 atom（待做）</td>
+    <td>未來 <code>testing-fsm-known-issues.html</code></td>
+  </tr>
+  <tr>
+    <td>Unit / Integration / Stress 測試範例</td>
+    <td>中</td>
+    <td>低（不同層）</td>
+    <td>★ 各自拆 atom</td>
+    <td>未來 <code>testing-{unit,integration,stress}.html</code></td>
+  </tr>
+</table>
+
+<h2>8. 對未來新 atom 的 checklist</h2>
+
+<p>寫新 atom 前先答這 4 題：</p>
+
+<ol>
+  <li><b>這篇要回答什麼問題？</b>（一句話，超過一句 → 可能該拆兩個 atom）</li>
+  <li><b>誰會看？</b>（onboarding / review 中引用 / PR 論據 / 廠商規格對照）</li>
+  <li><b>會被誰引用？</b>（其他 atom / CLAUDE.md / skills / 對話）</li>
+  <li><b>最常一起改的是哪些段落？</b>（一起改的內容該同 atom）</li>
+</ol>
+
+<h2>9. 例外：列印 / PDF 場景</h2>
+
+<div class="info">
+如果讀者主要用列印 / PDF（如廠商規格書 review、稽核文件），<b>反而該選 Monolith 或 Chapter</b>。
+原子化是給「在線閱讀 + 跨檔引用」場景設計的。對列印場景，一份大檔印一次比較方便。
+
+實務上：<b>線上文件原子化、列印場景用工具合併</b>（pandoc / 自製腳本把 atom 合成 PDF）。
+</div>
+
+<nav class="atom-nav"><a href="index.html">← 索引</a></nav>
+</body>
+</html>

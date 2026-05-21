@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>Choice — Repo Coding Style</title>
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="style-schools.html">Schools</a> ｜ 下一篇：<a href="style-layout.html">Layout</a></nav>
+
+<h1>3. Choice<br><span class="small">我們的選擇與理由</span></h1>
+
+<h2>3.1 條件清單</h2>
+
+<table>
+  <tr><th>因素</th><th>我們的狀況</th><th>偏好</th></tr>
+  <tr><td>元件數量</td><td>4 個 sdk/（AOI_SDK / LightBridge / PlcBridge / StorageBridge）</td><td>少 → 元件導向</td></tr>
+  <tr><td>廠商數量</td><td>3 個（Matrox / LTS-3DPA24 / stb）</td><td>少 → 不需 third_party 集中</td></tr>
+  <tr><td>Build tool</td><td>MSBuild + csproj</td><td>沒 Bazel/Buck → Google 派工具不適用</td></tr>
+  <tr><td>未來 split sdk/Bridges/LightBridge/ 出去</td><td>✓ 明確需求</td><td>self-contained 派</td></tr>
+  <tr><td>團隊規模</td><td>小團隊 + 獨立接案外包</td><td>結構越自說自話越好</td></tr>
+</table>
+
+<h2>3.2 結論</h2>
+
+<div class="good">
+<b>選 Lerna/Nx + .NET runtime 派</b>。
+Google style 是設計給「大規模 + monorepo + hermetic build」的，套小團隊只剩「結構感」沒實質好處。
+</div>
+
+<h2>3.3 不選 Google 的具體理由</h2>
+
+<div class="bad">
+<ul>
+  <li><b>沒有 Bazel/Buck</b>：無法強制 hermetic build。Google 風格的 <code>third_party/</code> 集中是配合 Bazel BUILD 顯式依賴設計的，沒有 build tool 強制，集中只剩「整齊感」沒實質好處。</li>
+  <li><b>未來想 split sdk 元件出去當獨立 repo</b>：<code>third_party/</code> 集中會讓 split 變麻煩（要手動撿對應廠商規格書複製過去），元件 self-contained 才能 <code>git mv</code> 整包走。</li>
+  <li><b>4 個元件 + 3 個廠商不夠多</b>：集中沒帶來「找東西比較快」的好處，反而要 cross-reference。</li>
+  <li><b>新工程師 / agent 的可讀性</b>：看 <code>sdk/Bridges/LightBridge/</code> 應該能在這個目錄內看到全部資訊（含廠商 ref），不該跨目錄 jump 才能拼出全貌。</li>
+</ul>
+</div>
+
+<h2>3.4 為什麼 .NET runtime 也影響我們</h2>
+
+<p>本專案是 .NET WinForms（不是 npm/Node），所以 Lerna/Nx 不能直接套。但 <a href="https://github.com/dotnet/runtime">dotnet/runtime</a> 這個業界最大的 .NET monorepo 也採類似哲學：</p>
+
+<ul>
+  <li><code>src/libraries/</code> 每個 library 自包 src/ tests/ ref/ 子目錄</li>
+  <li>廠商東西用 NuGet 拉，<b>不</b>放 repo 內</li>
+  <li>每個 library 可獨立 build / test / package</li>
+</ul>
+
+<p>我們的廠商東西不能用 NuGet 拉（廠商沒上 NuGet），所以折衷：放 <code>sdk/&lt;元件&gt;/vendor/</code>，跟 code 同層。</p>
+
+<h2>3.5 跟原本 CLAUDE.md 的關係</h2>
+
+<p>本專案的 <code>CLAUDE.md</code> §架構原則：repo 分層 段落已隱含這個選擇（src/sdk/tools/tests/docs 分層、sdk/ 可獨立 split 原則）。本 doc 是「為什麼這樣選」的脈絡展開。</p>
+
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="style-schools.html">Schools</a> ｜ 下一篇：<a href="style-layout.html">Layout</a></nav>
+</body>
+</html>
