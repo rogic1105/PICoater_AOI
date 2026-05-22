@@ -1,0 +1,11 @@
+<Project>
+  <!-- 先繼承 repo 根 Directory.Build.props（取得 EngRoot），再覆寫輸出位置 -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)..\'))" />
+
+  <PropertyGroup>
+    <!-- LightBridge 範例工具的 exe 輸出到 bin/<plat>/<cfg>/tools/light/，
+         跟產品主程式分開 + 按 Bridge 分項目（io/storage 對稱）。 -->
+    <OutDir>$(EngRoot)bin\$(Platform)\$(Configuration)\tools\light\</OutDir>
+    <OutputPath>$(OutDir)</OutputPath>
+  </PropertyGroup>
+</Project>
