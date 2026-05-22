@@ -37,9 +37,9 @@
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{77281454-b828-499a-9a88-d9e46249a625}</ProjectGuid>
-    <RootNamespace>core_cv_tests</RootNamespace>
+    <RootNamespace>core_cv_benchmark</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>core_cv_tests</ProjectName>
+    <ProjectName>core_cv_benchmark</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

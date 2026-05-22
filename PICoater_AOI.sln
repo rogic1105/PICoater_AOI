@@ -22,14 +22,14 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "picoater_api", "src\native\
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "GUI", "GUI", "{045B1682-9917-40A9-8090-B480480CDEB5}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core_cv_tests", "sdk\AOI_SDK\core_cv_tests\core_cv_tests.vcxproj", "{77281454-B828-499A-9A88-D9E46249A625}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core_cv_benchmark", "sdk\AOI_SDK\core_cv_benchmark\core_cv_benchmark.vcxproj", "{77281454-B828-499A-9A88-D9E46249A625}"
 	ProjectSection(ProjectDependencies) = postProject
 		{05DB04FC-CC8E-2E92-8736-4D39CC68F27A} = {05DB04FC-CC8E-2E92-8736-4D39CC68F27A}
 		{B39F6111-258B-48F8-8A3E-F940771A4D52} = {B39F6111-258B-48F8-8A3E-F940771A4D52}
 		{D3CC3425-9807-4866-AEB5-1F1DBC49523C} = {D3CC3425-9807-4866-AEB5-1F1DBC49523C}
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "picoater_tests", "tests\cpp_test\picoater_tests\picoater_tests.vcxproj", "{87AB434E-F87E-465F-B6E5-5D0625B80059}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "picoater_pipeline_benchmark", "src\native\benchmark\picoater_pipeline_benchmark\picoater_pipeline_benchmark.vcxproj", "{87AB434E-F87E-465F-B6E5-5D0625B80059}"
 	ProjectSection(ProjectDependencies) = postProject
 		{05DB04FC-CC8E-2E92-8736-4D39CC68F27A} = {05DB04FC-CC8E-2E92-8736-4D39CC68F27A}
 		{89631E35-4DE2-4280-BB43-32D6DBDD4840} = {89631E35-4DE2-4280-BB43-32D6DBDD4840}
@@ -67,11 +67,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AniloxRoll.Monitor", "src\d
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AOI.SDK", "sdk\AOI_SDK\src_dotnet\AOI.SDK\AOI.SDK.csproj", "{27263C11-7FEF-4076-A2F1-F412BB496DF3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AniloxRoll.Monitor.Tests", "tests\dotnet_test\AniloxRoll.Monitor.Tests\AniloxRoll.Monitor.Tests.csproj", "{B2C3D4E5-2222-3333-4444-555566667777}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AniloxRoll.Monitor.Tests", "tests\AniloxRoll.Monitor.Tests\AniloxRoll.Monitor.Tests.csproj", "{B2C3D4E5-2222-3333-4444-555566667777}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AniloxRoll.Monitor.Integration.Tests", "tests\dotnet_test\AniloxRoll.Monitor.Integration.Tests\AniloxRoll.Monitor.Integration.Tests.csproj", "{E4F5A6B7-5555-6666-7777-88889999AAAA}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AniloxRoll.Monitor.Integration.Tests", "tests\AniloxRoll.Monitor.Integration.Tests\AniloxRoll.Monitor.Integration.Tests.csproj", "{E4F5A6B7-5555-6666-7777-88889999AAAA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AniloxRoll.Monitor.Stress.Tests", "tests\dotnet_test\AniloxRoll.Monitor.Stress.Tests\AniloxRoll.Monitor.Stress.Tests.csproj", "{F5A6B7C8-6666-7777-8888-9999AAAABBBB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AniloxRoll.Monitor.Stress.Tests", "tests\AniloxRoll.Monitor.Stress.Tests\AniloxRoll.Monitor.Stress.Tests.csproj", "{F5A6B7C8-6666-7777-8888-9999AAAABBBB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

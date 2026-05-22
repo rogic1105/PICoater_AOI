@@ -23,16 +23,16 @@
     <ClCompile Include="src\PICoaterModuleTestsFast.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\sdk\AOI_SDK\core_cv\core_cv.vcxproj">
+    <ProjectReference Include="..\..\..\..\sdk\AOI_SDK\core_cv\core_cv.vcxproj">
       <Project>{b39f6111-258b-48f8-8a3e-f940771a4d52}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\..\sdk\AOI_SDK\cpp_utils\cpp_utils.vcxproj">
+    <ProjectReference Include="..\..\..\..\sdk\AOI_SDK\cpp_utils\cpp_utils.vcxproj">
       <Project>{05db04fc-cc8e-2e92-8736-4d39cc68f27a}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\..\sdk\AOI_SDK\framework\framework.vcxproj">
+    <ProjectReference Include="..\..\..\..\sdk\AOI_SDK\framework\framework.vcxproj">
       <Project>{d3cc3425-9807-4866-aeb5-1f1dbc49523c}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\..\src\native\modules\GetPICoaterBackground\Module_GetPICoaterBackground.vcxproj">
+    <ProjectReference Include="..\..\modules\GetPICoaterBackground\Module_GetPICoaterBackground.vcxproj">
       <Project>{89631e35-4de2-4280-bb43-32d6dbdd4840}</Project>
     </ProjectReference>
   </ItemGroup>
@@ -40,9 +40,9 @@
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{87AB434E-F87E-465F-B6E5-5D0625B80059}</ProjectGuid>
-    <RootNamespace>picoater_tests</RootNamespace>
+    <RootNamespace>picoater_pipeline_benchmark</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>picoater_tests</ProjectName>
+    <ProjectName>picoater_pipeline_benchmark</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

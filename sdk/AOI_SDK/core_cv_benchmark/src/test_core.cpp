@@ -1,7 +1,7 @@
-// AOI_SDK\core_cv_tests\src\test_core.cpp
+// AOI_SDK\core_cv_benchmark\src\test_core.cpp
 
-#include "core_cv/imgcodecs/core_imgcodecs_fast.hpp" // [·s¼W] Fast IO
-#include "core_cv/base/cuda_memory.hpp"             // [·s¼W] Pinned Memory
+#include "core_cv/imgcodecs/core_imgcodecs_fast.hpp" // [ï¿½sï¿½W] Fast IO
+#include "core_cv/base/cuda_memory.hpp"             // [ï¿½sï¿½W] Pinned Memory
 #include "core_cv/base/cuda_utils.hpp"
 
 #include "core_cv/imgproc/core_background.hpp"
@@ -15,7 +15,7 @@
 #include "framework/test_utils.hpp"
 
 #include <vector>
-#include <future> // [·s¼W] ¥­¦æ¦sÀÉ
+#include <future> // [ï¿½sï¿½W] ï¿½ï¿½ï¿½ï¿½sï¿½ï¿½
 
 void RunCoreTests(const std::string& imgPath) {
     std::cout << Color::CYAN << "\n========= Running Core Tests (Fast IO) =========" << Color::RESET << "\n";
@@ -37,7 +37,7 @@ void RunCoreTests(const std::string& imgPath) {
         // 1. Fast Load (SSD -> Pinned Memory)
         {
             TIME_SCOPE_MS("Fast Load BMP");
-            // ¹w¦ô³Ì¤j¥i¯à¤j¤p (¨Ò¦p 16K * 10K)¡Aª½±µ¤À°t
+            // ï¿½wï¿½ï¿½ï¿½Ì¤jï¿½iï¿½ï¿½jï¿½p (ï¿½Ò¦p 16K * 10K)ï¿½Aï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½t
             size_t max_alloc_size = 16384 * 10000;
             h_pinned_in = (uint8_t*)core::alloc_pinned_memory(max_alloc_size);
 
@@ -60,7 +60,7 @@ void RunCoreTests(const std::string& imgPath) {
 
         {
             TIME_SCOPE_MS("Memcpy H2D (Pinned)");
-            // Pinned Memory ·|Ä²µo DMA ¶Ç¿é¡A³t«×·¥§Ö
+            // Pinned Memory ï¿½|Ä²ï¿½o DMA ï¿½Ç¿ï¿½Aï¿½tï¿½×·ï¿½ï¿½ï¿½
             checkCudaErrors(cudaMemcpy(d_in, h_pinned_in, size, cudaMemcpyHostToDevice));
         }
 
@@ -93,9 +93,9 @@ void RunCoreTests(const std::string& imgPath) {
         {
             TIME_SCOPE_MS("Fast Save (Parallel)");
 
-            std::string outPath1 = framework::GetOutputPath("core_cv_tests", "out_core_brighten.bmp");
-            std::string outPath2 = framework::GetOutputPath("core_cv_tests", "out_core_threshold.bmp");
-            std::string outPath3 = framework::GetOutputPath("core_cv_tests", "out_core_convolution.bmp");
+            std::string outPath1 = framework::GetOutputPath("core_cv_benchmark", "out_core_brighten.bmp");
+            std::string outPath2 = framework::GetOutputPath("core_cv_benchmark", "out_core_threshold.bmp");
+            std::string outPath3 = framework::GetOutputPath("core_cv_benchmark", "out_core_convolution.bmp");
 
             auto f1 = std::async(std::launch::async, [&] { core::fast_write_bmp_8bit(outPath1, W, H, h_pinned_out_bright); });
             auto f2 = std::async(std::launch::async, [&] { core::fast_write_bmp_8bit(outPath2, W, H, h_pinned_out_thresh); });

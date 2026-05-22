@@ -13,7 +13,7 @@ echo  4. Exit
 echo.
 set /p choice="Select (1-4): "
 
-set "TEST_PROJ=tests\dotnet_test\AniloxRoll.Monitor.Tests\AniloxRoll.Monitor.Tests.csproj"
+set "TEST_PROJ=tests\AniloxRoll.Monitor.Tests\AniloxRoll.Monitor.Tests.csproj"
 set "LOG=%~dp0TestRunner.log"
 
 if "%choice%"=="1" goto :unit

@@ -1,14 +1,14 @@
-// PICoater_AOI\tests\cpp_test\picoater_tests\src\main.cpp
+// PICoater_AOI\tests\cpp_test\picoater_pipeline_benchmark\src\main.cpp
 
 #include "framework/test_utils.hpp"
 #include <iostream>
 
-// «Å§i¥~³¡´ú¸Õ¨ç¦¡
-void PICoaterModuleTestsFast(const std::string& imgPath);  // ·s¤èªk (¨Ï¥Î Fast IO)
+// ï¿½Å§iï¿½~ï¿½ï¿½ï¿½ï¿½ï¿½Õ¨ç¦¡
+void PICoaterModuleTestsFast(const std::string& imgPath);  // ï¿½sï¿½ï¿½k (ï¿½Ï¥ï¿½ Fast IO)
 void PICoaterModuleTestsMultiThread(const std::string& imgPath, const int NUM_CAMS);
 
 int main() {
-    // ©w¸q¤@­Ó Wrapper ¨ç¦¡¡A¨Ì§Ç©I¥s¨â­Ó´ú¸Õ
+    // ï¿½wï¿½qï¿½@ï¿½ï¿½ Wrapper ï¿½ç¦¡ï¿½Aï¿½Ì§Ç©Iï¿½sï¿½ï¿½Ó´ï¿½ï¿½ï¿½
     auto run_all_tests = [](const std::string& imgPath) {
         std::cout << "imgPath: " << imgPath << "\n";
         std::cout << "\n\n";
@@ -30,6 +30,6 @@ int main() {
         PICoaterModuleTestsMultiThread(imgPath, 10);
         };
 
-    // ±N Wrapper ¶Çµ¹ Bootstrap
+    // ï¿½N Wrapper ï¿½Çµï¿½ Bootstrap
     return framework::RunAOITestBootstrap("PICoater Full Comparison Tests", run_all_tests);
 }

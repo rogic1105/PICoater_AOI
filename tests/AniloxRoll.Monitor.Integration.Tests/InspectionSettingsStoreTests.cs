@@ -37,21 +37,21 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
-        public void SaveAndLoad_PersistsPlcSettings()
+        public void SaveAndLoad_PersistsIoSettings()
         {
             var settings = new InspectionSettings
             {
-                PlcEnabled = true,
-                PlcIp = "10.20.30.40",
-                PlcPort = 1502
+                IoEnabled = true,
+                IoIp = "10.20.30.40",
+                IoPort = 1502
             };
 
             InspectionSettingsStore.Save(settings);
             var loaded = InspectionSettingsStore.Load();
 
-            Assert.That(loaded.PlcEnabled, Is.True);
-            Assert.That(loaded.PlcIp, Is.EqualTo("10.20.30.40"));
-            Assert.That(loaded.PlcPort, Is.EqualTo(1502));
+            Assert.That(loaded.IoEnabled, Is.True);
+            Assert.That(loaded.IoIp, Is.EqualTo("10.20.30.40"));
+            Assert.That(loaded.IoPort, Is.EqualTo(1502));
         }
     }
 }

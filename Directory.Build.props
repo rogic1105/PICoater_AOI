@@ -17,7 +17,7 @@
 		<OutputPath>$(OutDir)</OutputPath>
 		<AoiSdkPath>$(EngRoot)sdk\AOI_SDK\</AoiSdkPath>
 		<CoreCVPath>$(AoiSdkPath)core_cv\</CoreCVPath>
-		<CoreCVTestsPath>$(AoiSdkPath)core_cv_tests\</CoreCVTestsPath>
+		<CoreCVTestsPath>$(AoiSdkPath)core_cv_benchmark\</CoreCVTestsPath>
 		<CppUtilsPath>$(AoiSdkPath)cpp_utils\</CppUtilsPath>
 		<FrameworkPath>$(AoiSdkPath)framework\</FrameworkPath>
 		<LocalModulesPath>$(EngRoot)src\native\modules\</LocalModulesPath>

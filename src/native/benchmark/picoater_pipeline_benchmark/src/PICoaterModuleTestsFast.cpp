@@ -1,4 +1,4 @@
-// PICoater_AOI\tests\cpp_test\picoater_tests\src\PICoaterModuleTestsFast.cpp
+// PICoater_AOI\tests\cpp_test\picoater_pipeline_benchmark\src\PICoaterModuleTestsFast.cpp
 
 #include "framework/test_utils.hpp"
 #include "core_cv/base/cuda_utils.hpp"
@@ -129,11 +129,11 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
         {
             TIME_SCOPE_MS("Fast Save BMP (Parallel + Raw Write)");
 
-            std::string outPath1 = framework::GetOutputPath("picoater_tests", "fast_ori.bmp");
-            std::string outPath2 = framework::GetOutputPath("picoater_tests", "fast_bg.bmp");
-            std::string outPath3 = framework::GetOutputPath("picoater_tests", "fast_mura.bmp");
-            std::string outPath4 = framework::GetOutputPath("picoater_tests", "fast_ridge.bmp");
-            std::string outPath5 = framework::GetOutputPath("picoater_tests", "fast_heatmap.bmp");
+            std::string outPath1 = framework::GetOutputPath("picoater_pipeline_benchmark", "fast_ori.bmp");
+            std::string outPath2 = framework::GetOutputPath("picoater_pipeline_benchmark", "fast_bg.bmp");
+            std::string outPath3 = framework::GetOutputPath("picoater_pipeline_benchmark", "fast_mura.bmp");
+            std::string outPath4 = framework::GetOutputPath("picoater_pipeline_benchmark", "fast_ridge.bmp");
+            std::string outPath5 = framework::GetOutputPath("picoater_pipeline_benchmark", "fast_heatmap.bmp");
 
             auto f1 = std::async(std::launch::async, [&] {
                 core::fast_write_bmp_8bit(outPath1, w, h, h_in);
@@ -175,7 +175,7 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
             // 4. �s������
             {
                 TIME_SCOPE_MS("Save CPU Result BMP");
-                std::string outPathCPU = framework::GetOutputPath("picoater_tests", "cpu_simd_mura.bmp");
+                std::string outPathCPU = framework::GetOutputPath("picoater_pipeline_benchmark", "cpu_simd_mura.bmp");
                 core::fast_write_bmp_8bit(outPathCPU, w, h, h_cpu_mura);
                 std::cout << "Saved CPU result to: " << outPathCPU << "\n";
             }

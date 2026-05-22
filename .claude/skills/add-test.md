@@ -10,9 +10,9 @@
 
 | 類型 | 位置 | 何時寫 |
 |---|---|---|
-| **Unit** | `tests/dotnet_test/AniloxRoll.Monitor.Tests/` | 純邏輯、無 IO、Mock 對外（< 5ms / case，每次 commit 都該過） |
-| **Integration** | `tests/dotnet_test/AniloxRoll.Monitor.Integration.Tests/` | 檔案 IO、JSON 讀寫、Mock 硬體（< 1s / case，PR / nightly 跑） |
-| **Stress** | `tests/dotnet_test/AniloxRoll.Monitor.Stress.Tests/` | 長迴圈、Soak、Load（數十秒到小時，週期跑） |
+| **Unit** | `tests/AniloxRoll.Monitor.Tests/` | 純邏輯、無 IO、Mock 對外（< 5ms / case，每次 commit 都該過） |
+| **Integration** | `tests/AniloxRoll.Monitor.Integration.Tests/` | 檔案 IO、JSON 讀寫、Mock 硬體（< 1s / case，PR / nightly 跑） |
+| **Stress** | `tests/AniloxRoll.Monitor.Stress.Tests/` | 長迴圈、Soak、Load（數十秒到小時，週期跑） |
 
 ## 決定該寫哪一層
 
@@ -28,7 +28,7 @@
 
 ### Unit（純 mock）
 ```csharp
-// tests/dotnet_test/AniloxRoll.Monitor.Tests/IoGrabControllerTests.cs
+// tests/AniloxRoll.Monitor.Tests/IoGrabControllerTests.cs
 [Test]
 public void NotifyGrabStarted_SetsBusyDoHigh()
 {
@@ -41,7 +41,7 @@ public void NotifyGrabStarted_SetsBusyDoHigh()
 
 ### Integration（檔案 IO）
 ```csharp
-// tests/dotnet_test/AniloxRoll.Monitor.Integration.Tests/InspectionLogServiceTests.cs
+// tests/AniloxRoll.Monitor.Integration.Tests/InspectionLogServiceTests.cs
 [Test]
 public void AppendRecord_CreatesCsvWithCfgHeader()
 {
@@ -59,7 +59,7 @@ public void AppendRecord_CreatesCsvWithCfgHeader()
 
 ### Stress（長迴圈）
 ```csharp
-// tests/dotnet_test/AniloxRoll.Monitor.Stress.Tests/StressTests.cs
+// tests/AniloxRoll.Monitor.Stress.Tests/StressTests.cs
 [Test]
 [Category("Stress")]
 public void Settings_RoundTrip_StressTest()
@@ -78,7 +78,7 @@ public void Settings_RoundTrip_StressTest()
 
 ## 新增第四個測試 csproj 時
 
-1. 創 `tests/dotnet_test/AniloxRoll.Monitor.{X}.Tests/{X}.Tests.csproj` — 複製現有 csproj 為模板
+1. 創 `tests/AniloxRoll.Monitor.{X}.Tests/{X}.Tests.csproj` — 複製現有 csproj 為模板
 2. 設定 `<RootNamespace>` / `<AssemblyName>`
 3. `Properties/AssemblyInfo.cs` 加 `[assembly: AssemblyTitle("...")]` + 新 GUID
 4. **`src/dotnet/AniloxRoll.Monitor/Properties/AssemblyInfo.cs` 加 `[assembly: InternalsVisibleTo("AniloxRoll.Monitor.{X}.Tests")]`** ← **必要**

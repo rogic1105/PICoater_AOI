@@ -20,15 +20,17 @@ PICoater_AOI/
 ├── src/dotnet/          # [介面] C# 使用者介面
 │   ├── AniloxRoll.Monitor/ # 主程式 (WinForms)
 │   └── IoBridge/       # IO Modbus TCP 通訊 (Core / ManualControl / Automation)
-├── tests/               # [測試] C++ / C# 單元測試與壓力測試
-│   ├── cpp_test         # (picoater_tests)
-│   └── dotnet_test/AniloxRoll.Monitor.Tests/ # NUnit 3.x + Moq 4.x
+├── tests/               # [測試] C# 自動化測試（量「對不對」）+ TestRunner.bat/.ps1
+│   └── AniloxRoll.Monitor.{Tests,Integration.Tests,Stress.Tests}/ # NUnit 3.x + Moq 4.x
+├── benchmark            # [速度測試] 跟被測對象住（無頂層）：
+│   ├── sdk/AOI_SDK/core_cv_benchmark/                     # 通用 CV 速度
+│   └── src/native/benchmark/picoater_pipeline_benchmark/  # pipeline 速度
+├── algtest/             # [演算法] Python 演算法原型 / 可行性（暫放）
 ├── docs/                # 架構與模式文件
 │   ├── sample/          # 示範程式（AOI.SDK.TestApp — 不參與主 build，未來會分離回 AOI_SDK repo）
 │   ├── config/          # config / dcf 範例
 │   ├── dev/             # 廠商規格書、CLProtocol 範例、Grabber / 光源控制器手冊
 │   └── user-manual/     # 操作員說明書 + IO 圖 + 硬體規格
-├── TestRunner/          # 測試啟動器（雙擊 TestRunner.bat 執行）
 └── Directory.Build.props # 全域 MSBuild 設定檔
 ```
 
@@ -68,9 +70,9 @@ PICoater_AOI/
 
 ## 6. 執行與測試 (Running & Testing)
 
-### C++ 模組測試 (底層驗證)
-* **專案**: `picoater_tests`
-* 驗證 CUDA 演算法是否正確，不涉及 GUI。
+### C++ 速度 Benchmark (底層驗證)
+* **專案**: `picoater_pipeline_benchmark`（`src/native/benchmark/`）、`core_cv_benchmark`（`sdk/AOI_SDK/`）
+* 量測 pipeline / CV 計算的速度（吞吐、IO、傳輸、多相機），輸出時間數字而非 pass/fail；不涉及 GUI。
 
 ### C# 單元 + 壓力測試
 * **專案**: `AniloxRoll.Monitor.Tests`（NUnit 3.x + Moq 4.x）
@@ -78,7 +80,7 @@ PICoater_AOI/
 
 #### 使用 TestRunner（推薦）
 
-雙擊 **`TestRunner/TestRunner.bat`** 即可選擇測試模式：
+雙擊 **`tests/TestRunner.bat`** 即可選擇測試模式：
 
 ```
  1. Unit tests only    (~2 sec)     ← 快速單元測試
@@ -94,9 +96,9 @@ PICoater_AOI/
 
 | 檔案 | 用途 |
 |------|------|
-| `TestRunner/TestRunner.bat` | 測試啟動器（雙擊執行） |
-| `TestRunner/TestRunner.ps1` | PowerShell 輔助腳本（bat 內部呼叫，處理 UTF-8 log） |
-| `TestRunner/TestRunner.log` | 測試結果 log（自動產生，已加入 .gitignore） |
+| `tests/TestRunner.bat` | 測試啟動器（雙擊執行） |
+| `tests/TestRunner.ps1` | PowerShell 輔助腳本（bat 內部呼叫，處理 UTF-8 log） |
+| `tests/TestRunner.log` | 測試結果 log（自動產生，已加入 .gitignore） |
 
 壓力測試執行時會即時顯示每 10% 的進度：
 ```
@@ -111,19 +113,19 @@ PICoater_AOI/
 
 ```bash
 # 快速單元測試（~2 秒）
-dotnet test tests/dotnet_test/AniloxRoll.Monitor.Tests/AniloxRoll.Monitor.Tests.csproj -p:Configuration=Release --filter "TestCategory!=Stress"
+dotnet test tests/AniloxRoll.Monitor.Tests/AniloxRoll.Monitor.Tests.csproj -p:Configuration=Release --filter "TestCategory!=Stress"
 
 # 壓力測試（自訂分鐘數，透過環境變數 STRESS_MINUTES）
 set STRESS_MINUTES=60
-dotnet test tests/dotnet_test/AniloxRoll.Monitor.Tests/AniloxRoll.Monitor.Tests.csproj -p:Configuration=Release --filter "TestCategory=Stress"
+dotnet test tests/AniloxRoll.Monitor.Tests/AniloxRoll.Monitor.Tests.csproj -p:Configuration=Release --filter "TestCategory=Stress"
 ```
 
 ### Mock Data 產生器
 
-`tests/python_test/generate_mock_captures.py` — 從原始 BMP 影像產生 AniloxRoll.Monitor 可讀取的存檔格式（JPG + .bin 曲線 + CSV）。
+`algtest/generate_mock_captures.py` — 從原始 BMP 影像產生 AniloxRoll.Monitor 可讀取的存檔格式（JPG + .bin 曲線 + CSV）。
 
 ```bash
-cd tests/python_test
+cd algtest
 python generate_mock_captures.py <input_dir> <output_dir>
 ```
 

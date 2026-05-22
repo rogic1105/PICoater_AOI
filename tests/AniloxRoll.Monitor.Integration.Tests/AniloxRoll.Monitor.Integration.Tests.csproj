@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
-    <RootNamespace>AniloxRoll.Monitor.Stress.Tests</RootNamespace>
-    <AssemblyName>AniloxRoll.Monitor.Stress.Tests</AssemblyName>
+    <RootNamespace>AniloxRoll.Monitor.Integration.Tests</RootNamespace>
+    <AssemblyName>AniloxRoll.Monitor.Integration.Tests</AssemblyName>
     <LangVersion>7.3</LangVersion>
     <OutputPath>bin\$(Configuration)\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -16,12 +16,10 @@
   <ItemGroup>
     <PackageReference Include="NUnit" Version="3.14.0" />
     <PackageReference Include="NUnit3TestAdapter" Version="4.5.0" />
-    <PackageReference Include="Moq" Version="4.18.4" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\dotnet\AniloxRoll.Monitor\AniloxRoll.Monitor.csproj" />
-    <ProjectReference Include="..\..\..\sdk\Bridges\IoBridge\IoBridge.Core\IoBridge.Core.csproj" />
+    <ProjectReference Include="..\..\src\dotnet\AniloxRoll.Monitor\AniloxRoll.Monitor.csproj" />
   </ItemGroup>
 
 </Project>

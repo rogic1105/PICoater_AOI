@@ -20,10 +20,10 @@ PICoater_AOI/
 ├── tools/                ← 跨元件 / 應用層通用工具（不專屬單一 sdk 元件）
 │   ├── ps/                   ← PowerShell 腳本
 │   └── python/               ← Python 工具
-├── tests/                ← 純測試
-│   ├── dotnet_test/      ← NUnit 單元 + 壓力測試
-│   ├── cpp_test/         ← C++ 單元
-│   └── python_test/      ← Python 測試
+├── tests/                ← 純自動化測試（.NET NUnit 三層 + TestRunner.bat/.ps1，量「對不對」）
+├── benchmark（量「多快」）→ 不設頂層，跟被測對象住：
+│       sdk/AOI_SDK/core_cv_benchmark（通用 CV）、src/native/benchmark/picoater_pipeline_benchmark（pipeline）
+├── algtest/              ← Python 演算法原型 / 可行性（暫放，非自動化測試）
 ├── docs/                 ← 文件
 │   ├── config/           ← 設定 JSON 範例
 │   ├── dev/              ← 開發者參考（MIL API / 廠商規格書）
@@ -57,9 +57,9 @@ PICoater_AOI/
 
 | 類型 | csproj | 內容 | 速度 | CI 跑時機 |
 |---|---|---|---|---|
-| **Unit** | `tests/dotnet_test/AniloxRoll.Monitor.Tests/` | 純邏輯、無 IO、無外部依賴（Mock 對外） | < 5ms / case | 每次 commit |
-| **Integration** | `tests/dotnet_test/AniloxRoll.Monitor.Integration.Tests/` | 含檔案 IO、JSON 讀寫、Mock 硬體 | < 1s / case | PR / nightly |
-| **Stress** | `tests/dotnet_test/AniloxRoll.Monitor.Stress.Tests/` | 長時間循環、Soak、Load | 數十秒～小時 | 週期跑（隔夜 / 週末 soak 24h） |
+| **Unit** | `tests/AniloxRoll.Monitor.Tests/` | 純邏輯、無 IO、無外部依賴（Mock 對外） | < 5ms / case | 每次 commit |
+| **Integration** | `tests/AniloxRoll.Monitor.Integration.Tests/` | 含檔案 IO、JSON 讀寫、Mock 硬體 | < 1s / case | PR / nightly |
+| **Stress** | `tests/AniloxRoll.Monitor.Stress.Tests/` | 長時間循環、Soak、Load | 數十秒～小時 | 週期跑（隔夜 / 週末 soak 24h） |
 
 **分類規則（測試該歸哪一類）：**
 - 用 `Mock<I*>` 注入 + 純函式驗證 → **Unit**
@@ -73,13 +73,16 @@ PICoater_AOI/
 
 **InternalsVisibleTo**：`src/dotnet/AniloxRoll.Monitor/Properties/AssemblyInfo.cs` 同時 `InternalsVisibleTo` 三個 test assembly。新增第四個測試 csproj 時要加進去。
 
-**Cpp / Python 對等**：
-- `tests/cpp_test/` — C++ 單元（可再細分 Unit/Integration/Stress 子目錄）
-- `tests/python_test/` — Python 測試（pytest）
+**Benchmark（量「多快」，跟被測對象住，非 `tests/`）**：
+- `sdk/AOI_SDK/core_cv_benchmark/` — 通用 CV micro-benchmark（C++）；跟 core_cv 同住，隨 sdk split 帶走
+- `src/native/benchmark/picoater_pipeline_benchmark/` — pipeline 端到端速度（C++/CUDA：IO+傳輸+CV+resize+多相機吞吐）；緊鄰 src/native 演算法，供 agent loop 優化
+
+**Python 演算法**：
+- `algtest/` — 演算法原型 / 可行性研究（暫放，讀 repo 外 05_QA_Validation 資料；非自動化測試）
 
 **未來擴充**：
-- UI 自動化 → `tests/dotnet_test/AniloxRoll.Monitor.UITests/`（拆 csproj）
-- Benchmark → `tests/dotnet_test/AniloxRoll.Monitor.Benchmarks/`（BenchmarkDotNet）
+- UI 自動化 → `tests/AniloxRoll.Monitor.UITests/`（拆 csproj）
+- .NET micro-benchmark → 跟被測 .NET 元件同住（BenchmarkDotNet）
 
 ## 架構原則：SSoT 原子結構
 
@@ -130,9 +133,9 @@ PICoater_AOI/
 ├── sdk/docs/                                      ← 跨專案工程經驗（atomic html）
 ├── tools/io-manual-control/IoBridge.ManualControl/  ← 手動 DI/DO GUI
 ├── tools/io-automation/IoBridge.Automation/         ← FSM 模擬 GUI
-├── tests/dotnet_test/AniloxRoll.Monitor.{Tests,Integration.Tests,Stress.Tests}/  ← NUnit 三層
-├── tests/python_test/               ← Python 測試/工具腳本
-├── TestRunner/                      ← 測試啟動器（雙擊 TestRunner.bat）
+├── tests/AniloxRoll.Monitor.{Tests,Integration.Tests,Stress.Tests}/  ← NUnit 三層 + TestRunner.bat/.ps1
+├── benchmark：sdk/AOI_SDK/core_cv_benchmark/（通用 CV）+ src/native/benchmark/picoater_pipeline_benchmark/（pipeline）  ← 速度測試，跟被測對象住
+├── algtest/                         ← Python 演算法原型（暫放）
 └── deploy/                          ← 現場部署腳本（PowerShell + JSON 參數）
     ├── storage-pc/                  ← 儲存機：固定 IP + SMB 共用 + 防火牆 + Guest 匿名（secedit）
     └── inspection-pc/               ← 檢測機：單 NIC 雙 IP 別名 + Client 端匿名 Guest SMB
@@ -216,7 +219,7 @@ PICoater_AOI/
 | `sdk/Bridges/IoBridge/IoBridge.Core/IModbusTcpClient.cs` | Modbus TCP 介面（供 IoGrabController mock 注入） |
 | `sdk/Bridges/IoBridge/IoBridge.Core/IoModuleFactory.cs` | 型號→client 單一決策點：`Create(model)`；新增型號加 case。`Modules/` 按廠商分實作 |
 | `sdk/Bridges/IoBridge/IoBridge.Core/Modules/IcpDasModbusTcpClient.cs` | ICP DAS 標準 Modbus（ET 系列通用）；ET-7044 實作 |
-| `tests/dotnet_test/AniloxRoll.Monitor.Tests/` | NUnit 3.x + Moq 4.x 測試專案 |
+| `tests/AniloxRoll.Monitor.Tests/` | NUnit 3.x + Moq 4.x 測試專案 |
 | `CsvConfigSnapshotTests.cs` | #CFG round-trip、ContentKey |
 | `AcquisitionSettingsTests.cs` | Validate fallback、JSON Save/Load |
 | `InspectionLogServiceTests.cs` | CSV 寫入、#CFG 插入、Pass/Fail 判定 |

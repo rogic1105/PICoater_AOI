@@ -1,10 +1,10 @@
-// AOI_SDK\core_cv_tests\src\main.cpp
+// AOI_SDK\core_cv_benchmark\src\main.cpp
 
 #include "framework/test_utils.hpp" 
 
 void RunCoreTests(const std::string& imgPath);
 
 int main() {
-    // ¤@¦æ·d©w¡A§â "RunCoreTests" ¨ç¦¡¶Ç¶i¥h
+    // ï¿½@ï¿½ï¿½dï¿½wï¿½Aï¿½ï¿½ "RunCoreTests" ï¿½ç¦¡ï¿½Ç¶iï¿½h
     return framework::RunAOITestBootstrap("AOI Core SDK Tests", RunCoreTests);
 }
