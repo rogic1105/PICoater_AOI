@@ -1,0 +1,11 @@
+<Project>
+  <!-- 先繼承 repo 根 Directory.Build.props（取得 EngRoot / IntDir 等），再覆寫輸出位置 -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)..\'))" />
+
+  <PropertyGroup>
+    <!-- examples（IoBridge 範例工具）的 exe 輸出到 bin/<plat>/<cfg>/tools/，
+         跟產品主程式 (AniloxRoll.Monitor.exe) 分開，避免部署時誤包。 -->
+    <OutDir>$(EngRoot)bin\$(Platform)\$(Configuration)\tools\</OutDir>
+    <OutputPath>$(OutDir)</OutputPath>
+  </PropertyGroup>
+</Project>
