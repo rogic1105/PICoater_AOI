@@ -29,7 +29,7 @@ PICoater_AOI/
 │   ├── dev/              ← 開發者參考（MIL API / 廠商規格書）
 │   ├── user-manual/      ← 操作員說明（ui-flow.html / hardware-specs）
 │   └── sample/           ← 範例程式（給 SDK 使用者參考的 demo）
-├── assets/               ← 集中品牌資源（app.ico；src/ 主程式 + sdk/examples 共用，避免 sdk 反向依賴 src）
+├── assets/               ← 主程式品牌資源（AniloxRoll.ico）；sdk examples 的 icon 跟著元件走（sdk/Bridges/<X>/examples/assets/，self-contained 可帶走）
 ├── deploy/               ← 現場部署腳本（PowerShell + JSON）
 └── .claude/skills/       ← Claude Code skills（按修改範圍觸發）
 

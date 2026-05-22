@@ -13,7 +13,7 @@
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <Deterministic>true</Deterministic>
     <TargetFrameworkProfile />
-    <ApplicationIcon>..\..\..\assets\app.ico</ApplicationIcon>
+    <ApplicationIcon>..\..\..\assets\AniloxRoll.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -159,7 +159,7 @@
     <Compile Include="UI\State\UserSessionState.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <EmbeddedResource Include="..\..\..\assets\app.ico">
+    <EmbeddedResource Include="..\..\..\assets\AniloxRoll.ico">
       <Link>Resources\app.ico</Link>
       <LogicalName>AniloxRoll.Monitor.Resources.app.ico</LogicalName>
     </EmbeddedResource>
