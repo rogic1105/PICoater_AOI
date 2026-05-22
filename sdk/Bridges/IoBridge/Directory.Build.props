@@ -1,0 +1,18 @@
+<Project>
+  <!-- 元件根 build 設定：讓 sdk/Bridges/IoBridge/ 既能在 monorepo 內 build，
+       也能整包拉出去（git subtree split / 複製到別專案）獨立 build。 -->
+  <PropertyGroup>
+    <!-- 找 repo 根 Directory.Build.props（往上 3 層：IoBridge → Bridges → sdk → repo root）-->
+    <_RepoRoot>$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)..\..\..\'))</_RepoRoot>
+  </PropertyGroup>
+
+  <!-- 在 monorepo 內：繼承 repo 根設定（EngRoot / 統一 bin/x64/Release/）-->
+  <Import Project="$(_RepoRoot)" Condition="'$(_RepoRoot)' != ''" />
+
+  <!-- standalone（拉出去、沒有 repo 根）：自定義 EngRoot = 元件根，一律 Release|x64 -->
+  <PropertyGroup Condition="'$(_RepoRoot)' == ''">
+    <EngRoot>$(MSBuildThisFileDirectory)</EngRoot>
+    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+    <Platform Condition="'$(Platform)' == ''">x64</Platform>
+  </PropertyGroup>
+</Project>
