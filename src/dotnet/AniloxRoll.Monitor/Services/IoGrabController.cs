@@ -90,7 +90,7 @@ namespace AniloxRoll.Monitor.Core.Services
         /// </summary>
         internal bool AutoBackgroundLoop { get; set; } = true;
 
-        public IoGrabController() : this(new IcpDasModbusTcpClient()) { }
+        public IoGrabController(string model = "ET-7044") : this(IoModuleFactory.Create(model)) { }
 
         internal IoGrabController(IModbusTcpClient plcClient)
         {

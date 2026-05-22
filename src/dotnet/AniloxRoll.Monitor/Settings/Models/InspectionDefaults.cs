@@ -49,6 +49,7 @@ namespace AniloxRoll.Monitor.Core.Data
         public const string RemoteConfigPath  = @"\\192.168.10.20\Anilox\Config";   // 遠端設定路徑
 
         // ── 5. IO 設定 ─────────────────────────────────────────────────────
+        public const string IoModel   = "ET-7044";        // IO 型號（對應 IoModuleFactory）
         public const bool   IoEnabled = true;             // 啟用 IO
         public const string IoIp      = "192.168.255.1"; // IO IP
         public const int    IoPort    = 502;              // IO Port

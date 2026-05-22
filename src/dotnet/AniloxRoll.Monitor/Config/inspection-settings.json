@@ -51,6 +51,7 @@
     "RemoteConfigPath": "\\\\192.168.10.20\\Anilox\\Config"
   },
   "Io": {
+    "Model": "ET-7044",
     "Enabled": true,
     "Ip": "192.168.255.1",
     "Port": 502

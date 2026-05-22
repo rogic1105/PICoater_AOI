@@ -55,7 +55,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="IModbusTcpClient.cs" />
-    <Compile Include="IcpDasModbusTcpClient.cs" />
+    <Compile Include="IoModuleFactory.cs" />
+    <Compile Include="Modules\IcpDasModbusTcpClient.cs" />
     <Compile Include="IoLogger.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

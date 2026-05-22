@@ -118,6 +118,7 @@ namespace AniloxRoll.Monitor.Core.Data
 
             // IO
             sb.AppendLine("  \"Io\": {");
+            sb.AppendLine($"    \"Model\": \"{SettingsStoreHelper.EscapeJson(s.IoModel)}\",");
             sb.AppendLine($"    \"Enabled\": {(s.IoEnabled ? "true" : "false")},");
             sb.AppendLine($"    \"Ip\": \"{SettingsStoreHelper.EscapeJson(s.IoIp)}\",");
             sb.AppendLine($"    \"Port\": {s.IoPort}");
@@ -162,6 +163,7 @@ namespace AniloxRoll.Monitor.Core.Data
                 Storage       = ParseStorage(json),
                 CameraParam   = ParseCameraParam(json),
                 Light         = ParseLight(json),
+                IoModel      = ParseIoModel(json),
                 IoEnabled    = ParseIoEnabled(json),
                 IoIp         = ParseIoIp(json),
                 IoPort       = ParseIoPort(json),
@@ -321,6 +323,9 @@ namespace AniloxRoll.Monitor.Core.Data
                 obj = SettingsStoreHelper.ExtractObject(json, "Plc");
             return obj;
         }
+
+        private static string ParseIoModel(string json)
+            => SettingsStoreHelper.GetString(ExtractIoObject(json), "Model", InspectionDefaults.IoModel);
 
         private static bool ParseIoEnabled(string json)
             => SettingsStoreHelper.GetBool(ExtractIoObject(json), "Enabled", InspectionDefaults.IoEnabled);

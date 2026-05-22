@@ -185,6 +185,7 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category("6. 光源設定")][DisplayName("暖機延遲 (ms)")][TypeConverter(typeof(LeftAlignNumericConverter))] public int    LightWarmupMs   { get => Light.WarmupMs;   set => Light.WarmupMs   = value; }
 
         // ===== 7. IO 設定 =====
+        [Category("7. IO設定")][DisplayName("IO 型號")] public string IoModel { get; set; } = InspectionDefaults.IoModel;
         [Category("7. IO設定")][DisplayName("啟用 IO")][TypeConverter(typeof(BoolYesNoConverter))]  public bool   IoEnabled { get; set; } = InspectionDefaults.IoEnabled;
         [Category("7. IO設定")][DisplayName("IO IP")]    public string IoIp      { get; set; } = InspectionDefaults.IoIp;
         [Category("7. IO設定")][DisplayName("IO Port")][TypeConverter(typeof(LeftAlignNumericConverter))]  public int    IoPort    { get; set; } = InspectionDefaults.IoPort;

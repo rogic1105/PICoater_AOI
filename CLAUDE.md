@@ -213,6 +213,8 @@ PICoater_AOI/
 | 路徑 | 職責 |
 |------|------|
 | `sdk/Bridges/IoBridge/IoBridge.Core/IModbusTcpClient.cs` | Modbus TCP 介面（供 IoGrabController mock 注入） |
+| `sdk/Bridges/IoBridge/IoBridge.Core/IoModuleFactory.cs` | 型號→client 單一決策點：`Create(model)`；新增型號加 case。`Modules/` 按廠商分實作 |
+| `sdk/Bridges/IoBridge/IoBridge.Core/Modules/IcpDasModbusTcpClient.cs` | ICP DAS 標準 Modbus（ET 系列通用）；ET-7044 實作 |
 | `tests/dotnet_test/AniloxRoll.Monitor.Tests/` | NUnit 3.x + Moq 4.x 測試專案 |
 | `CsvConfigSnapshotTests.cs` | #CFG round-trip、ContentKey |
 | `AcquisitionSettingsTests.cs` | Validate fallback、JSON Save/Load |
@@ -333,6 +335,7 @@ PICoater_AOI/
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
+| IO 型號 | `IoModel` | ET-7044 | 對應 `IoModuleFactory.Create(model)`；換型號改此值。目前支援 ET-7044 |
 | 啟用 IO | `IoEnabled` | true | 啟用 IO Modbus TCP |
 | IO IP | `IoIp` | 192.168.255.1 | ET-7044 IP |
 | IO Port | `IoPort` | 502 | Modbus TCP port |

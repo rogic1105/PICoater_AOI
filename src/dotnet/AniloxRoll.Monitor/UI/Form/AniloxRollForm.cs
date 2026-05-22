@@ -388,7 +388,7 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (!_settings.IoEnabled) return;
 
-            _ioGrabController = new IoGrabController();
+            _ioGrabController = new IoGrabController(_settings.IoModel);
 
             _ioGrabController.OnStartRequested += () =>
             {
