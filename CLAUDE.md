@@ -443,7 +443,7 @@ PICoater_AOI/
 | Native C API 新增/修改 | `/add-native-api` | P/Invoke 宣告、C++ 實作範本 |
 | 效能瓶頸排查 | `/perf-diagnose` | Stopwatch 計時、IO/GPU/UI 分層診斷 |
 | 追蹤 btn/cb/event I/O 流程 | `/review-flow <控制項>` | 完整 call chain 追蹤 + 文件比對 |
-| Build 驗證 | `/build` | Release+Debug x64 完整 build |
+| Build 驗證 | `/build` | Release x64 完整 build（**一律 Release，不 build Debug**）|
 | Commit 前文件更新 | `/update-docs` | 批次更新 CLAUDE.md + skills |
 | 提交推送 | `/commit` | build + 文件 + conventional commit |
 | 控制項別名記錄 | `/alias-log` | 對話中新稱呼 → 更新速查表 + 建議標準名稱 |
@@ -501,8 +501,10 @@ docs/
 
 ### Build 驗證
 
+- **一律 Release|x64**（主程式 + sdk + tools 全部）。**不要 build Debug** — 開發用 agent + `Trace.WriteLine` / `Console.WriteLine` 檢查（`Debug.WriteLine` 在 Release 是 no-op，不要用）。csproj 殘留的 Debug 配置請忽略，不要選用。
 - 修改 `.cs`、`.csproj`、`.sln` 後**立即 build** 確認零錯誤
 - 不得在 VS 的 reserved ImportGroup 放自訂 Import
+- build 入口：產品 `PICoater_AOI.sln` / sdk 工具 `sdk/Tools.sln` / 單一 `xxx.csproj`（msbuild 直接 build，依賴自動拉）
 - Build 命令（**必須帶 Platform=x64**，本專案依賴 AMD64 MIL SDK）：
   ```
   cat > /tmp/build.bat << 'EOFBAT'

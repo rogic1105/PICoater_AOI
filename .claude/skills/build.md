@@ -6,19 +6,24 @@
 
 使用者輸入 `/build` 時。
 
+## 原則
+
+**一律 Release|x64**，不 build Debug。本專案依賴 AMD64 MIL SDK，必須 `Platform=x64`
+（AnyCPU/MSIL 會 MSB3270 警告且執行期崩潰）。開發用 agent + `Trace.WriteLine` /
+`Console.WriteLine` 檢查（`Debug.WriteLine` 在 Release 是 no-op）。csproj 殘留的 Debug
+配置請忽略，不要選用。
+
 ## 執行步驟
 
-1. **Build Release|x64**：
+1. **Build 產品主程式**（Release|x64）：
    ```
-   cat > /tmp/build.bat << 'EOFBAT'
-   @echo off
    "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" "D:\Chunkuan\AUO\02_Projects_Active\PICoater\07_Source_Code_Repo\PICoater_AOI\src\dotnet\AniloxRoll.Monitor\AniloxRoll.Monitor.csproj" /p:Configuration=Release /p:Platform=x64 /v:minimal
-   EOFBAT
-   cmd //c "$(cygpath -w /tmp/build.bat)"
+   ```
+   （PowerShell 用 `& "...MSBuild.exe" "...csproj" /p:Configuration=Release /p:Platform=x64 /v:minimal`）
+
+2. **Build sdk 工具**（Release|x64，所有 examples → bin/x64/Release/tools/）：
+   ```
+   "...MSBuild.exe" "D:\...\PICoater_AOI\sdk\Tools.sln" /p:Configuration=Release /p:Platform=x64 /v:minimal
    ```
 
-2. **Build Debug|x64**（同上換 Configuration=Debug）
-
-3. **回報結果** — 列出 error/warning 數量，若有 error 顯示前 10 條
-
-**重要**：永遠使用 `Platform=x64`，不可省略。本專案依賴 AMD64 的 MIL SDK，AnyCPU/MSIL 會產生 MSB3270 警告且執行期會崩潰。
+3. **回報結果** — 列出 error/warning 數量，若有 error 顯示前 10 條。
