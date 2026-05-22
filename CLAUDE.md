@@ -10,13 +10,14 @@ PICoater_AOI/
 ├── sdk/                  ← 可獨立 split 的 library（純函式庫，無 GUI、無 exe）
 │   ├── AOI_SDK/          ← 影像處理 SDK（CUDA / framework / cpp_utils）
 │   ├── Bridges/          ← 對外設備 / 系統橋接層
-│   │   ├── IoBridge/IoBridge.Core/        ← Modbus IO 通訊
-│   │   ├── LightBridge/LightBridge.Core/    ← RS-232 LTS-3DPA24 光源
+│   │   ├── IoBridge/                         ← ICP DAS ET-7044 IO module（Modbus TCP）
+│   │   │   ├── IoBridge.Core/                ← library（IModbusTcpClient 介面 + ET-7044 實作）
+│   │   │   └── examples/                     ← 可執行範例（ManualControl / Automation GUI）
+│   │   ├── LightBridge/LightBridge.Core/     ← RS-232 LTS-3DPA24 光源
 │   │   └── StorageBridge/StorageBridge.Core/ ← SMB + 檔案複製 + 循環儲存
-│   └── docs/             ← 跨專案工程經驗（repo-style / testing pyramid / FSM）
-├── tools/                ← 內部工具（工程師 debug / 廠區維護 / 測試用 exe / 腳本）
-│   ├── io-manual-control/   ← IO 手動 DI/DO GUI（WinForms exe）
-│   ├── io-automation/       ← IO FSM 模擬工具（WinForms exe）
+│   ├── Common/          ← 跨元件共用（含 vendored third-party 如 stb）
+│   └── docs/            ← 跨專案工程經驗（repo-style / testing pyramid / FSM）
+├── tools/                ← 跨元件 / 應用層通用工具（不專屬單一 sdk 元件）
 │   ├── ps/                   ← PowerShell 腳本
 │   └── python/               ← Python 工具
 ├── tests/                ← 純測試
@@ -29,8 +30,12 @@ PICoater_AOI/
 │   ├── user-manual/      ← 操作員說明（ui-flow.html / hardware-specs）
 │   └── sample/           ← 範例程式（給 SDK 使用者參考的 demo）
 ├── deploy/               ← 現場部署腳本（PowerShell + JSON）
-│   └── Common/           ← 跨元件共用（含 vendored third-party 如 stb）
 └── .claude/skills/       ← Claude Code skills（按修改範圍觸發）
+
+**examples/ vs tools/ 區分：**
+- `sdk/<元件>/examples/` — **只服務單一 sdk 元件**的可執行範例（拿掉該元件就沒用）。展示「怎麼用這個 library」，self-contained 跟元件一起 split。如 IoBridge 的 ManualControl / Automation GUI。
+- `tools/` — **跨元件 / 應用層**通用工具（log analyzer、部署 helper 等），不專屬單一元件。
+- 判準：「這工具拿掉某個 sdk 元件還有用嗎？」沒用 → examples/；還有用 → tools/。
 ```
 
 **核心分層原則（業界 monorepo + Codex/Gemini 共識）：**
