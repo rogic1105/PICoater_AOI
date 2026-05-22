@@ -1,0 +1,8 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)..\'))" />
+  <PropertyGroup>
+    <!-- StorageBridge 範例工具 → bin/<plat>/<cfg>/tools/storage/（跟 io/light 對稱）-->
+    <OutDir>$(EngRoot)bin\$(Platform)\$(Configuration)\tools\storage\</OutDir>
+    <OutputPath>$(OutDir)</OutputPath>
+  </PropertyGroup>
+</Project>

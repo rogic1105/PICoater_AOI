@@ -1,0 +1,12 @@
+<Project>
+  <!-- 元件根 build 設定：monorepo + standalone 都支援（同 IoBridge/LightBridge pattern）。 -->
+  <PropertyGroup>
+    <_RepoRoot>$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)..\..\..\'))</_RepoRoot>
+  </PropertyGroup>
+  <Import Project="$(_RepoRoot)" Condition="'$(_RepoRoot)' != ''" />
+  <PropertyGroup Condition="'$(_RepoRoot)' == ''">
+    <EngRoot>$(MSBuildThisFileDirectory)</EngRoot>
+    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+    <Platform Condition="'$(Platform)' == ''">x64</Platform>
+  </PropertyGroup>
+</Project>
