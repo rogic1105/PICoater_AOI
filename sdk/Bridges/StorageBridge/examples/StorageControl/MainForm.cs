@@ -31,6 +31,7 @@ namespace StorageBridge.Control
         public MainForm()
         {
             Text = "儲存電腦連線測試 (StorageBridge)";
+            try { Icon = System.Drawing.Icon.ExtractAssociatedIcon(System.Windows.Forms.Application.ExecutablePath); } catch { }
             Font = new Font("Microsoft JhengHei", 9F);
             ClientSize = new Size(480, 250);
             FormBorderStyle = FormBorderStyle.FixedSingle;

@@ -21,6 +21,7 @@ namespace IoBridge.ManualControl
         public MainForm()
         {
             InitializeComponent();
+            try { Icon = System.Drawing.Icon.ExtractAssociatedIcon(System.Windows.Forms.Application.ExecutablePath); } catch { }
             InitDynamicControls();
 
             _plc.ReadWriteTimeoutMs = AppSettings.ReadWriteTimeoutMs;

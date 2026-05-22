@@ -28,6 +28,7 @@ namespace LightBridge.Control
         public MainForm()
         {
             Text = "光源控制 (LTS-3DPA24)";
+            try { Icon = System.Drawing.Icon.ExtractAssociatedIcon(System.Windows.Forms.Application.ExecutablePath); } catch { }
             Font = new Font("Microsoft JhengHei", 9F);
             ClientSize = new Size(440, 280);
             FormBorderStyle = FormBorderStyle.FixedSingle;
