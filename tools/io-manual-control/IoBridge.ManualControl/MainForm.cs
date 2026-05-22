@@ -104,9 +104,18 @@ namespace IoBridge.ManualControl
 
             if (success)
             {
+                IoLogger.Info($"Connected to {ip}:{AppSettings.PlcPort}");
+                // TCP 連上就算連線成功，切換 UI + 啟動 polling。
+                // 初始化讀取（下方 try）失敗不該誤判斷線 —— ET-7044 是 4DI+4DO，
+                // ReadDoStatuses 讀 8 coils 可能回 Modbus exception，但 TCP 已連上。
+                _timerScan.Start();
+                btnConnect.Text = "Connect";
+                btnDisconnect.Enabled = true;
+                btnDisconnect.BackColor = Color.LightPink;
+
+                // 初始化讀取：顯示當前狀態 + 同步 DO checkbox。失敗只記 log，不影響連線。
                 try
                 {
-                    IoLogger.Info($"Connected to {ip}:{AppSettings.PlcPort}");
                     var taskDO = _plc.ReadDoStatuses();
                     var taskDI = _plc.ReadDiStatuses();
                     await Task.WhenAll(taskDO, taskDI);
@@ -118,21 +127,10 @@ namespace IoBridge.ManualControl
                         UpdateStatusLamp("shpDO" + i, taskDO.Result[i] ? Color.LimeGreen : Color.White);
                         UpdateStatusLamp("shpDI" + i, taskDI.Result[i] ? Color.LimeGreen : Color.White);
                     }
-
-                    _timerScan.Start();
-                    btnConnect.Text = "Connect";
-                    btnDisconnect.Enabled = true;
-                    btnDisconnect.BackColor = Color.LightPink;
-                }
-                catch (SocketException ex)
-                {
-                    IoLogger.Error("Post-connect read failed (socket)", ex);
-                    HandleConnectionFail();
                 }
                 catch (Exception ex)
                 {
-                    IoLogger.Error("Post-connect init failed", ex);
-                    HandleConnectionFail();
+                    IoLogger.Warn($"Initial read failed (connection kept, polling will retry): {ex.Message}");
                 }
             }
             else
@@ -199,26 +197,37 @@ namespace IoBridge.ManualControl
 
         private async Task OnPollingTick()
         {
+            // DI 讀取為連線核心：失敗才斷線（ET-7044 DI 在 addr 0，IoGrabController 驗證過正常）
             try
             {
-                var doStates = await _plc.ReadDoStatuses();
                 var diStates = await _plc.ReadDiStatuses();
-
                 for (int i = 0; i < 8; i++)
-                {
                     UpdateStatusLamp("shpDI" + i, diStates[i] ? Color.LimeGreen : Color.White);
-                    UpdateStatusLamp("shpDO" + i, doStates[i] ? Color.LimeGreen : Color.White);
-                }
             }
             catch (SocketException ex)
             {
-                IoLogger.Error("Polling socket error, disconnecting", ex);
+                IoLogger.Error("DI polling socket error, disconnecting", ex);
                 btnDisconnect_Click(null, null);
+                return;
             }
             catch (Exception ex)
             {
-                IoLogger.Error("Polling error, disconnecting", ex);
+                IoLogger.Error("DI polling error, disconnecting", ex);
                 btnDisconnect_Click(null, null);
+                return;
+            }
+
+            // DO 讀取容錯：ET-7044 可能不支援 read 8 coils，失敗只 skip DO 燈，不斷線
+            // （手動戳 DO 用 WriteDo 不受影響，DO 回讀燈號顯示為止步狀態而已）
+            try
+            {
+                var doStates = await _plc.ReadDoStatuses();
+                for (int i = 0; i < 8; i++)
+                    UpdateStatusLamp("shpDO" + i, doStates[i] ? Color.LimeGreen : Color.White);
+            }
+            catch (Exception ex)
+            {
+                IoLogger.Warn($"DO read failed (skip DO lamps, connection kept): {ex.Message}");
             }
         }
 
