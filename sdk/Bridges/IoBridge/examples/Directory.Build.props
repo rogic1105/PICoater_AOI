@@ -3,9 +3,9 @@
   <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)..\'))" />
 
   <PropertyGroup>
-    <!-- examples（IoBridge 範例工具）的 exe 輸出到 bin/<plat>/<cfg>/tools/，
-         跟產品主程式 (AniloxRoll.Monitor.exe) 分開，避免部署時誤包。 -->
-    <OutDir>$(EngRoot)bin\$(Platform)\$(Configuration)\tools\</OutDir>
+    <!-- examples（IoBridge 範例工具）的 exe 輸出到 bin/<plat>/<cfg>/tools/io/，
+         跟產品主程式分開 + 按 Bridge 分項目（light/storage 未來對稱）。 -->
+    <OutDir>$(EngRoot)bin\$(Platform)\$(Configuration)\tools\io\</OutDir>
     <OutputPath>$(OutDir)</OutputPath>
   </PropertyGroup>
 </Project>
