@@ -1,0 +1,17 @@
+<Project>
+  <!-- 元件根 build 設定：monorepo 內 build + 整包拉出去獨立 build 都支援。
+       與 sdk/Bridges/IoBridge/Directory.Build.props 同 pattern。 -->
+  <PropertyGroup>
+    <_RepoRoot>$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)..\..\..\'))</_RepoRoot>
+  </PropertyGroup>
+
+  <!-- monorepo：繼承 repo 根（EngRoot / 統一 bin/x64/Release/）-->
+  <Import Project="$(_RepoRoot)" Condition="'$(_RepoRoot)' != ''" />
+
+  <!-- standalone：EngRoot = 元件根，一律 Release|x64 -->
+  <PropertyGroup Condition="'$(_RepoRoot)' == ''">
+    <EngRoot>$(MSBuildThisFileDirectory)</EngRoot>
+    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+    <Platform Condition="'$(Platform)' == ''">x64</Platform>
+  </PropertyGroup>
+</Project>

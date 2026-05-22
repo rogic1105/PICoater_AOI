@@ -1,0 +1,56 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightBridge.Core", "LightBridge.Core\LightBridge.Core.csproj", "{C2D3E4F5-3333-4444-5555-666677778888}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{B36A84DF-456D-A817-6EDD-3EC3E7F6E11F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "LightControl", "LightControl", "{BFCF6F25-6650-9AB8-E2BB-016DA38EF93B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightBridge.Control", "examples\LightControl\LightBridge.Control.csproj", "{D4E5F6A7-4444-5555-6666-777788889999}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C2D3E4F5-3333-4444-5555-666677778888}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C2D3E4F5-3333-4444-5555-666677778888}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C2D3E4F5-3333-4444-5555-666677778888}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C2D3E4F5-3333-4444-5555-666677778888}.Debug|x64.Build.0 = Debug|Any CPU
+		{C2D3E4F5-3333-4444-5555-666677778888}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C2D3E4F5-3333-4444-5555-666677778888}.Debug|x86.Build.0 = Debug|Any CPU
+		{C2D3E4F5-3333-4444-5555-666677778888}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C2D3E4F5-3333-4444-5555-666677778888}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C2D3E4F5-3333-4444-5555-666677778888}.Release|x64.ActiveCfg = Release|x64
+		{C2D3E4F5-3333-4444-5555-666677778888}.Release|x64.Build.0 = Release|x64
+		{C2D3E4F5-3333-4444-5555-666677778888}.Release|x86.ActiveCfg = Release|Any CPU
+		{C2D3E4F5-3333-4444-5555-666677778888}.Release|x86.Build.0 = Release|Any CPU
+		{D4E5F6A7-4444-5555-6666-777788889999}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D4E5F6A7-4444-5555-6666-777788889999}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D4E5F6A7-4444-5555-6666-777788889999}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D4E5F6A7-4444-5555-6666-777788889999}.Debug|x64.Build.0 = Debug|Any CPU
+		{D4E5F6A7-4444-5555-6666-777788889999}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D4E5F6A7-4444-5555-6666-777788889999}.Debug|x86.Build.0 = Debug|Any CPU
+		{D4E5F6A7-4444-5555-6666-777788889999}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D4E5F6A7-4444-5555-6666-777788889999}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D4E5F6A7-4444-5555-6666-777788889999}.Release|x64.ActiveCfg = Release|x64
+		{D4E5F6A7-4444-5555-6666-777788889999}.Release|x64.Build.0 = Release|x64
+		{D4E5F6A7-4444-5555-6666-777788889999}.Release|x86.ActiveCfg = Release|Any CPU
+		{D4E5F6A7-4444-5555-6666-777788889999}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{BFCF6F25-6650-9AB8-E2BB-016DA38EF93B} = {B36A84DF-456D-A817-6EDD-3EC3E7F6E11F}
+		{D4E5F6A7-4444-5555-6666-777788889999} = {BFCF6F25-6650-9AB8-E2BB-016DA38EF93B}
+	EndGlobalSection
+EndGlobal
