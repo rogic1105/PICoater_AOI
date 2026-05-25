@@ -223,6 +223,10 @@
       <Project>{A1B2C3D4-1111-2222-3333-444455556666}</Project>
       <Name>IoBridge.Core</Name>
     </ProjectReference>
+    <ProjectReference Include="..\..\..\sdk\MIL\MilGrabber.Core\MilGrabber.Core.csproj">
+      <Project>{B2C3D4E5-6F70-4A81-9B2C-3D4E5F607182}</Project>
+      <Name>MilGrabber.Core</Name>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
