@@ -14,8 +14,8 @@ PICoater_AOI/
 │   │   │   ├── IoBridge.Core/                ← library（IModbusTcpClient 介面 + ET-7044 實作）
 │   │   │   └── examples/                     ← 可執行範例（ManualControl / Automation GUI）
 │   │   ├── LightBridge/LightBridge.Core/     ← RS-232 LTS-3DPA24 光源
-│   │   ├── StorageBridge/StorageBridge.Core/ ← SMB + 檔案複製 + 循環儲存
-│   │   └── GrabberBridge/                     ← Matrox grabber + CLProtocol（殼：vendor only，預留 GrabberBridge.Core）
+│   │   └── StorageBridge/StorageBridge.Core/ ← SMB + 檔案複製 + 循環儲存
+│   ├── MIL/Grabber/      ← MIL 集中區（grab+顯示範例 examples/MilGrab + vendor：Matrox 規格書/CLProtocol）；隔離 MIL，換 grabber 整區換
 │   └── docs/            ← 跨專案工程經驗（repo-style / testing pyramid / FSM）
 ├── tools/                ← 跨元件 / 應用層通用工具（不專屬單一 sdk 元件）
 │   ├── ps/                   ← PowerShell 腳本

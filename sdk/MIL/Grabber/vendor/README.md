@@ -30,4 +30,4 @@ runtime 載入的是 Matrox SDK 安裝後系統內的 CLProtocol.dll。
 ## Note
 
 本專案目前**沒有自己寫 CLProtocol.dll**（用廠商隨相機提供的現成 .dll）。
-這份範例純對照用，未來若決定自己寫，會複製到 `../GrabberBridge.Core/` 變我們的 code。
+這份範例純對照用，未來若決定自己寫，會複製到本元件成為我們的 code（取代廠商現成 .dll）。
