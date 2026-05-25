@@ -8,14 +8,13 @@ PICoater_AOI/
 │   ├── dotnet/AniloxRoll.Monitor/  ← C# WinForms 主應用
 │   └── native/                     ← C++ pipeline
 ├── sdk/                  ← 可獨立 split 的 library（純函式庫，無 GUI、無 exe）
-│   ├── AOI_SDK/          ← 影像處理 SDK（CUDA / framework / cpp_utils）
+│   ├── AOI_SDK/          ← 影像處理 SDK（core_cv / framework / cpp_utils / core_cv_api；third_party/stb vendored → self-contained 可 split）
 │   ├── Bridges/          ← 對外設備 / 系統橋接層
 │   │   ├── IoBridge/                         ← ICP DAS ET-7044 IO module（Modbus TCP）
 │   │   │   ├── IoBridge.Core/                ← library（IModbusTcpClient 介面 + ET-7044 實作）
 │   │   │   └── examples/                     ← 可執行範例（ManualControl / Automation GUI）
 │   │   ├── LightBridge/LightBridge.Core/     ← RS-232 LTS-3DPA24 光源
 │   │   └── StorageBridge/StorageBridge.Core/ ← SMB + 檔案複製 + 循環儲存
-│   ├── Common/          ← 跨元件共用（含 vendored third-party 如 stb）
 │   └── docs/            ← 跨專案工程經驗（repo-style / testing pyramid / FSM）
 ├── tools/                ← 跨元件 / 應用層通用工具（不專屬單一 sdk 元件）
 │   ├── ps/                   ← PowerShell 腳本
@@ -43,7 +42,7 @@ PICoater_AOI/
 
 1. **library 跟 executable 實體分離** — sdk/ 只放 library（無 GUI、無 exe），exe/工具放 tools/。引用 sdk 的專案不會被迫拉 UI 依賴
 2. **sdk/ = 可獨立 split** — 每個元件 self-contained（有自己 Directory.Build.props / .gitignore 更好），未來可 split 為獨立 repo
-3. **依賴方向單向** — `src/ → sdk/`；sdk/ 內可用 `sdk/Common/`（共用 + vendored third-party）；**sdk/ 絕對不能反向依賴 src/**
+3. **依賴方向單向** — `src/ → sdk/`；vendored third-party（如 stb）放各 sdk 元件的 `third_party/`（隨元件 split）；**sdk/ 絕對不能反向依賴 src/**
 4. **新硬體 bridge 走 sdk/ 模板** — 見 [.claude/skills/add-hardware-bridge.md](.claude/skills/add-hardware-bridge.md)
 
 **業界對照：**

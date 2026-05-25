@@ -22,8 +22,7 @@
 		<FrameworkPath>$(AoiSdkPath)framework\</FrameworkPath>
 		<LocalModulesPath>$(EngRoot)src\native\modules\</LocalModulesPath>
 
-		<SdkCommonPath>$(EngRoot)sdk\Common\</SdkCommonPath>
-		<StbPath>$(SdkCommonPath)stb\include\</StbPath>
+		<StbPath>$(AoiSdkPath)third_party\stb\include\</StbPath>
 
 		<TestImageRelPath>02_Projects_Active\PICoater\05_QA_Validation\feasibility_test_data\20250117 L5C\Envision\Low_Angle_by_nor_line\mura\cal_25-11-17_11-16-48-283.bmp</TestImageRelPath>
 		<FullTestImagePath>$(AbsPGMRootPath)$(TestImageRelPath)</FullTestImagePath>
