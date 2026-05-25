@@ -9,10 +9,10 @@ from scipy.signal import find_peaks
 
 
 # --- 參數設定 ---
-IMAGE_FOLDER = "../../../../05_QA_Validation/feasibility_test_data/20250117 L5C/Envision/Low_Angle_by_nor_line/mura/"
+IMAGE_FOLDER = "../../../05_QA_Validation/feasibility_test_data/20250117 L5C/Envision/Low_Angle_by_nor_line/mura/"
 IMAGE_NAME = 'cal_25-11-17_11-19-25-929.bmp'
 IMAGE_PATH = os.path.join(IMAGE_FOLDER, IMAGE_NAME)
-OUTPUT_DIR = "../../artifacts/python_test/method_2"
+OUTPUT_DIR = "../artifacts/algtest/method_2"
 
 # 新增常數: 解析度 (um/pixel)
 OPS = 40.0 

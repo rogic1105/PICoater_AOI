@@ -15,11 +15,11 @@ Pipeline（與 C# AniloxCamera.cs 一致）：
   5. 從全解析度 hessian 計算曲線 → 存 MCBF .bin
 
 Usage:
-    cd tests/python_test
+    cd algtest
     python generate_mock_captures.py <input_dir> <output_dir>
 
 Example:
-    python generate_mock_captures.py "C:/Users/User/Downloads/mura" "../../artifacts/mock_captures"
+    python generate_mock_captures.py "C:/Users/User/Downloads/mura" "../artifacts/mock_captures"
 """
 
 import os
@@ -240,7 +240,7 @@ def write_csv(records, output_root):
 def main():
     if len(sys.argv) < 3:
         print("Usage: python generate_mock_captures.py <input_dir> <output_dir>")
-        print('Example: python generate_mock_captures.py "C:/Users/User/Downloads/mura" "../../artifacts/mock_captures"')
+        print('Example: python generate_mock_captures.py "C:/Users/User/Downloads/mura" "../artifacts/mock_captures"')
         sys.exit(1)
 
     input_dir = sys.argv[1]

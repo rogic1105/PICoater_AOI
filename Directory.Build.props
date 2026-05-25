@@ -15,11 +15,11 @@
 		<IntDir>$(EngRoot)build\obj\$(MSBuildProjectName)\$(Platform)\$(Configuration)\</IntDir>
 
 		<OutputPath>$(OutDir)</OutputPath>
-		<AoiSdkPath>$(EngRoot)sdk\AOI_SDK\</AoiSdkPath>
-		<CoreCVPath>$(AoiSdkPath)core_cv\</CoreCVPath>
-		<CoreCVTestsPath>$(AoiSdkPath)core_cv_benchmark\</CoreCVTestsPath>
-		<CppUtilsPath>$(AoiSdkPath)cpp_utils\</CppUtilsPath>
-		<FrameworkPath>$(AoiSdkPath)framework\</FrameworkPath>
+		<AoiSdkPath>$(EngRoot)sdk\AOI\</AoiSdkPath>
+		<CoreCVPath>$(AoiSdkPath)native\core_cv\</CoreCVPath>
+		<CoreCVBenchmarkPath>$(AoiSdkPath)benchmark\core_cv_benchmark\</CoreCVBenchmarkPath>
+		<CppUtilsPath>$(AoiSdkPath)native\cpp_utils\</CppUtilsPath>
+		<FrameworkPath>$(AoiSdkPath)benchmark\framework\</FrameworkPath>
 		<LocalModulesPath>$(EngRoot)src\native\modules\</LocalModulesPath>
 
 		<StbPath>$(AoiSdkPath)third_party\stb\include\</StbPath>
@@ -44,7 +44,7 @@
 
 			<AdditionalIncludeDirectories>
 				$(CoreCVPath)include;
-				$(CoreCVTestsPath)include;
+				$(CoreCVBenchmarkPath)include;
 				$(FrameworkPath)include;
 				$(CppUtilsPath)include;
 				$(StbPath);

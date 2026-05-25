@@ -13,7 +13,7 @@
 
 ## 2. 專案架構 (Project Structure)
 
-SDK 的核心檔案位於 `sdk/AOI_SDK` 目錄下，主要模組如下：
+SDK 的核心檔案位於 `sdk/AOI` 目錄下，主要模組如下：
 
 * **core_cv**: 核心影像處理演算法庫。
 * 包含所有 CUDA Kernel 實作 (`.cu`) 與 Host Wrapper (`.cpp`/`.cu`)。

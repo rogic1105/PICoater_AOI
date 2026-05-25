@@ -181,7 +181,7 @@
     <ClInclude Include="src\imgproc\utils\utils_kernels.cuh" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="core_background_cpu.cpp" />
+    <ClCompile Include="src\core_background_cpu.cpp" />
     <ClCompile Include="src\imgcodecs\core_imgcodecs.cpp" />
     <ClCompile Include="src\imgcodecs\core_imgcodecs_fast.cpp" />
   </ItemGroup>

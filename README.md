@@ -8,12 +8,12 @@ PI Coater 線上自動光學檢測系統（Automated Optical Inspection），用
 PICoater_AOI/
 ├── bin/                 # 編譯輸出目錄 (所有的 .exe, .dll, .lib 都會產生於此)
 ├── build/               # 編譯中間檔案 (Intermediate files, obj)
-├── sdk/                 # [核心] AOI_SDK 影像處理引擎
-│   ├── core_cv          # CUDA 底層運算庫
-│   ├── framework        # 測試框架
-│   ├── cpp_utils        # C++ 工具庫
-│   └── src/dotnet/
-│       └── AOI.SDK/     # .NET SDK（SmartCanvas 等）
+├── sdk/                 # [核心] 可獨立 split 的 library
+│   └── AOI/             # 影像 SDK（self-contained）
+│       ├── native/      # C++（core_cv CUDA 庫 / cpp_utils / core_cv_api）
+│       ├── dotnet/AOI.SDK/  # .NET SDK（SmartCanvas 等）
+│       ├── benchmark/   # framework + core_cv_benchmark 速度測試
+│       └── third_party/stb/
 ├── src/native/          # [演算法] 專案特定的 C++ 模組
 │   ├── modules/         # 各式檢測功能模組 (如 GetPICoaterBackground)
 │   └── c_api/           # 導出給 C# 使用的 DLL 介面層
@@ -23,7 +23,7 @@ PICoater_AOI/
 ├── tests/               # [測試] C# 自動化測試（量「對不對」）+ TestRunner.bat/.ps1
 │   └── AniloxRoll.Monitor.{Tests,Integration.Tests,Stress.Tests}/ # NUnit 3.x + Moq 4.x
 ├── benchmark            # [速度測試] 跟被測對象住（無頂層）：
-│   ├── sdk/AOI_SDK/core_cv_benchmark/                     # 通用 CV 速度
+│   ├── sdk/AOI/benchmark/core_cv_benchmark/              # 通用 CV 速度
 │   └── src/native/benchmark/picoater_pipeline_benchmark/  # pipeline 速度
 ├── algtest/             # [演算法] Python 演算法原型 / 可行性（暫放）
 ├── docs/                # 架構與模式文件
@@ -71,7 +71,7 @@ PICoater_AOI/
 ## 6. 執行與測試 (Running & Testing)
 
 ### C++ 速度 Benchmark (底層驗證)
-* **專案**: `picoater_pipeline_benchmark`（`src/native/benchmark/`）、`core_cv_benchmark`（`sdk/AOI_SDK/`）
+* **專案**: `picoater_pipeline_benchmark`（`src/native/benchmark/`）、`core_cv_benchmark`（`sdk/AOI/benchmark/`）
 * 量測 pipeline / CV 計算的速度（吞吐、IO、傳輸、多相機），輸出時間數字而非 pass/fail；不涉及 GUI。
 
 ### C# 單元 + 壓力測試

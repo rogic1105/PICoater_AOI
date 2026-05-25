@@ -21,5 +21,5 @@ AOI.SDK 的 WinForms 測試工具，示範 `core_cv_api.dll` 的 P/Invoke 用法
 
 ## 為什麼放在 docs/sample/ 而非 sdk/
 
-- `sdk/AOI_SDK/` 是當作 git submodule 的延伸（雖然目前實際是 monorepo），核心 SDK 程式不應該包示範
+- `sdk/AOI/` 是當作 git submodule 的延伸（雖然目前實際是 monorepo），核心 SDK 程式不應該包示範
 - `docs/sample/` 明確表達「給後續開發者看的範例、不是 build target」

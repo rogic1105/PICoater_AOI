@@ -11,16 +11,16 @@
 
 ## 執行步驟
 
-1. **C 標頭宣告** — `sdk/AOI_SDK/core_cv_api/include/export_c/export_api.h`
+1. **C 標頭宣告** — `sdk/AOI/native/core_cv_api/include/export_c/export_api.h`
    - 加入 `CORE_CV_API` 修飾的函式簽章
 
-2. **C++ 實作** — `sdk/AOI_SDK/core_cv_api/src/export_api.cpp`
+2. **C++ 實作** — `sdk/AOI/native/core_cv_api/src/export_api.cpp`
    - 實作函式，使用 CUDA kernel 或 core_cv 內部 API
    - 若有 GPU kernel：allocate d_buf → H2D → kernel → sync → D2H → free
 
 3. **C# P/Invoke** — `AniloxRoll.Monitor/Interop/NativeMethods.cs`
    - 加在對應 DLL 區塊（`CoreCVDllName` 或 `DllName`）
-   - **不得** 修改 `sdk/AOI_SDK/src_dotnet/AOI.SDK/Core/CoreCVWrapper.cs` 來供 Monitor 使用
+   - **不得** 修改 `sdk/AOI/dotnet/AOI.SDK/Core/CoreCVWrapper.cs` 來供 Monitor 使用
 
 4. **驗證**：確認 `CallingConvention.Cdecl`、`MarshalAs(UnmanagedType.I1)` (bool)、`[MarshalAs(UnmanagedType.LPStr)]` (string) 正確
 

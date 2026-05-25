@@ -17,7 +17,7 @@
 │   ├── dotnet/AniloxRoll.Monitor/
 │   └── native/
 ├── sdk/                          <span class="com">我們寫的 library（可獨立 split）</span>
-│   ├── AOI_SDK/                  <span class="com">影像處理 SDK</span>
+│   ├── AOI/                  <span class="com">影像處理 SDK</span>
 │   ├── LightBridge/
 │   │   ├── LightBridge.Core/     <span class="com">code（純 .NET library）</span>
 │   │   ├── vendor/               <span class="com">★ 廠商東西（self-contained）</span>
@@ -57,7 +57,7 @@
   <tr><th>目錄</th><th>放什麼</th><th>業界對照</th></tr>
   <tr><td><code>src/</code></td><td>應用程式（產品交付給客戶的主程式）</td><td>Nx apps/、.NET src/</td></tr>
   <tr><td><code>sdk/</code></td><td>我們寫的 library（無 GUI、無 exe，可獨立 split）</td><td>Nx packages/、.NET lib/</td></tr>
-  <tr><td><code>sdk/&lt;元件&gt;/third_party/</code></td><td>該元件 vendored 的 build-time lib（如 AOI_SDK 的 stb）</td><td>各元件 self-contained</td></tr>
+  <tr><td><code>sdk/&lt;元件&gt;/third_party/</code></td><td>該元件 vendored 的 build-time lib（如 AOI 的 stb）</td><td>各元件 self-contained</td></tr>
   <tr><td><code>sdk/docs/</code></td><td>跨元件通用工程經驗（本目錄）</td><td>—（前端常見每元件自己 docs/）</td></tr>
   <tr><td><code>tools/</code></td><td>內部工具 exe / 廠區維護 / 測試用 / 腳本</td><td>tools/、bin/</td></tr>
   <tr><td><code>tests/</code></td><td>純測試（Unit / Integration / Stress 子目錄）</td><td>tests/、test/、spec/</td></tr>
@@ -67,7 +67,7 @@
 
 <div class="info">
 <b>為什麼沒 top-level <code>third_party/</code>？</b>對齊 Lerna/Nx 派「廠商物品跟著使用者走」原則。
-stb 主要被 AOI_SDK 使用，vendored 進 <code>sdk/AOI_SDK/third_party/stb/</code> → AOI_SDK self-contained，整包 split 帶得走（不依賴外部共用層）。
+stb 主要被 AOI 使用，vendored 進 <code>sdk/AOI/third_party/stb/</code> → AOI self-contained，整包 split 帶得走（不依賴外部共用層）。
 </div>
 
 <h2>4.3 sdk/Common/ vs sdk/&lt;元件&gt;/vendor/ 的分界</h2>

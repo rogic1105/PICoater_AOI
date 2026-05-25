@@ -137,7 +137,7 @@
     <Compile Include="UI\Widgets\CanvasInteractionHelper.cs" />
     <Compile Include="UI\Widgets\EventGuard.cs" />
     <Compile Include="UI\Widgets\FormInteractionHelper.cs" />
-    <Compile Include="..\..\..\sdk\AOI_SDK\src_dotnet\AOI.SDK\UI\SmartCanvas.cs">
+    <Compile Include="..\..\..\sdk\AOI\dotnet\AOI.SDK\UI\SmartCanvas.cs">
       <Link>UI\Widgets\SmartCanvas.cs</Link>
     </Compile>
     <Compile Include="UI\Managers\LiveCameraManager.cs" />
@@ -207,7 +207,7 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\sdk\AOI_SDK\src_dotnet\AOI.SDK\AOI.SDK.csproj">
+    <ProjectReference Include="..\..\..\sdk\AOI\dotnet\AOI.SDK\AOI.SDK.csproj">
       <Project>{27263c11-7fef-4076-a2f1-f412bb496df3}</Project>
       <Name>AOI.SDK</Name>
     </ProjectReference>

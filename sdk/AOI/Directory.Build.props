@@ -12,10 +12,10 @@
 	<PropertyGroup Condition="'$(EngRoot)' == ''">
 		<!-- standalone（整包拉出去獨立 build，沒有 repo 根 props）：
 		     sdk 內部變數從 $(SdkRoot) 自帶，不再寄生 repo 根，ProjectReference 才解析得到。 -->
-		<CoreCVPath>$(SdkRoot)core_cv\</CoreCVPath>
-		<CoreCVBenchmarkPath>$(SdkRoot)core_cv_benchmark\</CoreCVBenchmarkPath>
-		<CppUtilsPath>$(SdkRoot)cpp_utils\</CppUtilsPath>
-		<FrameworkPath>$(SdkRoot)framework\</FrameworkPath>
+		<CoreCVPath>$(SdkRoot)native\core_cv\</CoreCVPath>
+		<CoreCVBenchmarkPath>$(SdkRoot)benchmark\core_cv_benchmark\</CoreCVBenchmarkPath>
+		<CppUtilsPath>$(SdkRoot)native\cpp_utils\</CppUtilsPath>
+		<FrameworkPath>$(SdkRoot)benchmark\framework\</FrameworkPath>
 		<StbPath>$(SdkRoot)third_party\stb\include\</StbPath>
 
 		<OutDir>$(SdkRoot)bin\$(Platform)\$(Configuration)\</OutDir>

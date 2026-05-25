@@ -136,7 +136,7 @@
     <ClCompile Include="src\imgcodecs\core_imgcodecs_fast.cpp">
       <Filter>來源檔案\base</Filter>
     </ClCompile>
-    <ClCompile Include="core_background_cpu.cpp">
+    <ClCompile Include="src\core_background_cpu.cpp">
       <Filter>來源檔案\imgproc\background</Filter>
     </ClCompile>
   </ItemGroup>
