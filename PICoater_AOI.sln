@@ -1,4 +1,3 @@
-
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.14.36221.1
@@ -73,6 +72,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AniloxRoll.Monitor.Integrat
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AniloxRoll.Monitor.Stress.Tests", "tests\AniloxRoll.Monitor.Stress.Tests\AniloxRoll.Monitor.Stress.Tests.csproj", "{F5A6B7C8-6666-7777-8888-9999AAAABBBB}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AOI.SDK.MILGrab", "sdk\MIL\MilGrab\AOI.SDK.MILGrab.csproj", "{846F1ADB-1879-476B-A963-267CC17DC219}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Release|x64 = Release|x64
@@ -110,6 +111,8 @@ Global
 		{E4F5A6B7-5555-6666-7777-88889999AAAA}.Release|x64.Build.0 = Release|x64
 		{F5A6B7C8-6666-7777-8888-9999AAAABBBB}.Release|x64.ActiveCfg = Release|x64
 		{F5A6B7C8-6666-7777-8888-9999AAAABBBB}.Release|x64.Build.0 = Release|x64
+		{846F1ADB-1879-476B-A963-267CC17DC219}.Release|x64.ActiveCfg = Release|x64
+		{846F1ADB-1879-476B-A963-267CC17DC219}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -130,6 +133,7 @@ Global
 		{A1B2C3D4-1111-2222-3333-444455556666} = {045B1682-9917-40A9-8090-B480480CDEB5}
 		{9A193EE5-9D02-42B4-A3DF-D49D7D13EE9B} = {045B1682-9917-40A9-8090-B480480CDEB5}
 		{27263C11-7FEF-4076-A2F1-F412BB496DF3} = {BF9C6D13-F0E4-4AE4-AB67-40A550EA3F3B}
+		{846F1ADB-1879-476B-A963-267CC17DC219} = {BF9C6D13-F0E4-4AE4-AB67-40A550EA3F3B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {7740A437-AC6B-4FD7-8E8F-6AB368D15162}

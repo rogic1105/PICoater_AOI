@@ -1,4 +1,4 @@
-# Grabber — Vendor Reference
+# MIL docs — Matrox 廠商規格書/範例
 
 廠商（Matrox）給的東西（不參與 build），純參考用。
 

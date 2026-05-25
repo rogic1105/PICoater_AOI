@@ -1,4 +1,4 @@
-﻿AOI.SDK.MILGrab
+﻿namespace AOI.SDK.MILGrab
 {
     partial class Form1
     {
