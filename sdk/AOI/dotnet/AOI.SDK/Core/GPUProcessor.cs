@@ -118,7 +118,6 @@ namespace AOI.SDK.Core
             if (_d_current != IntPtr.Zero) { CoreCVWrapper.CoreCV_FreeGPU(_d_current); _d_current = IntPtr.Zero; }
             if (_d_temp != IntPtr.Zero) { CoreCVWrapper.CoreCV_FreeGPU(_d_temp); _d_temp = IntPtr.Zero; }
             if (_d_mask != IntPtr.Zero) { CoreCVWrapper.CoreCV_FreeGPU_Float(_d_mask); _d_mask = IntPtr.Zero; }
-            if (_d_mask != IntPtr.Zero) { CoreCVWrapper.CoreCV_FreeGPU_Float(_d_mask); _d_mask = IntPtr.Zero; }
         }
     }
 }
