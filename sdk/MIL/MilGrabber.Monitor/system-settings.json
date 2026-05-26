@@ -1,0 +1,53 @@
+{
+  "CameraDevices": [
+    {
+      "Id": 1,
+      "SystemDescriptor": "M_SYSTEM_RADIENTEVCL",
+      "SystemNum": 0,
+      "DevNum": 0,
+      "DcfPath": "D:\\Anilox\\Dcf\\Radient_Config.dcf"
+    },
+    {
+      "Id": 2,
+      "SystemDescriptor": "M_SYSTEM_RADIENTEVCL",
+      "SystemNum": 0,
+      "DevNum": 1,
+      "DcfPath": "D:\\Anilox\\Dcf\\Radient_Config.dcf"
+    },
+    {
+      "Id": 3,
+      "SystemDescriptor": "M_SYSTEM_RADIENTEVCL",
+      "SystemNum": 0,
+      "DevNum": 2,
+      "DcfPath": "D:\\Anilox\\Dcf\\Radient_Config.dcf"
+    },
+    {
+      "Id": 4,
+      "SystemDescriptor": "M_SYSTEM_RADIENTEVCL",
+      "SystemNum": 0,
+      "DevNum": 3,
+      "DcfPath": "D:\\Anilox\\Dcf\\Radient_Config.dcf"
+    },
+    {
+      "Id": 5,
+      "SystemDescriptor": "M_SYSTEM_RADIENTEVCL",
+      "SystemNum": 1,
+      "DevNum": 0,
+      "DcfPath": "D:\\Anilox\\Dcf\\Radient_Config.dcf"
+    },
+    {
+      "Id": 6,
+      "SystemDescriptor": "M_SYSTEM_RADIENTEVCL",
+      "SystemNum": 1,
+      "DevNum": 1,
+      "DcfPath": "D:\\Anilox\\Dcf\\Radient_Config.dcf"
+    },
+    {
+      "Id": 7,
+      "SystemDescriptor": "M_SYSTEM_RADIENTEVCL",
+      "SystemNum": 1,
+      "DevNum": 2,
+      "DcfPath": "D:\\Anilox\\Dcf\\Radient_Config.dcf"
+    }
+  ]
+}

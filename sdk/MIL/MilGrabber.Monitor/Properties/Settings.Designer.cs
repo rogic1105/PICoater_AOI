@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace AOI.SDK.MILGrab.Properties
+namespace MilGrabber.Monitor.Properties
 {
 
 

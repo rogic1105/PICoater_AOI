@@ -232,6 +232,12 @@ namespace MilGrabber.Core
             MIL.MbufCopy(src, _milDisplayBuffer);
         }
 
+        /// <summary>清空顯示 buffer（填黑）。停 grab 後 displayBuffer 殘留最後一幀，重新綁定顯示前清掉避免顯示殘影。</summary>
+        public void ClearDisplay()
+        {
+            if (_milDisplayBuffer != MIL.M_NULL) MIL.MbufClear(_milDisplayBuffer, 0);
+        }
+
         // ==================== CLProtocol ====================
 
         private void StartCLProtocolAsync()
@@ -360,6 +366,19 @@ namespace MilGrabber.Core
                 double val = 0;
                 MIL.MdigInquireFeature(_milDigitizer, MIL.M_FEATURE_VALUE, "AcquisitionLineRate", MIL.M_TYPE_DOUBLE, ref val);
                 return val;
+            }
+            catch { return 0; }
+        }
+
+        /// <summary>查 grabber/相機的取樣頻率(line rate)上限(Hz)。需 CLProtocol 啟用；未就緒回 0。</summary>
+        public double GetLineRateMaxHz()
+        {
+            if (!_clProtocolEnabled || _milDigitizer == MIL.M_NULL) return 0;
+            try
+            {
+                double max = 0;
+                MIL.MdigInquireFeature(_milDigitizer, MIL.M_FEATURE_MAX, "AcquisitionLineRate", MIL.M_TYPE_DOUBLE, ref max);
+                return max;
             }
             catch { return 0; }
         }
