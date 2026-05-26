@@ -456,9 +456,15 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         private void SwitchMainDisplay(int cameraIndex)
         {
+            // 關閉/釋放期間 form 或 panel 可能已 dispose；存取 .Handle 會觸發 CreateHandle()
+            // 而拋 ObjectDisposedException（FreeCameras→DisableGlobalMerge→此處的崩潰路徑）。
+            if (_mainForm == null || _mainForm.IsDisposed
+                || _mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) return;
+
             if (_mainForm.InvokeRequired)
             {
-                _mainForm.BeginInvoke(new Action(() => SwitchMainDisplay(cameraIndex)));
+                try { _mainForm.BeginInvoke(new Action(() => SwitchMainDisplay(cameraIndex))); }
+                catch (InvalidOperationException) { /* ObjectDisposedException 亦繼承自此 */ }
                 return;
             }
 
@@ -824,9 +830,12 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         private void HandleMergedMouseData(int x, int y, int pixelValue)
         {
+            // MIL display hook 執行緒回 UI；關閉/釋放期 form 已 dispose → 守 guard 防 InvalidOperationException
+            if (IsReleasing || _mainForm == null || _mainForm.IsDisposed || !_mainForm.IsHandleCreated) return;
             if (_mainForm.InvokeRequired)
             {
-                _mainForm.BeginInvoke(new Action(() => HandleMergedMouseData(x, y, pixelValue)));
+                try { _mainForm.BeginInvoke(new Action(() => HandleMergedMouseData(x, y, pixelValue))); }
+                catch (InvalidOperationException) { /* ObjectDisposedException 亦繼承自此 */ }
                 return;
             }
 
@@ -928,9 +937,12 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         private void HandleMouseDataChanged(int camId, int x, int y, int pixelValue)
         {
+            // MIL display hook 執行緒回 UI；關閉/釋放期 form 已 dispose → 守 guard 防 InvalidOperationException
+            if (IsReleasing || _mainForm == null || _mainForm.IsDisposed || !_mainForm.IsHandleCreated) return;
             if (_mainForm.InvokeRequired)
             {
-                _mainForm.BeginInvoke(new Action(() => HandleMouseDataChanged(camId, x, y, pixelValue)));
+                try { _mainForm.BeginInvoke(new Action(() => HandleMouseDataChanged(camId, x, y, pixelValue))); }
+                catch (InvalidOperationException) { /* ObjectDisposedException 亦繼承自此 */ }
                 return;
             }
 

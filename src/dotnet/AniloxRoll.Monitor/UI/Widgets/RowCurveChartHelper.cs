@@ -125,15 +125,19 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 // 守 IsHandleCreated：StitchMode 切換期 chart 可能正在 re-layout，handle 短暫無效
                 if (_chart.IsHandleCreated && !_chart.IsDisposed)
                 {
-                    _chart.BeginInvoke(new Action(() =>
+                    try
                     {
-                        GetAdjustedZoom(top, bot, out double zMin, out double zMax);
-                        var axisY = _chart.ChartAreas[0].AxisY;
-                        axisY.Minimum = Math.Min(0, zMin);
-                        axisY.Maximum = Math.Max(_totalMm, zMax);
-                        try { axisY.ScaleView.Zoom(zMin, zMax); }
-                        catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[RowCurveChartHelper.OnPostPaint] {ex.GetType().Name}: {ex.Message}"); }
-                    }));
+                        _chart.BeginInvoke(new Action(() =>
+                        {
+                            GetAdjustedZoom(top, bot, out double zMin, out double zMax);
+                            var axisY = _chart.ChartAreas[0].AxisY;
+                            axisY.Minimum = Math.Min(0, zMin);
+                            axisY.Maximum = Math.Max(_totalMm, zMax);
+                            try { axisY.ScaleView.Zoom(zMin, zMax); }
+                            catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[RowCurveChartHelper.OnPostPaint] {ex.GetType().Name}: {ex.Message}"); }
+                        }));
+                    }
+                    catch (InvalidOperationException) { /* guard 通過後 Handle 已銷毀的競態窗口（ObjectDisposedException 亦繼承自此）*/ }
                 }
             }
         }

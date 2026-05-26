@@ -72,7 +72,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             if (_listView.InvokeRequired)
             {
-                _listView.BeginInvoke(new Action(() => Update(cameras)));
+                // 關閉時序：listView Handle 已銷毀但背景 callback 仍呼叫 → 守 guard 防 InvalidOperationException
+                if (_listView.IsDisposed || !_listView.IsHandleCreated) return;
+                try { _listView.BeginInvoke(new Action(() => Update(cameras))); }
+                catch (InvalidOperationException) { /* ObjectDisposedException 亦繼承自此 */ }
                 return;
             }
 

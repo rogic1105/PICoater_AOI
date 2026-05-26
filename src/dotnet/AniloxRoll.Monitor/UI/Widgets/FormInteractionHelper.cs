@@ -165,10 +165,11 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public void SetUiLoadingState(bool isBusy)
         {
             _isBusy = isBusy;
-            if (!_form.IsHandleCreated) return;
+            if (_form == null || _form.IsDisposed || !_form.IsHandleCreated) return;
             if (_form.InvokeRequired)
             {
-                _form.Invoke(new Action<bool>(SetUiLoadingState), isBusy);
+                try { _form.Invoke(new Action<bool>(SetUiLoadingState), isBusy); }
+                catch (InvalidOperationException) { /* ObjectDisposedException 亦繼承自此 */ }
                 return;
             }
             _form.Cursor = isBusy ? Cursors.WaitCursor : Cursors.Default;

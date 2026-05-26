@@ -186,6 +186,22 @@ namespace AniloxRoll.Monitor.Forms
             try { _cleanupFlagWatcher?.Dispose(); _cleanupFlagWatcher = null; } catch { }  // M3: 10 秒輪詢提前停
         }
 
+        /// <summary>
+        /// 背景執行緒（Modbus 輪詢、MIL mouse hook、retention service 等）回 UI 執行緒更新時的安全 marshal。
+        /// 關閉時序：FormClosing/FormClosed 銷毀 Handle 後，背景 callback 可能仍在跑並呼叫此處 →
+        /// 守 IsHandleCreated/IsDisposed/Disposing 早退，並 try/catch 吞掉競態窗口（guard 通過後 Handle 才銷毀）拋出的例外。
+        /// 已在 UI 執行緒（!InvokeRequired）時直接執行 action。
+        /// </summary>
+        private void SafeBeginInvoke(Action action)
+        {
+            if (action == null) return;
+            if (!InvokeRequired) { action(); return; }
+            if (!IsHandleCreated || IsDisposed || Disposing) return;
+            // ObjectDisposedException 繼承自 InvalidOperationException，單一 catch 即涵蓋兩者
+            try { BeginInvoke(action); }
+            catch (InvalidOperationException) { /* guard 通過後 Handle 已銷毀的競態窗口 */ }
+        }
+
         public AniloxRollForm()
         {
             InitializeComponent();
@@ -390,35 +406,16 @@ namespace AniloxRoll.Monitor.Forms
 
             _ioGrabController = new IoGrabController(_settings.IoModel);
 
-            _ioGrabController.OnStartRequested += () =>
-            {
-                if (InvokeRequired) { BeginInvoke(new Action(IoStartGrab)); return; }
-                IoStartGrab();
-            };
+            // 背景 Modbus 輪詢執行緒回 UI 更新；關閉時 Handle 已銷毀 → SafeBeginInvoke 守 guard 防 InvalidOperationException
+            _ioGrabController.OnStartRequested += () => SafeBeginInvoke(IoStartGrab);
 
-            _ioGrabController.OnStopRequested += () =>
-            {
-                if (InvokeRequired) { BeginInvoke(new Action(IoStopGrab)); return; }
-                IoStopGrab();
-            };
+            _ioGrabController.OnStopRequested += () => SafeBeginInvoke(IoStopGrab);
 
-            _ioGrabController.OnStateChanged += state =>
-            {
-                if (InvokeRequired) { BeginInvoke(new Action<IoState>(UpdateIoStateLabel), state); return; }
-                UpdateIoStateLabel(state);
-            };
+            _ioGrabController.OnStateChanged += state => SafeBeginInvoke(() => UpdateIoStateLabel(state));
 
-            _ioGrabController.OnConnectionChanged += connected =>
-            {
-                if (InvokeRequired) { BeginInvoke(new Action<bool>(UpdateIoConnectionUi), connected); return; }
-                UpdateIoConnectionUi(connected);
-            };
+            _ioGrabController.OnConnectionChanged += connected => SafeBeginInvoke(() => UpdateIoConnectionUi(connected));
 
-            _ioGrabController.OnIoUpdated += snapshot =>
-            {
-                if (InvokeRequired) { BeginInvoke(new Action<IoSnapshot>(UpdateIoLeds), snapshot); return; }
-                UpdateIoLeds(snapshot);
-            };
+            _ioGrabController.OnIoUpdated += snapshot => SafeBeginInvoke(() => UpdateIoLeds(snapshot));
 
             // 背景嘗試連線（不阻塞 Form 顯示）
             _ = _ioGrabController.StartAsync(_settings.IoIp, _settings.IoPort);
@@ -1949,10 +1946,7 @@ namespace AniloxRoll.Monitor.Forms
                 }
             }
 
-            if (InvokeRequired)
-                BeginInvoke(new Action(() => lblPixelInfo.Text = text));
-            else
-                lblPixelInfo.Text = text;
+            SafeBeginInvoke(() => lblPixelInfo.Text = text);
         }
 
         /// <summary>背景預覽模式：將 panelMainDisplay 上的 SmartCanvas 設為實體倍率 1x（畫面中心不動）。</summary>
@@ -3156,7 +3150,7 @@ namespace AniloxRoll.Monitor.Forms
                     string text = r.FreedBytes > 0
                         ? $"{r.DeletedDayFolders} folders, {r.FreedBytes / (1024.0 * 1024):F1} MB  ({DateTime.Now:HH:mm:ss})"
                         : $"OK  ({DateTime.Now:HH:mm:ss})";
-                    BeginInvoke((Action)(() => _storageLastCleanRow.SubItems[1].Text = text));
+                    SafeBeginInvoke(() => { if (_storageLastCleanRow != null) _storageLastCleanRow.SubItems[1].Text = text; });
                 };
             }
             else

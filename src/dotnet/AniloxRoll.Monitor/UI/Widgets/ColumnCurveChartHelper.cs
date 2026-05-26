@@ -156,7 +156,10 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 double right = _logicalRightMm;
                 // 守 IsHandleCreated：StitchMode 切換期 chart 可能正在 re-layout，handle 短暫無效
                 if (_chart.IsHandleCreated && !_chart.IsDisposed)
-                    _chart.BeginInvoke(new Action(() => ReapplyZoom(left, right)));
+                {
+                    try { _chart.BeginInvoke(new Action(() => ReapplyZoom(left, right))); }
+                    catch (InvalidOperationException) { /* guard 通過後 Handle 已銷毀的競態窗口（ObjectDisposedException 亦繼承自此）*/ }
+                }
             }
         }
 
