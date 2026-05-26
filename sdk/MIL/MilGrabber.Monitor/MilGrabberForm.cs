@@ -540,7 +540,7 @@ namespace MilGrabber.Monitor
         /// 依線掃速率算曝光動態上限（仿主程式）：lrHz≤0 → 絕對上限 ExpMaxCap；
         /// 否則 clamp(floor(900000 / lrHz), ExpMin, ExpMaxCap)。
         /// </summary>
-        private int CalcExpMax(int lrHz) => lrHz <= 0 ? ExpMaxCap : Math.Max(ExpMin, Math.Min(ExpMaxCap, (int)(900000.0 / lrHz)));
+        private int CalcExpMax(int lrHz) => MilCameraParams.CalcExposureMaxUs(lrHz, ExpMin, ExpMaxCap); // 公式單一真相在 MilGrabber.Core
 
         /// <summary>
         /// 依新線掃值重算第 i 台曝光 slider/NUD 的 Maximum = CalcExpMax(lrHz)；

@@ -11,6 +11,7 @@ using System.Management;
 using System.Windows.Forms;
 using StorageBridge.Core;
 using LightBridge.Core;
+using MilGrabber.Core;
 using AOI.SDK.UI;
 using AOI.SDK.Utils;
 using AniloxRoll.Monitor.Core.Camera;
@@ -2651,7 +2652,7 @@ namespace AniloxRoll.Monitor.Forms
                 () => {
                     // 同步所有 cam 的 exp max（每台 LR 都同值，算一次套到所有 cam）
                     int newMax = (int)acq.CameraLineRateHz[0];
-                    int expMax = newMax <= 0 ? ExpMaxCap : Math.Max(ExpMin, Math.Min(ExpMaxCap, (int)(900000.0 / newMax)));
+                    int expMax = MilCameraParams.CalcExposureMaxUs(newMax, ExpMin, ExpMaxCap);
                     for (int i = 0; i < CameraCount; i++) UpdateExpMaxAndClampColor(i, expMax);
                     UpdateRowChartPitch();
                 });
@@ -2674,7 +2675,7 @@ namespace AniloxRoll.Monitor.Forms
                 int CalcExpMax()
                 {
                     int lrHz = (int)acq.CameraLineRateHz[idx];
-                    return lrHz <= 0 ? ExpMaxCap : Math.Max(ExpMin, Math.Min(ExpMaxCap, (int)(900000.0 / lrHz)));
+                    return MilCameraParams.CalcExposureMaxUs(lrHz, ExpMin, ExpMaxCap);
                 }
 
                 // ── 曝光時間 ────────────────────────────────────────────
@@ -2709,7 +2710,7 @@ namespace AniloxRoll.Monitor.Forms
             for (int i = 0; i < CameraCount; i++)
             {
                 int lrHz = (int)acq.CameraLineRateHz[i];
-                int m = lrHz <= 0 ? ExpMaxCap : Math.Max(ExpMin, Math.Min(ExpMaxCap, (int)(900000.0 / lrHz)));
+                int m = MilCameraParams.CalcExposureMaxUs(lrHz, ExpMin, ExpMaxCap);
                 if (m < expAllMax) expAllMax = m;
             }
             _expAllBar.Minimum = ExpMin; _expAllBar.Maximum = expAllMax;

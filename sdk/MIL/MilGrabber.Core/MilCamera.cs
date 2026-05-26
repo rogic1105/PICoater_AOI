@@ -766,4 +766,27 @@ namespace MilGrabber.Core
             if (_hUserData.IsAllocated) _hUserData.Free();
         }
     }
+
+    /// <summary>
+    /// 相機參數計算公式（純函式、無狀態、無 UI／MIL 依賴）— 跨專案共用的單一真相。
+    /// 主程式與範例都呼叫這裡，避免同一條物理公式抄多份而分歧。
+    /// </summary>
+    public static class MilCameraParams
+    {
+        /// <summary>曝光時間(μs) × 線掃速率(Hz) ≈ 此固定常數（硬體限制）；線掃越高，曝光上限越低。</summary>
+        public const int ExposureLineRateProduct = 900000;
+
+        /// <summary>
+        /// 依線掃速率算曝光動態上限(μs)：lineRateHz ≤ 0 → expMaxCap（無線掃資訊時用絕對上限）；
+        /// 否則 clamp(ExposureLineRateProduct / lineRateHz, expMin, expMaxCap)。
+        /// </summary>
+        public static int CalcExposureMaxUs(int lineRateHz, int expMin, int expMaxCap)
+        {
+            if (lineRateHz <= 0) return expMaxCap;
+            int v = ExposureLineRateProduct / lineRateHz;
+            if (v < expMin) v = expMin;
+            if (v > expMaxCap) v = expMaxCap;
+            return v;
+        }
+    }
 }
