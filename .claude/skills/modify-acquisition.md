@@ -6,6 +6,14 @@
 
 修改 AniloxCamera、LiveCameraManager、CameraSystemManager、IoGrabController 或 MIL API 呼叫時。
 
+## 架構（2026-05-26 重構後）
+
+MIL 取像/顯示資源已抽到 **`sdk/MIL/MilGrabber.Core/MilCamera.cs`**（純 MIL 封裝 library，一台相機=一個 `MilCamera`）。本文以下的 **MIL 初始化順序 / CLProtocol / 曝光線掃 / 資源釋放** 細節**現在都在 `MilCamera`**，不在 `AniloxCamera`。
+
+- **改 MIL 取像/顯示/參數/CLProtocol/telemetry → 改 `MilCamera`**。注意：`SetExposureUs` 先存設定值再 early return（Initialize 前設也記得）；`AppliedLineRateHz` 暴露「設定值」供時間戳協調用（`GetLineRateHz` 在 CLProtocol 未就緒時回 0）
+- **`AniloxCamera` = composition**：持 `MilCamera _mil` + 訂閱 `_mil.FrameReady`，在 `OnMilFrameReady` 跑檢測(picoater_api)/存檔/合圖/曲線（非 MIL）；自己不再有 MIL 資源/hook
+- 換非 MIL grabber = 整包換 `sdk/MIL`，AniloxCamera 的檢測邏輯不動
+
 ## 關鍵檔案
 
 → 見 `CLAUDE.md` §關鍵檔案速查（subset：`Acquisition/*` + `UI/Managers/LiveCameraManager` + `Services/IoGrabController` + `Services/IoState` + `UI/Presenters/LiveTelemetryPresenter` + `Settings/Stores/AcquisitionSettingsStore`）。

@@ -308,7 +308,9 @@ namespace MilGrabber.Core
         /// </summary>
         public void SetExposureUs(double exposureUs)
         {
-            if (_milDigitizer == MIL.M_NULL || exposureUs <= 0) return;
+            if (exposureUs <= 0) return;
+            _appliedExposureUs = exposureUs;          // 先記住設定值（Initialize 前設也記得，待 Initialize() 套用）
+            if (_milDigitizer == MIL.M_NULL) return;  // digitizer 未就緒：只記不套
 
             if (_appliedLineRateHz > 0)
             {
@@ -318,6 +320,7 @@ namespace MilGrabber.Core
                     System.Diagnostics.Trace.WriteLine(
                         $"[CAM{CameraId}] SetExposureUs: {exposureUs} μs 超出上限 {maxUs} μs（LR={_appliedLineRateHz} Hz），已夾緊。");
                     exposureUs = maxUs;
+                    _appliedExposureUs = exposureUs;  // 夾緊後更新設定值
                 }
             }
 
@@ -325,8 +328,6 @@ namespace MilGrabber.Core
                 MIL.MdigControlFeature(_milDigitizer, MIL.M_FEATURE_VALUE, "ExposureTime", MIL.M_TYPE_DOUBLE, ref exposureUs);
             else
                 MIL.MdigControl(_milDigitizer, MIL.M_EXPOSURE_TIME, exposureUs * 1000.0);
-
-            _appliedExposureUs = exposureUs;
         }
 
         /// <summary>回傳最後一次 SetExposureUs 的設定值（μs），不依賴硬體回讀。</summary>
@@ -346,6 +347,10 @@ namespace MilGrabber.Core
         }
 
         // ==================== Line Rate ====================
+
+        /// <summary>最後一次 SetLineRateHz 設定的線掃速率（Hz）；不依賴硬體回讀，CLProtocol 未就緒也有值。
+        /// 供時間戳協調等需要「設定值」而非「即時硬體值」的場景（GetLineRateHz 在 CLProtocol 未就緒時回 0）。</summary>
+        public double AppliedLineRateHz => _appliedLineRateHz;
 
         public double GetLineRateHz()
         {
