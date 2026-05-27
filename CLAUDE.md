@@ -120,6 +120,26 @@ PICoater_AOI/
 **討論 / 設計時的提問順序：**
 「這是改哪個 setting？」 → 「副作用是什麼？」 → 「哪些 view 要更新？」— 而不是「按下按鈕跑哪些函式？」
 
+## 架構原則：唯一來源（同一邏輯只寫一份）
+
+> 此條 **OVERRIDE 預設的「避免過早抽象」傾向**：本專案真正重複（同一真相多份）一律收斂，不留分歧空間。
+
+任何「公式、演算法、順序敏感的步驟、常數」出現**第二份**時，**主動提取成唯一來源**（一個函式 / 方法 / 類別），呼叫端共用，不抄多份。**發現即提取並執行，不要只提議等同意** —— 小範圍 private 重構直接做。
+
+**判準（決定該不該抽）：**
+- 「這份改了，另一份是不是**一定**要跟著改？」→ 是（同一個真相）→ **抽**
+- 否（只是現在像、未來各自演化）→ 不抽（三行相似 < 過早抽象）
+
+**最高危險：順序敏感的重複** —— 多個方法都做「算 A → 設 B → 用 B」且順序重複，順序錯一處就出 bug。**必抽成單一方法把順序鎖死。**
+
+**已知教訓（都是抄多份釀的坑）：**
+- 曝光上限公式 `900000/線掃` 曾抄 4 份（主程式 3 + 範例 1）→ 收進 `MilCameraParams.CalcExposureMaxUs`
+- 合圖佈局「設座標 + 算位置」在 `EnableMerge`/`RefreshLayout` 各一份且順序不一致 → 切換 StitchMode 後 `xOffset` 用到 `RefOpsMm=0`（除以 0）變垃圾值 → 合圖全黑 → 收進 `MultiCameraMerger.ApplyLayout`（順序鎖死）
+- 座標換算 `pixel↔mm` 即時（`LiveCameraManager`）/ 回顧（`CanvasInteractionHelper`）各一份（待收斂）
+
+**討論 / 設計時的提問順序：**
+「這段邏輯有沒有第二份？」 → 「改一處另一處是否一定要跟著改？」 → 是則「抽哪裡、誰呼叫」 — 而不是「複製過來改一改」。
+
 ## 專案結構
 
 ```
@@ -182,9 +202,10 @@ PICoater_AOI/
 | `UI/Presenters/LiveTelemetryPresenter.cs` | 16 欄即時 Telemetry |
 | `Acquisition/AniloxCamera.cs` | 單台相機 composition：持有 `MilCamera _mil`（`sdk/MIL/MilGrabber.Core`）委派 MIL 資源/grab/display/參數/telemetry；自己做檢測/存檔/合圖/曲線（訂閱 `_mil.FrameReady`，hook 內檢測→顯示`PutDisplayBytes`/`CopyToDisplay`→合圖→存檔）。Global merge child-buffer 來源 |
 | `sdk/MIL/MilGrabber.Core/MilCamera.cs` | MIL 取像/顯示封裝 library（一台相機=一個 MilCamera）：alloc/grab/display/參數/系統資訊/CLProtocol/在線/mouse hook/buffer helper(`GetFrameBytes`/`PutDisplayBytes`/`CopyToDisplay`/`ClearDisplay`)/線掃最大速率(`GetLineRateMaxHz` via CLProtocol M_FEATURE_MAX，grab 後 ~3s 可得)；`FrameReady`/`OnMouseDataChanged`/`OnCameraClicked` 事件。純 MIL 範圍，檢測等非 MIL 由訂閱者做。同檔 `MilCameraParams`（純函式參數公式單一真相：`CalcExposureMaxUs(lrHz,expMin,expMaxCap)`=曝光上限=900000/線掃 clamp；主程式+範例共用，勿再各自抄公式） |
+| `sdk/MIL/MilGrabber.Core/MultiCameraMerger.cs` | 多相機即時合圖「工頭」library（純 MIL、無 WinForms）：接收一組 MilCamera，算佈局（全域範圍/xOffset/重疊中點分界）+ 分配合併 buffer + 每台 SetMergeTarget。`EnableMerge`/`RefreshLayout` 共用唯一來源 `ApplyLayout`（先設 RefOpsMm 再算 xOffset，**順序鎖死**避免除以 0 變垃圾值）。回傳 `MergedBuffer` + 座標(MinStartMm/RefOpsMm/TotalW/H) 供上層「秀」。貼圖在 MilCamera grab hook（`SetMergeTarget`/`CopyDisplayToMergeTarget`） |
 | `Acquisition/CameraFrameSaver.cs` | 存檔 I/O：SaveCapture（背景執行緒）、SaveJpegFromBytes、SaveCurveBinFromArray、Resource Log（CSV: CPU%/RAM/VRAM/GPU ms/Live/Review/StitchMode；啟動時 MergeOldResourceLogs 把「昨天以前」的小檔按日合併為 resource-monitor-yyyyMMdd.csv） |
 | `Acquisition/CaptureTimestampCoordinator.cs` | 多相機存檔時間戳同步 |
-| `UI/Managers/LiveCameraManager.cs` | 多台相機生命週期管理、連線數監控（OnCameraCountChanged）、即時全域合圖（EnableGlobalMerge / DisableGlobalMerge / RefreshGlobalMergeLayout）、合圖 zoom/pan（WheelZoomFilter）、合圖滑鼠座標（MergedMouseStatusHandler）、合圖 overview 聯動（TryGetMergedViewRange）、顯示同步 Timer（_mergedDisplayTimer） |
+| `UI/Managers/LiveCameraManager.cs` | 多台相機生命週期管理、連線數監控（OnCameraCountChanged）、即時全域合圖（EnableGlobalMerge / DisableGlobalMerge / RefreshGlobalMergeLayout；「拼」委派 `MultiCameraMerger` 工頭，本類別只「秀」）、合圖 zoom/pan（WheelZoomFilter）、合圖滑鼠座標（MergedMouseStatusHandler）、合圖 overview 聯動（TryGetMergedViewRange）、顯示同步 Timer（_mergedDisplayTimer）。**巨圖 display 必須「先關 M_UPDATE 再 MdispSelectWindow」**：否則 select+SCALE+CENTER 各觸發一次 8.9 萬寬巨圖重繪 → 切換 lag + 半貼殘影 |
 | `Settings/InspectionSettings.cs` | 根設定物件 |
 | `Settings/Models/ChartSettings.cs` | 圖表 Y 軸範圍設定（ChartScaleMode + YMax）；StitchMode enum（Vertical / Global） |
 | `Settings/Models/ImageViewSettings.cs` | 合圖方式設定（StitchMode） |

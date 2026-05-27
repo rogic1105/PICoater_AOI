@@ -67,6 +67,14 @@ namespace MilGrabber.Core
         private double _appliedExposureUs = 0;
         private double _appliedLineRateHz = 0;
 
+        // ==================== Global Merge Target（即時合圖：把本台 display buffer 裁切後貼到合併 buffer） ====================
+        // 由「多相機工頭」（MultiCameraMerger）或上層透過 SetMergeTarget/ClearMergeTarget 設定。
+        // 設定後，每幀 grab hook 在 displayBuffer 更新完成後，會把裁切範圍貼到合併 buffer 的 xOffset 位置。
+        private MIL_ID _mergedTargetBuffer = MIL.M_NULL;
+        private int _mergedTargetOffsetX = 0;
+        private int _mergedSrcClipLeft = 0;
+        private int _mergedSrcClipWidth = 0;
+
         // ==================== Delegates / Events ====================
         private MIL_DISP_HOOK_FUNCTION_PTR _mouseStatusDelegate;
         private MIL_DISP_HOOK_FUNCTION_PTR _mouseClickDelegate;
@@ -204,9 +212,60 @@ namespace MilGrabber.Core
                     handler(cam, modifiedBuffer);                       // 上層檢測 + 自行決定顯示
                 else
                     MIL.MbufCopy(modifiedBuffer, cam._milDisplayBuffer); // 預設顯示原圖
+
+                // 全域合圖：display buffer 更新完成後，把裁切範圍貼到合併 buffer 的對應位置。
+                // 以 displayBuffer 為來源 → 合併圖反映「目前顯示的內容」（原圖或上層處理後）。
+                cam.CopyDisplayToMergeTarget();
             }
 
             return MIL.M_NULL;
+        }
+
+        /// <summary>
+        /// 若已設定 merge target，把本台 display buffer 的裁切範圍 MbufCopyClip 到合併 buffer 的 xOffset 位置。
+        /// 在 grab hook 內（display buffer 更新後）呼叫。執行緒安全靠欄位讀取順序（buffer 最先清/最後設）。
+        /// </summary>
+        private void CopyDisplayToMergeTarget()
+        {
+            MIL_ID mergedBuf = _mergedTargetBuffer;
+            MIL_ID dispBuf   = _milDisplayBuffer;
+            if (mergedBuf == MIL.M_NULL || dispBuf == MIL.M_NULL) return;
+
+            int clipLeft  = _mergedSrcClipLeft;
+            int clipWidth = _mergedSrcClipWidth;
+            int dstX      = _mergedTargetOffsetX + clipLeft;
+            int fw = FrameWidth;
+            int fh = FrameHeight;
+            if (clipWidth <= 0 || clipLeft < 0 || clipLeft + clipWidth > fw) return;
+
+            MIL_ID childBuf = MIL.M_NULL;
+            MIL.MbufChild2d(dispBuf, clipLeft, 0, clipWidth, fh, ref childBuf);
+            if (childBuf != MIL.M_NULL)
+            {
+                MIL.MbufCopyClip(childBuf, mergedBuf, dstX, 0);
+                MIL.MbufFree(childBuf);
+            }
+        }
+
+        /// <summary>
+        /// 設定全域合圖目標：本台每幀把 display buffer 的 [srcLeft, srcLeft+srcWidth) 裁切範圍，
+        /// 貼到合併 buffer 的 (xOffset + srcLeft, 0) 位置。
+        /// buffer 最後設定，確保 grab hook 讀到完整狀態（thread safety）。
+        /// </summary>
+        public void SetMergeTarget(MIL_ID mergedBuffer, int xOffset, int srcLeft, int srcWidth)
+        {
+            _mergedTargetOffsetX = xOffset;
+            _mergedSrcClipLeft   = srcLeft;
+            _mergedSrcClipWidth  = srcWidth;
+            _mergedTargetBuffer  = mergedBuffer; // buffer 最後設定（thread safety）
+        }
+
+        /// <summary>清除全域合圖目標：buffer 最先清除，立即停止 grab hook 內的合併複製（thread safety）。</summary>
+        public void ClearMergeTarget()
+        {
+            _mergedTargetBuffer = MIL.M_NULL; // buffer 最先清除（thread safety）
+            _mergedSrcClipLeft  = 0;
+            _mergedSrcClipWidth = 0;
         }
 
         // ==================== Buffer Helpers（給上層檢測用） ====================

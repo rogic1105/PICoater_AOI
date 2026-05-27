@@ -70,32 +70,17 @@ namespace AniloxRoll.Monitor.Core.Camera
         // ==================== Internal ====================
         private bool _isReleased = false;
 
-        // Global merge 用（由 LiveCameraManager 透過 SetMergeTarget/ClearMergeTarget 設定）
-        private MIL_ID _mergedTargetBuffer = MIL.M_NULL;
-        private int _mergedTargetOffsetX = 0;
-        private int _mergedSrcClipLeft = 0;
-        private int _mergedSrcClipWidth = 0;
+        /// <summary>底層 MIL 封裝（供 LiveCameraManager 交給 MultiCameraMerger 工頭管理合圖）。</summary>
+        public MilCamera Mil => _mil;
 
         /// <summary>
-        /// 設定 Global merge 參數。buffer 最後設定，確保 OnMilFrameReady 讀到完整狀態。
+        /// 設定 Global merge 目標：委派給 _mil（MilCamera），合圖複製改在 MIL grab hook 內執行。
         /// </summary>
         internal void SetMergeTarget(MIL_ID buffer, int offsetX, int clipLeft, int clipWidth)
-        {
-            _mergedTargetOffsetX = offsetX;
-            _mergedSrcClipLeft = clipLeft;
-            _mergedSrcClipWidth = clipWidth;
-            _mergedTargetBuffer = buffer; // buffer 最後設定（thread safety）
-        }
+            => _mil.SetMergeTarget(buffer, offsetX, clipLeft, clipWidth);
 
-        /// <summary>
-        /// 清除 Global merge 參數。buffer 最先清除，停止 OnMilFrameReady 的合併複製。
-        /// </summary>
-        internal void ClearMergeTarget()
-        {
-            _mergedTargetBuffer = MIL.M_NULL; // buffer 最先清除（thread safety）
-            _mergedSrcClipLeft = 0;
-            _mergedSrcClipWidth = 0;
-        }
+        /// <summary>清除 Global merge 目標：委派給 _mil（MilCamera）。</summary>
+        internal void ClearMergeTarget() => _mil.ClearMergeTarget();
 
         // ==================== 檢測記憶體（非 MIL） ====================
         private byte[] _hostInputBuffer = null;
@@ -342,27 +327,8 @@ namespace AniloxRoll.Monitor.Core.Camera
             else
                 _mil.CopyToDisplay(modifiedBuffer);       // 顯示原圖
 
-            // Global merge：以顯示 buffer（_mil.MilDisplayBuffer）為來源，裁切後複製到合併 buffer 的對應位置
-            MIL_ID mergedBuf = _mergedTargetBuffer;
-            MIL_ID dispBuf = _mil.MilDisplayBuffer;
-            if (mergedBuf != MIL.M_NULL && dispBuf != MIL.M_NULL)
-            {
-                int clipLeft  = _mergedSrcClipLeft;
-                int clipWidth = _mergedSrcClipWidth;
-                int dstX      = _mergedTargetOffsetX + clipLeft;
-                int fw = _mil.FrameWidth;
-                int fh = _mil.FrameHeight;
-                if (clipWidth > 0 && clipLeft >= 0 && clipLeft + clipWidth <= fw)
-                {
-                    MIL_ID childBuf = MIL.M_NULL;
-                    MIL.MbufChild2d(dispBuf, clipLeft, 0, clipWidth, fh, ref childBuf);
-                    if (childBuf != MIL.M_NULL)
-                    {
-                        MIL.MbufCopyClip(childBuf, mergedBuf, dstX, 0);
-                        MIL.MbufFree(childBuf);
-                    }
-                }
-            }
+            // Global merge 複製（display buffer → 合併 buffer 裁切位置）已移至 MilCamera grab hook，
+            // 在此 FrameReady handler 返回後由 _mil 執行（顯示 buffer 已更新完成）。
 
             TrySaveCapture(modifiedBuffer);
         }

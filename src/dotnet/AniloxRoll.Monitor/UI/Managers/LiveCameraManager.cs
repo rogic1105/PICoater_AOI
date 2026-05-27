@@ -5,6 +5,7 @@ using System.IO;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Matrox.MatroxImagingLibrary;
+using MilGrabber.Core;
 using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
@@ -85,9 +86,12 @@ namespace AniloxRoll.Monitor.UI.Managers
         private int _userSelectedMainCameraId = 1;
 
         // --- Global merge（即時合圖）---
-        private MIL_ID _mergedBuffer  = MIL.M_NULL;
+        // 合圖的「拼」（佈局 + 合併 buffer + 每台 merge target）委派給 MultiCameraMerger 工頭（sdk/MIL）。
+        // 本類別只負責「秀」：MdispSelectWindow 顯示、33ms 防閃爍刷新、滑鼠 hook、overview 聯動。
+        private MultiCameraMerger _merger;
         private MIL_ID _mergedDisplay = MIL.M_NULL;
         public bool IsGlobalMergeActive { get; private set; }
+        // 座標欄位為工頭值的本地鏡像（值來源 = 工頭），EnableGlobalMerge/RefreshGlobalMergeLayout 後同步。
         private double _mergedMinStartMm;   // 合併座標系原點（mm）
         private double _mergedRefOpsMm;     // 合併像素尺寸（mm/px）
         private int    _mergedTotalW;       // 合併 buffer 寬度（px）
@@ -288,7 +292,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             _cameraStatusTimer.Stop();
             IsLiveGrabbing = false;
 
-            // 先停止 global merge（必須在 cam.Free 之前，因為 Free 會清除 _mergedTargetBuffer 指向的 buffer）
+            // 先停止 global merge（必須在 cam.Free 之前）：DisableGlobalMerge 會先清各相機 merge target
+            // 再由工頭 MbufFree 合併 buffer，避免 grab hook 把幀複製進已釋放的 buffer。
             DisableGlobalMerge();
 
             foreach (var cam in _cameras)
@@ -492,105 +497,41 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         // ==================== Global Merge ====================
 
-        /// <summary>啟用即時全域合圖：分配合併 buffer，每幀 callback 自動 MbufCopyClip。</summary>
+        /// <summary>啟用即時全域合圖：工頭算佈局 + 分配合併 buffer + 設每台 merge target；本類別綁 display 顯示。</summary>
         public void EnableGlobalMerge(double[] opsUm, double[] startPosMm)
         {
             if (IsGlobalMergeActive || _cameras.Count == 0) return;
 
-            // Pass 1：ALL slots（含空缺）計算全域範圍；空缺槽以 MaxWidth 作為標準寬度
-            double refOpsMm = opsUm[0] / 1000.0;
-            double minStart = double.MaxValue, maxEnd = double.MinValue;
-            int maxH = 0;
+            // 「拼」委派工頭：傳入底層 MilCamera 清單（空缺槽以 MaxWidth 作為標準寬度算全域範圍）
+            var mils = new List<MilCamera>(_cameras.Count);
+            foreach (var cam in _cameras) mils.Add(cam.Mil);
 
-            _mergedSlotStartsMm = new double[opsUm.Length];
-            _mergedSlotEndsMm   = new double[opsUm.Length];
-            for (int i = 0; i < opsUm.Length; i++)
+            _merger = new MultiCameraMerger(mils);
+            if (!_merger.EnableMerge(opsUm, startPosMm, InspectionEngineConfig.MaxWidth))
             {
-                double pos = (i < startPosMm.Length) ? startPosMm[i] : 0;
-                double ops = opsUm[i];
-                var liveCam = _cameras.Find(c => c.CameraId == i + 1);
-                double widthPx = (liveCam != null) ? liveCam.FrameWidth : InspectionEngineConfig.MaxWidth;
-                double widthMm = widthPx * ops / 1000.0;
-                if (pos < minStart) minStart = pos;
-                if (pos + widthMm > maxEnd) maxEnd = pos + widthMm;
-                _mergedSlotStartsMm[i] = pos;
-                _mergedSlotEndsMm[i]   = pos + widthMm;
+                _merger = null;
+                return;
             }
-            // Pass 2：在線相機取最大高度
-            foreach (var cam in _cameras)
-                if (cam.FrameHeight > maxH) maxH = cam.FrameHeight;
 
-            int totalW = (int)Math.Ceiling((maxEnd - minStart) / refOpsMm);
-            if (totalW <= 0 || maxH <= 0) return;
-
-            // 在第一台相機的 System 上分配合併 buffer + display
             MIL_ID sysId = _cameras[0].OwnerSystemId;
-            if (sysId == MIL.M_NULL) return;
-
-            MIL.MbufAlloc2d(sysId, totalW, maxH, 8 + MIL.M_UNSIGNED,
-                MIL.M_IMAGE + MIL.M_DISP + MIL.M_PROC, ref _mergedBuffer);
-            MIL.MbufClear(_mergedBuffer, 0);
-
-            // 計算每台相機的偏移，按偏移排序後處理 overlap
-            var entries = new List<(AniloxCamera cam, int xOffset)>();
-            foreach (var cam in _cameras)
-            {
-                int idx = cam.CameraId - 1;
-                double pos = (idx < startPosMm.Length) ? startPosMm[idx] : 0;
-                int offsetX = (int)Math.Round((pos - minStart) / refOpsMm);
-                entries.Add((cam, offsetX));
-            }
-            entries.Sort((a, b) => a.xOffset.CompareTo(b.xOffset));
-
-            // 計算 drawLeft / drawRight（重疊區域中點分界，與 GrabImageStitcher.MergeHorizontal 一致）
-            int n = entries.Count;
-            var drawLeft  = new int[n];
-            var drawRight = new int[n];
-            for (int i = 0; i < n; i++)
-            {
-                drawLeft[i]  = 0;
-                drawRight[i] = entries[i].cam.FrameWidth;
-            }
-            for (int i = 0; i < n - 1; i++)
-            {
-                int rightEdge = entries[i].xOffset + entries[i].cam.FrameWidth;
-                int leftEdge  = entries[i + 1].xOffset;
-                int overlap   = rightEdge - leftEdge;
-                if (overlap > 0)
-                {
-                    int mid = leftEdge + overlap / 2;
-                    // 前相機：drawRight = mid 在全域座標，轉為 src 座標
-                    drawRight[i] = Math.Min(drawRight[i], mid - entries[i].xOffset);
-                    // 後相機：drawLeft = mid 在全域座標，轉為 src 座標
-                    drawLeft[i + 1] = Math.Max(drawLeft[i + 1], mid - entries[i + 1].xOffset);
-                }
-            }
-
-            // 設定每台相機的合併目標（含裁切範圍）
-            for (int i = 0; i < n; i++)
-            {
-                var cam = entries[i].cam;
-                cam.SetMergeTarget(_mergedBuffer, entries[i].xOffset, drawLeft[i], drawRight[i] - drawLeft[i]);
-            }
+            if (sysId == MIL.M_NULL) { _merger.DisableMerge(); _merger = null; return; }
 
             // 解除所有相機的 secondary display，改用合併 display
             foreach (var cam in _cameras)
                 cam.SetSecondaryDisplay(IntPtr.Zero);
 
-            // 儲存座標系參數（供滑鼠回呼 + overview 計算）
-            _mergedMinStartMm = minStart;
-            _mergedRefOpsMm   = refOpsMm;
-            _mergedTotalW     = totalW;
-            _mergedTotalH     = maxH;
+            // 從工頭同步座標系參數（供滑鼠回呼 + overview 計算）
+            SyncCoordsFromMerger();
 
             MIL.MdispAlloc(sysId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref _mergedDisplay);
-            MIL.MdispSelectWindow(_mergedDisplay, _mergedBuffer, _mainDisplayPanel.Handle);
+
+            // 先關自動刷新「再」select window：避免 select 瞬間把 grab hook 尚未貼滿的合併 buffer
+            // 顯示出來（半貼狀態 → 橫條殘影閃一下）。改由 33ms timer 手動刷新，確保上螢幕時已較完整。
+            MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_DISABLE);
+            MIL.MdispSelectWindow(_mergedDisplay, _merger.MergedBuffer, _mainDisplayPanel.Handle);
             MIL.MdispControl(_mergedDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
             MIL.MdispControl(_mergedDisplay, MIL.M_CENTER_DISPLAY, MIL.M_ENABLE);
             MIL.MdispControl(_mergedDisplay, MIL.M_MOUSE_USE, MIL.M_ENABLE);
-
-            // 關閉 MIL 自動刷新（每次 MbufCopyClip 都會觸發 repaint，多相機非同步導致閃爍）
-            MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_DISABLE);
 
             // 改用定時器手動刷新（~30fps），確保每次顯示的是所有相機的最新合成結果
             _mergedDisplayTimer = new Timer { Interval = 33 };
@@ -604,12 +545,24 @@ namespace AniloxRoll.Monitor.UI.Managers
             IsGlobalMergeActive = true;
         }
 
-        /// <summary>停用即時全域合圖：釋放合併 buffer，恢復單台 secondary display。</summary>
+        /// <summary>從工頭同步座標系參數到本地鏡像欄位（值來源 = 工頭）。</summary>
+        private void SyncCoordsFromMerger()
+        {
+            if (_merger == null) return;
+            _mergedMinStartMm   = _merger.MinStartMm;
+            _mergedRefOpsMm     = _merger.RefOpsMm;
+            _mergedTotalW       = _merger.TotalW;
+            _mergedTotalH       = _merger.TotalH;
+            _mergedSlotStartsMm = _merger.SlotStartsMm;
+            _mergedSlotEndsMm   = _merger.SlotEndsMm;
+        }
+
+        /// <summary>停用即時全域合圖：本類別釋放 display，工頭釋放合併 buffer + 清各相機 merge target。</summary>
         public void DisableGlobalMerge()
         {
             if (!IsGlobalMergeActive) return;
 
-            // 停止定時刷新
+            // 停止定時刷新（顯示職責，留本類別）
             if (_mergedDisplayTimer != null)
             {
                 _mergedDisplayTimer.Stop();
@@ -617,11 +570,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 _mergedDisplayTimer = null;
             }
 
-            // 先清除各相機的合併目標（停止 callback 中的 MbufCopyClip）
-            foreach (var cam in _cameras)
-                cam.ClearMergeTarget();
-
-            // Unhook 滑鼠 + 釋放合併 display + buffer
+            // Unhook 滑鼠 + 解除 display 綁定（必須在工頭 MbufFree 合併 buffer 之前）
             if (_mergedDisplay != MIL.M_NULL)
             {
                 if (_mergedMouseDelegate != null)
@@ -632,11 +581,10 @@ namespace AniloxRoll.Monitor.UI.Managers
                 _mergedDisplay = MIL.M_NULL;
             }
             _mergedMouseDelegate = null;
-            if (_mergedBuffer != MIL.M_NULL)
-            {
-                MIL.MbufFree(_mergedBuffer);
-                _mergedBuffer = MIL.M_NULL;
-            }
+
+            // 「拆」委派工頭：清各相機 merge target + 釋放合併 buffer
+            _merger?.DisableMerge();
+            _merger = null;
 
             IsGlobalMergeActive = false;
             _mergedSlotStartsMm = null;
@@ -646,105 +594,25 @@ namespace AniloxRoll.Monitor.UI.Managers
             SwitchMainDisplay(_userSelectedMainCameraId);
         }
 
-        /// <summary>OPS/Start 變更時，重新計算全域合圖佈局（下一幀生效）。</summary>
+        /// <summary>OPS/Start 變更時，重新計算全域合圖佈局（下一幀生效）。運算委派工頭，顯示重綁留本類別。</summary>
         public void RefreshGlobalMergeLayout(double[] opsUm, double[] startPosMm)
         {
-            if (!IsGlobalMergeActive || _cameras.Count == 0) return;
+            if (!IsGlobalMergeActive || _merger == null || _cameras.Count == 0) return;
 
-            // ① 暫停所有相機的合併複製（callback 中 _mergedTargetBuffer == M_NULL → 跳過）
-            foreach (var cam in _cameras)
-                cam.ClearMergeTarget();
+            // 「拼」委派工頭（暫停合併 → 重算佈局 → 視需要重分配 buffer → 重設 merge target）
+            // 回傳 true 表示合併 buffer 已重新分配，display 需重綁。
+            bool reallocated = _merger.RefreshLayout(opsUm, startPosMm, InspectionEngineConfig.MaxWidth);
 
-            // ② 重算座標系（Pass 1: ALL slots；Pass 2: 在線相機取高度）
-            double refOpsMm = opsUm[0] / 1000.0;
-            double minStart = double.MaxValue, maxEnd = double.MinValue;
-            int maxH = 0;
-            _mergedSlotStartsMm = new double[opsUm.Length];
-            _mergedSlotEndsMm   = new double[opsUm.Length];
-            for (int i = 0; i < opsUm.Length; i++)
+            // 「秀」：buffer 重分配時，本類別重新 MdispSelectWindow 綁定新 buffer handle
+            if (reallocated && _mergedDisplay != MIL.M_NULL)
             {
-                double pos = (i < startPosMm.Length) ? startPosMm[i] : 0;
-                double ops = opsUm[i];
-                var liveCam = _cameras.Find(c => c.CameraId == i + 1);
-                double widthPx = (liveCam != null) ? liveCam.FrameWidth : InspectionEngineConfig.MaxWidth;
-                double widthMm = widthPx * ops / 1000.0;
-                if (pos < minStart) minStart = pos;
-                if (pos + widthMm > maxEnd) maxEnd = pos + widthMm;
-                _mergedSlotStartsMm[i] = pos;
-                _mergedSlotEndsMm[i]   = pos + widthMm;
-            }
-            foreach (var cam in _cameras)
-                if (cam.FrameHeight > maxH) maxH = cam.FrameHeight;
-            int totalW = (int)Math.Ceiling((maxEnd - minStart) / refOpsMm);
-            if (totalW <= 0 || maxH <= 0) return;
-
-            // ③ buffer 大小改變 → 重新分配
-            if (totalW != _mergedTotalW || maxH != _mergedTotalH)
-            {
-                MIL_ID sysId = _cameras[0].OwnerSystemId;
-                if (sysId == MIL.M_NULL) return;
-
-                // 暫時解除 display 綁定
                 MIL.MdispSelectWindow(_mergedDisplay, MIL.M_NULL, IntPtr.Zero);
-                MIL.MbufFree(_mergedBuffer);
-                _mergedBuffer = MIL.M_NULL;
-
-                MIL.MbufAlloc2d(sysId, totalW, maxH, 8 + MIL.M_UNSIGNED,
-                    MIL.M_IMAGE + MIL.M_DISP + MIL.M_PROC, ref _mergedBuffer);
-                MIL.MbufClear(_mergedBuffer, 0);
-
-                // 重新綁定 display
-                MIL.MdispSelectWindow(_mergedDisplay, _mergedBuffer, _mainDisplayPanel.Handle);
+                MIL.MdispSelectWindow(_mergedDisplay, _merger.MergedBuffer, _mainDisplayPanel.Handle);
                 MIL.MdispControl(_mergedDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
             }
-            else
-            {
-                MIL.MbufClear(_mergedBuffer, 0);
-            }
 
-            // ④ 重算 overlap + clip（與 EnableGlobalMerge 相同邏輯）
-            var entries = new List<(AniloxCamera cam, int xOffset)>();
-            foreach (var cam in _cameras)
-            {
-                int idx = cam.CameraId - 1;
-                double pos = (idx < startPosMm.Length) ? startPosMm[idx] : 0;
-                int offsetX = (int)Math.Round((pos - minStart) / refOpsMm);
-                entries.Add((cam, offsetX));
-            }
-            entries.Sort((a, b) => a.xOffset.CompareTo(b.xOffset));
-
-            int n = entries.Count;
-            var drawLeft  = new int[n];
-            var drawRight = new int[n];
-            for (int i = 0; i < n; i++)
-            {
-                drawLeft[i]  = 0;
-                drawRight[i] = entries[i].cam.FrameWidth;
-            }
-            for (int i = 0; i < n - 1; i++)
-            {
-                int rightEdge = entries[i].xOffset + entries[i].cam.FrameWidth;
-                int leftEdge  = entries[i + 1].xOffset;
-                int overlap   = rightEdge - leftEdge;
-                if (overlap > 0)
-                {
-                    int mid = leftEdge + overlap / 2;
-                    drawRight[i]     = Math.Min(drawRight[i], mid - entries[i].xOffset);
-                    drawLeft[i + 1]  = Math.Max(drawLeft[i + 1], mid - entries[i + 1].xOffset);
-                }
-            }
-
-            // ⑤ 更新座標系 + 各相機 clip，然後恢復合併複製
-            _mergedMinStartMm = minStart;
-            _mergedRefOpsMm   = refOpsMm;
-            _mergedTotalW     = totalW;
-            _mergedTotalH     = maxH;
-
-            for (int i = 0; i < n; i++)
-            {
-                var cam = entries[i].cam;
-                cam.SetMergeTarget(_mergedBuffer, entries[i].xOffset, drawLeft[i], drawRight[i] - drawLeft[i]);
-            }
+            // 從工頭同步座標系參數
+            SyncCoordsFromMerger();
         }
 
         // ==================== Merged Display Refresh ====================
@@ -803,7 +671,8 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         private MIL_INT MergedMouseStatusHandler(MIL_INT HookType, MIL_ID EventId, IntPtr UserPtr)
         {
-            if (_mergedBuffer == MIL.M_NULL) return MIL.M_NULL;
+            MIL_ID mergedBuffer = _merger?.MergedBuffer ?? MIL.M_NULL;
+            if (mergedBuffer == MIL.M_NULL) return MIL.M_NULL;
 
             double posX = 0, posY = 0;
             MIL.MdispGetHookInfo(EventId, MIL.M_MOUSE_POSITION_BUFFER_X, ref posX);
@@ -818,7 +687,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 try
                 {
                     byte[] data = new byte[1];
-                    MIL.MbufGet2d(_mergedBuffer, x, y, 1, 1, data);
+                    MIL.MbufGet2d(mergedBuffer, x, y, 1, 1, data);
                     pixelValue = data[0];
                 }
                 catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.MergedMouseStatus] {ex.GetType().Name}: {ex.Message}"); }
