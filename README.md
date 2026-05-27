@@ -12,7 +12,7 @@ PICoater_AOI/
 │   └── AOI/             # 影像 SDK（self-contained）
 │       ├── native/      # C++（core_cv CUDA 庫 / cpp_utils / core_cv_api）
 │       ├── dotnet/AOI.SDK/  # .NET SDK（SmartCanvas 等）
-│       ├── benchmark/   # framework + core_cv_benchmark 速度測試
+│       ├── benchmark/   # framework + core_cv_benchmark 速度測試 + AOI.SDK.TestApp（SDK benchmark UI，不參與主 build）
 │       └── third_party/stb/
 ├── src/native/          # [演算法] 專案特定的 C++ 模組
 │   ├── modules/         # 各式檢測功能模組 (如 GetPICoaterBackground)
@@ -27,7 +27,6 @@ PICoater_AOI/
 │   └── src/native/benchmark/picoater_pipeline_benchmark/  # pipeline 速度
 ├── algtest/             # [演算法] Python 演算法原型 / 可行性（暫放）
 ├── docs/                # 架構與模式文件
-│   ├── sample/          # 示範程式（AOI.SDK.TestApp — 不參與主 build，未來會分離回 AOI_SDK repo）
 │   ├── config/          # config / dcf 範例
 │   ├── dev/             # 廠商規格書、CLProtocol 範例、Grabber / 光源控制器手冊
 │   └── user-manual/     # 操作員說明書 + IO 圖 + 硬體規格

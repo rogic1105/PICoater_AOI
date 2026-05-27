@@ -13,6 +13,14 @@ namespace AOI.SDK.Core
         private const string DLL_NAME = "core_cv_api.dll";
 
         // =========================================================
+        // 0. GPU 暖身 (Warm-Up)
+        // =========================================================
+        // 強迫 CUDA context / driver 提早初始化。暖身的底層細節
+        // (malloc + kernel + free) 全封裝在 native，C# 只呼叫一次。
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int CoreCV_WarmUp();
+
+        // =========================================================
         // 1. 記憶體管理 (Pinned Memory) - 用於極速 IO
         // =========================================================
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]

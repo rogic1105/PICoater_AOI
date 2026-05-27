@@ -65,7 +65,7 @@
     <Compile Include="Forms\SdkForm.Designer.cs">
       <DependentUpon>SdkForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="..\AOI.SDK\UI\SmartCanvas.cs">
+    <Compile Include="..\..\dotnet\AOI.SDK\UI\SmartCanvas.cs">
       <Link>UI\SmartCanvas.cs</Link>
     </Compile>
     <Compile Include="Program.cs" />
@@ -97,7 +97,7 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\AOI.SDK\AOI.SDK.csproj">
+    <ProjectReference Include="..\..\dotnet\AOI.SDK\AOI.SDK.csproj">
       <Project>{27263c11-7fef-4076-a2f1-f412bb496df3}</Project>
       <Name>AOI.SDK</Name>
     </ProjectReference>

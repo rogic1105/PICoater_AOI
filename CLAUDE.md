@@ -27,8 +27,7 @@ PICoater_AOI/
 ├── docs/                 ← 文件
 │   ├── config/           ← 設定 JSON 範例
 │   ├── dev/              ← 開發者參考（MIL API / 廠商規格書）
-│   ├── user-manual/      ← 操作員說明（ui-flow.html / hardware-specs）
-│   └── sample/           ← 範例程式（給 SDK 使用者參考的 demo）
+│   └── user-manual/      ← 操作員說明（ui-flow.html / hardware-specs）
 ├── assets/               ← 主程式品牌資源（AniloxRoll.ico）；sdk examples 的 icon 跟著元件走（sdk/Bridges/<X>/examples/assets/，self-contained 可帶走）
 ├── deploy/               ← 現場部署腳本（PowerShell + JSON）
 └── .claude/skills/       ← Claude Code skills（按修改範圍觸發）
@@ -494,7 +493,6 @@ PICoater_AOI/
 docs/
 ├── config/         ← inspection-settings.json / acquisition-settings.json / dcf 範例
 ├── dev/            ← 開發者/部署參考（MIL/CLProtocol API、廠商 Grabber/LTS_3DPA24 規格書、code review 紀錄）
-├── sample/        ← 示範程式（AOI.SDK.TestApp — 不參與 build，未來分離回 AOI_SDK repo）
 └── user-manual/    ← 操作員說明書（UI 流程、IO 圖、硬體規格、lib/ 渲染資源）
 ```
 

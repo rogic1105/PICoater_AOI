@@ -22,6 +22,12 @@ extern "C" {
 #define CORE_CV_ERROR_INVALID_PARAM -3
 #define CORE_CV_ERROR_CUDA -4
 
+    // --- [新增] GPU 暖身 (Warm-Up) ---
+    // 強迫 CUDA context / driver 提早初始化：在 GPU 內分配小 buffer、跑一個 kernel、釋放。
+    // 「怎麼暖身」屬 GPU 內部細節，封裝在 native，不洩漏到 caller。
+    // 回傳 0 (CORE_CV_SUCCESS) 表成功。
+    CORE_CV_API int CoreCV_WarmUp();
+
     // --- [新增] 記憶體管理 (Pinned Memory) ---
     CORE_CV_API unsigned char* CoreCV_AllocPinned(unsigned long long size);
     CORE_CV_API void CoreCV_FreePinned(unsigned char* ptr);

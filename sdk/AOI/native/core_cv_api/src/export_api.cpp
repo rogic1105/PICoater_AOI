@@ -28,6 +28,38 @@
 
 extern "C" {
 
+    // --- [新增] GPU 暖身實作 ---
+    // 在 GPU 內分配兩塊小 buffer、跑一個 threshold kernel、釋放。
+    // 第一次 cudaMalloc / kernel launch 會強迫 CUDA context + driver 載入，
+    // 把這成本提前付掉，避免之後第一張正式影像處理變慢。
+    // 暖身細節全留在 native，caller 只需呼叫一次。
+    CORE_CV_API int CoreCV_WarmUp() {
+        const int W = 64;
+        const int H = 64;
+        const size_t size = (size_t)W * H;
+
+        uint8_t* d_src = nullptr;
+        uint8_t* d_dst = nullptr;
+
+        try {
+            CHECK_CUDA(cudaMalloc((void**)&d_src, size));
+            CHECK_CUDA(cudaMalloc((void**)&d_dst, size));
+
+            // 隨便跑一個 kernel 強迫 context 初始化
+            core::threshold_u8_gpu(d_src, d_dst, W, H, 128, 0);
+            CHECK_CUDA(cudaDeviceSynchronize());
+
+            cudaFree(d_src);
+            cudaFree(d_dst);
+            return CORE_CV_SUCCESS;
+        }
+        catch (...) {
+            if (d_src) cudaFree(d_src);
+            if (d_dst) cudaFree(d_dst);
+            return CORE_CV_ERROR_UNKNOWN;
+        }
+    }
+
     // --- [新增] 記憶體與 IO 實作 ---
 
     CORE_CV_API unsigned char* CoreCV_AllocPinned(unsigned long long size) {
