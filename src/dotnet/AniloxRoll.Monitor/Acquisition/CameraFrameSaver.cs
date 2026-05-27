@@ -3,7 +3,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
-using AOI.SDK.Utils;
+using TanukiCv.Utils;
 
 namespace AniloxRoll.Monitor.Core.Camera
 {

@@ -3,7 +3,7 @@ using AniloxRoll.Monitor.Core.Acquisition.Inspection;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.Navigators;
 using AniloxRoll.Monitor.UI.Presenters;
-using AOI.SDK.UI;
+using TanukiCv.Controls;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;

@@ -124,7 +124,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <CudaCompile>
-      <Include>$(ProjectDir)include;$(CoreCVPath)\include;$(FrameworkPath)\include;$(StbPath)\include</Include>
+      <Include>$(ProjectDir)include;$(CoreCVPath)\include;$(BenchFrameworkPath)\include;$(StbPath)\include</Include>
       <CodeGeneration>compute_86,sm_86</CodeGeneration>
       <GenerateRelocatableDeviceCode>true</GenerateRelocatableDeviceCode>
     </CudaCompile>
@@ -144,7 +144,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <CudaCompile>
-      <Include>$(ProjectDir)include;$(CoreCVPath)\include;$(FrameworkPath)\include;$(StbPath)\include</Include>
+      <Include>$(ProjectDir)include;$(CoreCVPath)\include;$(BenchFrameworkPath)\include;$(StbPath)\include</Include>
       <CodeGeneration>compute_86,sm_86</CodeGeneration>
       <GenerateRelocatableDeviceCode>true</GenerateRelocatableDeviceCode>
     </CudaCompile>

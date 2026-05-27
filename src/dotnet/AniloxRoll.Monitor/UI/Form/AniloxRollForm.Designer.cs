@@ -87,7 +87,7 @@
             this.cbReviewGrabId = new System.Windows.Forms.ComboBox();
             this.btnGrabIdPrev = new System.Windows.Forms.Button();
             this.btnGrabIdNext = new System.Windows.Forms.Button();
-            this.canvasMain = new AOI.SDK.UI.SmartCanvas();
+            this.canvasMain = new TanukiCv.Controls.SmartCanvas();
             this.tabPageData = new System.Windows.Forms.TabPage();
             this.chartMuraProfile = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.panelStatCam7 = new System.Windows.Forms.Panel();
@@ -3412,7 +3412,7 @@
         }
 
         #endregion
-        private AOI.SDK.UI.SmartCanvas canvasMain;
+        private TanukiCv.Controls.SmartCanvas canvasMain;
         private System.Windows.Forms.TabControl tabMain;
         private System.Windows.Forms.TabPage tabPageLiveView;
         private System.Windows.Forms.TabPage tabPageReview;

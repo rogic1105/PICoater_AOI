@@ -45,7 +45,7 @@ g.PixelOffsetMode   = PixelOffsetMode.Half;
 ```
 否則 0.5px 偏移 + 色彩擴散 → 拼接接縫線。
 
-### AOI.SDK AllowUnsafeBlocks
+### TanukiCv.Core AllowUnsafeBlocks
 Solution 映射 `Debug|x64` → `Debug|Any CPU`（含空格），`AllowUnsafeBlocks` 必須放無條件全域 PropertyGroup。
 
 ### Exception Handling

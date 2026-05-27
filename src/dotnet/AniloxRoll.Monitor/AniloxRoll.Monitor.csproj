@@ -137,9 +137,6 @@
     <Compile Include="UI\Widgets\CanvasInteractionHelper.cs" />
     <Compile Include="UI\Widgets\EventGuard.cs" />
     <Compile Include="UI\Widgets\FormInteractionHelper.cs" />
-    <Compile Include="..\..\..\sdk\AOI\dotnet\AOI.SDK\UI\SmartCanvas.cs">
-      <Link>UI\Widgets\SmartCanvas.cs</Link>
-    </Compile>
     <Compile Include="UI\Managers\LiveCameraManager.cs" />
     <Compile Include="UI\Widgets\ColumnCurveChartHelper.cs" />
     <Compile Include="UI\Widgets\CurveMergeHelper.cs" />
@@ -207,9 +204,13 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\sdk\AOI\dotnet\AOI.SDK\AOI.SDK.csproj">
+    <ProjectReference Include="..\..\..\sdk\TanukiCv\dotnet\TanukiCv.Core\TanukiCv.Core.csproj">
       <Project>{27263c11-7fef-4076-a2f1-f412bb496df3}</Project>
-      <Name>AOI.SDK</Name>
+      <Name>TanukiCv.Core</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\sdk\TanukiCv\dotnet\TanukiCv.Controls\TanukiCv.Controls.csproj">
+      <Project>{3655f7a3-8df1-4541-82ae-2fd4fe5a397f}</Project>
+      <Name>TanukiCv.Controls</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\..\sdk\Bridges\LightBridge\LightBridge.Core\LightBridge.Core.csproj">
       <Project>{C2D3E4F5-3333-4444-5555-666677778888}</Project>

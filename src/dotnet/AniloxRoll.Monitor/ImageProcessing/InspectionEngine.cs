@@ -2,7 +2,7 @@
 using System.Diagnostics;
 using System.IO;
 using AniloxRoll.Monitor.Core.Data;
-using AOI.SDK.Core.Models;
+using TanukiCv.Core.Models;
 
 namespace AniloxRoll.Monitor.Core.Services
 {

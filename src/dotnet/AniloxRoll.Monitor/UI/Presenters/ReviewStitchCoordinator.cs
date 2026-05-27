@@ -5,7 +5,7 @@ using System.Drawing;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
-using AOI.SDK.UI;
+using TanukiCv.Controls;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.Navigators;

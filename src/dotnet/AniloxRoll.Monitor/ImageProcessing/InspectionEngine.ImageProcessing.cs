@@ -7,8 +7,8 @@ using System.Runtime.InteropServices;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Acquisition.Inspection;
 using AniloxRoll.Monitor.Core.Interop;
-using AOI.SDK.Core.Models;
-using AOI.SDK.Utils;
+using TanukiCv.Core.Models;
+using TanukiCv.Utils;
 
 namespace AniloxRoll.Monitor.Core.Services
 {

@@ -6,11 +6,11 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{A0000001-000
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "sdk", "sdk", "{A0000002-0000-0000-0000-000000000002}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "AOI", "AOI", "{A0000003-0000-0000-0000-000000000003}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "TanukiCv", "TanukiCv", "{A0000003-0000-0000-0000-000000000003}"
 	ProjectSection(SolutionItems) = preProject
-		sdk\AOI\.gitignore = sdk\AOI\.gitignore
-		sdk\AOI\Directory.Build.props = sdk\AOI\Directory.Build.props
-		sdk\AOI\README.md = sdk\AOI\README.md
+		sdk\TanukiCv\.gitignore = sdk\TanukiCv\.gitignore
+		sdk\TanukiCv\Directory.Build.props = sdk\TanukiCv\Directory.Build.props
+		sdk\TanukiCv\README.md = sdk\TanukiCv\README.md
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Bridges", "Bridges", "{A0000004-0000-0000-0000-000000000004}"
@@ -46,22 +46,24 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "picoater_pipeline_benchmark
 		{D3CC3425-9807-4866-AEB5-1F1DBC49523C} = {D3CC3425-9807-4866-AEB5-1F1DBC49523C}
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AOI.SDK", "sdk\AOI\dotnet\AOI.SDK\AOI.SDK.csproj", "{27263C11-7FEF-4076-A2F1-F412BB496DF3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TanukiCv.Core", "sdk\TanukiCv\dotnet\TanukiCv.Core\TanukiCv.Core.csproj", "{27263C11-7FEF-4076-A2F1-F412BB496DF3}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core_cv", "sdk\AOI\native\core_cv\core_cv.vcxproj", "{B39F6111-258B-48F8-8A3E-F940771A4D52}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TanukiCv.Controls", "sdk\TanukiCv\dotnet\TanukiCv.Controls\TanukiCv.Controls.csproj", "{3655F7A3-8DF1-4541-82AE-2FD4FE5A397F}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cpp_utils", "sdk\AOI\native\cpp_utils\cpp_utils.vcxproj", "{05DB04FC-CC8E-2E92-8736-4D39CC68F27A}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core_cv", "sdk\TanukiCv\native\core_cv\core_cv.vcxproj", "{B39F6111-258B-48F8-8A3E-F940771A4D52}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core_cv_api", "sdk\AOI\native\core_cv_api\core_cv_api.vcxproj", "{F5B38893-304A-4913-A17A-0C63F88FA391}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cpp_utils", "sdk\TanukiCv\native\cpp_utils\cpp_utils.vcxproj", "{05DB04FC-CC8E-2E92-8736-4D39CC68F27A}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core_cv_benchmark", "sdk\AOI\benchmark\core_cv_benchmark\core_cv_benchmark.vcxproj", "{77281454-B828-499A-9A88-D9E46249A625}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core_cv_api", "sdk\TanukiCv\native\core_cv_api\core_cv_api.vcxproj", "{F5B38893-304A-4913-A17A-0C63F88FA391}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core_cv_benchmark", "sdk\TanukiCv\benchmark\core_cv_benchmark\core_cv_benchmark.vcxproj", "{77281454-B828-499A-9A88-D9E46249A625}"
 	ProjectSection(ProjectDependencies) = postProject
 		{05DB04FC-CC8E-2E92-8736-4D39CC68F27A} = {05DB04FC-CC8E-2E92-8736-4D39CC68F27A}
 		{B39F6111-258B-48F8-8A3E-F940771A4D52} = {B39F6111-258B-48F8-8A3E-F940771A4D52}
 		{D3CC3425-9807-4866-AEB5-1F1DBC49523C} = {D3CC3425-9807-4866-AEB5-1F1DBC49523C}
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "framework", "sdk\AOI\benchmark\framework\framework.vcxproj", "{D3CC3425-9807-4866-AEB5-1F1DBC49523C}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "bench_framework", "sdk\TanukiCv\benchmark\bench_framework\bench_framework.vcxproj", "{D3CC3425-9807-4866-AEB5-1F1DBC49523C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IoBridge.Core", "sdk\Bridges\IoBridge\IoBridge.Core\IoBridge.Core.csproj", "{A1B2C3D4-1111-2222-3333-444455556666}"
 EndProject
@@ -110,6 +112,8 @@ Global
 		{9A193EE5-9D02-42B4-A3DF-D49D7D13EE9B}.Release|x64.Build.0 = Release|x64
 		{27263C11-7FEF-4076-A2F1-F412BB496DF3}.Release|x64.ActiveCfg = Release|x64
 		{27263C11-7FEF-4076-A2F1-F412BB496DF3}.Release|x64.Build.0 = Release|x64
+		{3655F7A3-8DF1-4541-82AE-2FD4FE5A397F}.Release|x64.ActiveCfg = Release|x64
+		{3655F7A3-8DF1-4541-82AE-2FD4FE5A397F}.Release|x64.Build.0 = Release|x64
 		{B2C3D4E5-2222-3333-4444-555566667777}.Release|x64.ActiveCfg = Release|x64
 		{B2C3D4E5-2222-3333-4444-555566667777}.Release|x64.Build.0 = Release|x64
 		{E4F5A6B7-5555-6666-7777-88889999AAAA}.Release|x64.ActiveCfg = Release|x64
@@ -133,6 +137,7 @@ Global
 		{89631E35-4DE2-4280-BB43-32D6DBDD4840} = {A0000001-0000-0000-0000-000000000001}
 		{87AB434E-F87E-465F-B6E5-5D0625B80059} = {A0000001-0000-0000-0000-000000000001}
 		{27263C11-7FEF-4076-A2F1-F412BB496DF3} = {A0000003-0000-0000-0000-000000000003}
+		{3655F7A3-8DF1-4541-82AE-2FD4FE5A397F} = {A0000003-0000-0000-0000-000000000003}
 		{B39F6111-258B-48F8-8A3E-F940771A4D52} = {A0000003-0000-0000-0000-000000000003}
 		{05DB04FC-CC8E-2E92-8736-4D39CC68F27A} = {A0000003-0000-0000-0000-000000000003}
 		{F5B38893-304A-4913-A17A-0C63F88FA391} = {A0000003-0000-0000-0000-000000000003}

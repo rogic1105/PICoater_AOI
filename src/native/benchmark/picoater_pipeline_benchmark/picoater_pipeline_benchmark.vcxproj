@@ -29,7 +29,7 @@
     <ProjectReference Include="$(CppUtilsPath)cpp_utils.vcxproj">
       <Project>{05db04fc-cc8e-2e92-8736-4d39cc68f27a}</Project>
     </ProjectReference>
-    <ProjectReference Include="$(FrameworkPath)framework.vcxproj">
+    <ProjectReference Include="$(BenchFrameworkPath)bench_framework.vcxproj">
       <Project>{d3cc3425-9807-4866-aeb5-1f1dbc49523c}</Project>
     </ProjectReference>
     <ProjectReference Include="$(LocalModulesPath)GetPICoaterBackground\Module_GetPICoaterBackground.vcxproj">

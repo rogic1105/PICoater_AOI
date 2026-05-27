@@ -1,7 +1,7 @@
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.Presenters;
-using AOI.SDK.UI;
+using TanukiCv.Controls;
 using System;
 using System.Drawing;
 using System.Windows.Forms;

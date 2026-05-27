@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Threading.Tasks;
-using AOI.SDK.Core.Models;
+using TanukiCv.Core.Models;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Acquisition.Inspection;
 

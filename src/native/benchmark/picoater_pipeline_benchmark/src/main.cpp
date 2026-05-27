@@ -1,6 +1,6 @@
 // PICoater_AOI\tests\cpp_test\picoater_pipeline_benchmark\src\main.cpp
 
-#include "framework/test_utils.hpp"
+#include "bench_framework/test_utils.hpp"
 #include <iostream>
 
 // �ŧi�~�����ը禡
@@ -31,5 +31,5 @@ int main() {
         };
 
     // �N Wrapper �ǵ� Bootstrap
-    return framework::RunAOITestBootstrap("PICoater Full Comparison Tests", run_all_tests);
+    return bench_framework::RunAOITestBootstrap("PICoater Full Comparison Tests", run_all_tests);
 }

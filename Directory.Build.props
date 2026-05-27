@@ -15,11 +15,11 @@
 		<IntDir>$(EngRoot)build\obj\$(MSBuildProjectName)\$(Platform)\$(Configuration)\</IntDir>
 
 		<OutputPath>$(OutDir)</OutputPath>
-		<AoiSdkPath>$(EngRoot)sdk\AOI\</AoiSdkPath>
+		<AoiSdkPath>$(EngRoot)sdk\TanukiCv\</AoiSdkPath>
 		<CoreCVPath>$(AoiSdkPath)native\core_cv\</CoreCVPath>
 		<CoreCVBenchmarkPath>$(AoiSdkPath)benchmark\core_cv_benchmark\</CoreCVBenchmarkPath>
 		<CppUtilsPath>$(AoiSdkPath)native\cpp_utils\</CppUtilsPath>
-		<FrameworkPath>$(AoiSdkPath)benchmark\framework\</FrameworkPath>
+		<BenchFrameworkPath>$(AoiSdkPath)benchmark\bench_framework\</BenchFrameworkPath>
 		<LocalModulesPath>$(EngRoot)src\native\modules\</LocalModulesPath>
 
 		<StbPath>$(AoiSdkPath)third_party\stb\include\</StbPath>
@@ -45,7 +45,7 @@
 			<AdditionalIncludeDirectories>
 				$(CoreCVPath)include;
 				$(CoreCVBenchmarkPath)include;
-				$(FrameworkPath)include;
+				$(BenchFrameworkPath)include;
 				$(CppUtilsPath)include;
 				$(StbPath);
 				$(LocalModulesPath)GetPICoaterBackground\include;

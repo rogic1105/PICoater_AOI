@@ -4,7 +4,7 @@ using System.IO;
 using System.Threading.Tasks;
 using Matrox.MatroxImagingLibrary;
 using MilGrabber.Core;
-using AOI.SDK.Core;
+using TanukiCv.Core;
 using AniloxRoll.Monitor.Core.Interop;
 using AniloxRoll.Monitor.Core.Services;
 

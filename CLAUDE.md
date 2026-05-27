@@ -8,7 +8,7 @@ PICoater_AOI/
 │   ├── dotnet/AniloxRoll.Monitor/  ← C# WinForms 主應用
 │   └── native/                     ← C++ pipeline
 ├── sdk/                  ← 可獨立 split 的 library（純函式庫，無 GUI、無 exe）
-│   ├── AOI/              ← 影像 SDK（native/{core_cv,cpp_utils,core_cv_api} + dotnet/AOI.SDK + benchmark/{framework,core_cv_benchmark} + third_party/stb；self-contained 可 split）
+│   ├── TanukiCv/         ← 以 core_cv 為引擎的 .NET 影像 SDK（native/{core_cv,cpp_utils,core_cv_api} + dotnet/{TanukiCv.Core 純 library, TanukiCv.Controls WinForms} + benchmark/{bench_framework,core_cv_benchmark,TanukiCv.BenchUi} + third_party/stb；self-contained 可 split）
 │   ├── Bridges/          ← 對外設備 / 系統橋接層
 │   │   ├── IoBridge/                         ← ICP DAS ET-7044 IO module（Modbus TCP）
 │   │   │   ├── IoBridge.Core/                ← library（IModbusTcpClient 介面 + ET-7044 實作）
@@ -22,7 +22,7 @@ PICoater_AOI/
 │   └── python/               ← Python 工具
 ├── tests/                ← 純自動化測試（.NET NUnit 三層 + TestRunner.bat/.ps1，量「對不對」）
 ├── benchmark（量「多快」）→ 不設頂層，跟被測對象住：
-│       sdk/AOI/benchmark/core_cv_benchmark（通用 CV）、src/native/benchmark/picoater_pipeline_benchmark（pipeline）
+│       sdk/TanukiCv/benchmark/core_cv_benchmark（通用 CV）、src/native/benchmark/picoater_pipeline_benchmark（pipeline）
 ├── algtest/              ← Python 演算法原型 / 可行性研究（讀 repo 外 05_QA_Validation；非自動化測試）
 ├── docs/                 ← 文件
 │   ├── config/           ← 設定 JSON 範例
@@ -73,7 +73,7 @@ PICoater_AOI/
 **InternalsVisibleTo**：`src/dotnet/AniloxRoll.Monitor/Properties/AssemblyInfo.cs` 同時 `InternalsVisibleTo` 三個 test assembly。新增第四個測試 csproj 時要加進去。
 
 **Benchmark（量「多快」，跟被測對象住，非 `tests/`）**：
-- `sdk/AOI/benchmark/core_cv_benchmark/` — 通用 CV micro-benchmark（C++）；跟 core_cv 同住，隨 sdk split 帶走
+- `sdk/TanukiCv/benchmark/core_cv_benchmark/` — 通用 CV micro-benchmark（C++）；跟 core_cv 同住，隨 sdk split 帶走
 - `src/native/benchmark/picoater_pipeline_benchmark/` — pipeline 端到端速度（C++/CUDA：IO+傳輸+CV+resize+多相機吞吐）；緊鄰 src/native 演算法，供 agent loop 優化
 
 **Python 演算法**：
@@ -145,7 +145,7 @@ PICoater_AOI/
 PICoater_AOI/
 ├── src/dotnet/AniloxRoll.Monitor/                 ← C# WinForms 應用程式
 ├── src/native/                                    ← C++ pipeline 實作
-├── sdk/AOI/                                       ← 影像 SDK（native/{core_cv,cpp_utils,core_cv_api} + dotnet/AOI.SDK + benchmark/{framework,core_cv_benchmark}）
+├── sdk/TanukiCv/                                  ← 以 core_cv 為引擎的 .NET 影像 SDK（native/{core_cv,cpp_utils,core_cv_api} + dotnet/{TanukiCv.Core 純 library, TanukiCv.Controls WinForms} + benchmark/{bench_framework,core_cv_benchmark,TanukiCv.BenchUi}）
 ├── sdk/Bridges/IoBridge/IoBridge.Core/          ← Modbus TCP Client + IModbusTcpClient 介面
 ├── sdk/Bridges/LightBridge/LightBridge.Core/      ← LTS-3DPA24 RS-232 光源
 ├── sdk/Bridges/StorageBridge/StorageBridge.Core/  ← SMB 檔案複製 + 循環儲存
@@ -153,7 +153,7 @@ PICoater_AOI/
 ├── tools/io-manual-control/IoBridge.ManualControl/  ← 手動 DI/DO GUI
 ├── tools/io-automation/IoBridge.Automation/         ← FSM 模擬 GUI
 ├── tests/AniloxRoll.Monitor.{Tests,Integration.Tests,Stress.Tests}/  ← NUnit 三層 + TestRunner.bat/.ps1
-├── benchmark：sdk/AOI/benchmark/core_cv_benchmark/（通用 CV）+ src/native/benchmark/picoater_pipeline_benchmark/（pipeline）  ← 速度測試，跟被測對象住
+├── benchmark：sdk/TanukiCv/benchmark/core_cv_benchmark/（通用 CV）+ src/native/benchmark/picoater_pipeline_benchmark/（pipeline）  ← 速度測試，跟被測對象住
 ├── algtest/                         ← Python 演算法原型 / 可行性研究
 └── deploy/                          ← 現場部署腳本（PowerShell + JSON 參數）
     ├── storage-pc/                  ← 儲存機：固定 IP + SMB 共用 + 防火牆 + Guest 匿名（secedit）
@@ -173,7 +173,7 @@ PICoater_AOI/
 
 ## P/Invoke 架構規則
 
-**所有 P/Invoke 宣告只能在 `AniloxRoll.Monitor/Interop/NativeMethods.cs`**，不得跨層使用 SDK 的 `AOI.SDK.Core.CoreCVWrapper`。
+**所有 P/Invoke 宣告只能在 `AniloxRoll.Monitor/Interop/NativeMethods.cs`**，不得跨層使用 SDK 的 `TanukiCv.Core.CoreCVWrapper`。
 
 ## 關鍵檔案速查
 
@@ -229,7 +229,7 @@ PICoater_AOI/
 | `Services/LightController.cs` | LTS-3DPA24 光源控制器 RS-232 通訊：AutoDetect（先試設定 COM 再掃描）、嚴格 probe（PDF §4.1.4 表-4 驗證：8-byte、cmd/ch echo、XOR checksum）、TurnOn/Off/SetBrightness，跟隨 IO Grab 開關 |
 | `UI/Widgets/GrabImageStitcher.cs` | 多張影像垂直拼接 + MergeHorizontal 全域合圖；LoadCameraImage（internal） |
 | `UI/Widgets/ProportionalScaler.cs` | Form 等比例縮放 |
-| `sdk/AOI/dotnet/AOI.SDK/UI/SmartCanvas.cs` | PictureBox 子類：zoom/pan/edge/ClampPan；自訂白底黑邊十字游標 |
+| `sdk/TanukiCv/dotnet/TanukiCv.Controls/UI/SmartCanvas.cs` | PictureBox 子類（`TanukiCv.Controls` 獨立 WinForms assembly）：zoom/pan/edge/ClampPan；自訂白底黑邊十字游標 |
 
 > 路徑前綴 `src/dotnet/AniloxRoll.Monitor/` 省略以節省空間。
 
