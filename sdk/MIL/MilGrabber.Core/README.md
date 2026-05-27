@@ -101,5 +101,5 @@ double maxHz = cam.GetLineRateMaxHz();   // 回傳 0 = 尚未就緒
 
 ## 範例
 
-完整多相機監控範例：[`sdk/MIL/MilGrabber.Monitor`](../MilGrabber.Monitor)
+完整多相機監控範例：[`sdk/MIL/samples/MilGrabber.Monitor`](../samples/MilGrabber.Monitor)
 （`system-settings.json` 配置 N 台相機跨多張卡，示範佈局 / 選相機 / 參數面板 / 抓取相機資訊一鍵流程）。

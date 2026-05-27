@@ -5,11 +5,11 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightBridge.Core", "LightBridge.Core\LightBridge.Core.csproj", "{C2D3E4F5-3333-4444-5555-666677778888}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{B36A84DF-456D-A817-6EDD-3EC3E7F6E11F}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{B36A84DF-456D-A817-6EDD-3EC3E7F6E11F}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "LightControl", "LightControl", "{BFCF6F25-6650-9AB8-E2BB-016DA38EF93B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightBridge.Control", "examples\LightControl\LightBridge.Control.csproj", "{D4E5F6A7-4444-5555-6666-777788889999}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightBridge.Control", "samples\LightControl\LightBridge.Control.csproj", "{D4E5F6A7-4444-5555-6666-777788889999}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

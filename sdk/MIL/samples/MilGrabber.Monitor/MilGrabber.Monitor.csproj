@@ -104,7 +104,7 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\MilGrabber.Core\MilGrabber.Core.csproj">
+    <ProjectReference Include="..\..\MilGrabber.Core\MilGrabber.Core.csproj">
       <Project>{B2C3D4E5-6F70-4A81-9B2C-3D4E5F607182}</Project>
       <Name>MilGrabber.Core</Name>
     </ProjectReference>

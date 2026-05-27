@@ -5,13 +5,13 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IoBridge.Core", "IoBridge.Core\IoBridge.Core.csproj", "{A1B2C3D4-1111-2222-3333-444455556666}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{B36A84DF-456D-A817-6EDD-3EC3E7F6E11F}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{B36A84DF-456D-A817-6EDD-3EC3E7F6E11F}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ManualControl", "ManualControl", "{A9C7D930-CF3D-4574-D212-D008F05FC79C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IoBridge.ManualControl", "examples\ManualControl\IoBridge.ManualControl.csproj", "{B2C3D4E5-2222-3333-4444-555566667777}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IoBridge.ManualControl", "samples\ManualControl\IoBridge.ManualControl.csproj", "{B2C3D4E5-2222-3333-4444-555566667777}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IoBridge.Automation", "examples\Automation\IoBridge.Automation.csproj", "{C3D4E5F6-3333-4444-5555-666677778888}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IoBridge.Automation", "samples\Automation\IoBridge.Automation.csproj", "{C3D4E5F6-3333-4444-5555-666677778888}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

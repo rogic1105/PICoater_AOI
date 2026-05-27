@@ -7,15 +7,15 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Bridges", "Bridges", "{0E9D
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "IoBridge", "IoBridge", "{5E094FAA-43C7-3D07-BAB3-3260531500CA}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{7B94C0EE-4B9B-4045-533E-0FA97D0ECAF3}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{7B94C0EE-4B9B-4045-533E-0FA97D0ECAF3}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ManualControl", "ManualControl", "{DD8DAB2C-F869-35F8-4D32-33D7CE6F2224}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IoBridge.ManualControl", "Bridges\IoBridge\examples\ManualControl\IoBridge.ManualControl.csproj", "{B2C3D4E5-2222-3333-4444-555566667777}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IoBridge.ManualControl", "Bridges\IoBridge\samples\ManualControl\IoBridge.ManualControl.csproj", "{B2C3D4E5-2222-3333-4444-555566667777}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IoBridge.Automation", "Bridges\IoBridge\examples\Automation\IoBridge.Automation.csproj", "{C3D4E5F6-3333-4444-5555-666677778888}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IoBridge.Automation", "Bridges\IoBridge\samples\Automation\IoBridge.Automation.csproj", "{C3D4E5F6-3333-4444-5555-666677778888}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightBridge.Control", "Bridges\LightBridge\examples\LightControl\LightBridge.Control.csproj", "{D4E5F6A7-4444-5555-6666-777788889999}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightBridge.Control", "Bridges\LightBridge\samples\LightControl\LightBridge.Control.csproj", "{D4E5F6A7-4444-5555-6666-777788889999}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IoBridge.Core", "Bridges\IoBridge\IoBridge.Core\IoBridge.Core.csproj", "{A1B2C3D4-1111-2222-3333-444455556666}"
 EndProject
@@ -23,11 +23,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightBridge.Core", "Bridges
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "StorageBridge", "StorageBridge", "{1E154EDD-EB29-E9C2-826E-B45421868A1E}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{8823635A-11F2-8853-0E13-2F50412DFD9B}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{8823635A-11F2-8853-0E13-2F50412DFD9B}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "StorageControl", "StorageControl", "{33CB4B5D-F133-86A3-2DB5-6876CD873051}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StorageBridge.Control", "Bridges\StorageBridge\examples\StorageControl\StorageBridge.Control.csproj", "{E5F6A7B8-5555-6666-7777-888899990000}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StorageBridge.Control", "Bridges\StorageBridge\samples\StorageControl\StorageBridge.Control.csproj", "{E5F6A7B8-5555-6666-7777-888899990000}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StorageBridge.Core", "Bridges\StorageBridge\StorageBridge.Core\StorageBridge.Core.csproj", "{D3E4F5A6-4444-5555-6666-777788889999}"
 EndProject

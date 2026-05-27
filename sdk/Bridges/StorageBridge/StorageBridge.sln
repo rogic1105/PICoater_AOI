@@ -5,11 +5,11 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StorageBridge.Core", "StorageBridge.Core\StorageBridge.Core.csproj", "{D3E4F5A6-4444-5555-6666-777788889999}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{B36A84DF-456D-A817-6EDD-3EC3E7F6E11F}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{B36A84DF-456D-A817-6EDD-3EC3E7F6E11F}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "StorageControl", "StorageControl", "{8937122C-FBB9-2B73-350B-A15F194017EC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StorageBridge.Control", "examples\StorageControl\StorageBridge.Control.csproj", "{E5F6A7B8-5555-6666-7777-888899990000}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StorageBridge.Control", "samples\StorageControl\StorageBridge.Control.csproj", "{E5F6A7B8-5555-6666-7777-888899990000}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

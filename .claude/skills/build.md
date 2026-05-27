@@ -21,7 +21,7 @@
    ```
    （PowerShell 用 `& "...MSBuild.exe" "...csproj" /p:Configuration=Release /p:Platform=x64 /v:minimal`）
 
-2. **Build sdk 工具**（Release|x64，所有 examples → bin/x64/Release/tools/）：
+2. **Build sdk 工具**（Release|x64，所有 samples → bin/x64/Release/tools/）：
    ```
    "...MSBuild.exe" "D:\...\PICoater_AOI\sdk\Tools.sln" /p:Configuration=Release /p:Platform=x64 /v:minimal
    ```

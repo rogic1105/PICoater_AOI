@@ -5,12 +5,12 @@ MIL 相關全圈在這一區（隔離 Matrox 依賴）。未來換 grabber（不
 ## Contents
 
 - `MilGrabber.Core/` — **MIL 取像/顯示封裝 library**（純 MIL、無 GUI）：`MilCamera`（一台相機）+ `MultiCameraMerger`（多相機即時合圖工頭）+ `MilCameraParams`（參數公式）。詳見其 README。
-- `MilGrabber.Monitor/` — **多相機監控範例 exe**（WinExe，可獨立跑）：用 `MilGrabber.Core` 組裝佈局 / 選相機 / 參數面板 / 抓取相機資訊。
+- `samples/MilGrabber.Monitor/` — **多相機監控範例 exe**（WinExe，可獨立跑）：用 `MilGrabber.Core` 組裝佈局 / 選相機 / 參數面板 / 抓取相機資訊。
 - `docs/` — Matrox 廠商規格書 + CLProtocol 範例（純參考，不參與 build）
 
 ## 定位（sdk 範例庫 + Agent 組裝）
 
-sdk 範例庫的「取像/顯示」一塊。新專案 / Agent 可拿 `MilGrab` 當範例組裝即時監控。`AniloxRoll.Monitor` 的「即時監控」tab 是這個範例的**完整應用版**（多相機 + 全域合圖 + 即時曲線）。
+sdk 範例庫的「取像/顯示」一塊。新專案 / Agent 可拿 `samples/MilGrabber.Monitor` 當範例組裝即時監控。`AniloxRoll.Monitor` 的「即時監控」tab 是這個範例的**完整應用版**（多相機 + 全域合圖 + 即時曲線）。
 
 ## 換 grabber 時
 

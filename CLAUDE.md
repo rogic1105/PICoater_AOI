@@ -12,10 +12,10 @@ PICoater_AOI/
 │   ├── Bridges/          ← 對外設備 / 系統橋接層
 │   │   ├── IoBridge/                         ← ICP DAS ET-7044 IO module（Modbus TCP）
 │   │   │   ├── IoBridge.Core/                ← library（IModbusTcpClient 介面 + ET-7044 實作）
-│   │   │   └── examples/                     ← 可執行範例（ManualControl / Automation GUI）
+│   │   │   └── samples/                      ← 可執行範例（ManualControl / Automation GUI）
 │   │   ├── LightBridge/LightBridge.Core/     ← RS-232 LTS-3DPA24 光源
 │   │   └── StorageBridge/StorageBridge.Core/ ← SMB + 檔案複製 + 循環儲存
-│   ├── MIL/              ← MIL 集中區（MilGrabber.Core MIL 封裝 library〔MilCamera=一台相機〕 + MilGrabber.Monitor 多相機監控範例〔system-settings.json 配置〕 + docs：Matrox 規格書/CLProtocol）；隔離 MIL，換 grabber 整區換
+│   ├── MIL/              ← MIL 集中區（MilGrabber.Core MIL 封裝 library〔MilCamera=一台相機〕 + samples/MilGrabber.Monitor 多相機監控範例〔system-settings.json 配置〕 + docs：Matrox 規格書/CLProtocol）；隔離 MIL，換 grabber 整區換
 │   └── docs/            ← 跨專案工程經驗（repo-style / testing pyramid / FSM）
 ├── tools/                ← 跨元件 / 應用層通用工具（不專屬單一 sdk 元件）
 │   ├── ps/                   ← PowerShell 腳本
@@ -28,14 +28,14 @@ PICoater_AOI/
 │   ├── config/           ← 設定 JSON 範例
 │   ├── dev/              ← 開發者參考（MIL API / 廠商規格書）
 │   └── user-manual/      ← 操作員說明（ui-flow.html / hardware-specs）
-├── assets/               ← 主程式品牌資源（AniloxRoll.ico）；sdk examples 的 icon 跟著元件走（sdk/Bridges/<X>/examples/assets/，self-contained 可帶走）
+├── assets/               ← 主程式品牌資源（AniloxRoll.ico）；sdk samples 的 icon 跟著元件走（sdk/Bridges/<X>/samples/assets/，self-contained 可帶走）
 ├── deploy/               ← 現場部署腳本（PowerShell + JSON）
 └── .claude/skills/       ← Claude Code skills（按修改範圍觸發）
 
-**examples/ vs tools/ 區分：**
-- `sdk/<元件>/examples/` — **只服務單一 sdk 元件**的可執行範例（拿掉該元件就沒用）。展示「怎麼用這個 library」，self-contained 跟元件一起 split。如 IoBridge 的 ManualControl / Automation GUI。
+**samples/ vs tools/ 區分：**
+- `sdk/<元件>/samples/` — **只服務單一 sdk 元件**的可執行範例（拿掉該元件就沒用）。展示「怎麼用這個 library」，self-contained 跟元件一起 split。如 IoBridge 的 ManualControl / Automation GUI。
 - `tools/` — **跨元件 / 應用層**通用工具（log analyzer、部署 helper 等），不專屬單一元件。
-- 判準：「這工具拿掉某個 sdk 元件還有用嗎？」沒用 → examples/；還有用 → tools/。
+- 判準：「這工具拿掉某個 sdk 元件還有用嗎？」沒用 → samples/；還有用 → tools/。
 ```
 
 **核心分層原則（業界 monorepo + Codex/Gemini 共識）：**

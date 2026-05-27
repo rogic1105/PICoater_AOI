@@ -75,7 +75,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AniloxRoll.Monitor.Stress.T
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MilGrabber.Core", "sdk\MIL\MilGrabber.Core\MilGrabber.Core.csproj", "{B2C3D4E5-6F70-4A81-9B2C-3D4E5F607182}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MilGrabber.Monitor", "sdk\MIL\MilGrabber.Monitor\MilGrabber.Monitor.csproj", "{846F1ADB-1879-476B-A963-267CC17DC219}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MilGrabber.Monitor", "sdk\MIL\samples\MilGrabber.Monitor\MilGrabber.Monitor.csproj", "{846F1ADB-1879-476B-A963-267CC17DC219}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
