@@ -633,7 +633,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             try
             {
                 double centerMm = (_mergedSlotStartsMm[i] + _mergedSlotEndsMm[i]) / 2.0;
-                double centerPx = (centerMm - _mergedMinStartMm) / _mergedRefOpsMm;
+                double centerPx = PixelMmMapper.MmToPixel(centerMm, _mergedMinStartMm, _mergedRefOpsMm);
                 double zoomX = 0, panY = 0;
                 MIL.MdispInquire(_mergedDisplay, MIL.M_ZOOM_FACTOR_X, ref zoomX);
                 MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_Y, ref panY);
@@ -715,7 +715,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             }
             else
             {
-                double physicalX = _mergedMinStartMm + x * _mergedRefOpsMm;
+                double physicalX = PixelMmMapper.PixelToMm(x, _mergedMinStartMm, _mergedRefOpsMm);
 
                 var s = _inspectionSettings;
                 double lineRateHz = (_cameraLineRateHz.Length > 0) ? _cameraLineRateHz[0] : 0;
@@ -746,7 +746,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
                     if (zoomX > 0 && _screenMmPerPx > 0 && _mergedRefOpsMm > 0)
                     {
-                        double physicalMag = (zoomX * _screenMmPerPx) / _mergedRefOpsMm;
+                        double physicalMag = PixelMmMapper.PhysicalMagnification(zoomX, _screenMmPerPx, _mergedRefOpsMm);
                         magStr = $"{physicalMag:F2}x";
                     }
                 }
@@ -776,8 +776,8 @@ namespace AniloxRoll.Monitor.UI.Managers
 
                 double pixelLeft  = panX;
                 double pixelRight = panX + _mainDisplayPanel.Width / zoomX;
-                leftMm  = _mergedMinStartMm + pixelLeft  * _mergedRefOpsMm;
-                rightMm = _mergedMinStartMm + pixelRight * _mergedRefOpsMm;
+                leftMm  = PixelMmMapper.PixelToMm(pixelLeft,  _mergedMinStartMm, _mergedRefOpsMm);
+                rightMm = PixelMmMapper.PixelToMm(pixelRight, _mergedMinStartMm, _mergedRefOpsMm);
                 return true;
             }
             catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.TryGetMergedViewRange] {ex.GetType().Name}: {ex.Message}"); return false; }
@@ -835,7 +835,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 {
                     double opsInMm    = opsUmArr[camIdx] / 1000.0;
                     double startPosMm = startMmArr[camIdx];
-                    double physicalX  = startPosMm + x * opsInMm;
+                    double physicalX  = PixelMmMapper.PixelToMm(x, startPosMm, opsInMm);
                     double lineRateHz = (camIdx < _cameraLineRateHz.Length) ? _cameraLineRateHz[camIdx] : 0;
                     double speedMPerMin = s.AniloxRollSpeedMPerMin;
                     double rowPitchMm = (speedMPerMin > 0 && lineRateHz > 0)
@@ -851,8 +851,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                     {
                         double panelW = _mainDisplayPanel.Width;
                         double panelH = _mainDisplayPanel.Height;
-                        double viewLeftMm  = startPosMm + (panOffX) * opsInMm;
-                        double viewRightMm = startPosMm + (panOffX + panelW / zoomX) * opsInMm;
+                        double viewLeftMm  = PixelMmMapper.PixelToMm(panOffX, startPosMm, opsInMm);
+                        double viewRightMm = PixelMmMapper.PixelToMm(panOffX + panelW / zoomX, startPosMm, opsInMm);
                         rangeStr = $"X範圍:{viewLeftMm:F1}~{viewRightMm:F1} mm | ";
 
                         if (rowPitchMm > 0)
@@ -864,7 +864,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
                         if (_screenMmPerPx > 0 && opsInMm > 0)
                         {
-                            double physicalMag = (zoomX * _screenMmPerPx) / opsInMm;
+                            double physicalMag = PixelMmMapper.PhysicalMagnification(zoomX, _screenMmPerPx, opsInMm);
                             magStr = $"{physicalMag:F2}x";
                         }
                     }
@@ -959,7 +959,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (IsGlobalMergeActive && _mergedDisplay != MIL.M_NULL)
             {
                 if (_mergedRefOpsMm <= 0) return;
-                double zoom1x = _mergedRefOpsMm / _screenMmPerPx;
+                double zoom1x = PixelMmMapper.OneToOneZoom(_mergedRefOpsMm, _screenMmPerPx);
 
                 double cx = _mainDisplayPanel.Width / 2.0;
                 double cy = _mainDisplayPanel.Height / 2.0;
@@ -996,7 +996,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (opsInMm <= 0) return;
 
             // physicalMag = zoom * screenMmPerPx / opsInMm = 1  →  zoom = opsInMm / screenMmPerPx
-            double zoom1xCam = opsInMm / _screenMmPerPx;
+            double zoom1xCam = PixelMmMapper.OneToOneZoom(opsInMm, _screenMmPerPx);
 
             var cam = _cameras.Find(c => c.CameraId == _selectedMainCameraId);
             if (cam == null) return;

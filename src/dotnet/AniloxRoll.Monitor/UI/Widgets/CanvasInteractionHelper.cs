@@ -143,8 +143,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
                 double pixelLeft  = (0              - pan.X) / zoom * _imageScaleFactor;
                 double pixelRight = (_canvas.Width  - pan.X) / zoom * _imageScaleFactor;
-                _savedViewLeftMm  = startPosMm + pixelLeft  * opsInMm;
-                _savedViewRightMm = startPosMm + pixelRight * opsInMm;
+                _savedViewLeftMm  = PixelMmMapper.PixelToMm(pixelLeft,  startPosMm, opsInMm);
+                _savedViewRightMm = PixelMmMapper.PixelToMm(pixelRight, startPosMm, opsInMm);
 
                 // Y：以圖片高度中心分率保存（0=頂, 0.5=中, 1=底）
                 double yCenterPx = (_canvas.Height / 2.0 - pan.Y) / zoom;
@@ -204,8 +204,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
                         TryGetEffectiveCoordinates(out double opsInMm, out double startPosMm) &&
                         _canvas.Image != null)
                     {
-                        double leftPx  = (_savedViewLeftMm  - startPosMm) / (opsInMm * _imageScaleFactor);
-                        double rightPx = (_savedViewRightMm - startPosMm) / (opsInMm * _imageScaleFactor);
+                        double leftPx  = PixelMmMapper.MmToPixel(_savedViewLeftMm,  startPosMm, opsInMm * _imageScaleFactor);
+                        double rightPx = PixelMmMapper.MmToPixel(_savedViewRightMm, startPosMm, opsInMm * _imageScaleFactor);
                         double widthPx = rightPx - leftPx;
 
                         if (widthPx > 0)
@@ -266,8 +266,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             double pixelLeft  = (0             - pan.X) / zoom * _imageScaleFactor;
             double pixelRight = (_canvas.Width - pan.X) / zoom * _imageScaleFactor;
 
-            leftMm  = startPosMm + pixelLeft  * opsInMm;
-            rightMm = startPosMm + pixelRight * opsInMm;
+            leftMm  = PixelMmMapper.PixelToMm(pixelLeft,  startPosMm, opsInMm);
+            rightMm = PixelMmMapper.PixelToMm(pixelRight, startPosMm, opsInMm);
             return true;
         }
 
@@ -311,7 +311,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             if (!TryGetEffectiveCoordinates(out double opsInMm, out double startPosMm)) return;
 
             // 若圖像為縮小版（新格式 JPEG），需乘以縮放倍率還原成全解析度座標
-            double physicalX = startPosMm + (info.ImageX * _imageScaleFactor * opsInMm);
+            double physicalX = PixelMmMapper.PixelToMm(info.ImageX * _imageScaleFactor, startPosMm, opsInMm);
             double rowPitchMm = _rowChartHelper?.RowPitchMm ?? 0;
             double physicalY = info.ImageY * _imageScaleFactor * rowPitchMm;
 
@@ -320,8 +320,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 double pixelLeft  = (0             - info.PanOffset.X) / info.Zoom * _imageScaleFactor;
                 double pixelRight = (_canvas.Width - info.PanOffset.X) / info.Zoom * _imageScaleFactor;
 
-                _currentViewLeftMm = startPosMm + (pixelLeft * opsInMm);
-                _currentViewRightMm = startPosMm + (pixelRight * opsInMm);
+                _currentViewLeftMm = PixelMmMapper.PixelToMm(pixelLeft, startPosMm, opsInMm);
+                _currentViewRightMm = PixelMmMapper.PixelToMm(pixelRight, startPosMm, opsInMm);
 
                 if (!_suppressChartSync)
                 {
@@ -358,7 +358,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             string magStr = "-";
             if (info.Zoom > 0 && _screenMmPerPx > 0 && opsInMm > 0)
             {
-                double physicalMag = (info.Zoom * _screenMmPerPx) / (_imageScaleFactor * opsInMm);
+                double physicalMag = PixelMmMapper.PhysicalMagnification(info.Zoom, _screenMmPerPx, _imageScaleFactor * opsInMm);
                 magStr = $"{physicalMag:F2}x";
             }
 
@@ -382,7 +382,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             double opsInMm = opsUmArr[_currentCameraIndex] / 1000.0;
             if (opsInMm <= 0 || _screenMmPerPx <= 0) return;
 
-            float zoom1x = (float)(_imageScaleFactor * opsInMm / _screenMmPerPx);
+            float zoom1x = (float)PixelMmMapper.OneToOneZoom(_imageScaleFactor * opsInMm, _screenMmPerPx);
 
             // 滑鼠下的影像座標
             float oldZoom = _canvas.Zoom;
