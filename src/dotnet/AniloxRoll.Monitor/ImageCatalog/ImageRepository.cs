@@ -5,6 +5,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using AniloxRoll.Monitor.Core.Services;
 
 namespace AniloxRoll.Monitor.Core.Data
 {
@@ -27,7 +28,7 @@ namespace AniloxRoll.Monitor.Core.Data
             _metadataCache.Clear();
             if (!Directory.Exists(rootPath)) return;
 
-            var files = Directory.GetFiles(rootPath, "*_raw.jpg", SearchOption.AllDirectories);
+            var files = Directory.GetFiles(rootPath, CaptureFileNaming.RawJpgGlob, SearchOption.AllDirectories);
 
             _metadataCache = files.AsParallel()
                 .Select(f =>

@@ -142,10 +142,10 @@ namespace AniloxRoll.Monitor.UI.Widgets
             foreach (string path in imagePaths)
             {
                 string basePath = GetCurveBasePath(path);
-                var mean = InspectionEngine.LoadCurveBin(basePath + "_mean_v.bin")
-                        ?? InspectionEngine.LoadCurveBin(basePath + "_mean.bin");
-                var max = InspectionEngine.LoadCurveBin(basePath + "_max_v.bin")
-                        ?? InspectionEngine.LoadCurveBin(basePath + "_max.bin");
+                var mean = InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MeanV)
+                        ?? InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MeanVLegacy);
+                var max = InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MaxV)
+                        ?? InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MaxVLegacy);
                 if (mean != null && max != null && mean.Length > 0)
                 {
                     allMean.Add(mean);
@@ -188,10 +188,10 @@ namespace AniloxRoll.Monitor.UI.Widgets
             foreach (string path in imagePaths)
             {
                 string basePath = GetCurveBasePath(path);
-                var mean = InspectionEngine.LoadCurveBin(basePath + "_mean_h.bin")
-                        ?? InspectionEngine.LoadCurveBin(basePath + "_row_mean.bin");
-                var max = InspectionEngine.LoadCurveBin(basePath + "_max_h.bin")
-                        ?? InspectionEngine.LoadCurveBin(basePath + "_row_max.bin");
+                var mean = InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MeanH)
+                        ?? InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MeanHLegacy);
+                var max = InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MaxH)
+                        ?? InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MaxHLegacy);
                 if (mean != null && max != null && mean.Length > 0)
                 {
                     allMean.Add(mean);
@@ -267,12 +267,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
         /// _raw.jpg → strip suffix；其餘 → Path without extension。
         /// </summary>
         public static string GetCurveBasePath(string imagePath)
-        {
-            if (imagePath.EndsWith("_raw.jpg", StringComparison.OrdinalIgnoreCase))
-                return imagePath.Substring(0, imagePath.Length - "_raw.jpg".Length);
-            return Path.Combine(
-                Path.GetDirectoryName(imagePath),
-                Path.GetFileNameWithoutExtension(imagePath));
-        }
+            => CaptureFileNaming.BaseFromImagePath(imagePath);
     }
 }

@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
+using AniloxRoll.Monitor.Core.Services;
 using TanukiCv.Utils;
 
 namespace AniloxRoll.Monitor.Core.Camera
@@ -34,30 +35,30 @@ namespace AniloxRoll.Monitor.Core.Camera
             Directory.CreateDirectory(ctx.SaveDir);
 
             SaveJpegFromBytes(ctx.RawBytes, ctx.ResizeWidth, ctx.ResizeHeight,
-                Path.Combine(ctx.SaveDir, ctx.BaseName + "_raw.jpg"), ctx.JpgQuality);
+                Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.RawJpg), ctx.JpgQuality);
 
             if (ctx.ProcVBytes != null)
                 SaveJpegFromBytes(ctx.ProcVBytes, ctx.ResizeWidth, ctx.ResizeHeight,
-                    Path.Combine(ctx.SaveDir, ctx.BaseName + "_proc_v.jpg"), ctx.JpgQuality);
+                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.ProcV), ctx.JpgQuality);
 
             if (ctx.ProcHBytes != null)
                 SaveJpegFromBytes(ctx.ProcHBytes, ctx.ResizeWidth, ctx.ResizeHeight,
-                    Path.Combine(ctx.SaveDir, ctx.BaseName + "_proc_h.jpg"), ctx.JpgQuality);
+                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.ProcH), ctx.JpgQuality);
 
             if (ctx.MeanArr != null)
             {
                 SaveCurveBinFromArray(ctx.MeanArr, ctx.ScaleForHeader,
-                    Path.Combine(ctx.SaveDir, ctx.BaseName + "_mean_v.bin"));
+                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.MeanV));
                 SaveCurveBinFromArray(ctx.MaxArr, ctx.ScaleForHeader,
-                    Path.Combine(ctx.SaveDir, ctx.BaseName + "_max_v.bin"));
+                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.MaxV));
             }
 
             if (ctx.RowMeanArr != null)
             {
                 SaveCurveBinFromArray(ctx.RowMeanArr, ctx.ScaleForHeader,
-                    Path.Combine(ctx.SaveDir, ctx.BaseName + "_mean_h.bin"));
+                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.MeanH));
                 SaveCurveBinFromArray(ctx.RowMaxArr, ctx.ScaleForHeader,
-                    Path.Combine(ctx.SaveDir, ctx.BaseName + "_max_h.bin"));
+                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.MaxH));
             }
 
             // 計算本幀存檔總大小（排除 .bmp 原圖）

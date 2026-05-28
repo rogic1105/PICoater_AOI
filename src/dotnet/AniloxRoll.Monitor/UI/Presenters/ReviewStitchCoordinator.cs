@@ -575,10 +575,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
             {
                 if (!images.TryGetValue(i + 1, out string path)) continue;
                 string basePath = CurveMergeHelper.GetCurveBasePath(path);
-                curveMean[i] = InspectionEngine.LoadCurveBin(basePath + "_mean_v.bin")
-                            ?? InspectionEngine.LoadCurveBin(basePath + "_mean.bin");
-                curveMax[i]  = InspectionEngine.LoadCurveBin(basePath + "_max_v.bin")
-                            ?? InspectionEngine.LoadCurveBin(basePath + "_max.bin");
+                curveMean[i] = InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MeanV)
+                            ?? InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MeanVLegacy);
+                curveMax[i]  = InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MaxV)
+                            ?? InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MaxVLegacy);
             }
 
             var reviewCfg = _ctx.InteractionHelper?.ReviewConfig;

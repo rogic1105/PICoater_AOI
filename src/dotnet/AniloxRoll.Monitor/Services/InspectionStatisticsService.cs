@@ -267,8 +267,8 @@ namespace AniloxRoll.Monitor.Core.Services
 
                 for (int camId = 1; camId <= 7; camId++)
                 {
-                    string[] mFiles = Directory.GetFiles(dateDir, $"{prefix}*-{camId}_mean_v.bin");
-                    string[] xFiles = Directory.GetFiles(dateDir, $"{prefix}*-{camId}_max_v.bin");
+                    string[] mFiles = Directory.GetFiles(dateDir, $"{prefix}*-{camId}{CaptureFileNaming.MeanV}");
+                    string[] xFiles = Directory.GetFiles(dateDir, $"{prefix}*-{camId}{CaptureFileNaming.MaxV}");
                     if (mFiles.Length == 0) continue;
 
                     float[] mean = TryLoadBin(mFiles[0]);
@@ -781,7 +781,7 @@ namespace AniloxRoll.Monitor.Core.Services
                         dateStr.Substring(0, 6),
                         dateStr.Substring(0, 8));
 
-                    string rawJpg = Path.Combine(dir, fn + "_raw.jpg");
+                    string rawJpg = Path.Combine(dir, fn + CaptureFileNaming.RawJpg);
                     if (File.Exists(rawJpg)) { paths.Add(rawJpg); continue; }
 
                     string bmp = Path.Combine(dir, fn + ".bmp");

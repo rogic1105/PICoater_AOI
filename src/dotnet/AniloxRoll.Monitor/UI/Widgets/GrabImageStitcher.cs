@@ -197,16 +197,14 @@ namespace AniloxRoll.Monitor.UI.Widgets
         internal static Bitmap LoadCameraImage(string path, int bmpResizeScale,
             Func<string, Bitmap> bmpLoader, bool useProcessed, string ridgeDirection = "v")
         {
-            if (!path.EndsWith("_raw.jpg", StringComparison.OrdinalIgnoreCase))
+            if (!CaptureFileNaming.IsRawJpg(path))
                 return null;
 
             string loadPath = path;
             if (useProcessed)
             {
-                string baseName = path.Substring(0, path.Length - "_raw.jpg".Length);
-                string procSuffix = (ridgeDirection == "h") ? "_proc_h.jpg" : "_proc_v.jpg";
-                string procPath = baseName + procSuffix;
-                if (!File.Exists(procPath)) procPath = baseName + "_proc.jpg";
+                string baseName = CaptureFileNaming.StripRawJpg(path);
+                string procPath = CaptureFileNaming.ResolveProcJpg(baseName, ridgeDirection);
                 if (File.Exists(procPath)) loadPath = procPath;
             }
             byte[] bytes = File.ReadAllBytes(loadPath);
