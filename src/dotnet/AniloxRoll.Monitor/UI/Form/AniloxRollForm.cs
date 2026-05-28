@@ -3565,6 +3565,9 @@ namespace AniloxRoll.Monitor.Forms
 
         private async Task OnStitchModeChangedAsync(bool skipStitchedImageRefresh = false)
         {
+            // 關程式時 fire-and-forget 的切換 async（_ = SwitchStitchMode...）可能在 Form/控制項
+            // disposed 後續跑，碰 disposed 的 chart/canvas → NullReferenceException，故源頭早退。
+            if (IsDisposed || Disposing) return;
             // Live tab：即時全域合圖
             if (_settings.StitchMode == StitchMode.Global && _liveCameraManager?.IsAllocated == true)
                 _liveCameraManager.EnableGlobalMerge(

@@ -243,11 +243,18 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _ctx.ChartOverview.ChartAreas[0].AxisX.ScaleView.Zoomable = true;
         }
 
+        /// <summary>Form 關閉時控制項已 disposed → 這幾條 cleanup 的 UI 操作應 no-op：
+        /// Form 自身會清控制項與資源，且關程式時 fire-and-forget 的 StitchMode 切換 async
+        /// 可能續跑碰到已 disposed 的 chartOverview/canvas → NullReferenceException。</summary>
+        private bool UiDisposed =>
+            (_ctx?.ChartOverview?.IsDisposed ?? true) || (_ctx?.Canvas?.IsDisposed ?? true);
+
         /// <summary>離開合圖模式：清除座標覆寫、停用互動 zoom。
         /// 不重設 ScaleView（ZoomReset）：避免 await 期間 message pump 渲染出全範圍閃爍，
         /// 由後續 UpdateDataAndView 原子性地取代資料與 zoom。</summary>
         public void DisableMergedOverviewSync()
         {
+            if (UiDisposed) return;
             _ctx.InteractionHelper.ClearMergedMode();
             if (_ctx.ChartOverview.ChartAreas.Count > 0)
             {
@@ -258,6 +265,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// <summary>切到 Vertical 時清掉殘留的 Global/Period 合圖 bitmap（保留 _stitchedImages 與曲線）。</summary>
         public void DisposeGlobalMergedImage()
         {
+            if (UiDisposed) return;
             DisableMergedOverviewSync();
             if (_globalMergedImage != null)
             {
@@ -275,6 +283,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         public void ClearStitchedMode()
         {
+            if (UiDisposed) return;
             DisposeGlobalMergedImage();
             if (_stitchedImages == null) return;
             _ctx.Canvas.Image = null;
