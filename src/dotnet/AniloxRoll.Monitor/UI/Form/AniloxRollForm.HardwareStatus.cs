@@ -403,5 +403,110 @@ namespace AniloxRoll.Monitor.Forms
                 lblIoDoMura.Text = (doMuraOn ? "◎ " : "× ") + "DO1\r\nMURA_DET";
             }
         }
+
+        private void TriggerRetentionAndFlagAsync()
+        {
+            Task.Run(() => _retentionService?.RunCleanup());
+            WriteFlagToRemoteAsync();
+        }
+
+        private void WriteFlagToRemoteAsync()
+        {
+            // JSON 有設定就用，否則從 RemotePath 推算（同 IP，固定 AniloxConfig share）
+            string configPath = _settings?.RemoteConfigPath ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(configPath))
+                configPath = DeriveFlagSharePath(_settings?.RemotePath);
+            if (string.IsNullOrWhiteSpace(configPath)) return;
+
+            Task.Run(() =>
+            {
+                try
+                {
+                    string flagPath = Path.Combine(configPath, "cleanup-request.flag");
+                    File.WriteAllText(flagPath, DateTime.UtcNow.ToString("O"),
+                        System.Text.Encoding.UTF8);
+                }
+                catch (Exception ex)
+                {
+                    Trace.TraceWarning($"[RetentionFlag] 寫旗標失敗: {ex.Message}");
+                }
+            });
+        }
+
+        private void ApplyStorageModeUi()
+        {
+            if (_appMode?.Role != MachineRole.Storage) return;
+
+            tabMain.TabPages.Remove(tabPageLiveView);
+            tabControlRight.TabPages.Remove(tabPageCamera);
+
+            // PropertyGrid：隱藏 IO / 相機 / 光源三個大類
+            TypeDescriptor.AddProvider(
+                new StorageModeSettingsFilter(TypeDescriptor.GetProvider(_settings)), _settings);
+            propertyGridSettings.Refresh();
+
+            lblCamCount.Visible      = false;
+            lblStorageConn.Visible   = false;
+
+            lblIoState.Visible    = false;
+            lblIoConn.Visible     = false;
+            lblLightConn.Visible   = false;
+            lblIoDiAlive.Visible   = false;
+            lblIoDiStart.Visible   = false;
+            lblIoDoPcAlive.Visible = false;
+            lblIoDoMura.Visible    = false;
+            lblIoDoPcBusy.Visible  = false;
+        }
+
+        // \\server\share → \\server\AniloxConfig（cleanup-request.flag 目標）
+        private static string DeriveFlagSharePath(string remotePath)
+        {
+            if (string.IsNullOrWhiteSpace(remotePath)) return "";
+            var parts = remotePath.TrimStart('\\').Split('\\');
+            return parts.Length < 1 || string.IsNullOrEmpty(parts[0])
+                ? "" : $@"\\{parts[0]}\AniloxConfig";
+        }
+
+        private string GetStorageRetentionRoot()
+        {
+            if (_appMode?.Role == MachineRole.Storage &&
+                !string.IsNullOrWhiteSpace(_appMode.StorageFolderPath))
+                return _appMode.StorageFolderPath;
+            return _settings?.CaptureRootPath ?? string.Empty;
+        }
+
+        private void lblIoDoMura_Click(object sender, EventArgs e)
+        {
+            _isMuraDetectPaused = !_isMuraDetectPaused;
+            UpdateMuraLed(false);
+        }
+
+        private void lblIoConn_Click(object sender, EventArgs e)
+        {
+            if (_ioGrabController == null) return;
+            _isIoSuspended = !_isIoSuspended;
+            if (_isIoSuspended)
+            {
+                lblIoConn.BackColor = IecYellow;
+                lblIoConn.ForeColor = Color.Black;
+                lblIoConn.Text = "● IO 暫停 ⏸";
+                btnCameraGrab.Enabled = true;
+                UpdateGrabButton(_liveCameraManager?.IsLiveGrabbing ?? false);
+                btnCameraGrab.BackColor = SystemColors.Control;
+                btnCameraGrab.ForeColor = SystemColors.ControlText;
+                // 暫停 = 等同 IO 離線：重置狀態燈和所有 IO 燈號
+                lblIoState.Text = "〔已關閉〕";
+                lblIoState.BackColor = IecGray;
+                SetIoLed(lblIoDiAlive,   false);
+                SetIoLed(lblIoDiStart,   false);
+                SetIoLed(lblIoDoPcAlive, false);
+                SetIoLed(lblIoDoPcBusy,  false);
+                UpdateMuraLed(false);
+            }
+            else
+            {
+                UpdateIoConnectionUi(_ioGrabController.IsConnected);
+            }
+        }
     }
 }

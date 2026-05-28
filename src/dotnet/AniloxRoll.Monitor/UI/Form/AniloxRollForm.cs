@@ -112,31 +112,6 @@ namespace AniloxRoll.Monitor.Forms
         private readonly List<Image> _thumbnailCache = new List<Image>();
         private InspectionSettings _settings;
         private AniloxRoll.Monitor.Settings.Services.SettingsHub _settingsHub;
-        private bool IsStandardBgSubEnabled =>
-            _settings?.Recipe?.Algorithm == BackgroundAlgorithm.StandardBgSub;
-
-        private bool IsLightReadyForBg =>
-            !(_settings?.LightEnabled == true) || (_lightController != null && _lightController.IsConnected);
-
-        private bool _autoStartGrabAfterBg;
-
-        private bool IsBgBinReady()
-        {
-            if (!IsStandardBgSubEnabled) return true;
-            string bgDir = _settings.Storage.BackgroundPath;
-            if (_liveCameraManager?.IsAllocated == true)
-            {
-                foreach (var cam in _liveCameraManager.Cameras)
-                {
-                    if (!cam.IsConnected) continue;
-                    if (cam.FrameWidth <= 0) continue;
-                    string binPath = Path.Combine(bgDir, CaptureFileNaming.BgBin(cam.FrameWidth, cam.CameraId));
-                    if (!File.Exists(binPath)) return false;
-                }
-                return true;
-            }
-            return Directory.Exists(bgDir) && Directory.GetFiles(bgDir, CaptureFileNaming.BgGlob).Length > 0;
-        }
 
         /// <summary>"v" = vertical ridge（預設），"h" = horizontal ridge。控制 Live 顯示方向。</summary>
         private string _liveDisplayDirection = "v";
@@ -880,76 +855,6 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        private void TriggerRetentionAndFlagAsync()
-        {
-            Task.Run(() => _retentionService?.RunCleanup());
-            WriteFlagToRemoteAsync();
-        }
-
-        private void WriteFlagToRemoteAsync()
-        {
-            // JSON 有設定就用，否則從 RemotePath 推算（同 IP，固定 AniloxConfig share）
-            string configPath = _settings?.RemoteConfigPath ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(configPath))
-                configPath = DeriveFlagSharePath(_settings?.RemotePath);
-            if (string.IsNullOrWhiteSpace(configPath)) return;
-
-            Task.Run(() =>
-            {
-                try
-                {
-                    string flagPath = Path.Combine(configPath, "cleanup-request.flag");
-                    File.WriteAllText(flagPath, DateTime.UtcNow.ToString("O"),
-                        System.Text.Encoding.UTF8);
-                }
-                catch (Exception ex)
-                {
-                    Trace.TraceWarning($"[RetentionFlag] 寫旗標失敗: {ex.Message}");
-                }
-            });
-        }
-
-        private void ApplyStorageModeUi()
-        {
-            if (_appMode?.Role != MachineRole.Storage) return;
-
-            tabMain.TabPages.Remove(tabPageLiveView);
-            tabControlRight.TabPages.Remove(tabPageCamera);
-
-            // PropertyGrid：隱藏 IO / 相機 / 光源三個大類
-            TypeDescriptor.AddProvider(
-                new StorageModeSettingsFilter(TypeDescriptor.GetProvider(_settings)), _settings);
-            propertyGridSettings.Refresh();
-
-            lblCamCount.Visible      = false;
-            lblStorageConn.Visible   = false;
-
-            lblIoState.Visible    = false;
-            lblIoConn.Visible     = false;
-            lblLightConn.Visible   = false;
-            lblIoDiAlive.Visible   = false;
-            lblIoDiStart.Visible   = false;
-            lblIoDoPcAlive.Visible = false;
-            lblIoDoMura.Visible    = false;
-            lblIoDoPcBusy.Visible  = false;
-        }
-
-        // \\server\share → \\server\AniloxConfig（cleanup-request.flag 目標）
-        private static string DeriveFlagSharePath(string remotePath)
-        {
-            if (string.IsNullOrWhiteSpace(remotePath)) return "";
-            var parts = remotePath.TrimStart('\\').Split('\\');
-            return parts.Length < 1 || string.IsNullOrEmpty(parts[0])
-                ? "" : $@"\\{parts[0]}\AniloxConfig";
-        }
-
-        private string GetStorageRetentionRoot()
-        {
-            if (_appMode?.Role == MachineRole.Storage &&
-                !string.IsNullOrWhiteSpace(_appMode.StorageFolderPath))
-                return _appMode.StorageFolderPath;
-            return _settings?.CaptureRootPath ?? string.Empty;
-        }
 
         /// <summary>
         /// Live 曲線閾值判斷（callback 執行緒呼叫）。
@@ -1267,39 +1172,6 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        private void lblIoDoMura_Click(object sender, EventArgs e)
-        {
-            _isMuraDetectPaused = !_isMuraDetectPaused;
-            UpdateMuraLed(false);
-        }
-
-        private void lblIoConn_Click(object sender, EventArgs e)
-        {
-            if (_ioGrabController == null) return;
-            _isIoSuspended = !_isIoSuspended;
-            if (_isIoSuspended)
-            {
-                lblIoConn.BackColor = IecYellow;
-                lblIoConn.ForeColor = Color.Black;
-                lblIoConn.Text = "● IO 暫停 ⏸";
-                btnCameraGrab.Enabled = true;
-                UpdateGrabButton(_liveCameraManager?.IsLiveGrabbing ?? false);
-                btnCameraGrab.BackColor = SystemColors.Control;
-                btnCameraGrab.ForeColor = SystemColors.ControlText;
-                // 暫停 = 等同 IO 離線：重置狀態燈和所有 IO 燈號
-                lblIoState.Text = "〔已關閉〕";
-                lblIoState.BackColor = IecGray;
-                SetIoLed(lblIoDiAlive,   false);
-                SetIoLed(lblIoDiStart,   false);
-                SetIoLed(lblIoDoPcAlive, false);
-                SetIoLed(lblIoDoPcBusy,  false);
-                UpdateMuraLed(false);
-            }
-            else
-            {
-                UpdateIoConnectionUi(_ioGrabController.IsConnected);
-            }
-        }
 
         /// <summary>H3：debounce 統計重算 — 300ms 內合併多次 PropertyGrid 變更。</summary>
         private int _statsRefreshFailCount;

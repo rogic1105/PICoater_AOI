@@ -543,5 +543,31 @@ namespace AniloxRoll.Monitor.Forms
                 _liveCameraManager.RefreshMainDisplay();
             }
         }
+
+        private bool IsStandardBgSubEnabled =>
+            _settings?.Recipe?.Algorithm == BackgroundAlgorithm.StandardBgSub;
+
+        private bool IsLightReadyForBg =>
+            !(_settings?.LightEnabled == true) || (_lightController != null && _lightController.IsConnected);
+
+        private bool _autoStartGrabAfterBg;
+
+        private bool IsBgBinReady()
+        {
+            if (!IsStandardBgSubEnabled) return true;
+            string bgDir = _settings.Storage.BackgroundPath;
+            if (_liveCameraManager?.IsAllocated == true)
+            {
+                foreach (var cam in _liveCameraManager.Cameras)
+                {
+                    if (!cam.IsConnected) continue;
+                    if (cam.FrameWidth <= 0) continue;
+                    string binPath = Path.Combine(bgDir, CaptureFileNaming.BgBin(cam.FrameWidth, cam.CameraId));
+                    if (!File.Exists(binPath)) return false;
+                }
+                return true;
+            }
+            return Directory.Exists(bgDir) && Directory.GetFiles(bgDir, CaptureFileNaming.BgGlob).Length > 0;
+        }
     }
 }

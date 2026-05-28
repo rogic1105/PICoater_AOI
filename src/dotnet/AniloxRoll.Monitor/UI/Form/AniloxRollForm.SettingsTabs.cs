@@ -636,5 +636,54 @@ namespace AniloxRoll.Monitor.Forms
             _liveOverviewTimer.Tick += LiveOverviewTimer_Tick;
             _liveOverviewTimer.Start();
         }
+
+        // ── TrackBar 滾輪：每格僅移動 1 ──────────────────────────────────
+        private void RegisterWheelInterceptors(TrackBar[] bars)
+        {
+            foreach (var bar in bars)
+                _wheelInterceptors.Add(new TrackBarWheelInterceptor(bar));
+        }
+
+
+        private void SyncCameraParamsFromHardware()
+        {
+            if (_expBars == null || _lrBars == null) return;
+
+            var cameras = _liveCameraManager.Cameras;
+            var acq     = _settings?.Acquisition;
+            if (acq == null) return;
+
+            for (int idx = 0; idx < CameraCount; idx++)
+            {
+                try
+                {
+                    var cam = FindCameraById(idx + 1);
+                    if (cam == null) continue;
+                    if (!cam.IsHwParamsStable) continue;
+
+                    SyncHardwareParam(_expBars[idx], _expNums[idx],
+                        cam.GetMeasuredExposureUs(), v => acq.CameraExposureTimeUs[idx] = v);
+
+                    SyncHardwareParam(_lrBars[idx], _lrNums[idx],
+                        cam.GetLineRateHz(), v => acq.CameraLineRateHz[idx] = v);
+                }
+                catch (Exception ex) { Debug.WriteLine($"[SyncHw] CAM{idx + 1}: {ex.Message}"); }
+            }
+        }
+
+        // ── Helper Methods ──────────────────────────────────────────
+
+        private void SyncHardwareParam(TrackBar bar, NumericUpDown nud, double hwValue, Action<int> saveSetting)
+        {
+            if (_dragging.Contains(bar) || hwValue <= 0) return;
+            int clamped = Math.Max(bar.Minimum, Math.Min(bar.Maximum, (int)hwValue));
+            double diff = Math.Abs(clamped - bar.Value) / (double)Math.Max(1, bar.Value);
+            if (diff <= 0.05) return;
+            _syncingFromHw = true;
+            bar.Value = clamped;
+            nud.Value = clamped;
+            saveSetting(clamped);
+            _syncingFromHw = false;
+        }
     }
 }
