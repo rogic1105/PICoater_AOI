@@ -257,10 +257,7 @@ namespace AniloxRoll.Monitor.Core.Services
 
             foreach (var info in grabIds)
             {
-                string dateDir = Path.Combine(rootPath,
-                    info.Earliest.ToString("yyyy"),
-                    info.Earliest.ToString("yyyyMM"),
-                    info.Earliest.ToString("yyyyMMdd"));
+                string dateDir = CaptureStoragePaths.DateImageDir(rootPath, info.Earliest);
                 if (!Directory.Exists(dateDir)) continue;
 
                 string prefix = info.Earliest.ToString("yyyyMMdd_HHmmss");
@@ -728,8 +725,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 var dateCsvs = new List<string>();
                 for (DateTime d = hintFrom.Date; d <= hintTo.Date; d = d.AddDays(1))
                 {
-                    string p = Path.Combine(captureRootPath,
-                        d.ToString("yyyy"), d.ToString("yyyyMM"), d.ToString("yyyyMMdd") + ".csv");
+                    string p = CaptureStoragePaths.DailyCsv(captureRootPath, d);
                     if (File.Exists(p)) dateCsvs.Add(p);
                 }
                 csvPaths = dateCsvs;
@@ -775,11 +771,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 foreach (string fn in sortedNames)
                 {
                     if (fn.Length < 8) continue;
-                    string dateStr = fn.Substring(0, 8);
-                    string dir = Path.Combine(captureRootPath,
-                        dateStr.Substring(0, 4),
-                        dateStr.Substring(0, 6),
-                        dateStr.Substring(0, 8));
+                    string dir = CaptureStoragePaths.DateImageDir(captureRootPath, fn);
 
                     string rawJpg = Path.Combine(dir, fn + CaptureFileNaming.RawJpg);
                     if (File.Exists(rawJpg)) { paths.Add(rawJpg); continue; }
@@ -810,8 +802,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 var dateCsvs = new List<string>();
                 for (DateTime d = hintFrom.Date; d <= hintTo.Date; d = d.AddDays(1))
                 {
-                    string p = Path.Combine(captureRootPath,
-                        d.ToString("yyyy"), d.ToString("yyyyMM"), d.ToString("yyyyMMdd") + ".csv");
+                    string p = CaptureStoragePaths.DailyCsv(captureRootPath, d);
                     if (File.Exists(p)) dateCsvs.Add(p);
                 }
                 csvPaths = dateCsvs;
@@ -862,10 +853,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 return null;
 
             // CSV 路徑：{root}/{yyyy}/{yyyyMM}/{yyyyMMdd}.csv
-            string ymd = date.ToString("yyyyMMdd");
-            string ym  = date.ToString("yyyyMM");
-            string y   = date.ToString("yyyy");
-            string csvPath = Path.Combine(captureRootPath, y, ym, ymd + ".csv");
+            string csvPath = CaptureStoragePaths.DailyCsv(captureRootPath, date);
 
             return LoadConfigFromCsv(csvPath);
         }

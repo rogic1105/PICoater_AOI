@@ -130,12 +130,12 @@ namespace AniloxRoll.Monitor.Forms
                 {
                     if (!cam.IsConnected) continue;
                     if (cam.FrameWidth <= 0) continue;
-                    string binPath = Path.Combine(bgDir, $"bg_{cam.FrameWidth}_{cam.CameraId}.bin");
+                    string binPath = Path.Combine(bgDir, CaptureFileNaming.BgBin(cam.FrameWidth, cam.CameraId));
                     if (!File.Exists(binPath)) return false;
                 }
                 return true;
             }
-            return Directory.Exists(bgDir) && Directory.GetFiles(bgDir, "bg_*.bin").Length > 0;
+            return Directory.Exists(bgDir) && Directory.GetFiles(bgDir, CaptureFileNaming.BgGlob).Length > 0;
         }
 
         /// <summary>"v" = vertical ridge（預設），"h" = horizontal ridge。控制 Live 顯示方向。</summary>
@@ -1614,7 +1614,7 @@ namespace AniloxRoll.Monitor.Forms
                     for (int c = 0; c < cam.FrameWidth; c++)
                         avgColMean[c] = (float)(accum[i][c] * invN);
 
-                    string binPath = Path.Combine(bgDir, $"bg_{cam.FrameWidth}_{cam.CameraId}.bin");
+                    string binPath = Path.Combine(bgDir, CaptureFileNaming.BgBin(cam.FrameWidth, cam.CameraId));
                     SaveBackgroundBin(avgColMean, binPath, _settings.LightBrightness, (float)cam.CameraExposureTimeUs); // LightBrightness = light controller level (0-255)
                 }
 
@@ -1690,7 +1690,7 @@ namespace AniloxRoll.Monitor.Forms
             {
                 if (cam.FrameWidth <= 0) continue;
 
-                string binPath = Path.Combine(bgDir, $"bg_{cam.FrameWidth}_{cam.CameraId}.bin");
+                string binPath = Path.Combine(bgDir, CaptureFileNaming.BgBin(cam.FrameWidth, cam.CameraId));
                 float[] colMean = InspectionEngine.LoadCurveBin(binPath);
                 if (colMean != null && colMean.Length == cam.FrameWidth)
                 {
@@ -1715,7 +1715,7 @@ namespace AniloxRoll.Monitor.Forms
         private void UpdateViewBackgroundButtonText()
         {
             string bgDir = _settings.Storage.BackgroundPath;
-            string[] bins = Directory.Exists(bgDir) ? Directory.GetFiles(bgDir, "bg_*.bin") : Array.Empty<string>();
+            string[] bins = Directory.Exists(bgDir) ? Directory.GetFiles(bgDir, CaptureFileNaming.BgGlob) : Array.Empty<string>();
             if (bins.Length == 0) { lblBgBinInfo.Text = ""; return; }
             var meta = InspectionEngine.ReadBgBinMeta(bins[0]);
             lblBgBinInfo.Text = meta.HasValue
@@ -1808,7 +1808,7 @@ namespace AniloxRoll.Monitor.Forms
             for (int i = 0; i < livePanels.Length; i++)
             {
                 int camId = i + 1;
-                string[] matches = Directory.GetFiles(bgDir, $"bg_*_{camId}.bin");
+                string[] matches = Directory.GetFiles(bgDir, CaptureFileNaming.BgGlobForCam(camId));
                 if (matches.Length == 0) continue;
 
                 float[] colMean = InspectionEngine.LoadCurveBin(matches[0]);

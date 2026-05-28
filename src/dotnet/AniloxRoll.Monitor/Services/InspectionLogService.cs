@@ -84,13 +84,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 string root = _getCaptureRoot();
                 if (string.IsNullOrWhiteSpace(root)) return;
 
-                string dir = Path.Combine(
-                    root,
-                    timestamp.Year.ToString(CultureInfo.InvariantCulture),
-                    timestamp.ToString("yyyyMM"));
-                Directory.CreateDirectory(dir);
-
-                string csvPath = Path.Combine(dir, $"{timestamp:yyyyMMdd}.csv");
+                string csvPath = CaptureStoragePaths.DailyCsv(root, timestamp);
+                Directory.CreateDirectory(Path.GetDirectoryName(csvPath));
 
                 int maxExceed  = maxPeak  > errMax  ? 1 : 0;
                 int meanExceed = meanPeak > errMean ? 1 : 0;
@@ -150,12 +145,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 if (string.IsNullOrWhiteSpace(root)) return;
 
                 DateTime now = DateTime.Now;
-                string dir = Path.Combine(root,
-                    now.Year.ToString(CultureInfo.InvariantCulture),
-                    now.ToString("yyyyMM"));
-                Directory.CreateDirectory(dir);
-
-                string csvPath = Path.Combine(dir, $"{now:yyyyMMdd}.csv");
+                string csvPath = CaptureStoragePaths.DailyCsv(root, now);
+                Directory.CreateDirectory(Path.GetDirectoryName(csvPath));
 
                 lock (_csvLock)
                 {

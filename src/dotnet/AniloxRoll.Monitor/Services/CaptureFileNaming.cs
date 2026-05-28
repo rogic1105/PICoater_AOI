@@ -35,6 +35,14 @@ namespace AniloxRoll.Monitor.Core.Services
         // ── glob ─────────────────────────────────────────────────────────
         public const string RawJpgGlob = "*" + RawJpg;
 
+        // ── 背景 .bin（每相機一張，依影像寬度區分）──────────────────────
+        /// <summary>背景檔名：bg_{width}_{camId}.bin</summary>
+        public static string BgBin(int width, int camId) => $"bg_{width}_{camId}.bin";
+        /// <summary>背景檔 glob（全部）：bg_*.bin</summary>
+        public const string BgGlob = "bg_*.bin";
+        /// <summary>背景檔 glob（指定相機，不分寬度）：bg_*_{camId}.bin</summary>
+        public static string BgGlobForCam(int camId) => $"bg_*_{camId}.bin";
+
         // ── _raw.jpg 後綴判斷 / 去除 ─────────────────────────────────────
         public static bool IsRawJpg(string path) =>
             path != null && path.EndsWith(RawJpg, StringComparison.OrdinalIgnoreCase);

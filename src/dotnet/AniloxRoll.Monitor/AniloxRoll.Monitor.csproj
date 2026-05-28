@@ -116,6 +116,7 @@
     <Compile Include="Services\AoiService.cs" />
     <Compile Include="Services\PixelMmMapper.cs" />
     <Compile Include="Services\CaptureFileNaming.cs" />
+    <Compile Include="Services\CaptureStoragePaths.cs" />
     <Compile Include="Services\UiActionLogger.cs" />
     <Compile Include="Services\CsvConfigSnapshot.cs" />
     <Compile Include="Services\InspectionLogService.cs" />
