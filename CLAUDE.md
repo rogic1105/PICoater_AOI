@@ -184,7 +184,16 @@ PICoater_AOI/
 | `ImageProcessing/InspectionEngine.ImageProcessing.cs` | 縮圖/全解析度影像處理 |
 | `ImageProcessing/InspectionEngineConfig.cs` | MaxWidth=16384, MaxHeight=10000, DefaultSaveResizeScale=5 |
 | `ImageProcessing/BatchInspectionService.cs` | Parallel.For 批次縮圖 |
-| `UI/Form/AniloxRollForm.cs` | Form 邏輯：事件、InitializeSystem；內含 helpers: `BindBidirectionalSync`、`SetChartYRange`、`FindCameraById`、`CheckLiveMura`（Live 即時閾值→DO_MURA_DETECTED） |
+| `UI/Form/AniloxRollForm.cs` | **主檔（核心 bootstrap，~940 行）**：欄位宣告、ctor、`OnFormClosing`、`InitializeSystem`、`InitServiceLayer`/`InitUiLayer`/`InitCameraLayer`、`OnSettingChanged`（SSoT dispatcher，勿拆）、PG events、`UpdateCamCountLabel`。原 3969 行 God Object 已按職責拆 9 個 partial（↓ 同 `partial class AniloxRollForm`） |
+| `UI/Form/AniloxRollForm.Live.cs` | Live 監控：grab 流程（`btnCameraGrab_Click`）、即時曲線（`OnLiveCurveData`/`OnLiveRowCurveData`）、Mura 判定（`CheckLiveMura`）、強化/合圖切換（`ApplyMuraEnhance`/`SwitchStitchModeWithEnhanceSequence`） |
+| `UI/Form/AniloxRollForm.Review.cs` | 回顧：資料夾/時段載入（`btnSelectFolder_Click`/period 導航/`ApplyReviewEnhance`/`LoadImagesWithReviewConfig`） |
+| `UI/Form/AniloxRollForm.Background.cs` | 背景取得/載入/預覽 + 背景判斷（`IsBgBinReady`/`IsStandardBgSubEnabled`） |
+| `UI/Form/AniloxRollForm.SettingsTabs.cs` | 右側設定面板 tab 建構（`SetupCameraTab`/`SetupSystemTab`/`Bind*Sync`）+ 相機參數硬體同步（`SyncCameraParamsFromHardware`） |
+| `UI/Form/AniloxRollForm.HardwareStatus.cs` | IO/光源/儲存狀態：init（`InitIoController`/`InitLightController`）、連線標籤、LED、儲存管理（`TriggerRetentionAndFlagAsync`） |
+| `UI/Form/AniloxRollForm.DirectionStitch.cs` | V/H 方向/ridge/合圖模式切換（`SwitchRidgeDirection`/`OnStitchModeChangedAsync`） |
+| `UI/Form/AniloxRollForm.Data.cs` | 檢測數據 Tab（`SetupDataTab`/grabId 選擇） |
+| `UI/Form/AniloxRollForm.Telemetry.cs` | Telemetry/資源監控 timer（`TelemetryTimer_Tick`/`UpdateResourceMonitor`）。注意：timer new+Start 仍在 SettingsTabs.SetupSystemTab（未來可收回此檔，需測時序） |
+| `UI/Form/AniloxRollForm.Helpers.cs` | PG refresh（`RefreshGridItem`）/Review 座標（`ViewRangeProvider`）/通用（`FindCameraById`/`IsCanvasFitToScreen`） |
 | `UI/Form/AniloxRollForm.Designer.cs` | Form 控制項佈局（VS Designer） |
 | `UI/Widgets/FormInteractionHelper.cs` | UI 互動、gallery 選擇、計時；ReviewConfig 代理 |
 | `UI/Widgets/CanvasInteractionHelper.cs` | Canvas zoom/pan 事件、mm 座標換算；ReviewConfig → GetEffectiveOps/Pos |
