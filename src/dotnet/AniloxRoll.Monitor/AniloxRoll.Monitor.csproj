@@ -153,6 +153,9 @@
     <Compile Include="UI\Form\AniloxRollForm.Helpers.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="UI\Form\AniloxRollForm.HardwareStatus.cs">
+      <DependentUpon>AniloxRollForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="UI\Presenters\AniloxRollPresenter.cs" />
     <Compile Include="UI\Presenters\LiveTelemetryPresenter.cs" />
     <Compile Include="UI\Widgets\CanvasInteractionHelper.cs" />
