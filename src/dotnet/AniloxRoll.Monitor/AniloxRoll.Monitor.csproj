@@ -141,6 +141,9 @@
     <Compile Include="UI\Form\AniloxRollForm.DirectionStitch.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="UI\Form\AniloxRollForm.Data.cs">
+      <DependentUpon>AniloxRollForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="UI\Presenters\AniloxRollPresenter.cs" />
     <Compile Include="UI\Presenters\LiveTelemetryPresenter.cs" />
     <Compile Include="UI\Widgets\CanvasInteractionHelper.cs" />
