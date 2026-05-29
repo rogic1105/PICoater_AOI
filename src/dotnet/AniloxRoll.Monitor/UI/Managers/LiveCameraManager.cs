@@ -334,6 +334,13 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.EnableImageProcessing = enable;
         }
 
+        /// <summary>即時顯示方向（"v"/"h"）套到所有相機，控制 grab hook 顯示 V 或 H ridge。</summary>
+        public void SetLiveDisplayDirection(string dir)
+        {
+            foreach (var cam in _cameras)
+                cam.LiveDisplayDirection = dir;
+        }
+
         public void SetScreenMmPerPixel(double mmPerPx) => _screenMmPerPx = mmPerPx;
 
         public void SetCaptureSettings(InspectionSettings settings)

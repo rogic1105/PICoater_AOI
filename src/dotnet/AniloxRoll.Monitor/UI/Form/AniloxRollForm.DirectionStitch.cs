@@ -49,6 +49,7 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
             _liveDisplayDirection = dir;
+            _liveCameraManager?.SetLiveDisplayDirection(dir);
             UpdateLiveDirectionVisual();
         }
 
