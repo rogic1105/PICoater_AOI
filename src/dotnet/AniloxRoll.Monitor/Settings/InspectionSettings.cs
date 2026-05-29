@@ -152,9 +152,9 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public bool EnableMuraEnhance   { get => ImageView.EnableMuraEnhance;   set => ImageView.EnableMuraEnhance   = value; }
         [Browsable(false)] public bool EnableReviewEnhance { get => ImageView.EnableReviewEnhance; set => ImageView.EnableReviewEnhance = value; }
         [Browsable(false)] public ChartScaleMode ChartScaleMode { get => Chart.ScaleMode; set => Chart.ScaleMode = value; }
-        [Browsable(false)] public int ChartYearlyYMax  { get => Chart.YearlyYMax;  set => Chart.YearlyYMax  = value; }
-        [Browsable(false)] public int ChartMonthlyYMax { get => Chart.MonthlyYMax; set => Chart.MonthlyYMax = value; }
-        [Browsable(false)] public int ChartDailyYMax   { get => Chart.DailyYMax;   set => Chart.DailyYMax   = value; }
+        [Browsable(false)] public int ChartDataYieldYearlyYMax  { get => Chart.YearlyYMax;  set => Chart.YearlyYMax  = value; }
+        [Browsable(false)] public int ChartDataYieldMonthlyYMax { get => Chart.MonthlyYMax; set => Chart.MonthlyYMax = value; }
+        [Browsable(false)] public int ChartDataYieldDailyYMax   { get => Chart.DailyYMax;   set => Chart.DailyYMax   = value; }
         [Browsable(false)] public StitchMode StitchMode { get => ImageView.StitchMode; set => ImageView.StitchMode = value; }
         [Browsable(false)] public float ErrorValueMeanV { get => Recipe.ErrorValueMeanV; set => Recipe.ErrorValueMeanV = value; }
         [Browsable(false)] public float ErrorValueMaxV  { get => Recipe.ErrorValueMaxV;  set => Recipe.ErrorValueMaxV  = value; }

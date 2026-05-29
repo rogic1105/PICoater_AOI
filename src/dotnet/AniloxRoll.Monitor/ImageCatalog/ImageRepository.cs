@@ -64,7 +64,7 @@ namespace AniloxRoll.Monitor.Core.Data
             };
         }
 
-        // ── 簡化 ComboBox 介面（cbDate + cbTime）──────────────────────────
+        // ── 簡化 ComboBox 介面（cbReviewDate + cbReviewTime）──────────────────────────
 
         /// <summary>回傳所有不重複日期（YYYY-MM-DD），已排序。</summary>
         public List<string> GetDates() =>

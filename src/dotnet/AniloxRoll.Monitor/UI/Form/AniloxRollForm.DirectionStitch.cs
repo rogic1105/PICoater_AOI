@@ -30,7 +30,7 @@ namespace AniloxRoll.Monitor.Forms
     public partial class AniloxRollForm
     {
         /// <summary>
-        /// 切換 Live 顯示的 V/H 處理圖方向，點選 muraChartVerticalLive/HorizontalLive 觸發。
+        /// 切換 Live 顯示的 V/H 處理圖方向，點選 chartLiveVertical/HorizontalLive 觸發。
         /// 三態邏輯同 Review tab 的 SwitchRidgeDirection：
         /// 未勾選 → 自動勾選 + 設方向；同方向 → 取消勾選；不同方向 → 切換。
         /// </summary>
@@ -65,30 +65,30 @@ namespace AniloxRoll.Monitor.Forms
             bool vGlobActive =  isGlobal && dir == "v";
             bool hActive     = dir == "h";
 
-            muraChartVerticalLive.BackColor           = !isGlobal ? highlight : normal;
-            muraChartVerticalLive.BorderlineColor     = vVertActive ? orangeBorder : noColor;
-            muraChartVerticalLive.BorderlineWidth     = vVertActive ? 2 : 1;
-            muraChartVerticalLive.BorderlineDashStyle = vVertActive
+            chartLiveVertical.BackColor           = !isGlobal ? highlight : normal;
+            chartLiveVertical.BorderlineColor     = vVertActive ? orangeBorder : noColor;
+            chartLiveVertical.BorderlineWidth     = vVertActive ? 2 : 1;
+            chartLiveVertical.BorderlineDashStyle = vVertActive
                 ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
                 : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
 
-            chartLiveOverview.BackColor           = isGlobal ? highlight : normal;
-            chartLiveOverview.BorderlineColor     = vGlobActive ? orangeBorder : noColor;
-            chartLiveOverview.BorderlineWidth     = vGlobActive ? 2 : 1;
-            chartLiveOverview.BorderlineDashStyle = vGlobActive
+            chartLivePatch.BackColor           = isGlobal ? highlight : normal;
+            chartLivePatch.BorderlineColor     = vGlobActive ? orangeBorder : noColor;
+            chartLivePatch.BorderlineWidth     = vGlobActive ? 2 : 1;
+            chartLivePatch.BorderlineDashStyle = vGlobActive
                 ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
                 : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
 
-            muraChartHorizontalLive.BackColor           = normal;
-            muraChartHorizontalLive.BorderlineColor     = hActive ? orangeBorder : noColor;
-            muraChartHorizontalLive.BorderlineWidth     = hActive ? 2 : 1;
-            muraChartHorizontalLive.BorderlineDashStyle = hActive
+            chartLiveHorizontal.BackColor           = normal;
+            chartLiveHorizontal.BorderlineColor     = hActive ? orangeBorder : noColor;
+            chartLiveHorizontal.BorderlineWidth     = hActive ? 2 : 1;
+            chartLiveHorizontal.BorderlineDashStyle = hActive
                 ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
                 : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
         }
 
         /// <summary>
-        /// 切換 canvasMain 的 V/H 處理圖方向，點選 chartMuraVertical/Horizontal 觸發。
+        /// 切換 camReviewMain 的 V/H 處理圖方向，點選 chartReviewVertical/Horizontal 觸發。
         /// 未勾選強化圖時：自動勾選 + 設方向。
         /// 已勾選強化圖且點同方向：取消勾選（回原圖）。
         /// 已勾選強化圖且點不同方向：切換方向。
@@ -119,7 +119,7 @@ namespace AniloxRoll.Monitor.Forms
                 _interactionHelper.SaveCanvasView();
                 if (_stitchCoordinator.IsStitchMode)
                 {
-                    int idx = cbReviewGrabId.SelectedIndex;
+                    int idx = cbReviewId.SelectedIndex;
                     if (idx >= 0 && idx < _dataStatsPresenter.GrabIdInfos.Count)
                     {
                         var info = _dataStatsPresenter.GrabIdInfos[idx];
@@ -151,7 +151,7 @@ namespace AniloxRoll.Monitor.Forms
             if (_settings == null) return;
             bool wasStitchMode = _stitchCoordinator.IsStitchMode;
 
-            // 之前用 canvasMain.Visible=false 包 transition 想做 commit-on-end，但實測 reload 期間
+            // 之前用 camReviewMain.Visible=false 包 transition 想做 commit-on-end，但實測 reload 期間
             // canvas 整個消失（黑屏）幾百 ms 反而比中間幀更難看。改回直接 transition，由 ReloadCurrentStitchedView
             // 內 LoadGrabStitchedViewAsync 換 Image 時自然 paint 一次（短暫舊→新轉換可接受）。
             _settingsHub.SetBatch(s =>
@@ -168,7 +168,7 @@ namespace AniloxRoll.Monitor.Forms
             if (wasStitchMode && _stitchCoordinator.IsStitchMode)
             {
                 await ReloadCurrentStitchedView(false);
-                if (canvasMain.Image != null) canvasMain.FitToScreen();
+                if (camReviewMain.Image != null) camReviewMain.FitToScreen();
             }
         }
 
@@ -190,10 +190,10 @@ namespace AniloxRoll.Monitor.Forms
 
             if (_settings.StitchMode == StitchMode.Global)
             {
-                chartMuraVertical.Series["Mean"].Points.Clear();
-                chartMuraVertical.Series["Max"].Points.Clear();
-                muraChartVerticalLive.Series["Mean"].Points.Clear();
-                muraChartVerticalLive.Series["Max"].Points.Clear();
+                chartReviewVertical.Series["Mean"].Points.Clear();
+                chartReviewVertical.Series["Max"].Points.Clear();
+                chartLiveVertical.Series["Mean"].Points.Clear();
+                chartLiveVertical.Series["Max"].Points.Clear();
             }
 
             // 根據當前選中的回顧縮圖重新載入回顧主畫面
@@ -226,8 +226,8 @@ namespace AniloxRoll.Monitor.Forms
 
             // 切換合圖方式後主畫面 fit to screen
             // skipStitchedImageRefresh=true：caller 自己會 reload 新原圖再 fit，這裡 fit 會作用在舊強化版 image 上，跳過。
-            if (!skipStitchedImageRefresh && canvasMain.Image != null)
-                canvasMain.FitToScreen();
+            if (!skipStitchedImageRefresh && camReviewMain.Image != null)
+                camReviewMain.FitToScreen();
 
             // 底色（藍）依 StitchMode；橘框依強化狀態
             UpdateRidgeDirectionVisual(
@@ -249,26 +249,26 @@ namespace AniloxRoll.Monitor.Forms
             bool hActive     = dir == "h";
 
             // 淡藍底色：合圖方式指示（Vertical → 切向圖；Global → 全覽圖）
-            chartMuraVertical.BackColor           = !isGlobal ? highlight : normal;
-            chartMuraVertical.BorderlineColor     = vVertActive ? orangeBorder : noColor;
-            chartMuraVertical.BorderlineWidth     = vVertActive ? 2 : 1;
-            chartMuraVertical.BorderlineDashStyle = vVertActive
+            chartReviewVertical.BackColor           = !isGlobal ? highlight : normal;
+            chartReviewVertical.BorderlineColor     = vVertActive ? orangeBorder : noColor;
+            chartReviewVertical.BorderlineWidth     = vVertActive ? 2 : 1;
+            chartReviewVertical.BorderlineDashStyle = vVertActive
                 ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
                 : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
 
-            chartOverview.BackColor           = isGlobal ? highlight : normal;
-            chartOverview.BorderlineColor     = vGlobActive ? orangeBorder : noColor;
-            chartOverview.BorderlineWidth     = vGlobActive ? 2 : 1;
-            chartOverview.BorderlineDashStyle = vGlobActive
+            chartReviewPatch.BackColor           = isGlobal ? highlight : normal;
+            chartReviewPatch.BorderlineColor     = vGlobActive ? orangeBorder : noColor;
+            chartReviewPatch.BorderlineWidth     = vGlobActive ? 2 : 1;
+            chartReviewPatch.BorderlineDashStyle = vGlobActive
                 ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
                 : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
 
-            if (chartMuraHorizontal != null)
+            if (chartReviewHorizontal != null)
             {
-                chartMuraHorizontal.BackColor           = normal; // 法向圖不需合圖模式底色
-                chartMuraHorizontal.BorderlineColor     = hActive ? orangeBorder : noColor;
-                chartMuraHorizontal.BorderlineWidth     = hActive ? 2 : 1;
-                chartMuraHorizontal.BorderlineDashStyle = hActive
+                chartReviewHorizontal.BackColor           = normal; // 法向圖不需合圖模式底色
+                chartReviewHorizontal.BorderlineColor     = hActive ? orangeBorder : noColor;
+                chartReviewHorizontal.BorderlineWidth     = hActive ? 2 : 1;
+                chartReviewHorizontal.BorderlineDashStyle = hActive
                     ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
                     : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
             }

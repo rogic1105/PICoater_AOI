@@ -83,10 +83,10 @@ namespace AniloxRoll.Monitor.Forms
             {
                 System.Diagnostics.Trace.TraceWarning("[IoStartGrab] StandardBgSub 無背景 bin，自動取得背景後接續 grab");
                 _autoStartGrabAfterBg = true;
-                btnGetBackground_Click(null, null);
+                btnLiveGetBackground_Click(null, null);
                 return;
             }
-            btnCameraGrab_Click(null, null);
+            btnLiveGrab_Click(null, null);
             _ = _ioGrabController?.NotifyGrabStarted();
         }
 
@@ -94,7 +94,7 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (_isIoSuspended) return;
             if (_liveCameraManager == null || !_liveCameraManager.IsLiveGrabbing) return;
-            btnCameraGrab_Click(null, null);
+            btnLiveGrab_Click(null, null);
             _ = _ioGrabController?.NotifyGrabStopped();
         }
 
@@ -176,19 +176,19 @@ namespace AniloxRoll.Monitor.Forms
             {
                 lblIoConn.Text = "● IO 已連線";
                 lblIoConn.BackColor = IecGreen;
-                btnCameraGrab.Enabled = false;
-                btnCameraGrab.Text = "IO 控制中";
-                btnCameraGrab.BackColor = IecBlue;
-                btnCameraGrab.ForeColor = Color.White;
+                btnLiveGrab.Enabled = false;
+                btnLiveGrab.Text = "IO 控制中";
+                btnLiveGrab.BackColor = IecBlue;
+                btnLiveGrab.ForeColor = Color.White;
             }
             else
             {
                 lblIoConn.Text = "● IO 離線";
                 lblIoConn.BackColor = IecGray;
-                btnCameraGrab.Enabled = true;
+                btnLiveGrab.Enabled = true;
                 UpdateGrabButton(_liveCameraManager?.IsLiveGrabbing ?? false);
-                btnCameraGrab.BackColor = SystemColors.Control;
-                btnCameraGrab.ForeColor = SystemColors.ControlText;
+                btnLiveGrab.BackColor = SystemColors.Control;
+                btnLiveGrab.ForeColor = SystemColors.ControlText;
             }
         }
 
@@ -490,10 +490,10 @@ namespace AniloxRoll.Monitor.Forms
                 lblIoConn.BackColor = IecYellow;
                 lblIoConn.ForeColor = Color.Black;
                 lblIoConn.Text = "● IO 暫停 ⏸";
-                btnCameraGrab.Enabled = true;
+                btnLiveGrab.Enabled = true;
                 UpdateGrabButton(_liveCameraManager?.IsLiveGrabbing ?? false);
-                btnCameraGrab.BackColor = SystemColors.Control;
-                btnCameraGrab.ForeColor = SystemColors.ControlText;
+                btnLiveGrab.BackColor = SystemColors.Control;
+                btnLiveGrab.ForeColor = SystemColors.ControlText;
                 // 暫停 = 等同 IO 離線：重置狀態燈和所有 IO 燈號
                 lblIoState.Text = "〔已關閉〕";
                 lblIoState.BackColor = IecGray;

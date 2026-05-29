@@ -183,8 +183,8 @@ namespace AniloxRoll.Monitor.Forms
             double slotWidthMm = InspectionEngineConfig.MaxWidth * opsArr[camIdx] / 1000.0;
             double camCenterMm = posArr[camIdx] + slotWidthMm / 2.0;
             double camCenterPx = (camCenterMm - globalMinMm) / refOpsMm;
-            float newPanX = canvasMain.Width / 2.0f - (float)(camCenterPx * canvasMain.Zoom);
-            canvasMain.SetView(canvasMain.Zoom, new System.Drawing.PointF(newPanX, canvasMain.PanOffset.Y));
+            float newPanX = camReviewMain.Width / 2.0f - (float)(camCenterPx * camReviewMain.Zoom);
+            camReviewMain.SetView(camReviewMain.Zoom, new System.Drawing.PointF(newPanX, camReviewMain.PanOffset.Y));
         }
 
         private void UpdateSelectedReviewCamFromViewCenter(CanvasInfo info)
@@ -194,7 +194,7 @@ namespace AniloxRoll.Monitor.Forms
             var posArr = GetReviewPosArray();
             var opsArr = GetReviewOpsArray();
 
-            double centerPx = (canvasMain.Width / 2.0f - info.PanOffset.X) / info.Zoom;
+            double centerPx = (camReviewMain.Width / 2.0f - info.PanOffset.X) / info.Zoom;
             double centerMm = globalMinMm + centerPx * refOpsMm;
 
             int bestIdx = 0;
@@ -266,17 +266,17 @@ namespace AniloxRoll.Monitor.Forms
 
         private bool IsCanvasFitToScreen()
         {
-            if (canvasMain.Image == null) return false;
-            float ratioW = (float)canvasMain.Width / canvasMain.Image.Width;
-            float ratioH = (float)canvasMain.Height / canvasMain.Image.Height;
+            if (camReviewMain.Image == null) return false;
+            float ratioW = (float)camReviewMain.Width / camReviewMain.Image.Width;
+            float ratioH = (float)camReviewMain.Height / camReviewMain.Image.Height;
             float fitZoom = Math.Min(ratioW, ratioH) * 0.95f;
-            if (Math.Abs(canvasMain.Zoom - fitZoom) > 0.001f) return false;
+            if (Math.Abs(camReviewMain.Zoom - fitZoom) > 0.001f) return false;
 
-            float drawW = canvasMain.Image.Width * fitZoom;
-            float drawH = canvasMain.Image.Height * fitZoom;
-            float fitPanX = (canvasMain.Width - drawW) / 2f;
-            float fitPanY = (canvasMain.Height - drawH) / 2f;
-            var pan = canvasMain.PanOffset;
+            float drawW = camReviewMain.Image.Width * fitZoom;
+            float drawH = camReviewMain.Image.Height * fitZoom;
+            float fitPanX = (camReviewMain.Width - drawW) / 2f;
+            float fitPanY = (camReviewMain.Height - drawH) / 2f;
+            var pan = camReviewMain.PanOffset;
             return Math.Abs(pan.X - fitPanX) < 1f && Math.Abs(pan.Y - fitPanY) < 1f;
         }
     }

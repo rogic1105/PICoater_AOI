@@ -275,7 +275,7 @@ code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-
         <li>觀察【回顧主畫面】切換過程（不該看到舊強化版緩存中間幀）</li>
         <li>觀察 PG「合圖方式」「回顧強化」</li>
       </ol>
-      <div class="expect"><b>預期：</b>主畫面一次到位顯示新 Vertical 原圖；PG 合圖方式 = 垂直、回顧強化 = 否；canvasMain.Visible=false 包 transition 期間無閃</div>
+      <div class="expect"><b>預期：</b>主畫面一次到位顯示新 Vertical 原圖；PG 合圖方式 = 垂直、回顧強化 = 否；camReviewMain.Visible=false 包 transition 期間無閃</div>
       <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html">歷史查詢 §回顧曲線圖點擊</a></div>
       <textarea class="notes" placeholder=""></textarea>
       <div class="meta"></div>
@@ -285,7 +285,7 @@ code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-
   <div class="case" data-id="E2E-R03">
     <div class="case-head" onclick="toggleCase(this)">
       <span class="case-id">E2E-R03</span>
-      <span class="case-title">上一/下一序號 → 主畫面 + chartMuraProfile 同步切換</span>
+      <span class="case-title">上一/下一序號 → 主畫面 + chartDataPatch 同步切換</span>
       <span class="case-tags"></span>
       <span class="case-status"><select onchange="updateStatus(this)">
         <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
@@ -296,10 +296,10 @@ code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-
       <h4>步驟</h4>
       <ol>
         <li>按【上一序號 <】或【下一序號 ></li>
-        <li>觀察 cbReviewGrabId / cbDataGrabId 是否同步</li>
-        <li>觀察【回顧主畫面】、【chartMuraProfile】是否載入新 grab</li>
+        <li>觀察 cbReviewId / cbDataId 是否同步</li>
+        <li>觀察【回顧主畫面】、【chartDataPatch】是否載入新 grab</li>
       </ol>
-      <div class="expect"><b>預期：</b>所有序號 cb 同步、主畫面 + 切向 + 法向 + chartOverview + chartMuraProfile 全切換到新 grab</div>
+      <div class="expect"><b>預期：</b>所有序號 cb 同步、主畫面 + 切向 + 法向 + chartReviewPatch + chartDataPatch 全切換到新 grab</div>
       <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html#review-grabid-nav">歷史查詢 §單片序號導航</a></div>
       <textarea class="notes" placeholder=""></textarea>
       <div class="meta"></div>
@@ -309,7 +309,7 @@ code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-
   <div class="case" data-id="E2E-R04">
     <div class="case-head" onclick="toggleCase(this)">
       <span class="case-id">E2E-R04</span>
-      <span class="case-title">拖曳主畫面 → chartOverview X 軸跟動 + 縮圖橘框切到對應 CAM</span>
+      <span class="case-title">拖曳主畫面 → chartReviewPatch X 軸跟動 + 縮圖橘框切到對應 CAM</span>
       <span class="case-tags"></span>
       <span class="case-status"><select onchange="updateStatus(this)">
         <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
@@ -350,7 +350,7 @@ code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-
       <ol>
         <li>切到 Data tab</li>
         <li>按【讀取資料】→ 選資料夾</li>
-        <li>觀察【明細列表】、【良率卡片】、【chartYearly/Monthly/Daily】</li>
+        <li>觀察【明細列表】、【良率卡片】、【chartDataYieldYearly/Monthly/Daily】</li>
         <li>切到 Review tab → 觀察主畫面是否已載入</li>
       </ol>
       <div class="expect"><b>預期：</b>Data tab 統計填好、Review tab 主畫面顯示最新 grab、合圖方式 = 全域、回顧強化 = 否</div>
@@ -363,22 +363,22 @@ code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-
   <div class="case" data-id="E2E-D02">
     <div class="case-head" onclick="toggleCase(this)">
       <span class="case-id">E2E-D02</span>
-      <span class="case-title">點 listViewGrabDetail row → 統計 + chartMuraProfile 對齊單片，範圍 cb 不變</span>
+      <span class="case-title">點 listViewGrabDetail row → 統計 + chartDataPatch 對齊單片，範圍 cb 不變</span>
       <span class="case-tags"><span class="tag regression">regression</span></span>
       <span class="case-status"><select onchange="updateStatus(this)">
         <option value="todo">⬜ TODO</option><option value="pass">✓ PASS</option><option value="fail">✗ FAIL</option><option value="skip">⚠ SKIP</option>
       </select></span>
     </div>
     <div class="case-body">
-      <div class="pre"><b>前置：</b>Data tab 載資料、目前在範圍模式或時序模式（cbGrabIdStart/End 已設定範圍）</div>
+      <div class="pre"><b>前置：</b>Data tab 載資料、目前在範圍模式或時序模式（cbDataIdStart/End 已設定範圍）</div>
       <h4>步驟</h4>
       <ol>
-        <li>記下當前 cbGrabIdStart、cbGrabIdEnd、cbStartDate/Time、cbEndDate/Time 值</li>
+        <li>記下當前 cbDataIdStart、cbDataIdEnd、cbDataDateStart/Time、cbDataDateEnd/Time 值</li>
         <li>滑鼠按下 listView 任一 row（不放開）→ 觀察該 row 應該反白</li>
-        <li>放開滑鼠 → 觀察良率卡片 + chartMuraProfile</li>
-        <li>檢查 cbGrabIdStart/End、cbStartDate/Time、cbEndDate/Time 6 個 cb</li>
+        <li>放開滑鼠 → 觀察良率卡片 + chartDataPatch</li>
+        <li>檢查 cbDataIdStart/End、cbDataDateStart/Time、cbDataDateEnd/Time 6 個 cb</li>
       </ol>
-      <div class="expect"><b>預期：</b>放開才 commit、6 個 cb 值維持原狀、良率卡片改為單片 stats、chartMuraProfile 切到該 grab</div>
+      <div class="expect"><b>預期：</b>放開才 commit、6 個 cb 值維持原狀、良率卡片改為單片 stats、chartDataPatch 切到該 grab</div>
       <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html">檢測報表 §明細列表點選</a></div>
       <textarea class="notes" placeholder=""></textarea>
       <div class="meta"></div>
@@ -403,7 +403,7 @@ code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-
         <li>觀察 active GroupBox（綠色高亮）切到哪</li>
         <li>觀察良率卡片是否重新計算（範圍 stats）</li>
       </ol>
-      <div class="expect"><b>預期：</b>反白消失、GrpDataGrabIdRange 變綠（範圍模式 active）、卡片顯示 cbGrabIdStart/End 範圍 stats</div>
+      <div class="expect"><b>預期：</b>反白消失、GrpDataGrabIdRange 變綠（範圍模式 active）、卡片顯示 cbDataIdStart/End 範圍 stats</div>
       <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html">檢測報表 §明細列表點選</a></div>
       <textarea class="notes" placeholder=""></textarea>
       <div class="meta"></div>
@@ -506,9 +506,9 @@ code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-
     <div class="case-body">
       <h4>步驟</h4>
       <ol>
-        <li>Review tab 改 cbReviewGrabId（單片序號）</li>
+        <li>Review tab 改 cbReviewId（單片序號）</li>
         <li>切到 Data tab</li>
-        <li>觀察 cbDataGrabId、cbGrabIdStart/End、良率卡片</li>
+        <li>觀察 cbDataId、cbDataIdStart/End、良率卡片</li>
       </ol>
       <div class="expect"><b>預期：</b>Data tab 序號 cb 跟 Review 一致、卡片即時刷新</div>
       <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html">跨 Tab 同步</a></div>
@@ -530,7 +530,7 @@ code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-
       <h4>步驟</h4>
       <ol>
         <li>當前在 Data tab</li>
-        <li>改 cbDataGrabId</li>
+        <li>改 cbDataId</li>
         <li>觀察 Review tab 沒有立刻 load（節省 IO）</li>
         <li>切到 Review tab → 應該載入剛選的 grab</li>
       </ol>

@@ -67,13 +67,13 @@
 
 ### H4. PopulateStatDateCombos 包 Guard 但 manual 操作仍會誤觸 Time 模式
 
-`DataStatisticsPresenter.cs:246-272` 已用 `StatComboGuard.Enter()` 防止程式化填充誤觸 `OnStartComboChanged → SetActiveStatGroupBox(TimeRange)`。但 `OnStartComboChanged` 與 `OnEndComboChanged` 開頭就 `SetActiveStatGroupBox(_ctx.GroupBoxTimeRange)`（line 299, 314）— 使用者**手動**選 cbStartDate 時會強制切到 TimeRange，這沒問題。但 `OnSingleSheetComboChanged`（line 408-409）內也會程式化更新 cbStartDate/Time 與 cbEndDate/Time，包在 StatComboGuard 內所以 OnStartComboChanged 不會跑 — 邏輯**正確**，但極脆弱：未來若有人在 `SetCombosToDateTime` 加新事件 hook，guard 邊界容易破。
+`DataStatisticsPresenter.cs:246-272` 已用 `StatComboGuard.Enter()` 防止程式化填充誤觸 `OnStartComboChanged → SetActiveStatGroupBox(TimeRange)`。但 `OnStartComboChanged` 與 `OnEndComboChanged` 開頭就 `SetActiveStatGroupBox(_ctx.GroupBoxTimeRange)`（line 299, 314）— 使用者**手動**選 cbDataDateStart 時會強制切到 TimeRange，這沒問題。但 `OnSingleSheetComboChanged`（line 408-409）內也會程式化更新 cbDataDateStart/Time 與 cbDataDateEnd/Time，包在 StatComboGuard 內所以 OnStartComboChanged 不會跑 — 邏輯**正確**，但極脆弱：未來若有人在 `SetCombosToDateTime` 加新事件 hook，guard 邊界容易破。
 建議：把 mode-switch 邏輯從 ComboChanged handler 移到一個更明確的「user-initiated only」函式（如 `SetCombosToDateTime` 改成不會 fire `SelectedIndexChanged`，採 silent assignment + 手動 RefreshStats 路徑）。
 
 ### H5. `InitializeRightPanelControls` / `SetupDataTab` 之間：listViewGrabDetail.SelectedIndexChanged 可能 row 0 自動選
 
 `DataStatisticsPresenter.cs:634` `lv.SelectedIndexChanged += OnGrabDetailRowSelected`。`UpdateGrabDetailListView` 重填明細時 `lv.Items.Add(...)` 預設不選任何 item，所以理論上不會觸發。但 WinForms `ListView` 開啟 `MultiSelect=true`（預設）時，BeginUpdate/EndUpdate 之間若內部還原 selection（看 native 行為），會 fire 一次空的 SelectedIndexChanged。
-`OnGrabDetailRowSelected` 開頭 `if (StatComboGuard.IsSet) return;` 沒防住這個情境（RefreshStats 不在 StatComboGuard 內）。極端情況：RefreshStats 後 listView 重填，剛好 user 已選了某 row，selection 跨重填保留 → 觸發 `OnGrabDetailRowSelected`，又把 cbDataGrabId 設一次。
+`OnGrabDetailRowSelected` 開頭 `if (StatComboGuard.IsSet) return;` 沒防住這個情境（RefreshStats 不在 StatComboGuard 內）。極端情況：RefreshStats 後 listView 重填，剛好 user 已選了某 row，selection 跨重填保留 → 觸發 `OnGrabDetailRowSelected`，又把 cbDataId 設一次。
 建議：`UpdateGrabDetailListView` 開頭 `lv.SelectedIndexChanged -= OnGrabDetailRowSelected; ... lv.SelectedIndices.Clear(); lv.SelectedIndexChanged += OnGrabDetailRowSelected;`。
 
 ### H6. `ApplyHessianRescale` ratio=1 也跑了 noOp 判斷但只有 `ApplyHessianRescale` 有，`ApplySingleCurveRescale` 也有，但分散在三處：DataStatisticsPresenter / ReviewStitchCoordinator 各定義一份
@@ -85,10 +85,10 @@
 
 ## Medium（後續迭代修）
 
-### M1. ui-flow.html 沒描述 listViewGrabDetail row click → cbDataGrabId 同步
+### M1. ui-flow.html 沒描述 listViewGrabDetail row click → cbDataId 同步
 
 `docs/user-manual/ui-flow.html` grep 找不到 `listViewGrabDetail.*Click` 或 row-selection flow。commit 0e01f95 加了這個 feature，docs 未補。違反 CLAUDE.md 提到的「三方同步機制」。
-建議：在 ui-flow 「點選明細列表」加一條 flow：`listViewGrabDetail row 點選 → cbDataGrabId 對齊序號 → OnSingleSheetComboChanged → 切換為單片模式 + 刷新 chartMuraProfile + sync cbReviewGrabId`。
+建議：在 ui-flow 「點選明細列表」加一條 flow：`listViewGrabDetail row 點選 → cbDataId 對齊序號 → OnSingleSheetComboChanged → 切換為單片模式 + 刷新 chartDataPatch + sync cbReviewId`。
 
 ### M2. ui-flow.html 沒描述「機台角色」AppRole 變更後重啟 + Storage PC 模式
 
@@ -124,7 +124,7 @@
 
 `AniloxRollForm.cs:157, 1312, 3073`：grab callback thread 寫 array reference，UI timer thread 讀（`LiveOverviewTimer_Tick`）。`_liveOverviewDirty = volatile bool` 但 array 元素本身沒 memory barrier，雖然 race window 小、結果只是「短暫看到舊曲線」可接受，但建議至少在 `OnLiveCurveData` 寫之後 `Interlocked.MemoryBarrier()`。
 
-### M9. PopulateAllGrabIdCombos 不寫 cbDataGrabId 但 SyncFromReviewFolder 不傳 selectDataGrabId
+### M9. PopulateAllGrabIdCombos 不寫 cbDataId 但 SyncFromReviewFolder 不傳 selectDataGrabId
 
 `DataStatisticsPresenter.cs:202` `LoadDataFolder` 呼叫 `PopulateAllGrabIdCombos(selectDataGrabId: false)`，line 232 `SyncFromReviewFolder` 不傳參（用預設 false）。LoadDataFolder 之後立刻 line 219 又設 `_ctx.CbDataGrabId.SelectedIndex = 0`，看似冗餘但其實 `selectDataGrabId: false` 不會選 → 然後手動選 → 兩條路徑有微小語意差別。
 建議：直接 `PopulateAllGrabIdCombos(selectDataGrabId: true)` 並移掉 line 217-220 的手動指派。
@@ -165,8 +165,8 @@ CLAUDE.md `docs/` 目錄定位章節 `docs/dev/` 描述沒提到新加的子目�
 
 ## 沒問題的部分（review 後確認 OK 的）
 
-- **View-time rescale 公式**：V chart 用 `HM_V_capture / HM_V_current`、H chart 用 `HM_V_capture / HM_H_current`、`chartMuraProfile` 單 grab 模式正確 rescale、aggregate 模式正確跳過。語意一致，註解清楚。
-- **chartLiveOverview**：Live 自己產生資料 `_liveCurveMean[]`，無「baked-in」概念，rescale ratio=1 自然 OK。`LiveOverviewTimer_Tick` 不需要 rescale 路徑。
+- **View-time rescale 公式**：V chart 用 `HM_V_capture / HM_V_current`、H chart 用 `HM_V_capture / HM_H_current`、`chartDataPatch` 單 grab 模式正確 rescale、aggregate 模式正確跳過。語意一致，註解清楚。
+- **chartLivePatch**：Live 自己產生資料 `_liveCurveMean[]`，無「baked-in」概念，rescale ratio=1 自然 OK。`LiveOverviewTimer_Tick` 不需要 rescale 路徑。
 - **ThresholdContext 串通性**：`Compute` / `ComputeByGrabIdRange` / `ComputeDetailedByGrabIdRange` / `ScanCsvByDateRange` (via `ComputeGroupedByMonth/Day/Hour`) 全部接 optional `ctx`。`DataStatisticsPresenter.BuildThresholdContext` 在 4 條路徑都正確傳入（RefreshStats、OnChartYearIndexChanged、OnChartMonthIndexChanged、OnChartDayIndexChanged）。
 - **CsvConfigSnapshot legacy `ErrorValueMean`/`HessianMaxFactor` fallback**：邏輯正確，V 與 H 都填 legacy 值（line 213-218）。新 CSV 寫 6+2 個鍵，向後相容完整。
 - **InspectionLogService CSV 寫入 lock**：`_csvLock` 全 instance 共用，AppendRecord 與 ForceWriteConfig 都包進去，沒漏。
@@ -204,7 +204,7 @@ PropertyGrid 是否允許輸入 0？`ApplyHessianRescale` 有 `captureHm <= 0f` 
 ## 未修 TODO（壓力測試後再評估）
 
 - **M6** `LoadGrabIdInfos` `Directory.GetFiles AllDirectories` — 對 500+ 天資料慢，
-  但屬於 cold path（btnSelectDataFolder 才呼叫）。要做的話需要先用 LoadAvailableTimes
+  但屬於 cold path（btnDataSelectFolder 才呼叫）。要做的話需要先用 LoadAvailableTimes
   挑出涉及日期再 GetFiles by date — 改動較大，等實際遇到瓶頸再做。
 - **M7** `_currentDetails` / `_grabIdInfos` 跨 thread — 現在 UI thread only 不算 race，
   但若未來把 RefreshStats 改 async（H3 後續延伸），這裡會立刻變 race。標記注意。

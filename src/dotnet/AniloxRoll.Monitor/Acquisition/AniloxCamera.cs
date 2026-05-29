@@ -191,12 +191,12 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         // ==================== Primary / Secondary Display（委派 MIL） ====================
 
-        /// <summary>Detach / restore 主顯示（panelLiveCam 上的 MIL 顯示）。</summary>
+        /// <summary>Detach / restore 主顯示（camLive 上的 MIL 顯示）。</summary>
         public void SetPrimaryDisplayVisible(bool visible) => _mil.SetPrimaryDisplayVisible(visible);
 
         public void SetSecondaryDisplay(IntPtr handle) => _mil.SetSecondaryDisplay(handle);
 
-        /// <summary>查詢副顯示器（panelMainDisplay）的 zoom/pan 狀態。</summary>
+        /// <summary>查詢副顯示器（camLiveMain）的 zoom/pan 狀態。</summary>
         public bool TryGetSecondaryDisplayGeometry(out double zoomX, out double zoomY, out double panX, out double panY)
             => _mil.TryGetSecondaryDisplayGeometry(out zoomX, out zoomY, out panX, out panY);
 

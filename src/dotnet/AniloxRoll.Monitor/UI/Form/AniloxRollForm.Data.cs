@@ -37,22 +37,22 @@ namespace AniloxRoll.Monitor.Forms
         {
             _dataStatsPresenter = new DataStatisticsPresenter(new DataStatisticsContext
             {
-                CbStartDate = cbStartDate, CbStartTime = cbStartTime,
-                CbEndDate = cbEndDate, CbEndTime = cbEndTime,
-                CbGrabIdStart = cbGrabIdStart, CbGrabIdEnd = cbGrabIdEnd,
-                CbDataGrabId = cbDataGrabId, CbReviewGrabId = cbReviewGrabId,
-                BtnGrabIdPrev = btnGrabIdPrev, BtnGrabIdNext = btnGrabIdNext,
-                BtnGrabIdDataPrev = btnGrabIdDataPrev, BtnGrabIdDataNext = btnGrabIdDataNext,
-                BtnSelectDataFolder = btnSelectDataFolder, BtnShowFail = btnShowFail,
+                CbStartDate = cbDataDateStart, CbStartTime = cbDataTimeStart,
+                CbEndDate = cbDataDateEnd, CbEndTime = cbDataTimeEnd,
+                CbGrabIdStart = cbDataIdStart, CbGrabIdEnd = cbDataIdEnd,
+                CbDataGrabId = cbDataId, CbReviewGrabId = cbReviewId,
+                BtnGrabIdPrev = btnReviewIdPrev, BtnGrabIdNext = btnReviewIdNext,
+                BtnGrabIdDataPrev = btnDataIdPrev, BtnGrabIdDataNext = btnDataIdNext,
+                BtnSelectDataFolder = btnDataSelectFolder, BtnShowFail = btnDataShowFail,
                 GroupBoxGrabIdRange = groupBoxGrabIdRange, GrpDataSingleSheet = grpDataSingleSheet,
                 GroupBoxTimeRange = groupBoxTimeRange,
                 GrpReviewGrabNav = grpReviewGrabNav, GrpReviewTimePeriod = grpReviewTimePeriod,
                 ListViewGrabDetail = listViewGrabDetail,
-                PanelStatCams = new[] { panelStatCam1, panelStatCam2, panelStatCam3,
-                                        panelStatCam4, panelStatCam5, panelStatCam6, panelStatCam7 },
-                ChartMuraProfile = chartMuraProfile,
-                ChartYearly = chartYearly, ChartMonthly = chartMonthly, ChartDaily = chartDaily,
-                CbChartYear = cbChartYear, CbChartMonth = cbChartMonth, CbChartDay = cbChartDay,
+                PanelStatCams = new[] { camData1, camData2, camData3,
+                                        camData4, camData5, camData6, camData7 },
+                ChartDataPatch = chartDataPatch,
+                ChartDataYieldYearly = chartDataYieldYearly, ChartDataYieldMonthly = chartDataYieldMonthly, ChartDataYieldDaily = chartDataYieldDaily,
+                CbChartYear = cbDataYieldYear, CbChartMonth = cbDataYieldMonth, CbChartDay = cbDataYieldDay,
                 Settings = _settings, CameraCount = CameraCount,
             });
             _dataStatsPresenter.Initialize();
@@ -61,7 +61,7 @@ namespace AniloxRoll.Monitor.Forms
             _stitchCoordinator.SetDataStatsPresenter(_dataStatsPresenter);
 
             // 滾輪上滾 = 數值增加（反轉 ComboBox 預設行為）——僅用於升序排列的 ComboBox
-            foreach (var cb in new[] { cbChartYear, cbChartMonth, cbChartDay })
+            foreach (var cb in new[] { cbDataYieldYear, cbDataYieldMonth, cbDataYieldDay })
                 _wheelInterceptors.Add(new ComboBoxWheelReverser(cb));
 
             // 跨 Tab 事件
@@ -74,14 +74,14 @@ namespace AniloxRoll.Monitor.Forms
             tabMain.SelectedIndexChanged += async (s, e) =>
             {
                 if (tabMain.SelectedTab != tabPageReview || !_reviewDirty) return;
-                int idx = cbReviewGrabId.SelectedIndex;
+                int idx = cbReviewId.SelectedIndex;
                 if (idx < 0 || idx >= _dataStatsPresenter.GrabIdInfos.Count) return;
                 _reviewDirty = false;
                 var info = _dataStatsPresenter.GrabIdInfos[idx];
                 try
                 {
                     await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest);
-                    if (canvasMain.Image != null) canvasMain.FitToScreen();
+                    if (camReviewMain.Image != null) camReviewMain.FitToScreen();
                 }
                 catch (Exception ex) { Trace.WriteLine($"[tabMain → Review] {ex}"); }
             };
@@ -95,7 +95,7 @@ namespace AniloxRoll.Monitor.Forms
                 {
                     using (_dataStatsPresenter.GrabIdNavGuard.Enter())
                     {
-                        cbReviewGrabId.SelectedIndex = idx;
+                        cbReviewId.SelectedIndex = idx;
                         _interactionHelper.NavigateToDateTime(earliest);
                     }
                     _presenter.UpdatePeriodNavigationState();
@@ -117,12 +117,12 @@ namespace AniloxRoll.Monitor.Forms
                 _presenter.UpdatePeriodNavigationState();
 
                 await _stitchCoordinator.LoadGrabStitchedViewAsync(grabId, earliest, latest);
-                if (canvasMain.Image != null) canvasMain.FitToScreen();
+                if (camReviewMain.Image != null) camReviewMain.FitToScreen();
                 _reviewDirty = false;
 
                 // 同步 Data tab
                 if (!_dataStatsPresenter.GrabIdCrossGuard.IsSet
-                    && cbDataGrabId.Items.Count > 0 && idx < cbDataGrabId.Items.Count)
+                    && cbDataId.Items.Count > 0 && idx < cbDataId.Items.Count)
                 {
                     var info = _dataStatsPresenter.GrabIdInfos[idx];
                     _dataStatsPresenter.SyncDataGrabIdFromReview(idx, info);

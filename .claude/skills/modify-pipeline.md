@@ -28,8 +28,8 @@
 - Settings 拆分為 `HessianMaxFactorV`（垂直）+ `HessianMaxFactorH`（水平），native 端介面（`AoiAlgorithmParams.HessianMaxFactor`）維持單一欄位
 - **Capture 時** 送進 native 的單一 HM = `HessianMaxFactorV` → bin 中 baked-in 的縮放係數是 `255/HessianMaxFactorV`
 - **View 時** rescale 公式：
-  - V 曲線（chartMuraVertical / chartOverview / chartMuraProfile / muraChartVerticalLive）：`display = (bin/255) × (HM_V_capture / HM_V_current)` — 改 V 即時生效
-  - H 曲線（chartMuraHorizontal / row chart）：`display = (bin/255) × (HM_V_capture / HM_H_current)` — 改 H 即時生效；公式 numerator 用 V_capture 因為 bin 是被 V baked-in
+  - V 曲線（chartReviewVertical / chartReviewPatch / chartDataPatch / chartLiveVertical）：`display = (bin/255) × (HM_V_capture / HM_V_current)` — 改 V 即時生效
+  - H 曲線（chartReviewHorizontal / row chart）：`display = (bin/255) × (HM_V_capture / HM_H_current)` — 改 H 即時生效；公式 numerator 用 V_capture 因為 bin 是被 V baked-in
 - 改 PropertyGrid 正規值 V/H 時，Form 的 `_propertyGrid_PropertyValueChanged` 呼叫 `RefreshMuraProfileForSettingsChange` + `_stitchCoordinator.UpdateStitchedOverviewChart` 立即重畫
 - CSV `#CFG` 記錄兩個欄位 `HessianMaxFactorV`、`HessianMaxFactorH`；舊單一 `HessianMaxFactor` 欄位讀檔時 fallback 到 V=H=該值
 

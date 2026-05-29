@@ -28,7 +28,7 @@
 
 5. **輸出驗證結果** — 格式：
    ```
-   [觸發] 讀取資料 (btnSelectFolder)
+   [觸發] 讀取資料 (btnReviewSelectFolder)
      → [動作] ImageRepository.LoadDirectory
      → [動作] TimeNavigator.Initialize
      → [輸出] 時段日期/時間 → 填入最早值 ✅

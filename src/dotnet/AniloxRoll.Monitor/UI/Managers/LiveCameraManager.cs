@@ -1086,7 +1086,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             OnAfterVerticalZoom?.Invoke();
         }
 
-        /// <summary>攔截 panelMainDisplay 上的 WM_MOUSEWHEEL，用 1.1x 步長取代 MIL 預設的整數倍跳躍。</summary>
+        /// <summary>攔截 camLiveMain 上的 WM_MOUSEWHEEL，用 1.1x 步長取代 MIL 預設的整數倍跳躍。</summary>
         private class WheelZoomFilter : IMessageFilter
         {
             private const int WM_MOUSEWHEEL = 0x020A;

@@ -47,12 +47,12 @@ namespace AniloxRoll.Monitor.UI.Presenters
         // --- 統計 ---
         public ListView ListViewGrabDetail { get; set; }
         public Panel[] PanelStatCams { get; set; }
-        public Chart ChartMuraProfile { get; set; }
+        public Chart ChartDataPatch { get; set; }
 
         // --- 趨勢圖 ---
-        public Chart ChartYearly { get; set; }
-        public Chart ChartMonthly { get; set; }
-        public Chart ChartDaily { get; set; }
+        public Chart ChartDataYieldYearly { get; set; }
+        public Chart ChartDataYieldMonthly { get; set; }
+        public Chart ChartDataYieldDaily { get; set; }
 
         // --- 趨勢圖導航 ---
         public ComboBox CbChartYear { get; set; }
@@ -93,7 +93,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         internal readonly EventGuard GrabIdCrossGuard = new EventGuard();
         private readonly EventGuard _chartNavGuard = new EventGuard();
         // listViewGrabDetail commit 時設 true：OnSingleSheetComboChanged 跳過範圍 cb 同步，
-        // 保留使用者目前的 cbGrabIdStart/End + cbStartDate/Time + cbEndDate/Time 不變。
+        // 保留使用者目前的 cbDataIdStart/End + cbDataDateStart/Time + cbDataDateEnd/Time 不變。
         private bool _suppressRangeOnSingleSheetSync;
 
         private int _lastChartToggleTick;
@@ -210,8 +210,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             PopulateChartNavigators(_statAvailableTimes.Count > 0
                 ? (DateTime?)_statAvailableTimes.Max : null);
 
-            // 預設單片模式（與 Review tab btnSelectFolder 一致）— 最新一筆 grab（descending [0]）。
-            // 對齊 cbGrabIdStart=End=0 → RefreshStats 的單片分支取得單 grab 範圍。
+            // 預設單片模式（與 Review tab btnReviewSelectFolder 一致）— 最新一筆 grab（descending [0]）。
+            // 對齊 cbDataIdStart=End=0 → RefreshStats 的單片分支取得單 grab 範圍。
             SetActiveStatGroupBox(_ctx.GrpDataSingleSheet);
             if (_grabIdInfos.Count > 0)
             {
@@ -248,7 +248,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         private void PopulateStatDateCombos(DateTime start, DateTime end)
         {
-            // 包 StatComboGuard 抑制 cbStartDate/Time + cbEndDate/Time 的 SelectedIndexChanged：
+            // 包 StatComboGuard 抑制 cbDataDateStart/Time + cbDataDateEnd/Time 的 SelectedIndexChanged：
             // 避免程式化填充觸發 OnStartComboChanged → SetActiveStatGroupBox(TimeRange) +
             // RefreshStats 級聯（4 次 RefreshStats 用大時間範圍掃 CSV 灌大量資料進 listView，
             // 隨後 LoadDataFolder 才設回 SingleSheet 收回 — listViewGrabDetail「瞬間爆量再縮回」）。
@@ -499,7 +499,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _ctx.BtnGrabIdDataNext.Enabled = idx > 0;
         }
 
-        /// <summary>時間 ComboBox 變更時，同步 cbReviewGrabId 到包含該時間的序號。</summary>
+        /// <summary>時間 ComboBox 變更時，同步 cbReviewId 到包含該時間的序號。</summary>
         public void SyncGrabIdFromTime(DateTime current)
         {
             if (GrabIdNavGuard.IsSet || _grabIdInfos.Count == 0) return;
@@ -545,8 +545,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _ctx.Settings.ErrorValueMeanV,
                 _ctx.Settings.ErrorValueMaxV);
 
-            // SingleSheet mode：用 cbDataGrabId.SelectedIndex 算單 grab stats（start=end=該 grab）。
-            // 不靠 cbGrabIdStart/End 範圍，這樣 listViewGrabDetail 點選後（_suppressRangeOnSingleSheetSync=true
+            // SingleSheet mode：用 cbDataId.SelectedIndex 算單 grab stats（start=end=該 grab）。
+            // 不靠 cbDataIdStart/End 範圍，這樣 listViewGrabDetail 點選後（_suppressRangeOnSingleSheetSync=true
             // 跳過 range cb 同步）stats 仍對齊到剛點的單 grab。
             if (_activeStatMode == _ctx.GrpDataSingleSheet
                 && _ctx.CbDataGrabId.SelectedIndex >= 0
@@ -560,7 +560,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _statsPresenter.Update(stats);
                 _currentDetails = details;
                 ApplyFailFilter();
-                UpdateMuraProfileChart(null);  // SingleSheet branch 內自己查 cbDataGrabId 取 grab
+                UpdateMuraProfileChart(null);  // SingleSheet branch 內自己查 cbDataId 取 grab
                 return;
             }
 
@@ -658,9 +658,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
             FitListViewColumnsProportional(lv);
 
             // 點選明細列表的列 → MouseDown 時 ListView 預設視覺先反白（顯示被選中），
-            // MouseUp 才 commit 切到該序號（與 cbDataGrabId 變更流程共用 OnSingleSheetComboChanged）。
+            // MouseUp 才 commit 切到該序號（與 cbDataId 變更流程共用 OnSingleSheetComboChanged）。
             // commit 時包 _suppressRangeOnSingleSheetSync 跳過範圍 cb 同步，
-            // 保留 cbGrabIdStart/End + cbStartDate/Time + cbEndDate/Time 不變。
+            // 保留 cbDataIdStart/End + cbDataDateStart/Time + cbDataDateEnd/Time 不變。
             lv.MouseUp += OnGrabDetailRowCommitted;
         }
 
@@ -675,7 +675,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             string grabId = lv.SelectedItems[0].Text;
             if (string.IsNullOrEmpty(grabId)) return;
 
-            // Toggle：第二次點同 row + 已是 SingleSheet → 切回 GroupBoxGrabIdRange（範圍模式，stats 用 cbGrabIdStart/End）
+            // Toggle：第二次點同 row + 已是 SingleSheet → 切回 GroupBoxGrabIdRange（範圍模式，stats 用 cbDataIdStart/End）
             if (grabId == _lastListViewSelectedGrabId && _activeStatMode == _ctx.GrpDataSingleSheet)
             {
                 _lastListViewSelectedGrabId = null;
@@ -694,7 +694,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 if (_activeStatMode != _ctx.GrpDataSingleSheet)
                 {
                     SwitchActiveStatGroupBox(_ctx.GrpDataSingleSheet);
-                    RefreshStats();  // 切 mode 後 stats + chartMuraProfile 對齊單片
+                    RefreshStats();  // 切 mode 後 stats + chartDataPatch 對齊單片
                 }
                 return;
             }
@@ -780,22 +780,22 @@ namespace AniloxRoll.Monitor.UI.Presenters
         }
 
         // ══════════════════════════════════════════════════════════════
-        // Mura 空間分布曲線圖（拼接式，與 chartLiveOverview 相同格式）
+        // Mura 空間分布曲線圖（拼接式，與 chartLivePatch 相同格式）
         // ══════════════════════════════════════════════════════════════
 
         private void InitMuraProfileChart()
         {
-            if (_ctx.ChartMuraProfile == null) return;
-            _muraProfileHelper = new ColumnCurveChartHelper(_ctx.ChartMuraProfile);
+            if (_ctx.ChartDataPatch == null) return;
+            _muraProfileHelper = new ColumnCurveChartHelper(_ctx.ChartDataPatch);
         }
 
         private void UpdateMuraProfileChart(IList<GrabIdInfo> grabIds)
         {
             if (_muraProfileHelper == null || _ctx.Settings == null) return;
 
-            // 單片模式（GrpDataSingleSheet）：永遠用 cbDataGrabId.SelectedIndex 對應 grab，不依賴 caller 傳入的 grabIds。
+            // 單片模式（GrpDataSingleSheet）：永遠用 cbDataId.SelectedIndex 對應 grab，不依賴 caller 傳入的 grabIds。
             // 原因：listViewGrabDetail 點選時 _suppressRangeOnSingleSheetSync=true 跳過範圍 cb 同步，
-            // 但 caller 仍會用舊 cbGrabIdStart/End 範圍呼這函式 → 若用 grabIds[0] 會顯示舊範圍的第一筆而非剛點的 grab。
+            // 但 caller 仍會用舊 cbDataIdStart/End 範圍呼這函式 → 若用 grabIds[0] 會顯示舊範圍的第一筆而非剛點的 grab。
             // view-time 正規值 rescale（HM_capture / HM_current）讓改 PropertyGrid 正規值時曲線坡度立即變化。
             if (_activeStatMode == _ctx.GrpDataSingleSheet)
             {
@@ -841,7 +841,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         /// <summary>
         /// 用單一 grab 的 .bin（MergeCurves 合多 capture）+ 該 grab 的 CSV #CFG OPS/Pos
-        /// 更新 chartMuraProfile，與 chartOverview 完全對齊。不依賴 canvasMain 是否載入。
+        /// 更新 chartDataPatch，與 chartReviewPatch 完全對齊。不依賴 camReviewMain 是否載入。
         /// 套用 view-time 正規值 rescale：display = (bin/255) × (HM_capture / HM_current)；
         /// 改 PropertyGrid 正規值會立刻反映在曲線坡度上。
         /// </summary>
@@ -865,7 +865,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     CurveMergeHelper.MergeCurves(paths, out allMean[i], out allMax[i]);
             }
 
-            // view-time 正規值 rescale：chartMuraProfile 是垂直曲線，用 V 的 capture/current ratio
+            // view-time 正規值 rescale：chartDataPatch 是垂直曲線，用 V 的 capture/current ratio
             float captureHm = grabCfg?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
             HessianRescaleHelper.RescaleInPlace2D(allMean, allMax, captureHm, _ctx.Settings.HessianMaxFactorV);
 
@@ -881,7 +881,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         }
 
         /// <summary>
-        /// 由 PropertyGrid 變更觸發：刷新 chartMuraProfile 的閾值線 + view-time 正規值 rescale。
+        /// 由 PropertyGrid 變更觸發：刷新 chartDataPatch 的閾值線 + view-time 正規值 rescale。
         /// 不重做 RefreshStats（避免重算統計）；只重畫 chart。
         /// </summary>
         public void RefreshMuraProfileForSettingsChange()
@@ -899,7 +899,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         /// <summary>
         /// SingleSheet 模式：直接使用 Review tab 已載入的曲線資料（已套 view-time HM rescale），
-        /// 確保 chartMuraProfile 與 chartOverview 完全一致（相同 OPS/Pos 與顯示值）。
+        /// 確保 chartDataPatch 與 chartReviewPatch 完全一致（相同 OPS/Pos 與顯示值）。
         /// </summary>
         public void SyncMuraProfileFromReview(float[][] mean, float[][] max,
             double[] ops, double[] pos, float errMean, float errMax)
@@ -911,8 +911,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         private void ClearMuraProfileChart()
         {
-            if (_ctx.ChartMuraProfile == null) return;
-            foreach (var s in _ctx.ChartMuraProfile.Series)
+            if (_ctx.ChartDataPatch == null) return;
+            foreach (var s in _ctx.ChartDataPatch.Series)
                 s.Points.Clear();
         }
 
@@ -955,24 +955,24 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private void InitPeriodCharts()
         {
             var cs = _ctx.Settings.Chart;
-            InitOneChart(_ctx.ChartYearly, yDefault: cs.YearlyYMax, xCount: 12, xStart: 1);
-            InitOneChart(_ctx.ChartMonthly, yDefault: cs.MonthlyYMax, xCount: 31, xStart: 1);
-            InitOneChart(_ctx.ChartDaily, yDefault: cs.DailyYMax, xCount: 24, xStart: 0);
+            InitOneChart(_ctx.ChartDataYieldYearly, yDefault: cs.YearlyYMax, xCount: 12, xStart: 1);
+            InitOneChart(_ctx.ChartDataYieldMonthly, yDefault: cs.MonthlyYMax, xCount: 31, xStart: 1);
+            InitOneChart(_ctx.ChartDataYieldDaily, yDefault: cs.DailyYMax, xCount: 24, xStart: 0);
 
             if (cs.ScaleMode == ChartScaleMode.Auto)
             {
                 var empty = new List<PeriodStats>();
-                ApplyAutoScale(_ctx.ChartYearly, empty);
-                ApplyAutoScale(_ctx.ChartMonthly, empty);
-                ApplyAutoScale(_ctx.ChartDaily, empty);
+                ApplyAutoScale(_ctx.ChartDataYieldYearly, empty);
+                ApplyAutoScale(_ctx.ChartDataYieldMonthly, empty);
+                ApplyAutoScale(_ctx.ChartDataYieldDaily, empty);
             }
 
-            _ctx.ChartYearly.MouseClick -= PeriodChart_ToggleAutoScale;
-            _ctx.ChartMonthly.MouseClick -= PeriodChart_ToggleAutoScale;
-            _ctx.ChartDaily.MouseClick -= PeriodChart_ToggleAutoScale;
-            _ctx.ChartYearly.MouseClick += PeriodChart_ToggleAutoScale;
-            _ctx.ChartMonthly.MouseClick += PeriodChart_ToggleAutoScale;
-            _ctx.ChartDaily.MouseClick += PeriodChart_ToggleAutoScale;
+            _ctx.ChartDataYieldYearly.MouseClick -= PeriodChart_ToggleAutoScale;
+            _ctx.ChartDataYieldMonthly.MouseClick -= PeriodChart_ToggleAutoScale;
+            _ctx.ChartDataYieldDaily.MouseClick -= PeriodChart_ToggleAutoScale;
+            _ctx.ChartDataYieldYearly.MouseClick += PeriodChart_ToggleAutoScale;
+            _ctx.ChartDataYieldMonthly.MouseClick += PeriodChart_ToggleAutoScale;
+            _ctx.ChartDataYieldDaily.MouseClick += PeriodChart_ToggleAutoScale;
         }
 
         private void PeriodChart_ToggleAutoScale(object sender, MouseEventArgs e)
@@ -988,8 +988,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             if (isAuto)
             {
-                int fixedMax = chart == _ctx.ChartYearly ? _ctx.Settings.Chart.YearlyYMax
-                             : chart == _ctx.ChartMonthly ? _ctx.Settings.Chart.MonthlyYMax
+                int fixedMax = chart == _ctx.ChartDataYieldYearly ? _ctx.Settings.Chart.YearlyYMax
+                             : chart == _ctx.ChartDataYieldMonthly ? _ctx.Settings.Chart.MonthlyYMax
                              : _ctx.Settings.Chart.DailyYMax;
                 ApplyFixedScale(chart, fixedMax);
             }
@@ -1134,13 +1134,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
         {
             if (_ctx.Settings.Chart.ScaleMode == ChartScaleMode.Fixed)
             {
-                ApplyFixedScale(_ctx.ChartYearly, _ctx.Settings.Chart.YearlyYMax);
-                ApplyFixedScale(_ctx.ChartMonthly, _ctx.Settings.Chart.MonthlyYMax);
-                ApplyFixedScale(_ctx.ChartDaily, _ctx.Settings.Chart.DailyYMax);
+                ApplyFixedScale(_ctx.ChartDataYieldYearly, _ctx.Settings.Chart.YearlyYMax);
+                ApplyFixedScale(_ctx.ChartDataYieldMonthly, _ctx.Settings.Chart.MonthlyYMax);
+                ApplyFixedScale(_ctx.ChartDataYieldDaily, _ctx.Settings.Chart.DailyYMax);
             }
             else
             {
-                foreach (var chart in new[] { _ctx.ChartYearly, _ctx.ChartMonthly, _ctx.ChartDaily })
+                foreach (var chart in new[] { _ctx.ChartDataYieldYearly, _ctx.ChartDataYieldMonthly, _ctx.ChartDataYieldDaily })
                 {
                     if (chart.ChartAreas.Count == 0) continue;
                     var sPass = chart.Series["合格"];
@@ -1155,9 +1155,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         public void ApplyFixedScaleForChart(string chartName, int fixedMax)
         {
-            var chart = chartName == "Yearly" ? _ctx.ChartYearly
-                      : chartName == "Monthly" ? _ctx.ChartMonthly
-                      : _ctx.ChartDaily;
+            var chart = chartName == "Yearly" ? _ctx.ChartDataYieldYearly
+                      : chartName == "Monthly" ? _ctx.ChartDataYieldMonthly
+                      : _ctx.ChartDataYieldDaily;
             ApplyFixedScale(chart, fixedMax);
         }
 
@@ -1204,7 +1204,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (!ok) return;
             int year = _chartYears[idx];
             var ctx = BuildThresholdContext();
-            FillPeriodChart(_ctx.ChartYearly,
+            FillPeriodChart(_ctx.ChartDataYieldYearly,
                 InspectionStatisticsService.ComputeGroupedByMonthOfYear(_statsDataRootPath,
                     new DateTime(year, 1, 1), new DateTime(year, 12, 31, 23, 59, 59), ctx));
 
@@ -1216,7 +1216,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _ctx.Settings.ErrorValueMeanV,
             _ctx.Settings.ErrorValueMaxV);
 
-        /// <summary>由 PropertyGrid 變更觸發：重畫 chartYearly/Monthly/Daily（以當前 Settings 重算 Pass/Fail）。</summary>
+        /// <summary>由 PropertyGrid 變更觸發：重畫 chartDataYieldYearly/Monthly/Daily（以當前 Settings 重算 Pass/Fail）。</summary>
         public void RefreshPeriodCharts()
         {
             if (_ctx.CbChartYear?.SelectedIndex >= 0) OnChartYearIndexChanged();
@@ -1236,7 +1236,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             int year = _chartYears[yIdx];
             int month = _chartMonths[idx];
             int lastDay = DateTime.DaysInMonth(year, month);
-            FillPeriodChart(_ctx.ChartMonthly,
+            FillPeriodChart(_ctx.ChartDataYieldMonthly,
                 InspectionStatisticsService.ComputeGroupedByDayOfMonth(_statsDataRootPath,
                     new DateTime(year, month, 1), new DateTime(year, month, lastDay, 23, 59, 59),
                     BuildThresholdContext()));
@@ -1256,7 +1256,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             int year = _chartYears[yIdx];
             int month = _chartMonths[mIdx];
             int day = _chartDays[dIdx];
-            FillPeriodChart(_ctx.ChartDaily,
+            FillPeriodChart(_ctx.ChartDataYieldDaily,
                 InspectionStatisticsService.ComputeGroupedByHourOfDay(_statsDataRootPath,
                     new DateTime(year, month, day), new DateTime(year, month, day, 23, 59, 59),
                     BuildThresholdContext()));
@@ -1324,7 +1324,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             SetGroupBoxActive(_ctx.GrpReviewTimePeriod, !grabNavActive);
         }
 
-        /// <summary>讀取資料後預設切到單片模式：觸發 cbDataGrabId SelectedIndexChanged →
+        /// <summary>讀取資料後預設切到單片模式：觸發 cbDataId SelectedIndexChanged →
         /// OnSingleSheetComboChanged → SetActiveStatGroupBox(GrpDataSingleSheet) + RefreshStats。</summary>
         public void SelectLatestInSingleSheetMode()
         {
@@ -1340,11 +1340,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
         }
 
         /// <summary>
-        /// 由 GroupBox.Click 觸發：切換 active 模式並重算統計（panelStatCam / listViewGrabDetail
-        /// / chartMuraProfile / chartYearly 等）。已是 active 則無動作。
+        /// 由 GroupBox.Click 觸發：切換 active 模式並重算統計（camData / listViewGrabDetail
+        /// / chartDataPatch / chartDataYieldYearly 等）。已是 active 則無動作。
         /// 切到範圍類模式時把對應 combo 攤開到資料夾的完整範圍（避免承襲單片模式的單筆設定）：
-        ///   - GroupBoxGrabIdRange：cbGrabIdStart = 最舊、cbGrabIdEnd = 最新
-        ///   - GroupBoxTimeRange：cbStartDate/Time = _statAvailableTimes.Min、cbEndDate/Time = Max
+        ///   - GroupBoxGrabIdRange：cbDataIdStart = 最舊、cbDataIdEnd = 最新
+        ///   - GroupBoxTimeRange：cbDataDateStart/Time = _statAvailableTimes.Min、cbDataDateEnd/Time = Max
         /// </summary>
         private void SwitchActiveStatGroupBox(GroupBox target)
         {

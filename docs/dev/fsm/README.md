@@ -48,12 +48,12 @@
 3 個 setting：`hb_StitchMode` × `hc_EnableMuraEnhance` × `hd_EnableReviewEnhance` = 8 state
 
 5 個 action 已列：
-- `muraChartVerticalLive.Click`
-- `chartLiveOverview.Click`
-- `chartMuraVertical.Click`
-- `chartOverview.Click`
-- `chartMuraHorizontal.Click` / `muraChartHorizontalLive.Click` (view-only)
-- `canvasMain.DoubleClick` / `canvasMain.Drag` (view-only)
+- `chartLiveVertical.Click`
+- `chartLivePatch.Click`
+- `chartReviewVertical.Click`
+- `chartReviewPatch.Click`
+- `chartReviewHorizontal.Click` / `chartLiveHorizontal.Click` (view-only)
+- `camReviewMain.DoubleClick` / `camReviewMain.Drag` (view-only)
 
 **沒列在 transition-table 的 action 跑下去** → viewer 標 ❌，提示「這個 action 我沒寫到」。
 
@@ -62,7 +62,7 @@
 如果要區分「強化方向 V vs H」，state 從 8 變 32（× v/h × Live ridge dir × Review ridge dir）。屆時：
 1. `state-catalog.csv` 加 `liveRidgeDir`、`reviewRidgeDir` 欄
 2. `ComputeStateId()` 加對應 bit
-3. `muraChartHorizontalLive.Click` / `chartMuraHorizontal.Click` 從 view-only 變成真 transition
+3. `chartLiveHorizontal.Click` / `chartReviewHorizontal.Click` 從 view-only 變成真 transition
 
 ## 整合 StorageRetentionService
 

@@ -29,7 +29,7 @@ namespace AniloxRoll.Monitor.Forms
     /// <summary>AniloxRollForm 回顧（資料夾/時段載入、回顧強化）相關方法 — 由主檔拆出的 partial。</summary>
     public partial class AniloxRollForm
     {
-        private async void btnSelectFolder_Click(object sender, EventArgs e)
+        private async void btnReviewSelectFolder_Click(object sender, EventArgs e)
         {
             try
             {
@@ -37,14 +37,14 @@ namespace AniloxRoll.Monitor.Forms
                 _presenter.UpdatePeriodNavigationState();
                 await ResetAndLoadReviewAfterFolderChanged(dataPresenterAlreadySynced: false);
             }
-            catch (Exception ex) { Trace.WriteLine($"[btnSelectFolder_Click] {ex}"); }
+            catch (Exception ex) { Trace.WriteLine($"[btnReviewSelectFolder_Click] {ex}"); }
         }
 
         /// <summary>
         /// 載入 Anilox 資料夾後共用的 Review 重置 + 主畫面載入：
         /// state reset（合圖方式=全域、回顧強化=否）、Live merge sync + chart clear、
         /// DataPresenter 同步、Review 主畫面載入。
-        /// btnSelectFolder（Review tab）跟 OnDataFolderSelected（Data tab 觸發）共用。
+        /// btnReviewSelectFolder（Review tab）跟 OnDataFolderSelected（Data tab 觸發）共用。
         /// </summary>
         private async Task ResetAndLoadReviewAfterFolderChanged(bool dataPresenterAlreadySynced)
         {
@@ -65,10 +65,10 @@ namespace AniloxRoll.Monitor.Forms
                 _liveCameraManager?.DisableGlobalMerge();
             if (_settings.StitchMode == StitchMode.Global)
             {
-                chartMuraVertical.Series["Mean"].Points.Clear();
-                chartMuraVertical.Series["Max"].Points.Clear();
-                muraChartVerticalLive.Series["Mean"].Points.Clear();
-                muraChartVerticalLive.Series["Max"].Points.Clear();
+                chartReviewVertical.Series["Mean"].Points.Clear();
+                chartReviewVertical.Series["Max"].Points.Clear();
+                chartLiveVertical.Series["Mean"].Points.Clear();
+                chartLiveVertical.Series["Max"].Points.Clear();
             }
             UpdateLiveDirectionVisual();
 
@@ -92,12 +92,12 @@ namespace AniloxRoll.Monitor.Forms
             _dataStatsPresenter.SelectLatestInSingleSheetMode();
 
             // 預設 grpReviewGrabNav（單片序號模式）→ 直接 LoadGrabStitchedViewAsync
-            int reviewIdx = cbReviewGrabId.SelectedIndex;
+            int reviewIdx = cbReviewId.SelectedIndex;
             if (reviewIdx >= 0 && reviewIdx < _dataStatsPresenter.GrabIdInfos.Count)
             {
                 var info = _dataStatsPresenter.GrabIdInfos[reviewIdx];
                 await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest);
-                if (canvasMain.Image != null) canvasMain.FitToScreen();
+                if (camReviewMain.Image != null) camReviewMain.FitToScreen();
                 _reviewDirty = false;
             }
             else
@@ -128,7 +128,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private async Task ReloadCurrentStitchedView(bool enableProcess)
         {
-            int idx = cbReviewGrabId.SelectedIndex;
+            int idx = cbReviewId.SelectedIndex;
             if (idx < 0 || idx >= _dataStatsPresenter.GrabIdInfos.Count) return;
             _interactionHelper.SaveCanvasView();
             var info = _dataStatsPresenter.GrabIdInfos[idx];
@@ -175,7 +175,7 @@ namespace AniloxRoll.Monitor.Forms
             _stitchCoordinator.UpdateOverviewChartFromRepository();
         }
 
-        private async void btnPeriodPrev_Click(object sender, EventArgs e)
+        private async void btnReviewPeriodPrev_Click(object sender, EventArgs e)
         {
             try
             {
@@ -184,12 +184,12 @@ namespace AniloxRoll.Monitor.Forms
                 _stitchCoordinator.ClearStitchedMode();
                 await _presenter.MovePeriodAsync(-1, _stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig);
                 ApplyPostLoadDisplay();
-                if (wasStitch && canvasMain.Image != null) canvasMain.FitToScreen();
+                if (wasStitch && camReviewMain.Image != null) camReviewMain.FitToScreen();
             }
-            catch (Exception ex) { Trace.WriteLine($"[btnPeriodPrev] {ex}"); }
+            catch (Exception ex) { Trace.WriteLine($"[btnReviewPeriodPrev] {ex}"); }
         }
 
-        private async void btnPeriodNext_Click(object sender, EventArgs e)
+        private async void btnReviewPeriodNext_Click(object sender, EventArgs e)
         {
             try
             {
@@ -198,12 +198,12 @@ namespace AniloxRoll.Monitor.Forms
                 _stitchCoordinator.ClearStitchedMode();
                 await _presenter.MovePeriodAsync(+1, _stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig);
                 ApplyPostLoadDisplay();
-                if (wasStitch && canvasMain.Image != null) canvasMain.FitToScreen();
+                if (wasStitch && camReviewMain.Image != null) camReviewMain.FitToScreen();
             }
-            catch (Exception ex) { Trace.WriteLine($"[btnPeriodNext] {ex}"); }
+            catch (Exception ex) { Trace.WriteLine($"[btnReviewPeriodNext] {ex}"); }
         }
 
-        /// <summary>cbDate/cbTime 手動滾動時載入對應圖片（同 btnPeriodPrev/Next）。
+        /// <summary>cbReviewDate/cbReviewTime 手動滾動時載入對應圖片（同 btnReviewPeriodPrev/Next）。
         /// _dataStatsPresenter.GrabIdNavGuard 時跳過（由 OnReviewGrabIdChanged 等程式碼觸發的 NavigateToDateTime）。</summary>
         private async void OnPeriodComboChanged()
         {
@@ -217,7 +217,7 @@ namespace AniloxRoll.Monitor.Forms
             _dataStatsPresenter.SetReviewGroupBoxes(false);
             await _presenter.LoadImagesWithPeriodLockAsync(_stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig);
             ApplyPostLoadDisplay();
-            if (wasStitch && canvasMain.Image != null) canvasMain.FitToScreen();
+            if (wasStitch && camReviewMain.Image != null) camReviewMain.FitToScreen();
             }
             catch (Exception ex) { Trace.WriteLine($"[OnPeriodComboChanged] {ex}"); }
         }

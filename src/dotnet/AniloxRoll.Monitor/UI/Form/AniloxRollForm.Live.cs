@@ -33,7 +33,7 @@ namespace AniloxRoll.Monitor.Forms
         // --- 相機按鈕事件 ---
         // ==========================================
 
-        private async void btnCameraGrab_Click(object sender, EventArgs e)
+        private async void btnLiveGrab_Click(object sender, EventArgs e)
         {
             // 背景預覽中按 Grab → 先清除預覽並 Free，讓 MIL 能重新初始化
             if (_bgPreviewActive)
@@ -233,7 +233,7 @@ namespace AniloxRoll.Monitor.Forms
                 liveCam.TryGetSecondaryDisplayGeometry(
                     out double milZoomX, out double milZoomY, out double milPanX, out double milPanY))
             {
-                double panelW = panelMainDisplay.Width;
+                double panelW = camLiveMain.Width;
                 double leftPixel  = milPanX;
                 double rightPixel = milPanX + panelW / milZoomX;
                 viewLeftMm  = startPos + leftPixel  * opsInMm;
@@ -288,7 +288,7 @@ namespace AniloxRoll.Monitor.Forms
                     liveCam.TryGetSecondaryDisplayGeometry(
                         out double milZoomX, out double milZoomY, out double milPanX, out double milPanY))
                 {
-                    double panelH  = panelMainDisplay.Height;
+                    double panelH  = camLiveMain.Height;
                     double topPixel = milPanY;
                     double botPixel = milPanY + panelH / milZoomY;
                     _liveRowChartHelper.UpdateViewRange(topPixel * rowPitch, botPixel * rowPitch);
@@ -338,8 +338,8 @@ namespace AniloxRoll.Monitor.Forms
 
         private Panel[] GetLivePanels() => new[]
         {
-            panelLiveCam1, panelLiveCam2, panelLiveCam3,
-            panelLiveCam4, panelLiveCam5, panelLiveCam6, panelLiveCam7
+            camLive1, camLive2, camLive3,
+            camLive4, camLive5, camLive6, camLive7
         };
 
         /// <summary>
@@ -364,10 +364,10 @@ namespace AniloxRoll.Monitor.Forms
 
         private void UpdateGrabButton(bool isGrabbing)
         {
-            btnCameraGrab.Text = isGrabbing ? "停止抓取" : "開始抓取";
+            btnLiveGrab.Text = isGrabbing ? "停止抓取" : "開始抓取";
             // 抓取中：凍結取得背景/預覽背景；停止後解鎖
-            btnGetBackground.Enabled = !isGrabbing;
-            btnViewBackground.Enabled = !isGrabbing;
+            btnLiveGetBackground.Enabled = !isGrabbing;
+            btnLiveViewBackground.Enabled = !isGrabbing;
             if (!isGrabbing)
             {
                 UpdateStandardBgSubLockState(); // 停止後依 bin 狀態重新檢查

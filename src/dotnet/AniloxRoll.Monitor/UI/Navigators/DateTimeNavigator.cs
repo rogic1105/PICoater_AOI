@@ -8,30 +8,30 @@ using AniloxRoll.Monitor.UI.State;
 namespace AniloxRoll.Monitor.UI.Navigators
 {
     /// <summary>
-    /// [View Helper] 時間篩選連動管理器（簡化版：cbDate + cbTime）。
-    /// cbDate 顯示 YYYY-MM-DD，cbTime 顯示 HH:mm:ss.fff。
+    /// [View Helper] 時間篩選連動管理器（簡化版：cbReviewDate + cbReviewTime）。
+    /// cbReviewDate 顯示 YYYY-MM-DD，cbReviewTime 顯示 HH:mm:ss.fff。
     /// </summary>
     public class DateTimeNavigator
     {
         private readonly ImageRepository _repository;
-        private readonly ComboBox _cbDate, _cbTime;
+        private readonly ComboBox _cbReviewDate, _cbReviewTime;
         private bool _updating;
         public event Action PeriodSelectionChanged;
 
         public DateTimeNavigator(
             ImageRepository repository,
-            ComboBox cbDate, ComboBox cbTime)
+            ComboBox cbReviewDate, ComboBox cbReviewTime)
         {
             _repository = repository;
-            _cbDate = cbDate;
-            _cbTime = cbTime;
+            _cbReviewDate = cbReviewDate;
+            _cbReviewTime = cbReviewTime;
 
-            _cbDate.SelectedIndexChanged += (s, e) =>
+            _cbReviewDate.SelectedIndexChanged += (s, e) =>
             {
                 if (!_updating) UpdateTimeCombo();
                 if (!_updating) OnPeriodSelectionChanged();
             };
-            _cbTime.SelectedIndexChanged += (s, e) =>
+            _cbReviewTime.SelectedIndexChanged += (s, e) =>
             {
                 if (!_updating) OnPeriodSelectionChanged();
             };
@@ -45,14 +45,14 @@ namespace AniloxRoll.Monitor.UI.Navigators
             try
             {
                 var dates = _repository.GetDates();
-                _cbDate.Items.Clear();
-                _cbDate.Items.AddRange(dates.ToArray());
+                _cbReviewDate.Items.Clear();
+                _cbReviewDate.Items.AddRange(dates.ToArray());
                 if (dates.Count == 0) return;
 
                 // 嘗試還原上次選擇的日期
                 string lastDate = BuildLastDate();
                 int idx = dates.IndexOf(lastDate);
-                _cbDate.SelectedIndex = idx >= 0 ? idx : 0;
+                _cbReviewDate.SelectedIndex = idx >= 0 ? idx : 0;
 
                 UpdateTimeCombo();
             }
@@ -61,15 +61,15 @@ namespace AniloxRoll.Monitor.UI.Navigators
 
         private void UpdateTimeCombo(bool autoSelect = true)
         {
-            var times = _repository.GetTimesForDate(_cbDate.Text);
-            _cbTime.Items.Clear();
-            _cbTime.Items.AddRange(times.ToArray());
+            var times = _repository.GetTimesForDate(_cbReviewDate.Text);
+            _cbReviewTime.Items.Clear();
+            _cbReviewTime.Items.AddRange(times.ToArray());
             if (times.Count == 0) return;
             if (!autoSelect) return;
 
             string lastTime = BuildLastTime();
             int idx = times.IndexOf(lastTime);
-            _cbTime.SelectedIndex = idx >= 0 ? idx : 0;
+            _cbReviewTime.SelectedIndex = idx >= 0 ? idx : 0;
         }
 
         /// <summary>從 UserSessionState 組合上次存的日期字串。</summary>
@@ -150,18 +150,18 @@ namespace AniloxRoll.Monitor.UI.Navigators
             {
                 string dateStr = dt.ToString("yyyy-MM-dd");
                 string timeStr = dt.ToString("HH:mm:ss.fff");
-                if (_cbDate.Items.Contains(dateStr))
-                    _cbDate.SelectedItem = dateStr;
+                if (_cbReviewDate.Items.Contains(dateStr))
+                    _cbReviewDate.SelectedItem = dateStr;
                 else
-                    _cbDate.Text = dateStr;
+                    _cbReviewDate.Text = dateStr;
 
                 // 日期變更後必須刷新 time combo 的 Items，否則殘留前一天的時間列表
                 UpdateTimeCombo(autoSelect: false);
 
-                if (_cbTime.Items.Contains(timeStr))
-                    _cbTime.SelectedItem = timeStr;
+                if (_cbReviewTime.Items.Contains(timeStr))
+                    _cbReviewTime.SelectedItem = timeStr;
                 else
-                    _cbTime.Text = timeStr;
+                    _cbReviewTime.Text = timeStr;
             }
             finally { _updating = false; }
         }
@@ -171,7 +171,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
         private void ParseDate(out string year, out string month, out string day)
         {
             year = ""; month = ""; day = "";
-            string text = _cbDate.Text ?? "";
+            string text = _cbReviewDate.Text ?? "";
             var parts = text.Split('-');
             if (parts.Length >= 3) { year = parts[0]; month = parts[1]; day = parts[2]; }
         }
@@ -179,7 +179,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
         private void ParseTime(out string hour, out string min, out string secFff)
         {
             hour = ""; min = ""; secFff = "";
-            string text = _cbTime.Text ?? "";
+            string text = _cbReviewTime.Text ?? "";
             var parts = text.Split(':');
             if (parts.Length >= 3) { hour = parts[0]; min = parts[1]; secFff = parts[2]; }
         }

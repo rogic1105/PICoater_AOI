@@ -56,7 +56,7 @@
 | Mura 觸發 DO_MURA | 故意放標準 Mura 樣本 | DO1 觸發 + lblIoDoMura 亮黃 + CSV maxExceed=1 |
 | 暫停 Mura 偵測 | 點 lblIoDoMura | 顯示 ⏸ + DO1 不觸發 |
 | CSV 寫入正常 | grep 觀察 `D:\Anilox\Captures\{date}.csv` | 每秒新增 7 行、無錯誤行 |
-| 切到 Data tab | 取像中切 tab | 不卡 UI、btnSelectDataFolder 載入順暢 |
+| 切到 Data tab | 取像中切 tab | 不卡 UI、btnDataSelectFolder 載入順暢 |
 
 **Pass**：30 分鐘內無 crash、無 trace 中出現 Exception。
 
@@ -74,8 +74,8 @@
 | 子項 | 操作 | 預期 |
 |---|---|---|
 | Live ↔ Review ↔ Data 連續切換 100 次 | 5 秒/次 | 無 memory 累積（< 50MB）、無 CUDA leak（vRAM 穩定）|
-| 切到 Review tab 載歷史 grab | btnSelectFolder | 載入 < 3 秒、chartOverview 對齊 |
-| Data tab 點選 listViewGrabDetail row 50 次 | 不同 row | 每次 chartMuraProfile 立即重畫、cbDataGrabId 對齊 |
+| 切到 Review tab 載歷史 grab | btnReviewSelectFolder | 載入 < 3 秒、chartReviewPatch 對齊 |
+| Data tab 點選 listViewGrabDetail row 50 次 | 不同 row | 每次 chartDataPatch 立即重畫、cbDataId 對齊 |
 
 **Pass**：handle 數 < 1000、RAM 不持續上漲。
 
@@ -83,8 +83,8 @@
 
 | 子項 | 操作 | 預期 |
 |---|---|---|
-| 點【單片】→【序號範圍】→【時序範圍】→【單片】循環 30 次 | 1 秒/次 | 1) 切到 GrabIdRange 自動攤 [oldest..newest]、2) 切到 TimeRange 自動攤 [min..max]、3) 切回 SingleSheet 顯示 cbDataGrabId 當前 |
-| 每次切換 chartMuraProfile 內容 | 觀察 | 模式對應的視圖正確（單片 stitch / aggregate）|
+| 點【單片】→【序號範圍】→【時序範圍】→【單片】循環 30 次 | 1 秒/次 | 1) 切到 GrabIdRange 自動攤 [oldest..newest]、2) 切到 TimeRange 自動攤 [min..max]、3) 切回 SingleSheet 顯示 cbDataId 當前 |
+| 每次切換 chartDataPatch 內容 | 觀察 | 模式對應的視圖正確（單片 stitch / aggregate）|
 
 **Pass**：每次切換 chart 更新 < 500ms、listViewGrabDetail 不爆量。
 
@@ -117,7 +117,7 @@
 | 6h | 觸發 IO Grab Start/Stop 30 次 | 每次都成功啟停、無 FSM 異常 |
 | 8h | 切到 Data tab 跑 RefreshStats（資料量已累積 ~20 萬筆 CSV row）| < 5 秒完成 + UI 不凍結 > 1 秒 |
 | 12h | 切【序號範圍群組】掃整天資料 | < 10 秒，statistics 正確 |
-| 16h | 開啟 chartYearly 看連續切換 | 不卡、period charts 同步 |
+| 16h | 開啟 chartDataYieldYearly 看連續切換 | 不卡、period charts 同步 |
 | 20h | 暫停 5 分鐘觀察 idle 行為 | watchdog 不誤觸、storage retention 不誤刪 |
 
 **Pass**：所有監控指標達標、無 unhandled exception、無 user-visible bug。
@@ -188,8 +188,8 @@
 |---|---|---|
 | 正規值 V = 0.0001 | PropertyGrid 改 | chart 顯示峰值極大、不崩 |
 | 正規值 V = 10.0 | PropertyGrid 改 | chart 顯示峰值極小、threshold 線位置正確 |
-| 空 CaptureRoot 資料夾 | btnSelectDataFolder | listViewGrabDetail 空、chart 清空、無 NRE |
-| 1M+ CSV rows（手動生成）| btnSelectDataFolder | RefreshStats 完成（即使慢）、無 OOM |
+| 空 CaptureRoot 資料夾 | btnDataSelectFolder | listViewGrabDetail 空、chart 清空、無 NRE |
+| 1M+ CSV rows（手動生成）| btnDataSelectFolder | RefreshStats 完成（即使慢）、無 OOM |
 | CSV 內 #CFG 損壞 | 手動編輯 | TryParse 跳過、其他 row 正常 |
 | HM_V_capture = HM_V_current（ratio=1）| 預設情況 | 不做 rescale（noOp），效能與舊版相同 |
 
@@ -201,9 +201,9 @@
 |---|---|---|
 | `15b7902` `.bin` 中性化 | 取像、檢查 `.bin` 內值是否有 > 255（峰值未截斷）| `check_bin_neutral.py` 報告新檔 |
 | `10f0b6d` V/H 分離 | 改 HM_V 影響 V chart、HM_H 影響 H chart | 互不影響 |
-| `97f69a9` chartMuraProfile 對齊 | btnSelectDataFolder 立即顯示單 grab stitch | 不需切 Review tab |
+| `97f69a9` chartDataPatch 對齊 | btnDataSelectFolder 立即顯示單 grab stitch | 不需切 Review tab |
 | `9f9ee47` GroupBox 切模式 | 點三個 GroupBox 切換 | 行為對齊 P2-4 |
-| `0e01f95` listView 點選同步 | 點 row | cbDataGrabId 對齊 |
+| `0e01f95` listView 點選同步 | 點 row | cbDataId 對齊 |
 | `cf29600` legacy fallback 移除 | 舊 CSV（無 V/H）讀取 | 用 InspectionDefaults |
 | `2294621` H/M/L 18 個 | 各項目見 round-2 report | round-2 已驗證 |
 | `5f5a020` round-2 9 個 | B-H1 跨 process race、debouncer Dispose | P4-6 + P2-2 |

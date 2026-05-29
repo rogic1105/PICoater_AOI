@@ -116,7 +116,7 @@ namespace AniloxRoll.Monitor.Forms
         /// <summary>"v" = vertical ridge（預設），"h" = horizontal ridge。控制 Live 顯示方向。</summary>
         private string _liveDisplayDirection = "v";
 
-        /// <summary>Data tab 變更 cbDataGrabId 後 cbReviewGrabId 已同步但 canvasMain 尚未更新；
+        /// <summary>Data tab 變更 cbDataId 後 cbReviewId 已同步但 camReviewMain 尚未更新；
         /// 待使用者切到 Review tab 時才載圖。</summary>
         private bool _reviewDirty = false;
 
@@ -400,10 +400,10 @@ namespace AniloxRoll.Monitor.Forms
         private void InitUiLayer()
         {
             _dateTimeNavigator = new DateTimeNavigator(
-                _imageRepository, cbDate, cbTime);
+                _imageRepository, cbReviewDate, cbReviewTime);
 
             _cameraPanels = new PictureBox[] {
-                pbCam1, pbCam2, pbCam3, pbCam4, pbCam5, pbCam6, pbCam7
+                camReview1, camReview2, camReview3, camReview4, camReview5, camReview6, camReview7
             };
             _galleryManager = new ThumbnailGridPresenter();
             _galleryManager.Initialize(_cameraPanels);
@@ -411,82 +411,82 @@ namespace AniloxRoll.Monitor.Forms
             _presenter = new AniloxRollPresenter(
                 _imageRepository, _inspectionService, _dateTimeNavigator, _galleryManager);
 
-            _reviewColumnChartHelper = new ColumnCurveChartHelper(this.chartMuraVertical);
+            _reviewColumnChartHelper = new ColumnCurveChartHelper(this.chartReviewVertical);
             _reviewColumnChartHelper.SetOps(_settings.Cam1_Ops);
             _reviewColumnChartHelper.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
 
-            _liveColumnChartHelper = new ColumnCurveChartHelper(this.muraChartVerticalLive);
+            _liveColumnChartHelper = new ColumnCurveChartHelper(this.chartLiveVertical);
             _liveColumnChartHelper.SetOps(_settings.Cam1_Ops);
             _liveColumnChartHelper.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
 
-            _reviewOverviewHelper = new ColumnCurveChartHelper(this.chartOverview);
+            _reviewOverviewHelper = new ColumnCurveChartHelper(this.chartReviewPatch);
             _reviewOverviewHelper.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-            if (chartOverview.ChartAreas.Count > 0)
-                chartOverview.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
+            if (chartReviewPatch.ChartAreas.Count > 0)
+                chartReviewPatch.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
 
-            _liveOverviewHelper = new ColumnCurveChartHelper(this.chartLiveOverview);
+            _liveOverviewHelper = new ColumnCurveChartHelper(this.chartLivePatch);
             _liveOverviewHelper.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-            if (chartLiveOverview.ChartAreas.Count > 0)
-                chartLiveOverview.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
+            if (chartLivePatch.ChartAreas.Count > 0)
+                chartLivePatch.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
 
-            _liveRowChartHelper = new RowCurveChartHelper(this.muraChartHorizontalLive);
+            _liveRowChartHelper = new RowCurveChartHelper(this.chartLiveHorizontal);
             _liveRowChartHelper.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
 
-            _reviewRowChartHelper = new RowCurveChartHelper(this.chartMuraHorizontal);
+            _reviewRowChartHelper = new RowCurveChartHelper(this.chartReviewHorizontal);
             _reviewRowChartHelper.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
 
             UpdateRowChartPitch();
 
             // Review tab chart 點選（統一語意：點 chart 等於設定「目標 StitchMode + 是否強化 + 方向」）：
-            //   chartMuraVertical：
+            //   chartReviewVertical：
             //     同 mode (Vertical) → SwitchRidgeDirection("v") 切換強化方向
             //     不同 mode (Global) → 切回 Vertical（強化中也適用，順便關 enhance）
-            //   chartOverview：對稱（同/不同 mode 行為對調）
-            //   chartMuraHorizontal：永遠 toggle ridge dir = "h"
-            chartMuraVertical.MouseClick += (s, e) =>
+            //   chartReviewPatch：對稱（同/不同 mode 行為對調）
+            //   chartReviewHorizontal：永遠 toggle ridge dir = "h"
+            chartReviewVertical.MouseClick += (s, e) =>
             {
-                UiActionLogger.SetSource("chartMuraVertical.Click");
-                LogClick("chartMuraVertical.MouseClick", e);
+                UiActionLogger.SetSource("chartReviewVertical.Click");
+                LogClick("chartReviewVertical.MouseClick", e);
                 if (_settings?.StitchMode == StitchMode.Vertical) SwitchRidgeDirection("v");
                 else if (_settings?.StitchMode == StitchMode.Global) _ = SwitchReviewStitchModeAndDisableEnhance(StitchMode.Vertical);
             };
-            chartOverview.MouseClick += (s, e) =>
+            chartReviewPatch.MouseClick += (s, e) =>
             {
-                UiActionLogger.SetSource("chartOverview.Click");
-                LogClick("chartOverview.MouseClick", e);
+                UiActionLogger.SetSource("chartReviewPatch.Click");
+                LogClick("chartReviewPatch.MouseClick", e);
                 if (_settings?.StitchMode == StitchMode.Global) SwitchRidgeDirection("v");
                 else if (_settings?.StitchMode == StitchMode.Vertical) _ = SwitchReviewStitchModeAndDisableEnhance(StitchMode.Global);
             };
-            chartMuraHorizontal.MouseClick += (s, e) =>
+            chartReviewHorizontal.MouseClick += (s, e) =>
             {
-                UiActionLogger.SetSource("chartMuraHorizontal.Click");
-                UiActionLogger.RecordViewOnly("chartMuraHorizontal.Click");
+                UiActionLogger.SetSource("chartReviewHorizontal.Click");
+                UiActionLogger.RecordViewOnly("chartReviewHorizontal.Click");
                 SwitchRidgeDirection("h");
             };
 
             // Live tab chart 點選（同 Review tab 語意，只是底層 apply 函式不同）：
-            //   muraChartVerticalLive：
+            //   chartLiveVertical：
             //     同 mode (Vertical) → SwitchLiveDisplayDirection("v")
             //     不同 mode (Global) → SwitchStitchModeWithEnhanceSequence(Vertical)（內含關 enhance）
-            //   chartLiveOverview：對稱
-            muraChartVerticalLive.MouseClick += (s, e) =>
+            //   chartLivePatch：對稱
+            chartLiveVertical.MouseClick += (s, e) =>
             {
-                UiActionLogger.SetSource("muraChartVerticalLive.Click");
-                LogClick("muraChartVerticalLive.MouseClick", e);
+                UiActionLogger.SetSource("chartLiveVertical.Click");
+                LogClick("chartLiveVertical.MouseClick", e);
                 if (_settings?.StitchMode == StitchMode.Vertical) SwitchLiveDisplayDirection("v");
                 else if (_settings?.StitchMode == StitchMode.Global) _ = SwitchStitchModeWithEnhanceSequence(StitchMode.Vertical);
             };
-            chartLiveOverview.MouseClick += (s, e) =>
+            chartLivePatch.MouseClick += (s, e) =>
             {
-                UiActionLogger.SetSource("chartLiveOverview.Click");
-                LogClick("chartLiveOverview.MouseClick", e);
+                UiActionLogger.SetSource("chartLivePatch.Click");
+                LogClick("chartLivePatch.MouseClick", e);
                 if (_settings?.StitchMode == StitchMode.Global) SwitchLiveDisplayDirection("v");
                 else if (_settings?.StitchMode == StitchMode.Vertical) _ = SwitchStitchModeWithEnhanceSequence(StitchMode.Global);
             };
-            muraChartHorizontalLive.MouseClick += (s, e) =>
+            chartLiveHorizontal.MouseClick += (s, e) =>
             {
-                UiActionLogger.SetSource("muraChartHorizontalLive.Click");
-                UiActionLogger.RecordViewOnly("muraChartHorizontalLive.Click");
+                UiActionLogger.SetSource("chartLiveHorizontal.Click");
+                UiActionLogger.RecordViewOnly("chartLiveHorizontal.Click");
                 SwitchLiveDisplayDirection("h");
             };
 
@@ -520,8 +520,8 @@ namespace AniloxRoll.Monitor.Forms
             _interactionHelper = new FormInteractionHelper(new FormInteractionContext
             {
                 Form             = this,
-                Canvas           = canvasMain,
-                ButtonsToLock    = new Button[] { btnSelectFolder },
+                Canvas           = camReviewMain,
+                ButtonsToLock    = new Button[] { btnReviewSelectFolder },
                 ThumbnailCache   = _thumbnailCache,
                 Presenter        = _presenter,
                 InspectionService = _inspectionService,
@@ -538,10 +538,10 @@ namespace AniloxRoll.Monitor.Forms
 
             _stitchCoordinator = new ReviewStitchCoordinator(new ReviewStitchContext
             {
-                Canvas                    = canvasMain,
-                ChartOverview             = chartOverview,
-                ChartMuraVertical         = chartMuraVertical,
-                ChartMuraHorizontal       = chartMuraHorizontal,
+                Canvas                    = camReviewMain,
+                ChartReviewPatch             = chartReviewPatch,
+                ChartReviewVertical         = chartReviewVertical,
+                ChartReviewHorizontal       = chartReviewHorizontal,
                 InteractionHelper         = _interactionHelper,
                 ColumnChartHelper         = _reviewColumnChartHelper,
                 RowChartHelper            = _reviewRowChartHelper,
@@ -582,26 +582,26 @@ namespace AniloxRoll.Monitor.Forms
             _dateTimeNavigator.PeriodSelectionChanged += OnPeriodComboChanged;
             _presenter.PeriodNavigationStateChanged   += (canLast, canNext) =>
             {
-                btnPeriodPrev.Enabled = canLast;
-                btnPeriodNext.Enabled = canNext;
+                btnReviewPeriodPrev.Enabled = canLast;
+                btnReviewPeriodNext.Enabled = canNext;
             };
             _presenter.UpdatePeriodNavigationState();
 
-            canvasMain.StatusChanged += _interactionHelper.UpdateCanvasInfo;
-            canvasMain.StatusChanged += UpdateSelectedReviewCamFromViewCenter;
-            canvasMain.EdgeReached   += _interactionHelper.NavigateCamera;
+            camReviewMain.StatusChanged += _interactionHelper.UpdateCanvasInfo;
+            camReviewMain.StatusChanged += UpdateSelectedReviewCamFromViewCenter;
+            camReviewMain.EdgeReached   += _interactionHelper.NavigateCamera;
             var canvasClicker = new MultiClickDetector();
-            canvasMain.MouseDown += (s, e) =>
+            camReviewMain.MouseDown += (s, e) =>
             {
                 if (e.Button != MouseButtons.Left) return;
                 int clicks = canvasClicker.RegisterClick(e.Location);
-                if (clicks == 1) UiActionLogger.RecordViewOnly("canvasMain.Drag");
+                if (clicks == 1) UiActionLogger.RecordViewOnly("camReviewMain.Drag");
                 if (clicks == 2)
                 {
-                    UiActionLogger.RecordViewOnly("canvasMain.DoubleClick");
-                    if (canvasMain.Image != null && !IsCanvasFitToScreen())
+                    UiActionLogger.RecordViewOnly("camReviewMain.DoubleClick");
+                    if (camReviewMain.Image != null && !IsCanvasFitToScreen())
                     {
-                        canvasMain.FitToScreen();
+                        camReviewMain.FitToScreen();
                         canvasClicker.Consume();   // 歸零，防止下一下誤觸三擊
                     }
                 }
@@ -621,16 +621,16 @@ namespace AniloxRoll.Monitor.Forms
         {
             _liveCameraManager = new LiveCameraManager(
                 this,
-                new[] { panelLiveCam1, panelLiveCam2, panelLiveCam3,
-                        panelLiveCam4, panelLiveCam5, panelLiveCam6, panelLiveCam7 },
-                panelMainDisplay,
+                new[] { camLive1, camLive2, camLive3,
+                        camLive4, camLive5, camLive6, camLive7 },
+                camLiveMain,
                 pixelText => { if (lblPixelInfo != null) lblPixelInfo.Text = pixelText; }
             );
             _liveCameraManager.SetCaptureSettings(_settings);
             _liveCameraManager.OnFilesSaved = files => _remoteCopyService?.EnqueueFiles(files);
             _liveCameraManager.OnInspectionResult += OnCameraInspectionResult;
-            btnGetBackground.Click += btnGetBackground_Click;
-            btnViewBackground.Click += btnViewBackground_Click;
+            btnLiveGetBackground.Click += btnLiveGetBackground_Click;
+            btnLiveViewBackground.Click += btnLiveViewBackground_Click;
             UpdateStandardBgSubLockState();
             _liveCameraManager.OnLiveCurveData      += OnLiveCurveData;
             _liveCameraManager.OnLiveRowCurveData   += OnLiveRowCurveData;
@@ -652,7 +652,7 @@ namespace AniloxRoll.Monitor.Forms
             };
 
             var panelClicker = new MultiClickDetector();
-            panelMainDisplay.MouseDown += (s, e) =>
+            camLiveMain.MouseDown += (s, e) =>
             {
                 if (e.Button != MouseButtons.Left) return;
                 int clicks = panelClicker.RegisterClick(e.Location);
@@ -695,7 +695,7 @@ namespace AniloxRoll.Monitor.Forms
             // 程式啟動後自動分配相機（不 Grab），讓 lblCamCount 在按下【開始抓取】前就能顯示連線狀態
             Shown += (s, e) => AutoAllocateCameras();
 
-            // commit 5b769f4 把 Live tab 加進 ProportionalScaler 後，panelMainDisplay 在 z-order 上層
+            // commit 5b769f4 把 Live tab 加進 ProportionalScaler 後，camLiveMain 在 z-order 上層
             // 縮放時幾何疊到 chart 區、MIL window 吃掉 hit-test → chart click handler 完全不觸發。
             // 修法：Shown + Resize 後把 chart 提到 z-order 最上層，hit-test 順序就會正確。
             Shown    += (s, e) => BringLiveChartsToFront();
@@ -706,9 +706,9 @@ namespace AniloxRoll.Monitor.Forms
         {
             try
             {
-                chartLiveOverview?.BringToFront();
-                muraChartVerticalLive?.BringToFront();
-                muraChartHorizontalLive?.BringToFront();
+                chartLivePatch?.BringToFront();
+                chartLiveVertical?.BringToFront();
+                chartLiveHorizontal?.BringToFront();
                 LogClick("BringLiveChartsToFront() called");
             }
             catch (Exception ex) { LogClick("BringLiveChartsToFront throw: " + ex.Message); }

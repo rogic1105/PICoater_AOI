@@ -213,7 +213,7 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="box output">相機數狀態：相機: N/7（Cable 是否接上即可得知，不需 Grab）</div>
 </div>
 <div class="flow-group vflow" id="btn-camera-grab">
-<div class="flow-title">開始抓取 <code>btnCameraGrab</code></div>
+<div class="flow-title">開始抓取 <code>btnLiveGrab</code></div>
 <div class="box input">按下【開始抓取】</div>
 <div class="v-arrow dev"></div>
 <div class="out-seq dev">
@@ -250,7 +250,7 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="box action">SetGrabHeight → MdigControl(M_SOURCE_SIZE_Y)</div>
 <div class="box action">MdispAlloc × 2（primary + secondary Display）</div>
 <div class="box action">MbufAlloc2d × N（GrabBuffer + DisplayBuffer + ProcBuffer）</div>
-<div class="box action">MdispSelectWindow(primary, displayBuffer, panelLiveCam)（縮圖綁定）</div>
+<div class="box action">MdispSelectWindow(primary, displayBuffer, camLive)（縮圖綁定）</div>
 <div class="box action">MdispHookFunction(M_MOUSE_MOVE / M_MOUSE_LEFT_BUTTON_DOWN)</div>
 <div class="box action">SetExposureUs（初始曝光，走 legacy MdigControl 路徑）</div>
 </div>
@@ -284,7 +284,7 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <details class="subflow">
 <summary>SwitchMainDisplay 細節</summary>
 <div class="vflow">
-<div class="box action">選中相機：SetSecondaryDisplay(panelMainDisplay.Handle)（主畫面綁定）</div>
+<div class="box action">選中相機：SetSecondaryDisplay(camLiveMain.Handle)（主畫面綁定）</div>
 <div class="box action">其他相機：RemoveSecondaryDisplay()（移除主畫面綁定）</div>
 <div class="box action">選中縮圖標籤：背景色 PapayaWhip（高亮）</div>
 </div>
@@ -327,7 +327,7 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 </div>
 </div>
 <div class="flow-group vflow">
-<div class="flow-title">停止抓取 <code>btnCameraGrab（再按一次）</code></div>
+<div class="flow-title">停止抓取 <code>btnLiveGrab（再按一次）</code></div>
 <div class="box input">按下【停止抓取】</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">ToggleGrab</div>
@@ -494,19 +494,19 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="v-branch dev">
 <div class="v-branch-path"><span class="branch-label elif">StandardBgSub + 無 bin</span>
 <div class="out-seq">
-<div class="box action">btnGetBackground_Click（自動採集背景）</div>
-<div class="box action">採集完成 → FreeCameras → btnCameraGrab_Click（接續正式 grab）</div>
+<div class="box action">btnLiveGetBackground_Click（自動採集背景）</div>
+<div class="box action">採集完成 → FreeCameras → btnLiveGrab_Click（接續正式 grab）</div>
 </div>
 </div>
 <div class="v-branch-path"><span class="branch-label yes">正常</span>
-<div class="box action">btnCameraGrab_Click（LightTurnOn → await warmup → ToggleGrab）</div>
+<div class="box action">btnLiveGrab_Click（LightTurnOn → await warmup → ToggleGrab）</div>
 </div>
 </div>
 <div class="v-arrow dev" data-label="取像結束"></div>
 <div class="box input">IO 模組 DI_INSPECT_START 下降緣（PlcStopGrab）</div>
 <div class="v-arrow dev"></div>
 <div class="out-seq dev">
-<div class="box action">btnCameraGrab_Click → 停止取像</div>
+<div class="box action">btnLiveGrab_Click → 停止取像</div>
 <div class="box action">LightTurnOff → TurnOff(Channel)</div>
 </div>
 <div class="note">光源控制器 LTS-3DPA24，RS-232（9600/8N1），單通道機型 Channel=1、亮度 0~255。啟用光源 = True 時啟動自動偵測；NA 不影響取像（僅不觸發光源開關）。<strong>PropertyGrid 變更即時生效</strong>：啟用切換立即連線/斷線、COM/通道變更立即重新偵測、亮度變更立即套用硬體，不需重啟程式。<strong>連線狀態自動維護</strong>：每 2 秒背景 probe 偵測拔線、未連線時自動 AutoDetect 重連（包含程式啟動時光源未上電的情境），完全不需重啟。設定值於【檢測設定】→「7. 光源設定」。</div>
@@ -538,7 +538,7 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="note dev">EnableMuraEnhance 變更後呼叫 <code>RefreshPropertyGridKeepScroll()</code>：以 <code>WM_SETREDRAW=0</code> 凍結 PropertyGridView → <code>propertyGridSettings.Refresh()</code> → 直接還原 <code>VScrollBar.Value</code>（PropertyGridView 用 child VScrollBar 而非 window standard scrollbar，<code>GetScrollPos(gridView.Handle)</code> 永遠回傳 0，必須遍歷 Controls 取 VScrollBar）→ 解凍 + Invalidate()，避免 Refresh() 內部 scroll-to-selected 跳位。</div>
 </div>
 <div class="flow-group vflow">
-<div class="flow-title">取得背景 <code>btnGetBackground</code></div>
+<div class="flow-title">取得背景 <code>btnLiveGetBackground</code></div>
 <div class="box input">按下【取得背景】</div>
 <div class="v-arrow"></div>
 <div class="box guard">Guard：Algorithm = StandardBgSub 才可執行</div>
@@ -564,7 +564,7 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="note">亮度（光源設定 &gt; 亮度）與曝光時間（相機參數）會一起存入背景檔；若事後調整這兩個參數，需重新取背景。</div>
 </div>
 <div class="flow-group vflow">
-<div class="flow-title">預覽背景 <code>btnViewBackground</code>（Toggle）</div>
+<div class="flow-title">預覽背景 <code>btnLiveViewBackground</code>（Toggle）</div>
 <div class="box input">按下【預覽背景】</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">Detach MIL → 載入 bg .bin → ExpandColMeanToBitmap</div>
@@ -657,7 +657,7 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="flow-group vflow dev" id="live-global-merge">
 <div class="flow-title">即時全域合圖（系統流程）<code>EnableGlobalMerge / DisableGlobalMerge</code></div>
 <div class="ref-list">引用：<a href="#btn-camera-grab">開始抓取</a> · <a href="#live-thumbnail-click">監控縮圖點擊</a> · <a href="#settings-changed">檢測設定變更</a></div>
-<div class="note">合圖方式 = 全域時觸發。觸發時機：① StitchMode 變更（_propertyGrid_PropertyValueChanged）② 首次開始抓取（btnCameraGrab_Click 分配相機後）。使用 MIL MbufChild2d + MbufCopyClip 在 GPU 端完成跨相機合圖，不經 CPU。</div>
+<div class="note">合圖方式 = 全域時觸發。觸發時機：① StitchMode 變更（_propertyGrid_PropertyValueChanged）② 首次開始抓取（btnLiveGrab_Click 分配相機後）。使用 MIL MbufChild2d + MbufCopyClip 在 GPU 端完成跨相機合圖，不經 CPU。</div>
 <!-- ── EnableGlobalMerge 初始化 ── -->
 <div class="box action">EnableGlobalMerge(opsUm[], startPosMm[])</div>
 <div class="v-arrow"></div>
@@ -803,7 +803,7 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <h2 onclick="toggle(this)">歷史查詢（Review）</h2>
 <div class="tab-section">
 <div class="flow-group vflow" id="review-load-data">
-<div class="flow-title">讀取資料 <code>btnSelectFolder</code>（Review）/ <code>btnSelectDataFolder</code>（Data）</div>
+<div class="flow-title">讀取資料 <code>btnReviewSelectFolder</code>（Review）/ <code>btnDataSelectFolder</code>（Data）</div>
 <div class="box input">按下【讀取資料】→ 選擇資料夾</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">SelectAndLoadFolder 智慧修正：若選的目錄無 yyyy 子目錄但底下有 Captures\yyyy → 自動轉用 {selected}\Captures（修正使用者誤選 D:\Anilox 而非 D:\Anilox\Captures 的狀況）</div>
@@ -823,11 +823,11 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="v-arrow dev"></div>
 <div class="box action dev">ClearStitchedMode → SetReviewGroupBoxes(true)（【單片群組】+【序號選擇群組】綠色高亮，預設為 grpReviewGrabNav 模式）</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">SelectLatestInSingleSheetMode → cbDataGrabId.SelectedIndex = 0（同步 cbReviewGrabId；OnDataGrabIdSelected 只設 _reviewDirty=true，不立即載圖）</div>
+<div class="box action dev">SelectLatestInSingleSheetMode → cbDataId.SelectedIndex = 0（同步 cbReviewId；OnDataGrabIdSelected 只設 _reviewDirty=true，不立即載圖）</div>
 <div class="v-arrow" data-label="分支：序號有無"></div>
 <div class="v-branch">
 <div class="v-branch-path"><span class="branch-label yes">有序號（預設路徑）</span>
-<div class="box action dev">直接 LoadGrabStitchedViewAsync(cbReviewGrabId 當前 GrabIdInfo) → FitToScreen → _reviewDirty=false</div>
+<div class="box action dev">直接 LoadGrabStitchedViewAsync(cbReviewId 當前 GrabIdInfo) → FitToScreen → _reviewDirty=false</div>
 <div class="v-arrow" data-label="分支：合圖方式"></div>
 <div class="v-branch">
 <div class="v-branch-path"><span class="branch-label yes">垂直</span>
@@ -854,12 +854,12 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="box action dev">LoadImagesWithPeriodLockAsync + ApplyPostLoadDisplay（period 模式）</div>
 </div>
 </div>
-<div class="note dev">為什麼 btnSelectFolder_Click 要明確呼叫 LoadGrabStitchedViewAsync：OnDataGrabIdSelected 為 Data tab 延後渲染而設計（只設 _reviewDirty=true），但讀資料是 Review tab 操作，需要立即看圖。若僅依賴 SelectLatestInSingleSheetMode → 走 LoadImagesWithPeriodLockAsync → ApplyPostLoadDisplay，會載成 period 全域合圖（grpReviewTimePeriod 模式），與 UI 高亮的 grpReviewGrabNav 不一致。</div>
+<div class="note dev">為什麼 btnReviewSelectFolder_Click 要明確呼叫 LoadGrabStitchedViewAsync：OnDataGrabIdSelected 為 Data tab 延後渲染而設計（只設 _reviewDirty=true），但讀資料是 Review tab 操作，需要立即看圖。若僅依賴 SelectLatestInSingleSheetMode → 走 LoadImagesWithPeriodLockAsync → ApplyPostLoadDisplay，會載成 period 全域合圖（grpReviewTimePeriod 模式），與 UI 高亮的 grpReviewGrabNav 不一致。</div>
 <div class="v-arrow"></div>
 <div class="box sync">同步 Data tab：填充起始/結束序號、時間、良率圖導航 → 刷新統計</div>
 </div>
 <div class="flow-group vflow" id="review-period-nav">
-<div class="flow-title">時段導航 <code>btnPeriodPrev/Next</code> + <code>cbDate/cbTime</code></div>
+<div class="flow-title">時段導航 <code>btnReviewPeriodPrev/Next</code> + <code>cbReviewDate/cbReviewTime</code></div>
 <div class="box input">按【上一時段】/【下一時段】或切換【時段日期】/【時段時間】</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">ClearStitchedMode → MovePeriodAsync → LoadImages</div>
@@ -889,7 +889,7 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 </div></div>
 </div>
 <div class="flow-group vflow" id="review-grabid-nav">
-<div class="flow-title">單片序號導航 <code>cbReviewGrabId</code> + <code>btnGrabIdPrev/Next</code></div>
+<div class="flow-title">單片序號導航 <code>cbReviewId</code> + <code>btnReviewIdPrev/Next</code></div>
 <div class="box input">選擇【單片序號】或按【上一序號】/【下一序號】</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">NavigateToDateTime → LoadGrabStitchedViewAsync（內部以 resetView=false 顯示，視野存檔由呼叫端 SaveCanvasView 決定；首次載入無存檔 → FitToScreen）</div>
@@ -1012,7 +1012,7 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="box output">回顧強化變更 → ApplyReviewEnhance → 回顧主畫面切原圖/V/H 處理圖；作用中曲線圖 淺藍底 + 橘框</div>
 <div class="box output">縮圖橘框 Invalidate</div>
 </div>
-<div class="note dev">SwitchReviewStitchModeAndDisableEnhance 用 Hub.SetBatch 一次 save 兩 setting，caller 自己 inline await transition 避免 event race；canvasMain.Visible=false 包 try/finally 達 commit-on-end 避免中間幀閃。三態邏輯：未勾選→自動勾選+設方向；同方向→取消勾選；不同方向→換方向。</div>
+<div class="note dev">SwitchReviewStitchModeAndDisableEnhance 用 Hub.SetBatch 一次 save 兩 setting，caller 自己 inline await transition 避免 event race；camReviewMain.Visible=false 包 try/finally 達 commit-on-end 避免中間幀閃。三態邏輯：未勾選→自動勾選+設方向；同方向→取消勾選；不同方向→換方向。</div>
 </div>
 <div class="flow-group vflow">
 <div class="flow-title">監控曲線圖點擊 → setting 變更 → 訂閱者反應</div>
@@ -1065,7 +1065,7 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="flow-title">回顧主畫面手勢</div>
 <div class="box input">雙擊【回顧主畫面】</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">canvasMain.FitToScreen()</div>
+<div class="box action dev">camReviewMain.FitToScreen()</div>
 <div class="v-arrow"></div>
 <div class="box output">自動填滿</div>
 <div class="v-arrow"></div>
@@ -1191,24 +1191,24 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <h2 onclick="toggle(this)">檢測報表（Data）</h2>
 <div class="tab-section">
 <div class="flow-group vflow">
-<div class="flow-title">讀取資料 <code>btnSelectDataFolder</code>（從 Data tab 觸發）</div>
+<div class="flow-title">讀取資料 <code>btnDataSelectFolder</code>（從 Data tab 觸發）</div>
 <div class="box input">按下【讀取資料】→ 選擇資料夾</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">LoadAvailableTimes + LoadGrabIdInfos → PopulateChartNavigators → SetActiveStatGroupBox(GrpDataSingleSheet) → cbGrabIdStart=End=cbDataGrabId=0 (descending [0]=最新) → RefreshStats</div>
+<div class="box action dev">LoadAvailableTimes + LoadGrabIdInfos → PopulateChartNavigators → SetActiveStatGroupBox(GrpDataSingleSheet) → cbDataIdStart=End=cbDataId=0 (descending [0]=最新) → RefreshStats</div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">起始/結束序號：填入全範圍，初值對齊到最新一筆（單片模式）</div>
 <div class="box output">起始/結束日期時間：填入全範圍</div>
 <div class="box output">報表序號 + 單片序號：填入全部序號，預設選最新一筆</div>
-<div class="box output">【單片群組 grpDataSingleSheet】綠色高亮（預設 active 模式 — 與 Review tab btnSelectFolder 行為對齊）</div>
-<div class="box output">良率卡片1~7【panelStatCam1~7】：顯示最新單筆的 Pass/Fail（單片模式分母=1）</div>
-<div class="box output">【chartMuraProfile】Mura 空間分布圖：最新單 grab stitch 視圖（MergeCurves + 該 grab #CFG OPS/Pos，與【chartOverview】對齊）</div>
+<div class="box output">【單片群組 grpDataSingleSheet】綠色高亮（預設 active 模式 — 與 Review tab btnReviewSelectFolder 行為對齊）</div>
+<div class="box output">良率卡片1~7【camData1~7】：顯示最新單筆的 Pass/Fail（單片模式分母=1）</div>
+<div class="box output">【chartDataPatch】Mura 空間分布圖：最新單 grab stitch 視圖（MergeCurves + 該 grab #CFG OPS/Pos，與【chartReviewPatch】對齊）</div>
 <div class="box output">明細列表：逐序號明細</div>
 <div class="box output">良率年/月/日圖：填入統計資料</div>
 <div class="box output">年/月/日圖導航：填入可選範圍</div>
 </div>
 <div class="v-arrow"></div>
-<div class="box sync">DataFolderSelected event → AniloxRollForm.OnDataFolderSelected (async void) → 共用 ResetAndLoadReviewAfterFolderChanged helper（與 Review tab btnSelectFolder 同一條路徑）</div>
+<div class="box sync">DataFolderSelected event → AniloxRollForm.OnDataFolderSelected (async void) → 共用 ResetAndLoadReviewAfterFolderChanged helper（與 Review tab btnReviewSelectFolder 同一條路徑）</div>
 <div class="setting-change"><span class="user">合圖方式: → 全域（reset 預設）</span><span class="dev">hb_StitchMode: → Global (Hub.SetBatch + RefreshGridItem)</span></div>
 <div class="setting-change"><span class="user">回顧強化: → 否（reset 預設）</span><span class="dev">hd_EnableReviewEnhance: → false (Hub.SetBatch + RefreshGridItem)</span></div>
 <div class="v-arrow"></div>
@@ -1226,21 +1226,21 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">三個 GroupBox 之一綠色高亮（active），另兩個取消高亮</div>
-<div class="box output">切到【序號範圍群組】：cbGrabIdStart=最舊、cbGrabIdEnd=最新（descending order [last]/[0]）</div>
-<div class="box output">切到【時序範圍群組】：cbStartDate/Time + cbEndDate/Time 攤開到 _statAvailableTimes.Min/Max（資料夾完整時間範圍）— 避免承襲單片模式的單一秒級切片</div>
-<div class="box output">panelStatCam / listViewGrabDetail / chartMuraProfile 依新 active 模式重算（單片=取 cbDataGrabId，序號範圍=取 cbGrabIdStart/End，時序範圍=取 cbStartDate~cbEndTime）</div>
+<div class="box output">切到【序號範圍群組】：cbDataIdStart=最舊、cbDataIdEnd=最新（descending order [last]/[0]）</div>
+<div class="box output">切到【時序範圍群組】：cbDataDateStart/Time + cbDataDateEnd/Time 攤開到 _statAvailableTimes.Min/Max（資料夾完整時間範圍）— 避免承襲單片模式的單一秒級切片</div>
+<div class="box output">camData / listViewGrabDetail / chartDataPatch 依新 active 模式重算（單片=取 cbDataId，序號範圍=取 cbDataIdStart/End，時序範圍=取 cbDataDateStart~cbDataTimeEnd）</div>
 </div>
 <div class="note dev">與 Review tab 的 grpReviewGrabNav.Click（OnReviewGrabIdChanged）/ grpReviewTimePeriod.Click（PeriodComboManualChanged）對等：GroupBox 標題本身可點 = 模式切換器。</div>
 </div>
 <div class="flow-group vflow">
-<div class="flow-title">序號範圍選擇 <code>cbGrabIdStart/End</code></div>
+<div class="flow-title">序號範圍選擇 <code>cbDataIdStart/End</code></div>
 <div class="box input">選擇【起始序號】或【結束序號】</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">強制 start ≤ end → SetCombosToDateTime → RefreshStats</div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">起始/結束日期時間：同步更新</div>
-<div class="box output">良率卡片 + 明細列表：刷新（範圍統計）；【chartMuraProfile】：顯示範圍內**最新**一筆 grab 的 stitch 視圖（不再多 grab 平均）</div>
+<div class="box output">良率卡片 + 明細列表：刷新（範圍統計）；【chartDataPatch】：顯示範圍內**最新**一筆 grab 的 stitch 視圖（不再多 grab 平均）</div>
 <div class="box output">序號範圍群組：綠色高亮</div>
 </div>
 <div class="v-arrow"></div>
@@ -1251,37 +1251,37 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <div class="flow-title">點選明細列表 <code>listViewGrabDetail</code> row</div>
 <div class="box input">點選【明細列表】任一料件序號 row</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">OnGrabDetailRowSelected → 取出 row.Text(grabId) → IndexOf → 設 cbDataGrabId.SelectedIndex → OnSingleSheetComboChanged 接手</div>
+<div class="box action dev">OnGrabDetailRowSelected → 取出 row.Text(grabId) → IndexOf → 設 cbDataId.SelectedIndex → OnSingleSheetComboChanged 接手</div>
 <div class="v-arrow"></div>
 <div class="out-par">
-<div class="box output">報表序號 cbDataGrabId 對齊到該序號</div>
+<div class="box output">報表序號 cbDataId 對齊到該序號</div>
 <div class="box output">切到單片模式（GrpDataSingleSheet 綠色高亮）</div>
-<div class="box output">chartMuraProfile / 良率卡片 / 明細列表自動刷新單片視圖</div>
-<div class="box output">同步 cbReviewGrabId（_reviewDirty=true，canvas 延後到切 Review tab 時載入）</div>
+<div class="box output">chartDataPatch / 良率卡片 / 明細列表自動刷新單片視圖</div>
+<div class="box output">同步 cbReviewId（_reviewDirty=true，canvas 延後到切 Review tab 時載入）</div>
 </div>
 <div class="note dev">H5 防護：UpdateGrabDetailListView 重填明細時先 unsubscribe SelectedIndexChanged，避免 BeginUpdate/EndUpdate 之間 selection 還原誤觸發。</div>
 </div>
 <div class="flow-group vflow">
-<div class="flow-title">序號選擇 <code>cbDataGrabId</code>（cb 值即時、主畫面延後）</div>
+<div class="flow-title">序號選擇 <code>cbDataId</code>（cb 值即時、主畫面延後）</div>
 <div class="box input">選擇【報表序號】或按【報表上一序號】/【報表下一序號】</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">鎖定 start=end=同序號 → RefreshStats → UpdateMuraProfileChart → UpdateMuraProfileForSingleGrab（MergeCurves + 該 grab #CFG OPS/Pos，與 chartOverview 對齊）</div>
+<div class="box action dev">鎖定 start=end=同序號 → RefreshStats → UpdateMuraProfileChart → UpdateMuraProfileForSingleGrab（MergeCurves + 該 grab #CFG OPS/Pos，與 chartReviewPatch 對齊）</div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">起始/結束序號 + 日期時間：同步到該序號</div>
 <div class="box output">良率卡片 + 明細列表：刷新（單片統計）</div>
-<div class="box output">【chartMuraProfile】Mura 空間分布圖：立即用該 grab 的 stitch 視圖更新（不依賴 canvasMain 是否載入）</div>
+<div class="box output">【chartDataPatch】Mura 空間分布圖：立即用該 grab 的 stitch 視圖更新（不依賴 camReviewMain 是否載入）</div>
 <div class="box output">序號選擇群組：綠色高亮</div>
 </div>
 <div class="v-arrow"></div>
-<div class="box sync">同步 Review tab：cbReviewGrabId（值同步，GrabIdNavGuard 抑制觸發）+ 時段日期/時間 → 設 _reviewDirty=true（不立即載入主畫面）</div>
+<div class="box sync">同步 Review tab：cbReviewId（值同步，GrabIdNavGuard 抑制觸發）+ 時段日期/時間 → 設 _reviewDirty=true（不立即載入主畫面）</div>
 <div class="v-arrow"></div>
-<div class="note">主畫面（canvasMain）渲染延後：避免 Data tab 操作中等待 IO；待使用者切到 Review tab 時由 tabMain.SelectedIndexChanged 觸發 LoadGrabStitchedViewAsync。chartMuraProfile 不依賴此延後路徑 — Data tab 操作時就用 UpdateMuraProfileForSingleGrab 立即顯示對齊圖；Review tab 載入完成後 StitchedCurveUpdated → SyncMuraProfileFromReview 會以同源資料覆寫（結果不變）。</div>
+<div class="note">主畫面（camReviewMain）渲染延後：避免 Data tab 操作中等待 IO；待使用者切到 Review tab 時由 tabMain.SelectedIndexChanged 觸發 LoadGrabStitchedViewAsync。chartDataPatch 不依賴此延後路徑 — Data tab 操作時就用 UpdateMuraProfileForSingleGrab 立即顯示對齊圖；Review tab 載入完成後 StitchedCurveUpdated → SyncMuraProfileFromReview 會以同源資料覆寫（結果不變）。</div>
 <div class="v-arrow"></div>
 <div class="box guard">_grabIdCrossGuard 防 Review ↔ Data 迴圈</div>
 </div>
 <div class="flow-group vflow">
-<div class="flow-title">時序範圍選擇 <code>cbStartDate~cbEndTime</code></div>
+<div class="flow-title">時序範圍選擇 <code>cbDataDateStart~cbDataTimeEnd</code></div>
 <div class="box input">選擇【起始日期】/【起始時間】/【結束日期】/【結束時間】</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">Cascade 子項 → ClampEndToStart/ClampStartToEnd → RefreshStats</div>
@@ -1294,10 +1294,10 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <div class="box guard">_statComboGuard 防 cascade 重複</div>
 </div>
 <div class="flow-group vflow">
-<div class="flow-title">良率圖導航 <code>cbChartYear/Month/Day</code></div>
+<div class="flow-title">良率圖導航 <code>cbDataYieldYear/Month/Day</code></div>
 <div class="box input">選擇【年圖導航】</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">FillPeriodChart(chartYearly) → 填充月份 → cascade</div>
+<div class="box action dev">FillPeriodChart(chartDataYieldYearly) → 填充月份 → cascade</div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">良率年圖：紅綠柱狀圖更新</div>
@@ -1309,7 +1309,7 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <div class="note dev">點擊良率圖本身可 Toggle Auto/Fixed Y 軸刻度（500ms 防抖）。</div>
 </div>
 <div class="flow-group vflow">
-<div class="flow-title">篩選異常 <code>btnShowFail</code></div>
+<div class="flow-title">篩選異常 <code>btnDataShowFail</code></div>
 <div class="box input">按下【篩選異常】</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">Toggle _showFailOnly → ApplyFailFilter</div>
@@ -1336,7 +1336,7 @@ PropertyGrid → <code>NotifyExternalChange</code>；chart click / 程式碼 →
 <table class="setting-table">
 <tr><th>值</th><td><span class="user">全域 / 垂直</span><span class="dev"><code>Global</code> / <code>Vertical</code></span></td></tr>
 <tr><th>預設</th><td><span class="user">全域</span><span class="dev"><code>Global</code></span></td></tr>
-<tr><th>UI 入口</th><td><span class="user">設定面板、即時監控的【監控全覽圖】+【監控切向曲線圖】點擊、回顧的【回顧全覽圖】+【回顧切向曲線圖】點擊、【讀取資料】（重置為全域）</span><span class="dev"><code>propertyGridSettings</code>、<code>chartLiveOverview</code> click、<code>muraChartVerticalLive</code> click、<code>chartOverview</code> click、<code>chartMuraVertical</code> click、<code>btnSelectFolder_Click</code>（reset 為 <code>Global</code>）</span></td></tr>
+<tr><th>UI 入口</th><td><span class="user">設定面板、即時監控的【監控全覽圖】+【監控切向曲線圖】點擊、回顧的【回顧全覽圖】+【回顧切向曲線圖】點擊、【讀取資料】（重置為全域）</span><span class="dev"><code>propertyGridSettings</code>、<code>chartLivePatch</code> click、<code>chartLiveVertical</code> click、<code>chartReviewPatch</code> click、<code>chartReviewVertical</code> click、<code>btnReviewSelectFolder_Click</code>（reset 為 <code>Global</code>）</span></td></tr>
 <tr><th>副作用</th><td><span class="user">即時監控切換合圖、曲線圖清空、回顧主畫面重載入</span><span class="dev"><code>OnStitchModeChangedAsync</code> → Live merge enable/disable + mura chart clear + 回顧主畫面 reload（stitch mode 走 <code>MergeAndShowFromStitchedImages</code>/<code>ShowStitchedCameraInCanvas</code>；強化中 chart click 切 mode 走 <code>skipStitchedImageRefresh=true</code> 旁路）</span></td></tr>
 </table>
 </div>
@@ -1356,7 +1356,7 @@ PropertyGrid → <code>NotifyExternalChange</code>；chart click / 程式碼 →
 <table class="setting-table">
 <tr><th>值</th><td><span class="user">是 / 否</span><span class="dev"><code>true</code> / <code>false</code></span></td></tr>
 <tr><th>預設</th><td><span class="user">否</span><span class="dev"><code>false</code></span></td></tr>
-<tr><th>UI 入口</th><td><span class="user">設定面板、歷史查詢的曲線圖點擊（切換 V/H 強化）、【讀取資料】重置、配方參數變更（強制 = 是）</span><span class="dev"><code>propertyGridSettings</code>、<code>SwitchRidgeDirection</code>、<code>SwitchReviewStitchModeAndDisableEnhance</code>（切 mode 時自動關閉）、<code>btnSelectFolder_Click</code> reset、Recipe property 變更（reload 前 set <code>true</code>）</span></td></tr>
+<tr><th>UI 入口</th><td><span class="user">設定面板、歷史查詢的曲線圖點擊（切換 V/H 強化）、【讀取資料】重置、配方參數變更（強制 = 是）</span><span class="dev"><code>propertyGridSettings</code>、<code>SwitchRidgeDirection</code>、<code>SwitchReviewStitchModeAndDisableEnhance</code>（切 mode 時自動關閉）、<code>btnReviewSelectFolder_Click</code> reset、Recipe property 變更（reload 前 set <code>true</code>）</span></td></tr>
 <tr><th>副作用</th><td><span class="user">回顧主畫面切換原圖 ↔ 強化圖、重新載入</span><span class="dev"><code>ApplyReviewEnhance</code> → stitch mode 走 <code>ReloadCurrentStitchedView</code>；否則走 <code>LoadImagesWithPeriodLockAsync</code></span></td></tr>
 </table>
 </div>
@@ -1397,7 +1397,7 @@ PropertyGrid → <code>NotifyExternalChange</code>；chart click / 程式碼 →
 <tr><td><code>ab_~ah_OpsCam1-7</code><br/><code>bb_~bh_StartCam1-7</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td style="text-align:center">✓</td><td></td><td></td><td></td></tr>
 <tr><td>正規值 <code>dc_/dd_</code><br/>閾值 <code>ec_/ed_/ee_/ef_</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td style="text-align:center">✓ (rescale)</td><td style="text-align:center">✓</td><td>RidgeDir <code>eb_</code></td></tr>
 <tr><td><code>db_Algorithm</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td></td><td></td><td>LoadBackgroundBins<br/>+ StandardBgSubLockState</td></tr>
-<tr><td><code>gb_ChartScaleMode</code><br/><code>gc_/gd_/ge_YMax</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td>chartYearly/<br/>Monthly/Daily Y 軸</td><td></td><td></td></tr>
+<tr><td><code>gb_ChartScaleMode</code><br/><code>gc_/gd_/ge_YMax</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td>chartDataYieldYearly/<br/>Monthly/Daily Y 軸</td><td></td><td></td></tr>
 <tr><td><code>LightEnabled</code><br/><code>LightComPort</code><br/><code>LightChannel</code><br/><code>LightBrightness</code><br/><code>LightWarmupMs</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td></td><td></td><td>HandleLight<br/>SettingsChanged<br/>(Init/Brightness/...)</td></tr>
 <tr><td><code>IoEnabled</code><br/><code>IoIp</code> / <code>IoPort</code></td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td></td><td></td><td></td><td></td><td></td><td></td><td>IoGrabController 重連</td></tr>
 <tr><td><code>AppRole</code></td><td style="text-align:center">✓</td><td>—</td><td></td><td></td><td></td><td></td><td></td><td></td><td>寫 app-mode.json + MessageBox<br/>(early return，下游不跑)</td></tr>
@@ -1436,9 +1436,9 @@ PropertyGrid → <code>NotifyExternalChange</code>；chart click / 程式碼 →
 <div class="note dev">Source=PropertyGrid 跳過 RefreshGridItem（PG 自己改值已自我更新該 cell，避免重複 refresh 閃爍）。完整副作用對照見 §Setting × 副作用矩陣。</div>
 <div class="v-arrow"></div>
 <div class="out-par">
-<div class="box output">曲線圖閾值線：V chart (chartMuraVertical / chartOverview / chartLiveOverview / muraChartVerticalLive / chartMuraProfile) 用【垂直平均閾值】+【垂直最大閾值】；H chart (chartMuraHorizontal / muraChartHorizontalLive) 用【水平平均閾值】+【水平最大閾值】</div>
+<div class="box output">曲線圖閾值線：V chart (chartReviewVertical / chartReviewPatch / chartLivePatch / chartLiveVertical / chartDataPatch) 用【垂直平均閾值】+【垂直最大閾值】；H chart (chartReviewHorizontal / chartLiveHorizontal) 用【水平平均閾值】+【水平最大閾值】</div>
 <div class="box output">曲線坡度（view-time 正規值 rescale）：V 曲線套 (HM_V_capture / HM_V_current)；H 曲線套 (HM_V_capture / HM_H_current)。改【垂直正規值】或【水平正規值】立即反映坡度，bin 物理檔不變</div>
-<div class="box output">統計重算（view-time Pass/Fail）：panelStatCam（良率卡片）/ listViewGrabDetail（明細列表）/ chartYearly/Monthly/Daily 都用當前【垂直平均/最大閾值】+【垂直正規值】重算（CSV 內 MaxExceed/MeanExceed 僅作 fallback）。掃 CSV 時跟隨 #CFG 取每筆 grab 的 capture HM_V</div>
+<div class="box output">統計重算（view-time Pass/Fail）：camData（良率卡片）/ listViewGrabDetail（明細列表）/ chartDataYieldYearly/Monthly/Daily 都用當前【垂直平均/最大閾值】+【垂直正規值】重算（CSV 內 MaxExceed/MeanExceed 僅作 fallback）。掃 CSV 時跟隨 #CFG 取每筆 grab 的 capture HM_V</div>
 <div class="note dev">DO_MURA_DETECTED 觸發：CheckLiveMura 依 direction (v/h) 取對應方向閾值；RidgeDir=Both 時兩方向各自判定（任一超標即觸發）。OnCameraInspectionResult（存檔後 callback）的 meanPeak/maxPeak 為 V 方向，按 V 閾值判定並記錄到 CSV。</div>
 <div class="note dev">view-time 重算用 ThresholdContext（HM_V + ErrorMean/MaxV），InspectionStatisticsService.{Compute, ComputeByGrabIdRange, ComputeDetailedByGrabIdRange, ScanCsvByDateRange} 都吃 optional ctx；ctx=null 時退回 CSV MaxExceed/MeanExceed 舊行為。</div>
 <div class="box output dev">（抓取中）CSV 插入 #CFG 設定快照：timestamp + 機台佈局 OPS×7 / Start×7 / TrimHead / TrimTail + 相機參數 曝光×7 / 線掃×7 / 高度×7 + 正規值 V/H 兩欄 + Mura 閾值（平均/最大）。新檔、換日、或任一欄位變更時寫入一列 #CFG</div>
@@ -1467,12 +1467,12 @@ PropertyGrid → <code>NotifyExternalChange</code>；chart click / 程式碼 →
 <div class="box output">回顧全覽圖：同步更新</div>
 <div class="box output">監控主畫面：恢復單台 MIL 即時影像</div>
 </div>
-<div class="note dev">必須清殘留 bitmap：UpdateSelectedReviewCamFromViewCenter 的舊版守門條件曾用 IsGlobalMerged || IsPeriodMerged，殘留會在 Vertical 模式 zoom/pan 時誤觸發 pbCam 橘框切換。現守門已改為 StitchMode == Global（見下方「拖曳回顧主畫面 → UpdateSelectedReviewCamFromViewCenter」描述），但 bitmap 仍應釋放以免佔記憶體。</div>
+<div class="note dev">必須清殘留 bitmap：UpdateSelectedReviewCamFromViewCenter 的舊版守門條件曾用 IsGlobalMerged || IsPeriodMerged，殘留會在 Vertical 模式 zoom/pan 時誤觸發 camReview 橘框切換。現守門已改為 StitchMode == Global（見下方「拖曳回顧主畫面 → UpdateSelectedReviewCamFromViewCenter」描述），但 bitmap 仍應釋放以免佔記憶體。</div>
 </div>
 <div class="v-branch-path"><span class="branch-label no">全域</span>
 <div class="v-arrow" data-label="分支：是否已在序號模式（IsStitchMode）"></div>
 <div class="v-branch">
-<div class="v-branch-path"><span class="branch-label yes">序號模式（cbReviewGrabId 已載入）</span>
+<div class="v-branch-path"><span class="branch-label yes">序號模式（cbReviewId 已載入）</span>
 <div class="out-par">
 <div class="box action">MergeAndShowFromStitchedImages（直接用記憶體 _stitchedImages 合圖，不重讀碟）</div>
 <div class="box output">回顧主畫面：全域合圖（當前序號的 7 台影像）</div>
@@ -1495,8 +1495,8 @@ PropertyGrid → <code>NotifyExternalChange</code>；chart click / 程式碼 →
 </div>
 </div>
 <div class="v-arrow dev"></div>
-<div class="box output">回顧縮圖1~7：Global 模式時橘色外框由 ThumbnailGridPresenter.OnPreviewPaint（Tag == "Selected"）繪製；拖曳回顧主畫面 → canvasMain.StatusChanged → UpdateSelectedReviewCamFromViewCenter → 依視野中心最近槽位 → _galleryManager.Select(bestIdx, false) 更新 Tag → 重繪橘框。觸發條件：StitchMode == Global（序號模式 / 時段模式均適用；Vertical 模式不聯動）</div>
-<div class="box output">回顧主畫面：canvasMain.FitToScreen()</div>
+<div class="box output">回顧縮圖1~7：Global 模式時橘色外框由 ThumbnailGridPresenter.OnPreviewPaint（Tag == "Selected"）繪製；拖曳回顧主畫面 → camReviewMain.StatusChanged → UpdateSelectedReviewCamFromViewCenter → 依視野中心最近槽位 → _galleryManager.Select(bestIdx, false) 更新 Tag → 重繪橘框。觸發條件：StitchMode == Global（序號模式 / 時段模式均適用；Vertical 模式不聯動）</div>
+<div class="box output">回顧主畫面：camReviewMain.FitToScreen()</div>
 <div class="box output">曲線圖 highlight（UpdateRidgeDirectionVisual）：以實際生效狀態判斷——stitch 模式看 EnableReviewEnhance；period 模式看 LastReviewProcessedMode；未生效時傳 null（清除 highlight）</div>
 <div class="box input">修改 OPS / Start</div>
 <div class="v-arrow" data-label="分支"></div>
@@ -1877,20 +1877,20 @@ PropertyGrid → <code>NotifyExternalChange</code>；chart click / 程式碼 →
 <div class="box sync">GrabIdSelectedFromData 事件</div>
 <div class="v-arrow"></div>
 <div class="out-par">
-<div class="box output">單片序號 cbReviewGrabId：值同步（GrabIdNavGuard 抑制 SelectedIndexChanged）</div>
+<div class="box output">單片序號 cbReviewId：值同步（GrabIdNavGuard 抑制 SelectedIndexChanged）</div>
 <div class="box output">時段日期/時間：導航到該時間</div>
-<div class="box output">良率卡片 + 明細列表 + chartMuraProfile：立即刷新</div>
+<div class="box output">良率卡片 + 明細列表 + chartDataPatch：立即刷新</div>
 <div class="box output">單片群組：綠色高亮</div>
 <div class="box output dev">_reviewDirty = true（回顧主畫面延後渲染，不立即 LoadGrabStitchedViewAsync）</div>
 </div>
 <div class="v-arrow"></div>
 <div class="box input">使用者切到 Review tab</div>
 <div class="v-arrow dev"></div>
-<div class="box action dev">tabMain.SelectedIndexChanged：SelectedTab == tabPageReview &amp;&amp; _reviewDirty → LoadGrabStitchedViewAsync(cbReviewGrabId 當前 idx 對應 GrabIdInfo) → FitToScreen → _reviewDirty=false</div>
+<div class="box action dev">tabMain.SelectedIndexChanged：SelectedTab == tabPageReview &amp;&amp; _reviewDirty → LoadGrabStitchedViewAsync(cbReviewId 當前 idx 對應 GrabIdInfo) → FitToScreen → _reviewDirty=false</div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">回顧主畫面 + 縮圖：載入拼接圖</div>
-<div class="box output">chartMuraProfile：StitchedCurveUpdated → SyncMuraProfileFromReview 同源資料覆寫（Data tab 操作時已用 UpdateMuraProfileForSingleGrab 顯示相同內容，此步無視覺變化）</div>
+<div class="box output">chartDataPatch：StitchedCurveUpdated → SyncMuraProfileFromReview 同源資料覆寫（Data tab 操作時已用 UpdateMuraProfileForSingleGrab 顯示相同內容，此步無視覺變化）</div>
 </div>
 </div>
 <div class="flow-group vflow">

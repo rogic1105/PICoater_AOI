@@ -185,8 +185,8 @@ PICoater_AOI/
 | `ImageProcessing/InspectionEngineConfig.cs` | MaxWidth=16384, MaxHeight=10000, DefaultSaveResizeScale=5 |
 | `ImageProcessing/BatchInspectionService.cs` | Parallel.For 批次縮圖 |
 | `UI/Form/AniloxRollForm.cs` | **主檔（核心 bootstrap，~940 行）**：欄位宣告、ctor、`OnFormClosing`、`InitializeSystem`、`InitServiceLayer`/`InitUiLayer`/`InitCameraLayer`、`OnSettingChanged`（SSoT dispatcher，勿拆）、PG events、`UpdateCamCountLabel`。原 3969 行 God Object 已按職責拆 9 個 partial（↓ 同 `partial class AniloxRollForm`） |
-| `UI/Form/AniloxRollForm.Live.cs` | Live 監控：grab 流程（`btnCameraGrab_Click`）、即時曲線（`OnLiveCurveData`/`OnLiveRowCurveData`）、Mura 判定（`CheckLiveMura`）、強化/合圖切換（`ApplyMuraEnhance`/`SwitchStitchModeWithEnhanceSequence`） |
-| `UI/Form/AniloxRollForm.Review.cs` | 回顧：資料夾/時段載入（`btnSelectFolder_Click`/period 導航/`ApplyReviewEnhance`/`LoadImagesWithReviewConfig`） |
+| `UI/Form/AniloxRollForm.Live.cs` | Live 監控：grab 流程（`btnLiveGrab_Click`）、即時曲線（`OnLiveCurveData`/`OnLiveRowCurveData`）、Mura 判定（`CheckLiveMura`）、強化/合圖切換（`ApplyMuraEnhance`/`SwitchStitchModeWithEnhanceSequence`） |
+| `UI/Form/AniloxRollForm.Review.cs` | 回顧：資料夾/時段載入（`btnReviewSelectFolder_Click`/period 導航/`ApplyReviewEnhance`/`LoadImagesWithReviewConfig`） |
 | `UI/Form/AniloxRollForm.Background.cs` | 背景取得/載入/預覽 + 背景判斷（`IsBgBinReady`/`IsStandardBgSubEnabled`） |
 | `UI/Form/AniloxRollForm.SettingsTabs.cs` | 右側設定面板 tab 建構（`SetupCameraTab`/`SetupSystemTab`/`Bind*Sync`）+ 相機參數硬體同步（`SyncCameraParamsFromHardware`） |
 | `UI/Form/AniloxRollForm.HardwareStatus.cs` | IO/光源/儲存狀態：init（`InitIoController`/`InitLightController`）、連線標籤、LED、儲存管理（`TriggerRetentionAndFlagAsync`） |
@@ -205,7 +205,7 @@ PICoater_AOI/
 | `UI/Widgets/ComboBoxWheelReverser.cs` | ComboBox 滑鼠滾輪方向反轉（從 AniloxRollForm 提取） |
 | `UI/Widgets/MultiClickDetector.cs` | 多擊偵測器：雙擊/三擊辨識（從 AniloxRollForm 提取） |
 | `UI/Widgets/CurveMergeHelper.cs` | 全覽圖合併演算法 + .bin 曲線讀取（UpdateOverviewChart、MergeCurves、MergeRowCurves、GetCurveBasePath） |
-| `UI/Presenters/DataStatisticsPresenter.cs` | Data tab 統計邏輯：統計計算、combo 串聯、Period Charts、Mura 空間分布圖（chartMuraProfile）、跨 Tab 同步事件 |
+| `UI/Presenters/DataStatisticsPresenter.cs` | Data tab 統計邏輯：統計計算、combo 串聯、Period Charts、Mura 空間分布圖（chartDataPatch）、跨 Tab 同步事件 |
 | `UI/Presenters/ReviewStitchCoordinator.cs` | Review tab 拼接管理：LoadGrabStitchedViewAsync、合圖、ClearStitchedMode、overview chart 聯動 |
 | `UI/Presenters/LiveTelemetryPresenter.cs` | 16 欄即時 Telemetry |
 | `Acquisition/AniloxCamera.cs` | 單台相機 composition：持有 `MilCamera _mil`（`sdk/MIL/MilGrabber.Core`）委派 MIL 資源/grab/display/參數/telemetry；自己做檢測/存檔/合圖/曲線（訂閱 `_mil.FrameReady`，hook 內檢測→顯示`PutDisplayBytes`/`CopyToDisplay`→合圖→存檔）。Global merge child-buffer 來源 |
@@ -228,7 +228,7 @@ PICoater_AOI/
 | `ImageCatalog/ImageRepository.cs` | 掃描目錄建立索引 |
 | `Services/AoiService.cs` | C# ↔ Native P/Invoke wrapper（ProcessImage + ComputeColumnMean） |
 | `Services/InspectionLogService.cs` | 每日 CSV 寫入；GrabId = `yyMMdd-HHmmss` 時間戳格式 |
-| `Services/InspectionStatisticsService.cs` | CSV 統計服務；LoadConfigForDate（按日期載入 #CFG）；LoadConfigForGrabId / LoadImagePathsForGrabId（單 grab 取 #CFG 與 .bin 路徑，供 chartMuraProfile 對齊 chartOverview） |
+| `Services/InspectionStatisticsService.cs` | CSV 統計服務；LoadConfigForDate（按日期載入 #CFG）；LoadConfigForGrabId / LoadImagePathsForGrabId（單 grab 取 #CFG 與 .bin 路徑，供 chartDataPatch 對齊 chartReviewPatch） |
 | `Services/IoState.cs` | IoState enum（FSM 狀態）+ IoSnapshot struct（IO 快照） |
 | `Services/IoGrabController.cs` | IO-Grab 連動：IoState FSM、IO 追蹤、Watchdog keepalive；支援 IModbusTcpClient 注入測試 |
 | `Services/CsvConfigSnapshot.cs` | 不可變設定快照（CamOps/CamPos/CamGrabHeight/CamExposureUs/CamLineRateHz/Hessian/ErrorValue/TrimHead/TrimTail） |
@@ -328,9 +328,9 @@ PICoater_AOI/
 |---------|------|--------|------|
 | ── 檢測報表 ── | （分隔列，唯讀） | — | — |
 | y座標 | `gb_ChartScaleMode` → `ChartScaleMode` | Auto | Auto / Fixed |
-| 月產量 | `gc_YearlyYMax` → `ChartYearlyYMax` | 50000 | 良率年圖 Y 軸上限 |
-| 日產量 | `gd_MonthlyYMax` → `ChartMonthlyYMax` | 2000 | 良率月圖 Y 軸上限 |
-| 時產量 | `ge_DailyYMax` → `ChartDailyYMax` | 300 | 良率日圖 Y 軸上限 |
+| 月產量 | `gc_YearlyYMax` → `ChartDataYieldYearlyYMax` | 50000 | 良率年圖 Y 軸上限 |
+| 日產量 | `gd_MonthlyYMax` → `ChartDataYieldMonthlyYMax` | 2000 | 良率月圖 Y 軸上限 |
+| 時產量 | `ge_DailyYMax` → `ChartDataYieldDailyYMax` | 300 | 良率日圖 Y 軸上限 |
 | ── 主畫面 ── | （分隔列，唯讀） | — | — |
 | 合圖方式 | `hb_StitchMode` → `StitchMode` | Global | Vertical / Global |
 | 監控強化 | `hc_EnableMuraEnhance` → `EnableMuraEnhance` | false | 即時影像強化 Mura |
@@ -386,60 +386,60 @@ PICoater_AOI/
 
 | 標準名稱 | Name | 類型 | 畫面文字 |
 |---------|------|------|---------|
-| 開始抓取 | `btnCameraGrab` | Button | 開始抓取 / 停止抓取 |
-| 取得背景 | `btnGetBackground` | Button | 取得背景 |
-| 預覽背景 | `btnViewBackground` | Button | 預覽背景 |
-| 監控主畫面 | `panelMainDisplay` | Panel | — |
-| 監控縮圖1~7 | `panelLiveCam1~7` | Panel | — |
-| 監控切向曲線圖 | `muraChartVerticalLive` | Chart | — |
-| 監控法向曲線圖 | `muraChartHorizontalLive` | Chart | — |
-| 監控全覽圖 | `chartLiveOverview` | Chart | — |
+| 開始抓取 | `btnLiveGrab` | Button | 開始抓取 / 停止抓取 |
+| 取得背景 | `btnLiveGetBackground` | Button | 取得背景 |
+| 預覽背景 | `btnLiveViewBackground` | Button | 預覽背景 |
+| 監控主畫面 | `camLiveMain` | Panel | — |
+| 監控縮圖1~7 | `camLive1~7` | Panel | — |
+| 監控切向曲線圖 | `chartLiveVertical` | Chart | — |
+| 監控法向曲線圖 | `chartLiveHorizontal` | Chart | — |
+| 監控全覽圖 | `chartLivePatch` | Chart | — |
 | 暫停 Mura 檢測 | `lblIoDoMura`（點擊切換） | Label | DO1 MURA_DET / DO1 MURA ⏸（黃底=暫停中） |
 
 ### 歷史查詢（tabPageReview）
 
 | 標準名稱 | Name | 類型 | 畫面文字 |
 |---------|------|------|---------|
-| 讀取資料 | `btnSelectFolder`（Review）/ `btnSelectDataFolder`（Data） | Button | 讀取資料 |
-| 回顧縮圖1~7 | `pbCam1~7` | PictureBox | — |
-| 回顧主畫面 | `canvasMain` | SmartCanvas | — |
-| 回顧切向曲線圖 | `chartMuraVertical` | Chart | — |
-| 回顧法向曲線圖 | `chartMuraHorizontal` | Chart | — |
-| 回顧全覽圖 | `chartOverview` | Chart | — |
+| 讀取資料 | `btnReviewSelectFolder`（Review）/ `btnDataSelectFolder`（Data） | Button | 讀取資料 |
+| 回顧縮圖1~7 | `camReview1~7` | PictureBox | — |
+| 回顧主畫面 | `camReviewMain` | SmartCanvas | — |
+| 回顧切向曲線圖 | `chartReviewVertical` | Chart | — |
+| 回顧法向曲線圖 | `chartReviewHorizontal` | Chart | — |
+| 回顧全覽圖 | `chartReviewPatch` | Chart | — |
 | 時段群組 | `grpReviewTimePeriod` | GroupBox | 時序 |
-| 時段日期（時序cb） | `cbDate` | ComboBox | — |
-| 時段時間（時序cb） | `cbTime` | ComboBox | — |
-| 上一時段（上下鍵） | `btnPeriodPrev` | Button | < |
-| 下一時段（上下鍵） | `btnPeriodNext` | Button | > |
+| 時段日期（時序cb） | `cbReviewDate` | ComboBox | — |
+| 時段時間（時序cb） | `cbReviewTime` | ComboBox | — |
+| 上一時段（上下鍵） | `btnReviewPeriodPrev` | Button | < |
+| 下一時段（上下鍵） | `btnReviewPeriodNext` | Button | > |
 | 單片群組 | `grpReviewGrabNav` | GroupBox | 單片 |
-| 單片序號（序號cb） | `cbReviewGrabId` | ComboBox | — |
-| 上一序號（上下鍵） | `btnGrabIdPrev` | Button | < |
-| 下一序號（上下鍵） | `btnGrabIdNext` | Button | > |
+| 單片序號（序號cb） | `cbReviewId` | ComboBox | — |
+| 上一序號（上下鍵） | `btnReviewIdPrev` | Button | < |
+| 下一序號（上下鍵） | `btnReviewIdNext` | Button | > |
 
 ### 檢測報表（tabPageData）
 
 | 標準名稱 | Name | 類型 | 畫面文字 |
 |---------|------|------|---------|
-| 篩選異常 | `btnShowFail` | Button | 篩選異常 / 顯示全部 |
-| 良率卡片1~7 | `panelStatCam1~7` | Panel | — |
-| Mura 空間分布圖 | `chartMuraProfile` | Chart | — |
+| 篩選異常 | `btnDataShowFail` | Button | 篩選異常 / 顯示全部 |
+| 良率卡片1~7 | `camData1~7` | Panel | — |
+| Mura 空間分布圖 | `chartDataPatch` | Chart | — |
 | 明細列表 | `listViewGrabDetail` | ListView | — |
 | 序號範圍群組 | `groupBoxGrabIdRange` | GroupBox | 序號範圍 |
-| 起始序號 | `cbGrabIdStart` | ComboBox | — |
-| 結束序號 | `cbGrabIdEnd` | ComboBox | — |
+| 起始序號 | `cbDataIdStart` | ComboBox | — |
+| 結束序號 | `cbDataIdEnd` | ComboBox | — |
 | 序號選擇群組 | `grpDataSingleSheet` | GroupBox | 序號選擇 |
-| 報表序號 | `cbDataGrabId` | ComboBox | — |
-| 報表上一序號 | `btnGrabIdDataPrev` | Button | < |
-| 報表下一序號 | `btnGrabIdDataNext` | Button | > |
+| 報表序號 | `cbDataId` | ComboBox | — |
+| 報表上一序號 | `btnDataIdPrev` | Button | < |
+| 報表下一序號 | `btnDataIdNext` | Button | > |
 | 時序範圍群組 | `groupBoxTimeRange` | GroupBox | 時序範圍 |
-| 起始日期/時間 | `cbStartDate/cbStartTime` | ComboBox | — |
-| 結束日期/時間 | `cbEndDate/cbEndTime` | ComboBox | — |
-| 良率年圖 | `chartYearly` | Chart | — |
-| 良率月圖 | `chartMonthly` | Chart | — |
-| 良率日圖 | `chartDaily` | Chart | — |
-| 年圖導航 | `cbChartYear` | ComboBox | — |
-| 月圖導航 | `cbChartMonth` | ComboBox | — |
-| 日圖導航 | `cbChartDay` | ComboBox | — |
+| 起始日期/時間 | `cbDataDateStart/cbDataTimeStart` | ComboBox | — |
+| 結束日期/時間 | `cbDataDateEnd/cbDataTimeEnd` | ComboBox | — |
+| 良率年圖 | `chartDataYieldYearly` | Chart | — |
+| 良率月圖 | `chartDataYieldMonthly` | Chart | — |
+| 良率日圖 | `chartDataYieldDaily` | Chart | — |
+| 年圖導航 | `cbDataYieldYear` | ComboBox | — |
+| 月圖導航 | `cbDataYieldMonth` | ComboBox | — |
+| 日圖導航 | `cbDataYieldDay` | ComboBox | — |
 
 ### 設定面板
 

@@ -14,7 +14,7 @@
 | **H4** SetCombosToDateTime guard 文件化 | ✅ 正確 | `DataStatisticsPresenter.cs:326-329`：加 doc comment 明示 caller 必須包 `StatComboGuard.Enter()`。屬於約定式契約，未根本解決脆弱但文件清楚。 |
 | **H5** listView selection unsubscribe/subscribe | ⚠️ 不完整 | `DataStatisticsPresenter.cs:665, 692-694`：unsubscribe → BeginUpdate → ... → EndUpdate → subscribe。**沒包 try/finally** — 若 `lv.Items.Add(item)` 或 `AutoResizeColumns` 拋 exception，subscription 不會接回，從此 listView 點選失靈。建議 `try { ... } finally { lv.SelectedIndexChanged += OnGrabDetailRowSelected; }`。實務上 ListView.Items.Add 極少炸，可接受但不夠 robust。 |
 | **H6** HessianRescaleHelper 集中化 | ✅ 正確 | `Services/HessianRescaleHelper.cs` 5 個 API；DataStatisticsPresenter.cs:822、ReviewStitchCoordinator.cs:306/307/343/344/424/425/448/449 全部改用 helper。邊界保留：`Ratio` 0 check (line 18)、`IsNoOp` epsilon 0.0001 check (line 23)、null 護衛 (line 38/47/63)。**語意正確**：原本散在 4 處的 in-place vs clone 區分維持不變（DataStatisticsPresenter 用 RescaleInPlace2D，ReviewStitchCoordinator 全部用 Clone — 後者保留 `_stitchedCurveMean/Max` 快取不變，是必要的）。 |
-| **M1** ui-flow 補 listView click flow | ✅ 正確 | `ui-flow.html:1190-1203`：完整描述 OnGrabDetailRowSelected → cbDataGrabId → 單片模式 + chartMuraProfile 刷新 + sync cbReviewGrabId。H5 防護也 inline 註明。 |
+| **M1** ui-flow 補 listView click flow | ✅ 正確 | `ui-flow.html:1190-1203`：完整描述 OnGrabDetailRowSelected → cbDataId → 單片模式 + chartDataPatch 刷新 + sync cbReviewId。H5 防護也 inline 註明。 |
 | **M2** ui-flow 補 AppRole + Storage PC | ✅ 正確 | `ui-flow.html:1297-1304`：AppRole 變更 → app-mode.json → 重開生效 + Storage PC 模式說明（StorageRetentionService + CleanupFlagWatcher 隱藏 Live tab）。 |
 | **M3** CleanupFlagWatcher 提前 stop | ✅ 正確 | `AniloxRollForm.cs:183`：OnFormClosing 內 Dispose + 設 null。FormClosed 路徑（line 1275 RegisterStorageModeCleanup）的 `?.Dispose()` 因為 null 安全。 |
 | **M4** CsvConfigSnapshot V↔H 互補 | ✅ 正確 | `CsvConfigSnapshot.cs:202-209`：V/H 任一為 0 時鏡像到另一邊；新格式 CSV（V/H 都正常寫入）兩者皆 >0 不觸發鏡像 → 無副作用。 |
@@ -74,7 +74,7 @@
 ## 未修 TODO 再評估（C）
 
 ### M6: `LoadGrabIdInfos AllDirectories` perf
-**仍應 TODO**。`Directory.GetFiles(captureRoot, "*.csv", SearchOption.AllDirectories)` 對 500 天 / 100K 圖只掃 ~500 個 CSV（每天一個），不是 100K 個檔，比預期慢得多但仍是 cold path（btnSelectDataFolder 才呼叫，使用者操作會等待）。可接受。
+**仍應 TODO**。`Directory.GetFiles(captureRoot, "*.csv", SearchOption.AllDirectories)` 對 500 天 / 100K 圖只掃 ~500 個 CSV（每天一個），不是 100K 個檔，比預期慢得多但仍是 cold path（btnDataSelectFolder 才呼叫，使用者操作會等待）。可接受。
 
 ### M7: `_currentDetails` 跨 thread
 **H3 後仍安全**。`_statsRefreshDebouncer.Tick` 是 WinForms `System.Windows.Forms.Timer`（UI thread），handler 內 `RefreshStats()` 仍在 UI thread。`_currentDetails` 全部 UI thread 讀寫 — **不是 race**。✅ 但如同上一輪 M7 提醒：未來若把 Tick 改 `Task.Run` 模式（H3 進階優化），會立刻變 race。當前實作 OK。
@@ -91,7 +91,7 @@
 
 | 位置 | 不一致 |
 |---|---|
-| `ui-flow.html:1167` SwitchActiveStatGroupBox flow | **缺述 C1 行為**：「切到 TimeRange 時自動把 cbStartDate/EndDate 攤開到資料夾全範圍」這個重要動作 ui-flow 沒提。建議在 line 1170 加一條 output：「切到時序範圍：cbStartDate/EndDate 重設到資料夾全範圍」。 |
+| `ui-flow.html:1167` SwitchActiveStatGroupBox flow | **缺述 C1 行為**：「切到 TimeRange 時自動把 cbDataDateStart/EndDate 攤開到資料夾全範圍」這個重要動作 ui-flow 沒提。建議在 line 1170 加一條 output：「切到時序範圍：cbDataDateStart/EndDate 重設到資料夾全範圍」。 |
 | `ui-flow.html:1288` view-time 正規值 rescale 描述 | ✅ 正確且詳細（V 套 HM_V/HM_V，H 套 HM_V/HM_H）。HessianRescaleHelper 抽離後行為不變 — ui-flow 不需提及內部 helper 名。 |
 | `ui-flow.html:1190-1203` listView click flow | ✅ M1 已補。H5 防護也內聯註明。 |
 | `ui-flow.html:1297-1304` AppRole flow | ✅ M2 已補。 |
@@ -130,7 +130,7 @@
 - B-M2: 若 RefreshStats 持續炸（如磁碟掉線），會吞 exception 但 user 不知。
 **建議監控**：debounce 觸發頻率、RefreshStats 執行時長、UI thread 佔用率。
 
-### 4. `ScanCsvByDateRange` 在 ChartYearly/Monthly/Daily Index 切換時
+### 4. `ScanCsvByDateRange` 在 ChartDataYieldYearly/Monthly/Daily Index 切換時
 **路徑**：`DataStatisticsPresenter.OnChartYearIndexChanged` → `InspectionStatisticsService.ScanCsvByDateRange:570-632`
 **為什麼 hot**：拖 Year/Month/Day combo 時連環觸發三次 ScanCsvByDateRange + RefreshStats。
 **壓力下可能**：
@@ -165,7 +165,7 @@
 ✅ 已更新（line 8 第二輪 SetExposureForAll/SetGrabHeightForAll 紀錄）。
 
 ### ui-flow.html
-1. line 1170 加 output「切到時序範圍：cbStartDate/EndDate 攤開到資料夾全範圍」對應 C1。
+1. line 1170 加 output「切到時序範圍：cbDataDateStart/EndDate 攤開到資料夾全範圍」對應 C1。
 2. line 1202 H5 註可加「未來改 async 模式時需注意 try/finally」（B-M3）— 但屬實作細節，非 user flow，建議移到 skills/modify-data-stats.md。
 
 ---

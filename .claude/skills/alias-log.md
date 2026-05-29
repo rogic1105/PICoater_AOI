@@ -26,13 +26,13 @@
 對話中使用者說：「下面那個紅綠柱狀圖的年份切不過去」
 
 ```
-你說的「紅綠柱狀圖」→ `chartYearly/chartMonthly/chartDaily` → 建議稱呼「良率柱狀圖」
-你說的「年份切不過去」→ `btnChartYearPrev/Next` + `cbChartYear` → 建議稱呼「年份導航」
+你說的「紅綠柱狀圖」→ `chartDataYieldYearly/chartDataYieldMonthly/chartDataYieldDaily` → 建議稱呼「良率柱狀圖」
+你說的「年份切不過去」→ `btnChartYearPrev/Next` + `cbDataYieldYear` → 建議稱呼「年份導航」
 ```
 
 更新 CLAUDE.md：
 ```
-| 良率柱狀圖 / 紅綠柱狀圖 / 年月日圖表 | chartYearly/Monthly/Daily | Data tab |
+| 良率柱狀圖 / 紅綠柱狀圖 / 年月日圖表 | chartDataYieldYearly/Monthly/Daily | Data tab |
 ```
 
 ## 原則

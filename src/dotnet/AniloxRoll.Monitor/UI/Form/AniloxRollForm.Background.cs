@@ -32,7 +32,7 @@ namespace AniloxRoll.Monitor.Forms
         /// <summary>
         /// 取得背景：啟動 grab → 採集 N 秒 → 多幀平均 column mean → 存 MCBF bin。
         /// </summary>
-        private async void btnGetBackground_Click(object sender, EventArgs e)
+        private async void btnLiveGetBackground_Click(object sender, EventArgs e)
         {
             if (!IsStandardBgSubEnabled)
             {
@@ -67,8 +67,8 @@ namespace AniloxRoll.Monitor.Forms
                 UpdateGrabButton(true);
             }
 
-            btnGetBackground.Enabled = false;
-            btnCameraGrab.Enabled = false;
+            btnLiveGetBackground.Enabled = false;
+            btnLiveGrab.Enabled = false;
 
             int sampleSeconds = Math.Max(1, _settings.Recipe.BackgroundSampleSeconds);
             string bgDir = _settings.Storage.BackgroundPath;
@@ -93,7 +93,7 @@ namespace AniloxRoll.Monitor.Forms
                     if (remaining != lastShown)
                     {
                         lastShown = remaining;
-                        btnGetBackground.Text = $"採集中 {remaining}s";
+                        btnLiveGetBackground.Text = $"採集中 {remaining}s";
                     }
 
                     await Task.Delay(100);
@@ -140,8 +140,8 @@ namespace AniloxRoll.Monitor.Forms
             }
             finally
             {
-                btnGetBackground.Text = "取得背景";
-                btnGetBackground.Enabled = true;
+                btnLiveGetBackground.Text = "取得背景";
+                btnLiveGetBackground.Enabled = true;
 
                 // 採集完成後一律停止 grab
                 if (_liveCameraManager.IsLiveGrabbing)
@@ -158,14 +158,14 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _autoStartGrabAfterBg = false;
                 _liveCameraManager.FreeCameras();
-                btnCameraGrab_Click(null, null);
+                btnLiveGrab_Click(null, null);
                 _ = _ioGrabController?.NotifyGrabStarted();
                 return;
             }
 
             // 採集完成後直接預覽（先清除舊預覽，確保每次都重新開啟）
             if (_bgPreviewActive) ClearBackgroundPreview();
-            btnViewBackground_Click(btnViewBackground, EventArgs.Empty);
+            btnLiveViewBackground_Click(btnLiveViewBackground, EventArgs.Empty);
         }
 
         /// <summary>MCBF v2 格式存 background column mean（含光源等級與曝光時間）。</summary>
@@ -255,36 +255,36 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private void UpdateStandardBgSubLockState()
         {
-            // IO 已連線且未暫停：btnCameraGrab 由 IO 連線邏輯控制，不覆寫
+            // IO 已連線且未暫停：btnLiveGrab 由 IO 連線邏輯控制，不覆寫
             if (_ioGrabController?.IsConnected == true && !_isIoSuspended) return;
             // IO 暫停模式：交由使用者手動控制，不受 StandardBgSub bin 限制
-            if (_isIoSuspended) { btnCameraGrab.Enabled = true; return; }
+            if (_isIoSuspended) { btnLiveGrab.Enabled = true; return; }
 
             if (!IsStandardBgSubEnabled)
             {
                 // 非 StandardBgSub：正常解鎖（仍需光源就緒）
-                btnCameraGrab.Enabled = true;
-                btnGetBackground.Enabled = IsLightReadyForBg;
+                btnLiveGrab.Enabled = true;
+                btnLiveGetBackground.Enabled = IsLightReadyForBg;
                 return;
             }
 
-            btnGetBackground.Enabled = IsLightReadyForBg;
-            btnCameraGrab.Enabled = IsBgBinReady();
+            btnLiveGetBackground.Enabled = IsLightReadyForBg;
+            btnLiveGrab.Enabled = IsBgBinReady();
         }
 
         // --- 背景預覽狀態 ---
         private Bitmap[] _bgPreviewBitmaps;
         private bool _bgPreviewActive;
-        private SmartCanvas[] _bgPreviewBoxes;      // panelLiveCam 上的 overlay（SmartCanvas with ClampPan）
-        private SmartCanvas _bgPreviewMainCanvas;  // panelMainDisplay 上的 SmartCanvas（支援縮放/拖曳）
+        private SmartCanvas[] _bgPreviewBoxes;      // camLive 上的 overlay（SmartCanvas with ClampPan）
+        private SmartCanvas _bgPreviewMainCanvas;  // camLiveMain 上的 SmartCanvas（支援縮放/拖曳）
         private int _bgPreviewSelectedCamIndex;    // 目前預覽中的相機 index (0-based)
 
         /// <summary>
         /// 預覽背景：讀取各相機的 bg bin → 擴展為 width × grabHeight 灰階影像。
-        /// 用 PictureBox 疊在 panelLiveCam 上方，SmartCanvas 疊在 panelMainDisplay 上方（支援縮放拖曳）。
-        /// 點選 panelLiveCam 可切換 panelMainDisplay。再按一次清除預覽。
+        /// 用 PictureBox 疊在 camLive 上方，SmartCanvas 疊在 camLiveMain 上方（支援縮放拖曳）。
+        /// 點選 camLive 可切換 camLiveMain。再按一次清除預覽。
         /// </summary>
-        private void btnViewBackground_Click(object sender, EventArgs e)
+        private void btnLiveViewBackground_Click(object sender, EventArgs e)
         {
             // 先清除舊預覽（釋放 overlay + 恢復 MIL display），再重新載入
             if (_bgPreviewActive)
@@ -308,8 +308,8 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             // 清除殘留的最後一幀（MIL native window detach 後面板不會自動重繪）
-            panelMainDisplay.Invalidate();
-            panelMainDisplay.Update();
+            camLiveMain.Invalidate();
+            camLiveMain.Update();
 
             Panel[] livePanels = GetLivePanels();
             foreach (var p in livePanels) { p.Invalidate(); p.Update(); }
@@ -351,11 +351,11 @@ namespace AniloxRoll.Monitor.Forms
 
             if (firstValid >= 0)
             {
-                // SmartCanvas 覆蓋 panelMainDisplay：支援滑鼠滾輪縮放 + 左鍵拖曳
+                // SmartCanvas 覆蓋 camLiveMain：支援滑鼠滾輪縮放 + 左鍵拖曳
                 _bgPreviewMainCanvas = new SmartCanvas { Dock = DockStyle.Fill, ClampPan = true };
                 _bgPreviewMainCanvas.Image = _bgPreviewBitmaps[firstValid];
                 _bgPreviewMainCanvas.StatusChanged += BgPreviewCanvas_StatusChanged;
-                panelMainDisplay.Controls.Add(_bgPreviewMainCanvas);
+                camLiveMain.Controls.Add(_bgPreviewMainCanvas);
                 _bgPreviewMainCanvas.BringToFront();
                 _bgPreviewMainCanvas.FitToScreen();
                 _bgPreviewActive = true;
@@ -369,7 +369,7 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        /// <summary>點選 panelLiveCam 上的 PictureBox → 切換 panelMainDisplay 顯示該相機背景。</summary>
+        /// <summary>點選 camLive 上的 PictureBox → 切換 camLiveMain 顯示該相機背景。</summary>
         private void BgPreviewPanel_Click(object sender, EventArgs e)
         {
             if (!_bgPreviewActive || _bgPreviewBitmaps == null || _bgPreviewMainCanvas == null) return;
@@ -383,7 +383,7 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        /// <summary>SmartCanvas 滑鼠移動時更新 lblPixelInfo（與 canvasMain 同格式：mm 座標 + 範圍 + 倍率）。</summary>
+        /// <summary>SmartCanvas 滑鼠移動時更新 lblPixelInfo（與 camReviewMain 同格式：mm 座標 + 範圍 + 倍率）。</summary>
         private void BgPreviewCanvas_StatusChanged(CanvasInfo info)
         {
             if (lblPixelInfo == null) return;
@@ -463,7 +463,7 @@ namespace AniloxRoll.Monitor.Forms
             SafeBeginInvoke(() => lblPixelInfo.Text = text);
         }
 
-        /// <summary>背景預覽模式：將 panelMainDisplay 上的 SmartCanvas 設為實體倍率 1x（畫面中心不動）。</summary>
+        /// <summary>背景預覽模式：將 camLiveMain 上的 SmartCanvas 設為實體倍率 1x（畫面中心不動）。</summary>
         private void SetBgPreviewPhysicalMag1x()
         {
             if (_bgPreviewMainCanvas?.Image == null || _settings == null) return;
@@ -494,12 +494,12 @@ namespace AniloxRoll.Monitor.Forms
 
         /// <summary>
         /// 清除所有面板的背景預覽。
-        /// restoreMilDisplay=true 時恢復 MIL display（用於 btnCameraGrab 等需要回到即時畫面的場景）。
+        /// restoreMilDisplay=true 時恢復 MIL display（用於 btnLiveGrab 等需要回到即時畫面的場景）。
         /// 預設 false，避免在即將重新進入預覽時產生殘影。
         /// </summary>
         private void ClearBackgroundPreview(bool restoreMilDisplay = false)
         {
-            // 移除 panelLiveCam 上的 overlay SmartCanvas
+            // 移除 camLive 上的 overlay SmartCanvas
             Panel[] livePanels = GetLivePanels();
             if (_bgPreviewBoxes != null)
             {
@@ -515,12 +515,12 @@ namespace AniloxRoll.Monitor.Forms
                 _bgPreviewBoxes = null;
             }
 
-            // 移除 panelMainDisplay 上的 SmartCanvas
+            // 移除 camLiveMain 上的 SmartCanvas
             if (_bgPreviewMainCanvas != null)
             {
                 _bgPreviewMainCanvas.StatusChanged -= BgPreviewCanvas_StatusChanged;
                 _bgPreviewMainCanvas.Image = null;
-                panelMainDisplay.Controls.Remove(_bgPreviewMainCanvas);
+                camLiveMain.Controls.Remove(_bgPreviewMainCanvas);
                 _bgPreviewMainCanvas.Dispose();
                 _bgPreviewMainCanvas = null;
             }
@@ -537,7 +537,7 @@ namespace AniloxRoll.Monitor.Forms
 
             if (restoreMilDisplay && _liveCameraManager?.IsAllocated == true)
             {
-                // 恢復 primary display（panelLiveCam）+ secondary display（panelMainDisplay）
+                // 恢復 primary display（camLive）+ secondary display（camLiveMain）
                 foreach (var cam in _liveCameraManager.Cameras)
                     cam.SetPrimaryDisplayVisible(true);
                 _liveCameraManager.RefreshMainDisplay();

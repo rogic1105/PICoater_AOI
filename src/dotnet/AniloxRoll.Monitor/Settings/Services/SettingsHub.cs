@@ -85,7 +85,7 @@ namespace AniloxRoll.Monitor.Settings.Services
     {
         /// <summary>使用者在 PropertyGrid 改值（setter 已寫 memory、UI 已自我更新）</summary>
         PropertyGrid,
-        /// <summary>程式碼路徑改值（chart click、AutoDetect 回寫、btnSelectFolder reset 等）— PropertyGrid 顯示需外部刷新</summary>
+        /// <summary>程式碼路徑改值（chart click、AutoDetect 回寫、btnReviewSelectFolder reset 等）— PropertyGrid 顯示需外部刷新</summary>
         Programmatic,
     }
 
