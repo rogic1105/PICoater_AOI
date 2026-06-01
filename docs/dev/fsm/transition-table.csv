@@ -55,3 +55,19 @@ camReviewMain.Drag,5,5,同上
 camReviewMain.Drag,6,6,同上
 camReviewMain.Drag,7,7,同上
 camReviewMain.Drag,8,8,同上
+lblIoDoMura.Click,1,9,點 DO1 暫停檢測
+lblIoDoMura.Click,9,1,點 DO1 取消暫停
+lblIoDoMura.Click,2,10,點 DO1 暫停檢測
+lblIoDoMura.Click,10,2,點 DO1 取消暫停
+lblIoDoMura.Click,3,11,點 DO1 暫停檢測
+lblIoDoMura.Click,11,3,點 DO1 取消暫停
+lblIoDoMura.Click,4,12,點 DO1 暫停檢測
+lblIoDoMura.Click,12,4,點 DO1 取消暫停
+lblIoDoMura.Click,5,13,點 DO1 暫停檢測
+lblIoDoMura.Click,13,5,點 DO1 取消暫停
+lblIoDoMura.Click,6,14,點 DO1 暫停檢測
+lblIoDoMura.Click,14,6,點 DO1 取消暫停
+lblIoDoMura.Click,7,15,點 DO1 暫停檢測
+lblIoDoMura.Click,15,7,點 DO1 取消暫停
+lblIoDoMura.Click,8,16,點 DO1 暫停檢測
+lblIoDoMura.Click,16,8,點 DO1 取消暫停

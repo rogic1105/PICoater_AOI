@@ -189,6 +189,8 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category("7. IO設定")][DisplayName("啟用 IO")][TypeConverter(typeof(BoolYesNoConverter))]  public bool   IoEnabled { get; set; } = InspectionDefaults.IoEnabled;
         [Category("7. IO設定")][DisplayName("IO IP")]    public string IoIp      { get; set; } = InspectionDefaults.IoIp;
         [Category("7. IO設定")][DisplayName("IO Port")][TypeConverter(typeof(LeftAlignNumericConverter))]  public int    IoPort    { get; set; } = InspectionDefaults.IoPort;
+        // 檢測暫停（DO1 MURA_DET）：runtime toggle，不持久化 — 每次啟動為 false（避免漏檢）
+        [Category("7. IO設定")][DisplayName("檢測暫停")][TypeConverter(typeof(BoolYesNoConverter))]  public bool   MuraDetectPaused { get; set; } = false;
 
         // ===== 8. 開發者（PG 隱藏，編輯 inspection-settings.json 啟用） =====
         // FSM Action Logger 開關。對應 docs/dev/fsm/ + Services/UiActionLogger.cs。

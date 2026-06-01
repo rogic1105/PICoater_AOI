@@ -142,7 +142,6 @@ namespace AniloxRoll.Monitor.Forms
         private readonly float[][] _liveCurveMean = new float[CameraCount][];
         private readonly float[][] _liveCurveMax  = new float[CameraCount][];
         private volatile bool _liveOverviewDirty;
-        private bool _isMuraDetectPaused;
         private bool _isIoSuspended;
 
         // --- Review tab 拼接管理 ---
@@ -895,6 +894,11 @@ namespace AniloxRoll.Monitor.Forms
                     ApplyMuraEnhance(_settings.EnableMuraEnhance);
                 if (c.Name == nameof(InspectionSettings.hd_EnableReviewEnhance))
                     await ApplyReviewEnhance(_settings.EnableReviewEnhance);
+
+                // ── IO 設定（檢測暫停） ───────────────────────────────────────
+                // 取消暫停一律先顯示 ×；下次 IO snapshot 來時 UpdateIoLeds 會更新真實 ◎/×
+                if (c.Name == nameof(InspectionSettings.MuraDetectPaused))
+                    UpdateMuraLed(false);
 
                 // ── Algorithm 變更 ────────────────────────────────────────────
                 if (c.Name == "db_Algorithm" || c.Name == nameof(InspectionRecipe.Algorithm) || c.Name == "去背演算法")

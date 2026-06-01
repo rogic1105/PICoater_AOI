@@ -390,7 +390,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private void UpdateMuraLed(bool doMuraOn)
         {
-            if (_isMuraDetectPaused)
+            if (_settings.MuraDetectPaused)
             {
                 lblIoDoMura.BackColor = IecYellow;
                 lblIoDoMura.ForeColor = Color.Black;
@@ -477,8 +477,8 @@ namespace AniloxRoll.Monitor.Forms
 
         private void lblIoDoMura_Click(object sender, EventArgs e)
         {
-            _isMuraDetectPaused = !_isMuraDetectPaused;
-            UpdateMuraLed(false);
+            // 走 SettingsHub → Changed event → OnSettingChanged 接管 UpdateMuraLed
+            _settingsHub.Set(s => s.MuraDetectPaused, !_settings.MuraDetectPaused);
         }
 
         private void lblIoConn_Click(object sender, EventArgs e)

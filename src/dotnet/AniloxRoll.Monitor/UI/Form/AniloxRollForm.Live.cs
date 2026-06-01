@@ -151,7 +151,7 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private void CheckLiveMura(float[] meanArr, float[] maxArr, string direction)
         {
-            if (_isMuraDetectPaused) return;
+            if (_settings.MuraDetectPaused) return;
             if (_ioGrabController?.IsConnected != true) return;
             if (_settings == null) return;
             if (!_liveCameraManager.IsLiveGrabbing) return;

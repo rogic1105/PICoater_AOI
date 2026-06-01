@@ -90,6 +90,9 @@ const SETTING_LABELS = {
   hb_StitchMode: '合圖方式',
   hc_EnableMuraEnhance: '監控強化',
   hd_EnableReviewEnhance: '回顧強化',
+  gb_ChartScaleMode: 'y座標',
+  IoEnabled: '啟用 IO',
+  MuraDetectPaused: '檢測暫停',   // form runtime flag _isMuraDetectPaused，DO1 lblIoDoMura 切換；尚未進 SettingsHub
 };
 
 function parseCsv(text) {
@@ -165,10 +168,11 @@ function loadLog(input) {
 
 function renderCatalog() {
   if (states.length === 0) return;
-  const headers = Object.keys(states[0]);
+  // state_id 是 transition-table from/to 的內部 key，catalog 不顯示（note 已能識別 state）
+  const headers = Object.keys(states[0]).filter(h => h !== 'state_id');
   let html = '<thead><tr>' + headers.map(h => {
     const zh = SETTING_LABELS[h];
-    return zh ? `<th>${h}<br><span style="color:#222;font-weight:bold">${zh}</span></th>` : `<th>${h}</th>`;
+    return zh ? `<th>${h}<br><span style="color:#fff176;font-weight:bold">${zh}</span></th>` : `<th>${h}</th>`;
   }).join('') + '</tr></thead><tbody>';
   states.forEach(s => {
     html += '<tr>' + headers.map(h => `<td>${s[h]}</td>`).join('') + '</tr>';
