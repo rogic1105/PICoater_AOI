@@ -4,7 +4,7 @@ namespace AniloxRoll.Monitor.Core.Data
     internal static class AppModeDefaults
     {
         public const MachineRole Role              = MachineRole.Inspection;
-        public const string      LocalConfigFolder = @"D:\Anilox\Config";
-        public const string      StorageFolderPath = "";
+        public const string      StorageMachineConfigFolder = @"D:\Anilox\Config";
+        public const string      StorageMachineDataPath = "";
     }
 }

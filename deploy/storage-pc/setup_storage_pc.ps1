@@ -156,14 +156,14 @@ if ($cfg.AppDir) {
     if (-not (Test-Path $cfgDir)) {
         New-Item -ItemType Directory -Path $cfgDir -Force | Out-Null
     }
-    # LocalConfigFolder = AniloxRoot\Config；StorageFolderPath = AniloxRoot\Captures
+    # StorageMachineConfigFolder = AniloxRoot\Config；StorageMachineDataPath = AniloxRoot\Captures
     $localConfigDir = (Join-Path $cfg.AniloxRoot 'Config').Replace('\','\\')
     $storageDir     = (Join-Path $cfg.AniloxRoot 'Captures').Replace('\','\\')
     $appModeJson = @"
 {
   "Role": "Storage",
-  "LocalConfigFolder": "$localConfigDir",
-  "StorageFolderPath": "$storageDir"
+  "StorageMachineConfigFolder": "$localConfigDir",
+  "StorageMachineDataPath": "$storageDir"
 }
 "@
     $appModeFile = Join-Path $cfgDir 'app-mode.json'

@@ -223,7 +223,7 @@ PICoater_AOI/
 | `Settings/Models/LightSettings.cs` | 光源控制器設定（COM Port、Channel、Brightness） |
 | `Settings/Models/Defaults/InspectionDefaults.cs` | Inspection 所有預設常數集中（CamOps/IoEnabled/AniloxRootPath/DcfPath/LightChannel…）— 預設值唯一來源 |
 | `Settings/Models/Defaults/AcquisitionDefaults.cs` | Acquisition 預設值集中（GrabHeight/ExposureTimeUs/LineRateHz × 7 cam）；NewArray 工廠避免散落 |
-| `Settings/Models/Defaults/AppModeDefaults.cs` | AppMode 預設值（Role/LocalConfigFolder/StorageFolderPath） |
+| `Settings/Models/Defaults/AppModeDefaults.cs` | AppMode 預設值（Role/StorageMachineConfigFolder/StorageMachineDataPath） |
 | `Settings/Models/Defaults/SystemDefaults.cs` | SystemSettings 預設值（7 cam 拓樸 NewCameraDevices；dcf 共用 InspectionDefaults.DcfPath） |
 | `Settings/Utilities/DcfPathHelper.cs` | DcfPath 路徑解析：相對 `Config\Radient_Config.dcf` → 絕對 `BaseDir\Config\…`（進 MIL 前呼） |
 | `Settings/Stores/SettingsStoreHelper.cs` | Settings Load/Save 共用 helper：JSON 檔案 I/O、regex 解析工具方法 |
@@ -239,7 +239,7 @@ PICoater_AOI/
 | `Services/HessianRescaleHelper.cs` | View-time HM rescale 共用：Ratio / IsNoOp / RescaleInPlace1D\|2D / CloneAndRescale1D\|2D — 5 個公式單一來源 |
 | `Services/StorageRetentionService.cs` | 循環儲存：事件驅動（grab 結束/每 10 grab/watchdog），磁碟可用空間低於門檻時刪最舊日期資料夾影像，保留 CSV |
 | `Services/CleanupFlagWatcher.cs` | Storage PC 專用：每 10 秒自主查空間 + 清理；同時輪詢 cleanup-request.flag（Inspection PC 寫入）立即觸發 |
-| `Settings/Models/AppModeConfig.cs` | 機台角色設定：Role（Inspection/Storage）、LocalConfigFolder、StorageFolderPath；Load/Save → Config\app-mode.json |
+| `Settings/Models/AppModeConfig.cs` | 機台角色設定：Role（Inspection/Storage）、StorageMachineConfigFolder、StorageMachineDataPath；Load/Save → Config\app-mode.json |
 | `Services/RemoteCopyService.cs` | 背景遠端複製：ConcurrentQueue + 背景執行緒，File.Copy 含重試（3 次） |
 | `Services/LightController.cs` | LTS-3DPA24 光源控制器 RS-232 通訊：AutoDetect（先試設定 COM 再掃描）、嚴格 probe（PDF §4.1.4 表-4 驗證：8-byte、cmd/ch echo、XOR checksum）、TurnOn/Off/SetBrightness，跟隨 IO Grab 開關 |
 | `UI/Widgets/GrabImageStitcher.cs` | 多張影像垂直拼接 + MergeHorizontal 全域合圖；LoadCameraImage（internal） |

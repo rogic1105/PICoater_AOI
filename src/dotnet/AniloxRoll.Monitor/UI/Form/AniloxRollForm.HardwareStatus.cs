@@ -470,8 +470,8 @@ namespace AniloxRoll.Monitor.Forms
         private string GetStorageRetentionRoot()
         {
             if (_appMode?.Role == MachineRole.Storage &&
-                !string.IsNullOrWhiteSpace(_appMode.StorageFolderPath))
-                return _appMode.StorageFolderPath;
+                !string.IsNullOrWhiteSpace(_appMode.StorageMachineDataPath))
+                return _appMode.StorageMachineDataPath;
             return _settings?.CaptureRootPath ?? string.Empty;
         }
 

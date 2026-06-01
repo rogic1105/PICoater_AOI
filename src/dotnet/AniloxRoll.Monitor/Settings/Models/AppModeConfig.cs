@@ -21,10 +21,10 @@ namespace AniloxRoll.Monitor.Core.Data
         public MachineRole Role { get; set; } = AppModeDefaults.Role;
 
         /// <summary>Storage 模式：本機 Config 子目錄路徑（供 CleanupFlagWatcher 監看 cleanup-request.flag）。</summary>
-        public string LocalConfigFolder { get; set; } = AppModeDefaults.LocalConfigFolder;
+        public string StorageMachineConfigFolder { get; set; } = AppModeDefaults.StorageMachineConfigFolder;
 
         /// <summary>Storage 模式：循環儲存的根目錄；空字串時 fallback 至 CaptureRootPath。</summary>
-        public string StorageFolderPath { get; set; } = AppModeDefaults.StorageFolderPath;
+        public string StorageMachineDataPath { get; set; } = AppModeDefaults.StorageMachineDataPath;
 
         public static AppModeConfig Load()
         {

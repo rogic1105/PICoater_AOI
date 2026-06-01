@@ -356,7 +356,7 @@ namespace AniloxRoll.Monitor.Forms
             {
                 // Storage 模式：輪詢旗標觸發清理
                 _cleanupFlagWatcher = new CleanupFlagWatcher(
-                    () => _appMode.LocalConfigFolder,
+                    () => _appMode.StorageMachineConfigFolder,
                     _retentionService);
                 _cleanupFlagWatcher.Start();
             }
