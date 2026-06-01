@@ -162,35 +162,33 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public float ErrorValueMaxH  { get => Recipe.ErrorValueMaxH;  set => Recipe.ErrorValueMaxH  = value; }
 
         // ===== 4. 儲存設定 =====
-        [Category("4. 儲存設定")][DisplayName("存檔")][TypeConverter(typeof(BoolYesNoConverter))]          public bool   EnableAutoCapture    { get => Storage.EnableAutoCapture;    set => Storage.EnableAutoCapture    = value; }
-        [Category("4. 儲存設定")][DisplayName("存原圖")][TypeConverter(typeof(BoolYesNoConverter))]        public bool   SaveOriginalBmp      { get => Storage.SaveOriginalBmp;      set => Storage.SaveOriginalBmp      = value; }
-        [Category("4. 儲存設定")][DisplayName("Anilox 根目錄")]  public string AniloxRootPath       { get => Storage.AniloxRootPath;       set => Storage.AniloxRootPath       = value; }
+        [Category("4. 儲存設定")][DisplayName("Anilox 根目錄")][PropertyOrder(1)]  public string AniloxRootPath       { get => Storage.AniloxRootPath;       set => Storage.AniloxRootPath       = value; }
         // 子目錄路徑：PropertyGrid 不顯示，由 AniloxRootPath 推算
         [Browsable(false)] public string CaptureRootPath => Storage.CaptureRootPath;
-        [Category("4. 儲存設定")][DisplayName("預留空間 (GB)")][TypeConverter(typeof(LeftAlignNumericConverter))] public int    LocalMinFreeGB       { get => Storage.LocalMinFreeGB;       set => Storage.LocalMinFreeGB       = value; }
-        [Category("4. 儲存設定")][DisplayName("遠端路徑")]      public string RemotePath           { get => Storage.RemotePath;           set => Storage.RemotePath           = value; }
+        [Category("4. 儲存設定")][DisplayName("預留空間 (GB)")][PropertyOrder(2)][TypeConverter(typeof(LeftAlignNumericConverter))] public int    LocalMinFreeGB       { get => Storage.LocalMinFreeGB;       set => Storage.LocalMinFreeGB       = value; }
+        [Category("4. 儲存設定")][DisplayName("遠端路徑")][PropertyOrder(3)]      public string RemotePath           { get => Storage.RemotePath;           set => Storage.RemotePath           = value; }
+        [Category("4. 儲存設定")][DisplayName("存檔")][PropertyOrder(4)][TypeConverter(typeof(BoolYesNoConverter))]          public bool   EnableAutoCapture    { get => Storage.EnableAutoCapture;    set => Storage.EnableAutoCapture    = value; }
+        [Category("4. 儲存設定")][DisplayName("存原圖")][PropertyOrder(5)][TypeConverter(typeof(BoolYesNoConverter))]        public bool   SaveOriginalBmp      { get => Storage.SaveOriginalBmp;      set => Storage.SaveOriginalBmp      = value; }
         // 開發者設定：PropertyGrid 不顯示，部署時直接改 JSON
         [Browsable(false)] public string RemoteConfigPath { get => Storage.RemoteConfigPath; set => Storage.RemoteConfigPath = value; }
 
-        // ===== 5. 相機設定 =====
-        [Category("5. 相機設定")][DisplayName("設定檔")]
-        [Editor(typeof(DcfFileEditor), typeof(System.Drawing.Design.UITypeEditor))]
-        public string DcfPath { get => CameraParam.DcfPath; set => CameraParam.DcfPath = value; }
+        // DcfPath 固定為 Config\Radient_Config.dcf（跟 exe 走，build 自動複製）；PG 隱藏不讓使用者改
+        [Browsable(false)] public string DcfPath { get => CameraParam.DcfPath; set => CameraParam.DcfPath = value; }
 
         // ===== 6. 光源設定 =====
-        [Category("6. 光源設定")][DisplayName("啟用光源")][TypeConverter(typeof(BoolYesNoConverter))]      public bool   LightEnabled    { get => Light.Enabled;    set => Light.Enabled    = value; }
-        [Category("6. 光源設定")][DisplayName("COM Port")]      public string LightComPort    { get => Light.ComPort;    set => Light.ComPort    = value; }
-        [Category("6. 光源設定")][DisplayName("通道")][TypeConverter(typeof(LeftAlignNumericConverter))]          public int    LightChannel    { get => Light.Channel;    set => Light.Channel    = value; }
-        [Category("6. 光源設定")][DisplayName("亮度")][TypeConverter(typeof(LeftAlignNumericConverter))]          public int    LightBrightness { get => Light.Brightness; set => Light.Brightness = value; }
-        [Category("6. 光源設定")][DisplayName("暖機延遲 (ms)")][TypeConverter(typeof(LeftAlignNumericConverter))] public int    LightWarmupMs   { get => Light.WarmupMs;   set => Light.WarmupMs   = value; }
+        [Category("5. 光源設定")][DisplayName("啟用光源")][TypeConverter(typeof(BoolYesNoConverter))]      public bool   LightEnabled    { get => Light.Enabled;    set => Light.Enabled    = value; }
+        [Category("5. 光源設定")][DisplayName("COM Port")]      public string LightComPort    { get => Light.ComPort;    set => Light.ComPort    = value; }
+        [Category("5. 光源設定")][DisplayName("通道")][TypeConverter(typeof(LeftAlignNumericConverter))]          public int    LightChannel    { get => Light.Channel;    set => Light.Channel    = value; }
+        [Category("5. 光源設定")][DisplayName("亮度")][TypeConverter(typeof(LeftAlignNumericConverter))]          public int    LightBrightness { get => Light.Brightness; set => Light.Brightness = value; }
+        [Category("5. 光源設定")][DisplayName("暖機延遲 (ms)")][TypeConverter(typeof(LeftAlignNumericConverter))] public int    LightWarmupMs   { get => Light.WarmupMs;   set => Light.WarmupMs   = value; }
 
         // ===== 7. IO 設定 =====
-        [Category("7. IO設定")][DisplayName("IO 型號")] public string IoModel { get; set; } = InspectionDefaults.IoModel;
-        [Category("7. IO設定")][DisplayName("啟用 IO")][TypeConverter(typeof(BoolYesNoConverter))]  public bool   IoEnabled { get; set; } = InspectionDefaults.IoEnabled;
-        [Category("7. IO設定")][DisplayName("IO IP")]    public string IoIp      { get; set; } = InspectionDefaults.IoIp;
-        [Category("7. IO設定")][DisplayName("IO Port")][TypeConverter(typeof(LeftAlignNumericConverter))]  public int    IoPort    { get; set; } = InspectionDefaults.IoPort;
-        // 檢測暫停（DO1 MURA_DET）：runtime toggle，不持久化 — 每次啟動為 false（避免漏檢）
-        [Category("7. IO設定")][DisplayName("檢測暫停")][TypeConverter(typeof(BoolYesNoConverter))]  public bool   MuraDetectPaused { get; set; } = false;
+        [Category("6. IO設定")][DisplayName("IO IP")][PropertyOrder(1)]   public string IoIp      { get; set; } = InspectionDefaults.IoIp;
+        [Category("6. IO設定")][DisplayName("IO 型號")][PropertyOrder(2)] public string IoModel { get; set; } = InspectionDefaults.IoModel;
+        [Category("6. IO設定")][DisplayName("啟用 IO")][PropertyOrder(3)][TypeConverter(typeof(BoolYesNoConverter))]  public bool   IoEnabled { get; set; } = InspectionDefaults.IoEnabled;
+        [Category("6. IO設定")][DisplayName("IO Port")][PropertyOrder(4)][TypeConverter(typeof(LeftAlignNumericConverter))]  public int    IoPort    { get; set; } = InspectionDefaults.IoPort;
+        // Mura 檢出（DO1 MURA_DET）：runtime toggle，不持久化 — 每次啟動為 false（避免漏檢）
+        [Category("6. IO設定")][DisplayName("Mura檢出")][PropertyOrder(5)][TypeConverter(typeof(BoolYesNoConverter))]  public bool   MuraDetectPaused { get; set; } = false;
 
         // ===== 8. 開發者（PG 隱藏，編輯 inspection-settings.json 啟用） =====
         // FSM Action Logger 開關。對應 docs/dev/fsm/ + Services/UiActionLogger.cs。

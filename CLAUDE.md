@@ -221,6 +221,11 @@ PICoater_AOI/
 | `Settings/Models/MuraChartConfig.cs` | Mura 圖表閾值 PropertyGrid 展開代理 |
 | `Settings/Models/CameraParamSettings.cs` | DCF 設定檔路徑 |
 | `Settings/Models/LightSettings.cs` | 光源控制器設定（COM Port、Channel、Brightness） |
+| `Settings/Models/Defaults/InspectionDefaults.cs` | Inspection 所有預設常數集中（CamOps/IoEnabled/AniloxRootPath/DcfPath/LightChannel…）— 預設值唯一來源 |
+| `Settings/Models/Defaults/AcquisitionDefaults.cs` | Acquisition 預設值集中（GrabHeight/ExposureTimeUs/LineRateHz × 7 cam）；NewArray 工廠避免散落 |
+| `Settings/Models/Defaults/AppModeDefaults.cs` | AppMode 預設值（Role/LocalConfigFolder/StorageFolderPath） |
+| `Settings/Models/Defaults/SystemDefaults.cs` | SystemSettings 預設值（7 cam 拓樸 NewCameraDevices；dcf 共用 InspectionDefaults.DcfPath） |
+| `Settings/Utilities/DcfPathHelper.cs` | DcfPath 路徑解析：相對 `Config\Radient_Config.dcf` → 絕對 `BaseDir\Config\…`（進 MIL 前呼） |
 | `Settings/Stores/SettingsStoreHelper.cs` | Settings Load/Save 共用 helper：JSON 檔案 I/O、regex 解析工具方法 |
 | `Settings/Stores/AcquisitionSettingsStore.cs` | 讀寫 acquisition-settings.json |
 | `UI/State/UserSessionState.cs` | UI session 持久化 → session-state.json |
@@ -350,13 +355,7 @@ PICoater_AOI/
 | 遠端路徑 | `RemotePath` | \\192.168.10.20\Anilox\Captures | 遠端複製目標路徑（空=不複製）。單一 SMB share `Anilox` 子目錄 |
 | 遠端設定路徑 | `RemoteConfigPath` | \\192.168.10.20\Anilox\Config | [Browsable(false)] 開發者設定；cleanup-request.flag 寫入位置 |
 
-### 5. 相機設定
-
-| 顯示名稱 | 屬性 | 預設值 | 說明 |
-|---------|------|--------|------|
-| 設定檔 | `DcfPath` | D:\AniloxCaptures\dcf\Radient_Config.dcf | MIL Digitizer DCF 檔案路徑 |
-
-### 6. 光源設定
+### 5. 光源設定
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
@@ -366,7 +365,7 @@ PICoater_AOI/
 | 亮度 | `LightBrightness` | 255 | 亮度（0~255） |
 | 暖機延遲 (ms) | `LightWarmupMs` | 300 | 開燈後等待光源穩定的延遲；Grab 啟動前插入此延遲 |
 
-### 7. IO 設定
+### 6. IO 設定
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|

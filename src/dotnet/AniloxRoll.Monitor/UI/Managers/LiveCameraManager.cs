@@ -205,7 +205,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                     !_cameraStatusLabels.ContainsKey(cfg.Id))
                     continue;
 
-                string dcf = !string.IsNullOrEmpty(_dcfPath) ? _dcfPath : cfg.DcfPath;
+                string dcf = DcfPathHelper.Resolve(!string.IsNullOrEmpty(_dcfPath) ? _dcfPath : cfg.DcfPath);
                 var cam = new AniloxCamera(
                     currentSysId,
                     cfg.Id,

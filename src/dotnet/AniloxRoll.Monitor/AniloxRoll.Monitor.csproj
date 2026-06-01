@@ -101,13 +101,17 @@
     <Compile Include="Settings\Models\StorageSettings.cs" />
     <Compile Include="Settings\Models\CameraParamSettings.cs" />
     <Compile Include="Settings\Models\LightSettings.cs" />
-    <Compile Include="Settings\Models\InspectionDefaults.cs" />
-    <Compile Include="Settings\Models\LeftAlignNumericConverter.cs" />
-    <Compile Include="Settings\Models\ExpandableLeftAlignConverter.cs" />
-    <Compile Include="Settings\Models\RecipeDisplayAdapters.cs" />
-    <Compile Include="Settings\Models\BoolYesNoConverter.cs" />
-    <Compile Include="Settings\Models\InspectionSettingsDescriptionProvider.cs" />
-    <Compile Include="Settings\Models\DcfFileEditor.cs" />
+    <Compile Include="Settings\Models\Defaults\InspectionDefaults.cs" />
+    <Compile Include="Settings\Models\Defaults\AcquisitionDefaults.cs" />
+    <Compile Include="Settings\Models\Defaults\AppModeDefaults.cs" />
+    <Compile Include="Settings\Models\Defaults\SystemDefaults.cs" />
+    <Compile Include="Settings\Utilities\DcfPathHelper.cs" />
+    <Compile Include="Settings\Models\PropertyGrid\LeftAlignNumericConverter.cs" />
+    <Compile Include="Settings\Models\PropertyGrid\ExpandableLeftAlignConverter.cs" />
+    <Compile Include="Settings\Models\PropertyGrid\RecipeDisplayAdapters.cs" />
+    <Compile Include="Settings\Models\PropertyGrid\BoolYesNoConverter.cs" />
+    <Compile Include="Settings\Models\PropertyGrid\InspectionSettingsDescriptionProvider.cs" />
+    <Compile Include="Settings\Models\PropertyGrid\PropertyOrderAttribute.cs" />
     <Compile Include="Settings\Services\ConfigManager.cs" />
     <Compile Include="Settings\Services\SettingsHub.cs" />
     <Compile Include="Settings\System\CameraHardwareConfig.cs" />
@@ -137,30 +141,39 @@
     </Compile>
     <Compile Include="UI\Form\AniloxRollForm.Background.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="UI\Form\AniloxRollForm.DirectionStitch.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="UI\Form\AniloxRollForm.Data.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="UI\Form\AniloxRollForm.Telemetry.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="UI\Form\AniloxRollForm.SettingsTabs.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="UI\Form\AniloxRollForm.Helpers.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="UI\Form\AniloxRollForm.HardwareStatus.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="UI\Form\AniloxRollForm.Review.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="UI\Form\AniloxRollForm.Live.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="UI\Presenters\AniloxRollPresenter.cs" />
     <Compile Include="UI\Presenters\LiveTelemetryPresenter.cs" />
@@ -222,7 +235,6 @@
     <None Include="Config\inspection-settings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-
     <None Include="Config\acquisition-settings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
@@ -259,6 +271,8 @@
       <Name>MilGrabber.Core</Name>
     </ProjectReference>
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <Folder Include="Resources\" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

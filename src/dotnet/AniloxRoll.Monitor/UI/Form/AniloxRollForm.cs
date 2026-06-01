@@ -298,7 +298,7 @@ namespace AniloxRoll.Monitor.Forms
                 }
 
                 // 檢查 DCF 檔是否存在；不存在時設旗標，lblCamCount 之後會顯示警語
-                string dcfPath = _settings?.CameraParam?.DcfPath;
+                string dcfPath = DcfPathHelper.Resolve(_settings?.CameraParam?.DcfPath);
                 _dcfMissing = !string.IsNullOrWhiteSpace(dcfPath) && !File.Exists(dcfPath);
                 if (_dcfMissing)
                     Trace.WriteLine($"[EnsureAniloxFolderStructure] DCF 缺失: {dcfPath}");

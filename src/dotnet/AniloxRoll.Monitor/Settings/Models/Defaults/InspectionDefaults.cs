@@ -8,16 +8,16 @@ namespace AniloxRoll.Monitor.Core.Data
     internal static class InspectionDefaults
     {
         // ── 1. 機台佈局 ────────────────────────────────────────────────────
-        public const double CamOps      = 33.0;    // OPS (um)       ← Cam 1~7
-        public const double CamPos_Cam1 = 0.0;     // Start (mm)     ← Cam 1
-        public const double CamPos_Cam2 = 400.0;   // Start (mm)     ← Cam 2
-        public const double CamPos_Cam3 = 800.0;   // Start (mm)     ← Cam 3
-        public const double CamPos_Cam4 = 1200.0;  // Start (mm)     ← Cam 4
-        public const double CamPos_Cam5 = 1600.0;  // Start (mm)     ← Cam 5
-        public const double CamPos_Cam6 = 2000.0;  // Start (mm)     ← Cam 6
-        public const double CamPos_Cam7 = 2400.0;  // Start (mm)     ← Cam 7
-        public const double TrimHeadMm  = 0.0;     // 去頭 (mm)
-        public const double TrimTailMm  = 0.0;     // 去尾 (mm)
+        public const double CamOps      = 24.4140625; // OPS (um)       ← Cam 1~7（PICoater 機台實測）
+        public const double CamPos_Cam1 = 0.0;        // Start (mm)     ← Cam 1
+        public const double CamPos_Cam2 = 345.0;      // Start (mm)     ← Cam 2
+        public const double CamPos_Cam3 = 690.0;      // Start (mm)     ← Cam 3
+        public const double CamPos_Cam4 = 1035.0;     // Start (mm)     ← Cam 4
+        public const double CamPos_Cam5 = 1380.0;     // Start (mm)     ← Cam 5
+        public const double CamPos_Cam6 = 1725.0;     // Start (mm)     ← Cam 6
+        public const double CamPos_Cam7 = 2070.0;     // Start (mm)     ← Cam 7
+        public const double TrimHeadMm  = 0.0;        // 去頭 (mm)
+        public const double TrimTailMm  = 0.0;        // 去尾 (mm)
 
         // ── 2. 檢測配方 ────────────────────────────────────────────────────
         public static readonly BackgroundAlgorithm Algorithm  = BackgroundAlgorithm.SingleFrameBgSub; // 去背演算法
@@ -25,9 +25,9 @@ namespace AniloxRoll.Monitor.Core.Data
         public const float  HessianMaxFactorV       = 0.3f;   // 垂直正規值（同時當作 capture-time 送進 native 的 HM）
         public const float  HessianMaxFactorH       = 0.3f;   // 水平正規值（view-time only，僅作 H 曲線顯示縮放）
         public const float  ErrorValueMeanV         = 0.2f;   // Mura 圖表 > 垂直平均閾值
-        public const float  ErrorValueMaxV          = 0.4f;   // Mura 圖表 > 垂直最大閾值
+        public const float  ErrorValueMaxV          = 0.6f;   // Mura 圖表 > 垂直最大閾值（PICoater 機台實測）
         public const float  ErrorValueMeanH         = 0.2f;   // Mura 圖表 > 水平平均閾值
-        public const float  ErrorValueMaxH          = 0.4f;   // Mura 圖表 > 水平最大閾值
+        public const float  ErrorValueMaxH          = 0.6f;   // Mura 圖表 > 水平最大閾值（PICoater 機台實測）
         public const int    BackgroundSampleSeconds = 3;      // 取樣秒數
         public const double AniloxRollSpeedMPerMin  = 40.0;   // 輪速 (m/min)
 
@@ -55,7 +55,7 @@ namespace AniloxRoll.Monitor.Core.Data
         public const int    IoPort    = 502;              // IO Port
 
         // ── 6. 相機設定 ────────────────────────────────────────────────────
-        public const string DcfPath = @"D:\Anilox\Dcf\Radient_Config.dcf"; // 設定檔
+        public const string DcfPath = @"Config\Radient_Config.dcf";        // 設定檔（相對 exe，build 自動複製）
 
         // ── 7. 光源設定 ────────────────────────────────────────────────────
         public const bool   LightEnabled    = true;    // 啟用光源

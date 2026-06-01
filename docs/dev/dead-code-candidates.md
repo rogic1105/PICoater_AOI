@@ -18,7 +18,6 @@ python tests/python_test/find_dead_code.py [src_root]
 |---|---|
 | `LiveCameraManager.WheelZoomFilter.PreFilterMessage` | `IMessageFilter`（由 `Application.AddMessageFilter` 註冊）|
 | `BoolYesNoConverter.GetStandardValues` | `BooleanConverter` override |
-| `DcfFileEditor.GetEditStyle` / `EditValue` | `UITypeEditor` override |
 
 ## 清理歷史
 

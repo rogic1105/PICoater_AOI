@@ -1,11 +1,13 @@
 using System;
 using System.ComponentModel;
+using System.Linq;
 using System.Reflection;
 
 namespace AniloxRoll.Monitor.Core.Data
 {
     /// <summary>
-    /// 讓 PropertyGrid 的一般屬性在底部說明欄顯示該屬性的目前值。
+    /// 讓 PropertyGrid 的一般屬性在底部說明欄顯示該屬性的目前值，
+    /// 並依 [PropertyOrder] 在同一 Category 內排序（沒標 = order 0，維持 declaration 順序）。
     /// </summary>
     class InspectionSettingsDescriptionProvider : TypeDescriptionProvider
     {
@@ -40,8 +42,17 @@ namespace AniloxRoll.Monitor.Core.Data
                         ? new ValueDescriptor(p, _s)
                         : p;
                 }
-                return new PropertyDescriptorCollection(arr);
+                // 依 [PropertyOrder] 穩定排序：同 order 維持 declaration 順序
+                var sorted = arr.Select((d, i) => new { d, i })
+                                .OrderBy(x => GetOrder(x.d))
+                                .ThenBy(x => x.i)
+                                .Select(x => x.d)
+                                .ToArray();
+                return new PropertyDescriptorCollection(sorted);
             }
+
+            static int GetOrder(PropertyDescriptor p)
+                => (p.Attributes[typeof(PropertyOrderAttribute)] as PropertyOrderAttribute)?.Order ?? 0;
         }
 
         // ── PropertyDescriptor wrapper ─────────────────────────────────────
