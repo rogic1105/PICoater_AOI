@@ -34,6 +34,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from src.image_processing import (
     remove_column_background,
     compute_hessian_ridge,
+    ridge_to_uint8,
     img_reduction_resize_average_filter,
 )
 
@@ -149,9 +150,11 @@ def process_cam(bmp_paths, cam_id, output_root, shared_grab_id=None):
 
         # ── 4. 存 JPG ──
         encode_params = [cv2.IMWRITE_JPEG_QUALITY, JPG_QUALITY]
+        # proc_v/h 是 float ridge response（resize 後仍 float）→ 顯示圖才 clip u8；
+        # 曲線（下方 step 5）直接從 full-res float res_v/h 算（保峰值，同 native u8 之前）。
         cv2.imwrite(os.path.join(day_dir, base_name + "_raw.jpg"), raw_resized, encode_params)
-        cv2.imwrite(os.path.join(day_dir, base_name + "_proc_v.jpg"), proc_v_resized, encode_params)
-        cv2.imwrite(os.path.join(day_dir, base_name + "_proc_h.jpg"), proc_h_resized, encode_params)
+        cv2.imwrite(os.path.join(day_dir, base_name + "_proc_v.jpg"), ridge_to_uint8(proc_v_resized), encode_params)
+        cv2.imwrite(os.path.join(day_dir, base_name + "_proc_h.jpg"), ridge_to_uint8(proc_h_resized), encode_params)
 
         # ── 5. 從全解析度 hessian 計算曲線（與 C# AniloxCamera.cs 一致）──
         col_mean_v = np.mean(res_v, axis=0).astype(np.float32)  # (W,) 全解析度

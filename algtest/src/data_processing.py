@@ -1,10 +1,16 @@
+"""data_processing.py — algtest 資料輸出與視覺化積木。
+
+- plot_and_save_statistics：單組曲線（mean/max/min）沿位置(mm)的統計圖
+- save_array_to_csv：一維陣列存 CSV（含時間戳）
+- plot_comparison：多方案（原圖/壓縮/縮放…）曲線比較圖
+"""
 import matplotlib.pyplot as plt
 import numpy as np
 import os
 import csv
 from datetime import datetime
 
-def plot_and_save_statistics(mean_arr: np.ndarray, max_arr: np.ndarray, min_arr: np.ndarray, 
+def plot_and_save_statistics(mean_arr: np.ndarray, max_arr: np.ndarray, min_arr: np.ndarray,
                              ops_um: float, output_path: str, jpg_quality: int = 95):
     """
     繪製平均值與標準差圖表，橫軸單位為 mm。

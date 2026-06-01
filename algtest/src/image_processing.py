@@ -1,3 +1,13 @@
+"""image_processing.py — algtest 影像演算法積木（PICoater mura pipeline）。
+
+對應 C# native（src/native/modules/GetPICoaterBackground）的 Python 參考實作：
+- remove_column_background：逐列均值去背（+127 保留方向，同 native）
+- compute_hessian_ridge：Hessian ridge V/H + fixed 正規化，回 **float**（×255/正規值，不 clamp）
+  —— 同 native：bin 曲線從這個 float 算（保峰值，u8 之前）
+- ridge_to_uint8：float ridge → uint8 顯示圖（clip）—— 只給顯示，別拿來算曲線
+- overlay_heatmap：ridge 熱圖疊加（視覺化）
+- img_reduction_resize / _compress / _resize_average_filter：縮放與 JPEG 壓縮
+"""
 import cv2
 import numpy as np
 
@@ -49,15 +59,19 @@ def compute_hessian_ridge(image: np.ndarray,
         dyy = cv2.Sobel(smooth, cv2.CV_32F, 0, 2, ksize=3)
         response = np.abs(dxx) + np.abs(dyy)
 
-    # 3. Fixed Scaling (取代原本的 normalize)
-    # 公式: Output = (Response / Fixed_Max) * 255
-    # 例如: Response=0.5, Max=1.0 -> Output=127.5
+    # 3. Fixed Scaling — 同 native：×255/正規值，但「不 clamp」回傳 float。
+    #    曲線（bin）要從這個 float 算（保留 >255 的峰值）；顯示圖才另外用 ridge_to_uint8 clip。
+    #    對應 native：曲線 from float hessian response（u8 之前），u8 只是 scale_clamp 顯示圖。
     scale_factor = 255.0 / fixed_max_val
-    resp_scaled = response * scale_factor
-    
-    # 4. Clip to 0-255 (超過上限的就切平在 255)
-    resp_fixed = np.clip(resp_scaled, 0, 255).astype(np.uint8)
-    return resp_fixed
+    return response * scale_factor   # float（u8 之前）
+
+
+def ridge_to_uint8(ridge_response: np.ndarray) -> np.ndarray:
+    """float ridge response → uint8 顯示圖（clip 0-255）。對應 native scale_clamp_f32_to_u8。
+
+    ⚠️ bin 曲線不要用這個——會 clamp 掉 >255 的峰值。曲線請直接用 compute_hessian_ridge 的 float。
+    """
+    return np.clip(ridge_response, 0, 255).astype(np.uint8)
 
 def overlay_heatmap(src_image: np.ndarray, overlay_image: np.ndarray, 
                     lower_limit: int = 0, 

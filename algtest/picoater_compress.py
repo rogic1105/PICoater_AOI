@@ -1,260 +1,122 @@
+"""picoater_compress.py — 壓縮/縮放 在 pipeline 前後 對 mura 曲線的影響研究。
+
+比較 5 種處理順序，找「JPEG 壓縮 / 縮放 到什麼程度，mura 曲線還辨識得出」：
+  1 Original             原圖 → 檢測（baseline，曲線從 float，同 native）
+  2 Compressed          先 JPEG 壓縮 → 檢測
+  3 Resized             先縮放 → 檢測
+  4 Original-resized    先檢測 → 再縮放結果（float resize，曲線仍 float）
+  5 Original-compressed 先檢測 → 再 JPEG 壓縮結果（JPEG 必經 u8 → 曲線從壓縮後 u8，這正是要看的 degrade）
+
+演算法積木全部來自 src/（唯一來源）。
+
+⚠️ 此研究的 JPEG 用 cv2（libjpeg），與產品 C# 的 GDI+ 是不同 encoder（量化表不同）。
+   結論套到產品前，需用 GDI+ 對齊重驗（見對話記錄）。
+"""
 import cv2
 import numpy as np
 import os
-import csv
-import time
-import matplotlib.pyplot as plt
-from datetime import datetime
-from scipy.signal import find_peaks
-from src.image_processing import *
-from src.data_processing import *
+import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from src.image_processing import (
+    remove_column_background, compute_hessian_ridge, ridge_to_uint8, overlay_heatmap,
+    img_reduction_compress, img_reduction_resize, img_reduction_resize_average_filter,
+)
+from src.data_processing import plot_and_save_statistics, save_array_to_csv, plot_comparison
 
-# --- 參數設定 ---
-# IMAGE_FOLDER = "../../../05_QA_Validation/feasibility_test_data/20250117 L5C/Envision/Low_Angle_by_nor_line/mura/"
-# IMAGE_NAME = 'cal_25-11-17_11-19-25-929.bmp'
-
-IMAGE_FOLDER = ""
-IMAGE_NAME = 'VH.bmp'
-IMAGE_PATH = os.path.join(IMAGE_FOLDER, IMAGE_NAME)
+# --- 參數 ---
+IMAGE_PATH = "VH.bmp"
 OUTPUT_DIR = "../artifacts/algtest/compress"
-
-# 新增常數: 解析度 (um/pixel)
-OPS = 40.0 
-jpg_compression_level = 1
-mag_reshape = 5
+OPS = 40.0
+JPG_QUALITY = 1
+RESIZE_MAG = 5
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# --- 主程式 ---
-def main():
 
+def detect(img, sigma):
+    """去背 → Hessian ridge V/H（回 float，曲線從 float 算 = 同 native u8 之前）。"""
+    bg = remove_column_background(img)
+    res_v = compute_hessian_ridge(bg, sigma=sigma, mode='vertical')
+    res_h = compute_hessian_ridge(bg, sigma=sigma, mode='horizontal')
+    return bg, res_v, res_h
+
+
+def save_variant(name, input_img, bg, res_v, res_h, ops):
+    """存一個變體的所有產物，回傳曲線 dict。
+
+    曲線從傳入的 res_v 算（float 變體→保峰值；壓縮變體→從壓縮後 u8，反映 degrade）；
+    顯示圖一律 ridge_to_uint8 clip。input_img 與 res_v 同尺寸時才疊 heatmap。
+    """
+    out_dir = os.path.join(OUTPUT_DIR, name)
+    os.makedirs(out_dir, exist_ok=True)
+
+    col_mean = np.mean(res_v, axis=0)
+    col_max = np.max(res_v, axis=0)
+    col_min = np.min(res_v, axis=0)
+    plot_and_save_statistics(col_mean, col_max, col_min, ops, os.path.join(out_dir, f"{name}_curve.jpg"))
+    save_array_to_csv(col_mean, os.path.join(out_dir, f"{name}_mean.csv"))
+    save_array_to_csv(col_max, os.path.join(out_dir, f"{name}_max.csv"))
+    save_array_to_csv(col_min, os.path.join(out_dir, f"{name}_min.csv"))
+
+    rv_u8, rh_u8 = ridge_to_uint8(res_v), ridge_to_uint8(res_h)
+    cv2.imwrite(os.path.join(out_dir, f"{name}_1_input.jpg"), input_img)
+    cv2.imwrite(os.path.join(out_dir, f"{name}_2_bg.jpg"), bg)
+    cv2.imwrite(os.path.join(out_dir, f"{name}_3_res_v.jpg"), rv_u8)
+    cv2.imwrite(os.path.join(out_dir, f"{name}_4_res_h.jpg"), rh_u8)
+    if input_img.shape[:2] == rv_u8.shape[:2]:
+        cv2.imwrite(os.path.join(out_dir, f"{name}_5_heatmap_v.jpg"),
+                    overlay_heatmap(input_img, rv_u8, lower_limit=20, alpha=0.3))
+    return {'mean': col_mean, 'max': col_max, 'min': col_min}
+
+
+def main():
     if not os.path.exists(IMAGE_PATH):
         print(f"[Error] File not found: {IMAGE_PATH}")
         return
-    
     src_img = cv2.imread(IMAGE_PATH, cv2.IMREAD_GRAYSCALE)
     if src_img is None:
         print("[Error] Failed to decode image.")
         return
-
     src_img = np.flip(src_img, axis=0)
-    h, w = src_img.shape
 
+    cmp = {}
 
+    # 變體 1-3：先變換輸入，再檢測（曲線從 float ridge）
+    for name, img, sigma in [
+        ('Original',   src_img, 9.0),
+        ('Compressed', img_reduction_compress(src_img, JPG_QUALITY), 9.0),
+        ('Resized',    img_reduction_resize(src_img, RESIZE_MAG), 6.0),
+    ]:
+        bg, res_v, res_h = detect(img, sigma)
+        cmp[name] = save_variant(name, img, bg, res_v, res_h, OPS)
 
-    img_original = src_img.copy()
-    img_compressed = img_reduction_compress(src_img, jpg_compression_level)
-    img_resized = img_reduction_resize(src_img, mag_reshape)
+    # 原圖檢測一次（變體 4、5 共用）
+    bg_o, res_v_o, res_h_o = detect(src_img, 9.0)
 
-    
+    # 變體 4：檢測後縮放結果（float resize，input 也縮放以對齊尺寸）
+    cmp['Original-resized'] = save_variant(
+        'Original-resized', img_reduction_resize_average_filter(src_img, RESIZE_MAG),
+        img_reduction_resize_average_filter(bg_o, RESIZE_MAG),
+        img_reduction_resize_average_filter(res_v_o, RESIZE_MAG),
+        img_reduction_resize_average_filter(res_h_o, RESIZE_MAG), OPS)
 
-    comparison_data = {}
-    # ---------------------------------------------------------
-    # 1 原圖->檢測
-    # ---------------------------------------------------------
-    out_dir_orig = os.path.join(OUTPUT_DIR, 'original-imageProcessing')
-    os.makedirs(out_dir_orig, exist_ok=True)
+    # 變體 5：檢測後壓縮結果（JPEG 必經 u8；曲線從壓縮後 u8，看 degrade）
+    cmp['Original-compressed'] = save_variant(
+        'Original-compressed', src_img, img_reduction_compress(bg_o, JPG_QUALITY),
+        img_reduction_compress(ridge_to_uint8(res_v_o), JPG_QUALITY),
+        img_reduction_compress(ridge_to_uint8(res_h_o), JPG_QUALITY), OPS)
 
-    bg_removed_orig = remove_column_background(img_original)
-    res_v_orig = compute_hessian_ridge(bg_removed_orig, sigma=9.0, mode='vertical')
-    res_h_orig = compute_hessian_ridge(bg_removed_orig, sigma=9.0, mode='horizontal')
-    heatmap_orig_resV = overlay_heatmap(img_original, res_v_orig, lower_limit=20, alpha=0.3)
-    heatmap_orig_resH = overlay_heatmap(img_original, res_h_orig, lower_limit=20, alpha=0.3)
-
-    col_mean_orig = np.mean(res_v_orig, axis=0)
-    col_max_orig = np.max(res_v_orig, axis=0)
-    col_min_orig = np.min(res_v_orig, axis=0)
-    
-    plot_and_save_statistics(col_mean_orig, col_max_orig, col_min_orig, OPS, os.path.join(out_dir_orig, "Original_4_statistics_plot.bmp"), jpg_quality=95)
-    
-    save_array_to_csv(col_mean_orig, os.path.join(out_dir_orig, "Original_record_mean.csv"))
-    save_array_to_csv(col_max_orig, os.path.join(out_dir_orig, "Original_record_max.csv"))
-    save_array_to_csv(col_min_orig, os.path.join(out_dir_orig, "Original_record_min.csv"))
-    
-    cv2.imwrite(os.path.join(out_dir_orig, "Original_1_input.bmp"), img_original, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_orig, "Original_2_bg_removed.bmp"), bg_removed_orig, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_orig, "Original_3_res_v.bmp"), res_v_orig, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_orig, "Original_4_res_h.bmp"), res_h_orig, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_orig, "Original_5_heatmap_overlay_resV.bmp"), heatmap_orig_resV, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_orig, "Original_6_heatmap_overlay_resH.bmp"), heatmap_orig_resH, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    
-    comparison_data['Original'] = {'mean': col_mean_orig, 'max': col_max_orig, 'min': col_min_orig}
-
-
-    # ---------------------------------------------------------
-    # 2 壓縮圖->檢測
-    # ---------------------------------------------------------
-    out_dir_comp = os.path.join(OUTPUT_DIR, 'compressed-imageProcessing')
-    os.makedirs(out_dir_comp, exist_ok=True)
-    
-    bg_removed_comp = remove_column_background(img_compressed)
-    res_v_comp = compute_hessian_ridge(bg_removed_comp, sigma=9.0, mode='vertical')
-    res_h_comp = compute_hessian_ridge(bg_removed_comp, sigma=9.0, mode='horizontal')
-    heatmap_comp_resV = overlay_heatmap(img_compressed, res_v_comp, lower_limit=20, alpha=0.3)
-    heatmap_comp_resH = overlay_heatmap(img_compressed, res_h_comp, lower_limit=20, alpha=0.3)
-
-    col_mean_comp = np.mean(res_v_comp, axis=0)
-    col_max_comp = np.max(res_v_comp, axis=0)
-    col_min_comp = np.min(res_v_comp, axis=0)
-    
-    plot_and_save_statistics(col_mean_comp, col_max_comp, col_min_comp, OPS, os.path.join(out_dir_comp, "Compressed_4_statistics_plot.jpg"), jpg_quality=95)
-    
-    save_array_to_csv(col_mean_comp, os.path.join(out_dir_comp, "Compressed_record_mean.csv"))
-    save_array_to_csv(col_max_comp, os.path.join(out_dir_comp, "Compressed_record_max.csv"))
-    save_array_to_csv(col_min_comp, os.path.join(out_dir_comp, "Compressed_record_min.csv"))
-    
-    cv2.imwrite(os.path.join(out_dir_comp, "Compressed_1_input.jpg"), img_compressed, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_comp, "Compressed_2_bg_removed.jpg"), bg_removed_comp, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_comp, "Compressed_3_res_v.jpg"), res_v_comp, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_comp, "Compressed_4_res_h.jpg"), res_h_comp, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_comp, "Compressed_5_heatmap_overlay_resV.jpg"), heatmap_comp_resV, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_comp, "Compressed_6_heatmap_overlay_resH.jpg"), heatmap_comp_resH, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    
-    comparison_data['Compressed'] = {'mean': col_mean_comp, 'max': col_max_comp, 'min': col_min_comp}
-
-
-    # ---------------------------------------------------------
-    # 3 縮放->檢測
-    # ---------------------------------------------------------
-    out_dir_res = os.path.join(OUTPUT_DIR, f'resized-imageProcessing')
-    os.makedirs(out_dir_res, exist_ok=True)
-    
-    
-    bg_removed_res = remove_column_background(img_resized)
-
-    res_v_res = compute_hessian_ridge(bg_removed_res, sigma=6.0, mode='vertical')
-    res_h_res = compute_hessian_ridge(bg_removed_res, sigma=6.0, mode='horizontal')
-    heatmap_res_resV = overlay_heatmap(img_resized, res_v_res, lower_limit=20, alpha=0.3)
-    heatmap_res_resH = overlay_heatmap(img_resized, res_h_res, lower_limit=20, alpha=0.3)
-
-    col_mean_res = np.mean(res_v_res, axis=0)
-    col_max_res = np.max(res_v_res, axis=0)
-    col_min_res = np.min(res_v_res, axis=0)
-    
-    plot_and_save_statistics(col_mean_res, col_max_res, col_min_res, OPS * mag_reshape, os.path.join(out_dir_res, "Resized_4_statistics_plot.jpg"), jpg_quality=95)
-    
-    save_array_to_csv(col_mean_res, os.path.join(out_dir_res, "Resized_record_mean.csv"))
-    save_array_to_csv(col_max_res, os.path.join(out_dir_res, "Resized_record_max.csv"))
-    save_array_to_csv(col_min_res, os.path.join(out_dir_res, "Resized_record_min.csv"))
-
-    cv2.imwrite(os.path.join(out_dir_res, "Resized_1_input.jpg"), img_resized, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_res, "Resized_2_bg_removed.jpg"), bg_removed_res, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_res, "Resized_3_res_v.jpg"), res_v_res, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_res, "Resized_4_res_h.jpg"), res_h_res, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_res, "Resized_5_heatmap_overlay_resV.jpg"), heatmap_res_resV, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_res, "Resized_6_heatmap_overlay_resH.jpg"), heatmap_res_resH, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    
-    comparison_data['Resized'] = {'mean': col_mean_res, 'max': col_max_res, 'min': col_min_res}
-
-    # ---------------------------------------------------------
-    # 4 檢測->縮放
-    # ---------------------------------------------------------
-    
-    out_dir_orig = os.path.join(OUTPUT_DIR, 'imageProcessing-resized')
-    os.makedirs(out_dir_orig, exist_ok=True)
-
-    bg_removed_orig_res = img_reduction_resize_average_filter(bg_removed_orig, mag_reshape)
-    res_v_orig_res = img_reduction_resize_average_filter(res_v_orig, mag_reshape)
-    res_h_orig_res = img_reduction_resize_average_filter(res_h_orig, mag_reshape)
-    heatmap_orig_resV = img_reduction_resize_average_filter(heatmap_orig_resV, mag_reshape)
-    heatmap_orig_resH = img_reduction_resize_average_filter(heatmap_orig_resH, mag_reshape)
-
-    col_mean_orig_res = np.mean(res_v_orig_res, axis=0)
-    col_max_orig_res = np.max(res_v_orig_res, axis=0)
-    col_min_orig_res = np.min(res_v_orig_res, axis=0)
-    
-    plot_and_save_statistics(col_mean_orig_res, col_max_orig_res, col_min_orig_res, OPS, os.path.join(out_dir_orig, "Original-resized_4_statistics_plot.bmp"), jpg_quality=95)
-    
-    save_array_to_csv(col_mean_orig_res, os.path.join(out_dir_orig, "Original-resized_record_mean.csv"))
-    save_array_to_csv(col_max_orig_res, os.path.join(out_dir_orig, "Original-resized_record_max.csv"))
-    save_array_to_csv(col_min_orig_res, os.path.join(out_dir_orig, "Original-resized_record_min.csv"))
-    
-    cv2.imwrite(os.path.join(out_dir_orig, "Original-resized_1_input.bmp"), img_original)
-    cv2.imwrite(os.path.join(out_dir_orig, "Original-resized_2_bg_removed.bmp"), bg_removed_orig_res)
-    cv2.imwrite(os.path.join(out_dir_orig, "Original-resized_3_res_v.bmp"), res_v_orig_res)
-    cv2.imwrite(os.path.join(out_dir_orig, "Original-resized_4_res_h.bmp"), res_h_orig_res)
-    cv2.imwrite(os.path.join(out_dir_orig, "Original-resized_5_heatmap_overlay_resV.bmp"), heatmap_orig_resV)
-    cv2.imwrite(os.path.join(out_dir_orig, "Original-resized_6_heatmap_overlay_resH.bmp"), heatmap_orig_resH)
-    
-
-    cv2.imwrite(os.path.join(out_dir_orig, "Original-resized_1_input.jpg"), img_original, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_orig, "Original-resized_2_bg_removed.jpg"), bg_removed_orig_res, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_orig, "Original-resized_3_res_v.jpg"), res_v_orig_res, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_orig, "Original-resized_4_res_h.jpg"), res_h_orig_res, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_orig, "Original-resized_5_heatmap_overlay_resV.jpg"), heatmap_orig_resV, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_orig, "Original-resized_6_heatmap_overlay_resH.jpg"), heatmap_orig_resH, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    
-
-    comparison_data['Original-resized'] = {'mean': col_mean_orig_res, 'max': col_max_orig_res, 'min': col_min_orig_res}
-
-    # ---------------------------------------------------------
-    # 5 檢測->壓縮圖
-    # ---------------------------------------------------------
-
-    out_dir_orig = os.path.join(OUTPUT_DIR, 'imageProcessing-compressed')
-    os.makedirs(out_dir_orig, exist_ok=True)
-
-    bg_removed_orig_comp = img_reduction_compress(bg_removed_orig, jpg_compression_level)
-    res_v_orig_comp = img_reduction_compress(res_v_orig, jpg_compression_level)
-    res_h_orig_comp = img_reduction_compress(res_h_orig, jpg_compression_level)
-    heatmap_orig_resV_comp = img_reduction_compress(heatmap_orig_resV, jpg_compression_level)
-    heatmap_orig_resH_comp = img_reduction_compress(heatmap_orig_resH, jpg_compression_level)
-
-    col_mean_orig_comp = np.mean(res_v_orig_comp, axis=0)
-    col_max_orig_comp = np.max(res_v_orig_comp, axis=0)
-    col_min_orig_comp = np.min(res_v_orig_comp, axis=0)
-    
-    plot_and_save_statistics(col_mean_orig_comp, col_max_orig_comp, col_min_orig_comp, OPS, os.path.join(out_dir_orig, "Original-compressed_4_statistics_plot.bmp"), jpg_quality=95)
-    
-    save_array_to_csv(col_mean_orig_comp, os.path.join(out_dir_orig, "Original-compressed_record_mean.csv"))
-    save_array_to_csv(col_max_orig_comp, os.path.join(out_dir_orig, "Original-compressed_record_max.csv"))
-    save_array_to_csv(col_min_orig_comp, os.path.join(out_dir_orig, "Original-compressed_record_min.csv"))
-    
-    cv2.imwrite(os.path.join(out_dir_orig, "Original-compressed_1_input.bmp"), img_original, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_orig, "Original-compressed_2_bg_removed.bmp"), bg_removed_orig_comp, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_orig, "Original-compressed_3_res_v.bmp"), res_v_orig_comp, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_orig, "Original-compressed_4_res_h.bmp"), res_h_orig_comp, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_orig, "Original-compressed_5_heatmap_overlay_resV.bmp"), heatmap_orig_resV_comp, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    cv2.imwrite(os.path.join(out_dir_orig, "Original-compressed_6_heatmap_overlay_resH.bmp"), heatmap_orig_resH_comp, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    
-    comparison_data['Original-compressed'] = {'mean': col_mean_orig_comp, 'max': col_max_orig_comp, 'min': col_min_orig_comp}
-
-    # --- 生成對比圖表 ---
-    
-    plot_comparison_dir = os.path.join(OUTPUT_DIR, "comparison")
-    os.makedirs(plot_comparison_dir, exist_ok=True)
-    
-    # 繪製 Column Mean 比較圖
-    plot_comparison(
-        comparison_data['Original']['mean'], 
-        comparison_data['Compressed']['mean'], 
-        comparison_data['Resized']['mean'],
-        comparison_data['Original-resized']['mean'],
-        comparison_data['Original-compressed']['mean'],
-        OPS,
-        mag_reshape,
-        jpg_compression_level,
-        os.path.join(plot_comparison_dir, "comparison_column_mean.bmp"),
-        "Column Mean Comparison",
-        "Mean Intensity"
-    )
-    
-    # 繪製 Column Max 比較圖
-    plot_comparison(
-        comparison_data['Original']['max'], 
-        comparison_data['Compressed']['max'], 
-        comparison_data['Resized']['max'],
-        comparison_data['Original-resized']['max'],
-        comparison_data['Original-compressed']['max'],
-        OPS,
-        mag_reshape,
-        jpg_compression_level,
-        os.path.join(plot_comparison_dir, "comparison_column_max.bmp"),
-        "Column Max Comparison",
-        "Max Intensity"
-    )
-    
-
+    # 5 方案比較圖
+    cmp_dir = os.path.join(OUTPUT_DIR, "comparison")
+    os.makedirs(cmp_dir, exist_ok=True)
+    for stat, ylabel in [('mean', 'Mean Intensity'), ('max', 'Max Intensity')]:
+        plot_comparison(
+            cmp['Original'][stat], cmp['Compressed'][stat], cmp['Resized'][stat],
+            cmp['Original-resized'][stat], cmp['Original-compressed'][stat],
+            OPS, RESIZE_MAG, JPG_QUALITY,
+            os.path.join(cmp_dir, f"comparison_{stat}.jpg"),
+            f"Column {stat.capitalize()} Comparison", ylabel)
+    print(f"[Done] artifacts → {OUTPUT_DIR}")
 
 
 if __name__ == "__main__":

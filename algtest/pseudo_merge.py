@@ -1,16 +1,19 @@
+"""pseudo_merge.py — 單向實驗圖 → 模擬雙向 mock。
+
+實驗只取得單方向（如垂直）的圖，但產品實際是雙方向。此工具把單向圖
+旋轉 90° 後與原圖各 50% 疊加，補出「偽雙向」mock 圖供測試。
+
+用法：python pseudo_merge.py <image_path>  → 產出 <name>_merged.<ext>
+"""
 import cv2
 import numpy as np
 import os
 import sys
-def remove_column_background(image: np.ndarray) -> np.ndarray:
-    """Removes background by subtracting the column-wise mean."""
-    print("  [Process] Removing column background...")
-    img_float = image.astype(np.float32)
-    col_mean = np.mean(img_float, axis=0)
-    bg_2d = np.tile(col_mean, (image.shape[0], 1))
-    result = img_float - bg_2d + 127
 
-    return np.clip(result, 0, 255).astype(np.uint8)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from src.image_processing import remove_column_background
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: python pseudo_merge.py <image_path>")
