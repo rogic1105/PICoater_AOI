@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <title>FSM Action Log Viewer</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: "Microsoft JhengHei", "Segoe UI", sans-serif; background: #f5f5f5; padding: 16px; color: #222; }
@@ -11,6 +12,7 @@ h1 { font-size: 1.4em; margin-bottom: 6px; }
 .controls { background: #fff; padding: 12px; border-radius: 6px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
 .controls > div { margin: 6px 0; }
 input[type=file] { font-size: 0.88em; }
+select { font-size: 0.9em; padding: 3px 6px; }
 button { padding: 5px 12px; border: 1px solid #888; background: #fff; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 0.88em; margin-right: 4px; }
 button:hover { background: #eee; }
 
@@ -41,6 +43,9 @@ code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-
 table.matrix th, table.matrix td { text-align: center; font-size: 0.82em; }
 table.matrix td.has { background: #c8e6c9; cursor: help; }
 table.matrix td.empty { background: #fafafa; color: #ccc; }
+
+#stateDiagram { background: #fff; padding: 16px; border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,.05); overflow-x: auto; text-align: center; min-height: 60px; color: #888; font-size: 0.85em; }
+#stateDiagram svg { max-width: 100%; height: auto; }
 </style>
 </head>
 <body>
@@ -48,6 +53,10 @@ table.matrix td.empty { background: #fafafa; color: #ccc; }
 <p class="subtitle">讀 <code>state-catalog.csv</code> + <code>transition-table.csv</code> + 拖入 <code>ui-actions-YYYYMMDD.jsonl</code>，自動標記 ✓/❌/⚠ — 沒列在 transition table 的 action 跑下去就是 ❌ unknown。</p>
 
 <div class="controls">
+<div><b>FSM：</b><select id="fsmSelect" onchange="switchFsm(this.value)">
+  <option value="ui">UI FSM (state-catalog.csv + transition-table.csv)</option>
+  <option value="io">IO FSM (io-state-catalog.csv + io-transition-table.csv)</option>
+</select></div>
 <div><b>1. CSV 載入：</b>跟 viewer.html 同目錄會自動 fetch，下方手動覆寫</div>
 <div>State catalog: <input type="file" id="catalogFile" accept=".csv" onchange="loadCatalog(this)"></div>
 <div>Transition table: <input type="file" id="tableFile" accept=".csv" onchange="loadTable(this)"></div>
@@ -74,6 +83,9 @@ table.matrix td.empty { background: #fafafa; color: #ccc; }
 <h2>Transition coverage matrix（每格 = 該 action 在該 state 跑過幾次）</h2>
 <div class="matrix-wrap"><table id="matrixTable" class="matrix"></table></div>
 
+<h2>State diagram（自動繪圖；綠 = log 跑過的 state）</h2>
+<div id="stateDiagram">載入中…</div>
+
 <h2>State catalog</h2>
 <table id="catalogTable"></table>
 
@@ -81,11 +93,23 @@ table.matrix td.empty { background: #fafafa; color: #ccc; }
 <table id="tableTable"></table>
 
 <script>
-let states = [];          // [{state_id, hb_StitchMode, hc, hd, note}, ...]
+let states = [];          // [{state_id, ..., note}, ...] depending on FSM
 let transitions = [];     // [{action, from, to, note}, ...]
 let logEntries = [];      // 從 .jsonl 載入
 
-// 檢測設定參數 → UI 中文名（同步自 InspectionSettings.cs 的 [DisplayName]，與 PropertyGrid 一致）
+// FSM 設定：每個 FSM 用哪兩個 csv，以及 catalog 用哪欄位當顯示名（fallback "S{state_id}"）
+const FSM_CONFIG = {
+  ui: { catalog: 'state-catalog.csv', transition: 'transition-table.csv', nameKey: null },
+  io: { catalog: 'io-state-catalog.csv', transition: 'io-transition-table.csv', nameKey: 'IoState' },
+};
+let currentFsm = 'ui';
+function stateName(s) {
+  const k = FSM_CONFIG[currentFsm].nameKey;
+  return (k && s && s[k]) ? s[k] : `S${s?.state_id ?? '?'}`;
+}
+function switchFsm(v) { currentFsm = v; autoFetch(); }
+
+// 檢測設定參數 → UI 中文名（同步自 InspectionSettings.cs 的 [DisplayName]；UI FSM 用）
 const SETTING_LABELS = {
   hb_StitchMode: '合圖方式',
   hc_EnableMuraEnhance: '監控強化',
@@ -108,18 +132,20 @@ function parseCsv(text) {
 }
 
 async function autoFetch() {
+  const cfg = FSM_CONFIG[currentFsm];
+  states = []; transitions = [];
   try {
-    const c = await fetch('state-catalog.csv').then(r => r.text());
+    const c = await fetch(cfg.catalog).then(r => r.text());
     states = parseCsv(c);
     renderCatalog();
   } catch { /* user need to upload */ }
   try {
-    const t = await fetch('transition-table.csv').then(r => r.text());
+    const t = await fetch(cfg.transition).then(r => r.text());
     transitions = parseCsv(t);
     renderTable();
   } catch {}
   rebuild();
-  loadTodayLog();   // 開啟時自動試載今天 log（找到就直接載入；沒有則維持手動載入/拖入）
+  if (currentFsm === 'ui') loadTodayLog();   // 只有 UI FSM 有 logger；IO FSM 暫無 jsonl
 }
 
 function reloadCsv() { autoFetch(); }
@@ -192,8 +218,6 @@ function renderTable() {
 }
 
 function findTransition(source, from, to) {
-  // PG path: source 是 SettingChange.Source=PropertyGrid 的 entry，setting 對應到 hb_/hc_/hd_
-  // 簡化：source 跟 transition table 的 action 完全比對
   return transitions.find(t => t.action === source &&
                                t.from === String(from) &&
                                t.to === String(to));
@@ -204,7 +228,6 @@ function knownState(id) {
 }
 
 function classify(entry) {
-  // ViewOnly: from == to 且來自 view-only 動作（透過 changeSrc=ViewOnly 標記）
   if (entry.changeSrc === 'ViewOnly') return 'view';
   if (!knownState(entry.stateBefore) || !knownState(entry.stateAfter)) return 'unknown';
   if (findTransition(entry.source, entry.stateBefore, entry.stateAfter)) return 'ok';
@@ -242,6 +265,7 @@ function rebuild() {
   document.getElementById('s-unknown').textContent = counts.unknown;
 
   renderMatrix();
+  renderStateDiagram();
 }
 
 function renderMatrix() {
@@ -251,7 +275,6 @@ function renderMatrix() {
     document.getElementById('matrixTable').innerHTML = '<tr><td>等 catalog + transition CSV 載入</td></tr>';
     return;
   }
-  // 統計每個 (action, from_state) 的執行次數 + 是否在 expected table 內
   const counts = {};
   logEntries.forEach(e => {
     const key = `${e.source}|${e.stateBefore}`;
@@ -264,7 +287,10 @@ function renderMatrix() {
   });
 
   let html = '<thead><tr><th>Action ↓ / From state →</th>';
-  stateIds.forEach(s => html += `<th>S${s}</th>`);
+  stateIds.forEach(sid => {
+    const stObj = states.find(st => st.state_id === sid);
+    html += `<th>${stateName(stObj)}</th>`;
+  });
   html += '</tr></thead><tbody>';
   actions.forEach(a => {
     html += `<tr><td style="text-align:left"><code>${a}</code></td>`;
@@ -273,7 +299,9 @@ function renderMatrix() {
       const hit = counts[key] || 0;
       const exp = expected[key];
       if (exp != null) {
-        html += `<td class="has" title="預期 → ${exp}，跑過 ${hit} 次">→${exp}${hit ? ' ('+hit+')' : ''}</td>`;
+        const expObj = states.find(st => st.state_id === exp);
+        const expName = expObj ? stateName(expObj) : `S${exp}`;
+        html += `<td class="has" title="預期 → ${expName}，跑過 ${hit} 次">→${expName}${hit ? ' ('+hit+')' : ''}</td>`;
       } else {
         html += '<td class="empty">·</td>';
       }
@@ -282,6 +310,42 @@ function renderMatrix() {
   });
   html += '</tbody>';
   document.getElementById('matrixTable').innerHTML = html;
+}
+
+async function renderStateDiagram() {
+  const el = document.getElementById('stateDiagram');
+  if (!el) return;
+  if (states.length === 0) { el.innerHTML = '<span style="color:#888">無 catalog</span>'; return; }
+  if (typeof mermaid === 'undefined') { el.innerHTML = '<span style="color:#c62828">Mermaid 未載入（用 open-viewer.bat 起 http server）</span>'; return; }
+  mermaid.initialize({ startOnLoad: false, theme: 'default' });
+
+  // 跑過的 state（log 中出現過 stateBefore/stateAfter）
+  const visited = new Set();
+  logEntries.forEach(e => {
+    if (knownState(e.stateBefore)) visited.add(String(e.stateBefore));
+    if (knownState(e.stateAfter)) visited.add(String(e.stateAfter));
+  });
+
+  let text = 'stateDiagram-v2\n';
+  text += '    [*] --> ' + stateName(states[0]) + '\n';
+  transitions.forEach(t => {
+    const from = states.find(s => s.state_id === String(t.from));
+    const to = states.find(s => s.state_id === String(t.to));
+    if (!from || !to) return;
+    text += `    ${stateName(from)} --> ${stateName(to)}: ${t.action}\n`;
+  });
+  text += '    classDef visited fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px\n';
+  visited.forEach(sid => {
+    const st = states.find(s => s.state_id === sid);
+    if (st) text += `    class ${stateName(st)} visited\n`;
+  });
+
+  try {
+    const { svg } = await mermaid.render('mermaidSvg-' + Date.now(), text);
+    el.innerHTML = svg;
+  } catch (err) {
+    el.innerHTML = `<pre style="color:#c62828;text-align:left;font-size:0.85em">${err.message}\n\n${text}</pre>`;
+  }
 }
 
 document.getElementById('todayStr').textContent = todayDateStr();

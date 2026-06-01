@@ -1,0 +1,22 @@
+action,from,to,note
+Modbus.Connect.OK,1,2,初次連線成功 → EnterIdle 寫 DO_PC_ALIVE=1
+DI.InspectStart.Rise,2,3,START 上升緣 → SetState(Running) + OnStartRequested
+DI.InspectStart.Fall,3,4,START 下降緣 → SetState(Stopping) + OnStopRequested
+DI.InspectStart.Fall,5,4,Faulted 期間 START 下降也走 Stopping（PollTick 容許）
+Stopping.Complete,4,2,ClearMura + NotifyGrabStopped 完成 → 回 Idle
+DI.NakanAlive.Fall,2,5,設備斷電；保持 DO_PC_ALIVE 等恢復
+DI.NakanAlive.Fall,3,5,Running 中設備斷電；停寫 MURA / BUSY
+DI.NakanAlive.Fall,4,5,Stopping 中設備斷電
+DI.NakanAlive.Rise,5,2,設備恢復連線 → 回 Idle
+Modbus.TcpException,2,6,Idle TCP 例外 → CommLost；清 DO 狀態追蹤
+Modbus.TcpException,3,6,Running TCP 例外 → CommLost
+Modbus.TcpException,4,6,Stopping TCP 例外 → CommLost
+Modbus.TcpException,5,6,Faulted TCP 例外 → CommLost
+Modbus.Connect.OK,6,2,CommLost 重連成功 → EnterIdle → Idle
+Modbus.Connect.OK,1,2,Disconnected 背景重連成功（與初次連線同路徑）
+App.StopAsync,1,7,程式關閉
+App.StopAsync,2,7,程式關閉
+App.StopAsync,3,7,程式關閉
+App.StopAsync,4,7,程式關閉
+App.StopAsync,5,7,程式關閉
+App.StopAsync,6,7,程式關閉
