@@ -7,8 +7,8 @@
 
 #include "core_cv/imgproc/core_background.hpp"
 
-#include "../../../modules/GetPICoaterBackground/include/module_get_picoater_background.hpp"
-#include "../../../pipeline/aoi_pipeline.hpp"
+#include "modules/get_picoater_background/include/module_get_picoater_background.hpp"
+#include "pipeline/aoi_pipeline.hpp"
 
 namespace {
 

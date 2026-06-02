@@ -3,8 +3,8 @@
 
 #include <string>
 
-#include "../../i_aoi_module.hpp"
-#include "Module_GetPICoaterBackground.hpp"
+#include "modules/i_aoi_module.hpp"
+#include "picoater_detector.hpp"
 
 namespace picoater {
 namespace aoi {

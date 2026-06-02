@@ -36,7 +36,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AniloxRoll.Monitor", "src\d
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "picoater_api", "src\native\c_api\PiCoater_api\PiCoater_api.vcxproj", "{AE695487-606D-41DC-8639-5DB96B92B89C}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Module_GetPICoaterBackground", "src\native\modules\GetPICoaterBackground\Module_GetPICoaterBackground.vcxproj", "{89631E35-4DE2-4280-BB43-32D6DBDD4840}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "get_picoater_background", "src\native\modules\get_picoater_background\get_picoater_background.vcxproj", "{89631E35-4DE2-4280-BB43-32D6DBDD4840}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "picoater_pipeline_benchmark", "src\native\benchmark\picoater_pipeline_benchmark\picoater_pipeline_benchmark.vcxproj", "{87AB434E-F87E-465F-B6E5-5D0625B80059}"
 	ProjectSection(ProjectDependencies) = postProject

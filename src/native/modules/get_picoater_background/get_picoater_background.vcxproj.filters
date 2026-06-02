@@ -15,23 +15,23 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\Module_GetPICoaterBackground.hpp">
+    <ClInclude Include="include\picoater_detector.hpp">
       <Filter>標頭檔</Filter>
     </ClInclude>
     <ClInclude Include="include\module_get_picoater_background.hpp">
       <Filter>標頭檔</Filter>
     </ClInclude>
-    <ClInclude Include="..\i_aoi_module.hpp">
+    <ClInclude Include="$(NativeRoot)modules\i_aoi_module.hpp">
       <Filter>標頭檔</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <CudaCompile Include="src\Module_GetPICoaterBackground.cu">
+    <CudaCompile Include="src\picoater_detector.cu">
       <Filter>來源檔案</Filter>
     </CudaCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Module_GetPICoaterBackground_CPU.cpp">
+    <ClCompile Include="src\picoater_detector_cpu.cpp">
       <Filter>來源檔案</Filter>
     </ClCompile>
     <ClCompile Include="src\module_get_picoater_background.cpp">

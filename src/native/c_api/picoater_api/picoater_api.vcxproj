@@ -20,11 +20,11 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\export_api.cpp" />
-    <ClCompile Include="..\..\pipeline\aoi_pipeline.cpp" />
+    <ClCompile Include="$(NativeRoot)pipeline\aoi_pipeline.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\export_c\export_api.h" />
-    <ClInclude Include="..\..\pipeline\aoi_pipeline.hpp" />
+    <ClInclude Include="$(NativeRoot)pipeline\aoi_pipeline.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="$(CoreCVPath)core_cv.vcxproj">
@@ -33,7 +33,7 @@
     <ProjectReference Include="$(CppUtilsPath)cpp_utils.vcxproj">
       <Project>{05db04fc-cc8e-2e92-8736-4d39cc68f27a}</Project>
     </ProjectReference>
-    <ProjectReference Include="$(LocalModulesPath)GetPICoaterBackground\Module_GetPICoaterBackground.vcxproj">
+    <ProjectReference Include="$(LocalModulesPath)get_picoater_background\get_picoater_background.vcxproj">
       <Project>{89631e35-4de2-4280-bb43-32d6dbdd4840}</Project>
     </ProjectReference>
   </ItemGroup>
@@ -92,10 +92,10 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(ProjectDir)include;$(SolutionDir)FeatureA\include;$(SolutionDir)FeatureB\include;$(SolutionDir)CoreLib\include;%(Include);$(SolutionDir)GeneratePcbSegMask\include</IncludePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(NativeRoot);$(ProjectDir)include;%(Include)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(ProjectDir)include;$(SolutionDir)FeatureA\include;$(SolutionDir)FeatureB\include;$(SolutionDir)CoreLib\include;%(Include);$(SolutionDir)GeneratePcbSegMask\include</IncludePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(NativeRoot);$(ProjectDir)include;%(Include)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg">
     <VcpkgApplocalDeps>false</VcpkgApplocalDeps>

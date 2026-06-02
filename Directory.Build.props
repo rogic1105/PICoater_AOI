@@ -20,6 +20,7 @@
 		<CoreCVBenchmarkPath>$(AoiSdkPath)benchmark\core_cv_benchmark\</CoreCVBenchmarkPath>
 		<CppUtilsPath>$(AoiSdkPath)native\cpp_utils\</CppUtilsPath>
 		<BenchFrameworkPath>$(AoiSdkPath)benchmark\bench_framework\</BenchFrameworkPath>
+		<NativeRoot>$(EngRoot)src\native\</NativeRoot>
 		<LocalModulesPath>$(EngRoot)src\native\modules\</LocalModulesPath>
 
 		<StbPath>$(AoiSdkPath)third_party\stb\include\</StbPath>

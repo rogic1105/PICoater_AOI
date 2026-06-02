@@ -18,7 +18,7 @@
     <ClCompile Include="src\export_api.cpp">
       <Filter>來源檔案</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\pipeline\aoi_pipeline.cpp">
+    <ClCompile Include="$(NativeRoot)pipeline\aoi_pipeline.cpp">
       <Filter>來源檔案</Filter>
     </ClCompile>
   </ItemGroup>
@@ -26,7 +26,7 @@
     <ClInclude Include="include\export_c\export_api.h">
       <Filter>標頭檔</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\pipeline\aoi_pipeline.hpp">
+    <ClInclude Include="$(NativeRoot)pipeline\aoi_pipeline.hpp">
       <Filter>標頭檔</Filter>
     </ClInclude>
   </ItemGroup>

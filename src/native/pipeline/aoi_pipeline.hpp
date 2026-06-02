@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "../modules/i_aoi_module.hpp"
+#include "modules/i_aoi_module.hpp"
 
 namespace picoater {
 namespace aoi {

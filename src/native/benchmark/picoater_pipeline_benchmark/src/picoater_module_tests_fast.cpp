@@ -1,4 +1,4 @@
-// PICoater_AOI\tests\cpp_test\picoater_pipeline_benchmark\src\PICoaterModuleTestsFast.cpp
+// picoater_pipeline_benchmark / picoater_module_tests_fast.cpp
 
 #include "bench_framework/test_utils.hpp"
 #include "core_cv/base/cuda_utils.hpp"
@@ -11,7 +11,7 @@
 
 #include "cpp_utils/timer_utils.hpp"
 #include "cpp_utils/terminal_colors.hpp"
-#include "Module_GetPICoaterBackground.hpp"
+#include "picoater_detector.hpp"
 
 #include <future> 
 #include <iostream>

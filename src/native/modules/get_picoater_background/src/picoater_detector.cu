@@ -1,23 +1,21 @@
-// PICoater_AOI\src\native\modules\GetPICoaterBackground\src\Module_GetPICoaterBackground.cu
-
-#include "Module_GetPICoaterBackground.hpp"
+#include "picoater_detector.hpp"
 #include "core_cv/base/cuda_utils.hpp"
 
 #include "core_cv/imgproc/core_filters.hpp"
 #include "core_cv/imgproc/core_background.hpp"
 #include "core_cv/imgproc/core_features.hpp"
-#include "core_cv/imgproc/core_utils.hpp" // [�s�W] for overlay_heatmap_gpu
+#include "core_cv/imgproc/core_utils.hpp" // for overlay_heatmap_gpu
 
 #include "cpp_utils/timer_utils.hpp"
 
 namespace picoater {
 
-    // [Helper] �O�������p��u�� (����� 256 bytes�A�ŦX CUDA �̨Φs���ɫ�)
+    // Align an offset up to `alignment` bytes (default 256, CUDA-friendly).
     inline size_t alignUp(size_t offset, size_t alignment = 256) {
         return (offset + alignment - 1) & ~(alignment - 1);
     }
 
-    // [中性化曲線] 對 float 陣列就地乘上 scale_factor，不 clamp（保留峰值資訊）
+    // Neutralized curve: multiply a float array in place by scale_factor, no clamp (keep peaks).
     __global__ void k_scale_f32_inplace(float* d, int N, float s) {
         int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i < N) d[i] *= s;
@@ -34,12 +32,12 @@ namespace picoater {
     PICoaterDetector::~PICoaterDetector() { Release(); }
 
     void PICoaterDetector::Release() {
-        // �u�ݭn���� "�֦��v" ���O����
+        // Only free the buffers we actually own.
         if (d_col_mean) cudaFree(d_col_mean);
         if (d_col_bg_) cudaFree(d_col_bg_);
         if (d_blur_tmp_) cudaFree(d_blur_tmp_);
 
-        // [����] �u�ݭn�����` workspace�A���������Хu�O�ɥΦ�}�A���ݭn free
+        // Only free the single workspace; the hessian pointers are views into it (no free).
         if (d_workspace_) cudaFree(d_workspace_);
 
         d_col_mean = nullptr;
@@ -47,7 +45,7 @@ namespace picoater {
         d_blur_tmp_ = nullptr;
         d_workspace_ = nullptr;
 
-        // �k�s���СA�קK�a��
+        // Null the view pointers to avoid dangling references.
         d_hessian_u8_ = nullptr;
         d_hessian_f32_ = nullptr;
         d_hessian_resp_ = nullptr;
@@ -65,7 +63,7 @@ namespace picoater {
         CUDA_CHECK(cudaMalloc(&d_col_bg_, num_pixels * sizeof(uint8_t)));
         CUDA_CHECK(cudaMalloc(&d_blur_tmp_, num_pixels * sizeof(uint8_t)));
 
-        // --- �p�� Hessian �ݭn������ (�Ω��������) ---
+        // --- Workspace size needed by the Hessian path ---
         size_t offset = 0;
         auto alignUp = [](size_t off) { return (off + 255) & ~255; };
 
@@ -78,20 +76,19 @@ namespace picoater {
         size_t off_resp = alignUp(offset);
         offset = off_resp + num_pixels * sizeof(float);
 
-        size_t hessian_req_size = offset; // Hessian �ݭn�o��h
+        size_t hessian_req_size = offset; // bytes the Hessian path needs
 
-        // --- �p�� Gaussian �ݭn���j�p ---
-        // Gaussian �ݭn 3 �� float buffer + mask (���] mask 1KB)
+        // --- Workspace size needed by the Gaussian path ---
+        // Gaussian needs 3 float buffers + mask (assume mask ~1KB).
         size_t gaussian_req_size = (num_pixels * sizeof(float)) * 3 + 1024;
 
-        // [����] �`�j�p����̤��̤j��
+        // Allocate one workspace sized for the larger of the two.
         size_t total_size = (gaussian_req_size > hessian_req_size) ? gaussian_req_size : hessian_req_size;
 
-        // --- �榸���t ---
+        // --- Single allocation ---
         CUDA_CHECK(cudaMalloc(&d_workspace_, total_size));
 
-        // --- ���Ы��� (�� Hessian ��) ---
-        // �o�ǫ��Цb Run Hessian �ɷ|�Ψ�
+        // --- Sub-pointers (views into workspace, used by the Hessian path in Run) ---
         uint8_t* base = (uint8_t*)d_workspace_;
         d_hessian_u8_ = (uint8_t*)(base + off_u8);
         d_hessian_f32_ = (float*)(base + off_f32);
@@ -104,7 +101,7 @@ namespace picoater {
         uint8_t* d_mura_out,
         uint8_t* d_ridge_out,
         float* d_mura_curve_mean,
-		float* d_mura_curve_max,
+        float* d_mura_curve_max,
         float* d_mura_row_curve_mean,
         float* d_mura_row_curve_max,
         float bgSigmaFactor,
@@ -128,7 +125,7 @@ namespace picoater {
             core::calcColumnMeans_RemoveOutliers_gpu(d_in, d_col_mean, m_width, m_height, sigma_col, stream);
         }
 
-        // Step 2: Background Removal → d_mura_out (bg-removed image)
+        // Step 2: Background Removal -> d_mura_out (bg-removed image)
         core::calcColumnBackground_u8_gpu(d_in, d_col_mean, d_mura_out, m_width, m_height, stream);
 
         // Step 3: Gaussian blur (once, shared by all ridge directions)
@@ -144,13 +141,14 @@ namespace picoater {
         float scale_factor = 255.0f / hessianMaxFactor;
         int num_pixels = m_width * m_height;
 
-        // Step 4: Vertical ridge → d_ridge_out + col curves
+        // Step 4: Vertical ridge -> d_ridge_out + col curves
         if (doVertical) {
             core::computeHessianResponse_gpu(d_hessian_f32_, d_hessian_resp_, m_width, m_height,
                                              core::detectionMode::VERTICAL, stream);
 
-            // [中性化] 曲線從原始 float Hessian response 計算（在 clamp+u8 量化之前），
-            // 再套用 255/正規值 純 scale（不 clamp），保留峰值資訊以利後驗調整閾值。
+            // Neutralized: curves are computed from the raw float Hessian response
+            // (before clamp+u8 quantization), then scaled by 255/normValue (no clamp),
+            // preserving peak info so thresholds can be re-tuned at review time.
             core::calcColumnMeans_gpu<float>(
                 d_hessian_resp_, d_mura_curve_mean, m_width, m_height, stream, d_workspace_);
             core::calcColumnMax_gpu<float>(
@@ -158,7 +156,7 @@ namespace picoater {
             scale_f32_inplace_gpu(d_mura_curve_mean, m_width, scale_factor, stream);
             scale_f32_inplace_gpu(d_mura_curve_max,  m_width, scale_factor, stream);
 
-            // u8 ridge 影像（顯示用，仍走 scale+clamp 路徑）
+            // u8 ridge image (for display; still goes through the scale+clamp path)
             core::scale_clamp_f32_to_u8_gpu(d_hessian_resp_, d_ridge_out, num_pixels, scale_factor, stream);
         }
 
@@ -167,7 +165,7 @@ namespace picoater {
             core::computeHessianResponse_gpu(d_hessian_f32_, d_hessian_resp_, m_width, m_height,
                                              core::detectionMode::HORIZONTAL, stream);
 
-            // [中性化] 列曲線從原始 float Hessian response 計算，再套用 255/正規值 純 scale（不 clamp）
+            // Neutralized: row curves from raw float Hessian response, then 255/normValue scale (no clamp).
             if (d_mura_row_curve_mean != nullptr) {
                 core::calcRowMeans_gpu<float>(d_hessian_resp_, d_mura_row_curve_mean, m_width, m_height, stream);
                 scale_f32_inplace_gpu(d_mura_row_curve_mean, m_height, scale_factor, stream);
@@ -177,12 +175,12 @@ namespace picoater {
                 scale_f32_inplace_gpu(d_mura_row_curve_max, m_height, scale_factor, stream);
             }
 
-            // u8 ridge 影像（顯示用）
+            // u8 ridge image (for display)
             if (doVertical) {
-                // vertical+horizontal: horizontal image → d_mura_out (overwrite bg-removed, already consumed)
+                // vertical+horizontal: horizontal image -> d_mura_out (overwrite bg-removed, already consumed)
                 core::scale_clamp_f32_to_u8_gpu(d_hessian_resp_, d_mura_out, num_pixels, scale_factor, stream);
             } else {
-                // horizontal only: horizontal image → d_ridge_out (main output)
+                // horizontal only: horizontal image -> d_ridge_out (main output)
                 core::scale_clamp_f32_to_u8_gpu(d_hessian_resp_, d_ridge_out, num_pixels, scale_factor, stream);
             }
         }

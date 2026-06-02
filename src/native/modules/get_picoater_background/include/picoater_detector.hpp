@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <cuda_runtime.h>
-#include <vector> // �s�W
+#include <vector>
 
 namespace picoater {
 
@@ -12,7 +12,7 @@ namespace picoater {
 
         void Initialize(int width, int height);
 
-        // GPU Run
+        // GPU run: full detection pipeline (background / mura / ridge + curves).
         void Run(
             const uint8_t* d_in,
             uint8_t* d_bg_out,
@@ -30,11 +30,10 @@ namespace picoater {
             cudaStream_t stream = 0
         );
 
-        // [�s�W] CPU Run ����
-        // ���u�]�e��B�æs��
+        // CPU run (benchmark reference path): column mean + background subtraction only.
         void RunCPU(
             const uint8_t* h_in,
-            uint8_t* h_mura_out, // �o�̹��� GPU �� d_mura_out
+            uint8_t* h_mura_out,   // host counterpart of the GPU d_mura_out
             float bgSigmaFactor
         );
 
@@ -44,19 +43,18 @@ namespace picoater {
         int m_width = 0;
         int m_height = 0;
 
-        // GPU Buffers
+        // GPU buffers
         float* d_col_mean = nullptr;
         uint8_t* d_col_bg_ = nullptr;
         uint8_t* d_blur_tmp_ = nullptr;
         void* d_workspace_ = nullptr;
 
-        // GPU View Pointers
+        // GPU view pointers
         uint8_t* d_hessian_u8_ = nullptr;
         float* d_hessian_f32_ = nullptr;
         float* d_hessian_resp_ = nullptr;
 
-        // [�s�W] CPU Buffers
-        // �ϥ� std::vector �޲z����K�A�۰�����
+        // CPU buffers (std::vector for automatic memory management)
         std::vector<float> h_col_mean;
     };
 }

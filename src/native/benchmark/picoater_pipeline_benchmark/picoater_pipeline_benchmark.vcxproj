@@ -20,7 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp" />
-    <ClCompile Include="src\PICoaterModuleTestsFast.cpp" />
+    <ClCompile Include="src\picoater_module_tests_fast.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="$(CoreCVPath)core_cv.vcxproj">
@@ -32,7 +32,7 @@
     <ProjectReference Include="$(BenchFrameworkPath)bench_framework.vcxproj">
       <Project>{d3cc3425-9807-4866-aeb5-1f1dbc49523c}</Project>
     </ProjectReference>
-    <ProjectReference Include="$(LocalModulesPath)GetPICoaterBackground\Module_GetPICoaterBackground.vcxproj">
+    <ProjectReference Include="$(LocalModulesPath)get_picoater_background\get_picoater_background.vcxproj">
       <Project>{89631e35-4de2-4280-bb43-32d6dbdd4840}</Project>
     </ProjectReference>
   </ItemGroup>
@@ -91,12 +91,12 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>$(ProjcetDir)third_party;$(CoreCVPath)\include;$(AoiTestUtilsPath)\include;$(StbPath)\include;$(SolutionDir)Module_GetPICoaterBackground\include;$(IncludePath)</IncludePath>
+    <IncludePath>$(CoreCVPath)\include;$(CppUtilsPath)\include;$(BenchFrameworkPath)\include;$(StbPath)\include;$(NativeRoot)modules\get_picoater_background\include;$(IncludePath)</IncludePath>
     <OutDir>$(SolutionDir)bin\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)build\obj\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>$(ProjcetDir)third_party;$(CoreCVPath)\include;$(AoiTestUtilsPath)\include;$(StbPath)\include;$(SolutionDir)Module_GetPICoaterBackground\include;$(IncludePath)</IncludePath>
+    <IncludePath>$(CoreCVPath)\include;$(CppUtilsPath)\include;$(BenchFrameworkPath)\include;$(StbPath)\include;$(NativeRoot)modules\get_picoater_background\include;$(IncludePath)</IncludePath>
     <OutDir>$(SolutionDir)bin\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)build\obj\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
@@ -133,7 +133,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(CudaToolkitIncludeDir);$(CUDA_PATH)\include;$(SdkCommonPath);$(CommonLibPath)include;$(LocalModulesPath)Module_GetPICoaterBackground\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(CudaToolkitIncludeDir);$(CUDA_PATH)\include;$(NativeRoot)modules\get_picoater_background\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <AdditionalOptions>/wd4819 %(AdditionalOptions)</AdditionalOptions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
@@ -162,7 +162,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(CudaToolkitIncludeDir);$(CUDA_PATH)\include;$(SdkCommonPath);$(CommonLibPath)include;$(LocalModulesPath)Module_GetPICoaterBackground\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(CudaToolkitIncludeDir);$(CUDA_PATH)\include;$(NativeRoot)modules\get_picoater_background\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/wd4819 %(AdditionalOptions)</AdditionalOptions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
     </ClCompile>

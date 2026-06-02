@@ -18,7 +18,7 @@
     <ClCompile Include="src\main.cpp">
       <Filter>來源檔案</Filter>
     </ClCompile>
-    <ClCompile Include="src\PICoaterModuleTestsFast.cpp">
+    <ClCompile Include="src\picoater_module_tests_fast.cpp">
       <Filter>來源檔案</Filter>
     </ClCompile>
   </ItemGroup>
