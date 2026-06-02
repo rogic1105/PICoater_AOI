@@ -86,6 +86,20 @@ namespace LightBridge.Core
         }
 
         /// <summary>
+        /// 只嘗試指定的單一 COM port（不掃描全部）+ probe 驗證，成功則保持連線。
+        /// 給「定期自動重連已知 port」用：避免每輪 AutoDetect 掃描全部 port 造成
+        /// SerialPort handle 頻繁開關（會觸發 .NET SerialPort 內部 SafeHandle race）。
+        /// 全 port 掃描請用 <see cref="AutoDetect"/>（使用者主動觸發時）。
+        /// </summary>
+        public bool TryConnect(string comPort, int channel)
+        {
+            if (string.IsNullOrWhiteSpace(comPort)) return false;
+            bool ok = TryProbeAndConnect(comPort, channel, out _);
+            if (!ok) ActiveComPort = null;
+            return ok;
+        }
+
+        /// <summary>
         /// 對指定 port 送出 cmd=4 (read brightness) 並嚴格驗證回應 8-byte。
         /// 通過則保持連線（外部可直接使用），失敗則關閉 port。
         /// </summary>
