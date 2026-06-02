@@ -285,15 +285,13 @@ namespace AniloxRoll.Monitor.Forms
                 Directory.CreateDirectory(_settings.Storage.CaptureRootPath);
                 Directory.CreateDirectory(_settings.Storage.LogsPath);
                 Directory.CreateDirectory(_settings.Storage.BackgroundPath);
-                Directory.CreateDirectory(_settings.Storage.DcfDirPath);
 
-                // 一次性遷移：舊版 D:\AniloxCaptures\{dcf,bg} → D:\Anilox\{Dcf,Bg}
+                // 一次性遷移：舊版 D:\AniloxCaptures\bg → D:\Anilox\Bg
                 // 只在新目錄為空時遷移，避免覆蓋使用者已建立的新內容
                 string rootDrive = Path.GetPathRoot(aniloxRoot)?.TrimEnd('\\') ?? "D:";
                 string legacyCaptures = Path.Combine(rootDrive + "\\", "AniloxCaptures");
                 if (Directory.Exists(legacyCaptures))
                 {
-                    MigrateLegacySubdir(Path.Combine(legacyCaptures, "dcf"), _settings.Storage.DcfDirPath);
                     MigrateLegacySubdir(Path.Combine(legacyCaptures, "bg"),  _settings.Storage.BackgroundPath);
                 }
 

@@ -350,7 +350,7 @@ PICoater_AOI/
 | 存檔目錄 | （computed）| `{AniloxRoot}\Captures` | 影像 + 統計 CSV；不顯示於 PropertyGrid |
 | 存背景目錄 | （computed）| `{AniloxRoot}\Bg` | StandardBgSub 背景影像；不顯示 |
 | Logs 目錄 | （computed）| `{AniloxRoot}\Logs` | Resource Log；不顯示 |
-| Dcf 目錄 | （computed）| `{AniloxRoot}\Dcf` | MIL DCF；不顯示 |
+| Dcf 檔 | （跟 exe 走）| `{ExeDir}\Config\Radient_Config.dcf` | MIL DCF；build 自動複製，PG 隱藏 |
 | 預留空間 (GB) | `LocalMinFreeGB` | 100 | 磁碟可用空間低於此值觸發循環儲存，刪最舊日期影像（CSV 保留） |
 | 遠端路徑 | `RemotePath` | \\192.168.10.20\Anilox\Captures | 遠端複製目標路徑（空=不複製）。單一 SMB share `Anilox` 子目錄 |
 | 遠端設定路徑 | `RemoteConfigPath` | \\192.168.10.20\Anilox\Config | [Browsable(false)] 開發者設定；cleanup-request.flag 寫入位置 |
