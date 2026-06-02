@@ -16,9 +16,10 @@ namespace StorageBridge.Control
     /// </summary>
     public class MainForm : Form
     {
-        private static readonly Color Green = Color.FromArgb(76, 175, 80);
-        private static readonly Color Red   = Color.FromArgb(211, 47, 47);
-        private static readonly Color Gray  = Color.FromArgb(117, 117, 117);
+        // IEC 狀態色（對齊主程式 lblStorageConn / 光源工具）
+        private static readonly Color IecGreen = Color.FromArgb(56, 142, 60);
+        private static readonly Color IecRed   = Color.FromArgb(198, 40, 40);
+        private static readonly Color IecGray  = Color.FromArgb(117, 117, 117);
 
         private RemoteCopyService _copy;
         private TextBox _txtRemote, _txtLocal;
@@ -44,6 +45,9 @@ namespace StorageBridge.Control
             _probeTimer.Interval = AppSettings.ProbeIntervalMs;
             _probeTimer.Tick += (s, e) => ProbeAsync();
             UpdateStatus(null);
+
+            // 預設開啟自動偵測 → 燈號持續即時反映（同光源工具，launch 即活）
+            _chkAuto.Checked = true;
 
             FormClosed += (s, e) => { _probeTimer.Stop(); _copy?.Dispose(); };
         }
@@ -100,11 +104,11 @@ namespace StorageBridge.Control
         {
             if (string.IsNullOrWhiteSpace(_txtRemote.Text))
             {
-                _lblStatus.Text = "● 停用（未設遠端路徑）"; _lblStatus.BackColor = Gray; return;
+                _lblStatus.Text = "● 儲存電腦 停用（未設遠端路徑）"; _lblStatus.BackColor = IecGray; return;
             }
-            if (connected == true)  { _lblStatus.Text = "● 已連線"; _lblStatus.BackColor = Green; }
-            else if (connected == false) { _lblStatus.Text = "● 離線（路徑不可達）"; _lblStatus.BackColor = Red; }
-            else { _lblStatus.Text = "● 偵測中…"; _lblStatus.BackColor = Gray; }
+            if (connected == true)  { _lblStatus.Text = "● 儲存電腦 已連線"; _lblStatus.BackColor = IecGreen; }
+            else if (connected == false) { _lblStatus.Text = "● 儲存電腦 離線（路徑不可達）"; _lblStatus.BackColor = IecRed; }
+            else { _lblStatus.Text = "● 儲存電腦 偵測中…"; _lblStatus.BackColor = IecGray; }
         }
 
         private void OnCopyTest(object sender, EventArgs e)
