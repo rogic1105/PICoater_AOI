@@ -275,4 +275,23 @@
     <Folder Include="Resources\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- Release build 時，把各 Bridge 的測試工具 GUI 一起編到輸出的 tools\ 之下，
+       現場部署可直接執行（手動 IO / 光源 / 儲存控制 + FSM 模擬）。
+       每個工具各自子資料夾，避免 4 個 WinForms exe 的相依 DLL 互相覆蓋。
+       BuildInParallel=false：IoBridge.Core 被兩個 io 工具共用，序列 build 避免 obj 競爭。 -->
+  <ItemGroup>
+    <BridgeToolProject Include="..\..\..\sdk\Bridges\IoBridge\samples\Automation\IoBridge.Automation.csproj" />
+    <BridgeToolProject Include="..\..\..\sdk\Bridges\IoBridge\samples\ManualControl\IoBridge.ManualControl.csproj" />
+    <BridgeToolProject Include="..\..\..\sdk\Bridges\LightBridge\samples\LightControl\LightBridge.Control.csproj" />
+    <BridgeToolProject Include="..\..\..\sdk\Bridges\StorageBridge\samples\StorageControl\StorageBridge.Control.csproj" />
+  </ItemGroup>
+  <Target Name="BuildBridgeTools" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+    <!-- BuildingInsideVisualStudio=false：在 VS 方案 build 內，子專案 ProjectReference（IoBridge.Core 等）
+         不會照覆寫的 OutDir 走，導致 sample 的 .Core.dll 沒進 tools 子資料夾 → CS0006。
+         強制成命令列模式，連相依一起照 OutDir 完整編進子資料夾。 -->
+    <MSBuild Projects="@(BridgeToolProject)"
+             Targets="Build"
+             Properties="Configuration=Release;Platform=x64;BuildingInsideVisualStudio=false;OutDir=$(MSBuildThisFileDirectory)..\..\..\bin\x64\Release\tools\%(BridgeToolProject.Filename)\"
+             BuildInParallel="false" />
+  </Target>
 </Project>
