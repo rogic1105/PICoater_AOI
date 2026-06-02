@@ -539,6 +539,7 @@ docs/
 - build 入口：產品 `PICoater_AOI.sln` / sdk 工具 `sdk/Tools.sln` + 各 Bridge `sdk/Bridges/*/{Io,Light,Storage}Bridge.sln` / 單一 `xxx.csproj`（msbuild 直接 build，依賴自動拉）
 - **所有 sln 只保留 `Release|x64` 單一組態**（同主方案 `PICoater_AOI.sln`，避免誤選 Debug/AnyCPU；bridge 方案亦同）
 - **Bridge 測試工具輸出位置**：各 sample 的 `samples\Directory.Build.props` 導向 `bin\x64\Release\tools\{io|light|storage}\`；`samples\Directory.Build.targets` 把 `OutputPath` 對齊 `OutDir`（否則 VS F5「遺漏偵錯目標」）。主程式 `AniloxRoll.Monitor` Release build 經 `BuildBridgeTools` target 連帶把四個 sample 編到同位置（現場部署整包帶走）。**`.Core` 輸出位置不可在 monorepo 內改**（見記憶 project-core-output-shared-bin：VS 方案 P2P 參考寫死共用 bin → CS0006）
+- **主方案 `PICoater_AOI.sln` 已收四個 Bridge sample 工具**（IoBridge.ManualControl/Automation、LightBridge.Control、StorageBridge.Control，掛 Bridges 方案資料夾），可直接「設定為啟動專案 → F5」run。註：`IoBridge.ManualControl` 的 ProjectGuid 與 `AniloxRoll.Monitor.Tests` 原撞 GUID，主 sln 已把 Tests 改 GUID `{C481DC6D-…}` 解衝突
 - Build 命令（**必須帶 Platform=x64**，本專案依賴 AMD64 MIL SDK）：
   ```
   cat > /tmp/build.bat << 'EOFBAT'
