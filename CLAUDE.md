@@ -536,7 +536,9 @@ docs/
 - **一律 Release|x64**（主程式 + sdk + tools 全部）。**不要 build Debug** — 開發用 agent + `Trace.WriteLine` / `Console.WriteLine` 檢查（`Debug.WriteLine` 在 Release 是 no-op，不要用）。csproj 殘留的 Debug 配置請忽略，不要選用。
 - 修改 `.cs`、`.csproj`、`.sln` 後**立即 build** 確認零錯誤
 - 不得在 VS 的 reserved ImportGroup 放自訂 Import
-- build 入口：產品 `PICoater_AOI.sln` / sdk 工具 `sdk/Tools.sln` / 單一 `xxx.csproj`（msbuild 直接 build，依賴自動拉）
+- build 入口：產品 `PICoater_AOI.sln` / sdk 工具 `sdk/Tools.sln` + 各 Bridge `sdk/Bridges/*/{Io,Light,Storage}Bridge.sln` / 單一 `xxx.csproj`（msbuild 直接 build，依賴自動拉）
+- **所有 sln 只保留 `Release|x64` 單一組態**（同主方案 `PICoater_AOI.sln`，避免誤選 Debug/AnyCPU；bridge 方案亦同）
+- **Bridge 測試工具輸出位置**：各 sample 的 `samples\Directory.Build.props` 導向 `bin\x64\Release\tools\{io|light|storage}\`；`samples\Directory.Build.targets` 把 `OutputPath` 對齊 `OutDir`（否則 VS F5「遺漏偵錯目標」）。主程式 `AniloxRoll.Monitor` Release build 經 `BuildBridgeTools` target 連帶把四個 sample 編到同位置（現場部署整包帶走）。**`.Core` 輸出位置不可在 monorepo 內改**（見記憶 project-core-output-shared-bin：VS 方案 P2P 參考寫死共用 bin → CS0006）
 - Build 命令（**必須帶 Platform=x64**，本專案依賴 AMD64 MIL SDK）：
   ```
   cat > /tmp/build.bat << 'EOFBAT'

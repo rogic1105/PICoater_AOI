@@ -1,0 +1,10 @@
+<Project>
+  <!-- samples 的 OutputPath 對齊 OutDir（samples\Directory.Build.props 已導向 tools\light\）。
+       sample csproj 的 per-config <OutputPath>bin\x64\Release\</OutputPath> 在 props 之後評估，
+       會把 OutputPath 蓋回相對路徑 → VS「啟動偵錯」跑去 samples\X\bin\x64\Release\ 找 exe
+       （實際在 tools\light\ → 遺漏偵錯目標）。Directory.Build.targets 在 csproj 本體之後 import，
+       能蓋過 csproj 的 OutputPath，讓它與 OutDir 一致。 -->
+  <PropertyGroup>
+    <OutputPath>$(OutDir)</OutputPath>
+  </PropertyGroup>
+</Project>
