@@ -21,21 +21,12 @@
     <ClCompile Include="..\..\pipeline\aoi_pipeline.cpp">
       <Filter>來源檔案</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\plc\mock_plc_adapter.cpp">
-      <Filter>來源檔案</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\export_c\export_api.h">
       <Filter>標頭檔</Filter>
     </ClInclude>
     <ClInclude Include="..\..\pipeline\aoi_pipeline.hpp">
-      <Filter>標頭檔</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\plc\i_plc_adapter.hpp">
-      <Filter>標頭檔</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\plc\mock_plc_adapter.hpp">
       <Filter>標頭檔</Filter>
     </ClInclude>
   </ItemGroup>

@@ -9,8 +9,6 @@
 
 #include "../../../modules/GetPICoaterBackground/include/module_get_picoater_background.hpp"
 #include "../../../pipeline/aoi_pipeline.hpp"
-#include "../../../plc/i_plc_adapter.hpp"
-#include "../../../plc/mock_plc_adapter.hpp"
 
 namespace {
 
@@ -87,10 +85,6 @@ struct AoiPipelineContext {
 
     return true;
   }
-};
-
-struct PlcAdapterContext {
-  std::unique_ptr<picoater::plc::IPlcAdapter> adapter;
 };
 
 }  // namespace
@@ -255,48 +249,6 @@ void PICoaterAPI_DestroyPipeline(AoiPipelineHandle handle) {
 
   auto* context = reinterpret_cast<AoiPipelineContext*>(handle);
   delete context;
-}
-
-PlcAdapterHandle PICoaterAPI_CreateMockPlc() {
-  auto* context = new PlcAdapterContext();
-  context->adapter = std::make_unique<picoater::plc::MockPlcAdapter>();
-  return reinterpret_cast<PlcAdapterHandle>(context);
-}
-
-void PICoaterAPI_DestroyPlc(PlcAdapterHandle handle) {
-  if (handle == nullptr) {
-    return;
-  }
-
-  auto* context = reinterpret_cast<PlcAdapterContext*>(handle);
-  delete context;
-}
-
-int PICoaterAPI_PlcConnect(PlcAdapterHandle handle) {
-  if (handle == nullptr) {
-    return -1;
-  }
-
-  auto* context = reinterpret_cast<PlcAdapterContext*>(handle);
-  return context->adapter->Connect() ? 0 : -2;
-}
-
-int PICoaterAPI_PlcReadBit(PlcAdapterHandle handle, int address, bool* value) {
-  if (handle == nullptr || value == nullptr) {
-    return -1;
-  }
-
-  auto* context = reinterpret_cast<PlcAdapterContext*>(handle);
-  return context->adapter->ReadBit(address, value) ? 0 : -2;
-}
-
-int PICoaterAPI_PlcWriteBit(PlcAdapterHandle handle, int address, bool value) {
-  if (handle == nullptr) {
-    return -1;
-  }
-
-  auto* context = reinterpret_cast<PlcAdapterContext*>(handle);
-  return context->adapter->WriteBit(address, value) ? 0 : -2;
 }
 
 int PICoaterAPI_ComputeColumnMean(AoiPipelineHandle handle,

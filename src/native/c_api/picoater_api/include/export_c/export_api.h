@@ -11,7 +11,6 @@
 extern "C" {
 
 typedef void* AoiPipelineHandle;
-typedef void* PlcAdapterHandle;
 
 typedef struct AoiInputImageC {
     int width;
@@ -58,17 +57,5 @@ PICOATER_API int PICoaterAPI_ComputeColumnMean(
     const AoiInputImageC* input,
     float bg_sigma_factor,
     float* out_col_mean);  /* host buffer, size = input->width */
-
-PICOATER_API PlcAdapterHandle PICoaterAPI_CreateMockPlc();
-
-PICOATER_API void PICoaterAPI_DestroyPlc(PlcAdapterHandle handle);
-
-PICOATER_API int PICoaterAPI_PlcConnect(PlcAdapterHandle handle);
-
-PICOATER_API int PICoaterAPI_PlcReadBit(
-    PlcAdapterHandle handle, int address, bool* value);
-
-PICOATER_API int PICoaterAPI_PlcWriteBit(
-    PlcAdapterHandle handle, int address, bool value);
 
 }  // extern "C"
