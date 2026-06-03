@@ -35,6 +35,8 @@ namespace AniloxRoll.Monitor.Forms
             if (!_settings.IoEnabled) return;
 
             _ioGrabController = new IoGrabController(_settings.IoModel);
+            _ioGrabController.ReconnectIntervalMs = 3000;   // 重連週期 5s→3s（TCP 連線嘗試很輕量）
+            _ioGrabController.ReadWriteTimeoutMs = 500;     // 讀寫逾時 2000→500ms：斷線偵測更快（健康設備回應 <100ms，零資源代價）
 
             // 背景 Modbus 輪詢執行緒回 UI 更新；關閉時 Handle 已銷毀 → SafeBeginInvoke 守 guard 防 InvalidOperationException
             _ioGrabController.OnStartRequested += () => SafeBeginInvoke(IoStartGrab);
@@ -61,11 +63,15 @@ namespace AniloxRoll.Monitor.Forms
             string preferredPort = _settings.LightComPort;
             int channel = _settings.LightChannel;
             var controller = new LightController();
+            _lightProbeInFlight = true;   // 佔住，避免 telemetry 重連 probe 同時也跑 AutoDetect 搶 COM
             Task.Run(() =>
             {
-                string found = controller.AutoDetect(preferredPort, channel);
+                string found;
+                try { found = controller.AutoDetect(preferredPort, channel); }
+                finally { _lightProbeInFlight = false; }
                 SafeBeginInvoke(() =>
                 {
+                    _lightProbedOnce = true;   // 初次偵測完成 → label 從「初始化中」切到實際狀態
                     if (_settings == null || !_settings.LightEnabled || IsDisposed || Disposing)
                     {
                         controller.Dispose();
@@ -208,12 +214,39 @@ namespace AniloxRoll.Monitor.Forms
         private void UpdateIoConnectionUi(bool connected)
         {
             if (_isIoSuspended) return;
-            // IO 連線標籤照實顯示（IO 確實先連上是事實）；但「按鈕是否變 IO 控制中」交給
-            // RefreshGrabButtonState 統一決定 —— 相機未就緒前按鈕維持「初始化中」，不被 IO 搶顯示，
-            // 避免使用者誤以為系統已可操作。
-            lblIoConn.Text = connected ? "● IO 已連線" : "● IO 離線";
-            lblIoConn.BackColor = connected ? IecGreen : IecGray;
+            // 「按鈕是否變 IO 控制中」交給 RefreshGrabButtonState 統一決定（相機未就緒前不被 IO 搶顯示）。
+            lblIoConn.ForeColor = Color.White;   // 統一白字
+            if (connected)
+            {
+                lblIoConn.Text = "● IO 已連線";
+                lblIoConn.BackColor = IecGreen;
+            }
+            else
+            {
+                // 不顯示靜止「IO 離線」：斷線一律走重連倒數（RefreshIoConnLabel 每 tick 補上秒數）
+                lblIoConn.Text = "● IO 重連中…";
+                lblIoConn.BackColor = IecRed;
+            }
             RefreshGrabButtonState();
+        }
+
+        /// <summary>由 TelemetryTimer 每 tick 呼叫：IO 斷線時顯示重連倒數（秒數源自 IoGrabController）。
+        /// 手動暫停（_isIoSuspended）不覆蓋；初始連線中（尚未排程重連）維持「初始化中」。</summary>
+        private void RefreshIoConnLabel()
+        {
+            if (_ioGrabController == null || _isIoSuspended) return;  // 手動暫停 → 保留「IO 暫停 ⏸」
+            if (_ioGrabController.IsConnected)
+            {
+                if (lblIoConn.BackColor != IecGreen) UpdateIoConnectionUi(true);  // 連上 → 綠（idempotent）
+                return;
+            }
+            var next = _ioGrabController.NextReconnectAtUtc;
+            if (!next.HasValue) return;  // 尚未排程重連（初始連線進行中）→ 維持「初始化中」
+            int sec = (int)Math.Ceiling((next.Value - DateTime.UtcNow).TotalSeconds);
+            sec = Math.Max(1, Math.Min(sec, _ioGrabController.ReconnectIntervalMs / 1000));
+            lblIoConn.Text = $"● IO 重連中 {sec}s…";
+            lblIoConn.BackColor = IecRed;
+            lblIoConn.ForeColor = Color.White;
         }
 
         private void UpdateLightConnLabel()
@@ -229,10 +262,19 @@ namespace AniloxRoll.Monitor.Forms
                 lblLightConn.Text = $"● 光源 已連線 ({_settings.LightBrightness})";
                 lblLightConn.BackColor = IecGreen;
             }
+            else if (!_lightProbedOnce)
+            {
+                // 初次偵測還沒回來 → 維持「初始化中」（與 IO/儲存一致）
+                lblLightConn.Text = "● 光源: 初始化中…";
+                lblLightConn.BackColor = IecGray;
+            }
             else
             {
-                lblLightConn.Text = "● 光源 離線";
-                lblLightConn.BackColor = IecGray;
+                // 斷線 → 顯示重連倒數（探測進行中時顯示「探測中」）。秒數源自 LightProbeIntervalTicks。
+                lblLightConn.Text = _lightProbeInFlight
+                    ? "● 光源 探測中…"
+                    : $"● 光源 重連中 {CountdownSec(_lightProbeTickCounter, LightProbeIntervalTicks)}s…";
+                lblLightConn.BackColor = IecRed;
             }
 
             UpdateStandardBgSubLockState();
@@ -242,9 +284,23 @@ namespace AniloxRoll.Monitor.Forms
         private volatile bool _storageProbeInFlight;
         private int _lightProbeTickCounter;
         private volatile bool _lightProbeInFlight;
+        private bool? _storageLastConnected;   // 最後一次 probe 結果（供每 tick 刷新倒數用）
+        private bool _lightProbedOnce;         // 光源初次偵測是否完成（未完成前 label 維持「初始化中」）
+
+        // ── 重連倒數 / probe 排程的單一真實來源（秒數由此推導，不寫死）──────────────
+        internal const int TelemetryTickMs = 500;          // = SettingsTabs 的 _telemetryTimer.Interval
+        private const int LightProbeIntervalTicks = 4;     // 光源每 4 tick(2s) 背景 probe / 重連一次
+        private const int StorageProbeIntervalTicks = 4;   // 儲存每 4 tick(2s) 背景 probe 一次
+
+        /// <summary>倒數剩餘秒數 = (intervalTicks − 已過 ticks) × tick 間隔，至少 1。</summary>
+        private static int CountdownSec(int elapsedTicks, int intervalTicks)
+            => Math.Max(1, (int)Math.Ceiling((intervalTicks - elapsedTicks) * TelemetryTickMs / 1000.0));
 
         private void UpdateStorageConnLabel(bool? connected)
         {
+            // connected 有值 = probe 回報新結果；null = 每 tick 刷新倒數（沿用上次結果）
+            if (connected.HasValue) _storageLastConnected = connected;
+
             string path = _settings?.RemotePath ?? string.Empty;
             if (string.IsNullOrWhiteSpace(path))
             {
@@ -252,17 +308,20 @@ namespace AniloxRoll.Monitor.Forms
                 lblStorageConn.BackColor = IecGray;
                 return;
             }
-            if (connected == true)
+            if (_storageLastConnected == true)
             {
                 lblStorageConn.Text = "● 儲存電腦 已連線";
                 lblStorageConn.BackColor = IecGreen;
             }
-            else if (connected == false)
+            else if (_storageLastConnected == false)
             {
-                lblStorageConn.Text = "● 儲存電腦 離線";
+                // 斷線 → 重連倒數（探測進行中顯示「探測中」）。秒數源自 StorageProbeIntervalTicks。
+                lblStorageConn.Text = _storageProbeInFlight
+                    ? "● 儲存電腦 探測中…"
+                    : $"● 儲存電腦 重連中 {CountdownSec(_storageProbeTickCounter, StorageProbeIntervalTicks)}s…";
                 lblStorageConn.BackColor = IecRed;
             }
-            // connected == null：保留上次結果（probe 還沒回來）
+            // _storageLastConnected == null（還沒 probe 過）：維持「初始化中」不覆蓋
         }
 
         /// <summary>
@@ -304,7 +363,9 @@ namespace AniloxRoll.Monitor.Forms
             // 光源：先同步更新（用 IsConnected 快取結果），再 2 秒背景實測 / 重連
             // （Probe 用 TryEnter，與取像時 SendCommand 不會競爭，可放心高頻）
             UpdateLightConnLabel();
-            if (++_lightProbeTickCounter >= 4)
+            RefreshIoConnLabel();          // IO 重連倒數每 tick 刷新（源自 IoGrabController）
+            UpdateStorageConnLabel(null);  // 儲存重連倒數每 tick 刷新（用上次 probe 結果）
+            if (++_lightProbeTickCounter >= LightProbeIntervalTicks)
             {
                 _lightProbeTickCounter = 0;
                 if (_settings != null && _settings.LightEnabled && !_lightProbeInFlight)
@@ -368,7 +429,7 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             // 儲存機：每 5 秒背景 probe UNC 路徑
-            if (++_storageProbeTickCounter < 10) return;
+            if (++_storageProbeTickCounter < StorageProbeIntervalTicks) return;
             _storageProbeTickCounter = 0;
 
             string path = _settings?.RemotePath ?? string.Empty;
@@ -383,7 +444,7 @@ namespace AniloxRoll.Monitor.Forms
             System.Threading.Tasks.Task.Run(() =>
             {
                 bool ok;
-                try { ok = System.IO.Directory.Exists(path); }
+                try { ok = ProbeStorageReachable(path); }
                 catch { ok = false; }
                 finally { _storageProbeInFlight = false; }
 
@@ -391,6 +452,54 @@ namespace AniloxRoll.Monitor.Forms
                 try { BeginInvoke(new Action<bool?>(UpdateStorageConnLabel), (bool?)ok); }
                 catch (InvalidOperationException) { }
             });
+        }
+
+        /// <summary>本機網路介面變動（拔/插網路線）→ 立即觸發儲存重探（下一個 telemetry tick ≤500ms），
+        /// 不必等整個探測週期。事件驅動、零輪詢成本。
+        /// 注意：遠端 PC 自己關機/更新時本機網卡不變、此事件不觸發，那種情況仍靠週期探測。</summary>
+        private void OnNetworkAddressChanged(object sender, EventArgs e)
+        {
+            // 事件在 thread pool 觸發 → marshal 回 UI 執行緒改計數器（與 telemetry tick 同執行緒，無 race）
+            SafeBeginInvoke(() => { _storageProbeTickCounter = StorageProbeIntervalTicks; });
+        }
+
+        /// <summary>儲存機可達性探測：解析 UNC host 後 TCP 連 445(SMB) port，2s 逾時。
+        /// 不用 Directory.Exists —— 拔網路線後 Windows SMB redirector 會把該 server 快取為不可達，
+        /// 重插網路線甚至重開程式都恢復不了（"找不到"）。直接 TCP 探測繞過 SMB session 快取，
+        /// 網路一通就立刻恢復綠燈。實際檔案複製仍由 RemoteCopyService 處理。</summary>
+        private static bool ProbeStorageReachable(string uncPath)
+        {
+            string host = ParseUncHost(uncPath);
+            if (string.IsNullOrEmpty(host)) return false;
+            System.Net.Sockets.Socket sock = null;
+            try
+            {
+                sock = new System.Net.Sockets.Socket(
+                    System.Net.Sockets.AddressFamily.InterNetwork,
+                    System.Net.Sockets.SocketType.Stream,
+                    System.Net.Sockets.ProtocolType.Tcp);
+                var ar = sock.BeginConnect(host, 445, null, null);
+                // 逾時就直接 Close（不呼叫 EndConnect）—— 避免 TcpClient.ConnectAsync 在 dispose 後
+                // 仍呼叫 EndConnect 於已釋放 socket 而拋 NullReferenceException（並非儲存機端問題）。
+                // 1s 逾時（LAN 連線 <50ms，足夠）→ 斷線偵測更快。
+                if (ar.AsyncWaitHandle.WaitOne(1000) && sock.Connected)
+                {
+                    sock.EndConnect(ar);
+                    return true;
+                }
+                return false;
+            }
+            catch { return false; }
+            finally { try { sock?.Close(); } catch { } }
+        }
+
+        /// <summary>從 UNC 路徑（\\host\share\...）解析出 host。</summary>
+        private static string ParseUncHost(string uncPath)
+        {
+            if (string.IsNullOrWhiteSpace(uncPath)) return null;
+            string p = uncPath.TrimStart('\\', '/');
+            int slash = p.IndexOfAny(new[] { '\\', '/' });
+            return slash > 0 ? p.Substring(0, slash) : p;
         }
 
         private void UpdateIoLeds(IoSnapshot io)
@@ -512,7 +621,7 @@ namespace AniloxRoll.Monitor.Forms
             if (_isIoSuspended)
             {
                 lblIoConn.BackColor = IecYellow;
-                lblIoConn.ForeColor = Color.Black;
+                lblIoConn.ForeColor = Color.White;   // 統一白字（原黑字）
                 lblIoConn.Text = "● IO 暫停 ⏸";
                 btnLiveGrab.Enabled = true;
                 UpdateGrabButton(_liveCameraManager?.IsLiveGrabbing ?? false);

@@ -59,8 +59,25 @@ namespace AniloxRoll.Monitor.Core.Services
         /// <summary>重連週期（ms）。</summary>
         public int ReconnectIntervalMs { get; set; } = 5000;
 
-        /// <summary>讀寫逾時（ms）。</summary>
-        public int ReadWriteTimeoutMs => _plc.ReadWriteTimeoutMs;
+        // 下次自動重連的預定時刻（UTC ticks，0=未排程）。供 UI 顯示「重連中 Ns」倒數，秒數源自此處（單一真實來源）。
+        private long _nextReconnectAtTicksUtc;
+
+        /// <summary>下次自動重連預定時刻（UTC）；已連線或未排程時回 null。供 UI 倒數顯示。</summary>
+        public DateTime? NextReconnectAtUtc
+        {
+            get
+            {
+                long t = System.Threading.Interlocked.Read(ref _nextReconnectAtTicksUtc);
+                return t == 0 ? (DateTime?)null : new DateTime(t, DateTimeKind.Utc);
+            }
+        }
+
+        /// <summary>讀寫逾時（ms）。調小 → 斷線偵測更快（健康設備回應 &lt;100ms，故可安全縮短）。</summary>
+        public int ReadWriteTimeoutMs
+        {
+            get => _plc.ReadWriteTimeoutMs;
+            set => _plc.ReadWriteTimeoutMs = value;
+        }
 
         /// <summary>目前連線 IP。</summary>
         public string IoIp => _plcIp;
@@ -134,6 +151,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 {
                     if (_plc.IsConnected)
                     {
+                        System.Threading.Interlocked.Exchange(ref _nextReconnectAtTicksUtc, 0); // 已連線 → 清除倒數
                         await PollTick();
                         try { await Task.Delay(PollIntervalMs, ct); } catch (OperationCanceledException) { break; }
                     }
@@ -142,6 +160,9 @@ namespace AniloxRoll.Monitor.Core.Services
                         await ReconnectTick();
                         if (!_plc.IsConnected)
                         {
+                            // 記錄下次重連時刻供 UI 倒數（單一真實來源 = ReconnectIntervalMs）
+                            System.Threading.Interlocked.Exchange(ref _nextReconnectAtTicksUtc,
+                                DateTime.UtcNow.AddMilliseconds(ReconnectIntervalMs).Ticks);
                             try { await Task.Delay(ReconnectIntervalMs, ct); } catch (OperationCanceledException) { break; }
                         }
                     }
@@ -268,6 +289,7 @@ namespace AniloxRoll.Monitor.Core.Services
 
         internal async Task PollTick()
         {
+            var __pollSw = System.Diagnostics.Stopwatch.StartNew();
             try
             {
                 // ReadDiStatuses 產生 Modbus 流量，同時餵 ET-7044 Host Watchdog
@@ -337,6 +359,7 @@ namespace AniloxRoll.Monitor.Core.Services
             }
             catch (Exception ex)
             {
+                System.Diagnostics.Trace.WriteLine($"[IO] PollTick 失敗於 {__pollSw.ElapsedMilliseconds}ms → CommLost（讀寫逾時設定={_plc.ReadWriteTimeoutMs}ms）");
                 IoLogger.Error("IO polling error → CommLost", ex);
                 SetState(IoState.CommLost);
                 _isPcAlive = false;

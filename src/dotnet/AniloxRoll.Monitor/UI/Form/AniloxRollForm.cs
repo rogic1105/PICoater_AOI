@@ -159,6 +159,7 @@ namespace AniloxRoll.Monitor.Forms
             try { _liveOverviewTimer?.Stop(); } catch { }
             try { _statsRefreshDebouncer?.Stop(); _statsRefreshDebouncer?.Dispose(); _statsRefreshDebouncer = null; } catch { }  // H3 + round-2 H3 補 Dispose
             try { _cleanupFlagWatcher?.Dispose(); _cleanupFlagWatcher = null; } catch { }  // M3: 10 秒輪詢提前停
+            try { System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged; } catch { }
         }
 
         /// <summary>
@@ -372,6 +373,8 @@ namespace AniloxRoll.Monitor.Forms
                 // IO（快速 TCP）最後啟動，避免它最先亮綠讓人誤以為系統已就緒。
                 InitLightController();
                 InitIoController();
+                // 本機網路介面變動（拔/插網路線）→ 立即重探儲存，不等探測週期（事件驅動、零輪詢成本）
+                System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
             }
 
             // 啟動時執行一次清理（雙模式共用）

@@ -626,8 +626,8 @@ namespace AniloxRoll.Monitor.Forms
             }
             AutoFitListViewColumns(listViewHardware);
 
-            // ── Telemetry Timer（每 500ms 更新 ListView + SyncFromHardware）─
-            _telemetryTimer = new System.Windows.Forms.Timer { Interval = 500 };
+            // ── Telemetry Timer（每 TelemetryTickMs 更新 ListView + SyncFromHardware + 重連倒數）─
+            _telemetryTimer = new System.Windows.Forms.Timer { Interval = TelemetryTickMs };
             _telemetryTimer.Tick += TelemetryTimer_Tick;
             _telemetryTimer.Start();
 

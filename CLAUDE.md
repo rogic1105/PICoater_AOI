@@ -188,7 +188,7 @@ PICoater_AOI/
 | `UI/Form/AniloxRollForm.Review.cs` | 回顧：資料夾/時段載入（`btnReviewSelectFolder_Click`/period 導航/`ApplyReviewEnhance`/`LoadImagesWithReviewConfig`） |
 | `UI/Form/AniloxRollForm.Background.cs` | 背景取得/載入/預覽 + 背景判斷（`IsBgBinReady`/`IsStandardBgSubEnabled`） |
 | `UI/Form/AniloxRollForm.SettingsTabs.cs` | 右側設定面板 tab 建構（`SetupCameraTab`/`SetupSystemTab`/`Bind*Sync`）+ 相機參數硬體同步（`SyncCameraParamsFromHardware`） |
-| `UI/Form/AniloxRollForm.HardwareStatus.cs` | IO/光源/儲存狀態：init（`InitIoController`/`InitLightController`）、連線標籤、LED、儲存管理（`TriggerRetentionAndFlagAsync`） |
+| `UI/Form/AniloxRollForm.HardwareStatus.cs` | IO/光源/儲存狀態：init（`InitIoController` 設 `ReconnectIntervalMs=3000`/`ReadWriteTimeoutMs=500`、`InitLightController` AutoDetect 背景化）、連線標籤、LED、儲存管理（`TriggerRetentionAndFlagAsync`）。**斷線重連倒數**（`RefreshIoConnLabel`/`UpdateLightConnLabel`/`UpdateStorageConnLabel` 顯示「重連中 Ns…」，秒數源自 `ReconnectIntervalMs`/`*ProbeIntervalTicks`×`TelemetryTickMs` 單一來源；尊重 `_isIoSuspended` 不覆蓋）。**儲存探測** `ProbeStorageReachable`＝解析 UNC host 後 TCP 連 445（繞過 SMB session 快取，重插即恢復；非 `Directory.Exists`）。`OnNetworkAddressChanged`（NetworkChange 事件）拔/插本機網路線即時重探 |
 | `UI/Form/AniloxRollForm.DirectionStitch.cs` | V/H 方向/ridge/合圖模式切換（`SwitchRidgeDirection`/`OnStitchModeChangedAsync`） |
 | `UI/Form/AniloxRollForm.Data.cs` | 檢測數據 Tab（`SetupDataTab`/grabId 選擇） |
 | `UI/Form/AniloxRollForm.Telemetry.cs` | Telemetry/資源監控 timer（`TelemetryTimer_Tick`/`UpdateResourceMonitor`）。注意：timer new+Start 仍在 SettingsTabs.SetupSystemTab（未來可收回此檔，需測時序） |
@@ -235,7 +235,7 @@ PICoater_AOI/
 | `Services/InspectionLogService.cs` | 每日 CSV 寫入；GrabId = `yyMMdd-HHmmss` 時間戳格式 |
 | `Services/InspectionStatisticsService.cs` | CSV 統計服務；LoadConfigForDate（按日期載入 #CFG）；LoadConfigForGrabId / LoadImagePathsForGrabId（單 grab 取 #CFG 與 .bin 路徑，供 chartDataPatch 對齊 chartReviewPatch） |
 | `Services/IoState.cs` | IoState enum（FSM 狀態）+ IoSnapshot struct（IO 快照） |
-| `Services/IoGrabController.cs` | IO-Grab 連動：IoState FSM、IO 追蹤、Watchdog keepalive；支援 IModbusTcpClient 注入測試 |
+| `Services/IoGrabController.cs` | IO-Grab 連動：IoState FSM、IO 追蹤、Watchdog keepalive；支援 IModbusTcpClient 注入測試。`ReadWriteTimeoutMs`（可設）= 斷線偵測下限（拔線 OS 即報錯近 0ms；斷電靠逾時 ~500ms）；`NextReconnectAtUtc` 供 UI 重連倒數 |
 | `Services/CsvConfigSnapshot.cs` | 不可變設定快照（CamOps/CamPos/CamGrabHeight/CamExposureUs/CamLineRateHz/Hessian/ErrorValue/TrimHead/TrimTail） |
 | `Services/HessianRescaleHelper.cs` | View-time HM rescale 共用：Ratio / IsNoOp / RescaleInPlace1D\|2D / CloneAndRescale1D\|2D — 5 個公式單一來源 |
 | `Services/StorageRetentionService.cs` | 循環儲存：事件驅動（grab 結束/每 10 grab/watchdog），磁碟可用空間低於門檻時刪最舊日期資料夾影像，保留 CSV |
