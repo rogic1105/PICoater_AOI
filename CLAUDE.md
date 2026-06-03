@@ -191,7 +191,7 @@ PICoater_AOI/
 | `UI/Form/AniloxRollForm.HardwareStatus.cs` | IO/光源/儲存狀態：init（`InitIoController` 設 `ReconnectIntervalMs=3000`/`ReadWriteTimeoutMs=500`、`InitLightController` AutoDetect 背景化）、連線標籤、LED、儲存管理（`TriggerRetentionAndFlagAsync`）。**斷線重連倒數**（`RefreshIoConnLabel`/`UpdateLightConnLabel`/`UpdateStorageConnLabel` 顯示「重連中 Ns…」，秒數源自 `ReconnectIntervalMs`/`*ProbeIntervalTicks`×`TelemetryTickMs` 單一來源；尊重 `_isIoSuspended` 不覆蓋）。**儲存探測** `ProbeStorageReachable`＝解析 UNC host 後 TCP 連 445（繞過 SMB session 快取，重插即恢復；非 `Directory.Exists`）。`OnNetworkAddressChanged`（NetworkChange 事件）拔/插本機網路線即時重探 |
 | `UI/Form/AniloxRollForm.DirectionStitch.cs` | V/H 方向/ridge/合圖模式切換（`SwitchRidgeDirection`/`OnStitchModeChangedAsync`） |
 | `UI/Form/AniloxRollForm.Data.cs` | 檢測數據 Tab（`SetupDataTab`/grabId 選擇） |
-| `UI/Form/AniloxRollForm.Telemetry.cs` | Telemetry/資源監控 timer（`TelemetryTimer_Tick`/`UpdateResourceMonitor`）。注意：timer new+Start 仍在 SettingsTabs.SetupSystemTab（未來可收回此檔，需測時序） |
+| `UI/Form/AniloxRollForm.Telemetry.cs` | Telemetry/資源監控 timer（`TelemetryTimer_Tick`/`UpdateResourceMonitor`）。`TelemetryTimer_Tick` MIL 查詢經 `LiveTelemetryPresenter.Capture` 背景化（`_telemetryCaptureInFlight` 防堆積）+ `AreCamerasHwReady` gate（CLProtocol 初始化期間不碰 MIL）。注意：timer new+Start 仍在 SettingsTabs.SetupSystemTab |
 | `UI/Form/AniloxRollForm.Helpers.cs` | PG refresh（`RefreshGridItem`）/Review 座標（`ViewRangeProvider`）/通用（`FindCameraById`/`IsCanvasFitToScreen`） |
 | `UI/Form/AniloxRollForm.Designer.cs` | Form 控制項佈局（VS Designer）。狀態列順序：相機→儲存→光源→IO連線→IO狀態→DIO |
 | `Program.cs` | 進入點 + **全域例外攔截**（`ThreadException`/`AppDomain.UnhandledException`/`UnobservedTaskException` → 寫 `AniloxRoll-crash.log` 到 bin 與 %TEMP%；背景執行緒未處理例外不再直接 0xffffffff 終止）+ 損毀 user.config 自刪 |
@@ -207,7 +207,7 @@ PICoater_AOI/
 | `UI/Widgets/CurveMergeHelper.cs` | 全覽圖合併演算法 + .bin 曲線讀取（UpdateOverviewChart、MergeCurves、MergeRowCurves、GetCurveBasePath） |
 | `UI/Presenters/DataStatisticsPresenter.cs` | Data tab 統計邏輯：統計計算、combo 串聯、Period Charts、Mura 空間分布圖（chartDataPatch）、跨 Tab 同步事件 |
 | `UI/Presenters/ReviewStitchCoordinator.cs` | Review tab 拼接管理：LoadGrabStitchedViewAsync、合圖、ClearStitchedMode、overview chart 聯動 |
-| `UI/Presenters/LiveTelemetryPresenter.cs` | 16 欄即時 Telemetry |
+| `UI/Presenters/LiveTelemetryPresenter.cs` | 16 欄即時 Telemetry。**MIL 查詢背景化**：`Capture(cameras)`（背景執行緒做 16 欄 MdigInquire/MsysInquire ≈195ms，回傳純字串 `CamSnapshot`）+ `Apply(snapshots)`（UI 執行緒只套字串，不碰 MIL）→ 避免 `TelemetryTimer_Tick` 每 500ms 卡 UI 執行緒。`Update()`=同步版（背景用） |
 | `Acquisition/AniloxCamera.cs` | 單台相機 composition：持有 `MilCamera _mil`（`sdk/MIL/MilGrabber.Core`）委派 MIL 資源/grab/display/參數/telemetry；自己做檢測/存檔/合圖/曲線（訂閱 `_mil.FrameReady`，hook 內檢測→顯示`PutDisplayBytes`/`CopyToDisplay`→合圖→存檔）。Global merge child-buffer 來源 |
 | `sdk/MIL/MilGrabber.Core/MilCamera.cs` | MIL 取像/顯示封裝 library（一台相機=一個 MilCamera）：alloc/grab/display/參數/系統資訊/CLProtocol/在線/mouse hook/buffer helper(`GetFrameBytes`/`PutDisplayBytes`/`CopyToDisplay`/`ClearDisplay`)/線掃最大速率(`GetLineRateMaxHz` via CLProtocol M_FEATURE_MAX，grab 後 ~3s 可得)；`FrameReady`/`OnMouseDataChanged`/`OnCameraClicked` 事件。純 MIL 範圍，檢測等非 MIL 由訂閱者做。同檔 `MilCameraParams`（純函式參數公式單一真相：`CalcExposureMaxUs(lrHz,expMin,expMaxCap)`=曝光上限=900000/線掃 clamp；主程式+範例共用，勿再各自抄公式） |
 | `sdk/MIL/MilGrabber.Core/MultiCameraMerger.cs` | 多相機即時合圖「工頭」library（純 MIL、無 WinForms）：接收一組 MilCamera，算佈局（全域範圍/xOffset/重疊中點分界）+ 分配合併 buffer + 每台 SetMergeTarget。`EnableMerge`/`RefreshLayout` 共用唯一來源 `ApplyLayout`（先設 RefOpsMm 再算 xOffset，**順序鎖死**避免除以 0 變垃圾值）。回傳 `MergedBuffer` + 座標(MinStartMm/RefOpsMm/TotalW/H) 供上層「秀」。貼圖在 MilCamera grab hook（`SetMergeTarget`/`CopyDisplayToMergeTarget`） |
@@ -244,7 +244,7 @@ PICoater_AOI/
 | `Services/RemoteCopyService.cs` | 背景遠端複製：ConcurrentQueue + 背景執行緒，File.Copy 含重試（3 次） |
 | `Services/LightController.cs` | LTS-3DPA24 光源控制器 RS-232 通訊：AutoDetect（先試設定 COM 再掃描）、嚴格 probe（PDF §4.1.4 表-4 驗證：8-byte、cmd/ch echo、XOR checksum）、TurnOn/Off/SetBrightness，跟隨 IO Grab 開關 |
 | `UI/Widgets/GrabImageStitcher.cs` | 多張影像垂直拼接 + MergeHorizontal 全域合圖；LoadCameraImage（internal） |
-| `UI/Widgets/ProportionalScaler.cs` | Form 等比例縮放（重設 Bounds + 重建 Font，非點陣縮放） |
+| `UI/Widgets/ProportionalScaler.cs` | Form 等比例縮放（重設 Bounds + 重建 Font，非點陣縮放）。`FontScale`（全域字體微調，現 1.0=設計大小）；DPI 感知（`app.manifest` dpiAware=true）+ `WindowState=Maximized` 下文字原生清晰 |
 | `UI/Widgets/RoundedLabel.cs` | 圓角晶片 Label（`Label` 子類）：反鋸齒繪圓角底（BackColor 當填色）+ 文字交 `base.OnPaint` 原生繪製（清晰）；強制無 BorderStyle 方框。用於 IO 運作區（lblIoState + DI/DO 燈號）與方正連線燈視覺分組 |
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/UI/SmartCanvas.cs` | PictureBox 子類（`TanukiCv.Controls` 獨立 WinForms assembly）：zoom/pan/edge/ClampPan；自訂白底黑邊十字游標 |
 

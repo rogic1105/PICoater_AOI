@@ -171,7 +171,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                 ForeColor = Color.DarkGray,
                 BackColor = Color.FromArgb(32, 32, 32),
                 TextAlign = ContentAlignment.MiddleCenter,
-                Font      = new Font("Segoe UI", 10f, FontStyle.Regular)
+                // 動態建立、未被 ProportionalScaler 記錄縮放 → 直接用較小字級對齊全域 0.85（DPI 感知下 10f 偏大）
+                Font      = new Font("Segoe UI", 8.5f, FontStyle.Regular)
             };
 
             displayPanel.MouseClick += (s, e) => SwitchMainDisplay(cameraIndex);

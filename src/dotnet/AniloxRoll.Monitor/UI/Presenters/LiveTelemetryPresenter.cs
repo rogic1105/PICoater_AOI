@@ -62,68 +62,68 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         // ── 更新資料 ─────────────────────────────────────────────────────
 
-        /// <summary>
-        /// 從 cameras 讀取最新 Telemetry 並更新 ListView 所有欄位。
-        /// 找不到對應相機時，該列全顯示 "N/A"。支援跨執行緒呼叫。
-        /// </summary>
-        public void Update(IReadOnlyList<AniloxCamera> cameras)
+        /// <summary>單台相機的 telemetry 快照（純字串，無 MIL）。Capture 在背景產生、Apply 在 UI 套用。</summary>
+        public sealed class CamSnapshot
         {
-            if (_listView == null) return;
+            public int CamId;
+            public double Fps;                       // 供 caller 算 maxFps（不必再查 MIL）
+            public readonly string[] Cells = new string[16];  // [1..15] 對應 SubItems
+        }
 
-            if (_listView.InvokeRequired)
+        /// <summary>★ 背景執行緒呼叫：對每台相機做 MIL 查詢，產生純字串快照（**不碰 ListView**）。
+        /// 這些 MdigInquire/MsysInquire 約 ~100ms/tick，移到背景後就不再卡 UI 執行緒。</summary>
+        public List<CamSnapshot> Capture(IReadOnlyList<AniloxCamera> cameras)
+        {
+            var list = new List<CamSnapshot>();
+            if (cameras == null) return list;
+
+            foreach (var cam in cameras)
             {
-                // 關閉時序：listView Handle 已銷毀但背景 callback 仍呼叫 → 守 guard 防 InvalidOperationException
-                if (_listView.IsDisposed || !_listView.IsHandleCreated) return;
-                try { _listView.BeginInvoke(new Action(() => Update(cameras))); }
-                catch (InvalidOperationException) { /* ObjectDisposedException 亦繼承自此 */ }
-                return;
+                if (cam == null) continue;
+                var s = new CamSnapshot { CamId = cam.CameraId, Fps = cam.CurrentFps };
+                var c = s.Cells;
+                c[1]  = $"{s.Fps:F2}";
+                c[2]  = $"{cam.GetSelectedFrameRate():F2}";
+                double lineRate = cam.GetLineRateHz();   c[3]  = lineRate > 0 ? $"{lineRate:F1}" : "-";
+                double expUs    = cam.GetExposureUs();    c[4]  = expUs > 0 ? $"{expUs:F1}" : "-";
+                double measUs   = cam.GetMeasuredExposureUs(); c[5] = measUs > 0 ? $"{measUs:F1}" : "-";
+                c[6]  = $"{cam.GetFrameCount()}";
+                c[7]  = $"{cam.GetFrameMissed()}";
+                c[8]  = $"{cam.GetGrabFrameMissed()}";
+                c[9]  = $"{cam.FrameWidth}×{cam.FrameHeight}";
+                c[10] = cam.GetScanMode();
+                double fpgaTemp = cam.GetFpgaTemperature(); c[11] = double.IsNaN(fpgaTemp) ? "-" : $"{fpgaTemp:F1}";
+                double camTemp  = cam.GetCameraTemperature(); c[12] = double.IsNaN(camTemp) ? "-" : $"{camTemp:F1}";
+                long memFree = cam.GetMemoryFreeMB();      c[13] = memFree >= 0 ? $"{memFree}" : "-";
+                int lanes    = cam.GetPcieNumberOfLanes(); c[14] = lanes >= 0 ? $"{lanes}" : "-";
+                c[15] = cam.GetPcieSpeed();
+                list.Add(s);
             }
+            return list;
+        }
+
+        /// <summary>★ UI 執行緒呼叫：把背景產生的快照套進 ListView（純字串指派，**不碰 MIL**，極快）。</summary>
+        public void Apply(List<CamSnapshot> snapshots)
+        {
+            if (_listView == null || _listView.IsDisposed) return;
 
             foreach (ListViewItem item in _listView.Items)
             {
                 int camId = (int)item.Tag;
-                var cam   = FindCamera(cameras, camId);
+                CamSnapshot s = null;
+                if (snapshots != null)
+                    for (int i = 0; i < snapshots.Count; i++)
+                        if (snapshots[i].CamId == camId) { s = snapshots[i]; break; }
 
-                if (cam == null)
-                {
+                if (s == null)
                     for (int i = 1; i <= 15; i++) item.SubItems[i].Text = "-";
-                }
                 else
-                {
-                    item.SubItems[1].Text  = $"{cam.CurrentFps:F2}";
-                    item.SubItems[2].Text  = $"{cam.GetSelectedFrameRate():F2}";
-
-                    double lineRate = cam.GetLineRateHz();
-                    item.SubItems[3].Text  = lineRate > 0 ? $"{lineRate:F1}" : "-";
-
-                    double expUs = cam.GetExposureUs();
-                    item.SubItems[4].Text  = expUs > 0 ? $"{expUs:F1}" : "-";
-
-                    double measUs = cam.GetMeasuredExposureUs();
-                    item.SubItems[5].Text  = measUs > 0 ? $"{measUs:F1}" : "-";
-
-                    item.SubItems[6].Text  = $"{cam.GetFrameCount()}";
-                    item.SubItems[7].Text  = $"{cam.GetFrameMissed()}";
-                    item.SubItems[8].Text  = $"{cam.GetGrabFrameMissed()}";
-                    item.SubItems[9].Text  = $"{cam.FrameWidth}×{cam.FrameHeight}";
-                    item.SubItems[10].Text = cam.GetScanMode();
-
-                    double fpgaTemp = cam.GetFpgaTemperature();
-                    item.SubItems[11].Text = double.IsNaN(fpgaTemp) ? "-" : $"{fpgaTemp:F1}";
-
-                    double camTemp = cam.GetCameraTemperature();
-                    item.SubItems[12].Text = double.IsNaN(camTemp) ? "-" : $"{camTemp:F1}";
-
-                    long memFree = cam.GetMemoryFreeMB();
-                    item.SubItems[13].Text = memFree >= 0 ? $"{memFree}" : "-";
-
-                    int lanes = cam.GetPcieNumberOfLanes();
-                    item.SubItems[14].Text = lanes >= 0 ? $"{lanes}" : "-";
-
-                    item.SubItems[15].Text = cam.GetPcieSpeed();
-                }
+                    for (int i = 1; i <= 15; i++) item.SubItems[i].Text = s.Cells[i] ?? "-";
             }
         }
+
+        /// <summary>同步版（背景 Capture + 此執行緒 Apply）。注意：會在呼叫端執行緒做 MIL 查詢，UI 執行緒勿用。</summary>
+        public void Update(IReadOnlyList<AniloxCamera> cameras) => Apply(Capture(cameras));
 
         // ── 重置 ─────────────────────────────────────────────────────────
 

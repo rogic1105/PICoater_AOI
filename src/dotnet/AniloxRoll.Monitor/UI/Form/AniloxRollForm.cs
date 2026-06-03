@@ -199,9 +199,16 @@ namespace AniloxRoll.Monitor.Forms
             catch { }
             InitializeSystem();
             _scaler = new ProportionalScaler(this);
+            _scaler.FontScale = 1.0f;    // runtime 字體 = 設計大小（DPI 感知下原生清晰，不再縮放；使用者要求不變）
             _scaler.Initialize();
             Shown += (s, e) =>
             {
+                // 開窗即最大化後，補縮一次「作用中 tab」（tabPageLiveView 等）的內容：
+                // WinForms TabControl lazy-layout 讓作用中 tab 在 maximize 當下沒被 ScaleRecursive 套到
+                // （原本要切到別 tab 再切回才放大）。
+                _scaler?.RescaleActiveTabs();
+
+                // PropertyGrid 字體維持 DPI 原生大小（使用者要求 1.0，不另外收小）
                 AutoFitPropertyGridLabelColumn(propertyGridSettings);
                 // 選取第一個 category 的第一個屬性，PropertyGrid 會自動捲動到頂
                 // 層級：SelectedGridItem → parent(category) → parent.Parent(root) → [0](第一 category) → [0](第一屬性)
@@ -715,8 +722,10 @@ namespace AniloxRoll.Monitor.Forms
                 _remoteCopyService?.Dispose(); _remoteCopyService = null;
             };
 
-            // 程式啟動後自動分配相機（不 Grab），讓 lblCamCount 在按下【開始抓取】前就能顯示連線狀態
-            Shown += (s, e) => AutoAllocateCameras();
+            // 程式啟動後自動分配相機（不 Grab），讓 lblCamCount 在按下【開始抓取】前就能顯示連線狀態。
+            // 用 BeginInvoke 延後一個 UI 週期：讓最大化/layout/首幀 paint 先完成，再進 MIL 配置 + 啟動
+            // CLProtocol，使視窗先變可互動（Codex 建議；不背景化以免動到 panel handle/timer/status UI）。
+            Shown += (s, e) => BeginInvoke(new Action(AutoAllocateCameras));
 
             // commit 5b769f4 把 Live tab 加進 ProportionalScaler 後，camLiveMain 在 z-order 上層
             // 縮放時幾何疊到 chart 區、MIL window 吃掉 hit-test → chart click handler 完全不觸發。

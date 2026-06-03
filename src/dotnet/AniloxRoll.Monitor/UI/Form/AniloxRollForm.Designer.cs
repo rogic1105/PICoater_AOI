@@ -3266,6 +3266,7 @@
             this.Controls.Add(this.tabMain);
             this.Name = "AniloxRollForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
+            this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
             this.Text = "AniloxRoll Monitor";
             this.tabMain.ResumeLayout(false);
             this.tabPageLiveView.ResumeLayout(false);
