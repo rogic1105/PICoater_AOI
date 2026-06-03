@@ -122,8 +122,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
         }
 
-        /// <summary>同步版（背景 Capture + 此執行緒 Apply）。注意：會在呼叫端執行緒做 MIL 查詢，UI 執行緒勿用。</summary>
-        public void Update(IReadOnlyList<AniloxCamera> cameras) => Apply(Capture(cameras));
 
         // ── 重置 ─────────────────────────────────────────────────────────
 

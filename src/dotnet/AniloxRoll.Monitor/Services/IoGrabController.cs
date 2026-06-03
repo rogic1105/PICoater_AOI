@@ -289,7 +289,6 @@ namespace AniloxRoll.Monitor.Core.Services
 
         internal async Task PollTick()
         {
-            var __pollSw = System.Diagnostics.Stopwatch.StartNew();
             try
             {
                 // ReadDiStatuses 產生 Modbus 流量，同時餵 ET-7044 Host Watchdog
@@ -359,7 +358,6 @@ namespace AniloxRoll.Monitor.Core.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Trace.WriteLine($"[IO] PollTick 失敗於 {__pollSw.ElapsedMilliseconds}ms → CommLost（讀寫逾時設定={_plc.ReadWriteTimeoutMs}ms）");
                 IoLogger.Error("IO polling error → CommLost", ex);
                 SetState(IoState.CommLost);
                 _isPcAlive = false;

@@ -244,7 +244,7 @@ PICoater_AOI/
 | `Services/RemoteCopyService.cs` | 背景遠端複製：ConcurrentQueue + 背景執行緒，File.Copy 含重試（3 次） |
 | `Services/LightController.cs` | LTS-3DPA24 光源控制器 RS-232 通訊：AutoDetect（先試設定 COM 再掃描）、嚴格 probe（PDF §4.1.4 表-4 驗證：8-byte、cmd/ch echo、XOR checksum）、TurnOn/Off/SetBrightness，跟隨 IO Grab 開關 |
 | `UI/Widgets/GrabImageStitcher.cs` | 多張影像垂直拼接 + MergeHorizontal 全域合圖；LoadCameraImage（internal） |
-| `UI/Widgets/ProportionalScaler.cs` | Form 等比例縮放（重設 Bounds + 重建 Font，非點陣縮放）。`FontScale`（全域字體微調，現 1.0=設計大小）；DPI 感知（`app.manifest` dpiAware=true）+ `WindowState=Maximized` 下文字原生清晰 |
+| `UI/Widgets/ProportionalScaler.cs` | Form 等比例縮放（重設 Bounds + 重建 Font，非點陣縮放）。`RescaleActiveTabs`（開窗最大化後補縮作用中 tab，解 TabControl lazy-layout）。DPI 感知（`app.manifest` dpiAware=true）+ `WindowState=Maximized` 下文字原生清晰；字體 = 設計大小 |
 | `UI/Widgets/RoundedLabel.cs` | 圓角晶片 Label（`Label` 子類）：反鋸齒繪圓角底（BackColor 當填色）+ 文字交 `base.OnPaint` 原生繪製（清晰）；強制無 BorderStyle 方框。用於 IO 運作區（lblIoState + DI/DO 燈號）與方正連線燈視覺分組 |
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/UI/SmartCanvas.cs` | PictureBox 子類（`TanukiCv.Controls` 獨立 WinForms assembly）：zoom/pan/edge/ClampPan；自訂白底黑邊十字游標 |
 

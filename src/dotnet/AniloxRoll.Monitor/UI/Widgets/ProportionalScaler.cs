@@ -26,16 +26,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private bool _initialized;
         private bool _scaling;
 
-        /// <summary>全域字體縮放係數（DPI 感知後微調用；1=原樣，&lt;1=縮小）。
-        /// DPI 感知下點數字體會隨 DPI 放大、但固定像素版面不變 → 用此係數把字體收小以配合版面。</summary>
-        public float FontScale { get; set; } = 1f;
-
-        /// <summary>立即依目前 Form 尺寸重套一次（套用 FontScale，不必等使用者 resize）。</summary>
-        public void Reapply()
-        {
-            if (_initialized) OnFormResize(_form, EventArgs.Empty);
-        }
-
         /// <summary>重新縮放所有 TabControl「目前作用中」的 tab。
         /// 初始最大化時，作用中 tab（如 tabPageLiveView）的子控制項因 WinForms TabControl lazy-layout
         /// 沒被 ScaleRecursive 套到（要切到別 tab 再切回才放大）→ 開窗後主動補一次。</summary>
@@ -116,15 +106,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 // 記錄後立即移除 Anchor，由 Scaler 全權接管定位
                 c.Anchor = AnchorStyles.Left | AnchorStyles.Top;
 
-                // 在 Initialize 階段（視窗顯示前）就套用 FontScale，避免改到 Shown 才整批重建字體凍結 UI。
-                // FontRatio 已用原始字級記錄，後續 resize 公式（×FontScale）與此一致、不會疊乘。
-                if (Math.Abs(FontScale - 1f) > 0.001f)
-                {
-                    float fs = c.Font.Size * FontScale;
-                    if (fs >= 4f && fs <= 72f)
-                        try { c.Font = new Font(c.Font.FontFamily, fs, c.Font.Style); } catch { }
-                }
-
                 RecordRecursive(c);
             }
         }
@@ -179,8 +160,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 int h = Math.Max(1, (int)(rec.HRatio * ph));
                 c.SetBounds(x, y, w, h);
 
-                // 等比例字體（乘上全域 FontScale 微調）
-                float newFontSize = rec.FontRatio * formSize.Height * FontScale;
+                // 等比例字體
+                float newFontSize = rec.FontRatio * formSize.Height;
                 if (newFontSize >= 4f && newFontSize <= 72f &&
                     Math.Abs(newFontSize - c.Font.Size) > 0.5f)
                 {

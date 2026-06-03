@@ -199,7 +199,6 @@ namespace AniloxRoll.Monitor.Forms
             catch { }
             InitializeSystem();
             _scaler = new ProportionalScaler(this);
-            _scaler.FontScale = 1.0f;    // runtime 字體 = 設計大小（DPI 感知下原生清晰，不再縮放；使用者要求不變）
             _scaler.Initialize();
             Shown += (s, e) =>
             {
