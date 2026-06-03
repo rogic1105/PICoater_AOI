@@ -244,7 +244,8 @@ PICoater_AOI/
 | `Services/RemoteCopyService.cs` | 背景遠端複製：ConcurrentQueue + 背景執行緒，File.Copy 含重試（3 次） |
 | `Services/LightController.cs` | LTS-3DPA24 光源控制器 RS-232 通訊：AutoDetect（先試設定 COM 再掃描）、嚴格 probe（PDF §4.1.4 表-4 驗證：8-byte、cmd/ch echo、XOR checksum）、TurnOn/Off/SetBrightness，跟隨 IO Grab 開關 |
 | `UI/Widgets/GrabImageStitcher.cs` | 多張影像垂直拼接 + MergeHorizontal 全域合圖；LoadCameraImage（internal） |
-| `UI/Widgets/ProportionalScaler.cs` | Form 等比例縮放 |
+| `UI/Widgets/ProportionalScaler.cs` | Form 等比例縮放（重設 Bounds + 重建 Font，非點陣縮放） |
+| `UI/Widgets/RoundedLabel.cs` | 圓角晶片 Label（`Label` 子類）：反鋸齒繪圓角底（BackColor 當填色）+ 文字交 `base.OnPaint` 原生繪製（清晰）；強制無 BorderStyle 方框。用於 IO 運作區（lblIoState + DI/DO 燈號）與方正連線燈視覺分組 |
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/UI/SmartCanvas.cs` | PictureBox 子類（`TanukiCv.Controls` 獨立 WinForms assembly）：zoom/pan/edge/ClampPan；自訂白底黑邊十字游標 |
 
 > 路徑前綴 `src/dotnet/AniloxRoll.Monitor/` 省略以節省空間。
@@ -455,7 +456,7 @@ PICoater_AOI/
 | 硬體參數列表 | `listViewHardware` | ListView | — |
 | 座標狀態列 | `lblPixelInfo` | Label | 位置:... |
 | 相機數狀態 | `lblCamCount` | Label | 相機: N/7 |
-| IO 狀態 | `lblIoState` | Label | ● 狀態: -- |
+| IO 狀態 | `lblIoState` | RoundedLabel | -- → 待機/取像/停止/故障/斷線/關閉/未連線（FSM 運作狀態，非連線燈；已移入 `panelIo` IO 運作區當開頭，與 DIO 燈號同組，皆圓角晶片） |
 | IO 連線狀態 | `lblIoConn` | Label | ● IO: -- |
 | 光源連線狀態 | `lblLightConn` | Label | ● 光源: -- |
 | 儲存電腦連線狀態 | `lblStorageConn` | Label | ● 儲存電腦: -- |

@@ -179,6 +179,9 @@
     <Compile Include="UI\Presenters\LiveTelemetryPresenter.cs" />
     <Compile Include="UI\Widgets\CanvasInteractionHelper.cs" />
     <Compile Include="UI\Widgets\EventGuard.cs" />
+    <Compile Include="UI\Widgets\RoundedLabel.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="UI\Widgets\FormInteractionHelper.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.cs" />
     <Compile Include="UI\Widgets\ColumnCurveChartHelper.cs" />
@@ -293,9 +296,6 @@
     <BridgeToolProject Include="..\..\..\sdk\Bridges\StorageBridge\samples\StorageControl\StorageBridge.Control.csproj" />
   </ItemGroup>
   <Target Name="BuildBridgeTools" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
-    <MSBuild Projects="@(BridgeToolProject)"
-             Targets="Build"
-             Properties="Configuration=Release;Platform=x64;BuildingInsideVisualStudio=false"
-             BuildInParallel="false" />
+    <MSBuild Projects="@(BridgeToolProject)" Targets="Build" Properties="Configuration=Release;Platform=x64;BuildingInsideVisualStudio=false" BuildInParallel="false" />
   </Target>
 </Project>

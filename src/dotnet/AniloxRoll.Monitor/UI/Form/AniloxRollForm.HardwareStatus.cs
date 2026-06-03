@@ -180,15 +180,15 @@ namespace AniloxRoll.Monitor.Forms
             Color bgColor;
             switch (state)
             {
-                case IoState.Idle:      text = "Idle 待機"; bgColor = IecGreen;  break;
-                case IoState.Running:   text = "取像中";   bgColor = IecBlue;   break;
-                case IoState.Stopping:  text = "停止中";   bgColor = IecYellow; break;
-                case IoState.Faulted:   text = "設備離線"; bgColor = IecRed;    break;
-                case IoState.CommLost:  text = "通訊中斷"; bgColor = IecRed;    break;
-                case IoState.Closed:    text = "已關閉";   bgColor = IecGray;   break;
-                default:                text = "未連線";   bgColor = IecGray;   break;  // Disconnected
+                case IoState.Idle:      text = "待機";   bgColor = IecGreen;  break;
+                case IoState.Running:   text = "取像";   bgColor = IecBlue;   break;
+                case IoState.Stopping:  text = "停止";   bgColor = IecYellow; break;
+                case IoState.Faulted:   text = "故障";   bgColor = IecRed;    break;
+                case IoState.CommLost:  text = "斷線";   bgColor = IecRed;    break;
+                case IoState.Closed:    text = "關閉";   bgColor = IecGray;   break;
+                default:                text = "未連線"; bgColor = IecGray;   break;  // Disconnected
             }
-            lblIoState.Text = $"〔{text}〕";
+            lblIoState.Text = text;
             lblIoState.BackColor = bgColor;
         }
 
@@ -628,7 +628,7 @@ namespace AniloxRoll.Monitor.Forms
                 btnLiveGrab.BackColor = SystemColors.Control;
                 btnLiveGrab.ForeColor = SystemColors.ControlText;
                 // 暫停 = 等同 IO 離線：重置狀態燈和所有 IO 燈號
-                lblIoState.Text = "〔已關閉〕";
+                lblIoState.Text = "關閉";
                 lblIoState.BackColor = IecGray;
                 SetIoLed(lblIoDiAlive,   false);
                 SetIoLed(lblIoDiStart,   false);
