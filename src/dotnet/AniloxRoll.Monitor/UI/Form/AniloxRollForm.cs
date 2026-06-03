@@ -251,6 +251,10 @@ namespace AniloxRoll.Monitor.Forms
             SetupDataTab();
             ApplyStorageModeUi();
 
+            // 硬體狀態列啟動先顯示「初始化中」（灰）；各硬體連線/偵測完成後由各自 Update*Label 接手。
+            if (_appMode?.Role != MachineRole.Storage)
+                ShowHardwareStatusInitializing();
+
             // DCF 缺失警語：UI 已建立，立即顯示
             if (_dcfMissing && _appMode?.Role != MachineRole.Storage)
                 UpdateCamCountLabel(0, CameraCount);
@@ -364,8 +368,10 @@ namespace AniloxRoll.Monitor.Forms
                 _remoteCopyService = new RemoteCopyService(
                     getRemotePath: () => _settings?.RemotePath ?? string.Empty,
                     getLocalRoot:  () => _settings?.CaptureRootPath ?? string.Empty);
-                InitIoController();
+                // 初始化順序對齊狀態列由左至右（相機→儲存→光源→IO）：光源先於 IO，
+                // IO（快速 TCP）最後啟動，避免它最先亮綠讓人誤以為系統已就緒。
                 InitLightController();
+                InitIoController();
             }
 
             // 啟動時執行一次清理（雙模式共用）
@@ -382,6 +388,13 @@ namespace AniloxRoll.Monitor.Forms
             {
                 lblCamCount.Text = "⚠ DCF 缺失";
                 lblCamCount.BackColor = IecRed;
+                return;
+            }
+            // 相機已分配但 CLProtocol 尚未就緒（曝光/線掃未套）→ 顯示「初始化中」而非誤導的暫態連線數。
+            if (_liveCameraManager != null && _liveCameraManager.IsAllocated && !_liveCameraManager.AreCamerasHwReady)
+            {
+                lblCamCount.Text = "相機: 初始化中…";
+                lblCamCount.BackColor = IecGray;
                 return;
             }
             lblCamCount.Text = $"相機: {connected}/{expected}";
@@ -647,6 +660,16 @@ namespace AniloxRoll.Monitor.Forms
                 if (InvokeRequired) { if (!IsHandleCreated || IsDisposed || Disposing) return; BeginInvoke(new Action<int, int>(UpdateCamCountLabel), connected, expected); return; }
                 UpdateCamCountLabel(connected, expected);
             };
+            // CLProtocol 就緒前「開始抓取」維持灰色 + 相機數顯示「初始化中」，避免 grab 期間才啟用
+            // CLProtocol+重套線掃掉幀，也避免使用者在初始化中誤操作。
+            btnLiveGrab.Enabled = false;
+            btnLiveGrab.Text = "初始化中…";
+            if (lblCamCount != null) { lblCamCount.Text = "相機: 初始化中…"; lblCamCount.BackColor = IecGray; }
+            _liveCameraManager.OnHwReady += () =>
+            {
+                if (InvokeRequired) { if (!IsHandleCreated || IsDisposed || Disposing) return; BeginInvoke(new Action(OnCamerasHwReady)); return; }
+                OnCamerasHwReady();
+            };
 
             var panelClicker = new MultiClickDetector();
             camLiveMain.MouseDown += (s, e) =>
@@ -722,14 +745,61 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _liveCameraManager.AllocateCameras(_settings.EnableMuraEnhance);
                 LoadBackgroundBins();
-                if (_settings.StitchMode == StitchMode.Global)
-                    _liveCameraManager.EnableGlobalMerge(
-                        _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
+                // 全域合圖（MIL 大 buffer alloc）延後到 CLProtocol 就緒後（OnCamerasHwReady）才建立：
+                // 否則在 Shown 的 UI 執行緒上 alloc 會與剛啟動的背景 CLProtocol enable 搶 MIL 內部鎖，
+                // UI 執行緒卡住直到 CLProtocol 釋放（~數秒）→ 視窗整段拖不動。
             }
             catch (Exception ex)
             {
                 Trace.WriteLine($"[AutoAllocateCameras] {ex.GetType().Name}: {ex.Message}");
             }
+        }
+
+        /// <summary>所有相機 CLProtocol 就緒（曝光/線掃已套）→ 更新相機數 + 解鎖「開始抓取」。</summary>
+        private void OnCamerasHwReady()
+        {
+            if (IsDisposed || Disposing || _liveCameraManager == null) return;
+            // CLProtocol 已就緒、背景不再佔 MIL 鎖 → 此時才建立全域合圖（從 AutoAllocateCameras 延後至此）。
+            if (_settings.StitchMode == StitchMode.Global && !_liveCameraManager.IsGlobalMergeActive)
+                _liveCameraManager.EnableGlobalMerge(
+                    _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
+            UpdateCamCountLabel(_liveCameraManager.ConnectedCameraCount, CameraCount);
+            RefreshGrabButtonState();
+        }
+
+        /// <summary>btnLiveGrab 狀態唯一來源：依「相機就緒 / IO 連線 / 是否抓取中」決定顯示。
+        /// 由 <see cref="OnCamerasHwReady"/> 與 <see cref="UpdateIoConnectionUi"/> 共同呼叫。
+        /// 關鍵：相機就緒前一律「初始化中」，即使 IO 先連線也不顯示「IO 控制中」，
+        /// 避免使用者誤以為系統已可操作（IO 是 TCP，通常比相機 CLProtocol 早就緒）。</summary>
+        private void RefreshGrabButtonState()
+        {
+            if (IsDisposed || Disposing || btnLiveGrab == null) return;
+
+            bool camReady      = _liveCameraManager?.AreCamerasHwReady ?? false;
+            bool ioControlling = _ioGrabController != null && _ioGrabController.IsConnected && !_isIoSuspended;
+
+            if (!camReady)
+            {
+                // 相機尚未就緒：一律「初始化中」（IO 即使已連線也不接管按鈕）
+                btnLiveGrab.Enabled  = false;
+                btnLiveGrab.Text     = "初始化中…";
+                btnLiveGrab.BackColor = SystemColors.Control;
+                btnLiveGrab.ForeColor = SystemColors.ControlText;
+                return;
+            }
+            if (ioControlling)
+            {
+                btnLiveGrab.Enabled  = false;
+                btnLiveGrab.Text     = "IO 控制中";
+                btnLiveGrab.BackColor = IecBlue;
+                btnLiveGrab.ForeColor = Color.White;
+                return;
+            }
+            // 相機就緒、IO 未控制 → 可手動操作
+            btnLiveGrab.Enabled  = true;
+            btnLiveGrab.BackColor = SystemColors.Control;
+            btnLiveGrab.ForeColor = SystemColors.ControlText;
+            UpdateGrabButton(_liveCameraManager?.IsLiveGrabbing ?? false);
         }
 
 

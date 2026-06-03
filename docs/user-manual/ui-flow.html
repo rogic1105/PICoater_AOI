@@ -260,8 +260,8 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <summary>CLProtocol 背景初始化（曝光 Race 說明）</summary>
 <div class="vflow">
 <div class="out-seq">
-<div class="box action">MdigProcess(M_START) → StartCLProtocolAsync()（背景 Task）</div>
-<div class="box guard">_clProtocolInitStarted=true, _clProtocolInitDone=false → IsHwParamsStable=false → SyncCameraParamsFromHardware 跳過此相機</div>
+<div class="box action">相機分配後（grab 前）：AllocateCameras 迴圈後 if(CheckPresence) BeginCLProtocolInit()（背景 Task，只對在線相機）</div>
+<div class="box guard">_clProtocolInitStarted=true, _clProtocolInitDone=false → IsHwParamsStable=false → AreCamerasHwReady=false → 「開始抓取」維持灰「初始化中」、status timer 不輪詢 MIL、全域合圖延後</div>
 </div>
 <div class="v-arrow" data-label="成功路徑"></div>
 <div class="out-seq">

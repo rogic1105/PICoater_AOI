@@ -45,6 +45,14 @@ namespace AniloxRoll.Monitor.Forms
 
             bool wasGrabbing = _liveCameraManager.IsLiveGrabbing;
 
+            // CLProtocol 尚未就緒不可開始抓取（grab 進行中才 enable + 重套線掃會掉幀，cam1 最明顯）。
+            // 手動鈕在就緒前已是灰色；此處主要擋 IO 觸發路徑（IoStartGrab 直接呼叫本方法繞過按鈕狀態）。
+            if (!wasGrabbing && _liveCameraManager.IsAllocated && !_liveCameraManager.AreCamerasHwReady)
+            {
+                Trace.WriteLine("[Grab] CLProtocol 尚未就緒，忽略開始抓取請求。");
+                return;
+            }
+
             // 啟動路徑：先亮燈 → 等光源穩定 → 再開始 grab
             if (!wasGrabbing)
             {

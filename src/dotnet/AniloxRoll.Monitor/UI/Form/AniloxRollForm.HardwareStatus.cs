@@ -54,25 +54,42 @@ namespace AniloxRoll.Monitor.Forms
         private void InitLightController()
         {
             if (!_settings.LightEnabled) return;
-            _lightController = new LightController();
 
-            // 先試檢測設定的 COM，失敗則掃描所有 port
-            string found = _lightController.AutoDetect(_settings.LightComPort, _settings.LightChannel);
-            if (found == null)
+            // AutoDetect 會先試設定 COM，失敗則掃描全部 port —— 這是阻塞數秒的序列埠 IO。
+            // 過去直接跑在 UI 執行緒（InitServiceLayer）→ 啟動期間整個視窗拖不動（光源是真正瓶頸，不是相機）。
+            // 改為背景偵測，完成後 marshal 回 UI 接管 _lightController + 更新 COM 設定 + 刷狀態燈。
+            string preferredPort = _settings.LightComPort;
+            int channel = _settings.LightChannel;
+            var controller = new LightController();
+            Task.Run(() =>
             {
-                System.Diagnostics.Trace.WriteLine("[Light] 光源控制器: NA（設定 " + _settings.LightComPort + " + 全 port 掃描均無回應）");
-                _lightController.Dispose();
-                _lightController = null;
-                return;
-            }
-
-            // 掃描找到但非原設定 → 更新記錄的 COM（下次啟動直接命中）。
-            // 用 SetBatch（save only no event）避免遞迴：Hub.Set 會 raise event → HandleLightSettingsChanged 重 Init → 又呼此 AutoDetect。
-            if (!string.Equals(found, _settings.LightComPort, StringComparison.OrdinalIgnoreCase))
-            {
-                _settingsHub.SetBatch(s => s.LightComPort = found);
-                RefreshGridItem(nameof(InspectionSettings.LightComPort));
-            }
+                string found = controller.AutoDetect(preferredPort, channel);
+                SafeBeginInvoke(() =>
+                {
+                    if (_settings == null || !_settings.LightEnabled || IsDisposed || Disposing)
+                    {
+                        controller.Dispose();
+                        return;
+                    }
+                    if (found == null)
+                    {
+                        System.Diagnostics.Trace.WriteLine("[Light] 光源控制器: NA（設定 " + preferredPort + " + 全 port 掃描均無回應）");
+                        controller.Dispose();
+                        _lightController = null;
+                        UpdateLightConnLabel();
+                        return;
+                    }
+                    _lightController?.Dispose();
+                    _lightController = controller;
+                    // 掃描找到但非原設定 → 更新記錄的 COM（下次啟動直接命中）。SetBatch（save only no event）避免遞迴。
+                    if (!string.Equals(found, preferredPort, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _settingsHub.SetBatch(s => s.LightComPort = found);
+                        RefreshGridItem(nameof(InspectionSettings.LightComPort));
+                    }
+                    UpdateLightConnLabel();
+                });
+            });
         }
 
         private void IoStartGrab()
@@ -169,27 +186,34 @@ namespace AniloxRoll.Monitor.Forms
             lblIoState.BackColor = bgColor;
         }
 
+        /// <summary>啟動時硬體狀態列先顯示「初始化中」（灰）—— 各硬體連線/偵測完成後由各自 Update*Label 接手。
+        /// 只對「已啟用/已設定」的硬體顯示，避免停用項目卡在「初始化中」。</summary>
+        private void ShowHardwareStatusInitializing()
+        {
+            if (_settings == null) return;
+            if (_settings.IoEnabled)
+            {
+                lblIoConn.Text = "● IO: 初始化中…";  lblIoConn.BackColor = IecGray;
+            }
+            if (_settings.LightEnabled)
+            {
+                lblLightConn.Text = "● 光源: 初始化中…";  lblLightConn.BackColor = IecGray;
+            }
+            if (!string.IsNullOrWhiteSpace(_settings.RemotePath))
+            {
+                lblStorageConn.Text = "● 儲存電腦: 初始化中…";  lblStorageConn.BackColor = IecGray;
+            }
+        }
+
         private void UpdateIoConnectionUi(bool connected)
         {
             if (_isIoSuspended) return;
-            if (connected)
-            {
-                lblIoConn.Text = "● IO 已連線";
-                lblIoConn.BackColor = IecGreen;
-                btnLiveGrab.Enabled = false;
-                btnLiveGrab.Text = "IO 控制中";
-                btnLiveGrab.BackColor = IecBlue;
-                btnLiveGrab.ForeColor = Color.White;
-            }
-            else
-            {
-                lblIoConn.Text = "● IO 離線";
-                lblIoConn.BackColor = IecGray;
-                btnLiveGrab.Enabled = true;
-                UpdateGrabButton(_liveCameraManager?.IsLiveGrabbing ?? false);
-                btnLiveGrab.BackColor = SystemColors.Control;
-                btnLiveGrab.ForeColor = SystemColors.ControlText;
-            }
+            // IO 連線標籤照實顯示（IO 確實先連上是事實）；但「按鈕是否變 IO 控制中」交給
+            // RefreshGrabButtonState 統一決定 —— 相機未就緒前按鈕維持「初始化中」，不被 IO 搶顯示，
+            // 避免使用者誤以為系統已可操作。
+            lblIoConn.Text = connected ? "● IO 已連線" : "● IO 離線";
+            lblIoConn.BackColor = connected ? IecGreen : IecGray;
+            RefreshGrabButtonState();
         }
 
         private void UpdateLightConnLabel()

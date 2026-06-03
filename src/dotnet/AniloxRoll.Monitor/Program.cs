@@ -28,10 +28,36 @@ namespace AniloxRoll.Monitor
                 return null;
             };
 
+            // 全域例外攔截：背景執行緒未處理例外（如 startup 期間 CLProtocol/光源/儲存背景回 UI 的
+            // BeginInvoke/Invoke 在 Handle 未建立時拋 InvalidOperationException）會直接終止 process（exit 0xffffffff）。
+            // 這裡統一攔截並寫完整 stack 到 crash log，UI 執行緒例外改為記錄後續跑（不硬崩）。
+            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+            Application.ThreadException += (_, e) => LogFatal("ThreadException(UI)", e.Exception);
+            AppDomain.CurrentDomain.UnhandledException += (_, e) => LogFatal("UnhandledException(BG)", e.ExceptionObject as Exception);
+            System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, e) =>
+            {
+                LogFatal("UnobservedTaskException", e.Exception);
+                e.SetObserved();
+            };
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             TryDeleteCorruptedUserConfig();
             Application.Run(new AniloxRollForm());
+        }
+
+        /// <summary>把致命例外的完整 stack 寫到 %TEMP% 與 exe 目錄的 crash log，並輸出到 Trace（VS 輸出視窗可見）。</summary>
+        private static void LogFatal(string source, Exception ex)
+        {
+            string msg = $"[FATAL][{source}] {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}\r\n" +
+                         (ex?.ToString() ?? "(null exception object)") + "\r\n" +
+                         new string('-', 80) + "\r\n";
+            System.Diagnostics.Trace.WriteLine(msg);
+            foreach (var dir in new[] { Path.GetTempPath(), AppDomain.CurrentDomain.BaseDirectory })
+            {
+                try { File.AppendAllText(Path.Combine(dir, "AniloxRoll-crash.log"), msg); }
+                catch { /* log 失敗不可再丟例外 */ }
+            }
         }
 
         /// <summary>

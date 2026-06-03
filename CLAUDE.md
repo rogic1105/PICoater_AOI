@@ -193,7 +193,8 @@ PICoater_AOI/
 | `UI/Form/AniloxRollForm.Data.cs` | 檢測數據 Tab（`SetupDataTab`/grabId 選擇） |
 | `UI/Form/AniloxRollForm.Telemetry.cs` | Telemetry/資源監控 timer（`TelemetryTimer_Tick`/`UpdateResourceMonitor`）。注意：timer new+Start 仍在 SettingsTabs.SetupSystemTab（未來可收回此檔，需測時序） |
 | `UI/Form/AniloxRollForm.Helpers.cs` | PG refresh（`RefreshGridItem`）/Review 座標（`ViewRangeProvider`）/通用（`FindCameraById`/`IsCanvasFitToScreen`） |
-| `UI/Form/AniloxRollForm.Designer.cs` | Form 控制項佈局（VS Designer） |
+| `UI/Form/AniloxRollForm.Designer.cs` | Form 控制項佈局（VS Designer）。狀態列順序：相機→儲存→光源→IO連線→IO狀態→DIO |
+| `Program.cs` | 進入點 + **全域例外攔截**（`ThreadException`/`AppDomain.UnhandledException`/`UnobservedTaskException` → 寫 `AniloxRoll-crash.log` 到 bin 與 %TEMP%；背景執行緒未處理例外不再直接 0xffffffff 終止）+ 損毀 user.config 自刪 |
 | `UI/Widgets/FormInteractionHelper.cs` | UI 互動、gallery 選擇、計時；ReviewConfig 代理 |
 | `UI/Widgets/CanvasInteractionHelper.cs` | Canvas zoom/pan 事件、mm 座標換算；ReviewConfig → GetEffectiveOps/Pos |
 | `UI/Widgets/EventGuard.cs` | 可重入 bool 旗標（EventGuard + EventGuardScope），using 語法自動還原 |

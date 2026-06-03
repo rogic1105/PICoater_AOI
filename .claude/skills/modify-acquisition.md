@@ -30,14 +30,17 @@ MdigAlloc → MdigControl(M_SOURCE_SIZE_Y) → MdispAlloc × 2 → MdigInquire(S
 - `M_SOURCE_SIZE_Y` 必須在 `MdigInquire` 之前（否則 buffer 大小錯誤）
 - CLProtocol **不在此處啟動**
 
-## CLProtocol 延遲啟動（重要）
+## CLProtocol 啟用（重要）— 分配後、grab 前，只對在線相機
 
-- `StartCLProtocolAsync()` 在第一次 `MdigProcess(M_START)` 之後才呼叫
-- 耗時 2-5 秒，若在 Initialize 期間啟動會與 MbufAlloc/MdispAlloc 競爭 MIL 內部鎖
+- `BeginCLProtocolInit()`（public，原 `StartCLProtocolAsync`）在**相機分配完成後、第一次 grab 之前**背景啟用（不在 grab 期間 enable + 重套線掃 → 否則首抓掉幀，cam1 最明顯）。
+- 觸發點：`LiveCameraManager.AllocateCameras` 迴圈後 `foreach cam: if (cam.CheckPresence()) cam.BeginCLProtocolInit();`
+  —— **只對在線相機**。對斷線相機 enable 會卡住 MIL 內部鎖（全 0/7 時 7 台全卡 → 逾時翻 true 後 timer 輪詢搶鎖 → UI 凍死）。斷線相機 `_clProtocolInitStarted=false` → `IsHwParamsStable=true`（不擋就緒判定），之後連上走 legacy 參數路徑。
+- 耗時 2-5 秒/台；完成前 `IsHwParamsStable=false`。上層就緒判定：`LiveCameraManager.AreCamerasHwReady`（全相機 `IsHwParamsStable`）+ 一次性 `OnHwReady` 事件 → 解鎖「開始抓取」鈕、建立全域合圖。
+- **就緒前 UI 不可碰 MIL**：`CameraStatusTimer_Tick` 在 `!AreCamerasHwReady` 時跳過 `CheckPresence` 輪詢；全域合圖 `EnableGlobalMerge` 延後到 `OnCamerasHwReady`（都避免與背景 CLProtocol 搶 MIL 鎖造成凍結）。
 - **Quad 卡 DevNum>=2 必須明確列舉 Device ID**，`"M_DEFAULT"` 無效
-- `_clProtocolInitLock`（static）序列化同卡多 digitizer
-- `_clProtocolInitStarted`（volatile bool）防重複觸發
-- 逾時保護：`Task.WhenAny(initTask, Task.Delay(10s))`，不取消（MIL 不支援安全取消）
+- `_clProtocolInitLock`（static）序列化同卡多 digitizer；`_clProtocolInitStarted`（volatile）防重複；`IsHwParamsStable => !_clProtocolInitStarted || _clProtocolInitDone`
+- 逾時保護：`Task.WhenAny(initTask, Task.Delay(10s))`，不取消（MIL 不支援安全取消）—— 只設 `_clProtocolInitDone` 旗標，故**斷線相機不可啟動**（MIL 呼叫實際仍會卡，逾時無法中止）
+- **光源 `InitLightController` 的 `AutoDetect`（掃 COM 阻塞數秒）必須背景 `Task.Run`**（不可在 UI 執行緒）；四硬體（相機/IO/光源/儲存）為**平行**初始化，非依序
 
 ## 曝光/線掃設定
 

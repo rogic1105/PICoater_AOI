@@ -305,6 +305,9 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         public void ApplyGrabState() => _mil.ApplyGrabState();
 
+        /// <summary>分配後預先啟用 CLProtocol（背景）；grab 前完成，避免 grab 期間重套線掃掉幀。</summary>
+        public void BeginCLProtocolInit() => _mil.BeginCLProtocolInit();
+
         public bool CheckPresence() => _mil.CheckPresence();
 
         // ==================== MIL FrameReady 回呼（非 MIL 檢測/合圖/存檔） ====================

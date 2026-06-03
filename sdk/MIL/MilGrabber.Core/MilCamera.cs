@@ -161,7 +161,9 @@ namespace MilGrabber.Core
             ApplyGrabState();
         }
 
-        /// <summary>依 _userWantsGrab 與 IsLive 決定啟動/停止 MdigProcess；首次啟動後背景啟用 CLProtocol。</summary>
+        /// <summary>依 _userWantsGrab 與 IsLive 決定啟動/停止 MdigProcess。
+        /// CLProtocol 不在此啟動 —— 改由分配相機後 <see cref="BeginCLProtocolInit"/> 預先在背景啟用，
+        /// 避免第一次 grab 進行中才 enable + 重套線掃造成掉幀（cam1 最明顯）。</summary>
         public void ApplyGrabState()
         {
             if (_isReleased || _milDigitizer == MIL.M_NULL) return;
@@ -171,7 +173,6 @@ namespace MilGrabber.Core
                 MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize,
                     MIL.M_START, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
                 IsLive = true;
-                StartCLProtocolAsync();
             }
             else if (!_userWantsGrab && IsLive)
             {
@@ -299,7 +300,10 @@ namespace MilGrabber.Core
 
         // ==================== CLProtocol ====================
 
-        private void StartCLProtocolAsync()
+        /// <summary>背景啟用 CLProtocol（2-5s）+ 套用曝光/線掃。應在「相機分配完成後、第一次 grab 之前」呼叫
+        /// （不與 MbufAlloc/MdispAlloc 競爭 MIL 內部鎖，也不在 grab 期間執行）。idempotent（_clProtocolInitStarted 守門）。
+        /// 完成（或逾時/失敗）前 <see cref="IsHwParamsStable"/>=false，供上層把「開始抓取」鈕維持灰色。</summary>
+        public void BeginCLProtocolInit()
         {
             if (_clProtocolInitStarted) return;
             _clProtocolInitStarted = true;

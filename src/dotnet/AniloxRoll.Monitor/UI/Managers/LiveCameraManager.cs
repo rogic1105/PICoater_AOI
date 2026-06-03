@@ -55,6 +55,23 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// <summary>連線數變更時通知 UI。參數：(connected, expected)。</summary>
         public event Action<int, int> OnCameraCountChanged;
 
+        /// <summary>所有相機 CLProtocol 初始化完成（曝光/線掃已套，可安全 grab）時一次性觸發，供 UI 解鎖
+        /// 「開始抓取」鈕。CLProtocol 逾時/失敗也算完成（fallback legacy 參數），故按鈕不會永久卡死。</summary>
+        public event Action OnHwReady;
+        private bool _hwReadyRaised;
+
+        /// <summary>所有相機 CLProtocol 是否就緒（已套曝光/線掃）。未就緒時上層應禁用「開始抓取」。</summary>
+        public bool AreCamerasHwReady
+        {
+            get
+            {
+                if (!IsAllocated || _cameras.Count == 0) return false;
+                foreach (var cam in _cameras)
+                    if (!cam.IsHwParamsStable) return false;
+                return true;
+            }
+        }
+
         /// <summary>每台相機存檔並完成 inspection 後觸發。
         /// 參數：(cameraId, fileNameWithoutExt, meanPeak_0to1, maxPeak_0to1)</summary>
         public event Action<int, string, float, float> OnInspectionResult;
@@ -241,6 +258,19 @@ namespace AniloxRoll.Monitor.UI.Managers
                 _cameras.Add(cam);
             }
 
+            // CLProtocol 啟用移到「所有相機 buffer 分配完成後」的背景階段：不與 MbufAlloc/MdispAlloc 競爭
+            // MIL 內部鎖，也不在 grab 期間 enable + 重套線掃（會掉幀，cam1 最明顯）。利用「分配 → 使用者點抓取」
+            // 空檔跑完 2-5s/台；完成前 AreCamerasHwReady=false，上層把「開始抓取」鈕維持灰色。
+            // 只對「在線」相機啟用 CLProtocol：對斷線相機 enable 會卡住 MIL 內部鎖（全斷線時 7 台全卡 →
+            // 10s 逾時旗標翻 true 後 timer 恢復、CheckPresence 跟還卡著的背景 MIL 搶鎖 → 整個 UI 凍死）。
+            // 斷線相機 _clProtocolInitStarted=false → IsHwParamsStable=true（不擋 AreCamerasHwReady）；
+            // 若之後才連上，走 legacy 參數路徑（與導入 CLProtocol 前行為相同）。順帶：正常 2/7 時 init
+            // 不再空等 5 台死相機逾時 → 從 ~10s 縮到 ~2-4s。
+            _hwReadyRaised = false;
+            foreach (var cam in _cameras)
+                if (cam.CheckPresence())
+                    cam.BeginCLProtocolInit();
+
             IsAllocated = true;
             _cameraStatusTimer.Start();
             UpdateCameraStatus("已配置", Color.White);
@@ -291,6 +321,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             IsReleasing = true;
             _cameraStatusTimer.Stop();
             IsLiveGrabbing = false;
+            _hwReadyRaised = false;
 
             // 先停止 global merge（必須在 cam.Free 之前）：DisableGlobalMerge 會先清各相機 merge target
             // 再由工頭 MbufFree 合併 buffer，避免 grab hook 把幀複製進已釋放的 buffer。
@@ -899,6 +930,12 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (IsReleasing) return;
 
+            // CLProtocol 背景初始化期間（分配後 ~2-10s）：UI 執行緒不可呼叫 CheckPresence（MdigInquire），
+            // 否則與背景 CLProtocol enable（MdigControl）搶 MIL 內部鎖 → UI 執行緒卡在 tick 裡 →
+            // 整個視窗凍結（拖不動）+ 顯示誤導的暫態連線數。就緒前完全跳過輪詢，UI 維持「初始化中」。
+            // AreCamerasHwReady 只讀 _clProtocolInitDone 旗標（非 MIL 呼叫），不造成競爭。
+            if (!AreCamerasHwReady) return;
+
             // 先拍快照：防止 ReleaseAsync 在 background thread 執行 _cameras.Clear() 時，
             // foreach 拋出 InvalidOperationException 或存取已釋放的相機物件。
             AniloxCamera[] snapshot;
@@ -933,6 +970,13 @@ namespace AniloxRoll.Monitor.UI.Managers
             {
                 ConnectedCameraCount = connected;
                 OnCameraCountChanged?.Invoke(connected, ExpectedCameraCount);
+            }
+
+            // CLProtocol 全就緒 → 一次性通知 UI 解鎖「開始抓取」鈕
+            if (!_hwReadyRaised && AreCamerasHwReady)
+            {
+                _hwReadyRaised = true;
+                OnHwReady?.Invoke();
             }
         }
 

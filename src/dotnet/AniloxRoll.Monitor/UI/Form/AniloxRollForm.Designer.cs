@@ -3077,10 +3077,10 @@
             this.panelStatusBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 14F));
             this.panelStatusBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 30F));
             this.panelStatusBar.Controls.Add(this.lblCamCount, 0, 0);
-            this.panelStatusBar.Controls.Add(this.lblIoState, 1, 0);
-            this.panelStatusBar.Controls.Add(this.lblIoConn, 2, 0);
-            this.panelStatusBar.Controls.Add(this.lblLightConn, 3, 0);
-            this.panelStatusBar.Controls.Add(this.lblStorageConn, 4, 0);
+            this.panelStatusBar.Controls.Add(this.lblStorageConn, 1, 0);
+            this.panelStatusBar.Controls.Add(this.lblLightConn, 2, 0);
+            this.panelStatusBar.Controls.Add(this.lblIoConn, 3, 0);
+            this.panelStatusBar.Controls.Add(this.lblIoState, 4, 0);
             this.panelStatusBar.Controls.Add(this.panelIo, 5, 0);
             this.panelStatusBar.Dock = System.Windows.Forms.DockStyle.Top;
             this.panelStatusBar.Location = new System.Drawing.Point(0, 0);
