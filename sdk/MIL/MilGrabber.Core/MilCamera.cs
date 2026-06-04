@@ -35,6 +35,10 @@ namespace MilGrabber.Core
         /// <summary>hook 中暫存的最近一幀原圖 buffer（供上層在 FrameReady 外延遲取用）。</summary>
         public MIL_ID LastGrabBuffer => _milLastGrabBuffer;
 
+        /// <summary>顯示時上下翻轉（線掃相機由下往上拍 → 顯示需反轉）。只影響「預設 grab hook 顯示」路徑
+        /// （未訂閱 FrameReady 時）；訂閱 FrameReady 的上層自行決定顯示方向。</summary>
+        public bool FlipVertical { get; set; }
+
         // ==================== Identity ====================
         public int CameraId { get; private set; }
         private MIL_INT _devNum;
@@ -211,6 +215,8 @@ namespace MilGrabber.Core
                 var handler = cam.FrameReady;
                 if (handler != null)
                     handler(cam, modifiedBuffer);                       // 上層檢測 + 自行決定顯示
+                else if (cam.FlipVertical)
+                    MIL.MimFlip(modifiedBuffer, cam._milDisplayBuffer, MIL.M_FLIP_VERTICAL, MIL.M_DEFAULT); // 上下翻轉顯示
                 else
                     MIL.MbufCopy(modifiedBuffer, cam._milDisplayBuffer); // 預設顯示原圖
 

@@ -21,6 +21,7 @@ namespace MilGrabber.Monitor
             this.btnGrab = new System.Windows.Forms.Button();
             this.btnRelease = new System.Windows.Forms.Button();
             this.btnFetchInfo = new System.Windows.Forms.Button();
+            this.chkFlipVertical = new System.Windows.Forms.CheckBox();
             this.panelMain = new System.Windows.Forms.Panel();
             this.lvCameras = new System.Windows.Forms.ListView();
             this.colCamCamera = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
@@ -289,9 +290,20 @@ namespace MilGrabber.Monitor
             this.btnFetchInfo.Text = "抓取相機資訊";
             this.btnFetchInfo.UseVisualStyleBackColor = true;
             this.btnFetchInfo.Click += new System.EventHandler(this.btnFetchInfo_Click);
-            // 
+            //
+            // chkFlipVertical
+            //
+            this.chkFlipVertical.AutoSize = true;
+            this.chkFlipVertical.Location = new System.Drawing.Point(14, 167);
+            this.chkFlipVertical.Name = "chkFlipVertical";
+            this.chkFlipVertical.Size = new System.Drawing.Size(98, 19);
+            this.chkFlipVertical.TabIndex = 4;
+            this.chkFlipVertical.Text = "上下翻轉";
+            this.chkFlipVertical.UseVisualStyleBackColor = true;
+            this.chkFlipVertical.CheckedChanged += new System.EventHandler(this.chkFlipVertical_CheckedChanged);
+            //
             // panelMain
-            // 
+            //
             this.panelMain.BackColor = System.Drawing.Color.Black;
             this.panelMain.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.panelMain.Location = new System.Drawing.Point(12, 265);
@@ -2117,6 +2129,7 @@ namespace MilGrabber.Monitor
             this.Controls.Add(this.lvEngine);
             this.Controls.Add(this.lvCameras);
             this.Controls.Add(this.panelMain);
+            this.Controls.Add(this.chkFlipVertical);
             this.Controls.Add(this.btnFetchInfo);
             this.Controls.Add(this.btnRelease);
             this.Controls.Add(this.btnGrab);
@@ -2245,6 +2258,7 @@ namespace MilGrabber.Monitor
         private System.Windows.Forms.Button btnGrab;
         private System.Windows.Forms.Button btnRelease;
         private System.Windows.Forms.Button btnFetchInfo;
+        private System.Windows.Forms.CheckBox chkFlipVertical;
         private System.Windows.Forms.Panel panelMain;
         private System.Windows.Forms.ListView lvCameras;
         private System.Windows.Forms.ColumnHeader colCamCamera;

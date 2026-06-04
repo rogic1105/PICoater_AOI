@@ -232,6 +232,7 @@ namespace MilGrabber.Monitor
                 var cam = new MilCamera(sysId, dev.Id, MIL.M_DEV0 + dev.DevNum, dev.DcfPath, panelHandle);
                 int idx = i; // 迴圈變數捕捉（綁子畫面索引，與 _cams / lvCameras Tag 一致）
                 cam.OnCameraClicked += _ => SelectCamera(idx);
+                cam.FlipVertical = chkFlipVertical.Checked;   // 套用目前「上下翻轉」勾選狀態
                 cam.Initialize();
                 _cams[i] = cam;
             }
@@ -439,6 +440,17 @@ namespace MilGrabber.Monitor
                 cam?.SetUserGrabIntent(_userWantsGrab);
 
             btnGrab.Text = _userWantsGrab ? "停止抓取" : "開始抓取";
+        }
+
+        // =========================================================================
+        // chkFlipVertical: 上下翻轉顯示（線掃相機由下往上拍 → 顯示需反轉）。
+        // 即時套用到所有相機（MilCamera 的 grab hook 用 MimFlip 翻轉到 display buffer）。
+        // =========================================================================
+        private void chkFlipVertical_CheckedChanged(object sender, EventArgs e)
+        {
+            if (_cams == null) return;
+            foreach (var cam in _cams)
+                if (cam != null) cam.FlipVertical = chkFlipVertical.Checked;
         }
 
         // =========================================================================
