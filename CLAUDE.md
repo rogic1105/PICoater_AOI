@@ -303,10 +303,10 @@ PICoater_AOI/
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
 | ── OPS (um) ── | （分隔列，唯讀） | — | — |
-| Cam 1~7 | `ab_OpsCam1~ah_OpsCam7` | 33.0 | 各相機像素尺寸 |
+| Cam 1~7 | `ab_OpsCam1~ah_OpsCam7` | 24.4140625 | 各相機像素尺寸 |
 | A輪速度 (m/min) | `ai_OpsSpeed` → `AniloxRollSpeedMPerMin` | 40.0 | Anilox 輪速 |
 | ── Start (mm) ── | （分隔列，唯讀） | — | — |
-| Cam 1~7 | `bb_StartCam1~bh_StartCam7` | 0/400/800/1200/1600/2000/2400 | 各相機起始位置 |
+| Cam 1~7 | `bb_StartCam1~bh_StartCam7` | 0/345/690/1035/1380/1725/2070 | 各相機起始位置 |
 | ── Crop (mm) ── | （分隔列，唯讀） | — | — |
 | 去頭 | `cb_CropHead` → `Crop.TrimHeadMm` | 0.0 | CAM1 左側裁切 |
 | 去尾 | `cc_CropTail` → `Crop.TrimTailMm` | 0.0 | CAM7 右側裁切 |
@@ -322,9 +322,9 @@ PICoater_AOI/
 | ── 檢出標準 ── | （分隔列，唯讀） | — | — |
 | 檢出方向 | `eb_RidgeDir` → `RidgeDir` | Both | 垂直 / 水平 / 全部 |
 | 垂直平均閾值 | `ec_ErrorValueMeanV` → `ErrorValueMeanV` | 0.2 | V chart Mean 閾值線 |
-| 垂直最大閾值 | `ed_ErrorValueMaxV` → `ErrorValueMaxV` | 0.4 | V chart Max 閾值線 |
+| 垂直最大閾值 | `ed_ErrorValueMaxV` → `ErrorValueMaxV` | 0.6 | V chart Max 閾值線 |
 | 水平平均閾值 | `ee_ErrorValueMeanH` → `ErrorValueMeanH` | 0.2 | H chart Mean 閾值線 |
-| 水平最大閾值 | `ef_ErrorValueMaxH` → `ErrorValueMaxH` | 0.4 | H chart Max 閾值線 |
+| 水平最大閾值 | `ef_ErrorValueMaxH` → `ErrorValueMaxH` | 0.6 | H chart Max 閾值線 |
 | ── 背景校正 ── | （分隔列，唯讀） | — | — |
 | 取時間 (sec) | `fb_BackgroundSampleSeconds` → `BackgroundSampleSeconds` | 3 | StandardBgSub 採集時間 |
 
@@ -532,6 +532,13 @@ docs/
 1. 先列出完整的**狀態轉移表**（State + Event → Next State + Action）
 2. 與使用者確認後再寫 code
 3. 避免用 AND 條件做安全檢查（容易漏邊界情況），優先用比值/閾值比較
+
+### 設定檔機制（Config 跟著 exe，缺檔 → Defaults 重生）
+
+- **所有設定 json 存 `{ExeDir}\Config\`**（`AppDomain.CurrentDomain.BaseDirectory`），不在 `%AppData%`/`%ProgramData%`。各 Store（`InspectionSettingsStore` / `AcquisitionSettingsStore` / `SystemSettings` / `AppModeConfig` / `UserSessionState`）`Load` 時 **檔案不存在 → 用 `*Defaults.cs` 產生並寫回**。
+- **設定 json 不進版控、不隨原始碼複製**（`.gitignore: src/.../Config/*.json`；csproj 不放 `<None CopyToOutputDirectory>`）。理由：若 commit 並複製進 bin，開機永遠以那份舊 json 為輸入，**蓋掉 `*Defaults.cs` 這個唯一真相** → 改 Defaults 不生效、刪 bin 也回不到預設。**唯一例外是 DCF**（MIL 二進位、非 Defaults 產生，保留 csproj 複製）。
+- **要回到預設值**：刪 `bin\...\Config\*.json`（或整個 bin）後啟動即重生。**改預設值只改 `*Defaults.cs`**。
+- **⚠ 序列化型別陷阱**：`JavaScriptSerializer` 無法序列化 `MIL_INT` struct（寫成 `{}`）。持久化的 config model **欄位一律用 `int`/`double`/`string`**，不可用 `MIL_INT`（`CameraHardwareConfig.DevNum` 曾用 MIL_INT → 重生的 `system-settings.json` DevNum 全 `{}` → 讀回全 0 → 多 board 撞號只認到單 board）。消費端要 MIL_INT 時自行 `(MIL_INT)` 轉。
 
 ### Build 驗證
 

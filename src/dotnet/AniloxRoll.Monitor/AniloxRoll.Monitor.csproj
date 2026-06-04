@@ -234,21 +234,10 @@
   <ItemGroup>
     <None Include="App.config" />
     <None Include="app.manifest" />
-    <None Include="Config\system-settings.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="Config\inspection-settings.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="Config\acquisition-settings.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="Config\session-state.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="Config\app-mode.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    <!-- 設定 json 刻意不隨原始碼複製：bin\Config 缺檔時各 Store 用 *Defaults.cs 自動產生新檔
+         （刪 bin → rebuild = 回到 *Defaults.cs 預設）。若把 json commit 並複製進 bin，
+         開機會永遠以那份舊 json 為輸入，蓋掉 *Defaults.cs 這個唯一真相。
+         僅 DCF 保留複製（MIL 二進位設定，非 Defaults 產生）。 -->
     <!-- MIL DCF：跟 exe 走（exe\Config\Radient_Config.dcf）。DcfPathHelper.Resolve 進 MIL 前轉絕對。 -->
     <None Include="Config\Radient_Config.dcf">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
