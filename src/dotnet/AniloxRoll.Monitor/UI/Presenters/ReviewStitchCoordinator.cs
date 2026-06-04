@@ -316,9 +316,21 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 float captureHmV = _currentGrabConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
                 HessianRescaleHelper.RescaleInPlace1D(mergedMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
                 HessianRescaleHelper.RescaleInPlace1D(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
+                FlipRowCurveIfNeeded(mergedMean, mergedMax);
                 _ctx.RowChartHelper.UpdateData(mergedMean, mergedMax);
                 _ctx.InteractionHelper.RefreshRowChartRange();
             }
+        }
+
+        /// <summary>線掃相機由下往上拍攝 → 回顧影像上下翻轉顯示（StitchCamera），故 row 曲線也須反向才能對齊影像。
+        /// 即時(live)影像不翻轉、曲線本就對齊，故只在回顧反轉。未來可改成 tool 選項（per-grab）。</summary>
+        private const bool CurveFlipVertical = true;
+
+        private static void FlipRowCurveIfNeeded(float[] mean, float[] max)
+        {
+            if (!CurveFlipVertical) return;
+            if (mean != null) Array.Reverse(mean);
+            if (max  != null) Array.Reverse(max);
         }
 
         /// <summary>
@@ -458,6 +470,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                         float captureHmV = _currentGrabConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
                         var displayMean = HessianRescaleHelper.CloneAndRescale1D(rowMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
                         var displayMax  = HessianRescaleHelper.CloneAndRescale1D(rowMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
+                        FlipRowCurveIfNeeded(displayMean, displayMax);
                         _ctx.RowChartHelper.UpdateData(displayMean, displayMax);
                         _ctx.InteractionHelper.RefreshRowChartRange();
                     }
