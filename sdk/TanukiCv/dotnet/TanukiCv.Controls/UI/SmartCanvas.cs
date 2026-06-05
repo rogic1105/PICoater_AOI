@@ -34,6 +34,7 @@ namespace TanukiCv.Controls
         private int _lastImgX = 0;
         private int _lastImgY = 0;
         private Color _lastColor = Color.Black;
+        private string _cursorMm = ""; // 上層推入的「位置 mm」字串；空=fallback 像素座標
 
         // ── 畫布資訊 overlay（游標座標/亮度跟滑鼠、四邊 mm 範圍、右下實體倍率；右鍵開關）──
         private bool _showOverlay = true;
@@ -88,6 +89,15 @@ namespace TanukiCv.Controls
             _ovXLeft = xLeft; _ovXRight  = xRight;
             _ovYTop  = yTop;  _ovYBottom = yBottom;
             if (_showOverlay) Invalidate(); // 範圍真的變了（zoom/pan）才整張重畫
+        }
+
+        /// <summary>由上層（CanvasInteractionHelper）推入算好的「游標位置 mm」字串。
+        /// 只儲存字串，不呼叫 Invalidate（OnMouseMove 既有的區域失效會重畫游標區，
+        /// 且此方法在 paint 前同步呼叫，字串已就緒不會延遲）。空字串時 DrawOverlays
+        /// fallback 回像素座標（讓未推 mm 的畫布如背景預覽優雅退化）。</summary>
+        public void SetCursorMm(string text)
+        {
+            _cursorMm = text ?? "";
         }
 
         /// <summary>
@@ -439,12 +449,15 @@ namespace TanukiCv.Controls
             // 右下角：實體倍率
             if (!string.IsNullOrEmpty(_ovMag)) DrawLabel(g, _ovMag, Width - pad, Height - pad, 1f, 1f);
 
-            // 游標座標 + 亮度（跟滑鼠）
+            // 游標位置 mm + 亮度（跟滑鼠）；無 mm 字串時 fallback 像素座標
             if (_cursorInside && this.Image != null &&
                 _lastImgX >= 0 && _lastImgY >= 0 &&
                 _lastImgX < this.Image.Width && _lastImgY < this.Image.Height)
             {
-                DrawLabel(g, $"({_lastImgX}, {_lastImgY})  {_lastColor.R}",
+                string head = string.IsNullOrEmpty(_cursorMm)
+                    ? $"({_lastImgX}, {_lastImgY})"
+                    : _cursorMm;
+                DrawLabel(g, $"{head}  {_lastColor.R}",
                           _cursorPos.X + 14, _cursorPos.Y + 14, 0f, 0f);
             }
         }

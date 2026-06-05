@@ -368,6 +368,10 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 $"亮度: {info.PixelColor.R} | " +
                 $"實體倍率:{magStr}";
 
+            // 游標位置（mm 數值）推給畫布 overlay：純置換像素座標，沿用 (數值, 數值) 格式、不加單位
+            // （加 "位置:"/"mm" 會讓字串變長、超出游標失效小框 → 殘影）。亮度由 canvas 自繪。
+            _canvas.SetCursorMm($"({physicalX:F2}, {physicalY:F2})");
+
             // 同步推給畫布 overlay（座標/亮度由 canvas 自繪；此處給四邊範圍 + 倍率）
             _canvas.SetRangeOverlay(
                 magStr,
