@@ -109,7 +109,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             var swTotal = Stopwatch.StartNew();
             try
             {
-                long csvMs = 0, stitchMs = 0;
+                long csvMs = 0, stitchMs = 0, mergeMs = 0;
                 int totalImgCount = 0;
                 string ridgeDir = ActiveRidgeDirection;
                 int camCount = _ctx.CameraCount;
@@ -119,7 +119,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 float[][] newRowCurveMax  = new float[camCount][];
                 CsvConfigSnapshot grabCfg = null;
                 var inspSvc = _ctx.InspectionService;
-                var newImages = await Task.Run(() =>
+                var loaded = await Task.Run(() =>
                 {
                     var swCsv = Stopwatch.StartNew();
                     var grouped = InspectionStatisticsService.LoadImagePathsForGrabId(
@@ -132,7 +132,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     var swStitch = Stopwatch.StartNew();
                     int scale = InspectionEngineConfig.DefaultSaveResizeScale;
                     var imgs = new Bitmap[camCount];
-                    for (int i = 0; i < camCount; i++)
+                    // 7 台相機各自獨立（imgs[i]/curve[i] 各寫各的 index、BitmapPool 有 lock、CurveMergeHelper 無共用 static）
+                    // → 平行解碼/拼接，吃滿多核心，削掉最大宗的 Stitch 延遲。每台自帶 try/catch，不外拋 AggregateException。
+                    System.Threading.Tasks.Parallel.For(0, camCount, i =>
                     {
                         int camId = i + 1;
                         if (grouped.TryGetValue(camId, out var paths) && paths.Count > 0)
@@ -150,10 +152,23 @@ namespace AniloxRoll.Monitor.UI.Presenters
                                     $"[StitchView] CAM{camId}: {ex.GetType().Name}: {ex.Message}");
                             }
                         }
-                    }
+                    });
                     stitchMs = swStitch.ElapsedMilliseconds;
-                    return imgs;
+
+                    // 全域合圖也在背景做（原本在 UI 執行緒 → 換 ID swap 卡頓的主因；MergeHorizontal 純影像運算可背景化）
+                    Bitmap merged = null;
+                    double[] ops = null, pos = null;
+                    if (_ctx.Settings.StitchMode == StitchMode.Global)
+                    {
+                        var swMerge = Stopwatch.StartNew();
+                        ops = grabCfg?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
+                        pos = grabCfg?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
+                        merged = GrabImageStitcher.MergeHorizontal(imgs, ops, pos, scale);
+                        mergeMs = swMerge.ElapsedMilliseconds;
+                    }
+                    return (imgs, merged, ops, pos);
                 });
+                var newImages = loaded.imgs;
 
                 ClearStitchedMode();
                 _stitchedImages       = newImages;
@@ -165,14 +180,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _ctx.InteractionHelper.ReviewConfig = grabCfg;
                 _ctx.DataStatsPresenter?.SetReviewGroupBoxes(true);
 
-                double[] opsArr = null, posArr = null;
-                if (_ctx.Settings.StitchMode == StitchMode.Global)
-                {
-                    opsArr = grabCfg?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
-                    posArr = grabCfg?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
-                    _globalMergedImage = GrabImageStitcher.MergeHorizontal(
-                        _stitchedImages, opsArr, posArr, InspectionEngineConfig.DefaultSaveResizeScale);
-                }
+                double[] opsArr = loaded.ops, posArr = loaded.pos;
+                if (loaded.merged != null)
+                    _globalMergedImage = loaded.merged; // 已於背景 Task.Run 合好
 
                 _ctx.GalleryManager.SetImages(_stitchedImages);
 
@@ -188,7 +198,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 }
                 UpdateStitchedOverviewChart();
 
-                Trace.WriteLine($"[StitchView] {grabId} proc={enableProcess} | CSV={csvMs}ms | Stitch={stitchMs}ms | Total={swTotal.ElapsedMilliseconds}ms");
+                Trace.WriteLine($"[StitchView] {grabId} proc={enableProcess} | CSV={csvMs}ms | Stitch={stitchMs}ms | Merge(bg)={mergeMs}ms | UIapply={swTotal.ElapsedMilliseconds - csvMs - stitchMs - mergeMs}ms | Total={swTotal.ElapsedMilliseconds}ms");
 
                 // Resource log
                 int loadedCams = 0, finalW = 0, finalH = 0;
