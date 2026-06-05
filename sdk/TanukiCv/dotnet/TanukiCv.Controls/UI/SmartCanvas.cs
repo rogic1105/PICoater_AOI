@@ -42,10 +42,10 @@ namespace TanukiCv.Controls
         private bool _cursorInside;
         private Rectangle _cursorDirty = Rectangle.Empty; // 上次游標 overlay 重畫區（用於只失效小塊）
 
-        // ── 顯示快取：縮放後的畫面存成控制項大小 bitmap，hover 重畫只需 1:1 貼上，免每次重新縮放 ──
+        // ── 顯示快取：整張圖在「當前 zoom」下的點陣（不含 pan）。pan 時只改貼圖偏移、不重建
+        //    → FitToScreen 拖曳不再每幀重縮整張大圖。只在 zoom/Image 變時重建。 ──
         private Bitmap _viewCache;
         private float _cacheZoom = float.NaN;
-        private PointF _cachePan = new PointF(float.NaN, float.NaN);
         private Image _cacheImg;
         private static readonly Font  _ovFont      = new Font("Segoe UI", 9f);
         private static readonly Brush _ovBackBrush = new SolidBrush(Color.FromArgb(150, 0, 0, 0));
@@ -368,40 +368,59 @@ namespace TanukiCv.Controls
             if (this.Image == null) { base.OnPaint(pe); return; }
 
             EnsureViewCache();
-            // 1:1 貼快取（GDI 自動裁切到失效區域 → hover 時只貼那一小塊，免重新縮放）
+            pe.Graphics.Clear(this.BackColor); // 整圖快取只蓋影像範圍，邊緣/失效區先填底色
+
             if (_viewCache != null)
-                pe.Graphics.DrawImageUnscaled(_viewCache, 0, 0);
+            {
+                // 整圖快取：pan 只是把同一張縮好的圖「貼到不同位置」→ 不重縮 → FitToScreen 拖曳超順
+                pe.Graphics.DrawImageUnscaled(_viewCache,
+                    (int)Math.Round(_panOffset.X), (int)Math.Round(_panOffset.Y));
+            }
+            else
+            {
+                // 放大太多、整圖超過快取預算 → per-frame 只畫可見區（放大時取樣小、便宜）
+                pe.Graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
+                pe.Graphics.PixelOffsetMode   = PixelOffsetMode.Half;
+                pe.Graphics.DrawImage(this.Image, _panOffset.X, _panOffset.Y,
+                    this.Image.Width * _zoom, this.Image.Height * _zoom);
+            }
 
             if (_showOverlay) DrawOverlays(pe.Graphics);
         }
 
-        /// <summary>確保 _viewCache = 目前 zoom/pan 下縮放好的整個畫面（控制項大小）。
-        /// 只在 zoom/pan/Image/尺寸真的變了才重建（昂貴的縮放只做一次）；hover 不變 → 直接沿用。</summary>
+        /// <summary>_viewCache =「整張圖在當前 zoom 下」的點陣（不含 pan）。pan 直接以偏移貼上、不重建
+        /// → FitToScreen 拖曳不再每幀重縮整張。只在 zoom/Image/超預算狀態改變時重建。
+        /// 放大太多致整圖超過記憶體預算（~6× 控制項面積）→ _viewCache=null，OnPaint 改 per-frame（放大時便宜）。</summary>
         private void EnsureViewCache()
         {
-            bool sizeChanged  = _viewCache == null || _viewCache.Width != Width || _viewCache.Height != Height;
-            bool stateChanged = _zoom != _cacheZoom || _panOffset != _cachePan || !ReferenceEquals(this.Image, _cacheImg);
-            if (!sizeChanged && !stateChanged) return;
+            int  sw = Math.Max(1, (int)Math.Round(this.Image.Width  * _zoom));
+            int  sh = Math.Max(1, (int)Math.Round(this.Image.Height * _zoom));
+            long budget = Math.Max(6L * Width * Height, 8_000_000L);
 
-            if (sizeChanged)
+            if ((long)sw * sh > budget) // 整圖太大 → 不快取，走 per-frame
             {
-                _viewCache?.Dispose();
-                _viewCache = new Bitmap(Math.Max(1, Width), Math.Max(1, Height),
-                                        System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+                if (_viewCache != null) { _viewCache.Dispose(); _viewCache = null; }
+                _cacheZoom = float.NaN;
+                return;
             }
 
+            bool valid = _viewCache != null && _viewCache.Width == sw && _viewCache.Height == sh
+                         && _zoom == _cacheZoom && ReferenceEquals(this.Image, _cacheImg);
+            if (valid) return; // zoom/Image 沒變 → pan 直接沿用，不重建
+
+            if (_viewCache == null || _viewCache.Width != sw || _viewCache.Height != sh)
+            {
+                _viewCache?.Dispose();
+                _viewCache = new Bitmap(sw, sh, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            }
             using (var g = Graphics.FromImage(_viewCache))
             {
                 g.Clear(this.BackColor);
                 g.InterpolationMode = InterpolationMode.NearestNeighbor;
                 g.PixelOffsetMode   = PixelOffsetMode.Half;
-                float drawW = this.Image.Width  * _zoom;
-                float drawH = this.Image.Height * _zoom;
-                g.DrawImage(this.Image, _panOffset.X, _panOffset.Y, drawW, drawH);
+                g.DrawImage(this.Image, 0, 0, sw, sh); // 整張縮到快取（不含 pan）
             }
-
             _cacheZoom = _zoom;
-            _cachePan  = _panOffset;
             _cacheImg  = this.Image;
         }
 
