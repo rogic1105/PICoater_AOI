@@ -56,8 +56,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public void SetScreenMmPerPixel(double mmPerPx) => _screenMmPerPx = mmPerPx;
         public double ScreenMmPerPixel => _screenMmPerPx;
 
-        public string ImageInfoSuffix { get; set; } = "";
-
         private float _savedZoom = 0f;
         private PointF _savedPan = PointF.Empty;
         private bool _shouldRestoreView = false;
@@ -368,7 +366,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 $"Y範圍:{viewTopMm:F1}~{viewBotMm:F1} mm | " +
                 $"座標: ({info.ImageX}, {info.ImageY}) | " +
                 $"亮度: {info.PixelColor.R} | " +
-                $"實體倍率:{magStr}{ImageInfoSuffix}";
+                $"實體倍率:{magStr}";
         }
 
         /// <summary>將 canvas 設為實體倍率 1x，滑鼠所指的影像位置移到 canvas 中央。</summary>

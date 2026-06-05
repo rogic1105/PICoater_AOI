@@ -47,7 +47,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private readonly RowCurveChartHelper _rowChartHelper;
         private readonly InspectionSettings _settings;
         private readonly CanvasInteractionHelper _canvasHelper;
-        private string _imageInfoSuffix = "";
 
         /// <summary>
         /// 回顧資料夾的 CSV #CFG 快照。設定後，chart/canvas 優先使用 CFG 的 Ops/Pos/閾值。
@@ -200,9 +199,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 {
                     _canvasHelper.SetImageScaleFactor(data.ScaleFactor);
 
-                    _imageInfoSuffix = $" | {(data.IsCompressedJpeg ? "JPEG" : "BMP")} {data.ScaleFactor}x";
-                    _canvasHelper.ImageInfoSuffix = _imageInfoSuffix;
-
                     sw.Restart();
                     _canvasHelper.UpdateCanvas(data.Image);
                     canvasMs = sw.ElapsedMilliseconds;
@@ -236,11 +232,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
                         _rowChartHelper.UpdateData(data.MuraRowCurveMean, data.MuraRowCurveMax);
                         _canvasHelper.RefreshRowChartRange();
                     }
-                }
-                else
-                {
-                    _imageInfoSuffix = "";
-                    _canvasHelper.ImageInfoSuffix = _imageInfoSuffix;
                 }
 
                 Console.WriteLine(
