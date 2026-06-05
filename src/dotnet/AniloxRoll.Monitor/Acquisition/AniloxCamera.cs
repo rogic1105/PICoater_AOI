@@ -156,7 +156,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         private float _lastMaxPeak  = 0f;
 
         // ==================== Constructor ====================
-        public AniloxCamera(MIL_ID systemId, int id, MIL_INT devNum, string dcfPath, IntPtr panelHandle, bool enableImageProcessing = true)
+        public AniloxCamera(MIL_ID systemId, int id, int devNum, string dcfPath, IntPtr panelHandle, bool enableImageProcessing = true)
         {
             CameraId = id;
             EnableImageProcessing = enableImageProcessing;

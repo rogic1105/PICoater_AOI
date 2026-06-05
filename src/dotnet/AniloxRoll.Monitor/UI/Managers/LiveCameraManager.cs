@@ -227,7 +227,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 var cam = new AniloxCamera(
                     currentSysId,
                     cfg.Id,
-                    (MIL_INT)cfg.DevNum,   // cfg.DevNum 為 int（JSON round-trip）；MdigAlloc 需 MIL_INT
+                    cfg.DevNum,   // 固定 device 位置（絕對值，直接傳）；MIL 轉換收斂在 MilCamera ctor
                     dcf,
                     displayPanel.Handle,
                     enableImageProcessing);

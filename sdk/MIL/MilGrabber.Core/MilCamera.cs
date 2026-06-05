@@ -99,11 +99,15 @@ namespace MilGrabber.Core
         public event Action<int> OnCameraClicked;
 
         // ==================== Constructor ====================
-        public MilCamera(MIL_ID systemId, int id, MIL_INT devNum, string dcfPath, IntPtr panelHandle)
+        /// <param name="devNum">板內固定 device 位置（0-based 絕對值，對應 M_DEV0/1/2/3…）。
+        /// 相機實體接線固定 → 直接寫絕對位置，**不加偏移**（不做 M_DEV0 + n），少槽卡（1/2 槽）只列實際在用的 channel。
+        /// 這裡是「json device 號 → MdigAlloc 引數」的唯一轉換點：本機型 M_DEV0=0 故為 identity；
+        /// 未來若遇 M_DEV0≠0 的擷取卡，只改這一行（caller 一律傳 json 固定值，不自行運算）。</param>
+        public MilCamera(MIL_ID systemId, int id, int devNum, string dcfPath, IntPtr panelHandle)
         {
             _ownerSystemId = systemId;
             CameraId = id;
-            _devNum = devNum;
+            _devNum = (MIL_INT)devNum;
             _dcfPath = dcfPath;
             _panelHandle = panelHandle;
 

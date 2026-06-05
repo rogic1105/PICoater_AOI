@@ -229,7 +229,7 @@ namespace MilGrabber.Monitor
                 }
 
                 IntPtr panelHandle = _displayPanels[i].Handle; // 第 i 台綁第 i 個容器內的 displayPanel（primary display）
-                var cam = new MilCamera(sysId, dev.Id, MIL.M_DEV0 + dev.DevNum, dev.DcfPath, panelHandle);
+                var cam = new MilCamera(sysId, dev.Id, dev.DevNum, dev.DcfPath, panelHandle); // dev.DevNum = 固定 device 位置（絕對值）；不加 M_DEV0 偏移，轉換收斂在 MilCamera ctor
                 int idx = i; // 迴圈變數捕捉（綁子畫面索引，與 _cams / lvCameras Tag 一致）
                 cam.OnCameraClicked += _ => SelectCamera(idx);
                 cam.FlipVertical = chkFlipVertical.Checked;   // 套用目前「上下翻轉」勾選狀態
