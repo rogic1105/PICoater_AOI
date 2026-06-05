@@ -367,6 +367,12 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 $"座標: ({info.ImageX}, {info.ImageY}) | " +
                 $"亮度: {info.PixelColor.R} | " +
                 $"實體倍率:{magStr}";
+
+            // 同步推給畫布 overlay（座標/亮度由 canvas 自繪；此處給四邊範圍 + 倍率）
+            _canvas.SetRangeOverlay(
+                magStr,
+                $"{_currentViewLeftMm:F1}",  $"{_currentViewRightMm:F1}",
+                $"{viewTopMm:F1}",           $"{viewBotMm:F1}");
         }
 
         /// <summary>將 canvas 設為實體倍率 1x，滑鼠所指的影像位置移到 canvas 中央。</summary>

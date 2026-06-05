@@ -246,7 +246,7 @@ PICoater_AOI/
 | `UI/Widgets/GrabImageStitcher.cs` | 多張影像垂直拼接 + MergeHorizontal 全域合圖；LoadCameraImage（internal） |
 | `UI/Widgets/ProportionalScaler.cs` | Form 等比例縮放（重設 Bounds + 重建 Font，非點陣縮放）。`RescaleActiveTabs`（開窗最大化後補縮作用中 tab，解 TabControl lazy-layout）。DPI 感知（`app.manifest` dpiAware=true）+ `WindowState=Maximized` 下文字原生清晰；字體 = 設計大小 |
 | `UI/Widgets/RoundedLabel.cs` | 圓角晶片 Label（`Label` 子類）：反鋸齒繪圓角底（BackColor 當填色）+ 文字交 `base.OnPaint` 原生繪製（清晰）；強制無 BorderStyle 方框。用於 IO 運作區（lblIoState + DI/DO 燈號）與方正連線燈視覺分組 |
-| `sdk/TanukiCv/dotnet/TanukiCv.Controls/UI/SmartCanvas.cs` | PictureBox 子類（`TanukiCv.Controls` 獨立 WinForms assembly）：zoom/pan/edge/ClampPan；自訂白底黑邊十字游標 |
+| `sdk/TanukiCv/dotnet/TanukiCv.Controls/UI/SmartCanvas.cs` | PictureBox 子類（`TanukiCv.Controls` 獨立 WinForms assembly）：zoom/pan/edge/ClampPan；自訂白底黑邊十字游標。**畫布資訊 overlay**（`ShowOverlay` 右鍵開關）：游標座標/亮度跟滑鼠、四邊 mm 範圍（X 左右 90° 旋轉、Y 上下）、右下實體倍率；座標/亮度 canvas 自繪，範圍/倍率由 `CanvasInteractionHelper.SetRangeOverlay` 推（mm 換算單一來源仍在 helper）。**效能**：游標 overlay 用 `Region` 區域失效（兩塊分離小矩形，非外接框，快速移動才不變整張）+ 重狀態同步限流 ~30fps + 顯示快取（`_viewCache` 把縮放後畫面存控制項大小 bitmap，僅 zoom/pan/Image/尺寸變才重建，hover 1:1 貼免重縮放） |
 
 > 路徑前綴 `src/dotnet/AniloxRoll.Monitor/` 省略以節省空間。
 

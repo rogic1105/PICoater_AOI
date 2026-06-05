@@ -35,6 +35,22 @@ namespace TanukiCv.Controls
         private int _lastImgY = 0;
         private Color _lastColor = Color.Black;
 
+        // ── 畫布資訊 overlay（游標座標/亮度跟滑鼠、四邊 mm 範圍、右下實體倍率；右鍵開關）──
+        private bool _showOverlay = true;
+        private string _ovMag = "", _ovXLeft = "", _ovXRight = "", _ovYTop = "", _ovYBottom = "";
+        private Point _cursorPos;
+        private bool _cursorInside;
+        private Rectangle _cursorDirty = Rectangle.Empty; // 上次游標 overlay 重畫區（用於只失效小塊）
+
+        // ── 顯示快取：縮放後的畫面存成控制項大小 bitmap，hover 重畫只需 1:1 貼上，免每次重新縮放 ──
+        private Bitmap _viewCache;
+        private float _cacheZoom = float.NaN;
+        private PointF _cachePan = new PointF(float.NaN, float.NaN);
+        private Image _cacheImg;
+        private static readonly Font  _ovFont      = new Font("Segoe UI", 9f);
+        private static readonly Brush _ovBackBrush = new SolidBrush(Color.FromArgb(150, 0, 0, 0));
+        private static readonly Brush _ovTextBrush = new SolidBrush(Color.White);
+
         public event Action<CanvasInfo> StatusChanged;
 
         // [新增] 邊緣觸發事件 (int direction: -1=上一張, 1=下一張)
@@ -47,6 +63,32 @@ namespace TanukiCv.Controls
 
         public float Zoom => _zoom;
         public PointF PanOffset => _panOffset;
+
+        /// <summary>是否在畫布上疊顯資訊（游標座標/亮度、四邊 mm 範圍、右下實體倍率）。滑鼠右鍵切換。</summary>
+        public bool ShowOverlay
+        {
+            get => _showOverlay;
+            set { _showOverlay = value; Invalidate(); }
+        }
+
+        /// <summary>由上層（CanvasInteractionHelper）推入算好的「四邊範圍 + 倍率」字串。
+        /// 座標與亮度由 canvas 自繪（已知 _lastImgX/Y、_lastColor，不必繞上層、確保跟手）。</summary>
+        public void SetRangeOverlay(string magnification, string xLeft, string xRight, string yTop, string yBottom)
+        {
+            magnification = magnification ?? "";
+            xLeft = xLeft ?? ""; xRight = xRight ?? "";
+            yTop  = yTop  ?? ""; yBottom = yBottom ?? "";
+
+            // 值沒變（hover 不動 viewport，四邊範圍/倍率相同）→ 不重畫，避免每次滑鼠移動整張重繪
+            if (magnification == _ovMag && xLeft == _ovXLeft && xRight == _ovXRight &&
+                yTop == _ovYTop && yBottom == _ovYBottom)
+                return;
+
+            _ovMag   = magnification;
+            _ovXLeft = xLeft; _ovXRight  = xRight;
+            _ovYTop  = yTop;  _ovYBottom = yBottom;
+            if (_showOverlay) Invalidate(); // 範圍真的變了（zoom/pan）才整張重畫
+        }
 
         /// <summary>
         /// 啟用後 pan 限制在控制項邊界內（影像不會拖出可見區域），
@@ -136,6 +178,10 @@ namespace TanukiCv.Controls
                 _lastMousePos = e.Location;
                 _edgeTriggeredInDrag = false; // 重置觸發旗標
             }
+            else if (e.Button == MouseButtons.Right)
+            {
+                ShowOverlay = !ShowOverlay; // 右鍵開關畫布資訊
+            }
         }
 
         protected override void OnMouseUp(MouseEventArgs e)
@@ -148,6 +194,9 @@ namespace TanukiCv.Controls
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
+
+            _cursorPos = e.Location;   // overlay 游標座標/亮度跟手用
+            _cursorInside = true;
 
             if (_isDragging)
             {
@@ -193,8 +242,43 @@ namespace TanukiCv.Controls
                     _lastColor = Color.Black;
                 }
 
-                TriggerStatusChange();
+                // 重的 status/chart 同步限流 ~30fps；游標 overlay（便宜）每次都更新跟手
+                int now = Environment.TickCount;
+                if (now - _lastStatusTickMs >= StatusThrottleMs)
+                {
+                    _lastStatusTickMs = now;
+                    TriggerStatusChange();
+                }
+                if (_showOverlay) InvalidateCursorOverlay();
             }
+            }
+        }
+
+        /// <summary>只失效游標 overlay 的區域（上次 + 這次當「兩塊分離小矩形」，非外接框）。
+        /// 用 Region 而非 Rectangle.Union：快速移動時舊/新位置離很遠，外接框會幾乎=整張 → 失去意義。
+        /// GDI 把 OnPaint 的 DrawImage 裁切到此區 → 成本只剩這兩小塊。</summary>
+        private void InvalidateCursorOverlay()
+        {
+            // 框需完整蓋住標籤實際繪製範圍（標籤在游標右下 +14；邊界 clamp 時可能移到左/上）。
+            // 不足會殘留黑底殘影 → 兩側都給足（最寬座標文字約 170px）。
+            var box = new Rectangle(_cursorPos.X - 190, _cursorPos.Y - 28, 380, 74);
+            using (var region = new Region(box))
+            {
+                if (_cursorDirty != Rectangle.Empty)
+                    region.Union(_cursorDirty);
+                Invalidate(region);
+            }
+            _cursorDirty = box;
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            base.OnMouseLeave(e);
+            _cursorInside = false;
+            if (_showOverlay && _cursorDirty != Rectangle.Empty)
+            {
+                Invalidate(_cursorDirty); // 只清掉游標 overlay 那一小塊
+                _cursorDirty = Rectangle.Empty;
             }
         }
 
@@ -283,13 +367,99 @@ namespace TanukiCv.Controls
         {
             if (this.Image == null) { base.OnPaint(pe); return; }
 
-            pe.Graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
-            pe.Graphics.PixelOffsetMode = PixelOffsetMode.Half;
+            EnsureViewCache();
+            // 1:1 貼快取（GDI 自動裁切到失效區域 → hover 時只貼那一小塊，免重新縮放）
+            if (_viewCache != null)
+                pe.Graphics.DrawImageUnscaled(_viewCache, 0, 0);
 
-            float drawW = this.Image.Width * _zoom;
-            float drawH = this.Image.Height * _zoom;
+            if (_showOverlay) DrawOverlays(pe.Graphics);
+        }
 
-            pe.Graphics.DrawImage(this.Image, _panOffset.X, _panOffset.Y, drawW, drawH);
+        /// <summary>確保 _viewCache = 目前 zoom/pan 下縮放好的整個畫面（控制項大小）。
+        /// 只在 zoom/pan/Image/尺寸真的變了才重建（昂貴的縮放只做一次）；hover 不變 → 直接沿用。</summary>
+        private void EnsureViewCache()
+        {
+            bool sizeChanged  = _viewCache == null || _viewCache.Width != Width || _viewCache.Height != Height;
+            bool stateChanged = _zoom != _cacheZoom || _panOffset != _cachePan || !ReferenceEquals(this.Image, _cacheImg);
+            if (!sizeChanged && !stateChanged) return;
+
+            if (sizeChanged)
+            {
+                _viewCache?.Dispose();
+                _viewCache = new Bitmap(Math.Max(1, Width), Math.Max(1, Height),
+                                        System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            }
+
+            using (var g = Graphics.FromImage(_viewCache))
+            {
+                g.Clear(this.BackColor);
+                g.InterpolationMode = InterpolationMode.NearestNeighbor;
+                g.PixelOffsetMode   = PixelOffsetMode.Half;
+                float drawW = this.Image.Width  * _zoom;
+                float drawH = this.Image.Height * _zoom;
+                g.DrawImage(this.Image, _panOffset.X, _panOffset.Y, drawW, drawH);
+            }
+
+            _cacheZoom = _zoom;
+            _cachePan  = _panOffset;
+            _cacheImg  = this.Image;
+        }
+
+        // ── Overlay 繪製 ──────────────────────────────────────────────────────
+        private void DrawOverlays(Graphics g)
+        {
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
+            const int pad = 4;
+
+            // 四邊範圍：Y 上/下邊中央、X 左/右邊垂直（90° 旋轉）
+            if (!string.IsNullOrEmpty(_ovYTop))    DrawLabel(g, _ovYTop,    Width / 2,    pad,           0.5f, 0f);
+            if (!string.IsNullOrEmpty(_ovYBottom)) DrawLabel(g, _ovYBottom, Width / 2,    Height - pad,  0.5f, 1f);
+            if (!string.IsNullOrEmpty(_ovXLeft))   DrawRotatedLabel(g, _ovXLeft,  pad,          Height / 2, true);
+            if (!string.IsNullOrEmpty(_ovXRight))  DrawRotatedLabel(g, _ovXRight, Width - pad,  Height / 2, false);
+
+            // 右下角：實體倍率
+            if (!string.IsNullOrEmpty(_ovMag)) DrawLabel(g, _ovMag, Width - pad, Height - pad, 1f, 1f);
+
+            // 游標座標 + 亮度（跟滑鼠）
+            if (_cursorInside && this.Image != null &&
+                _lastImgX >= 0 && _lastImgY >= 0 &&
+                _lastImgX < this.Image.Width && _lastImgY < this.Image.Height)
+            {
+                DrawLabel(g, $"({_lastImgX}, {_lastImgY})  {_lastColor.R}",
+                          _cursorPos.X + 14, _cursorPos.Y + 14, 0f, 0f);
+            }
+        }
+
+        /// <summary>畫帶半透明底的文字。(ax, ay) 為錨點對齊比例（0=左/上，0.5=中，1=右/下），再 clamp 進畫布。</summary>
+        private void DrawLabel(Graphics g, string text, int x, int y, float ax, float ay)
+        {
+            SizeF sz = g.MeasureString(text, _ovFont);
+            float bx = x - sz.Width  * ax;
+            float by = y - sz.Height * ay;
+            bx = Math.Max(0, Math.Min(bx, Width  - sz.Width));
+            by = Math.Max(0, Math.Min(by, Height - sz.Height));
+            g.FillRectangle(_ovBackBrush, bx - 2, by - 1, sz.Width + 4, sz.Height + 2);
+            g.DrawString(text, _ovFont, _ovTextBrush, bx, by);
+        }
+
+        /// <summary>沿左/右邊畫 90° 旋轉的垂直文字（讀向由下往上），垂直置中於 yCenter。</summary>
+        private void DrawRotatedLabel(Graphics g, string text, int x, int yCenter, bool leftEdge)
+        {
+            SizeF sz = g.MeasureString(text, _ovFont);
+            var state = g.Save();
+            g.TranslateTransform(x, yCenter);
+            g.RotateTransform(-90);                       // 逆時針 90°：文字由下往上
+            float bx = -sz.Width / 2f;                    // 沿（旋轉後的）垂直方向置中
+            float by = leftEdge ? 0 : -sz.Height;         // 左邊文字往內（右），右邊往內（左）
+            g.FillRectangle(_ovBackBrush, bx - 2, by - 1, sz.Width + 4, sz.Height + 2);
+            g.DrawString(text, _ovFont, _ovTextBrush, bx, by);
+            g.Restore(state);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) { _viewCache?.Dispose(); _viewCache = null; }
+            base.Dispose(disposing);
         }
     }
 }
