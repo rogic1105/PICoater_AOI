@@ -1,6 +1,6 @@
-namespace MilGrabber.Monitor
+namespace MilGrabber.PictureBoxTest
 {
-    partial class MilGrabberForm
+    partial class MilGrabberPbForm
     {
         private System.ComponentModel.IContainer components = null;
 
@@ -22,6 +22,9 @@ namespace MilGrabber.Monitor
             this.btnRelease = new System.Windows.Forms.Button();
             this.btnFetchInfo = new System.Windows.Forms.Button();
             this.chkFlipVertical = new System.Windows.Forms.CheckBox();
+            this.lblResize = new System.Windows.Forms.Label();
+            this.numResize = new System.Windows.Forms.NumericUpDown();
+            this.chkMerge = new System.Windows.Forms.CheckBox();
             this.panelMain = new System.Windows.Forms.Panel();
             this.lvCameras = new System.Windows.Forms.ListView();
             this.colCamCamera = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
@@ -164,6 +167,7 @@ namespace MilGrabber.Monitor
             this.panelCam5 = new System.Windows.Forms.Panel();
             this.panelCam6 = new System.Windows.Forms.Panel();
             this.panelCam7 = new System.Windows.Forms.Panel();
+            ((System.ComponentModel.ISupportInitialize)(this.numResize)).BeginInit();
             this.tabParams.SuspendLayout();
             this.tabExposure.SuspendLayout();
             this.panelExpAll.SuspendLayout();
@@ -301,6 +305,49 @@ namespace MilGrabber.Monitor
             this.chkFlipVertical.Text = "上下翻轉";
             this.chkFlipVertical.UseVisualStyleBackColor = true;
             this.chkFlipVertical.CheckedChanged += new System.EventHandler(this.chkFlipVertical_CheckedChanged);
+            // 
+            // lblResize
+            // 
+            this.lblResize.AutoSize = true;
+            this.lblResize.Location = new System.Drawing.Point(965, 200);
+            this.lblResize.Name = "lblResize";
+            this.lblResize.Size = new System.Drawing.Size(67, 15);
+            this.lblResize.TabIndex = 32;
+            this.lblResize.Text = "縮圖倍率";
+            // 
+            // numResize
+            // 
+            this.numResize.Location = new System.Drawing.Point(1035, 198);
+            this.numResize.Maximum = new decimal(new int[] {
+            20,
+            0,
+            0,
+            0});
+            this.numResize.Minimum = new decimal(new int[] {
+            1,
+            0,
+            0,
+            0});
+            this.numResize.Name = "numResize";
+            this.numResize.Size = new System.Drawing.Size(48, 25);
+            this.numResize.TabIndex = 5;
+            this.numResize.Value = new decimal(new int[] {
+            4,
+            0,
+            0,
+            0});
+            this.numResize.ValueChanged += new System.EventHandler(this.numResize_ValueChanged);
+            // 
+            // chkMerge
+            // 
+            this.chkMerge.AutoSize = true;
+            this.chkMerge.Location = new System.Drawing.Point(965, 228);
+            this.chkMerge.Name = "chkMerge";
+            this.chkMerge.Size = new System.Drawing.Size(59, 19);
+            this.chkMerge.TabIndex = 6;
+            this.chkMerge.Text = "合圖";
+            this.chkMerge.UseVisualStyleBackColor = true;
+            this.chkMerge.CheckedChanged += new System.EventHandler(this.chkMerge_CheckedChanged);
             // 
             // panelMain
             // 
@@ -2112,7 +2159,7 @@ namespace MilGrabber.Monitor
             this.panelCam7.Size = new System.Drawing.Size(194, 118);
             this.panelCam7.TabIndex = 17;
             // 
-            // MilGrabberForm
+            // MilGrabberPbForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
@@ -2130,12 +2177,16 @@ namespace MilGrabber.Monitor
             this.Controls.Add(this.lvCameras);
             this.Controls.Add(this.panelMain);
             this.Controls.Add(this.chkFlipVertical);
+            this.Controls.Add(this.lblResize);
+            this.Controls.Add(this.numResize);
+            this.Controls.Add(this.chkMerge);
             this.Controls.Add(this.btnFetchInfo);
             this.Controls.Add(this.btnRelease);
             this.Controls.Add(this.btnGrab);
             this.Controls.Add(this.btnInit);
-            this.Name = "MilGrabberForm";
+            this.Name = "MilGrabberPbForm";
             this.Text = "MilGrabber.Monitor — 多相機即時監控";
+            ((System.ComponentModel.ISupportInitialize)(this.numResize)).EndInit();
             this.tabParams.ResumeLayout(false);
             this.tabExposure.ResumeLayout(false);
             this.panelExpAll.ResumeLayout(false);
@@ -2260,6 +2311,9 @@ namespace MilGrabber.Monitor
         private System.Windows.Forms.Button btnRelease;
         private System.Windows.Forms.Button btnFetchInfo;
         private System.Windows.Forms.CheckBox chkFlipVertical;
+        private System.Windows.Forms.Label lblResize;
+        private System.Windows.Forms.NumericUpDown numResize;
+        private System.Windows.Forms.CheckBox chkMerge;
         private System.Windows.Forms.Panel panelMain;
         private System.Windows.Forms.ListView lvCameras;
         private System.Windows.Forms.ColumnHeader colCamCamera;

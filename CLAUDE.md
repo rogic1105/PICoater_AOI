@@ -15,7 +15,7 @@ PICoater_AOI/
 │   │   │   └── samples/                      ← 可執行範例（ManualControl / Automation GUI）
 │   │   ├── LightBridge/LightBridge.Core/     ← RS-232 LTS-3DPA24 光源
 │   │   └── StorageBridge/StorageBridge.Core/ ← SMB + 檔案複製 + 循環儲存
-│   ├── MIL/              ← MIL 集中區（MilGrabber.Core MIL 封裝 library〔MilCamera=一台相機〕 + samples/MilGrabber.Monitor 多相機監控範例〔system-settings.json 配置〕 + docs：Matrox 規格書/CLProtocol）；隔離 MIL，換 grabber 整區換
+│   ├── MIL/              ← MIL 集中區（MilGrabber.Core MIL 封裝 library〔MilCamera=一台相機〕 + samples/MilGrabber.Monitor 多相機監控範例〔MIL 直繪 panel〕 + samples/MilGrabber.PictureBox〔同範例但改：MilCamera FrameReady → GetFrameBytes → core_cv GPU resize 縮圖 → PictureBox/SmartCanvas 繪 + 合圖；測 GDI 繪製即時取像會不會卡，class=MilGrabberPbForm 區隔〕 + docs）；隔離 MIL，換 grabber 整區換。**取像同步**：相機需 CLProtocol 套線掃才同頻（btnInit 後自動跑 btnFetchInfo 等 CLProtocol+套線掃，否則 free-run 偶發不同步；硬體無 encoder/外部觸發）
 │   └── docs/            ← 跨專案工程經驗（repo-style / testing pyramid / FSM）
 ├── tools/                ← 跨元件 / 應用層通用工具（不專屬單一 sdk 元件）
 │   ├── ps/                   ← PowerShell 腳本

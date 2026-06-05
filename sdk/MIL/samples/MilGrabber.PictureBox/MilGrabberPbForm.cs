@@ -8,7 +8,7 @@ using System.Windows.Forms;
 using Matrox.MatroxImagingLibrary; // MApp 仍由本範例管理
 using MilGrabber.Core;             // 已封裝的單相機 MIL library
 
-namespace MilGrabber.Monitor
+namespace MilGrabber.PictureBoxTest
 {
     /// <summary>
     /// 多相機即時監控 UI 範例。
@@ -17,7 +17,7 @@ namespace MilGrabber.Monitor
     /// MilCamera 內建 grab hook：未訂閱 FrameReady 時自動把原圖顯示到 primary panel，
     /// 故本純顯示範例不訂閱 FrameReady。
     /// </summary>
-    public partial class MilGrabberForm : Form
+    public partial class MilGrabberPbForm : Form
     {
         // 固定畫 8 個子畫面（不管實際幾台相機）。Designer 已逐一宣告 panelCam0..7（容器）；
         // displayPanel + status label 在本檔 runtime 建（仿主程式 SetupLivePanel）。
@@ -71,7 +71,7 @@ namespace MilGrabber.Monitor
         // 否則 VS 設計工具的 XML parser 無法解析 → 設計階段載入失敗。
         // 每個容器內部的 displayPanel（MIL 顯示）+ status label（狀態）由 SetupCamPanel runtime 建（仿主程式 SetupLivePanel）。
         private Panel[] _camContainers;     // Designer 宣告的 panelCam0..7（容器）
-        private Panel[] _displayPanels;     // runtime 建：MilCamera 顯示目標（panelHandle 來源）
+        private PictureBox[] _displayBoxes; // runtime 建：縮圖後用 PictureBox 自己畫（取代 MIL 直繪 panel）
         private Label[] _statusLabels;      // runtime 建：取代原 lblCam，顯示 Online/Offline/No Camera
 
         // ==================== State ====================
@@ -87,7 +87,7 @@ namespace MilGrabber.Monitor
         // 拖曳中的 TrackBar（MouseDown 進 / MouseUp 出）：拖曳過程不寫硬體，放掉才套用（仿 AniloxRoll.Monitor）
         private readonly HashSet<TrackBar> _dragging = new HashSet<TrackBar>();
 
-        public MilGrabberForm()
+        public MilGrabberPbForm()
         {
             InitializeComponent();
 
@@ -95,13 +95,15 @@ namespace MilGrabber.Monitor
             _camContainers = new Panel[] {
                 panelCam0, panelCam1, panelCam2, panelCam3,
                 panelCam4, panelCam5, panelCam6, panelCam7 };
-            _displayPanels = new Panel[SubPanelCount];
+            _displayBoxes = new PictureBox[SubPanelCount];
             _statusLabels  = new Label[SubPanelCount];
 
             // 每個容器 runtime 建內部 displayPanel + status（仿主程式 SetupLivePanel）。
             // 一律先建好（即使未綁相機），未綁的 status 顯示 "No Camera"。
             for (int i = 0; i < SubPanelCount; i++)
                 SetupCamPanel(_camContainers[i], i);
+
+            SetupPbMain(); // 主畫面 SmartCanvas（PictureBox 顯示路徑用）
 
             // 參數控制項陣列：從 Designer 具名控制項組成（陣列在 .cs 組、控制項在 Designer 宣告，同 panelCam0..7 模式）。
             _tbExposure = new[] { trackBarExpCam1, trackBarExpCam2, trackBarExpCam3, trackBarExpCam4, trackBarExpCam5, trackBarExpCam6, trackBarExpCam7, trackBarExpCam8 };
@@ -141,10 +143,11 @@ namespace MilGrabber.Monitor
             container.Padding = new Padding(2);
             container.Controls.Clear();
 
-            var displayPanel = new Panel
+            var displayBox = new PictureBox
             {
                 Dock = DockStyle.Fill,
-                BackColor = Color.Black
+                BackColor = Color.Black,
+                SizeMode = PictureBoxSizeMode.Zoom   // 等比例縮放塞滿子畫面（縮圖後的小圖）
             };
 
             var status = new Label
@@ -157,15 +160,15 @@ namespace MilGrabber.Monitor
                 Text = "No Camera"
             };
 
-            displayPanel.MouseClick += (s, e) => SelectCamera(idx);
+            displayBox.MouseClick += (s, e) => SelectCamera(idx);
             status.MouseClick += (s, e) => SelectCamera(idx);
             container.Paint += (s, e) => OnCamPanelPaint(s, e, idx);
 
-            container.Controls.Add(displayPanel);
+            container.Controls.Add(displayBox);
             container.Controls.Add(status);
-            displayPanel.BringToFront();
+            displayBox.BringToFront();
 
-            _displayPanels[idx] = displayPanel;
+            _displayBoxes[idx] = displayBox;
             _statusLabels[idx] = status;
         }
 
@@ -228,12 +231,15 @@ namespace MilGrabber.Monitor
                     _systems[dev.SystemNum] = sysId;
                 }
 
-                IntPtr panelHandle = _displayPanels[i].Handle; // 第 i 台綁第 i 個容器內的 displayPanel（primary display）
-                var cam = new MilCamera(sysId, dev.Id, dev.DevNum, dev.DcfPath, panelHandle); // dev.DevNum = 固定 device 位置（絕對值）；不加 M_DEV0 偏移，轉換收斂在 MilCamera ctor
+                // 傳真實 PictureBox handle（不可傳 IntPtr.Zero，否則 MIL 會自己開顯示視窗 → 每台一個彈窗）。
+                // Initialize 後立刻 SetPrimaryDisplayVisible(false) detach MIL 顯示，純用 PictureBox 畫（FrameReady）。
+                IntPtr h = _displayBoxes[i].Handle;
+                var cam = new MilCamera(sysId, dev.Id, dev.DevNum, dev.DcfPath, h);
                 int idx = i; // 迴圈變數捕捉（綁子畫面索引，與 _cams / lvCameras Tag 一致）
                 cam.OnCameraClicked += _ => SelectCamera(idx);
-                cam.FlipVertical = chkFlipVertical.Checked;   // 套用目前「上下翻轉」勾選狀態
+                cam.FrameReady += (c, buf) => OnCameraFrame(idx, c, buf); // 每幀：縮圖 → PictureBox
                 cam.Initialize();
+                cam.SetPrimaryDisplayVisible(false); // detach MIL 顯示（不彈窗、不跟 PictureBox 搶畫）
                 _cams[i] = cam;
             }
 
@@ -259,6 +265,7 @@ namespace MilGrabber.Monitor
                 SelectCamera(0);
 
             _statusTimer.Start();
+            _displayTimer?.Start(); // 主畫面/合圖定頻刷
             btnGrab.Text = "開始抓取";
             UpdateButtonsEnabled(initialized: true);
 
@@ -351,10 +358,7 @@ namespace MilGrabber.Monitor
             string origText = btnFetchInfo.Text;
             try
             {
-                // 抓取期間完全不顯示（grab 但 panel 不亮）：停所有子畫面(primary) + 選中主畫面(secondary)
-                foreach (var c in _cams) if (c != null) c.SetPrimaryDisplayVisible(false);
-                if (_selectedCam >= 0 && _selectedCam < _cams.Length && _cams[_selectedCam] != null)
-                    _cams[_selectedCam].SetSecondaryDisplay(IntPtr.Zero);
+                // PictureBox 版不用 MIL display（已 detach），顯示全走 FrameReady → PictureBox/SmartCanvas，不需開關。
 
                 // 1. 確保 grab（沒在 grab 就自動啟動，CLProtocol 才會背景啟用）
                 if (!_userWantsGrab)
@@ -426,10 +430,7 @@ namespace MilGrabber.Monitor
                 foreach (var c in _cams) if (c != null) c.SetUserGrabIntent(false);
                 btnGrab.Text = "開始抓取";
 
-                // 清掉停 grab 後殘留的最後一幀 → 恢復顯示綁定 → panel 顯示黑（不顯示殘影）
-                foreach (var c in _cams) if (c != null) { c.ClearDisplay(); c.SetPrimaryDisplayVisible(true); }
-                if (_selectedCam >= 0 && _selectedCam < _cams.Length && _cams[_selectedCam] != null)
-                    _cams[_selectedCam].SetSecondaryDisplay(panelMain.Handle);
+                // PictureBox 版：停 grab 後 FrameReady 自然停止，畫面留最後一幀；不需 MIL display 還原。
             }
             finally
             {
@@ -477,6 +478,10 @@ namespace MilGrabber.Monitor
         {
             _isReleasing = true;
             _statusTimer.Stop();
+            _displayTimer?.Stop();
+
+            // 0. 釋放 PictureBox 縮圖緩衝（pinned）+ 清掉 PictureBox 上的圖
+            ReleasePictureBoxDisplays();
 
             // 1. 所有 MilCamera Dispose（會 stop grab + free digitizer/display/buffer）
             if (_cams != null)
@@ -525,14 +530,8 @@ namespace MilGrabber.Monitor
         {
             if (_cams == null || idx < 0 || idx >= _cams.Length || _cams[idx] == null) return;
 
-            // 舊選中：解除副顯示（回到只在自己的子 panel）
-            if (_selectedCam >= 0 && _selectedCam < _cams.Length && _cams[_selectedCam] != null)
-                _cams[_selectedCam].SetSecondaryDisplay(IntPtr.Zero);
-
+            // PictureBox 版：主畫面不用 MIL secondary，改由 OnCameraFrame 在 idx==_selectedCam 時更新 _mainBox。
             _selectedCam = idx;
-
-            // 新選中：把這台顯示到主畫面
-            _cams[idx].SetSecondaryDisplay(panelMain.Handle);
 
             // 重畫所有容器邊框（選中橘色、其他深灰）
             if (_camContainers != null)
@@ -870,7 +869,7 @@ namespace MilGrabber.Monitor
                 bool online = cam.CheckPresence();
                 int camId = CamIdForIndex(i);
                 if (online)
-                    SetSubLabel(i, $"Cam {camId}: Online", Color.LightGreen, Color.Black);
+                    SetSubLabel(i, $"Cam {camId}  {cam.CurrentFps:F1} fps", Color.LightGreen, Color.Black);
                 else
                     SetSubLabel(i, $"Cam {camId}: Offline", Color.Red, Color.White);
             }
