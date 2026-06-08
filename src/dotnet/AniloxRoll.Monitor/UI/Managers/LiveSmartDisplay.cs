@@ -52,7 +52,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _canvas.FitRelativeZoom = true;
             _canvas.DoubleClickFitToScreen = true;
             _canvas.TripleClickPhysical1x = true;
-            _canvas.ClampPan = true;
+            _canvas.ClampPan = false; // 自由拖曳（可上下/左右拖，含 fit 時）—— 監控要能隨意拖看
             _canvas.StatusChanged += OnCanvasStatus;
             _mainPanel.Controls.Add(_canvas);
             _canvas.BringToFront();

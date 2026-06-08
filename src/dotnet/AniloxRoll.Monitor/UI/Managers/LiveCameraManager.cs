@@ -282,15 +282,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _cameraStatusTimer.Start();
             UpdateCameraStatus("已配置", Color.White);
 
-            // SmartCanvas 顯示路徑（he_MainDisplay==SmartCanvas）：在 camLiveMain 疊 SmartCanvas，
-            // 訂閱各相機每幀顯示 bytes → CPU bitmap。MIL 直繪維持在底層（被 SmartCanvas 覆蓋，coexist）。
-            if (SmartCanvasMode)
-            {
-                _smartDisplay = new LiveSmartDisplay(_mainDisplayPanel, _cameraPanels, _screenMmPerPx);
-                _smartDisplay.SelectRequested  += SmartSelectCamera;
-                _smartDisplay.ViewRangeMmChanged += OnSmartViewRange;
-                foreach (var cam in _cameras) cam.OnDisplayFrame += OnCameraDisplayFrame;
-            }
+            EnsureSmartDisplay(); // SmartCanvas 模式：在 camLiveMain 疊 SmartCanvas + 訂閱各相機每幀 bytes
 
             SwitchMainDisplay(_selectedMainCameraId);
 
@@ -319,6 +311,9 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (!IsAllocated || IsLiveGrabbing) return;
             IsLiveGrabbing = true;
+            // 切「主畫面顯示」設定後重開抓取即生效：SmartCanvas 模式建立、MilDirect 模式拆除
+            if (SmartCanvasMode) EnsureSmartDisplay();
+            else TeardownSmartDisplay();
             foreach (var cam in _cameras)
                 cam.SetUserGrabIntent(true);
         }
@@ -524,6 +519,29 @@ namespace AniloxRoll.Monitor.UI.Managers
         }
 
         // ── SmartCanvas 顯示路徑橋接 ──
+        /// <summary>SmartCanvas 模式且尚未建立 → 在 camLiveMain 疊 SmartCanvas + 訂閱各相機每幀 bytes（冪等）。
+        /// 在「相機配置」與「開始抓取」都呼叫 → 切設定後重開抓取即生效，不必重啟程式。</summary>
+        private void EnsureSmartDisplay()
+        {
+            if (!SmartCanvasMode || _smartDisplay != null) return;
+            if (_mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) return;
+            _smartDisplay = new LiveSmartDisplay(_mainDisplayPanel, _cameraPanels, _screenMmPerPx);
+            _smartDisplay.SelectRequested  += SmartSelectCamera;
+            _smartDisplay.ViewRangeMmChanged += OnSmartViewRange;
+            _smartDisplay.SetSelected(_selectedMainCameraId);
+            _smartDisplay.SetMergeMode(IsGlobalMergeActive);
+            foreach (var cam in _cameras) cam.OnDisplayFrame += OnCameraDisplayFrame;
+        }
+
+        /// <summary>切回 MIL 模式（he_MainDisplay==MilDirect）→ 解訂閱 + dispose SmartCanvas，露出底層 MIL。</summary>
+        private void TeardownSmartDisplay()
+        {
+            if (_smartDisplay == null) return;
+            foreach (var cam in _cameras) cam.OnDisplayFrame -= OnCameraDisplayFrame;
+            _smartDisplay.Dispose();
+            _smartDisplay = null;
+        }
+
         private void OnCameraDisplayFrame(int camId, byte[] bytes, int w, int h) => _smartDisplay?.OnCameraFrame(camId, bytes, w, h);
         private void SmartSelectCamera(int camId) => SwitchMainDisplay(camId);
         private void OnSmartViewRange(double leftMm, double rightMm) { /* TODO: overview(chartLivePatch) 聯動，先留 hook */ }
