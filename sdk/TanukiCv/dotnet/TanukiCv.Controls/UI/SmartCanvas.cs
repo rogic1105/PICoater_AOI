@@ -4,6 +4,7 @@ using System;
 using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Threading.Tasks; // LOD tile GPU 重算丟背景執行緒
 using System.Windows.Forms;
 using TanukiCv.Core; // PixelMmMapper（實體 1:1 zoom 公式）
 
@@ -75,8 +76,15 @@ namespace TanukiCv.Controls
         private Func<Rectangle, Size, Bitmap> _lodProvider;     // (可見虛擬區 srcRect, 目標像素) → tile（caller 做 GPU 裁+縮）
         private Bitmap _lodTile;                                // 當前 tile（~panel 大小，canvas 持有並 Dispose）
         private Rectangle _lodTileRect;                         // _lodTile 代表的虛擬區
+        private volatile bool _lodRecomputeInFlight;            // provider(GPU) 背景進行中
+        private volatile bool _lodRecomputePending;            // 進行中又有新請求 → 完成後再算一次（用最新視角）
         private Timer _lodSettleTimer;                          // 停住才重算 crisp tile
         private const int LodSettleMs = 150;
+
+        // 滾輪 zoom 防抖：滾動中只「拉伸現有畫面」(便宜)，停下才做昂貴重建(viewCache 重建 / LOD tile 重算)
+        private bool _zoomingActive;
+        private Timer _zoomSettleTimer;
+        private const int ZoomSettleMs = 150;
 
         /// <summary>LOD overscan：tile 多裁「可見區 × 此倍率」的邊（每側）。1.0=各側多一個視窗(3×3)→ 拖曳不易破圖。</summary>
         public float LodMargin { get; set; } = 1.0f;
@@ -214,6 +222,9 @@ namespace TanukiCv.Controls
 
             _lodSettleTimer = new Timer { Interval = LodSettleMs };
             _lodSettleTimer.Tick += (s, e) => { _lodSettleTimer.Stop(); RecomputeLodTile(); };
+
+            _zoomSettleTimer = new Timer { Interval = ZoomSettleMs };
+            _zoomSettleTimer.Tick += (s, e) => { _zoomSettleTimer.Stop(); _zoomingActive = false; Invalidate(); };
         }
 
         // ── 動態 LOD API ──────────────────────────────────────────────────────
@@ -312,15 +323,40 @@ namespace TanukiCv.Controls
             int tw = Math.Max(1, Math.Min(capW, (int)Math.Round(rw * _zoom)));
             int th = Math.Max(1, Math.Min(capH, (int)Math.Round(rh * _zoom)));
 
-            Bitmap tile;
-            try { tile = _lodProvider(srcRect, new Size(tw, th)); } catch { tile = null; }
-            if (tile == null) return;
+            // provider(GPU 裁+縮) 丟背景執行緒 → 停下/換幀不凍 UI；同時間只一個（in-flight），
+            // 進行中又被請求則記 pending，完成後用「最新視角」再算一次。
+            if (_lodRecomputeInFlight) { _lodRecomputePending = true; return; }
+            _lodRecomputeInFlight = true;
+            var provider = _lodProvider;
+            var size = new Size(tw, th);
+            Task.Run(() =>
+            {
+                Bitmap tile = null;
+                try { tile = provider(srcRect, size); } catch { tile = null; }
+                try
+                {
+                    if (IsHandleCreated && !IsDisposed)
+                        BeginInvoke((Action)(() => ApplyLodTile(tile, srcRect)));
+                    else { tile?.Dispose(); _lodRecomputeInFlight = false; }
+                }
+                catch { tile?.Dispose(); _lodRecomputeInFlight = false; }
+            });
+        }
 
-            if (_lodTile != null && !ReferenceEquals(_lodTile, tile)) _lodTile.Dispose();
-            _lodTile = tile;
-            _lodTileRect = srcRect;
-            _lodLastRecomputeMs = Environment.TickCount;
-            this.Invalidate();
+        /// <summary>背景 provider 完成 → UI 執行緒套 tile + 若有 pending 再算一次（最新視角）。</summary>
+        private void ApplyLodTile(Bitmap tile, Rectangle rect)
+        {
+            _lodRecomputeInFlight = false;
+            if (!_lodActive) { tile?.Dispose(); return; }
+            if (tile != null)
+            {
+                if (_lodTile != null && !ReferenceEquals(_lodTile, tile)) _lodTile.Dispose();
+                _lodTile = tile;
+                _lodTileRect = rect;
+                _lodLastRecomputeMs = Environment.TickCount;
+                this.Invalidate();
+            }
+            if (_lodRecomputePending) { _lodRecomputePending = false; RecomputeLodTile(); }
         }
 
         private static Cursor CreateCrosshairCursor(int size, int lineWidth, Color foreColor)
@@ -583,6 +619,10 @@ namespace TanukiCv.Controls
             _panOffset.Y = e.Y - (e.Y - _panOffset.Y) * scaleChange;
             if (ClampPan) ApplyPanClamp();
 
+            // zoom 防抖：滾動中只拉伸現有畫面（非 LOD 拉伸舊 viewCache、LOD 拉伸舊 tile），停下才重建
+            _zoomingActive = true;
+            _zoomSettleTimer.Stop(); _zoomSettleTimer.Start();
+
             this.Invalidate();
             TriggerStatusChange();
             RestartLodSettle(); // LOD：停住才重算 crisp tile（互動中先用舊 tile 拉伸）
@@ -658,9 +698,21 @@ namespace TanukiCv.Controls
 
             if (_viewCache != null)
             {
-                // 整圖快取：pan 只是把同一張縮好的圖「貼到不同位置」→ 不重縮 → FitToScreen 拖曳超順
-                pe.Graphics.DrawImageUnscaled(_viewCache,
-                    (int)Math.Round(_panOffset.X), (int)Math.Round(_panOffset.Y));
+                if (_zoomingActive && _cacheZoom > 0 && _zoom != _cacheZoom)
+                {
+                    // 滾動中：把舊 cache（在 _cacheZoom 下）依 _zoom/_cacheZoom 拉伸（便宜）→ 停下才重建一次
+                    float s = _zoom / _cacheZoom;
+                    pe.Graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
+                    pe.Graphics.PixelOffsetMode   = PixelOffsetMode.Half;
+                    pe.Graphics.DrawImage(_viewCache, _panOffset.X, _panOffset.Y,
+                        _viewCache.Width * s, _viewCache.Height * s);
+                }
+                else
+                {
+                    // 整圖快取：pan 只是把同一張縮好的圖「貼到不同位置」→ 不重縮 → FitToScreen 拖曳超順
+                    pe.Graphics.DrawImageUnscaled(_viewCache,
+                        (int)Math.Round(_panOffset.X), (int)Math.Round(_panOffset.Y));
+                }
             }
             else
             {
@@ -683,6 +735,9 @@ namespace TanukiCv.Controls
         /// 放大太多致整圖超過記憶體預算（~6× 控制項面積）→ _viewCache=null，OnPaint 改 per-frame（放大時便宜）。</summary>
         private void EnsureViewCache()
         {
+            // 滾輪 zoom 進行中且有現成 cache → 不重建，OnPaint 拉伸舊 cache（便宜）；停下 settle 才重建一次。
+            if (_zoomingActive && _viewCache != null) return;
+
             int  sw = Math.Max(1, (int)Math.Round(this.Image.Width  * _zoom));
             int  sh = Math.Max(1, (int)Math.Round(this.Image.Height * _zoom));
             long budget = Math.Max(6L * Width * Height, 8_000_000L);
@@ -776,6 +831,7 @@ namespace TanukiCv.Controls
             {
                 _viewCache?.Dispose(); _viewCache = null;
                 _lodSettleTimer?.Dispose(); _lodSettleTimer = null;
+                _zoomSettleTimer?.Dispose(); _zoomSettleTimer = null;
                 _lodTile?.Dispose(); _lodTile = null;
             }
             base.Dispose(disposing);

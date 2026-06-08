@@ -33,7 +33,9 @@ namespace MilGrabber.Monitor
         //    停住才裁可見區+GPU 縮到 panel 解析度 → 縮小看全圖便宜、放大看細節清晰且便宜。 ──
         private volatile bool _lodEnabled;
         private volatile FrameData _lodSnap;        // 選中相機最新「全解析度」灰階快照（整顆 ref 原子換→尺寸+bytes 一致，provider 在 UI 執行緒讀）
-        private IntPtr _lodSrcPinned, _lodDstPinned; // LOD 裁+縮專用 pinned（provider 單執行緒=UI，無併發）
+        private IntPtr _lodSrcPinned, _lodDstPinned; // LOD 裁+縮專用 pinned（provider 現跑背景執行緒）
+        private readonly object _lodBufLock = new object(); // 保護 pinned：背景 provider vs 釋放（防 use-after-free）
+        private volatile bool _lodReleased;          // 已釋放 pinned → 等待中的 provider 取得鎖後不再 re-alloc
         private int _lodSrcCap, _lodDstCap;
         private int _lodActiveCamIdx = -1;         // 目前 LOD 綁的相機 index（換相機要重設虛擬尺寸）
 
@@ -82,6 +84,7 @@ namespace MilGrabber.Monitor
         /// MIL 模式：每容器疊 Panel（MIL 直繪目標）+ 主畫面疊 Panel；PictureBox 模式：用現成 PictureBox + SmartCanvas。</summary>
         private void CreateDisplaysForMode()
         {
+            _lodReleased = false; // 重新 init → 允許 LOD provider 再配置 pinned
             _milMode = _rbModeMil.Checked;
             _rbModeMil.Enabled = _rbModePb.Enabled = false; // 初始化後不可改模式
             if (!_milMode) return;
@@ -243,27 +246,31 @@ namespace MilGrabber.Monitor
             int tw = Math.Max(1, target.Width), th = Math.Max(1, target.Height);
             int cropPix = sw * sh, dstPix = tw * th;
 
-            if (_lodSrcCap < cropPix)
+            byte[] dst;
+            lock (_lodBufLock) // pinned 存取與「釋放」互斥（provider 現跑背景執行緒）
             {
-                if (_lodSrcPinned != IntPtr.Zero) NativeResize.CoreCV_FreePinned(_lodSrcPinned);
-                _lodSrcPinned = NativeResize.CoreCV_AllocPinned((ulong)cropPix); _lodSrcCap = cropPix;
-            }
-            if (_lodDstCap < dstPix)
-            {
-                if (_lodDstPinned != IntPtr.Zero) NativeResize.CoreCV_FreePinned(_lodDstPinned);
-                _lodDstPinned = NativeResize.CoreCV_AllocPinned((ulong)dstPix); _lodDstCap = dstPix;
-            }
-            if (_lodSrcPinned == IntPtr.Zero || _lodDstPinned == IntPtr.Zero) return null;
+                if (_lodReleased) return null; // 已釋放 → 不再碰/配置 pinned
+                if (_lodSrcCap < cropPix)
+                {
+                    if (_lodSrcPinned != IntPtr.Zero) NativeResize.CoreCV_FreePinned(_lodSrcPinned);
+                    _lodSrcPinned = NativeResize.CoreCV_AllocPinned((ulong)cropPix); _lodSrcCap = cropPix;
+                }
+                if (_lodDstCap < dstPix)
+                {
+                    if (_lodDstPinned != IntPtr.Zero) NativeResize.CoreCV_FreePinned(_lodDstPinned);
+                    _lodDstPinned = NativeResize.CoreCV_AllocPinned((ulong)dstPix); _lodDstCap = dstPix;
+                }
+                if (_lodSrcPinned == IntPtr.Zero || _lodDstPinned == IntPtr.Zero) return null;
 
-            // 裁出可見區到連續緩衝（逐列複製）
-            var crop = new byte[cropPix];
-            for (int y = 0; y < sh; y++) Array.Copy(full, (sy + y) * fw + sx, crop, y * sw, sw);
-            Marshal.Copy(crop, 0, _lodSrcPinned, cropPix);
-            NativeResize.CoreCV_Resize_GPU(_lodSrcPinned, sw, sh, _lodDstPinned, tw, th);
-
-            var dst = new byte[dstPix];
-            Marshal.Copy(_lodDstPinned, dst, 0, dstPix);
-            return BuildGrayBitmap(dst, tw, th); // flip 由 _flipDisplay 處理（與主路徑一致）
+                // 裁出可見區到連續緩衝（逐列複製）→ GPU 縮 → 拷回 dst
+                var crop = new byte[cropPix];
+                for (int y = 0; y < sh; y++) Array.Copy(full, (sy + y) * fw + sx, crop, y * sw, sw);
+                Marshal.Copy(crop, 0, _lodSrcPinned, cropPix);
+                NativeResize.CoreCV_Resize_GPU(_lodSrcPinned, sw, sh, _lodDstPinned, tw, th);
+                dst = new byte[dstPix];
+                Marshal.Copy(_lodDstPinned, dst, 0, dstPix);
+            }
+            return BuildGrayBitmap(dst, tw, th); // 組 bitmap 不碰 pinned，移出鎖；flip 由 _flipDisplay 處理
         }
 
         /// <summary>更新計時 label（StatusTimer 每 500ms 呼叫）：比較 MIL 直繪 vs PictureBox 的縮圖/顯示成本。</summary>
@@ -470,10 +477,14 @@ namespace MilGrabber.Monitor
                     _displayPanels[i] = null;
                 }
             }
-            // LOD：停用 + 釋放專用 pinned + 清快照
+            // LOD：停用（新 recompute 不再啟動）+ 鎖內釋放 pinned（等背景 provider 用完）+ 清快照
             if (_mainCanvas != null && _mainCanvas.LodActive) _mainCanvas.DisableLod();
-            if (_lodSrcPinned != IntPtr.Zero) { NativeResize.CoreCV_FreePinned(_lodSrcPinned); _lodSrcPinned = IntPtr.Zero; _lodSrcCap = 0; }
-            if (_lodDstPinned != IntPtr.Zero) { NativeResize.CoreCV_FreePinned(_lodDstPinned); _lodDstPinned = IntPtr.Zero; _lodDstCap = 0; }
+            lock (_lodBufLock)
+            {
+                _lodReleased = true;
+                if (_lodSrcPinned != IntPtr.Zero) { NativeResize.CoreCV_FreePinned(_lodSrcPinned); _lodSrcPinned = IntPtr.Zero; _lodSrcCap = 0; }
+                if (_lodDstPinned != IntPtr.Zero) { NativeResize.CoreCV_FreePinned(_lodDstPinned); _lodDstPinned = IntPtr.Zero; _lodDstCap = 0; }
+            }
             _lodSnap = null; _lodActiveCamIdx = -1;
 
             if (_mainCanvas != null) { var old = _mainCanvas.Image; _mainCanvas.Image = null; old?.Dispose(); }
