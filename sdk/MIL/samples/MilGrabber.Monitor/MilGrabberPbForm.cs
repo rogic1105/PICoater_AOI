@@ -8,7 +8,7 @@ using System.Windows.Forms;
 using Matrox.MatroxImagingLibrary; // MApp 仍由本範例管理
 using MilGrabber.Core;             // 已封裝的單相機 MIL library
 
-namespace MilGrabber.PictureBoxTest
+namespace MilGrabber.Monitor
 {
     /// <summary>
     /// 多相機即時監控 UI 範例。

@@ -9,7 +9,7 @@ using MilGrabber.Core;
 using TanukiCv.Controls; // SmartCanvas（zoom/pan/overlay）
 using TanukiCv.Core;     // SystemInfo（螢幕 mm/px）、PixelMmMapper
 
-namespace MilGrabber.PictureBoxTest
+namespace MilGrabber.Monitor
 {
     // PictureBox 顯示路徑：不讓 MIL 直接畫 panel，改訂閱 MilCamera.FrameReady →
     //   GetFrameBytes（8-bit 灰階）→ core_cv_api 的 GPU resize 縮圖 → 組灰階 Bitmap →

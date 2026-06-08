@@ -4,7 +4,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{846F1ADB-1879-476B-A963-267CC17DC219}</ProjectGuid>
+    <ProjectGuid>{3F8B2D17-6C49-4E2A-A1B5-9D0E4C7F26A3}</ProjectGuid>
     <OutputType>WinExe</OutputType>
     <RootNamespace>MilGrabber.Monitor</RootNamespace>
     <AssemblyName>MilGrabber.Monitor</AssemblyName>
@@ -65,16 +65,21 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="MilGrabberForm.cs">
+    <Compile Include="MilGrabberPbForm.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="MilGrabberForm.Designer.cs">
-      <DependentUpon>MilGrabberForm.cs</DependentUpon>
+    <Compile Include="MilGrabberPbForm.PictureBox.cs">
+      <DependentUpon>MilGrabberPbForm.cs</DependentUpon>
+      <SubType>Form</SubType>
     </Compile>
+    <Compile Include="MilGrabberPbForm.Designer.cs">
+      <DependentUpon>MilGrabberPbForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="NativeResize.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <EmbeddedResource Include="MilGrabberForm.resx">
-      <DependentUpon>MilGrabberForm.cs</DependentUpon>
+    <EmbeddedResource Include="MilGrabberPbForm.resx">
+      <DependentUpon>MilGrabberPbForm.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
@@ -107,6 +112,14 @@
     <ProjectReference Include="..\..\MilGrabber.Core\MilGrabber.Core.csproj">
       <Project>{B2C3D4E5-6F70-4A81-9B2C-3D4E5F607182}</Project>
       <Name>MilGrabber.Core</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\TanukiCv\dotnet\TanukiCv.Controls\TanukiCv.Controls.csproj">
+      <Project>{3655F7A3-8DF1-4541-82AE-2FD4FE5A397F}</Project>
+      <Name>TanukiCv.Controls</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\TanukiCv\dotnet\TanukiCv.Core\TanukiCv.Core.csproj">
+      <Project>{27263C11-7FEF-4076-A2F1-F412BB496DF3}</Project>
+      <Name>TanukiCv.Core</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

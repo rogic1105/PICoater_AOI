@@ -1,4 +1,4 @@
-namespace MilGrabber.PictureBoxTest
+namespace MilGrabber.Monitor
 {
     partial class MilGrabberPbForm
     {

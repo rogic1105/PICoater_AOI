@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace MilGrabber.PictureBoxTest
+namespace MilGrabber.Monitor
 {
     /// <summary>
     /// 縮圖走 core_cv_api.dll 既有的 GPU resize（與主程式 AniloxRoll.Monitor 同一份 native）。

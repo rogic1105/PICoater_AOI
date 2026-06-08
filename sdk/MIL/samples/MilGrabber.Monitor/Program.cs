@@ -16,7 +16,7 @@ namespace MilGrabber.Monitor
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new MilGrabberForm());
+            Application.Run(new MilGrabberPbForm());
         }
     }
 }
