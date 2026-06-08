@@ -341,6 +341,7 @@ PICoater_AOI/
 | 合圖方式 | `hb_StitchMode` → `StitchMode` | Global | Vertical / Global |
 | 監控強化 | `hc_EnableMuraEnhance` → `EnableMuraEnhance` | false | 即時影像強化 Mura |
 | 回顧強化 | `hd_EnableReviewEnhance` → `EnableReviewEnhance` | false | 回顧影像強化 Mura |
+| 主畫面顯示 | `he_MainDisplay` → `ImageView.MainDisplay` | MilDirect | MilDirect（MIL 直繪，現狀）/ SmartCanvas（CPU 繪、跟回顧畫布同源；並存開關，SmartCanvas 顯示路徑施工中）|
 
 ### 4. 儲存設定
 

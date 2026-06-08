@@ -72,6 +72,7 @@ namespace MilGrabber.Monitor
             _mainCanvas.DoubleClickFitToScreen = true; // 雙擊回到 fit（提取自主程式回顧畫布）
             _mainCanvas.TripleClickPhysical1x = true;  // 三擊跳實體 1:1（需 SetPhysicalCalibration）
             _screenMmPerPx = SystemInfo.GetScreenMetrics().MmPerPx; // 螢幕 mm/px 查一次
+            _mainCanvas.StatusChanged += OnMainCanvasStatus; // 四邊 mm 邊界 overlay + 游標 mm（驗證座標映射）
             panelMain.Controls.Add(_mainCanvas);
             _mainCanvas.BringToFront();
 
@@ -181,6 +182,38 @@ namespace MilGrabber.Monitor
             double opsInMm = fovMm / fw;                                  // mm / 全解析度像素
             double mmPerImagePx = opsInMm * (_lodEnabled ? 1.0 : _resizeScale);
             _mainCanvas.SetPhysicalCalibration(mmPerImagePx, _screenMmPerPx);
+        }
+
+        /// <summary>StatusChanged：算四邊 mm 邊界 + 游標 mm，推給 SmartCanvas overlay。
+        /// 驗證座標映射：縮放/平移時 mm 即時跟動且不跑調 → pixel↔mm 對 → .bin 靠同座標就會對齊。
+        /// 公式單一來源 PixelMmMapper；canvas像素→全解析度像素 sf=(LOD?1:scale)，與 SetPhysicalCalibration 同邏輯。</summary>
+        private void OnMainCanvasStatus(CanvasInfo info)
+        {
+            if (_mainCanvas == null) return;
+            double fovMm = (numFovMm != null) ? (double)numFovMm.Value : 0;
+            int fw = (_selectedCam >= 0 && _cams != null && _selectedCam < _cams.Length && _cams[_selectedCam] != null)
+                ? _cams[_selectedCam].FrameWidth : 0;
+            if (fovMm <= 0 || fw <= 0 || info.Zoom <= 0)
+            {
+                _mainCanvas.SetRangeOverlay("", "", "", "", "");
+                return;
+            }
+            double opsInMm = fovMm / fw;
+            double sf = _lodEnabled ? 1.0 : _resizeScale;          // canvas 像素 → 全解析度像素
+            // 四邊：canvas 邊 → 全解析度像素 → mm（start=0，單相機視角；Y 暫用同 ops 方形像素假設，驗證跟動用）
+            double leftMm  = PixelMmMapper.PixelToMm((0 - info.PanOffset.X) / info.Zoom * sf, 0, opsInMm);
+            double rightMm = PixelMmMapper.PixelToMm((_mainCanvas.Width  - info.PanOffset.X) / info.Zoom * sf, 0, opsInMm);
+            double topMm   = PixelMmMapper.PixelToMm((0 - info.PanOffset.Y) / info.Zoom * sf, 0, opsInMm);
+            double botMm   = PixelMmMapper.PixelToMm((_mainCanvas.Height - info.PanOffset.Y) / info.Zoom * sf, 0, opsInMm);
+
+            double physMag = _mainCanvas.PhysicalMagnification;
+            _mainCanvas.SetRangeOverlay(physMag > 0 ? $"{physMag:F2}x" : "",
+                $"{leftMm:F1}", $"{rightMm:F1}", $"{topMm:F1}", $"{botMm:F1}");
+
+            // 游標 mm（跟滑鼠）
+            double curX = info.ImageX * sf * opsInMm;
+            double curY = info.ImageY * sf * opsInMm;
+            _mainCanvas.SetCursorMm($"({curX:F2}, {curY:F2})");
         }
         private void chkMerge_CheckedChanged(object sender, EventArgs e)
         {

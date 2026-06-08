@@ -147,6 +147,8 @@ namespace AniloxRoll.Monitor.Core.Data
         public bool hc_EnableMuraEnhance { get => ImageView.EnableMuraEnhance; set => ImageView.EnableMuraEnhance = value; }
         [Category("3. 圖表設定")][DisplayName("回顧強化")][TypeConverter(typeof(BoolYesNoConverter))]
         public bool hd_EnableReviewEnhance { get => ImageView.EnableReviewEnhance; set => ImageView.EnableReviewEnhance = value; }
+        [Category("3. 圖表設定")][DisplayName("主畫面顯示")][Description("MilDirect=MIL 直繪（現狀）；SmartCanvas=CPU 繪、跟回顧畫布同源。變更後重開抓取生效。")]
+        public MainDisplayMode he_MainDisplay { get => ImageView.MainDisplay; set => ImageView.MainDisplay = value; }
 
         // 向後相容：程式碼中直接存取的快捷屬性
         [Browsable(false)] public bool EnableMuraEnhance   { get => ImageView.EnableMuraEnhance;   set => ImageView.EnableMuraEnhance   = value; }
