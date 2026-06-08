@@ -282,15 +282,16 @@ namespace MilGrabber.Monitor
                 // 每 500ms 視窗的「最大值」(worst-case，判斷卡頓);讀完即重置 → 反映近期互動
                 double resizeMax = _resizeMaxMs; _resizeMaxMs = 0;
                 double paintMax  = _mainCanvas?.ResetMaxPaintMs() ?? 0;
-                float  zoomRel   = _mainCanvas?.ZoomRelativeToFit ?? 1f; // 相對 fit（fit=1×；滾 N 格=1.1^N，跨 resize 一致）
-                float  zoomAbs   = _mainCanvas?.Zoom ?? 1f;              // 絕對（螢幕÷bitmap；因 resize 而異）
+                float  zoomRel   = _mainCanvas?.ZoomRelativeToFit ?? 1f;   // 螢幕縮放：相對 fit（fit=1×）
+                double physMag   = _mainCanvas?.PhysicalMagnification ?? 0; // 實體倍率（mm 校正；0=未校正/沒FOV）
                 string merge     = _mergeMode ? "合圖" : "單張";     // 主畫面合圖狀態
                 // LOD 狀態：勾選(_lodEnabled) + 是否真的在畫布生效(LodActive)。ON=生效中、待命=勾了但還沒綁、OFF=沒勾
                 bool lodOn       = _mainCanvas != null && _mainCanvas.LodActive;
                 string lod       = lodOn ? "ON" : (_lodEnabled ? "待命" : "OFF");
+                string physStr   = physMag > 0 ? $"{physMag:F2}x" : "-（需FOV）";
                 _lblTiming.Text =
-                    $"模式: PictureBox\n畫面: {merge}\nLOD: {lod}\n縮圖倍率: {_resizeScale}\nzoom×fit: {zoomRel:F2}\n(abs {zoomAbs:F2})\n縮圖(max): {resizeMax:F1} ms\n顯示(max): {paintMax:F1} ms\nFPS: {fps:F1}";
-                Trace.WriteLine($"[PbTiming] mode=PB {merge} LOD={lod} scale={_resizeScale} zoom×fit={zoomRel:F2} abs={zoomAbs:F2} 縮圖max={resizeMax:F1}ms 顯示max={paintMax:F1}ms FPS={fps:F1}");
+                    $"模式: PictureBox\n畫面: {merge}\nLOD: {lod}\n縮圖倍率: {_resizeScale}\nzoom×fit: {zoomRel:F2}\n實體倍率: {physStr}\n縮圖(max): {resizeMax:F1} ms\n顯示(max): {paintMax:F1} ms\nFPS: {fps:F1}";
+                Trace.WriteLine($"[PbTiming] mode=PB {merge} LOD={lod} scale={_resizeScale} zoom×fit={zoomRel:F2} 實體={physStr} 縮圖max={resizeMax:F1}ms 顯示max={paintMax:F1}ms FPS={fps:F1}");
             }
         }
 

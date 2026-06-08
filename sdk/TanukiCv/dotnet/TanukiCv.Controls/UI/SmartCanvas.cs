@@ -136,6 +136,11 @@ namespace TanukiCv.Controls
             _physCalibrated = mmPerImagePx > 0 && screenMmPerPx > 0;
         }
 
+        /// <summary>實體放大倍率（螢幕上 1mm = 實際 1mm 時為 1.0×）。需先 SetPhysicalCalibration，否則回 0。
+        /// 這是「實體倍率」≠ ZoomRelativeToFit「螢幕縮放」，兩者互不可取代。</summary>
+        public double PhysicalMagnification =>
+            _physCalibrated && _mmPerImagePx > 0 ? PixelMmMapper.PhysicalMagnification(_zoom, _physScreenMmPerPx, _mmPerImagePx) : 0;
+
         /// <summary>跳到實體 1:1（螢幕上 1mm = 實際 1mm），anchor 所指的影像點移到畫布中央。需先 SetPhysicalCalibration。</summary>
         public void ZoomToOneToOne(Point anchor)
         {
