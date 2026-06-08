@@ -37,6 +37,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private readonly double _screenMmPerPx;
 
         private int _mainW = -1, _mainH = -1;   // 主畫面上次影像尺寸（變了才 FitToScreen）
+        private volatile bool _mainDirty = true; // 有新幀/換相機/換模式才重建主畫面（相機 1fps，避免 30fps 冗餘塞爆 UI → zoom/pan 卡）
         private System.Windows.Forms.Timer _timer;
 
         /// <summary>thumbnail 被點 → 要求切換選中相機（camId）。LiveCameraManager 訂閱。</summary>
@@ -72,8 +73,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             _timer.Start();
         }
 
-        public void SetSelected(int camId) => _selectedCamId = camId;
-        public void SetMergeMode(bool on) => _mergeMode = on;
+        public void SetSelected(int camId) { _selectedCamId = camId; _mainDirty = true; }
+        public void SetMergeMode(bool on) { _mergeMode = on; _mainDirty = true; }
 
         public void SetMergeLayout(double minStartMm, double refOpsMm, int totalW, int totalH,
                                    double[] startPosMm, double[] opsUm, double rowPitchMm)
@@ -91,6 +92,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             var copy = new byte[n];
             Array.Copy(bytes, copy, Math.Min(bytes.Length, n));
             _latest[camId - 1] = new Frame(copy, w, h);
+            _mainDirty = true; // 有新幀 → 下個 timer tick 重建主畫面（靜止時不重建，互動才順）
 
             // thumbnail（UI 執行緒）
             PictureBox pb = (camId - 1 < _thumbs.Length) ? _thumbs[camId - 1] : null;
@@ -106,6 +108,8 @@ namespace AniloxRoll.Monitor.UI.Managers
         private void RefreshMain()
         {
             if (_disposed || _canvas == null || _canvas.IsDisposed) return;
+            if (!_mainDirty) return; // 沒新幀 → 不重建 → zoom/pan 互動不被合圖重建干擾（相機 1fps）
+            _mainDirty = false;
             Bitmap bmp = _mergeMode ? BuildMerge() : BuildSingle();
             if (bmp == null) return;
             var old = _canvas.Image;
@@ -125,27 +129,42 @@ namespace AniloxRoll.Monitor.UI.Managers
             return f != null ? BuildGray(f.Bytes, f.W, f.H) : null;
         }
 
-        /// <summary>CPU 合圖：用 MultiCameraMerger 佈局把各台貼到 xOffset=(startPosMm-MinStartMm)/RefOpsMm。
-        /// 重疊區後台相機覆蓋（簡化；MIL 的中點分界為後續精修）。</summary>
+        private const int MergeTargetW = 4096;   // CPU 合圖目標寬（全解析度合圖可達 ~9 萬寬，整張 CPU 不可能）
+        private volatile int _mergeScale = 1;     // 合圖降採樣倍率（顯示像素 → 全解析度像素，mm 換算用）
+
+        /// <summary>CPU 合圖：用 MultiCameraMerger 佈局把各台貼到 xOffset=(startPosMm-MinStartMm)/RefOpsMm，
+        /// 但**降採樣**（÷mergeScale）避免巨圖 OOM。重疊區後台覆蓋（簡化；MIL 中點分界為後續精修）。</summary>
         private Bitmap BuildMerge()
         {
             if (!_mergeReady || _startPosMm == null || _totalW <= 0 || _totalH <= 0) return BuildSingle();
-            var merged = new Bitmap(_totalW, _totalH, PixelFormat.Format24bppRgb);
-            using (var g = Graphics.FromImage(merged))
+            try
             {
-                g.Clear(Color.Black);
-                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
-                g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
-                for (int i = 0; i < _latest.Length && i < _startPosMm.Length; i++)
+                int scale = Math.Max(1, (_totalW + MergeTargetW - 1) / MergeTargetW);
+                _mergeScale = scale;
+                int mw = Math.Max(1, _totalW / scale), mh = Math.Max(1, _totalH / scale);
+                var merged = new Bitmap(mw, mh, PixelFormat.Format24bppRgb);
+                using (var g = Graphics.FromImage(merged))
                 {
-                    Frame f = _latest[i];
-                    if (f == null) continue;
-                    int xOff = (int)Math.Round((_startPosMm[i] - _minStartMm) / _refOpsMm);
-                    using (var cam = BuildGray(f.Bytes, f.W, f.H))
-                        g.DrawImageUnscaled(cam, xOff, 0);
+                    g.Clear(Color.Black);
+                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
+                    g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
+                    for (int i = 0; i < _latest.Length && i < _startPosMm.Length; i++)
+                    {
+                        Frame f = _latest[i];
+                        if (f == null) continue;
+                        int xOff = (int)Math.Round((_startPosMm[i] - _minStartMm) / _refOpsMm / scale);
+                        int cw = Math.Max(1, f.W / scale), ch = Math.Max(1, f.H / scale);
+                        using (var cam = BuildGray(f.Bytes, f.W, f.H))
+                            g.DrawImage(cam, new Rectangle(xOff, 0, cw, ch)); // 縮放貼到降採樣合圖
+                    }
                 }
+                return merged;
             }
-            return merged;
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning($"[LiveSmartDisplay.BuildMerge] {ex.GetType().Name}: {ex.Message}");
+                return null;
+            }
         }
 
         // ── mm overlay + 實體校正（StatusChanged）──
@@ -153,33 +172,33 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (_disposed || _canvas == null || info.Zoom <= 0) return;
 
-            double startMm, opsInMm;
+            double startMm, opsInMm, sf;
             if (_mergeMode && _mergeReady)
             {
-                startMm = _minStartMm; opsInMm = _refOpsMm; // 合圖座標系
+                startMm = _minStartMm; opsInMm = _refOpsMm; sf = _mergeScale; // 合圖座標系（顯示像素降採樣 ×mergeScale）
             }
             else
             {
                 int idx = _selectedCamId - 1;
                 if (_opsUm == null || _startPosMm == null || idx < 0 || idx >= _opsUm.Length) { _canvas.SetRangeOverlay("", "", "", "", ""); return; }
-                opsInMm = _opsUm[idx] / 1000.0; startMm = _startPosMm[idx];
+                opsInMm = _opsUm[idx] / 1000.0; startMm = _startPosMm[idx]; sf = 1.0; // 單相機顯示全解析度
             }
             if (opsInMm <= 0) { _canvas.SetRangeOverlay("", "", "", "", ""); return; }
 
-            // X：canvas 邊 → 影像像素(全解析度，sf=1) → mm（PixelMmMapper 單一公式）
-            double leftMm  = PixelMmMapper.PixelToMm((0 - info.PanOffset.X) / info.Zoom, startMm, opsInMm);
-            double rightMm = PixelMmMapper.PixelToMm((_canvas.Width - info.PanOffset.X) / info.Zoom, startMm, opsInMm);
+            // canvas 邊 → 顯示像素 → 全解析度像素(×sf) → mm（PixelMmMapper 單一公式）
+            double leftMm  = PixelMmMapper.PixelToMm((0 - info.PanOffset.X) / info.Zoom * sf, startMm, opsInMm);
+            double rightMm = PixelMmMapper.PixelToMm((_canvas.Width - info.PanOffset.X) / info.Zoom * sf, startMm, opsInMm);
             double yPitch = _rowPitchMm > 0 ? _rowPitchMm : opsInMm; // Y 用 row pitch；缺則退回 ops
-            double topMm = (0 - info.PanOffset.Y) / info.Zoom * yPitch;
-            double botMm = (_canvas.Height - info.PanOffset.Y) / info.Zoom * yPitch;
+            double topMm = (0 - info.PanOffset.Y) / info.Zoom * sf * yPitch;
+            double botMm = (_canvas.Height - info.PanOffset.Y) / info.Zoom * sf * yPitch;
 
-            _canvas.SetPhysicalCalibration(opsInMm, _screenMmPerPx); // 三擊實體 1:1（sf=1）
+            _canvas.SetPhysicalCalibration(opsInMm * sf, _screenMmPerPx); // mmPerImagePx = 每顯示像素 mm
             double physMag = _canvas.PhysicalMagnification;
             _canvas.SetRangeOverlay(physMag > 0 ? $"{physMag:F2}x" : "",
                 $"{leftMm:F1}", $"{rightMm:F1}", $"{topMm:F1}", $"{botMm:F1}");
 
-            double curMmX = PixelMmMapper.PixelToMm(info.ImageX, startMm, opsInMm);
-            double curMmY = info.ImageY * yPitch;
+            double curMmX = PixelMmMapper.PixelToMm(info.ImageX * sf, startMm, opsInMm);
+            double curMmY = info.ImageY * sf * yPitch;
             _canvas.SetCursorMm($"({curMmX:F2}, {curMmY:F2})");
 
             ViewRangeMmChanged?.Invoke(leftMm, rightMm); // overview 聯動

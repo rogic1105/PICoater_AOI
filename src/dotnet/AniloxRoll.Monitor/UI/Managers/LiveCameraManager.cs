@@ -529,6 +529,12 @@ namespace AniloxRoll.Monitor.UI.Managers
             _smartDisplay.SelectRequested  += SmartSelectCamera;
             _smartDisplay.ViewRangeMmChanged += OnSmartViewRange;
             _smartDisplay.SetSelected(_selectedMainCameraId);
+            if (IsGlobalMergeActive && _merger != null)
+            {
+                var ops = new double[_merger.SlotStartsMm?.Length ?? 0];
+                for (int i = 0; i < ops.Length; i++) ops[i] = _merger.RefOpsMm * 1000.0; // 均勻 ops（單相機 mm 用）
+                _smartDisplay.SetMergeLayout(_merger.MinStartMm, _merger.RefOpsMm, _merger.TotalW, _merger.TotalH, _merger.SlotStartsMm, ops, 0);
+            }
             _smartDisplay.SetMergeMode(IsGlobalMergeActive);
             foreach (var cam in _cameras) cam.OnDisplayFrame += OnCameraDisplayFrame;
         }
