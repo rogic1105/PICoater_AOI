@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Matrox.MatroxImagingLibrary;
 using MilGrabber.Core;
+using TanukiCv.Core; // PixelMmMapper（已收進 sdk 唯一來源）
 using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;

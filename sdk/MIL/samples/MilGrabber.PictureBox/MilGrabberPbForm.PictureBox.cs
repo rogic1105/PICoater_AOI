@@ -7,6 +7,7 @@ using System.Windows.Forms;
 using Matrox.MatroxImagingLibrary;
 using MilGrabber.Core;
 using TanukiCv.Controls; // SmartCanvas（zoom/pan/overlay）
+using TanukiCv.Core;     // SystemInfo（螢幕 mm/px）、PixelMmMapper
 
 namespace MilGrabber.PictureBoxTest
 {
@@ -38,6 +39,7 @@ namespace MilGrabber.PictureBoxTest
 
         private SmartCanvas _mainCanvas;           // 主畫面（panelMain 內，PictureBox 模式）
         private int _mainW = -1, _mainH = -1;      // 主畫面上次影像尺寸（變了才 FitToScreen）
+        private double _screenMmPerPx;             // 螢幕實體 mm/px（SystemInfo 查一次）→ 三擊實體 1:1 用
 
         // ── 顯示模式（初始化前選）：MIL 直繪 vs PictureBox 縮圖繪 ──
         private bool _milMode;                                              // true=MIL 直繪、false=PictureBox
@@ -64,7 +66,10 @@ namespace MilGrabber.PictureBoxTest
         private void SetupPbMain()
         {
             _mainCanvas = new SmartCanvas { Dock = DockStyle.Fill }; // PictureBox 模式主畫面
-            _mainCanvas.FitRelativeZoom = true; // 滾輪相對 fit（fit=1×；滾 N 格放大一致，上限隨 resize 而異）
+            _mainCanvas.FitRelativeZoom = true;        // 滾輪相對 fit（fit=1×；滾 N 格放大一致，上限隨 resize 而異）
+            _mainCanvas.DoubleClickFitToScreen = true; // 雙擊回到 fit（提取自主程式回顧畫布）
+            _mainCanvas.TripleClickPhysical1x = true;  // 三擊跳實體 1:1（需 SetPhysicalCalibration）
+            _screenMmPerPx = SystemInfo.GetScreenMetrics().MmPerPx; // 螢幕 mm/px 查一次
             panelMain.Controls.Add(_mainCanvas);
             _mainCanvas.BringToFront();
 
@@ -158,7 +163,22 @@ namespace MilGrabber.PictureBoxTest
         }
 
         // ── Designer 控制項事件 ──
-        private void numResize_ValueChanged(object sender, EventArgs e) => _resizeScale = (int)numResize.Value;
+        private void numResize_ValueChanged(object sender, EventArgs e) { _resizeScale = (int)numResize.Value; UpdatePhysicalCalibration(); }
+        private void numFovMm_ValueChanged(object sender, EventArgs e) => UpdatePhysicalCalibration();
+
+        /// <summary>依 FOV + 選中相機影像寬 + 顯示模式算 mm/影像像素，餵 SmartCanvas（三擊實體 1:1）。
+        /// LOD 模式畫布操作的是虛擬全解析度→mmPerImagePx=opsInMm；非 LOD 顯示縮圖→×scale。</summary>
+        private void UpdatePhysicalCalibration()
+        {
+            if (_mainCanvas == null) return;
+            double fovMm = (numFovMm != null) ? (double)numFovMm.Value : 0;
+            int fw = (_selectedCam >= 0 && _cams != null && _selectedCam < _cams.Length && _cams[_selectedCam] != null)
+                ? _cams[_selectedCam].FrameWidth : 0;
+            if (fovMm <= 0 || fw <= 0 || _screenMmPerPx <= 0) { _mainCanvas.SetPhysicalCalibration(0, 0); return; }
+            double opsInMm = fovMm / fw;                                  // mm / 全解析度像素
+            double mmPerImagePx = opsInMm * (_lodEnabled ? 1.0 : _resizeScale);
+            _mainCanvas.SetPhysicalCalibration(mmPerImagePx, _screenMmPerPx);
+        }
         private void chkMerge_CheckedChanged(object sender, EventArgs e)
         {
             _mergeMode = chkMerge.Checked;
@@ -178,6 +198,7 @@ namespace MilGrabber.PictureBoxTest
                 _lodActiveCamIdx = -1;
                 _mainW = _mainH = -1; // 下次 ApplyMainImage 會重新 FitToScreen
             }
+            UpdatePhysicalCalibration(); // 模式變→mm/px 基準變
             // 開啟時不立刻動作：等選中相機下一幀在 OnCameraFrame 啟用（要有全解析度快照）
         }
 

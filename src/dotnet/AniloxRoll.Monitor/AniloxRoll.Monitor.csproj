@@ -119,7 +119,6 @@
     <Compile Include="Settings\System\SystemSettings.cs" />
     <Compile Include="Interop\NativeMethods.cs" />
     <Compile Include="Services\AoiService.cs" />
-    <Compile Include="Services\PixelMmMapper.cs" />
     <Compile Include="Services\CaptureFileNaming.cs" />
     <Compile Include="Services\CaptureStoragePaths.cs" />
     <Compile Include="Services\UiActionLogger.cs" />

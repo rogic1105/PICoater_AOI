@@ -28,9 +28,7 @@ namespace AniloxRoll.Monitor.Forms
 {
     public partial class AniloxRollForm : Form
     {
-        [DllImport("gdi32.dll")] private static extern int GetDeviceCaps(IntPtr hdc, int index);
-        [DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr hwnd);
-        [DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr hwnd, IntPtr hdc);
+        // 螢幕 mm/px 的 GetDeviceCaps P/Invoke 已收進 TanukiCv.Core.SystemInfo（唯一來源）
 
         // --- 核心服務 ---
         private readonly ImageRepository _imageRepository = new ImageRepository();

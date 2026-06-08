@@ -13,6 +13,7 @@ using StorageBridge.Core;
 using LightBridge.Core;
 using MilGrabber.Core;
 using TanukiCv.Controls;
+using TanukiCv.Core; // SystemInfo（CPU/GPU/RAM/螢幕 唯一來源）
 using TanukiCv.Utils;
 using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Data;
@@ -408,87 +409,9 @@ namespace AniloxRoll.Monitor.Forms
             listViewHardware.Columns.Add("參數", 120);
             listViewHardware.Columns.Add("值",   120);
 
-            // ── CPU / RAM ──
-            try
-            {
-                using (var cpuSearcher = new ManagementObjectSearcher("SELECT Name, NumberOfCores, NumberOfLogicalProcessors FROM Win32_Processor"))
-                foreach (var obj in cpuSearcher.Get())
-                {
-                    listViewHardware.Items.Add(new ListViewItem(new[] { "CPU",       obj["Name"]?.ToString().Trim() ?? "N/A" }));
-                    listViewHardware.Items.Add(new ListViewItem(new[] { "CPU_Cores",  $"{obj["NumberOfCores"]}C / {obj["NumberOfLogicalProcessors"]}T" }));
-                    break; // 只取第一顆
-                }
-
-                using (var memSearcher = new ManagementObjectSearcher("SELECT Capacity, Speed, SMBIOSMemoryType FROM Win32_PhysicalMemory"))
-                {
-                    var sticks = memSearcher.Get().Cast<ManagementObject>().ToArray();
-                    int count = sticks.Length;
-                    ulong totalBytes = 0;
-                    int speed = 0;
-                    int memType = 0;
-                    foreach (var stick in sticks)
-                    {
-                        totalBytes += (ulong)stick["Capacity"];
-                        if (speed == 0 && stick["Speed"] != null)
-                            speed = Convert.ToInt32(stick["Speed"]);
-                        if (memType == 0 && stick["SMBIOSMemoryType"] != null)
-                            memType = Convert.ToInt32(stick["SMBIOSMemoryType"]);
-                    }
-                    double perStickGb = count > 0 ? (totalBytes / (double)count) / (1024.0 * 1024 * 1024) : 0;
-                    string ddrGen = memType == 34 ? "DDR5" : memType == 26 ? "DDR4" : memType == 24 ? "DDR3" : "DDR";
-                    string speedStr = speed > 0 ? $"-{speed}" : "";
-                    listViewHardware.Items.Add(new ListViewItem(new[] { "RAM",
-                        $"{totalBytes / (1024.0 * 1024 * 1024):F0} GB ({count}×{perStickGb:F0}GB {ddrGen}{speedStr})" }));
-                }
-            }
-            catch { /* WMI 非關鍵，忽略 */ }
-
-            // ── GPU ──
-            try
-            {
-                // Registry 查 64-bit VRAM（qwMemorySize），避免 WMI uint32 溢位
-                var regVram = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
-                try
-                {
-                    using (var videoKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"))
-                    if (videoKey != null)
-                    {
-                        foreach (string sub in videoKey.GetSubKeyNames())
-                        {
-                            if (!int.TryParse(sub, out _)) continue;
-                            using (var sk = videoKey.OpenSubKey(sub))
-                            {
-                                if (sk == null) continue;
-                                string desc = sk.GetValue("DriverDesc") as string;
-                                if (string.IsNullOrEmpty(desc)) continue;
-                                object qw = sk.GetValue("HardwareInformation.qwMemorySize");
-                                if (qw is long qwVal && qwVal > 0)
-                                    regVram[desc] = qwVal;
-                                else if (qw is byte[] qwBytes && qwBytes.Length >= 8)
-                                    regVram[desc] = BitConverter.ToInt64(qwBytes, 0);
-                            }
-                        }
-                    }
-                }
-                catch { /* registry 非關鍵 */ }
-
-                using (var gpuSearcher = new ManagementObjectSearcher("SELECT Name, AdapterRAM FROM Win32_VideoController"))
-                foreach (ManagementObject obj in gpuSearcher.Get())
-                {
-                    string gpuName = obj["Name"]?.ToString() ?? "N/A";
-                    long vramBytes;
-                    if (regVram.TryGetValue(gpuName, out long regBytes) && regBytes > 0)
-                        vramBytes = regBytes;
-                    else
-                        vramBytes = Convert.ToUInt32(obj["AdapterRAM"]);
-
-                    double vramGb = vramBytes / (1024.0 * 1024 * 1024);
-                    string vramStr = vramGb >= 1.0 ? $"{vramGb:F1} GB" : $"{vramBytes / (1024.0 * 1024):F0} MB";
-                    listViewHardware.Items.Add(new ListViewItem(new[] { "GPU",      gpuName }));
-                    listViewHardware.Items.Add(new ListViewItem(new[] { "GPU_VRAM", vramStr }));
-                }
-            }
-            catch { /* WMI 非關鍵，忽略 */ }
+            // ── CPU / RAM / GPU（通用硬體，收進 TanukiCv.Core.SystemInfo 唯一來源）──
+            foreach (var kv in SystemInfo.GetGenericHardwareRows())
+                listViewHardware.Items.Add(new ListViewItem(new[] { kv.Key, kv.Value }));
 
             // ── Grabber（PCIe frame grabber）──
             try
@@ -569,33 +492,15 @@ namespace AniloxRoll.Monitor.Forms
             }
             catch { /* 非關鍵，忽略 */ }
 
-            // ── 螢幕 ──
-            try
+            // ── 螢幕（收進 TanukiCv.Core.SystemInfo 唯一來源；mm/px 同步給座標/倍率計算）──
+            foreach (var kv in SystemInfo.GetScreenRows())
+                listViewHardware.Items.Add(new ListViewItem(new[] { kv.Key, kv.Value }));
+            var screen = SystemInfo.GetScreenMetrics();
+            if (screen.HorzPx > 0)
             {
-                IntPtr hdc = GetDC(IntPtr.Zero);
-                int horzMm   = GetDeviceCaps(hdc, 4);   // HORZSIZE (mm)
-                int vertMm   = GetDeviceCaps(hdc, 6);   // VERTSIZE (mm)
-                int horzPx   = GetDeviceCaps(hdc, 8);   // HORZRES (px, 含 DPI 縮放)
-                int vertPx   = GetDeviceCaps(hdc, 10);  // VERTRES (px, 含 DPI 縮放)
-                int logDpiX  = GetDeviceCaps(hdc, 88);  // LOGPIXELSX
-                int logDpiY  = GetDeviceCaps(hdc, 90);  // LOGPIXELSY
-                ReleaseDC(IntPtr.Zero, hdc);
-
-                int nativeW  = (int)Math.Round(horzPx * logDpiX / 96.0);
-                int nativeH  = (int)Math.Round(vertPx * logDpiY / 96.0);
-                int scalePct = (int)Math.Round(logDpiX / 96.0 * 100);
-
-                double screenMmPerPx = (double)horzMm / horzPx;
-                listViewHardware.Items.Add(new ListViewItem(new[] { "ScreenSize",   $"{horzMm / 10.0:F1} × {vertMm / 10.0:F1} cm" }));
-                listViewHardware.Items.Add(new ListViewItem(new[] { "NativeRes",    $"{nativeW} × {nativeH}" }));
-                listViewHardware.Items.Add(new ListViewItem(new[] { "EffectiveRes", $"{horzPx} × {vertPx}" }));
-                listViewHardware.Items.Add(new ListViewItem(new[] { "DpiScale",     $"{scalePct}%" }));
-                listViewHardware.Items.Add(new ListViewItem(new[] { "mm/px",        $"{screenMmPerPx:F4}" }));
-
-                _interactionHelper?.SetScreenMmPerPixel(screenMmPerPx);
-                _liveCameraManager?.SetScreenMmPerPixel(screenMmPerPx);
+                _interactionHelper?.SetScreenMmPerPixel(screen.MmPerPx);
+                _liveCameraManager?.SetScreenMmPerPixel(screen.MmPerPx);
             }
-            catch { /* 非關鍵資訊，忽略 */ }
 
             // ── Storage 模式：磁碟 + 清理狀態（即時，Timer 更新）──
             if (_appMode?.Role == MachineRole.Storage)

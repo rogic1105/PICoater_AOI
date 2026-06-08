@@ -2,6 +2,7 @@ using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.Presenters;
 using TanukiCv.Controls;
+using TanukiCv.Core; // PixelMmMapper（已收進 sdk 唯一來源）
 using System;
 using System.Drawing;
 using System.Windows.Forms;

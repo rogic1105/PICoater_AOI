@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
+using TanukiCv.Core; // PixelMmMapper（實體 1:1 zoom 公式）
 
 namespace TanukiCv.Controls
 {
@@ -86,6 +87,53 @@ namespace TanukiCv.Controls
         private float _fitZoom = 1f;                            // FitToScreen 當下的 _zoom（=「1×」基準）
         public bool FitRelativeZoom { get; set; } = false;
         public float MaxZoomOverBitmap { get; set; } = 8f;     // 上限 = 餵入 bitmap 的 1:1 再放大幾倍（像素級檢視）
+
+        // 多擊手勢（opt-in；主程式回顧畫布自有 MultiClickDetector 那套，故預設關不影響）：
+        //   雙擊 = FitToScreen；三擊 = 實體 1:1（需先 SetPhysicalCalibration）。
+        public bool DoubleClickFitToScreen { get; set; } = false;
+        public bool TripleClickPhysical1x  { get; set; } = false;
+
+        // 多擊偵測（內建，sdk 不可引用 app 的 MultiClickDetector，故在此自帶最小實作）
+        private int _mcCount, _mcLastMs;
+        private Point _mcLastPos;
+        private int RegisterMultiClick(Point p)
+        {
+            int now = Environment.TickCount;
+            if (now - _mcLastMs <= SystemInformation.DoubleClickTime &&
+                Math.Abs(p.X - _mcLastPos.X) <= SystemInformation.DoubleClickSize.Width &&
+                Math.Abs(p.Y - _mcLastPos.Y) <= SystemInformation.DoubleClickSize.Height)
+                _mcCount++;
+            else _mcCount = 1;
+            _mcLastMs = now; _mcLastPos = p;
+            return _mcCount;
+        }
+        private void ConsumeMultiClick() => _mcCount = 0;
+
+        // 實體校正（mm/影像像素、mm/螢幕像素）→ 三擊跳實體 1:1。caller 依顯示模式算好 mmPerImagePx 餵進來
+        // （LOD=每虛擬全解析度像素的 mm；非 LOD=每縮圖像素的 mm=opsInMm×scale）。
+        private double _mmPerImagePx, _physScreenMmPerPx;
+        private bool _physCalibrated;
+        public void SetPhysicalCalibration(double mmPerImagePx, double screenMmPerPx)
+        {
+            _mmPerImagePx = mmPerImagePx; _physScreenMmPerPx = screenMmPerPx;
+            _physCalibrated = mmPerImagePx > 0 && screenMmPerPx > 0;
+        }
+
+        /// <summary>跳到實體 1:1（螢幕上 1mm = 實際 1mm），以 anchor 為定點。需先 SetPhysicalCalibration。</summary>
+        public void ZoomToOneToOne(Point anchor)
+        {
+            if (!_physCalibrated) return;
+            float z1 = (float)PixelMmMapper.OneToOneZoom(_mmPerImagePx, _physScreenMmPerPx);
+            if (z1 <= 0) return;
+            float oldZoom = _zoom; _zoom = z1;
+            float sc = oldZoom > 0 ? _zoom / oldZoom : 1f;
+            _panOffset.X = anchor.X - (anchor.X - _panOffset.X) * sc;
+            _panOffset.Y = anchor.Y - (anchor.Y - _panOffset.Y) * sc;
+            if (ClampPan) ApplyPanClamp();
+            this.Invalidate();
+            TriggerStatusChange();
+            if (_lodActive) RecomputeLodTile();
+        }
 
         public bool LodActive => _lodActive;
 
@@ -317,6 +365,7 @@ namespace TanukiCv.Controls
 
             this.Invalidate();
             TriggerStatusChange();
+            if (_lodActive) RecomputeLodTile(); // 視角變了 → LOD 立即重產 tile
         }
 
         protected override void OnMouseDown(MouseEventArgs e)
@@ -327,6 +376,19 @@ namespace TanukiCv.Controls
                 _isDragging = true;
                 _lastMousePos = e.Location;
                 _edgeTriggeredInDrag = false; // 重置觸發旗標
+
+                // 多擊手勢：雙擊 fit、三擊實體 1:1（opt-in；歸零防下一下誤觸更高擊數）
+                int clicks = RegisterMultiClick(e.Location);
+                if (clicks == 2 && DoubleClickFitToScreen && (this.Image != null || _lodActive))
+                {
+                    _isDragging = false; ConsumeMultiClick();
+                    FitToScreen();
+                }
+                else if (clicks >= 3 && TripleClickPhysical1x && _physCalibrated)
+                {
+                    _isDragging = false; ConsumeMultiClick();
+                    ZoomToOneToOne(e.Location);
+                }
             }
             else if (e.Button == MouseButtons.Right)
             {

@@ -117,6 +117,10 @@
       <Project>{3655F7A3-8DF1-4541-82AE-2FD4FE5A397F}</Project>
       <Name>TanukiCv.Controls</Name>
     </ProjectReference>
+    <ProjectReference Include="..\..\..\TanukiCv\dotnet\TanukiCv.Core\TanukiCv.Core.csproj">
+      <Project>{27263C11-7FEF-4076-A2F1-F412BB496DF3}</Project>
+      <Name>TanukiCv.Core</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

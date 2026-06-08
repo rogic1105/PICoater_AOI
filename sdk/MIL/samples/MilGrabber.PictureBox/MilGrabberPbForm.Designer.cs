@@ -24,6 +24,8 @@ namespace MilGrabber.PictureBoxTest
             this.chkFlipVertical = new System.Windows.Forms.CheckBox();
             this.lblResize = new System.Windows.Forms.Label();
             this.numResize = new System.Windows.Forms.NumericUpDown();
+            this.lblFov = new System.Windows.Forms.Label();
+            this.numFovMm = new System.Windows.Forms.NumericUpDown();
             this.chkMerge = new System.Windows.Forms.CheckBox();
             this.chkLod = new System.Windows.Forms.CheckBox();
             this._rbModePb = new System.Windows.Forms.RadioButton();
@@ -172,6 +174,7 @@ namespace MilGrabber.PictureBoxTest
             this.panelCam6 = new System.Windows.Forms.Panel();
             this.panelCam7 = new System.Windows.Forms.Panel();
             ((System.ComponentModel.ISupportInitialize)(this.numResize)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.numFovMm)).BeginInit();
             this.tabParams.SuspendLayout();
             this.tabExposure.SuspendLayout();
             this.panelExpAll.SuspendLayout();
@@ -302,7 +305,7 @@ namespace MilGrabber.PictureBoxTest
             // chkFlipVertical
             // 
             this.chkFlipVertical.AutoSize = true;
-            this.chkFlipVertical.Location = new System.Drawing.Point(965, 216);
+            this.chkFlipVertical.Location = new System.Drawing.Point(965, 194);
             this.chkFlipVertical.Name = "chkFlipVertical";
             this.chkFlipVertical.Size = new System.Drawing.Size(89, 19);
             this.chkFlipVertical.TabIndex = 4;
@@ -313,7 +316,7 @@ namespace MilGrabber.PictureBoxTest
             // lblResize
             // 
             this.lblResize.AutoSize = true;
-            this.lblResize.Location = new System.Drawing.Point(965, 164);
+            this.lblResize.Location = new System.Drawing.Point(164, 272);
             this.lblResize.Name = "lblResize";
             this.lblResize.Size = new System.Drawing.Size(67, 15);
             this.lblResize.TabIndex = 32;
@@ -321,7 +324,7 @@ namespace MilGrabber.PictureBoxTest
             // 
             // numResize
             // 
-            this.numResize.Location = new System.Drawing.Point(1035, 162);
+            this.numResize.Location = new System.Drawing.Point(234, 270);
             this.numResize.Maximum = new decimal(new int[] {
             20,
             0,
@@ -342,10 +345,38 @@ namespace MilGrabber.PictureBoxTest
             0});
             this.numResize.ValueChanged += new System.EventHandler(this.numResize_ValueChanged);
             // 
+            // lblFov
+            // 
+            this.lblFov.AutoSize = true;
+            this.lblFov.Location = new System.Drawing.Point(14, 272);
+            this.lblFov.Name = "lblFov";
+            this.lblFov.Size = new System.Drawing.Size(67, 15);
+            this.lblFov.TabIndex = 43;
+            this.lblFov.Text = "FOV(mm)";
+            // 
+            // numFovMm
+            // 
+            this.numFovMm.DecimalPlaces = 1;
+            this.numFovMm.Location = new System.Drawing.Point(84, 270);
+            this.numFovMm.Maximum = new decimal(new int[] {
+            10000,
+            0,
+            0,
+            0});
+            this.numFovMm.Name = "numFovMm";
+            this.numFovMm.Size = new System.Drawing.Size(64, 25);
+            this.numFovMm.TabIndex = 8;
+            this.numFovMm.Value = new decimal(new int[] {
+            100,
+            0,
+            0,
+            0});
+            this.numFovMm.ValueChanged += new System.EventHandler(this.numFovMm_ValueChanged);
+            // 
             // chkMerge
             // 
             this.chkMerge.AutoSize = true;
-            this.chkMerge.Location = new System.Drawing.Point(965, 191);
+            this.chkMerge.Location = new System.Drawing.Point(965, 169);
             this.chkMerge.Name = "chkMerge";
             this.chkMerge.Size = new System.Drawing.Size(59, 19);
             this.chkMerge.TabIndex = 6;
@@ -356,7 +387,7 @@ namespace MilGrabber.PictureBoxTest
             // chkLod
             // 
             this.chkLod.AutoSize = true;
-            this.chkLod.Location = new System.Drawing.Point(965, 241);
+            this.chkLod.Location = new System.Drawing.Point(965, 219);
             this.chkLod.Name = "chkLod";
             this.chkLod.Size = new System.Drawing.Size(88, 19);
             this.chkLod.TabIndex = 7;
@@ -2225,6 +2256,8 @@ namespace MilGrabber.PictureBoxTest
             this.Controls.Add(this.chkFlipVertical);
             this.Controls.Add(this.lblResize);
             this.Controls.Add(this.numResize);
+            this.Controls.Add(this.lblFov);
+            this.Controls.Add(this.numFovMm);
             this.Controls.Add(this.chkMerge);
             this.Controls.Add(this.chkLod);
             this.Controls.Add(this._rbModePb);
@@ -2237,6 +2270,7 @@ namespace MilGrabber.PictureBoxTest
             this.Name = "MilGrabberPbForm";
             this.Text = "MilGrabber.Monitor — 多相機即時監控";
             ((System.ComponentModel.ISupportInitialize)(this.numResize)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.numFovMm)).EndInit();
             this.tabParams.ResumeLayout(false);
             this.tabExposure.ResumeLayout(false);
             this.panelExpAll.ResumeLayout(false);
@@ -2363,6 +2397,8 @@ namespace MilGrabber.PictureBoxTest
         private System.Windows.Forms.CheckBox chkFlipVertical;
         private System.Windows.Forms.Label lblResize;
         private System.Windows.Forms.NumericUpDown numResize;
+        private System.Windows.Forms.Label lblFov;
+        private System.Windows.Forms.NumericUpDown numFovMm;
         private System.Windows.Forms.CheckBox chkMerge;
         private System.Windows.Forms.CheckBox chkLod;
         private System.Windows.Forms.RadioButton _rbModePb;

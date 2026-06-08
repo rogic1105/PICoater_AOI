@@ -72,6 +72,11 @@ bootstrap 例外（line 232 AppRole）：Hub 還沒建構，加註解標明合�
 - **動態 LOD**：`EnableLod(virtualW,virtualH,provider)` — zoom/pan 導覽「虛擬全解析度圖」，停住(150ms settle)才請 provider 裁可見區+GPU 縮到 ~panel 產 tile（互動用舊 tile 拉伸）。`LodMargin`(1.0=3×3 overscan)+ 拖出範圍節流 120ms 即時補→拖曳不破圖。`RefreshLod`(新幀)/`DisableLod`/`UpdateLodVirtualSize`。**縮小看全圖便宜、放大看真細節**。
 - **`FitRelativeZoom`**：滾輪相對 fit(fit=1×)，上限=bitmap 1:1 ×`MaxZoomOverBitmap`(8)。滾輪 `_zoom *= 1.1^(e.Delta/120)` 正比轉動量——**修掉卡頓時 Windows 合併滾輪事件、舊算法每事件只乘一次造成的跨 scale 不一致**。
 - ⚠ **`ZoomRelativeToFit` 是螢幕縮放，不是實體倍率**（主程式 `_ovMag` 由 mm 校正算，兩者互不可取代）。
+- **多擊手勢**：`DoubleClickFitToScreen`(雙擊 fit)、`TripleClickPhysical1x`(三擊實體 1:1，需先 `SetPhysicalCalibration(mmPerImagePx,screenMmPerPx)`)。SmartCanvas 自帶最小多擊偵測（sdk 不可引用 app 的 MultiClickDetector）。
+
+### 系統資訊 / 實體校正（TanukiCv.Core 唯一來源）
+- `TanukiCv.Core.SystemInfo`：`GetScreenMetrics()`(GDI32 螢幕 mm/px)、`GetGenericHardwareRows()`(CPU/RAM/GPU WMI)、`GetScreenRows()`。主程式 `SettingsTabs` listViewHardware 的 CPU/GPU/RAM/螢幕已改吃這個（Grabber/Disk/Storage/Resource 仍留 app；MIL Grabber 不進 sdk）。
+- `TanukiCv.Core.PixelMmMapper`：pixel↔mm + `PhysicalMagnification`/`OneToOneZoom`（從 app 搬來的唯一來源）。實體 1:1 = `OneToOneZoom(mmPerImagePx, screenMmPerPx)`；`mmPerImagePx = FOV÷影像寬 ×(LOD?1:scale)`。
 
 ### SwitchRidgeDirection 三態切換
 1. 未勾選 → 自動勾選 + 設方向
