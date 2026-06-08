@@ -607,27 +607,13 @@ namespace AniloxRoll.Monitor.Forms
             camReviewMain.StatusChanged += _interactionHelper.UpdateCanvasInfo;
             camReviewMain.StatusChanged += UpdateSelectedReviewCamFromViewCenter;
             camReviewMain.EdgeReached   += _interactionHelper.NavigateCamera;
-            var canvasClicker = new MultiClickDetector();
-            camReviewMain.MouseDown += (s, e) =>
-            {
-                if (e.Button != MouseButtons.Left) return;
-                int clicks = canvasClicker.RegisterClick(e.Location);
-                if (clicks == 1) UiActionLogger.RecordViewOnly("camReviewMain.Drag");
-                if (clicks == 2)
-                {
-                    UiActionLogger.RecordViewOnly("camReviewMain.DoubleClick");
-                    if (camReviewMain.Image != null && !IsCanvasFitToScreen())
-                    {
-                        camReviewMain.FitToScreen();
-                        canvasClicker.Consume();   // 歸零，防止下一下誤觸三擊
-                    }
-                }
-                else if (clicks >= 3)
-                {
-                    canvasClicker.Consume();
-                    _interactionHelper?.SetCanvasPhysicalMag1x(e.Location);
-                }
-            };
+            // 手勢（雙擊 fit / 三擊實體 1:1）唯一來源收進 SmartCanvas 內建；校正由 UpdateCanvasInfo 餵。
+            // 這裡只訂閱事件做 app 專屬的 UiActionLogger 記錄（記錄屬 app，不放 sdk）。
+            camReviewMain.DoubleClickFitToScreen = true;
+            camReviewMain.TripleClickPhysical1x  = true;
+            camReviewMain.DragStarted        += (s, e) => UiActionLogger.RecordViewOnly("camReviewMain.Drag");
+            camReviewMain.FitPerformed       += (s, e) => UiActionLogger.RecordViewOnly("camReviewMain.DoubleClick");
+            camReviewMain.Physical1xPerformed += (s, e) => UiActionLogger.RecordViewOnly("camReviewMain.Physical1x");
 
             UpdateLiveDirectionVisual();
             UpdateRidgeDirectionVisual(null); // dir=null：無強化橘框，底色依 StitchMode 上色

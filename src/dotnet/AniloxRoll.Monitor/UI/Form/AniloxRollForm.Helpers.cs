@@ -264,20 +264,6 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        private bool IsCanvasFitToScreen()
-        {
-            if (camReviewMain.Image == null) return false;
-            float ratioW = (float)camReviewMain.Width / camReviewMain.Image.Width;
-            float ratioH = (float)camReviewMain.Height / camReviewMain.Image.Height;
-            float fitZoom = Math.Min(ratioW, ratioH) * 0.95f;
-            if (Math.Abs(camReviewMain.Zoom - fitZoom) > 0.001f) return false;
-
-            float drawW = camReviewMain.Image.Width * fitZoom;
-            float drawH = camReviewMain.Image.Height * fitZoom;
-            float fitPanX = (camReviewMain.Width - drawW) / 2f;
-            float fitPanY = (camReviewMain.Height - drawH) / 2f;
-            var pan = camReviewMain.PanOffset;
-            return Math.Abs(pan.X - fitPanX) < 1f && Math.Abs(pan.Y - fitPanY) < 1f;
-        }
+        // IsCanvasFitToScreen 已移除：fit 判斷收進 SmartCanvas.IsAtFitView()（多擊內部用，單一來源）。
     }
 }

@@ -104,7 +104,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public void SetScreenMmPerPixel(double mmPerPx) => _canvasHelper.SetScreenMmPerPixel(mmPerPx);
         public double ScreenMmPerPixel => _canvasHelper.ScreenMmPerPixel;
         public double RowPitchMm => _rowChartHelper?.RowPitchMm ?? 0;
-        public void SetCanvasPhysicalMag1x(Point mouseLocation) => _canvasHelper.SetPhysicalMagnification1x(mouseLocation);
 
         /// <summary>設定全域/水平合圖模式：chartReviewPatch 與 canvas 座標聯動。</summary>
         public void SetMergedMode(ColumnCurveChartHelper overviewHelper, double startMm, double opsUm)

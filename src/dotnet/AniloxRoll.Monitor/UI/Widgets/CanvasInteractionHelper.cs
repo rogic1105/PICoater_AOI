@@ -378,35 +378,13 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 magStr,
                 $"{_currentViewLeftMm:F1}",  $"{_currentViewRightMm:F1}",
                 $"{viewTopMm:F1}",           $"{viewBotMm:F1}");
+
+            // 實體校正餵給 SmartCanvas（三擊實體 1:1 用，唯一來源；隨相機/scale/螢幕即時更新）
+            _canvas.SetPhysicalCalibration(_imageScaleFactor * opsInMm, _screenMmPerPx);
         }
 
-        /// <summary>將 canvas 設為實體倍率 1x，滑鼠所指的影像位置移到 canvas 中央。</summary>
-        public void SetPhysicalMagnification1x(Point mouseLocation)
-        {
-            if (_canvas.Image == null || _settings == null) return;
-
-            double[] opsUmArr = GetEffectiveOpsArray();
-            if (_currentCameraIndex < 0 || _currentCameraIndex >= opsUmArr.Length) return;
-
-            double opsInMm = opsUmArr[_currentCameraIndex] / 1000.0;
-            if (opsInMm <= 0 || _screenMmPerPx <= 0) return;
-
-            float zoom1x = (float)PixelMmMapper.OneToOneZoom(_imageScaleFactor * opsInMm, _screenMmPerPx);
-
-            // 滑鼠下的影像座標
-            float oldZoom = _canvas.Zoom;
-            PointF oldPan = _canvas.PanOffset;
-            float imgX = (mouseLocation.X - oldPan.X) / oldZoom;
-            float imgY = (mouseLocation.Y - oldPan.Y) / oldZoom;
-
-            // 該影像點放到 canvas 中央
-            float cx = _canvas.Width / 2f;
-            float cy = _canvas.Height / 2f;
-            float newPanX = cx - imgX * zoom1x;
-            float newPanY = cy - imgY * zoom1x;
-
-            _canvas.SetView(zoom1x, new PointF(newPanX, newPanY));
-        }
+        // SetPhysicalMagnification1x 已移除：三擊實體 1:1 改由 SmartCanvas 內建（ZoomToOneToOne，
+        // 校正由 UpdateCanvasInfo 餵 SetPhysicalCalibration）。手勢偵測單一來源收進 SmartCanvas。
 
         /// <summary>事件處理：canvas.EdgeReached → 切換至相鄰相機。</summary>
         public void NavigateCamera(int direction)

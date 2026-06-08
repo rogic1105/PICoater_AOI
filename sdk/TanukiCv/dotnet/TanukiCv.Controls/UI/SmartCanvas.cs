@@ -93,6 +93,12 @@ namespace TanukiCv.Controls
         public bool DoubleClickFitToScreen { get; set; } = false;
         public bool TripleClickPhysical1x  { get; set; } = false;
 
+        // 手勢事件（給上層做 app 專屬的事，如 UiActionLogger 記錄；手勢偵測/動作本身由 SmartCanvas 做）
+        public event EventHandler FitPerformed;        // 雙擊 fit 完成
+        public event EventHandler Physical1xPerformed; // 三擊實體 1:1 完成
+        public event EventHandler DragStarted;         // 實際拖曳開始（第一次帶鍵移動）
+        private bool _dragMoved;
+
         // 多擊偵測（內建，sdk 不可引用 app 的 MultiClickDetector，故在此自帶最小實作）
         private int _mcCount, _mcLastMs;
         private Point _mcLastPos;
@@ -109,6 +115,17 @@ namespace TanukiCv.Controls
         }
         private void ConsumeMultiClick() => _mcCount = 0;
 
+        /// <summary>是否在 fit-to-screen 視角（zoom≈fit + pan≈置中）。供多擊「已 fit→不歸零讓三擊接手」用，
+        /// 也可給上層當「是否已 fit」單一來源（取代 app 自己重算 fitZoom）。</summary>
+        public bool IsAtFitView()
+        {
+            if (ContentW <= 0 || ContentH <= 0 || _fitZoom <= 0) return false;
+            if (Math.Abs(_zoom - _fitZoom) > _fitZoom * 0.01f) return false;
+            float drawW = ContentW * _fitZoom, drawH = ContentH * _fitZoom;
+            float fitPanX = (Width - drawW) / 2f, fitPanY = (Height - drawH) / 2f;
+            return Math.Abs(_panOffset.X - fitPanX) < 1.5f && Math.Abs(_panOffset.Y - fitPanY) < 1.5f;
+        }
+
         // 實體校正（mm/影像像素、mm/螢幕像素）→ 三擊跳實體 1:1。caller 依顯示模式算好 mmPerImagePx 餵進來
         // （LOD=每虛擬全解析度像素的 mm；非 LOD=每縮圖像素的 mm=opsInMm×scale）。
         private double _mmPerImagePx, _physScreenMmPerPx;
@@ -119,16 +136,17 @@ namespace TanukiCv.Controls
             _physCalibrated = mmPerImagePx > 0 && screenMmPerPx > 0;
         }
 
-        /// <summary>跳到實體 1:1（螢幕上 1mm = 實際 1mm），以 anchor 為定點。需先 SetPhysicalCalibration。</summary>
+        /// <summary>跳到實體 1:1（螢幕上 1mm = 實際 1mm），anchor 所指的影像點移到畫布中央。需先 SetPhysicalCalibration。</summary>
         public void ZoomToOneToOne(Point anchor)
         {
-            if (!_physCalibrated) return;
+            if (!_physCalibrated || _zoom <= 0) return;
             float z1 = (float)PixelMmMapper.OneToOneZoom(_mmPerImagePx, _physScreenMmPerPx);
             if (z1 <= 0) return;
-            float oldZoom = _zoom; _zoom = z1;
-            float sc = oldZoom > 0 ? _zoom / oldZoom : 1f;
-            _panOffset.X = anchor.X - (anchor.X - _panOffset.X) * sc;
-            _panOffset.Y = anchor.Y - (anchor.Y - _panOffset.Y) * sc;
+            float imgX = (anchor.X - _panOffset.X) / _zoom;   // 滑鼠下的影像座標
+            float imgY = (anchor.Y - _panOffset.Y) / _zoom;
+            _zoom = z1;
+            _panOffset.X = Width  / 2f - imgX * _zoom;          // 該點移到畫布中央
+            _panOffset.Y = Height / 2f - imgY * _zoom;
             if (ClampPan) ApplyPanClamp();
             this.Invalidate();
             TriggerStatusChange();
@@ -374,20 +392,24 @@ namespace TanukiCv.Controls
             if (e.Button == MouseButtons.Left)
             {
                 _isDragging = true;
+                _dragMoved = false;
                 _lastMousePos = e.Location;
                 _edgeTriggeredInDrag = false; // 重置觸發旗標
 
                 // 多擊手勢：雙擊 fit、三擊實體 1:1（opt-in；歸零防下一下誤觸更高擊數）
                 int clicks = RegisterMultiClick(e.Location);
-                if (clicks == 2 && DoubleClickFitToScreen && (this.Image != null || _lodActive))
+                if (clicks == 2 && DoubleClickFitToScreen && (this.Image != null || _lodActive) && !IsAtFitView())
                 {
+                    // 只有「非 fit」才 fit + 歸零；已在 fit → 不做事也不歸零，讓第三下能觸發三擊。
                     _isDragging = false; ConsumeMultiClick();
                     FitToScreen();
+                    FitPerformed?.Invoke(this, EventArgs.Empty);
                 }
                 else if (clicks >= 3 && TripleClickPhysical1x && _physCalibrated)
                 {
                     _isDragging = false; ConsumeMultiClick();
                     ZoomToOneToOne(e.Location);
+                    Physical1xPerformed?.Invoke(this, EventArgs.Empty);
                 }
             }
             else if (e.Button == MouseButtons.Right)
@@ -412,6 +434,7 @@ namespace TanukiCv.Controls
 
             if (_isDragging)
             {
+                if (!_dragMoved) { _dragMoved = true; DragStarted?.Invoke(this, EventArgs.Empty); }
                 _panOffset.X += e.X - _lastMousePos.X;
                 _panOffset.Y += e.Y - _lastMousePos.Y;
                 _lastMousePos = e.Location;

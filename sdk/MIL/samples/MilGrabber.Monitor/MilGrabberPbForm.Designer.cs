@@ -316,7 +316,7 @@ namespace MilGrabber.Monitor
             // lblResize
             // 
             this.lblResize.AutoSize = true;
-            this.lblResize.Location = new System.Drawing.Point(164, 272);
+            this.lblResize.Location = new System.Drawing.Point(967, 272);
             this.lblResize.Name = "lblResize";
             this.lblResize.Size = new System.Drawing.Size(67, 15);
             this.lblResize.TabIndex = 32;
@@ -324,7 +324,7 @@ namespace MilGrabber.Monitor
             // 
             // numResize
             // 
-            this.numResize.Location = new System.Drawing.Point(234, 270);
+            this.numResize.Location = new System.Drawing.Point(1037, 270);
             this.numResize.Maximum = new decimal(new int[] {
             20,
             0,
@@ -348,7 +348,7 @@ namespace MilGrabber.Monitor
             // lblFov
             // 
             this.lblFov.AutoSize = true;
-            this.lblFov.Location = new System.Drawing.Point(14, 272);
+            this.lblFov.Location = new System.Drawing.Point(817, 272);
             this.lblFov.Name = "lblFov";
             this.lblFov.Size = new System.Drawing.Size(67, 15);
             this.lblFov.TabIndex = 43;
@@ -357,7 +357,7 @@ namespace MilGrabber.Monitor
             // numFovMm
             // 
             this.numFovMm.DecimalPlaces = 1;
-            this.numFovMm.Location = new System.Drawing.Point(84, 270);
+            this.numFovMm.Location = new System.Drawing.Point(887, 270);
             this.numFovMm.Maximum = new decimal(new int[] {
             10000,
             0,
