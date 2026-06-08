@@ -25,6 +25,10 @@ namespace MilGrabber.PictureBoxTest
             this.lblResize = new System.Windows.Forms.Label();
             this.numResize = new System.Windows.Forms.NumericUpDown();
             this.chkMerge = new System.Windows.Forms.CheckBox();
+            this.chkLod = new System.Windows.Forms.CheckBox();
+            this._rbModePb = new System.Windows.Forms.RadioButton();
+            this._rbModeMil = new System.Windows.Forms.RadioButton();
+            this._lblTiming = new System.Windows.Forms.Label();
             this.panelMain = new System.Windows.Forms.Panel();
             this.lvCameras = new System.Windows.Forms.ListView();
             this.colCamCamera = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
@@ -298,7 +302,7 @@ namespace MilGrabber.PictureBoxTest
             // chkFlipVertical
             // 
             this.chkFlipVertical.AutoSize = true;
-            this.chkFlipVertical.Location = new System.Drawing.Point(965, 171);
+            this.chkFlipVertical.Location = new System.Drawing.Point(965, 216);
             this.chkFlipVertical.Name = "chkFlipVertical";
             this.chkFlipVertical.Size = new System.Drawing.Size(89, 19);
             this.chkFlipVertical.TabIndex = 4;
@@ -309,7 +313,7 @@ namespace MilGrabber.PictureBoxTest
             // lblResize
             // 
             this.lblResize.AutoSize = true;
-            this.lblResize.Location = new System.Drawing.Point(965, 200);
+            this.lblResize.Location = new System.Drawing.Point(965, 164);
             this.lblResize.Name = "lblResize";
             this.lblResize.Size = new System.Drawing.Size(67, 15);
             this.lblResize.TabIndex = 32;
@@ -317,7 +321,7 @@ namespace MilGrabber.PictureBoxTest
             // 
             // numResize
             // 
-            this.numResize.Location = new System.Drawing.Point(1035, 198);
+            this.numResize.Location = new System.Drawing.Point(1035, 162);
             this.numResize.Maximum = new decimal(new int[] {
             20,
             0,
@@ -341,7 +345,7 @@ namespace MilGrabber.PictureBoxTest
             // chkMerge
             // 
             this.chkMerge.AutoSize = true;
-            this.chkMerge.Location = new System.Drawing.Point(965, 228);
+            this.chkMerge.Location = new System.Drawing.Point(965, 191);
             this.chkMerge.Name = "chkMerge";
             this.chkMerge.Size = new System.Drawing.Size(59, 19);
             this.chkMerge.TabIndex = 6;
@@ -349,13 +353,55 @@ namespace MilGrabber.PictureBoxTest
             this.chkMerge.UseVisualStyleBackColor = true;
             this.chkMerge.CheckedChanged += new System.EventHandler(this.chkMerge_CheckedChanged);
             // 
+            // chkLod
+            // 
+            this.chkLod.AutoSize = true;
+            this.chkLod.Location = new System.Drawing.Point(965, 241);
+            this.chkLod.Name = "chkLod";
+            this.chkLod.Size = new System.Drawing.Size(88, 19);
+            this.chkLod.TabIndex = 7;
+            this.chkLod.Text = "動態LOD";
+            this.chkLod.UseVisualStyleBackColor = true;
+            this.chkLod.CheckedChanged += new System.EventHandler(this.chkLod_CheckedChanged);
+            // 
+            // _rbModePb
+            // 
+            this._rbModePb.AutoSize = true;
+            this._rbModePb.Checked = true;
+            this._rbModePb.Location = new System.Drawing.Point(820, 20);
+            this._rbModePb.Name = "_rbModePb";
+            this._rbModePb.Size = new System.Drawing.Size(91, 19);
+            this._rbModePb.TabIndex = 40;
+            this._rbModePb.TabStop = true;
+            this._rbModePb.Text = "PictureBox";
+            this._rbModePb.UseVisualStyleBackColor = true;
+            // 
+            // _rbModeMil
+            // 
+            this._rbModeMil.AutoSize = true;
+            this._rbModeMil.Location = new System.Drawing.Point(820, 44);
+            this._rbModeMil.Name = "_rbModeMil";
+            this._rbModeMil.Size = new System.Drawing.Size(89, 19);
+            this._rbModeMil.TabIndex = 41;
+            this._rbModeMil.Text = "MIL 直繪";
+            this._rbModeMil.UseVisualStyleBackColor = true;
+            // 
+            // _lblTiming
+            // 
+            this._lblTiming.ForeColor = System.Drawing.Color.DimGray;
+            this._lblTiming.Location = new System.Drawing.Point(820, 74);
+            this._lblTiming.Name = "_lblTiming";
+            this._lblTiming.Size = new System.Drawing.Size(135, 160);
+            this._lblTiming.TabIndex = 42;
+            this._lblTiming.Text = "(計時)";
+            // 
             // panelMain
             // 
             this.panelMain.BackColor = System.Drawing.Color.Black;
             this.panelMain.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.panelMain.Location = new System.Drawing.Point(12, 265);
+            this.panelMain.Location = new System.Drawing.Point(12, 298);
             this.panelMain.Name = "panelMain";
-            this.panelMain.Size = new System.Drawing.Size(1075, 315);
+            this.panelMain.Size = new System.Drawing.Size(1075, 282);
             this.panelMain.TabIndex = 3;
             // 
             // lvCameras
@@ -1050,7 +1096,7 @@ namespace MilGrabber.PictureBoxTest
             this.tabLineRate.Location = new System.Drawing.Point(4, 25);
             this.tabLineRate.Name = "tabLineRate";
             this.tabLineRate.Padding = new System.Windows.Forms.Padding(3);
-            this.tabLineRate.Size = new System.Drawing.Size(310, 697);
+            this.tabLineRate.Size = new System.Drawing.Size(306, 662);
             this.tabLineRate.TabIndex = 1;
             this.tabLineRate.Text = "線掃(Hz)";
             this.tabLineRate.UseVisualStyleBackColor = true;
@@ -1576,7 +1622,7 @@ namespace MilGrabber.PictureBoxTest
             this.tabHeight.Location = new System.Drawing.Point(4, 25);
             this.tabHeight.Name = "tabHeight";
             this.tabHeight.Padding = new System.Windows.Forms.Padding(3);
-            this.tabHeight.Size = new System.Drawing.Size(310, 697);
+            this.tabHeight.Size = new System.Drawing.Size(306, 662);
             this.tabHeight.TabIndex = 2;
             this.tabHeight.Text = "高度(px)";
             this.tabHeight.UseVisualStyleBackColor = true;
@@ -2180,6 +2226,10 @@ namespace MilGrabber.PictureBoxTest
             this.Controls.Add(this.lblResize);
             this.Controls.Add(this.numResize);
             this.Controls.Add(this.chkMerge);
+            this.Controls.Add(this.chkLod);
+            this.Controls.Add(this._rbModePb);
+            this.Controls.Add(this._rbModeMil);
+            this.Controls.Add(this._lblTiming);
             this.Controls.Add(this.btnFetchInfo);
             this.Controls.Add(this.btnRelease);
             this.Controls.Add(this.btnGrab);
@@ -2314,6 +2364,10 @@ namespace MilGrabber.PictureBoxTest
         private System.Windows.Forms.Label lblResize;
         private System.Windows.Forms.NumericUpDown numResize;
         private System.Windows.Forms.CheckBox chkMerge;
+        private System.Windows.Forms.CheckBox chkLod;
+        private System.Windows.Forms.RadioButton _rbModePb;
+        private System.Windows.Forms.RadioButton _rbModeMil;
+        private System.Windows.Forms.Label _lblTiming;
         private System.Windows.Forms.Panel panelMain;
         private System.Windows.Forms.ListView lvCameras;
         private System.Windows.Forms.ColumnHeader colCamCamera;

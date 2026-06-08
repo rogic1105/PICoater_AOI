@@ -64,6 +64,34 @@ namespace TanukiCv.Controls
 
         public float Zoom => _zoom;
         public PointF PanOffset => _panOffset;
+        /// <summary>相對 fit 的放大倍率（fit=1.0×）。滾 N 格 = 1.1^N，與餵入 bitmap 解析度無關 → 跨 resize 一致。</summary>
+        public float ZoomRelativeToFit => _fitZoom > 0 ? _zoom / _fitZoom : _zoom;
+
+        // ── 動態 LOD（可選，預設關）：zoom/pan 導覽一張「虛擬全解析度圖」，停住才請 provider
+        //    裁可見區 + 縮到 ~panel 解析度產 tile（互動中先用舊 tile 拉伸頂著）。非 LOD 用法完全不受影響。 ──
+        private bool _lodActive;
+        private int _lodVirtualW, _lodVirtualH;                 // 虛擬全解析度圖尺寸
+        private Func<Rectangle, Size, Bitmap> _lodProvider;     // (可見虛擬區 srcRect, 目標像素) → tile（caller 做 GPU 裁+縮）
+        private Bitmap _lodTile;                                // 當前 tile（~panel 大小，canvas 持有並 Dispose）
+        private Rectangle _lodTileRect;                         // _lodTile 代表的虛擬區
+        private Timer _lodSettleTimer;                          // 停住才重算 crisp tile
+        private const int LodSettleMs = 150;
+
+        /// <summary>LOD overscan：tile 多裁「可見區 × 此倍率」的邊（每側）。1.0=各側多一個視窗(3×3)→ 拖曳不易破圖。</summary>
+        public float LodMargin { get; set; } = 1.0f;
+
+        // ── 滾輪相對 fit 縮放（opt-in；預設 false=原 [0.01,100] 行為，主程式回顧畫布不受影響）──
+        //    開啟後：fit=最小(看全圖)，滾 N 格不管 resize 放大程度一致；上限=bitmap 1:1 的 N 倍
+        //    → resize 多(bitmap 小)放不了那麼大、resize 少可放更大看真細節。
+        private float _fitZoom = 1f;                            // FitToScreen 當下的 _zoom（=「1×」基準）
+        public bool FitRelativeZoom { get; set; } = false;
+        public float MaxZoomOverBitmap { get; set; } = 8f;     // 上限 = 餵入 bitmap 的 1:1 再放大幾倍（像素級檢視）
+
+        public bool LodActive => _lodActive;
+
+        // 內容尺寸：LOD 模式用虛擬尺寸，否則用實際 Image 尺寸（座標/fit/clamp/overlay 共用）
+        private int ContentW => _lodActive ? _lodVirtualW : (this.Image?.Width  ?? 0);
+        private int ContentH => _lodActive ? _lodVirtualH : (this.Image?.Height ?? 0);
 
         /// <summary>是否在畫布上疊顯資訊（游標座標/亮度、四邊 mm 範圍、右下實體倍率）。滑鼠右鍵切換。</summary>
         public bool ShowOverlay
@@ -112,6 +140,116 @@ namespace TanukiCv.Controls
             this.SizeMode = PictureBoxSizeMode.Normal;
             this.Cursor = CreateCrosshairCursor(31, 2, Color.White);
             this.BackColor = Color.Black;
+
+            _lodSettleTimer = new Timer { Interval = LodSettleMs };
+            _lodSettleTimer.Tick += (s, e) => { _lodSettleTimer.Stop(); RecomputeLodTile(); };
+        }
+
+        // ── 動態 LOD API ──────────────────────────────────────────────────────
+        /// <summary>啟用動態 LOD：宣告虛擬全解析度圖尺寸 + provider（裁可見區+縮到目標像素）。
+        /// 啟用後 canvas 不用 Image 當主內容，改用 provider 產的 tile；zoom/pan 以虛擬座標導覽。</summary>
+        public void EnableLod(int virtualW, int virtualH, Func<Rectangle, Size, Bitmap> provider)
+        {
+            _lodVirtualW = Math.Max(1, virtualW);
+            _lodVirtualH = Math.Max(1, virtualH);
+            _lodProvider = provider;
+            _lodActive   = provider != null;
+            if (_lodActive) { FitToScreen(); RecomputeLodTile(); }
+        }
+
+        /// <summary>虛擬尺寸變了（如換相機/換合圖大小）但仍要 LOD → 更新尺寸並重 fit。</summary>
+        public void UpdateLodVirtualSize(int virtualW, int virtualH)
+        {
+            if (!_lodActive) return;
+            _lodVirtualW = Math.Max(1, virtualW);
+            _lodVirtualH = Math.Max(1, virtualH);
+            FitToScreen();
+            RecomputeLodTile();
+        }
+
+        public void DisableLod()
+        {
+            _lodActive = false;
+            _lodSettleTimer.Stop();
+            if (_lodTile != null) { _lodTile.Dispose(); _lodTile = null; }
+            _lodProvider = null;
+        }
+
+        /// <summary>新幀進來（內容變、視角沒變）→ 立刻用當前視角重算 tile（不延遲）。</summary>
+        public void RefreshLod()
+        {
+            if (_lodActive) RecomputeLodTile();
+        }
+
+        private void RestartLodSettle()
+        {
+            if (!_lodActive) return;
+            _lodSettleTimer.Stop();
+            _lodSettleTimer.Start();
+        }
+
+        private int _lodLastRecomputeMs;
+
+        /// <summary>拖曳中視角變了：排程停住重算；若已拖出 overscan tile 範圍 → 立刻補（節流 120ms，避免每像素 GPU）。</summary>
+        private void LodOnDrag()
+        {
+            if (!_lodActive) return;
+            RestartLodSettle();
+            int now = Environment.TickCount;
+            if (now - _lodLastRecomputeMs >= 120 && !VisibleInsideTile())
+                RecomputeLodTile(); // 內含更新 _lodLastRecomputeMs
+        }
+
+        private bool VisibleInsideTile()
+        {
+            if (_lodTile == null || _zoom <= 0) return false;
+            float vx0 = (0 - _panOffset.X) / _zoom;
+            float vy0 = (0 - _panOffset.Y) / _zoom;
+            float vx1 = (Width  - _panOffset.X) / _zoom;
+            float vy1 = (Height - _panOffset.Y) / _zoom;
+            return vx0 >= _lodTileRect.X && vy0 >= _lodTileRect.Y &&
+                   vx1 <= _lodTileRect.X + _lodTileRect.Width &&
+                   vy1 <= _lodTileRect.Y + _lodTileRect.Height;
+        }
+
+        /// <summary>算當前視角的可見虛擬區 → 請 provider 裁+縮到 ~螢幕投影大小 → 存為 tile。</summary>
+        private void RecomputeLodTile()
+        {
+            if (!_lodActive || _lodProvider == null || _zoom <= 0 || Width <= 0 || Height <= 0) return;
+
+            // 可見虛擬區（虛擬座標）= 螢幕視窗反投影
+            float vx0 = (0 - _panOffset.X) / _zoom;
+            float vy0 = (0 - _panOffset.Y) / _zoom;
+            float vx1 = (Width  - _panOffset.X) / _zoom;
+            float vy1 = (Height - _panOffset.Y) / _zoom;
+
+            // overscan：往外擴「可見寬高 × LodMargin」（各側）→ 拖曳在 tile 內、不破圖；再 clamp 進 [0, virtual]
+            float mx = (vx1 - vx0) * LodMargin;
+            float my = (vy1 - vy0) * LodMargin;
+            int rx = (int)Math.Floor(Math.Max(0, vx0 - mx));
+            int ry = (int)Math.Floor(Math.Max(0, vy0 - my));
+            int rr = (int)Math.Ceiling(Math.Min(_lodVirtualW, vx1 + mx));
+            int rb = (int)Math.Ceiling(Math.Min(_lodVirtualH, vy1 + my));
+            int rw = Math.Max(1, rr - rx);
+            int rh = Math.Max(1, rb - ry);
+            var srcRect = new Rectangle(rx, ry, rw, rh);
+
+            // 目標像素 = 該區投影到螢幕的大小 → 即「縮到 ~panel 解析度（含 overscan）」；放大時 rw 小→縮得少→清晰。
+            // 上限約 (1+2×margin)×視窗，避免 tile 過大。
+            int capW = (int)((1f + 2f * LodMargin) * Width)  + 2;
+            int capH = (int)((1f + 2f * LodMargin) * Height) + 2;
+            int tw = Math.Max(1, Math.Min(capW, (int)Math.Round(rw * _zoom)));
+            int th = Math.Max(1, Math.Min(capH, (int)Math.Round(rh * _zoom)));
+
+            Bitmap tile;
+            try { tile = _lodProvider(srcRect, new Size(tw, th)); } catch { tile = null; }
+            if (tile == null) return;
+
+            if (_lodTile != null && !ReferenceEquals(_lodTile, tile)) _lodTile.Dispose();
+            _lodTile = tile;
+            _lodTileRect = srcRect;
+            _lodLastRecomputeMs = Environment.TickCount;
+            this.Invalidate();
         }
 
         private static Cursor CreateCrosshairCursor(int size, int lineWidth, Color foreColor)
@@ -165,15 +303,17 @@ namespace TanukiCv.Controls
 
         public void FitToScreen()
         {
-            if (this.Image == null) return;
+            int iw = ContentW, ih = ContentH;
+            if (iw <= 0 || ih <= 0) return;
 
-            float ratioW = (float)this.Width / this.Image.Width;
-            float ratioH = (float)this.Height / this.Image.Height;
+            float ratioW = (float)this.Width / iw;
+            float ratioH = (float)this.Height / ih;
             _zoom = Math.Min(ratioW, ratioH) * 0.95f;
 
-            float drawW = this.Image.Width * _zoom;
-            float drawH = this.Image.Height * _zoom;
+            float drawW = iw * _zoom;
+            float drawH = ih * _zoom;
             _panOffset = new PointF((this.Width - drawW) / 2, (this.Height - drawH) / 2);
+            _fitZoom = _zoom;                 // 記下「1×」基準（FitRelativeZoom 用）
 
             this.Invalidate();
             TriggerStatusChange();
@@ -215,12 +355,13 @@ namespace TanukiCv.Controls
                 _lastMousePos = e.Location;
                 if (ClampPan) ApplyPanClamp();
                 this.Invalidate();
+                LodOnDrag(); // LOD：停住重算 + 拖出 overscan 範圍即時補
 
                 // [新增] 檢查是否拉到邊界
                 if (!ClampPan) CheckEdgeTrigger();
             }
 
-            if (this.Image != null)
+            if (this.Image != null || _lodActive)
             {
                 float imgXf = (e.X - _panOffset.X) / _zoom;
                 float imgYf = (e.Y - _panOffset.Y) / _zoom;
@@ -326,13 +467,25 @@ namespace TanukiCv.Controls
         protected override void OnMouseWheel(MouseEventArgs e)
         {
             float oldZoom = _zoom;
-            float factor = 1.1f;
+            // 縮放正比於滾輪「實際轉動量」：一格 ±120 → ×1.1。事件合併（UI 卡頓時 Windows 把多格併成一個
+            // 大 e.Delta）也按比例 → 同樣的物理滾動量得到同樣縮放，與卡頓/餵入 bitmap 解析度無關。
+            float notches = e.Delta / 120f;
+            _zoom *= (float)Math.Pow(1.1, notches);
 
-            if (e.Delta > 0) _zoom *= factor;
-            else _zoom /= factor;
-
-            if (_zoom < 0.01f) _zoom = 0.01f;
-            if (_zoom > 100.0f) _zoom = 100.0f;
+            if (FitRelativeZoom)
+            {
+                // fit=最小（看全圖），上限=bitmap 1:1 的 N 倍。滾 N 格相對 fit 放大一致；
+                // resize 多→fit 小→到上限的「相對倍率」小（放不了那麼大），resize 少→可放更大。
+                float lo = _fitZoom;
+                float hi = Math.Max(_fitZoom, MaxZoomOverBitmap);
+                if (_zoom < lo) _zoom = lo;
+                if (_zoom > hi) _zoom = hi;
+            }
+            else
+            {
+                if (_zoom < 0.01f) _zoom = 0.01f;
+                if (_zoom > 100.0f) _zoom = 100.0f;
+            }
 
             float scaleChange = _zoom / oldZoom;
 
@@ -342,6 +495,7 @@ namespace TanukiCv.Controls
 
             this.Invalidate();
             TriggerStatusChange();
+            RestartLodSettle(); // LOD：停住才重算 crisp tile（互動中先用舊 tile 拉伸）
         }
 
         /// <summary>
@@ -350,9 +504,9 @@ namespace TanukiCv.Controls
         /// </summary>
         private void ApplyPanClamp()
         {
-            if (this.Image == null) return;
-            float drawW = this.Image.Width * _zoom;
-            float drawH = this.Image.Height * _zoom;
+            if (ContentW <= 0 || ContentH <= 0) return;
+            float drawW = ContentW * _zoom;
+            float drawH = ContentH * _zoom;
 
             // X 軸
             if (drawW <= this.Width)
@@ -373,10 +527,42 @@ namespace TanukiCv.Controls
             }
         }
 
+        /// <summary>上次 OnPaint 實際繪製耗時（ms，含小數）。供效能量測/比較（如 MIL 直繪 vs PictureBox）。</summary>
+        public double LastPaintMs { get; private set; }
+        /// <summary>自上次 <see cref="ResetMaxPaintMs"/> 以來的最大 OnPaint 耗時（worst-case，判斷卡頓用）。</summary>
+        public double MaxPaintMs { get; private set; }
+        /// <summary>讀取 MaxPaintMs 後呼叫以重置視窗（取「每段時間內最差」）。</summary>
+        public double ResetMaxPaintMs() { double m = MaxPaintMs; MaxPaintMs = 0; return m; }
+        private readonly System.Diagnostics.Stopwatch _paintSw = new System.Diagnostics.Stopwatch();
+
         protected override void OnPaint(PaintEventArgs pe)
         {
+            if (_lodActive)
+            {
+                _paintSw.Restart();
+                pe.Graphics.Clear(this.BackColor);
+                if (_lodTile != null)
+                {
+                    // tile 代表 _lodTileRect（虛擬區）→ 畫到該區投影到螢幕的位置/大小。
+                    // 互動中視角已變但 tile 未重算 → 同一 tile 被拉伸（便宜，停住才換 crisp）。
+                    float dx = _lodTileRect.X * _zoom + _panOffset.X;
+                    float dy = _lodTileRect.Y * _zoom + _panOffset.Y;
+                    float dw = _lodTileRect.Width  * _zoom;
+                    float dh = _lodTileRect.Height * _zoom;
+                    pe.Graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
+                    pe.Graphics.PixelOffsetMode   = PixelOffsetMode.Half;
+                    pe.Graphics.DrawImage(_lodTile, dx, dy, dw, dh);
+                }
+                if (_showOverlay) DrawOverlays(pe.Graphics);
+                _paintSw.Stop();
+                LastPaintMs = _paintSw.Elapsed.TotalMilliseconds;
+                if (LastPaintMs > MaxPaintMs) MaxPaintMs = LastPaintMs;
+                return;
+            }
+
             if (this.Image == null) { base.OnPaint(pe); return; }
 
+            _paintSw.Restart();
             EnsureViewCache();
             pe.Graphics.Clear(this.BackColor); // 整圖快取只蓋影像範圍，邊緣/失效區先填底色
 
@@ -396,6 +582,10 @@ namespace TanukiCv.Controls
             }
 
             if (_showOverlay) DrawOverlays(pe.Graphics);
+
+            _paintSw.Stop();
+            LastPaintMs = _paintSw.Elapsed.TotalMilliseconds;
+            if (LastPaintMs > MaxPaintMs) MaxPaintMs = LastPaintMs;
         }
 
         /// <summary>_viewCache =「整張圖在當前 zoom 下」的點陣（不含 pan）。pan 直接以偏移貼上、不重建
@@ -450,14 +640,16 @@ namespace TanukiCv.Controls
             if (!string.IsNullOrEmpty(_ovMag)) DrawLabel(g, _ovMag, Width - pad, Height - pad, 1f, 1f);
 
             // 游標位置 mm + 亮度（跟滑鼠）；無 mm 字串時 fallback 像素座標
-            if (_cursorInside && this.Image != null &&
+            if (_cursorInside && ContentW > 0 && ContentH > 0 &&
                 _lastImgX >= 0 && _lastImgY >= 0 &&
-                _lastImgX < this.Image.Width && _lastImgY < this.Image.Height)
+                _lastImgX < ContentW && _lastImgY < ContentH)
             {
                 string head = string.IsNullOrEmpty(_cursorMm)
                     ? $"({_lastImgX}, {_lastImgY})"
                     : _cursorMm;
-                DrawLabel(g, $"{head}  {_lastColor.R}",
+                // LOD 模式 this.Image 為 null → 無亮度（_lastColor 預設黑），只顯示座標
+                string tail = _lodActive ? "" : $"  {_lastColor.R}";
+                DrawLabel(g, $"{head}{tail}",
                           _cursorPos.X + 14, _cursorPos.Y + 14, 0f, 0f);
             }
         }
@@ -490,7 +682,12 @@ namespace TanukiCv.Controls
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { _viewCache?.Dispose(); _viewCache = null; }
+            if (disposing)
+            {
+                _viewCache?.Dispose(); _viewCache = null;
+                _lodSettleTimer?.Dispose(); _lodSettleTimer = null;
+                _lodTile?.Dispose(); _lodTile = null;
+            }
             base.Dispose(disposing);
         }
     }

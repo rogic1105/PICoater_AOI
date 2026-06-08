@@ -209,6 +209,9 @@ namespace MilGrabber.PictureBoxTest
             MIL.MappAlloc(MIL.M_NULL, MIL.M_DEFAULT, ref _milApplication);
             MIL.MappControl(MIL.M_DEFAULT, MIL.M_ERROR, MIL.M_PRINT_DISABLE);
 
+            // 依「初始化前選的模式」建立顯示控制項（MIL→Panel 直繪 / PictureBox→現成 PictureBox+SmartCanvas）
+            CreateDisplaysForMode();
+
             // 3. 按 SystemNum 去重，每張卡 MsysAlloc 一次
             _systems.Clear();
             _cams = new MilCamera[camCount];
@@ -231,15 +234,17 @@ namespace MilGrabber.PictureBoxTest
                     _systems[dev.SystemNum] = sysId;
                 }
 
-                // 傳真實 PictureBox handle（不可傳 IntPtr.Zero，否則 MIL 會自己開顯示視窗 → 每台一個彈窗）。
-                // Initialize 後立刻 SetPrimaryDisplayVisible(false) detach MIL 顯示，純用 PictureBox 畫（FrameReady）。
-                IntPtr h = _displayBoxes[i].Handle;
+                // 顯示目標 handle：MIL 模式 = 該容器的 Panel（MIL 直繪）；PictureBox 模式 = PictureBox（之後 detach 純用 FrameReady 畫）。
+                // 不可傳 IntPtr.Zero，否則 MIL 會自己開顯示視窗（每台一個彈窗）。
+                IntPtr h = _milMode ? _displayPanels[i].Handle : _displayBoxes[i].Handle;
                 var cam = new MilCamera(sysId, dev.Id, dev.DevNum, dev.DcfPath, h);
                 int idx = i; // 迴圈變數捕捉（綁子畫面索引，與 _cams / lvCameras Tag 一致）
                 cam.OnCameraClicked += _ => SelectCamera(idx);
-                cam.FrameReady += (c, buf) => OnCameraFrame(idx, c, buf); // 每幀：縮圖 → PictureBox
+                if (!_milMode)
+                    cam.FrameReady += (c, buf) => OnCameraFrame(idx, c, buf); // PictureBox 模式：每幀縮圖→繪
                 cam.Initialize();
-                cam.SetPrimaryDisplayVisible(false); // detach MIL 顯示（不彈窗、不跟 PictureBox 搶畫）
+                if (!_milMode)
+                    cam.SetPrimaryDisplayVisible(false); // PictureBox 模式 detach MIL；MIL 模式保留 MIL 直繪
                 _cams[i] = cam;
             }
 
@@ -423,7 +428,7 @@ namespace MilGrabber.PictureBoxTest
                     finally { _suppressParamEvents = false; }
                 }
 
-                UpdateCamerasListView();
+                UpdateCamerasListView(slow: true); // 一次性完整刷（含慢欄位）
 
                 // 抓取相機資訊只為取得上限，不需持續取像顯示 → 抓完停 grab（panel 不顯示影像）
                 _userWantsGrab = false;
@@ -459,9 +464,10 @@ namespace MilGrabber.PictureBoxTest
         // =========================================================================
         private void chkFlipVertical_CheckedChanged(object sender, EventArgs e)
         {
+            _flipDisplay = chkFlipVertical.Checked; // PictureBox 模式：BuildGrayBitmap 上下翻轉
             if (_cams == null) return;
             foreach (var cam in _cams)
-                if (cam != null) cam.FlipVertical = chkFlipVertical.Checked;
+                if (cam != null) cam.FlipVertical = chkFlipVertical.Checked; // MIL 模式：MIL 翻轉
         }
 
         // =========================================================================
@@ -530,8 +536,19 @@ namespace MilGrabber.PictureBoxTest
         {
             if (_cams == null || idx < 0 || idx >= _cams.Length || _cams[idx] == null) return;
 
-            // PictureBox 版：主畫面不用 MIL secondary，改由 OnCameraFrame 在 idx==_selectedCam 時更新 _mainBox。
-            _selectedCam = idx;
+            if (_milMode)
+            {
+                // MIL 模式：舊選中解除副顯示、新選中接主畫面（MIL secondary 直繪到 _mainPanelMil）
+                if (_selectedCam >= 0 && _selectedCam < _cams.Length && _cams[_selectedCam] != null)
+                    _cams[_selectedCam].SetSecondaryDisplay(IntPtr.Zero);
+                _selectedCam = idx;
+                if (_mainPanelMil != null) _cams[idx].SetSecondaryDisplay(_mainPanelMil.Handle);
+            }
+            else
+            {
+                // PictureBox 模式：主畫面由 DisplayTimer/OnCameraFrame 更新（依 _selectedCam）
+                _selectedCam = idx;
+            }
 
             // 重畫所有容器邊框（選中橘色、其他深灰）
             if (_camContainers != null)
@@ -857,6 +874,10 @@ namespace MilGrabber.PictureBoxTest
         // Timer（500ms）：更新子畫面狀態 label + 選中相機 telemetry
         // tick 在 UI 執行緒，故可直接更新 UI
         // =========================================================================
+        private int _statusTick;                 // StatusTimer tick 計數（決定慢欄位刷新時機）
+        private const int SlowTelemetryEveryTicks = 8; // 慢欄位（溫度/PCIe/…）每 N tick 刷一次（500ms×8=4s）
+        private double[] _maxLineRateCache;      // Max Line Rate 固定上限，抓到一次即快取（CLProtocol 查詢最慢）
+
         private void StatusTimer_Tick(object sender, EventArgs e)
         {
             if (_isReleasing || _cams == null) return;
@@ -874,10 +895,13 @@ namespace MilGrabber.PictureBoxTest
                     SetSubLabel(i, $"Cam {camId}: Offline", Color.Red, Color.White);
             }
 
-            // 每 tick 更新所有相機列（17 欄 telemetry）
-            UpdateCamerasListView();
+            // 每 tick 更新所有相機列（快欄位每次、慢欄位每 4s；避免每 500ms 在 UI 執行緒做整套 MIL 查詢造成凍結）
+            bool slow = (_statusTick++ % SlowTelemetryEveryTicks) == 0;
+            UpdateCamerasListView(slow);
             // 選中相機那列（動態）
             UpdateEngineSelectedCam();
+            // 計時比較（縮圖/顯示/FPS；MIL vs PictureBox）
+            UpdateTimingLabel();
         }
 
         // =========================================================================
@@ -891,6 +915,7 @@ namespace MilGrabber.PictureBoxTest
         /// </summary>
         private void InitCamerasListView(int camCount)
         {
+            _maxLineRateCache = null; // 重新 init → 清快取，下個 tick 重抓 Max Line Rate
             lvCameras.BeginUpdate();
             try
             {
@@ -917,9 +942,11 @@ namespace MilGrabber.PictureBoxTest
         /// 11 Scan Mode / 12 FPGA / 13 Cam Temp / 14 Mem Free / 15 PCIe Lanes / 16 PCIe Speed。
         /// Max Line Rate(欄 4)：cam.GetLineRateMaxHz()，&gt;0 顯示整數，否則 "-"（CLProtocol 未就緒即 "-"）。
         /// </summary>
-        private void UpdateCamerasListView()
+        private void UpdateCamerasListView(bool slow)
         {
             if (lvCameras.Items.Count == 0) return;
+            if (_maxLineRateCache == null || _maxLineRateCache.Length != (_cams?.Length ?? 0))
+                _maxLineRateCache = new double[_cams?.Length ?? 0];
 
             lvCameras.BeginUpdate();
             try
@@ -935,15 +962,12 @@ namespace MilGrabber.PictureBoxTest
                         continue;
                     }
 
+                    // ── 快欄位（每 tick；C# 計數器 / 便宜查詢，快變要即時）──
                     item.SubItems[1].Text = $"{cam.CurrentFps:F2}";
                     item.SubItems[2].Text = $"{cam.GetSelectedFrameRate():F2}";
 
                     double lineRate = cam.GetLineRateHz();
                     item.SubItems[3].Text = lineRate > 0 ? $"{lineRate:F1}" : "-";
-
-                    // Max Line Rate(Hz)：CLProtocol 上限；>0 顯示整數，未就緒/抓不到顯示 "-"。
-                    double lineRateMax = cam.GetLineRateMaxHz();
-                    item.SubItems[4].Text = lineRateMax > 0 ? $"{(long)Math.Floor(lineRateMax)}" : "-";
 
                     double expUs = cam.GetExposureUs();
                     item.SubItems[5].Text = expUs > 0 ? $"{expUs:F1}" : "-";
@@ -955,6 +979,17 @@ namespace MilGrabber.PictureBoxTest
                     item.SubItems[8].Text = $"{cam.GetFrameMissed()}";
                     item.SubItems[9].Text = $"{cam.GetGrabFrameMissed()}";
                     item.SubItems[10].Text = $"{cam.FrameWidth}×{cam.FrameHeight}";
+
+                    // Max Line Rate(Hz)：固定上限，抓到一次即快取（CLProtocol 查詢最慢，不必每次問）
+                    if (idx < _maxLineRateCache.Length && _maxLineRateCache[idx] <= 0)
+                    {
+                        double m = cam.GetLineRateMaxHz();
+                        if (m > 0) { _maxLineRateCache[idx] = m; item.SubItems[4].Text = $"{(long)Math.Floor(m)}"; }
+                        else if (item.SubItems[4].Text != "-") item.SubItems[4].Text = "-";
+                    }
+
+                    if (!slow) continue; // 慢欄位（溫度/PCIe/掃描模式/記憶體）每 4s 才刷，避免 UI 凍結
+
                     item.SubItems[11].Text = cam.GetScanMode();
 
                     double fpgaTemp = cam.GetFpgaTemperature();

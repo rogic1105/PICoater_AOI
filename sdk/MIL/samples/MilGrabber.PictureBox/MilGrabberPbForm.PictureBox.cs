@@ -26,9 +26,28 @@ namespace MilGrabber.PictureBoxTest
 
         private volatile int  _resizeScale = 4;   // 縮圖倍率（由 numResize 更新；控制項在 Designer）
         private volatile bool _mergeMode;          // 主畫面顯示合圖 vs 選中相機（由 chkMerge 更新）
+        private volatile bool _flipDisplay;        // PictureBox 模式上下翻轉（CoreCV_Resize_GPU 輸出 bottom-up，由 chkFlipVertical 控制）
 
-        private SmartCanvas _mainCanvas;           // 主畫面（panelMain 內）
+        // ── 動態 LOD（單張模式；由 chkLod 控制）：主畫面改用 SmartCanvas LOD provider，
+        //    停住才裁可見區+GPU 縮到 panel 解析度 → 縮小看全圖便宜、放大看細節清晰且便宜。 ──
+        private volatile bool _lodEnabled;
+        private volatile FrameData _lodSnap;        // 選中相機最新「全解析度」灰階快照（整顆 ref 原子換→尺寸+bytes 一致，provider 在 UI 執行緒讀）
+        private IntPtr _lodSrcPinned, _lodDstPinned; // LOD 裁+縮專用 pinned（provider 單執行緒=UI，無併發）
+        private int _lodSrcCap, _lodDstCap;
+        private int _lodActiveCamIdx = -1;         // 目前 LOD 綁的相機 index（換相機要重設虛擬尺寸）
+
+        private SmartCanvas _mainCanvas;           // 主畫面（panelMain 內，PictureBox 模式）
         private int _mainW = -1, _mainH = -1;      // 主畫面上次影像尺寸（變了才 FitToScreen）
+
+        // ── 顯示模式（初始化前選）：MIL 直繪 vs PictureBox 縮圖繪 ──
+        private bool _milMode;                                              // true=MIL 直繪、false=PictureBox
+        private readonly Panel[] _displayPanels = new Panel[SubPanelCount]; // MIL 模式子畫面（MIL 直繪目標）
+        private Panel _mainPanelMil;                                        // MIL 模式主畫面（MIL secondary 目標）
+        // _rbModePb / _rbModeMil / _lblTiming 已移到 Designer（可在 [設計] 看到/調位置）
+
+        // ── 計時（每 500ms 視窗的最大值=worst-case，比較 MIL vs PictureBox）──
+        private double _resizeMaxMs; // 縮圖 worst-case：CoreCV_Resize_GPU + 組 bitmap（每窗重置）
+        private readonly System.Diagnostics.Stopwatch _resizeSw = new System.Diagnostics.Stopwatch();
 
         // 合圖用：各台最新縮圖（整顆 ref 原子換 → 合圖端讀到完整一幀）
         private sealed class FrameData
@@ -41,38 +60,56 @@ namespace MilGrabber.PictureBoxTest
         private int _lastMergeMs;                                            // 上次合圖時間（逾時 fallback 用）
         private System.Windows.Forms.Timer _displayTimer; // 單台刷 + 合圖逾時 fallback（仿主程式 _mergedDisplayTimer）
 
-        /// <summary>建立主畫面 SmartCanvas + 定頻刷新 timer（建構式呼叫）。numResize/chkMerge 控制項在 Designer。</summary>
+        /// <summary>建立主畫面 SmartCanvas + 定頻 timer + 顯示模式 radio + 計時 label（建構式呼叫）。</summary>
         private void SetupPbMain()
         {
-            _mainCanvas = new SmartCanvas { Dock = DockStyle.Fill };
+            _mainCanvas = new SmartCanvas { Dock = DockStyle.Fill }; // PictureBox 模式主畫面
+            _mainCanvas.FitRelativeZoom = true; // 滾輪相對 fit（fit=1×；滾 N 格放大一致，上限隨 resize 而異）
             panelMain.Controls.Add(_mainCanvas);
             _mainCanvas.BringToFront();
 
             _displayTimer = new System.Windows.Forms.Timer { Interval = 33 }; // ~30fps
             _displayTimer.Tick += DisplayTimer_Tick;
+            // 顯示模式 radio（_rbModePb/_rbModeMil）+ 計時 label（_lblTiming）在 Designer 宣告/佈局。
         }
 
-        /// <summary>單台模式定頻刷；合圖模式只做「逾時 fallback」（合圖正常路徑在 OnCameraFrame 湊齊一輪即合）。</summary>
+        /// <summary>依「初始化前選的模式」建立顯示控制項（btnInit 開頭呼叫）。
+        /// MIL 模式：每容器疊 Panel（MIL 直繪目標）+ 主畫面疊 Panel；PictureBox 模式：用現成 PictureBox + SmartCanvas。</summary>
+        private void CreateDisplaysForMode()
+        {
+            _milMode = _rbModeMil.Checked;
+            _rbModeMil.Enabled = _rbModePb.Enabled = false; // 初始化後不可改模式
+            if (!_milMode) return;
+
+            for (int i = 0; i < SubPanelCount; i++)
+            {
+                var p = new Panel { Dock = DockStyle.Fill, BackColor = Color.Black };
+                int idx = i;
+                p.MouseClick += (s, e) => SelectCamera(idx);
+                _camContainers[i].Controls.Add(p);
+                p.BringToFront(); // 蓋住 PictureBox
+                _displayPanels[i] = p;
+            }
+            _mainPanelMil = new Panel { Dock = DockStyle.Fill, BackColor = Color.Black };
+            panelMain.Controls.Add(_mainPanelMil);
+            _mainPanelMil.BringToFront(); // 蓋住 SmartCanvas
+        }
+
+        /// <summary>只做合圖「逾時 fallback」。單台 / 合圖正常更新都在 OnCameraFrame（隨相機 fps）；
+        /// 不再 30fps 空轉重畫 —— 相機 1fps 時冗餘重建 _viewCache 是主要顯示成本（見 PbTiming）。</summary>
         private void DisplayTimer_Tick(object sender, EventArgs e)
         {
-            if (_isReleasing || _mainCanvas == null || _mainCanvas.IsDisposed) return;
+            if (_isReleasing || _milMode || _mainCanvas == null || _mainCanvas.IsDisposed) return; // MIL 模式主畫面由 MIL 直繪
 
-            if (_mergeMode)
+            // 合圖模式某台停了 → 集合永遠湊不齊 → 超過 200ms 強制刷一次（避免合圖凍住）。
+            // 但只有「真的有新幀進來、只是沒湊齊一輪」才刷；完全沒新幀就跳過 → 靜止=真靜止，
+            // 不對 1fps 相機做 5fps 冗餘重建（低配機省 CPU）。
+            if (_mergeMode && Environment.TickCount - _lastMergeMs > 200 && AnyReadySinceMerge())
             {
-                // 某台停了 → 集合永遠湊不齊 → 超過 200ms 強制刷一次（避免合圖凍住）
-                if (Environment.TickCount - _lastMergeMs > 200)
-                {
-                    ClearReadyFlags();
-                    _lastMergeMs = Environment.TickCount;
-                    Bitmap m = BuildMergeBitmap();
-                    if (m != null) ApplyMainImage(m);
-                }
-            }
-            else
-            {
-                int sel = _selectedCam;
-                FrameData f = (sel >= 0 && sel < SubPanelCount) ? _latest[sel] : null;
-                if (f != null) ApplyMainImage(BuildGrayBitmap(f.Bytes, f.W, f.H));
+                ClearReadyFlags();
+                _lastMergeMs = Environment.TickCount;
+                Bitmap m = BuildMergeBitmap();
+                if (m != null) ApplyMainImage(m);
             }
         }
 
@@ -91,6 +128,12 @@ namespace MilGrabber.PictureBoxTest
         private void ClearReadyFlags()
         {
             for (int i = 0; i < SubPanelCount; i++) _readySinceMerge[i] = false;
+        }
+
+        private bool AnyReadySinceMerge()
+        {
+            for (int i = 0; i < SubPanelCount; i++) if (_readySinceMerge[i]) return true;
+            return false;
         }
 
         /// <summary>切 UI 換主畫面 SmartCanvas 影像；尺寸變了才 FitToScreen（不重置使用者 zoom/pan）。
@@ -116,7 +159,119 @@ namespace MilGrabber.PictureBoxTest
 
         // ── Designer 控制項事件 ──
         private void numResize_ValueChanged(object sender, EventArgs e) => _resizeScale = (int)numResize.Value;
-        private void chkMerge_CheckedChanged(object sender, EventArgs e) => _mergeMode = chkMerge.Checked;
+        private void chkMerge_CheckedChanged(object sender, EventArgs e)
+        {
+            _mergeMode = chkMerge.Checked;
+            if (_mergeMode && _mainCanvas != null && _mainCanvas.LodActive)
+            {
+                _mainCanvas.DisableLod(); // 合圖暫不支援 LOD → 退回一般顯示
+                _lodActiveCamIdx = -1;
+            }
+        }
+
+        private void chkLod_CheckedChanged(object sender, EventArgs e)
+        {
+            _lodEnabled = chkLod.Checked;
+            if (!_lodEnabled && _mainCanvas != null && _mainCanvas.LodActive)
+            {
+                _mainCanvas.DisableLod();
+                _lodActiveCamIdx = -1;
+                _mainW = _mainH = -1; // 下次 ApplyMainImage 會重新 FitToScreen
+            }
+            // 開啟時不立刻動作：等選中相機下一幀在 OnCameraFrame 啟用（要有全解析度快照）
+        }
+
+        // ── 動態 LOD ─────────────────────────────────────────────────────────
+        /// <summary>UI 執行緒：依當前快照啟用 / 刷新主畫面 LOD（合圖模式跳過）。</summary>
+        private void UpdateLodOnUi(int idx, int fullW, int fullH)
+        {
+            SmartCanvas c = _mainCanvas;
+            if (c == null || !c.IsHandleCreated || c.IsDisposed) return;
+            try
+            {
+                c.BeginInvoke((Action)(() =>
+                {
+                    if (_isReleasing || _mergeMode || !_lodEnabled) return;
+                    if (!c.LodActive || _lodActiveCamIdx != idx)
+                    {
+                        _lodActiveCamIdx = idx;
+                        c.EnableLod(fullW, fullH, LodProvide); // 內含 fit + 首次 RecomputeLodTile
+                    }
+                    else
+                    {
+                        c.RefreshLod(); // 新幀、視角沒變 → 用當前視角重產 tile
+                    }
+                }));
+            }
+            catch { /* handle 已毀 */ }
+        }
+
+        /// <summary>LOD provider（UI 執行緒）：從全解析度快照裁出可見虛擬區 srcRect → GPU 縮到 target → 灰階 Bitmap。
+        /// 放大時 srcRect 小 → 縮得少 → 清晰；縮小時 srcRect≈全圖 → 縮到 panel → 便宜。</summary>
+        private Bitmap LodProvide(Rectangle srcRect, Size target)
+        {
+            FrameData snap = _lodSnap;
+            if (snap == null) return null;
+            byte[] full = snap.Bytes; int fw = snap.W, fh = snap.H;
+
+            // clamp srcRect 進 [0,fw]×[0,fh]
+            int sx = Math.Max(0, Math.Min(srcRect.X, fw - 1));
+            int sy = Math.Max(0, Math.Min(srcRect.Y, fh - 1));
+            int sw = Math.Max(1, Math.Min(srcRect.Width,  fw - sx));
+            int sh = Math.Max(1, Math.Min(srcRect.Height, fh - sy));
+            int tw = Math.Max(1, target.Width), th = Math.Max(1, target.Height);
+            int cropPix = sw * sh, dstPix = tw * th;
+
+            if (_lodSrcCap < cropPix)
+            {
+                if (_lodSrcPinned != IntPtr.Zero) NativeResize.CoreCV_FreePinned(_lodSrcPinned);
+                _lodSrcPinned = NativeResize.CoreCV_AllocPinned((ulong)cropPix); _lodSrcCap = cropPix;
+            }
+            if (_lodDstCap < dstPix)
+            {
+                if (_lodDstPinned != IntPtr.Zero) NativeResize.CoreCV_FreePinned(_lodDstPinned);
+                _lodDstPinned = NativeResize.CoreCV_AllocPinned((ulong)dstPix); _lodDstCap = dstPix;
+            }
+            if (_lodSrcPinned == IntPtr.Zero || _lodDstPinned == IntPtr.Zero) return null;
+
+            // 裁出可見區到連續緩衝（逐列複製）
+            var crop = new byte[cropPix];
+            for (int y = 0; y < sh; y++) Array.Copy(full, (sy + y) * fw + sx, crop, y * sw, sw);
+            Marshal.Copy(crop, 0, _lodSrcPinned, cropPix);
+            NativeResize.CoreCV_Resize_GPU(_lodSrcPinned, sw, sh, _lodDstPinned, tw, th);
+
+            var dst = new byte[dstPix];
+            Marshal.Copy(_lodDstPinned, dst, 0, dstPix);
+            return BuildGrayBitmap(dst, tw, th); // flip 由 _flipDisplay 處理（與主路徑一致）
+        }
+
+        /// <summary>更新計時 label（StatusTimer 每 500ms 呼叫）：比較 MIL 直繪 vs PictureBox 的縮圖/顯示成本。</summary>
+        private void UpdateTimingLabel()
+        {
+            if (_lblTiming == null) return;
+            double fps = (_selectedCam >= 0 && _cams != null && _selectedCam < _cams.Length && _cams[_selectedCam] != null)
+                ? _cams[_selectedCam].CurrentFps : 0;
+            if (_milMode)
+            {
+                _lblTiming.Text = $"模式: MIL 直繪\nFPS: {fps:F1}\n(縮圖/顯示由 MIL\n 硬體直繪，無 CPU 成本)";
+                Trace.WriteLine($"[PbTiming] mode=MIL FPS={fps:F1}");
+            }
+            else
+            {
+                // 每 500ms 視窗的「最大值」(worst-case，判斷卡頓);讀完即重置 → 反映近期互動
+                double resizeMax = _resizeMaxMs; _resizeMaxMs = 0;
+                double paintMax  = _mainCanvas?.ResetMaxPaintMs() ?? 0;
+                float  zoomRel   = _mainCanvas?.ZoomRelativeToFit ?? 1f; // 相對 fit（fit=1×；滾 N 格=1.1^N，跨 resize 一致）
+                float  zoomAbs   = _mainCanvas?.Zoom ?? 1f;              // 絕對（螢幕÷bitmap；因 resize 而異）
+                string merge     = _mergeMode ? "合圖" : "單張";     // 主畫面合圖狀態
+                // LOD 狀態：勾選(_lodEnabled) + 是否真的在畫布生效(LodActive)。ON=生效中、待命=勾了但還沒綁、OFF=沒勾
+                bool lodOn       = _mainCanvas != null && _mainCanvas.LodActive;
+                string lod       = lodOn ? "ON" : (_lodEnabled ? "待命" : "OFF");
+                _lblTiming.Text =
+                    $"模式: PictureBox\n畫面: {merge}\nLOD: {lod}\n縮圖倍率: {_resizeScale}\nzoom×fit: {zoomRel:F2}\n(abs {zoomAbs:F2})\n縮圖(max): {resizeMax:F1} ms\n顯示(max): {paintMax:F1} ms\nFPS: {fps:F1}";
+                Trace.WriteLine($"[PbTiming] mode=PB {merge} LOD={lod} scale={_resizeScale} zoom×fit={zoomRel:F2} abs={zoomAbs:F2} 縮圖max={resizeMax:F1}ms 顯示max={paintMax:F1}ms FPS={fps:F1}");
+            }
+        }
 
         /// <summary>每幀（MIL 回呼執行緒）：縮圖 → 灰階 Bitmap → thumbnail + 主畫面（合圖 / 選中）。</summary>
         private void OnCameraFrame(int idx, MilCamera cam, MIL_ID buffer)
@@ -146,26 +301,51 @@ namespace MilGrabber.PictureBoxTest
                 }
                 if (_srcPinned[idx] == IntPtr.Zero || _dstPinned[idx] == IntPtr.Zero) return; // alloc 失敗（無 GPU / DLL）
 
+                _resizeSw.Restart();                                             // ── 縮圖計時起 ──
                 cam.GetFrameBytes(buffer, _srcBytes[idx]);                       // 8-bit 灰階原圖
                 Marshal.Copy(_srcBytes[idx], 0, _srcPinned[idx], srcPix);
                 NativeResize.CoreCV_Resize_GPU(_srcPinned[idx], fw, fh, _dstPinned[idx], dw, dh); // GPU 縮圖
 
                 var dstBytes = new byte[dstPix];
                 Marshal.Copy(_dstPinned[idx], dstBytes, 0, dstPix);
-                _latest[idx] = new FrameData(dstBytes, dw, dh);                  // 供合圖讀（原子 ref 換）
+                Bitmap thumb = BuildGrayBitmap(dstBytes, dw, dh);                // 組 thumbnail bitmap
+                _resizeSw.Stop();                                                // ── 縮圖計時止（resize+組bitmap）──
+                double rms = _resizeSw.Elapsed.TotalMilliseconds;
+                if (rms > _resizeMaxMs) _resizeMaxMs = rms;                       // 視窗內最大（worst-case）
 
-                // 子畫面 thumbnail
-                SwapImage((idx < _displayBoxes.Length) ? _displayBoxes[idx] : null, BuildGrayBitmap(dstBytes, dw, dh));
+                _latest[idx] = new FrameData(dstBytes, dw, dh);                  // 供合圖讀（原子 ref 換）
+                SwapImage((idx < _displayBoxes.Length) ? _displayBoxes[idx] : null, thumb); // 子畫面 thumbnail
 
                 // 合圖同步：等所有在線相機都產生新幀（湊齊一輪）才合 → _latest 全是同一輪 → 對齊，
                 // 避免「半輪取樣」（有些相機已更新、有些還在 resize）造成的時間差。
                 _readySinceMerge[idx] = true;
-                if (_mergeMode && AllActiveFramed())
+                if (_mergeMode)
                 {
-                    ClearReadyFlags();
-                    _lastMergeMs = Environment.TickCount;
-                    Bitmap merged = BuildMergeBitmap();
-                    if (merged != null) ApplyMainImage(merged);
+                    if (AllActiveFramed())
+                    {
+                        ClearReadyFlags();
+                        _lastMergeMs = Environment.TickCount;
+                        Bitmap merged = BuildMergeBitmap();
+                        if (merged != null) ApplyMainImage(merged);
+                    }
+                }
+                else if (idx == _selectedCam)
+                {
+                    if (_lodEnabled)
+                    {
+                        // LOD：存「全解析度」快照（整顆 ref 原子換）→ UI 執行緒啟用/刷新 LOD。
+                        // 主畫面不走 ApplyMainImage（SmartCanvas 改用 provider 產 tile）。
+                        var full = new byte[srcPix];
+                        Array.Copy(_srcBytes[idx], full, srcPix);
+                        _lodSnap = new FrameData(full, fw, fh);
+                        UpdateLodOnUi(idx, fw, fh);
+                    }
+                    else
+                    {
+                        // 單台模式：只在「被選中的相機產生新幀」時更新主畫面（隨相機 fps，非 30fps 空轉）。
+                        // 互動（zoom/pan）由 SmartCanvas 自己 Invalidate 重繪，不靠這條路徑。
+                        ApplyMainImage(BuildGrayBitmap(dstBytes, dw, dh));
+                    }
                 }
             }
             catch (Exception ex)
@@ -215,19 +395,32 @@ namespace MilGrabber.PictureBoxTest
             else bmp.Dispose();
         }
 
-        /// <summary>8-bit 灰階 byte[] → Format8bppIndexed Bitmap（灰階調色盤）。</summary>
-        private static Bitmap BuildGrayBitmap(byte[] data, int w, int h)
+        /// <summary>8-bit 灰階 byte[] → Format8bppIndexed Bitmap（灰階調色盤）。
+        /// _flipDisplay 時上下翻轉（CoreCV_Resize_GPU 輸出 bottom-up，由「上下翻轉」勾選控制；翻轉只是來源列反向、零額外成本）。</summary>
+        private static readonly Color[] _grayEntries = BuildGrayEntries(); // 256 灰階一次算好（每幀重算是純浪費）
+        private static Color[] BuildGrayEntries()
+        {
+            var e = new Color[256];
+            for (int i = 0; i < 256; i++) e[i] = Color.FromArgb(i, i, i);
+            return e;
+        }
+
+        private Bitmap BuildGrayBitmap(byte[] data, int w, int h)
         {
             var bmp = new Bitmap(w, h, PixelFormat.Format8bppIndexed);
-            ColorPalette pal = bmp.Palette;
-            for (int i = 0; i < 256; i++) pal.Entries[i] = Color.FromArgb(i, i, i);
+            ColorPalette pal = bmp.Palette;                       // ColorPalette 不可跨 Bitmap 共用，但 entry 內容用快取免重算
+            for (int i = 0; i < 256; i++) pal.Entries[i] = _grayEntries[i];
             bmp.Palette = pal;
 
+            bool flip = _flipDisplay;
             BitmapData bd = bmp.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.WriteOnly, PixelFormat.Format8bppIndexed);
             try
             {
                 for (int y = 0; y < h; y++)
-                    Marshal.Copy(data, y * w, IntPtr.Add(bd.Scan0, y * bd.Stride), w);
+                {
+                    int srcRow = flip ? (h - 1 - y) : y;
+                    Marshal.Copy(data, srcRow * w, IntPtr.Add(bd.Scan0, y * bd.Stride), w);
+                }
             }
             finally { bmp.UnlockBits(bd); }
             return bmp;
@@ -246,8 +439,30 @@ namespace MilGrabber.PictureBoxTest
 
                 PictureBox box = (_displayBoxes != null && i < _displayBoxes.Length) ? _displayBoxes[i] : null;
                 if (box != null) { var old = box.Image; box.Image = null; old?.Dispose(); }
+
+                // MIL 模式疊上去的 Panel：移除 + dispose（下次 init 可重選模式）
+                if (_displayPanels[i] != null)
+                {
+                    _camContainers[i]?.Controls.Remove(_displayPanels[i]);
+                    _displayPanels[i].Dispose();
+                    _displayPanels[i] = null;
+                }
             }
+            // LOD：停用 + 釋放專用 pinned + 清快照
+            if (_mainCanvas != null && _mainCanvas.LodActive) _mainCanvas.DisableLod();
+            if (_lodSrcPinned != IntPtr.Zero) { NativeResize.CoreCV_FreePinned(_lodSrcPinned); _lodSrcPinned = IntPtr.Zero; _lodSrcCap = 0; }
+            if (_lodDstPinned != IntPtr.Zero) { NativeResize.CoreCV_FreePinned(_lodDstPinned); _lodDstPinned = IntPtr.Zero; _lodDstCap = 0; }
+            _lodSnap = null; _lodActiveCamIdx = -1;
+
             if (_mainCanvas != null) { var old = _mainCanvas.Image; _mainCanvas.Image = null; old?.Dispose(); }
+            if (_mainPanelMil != null)
+            {
+                panelMain?.Controls.Remove(_mainPanelMil);
+                _mainPanelMil.Dispose();
+                _mainPanelMil = null;
+            }
+            if (_rbModeMil != null) _rbModeMil.Enabled = true;  // 釋放後可重選模式
+            if (_rbModePb  != null) _rbModePb.Enabled  = true;
         }
     }
 }

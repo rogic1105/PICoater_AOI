@@ -67,6 +67,12 @@ bootstrap 例外（line 232 AppRole）：Hub 還沒建構，加註解標明合�
 - **Vertical 模式**：overview X 軸固定（不隨 canvas zoom）；muraVertical/Horizontal 隨動；Live 單台 MIL 顯示
 - **Global → Vertical 切換**：必須呼叫 `ReviewStitchCoordinator.DisposeGlobalMergedImage()` 清掉殘留 `_globalMergedImage` / `_periodMergedImage`。否則 IsGlobalMerged 仍為 true，會誤觸發其他守門條件（`UpdateSelectedReviewCamFromViewCenter` 現已改用 `StitchMode == Global` 判斷，但 bitmap 仍須釋放避免佔記憶體）。
 
+### SmartCanvas opt-in 功能（TanukiCv.Controls，預設關，主程式回顧畫布未啟用）
+先在 `sdk/MIL/samples/MilGrabber.PictureBox` 驗證，未來可搬回顧畫布（見記憶 project_smartcanvas_lod / project_review_lod_grid_todo）：
+- **動態 LOD**：`EnableLod(virtualW,virtualH,provider)` — zoom/pan 導覽「虛擬全解析度圖」，停住(150ms settle)才請 provider 裁可見區+GPU 縮到 ~panel 產 tile（互動用舊 tile 拉伸）。`LodMargin`(1.0=3×3 overscan)+ 拖出範圍節流 120ms 即時補→拖曳不破圖。`RefreshLod`(新幀)/`DisableLod`/`UpdateLodVirtualSize`。**縮小看全圖便宜、放大看真細節**。
+- **`FitRelativeZoom`**：滾輪相對 fit(fit=1×)，上限=bitmap 1:1 ×`MaxZoomOverBitmap`(8)。滾輪 `_zoom *= 1.1^(e.Delta/120)` 正比轉動量——**修掉卡頓時 Windows 合併滾輪事件、舊算法每事件只乘一次造成的跨 scale 不一致**。
+- ⚠ **`ZoomRelativeToFit` 是螢幕縮放，不是實體倍率**（主程式 `_ovMag` 由 mm 校正算，兩者互不可取代）。
+
 ### SwitchRidgeDirection 三態切換
 1. 未勾選 → 自動勾選 + 設方向
 2. 已勾選 + 同方向 → 取消勾選（回原圖）
