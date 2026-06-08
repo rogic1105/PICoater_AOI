@@ -144,6 +144,10 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// 參數：(cameraId, fileNameWithoutExt, meanPeak_0to1, maxPeak_0to1)</summary>
         public event Action<int, string, float, float> OnInspectionResult;
 
+        /// <summary>SmartCanvas 顯示路徑用：每幀提供「顯示 bytes(8-bit 灰階)+ 尺寸」(MIL 回呼執行緒)。
+        /// bytes 是重用緩衝 → 訂閱者必須**同步消費**(組 bitmap 複製)、勿存 ref。只在有訂閱者(SmartCanvas 模式)時觸發。</summary>
+        public event Action<int, byte[], int, int> OnDisplayFrame;
+
         /// <summary>每幀 GPU pipeline 完成後觸發（MIL 回呼執行緒）。
         /// 參數：(cameraId, curveMean_raw255, curveMax_raw255)</summary>
         public event Action<int, float[], float[]> OnLiveCurveData;
@@ -325,10 +329,19 @@ namespace AniloxRoll.Monitor.Core.Camera
             bool processedByPicoater = TryApplyPicoaterRidge(modifiedBuffer);
 
             // EnableImageProcessing 控制「顯示」：勾選且處理成功才顯示處理結果，否則顯示原圖
-            if (EnableImageProcessing && processedByPicoater)
+            bool showProcessed = EnableImageProcessing && processedByPicoater;
+            if (showProcessed)
                 _mil.PutDisplayBytes(_hostOutputBuffer); // 已填好的處理結果寫入顯示 buffer
             else
                 _mil.CopyToDisplay(modifiedBuffer);       // 顯示原圖
+
+            // SmartCanvas 顯示路徑：每幀把「顯示 bytes」交給訂閱者(同步組 bitmap)。MIL 模式無訂閱者→不觸發。
+            var onDisp = OnDisplayFrame;
+            if (onDisp != null)
+            {
+                byte[] disp = showProcessed ? _hostOutputBuffer : _hostInputBuffer;
+                if (disp != null) onDisp(CameraId, disp, FrameWidth, FrameHeight);
+            }
 
             // Global merge 複製（display buffer → 合併 buffer 裁切位置）已移至 MilCamera grab hook，
             // 在此 FrameReady handler 返回後由 _mil 執行（顯示 buffer 已更新完成）。

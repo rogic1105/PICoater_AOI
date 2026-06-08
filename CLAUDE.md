@@ -341,7 +341,7 @@ PICoater_AOI/
 | 合圖方式 | `hb_StitchMode` → `StitchMode` | Global | Vertical / Global |
 | 監控強化 | `hc_EnableMuraEnhance` → `EnableMuraEnhance` | false | 即時影像強化 Mura |
 | 回顧強化 | `hd_EnableReviewEnhance` → `EnableReviewEnhance` | false | 回顧影像強化 Mura |
-| 主畫面顯示 | `he_MainDisplay` → `ImageView.MainDisplay` | MilDirect | MilDirect（MIL 直繪，現狀）/ SmartCanvas（CPU 繪、跟回顧畫布同源；並存開關，SmartCanvas 顯示路徑施工中）|
+| 主畫面顯示 | `he_MainDisplay` → `ImageView.MainDisplay` | MilDirect | MilDirect（MIL 直繪，現狀）/ SmartCanvas（CPU 繪、跟回顧畫布同源 SmartCanvas；`LiveSmartDisplay` 在 camLiveMain 疊 SmartCanvas，吃 `AniloxCamera.OnDisplayFrame` bytes→bitmap，單相機/CPU合圖+mm overlay+zoom+雙三擊；MIL 並存於底層被覆蓋。TODO：overview 聯動 / Y row pitch / 合圖 overlap 中點分界 / 關底層 MIL）|
 
 ### 4. 儲存設定
 

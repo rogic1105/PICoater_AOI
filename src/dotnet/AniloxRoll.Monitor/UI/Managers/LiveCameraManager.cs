@@ -17,6 +17,10 @@ namespace AniloxRoll.Monitor.UI.Managers
     {
         private readonly Form _mainForm;
         private readonly Panel _mainDisplayPanel;
+        private Panel[] _cameraPanels;                 // camLive1~7（SmartCanvas 模式 thumbnail 用）
+        private LiveSmartDisplay _smartDisplay;        // SmartCanvas 顯示路徑（he_MainDisplay==SmartCanvas）
+        private bool SmartCanvasMode => _inspectionSettings != null
+            && _inspectionSettings.he_MainDisplay == AniloxRoll.Monitor.Core.Data.MainDisplayMode.SmartCanvas;
         private readonly Action<string> _updatePixelInfoCallback;
 
         private List<AniloxCamera> _cameras = new List<AniloxCamera>();
@@ -136,6 +140,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             _mainForm = mainForm;
             _mainDisplayPanel = mainDisplayPanel;
+            _cameraPanels = cameraPanels;
             _updatePixelInfoCallback = updatePixelInfoCallback;
             _mainDisplayPanel.BackColor = Color.Black;
 
@@ -276,6 +281,17 @@ namespace AniloxRoll.Monitor.UI.Managers
             IsAllocated = true;
             _cameraStatusTimer.Start();
             UpdateCameraStatus("已配置", Color.White);
+
+            // SmartCanvas 顯示路徑（he_MainDisplay==SmartCanvas）：在 camLiveMain 疊 SmartCanvas，
+            // 訂閱各相機每幀顯示 bytes → CPU bitmap。MIL 直繪維持在底層（被 SmartCanvas 覆蓋，coexist）。
+            if (SmartCanvasMode)
+            {
+                _smartDisplay = new LiveSmartDisplay(_mainDisplayPanel, _cameraPanels, _screenMmPerPx);
+                _smartDisplay.SelectRequested  += SmartSelectCamera;
+                _smartDisplay.ViewRangeMmChanged += OnSmartViewRange;
+                foreach (var cam in _cameras) cam.OnDisplayFrame += OnCameraDisplayFrame;
+            }
+
             SwitchMainDisplay(_selectedMainCameraId);
 
             // 初始化後立即發布相機數量（分配成功不代表已連線，Timer 會持續更新）
@@ -328,6 +344,14 @@ namespace AniloxRoll.Monitor.UI.Managers
             // 先停止 global merge（必須在 cam.Free 之前）：DisableGlobalMerge 會先清各相機 merge target
             // 再由工頭 MbufFree 合併 buffer，避免 grab hook 把幀複製進已釋放的 buffer。
             DisableGlobalMerge();
+
+            // SmartCanvas 顯示：解訂閱 + dispose（移除 camLiveMain 上的 SmartCanvas/thumbnail）
+            if (_smartDisplay != null)
+            {
+                foreach (var cam in _cameras) cam.OnDisplayFrame -= OnCameraDisplayFrame;
+                _smartDisplay.Dispose();
+                _smartDisplay = null;
+            }
 
             foreach (var cam in _cameras)
                 cam.Free();
@@ -499,6 +523,11 @@ namespace AniloxRoll.Monitor.UI.Managers
                 borderColor, borderWidth, ButtonBorderStyle.Solid);
         }
 
+        // ── SmartCanvas 顯示路徑橋接 ──
+        private void OnCameraDisplayFrame(int camId, byte[] bytes, int w, int h) => _smartDisplay?.OnCameraFrame(camId, bytes, w, h);
+        private void SmartSelectCamera(int camId) => SwitchMainDisplay(camId);
+        private void OnSmartViewRange(double leftMm, double rightMm) { /* TODO: overview(chartLivePatch) 聯動，先留 hook */ }
+
         private void SwitchMainDisplay(int cameraIndex)
         {
             // 關閉/釋放期間 form 或 panel 可能已 dispose；存取 .Handle 會觸發 CreateHandle()
@@ -515,6 +544,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             _selectedMainCameraId = cameraIndex;
             _userSelectedMainCameraId = cameraIndex;
+            _smartDisplay?.SetSelected(cameraIndex);
 
             foreach (var kvp in _liveParentPanels)
                 kvp.Value.Invalidate();
@@ -583,6 +613,13 @@ namespace AniloxRoll.Monitor.UI.Managers
             MIL.MdispHookFunction(_mergedDisplay, MIL.M_MOUSE_MOVE, _mergedMouseDelegate, IntPtr.Zero);
 
             IsGlobalMergeActive = true;
+
+            // SmartCanvas 合圖：用工頭佈局(MinStartMm/RefOpsMm/各台 xOffset) CPU 拼（MIL 合圖在底層被覆蓋）
+            if (SmartCanvasMode && _smartDisplay != null)
+            {
+                _smartDisplay.SetMergeLayout(_merger.MinStartMm, _merger.RefOpsMm, _merger.TotalW, _merger.TotalH, startPosMm, opsUm, 0);
+                _smartDisplay.SetMergeMode(true);
+            }
         }
 
         /// <summary>從工頭同步座標系參數到本地鏡像欄位（值來源 = 工頭）。</summary>
@@ -626,6 +663,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             _merger?.DisableMerge();
             _merger = null;
 
+            _smartDisplay?.SetMergeMode(false); // SmartCanvas 回單相機
+
             IsGlobalMergeActive = false;
             _mergedSlotStartsMm = null;
             _mergedSlotEndsMm   = null;
@@ -653,6 +692,10 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             // 從工頭同步座標系參數
             SyncCoordsFromMerger();
+
+            // SmartCanvas 合圖佈局同步
+            if (SmartCanvasMode && _smartDisplay != null)
+                _smartDisplay.SetMergeLayout(_merger.MinStartMm, _merger.RefOpsMm, _merger.TotalW, _merger.TotalH, startPosMm, opsUm, 0);
         }
 
         // ==================== Merged Display Refresh ====================
