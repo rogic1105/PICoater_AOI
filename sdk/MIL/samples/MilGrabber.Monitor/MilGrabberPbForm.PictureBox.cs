@@ -191,7 +191,7 @@ namespace MilGrabber.Monitor
             }
         }
 
-        private bool AllActiveFramed()
+        private bool AllActiveReadySinceMerge()
         {
             bool any = false;
             for (int i = 0; i < SubPanelCount; i++)
@@ -452,7 +452,7 @@ namespace MilGrabber.Monitor
                 _readySinceMerge[idx] = true;
                 if (_mergeMode)
                 {
-                    if (AllActiveFramed())
+                    if (AllActiveReadySinceMerge())
                     {
                         ClearReadyFlags();
                         _lastMergeMs = Environment.TickCount;

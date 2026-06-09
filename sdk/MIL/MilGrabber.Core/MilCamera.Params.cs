@@ -22,7 +22,8 @@ namespace MilGrabber.Core
 
             if (_appliedLineRateHz > 0)
             {
-                double maxUs = Math.Max(1.0, Math.Min(10000.0, Math.Floor(900000.0 / _appliedLineRateHz)));
+                // 曝光上限公式單一真相 → MilCameraParams.CalcExposureMaxUs（勿在此再抄 900000/線掃）。
+                double maxUs = MilCameraParams.CalcExposureMaxUs(_appliedLineRateHz, 1.0, 10000.0);
                 if (exposureUs > maxUs)
                 {
                     System.Diagnostics.Trace.WriteLine(
@@ -198,16 +199,18 @@ namespace MilGrabber.Core
         public const int ExposureLineRateProduct = 900000;
 
         /// <summary>
-        /// 依線掃速率算曝光動態上限(μs)：lineRateHz ≤ 0 → expMaxCap（無線掃資訊時用絕對上限）；
-        /// 否則 clamp(ExposureLineRateProduct / lineRateHz, expMin, expMaxCap)。
+        /// 依線掃速率算曝光動態上限(μs) 核心（double）：lineRateHz ≤ 0 → expMaxCap（無線掃資訊時用絕對上限）；
+        /// 否則 clamp(floor(ExposureLineRateProduct / lineRateHz), expMin, expMaxCap)。曝光相關「上限公式」唯一真相。
         /// </summary>
-        public static int CalcExposureMaxUs(int lineRateHz, int expMin, int expMaxCap)
+        public static double CalcExposureMaxUs(double lineRateHz, double expMin, double expMaxCap)
         {
             if (lineRateHz <= 0) return expMaxCap;
-            int v = ExposureLineRateProduct / lineRateHz;
-            if (v < expMin) v = expMin;
-            if (v > expMaxCap) v = expMaxCap;
-            return v;
+            double v = Math.Floor(ExposureLineRateProduct / lineRateHz);
+            return Math.Max(expMin, Math.Min(expMaxCap, v));
         }
+
+        /// <summary>int 版（曝光滑桿上限用）：委派 double 核心。正整數線掃下 floor 與整數除法結果一致，行為不變。</summary>
+        public static int CalcExposureMaxUs(int lineRateHz, int expMin, int expMaxCap)
+            => (int)CalcExposureMaxUs((double)lineRateHz, expMin, expMaxCap);
     }
 }
