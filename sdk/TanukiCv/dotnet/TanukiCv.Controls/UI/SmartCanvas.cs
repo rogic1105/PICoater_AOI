@@ -761,7 +761,10 @@ namespace TanukiCv.Controls
             using (var g = Graphics.FromImage(_viewCache))
             {
                 g.Clear(this.BackColor);
-                g.InterpolationMode = InterpolationMode.NearestNeighbor;
+                // 縮小（sw<原圖寬，如 fit/overview）→ 平滑內插避免「丟像素」馬賽克；
+                // 放大（zoom>1，看細節）→ NearestNeighbor 保持像素邊界清晰、不糊。
+                bool shrinking = sw < this.Image.Width;
+                g.InterpolationMode = shrinking ? InterpolationMode.HighQualityBilinear : InterpolationMode.NearestNeighbor;
                 g.PixelOffsetMode   = PixelOffsetMode.Half;
                 g.DrawImage(this.Image, 0, 0, sw, sh); // 整張縮到快取（不含 pan）
             }

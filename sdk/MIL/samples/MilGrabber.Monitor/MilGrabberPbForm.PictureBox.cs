@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -68,7 +70,9 @@ namespace MilGrabber.Monitor
         private void SetupPbMain()
         {
             _mainCanvas = new SmartCanvas { Dock = DockStyle.Fill }; // PictureBox 模式主畫面
-            _mainCanvas.FitRelativeZoom = true;        // 滾輪相對 fit（fit=1×；滾 N 格放大一致，上限隨 resize 而異）
+            // FitRelativeZoom=false → 同 camReviewMain：滾輪可放大也可縮小到 fit 以下（0.01~100），
+            // 不被 fit 下限卡住（FitRelativeZoom=true 時 lo=_fitZoom 會擋住「縮小看更小」）。
+            _mainCanvas.FitRelativeZoom = false;
             _mainCanvas.DoubleClickFitToScreen = true; // 雙擊回到 fit（提取自主程式回顧畫布）
             _mainCanvas.TripleClickPhysical1x = true;  // 三擊跳實體 1:1（需 SetPhysicalCalibration）
             _screenMmPerPx = SystemInfo.GetScreenMetrics().MmPerPx; // 螢幕 mm/px 查一次
@@ -79,6 +83,71 @@ namespace MilGrabber.Monitor
             _displayTimer = new System.Windows.Forms.Timer { Interval = 33 }; // ~30fps
             _displayTimer.Tick += DisplayTimer_Tick;
             // 顯示模式 radio（_rbModePb/_rbModeMil）+ 計時 label（_lblTiming）在 Designer 宣告/佈局。
+        }
+
+        // ── 合圖 ops/start + 重疊策略（tabParams「合圖」tab；控制項在 Designer 宣告，本檔只接線）──
+        private readonly MergeParams _mergeParams = new MergeParams();
+        private volatile int _mergeStrategy;   // 0=Midline、1=RightOverLeft、2=LeftOverRight（對應 MergeOverlap）
+        private volatile bool _mergeAllMode;   // 合圖全部：含無畫面相機（黑色占空間），由 chkMergeAll 控制
+        private const int MergeMaxW = 30000;   // 合圖點陣圖寬度上限：GDI 座標 16-bit 上限 ~32767，超過會 wrap
+                                               // → 內容錯位重複。設 30000 留邊際；以下不降採樣（保 1 倍真實解析度）
+
+        /// <summary>「合圖」tab 接線：填 ops/start 預設 + 綁 PropertyGrid + 演算法下拉 + chkMergeAll
+        /// （tabMerge / propertyGridMerge / cmbMergeMode 控制項在 Designer 宣告，故 [設計] 可見）。</summary>
+        private void SetupMergeTab()
+        {
+            // 預設值對齊主程式機台佈局（ops 24.41µm ×8、start 每台 +345mm）。
+            _mergeParams.Ops.Set(new[] { 24.4140625, 24.4140625, 24.4140625, 24.4140625, 24.4140625, 24.4140625, 24.4140625, 24.4140625 });
+            _mergeParams.Start.Set(new[] { 0.0, 345, 690, 1035, 1380, 1725, 2070, 2415 });
+
+            cmbMergeMode.Items.AddRange(new object[] { "中線分界", "右覆蓋左", "左覆蓋右" });
+            cmbMergeMode.SelectedIndex = 0; // 先設值再接事件 → 不在 init 觸發
+            cmbMergeMode.SelectedIndexChanged += (s, e) => _mergeStrategy = cmbMergeMode.SelectedIndex;
+
+            propertyGridMerge.SelectedObject = _mergeParams; // 仿 propertyGridSettings：Cam1~8 可展開
+
+            chkMergeAll.CheckedChanged += chkMergeAll_CheckedChanged; // Designer 宣告、未接事件 → 在此接線
+        }
+
+        /// <summary>合圖全部：含無畫面相機（黑色占空間）。勾選即進合圖顯示（不需另勾「合圖」）。</summary>
+        private void chkMergeAll_CheckedChanged(object sender, EventArgs e)
+        {
+            _mergeAllMode = chkMergeAll.Checked;
+            _mergeMode = chkMerge.Checked || _mergeAllMode;
+            if (_mergeMode && _mainCanvas != null && _mainCanvas.LodActive)
+            {
+                _mainCanvas.DisableLod();
+                _lodActiveCamIdx = -1;
+            }
+        }
+
+        // ── 合圖參數（PropertyGrid 綁定物件；Cam1~8 可展開，仿主程式 MachineLayoutConfig 風格）──
+        [TypeConverter(typeof(ExpandableObjectConverter))]
+        private sealed class CamRow8
+        {
+            [DisplayName("Cam 1")] public double Cam1 { get; set; }
+            [DisplayName("Cam 2")] public double Cam2 { get; set; }
+            [DisplayName("Cam 3")] public double Cam3 { get; set; }
+            [DisplayName("Cam 4")] public double Cam4 { get; set; }
+            [DisplayName("Cam 5")] public double Cam5 { get; set; }
+            [DisplayName("Cam 6")] public double Cam6 { get; set; }
+            [DisplayName("Cam 7")] public double Cam7 { get; set; }
+            [DisplayName("Cam 8")] public double Cam8 { get; set; }
+
+            public double[] ToArray() => new[] { Cam1, Cam2, Cam3, Cam4, Cam5, Cam6, Cam7, Cam8 };
+            public void Set(double[] v)
+            {
+                if (v == null) return;
+                if (v.Length > 0) Cam1 = v[0]; if (v.Length > 1) Cam2 = v[1]; if (v.Length > 2) Cam3 = v[2]; if (v.Length > 3) Cam4 = v[3];
+                if (v.Length > 4) Cam5 = v[4]; if (v.Length > 5) Cam6 = v[5]; if (v.Length > 6) Cam7 = v[6]; if (v.Length > 7) Cam8 = v[7];
+            }
+            public override string ToString() => "";
+        }
+
+        private sealed class MergeParams
+        {
+            [Category("合圖佈局")][DisplayName("OPS (µm)")]  public CamRow8 Ops   { get; } = new CamRow8();
+            [Category("合圖佈局")][DisplayName("Start (mm)")] public CamRow8 Start { get; } = new CamRow8();
         }
 
         /// <summary>依「初始化前選的模式」建立顯示控制項（btnInit 開頭呼叫）。
@@ -217,7 +286,7 @@ namespace MilGrabber.Monitor
         }
         private void chkMerge_CheckedChanged(object sender, EventArgs e)
         {
-            _mergeMode = chkMerge.Checked;
+            _mergeMode = chkMerge.Checked || _mergeAllMode;
             if (_mergeMode && _mainCanvas != null && _mainCanvas.LodActive)
             {
                 _mainCanvas.DisableLod(); // 合圖暫不支援 LOD → 退回一般顯示
@@ -416,18 +485,91 @@ namespace MilGrabber.Monitor
             }
         }
 
-        /// <summary>各台最新縮圖橫向簡單拼接成一張（A：不做位置重疊）。</summary>
+        /// <summary>
+        /// 各台最新縮圖依 ops/start 定位合圖（xOffset = (start−minStart)/refOpsMm/scale），
+        /// 重疊區依選擇的演算法分界（中線 / 右覆蓋左 / 左覆蓋右）。佈局算術委派 sdk <see cref="MergeLayout"/>
+        /// （與 MIL 即時合圖 MultiCameraMerger 同一來源；範例合的是縮圖故 scale=_resizeScale）。
+        /// _mergeAllMode（合圖全部）時把無畫面的相機槽也納入佈局（黑色占空間，同 camLiveMain 邏輯）。
+        /// ops 未設（=0）時退回各台裸拼接 <see cref="BuildMergeConcat"/>。
+        /// </summary>
         private Bitmap BuildMergeBitmap()
         {
+            int scale = _resizeScale; if (scale < 1) scale = 1;
+            double[] ops = _mergeParams.Ops.ToArray();
+            double[] start = _mergeParams.Start.ToArray();
+
+            // 「合圖全部」需要無畫面相機的占位尺寸：用任一有畫面相機的尺寸當代表（同型號等寬高）。
             var frames = new FrameData[SubPanelCount];
-            int totalW = 0, maxH = 0, count = 0;
+            int defW = 0, defH = 0;
             for (int i = 0; i < SubPanelCount; i++)
             {
-                FrameData f = _latest[i];
-                frames[i] = f;
-                if (f != null) { totalW += f.W; if (f.H > maxH) maxH = f.H; count++; }
+                frames[i] = _latest[i];
+                if (frames[i] != null && defW == 0) { defW = frames[i].W; defH = frames[i].H; }
             }
-            if (count == 0 || totalW <= 0 || maxH <= 0) return null;
+            if (defW == 0) return null; // 完全沒畫面 → 無法合圖
+
+            bool all = _mergeAllMode;
+            var geoms = new List<MergeLayout.CamGeom>();
+            double minStart = double.MaxValue;
+            int maxH = 0;
+            for (int i = 0; i < SubPanelCount; i++)
+            {
+                bool present = frames[i] != null;
+                if (!all && !present) continue;           // 一般合圖：只納入有畫面的；合圖全部：8 槽全納入
+                double st = (i < start.Length) ? start[i] : 0;
+                int w = present ? frames[i].W : defW;     // 無畫面 → 用代表寬（占空間，畫面留黑）
+                int h = present ? frames[i].H : defH;
+                if (st < minStart) minStart = st;
+                if (h > maxH) maxH = h;
+                geoms.Add(new MergeLayout.CamGeom { CameraId = i + 1, StartMm = st, WidthPx = w });
+            }
+            if (geoms.Count == 0 || maxH <= 0) return null;
+
+            double refOpsMm = (ops.Length > 0 && ops[0] > 0) ? ops[0] / 1000.0 : 0;
+            if (refOpsMm <= 0) return BuildMergeConcat(frames, maxH); // ops 未設 → 退回裸拼接
+
+            var placements = MergeLayout.Compute(geoms, minStart, refOpsMm, scale,
+                (MergeOverlap)_mergeStrategy, out int totalW);
+            if (totalW <= 0) return null;
+
+            // 合圖點陣圖寬度上限：8 槽全合圖在 scale=1 時 totalW 可達 ~11 萬 px，GDI+ 畫超寬圖會
+            // 座標錯位 → 左邊 cam 內容重複到右邊（誤判為「複製到 5,6」）。超過上限就整張再降採樣 k 倍。
+            // 同主程式 LiveSmartDisplay.BuildMerge 的 MergeTargetW 保護。
+            int k = Math.Max(1, (totalW + MergeMaxW - 1) / MergeMaxW);
+            int mw = Math.Max(1, totalW / k), mh = Math.Max(1, maxH / k);
+
+            var merged = new Bitmap(mw, mh, PixelFormat.Format24bppRgb);
+            using (var g = Graphics.FromImage(merged))
+            {
+                g.Clear(Color.Black);
+                // k>1（合圖全部需再降採樣）→ 平滑內插避免馬賽克；k==1（無縮放）→ NearestNeighbor 等同直拷、保清晰。
+                g.InterpolationMode = k > 1
+                    ? System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear
+                    : System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
+                g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
+                foreach (var p in placements)
+                {
+                    FrameData f = frames[p.CameraId - 1];
+                    if (f == null || p.SrcWidth <= 0) continue;
+                    int dx = (int)Math.Round(p.DestX / (double)k);
+                    int dw = Math.Max(1, (int)Math.Round(p.SrcWidth / (double)k));
+                    int dh = Math.Max(1, (int)Math.Round(f.H / (double)k));
+                    using (var fb = BuildGrayBitmap(f.Bytes, f.W, f.H))
+                        g.DrawImage(fb,
+                            new Rectangle(dx, 0, dw, dh),                 // dest：再降採樣 k 倍後的全域 x
+                            new Rectangle(p.SrcLeft, 0, p.SrcWidth, f.H), // src：重疊分界後的裁切
+                            GraphicsUnit.Pixel);
+                }
+            }
+            return merged;
+        }
+
+        /// <summary>fallback：ops 未設時各台縮圖橫向裸拼接（原行為，不做位置重疊）。</summary>
+        private Bitmap BuildMergeConcat(FrameData[] frames, int maxH)
+        {
+            int totalW = 0;
+            for (int i = 0; i < SubPanelCount; i++) if (frames[i] != null) totalW += frames[i].W;
+            if (totalW <= 0 || maxH <= 0) return null;
 
             var merged = new Bitmap(totalW, maxH, PixelFormat.Format24bppRgb);
             using (var g = Graphics.FromImage(merged))

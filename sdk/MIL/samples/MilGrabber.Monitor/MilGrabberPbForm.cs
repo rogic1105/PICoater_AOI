@@ -104,6 +104,7 @@ namespace MilGrabber.Monitor
                 SetupCamPanel(_camContainers[i], i);
 
             SetupPbMain(); // 主畫面 SmartCanvas（PictureBox 顯示路徑用）
+            SetupMergeTab(); // tabParams 新增「合圖」tab：ops/start 表格 + 重疊演算法選擇
 
             // 參數控制項陣列：從 Designer 具名控制項組成（陣列在 .cs 組、控制項在 Designer 宣告，同 panelCam0..7 模式）。
             _tbExposure = new[] { trackBarExpCam1, trackBarExpCam2, trackBarExpCam3, trackBarExpCam4, trackBarExpCam5, trackBarExpCam6, trackBarExpCam7, trackBarExpCam8 };

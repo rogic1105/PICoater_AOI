@@ -16,8 +16,10 @@ namespace MilGrabber.Core
     /// 本類別刻意 0 依賴 System.Windows.Forms：不碰 panel / Label / Timer / Control / Handle。
     /// 顯示與 UI 全留上層。工頭不負責建立/釋放相機（相機生命週期由呼叫端管理）。
     ///
-    /// 注意：佈局/重疊分界算術目前內嵌於此（與 GrabImageStitcher.MergeHorizontal 同邏輯）；
-    /// 抽成共用單一真相是下一階段工作，現階段刻意不抽。
+    /// 佈局/重疊分界算術刻意內嵌於此（MIL-only、自含）：MIL 區是「換 grabber/相機就整包換掉」的
+    /// 拋棄層，不引用上層共用 SDK（避免被迫拉 TanukiCv/WinForms 依賴）。可重用的合圖佈局演算法
+    /// 另存於 TanukiCv.Controls.MergeLayout，服務 SmartCanvas/CPU 合圖路徑（durable、跨產品）。
+    /// 兩份刻意分流：MIL 這份隨硬體丟、TanukiCv 那份長期演化（含右覆蓋左/左覆蓋右等策略）。
     /// </summary>
     public class MultiCameraMerger
     {
@@ -216,7 +218,7 @@ namespace MilGrabber.Core
 
         /// <summary>
         /// 計算每台相機的 xOffset + 重疊中點分界（drawLeft/drawRight），然後對每台 SetMergeTarget。
-        /// 與 GrabImageStitcher.MergeHorizontal 的重疊處理一致。
+        /// MIL-only 自含實作（不引用 TanukiCv.Controls.MergeLayout，保 MIL 區可隨硬體整包換）。
         /// </summary>
         private void ApplyMergeTargets(double[] startPosMm, double minStart)
         {

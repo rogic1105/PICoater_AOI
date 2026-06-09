@@ -165,6 +165,10 @@ namespace MilGrabber.Monitor
             this.lblHtCam8 = new System.Windows.Forms.Label();
             this.trackBarHtCam8 = new System.Windows.Forms.TrackBar();
             this.numHtCam8 = new System.Windows.Forms.NumericUpDown();
+            this.tabMerge = new System.Windows.Forms.TabPage();
+            this.propertyGridMerge = new System.Windows.Forms.PropertyGrid();
+            this.cmbMergeMode = new System.Windows.Forms.ComboBox();
+            this.lblMergeMode = new System.Windows.Forms.Label();
             this.panelCam0 = new System.Windows.Forms.Panel();
             this.panelCam1 = new System.Windows.Forms.Panel();
             this.panelCam2 = new System.Windows.Forms.Panel();
@@ -173,6 +177,7 @@ namespace MilGrabber.Monitor
             this.panelCam5 = new System.Windows.Forms.Panel();
             this.panelCam6 = new System.Windows.Forms.Panel();
             this.panelCam7 = new System.Windows.Forms.Panel();
+            this.chkMergeAll = new System.Windows.Forms.CheckBox();
             ((System.ComponentModel.ISupportInitialize)(this.numResize)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numFovMm)).BeginInit();
             this.tabParams.SuspendLayout();
@@ -260,6 +265,7 @@ namespace MilGrabber.Monitor
             this.panelHtCam8.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarHtCam8)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam8)).BeginInit();
+            this.tabMerge.SuspendLayout();
             this.SuspendLayout();
             // 
             // btnInit
@@ -305,7 +311,7 @@ namespace MilGrabber.Monitor
             // chkFlipVertical
             // 
             this.chkFlipVertical.AutoSize = true;
-            this.chkFlipVertical.Location = new System.Drawing.Point(965, 194);
+            this.chkFlipVertical.Location = new System.Drawing.Point(965, 215);
             this.chkFlipVertical.Name = "chkFlipVertical";
             this.chkFlipVertical.Size = new System.Drawing.Size(89, 19);
             this.chkFlipVertical.TabIndex = 4;
@@ -387,7 +393,7 @@ namespace MilGrabber.Monitor
             // chkLod
             // 
             this.chkLod.AutoSize = true;
-            this.chkLod.Location = new System.Drawing.Point(965, 219);
+            this.chkLod.Location = new System.Drawing.Point(965, 240);
             this.chkLod.Name = "chkLod";
             this.chkLod.Size = new System.Drawing.Size(88, 19);
             this.chkLod.TabIndex = 7;
@@ -580,6 +586,7 @@ namespace MilGrabber.Monitor
             this.tabParams.Controls.Add(this.tabExposure);
             this.tabParams.Controls.Add(this.tabLineRate);
             this.tabParams.Controls.Add(this.tabHeight);
+            this.tabParams.Controls.Add(this.tabMerge);
             this.tabParams.Location = new System.Drawing.Point(1089, 17);
             this.tabParams.Name = "tabParams";
             this.tabParams.SelectedIndex = 0;
@@ -2164,6 +2171,49 @@ namespace MilGrabber.Monitor
             0,
             0});
             // 
+            // tabMerge
+            // 
+            this.tabMerge.Controls.Add(this.propertyGridMerge);
+            this.tabMerge.Controls.Add(this.cmbMergeMode);
+            this.tabMerge.Controls.Add(this.lblMergeMode);
+            this.tabMerge.Location = new System.Drawing.Point(4, 25);
+            this.tabMerge.Name = "tabMerge";
+            this.tabMerge.Padding = new System.Windows.Forms.Padding(3);
+            this.tabMerge.Size = new System.Drawing.Size(306, 662);
+            this.tabMerge.TabIndex = 3;
+            this.tabMerge.Text = "合圖";
+            this.tabMerge.UseVisualStyleBackColor = true;
+            // 
+            // propertyGridMerge
+            // 
+            this.propertyGridMerge.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.propertyGridMerge.HelpVisible = false;
+            this.propertyGridMerge.Location = new System.Drawing.Point(11, 47);
+            this.propertyGridMerge.Name = "propertyGridMerge";
+            this.propertyGridMerge.Size = new System.Drawing.Size(392, 1166);
+            this.propertyGridMerge.TabIndex = 2;
+            this.propertyGridMerge.ToolbarVisible = false;
+            // 
+            // cmbMergeMode
+            // 
+            this.cmbMergeMode.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.cmbMergeMode.FormattingEnabled = true;
+            this.cmbMergeMode.Location = new System.Drawing.Point(99, 11);
+            this.cmbMergeMode.Name = "cmbMergeMode";
+            this.cmbMergeMode.Size = new System.Drawing.Size(150, 23);
+            this.cmbMergeMode.TabIndex = 1;
+            // 
+            // lblMergeMode
+            // 
+            this.lblMergeMode.AutoSize = true;
+            this.lblMergeMode.Location = new System.Drawing.Point(11, 17);
+            this.lblMergeMode.Name = "lblMergeMode";
+            this.lblMergeMode.Size = new System.Drawing.Size(97, 15);
+            this.lblMergeMode.TabIndex = 0;
+            this.lblMergeMode.Text = "重疊演算法：";
+            // 
             // panelCam0
             // 
             this.panelCam0.BackColor = System.Drawing.Color.Black;
@@ -2236,11 +2286,22 @@ namespace MilGrabber.Monitor
             this.panelCam7.Size = new System.Drawing.Size(194, 118);
             this.panelCam7.TabIndex = 17;
             // 
+            // chkMergeAll
+            // 
+            this.chkMergeAll.AutoSize = true;
+            this.chkMergeAll.Location = new System.Drawing.Point(965, 190);
+            this.chkMergeAll.Name = "chkMergeAll";
+            this.chkMergeAll.Size = new System.Drawing.Size(89, 19);
+            this.chkMergeAll.TabIndex = 44;
+            this.chkMergeAll.Text = "合圖全部";
+            this.chkMergeAll.UseVisualStyleBackColor = true;
+            // 
             // MilGrabberPbForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1415, 875);
+            this.Controls.Add(this.chkMergeAll);
             this.Controls.Add(this.panelCam0);
             this.Controls.Add(this.panelCam1);
             this.Controls.Add(this.panelCam2);
@@ -2383,6 +2444,8 @@ namespace MilGrabber.Monitor
             this.panelHtCam8.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.trackBarHtCam8)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam8)).EndInit();
+            this.tabMerge.ResumeLayout(false);
+            this.tabMerge.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -2428,6 +2491,10 @@ namespace MilGrabber.Monitor
         private System.Windows.Forms.ColumnHeader colEngValue;
         private System.Windows.Forms.TabControl tabParams;
         private System.Windows.Forms.TabPage tabExposure;
+        private System.Windows.Forms.TabPage tabMerge;
+        private System.Windows.Forms.Label lblMergeMode;
+        private System.Windows.Forms.ComboBox cmbMergeMode;
+        private System.Windows.Forms.PropertyGrid propertyGridMerge;
         private System.Windows.Forms.TabPage tabLineRate;
         private System.Windows.Forms.TabPage tabHeight;
         // ── 曝光 tab 控制項（固定 8 相機 + 全部相機列）──
@@ -2549,5 +2616,6 @@ namespace MilGrabber.Monitor
         private System.Windows.Forms.Panel panelCam5;
         private System.Windows.Forms.Panel panelCam6;
         private System.Windows.Forms.Panel panelCam7;
+        private System.Windows.Forms.CheckBox chkMergeAll;
     }
 }

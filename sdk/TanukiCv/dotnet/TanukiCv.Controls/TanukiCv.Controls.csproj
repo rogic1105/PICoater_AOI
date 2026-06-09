@@ -58,6 +58,7 @@
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="MergeLayout.cs" />
     <Compile Include="UI\SmartCanvas.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
