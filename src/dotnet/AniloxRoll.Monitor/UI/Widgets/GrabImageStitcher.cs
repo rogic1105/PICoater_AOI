@@ -5,6 +5,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using AniloxRoll.Monitor.Core.Services;
+using TanukiCv.Controls; // MergeLayout：合圖佈局 + 重疊中點分界單一來源（app → sdk 合法）
 
 namespace AniloxRoll.Monitor.UI.Widgets
 {
@@ -140,53 +141,27 @@ namespace AniloxRoll.Monitor.UI.Widgets
             int totalW = (int)Math.Ceiling((globalMaxMm - globalMinMm) / refOpsPxMm);
             if (totalW <= 0 || maxH <= 0) return null;
 
-            var entries = new List<(Bitmap bmp, int xOffset)>(validCams.Count);
+            // 佈局（xOffset）+ 重疊中點分界委派 sdk 單一來源 TanukiCv.Controls.MergeLayout（Midline 與原內嵌邏輯一致）。
+            // CameraId 用 validCams 索引（Compute 依輸入順序回傳）；totalW 仍用上方 ALL-slots 版（含空缺槽），故 out 忽略。
+            var geoms = new List<MergeLayout.CamGeom>(validCams.Count);
             for (int i = 0; i < validCams.Count; i++)
-            {
-                int xOff = (int)Math.Round((validCams[i].posMm - globalMinMm) / refOpsPxMm);
-                entries.Add((validCams[i].bmp, xOff));
-            }
+                geoms.Add(new MergeLayout.CamGeom { CameraId = i, StartMm = validCams[i].posMm, WidthPx = validCams[i].bmp.Width });
 
-            // 按 xOffset 排序，計算每台相機的有效繪製範圍
-            entries.Sort((a, b) => a.xOffset.CompareTo(b.xOffset));
-            int n = entries.Count;
-            var drawLeft  = new int[n];
-            var drawRight = new int[n];
-            for (int i = 0; i < n; i++)
-            {
-                drawLeft[i]  = entries[i].xOffset;
-                drawRight[i] = entries[i].xOffset + entries[i].bmp.Width;
-            }
-
-            // 重疊區域各取一半（中點分界）
-            for (int i = 0; i < n - 1; i++)
-            {
-                int rightEdge = entries[i].xOffset + entries[i].bmp.Width;
-                int leftEdge  = entries[i + 1].xOffset;
-                int overlap   = rightEdge - leftEdge;
-                if (overlap > 0)
-                {
-                    int mid = leftEdge + overlap / 2;
-                    drawRight[i]     = Math.Min(drawRight[i], mid);
-                    drawLeft[i + 1]  = Math.Max(drawLeft[i + 1], mid);
-                }
-                // overlap <= 0：間隙留黑（ARGB 預設透明/黑）
-            }
+            var placements = MergeLayout.Compute(geoms, globalMinMm, opsUm[0] / 1000.0, scaleFactor,
+                MergeOverlap.Midline, out _);
 
             var result = BitmapPool.Rent(totalW, maxH);
             using (var g = Graphics.FromImage(result))
             {
                 g.InterpolationMode = InterpolationMode.NearestNeighbor;
                 g.PixelOffsetMode = PixelOffsetMode.Half;
-                for (int i = 0; i < n; i++)
+                foreach (var p in placements)
                 {
-                    var (bmp, xOff) = entries[i];
-                    int srcLeft  = drawLeft[i] - xOff;
-                    int srcWidth = drawRight[i] - drawLeft[i];
-                    if (srcWidth <= 0) continue;
+                    if (p.SrcWidth <= 0) continue;
+                    Bitmap bmp = validCams[p.CameraId].bmp;
                     g.DrawImage(bmp,
-                        new Rectangle(drawLeft[i], 0, srcWidth, bmp.Height),
-                        new Rectangle(srcLeft, 0, srcWidth, bmp.Height),
+                        new Rectangle(p.DestX, 0, p.SrcWidth, bmp.Height),   // dest：全域 x = xOffset + srcLeft
+                        new Rectangle(p.SrcLeft, 0, p.SrcWidth, bmp.Height), // src：重疊分界後裁切
                         GraphicsUnit.Pixel);
                 }
             }
