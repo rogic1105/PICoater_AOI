@@ -72,6 +72,15 @@
       <DependentUpon>MilGrabberPbForm.cs</DependentUpon>
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="MilGrabberPbForm.Config.cs">
+      <DependentUpon>MilGrabberPbForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="MilGrabberPbForm.Params.cs">
+      <DependentUpon>MilGrabberPbForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="MilGrabberPbForm.Telemetry.cs">
+      <DependentUpon>MilGrabberPbForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="MilGrabberPbForm.Designer.cs">
       <DependentUpon>MilGrabberPbForm.cs</DependentUpon>
     </Compile>
