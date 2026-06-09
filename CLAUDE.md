@@ -8,7 +8,7 @@ PICoater_AOI/
 │   ├── dotnet/AniloxRoll.Monitor/  ← C# WinForms 主應用
 │   └── native/                     ← C++ pipeline
 ├── sdk/                  ← 可獨立 split 的 library（純函式庫，無 GUI、無 exe）
-│   ├── TanukiCv/         ← 以 core_cv 為引擎的 .NET 影像 SDK（native/{core_cv,cpp_utils,core_cv_api} + dotnet/{TanukiCv.Core 純 library〔含 PixelMmMapper 像素↔mm 公式、SystemInfo CPU/GPU/RAM/螢幕查詢 唯一來源〕, TanukiCv.Controls WinForms〔→Core；含 SmartCanvas + MergeLayout 合圖佈局演算法單一來源（純算術；xOffset+重疊分界，3 策略：中線/右覆蓋左/左覆蓋右）〕} + benchmark/{bench_framework,core_cv_benchmark,TanukiCv.BenchUi} + samples/TanukiCv.SysInfoTool〔系統資訊 GUI 工具〕 + third_party/stb；self-contained 可 split）
+│   ├── TanukiCv/         ← 以 core_cv 為引擎的 .NET 影像 SDK（native/{core_cv,cpp_utils,core_cv_api} + dotnet/{TanukiCv.Core 純 library〔含 PixelMmMapper 像素↔mm 公式、SystemInfo CPU/GPU/RAM/螢幕查詢、PerfTimer 通用計時器（量段+視窗 worst-case，計時唯一來源）唯一來源〕, TanukiCv.Controls WinForms〔→Core；含 SmartCanvas + MergeLayout 合圖佈局演算法單一來源（純算術；xOffset+重疊分界，3 策略：中線/右覆蓋左/左覆蓋右）+ **顯示 pipeline 共用元件：MultiCamLiveView（多相機即時監控：主畫面 SmartCanvas+縮圖條+CPU合圖，吃灰階 bytes 0依賴 MIL/app）/ ThumbStrip（多相機縮圖條：批量 CPU 建圖不閃，app 與範例共用唯一來源）/ ThumbView（雙緩衝自繪縮圖葉子）/ GrayBitmap（灰階 bytes→bitmap 唯一來源）**〕} + benchmark/{bench_framework,core_cv_benchmark,TanukiCv.BenchUi} + samples/TanukiCv.SysInfoTool〔系統資訊 GUI 工具〕 + third_party/stb；self-contained 可 split）
 │   ├── Bridges/          ← 對外設備 / 系統橋接層
 │   │   ├── IoBridge/                         ← ICP DAS ET-7044 IO module（Modbus TCP）
 │   │   │   ├── IoBridge.Core/                ← library（IModbusTcpClient 介面 + ET-7044 實作）
@@ -341,7 +341,7 @@ PICoater_AOI/
 | 合圖方式 | `hb_StitchMode` → `StitchMode` | Global | Vertical / Global |
 | 監控強化 | `hc_EnableMuraEnhance` → `EnableMuraEnhance` | false | 即時影像強化 Mura |
 | 回顧強化 | `hd_EnableReviewEnhance` → `EnableReviewEnhance` | false | 回顧影像強化 Mura |
-| 主畫面顯示 | `he_MainDisplay` → `ImageView.MainDisplay` | MilDirect | MilDirect（MIL 直繪，現狀）/ SmartCanvas（CPU 繪、跟回顧畫布同源 SmartCanvas；`LiveSmartDisplay` 在 camLiveMain 疊 SmartCanvas，吃 `AniloxCamera.OnDisplayFrame` bytes→bitmap，單相機/CPU合圖+mm overlay+zoom+雙三擊；MIL 並存於底層被覆蓋。TODO：overview 聯動 / Y row pitch / 合圖 overlap 中點分界 / 關底層 MIL）|
+| 主畫面顯示 | `he_MainDisplay` → `ImageView.MainDisplay` | SmartCanvas | MilDirect（MIL 直繪）/ SmartCanvas（CPU 繪、跟回顧畫布同源；共用 `MultiCamLiveView`〔sdk TanukiCv.Controls〕在 camLiveMain 疊 SmartCanvas+各 cam 疊 ThumbStrip 縮圖，吃 `AniloxCamera.OnDisplayFrame` bytes→bitmap，單相機/CPU合圖+mm overlay+zoom+雙三擊；MIL 並存於底層被覆蓋。**TODO（Phase 2）：camLiveMain 監控中不能縮放（MIL secondary display 綁同一 panel 搶滑鼠，需分離 panel）/ overview 聯動 / 縮圖多相機同步刷 / 關底層 MIL**）|
 
 ### 4. 儲存設定
 

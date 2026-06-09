@@ -184,7 +184,6 @@
     </Compile>
     <Compile Include="UI\Widgets\FormInteractionHelper.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.cs" />
-    <Compile Include="UI\Managers\LiveSmartDisplay.cs" />
     <Compile Include="UI\Widgets\ColumnCurveChartHelper.cs" />
     <Compile Include="UI\Widgets\CurveMergeHelper.cs" />
     <Compile Include="UI\Widgets\RowCurveChartHelper.cs" />

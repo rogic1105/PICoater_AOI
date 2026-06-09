@@ -7,6 +7,7 @@ using System.Web.Script.Serialization; // JavaScriptSerializer 解析 system-set
 using System.Windows.Forms;
 using Matrox.MatroxImagingLibrary; // MApp 仍由本範例管理
 using MilGrabber.Core;             // 已封裝的單相機 MIL library
+using TanukiCv.Controls;           // ThumbView（共用無閃縮圖控制項）
 
 namespace MilGrabber.Monitor
 {
@@ -71,7 +72,7 @@ namespace MilGrabber.Monitor
         // 否則 VS 設計工具的 XML parser 無法解析 → 設計階段載入失敗。
         // 每個容器內部的 displayPanel（MIL 顯示）+ status label（狀態）由 SetupCamPanel runtime 建（仿主程式 SetupLivePanel）。
         private Panel[] _camContainers;     // Designer 宣告的 panelCam0..7（容器）
-        private PictureBox[] _displayBoxes; // runtime 建：縮圖後用 PictureBox 自己畫（取代 MIL 直繪 panel）
+        private ThumbStrip _thumbStrip;     // sdk 共用多相機縮圖條（唯一來源；批量 CPU 建圖不閃，與主程式 camLive 同一份）
         private Label[] _statusLabels;      // runtime 建：取代原 lblCam，顯示 Online/Offline/No Camera
 
         // ==================== State ====================
@@ -95,13 +96,17 @@ namespace MilGrabber.Monitor
             _camContainers = new Panel[] {
                 panelCam0, panelCam1, panelCam2, panelCam3,
                 panelCam4, panelCam5, panelCam6, panelCam7 };
-            _displayBoxes = new PictureBox[SubPanelCount];
             _statusLabels  = new Label[SubPanelCount];
 
-            // 每個容器 runtime 建內部 displayPanel + status（仿主程式 SetupLivePanel）。
+            // 每個容器 runtime 建內部 status + 邊框（仿主程式 SetupLivePanel）。
             // 一律先建好（即使未綁相機），未綁的 status 顯示 "No Camera"。
             for (int i = 0; i < SubPanelCount; i++)
                 SetupCamPanel(_camContainers[i], i);
+
+            // 縮圖條：在各容器疊共用 ThumbStrip 的 ThumbView（status 已 Dock=Bottom，ThumbView Dock=Fill 補上方）。
+            // 與主程式 camLive 走同一份批量 CPU 建圖路徑 → 不閃。
+            _thumbStrip = new ThumbStrip(_camContainers);
+            _thumbStrip.SelectRequested += SelectCamera;
 
             SetupPbMain(); // 主畫面 SmartCanvas（PictureBox 顯示路徑用）
             SetupMergeTab(); // tabParams 新增「合圖」tab：ops/start 表格 + 重疊演算法選擇
@@ -143,14 +148,11 @@ namespace MilGrabber.Monitor
             container.BackColor = Color.Black;
             container.Padding = new Padding(2);
             container.Controls.Clear();
+            // 注意：不對「容器」開雙緩衝。對容器（有子控制項）開雙緩衝是經典 WinForms 陷阱：
+            // 容器雙緩衝與子控制項各自繪製對不上 → 反而讓子控制項閃。葉子 ThumbView 自己已雙緩衝（正解）。
+            // 對齊主程式 SetupLivePanel（不對 parentPanel 開雙緩衝 → camLive 不閃）。
 
-            var displayBox = new PictureBox
-            {
-                Dock = DockStyle.Fill,
-                BackColor = Color.Black,
-                SizeMode = PictureBoxSizeMode.Zoom   // 等比例縮放塞滿子畫面（縮圖後的小圖）
-            };
-
+            // 縮圖 ThumbView 由共用 ThumbStrip 統一建（ctor 後一次建好）；此處只建 status + 邊框。
             var status = new Label
             {
                 Dock = DockStyle.Bottom,
@@ -161,15 +163,11 @@ namespace MilGrabber.Monitor
                 Text = "No Camera"
             };
 
-            displayBox.MouseClick += (s, e) => SelectCamera(idx);
             status.MouseClick += (s, e) => SelectCamera(idx);
             container.Paint += (s, e) => OnCamPanelPaint(s, e, idx);
 
-            container.Controls.Add(displayBox);
             container.Controls.Add(status);
-            displayBox.BringToFront();
 
-            _displayBoxes[idx] = displayBox;
             _statusLabels[idx] = status;
         }
 
@@ -237,7 +235,8 @@ namespace MilGrabber.Monitor
 
                 // 顯示目標 handle：MIL 模式 = 該容器的 Panel（MIL 直繪）；PictureBox 模式 = PictureBox（之後 detach 純用 FrameReady 畫）。
                 // 不可傳 IntPtr.Zero，否則 MIL 會自己開顯示視窗（每台一個彈窗）。
-                IntPtr h = _milMode ? _displayPanels[i].Handle : _displayBoxes[i].Handle;
+                // PictureBox 模式：MIL 主顯示稍後 detach（純用 FrameReady→ThumbStrip 畫），h 只需任一有效視窗 handle → 用容器。
+                IntPtr h = _milMode ? _displayPanels[i].Handle : _camContainers[i].Handle;
                 var cam = new MilCamera(sysId, dev.Id, dev.DevNum, dev.DcfPath, h);
                 int idx = i; // 迴圈變數捕捉（綁子畫面索引，與 _cams / lvCameras Tag 一致）
                 cam.OnCameraClicked += _ => SelectCamera(idx);
@@ -402,7 +401,8 @@ namespace MilGrabber.Monitor
         // =========================================================================
         private void chkFlipVertical_CheckedChanged(object sender, EventArgs e)
         {
-            _flipDisplay = chkFlipVertical.Checked; // PictureBox 模式：BuildGrayBitmap 上下翻轉
+            _flipDisplay = chkFlipVertical.Checked; // PictureBox 模式：主畫面 BuildGrayBitmap + 縮圖 ThumbStrip 上下翻轉
+            if (_thumbStrip != null) _thumbStrip.FlipVertical = _flipDisplay;
             if (_cams == null) return;
             foreach (var cam in _cams)
                 if (cam != null) cam.FlipVertical = chkFlipVertical.Checked; // MIL 模式：MIL 翻轉
@@ -424,10 +424,9 @@ namespace MilGrabber.Monitor
             _statusTimer.Stop();
             _displayTimer?.Stop();
 
-            // 0. 釋放 PictureBox 縮圖緩衝（pinned）+ 清掉 PictureBox 上的圖
-            ReleasePictureBoxDisplays();
-
-            // 1. 所有 MilCamera Dispose（會 stop grab + free digitizer/display/buffer）
+            // 0. 先所有 MilCamera Dispose（stop grab）→ 確保不再有 FrameReady→OnCameraFrame 在背景跑。
+            // **順序關鍵**：必須先停相機，才能釋放它正在讀寫的 pinned 緩衝（步驟 1）。反過來會 use-after-free：
+            // OnCameraFrame（背景）讀到已釋放的 _dstPinned → AccessViolationException（關窗崩潰）。
             if (_cams != null)
             {
                 for (int i = 0; i < _cams.Length; i++)
@@ -437,6 +436,9 @@ namespace MilGrabber.Monitor
                 }
                 _cams = null;
             }
+
+            // 1. 釋放 PictureBox 縮圖緩衝（pinned）+ 清縮圖（此時 grab 已停，無背景 callback → 安全）
+            ReleasePictureBoxDisplays();
 
             // 2. 每張卡 MsysFree（與 MsysAlloc 對稱）
             foreach (var sysId in _systems.Values)
@@ -529,6 +531,7 @@ namespace MilGrabber.Monitor
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             ReleaseAll();
+            _thumbStrip?.Dispose(); _thumbStrip = null; // 縮圖條存活到關窗才釋放（ReleaseAll 會在重 init 呼叫，故不放那）
             base.OnFormClosing(e);
         }
     }

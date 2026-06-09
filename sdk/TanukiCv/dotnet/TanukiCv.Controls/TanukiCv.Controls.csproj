@@ -58,7 +58,13 @@
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="GrayBitmap.cs" />
     <Compile Include="MergeLayout.cs" />
+    <Compile Include="MultiCamLiveView.cs" />
+    <Compile Include="ThumbStrip.cs" />
+    <Compile Include="ThumbView.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="UI\SmartCanvas.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

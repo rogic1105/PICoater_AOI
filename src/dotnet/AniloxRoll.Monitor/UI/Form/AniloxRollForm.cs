@@ -611,6 +611,8 @@ namespace AniloxRoll.Monitor.Forms
             // 這裡只訂閱事件做 app 專屬的 UiActionLogger 記錄（記錄屬 app，不放 sdk）。
             camReviewMain.DoubleClickFitToScreen = true;
             camReviewMain.TripleClickPhysical1x  = true;
+            // 回顧是靜態畫面（換 ID 才重建快取）→ 縮小用 HighQualityBilinear 換平滑（不影響取像即時性）。
+            camReviewMain.DownscaleInterpolation = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
             camReviewMain.DragStarted        += (s, e) => UiActionLogger.RecordViewOnly("camReviewMain.Drag");
             camReviewMain.FitPerformed       += (s, e) => UiActionLogger.RecordViewOnly("camReviewMain.DoubleClick");
             camReviewMain.Physical1xPerformed += (s, e) => UiActionLogger.RecordViewOnly("camReviewMain.Physical1x");

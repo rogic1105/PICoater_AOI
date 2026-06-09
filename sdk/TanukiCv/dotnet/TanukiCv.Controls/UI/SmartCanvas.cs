@@ -96,6 +96,11 @@ namespace TanukiCv.Controls
         public bool FitRelativeZoom { get; set; } = false;
         public float MaxZoomOverBitmap { get; set; } = 8f;     // 上限 = 餵入 bitmap 的 1:1 再放大幾倍（像素級檢視）
 
+        /// <summary>縮小（fit/overview）時整圖快取的內插模式。預設 <see cref="InterpolationMode.NearestNeighbor"/>（快，
+        /// 適合每幀重建的即時顯示）；靜態畫面（如回顧 camReviewMain）可設 HighQualityBilinear 換平滑（成本只在
+        /// Image/zoom 變時付一次）。即時路徑切勿設 HighQuality —— 全解析度大圖每幀 HighQuality 縮放會卡死取像。</summary>
+        public InterpolationMode DownscaleInterpolation { get; set; } = InterpolationMode.NearestNeighbor;
+
         // 多擊手勢（opt-in；主程式回顧畫布自有 MultiClickDetector 那套，故預設關不影響）：
         //   雙擊 = FitToScreen；三擊 = 實體 1:1（需先 SetPhysicalCalibration）。
         public bool DoubleClickFitToScreen { get; set; } = false;
@@ -658,18 +663,18 @@ namespace TanukiCv.Controls
         }
 
         /// <summary>上次 OnPaint 實際繪製耗時（ms，含小數）。供效能量測/比較（如 MIL 直繪 vs PictureBox）。</summary>
-        public double LastPaintMs { get; private set; }
+        public double LastPaintMs => _paintTimer.LastMs;
         /// <summary>自上次 <see cref="ResetMaxPaintMs"/> 以來的最大 OnPaint 耗時（worst-case，判斷卡頓用）。</summary>
-        public double MaxPaintMs { get; private set; }
+        public double MaxPaintMs => _paintTimer.MaxMs;
         /// <summary>讀取 MaxPaintMs 後呼叫以重置視窗（取「每段時間內最差」）。</summary>
-        public double ResetMaxPaintMs() { double m = MaxPaintMs; MaxPaintMs = 0; return m; }
-        private readonly System.Diagnostics.Stopwatch _paintSw = new System.Diagnostics.Stopwatch();
+        public double ResetMaxPaintMs() => _paintTimer.ResetMax();
+        private readonly PerfTimer _paintTimer = new PerfTimer(); // 繪製計時（TanukiCv.Core 通用計時器，與範例縮圖計時同一來源）
 
         protected override void OnPaint(PaintEventArgs pe)
         {
             if (_lodActive)
             {
-                _paintSw.Restart();
+                _paintTimer.Start();
                 pe.Graphics.Clear(this.BackColor);
                 if (_lodTile != null)
                 {
@@ -684,15 +689,13 @@ namespace TanukiCv.Controls
                     pe.Graphics.DrawImage(_lodTile, dx, dy, dw, dh);
                 }
                 if (_showOverlay) DrawOverlays(pe.Graphics);
-                _paintSw.Stop();
-                LastPaintMs = _paintSw.Elapsed.TotalMilliseconds;
-                if (LastPaintMs > MaxPaintMs) MaxPaintMs = LastPaintMs;
+                _paintTimer.Stop();
                 return;
             }
 
             if (this.Image == null) { base.OnPaint(pe); return; }
 
-            _paintSw.Restart();
+            _paintTimer.Start();
             EnsureViewCache();
             pe.Graphics.Clear(this.BackColor); // 整圖快取只蓋影像範圍，邊緣/失效區先填底色
 
@@ -725,9 +728,7 @@ namespace TanukiCv.Controls
 
             if (_showOverlay) DrawOverlays(pe.Graphics);
 
-            _paintSw.Stop();
-            LastPaintMs = _paintSw.Elapsed.TotalMilliseconds;
-            if (LastPaintMs > MaxPaintMs) MaxPaintMs = LastPaintMs;
+            _paintTimer.Stop();
         }
 
         /// <summary>_viewCache =「整張圖在當前 zoom 下」的點陣（不含 pan）。pan 直接以偏移貼上、不重建
@@ -761,10 +762,11 @@ namespace TanukiCv.Controls
             using (var g = Graphics.FromImage(_viewCache))
             {
                 g.Clear(this.BackColor);
-                // 縮小（sw<原圖寬，如 fit/overview）→ 平滑內插避免「丟像素」馬賽克；
-                // 放大（zoom>1，看細節）→ NearestNeighbor 保持像素邊界清晰、不糊。
+                // 縮小（sw<原圖寬，如 fit/overview）→ 用 DownscaleInterpolation（預設 Nearest，快；
+                // 靜態畫面可設 HighQualityBilinear 換平滑）。放大 → NearestNeighbor 保持像素邊界清晰、不糊。
+                // ⚠ 即時顯示每幀重建快取 → 縮小務必用快的 Nearest，否則全解析度大圖 HighQuality 縮放會卡死取像。
                 bool shrinking = sw < this.Image.Width;
-                g.InterpolationMode = shrinking ? InterpolationMode.HighQualityBilinear : InterpolationMode.NearestNeighbor;
+                g.InterpolationMode = shrinking ? DownscaleInterpolation : InterpolationMode.NearestNeighbor;
                 g.PixelOffsetMode   = PixelOffsetMode.Half;
                 g.DrawImage(this.Image, 0, 0, sw, sh); // 整張縮到快取（不含 pan）
             }

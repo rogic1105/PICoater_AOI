@@ -18,7 +18,7 @@ namespace MilGrabber.Core
     ///
     /// 佈局/重疊分界算術刻意內嵌於此（MIL-only、自含）：MIL 區是「換 grabber/相機就整包換掉」的
     /// 拋棄層，不引用上層共用 SDK（避免被迫拉 TanukiCv/WinForms 依賴）。可重用的合圖佈局演算法
-    /// 另存於 TanukiCv.Controls.MergeLayout，服務所有 CPU 合圖路徑（範例 / 主程式 LiveSmartDisplay /
+    /// 另存於 TanukiCv.Controls.MergeLayout，服務所有 CPU 合圖路徑（範例 / 主程式 MultiCamLiveView /
     /// GrabImageStitcher 都已指向它；durable、跨產品）。
     /// 兩份刻意分流：MIL 這份隨硬體丟、TanukiCv 那份長期演化（含右覆蓋左/左覆蓋右等策略）。
     /// </summary>

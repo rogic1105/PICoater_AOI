@@ -52,8 +52,8 @@ namespace MilGrabber.Monitor
         // _rbModePb / _rbModeMil / _lblTiming 已移到 Designer（可在 [設計] 看到/調位置）
 
         // ── 計時（每 500ms 視窗的最大值=worst-case，比較 MIL vs PictureBox）──
-        private double _resizeMaxMs; // 縮圖 worst-case：CoreCV_Resize_GPU + 組 bitmap（每窗重置）
-        private readonly System.Diagnostics.Stopwatch _resizeSw = new System.Diagnostics.Stopwatch();
+        // 用 TanukiCv.Core 通用 PerfTimer（與 SmartCanvas 繪製計時同一來源）；量 GPU resize 段。
+        private readonly PerfTimer _resizeTimer = new PerfTimer();
 
         // 合圖用：各台最新縮圖（整顆 ref 原子換 → 合圖端讀到完整一幀）
         private sealed class FrameData
@@ -80,8 +80,9 @@ namespace MilGrabber.Monitor
             panelMain.Controls.Add(_mainCanvas);
             _mainCanvas.BringToFront();
 
-            _displayTimer = new System.Windows.Forms.Timer { Interval = 33 }; // ~30fps
+            _displayTimer = new System.Windows.Forms.Timer { Interval = 33 }; // ~30fps：批量套縮圖 + 合圖逾時 fallback
             _displayTimer.Tick += DisplayTimer_Tick;
+            _displayTimer.Start();
             // 顯示模式 radio（_rbModePb/_rbModeMil）+ 計時 label（_lblTiming）在 Designer 宣告/佈局。
         }
 
@@ -173,8 +174,8 @@ namespace MilGrabber.Monitor
             _mainPanelMil.BringToFront(); // 蓋住 SmartCanvas
         }
 
-        /// <summary>只做合圖「逾時 fallback」。單台 / 合圖正常更新都在 OnCameraFrame（隨相機 fps）；
-        /// 不再 30fps 空轉重畫 —— 相機 1fps 時冗餘重建 _viewCache 是主要顯示成本（見 PbTiming）。</summary>
+        /// <summary>只做合圖「逾時 fallback」。縮圖由共用 ThumbStrip 自己批量刷；單台 / 合圖正常更新在 OnCameraFrame
+        /// （隨相機 fps）；不再 30fps 空轉重畫 —— 相機 1fps 時冗餘重建 _viewCache 是主要顯示成本（見 PbTiming）。</summary>
         private void DisplayTimer_Tick(object sender, EventArgs e)
         {
             if (_isReleasing || _milMode || _mainCanvas == null || _mainCanvas.IsDisposed) return; // MIL 模式主畫面由 MIL 直繪
@@ -389,7 +390,7 @@ namespace MilGrabber.Monitor
             else
             {
                 // 每 500ms 視窗的「最大值」(worst-case，判斷卡頓);讀完即重置 → 反映近期互動
-                double resizeMax = _resizeMaxMs; _resizeMaxMs = 0;
+                double resizeMax = _resizeTimer.ResetMax();
                 double paintMax  = _mainCanvas?.ResetMaxPaintMs() ?? 0;
                 float  zoomRel   = _mainCanvas?.ZoomRelativeToFit ?? 1f;   // 螢幕縮放：相對 fit（fit=1×）
                 double physMag   = _mainCanvas?.PhysicalMagnification ?? 0; // 實體倍率（mm 校正；0=未校正/沒FOV）
@@ -432,20 +433,17 @@ namespace MilGrabber.Monitor
                 }
                 if (_srcPinned[idx] == IntPtr.Zero || _dstPinned[idx] == IntPtr.Zero) return; // alloc 失敗（無 GPU / DLL）
 
-                _resizeSw.Restart();                                             // ── 縮圖計時起 ──
+                _resizeTimer.Start();                                            // ── 縮圖(resize)計時起 ──
                 cam.GetFrameBytes(buffer, _srcBytes[idx]);                       // 8-bit 灰階原圖
                 Marshal.Copy(_srcBytes[idx], 0, _srcPinned[idx], srcPix);
                 NativeResize.CoreCV_Resize_GPU(_srcPinned[idx], fw, fh, _dstPinned[idx], dw, dh); // GPU 縮圖
 
                 var dstBytes = new byte[dstPix];
                 Marshal.Copy(_dstPinned[idx], dstBytes, 0, dstPix);
-                Bitmap thumb = BuildGrayBitmap(dstBytes, dw, dh);                // 組 thumbnail bitmap
-                _resizeSw.Stop();                                                // ── 縮圖計時止（resize+組bitmap）──
-                double rms = _resizeSw.Elapsed.TotalMilliseconds;
-                if (rms > _resizeMaxMs) _resizeMaxMs = rms;                       // 視窗內最大（worst-case）
+                _resizeTimer.Stop();                                             // ── 縮圖(resize)計時止（worst-case 自動記）──
 
                 _latest[idx] = new FrameData(dstBytes, dw, dh);                  // 供合圖讀（原子 ref 換）
-                SwapImage((idx < _displayBoxes.Length) ? _displayBoxes[idx] : null, thumb); // 子畫面 thumbnail
+                _thumbStrip?.PushFrame(idx, dstBytes, dw, dh);                   // 縮圖唯一來源：ThumbStrip 批量 CPU 建圖換圖（不閃；建圖成本移出此執行緒）
 
                 // 合圖同步：等所有在線相機都產生新幀（湊齊一輪）才合 → _latest 全是同一輪 → 對齊，
                 // 避免「半輪取樣」（有些相機已更新、有些還在 resize）造成的時間差。
@@ -534,7 +532,7 @@ namespace MilGrabber.Monitor
 
             // 合圖點陣圖寬度上限：8 槽全合圖在 scale=1 時 totalW 可達 ~11 萬 px，GDI+ 畫超寬圖會
             // 座標錯位 → 左邊 cam 內容重複到右邊（誤判為「複製到 5,6」）。超過上限就整張再降採樣 k 倍。
-            // 同主程式 LiveSmartDisplay.BuildMerge 的 MergeTargetW 保護。
+            // 同共用 MultiCamLiveView.BuildMerge 的 MergeMaxW 保護。
             int k = Math.Max(1, (totalW + MergeMaxW - 1) / MergeMaxW);
             int mw = Math.Max(1, totalW / k), mh = Math.Max(1, maxH / k);
 
@@ -542,10 +540,8 @@ namespace MilGrabber.Monitor
             using (var g = Graphics.FromImage(merged))
             {
                 g.Clear(Color.Black);
-                // k>1（合圖全部需再降採樣）→ 平滑內插避免馬賽克；k==1（無縮放）→ NearestNeighbor 等同直拷、保清晰。
-                g.InterpolationMode = k > 1
-                    ? System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear
-                    : System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
+                // 即時合圖每幀重建 → 一律 NearestNeighbor（快）。HighQuality 對大圖每幀縮放會卡取像/閃黑。
+                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
                 g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
                 foreach (var p in placements)
                 {
@@ -586,17 +582,6 @@ namespace MilGrabber.Monitor
                 }
             }
             return merged;
-        }
-
-        /// <summary>切到 UI 執行緒換 PictureBox.Image（dispose 舊圖）；box 無效時自行 dispose bmp。</summary>
-        private static void SwapImage(PictureBox box, Bitmap bmp)
-        {
-            if (box != null && box.IsHandleCreated && !box.IsDisposed)
-            {
-                try { box.BeginInvoke((Action)(() => { var old = box.Image; box.Image = bmp; old?.Dispose(); })); }
-                catch { bmp.Dispose(); }
-            }
-            else bmp.Dispose();
         }
 
         /// <summary>8-bit 灰階 byte[] → Format8bppIndexed Bitmap（灰階調色盤）。
@@ -640,9 +625,7 @@ namespace MilGrabber.Monitor
                 _srcBytes[i] = null;
                 _latest[i] = null;
                 _readySinceMerge[i] = false;
-
-                PictureBox box = (_displayBoxes != null && i < _displayBoxes.Length) ? _displayBoxes[i] : null;
-                if (box != null) { var old = box.Image; box.Image = null; old?.Dispose(); }
+                _thumbStrip?.Clear(i);   // 清該台縮圖（ThumbStrip 存活到 form 關閉，可重 init）
 
                 // MIL 模式疊上去的 Panel：移除 + dispose（下次 init 可重選模式）
                 if (_displayPanels[i] != null)

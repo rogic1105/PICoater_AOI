@@ -11,7 +11,7 @@ namespace AniloxRoll.Monitor.Core.Data
         [DisplayName("合圖方式")]  public StitchMode StitchMode       { get; set; } = InspectionDefaults.DefaultStitch;
         [DisplayName("監控強化")]  public bool       EnableMuraEnhance   { get; set; } = InspectionDefaults.EnableMuraEnhance;
         [DisplayName("回顧強化")]  public bool       EnableReviewEnhance { get; set; } = InspectionDefaults.EnableReviewEnhance;
-        [DisplayName("主畫面顯示")] public MainDisplayMode MainDisplay  { get; set; } = MainDisplayMode.MilDirect;
+        [DisplayName("主畫面顯示")] public MainDisplayMode MainDisplay  { get; set; } = MainDisplayMode.SmartCanvas;
 
         public void Validate() { }
 
