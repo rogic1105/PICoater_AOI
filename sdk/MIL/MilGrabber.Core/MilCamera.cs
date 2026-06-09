@@ -131,6 +131,8 @@ namespace MilGrabber.Core
 
             MIL.MdispAlloc(_ownerSystemId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref _milDisplay);
             MIL.MdispAlloc(_ownerSystemId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref _milSecondaryDisplay);
+            if (_milDisplay == MIL.M_NULL)
+                System.Diagnostics.Trace.TraceWarning($"[MilCamera CAM{CameraId}] MdispAlloc(primary) 失敗 → 主畫面 MIL 直繪不可用（SmartCanvas 路徑仍可）");
 
             MIL_INT sizeX = MIL.MdigInquire(_milDigitizer, MIL.M_SIZE_X, MIL.M_NULL);
             MIL_INT sizeY = MIL.MdigInquire(_milDigitizer, MIL.M_SIZE_Y, MIL.M_NULL);
@@ -141,20 +143,29 @@ namespace MilGrabber.Core
             {
                 MIL.MbufAlloc2d(_ownerSystemId, sizeX, sizeY, 8 + MIL.M_UNSIGNED,
                     MIL.M_IMAGE + MIL.M_GRAB + MIL.M_PROC, ref _milGrabBuffers[i]);
-                MIL.MbufClear(_milGrabBuffers[i], 0);
+                if (_milGrabBuffers[i] == MIL.M_NULL)
+                    System.Diagnostics.Trace.TraceWarning($"[MilCamera CAM{CameraId}] MbufAlloc2d(grab[{i}]) 失敗 → 取像將失敗");
+                else MIL.MbufClear(_milGrabBuffers[i], 0);
             }
 
             MIL.MbufAlloc2d(_ownerSystemId, sizeX, sizeY, 8 + MIL.M_UNSIGNED,
                 MIL.M_IMAGE + MIL.M_DISP + MIL.M_PROC, ref _milDisplayBuffer);
-            MIL.MbufClear(_milDisplayBuffer, 0);
+            if (_milDisplayBuffer == MIL.M_NULL)
+                System.Diagnostics.Trace.TraceWarning($"[MilCamera CAM{CameraId}] MbufAlloc2d(display buffer) 失敗 → MIL 直繪不可用");
+            else MIL.MbufClear(_milDisplayBuffer, 0);
 
-            MIL.MdispSelectWindow(_milDisplay, _milDisplayBuffer, _panelHandle);
-            MIL.MdispControl(_milDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
-            MIL.MdispControl(_milDisplay, MIL.M_CENTER_DISPLAY, MIL.M_ENABLE);
-            MIL.MdispControl(_milDisplay, MIL.M_MOUSE_USE, MIL.M_ENABLE);
+            // display/buffer 任一 M_NULL → 跳過 MdispSelectWindow（對 M_NULL 操作會 MIL 報錯）。
+            // grab 仍進行，SmartCanvas 顯示路徑不靠 MIL display；只 MIL 直繪模式會黑畫面（已 log）。
+            if (_milDisplay != MIL.M_NULL && _milDisplayBuffer != MIL.M_NULL)
+            {
+                MIL.MdispSelectWindow(_milDisplay, _milDisplayBuffer, _panelHandle);
+                MIL.MdispControl(_milDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
+                MIL.MdispControl(_milDisplay, MIL.M_CENTER_DISPLAY, MIL.M_ENABLE);
+                MIL.MdispControl(_milDisplay, MIL.M_MOUSE_USE, MIL.M_ENABLE);
 
-            MIL.MdispHookFunction(_milDisplay, MIL.M_MOUSE_MOVE, _mouseStatusDelegate, (IntPtr)CameraId);
-            MIL.MdispHookFunction(_milDisplay, MIL.M_MOUSE_LEFT_BUTTON_DOWN, _mouseClickDelegate, (IntPtr)CameraId);
+                MIL.MdispHookFunction(_milDisplay, MIL.M_MOUSE_MOVE, _mouseStatusDelegate, (IntPtr)CameraId);
+                MIL.MdispHookFunction(_milDisplay, MIL.M_MOUSE_LEFT_BUTTON_DOWN, _mouseClickDelegate, (IntPtr)CameraId);
+            }
 
             // 初始曝光：此時 CLProtocol 尚未啟用，走 legacy MdigControl 路徑
             if (_appliedExposureUs > 0)

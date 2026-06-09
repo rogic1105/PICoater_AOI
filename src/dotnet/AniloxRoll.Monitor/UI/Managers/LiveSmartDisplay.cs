@@ -110,7 +110,9 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (_disposed || _canvas == null || _canvas.IsDisposed) return;
             if (!_mainDirty) return; // 沒新幀 → 不重建 → zoom/pan 互動不被合圖重建干擾（相機 1fps）
             _mainDirty = false;
-            Bitmap bmp = _mergeMode ? BuildMerge() : BuildSingle();
+            Bitmap bmp;
+            try { bmp = _mergeMode ? BuildMerge() : BuildSingle(); }
+            catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveSmartDisplay.RefreshMain] {ex.GetType().Name}: {ex.Message}"); return; }
             if (bmp == null) return;
             var old = _canvas.Image;
             _canvas.Image = bmp;
@@ -120,6 +122,19 @@ namespace AniloxRoll.Monitor.UI.Managers
                 _mainW = bmp.Width; _mainH = bmp.Height;
                 _canvas.FitToScreen();
             }
+            // 換相機/模式/幀後主動刷三擊 1:1 校正（不必等 StatusChanged）— 對齊範例每 500ms 主動推校正
+            if (GetDisplayCoords(out _, out double opsInMm, out double sf))
+                _canvas.SetPhysicalCalibration(opsInMm * sf, _screenMmPerPx);
+        }
+
+        /// <summary>取當前顯示座標基準：合圖用 MinStartMm/RefOpsMm×mergeScale；單相機用各台 ops/start、sf=1。</summary>
+        private bool GetDisplayCoords(out double startMm, out double opsInMm, out double sf)
+        {
+            if (_mergeMode && _mergeReady) { startMm = _minStartMm; opsInMm = _refOpsMm; sf = _mergeScale; return opsInMm > 0; }
+            int idx = _selectedCamId - 1;
+            if (_opsUm != null && _startPosMm != null && idx >= 0 && idx < _opsUm.Length && _opsUm[idx] > 0)
+            { opsInMm = _opsUm[idx] / 1000.0; startMm = _startPosMm[idx]; sf = 1.0; return true; }
+            startMm = 0; opsInMm = 0; sf = 1; return false;
         }
 
         private Bitmap BuildSingle()
@@ -172,18 +187,8 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (_disposed || _canvas == null || info.Zoom <= 0) return;
 
-            double startMm, opsInMm, sf;
-            if (_mergeMode && _mergeReady)
-            {
-                startMm = _minStartMm; opsInMm = _refOpsMm; sf = _mergeScale; // 合圖座標系（顯示像素降採樣 ×mergeScale）
-            }
-            else
-            {
-                int idx = _selectedCamId - 1;
-                if (_opsUm == null || _startPosMm == null || idx < 0 || idx >= _opsUm.Length) { _canvas.SetRangeOverlay("", "", "", "", ""); return; }
-                opsInMm = _opsUm[idx] / 1000.0; startMm = _startPosMm[idx]; sf = 1.0; // 單相機顯示全解析度
-            }
-            if (opsInMm <= 0) { _canvas.SetRangeOverlay("", "", "", "", ""); return; }
+            if (!GetDisplayCoords(out double startMm, out double opsInMm, out double sf))
+            { _canvas.SetRangeOverlay("", "", "", "", ""); return; }
 
             // canvas 邊 → 顯示像素 → 全解析度像素(×sf) → mm（PixelMmMapper 單一公式）
             double leftMm  = PixelMmMapper.PixelToMm((0 - info.PanOffset.X) / info.Zoom * sf, startMm, opsInMm);

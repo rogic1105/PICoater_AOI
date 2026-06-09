@@ -617,7 +617,16 @@ namespace AniloxRoll.Monitor.UI.Managers
             // 從工頭同步座標系參數（供滑鼠回呼 + overview 計算）
             SyncCoordsFromMerger();
 
+            // panel 已 dispose（關閉/釋放期）→ 不碰 .Handle（會觸發 CreateHandle/ObjectDisposedException）
+            if (_mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) { _merger.DisableMerge(); _merger = null; return; }
+
             MIL.MdispAlloc(sysId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref _mergedDisplay);
+            // MdispAlloc 失敗(多 board/資源不足)→ M_NULL，後續 MdispControl/SelectWindow 對 M_NULL 會 MIL 報錯
+            if (_mergedDisplay == MIL.M_NULL)
+            {
+                System.Diagnostics.Trace.TraceWarning("[LiveCameraManager.EnableGlobalMerge] MdispAlloc 失敗（合圖 display）");
+                _merger.DisableMerge(); _merger = null; return;
+            }
 
             // 先關自動刷新「再」select window：避免 select 瞬間把 grab hook 尚未貼滿的合併 buffer
             // 顯示出來（半貼狀態 → 橫條殘影閃一下）。改由 33ms timer 手動刷新，確保上螢幕時已較完整。
@@ -701,6 +710,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         public void RefreshGlobalMergeLayout(double[] opsUm, double[] startPosMm)
         {
             if (!IsGlobalMergeActive || _merger == null || _cameras.Count == 0) return;
+            if (_mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) return; // 關閉期不碰 .Handle
 
             // 「拼」委派工頭（暫停合併 → 重算佈局 → 視需要重分配 buffer → 重設 merge target）
             // 回傳 true 表示合併 buffer 已重新分配，display 需重綁。
