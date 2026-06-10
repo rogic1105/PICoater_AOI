@@ -68,8 +68,8 @@ namespace TanukiCv.Controls
 
         /// <summary>縮圖被點 → 要求切換選中相機（1-based camId）。</summary>
         public event Action<int> SelectRequested;
-        /// <summary>視野左右範圍（mm）→ 上層 overview 聯動。</summary>
-        public event Action<double, double> ViewRangeMmChanged;
+        /// <summary>視野可見範圍（mm）：leftX, rightX, topY, botY → 上層曲線圖（切向用 X、法向用 Y、overview 用 X）zoom 連動。</summary>
+        public event Action<double, double, double, double> ViewRangeMmChanged;
 
         /// <summary>游標十字剖面（L0 通用：游標那列/行的原始像素值）+ 對齊資訊（曲線圖畫點 + zoom 同步用）。
         /// 單張模式才發；純像素、0 依賴檢測（Hessian）。app 之後可在 L1 換成自己的曲線資料（同對齊路）。</summary>
@@ -461,7 +461,7 @@ namespace TanukiCv.Controls
             double curMmY = info.ImageY * sf * yPitch;
             _canvas.SetCursorMm($"({curMmX:F2}, {curMmY:F2})");
 
-            ViewRangeMmChanged?.Invoke(leftMm, rightMm);
+            ViewRangeMmChanged?.Invoke(leftMm, rightMm, topMm, botMm);
 
             // L0 游標剖面（單張模式；游標那列/行的原始像素 → 曲線圖。座標跟影像同源 → 自動對齊）。
             if (CursorProfileChanged != null && !_mergeMode)

@@ -187,6 +187,21 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
+        /// <summary>監控主畫面（LiveDisplayView）縮放/平移 → live 曲線圖 zoom 連動（bin↔主畫面對齊）。
+        /// 切向(X)/overview(X) 用左右範圍、法向(Y) 用上下範圍。UI 執行緒（ViewRangeMmChanged 來）。</summary>
+        // 主畫面即時 X 可見範圍（mm）：ApplyLiveViewRange 存 → LiveViewRangeProvider 給 overview 的 500ms 更新沿用同值
+        // （overview 立即跟隨 + 500ms 重畫沿用同範圍 → 不閃回原點）。NaN=非 SmartCanvas 即時狀態。
+        private double _liveViewLeftMm = double.NaN, _liveViewRightMm = double.NaN;
+
+        private void ApplyLiveViewRange(double leftMm, double rightMm, double topMm, double botMm)
+        {
+            if (IsDisposed) return;
+            _liveViewLeftMm = leftMm; _liveViewRightMm = rightMm;     // 供 overview provider 沿用（不閃）
+            _liveColumnChartHelper?.UpdateViewRange(leftMm, rightMm);  // 切向(X)
+            _liveRowChartHelper?.UpdateViewRange(topMm, botMm);        // 法向(Y)
+            _liveOverviewHelper?.UpdateViewRange(leftMm, rightMm);     // overview 立即跟隨（500ms 重畫用同值不閃）
+        }
+
         private void OnLiveCurveData(int camId, float[] meanArr, float[] maxArr)
         {
             // 快取每台相機最新曲線（callback 執行緒，只是 ref 賦值）
@@ -341,6 +356,9 @@ namespace AniloxRoll.Monitor.Forms
                 _settings.AniloxRollSpeedMPerMin, lineRateHz);
             _reviewRowChartHelper?.SetRowPitchFromSpeed(
                 _settings.AniloxRollSpeedMPerMin, lineRateHz);
+            // 把 row pitch 餵給主畫面顯示 → SetLayout → 法向曲線圖 Y 對齊（否則 LiveDisplayView 用 X ops 比例錯）
+            if (_liveCameraManager != null)
+                _liveCameraManager.RowPitchMm = _liveRowChartHelper?.RowPitchMm ?? 0;
         }
 
 

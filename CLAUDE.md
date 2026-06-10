@@ -341,7 +341,7 @@ PICoater_AOI/
 | 合圖方式 | `hb_StitchMode` → `StitchMode` | Global | Vertical / Global |
 | 監控強化 | `hc_EnableMuraEnhance` → `EnableMuraEnhance` | false | 即時影像強化 Mura |
 | 回顧強化 | `hd_EnableReviewEnhance` → `EnableReviewEnhance` | false | 回顧影像強化 Mura |
-| 主畫面顯示 | `he_MainDisplay` → `ImageView.MainDisplay` | SmartCanvas | MilDirect（MIL 直繪）/ SmartCanvas（CPU 繪、跟回顧畫布同源；共用 `LiveDisplayView`〔sdk TanukiCv.Controls；與範例同源唯一來源〕在 camLiveMain 疊 SmartCanvas+各 cam 疊 ThumbStrip 縮圖，吃 `AniloxCamera.OnDisplayFrame` bytes→bitmap，單相機/CPU合圖+mm overlay+zoom+雙三擊+LOD；MIL 並存於底層被覆蓋。滾輪縮放：`WheelZoomFilter` 在 SmartCanvas 模式讓路（`return false`，否則全域 filter 吃掉滾輪→縮不動；只服務 MIL 直繪合圖）。**TODO：overview 聯動 / 縮圖多相機同步刷 / 關底層 MIL / app live 是否實體化 LOD/flip UI**）|
+| 主畫面顯示 | `he_MainDisplay` → `ImageView.MainDisplay` | SmartCanvas | MilDirect（MIL 直繪）/ SmartCanvas（CPU 繪、跟回顧畫布同源；共用 `LiveDisplayView`〔sdk TanukiCv.Controls；與範例同源唯一來源〕在 camLiveMain 疊 SmartCanvas+各 cam 疊 ThumbStrip 縮圖，吃 `AniloxCamera.OnDisplayFrame` bytes→bitmap，單相機/CPU合圖+mm overlay+zoom+雙三擊+LOD；MIL 並存於底層被覆蓋。滾輪縮放：`WheelZoomFilter` 在 SmartCanvas 模式讓路（`return false`，否則全域 filter 吃掉滾輪→縮不動；只服務 MIL 直繪合圖）。**bin↔主畫面連動**：`LiveDisplayView.ViewRangeMmChanged(left,right,top,bot)`→`LiveCameraManager.OnSmartViewRange`→`OnLiveViewRange`事件→form `ApplyLiveViewRange`：切向/overview用X、法向用Y zoom 同步（法向需 `LiveCameraManager.RowPitchMm` 餵真 row pitch；overview 用 `LiveViewRangeProvider` 沿用同範圍→500ms 重畫不閃）。**TODO：縮圖多相機同步刷 / 關底層 MIL / 回顧側 CanvasInteractionHelper 視野計算收斂進 sdk / sample 重用曲線圖+閾值線選用 / app live 實體化 LOD/flip UI**）|
 
 ### 4. 儲存設定
 

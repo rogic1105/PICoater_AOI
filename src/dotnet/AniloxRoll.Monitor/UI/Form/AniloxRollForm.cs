@@ -639,6 +639,7 @@ namespace AniloxRoll.Monitor.Forms
             UpdateStandardBgSubLockState();
             _liveCameraManager.OnLiveCurveData      += OnLiveCurveData;
             _liveCameraManager.OnLiveRowCurveData   += OnLiveRowCurveData;
+            _liveCameraManager.OnLiveViewRange      += ApplyLiveViewRange; // 主畫面縮放/平移 → live 曲線圖 zoom 連動（bin↔主畫面對齊）
             _liveCameraManager.OnAfterVerticalZoom   = () =>
             {
                 if (_settings?.StitchMode != StitchMode.Vertical) return;

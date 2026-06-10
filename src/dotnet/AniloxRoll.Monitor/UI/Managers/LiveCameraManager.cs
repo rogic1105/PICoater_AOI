@@ -31,6 +31,10 @@ namespace AniloxRoll.Monitor.UI.Managers
         private readonly object _lodBufLock = new object();
         private volatile bool _lodReleased;
 
+        /// <summary>法向(Y) mm/影像列（row pitch）：form 從速度+線掃算好餵入 → SetLayout → 法向曲線圖 Y 對齊。
+        /// 0 時 LiveDisplayView 退回用 X 的 ops（Y 不對齊）。</summary>
+        public double RowPitchMm { get; set; }
+
         private List<AniloxCamera> _cameras = new List<AniloxCamera>();
         private List<CameraHardwareConfig> _cameraHardwareConfigs;
         private Dictionary<int, MIL_ID> _allocatedSystems = new Dictionary<int, MIL_ID>();
@@ -541,7 +545,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             {
                 var ops = new double[_merger.SlotStartsMm?.Length ?? 0];
                 for (int i = 0; i < ops.Length; i++) ops[i] = _merger.RefOpsMm * 1000.0; // 均勻 ops（µm）
-                _smartDisplay.SetLayout(_merger.SlotStartsMm, ops, 1, 0); // 主程式餵全解析度顯示 bytes → feedScale=1
+                _smartDisplay.SetLayout(_merger.SlotStartsMm, ops, 1, RowPitchMm); // 主程式餵全解析度顯示 bytes → feedScale=1
             }
             _smartDisplay.MergeAll = IsGlobalMergeActive;     // 全域＝合圖全部（含無畫面相機黑占位）
             _smartDisplay.SetMergeMode(IsGlobalMergeActive);
@@ -606,7 +610,13 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         private void OnCameraDisplayFrame(int camId, byte[] bytes, int w, int h) => _smartDisplay?.PushFrame(camId, bytes, w, h);
         private void SmartSelectCamera(int camId) => SwitchMainDisplay(camId);
-        private void OnSmartViewRange(double leftMm, double rightMm) { /* TODO: overview(chartLivePatch) 聯動，先留 hook */ }
+        /// <summary>監控主畫面（LiveDisplayView）縮放/平移 → 把可見範圍轉給 form 連動 live 曲線圖
+        /// （切向/overview 用 X 範圍、法向用 Y 範圍）。bin↔主畫面對齊。</summary>
+        private void OnSmartViewRange(double leftMm, double rightMm, double topMm, double botMm)
+            => OnLiveViewRange?.Invoke(leftMm, rightMm, topMm, botMm);
+
+        /// <summary>監控主畫面可見範圍變更（leftX, rightX, topY, botY mm）→ form 訂閱、連動 live 曲線圖 zoom。</summary>
+        public event Action<double, double, double, double> OnLiveViewRange;
 
         private void SwitchMainDisplay(int cameraIndex)
         {
@@ -714,7 +724,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             // SmartCanvas 合圖：用工頭佈局(各台 start/ops) CPU 拼（feedScale=1：主程式餵全解析度）
             if (SmartCanvasMode && _smartDisplay != null)
             {
-                _smartDisplay.SetLayout(startPosMm, opsUm, 1, 0);
+                _smartDisplay.SetLayout(startPosMm, opsUm, 1, RowPitchMm);
                 _smartDisplay.MergeAll = true;   // 全域＝合圖全部（含無畫面相機黑占位）
                 _smartDisplay.SetMergeMode(true);
             }
@@ -794,7 +804,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             // SmartCanvas 合圖佈局同步（feedScale=1：主程式餵全解析度顯示 bytes）
             if (SmartCanvasMode && _smartDisplay != null)
-                _smartDisplay.SetLayout(startPosMm, opsUm, 1, 0);
+                _smartDisplay.SetLayout(startPosMm, opsUm, 1, RowPitchMm);
         }
 
         // ==================== Merged Display Refresh ====================
