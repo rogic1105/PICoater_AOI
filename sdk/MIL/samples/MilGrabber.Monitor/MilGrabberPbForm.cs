@@ -389,18 +389,8 @@ namespace MilGrabber.Monitor
             btnGrab.Text = _userWantsGrab ? "停止抓取" : "開始抓取";
         }
 
-        // =========================================================================
-        // chkFlipVertical: 上下翻轉顯示（線掃相機由下往上拍 → 顯示需反轉）。
-        // 即時套用到所有相機（MilCamera 的 grab hook 用 MimFlip 翻轉到 display buffer）。
-        // =========================================================================
-        private void chkFlipVertical_CheckedChanged(object sender, EventArgs e)
-        {
-            _flipDisplay = chkFlipVertical.Checked; // PictureBox 模式：LiveDisplayView 主畫面+縮圖一起翻
-            if (_live != null) _live.FlipVertical = _flipDisplay;
-            if (_cams == null) return;
-            foreach (var cam in _cams)
-                if (cam != null) cam.FlipVertical = chkFlipVertical.Checked; // MIL 模式：MIL 翻轉
-        }
+        // 上下翻轉（線掃相機由下往上拍 → 顯示需反轉）已融入「設定」PropertyGrid（PbSettings.Flip）→ ApplyPbSettings
+        //   同時套用到 LiveDisplayView（PictureBox 模式主畫面+縮圖）與各 MilCamera（MIL 模式 MimFlip）。
 
         // =========================================================================
         // btnRelease: 釋放（停 timer + 旗標 → 所有 Dispose → MappFreeDefault）

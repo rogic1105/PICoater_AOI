@@ -20,11 +20,11 @@ namespace MilGrabber.Monitor
         // 每相機原始灰階緩衝（同相機 FrameReady 序列觸發 → 同 idx 無併發；PushFrame 內會複製，故可重用）
         private readonly byte[][] _srcBytes = new byte[SubPanelCount][];
 
-        private volatile int  _resizeScale = 1;     // 餵入降採樣倍率（numResize；1=全解析度。feedScale 給 LiveDisplayView）
-        private volatile bool _mergeMode;            // 合圖 vs 單張（chkMerge/chkMergeAll）
-        private volatile bool _flipDisplay;          // 上下翻轉（chkFlipVertical）
+        private volatile int  _resizeScale = 1;     // 餵入降採樣倍率（PbSettings.ResizeScale；1=全解析度。feedScale 給 LiveDisplayView）
+        private volatile bool _mergeMode;            // 合圖 vs 單張（PbSettings.Display）
+        private volatile bool _flipDisplay;          // 上下翻轉（PbSettings.Flip）
 
-        // ── 動態 LOD（chkLodGPU/chkLodCPU）：LiveDisplayView 提供 LOD 機制（純 CPU），resize 由本檔插拔委派 ──
+        // ── 動態 LOD（PbSettings.Lod = GPU/CPU）：LiveDisplayView 提供 LOD 機制（純 CPU），resize 由本檔插拔委派 ──
         private volatile bool _lodEnabled;
         private volatile bool _lodUseGpu = true;     // true=GPU(CoreCV_Resize_GPU)、false=CPU(GrayResizeCpu)
         // GPU LOD provider 專用 pinned（只裁「可見區」→ 一次一塊，非每幀全幀；on-settle 觸發）
@@ -87,52 +87,58 @@ namespace MilGrabber.Monitor
             return f;
         }
 
-        // ── 合圖 ops/start + 重疊策略（tabParams「合圖」tab；控制項在 Designer 宣告，本檔只接線）──
-        private readonly MergeParams _mergeParams = new MergeParams();
+        // ── 設定面板（tabParams「設定」tab；全部選項融入 PropertyGrid，仿主程式 propertyGridSettings 的 SSoT 設計）──
+        private readonly PbSettings _settings = new PbSettings();
         private volatile int _mergeStrategy;   // 0=Midline、1=RightOverLeft、2=LeftOverRight（對應 MergeOverlap）
-        private volatile bool _mergeAllMode;   // 合圖全部：含無畫面相機（黑色占空間），由 chkMergeAll 控制
+        private volatile bool _mergeAllMode;   // 合圖全部：含無畫面相機（黑色占空間）
+        private bool _modeLocked;              // 繪圖模式（PbSettings.Init）初始化後鎖定（CreateDisplaysForMode 設、btnRelease 解）
+        private PbSettings.InitMode _lockedInitMode; // 鎖定當下的模式（軟鎖：改了就還原）
 
-        /// <summary>「合圖」tab 接線：填 ops/start 預設 + 綁 PropertyGrid + 演算法下拉 + chkMergeAll。</summary>
+        /// <summary>「設定」tab 接線：填 ops/start 預設 + 綁 PropertyGrid（合圖方式 / 動態LOD / 重疊策略 / 上下翻轉 / FOV / 縮圖倍率 + ops/start）。</summary>
         private void SetupMergeTab()
         {
-            _mergeParams.Ops.Set(new[] { 24.4140625, 24.4140625, 24.4140625, 24.4140625, 24.4140625, 24.4140625, 24.4140625, 24.4140625 });
-            _mergeParams.Start.Set(new[] { 0.0, 345, 690, 1035, 1380, 1725, 2070, 2415 });
+            _settings.Ops.Set(new[] { 24.4140625, 24.4140625, 24.4140625, 24.4140625, 24.4140625, 24.4140625, 24.4140625, 24.4140625 });
+            _settings.Start.Set(new[] { 0.0, 345, 690, 1035, 1380, 1725, 2070, 2415 });
 
-            cmbMergeMode.Items.AddRange(new object[] { "中線分界", "右覆蓋左", "左覆蓋右" });
-            cmbMergeMode.SelectedIndex = 0; // 先設值再接事件 → 不在 init 觸發
-            cmbMergeMode.SelectedIndexChanged += (s, e) => { _mergeStrategy = cmbMergeMode.SelectedIndex; if (_live != null) _live.MergeStrategy = (MergeOverlap)_mergeStrategy; };
-
-            propertyGridMerge.SelectedObject = _mergeParams;
-            propertyGridMerge.PropertyValueChanged += (s, e) => ApplyLayout(); // 改 ops/start → 重套佈局
-            chkMergeAll.CheckedChanged += chkMergeAll_CheckedChanged;
-            ApplyLayout();
+            propertyGridMerge.SelectedObject = _settings;
+            propertyGridMerge.PropertyValueChanged += (s, e) => ApplyPbSettings(); // 改任一設定 → 一次套用全部
+            ApplyPbSettings();
         }
 
-        /// <summary>合圖全部：含無畫面相機（黑色占空間）。與「合圖」互斥（擇一）。</summary>
-        private void chkMergeAll_CheckedChanged(object sender, EventArgs e)
+        /// <summary>PropertyGrid 改任一設定 → 一次套用全部到 LiveDisplayView（取代原本散落的 chk/num handler；互斥選項用 enum）。</summary>
+        private void ApplyPbSettings()
         {
-            if (chkMergeAll.Checked && chkMerge.Checked) chkMerge.Checked = false; // 互斥（擇一）
-            _mergeAllMode = chkMergeAll.Checked;
-            ApplyMergeState();
-        }
+            // 繪圖模式（PictureBox / MIL 直繪）初始化後鎖定（軟鎖：改了就還原 + 刷新顯示）
+            if (_modeLocked && _settings.Init != _lockedInitMode)
+            {
+                _settings.Init = _lockedInitMode;
+                propertyGridMerge.Refresh();
+            }
 
-        private void chkMerge_CheckedChanged(object sender, EventArgs e)
-        {
-            if (chkMerge.Checked && chkMergeAll.Checked) chkMergeAll.Checked = false; // 互斥（擇一）
-            _mergeAllMode = chkMergeAll.Checked;
-            ApplyMergeState();
-        }
+            // 顯示模式（單張 / 合圖 / 合圖全部，互斥 → enum）
+            _mergeAllMode  = _settings.Display == PbSettings.DisplayMode.MergeAll;
+            _mergeMode     = _settings.Display != PbSettings.DisplayMode.Single;
+            _mergeStrategy = (int)_settings.Overlap;
+            _resizeScale   = Math.Max(1, _settings.ResizeScale);
+            _flipDisplay   = _settings.Flip;
+            _lodUseGpu     = _settings.Lod == PbSettings.LodMode.Gpu;
+            _lodEnabled    = _settings.Lod != PbSettings.LodMode.Off;
 
-        /// <summary>合圖狀態（含「合圖全部」）→ 套到 LiveDisplayView。</summary>
-        private void ApplyMergeState()
-        {
-            _mergeMode = chkMerge.Checked || _mergeAllMode;
-            ApplyLayout();
+            ApplyLayout(); // FOV / ops / start + 縮圖倍率 → SetLayout
+
             if (_live != null)
             {
-                _live.MergeAll = _mergeAllMode;
+                _live.MergeAll      = _mergeAllMode;
                 _live.SetMergeMode(_mergeMode);
+                _live.MergeStrategy = (MergeOverlap)_mergeStrategy;
+                _live.FlipVertical  = _flipDisplay;
+                if (!_lodEnabled) _live.DisableLod();
+                else _live.EnableLod(_lodUseGpu ? (GrayResize)LodResizeGpu : LodResizeCpu); // resize 委派二選一（GPU/CPU 跑測比較）
             }
+            // 翻轉也套到 MIL 模式的相機（與舊 chkFlipVertical handler 行為一致）
+            if (_cams != null)
+                foreach (var cam in _cams)
+                    if (cam != null) cam.FlipVertical = _flipDisplay;
         }
 
         /// <summary>座標來源統一：FOV（fovMm/影像寬，全相機等 ops）優先；沒 FOV 用 PropertyGrid 的 ops。
@@ -140,10 +146,10 @@ namespace MilGrabber.Monitor
         private void ApplyLayout()
         {
             if (_live == null) return;
-            double[] start = _mergeParams.Start.ToArray();
-            double[] ops = _mergeParams.Ops.ToArray();
+            double[] start = _settings.Start.ToArray();
+            double[] ops = _settings.Ops.ToArray();
 
-            double fovMm = (numFovMm != null) ? (double)numFovMm.Value : 0;
+            double fovMm = _settings.FovMm;
             int fw = SelectedFrameWidth();
             if (fovMm > 0 && fw > 0)
             {
@@ -184,10 +190,62 @@ namespace MilGrabber.Monitor
             public override string ToString() => "";
         }
 
-        private sealed class MergeParams
+        // 設定面板綁定物件（仿主程式 InspectionSettings：互斥選項 enum、可展開 CamRow8）。
+        // PropertyValueChanged → ApplyPbSettings 一次套用，view 不擁有邏輯（SSoT）。
+        private sealed class PbSettings
         {
+            [TypeConverter(typeof(EnumDescConverter))]
+            public enum DisplayMode { [Description("單張")] Single, [Description("合圖")] Merge, [Description("合圖全部")] MergeAll }
+            [TypeConverter(typeof(EnumDescConverter))]
+            public enum LodMode { [Description("關閉")] Off, [Description("GPU")] Gpu, [Description("CPU")] Cpu }
+            [TypeConverter(typeof(EnumDescConverter))]
+            public enum OverlapMode { [Description("中線分界")] Midline, [Description("右覆蓋左")] RightOverLeft, [Description("左覆蓋右")] LeftOverRight }
+            [TypeConverter(typeof(EnumDescConverter))]
+            public enum InitMode { [Description("PictureBox")] PictureBox, [Description("MIL 直繪")] Mil }
+
+            [Category("顯示")][DisplayName("繪圖模式")][Description("PictureBox（LiveDisplayView CPU 繪，本範例主路徑）/ MIL 直繪（MIL 直接畫 panel）。初始化後鎖定，需釋放才可改")]
+            public InitMode Init { get; set; } = InitMode.PictureBox;
+            [Category("顯示")][DisplayName("合圖方式")][Description("單張 / 合圖 / 合圖全部（含無畫面相機黑占位）")]
+            public DisplayMode Display { get; set; } = DisplayMode.Single;
+            [Category("顯示")][DisplayName("動態LOD")][Description("關閉 / GPU(CoreCV) / CPU(GrayResizeCpu)。CPU 通常較順（無 H2D/D2H 來回）")]
+            public LodMode Lod { get; set; } = LodMode.Off;
+            [Category("顯示")][DisplayName("重疊策略")][Description("合圖重疊區分界：中線 / 右覆蓋左 / 左覆蓋右")]
+            public OverlapMode Overlap { get; set; } = OverlapMode.Midline;
+            [Category("顯示")][DisplayName("上下翻轉")][Description("線掃相機由下往上拍 → 顯示需上下翻")]
+            public bool Flip { get; set; }
+            [Category("顯示")][DisplayName("FOV (mm)")][Description("選中相機視野寬（>0 時全相機等 ops 由此算；0=改用下方 OPS）")]
+            public int FovMm { get; set; } = 400;
+            [Category("顯示")][DisplayName("縮圖倍率")][Description("餵入降採樣倍率（1=全解析度；>1 先 CPU stride 降採樣再餵）")]
+            public int ResizeScale { get; set; } = 1;
+
             [Category("合圖佈局")][DisplayName("OPS (µm)")]  public CamRow8 Ops   { get; } = new CamRow8();
             [Category("合圖佈局")][DisplayName("Start (mm)")] public CamRow8 Start { get; } = new CamRow8();
+        }
+
+        /// <summary>PropertyGrid enum 顯示 [Description] 中文（值的內部名稱仍英文）。</summary>
+        private sealed class EnumDescConverter : EnumConverter
+        {
+            public EnumDescConverter(Type type) : base(type) { }
+            public override object ConvertTo(ITypeDescriptorContext c, System.Globalization.CultureInfo cu, object value, Type destType)
+            {
+                if (destType == typeof(string) && value != null)
+                {
+                    var fi = EnumType.GetField(value.ToString());
+                    var attr = fi?.GetCustomAttributes(typeof(DescriptionAttribute), false);
+                    if (attr != null && attr.Length > 0) return ((DescriptionAttribute)attr[0]).Description;
+                }
+                return base.ConvertTo(c, cu, value, destType);
+            }
+            public override object ConvertFrom(ITypeDescriptorContext c, System.Globalization.CultureInfo cu, object value)
+            {
+                if (value is string s)
+                    foreach (var f in EnumType.GetFields())
+                    {
+                        var attr = f.GetCustomAttributes(typeof(DescriptionAttribute), false);
+                        if (attr.Length > 0 && ((DescriptionAttribute)attr[0]).Description == s) return Enum.Parse(EnumType, f.Name);
+                    }
+                return base.ConvertFrom(c, cu, value);
+            }
         }
 
         /// <summary>依「初始化前選的模式」建立顯示控制項（btnInit 開頭呼叫）。
@@ -195,8 +253,9 @@ namespace MilGrabber.Monitor
         private void CreateDisplaysForMode()
         {
             _lodReleased = false; // 重新 init → 允許 LOD provider 再配置 pinned
-            _milMode = _rbModeMil.Checked;
-            _rbModeMil.Enabled = _rbModePb.Enabled = false; // 初始化後不可改模式
+            _milMode = _settings.Init == PbSettings.InitMode.Mil;
+            _lockedInitMode = _settings.Init; _modeLocked = true; // 初始化後鎖定繪圖模式（PropertyGrid 軟鎖）
+            propertyGridMerge.Refresh();
             if (!_milMode) return;
 
             for (int i = 0; i < SubPanelCount; i++)
@@ -213,23 +272,7 @@ namespace MilGrabber.Monitor
             _mainPanelMil.BringToFront(); // 蓋住 SmartCanvas
         }
 
-        // ── Designer 控制項事件 ──
-        private void numResize_ValueChanged(object sender, EventArgs e) { _resizeScale = (int)numResize.Value; ApplyLayout(); }
-        private void numFovMm_ValueChanged(object sender, EventArgs e) => ApplyLayout();
-
-        // chkLodGPU / chkLodCPU 共用此 handler（Designer 兩者都接這裡）：GPU/CPU 二選一跑測比較。
-        private void chkLod_CheckedChanged(object sender, EventArgs e)
-        {
-            // 互斥：剛勾的那個關掉另一個（設 .Checked=false 會再進本 handler，但屆時兩者不再同 true → 不遞迴）
-            if (sender == chkLodGPU && chkLodGPU.Checked && chkLodCPU.Checked) chkLodCPU.Checked = false;
-            else if (sender == chkLodCPU && chkLodCPU.Checked && chkLodGPU.Checked) chkLodGPU.Checked = false;
-
-            _lodUseGpu  = chkLodGPU.Checked;
-            _lodEnabled = chkLodGPU.Checked || chkLodCPU.Checked;
-            if (_live == null) return;
-            if (!_lodEnabled) _live.DisableLod();
-            else _live.EnableLod(_lodUseGpu ? (GrayResize)LodResizeGpu : LodResizeCpu); // resize 委派二選一
-        }
+        // 縮圖倍率 / FOV / LOD GPU↔CPU 的切換已融入 PropertyGrid（PbSettings）→ ApplyPbSettings 統一套用。
 
         // ── LOD resize 委派（LiveDisplayView 在背景執行緒呼叫；只縮「可見區」一塊） ──
         /// <summary>GPU 版：裁好的可見區 → pinned → CoreCV_Resize_GPU → 灰階 bytes。計時記 _lodGpuTimer。</summary>
@@ -365,8 +408,8 @@ namespace MilGrabber.Monitor
                 _mainPanelMil.Dispose();
                 _mainPanelMil = null;
             }
-            if (_rbModeMil != null) _rbModeMil.Enabled = true;  // 釋放後可重選模式
-            if (_rbModePb  != null) _rbModePb.Enabled  = true;
+            _modeLocked = false; // 釋放後可重選繪圖模式（PropertyGrid 解鎖）
+            propertyGridMerge.Refresh();
         }
     }
 }
