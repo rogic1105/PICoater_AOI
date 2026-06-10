@@ -7,7 +7,7 @@ using System.Windows.Forms;
 using Matrox.MatroxImagingLibrary;
 using MilGrabber.Core;
 using TanukiCv.Core; // PixelMmMapper（已收進 sdk 唯一來源）
-using TanukiCv.Controls; // MultiCamLiveView（共用多相機監控顯示元件）
+using TanukiCv.Controls; // LiveDisplayView（共用多相機監控顯示元件）
 using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
@@ -19,7 +19,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private readonly Form _mainForm;
         private readonly Panel _mainDisplayPanel;
         private Panel[] _cameraPanels;                 // camLive1~7（SmartCanvas 模式 thumbnail 用）
-        private MultiCamLiveView _smartDisplay;        // 共用多相機監控顯示（sdk TanukiCv.Controls；he_MainDisplay==SmartCanvas）
+        private LiveDisplayView _smartDisplay;        // 共用多相機監控顯示（sdk TanukiCv.Controls；he_MainDisplay==SmartCanvas）
         private bool SmartCanvasMode => _inspectionSettings != null
             && _inspectionSettings.he_MainDisplay == AniloxRoll.Monitor.Core.Data.MainDisplayMode.SmartCanvas;
         private readonly Action<string> _updatePixelInfoCallback;
@@ -526,7 +526,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (!SmartCanvasMode || _smartDisplay != null) return;
             if (_mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) return;
-            _smartDisplay = new MultiCamLiveView(_mainDisplayPanel, _cameraPanels, _screenMmPerPx);
+            _smartDisplay = new LiveDisplayView(_mainDisplayPanel, _cameraPanels, _screenMmPerPx);
             _smartDisplay.SelectRequested  += SmartSelectCamera;
             _smartDisplay.ViewRangeMmChanged += OnSmartViewRange;
             _smartDisplay.SetSelected(_selectedMainCameraId);
@@ -534,7 +534,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             {
                 var ops = new double[_merger.SlotStartsMm?.Length ?? 0];
                 for (int i = 0; i < ops.Length; i++) ops[i] = _merger.RefOpsMm * 1000.0; // 均勻 ops（µm）
-                _smartDisplay.SetMergeLayout(_merger.SlotStartsMm, ops, 1, 0); // 主程式餵全解析度顯示 bytes → feedScale=1
+                _smartDisplay.SetLayout(_merger.SlotStartsMm, ops, 1, 0); // 主程式餵全解析度顯示 bytes → feedScale=1
             }
             _smartDisplay.SetMergeMode(IsGlobalMergeActive);
             foreach (var cam in _cameras) cam.OnDisplayFrame += OnCameraDisplayFrame;
@@ -581,7 +581,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 return;
             }
 
-            // SmartCanvas 模式：主畫面由 MultiCamLiveView 顯示，不綁 MIL secondary display 到 camLiveMain
+            // SmartCanvas 模式：主畫面由 LiveDisplayView 顯示，不綁 MIL secondary display 到 camLiveMain
             // （MIL display 的 M_MOUSE_USE 會攔截滾輪，疊在上面的 SmartCanvas 無法縮放）。一律卸成 IntPtr.Zero。
             foreach (var cam in _cameras)
             {
@@ -623,7 +623,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             // panel 已 dispose（關閉/釋放期）→ 不碰 .Handle（會觸發 CreateHandle/ObjectDisposedException）
             if (_mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) { _merger.DisableMerge(); _merger = null; return; }
 
-            // SmartCanvas 模式：合圖由 MultiCamLiveView CPU 拼，不需 MIL 合圖 display。
+            // SmartCanvas 模式：合圖由 LiveDisplayView CPU 拼，不需 MIL 合圖 display。
             // 關鍵：不把 MIL display 綁到 camLiveMain（否則 MIL display 的 M_MOUSE_USE 會攔截滾輪，
             // 疊在上面的 SmartCanvas 收不到 → 無法縮放）。MIL 直繪模式才走下面整套。
             if (!SmartCanvasMode)
@@ -659,7 +659,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             // SmartCanvas 合圖：用工頭佈局(各台 start/ops) CPU 拼（feedScale=1：主程式餵全解析度）
             if (SmartCanvasMode && _smartDisplay != null)
             {
-                _smartDisplay.SetMergeLayout(startPosMm, opsUm, 1, 0);
+                _smartDisplay.SetLayout(startPosMm, opsUm, 1, 0);
                 _smartDisplay.SetMergeMode(true);
             }
         }
@@ -738,7 +738,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             // SmartCanvas 合圖佈局同步（feedScale=1：主程式餵全解析度顯示 bytes）
             if (SmartCanvasMode && _smartDisplay != null)
-                _smartDisplay.SetMergeLayout(startPosMm, opsUm, 1, 0);
+                _smartDisplay.SetLayout(startPosMm, opsUm, 1, 0);
         }
 
         // ==================== Merged Display Refresh ====================

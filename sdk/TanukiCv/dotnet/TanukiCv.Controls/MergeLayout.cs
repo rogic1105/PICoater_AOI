@@ -39,7 +39,7 @@ namespace TanukiCv.Controls
     ///
     /// 放在 TanukiCv（durable、跨產品共用的影像 SDK）而非 MIL 區：MIL 區是「換 grabber/相機就整包
     /// 換掉」的拋棄層，可重用 IP 不該困在那。本演算法服務 SmartCanvas / CPU 合圖路徑（範例 +
-    /// 主程式 MultiCamLiveView / GrabImageStitcher），scale=縮圖倍率、strategy 可選三種。
+    /// 主程式 LiveDisplayView / GrabImageStitcher），scale=縮圖倍率、strategy 可選三種。
     /// （MIL 即時合圖 MultiCameraMerger 另有自含的 MIL-only 中線實作，隨硬體丟，刻意不共用此份。）
     /// </summary>
     public static class MergeLayout

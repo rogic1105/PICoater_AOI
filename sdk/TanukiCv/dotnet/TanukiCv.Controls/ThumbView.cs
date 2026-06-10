@@ -8,7 +8,7 @@ namespace TanukiCv.Controls
     /// <summary>
     /// 雙緩衝縮圖控制項：自繪 bitmap（zoom-to-fit 黑底 letterbox），換圖只 <see cref="SetImage"/> → Invalidate，
     /// **不閃黑**。取代 PictureBox.Image swap —— PictureBox 重繪會「先填底色再畫圖」，且雙緩衝對它未必生效。
-    /// 多相機監控縮圖（<see cref="MultiCamLiveView"/>）與範例縮圖共用。執行緒：SetImage 須在 UI 執行緒呼叫。
+    /// 多相機監控縮圖（<see cref="LiveDisplayView"/>）與範例縮圖共用。執行緒：SetImage 須在 UI 執行緒呼叫。
     /// </summary>
     public sealed class ThumbView : Control
     {

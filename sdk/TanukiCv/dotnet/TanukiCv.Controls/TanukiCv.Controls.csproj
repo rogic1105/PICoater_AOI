@@ -62,7 +62,6 @@
     <Compile Include="GrayResizeCpu.cs" />
     <Compile Include="LiveDisplayView.cs" />
     <Compile Include="MergeLayout.cs" />
-    <Compile Include="MultiCamLiveView.cs" />
     <Compile Include="ThumbStrip.cs" />
     <Compile Include="ThumbView.cs">
       <SubType>Component</SubType>
