@@ -149,6 +149,8 @@ namespace AniloxRoll.Monitor.Core.Data
         public bool hd_EnableReviewEnhance { get => ImageView.EnableReviewEnhance; set => ImageView.EnableReviewEnhance = value; }
         [Category("3. 圖表設定")][DisplayName("主畫面顯示")][Description("MilDirect=MIL 直繪（現狀）；SmartCanvas=CPU 繪、跟回顧畫布同源。變更後重開抓取生效。")]
         public MainDisplayMode he_MainDisplay { get => ImageView.MainDisplay; set => ImageView.MainDisplay = value; }
+        [Category("3. 圖表設定")][DisplayName("動態LOD")][Description("Off=關；GPU=CoreCV GPU 縮；CPU=純 CPU 縮。放大巨圖看細節用（顯示成本大降）。SmartCanvas 模式即時生效。")]
+        public LiveLodMode hf_LiveLod { get => ImageView.LiveLod; set => ImageView.LiveLod = value; }
 
         // 向後相容：程式碼中直接存取的快捷屬性
         [Browsable(false)] public bool EnableMuraEnhance   { get => ImageView.EnableMuraEnhance;   set => ImageView.EnableMuraEnhance   = value; }
@@ -158,6 +160,7 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public int ChartDataYieldMonthlyYMax { get => Chart.MonthlyYMax; set => Chart.MonthlyYMax = value; }
         [Browsable(false)] public int ChartDataYieldDailyYMax   { get => Chart.DailyYMax;   set => Chart.DailyYMax   = value; }
         [Browsable(false)] public StitchMode StitchMode { get => ImageView.StitchMode; set => ImageView.StitchMode = value; }
+        [Browsable(false)] public LiveLodMode LiveLod { get => ImageView.LiveLod; set => ImageView.LiveLod = value; }
         [Browsable(false)] public float ErrorValueMeanV { get => Recipe.ErrorValueMeanV; set => Recipe.ErrorValueMeanV = value; }
         [Browsable(false)] public float ErrorValueMaxV  { get => Recipe.ErrorValueMaxV;  set => Recipe.ErrorValueMaxV  = value; }
         [Browsable(false)] public float ErrorValueMeanH { get => Recipe.ErrorValueMeanH; set => Recipe.ErrorValueMeanH = value; }

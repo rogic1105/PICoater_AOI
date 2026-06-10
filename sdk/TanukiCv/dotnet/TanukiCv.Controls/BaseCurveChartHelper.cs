@@ -3,7 +3,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
 
-namespace AniloxRoll.Monitor.UI.Widgets
+namespace TanukiCv.Controls
 {
     /// <summary>
     /// Column/Row 曲線圖共用基底：chart 初始化骨架、閾值線、Mean/Max series 建立。

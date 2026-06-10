@@ -50,6 +50,7 @@ namespace MilGrabber.Monitor
             _screenMmPerPx = SystemInfo.GetScreenMetrics().MmPerPx;
             _live = new LiveDisplayView(panelMain, _camContainers, _screenMmPerPx);
             _live.SelectRequested += camId => SelectCamera(camId - 1); // 1-based camId → 0-based idx
+            // 游標剖面（L0）→ chartProfileX/Y 的接線延後（待 sample 重用階段；LiveDisplayView.CursorProfileChanged 已具備）
         }
 
         // ── 合圖 ops/start + 重疊策略（tabParams「合圖」tab；控制項在 Designer 宣告，本檔只接線）──

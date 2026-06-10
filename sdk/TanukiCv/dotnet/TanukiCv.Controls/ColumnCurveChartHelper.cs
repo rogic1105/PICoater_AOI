@@ -2,7 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms.DataVisualization.Charting;
 
-namespace AniloxRoll.Monitor.UI.Widgets
+namespace TanukiCv.Controls
 {
     /// <summary>
     /// 切向（tangential）Mura 曲線圖：X 軸 = 位置 mm，Y 軸 = normalized value。

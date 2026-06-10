@@ -933,6 +933,10 @@ namespace AniloxRoll.Monitor.Forms
                 if (c.Name == nameof(InspectionSettings.hb_StitchMode))
                     await OnStitchModeChangedAsync();
 
+                // ── 動態 LOD 變更 → 即時套到 LiveDisplayView ───────────────────
+                if (c.Name == nameof(InspectionSettings.hf_LiveLod))
+                    _liveCameraManager?.SetLodMode(_settings.LiveLod);
+
                 // ── OPS/Start 變更 → Live 全域合圖佈局即時更新 ────────────────
                 if (OpsStartSettingNames.Contains(c.Name))
                 {

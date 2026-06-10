@@ -198,9 +198,9 @@ PICoater_AOI/
 | `UI/Widgets/FormInteractionHelper.cs` | UI 互動、gallery 選擇、計時；ReviewConfig 代理 |
 | `UI/Widgets/CanvasInteractionHelper.cs` | Canvas zoom/pan 事件、mm 座標換算；ReviewConfig → GetEffectiveOps/Pos |
 | `UI/Widgets/EventGuard.cs` | 可重入 bool 旗標（EventGuard + EventGuardScope），using 語法自動還原 |
-| `UI/Widgets/BaseCurveChartHelper.cs` | 曲線圖抽象基底：共用欄位、Build 骨架、閾值線、PostPaint 事件 |
-| `UI/Widgets/ColumnCurveChartHelper.cs` | 切向（X 軸）mura 曲線圖：繼承 BaseCurveChartHelper，含 zoom 同步 |
-| `UI/Widgets/RowCurveChartHelper.cs` | 法向（Y 軸）mura 曲線圖：繼承 BaseCurveChartHelper，座標反轉、InnerPlot 補償 |
+| `sdk/TanukiCv/dotnet/TanukiCv.Controls/BaseCurveChartHelper.cs` | **曲線圖抽象基底（已搬 sdk 共用唯一來源）**：Template Method（Build 骨架 + Mean/Max 線 + 閾值線工廠 + PostPaint），子類填方向專屬洞。自包含 0 依賴 app；app+sample 共用。**TODO：閾值線做成選用（讓純剖面重用同套不顯 mura 門檻）** |
+| `sdk/TanukiCv/dotnet/TanukiCv.Controls/ColumnCurveChartHelper.cs` | 切向（X 軸）曲線圖子類：X=位置 mm/Y=值、右側 Y2 刻度、水平 InnerPlotPosition 對齊補償、zoom 同步（chartLiveVertical/Patch/Review*/DataPatch 用）|
+| `sdk/TanukiCv/dotnet/TanukiCv.Controls/RowCurveChartHelper.cs` | 法向（Y 軸）曲線圖子類：Y=位置、軸旋轉、垂直 InnerPlot 補償（chartLiveHorizontal/ReviewHorizontal 用）|
 | `UI/Widgets/TrackBarWheelInterceptor.cs` | TrackBar 滑鼠滾輪攔截器（從 AniloxRollForm 提取） |
 | `UI/Widgets/ComboBoxWheelReverser.cs` | ComboBox 滑鼠滾輪方向反轉（從 AniloxRollForm 提取） |
 | `UI/Widgets/MultiClickDetector.cs` | 多擊偵測器：雙擊/三擊辨識（從 AniloxRollForm 提取） |

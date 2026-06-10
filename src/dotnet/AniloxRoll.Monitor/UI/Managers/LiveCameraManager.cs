@@ -11,6 +11,7 @@ using TanukiCv.Controls; // LiveDisplayView（共用多相機監控顯示元件�
 using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
+using AniloxRoll.Monitor.Core.Interop; // NativeMethods（LOD GPU resize；P/Invoke 宣告唯一點）
 
 namespace AniloxRoll.Monitor.UI.Managers
 {
@@ -23,6 +24,12 @@ namespace AniloxRoll.Monitor.UI.Managers
         private bool SmartCanvasMode => _inspectionSettings != null
             && _inspectionSettings.he_MainDisplay == AniloxRoll.Monitor.Core.Data.MainDisplayMode.SmartCanvas;
         private readonly Action<string> _updatePixelInfoCallback;
+
+        // 動態 LOD（he_LiveLod）：GPU provider 專用 pinned（只裁可見小區，非每幀全幀）；CPU 走 GrayResizeCpu 無 pinned。
+        private IntPtr _lodSrcPinned, _lodDstPinned;
+        private int _lodSrcCap, _lodDstCap;
+        private readonly object _lodBufLock = new object();
+        private volatile bool _lodReleased;
 
         private List<AniloxCamera> _cameras = new List<AniloxCamera>();
         private List<CameraHardwareConfig> _cameraHardwareConfigs;
@@ -536,8 +543,49 @@ namespace AniloxRoll.Monitor.UI.Managers
                 for (int i = 0; i < ops.Length; i++) ops[i] = _merger.RefOpsMm * 1000.0; // 均勻 ops（µm）
                 _smartDisplay.SetLayout(_merger.SlotStartsMm, ops, 1, 0); // 主程式餵全解析度顯示 bytes → feedScale=1
             }
+            _smartDisplay.MergeAll = IsGlobalMergeActive;     // 全域＝合圖全部（含無畫面相機黑占位）
             _smartDisplay.SetMergeMode(IsGlobalMergeActive);
             foreach (var cam in _cameras) cam.OnDisplayFrame += OnCameraDisplayFrame;
+            if (_inspectionSettings != null) SetLodMode(_inspectionSettings.LiveLod); // 套目前 LOD 設定
+        }
+
+        /// <summary>套用動態 LOD 模式到 LiveDisplayView（he_LiveLod 變更 / 顯示建立時呼叫）。</summary>
+        public void SetLodMode(LiveLodMode mode)
+        {
+            if (_smartDisplay == null) return;
+            switch (mode)
+            {
+                case LiveLodMode.GPU: _lodReleased = false; _smartDisplay.EnableLod(LodResizeGpu); break;
+                case LiveLodMode.CPU: _smartDisplay.EnableLod(GrayResizeCpu.Resize); break;
+                default:              _smartDisplay.DisableLod(); break;
+            }
+        }
+
+        /// <summary>GPU LOD resize 委派（LiveDisplayView 背景執行緒呼叫；只縮「可見區」一塊）。</summary>
+        private byte[] LodResizeGpu(byte[] src, int sw, int sh, int dw, int dh)
+        {
+            int srcPix = sw * sh, dstPix = dw * dh;
+            byte[] dst;
+            lock (_lodBufLock)
+            {
+                if (_lodReleased) return null;
+                if (_lodSrcCap < srcPix)
+                {
+                    if (_lodSrcPinned != IntPtr.Zero) NativeMethods.CoreCV_FreePinned(_lodSrcPinned);
+                    _lodSrcPinned = NativeMethods.CoreCV_AllocPinned((ulong)srcPix); _lodSrcCap = srcPix;
+                }
+                if (_lodDstCap < dstPix)
+                {
+                    if (_lodDstPinned != IntPtr.Zero) NativeMethods.CoreCV_FreePinned(_lodDstPinned);
+                    _lodDstPinned = NativeMethods.CoreCV_AllocPinned((ulong)dstPix); _lodDstCap = dstPix;
+                }
+                if (_lodSrcPinned == IntPtr.Zero || _lodDstPinned == IntPtr.Zero) return null;
+                System.Runtime.InteropServices.Marshal.Copy(src, 0, _lodSrcPinned, srcPix);
+                NativeMethods.CoreCV_Resize_GPU(_lodSrcPinned, sw, sh, _lodDstPinned, dw, dh);
+                dst = new byte[dstPix];
+                System.Runtime.InteropServices.Marshal.Copy(_lodDstPinned, dst, 0, dstPix);
+            }
+            return dst;
         }
 
         /// <summary>切回 MIL 模式（he_MainDisplay==MilDirect）→ 解訂閱 + dispose SmartCanvas，露出底層 MIL。</summary>
@@ -547,6 +595,13 @@ namespace AniloxRoll.Monitor.UI.Managers
             foreach (var cam in _cameras) cam.OnDisplayFrame -= OnCameraDisplayFrame;
             _smartDisplay.Dispose();
             _smartDisplay = null;
+            // LOD pinned 釋放（鎖內 + 旗標，等背景 provider 用完防 use-after-free）
+            lock (_lodBufLock)
+            {
+                _lodReleased = true;
+                if (_lodSrcPinned != IntPtr.Zero) { NativeMethods.CoreCV_FreePinned(_lodSrcPinned); _lodSrcPinned = IntPtr.Zero; _lodSrcCap = 0; }
+                if (_lodDstPinned != IntPtr.Zero) { NativeMethods.CoreCV_FreePinned(_lodDstPinned); _lodDstPinned = IntPtr.Zero; _lodDstCap = 0; }
+            }
         }
 
         private void OnCameraDisplayFrame(int camId, byte[] bytes, int w, int h) => _smartDisplay?.PushFrame(camId, bytes, w, h);
@@ -660,6 +715,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (SmartCanvasMode && _smartDisplay != null)
             {
                 _smartDisplay.SetLayout(startPosMm, opsUm, 1, 0);
+                _smartDisplay.MergeAll = true;   // 全域＝合圖全部（含無畫面相機黑占位）
                 _smartDisplay.SetMergeMode(true);
             }
         }

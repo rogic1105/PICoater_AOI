@@ -2,7 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms.DataVisualization.Charting;
 
-namespace AniloxRoll.Monitor.UI.Widgets
+namespace TanukiCv.Controls
 {
     /// <summary>
     /// 法向（axial）Mura 曲線圖：row-wise ridge data，旋轉 90° 顯示。

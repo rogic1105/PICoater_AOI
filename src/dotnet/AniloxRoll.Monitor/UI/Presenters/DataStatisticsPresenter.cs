@@ -7,6 +7,7 @@ using System.Windows.Forms.DataVisualization.Charting;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.Widgets;
+using TanukiCv.Controls;
 
 namespace AniloxRoll.Monitor.UI.Presenters
 {

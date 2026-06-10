@@ -445,9 +445,9 @@
             // 
             this.lblBgBinInfo.Font = new System.Drawing.Font("Microsoft Sans Serif", 7.5F);
             this.lblBgBinInfo.ForeColor = System.Drawing.Color.Gray;
-            this.lblBgBinInfo.Location = new System.Drawing.Point(900, 609);
+            this.lblBgBinInfo.Location = new System.Drawing.Point(900, 90);
             this.lblBgBinInfo.Name = "lblBgBinInfo";
-            this.lblBgBinInfo.Size = new System.Drawing.Size(113, 16);
+            this.lblBgBinInfo.Size = new System.Drawing.Size(113, 97);
             this.lblBgBinInfo.TabIndex = 22;
             this.lblBgBinInfo.Text = "光源0  曝光 0us";
             this.lblBgBinInfo.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -835,11 +835,18 @@
             | System.Windows.Forms.AnchorStyles.Right)));
             this.camReviewMain.BackColor = System.Drawing.Color.Black;
             this.camReviewMain.ClampPan = false;
+            this.camReviewMain.DoubleClickFitToScreen = false;
+            this.camReviewMain.DownscaleInterpolation = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
+            this.camReviewMain.FitRelativeZoom = false;
             this.camReviewMain.Location = new System.Drawing.Point(6, 190);
+            this.camReviewMain.LodMargin = 1F;
+            this.camReviewMain.MaxZoomOverBitmap = 8F;
             this.camReviewMain.Name = "camReviewMain";
+            this.camReviewMain.ShowOverlay = true;
             this.camReviewMain.Size = new System.Drawing.Size(888, 333);
             this.camReviewMain.TabIndex = 7;
             this.camReviewMain.TabStop = false;
+            this.camReviewMain.TripleClickPhysical1x = false;
             // 
             // tabPageData
             // 
@@ -3173,13 +3180,14 @@
             // lblIoState
             // 
             this.lblIoState.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(117)))), ((int)(((byte)(117)))), ((int)(((byte)(117)))));
-            this.lblIoState.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lblIoState.CornerRadius = 10;
             this.lblIoState.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblIoState.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F);
             this.lblIoState.ForeColor = System.Drawing.Color.White;
             this.lblIoState.Location = new System.Drawing.Point(3, 0);
             this.lblIoState.Name = "lblIoState";
-            this.lblIoState.Size = new System.Drawing.Size(133, 32);
+            this.lblIoState.Raised = true;
+            this.lblIoState.Size = new System.Drawing.Size(87, 32);
             this.lblIoState.TabIndex = 2;
             this.lblIoState.Text = "--";
             this.lblIoState.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -3187,13 +3195,14 @@
             // lblIoDiAlive
             // 
             this.lblIoDiAlive.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(60)))), ((int)(((byte)(60)))));
-            this.lblIoDiAlive.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lblIoDiAlive.CornerRadius = 10;
             this.lblIoDiAlive.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblIoDiAlive.Font = new System.Drawing.Font("Microsoft Sans Serif", 7F);
             this.lblIoDiAlive.ForeColor = System.Drawing.Color.White;
-            this.lblIoDiAlive.Location = new System.Drawing.Point(142, 0);
+            this.lblIoDiAlive.Location = new System.Drawing.Point(96, 0);
             this.lblIoDiAlive.Name = "lblIoDiAlive";
-            this.lblIoDiAlive.Size = new System.Drawing.Size(77, 32);
+            this.lblIoDiAlive.Raised = true;
+            this.lblIoDiAlive.Size = new System.Drawing.Size(87, 32);
             this.lblIoDiAlive.TabIndex = 0;
             this.lblIoDiAlive.Text = "DI0\r\nNKN_ALV";
             this.lblIoDiAlive.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -3201,13 +3210,14 @@
             // lblIoDiStart
             // 
             this.lblIoDiStart.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(60)))), ((int)(((byte)(60)))));
-            this.lblIoDiStart.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lblIoDiStart.CornerRadius = 10;
             this.lblIoDiStart.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblIoDiStart.Font = new System.Drawing.Font("Microsoft Sans Serif", 7F);
             this.lblIoDiStart.ForeColor = System.Drawing.Color.White;
-            this.lblIoDiStart.Location = new System.Drawing.Point(225, 0);
+            this.lblIoDiStart.Location = new System.Drawing.Point(189, 0);
             this.lblIoDiStart.Name = "lblIoDiStart";
-            this.lblIoDiStart.Size = new System.Drawing.Size(77, 32);
+            this.lblIoDiStart.Raised = true;
+            this.lblIoDiStart.Size = new System.Drawing.Size(87, 32);
             this.lblIoDiStart.TabIndex = 1;
             this.lblIoDiStart.Text = "DI1\r\nINSPECT";
             this.lblIoDiStart.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -3215,13 +3225,14 @@
             // lblIoDoPcAlive
             // 
             this.lblIoDoPcAlive.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(60)))), ((int)(((byte)(60)))));
-            this.lblIoDoPcAlive.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lblIoDoPcAlive.CornerRadius = 10;
             this.lblIoDoPcAlive.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblIoDoPcAlive.Font = new System.Drawing.Font("Microsoft Sans Serif", 7F);
             this.lblIoDoPcAlive.ForeColor = System.Drawing.Color.White;
-            this.lblIoDoPcAlive.Location = new System.Drawing.Point(308, 0);
+            this.lblIoDoPcAlive.Location = new System.Drawing.Point(282, 0);
             this.lblIoDoPcAlive.Name = "lblIoDoPcAlive";
-            this.lblIoDoPcAlive.Size = new System.Drawing.Size(77, 32);
+            this.lblIoDoPcAlive.Raised = true;
+            this.lblIoDoPcAlive.Size = new System.Drawing.Size(87, 32);
             this.lblIoDoPcAlive.TabIndex = 2;
             this.lblIoDoPcAlive.Text = "DO0\r\nPC_ALV";
             this.lblIoDoPcAlive.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -3229,14 +3240,15 @@
             // lblIoDoMura
             // 
             this.lblIoDoMura.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(60)))), ((int)(((byte)(60)))));
-            this.lblIoDoMura.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lblIoDoMura.CornerRadius = 10;
             this.lblIoDoMura.Cursor = System.Windows.Forms.Cursors.Hand;
             this.lblIoDoMura.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblIoDoMura.Font = new System.Drawing.Font("Microsoft Sans Serif", 7F);
             this.lblIoDoMura.ForeColor = System.Drawing.Color.White;
-            this.lblIoDoMura.Location = new System.Drawing.Point(391, 0);
+            this.lblIoDoMura.Location = new System.Drawing.Point(375, 0);
             this.lblIoDoMura.Name = "lblIoDoMura";
-            this.lblIoDoMura.Size = new System.Drawing.Size(77, 32);
+            this.lblIoDoMura.Raised = true;
+            this.lblIoDoMura.Size = new System.Drawing.Size(87, 32);
             this.lblIoDoMura.TabIndex = 3;
             this.lblIoDoMura.Text = "DO1\r\nMURA_DET";
             this.lblIoDoMura.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -3245,13 +3257,14 @@
             // lblIoDoPcBusy
             // 
             this.lblIoDoPcBusy.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(60)))), ((int)(((byte)(60)))));
-            this.lblIoDoPcBusy.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lblIoDoPcBusy.CornerRadius = 10;
             this.lblIoDoPcBusy.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblIoDoPcBusy.Font = new System.Drawing.Font("Microsoft Sans Serif", 7F);
             this.lblIoDoPcBusy.ForeColor = System.Drawing.Color.White;
-            this.lblIoDoPcBusy.Location = new System.Drawing.Point(474, 0);
+            this.lblIoDoPcBusy.Location = new System.Drawing.Point(468, 0);
             this.lblIoDoPcBusy.Name = "lblIoDoPcBusy";
-            this.lblIoDoPcBusy.Size = new System.Drawing.Size(81, 32);
+            this.lblIoDoPcBusy.Raised = true;
+            this.lblIoDoPcBusy.Size = new System.Drawing.Size(87, 32);
             this.lblIoDoPcBusy.TabIndex = 4;
             this.lblIoDoPcBusy.Text = "DO2\r\nINSPECT";
             this.lblIoDoPcBusy.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -3266,8 +3279,8 @@
             this.Controls.Add(this.tabMain);
             this.Name = "AniloxRollForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
             this.Text = "AniloxRoll Monitor";
+            this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
             this.tabMain.ResumeLayout(false);
             this.tabPageLiveView.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.chartLiveHorizontal)).EndInit();

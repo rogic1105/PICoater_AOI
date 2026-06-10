@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
+using TanukiCv.Controls;
 
 namespace AniloxRoll.Monitor.UI.Widgets
 {

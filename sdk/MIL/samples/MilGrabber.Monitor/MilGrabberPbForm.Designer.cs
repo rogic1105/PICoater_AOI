@@ -17,6 +17,12 @@ namespace MilGrabber.Monitor
 
         private void InitializeComponent()
         {
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea1 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend1 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series1 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea2 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend2 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series2 = new System.Windows.Forms.DataVisualization.Charting.Series();
             this.btnInit = new System.Windows.Forms.Button();
             this.btnGrab = new System.Windows.Forms.Button();
             this.btnRelease = new System.Windows.Forms.Button();
@@ -179,6 +185,8 @@ namespace MilGrabber.Monitor
             this.panelCam7 = new System.Windows.Forms.Panel();
             this.chkMergeAll = new System.Windows.Forms.CheckBox();
             this.chkLodCPU = new System.Windows.Forms.CheckBox();
+            this.chartProfileY = new System.Windows.Forms.DataVisualization.Charting.Chart();
+            this.chartProfileX = new System.Windows.Forms.DataVisualization.Charting.Chart();
             ((System.ComponentModel.ISupportInitialize)(this.numResize)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numFovMm)).BeginInit();
             this.tabParams.SuspendLayout();
@@ -267,11 +275,13 @@ namespace MilGrabber.Monitor
             ((System.ComponentModel.ISupportInitialize)(this.trackBarHtCam8)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam8)).BeginInit();
             this.tabMerge.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.chartProfileY)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.chartProfileX)).BeginInit();
             this.SuspendLayout();
             // 
             // btnInit
             // 
-            this.btnInit.Location = new System.Drawing.Point(963, 17);
+            this.btnInit.Location = new System.Drawing.Point(1119, 12);
             this.btnInit.Name = "btnInit";
             this.btnInit.Size = new System.Drawing.Size(110, 32);
             this.btnInit.TabIndex = 0;
@@ -281,7 +291,7 @@ namespace MilGrabber.Monitor
             // 
             // btnGrab
             // 
-            this.btnGrab.Location = new System.Drawing.Point(965, 93);
+            this.btnGrab.Location = new System.Drawing.Point(1121, 88);
             this.btnGrab.Name = "btnGrab";
             this.btnGrab.Size = new System.Drawing.Size(110, 32);
             this.btnGrab.TabIndex = 1;
@@ -291,7 +301,7 @@ namespace MilGrabber.Monitor
             // 
             // btnRelease
             // 
-            this.btnRelease.Location = new System.Drawing.Point(965, 131);
+            this.btnRelease.Location = new System.Drawing.Point(1121, 126);
             this.btnRelease.Name = "btnRelease";
             this.btnRelease.Size = new System.Drawing.Size(110, 32);
             this.btnRelease.TabIndex = 2;
@@ -301,7 +311,7 @@ namespace MilGrabber.Monitor
             // 
             // btnFetchInfo
             // 
-            this.btnFetchInfo.Location = new System.Drawing.Point(963, 55);
+            this.btnFetchInfo.Location = new System.Drawing.Point(1119, 50);
             this.btnFetchInfo.Name = "btnFetchInfo";
             this.btnFetchInfo.Size = new System.Drawing.Size(110, 32);
             this.btnFetchInfo.TabIndex = 3;
@@ -312,7 +322,7 @@ namespace MilGrabber.Monitor
             // chkFlipVertical
             // 
             this.chkFlipVertical.AutoSize = true;
-            this.chkFlipVertical.Location = new System.Drawing.Point(965, 215);
+            this.chkFlipVertical.Location = new System.Drawing.Point(1121, 210);
             this.chkFlipVertical.Name = "chkFlipVertical";
             this.chkFlipVertical.Size = new System.Drawing.Size(89, 19);
             this.chkFlipVertical.TabIndex = 4;
@@ -323,7 +333,7 @@ namespace MilGrabber.Monitor
             // lblResize
             // 
             this.lblResize.AutoSize = true;
-            this.lblResize.Location = new System.Drawing.Point(686, 272);
+            this.lblResize.Location = new System.Drawing.Point(949, 52);
             this.lblResize.Name = "lblResize";
             this.lblResize.Size = new System.Drawing.Size(67, 15);
             this.lblResize.TabIndex = 32;
@@ -331,7 +341,7 @@ namespace MilGrabber.Monitor
             // 
             // numResize
             // 
-            this.numResize.Location = new System.Drawing.Point(756, 270);
+            this.numResize.Location = new System.Drawing.Point(1019, 50);
             this.numResize.Maximum = new decimal(new int[] {
             20,
             0,
@@ -355,7 +365,7 @@ namespace MilGrabber.Monitor
             // lblFov
             // 
             this.lblFov.AutoSize = true;
-            this.lblFov.Location = new System.Drawing.Point(536, 272);
+            this.lblFov.Location = new System.Drawing.Point(949, 21);
             this.lblFov.Name = "lblFov";
             this.lblFov.Size = new System.Drawing.Size(67, 15);
             this.lblFov.TabIndex = 43;
@@ -364,7 +374,7 @@ namespace MilGrabber.Monitor
             // numFovMm
             // 
             this.numFovMm.DecimalPlaces = 1;
-            this.numFovMm.Location = new System.Drawing.Point(606, 270);
+            this.numFovMm.Location = new System.Drawing.Point(1019, 19);
             this.numFovMm.Maximum = new decimal(new int[] {
             10000,
             0,
@@ -383,7 +393,7 @@ namespace MilGrabber.Monitor
             // chkMerge
             // 
             this.chkMerge.AutoSize = true;
-            this.chkMerge.Location = new System.Drawing.Point(965, 169);
+            this.chkMerge.Location = new System.Drawing.Point(1121, 164);
             this.chkMerge.Name = "chkMerge";
             this.chkMerge.Size = new System.Drawing.Size(59, 19);
             this.chkMerge.TabIndex = 6;
@@ -394,7 +404,7 @@ namespace MilGrabber.Monitor
             // chkLodGPU
             // 
             this.chkLodGPU.AutoSize = true;
-            this.chkLodGPU.Location = new System.Drawing.Point(965, 240);
+            this.chkLodGPU.Location = new System.Drawing.Point(1121, 235);
             this.chkLodGPU.Name = "chkLodGPU";
             this.chkLodGPU.Size = new System.Drawing.Size(120, 19);
             this.chkLodGPU.TabIndex = 7;
@@ -406,7 +416,7 @@ namespace MilGrabber.Monitor
             // 
             this._rbModePb.AutoSize = true;
             this._rbModePb.Checked = true;
-            this._rbModePb.Location = new System.Drawing.Point(820, 20);
+            this._rbModePb.Location = new System.Drawing.Point(824, 19);
             this._rbModePb.Name = "_rbModePb";
             this._rbModePb.Size = new System.Drawing.Size(91, 19);
             this._rbModePb.TabIndex = 40;
@@ -417,7 +427,7 @@ namespace MilGrabber.Monitor
             // _rbModeMil
             // 
             this._rbModeMil.AutoSize = true;
-            this._rbModeMil.Location = new System.Drawing.Point(820, 44);
+            this._rbModeMil.Location = new System.Drawing.Point(824, 43);
             this._rbModeMil.Name = "_rbModeMil";
             this._rbModeMil.Size = new System.Drawing.Size(89, 19);
             this._rbModeMil.TabIndex = 41;
@@ -427,7 +437,7 @@ namespace MilGrabber.Monitor
             // _lblTiming
             // 
             this._lblTiming.ForeColor = System.Drawing.Color.DimGray;
-            this._lblTiming.Location = new System.Drawing.Point(820, 74);
+            this._lblTiming.Location = new System.Drawing.Point(824, 73);
             this._lblTiming.Name = "_lblTiming";
             this._lblTiming.Size = new System.Drawing.Size(135, 160);
             this._lblTiming.TabIndex = 42;
@@ -439,7 +449,7 @@ namespace MilGrabber.Monitor
             this.panelMain.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.panelMain.Location = new System.Drawing.Point(12, 298);
             this.panelMain.Name = "panelMain";
-            this.panelMain.Size = new System.Drawing.Size(1075, 282);
+            this.panelMain.Size = new System.Drawing.Size(952, 282);
             this.panelMain.TabIndex = 3;
             // 
             // lvCameras
@@ -465,9 +475,9 @@ namespace MilGrabber.Monitor
             this.lvCameras.FullRowSelect = true;
             this.lvCameras.GridLines = true;
             this.lvCameras.HideSelection = false;
-            this.lvCameras.Location = new System.Drawing.Point(6, 712);
+            this.lvCameras.Location = new System.Drawing.Point(6, 842);
             this.lvCameras.Name = "lvCameras";
-            this.lvCameras.Size = new System.Drawing.Size(1393, 160);
+            this.lvCameras.Size = new System.Drawing.Size(1533, 160);
             this.lvCameras.TabIndex = 30;
             this.lvCameras.UseCompatibleStateImageBehavior = false;
             this.lvCameras.View = System.Windows.Forms.View.Details;
@@ -565,9 +575,9 @@ namespace MilGrabber.Monitor
             this.lvEngine.FullRowSelect = true;
             this.lvEngine.GridLines = true;
             this.lvEngine.HideSelection = false;
-            this.lvEngine.Location = new System.Drawing.Point(12, 586);
+            this.lvEngine.Location = new System.Drawing.Point(8, 718);
             this.lvEngine.Name = "lvEngine";
-            this.lvEngine.Size = new System.Drawing.Size(1075, 118);
+            this.lvEngine.Size = new System.Drawing.Size(1531, 118);
             this.lvEngine.TabIndex = 31;
             this.lvEngine.UseCompatibleStateImageBehavior = false;
             this.lvEngine.View = System.Windows.Forms.View.Details;
@@ -588,7 +598,7 @@ namespace MilGrabber.Monitor
             this.tabParams.Controls.Add(this.tabLineRate);
             this.tabParams.Controls.Add(this.tabHeight);
             this.tabParams.Controls.Add(this.tabMerge);
-            this.tabParams.Location = new System.Drawing.Point(1089, 17);
+            this.tabParams.Location = new System.Drawing.Point(1235, 2);
             this.tabParams.Name = "tabParams";
             this.tabParams.SelectedIndex = 0;
             this.tabParams.Size = new System.Drawing.Size(314, 691);
@@ -2290,7 +2300,7 @@ namespace MilGrabber.Monitor
             // chkMergeAll
             // 
             this.chkMergeAll.AutoSize = true;
-            this.chkMergeAll.Location = new System.Drawing.Point(965, 190);
+            this.chkMergeAll.Location = new System.Drawing.Point(1121, 185);
             this.chkMergeAll.Name = "chkMergeAll";
             this.chkMergeAll.Size = new System.Drawing.Size(89, 19);
             this.chkMergeAll.TabIndex = 44;
@@ -2300,7 +2310,7 @@ namespace MilGrabber.Monitor
             // chkLodCPU
             // 
             this.chkLodCPU.AutoSize = true;
-            this.chkLodCPU.Location = new System.Drawing.Point(966, 265);
+            this.chkLodCPU.Location = new System.Drawing.Point(1122, 260);
             this.chkLodCPU.Name = "chkLodCPU";
             this.chkLodCPU.Size = new System.Drawing.Size(119, 19);
             this.chkLodCPU.TabIndex = 45;
@@ -2308,11 +2318,45 @@ namespace MilGrabber.Monitor
             this.chkLodCPU.UseVisualStyleBackColor = true;
             this.chkLodCPU.CheckedChanged += new System.EventHandler(this.chkLod_CheckedChanged);
             // 
+            // chartProfileY
+            // 
+            chartArea1.Name = "ChartArea1";
+            this.chartProfileY.ChartAreas.Add(chartArea1);
+            legend1.Name = "Legend1";
+            this.chartProfileY.Legends.Add(legend1);
+            this.chartProfileY.Location = new System.Drawing.Point(966, 298);
+            this.chartProfileY.Name = "chartProfileY";
+            series1.ChartArea = "ChartArea1";
+            series1.Legend = "Legend1";
+            series1.Name = "Series1";
+            this.chartProfileY.Series.Add(series1);
+            this.chartProfileY.Size = new System.Drawing.Size(263, 414);
+            this.chartProfileY.TabIndex = 46;
+            this.chartProfileY.Text = "chartProfileY";
+            // 
+            // chartProfileX
+            // 
+            chartArea2.Name = "ChartArea1";
+            this.chartProfileX.ChartAreas.Add(chartArea2);
+            legend2.Name = "Legend1";
+            this.chartProfileX.Legends.Add(legend2);
+            this.chartProfileX.Location = new System.Drawing.Point(12, 586);
+            this.chartProfileX.Name = "chartProfileX";
+            series2.ChartArea = "ChartArea1";
+            series2.Legend = "Legend1";
+            series2.Name = "Series1";
+            this.chartProfileX.Series.Add(series2);
+            this.chartProfileX.Size = new System.Drawing.Size(952, 126);
+            this.chartProfileX.TabIndex = 47;
+            this.chartProfileX.Text = "chartProfileX";
+            // 
             // MilGrabberPbForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1415, 875);
+            this.ClientSize = new System.Drawing.Size(1551, 1014);
+            this.Controls.Add(this.chartProfileX);
+            this.Controls.Add(this.chartProfileY);
             this.Controls.Add(this.chkLodCPU);
             this.Controls.Add(this.chkMergeAll);
             this.Controls.Add(this.panelCam0);
@@ -2459,6 +2503,8 @@ namespace MilGrabber.Monitor
             ((System.ComponentModel.ISupportInitialize)(this.numHtCam8)).EndInit();
             this.tabMerge.ResumeLayout(false);
             this.tabMerge.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.chartProfileY)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.chartProfileX)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -2631,5 +2677,7 @@ namespace MilGrabber.Monitor
         private System.Windows.Forms.Panel panelCam7;
         private System.Windows.Forms.CheckBox chkMergeAll;
         private System.Windows.Forms.CheckBox chkLodCPU;
+        private System.Windows.Forms.DataVisualization.Charting.Chart chartProfileY;
+        private System.Windows.Forms.DataVisualization.Charting.Chart chartProfileX;
     }
 }

@@ -70,6 +70,22 @@ namespace TanukiCv.Controls
         public event Action<int> SelectRequested;
         /// <summary>視野左右範圍（mm）→ 上層 overview 聯動。</summary>
         public event Action<double, double> ViewRangeMmChanged;
+
+        /// <summary>游標十字剖面（L0 通用：游標那列/行的原始像素值）+ 對齊資訊（曲線圖畫點 + zoom 同步用）。
+        /// 單張模式才發；純像素、0 依賴檢測（Hessian）。app 之後可在 L1 換成自己的曲線資料（同對齊路）。</summary>
+        public event Action<CursorProfile> CursorProfileChanged;
+
+        /// <summary>游標剖面資料 + 對齊座標（曲線圖：X 點 mm = StartXmm + i×OpsXmm；Y 點 mm = i×OpsYmm；軸 zoom 用 View*Mm）。</summary>
+        public sealed class CursorProfile
+        {
+            public byte[] RowProfile;   // 游標那「列」沿影像 X 的像素（長度=影像寬）
+            public byte[] ColProfile;   // 游標那「行」沿影像 Y 的像素（長度=影像高）
+            public double StartXmm, OpsXmm;   // X 軸 mm 映射
+            public double OpsYmm;             // Y 軸 mm 映射（top=0）
+            public double ViewLeftMm, ViewRightMm, ViewTopMm, ViewBotMm; // 目前可見範圍 → 曲線圖軸 zoom（跟影像對齊）
+            public int CursorX, CursorY;      // 游標影像座標
+        }
+
         /// <summary>合圖重疊分界策略（預設中線）。</summary>
         public MergeOverlap MergeStrategy { get; set; } = MergeOverlap.Midline;
 
@@ -446,6 +462,29 @@ namespace TanukiCv.Controls
             _canvas.SetCursorMm($"({curMmX:F2}, {curMmY:F2})");
 
             ViewRangeMmChanged?.Invoke(leftMm, rightMm);
+
+            // L0 游標剖面（單張模式；游標那列/行的原始像素 → 曲線圖。座標跟影像同源 → 自動對齊）。
+            if (CursorProfileChanged != null && !_mergeMode)
+            {
+                int idx = _selectedCamId - 1;
+                Frame f = (idx >= 0 && idx < _latest.Length) ? _latest[idx] : null;
+                if (f != null)
+                {
+                    int cx = info.ImageX < 0 ? 0 : (info.ImageX >= f.W ? f.W - 1 : info.ImageX); // 游標在影像座標（單張：=_latest 座標）
+                    int cy = info.ImageY < 0 ? 0 : (info.ImageY >= f.H ? f.H - 1 : info.ImageY);
+                    var row = new byte[f.W];
+                    Array.Copy(f.Bytes, cy * f.W, row, 0, f.W);
+                    var col = new byte[f.H];
+                    for (int y = 0; y < f.H; y++) col[y] = f.Bytes[y * f.W + cx];
+                    CursorProfileChanged(new CursorProfile
+                    {
+                        RowProfile = row, ColProfile = col,
+                        StartXmm = startMm, OpsXmm = opsInMm * sf, OpsYmm = yPitch * sf,
+                        ViewLeftMm = leftMm, ViewRightMm = rightMm, ViewTopMm = topMm, ViewBotMm = botMm,
+                        CursorX = cx, CursorY = cy
+                    });
+                }
+            }
         }
 
         private bool AllActiveReadySinceMerge()
