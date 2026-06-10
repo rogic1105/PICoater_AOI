@@ -2330,7 +2330,7 @@ namespace MilGrabber.Monitor
             series1.Legend = "Legend1";
             series1.Name = "Series1";
             this.chartProfileY.Series.Add(series1);
-            this.chartProfileY.Size = new System.Drawing.Size(263, 414);
+            this.chartProfileY.Size = new System.Drawing.Size(151, 282);
             this.chartProfileY.TabIndex = 46;
             this.chartProfileY.Text = "chartProfileY";
             // 

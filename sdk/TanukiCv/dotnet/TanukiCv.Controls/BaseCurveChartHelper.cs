@@ -18,6 +18,10 @@ namespace TanukiCv.Controls
         protected float _errorValueMax  = 0.4f;
         protected bool  _innerPlotPositionFrozen = false;
 
+        /// <summary>是否顯示紅色閾值線（mura 用）。純剖面（L0）等場景可關；設值即重整。子類 RefreshThresholds 依此 gate。</summary>
+        protected bool _showThresholds = true;
+        public bool ShowThresholds { get => _showThresholds; set { _showThresholds = value; if (_chart.ChartAreas.Count > 0) RefreshThresholds(); } }
+
         protected static readonly Font  UnitFont  = new Font("Segoe UI", 7f);
         protected static readonly Brush UnitBrush = new SolidBrush(Color.Gray);
 

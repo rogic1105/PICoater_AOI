@@ -50,7 +50,41 @@ namespace MilGrabber.Monitor
             _screenMmPerPx = SystemInfo.GetScreenMetrics().MmPerPx;
             _live = new LiveDisplayView(panelMain, _camContainers, _screenMmPerPx);
             _live.SelectRequested += camId => SelectCamera(camId - 1); // 1-based camId → 0-based idx
-            // 游標剖面（L0）→ chartProfileX/Y 的接線延後（待 sample 重用階段；LiveDisplayView.CursorProfileChanged 已具備）
+
+            // 游標剖面（L0）→ 重用 app 的曲線圖設計（Column/RowCurveChartHelper），閾值線關（純剖面不顯 mura 門檻）
+            _profileChartX = new ColumnCurveChartHelper(chartProfileX) { ShowThresholds = false }; // 下方：沿 X
+            _profileChartY = new RowCurveChartHelper(chartProfileY)    { ShowThresholds = false }; // 右側：沿 Y
+            _live.CursorProfileChanged += OnCursorProfile;
+        }
+
+        private ColumnCurveChartHelper _profileChartX;
+        private RowCurveChartHelper _profileChartY;
+
+        /// <summary>游標剖面（UI 執行緒，StatusChanged 來）→ 共用曲線圖（降採樣 ~600 點防卡）+ zoom 同步。</summary>
+        private void OnCursorProfile(LiveDisplayView.CursorProfile p)
+        {
+            if (_isReleasing || p == null) return;
+            if (_profileChartX != null && p.RowProfile != null && p.RowProfile.Length > 0)
+            {
+                int step = Math.Max(1, p.RowProfile.Length / 600);
+                _profileChartX.SetOps(p.OpsXmm * step * 1000.0);  // µm；降採樣 → 間距 ×step
+                _profileChartX.UpdateDataAndView(Downsample(p.RowProfile, step), null, p.StartXmm, p.ViewLeftMm, p.ViewRightMm);
+            }
+            if (_profileChartY != null && p.ColProfile != null && p.ColProfile.Length > 0)
+            {
+                int step = Math.Max(1, p.ColProfile.Length / 600);
+                _profileChartY.SetRowPitch(p.OpsYmm * step);
+                _profileChartY.UpdateData(Downsample(p.ColProfile, step), null);
+                _profileChartY.UpdateViewRange(p.ViewTopMm, p.ViewBotMm);
+            }
+        }
+
+        private static float[] Downsample(byte[] b, int step)
+        {
+            int n = (b.Length + step - 1) / step;
+            var f = new float[n]; int k = 0;
+            for (int i = 0; i < b.Length && k < n; i += step) f[k++] = b[i];
+            return f;
         }
 
         // ── 合圖 ops/start + 重疊策略（tabParams「合圖」tab；控制項在 Designer 宣告，本檔只接線）──

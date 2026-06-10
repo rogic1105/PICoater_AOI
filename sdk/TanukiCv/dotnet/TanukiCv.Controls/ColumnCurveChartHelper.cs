@@ -270,8 +270,11 @@ namespace TanukiCv.Controls
             var axisY = area.AxisY;
 
             axisY.StripLines.Clear();
-            axisY.StripLines.Add(MakeStripLine(_errorValueMax,  ChartDashStyle.Solid));
-            axisY.StripLines.Add(MakeStripLine(_errorValueMean, ChartDashStyle.Dash));
+            if (_showThresholds)
+            {
+                axisY.StripLines.Add(MakeStripLine(_errorValueMax,  ChartDashStyle.Solid));
+                axisY.StripLines.Add(MakeStripLine(_errorValueMean, ChartDashStyle.Dash));
+            }
 
             double yMax = Math.Max(1.0, Math.Max(_errorValueMean, _errorValueMax) * 1.1);
             area.AxisY.Maximum  = yMax;

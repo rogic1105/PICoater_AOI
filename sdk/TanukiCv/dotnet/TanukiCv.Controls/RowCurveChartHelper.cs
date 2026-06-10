@@ -38,6 +38,9 @@ namespace TanukiCv.Controls
                 _rowPitchMm = (speedMPerMin / 60.0 * 1000.0) / lineRateHz;
         }
 
+        /// <summary>直接設 row pitch（mm/影像列）；純剖面用（CursorProfile.OpsYmm）。</summary>
+        public void SetRowPitch(double mmPerRow) { if (mmPerRow > 0) _rowPitchMm = mmPerRow; }
+
         /// <summary>
         /// 更新 row-wise 曲線資料。meanData[i] / maxData[i] 為 row i 的值（0–255 raw）。
         /// </summary>
@@ -242,8 +245,11 @@ namespace TanukiCv.Controls
             var area = _chart.ChartAreas[0];
 
             area.AxisX.StripLines.Clear();
-            area.AxisX.StripLines.Add(MakeStripLine(_errorValueMax,  ChartDashStyle.Solid));
-            area.AxisX.StripLines.Add(MakeStripLine(_errorValueMean, ChartDashStyle.Dash));
+            if (_showThresholds)
+            {
+                area.AxisX.StripLines.Add(MakeStripLine(_errorValueMax,  ChartDashStyle.Solid));
+                area.AxisX.StripLines.Add(MakeStripLine(_errorValueMean, ChartDashStyle.Dash));
+            }
 
             double xMax = Math.Max(1.0, Math.Max(_errorValueMean, _errorValueMax) * 1.1);
             area.AxisX.Maximum = xMax;
