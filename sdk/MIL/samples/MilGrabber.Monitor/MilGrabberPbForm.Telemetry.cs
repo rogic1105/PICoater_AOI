@@ -42,8 +42,8 @@ namespace MilGrabber.Monitor
             UpdateEngineSelectedCam();
             // 計時比較（縮圖/顯示/FPS；MIL vs PictureBox）
             UpdateTimingLabel();
-            // 三擊實體 1:1 校正（FOV/scale/模式/相機可能變，這裡保持最新）
-            UpdatePhysicalCalibration();
+            // 三擊實體 1:1 校正（FOV/scale/模式/相機可能變，這裡保持最新）→ 重套佈局（含 FOV→ops 校正）
+            ApplyLayout();
         }
 
         // =========================================================================

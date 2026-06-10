@@ -59,6 +59,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="GrayBitmap.cs" />
+    <Compile Include="GrayResizeCpu.cs" />
+    <Compile Include="LiveDisplayView.cs" />
     <Compile Include="MergeLayout.cs" />
     <Compile Include="MultiCamLiveView.cs" />
     <Compile Include="ThumbStrip.cs" />

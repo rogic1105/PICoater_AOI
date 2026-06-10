@@ -72,7 +72,6 @@ namespace MilGrabber.Monitor
         // 否則 VS 設計工具的 XML parser 無法解析 → 設計階段載入失敗。
         // 每個容器內部的 displayPanel（MIL 顯示）+ status label（狀態）由 SetupCamPanel runtime 建（仿主程式 SetupLivePanel）。
         private Panel[] _camContainers;     // Designer 宣告的 panelCam0..7（容器）
-        private ThumbStrip _thumbStrip;     // sdk 共用多相機縮圖條（唯一來源；批量 CPU 建圖不閃，與主程式 camLive 同一份）
         private Label[] _statusLabels;      // runtime 建：取代原 lblCam，顯示 Online/Offline/No Camera
 
         // ==================== State ====================
@@ -103,12 +102,7 @@ namespace MilGrabber.Monitor
             for (int i = 0; i < SubPanelCount; i++)
                 SetupCamPanel(_camContainers[i], i);
 
-            // 縮圖條：在各容器疊共用 ThumbStrip 的 ThumbView（status 已 Dock=Bottom，ThumbView Dock=Fill 補上方）。
-            // 與主程式 camLive 走同一份批量 CPU 建圖路徑 → 不閃。
-            _thumbStrip = new ThumbStrip(_camContainers);
-            _thumbStrip.SelectRequested += SelectCamera;
-
-            SetupPbMain(); // 主畫面 SmartCanvas（PictureBox 顯示路徑用）
+            SetupPbMain(); // 建共用 LiveDisplayView（主畫面 SmartCanvas + 各容器疊縮圖；含合圖/LOD）
             SetupMergeTab(); // tabParams 新增「合圖」tab：ops/start 表格 + 重疊演算法選擇
 
             // 參數控制項陣列：從 Designer 具名控制項組成（陣列在 .cs 組、控制項在 Designer 宣告，同 panelCam0..7 模式）。
@@ -270,7 +264,7 @@ namespace MilGrabber.Monitor
                 SelectCamera(0);
 
             _statusTimer.Start();
-            _displayTimer?.Start(); // 主畫面/合圖定頻刷
+            // 主畫面/合圖刷新由 LiveDisplayView 內部 timer 自管（不需這裡的 _displayTimer）
             btnGrab.Text = "開始抓取";
             UpdateButtonsEnabled(initialized: true);
 
@@ -401,8 +395,8 @@ namespace MilGrabber.Monitor
         // =========================================================================
         private void chkFlipVertical_CheckedChanged(object sender, EventArgs e)
         {
-            _flipDisplay = chkFlipVertical.Checked; // PictureBox 模式：主畫面 BuildGrayBitmap + 縮圖 ThumbStrip 上下翻轉
-            if (_thumbStrip != null) _thumbStrip.FlipVertical = _flipDisplay;
+            _flipDisplay = chkFlipVertical.Checked; // PictureBox 模式：LiveDisplayView 主畫面+縮圖一起翻
+            if (_live != null) _live.FlipVertical = _flipDisplay;
             if (_cams == null) return;
             foreach (var cam in _cams)
                 if (cam != null) cam.FlipVertical = chkFlipVertical.Checked; // MIL 模式：MIL 翻轉
@@ -422,7 +416,6 @@ namespace MilGrabber.Monitor
         {
             _isReleasing = true;
             _statusTimer.Stop();
-            _displayTimer?.Stop();
 
             // 0. 先所有 MilCamera Dispose（stop grab）→ 確保不再有 FrameReady→OnCameraFrame 在背景跑。
             // **順序關鍵**：必須先停相機，才能釋放它正在讀寫的 pinned 緩衝（步驟 1）。反過來會 use-after-free：
@@ -486,8 +479,10 @@ namespace MilGrabber.Monitor
             }
             else
             {
-                // PictureBox 模式：主畫面由 DisplayTimer/OnCameraFrame 更新（依 _selectedCam）
+                // PictureBox 模式：主畫面由 LiveDisplayView 依選中相機顯示
                 _selectedCam = idx;
+                _live?.SetSelected(idx + 1);   // 0-based idx → 1-based camId
+                ApplyLayout();                 // 選中相機變 → FOV→ops 基準（FrameWidth）可能變
             }
 
             // 重畫所有容器邊框（選中橘色、其他深灰）
@@ -531,7 +526,7 @@ namespace MilGrabber.Monitor
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             ReleaseAll();
-            _thumbStrip?.Dispose(); _thumbStrip = null; // 縮圖條存活到關窗才釋放（ReleaseAll 會在重 init 呼叫，故不放那）
+            _live?.Dispose(); _live = null; // 共用顯示元件存活到關窗才釋放（ReleaseAll 會在重 init 呼叫，故不放那）
             base.OnFormClosing(e);
         }
     }

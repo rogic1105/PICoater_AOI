@@ -27,7 +27,7 @@ namespace MilGrabber.Monitor
             this.lblFov = new System.Windows.Forms.Label();
             this.numFovMm = new System.Windows.Forms.NumericUpDown();
             this.chkMerge = new System.Windows.Forms.CheckBox();
-            this.chkLod = new System.Windows.Forms.CheckBox();
+            this.chkLodGPU = new System.Windows.Forms.CheckBox();
             this._rbModePb = new System.Windows.Forms.RadioButton();
             this._rbModeMil = new System.Windows.Forms.RadioButton();
             this._lblTiming = new System.Windows.Forms.Label();
@@ -178,6 +178,7 @@ namespace MilGrabber.Monitor
             this.panelCam6 = new System.Windows.Forms.Panel();
             this.panelCam7 = new System.Windows.Forms.Panel();
             this.chkMergeAll = new System.Windows.Forms.CheckBox();
+            this.chkLodCPU = new System.Windows.Forms.CheckBox();
             ((System.ComponentModel.ISupportInitialize)(this.numResize)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numFovMm)).BeginInit();
             this.tabParams.SuspendLayout();
@@ -322,7 +323,7 @@ namespace MilGrabber.Monitor
             // lblResize
             // 
             this.lblResize.AutoSize = true;
-            this.lblResize.Location = new System.Drawing.Point(967, 272);
+            this.lblResize.Location = new System.Drawing.Point(686, 272);
             this.lblResize.Name = "lblResize";
             this.lblResize.Size = new System.Drawing.Size(67, 15);
             this.lblResize.TabIndex = 32;
@@ -330,7 +331,7 @@ namespace MilGrabber.Monitor
             // 
             // numResize
             // 
-            this.numResize.Location = new System.Drawing.Point(1037, 270);
+            this.numResize.Location = new System.Drawing.Point(756, 270);
             this.numResize.Maximum = new decimal(new int[] {
             20,
             0,
@@ -345,7 +346,7 @@ namespace MilGrabber.Monitor
             this.numResize.Size = new System.Drawing.Size(48, 25);
             this.numResize.TabIndex = 5;
             this.numResize.Value = new decimal(new int[] {
-            4,
+            1,
             0,
             0,
             0});
@@ -354,7 +355,7 @@ namespace MilGrabber.Monitor
             // lblFov
             // 
             this.lblFov.AutoSize = true;
-            this.lblFov.Location = new System.Drawing.Point(817, 272);
+            this.lblFov.Location = new System.Drawing.Point(536, 272);
             this.lblFov.Name = "lblFov";
             this.lblFov.Size = new System.Drawing.Size(67, 15);
             this.lblFov.TabIndex = 43;
@@ -363,7 +364,7 @@ namespace MilGrabber.Monitor
             // numFovMm
             // 
             this.numFovMm.DecimalPlaces = 1;
-            this.numFovMm.Location = new System.Drawing.Point(887, 270);
+            this.numFovMm.Location = new System.Drawing.Point(606, 270);
             this.numFovMm.Maximum = new decimal(new int[] {
             10000,
             0,
@@ -373,7 +374,7 @@ namespace MilGrabber.Monitor
             this.numFovMm.Size = new System.Drawing.Size(64, 25);
             this.numFovMm.TabIndex = 8;
             this.numFovMm.Value = new decimal(new int[] {
-            100,
+            400,
             0,
             0,
             0});
@@ -390,16 +391,16 @@ namespace MilGrabber.Monitor
             this.chkMerge.UseVisualStyleBackColor = true;
             this.chkMerge.CheckedChanged += new System.EventHandler(this.chkMerge_CheckedChanged);
             // 
-            // chkLod
+            // chkLodGPU
             // 
-            this.chkLod.AutoSize = true;
-            this.chkLod.Location = new System.Drawing.Point(965, 240);
-            this.chkLod.Name = "chkLod";
-            this.chkLod.Size = new System.Drawing.Size(88, 19);
-            this.chkLod.TabIndex = 7;
-            this.chkLod.Text = "動態LOD";
-            this.chkLod.UseVisualStyleBackColor = true;
-            this.chkLod.CheckedChanged += new System.EventHandler(this.chkLod_CheckedChanged);
+            this.chkLodGPU.AutoSize = true;
+            this.chkLodGPU.Location = new System.Drawing.Point(965, 240);
+            this.chkLodGPU.Name = "chkLodGPU";
+            this.chkLodGPU.Size = new System.Drawing.Size(120, 19);
+            this.chkLodGPU.TabIndex = 7;
+            this.chkLodGPU.Text = "動態LOD GPU";
+            this.chkLodGPU.UseVisualStyleBackColor = true;
+            this.chkLodGPU.CheckedChanged += new System.EventHandler(this.chkLod_CheckedChanged);
             // 
             // _rbModePb
             // 
@@ -2296,11 +2297,23 @@ namespace MilGrabber.Monitor
             this.chkMergeAll.Text = "合圖全部";
             this.chkMergeAll.UseVisualStyleBackColor = true;
             // 
+            // chkLodCPU
+            // 
+            this.chkLodCPU.AutoSize = true;
+            this.chkLodCPU.Location = new System.Drawing.Point(966, 265);
+            this.chkLodCPU.Name = "chkLodCPU";
+            this.chkLodCPU.Size = new System.Drawing.Size(119, 19);
+            this.chkLodCPU.TabIndex = 45;
+            this.chkLodCPU.Text = "動態LOD CPU";
+            this.chkLodCPU.UseVisualStyleBackColor = true;
+            this.chkLodCPU.CheckedChanged += new System.EventHandler(this.chkLod_CheckedChanged);
+            // 
             // MilGrabberPbForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1415, 875);
+            this.Controls.Add(this.chkLodCPU);
             this.Controls.Add(this.chkMergeAll);
             this.Controls.Add(this.panelCam0);
             this.Controls.Add(this.panelCam1);
@@ -2320,7 +2333,7 @@ namespace MilGrabber.Monitor
             this.Controls.Add(this.lblFov);
             this.Controls.Add(this.numFovMm);
             this.Controls.Add(this.chkMerge);
-            this.Controls.Add(this.chkLod);
+            this.Controls.Add(this.chkLodGPU);
             this.Controls.Add(this._rbModePb);
             this.Controls.Add(this._rbModeMil);
             this.Controls.Add(this._lblTiming);
@@ -2463,7 +2476,7 @@ namespace MilGrabber.Monitor
         private System.Windows.Forms.Label lblFov;
         private System.Windows.Forms.NumericUpDown numFovMm;
         private System.Windows.Forms.CheckBox chkMerge;
-        private System.Windows.Forms.CheckBox chkLod;
+        private System.Windows.Forms.CheckBox chkLodGPU;
         private System.Windows.Forms.RadioButton _rbModePb;
         private System.Windows.Forms.RadioButton _rbModeMil;
         private System.Windows.Forms.Label _lblTiming;
@@ -2617,5 +2630,6 @@ namespace MilGrabber.Monitor
         private System.Windows.Forms.Panel panelCam6;
         private System.Windows.Forms.Panel panelCam7;
         private System.Windows.Forms.CheckBox chkMergeAll;
+        private System.Windows.Forms.CheckBox chkLodCPU;
     }
 }
