@@ -54,10 +54,15 @@ namespace TanukiCv.Controls
         private double _rowPitchMm;
         private volatile int _mergeCapK = 1;
 
-        // LOD（單張模式；可插拔 GrayResize）
+        // 合圖幾何快取（BuildMerge 與「合圖 LOD」合成 provider 共用單一來源）
+        private List<CameraPlacement> _mergePlacements;
+        private int _mergeTotalW, _mergeMaxH;
+
+        // LOD（單張或合圖；可插拔 GrayResize）
         private GrayResize _lodResize;
         private volatile bool _lodWanted;
-        private int _lodCamId = -1;
+        private int _lodCamId = -1;           // 單張：目前 LOD 綁的相機（換相機要重綁虛擬尺寸）
+        private int _lodMergeW = -1, _lodMergeH = -1; // 合圖：目前 LOD 綁的虛擬尺寸（變了要重綁）
 
         private const int MergeMaxW = 30000; // 合圖點陣寬上限（GDI 16-bit 座標 wrap 防護）
 
@@ -183,30 +188,46 @@ namespace TanukiCv.Controls
             if (_mergeMode && !_mainDirty && AnyReadySinceMerge() && Environment.TickCount - _lastMergeTick > 200)
             { ClearReadyFlags(); _mainDirty = true; _lastMergeTick = Environment.TickCount; }
 
-            // LOD 路徑（單張 + 有 provider + 選中有畫面）：畫布用 provider tile，不走 .Image
-            if (_lodWanted && _lodResize != null && !_mergeMode)
+            // LOD 路徑（單張 or 合圖 + 有 provider）：畫布用 provider tile，不走 .Image
+            if (_lodWanted && _lodResize != null)
             {
-                int idx = _selectedCamId - 1;
-                Frame f = (idx >= 0 && idx < _latest.Length) ? _latest[idx] : null;
-                if (f != null)
+                if (_mergeMode)
                 {
-                    if (!_canvas.LodActive || _lodCamId != _selectedCamId)
+                    // 合圖 LOD：虛擬圖=完整合圖佈局（未 cap），provider 從各相機合成可見區
+                    if (TryComputeMergeGeometry())
                     {
-                        _lodCamId = _selectedCamId;
-                        _canvas.EnableLod(f.W, f.H, LodProvide); // 虛擬尺寸=全解析度；停住才請 provider 裁+縮
-                        ApplyCalibration();
+                        if (!_canvas.LodActive || _lodCamId != 0 || _lodMergeW != _mergeTotalW || _lodMergeH != _mergeMaxH)
+                        {
+                            _lodCamId = 0; _lodMergeW = _mergeTotalW; _lodMergeH = _mergeMaxH; _mergeCapK = 1;
+                            _canvas.EnableLod(_mergeTotalW, _mergeMaxH, MergeLodProvide);
+                            ApplyCalibration();
+                        }
+                        else if (_mainDirty) _canvas.RefreshLod();
+                        _mainDirty = false;
+                        return;
                     }
-                    else if (_mainDirty)
+                }
+                else
+                {
+                    int idx = _selectedCamId - 1;
+                    Frame f = (idx >= 0 && idx < _latest.Length) ? _latest[idx] : null;
+                    if (f != null)
                     {
-                        _canvas.RefreshLod(); // 新幀、視角沒變 → 重產 crisp tile
+                        if (!_canvas.LodActive || _lodCamId != _selectedCamId)
+                        {
+                            _lodCamId = _selectedCamId;
+                            _canvas.EnableLod(f.W, f.H, LodProvide); // 虛擬尺寸=全解析度；停住才請 provider 裁+縮
+                            ApplyCalibration();
+                        }
+                        else if (_mainDirty) _canvas.RefreshLod();
+                        _mainDirty = false;
+                        return;
                     }
-                    _mainDirty = false;
-                    return;
                 }
             }
-            else if (_canvas.LodActive)
+            if ((!_lodWanted || _lodResize == null) && _canvas.LodActive)
             {
-                _canvas.DisableLod(); _lodCamId = -1; _mainW = _mainH = -1;
+                _canvas.DisableLod(); _lodCamId = -1; _lodMergeW = _lodMergeH = -1; _mainW = _mainH = -1;
             }
 
             if (!_mainDirty) return;
@@ -258,6 +279,50 @@ namespace TanukiCv.Controls
             return GrayBitmap.From(dst, tw, th, _flip);
         }
 
+        /// <summary>合圖 LOD provider（背景執行緒）：從完整合圖虛擬座標裁可見區，逐欄找對應相機合成
+        /// （重疊分界已在 placements 的 SrcLeft/SrcWidth；無相機覆蓋處留黑）→ GrayResize → 灰階 bitmap。
+        /// stride 把合成緩衝壓到 ~target 大小（縮太多時不配巨緩衝）；resize 做最終縮放。</summary>
+        private Bitmap MergeLodProvide(Rectangle srcRect, Size target)
+        {
+            GrayResize resize = _lodResize;
+            var placements = _mergePlacements;
+            int vw = _mergeTotalW, vh = _mergeMaxH;
+            if (resize == null || placements == null || vw <= 0 || vh <= 0) return null;
+
+            int sx = Math.Max(0, Math.Min(srcRect.X, vw - 1));
+            int sy = Math.Max(0, Math.Min(srcRect.Y, vh - 1));
+            int sw = Math.Max(1, Math.Min(srcRect.Width, vw - sx));
+            int sh = Math.Max(1, Math.Min(srcRect.Height, vh - sy));
+            int tw = Math.Max(1, target.Width), th = Math.Max(1, target.Height);
+
+            int strideX = Math.Max(1, sw / tw), strideY = Math.Max(1, sh / th);
+            int cw = Math.Max(1, sw / strideX), ch = Math.Max(1, sh / strideY);
+            var comp = new byte[cw * ch]; // 預設黑（無相機覆蓋處）
+
+            for (int cx = 0; cx < cw; cx++)
+            {
+                int vx = sx + cx * strideX;
+                Frame f = null; int srcX = 0;
+                for (int pi = 0; pi < placements.Count; pi++)
+                {
+                    var p = placements[pi];
+                    if (vx >= p.DestX && vx < p.DestX + p.SrcWidth)
+                    { f = _latest[p.CameraId - 1]; srcX = p.SrcLeft + (vx - p.DestX); break; }
+                }
+                if (f == null || srcX < 0 || srcX >= f.W) continue; // 無畫面/越界 → 留黑
+                byte[] fb = f.Bytes; int fwid = f.W, fhei = f.H;
+                for (int cy = 0; cy < ch; cy++)
+                {
+                    int vy = sy + cy * strideY;
+                    if (vy < fhei) comp[cy * cw + cx] = fb[vy * fwid + srcX];
+                }
+            }
+
+            byte[] dst = resize(comp, cw, ch, tw, th);
+            if (dst == null) return null;
+            return GrayBitmap.From(dst, tw, th, _flip);
+        }
+
         // ==================== 建圖（單張 / 合圖）====================
 
         private Bitmap BuildSingle()
@@ -269,16 +334,19 @@ namespace TanukiCv.Controls
 
         /// <summary>CPU 合圖：佈局/重疊分界委派 <see cref="MergeLayout"/>（含 8 槽全納入：無畫面相機留黑占位）；
         /// 巨圖超 MergeMaxW 再降採樣 k 倍（防 GDI 座標 wrap）。</summary>
-        private Bitmap BuildMerge()
+        /// <summary>算合圖幾何（placements / totalW / maxH，全解析度未 cap）→ 存快取，供 BuildMerge（cap+畫）
+        /// 與合圖 LOD provider（合成可見區）共用同一份。回傳 false=無法合圖（沒畫面/ops 未設）。</summary>
+        private bool TryComputeMergeGeometry()
         {
-            if (!_mergeReady) return BuildSingle();
+            _mergePlacements = null; _mergeTotalW = 0; _mergeMaxH = 0;
+            if (!_mergeReady || _opsUm == null || _opsUm.Length == 0) return false;
             double refOpsMm = _opsUm[0] / 1000.0;
-            if (refOpsMm <= 0) return BuildSingle();
+            if (refOpsMm <= 0) return false;
 
             int defW = 0, defH = 0;
             for (int i = 0; i < _camCount; i++)
-                if (_latest[i] != null && defW == 0) { defW = _latest[i].W; defH = _latest[i].H; }
-            if (defW == 0) return null;
+                if (_latest[i] != null) { defW = _latest[i].W; defH = _latest[i].H; break; }
+            if (defW == 0) return false;
 
             double minStart = MinStart();
             var geoms = new List<MergeLayout.CamGeom>();
@@ -293,10 +361,20 @@ namespace TanukiCv.Controls
                 if (hpx > maxH) maxH = hpx;
                 geoms.Add(new MergeLayout.CamGeom { CameraId = i + 1, StartMm = st, WidthPx = wpx });
             }
-            if (geoms.Count == 0 || maxH <= 0) return null;
+            if (geoms.Count == 0 || maxH <= 0) return false;
 
             var placements = MergeLayout.Compute(geoms, minStart, refOpsMm, _feedScale, MergeStrategy, out int totalW);
-            if (totalW <= 0) return null;
+            if (totalW <= 0) return false;
+            _mergePlacements = placements; _mergeTotalW = totalW; _mergeMaxH = maxH;
+            return true;
+        }
+
+        private Bitmap BuildMerge()
+        {
+            if (!_mergeReady) return BuildSingle();
+            if (!TryComputeMergeGeometry()) return BuildSingle();
+            var placements = _mergePlacements;
+            int totalW = _mergeTotalW, maxH = _mergeMaxH;
 
             int k = Math.Max(1, (totalW + MergeMaxW - 1) / MergeMaxW);
             _mergeCapK = k;
