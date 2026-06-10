@@ -1236,6 +1236,10 @@ namespace AniloxRoll.Monitor.UI.Managers
             public bool PreFilterMessage(ref Message m)
             {
                 if (m.Msg != WM_MOUSEWHEEL) return false;
+                // SmartCanvas 模式：主畫面由 SmartCanvas 自己處理滾輪 zoom（無 MIL 巨圖 display）。
+                // filter 不可攔截，否則滾輪被吃掉 → SmartCanvas 收不到 → camLiveMain「縮不動」
+                // （雙三擊是點擊事件、不走此 filter，故一直有反應）。此 filter 只服務 MIL 直繪合圖縮放。
+                if (_mgr.SmartCanvasMode) return false;
                 if (!_mgr.IsLiveGrabbing) return false;
 
                 var panel = _mgr._mainDisplayPanel;

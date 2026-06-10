@@ -162,8 +162,11 @@ namespace TanukiCv.Controls
             old?.Dispose();
             if (bmp.Width != _mainW || bmp.Height != _mainH)
             {
+                bool firstFrame = _mainW < 0;
                 _mainW = bmp.Width; _mainH = bmp.Height;
-                _canvas.FitToScreen();
+                // 首幀一定 fit；之後尺寸變動只在「使用者仍在 fit 視角」才 fit。
+                // 否則 live 新幀（合圖尺寸變動時）會把使用者手動的縮放拉回 fit。
+                if (firstFrame || _canvas.IsAtFitView()) _canvas.FitToScreen();
             }
             if (GetDisplayCoords(out _, out double opsInMm, out double sf))
                 _canvas.SetPhysicalCalibration(opsInMm * sf, _screenMmPerPx);

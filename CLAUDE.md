@@ -341,7 +341,7 @@ PICoater_AOI/
 | 合圖方式 | `hb_StitchMode` → `StitchMode` | Global | Vertical / Global |
 | 監控強化 | `hc_EnableMuraEnhance` → `EnableMuraEnhance` | false | 即時影像強化 Mura |
 | 回顧強化 | `hd_EnableReviewEnhance` → `EnableReviewEnhance` | false | 回顧影像強化 Mura |
-| 主畫面顯示 | `he_MainDisplay` → `ImageView.MainDisplay` | SmartCanvas | MilDirect（MIL 直繪）/ SmartCanvas（CPU 繪、跟回顧畫布同源；共用 `MultiCamLiveView`〔sdk TanukiCv.Controls〕在 camLiveMain 疊 SmartCanvas+各 cam 疊 ThumbStrip 縮圖，吃 `AniloxCamera.OnDisplayFrame` bytes→bitmap，單相機/CPU合圖+mm overlay+zoom+雙三擊；MIL 並存於底層被覆蓋。**TODO（Phase 2）：camLiveMain 監控中不能縮放（MIL secondary display 綁同一 panel 搶滑鼠，需分離 panel）/ overview 聯動 / 縮圖多相機同步刷 / 關底層 MIL**）|
+| 主畫面顯示 | `he_MainDisplay` → `ImageView.MainDisplay` | SmartCanvas | MilDirect（MIL 直繪）/ SmartCanvas（CPU 繪、跟回顧畫布同源；共用 `MultiCamLiveView`〔sdk TanukiCv.Controls〕在 camLiveMain 疊 SmartCanvas+各 cam 疊 ThumbStrip 縮圖，吃 `AniloxCamera.OnDisplayFrame` bytes→bitmap，單相機/CPU合圖+mm overlay+zoom+雙三擊；MIL 並存於底層被覆蓋。滾輪縮放：`WheelZoomFilter` 在 SmartCanvas 模式讓路（`return false`，否則全域 filter 吃掉滾輪→縮不動；只服務 MIL 直繪合圖）。**TODO（Phase 2）：sample/app 主畫面收斂同源 MultiCamLiveView（目前只縮圖 ThumbStrip 共用，主畫面各一份）/ overview 聯動 / 縮圖多相機同步刷 / 關底層 MIL**）|
 
 ### 4. 儲存設定
 
