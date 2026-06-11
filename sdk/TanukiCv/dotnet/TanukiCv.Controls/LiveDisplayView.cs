@@ -44,6 +44,7 @@ namespace TanukiCv.Controls
         private volatile bool _mergeMode;
         private volatile bool _disposed;
         private volatile bool _mainDirty = true;
+        private bool _cursorProfileCleared;   // 剖面已歸零旗標（游標出界/離開畫布；防重複 fire null + Invalidate）
         private int _mainW = -1, _mainH = -1;
         private System.Windows.Forms.Timer _timer;
 
@@ -72,7 +73,8 @@ namespace TanukiCv.Controls
         public event Action<double, double, double, double> ViewRangeMmChanged;
 
         /// <summary>游標十字剖面（L0 通用：游標那列/行的原始像素值）+ 對齊資訊（曲線圖畫點 + zoom 同步用）。
-        /// 單張模式才發；純像素、0 依賴檢測（Hessian）。app 之後可在 L1 換成自己的曲線資料（同對齊路）。</summary>
+        /// 單張＝選定相機全幀；合圖＝游標列橫跨整張合圖（用 BuildMerge 同份 placements 拼，與畫面對齊）、
+        /// 游標行取所屬相機。純像素、0 依賴檢測（Hessian）。app 之後可在 L1 換成自己的曲線資料（同對齊路）。</summary>
         public event Action<CursorProfile> CursorProfileChanged;
 
         /// <summary>游標剖面資料 + 對齊座標（曲線圖：X 點 mm = StartXmm + i×OpsXmm；Y 點 mm = i×OpsYmm；軸 zoom 用 View*Mm）。</summary>
@@ -127,6 +129,7 @@ namespace TanukiCv.Controls
             _canvas.TripleClickPhysical1x = true;
             _canvas.ClampPan = false;
             _canvas.StatusChanged += OnCanvasStatus;
+            _canvas.MouseLeave += (s, e) => ClearCursorProfile(); // 游標離開畫布 → 剖面歸零
             _mainPanel.Controls.Add(_canvas);
             _canvas.BringToFront();
 
@@ -463,19 +466,73 @@ namespace TanukiCv.Controls
 
             ViewRangeMmChanged?.Invoke(leftMm, rightMm, topMm, botMm);
 
-            // L0 游標剖面（單張模式；游標那列/行的原始像素 → 曲線圖。座標跟影像同源 → 自動對齊）。
-            if (CursorProfileChanged != null && !_mergeMode)
+            // L0 游標剖面（游標那列/行的原始像素 → 曲線圖。座標跟影像同源 → 自動對齊）。
+            // 單張：取選定相機全幀那列/行。合圖：游標列橫跨整張合圖（用 BuildMerge 同一份 _mergePlacements
+            // 拼，故與畫面 pixel 對齊）、游標行取所屬相機那行；座標基準走合圖（MinStart/ops0/sf=feedScale×capK）。
+            // 游標出界（在畫布內但出影像 / 合圖）→ row 維持 null → 下面歸零（不停留在最後一點）。
+            if (CursorProfileChanged != null)
             {
-                int idx = _selectedCamId - 1;
-                Frame f = (idx >= 0 && idx < _latest.Length) ? _latest[idx] : null;
-                if (f != null)
+                byte[] row = null, col = null; int cx = 0, cy = 0;
+                if (!_mergeMode)
                 {
-                    int cx = info.ImageX < 0 ? 0 : (info.ImageX >= f.W ? f.W - 1 : info.ImageX); // 游標在影像座標（單張：=_latest 座標）
-                    int cy = info.ImageY < 0 ? 0 : (info.ImageY >= f.H ? f.H - 1 : info.ImageY);
-                    var row = new byte[f.W];
-                    Array.Copy(f.Bytes, cy * f.W, row, 0, f.W);
-                    var col = new byte[f.H];
-                    for (int y = 0; y < f.H; y++) col[y] = f.Bytes[y * f.W + cx];
+                    int idx = _selectedCamId - 1;
+                    Frame f = (idx >= 0 && idx < _latest.Length) ? _latest[idx] : null;
+                    if (f != null && info.ImageX >= 0 && info.ImageX < f.W && info.ImageY >= 0 && info.ImageY < f.H)
+                    {
+                        cx = info.ImageX; cy = info.ImageY; // 游標在影像座標（單張：=_latest 座標）
+                        row = new byte[f.W];
+                        Array.Copy(f.Bytes, cy * f.W, row, 0, f.W);
+                        col = new byte[f.H];
+                        for (int y = 0; y < f.H; y++) col[y] = f.Bytes[y * f.W + cx];
+                    }
+                }
+                else if (_mergeReady && _mergePlacements != null)
+                {
+                    // 合圖剖面（capped 合圖座標）：mw×mh = BuildMerge 的 cap 後尺寸。
+                    int k = Math.Max(1, _mergeCapK);
+                    int mw = Math.Max(1, _mergeTotalW / k);
+                    int mh = Math.Max(1, _mergeMaxH / k);
+                    if (info.ImageX >= 0 && info.ImageX < mw && info.ImageY >= 0 && info.ImageY < mh)
+                    {
+                        cx = info.ImageX; cy = info.ImageY;
+                        row = new byte[mw];
+                        col = new byte[mh];
+                        foreach (var p in _mergePlacements)
+                        {
+                            Frame f = (p.CameraId - 1 >= 0 && p.CameraId - 1 < _latest.Length) ? _latest[p.CameraId - 1] : null;
+                            if (f == null || p.SrcWidth <= 0) continue;
+                            int dx0 = (int)Math.Round(p.DestX / (double)k);
+                            int dw  = Math.Max(1, (int)Math.Round(p.SrcWidth / (double)k));
+                            // 游標 Y 對應本相機 source 列（含上下翻轉，與 BuildMerge 的 _flip 一致）
+                            int fy = cy * k; if (fy >= f.H) fy = f.H - 1;
+                            int rowBase = (_flip ? (f.H - 1 - fy) : fy) * f.W;
+                            for (int j = 0; j < dw; j++)
+                            {
+                                int mxi = dx0 + j;
+                                if (mxi < 0 || mxi >= mw) continue;
+                                int sx = p.SrcLeft + (int)((long)j * p.SrcWidth / dw);
+                                if (sx < 0) sx = 0; else if (sx >= f.W) sx = f.W - 1;
+                                row[mxi] = f.Bytes[rowBase + sx];
+                            }
+                            // 縱切面：游標 X 落在本相機合圖範圍 → 取本相機該行（capped）
+                            if (cx >= dx0 && cx < dx0 + dw)
+                            {
+                                int sx = p.SrcLeft + (int)((long)(cx - dx0) * p.SrcWidth / dw);
+                                if (sx < 0) sx = 0; else if (sx >= f.W) sx = f.W - 1;
+                                int ch = Math.Min(mh, Math.Max(1, f.H / k));
+                                for (int y = 0; y < ch; y++)
+                                {
+                                    int fyy = y * k; if (fyy >= f.H) fyy = f.H - 1;
+                                    col[y] = f.Bytes[(_flip ? (f.H - 1 - fyy) : fyy) * f.W + sx];
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (row != null)
+                {
+                    _cursorProfileCleared = false;
                     CursorProfileChanged(new CursorProfile
                     {
                         RowProfile = row, ColProfile = col,
@@ -484,7 +541,16 @@ namespace TanukiCv.Controls
                         CursorX = cx, CursorY = cy
                     });
                 }
+                else ClearCursorProfile(); // 出界 → 歸零（防重複 fire）
             }
+        }
+
+        /// <summary>剖面歸零（游標出界 / 離開畫布）：fire null 給訂閱者清 chart；旗標防重複 Invalidate。</summary>
+        private void ClearCursorProfile()
+        {
+            if (_cursorProfileCleared) return;
+            _cursorProfileCleared = true;
+            CursorProfileChanged?.Invoke(null);
         }
 
         private bool AllActiveReadySinceMerge()

@@ -30,6 +30,14 @@ namespace TanukiCv.Controls
             _chart = chart;
         }
 
+        /// <summary>清空曲線（Mean/Max 點全清）→ chart 歸零（如游標移出影像時）。保留 anchor series 維持軸範圍。</summary>
+        public void Clear()
+        {
+            if (_chart.Series.IndexOf("Mean") >= 0) _chart.Series["Mean"].Points.Clear();
+            if (_chart.Series.IndexOf("Max")  >= 0) _chart.Series["Max"].Points.Clear();
+            _chart.Invalidate();
+        }
+
         /// <summary>更新閾值（PropertyGrid 修改配方後呼叫）。</summary>
         public void SetThresholds(float errorValueMean, float errorValueMax)
         {

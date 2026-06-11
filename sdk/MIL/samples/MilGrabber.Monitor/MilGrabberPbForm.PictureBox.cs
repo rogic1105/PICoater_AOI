@@ -63,7 +63,8 @@ namespace MilGrabber.Monitor
         /// <summary>游標剖面（UI 執行緒，StatusChanged 來）→ 共用曲線圖（降採樣 ~600 點防卡）+ zoom 同步。</summary>
         private void OnCursorProfile(LiveDisplayView.CursorProfile p)
         {
-            if (_isReleasing || p == null) return;
+            if (_isReleasing) return;
+            if (p == null) { _profileChartX?.Clear(); _profileChartY?.Clear(); return; } // 游標出界/離開畫布 → 剖面歸零
             if (_profileChartX != null && p.RowProfile != null && p.RowProfile.Length > 0)
             {
                 int step = Math.Max(1, p.RowProfile.Length / 600);
