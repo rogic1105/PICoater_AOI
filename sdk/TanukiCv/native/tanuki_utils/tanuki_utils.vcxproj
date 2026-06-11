@@ -14,13 +14,13 @@
     <ClCompile Include="src\stb_impl.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\cpp_utils\terminal_colors.hpp" />
-    <ClInclude Include="include\cpp_utils\timer_utils.hpp" />
+    <ClInclude Include="include\tanuki\utils\terminal_colors.hpp" />
+    <ClInclude Include="include\tanuki\utils\timer_utils.hpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{05DB04FC-CC8E-2E92-8736-4D39CC68F27A}</ProjectGuid>
-    <RootNamespace>cpp_utils</RootNamespace>
-    <ProjectName>cpp_utils</ProjectName>
+    <RootNamespace>tanuki_utils</RootNamespace>
+    <ProjectName>tanuki_utils</ProjectName>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -77,6 +77,7 @@
       <PreprocessorDefinitions>WIN32;WIN64;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>

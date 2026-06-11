@@ -6,7 +6,7 @@
 #include "core_cv/imgproc/core_features.hpp"
 #include "core_cv/imgproc/core_utils.hpp" // for overlay_heatmap_gpu
 
-#include "cpp_utils/timer_utils.hpp"
+#include "tanuki/utils/timer_utils.hpp"
 
 namespace picoater {
 

@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Color {
+namespace tanuki { namespace utils {
     // === ����X ===
     constexpr auto RESET = "\033[0m";
 
@@ -21,4 +21,4 @@ namespace Color {
     constexpr auto MAGENTA_B = "\033[95m";
     constexpr auto CYAN_B = "\033[96m";
     constexpr auto WHITE_B = "\033[97m";
-}
+}}  // namespace utils, tanuki

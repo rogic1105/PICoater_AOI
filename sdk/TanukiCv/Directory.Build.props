@@ -14,7 +14,7 @@
 		     sdk 內部變數從 $(SdkRoot) 自帶，不再寄生 repo 根，ProjectReference 才解析得到。 -->
 		<CoreCVPath>$(SdkRoot)native\core_cv\</CoreCVPath>
 		<CoreCVBenchmarkPath>$(SdkRoot)benchmark\core_cv_benchmark\</CoreCVBenchmarkPath>
-		<CppUtilsPath>$(SdkRoot)native\cpp_utils\</CppUtilsPath>
+		<CppUtilsPath>$(SdkRoot)native\tanuki_utils\</CppUtilsPath>
 		<BenchFrameworkPath>$(SdkRoot)benchmark\bench_framework\</BenchFrameworkPath>
 		<StbPath>$(SdkRoot)third_party\stb\include\</StbPath>
 

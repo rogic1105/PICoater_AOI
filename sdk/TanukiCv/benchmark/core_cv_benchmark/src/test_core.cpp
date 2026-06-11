@@ -9,15 +9,15 @@
 #include "core_cv/imgproc/core_filters.hpp"
 #include "core_cv/imgproc/core_utils.hpp"
 
-#include "cpp_utils/timer_utils.hpp"
-#include "cpp_utils/terminal_colors.hpp"
+#include "tanuki/utils/timer_utils.hpp"
+#include "tanuki/utils/terminal_colors.hpp"
 #include "bench_framework/test_utils.hpp"
 
 #include <vector>
 #include <future> // [�s�W] ����s��
 
 void RunCoreTests(const std::string& imgPath) {
-    std::cout << Color::CYAN << "\n========= Running Core Tests (Fast IO) =========" << Color::RESET << "\n";
+    std::cout << tanuki::utils::CYAN << "\n========= Running Core Tests (Fast IO) =========" << tanuki::utils::RESET << "\n";
 
     // Host Pinned Pointers
     uint8_t* h_pinned_in = nullptr;
@@ -103,7 +103,7 @@ void RunCoreTests(const std::string& imgPath) {
             f1.get(); f2.get(); f3.get();
         }
 
-        std::cout << Color::GREEN << "Core Tests Completed." << Color::RESET << "\n";
+        std::cout << tanuki::utils::GREEN << "Core Tests Completed." << tanuki::utils::RESET << "\n";
     }
     catch (const std::exception& e) {
         std::cerr << "Core Test Failed: " << e.what() << "\n";

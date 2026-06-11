@@ -52,7 +52,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TanukiCv.Controls", "sdk\Ta
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core_cv", "sdk\TanukiCv\native\core_cv\core_cv.vcxproj", "{B39F6111-258B-48F8-8A3E-F940771A4D52}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cpp_utils", "sdk\TanukiCv\native\cpp_utils\cpp_utils.vcxproj", "{05DB04FC-CC8E-2E92-8736-4D39CC68F27A}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "tanuki_utils", "sdk\TanukiCv\native\tanuki_utils\tanuki_utils.vcxproj", "{05DB04FC-CC8E-2E92-8736-4D39CC68F27A}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core_cv_api", "sdk\TanukiCv\native\core_cv_api\core_cv_api.vcxproj", "{F5B38893-304A-4913-A17A-0C63F88FA391}"
 EndProject

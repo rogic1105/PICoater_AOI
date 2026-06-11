@@ -9,8 +9,8 @@
 
 #include <stb/stb_image_write.h>
 
-#include "cpp_utils/timer_utils.hpp"
-#include "cpp_utils/terminal_colors.hpp"
+#include "tanuki/utils/timer_utils.hpp"
+#include "tanuki/utils/terminal_colors.hpp"
 #include "picoater_detector.hpp"
 
 #include <future> 
@@ -18,7 +18,7 @@
 
 
 void PICoaterModuleTestsFast(const std::string& imgPath) {
-    std::cout << Color::CYAN << "\n========= Running PICoater Module Tests (Fast IO) =========" << Color::RESET << "\n";
+    std::cout << tanuki::utils::CYAN << "\n========= Running PICoater Module Tests (Fast IO) =========" << tanuki::utils::RESET << "\n";
 
     // 1. �w�q Host Pinned Memory (��J�P��X)
     uint8_t* h_pinned_in = nullptr;
@@ -156,7 +156,7 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
 
         // --- I. CPU SIMD Implementation Test (New) ---
                 // ���� CPU ���� (AVX2 + OpenMP) ���B�⵲�G�P�s��
-        std::cout << Color::CYAN << "\n--- Running CPU SIMD Implementation Test ---" << Color::RESET << "\n";
+        std::cout << tanuki::utils::CYAN << "\n--- Running CPU SIMD Implementation Test ---" << tanuki::utils::RESET << "\n";
         {
             // 1. ���t CPU ��X�w�İ�
             uint8_t* h_cpu_mura = (uint8_t*)tanuki::core::alloc_pinned_memory(img_size);
@@ -204,7 +204,7 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
     tanuki::core::free_pinned_memory(h_pinned_heatmap); // [�s�W]
     tanuki::core::free_pinned_memory(h_pinned_mura_mean);
 
-    std::cout << Color::GREEN << "All Tests Finished." << Color::RESET << "\n";
+    std::cout << tanuki::utils::GREEN << "All Tests Finished." << tanuki::utils::RESET << "\n";
 }
 
 
@@ -306,7 +306,7 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath, const int NUM_CA
     int thumb_h = (int)((float)h / w * THUMB_W);
 
     // 2. Context
-    std::cout << Color::CYAN << "Initializing Shared GPU Resources (1 Context)..." << Color::RESET << "\n";
+    std::cout << tanuki::utils::CYAN << "Initializing Shared GPU Resources (1 Context)..." << tanuki::utils::RESET << "\n";
 
     CamContext shared_ctx; // �u�ŧi�@�ӡI
     shared_ctx.id = 0;
