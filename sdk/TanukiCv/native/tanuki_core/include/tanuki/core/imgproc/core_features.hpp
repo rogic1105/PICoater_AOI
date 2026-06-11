@@ -10,18 +10,6 @@ namespace tanuki { namespace core {
     void sobel_u8_gpu(const uint8_t* d_in, uint8_t* d_out, int W, int H, cudaStream_t s = 0);
 
     void computeHessianResponse_gpu(const float* d_src, float* d_dst, int width, int height, detectionMode mode, cudaStream_t stream);
-    
-    void hessianRidge_u8_gpu(
-        const uint8_t* d_in,
-        uint8_t* d_out,
-        int W, int H,
-        float sigma,
-        const char* mode_str,
-        float fixed_max_val,
-        float* d_temp_blur_f32,
-        float* d_temp_response,
-        cudaStream_t s,
-        void* d_workspace = nullptr
-    );
+    // 註：hessianRidge_u8_gpu（blur+hessian+scale 組合）已移除 → ridge_hessian module（tanuki_pipeline）。
 
 }}  // namespace core, tanuki
