@@ -32,13 +32,13 @@ namespace TanukiCv.Core
             _width = w;
             _height = h;
 
-            CoreCVWrapper.CoreCV_MallocGPU(out _d_origin, w, h);
-            CoreCVWrapper.CoreCV_MallocGPU(out _d_current, w, h);
-            CoreCVWrapper.CoreCV_MallocGPU(out _d_temp, w, h);
+            CoreCVWrapper.TanukiCv_MallocGPU(out _d_origin, w, h);
+            CoreCVWrapper.TanukiCv_MallocGPU(out _d_current, w, h);
+            CoreCVWrapper.TanukiCv_MallocGPU(out _d_temp, w, h);
 
             // 上傳原圖到 Origin 和 Current
-            CoreCVWrapper.CoreCV_Upload(pHostSrc, _d_origin, w, h);
-            CoreCVWrapper.CoreCV_Upload(pHostSrc, _d_current, w, h);
+            CoreCVWrapper.TanukiCv_Upload(pHostSrc, _d_origin, w, h);
+            CoreCVWrapper.TanukiCv_Upload(pHostSrc, _d_current, w, h);
         }
 
         // 2. 執行運算 (Ping-Pong)
@@ -73,7 +73,7 @@ namespace TanukiCv.Core
             GCHandle h = GCHandle.Alloc(hostBuffer, GCHandleType.Pinned);
             try
             {
-                CoreCVWrapper.CoreCV_Download(_d_current, h.AddrOfPinnedObject(), _width, _height);
+                CoreCVWrapper.TanukiCv_Download(_d_current, h.AddrOfPinnedObject(), _width, _height);
             }
             finally { h.Free(); }
         }
@@ -85,7 +85,7 @@ namespace TanukiCv.Core
             // 這裡我們需要 DeviceToDevice Copy，但目前只能用 Upload
             // 或者：我們如果之前保留了 _d_origin，我們可以新增一個 Kernel 做 Copy
             // 暫時解法：假設外部會傳入原圖的 Host Buffer 重新 Upload
-            // 更好的解法是 C++ 新增 CoreCV_CopyGPU(_d_origin, _d_current)
+            // 更好的解法是 C++ 新增 TanukiCv_CopyGPU(_d_origin, _d_current)
             // 這裡先留空，由外部 Upload 處理，或是補上 C++ API
         }
 
@@ -96,7 +96,7 @@ namespace TanukiCv.Core
             GCHandle h = GCHandle.Alloc(originalData, GCHandleType.Pinned);
             try
             {
-                CoreCVWrapper.CoreCV_Upload(h.AddrOfPinnedObject(), _d_current, _width, _height);
+                CoreCVWrapper.TanukiCv_Upload(h.AddrOfPinnedObject(), _d_current, _width, _height);
             }
             finally { h.Free(); }
         }
@@ -106,18 +106,18 @@ namespace TanukiCv.Core
         {
             if (_d_mask == IntPtr.Zero)
             {
-                CoreCVWrapper.CoreCV_MallocGPU_Float(out _d_mask, maskData.Length);
-                CoreCVWrapper.CoreCV_Upload_Float(maskData, _d_mask, maskData.Length);
+                CoreCVWrapper.TanukiCv_MallocGPU_Float(out _d_mask, maskData.Length);
+                CoreCVWrapper.TanukiCv_Upload_Float(maskData, _d_mask, maskData.Length);
             }
             return _d_mask;
         }
 
         public void Dispose()
         {
-            if (_d_origin != IntPtr.Zero) { CoreCVWrapper.CoreCV_FreeGPU(_d_origin); _d_origin = IntPtr.Zero; }
-            if (_d_current != IntPtr.Zero) { CoreCVWrapper.CoreCV_FreeGPU(_d_current); _d_current = IntPtr.Zero; }
-            if (_d_temp != IntPtr.Zero) { CoreCVWrapper.CoreCV_FreeGPU(_d_temp); _d_temp = IntPtr.Zero; }
-            if (_d_mask != IntPtr.Zero) { CoreCVWrapper.CoreCV_FreeGPU_Float(_d_mask); _d_mask = IntPtr.Zero; }
+            if (_d_origin != IntPtr.Zero) { CoreCVWrapper.TanukiCv_FreeGPU(_d_origin); _d_origin = IntPtr.Zero; }
+            if (_d_current != IntPtr.Zero) { CoreCVWrapper.TanukiCv_FreeGPU(_d_current); _d_current = IntPtr.Zero; }
+            if (_d_temp != IntPtr.Zero) { CoreCVWrapper.TanukiCv_FreeGPU(_d_temp); _d_temp = IntPtr.Zero; }
+            if (_d_mask != IntPtr.Zero) { CoreCVWrapper.TanukiCv_FreeGPU_Float(_d_mask); _d_mask = IntPtr.Zero; }
         }
     }
 }

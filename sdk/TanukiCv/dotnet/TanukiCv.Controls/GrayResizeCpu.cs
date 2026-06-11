@@ -6,7 +6,7 @@ namespace TanukiCv.Controls
     /// 純 CPU 的灰階縮放（雙線性內插，無 GPU、無 System.Drawing）——LOD provider 的 CPU 版單一來源。
     /// 簽章吻合 <see cref="GrayResize"/> 委派，可直接：<c>view.EnableLod(GrayResizeCpu.Resize)</c>。
     ///
-    /// 沒 GPU（或刻意不用 GPU）的機器走這條；有 GPU 的呼叫端可改餵 GPU 版（如 core_cv 的 CoreCV_Resize_GPU），
+    /// 沒 GPU（或刻意不用 GPU）的機器走這條；有 GPU 的呼叫端可改餵 GPU 版（如 core_cv 的 TanukiCv_Resize_GPU），
     /// 兩者由 <c>chkLodCPU</c>/<c>chkLodGPU</c> 分開跑測。雙線性對縮小（LOD 縮到 panel）平滑、對放大也堪用。
     /// </summary>
     public static class GrayResizeCpu

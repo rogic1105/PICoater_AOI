@@ -54,7 +54,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "tanuki_core", "sdk\TanukiCv
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "tanuki_utils", "sdk\TanukiCv\native\tanuki_utils\tanuki_utils.vcxproj", "{05DB04FC-CC8E-2E92-8736-4D39CC68F27A}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core_cv_api", "sdk\TanukiCv\native\core_cv_api\core_cv_api.vcxproj", "{F5B38893-304A-4913-A17A-0C63F88FA391}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "tanuki_cv_api", "sdk\TanukiCv\native\tanuki_cv_api\tanuki_cv_api.vcxproj", "{F5B38893-304A-4913-A17A-0C63F88FA391}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core_cv_benchmark", "sdk\TanukiCv\benchmark\core_cv_benchmark\core_cv_benchmark.vcxproj", "{77281454-B828-499A-9A88-D9E46249A625}"
 	ProjectSection(ProjectDependencies) = postProject

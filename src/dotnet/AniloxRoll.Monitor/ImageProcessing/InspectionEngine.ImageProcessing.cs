@@ -15,7 +15,7 @@ namespace AniloxRoll.Monitor.Core.Services
     public partial class InspectionEngine
     {
         /// <summary>
-        /// BMP 拼接專用：CoreCV_FastReadBMP + GPU resize 縮 scale 倍，回傳 Bitmap。
+        /// BMP 拼接專用：TanukiCv_FastReadBMP + GPU resize 縮 scale 倍，回傳 Bitmap。
         /// 比 GDI+ new Bitmap(path) 快約 10x（繞過 GDI+，DMA 傳輸）。
         /// 使用 _muraBuffer 作為 resize 目標（MaxWidth×MaxHeight，不受 ThumbnailBufferSize 限制）。
         /// </summary>
@@ -23,14 +23,14 @@ namespace AniloxRoll.Monitor.Core.Services
         {
             lock (_lock)
             {
-                bool ok = NativeMethods.CoreCV_FastReadBMP(
+                bool ok = NativeMethods.TanukiCv_FastReadBMP(
                     path, out int w, out int h, _inputBuffer, (int)_imgBufferSize);
                 if (!ok) return null;
                 int dstW = Math.Max(1, w / scale);
                 int dstH = Math.Max(1, h / scale);
-                int ret = NativeMethods.CoreCV_Resize_GPU(_inputBuffer, w, h, _muraBuffer, dstW, dstH);
+                int ret = NativeMethods.TanukiCv_Resize_GPU(_inputBuffer, w, h, _muraBuffer, dstW, dstH);
                 if (ret != 0) return null;
-                // CoreCV_Resize_GPU 輸出為 bottom-up（Y 軸反轉），需 flipY: true 補正；
+                // TanukiCv_Resize_GPU 輸出為 bottom-up（Y 軸反轉），需 flipY: true 補正；
                 // 直接從 _inputBuffer 建立 bitmap（RunInspectionFullRes 路徑）不經過 GPU resize，
                 // 保持 top-down，故用 flipY: false。
                 return ImageUtils.Create8bppBitmap(_muraBuffer, dstW, dstH, flipY: true);
@@ -45,10 +45,10 @@ namespace AniloxRoll.Monitor.Core.Services
 
             return ExecuteTimedOperation<InspectionData>(filePath, (stopwatch) =>
             {
-                // [IO] 使用 CoreCV_FastReadBMP 直接讀入 Pinned Memory，
+                // [IO] 使用 TanukiCv_FastReadBMP 直接讀入 Pinned Memory，
                 // 比 GDI+ new Bitmap() 快，且為後續 DMA 傳輸做好準備。
                 stopwatch.Start();
-                bool readSuccess = NativeMethods.CoreCV_FastReadBMP(
+                bool readSuccess = NativeMethods.TanukiCv_FastReadBMP(
                     filePath, out int w, out int h, _inputBuffer, (int)_imgBufferSize);
                 stopwatch.Stop();
                 long ioTime = stopwatch.ElapsedMilliseconds;
@@ -60,7 +60,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 // [GPU] 在 GPU 上縮圖，對應 de24f715 的 PICoater_RunThumbnail_GPU 設計。
                 // _inputBuffer / _thumbnailBuffer 均為 Pinned Memory，H<->D 走 DMA 加速。
                 stopwatch.Restart();
-                int ret = NativeMethods.CoreCV_Resize_GPU(
+                int ret = NativeMethods.TanukiCv_Resize_GPU(
                     _inputBuffer, w, h,
                     _thumbnailBuffer, targetThumbWidth, thumbH);
                 stopwatch.Stop();
@@ -69,7 +69,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 if (ret != 0) throw new InvalidOperationException($"GPU Resize Error: {ret}");
 
                 // [BMP] 從 Pinned Memory 建立 Bitmap（直接 MemoryCopy，無額外 Marshal 開銷）
-                // CoreCV_Resize_GPU 輸出為 bottom-up，此應用刻意保持翻轉（取像時序）
+                // TanukiCv_Resize_GPU 輸出為 bottom-up，此應用刻意保持翻轉（取像時序）
                 stopwatch.Restart();
                 var bitmap = ImageUtils.Create8bppBitmap(_thumbnailBuffer, targetThumbWidth, thumbH);
                 stopwatch.Stop();
@@ -266,7 +266,7 @@ namespace AniloxRoll.Monitor.Core.Services
 
             lock (_lock)
             {
-                bool ok = NativeMethods.CoreCV_FastReadBMP(
+                bool ok = NativeMethods.TanukiCv_FastReadBMP(
                     path, out int w, out int h, _inputBuffer, (int)_imgBufferSize);
                 if (!ok) return null;
 
@@ -303,7 +303,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 string procHPath = basePath + CaptureFileNaming.ProcH;
                 if (!File.Exists(procHPath))
                 {
-                    int retH = NativeMethods.CoreCV_Resize_GPU(_muraBuffer, w, h, _inputBuffer, dstW, dstH);
+                    int retH = NativeMethods.TanukiCv_Resize_GPU(_muraBuffer, w, h, _inputBuffer, dstW, dstH);
                     if (retH == 0)
                     {
                         using (var bmpH = ImageUtils.Create8bppBitmap(_inputBuffer, dstW, dstH, flipY: true))
@@ -317,7 +317,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 }
 
                 // _ridgeBuffer = vertical ridge → resize 至 _muraBuffer 作為回傳 Bitmap + 存 _proc_v.jpg
-                int ret = NativeMethods.CoreCV_Resize_GPU(_ridgeBuffer, w, h, _muraBuffer, dstW, dstH);
+                int ret = NativeMethods.TanukiCv_Resize_GPU(_ridgeBuffer, w, h, _muraBuffer, dstW, dstH);
                 if (ret != 0) return null;
 
                 string procVPath = basePath + CaptureFileNaming.ProcV;

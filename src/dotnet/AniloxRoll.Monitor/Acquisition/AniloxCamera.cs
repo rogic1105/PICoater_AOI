@@ -564,21 +564,21 @@ namespace AniloxRoll.Monitor.Core.Camera
                         int pixels = rw * rh;
 
                         // GPU resize raw → _rawResizeBuf
-                        NativeMethods.CoreCV_Resize_GPU(
+                        NativeMethods.TanukiCv_Resize_GPU(
                             _nativeBufferPool.InputBuffer, fw, fh,
                             _rawResizeBuf, rw, rh);
                         rawBytes = new byte[pixels];
                         Marshal.Copy(_rawResizeBuf, rawBytes, 0, pixels);
 
                         // _ridgeBuffer = vertical ridge → _proc_v.jpg
-                        NativeMethods.CoreCV_Resize_GPU(
+                        NativeMethods.TanukiCv_Resize_GPU(
                             _nativeBufferPool.RidgeBuffer, fw, fh,
                             _procResizeBuf, rw, rh);
                         procVBytes = new byte[pixels];
                         Marshal.Copy(_procResizeBuf, procVBytes, 0, pixels);
 
                         // _muraBuffer = horizontal ridge → _proc_h.jpg
-                        NativeMethods.CoreCV_Resize_GPU(
+                        NativeMethods.TanukiCv_Resize_GPU(
                             _nativeBufferPool.MuraBuffer, fw, fh,
                             _rawResizeBuf, rw, rh);
                         procHBytes = new byte[pixels];
@@ -683,20 +683,20 @@ namespace AniloxRoll.Monitor.Core.Camera
             if (_resizeWidth <= 0 || _resizeHeight <= 0) return;
 
             ulong sz = (ulong)(_resizeWidth * _resizeHeight);
-            _rawResizeBuf  = NativeMethods.CoreCV_AllocPinned(sz);
-            _procResizeBuf = NativeMethods.CoreCV_AllocPinned(sz);
+            _rawResizeBuf  = NativeMethods.TanukiCv_AllocPinned(sz);
+            _procResizeBuf = NativeMethods.TanukiCv_AllocPinned(sz);
         }
 
         private void FreeResizeBuffers()
         {
             if (_rawResizeBuf != IntPtr.Zero)
             {
-                NativeMethods.CoreCV_FreePinned(_rawResizeBuf);
+                NativeMethods.TanukiCv_FreePinned(_rawResizeBuf);
                 _rawResizeBuf = IntPtr.Zero;
             }
             if (_procResizeBuf != IntPtr.Zero)
             {
-                NativeMethods.CoreCV_FreePinned(_procResizeBuf);
+                NativeMethods.TanukiCv_FreePinned(_procResizeBuf);
                 _procResizeBuf = IntPtr.Zero;
             }
         }

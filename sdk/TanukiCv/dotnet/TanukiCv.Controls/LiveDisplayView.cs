@@ -9,7 +9,7 @@ using TanukiCv.Core; // PixelMmMapper
 namespace TanukiCv.Controls
 {
     /// <summary>灰階影像縮放委派（src wxh → dst dwxdh 的灰階 bytes）。LOD provider 的可插拔縮放步驟：
-    /// GPU 版由呼叫端餵（如 core_cv 的 CoreCV_Resize_GPU），CPU 版 TanukiCv 內建（見 GrayResizeCpu，階段 2）。
+    /// GPU 版由呼叫端餵（如 core_cv 的 TanukiCv_Resize_GPU），CPU 版 TanukiCv 內建（見 GrayResizeCpu，階段 2）。
     /// 把「LOD 要不要 GPU」的差異收斂成這一個委派——LOD 機制本身（SmartCanvas）純 CPU。</summary>
     public delegate byte[] GrayResize(byte[] src, int srcW, int srcH, int dstW, int dstH);
 

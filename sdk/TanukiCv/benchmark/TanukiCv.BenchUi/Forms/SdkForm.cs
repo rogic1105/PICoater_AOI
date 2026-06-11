@@ -66,13 +66,13 @@ namespace TanukiCv.BenchUi.Forms
                 ulong maxBytes = (ulong)(maxW * maxH);
 
                 // 使用 Wrapper 分配鎖頁記憶體
-                IntPtr pBuffer = CoreCVWrapper.CoreCV_AllocPinned(maxBytes);
+                IntPtr pBuffer = CoreCVWrapper.TanukiCv_AllocPinned(maxBytes);
 
                 try
                 {
                     int w, h;
                     // 呼叫 C++ 極速讀檔
-                    bool success = CoreCVWrapper.CoreCV_FastReadBMP(ofd.FileName, out w, out h, pBuffer, (int)maxBytes);
+                    bool success = CoreCVWrapper.TanukiCv_FastReadBMP(ofd.FileName, out w, out h, pBuffer, (int)maxBytes);
 
                     if (success)
                     {
@@ -112,7 +112,7 @@ namespace TanukiCv.BenchUi.Forms
                 finally
                 {
                     // 務必釋放 Pinned Memory
-                    CoreCVWrapper.CoreCV_FreePinned(pBuffer);
+                    CoreCVWrapper.TanukiCv_FreePinned(pBuffer);
                 }
             }
         }
@@ -135,7 +135,7 @@ namespace TanukiCv.BenchUi.Forms
                 {
                     IntPtr ptrData = hData.AddrOfPinnedObject();
                     // 呼叫 C++ 極速寫檔
-                    bool success = CoreCVWrapper.CoreCV_FastWriteBMP(sfd.FileName, _imgW, _imgH, ptrData);
+                    bool success = CoreCVWrapper.TanukiCv_FastWriteBMP(sfd.FileName, _imgW, _imgH, ptrData);
 
                     sw.Stop();
                     lblSaveTime.Text = $"{sw.Elapsed.TotalMilliseconds:F1} ms";
@@ -185,7 +185,7 @@ namespace TanukiCv.BenchUi.Forms
         private void btnBrighten_Click(object sender, EventArgs e)
         {
             RunProcessGPU((src, dst, w, h) =>
-                CoreCVWrapper.CoreCV_Brighten_GPU(src, w, h, (int)numBrightVal.Value, dst),
+                CoreCVWrapper.TanukiCv_Brighten_GPU(src, w, h, (int)numBrightVal.Value, dst),
                 lblBrightenTime
             );
         }
@@ -193,7 +193,7 @@ namespace TanukiCv.BenchUi.Forms
         private void btnBinary_Click(object sender, EventArgs e)
         {
             RunProcessGPU((src, dst, w, h) =>
-                CoreCVWrapper.CoreCV_Threshold_GPU(src, w, h, (byte)numThreshold.Value, dst),
+                CoreCVWrapper.TanukiCv_Threshold_GPU(src, w, h, (byte)numThreshold.Value, dst),
                 lblBinaryTime
             );
         }
@@ -201,7 +201,7 @@ namespace TanukiCv.BenchUi.Forms
         private void btnInvert_Click(object sender, EventArgs e)
         {
             RunProcessGPU((src, dst, w, h) =>
-                CoreCVWrapper.CoreCV_Invert_GPU(src, w, h, dst),
+                CoreCVWrapper.TanukiCv_Invert_GPU(src, w, h, dst),
                 lblInvertTime
             );
         }
@@ -220,7 +220,7 @@ namespace TanukiCv.BenchUi.Forms
 
             // 執行卷積
             RunProcessGPU((src, dst, w, h) =>
-                CoreCVWrapper.CoreCV_Convolution_GPU(src, w, h, d_mask, 3, dst),
+                CoreCVWrapper.TanukiCv_Convolution_GPU(src, w, h, d_mask, 3, dst),
                 lblConvTime
             );
         }

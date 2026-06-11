@@ -11,7 +11,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
 {
     /// <summary>
     /// 將同一台相機的多張影像垂直拼接（依時間由上到下）。
-    /// JPEG（_raw.jpg）直接載入；BMP 優先使用 bmpLoader（CoreCV_FastReadBMP + GPU resize），
+    /// JPEG（_raw.jpg）直接載入；BMP 優先使用 bmpLoader（TanukiCv_FastReadBMP + GPU resize），
     /// 縮小 bmpResizeScale 倍後 JPEG 95% 重編碼，對齊 _raw.jpg 的視覺品質。
     /// </summary>
     public static class GrabImageStitcher
@@ -28,7 +28,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
         /// <summary>
         /// 拼接同一相機的多張影像（依 sortedPaths 順序，第一張在最上方）。
-        /// bmpLoader：BMP 檔案的快速載入器（CoreCV_FastReadBMP + GPU resize）；
+        /// bmpLoader：BMP 檔案的快速載入器（TanukiCv_FastReadBMP + GPU resize）；
         ///            為 null 時退回 GDI+ 路徑（慢）。
         /// useProcessed：true 時 _raw.jpg 改讀 _proc_v/h.jpg（若存在）；BMP 路徑不受影響。
         /// ridgeDirection：處理圖方向 "v"（預設）或 "h"。

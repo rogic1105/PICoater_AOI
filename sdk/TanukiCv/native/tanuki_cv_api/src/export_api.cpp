@@ -32,7 +32,7 @@ extern "C" {
     // 第一次 cudaMalloc / kernel launch 會強迫 CUDA context + driver 載入，
     // 把這成本提前付掉，避免之後第一張正式影像處理變慢。
     // 暖身細節全留在 native，caller 只需呼叫一次。
-    CORE_CV_API int CoreCV_WarmUp() {
+    TANUKI_CV_API int TanukiCv_WarmUp() {
         const int W = 64;
         const int H = 64;
         const size_t size = (size_t)W * H;
@@ -61,15 +61,15 @@ extern "C" {
 
     // --- [新增] 記憶體與 IO 實作 ---
 
-    CORE_CV_API unsigned char* CoreCV_AllocPinned(unsigned long long size) {
+    TANUKI_CV_API unsigned char* TanukiCv_AllocPinned(unsigned long long size) {
         return (unsigned char*)tanuki::core::alloc_pinned_memory((size_t)size);
     }
 
-    CORE_CV_API void CoreCV_FreePinned(unsigned char* ptr) {
+    TANUKI_CV_API void TanukiCv_FreePinned(unsigned char* ptr) {
         tanuki::core::free_pinned_memory(ptr);
     }
 
-    CORE_CV_API bool CoreCV_FastReadBMP(const char* filepath, int* w, int* h, unsigned char* outBuffer, int bufferSize) {
+    TANUKI_CV_API bool TanukiCv_FastReadBMP(const char* filepath, int* w, int* h, unsigned char* outBuffer, int bufferSize) {
         try {
             int width = 0, height = 0;
             bool res = tanuki::core::fast_read_bmp_8bit(filepath, width, height, outBuffer, bufferSize);
@@ -82,7 +82,7 @@ extern "C" {
         catch (...) { return false; }
     }
 
-    CORE_CV_API bool CoreCV_FastWriteBMP(const char* filepath, int w, int h, const unsigned char* inBuffer) {
+    TANUKI_CV_API bool TanukiCv_FastWriteBMP(const char* filepath, int w, int h, const unsigned char* inBuffer) {
         try {
             return tanuki::core::fast_write_bmp_8bit(filepath, w, h, inBuffer);
         }
@@ -92,7 +92,7 @@ extern "C" {
 
     // --- 影像處理實作 (保持原本邏輯，但在 Pinned Memory 下會變快) ---
 
-    int CoreCV_Brighten(const uint8_t* src_ptr, int width, int height, int value, uint8_t* dst_ptr) {
+    int TanukiCv_Brighten(const uint8_t* src_ptr, int width, int height, int value, uint8_t* dst_ptr) {
         if (!src_ptr || !dst_ptr) return CORE_CV_ERROR_NULL_POINTER;
         if (width <= 0 || height <= 0) return CORE_CV_ERROR_INVALID_PARAM;
 
@@ -104,7 +104,7 @@ extern "C" {
             CHECK_CUDA(cudaMalloc(&d_in, size));
             CHECK_CUDA(cudaMalloc(&d_out, size));
 
-            // 如果 src_ptr 是透過 CoreCV_AllocPinned 分配的，這行 Memcpy 會自動變成 Async DMA
+            // 如果 src_ptr 是透過 TanukiCv_AllocPinned 分配的，這行 Memcpy 會自動變成 Async DMA
             CHECK_CUDA(cudaMemcpy(d_in, src_ptr, size, cudaMemcpyHostToDevice));
 
             tanuki::core::brighten_u8_gpu(d_in, d_out, width, height, value, 0);
@@ -126,7 +126,7 @@ extern "C" {
         }
     }
 
-    int CoreCV_Threshold(const uint8_t* src_ptr, int width, int height, uint8_t threshold, uint8_t* dst_ptr) {
+    int TanukiCv_Threshold(const uint8_t* src_ptr, int width, int height, uint8_t threshold, uint8_t* dst_ptr) {
         if (!src_ptr || !dst_ptr) return CORE_CV_ERROR_NULL_POINTER;
         size_t size = static_cast<size_t>(width) * height * sizeof(uint8_t);
         uint8_t* d_in = nullptr;
@@ -154,7 +154,7 @@ extern "C" {
         }
     }
 
-    int CoreCV_Invert(const uint8_t* src_ptr, int width, int height, uint8_t* dst_ptr) {
+    int TanukiCv_Invert(const uint8_t* src_ptr, int width, int height, uint8_t* dst_ptr) {
         if (!src_ptr || !dst_ptr) return CORE_CV_ERROR_NULL_POINTER;
         size_t size = static_cast<size_t>(width) * height * sizeof(uint8_t);
         uint8_t* d_in = nullptr;
@@ -180,7 +180,7 @@ extern "C" {
         }
     }
 
-    int CoreCV_Convolution(const uint8_t* src_ptr, int width, int height, const float* mask_ptr, int mask_size, uint8_t* dst_ptr) {
+    int TanukiCv_Convolution(const uint8_t* src_ptr, int width, int height, const float* mask_ptr, int mask_size, uint8_t* dst_ptr) {
         if (!src_ptr || !dst_ptr || !mask_ptr) return CORE_CV_ERROR_NULL_POINTER;
         size_t img_size = static_cast<size_t>(width) * height * sizeof(uint8_t);
         size_t mask_bytes = static_cast<size_t>(mask_size) * mask_size * sizeof(float);
@@ -215,32 +215,32 @@ extern "C" {
     }
 
     // ------------ GPU 記憶體管理 ---------------
-    CORE_CV_API int CoreCV_MallocGPU(unsigned char** d_ptr, int width, int height) {
+    TANUKI_CV_API int TanukiCv_MallocGPU(unsigned char** d_ptr, int width, int height) {
         size_t size = (size_t)width * height;
         CHECK_CUDA(cudaMalloc((void**)d_ptr, size));
         return CORE_CV_SUCCESS;
     }
 
-    CORE_CV_API int CoreCV_FreeGPU(unsigned char* d_ptr) {
+    TANUKI_CV_API int TanukiCv_FreeGPU(unsigned char* d_ptr) {
         if (d_ptr) CHECK_CUDA(cudaFree(d_ptr));
         return CORE_CV_SUCCESS;
     }
 
-    CORE_CV_API int CoreCV_Upload(const unsigned char* h_src, unsigned char* d_dst, int width, int height) {
+    TANUKI_CV_API int TanukiCv_Upload(const unsigned char* h_src, unsigned char* d_dst, int width, int height) {
         size_t size = (size_t)width * height;
         // 如果 h_src 是 Pinned Memory，這裡會跑 Async DMA
         CHECK_CUDA(cudaMemcpy(d_dst, h_src, size, cudaMemcpyHostToDevice));
         return CORE_CV_SUCCESS;
     }
 
-    CORE_CV_API int CoreCV_Download(const unsigned char* d_src, unsigned char* h_dst, int width, int height) {
+    TANUKI_CV_API int TanukiCv_Download(const unsigned char* d_src, unsigned char* h_dst, int width, int height) {
         size_t size = (size_t)width * height;
         CHECK_CUDA(cudaMemcpy(h_dst, d_src, size, cudaMemcpyDeviceToHost));
         return CORE_CV_SUCCESS;
     }
 
     // --- 純 GPU 運算 (極速版) ---
-    CORE_CV_API int CoreCV_Brighten_GPU(const uint8_t* d_src, int width, int height, int value, uint8_t* d_dst) {
+    TANUKI_CV_API int TanukiCv_Brighten_GPU(const uint8_t* d_src, int width, int height, int value, uint8_t* d_dst) {
         // 沒有 Malloc，沒有 Memcpy，只有 Kernel Launch
         tanuki::core::brighten_u8_gpu(d_src, d_dst, width, height, value, 0);
         // 不做 Sync，讓 CPU 可以馬上量測 Launch 時間 (或做 Sync 量測執行時間)
@@ -248,38 +248,38 @@ extern "C" {
         return CORE_CV_SUCCESS;
     }
 
-    CORE_CV_API int CoreCV_Threshold_GPU(const uint8_t* d_src, int width, int height, uint8_t threshold, uint8_t* d_dst) {
+    TANUKI_CV_API int TanukiCv_Threshold_GPU(const uint8_t* d_src, int width, int height, uint8_t threshold, uint8_t* d_dst) {
         tanuki::core::threshold_u8_gpu(d_src, d_dst, width, height, threshold, 0);
         CHECK_CUDA(cudaDeviceSynchronize());
         return CORE_CV_SUCCESS;
     }
 
-    CORE_CV_API int CoreCV_Invert_GPU(const uint8_t* d_src, int width, int height, uint8_t* d_dst) {
+    TANUKI_CV_API int TanukiCv_Invert_GPU(const uint8_t* d_src, int width, int height, uint8_t* d_dst) {
         tanuki::core::invert_u8_gpu(d_src, d_dst, width, height, 0);
         CHECK_CUDA(cudaDeviceSynchronize());
         return CORE_CV_SUCCESS;
     }
 
     // 注意：Mask 也必須已經在 GPU 上
-    CORE_CV_API int CoreCV_Convolution_GPU(const uint8_t* d_src, int width, int height, const float* d_mask, int mask_size, uint8_t* d_dst) {
+    TANUKI_CV_API int TanukiCv_Convolution_GPU(const uint8_t* d_src, int width, int height, const float* d_mask, int mask_size, uint8_t* d_dst) {
         tanuki::core::convolution_u8_gpu(d_src, d_dst, width, height, d_mask, mask_size, 0);
         CHECK_CUDA(cudaDeviceSynchronize());
         return CORE_CV_SUCCESS;
     }
 
     // --- [新增] Float 資源實作 ---
-    CORE_CV_API int CoreCV_MallocGPU_Float(float** d_ptr, int count) {
+    TANUKI_CV_API int TanukiCv_MallocGPU_Float(float** d_ptr, int count) {
         size_t size = (size_t)count * sizeof(float);
         CHECK_CUDA(cudaMalloc((void**)d_ptr, size));
         return CORE_CV_SUCCESS;
     }
 
-    CORE_CV_API int CoreCV_FreeGPU_Float(float* d_ptr) {
+    TANUKI_CV_API int TanukiCv_FreeGPU_Float(float* d_ptr) {
         if (d_ptr) CHECK_CUDA(cudaFree(d_ptr));
         return CORE_CV_SUCCESS;
     }
 
-    CORE_CV_API int CoreCV_Upload_Float(const float* h_src, float* d_dst, int count) {
+    TANUKI_CV_API int TanukiCv_Upload_Float(const float* h_src, float* d_dst, int count) {
         size_t size = (size_t)count * sizeof(float);
         CHECK_CUDA(cudaMemcpy(d_dst, h_src, size, cudaMemcpyHostToDevice));
         return CORE_CV_SUCCESS;
@@ -287,7 +287,7 @@ extern "C" {
 
     // --- [新增] GPU 縮圖實作 ---
     // h_src / h_dst 若為 Pinned Memory，cudaMemcpy 自動走非同步 DMA，速度更快。
-    CORE_CV_API int CoreCV_Resize_GPU(
+    TANUKI_CV_API int TanukiCv_Resize_GPU(
         const uint8_t* h_src, int src_w, int src_h,
         uint8_t*       h_dst, int dst_w, int dst_h)
     {

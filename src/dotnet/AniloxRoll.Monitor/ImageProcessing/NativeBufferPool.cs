@@ -66,7 +66,7 @@ namespace AniloxRoll.Monitor.Core.Services
 
         private static IntPtr AllocatePinned(ulong size)
         {
-            IntPtr ptr = NativeMethods.CoreCV_AllocPinned(size);
+            IntPtr ptr = NativeMethods.TanukiCv_AllocPinned(size);
             if (ptr == IntPtr.Zero)
             {
                 throw new OutOfMemoryException($"CUDA pinned buffer allocation failed. Requested size={size}.");
@@ -82,7 +82,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 return;
             }
 
-            NativeMethods.CoreCV_FreePinned(ptr);
+            NativeMethods.TanukiCv_FreePinned(ptr);
             ptr = IntPtr.Zero;
         }
     }

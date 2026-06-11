@@ -575,17 +575,17 @@ namespace AniloxRoll.Monitor.UI.Managers
                 if (_lodReleased) return null;
                 if (_lodSrcCap < srcPix)
                 {
-                    if (_lodSrcPinned != IntPtr.Zero) NativeMethods.CoreCV_FreePinned(_lodSrcPinned);
-                    _lodSrcPinned = NativeMethods.CoreCV_AllocPinned((ulong)srcPix); _lodSrcCap = srcPix;
+                    if (_lodSrcPinned != IntPtr.Zero) NativeMethods.TanukiCv_FreePinned(_lodSrcPinned);
+                    _lodSrcPinned = NativeMethods.TanukiCv_AllocPinned((ulong)srcPix); _lodSrcCap = srcPix;
                 }
                 if (_lodDstCap < dstPix)
                 {
-                    if (_lodDstPinned != IntPtr.Zero) NativeMethods.CoreCV_FreePinned(_lodDstPinned);
-                    _lodDstPinned = NativeMethods.CoreCV_AllocPinned((ulong)dstPix); _lodDstCap = dstPix;
+                    if (_lodDstPinned != IntPtr.Zero) NativeMethods.TanukiCv_FreePinned(_lodDstPinned);
+                    _lodDstPinned = NativeMethods.TanukiCv_AllocPinned((ulong)dstPix); _lodDstCap = dstPix;
                 }
                 if (_lodSrcPinned == IntPtr.Zero || _lodDstPinned == IntPtr.Zero) return null;
                 System.Runtime.InteropServices.Marshal.Copy(src, 0, _lodSrcPinned, srcPix);
-                NativeMethods.CoreCV_Resize_GPU(_lodSrcPinned, sw, sh, _lodDstPinned, dw, dh);
+                NativeMethods.TanukiCv_Resize_GPU(_lodSrcPinned, sw, sh, _lodDstPinned, dw, dh);
                 dst = new byte[dstPix];
                 System.Runtime.InteropServices.Marshal.Copy(_lodDstPinned, dst, 0, dstPix);
             }
@@ -603,8 +603,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             lock (_lodBufLock)
             {
                 _lodReleased = true;
-                if (_lodSrcPinned != IntPtr.Zero) { NativeMethods.CoreCV_FreePinned(_lodSrcPinned); _lodSrcPinned = IntPtr.Zero; _lodSrcCap = 0; }
-                if (_lodDstPinned != IntPtr.Zero) { NativeMethods.CoreCV_FreePinned(_lodDstPinned); _lodDstPinned = IntPtr.Zero; _lodDstCap = 0; }
+                if (_lodSrcPinned != IntPtr.Zero) { NativeMethods.TanukiCv_FreePinned(_lodSrcPinned); _lodSrcPinned = IntPtr.Zero; _lodSrcCap = 0; }
+                if (_lodDstPinned != IntPtr.Zero) { NativeMethods.TanukiCv_FreePinned(_lodDstPinned); _lodDstPinned = IntPtr.Zero; _lodDstCap = 0; }
             }
         }
 

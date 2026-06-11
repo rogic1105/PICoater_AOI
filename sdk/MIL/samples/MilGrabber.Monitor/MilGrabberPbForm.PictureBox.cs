@@ -26,7 +26,7 @@ namespace MilGrabber.Monitor
 
         // ── 動態 LOD（PbSettings.Lod = GPU/CPU）：LiveDisplayView 提供 LOD 機制（純 CPU），resize 由本檔插拔委派 ──
         private volatile bool _lodEnabled;
-        private volatile bool _lodUseGpu = true;     // true=GPU(CoreCV_Resize_GPU)、false=CPU(GrayResizeCpu)
+        private volatile bool _lodUseGpu = true;     // true=GPU(TanukiCv_Resize_GPU)、false=CPU(GrayResizeCpu)
         // GPU LOD provider 專用 pinned（只裁「可見區」→ 一次一塊，非每幀全幀；on-settle 觸發）
         private IntPtr _lodSrcPinned, _lodDstPinned;
         private int _lodSrcCap, _lodDstCap;
@@ -276,7 +276,7 @@ namespace MilGrabber.Monitor
         // 縮圖倍率 / FOV / LOD GPU↔CPU 的切換已融入 PropertyGrid（PbSettings）→ ApplyPbSettings 統一套用。
 
         // ── LOD resize 委派（LiveDisplayView 在背景執行緒呼叫；只縮「可見區」一塊） ──
-        /// <summary>GPU 版：裁好的可見區 → pinned → CoreCV_Resize_GPU → 灰階 bytes。計時記 _lodGpuTimer。</summary>
+        /// <summary>GPU 版：裁好的可見區 → pinned → TanukiCv_Resize_GPU → 灰階 bytes。計時記 _lodGpuTimer。</summary>
         private byte[] LodResizeGpu(byte[] src, int sw, int sh, int dw, int dh)
         {
             int srcPix = sw * sh, dstPix = dw * dh;
@@ -286,19 +286,19 @@ namespace MilGrabber.Monitor
                 if (_lodReleased) return null;
                 if (_lodSrcCap < srcPix)
                 {
-                    if (_lodSrcPinned != IntPtr.Zero) NativeResize.CoreCV_FreePinned(_lodSrcPinned);
-                    _lodSrcPinned = NativeResize.CoreCV_AllocPinned((ulong)srcPix); _lodSrcCap = srcPix;
+                    if (_lodSrcPinned != IntPtr.Zero) NativeResize.TanukiCv_FreePinned(_lodSrcPinned);
+                    _lodSrcPinned = NativeResize.TanukiCv_AllocPinned((ulong)srcPix); _lodSrcCap = srcPix;
                 }
                 if (_lodDstCap < dstPix)
                 {
-                    if (_lodDstPinned != IntPtr.Zero) NativeResize.CoreCV_FreePinned(_lodDstPinned);
-                    _lodDstPinned = NativeResize.CoreCV_AllocPinned((ulong)dstPix); _lodDstCap = dstPix;
+                    if (_lodDstPinned != IntPtr.Zero) NativeResize.TanukiCv_FreePinned(_lodDstPinned);
+                    _lodDstPinned = NativeResize.TanukiCv_AllocPinned((ulong)dstPix); _lodDstCap = dstPix;
                 }
                 if (_lodSrcPinned == IntPtr.Zero || _lodDstPinned == IntPtr.Zero) return null;
 
                 _lodGpuTimer.Start();                                  // ── 真 improcess（H2D+縮+D2H）──
                 Marshal.Copy(src, 0, _lodSrcPinned, srcPix);
-                NativeResize.CoreCV_Resize_GPU(_lodSrcPinned, sw, sh, _lodDstPinned, dw, dh);
+                NativeResize.TanukiCv_Resize_GPU(_lodSrcPinned, sw, sh, _lodDstPinned, dw, dh);
                 dst = new byte[dstPix];
                 Marshal.Copy(_lodDstPinned, dst, 0, dstPix);
                 _lodGpuTimer.Stop();
@@ -399,8 +399,8 @@ namespace MilGrabber.Monitor
             lock (_lodBufLock)
             {
                 _lodReleased = true;
-                if (_lodSrcPinned != IntPtr.Zero) { NativeResize.CoreCV_FreePinned(_lodSrcPinned); _lodSrcPinned = IntPtr.Zero; _lodSrcCap = 0; }
-                if (_lodDstPinned != IntPtr.Zero) { NativeResize.CoreCV_FreePinned(_lodDstPinned); _lodDstPinned = IntPtr.Zero; _lodDstCap = 0; }
+                if (_lodSrcPinned != IntPtr.Zero) { NativeResize.TanukiCv_FreePinned(_lodSrcPinned); _lodSrcPinned = IntPtr.Zero; _lodSrcCap = 0; }
+                if (_lodDstPinned != IntPtr.Zero) { NativeResize.TanukiCv_FreePinned(_lodDstPinned); _lodDstPinned = IntPtr.Zero; _lodDstCap = 0; }
             }
 
             if (_mainPanelMil != null)

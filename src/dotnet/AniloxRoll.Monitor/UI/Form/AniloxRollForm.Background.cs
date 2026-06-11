@@ -208,14 +208,14 @@ namespace AniloxRoll.Monitor.Forms
                 if (colMean != null && colMean.Length == cam.FrameWidth)
                 {
                     // 分配 pinned memory 並複製
-                    IntPtr pinned = NativeMethods.CoreCV_AllocPinned((ulong)(cam.FrameWidth * sizeof(float)));
+                    IntPtr pinned = NativeMethods.TanukiCv_AllocPinned((ulong)(cam.FrameWidth * sizeof(float)));
                     if (pinned != IntPtr.Zero)
                     {
                         Marshal.Copy(colMean, 0, pinned, colMean.Length);
 
                         // 釋放舊的（如果有）
                         if (cam.PrecomputedColMean != IntPtr.Zero)
-                            NativeMethods.CoreCV_FreePinned(cam.PrecomputedColMean);
+                            NativeMethods.TanukiCv_FreePinned(cam.PrecomputedColMean);
 
                         cam.PrecomputedColMean = pinned;
                     }
@@ -244,7 +244,7 @@ namespace AniloxRoll.Monitor.Forms
             {
                 if (cam.PrecomputedColMean != IntPtr.Zero)
                 {
-                    NativeMethods.CoreCV_FreePinned(cam.PrecomputedColMean);
+                    NativeMethods.TanukiCv_FreePinned(cam.PrecomputedColMean);
                     cam.PrecomputedColMean = IntPtr.Zero;
                 }
             }
