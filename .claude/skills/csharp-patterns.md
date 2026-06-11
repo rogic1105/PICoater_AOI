@@ -25,9 +25,20 @@ C# / WinForms 開發模式與陷阱速查。
 | `Config\session-state.json` | UI session state |
 
 - **不使用 `JavaScriptSerializer`**（`user.config` 損毀時拋例外），改用手刻 `SerializeJson/ParseJson`
-- 新增 PropertyGrid 屬性 → 必須同步更新 Store 的序列化/反序列化
 - `AcquisitionSettings` 索引 0=CAM1…6=CAM7
 - 存檔在 `ValueChanged` 觸發（不用 `MouseUp`，因為拖曳放開不在控制項範圍內時 MouseUp 不觸發）
+
+### ★ 新增一個設定參數的 5 步清單（缺一步就出 bug）
+
+> 預設值唯一來源在 `Settings/Models/Defaults/*Defaults.cs`；model 初始值與 Store fallback **都引用它**（檔頭註解明寫）。曾踩坑：`MainDisplay`/`LiveLod` 新增時直接在 model 寫死字面值、又沒進 JSON → 跳過 Defaults 架構 + 改了不持久化。照這張清單就不會漏：
+
+1. **進 Defaults** — `InspectionDefaults.cs`（或對應 `*Defaults.cs`）加常數；enum 用 `static readonly`，值型別用 `const`。
+2. **model 初始值引用 Defaults** — `= InspectionDefaults.X`，**不寫死字面值**（如 `= LiveLodMode.CPU` ❌ → `= InspectionDefaults.LiveLod` ✅）。
+3. **Store `SerializeJson` 加一行** — 寫進對應區塊（注意前一行尾要補逗號）。
+4. **Store `Parse*` 加讀取 + fallback** — fallback 一律 `InspectionDefaults.X`（不寫死字面值）；enum 用 `Enum.TryParse(..., out var v)` 失敗回 Defaults。
+5. **PropertyGrid attribute**（若要露出給使用者）— `[Category]`/`[DisplayName]`/`[Description]`；enum 中文用 `[Description]` + `EnumDescConverter`。
+
+驗收：刪 `bin\...\Config\inspection-settings.json` 重啟 → 應以新預設重生並寫回（含步驟 3 的新欄位）。⚠ 若參數漏了步驟 3/4（沒進 JSON），它**永遠只吃 model 預設、PropertyGrid 改了重開不留存**。
 
 ## WinForms 陷阱
 

@@ -7,7 +7,7 @@ PICoater_AOI/
 ├── src/                  ← 應用程式（產品交付）
 │   ├── dotnet/AniloxRoll.Monitor/  ← C# WinForms 主應用
 │   └── native/                     ← C++ pipeline
-├── sdk/                  ← 可獨立 split 的 library（純函式庫，無 GUI、無 exe）
+├── sdk/                  ← 可獨立 split 的 library（純函式庫，無 GUI、無 exe）。**有自己的 `sdk/CLAUDE.md`（巢狀，編 sdk 檔時載入；放分層鐵則+元件地圖，隨 split 帶走）**
 │   ├── TanukiCv/         ← 以 core_cv 為引擎的 .NET 影像 SDK（native/{core_cv,cpp_utils,core_cv_api} + dotnet/{TanukiCv.Core 純 library〔含 PixelMmMapper 像素↔mm 公式、SystemInfo CPU/GPU/RAM/螢幕查詢、PerfTimer 通用計時器（量段+視窗 worst-case，計時唯一來源）唯一來源〕, TanukiCv.Controls WinForms〔→Core；含 SmartCanvas + MergeLayout 合圖佈局演算法單一來源（純算術；xOffset+重疊分界，3 策略：中線/右覆蓋左/左覆蓋右）+ **顯示 pipeline 共用元件：LiveDisplayView（絞殺榕重寫版多相機監控：主畫面 SmartCanvas+ThumbStrip縮圖+CPU合圖+合圖全部+flip+**LOD 單張&合圖**，統一介面 PushFrame/SetLayout/EnableLod(GrayResize)/FlipVertical；**合圖 LOD＝虛擬圖=完整合圖佈局、provider 逐欄找相機合成可見區+stride 壓緩衝→GrayResize，顯示成本從 ~180ms 降到 ~1ms**；**app（LiveCameraManager）+ 範例（MilGrabberPbForm）都已採用＝兩產品同源唯一來源；舊 MultiCamLiveView 已退場刪除**）/ ThumbStrip（多相機縮圖條：批量 CPU 建圖不閃，唯一來源）/ ThumbView（雙緩衝自繪縮圖葉子）/ GrayBitmap（灰階 bytes→bitmap 唯一來源）/ GrayResizeCpu（純 CPU 雙線性縮放＝LOD 的 CPU provider，無 GPU 機器用）/ GrayResize 委派（LOD resize 插槽：GPU 呼叫端給、CPU 用 GrayResizeCpu）**〕} + benchmark/{bench_framework,core_cv_benchmark,TanukiCv.BenchUi} + samples/TanukiCv.SysInfoTool〔系統資訊 GUI 工具〕 + third_party/stb；self-contained 可 split）
 │   ├── Bridges/          ← 對外設備 / 系統橋接層
 │   │   ├── IoBridge/                         ← ICP DAS ET-7044 IO module（Modbus TCP）
@@ -204,7 +204,7 @@ PICoater_AOI/
 | `UI/Widgets/TrackBarWheelInterceptor.cs` | TrackBar 滑鼠滾輪攔截器（從 AniloxRollForm 提取） |
 | `UI/Widgets/ComboBoxWheelReverser.cs` | ComboBox 滑鼠滾輪方向反轉（從 AniloxRollForm 提取） |
 | `UI/Widgets/MultiClickDetector.cs` | 多擊偵測器：雙擊/三擊辨識（從 AniloxRollForm 提取） |
-| `UI/Widgets/CurveMergeHelper.cs` | 全覽圖合併演算法 + .bin 曲線讀取（UpdateOverviewChart、MergeCurves、MergeRowCurves、GetCurveBasePath） |
+| `UI/Widgets/CurveMergeHelper.cs` | 全覽圖合併演算法 + .bin 曲線讀取（UpdateOverviewChart、MergeCurves、MergeRowCurves、GetCurveBasePath）。**切向全覽 `UpdateOverviewChart` 重疊區依合圖方式 `MergeOverlap`（預設 Midline）唯一歸屬**＝reuse `TanukiCv.Controls.MergeLayout.Compute`（gridMm 當基準像素、curve 長度換 grid 寬算每台擁有區間），不再 avg/max → 曲線與影像 pixel 對齊；間空（無曲線）相機不參與分界 → 留 0。app 不傳 overlap＝Midline（單一合圖方式，對齊影像 MultiCameraMerger 中線）；sample 三策略未來可傳入 |
 | `UI/Presenters/DataStatisticsPresenter.cs` | Data tab 統計邏輯：統計計算、combo 串聯、Period Charts、Mura 空間分布圖（chartDataPatch）、跨 Tab 同步事件 |
 | `UI/Presenters/ReviewStitchCoordinator.cs` | Review tab 拼接管理：LoadGrabStitchedViewAsync、合圖、ClearStitchedMode、overview chart 聯動。**換 ID 載入效能**：`LoadGrabStitchedViewAsync` 的 `Task.Run` 內 7 台相機 `Parallel.For` 平行解碼/拼接（imgs[i]/curve[i] 各寫各 index、BitmapPool 有 lock、CurveMergeHelper 無共用 static → 安全；GDI+ 併發為灰色地帶，留意偶發黑塊）+ **`MergeHorizontal` 也移進背景**（原在 UI 執行緒＝swap 卡頓主因）；計時 log `CSV/Stitch/Merge(bg)/UIapply/Total`。**`CurveFlipVertical`**（旗標，未來可做 tool 選項）+ `FlipRowCurveIfNeeded`：線掃相機由下往上拍→回顧影像上下翻轉（StitchCamera），故 row 曲線兩條路徑（逐相機 + Global）都反向才對齊影像；live 不翻轉故不動 |
 | `UI/Presenters/LiveTelemetryPresenter.cs` | 16 欄即時 Telemetry。**MIL 查詢背景化**：`Capture(cameras)`（背景執行緒做 16 欄 MdigInquire/MsysInquire ≈195ms，回傳純字串 `CamSnapshot`）+ `Apply(snapshots)`（UI 執行緒只套字串，不碰 MIL）→ 避免 `TelemetryTimer_Tick` 每 500ms 卡 UI 執行緒。`Update()`=同步版（背景用） |
@@ -342,6 +342,7 @@ PICoater_AOI/
 | 監控強化 | `hc_EnableMuraEnhance` → `EnableMuraEnhance` | false | 即時影像強化 Mura |
 | 回顧強化 | `hd_EnableReviewEnhance` → `EnableReviewEnhance` | false | 回顧影像強化 Mura |
 | 主畫面顯示 | `he_MainDisplay` → `ImageView.MainDisplay` | SmartCanvas | MilDirect（MIL 直繪）/ SmartCanvas（CPU 繪、跟回顧畫布同源；共用 `LiveDisplayView`〔sdk TanukiCv.Controls；與範例同源唯一來源〕在 camLiveMain 疊 SmartCanvas+各 cam 疊 ThumbStrip 縮圖，吃 `AniloxCamera.OnDisplayFrame` bytes→bitmap，單相機/CPU合圖+mm overlay+zoom+雙三擊+LOD；MIL 並存於底層被覆蓋。滾輪縮放：`WheelZoomFilter` 在 SmartCanvas 模式讓路（`return false`，否則全域 filter 吃掉滾輪→縮不動；只服務 MIL 直繪合圖）。**bin↔主畫面連動**：`LiveDisplayView.ViewRangeMmChanged(left,right,top,bot)`→`LiveCameraManager.OnSmartViewRange`→`OnLiveViewRange`事件→form `ApplyLiveViewRange`：切向/overview用X、法向用Y zoom 同步（法向需 `LiveCameraManager.RowPitchMm` 餵真 row pitch；overview 用 `LiveViewRangeProvider` 沿用同範圍→500ms 重畫不閃）。**TODO：縮圖多相機同步刷 / 關底層 MIL / 回顧側 CanvasInteractionHelper 視野計算收斂進 sdk / sample 重用曲線圖+閾值線選用 / app live 實體化 LOD/flip UI**）|
+| 動態LOD | `hf_LiveLod` → `ImageView.LiveLod` | CPU | Off / GPU（CoreCV GPU 縮）/ CPU（GrayResizeCpu 純 CPU 縮）。SmartCanvas 模式放大巨圖看細節用（顯示成本 ~180ms→~1ms），即時生效。預設 CPU＝無 GPU 機也能跑。`LiveCameraManager.SetLodMode` 套到 `LiveDisplayView.EnableLod`/`DisableLod` |
 
 ### 4. 儲存設定
 
