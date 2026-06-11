@@ -1,7 +1,26 @@
 # 遷移 Plan：src/native（產品 pipeline）→ sdk/tanuki_pipeline
 
-> 狀態：**規劃中**（基準 = main @ tanuki 改名完成）。動工前逐階段確認。
+> 狀態：**階段 0–5 完成（分支 refactor/tanuki-pipeline，平行建新未拆舊）**。階段 6（切換+刪舊）待上機驗數值。
 > 原則沿用 tanuki 改名那次：**分階段 + 每階段 build 驗證 + checkpoint commit + 隨時可回滾**。
+
+## ⚡ 目前進度（2026-06-11 自主跑完 0–5）
+新 sdk/tanuki_pipeline 全套**已建好 + build 綠 + 實機 RTX5080 跑通**（12MP 整條 3.26ms）：
+| 元件 | 產出 | 狀態 |
+|---|---|---|
+| framework | tanuki_pipeline_framework.lib（IModule/Pipeline/Registry） | ✅ build |
+| modules | tanuki_pipeline_modules.lib（background_sub + ridge_hessian） | ✅ build |
+| pipeline | find_stream_ridgeline.lib（食譜 + README） | ✅ build + **runtime 跑通** |
+| api | tanuki_pipeline_api.dll（**C ABI 與 picoater_api 相同，drop-in**） | ✅ build |
+| benchmark | find_stream_ridgeline_bench.exe | ✅ build + 跑出數字 |
+
+**平行建新、未拆舊**：`src/native`（picoater_api.dll）+ bench_framework 全保留，**app 仍走舊路徑可用**。
+
+### 🔲 待你（上機驗證後）做的交接
+1. **驗數值**：新 find_stream_ridgeline 輸出 vs 舊 PICoaterDetector 是否一致（同輸入比 ridge/curve）。
+2. **切換 app**：`NativeMethods.cs` 的 DllImport DLL 名 `picoater_api.dll → tanuki_pipeline_api.dll`（函式名相同，只改 DLL 名）。跑 app 驗即時/回顧檢測正常。
+3. **刪舊**（驗證 OK 後）：`src/native`（c_api/picoater_api、modules/get_picoater_background、pipeline、benchmark/picoater_pipeline_benchmark）+ sdk bench_framework + .sln/props 對應條目。
+4. **接 .sln**：把 tanuki_pipeline 5 個 vcxproj 收進 PICoater_AOI.sln（目前 standalone build，未進方案）。
+5. **可選 4b**：API 改 `run(name, json)` + 函式改名 TanukiPipeline_*（連同切換一起）。
 
 ## 1. 目標與動機
 把 `src/native`（C++/CUDA 演算法 pipeline）整個搬進 `sdk/`，讓：

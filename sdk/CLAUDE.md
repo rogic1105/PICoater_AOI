@@ -16,11 +16,18 @@
 ```
 sdk/
 ├── TanukiCv/        ← 以 tanuki_core(CUDA) 為引擎的 .NET 影像 SDK（durable，跨產品共用）
-│   ├── native/{tanuki_core, tanuki_utils, tanuki_cv_api}   ← C++/CUDA 引擎 + C API
+│   ├── native/{tanuki_core, tanuki_utils, tanuki_cv_api, tanuki_pipeline}   ← C++/CUDA 引擎 + C API + pipeline 層
 │   │     C++ namespace = `tanuki::core`（傳統巢狀 `namespace tanuki { namespace core {`；nvcc 不吃 C++17
 │   │     `namespace tanuki::core{}` 形式）。避開超常見 `core` 撞名，供其他 C++ 專案 source/header 重用。
 │   │     對外 C API = `extern "C" TanukiCv_*`（DLL `tanuki_cv_api.dll`；.NET P/Invoke 不碰 namespace）。
 │   │     tanuki_utils namespace = `tanuki::utils`（原 `Color` 已收編）。源碼一律 UTF-8 + vcxproj 帶 /utf-8
+│   │     ★ tanuki_pipeline（namespace `tanuki::pipeline`）= 演算法流程層（從 src/native 搬入；分層 core→module→pipeline）：
+│   │       framework/（IModule + Pipeline 工頭 + ModuleRegistry）；modules/（background_sub、ridge_hessian＝
+│   │       組合 core primitive 的「可換步驟」，換方法=換 module）；pipelines/find_stream_ridgeline/（食譜＝串 module，
+│   │       找流水圖脊線=mura 檢測，含 README+benchmark）；api/（tanuki_pipeline_api.dll，C ABI 與舊 picoater_api 相同 drop-in）。
+│   │       判準：包一顆 kernel=core primitive；組幾個 primitive 成可換步驟=module；串 module 成完整流程=pipeline。
+│   │       狀態：平行建好 build 綠+RTX5080 跑通；切換 app（DllImport 改 tanuki_pipeline_api.dll）+刪 src/native 待上機驗數值。
+│   │       詳見 `docs/dev/migration-native-to-sdk-pipeline.md`
 │   ├── dotnet/
 │   │   ├── TanukiCv.Core         ← 純 library（無 WinForms）：PixelMmMapper 像素↔mm、SystemInfo、PerfTimer、
 │   │   │                             MergeLayout（合圖佈局唯一來源）、CurveOverviewMerger（切向全覽曲線合併唯一來源）
