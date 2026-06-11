@@ -34,7 +34,7 @@
 - CSV `#CFG` 記錄兩個欄位 `HessianMaxFactorV`、`HessianMaxFactorH`；舊單一 `HessianMaxFactor` 欄位讀檔時 fallback 到 V=H=該值
 
 ### CUDA Pinned Memory
-- 所有 NativeBufferPool buffer 使用 `CoreCV_AllocPinned`（cudaMallocHost）
+- 所有 NativeBufferPool buffer 使用 `TanukiCv_AllocPinned`（cudaMallocHost）
 - NativeBufferPool.Dispose：`_isDisposed = true` 必須在所有 `FreePinned` 之前設定（防重複 Free）
 
 ### 存檔格式（TrySaveCapture）

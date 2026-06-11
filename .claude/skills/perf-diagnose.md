@@ -23,7 +23,7 @@
 
    | 慢的欄位 | 原因 | 對策 |
    |---------|------|------|
-   | `IO` 大 | FastReadBMP 讀盤慢 | 確認 NativeBufferPool 用 pinned memory；確認 CoreCV_FastReadBMP 有正確呼叫 |
+   | `IO` 大 | FastReadBMP 讀盤慢 | 確認 NativeBufferPool 用 pinned memory；確認 TanukiCv_FastReadBMP 有正確呼叫 |
    | `GPU` 大 | CUDA pipeline 慢 | 確認 AoiService 參數正確；確認 CUDA stream 沒有意外同步 |
    | `BMP` 大 | Create8bppBitmap 慢 | 確認用 ImageUtils.Create8bppBitmap（MemoryCopy 路徑），非 GDI+ pixel 迴圈 |
    | `Canvas` 大 | FitToScreen/SetView 慢 | 確認 _shouldRestoreView 邏輯正確；避免多次 Invalidate |

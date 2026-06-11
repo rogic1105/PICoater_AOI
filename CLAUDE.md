@@ -8,14 +8,14 @@ PICoater_AOI/
 │   ├── dotnet/AniloxRoll.Monitor/  ← C# WinForms 主應用
 │   └── native/                     ← C++ pipeline
 ├── sdk/                  ← 可獨立 split 的 library（純函式庫，無 GUI、無 exe）。**有自己的 `sdk/CLAUDE.md`（巢狀，編 sdk 檔時載入；放分層鐵則+元件地圖，隨 split 帶走）**
-│   ├── TanukiCv/         ← 以 core_cv 為引擎的 .NET 影像 SDK（native/{core_cv,cpp_utils,core_cv_api} + dotnet/{TanukiCv.Core 純 library〔含 PixelMmMapper 像素↔mm 公式、SystemInfo CPU/GPU/RAM/螢幕查詢、PerfTimer 通用計時器（量段+視窗 worst-case，計時唯一來源）、MergeLayout 合圖佈局演算法單一來源（純算術；xOffset+重疊分界，3 策略：中線/右覆蓋左/左覆蓋右）、CurveOverviewMerger 切向全覽曲線合併唯一來源（reuse MergeLayout boundary 唯一歸屬、間空留 0；範例同源共用）〕, TanukiCv.Controls WinForms〔→Core；含 SmartCanvas + **顯示 pipeline 共用元件：LiveDisplayView（絞殺榕重寫版多相機監控：主畫面 SmartCanvas+ThumbStrip縮圖+CPU合圖+合圖全部+flip+**LOD 單張&合圖**，統一介面 PushFrame/SetLayout/EnableLod(GrayResize)/FlipVertical；**合圖 LOD＝虛擬圖=完整合圖佈局、provider 逐欄找相機合成可見區+stride 壓緩衝→GrayResize，顯示成本從 ~180ms 降到 ~1ms**；**app（LiveCameraManager）+ 範例（MilGrabberPbForm）都已採用＝兩產品同源唯一來源；舊 MultiCamLiveView 已退場刪除**）/ ThumbStrip（多相機縮圖條：批量 CPU 建圖不閃，唯一來源）/ ThumbView（雙緩衝自繪縮圖葉子）/ GrayBitmap（灰階 bytes→bitmap 唯一來源）/ GrayResizeCpu（純 CPU 雙線性縮放＝LOD 的 CPU provider，無 GPU 機器用）/ GrayResize 委派（LOD resize 插槽：GPU 呼叫端給、CPU 用 GrayResizeCpu）**〕} + benchmark/{bench_framework,core_cv_benchmark,TanukiCv.BenchUi} + samples/TanukiCv.SysInfoTool〔系統資訊 GUI 工具〕 + third_party/stb；self-contained 可 split）
+│   ├── TanukiCv/         ← 以 tanuki_core 為引擎的 .NET 影像 SDK（native/{tanuki_core,tanuki_utils,tanuki_cv_api} + dotnet/{TanukiCv.Core 純 library〔含 PixelMmMapper 像素↔mm 公式、SystemInfo CPU/GPU/RAM/螢幕查詢、PerfTimer 通用計時器（量段+視窗 worst-case，計時唯一來源）、MergeLayout 合圖佈局演算法單一來源（純算術；xOffset+重疊分界，3 策略：中線/右覆蓋左/左覆蓋右）、CurveOverviewMerger 切向全覽曲線合併唯一來源（reuse MergeLayout boundary 唯一歸屬、間空留 0；範例同源共用）〕, TanukiCv.Controls WinForms〔→Core；含 SmartCanvas + **顯示 pipeline 共用元件：LiveDisplayView（絞殺榕重寫版多相機監控：主畫面 SmartCanvas+ThumbStrip縮圖+CPU合圖+合圖全部+flip+**LOD 單張&合圖**，統一介面 PushFrame/SetLayout/EnableLod(GrayResize)/FlipVertical；**合圖 LOD＝虛擬圖=完整合圖佈局、provider 逐欄找相機合成可見區+stride 壓緩衝→GrayResize，顯示成本從 ~180ms 降到 ~1ms**；**app（LiveCameraManager）+ 範例（MilGrabberPbForm）都已採用＝兩產品同源唯一來源；舊 MultiCamLiveView 已退場刪除**）/ ThumbStrip（多相機縮圖條：批量 CPU 建圖不閃，唯一來源）/ ThumbView（雙緩衝自繪縮圖葉子）/ GrayBitmap（灰階 bytes→bitmap 唯一來源）/ GrayResizeCpu（純 CPU 雙線性縮放＝LOD 的 CPU provider，無 GPU 機器用）/ GrayResize 委派（LOD resize 插槽：GPU 呼叫端給、CPU 用 GrayResizeCpu）**〕} + benchmark/{bench_framework,core_cv_benchmark,TanukiCv.BenchUi} + samples/TanukiCv.SysInfoTool〔系統資訊 GUI 工具〕 + third_party/stb；self-contained 可 split）
 │   ├── Bridges/          ← 對外設備 / 系統橋接層
 │   │   ├── IoBridge/                         ← ICP DAS ET-7044 IO module（Modbus TCP）
 │   │   │   ├── IoBridge.Core/                ← library（IModbusTcpClient 介面 + ET-7044 實作）
 │   │   │   └── samples/                      ← 可執行範例（ManualControl / Automation GUI）
 │   │   ├── LightBridge/LightBridge.Core/     ← RS-232 LTS-3DPA24 光源
 │   │   └── StorageBridge/StorageBridge.Core/ ← SMB + 檔案複製 + 循環儲存
-│   ├── MIL/              ← MIL 集中區（MilGrabber.Core MIL 封裝 library〔MilCamera=一台相機〕 + samples/MilGrabber.Monitor 多相機監控範例（**繪圖模式 MIL 直繪 panel vs PictureBox**〔「設定」tab PropertyGrid 選、初始化後軟鎖、釋放解鎖〕；PictureBox 模式：MilCamera FrameReady → GetFrameBytes → core_cv GPU resize 縮圖 → SmartCanvas 繪 + 合圖，測 GDI 即時取像卡不卡。class=MilGrabberPbForm（1127→535 行，按職責拆 partial：`.cs` 核心生命週期/ctor + `.PictureBox.cs` 顯示路徑 + `.Params.cs` 參數接線 + `.Telemetry.cs` ListView/timer + `.Config.cs` json 載入）；含 `[PbTiming]` 計時 log（縮圖/顯示 max）+ chkLod 動態LOD（停住裁可見區+GPU 縮到 panel→縮小看全圖便宜、放大看真細節）+ 滾輪相對 fit + 雙擊 fit / 三擊實體 1:1〔FOV 輸入框算 mm/px〕。**原獨立 MilGrabber.PictureBox 範例已併入此**。**tabParams 含「設定」tab**（單一 PropertyGrid `propertyGridMerge` 綁 `PbSettings`，仿 app propertyGridSettings 的 SSoT；散落 chk/num/cmb/radio 全收進來：繪圖模式/合圖方式/動態LOD/重疊策略 互斥用 enum〔`EnumDescConverter` 顯示中文 [Description]〕+ 上下翻轉/FOV/縮圖倍率 + OPS/Start CamRow8〔Cam1~8 可展開〕；`PropertyValueChanged`→`ApplyPbSettings` 一次套用全部，view 不擁有邏輯。合圖全部=無畫面相機黑占位；佈局用 sdk `TanukiCv.Controls.MergeLayout`，巨圖 `MergeMaxW=30000` cap 防 GDI 16-bit 座標 wrap 內容錯位）） + docs）；隔離 MIL，換 grabber 整區換。**MIL 合圖（MultiCameraMerger）刻意保 MIL-only 自含中線、不引用 TanukiCv（拋棄層隨硬體換）；可重用合圖演算法在 TanukiCv.Controls.MergeLayout**。**取像同步**：相機需 CLProtocol 套線掃才同頻（btnInit 後自動跑 btnFetchInfo 等 CLProtocol+套線掃，否則 free-run 偶發不同步；硬體無 encoder/外部觸發）
+│   ├── MIL/              ← MIL 集中區（MilGrabber.Core MIL 封裝 library〔MilCamera=一台相機〕 + samples/MilGrabber.Monitor 多相機監控範例（**繪圖模式 MIL 直繪 panel vs PictureBox**〔「設定」tab PropertyGrid 選、初始化後軟鎖、釋放解鎖〕；PictureBox 模式：MilCamera FrameReady → GetFrameBytes → tanuki_core GPU resize 縮圖 → SmartCanvas 繪 + 合圖，測 GDI 即時取像卡不卡。class=MilGrabberPbForm（1127→535 行，按職責拆 partial：`.cs` 核心生命週期/ctor + `.PictureBox.cs` 顯示路徑 + `.Params.cs` 參數接線 + `.Telemetry.cs` ListView/timer + `.Config.cs` json 載入）；含 `[PbTiming]` 計時 log（縮圖/顯示 max）+ chkLod 動態LOD（停住裁可見區+GPU 縮到 panel→縮小看全圖便宜、放大看真細節）+ 滾輪相對 fit + 雙擊 fit / 三擊實體 1:1〔FOV 輸入框算 mm/px〕。**原獨立 MilGrabber.PictureBox 範例已併入此**。**tabParams 含「設定」tab**（單一 PropertyGrid `propertyGridMerge` 綁 `PbSettings`，仿 app propertyGridSettings 的 SSoT；散落 chk/num/cmb/radio 全收進來：繪圖模式/合圖方式/動態LOD/重疊策略 互斥用 enum〔`EnumDescConverter` 顯示中文 [Description]〕+ 上下翻轉/FOV/縮圖倍率 + OPS/Start CamRow8〔Cam1~8 可展開〕；`PropertyValueChanged`→`ApplyPbSettings` 一次套用全部，view 不擁有邏輯。合圖全部=無畫面相機黑占位；佈局用 sdk `TanukiCv.Controls.MergeLayout`，巨圖 `MergeMaxW=30000` cap 防 GDI 16-bit 座標 wrap 內容錯位）） + docs）；隔離 MIL，換 grabber 整區換。**MIL 合圖（MultiCameraMerger）刻意保 MIL-only 自含中線、不引用 TanukiCv（拋棄層隨硬體換）；可重用合圖演算法在 TanukiCv.Controls.MergeLayout**。**取像同步**：相機需 CLProtocol 套線掃才同頻（btnInit 後自動跑 btnFetchInfo 等 CLProtocol+套線掃，否則 free-run 偶發不同步；硬體無 encoder/外部觸發）
 │   └── docs/            ← 跨專案工程經驗（repo-style / testing pyramid / FSM）
 ├── tools/                ← 跨元件 / 應用層通用工具（不專屬單一 sdk 元件）
 │   ├── ps/                   ← PowerShell 腳本
@@ -72,7 +72,7 @@ PICoater_AOI/
 **InternalsVisibleTo**：`src/dotnet/AniloxRoll.Monitor/Properties/AssemblyInfo.cs` 同時 `InternalsVisibleTo` 三個 test assembly。新增第四個測試 csproj 時要加進去。
 
 **Benchmark（量「多快」，跟被測對象住，非 `tests/`）**：
-- `sdk/TanukiCv/benchmark/core_cv_benchmark/` — 通用 CV micro-benchmark（C++）；跟 core_cv 同住，隨 sdk split 帶走
+- `sdk/TanukiCv/benchmark/core_cv_benchmark/` — 通用 CV micro-benchmark（C++）；跟 tanuki_core 同住，隨 sdk split 帶走
 - `src/native/benchmark/picoater_pipeline_benchmark/` — pipeline 端到端速度（C++/CUDA：IO+傳輸+CV+resize+多相機吞吐）；緊鄰 src/native 演算法，供 agent loop 優化
 
 **Python 演算法**：
@@ -144,7 +144,7 @@ PICoater_AOI/
 PICoater_AOI/
 ├── src/dotnet/AniloxRoll.Monitor/                 ← C# WinForms 應用程式
 ├── src/native/                                    ← C++ pipeline 實作
-├── sdk/TanukiCv/                                  ← 以 core_cv 為引擎的 .NET 影像 SDK（native/{core_cv,cpp_utils,core_cv_api} + dotnet/{TanukiCv.Core 純 library, TanukiCv.Controls WinForms} + benchmark/{bench_framework,core_cv_benchmark,TanukiCv.BenchUi}）
+├── sdk/TanukiCv/                                  ← 以 tanuki_core 為引擎的 .NET 影像 SDK（native/{tanuki_core,tanuki_utils,tanuki_cv_api} + dotnet/{TanukiCv.Core 純 library, TanukiCv.Controls WinForms} + benchmark/{bench_framework,core_cv_benchmark,TanukiCv.BenchUi}）
 ├── sdk/Bridges/IoBridge/IoBridge.Core/          ← Modbus TCP Client + IModbusTcpClient 介面
 ├── sdk/Bridges/LightBridge/LightBridge.Core/      ← LTS-3DPA24 RS-232 光源
 ├── sdk/Bridges/StorageBridge/StorageBridge.Core/  ← SMB 檔案複製 + 循環儲存
@@ -166,13 +166,13 @@ PICoater_AOI/
 | DLL | 函式 | 用途 |
 |-----|------|------|
 | `picoater_api.dll` | `PICoaterAPI_CreatePipeline` / `ProcessPipeline` / `DestroyPipeline` / `ComputeColumnMean` | GPU 檢測 pipeline |
-| `core_cv_api.dll` | `CoreCV_AllocPinned` / `CoreCV_FreePinned` | CUDA pinned memory 管理 |
-| `core_cv_api.dll` | `CoreCV_FastReadBMP` | 快速讀取 BMP（繞過 GDI+） |
-| `core_cv_api.dll` | `CoreCV_Resize_GPU` | GPU 縮圖 |
+| `tanuki_cv_api.dll` | `TanukiCv_AllocPinned` / `TanukiCv_FreePinned` | CUDA pinned memory 管理 |
+| `tanuki_cv_api.dll` | `TanukiCv_FastReadBMP` | 快速讀取 BMP（繞過 GDI+） |
+| `tanuki_cv_api.dll` | `TanukiCv_Resize_GPU` | GPU 縮圖 |
 
 ## P/Invoke 架構規則
 
-**所有 P/Invoke 宣告只能在 `AniloxRoll.Monitor/Interop/NativeMethods.cs`**，不得跨層使用 SDK 的 `TanukiCv.Core.CoreCVWrapper`。
+**所有 P/Invoke 宣告只能在 `AniloxRoll.Monitor/Interop/NativeMethods.cs`**，不得跨層使用 SDK 的 `TanukiCv.Core.TanukiCvWrapper`。
 
 ## 關鍵檔案速查
 
@@ -342,7 +342,7 @@ PICoater_AOI/
 | 監控強化 | `hc_EnableMuraEnhance` → `EnableMuraEnhance` | false | 即時影像強化 Mura |
 | 回顧強化 | `hd_EnableReviewEnhance` → `EnableReviewEnhance` | false | 回顧影像強化 Mura |
 | 主畫面顯示 | `he_MainDisplay` → `ImageView.MainDisplay` | SmartCanvas | MilDirect（MIL 直繪）/ SmartCanvas（CPU 繪、跟回顧畫布同源；共用 `LiveDisplayView`〔sdk TanukiCv.Controls；與範例同源唯一來源〕在 camLiveMain 疊 SmartCanvas+各 cam 疊 ThumbStrip 縮圖，吃 `AniloxCamera.OnDisplayFrame` bytes→bitmap，單相機/CPU合圖+mm overlay+zoom+雙三擊+LOD；MIL 並存於底層被覆蓋。滾輪縮放：`WheelZoomFilter` 在 SmartCanvas 模式讓路（`return false`，否則全域 filter 吃掉滾輪→縮不動；只服務 MIL 直繪合圖）。**bin↔主畫面連動**：`LiveDisplayView.ViewRangeMmChanged(left,right,top,bot)`→`LiveCameraManager.OnSmartViewRange`→`OnLiveViewRange`事件→form `ApplyLiveViewRange`：切向/overview用X、法向用Y zoom 同步（法向需 `LiveCameraManager.RowPitchMm` 餵真 row pitch；overview 用 `LiveViewRangeProvider` 沿用同範圍→500ms 重畫不閃）。**TODO：縮圖多相機同步刷 / 關底層 MIL / 回顧側 CanvasInteractionHelper 視野計算收斂進 sdk / sample 重用曲線圖+閾值線選用 / app live 實體化 LOD/flip UI**）|
-| 動態LOD | `hf_LiveLod` → `ImageView.LiveLod` | CPU | Off / GPU（CoreCV GPU 縮）/ CPU（GrayResizeCpu 純 CPU 縮）。SmartCanvas 模式放大巨圖看細節用（顯示成本 ~180ms→~1ms），即時生效。預設 CPU＝無 GPU 機也能跑。`LiveCameraManager.SetLodMode` 套到 `LiveDisplayView.EnableLod`/`DisableLod` |
+| 動態LOD | `hf_LiveLod` → `ImageView.LiveLod` | CPU | Off / GPU（TanukiCv GPU 縮）/ CPU（GrayResizeCpu 純 CPU 縮）。SmartCanvas 模式放大巨圖看細節用（顯示成本 ~180ms→~1ms），即時生效。預設 CPU＝無 GPU 機也能跑。`LiveCameraManager.SetLodMode` 套到 `LiveDisplayView.EnableLod`/`DisableLod` |
 
 ### 4. 儲存設定
 
