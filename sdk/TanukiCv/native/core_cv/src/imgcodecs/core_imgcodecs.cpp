@@ -42,7 +42,7 @@ namespace tanuki { namespace core {
 
     // 2. �x�s�Ϥ� (Wrapper around stbi_write_bmp)
     bool imwrite(const std::string& filepath, int w, int h, int c, const void* data) {
-        // stbi_write_bmp �^�ǫD 0 �N����\
+        // stbi_write_bmp returns 0 on failure
         return stbi_write_bmp(filepath.c_str(), w, h, c, data) != 0;
     }
 

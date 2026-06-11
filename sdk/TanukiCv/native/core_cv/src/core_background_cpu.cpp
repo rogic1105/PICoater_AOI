@@ -7,8 +7,8 @@
 #include <cstdint>
 #include <cstring>
 
-// MSVC / GCC restrict ÃöÁä¦r¬Û®e©Ê©w¸q
-// ³o§i¶D½sÄ¶¾¹«ü°w¤¬¤£­«Å|¡A¬O¶}±Ò¦Û°Ê¦V¶q¤ÆªºÃöÁä
+// MSVC / GCC restrict é—œéµå­—ç›¸å®¹æ€§å®šç¾©
+// é€™å‘Šè¨´ç·¨è­¯å™¨æŒ‡é‡äº’ä¸é‡ç–Šï¼Œæ˜¯é–‹å•Ÿè‡ªå‹•å‘é‡åŒ–çš„é—œéµ
 #if defined(_MSC_VER)
 #define RESTRICT __restrict
 #else
@@ -17,20 +17,20 @@
 
 namespace tanuki { namespace core {
 
-    // [CPU V21 Final] ««ª½¤À¶ô + ««ª½®i¶} (Vertical Strip + Unroll)
-    // ®Ä¯à¡G~0.68s @ 128MP (¤ñ Python numpy.mean §Ö)
-    // ­ì²z¡G½T«O Accumulator Âê¦º¦b L1 Cache¡A¨Ã§Q¥Î¼È¦s¾¹´î¤Ö L1 Åª¼g¦¸¼Æ
+    // [CPU V21 Final] å‚ç›´åˆ†å¡Š + å‚ç›´å±•é–‹ (Vertical Strip + Unroll)
+    // æ•ˆèƒ½ï¼š~0.68s @ 128MP (æ¯” Python numpy.mean å¿«)
+    // åŸç†ï¼šç¢ºä¿ Accumulator é–æ­»åœ¨ L1 Cacheï¼Œä¸¦åˆ©ç”¨æš«å­˜å™¨æ¸›å°‘ L1 è®€å¯«æ¬¡æ•¸
     void calcColumnMeans_RemoveOutliers_cpu(
         const uint8_t* RESTRICT h_in,
         float* RESTRICT h_out,
         int W,
         int H,
         int stride,
-        float sigma_threshold // ¦¹·¥³tª©©¿²¤Â÷¸s­È­pºâ¡A¶È­pºâ¥ş°ì¥­§¡
+        float sigma_threshold // æ­¤æ¥µé€Ÿç‰ˆå¿½ç•¥é›¢ç¾¤å€¼è¨ˆç®—ï¼Œåƒ…è¨ˆç®—å…¨åŸŸå¹³å‡
     ) {
         if (stride == 0) stride = W;
 
-        // ¨Ï¥Î©Ò¦³®Ö¤ß¡Adynamic schedule ·|¦Û°Ê³B²z¤j¤p®Ö­t¸ü¥­¿Å
+        // ä½¿ç”¨æ‰€æœ‰æ ¸å¿ƒï¼Œdynamic schedule æœƒè‡ªå‹•è™•ç†å¤§å°æ ¸è² è¼‰å¹³è¡¡
         int num_threads = omp_get_max_threads();
 
 #pragma omp single
@@ -38,33 +38,33 @@ namespace tanuki { namespace core {
             printf("[CPU Optimized] V21 Strategy | Threads: %d | Vertical Strip (L1 Cache) | 4x Unroll\n", num_threads);
         }
 
-        // ±ø±a¼e«× 256¡G
-        // 256 * 4 bytes = 1KB¡A»·¤p©ó L1 Cache (32KB/48KB)
-        // ½T«O²Ö¥[¹Lµ{·¥§Ö¡AµL Cache Miss
+        // æ¢å¸¶å¯¬åº¦ 256ï¼š
+        // 256 * 4 bytes = 1KBï¼Œé å°æ–¼ L1 Cache (32KB/48KB)
+        // ç¢ºä¿ç´¯åŠ éç¨‹æ¥µå¿«ï¼Œç„¡ Cache Miss
         const int BLOCK_W = 256;
 
 #pragma omp parallel for schedule(dynamic)
         for (int x_base = 0; x_base < W; x_base += BLOCK_W) {
 
-            // ³B²zÃä¬É (³Ì«á¤@­Ó Block ¥i¯à¤p©ó 256)
+            // è™•ç†é‚Šç•Œ (æœ€å¾Œä¸€å€‹ Block å¯èƒ½å°æ–¼ 256)
             int current_w = (x_base + BLOCK_W <= W) ? BLOCK_W : (W - x_base);
 
-            // §½³¡²Ö¥[¾¹ (Stack Memory -> L1 Cache)
-            // alignas(32) À°§U½sÄ¶¾¹¥Í¦¨ AVX «ü¥O
+            // å±€éƒ¨ç´¯åŠ å™¨ (Stack Memory -> L1 Cache)
+            // alignas(32) å¹«åŠ©ç·¨è­¯å™¨ç”Ÿæˆ AVX æŒ‡ä»¤
             alignas(32) uint32_t sum_buf[BLOCK_W] = { 0 };
 
             const uint8_t* ptr = h_in + x_base;
             int y = 0;
 
-            // ®Ö¤ßÀu¤Æ¡G««ª½®i¶} 4 ­¿ (4x Vertical Unroll)
-            // Åı 4 ¦æ¹³¯À¦b CPU ¼È¦s¾¹¤º¥ı¥[Á`¡A´î¤Ö¹ï sum_buf (L1 Cache) ªºÅª¼gÀ£¤O
+            // æ ¸å¿ƒå„ªåŒ–ï¼šå‚ç›´å±•é–‹ 4 å€ (4x Vertical Unroll)
+            // è®“ 4 è¡Œåƒç´ åœ¨ CPU æš«å­˜å™¨å…§å…ˆåŠ ç¸½ï¼Œæ¸›å°‘å° sum_buf (L1 Cache) çš„è®€å¯«å£“åŠ›
             for (; y <= H - 4; y += 4) {
                 const uint8_t* p0 = ptr;
                 const uint8_t* p1 = ptr + stride;
                 const uint8_t* p2 = ptr + 2 * stride;
                 const uint8_t* p3 = ptr + 3 * stride;
 
-                // ½sÄ¶¾¹·|¦Û°Ê¦V¶q¤Æ¦¹°j°é (¥Í¦¨ vpaddd «ü¥O)
+                // ç·¨è­¯å™¨æœƒè‡ªå‹•å‘é‡åŒ–æ­¤è¿´åœˆ (ç”Ÿæˆ vpaddd æŒ‡ä»¤)
                 for (int x = 0; x < current_w; ++x) {
                     uint32_t s = sum_buf[x];
                     s += p0[x];
@@ -76,7 +76,7 @@ namespace tanuki { namespace core {
                 ptr += 4 * stride;
             }
 
-            // ³B²z³Ñ¾lªº¦æ (0~3 ¦æ)
+            // è™•ç†å‰©é¤˜çš„è¡Œ (0~3 è¡Œ)
             for (; y < H; ++y) {
                 for (int x = 0; x < current_w; ++x) {
                     sum_buf[x] += ptr[x];
@@ -84,16 +84,16 @@ namespace tanuki { namespace core {
                 ptr += stride;
             }
 
-            // ­pºâ¥­§¡¨Ã¼g¦^µ²ªG
-            // ³o¸Ì¥u¦³ W ¦¸¼g¤J¡A¹ïÀW¼e¼vÅT·¥¤p
+            // è¨ˆç®—å¹³å‡ä¸¦å¯«å›çµæœ
+            // é€™è£¡åªæœ‰ W æ¬¡å¯«å…¥ï¼Œå°é »å¯¬å½±éŸ¿æ¥µå°
             for (int x = 0; x < current_w; ++x) {
                 h_out[x_base + x] = (float)sum_buf[x] / H;
             }
         }
     }
 
-    // [Pass 2] ­I´º¬Û´î (Row-Parallel)
-    // ³o¬OÀW¼e­­¨î¾Ş§@ (Memory Bound)¡AÂ²³æªº¦æ¥­¦æ¤Æ®Ä²v³Ì°ª
+    // [Pass 2] èƒŒæ™¯ç›¸æ¸› (Row-Parallel)
+    // é€™æ˜¯é »å¯¬é™åˆ¶æ“ä½œ (Memory Bound)ï¼Œç°¡å–®çš„è¡Œå¹³è¡ŒåŒ–æ•ˆç‡æœ€é«˜
     void calcColumnBackground_u8_cpu(
         const uint8_t* RESTRICT h_in,
         const float* RESTRICT h_mean,
@@ -104,18 +104,18 @@ namespace tanuki { namespace core {
 
         if (stride == 0) stride = W;
 
-        // ¨Ï¥Î static schedule ´î¤Ö±Æµ{¶}¾P¡A¦]¬°¨C¦æ¤u§@¶q§¹¥ş¤@­P
+        // ä½¿ç”¨ static schedule æ¸›å°‘æ’ç¨‹é–‹éŠ·ï¼Œå› ç‚ºæ¯è¡Œå·¥ä½œé‡å®Œå…¨ä¸€è‡´
 #pragma omp parallel for schedule(static)
         for (int y = 0; y < H; ++y) {
             const uint8_t* src = h_in + y * stride;
             uint8_t* dst = h_out + y * stride;
 
-            // ½sÄ¶¾¹·|¦Û°Ê¦V¶q¤Æ (AVX2 ¸ü¤J/­pºâ/Àx¦s)
+            // ç·¨è­¯å™¨æœƒè‡ªå‹•å‘é‡åŒ– (AVX2 è¼‰å…¥/è¨ˆç®—/å„²å­˜)
             for (int x = 0; x < W; ++x) {
                 float val = (float)src[x];
                 float bg = h_mean[x];
 
-                // ¹BºâÅŞ¿è¡Gval - bg + 128
+                // é‹ç®—é‚è¼¯ï¼šval - bg + 128
                 float diff = val - bg + 128.0f;
 
                 // Clamp 0-255
