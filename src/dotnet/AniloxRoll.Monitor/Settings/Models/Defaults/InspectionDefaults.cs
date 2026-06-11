@@ -39,6 +39,8 @@ namespace AniloxRoll.Monitor.Core.Data
         public static readonly StitchMode DefaultStitch = StitchMode.Global;        // 主畫面 > 合圖方式
         public const bool EnableMuraEnhance   = false;       // 監控強化
         public const bool EnableReviewEnhance = false;       // 回顧強化
+        public static readonly MainDisplayMode MainDisplay = MainDisplayMode.SmartCanvas; // 主畫面顯示（MIL 直繪 / SmartCanvas）
+        public static readonly LiveLodMode     LiveLod     = LiveLodMode.CPU;             // 動態LOD（Off / GPU / CPU）
 
         // ── 4. 儲存設定 ────────────────────────────────────────────────────
         public const bool   EnableAutoCapture = true;                              // 存檔

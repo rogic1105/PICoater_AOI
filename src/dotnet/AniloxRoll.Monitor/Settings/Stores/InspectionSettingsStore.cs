@@ -103,7 +103,9 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine("  \"ImageView\": {");
             sb.AppendLine($"    \"StitchMode\": \"{V.StitchMode}\",");
             sb.AppendLine($"    \"EnableMuraEnhance\": {(V.EnableMuraEnhance ? "true" : "false")},");
-            sb.AppendLine($"    \"EnableReviewEnhance\": {(V.EnableReviewEnhance ? "true" : "false")}");
+            sb.AppendLine($"    \"EnableReviewEnhance\": {(V.EnableReviewEnhance ? "true" : "false")},");
+            sb.AppendLine($"    \"MainDisplay\": \"{V.MainDisplay}\",");
+            sb.AppendLine($"    \"LiveLod\": \"{V.LiveLod}\"");
             sb.AppendLine("  },");
 
             // Storage
@@ -252,13 +254,21 @@ namespace AniloxRoll.Monitor.Core.Data
                 ? obj
                 : SettingsStoreHelper.ExtractObject(json, "Chart");
 
-            StitchMode stitchMode = StitchMode.Global;
-            string stitchStr = SettingsStoreHelper.GetString(src, "StitchMode", "Global");
+            StitchMode stitchMode = InspectionDefaults.DefaultStitch;
+            string stitchStr = SettingsStoreHelper.GetString(src, "StitchMode", InspectionDefaults.DefaultStitch.ToString());
             // 向後相容：舊設定的 "Horizontal" 對映到 Global
             if (string.Equals(stitchStr, "Horizontal", System.StringComparison.OrdinalIgnoreCase))
                 stitchMode = StitchMode.Global;
             else if (!System.Enum.TryParse(stitchStr, true, out stitchMode))
-                stitchMode = StitchMode.Global;
+                stitchMode = InspectionDefaults.DefaultStitch;
+
+            // MainDisplay / LiveLod（enum；fallback → InspectionDefaults）
+            if (!System.Enum.TryParse(SettingsStoreHelper.GetString(obj, "MainDisplay", InspectionDefaults.MainDisplay.ToString()),
+                    true, out MainDisplayMode mainDisplay))
+                mainDisplay = InspectionDefaults.MainDisplay;
+            if (!System.Enum.TryParse(SettingsStoreHelper.GetString(obj, "LiveLod", InspectionDefaults.LiveLod.ToString()),
+                    true, out LiveLodMode liveLod))
+                liveLod = InspectionDefaults.LiveLod;
 
             // 向後相容：EnableMuraEnhance/EnableReviewEnhance 原在 Recipe 區塊
             string recipeObj = SettingsStoreHelper.ExtractObject(json, "Recipe");
@@ -266,9 +276,11 @@ namespace AniloxRoll.Monitor.Core.Data
             {
                 StitchMode          = stitchMode,
                 EnableMuraEnhance   = SettingsStoreHelper.GetBool(obj, "EnableMuraEnhance",
-                                          SettingsStoreHelper.GetBool(recipeObj, "EnableMuraEnhance",   false)),
+                                          SettingsStoreHelper.GetBool(recipeObj, "EnableMuraEnhance",   InspectionDefaults.EnableMuraEnhance)),
                 EnableReviewEnhance = SettingsStoreHelper.GetBool(obj, "EnableReviewEnhance",
-                                          SettingsStoreHelper.GetBool(recipeObj, "EnableReviewEnhance", false)),
+                                          SettingsStoreHelper.GetBool(recipeObj, "EnableReviewEnhance", InspectionDefaults.EnableReviewEnhance)),
+                MainDisplay         = mainDisplay,
+                LiveLod             = liveLod,
             };
         }
 
