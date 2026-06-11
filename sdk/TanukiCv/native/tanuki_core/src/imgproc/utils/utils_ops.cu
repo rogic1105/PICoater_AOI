@@ -10,7 +10,7 @@
 
 namespace tanuki { namespace core {
 
-    // 2D �B��: Zero Border
+
     void zero_border_u8_gpu(uint8_t* d_gray, int roiW, int roiH, int t, cudaStream_t s) {
         dim3 grid, block;
         get_optimal_launch_2d(k_zeroBorder_u8, roiW, roiH, grid, block);
@@ -18,7 +18,7 @@ namespace tanuki { namespace core {
         CUDA_CHECK(cudaGetLastError());
     }
 
-    // ����ഫ: Float -> Uint8 (��ºI�_ Clamp)
+
     void convert_f32_to_u8_clamp_gpu(const float* d_in, uint8_t* d_out, int N, cudaStream_t s) {
         int gridSize, blockSize;
         get_optimal_launch_1d(k_f32_to_u8_clamp, N, gridSize, blockSize);
@@ -34,7 +34,7 @@ namespace tanuki { namespace core {
         CUDA_CHECK(cudaGetLastError());
     }
 
-    // ����ഫ: Uint8 -> Float
+
     void convert_u8_to_f32_gpu(const uint8_t* d_in, float* d_out, int N, cudaStream_t s) {
         int gridSize, blockSize;
         get_optimal_launch_1d(k_u8_to_f32, N, gridSize, blockSize);
@@ -42,27 +42,27 @@ namespace tanuki { namespace core {
         CUDA_CHECK(cudaGetLastError());
     }
 
-    // ���W��: Float -> Uint8 (MinMax 0-255)
+
     void normalize_minmax_f32_u8_gpu(const float* d_in, uint8_t* d_out, int N, cudaStream_t s) {
-        // 1. �ϥ� Thrust ��X�̤j�ȻP�̤p��
-        // �إ� Thrust Device Pointer (���|Ĳ�o�ƻs�A�u�O�]�˫���)
+
+
         thrust::device_ptr<const float> d_ptr(d_in);
 
-        // ���� minmax_element
-        // �ϥ� thrust::cuda::par.on(s) �T�O�b���w�� Stream �W����
+
+
         auto result = thrust::minmax_element(thrust::cuda::par.on(s), d_ptr, d_ptr + N);
 
-        // 2. �N���G�q Device �Ǧ^ Host
+
         float min_val, max_val;
-        // result.first �M second �O device iterator�A�ݭn���X����V����
-        // �ϥ� Async �ƻs�H�t�X Stream
+
+
         CUDA_CHECK(cudaMemcpyAsync(&min_val, result.first.get(), sizeof(float), cudaMemcpyDeviceToHost, s));
         CUDA_CHECK(cudaMemcpyAsync(&max_val, result.second.get(), sizeof(float), cudaMemcpyDeviceToHost, s));
 
-        // [���n] �o�̥����P�B Stream�A�]�����U�Ӫ� Kernel Launch �ݭn�Ψ� CPU �ݪ� min_val/max_val
+
         CUDA_CHECK(cudaStreamSynchronize(s));
 
-        // 3. ���楿�W�� Kernel
+
         int gridSize, blockSize;
         get_optimal_launch_1d(k_normalizeMinMax_f32_u8, N, gridSize, blockSize);
         k_normalizeMinMax_f32_u8 << <gridSize, blockSize, 0, s >> > (d_in, d_out, N, min_val, max_val);

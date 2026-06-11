@@ -6,37 +6,37 @@
 
 namespace tanuki { namespace core {
 
-    // �w�q�@�ӳq�Ϊ��v�����c (RAII ����A�۰ʺ޲z�O����)
+    // 通用影像結構（RAII 風格，vector 自動管理記憶體）。
     struct Image {
         int w = 0;
         int h = 0;
         int c = 0;
-        std::vector<uint8_t> data; // �ϥ� vector �۰ʺ޲z�O����
+        std::vector<uint8_t> data; // 像素 buffer（vector 自動釋放）
 
         bool empty() const { return data.empty(); }
     };
 
     /**
-     * @brief Ū���Ϥ�
-     * @param filepath ��|
+     * @brief 讀取圖片
+     * @param filepath 路徑
      * @param desired_channels
-     * 0 = �۰� (��ϬO�X�q�D�NŪ�X�q�D)
-     * 1 = �j����Ƕ� (�̧֡A�ٰO����)
-     * 3 = �j���� RGB
+     *   0 = 自動（原圖幾通道就讀幾通道）
+     *   1 = 強制灰階（最快、最省記憶體）
+     *   3 = 強制 RGB
      */
     Image imread(const std::string& filepath, int desired_channels = 0);
 
     /**
-     * @brief �x�s�Ϥ� (BMP)
-     * @param filepath ��|
-     * @param img �v������
-     * @return true ���\
+     * @brief 儲存圖片（BMP）
+     * @param filepath 路徑
+     * @param img 影像物件
+     * @return true 成功
      */
     bool imwrite(const std::string& filepath, const Image& img);
 
-    // �쥻���g�k (���F�ۮe�A�� Pinned Memory �s�ɻݨD)
+    // 相容用多載：直接給 raw buffer 存檔（Pinned Memory 存檔需求）。
     bool imwrite(const std::string& filepath, int w, int h, int c, const void* data);
 
-    // CPU �Y��Ū�� (�A�쥻�g�n��)
+    // CPU 縮圖讀取。
     int load_thumbnail_cpu(const char* filepath, int target_width, uint8_t* out_buffer, int* out_real_w, int* out_real_h);
 }}  // namespace core, tanuki

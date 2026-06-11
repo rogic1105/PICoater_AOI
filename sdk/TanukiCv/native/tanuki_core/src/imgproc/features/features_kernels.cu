@@ -11,13 +11,13 @@ namespace tanuki { namespace core {
 
         if (x >= W || y >= H) return;
 
-        // ��ɳB�z�G��t�]�� 0
+
         if (x < 1 || x >= W - 1 || y < 1 || y >= H - 1) {
             out[y * W + x] = 0;
             return;
         }
 
-        // Ū�� 3x3
+
         // 00 01 02
         // 10 11 12
         // 20 21 22
@@ -57,7 +57,7 @@ namespace tanuki { namespace core {
             return;
         }
 
-        // �o�̻ݭnŪ float ��������J
+
         float p00 = img[(y - 1) * W + (x - 1)];
         float p01 = img[(y - 1) * W + x];
         float p02 = img[(y - 1) * W + (x + 1)];
@@ -74,7 +74,7 @@ namespace tanuki { namespace core {
         // Lxx (Vertical features)
         if (mode == detectionMode::VERTICAL || mode == detectionMode::BOTH) {
             val_xx = (p00 + p02 + p20 + p22) + 2.0f * (p10 + p12) - 2.0f * (p01 + p21) - 4.0f * p11;
-            // �`�N�G�W���� mask ²�Ƽg�k��굥�� Sobel(2,0)�A�зǬO 1, -2, 1 ���n
+
             val_xx = (p00 - 2 * p01 + p02) + 2 * (p10 - 2 * p11 + p12) + (p20 - 2 * p21 + p22);
         }
 

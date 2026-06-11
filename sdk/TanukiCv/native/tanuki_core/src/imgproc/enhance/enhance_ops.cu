@@ -14,7 +14,7 @@ namespace tanuki { namespace core {
         int N = W * H;
         int gridSize, blockSize;
         get_optimal_launch_1d(k_brighten_u8, N, gridSize, blockSize);
-        // �`�N�G�o�̶� N �Ӥ��O W, H
+
         k_brighten_u8 << <gridSize, blockSize, 0, s >> > (d_in, d_out, N, bright);
         CUDA_CHECK(cudaGetLastError());
     }

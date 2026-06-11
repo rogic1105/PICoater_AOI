@@ -1,5 +1,5 @@
 
-// [����ץ�] ������b��� #include ���e
+
 #define _CRT_SECURE_NO_WARNINGS 
 
 #include "tanuki/core/imgcodecs/core_imgcodecs_fast.hpp"
@@ -39,25 +39,25 @@ namespace tanuki { namespace core {
         FILE* f = fopen(filepath.c_str(), "wb");
         if (!f) return false;
 
-        // 1. �ǳ� Header
+
         const int paletteSize = 1024;
         const int headerSize = sizeof(BmpHeader) + sizeof(BmpInfoHeader);
         const int offset = headerSize + paletteSize;
 
-        // Padding �p��
+
         int stride = (w + 3) & (~3);
         int imageSize = stride * h;
         int fileSize = offset + imageSize;
 
         BmpHeader fileHeader = { 0x4D42, (uint32_t)fileSize, 0, 0, (uint32_t)offset };
-        // �`�N height �s���t�� (-h) �N�� Top-Down�A��K�˵�
+
         BmpInfoHeader infoHeader = { 40, w, -h, 1, 8, 0, (uint32_t)imageSize, 2835, 2835, 256, 0 };
 
-        // 2. �g�J Header
+
         fwrite(&fileHeader, sizeof(fileHeader), 1, f);
         fwrite(&infoHeader, sizeof(infoHeader), 1, f);
 
-        // 3. �g�J�զ�L
+
         uint8_t palette[1024];
         for (int i = 0; i < 256; ++i) {
             palette[i * 4 + 0] = i; // B
@@ -67,7 +67,7 @@ namespace tanuki { namespace core {
         }
         fwrite(palette, 1, 1024, f);
 
-        // 4. �g�J����
+
         if (stride == w) {
             fwrite(data, 1, (size_t)w * h, f);
         }
@@ -144,7 +144,7 @@ namespace tanuki { namespace core {
     void fast_write_bmp_24bit(const std::string& filepath, int width, int height, const uint8_t* pData) {
         if (!pData) return;
 
-        // �p�� Row Padding (BMP �C�@�楲���O 4 bytes ������)
+
         int row_stride = width * 3;
         int padding_size = (4 - (row_stride % 4)) % 4;
         int padded_stride = row_stride + padding_size;
@@ -155,9 +155,9 @@ namespace tanuki { namespace core {
         BMPHeader header;
         header.bfSize = (uint32_t)file_size;
         header.biWidth = width;
-        header.biHeight = -height; // �t�ȥN�� Top-down (�ѤW���U)�A���Ȭ� Bottom-up
-        // �`�N�G�Y��ϬO���V�A�o��] -height �i�����g�J�F�Y�����˵������䴩�A�i�]���Ȧ��n�˵ۼg
-        // �j�h�Ʋ{�N�˵������䴩 Top-down BMP�C
+        header.biHeight = -height;
+
+
         header.biSizeImage = (uint32_t)data_size;
 
         FILE* fp = nullptr;
@@ -172,16 +172,16 @@ namespace tanuki { namespace core {
             return;
         }
 
-        // 1. �g�J Header
+
         fwrite(&header, sizeof(BMPHeader), 1, fp);
 
-        // 2. �g�J Data (�]�t Padding)
+
         if (padding_size == 0) {
-            // �p�G��n���A�������g�J (�̧�)
+
             fwrite(pData, 1, (size_t)width * height * 3, fp);
         }
         else {
-            // �ݭn Padding�A�v��g�J
+
             std::vector<uint8_t> padBytes(padding_size, 0);
             for (int y = 0; y < height; ++y) {
                 const uint8_t* row_ptr = pData + (size_t)y * row_stride;

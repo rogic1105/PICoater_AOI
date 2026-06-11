@@ -15,9 +15,9 @@ namespace tanuki { namespace core {
     __global__ void k_normalizeMinMax_f32_u8(const float* __restrict__ in, uint8_t* __restrict__ out, int N, float minVal, float maxVal);
 
     __global__ void k_overlay_heatmap(
-        const uint8_t* __restrict__ src,      // ��l�Ƕ���
-        const uint8_t* __restrict__ overlay,  // Heatmap �ӷ� (0-255)
-        uint8_t* __restrict__ dst,            // ��X BGR �m�� (size * 3)
+        const uint8_t* __restrict__ src,
+        const uint8_t* __restrict__ overlay,
+        uint8_t* __restrict__ dst,
         int width, int height,
         int lower_limit,
         float alpha

@@ -25,11 +25,11 @@ namespace tanuki { namespace core {
         int num_pixels = width * height;
         int grid, block;
 
-        // �N���h�� launch �޿�ʸ˦b�o��
+
         get_optimal_launch_1d(k_hessianResponse, num_pixels, grid, block);
         k_hessianResponse << < grid, block, 0, stream >> > (d_src, d_dst, width, height, mode);
 
-        // �o�̥i�H�� Error Check
+
         CUDA_CHECK(cudaGetLastError());
     }
 
@@ -50,7 +50,7 @@ namespace tanuki { namespace core {
         int gridSize, blockSize;
 
 
-        // �����h���T
+
         int ksize = (int)(6.0f * sigma + 1.0f);
         if (ksize % 2 == 0) ksize++;
         tanuki::core::gaussianBlur_gpu<uint8_t, float>(d_in, d_temp_blur_f32, W, H, sigma, ksize, s, d_workspace);

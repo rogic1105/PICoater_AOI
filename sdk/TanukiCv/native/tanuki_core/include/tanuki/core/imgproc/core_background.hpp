@@ -27,8 +27,8 @@ namespace tanuki { namespace core {
     // CPU Host Implementations 
     // ==========================================
 
-    // �p��C���� (�������s��) - CPU ����
-    // stride �w�]�� W�A�p�G�Ϥ��� padding �i�H�ǤJ��� stride
+    // 計算每欄平均（移除離群值）— CPU 版。
+    // stride 預設為 W；影像有 padding 時可傳入實際 stride。
     void calcColumnMeans_RemoveOutliers_cpu(
         const uint8_t* h_in,
         float* h_out,
@@ -38,7 +38,7 @@ namespace tanuki { namespace core {
         float sigma_threshold
     );
 
-    // �p��I�� (Mura) - CPU ����
+    // 計算背景（Mura）— CPU 版。
     void calcColumnBackground_u8_cpu(
         const uint8_t* h_in,
         const float* h_mean,

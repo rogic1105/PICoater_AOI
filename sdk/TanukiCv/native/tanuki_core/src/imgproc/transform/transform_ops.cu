@@ -19,11 +19,11 @@ namespace tanuki { namespace core {
 
         dim3 gridDim, blockDim;
 
-        // [����] �ϥΧA���Ѫ� 2D Launch Helper
-        // ���|�۰ʺ�X�̨Ϊ� blockDim (�Ҧp 32x32 �� 32x16)
+
+
         get_optimal_launch_2d(k_resize_nearest_u8, dst_w, dst_h, gridDim, blockDim);
 
-        // �Ұ� Kernel
+
         k_resize_nearest_u8 << <gridDim, blockDim, 0, stream >> > (
             d_src, src_w, src_h, d_dst, dst_w, dst_h
             );

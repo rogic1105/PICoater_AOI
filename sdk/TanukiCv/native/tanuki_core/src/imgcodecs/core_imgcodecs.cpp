@@ -9,38 +9,38 @@
 
 namespace tanuki { namespace core {
 
-    // 1. Ū���Ϥ�
+
     Image imread(const std::string& filepath, int desired_channels) {
         Image res;
 
-        // stbi_load �̫�@�ӰѼơG
-        // 0: �O����ϳq�D��
-        // 1: �j����Ƕ� (Gray)
-        // 3: �j���� RGB
+
+
+
+
         unsigned char* ptr = stbi_load(filepath.c_str(), &res.w, &res.h, &res.c, desired_channels);
 
         if (!ptr) {
-            // Ū�����Ѧ^�ǪŹϡA�Ϊ̧A�i�H��� throw exception
+
             std::cerr << "[Error] Failed to load image: " << filepath << "\n";
             return res;
         }
 
-        // �p�G���w�F�q�D�A�ݧ�s���c�����q�D��
+
         if (desired_channels != 0) {
             res.c = desired_channels;
         }
 
-        // �ƻs�ƾڨ� vector (�o�� stbi ���O����N�i�H����F�A�קK memory leak)
+
         size_t size = res.w * res.h * res.c;
         res.data.assign(ptr, ptr + size);
 
-        // ���� STB ��l�O����
+
         stbi_image_free(ptr);
 
         return res;
     }
 
-    // 2. �x�s�Ϥ� (Wrapper around stbi_write_bmp)
+
     bool imwrite(const std::string& filepath, int w, int h, int c, const void* data) {
         // stbi_write_bmp returns 0 on failure
         return stbi_write_bmp(filepath.c_str(), w, h, c, data) != 0;
@@ -51,7 +51,7 @@ namespace tanuki { namespace core {
         return imwrite(filepath, img.w, img.h, img.c, img.data.data());
     }
 
-    // --- �H�U�O�A�쥻���Y�ϥN�X (�O������) ---
+
     static void resize_gray_nearest(const uint8_t* src, int w, int h, uint8_t* dst, int new_w, int new_h) {
         float scale_x = (float)w / new_w;
         float scale_y = (float)h / new_h;
@@ -68,7 +68,7 @@ namespace tanuki { namespace core {
     int load_thumbnail_cpu(const char* filepath, int target_width, uint8_t* out_buffer, int* out_real_w, int* out_real_h) {
         if (!filepath || !out_buffer) return -1;
         int w, h, channels;
-        uint8_t* img = stbi_load(filepath, &w, &h, &channels, 1); // �j��Ƕ�
+        uint8_t* img = stbi_load(filepath, &w, &h, &channels, 1);
         if (!img) return -2;
 
         float ratio = (float)h / w;

@@ -25,7 +25,7 @@ namespace tanuki { namespace core {
         if (val < 0.0f) val = 0.0f;
         else if (val > 255.0f) val = 255.0f;
 
-        out[idx] = (uint8_t)(val + 0.5f); // �|�����J
+        out[idx] = (uint8_t)(val + 0.5f);
     }
 
     __global__ void k_scale_clamp_f32_to_u8(const float* src, uint8_t* dst, int num_pixels, float scale_factor) {
@@ -38,7 +38,7 @@ namespace tanuki { namespace core {
         if (val < 0.0f) val = 0.0f;
         if (val > 255.0f) val = 255.0f;
 
-        // astype(np.uint8) �欰 (Truncation)
+
         dst[idx] = (uint8_t)val;
     }
 
@@ -66,7 +66,7 @@ namespace tanuki { namespace core {
     __device__ inline void get_jet_color(uint8_t v, float& b, float& g, float& r) {
         float val = v / 255.0f;
 
-        // Jet �������
+
         // Base value = 1.5 - |4*val - shift|
         float b_val = 1.5f - fabsf(4.0f * val - 1.0f);
         float g_val = 1.5f - fabsf(4.0f * val - 2.0f);
@@ -98,20 +98,20 @@ namespace tanuki { namespace core {
         uint8_t src_val = src[idx];
         uint8_t ov_val = overlay[idx];
 
-        // �޿�: mask_indices = (overlay_image <= lower_limit)
-        // �Y�b mask ���A�u��ܭ�� (�� BGR)
+
+
         if (ov_val <= lower_limit) {
             dst[idx * 3 + 0] = src_val; // B
             dst[idx * 3 + 1] = src_val; // G
             dst[idx * 3 + 2] = src_val; // R
         }
         else {
-            // �p�� Heatmap �C��
+
             float h_r, h_g, h_b;
             get_jet_color(ov_val, h_r, h_g, h_b); // 0.0~1.0
 
-            // �V�X: result = src * alpha + heatmap * (1 - alpha)
-            // Python�N�X�� src_bgr �O�Ƕ��ন��BGR�A�ҥH src_r = src_g = src_b = src_val
+
+
             float beta = 1.0f - alpha;
             float s_v = (float)src_val;
 
@@ -122,7 +122,7 @@ namespace tanuki { namespace core {
             // R channel
             float out_r = s_v * alpha + (h_r * 255.0f) * beta;
 
-            // �g�^ (Clamp 0-255)
+
             dst[idx * 3 + 0] = (uint8_t)fminf(255.0f, fmaxf(0.0f, out_b));
             dst[idx * 3 + 1] = (uint8_t)fminf(255.0f, fmaxf(0.0f, out_g));
             dst[idx * 3 + 2] = (uint8_t)fminf(255.0f, fmaxf(0.0f, out_r));

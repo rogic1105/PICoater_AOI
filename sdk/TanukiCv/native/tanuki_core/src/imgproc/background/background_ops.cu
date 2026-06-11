@@ -6,7 +6,7 @@
 
 namespace tanuki { namespace core {
 
-    // 1. �@�륭�� Host Function
+
     template <typename T>
     void calcColumnMeans_gpu(const T* d_in, float* d_out, int W, int H, cudaStream_t stream, void* d_workspace) {
         int gridSize, blockSize;
@@ -23,7 +23,7 @@ namespace tanuki { namespace core {
         CUDA_CHECK(cudaGetLastError());
     }
 
-    // 2. [�ק�] �h�����s�� Host Function (�אּ�x��)
+
     template <typename T>
     void calcColumnMeans_RemoveOutliers_gpu(const T* d_in, float* d_out, int W, int H, float sigma, cudaStream_t stream) {
         int gridSize, blockSize;
@@ -32,7 +32,7 @@ namespace tanuki { namespace core {
         CUDA_CHECK(cudaGetLastError());
     }
 
-    // 3. �I���۴� Host Function
+
     void calcColumnBackground_u8_gpu(const uint8_t* d_in, const float* d_mean, uint8_t* d_out, int W, int H, cudaStream_t s) {
         dim3 gridDim, blockDim;
         get_optimal_launch_2d(k_calcColumnBackground, W, H, gridDim, blockDim);

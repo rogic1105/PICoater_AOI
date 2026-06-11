@@ -14,15 +14,15 @@ namespace tanuki { namespace core {
 
         if (x >= dst_w || y >= dst_h) return;
 
-        // �p���������Ϯy�� (�B�I�ƭp��)
-        // ���F�קK�B�I�~�t�ɭP�X�ݶV�ɡA�̫�n clamp
+
+
         float scale_x = (float)src_w / (float)dst_w;
         float scale_y = (float)src_h / (float)dst_h;
 
         int src_x = (int)(x * scale_x);
         int src_y = (int)(y * scale_y);
 
-        // ����ˬd (Clamp)
+
         if (src_x >= src_w) src_x = src_w - 1;
         if (src_y >= src_h) src_y = src_h - 1;
 

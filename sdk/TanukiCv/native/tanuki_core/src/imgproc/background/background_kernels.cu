@@ -6,12 +6,12 @@
 
 namespace tanuki { namespace core {
 
-    // [Traits] �M�w�֥[�����O
-    template <typename T> struct AccumulatorTraits { using Type = float; }; // �w�] float (�� float ��J��)
-    template <> struct AccumulatorTraits<uint8_t> { using Type = uint32_t; }; // �S�� uint8 -> uint32
+
+    template <typename T> struct AccumulatorTraits { using Type = float; };
+    template <> struct AccumulatorTraits<uint8_t> { using Type = uint32_t; };
     template <> struct AccumulatorTraits<double> { using Type = double; };
 
-    // 1. �@�륭�� Kernel
+
     template <typename T>
     __global__ void k_calcColumnMeans(
         const T* __restrict__ src,
@@ -20,27 +20,27 @@ namespace tanuki { namespace core {
     ) {
         int col = blockIdx.x * blockDim.x + threadIdx.x;
 
-        // [�w���ˬd 1] X �b�V�ɫO�@
+
         if (col >= W) return;
 
         using SumType = typename AccumulatorTraits<T>::Type;
         SumType sum = 0;
 
-        // [�w���ˬd 2] ����ū��� (�����`������ϩR)
+
         if (src == nullptr || dst == nullptr) return;
 
-        // ��Ϊ������ޭp��A�קK���в֥[�y������b����
-        // �o�ؼg�k��sĶ���u�ƨӻ��O�@�˪��A�� debug ���[
+
+
         for (int y = 0; y < H; ++y) {
-            // [�w���ˬd 3] �p����ޡA�T�O�b�޿�d��
-            // size_t ���� int * int ���� (���M 1.2���������|����A���n�ߺD)
+
+
             size_t idx = (size_t)y * W + col;
 
-            // Ū��
+
             sum += src[idx];
         }
 
-        // �g�J���G
+
         dst[col] = (float)sum / (float)H;
     }
 
@@ -54,17 +54,17 @@ namespace tanuki { namespace core {
         if (col >= W) return;
         if (src == nullptr || dst == nullptr) return;
 
-        // ���b�G�p�G���׬�0�A�]��0
+
         if (H <= 0) {
             dst[col] = 0.0f;
             return;
         }
 
-        // 1. �H�Ĥ@�� row ���ȧ@����l�̤j��
-        // �o�̪����૬�� float �i�����A�P dst �����@�P
+
+
         float max_val = (float)src[col];
 
-        // 2. �M���ѤU�� row
+
         for (int y = 1; y < H; ++y) {
             size_t idx = (size_t)y * W + col;
             float val = (float)src[idx];
@@ -73,13 +73,13 @@ namespace tanuki { namespace core {
             }
         }
 
-        // 3. �g�J���G
+
         dst[col] = max_val;
     }
 
 
 
-    // 2. [�ק�] �h�����s�� Kernel (�x����)
+
     template <typename T>
     __global__ void k_calcColumnMeans_RemoveOutliers(
         const T* __restrict__ src,
@@ -90,17 +90,17 @@ namespace tanuki { namespace core {
         int col = blockIdx.x * blockDim.x + threadIdx.x;
         if (col >= W) return;
 
-        // �w�q�֥[���O
+
         using SumType = typename AccumulatorTraits<T>::Type;
 
-        // --- [Pass 1] �p�� Mean & StdDev ---
+
         SumType sum = 0;
-        SumType sq_sum = 0; // ����M
+        SumType sq_sum = 0;
 
         const T* col_ptr = src + col;
 
         for (int y = 0; y < H; ++y) {
-            // �૬�� SumType ����� (�Ҧp uint8 -> uint32)
+
             SumType val = (SumType)(*col_ptr);
             sum += val;
             sq_sum += val * val;
@@ -109,12 +109,12 @@ namespace tanuki { namespace core {
 
         float mean = (float)sum / (float)H;
 
-        // �ܲ��� = E[X^2] - (E[X])^2
+
         float variance = ((float)sq_sum / (float)H) - (mean * mean);
         if (variance < 0.0f) variance = 0.0f;
         float std_dev = sqrtf(variance);
 
-        // --- [Pass 2] �L�o ---
+
         float limit = sigma_threshold * std_dev;
         float lower_bound = mean - limit;
         float upper_bound = mean + limit;
@@ -137,11 +137,11 @@ namespace tanuki { namespace core {
             dst[col] = clean_sum / (float)clean_count;
         }
         else {
-            dst[col] = mean; // ���b
+            dst[col] = mean;
         }
     }
 
-    // 3. �I���۴� (�O������)
+
     __global__ void k_calcColumnBackground(
         const uint8_t* __restrict__ input_image,
         const float* __restrict__ column_means,

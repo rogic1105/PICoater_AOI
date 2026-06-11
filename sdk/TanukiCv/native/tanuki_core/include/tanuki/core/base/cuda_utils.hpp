@@ -13,12 +13,12 @@
 
 
 // =========================================================
-// [�s�W] VSCode IntelliSense Fix
-// ���s�边�ݱo�� __global__, blockIdx ������r�A���v�T��ڽsĶ
+// VSCode IntelliSense 修正
+// 讓編輯器看得懂 __global__ / blockIdx 等 CUDA 關鍵字（僅 IDE 用，不影響實際編譯）。
 // =========================================================
 #if defined(__INTELLISENSE__) || defined(__RESHARPER__)
 
-    // 1. ��¦����r���F
+    // 1. 基礎關鍵字假定義
 #ifndef __CUDACC__
 #define __CUDACC__
 #endif
@@ -33,13 +33,13 @@
 #define __managed__
 #define __restrict__
 
-// 2. �֤ߦP�B�禡
+// 2. 核心同步函式
 inline void __syncthreads() {}
 inline void __threadfence() {}
 inline void __threadfence_block() {}
 inline void __threadfence_system() {}
 
-// 3. �֤߯����ܼ� (���� dim3 ���c)
+// 3. 核心內建變數（假的 dim3 結構）
 struct __cuda_fake_dim3 { unsigned int x, y, z; };
 extern __cuda_fake_dim3 gridDim;
 extern __cuda_fake_dim3 blockDim;
@@ -47,8 +47,7 @@ extern __cuda_fake_dim3 blockIdx;
 extern __cuda_fake_dim3 threadIdx;
 extern int warpSize;
 
-// 4. �`�μƾǻP��l�ާ@ (Atomic)
-// ���F�� IDE ���|���� "atomicAdd undefined"
+// 4. 常用原子操作（Atomic）—— 讓 IDE 不報 "atomicAdd undefined"
 template<typename T> inline T atomicAdd(T* address, T val) { return *address; }
 template<typename T> inline T atomicSub(T* address, T val) { return *address; }
 template<typename T> inline T atomicExch(T* address, T val) { return *address; }
@@ -56,10 +55,10 @@ template<typename T> inline T atomicMin(T* address, T val) { return *address; }
 template<typename T> inline T atomicMax(T* address, T val) { return *address; }
 template<typename T> inline T atomicCAS(T* address, T compare, T val) { return *address; }
 
-// 5. ��L CUDA ���ب禡
+// 5. 其他 CUDA 內建函式
 inline void __sincosf(float x, float* s, float* c) {}
 inline float __fdividef(float x, float y) { return x / y; }
-// �p�G���Ψ� __launch_bounds__
+// IDE 下讓 __launch_bounds__ 變 no-op
 #define __launch_bounds__(max_threads_per_block, min_blocks_per_multiprocessor)
 
 #endif
@@ -76,7 +75,7 @@ inline void cudaCheck(cudaError_t e, const char* expr, const char* file, int lin
 }
 #define CUDA_CHECK(x) cudaCheck((x), #x, __FILE__, __LINE__)
 
-// CUDA ���~�ˬd
+// CUDA 錯誤檢查
 #define checkCudaErrors(val) check((val), #val, __FILE__, __LINE__)
 inline void check(cudaError_t result, const char* func, const char* file, int line) {
     if (result != cudaSuccess) {
@@ -86,7 +85,7 @@ inline void check(cudaError_t result, const char* func, const char* file, int li
     }
 }
 
-// cuFFT ���~�ˬd
+// cuFFT 錯誤檢查
 #define checkCufftErrors(val) check((val), #val, __FILE__, __LINE__)
 inline void check(cufftResult result, const char* func, const char* file, int line) {
     if (result != CUFFT_SUCCESS) {
@@ -102,12 +101,12 @@ inline void check(cufftResult result, const char* func, const char* file, int li
   std::exit(1);} }while(0)
 
 inline void dbg_sync(const char* tag) {
-    CUDA_OK(cudaGetLastError());        // ���� launch error
-    CUDA_OK(cudaDeviceSynchronize());   // �� GPU ����
+    CUDA_OK(cudaGetLastError());        // 捕捉 launch error
+    CUDA_OK(cudaDeviceSynchronize());   // 等 GPU 完成
     fprintf(stderr, "[SYNC OK] %s\n", tag);
 }
 
-// �U�� uint8 �æC�L�e�X�ӡB�p�ƫD�s�Bmin/max
+// 下載 uint8 陣列：印前幾個值、統計非零數、min/max（除錯用）
 inline void dbg_dump_u8(const char* tag, const uint8_t* d_ptr, size_t N, size_t head = 32) {
     std::vector<uint8_t> h(N);
     CUDA_OK(cudaMemcpy(h.data(), d_ptr, N, cudaMemcpyDeviceToHost));
@@ -121,7 +120,7 @@ inline void dbg_dump_u8(const char* tag, const uint8_t* d_ptr, size_t N, size_t 
     fprintf(stderr, "\n");
 }
 
-// �U�� float �æC�L min/max
+// 下載 float 陣列：印 min/max（除錯用）
 inline void dbg_dump_f32_minmax(const char* tag, const float* d_ptr, size_t N) {
     std::vector<float> h(N);
     CUDA_OK(cudaMemcpy(h.data(), d_ptr, N * sizeof(float), cudaMemcpyDeviceToHost));
@@ -133,34 +132,32 @@ inline void dbg_dump_f32_minmax(const char* tag, const float* d_ptr, size_t N) {
 
 template <typename KernelFunc>
 inline void get_optimal_launch_1d(KernelFunc kernel, int n, int& gridSize, int& blockSize, int dynamicSMemSize = 0) {
-    int minGridSize; // �̤p Grid �� (API �ݭn�o�ӰѼƦ��ڭ̳o��ȮɥΤ���)
+    int minGridSize; // 最小 Grid 數（API 需要此參數，這裡值暫用不到）
 
-    // �]�k�禡�G�߰��X�ʵ{���̨� Block �j�p
+    // 佔用率 API：問出該 kernel 的最佳 Block 大小
     cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, kernel, dynamicSMemSize, n);
 
-    // �ھں�X�Ӫ��̨� Block �p�� Grid
+    // 依算出的最佳 Block 算 Grid
     gridSize = (n + blockSize - 1) / blockSize;
 }
 
-// [�s�W] �۰ʭp�� 2D �̨� Block/Grid
+// 自動計算 2D 最佳 Block/Grid
 template <typename KernelFunc>
 inline void get_optimal_launch_2d(KernelFunc kernel, int W, int H, dim3& gridDim, dim3& blockDim, int dynamicSMemSize = 0) {
     int minGridSize;
     int maxBlockSize;
 
-    // 1. ���o�̨Ϊ��` Thread �� (�Ҧp 1024 �� 512)
+    // 1. 取得最佳的總 Thread 數（例如 1024 或 512）
     cudaOccupancyMaxPotentialBlockSize(&minGridSize, &maxBlockSize, kernel, dynamicSMemSize, W * H);
 
-    // 2. �N 1D ���`�Ʃ 2D (X, Y)
-    // �q�`�]�w block.x �� 32 (�]�� Warp Size �O 32)�A�ѤU���� block.y
-    // �Ҧp maxBlockSize = 1024 -> 32 x 32
-    // �Ҧp maxBlockSize = 512  -> 32 x 16
-
+    // 2. 將 1D 總數拆成 2D (X, Y)
+    //    block.x 固定 32（Warp Size = 32），剩下給 block.y
+    //    例：maxBlockSize 1024 -> 32 x 32；512 -> 32 x 16
     blockDim.x = 32;
     blockDim.y = maxBlockSize / blockDim.x;
     blockDim.z = 1;
 
-    // 3. �p�� Grid
+    // 3. 計算 Grid
     gridDim.x = (W + blockDim.x - 1) / blockDim.x;
     gridDim.y = (H + blockDim.y - 1) / blockDim.y;
     gridDim.z = 1;

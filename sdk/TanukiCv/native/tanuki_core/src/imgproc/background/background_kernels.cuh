@@ -5,7 +5,7 @@
 
 namespace tanuki { namespace core {
 
-    // �@�륭�� (�x��)
+
     template <typename T>
     __global__ void k_calcColumnMeans(
         const T* __restrict__ src,
@@ -20,7 +20,7 @@ namespace tanuki { namespace core {
         int W, int H
     );
 
-    // [�ק�] �h�����s�ȥ��� (�אּ�x���A�䴩 uint8 �M float)
+
     template <typename T>
     __global__ void k_calcColumnMeans_RemoveOutliers(
         const T* __restrict__ src,
@@ -45,7 +45,7 @@ namespace tanuki { namespace core {
         int W, int H
     );
 
-    // �I���۴� (��J uint8, ��X uint8) - �O������
+
     __global__ void k_calcColumnBackground(
         const uint8_t* __restrict__ input_image,
         const float* __restrict__ column_means,
