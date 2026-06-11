@@ -3,7 +3,7 @@
 #include <string>
 #include <cstdint>
 
-namespace core {
+namespace tanuki { namespace core {
 
     // ���tŪ�� BMP (�Ȥ䴩 8-bit �Ƕ�)
     // ����Ū�J���w�� buffer (��ĳ�ǤJ Pinned Memory)
@@ -16,4 +16,4 @@ namespace core {
 
     void fast_write_bmp_24bit(const std::string& filepath, int width, int height, const uint8_t* pData);
 
-}
+}}  // namespace core, tanuki

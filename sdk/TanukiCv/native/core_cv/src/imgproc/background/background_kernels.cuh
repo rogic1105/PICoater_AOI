@@ -3,7 +3,7 @@
 #include <cuda_runtime.h>
 #include <cstdint>
 
-namespace core {
+namespace tanuki { namespace core {
 
     // �@�륭�� (�x��)
     template <typename T>
@@ -52,4 +52,4 @@ namespace core {
         uint8_t* __restrict__ output_image,
         int width, int height
     );
-}
+}}  // namespace core, tanuki

@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <cuda_runtime.h>
 
-namespace core {
+namespace tanuki { namespace core {
     // �o�� helper �q�`���ݼ��S���~���ϥΪ̡A���Y��L�Ҳշ|�Ψ�A�i�H��o
     // �Y�u������ kernel �ΡA�h�����b���ŧi
 
@@ -25,5 +25,5 @@ namespace core {
         float alpha = 0.5f,
         cudaStream_t stream = 0
     );
-}
+}}  // namespace core, tanuki
 

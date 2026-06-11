@@ -3,7 +3,7 @@
 #include "core_cv/base/cuda_utils.hpp"
 #include <cmath>
 
-namespace core {
+namespace tanuki { namespace core {
 
     __global__ void k_sobelMagnitude_u8(const uint8_t* __restrict__ in, uint8_t* __restrict__ out, int W, int H) {
         int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -91,4 +91,4 @@ namespace core {
         out[idx] = response;
     }
 
-}
+}}  // namespace core, tanuki

@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <cuda_runtime.h>
 
-namespace core {
+namespace tanuki { namespace core {
     // �w�q Ridge Mode (���}���ϥΪ̬�)
     enum class detectionMode {VERTICAL = 0, HORIZONTAL = 1, BOTH = 2 };
 
@@ -24,4 +24,4 @@ namespace core {
         void* d_workspace = nullptr
     );
 
-}
+}}  // namespace core, tanuki

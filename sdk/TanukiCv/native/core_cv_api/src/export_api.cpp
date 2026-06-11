@@ -45,7 +45,7 @@ extern "C" {
             CHECK_CUDA(cudaMalloc((void**)&d_dst, size));
 
             // 隨便跑一個 kernel 強迫 context 初始化
-            core::threshold_u8_gpu(d_src, d_dst, W, H, 128, 0);
+            tanuki::core::threshold_u8_gpu(d_src, d_dst, W, H, 128, 0);
             CHECK_CUDA(cudaDeviceSynchronize());
 
             cudaFree(d_src);
@@ -62,17 +62,17 @@ extern "C" {
     // --- [新增] 記憶體與 IO 實作 ---
 
     CORE_CV_API unsigned char* CoreCV_AllocPinned(unsigned long long size) {
-        return (unsigned char*)core::alloc_pinned_memory((size_t)size);
+        return (unsigned char*)tanuki::core::alloc_pinned_memory((size_t)size);
     }
 
     CORE_CV_API void CoreCV_FreePinned(unsigned char* ptr) {
-        core::free_pinned_memory(ptr);
+        tanuki::core::free_pinned_memory(ptr);
     }
 
     CORE_CV_API bool CoreCV_FastReadBMP(const char* filepath, int* w, int* h, unsigned char* outBuffer, int bufferSize) {
         try {
             int width = 0, height = 0;
-            bool res = core::fast_read_bmp_8bit(filepath, width, height, outBuffer, bufferSize);
+            bool res = tanuki::core::fast_read_bmp_8bit(filepath, width, height, outBuffer, bufferSize);
             if (res) {
                 if (w) *w = width;
                 if (h) *h = height;
@@ -84,7 +84,7 @@ extern "C" {
 
     CORE_CV_API bool CoreCV_FastWriteBMP(const char* filepath, int w, int h, const unsigned char* inBuffer) {
         try {
-            return core::fast_write_bmp_8bit(filepath, w, h, inBuffer);
+            return tanuki::core::fast_write_bmp_8bit(filepath, w, h, inBuffer);
         }
         catch (...) { return false; }
     }
@@ -107,7 +107,7 @@ extern "C" {
             // 如果 src_ptr 是透過 CoreCV_AllocPinned 分配的，這行 Memcpy 會自動變成 Async DMA
             CHECK_CUDA(cudaMemcpy(d_in, src_ptr, size, cudaMemcpyHostToDevice));
 
-            core::brighten_u8_gpu(d_in, d_out, width, height, value, 0);
+            tanuki::core::brighten_u8_gpu(d_in, d_out, width, height, value, 0);
 
             CHECK_CUDA(cudaGetLastError());
             CHECK_CUDA(cudaDeviceSynchronize());
@@ -138,7 +138,7 @@ extern "C" {
 
             CHECK_CUDA(cudaMemcpy(d_in, src_ptr, size, cudaMemcpyHostToDevice));
 
-            core::threshold_u8_gpu(d_in, d_out, width, height, threshold, 0);
+            tanuki::core::threshold_u8_gpu(d_in, d_out, width, height, threshold, 0);
             CHECK_CUDA(cudaDeviceSynchronize());
 
             CHECK_CUDA(cudaMemcpy(dst_ptr, d_out, size, cudaMemcpyDeviceToHost));
@@ -165,7 +165,7 @@ extern "C" {
             CHECK_CUDA(cudaMalloc(&d_out, size));
             CHECK_CUDA(cudaMemcpy(d_in, src_ptr, size, cudaMemcpyHostToDevice));
 
-            core::invert_u8_gpu(d_in, d_out, width, height, 0); // 呼叫 core_ops (請確認已實作)
+            tanuki::core::invert_u8_gpu(d_in, d_out, width, height, 0); // 呼叫 core_ops (請確認已實作)
             CHECK_CUDA(cudaDeviceSynchronize());
 
             CHECK_CUDA(cudaMemcpy(dst_ptr, d_out, size, cudaMemcpyDeviceToHost));
@@ -196,7 +196,7 @@ extern "C" {
             CHECK_CUDA(cudaMemcpy(d_in, src_ptr, img_size, cudaMemcpyHostToDevice));
             CHECK_CUDA(cudaMemcpy(d_mask, mask_ptr, mask_bytes, cudaMemcpyHostToDevice));
 
-            core::convolution_u8_gpu(d_in, d_out, width, height, d_mask, mask_size, 0);
+            tanuki::core::convolution_u8_gpu(d_in, d_out, width, height, d_mask, mask_size, 0);
             CHECK_CUDA(cudaDeviceSynchronize());
 
             CHECK_CUDA(cudaMemcpy(dst_ptr, d_out, img_size, cudaMemcpyDeviceToHost));
@@ -242,27 +242,27 @@ extern "C" {
     // --- 純 GPU 運算 (極速版) ---
     CORE_CV_API int CoreCV_Brighten_GPU(const uint8_t* d_src, int width, int height, int value, uint8_t* d_dst) {
         // 沒有 Malloc，沒有 Memcpy，只有 Kernel Launch
-        core::brighten_u8_gpu(d_src, d_dst, width, height, value, 0);
+        tanuki::core::brighten_u8_gpu(d_src, d_dst, width, height, value, 0);
         // 不做 Sync，讓 CPU 可以馬上量測 Launch 時間 (或做 Sync 量測執行時間)
         CHECK_CUDA(cudaDeviceSynchronize());
         return CORE_CV_SUCCESS;
     }
 
     CORE_CV_API int CoreCV_Threshold_GPU(const uint8_t* d_src, int width, int height, uint8_t threshold, uint8_t* d_dst) {
-        core::threshold_u8_gpu(d_src, d_dst, width, height, threshold, 0);
+        tanuki::core::threshold_u8_gpu(d_src, d_dst, width, height, threshold, 0);
         CHECK_CUDA(cudaDeviceSynchronize());
         return CORE_CV_SUCCESS;
     }
 
     CORE_CV_API int CoreCV_Invert_GPU(const uint8_t* d_src, int width, int height, uint8_t* d_dst) {
-        core::invert_u8_gpu(d_src, d_dst, width, height, 0);
+        tanuki::core::invert_u8_gpu(d_src, d_dst, width, height, 0);
         CHECK_CUDA(cudaDeviceSynchronize());
         return CORE_CV_SUCCESS;
     }
 
     // 注意：Mask 也必須已經在 GPU 上
     CORE_CV_API int CoreCV_Convolution_GPU(const uint8_t* d_src, int width, int height, const float* d_mask, int mask_size, uint8_t* d_dst) {
-        core::convolution_u8_gpu(d_src, d_dst, width, height, d_mask, mask_size, 0);
+        tanuki::core::convolution_u8_gpu(d_src, d_dst, width, height, d_mask, mask_size, 0);
         CHECK_CUDA(cudaDeviceSynchronize());
         return CORE_CV_SUCCESS;
     }
@@ -305,7 +305,7 @@ extern "C" {
             // 若 h_src 是 Pinned Memory，此 memcpy 走 DMA 加速
             CHECK_CUDA(cudaMemcpy(d_src, h_src, (size_t)src_w * src_h, cudaMemcpyHostToDevice));
 
-            core::resize_u8_gpu(d_src, src_w, src_h, d_dst, dst_w, dst_h, /*stream=*/nullptr);
+            tanuki::core::resize_u8_gpu(d_src, src_w, src_h, d_dst, dst_w, dst_h, /*stream=*/nullptr);
 
             CHECK_CUDA(cudaGetLastError());
             CHECK_CUDA(cudaDeviceSynchronize());

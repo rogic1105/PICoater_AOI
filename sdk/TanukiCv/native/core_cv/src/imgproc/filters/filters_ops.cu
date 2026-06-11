@@ -11,7 +11,7 @@
 #include <thrust/execution_policy.h>
 
 
-namespace core {
+namespace tanuki { namespace core {
 
     void convolution_u8_gpu(const uint8_t* d_in, uint8_t* d_out, int W, int H, const float* d_mask, int maskSize, cudaStream_t s) {
         dim3 grid, block;
@@ -67,7 +67,7 @@ namespace core {
         CUDA_CHECK(cudaMemcpyAsync(d_mask, h_kernel.data(), ksize * sizeof(float), cudaMemcpyHostToDevice, s));
 
         // 3. �� Float
-        core::convert_u8_to_f32_gpu(d_in, d_f32_in, num_pixels, s);
+        tanuki::core::convert_u8_to_f32_gpu(d_in, d_f32_in, num_pixels, s);
 
         // 4. ���������n
         get_optimal_launch_2d(k_gaussianBlurRow, W, H, grid2d, block2d);
@@ -75,7 +75,7 @@ namespace core {
         k_gaussianBlurCol << <grid2d, block2d, 0, s >> > (d_f32_temp, d_f32_out, W, H, d_mask, ksize);
 
         // 5. ��^ Uint8
-        core::convert_f32_to_u8_clamp_gpu(d_f32_out, d_out, num_pixels, s);
+        tanuki::core::convert_f32_to_u8_clamp_gpu(d_f32_out, d_out, num_pixels, s);
 
         // 6. �M�z
         if (need_free) {
@@ -181,7 +181,7 @@ namespace core {
 
         // 6. ��J�ഫ (u8 -> f32)
         if constexpr (std::is_same<T_in, uint8_t>::value) {
-            core::convert_u8_to_f32_gpu((const uint8_t*)d_in, (float*)d_f32_src, num_pixels, stream);
+            tanuki::core::convert_u8_to_f32_gpu((const uint8_t*)d_in, (float*)d_f32_src, num_pixels, stream);
         }
 
         // 7. ����֤� (Row & Col)
@@ -193,7 +193,7 @@ namespace core {
 
         // 8. ��X�ഫ (f32 -> u8)
         if constexpr (std::is_same<T_out, uint8_t>::value) {
-            core::convert_f32_to_u8_clamp_gpu(d_f32_dst, (uint8_t*)d_out, num_pixels, stream);
+            tanuki::core::convert_f32_to_u8_clamp_gpu(d_f32_dst, (uint8_t*)d_out, num_pixels, stream);
         }
 
         // 9. �M�z (�Y�ϥ� cudaMalloc)
@@ -212,4 +212,4 @@ namespace core {
 
 
 
-}
+}}  // namespace core, tanuki

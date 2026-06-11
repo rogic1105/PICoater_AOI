@@ -11,7 +11,7 @@
 #include <thrust/execution_policy.h>
 
 
-namespace core {
+namespace tanuki { namespace core {
 
     void resize_u8_gpu(const uint8_t* d_src, int src_w, int src_h,
         uint8_t* d_dst, int dst_w, int dst_h,
@@ -31,4 +31,4 @@ namespace core {
         CUDA_CHECK(cudaGetLastError());
     }
 
-}
+}}  // namespace core, tanuki

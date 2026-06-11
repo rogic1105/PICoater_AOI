@@ -8,7 +8,7 @@
 #include <thrust/execution_policy.h>
 
 
-namespace core {
+namespace tanuki { namespace core {
 
     // 2D �B��: Zero Border
     void zero_border_u8_gpu(uint8_t* d_gray, int roiW, int roiH, int t, cudaStream_t s) {
@@ -92,4 +92,4 @@ namespace core {
         CUDA_CHECK(cudaGetLastError());
     }
 
-}
+}}  // namespace core, tanuki

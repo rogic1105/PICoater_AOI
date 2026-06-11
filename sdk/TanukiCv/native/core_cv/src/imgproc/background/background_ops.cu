@@ -4,7 +4,7 @@
 #include "background_kernels.cuh"
 #include <cstdint>
 
-namespace core {
+namespace tanuki { namespace core {
 
     // 1. �@�륭�� Host Function
     template <typename T>
@@ -80,4 +80,4 @@ namespace core {
     // Row max
     template void calcRowMax_gpu<uint8_t>(const uint8_t*, float*, int, int, cudaStream_t);
     template void calcRowMax_gpu<float>(const float*, float*, int, int, cudaStream_t);
-}
+}}  // namespace core, tanuki

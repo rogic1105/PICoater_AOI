@@ -4,7 +4,7 @@
 #include <vector>
 #include <string>
 
-namespace core {
+namespace tanuki { namespace core {
 
     // �w�q�@�ӳq�Ϊ��v�����c (RAII ����A�۰ʺ޲z�O����)
     struct Image {
@@ -39,4 +39,4 @@ namespace core {
 
     // CPU �Y��Ū�� (�A�쥻�g�n��)
     int load_thumbnail_cpu(const char* filepath, int target_width, uint8_t* out_buffer, int* out_real_w, int* out_real_h);
-}
+}}  // namespace core, tanuki

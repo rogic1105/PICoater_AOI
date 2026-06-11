@@ -38,9 +38,9 @@ void RunCoreTests(const std::string& imgPath) {
             TIME_SCOPE_MS("Fast Load BMP");
             // �w���̤j�i��j�p (�Ҧp 16K * 10K)�A�������t
             size_t max_alloc_size = 16384 * 10000;
-            h_pinned_in = (uint8_t*)core::alloc_pinned_memory(max_alloc_size);
+            h_pinned_in = (uint8_t*)tanuki::core::alloc_pinned_memory(max_alloc_size);
 
-            if (!core::fast_read_bmp_8bit(imgPath, W, H, h_pinned_in, max_alloc_size)) {
+            if (!tanuki::core::fast_read_bmp_8bit(imgPath, W, H, h_pinned_in, max_alloc_size)) {
                 throw std::runtime_error("Fast load failed");
             }
             std::cout << "Loaded: " << W << "x" << H << "\n";
@@ -49,9 +49,9 @@ void RunCoreTests(const std::string& imgPath) {
         size_t size = W * H;
 
         // 2. Allocate Output Pinned Memory
-        h_pinned_out_bright = (uint8_t*)core::alloc_pinned_memory(size);
-        h_pinned_out_thresh = (uint8_t*)core::alloc_pinned_memory(size);
-        h_pinned_out_conv = (uint8_t*)core::alloc_pinned_memory(size);
+        h_pinned_out_bright = (uint8_t*)tanuki::core::alloc_pinned_memory(size);
+        h_pinned_out_thresh = (uint8_t*)tanuki::core::alloc_pinned_memory(size);
+        h_pinned_out_conv = (uint8_t*)tanuki::core::alloc_pinned_memory(size);
 
         // 3. GPU Alloc & Upload
         checkCudaErrors(cudaMalloc(&d_in, size));
@@ -66,14 +66,14 @@ void RunCoreTests(const std::string& imgPath) {
         // --- Test 1: Brighten ---
         {
             TIME_SCOPE_MS_SYNC("Core: Brighten (GPU)", cudaDeviceSynchronize());
-            core::brighten_u8_gpu(d_in, d_out, W, H, 50, 0);
+            tanuki::core::brighten_u8_gpu(d_in, d_out, W, H, 50, 0);
         }
         checkCudaErrors(cudaMemcpy(h_pinned_out_bright, d_out, size, cudaMemcpyDeviceToHost));
 
         // --- Test 2: Threshold ---
         {
             TIME_SCOPE_MS_SYNC("Core: Threshold (GPU)", cudaDeviceSynchronize());
-            core::threshold_u8_gpu(d_in, d_out, W, H, 128, 0);
+            tanuki::core::threshold_u8_gpu(d_in, d_out, W, H, 128, 0);
         }
         checkCudaErrors(cudaMemcpy(h_pinned_out_thresh, d_out, size, cudaMemcpyDeviceToHost));
 
@@ -84,7 +84,7 @@ void RunCoreTests(const std::string& imgPath) {
 
         {
             TIME_SCOPE_MS_SYNC("Core: Convolution 3x3 (GPU)", cudaDeviceSynchronize());
-            core::convolution_u8_gpu(d_in, d_out, W, H, d_mask, 3, 0);
+            tanuki::core::convolution_u8_gpu(d_in, d_out, W, H, d_mask, 3, 0);
         }
         checkCudaErrors(cudaMemcpy(h_pinned_out_conv, d_out, size, cudaMemcpyDeviceToHost));
 
@@ -96,9 +96,9 @@ void RunCoreTests(const std::string& imgPath) {
             std::string outPath2 = bench_framework::GetOutputPath("core_cv_benchmark", "out_core_threshold.bmp");
             std::string outPath3 = bench_framework::GetOutputPath("core_cv_benchmark", "out_core_convolution.bmp");
 
-            auto f1 = std::async(std::launch::async, [&] { core::fast_write_bmp_8bit(outPath1, W, H, h_pinned_out_bright); });
-            auto f2 = std::async(std::launch::async, [&] { core::fast_write_bmp_8bit(outPath2, W, H, h_pinned_out_thresh); });
-            auto f3 = std::async(std::launch::async, [&] { core::fast_write_bmp_8bit(outPath3, W, H, h_pinned_out_conv); });
+            auto f1 = std::async(std::launch::async, [&] { tanuki::core::fast_write_bmp_8bit(outPath1, W, H, h_pinned_out_bright); });
+            auto f2 = std::async(std::launch::async, [&] { tanuki::core::fast_write_bmp_8bit(outPath2, W, H, h_pinned_out_thresh); });
+            auto f3 = std::async(std::launch::async, [&] { tanuki::core::fast_write_bmp_8bit(outPath3, W, H, h_pinned_out_conv); });
 
             f1.get(); f2.get(); f3.get();
         }
@@ -114,8 +114,8 @@ void RunCoreTests(const std::string& imgPath) {
     if (d_out) cudaFree(d_out);
     if (d_mask) cudaFree(d_mask);
 
-    core::free_pinned_memory(h_pinned_in);
-    core::free_pinned_memory(h_pinned_out_bright);
-    core::free_pinned_memory(h_pinned_out_thresh);
-    core::free_pinned_memory(h_pinned_out_conv);
+    tanuki::core::free_pinned_memory(h_pinned_in);
+    tanuki::core::free_pinned_memory(h_pinned_out_bright);
+    tanuki::core::free_pinned_memory(h_pinned_out_thresh);
+    tanuki::core::free_pinned_memory(h_pinned_out_conv);
 }

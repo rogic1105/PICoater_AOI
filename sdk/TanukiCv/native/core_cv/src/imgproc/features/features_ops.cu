@@ -5,7 +5,7 @@
 #include "core_cv/imgproc/core_filters.hpp"
 #include "core_cv/imgproc/core_utils.hpp"
 
-namespace core {
+namespace tanuki { namespace core {
 
     void sobel_u8_gpu(const uint8_t* d_in, uint8_t* d_out, int W, int H, cudaStream_t s) {
         dim3 grid, block;
@@ -53,17 +53,17 @@ namespace core {
         // �����h���T
         int ksize = (int)(6.0f * sigma + 1.0f);
         if (ksize % 2 == 0) ksize++;
-        core::gaussianBlur_gpu<uint8_t, float>(d_in, d_temp_blur_f32, W, H, sigma, ksize, s, d_workspace);
+        tanuki::core::gaussianBlur_gpu<uint8_t, float>(d_in, d_temp_blur_f32, W, H, sigma, ksize, s, d_workspace);
 
         detectionMode mode = detectionMode::VERTICAL;
         if (strcmp(mode_str, "horizontal") == 0) mode = detectionMode::HORIZONTAL;
         else if (strcmp(mode_str, "both") == 0) mode = detectionMode::BOTH;
-        core::computeHessianResponse_gpu(d_temp_blur_f32, d_temp_response, W, H, mode, s);
+        tanuki::core::computeHessianResponse_gpu(d_temp_blur_f32, d_temp_response, W, H, mode, s);
 
         float scale_factor = 255.0f / hessianMaxFactor;
-        core::scale_clamp_f32_to_u8_gpu(d_temp_response, d_out, num_pixels, scale_factor, s);
+        tanuki::core::scale_clamp_f32_to_u8_gpu(d_temp_response, d_out, num_pixels, scale_factor, s);
 
     }
 
 
-}
+}}  // namespace core, tanuki

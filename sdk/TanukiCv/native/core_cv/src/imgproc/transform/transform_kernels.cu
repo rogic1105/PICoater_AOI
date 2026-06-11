@@ -5,7 +5,7 @@
 
 
 
-namespace core {
+namespace tanuki { namespace core {
 
     __global__ void k_resize_nearest_u8(const uint8_t* src, int src_w, int src_h,
         uint8_t* dst, int dst_w, int dst_h) {
@@ -29,4 +29,4 @@ namespace core {
         dst[y * dst_w + x] = src[src_y * src_w + src_x];
     }
 
-}
+}}  // namespace core, tanuki

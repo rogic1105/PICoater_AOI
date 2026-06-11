@@ -30,7 +30,7 @@ namespace picoater {
             // Step 1: column means with outlier removal.
             // stride = m_width: h_in is tightly packed by column (no padding).
             {
-                core::calcColumnMeans_RemoveOutliers_cpu(
+                tanuki::core::calcColumnMeans_RemoveOutliers_cpu(
                     h_in,
                     h_col_mean.data(),
                     m_width,
@@ -42,7 +42,7 @@ namespace picoater {
 
             // Step 2: column background + mura.
             {
-                core::calcColumnBackground_u8_cpu(
+                tanuki::core::calcColumnBackground_u8_cpu(
                     h_in,
                     h_col_mean.data(),
                     h_mura_out,

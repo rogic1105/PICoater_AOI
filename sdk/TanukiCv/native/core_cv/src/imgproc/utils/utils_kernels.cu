@@ -6,7 +6,7 @@
 
 
 
-namespace core {
+namespace tanuki { namespace core {
 
     __global__ void k_zeroBorder_u8(uint8_t* __restrict__ in, int roiW, int roiH, int t) {
         int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -133,4 +133,4 @@ namespace core {
 
 
 
-}
+}}  // namespace core, tanuki

@@ -7,7 +7,7 @@
 #include <iostream>
 #include <stdexcept>
 
-namespace core {
+namespace tanuki { namespace core {
 
     // 1. Ū���Ϥ�
     Image imread(const std::string& filepath, int desired_channels) {
@@ -82,4 +82,4 @@ namespace core {
         stbi_image_free(img);
         return 0;
     }
-}
+}}  // namespace core, tanuki

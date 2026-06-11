@@ -122,16 +122,16 @@ namespace picoater {
             cudaMemcpyAsync(d_col_mean, d_precomputed_col_mean,
                             m_width * sizeof(float), cudaMemcpyDeviceToDevice, stream);
         } else {
-            core::calcColumnMeans_RemoveOutliers_gpu(d_in, d_col_mean, m_width, m_height, sigma_col, stream);
+            tanuki::core::calcColumnMeans_RemoveOutliers_gpu(d_in, d_col_mean, m_width, m_height, sigma_col, stream);
         }
 
         // Step 2: Background Removal -> d_mura_out (bg-removed image)
-        core::calcColumnBackground_u8_gpu(d_in, d_col_mean, d_mura_out, m_width, m_height, stream);
+        tanuki::core::calcColumnBackground_u8_gpu(d_in, d_col_mean, d_mura_out, m_width, m_height, stream);
 
         // Step 3: Gaussian blur (once, shared by all ridge directions)
         int ksize = (int)(6.0f * ridgeSigma + 1.0f);
         if (ksize % 2 == 0) ksize++;
-        core::gaussianBlur_gpu<uint8_t, float>(
+        tanuki::core::gaussianBlur_gpu<uint8_t, float>(
             d_mura_out, d_hessian_f32_, m_width, m_height, ridgeSigma, ksize, stream, d_workspace_);
 
         // Parse ridgeMode: "vertical", "horizontal", "vertical+horizontal"
@@ -143,45 +143,45 @@ namespace picoater {
 
         // Step 4: Vertical ridge -> d_ridge_out + col curves
         if (doVertical) {
-            core::computeHessianResponse_gpu(d_hessian_f32_, d_hessian_resp_, m_width, m_height,
-                                             core::detectionMode::VERTICAL, stream);
+            tanuki::core::computeHessianResponse_gpu(d_hessian_f32_, d_hessian_resp_, m_width, m_height,
+                                             tanuki::core::detectionMode::VERTICAL, stream);
 
             // Neutralized: curves are computed from the raw float Hessian response
             // (before clamp+u8 quantization), then scaled by 255/normValue (no clamp),
             // preserving peak info so thresholds can be re-tuned at review time.
-            core::calcColumnMeans_gpu<float>(
+            tanuki::core::calcColumnMeans_gpu<float>(
                 d_hessian_resp_, d_mura_curve_mean, m_width, m_height, stream, d_workspace_);
-            core::calcColumnMax_gpu<float>(
+            tanuki::core::calcColumnMax_gpu<float>(
                 d_hessian_resp_, d_mura_curve_max, m_width, m_height, stream);
             scale_f32_inplace_gpu(d_mura_curve_mean, m_width, scale_factor, stream);
             scale_f32_inplace_gpu(d_mura_curve_max,  m_width, scale_factor, stream);
 
             // u8 ridge image (for display; still goes through the scale+clamp path)
-            core::scale_clamp_f32_to_u8_gpu(d_hessian_resp_, d_ridge_out, num_pixels, scale_factor, stream);
+            tanuki::core::scale_clamp_f32_to_u8_gpu(d_hessian_resp_, d_ridge_out, num_pixels, scale_factor, stream);
         }
 
         // Step 5: Horizontal ridge + row curves
         if (doHorizontal) {
-            core::computeHessianResponse_gpu(d_hessian_f32_, d_hessian_resp_, m_width, m_height,
-                                             core::detectionMode::HORIZONTAL, stream);
+            tanuki::core::computeHessianResponse_gpu(d_hessian_f32_, d_hessian_resp_, m_width, m_height,
+                                             tanuki::core::detectionMode::HORIZONTAL, stream);
 
             // Neutralized: row curves from raw float Hessian response, then 255/normValue scale (no clamp).
             if (d_mura_row_curve_mean != nullptr) {
-                core::calcRowMeans_gpu<float>(d_hessian_resp_, d_mura_row_curve_mean, m_width, m_height, stream);
+                tanuki::core::calcRowMeans_gpu<float>(d_hessian_resp_, d_mura_row_curve_mean, m_width, m_height, stream);
                 scale_f32_inplace_gpu(d_mura_row_curve_mean, m_height, scale_factor, stream);
             }
             if (d_mura_row_curve_max != nullptr) {
-                core::calcRowMax_gpu<float>(d_hessian_resp_, d_mura_row_curve_max, m_width, m_height, stream);
+                tanuki::core::calcRowMax_gpu<float>(d_hessian_resp_, d_mura_row_curve_max, m_width, m_height, stream);
                 scale_f32_inplace_gpu(d_mura_row_curve_max, m_height, scale_factor, stream);
             }
 
             // u8 ridge image (for display)
             if (doVertical) {
                 // vertical+horizontal: horizontal image -> d_mura_out (overwrite bg-removed, already consumed)
-                core::scale_clamp_f32_to_u8_gpu(d_hessian_resp_, d_mura_out, num_pixels, scale_factor, stream);
+                tanuki::core::scale_clamp_f32_to_u8_gpu(d_hessian_resp_, d_mura_out, num_pixels, scale_factor, stream);
             } else {
                 // horizontal only: horizontal image -> d_ridge_out (main output)
-                core::scale_clamp_f32_to_u8_gpu(d_hessian_resp_, d_ridge_out, num_pixels, scale_factor, stream);
+                tanuki::core::scale_clamp_f32_to_u8_gpu(d_hessian_resp_, d_ridge_out, num_pixels, scale_factor, stream);
             }
         }
 

@@ -4,7 +4,7 @@
 #include <cmath>
 
 
-namespace core {
+namespace tanuki { namespace core {
 
     // ���n (���� 2D)
     __global__ void k_convolution_u8(const uint8_t* __restrict__ in, uint8_t* __restrict__ out, int W, int H, const float* __restrict__ d_mask, int maskSize) {
@@ -108,4 +108,4 @@ namespace core {
     }
 
 
-}
+}}  // namespace core, tanuki

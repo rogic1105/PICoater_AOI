@@ -8,7 +8,7 @@
 #include <thrust/execution_policy.h>
 
 
-namespace core {
+namespace tanuki { namespace core {
 
     void brighten_u8_gpu(const uint8_t* d_in, uint8_t* d_out, int W, int H, int bright, cudaStream_t s) {
         int N = W * H;
@@ -35,4 +35,4 @@ namespace core {
         CUDA_CHECK(cudaGetLastError());
     }
 
-}
+}}  // namespace core, tanuki

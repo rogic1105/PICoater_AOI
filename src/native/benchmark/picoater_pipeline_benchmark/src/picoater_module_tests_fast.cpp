@@ -44,14 +44,14 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
     try {
         // �w���̤j�i��ؤo (�Ҧp 16384 x 10000)
         size_t max_size = 16384 * 10000;
-        h_pinned_in = (uint8_t*)core::alloc_pinned_memory(max_size);
+        h_pinned_in = (uint8_t*)tanuki::core::alloc_pinned_memory(max_size);
 
         int w = 0, h = 0;
 
         // --- A. ���tŪ�ϴ��� (Direct to Pinned) ---
         {
             TIME_SCOPE_MS("Fast Load BMP (SSD -> Pinned Memory)");
-            if (!core::fast_read_bmp_8bit(imgPath, w, h, h_pinned_in, max_size)) {
+            if (!tanuki::core::fast_read_bmp_8bit(imgPath, w, h, h_pinned_in, max_size)) {
                 std::cerr << "Fast load failed! Check file path or format.\n";
                 return;
             }
@@ -72,12 +72,12 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
         checkCudaErrors(cudaMalloc(&d_mura_row_curve_max, h * sizeof(float)));
 
         // --- C. ���t��X Pinned Memory ---
-        h_in = (uint8_t*)core::alloc_pinned_memory(img_size);
-        h_pinned_bg = (uint8_t*)core::alloc_pinned_memory(img_size);
-        h_pinned_mura = (uint8_t*)core::alloc_pinned_memory(img_size);
-        h_pinned_ridge = (uint8_t*)core::alloc_pinned_memory(img_size);
-        h_pinned_mura_mean = (float*)core::alloc_pinned_memory(w * sizeof(float));
-        h_pinned_mura_max = (float*)core::alloc_pinned_memory(w * sizeof(float));
+        h_in = (uint8_t*)tanuki::core::alloc_pinned_memory(img_size);
+        h_pinned_bg = (uint8_t*)tanuki::core::alloc_pinned_memory(img_size);
+        h_pinned_mura = (uint8_t*)tanuki::core::alloc_pinned_memory(img_size);
+        h_pinned_ridge = (uint8_t*)tanuki::core::alloc_pinned_memory(img_size);
+        h_pinned_mura_mean = (float*)tanuki::core::alloc_pinned_memory(w * sizeof(float));
+        h_pinned_mura_max = (float*)tanuki::core::alloc_pinned_memory(w * sizeof(float));
 
         // --- D. �W�ǹϤ� (Pinned -> Device) ---
         {
@@ -136,19 +136,19 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
             std::string outPath5 = bench_framework::GetOutputPath("picoater_pipeline_benchmark", "fast_heatmap.bmp");
 
             auto f1 = std::async(std::launch::async, [&] {
-                core::fast_write_bmp_8bit(outPath1, w, h, h_in);
+                tanuki::core::fast_write_bmp_8bit(outPath1, w, h, h_in);
                 });
             auto f2 = std::async(std::launch::async, [&] {
-                core::fast_write_bmp_8bit(outPath2, w, h, h_pinned_bg);
+                tanuki::core::fast_write_bmp_8bit(outPath2, w, h, h_pinned_bg);
                 });
             auto f3 = std::async(std::launch::async, [&] {
-                core::fast_write_bmp_8bit(outPath3, w, h, h_pinned_mura);
+                tanuki::core::fast_write_bmp_8bit(outPath3, w, h, h_pinned_mura);
                 });
             auto f4 = std::async(std::launch::async, [&] {
-                core::fast_write_bmp_8bit(outPath4, w, h, h_pinned_ridge);
+                tanuki::core::fast_write_bmp_8bit(outPath4, w, h, h_pinned_ridge);
                 });
             auto f5 = std::async(std::launch::async, [&] {
-                core::fast_write_bmp_24bit(outPath5, w, h, h_pinned_heatmap);
+                tanuki::core::fast_write_bmp_24bit(outPath5, w, h, h_pinned_heatmap);
                 });
 
             f2.get(); f3.get(); f4.get(); f5.get();
@@ -159,7 +159,7 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
         std::cout << Color::CYAN << "\n--- Running CPU SIMD Implementation Test ---" << Color::RESET << "\n";
         {
             // 1. ���t CPU ��X�w�İ�
-            uint8_t* h_cpu_mura = (uint8_t*)core::alloc_pinned_memory(img_size);
+            uint8_t* h_cpu_mura = (uint8_t*)tanuki::core::alloc_pinned_memory(img_size);
 
             // 2. �إ� Detector ���
             picoater::PICoaterDetector detector_cpu;
@@ -176,12 +176,12 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
             {
                 TIME_SCOPE_MS("Save CPU Result BMP");
                 std::string outPathCPU = bench_framework::GetOutputPath("picoater_pipeline_benchmark", "cpu_simd_mura.bmp");
-                core::fast_write_bmp_8bit(outPathCPU, w, h, h_cpu_mura);
+                tanuki::core::fast_write_bmp_8bit(outPathCPU, w, h, h_cpu_mura);
                 std::cout << "Saved CPU result to: " << outPathCPU << "\n";
             }
 
             // �M�z���a�귽
-            core::free_pinned_memory(h_cpu_mura);
+            tanuki::core::free_pinned_memory(h_cpu_mura);
         }
 
     }
@@ -197,12 +197,12 @@ void PICoaterModuleTestsFast(const std::string& imgPath) {
     if (d_heatmap) cudaFree(d_heatmap); // [�s�W]
     if (d_mura_curve_mean) cudaFree(d_mura_curve_mean);
 
-    core::free_pinned_memory(h_pinned_in);
-    core::free_pinned_memory(h_pinned_bg);
-    core::free_pinned_memory(h_pinned_mura);
-    core::free_pinned_memory(h_pinned_ridge);
-    core::free_pinned_memory(h_pinned_heatmap); // [�s�W]
-    core::free_pinned_memory(h_pinned_mura_mean);
+    tanuki::core::free_pinned_memory(h_pinned_in);
+    tanuki::core::free_pinned_memory(h_pinned_bg);
+    tanuki::core::free_pinned_memory(h_pinned_mura);
+    tanuki::core::free_pinned_memory(h_pinned_ridge);
+    tanuki::core::free_pinned_memory(h_pinned_heatmap); // [�s�W]
+    tanuki::core::free_pinned_memory(h_pinned_mura_mean);
 
     std::cout << Color::GREEN << "All Tests Finished." << Color::RESET << "\n";
 }
@@ -249,10 +249,10 @@ struct CamContext {
         checkCudaErrors(cudaMalloc(&d_mura_row_curve_mean, h * sizeof(float)));
         checkCudaErrors(cudaMalloc(&d_mura_row_curve_max, h * sizeof(float)));
 
-        h_pinned_in = (uint8_t*)core::alloc_pinned_memory(img_size);
-        h_pinned_thumb = (uint8_t*)core::alloc_pinned_memory(2000 * 2000);
-        h_pinned_mura_mean = (float*)core::alloc_pinned_memory(w * sizeof(float));
-        h_pinned_mura_max = (float*)core::alloc_pinned_memory(w * sizeof(float));
+        h_pinned_in = (uint8_t*)tanuki::core::alloc_pinned_memory(img_size);
+        h_pinned_thumb = (uint8_t*)tanuki::core::alloc_pinned_memory(2000 * 2000);
+        h_pinned_mura_mean = (float*)tanuki::core::alloc_pinned_memory(w * sizeof(float));
+        h_pinned_mura_max = (float*)tanuki::core::alloc_pinned_memory(w * sizeof(float));
 
         if (!h_pinned_in || !h_pinned_thumb || !h_pinned_mura_mean) {
             std::cerr << "CamContext " << id << ": Failed to allocate Host Pinned Memory!\n";
@@ -273,9 +273,9 @@ struct CamContext {
         if (d_mura_row_curve_mean) cudaFree(d_mura_row_curve_mean);
         if (d_mura_row_curve_max) cudaFree(d_mura_row_curve_max);
 
-        core::free_pinned_memory(h_pinned_in);
-        core::free_pinned_memory(h_pinned_thumb);
-        core::free_pinned_memory(h_pinned_mura_mean);
+        tanuki::core::free_pinned_memory(h_pinned_in);
+        tanuki::core::free_pinned_memory(h_pinned_thumb);
+        tanuki::core::free_pinned_memory(h_pinned_mura_mean);
 
         if (stream) cudaStreamDestroy(stream);
     }
@@ -291,11 +291,11 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath, const int NUM_CA
 
     {
         size_t max_size = 16384 * 10000;
-        shared_source_img = (uint8_t*)core::alloc_pinned_memory(max_size); // �Ȧs��
+        shared_source_img = (uint8_t*)tanuki::core::alloc_pinned_memory(max_size); // �Ȧs��
 
-        if (!core::fast_read_bmp_8bit(imgPath, w, h, shared_source_img, max_size)) {
+        if (!tanuki::core::fast_read_bmp_8bit(imgPath, w, h, shared_source_img, max_size)) {
             std::cerr << "Init failed: Cannot load image.\n";
-            core::free_pinned_memory(shared_source_img);
+            tanuki::core::free_pinned_memory(shared_source_img);
             return;
         }
         img_size = (size_t)w * h;
@@ -352,7 +352,7 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath, const int NUM_CA
 
             // C. Resize
             uint8_t* d_thumb_temp = shared_ctx.d_bg;
-            core::resize_u8_gpu(shared_ctx.d_mura, shared_ctx.w, shared_ctx.h, d_thumb_temp, 1000, thumb_h, shared_ctx.stream);
+            tanuki::core::resize_u8_gpu(shared_ctx.d_mura, shared_ctx.w, shared_ctx.h, d_thumb_temp, 1000, thumb_h, shared_ctx.stream);
 
             // D. Download
             size_t thumb_size = 1000 * thumb_h;
@@ -370,7 +370,7 @@ void PICoaterModuleTestsMultiThread(const std::string& imgPath, const int NUM_CA
 
     // �M�z
     shared_ctx.Release();
-    core::free_pinned_memory(shared_source_img);
+    tanuki::core::free_pinned_memory(shared_source_img);
 
 
 }

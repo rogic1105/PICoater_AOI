@@ -4,7 +4,7 @@
 #include <cmath>
 #include <cuda_fp16.h>
 
-namespace core {
+namespace tanuki { namespace core {
 
     // [Traits] �M�w�֥[�����O
     template <typename T> struct AccumulatorTraits { using Type = float; }; // �w�] float (�� float ��J��)
@@ -219,4 +219,4 @@ namespace core {
 
     template __global__ void k_calcColumnMeans_RemoveOutliers<uint8_t>(const uint8_t* __restrict__, float* __restrict__, int, int, float);
     template __global__ void k_calcColumnMeans_RemoveOutliers<float>(const float* __restrict__, float* __restrict__, int, int, float);
-}
+}}  // namespace core, tanuki

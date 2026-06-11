@@ -15,7 +15,7 @@
 #define RESTRICT __restrict__
 #endif
 
-namespace core {
+namespace tanuki { namespace core {
 
     // [CPU V21 Final] 垂直分塊 + 垂直展開 (Vertical Strip + Unroll)
     // 效能：~0.68s @ 128MP (比 Python numpy.mean 快)
@@ -126,4 +126,4 @@ namespace core {
             }
         }
     }
-}
+}}  // namespace core, tanuki

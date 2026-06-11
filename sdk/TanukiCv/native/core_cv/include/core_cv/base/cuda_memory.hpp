@@ -3,7 +3,7 @@
 #include <cuda_runtime.h>
 #include <cstdlib> // size_t
 
-namespace core {
+namespace tanuki { namespace core {
 
     // ���t�ꭶ�O���� (Pinned Memory)
     // �ϥ� void** �O���F�t�X CUDA API ����A�Ϊ̪����^�� void* �]�i�H
@@ -25,4 +25,4 @@ namespace core {
         }
     }
 
-}
+}}  // namespace core, tanuki

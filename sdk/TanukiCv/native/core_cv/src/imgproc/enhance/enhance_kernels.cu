@@ -2,7 +2,7 @@
 #include "enhance_kernels.cuh"
 #include <cmath>
 
-namespace core {
+namespace tanuki { namespace core {
 
     //  �G�� (1D)
     __global__ void k_brighten_u8(const uint8_t* __restrict__ in, uint8_t* __restrict__ out, int N, int bright) {
@@ -32,4 +32,4 @@ namespace core {
         }
     }
 
-}
+}}  // namespace core, tanuki

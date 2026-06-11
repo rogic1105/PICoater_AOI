@@ -3,7 +3,7 @@
 #include <cuda_runtime.h>
 #include <cstdint>
 
-namespace core {
+namespace tanuki { namespace core {
     __global__ void k_zeroBorder_u8(uint8_t* __restrict__ in, int roiW, int roiH, int t);
 
     __global__ void k_f32_to_u8_clamp(const float* __restrict__ in, uint8_t* __restrict__ out, int N);
@@ -23,4 +23,4 @@ namespace core {
         float alpha
     );
 
-}
+}}  // namespace core, tanuki

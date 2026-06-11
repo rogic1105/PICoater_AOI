@@ -277,7 +277,7 @@ int PICoaterAPI_ComputeColumnMean(AoiPipelineHandle handle,
   if (sigma_col < 1) sigma_col = 1;
 
   // Only Step 1: compute column means with outlier removal
-  core::calcColumnMeans_RemoveOutliers_gpu<uint8_t>(
+  tanuki::core::calcColumnMeans_RemoveOutliers_gpu<uint8_t>(
       context->d_input, context->d_curve_mean, input->width, input->height,
       sigma_col, nullptr);
   cudaDeviceSynchronize();

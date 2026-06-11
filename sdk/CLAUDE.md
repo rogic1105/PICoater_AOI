@@ -17,6 +17,9 @@
 sdk/
 ├── TanukiCv/        ← 以 core_cv(CUDA) 為引擎的 .NET 影像 SDK（durable，跨產品共用）
 │   ├── native/{core_cv, cpp_utils, core_cv_api}   ← C++/CUDA 引擎 + C API
+│   │     C++ namespace = `tanuki::core`（傳統巢狀 `namespace tanuki { namespace core {`；nvcc 不吃 C++17
+│   │     `namespace tanuki::core{}` 形式）。避開超常見 `core` 撞名，供其他 C++ 專案 source/header 重用。
+│   │     對外 C API 仍是 `extern "C" CoreCV_*`（.NET P/Invoke 不碰 namespace）。cpp_utils 仍 `Color`（待議）
 │   ├── dotnet/
 │   │   ├── TanukiCv.Core         ← 純 library（無 WinForms）：PixelMmMapper 像素↔mm、SystemInfo、PerfTimer、
 │   │   │                             MergeLayout（合圖佈局唯一來源）、CurveOverviewMerger（切向全覽曲線合併唯一來源）

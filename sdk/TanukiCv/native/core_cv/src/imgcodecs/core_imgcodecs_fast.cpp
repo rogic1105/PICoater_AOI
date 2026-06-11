@@ -9,7 +9,7 @@
 #include <iostream>
 #include <cmath> // std::abs
 
-namespace core {
+namespace tanuki { namespace core {
 
 #pragma pack(push, 1)
     struct BmpHeader {
@@ -193,4 +193,4 @@ namespace core {
         fclose(fp);
     }
 
-}
+}}  // namespace core, tanuki
