@@ -75,7 +75,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Core\CoreCVWrapper.cs" />
+    <Compile Include="Core\TanukiCvWrapper.cs" />
     <Compile Include="PixelMmMapper.cs" />
     <Compile Include="MergeLayout.cs" />
     <Compile Include="CurveOverviewMerger.cs" />

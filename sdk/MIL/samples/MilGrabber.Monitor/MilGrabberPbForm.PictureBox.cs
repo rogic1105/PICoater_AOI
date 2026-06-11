@@ -14,7 +14,7 @@ namespace MilGrabber.Monitor
     // PictureBox 顯示路徑（絞殺榕重寫版）：不讓 MIL 直接畫 panel，改訂閱 MilCamera.FrameReady →
     //   GetFrameBytes（8-bit 灰階全解析度）→ 餵共用 LiveDisplayView（主畫面 SmartCanvas + 縮圖條 + CPU 合圖 + LOD）。
     // **不再每幀做全解析度 GPU resize / pinned**（那是舊路的資源殺手：16384×3000=49MB/幀，撐爆 CUDA pinned）。
-    //   顯示/縮圖/合圖一律 CPU；LOD 只裁「可見區」小圖，resize 用可插拔委派（GPU CoreCV / CPU GrayResizeCpu，二選一跑測）。
+    //   顯示/縮圖/合圖一律 CPU；LOD 只裁「可見區」小圖，resize 用可插拔委派（GPU TanukiCv / CPU GrayResizeCpu，二選一跑測）。
     public partial class MilGrabberPbForm
     {
         // 每相機原始灰階緩衝（同相機 FrameReady 序列觸發 → 同 idx 無併發；PushFrame 內會複製，故可重用）
@@ -208,7 +208,7 @@ namespace MilGrabber.Monitor
             public InitMode Init { get; set; } = InitMode.PictureBox;
             [Category("顯示")][DisplayName("合圖方式")][Description("單張 / 合圖 / 合圖全部（含無畫面相機黑占位）")]
             public DisplayMode Display { get; set; } = DisplayMode.Single;
-            [Category("顯示")][DisplayName("動態LOD")][Description("關閉 / GPU(CoreCV) / CPU(GrayResizeCpu)。CPU 通常較順（無 H2D/D2H 來回）")]
+            [Category("顯示")][DisplayName("動態LOD")][Description("關閉 / GPU(TanukiCv) / CPU(GrayResizeCpu)。CPU 通常較順（無 H2D/D2H 來回）")]
             public LodMode Lod { get; set; } = LodMode.Off;
             [Category("顯示")][DisplayName("重疊策略")][Description("合圖重疊區分界：中線 / 右覆蓋左 / 左覆蓋右")]
             public OverlapMode Overlap { get; set; } = OverlapMode.Midline;

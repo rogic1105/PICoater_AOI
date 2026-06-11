@@ -1,4 +1,4 @@
-﻿// TanukiCv.Core\Core\CoreCVWrapper.cs
+﻿// TanukiCv.Core\Core\TanukiCvWrapper.cs
 
 using System;
 using System.Runtime.InteropServices;
@@ -8,7 +8,7 @@ namespace TanukiCv.Core
     /// <summary>
     /// 封裝 tanuki_cv_api.dll 的原生函式庫
     /// </summary>
-    public static class CoreCVWrapper
+    public static class TanukiCvWrapper
     {
         private const string DLL_NAME = "tanuki_cv_api.dll";
 

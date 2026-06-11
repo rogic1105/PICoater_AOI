@@ -22,7 +22,7 @@ namespace TanukiCv.Core
 
                     // 暖身細節 (malloc + kernel + free) 封裝在 native，
                     // 「怎麼暖身」是 GPU 的內部事，不在 C# 端組底層 CUDA 呼叫。
-                    int ret = CoreCVWrapper.TanukiCv_WarmUp();
+                    int ret = TanukiCvWrapper.TanukiCv_WarmUp();
 
                     sw.Stop();
                     Debug.WriteLine($"[GPU] WarmUp Completed (ret={ret}) in {sw.ElapsedMilliseconds} ms");

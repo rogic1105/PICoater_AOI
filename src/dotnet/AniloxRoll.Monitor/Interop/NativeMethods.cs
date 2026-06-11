@@ -40,21 +40,21 @@ namespace AniloxRoll.Monitor.Core.Interop
     internal static class NativeMethods
     {
         private const string DllName = "picoater_api.dll";
-        private const string CoreCVDllName = "tanuki_cv_api.dll";
+        private const string TanukiCvDllName = "tanuki_cv_api.dll";
 
         // =====================================================
         // tanuki_cv_api.dll — Pinned Memory (CUDA cudaMallocHost)
         // =====================================================
-        [DllImport(CoreCVDllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(TanukiCvDllName, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr TanukiCv_AllocPinned(ulong size);
 
-        [DllImport(CoreCVDllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(TanukiCvDllName, CallingConvention = CallingConvention.Cdecl)]
         public static extern void TanukiCv_FreePinned(IntPtr ptr);
 
         // =====================================================
         // tanuki_cv_api.dll — Fast IO (繞過 GDI+ 直讀 8-bit BMP)
         // =====================================================
-        [DllImport(CoreCVDllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(TanukiCvDllName, CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool TanukiCv_FastReadBMP(
             [MarshalAs(UnmanagedType.LPStr)] string filePath,
@@ -65,7 +65,7 @@ namespace AniloxRoll.Monitor.Core.Interop
         // tanuki_cv_api.dll — GPU Thumbnail Resize
         // h_src / h_dst 若為 Pinned Memory，H<->D 走 DMA 加速。
         // =====================================================
-        [DllImport(CoreCVDllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(TanukiCvDllName, CallingConvention = CallingConvention.Cdecl)]
         public static extern int TanukiCv_Resize_GPU(
             IntPtr hSrc, int srcW, int srcH,
             IntPtr hDst, int dstW, int dstH);
