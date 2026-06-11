@@ -26,7 +26,7 @@ sdk/
 │   │   │                             MergeLayout（合圖佈局唯一來源）、CurveOverviewMerger（切向全覽曲線合併唯一來源）
 │   │   └── TanukiCv.Controls     ← WinForms（→Core）：SmartCanvas / LiveDisplayView / ThumbStrip /
 │   │                                 曲線圖 helper（Base/Column/Row）/ GrayBitmap / GrayResizeCpu
-│   ├── benchmark/{bench_framework, core_cv_benchmark, TanukiCv.BenchUi}
+│   ├── benchmark/{bench_framework, tanuki_core_bench, TanukiCv.BenchUi}
 │   ├── samples/TanukiCv.SysInfoTool
 │   └── third_party/stb
 ├── Bridges/         ← 對外設備 / 系統橋接層（純函式庫 + 介面供 mock 注入）

@@ -8,7 +8,7 @@ PICoater_AOI/
 │   ├── dotnet/AniloxRoll.Monitor/  ← C# WinForms 主應用
 │   └── native/                     ← C++ pipeline
 ├── sdk/                  ← 可獨立 split 的 library（純函式庫，無 GUI、無 exe）。**有自己的 `sdk/CLAUDE.md`（巢狀，編 sdk 檔時載入；放分層鐵則+元件地圖，隨 split 帶走）**
-│   ├── TanukiCv/         ← 以 tanuki_core 為引擎的 .NET 影像 SDK（native/{tanuki_core,tanuki_utils,tanuki_cv_api} + dotnet/{TanukiCv.Core 純 library〔含 PixelMmMapper 像素↔mm 公式、SystemInfo CPU/GPU/RAM/螢幕查詢、PerfTimer 通用計時器（量段+視窗 worst-case，計時唯一來源）、MergeLayout 合圖佈局演算法單一來源（純算術；xOffset+重疊分界，3 策略：中線/右覆蓋左/左覆蓋右）、CurveOverviewMerger 切向全覽曲線合併唯一來源（reuse MergeLayout boundary 唯一歸屬、間空留 0；範例同源共用）〕, TanukiCv.Controls WinForms〔→Core；含 SmartCanvas + **顯示 pipeline 共用元件：LiveDisplayView（絞殺榕重寫版多相機監控：主畫面 SmartCanvas+ThumbStrip縮圖+CPU合圖+合圖全部+flip+**LOD 單張&合圖**，統一介面 PushFrame/SetLayout/EnableLod(GrayResize)/FlipVertical；**合圖 LOD＝虛擬圖=完整合圖佈局、provider 逐欄找相機合成可見區+stride 壓緩衝→GrayResize，顯示成本從 ~180ms 降到 ~1ms**；**app（LiveCameraManager）+ 範例（MilGrabberPbForm）都已採用＝兩產品同源唯一來源；舊 MultiCamLiveView 已退場刪除**）/ ThumbStrip（多相機縮圖條：批量 CPU 建圖不閃，唯一來源）/ ThumbView（雙緩衝自繪縮圖葉子）/ GrayBitmap（灰階 bytes→bitmap 唯一來源）/ GrayResizeCpu（純 CPU 雙線性縮放＝LOD 的 CPU provider，無 GPU 機器用）/ GrayResize 委派（LOD resize 插槽：GPU 呼叫端給、CPU 用 GrayResizeCpu）**〕} + benchmark/{bench_framework,core_cv_benchmark,TanukiCv.BenchUi} + samples/TanukiCv.SysInfoTool〔系統資訊 GUI 工具〕 + third_party/stb；self-contained 可 split）
+│   ├── TanukiCv/         ← 以 tanuki_core 為引擎的 .NET 影像 SDK（native/{tanuki_core,tanuki_utils,tanuki_cv_api} + dotnet/{TanukiCv.Core 純 library〔含 PixelMmMapper 像素↔mm 公式、SystemInfo CPU/GPU/RAM/螢幕查詢、PerfTimer 通用計時器（量段+視窗 worst-case，計時唯一來源）、MergeLayout 合圖佈局演算法單一來源（純算術；xOffset+重疊分界，3 策略：中線/右覆蓋左/左覆蓋右）、CurveOverviewMerger 切向全覽曲線合併唯一來源（reuse MergeLayout boundary 唯一歸屬、間空留 0；範例同源共用）〕, TanukiCv.Controls WinForms〔→Core；含 SmartCanvas + **顯示 pipeline 共用元件：LiveDisplayView（絞殺榕重寫版多相機監控：主畫面 SmartCanvas+ThumbStrip縮圖+CPU合圖+合圖全部+flip+**LOD 單張&合圖**，統一介面 PushFrame/SetLayout/EnableLod(GrayResize)/FlipVertical；**合圖 LOD＝虛擬圖=完整合圖佈局、provider 逐欄找相機合成可見區+stride 壓緩衝→GrayResize，顯示成本從 ~180ms 降到 ~1ms**；**app（LiveCameraManager）+ 範例（MilGrabberPbForm）都已採用＝兩產品同源唯一來源；舊 MultiCamLiveView 已退場刪除**）/ ThumbStrip（多相機縮圖條：批量 CPU 建圖不閃，唯一來源）/ ThumbView（雙緩衝自繪縮圖葉子）/ GrayBitmap（灰階 bytes→bitmap 唯一來源）/ GrayResizeCpu（純 CPU 雙線性縮放＝LOD 的 CPU provider，無 GPU 機器用）/ GrayResize 委派（LOD resize 插槽：GPU 呼叫端給、CPU 用 GrayResizeCpu）**〕} + benchmark/{bench_framework,tanuki_core_bench,TanukiCv.BenchUi} + samples/TanukiCv.SysInfoTool〔系統資訊 GUI 工具〕 + third_party/stb；self-contained 可 split）
 │   ├── Bridges/          ← 對外設備 / 系統橋接層
 │   │   ├── IoBridge/                         ← ICP DAS ET-7044 IO module（Modbus TCP）
 │   │   │   ├── IoBridge.Core/                ← library（IModbusTcpClient 介面 + ET-7044 實作）
@@ -22,7 +22,7 @@ PICoater_AOI/
 │   └── python/               ← Python 工具
 ├── tests/                ← 純自動化測試（.NET NUnit 三層 + TestRunner.bat/.ps1，量「對不對」）
 ├── benchmark（量「多快」）→ 不設頂層，跟被測對象住：
-│       sdk/TanukiCv/benchmark/core_cv_benchmark（通用 CV）、src/native/benchmark/picoater_pipeline_benchmark（pipeline）
+│       sdk/TanukiCv/benchmark/tanuki_core_bench（通用 CV）、src/native/benchmark/picoater_pipeline_benchmark（pipeline）
 ├── algtest/              ← Python 演算法原型 / 可行性研究（讀 repo 外 05_QA_Validation；非自動化測試）
 ├── docs/                 ← 文件
 │   ├── config/           ← 設定 JSON 範例
@@ -72,7 +72,7 @@ PICoater_AOI/
 **InternalsVisibleTo**：`src/dotnet/AniloxRoll.Monitor/Properties/AssemblyInfo.cs` 同時 `InternalsVisibleTo` 三個 test assembly。新增第四個測試 csproj 時要加進去。
 
 **Benchmark（量「多快」，跟被測對象住，非 `tests/`）**：
-- `sdk/TanukiCv/benchmark/core_cv_benchmark/` — 通用 CV micro-benchmark（C++）；跟 tanuki_core 同住，隨 sdk split 帶走
+- `sdk/TanukiCv/benchmark/tanuki_core_bench/` — 通用 CV micro-benchmark（C++）；跟 tanuki_core 同住，隨 sdk split 帶走
 - `src/native/benchmark/picoater_pipeline_benchmark/` — pipeline 端到端速度（C++/CUDA：IO+傳輸+CV+resize+多相機吞吐）；緊鄰 src/native 演算法，供 agent loop 優化
 
 **Python 演算法**：
@@ -144,7 +144,7 @@ PICoater_AOI/
 PICoater_AOI/
 ├── src/dotnet/AniloxRoll.Monitor/                 ← C# WinForms 應用程式
 ├── src/native/                                    ← C++ pipeline 實作
-├── sdk/TanukiCv/                                  ← 以 tanuki_core 為引擎的 .NET 影像 SDK（native/{tanuki_core,tanuki_utils,tanuki_cv_api} + dotnet/{TanukiCv.Core 純 library, TanukiCv.Controls WinForms} + benchmark/{bench_framework,core_cv_benchmark,TanukiCv.BenchUi}）
+├── sdk/TanukiCv/                                  ← 以 tanuki_core 為引擎的 .NET 影像 SDK（native/{tanuki_core,tanuki_utils,tanuki_cv_api} + dotnet/{TanukiCv.Core 純 library, TanukiCv.Controls WinForms} + benchmark/{bench_framework,tanuki_core_bench,TanukiCv.BenchUi}）
 ├── sdk/Bridges/IoBridge/IoBridge.Core/          ← Modbus TCP Client + IModbusTcpClient 介面
 ├── sdk/Bridges/LightBridge/LightBridge.Core/      ← LTS-3DPA24 RS-232 光源
 ├── sdk/Bridges/StorageBridge/StorageBridge.Core/  ← SMB 檔案複製 + 循環儲存
@@ -152,7 +152,7 @@ PICoater_AOI/
 ├── tools/io-manual-control/IoBridge.ManualControl/  ← 手動 DI/DO GUI
 ├── tools/io-automation/IoBridge.Automation/         ← FSM 模擬 GUI
 ├── tests/AniloxRoll.Monitor.{Tests,Integration.Tests,Stress.Tests}/  ← NUnit 三層 + TestRunner.bat/.ps1
-├── benchmark：sdk/TanukiCv/benchmark/core_cv_benchmark/（通用 CV）+ src/native/benchmark/picoater_pipeline_benchmark/（pipeline）  ← 速度測試，跟被測對象住
+├── benchmark：sdk/TanukiCv/benchmark/tanuki_core_bench/（通用 CV）+ src/native/benchmark/picoater_pipeline_benchmark/（pipeline）  ← 速度測試，跟被測對象住
 ├── algtest/                         ← Python 演算法原型 / 可行性研究
 └── deploy/                          ← 現場部署腳本（PowerShell + JSON 參數）
     ├── storage-pc/                  ← 儲存機：固定 IP + SMB 共用 + 防火牆 + Guest 匿名（secedit）
