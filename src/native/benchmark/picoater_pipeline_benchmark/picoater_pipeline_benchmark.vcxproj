@@ -23,7 +23,7 @@
     <ClCompile Include="src\picoater_module_tests_fast.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="$(CoreCVPath)core_cv.vcxproj">
+    <ProjectReference Include="$(CoreCVPath)tanuki_core.vcxproj">
       <Project>{b39f6111-258b-48f8-8a3e-f940771a4d52}</Project>
     </ProjectReference>
     <ProjectReference Include="$(CppUtilsPath)tanuki_utils.vcxproj">

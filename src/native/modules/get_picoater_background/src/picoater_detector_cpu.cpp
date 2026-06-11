@@ -1,6 +1,6 @@
 #include "picoater_detector.hpp"
-#include "core_cv/imgproc/core_background.hpp"
-#include "core_cv/imgproc/core_utils.hpp"
+#include "tanuki/core/imgproc/core_background.hpp"
+#include "tanuki/core/imgproc/core_utils.hpp"
 #include "tanuki/utils/timer_utils.hpp"  // timing
 
 // Define DEBUG_SAVE_IMAGE to enable debug image dump.

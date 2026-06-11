@@ -1,6 +1,6 @@
 
 #include "transform_kernels.cuh"
-#include "core_cv/base/cuda_utils.hpp"
+#include "tanuki/core/base/cuda_utils.hpp"
 #include <cmath>
 
 

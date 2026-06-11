@@ -25,7 +25,7 @@
     <ClInclude Include="include\export_c\export_api.h" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="$(CoreCVPath)core_cv.vcxproj">
+    <ProjectReference Include="$(CoreCVPath)tanuki_core.vcxproj">
       <Project>{b39f6111-258b-48f8-8a3e-f940771a4d52}</Project>
     </ProjectReference>
   </ItemGroup>

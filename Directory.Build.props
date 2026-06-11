@@ -16,7 +16,7 @@
 
 		<OutputPath>$(OutDir)</OutputPath>
 		<AoiSdkPath>$(EngRoot)sdk\TanukiCv\</AoiSdkPath>
-		<CoreCVPath>$(AoiSdkPath)native\core_cv\</CoreCVPath>
+		<CoreCVPath>$(AoiSdkPath)native\tanuki_core\</CoreCVPath>
 		<CoreCVBenchmarkPath>$(AoiSdkPath)benchmark\core_cv_benchmark\</CoreCVBenchmarkPath>
 		<CppUtilsPath>$(AoiSdkPath)native\tanuki_utils\</CppUtilsPath>
 		<BenchFrameworkPath>$(AoiSdkPath)benchmark\bench_framework\</BenchFrameworkPath>

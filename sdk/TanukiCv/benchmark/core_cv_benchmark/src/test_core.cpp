@@ -1,13 +1,13 @@
 
-#include "core_cv/imgcodecs/core_imgcodecs_fast.hpp" // [�s�W] Fast IO
-#include "core_cv/base/cuda_memory.hpp"             // [�s�W] Pinned Memory
-#include "core_cv/base/cuda_utils.hpp"
+#include "tanuki/core/imgcodecs/core_imgcodecs_fast.hpp" // [�s�W] Fast IO
+#include "tanuki/core/base/cuda_memory.hpp"             // [�s�W] Pinned Memory
+#include "tanuki/core/base/cuda_utils.hpp"
 
-#include "core_cv/imgproc/core_background.hpp"
-#include "core_cv/imgproc/core_enhance.hpp"
-#include "core_cv/imgproc/core_features.hpp"
-#include "core_cv/imgproc/core_filters.hpp"
-#include "core_cv/imgproc/core_utils.hpp"
+#include "tanuki/core/imgproc/core_background.hpp"
+#include "tanuki/core/imgproc/core_enhance.hpp"
+#include "tanuki/core/imgproc/core_features.hpp"
+#include "tanuki/core/imgproc/core_filters.hpp"
+#include "tanuki/core/imgproc/core_utils.hpp"
 
 #include "tanuki/utils/timer_utils.hpp"
 #include "tanuki/utils/terminal_colors.hpp"

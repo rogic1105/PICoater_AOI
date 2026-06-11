@@ -1,6 +1,6 @@
 
-#include "core_cv/base/cuda_utils.hpp"
-#include "core_cv/imgproc/core_transform.hpp"
+#include "tanuki/core/base/cuda_utils.hpp"
+#include "tanuki/core/imgproc/core_transform.hpp"
 
 
 #include "transform_kernels.cuh"

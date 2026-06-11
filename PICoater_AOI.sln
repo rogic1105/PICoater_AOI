@@ -50,7 +50,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TanukiCv.Core", "sdk\Tanuki
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TanukiCv.Controls", "sdk\TanukiCv\dotnet\TanukiCv.Controls\TanukiCv.Controls.csproj", "{3655F7A3-8DF1-4541-82AE-2FD4FE5A397F}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core_cv", "sdk\TanukiCv\native\core_cv\core_cv.vcxproj", "{B39F6111-258B-48F8-8A3E-F940771A4D52}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "tanuki_core", "sdk\TanukiCv\native\tanuki_core\tanuki_core.vcxproj", "{B39F6111-258B-48F8-8A3E-F940771A4D52}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "tanuki_utils", "sdk\TanukiCv\native\tanuki_utils\tanuki_utils.vcxproj", "{05DB04FC-CC8E-2E92-8736-4D39CC68F27A}"
 EndProject

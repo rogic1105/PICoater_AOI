@@ -2,7 +2,7 @@
 // [����ץ�] ������b��� #include ���e
 #define _CRT_SECURE_NO_WARNINGS 
 
-#include "core_cv/imgcodecs/core_imgcodecs_fast.hpp"
+#include "tanuki/core/imgcodecs/core_imgcodecs_fast.hpp"
 #include <cstdio>
 #include <vector>
 #include <cstring>

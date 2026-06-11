@@ -1,15 +1,15 @@
 ﻿
 #include "export_c/export_api.h"
 
-#include "core_cv/imgproc/core_background.hpp"
-#include "core_cv/imgproc/core_enhance.hpp"
-#include "core_cv/imgproc/core_features.hpp"
-#include "core_cv/imgproc/core_filters.hpp"
-#include "core_cv/imgproc/core_utils.hpp"
+#include "tanuki/core/imgproc/core_background.hpp"
+#include "tanuki/core/imgproc/core_enhance.hpp"
+#include "tanuki/core/imgproc/core_features.hpp"
+#include "tanuki/core/imgproc/core_filters.hpp"
+#include "tanuki/core/imgproc/core_utils.hpp"
 // [新增] 引用 Fast IO 與 Memory 模組
-#include "core_cv/imgcodecs/core_imgcodecs_fast.hpp"
-#include "core_cv/base/cuda_memory.hpp"
-#include "core_cv/imgproc/core_transform.hpp"
+#include "tanuki/core/imgcodecs/core_imgcodecs_fast.hpp"
+#include "tanuki/core/base/cuda_memory.hpp"
+#include "tanuki/core/imgproc/core_transform.hpp"
 
 #include <cuda_runtime.h>
 #include <iostream>

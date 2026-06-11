@@ -1,7 +1,7 @@
 
 #pragma once
 #include <cuda_runtime.h>
-#include "core_cv/base/cuda_utils.hpp"
+#include "tanuki/core/base/cuda_utils.hpp"
 #include <cstdint>
 
 namespace tanuki { namespace core {

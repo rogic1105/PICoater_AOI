@@ -1,5 +1,5 @@
 
-#include "core_cv/imgcodecs/core_imgcodecs.hpp"
+#include "tanuki/core/imgcodecs/core_imgcodecs.hpp"
 
 #include "stb/stb_image.h" 
 #include "stb/stb_image_write.h"

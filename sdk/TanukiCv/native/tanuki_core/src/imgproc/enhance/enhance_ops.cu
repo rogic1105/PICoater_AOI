@@ -1,5 +1,5 @@
 
-#include "core_cv/base/cuda_utils.hpp"
+#include "tanuki/core/base/cuda_utils.hpp"
 #include "enhance_kernels.cuh"
 #include <vector>
 #include <cmath>

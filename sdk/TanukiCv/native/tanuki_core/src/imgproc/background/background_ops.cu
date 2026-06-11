@@ -1,6 +1,6 @@
 
-#include "core_cv/base/cuda_utils.hpp"
-#include "core_cv/imgproc/core_background.hpp"
+#include "tanuki/core/base/cuda_utils.hpp"
+#include "tanuki/core/imgproc/core_background.hpp"
 #include "background_kernels.cuh"
 #include <cstdint>
 

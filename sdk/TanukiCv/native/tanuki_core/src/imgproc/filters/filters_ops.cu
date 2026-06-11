@@ -1,6 +1,6 @@
 
-#include "core_cv/base/cuda_utils.hpp"
-#include "core_cv/imgproc/core_utils.hpp"
+#include "tanuki/core/base/cuda_utils.hpp"
+#include "tanuki/core/imgproc/core_utils.hpp"
 
 
 #include "filters_kernels.cuh"

@@ -1,10 +1,10 @@
 #include "picoater_detector.hpp"
-#include "core_cv/base/cuda_utils.hpp"
+#include "tanuki/core/base/cuda_utils.hpp"
 
-#include "core_cv/imgproc/core_filters.hpp"
-#include "core_cv/imgproc/core_background.hpp"
-#include "core_cv/imgproc/core_features.hpp"
-#include "core_cv/imgproc/core_utils.hpp" // for overlay_heatmap_gpu
+#include "tanuki/core/imgproc/core_filters.hpp"
+#include "tanuki/core/imgproc/core_background.hpp"
+#include "tanuki/core/imgproc/core_features.hpp"
+#include "tanuki/core/imgproc/core_utils.hpp" // for overlay_heatmap_gpu
 
 #include "tanuki/utils/timer_utils.hpp"
 

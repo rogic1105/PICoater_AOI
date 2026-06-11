@@ -1,10 +1,10 @@
 // picoater_pipeline_benchmark / picoater_module_tests_fast.cpp
 
 #include "bench_framework/test_utils.hpp"
-#include "core_cv/base/cuda_utils.hpp"
-#include "core_cv/base/cuda_memory.hpp"
-#include "core_cv/imgcodecs/core_imgcodecs_fast.hpp"
-#include "core_cv/imgproc/core_transform.hpp"
+#include "tanuki/core/base/cuda_utils.hpp"
+#include "tanuki/core/base/cuda_memory.hpp"
+#include "tanuki/core/imgcodecs/core_imgcodecs_fast.hpp"
+#include "tanuki/core/imgproc/core_transform.hpp"
 
 
 #include <stb/stb_image_write.h>

@@ -5,7 +5,7 @@
 #include <memory>
 #include <string>
 
-#include "core_cv/imgproc/core_background.hpp"
+#include "tanuki/core/imgproc/core_background.hpp"
 
 #include "modules/get_picoater_background/include/module_get_picoater_background.hpp"
 #include "pipeline/aoi_pipeline.hpp"

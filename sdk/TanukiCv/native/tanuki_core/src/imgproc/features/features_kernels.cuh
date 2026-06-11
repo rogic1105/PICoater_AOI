@@ -2,7 +2,7 @@
 #pragma once
 #include <cuda_runtime.h>
 #include <cstdint>
-#include "core_cv/imgproc/core_features.hpp" // ���F�ޥ� RidgeMode
+#include "tanuki/core/imgproc/core_features.hpp" // ���F�ޥ� RidgeMode
 
 namespace tanuki { namespace core {
 

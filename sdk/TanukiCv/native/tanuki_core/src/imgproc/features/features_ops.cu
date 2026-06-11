@@ -1,9 +1,9 @@
 
-#include "core_cv/base/cuda_utils.hpp"
+#include "tanuki/core/base/cuda_utils.hpp"
 #include "features_kernels.cuh"
 #include "imgproc/utils/utils_kernels.cuh"
-#include "core_cv/imgproc/core_filters.hpp"
-#include "core_cv/imgproc/core_utils.hpp"
+#include "tanuki/core/imgproc/core_filters.hpp"
+#include "tanuki/core/imgproc/core_utils.hpp"
 
 namespace tanuki { namespace core {
 
