@@ -17,7 +17,9 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
         /// <summary>
         /// 將多台相機曲線合併到單一全覽圖。
-        /// 重疊區域：Mean 取平均、Max 取最大值。
+        /// 重疊區域：依合圖方式（<paramref name="overlap"/>）的 boundary 唯一歸屬 —— 與影像合圖共用
+        /// 同一份 <see cref="MergeLayout"/> 分界邏輯，重疊區的每個全域 bin 只取「該欄歸屬相機」的曲線值，
+        /// 不再平均 → 曲線與影像 pixel 對齊。間空（無曲線）相機不參與分界，該區留 0。
         /// </summary>
         public static void UpdateOverviewChart(
             float[][] allMean, float[][] allMax,
@@ -26,7 +28,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             ColumnCurveChartHelper target,
             int cameraCount,
             StitchMode stitchMode,
-            Func<int, bool, double, double> viewRangeProvider)
+            Func<int, bool, double, double> viewRangeProvider,
+            MergeOverlap overlap = MergeOverlap.Midline)
         {
             if (target == null || allMean == null) return;
 
@@ -66,53 +69,52 @@ namespace AniloxRoll.Monitor.UI.Widgets
             int totalLen = (int)Math.Ceiling((globalMax - globalMin) / gridMm);
             if (totalLen <= 0 || totalLen > MaxOverviewPoints + 1) return;
 
-            // 兩層合併：
-            // 1) bin 內降解析（同一台相機多點 → 1 bin）→ max-window 保峰值
-            // 2) 相機重疊（多台相機同一 bin）→ Mean 取平均、Max 取最大值
+            // 重疊歸屬（與影像合圖共用唯一來源 MergeLayout）：以 gridMm 當基準像素、curve 長度換成 grid 寬，
+            // 算出每台在「全域 grid」的擁有區間 [ownStart, ownEnd)。間空相機不參與 → 其區段沒人擁有 → 留 0。
+            // MergeLayout 的 boundary 對相鄰兩台剛好 tile（a.ownEnd == b.ownStart），故無縫且不重疊。
+            var ownStart = new int[cameraCount];
+            var ownEnd   = new int[cameraCount];
+            var geom = new List<MergeLayout.CamGeom>();
+            for (int i = 0; i < cameraCount; i++)
+            {
+                var c = allMean[i];
+                if (c == null || c.Length == 0) continue;          // 間空不參與分界
+                int wGrid = (int)Math.Round(c.Length * (opsArr[i] / 1000.0) / gridMm);
+                geom.Add(new MergeLayout.CamGeom { CameraId = i, StartMm = posArr[i], WidthPx = Math.Max(1, wGrid) });
+            }
+            foreach (var p in MergeLayout.Compute(geom, globalMin, gridMm, 1, overlap, out _))
+            {
+                ownStart[p.CameraId] = p.XOffset + p.SrcLeft;
+                ownEnd[p.CameraId]   = p.XOffset + p.SrcLeft + p.SrcWidth;
+            }
+
+            // 每台只把「自己擁有的 grid 區段」的曲線貼進全域 bin；同一台多點落同一 bin → 取 max 保峰值。
             var mergedMean = new float[totalLen];
-            var mergedMax = new float[totalLen];
-            var overlapCount = new int[totalLen];
+            var mergedMax  = new float[totalLen];
+            var hit        = new bool[totalLen];
 
             for (int i = 0; i < cameraCount; i++)
             {
                 var curveMean = allMean[i];
                 if (curveMean == null || curveMean.Length == 0) continue;
                 var curveMax = (allMax != null && i < allMax.Length) ? allMax[i] : null;
+                int os = ownStart[i], oe = ownEnd[i];
 
                 double camOpsMm = opsArr[i] / 1000.0;
                 double camStart = posArr[i];
-
-                var camBinMean = new float[totalLen];
-                var camBinMax = new float[totalLen];
-                var camBinHit = new bool[totalLen];
 
                 for (int j = 0; j < curveMean.Length; j++)
                 {
                     int idx = (int)((camStart + j * camOpsMm - globalMin) / gridMm);
                     if (idx < 0 || idx >= totalLen) continue;
+                    if (idx < os || idx >= oe) continue;            // 重疊區不屬本台 → 歸鄰台
 
-                    if (!camBinHit[idx] || curveMean[j] > camBinMean[idx])
-                        camBinMean[idx] = curveMean[j];
-
+                    if (!hit[idx] || curveMean[j] > mergedMean[idx]) mergedMean[idx] = curveMean[j];
                     float mv = (curveMax != null && j < curveMax.Length) ? curveMax[j] : 0;
-                    if (!camBinHit[idx] || mv > camBinMax[idx])
-                        camBinMax[idx] = mv;
-
-                    camBinHit[idx] = true;
-                }
-
-                for (int k = 0; k < totalLen; k++)
-                {
-                    if (!camBinHit[k]) continue;
-                    mergedMean[k] += camBinMean[k];
-                    overlapCount[k] += 1;
-                    if (camBinMax[k] > mergedMax[k]) mergedMax[k] = camBinMax[k];
+                    if (!hit[idx] || mv > mergedMax[idx]) mergedMax[idx] = mv;
+                    hit[idx] = true;
                 }
             }
-
-            // 重疊區域 Mean 取平均
-            for (int i = 0; i < totalLen; i++)
-                if (overlapCount[i] > 1) mergedMean[i] /= overlapCount[i];
 
             target.SetOps(gridMm * 1000.0);
             target.SetThresholds(errMean, errMax);
