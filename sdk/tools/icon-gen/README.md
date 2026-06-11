@@ -9,9 +9,9 @@
 |---|---|---|
 | 綠 `6FBF44` | 產品主程式 | `app.ico`（Anilox 滾筒）|
 | 藍 `2563EB` | Bridge 工具 | `io-auto.ico` / `io-manual.ico` / `light.ico` / `storage.ico` |
-| 黃 `F9A825` | MIL 範例（非 Bridge） | `MilGrabber.ico`（四色相機格子）|
+| 黃 `F9A825` | 影像範例程式 | `MilGrabber.ico`（四色相機格子）|
 
-> 邊框色＝類別語意（綠主程式 / 藍 Bridge / 黃 MIL）；都可選加底部文字橫條（`--text`）。
+> 邊框色＝類別語意（綠主程式 / 藍 Bridge / 黃 影像範例程式）；都可選加底部文字橫條（`--text`）。
 
 ## 用法
 

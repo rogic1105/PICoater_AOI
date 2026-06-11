@@ -1,83 +1,26 @@
-"""gen_base.py — 生成四象限漸層格子底圖 256x256
+"""MilGrabber icon 底圖生成：裁切設計參考圖（四色相機格子截圖）的白邊 → 置中正方形 256px。
 
-四象限：
-  左上 = 暖黃/橙色系
-  右上 = 綠色系
-  左下 = 紅色系
-  右下 = 紫/藍紫色系
-
-6x6 格子（每象限 3x3），小方塊圓角，方塊間留間隙。
+icon 實際做法（忠於設計參考圖，非 PIL 重畫）：
+  1. python gen_base.py <參考圖.png>   → 產 MilGrabber_base.png（已 .gitignore，中間產物）
+  2. cd ../../../tools/icon-gen && python make_icon.py \
+       --photo ../../MIL/samples/assets/MilGrabber_base.png --no-band --border F9A825 \
+       --out ../../MIL/samples/assets/MilGrabber.ico
+  （黃框 F9A825 = 影像範例程式語意；見 sdk/tools/icon-gen/README.md）
 """
-from PIL import Image, ImageDraw
+import sys
+from PIL import Image, ImageChops
 
-S = 256
-GRID = 6          # 整個 icon 幾格
-GAP = 6           # 格間距 px（在 256px 下）
-CORNER = 6        # 小方塊圓角
+ref = sys.argv[1] if len(sys.argv) > 1 else r"C:\Users\User\Desktop\螢幕擷取畫面 2026-06-11 110707.png"
+src = Image.open(ref).convert("RGB")
 
-# 四象限各 3x3 的顏色漸層（左上→右下方向深淺）
-# 格子座標 (row, col) 0-based；row 0=上, col 0=左
-QUAD_COLORS = {
-    # 左上 (row<3, col<3)：暖黃/橙
-    (0, 0): (255, 230,  80),
-    (0, 1): (255, 200,  60),
-    (0, 2): (250, 170,  40),
-    (1, 0): (255, 210,  90),
-    (1, 1): (240, 180,  50),
-    (1, 2): (230, 145,  30),
-    (2, 0): (245, 190,  70),
-    (2, 1): (225, 155,  40),
-    (2, 2): (210, 125,  20),
-    # 右上 (row<3, col>=3)：綠色系
-    (0, 3): (160, 220, 100),
-    (0, 4): (100, 200,  80),
-    (0, 5): ( 60, 175,  60),
-    (1, 3): (130, 210,  90),
-    (1, 4): ( 80, 185,  70),
-    (1, 5): ( 40, 155,  50),
-    (2, 3): (100, 190,  75),
-    (2, 4): ( 60, 165,  55),
-    (2, 5): ( 30, 135,  40),
-    # 左下 (row>=3, col<3)：紅色系
-    (3, 0): (255, 100,  80),
-    (3, 1): (230,  70,  60),
-    (3, 2): (200,  45,  40),
-    (4, 0): (240,  80,  65),
-    (4, 1): (210,  55,  45),
-    (4, 2): (180,  30,  30),
-    (5, 0): (220,  60,  50),
-    (5, 1): (190,  40,  35),
-    (5, 2): (160,  20,  20),
-    # 右下 (row>=3, col>=3)：紫/藍紫色系
-    (3, 3): (180, 120, 220),
-    (3, 4): (140,  90, 200),
-    (3, 5): (100,  60, 180),
-    (4, 3): (155, 100, 210),
-    (4, 4): (115,  70, 185),
-    (4, 5): ( 80,  45, 160),
-    (5, 3): (130,  80, 195),
-    (5, 4): ( 95,  55, 170),
-    (5, 5): ( 65,  35, 145),
-}
+# 自動裁掉近白邊：與全白底的差異 bounding box
+bbox = ImageChops.difference(src, Image.new("RGB", src.size, (255, 255, 255))).getbbox()
+crop = src.crop(bbox)
 
-img = Image.new("RGBA", (S, S), (255, 255, 255, 255))
-d = ImageDraw.Draw(img)
-
-# 計算每格尺寸（留邊 + 間隙）
-MARGIN = GAP  # 外邊距
-total_gaps = GAP * (GRID - 1)
-total_margins = MARGIN * 2
-cell = (S - total_margins - total_gaps) // GRID  # 每格寬高
-
-for r in range(GRID):
-    for c in range(GRID):
-        x0 = MARGIN + c * (cell + GAP)
-        y0 = MARGIN + r * (cell + GAP)
-        x1 = x0 + cell - 1
-        y1 = y0 + cell - 1
-        color = QUAD_COLORS[(r, c)] + (255,)
-        d.rounded_rectangle([x0, y0, x1, y1], radius=CORNER, fill=color)
-
-out = "MilGrabber_base.png"
-img.save(out)
-print(f"saved {out}  ({S}x{S})")
+# 置中貼到正方形畫布（取較長邊 + 4% 留白讓黃框不貼死色塊），縮到 256
+side = max(crop.size)
+pad = int(side * 0.04)
+canvas = Image.new("RGB", (side + 2 * pad, side + 2 * pad), (255, 255, 255))
+canvas.paste(crop, ((canvas.size[0] - crop.size[0]) // 2, (canvas.size[1] - crop.size[1]) // 2))
+canvas.resize((256, 256), Image.LANCZOS).save("MilGrabber_base.png")
+print("saved MilGrabber_base.png 256x256 (from", ref, ")")
