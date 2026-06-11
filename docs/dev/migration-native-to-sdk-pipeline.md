@@ -81,8 +81,8 @@ src/
 - **MSBuild 牽連**：dir/vcxproj/.sln/Directory.Build.props 的 `$(...)Path` 屬性都要一起改（沿用 tanuki 改名經驗）。
 - **依賴方向**：pipeline → core（單向）；module 之間不互相依賴（都靠 framework 介面）。
 
-## 7. 待定（動工前確認）
-- framework 是 header-only 還是 .lib？（IModule 純介面 → header；工頭可 .lib）
-- module 顆粒度：去背、脊線各一 module 夠嗎？還是再細（去背 = 估背景 + 相減 兩 module）？
-- pipeline「食譜」格式：硬編 C++ 組合 vs 設定檔（json）描述 module 序列？（先硬編，未來可設定檔）
-- 階段 4b 的 API 形狀：`run(name, json_params)` 還是強型別 struct？
+## 7. 設計定案（2026-06-11 確認）
+- **framework = .lib**（工頭 Pipeline + 模組註冊表 ModuleRegistry，編一次）+ 介面（IModule/IRidge + I/O structs）放 header。
+- **module 顆粒度** = 去背一個（background_sub）+ 脊線一個（ridge_hessian），足夠。
+- **pipeline 食譜 = 先硬編 C++**（型別安全、現在一個 pipeline）；「換方法」用**參數選**（registry by name），不上 json 食譜（拿 90% 彈性、0 額外基建）。未來多食譜/現場可調再上 json。
+- **API = 單一 `run(pipeline_name, json_params)`**（一簽名服務所有 pipeline，C# settings 序列化 json 傳入，native 各自 parse；擴充不破 ABI）。階段 4a 先純搬保行為、4b 才換成此形狀。
