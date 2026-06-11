@@ -5,7 +5,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using AniloxRoll.Monitor.Core.Services;
-using TanukiCv.Controls; // MergeLayout：合圖佈局 + 重疊中點分界單一來源（app → sdk 合法）
+using TanukiCv.Core; // MergeLayout：合圖佈局 + 重疊中點分界單一來源（純算法，app → sdk 合法）
 
 namespace AniloxRoll.Monitor.UI.Widgets
 {
@@ -141,7 +141,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             int totalW = (int)Math.Ceiling((globalMaxMm - globalMinMm) / refOpsPxMm);
             if (totalW <= 0 || maxH <= 0) return null;
 
-            // 佈局（xOffset）+ 重疊中點分界委派 sdk 單一來源 TanukiCv.Controls.MergeLayout（Midline 與原內嵌邏輯一致）。
+            // 佈局（xOffset）+ 重疊中點分界委派 sdk 單一來源 TanukiCv.Core.MergeLayout（Midline 與原內嵌邏輯一致）。
             // CameraId 用 validCams 索引（Compute 依輸入順序回傳）；totalW 仍用上方 ALL-slots 版（含空缺槽），故 out 忽略。
             var geoms = new List<MergeLayout.CamGeom>(validCams.Count);
             for (int i = 0; i < validCams.Count; i++)

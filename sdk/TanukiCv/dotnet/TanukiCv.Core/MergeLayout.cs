@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace TanukiCv.Controls
+namespace TanukiCv.Core
 {
     /// <summary>
     /// 合圖重疊區歸屬策略（相鄰兩台相機重疊時，重疊像素歸給誰）。

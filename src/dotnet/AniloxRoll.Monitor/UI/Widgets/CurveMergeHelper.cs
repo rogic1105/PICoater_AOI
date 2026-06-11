@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
-using TanukiCv.Controls;
+using TanukiCv.Core;     // CurveOverviewMerger / MergeLayout / MergeOverlap（純算法 唯一來源）
+using TanukiCv.Controls; // ColumnCurveChartHelper（曲線圖）
 
 namespace AniloxRoll.Monitor.UI.Widgets
 {
@@ -13,13 +14,10 @@ namespace AniloxRoll.Monitor.UI.Widgets
     /// </summary>
     public static class CurveMergeHelper
     {
-        private const int MaxOverviewPoints = 2000;
-
         /// <summary>
-        /// 將多台相機曲線合併到單一全覽圖。
-        /// 重疊區域：依合圖方式（<paramref name="overlap"/>）的 boundary 唯一歸屬 —— 與影像合圖共用
-        /// 同一份 <see cref="MergeLayout"/> 分界邏輯，重疊區的每個全域 bin 只取「該欄歸屬相機」的曲線值，
-        /// 不再平均 → 曲線與影像 pixel 對齊。間空（無曲線）相機不參與分界，該區留 0。
+        /// 將多台相機曲線合併到單一全覽圖並畫到 chart。
+        /// 合併數學委派 sdk 唯一來源 <see cref="CurveOverviewMerger"/>（依合圖方式 boundary 唯一歸屬，
+        /// 與影像合圖 pixel 對齊；間空相機留 0）；本方法只負責「秀」：設 ops/閾值 + 帶入合圖視野。
         /// </summary>
         public static void UpdateOverviewChart(
             float[][] allMean, float[][] allMax,
@@ -33,90 +31,10 @@ namespace AniloxRoll.Monitor.UI.Widgets
         {
             if (target == null || allMean == null) return;
 
-            // 全域範圍：涵蓋全部相機位置，缺圖用現有影像寬度平均類推
-            double sumWidthMm = 0;
-            int widthCount = 0;
-            double minOpsUm = double.MaxValue;
-            for (int i = 0; i < cameraCount; i++)
-            {
-                if (opsArr[i] > 0 && opsArr[i] < minOpsUm) minOpsUm = opsArr[i];
-                var curve = allMean[i];
-                if (curve != null && curve.Length > 0)
-                {
-                    sumWidthMm += curve.Length * (opsArr[i] / 1000.0);
-                    widthCount++;
-                }
-            }
-            if (minOpsUm <= 0 || minOpsUm == double.MaxValue) minOpsUm = 33.0;
-            double avgWidthMm = widthCount > 0 ? sumWidthMm / widthCount : 400.0;
+            var r = CurveOverviewMerger.Merge(allMean, allMax, opsArr, posArr, cameraCount, overlap);
+            if (!r.Valid) return;
 
-            double globalMin = double.MaxValue, globalMax = double.MinValue;
-            for (int i = 0; i < cameraCount; i++)
-            {
-                double camStart = posArr[i];
-                var curve = allMean[i];
-                double camEnd = (curve != null && curve.Length > 0)
-                    ? camStart + curve.Length * (opsArr[i] / 1000.0)
-                    : camStart + avgWidthMm;
-                if (camStart < globalMin) globalMin = camStart;
-                if (camEnd > globalMax) globalMax = camEnd;
-            }
-            if (globalMin >= globalMax) return;
-
-            // 格點間距：至少 OPS 精度，但上限 MaxOverviewPoints 點
-            double gridMm = Math.Max(minOpsUm / 1000.0, (globalMax - globalMin) / MaxOverviewPoints);
-
-            int totalLen = (int)Math.Ceiling((globalMax - globalMin) / gridMm);
-            if (totalLen <= 0 || totalLen > MaxOverviewPoints + 1) return;
-
-            // 重疊歸屬（與影像合圖共用唯一來源 MergeLayout）：以 gridMm 當基準像素、curve 長度換成 grid 寬，
-            // 算出每台在「全域 grid」的擁有區間 [ownStart, ownEnd)。間空相機不參與 → 其區段沒人擁有 → 留 0。
-            // MergeLayout 的 boundary 對相鄰兩台剛好 tile（a.ownEnd == b.ownStart），故無縫且不重疊。
-            var ownStart = new int[cameraCount];
-            var ownEnd   = new int[cameraCount];
-            var geom = new List<MergeLayout.CamGeom>();
-            for (int i = 0; i < cameraCount; i++)
-            {
-                var c = allMean[i];
-                if (c == null || c.Length == 0) continue;          // 間空不參與分界
-                int wGrid = (int)Math.Round(c.Length * (opsArr[i] / 1000.0) / gridMm);
-                geom.Add(new MergeLayout.CamGeom { CameraId = i, StartMm = posArr[i], WidthPx = Math.Max(1, wGrid) });
-            }
-            foreach (var p in MergeLayout.Compute(geom, globalMin, gridMm, 1, overlap, out _))
-            {
-                ownStart[p.CameraId] = p.XOffset + p.SrcLeft;
-                ownEnd[p.CameraId]   = p.XOffset + p.SrcLeft + p.SrcWidth;
-            }
-
-            // 每台只把「自己擁有的 grid 區段」的曲線貼進全域 bin；同一台多點落同一 bin → 取 max 保峰值。
-            var mergedMean = new float[totalLen];
-            var mergedMax  = new float[totalLen];
-            var hit        = new bool[totalLen];
-
-            for (int i = 0; i < cameraCount; i++)
-            {
-                var curveMean = allMean[i];
-                if (curveMean == null || curveMean.Length == 0) continue;
-                var curveMax = (allMax != null && i < allMax.Length) ? allMax[i] : null;
-                int os = ownStart[i], oe = ownEnd[i];
-
-                double camOpsMm = opsArr[i] / 1000.0;
-                double camStart = posArr[i];
-
-                for (int j = 0; j < curveMean.Length; j++)
-                {
-                    int idx = (int)((camStart + j * camOpsMm - globalMin) / gridMm);
-                    if (idx < 0 || idx >= totalLen) continue;
-                    if (idx < os || idx >= oe) continue;            // 重疊區不屬本台 → 歸鄰台
-
-                    if (!hit[idx] || curveMean[j] > mergedMean[idx]) mergedMean[idx] = curveMean[j];
-                    float mv = (curveMax != null && j < curveMax.Length) ? curveMax[j] : 0;
-                    if (!hit[idx] || mv > mergedMax[idx]) mergedMax[idx] = mv;
-                    hit[idx] = true;
-                }
-            }
-
-            target.SetOps(gridMm * 1000.0);
+            target.SetOps(r.GridMm * 1000.0);
             target.SetThresholds(errMean, errMax);
 
             // 合圖模式：帶入 canvas 當前視野
@@ -126,7 +44,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 viewLeft = viewRangeProvider(0, true, double.NaN);
                 viewRight = viewRangeProvider(0, false, double.NaN);
             }
-            target.UpdateDataAndView(mergedMean, mergedMax, globalMin, viewLeft, viewRight);
+            target.UpdateDataAndView(r.Mean, r.Max, r.GlobalMinMm, viewLeft, viewRight);
         }
 
         /// <summary>

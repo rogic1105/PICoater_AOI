@@ -18,10 +18,10 @@ sdk/
 ├── TanukiCv/        ← 以 core_cv(CUDA) 為引擎的 .NET 影像 SDK（durable，跨產品共用）
 │   ├── native/{core_cv, cpp_utils, core_cv_api}   ← C++/CUDA 引擎 + C API
 │   ├── dotnet/
-│   │   ├── TanukiCv.Core         ← 純 library（PixelMmMapper 像素↔mm、SystemInfo、PerfTimer）
+│   │   ├── TanukiCv.Core         ← 純 library（無 WinForms）：PixelMmMapper 像素↔mm、SystemInfo、PerfTimer、
+│   │   │                             MergeLayout（合圖佈局唯一來源）、CurveOverviewMerger（切向全覽曲線合併唯一來源）
 │   │   └── TanukiCv.Controls     ← WinForms（→Core）：SmartCanvas / LiveDisplayView / ThumbStrip /
-│   │                                 MergeLayout（合圖佈局唯一來源）/ 曲線圖 helper（Base/Column/Row）/
-│   │                                 GrayBitmap / GrayResizeCpu
+│   │                                 曲線圖 helper（Base/Column/Row）/ GrayBitmap / GrayResizeCpu
 │   ├── benchmark/{bench_framework, core_cv_benchmark, TanukiCv.BenchUi}
 │   ├── samples/TanukiCv.SysInfoTool
 │   └── third_party/stb
@@ -39,8 +39,10 @@ sdk/
 
 ## 單一來源（sdk 內已收斂的，勿再抄）
 
-- **合圖佈局** = `TanukiCv.Controls.MergeLayout.Compute`（純算術；xOffset + 重疊 boundary，3 策略 `MergeOverlap.Midline/RightOverLeft/LeftOverRight`）。影像合圖（GrabImageStitcher / LiveDisplayView）+ 曲線合圖（app `CurveMergeHelper`）都呼這份 → 曲線與影像 pixel 對齊。
+- **合圖佈局** = `TanukiCv.Core.MergeLayout.Compute`（純算術；xOffset + 重疊 boundary，3 策略 `MergeOverlap.Midline/RightOverLeft/LeftOverRight`）。影像合圖（GrabImageStitcher / LiveDisplayView）+ 曲線合圖都呼這份 → 曲線與影像 pixel 對齊。
+- **切向全覽曲線合併** = `TanukiCv.Core.CurveOverviewMerger.Merge`（純算術；reuse MergeLayout boundary 唯一歸屬、間空留 0；回傳 mean/max/globalMin/gridMm 純資料，「秀」交呼叫端）。app `CurveMergeHelper.UpdateOverviewChart` 是薄 wrapper（委派 Merge + 接 ColumnCurveChartHelper + StitchMode 視野）；範例可直接呼 Merge 接自己的曲線圖。
   - 例外：`MIL/MultiCameraMerger` 刻意保 MIL-only 自含中線、不引用 TanukiCv（拋棄層隨硬體換）。
+  - 註：MergeLayout / CurveOverviewMerger 在 **Core**（純算術），非 Controls —— 純 IP 不困在 WinForms assembly，headless/benchmark/範例 皆可用。
 - **像素↔mm** = `TanukiCv.Core.PixelMmMapper`。
 - **曝光上限公式** = `MilCameraParams.CalcExposureMaxUs`（`MIL/MilGrabber.Core/MilCamera.Params.cs`）。
 - **曲線圖** = `BaseCurveChartHelper`（Template Method）+ `Column`/`Row` 子類；app 與 sample 共用。

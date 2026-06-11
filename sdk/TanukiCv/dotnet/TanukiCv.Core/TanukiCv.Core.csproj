@@ -77,6 +77,8 @@
   <ItemGroup>
     <Compile Include="Core\CoreCVWrapper.cs" />
     <Compile Include="PixelMmMapper.cs" />
+    <Compile Include="MergeLayout.cs" />
+    <Compile Include="CurveOverviewMerger.cs" />
     <Compile Include="SystemInfo.cs" />
     <Compile Include="Core\GPUHelper.cs" />
     <Compile Include="Core\GPUProcessor.cs" />
