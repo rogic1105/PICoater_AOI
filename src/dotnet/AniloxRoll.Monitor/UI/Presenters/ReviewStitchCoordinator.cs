@@ -154,7 +154,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                                     useProcessed: enableProcess, ridgeDirection: ridgeDir);
                                 CurveMergeHelper.MergeCurves(paths, out newCurveMean[i], out newCurveMax[i]);
                                 CurveMergeHelper.MergeRowCurves(paths, out newRowCurveMean[i], out newRowCurveMax[i]);
-                                if (imgs[i] != null && AniloxRoll.Monitor.UI.Managers.AniloxRollFormReviewFlags.UseSameSourceDisplay)
+                                if (imgs[i] != null)
                                     grayArr[i] = AniloxRoll.Monitor.UI.Managers.ReviewDisplayManager.ToGray8(imgs[i], out grayW[i], out grayH[i]);
                             }
                             catch (Exception ex)

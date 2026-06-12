@@ -544,7 +544,7 @@ namespace AniloxRoll.Monitor.Forms
             });
 
             // #13 絞殺榕收官 Stage1：回顧主畫面平行接 LiveDisplayView（Designer 不動、runtime 疊加；旗標可回滾）
-            if (AniloxRollFormReviewFlags.UseSameSourceDisplay)
+            // #13 同源顯示（4c 轉正：旗標已刪、唯一路徑）
             {
                 _reviewDisplayManager = new ReviewDisplayManager(camReviewMain,
                     new System.Windows.Forms.Control[] { camReview1, camReview2, camReview3, camReview4, camReview5, camReview6, camReview7 });
@@ -584,19 +584,8 @@ namespace AniloxRoll.Monitor.Forms
 
             _presenter.BusyStateChanged += _interactionHelper.SetUiLoadingState;
             _presenter.LogReported      += OnPresenterLogReported;
-            _galleryManager.SelectionChanged += idx =>
-            {
-                if (_stitchCoordinator.IsGlobalMerged || _stitchCoordinator.IsPeriodMerged)
-                {
-                    PanCanvasToReviewCameraCenter(idx);
-                    return;
-                }
-                if (_stitchCoordinator.IsStitchMode)
-                    _stitchCoordinator.ShowStitchedCameraInCanvas(idx);
-                else
-                    _interactionHelper.OnGallerySelectionChanged(idx);
-            };
-
+            // 4c：舊 gallery 選擇鏈已拆（PictureBox 被 sdk ThumbStrip 覆蓋＝點擊不可達；
+            //     縮圖↔主畫面雙向連動由 LiveDisplayView 內建）。
             _dateTimeNavigator.PeriodSelectionChanged += _presenter.UpdatePeriodNavigationState;
             _dateTimeNavigator.PeriodSelectionChanged += () =>
             {
@@ -610,7 +599,6 @@ namespace AniloxRoll.Monitor.Forms
             _presenter.UpdatePeriodNavigationState();
 
             camReviewMain.StatusChanged += _interactionHelper.UpdateCanvasInfo;
-            camReviewMain.StatusChanged += UpdateSelectedReviewCamFromViewCenter;
             camReviewMain.EdgeReached   += _interactionHelper.NavigateCamera;
             // 手勢（雙擊 fit / 三擊實體 1:1）唯一來源收進 SmartCanvas 內建；校正由 UpdateCanvasInfo 餵。
             // 這裡只訂閱事件做 app 專屬的 UiActionLogger 記錄（記錄屬 app，不放 sdk）。

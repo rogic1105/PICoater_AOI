@@ -8,9 +8,8 @@ namespace AniloxRoll.Monitor.UI.Managers
 {
     /// <summary>
     /// 回顧主畫面接 sdk <see cref="LiveDisplayView"/>（與監控同源，絞殺榕收官 #13 Stage1）。
-    /// **平行建新不拆舊**：Designer 不動 —— 執行時在 camReviewMain（SmartCanvas）與 camReview1~7（PictureBox）
-    /// 上各疊一個 Panel 給 LiveDisplayView（同 Parent/Bounds/Anchor、BringToFront），舊路徑完整保留，
-    /// <see cref="AniloxRollFormReviewFlags.UseSameSourceDisplay"/> 旗標切換、可回滾。
+    /// 執行時在 camReviewMain 與 camReview1~7 位置疊 Panel 宿主 LiveDisplayView（同 Parent/Bounds/Anchor）。
+    /// 4c 已轉正＝唯一顯示路徑（過渡旗標已刪）；舊控制項實體待 4d 連 Designer 一併清除。
     /// 回顧直接繼承：動態 LOD（70 張合圖顯示成本 ~180ms→~1ms 路線）、縮圖↔主畫面雙向連動、mm overlay、雙三擊、游標剖面。
     /// </summary>
     internal sealed class ReviewDisplayManager : IDisposable
@@ -140,10 +139,4 @@ namespace AniloxRoll.Monitor.UI.Managers
         }
     }
 
-    /// <summary>#13 過渡旗標（Stage1 平行建新）：true=回顧主畫面走 LiveDisplayView（同源新路徑）。
-    /// 驗證 OK 後 Stage4 刪舊路徑與此旗標。</summary>
-    internal static class AniloxRollFormReviewFlags
-    {
-        public const bool UseSameSourceDisplay = true;
-    }
 }

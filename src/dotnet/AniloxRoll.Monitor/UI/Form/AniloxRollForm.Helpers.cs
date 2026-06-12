@@ -154,66 +154,9 @@ namespace AniloxRoll.Monitor.Forms
             return null;
         }
 
-        // ── 回顧縮圖↔主畫面雙向同步（Global 模式）──────────────────
-
-        private double[] GetReviewOpsArray() =>
-            _interactionHelper?.ReviewConfig?.CamOps ?? _settings?.GetCameraOpsUmArray() ?? new double[7];
-
-        private double[] GetReviewPosArray() =>
-            _interactionHelper?.ReviewConfig?.CamPos ?? _settings?.GetCameraStartPositionMmArray() ?? new double[7];
-
-        private bool TryGetMergedReviewCoords(out double globalMinMm, out double refOpsMm)
-        {
-            globalMinMm = 0; refOpsMm = 0;
-            var opsArr = GetReviewOpsArray();
-            var posArr = GetReviewPosArray();
-            if (opsArr == null || opsArr.Length == 0 || opsArr[0] <= 0) return false;
-            globalMinMm = double.MaxValue;
-            for (int i = 0; i < posArr.Length; i++)
-                if (posArr[i] < globalMinMm) globalMinMm = posArr[i];
-            if (globalMinMm == double.MaxValue) { globalMinMm = 0; }
-            refOpsMm = opsArr[0] * InspectionEngineConfig.DefaultSaveResizeScale / 1000.0;
-            return refOpsMm > 0;
-        }
-
-        private void PanCanvasToReviewCameraCenter(int camIdx)
-        {
-            if (!_stitchCoordinator.IsGlobalMerged && !_stitchCoordinator.IsPeriodMerged) return;
-            if (!TryGetMergedReviewCoords(out double globalMinMm, out double refOpsMm)) return;
-            var posArr = GetReviewPosArray();
-            var opsArr = GetReviewOpsArray();
-            if (camIdx < 0 || camIdx >= posArr.Length) return;
-
-            double slotWidthMm = InspectionEngineConfig.MaxWidth * opsArr[camIdx] / 1000.0;
-            double camCenterMm = posArr[camIdx] + slotWidthMm / 2.0;
-            double camCenterPx = (camCenterMm - globalMinMm) / refOpsMm;
-            float newPanX = camReviewMain.Width / 2.0f - (float)(camCenterPx * camReviewMain.Zoom);
-            camReviewMain.SetView(camReviewMain.Zoom, new System.Drawing.PointF(newPanX, camReviewMain.PanOffset.Y));
-        }
-
-        private void UpdateSelectedReviewCamFromViewCenter(CanvasInfo info)
-        {
-            if (_settings?.StitchMode != StitchMode.Global) return;
-            if (!TryGetMergedReviewCoords(out double globalMinMm, out double refOpsMm)) return;
-            var posArr = GetReviewPosArray();
-            var opsArr = GetReviewOpsArray();
-
-            double centerPx = (camReviewMain.Width / 2.0f - info.PanOffset.X) / info.Zoom;
-            double centerMm = globalMinMm + centerPx * refOpsMm;
-
-            int bestIdx = 0;
-            double bestDist = double.MaxValue;
-            for (int i = 0; i < posArr.Length; i++)
-            {
-                double slotWidthMm = InspectionEngineConfig.MaxWidth * opsArr[i] / 1000.0;
-                double slotCenterMm = posArr[i] + slotWidthMm / 2.0;
-                double dist = Math.Abs(centerMm - slotCenterMm);
-                if (dist < bestDist) { bestDist = dist; bestIdx = i; }
-            }
-
-            if (bestIdx == _galleryManager.SelectedIndex) return;
-            _galleryManager.Select(bestIdx, triggerEvent: false);
-        }
+        // 4c：舊「回顧縮圖↔主畫面雙向同步」死碼簇已刪（GetReviewOps/PosArray、TryGetMergedReviewCoords、
+        //     PanCanvasToReviewCameraCenter、UpdateSelectedReviewCamFromViewCenter）——由 sdk LiveDisplayView
+        //     內建雙向連動取代（CenterOnCamera + UpdateReverseThumbSync）。
 
         // ── Helper Methods ──────────────────────────────────────────
 
