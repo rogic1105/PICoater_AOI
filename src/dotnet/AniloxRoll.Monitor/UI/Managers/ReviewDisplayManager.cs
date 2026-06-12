@@ -71,36 +71,18 @@ namespace AniloxRoll.Monitor.UI.Managers
         }
 
         /// <summary>
-        /// 餵一組回顧影像（7 台拼接圖；null 槽=間空黑占位）+ CFG 座標。
-        /// Bitmap → 8bpp 灰階 bytes（LockBits 一次性轉，換 ID 才發生）→ PushFrame；feedScale=1（full-res）。
+        /// 餵一組回顧灰階幀（RSC 解碼段已轉好的不可變 bytes；null 槽=間空黑占位）+ CFG 座標。
+        /// 純推幀零轉換 → UI 執行緒無負擔、與 Bitmap 生命週期零 race。
         /// </summary>
-        public void PushImages(Bitmap[] imgs, double[] opsUm, double[] posMm, bool mergeMode, double screenMmPerPx, int feedScale, string grabId, bool isProcessed, double rowPitchMm)
+        public void PushFrames(byte[][] gray, int[] w, int[] h, double[] opsUm, double[] posMm,
+            bool mergeMode, double screenMmPerPx, int feedScale, double rowPitchMm)
         {
-            if (_disposed || imgs == null) return;
-            EnsureCreated(screenMmPerPx);                    // 控制項建立必須在 UI 執行緒
-            _view.SetLayout(posMm, opsUm, Math.Max(1, feedScale), rowPitchMm); // feedScale=降採樣倍率；rowPitchMm=真實 mm/列（法向 Y 對齊，0 退回方形像素）
+            if (_disposed || gray == null) return;
+            EnsureCreated(screenMmPerPx);
+            _view.SetLayout(posMm, opsUm, Math.Max(1, feedScale), rowPitchMm); // feedScale=降採樣倍率；rowPitchMm=真實 mm/列
             _view.SetMergeMode(mergeMode);
-            // 灰階轉換+推幀進背景（PushFrame 設計上支援背景執行緒＝相機 callback 同路）；
-            // Parallel 7 台同時轉，UI 不卡（載入加速 3c）。caller 的 Bitmap 生命週期：RSC 換 ID 才 Dispose 舊圖，
-            // 期間夠轉完；防衛起見轉換中例外吞掉（圖被換走時放棄該幀）。
-            // 瞬切雙快取已拆除（2026-06-13 上機：無體感收益且記憶體吃緊）；灰階轉換照走背景。
-            var snapshot = (Bitmap[])imgs.Clone();
-            System.Threading.Tasks.Task.Run(() =>
-            {
-                System.Threading.Tasks.Parallel.For(0, snapshot.Length, i =>
-                {
-                    try
-                    {
-                        var bmp = snapshot[i];
-                        if (bmp == null) return;
-                        byte[] gray;
-                        int w, h;
-                        lock (bmp) { gray = ToGray8(bmp, out w, out h); }
-                        if (gray != null) _view?.PushFrame(i + 1, gray, w, h);
-                    }
-                    catch { /* 圖在轉換中被釋放（快速換 ID）→ 放棄該幀 */ }
-                });
-            });
+            for (int i = 0; i < gray.Length; i++)
+                if (gray[i] != null) _view.PushFrame(i + 1, gray[i], w[i], h[i]);
         }
 
         /// <summary>chart 重建後補發當前視野（強化切換/重載後曲線恢復跟隨，免等滑鼠互動）。</summary>

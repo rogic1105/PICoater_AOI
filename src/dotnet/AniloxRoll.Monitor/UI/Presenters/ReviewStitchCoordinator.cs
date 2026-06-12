@@ -90,7 +90,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// </summary>
         /// <summary>#13 同源新路徑：一組 grab 影像載好（7 台拼接圖 + CFG 有效 ops/pos + 是否 Global）。
         /// Form 訂閱 → ReviewDisplayManager.PushImages（LiveDisplayView 顯示）；舊 canvas 路徑照跑（平行建新）。</summary>
-        public event Action<System.Drawing.Bitmap[], double[], double[], bool, string, bool> StitchedImagesReady; // imgs, ops, pos, isGlobal, grabId, isProcessed（瞬切快取鍵）
+        public event Action<byte[][], int[], int[], double[], double[], bool> StitchedImagesReady; // gray bytes(不可變快照), w, h, ops, pos, isGlobal —— Bitmap 不出此類（GDI+ 單執行緒物件）
 
         public Task LoadGrabStitchedViewAsync(string grabId, DateTime hintFrom, DateTime hintTo)
             => LoadGrabStitchedViewAsync(grabId, hintFrom, hintTo, LastReviewProcessedMode);
@@ -119,6 +119,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 int camCount = _ctx.CameraCount;
                 float[][] newCurveMean    = new float[camCount][];
                 float[][] newCurveMax     = new float[camCount][];
+                // #13 同源：灰階轉換在「解碼同段背景、Bitmap 仍獨佔未發布」時做 → 與後續任何讀取零 race
+                //（教訓：GDI+ Bitmap 單執行緒物件，發布後背景 LockBits 會與快速換 ID 的下一輪讀取相撞）。
+                var grayArr = new byte[camCount][];
+                var grayW = new int[camCount];
+                var grayH = new int[camCount];
                 float[][] newRowCurveMean = new float[camCount][];
                 float[][] newRowCurveMax  = new float[camCount][];
                 CsvConfigSnapshot grabCfg = null;
@@ -149,6 +154,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                                     useProcessed: enableProcess, ridgeDirection: ridgeDir);
                                 CurveMergeHelper.MergeCurves(paths, out newCurveMean[i], out newCurveMax[i]);
                                 CurveMergeHelper.MergeRowCurves(paths, out newRowCurveMean[i], out newRowCurveMax[i]);
+                                if (imgs[i] != null && AniloxRoll.Monitor.UI.Managers.AniloxRollFormReviewFlags.UseSameSourceDisplay)
+                                    grayArr[i] = AniloxRoll.Monitor.UI.Managers.ReviewDisplayManager.ToGray8(imgs[i], out grayW[i], out grayH[i]);
                             }
                             catch (Exception ex)
                             {
@@ -195,8 +202,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 // #13 同源新路徑（平行建新）：餵 LiveDisplayView（Vertical 模式 ops/pos 補算 CFG 有效值）
                 var opsEff = opsArr ?? grabCfg?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
                 var posEff = posArr ?? grabCfg?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
-                StitchedImagesReady?.Invoke(_stitchedImages, opsEff, posEff,
-                    _ctx.Settings.StitchMode == StitchMode.Global, grabId, enableProcess);
+                StitchedImagesReady?.Invoke(grayArr, grayW, grayH, opsEff, posEff,
+                    _ctx.Settings.StitchMode == StitchMode.Global);
 
                 if (AniloxRoll.Monitor.UI.Managers.AniloxRollFormReviewFlags.UseSameSourceDisplay)
                 {

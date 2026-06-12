@@ -548,10 +548,11 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _reviewDisplayManager = new ReviewDisplayManager(camReviewMain,
                     new System.Windows.Forms.Control[] { camReview1, camReview2, camReview3, camReview4, camReview5, camReview6, camReview7 });
-                _stitchCoordinator.StitchedImagesReady += (imgs, ops, pos, isGlobal, grabId, isProcessed) =>
-                    _reviewDisplayManager?.PushImages(imgs, ops, pos, isGlobal, _interactionHelper?.ScreenMmPerPixel ?? 0,
-                        AniloxRoll.Monitor.Core.Services.InspectionEngineConfig.DefaultSaveResizeScale, grabId, isProcessed,
-                        _reviewRowChartHelper?.RowPitchMm ?? 0);   // 真實 mm/列（速度/線掃率）→ 法向 Y 對齊；?.：關閉時序防 NRE
+                _stitchCoordinator.StitchedImagesReady += (gray, ws, hs, ops, pos, isGlobal) =>
+                    _reviewDisplayManager?.PushFrames(gray, ws, hs, ops, pos, isGlobal,
+                        _interactionHelper?.ScreenMmPerPixel ?? 0,
+                        AniloxRoll.Monitor.Core.Services.InspectionEngineConfig.DefaultSaveResizeScale,
+                        _reviewRowChartHelper?.RowPitchMm ?? 0);   // 灰階已在 RSC 解碼段轉好（零 race）；?.：關閉時序防 NRE
                 // Stage2：新 canvas 視野 → 回顧曲線圖 zoom 連動（切向=全覽 X、法向=Y；拖曳中即時）
                 _reviewDisplayManager.ViewRangeMmChanged += (l, r, top, bot) =>
                 {
