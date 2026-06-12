@@ -422,8 +422,6 @@
             this.btnLiveViewBackground.Text = "預覽背景";
             this.btnLiveViewBackground.UseVisualStyleBackColor = true;
             // 
-            // 
-            // 
             // btnLiveGetBackground
             // 
             this.btnLiveGetBackground.Location = new System.Drawing.Point(900, 94);

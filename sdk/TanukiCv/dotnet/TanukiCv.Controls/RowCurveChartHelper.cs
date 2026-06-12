@@ -58,13 +58,25 @@ namespace TanukiCv.Controls
             meanSeries.Points.Clear();
             maxSeries.Points.Clear();
 
-            for (int i = 0; i < n; i++)
+            // 顯示降採樣（[ReviewSync] 實測：全點上 chart 重繪 22~67ms/次 → 拖曳跟隨吃滿 UI）：
+            // 上限 ~2000 點（同 overview 慣例）。桶內 mean=平均、max=取大（保峰值）、位置=桶中心；
+            // 純顯示瘦身，資料/判定不經此路。
+            const int MaxDisplayPoints = 2000;
+            int stride = Math.Max(1, (n + MaxDisplayPoints - 1) / MaxDisplayPoints);
+            for (int i = 0; i < n; i += stride)
             {
-                double yMm = (n - 1 - i) * _rowPitchMm;
-                double xMean = meanData[i] / 255.0;
-                meanSeries.Points.AddXY(xMean, yMm);
-                if (maxData != null && i < maxData.Length)
-                    maxSeries.Points.AddXY(maxData[i] / 255.0, yMm);
+                int end = Math.Min(i + stride, n);
+                double sum = 0; double bucketMax = 0; int cnt = 0;
+                for (int j = i; j < end; j++)
+                {
+                    sum += meanData[j]; cnt++;
+                    if (maxData != null && j < maxData.Length && maxData[j] > bucketMax) bucketMax = maxData[j];
+                }
+                int mid = (i + end - 1) / 2;
+                double yMm = (n - 1 - mid) * _rowPitchMm;
+                meanSeries.Points.AddXY(sum / cnt / 255.0, yMm);
+                if (maxData != null)
+                    maxSeries.Points.AddXY(bucketMax / 255.0, yMm);
             }
 
             var area = _chart.ChartAreas[0];
