@@ -93,6 +93,7 @@ namespace AniloxRoll.Monitor.Forms
             {
                 var info = _dataStatsPresenter.GrabIdInfos[reviewIdx];
                 await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest);
+                _reviewDisplayManager?.RefireViewRange();   // 同上：載入完恢復曲線視野跟隨
                 if (camReviewMain.Image != null) camReviewMain.FitToScreen();
                 _reviewDirty = false;
             }
@@ -129,6 +130,7 @@ namespace AniloxRoll.Monitor.Forms
             _interactionHelper.SaveCanvasView();
             var info = _dataStatsPresenter.GrabIdInfos[idx];
             await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest, enableProcess);
+            _reviewDisplayManager?.RefireViewRange();   // chart 重建會重設軸 → 補發當前視野（不用等滑鼠動）
         }
 
         /// <summary>

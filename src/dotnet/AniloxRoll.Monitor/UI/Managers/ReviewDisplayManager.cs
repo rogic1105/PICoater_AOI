@@ -103,6 +103,9 @@ namespace AniloxRoll.Monitor.UI.Managers
             });
         }
 
+        /// <summary>chart 重建後補發當前視野（強化切換/重載後曲線恢復跟隨，免等滑鼠互動）。</summary>
+        public void RefireViewRange() => _view?.RefireViewRange();
+
         public void SetMergeMode(bool on) => _view?.SetMergeMode(on);
         public void SetSelected(int camId) => _view?.SetSelected(camId);
 

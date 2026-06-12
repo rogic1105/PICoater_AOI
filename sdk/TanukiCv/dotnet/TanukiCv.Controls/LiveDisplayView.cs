@@ -241,6 +241,23 @@ namespace TanukiCv.Controls
 
         // ==================== UI timer（33ms）：主畫面更新（縮圖由 ThumbStrip 自管）====================
 
+        /// <summary>用「當前」zoom/pan 重發 ViewRangeMmChanged（不需滑鼠互動）。
+        /// 用途：上層 chart 重建（重載/強化切換）會重設軸範圍 → 載入完呼此補發，曲線立即恢復跟隨視野。</summary>
+        public void RefireViewRange()
+        {
+            if (_canvas == null || ViewRangeMmChanged == null) return;
+            if (!GetDisplayCoords(out double startMm, out double opsInMm, out double sf)) return;
+            float zoom = _canvas.Zoom;
+            if (zoom <= 0) return;
+            var pan = _canvas.PanOffset;
+            double leftMm = PixelMmMapper.PixelToMm((0 - pan.X) / zoom * sf, startMm, opsInMm);
+            double rightMm = PixelMmMapper.PixelToMm((_canvas.Width - pan.X) / zoom * sf, startMm, opsInMm);
+            double yPitch = _rowPitchMm > 0 ? _rowPitchMm : opsInMm;
+            double topMm = (0 - pan.Y) / zoom * sf * yPitch;
+            double botMm = (_canvas.Height - pan.Y) / zoom * sf * yPitch;
+            ViewRangeMmChanged?.Invoke(leftMm, rightMm, topMm, botMm);
+        }
+
         /// <summary>縮圖↔主畫面雙向連動（反向）：合圖模式視野中心最近的相機 → 自動高亮縮圖
         /// （不觸發 SelectRequested 防遞迴）。OnCanvasStatus（互動）+ 33ms timer（快拖事件合併時補刷，
         /// 中間相機不被跳過）兩處呼叫；計算極便宜（找最近 placement 中心）。</summary>
