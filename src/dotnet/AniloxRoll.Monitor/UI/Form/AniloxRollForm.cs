@@ -39,6 +39,7 @@ namespace AniloxRoll.Monitor.Forms
         private ThumbnailGridPresenter _galleryManager;
         private ReviewDisplayManager _reviewDisplayManager;   // #13 同源新路徑（旗標 UseSameSourceDisplay）
         private double _reviewViewLeftMm = double.NaN, _reviewViewRightMm, _reviewViewTopMm, _reviewViewBotMm; // 新畫布視野快取（chart 原子更新用）
+        private int _reviewSyncCount; private long _reviewSyncOvMax, _reviewSyncRowMax;   // [ReviewSync] 拖曳跟隨計時儀器
         private AniloxRollPresenter _presenter;
         private FormInteractionHelper _interactionHelper;
         private ColumnCurveChartHelper _reviewOverviewHelper;
@@ -548,14 +549,27 @@ namespace AniloxRoll.Monitor.Forms
                 _reviewDisplayManager = new ReviewDisplayManager(camReviewMain,
                     new System.Windows.Forms.Control[] { camReview1, camReview2, camReview3, camReview4, camReview5, camReview6, camReview7 });
                 _stitchCoordinator.StitchedImagesReady += (imgs, ops, pos, isGlobal, grabId, isProcessed) =>
-                    _reviewDisplayManager.PushImages(imgs, ops, pos, isGlobal, _interactionHelper?.ScreenMmPerPixel ?? 0,
-                        AniloxRoll.Monitor.Core.Services.InspectionEngineConfig.DefaultSaveResizeScale, grabId, isProcessed);
+                    _reviewDisplayManager?.PushImages(imgs, ops, pos, isGlobal, _interactionHelper?.ScreenMmPerPixel ?? 0,
+                        AniloxRoll.Monitor.Core.Services.InspectionEngineConfig.DefaultSaveResizeScale, grabId, isProcessed);   // ?.：關閉時序（OnFormClosing 已釋放）遲到事件防 NRE
                 // Stage2：新 canvas 視野 → 回顧曲線圖 zoom 連動（切向=全覽 X、法向=Y；拖曳中即時）
                 _reviewDisplayManager.ViewRangeMmChanged += (l, r, top, bot) =>
                 {
                     _reviewViewLeftMm = l; _reviewViewRightMm = r; _reviewViewTopMm = top; _reviewViewBotMm = bot;
+                    var swSync = System.Diagnostics.Stopwatch.StartNew();
                     _reviewOverviewHelper?.UpdateViewRange(l, r);
+                    long ovMs = swSync.ElapsedMilliseconds;
                     _reviewRowChartHelper?.UpdateViewRange(top, bot);
+                    long rowMs = swSync.ElapsedMilliseconds - ovMs;
+                    // [ReviewSync] 計時儀器：單次 >25ms 即時告警；每 120 次彙總（拖曳 ~4 秒）→ 看瓶頸在 overview/row/事件頻率
+                    _reviewSyncCount++; _reviewSyncOvMax = Math.Max(_reviewSyncOvMax, ovMs); _reviewSyncRowMax = Math.Max(_reviewSyncRowMax, rowMs);
+                    long gapMs = swSync.ElapsedMilliseconds; // handler 總耗時
+                    if (gapMs > 25)
+                        Trace.WriteLine($"[ReviewSync] SLOW ov={ovMs}ms row={rowMs}ms");
+                    if (_reviewSyncCount >= 120)
+                    {
+                        Trace.WriteLine($"[ReviewSync] 120 events: ovMax={_reviewSyncOvMax}ms rowMax={_reviewSyncRowMax}ms");
+                        _reviewSyncCount = 0; _reviewSyncOvMax = 0; _reviewSyncRowMax = 0;
+                    }
                 };
                 // chart 重建（重載/強化切換）原子帶入當前視野 → 不先閃回預設（同 Live 解法）
                 _stitchCoordinator.SameSourceViewRange = () =>
