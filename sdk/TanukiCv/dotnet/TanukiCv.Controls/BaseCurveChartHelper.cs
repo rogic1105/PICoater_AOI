@@ -5,6 +5,9 @@ using System.Windows.Forms.DataVisualization.Charting;
 
 namespace TanukiCv.Controls
 {
+    /// <summary>⚠ 不變量（踩過 3 次的坑）：chart 任何重畫**必須原子帶視野**（UpdateDataAndView 一次給資料+範圍），
+    /// **嚴禁**「先 Clear/重設 → 之後再補視野」——中間狀態會閃給使用者看（重載/強化切換回預設一閃）。
+    /// 視野來源用呼叫端快取的「當前視野」（Live=_liveViewLeftMm、Review=SameSourceViewRange 注入），不要事後補發。</summary>
     /// <summary>
     /// Column/Row 曲線圖共用基底：chart 初始化骨架、閾值線、Mean/Max series 建立。
     /// 子類實作方向特定的 ChartArea、series anchor、InnerPlotPosition 補償。
