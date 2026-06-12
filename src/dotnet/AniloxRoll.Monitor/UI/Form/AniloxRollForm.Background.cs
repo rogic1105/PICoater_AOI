@@ -227,13 +227,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private void UpdateViewBackgroundButtonText()
         {
-            string bgDir = _settings.Storage.BackgroundPath;
-            string[] bins = Directory.Exists(bgDir) ? Directory.GetFiles(bgDir, CaptureFileNaming.BgGlob) : Array.Empty<string>();
-            if (bins.Length == 0) { lblBgBinInfo.Text = ""; return; }
-            var meta = InspectionEngine.ReadBgBinMeta(bins[0]);
-            lblBgBinInfo.Text = meta.HasValue
-                ? $"光源{meta.Value.Light} 曝光{(int)meta.Value.ExposureUs}us"
-                : "";
+            // lblBgBinInfo 已刪除（2026-06-12 使用者刪除清單）；保留空方法給既有呼叫點，待 #13 收尾一併清。
         }
 
         /// <summary>釋放所有相機的 PrecomputedColMean pinned buffer。</summary>
