@@ -1,6 +1,6 @@
 # 遷移 Plan：回顧主畫面接 LiveDisplayView（與監控同源，絞殺榕收官）
 
-> 狀態：**規劃完成、待執行**（分支 `refactor/review-same-source`）。
+> 狀態：**Stage 1~4c 完成（分支 @ea8e4e1，上機驗證 log 零例外）**；剩 4d 收官（下方清單，需上機逐項驗）。
 > 原則沿用 tanuki 遷移：**分階段 + 每階段 build 驗證 + checkpoint commit + 平行建新不拆舊**。
 
 ## 1. 目標
@@ -52,3 +52,24 @@
 - 回顧的「強化重載」「背景預覽」也畫在 camReviewMain → 接入後改推幀（Background.cs 接點）。
 - ReviewStitchCoordinator 的平行解碼計時 log（CSV/Stitch/Merge(bg)/UIapply）要保留量測語意。
 - DataStatisticsPresenter 跨 tab 同步（chartDataPatch 對齊 chartReviewPatch）的座標假設要重驗。
+
+## ✅ 執行紀錄（2026-06-12，Stage 1~4c）
+- Stage1 平行接入（ReviewDisplayManager runtime 疊 Panel）→ Stage2 chart 連動 → Stage3 永遠 Global+
+  灰階背景化+強化自動接新路徑 → 4a 跳舊白工 → 4b 刪旗標封死死路 → 4c 旗標轉正+舊雙向連動死碼簇刪除。
+- 效能戰果（[ReviewSync]/[StitchView] 數據）：UIapply 300~1400ms→15~60ms；row chart 22~67ms→3~4ms；
+  WM_PAINT 飢餓修正（chart.Update）；GDI+ race 架構性修正（灰階轉換入解碼段、事件傳不可變 bytes）。
+- 修正史：feedScale 座標對齊、疊加 Panel 跟版、RefireViewRange→SameSourceViewRange 原子帶視野、
+  真實 rowPitch 對齊、瞬切雙快取（嘗試後拆除＝無收益+記憶體吃緊）。
+
+## 🔲 4d 收官清單（需上機逐項驗，勿盲刪）
+1. camReviewMain（SmartCanvas）+ camReview1~7（PictureBox）控制項實體與 Designer 移除
+   → ReviewDisplayManager 改直接吃 Panel（Designer 放 Panel）；連動 CanvasInteractionHelper ctor。
+2. CanvasInteractionHelper 拆分：顯示路徑（UpdateCanvas/SaveView/RestoreView/UpdateCanvasInfo）刪；
+   保留 ScreenMmPerPixel、ReviewConfig 代理、TryComputeCurrentViewRange（RSC fallback/DataStats 用）→ 評估搬家。
+3. ThumbnailGridPresenter 刪（確認 AniloxRollPresenter/DirectionStitch 的 SelectedIndex 讀取改接 LiveDisplayView）。
+4. StitchMode 死碼掃除（~75 處 Global 恆真分支）+ enum/設定殘骸。
+5. GrabImageStitcher.MergeHorizontal 本體（先查 period/時段合併路徑呼叫端；時段合併去留=使用者測 LOD 後決定）。
+6. 預覽背景（Background.cs 對 camReviewMain 的繪製）改推 LiveDisplayView 或確認路徑。
+7. 驗證：視野保留（換 ID 保 zoom/pan）、換 ID fit 閃爍（先算佈局再首繪）、CLAUDE.md 控制項表+ui-flow 後續。
+完成後 #13 收官 → merge main → 絞殺榕全劇終。
+
