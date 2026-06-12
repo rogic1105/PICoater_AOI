@@ -69,7 +69,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         /// <summary>
         /// UpdateStitchedOverviewChart 完成後觸發，傳遞與 chartReviewPatch 相同的曲線資料，
-        /// 供外部（AniloxRollForm）同步 chartDataPatch。
+        /// 供外部（AniloxRollForm）同步 chartDataVertical。
         /// 參數：(mean[][], max[][], opsUm[], startPosMm[], errMean, errMax)
         /// </summary>
         public event Action<float[][], float[][], double[], double[], float, float> StitchedCurveUpdated;

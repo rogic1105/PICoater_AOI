@@ -89,7 +89,7 @@
             this.btnReviewIdNext = new System.Windows.Forms.Button();
             this.camReviewMain = new TanukiCv.Controls.SmartCanvas();
             this.tabPageData = new System.Windows.Forms.TabPage();
-            this.chartDataPatch = new System.Windows.Forms.DataVisualization.Charting.Chart();
+            this.chartDataVertical = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.camData7 = new System.Windows.Forms.Panel();
             this.lblChartDataYieldMonthlyUnit = new System.Windows.Forms.Label();
             this.lblChartDataYieldDailyUnit = new System.Windows.Forms.Label();
@@ -299,7 +299,7 @@
             this.grpReviewGrabNav.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.camReviewMain)).BeginInit();
             this.tabPageData.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.chartDataPatch)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.chartDataVertical)).BeginInit();
             this.grpDataSingleSheet.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.chartDataYieldYearly)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.chartDataYieldMonthly)).BeginInit();
@@ -850,7 +850,7 @@
             // 
             // tabPageData
             // 
-            this.tabPageData.Controls.Add(this.chartDataPatch);
+            this.tabPageData.Controls.Add(this.chartDataVertical);
             this.tabPageData.Controls.Add(this.camData7);
             this.tabPageData.Controls.Add(this.lblChartDataYieldMonthlyUnit);
             this.tabPageData.Controls.Add(this.lblChartDataYieldDailyUnit);
@@ -883,23 +883,23 @@
             this.tabPageData.Text = "檢測報表";
             this.tabPageData.UseVisualStyleBackColor = true;
             // 
-            // chartDataPatch
+            // chartDataVertical
             // 
-            this.chartDataPatch.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
+            this.chartDataVertical.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             chartArea14.Name = "ChartArea1";
-            this.chartDataPatch.ChartAreas.Add(chartArea14);
+            this.chartDataVertical.ChartAreas.Add(chartArea14);
             legend14.Name = "Legend1";
-            this.chartDataPatch.Legends.Add(legend14);
-            this.chartDataPatch.Location = new System.Drawing.Point(6, 88);
-            this.chartDataPatch.Name = "chartDataPatch";
+            this.chartDataVertical.Legends.Add(legend14);
+            this.chartDataVertical.Location = new System.Drawing.Point(6, 88);
+            this.chartDataVertical.Name = "chartDataVertical";
             series14.ChartArea = "ChartArea1";
             series14.Legend = "Legend1";
             series14.Name = "Series1";
-            this.chartDataPatch.Series.Add(series14);
-            this.chartDataPatch.Size = new System.Drawing.Size(888, 96);
-            this.chartDataPatch.TabIndex = 58;
-            this.chartDataPatch.Text = "chartDataPatch";
+            this.chartDataVertical.Series.Add(series14);
+            this.chartDataVertical.Size = new System.Drawing.Size(888, 96);
+            this.chartDataVertical.TabIndex = 58;
+            this.chartDataVertical.Text = "chartDataVertical";
             // 
             // camData7
             // 
@@ -3302,7 +3302,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.camReviewMain)).EndInit();
             this.tabPageData.ResumeLayout(false);
             this.tabPageData.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.chartDataPatch)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.chartDataVertical)).EndInit();
             this.grpDataSingleSheet.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.chartDataYieldYearly)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.chartDataYieldMonthly)).EndInit();
@@ -3655,6 +3655,6 @@
         private System.Windows.Forms.Label label41;
         private System.Windows.Forms.Button btnLiveViewBackground;
         private System.Windows.Forms.Label lblBgBinInfo;
-        private System.Windows.Forms.DataVisualization.Charting.Chart chartDataPatch;
+        private System.Windows.Forms.DataVisualization.Charting.Chart chartDataVertical;
     }
 }
