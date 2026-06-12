@@ -24,7 +24,7 @@ sdk/
 │   │     ★ tanuki_pipeline（namespace `tanuki::pipeline`）= 演算法流程層（從 src/native 搬入；分層 core→module→pipeline）：
 │   │       framework/（IModule + Pipeline 工頭 + ModuleRegistry）；modules/（background_sub、ridge_hessian＝
 │   │       組合 core primitive 的「可換步驟」，換方法=換 module）；pipelines/find_stream_ridgeline/（食譜＝串 module，
-│   │       找流水圖脊線=mura 檢測，含 README+benchmark）；api/（tanuki_pipeline_api.dll，C ABI 與舊 picoater_api 相同 drop-in）。
+│   │       找流水圖脊線=mura 檢測，含 README+benchmark）；api/（tanuki_pipeline_api.dll，4b 定版：`TanukiPipeline_Create(name,json)`/`Process(...,json,...)` 單一簽名服務所有 pipeline；參數 json 化、加參數不破 ABI；json_lite 零依賴 parser）。
 │   │       判準：包一顆 kernel=core primitive；組幾個 primitive 成可換步驟=module；串 module 成完整流程=pipeline。
 │   │       狀態：**遷移完成**——app 已切換（DllImport=tanuki_pipeline_api.dll、上機驗過）、src/native + 舊 picoater_api + bench_framework 已刪除。
 │   │       詳見 `docs/dev/migration-native-to-sdk-pipeline.md`

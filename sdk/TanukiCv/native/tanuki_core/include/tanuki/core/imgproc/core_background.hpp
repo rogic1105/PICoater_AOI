@@ -6,7 +6,7 @@
 namespace tanuki { namespace core {
 
     template <typename T>
-    void calcColumnMeans_gpu(const T* d_in, float* d_out, int W, int H, cudaStream_t stream, void* d_workspace);
+    void calcColumnMeans_gpu(const T* d_in, float* d_out, int W, int H, cudaStream_t stream);
 
     template <typename T>
     void calcColumnMax_gpu(const T* d_in, float* d_out, int W, int H, cudaStream_t stream);

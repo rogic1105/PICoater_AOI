@@ -47,6 +47,7 @@ SDK 的核心檔案位於 `sdk/TanukiCv` 目錄下，native 主要模組：
 * **CUDA 語法**：Kernel 啟動寫 `<<<grid, block>>>`，**嚴禁** `<< < > >>`。
 * **檔案分離**：介面 `.hpp`/`.cuh`、實作 `.cpp`/`.cu`；Header 不放複雜實作（確保 .lib 正確生成連結）。
 * **分層判準**：包一顆 kernel = core primitive；組幾個 primitive 成可換步驟 = module；串 module 成完整流程 = pipeline。
+* **型別後綴命名（定案）**：core primitive 用顯式型別後綴（`scale_clamp_f32_to_u8_gpu`、`threshold_u8_gpu`），**不**參數化成 `xxx_gpu('u8')`——C 風格 + 顯式實例化下這是業界正解（NPP/OpenCV 同款），型別組合有限且編譯期檢查。「同名不同型別組合」才用 template（如 `gaussianBlur_gpu<T_in,T_out>`）。
 
 ## 4. 如何整合 SDK (Usage Guide)
 

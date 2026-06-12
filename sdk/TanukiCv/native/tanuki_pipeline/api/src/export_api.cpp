@@ -1,4 +1,5 @@
 #include "export_c/export_api.h"
+#include "json_lite.hpp"
 
 #include <cuda_runtime.h>
 #include <memory>
@@ -9,9 +10,13 @@
 
 namespace {
 
+using tanuki::pipeline::jsonlite::get_number;
+using tanuki::pipeline::jsonlite::get_string;
+
 struct PipelineContext {
     std::unique_ptr<tanuki::pipeline::Pipeline> pipeline;
     std::string last_error;
+    std::string ridge_mode_buf;   // 持有 json 取出的字串（Params.ridge_mode 是 const char*）
 
     int width = 0, height = 0;
     size_t image_size = 0;
@@ -67,19 +72,30 @@ struct PipelineContext {
 
 extern "C" {
 
-AoiPipelineHandle PICoaterAPI_CreatePipeline() {
+TanukiPipelineHandle TanukiPipeline_Create(const char* pipeline_name, const char* json_options) {
+    std::string name = pipeline_name ? pipeline_name : "";
+    std::unique_ptr<tanuki::pipeline::Pipeline> pipe;
+
+    if (name == "find_stream_ridgeline") {
+        std::string method = get_string(json_options, "ridge_method", "hessian");
+        pipe = tanuki::pipeline::CreateFindStreamRidgeline(method);
+    }
+    // 未來新 pipeline 在此加分支（單一 API 簽名不變）
+
+    if (!pipe) return nullptr;   // 未知 pipeline / 未知方法 → 明確失敗
+
     auto* ctx = new PipelineContext();
-    ctx->pipeline = tanuki::pipeline::CreateFindStreamRidgeline("hessian");
-    if (!ctx->pipeline) { delete ctx; return nullptr; } // 未知方法食譜回 nullptr → 對外明確失敗
-    return reinterpret_cast<AoiPipelineHandle>(ctx);
+    ctx->pipeline = std::move(pipe);
+    return reinterpret_cast<TanukiPipelineHandle>(ctx);
 }
 
-int PICoaterAPI_ProcessPipeline(AoiPipelineHandle handle,
-                                const AoiInputImageC* input,
-                                const AoiAlgorithmParamsC* params,
-                                const AoiOutputBuffersC* output) {
+int TanukiPipeline_Process(TanukiPipelineHandle handle,
+                           const TanukiPipelineInputC* input,
+                           const char* json_params,
+                           const float* precomputed_col_mean,
+                           const TanukiPipelineOutputC* output) {
     if (handle == nullptr) return -1;
-    if (input == nullptr || params == nullptr || output == nullptr || input->data == nullptr) return -1;
+    if (input == nullptr || output == nullptr || input->data == nullptr) return -1;
     auto* ctx = reinterpret_cast<PipelineContext*>(handle);
 
     if (!ctx->EnsureBuffers(input->width, input->height, &ctx->last_error)) return -2;
@@ -92,19 +108,21 @@ int PICoaterAPI_ProcessPipeline(AoiPipelineHandle handle,
     in.width = input->width; in.height = input->height; in.data = ctx->d_input; in.stream = input->stream;
 
     // precomputed column mean：host → GPU（用 d_curve_mean 暫存）
-    if (params->precomputed_col_mean != nullptr) {
-        if (cudaMemcpy(ctx->d_curve_mean, params->precomputed_col_mean,
+    if (precomputed_col_mean != nullptr) {
+        if (cudaMemcpy(ctx->d_curve_mean, precomputed_col_mean,
                        input->width * sizeof(float), cudaMemcpyHostToDevice) != cudaSuccess) {
             ctx->last_error = "Failed to copy precomputed column mean to GPU."; return -2;
         }
     }
 
+    // 演算法參數：json → Params（各 module 取自己要的 key；缺 key 用 Params 預設）
     tanuki::pipeline::Params p;
-    p.bg_sigma_factor = params->bg_sigma_factor;
-    p.ridge_sigma = params->ridge_sigma;
-    p.hessian_max_factor = params->hessian_max_factor;
-    p.ridge_mode = params->ridge_mode;
-    p.precomputed_col_mean = params->precomputed_col_mean != nullptr ? ctx->d_curve_mean : nullptr;
+    p.bg_sigma_factor = get_number(json_params, "bg_sigma_factor", p.bg_sigma_factor);
+    p.ridge_sigma = get_number(json_params, "ridge_sigma", p.ridge_sigma);
+    p.hessian_max_factor = get_number(json_params, "hessian_max_factor", p.hessian_max_factor);
+    ctx->ridge_mode_buf = get_string(json_params, "ridge_mode", p.ridge_mode);
+    p.ridge_mode = ctx->ridge_mode_buf.c_str();
+    p.precomputed_col_mean = precomputed_col_mean != nullptr ? ctx->d_curve_mean : nullptr;
 
     tanuki::pipeline::OutputBuffers out;
     out.width = output->width > 0 ? output->width : input->width;
@@ -139,27 +157,27 @@ int PICoaterAPI_ProcessPipeline(AoiPipelineHandle handle,
     return 0;
 }
 
-const char* PICoaterAPI_GetLastError(AoiPipelineHandle handle) {
+const char* TanukiPipeline_GetLastError(TanukiPipelineHandle handle) {
     if (handle == nullptr) return "Invalid pipeline handle.";
     return reinterpret_cast<PipelineContext*>(handle)->last_error.c_str();
 }
 
-void PICoaterAPI_DestroyPipeline(AoiPipelineHandle handle) {
+void TanukiPipeline_Destroy(TanukiPipelineHandle handle) {
     if (handle == nullptr) return;
     delete reinterpret_cast<PipelineContext*>(handle);
 }
 
-int PICoaterAPI_ComputeColumnMean(AoiPipelineHandle handle,
-                                  const AoiInputImageC* input,
-                                  float bg_sigma_factor,
-                                  float* out_col_mean) {
+int TanukiPipeline_ComputeColumnMean(TanukiPipelineHandle handle,
+                                     const TanukiPipelineInputC* input,
+                                     float bg_sigma_factor,
+                                     float* out_col_mean) {
     if (handle == nullptr || input == nullptr || out_col_mean == nullptr || input->data == nullptr) return -1;
     auto* ctx = reinterpret_cast<PipelineContext*>(handle);
     if (!ctx->EnsureBuffers(input->width, input->height, &ctx->last_error)) return -2;
     if (cudaMemcpy(ctx->d_input, input->data, ctx->image_size, cudaMemcpyHostToDevice) != cudaSuccess) {
         ctx->last_error = "Failed to copy input image for column mean."; return -2;
     }
-    int sigma_col = (int)bg_sigma_factor; if (sigma_col < 1) sigma_col = 1;
+    int sigma_col = (int)bg_sigma_factor; if (sigma_col < 1) sigma_col = 1;  // 沿用舊版整數截斷行為
     tanuki::core::calcColumnMeans_RemoveOutliers_gpu<uint8_t>(
         ctx->d_input, ctx->d_curve_mean, input->width, input->height, (float)sigma_col, nullptr);
     cudaDeviceSynchronize();

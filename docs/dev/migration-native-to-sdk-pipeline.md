@@ -38,7 +38,10 @@
    全方案 build 0 錯誤；實測刪 DLL 後 sln build 自動重生 → **清 bin 陷阱解除**。
    附帶：舊 picoater_pipeline_benchmark（既有編碼壞、已被 find_stream_ridgeline_bench 取代）關 Build.0 排除出 sln build（目錄留 phase-6 刪）；api 連結修 LNK4098（移 cudart_static）。
 4. ~~**刪舊**~~ ✅ **已做（phase-6，2026-06-12）**：`src/native` 整目錄（picoater_api／get_picoater_background／aoi_pipeline／picoater_pipeline_benchmark）+ sdk `bench_framework` + `core_cv_benchmark` 殘檔刪除；.sln 4 專案條目 + app 的 picoater_api 回滾依賴移除；props（BenchFrameworkPath/NativeRoot/LocalModulesPath）清掉；CLAUDE.md×2 / README×2 / skills×3 同步。全方案 build 0 錯誤。**src/ 只剩 dotnet（UI），單一真相在 sdk/tanuki_pipeline。**
-5. **可選 4b**（唯一遺留）：API 改 `run(name, json)` + 函式改名 TanukiPipeline_*；屆時先補 registry link-drop 保險（RegisterBuiltinModules）。
+5. ~~**可選 4b**~~ ✅ **已做（2026-06-12）**：API 定版 `TanukiPipeline_Create(name, json_options)` + `Process(handle, input, json_params, precomputed_col_mean, output)`（演算法參數 json 化＝加參數/加 pipeline 不破 ABI；json_lite 零依賴 flat parser；指標走 struct/獨立引數）。C# NativeMethods/AoiService 同步切換。
+   一併收尾：bg_sigma 參數 honest 化（module 用參數；app 新常數 PerFrameBgSigma=1.0 走 Process＝行為不變、DefaultBgSigma=2.0 留背景採集——兩條路徑本來就不同 sigma）；IModule 移除無人呼叫的 Initialize（YAGNI）；calcColumnMeans_gpu 死參數 d_workspace 刪除；AlgorithmParams 預設 ridge_mode "dark"→"vertical+horizontal"。
+   registry 保險（RegisterBuiltinModules）未做＝registry 仍是未用的未來基建（食譜 direct-new 已避開 link-drop），等真用 registry 選 module 再補。
+   ⚠ **app 需上機重驗**（P/Invoke 簽名換了：監控 + 取得背景 + 回顧各跑一輪）。
 
 ## 1. 目標與動機
 把 `src/native`（C++/CUDA 演算法 pipeline）整個搬進 `sdk/`，讓：

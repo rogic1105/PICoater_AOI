@@ -245,7 +245,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 },
                 Params = new AoiProcessRequest.AlgorithmParams
                 {
-                    BgSigmaFactor    = InspectionEngineConfig.DefaultBgSigma,
+                    BgSigmaFactor    = InspectionEngineConfig.PerFrameBgSigma,
                     RidgeSigma       = InspectionEngineConfig.DefaultRidgeSigma,
                     HessianMaxFactor = hessianFactor,
                     RidgeMode        = "vertical+horizontal"  // 永遠計算雙方向，確保 V/H 皆可存檔

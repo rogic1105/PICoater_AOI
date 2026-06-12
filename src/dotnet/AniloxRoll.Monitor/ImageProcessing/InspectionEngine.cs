@@ -72,7 +72,7 @@ namespace AniloxRoll.Monitor.Core.Services
                         },
                         Params = new AoiProcessRequest.AlgorithmParams
                         {
-                            BgSigmaFactor = InspectionEngineConfig.DefaultBgSigma,
+                            BgSigmaFactor = InspectionEngineConfig.PerFrameBgSigma,
                             RidgeSigma = InspectionEngineConfig.DefaultRidgeSigma,
                             HessianMaxFactor = 1.0f,
                             RidgeMode = InspectionEngineConfig.DefaultRidgeMode

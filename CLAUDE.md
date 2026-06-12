@@ -163,7 +163,7 @@ PICoater_AOI/
 
 | DLL | 函式 | 用途 |
 |-----|------|------|
-| `tanuki_pipeline_api.dll` | `PICoaterAPI_CreatePipeline` / `ProcessPipeline` / `DestroyPipeline` / `ComputeColumnMean` | GPU 檢測 pipeline（find_stream_ridgeline；函式名沿用 PICoaterAPI_*，4b 重設計再改） |
+| `tanuki_pipeline_api.dll` | `TanukiPipeline_Create(name,jsonOpts)` / `Process(h,input,jsonParams,precomputed,output)` / `GetLastError` / `Destroy` / `ComputeColumnMean` | GPU 檢測 pipeline（4b 定版：單一 API run(name,json)，演算法參數走 json 字串、加參數/加 pipeline 不破 ABI；指標走 struct/獨立引數） |
 | `tanuki_cv_api.dll` | `TanukiCv_AllocPinned` / `TanukiCv_FreePinned` | CUDA pinned memory 管理 |
 | `tanuki_cv_api.dll` | `TanukiCv_FastReadBMP` | 快速讀取 BMP（繞過 GDI+） |
 | `tanuki_cv_api.dll` | `TanukiCv_Resize_GPU` | GPU 縮圖 |

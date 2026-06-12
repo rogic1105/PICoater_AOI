@@ -404,7 +404,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                         },
                         Params = new AoiProcessRequest.AlgorithmParams
                         {
-                            BgSigmaFactor  = 2.0f,
+                            BgSigmaFactor  = InspectionEngineConfig.PerFrameBgSigma,
                             RidgeSigma     = (float)HessianSigma,
                             HessianMaxFactor = (float)HessianFixedMax,
                             RidgeMode      = "vertical+horizontal",  // 永遠計算雙方向，確保 V/H 皆可存檔
@@ -495,7 +495,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                     IntPtr hColMean = Marshal.AllocHGlobal(fw * sizeof(float));
                     try
                     {
-                        _aoiService.ComputeColumnMean(fw, fh, inputBuffer, 2.0f, hColMean);
+                        _aoiService.ComputeColumnMean(fw, fh, inputBuffer, InspectionEngineConfig.DefaultBgSigma, hColMean);
                         Marshal.Copy(hColMean, outColMean, 0, fw);
                         return true;
                     }

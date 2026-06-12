@@ -27,16 +27,6 @@ namespace AniloxRoll.Monitor.Core.Interop
         public IntPtr Stream;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct AoiAlgorithmParamsNative
-    {
-        public float BgSigmaFactor;
-        public float RidgeSigma;
-        public float HessianMaxFactor;
-        public IntPtr RidgeMode;
-        public IntPtr PrecomputedColMean;  // host float*, size = width. IntPtr.Zero = per-frame mode.
-    }
-
     internal static class NativeMethods
     {
         private const string DllName = "tanuki_pipeline_api.dll";
@@ -70,24 +60,31 @@ namespace AniloxRoll.Monitor.Core.Interop
             IntPtr hSrc, int srcW, int srcH,
             IntPtr hDst, int dstW, int dstH);
 
+        // =====================================================
+        // tanuki_pipeline_api.dll — 檢測 pipeline（4b 定版：run(name, json)）
+        // 演算法參數走 json 字串（純 ASCII，LPStr 安全）；指標類走 struct / 獨立引數。
+        // =====================================================
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        public static extern IntPtr PICoaterAPI_CreatePipeline();
+        public static extern IntPtr TanukiPipeline_Create(
+            [MarshalAs(UnmanagedType.LPStr)] string pipelineName,
+            [MarshalAs(UnmanagedType.LPStr)] string jsonOptions);  // 可 null
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int PICoaterAPI_ProcessPipeline(
+        public static extern int TanukiPipeline_Process(
             IntPtr handle,
             ref AoiInputImageNative input,
-            ref AoiAlgorithmParamsNative parameters,
+            [MarshalAs(UnmanagedType.LPStr)] string jsonParams,
+            IntPtr precomputedColMean,   // host float*, size = width. IntPtr.Zero = 每幀自算
             ref AoiOutputBuffersNative output);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        public static extern IntPtr PICoaterAPI_GetLastError(IntPtr handle);
+        public static extern IntPtr TanukiPipeline_GetLastError(IntPtr handle);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        public static extern void PICoaterAPI_DestroyPipeline(IntPtr handle);
+        public static extern void TanukiPipeline_Destroy(IntPtr handle);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int PICoaterAPI_ComputeColumnMean(
+        public static extern int TanukiPipeline_ComputeColumnMean(
             IntPtr handle,
             ref AoiInputImageNative input,
             float bgSigmaFactor,

@@ -33,7 +33,7 @@ namespace AniloxRoll.Monitor.Core.Services
             public float BgSigmaFactor { get; set; }
             public float RidgeSigma { get; set; }
             public float HessianMaxFactor { get; set; }
-            public string RidgeMode { get; set; } = "dark";
+            public string RidgeMode { get; set; } = "vertical+horizontal";
             public IntPtr PrecomputedColMean { get; set; } = IntPtr.Zero;
         }
 
@@ -46,6 +46,9 @@ namespace AniloxRoll.Monitor.Core.Services
     {
         private IntPtr _pipelineHandle = IntPtr.Zero;
 
+        /// <summary>使用的 pipeline 名（tanuki_pipeline 的食譜；4b 單一 API：run(name, json)）。</summary>
+        private const string PipelineName = "find_stream_ridgeline";
+
         public void Initialize()
         {
             if (_pipelineHandle != IntPtr.Zero)
@@ -53,7 +56,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 return;
             }
 
-            _pipelineHandle = NativeMethods.PICoaterAPI_CreatePipeline();
+            // jsonOptions 可選方法（如 {"ridge_method":"gabor"}）；null = 預設 hessian
+            _pipelineHandle = NativeMethods.TanukiPipeline_Create(PipelineName, null);
             if (_pipelineHandle == IntPtr.Zero)
             {
                 throw new InvalidOperationException("Failed to create AOI pipeline handle.");
@@ -101,40 +105,25 @@ namespace AniloxRoll.Monitor.Core.Services
                 Stream = request.Output.Stream != IntPtr.Zero ? request.Output.Stream : request.Input.Stream
             };
 
-            IntPtr ridgeModePtr = IntPtr.Zero;
-            try
+            // 演算法參數組成 json（InvariantCulture：小數點一律 '.'，不受系統地區影響）
+            string jsonParams = string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                "{{\"bg_sigma_factor\":{0},\"ridge_sigma\":{1},\"hessian_max_factor\":{2},\"ridge_mode\":\"{3}\"}}",
+                request.Params.BgSigmaFactor,
+                request.Params.RidgeSigma,
+                request.Params.HessianMaxFactor,
+                request.Params.RidgeMode ?? "vertical+horizontal");
+
+            int result = NativeMethods.TanukiPipeline_Process(
+                _pipelineHandle,
+                ref input,
+                jsonParams,
+                request.Params.PrecomputedColMean,
+                ref output);
+
+            if (result != 0)
             {
-                if (!string.IsNullOrEmpty(request.Params.RidgeMode))
-                {
-                    ridgeModePtr = Marshal.StringToHGlobalAnsi(request.Params.RidgeMode);
-                }
-
-                var parameters = new AoiAlgorithmParamsNative
-                {
-                    BgSigmaFactor = request.Params.BgSigmaFactor,
-                    RidgeSigma = request.Params.RidgeSigma,
-                    HessianMaxFactor = request.Params.HessianMaxFactor,
-                    RidgeMode = ridgeModePtr,
-                    PrecomputedColMean = request.Params.PrecomputedColMean
-                };
-
-                int result = NativeMethods.PICoaterAPI_ProcessPipeline(
-                    _pipelineHandle,
-                    ref input,
-                    ref parameters,
-                    ref output);
-
-                if (result != 0)
-                {
-                    throw new InvalidOperationException(GetLastError());
-                }
-            }
-            finally
-            {
-                if (ridgeModePtr != IntPtr.Zero)
-                {
-                    Marshal.FreeHGlobal(ridgeModePtr);
-                }
+                throw new InvalidOperationException(GetLastError());
             }
         }
 
@@ -152,7 +141,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 Data = inputData,
                 Stream = IntPtr.Zero
             };
-            int result = NativeMethods.PICoaterAPI_ComputeColumnMean(
+            int result = NativeMethods.TanukiPipeline_ComputeColumnMean(
                 _pipelineHandle, ref input, bgSigmaFactor, outColMean);
             if (result != 0)
                 throw new InvalidOperationException(GetLastError());
@@ -165,7 +154,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 return "AOI pipeline is not initialized.";
             }
 
-            IntPtr messagePtr = NativeMethods.PICoaterAPI_GetLastError(_pipelineHandle);
+            IntPtr messagePtr = NativeMethods.TanukiPipeline_GetLastError(_pipelineHandle);
             return messagePtr == IntPtr.Zero
                 ? "Unknown native error."
                 : Marshal.PtrToStringAnsi(messagePtr) ?? "Unknown native error.";
@@ -175,7 +164,7 @@ namespace AniloxRoll.Monitor.Core.Services
         {
             if (_pipelineHandle != IntPtr.Zero)
             {
-                NativeMethods.PICoaterAPI_DestroyPipeline(_pipelineHandle);
+                NativeMethods.TanukiPipeline_Destroy(_pipelineHandle);
                 _pipelineHandle = IntPtr.Zero;
             }
         }

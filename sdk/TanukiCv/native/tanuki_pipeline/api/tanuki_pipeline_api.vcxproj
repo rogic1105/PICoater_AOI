@@ -15,6 +15,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\export_c\export_api.h" />
+    <ClInclude Include="src\json_lite.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\pipelines\find_stream_ridgeline\find_stream_ridgeline.vcxproj">

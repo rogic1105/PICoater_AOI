@@ -24,8 +24,6 @@ bool BackgroundSubModule::EnsureBuffers(int w, int h) {
     return true;
 }
 
-bool BackgroundSubModule::Initialize() { return true; } // lazy 配置在 Process
-
 bool BackgroundSubModule::Process(const InputImage& input, const Params& params, OutputBuffers* output) {
     if (!input.data || !output || !output->mura_data) { err_ = "background_sub: null input/output buffer"; return false; }
     if (!EnsureBuffers(input.width, input.height)) return false;
@@ -39,13 +37,12 @@ bool BackgroundSubModule::Process(const InputImage& input, const Params& params,
             return false;
         }
     } else {
-        // ⚠ parity 保留：舊 PICoaterDetector::Run 在這裡「硬編 sigma_col=1、無視 bgSigmaFactor 參數」。
-        //   為了與舊版輸出位元級一致（drop-in 驗證可比對），這裡同樣固定 1。
-        //   app 其實傳 bg_sigma_factor=2.0（InspectionEngineConfig.DefaultBgSigma）——若要「啟用」
-        //   這個參數（可能是修舊 bug），改回 params.bg_sigma_factor 並在 migration doc 記 known diff。
-        const float sigma_col = 1.0f;
+        // 參數 honest 化（4b 定版）：使用 params.bg_sigma_factor，硬編值移到 app 端設定。
+        //   行為沿革：舊 PICoaterDetector 在每幀路徑硬編 sigma=1、無視參數；現在 app 端
+        //   per-frame 明確傳 1.0（InspectionEngineConfig.PerFrameBgSigma）→ 行為不變、參數誠實。
+        //   背景採集路徑（ComputeColumnMean）一向用參數（app 傳 DefaultBgSigma=2.0），兩者本來就不同 sigma。
         tanuki::core::calcColumnMeans_RemoveOutliers_gpu<uint8_t>(
-            input.data, d_col_mean_, w_, h_, sigma_col, s);
+            input.data, d_col_mean_, w_, h_, params.bg_sigma_factor, s);
     }
 
     // Step 2：column 背景相減 → 去背影像（寫 output->mura_data，供下個 module 接手）

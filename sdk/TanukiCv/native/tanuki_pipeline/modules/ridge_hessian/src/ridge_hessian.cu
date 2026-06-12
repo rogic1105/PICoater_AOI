@@ -57,8 +57,6 @@ bool RidgeHessianModule::EnsureBuffers(int w, int h) {
     return true;
 }
 
-bool RidgeHessianModule::Initialize() { return true; } // lazy
-
 bool RidgeHessianModule::Process(const InputImage& input, const Params& params, OutputBuffers* output) {
     if (!output || !output->mura_data || !output->ridge_data) { err_ = "ridge_hessian: null output buffer"; return false; }
     if (!EnsureBuffers(input.width, input.height)) return false;
@@ -79,8 +77,7 @@ bool RidgeHessianModule::Process(const InputImage& input, const Params& params, 
     // Step 4：切向脊線 → ridge_data + 切向曲線
     if (doVertical) {
         tanuki::core::computeHessianResponse_gpu(d_blur_f32_, d_resp_, W, H, tanuki::core::detectionMode::VERTICAL, s);
-        // calcColumnMeans_gpu 的 workspace 參數是死參數（實作未用）→ 傳 nullptr，避免誤導有 aliasing 要管
-        tanuki::core::calcColumnMeans_gpu<float>(d_resp_, output->mura_curve_mean, W, H, s, nullptr);
+        tanuki::core::calcColumnMeans_gpu<float>(d_resp_, output->mura_curve_mean, W, H, s);
         tanuki::core::calcColumnMax_gpu<float>(d_resp_, output->mura_curve_max, W, H, s);
         scale_f32_inplace_gpu(output->mura_curve_mean, W, scale_factor, s);
         scale_f32_inplace_gpu(output->mura_curve_max,  W, scale_factor, s);

@@ -10,9 +10,6 @@ class IModule {
 public:
     virtual ~IModule() = default;
 
-    // 一次性初始化（配置常駐資源等）。
-    virtual bool Initialize() = 0;
-
     // 處理一幀：吃 input + params，填 output buffer。
     virtual bool Process(const InputImage& input, const Params& params, OutputBuffers* output) = 0;
 

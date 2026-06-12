@@ -11,7 +11,6 @@ namespace tanuki { namespace pipeline {
 class RidgeHessianModule : public IModule {
 public:
     ~RidgeHessianModule() override;
-    bool Initialize() override;
     bool Process(const InputImage& input, const Params& params, OutputBuffers* output) override;
     std::string GetLastError() const override;
     const char* Name() const override { return "ridge_hessian"; }

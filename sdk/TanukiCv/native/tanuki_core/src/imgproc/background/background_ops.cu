@@ -8,7 +8,7 @@ namespace tanuki { namespace core {
 
 
     template <typename T>
-    void calcColumnMeans_gpu(const T* d_in, float* d_out, int W, int H, cudaStream_t stream, void* d_workspace) {
+    void calcColumnMeans_gpu(const T* d_in, float* d_out, int W, int H, cudaStream_t stream) {
         int gridSize, blockSize;
         get_optimal_launch_1d(k_calcColumnMeans<T>, W, gridSize, blockSize);
         k_calcColumnMeans<T> << <gridSize, blockSize, 0, stream >> > (d_in, d_out, W, H);
@@ -63,8 +63,8 @@ namespace tanuki { namespace core {
     // =========================================================
 
     // Column means
-    template void calcColumnMeans_gpu<uint8_t>(const uint8_t*, float*, int, int, cudaStream_t, void*);
-    template void calcColumnMeans_gpu<float>(const float*, float*, int, int, cudaStream_t, void*);
+    template void calcColumnMeans_gpu<uint8_t>(const uint8_t*, float*, int, int, cudaStream_t);
+    template void calcColumnMeans_gpu<float>(const float*, float*, int, int, cudaStream_t);
 
     template void calcColumnMax_gpu<uint8_t>(const uint8_t*, float*, int, int, cudaStream_t);
     template void calcColumnMax_gpu<float>(const float*, float*, int, int, cudaStream_t);
