@@ -70,6 +70,7 @@ extern "C" {
 AoiPipelineHandle PICoaterAPI_CreatePipeline() {
     auto* ctx = new PipelineContext();
     ctx->pipeline = tanuki::pipeline::CreateFindStreamRidgeline("hessian");
+    if (!ctx->pipeline) { delete ctx; return nullptr; } // 未知方法食譜回 nullptr → 對外明確失敗
     return reinterpret_cast<AoiPipelineHandle>(ctx);
 }
 

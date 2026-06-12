@@ -17,11 +17,11 @@ public:
     const char* Name() const override { return "ridge_hessian"; }
 
 private:
-    void EnsureBuffers(int w, int h);   // 依尺寸 lazy 配置 workspace + views
+    bool EnsureBuffers(int w, int h);   // 依尺寸 lazy 配置 workspace + views（失敗設 err_ 回 false）
     void Release();
 
     int w_ = 0, h_ = 0;
-    void* d_workspace_ = nullptr;   // 單一 workspace（gaussian 內部 scratch + hessian views，沿用原設計）
+    void* d_workspace_ = nullptr;   // 單一 workspace：前段 gaussian scratch、後段 blur/resp views（不重疊，見 .cu 註解）
     float* d_blur_f32_ = nullptr;   // workspace 內 view：blur 輸出
     float* d_resp_ = nullptr;       // workspace 內 view：hessian 響應
     std::string err_;

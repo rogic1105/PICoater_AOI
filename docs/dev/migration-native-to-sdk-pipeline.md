@@ -15,12 +15,28 @@
 
 **平行建新、未拆舊**：`src/native`（picoater_api.dll）+ bench_framework 全保留，**app 仍走舊路徑可用**。
 
-### 🔲 待你（上機驗證後）做的交接
-1. **驗數值**：新 find_stream_ridgeline 輸出 vs 舊 PICoaterDetector 是否一致（同輸入比 ridge/curve）。
-2. **切換 app**：`NativeMethods.cs` 的 DllImport DLL 名 `picoater_api.dll → tanuki_pipeline_api.dll`（函式名相同，只改 DLL 名）。跑 app 驗即時/回顧檢測正常。
-3. **刪舊**（驗證 OK 後）：`src/native`（c_api/picoater_api、modules/get_picoater_background、pipeline、benchmark/picoater_pipeline_benchmark）+ sdk bench_framework + .sln/props 對應條目。
-4. **接 .sln**：把 tanuki_pipeline 5 個 vcxproj 收進 PICoater_AOI.sln（目前 standalone build，未進方案）。
-5. **可選 4b**：API 改 `run(name, json)` + 函式改名 TanukiPipeline_*（連同切換一起）。
+### 🔎 架構審查 + 修正（2026-06-12，Fable 5 agent 審查、已驗證屬實並修掉）
+1. **（高）ridge_hessian workspace data race 已修**：舊 PICoaterDetector 把 blur view 放 offset≈N，
+   與 `gaussianBlur_gpu` 從 offset 0 bump 配的內部 scratch（f32_temp）重疊 → col-pass kernel
+   讀 temp 同時寫 dst = 真 GPU race（靠 block 排程順序矇對；換卡/尺寸可能浮現）。忠實 port 曾把坑搬來。
+   **修正**：blur/resp view 排到 gaussian scratch 區之後、零重疊（+8N bytes）；並刪掉沒人用的 u8 遺跡槽。
+2. **（高）bg_sigma parity 已還原**：舊 code 在 column mean 這步「硬編 sigma=1、無視 bgSigmaFactor 參數」，
+   新 module 一度改用參數值（app 傳 2.0）→ 輸出必然與舊版不同、drop-in 不成立。
+   **暫還原硬編 1.0（求 parity，可乾淨比對）**；要「啟用參數」（可能是修舊 bug）再單獨決定 + 記 known diff。
+3. **（中）module 補錯誤檢查**：cudaMalloc / memcpy / launch 失敗現在會設 err_ 回 false（GetLastError 契約兌現）。
+4. `Params.ridge_mode` 預設 `"dark"`（不被解析=默默零輸出）→ 改 `"vertical+horizontal"`；
+   未知 ridge_method 食譜回 nullptr（api CreatePipeline 有防護）。
+5. 審查留待後續：registry static 自註冊 link-drop 保險（4b 前補 `RegisterBuiltinModules()` + 啟動 assert）、
+   api 同步 cudaMemcpy 依賴 legacy default stream 隱式同步（與舊版一致，開 per-thread stream 才有事）、
+   `calcColumnMeans_gpu` 死參數 d_workspace 可刪、`IModule::Initialize` 無人呼叫（YAGNI 候選）。
+
+### 🔲 交接進度
+1. ~~**切換 app**~~ ✅ **已做**：`NativeMethods.cs` DllName 已改 `tanuki_pipeline_api.dll`，即時監控正常。
+   ⚠ 注意：app build 尚未「生產」此 DLL（tanuki_pipeline 未進 .sln、無 ProjectDependency）——清 bin 重 build 會缺 DLL，見第 3 點。
+2. **驗數值**（修正後重驗）：上面第 1、2 修正後，新舊輸出理論上 parity；同輸入比 ridge/curve 確認。
+3. **接 .sln + 依賴**：tanuki_pipeline 5 個 vcxproj 收進 PICoater_AOI.sln，app 依賴從 picoater_api 改指 tanuki_pipeline_api（讓 build app 連帶產 DLL）。
+4. **刪舊**（驗證 OK 後）：`src/native`（c_api/picoater_api、modules/get_picoater_background、pipeline、benchmark/picoater_pipeline_benchmark）+ sdk bench_framework + .sln/props 對應條目。**給 deadline，別讓兩份真相並存變永久**（違反唯一來源鐵則）。
+5. **可選 4b**：API 改 `run(name, json)` + 函式改名 TanukiPipeline_*；屆時先補 registry link-drop 保險。
 
 ## 1. 目標與動機
 把 `src/native`（C++/CUDA 演算法 pipeline）整個搬進 `sdk/`，讓：
@@ -72,9 +88,9 @@ src/
 ## 4. 搬遷對應表
 | 現在 | 搬去 | 備註 |
 |---|---|---|
-| `tanuki_core` 的 `hessianRidge_u8_gpu` | `modules/ridge_hessian` | 組合（blur+hessian+scale），非 primitive |
-| `tanuki_core` 的 `calcColumnBackground_u8_gpu/cpu` | `modules/background_sub` | 背景相減步驟 |
-| `tanuki_core` 的 `calcColumnMeans_RemoveOutliers_gpu/cpu` | `modules/background_sub` | 穩健背景估計法 |
+| `tanuki_core` 的 `hessianRidge_u8_gpu` | **已刪**（由 `modules/ridge_hessian` 取代） | 組合（blur+hessian+scale），非 primitive，且無人呼叫 |
+| `tanuki_core` 的 `calcColumnBackground_u8_gpu/cpu` | **留 core**（`modules/background_sub` 組合它） | 實作時改判：單顆 kernel=primitive；module 擁有食譜、不擁有 kernel |
+| `tanuki_core` 的 `calcColumnMeans_RemoveOutliers_gpu/cpu` | **留 core**（`modules/background_sub` 組合它） | 同上（原計畫「搬去 module」已修正，勿誤刪 core 函式） |
 | `src/native/modules/i_aoi_module.hpp` + `pipeline/aoi_pipeline.*` | `framework/`（IModule + 工頭） | 改名 namespace `tanuki::pipeline` |
 | `src/native/modules/get_picoater_background/`（肥 module） | 拆成 `modules/background_sub` + `modules/ridge_hessian` | 名字消失，PICoaterDetector 拆進 module |
 | `src/native/c_api/picoater_api` | `api/`（tanuki_pipeline_api.dll） | 單一出口 |

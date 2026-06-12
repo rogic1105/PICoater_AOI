@@ -15,7 +15,7 @@ public:
     const char* Name() const override { return "background_sub"; }
 
 private:
-    void EnsureBuffers(int w, int h);   // 依輸入尺寸 lazy 配置
+    bool EnsureBuffers(int w, int h);   // 依輸入尺寸 lazy 配置（失敗設 err_ 回 false）
     void Release();
 
     int w_ = 0, h_ = 0;

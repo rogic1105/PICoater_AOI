@@ -31,7 +31,9 @@ struct Params {
     float bg_sigma_factor = 1.0f;
     float ridge_sigma = 1.0f;
     float hessian_max_factor = 1.0f;
-    const char* ridge_mode = "dark";
+    // "vertical" / "horizontal" / "vertical+horizontal"。
+    // （舊 code 預設 "dark"＝不被任何路徑解析 → 默默零輸出的 footgun，已改 sane default。）
+    const char* ridge_mode = "vertical+horizontal";
 
     // 預先算好的 column mean（GPU 指標）。非 null 時跳過每幀 calcColumnMeans，直接拿來去背。
     const float* precomputed_col_mean = nullptr;
