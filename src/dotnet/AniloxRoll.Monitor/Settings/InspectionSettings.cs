@@ -141,8 +141,10 @@ namespace AniloxRoll.Monitor.Core.Data
 
         [Category("3. 圖表設定")][DisplayName("─ 主畫面 ─")][ReadOnly(true)]
         public string ha_DisplayHeader => "";
-        [Category("3. 圖表設定")][DisplayName("合圖方式")]
-        public StitchMode hb_StitchMode { get => ImageView.StitchMode; set => ImageView.StitchMode = value; }
+        // 合圖方式選項已退場（2026-06-13 上機決策：app 永遠 Global 合圖；單張模式留 sample）。
+        // PG 隱藏 + setter 強制 Global（絞殺式：Vertical 分支變死路，Stage4 刪死碼）。
+        [Browsable(false)]
+        public StitchMode hb_StitchMode { get => StitchMode.Global; set => ImageView.StitchMode = StitchMode.Global; }
         [Category("3. 圖表設定")][DisplayName("監控強化")][TypeConverter(typeof(BoolYesNoConverter))]
         public bool hc_EnableMuraEnhance { get => ImageView.EnableMuraEnhance; set => ImageView.EnableMuraEnhance = value; }
         [Category("3. 圖表設定")][DisplayName("回顧強化")][TypeConverter(typeof(BoolYesNoConverter))]

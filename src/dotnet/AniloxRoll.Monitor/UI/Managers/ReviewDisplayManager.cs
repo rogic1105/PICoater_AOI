@@ -77,16 +77,29 @@ namespace AniloxRoll.Monitor.UI.Managers
         public void PushImages(Bitmap[] imgs, double[] opsUm, double[] posMm, bool mergeMode, double screenMmPerPx, int feedScale)
         {
             if (_disposed || imgs == null) return;
-            EnsureCreated(screenMmPerPx);
+            EnsureCreated(screenMmPerPx);                    // 控制項建立必須在 UI 執行緒
             _view.SetLayout(posMm, opsUm, Math.Max(1, feedScale), 0); // 回顧影像=1/scale 降採樣存檔；ops 為全解析度 px → feedScale 必傳（座標對齊）
-            for (int i = 0; i < imgs.Length; i++)
-            {
-                var bmp = imgs[i];
-                if (bmp == null) continue;
-                byte[] gray = ToGray8(bmp, out int w, out int h);
-                if (gray != null) _view.PushFrame(i + 1, gray, w, h);
-            }
             _view.SetMergeMode(mergeMode);
+            // 灰階轉換+推幀進背景（PushFrame 設計上支援背景執行緒＝相機 callback 同路）；
+            // Parallel 7 台同時轉，UI 不卡（載入加速 3c）。caller 的 Bitmap 生命週期：RSC 換 ID 才 Dispose 舊圖，
+            // 期間夠轉完；防衛起見轉換中例外吞掉（圖被換走時放棄該幀）。
+            var snapshot = (Bitmap[])imgs.Clone();
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                System.Threading.Tasks.Parallel.For(0, snapshot.Length, i =>
+                {
+                    try
+                    {
+                        var bmp = snapshot[i];
+                        if (bmp == null) return;
+                        byte[] gray;
+                        int w, h;
+                        lock (bmp) { gray = ToGray8(bmp, out w, out h); }
+                        if (gray != null) _view?.PushFrame(i + 1, gray, w, h);
+                    }
+                    catch { /* 圖在轉換中被釋放（快速換 ID）→ 放棄該幀 */ }
+                });
+            });
         }
 
         public void SetMergeMode(bool on) => _view?.SetMergeMode(on);
