@@ -167,17 +167,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     stitchMs = swStitch.ElapsedMilliseconds;
 
                     // 全域合圖也在背景做（原本在 UI 執行緒 → 換 ID swap 卡頓的主因；MergeHorizontal 純影像運算可背景化）
+                    // Stage4b：舊 GrabImageStitcher.MergeHorizontal 顯示用合圖已刪（顯示走 LiveDisplayView.BuildMerge）。
                     Bitmap merged = null;
                     double[] ops = null, pos = null;
-                    if (_ctx.Settings.StitchMode == StitchMode.Global
-                        && !AniloxRoll.Monitor.UI.Managers.AniloxRollFormReviewFlags.UseSameSourceDisplay)
-                    {   // Stage4a：同源新路徑開啟時跳過舊 MergeHorizontal（雙跑白工＝換 ID 最大耗時）
-                        var swMerge = Stopwatch.StartNew();
-                        ops = grabCfg?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
-                        pos = grabCfg?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
-                        merged = GrabImageStitcher.MergeHorizontal(imgs, ops, pos, scale);
-                        mergeMs = swMerge.ElapsedMilliseconds;
-                    }
                     return (imgs, merged, ops, pos);
                 });
                 var newImages = loaded.imgs;
@@ -196,8 +188,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 if (loaded.merged != null)
                     _globalMergedImage = loaded.merged; // 已於背景 Task.Run 合好
 
-                if (!AniloxRoll.Monitor.UI.Managers.AniloxRollFormReviewFlags.UseSameSourceDisplay)
-                    _ctx.GalleryManager.SetImages(_stitchedImages);   // Stage4a：舊縮圖在疊加 Panel 底下，免建
+                // Stage4b：舊 PictureBox 縮圖建圖已刪（縮圖走 sdk ThumbStrip）
 
                 // #13 同源新路徑（平行建新）：餵 LiveDisplayView（Vertical 模式 ops/pos 補算 CFG 有效值）
                 var opsEff = opsArr ?? grabCfg?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
@@ -205,20 +196,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 StitchedImagesReady?.Invoke(grayArr, grayW, grayH, opsEff, posEff,
                     _ctx.Settings.StitchMode == StitchMode.Global);
 
-                if (AniloxRoll.Monitor.UI.Managers.AniloxRollFormReviewFlags.UseSameSourceDisplay)
-                {
-                    UpdateGlobalRowChart();   // Stage4a：畫布顯示走 LiveDisplayView；row 曲線照合併更新
-                }
-                else if (_globalMergedImage != null)
-                {
-                    ShowMergedImageInCanvas(_globalMergedImage, opsArr, posArr);
-                    // Global 模式：7 台 row curves 重疊合併
-                    UpdateGlobalRowChart();
-                }
-                else
-                {
-                    ShowStitchedCameraInCanvas(_ctx.GalleryManager.SelectedIndex, resetView: false);
-                }
+                UpdateGlobalRowChart();   // 畫布顯示走 LiveDisplayView（同源）；row 曲線照合併更新
                 UpdateStitchedOverviewChart();
 
                 Trace.WriteLine($"[StitchView] {grabId} proc={enableProcess} | CSV={csvMs}ms | Stitch={stitchMs}ms | Merge(bg)={mergeMs}ms | UIapply={swTotal.ElapsedMilliseconds - csvMs - stitchMs - mergeMs}ms | Total={swTotal.ElapsedMilliseconds}ms");
