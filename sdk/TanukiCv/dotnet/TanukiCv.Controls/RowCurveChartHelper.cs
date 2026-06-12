@@ -93,6 +93,7 @@ namespace TanukiCv.Controls
             if (axisY.Maximum != newMax) axisY.Maximum = newMax;
             try { axisY.ScaleView.Zoom(zMin, zMax); }
             catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[RowCurveChartHelper.UpdateViewRange] {ex.GetType().Name}: {ex.Message}"); }
+            _chart.Update();   // 同 ColumnCurveChartHelper：防拖曳時 WM_PAINT 飢餓（chart 放開滑鼠才動）
         }
 
         // ── InnerPlotPosition 補償 ────────────────────────────────────────────

@@ -123,6 +123,9 @@ namespace TanukiCv.Controls
                 System.Diagnostics.Trace.WriteLine(
                     $"[MuraChart] UpdateViewRange Zoom({zMin:F2}, {zMax:F2}) failed: {ex.GetType().Name}: {ex.Message}");
             }
+            // 拖曳即時跟隨：滑鼠訊息佔滿佇列時 WM_PAINT（最低優先級）會飢餓 → chart 放開滑鼠才動。
+            // Update() 同步畫掉 pending paint → 真即時（鐵則：互動中不可抑制曲線連動）。
+            _chart.Update();
         }
 
         // ── InnerPlotPosition 補償 ────────────────────────────────────────────

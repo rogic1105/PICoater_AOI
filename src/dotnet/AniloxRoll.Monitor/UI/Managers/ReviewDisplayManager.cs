@@ -74,11 +74,11 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// 餵一組回顧影像（7 台拼接圖；null 槽=間空黑占位）+ CFG 座標。
         /// Bitmap → 8bpp 灰階 bytes（LockBits 一次性轉，換 ID 才發生）→ PushFrame；feedScale=1（full-res）。
         /// </summary>
-        public void PushImages(Bitmap[] imgs, double[] opsUm, double[] posMm, bool mergeMode, double screenMmPerPx, int feedScale, string grabId, bool isProcessed)
+        public void PushImages(Bitmap[] imgs, double[] opsUm, double[] posMm, bool mergeMode, double screenMmPerPx, int feedScale, string grabId, bool isProcessed, double rowPitchMm)
         {
             if (_disposed || imgs == null) return;
             EnsureCreated(screenMmPerPx);                    // 控制項建立必須在 UI 執行緒
-            _view.SetLayout(posMm, opsUm, Math.Max(1, feedScale), 0); // 回顧影像=1/scale 降採樣存檔；ops 為全解析度 px → feedScale 必傳（座標對齊）
+            _view.SetLayout(posMm, opsUm, Math.Max(1, feedScale), rowPitchMm); // feedScale=降採樣倍率；rowPitchMm=真實 mm/列（法向 Y 對齊，0 退回方形像素）
             _view.SetMergeMode(mergeMode);
             // 灰階轉換+推幀進背景（PushFrame 設計上支援背景執行緒＝相機 callback 同路）；
             // Parallel 7 台同時轉，UI 不卡（載入加速 3c）。caller 的 Bitmap 生命週期：RSC 換 ID 才 Dispose 舊圖，
