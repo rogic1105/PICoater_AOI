@@ -68,7 +68,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public string ActiveRidgeDirection { get; set; } = "v";
 
         /// <summary>
-        /// UpdateStitchedOverviewChart 完成後觸發，傳遞與 chartReviewPatch 相同的曲線資料，
+        /// UpdateStitchedOverviewChart 完成後觸發，傳遞與 chartReviewVertical 相同的曲線資料，
         /// 供外部（AniloxRollForm）同步 chartDataVertical。
         /// 參數：(mean[][], max[][], opsUm[], startPosMm[], errMean, errMax)
         /// </summary>
@@ -230,7 +230,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
         }
 
-        /// <summary>將合併圖顯示在 camReviewMain 並啟用 chartReviewPatch 聯動。</summary>
+        /// <summary>將合併圖顯示在 camReviewMain 並啟用 chartReviewVertical 聯動。</summary>
         public void ShowMergedImageInCanvas(Bitmap mergedImage, double[] opsArr, double[] posArr)
         {
             int scale = InspectionEngineConfig.DefaultSaveResizeScale;
@@ -255,7 +255,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         /// <summary>Form 關閉時控制項已 disposed → 這幾條 cleanup 的 UI 操作應 no-op：
         /// Form 自身會清控制項與資源，且關程式時 fire-and-forget 的 StitchMode 切換 async
-        /// 可能續跑碰到已 disposed 的 chartReviewPatch/canvas → NullReferenceException。</summary>
+        /// 可能續跑碰到已 disposed 的 chartReviewVertical/canvas → NullReferenceException。</summary>
         private bool UiDisposed =>
             (_ctx?.ChartReviewPatch?.IsDisposed ?? true) || (_ctx?.Canvas?.IsDisposed ?? true);
 
@@ -372,7 +372,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             float errMean = _ctx.Settings.ErrorValueMeanV;
             float errMax  = _ctx.Settings.ErrorValueMaxV;
 
-            // chartReviewPatch 是垂直 (column) 曲線 → 用 V 的 capture/current ratio
+            // chartReviewVertical 是垂直 (column) 曲線 → 用 V 的 capture/current ratio
             var displayMean = HessianRescaleHelper.CloneAndRescale2D(_stitchedCurveMean, captureHm, _ctx.Settings.HessianMaxFactorV);
             var displayMax  = HessianRescaleHelper.CloneAndRescale2D(_stitchedCurveMax,  captureHm, _ctx.Settings.HessianMaxFactorV);
 
@@ -517,8 +517,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (_globalMergedImage != null)
                 ShowMergedImageInCanvas(_globalMergedImage, opsArr, posArr);
 
-            _ctx.ChartReviewVertical.Series["Mean"].Points.Clear();
-            _ctx.ChartReviewVertical.Series["Max"].Points.Clear();
         }
 
         /// <summary>
@@ -572,12 +570,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 ShowMergedImageInCanvas(_periodMergedImage, opsArr, posArr);
 
             // Global 模式：切向曲線圖清空（單台資料無意義）
-            _ctx.ChartReviewVertical.Series["Mean"].Points.Clear();
-            _ctx.ChartReviewVertical.Series["Max"].Points.Clear();
         }
 
         /// <summary>
-        /// 原圖路徑：從當前 Repository 時間點讀取 .bin 曲線更新 chartReviewPatch 全覽圖。
+        /// 原圖路徑：從當前 Repository 時間點讀取 .bin 曲線更新 chartReviewVertical 全覽圖。
         /// </summary>
         public void UpdateOverviewChartFromRepository()
         {

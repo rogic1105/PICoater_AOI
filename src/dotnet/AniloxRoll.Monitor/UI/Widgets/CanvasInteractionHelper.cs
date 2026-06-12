@@ -23,7 +23,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private double _currentViewLeftMm = 0;
         private double _currentViewRightMm = 0;
 
-        /// <summary>全域/水平合圖模式：同步 chartReviewPatch X 軸視野。</summary>
+        /// <summary>全域/水平合圖模式：同步 chartReviewVertical X 軸視野。</summary>
         public ColumnCurveChartHelper OverviewChartHelper { get; set; }
 
         // 合圖模式座標覆寫：合圖 pixel 0 對應的 mm 起始位置與解析度
@@ -270,7 +270,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             return true;
         }
 
-        /// <summary>從目前 canvas 狀態更新 chartMura / chartReviewHorizontal / chartReviewPatch 視野範圍。</summary>
+        /// <summary>從目前 canvas 狀態更新 chartMura / chartReviewHorizontal / chartReviewVertical 視野範圍。</summary>
         public void RefreshChartRange()
         {
             if (_canvas.Image == null) return;

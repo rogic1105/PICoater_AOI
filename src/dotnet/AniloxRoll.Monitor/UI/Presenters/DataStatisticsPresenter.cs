@@ -781,7 +781,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         }
 
         // ══════════════════════════════════════════════════════════════
-        // Mura 空間分布曲線圖（拼接式，與 chartLivePatch 相同格式）
+        // Mura 空間分布曲線圖（拼接式，與 chartLiveVertical 相同格式）
         // ══════════════════════════════════════════════════════════════
 
         private void InitMuraProfileChart()
@@ -842,7 +842,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         /// <summary>
         /// 用單一 grab 的 .bin（MergeCurves 合多 capture）+ 該 grab 的 CSV #CFG OPS/Pos
-        /// 更新 chartDataVertical，與 chartReviewPatch 完全對齊。不依賴 camReviewMain 是否載入。
+        /// 更新 chartDataVertical，與 chartReviewVertical 完全對齊。不依賴 camReviewMain 是否載入。
         /// 套用 view-time 正規值 rescale：display = (bin/255) × (HM_capture / HM_current)；
         /// 改 PropertyGrid 正規值會立刻反映在曲線坡度上。
         /// </summary>
@@ -900,7 +900,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         /// <summary>
         /// SingleSheet 模式：直接使用 Review tab 已載入的曲線資料（已套 view-time HM rescale），
-        /// 確保 chartDataVertical 與 chartReviewPatch 完全一致（相同 OPS/Pos 與顯示值）。
+        /// 確保 chartDataVertical 與 chartReviewVertical 完全一致（相同 OPS/Pos 與顯示值）。
         /// </summary>
         public void SyncMuraProfileFromReview(float[][] mean, float[][] max,
             double[] ops, double[] pos, float errMean, float errMax)

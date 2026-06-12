@@ -391,9 +391,8 @@ PICoater_AOI/
 | 預覽背景 | `btnLiveViewBackground` | Button | 預覽背景 |
 | 監控主畫面 | `camLiveMain` | Panel | — |
 | 監控縮圖1~7 | `camLive1~7` | Panel | — |
-| 監控切向曲線圖 | `chartLiveVertical` | Chart | — |
+| 監控切向曲線圖（全覽） | `chartLiveVertical` | Chart | —（原 chartLivePatch 接位改名；舊單台切向 chart 已刪，曲線走全覽合併路徑） |
 | 監控法向曲線圖 | `chartLiveHorizontal` | Chart | — |
-| 監控全覽圖 | `chartLivePatch` | Chart | — |
 | 暫停 Mura 檢測 | `lblIoDoMura`（點擊切換） | Label | DO1 MURA_DET / DO1 MURA ⏸（黃底=暫停中） |
 
 ### 歷史查詢（tabPageReview）
@@ -403,9 +402,8 @@ PICoater_AOI/
 | 讀取資料 | `btnReviewSelectFolder`（Review）/ `btnDataSelectFolder`（Data） | Button | 讀取資料 |
 | 回顧縮圖1~7 | `camReview1~7` | PictureBox | — |
 | 回顧主畫面 | `camReviewMain` | SmartCanvas | — |
-| 回顧切向曲線圖 | `chartReviewVertical` | Chart | — |
+| 回顧切向曲線圖（全覽） | `chartReviewVertical` | Chart | —（原 chartReviewPatch 接位改名；舊單台切向 chart 已刪） |
 | 回顧法向曲線圖 | `chartReviewHorizontal` | Chart | — |
-| 回顧全覽圖 | `chartReviewPatch` | Chart | — |
 | 時段群組 | `grpReviewTimePeriod` | GroupBox | 時序 |
 | 時段日期（時序cb） | `cbReviewDate` | ComboBox | — |
 | 時段時間（時序cb） | `cbReviewTime` | ComboBox | — |
@@ -422,7 +420,7 @@ PICoater_AOI/
 |---------|------|------|---------|
 | 篩選異常 | `btnDataShowFail` | Button | 篩選異常 / 顯示全部 |
 | 良率卡片1~7 | `camData1~7` | Panel | — |
-| Mura 空間分布圖 | `chartDataPatch` | Chart | — |
+| Mura 空間分布圖 | `chartDataVertical` | Chart | —（原 chartDataPatch 改名） |
 | 明細列表 | `listViewGrabDetail` | ListView | — |
 | 序號範圍群組 | `groupBoxGrabIdRange` | GroupBox | 序號範圍 |
 | 起始序號 | `cbDataIdStart` | ComboBox | — |

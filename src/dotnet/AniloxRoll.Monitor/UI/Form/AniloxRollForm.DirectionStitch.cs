@@ -66,17 +66,10 @@ namespace AniloxRoll.Monitor.Forms
             bool vGlobActive =  isGlobal && dir == "v";
             bool hActive     = dir == "h";
 
-            chartLiveVertical.BackColor           = !isGlobal ? highlight : normal;
-            chartLiveVertical.BorderlineColor     = vVertActive ? orangeBorder : noColor;
-            chartLiveVertical.BorderlineWidth     = vVertActive ? 2 : 1;
-            chartLiveVertical.BorderlineDashStyle = vVertActive
-                ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
-                : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
-
-            chartLivePatch.BackColor           = isGlobal ? highlight : normal;
-            chartLivePatch.BorderlineColor     = vGlobActive ? orangeBorder : noColor;
-            chartLivePatch.BorderlineWidth     = vGlobActive ? 2 : 1;
-            chartLivePatch.BorderlineDashStyle = vGlobActive
+            chartLiveVertical.BackColor           = isGlobal ? highlight : normal;
+            chartLiveVertical.BorderlineColor     = vGlobActive ? orangeBorder : noColor;
+            chartLiveVertical.BorderlineWidth     = vGlobActive ? 2 : 1;
+            chartLiveVertical.BorderlineDashStyle = vGlobActive
                 ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
                 : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
 
@@ -191,10 +184,6 @@ namespace AniloxRoll.Monitor.Forms
 
             if (_settings.StitchMode == StitchMode.Global)
             {
-                chartReviewVertical.Series["Mean"].Points.Clear();
-                chartReviewVertical.Series["Max"].Points.Clear();
-                chartLiveVertical.Series["Mean"].Points.Clear();
-                chartLiveVertical.Series["Max"].Points.Clear();
             }
 
             // 根據當前選中的回顧縮圖重新載入回顧主畫面
@@ -250,17 +239,10 @@ namespace AniloxRoll.Monitor.Forms
             bool hActive     = dir == "h";
 
             // 淡藍底色：合圖方式指示（Vertical → 切向圖；Global → 全覽圖）
-            chartReviewVertical.BackColor           = !isGlobal ? highlight : normal;
-            chartReviewVertical.BorderlineColor     = vVertActive ? orangeBorder : noColor;
-            chartReviewVertical.BorderlineWidth     = vVertActive ? 2 : 1;
-            chartReviewVertical.BorderlineDashStyle = vVertActive
-                ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
-                : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
-
-            chartReviewPatch.BackColor           = isGlobal ? highlight : normal;
-            chartReviewPatch.BorderlineColor     = vGlobActive ? orangeBorder : noColor;
-            chartReviewPatch.BorderlineWidth     = vGlobActive ? 2 : 1;
-            chartReviewPatch.BorderlineDashStyle = vGlobActive
+            chartReviewVertical.BackColor           = isGlobal ? highlight : normal;
+            chartReviewVertical.BorderlineColor     = vGlobActive ? orangeBorder : noColor;
+            chartReviewVertical.BorderlineWidth     = vGlobActive ? 2 : 1;
+            chartReviewVertical.BorderlineDashStyle = vGlobActive
                 ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
                 : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
 

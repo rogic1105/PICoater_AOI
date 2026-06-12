@@ -55,7 +55,6 @@
             this.lblBgBinInfo = new System.Windows.Forms.Label();
             this.btnLiveGetBackground = new System.Windows.Forms.Button();
             this.chartLiveHorizontal = new System.Windows.Forms.DataVisualization.Charting.Chart();
-            this.chartLivePatch = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.chartLiveVertical = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.btnLiveGrab = new System.Windows.Forms.Button();
             this.camLiveMain = new System.Windows.Forms.Panel();
@@ -68,13 +67,12 @@
             this.camLive1 = new System.Windows.Forms.Panel();
             this.tabPageReview = new System.Windows.Forms.TabPage();
             this.chartReviewHorizontal = new System.Windows.Forms.DataVisualization.Charting.Chart();
-            this.chartReviewPatch = new System.Windows.Forms.DataVisualization.Charting.Chart();
+            this.chartReviewVertical = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.grpReviewTimePeriod = new System.Windows.Forms.GroupBox();
             this.cbReviewDate = new System.Windows.Forms.ComboBox();
             this.cbReviewTime = new System.Windows.Forms.ComboBox();
             this.btnReviewPeriodNext = new System.Windows.Forms.Button();
             this.btnReviewPeriodPrev = new System.Windows.Forms.Button();
-            this.chartReviewVertical = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.btnReviewSelectFolder = new System.Windows.Forms.Button();
             this.camReview1 = new System.Windows.Forms.PictureBox();
             this.camReview2 = new System.Windows.Forms.PictureBox();
@@ -282,13 +280,11 @@
             this.tabMain.SuspendLayout();
             this.tabPageLiveView.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.chartLiveHorizontal)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.chartLivePatch)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.chartLiveVertical)).BeginInit();
             this.tabPageReview.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.chartReviewHorizontal)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.chartReviewPatch)).BeginInit();
-            this.grpReviewTimePeriod.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.chartReviewVertical)).BeginInit();
+            this.grpReviewTimePeriod.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.camReview1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.camReview2)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.camReview3)).BeginInit();
@@ -412,7 +408,6 @@
             this.tabPageLiveView.Controls.Add(this.lblBgBinInfo);
             this.tabPageLiveView.Controls.Add(this.btnLiveGetBackground);
             this.tabPageLiveView.Controls.Add(this.chartLiveHorizontal);
-            this.tabPageLiveView.Controls.Add(this.chartLivePatch);
             this.tabPageLiveView.Controls.Add(this.chartLiveVertical);
             this.tabPageLiveView.Controls.Add(this.btnLiveGrab);
             this.tabPageLiveView.Controls.Add(this.camLiveMain);
@@ -480,41 +475,30 @@
             this.chartLiveHorizontal.TabIndex = 19;
             this.chartLiveHorizontal.Text = "chart1";
             // 
-            // chartLivePatch
-            // 
-            this.chartLivePatch.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            chartArea9.Name = "ChartArea1";
-            this.chartLivePatch.ChartAreas.Add(chartArea9);
-            legend9.Name = "Legend1";
-            this.chartLivePatch.Legends.Add(legend9);
-            this.chartLivePatch.Location = new System.Drawing.Point(6, 88);
-            this.chartLivePatch.Name = "chartLivePatch";
-            series9.ChartArea = "ChartArea1";
-            series9.Legend = "Legend1";
-            series9.Name = "Series1";
-            this.chartLivePatch.Series.Add(series9);
-            this.chartLivePatch.Size = new System.Drawing.Size(888, 96);
-            this.chartLivePatch.TabIndex = 18;
-            this.chartLivePatch.Text = "chart1";
-            // 
             // chartLiveVertical
             // 
             this.chartLiveVertical.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            chartArea10.Name = "ChartArea1";
-            this.chartLiveVertical.ChartAreas.Add(chartArea10);
-            legend10.Name = "Legend1";
-            this.chartLiveVertical.Legends.Add(legend10);
-            this.chartLiveVertical.Location = new System.Drawing.Point(6, 529);
+            chartArea9.Name = "ChartArea1";
+            this.chartLiveVertical.ChartAreas.Add(chartArea9);
+            legend9.Name = "Legend1";
+            this.chartLiveVertical.Legends.Add(legend9);
+            this.chartLiveVertical.Location = new System.Drawing.Point(6, 88);
             this.chartLiveVertical.Name = "chartLiveVertical";
+            series9.ChartArea = "ChartArea1";
+            series9.Legend = "Legend1";
+            series9.Name = "Series1";
+            this.chartLiveVertical.Series.Add(series9);
+            this.chartLiveVertical.Size = new System.Drawing.Size(888, 96);
+            this.chartLiveVertical.TabIndex = 18;
+            this.chartLiveVertical.Text = "chart1";
+            // 
+            // 
+            chartArea10.Name = "ChartArea1";
+            legend10.Name = "Legend1";
             series10.ChartArea = "ChartArea1";
             series10.Legend = "Legend1";
             series10.Name = "Series1";
-            this.chartLiveVertical.Series.Add(series10);
-            this.chartLiveVertical.Size = new System.Drawing.Size(888, 96);
-            this.chartLiveVertical.TabIndex = 17;
-            this.chartLiveVertical.Text = "chart1";
             // 
             // btnLiveGrab
             // 
@@ -589,9 +573,8 @@
             // tabPageReview
             // 
             this.tabPageReview.Controls.Add(this.chartReviewHorizontal);
-            this.tabPageReview.Controls.Add(this.chartReviewPatch);
-            this.tabPageReview.Controls.Add(this.grpReviewTimePeriod);
             this.tabPageReview.Controls.Add(this.chartReviewVertical);
+            this.tabPageReview.Controls.Add(this.grpReviewTimePeriod);
             this.tabPageReview.Controls.Add(this.btnReviewSelectFolder);
             this.tabPageReview.Controls.Add(this.camReview1);
             this.tabPageReview.Controls.Add(this.camReview2);
@@ -628,23 +611,23 @@
             this.chartReviewHorizontal.TabIndex = 58;
             this.chartReviewHorizontal.Text = "chart1";
             // 
-            // chartReviewPatch
+            // chartReviewVertical
             // 
-            this.chartReviewPatch.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
+            this.chartReviewVertical.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             chartArea12.Name = "ChartArea1";
-            this.chartReviewPatch.ChartAreas.Add(chartArea12);
+            this.chartReviewVertical.ChartAreas.Add(chartArea12);
             legend12.Name = "Legend1";
-            this.chartReviewPatch.Legends.Add(legend12);
-            this.chartReviewPatch.Location = new System.Drawing.Point(6, 88);
-            this.chartReviewPatch.Name = "chartReviewPatch";
+            this.chartReviewVertical.Legends.Add(legend12);
+            this.chartReviewVertical.Location = new System.Drawing.Point(6, 88);
+            this.chartReviewVertical.Name = "chartReviewVertical";
             series12.ChartArea = "ChartArea1";
             series12.Legend = "Legend1";
             series12.Name = "Series1";
-            this.chartReviewPatch.Series.Add(series12);
-            this.chartReviewPatch.Size = new System.Drawing.Size(888, 96);
-            this.chartReviewPatch.TabIndex = 57;
-            this.chartReviewPatch.Text = "chart1";
+            this.chartReviewVertical.Series.Add(series12);
+            this.chartReviewVertical.Size = new System.Drawing.Size(888, 96);
+            this.chartReviewVertical.TabIndex = 57;
+            this.chartReviewVertical.Text = "chart1";
             // 
             // grpReviewTimePeriod
             // 
@@ -697,23 +680,12 @@
             this.btnReviewPeriodPrev.UseVisualStyleBackColor = true;
             this.btnReviewPeriodPrev.Click += new System.EventHandler(this.btnReviewPeriodPrev_Click);
             // 
-            // chartReviewVertical
             // 
-            this.chartReviewVertical.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
             chartArea13.Name = "ChartArea1";
-            this.chartReviewVertical.ChartAreas.Add(chartArea13);
             legend13.Name = "Legend1";
-            this.chartReviewVertical.Legends.Add(legend13);
-            this.chartReviewVertical.Location = new System.Drawing.Point(6, 529);
-            this.chartReviewVertical.Name = "chartReviewVertical";
             series13.ChartArea = "ChartArea1";
             series13.Legend = "Legend1";
             series13.Name = "Series1";
-            this.chartReviewVertical.Series.Add(series13);
-            this.chartReviewVertical.Size = new System.Drawing.Size(888, 96);
-            this.chartReviewVertical.TabIndex = 16;
-            this.chartReviewVertical.Text = "chart1";
             // 
             // btnReviewSelectFolder
             // 
@@ -3284,13 +3256,11 @@
             this.tabMain.ResumeLayout(false);
             this.tabPageLiveView.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.chartLiveHorizontal)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.chartLivePatch)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.chartLiveVertical)).EndInit();
             this.tabPageReview.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.chartReviewHorizontal)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.chartReviewPatch)).EndInit();
-            this.grpReviewTimePeriod.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.chartReviewVertical)).EndInit();
+            this.grpReviewTimePeriod.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.camReview1)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.camReview2)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.camReview3)).EndInit();
@@ -3442,7 +3412,6 @@
         private System.Windows.Forms.Button btnReviewSelectFolder;
         private System.Windows.Forms.StatusStrip statusBarMain;
         private System.Windows.Forms.ToolStripStatusLabel lblPixelInfo;
-        private System.Windows.Forms.DataVisualization.Charting.Chart chartReviewVertical;
         private System.Windows.Forms.DataVisualization.Charting.Chart chartDataYieldYearly;
         private System.Windows.Forms.DataVisualization.Charting.Chart chartDataYieldMonthly;
         private System.Windows.Forms.DataVisualization.Charting.Chart chartDataYieldDaily;
@@ -3645,9 +3614,8 @@
         private System.Windows.Forms.Label lblChartDataYieldYearlyUnit;
         private System.Windows.Forms.GroupBox grpReviewTimePeriod;
         private System.ComponentModel.BackgroundWorker backgroundWorker1;
+        private System.Windows.Forms.DataVisualization.Charting.Chart chartReviewVertical;
         private System.Windows.Forms.DataVisualization.Charting.Chart chartLiveVertical;
-        private System.Windows.Forms.DataVisualization.Charting.Chart chartReviewPatch;
-        private System.Windows.Forms.DataVisualization.Charting.Chart chartLivePatch;
         private System.Windows.Forms.DataVisualization.Charting.Chart chartLiveHorizontal;
         private System.Windows.Forms.Button btnLiveGetBackground;
         private System.Windows.Forms.DataVisualization.Charting.Chart chartReviewHorizontal;

@@ -65,10 +65,6 @@ namespace AniloxRoll.Monitor.Forms
                 _liveCameraManager?.DisableGlobalMerge();
             if (_settings.StitchMode == StitchMode.Global)
             {
-                chartReviewVertical.Series["Mean"].Points.Clear();
-                chartReviewVertical.Series["Max"].Points.Clear();
-                chartLiveVertical.Series["Mean"].Points.Clear();
-                chartLiveVertical.Series["Max"].Points.Clear();
             }
             UpdateLiveDirectionVisual();
 

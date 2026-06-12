@@ -197,7 +197,6 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (IsDisposed) return;
             _liveViewLeftMm = leftMm; _liveViewRightMm = rightMm;     // 供 overview provider 沿用（不閃）
-            _liveColumnChartHelper?.UpdateViewRange(leftMm, rightMm);  // 切向(X)
             _liveRowChartHelper?.UpdateViewRange(topMm, botMm);        // 法向(Y)
             _liveOverviewHelper?.UpdateViewRange(leftMm, rightMm);     // overview 立即跟隨（500ms 重畫用同值不閃）
         }
@@ -218,53 +217,8 @@ namespace AniloxRoll.Monitor.Forms
 
             // Live Mura 判斷（callback 執行緒，所有相機都檢查）
             CheckLiveMura(meanArr, maxArr, "v");
-
-            // Global 模式不更新 Live mura 垂直圖（單台資料無意義）
-            if (_settings.StitchMode == StitchMode.Global) return;
-
-            // 只有選中相機才 marshal 到 UI 執行緒更新 muraChartLive
-            if (camId != _liveCameraManager.SelectedMainCameraId) return;
-
-            if (InvokeRequired)
-            {
-                if (!IsHandleCreated || IsDisposed || Disposing) return;
-                BeginInvoke(new Action<int, float[], float[]>(OnLiveCurveData), camId, meanArr, maxArr);
-                return;
-            }
-
-            if (_liveColumnChartHelper == null || _settings == null) return;
-
-            double[] opsUmArr       = _settings.GetCameraOpsUmArray();
-            double[] startPositions = _settings.GetCameraStartPositionMmArray();
-
-            double opsUm = (cameraIndex >= 0 && cameraIndex < opsUmArr.Length)
-                ? opsUmArr[cameraIndex] : _settings.Cam1_Ops;
-            double opsInMm  = opsUm / 1000.0;
-            double startPos = (cameraIndex >= 0 && cameraIndex < startPositions.Length)
-                ? startPositions[cameraIndex] : 0;
-
-            _liveColumnChartHelper.SetOps(opsUm);
-
-            // 查詢 MIL 副顯示器的實際 zoom/pan（隨使用者滾輪操作即時變化）
-            // panOffsetX = 面板左邊緣對應的 buffer pixel X
-            // rightPixel = panOffsetX + panelWidth / zoomX
-            double viewLeftMm = double.NaN, viewRightMm = double.NaN;
-
-            var liveCam = FindCameraById(camId);
-
-            if (liveCam != null && opsInMm > 0 &&
-                liveCam.TryGetSecondaryDisplayGeometry(
-                    out double milZoomX, out double milZoomY, out double milPanX, out double milPanY))
-            {
-                double panelW = camLiveMain.Width;
-                double leftPixel  = milPanX;
-                double rightPixel = milPanX + panelW / milZoomX;
-                viewLeftMm  = startPos + leftPixel  * opsInMm;
-                viewRightMm = startPos + rightPixel * opsInMm;
-            }
-
-            _liveColumnChartHelper.UpdateDataAndView(meanArr, maxArr,
-                startPos, viewLeftMm, viewRightMm);
+            // 單台切向 chart（chartLiveVertical 舊版）已刪除：全覽圖（接位後的 chartLiveVertical）
+            // 由 _liveOverviewDirty + UpdateOverviewChart 路徑更新（boundary 唯一歸屬、與影像對齊）。
         }
 
         private void OnLiveRowCurveData(int camId, float[] meanArr, float[] maxArr)

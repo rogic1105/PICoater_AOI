@@ -105,14 +105,14 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public double ScreenMmPerPixel => _canvasHelper.ScreenMmPerPixel;
         public double RowPitchMm => _rowChartHelper?.RowPitchMm ?? 0;
 
-        /// <summary>設定全域/水平合圖模式：chartReviewPatch 與 canvas 座標聯動。</summary>
+        /// <summary>設定全域/水平合圖模式：chartReviewVertical 與 canvas 座標聯動。</summary>
         public void SetMergedMode(ColumnCurveChartHelper overviewHelper, double startMm, double opsUm)
         {
             _canvasHelper.OverviewChartHelper = overviewHelper;
             _canvasHelper.SetMergedCoordinates(startMm, opsUm);
         }
 
-        /// <summary>離開合圖模式：清除 chartReviewPatch 聯動與座標覆寫。</summary>
+        /// <summary>離開合圖模式：清除 chartReviewVertical 聯動與座標覆寫。</summary>
         public void ClearMergedMode()
         {
             _canvasHelper.OverviewChartHelper = null;

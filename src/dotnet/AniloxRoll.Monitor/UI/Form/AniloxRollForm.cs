@@ -39,8 +39,6 @@ namespace AniloxRoll.Monitor.Forms
         private ThumbnailGridPresenter _galleryManager;
         private AniloxRollPresenter _presenter;
         private FormInteractionHelper _interactionHelper;
-        private ColumnCurveChartHelper _reviewColumnChartHelper;
-        private ColumnCurveChartHelper _liveColumnChartHelper;
         private ColumnCurveChartHelper _reviewOverviewHelper;
         private ColumnCurveChartHelper _liveOverviewHelper;
         private RowCurveChartHelper _liveRowChartHelper;
@@ -428,23 +426,17 @@ namespace AniloxRoll.Monitor.Forms
             _presenter = new AniloxRollPresenter(
                 _imageRepository, _inspectionService, _dateTimeNavigator, _galleryManager);
 
-            _reviewColumnChartHelper = new ColumnCurveChartHelper(this.chartReviewVertical);
-            _reviewColumnChartHelper.SetOps(_settings.Cam1_Ops);
-            _reviewColumnChartHelper.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
 
-            _liveColumnChartHelper = new ColumnCurveChartHelper(this.chartLiveVertical);
-            _liveColumnChartHelper.SetOps(_settings.Cam1_Ops);
-            _liveColumnChartHelper.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
 
-            _reviewOverviewHelper = new ColumnCurveChartHelper(this.chartReviewPatch);
+            _reviewOverviewHelper = new ColumnCurveChartHelper(this.chartReviewVertical);
             _reviewOverviewHelper.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-            if (chartReviewPatch.ChartAreas.Count > 0)
-                chartReviewPatch.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
+            if (chartReviewVertical.ChartAreas.Count > 0)
+                chartReviewVertical.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
 
-            _liveOverviewHelper = new ColumnCurveChartHelper(this.chartLivePatch);
+            _liveOverviewHelper = new ColumnCurveChartHelper(this.chartLiveVertical);
             _liveOverviewHelper.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-            if (chartLivePatch.ChartAreas.Count > 0)
-                chartLivePatch.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
+            if (chartLiveVertical.ChartAreas.Count > 0)
+                chartLiveVertical.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
 
             _liveRowChartHelper = new RowCurveChartHelper(this.chartLiveHorizontal);
             _liveRowChartHelper.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
@@ -454,25 +446,13 @@ namespace AniloxRoll.Monitor.Forms
 
             UpdateRowChartPitch();
 
-            // Review tab chart 點選（統一語意：點 chart 等於設定「目標 StitchMode + 是否強化 + 方向」）：
-            //   chartReviewVertical：
-            //     同 mode (Vertical) → SwitchRidgeDirection("v") 切換強化方向
-            //     不同 mode (Global) → 切回 Vertical（強化中也適用，順便關 enhance）
-            //   chartReviewPatch：對稱（同/不同 mode 行為對調）
-            //   chartReviewHorizontal：永遠 toggle ridge dir = "h"
+            // Review tab 切向 chart 點選 —— 過渡語意（mode/強化切換 FSM 待 #13 接入後定案）：
+            //   點全覽圖（接位後的 chartReviewVertical）＝切檢出方向 v；StitchMode/強化暫走 PropertyGrid。TODO-FSM
             chartReviewVertical.MouseClick += (s, e) =>
             {
                 UiActionLogger.SetSource("chartReviewVertical.Click");
                 LogClick("chartReviewVertical.MouseClick", e);
-                if (_settings?.StitchMode == StitchMode.Vertical) SwitchRidgeDirection("v");
-                else if (_settings?.StitchMode == StitchMode.Global) _ = SwitchReviewStitchModeAndDisableEnhance(StitchMode.Vertical);
-            };
-            chartReviewPatch.MouseClick += (s, e) =>
-            {
-                UiActionLogger.SetSource("chartReviewPatch.Click");
-                LogClick("chartReviewPatch.MouseClick", e);
-                if (_settings?.StitchMode == StitchMode.Global) SwitchRidgeDirection("v");
-                else if (_settings?.StitchMode == StitchMode.Vertical) _ = SwitchReviewStitchModeAndDisableEnhance(StitchMode.Global);
+                SwitchRidgeDirection("v");
             };
             chartReviewHorizontal.MouseClick += (s, e) =>
             {
@@ -481,24 +461,14 @@ namespace AniloxRoll.Monitor.Forms
                 SwitchRidgeDirection("h");
             };
 
-            // Live tab chart 點選（同 Review tab 語意，只是底層 apply 函式不同）：
-            //   chartLiveVertical：
-            //     同 mode (Vertical) → SwitchLiveDisplayDirection("v")
-            //     不同 mode (Global) → SwitchStitchModeWithEnhanceSequence(Vertical)（內含關 enhance）
-            //   chartLivePatch：對稱
+            // Live tab 切向 chart 點選 —— 過渡語意（mode/強化切換 FSM 待 #13 接入後定案）：
+            //   點全覽圖（接位後的 chartLiveVertical）＝切檢出方向 v（與 Horizontal chart 對稱）；
+            //   StitchMode / 強化切換暫時只走 PropertyGrid（SSoT 正路）。TODO-FSM
             chartLiveVertical.MouseClick += (s, e) =>
             {
                 UiActionLogger.SetSource("chartLiveVertical.Click");
                 LogClick("chartLiveVertical.MouseClick", e);
-                if (_settings?.StitchMode == StitchMode.Vertical) SwitchLiveDisplayDirection("v");
-                else if (_settings?.StitchMode == StitchMode.Global) _ = SwitchStitchModeWithEnhanceSequence(StitchMode.Vertical);
-            };
-            chartLivePatch.MouseClick += (s, e) =>
-            {
-                UiActionLogger.SetSource("chartLivePatch.Click");
-                LogClick("chartLivePatch.MouseClick", e);
-                if (_settings?.StitchMode == StitchMode.Global) SwitchLiveDisplayDirection("v");
-                else if (_settings?.StitchMode == StitchMode.Vertical) _ = SwitchStitchModeWithEnhanceSequence(StitchMode.Global);
+                SwitchLiveDisplayDirection("v");
             };
             chartLiveHorizontal.MouseClick += (s, e) =>
             {
@@ -545,7 +515,6 @@ namespace AniloxRoll.Monitor.Forms
                 ImageRepository  = _imageRepository,
                 TimeNavigator    = _dateTimeNavigator,
                 GalleryManager   = _galleryManager,
-                ColumnChartHelper  = _reviewColumnChartHelper,
                 Settings         = _settings,
                 StatusLabel      = lblPixelInfo,
                 CameraPanels     = _cameraPanels,
@@ -556,11 +525,9 @@ namespace AniloxRoll.Monitor.Forms
             _stitchCoordinator = new ReviewStitchCoordinator(new ReviewStitchContext
             {
                 Canvas                    = camReviewMain,
-                ChartReviewPatch             = chartReviewPatch,
-                ChartReviewVertical         = chartReviewVertical,
+                ChartReviewPatch             = chartReviewVertical,
                 ChartReviewHorizontal       = chartReviewHorizontal,
                 InteractionHelper         = _interactionHelper,
-                ColumnChartHelper         = _reviewColumnChartHelper,
                 RowChartHelper            = _reviewRowChartHelper,
                 OverviewHelper            = _reviewOverviewHelper,
                 GalleryManager            = _galleryManager,
@@ -724,7 +691,6 @@ namespace AniloxRoll.Monitor.Forms
         {
             try
             {
-                chartLivePatch?.BringToFront();
                 chartLiveVertical?.BringToFront();
                 chartLiveHorizontal?.BringToFront();
                 LogClick("BringLiveChartsToFront() called");
@@ -901,9 +867,6 @@ namespace AniloxRoll.Monitor.Forms
                     RefreshGridItem(c.Name);
                 _interactionHelper.HandleSettingsChanged();
                 _liveCameraManager?.SetCaptureSettings(_settings);
-                _reviewColumnChartHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-                _liveColumnChartHelper?.SetOps(_settings.Cam1_Ops);
-                _liveColumnChartHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
                 _reviewOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
                 _liveOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
                 _liveRowChartHelper?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
