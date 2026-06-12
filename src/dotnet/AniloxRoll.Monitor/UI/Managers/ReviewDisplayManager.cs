@@ -64,6 +64,9 @@ namespace AniloxRoll.Monitor.UI.Managers
             };
             under.Parent.Controls.Add(p);
             p.BringToFront();
+            // 跟隨底下控制項（ProportionalScaler 縮放 / 佈局變更 → 同步 Bounds，不跑版）
+            under.SizeChanged += (s, e) => p.Bounds = under.Bounds;
+            under.LocationChanged += (s, e) => p.Bounds = under.Bounds;
             return p;
         }
 
@@ -71,11 +74,11 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// 餵一組回顧影像（7 台拼接圖；null 槽=間空黑占位）+ CFG 座標。
         /// Bitmap → 8bpp 灰階 bytes（LockBits 一次性轉，換 ID 才發生）→ PushFrame；feedScale=1（full-res）。
         /// </summary>
-        public void PushImages(Bitmap[] imgs, double[] opsUm, double[] posMm, bool mergeMode, double screenMmPerPx)
+        public void PushImages(Bitmap[] imgs, double[] opsUm, double[] posMm, bool mergeMode, double screenMmPerPx, int feedScale)
         {
             if (_disposed || imgs == null) return;
             EnsureCreated(screenMmPerPx);
-            _view.SetLayout(posMm, opsUm, 1, 0);
+            _view.SetLayout(posMm, opsUm, Math.Max(1, feedScale), 0); // 回顧影像=1/scale 降採樣存檔；ops 為全解析度 px → feedScale 必傳（座標對齊）
             for (int i = 0; i < imgs.Length; i++)
             {
                 var bmp = imgs[i];
