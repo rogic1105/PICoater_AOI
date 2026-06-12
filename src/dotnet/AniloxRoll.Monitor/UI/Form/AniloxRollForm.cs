@@ -566,8 +566,6 @@ namespace AniloxRoll.Monitor.Forms
             _dateTimeNavigator.PeriodSelectionChanged += OnPeriodComboChanged;
             _presenter.PeriodNavigationStateChanged   += (canLast, canNext) =>
             {
-                btnReviewPeriodPrev.Enabled = canLast;
-                btnReviewPeriodNext.Enabled = canNext;
             };
             _presenter.UpdatePeriodNavigationState();
 

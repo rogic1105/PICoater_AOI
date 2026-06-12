@@ -41,8 +41,6 @@ namespace AniloxRoll.Monitor.Forms
                 CbEndDate = cbDataDateEnd, CbEndTime = cbDataTimeEnd,
                 CbGrabIdStart = cbDataIdStart, CbGrabIdEnd = cbDataIdEnd,
                 CbDataGrabId = cbDataId, CbReviewGrabId = cbReviewId,
-                BtnGrabIdPrev = btnReviewIdPrev, BtnGrabIdNext = btnReviewIdNext,
-                BtnGrabIdDataPrev = btnDataIdPrev, BtnGrabIdDataNext = btnDataIdNext,
                 BtnSelectDataFolder = btnDataSelectFolder, BtnShowFail = btnDataShowFail,
                 GroupBoxGrabIdRange = groupBoxGrabIdRange, GrpDataSingleSheet = grpDataSingleSheet,
                 GroupBoxTimeRange = groupBoxTimeRange,

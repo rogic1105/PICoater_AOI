@@ -171,33 +171,7 @@ namespace AniloxRoll.Monitor.Forms
             _stitchCoordinator.UpdateOverviewChartFromRepository();
         }
 
-        private async void btnReviewPeriodPrev_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                bool wasStitch = _stitchCoordinator.IsStitchMode;
-                _interactionHelper.SaveCanvasView();
-                _stitchCoordinator.ClearStitchedMode();
-                await _presenter.MovePeriodAsync(-1, _stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig);
-                ApplyPostLoadDisplay();
-                if (wasStitch && camReviewMain.Image != null) camReviewMain.FitToScreen();
-            }
-            catch (Exception ex) { Trace.WriteLine($"[btnReviewPeriodPrev] {ex}"); }
-        }
 
-        private async void btnReviewPeriodNext_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                bool wasStitch = _stitchCoordinator.IsStitchMode;
-                _interactionHelper.SaveCanvasView();
-                _stitchCoordinator.ClearStitchedMode();
-                await _presenter.MovePeriodAsync(+1, _stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig);
-                ApplyPostLoadDisplay();
-                if (wasStitch && camReviewMain.Image != null) camReviewMain.FitToScreen();
-            }
-            catch (Exception ex) { Trace.WriteLine($"[btnReviewPeriodNext] {ex}"); }
-        }
 
         /// <summary>cbReviewDate/cbReviewTime 手動滾動時載入對應圖片（同 btnReviewPeriodPrev/Next）。
         /// _dataStatsPresenter.GrabIdNavGuard 時跳過（由 OnReviewGrabIdChanged 等程式碼觸發的 NavigateToDateTime）。</summary>

@@ -65,8 +65,6 @@
             this.grpReviewTimePeriod = new System.Windows.Forms.GroupBox();
             this.cbReviewDate = new System.Windows.Forms.ComboBox();
             this.cbReviewTime = new System.Windows.Forms.ComboBox();
-            this.btnReviewPeriodNext = new System.Windows.Forms.Button();
-            this.btnReviewPeriodPrev = new System.Windows.Forms.Button();
             this.btnReviewSelectFolder = new System.Windows.Forms.Button();
             this.camReview1 = new System.Windows.Forms.PictureBox();
             this.camReview2 = new System.Windows.Forms.PictureBox();
@@ -77,8 +75,6 @@
             this.camReview7 = new System.Windows.Forms.PictureBox();
             this.grpReviewGrabNav = new System.Windows.Forms.GroupBox();
             this.cbReviewId = new System.Windows.Forms.ComboBox();
-            this.btnReviewIdPrev = new System.Windows.Forms.Button();
-            this.btnReviewIdNext = new System.Windows.Forms.Button();
             this.camReviewMain = new TanukiCv.Controls.SmartCanvas();
             this.tabPageData = new System.Windows.Forms.TabPage();
             this.chartDataVertical = new System.Windows.Forms.DataVisualization.Charting.Chart();
@@ -87,8 +83,6 @@
             this.lblChartDataYieldDailyUnit = new System.Windows.Forms.Label();
             this.lblChartDataYieldYearlyUnit = new System.Windows.Forms.Label();
             this.grpDataSingleSheet = new System.Windows.Forms.GroupBox();
-            this.btnDataIdPrev = new System.Windows.Forms.Button();
-            this.btnDataIdNext = new System.Windows.Forms.Button();
             this.cbDataId = new System.Windows.Forms.ComboBox();
             this.lblChartNavMonth = new System.Windows.Forms.Label();
             this.cbDataYieldYear = new System.Windows.Forms.ComboBox();
@@ -622,8 +616,6 @@
             // 
             this.grpReviewTimePeriod.Controls.Add(this.cbReviewDate);
             this.grpReviewTimePeriod.Controls.Add(this.cbReviewTime);
-            this.grpReviewTimePeriod.Controls.Add(this.btnReviewPeriodNext);
-            this.grpReviewTimePeriod.Controls.Add(this.btnReviewPeriodPrev);
             this.grpReviewTimePeriod.Location = new System.Drawing.Point(899, 529);
             this.grpReviewTimePeriod.Name = "grpReviewTimePeriod";
             this.grpReviewTimePeriod.Size = new System.Drawing.Size(119, 102);
@@ -649,25 +641,9 @@
             this.cbReviewTime.Size = new System.Drawing.Size(107, 23);
             this.cbReviewTime.TabIndex = 16;
             // 
-            // btnReviewPeriodNext
             // 
-            this.btnReviewPeriodNext.Location = new System.Drawing.Point(69, 68);
-            this.btnReviewPeriodNext.Name = "btnReviewPeriodNext";
-            this.btnReviewPeriodNext.Size = new System.Drawing.Size(44, 28);
-            this.btnReviewPeriodNext.TabIndex = 31;
-            this.btnReviewPeriodNext.Text = ">";
-            this.btnReviewPeriodNext.UseVisualStyleBackColor = true;
-            this.btnReviewPeriodNext.Click += new System.EventHandler(this.btnReviewPeriodNext_Click);
             // 
-            // btnReviewPeriodPrev
             // 
-            this.btnReviewPeriodPrev.Location = new System.Drawing.Point(6, 68);
-            this.btnReviewPeriodPrev.Name = "btnReviewPeriodPrev";
-            this.btnReviewPeriodPrev.Size = new System.Drawing.Size(44, 28);
-            this.btnReviewPeriodPrev.TabIndex = 30;
-            this.btnReviewPeriodPrev.Text = "<";
-            this.btnReviewPeriodPrev.UseVisualStyleBackColor = true;
-            this.btnReviewPeriodPrev.Click += new System.EventHandler(this.btnReviewPeriodPrev_Click);
             // 
             // 
             // 
@@ -749,8 +725,6 @@
             // 
             this.grpReviewGrabNav.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.grpReviewGrabNav.Controls.Add(this.cbReviewId);
-            this.grpReviewGrabNav.Controls.Add(this.btnReviewIdPrev);
-            this.grpReviewGrabNav.Controls.Add(this.btnReviewIdNext);
             this.grpReviewGrabNav.Location = new System.Drawing.Point(899, 93);
             this.grpReviewGrabNav.Name = "grpReviewGrabNav";
             this.grpReviewGrabNav.Size = new System.Drawing.Size(118, 96);
@@ -766,23 +740,9 @@
             this.cbReviewId.Size = new System.Drawing.Size(104, 23);
             this.cbReviewId.TabIndex = 0;
             // 
-            // btnReviewIdPrev
             // 
-            this.btnReviewIdPrev.Location = new System.Drawing.Point(10, 50);
-            this.btnReviewIdPrev.Name = "btnReviewIdPrev";
-            this.btnReviewIdPrev.Size = new System.Drawing.Size(44, 28);
-            this.btnReviewIdPrev.TabIndex = 1;
-            this.btnReviewIdPrev.Text = "<";
-            this.btnReviewIdPrev.UseVisualStyleBackColor = true;
             // 
-            // btnReviewIdNext
             // 
-            this.btnReviewIdNext.Location = new System.Drawing.Point(70, 50);
-            this.btnReviewIdNext.Name = "btnReviewIdNext";
-            this.btnReviewIdNext.Size = new System.Drawing.Size(44, 28);
-            this.btnReviewIdNext.TabIndex = 2;
-            this.btnReviewIdNext.Text = ">";
-            this.btnReviewIdNext.UseVisualStyleBackColor = true;
             // 
             // camReviewMain
             // 
@@ -894,8 +854,6 @@
             // grpDataSingleSheet
             // 
             this.grpDataSingleSheet.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.grpDataSingleSheet.Controls.Add(this.btnDataIdPrev);
-            this.grpDataSingleSheet.Controls.Add(this.btnDataIdNext);
             this.grpDataSingleSheet.Controls.Add(this.cbDataId);
             this.grpDataSingleSheet.Location = new System.Drawing.Point(899, 93);
             this.grpDataSingleSheet.Name = "grpDataSingleSheet";
@@ -904,23 +862,9 @@
             this.grpDataSingleSheet.TabStop = false;
             this.grpDataSingleSheet.Text = "序號選擇";
             // 
-            // btnDataIdPrev
             // 
-            this.btnDataIdPrev.Location = new System.Drawing.Point(10, 50);
-            this.btnDataIdPrev.Name = "btnDataIdPrev";
-            this.btnDataIdPrev.Size = new System.Drawing.Size(44, 28);
-            this.btnDataIdPrev.TabIndex = 43;
-            this.btnDataIdPrev.Text = "<";
-            this.btnDataIdPrev.UseVisualStyleBackColor = true;
             // 
-            // btnDataIdNext
             // 
-            this.btnDataIdNext.Location = new System.Drawing.Point(70, 50);
-            this.btnDataIdNext.Name = "btnDataIdNext";
-            this.btnDataIdNext.Size = new System.Drawing.Size(44, 28);
-            this.btnDataIdNext.TabIndex = 44;
-            this.btnDataIdNext.Text = ">";
-            this.btnDataIdNext.UseVisualStyleBackColor = true;
             // 
             // cbDataId
             // 
@@ -3411,8 +3355,6 @@
         private System.Windows.Forms.Panel camLive3;
         private System.Windows.Forms.Panel camLive2;
         private System.Windows.Forms.Button btnLiveGrab;
-        private System.Windows.Forms.Button btnReviewPeriodPrev;
-        private System.Windows.Forms.Button btnReviewPeriodNext;
         private System.Windows.Forms.TabControl tabControlRight;
         private System.Windows.Forms.TabPage tabPageInspSettings;
         private System.Windows.Forms.TabPage tabPageCamera;
@@ -3586,13 +3528,9 @@
         private System.Windows.Forms.Label lblChartNavDay;
         private System.Windows.Forms.Label lblChartNavYear;
         private System.Windows.Forms.GroupBox grpDataSingleSheet;
-        private System.Windows.Forms.Button btnDataIdPrev;
-        private System.Windows.Forms.Button btnDataIdNext;
         private System.Windows.Forms.ComboBox cbDataId;
         private System.Windows.Forms.GroupBox grpReviewGrabNav;
         private System.Windows.Forms.ComboBox cbReviewId;
-        private System.Windows.Forms.Button btnReviewIdPrev;
-        private System.Windows.Forms.Button btnReviewIdNext;
         private System.Windows.Forms.Label lblChartDataYieldMonthlyUnit;
         private System.Windows.Forms.Label lblChartDataYieldDailyUnit;
         private System.Windows.Forms.Label lblChartDataYieldYearlyUnit;

@@ -29,10 +29,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public ComboBox CbReviewGrabId { get; set; }
 
         // --- 序號導航按鈕 ---
-        public Button BtnGrabIdPrev { get; set; }
-        public Button BtnGrabIdNext { get; set; }
-        public Button BtnGrabIdDataPrev { get; set; }
-        public Button BtnGrabIdDataNext { get; set; }
 
         // --- 資料夾 / 篩選 ---
         public Button BtnSelectDataFolder { get; set; }
@@ -158,12 +154,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _ctx.CbGrabIdEnd.SelectedIndexChanged += (s, e) => OnGrabIdComboChanged(isStart: false);
             _ctx.CbDataGrabId.SelectedIndexChanged += (s, e) => OnSingleSheetComboChanged();
             _ctx.CbReviewGrabId.SelectedIndexChanged += (s, e) => OnReviewGrabIdChanged();
-            _ctx.BtnGrabIdPrev.Click += (s, e) => StepReviewGrabId(+1);
-            _ctx.BtnGrabIdNext.Click += (s, e) => StepReviewGrabId(-1);
             _ctx.GrpReviewGrabNav.Click += (s, e) => OnReviewGrabIdChanged();
             _ctx.GrpReviewTimePeriod.Click += (s, e) => PeriodComboManualChanged?.Invoke();
-            _ctx.BtnGrabIdDataPrev.Click += (s, e) => StepDataGrabId(+1);
-            _ctx.BtnGrabIdDataNext.Click += (s, e) => StepDataGrabId(-1);
 
             // Data tab：點選 GroupBox 標題切換 active stat 模式（與 GrpReviewGrabNav.Click 相同模式）
             _ctx.GrpDataSingleSheet.Click   += (s, e) => SwitchActiveStatGroupBox(_ctx.GrpDataSingleSheet);
@@ -487,8 +479,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
         {
             int idx = _ctx.CbReviewGrabId.SelectedIndex;
             int count = _ctx.CbReviewGrabId.Items.Count;
-            _ctx.BtnGrabIdPrev.Enabled = idx >= 0 && idx < count - 1;
-            _ctx.BtnGrabIdNext.Enabled = idx > 0;
             UpdateDataGrabIdNavState();
         }
 
@@ -496,8 +486,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
         {
             int idx = _ctx.CbDataGrabId.SelectedIndex;
             int count = _ctx.CbDataGrabId.Items.Count;
-            _ctx.BtnGrabIdDataPrev.Enabled = idx >= 0 && idx < count - 1;
-            _ctx.BtnGrabIdDataNext.Enabled = idx > 0;
         }
 
         /// <summary>時間 ComboBox 變更時，同步 cbReviewId 到包含該時間的序號。</summary>
