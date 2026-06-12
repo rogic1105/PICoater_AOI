@@ -32,9 +32,11 @@
 
 ### 🔲 交接進度
 1. ~~**切換 app**~~ ✅ **已做**：`NativeMethods.cs` DllName 已改 `tanuki_pipeline_api.dll`，即時監控正常。
-   ⚠ 注意：app build 尚未「生產」此 DLL（tanuki_pipeline 未進 .sln、無 ProjectDependency）——清 bin 重 build 會缺 DLL，見第 3 點。
 2. **驗數值**（修正後重驗）：上面第 1、2 修正後，新舊輸出理論上 parity；同輸入比 ridge/curve 確認。
-3. **接 .sln + 依賴**：tanuki_pipeline 5 個 vcxproj 收進 PICoater_AOI.sln，app 依賴從 picoater_api 改指 tanuki_pipeline_api（讓 build app 連帶產 DLL）。
+3. ~~**接 .sln + 依賴**~~ ✅ **已做**：tanuki_pipeline 5 個 vcxproj 收進 PICoater_AOI.sln（方案資料夾 sdk/TanukiCv/tanuki_pipeline），
+   app ProjectDependencies 加 tanuki_pipeline_api（**picoater_api 依賴暫留＝回滾保險，phase-6 刪舊時一併移除**）。
+   全方案 build 0 錯誤；實測刪 DLL 後 sln build 自動重生 → **清 bin 陷阱解除**。
+   附帶：舊 picoater_pipeline_benchmark（既有編碼壞、已被 find_stream_ridgeline_bench 取代）關 Build.0 排除出 sln build（目錄留 phase-6 刪）；api 連結修 LNK4098（移 cudart_static）。
 4. **刪舊**（驗證 OK 後）：`src/native`（c_api/picoater_api、modules/get_picoater_background、pipeline、benchmark/picoater_pipeline_benchmark）+ sdk bench_framework + .sln/props 對應條目。**給 deadline，別讓兩份真相並存變永久**（違反唯一來源鐵則）。
 5. **可選 4b**：API 改 `run(name, json)` + 函式改名 TanukiPipeline_*；屆時先補 registry link-drop 保險。
 
