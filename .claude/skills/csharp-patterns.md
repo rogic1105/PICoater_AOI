@@ -125,3 +125,12 @@ propertyGridSettings.SelectedObject = _settings;
 - 新增 .cs 檔必須手動加 `<Compile Include>` 到 .csproj
 - 無 `switch expression`、`is not`、`record`、`init`
 - `string interpolation` 可用；`??=` 不可用
+
+## GDI+ Bitmap 跨執行緒鐵則（2026-06-12 race 實戰）
+
+- **Bitmap/Image 是單執行緒物件**：任一執行緒 LockBits 中，另一執行緒連 `get_Width` 都會炸
+  `InvalidOperationException: 其他地方正在使用物件`（快速換 ID 時背景轉換 vs 下一輪載入相撞）。
+- **修法選架構不選鎖**：要跨執行緒傳影像 → 在「Bitmap 仍獨佔、未發布」的階段（如解碼當下）
+  轉成**不可變 byte[]**再傳；Bitmap 本體不跨出擁有者。`lock(bmp)` 只防自己人，防不了外部讀取。
+- 案例：ReviewStitchCoordinator 解碼 Parallel.For 內轉灰階 → 事件只傳 bytes+尺寸。
+
