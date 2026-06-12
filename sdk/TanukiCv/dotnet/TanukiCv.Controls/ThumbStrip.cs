@@ -28,6 +28,14 @@ namespace TanukiCv.Controls
         /// <summary>縮圖被點 → 要求切換選中相機（0-based 索引，與 panels 傳入順序一致）。</summary>
         public event Action<int> SelectRequested;
 
+        /// <summary>設定選取高亮（0-based；超界＝全部清除）。主畫面↔縮圖雙向連動的「秀」，不觸發 SelectRequested。</summary>
+        public void SetSelected(int idx)
+        {
+            if (_disposed) return;
+            for (int i = 0; i < _count; i++)
+                if (_thumbs[i] != null) _thumbs[i].Selected = (i == idx);
+        }
+
         /// <summary>建縮圖時 stride 降採樣到此寬以下（小圖、便宜）。預設 320。</summary>
         public int ThumbMaxW { get; set; } = 320;
 

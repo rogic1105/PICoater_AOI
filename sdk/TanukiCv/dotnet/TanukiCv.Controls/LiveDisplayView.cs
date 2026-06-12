@@ -69,6 +69,10 @@ namespace TanukiCv.Controls
 
         /// <summary>縮圖被點 → 要求切換選中相機（1-based camId）。</summary>
         public event Action<int> SelectRequested;
+
+        /// <summary>選中相機因「視野移動」自動變更（合圖模式反向連動：視野中心最近的相機 → 自動高亮縮圖）。
+        /// 1-based camId。程式化來源（非使用者點擊），上層通常只需更新狀態、勿再呼 CenterOnCamera（防遞迴）。</summary>
+        public event Action<int> SelectedCamChanged;
         /// <summary>視野可見範圍（mm）：leftX, rightX, topY, botY → 上層曲線圖（切向用 X、法向用 Y、overview 用 X）zoom 連動。</summary>
         public event Action<double, double, double, double> ViewRangeMmChanged;
 
@@ -134,7 +138,16 @@ namespace TanukiCv.Controls
             _canvas.BringToFront();
 
             _thumbStrip = new ThumbStrip(camPanels);
-            _thumbStrip.SelectRequested += idx => SelectRequested?.Invoke(idx + 1); // 0-based idx → 1-based camId
+            _thumbStrip.SelectRequested += idx =>
+            {
+                int camId = idx + 1; // 0-based idx → 1-based camId
+                // 縮圖↔主畫面雙向連動（正向）：合圖模式點縮圖 → 主畫面 pan 定位到該相機（保 zoom）。
+                // 單張模式交給上層（SelectRequested → 上層 SetSelected 換顯示相機）。
+                if (_mergeMode) CenterOnCamera(camId);
+                SetSelected(camId);
+                SelectRequested?.Invoke(camId);
+            };
+            _thumbStrip.SetSelected(_selectedCamId - 1); // 初始高亮
 
             _timer = new System.Windows.Forms.Timer { Interval = 33 };
             _timer.Tick += (s, e) => RefreshMain();
@@ -143,8 +156,34 @@ namespace TanukiCv.Controls
 
         // ==================== 介面 ====================
 
-        public void SetSelected(int camId) { _selectedCamId = camId; _mainDirty = true; }
+        public void SetSelected(int camId)
+        {
+            _selectedCamId = camId; _mainDirty = true;
+            _thumbStrip?.SetSelected(camId - 1);   // 縮圖高亮跟著走（雙向連動的「秀」）
+        }
         public void SetMergeMode(bool on) { _mergeMode = on; _mainDirty = true; }
+
+        /// <summary>合圖模式：把主畫面 pan 定位到指定相機的槽中心（保 zoom）。
+        /// 縮圖↔主畫面雙向連動的「正向」；非合圖 / 佈局未備則無動作。</summary>
+        public void CenterOnCamera(int camId)
+        {
+            if (!_mergeMode || _canvas == null) return;
+            var placements = _mergePlacements;
+            if (placements == null && !TryComputeMergeGeometry()) return;
+            placements = _mergePlacements;
+            if (placements == null) return;
+            int k = Math.Max(1, _mergeCapK);
+            foreach (var p in placements)
+            {
+                if (p.CameraId != camId) continue;
+                double centerPx = (p.DestX + p.SrcWidth / 2.0) / k;   // 顯示（capped）座標
+                float zoom = _canvas.Zoom;
+                if (zoom <= 0) return;
+                float newPanX = _canvas.Width / 2.0f - (float)(centerPx * zoom);
+                _canvas.SetView(zoom, new PointF(newPanX, _canvas.PanOffset.Y));
+                return;
+            }
+        }
 
         /// <summary>座標來源（單一介面）：各台 start(mm) + ops(µm，相對全解析度) + feedScale（餵入幀相對全解析度的降採樣；
         /// app 餵全解析度=1、範例餵縮圖=resizeScale）+ rowPitchMm（Y 方向 mm/px，0 則退回 ops 方形像素）。
@@ -465,6 +504,26 @@ namespace TanukiCv.Controls
             _canvas.SetCursorMm($"({curMmX:F2}, {curMmY:F2})");
 
             ViewRangeMmChanged?.Invoke(leftMm, rightMm, topMm, botMm);
+
+            // 縮圖↔主畫面雙向連動（反向）：合圖模式視野中心最近的相機 → 自動高亮縮圖（不觸發 SelectRequested 防遞迴）。
+            if (_mergeMode && _mergePlacements != null)
+            {
+                int k = Math.Max(1, _mergeCapK);
+                double viewCenterPx = (_canvas.Width / 2.0 - info.PanOffset.X) / info.Zoom; // capped 顯示座標
+                int bestCam = 0; double bestDist = double.MaxValue;
+                foreach (var p in _mergePlacements)
+                {
+                    double c = (p.DestX + p.SrcWidth / 2.0) / k;
+                    double d = Math.Abs(viewCenterPx - c);
+                    if (d < bestDist) { bestDist = d; bestCam = p.CameraId; }
+                }
+                if (bestCam > 0 && bestCam != _selectedCamId)
+                {
+                    _selectedCamId = bestCam;                  // 只更新欄位+高亮，不設 _mainDirty（合圖畫面不需重建）
+                    _thumbStrip?.SetSelected(bestCam - 1);
+                    SelectedCamChanged?.Invoke(bestCam);
+                }
+            }
 
             // L0 游標剖面（游標那列/行的原始像素 → 曲線圖。座標跟影像同源 → 自動對齊）。
             // 單張：取選定相機全幀那列/行。合圖：游標列橫跨整張合圖（用 BuildMerge 同一份 _mergePlacements

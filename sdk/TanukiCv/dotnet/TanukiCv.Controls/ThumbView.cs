@@ -13,6 +13,17 @@ namespace TanukiCv.Controls
     public sealed class ThumbView : Control
     {
         private Bitmap _img;
+        private bool _selected;
+
+        /// <summary>選取高亮（主畫面↔縮圖雙向連動的視覺）：true 畫邊框。</summary>
+        public bool Selected
+        {
+            get => _selected;
+            set { if (_selected != value) { _selected = value; Invalidate(); } }
+        }
+
+        /// <summary>選取邊框色（預設亮藍；上層可改）。</summary>
+        public Color SelectedBorderColor { get; set; } = Color.DeepSkyBlue;
 
         public ThumbView()
         {
@@ -33,16 +44,22 @@ namespace TanukiCv.Controls
         {
             e.Graphics.Clear(BackColor);
             var img = _img;
-            if (img == null) return;
             var cs = ClientSize;
-            if (cs.Width <= 0 || cs.Height <= 0 || img.Width <= 0 || img.Height <= 0) return;
-            double s = Math.Min(cs.Width / (double)img.Width, cs.Height / (double)img.Height);
-            int dw = Math.Max(1, (int)(img.Width * s)), dh = Math.Max(1, (int)(img.Height * s));
-            int dx = (cs.Width - dw) / 2, dy = (cs.Height - dh) / 2;
-            // 即時縮圖每幀重繪 → 一律 NearestNeighbor（快）；HighQuality 對大圖每幀縮放會卡 → 反而閃黑更久。
-            e.Graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
-            e.Graphics.PixelOffsetMode = PixelOffsetMode.Half;
-            e.Graphics.DrawImage(img, dx, dy, dw, dh);
+            if (img != null && cs.Width > 0 && cs.Height > 0 && img.Width > 0 && img.Height > 0)
+            {
+                double s = Math.Min(cs.Width / (double)img.Width, cs.Height / (double)img.Height);
+                int dw = Math.Max(1, (int)(img.Width * s)), dh = Math.Max(1, (int)(img.Height * s));
+                int dx = (cs.Width - dw) / 2, dy = (cs.Height - dh) / 2;
+                // 即時縮圖每幀重繪 → 一律 NearestNeighbor（快）；HighQuality 對大圖每幀縮放會卡 → 反而閃黑更久。
+                e.Graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
+                e.Graphics.PixelOffsetMode = PixelOffsetMode.Half;
+                e.Graphics.DrawImage(img, dx, dy, dw, dh);
+            }
+            if (_selected && cs.Width > 2 && cs.Height > 2)
+            {
+                using (var pen = new Pen(SelectedBorderColor, 2f))
+                    e.Graphics.DrawRectangle(pen, 1, 1, cs.Width - 3, cs.Height - 3);
+            }
         }
 
         protected override void Dispose(bool disposing)

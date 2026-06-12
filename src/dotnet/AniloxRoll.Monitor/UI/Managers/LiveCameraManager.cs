@@ -539,6 +539,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (_mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) return;
             _smartDisplay = new LiveDisplayView(_mainDisplayPanel, _cameraPanels, _screenMmPerPx);
             _smartDisplay.SelectRequested  += SmartSelectCamera;
+            // 反向連動（合圖視野移動 → sdk 已自動高亮縮圖）：只同步 app 選中狀態，不走 SwitchMainDisplay（防重載/遞迴）
+            _smartDisplay.SelectedCamChanged += camId => _selectedMainCameraId = camId;
             _smartDisplay.ViewRangeMmChanged += OnSmartViewRange;
             _smartDisplay.SetSelected(_selectedMainCameraId);
             if (IsGlobalMergeActive && _merger != null)
