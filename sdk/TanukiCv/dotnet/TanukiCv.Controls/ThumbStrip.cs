@@ -28,6 +28,13 @@ namespace TanukiCv.Controls
         /// <summary>縮圖被點 → 要求切換選中相機（0-based 索引，與 panels 傳入順序一致）。</summary>
         public event Action<int> SelectRequested;
 
+        /// <summary>選取框色（套用到所有縮圖；預設 ThumbView 預設色）。</summary>
+        public void SetSelectedColor(System.Drawing.Color c)
+        {
+            for (int i = 0; i < _count; i++)
+                if (_thumbs[i] != null) _thumbs[i].SelectedBorderColor = c;
+        }
+
         /// <summary>設定選取高亮（0-based；超界＝全部清除）。主畫面↔縮圖雙向連動的「秀」，不觸發 SelectRequested。</summary>
         public void SetSelected(int idx)
         {

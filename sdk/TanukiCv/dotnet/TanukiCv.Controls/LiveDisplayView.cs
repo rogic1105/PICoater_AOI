@@ -109,6 +109,9 @@ namespace TanukiCv.Controls
         /// <summary>內部主畫面 SmartCanvas（供上層接計時 / app 專屬事件等；一般顯示不需碰）。</summary>
         public SmartCanvas Canvas => _canvas;
 
+        /// <summary>縮圖選取框色（雙向連動高亮的唯一視覺來源；上層若原本自畫選取框請移除，避免雙框）。</summary>
+        public System.Drawing.Color ThumbSelectedColor { set => _thumbStrip?.SetSelectedColor(value); }
+
         /// <summary>選中相機最新全解析度灰階快照（LOD provider / 進階用；無則 null）。</summary>
         public byte[] GetSelectedRaw(out int w, out int h)
         {
