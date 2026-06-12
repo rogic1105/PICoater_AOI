@@ -39,7 +39,7 @@ namespace AniloxRoll.Monitor.Core.Interop
 
     internal static class NativeMethods
     {
-        private const string DllName = "picoater_api.dll";
+        private const string DllName = "tanuki_pipeline_api.dll";
         private const string TanukiCvDllName = "tanuki_cv_api.dll";
 
         // =====================================================
