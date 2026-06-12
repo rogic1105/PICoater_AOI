@@ -1,6 +1,6 @@
 # 遷移 Plan：src/native（產品 pipeline）→ sdk/tanuki_pipeline
 
-> 狀態：**階段 0–5 完成（分支 refactor/tanuki-pipeline，平行建新未拆舊）**。階段 6（切換+刪舊）待上機驗數值。
+> 狀態：✅ **全部完成（含 phase-6 刪舊，2026-06-12）**。本文件轉為歷史紀錄：分層定義（§2）與判準仍為現行規範。
 > 原則沿用 tanuki 改名那次：**分階段 + 每階段 build 驗證 + checkpoint commit + 隨時可回滾**。
 
 ## ⚡ 目前進度（2026-06-11 自主跑完 0–5）
@@ -37,8 +37,8 @@
    app ProjectDependencies 加 tanuki_pipeline_api（**picoater_api 依賴暫留＝回滾保險，phase-6 刪舊時一併移除**）。
    全方案 build 0 錯誤；實測刪 DLL 後 sln build 自動重生 → **清 bin 陷阱解除**。
    附帶：舊 picoater_pipeline_benchmark（既有編碼壞、已被 find_stream_ridgeline_bench 取代）關 Build.0 排除出 sln build（目錄留 phase-6 刪）；api 連結修 LNK4098（移 cudart_static）。
-4. **刪舊**（驗證 OK 後）：`src/native`（c_api/picoater_api、modules/get_picoater_background、pipeline、benchmark/picoater_pipeline_benchmark）+ sdk bench_framework + .sln/props 對應條目。**給 deadline，別讓兩份真相並存變永久**（違反唯一來源鐵則）。
-5. **可選 4b**：API 改 `run(name, json)` + 函式改名 TanukiPipeline_*；屆時先補 registry link-drop 保險。
+4. ~~**刪舊**~~ ✅ **已做（phase-6，2026-06-12）**：`src/native` 整目錄（picoater_api／get_picoater_background／aoi_pipeline／picoater_pipeline_benchmark）+ sdk `bench_framework` + `core_cv_benchmark` 殘檔刪除；.sln 4 專案條目 + app 的 picoater_api 回滾依賴移除；props（BenchFrameworkPath/NativeRoot/LocalModulesPath）清掉；CLAUDE.md×2 / README×2 / skills×3 同步。全方案 build 0 錯誤。**src/ 只剩 dotnet（UI），單一真相在 sdk/tanuki_pipeline。**
+5. **可選 4b**（唯一遺留）：API 改 `run(name, json)` + 函式改名 TanukiPipeline_*；屆時先補 registry link-drop 保險（RegisterBuiltinModules）。
 
 ## 1. 目標與動機
 把 `src/native`（C++/CUDA 演算法 pipeline）整個搬進 `sdk/`，讓：

@@ -9,7 +9,7 @@
 ## 關鍵檔案
 
 → 見 `CLAUDE.md` §關鍵檔案速查（subset：`ImageProcessing/*` + `Services/AoiService` + `Interop/NativeMethods` + `ImageCatalog/ImageRepository`）。
-→ Native pipeline 細節見 `src/native/modules/GetPICoaterBackground/` 與 `docs/dev/MIL_API_Reference.md`。
+→ Native pipeline 細節見 `sdk/TanukiCv/native/tanuki_pipeline/`（framework/modules/pipelines/api 分層；modules/background_sub + ridge_hessian）與 `docs/dev/MIL_API_Reference.md`。
 
 ## 注意事項
 
@@ -22,7 +22,7 @@
 - 曲線（`mura_curve_mean/max`、`mura_row_curve_mean/max`）從 **`d_hessian_resp_` 原始 float Hessian response** 計算，**在 scale+clamp 到 u8 之前**
 - 計算後套用 `scale_f32_inplace_gpu(..., scale_factor)` 做純 scalar 乘法（`scale_factor = 255/正規值`），**不 clamp** → 峰值保留、.bin 值可超過 255
 - u8 ridge 影像（`d_ridge_out` / `d_mura_out`）仍走 `scale_clamp_f32_to_u8_gpu` 顯示路徑，不影響 `.bin`
-- inline kernel `k_scale_f32_inplace` 定義在 `Module_GetPICoaterBackground.cu` 本檔內（不暴露到 SDK header）
+- inline kernel `k_scale_f32_inplace` 定義在 `modules/ridge_hessian/src/ridge_hessian.cu` 本檔內（不暴露到 SDK header）
 
 ### 正規值 V/H 分離（C# 層）
 - Settings 拆分為 `HessianMaxFactorV`（垂直）+ `HessianMaxFactorH`（水平），native 端介面（`AoiAlgorithmParams.HessianMaxFactor`）維持單一欄位

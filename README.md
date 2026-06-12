@@ -9,22 +9,20 @@ PICoater_AOI/
 ├── bin/                 # 編譯輸出目錄 (所有的 .exe, .dll, .lib 都會產生於此)
 ├── build/               # 編譯中間檔案 (Intermediate files, obj)
 ├── sdk/                 # [核心] 可獨立 split 的 library
-│   └── TanukiCv/        # 以 core_cv 為引擎的 .NET 影像 SDK（self-contained）
-│       ├── native/      # C++（core_cv CUDA 庫 / cpp_utils / core_cv_api）— 引擎名保留
+│   └── TanukiCv/        # 以 tanuki_core 為引擎的 .NET 影像 SDK（self-contained）
+│       ├── native/      # C++：tanuki_core（CUDA primitive）/ tanuki_utils / tanuki_cv_api
+│       │                #      + tanuki_pipeline（演算法流程層 framework/modules/pipelines/api）
 │       ├── dotnet/      # TanukiCv.Core（純 library）+ TanukiCv.Controls（WinForms SmartCanvas）
-│       ├── benchmark/   # bench_framework + core_cv_benchmark 速度測試 + TanukiCv.BenchUi（SDK benchmark UI，不參與主 build）
+│       ├── benchmark/   # tanuki_core_bench 速度測試 + TanukiCv.BenchUi（SDK benchmark UI）
 │       └── third_party/stb/
-├── src/native/          # [演算法] 專案特定的 C++ 模組
-│   ├── modules/         # 各式檢測功能模組 (如 GetPICoaterBackground)
-│   └── c_api/           # 導出給 C# 使用的 DLL 介面層
-├── src/dotnet/          # [介面] C# 使用者介面
+├── src/dotnet/          # [介面] C# 使用者介面（src 只剩 UI；C++ 演算法全在 sdk/TanukiCv/native）
 │   ├── AniloxRoll.Monitor/ # 主程式 (WinForms)
 │   └── IoBridge/       # IO Modbus TCP 通訊 (Core / ManualControl / Automation)
 ├── tests/               # [測試] C# 自動化測試（量「對不對」）+ TestRunner.bat/.ps1
 │   └── AniloxRoll.Monitor.{Tests,Integration.Tests,Stress.Tests}/ # NUnit 3.x + Moq 4.x
 ├── benchmark            # [速度測試] 跟被測對象住（無頂層）：
-│   ├── sdk/TanukiCv/benchmark/core_cv_benchmark/         # 通用 CV 速度
-│   └── src/native/benchmark/picoater_pipeline_benchmark/  # pipeline 速度
+│   ├── sdk/TanukiCv/benchmark/tanuki_core_bench/                                  # 通用 CV 速度
+│   └── sdk/TanukiCv/native/tanuki_pipeline/pipelines/find_stream_ridgeline/benchmark/  # pipeline 端到端速度
 ├── algtest/             # [演算法] Python 演算法原型 / 可行性（暫放）
 ├── docs/                # 架構與模式文件
 │   ├── config/          # config / dcf 範例
@@ -70,7 +68,7 @@ PICoater_AOI/
 ## 6. 執行與測試 (Running & Testing)
 
 ### C++ 速度 Benchmark (底層驗證)
-* **專案**: `picoater_pipeline_benchmark`（`src/native/benchmark/`）、`core_cv_benchmark`（`sdk/TanukiCv/benchmark/`）
+* **專案**: `find_stream_ridgeline_bench`（pipeline 端到端）、`tanuki_core_bench`（`sdk/TanukiCv/benchmark/`，primitive）
 * 量測 pipeline / CV 計算的速度（吞吐、IO、傳輸、多相機），輸出時間數字而非 pass/fail；不涉及 GUI。
 
 ### C# 單元 + 壓力測試
@@ -181,7 +179,7 @@ pip install numpy opencv-python
 
 ### C# GUI (主程式)
 * **專案**: `AniloxRoll.Monitor`
-* 程式啟動時自動載入 `picoater_api.dll` 及 `core_cv_api.dll`。
+* 程式啟動時自動載入 `tanuki_pipeline_api.dll`（檢測 pipeline）及 `tanuki_cv_api.dll`（通用 CV）。
 
 ## 7. 開發文件
 
@@ -200,10 +198,9 @@ pip install numpy opencv-python
 ## 8. 開發規範 (Development Guide)
 
 ### 加入新的 C++ 演算法
-1. 在 `src/native/modules` 下建立新的專案 (Static Library)。
-2. 實作 `.hpp` 與 `.cu`（參考 `Module_GetPICoaterBackground`）。
-3. 在 `Directory.Build.props` 定義新模組的路徑變數。
-4. **重要**: 透過**專案參考**加入模組，切勿手動加入 `.lib`。
+1. 在 `sdk/TanukiCv/native/tanuki_pipeline/modules/` 下建新 module（參考 `ridge_hessian`：實作 `IModule`、組合 tanuki_core primitive）。
+2. 加進 `tanuki_pipeline_modules.vcxproj`，pipeline 食譜（`find_stream_ridgeline.cpp`）加方法分支。
+3. **重要**: 透過**專案參考**加入，切勿手動加入 `.lib`。詳見 `sdk/TanukiCv/README.md` §5。
 
 ### 解決連結錯誤 (Troubleshooting)
 * **LNK2001 / LNK1181**: 檢查 References 是否勾選相依專案。若依賴 CUDA Code，將「使用程式庫相依性輸入」設為 True。

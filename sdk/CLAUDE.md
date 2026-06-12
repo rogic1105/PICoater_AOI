@@ -26,14 +26,14 @@ sdk/
 │   │       組合 core primitive 的「可換步驟」，換方法=換 module）；pipelines/find_stream_ridgeline/（食譜＝串 module，
 │   │       找流水圖脊線=mura 檢測，含 README+benchmark）；api/（tanuki_pipeline_api.dll，C ABI 與舊 picoater_api 相同 drop-in）。
 │   │       判準：包一顆 kernel=core primitive；組幾個 primitive 成可換步驟=module；串 module 成完整流程=pipeline。
-│   │       狀態：平行建好 build 綠+RTX5080 跑通；切換 app（DllImport 改 tanuki_pipeline_api.dll）+刪 src/native 待上機驗數值。
+│   │       狀態：**遷移完成**——app 已切換（DllImport=tanuki_pipeline_api.dll、上機驗過）、src/native + 舊 picoater_api + bench_framework 已刪除。
 │   │       詳見 `docs/dev/migration-native-to-sdk-pipeline.md`
 │   ├── dotnet/
 │   │   ├── TanukiCv.Core         ← 純 library（無 WinForms）：PixelMmMapper 像素↔mm、SystemInfo、PerfTimer、
 │   │   │                             MergeLayout（合圖佈局唯一來源）、CurveOverviewMerger（切向全覽曲線合併唯一來源）
 │   │   └── TanukiCv.Controls     ← WinForms（→Core）：SmartCanvas / LiveDisplayView / ThumbStrip /
 │   │                                 曲線圖 helper（Base/Column/Row）/ GrayBitmap / GrayResizeCpu
-│   ├── benchmark/{bench_framework, tanuki_core_bench, TanukiCv.BenchUi}
+│   ├── benchmark/{tanuki_core_bench, TanukiCv.BenchUi}
 │   ├── samples/TanukiCv.SysInfoTool
 │   └── third_party/stb
 ├── Bridges/         ← 對外設備 / 系統橋接層（純函式庫 + 介面供 mock 注入）

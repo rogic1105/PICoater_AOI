@@ -6,7 +6,7 @@
 
 當需要：
 - 在 `tanuki_cv_api.dll` 新增 GPU 函式
-- 在 `picoater_api.dll` 新增 pipeline 函式
+- 在 `tanuki_pipeline_api.dll` 新增 pipeline 函式（`sdk/TanukiCv/native/tanuki_pipeline/api/`，標頭+實作同 tanuki_cv_api 模式）
 - 更新 C# 端的 P/Invoke 宣告
 
 ## 執行步驟

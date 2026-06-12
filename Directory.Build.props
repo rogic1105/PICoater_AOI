@@ -18,9 +18,6 @@
 		<AoiSdkPath>$(EngRoot)sdk\TanukiCv\</AoiSdkPath>
 		<CoreCVPath>$(AoiSdkPath)native\tanuki_core\</CoreCVPath>
 		<CppUtilsPath>$(AoiSdkPath)native\tanuki_utils\</CppUtilsPath>
-		<BenchFrameworkPath>$(AoiSdkPath)benchmark\bench_framework\</BenchFrameworkPath>
-		<NativeRoot>$(EngRoot)src\native\</NativeRoot>
-		<LocalModulesPath>$(EngRoot)src\native\modules\</LocalModulesPath>
 
 		<StbPath>$(AoiSdkPath)third_party\stb\include\</StbPath>
 
@@ -44,10 +41,8 @@
 
 			<AdditionalIncludeDirectories>
 				$(CoreCVPath)include;
-				$(BenchFrameworkPath)include;
 				$(CppUtilsPath)include;
 				$(StbPath);
-				$(LocalModulesPath)GetPICoaterBackground\include;
 				%(AdditionalIncludeDirectories)
 			</AdditionalIncludeDirectories>
 		</ClCompile>

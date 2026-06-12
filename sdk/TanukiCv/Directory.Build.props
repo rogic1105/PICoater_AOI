@@ -14,7 +14,6 @@
 		     sdk 內部變數從 $(SdkRoot) 自帶，不再寄生 repo 根，ProjectReference 才解析得到。 -->
 		<CoreCVPath>$(SdkRoot)native\tanuki_core\</CoreCVPath>
 		<CppUtilsPath>$(SdkRoot)native\tanuki_utils\</CppUtilsPath>
-		<BenchFrameworkPath>$(SdkRoot)benchmark\bench_framework\</BenchFrameworkPath>
 		<StbPath>$(SdkRoot)third_party\stb\include\</StbPath>
 
 		<OutDir>$(SdkRoot)bin\$(Platform)\$(Configuration)\</OutDir>
@@ -37,13 +36,13 @@
 	     （monorepo 時 EngRoot != ''，不觸發，由 repo 根全域提供）。 -->
 	<ItemDefinitionGroup Condition="'$(EngRoot)' == ''">
 		<ClCompile>
-			<AdditionalIncludeDirectories>$(CoreCVPath)include;$(BenchFrameworkPath)include;$(CppUtilsPath)include;$(StbPath);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-			<!-- bench_framework/benchmark 編譯依賴這些（artifacts 輸出根 + 測試影像路徑）；
+			<AdditionalIncludeDirectories>$(CoreCVPath)include;$(CppUtilsPath)include;$(StbPath);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+			<!-- 部分 benchmark/工具編譯依賴這些（artifacts 輸出根 + 測試影像路徑）；
 			     split 後沒 repo 測試資料，用 SdkRoot 佔位讓編譯過，執行時自備測試影像。 -->
 			<PreprocessorDefinitions>REPO_ROOT=R"($(SdkRoot))";PGM_ROOT=R"($(SdkRoot))";PROJECT_ROOT=R"($(SdkRoot))";DEFAULT_TEST_IMAGE="";DATA_FOLDER_PATH="";TARGET_IMAGE_PATH="";%(PreprocessorDefinitions)</PreprocessorDefinitions>
 		</ClCompile>
 		<CudaCompile>
-			<Include>$(CoreCVPath)include;$(BenchFrameworkPath)include;$(CppUtilsPath)include;$(StbPath);%(Include)</Include>
+			<Include>$(CoreCVPath)include;$(CppUtilsPath)include;$(StbPath);%(Include)</Include>
 		</CudaCompile>
 	</ItemDefinitionGroup>
 
