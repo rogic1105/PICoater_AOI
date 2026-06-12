@@ -162,8 +162,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     // 全域合圖也在背景做（原本在 UI 執行緒 → 換 ID swap 卡頓的主因；MergeHorizontal 純影像運算可背景化）
                     Bitmap merged = null;
                     double[] ops = null, pos = null;
-                    if (_ctx.Settings.StitchMode == StitchMode.Global)
-                    {
+                    if (_ctx.Settings.StitchMode == StitchMode.Global
+                        && !AniloxRoll.Monitor.UI.Managers.AniloxRollFormReviewFlags.UseSameSourceDisplay)
+                    {   // Stage4a：同源新路徑開啟時跳過舊 MergeHorizontal（雙跑白工＝換 ID 最大耗時）
                         var swMerge = Stopwatch.StartNew();
                         ops = grabCfg?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
                         pos = grabCfg?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
@@ -188,7 +189,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 if (loaded.merged != null)
                     _globalMergedImage = loaded.merged; // 已於背景 Task.Run 合好
 
-                _ctx.GalleryManager.SetImages(_stitchedImages);
+                if (!AniloxRoll.Monitor.UI.Managers.AniloxRollFormReviewFlags.UseSameSourceDisplay)
+                    _ctx.GalleryManager.SetImages(_stitchedImages);   // Stage4a：舊縮圖在疊加 Panel 底下，免建
 
                 // #13 同源新路徑（平行建新）：餵 LiveDisplayView（Vertical 模式 ops/pos 補算 CFG 有效值）
                 var opsEff = opsArr ?? grabCfg?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
@@ -196,7 +198,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 StitchedImagesReady?.Invoke(_stitchedImages, opsEff, posEff,
                     _ctx.Settings.StitchMode == StitchMode.Global, grabId, enableProcess);
 
-                if (_globalMergedImage != null)
+                if (AniloxRoll.Monitor.UI.Managers.AniloxRollFormReviewFlags.UseSameSourceDisplay)
+                {
+                    UpdateGlobalRowChart();   // Stage4a：畫布顯示走 LiveDisplayView；row 曲線照合併更新
+                }
+                else if (_globalMergedImage != null)
                 {
                     ShowMergedImageInCanvas(_globalMergedImage, opsArr, posArr);
                     // Global 模式：7 台 row curves 重疊合併

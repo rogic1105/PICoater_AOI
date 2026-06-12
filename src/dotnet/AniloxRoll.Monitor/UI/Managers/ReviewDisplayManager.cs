@@ -29,28 +29,6 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// <summary>sdk 顯示元件（接事件 / 進階用；未建立前 null）。</summary>
         public LiveDisplayView View => _view;
 
-        // ── 強化↔原圖瞬切雙快取：只留「當前 grabId」的原圖/強化兩套灰階（換 ID 清 → 記憶體有界）──
-        private sealed class CachedSet
-        {
-            public byte[][] Gray; public int[] W, H;
-            public double[] Ops, Pos; public int FeedScale; public bool Global;
-        }
-        private string _cacheGrabId;
-        private CachedSet _cacheRaw, _cacheProc;
-
-        /// <summary>快取命中 → 直接 re-push（零解碼，瞬切）。回 false=未命中（caller 走完整載入）。</summary>
-        public bool TryShowCached(string grabId, bool isProcessed)
-        {
-            if (_disposed || _view == null || grabId == null || grabId != _cacheGrabId) return false;
-            var set = isProcessed ? _cacheProc : _cacheRaw;
-            if (set?.Gray == null) return false;
-            _view.SetLayout(set.Pos, set.Ops, Math.Max(1, set.FeedScale), 0);
-            _view.SetMergeMode(set.Global);
-            for (int i = 0; i < set.Gray.Length; i++)
-                if (set.Gray[i] != null) _view.PushFrame(i + 1, set.Gray[i], set.W[i], set.H[i]);
-            return true;
-        }
-
         public ReviewDisplayManager(Control mainUnder, Control[] thumbsUnder)
         {
             _mainUnder = mainUnder ?? throw new ArgumentNullException(nameof(mainUnder));
@@ -105,13 +83,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             // 灰階轉換+推幀進背景（PushFrame 設計上支援背景執行緒＝相機 callback 同路）；
             // Parallel 7 台同時轉，UI 不卡（載入加速 3c）。caller 的 Bitmap 生命週期：RSC 換 ID 才 Dispose 舊圖，
             // 期間夠轉完；防衛起見轉換中例外吞掉（圖被換走時放棄該幀）。
-            if (grabId != _cacheGrabId) { _cacheRaw = null; _cacheProc = null; _cacheGrabId = grabId; } // 換 ID 清快取（有界）
+            // 瞬切雙快取已拆除（2026-06-13 上機：無體感收益且記憶體吃緊）；灰階轉換照走背景。
             var snapshot = (Bitmap[])imgs.Clone();
-            var set = new CachedSet
-            {
-                Gray = new byte[snapshot.Length][], W = new int[snapshot.Length], H = new int[snapshot.Length],
-                Ops = opsUm, Pos = posMm, FeedScale = Math.Max(1, feedScale), Global = mergeMode,
-            };
             System.Threading.Tasks.Task.Run(() =>
             {
                 System.Threading.Tasks.Parallel.For(0, snapshot.Length, i =>
@@ -123,13 +96,10 @@ namespace AniloxRoll.Monitor.UI.Managers
                         byte[] gray;
                         int w, h;
                         lock (bmp) { gray = ToGray8(bmp, out w, out h); }
-                        if (gray == null) return;
-                        set.Gray[i] = gray; set.W[i] = w; set.H[i] = h;   // 進瞬切快取
-                        _view?.PushFrame(i + 1, gray, w, h);
+                        if (gray != null) _view?.PushFrame(i + 1, gray, w, h);
                     }
                     catch { /* 圖在轉換中被釋放（快速換 ID）→ 放棄該幀 */ }
                 });
-                if (isProcessed) _cacheProc = set; else _cacheRaw = set;
             });
         }
 
