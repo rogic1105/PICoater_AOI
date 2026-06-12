@@ -9,7 +9,8 @@ namespace TanukiCv.Core
     ///
     /// 重疊區依合圖方式（<see cref="MergeOverlap"/>）的 boundary **唯一歸屬** —— 與影像合圖共用
     /// 同一份 <see cref="MergeLayout"/> 分界邏輯，重疊區每個全域 bin 只取「該欄歸屬相機」的曲線值，
-    /// 不再平均 → 曲線與影像 pixel 對齊。間空（無曲線）相機不參與分界，該區段留 0。
+    /// 不再平均 → 曲線與影像 pixel 對齊。間空（無曲線）相機**參與分界但不貼資料**（黑占位，
+    /// 同影像合圖 ALL-slots 佈局；在線相機曲線在與黑占位的中線被切，黑布區段留 0）。
     ///
     /// 把「秀」（畫到 chart、帶入視野）留給呼叫端（app / 範例各自接自己的曲線圖）。
     /// </summary>
@@ -86,7 +87,11 @@ namespace TanukiCv.Core
             if (totalLen <= 0 || totalLen > maxPoints + 1) return result;
 
             // 重疊歸屬（與影像合圖共用唯一來源 MergeLayout）：以 gridMm 當基準像素、curve 長度換成 grid 寬，
-            // 算出每台在「全域 grid」的擁有區間 [ownStart, ownEnd)。間空相機不參與 → 其區段沒人擁有 → 留 0。
+            // 算出每台在「全域 grid」的擁有區間 [ownStart, ownEnd)。
+            // 間空相機**參與分界但不貼資料**（黑占位，同影像合圖 ALL-slots 佈局）：
+            //   影像合圖把缺席相機當黑占位算 boundary（在線相機影像在中線被切、之後顯示黑），
+            //   曲線必須同一套切法，否則最後一台在線相機的曲線會跑進黑布區（尾端沒被切、跟影像錯位）。
+            //   間空的寬度用 avgWidthMm 估（同全域範圍的估法）；其擁有區段沒資料可貼 → 留 0。
             // MergeLayout 的 boundary 對相鄰兩台剛好 tile（a.ownEnd == b.ownStart），故無縫且不重疊。
             var ownStart = new int[cameraCount];
             var ownEnd   = new int[cameraCount];
@@ -94,8 +99,9 @@ namespace TanukiCv.Core
             for (int i = 0; i < cameraCount; i++)
             {
                 var c = allMean[i];
-                if (c == null || c.Length == 0) continue;          // 間空不參與分界
-                int wGrid = (int)Math.Round(c.Length * (opsArr[i] / 1000.0) / gridMm);
+                int wGrid = (c != null && c.Length > 0)
+                    ? (int)Math.Round(c.Length * (opsArr[i] / 1000.0) / gridMm)
+                    : (int)Math.Round(avgWidthMm / gridMm);        // 間空：黑占位寬，參與分界
                 geom.Add(new MergeLayout.CamGeom { CameraId = i, StartMm = posArr[i], WidthPx = Math.Max(1, wGrid) });
             }
             foreach (var p in MergeLayout.Compute(geom, globalMin, gridMm, 1, overlap, out _))
