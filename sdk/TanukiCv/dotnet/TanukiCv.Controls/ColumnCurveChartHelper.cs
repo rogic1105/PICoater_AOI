@@ -112,8 +112,11 @@ namespace TanukiCv.Controls
             _logicalRightMm = maxMm;
             GetAdjustedZoom(minMm, maxMm, out double zMin, out double zMax);
             var axisX = _chart.ChartAreas[0].AxisX;
-            axisX.Minimum = Math.Min(_dataMinX, zMin);
-            axisX.Maximum = Math.Max(_dataMaxX, zMax);
+            // ⚠ 拖曳即時跟隨效能：設 Minimum/Maximum 會觸發 MSChart 整張重排版（比 ScaleView.Zoom 貴一級）。
+            //   30fps 連續跟隨時 Min/Max 其實不變（資料沒換）→ 只在真的變了才設，跟隨只走便宜的 Zoom。
+            double newMin = Math.Min(_dataMinX, zMin), newMax = Math.Max(_dataMaxX, zMax);
+            if (axisX.Minimum != newMin) axisX.Minimum = newMin;
+            if (axisX.Maximum != newMax) axisX.Maximum = newMax;
             try { axisX.ScaleView.Zoom(zMin, zMax); }
             catch (Exception ex)
             {
@@ -177,8 +180,11 @@ namespace TanukiCv.Controls
         {
             GetAdjustedZoom(logicalLeft, logicalRight, out double zMin, out double zMax);
             var axisX = _chart.ChartAreas[0].AxisX;
-            axisX.Minimum = Math.Min(_dataMinX, zMin);
-            axisX.Maximum = Math.Max(_dataMaxX, zMax);
+            // ⚠ 拖曳即時跟隨效能：設 Minimum/Maximum 會觸發 MSChart 整張重排版（比 ScaleView.Zoom 貴一級）。
+            //   30fps 連續跟隨時 Min/Max 其實不變（資料沒換）→ 只在真的變了才設，跟隨只走便宜的 Zoom。
+            double newMin = Math.Min(_dataMinX, zMin), newMax = Math.Max(_dataMaxX, zMax);
+            if (axisX.Minimum != newMin) axisX.Minimum = newMin;
+            if (axisX.Maximum != newMax) axisX.Maximum = newMax;
             try { axisX.ScaleView.Zoom(zMin, zMax); }
             catch (Exception ex)
             {

@@ -87,8 +87,10 @@ namespace TanukiCv.Controls
 
             GetAdjustedZoom(canvasTopMm, canvasBotMm, out double zMin, out double zMax);
             var axisY = _chart.ChartAreas[0].AxisY;
-            axisY.Minimum = Math.Min(0, zMin);
-            axisY.Maximum = Math.Max(_totalMm, zMax);
+            // 同 ColumnCurveChartHelper：Min/Max 變了才設（避免拖曳跟隨時每次整張重排版）。
+            double newMin = Math.Min(0, zMin), newMax = Math.Max(_totalMm, zMax);
+            if (axisY.Minimum != newMin) axisY.Minimum = newMin;
+            if (axisY.Maximum != newMax) axisY.Maximum = newMax;
             try { axisY.ScaleView.Zoom(zMin, zMax); }
             catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[RowCurveChartHelper.UpdateViewRange] {ex.GetType().Name}: {ex.Message}"); }
         }
