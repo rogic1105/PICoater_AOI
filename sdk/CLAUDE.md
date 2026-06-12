@@ -11,6 +11,43 @@
 4. **vendored third-party 隨元件走** — 如 `TanukiCv/third_party/stb`，split 時一起帶。
 5. **拋棄層 vs durable 層要分清** — 「換硬體就整包丟」的程式碼（MIL grabber 封裝）留在 `MIL/`，可重用的演算法（合圖佈局、像素↔mm）放 `TanukiCv/`（durable，跨產品共用）。可重用 IP 不該困在拋棄層。
 
+## 架構原則：演算法分層（kernel → primitive → module → pipeline → api → src）
+
+任何影像/演算法功能，按這個堆疊放（依賴單向往下；違反即停下重組）：
+
+```
+kernel       __global__ GPU code               （tanuki_core 內最底，X_kernels.cu）
+  ↑ 包一顆 kernel + 算 grid/block + launch
+primitive    threshold_u8_gpu / gaussianBlur…  （🟢 tanuki_core 對外 API＝「一個動作」）
+  ↑ 組多個 primitive + 實作 IModule 介面
+module       ridge_hessian / background_sub    （🔵 tanuki_pipeline/modules＝可換的「步驟/方法」）
+  ↑ 串起來（食譜）
+pipeline     find_stream_ridgeline             （🟣 tanuki_pipeline/pipelines＝完整「解決方案」）
+  ↑ 單一出口
+api          tanuki_pipeline_api.dll           （🟠 TanukiPipeline_Create(name,json)/Process(...,json,...)）
+  ↑ P/Invoke
+src (C# UI)  選 pipeline 名 + 給 json 參數     （⚪ 產品 UI；src 不放演算法）
+```
+
+**判準（新功能放哪一層）：**
+- 「**一個動作**」（包一顆 kernel）→ core primitive（如 `calcColumnBackground`、`computeHessianResponse`）
+- 「**一串步驟 / 一種方法**」（組幾個 primitive、可被換掉）→ module（如 hessian 法找脊線）
+- 「**端到端解決方案**」（串 module）→ pipeline
+
+**擴充模式（不破既有結構）：**
+- 同目標**換方法**（hessian→gabor）＝新 module 實作 IModule + 食譜加分支，**不開 `pipeline_2`**
+- 加**新 pipeline** ＝ `TanukiPipeline_Create` 加分支 + C# 換 name 字串（API 單一簽名不變）
+- 加**演算法參數** ＝ json 加 key（各 pipeline parse 自己的；**不破 C ABI、不改 P/Invoke**）
+- 指標類（GPU/host buffer）**不進 json**：input/output struct + 獨立引數
+
+**反模式：**
+- ❌ 把多步驟組合塞進 core 當 primitive（如已刪除的 `hessianRidge_u8_gpu`＝blur+hessian+scale）
+- ❌ module 之間直接互呼（只透過 OutputBuffers 傳遞、由 pipeline 排順序）
+- ❌ 演算法寫在 src/（src 只剩 UI）
+- ❌ 用 registry 名字選 module 卻不補 static-lib link-drop 保險（目前食譜 direct-new 刻意避開；真用 registry 再補 `RegisterBuiltinModules`）
+
+歷史與細節：`docs/dev/migration-native-to-sdk-pipeline.md`（已完成的遷移紀錄）。
+
 ## 元件地圖
 
 ```
@@ -21,13 +58,10 @@ sdk/
 │   │     `namespace tanuki::core{}` 形式）。避開超常見 `core` 撞名，供其他 C++ 專案 source/header 重用。
 │   │     對外 C API = `extern "C" TanukiCv_*`（DLL `tanuki_cv_api.dll`；.NET P/Invoke 不碰 namespace）。
 │   │     tanuki_utils namespace = `tanuki::utils`（原 `Color` 已收編）。源碼一律 UTF-8 + vcxproj 帶 /utf-8
-│   │     ★ tanuki_pipeline（namespace `tanuki::pipeline`）= 演算法流程層（從 src/native 搬入；分層 core→module→pipeline）：
-│   │       framework/（IModule + Pipeline 工頭 + ModuleRegistry）；modules/（background_sub、ridge_hessian＝
-│   │       組合 core primitive 的「可換步驟」，換方法=換 module）；pipelines/find_stream_ridgeline/（食譜＝串 module，
-│   │       找流水圖脊線=mura 檢測，含 README+benchmark）；api/（tanuki_pipeline_api.dll，4b 定版：`TanukiPipeline_Create(name,json)`/`Process(...,json,...)` 單一簽名服務所有 pipeline；參數 json 化、加參數不破 ABI；json_lite 零依賴 parser）。
-│   │       判準：包一顆 kernel=core primitive；組幾個 primitive 成可換步驟=module；串 module 成完整流程=pipeline。
-│   │       狀態：**遷移完成**——app 已切換（DllImport=tanuki_pipeline_api.dll、上機驗過）、src/native + 舊 picoater_api + bench_framework 已刪除。
-│   │       詳見 `docs/dev/migration-native-to-sdk-pipeline.md`
+│   │     ★ tanuki_pipeline（namespace `tanuki::pipeline`）= 演算法流程層（分層見上方「架構原則：演算法分層」）：
+│   │       framework/（IModule + Pipeline 工頭 + ModuleRegistry）；modules/（background_sub、ridge_hessian）；
+│   │       pipelines/find_stream_ridgeline/（找流水圖脊線=mura 檢測，含 README+benchmark）；
+│   │       api/（tanuki_pipeline_api.dll＝app P/Invoke 出口；json_lite 零依賴 parser）
 │   ├── dotnet/
 │   │   ├── TanukiCv.Core         ← 純 library（無 WinForms）：PixelMmMapper 像素↔mm、SystemInfo、PerfTimer、
 │   │   │                             MergeLayout（合圖佈局唯一來源）、CurveOverviewMerger（切向全覽曲線合併唯一來源）
