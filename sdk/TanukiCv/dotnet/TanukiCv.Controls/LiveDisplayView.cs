@@ -241,8 +241,34 @@ namespace TanukiCv.Controls
 
         // ==================== UI timer（33ms）：主畫面更新（縮圖由 ThumbStrip 自管）====================
 
+        /// <summary>縮圖↔主畫面雙向連動（反向）：合圖模式視野中心最近的相機 → 自動高亮縮圖
+        /// （不觸發 SelectRequested 防遞迴）。OnCanvasStatus（互動）+ 33ms timer（快拖事件合併時補刷，
+        /// 中間相機不被跳過）兩處呼叫；計算極便宜（找最近 placement 中心）。</summary>
+        private void UpdateReverseThumbSync()
+        {
+            if (!_mergeMode || _mergePlacements == null || _canvas == null) return;
+            float zoom = _canvas.Zoom;
+            if (zoom <= 0) return;
+            int k = Math.Max(1, _mergeCapK);
+            double viewCenterPx = (_canvas.Width / 2.0 - _canvas.PanOffset.X) / zoom; // capped 顯示座標
+            int bestCam = 0; double bestDist = double.MaxValue;
+            foreach (var p in _mergePlacements)
+            {
+                double c = (p.DestX + p.SrcWidth / 2.0) / k;
+                double d = Math.Abs(viewCenterPx - c);
+                if (d < bestDist) { bestDist = d; bestCam = p.CameraId; }
+            }
+            if (bestCam > 0 && bestCam != _selectedCamId)
+            {
+                _selectedCamId = bestCam;                  // 只更新欄位+高亮，不設 _mainDirty（合圖畫面不需重建）
+                _thumbStrip?.SetSelected(bestCam - 1);
+                SelectedCamChanged?.Invoke(bestCam);
+            }
+        }
+
         private void RefreshMain()
         {
+            UpdateReverseThumbSync();   // 快拖補刷（33ms；StatusChanged 限流時的保險）
             if (_disposed || _canvas == null || _canvas.IsDisposed) return;
 
             // 合圖湊不齊（某台停了）但有新幀且逾 200ms → 強制補一次，避免凍住
@@ -508,25 +534,7 @@ namespace TanukiCv.Controls
 
             ViewRangeMmChanged?.Invoke(leftMm, rightMm, topMm, botMm);
 
-            // 縮圖↔主畫面雙向連動（反向）：合圖模式視野中心最近的相機 → 自動高亮縮圖（不觸發 SelectRequested 防遞迴）。
-            if (_mergeMode && _mergePlacements != null)
-            {
-                int k = Math.Max(1, _mergeCapK);
-                double viewCenterPx = (_canvas.Width / 2.0 - info.PanOffset.X) / info.Zoom; // capped 顯示座標
-                int bestCam = 0; double bestDist = double.MaxValue;
-                foreach (var p in _mergePlacements)
-                {
-                    double c = (p.DestX + p.SrcWidth / 2.0) / k;
-                    double d = Math.Abs(viewCenterPx - c);
-                    if (d < bestDist) { bestDist = d; bestCam = p.CameraId; }
-                }
-                if (bestCam > 0 && bestCam != _selectedCamId)
-                {
-                    _selectedCamId = bestCam;                  // 只更新欄位+高亮，不設 _mainDirty（合圖畫面不需重建）
-                    _thumbStrip?.SetSelected(bestCam - 1);
-                    SelectedCamChanged?.Invoke(bestCam);
-                }
-            }
+            UpdateReverseThumbSync();
 
             // L0 游標剖面（游標那列/行的原始像素 → 曲線圖。座標跟影像同源 → 自動對齊）。
             // 單張：取選定相機全幀那列/行。合圖：游標列橫跨整張合圖（用 BuildMerge 同一份 _mergePlacements

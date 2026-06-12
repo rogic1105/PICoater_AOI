@@ -128,6 +128,15 @@ namespace AniloxRoll.Monitor.Forms
             if (idx < 0 || idx >= _dataStatsPresenter.GrabIdInfos.Count) return;
             _interactionHelper.SaveCanvasView();
             var info = _dataStatsPresenter.GrabIdInfos[idx];
+            // 強化↔原圖瞬切：同 grabId 的兩套灰階已在快取 → 直接 re-push（零解碼）。
+            // 曲線（bins）不隨強化改變 → chart 不用重載。未命中走完整載入（載完自動進快取）。
+            if (AniloxRollFormReviewFlags.UseSameSourceDisplay
+                && _reviewDisplayManager != null
+                && _reviewDisplayManager.TryShowCached(info.GrabId, enableProcess))
+            {
+                _stitchCoordinator.LastReviewProcessedMode = enableProcess;
+                return;
+            }
             await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest, enableProcess);
         }
 

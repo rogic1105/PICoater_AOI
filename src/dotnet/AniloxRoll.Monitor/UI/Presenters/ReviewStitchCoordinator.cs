@@ -90,7 +90,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// </summary>
         /// <summary>#13 同源新路徑：一組 grab 影像載好（7 台拼接圖 + CFG 有效 ops/pos + 是否 Global）。
         /// Form 訂閱 → ReviewDisplayManager.PushImages（LiveDisplayView 顯示）；舊 canvas 路徑照跑（平行建新）。</summary>
-        public event Action<System.Drawing.Bitmap[], double[], double[], bool> StitchedImagesReady;
+        public event Action<System.Drawing.Bitmap[], double[], double[], bool, string, bool> StitchedImagesReady; // imgs, ops, pos, isGlobal, grabId, isProcessed（瞬切快取鍵）
 
         public Task LoadGrabStitchedViewAsync(string grabId, DateTime hintFrom, DateTime hintTo)
             => LoadGrabStitchedViewAsync(grabId, hintFrom, hintTo, LastReviewProcessedMode);
@@ -194,7 +194,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 var opsEff = opsArr ?? grabCfg?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
                 var posEff = posArr ?? grabCfg?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
                 StitchedImagesReady?.Invoke(_stitchedImages, opsEff, posEff,
-                    _ctx.Settings.StitchMode == StitchMode.Global);
+                    _ctx.Settings.StitchMode == StitchMode.Global, grabId, enableProcess);
 
                 if (_globalMergedImage != null)
                 {
