@@ -41,10 +41,25 @@ src (C# UI)  選 pipeline 名 + 給 json 參數     （⚪ 產品 UI；src 不�
 - 指標類（GPU/host buffer）**不進 json**：input/output struct + 獨立引數
 
 **反模式：**
-- ❌ 把多步驟組合塞進 core 當 primitive（如已刪除的 `hessianRidge_u8_gpu`＝blur+hessian+scale）
+- ❌ 把帶產品 policy 的組合塞進 core（如已刪除的 `hessianRidge_u8_gpu`＝blur+hessian+scale+產品 mode/scale 語意）
 - ❌ module 之間直接互呼（只透過 OutputBuffers 傳遞、由 pipeline 排順序）
 - ❌ 演算法寫在 src/（src 只剩 UI）
 - ❌ 用 registry 名字選 module 卻不補 static-lib link-drop 保險（目前食譜 direct-new 刻意避開；真用 registry 再補 `RegisterBuiltinModules`）
+
+### 新增影像演算法 SOP（agent 照此執行，例：要一個 tophat）
+
+1. **先搜現有，禁止平行造輪子**：grep `sdk/TanukiCv/native/tanuki_core/include/tanuki/core/imgproc/*.hpp`
+   的對外宣告（同義詞也搜：morphology/erode/dilate/open/close…）。已有 → 直接用；有部分（如已有 erode/dilate）→ 只補缺的，組合重用。
+2. **判層（看 policy，不只看顆數）**：
+   - 業界標準、無產品 policy 的**通用算子 → core**——即使是薄組合（如 `tophat_u8_gpu` = erode→dilate→sub，
+     OpenCV morphologyEx 同款），實作內**重用既有 primitive**、註解寫明「組合自 X+Y」；缺的底層 kernel 才新寫。
+   - 帶**產品語意 / 可換方法**（「用 tophat 法做去背」）→ module（組合 core 算子 + 實作 IModule），食譜加分支。
+3. **命名與落點**：`動詞/算子名_型別_gpu`（型別後綴定案，見 TanukiCv README §3）；kernel 放
+   `src/imgproc/<分類>/X_kernels.cu`、host wrapper 放 `X_ops.cu`、宣告加進對應 `core_<分類>.hpp`。
+   分類不存在才開新資料夾（先看 filters/features/transform/utils/background 能不能容納）。
+   GPU scratch buffer：優先 caller 傳 workspace（參數註明大小），勿在 op 內隱性 cudaMalloc 每幀配。
+4. **驗證**：tanuki_core_bench 加一個 case（效能相關才加）；nvcc 注意傳統巢狀 namespace。
+5. **文件**：對應 `core_<分類>.hpp` 的宣告加一行中文註解；本檔元件地圖若新增分類才更新。
 
 歷史與細節：`docs/dev/migration-native-to-sdk-pipeline.md`（已完成的遷移紀錄）。
 
