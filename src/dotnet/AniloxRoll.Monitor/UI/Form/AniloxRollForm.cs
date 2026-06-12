@@ -156,6 +156,7 @@ namespace AniloxRoll.Monitor.Forms
             try { _liveOverviewTimer?.Stop(); } catch { }
             try { _statsRefreshDebouncer?.Stop(); _statsRefreshDebouncer?.Dispose(); _statsRefreshDebouncer = null; } catch { }  // H3 + round-2 H3 補 Dispose
             try { _cleanupFlagWatcher?.Dispose(); _cleanupFlagWatcher = null; } catch { }  // M3: 10 秒輪詢提前停
+            try { _reviewDisplayManager?.Dispose(); _reviewDisplayManager = null; } catch { }  // #13 同源顯示（內含 33ms timer）
             try { System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged; } catch { }
         }
 
@@ -547,6 +548,12 @@ namespace AniloxRoll.Monitor.Forms
                     new System.Windows.Forms.Control[] { camReview1, camReview2, camReview3, camReview4, camReview5, camReview6, camReview7 });
                 _stitchCoordinator.StitchedImagesReady += (imgs, ops, pos, isGlobal) =>
                     _reviewDisplayManager.PushImages(imgs, ops, pos, isGlobal, _interactionHelper?.ScreenMmPerPixel ?? 0);
+                // Stage2：新 canvas 視野 → 回顧曲線圖 zoom 連動（切向=全覽 X、法向=Y；拖曳中即時）
+                _reviewDisplayManager.ViewRangeMmChanged += (l, r, top, bot) =>
+                {
+                    _reviewOverviewHelper?.UpdateViewRange(l, r);
+                    _reviewRowChartHelper?.UpdateViewRange(top, bot);
+                };
             }
 
             _stitchCoordinator.StitchedCurveUpdated += (mean, max, ops, pos, errMean, errMax) =>
