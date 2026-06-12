@@ -344,7 +344,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 HessianRescaleHelper.RescaleInPlace1D(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
                 FlipRowCurveIfNeeded(mergedMean, mergedMax);
                 _ctx.RowChartHelper.UpdateData(mergedMean, mergedMax);
-                _ctx.InteractionHelper.RefreshRowChartRange();
+                var nv = SameSourceViewRange?.Invoke();
+                if (nv != null) _ctx.RowChartHelper.UpdateViewRange(nv[2], nv[3]);   // 新路徑：原子帶入當前 Y 視野
+                else _ctx.InteractionHelper.RefreshRowChartRange();
             }
         }
 
@@ -641,8 +643,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
         }
 
+        /// <summary>#13 同源新路徑的「當前視野」注入（form 快取 LiveDisplayView 視野；[l,r,top,bot]，null=無效）。
+        /// chart 更新原子帶入此值 → 重載/強化切換不會先閃回預設再跟隨（同 Live 的 _liveViewLeftMm 解法）。</summary>
+        public Func<double[]> SameSourceViewRange { get; set; }
+
         private double ViewRangeProvider(int cameraIndex, bool isLeft, double defaultValue)
         {
+            var nv = SameSourceViewRange?.Invoke();
+            if (nv != null) return isLeft ? nv[0] : nv[1];
             if (_ctx.InteractionHelper == null) return defaultValue;
             if (!_ctx.InteractionHelper.TryComputeCurrentViewRange(cameraIndex, out double left, out double right))
                 return defaultValue;

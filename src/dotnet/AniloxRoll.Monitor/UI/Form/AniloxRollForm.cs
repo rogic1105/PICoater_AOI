@@ -38,6 +38,7 @@ namespace AniloxRoll.Monitor.Forms
         private DateTimeNavigator _dateTimeNavigator;
         private ThumbnailGridPresenter _galleryManager;
         private ReviewDisplayManager _reviewDisplayManager;   // #13 同源新路徑（旗標 UseSameSourceDisplay）
+        private double _reviewViewLeftMm = double.NaN, _reviewViewRightMm, _reviewViewTopMm, _reviewViewBotMm; // 新畫布視野快取（chart 原子更新用）
         private AniloxRollPresenter _presenter;
         private FormInteractionHelper _interactionHelper;
         private ColumnCurveChartHelper _reviewOverviewHelper;
@@ -552,9 +553,14 @@ namespace AniloxRoll.Monitor.Forms
                 // Stage2：新 canvas 視野 → 回顧曲線圖 zoom 連動（切向=全覽 X、法向=Y；拖曳中即時）
                 _reviewDisplayManager.ViewRangeMmChanged += (l, r, top, bot) =>
                 {
+                    _reviewViewLeftMm = l; _reviewViewRightMm = r; _reviewViewTopMm = top; _reviewViewBotMm = bot;
                     _reviewOverviewHelper?.UpdateViewRange(l, r);
                     _reviewRowChartHelper?.UpdateViewRange(top, bot);
                 };
+                // chart 重建（重載/強化切換）原子帶入當前視野 → 不先閃回預設（同 Live 解法）
+                _stitchCoordinator.SameSourceViewRange = () =>
+                    double.IsNaN(_reviewViewLeftMm) ? null
+                    : new[] { _reviewViewLeftMm, _reviewViewRightMm, _reviewViewTopMm, _reviewViewBotMm };
             }
 
             _stitchCoordinator.StitchedCurveUpdated += (mean, max, ops, pos, errMean, errMax) =>
