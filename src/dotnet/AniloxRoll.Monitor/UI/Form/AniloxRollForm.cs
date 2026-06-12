@@ -37,6 +37,7 @@ namespace AniloxRoll.Monitor.Forms
         // --- UI Helpers ---
         private DateTimeNavigator _dateTimeNavigator;
         private ThumbnailGridPresenter _galleryManager;
+        private ReviewDisplayManager _reviewDisplayManager;   // #13 同源新路徑（旗標 UseSameSourceDisplay）
         private AniloxRollPresenter _presenter;
         private FormInteractionHelper _interactionHelper;
         private ColumnCurveChartHelper _reviewOverviewHelper;
@@ -538,6 +539,15 @@ namespace AniloxRoll.Monitor.Forms
                 DateTimeNavigator         = _dateTimeNavigator,
                 CameraCount               = CameraCount,
             });
+
+            // #13 絞殺榕收官 Stage1：回顧主畫面平行接 LiveDisplayView（Designer 不動、runtime 疊加；旗標可回滾）
+            if (AniloxRollFormReviewFlags.UseSameSourceDisplay)
+            {
+                _reviewDisplayManager = new ReviewDisplayManager(camReviewMain,
+                    new System.Windows.Forms.Control[] { camReview1, camReview2, camReview3, camReview4, camReview5, camReview6, camReview7 });
+                _stitchCoordinator.StitchedImagesReady += (imgs, ops, pos, isGlobal) =>
+                    _reviewDisplayManager.PushImages(imgs, ops, pos, isGlobal, _interactionHelper?.ScreenMmPerPixel ?? 0);
+            }
 
             _stitchCoordinator.StitchedCurveUpdated += (mean, max, ops, pos, errMean, errMax) =>
                 _dataStatsPresenter?.SyncMuraProfileFromReview(mean, max, ops, pos, errMean, errMax);

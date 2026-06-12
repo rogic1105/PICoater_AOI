@@ -184,6 +184,7 @@
     </Compile>
     <Compile Include="UI\Widgets\FormInteractionHelper.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.cs" />
+    <Compile Include="UI\Managers\ReviewDisplayManager.cs" />
     <Compile Include="UI\Widgets\CurveMergeHelper.cs" />
     <Compile Include="UI\Widgets\BitmapPool.cs" />
     <Compile Include="UI\Widgets\TrackBarWheelInterceptor.cs" />
