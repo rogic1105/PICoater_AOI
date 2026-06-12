@@ -55,30 +55,20 @@ namespace AniloxRoll.Monitor.Forms
 
         private void UpdateLiveDirectionVisual()
         {
-            var highlight    = System.Drawing.Color.FromArgb(230, 240, 255);
-            var normal       = System.Drawing.SystemColors.Control;
-            var orangeBorder = System.Drawing.Color.FromArgb(255, 140, 0);
-            var noColor      = System.Drawing.Color.Transparent;
-            bool isGlobal    = _settings?.StitchMode == StitchMode.Global;
-
+            // 視覺規則（2026-06-12 改版）：藍底＝該方向強化圖顯示中；mode 底色 + 橘框已廢
+            //（mode 雙 chart 切換器已隨舊單台切向 chart 刪除；StitchMode 走 PropertyGrid）。
+            var enhanceBg = System.Drawing.Color.FromArgb(230, 240, 255);
+            var normal    = System.Drawing.SystemColors.Control;
             string dir = (_settings?.EnableMuraEnhance == true) ? _liveDisplayDirection : null;
-            bool vVertActive = !isGlobal && dir == "v";
-            bool vGlobActive =  isGlobal && dir == "v";
-            bool hActive     = dir == "h";
 
-            chartLiveVertical.BackColor           = isGlobal ? highlight : normal;
-            chartLiveVertical.BorderlineColor     = vGlobActive ? orangeBorder : noColor;
-            chartLiveVertical.BorderlineWidth     = vGlobActive ? 2 : 1;
-            chartLiveVertical.BorderlineDashStyle = vGlobActive
-                ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
-                : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
-
-            chartLiveHorizontal.BackColor           = normal;
-            chartLiveHorizontal.BorderlineColor     = hActive ? orangeBorder : noColor;
-            chartLiveHorizontal.BorderlineWidth     = hActive ? 2 : 1;
-            chartLiveHorizontal.BorderlineDashStyle = hActive
-                ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
-                : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
+            chartLiveVertical.BackColor   = dir == "v" ? enhanceBg : normal;
+            chartLiveHorizontal.BackColor = dir == "h" ? enhanceBg : normal;
+            foreach (var c in new[] { chartLiveVertical, chartLiveHorizontal })
+            {
+                c.BorderlineColor = System.Drawing.Color.Transparent;
+                c.BorderlineWidth = 1;
+                c.BorderlineDashStyle = System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
+            }
         }
 
         /// <summary>
@@ -227,33 +217,19 @@ namespace AniloxRoll.Monitor.Forms
 
         private void UpdateRidgeDirectionVisual(string dir)
         {
-            var highlight    = System.Drawing.Color.FromArgb(230, 240, 255);
-            var normal       = System.Drawing.SystemColors.Control;
-            var orangeBorder = System.Drawing.Color.FromArgb(255, 140, 0);
-            var noColor      = System.Drawing.Color.Transparent;
-            bool isGlobal    = _settings?.StitchMode == StitchMode.Global;
+            // 視覺規則（2026-06-12 改版）：藍底＝該方向強化圖顯示中；mode 底色 + 橘框已廢（同 Live）。
+            var enhanceBg = System.Drawing.Color.FromArgb(230, 240, 255);
+            var normal    = System.Drawing.SystemColors.Control;
 
-            // 橘框：強化方向（同前）
-            bool vVertActive = !isGlobal && dir == "v";
-            bool vGlobActive =  isGlobal && dir == "v";
-            bool hActive     = dir == "h";
-
-            // 淡藍底色：合圖方式指示（Vertical → 切向圖；Global → 全覽圖）
-            chartReviewVertical.BackColor           = isGlobal ? highlight : normal;
-            chartReviewVertical.BorderlineColor     = vGlobActive ? orangeBorder : noColor;
-            chartReviewVertical.BorderlineWidth     = vGlobActive ? 2 : 1;
-            chartReviewVertical.BorderlineDashStyle = vGlobActive
-                ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
-                : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
-
+            chartReviewVertical.BackColor = dir == "v" ? enhanceBg : normal;
             if (chartReviewHorizontal != null)
+                chartReviewHorizontal.BackColor = dir == "h" ? enhanceBg : normal;
+            foreach (var c in new[] { chartReviewVertical, chartReviewHorizontal })
             {
-                chartReviewHorizontal.BackColor           = normal; // 法向圖不需合圖模式底色
-                chartReviewHorizontal.BorderlineColor     = hActive ? orangeBorder : noColor;
-                chartReviewHorizontal.BorderlineWidth     = hActive ? 2 : 1;
-                chartReviewHorizontal.BorderlineDashStyle = hActive
-                    ? System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid
-                    : System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
+                if (c == null) continue;
+                c.BorderlineColor = System.Drawing.Color.Transparent;
+                c.BorderlineWidth = 1;
+                c.BorderlineDashStyle = System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.NotSet;
             }
         }
     }
