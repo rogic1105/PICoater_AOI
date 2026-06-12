@@ -129,6 +129,7 @@ namespace MilGrabber.Monitor
 
             if (_live != null)
             {
+                _live.ThumbSelectedColor = _settings.ThumbBorder;   // 選取框唯一來源 = sdk ThumbView，色由設定層選
                 _live.MergeAll      = _mergeAllMode;
                 _live.SetMergeMode(_mergeMode);
                 _live.MergeStrategy = (MergeOverlap)_mergeStrategy;
@@ -218,6 +219,8 @@ namespace MilGrabber.Monitor
             public int FovMm { get; set; } = 400;
             [Category("顯示")][DisplayName("縮圖倍率")][Description("餵入降採樣倍率（1=全解析度；>1 先 CPU stride 降採樣再餵）")]
             public int ResizeScale { get; set; } = 1;
+            [Category("顯示")][DisplayName("選取框色")][Description("縮圖選取高亮框色（sdk ThumbView 唯一來源；各 UI 自選）")]
+            public Color ThumbBorder { get; set; } = Color.Orange;
 
             [Category("合圖佈局")][DisplayName("OPS (µm)")]  public CamRow8 Ops   { get; } = new CamRow8();
             [Category("合圖佈局")][DisplayName("Start (mm)")] public CamRow8 Start { get; } = new CamRow8();

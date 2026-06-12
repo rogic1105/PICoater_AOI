@@ -169,7 +169,9 @@ namespace MilGrabber.Monitor
         private void OnCamPanelPaint(object sender, PaintEventArgs e, int idx)
         {
             if (!(sender is Panel panel)) return;
-            bool isSelected = idx == _selectedCam;
+            // PictureBox 模式選取框唯一來源 = sdk ThumbView（色由 PbSettings 選）；容器只畫中性灰框。
+            // MIL 直繪模式（無 ThumbView）仍由此畫橘框。
+            bool isSelected = idx == _selectedCam && _live == null;
             Color borderColor = isSelected ? Color.Orange : Color.FromArgb(60, 60, 60);
             int borderWidth = isSelected ? 3 : 1;
             ControlPaint.DrawBorder(e.Graphics, panel.ClientRectangle,
