@@ -520,7 +520,9 @@ namespace AniloxRoll.Monitor.UI.Managers
         private void OnLivePanelPaint(object sender, PaintEventArgs e, int cameraIndex)
         {
             if (!(sender is Panel panel)) return;
-            bool isSelected = cameraIndex == _selectedMainCameraId;
+            // SmartCanvas 模式選取框唯一來源 = sdk ThumbView（橘）；父 panel 只畫中性灰框（避免雙框）。
+            // MIL 直繪模式（無 ThumbView）仍由此畫橘框。
+            bool isSelected = cameraIndex == _selectedMainCameraId && !SmartCanvasMode;
             Color borderColor = isSelected ? Color.Orange : Color.FromArgb(60, 60, 60);
             int   borderWidth = isSelected ? 3 : 1;
             ControlPaint.DrawBorder(e.Graphics, panel.ClientRectangle,
