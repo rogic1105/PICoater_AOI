@@ -903,67 +903,33 @@ namespace AniloxRoll.Monitor.Forms
                 if (_liveCameraManager?.IsLiveGrabbing == true)
                     _inspectionLogService?.ForceWriteConfig(CsvConfigSnapshot.FromSettings(_settings));
 
-                // ── 機台角色：寫 app-mode.json（早退） ────────────────────────
-                if (c.Name == nameof(InspectionSettings.AppRole))
-                {
-                    if (_appMode == null) _appMode = new AppModeConfig();
-                    _appMode.Role = _settings.AppRole;
-                    _appMode.Save();
-                    MessageBox.Show("機台角色已儲存，重新開啟程式後生效。",
-                        "機台設定", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return;
-                }
+                // ── 各 feature 副作用 dispatch（Wave3 選項1：邏輯搬各 feature partial；
+                //    dispatcher 只「持鎖 + 跑共用前段 + 依序 fan-out」，不擁有 feature 細節）──────────
+                if (HandleAppRoleSettingsChanged(c.Name)) return;  // 早退：機台角色（寫 app-mode.json）
+                HandleLiveLayoutSettingsChanged(c.Name);           // 動態 LOD + OPS/Start 合圖佈局（Live.cs）
+                HandleChartScaleSettingsChanged(c.Name);           // 檢測報表 Y 軸（Data.cs）
+                HandleLightSettingsChanged(c.Name);                // 光源（HardwareStatus.cs）
+                await HandleEnhanceSettingsChanged(c.Name);        // 監控/回顧強化（Live.cs）
+                HandleMuraPauseSettingsChanged(c.Name);            // IO 檢測暫停 LED（HardwareStatus.cs）
+                HandleAlgorithmSettingsChanged(c.Name);            // 去背演算法（Background.cs）
 
-                // ── 動態 LOD 變更 → 即時套到 LiveDisplayView ───────────────────
-                if (c.Name == nameof(InspectionSettings.hf_LiveLod))
-                    _liveCameraManager?.SetLodMode(_settings.LiveLod);
-
-                // ── OPS/Start 變更 → Live 全域合圖佈局即時更新 ────────────────
-                if (OpsStartSettingNames.Contains(c.Name))
-                {
-                    if (_liveCameraManager?.IsGlobalMergeActive == true)
-                        _liveCameraManager.RefreshGlobalMergeLayout(
-                            _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
-                }
-
-                // ── 檢測報表設定 ──────────────────────────────────────────────
-                if (c.Name == nameof(InspectionSettings.gb_ChartScaleMode))
-                    _dataStatsPresenter.ApplyChartScaleFromSettings();
-                else if (c.Name == nameof(InspectionSettings.gc_YearlyYMax))
-                    _dataStatsPresenter.ApplyFixedScaleForChart("Yearly", _settings.Chart.YearlyYMax);
-                else if (c.Name == nameof(InspectionSettings.gd_MonthlyYMax))
-                    _dataStatsPresenter.ApplyFixedScaleForChart("Monthly", _settings.Chart.MonthlyYMax);
-                else if (c.Name == nameof(InspectionSettings.ge_DailyYMax))
-                    _dataStatsPresenter.ApplyFixedScaleForChart("Daily", _settings.Chart.DailyYMax);
-
-                // ── 光源設定 ──────────────────────────────────────────────────
-                HandleLightSettingsChanged(c.Name);
-
-                // ── 強化 setting ──────────────────────────────────────────────
-                if (c.Name == nameof(InspectionSettings.hc_EnableMuraEnhance))
-                    ApplyMuraEnhance(_settings.EnableMuraEnhance);
-                if (c.Name == nameof(InspectionSettings.hd_EnableReviewEnhance))
-                    await ApplyReviewEnhance(_settings.EnableReviewEnhance);
-
-                // ── IO 設定（檢測暫停） ───────────────────────────────────────
-                // 取消暫停一律先顯示 ×；下次 IO snapshot 來時 UpdateIoLeds 會更新真實 ◎/×
-                if (c.Name == nameof(InspectionSettings.MuraDetectPaused))
-                    UpdateMuraLed(false);
-
-                // ── Algorithm 變更 ────────────────────────────────────────────
-                if (c.Name == "db_Algorithm" || c.Name == nameof(InspectionRecipe.Algorithm) || c.Name == "去背演算法")
-                {
-                    if (_liveCameraManager.IsAllocated) LoadBackgroundBins();
-                    UpdateStandardBgSubLockState();
-                }
-
-                // ── Recipe 變更（正規值 / 閾值 / 演算法 / Ridge 方向） ─────────
-                // 影響：PASS/FAIL 判定 + 閾值線 + 曲線坡度（共用前段的 SetThresholds + UpdateStitchedOverviewChart 已處理）
-                // 不影響：影像 bytes（無需 reload 主畫面）。
-                // TODO：未來實作「重算 .bin curve」時在此分支補上。原本 pre-existing 的 reload 行為移除。
+                // 註：Recipe 變更（正規值/閾值/Ridge 方向）影響 PASS/FAIL + 閾值線 + 曲線坡度，
+                //     已由共用前段（SetThresholds + UpdateStitchedOverviewChart）處理；不影響影像 bytes，無需 reload。
             }
             catch (Exception ex) { Trace.WriteLine($"[OnSettingChanged {c?.Name}] {ex}"); }
             finally { _onSettingChangedSemaphore.Release(); }
+        }
+
+        /// <summary>機台角色變更 → 寫 app-mode.json + 提示重開。回 true=已處理（dispatcher 早退、跳過其餘 feature）。</summary>
+        private bool HandleAppRoleSettingsChanged(string name)
+        {
+            if (name != nameof(InspectionSettings.AppRole)) return false;
+            if (_appMode == null) _appMode = new AppModeConfig();
+            _appMode.Role = _settings.AppRole;
+            _appMode.Save();
+            MessageBox.Show("機台角色已儲存，重新開啟程式後生效。",
+                "機台設定", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return true;
         }
 
         // OPS/Start setting 名稱清單（用來判斷是不是「機台佈局」群組的 setting）
