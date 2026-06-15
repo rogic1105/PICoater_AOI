@@ -1,3 +1,4 @@
+using TanukiCv.Controls;
 using System;
 using System.Collections.Generic;
 using System.Drawing;

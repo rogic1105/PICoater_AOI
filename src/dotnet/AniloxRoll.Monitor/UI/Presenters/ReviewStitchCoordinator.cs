@@ -271,13 +271,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (_globalMergedImage != null)
             {
                 if (_ctx.Canvas.Image == _globalMergedImage) _ctx.Canvas.Image = null;
-                Widgets.BitmapPool.Return(_globalMergedImage);
+                BitmapPool.Return(_globalMergedImage);
                 _globalMergedImage = null;
             }
             if (_periodMergedImage != null)
             {
                 if (_ctx.Canvas.Image == _periodMergedImage) _ctx.Canvas.Image = null;
-                Widgets.BitmapPool.Return(_periodMergedImage);
+                BitmapPool.Return(_periodMergedImage);
                 _periodMergedImage = null;
             }
         }
@@ -289,7 +289,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (_stitchedImages == null) return;
             _ctx.Canvas.Image = null;
             _ctx.GalleryManager.ClearImages();
-            foreach (var bmp in _stitchedImages) Widgets.BitmapPool.Return(bmp);
+            foreach (var bmp in _stitchedImages) BitmapPool.Return(bmp);
             _stitchedImages = null;
             _stitchedCurveMean    = null;
             _stitchedCurveMax     = null;

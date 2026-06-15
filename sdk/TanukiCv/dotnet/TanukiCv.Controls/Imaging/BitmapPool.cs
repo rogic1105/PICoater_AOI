@@ -2,7 +2,7 @@ using System;
 using System.Drawing;
 using System.Drawing.Imaging;
 
-namespace AniloxRoll.Monitor.UI.Widgets
+namespace TanukiCv.Controls
 {
     /// <summary>
     /// 大尺寸 Bitmap 物件池，減少 LOH 分配與 Gen2 GC 壓力。
