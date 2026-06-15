@@ -107,6 +107,22 @@ sdk/
 - **曝光上限公式** = `MilCameraParams.CalcExposureMaxUs`（`MIL/MilGrabber.Core/MilCamera.Params.cs`）。
 - **曲線圖** = `BaseCurveChartHelper`（Template Method）+ `Column`/`Row` 子類；app 與 sample 共用。
 
+## sdk 元件對外慣例：讓呼叫端「看 header 就懂」（.NET 沒有 .hpp，用這三件）
+
+C++ 靠 `.hpp` 當公開介面；.NET 沒有 header 檔，「直觀好用」靠以下三件，**搬/寫 sdk 元件時一起做**：
+
+1. **乾淨 public API** = 你的「header」。方法/參數名自解釋（`EnableLod(provider)` 而非 `SetFlag(3)`）；
+   只 public 該對外的，內部用 `private`/`internal`。
+2. **`/// <summary>` XML 註解**（中文 OK）= header 的文件。**VS 在呼叫端滑鼠一移就顯示**（比 C++ 開檔還直觀）——
+   public 型別/方法/重要參數都要寫。這是「直觀」的關鍵投資，別省。
+3. **per-元件 sample**（能獨立展示者）= 活範例。放 `sdk/<元件>/samples/`，`README.md` 配截圖；
+   示範「最小怎麼用」（如 MilGrabber.Monitor / SysInfoTool）。
+
+> 搬 app 機制進 sdk 的 SOP：① 移檔 + 改 namespace 成 `TanukiCv.Controls`（或對應元件）→ ② 去產品語意
+> （doc 拿掉 Anilox/Mura 字眼，寫通用用法）→ ③ 補/補強 XML 註解 → ④ 兩邊 csproj Compile 條目移轉
+> （本 repo csproj 是顯式 Compile，非 glob）→ ⑤ 呼叫端改 `using`/全限定名 → ⑥ build。
+> 純機制（無 System.Windows.Forms 的 app 依賴、無 InspectionSettings）才可搬；含產品 policy 的留 app。
+
 ## samples/ vs repo 根 tools/
 
 - `sdk/<元件>/samples/` — 只服務單一 sdk 元件的可執行範例（拿掉該元件就沒用），跟元件一起 split。
