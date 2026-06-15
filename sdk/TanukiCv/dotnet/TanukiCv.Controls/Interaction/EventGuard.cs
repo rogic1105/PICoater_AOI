@@ -1,4 +1,4 @@
-namespace AniloxRoll.Monitor.UI.Widgets
+namespace TanukiCv.Controls
 {
     /// <summary>
     /// 可重入的 bool 旗標，搭配 <see cref="EventGuardScope"/> 以 using 語法自動還原。

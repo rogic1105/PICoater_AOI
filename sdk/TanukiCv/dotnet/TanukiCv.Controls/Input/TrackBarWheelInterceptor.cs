@@ -1,13 +1,13 @@
 using System;
 using System.Windows.Forms;
 
-namespace AniloxRoll.Monitor.UI.Widgets
+namespace TanukiCv.Controls
 {
     /// <summary>
     /// 攔截原生 WM_MOUSEWHEEL：Windows TRACKBAR 每個滾輪 notch 會送出 3 個
     /// TB_LINEUP/TB_LINEDOWN（等同 3 × SmallChange），此攔截器改為每格僅移動 1。
     /// </summary>
-    internal sealed class TrackBarWheelInterceptor : NativeWindow
+    public sealed class TrackBarWheelInterceptor : NativeWindow
     {
         private const int WM_MOUSEWHEEL = 0x020A;
         private readonly TrackBar _bar;

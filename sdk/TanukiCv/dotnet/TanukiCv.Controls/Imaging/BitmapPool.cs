@@ -2,14 +2,15 @@ using System;
 using System.Drawing;
 using System.Drawing.Imaging;
 
-namespace AniloxRoll.Monitor.UI.Widgets
+namespace TanukiCv.Controls
 {
     /// <summary>
-    /// 大尺寸 Bitmap 物件池，減少 LOH 分配與 Gen2 GC 壓力。
+    /// 大尺寸合成 Bitmap 物件池（通用，0 依賴 app/MIL），減少 LOH 分配與 Gen2 GC 壓力。
     /// 保留最近歸還的 1 張 Bitmap，若下次 Rent 尺寸相同則重用（清零後返回）。
-    /// 僅用於 GrabImageStitcher / ReviewStitchCoordinator 的合成圖（數十~數百 MB），
-    /// 不用於小型中間 Bitmap（如 JPEG 重編碼、縮圖）。
-    /// Thread-safe：lock 保護單一 slot。
+    /// 適用於數十~數百 MB 的大型合成圖；不用於小型中間 Bitmap（JPEG 重編碼、縮圖）。
+    /// Thread-safe：lock 保護單一 slot（不 corrupt）。但**單槽**設計：
+    /// 並行 Rent（如 Parallel.For 多路同時取）命中率低、多數 fallback 到 new，
+    /// pooling 效益僅在「序列化 Rent/Return 同尺寸」時成立。
     /// </summary>
     public static class BitmapPool
     {
