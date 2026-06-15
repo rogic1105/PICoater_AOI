@@ -177,7 +177,6 @@
     </Compile>
     <Compile Include="UI\Presenters\AniloxRollPresenter.cs" />
     <Compile Include="UI\Presenters\LiveTelemetryPresenter.cs" />
-    <Compile Include="UI\Widgets\CanvasInteractionHelper.cs" />
     <Compile Include="UI\Widgets\FormInteractionHelper.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.cs" />
     <Compile Include="UI\Managers\ReviewDisplayManager.cs" />

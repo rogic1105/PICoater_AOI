@@ -46,10 +46,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private readonly ColumnCurveChartHelper _columnChartHelper;
         private readonly RowCurveChartHelper _rowChartHelper;
         private readonly InspectionSettings _settings;
-        private readonly CanvasInteractionHelper _canvasHelper;
 
-        // Wave2 2b-i：回顧 CFG 快照 + 螢幕 mm/px 從枯幹（CanvasInteractionHelper）移到 facade 自存
-        //   → 活資料不再轉發給死的顯示路徑，枯幹零活資料、2b-ii 可整棵砍。
+        // Wave2 2b：回顧 CFG 快照 + 螢幕 mm/px facade 自存（原寄放 CanvasInteractionHelper，2b-ii 已砍枯幹）。
         private CsvConfigSnapshot _reviewConfig;
         private double _screenMmPerPx;
 
@@ -81,49 +79,16 @@ namespace AniloxRoll.Monitor.UI.Widgets
             _columnChartHelper = context.ColumnChartHelper;
             _rowChartHelper = context.RowChartHelper;
             _settings = context.Settings;
-
-            _canvasHelper = new CanvasInteractionHelper(
-                context.Canvas,
-                context.Settings,
-                context.StatusLabel,
-                context.ColumnChartHelper,
-                context.RowChartHelper,
-                context.CameraPanels,
-                context.GalleryManager);
+            // Wave2 2b-ii：CanvasInteractionHelper（回顧顯示路徑）已整棵砍——
+            //   顯示/互動/座標 overlay/視野連動全由 sdk LiveDisplayView 承接（ReviewDisplayManager 包）。
+            //   原本一堆 canvas 事件代理（UpdateCanvasInfo/NavigateCamera/TryComputeCurrentViewRange/
+            //   RefreshChartRange/SaveCanvasView/SetMergedMode...）都是死碼，隨枯幹移除。
         }
 
-        // ── Canvas 事件代理 ──────────────────────────────────────────────
-        public void UpdateCanvasInfo(CanvasInfo info) => _canvasHelper.UpdateCanvasInfo(info);
-        public void NavigateCamera(int direction) => _canvasHelper.NavigateCamera(direction);
-        public void SetCanvasScaleAndCamera(int scaleFactor, int cameraIndex)
-        {
-            _canvasHelper.SetImageScaleFactor(scaleFactor);
-            _canvasHelper.SetCurrentCameraIndex(cameraIndex);
-        }
-        public bool TryComputeCurrentViewRange(int cameraIndex, out double leftMm, out double rightMm)
-            => _canvasHelper.TryComputeCurrentViewRange(cameraIndex, out leftMm, out rightMm);
-        public void RefreshChartRange() => _canvasHelper.RefreshChartRange();
-        public void RefreshRowChartRange() => _canvasHelper.RefreshRowChartRange();
-        public void SaveCanvasView() => _canvasHelper.SaveViewIfNeeded();
-        public void RestoreCanvasViewOrFit() => _canvasHelper.RestoreViewOrFitToScreen();
-        public void ClearCanvasView() => _canvasHelper.ClearSavedView();
+        // ── 螢幕校正（餵 PushFrames + Background 的實體倍率換算）────────────
         public void SetScreenMmPerPixel(double mmPerPx) => _screenMmPerPx = mmPerPx;
         public double ScreenMmPerPixel => _screenMmPerPx;
         public double RowPitchMm => _rowChartHelper?.RowPitchMm ?? 0;
-
-        /// <summary>設定全域/水平合圖模式：chartReviewVertical 與 canvas 座標聯動。</summary>
-        public void SetMergedMode(ColumnCurveChartHelper overviewHelper, double startMm, double opsUm)
-        {
-            _canvasHelper.OverviewChartHelper = overviewHelper;
-            _canvasHelper.SetMergedCoordinates(startMm, opsUm);
-        }
-
-        /// <summary>離開合圖模式：清除 chartReviewVertical 聯動與座標覆寫。</summary>
-        public void ClearMergedMode()
-        {
-            _canvasHelper.OverviewChartHelper = null;
-            _canvasHelper.ClearMergedCoordinates();
-        }
 
         // ── 設定 ─────────────────────────────────────────────────────────
         public void ApplySettingsToService()
@@ -149,13 +114,11 @@ namespace AniloxRoll.Monitor.UI.Widgets
             if (_settings == null) return;
             ApplySettingsToService();
             _columnChartHelper?.SetOps(_settings.Cam1_Ops);
-            _canvasHelper.Invalidate();
         }
 
         // ── 工作流程 ──────────────────────────────────────────────────────
         public async Task LoadImages(bool enableProcess)
         {
-            _canvasHelper.SaveViewIfNeeded();
             _isProcessedMode = enableProcess;
             ClearOldImages();
             await _presenter.RunWorkflowAsync(enableProcess, _thumbnailCache);
@@ -228,7 +191,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
                     _timeNavigator.Initialize(UserSessionState.LastYear);
 
                     _galleryManager.Select(lastCameraIndex, triggerEvent: false);
-                    _canvasHelper.SetCurrentCameraIndex(lastCameraIndex);
                 }
             }
         }
@@ -252,7 +214,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
         // ── 資源清理 ──────────────────────────────────────────────────────
         public void ClearOldImages()
         {
-            _canvasHelper.ClearCanvas();
             // 先清 PictureBox 引用，再 Dispose Bitmap。
             // 若順序相反，await Task.Run 期間 UI 執行緒空出，
             // Windows Paint 事件會嘗試繪製已 Dispose 的 Bitmap，拋 ArgumentException。

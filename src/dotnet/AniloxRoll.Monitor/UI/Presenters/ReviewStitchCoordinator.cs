@@ -239,7 +239,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 if (posArr[i] < globalMinMm) globalMinMm = posArr[i];
             if (globalMinMm == double.MaxValue) globalMinMm = 0;
 
-            _ctx.InteractionHelper.SetMergedMode(_ctx.OverviewHelper, globalMinMm, refOpsUm);
+            // 2b-ii：合圖座標覆寫原餵 CanvasInteractionHelper 顯示路徑（已砍）；overview X 視野連動
+            //   現由 LiveDisplayView.ViewRangeMmChanged → _reviewOverviewHelper.UpdateViewRange 承接。
             if (_ctx.ChartReviewPatch.ChartAreas.Count > 0)
                 _ctx.ChartReviewPatch.ChartAreas[0].AxisX.ScaleView.Zoomable = true;
         }
@@ -256,7 +257,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public void DisableMergedOverviewSync()
         {
             if (UiDisposed) return;
-            _ctx.InteractionHelper.ClearMergedMode();
+            // 2b-ii：原 ClearMergedMode 清的是 CanvasInteractionHelper 座標覆寫（已砍）。
             if (_ctx.ChartReviewPatch.ChartAreas.Count > 0)
             {
                 _ctx.ChartReviewPatch.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
@@ -321,7 +322,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _ctx.RowChartHelper.UpdateData(mergedMean, mergedMax);
                 var nv = SameSourceViewRange?.Invoke();
                 if (nv != null) _ctx.RowChartHelper.UpdateViewRange(nv[2], nv[3]);   // 新路徑：原子帶入當前 Y 視野
-                else _ctx.InteractionHelper.RefreshRowChartRange();
+                // 舊 else RefreshRowChartRange（讀已砍 canvas，恆 no-op）移除；視野由 LiveDisplayView 連動
             }
         }
 
@@ -429,7 +430,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 var displayMax  = HessianRescaleHelper.CloneAndRescale1D(max,  captureHmV, _ctx.Settings.HessianMaxFactorV);
 
                 double startPos = (idx >= 0 && idx < posArr.Length) ? posArr[idx] : 0;
-                _ctx.InteractionHelper.TryComputeCurrentViewRange(idx, out double leftMm, out double rightMm);
+                // 2b-ii：當前 X 視野改取 LiveDisplayView 快取（原 TryComputeCurrentViewRange 讀已砍 canvas，恆回 0,0）
+                var nv = SameSourceViewRange?.Invoke();
+                double leftMm = nv?[0] ?? 0, rightMm = nv?[1] ?? 0;
                 _ctx.ColumnChartHelper.UpdateDataAndView(displayMean, displayMax, startPos, leftMm, rightMm);
             }
 
@@ -453,7 +456,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                         var displayMax  = HessianRescaleHelper.CloneAndRescale1D(rowMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
                         FlipRowCurveIfNeeded(displayMean, displayMax);
                         _ctx.RowChartHelper.UpdateData(displayMean, displayMax);
-                        _ctx.InteractionHelper.RefreshRowChartRange();
+                        var nv = SameSourceViewRange?.Invoke();
+                        if (nv != null) _ctx.RowChartHelper.UpdateViewRange(nv[2], nv[3]);  // 取代死的 RefreshRowChartRange
                     }
                 }
             }
@@ -578,12 +582,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         private double ViewRangeProvider(int cameraIndex, bool isLeft, double defaultValue)
         {
+            // 2b-ii：視野唯一來源＝LiveDisplayView 快取（SameSourceViewRange）。
+            //   舊 fallback TryComputeCurrentViewRange 讀已砍 canvas、恆失敗，移除。
             var nv = SameSourceViewRange?.Invoke();
             if (nv != null) return isLeft ? nv[0] : nv[1];
-            if (_ctx.InteractionHelper == null) return defaultValue;
-            if (!_ctx.InteractionHelper.TryComputeCurrentViewRange(cameraIndex, out double left, out double right))
-                return defaultValue;
-            return isLeft ? left : right;
+            return defaultValue;
         }
     }
 }

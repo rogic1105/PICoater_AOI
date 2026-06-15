@@ -135,16 +135,8 @@ namespace AniloxRoll.Monitor.Forms
             return defaultValue;
         }
 
-        /// <summary>
-        /// CurveMergeHelper 用的 viewRange 代理：將 TryComputeCurrentViewRange 包裝為 Func。
-        /// </summary>
-        private double ViewRangeProvider(int cameraIndex, bool isLeft, double defaultValue)
-        {
-            if (_interactionHelper == null) return defaultValue;
-            if (!_interactionHelper.TryComputeCurrentViewRange(cameraIndex, out double left, out double right))
-                return defaultValue;
-            return isLeft ? left : right;
-        }
+        // 2b-ii：回顧 ViewRangeProvider（包 TryComputeCurrentViewRange）已死碼移除——
+        //   無 caller，且 canvas 已砍；RSC 自有 ViewRangeProvider 走 SameSourceViewRange。
 
         private AniloxCamera FindCameraById(int camId)
         {

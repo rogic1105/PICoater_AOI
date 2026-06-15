@@ -94,7 +94,7 @@ namespace AniloxRoll.Monitor.Forms
                 var info = _dataStatsPresenter.GrabIdInfos[reviewIdx];
                 await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest);
                 _reviewDisplayManager?.RefireViewRange();   // 同上：載入完恢復曲線視野跟隨
-                if (camReviewMain.Image != null) camReviewMain.FitToScreen();
+                // 2b-ii：fit-on-load 由 LiveDisplayView 首幀自動 fit 承接（換 ID 保視野＝刻意不再 re-fit）
                 _reviewDirty = false;
             }
             else
@@ -127,7 +127,6 @@ namespace AniloxRoll.Monitor.Forms
         {
             int idx = cbReviewId.SelectedIndex;
             if (idx < 0 || idx >= _dataStatsPresenter.GrabIdInfos.Count) return;
-            _interactionHelper.SaveCanvasView();
             var info = _dataStatsPresenter.GrabIdInfos[idx];
             await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest, enableProcess);
             _reviewDisplayManager?.RefireViewRange();   // chart 重建會重設軸 → 補發當前視野（不用等滑鼠動）
@@ -182,13 +181,11 @@ namespace AniloxRoll.Monitor.Forms
             if (_imageRepository.FileCount == 0) return;
             try
             {
-            bool wasStitch = _stitchCoordinator.IsStitchMode;
-            _interactionHelper.SaveCanvasView();
             _stitchCoordinator.ClearStitchedMode();
             _dataStatsPresenter.SetReviewGroupBoxes(false);
             await _presenter.LoadImagesWithPeriodLockAsync(_stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig);
             ApplyPostLoadDisplay();
-            if (wasStitch && camReviewMain.Image != null) camReviewMain.FitToScreen();
+            // 2b-ii：SaveCanvasView/FitToScreen（讀已砍 canvas）移除；LiveDisplayView 自管視野
             }
             catch (Exception ex) { Trace.WriteLine($"[OnPeriodComboChanged] {ex}"); }
         }
