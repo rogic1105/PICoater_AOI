@@ -177,7 +177,6 @@
     </Compile>
     <Compile Include="UI\Presenters\AniloxRollPresenter.cs" />
     <Compile Include="UI\Presenters\LiveTelemetryPresenter.cs" />
-    <Compile Include="UI\Widgets\CanvasInteractionHelper.cs" />
     <Compile Include="UI\Widgets\FormInteractionHelper.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.cs" />
     <Compile Include="UI\Managers\ReviewDisplayManager.cs" />
@@ -187,7 +186,6 @@
     <Compile Include="UI\Presenters\DataStatisticsPresenter.cs" />
     <Compile Include="UI\Presenters\ReviewStitchCoordinator.cs" />
     <Compile Include="UI\Presenters\InspectionStatsPresenter.cs" />
-    <Compile Include="UI\Presenters\ThumbnailGridPresenter.cs" />
     <Compile Include="UI\Navigators\DateTimeNavigator.cs" />
     <Compile Include="UI\State\UserSessionState.cs" />
     <Compile Include="Program.cs" />

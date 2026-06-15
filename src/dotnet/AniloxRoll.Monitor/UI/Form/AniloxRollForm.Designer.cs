@@ -65,16 +65,16 @@
             this.cbReviewDate = new System.Windows.Forms.ComboBox();
             this.cbReviewTime = new System.Windows.Forms.ComboBox();
             this.btnReviewSelectFolder = new System.Windows.Forms.Button();
-            this.camReview1 = new System.Windows.Forms.PictureBox();
-            this.camReview2 = new System.Windows.Forms.PictureBox();
-            this.camReview3 = new System.Windows.Forms.PictureBox();
-            this.camReview4 = new System.Windows.Forms.PictureBox();
-            this.camReview5 = new System.Windows.Forms.PictureBox();
-            this.camReview6 = new System.Windows.Forms.PictureBox();
-            this.camReview7 = new System.Windows.Forms.PictureBox();
+            this.camReview1 = new System.Windows.Forms.Panel();
+            this.camReview2 = new System.Windows.Forms.Panel();
+            this.camReview3 = new System.Windows.Forms.Panel();
+            this.camReview4 = new System.Windows.Forms.Panel();
+            this.camReview5 = new System.Windows.Forms.Panel();
+            this.camReview6 = new System.Windows.Forms.Panel();
+            this.camReview7 = new System.Windows.Forms.Panel();
             this.grpReviewGrabNav = new System.Windows.Forms.GroupBox();
             this.cbReviewId = new System.Windows.Forms.ComboBox();
-            this.camReviewMain = new TanukiCv.Controls.SmartCanvas();
+            this.camReviewMain = new System.Windows.Forms.Panel();
             this.tabPageData = new System.Windows.Forms.TabPage();
             this.chartDataVertical = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.camData7 = new System.Windows.Forms.Panel();
@@ -272,15 +272,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.chartReviewHorizontal)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.chartReviewVertical)).BeginInit();
             this.grpReviewTimePeriod.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.camReview1)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.camReview2)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.camReview3)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.camReview4)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.camReview5)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.camReview6)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.camReview7)).BeginInit();
             this.grpReviewGrabNav.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.camReviewMain)).BeginInit();
             this.tabPageData.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.chartDataVertical)).BeginInit();
             this.grpDataSingleSheet.SuspendLayout();
@@ -642,7 +634,7 @@
             this.camReview1.Location = new System.Drawing.Point(6, 6);
             this.camReview1.Name = "camReview1";
             this.camReview1.Size = new System.Drawing.Size(120, 80);
-            this.camReview1.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
+            this.camReview1.BackColor = System.Drawing.Color.Black;
             this.camReview1.TabIndex = 8;
             this.camReview1.TabStop = false;
             // 
@@ -651,7 +643,7 @@
             this.camReview2.Location = new System.Drawing.Point(134, 6);
             this.camReview2.Name = "camReview2";
             this.camReview2.Size = new System.Drawing.Size(120, 80);
-            this.camReview2.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
+            this.camReview2.BackColor = System.Drawing.Color.Black;
             this.camReview2.TabIndex = 9;
             this.camReview2.TabStop = false;
             // 
@@ -660,7 +652,7 @@
             this.camReview3.Location = new System.Drawing.Point(262, 6);
             this.camReview3.Name = "camReview3";
             this.camReview3.Size = new System.Drawing.Size(120, 80);
-            this.camReview3.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
+            this.camReview3.BackColor = System.Drawing.Color.Black;
             this.camReview3.TabIndex = 10;
             this.camReview3.TabStop = false;
             // 
@@ -669,7 +661,7 @@
             this.camReview4.Location = new System.Drawing.Point(390, 6);
             this.camReview4.Name = "camReview4";
             this.camReview4.Size = new System.Drawing.Size(120, 80);
-            this.camReview4.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
+            this.camReview4.BackColor = System.Drawing.Color.Black;
             this.camReview4.TabIndex = 11;
             this.camReview4.TabStop = false;
             // 
@@ -678,7 +670,7 @@
             this.camReview5.Location = new System.Drawing.Point(518, 6);
             this.camReview5.Name = "camReview5";
             this.camReview5.Size = new System.Drawing.Size(120, 80);
-            this.camReview5.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
+            this.camReview5.BackColor = System.Drawing.Color.Black;
             this.camReview5.TabIndex = 12;
             this.camReview5.TabStop = false;
             // 
@@ -687,7 +679,7 @@
             this.camReview6.Location = new System.Drawing.Point(646, 6);
             this.camReview6.Name = "camReview6";
             this.camReview6.Size = new System.Drawing.Size(120, 80);
-            this.camReview6.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
+            this.camReview6.BackColor = System.Drawing.Color.Black;
             this.camReview6.TabIndex = 13;
             this.camReview6.TabStop = false;
             // 
@@ -696,7 +688,7 @@
             this.camReview7.Location = new System.Drawing.Point(774, 6);
             this.camReview7.Name = "camReview7";
             this.camReview7.Size = new System.Drawing.Size(120, 80);
-            this.camReview7.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
+            this.camReview7.BackColor = System.Drawing.Color.Black;
             this.camReview7.TabIndex = 14;
             this.camReview7.TabStop = false;
             // 
@@ -725,19 +717,10 @@
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.camReviewMain.BackColor = System.Drawing.Color.Black;
-            this.camReviewMain.ClampPan = false;
-            this.camReviewMain.DoubleClickFitToScreen = false;
-            this.camReviewMain.DownscaleInterpolation = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
-            this.camReviewMain.FitRelativeZoom = false;
             this.camReviewMain.Location = new System.Drawing.Point(6, 190);
-            this.camReviewMain.LodMargin = 1F;
-            this.camReviewMain.MaxZoomOverBitmap = 8F;
             this.camReviewMain.Name = "camReviewMain";
-            this.camReviewMain.ShowOverlay = true;
             this.camReviewMain.Size = new System.Drawing.Size(888, 435);
             this.camReviewMain.TabIndex = 7;
-            this.camReviewMain.TabStop = false;
-            this.camReviewMain.TripleClickPhysical1x = false;
             // 
             // tabPageData
             // 
@@ -3160,15 +3143,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.chartReviewHorizontal)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.chartReviewVertical)).EndInit();
             this.grpReviewTimePeriod.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)(this.camReview1)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.camReview2)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.camReview3)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.camReview4)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.camReview5)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.camReview6)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.camReview7)).EndInit();
             this.grpReviewGrabNav.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)(this.camReviewMain)).EndInit();
             this.tabPageData.ResumeLayout(false);
             this.tabPageData.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.chartDataVertical)).EndInit();
@@ -3295,17 +3270,17 @@
         }
 
         #endregion
-        private TanukiCv.Controls.SmartCanvas camReviewMain;
+        private System.Windows.Forms.Panel camReviewMain;
         private System.Windows.Forms.TabControl tabMain;
         private System.Windows.Forms.TabPage tabPageLiveView;
         private System.Windows.Forms.TabPage tabPageReview;
-        private System.Windows.Forms.PictureBox camReview7;
-        private System.Windows.Forms.PictureBox camReview6;
-        private System.Windows.Forms.PictureBox camReview5;
-        private System.Windows.Forms.PictureBox camReview4;
-        private System.Windows.Forms.PictureBox camReview3;
-        private System.Windows.Forms.PictureBox camReview2;
-        private System.Windows.Forms.PictureBox camReview1;
+        private System.Windows.Forms.Panel camReview7;
+        private System.Windows.Forms.Panel camReview6;
+        private System.Windows.Forms.Panel camReview5;
+        private System.Windows.Forms.Panel camReview4;
+        private System.Windows.Forms.Panel camReview3;
+        private System.Windows.Forms.Panel camReview2;
+        private System.Windows.Forms.Panel camReview1;
         private System.Windows.Forms.ComboBox cbReviewDate;
         private System.Windows.Forms.ComboBox cbReviewTime;
         private System.Windows.Forms.Button btnReviewSelectFolder;

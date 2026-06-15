@@ -14,10 +14,8 @@ namespace AniloxRoll.Monitor.UI.Managers
     /// </summary>
     internal sealed class ReviewDisplayManager : IDisposable
     {
-        private readonly Control _mainUnder;
-        private readonly Control[] _thumbsUnder;
-        private Panel _mainHost;
-        private Panel[] _thumbHosts;
+        private readonly Panel _mainHost;          // 2b-ii-B：直接是 Designer 上的 Panel（落地生根，不再 runtime overlay）
+        private readonly Panel[] _thumbHosts;
         private LiveDisplayView _view;
         private bool _disposed;
 
@@ -25,24 +23,26 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// 回顧曲線圖 zoom 連動（拖曳中也即時，鐵則：不可為效能抑制）。</summary>
         public event Action<double, double, double, double> ViewRangeMmChanged;
 
+        /// <summary>游標狀態（mm 位置/範圍/亮度/倍率）pass-through → 上層更新狀態列 lblPixelInfo。</summary>
+        public event Action<LiveDisplayView.CursorStatus> CursorStatusChanged;
+
         /// <summary>sdk 顯示元件（接事件 / 進階用；未建立前 null）。</summary>
         public LiveDisplayView View => _view;
 
-        public ReviewDisplayManager(Control mainUnder, Control[] thumbsUnder)
+        /// <summary>當前選中相機 index（0-based；未建立前回 0）。供 RSC 重畫 per-cam 曲線用。</summary>
+        public int SelectedCamIndex => (_view?.SelectedCamId ?? 1) - 1;
+
+        public ReviewDisplayManager(Panel mainHost, Panel[] thumbHosts)
         {
-            _mainUnder = mainUnder ?? throw new ArgumentNullException(nameof(mainUnder));
-            _thumbsUnder = thumbsUnder ?? new Control[0];
+            _mainHost = mainHost ?? throw new ArgumentNullException(nameof(mainHost));
+            _thumbHosts = thumbHosts ?? new Panel[0];
         }
 
-        /// <summary>lazy 建宿主 + LiveDisplayView（首次餵圖時呼叫；screenMmPerPx 屆時已由 SystemInfo 設定）。</summary>
+        /// <summary>lazy 建 LiveDisplayView（首次餵圖時呼叫；screenMmPerPx 屆時已由 SystemInfo 設定）。
+        /// 宿主＝Designer 上的 camReviewMain/camReview1~7 Panel（2b-ii-B 後直接用，不再 overlay）。</summary>
         public void EnsureCreated(double screenMmPerPx)
         {
             if (_view != null || _disposed) return;
-
-            _mainHost = OverlayPanel(_mainUnder);
-            _thumbHosts = new Panel[_thumbsUnder.Length];
-            for (int i = 0; i < _thumbsUnder.Length; i++)
-                _thumbHosts[i] = _thumbsUnder[i] != null ? OverlayPanel(_thumbsUnder[i]) : null;
 
             _view = new LiveDisplayView(_mainHost, _thumbHosts, screenMmPerPx);
             _view.ThumbSelectedColor = Color.Orange;   // 與監控同款；選取視覺唯一來源 = sdk ThumbView
@@ -50,23 +50,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _view.FlipVertical = false;                // 回顧影像載入時已翻轉（StitchCamera baked-in），勿再翻
             _view.EnableLod(GrayResizeCpu.Resize);     // 回顧白賺 LOD；CPU provider＝無 GPU 機也跑
             _view.ViewRangeMmChanged += (l, r, tp, bt) => ViewRangeMmChanged?.Invoke(l, r, tp, bt);
-        }
-
-        private static Panel OverlayPanel(Control under)
-        {
-            var p = new Panel
-            {
-                Bounds = under.Bounds,
-                Anchor = under.Anchor,
-                Dock = under.Dock,
-                BackColor = Color.Black,
-            };
-            under.Parent.Controls.Add(p);
-            p.BringToFront();
-            // 跟隨底下控制項（ProportionalScaler 縮放 / 佈局變更 → 同步 Bounds，不跑版）
-            under.SizeChanged += (s, e) => p.Bounds = under.Bounds;
-            under.LocationChanged += (s, e) => p.Bounds = under.Bounds;
-            return p;
+            _view.CursorStatusChanged += s => CursorStatusChanged?.Invoke(s);
         }
 
         /// <summary>
@@ -131,11 +115,8 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (_disposed) return;
             _disposed = true;
+            // 宿主 Panel 是 Designer 擁有（Form 自行 dispose）；這裡只釋放 LiveDisplayView。
             _view?.Dispose(); _view = null;
-            if (_mainHost != null) { _mainHost.Parent?.Controls.Remove(_mainHost); _mainHost.Dispose(); _mainHost = null; }
-            if (_thumbHosts != null)
-                foreach (var p in _thumbHosts)
-                    if (p != null) { p.Parent?.Controls.Remove(p); p.Dispose(); }
         }
     }
 

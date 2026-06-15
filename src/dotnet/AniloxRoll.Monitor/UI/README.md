@@ -10,7 +10,6 @@
 
 - `Presenters/`
   - `AniloxRollPresenter.cs`
-  - `ThumbnailGridPresenter.cs`
 
 - `Navigators/`
   - `DateTimeNavigator.cs`

@@ -36,8 +36,7 @@ namespace AniloxRoll.Monitor.Forms
 
         // --- UI Helpers ---
         private DateTimeNavigator _dateTimeNavigator;
-        private ThumbnailGridPresenter _galleryManager;
-        private ReviewDisplayManager _reviewDisplayManager;   // #13 同源新路徑（旗標 UseSameSourceDisplay）
+        private ReviewDisplayManager _reviewDisplayManager;   // 回顧同源顯示（sdk LiveDisplayView，絞殺榕收官）
         private double _reviewViewLeftMm = double.NaN, _reviewViewRightMm, _reviewViewTopMm, _reviewViewBotMm; // 新畫布視野快取（chart 原子更新用）
         private int _reviewSyncCount; private long _reviewSyncOvMax, _reviewSyncRowMax;   // [ReviewSync] 拖曳跟隨計時儀器
         private AniloxRollPresenter _presenter;
@@ -145,7 +144,6 @@ namespace AniloxRoll.Monitor.Forms
 
         // --- Review tab 拼接管理 ---
         private ReviewStitchCoordinator _stitchCoordinator;
-        private PictureBox[] _cameraPanels;
 
 
         protected override void OnFormClosing(FormClosingEventArgs e)
@@ -421,14 +419,10 @@ namespace AniloxRoll.Monitor.Forms
             _dateTimeNavigator = new DateTimeNavigator(
                 _imageRepository, cbReviewDate, cbReviewTime);
 
-            _cameraPanels = new PictureBox[] {
-                camReview1, camReview2, camReview3, camReview4, camReview5, camReview6, camReview7
-            };
-            _galleryManager = new ThumbnailGridPresenter();
-            _galleryManager.Initialize(_cameraPanels);
-
+            // 2b-ii-B：ThumbnailGridPresenter（舊回顧縮圖畫廊）已刪——縮圖顯示/選取全由 sdk LiveDisplayView
+            //   的 ThumbStrip 承接（camReview1~7 現為 Panel 宿主，見 ReviewDisplayManager）。
             _presenter = new AniloxRollPresenter(
-                _imageRepository, _inspectionService, _dateTimeNavigator, _galleryManager);
+                _imageRepository, _inspectionService, _dateTimeNavigator);
 
 
 
@@ -511,30 +505,24 @@ namespace AniloxRoll.Monitor.Forms
             _interactionHelper = new FormInteractionHelper(new FormInteractionContext
             {
                 Form             = this,
-                Canvas           = camReviewMain,
                 ButtonsToLock    = new Button[] { btnReviewSelectFolder },
                 ThumbnailCache   = _thumbnailCache,
                 Presenter        = _presenter,
                 InspectionService = _inspectionService,
                 ImageRepository  = _imageRepository,
                 TimeNavigator    = _dateTimeNavigator,
-                GalleryManager   = _galleryManager,
                 Settings         = _settings,
-                StatusLabel      = lblPixelInfo,
-                CameraPanels     = _cameraPanels,
                 RowChartHelper = _reviewRowChartHelper,
             });
             _interactionHelper.ApplySettingsToService();
 
             _stitchCoordinator = new ReviewStitchCoordinator(new ReviewStitchContext
             {
-                Canvas                    = camReviewMain,
                 ChartReviewPatch             = chartReviewVertical,
                 ChartReviewHorizontal       = chartReviewHorizontal,
                 InteractionHelper         = _interactionHelper,
                 RowChartHelper            = _reviewRowChartHelper,
                 OverviewHelper            = _reviewOverviewHelper,
-                GalleryManager            = _galleryManager,
                 InspectionService         = _inspectionService,
                 ImageRepository           = _imageRepository,
                 DataStatsPresenter        = _dataStatsPresenter,
@@ -543,11 +531,12 @@ namespace AniloxRoll.Monitor.Forms
                 CameraCount               = CameraCount,
             });
 
-            // #13 絞殺榕收官 Stage1：回顧主畫面平行接 LiveDisplayView（Designer 不動、runtime 疊加；旗標可回滾）
-            // #13 同源顯示（4c 轉正：旗標已刪、唯一路徑）
+            // 絞殺榕收官（Wave2 2b-ii-B）：回顧主畫面/縮圖＝Designer 上的 Panel，直接交給 LiveDisplayView 落地生根。
             {
                 _reviewDisplayManager = new ReviewDisplayManager(camReviewMain,
-                    new System.Windows.Forms.Control[] { camReview1, camReview2, camReview3, camReview4, camReview5, camReview6, camReview7 });
+                    new System.Windows.Forms.Panel[] { camReview1, camReview2, camReview3, camReview4, camReview5, camReview6, camReview7 });
+                // 選中相機 index 來源＝LiveDisplayView（取代舊 ThumbnailGridPresenter.SelectedIndex）
+                _stitchCoordinator.SelectedCamIndexProvider = () => _reviewDisplayManager?.SelectedCamIndex ?? 0;
                 _stitchCoordinator.StitchedImagesReady += (gray, ws, hs, ops, pos, isGlobal) =>
                     _reviewDisplayManager?.PushFrames(gray, ws, hs, ops, pos, isGlobal,
                         _interactionHelper?.ScreenMmPerPixel ?? 0,
@@ -577,6 +566,19 @@ namespace AniloxRoll.Monitor.Forms
                 _stitchCoordinator.SameSourceViewRange = () =>
                     double.IsNaN(_reviewViewLeftMm) ? null
                     : new[] { _reviewViewLeftMm, _reviewViewRightMm, _reviewViewTopMm, _reviewViewBotMm };
+                // 游標狀態 → 狀態列 lblPixelInfo（mm 換算同源在 LiveDisplayView，這裡只格式化＝app 政策）。
+                // 取代舊 camReviewMain.StatusChanged→UpdateCanvasInfo（覆蓋後已死，#13 遷移時即斷）。
+                _reviewDisplayManager.CursorStatusChanged += s =>
+                {
+                    if (lblPixelInfo == null) return;
+                    lblPixelInfo.Text =
+                        $"位置:({s.CurMmX:F2}, {s.CurMmY:F2}) mm | " +
+                        $"X範圍:{s.ViewLeftMm:F1}~{s.ViewRightMm:F1} mm | " +
+                        $"Y範圍:{s.ViewTopMm:F1}~{s.ViewBotMm:F1} mm | " +
+                        $"座標: ({s.CursorX}, {s.CursorY}) | " +
+                        $"亮度: {s.Brightness} | " +
+                        $"實體倍率:{(s.PhysMag > 0 ? $"{s.PhysMag:F2}x" : "-")}";
+                };
             }
 
             _stitchCoordinator.StitchedCurveUpdated += (mean, max, ops, pos, errMean, errMax) =>
@@ -598,17 +600,10 @@ namespace AniloxRoll.Monitor.Forms
             };
             _presenter.UpdatePeriodNavigationState();
 
-            camReviewMain.StatusChanged += _interactionHelper.UpdateCanvasInfo;
-            camReviewMain.EdgeReached   += _interactionHelper.NavigateCamera;
-            // 手勢（雙擊 fit / 三擊實體 1:1）唯一來源收進 SmartCanvas 內建；校正由 UpdateCanvasInfo 餵。
-            // 這裡只訂閱事件做 app 專屬的 UiActionLogger 記錄（記錄屬 app，不放 sdk）。
-            camReviewMain.DoubleClickFitToScreen = true;
-            camReviewMain.TripleClickPhysical1x  = true;
-            // 回顧是靜態畫面（換 ID 才重建快取）→ 縮小用 HighQualityBilinear 換平滑（不影響取像即時性）。
-            camReviewMain.DownscaleInterpolation = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
-            camReviewMain.DragStarted        += (s, e) => UiActionLogger.RecordViewOnly("camReviewMain.Drag");
-            camReviewMain.FitPerformed       += (s, e) => UiActionLogger.RecordViewOnly("camReviewMain.DoubleClick");
-            camReviewMain.Physical1xPerformed += (s, e) => UiActionLogger.RecordViewOnly("camReviewMain.Physical1x");
+            // 絞殺榕全劇終（Wave2）：camReviewMain/camReview1~7 已是 Designer 上的 Panel，
+            //   顯示/互動/手勢/座標 overlay/雙三擊/縮圖選取全由 sdk LiveDisplayView 內建承接
+            //   （經 ReviewDisplayManager 落地生根）。舊 SmartCanvas/PictureBox/CanvasInteractionHelper/
+            //   ThumbnailGridPresenter 顯示鏈已整棵砍除。
 
             UpdateLiveDirectionVisual();
             UpdateRidgeDirectionVisual(null); // dir=null：無強化橘框，底色依 StitchMode 上色

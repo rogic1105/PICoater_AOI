@@ -18,7 +18,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
     /// </summary>
     public class ReviewStitchContext
     {
-        public SmartCanvas Canvas { get; set; }
         public Chart ChartReviewPatch { get; set; }
         public Chart ChartReviewVertical { get; set; }
         public Chart ChartReviewHorizontal { get; set; }
@@ -26,7 +25,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public ColumnCurveChartHelper ColumnChartHelper { get; set; }
         public RowCurveChartHelper RowChartHelper { get; set; }
         public ColumnCurveChartHelper OverviewHelper { get; set; }
-        public ThumbnailGridPresenter GalleryManager { get; set; }
 
         public BatchInspectionService InspectionService { get; set; }
         public ImageRepository ImageRepository { get; set; }
@@ -239,7 +237,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 if (posArr[i] < globalMinMm) globalMinMm = posArr[i];
             if (globalMinMm == double.MaxValue) globalMinMm = 0;
 
-            _ctx.InteractionHelper.SetMergedMode(_ctx.OverviewHelper, globalMinMm, refOpsUm);
+            // 2b-ii：合圖座標覆寫原餵 CanvasInteractionHelper 顯示路徑（已砍）；overview X 視野連動
+            //   現由 LiveDisplayView.ViewRangeMmChanged → _reviewOverviewHelper.UpdateViewRange 承接。
             if (_ctx.ChartReviewPatch.ChartAreas.Count > 0)
                 _ctx.ChartReviewPatch.ChartAreas[0].AxisX.ScaleView.Zoomable = true;
         }
@@ -248,7 +247,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// Form 自身會清控制項與資源，且關程式時 fire-and-forget 的 StitchMode 切換 async
         /// 可能續跑碰到已 disposed 的 chartReviewVertical/canvas → NullReferenceException。</summary>
         private bool UiDisposed =>
-            (_ctx?.ChartReviewPatch?.IsDisposed ?? true) || (_ctx?.Canvas?.IsDisposed ?? true);
+            (_ctx?.ChartReviewPatch?.IsDisposed ?? true);
 
         /// <summary>離開合圖模式：清除座標覆寫、停用互動 zoom。
         /// 不重設 ScaleView（ZoomReset）：避免 await 期間 message pump 渲染出全範圍閃爍，
@@ -256,7 +255,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public void DisableMergedOverviewSync()
         {
             if (UiDisposed) return;
-            _ctx.InteractionHelper.ClearMergedMode();
+            // 2b-ii：原 ClearMergedMode 清的是 CanvasInteractionHelper 座標覆寫（已砍）。
             if (_ctx.ChartReviewPatch.ChartAreas.Count > 0)
             {
                 _ctx.ChartReviewPatch.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
@@ -268,15 +267,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
         {
             if (UiDisposed) return;
             DisableMergedOverviewSync();
+            // 2b-ii-B：合圖 bitmap 不再貼到 canvas（顯示走 LiveDisplayView）→ 只還池。
             if (_globalMergedImage != null)
             {
-                if (_ctx.Canvas.Image == _globalMergedImage) _ctx.Canvas.Image = null;
                 BitmapPool.Return(_globalMergedImage);
                 _globalMergedImage = null;
             }
             if (_periodMergedImage != null)
             {
-                if (_ctx.Canvas.Image == _periodMergedImage) _ctx.Canvas.Image = null;
                 BitmapPool.Return(_periodMergedImage);
                 _periodMergedImage = null;
             }
@@ -287,8 +285,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (UiDisposed) return;
             DisposeGlobalMergedImage();
             if (_stitchedImages == null) return;
-            _ctx.Canvas.Image = null;
-            _ctx.GalleryManager.ClearImages();
+            // 2b-ii-B：canvas/縮圖 PictureBox 已退場（LiveDisplayView 接管）→ 不再清它們的 Image。
             foreach (var bmp in _stitchedImages) BitmapPool.Return(bmp);
             _stitchedImages = null;
             _stitchedCurveMean    = null;
@@ -321,7 +318,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _ctx.RowChartHelper.UpdateData(mergedMean, mergedMax);
                 var nv = SameSourceViewRange?.Invoke();
                 if (nv != null) _ctx.RowChartHelper.UpdateViewRange(nv[2], nv[3]);   // 新路徑：原子帶入當前 Y 視野
-                else _ctx.InteractionHelper.RefreshRowChartRange();
+                // 舊 else RefreshRowChartRange（讀已砍 canvas，恆 no-op）移除；視野由 LiveDisplayView 連動
             }
         }
 
@@ -429,7 +426,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 var displayMax  = HessianRescaleHelper.CloneAndRescale1D(max,  captureHmV, _ctx.Settings.HessianMaxFactorV);
 
                 double startPos = (idx >= 0 && idx < posArr.Length) ? posArr[idx] : 0;
-                _ctx.InteractionHelper.TryComputeCurrentViewRange(idx, out double leftMm, out double rightMm);
+                // 2b-ii：當前 X 視野改取 LiveDisplayView 快取（原 TryComputeCurrentViewRange 讀已砍 canvas，恆回 0,0）
+                var nv = SameSourceViewRange?.Invoke();
+                double leftMm = nv?[0] ?? 0, rightMm = nv?[1] ?? 0;
                 _ctx.ColumnChartHelper.UpdateDataAndView(displayMean, displayMax, startPos, leftMm, rightMm);
             }
 
@@ -453,7 +452,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                         var displayMax  = HessianRescaleHelper.CloneAndRescale1D(rowMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
                         FlipRowCurveIfNeeded(displayMean, displayMax);
                         _ctx.RowChartHelper.UpdateData(displayMean, displayMax);
-                        _ctx.InteractionHelper.RefreshRowChartRange();
+                        var nv = SameSourceViewRange?.Invoke();
+                        if (nv != null) _ctx.RowChartHelper.UpdateViewRange(nv[2], nv[3]);  // 取代死的 RefreshRowChartRange
                     }
                 }
             }
@@ -466,7 +466,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public void RefreshCurrentCameraChartsForSettingsChange()
         {
             if (_stitchedImages == null) return;
-            int idx = _ctx.GalleryManager.SelectedIndex;
+            int idx = SelectedCamIndexProvider?.Invoke() ?? 0;
             if (idx < 0) idx = 0;
             UpdatePerCameraCharts(idx);
         }
@@ -572,18 +572,62 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
         }
 
+        /// <summary>
+        /// 時序（period）路徑：從當前 Repository 時間點讀 H (_mean_h/_max_h) .bin 曲線 → 合併更新法向曲線圖
+        /// （chartReviewHorizontal）。單片路徑走 <see cref="UpdateGlobalRowChart"/>（吃 _stitchedRowCurveMean）；
+        /// period 不進 stitch 模式（_stitchedImages=null），故獨立從 repository 載 → 與切向 overview 對稱。
+        /// </summary>
+        public void UpdateRowChartFromRepository()
+        {
+            if (_ctx.RowChartHelper == null || _stitchedImages != null) return;
+
+            var images = _ctx.ImageRepository.GetImages(
+                _ctx.DateTimeNavigator.GetCurrentYear(),  _ctx.DateTimeNavigator.GetCurrentMonth(),
+                _ctx.DateTimeNavigator.GetCurrentDay(),   _ctx.DateTimeNavigator.GetCurrentHour(),
+                _ctx.DateTimeNavigator.GetCurrentMin(),   _ctx.DateTimeNavigator.GetCurrentSec());
+            if (images == null || images.Count == 0) return;
+
+            int camCount = _ctx.CameraCount;
+            var rowMean = new float[camCount][];
+            var rowMax  = new float[camCount][];
+            for (int i = 0; i < camCount; i++)
+            {
+                if (!images.TryGetValue(i + 1, out string path)) continue;
+                string basePath = CurveMergeHelper.GetCurveBasePath(path);
+                rowMean[i] = InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MeanH)
+                          ?? InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MeanHLegacy);
+                rowMax[i]  = InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MaxH)
+                          ?? InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MaxHLegacy);
+            }
+
+            CurveMergeHelper.MergeRowCurvesOverlap(rowMean, rowMax, camCount,
+                out float[] mergedMean, out float[] mergedMax);
+            if (mergedMean == null) return;
+
+            // 與 UpdateGlobalRowChart 同公式：bin baked-in 縮放=HM_V_capture，view-time 目標=HM_H_current。
+            float captureHmV = _ctx.InteractionHelper?.ReviewConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
+            HessianRescaleHelper.RescaleInPlace1D(mergedMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
+            HessianRescaleHelper.RescaleInPlace1D(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
+            FlipRowCurveIfNeeded(mergedMean, mergedMax);
+            _ctx.RowChartHelper.UpdateData(mergedMean, mergedMax);
+            var nv = SameSourceViewRange?.Invoke();
+            if (nv != null) _ctx.RowChartHelper.UpdateViewRange(nv[2], nv[3]);
+        }
+
         /// <summary>#13 同源新路徑的「當前視野」注入（form 快取 LiveDisplayView 視野；[l,r,top,bot]，null=無效）。
         /// chart 更新原子帶入此值 → 重載/強化切換不會先閃回預設再跟隨（同 Live 的 _liveViewLeftMm 解法）。</summary>
         public Func<double[]> SameSourceViewRange { get; set; }
 
+        /// <summary>當前選中相機 index（0-based）來源＝LiveDisplayView（2b-ii-B 後取代舊 GalleryManager.SelectedIndex）。</summary>
+        public Func<int> SelectedCamIndexProvider { get; set; }
+
         private double ViewRangeProvider(int cameraIndex, bool isLeft, double defaultValue)
         {
+            // 2b-ii：視野唯一來源＝LiveDisplayView 快取（SameSourceViewRange）。
+            //   舊 fallback TryComputeCurrentViewRange 讀已砍 canvas、恆失敗，移除。
             var nv = SameSourceViewRange?.Invoke();
             if (nv != null) return isLeft ? nv[0] : nv[1];
-            if (_ctx.InteractionHelper == null) return defaultValue;
-            if (!_ctx.InteractionHelper.TryComputeCurrentViewRange(cameraIndex, out double left, out double right))
-                return defaultValue;
-            return isLeft ? left : right;
+            return defaultValue;
         }
     }
 }
