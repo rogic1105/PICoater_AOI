@@ -174,16 +174,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
         /// 若有世界座標存檔，以 mm 反算新倍率下的 zoom/pan（跨倍率連續）。
         /// FitToScreen/SetView 內部會觸發 StatusChanged → chart sync，
         /// 此處以 _suppressChartSync 壓制，讓呼叫端統一呼叫 UpdateDataAndView。</summary>
-        public void UpdateCanvas(Bitmap newImage)
-        {
-            if (newImage == null) return;
-
-            ClearCanvas();
-            _canvas.Image = newImage;
-
-            RestoreViewOrFitToScreen();
-        }
-
         /// <summary>依 SaveViewIfNeeded 決定還原縮放或 FitToScreen。
         /// 用於 UpdateCanvas 內部，也供 stitched mode 外部呼叫（不經 ClearCanvas）。</summary>
         public void RestoreViewOrFitToScreen()
