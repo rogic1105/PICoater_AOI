@@ -598,17 +598,11 @@ namespace AniloxRoll.Monitor.Forms
             };
             _presenter.UpdatePeriodNavigationState();
 
-            camReviewMain.StatusChanged += _interactionHelper.UpdateCanvasInfo;
-            camReviewMain.EdgeReached   += _interactionHelper.NavigateCamera;
-            // 手勢（雙擊 fit / 三擊實體 1:1）唯一來源收進 SmartCanvas 內建；校正由 UpdateCanvasInfo 餵。
-            // 這裡只訂閱事件做 app 專屬的 UiActionLogger 記錄（記錄屬 app，不放 sdk）。
-            camReviewMain.DoubleClickFitToScreen = true;
-            camReviewMain.TripleClickPhysical1x  = true;
-            // 回顧是靜態畫面（換 ID 才重建快取）→ 縮小用 HighQualityBilinear 換平滑（不影響取像即時性）。
-            camReviewMain.DownscaleInterpolation = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
-            camReviewMain.DragStarted        += (s, e) => UiActionLogger.RecordViewOnly("camReviewMain.Drag");
-            camReviewMain.FitPerformed       += (s, e) => UiActionLogger.RecordViewOnly("camReviewMain.DoubleClick");
-            camReviewMain.Physical1xPerformed += (s, e) => UiActionLogger.RecordViewOnly("camReviewMain.Physical1x");
+            // Wave2 Step2a：camReviewMain（舊 SmartCanvas）已被 ReviewDisplayManager 的 overlay panel 覆蓋＝
+            //   使用者點不到、且永不被餵圖（StitchedImagesReady 走 PushFrames、RSC 只清空不賦值）→
+            //   StatusChanged/EdgeReached/手勢/UiActionLogger 全數不再觸發＝死接線，本回切斷（零行為變更）。
+            //   顯示/互動/手勢/座標 overlay/雙三擊全部由 LiveDisplayView（SmartCanvas）內建承接。
+            //   控制項實體 + Designer + CanvasInteractionHelper 顯示路徑留 Step2b（需上機驗 fit-on-load）。
 
             UpdateLiveDirectionVisual();
             UpdateRidgeDirectionVisual(null); // dir=null：無強化橘框，底色依 StitchMode 上色
