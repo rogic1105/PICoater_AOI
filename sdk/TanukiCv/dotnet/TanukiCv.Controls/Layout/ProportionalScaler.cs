@@ -6,10 +6,10 @@ using System.Windows.Forms;
 namespace TanukiCv.Controls
 {
     /// <summary>
-    /// Form 等比例縮放 Helper。
+    /// Form 等比例縮放 Helper（通用控制項，0 依賴 app/MIL）。
     /// Load 時記錄所有控制項的相對位置/大小，Resize 時按比例還原。
     /// </summary>
-    public class ProportionalScaler
+    public sealed class ProportionalScaler
     {
         private struct ControlRecord
         {
@@ -27,7 +27,7 @@ namespace TanukiCv.Controls
         private bool _scaling;
 
         /// <summary>重新縮放所有 TabControl「目前作用中」的 tab。
-        /// 初始最大化時，作用中 tab（如 tabPageLiveView）的子控制項因 WinForms TabControl lazy-layout
+        /// 初始最大化時，作用中 tab 的子控制項因 WinForms TabControl lazy-layout
         /// 沒被 ScaleRecursive 套到（要切到別 tab 再切回才放大）→ 開窗後主動補一次。</summary>
         public void RescaleActiveTabs()
         {
