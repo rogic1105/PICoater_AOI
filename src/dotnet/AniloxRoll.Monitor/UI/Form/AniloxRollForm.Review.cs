@@ -167,7 +167,8 @@ namespace AniloxRoll.Monitor.Forms
         {
             // 永遠 Global：時序路徑顯示走 LiveDisplayView（ApplyGlobalMergeIfNeeded 發 StitchedImagesReady）。
             _stitchCoordinator.ApplyGlobalMergeIfNeeded();
-            _stitchCoordinator.UpdateOverviewChartFromRepository();
+            _stitchCoordinator.UpdateOverviewChartFromRepository();   // 切向 overview（V 曲線）
+            _stitchCoordinator.UpdateRowChartFromRepository();        // 法向 row chart（H 曲線；時序路徑原本漏更新）
             _reviewDisplayManager?.RefireViewRange();   // chart 重建會重設軸 → 補發當前視野
         }
 

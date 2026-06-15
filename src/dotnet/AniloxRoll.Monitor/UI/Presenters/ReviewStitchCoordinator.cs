@@ -572,6 +572,48 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
         }
 
+        /// <summary>
+        /// 時序（period）路徑：從當前 Repository 時間點讀 H (_mean_h/_max_h) .bin 曲線 → 合併更新法向曲線圖
+        /// （chartReviewHorizontal）。單片路徑走 <see cref="UpdateGlobalRowChart"/>（吃 _stitchedRowCurveMean）；
+        /// period 不進 stitch 模式（_stitchedImages=null），故獨立從 repository 載 → 與切向 overview 對稱。
+        /// </summary>
+        public void UpdateRowChartFromRepository()
+        {
+            if (_ctx.RowChartHelper == null || _stitchedImages != null) return;
+
+            var images = _ctx.ImageRepository.GetImages(
+                _ctx.DateTimeNavigator.GetCurrentYear(),  _ctx.DateTimeNavigator.GetCurrentMonth(),
+                _ctx.DateTimeNavigator.GetCurrentDay(),   _ctx.DateTimeNavigator.GetCurrentHour(),
+                _ctx.DateTimeNavigator.GetCurrentMin(),   _ctx.DateTimeNavigator.GetCurrentSec());
+            if (images == null || images.Count == 0) return;
+
+            int camCount = _ctx.CameraCount;
+            var rowMean = new float[camCount][];
+            var rowMax  = new float[camCount][];
+            for (int i = 0; i < camCount; i++)
+            {
+                if (!images.TryGetValue(i + 1, out string path)) continue;
+                string basePath = CurveMergeHelper.GetCurveBasePath(path);
+                rowMean[i] = InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MeanH)
+                          ?? InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MeanHLegacy);
+                rowMax[i]  = InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MaxH)
+                          ?? InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MaxHLegacy);
+            }
+
+            CurveMergeHelper.MergeRowCurvesOverlap(rowMean, rowMax, camCount,
+                out float[] mergedMean, out float[] mergedMax);
+            if (mergedMean == null) return;
+
+            // 與 UpdateGlobalRowChart 同公式：bin baked-in 縮放=HM_V_capture，view-time 目標=HM_H_current。
+            float captureHmV = _ctx.InteractionHelper?.ReviewConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
+            HessianRescaleHelper.RescaleInPlace1D(mergedMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
+            HessianRescaleHelper.RescaleInPlace1D(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
+            FlipRowCurveIfNeeded(mergedMean, mergedMax);
+            _ctx.RowChartHelper.UpdateData(mergedMean, mergedMax);
+            var nv = SameSourceViewRange?.Invoke();
+            if (nv != null) _ctx.RowChartHelper.UpdateViewRange(nv[2], nv[3]);
+        }
+
         /// <summary>#13 同源新路徑的「當前視野」注入（form 快取 LiveDisplayView 視野；[l,r,top,bot]，null=無效）。
         /// chart 更新原子帶入此值 → 重載/強化切換不會先閃回預設再跟隨（同 Live 的 _liveViewLeftMm 解法）。</summary>
         public Func<double[]> SameSourceViewRange { get; set; }

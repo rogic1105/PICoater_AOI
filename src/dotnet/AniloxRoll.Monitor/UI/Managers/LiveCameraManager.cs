@@ -545,6 +545,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             // 反向連動（合圖視野移動 → sdk 已自動高亮縮圖）：只同步 app 選中狀態，不走 SwitchMainDisplay（防重載/遞迴）
             _smartDisplay.SelectedCamChanged += camId => _selectedMainCameraId = camId;
             _smartDisplay.ViewRangeMmChanged += OnSmartViewRange;
+            // SmartCanvas 模式下 MIL 滑鼠 hook 被覆蓋不觸發 → lblPixelInfo 改吃 LiveDisplayView 游標狀態（同源）
+            _smartDisplay.CursorStatusChanged += OnSmartCursorStatus;
             _smartDisplay.SetSelected(_selectedMainCameraId);
             if (IsGlobalMergeActive && _merger != null)
             {
@@ -619,6 +621,22 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// （切向/overview 用 X 範圍、法向用 Y 範圍）。bin↔主畫面對齊。</summary>
         private void OnSmartViewRange(double leftMm, double rightMm, double topMm, double botMm)
             => OnLiveViewRange?.Invoke(leftMm, rightMm, topMm, botMm);
+
+        /// <summary>SmartCanvas 模式：LiveDisplayView 游標狀態 → lblPixelInfo（mm 換算同源在 sdk，這裡只格式化）。
+        /// 取代 MIL 滑鼠 hook（SmartCanvas 覆蓋 MIL display 後 hook 不觸發）。</summary>
+        private void OnSmartCursorStatus(LiveDisplayView.CursorStatus s)
+        {
+            if (_updatePixelInfoCallback == null) return;
+            string tag = IsGlobalMergeActive ? "全域合圖" : $"CAM {s.SelectedCamId}";
+            _updatePixelInfoCallback.Invoke(
+                $"即時影像 [{tag}] | " +
+                $"位置:({s.CurMmX:F2}, {s.CurMmY:F2}) mm | " +
+                $"X範圍:{s.ViewLeftMm:F1}~{s.ViewRightMm:F1} mm | " +
+                $"Y範圍:{s.ViewTopMm:F1}~{s.ViewBotMm:F1} mm | " +
+                $"座標: ({s.CursorX}, {s.CursorY}) | " +
+                $"亮度: {s.Brightness} | " +
+                $"實體倍率:{(s.PhysMag > 0 ? $"{s.PhysMag:F2}x" : "-")}");
+        }
 
         /// <summary>監控主畫面可見範圍變更（leftX, rightX, topY, botY mm）→ form 訂閱、連動 live 曲線圖 zoom。</summary>
         public event Action<double, double, double, double> OnLiveViewRange;
