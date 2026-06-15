@@ -48,13 +48,19 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private readonly InspectionSettings _settings;
         private readonly CanvasInteractionHelper _canvasHelper;
 
+        // Wave2 2b-i：回顧 CFG 快照 + 螢幕 mm/px 從枯幹（CanvasInteractionHelper）移到 facade 自存
+        //   → 活資料不再轉發給死的顯示路徑，枯幹零活資料、2b-ii 可整棵砍。
+        private CsvConfigSnapshot _reviewConfig;
+        private double _screenMmPerPx;
+
         /// <summary>
-        /// 回顧資料夾的 CSV #CFG 快照。設定後，chart/canvas 優先使用 CFG 的 Ops/Pos/閾值。
+        /// 回顧資料夾的 CSV #CFG 快照。設定後，回顧曲線/座標優先使用 CFG 的 Ops/Pos/閾值
+        /// （RSC 取座標、PushFrames 餵 LiveDisplayView 用）。
         /// </summary>
         public CsvConfigSnapshot ReviewConfig
         {
-            get => _canvasHelper.ReviewConfig;
-            set => _canvasHelper.ReviewConfig = value;
+            get => _reviewConfig;
+            set => _reviewConfig = value;
         }
 
         private bool _isProcessedMode = false;
@@ -101,8 +107,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public void SaveCanvasView() => _canvasHelper.SaveViewIfNeeded();
         public void RestoreCanvasViewOrFit() => _canvasHelper.RestoreViewOrFitToScreen();
         public void ClearCanvasView() => _canvasHelper.ClearSavedView();
-        public void SetScreenMmPerPixel(double mmPerPx) => _canvasHelper.SetScreenMmPerPixel(mmPerPx);
-        public double ScreenMmPerPixel => _canvasHelper.ScreenMmPerPixel;
+        public void SetScreenMmPerPixel(double mmPerPx) => _screenMmPerPx = mmPerPx;
+        public double ScreenMmPerPixel => _screenMmPerPx;
         public double RowPitchMm => _rowChartHelper?.RowPitchMm ?? 0;
 
         /// <summary>設定全域/水平合圖模式：chartReviewVertical 與 canvas 座標聯動。</summary>
