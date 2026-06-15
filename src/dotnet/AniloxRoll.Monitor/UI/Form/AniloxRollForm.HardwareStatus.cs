@@ -521,6 +521,14 @@ namespace AniloxRoll.Monitor.Forms
             lbl.BackColor = on ? IecGreen : IecDarkGray;
         }
 
+        /// <summary>檢測暫停 setting 變更 → LED 先顯示 ×（下次 IO snapshot 由 UpdateIoLeds 更新真實 ◎/×）。
+        /// （Wave3 選項1：從 OnSettingChanged dispatcher 搬入。）</summary>
+        private void HandleMuraPauseSettingsChanged(string name)
+        {
+            if (name == nameof(InspectionSettings.MuraDetectPaused))
+                UpdateMuraLed(false);
+        }
+
         private void UpdateMuraLed(bool doMuraOn)
         {
             if (_settings.MuraDetectPaused)

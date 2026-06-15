@@ -33,6 +33,20 @@ namespace AniloxRoll.Monitor.Forms
         // --- 檢測數據 Tab ---
         // ==========================================
 
+        /// <summary>檢測報表 Y 軸 setting（gb 模式 / gc/gd/ge 各週期 YMax）→ 套到 Data 統計 charts。
+        /// （Wave3 選項1：從 OnSettingChanged dispatcher 搬入。）</summary>
+        private void HandleChartScaleSettingsChanged(string name)
+        {
+            if (name == nameof(InspectionSettings.gb_ChartScaleMode))
+                _dataStatsPresenter.ApplyChartScaleFromSettings();
+            else if (name == nameof(InspectionSettings.gc_YearlyYMax))
+                _dataStatsPresenter.ApplyFixedScaleForChart("Yearly", _settings.Chart.YearlyYMax);
+            else if (name == nameof(InspectionSettings.gd_MonthlyYMax))
+                _dataStatsPresenter.ApplyFixedScaleForChart("Monthly", _settings.Chart.MonthlyYMax);
+            else if (name == nameof(InspectionSettings.ge_DailyYMax))
+                _dataStatsPresenter.ApplyFixedScaleForChart("Daily", _settings.Chart.DailyYMax);
+        }
+
         private void SetupDataTab()
         {
             _dataStatsPresenter = new DataStatisticsPresenter(new DataStatisticsContext

@@ -184,6 +184,17 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         /// <summary>
+        /// <summary>去背演算法 setting 變更 → 重載背景 bin + 更新 StandardBgSub 鎖定狀態。
+        /// （Wave3 選項1：從 OnSettingChanged dispatcher 搬入。）</summary>
+        private void HandleAlgorithmSettingsChanged(string name)
+        {
+            if (name == "db_Algorithm" || name == nameof(InspectionRecipe.Algorithm) || name == "去背演算法")
+            {
+                if (_liveCameraManager.IsAllocated) LoadBackgroundBins();
+                UpdateStandardBgSubLockState();
+            }
+        }
+
         /// 從 BackgroundPath 載入各相機的 bg bin → pinned buffer → 設定到 AniloxCamera.PrecomputedColMean。
         /// </summary>
         private void LoadBackgroundBins()

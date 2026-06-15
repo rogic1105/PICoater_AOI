@@ -354,6 +354,26 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
+        /// <summary>Live 顯示相關 setting（動態 LOD + OPS/Start 合圖佈局）→ 即時套到 LiveCameraManager。
+        /// （Wave3 選項1：從 OnSettingChanged dispatcher 搬入；dispatcher 只 fan-out。）</summary>
+        private void HandleLiveLayoutSettingsChanged(string name)
+        {
+            if (name == nameof(InspectionSettings.hf_LiveLod))
+                _liveCameraManager?.SetLodMode(_settings.LiveLod);
+            if (OpsStartSettingNames.Contains(name) && _liveCameraManager?.IsGlobalMergeActive == true)
+                _liveCameraManager.RefreshGlobalMergeLayout(
+                    _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
+        }
+
+        /// <summary>強化 setting（監控 hc / 回顧 hd）→ 套用對應強化。（Wave3 選項1：從 dispatcher 搬入。）</summary>
+        private async Task HandleEnhanceSettingsChanged(string name)
+        {
+            if (name == nameof(InspectionSettings.hc_EnableMuraEnhance))
+                ApplyMuraEnhance(_settings.EnableMuraEnhance);
+            if (name == nameof(InspectionSettings.hd_EnableReviewEnhance))
+                await ApplyReviewEnhance(_settings.EnableReviewEnhance);
+        }
+
         private void ApplyMuraEnhance(bool enabled)
         {
             _liveCameraManager?.SetImageProcessingEnabled(enabled);
