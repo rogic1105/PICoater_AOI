@@ -3,12 +3,15 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
-namespace AniloxRoll.Monitor.UI.Widgets
+namespace TanukiCv.Controls
 {
-    /// <summary>圓角晶片 Label：以 <see cref="Control.BackColor"/> 當晶片填色，**反鋸齒**繪製圓角矩形底，
-    /// 文字交回 <c>base.OnPaint</c>（Label 原生繪製）→ 與設計時/其他 label 一致、清晰（不自畫文字避免模糊）。
-    /// 取代 Region 裁切（Region 硬邊無法反鋸齒）。強制無 BorderStyle 方框（否則圓角外露出細黑框）。
-    /// 現有設 BackColor 的程式（SetIoLed/UpdateIoStateLabel）不需改，照舊運作。</summary>
+    /// <summary>
+    /// 圓角晶片 Label（通用控制項，0 依賴 app/MIL）：以 <see cref="Control.BackColor"/> 當晶片填色，
+    /// 反鋸齒繪製圓角矩形底，文字交回 <c>base.OnPaint</c>（Label 原生繪製）→ 與其他 label 一致且清晰。
+    /// 取代 Region 裁切（Region 硬邊無法反鋸齒）。強制無 <see cref="BorderStyle"/> 方框（否則圓角外露細黑框）。
+    /// 用法：當一般 Label 用，設 <see cref="Control.BackColor"/> 即變晶片色；<see cref="CornerRadius"/> 調圓角、
+    /// <see cref="Raised"/> 開關立體漸層。狀態燈 / 標籤晶片皆適用。
+    /// </summary>
     public class RoundedLabel : Label
     {
         private int _cornerRadius = 10;

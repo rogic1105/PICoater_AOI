@@ -179,9 +179,6 @@
     <Compile Include="UI\Presenters\LiveTelemetryPresenter.cs" />
     <Compile Include="UI\Widgets\CanvasInteractionHelper.cs" />
     <Compile Include="UI\Widgets\EventGuard.cs" />
-    <Compile Include="UI\Widgets\RoundedLabel.cs">
-      <SubType>Component</SubType>
-    </Compile>
     <Compile Include="UI\Widgets\FormInteractionHelper.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.cs" />
     <Compile Include="UI\Managers\ReviewDisplayManager.cs" />
