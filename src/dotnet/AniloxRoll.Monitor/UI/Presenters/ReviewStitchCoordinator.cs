@@ -547,32 +547,27 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 ? (Func<string, Bitmap>)(p => _ctx.InspectionService.LoadBmpAtScale(p, scale))
                 : null;
 
+            // 時序（cbReviewDate/cbReviewTime）路徑：載 7 台 → 轉灰階 → 發同一個 StitchedImagesReady
+            //（與單片同源 → 顯示走 LiveDisplayView、拿到 LOD）。Bitmap 在本地迴圈內轉灰階即釋放，零 race。
             int camCount = _ctx.CameraCount;
-            var camImages = new Bitmap[camCount];
+            var grayArr = new byte[camCount][];
+            var grayW = new int[camCount];
+            var grayH = new int[camCount];
             for (int i = 0; i < camCount; i++)
             {
-                if (filesMap.TryGetValue(i + 1, out string path))
+                if (!filesMap.TryGetValue(i + 1, out string path)) continue;
+                Bitmap bmp = null;
+                try
                 {
-                    try
-                    {
-                        camImages[i] = GrabImageStitcher.LoadCameraImage(path, scale, bmpLoader,
-                            useProcessed: LastReviewProcessedMode, ridgeDirection: ActiveRidgeDirection);
-                    }
-                    catch (Exception ex)
-                    {
-                        Trace.WriteLine($"[GlobalMerge] CAM{i + 1}: {ex.GetType().Name}: {ex.Message}");
-                    }
+                    bmp = GrabImageStitcher.LoadCameraImage(path, scale, bmpLoader,
+                        useProcessed: LastReviewProcessedMode, ridgeDirection: ActiveRidgeDirection);
+                    if (bmp != null)
+                        grayArr[i] = AniloxRoll.Monitor.UI.Managers.ReviewDisplayManager.ToGray8(bmp, out grayW[i], out grayH[i]);
                 }
+                catch (Exception ex) { Trace.WriteLine($"[GlobalMerge] CAM{i + 1}: {ex.GetType().Name}: {ex.Message}"); }
+                finally { bmp?.Dispose(); }
             }
-
-            _periodMergedImage = GrabImageStitcher.MergeHorizontal(camImages, opsArr, posArr, scale);
-
-            foreach (var img in camImages) img?.Dispose();
-
-            if (_periodMergedImage != null)
-                ShowMergedImageInCanvas(_periodMergedImage, opsArr, posArr);
-
-            // Global 模式：切向曲線圖清空（單台資料無意義）
+            StitchedImagesReady?.Invoke(grayArr, grayW, grayH, opsArr, posArr, true);
         }
 
         /// <summary>

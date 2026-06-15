@@ -166,11 +166,10 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private void ApplyPostLoadDisplay()
         {
-            if (_settings.StitchMode == StitchMode.Global)
-                _stitchCoordinator.ApplyGlobalMergeIfNeeded();
-            else
-                _interactionHelper.RefreshCurrentCanvasResult();
+            // 永遠 Global：時序路徑顯示走 LiveDisplayView（ApplyGlobalMergeIfNeeded 發 StitchedImagesReady）。
+            _stitchCoordinator.ApplyGlobalMergeIfNeeded();
             _stitchCoordinator.UpdateOverviewChartFromRepository();
+            _reviewDisplayManager?.RefireViewRange();   // chart 重建會重設軸 → 補發當前視野
         }
 
 
