@@ -231,16 +231,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
         }
 
-        /// <summary>將合併圖顯示在 camReviewMain 並啟用 chartReviewVertical 聯動。</summary>
-        public void ShowMergedImageInCanvas(Bitmap mergedImage, double[] opsArr, double[] posArr)
-        {
-            int scale = InspectionEngineConfig.DefaultSaveResizeScale;
-            _ctx.InteractionHelper.SetCanvasScaleAndCamera(scale, 0);
-            EnableMergedOverviewSync(opsArr, posArr);
-            _ctx.Canvas.Image = mergedImage;
-            _ctx.InteractionHelper.RestoreCanvasViewOrFit();
-        }
-
         public void EnableMergedOverviewSync(double[] opsArr, double[] posArr)
         {
             double globalMinMm = double.MaxValue;
@@ -388,28 +378,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
         }
 
 
-        /// <summary>顯示單台相機拼接影像，並更新對應的 mura chart。
-        /// resetView=true（camReview 切換相機）：Vertical 模式強制 fit to screen。
-        /// resetView=false（強化方向重載）：尊重呼叫端 SaveCanvasView 的視野存檔。</summary>
-        public void ShowStitchedCameraInCanvas(int idx, bool resetView = true)
-        {
-            if (_stitchedImages == null) return;
-            var bmp = (idx >= 0 && idx < _stitchedImages.Length) ? _stitchedImages[idx] : null;
-
-            _ctx.InteractionHelper.SetCanvasScaleAndCamera(
-                InspectionEngineConfig.DefaultSaveResizeScale, idx);
-
-            _ctx.Canvas.Image = bmp;
-            if (bmp != null)
-            {
-                if (resetView && _ctx.Settings.StitchMode == StitchMode.Vertical)
-                    _ctx.InteractionHelper.ClearCanvasView();
-                _ctx.InteractionHelper.RestoreCanvasViewOrFit();
-            }
-
-            UpdatePerCameraCharts(idx);
-        }
-
         /// <summary>
         /// 更新單台相機的 chartReviewVertical（V）+ chartReviewHorizontal（H）。
         /// 套用 view-time 正規值 rescale：
@@ -501,25 +469,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
             int idx = _ctx.GalleryManager.SelectedIndex;
             if (idx < 0) idx = 0;
             UpdatePerCameraCharts(idx);
-        }
-
-        /// <summary>
-        /// Stitch 模式（cbReviewId 已載入）切換到 Global：
-        /// 直接用記憶體中的 _stitchedImages 合圖，不重新讀碟。
-        /// </summary>
-        public void MergeAndShowFromStitchedImages()
-        {
-            if (_stitchedImages == null) return;
-            var cfg = _ctx.InteractionHelper.ReviewConfig;
-            double[] opsArr = cfg?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
-            double[] posArr = cfg?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
-            int scale = InspectionEngineConfig.DefaultSaveResizeScale;
-
-            _globalMergedImage?.Dispose();
-            _globalMergedImage = GrabImageStitcher.MergeHorizontal(_stitchedImages, opsArr, posArr, scale);
-            if (_globalMergedImage != null)
-                ShowMergedImageInCanvas(_globalMergedImage, opsArr, posArr);
-
         }
 
         /// <summary>

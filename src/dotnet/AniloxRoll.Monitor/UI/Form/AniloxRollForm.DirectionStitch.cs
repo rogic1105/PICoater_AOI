@@ -126,65 +126,6 @@ namespace AniloxRoll.Monitor.Forms
                 : _stitchCoordinator.LastReviewProcessedMode;
 
 
-        private async Task OnStitchModeChangedAsync(bool skipStitchedImageRefresh = false)
-        {
-            // 關程式時 fire-and-forget 的切換 async（_ = SwitchStitchMode...）可能在 Form/控制項
-            // disposed 後續跑，碰 disposed 的 chart/canvas → NullReferenceException，故源頭早退。
-            if (IsDisposed || Disposing) return;
-            // Live tab：即時全域合圖
-            if (_settings.StitchMode == StitchMode.Global && _liveCameraManager?.IsAllocated == true)
-                _liveCameraManager.EnableGlobalMerge(
-                    _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
-            else
-            {
-                _liveCameraManager?.DisableGlobalMerge();
-                _liveRowMeanCache.Clear();
-                _liveRowMaxCache.Clear();
-            }
-
-            if (_settings.StitchMode == StitchMode.Global)
-            {
-            }
-
-            // 根據當前選中的回顧縮圖重新載入回顧主畫面
-            if (_stitchCoordinator.IsStitchMode)
-            {
-                // skipStitchedImageRefresh=true：caller 自己會 LoadGrabStitchedViewAsync 重 load，
-                // 跳過這裡的緩存 merge 避免「先顯示緩存再 reload」兩段閃爍。
-                if (!skipStitchedImageRefresh)
-                {
-                    int idx = _galleryManager?.SelectedIndex ?? 0;
-                    if (_settings.StitchMode == StitchMode.Global)
-                        _stitchCoordinator.MergeAndShowFromStitchedImages();
-                    else
-                    {
-                        _stitchCoordinator.DisposeGlobalMergedImage();
-                        _stitchCoordinator.ShowStitchedCameraInCanvas(idx);
-                    }
-                }
-            }
-            else if (_imageRepository.FileCount > 0)
-            {
-                _stitchCoordinator.ClearStitchedMode();
-                await _presenter.LoadImagesWithPeriodLockAsync(
-                    _stitchCoordinator.LastReviewProcessedMode, _interactionHelper.LoadImages);
-                ApplyPostLoadDisplay();
-            }
-
-            // 重繪縮圖外框（切換 StitchMode 後橘框隨之更新）
-            foreach (var pb in _cameraPanels) pb.Invalidate();
-
-            // 切換合圖方式後主畫面 fit to screen
-            // skipStitchedImageRefresh=true：caller 自己會 reload 新原圖再 fit，這裡 fit 會作用在舊強化版 image 上，跳過。
-            if (!skipStitchedImageRefresh && camReviewMain.Image != null)
-                camReviewMain.FitToScreen();
-
-            // 底色（藍）依 StitchMode；橘框依強化狀態
-            UpdateRidgeDirectionVisual(
-                IsEnhanceDisplayActive ? _stitchCoordinator.ActiveRidgeDirection : null);
-            UpdateLiveDirectionVisual();
-        }
-
         private void UpdateRidgeDirectionVisual(string dir)
         {
             // 視覺規則（2026-06-12 改版）：藍底＝該方向強化圖顯示中；mode 底色 + 橘框已廢（同 Live）。

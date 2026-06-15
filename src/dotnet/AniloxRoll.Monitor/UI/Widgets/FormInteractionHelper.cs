@@ -155,11 +155,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
             await _presenter.RunWorkflowAsync(enableProcess, _thumbnailCache);
         }
 
-        public void RefreshCurrentCanvasResult()
-        {
-            OnGallerySelectionChanged(_galleryManager?.SelectedIndex ?? 0);
-        }
-
         public void SetUiLoadingState(bool isBusy)
         {
             _isBusy = isBusy;
@@ -178,72 +173,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
         }
 
         // ── Gallery 選取 ──────────────────────────────────────────────────
-        public void OnGallerySelectionChanged(int index)
-        {
-            _canvasHelper.SetCurrentCameraIndex(index);
-
-            if (_isBusy) return;
-
-            var swTotal = Stopwatch.StartNew();
-
-            try
-            {
-                var sw = Stopwatch.StartNew();
-                InspectionData data = _inspectionService?.RunInspectionFullRes(index);
-                long fullResMs = sw.ElapsedMilliseconds;
-
-                long canvasMs = 0, chartMs = 0;
-
-                if (data != null)
-                {
-                    _canvasHelper.SetImageScaleFactor(data.ScaleFactor);
-
-                    sw.Restart();
-                    _canvasHelper.UpdateCanvas(data.Image);
-                    canvasMs = sw.ElapsedMilliseconds;
-
-                    if (_columnChartHelper != null && _settings != null)
-                    {
-                        sw.Restart();
-                        var cfg = ReviewConfig;
-                        double[] posArr = cfg?.CamPos ?? _settings.GetCameraStartPositionMmArray();
-                        double startPos = (index >= 0 && index < posArr.Length)
-                            ? posArr[index] : 0;
-
-                        // 回顧模式：chart 使用 CFG 的 Ops/閾值
-                        if (cfg != null)
-                        {
-                            double opsUm = (index >= 0 && index < cfg.CamOps.Length)
-                                ? cfg.CamOps[index] : _settings.Cam1_Ops;
-                            _columnChartHelper.SetOps(opsUm);
-                            _columnChartHelper.SetThresholds(cfg.ErrorValueMeanV, cfg.ErrorValueMaxV);
-                        }
-
-                        _canvasHelper.TryComputeCurrentViewRange(index, out double leftMm, out double rightMm);
-                        _columnChartHelper.UpdateDataAndView(data.MuraCurveMean, data.MuraCurveMax,
-                            startPos, leftMm, rightMm);
-                        chartMs = sw.ElapsedMilliseconds;
-                    }
-
-                    // 更新法向（水平）Mura 曲線圖 + Y 軸視野同步
-                    if (_rowChartHelper != null && data.MuraRowCurveMean != null)
-                    {
-                        _rowChartHelper.UpdateData(data.MuraRowCurveMean, data.MuraRowCurveMax);
-                        _canvasHelper.RefreshRowChartRange();
-                    }
-                }
-
-                Console.WriteLine(
-                    $"[OnSelect] Cam{index + 1} | " +
-                    $"FullRes={fullResMs,5}ms | Canvas={canvasMs,4}ms | Chart={chartMs,4}ms | " +
-                    $"Total={swTotal.ElapsedMilliseconds,5}ms");
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(_form, "載入圖像失敗: " + ex.Message);
-            }
-        }
-
         // ── 時間導航 ──────────────────────────────────────────────────────
         public void NavigateToDateTime(DateTime dt) => _timeNavigator.NavigateTo(dt);
 
