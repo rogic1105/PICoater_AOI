@@ -92,6 +92,21 @@ namespace TanukiCv.Controls
             public int CursorX, CursorY;      // 游標影像座標
         }
 
+        /// <summary>游標狀態（mm 位置 + 可見範圍 + 實體倍率 + 原始座標/亮度）→ 上層更新狀態列等。
+        /// 與 <see cref="OnCanvasStatus"/> 同源計算（mm 換算只在這裡做一次），上層只負責格式化（文字屬上層政策）。</summary>
+        public event Action<CursorStatus> CursorStatusChanged;
+
+        /// <summary>游標狀態快照（單一來源＝LiveDisplayView 內部 mm 換算；上層不重算）。</summary>
+        public sealed class CursorStatus
+        {
+            public double CurMmX, CurMmY;                                   // 游標位置 mm（X=沿料寬，Y=沿走料方向）
+            public double ViewLeftMm, ViewRightMm, ViewTopMm, ViewBotMm;    // 可見範圍 mm
+            public double PhysMag;                                          // 實體倍率（<=0＝無校正）
+            public int CursorX, CursorY;                                    // 游標影像座標（像素）
+            public int Brightness;                                          // 該點灰階值 0~255
+            public int SelectedCamId;                                       // 1-based 當前選中相機
+        }
+
         /// <summary>合圖重疊分界策略（預設中線）。</summary>
         public MergeOverlap MergeStrategy { get; set; } = MergeOverlap.Midline;
 
@@ -550,6 +565,17 @@ namespace TanukiCv.Controls
             _canvas.SetCursorMm($"({curMmX:F2}, {curMmY:F2})");
 
             ViewRangeMmChanged?.Invoke(leftMm, rightMm, topMm, botMm);
+
+            // 游標狀態（含位置/亮度/倍率）→ 上層狀態列；mm 換算同源、不在上層重算。
+            CursorStatusChanged?.Invoke(new CursorStatus
+            {
+                CurMmX = curMmX, CurMmY = curMmY,
+                ViewLeftMm = leftMm, ViewRightMm = rightMm, ViewTopMm = topMm, ViewBotMm = botMm,
+                PhysMag = physMag,
+                CursorX = info.ImageX, CursorY = info.ImageY,
+                Brightness = info.PixelColor.R,
+                SelectedCamId = _selectedCamId,
+            });
 
             UpdateReverseThumbSync();
 

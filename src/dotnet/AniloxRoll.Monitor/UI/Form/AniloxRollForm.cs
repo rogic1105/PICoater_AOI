@@ -577,6 +577,19 @@ namespace AniloxRoll.Monitor.Forms
                 _stitchCoordinator.SameSourceViewRange = () =>
                     double.IsNaN(_reviewViewLeftMm) ? null
                     : new[] { _reviewViewLeftMm, _reviewViewRightMm, _reviewViewTopMm, _reviewViewBotMm };
+                // 游標狀態 → 狀態列 lblPixelInfo（mm 換算同源在 LiveDisplayView，這裡只格式化＝app 政策）。
+                // 取代舊 camReviewMain.StatusChanged→UpdateCanvasInfo（覆蓋後已死，#13 遷移時即斷）。
+                _reviewDisplayManager.CursorStatusChanged += s =>
+                {
+                    if (lblPixelInfo == null) return;
+                    lblPixelInfo.Text =
+                        $"位置:({s.CurMmX:F2}, {s.CurMmY:F2}) mm | " +
+                        $"X範圍:{s.ViewLeftMm:F1}~{s.ViewRightMm:F1} mm | " +
+                        $"Y範圍:{s.ViewTopMm:F1}~{s.ViewBotMm:F1} mm | " +
+                        $"座標: ({s.CursorX}, {s.CursorY}) | " +
+                        $"亮度: {s.Brightness} | " +
+                        $"實體倍率:{(s.PhysMag > 0 ? $"{s.PhysMag:F2}x" : "-")}";
+                };
             }
 
             _stitchCoordinator.StitchedCurveUpdated += (mean, max, ops, pos, errMean, errMax) =>

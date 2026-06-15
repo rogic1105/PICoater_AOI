@@ -25,6 +25,9 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// 回顧曲線圖 zoom 連動（拖曳中也即時，鐵則：不可為效能抑制）。</summary>
         public event Action<double, double, double, double> ViewRangeMmChanged;
 
+        /// <summary>游標狀態（mm 位置/範圍/亮度/倍率）pass-through → 上層更新狀態列 lblPixelInfo。</summary>
+        public event Action<LiveDisplayView.CursorStatus> CursorStatusChanged;
+
         /// <summary>sdk 顯示元件（接事件 / 進階用；未建立前 null）。</summary>
         public LiveDisplayView View => _view;
 
@@ -50,6 +53,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _view.FlipVertical = false;                // 回顧影像載入時已翻轉（StitchCamera baked-in），勿再翻
             _view.EnableLod(GrayResizeCpu.Resize);     // 回顧白賺 LOD；CPU provider＝無 GPU 機也跑
             _view.ViewRangeMmChanged += (l, r, tp, bt) => ViewRangeMmChanged?.Invoke(l, r, tp, bt);
+            _view.CursorStatusChanged += s => CursorStatusChanged?.Invoke(s);
         }
 
         private static Panel OverlayPanel(Control under)
