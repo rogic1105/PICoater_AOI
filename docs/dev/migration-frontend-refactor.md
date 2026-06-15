@@ -49,10 +49,11 @@
 - 風險：中。每項 build+上機抽測（單片/時序/監控三條）。
 
 ### Wave 3 — 拆 god object（按判準）🔴 增量、最謹慎
-- [ ] `LiveCameraManager`（1327）→ `LiveCameraService`（相機/MIL/grab/生命週期，不碰 WinForms）+ `LiveDisplayCoordinator`（Panel/LiveDisplayView/chart/view-range）。先 partial 物理拆、再抽類。
-- [ ] `FormInteractionHelper`（269）→ `CanvasCoordinator` + `ReviewFolderCoordinator` + `BusyUiBinder` + `ImageCacheService` + `InspectionSettingsCoordinator` + 殘留 Helper。`FormInteractionContext` 改回純 DTO（不准 service-locator）。
-- [ ] `OnSettingChanged` 唯一 dispatcher → 拆成多個 feature coordinator 各自訂 Hub（Form 不再唯一 dispatch）。逐 setting group 搬，留 dispatcher 過渡到空。
-- [ ] `DataStatisticsPresenter`（1394）→ 內部拆（統計計算 service / chart coordinator / 跨 tab 同步）。
+**拆序（審查重排）：dispatcher 先 → 混血 → facade → 自包含最後。理由：先拆 SSoT 中樞，後面三個碰它時才有地方掛；最孤立的放最後降風險。**
+- [ ] **①** `OnSettingChanged` 唯一 dispatcher → 拆成多個 feature coordinator 各自訂 Hub（Form 不再唯一 dispatch）。逐 setting group 搬，留 dispatcher 過渡到空。**先拆＝它是 SSoT 中樞，其他三個都會掛上來。**
+- [ ] **②** `LiveCameraManager`（1327）→ `LiveCameraService`（相機/MIL/grab/生命週期，不碰 WinForms）+ `LiveDisplayCoordinator`（Panel/LiveDisplayView/chart/view-range）。先 partial 物理拆、再抽類。**獨立子分支 + partial 階段就上機**——碰「先關 M_UPDATE 再 select」順序敏感邏輯，錯一步殘影/凍結。
+- [ ] **③** `FormInteractionHelper`（269）→ `CanvasCoordinator` + `ReviewFolderCoordinator` + `BusyUiBinder` + `ImageCacheService` + `InspectionSettingsCoordinator` + 殘留 Helper。`FormInteractionContext` 改回純 DTO（不准 service-locator）。
+- [ ] **④** `DataStatisticsPresenter`（1394）→ 內部拆（統計計算 service / chart coordinator / 跨 tab 同步）。**放最後＝對其他三個依賴最少、跨 tab 邊界清楚、風險孤立。**
 - 風險：高。每個 god object 一條子分支，先 partial 再抽，每步 build + 完整上機回歸。**絕不一次拆完。**
 
 ### Wave 4 — 命名收斂 + namespace=資料夾 🟢
