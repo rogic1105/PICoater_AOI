@@ -101,7 +101,7 @@ app 的 UI 架構（SSoT 原子結構 / 四層 View-協調-State-Service / 協�
 **已知教訓（都是抄多份釀的坑）：**
 - 曝光上限公式 `900000/線掃` 曾抄 4 份（主程式 3 + 範例 1）→ 收進 `MilCameraParams.CalcExposureMaxUs`
 - 合圖佈局「設座標 + 算位置」在 `EnableMerge`/`RefreshLayout` 各一份且順序不一致 → 切換 StitchMode 後 `xOffset` 用到 `RefOpsMm=0`（除以 0）變垃圾值 → 合圖全黑 → 收進 `MultiCameraMerger.ApplyLayout`（順序鎖死）
-- 座標換算 `pixel↔mm` 即時（`LiveCameraManager`）/ 回顧（`CanvasInteractionHelper`）各一份（待收斂）
+- 座標換算 `pixel↔mm`：回顧已收斂進 sdk `LiveDisplayView.OnCanvasStatus`（唯一來源，CanvasInteractionHelper 已刪）；Live MIL 直繪路徑 `LiveCameraManager` 仍一份（公式都走 `PixelMmMapper`，待 Wave3 一併檢視）
 
 **討論 / 設計時的提問順序：**
 「這段邏輯有沒有第二份？」 → 「改一處另一處是否一定要跟著改？」 → 是則「抽哪裡、誰呼叫」 — 而不是「複製過來改一改」。
@@ -162,15 +162,14 @@ PICoater_AOI/
 | `UI/Form/AniloxRollForm.Helpers.cs` | PG refresh（`RefreshGridItem`）/Review 座標（`ViewRangeProvider`）/通用（`FindCameraById`/`IsCanvasFitToScreen`） |
 | `UI/Form/AniloxRollForm.Designer.cs` | Form 控制項佈局（VS Designer）。狀態列順序：相機→儲存→光源→IO連線→IO狀態→DIO |
 | `Program.cs` | 進入點 + **全域例外攔截**（`ThreadException`/`AppDomain.UnhandledException`/`UnobservedTaskException` → 寫 `AniloxRoll-crash.log` 到 bin 與 %TEMP%；背景執行緒未處理例外不再直接 0xffffffff 終止）+ 損毀 user.config 自刪 |
-| `UI/Widgets/FormInteractionHelper.cs` | UI 互動、gallery 選擇、計時；ReviewConfig 代理 |
-| `UI/Widgets/CanvasInteractionHelper.cs` | Canvas zoom/pan 事件、mm 座標換算；ReviewConfig → GetEffectiveOps/Pos |
-| `UI/Widgets/EventGuard.cs` | 可重入 bool 旗標（EventGuard + EventGuardScope），using 語法自動還原 |
+| `UI/Widgets/FormInteractionHelper.cs` | 回顧資料夾載入、忙碌鎖、設定套用、螢幕校正、ReviewConfig（Wave2 後已去 canvas 代理 + gallery；Wave3 待拆 facade） |
+| `sdk/TanukiCv/dotnet/TanukiCv.Controls/Interaction/EventGuard.cs` | 可重入 bool 旗標（EventGuard + EventGuardScope），using 自動還原（**Wave1 已搬 sdk**） |
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/BaseCurveChartHelper.cs` | **曲線圖抽象基底（已搬 sdk 共用唯一來源）**：Template Method（Build 骨架 + Mean/Max 線 + 閾值線工廠 + PostPaint），子類填方向專屬洞。自包含 0 依賴 app；app+sample 共用。`ShowThresholds`（預設 true）可關紅閾值線（純剖面用）；`RowCurveChartHelper.SetRowPitch` 直接設 mm/列。**範例 chartProfileX/Y 重用此 + LiveDisplayView.CursorProfileChanged 游標剖面（單張＝選定相機全幀；**合圖剖面已做**＝游標列橫跨整張合圖、用 BuildMerge 同份 placements 拼故與畫面 pixel 對齊、游標行取所屬相機；sdk LiveDisplayView 內、app+sample 同享）** |
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/ColumnCurveChartHelper.cs` | 切向（X 軸）曲線圖子類：X=位置 mm/Y=值、右側 Y2 刻度、水平 InnerPlotPosition 對齊補償、zoom 同步（chartLiveVertical/Patch/Review*/DataPatch 用）|
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/RowCurveChartHelper.cs` | 法向（Y 軸）曲線圖子類：Y=位置、軸旋轉、垂直 InnerPlot 補償（chartLiveHorizontal/ReviewHorizontal 用）|
-| `UI/Widgets/TrackBarWheelInterceptor.cs` | TrackBar 滑鼠滾輪攔截器（從 AniloxRollForm 提取） |
-| `UI/Widgets/ComboBoxWheelReverser.cs` | ComboBox 滑鼠滾輪方向反轉（從 AniloxRollForm 提取） |
-| `UI/Widgets/MultiClickDetector.cs` | 多擊偵測器：雙擊/三擊辨識（從 AniloxRollForm 提取） |
+| `sdk/TanukiCv/dotnet/TanukiCv.Controls/Input/TrackBarWheelInterceptor.cs` | TrackBar 滑鼠滾輪攔截器（**Wave1 已搬 sdk**） |
+| `sdk/TanukiCv/dotnet/TanukiCv.Controls/Input/ComboBoxWheelReverser.cs` | ComboBox 滑鼠滾輪方向反轉（**Wave1 已搬 sdk**） |
+| `UI/Widgets/MultiClickDetector.cs` | 多擊偵測器：雙擊/三擊辨識（app panelClicker 用）。**與 SmartCanvas 內建重複＝唯一來源債，Wave3 收** |
 | `UI/Widgets/CurveMergeHelper.cs` | **薄 wrapper**：全覽合併數學已抽到 sdk `TanukiCv.Core.CurveOverviewMerger.Merge`（唯一來源，範例同源可共用），本類別只 `.bin 曲線讀取（MergeCurves/MergeRowCurves/GetCurveBasePath，含 CaptureFileNaming 檔名故留 app）+ UpdateOverviewChart「秀」（委派 Merge → 接 ColumnCurveChartHelper + StitchMode 視野）`。切向全覽重疊區依合圖方式 `MergeOverlap`（app 預設 Midline，對齊影像 MultiCameraMerger 中線）唯一歸屬、不再 avg/max、間空留 0（邏輯在 Core） |
 | `UI/Presenters/DataStatisticsPresenter.cs` | Data tab 統計邏輯：統計計算、combo 串聯、Period Charts、Mura 空間分布圖（chartDataPatch）、跨 Tab 同步事件 |
 | `UI/Presenters/ReviewStitchCoordinator.cs` | Review tab 拼接管理：LoadGrabStitchedViewAsync、合圖、ClearStitchedMode、overview chart 聯動。**換 ID 載入效能**：`LoadGrabStitchedViewAsync` 的 `Task.Run` 內 7 台相機 `Parallel.For` 平行解碼/拼接（imgs[i]/curve[i] 各寫各 index、BitmapPool 有 lock、CurveMergeHelper 無共用 static → 安全；GDI+ 併發為灰色地帶，留意偶發黑塊）+ **`MergeHorizontal` 也移進背景**（原在 UI 執行緒＝swap 卡頓主因）；計時 log `CSV/Stitch/Merge(bg)/UIapply/Total`。**`CurveFlipVertical`**（旗標，未來可做 tool 選項）+ `FlipRowCurveIfNeeded`：線掃相機由下往上拍→回顧影像上下翻轉（StitchCamera），故 row 曲線兩條路徑（逐相機 + Global）都反向才對齊影像；live 不翻轉故不動 |
@@ -211,8 +210,8 @@ PICoater_AOI/
 | `Services/RemoteCopyService.cs` | 背景遠端複製：ConcurrentQueue + 背景執行緒，File.Copy 含重試（3 次） |
 | `Services/LightController.cs` | LTS-3DPA24 光源控制器 RS-232 通訊：AutoDetect（先試設定 COM 再掃描）、嚴格 probe（PDF §4.1.4 表-4 驗證：8-byte、cmd/ch echo、XOR checksum）、TurnOn/Off/SetBrightness，跟隨 IO Grab 開關 |
 | `UI/Widgets/GrabImageStitcher.cs` | 多張影像垂直拼接 + MergeHorizontal 全域合圖（佈局 xOffset + 重疊中點分界委派 sdk `TanukiCv.Controls.MergeLayout.Compute(Midline)` 單一來源，totalW 保留自家 ALL-slots 含空缺占位版）；LoadCameraImage（internal） |
-| `UI/Widgets/ProportionalScaler.cs` | Form 等比例縮放（重設 Bounds + 重建 Font，非點陣縮放）。`RescaleActiveTabs`（開窗最大化後補縮作用中 tab，解 TabControl lazy-layout）。DPI 感知（`app.manifest` dpiAware=true）+ `WindowState=Maximized` 下文字原生清晰；字體 = 設計大小 |
-| `UI/Widgets/RoundedLabel.cs` | 圓角晶片 Label（`Label` 子類）：反鋸齒繪圓角底（BackColor 當填色）+ 文字交 `base.OnPaint` 原生繪製（清晰）；強制無 BorderStyle 方框。用於 IO 運作區（lblIoState + DI/DO 燈號）與方正連線燈視覺分組 |
+| `sdk/TanukiCv/dotnet/TanukiCv.Controls/Layout/ProportionalScaler.cs` | Form 等比例縮放（重設 Bounds + 重建 Font，非點陣縮放）。`RescaleActiveTabs`（開窗最大化後補縮作用中 tab，解 TabControl lazy-layout）。DPI 感知（`app.manifest` dpiAware=true）+ `WindowState=Maximized` 下文字原生清晰（**Wave1 已搬 sdk**） |
+| `sdk/TanukiCv/dotnet/TanukiCv.Controls/Layout/RoundedLabel.cs` | 圓角晶片 Label（`Label` 子類）：反鋸齒繪圓角底 + 文字交 `base.OnPaint` 原生繪製；強制無 BorderStyle 方框。用於 IO 運作區與連線燈視覺分組（**已搬 sdk**） |
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/UI/SmartCanvas.cs` | PictureBox 子類（`TanukiCv.Controls` 獨立 WinForms assembly）：zoom/pan/edge/ClampPan；自訂白底黑邊十字游標。**畫布資訊 overlay**（`ShowOverlay` 右鍵開關）：游標座標/亮度跟滑鼠、四邊 mm 範圍（X 左右 90° 旋轉、Y 上下）、右下實體倍率；座標/亮度 canvas 自繪，範圍/倍率由 `CanvasInteractionHelper.SetRangeOverlay` 推（mm 換算單一來源仍在 helper）。**效能**：游標 overlay 用 `Region` 區域失效（兩塊分離小矩形，非外接框，快速移動才不變整張）+ 重狀態同步限流 ~30fps + **整圖快取 `_viewCache`**（存「整張圖在當前 zoom 下」的點陣，**不含 pan**；pan 只改 `DrawImageUnscaled` 偏移、不重建 → FitToScreen 拖曳不再每幀重縮整張大圖；只 zoom/Image 變才重建。放大致整圖 > ~6× 控制項面積 → `_viewCache=null` 退回 per-frame 只畫可見區，放大時便宜。**cache 建構內插：縮小(zoom<1，如 fit/overview)用 `HighQualityBilinear` 平滑、放大(zoom>1)用 `NearestNeighbor` 保像素邊界清晰 —— min/mag 標準正解，避免寬圖(如合圖)縮小時 NearestNeighbor 丟像素變馬賽克**）。**滾輪 zoom 防抖**：滾動中不重建 cache、改拉伸舊 cache(`_zoom/_cacheZoom`)，停下 150ms(`_zoomSettleTimer`)才重建一次 → zoom 不每格頓。**動態 LOD（opt-in，預設關）**：`EnableLod(virtualW,virtualH,provider)` 把 zoom/pan 當「導覽虛擬全解析度圖」，停住(150ms)才請 provider 裁可見區+縮到~panel 產 tile（互動用舊 tile 拉伸）；**tile 的 GPU 重算丟背景執行緒**(in-flight guard + pending 用最新視角重算；caller 的 pinned 釋放需與 provider 互斥防 use-after-free)→ 停下不凍 UI；`LodMargin`(1.0=3×3 overscan)+ 拖出範圍節流 120ms 即時補不破圖；`RefreshLod`/`DisableLod`/`UpdateLodVirtualSize`。**`FitRelativeZoom`(opt-in)**：滾輪相對 fit(fit=1×)，上限=bitmap 1:1×`MaxZoomOverBitmap`(8)；滾輪 `×1.1^(e.Delta/120)` 正比轉動量（修卡頓時事件合併漏算）。`ZoomRelativeToFit`=螢幕縮放，**非實體倍率**(兩者互不可取代)；`PhysicalMagnification`=實體倍率(需 SetPhysicalCalibration，唯一來源，1.0x=螢幕1mm=實物1mm)。**多擊手勢(opt-in，單一來源)**：`DoubleClickFitToScreen`(雙擊 fit；只在「非 fit」才動作、已 fit 不歸零讓三擊接手)、`TripleClickPhysical1x`(三擊實體 1:1，需先 `SetPhysicalCalibration(mmPerImagePx,screenMmPerPx)`→`ZoomToOneToOne` 將點選點移到畫布中央，用 `PixelMmMapper.OneToOneZoom`)；自帶最小多擊偵測 + `IsAtFitView()`。事件 `FitPerformed`/`Physical1xPerformed`/`DragStarted` 供上層做 app 專屬記錄(如 `UiActionLogger`)。**主程式回顧畫布 `camReviewMain` 已改用此**(`CanvasInteractionHelper.UpdateCanvasInfo` 餵 `SetPhysicalCalibration`；原 app 的 MultiClickDetector handler/SetPhysicalMagnification1x/IsCanvasFitToScreen 已移除)。Controls→Core 參考。詳見 `sdk/MIL/samples/MilGrabber.Monitor`（先在此驗證，未來搬回顧畫布） |
 
 > 路徑前綴 `src/dotnet/AniloxRoll.Monitor/` 省略以節省空間。
@@ -369,8 +368,8 @@ PICoater_AOI/
 | 標準名稱 | Name | 類型 | 畫面文字 |
 |---------|------|------|---------|
 | 讀取資料 | `btnReviewSelectFolder`（Review）/ `btnDataSelectFolder`（Data） | Button | 讀取資料 |
-| 回顧縮圖1~7 | `camReview1~7` | PictureBox | — |
-| 回顧主畫面 | `camReviewMain` | SmartCanvas | — |
+| 回顧縮圖1~7 | `camReview1~7` | Panel | —（Wave2：原 PictureBox→Panel，當 LiveDisplayView ThumbStrip 宿主） |
+| 回顧主畫面 | `camReviewMain` | Panel | —（Wave2：原 SmartCanvas→Panel，當 LiveDisplayView 宿主；顯示/互動全由 sdk 承接） |
 | 回顧切向曲線圖（全覽） | `chartReviewVertical` | Chart | —（原 chartReviewPatch 接位改名；舊單台切向 chart 已刪） |
 | 回顧法向曲線圖 | `chartReviewHorizontal` | Chart | — |
 | 時段群組 | `grpReviewTimePeriod` | GroupBox | 時序 |
