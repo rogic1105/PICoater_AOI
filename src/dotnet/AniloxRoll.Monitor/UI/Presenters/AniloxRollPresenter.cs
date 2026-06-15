@@ -16,7 +16,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private readonly ImageRepository _repository;
         private readonly BatchInspectionService _inspectionService;
         private readonly DateTimeNavigator _timeManager;
-        private readonly ThumbnailGridPresenter _galleryManager;
         private int _periodNavigationBusyCount = 0;
 
         public event Action<bool> BusyStateChanged;
@@ -26,13 +25,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public AniloxRollPresenter(
             ImageRepository repo,
             BatchInspectionService service,
-            DateTimeNavigator timeMgr,
-            ThumbnailGridPresenter galleryMgr)
+            DateTimeNavigator timeMgr)
         {
             _repository = repo;
             _inspectionService = service;
             _timeManager = timeMgr;
-            _galleryManager = galleryMgr;
 
             // 啟動時 WarmUp
             Task.Run(() =>
@@ -71,12 +68,12 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
                 sw.Stop();
 
-                _galleryManager.UpdateImages(results, cacheCollector);
+                // 2b-ii-B：縮圖顯示由 LiveDisplayView 承接（ThumbnailGridPresenter 已刪）。
+                //   此處仍把 ProcessBatch 產出的影像收進 cacheCollector → 由 ClearOldImages 統一 Dispose（防洩漏）。
+                foreach (var r in results)
+                    if (r?.Data?.Image != null) cacheCollector.Add(r.Data.Image);
 
                 BusyStateChanged?.Invoke(false);
-
-                // 更新縮圖選取框（不觸發事件，由呼叫端根據 StitchMode 決定顯示方式）
-                _galleryManager.Select(_galleryManager.SelectedIndex, triggerEvent: false);
 
                 string logText = string.Join(Environment.NewLine, logs.OrderBy(x => x));
                 LogReported?.Invoke($"Total Duration: {sw.ElapsedMilliseconds} ms\n{logText}");

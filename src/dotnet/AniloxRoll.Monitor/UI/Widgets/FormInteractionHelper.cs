@@ -18,18 +18,14 @@ namespace AniloxRoll.Monitor.UI.Widgets
     public class FormInteractionContext
     {
         public Form Form { get; set; }
-        public SmartCanvas Canvas { get; set; }
         public Button[] ButtonsToLock { get; set; }
         public List<Image> ThumbnailCache { get; set; }
         public AniloxRollPresenter Presenter { get; set; }
         public BatchInspectionService InspectionService { get; set; }
         public ImageRepository ImageRepository { get; set; }
         public DateTimeNavigator TimeNavigator { get; set; }
-        public ThumbnailGridPresenter GalleryManager { get; set; }
         public ColumnCurveChartHelper ColumnChartHelper { get; set; }
         public InspectionSettings Settings { get; set; }
-        public ToolStripStatusLabel StatusLabel { get; set; }
-        public PictureBox[] CameraPanels { get; set; }
         public RowCurveChartHelper RowChartHelper { get; set; }
     }
 
@@ -42,7 +38,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private readonly BatchInspectionService _inspectionService;
         private readonly ImageRepository _imageRepository;
         private readonly DateTimeNavigator _timeNavigator;
-        private readonly ThumbnailGridPresenter _galleryManager;
         private readonly ColumnCurveChartHelper _columnChartHelper;
         private readonly RowCurveChartHelper _rowChartHelper;
         private readonly InspectionSettings _settings;
@@ -75,7 +70,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
             _inspectionService = context.InspectionService;
             _imageRepository = context.ImageRepository;
             _timeNavigator = context.TimeNavigator;
-            _galleryManager = context.GalleryManager;
             _columnChartHelper = context.ColumnChartHelper;
             _rowChartHelper = context.RowChartHelper;
             _settings = context.Settings;
@@ -166,8 +160,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
                 if (fbd.ShowDialog() == DialogResult.OK)
                 {
-                    int lastCameraIndex = _galleryManager.SelectedIndex;
-                    if (lastCameraIndex < 0) lastCameraIndex = 0;
+                    // 2b-ii-B：選中相機狀態由 LiveDisplayView 自管（換資料夾不重置）→ 不再記/還原 gallery index。
 
                     // 路徑修正：使用者選的目錄無 yyyy 子目錄但底下有 Captures\yyyy → 自動往下走
                     // (使用者誤選 D:\Anilox 時自動轉成 D:\Anilox\Captures)
@@ -189,8 +182,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
                     }
 
                     _timeNavigator.Initialize(UserSessionState.LastYear);
-
-                    _galleryManager.Select(lastCameraIndex, triggerEvent: false);
                 }
             }
         }
@@ -214,10 +205,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         // ── 資源清理 ──────────────────────────────────────────────────────
         public void ClearOldImages()
         {
-            // 先清 PictureBox 引用，再 Dispose Bitmap。
-            // 若順序相反，await Task.Run 期間 UI 執行緒空出，
-            // Windows Paint 事件會嘗試繪製已 Dispose 的 Bitmap，拋 ArgumentException。
-            _galleryManager.ClearImages();
+            // 2b-ii-B：縮圖 PictureBox 已退場（LiveDisplayView 接管）→ 不再 ClearImages；直接 Dispose 快取 Bitmap。
             foreach (var img in _thumbnailCache)
             {
                 try { img.Dispose(); }

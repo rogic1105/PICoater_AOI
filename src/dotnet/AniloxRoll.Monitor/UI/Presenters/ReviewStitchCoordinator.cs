@@ -18,7 +18,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
     /// </summary>
     public class ReviewStitchContext
     {
-        public SmartCanvas Canvas { get; set; }
         public Chart ChartReviewPatch { get; set; }
         public Chart ChartReviewVertical { get; set; }
         public Chart ChartReviewHorizontal { get; set; }
@@ -26,7 +25,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public ColumnCurveChartHelper ColumnChartHelper { get; set; }
         public RowCurveChartHelper RowChartHelper { get; set; }
         public ColumnCurveChartHelper OverviewHelper { get; set; }
-        public ThumbnailGridPresenter GalleryManager { get; set; }
 
         public BatchInspectionService InspectionService { get; set; }
         public ImageRepository ImageRepository { get; set; }
@@ -249,7 +247,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// Form 自身會清控制項與資源，且關程式時 fire-and-forget 的 StitchMode 切換 async
         /// 可能續跑碰到已 disposed 的 chartReviewVertical/canvas → NullReferenceException。</summary>
         private bool UiDisposed =>
-            (_ctx?.ChartReviewPatch?.IsDisposed ?? true) || (_ctx?.Canvas?.IsDisposed ?? true);
+            (_ctx?.ChartReviewPatch?.IsDisposed ?? true);
 
         /// <summary>離開合圖模式：清除座標覆寫、停用互動 zoom。
         /// 不重設 ScaleView（ZoomReset）：避免 await 期間 message pump 渲染出全範圍閃爍，
@@ -269,15 +267,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
         {
             if (UiDisposed) return;
             DisableMergedOverviewSync();
+            // 2b-ii-B：合圖 bitmap 不再貼到 canvas（顯示走 LiveDisplayView）→ 只還池。
             if (_globalMergedImage != null)
             {
-                if (_ctx.Canvas.Image == _globalMergedImage) _ctx.Canvas.Image = null;
                 BitmapPool.Return(_globalMergedImage);
                 _globalMergedImage = null;
             }
             if (_periodMergedImage != null)
             {
-                if (_ctx.Canvas.Image == _periodMergedImage) _ctx.Canvas.Image = null;
                 BitmapPool.Return(_periodMergedImage);
                 _periodMergedImage = null;
             }
@@ -288,8 +285,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (UiDisposed) return;
             DisposeGlobalMergedImage();
             if (_stitchedImages == null) return;
-            _ctx.Canvas.Image = null;
-            _ctx.GalleryManager.ClearImages();
+            // 2b-ii-B：canvas/縮圖 PictureBox 已退場（LiveDisplayView 接管）→ 不再清它們的 Image。
             foreach (var bmp in _stitchedImages) BitmapPool.Return(bmp);
             _stitchedImages = null;
             _stitchedCurveMean    = null;
@@ -470,7 +466,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public void RefreshCurrentCameraChartsForSettingsChange()
         {
             if (_stitchedImages == null) return;
-            int idx = _ctx.GalleryManager.SelectedIndex;
+            int idx = SelectedCamIndexProvider?.Invoke() ?? 0;
             if (idx < 0) idx = 0;
             UpdatePerCameraCharts(idx);
         }
@@ -579,6 +575,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// <summary>#13 同源新路徑的「當前視野」注入（form 快取 LiveDisplayView 視野；[l,r,top,bot]，null=無效）。
         /// chart 更新原子帶入此值 → 重載/強化切換不會先閃回預設再跟隨（同 Live 的 _liveViewLeftMm 解法）。</summary>
         public Func<double[]> SameSourceViewRange { get; set; }
+
+        /// <summary>當前選中相機 index（0-based）來源＝LiveDisplayView（2b-ii-B 後取代舊 GalleryManager.SelectedIndex）。</summary>
+        public Func<int> SelectedCamIndexProvider { get; set; }
 
         private double ViewRangeProvider(int cameraIndex, bool isLeft, double defaultValue)
         {

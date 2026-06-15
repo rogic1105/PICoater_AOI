@@ -124,6 +124,9 @@ namespace TanukiCv.Controls
         /// <summary>內部主畫面 SmartCanvas（供上層接計時 / app 專屬事件等；一般顯示不需碰）。</summary>
         public SmartCanvas Canvas => _canvas;
 
+        /// <summary>當前選中相機（1-based）。上層需要「目前哪一台」時讀這裡（唯一來源）。</summary>
+        public int SelectedCamId => _selectedCamId;
+
         /// <summary>縮圖選取框色（雙向連動高亮的唯一視覺來源；上層若原本自畫選取框請移除，避免雙框）。</summary>
         public System.Drawing.Color ThumbSelectedColor { set => _thumbStrip?.SetSelectedColor(value); }
 
