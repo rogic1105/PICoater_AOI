@@ -405,40 +405,5 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        /// <summary>
-        /// Live chart 點選切 StitchMode 時，若同時要關掉強化，必須先把 callback thread 的 chart 更新訂閱斷開，
-        /// 避免轉場期間 callback BeginInvoke 到 chart handle 不穩定的視窗。
-        /// L2：setting 變更走 Hub.SetBatch 統一 save；副作用 transition 仍 inline await（避免 event race）。
-        /// </summary>
-        private async Task SwitchStitchModeWithEnhanceSequence(StitchMode newMode)
-        {
-            if (_settings == null) return;
-            bool wasEnhanced = _settings.EnableMuraEnhance;
-            try
-            {
-                _liveCameraManager.OnLiveCurveData    -= OnLiveCurveData;
-                _liveCameraManager.OnLiveRowCurveData -= OnLiveRowCurveData;
-
-                _settingsHub.SetBatch(s =>
-                {
-                    if (wasEnhanced) s.EnableMuraEnhance = false;
-                    s.hb_StitchMode = newMode;
-                });
-                if (wasEnhanced) _liveCameraManager?.SetImageProcessingEnabled(false);
-                if (wasEnhanced) RefreshGridItem(nameof(InspectionSettings.hc_EnableMuraEnhance));
-                RefreshGridItem(nameof(InspectionSettings.hb_StitchMode));
-                await OnStitchModeChangedAsync();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"切換 StitchMode 異常:\n{ex}", "StitchMode", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            finally
-            {
-                _liveCameraManager.OnLiveCurveData    += OnLiveCurveData;
-                _liveCameraManager.OnLiveRowCurveData += OnLiveRowCurveData;
-                try { UpdateLiveDirectionVisual(); } catch (Exception ex) { Trace.WriteLine(ex); }
-            }
-        }
     }
 }

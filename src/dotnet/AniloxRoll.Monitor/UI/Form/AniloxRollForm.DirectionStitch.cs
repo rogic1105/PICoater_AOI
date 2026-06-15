@@ -125,36 +125,6 @@ namespace AniloxRoll.Monitor.Forms
                 ? _settings.EnableReviewEnhance
                 : _stitchCoordinator.LastReviewProcessedMode;
 
-        /// <summary>
-        /// Review tab：點對方 chart 切 StitchMode 時順便關 enhance。
-        /// 對應 Live tab 的 SwitchStitchModeWithEnhanceSequence。
-        /// 一次性從硬碟 reload 原圖 + 切 mode，避免「先用緩存 merge 顯示強化版、再 reload 顯示原圖」的兩段閃爍。
-        /// </summary>
-        private async Task SwitchReviewStitchModeAndDisableEnhance(StitchMode newMode)
-        {
-            if (_settings == null) return;
-            bool wasStitchMode = _stitchCoordinator.IsStitchMode;
-
-            // 之前用 camReviewMain.Visible=false 包 transition 想做 commit-on-end，但實測 reload 期間
-            // canvas 整個消失（黑屏）幾百 ms 反而比中間幀更難看。改回直接 transition，由 ReloadCurrentStitchedView
-            // 內 LoadGrabStitchedViewAsync 換 Image 時自然 paint 一次（短暫舊→新轉換可接受）。
-            _settingsHub.SetBatch(s =>
-            {
-                s.EnableReviewEnhance = false;
-                s.hb_StitchMode       = newMode;
-            });
-            _stitchCoordinator.LastReviewProcessedMode = false;
-            UpdateRidgeDirectionVisual(null);
-            RefreshGridItem(nameof(InspectionSettings.hd_EnableReviewEnhance));
-            RefreshGridItem(nameof(InspectionSettings.hb_StitchMode));
-
-            await OnStitchModeChangedAsync(skipStitchedImageRefresh: wasStitchMode);
-            if (wasStitchMode && _stitchCoordinator.IsStitchMode)
-            {
-                await ReloadCurrentStitchedView(false);
-                if (camReviewMain.Image != null) camReviewMain.FitToScreen();
-            }
-        }
 
         private async Task OnStitchModeChangedAsync(bool skipStitchedImageRefresh = false)
         {
