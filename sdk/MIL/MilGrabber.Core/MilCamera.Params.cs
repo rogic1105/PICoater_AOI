@@ -105,13 +105,18 @@ namespace MilGrabber.Core
         // ==================== Grab Height ====================
 
         /// <summary>變更 Grab 高度並重新分配 MIL Buffer。失敗自動 rollback 至原高度。</summary>
-        public void SetGrabHeight(int height)
+        /// <summary>變更 grab 高度。<paramref name="onStoppedBeforeRestart"/>＝「grab 已停、buffer 已配新尺寸、
+        /// 尚未重啟」時的回呼：上層在此重配自己的 buffer（如 native 檢測記憶體），保證**不與 grab callback 競爭**
+        /// → 消除「邊抓邊換 buffer」的不一致窗（高度變更 AccessViolation 根治）。</summary>
+        public void SetGrabHeight(int height, Action onStoppedBeforeRestart = null)
         {
             if (_milDigitizer == MIL.M_NULL || height <= 0) return;
 
             bool wasLive = IsLive;
             int oldHeight = CameraGrabHeight;
 
+            // M_STOP 排乾在途 processing callback → 之後沒有 FrameReady 在跑；接著「停著」期間做完所有 buffer
+            // 重配（MIL + 上層 native）再重啟，消除不一致窗。
             if (wasLive)
             {
                 MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize,
@@ -121,9 +126,10 @@ namespace MilGrabber.Core
 
             FreeGrabBuffers();
 
+            bool ready = true;
             try
             {
-                AllocateAndBind(height, wasLive);
+                AllocateAndBind(height);   // 配 MIL buffer + 設新 FrameWidth/Height（不在此重啟）
             }
             catch (Exception ex)
             {
@@ -132,15 +138,29 @@ namespace MilGrabber.Core
                 FreeGrabBuffers();
                 try
                 {
-                    AllocateAndBind(oldHeight, wasLive);
+                    AllocateAndBind(oldHeight);
                 }
                 catch (Exception rex)
                 {
                     System.Diagnostics.Trace.WriteLine(
                         $"[CAM{CameraId}] SetGrabHeight rollback to {oldHeight}px also failed: {rex.GetType().Name}: {rex.Message}. Camera disabled.");
                     _userWantsGrab = false;
+                    ready = false;
                 }
             }
+
+            // grab 仍停著、FrameWidth/Height 已是最終尺寸 → 上層重配 native/host buffer（無 callback 競爭）
+            if (ready) { try { onStoppedBeforeRestart?.Invoke(); } catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}] onStoppedBeforeRestart: {ex.Message}"); } }
+
+            // 所有 buffer 就緒後才重啟 grab
+            if (ready && wasLive && _userWantsGrab) StartProcess();
+        }
+
+        private void StartProcess()
+        {
+            MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize,
+                MIL.M_START, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
+            IsLive = true;
         }
 
         private void FreeGrabBuffers()
@@ -157,7 +177,7 @@ namespace MilGrabber.Core
             _milLastGrabBuffer = MIL.M_NULL;
         }
 
-        private void AllocateAndBind(int targetHeight, bool shouldRestart)
+        private void AllocateAndBind(int targetHeight)
         {
             MIL.MdigControl(_milDigitizer, MIL.M_SOURCE_SIZE_Y, (MIL_INT)targetHeight);
             CameraGrabHeight = targetHeight;
@@ -179,13 +199,7 @@ namespace MilGrabber.Core
 
             MIL.MdispSelectWindow(_milDisplay, _milDisplayBuffer, _panelHandle);
             MIL.MdispControl(_milDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
-
-            if (shouldRestart && _userWantsGrab)
-            {
-                MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize,
-                    MIL.M_START, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
-                IsLive = true;
-            }
+            // 重啟 grab 不在此做：交給 SetGrabHeight 在「上層 buffer 也配好後」才呼 StartProcess（消除不一致窗）。
         }
     }
 

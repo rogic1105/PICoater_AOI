@@ -237,25 +237,26 @@ namespace AniloxRoll.Monitor.Core.Camera
         {
             if (height <= 0) return;
 
-            // 1. 釋放檢測記憶體（MIL buffer 由 _mil.SetGrabHeight 處理）
-            FreeInspectionBuffers();
-
-            // 2. MIL 端重分配 grab/display buffer + rebind display + restart
-            _mil.SetGrabHeight(height);
-            CameraGrabHeight = _mil.CameraGrabHeight;
-
-            // 3. 用 MIL 回報的實際尺寸重分配檢測記憶體
-            int w = _mil.FrameWidth;
-            int h = _mil.FrameHeight;
-            if (w <= 0 || h <= 0) return;
-
-            _hostInputBuffer  = new byte[w * h];
-            _hostOutputBuffer = new byte[w * h];
-            lock (_picoaterLock)
+            // 根治高度變更 AccessViolation：原本「先 FreeInspectionBuffers（邊抓邊放）→ _mil 重啟後才重配 native」
+            // 有兩個與 grab callback 競爭的窗。改：把「釋放舊 + 重配 native/host/resize」交給 _mil 的
+            // onStoppedBeforeRestart 回呼 → 在「grab 已停（M_STOP 排乾 callback）、MIL buffer 已配新尺寸、尚未重啟」
+            // 時做，**保證無 FrameReady 在跑** → 消除不一致窗。
+            _mil.SetGrabHeight(height, onStoppedBeforeRestart: () =>
             {
-                _nativeBufferPool = new NativeBufferPool(w, h, 1);
-            }
-            AllocateResizeBuffers();
+                int w = _mil.FrameWidth;
+                int h = _mil.FrameHeight;
+                if (w <= 0 || h <= 0) return;
+
+                FreeInspectionBuffers();   // 釋放舊 native/host/resize（此刻 grab 停著、無 callback）
+                _hostInputBuffer  = new byte[w * h];
+                _hostOutputBuffer = new byte[w * h];
+                lock (_picoaterLock)
+                {
+                    _nativeBufferPool = new NativeBufferPool(w, h, 1);
+                }
+                AllocateResizeBuffers();
+            });
+            CameraGrabHeight = _mil.CameraGrabHeight;
         }
 
         /// <summary>釋放檢測記憶體（host + NativeBufferPool + resize pinned buffer）。MIL buffer 不在此處理。</summary>
