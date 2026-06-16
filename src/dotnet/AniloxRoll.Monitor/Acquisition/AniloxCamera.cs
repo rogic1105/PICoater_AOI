@@ -366,6 +366,11 @@ namespace AniloxRoll.Monitor.Core.Camera
             lock (_picoaterLock)
             {
                 if (_nativeBufferPool == null) return false;
+                // 高度變更瞬間：fw/fh（鎖外讀）可能與「鎖內已重配的 pool / host buffer」尺寸不一致 →
+                // GPU/Marshal 越界 → AccessViolation。守門：尺寸超過任一 buffer 容量就跳過這幀（transient，不崩）。
+                if ((ulong)fw * (ulong)fh > _nativeBufferPool.ImageBufferSize) return false;
+                if (_hostInputBuffer == null || _hostInputBuffer.Length < fw * fh ||
+                    _hostOutputBuffer == null || _hostOutputBuffer.Length < fw * fh) return false;
 
                 IntPtr picoaterInputBuffer = _nativeBufferPool.InputBuffer;
                 IntPtr picoaterRidgeBuffer = _nativeBufferPool.RidgeBuffer;
@@ -556,9 +561,14 @@ namespace AniloxRoll.Monitor.Core.Camera
 
                 lock (_picoaterLock)
                 {
+                    // fw/fh 在鎖外讀（580）→ 高度變更時可能與「鎖內已重配的 _nativeBufferPool」尺寸不一致：
+                    // 高度調小 → 舊 fw×fh > 新 buffer 容量 → GPU 越界讀 → AccessViolation。
+                    // 守門：來源 fw×fh 超過當前 pool 容量就跳過這幀（高度切換瞬間的 transient，不存即可，不崩）。
                     if (_nativeBufferPool != null &&
                         _rawResizeBuf  != IntPtr.Zero &&
-                        _procResizeBuf != IntPtr.Zero)
+                        _procResizeBuf != IntPtr.Zero &&
+                        (ulong)fw * (ulong)fh <= _nativeBufferPool.ImageBufferSize &&
+                        fw > 0 && fh > 0)
                     {
                         hasResizeData = true;
                         int pixels = rw * rh;
