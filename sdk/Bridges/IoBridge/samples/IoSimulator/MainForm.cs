@@ -94,7 +94,9 @@ namespace IoBridge.IoSimulator
                 Location = new Point(444, 12), Size = new Size(344, 446),
                 Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical,
                 BackColor = Color.FromArgb(250, 250, 235), Font = new Font("Microsoft JhengHei UI", 8.5f),
-                Text = HelpText
+                WordWrap = true,
+                // WinForms TextBox 需 \r\n 才換行；原始字串（LF）正規化成 CRLF。
+                Text = HelpText.Replace("\r\n", "\n").Replace("\n", "\r\n")
             };
             Controls.Add(help);
         }
