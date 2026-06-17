@@ -60,6 +60,7 @@
     <Compile Include="MilCamera.CLProtocol.cs" />
     <Compile Include="MilCamera.Display.cs" />
     <Compile Include="MilCamera.Params.cs" />
+    <Compile Include="MilCamera.PhaseLog.cs" />
     <Compile Include="MilCamera.Telemetry.cs" />
     <Compile Include="MultiCameraMerger.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

@@ -126,6 +126,10 @@ namespace MilGrabber.Monitor
             _statusTimer = new System.Windows.Forms.Timer { Interval = 500 };
             _statusTimer.Tick += StatusTimer_Tick;
 
+            // 循環測試：接到 Designer 拉的 btnCycleTest（模擬真實「拍 10s 停 1s」循環，觀察相位跨循環是否漂走）。
+            btnCycleTest.Text = "循環測試";
+            btnCycleTest.Click += btnCycle_Click;
+
             UpdateButtonsEnabled(initialized: false);
         }
 
@@ -195,6 +199,15 @@ namespace MilGrabber.Monitor
 
             _isReleasing = false;
             _userWantsGrab = false;
+
+            // 多相機相位量測 log（診斷）：輸出到 exe 旁 Logs\phaselog-yyyyMMdd.csv。
+            try
+            {
+                string logsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
+                Directory.CreateDirectory(logsDir);
+                MilCamera.PhaseLogPath = Path.Combine(logsDir, $"phaselog-{DateTime.Now:yyyyMMdd}.csv");
+            }
+            catch { }
 
             // 1. 讀 config（檔不存在 / 解析失敗 → fallback 內建 7 相機，並標示）
             _devices = LoadDeviceConfig();
@@ -391,6 +404,55 @@ namespace MilGrabber.Monitor
             btnGrab.Text = _userWantsGrab ? "停止抓取" : "開始抓取";
         }
 
+        // =========================================================================
+        // btnCycle: 循環測試（模擬真實「拍 N 秒 → 停 M 秒」循環 → 觀察相位跨循環是否累積漂走）
+        // =========================================================================
+        private bool _cycleRunning;
+        private const int CycleOnSec = 10, CycleOffSec = 1;   // 拍 10s / 停 1s（你的真實場景：一次拍 10~20s）
+
+        private async void btnCycle_Click(object sender, EventArgs e)
+        {
+            if (_cams == null) return;
+
+            if (_cycleRunning) { _cycleRunning = false; btnCycleTest.Text = "停止中…"; return; }
+
+            _cycleRunning = true;
+            btnGrab.Enabled = false; btnRelease.Enabled = false;
+            int n = 0;
+            try
+            {
+                while (_cycleRunning && !_isReleasing)
+                {
+                    n++;
+                    btnCycleTest.Text = $"循環中 #{n}";
+                    // 開抓 CycleOnSec 秒
+                    _userWantsGrab = true;
+                    foreach (var cam in _cams) if (cam != null && cam.IsConnected) cam.SetUserGrabIntent(true);
+                    btnGrab.Text = "停止抓取";
+                    for (int s = 0; s < CycleOnSec * 10 && _cycleRunning && !_isReleasing; s++)
+                        await System.Threading.Tasks.Task.Delay(100);
+                    // 停 CycleOffSec 秒
+                    _userWantsGrab = false;
+                    foreach (var cam in _cams) if (cam != null) cam.SetUserGrabIntent(false);
+                    btnGrab.Text = "開始抓取";
+                    for (int s = 0; s < CycleOffSec * 10 && _cycleRunning && !_isReleasing; s++)
+                        await System.Threading.Tasks.Task.Delay(100);
+                }
+            }
+            finally
+            {
+                _cycleRunning = false;
+                if (!_isReleasing)
+                {
+                    _userWantsGrab = false;
+                    foreach (var cam in _cams) if (cam != null) cam.SetUserGrabIntent(false);
+                    btnGrab.Text = "開始抓取";
+                    btnGrab.Enabled = true; btnRelease.Enabled = true;
+                    btnCycleTest.Text = $"循環測試（已跑 {n} 次）";
+                }
+            }
+        }
+
         // 上下翻轉（線掃相機由下往上拍 → 顯示需反轉）已融入「設定」PropertyGrid（PbSettings.Flip）→ ApplyPbSettings
         //   同時套用到 LiveDisplayView（PictureBox 模式主畫面+縮圖）與各 MilCamera（MIL 模式 MimFlip）。
 
@@ -510,6 +572,7 @@ namespace MilGrabber.Monitor
             btnRelease.Enabled = initialized;
             btnFetchInfo.Enabled = initialized; // 已初始化才可手動抓相機資訊
             tabParams.Enabled = initialized;
+            btnCycleTest.Enabled = initialized;   // 循環測試
         }
 
         // =========================================================================

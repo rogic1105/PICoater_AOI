@@ -174,6 +174,7 @@ namespace MilGrabber.Monitor
             this.panelCam7 = new System.Windows.Forms.Panel();
             this.chartProfileY = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.chartProfileX = new System.Windows.Forms.DataVisualization.Charting.Chart();
+            this.btnCycleTest = new System.Windows.Forms.Button();
             this.tabParams.SuspendLayout();
             this.tabExposure.SuspendLayout();
             this.panelExpAll.SuspendLayout();
@@ -303,7 +304,7 @@ namespace MilGrabber.Monitor
             this.btnFetchInfo.Text = "抓取相機資訊";
             this.btnFetchInfo.UseVisualStyleBackColor = true;
             this.btnFetchInfo.Click += new System.EventHandler(this.btnFetchInfo_Click);
-            //
+            // 
             // _lblTiming
             // 
             this._lblTiming.ForeColor = System.Drawing.Color.DimGray;
@@ -2176,11 +2177,21 @@ namespace MilGrabber.Monitor
             this.chartProfileX.TabIndex = 47;
             this.chartProfileX.Text = "chartProfileX";
             // 
+            // btnCycleTest
+            // 
+            this.btnCycleTest.Location = new System.Drawing.Point(980, 164);
+            this.btnCycleTest.Name = "btnCycleTest";
+            this.btnCycleTest.Size = new System.Drawing.Size(110, 32);
+            this.btnCycleTest.TabIndex = 48;
+            this.btnCycleTest.Text = "按鈕";
+            this.btnCycleTest.UseVisualStyleBackColor = true;
+            // 
             // MilGrabberPbForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1448, 1014);
+            this.Controls.Add(this.btnCycleTest);
             this.Controls.Add(this.chartProfileX);
             this.Controls.Add(this.chartProfileY);
             this.Controls.Add(this.panelCam0);
@@ -2318,7 +2329,6 @@ namespace MilGrabber.Monitor
             ((System.ComponentModel.ISupportInitialize)(this.chartProfileY)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.chartProfileX)).EndInit();
             this.ResumeLayout(false);
-            this.PerformLayout();
 
         }
 
@@ -2478,5 +2488,6 @@ namespace MilGrabber.Monitor
         private System.Windows.Forms.Panel panelCam7;
         private System.Windows.Forms.DataVisualization.Charting.Chart chartProfileY;
         private System.Windows.Forms.DataVisualization.Charting.Chart chartProfileX;
+        private System.Windows.Forms.Button btnCycleTest;
     }
 }

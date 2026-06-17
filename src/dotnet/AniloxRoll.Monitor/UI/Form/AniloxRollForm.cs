@@ -728,6 +728,19 @@ namespace AniloxRoll.Monitor.Forms
             if (_liveCameraManager == null || _liveCameraManager.IsAllocated) return;
             try
             {
+                // 多相機相位量測 log（診斷）：設了路徑 → 每幀記 frame-start 硬體時戳 → Logs\phaselog-yyyyMMdd.csv。
+                try
+                {
+                    string logsDir = _settings?.Storage?.LogsPath;
+                    if (!string.IsNullOrEmpty(logsDir))
+                    {
+                        System.IO.Directory.CreateDirectory(logsDir);
+                        MilGrabber.Core.MilCamera.PhaseLogPath =
+                            System.IO.Path.Combine(logsDir, $"phaselog-{DateTime.Now:yyyyMMdd}.csv");
+                    }
+                }
+                catch { }
+
                 _liveCameraManager.AllocateCameras(_settings.EnableMuraEnhance);
                 LoadBackgroundBins();
                 // 全域合圖（MIL 大 buffer alloc）延後到 CLProtocol 就緒後（OnCamerasHwReady）才建立：

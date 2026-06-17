@@ -170,6 +170,9 @@ namespace MilGrabber.Core
             // 初始曝光：此時 CLProtocol 尚未啟用，走 legacy MdigControl 路徑
             if (_appliedExposureUs > 0)
                 SetExposureUs(_appliedExposureUs);
+
+            // 多相機相位量測：啟用 frame-start 硬體時戳 latch（診斷用）。
+            EnableFrameStartTimestampLatch();
         }
 
         // ==================== Grab Control ====================
@@ -224,6 +227,7 @@ namespace MilGrabber.Core
             MIL_ID modifiedBuffer = MIL.M_NULL;
             MIL.MdigGetHookInfo(eventId, MIL.M_MODIFIED_BUFFER + MIL.M_BUFFER_ID, ref modifiedBuffer);
             cam._milLastGrabBuffer = modifiedBuffer;
+            cam.CaptureFrameStartLatch(eventId);   // 多相機相位：讀本幀 frame-start 硬體時戳 + 記 phase log（診斷）
 
             if (modifiedBuffer != MIL.M_NULL && cam._milDisplayBuffer != MIL.M_NULL)
             {
