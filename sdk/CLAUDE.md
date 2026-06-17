@@ -129,6 +129,16 @@ C++ 靠 `.hpp` 當公開介面；.NET 沒有 header 檔，「直觀好用」靠�
 - repo 根 `tools/` — 跨元件 / 應用層通用工具，不專屬單一元件。
 - 判準：「這工具拿掉某個 sdk 元件還有用嗎？」沒用 → samples/；還有用 → tools/。
 
+## 工具：app icon 生成（`sdk/tools/icon-gen/make_icon.py`）
+
+**新增 sample/工具的 exe icon 一律用這支腳本，不要手刻**（風格才一致）。圓角方框 + 邊框貼外緣 + 可選底部 1/5 橫條白字，多尺寸 `.ico`。
+**配色語意慣例**（邊框色＝類別）：**綠 `6FBF44`＝產品主程式 / 藍 `2563EB`＝Bridge 工具 / 黃 `F9A825`＝影像範例程式**。
+```bash
+python make_icon.py --photo ET7044.png --text SIMULATOR --out ../../Bridges/IoBridge/samples/assets/io-simulator.ico   # 照片+藍框+底字
+python make_icon.py --photo roll.png --out app.ico --border 6FBF44 --no-band                                          # 綠框、不加字（主程式）
+```
+csproj 套用：`<ApplicationIcon>..\assets\xxx.ico</ApplicationIcon>`。完整參數見 `sdk/tools/icon-gen/README.md`。
+
 ## Build
 
 - 一律 `Release|x64`。sdk 工具方案 `sdk/Tools.sln`；各 Bridge `sdk/Bridges/*/*.sln`；單一 csproj msbuild 直接 build（依賴自動拉）。
