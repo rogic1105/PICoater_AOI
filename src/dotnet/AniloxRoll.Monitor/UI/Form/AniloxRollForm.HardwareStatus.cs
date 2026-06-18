@@ -173,6 +173,34 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
+        /// <summary>IO 設定變更（IP/Port/型號/啟用）→ 重啟 IO controller，改完數值立即生效（不用重開程式）。</summary>
+        private void HandleIoSettingsChanged(string changedPropertyName)
+        {
+            switch (changedPropertyName)
+            {
+                case nameof(InspectionSettings.IoEnabled):
+                case nameof(InspectionSettings.IoIp):
+                case nameof(InspectionSettings.IoPort):
+                case nameof(InspectionSettings.IoModel):
+                    RestartIoController();
+                    break;
+            }
+        }
+
+        /// <summary>停掉舊 IO controller 並依目前設定重建（IoEnabled=false 時 InitIoController 會 early-return＝關閉）。
+        /// async void：StopAsync 在背景跑、不阻塞 dispatcher；重建期間 _ioGrabController 短暫為 null（讀取端皆 null-safe）。</summary>
+        private async void RestartIoController()
+        {
+            if (_ioGrabController != null)
+            {
+                try { await _ioGrabController.StopAsync(); } catch { }
+                _ioGrabController.Dispose();
+                _ioGrabController = null;
+            }
+            UpdateIoConnectionUi(false);   // 立即顯示斷線（重連中），避免殘留舊 IP 的「已連線」狀態
+            InitIoController();            // 用新設定（IP/Port/型號）重建並背景連線
+        }
+
         private void UpdateIoStateLabel(IoState state)
         {
             if (_isIoSuspended) return;

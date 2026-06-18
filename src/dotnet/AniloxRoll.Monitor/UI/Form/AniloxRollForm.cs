@@ -922,6 +922,7 @@ namespace AniloxRoll.Monitor.Forms
                 HandleLiveLayoutSettingsChanged(c.Name);           // 動態 LOD + OPS/Start 合圖佈局（Live.cs）
                 HandleChartScaleSettingsChanged(c.Name);           // 檢測報表 Y 軸（Data.cs）
                 HandleLightSettingsChanged(c.Name);                // 光源（HardwareStatus.cs）
+                HandleIoSettingsChanged(c.Name);                   // IO IP/Port/型號/啟用 → 重啟 controller 立即生效（HardwareStatus.cs）
                 await HandleEnhanceSettingsChanged(c.Name);        // 監控/回顧強化（Live.cs）
                 HandleMuraPauseSettingsChanged(c.Name);            // IO 檢測暫停 LED（HardwareStatus.cs）
                 HandleAlgorithmSettingsChanged(c.Name);            // 去背演算法（Background.cs）
