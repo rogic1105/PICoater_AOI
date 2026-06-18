@@ -260,21 +260,26 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private void UpdateStandardBgSubLockState()
         {
+            // 相機未就緒（CLProtocol/buffer 還沒配好）→ 一律不解鎖 btnLiveGrab：此方法原本會繞過
+            // RefreshGrabButtonState 的 camReady gate 直接 Enabled=true → 使用者可在「沒配置好」時點 grab → stall。
+            // 故所有 enable 都 AND camReady（與 RefreshGrabButtonState 一致）。
+            bool camReady = _liveCameraManager?.AreCamerasHwReady ?? false;
+
             // IO 已連線且未暫停：btnLiveGrab 由 IO 連線邏輯控制，不覆寫
             if (_ioGrabController?.IsConnected == true && !_isIoSuspended) return;
             // IO 暫停模式：交由使用者手動控制，不受 StandardBgSub bin 限制
-            if (_isIoSuspended) { btnLiveGrab.Enabled = true; return; }
+            if (_isIoSuspended) { btnLiveGrab.Enabled = camReady; return; }
 
             if (!IsStandardBgSubEnabled)
             {
-                // 非 StandardBgSub：正常解鎖（仍需光源就緒）
-                btnLiveGrab.Enabled = true;
+                // 非 StandardBgSub：正常解鎖（仍需光源就緒 + 相機就緒）
+                btnLiveGrab.Enabled = camReady;
                 btnLiveGetBackground.Enabled = IsLightReadyForBg;
                 return;
             }
 
             btnLiveGetBackground.Enabled = IsLightReadyForBg;
-            btnLiveGrab.Enabled = IsBgBinReady();
+            btnLiveGrab.Enabled = camReady && IsBgBinReady();
         }
 
         // --- 背景預覽狀態 ---
