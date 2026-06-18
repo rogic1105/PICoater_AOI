@@ -142,20 +142,20 @@ namespace AniloxRoll.Monitor.Forms
                 BindBidirectionalSync(_expBars[idx], _expNums[idx], camId,
                     ExpMin, expMax, (int)acq.CameraExposureTimeUs[idx],
                     v => { acq.CameraExposureTimeUs[idx] = v; ConfigManager.SaveAcquisitionSettings(acq); },
-                    v => _liveCameraManager?.SetExposureForCamera(camId, v));
+                    v => _liveCameraManager?.ApplyParamCoordinated(() => _liveCameraManager.SetExposureForCamera(camId, v)));
 
                 // ── 線掃速率 ────────────────────────────────────────────
                 BindBidirectionalSync(_lrBars[idx], _lrNums[idx], camId,
                     LrMin, LrMax, (int)acq.CameraLineRateHz[idx],
                     v => { acq.CameraLineRateHz[idx] = v; ConfigManager.SaveAcquisitionSettings(acq); },
-                    v => _liveCameraManager?.SetLineRateForCamera(camId, v),
+                    v => _liveCameraManager?.ApplyParamCoordinated(() => _liveCameraManager.SetLineRateForCamera(camId, v)),
                     () => { UpdateExpMaxAndClampColor(idx, CalcExpMax()); if (idx == 0) UpdateRowChartPitch(); });
 
                 // ── 擷取高度 ────────────────────────────────────────────
                 BindBidirectionalSync(_htBars[idx], _htNums[idx], camId,
                     HtMin, HtMax, acq.CameraGrabHeight[idx],
                     v => { acq.CameraGrabHeight[idx] = v; ConfigManager.SaveAcquisitionSettings(acq); },
-                    v => _liveCameraManager?.SetGrabHeightForCamera(camId, v),
+                    v => _liveCameraManager?.ApplyParamCoordinated(() => _liveCameraManager.SetGrabHeightForCamera(camId, v)),
                     () => {
                         _liveCameraManager?.RefreshMainDisplay();
                         if (_settings.StitchMode == StitchMode.Global && _liveCameraManager?.IsGlobalMergeActive == true)
@@ -282,9 +282,12 @@ namespace AniloxRoll.Monitor.Forms
 
             void Apply(int v)
             {
-                // 1. 寫硬體（所有 7 台）
-                for (int j = 0; j < bars.Length; j++)
-                    writeHardwareForCam(j, v);
+                // 1. 寫硬體（所有 7 台）— 協調式：一起停 → 寫全部 → 一起開（一個週期，offset 一致重建）
+                _liveCameraManager?.ApplyParamCoordinated(() =>
+                {
+                    for (int j = 0; j < bars.Length; j++)
+                        writeHardwareForCam(j, v);
+                });
                 // 2. 寫 settings
                 for (int j = 0; j < bars.Length; j++)
                     saveSettingForCam(j, v);

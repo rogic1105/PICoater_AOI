@@ -463,6 +463,33 @@ namespace AniloxRoll.Monitor.UI.Managers
             FindCamera(camId)?.SetGrabHeight(height);
         }
 
+        private int _coordDepth;
+        /// <summary>協調式套用參數（#3）：grab 中改任何相機參數時，**全部相機一起停 → 寫 → 一起重啟**，
+        /// 讓重啟後相位 offset 一致重建（測「停→寫→開」對相位的效果；高度也順帶安全＝停著重配）。
+        /// 重入保護：巢狀呼叫（如 All 一次套 7 台）只寫、不重複停/開。非抓取中 → 直接寫。
+        /// 寫入時全部相機停著：SetGrabHeight 見 wasLive=false → 只重配 buffer 不自行重啟；曝光/線掃 live 寫即可。</summary>
+        public void ApplyParamCoordinated(Action write)
+        {
+            if (write == null) return;
+            if (!IsLiveGrabbing || _coordDepth > 0) { write(); return; }
+
+            _coordDepth++;
+            var paused = new List<AniloxCamera>();
+            try
+            {
+                foreach (var cam in _cameras)
+                    if (cam != null && cam.IsLive) { cam.SetUserGrabIntent(false); paused.Add(cam); }
+                write();
+            }
+            finally
+            {
+                // 協調重啟：back-to-back 一起 M_START → 兩台幾乎同時起、offset 一致（barrier 待 main 補後再加 SetActiveCameras）
+                foreach (var cam in paused)
+                    if (cam.IsConnected) cam.SetUserGrabIntent(true);
+                _coordDepth--;
+            }
+        }
+
         private AniloxCamera FindCamera(int camId)
         {
             for (int i = 0; i < _cameras.Count; i++)
