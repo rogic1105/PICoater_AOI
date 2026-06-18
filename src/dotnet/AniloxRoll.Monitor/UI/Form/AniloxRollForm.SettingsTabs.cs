@@ -101,11 +101,11 @@ namespace AniloxRoll.Monitor.Forms
             _lrAllBar  = trackBarLrAll;  _lrAllNum  = numLrAll;
             _htAllBar  = trackBarHtAll;  _htAllNum  = numHtAll;
 
-            BindAllSync(_expAllBar, _expAllNum, _expBars, _expNums,
+            BindAllSync(_expAllBar, _expAllNum, _expBars, _expNums, "ExpAll",
                 (j, v) => _liveCameraManager?.SetExposureForCamera(j + 1, v),
                 (j, v) => { acq.CameraExposureTimeUs[j] = v; ConfigManager.SaveAcquisitionSettings(acq); });
 
-            BindAllSync(_lrAllBar, _lrAllNum, _lrBars, _lrNums,
+            BindAllSync(_lrAllBar, _lrAllNum, _lrBars, _lrNums, "LineRateAll",
                 (j, v) => _liveCameraManager?.SetLineRateForCamera(j + 1, v),
                 (j, v) => { acq.CameraLineRateHz[j] = v; ConfigManager.SaveAcquisitionSettings(acq); },
                 () => {
@@ -116,7 +116,7 @@ namespace AniloxRoll.Monitor.Forms
                     UpdateRowChartPitch();
                 });
 
-            BindAllSync(_htAllBar, _htAllNum, _htBars, _htNums,
+            BindAllSync(_htAllBar, _htAllNum, _htBars, _htNums, "HeightAll",
                 (j, v) => _liveCameraManager?.SetGrabHeightForCamera(j + 1, v),
                 (j, v) => { acq.CameraGrabHeight[j] = v; ConfigManager.SaveAcquisitionSettings(acq); },
                 () => {
@@ -142,20 +142,20 @@ namespace AniloxRoll.Monitor.Forms
                 BindBidirectionalSync(_expBars[idx], _expNums[idx], camId,
                     ExpMin, expMax, (int)acq.CameraExposureTimeUs[idx],
                     v => { acq.CameraExposureTimeUs[idx] = v; ConfigManager.SaveAcquisitionSettings(acq); },
-                    v => ApplyCamParam(camId, () => _liveCameraManager.SetExposureForCamera(camId, v)));
+                    v => ApplyCamParam(camId, "Exp", v, () => _liveCameraManager.SetExposureForCamera(camId, v)));
 
                 // ── 線掃速率 ────────────────────────────────────────────
                 BindBidirectionalSync(_lrBars[idx], _lrNums[idx], camId,
                     LrMin, LrMax, (int)acq.CameraLineRateHz[idx],
                     v => { acq.CameraLineRateHz[idx] = v; ConfigManager.SaveAcquisitionSettings(acq); },
-                    v => ApplyCamParam(camId, () => _liveCameraManager.SetLineRateForCamera(camId, v)),
+                    v => ApplyCamParam(camId, "LineRate", v, () => _liveCameraManager.SetLineRateForCamera(camId, v)),
                     () => { UpdateExpMaxAndClampColor(idx, CalcExpMax()); if (idx == 0) UpdateRowChartPitch(); });
 
                 // ── 擷取高度 ────────────────────────────────────────────
                 BindBidirectionalSync(_htBars[idx], _htNums[idx], camId,
                     HtMin, HtMax, acq.CameraGrabHeight[idx],
                     v => { acq.CameraGrabHeight[idx] = v; ConfigManager.SaveAcquisitionSettings(acq); },
-                    v => ApplyCamParam(camId, () => _liveCameraManager.SetGrabHeightForCamera(camId, v)),
+                    v => ApplyCamParam(camId, "Height", v, () => _liveCameraManager.SetGrabHeightForCamera(camId, v)),
                     () => {
                         _liveCameraManager?.RefreshMainDisplay();
                         if (_settings.StitchMode == StitchMode.Global && _liveCameraManager?.IsGlobalMergeActive == true)
@@ -271,6 +271,7 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private void BindAllSync(TrackBar barAll, NumericUpDown numAll,
             TrackBar[] bars, NumericUpDown[] nums,
+            string paramLabel,                       // 參數名（param-change log 用）
             Action<int, int> writeHardwareForCam,    // (camIdx0based, value)
             Action<int, int> saveSettingForCam,      // (camIdx0based, value)
             Action postWriteAll = null)
@@ -283,7 +284,7 @@ namespace AniloxRoll.Monitor.Forms
             void Apply(int v)
             {
                 // 1. 寫硬體（所有 7 台）— 協調式：一起停 → 寫全部 → 一起開（含參數鎖：套用期間 disable 控制項）
-                ApplyAllCamParam(() =>
+                ApplyAllCamParam(paramLabel, v, () =>
                 {
                     for (int j = 0; j < bars.Length; j++)
                         writeHardwareForCam(j, v);
@@ -350,26 +351,51 @@ namespace AniloxRoll.Monitor.Forms
         //   ② 解鎖條件＝相機已恢復出幀（FrameCount 前進）或逾時兜底 → 用非阻塞 Forms.Timer 輪詢，不凍 UI。
         private System.Windows.Forms.Timer _paramUnlockTimer;
         private System.Collections.Generic.Dictionary<int, long> _paramLockBaseCnts;
-        private DateTime _paramLockDeadlineUtc;
+        private DateTime _paramLockMinReleaseUtc;   // 最早可解鎖時刻（至少鎖一個完整幀週期）
+        private DateTime _paramLockDeadlineUtc;     // 逾時兜底（stall 不恢復也解鎖）
 
-        /// <summary>套用單一相機參數：先鎖控制項 → 只停/寫/開該台 → 啟動解鎖輪詢（恢復出幀/逾時才解鎖）。</summary>
-        private void ApplyCamParam(int camId, Action write)
+        /// <summary>套用單一相機參數：記 param-change log → 先鎖控制項 → 只停/寫/開該台 → 啟動解鎖輪詢。</summary>
+        private void ApplyCamParam(int camId, string param, int value, Action write)
         {
+            LogParamChange("cam", camId, param, value);
             if (_liveCameraManager == null) { write?.Invoke(); return; }
             bool live = _liveCameraManager.IsLiveGrabbing;
-            if (live) SetParamControlsLocked(true);
-            _liveCameraManager.ApplyParamCoordinated(camId, write);
-            if (live) BeginParamUnlockPoll();
+            if (live) { SetParamControlsLocked(true); _liveCameraManager.SetCaptureSuppressed(true); }
+            try { _liveCameraManager.ApplyParamCoordinated(camId, write); }
+            finally { if (live) BeginParamUnlockPoll(); }   // 保證解鎖輪詢必啟動 → lock/suppress 必被清
         }
 
-        /// <summary>套用「全部相機」參數（All 滑桿）：鎖 → 全停/寫/全開 → 解鎖輪詢。</summary>
-        private void ApplyAllCamParam(Action write)
+        /// <summary>套用「全部相機」參數（All 滑桿）：記 log → 鎖+暫停存檔 → 全停/寫/全開 → 解鎖輪詢。</summary>
+        private void ApplyAllCamParam(string param, int value, Action write)
         {
+            LogParamChange("all", 0, param, value);
             if (_liveCameraManager == null) { write?.Invoke(); return; }
             bool live = _liveCameraManager.IsLiveGrabbing;
-            if (live) SetParamControlsLocked(true);
-            _liveCameraManager.ApplyParamCoordinated(write);
-            if (live) BeginParamUnlockPoll();
+            if (live) { SetParamControlsLocked(true); _liveCameraManager.SetCaptureSuppressed(true); }
+            try { _liveCameraManager.ApplyParamCoordinated(write); }
+            finally { if (live) BeginParamUnlockPoll(); }
+        }
+
+        // ── 參數變更 log（diag：對齊 _ticks.csv 掉偵時間，定位掉偵 vs 改參數）──────────
+        /// <summary>參數變更 log 路徑（AutoAllocateCameras 設）；null=不記。</summary>
+        public static string ParamChangeLogPath;
+        private static readonly object _paramChangeLogLock = new object();
+
+        /// <summary>記一筆參數變更：time,scope,cam,param,value。路徑由 ParamChangeLogPath（AutoAllocateCameras 設）控制。</summary>
+        private static void LogParamChange(string scope, int camId, string param, int value)
+        {
+            string p = ParamChangeLogPath;
+            if (p == null) return;
+            try
+            {
+                lock (_paramChangeLogLock)
+                {
+                    if (!System.IO.File.Exists(p))
+                        System.IO.File.AppendAllText(p, "time,scope,cam,param,value\r\n");
+                    System.IO.File.AppendAllText(p, $"{DateTime.Now:HH:mm:ss.fff},{scope},{camId},{param},{value}\r\n");
+                }
+            }
+            catch { }
         }
 
         /// <summary>鎖/解鎖所有相機參數控制項（曝光/線掃/高度 ×7 + All）。disable＝拉不動、輸入被拒不排隊。</summary>
@@ -389,7 +415,13 @@ namespace AniloxRoll.Monitor.Forms
         private void BeginParamUnlockPoll()
         {
             _paramLockBaseCnts = _liveCameraManager.SnapshotLiveFrameCounts();
-            _paramLockDeadlineUtc = DateTime.UtcNow.AddSeconds(3);   // stall 永不恢復 → 逾時仍解鎖（避免鎖死）
+            // 至少鎖住「一個完整幀週期 ×1.5 + 餘裕」：改完參數的相機要跑完一張乾淨幀(且有 settle 餘裕)才放行下一次改，
+            // 防「改完馬上又改」連續 stop/start → stall（你觀察的根因）。週期＝高度/線掃率，極低 fps 上限 2.5s 避免鎖太久。
+            int periodMs = _liveCameraManager.GetMaxFramePeriodMs();
+            int minHoldMs = periodMs > 0 ? System.Math.Min(4000, periodMs * 2 + 150) : 500;  // 至少 2 個完整幀週期（實測不 stall）
+            var now = DateTime.UtcNow;
+            _paramLockMinReleaseUtc = now.AddMilliseconds(minHoldMs);
+            _paramLockDeadlineUtc   = now.AddMilliseconds(System.Math.Max(5000, minHoldMs + 1500));
             if (_paramUnlockTimer == null)
             {
                 _paramUnlockTimer = new System.Windows.Forms.Timer { Interval = 120 };
@@ -400,11 +432,14 @@ namespace AniloxRoll.Monitor.Forms
 
         private void ParamUnlockTimer_Tick(object sender, EventArgs e)
         {
+            var now = DateTime.UtcNow;
             bool recovered = _liveCameraManager == null || _liveCameraManager.AllAdvancedSince(_paramLockBaseCnts);
-            if (recovered || DateTime.UtcNow >= _paramLockDeadlineUtc)
+            bool minHeld = now >= _paramLockMinReleaseUtc;   // 至少鎖滿一個完整幀週期才准放行
+            if ((recovered && minHeld) || now >= _paramLockDeadlineUtc)
             {
                 _paramUnlockTimer.Stop();
                 SetParamControlsLocked(false);
+                _liveCameraManager?.SetCaptureSuppressed(false);   // 全部恢復同步 → 恢復存檔
             }
         }
 

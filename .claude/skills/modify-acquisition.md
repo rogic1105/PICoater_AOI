@@ -65,15 +65,45 @@ _isReleased = true → MdigProcess(M_STOP)
 
 ## SetGrabHeight（不可省略步驟）
 
-`M_STOP → Free buffers+pool → M_SOURCE_SIZE_Y → Inquire → Realloc → MdispSelectWindow → M_START`
+`M_STOP+M_WAIT → MdigControl(M_GRAB_ABORT) → Free buffers+pool → M_SOURCE_SIZE_Y → Inquire → Realloc → MdispSelectWindow → settle → M_START`
 - 舊尺寸 buffer ≠ 新尺寸 → MIL 崩潰
 - Rollback：失敗時 FreeGrabBuffers → AllocateAndBind(oldHeight)
+
+### ⚠ 改高度會讓相機永久 stall — 根因與修法（2026-06-18 實機確認）
+
+**症狀**：改高度後某台（甚至兩台）相機 `M_PROCESS_FRAME_COUNT` 凍在 0、fps=0，永不恢復；停/開（含停止抓取→開始抓取）救不回，**只有重開程式**。穩態不改參數＝0 stall。鐵證：「停→改高度→開」重複多次會 stall；「停→改高度多次→開一次」不會。
+
+**根因**（Grok 第二意見 + Matrox 官方文件確認）：
+1. `MdigProcess(M_STOP, M_DEFAULT)` 是**優雅停止**、只取消佇列、**不 hard-drain** CL 接收器/DMA → 殘留狀態跨「重複 free+realloc+re-arm」累積成永久壞狀態。
+2. **`M_SOURCE_SIZE_Y` 純 digitizer 端**（幾條線切一幀）。**絕不可寫相機 GenICam `Height` feature 去「同步」**（試過→相機輸出尺寸錯亂、兩台 stall + FPS 算錯）。line-scan 相機 Height ≠ grab 高度。
+3. 沒有 in-app reset digitizer 的 API（無 `MdigReset`）→ 證實「只有重開程式（=MdigFree/MdigAlloc）能救」。
+
+**修法（已實作，實機驗證 stall 消失）**：改尺寸前加
+- `MdigProcess(…, M_STOP + M_WAIT, …)`：等佇列 grab 全跑完才返回（drain，非只取消）。
+- `MdigControl(dig, M_GRAB_ABORT, M_DEFAULT)`：立即中止 in-flight + 佇列（eV-CL 支援；guard try/catch 防 wrapper 不支援）。
+
+**Matrox 官方文件路徑（查證來源，未來再查從這裡）**：
+- `C:\Program Files\Matrox Imaging\MIL\DOC\mil_help\content\Reference\dig\MdigProcess.htm`（M_STOP 預設取消佇列；M_STOP+M_WAIT 等佇列跑完）
+- `…\Reference\dig\MdigControl.htm`（**M_GRAB_ABORT**＝立即中止 in-flight+佇列；M_COMMAND_QUEUE_MODE M_QUEUED/M_IMMEDIATE；無 reset）
+- `…\Reference\dig\MdigHalt.htm`（MdigHalt 是 MdigGrabContinuous 的夥伴，**非** MdigProcess）
+- `…\UserGuide\grabbing\Grabbing_and_processing.htm`（尺寸會變的官方做法＝MdigProcess bufarray=M_NULL 自動配，或 max-size buffer 配一次）
+- `…\UserGuide\grabbing\Linescan_cameras.htm`、`…\Readme\milRadienteVCL\milRadienteVCL.htm`（eV-CL 無 SOURCE_SIZE 改尺寸 stall 的 release note）
+- `Mil.h:3693`（`M_GRAB_ABORT = 6643L`）
+
+**未做的階段 2（更直接，agent/Matrox 最推薦）**：**一次配 max 高度 buffer，改高度只改 `M_SOURCE_SIZE_Y`、不 free/realloc** → 從根本拿掉「realloc→re-arm」那步。需先驗證 MIL 語意（buffer 比 M_SOURCE_SIZE_Y 大時幀是否在 M_SOURCE_SIZE_Y 行就完成）+ 追蹤實際高度 vs buffer 高度（hook/顯示/存檔）。潛在大獎：可能 grab 中改高度不用停機（M_QUEUED 幀邊界套用）→ live、不掉幀。
+
+### 改參數掉偵診斷 log（Logs\）
+- `phaselog-yyyyMMdd.csv`：每幀硬體 frame-start tick（`MilCamera.PhaseLog.cs` Data Latch）→ 真實相位/掉幀位置。
+- `dropdiag-yyyyMMdd_HHmmss.csv`：每 500ms 背景記 frames/procMissed/grabMissed（`LiveTelemetryPresenter.DropDiagLogPath`）→ 分層（host vs 硬體）。
+- `paramchange-yyyyMMdd_HHmmss.csv`：每次改參數 time,scope,cam,param,value（`AniloxRollForm.ParamChangeLogPath`）→ 對齊 `_ticks.csv` 看掉偵 vs 改參數。
+- 結論：**穩態 0 掉偵；掉偵 100% 來自改參數的重啟空檔**。
 
 ## Grab 中改參數（協調套用 + 參數鎖 + stall）
 
 - **`LiveCameraManager.ApplyParamCoordinated(camId, write)`**＝只停/寫/開**被改的那一台**（曝光/線掃/高度單滑桿走此）。相位已用 phaselog 證明不重要（free-run 2-3 條線）→ **不再全部相機一起停/開**（會連累沒被改的 cam2 反覆 stop/start → stall）。All 滑桿才用無參數版 `ApplyParamCoordinated(write)`（全停全開）。
 - **絕不在套用後同步 `Thread.Sleep` 等出幀** → 會凍 UI（Windows 變灰 Not Responding）→ 拉滑桿被排隊、解凍後 replay「跳到空拉位置」＝暴力漏洞。stop→write→start 本身已被 MouseUp handler 序列化。
-- **參數鎖**（`AniloxRollForm.SettingsTabs.cs` `ApplyCamParam`/`SetParamControlsLocked`）：套用期間 `Enabled=false` 所有參數控制項（拒輸入不排隊）→ 非阻塞 `Forms.Timer` 輪詢 `LiveCameraManager.AllAdvancedSince`（恢復出幀）或 3s 逾時才解鎖。
+- **參數鎖**（`AniloxRollForm.SettingsTabs.cs` `ApplyCamParam`/`SetParamControlsLocked`）：套用期間 `Enabled=false` 所有參數控制項（拒輸入不排隊）→ 非阻塞 `Forms.Timer` 輪詢 `LiveCameraManager.AllAdvancedSince`（恢復出幀）**且**至少鎖滿 **2 個完整幀週期**（`GetMaxFramePeriodMs`＝高度/線掃率，實測 2 週期才不 stall）或 5s 逾時才解鎖 → 逼「改完馬上又改」慢下來。
+- **改參數窗口暫停存檔**（`LiveCameraManager.SetCaptureSuppressed` → `AniloxCamera.SuppressCapture` → `TrySaveCapture` 早退）：套用時全相機暫停存檔、等全部恢復同步（解鎖時）才恢復 → 存出的序列不含重啟空檔、各台齊全（不影響 grab/檢測/顯示）。
 - **stall 偵測**（`LiveCameraManager.Telemetry.cs` status timer 500ms）：IsLive 但 `CurrentFps < 0.05` 持續 2s ＝ stall（縮圖紅「STALL」）。**FPS 0.1 是合法慢速（一幀 10s）不算**，只認真正的 0。stall＝硬體層 CL 失鎖，**停/開（含停止抓取→開始抓取）救不回、只有重開程式** → 不做無效自動 thrash（會 stall 的最大宗＝改線掃；高度也會）。深度救援（MdigFree+MdigAlloc+CLProtocol）暫不做，先靠 prevention。
 
 ## 已知 MIL .NET Wrapper 限制

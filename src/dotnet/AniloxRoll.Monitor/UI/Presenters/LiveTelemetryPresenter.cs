@@ -62,6 +62,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         // ── 更新資料 ─────────────────────────────────────────────────────
 
+        /// <summary>掉偵診斷 log 路徑（static）。設了就每次背景 Capture 每相機 append 一列；null=不記。
+        /// 欄位：time,cam,fps,lineRateHz,frameH,frames,procMissed,grabMissed。
+        /// 離線分析：frames 增量 vs 期望(lineRate/frameH)＝總掉偵；procMissed 增量＝host 來不及(ring 太小/hook 慢)、
+        /// grabMissed 增量＝硬體 grab 層(CL/頻寬)。**寫在背景 Capture 執行緒（每 500ms），不碰 hot hook → log 本身不造成掉幀。**</summary>
+        public static string DropDiagLogPath;
+        private static readonly object _dropDiagLock = new object();
+
         /// <summary>單台相機的 telemetry 快照（純字串，無 MIL）。Capture 在背景產生、Apply 在 UI 套用。</summary>
         public sealed class CamSnapshot
         {
@@ -87,10 +94,27 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 double lineRate = cam.GetLineRateHz();   c[3]  = lineRate > 0 ? $"{lineRate:F1}" : "-";
                 double expUs    = cam.GetExposureUs();    c[4]  = expUs > 0 ? $"{expUs:F1}" : "-";
                 double measUs   = cam.GetMeasuredExposureUs(); c[5] = measUs > 0 ? $"{measUs:F1}" : "-";
-                c[6]  = $"{cam.GetFrameCount()}";
-                c[7]  = $"{cam.GetFrameMissed()}";
-                c[8]  = $"{cam.GetGrabFrameMissed()}";
+                long frames   = cam.GetFrameCount();      c[6] = $"{frames}";
+                long procMiss = cam.GetFrameMissed();     c[7] = $"{procMiss}";
+                long grabMiss = cam.GetGrabFrameMissed(); c[8] = $"{grabMiss}";
                 c[9]  = $"{cam.FrameWidth}×{cam.FrameHeight}";
+
+                // 掉偵診斷 log（背景執行緒、不碰 hot hook）：每相機每次 Capture 記一列，供離線定位掉在哪一層
+                string ddp = DropDiagLogPath;
+                if (ddp != null && cam.IsLive)
+                {
+                    try
+                    {
+                        lock (_dropDiagLock)
+                        {
+                            if (!System.IO.File.Exists(ddp))
+                                System.IO.File.AppendAllText(ddp, "time,cam,fps,lineRateHz,frameH,frames,procMissed,grabMissed\r\n");
+                            System.IO.File.AppendAllText(ddp,
+                                $"{DateTime.Now:HH:mm:ss.fff},{cam.CameraId},{s.Fps:F2},{(lineRate > 0 ? lineRate : 0):F1},{cam.FrameHeight},{frames},{procMiss},{grabMiss}\r\n");
+                        }
+                    }
+                    catch { }
+                }
                 c[10] = cam.GetScanMode();
                 double fpgaTemp = cam.GetFpgaTemperature(); c[11] = double.IsNaN(fpgaTemp) ? "-" : $"{fpgaTemp:F1}";
                 double camTemp  = cam.GetCameraTemperature(); c[12] = double.IsNaN(camTemp) ? "-" : $"{camTemp:F1}";

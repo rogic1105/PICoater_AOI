@@ -115,14 +115,19 @@ namespace MilGrabber.Core
             bool wasLive = IsLive;
             int oldHeight = CameraGrabHeight;
 
-            // M_STOP 排乾在途 processing callback → 之後沒有 FrameReady 在跑；接著「停著」期間做完所有 buffer
-            // 重配（MIL + 上層 native）再重啟，消除不一致窗。
+            // M_STOP + M_WAIT：等佇列中的 grab 全部跑完才返回（drain，非只取消）→ 之後沒有 FrameReady 在跑。
             if (wasLive)
             {
                 MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize,
-                    MIL.M_STOP, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
+                    MIL.M_STOP + MIL.M_WAIT, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
                 IsLive = false;
             }
+
+            // 硬排空 digitizer grab queue/DMA（不論本路徑是否停的；協調路徑是上層先停的）。
+            // Matrox doc：M_STOP 只取消佇列、M_GRAB_ABORT 才「立即中止 in-flight + 佇列」→ 防「優雅停止留殘留 →
+            // 重複 realloc+re-arm 累積壞狀態 → 永久 stall」。eV-CL 支援；guard 防 .NET wrapper 不支援。
+            try { MIL.MdigControl(_milDigitizer, MIL.M_GRAB_ABORT, MIL.M_DEFAULT); }
+            catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}] M_GRAB_ABORT 不支援/失敗（continue）：{ex.Message}"); }
 
             FreeGrabBuffers();
 
@@ -179,6 +184,8 @@ namespace MilGrabber.Core
 
         private void AllocateAndBind(int targetHeight)
         {
+            // 註：曾試「同步寫相機 GenICam Height feature」→ 反而讓相機輸出尺寸錯亂、兩台都 stall + FPS 算錯。
+            // 結論：此 line-scan 相機的 Height 不可被寫成 grab 高度，切幀只能靠 digitizer M_SOURCE_SIZE_Y。已移除。
             MIL.MdigControl(_milDigitizer, MIL.M_SOURCE_SIZE_Y, (MIL_INT)targetHeight);
             CameraGrabHeight = targetHeight;
 
@@ -199,8 +206,17 @@ namespace MilGrabber.Core
 
             MIL.MdispSelectWindow(_milDisplay, _milDisplayBuffer, _panelHandle);
             MIL.MdispControl(_milDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
+
+            // settle：改完 M_SOURCE_SIZE_Y 後讓 digitizer/相機套用新尺寸「沉澱」再讓 grab re-arm。
+            // 根因（實測）：每次「resize→M_START」都有小機率沒乾淨 re-arm → 重複做會累積 stall；
+            // 而「resize 多次→start 一次」不會 stall ＝ 最後一次 resize 到 start 之間有 settle 時間。
+            // 故在 re-arm 前補足 settle（此時 grab 已停、無 callback 競爭）。
+            System.Threading.Thread.Sleep(HeightSettleMs);
             // 重啟 grab 不在此做：交給 SetGrabHeight 在「上層 buffer 也配好後」才呼 StartProcess（消除不一致窗）。
         }
+
+        /// <summary>height 改完到 grab re-arm 之間的 settle（ms）。防「resize→start 重複累積 stall」。</summary>
+        private const int HeightSettleMs = 250;
     }
 
     /// <summary>

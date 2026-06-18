@@ -737,6 +737,12 @@ namespace AniloxRoll.Monitor.Forms
                         System.IO.Directory.CreateDirectory(logsDir);
                         MilGrabber.Core.MilCamera.PhaseLogPath =
                             System.IO.Path.Combine(logsDir, $"phaselog-{DateTime.Now:yyyyMMdd}.csv");
+                        // 掉偵診斷 log（每 500ms 背景 Capture 記 frames/procMissed/grabMissed → 離線定位掉在哪層）
+                        AniloxRoll.Monitor.UI.Presenters.LiveTelemetryPresenter.DropDiagLogPath =
+                            System.IO.Path.Combine(logsDir, $"dropdiag-{DateTime.Now:yyyyMMdd_HHmmss}.csv");
+                        // 參數變更 log（time,scope,cam,param,value → 對齊 _ticks.csv 掉偵時間，定位掉偵 vs 改參數）
+                        ParamChangeLogPath =
+                            System.IO.Path.Combine(logsDir, $"paramchange-{DateTime.Now:yyyyMMdd_HHmmss}.csv");
                     }
                 }
                 catch { }

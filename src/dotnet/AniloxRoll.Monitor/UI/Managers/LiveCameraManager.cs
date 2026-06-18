@@ -527,6 +527,33 @@ namespace AniloxRoll.Monitor.UI.Managers
             return null;
         }
 
+        /// <summary>改參數窗口：暫停/恢復「全部相機」存檔（不影響 grab/檢測/顯示）。
+        /// 套用參數時設 true → 等全部相機恢復同步（UI 解鎖時）設 false → 存出的序列不含重啟空檔、各台齊全。</summary>
+        public void SetCaptureSuppressed(bool suppressed)
+        {
+            foreach (var cam in _cameras)
+                if (cam != null) cam.SuppressCapture = suppressed;
+        }
+
+        /// <summary>所有在抓相機中「最大的幀週期」(ms)＝FrameHeight/AppliedLineRateHz。
+        /// 供改參數後的參數鎖：至少鎖住一個完整幀週期，確保改完的相機跑完一張乾淨幀才放行下一次改（防連改太快 stall）。</summary>
+        public int GetMaxFramePeriodMs()
+        {
+            int maxMs = 0;
+            foreach (var cam in _cameras)
+            {
+                if (cam == null || !cam.IsLive) continue;
+                double lr = cam.AppliedLineRateHz;
+                int h = cam.FrameHeight;
+                if (lr > 0 && h > 0)
+                {
+                    int ms = (int)System.Math.Ceiling(h / lr * 1000.0);
+                    if (ms > maxMs) maxMs = ms;
+                }
+            }
+            return maxMs;
+        }
+
         /// <summary>快照所有「正在抓」相機的 FrameCount（camId→count）；供 UI 參數鎖判「重啟後是否已恢復出幀」。</summary>
         public Dictionary<int, long> SnapshotLiveFrameCounts()
         {

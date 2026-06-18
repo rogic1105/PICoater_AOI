@@ -40,6 +40,9 @@ namespace AniloxRoll.Monitor.Core.Camera
         // ==================== Settings ====================
         public bool EnableImageProcessing { get; set; } = true;
         public bool EnableAutoCapture { get; set; } = false;
+        /// <summary>暫停存檔（不影響 grab/檢測/顯示，只跳過 TrySaveCapture）。
+        /// 改參數期間由 LiveCameraManager 全相機設 true → 等全部恢復同步再設 false，避免存出「改參數重啟空檔」的不齊序列。</summary>
+        public bool SuppressCapture { get; set; } = false;
         public bool SaveOriginalBmp { get; set; } = false;
         public string CaptureRootPath { get; set; } = string.Empty;
         /// <summary>Grab 高度（0 = 用 DCF 預設）。必須在 Initialize() 之前設定（轉發給 _mil）。</summary>
@@ -221,6 +224,9 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         /// <summary>從硬體讀回目前曝光時間（μs）。CLProtocol 未啟用時回傳 0。</summary>
         public double GetMeasuredExposureUs() => _mil.GetMeasuredExposureUs();
+
+        /// <summary>目前套用的線掃率（Hz，設定值、不查硬體；便宜）。供算幀週期＝FrameHeight/lineRate。</summary>
+        public double AppliedLineRateHz => _mil.AppliedLineRateHz;
 
         /// <summary>透過 CLProtocol GenICam Feature 讀取 Line Rate（Hz）。CLProtocol 未啟用時回傳 0。</summary>
         public double GetLineRateHz() => _mil.GetLineRateHz();
@@ -524,6 +530,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         private void TrySaveCapture(MIL_ID sourceBuffer)
         {
             if (!EnableAutoCapture) return;
+            if (SuppressCapture) return;   // 改參數→恢復同步 窗口內暫停存檔（避免存不齊序列）
             if (sourceBuffer == MIL.M_NULL) return;
             if (string.IsNullOrWhiteSpace(CaptureRootPath)) return;
 
