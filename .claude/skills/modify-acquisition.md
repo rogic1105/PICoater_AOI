@@ -69,6 +69,13 @@ _isReleased = true → MdigProcess(M_STOP)
 - 舊尺寸 buffer ≠ 新尺寸 → MIL 崩潰
 - Rollback：失敗時 FreeGrabBuffers → AllocateAndBind(oldHeight)
 
+## Grab 中改參數（協調套用 + 參數鎖 + stall）
+
+- **`LiveCameraManager.ApplyParamCoordinated(camId, write)`**＝只停/寫/開**被改的那一台**（曝光/線掃/高度單滑桿走此）。相位已用 phaselog 證明不重要（free-run 2-3 條線）→ **不再全部相機一起停/開**（會連累沒被改的 cam2 反覆 stop/start → stall）。All 滑桿才用無參數版 `ApplyParamCoordinated(write)`（全停全開）。
+- **絕不在套用後同步 `Thread.Sleep` 等出幀** → 會凍 UI（Windows 變灰 Not Responding）→ 拉滑桿被排隊、解凍後 replay「跳到空拉位置」＝暴力漏洞。stop→write→start 本身已被 MouseUp handler 序列化。
+- **參數鎖**（`AniloxRollForm.SettingsTabs.cs` `ApplyCamParam`/`SetParamControlsLocked`）：套用期間 `Enabled=false` 所有參數控制項（拒輸入不排隊）→ 非阻塞 `Forms.Timer` 輪詢 `LiveCameraManager.AllAdvancedSince`（恢復出幀）或 3s 逾時才解鎖。
+- **stall 偵測**（`LiveCameraManager.Telemetry.cs` status timer 500ms）：IsLive 但 `CurrentFps < 0.05` 持續 2s ＝ stall（縮圖紅「STALL」）。**FPS 0.1 是合法慢速（一幀 10s）不算**，只認真正的 0。stall＝硬體層 CL 失鎖，**停/開（含停止抓取→開始抓取）救不回、只有重開程式** → 不做無效自動 thrash（會 stall 的最大宗＝改線掃；高度也會）。深度救援（MdigFree+MdigAlloc+CLProtocol）暫不做，先靠 prevention。
+
 ## 已知 MIL .NET Wrapper 限制
 
 - `M_LINE_RATE` / `M_GRAB_SIZE_Y` 常數不存在 → 用 Feature API 或 `M_SOURCE_SIZE_Y`

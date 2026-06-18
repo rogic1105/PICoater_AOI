@@ -464,6 +464,33 @@ namespace AniloxRoll.Monitor.UI.Managers
         }
 
         private int _coordDepth;
+
+        /// <summary>協調式套用「單一相機」參數（#3 修正）：只停**該台**→寫→重啟該台，其他相機完全不碰。
+        /// 相位已用 phaselog 證明不重要（free-run 2-3 條線就夠好）→ 不再全部一起停/開，
+        /// 避免沒被改的相機（最常見 cam2）被反覆 stop/start 連累而 stall。
+        /// 重入 / 非抓取中 / 該台未在抓 → 直接寫。</summary>
+        public void ApplyParamCoordinated(int camId, Action write)
+        {
+            if (write == null) return;
+            var cam = FindCamera(camId);
+            if (cam == null || !IsLiveGrabbing || _coordDepth > 0 || !cam.IsLive) { write?.Invoke(); return; }
+
+            _coordDepth++;
+            try
+            {
+                cam.SetUserGrabIntent(false);   // 只停這一台
+                write();
+            }
+            finally
+            {
+                if (cam.IsConnected) cam.SetUserGrabIntent(true);   // 只重啟這一台
+                // 不在此同步等出幀：同步 Thread.Sleep 會凍 UI（stall 時必卡滿）→ Windows 變灰 Not Responding →
+                // 拉滑桿被排隊 replay → 解凍後「跳到空拉位置」再觸發一次套用＝暴力漏洞。stop→write→start 本身
+                // 同步序列化（MouseUp handler 跑完才處理下一個事件），不需凍結等待。stall 偵測交給 status timer。
+                _coordDepth--;
+            }
+        }
+
         /// <summary>協調式套用參數（#3）：grab 中改任何相機參數時，**全部相機一起停 → 寫 → 一起重啟**，
         /// 讓重啟後相位 offset 一致重建（測「停→寫→開」對相位的效果；高度也順帶安全＝停著重配）。
         /// 重入保護：巢狀呼叫（如 All 一次套 7 台）只寫、不重複停/開。非抓取中 → 直接寫。
@@ -483,24 +510,12 @@ namespace AniloxRoll.Monitor.UI.Managers
             }
             finally
             {
-                // 協調重啟：back-to-back 一起 M_START → 兩台幾乎同時起、offset 一致（barrier 待 main 補後再加 SetActiveCameras）
+                // 協調重啟：back-to-back 一起 M_START（All 一次套 7 台才用此版；單台走 camId overload）
                 foreach (var cam in paused)
                     if (cam.IsConnected) cam.SetUserGrabIntent(true);
 
-                // ★ 等所有重啟的相機都吐出第一幀才返回（確認重啟真的完成）。期間 UI 凍住＝參數自動鎖住：
-                //   防「上一次重啟還沒完成就改下一個參數」插隊（你觀察的曝光沒改完又改頻率）+ 確認 cam2 也重啟好（減少回顧掉偵）。
-                var baseCnt = new Dictionary<AniloxCamera, long>();
-                foreach (var cam in paused) if (cam.IsConnected) baseCnt[cam] = cam.GetFrameCount();
-                int waited = 0;
-                while (waited < 3000 && baseCnt.Count > 0)
-                {
-                    bool allAdvanced = true;
-                    foreach (var kv in baseCnt)
-                        if (kv.Key.GetFrameCount() <= kv.Value) { allAdvanced = false; break; }
-                    if (allAdvanced) break;
-                    System.Threading.Thread.Sleep(20);
-                    waited += 20;
-                }
+                // 不同步等出幀（會凍 UI → 變灰 Not Responding → 拉滑桿排隊 replay 跳值＝暴力漏洞）。
+                // stall 偵測交給 status timer（FPS≈0 判據）。
                 _coordDepth--;
             }
         }
@@ -510,6 +525,28 @@ namespace AniloxRoll.Monitor.UI.Managers
             for (int i = 0; i < _cameras.Count; i++)
                 if (_cameras[i].CameraId == camId) return _cameras[i];
             return null;
+        }
+
+        /// <summary>快照所有「正在抓」相機的 FrameCount（camId→count）；供 UI 參數鎖判「重啟後是否已恢復出幀」。</summary>
+        public Dictionary<int, long> SnapshotLiveFrameCounts()
+        {
+            var d = new Dictionary<int, long>();
+            foreach (var cam in _cameras)
+                if (cam != null && cam.IsLive) d[cam.CameraId] = cam.GetFrameCount();
+            return d;
+        }
+
+        /// <summary>baseline 內每台是否都已出至少一張新幀（FrameCount 前進）＝重啟落定。
+        /// stalled 相機永不前進 → 回 false，呼叫端用逾時兜底解鎖。</summary>
+        public bool AllAdvancedSince(Dictionary<int, long> baseCounts)
+        {
+            if (baseCounts == null) return true;
+            foreach (var kv in baseCounts)
+            {
+                var cam = FindCamera(kv.Key);
+                if (cam != null && cam.GetFrameCount() <= kv.Value) return false;
+            }
+            return true;
         }
 
         private void UpdateCaptureSettingsCache(InspectionSettings settings)

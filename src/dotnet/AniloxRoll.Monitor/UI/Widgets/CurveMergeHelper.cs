@@ -103,11 +103,15 @@ namespace AniloxRoll.Monitor.UI.Widgets
             mergedMean = null;
             mergedMax = null;
 
-            var allMean = new List<float[]>();
+            // slot-based：imagePaths 可含 null（呼叫端對齊參考時間軸後缺幀=null）→ 該格補「0 曲線」一格，
+            // 與影像黑布占位（GrabImageStitcher）對齊；no-null 時行為與舊版一致。
+            var allMean = new List<float[]>();   // null = 缺幀（0 占位）
             var allMax = new List<float[]>();
+            int frameLen = 0;                     // 每幀列曲線長度（取自第一個有資料的幀）
 
             foreach (string path in imagePaths)
             {
+                if (string.IsNullOrEmpty(path)) { allMean.Add(null); allMax.Add(null); continue; }
                 string basePath = GetCurveBasePath(path);
                 var mean = InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MeanH)
                         ?? InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MeanHLegacy);
@@ -117,22 +121,28 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 {
                     allMean.Add(mean);
                     allMax.Add(max);
+                    if (frameLen == 0) frameLen = mean.Length;
                 }
+                else { allMean.Add(null); allMax.Add(null); }   // bin 也缺 → 同樣 0 占位
             }
 
-            if (allMean.Count == 0) return;
+            if (frameLen == 0) return;   // 沒有任何真資料
 
             int totalLen = 0;
-            foreach (var a in allMean) totalLen += a.Length;
+            foreach (var a in allMean) totalLen += (a?.Length ?? frameLen);
 
-            mergedMean = new float[totalLen];
+            mergedMean = new float[totalLen];   // 預設全 0 → 缺幀那格自然是 0 曲線
             mergedMax = new float[totalLen];
             int offset = 0;
             for (int j = 0; j < allMean.Count; j++)
             {
-                Array.Copy(allMean[j], 0, mergedMean, offset, allMean[j].Length);
-                Array.Copy(allMax[j], 0, mergedMax, offset, allMax[j].Length);
-                offset += allMean[j].Length;
+                if (allMean[j] != null)
+                {
+                    Array.Copy(allMean[j], 0, mergedMean, offset, allMean[j].Length);
+                    Array.Copy(allMax[j], 0, mergedMax, offset, allMax[j].Length);
+                    offset += allMean[j].Length;
+                }
+                else offset += frameLen;   // 缺幀：跳過一格（已是 0）= 黑布那格的 0 曲線
             }
         }
 

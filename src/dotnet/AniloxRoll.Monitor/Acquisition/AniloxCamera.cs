@@ -652,6 +652,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                         CameraId = camId, OrigWidth = origW, OrigHeight = origH,
                         MeanPeak = meanPeak, MaxPeak = maxPeak,
                         GpuTimeMs = LastGpuTimeMs,
+                        FrameStartTicks = _mil.LastFrameStartTicks,  // 本幀硬體 frame-start 戳（hook 早段已 latch）
                         OnResult = OnInspectionResult,
                         OnFilesSaved = OnFilesSaved
                     };

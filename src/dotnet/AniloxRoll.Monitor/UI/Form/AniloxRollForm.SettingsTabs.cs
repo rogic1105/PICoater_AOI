@@ -142,20 +142,20 @@ namespace AniloxRoll.Monitor.Forms
                 BindBidirectionalSync(_expBars[idx], _expNums[idx], camId,
                     ExpMin, expMax, (int)acq.CameraExposureTimeUs[idx],
                     v => { acq.CameraExposureTimeUs[idx] = v; ConfigManager.SaveAcquisitionSettings(acq); },
-                    v => _liveCameraManager?.ApplyParamCoordinated(() => _liveCameraManager.SetExposureForCamera(camId, v)));
+                    v => ApplyCamParam(camId, () => _liveCameraManager.SetExposureForCamera(camId, v)));
 
                 // ── 線掃速率 ────────────────────────────────────────────
                 BindBidirectionalSync(_lrBars[idx], _lrNums[idx], camId,
                     LrMin, LrMax, (int)acq.CameraLineRateHz[idx],
                     v => { acq.CameraLineRateHz[idx] = v; ConfigManager.SaveAcquisitionSettings(acq); },
-                    v => _liveCameraManager?.ApplyParamCoordinated(() => _liveCameraManager.SetLineRateForCamera(camId, v)),
+                    v => ApplyCamParam(camId, () => _liveCameraManager.SetLineRateForCamera(camId, v)),
                     () => { UpdateExpMaxAndClampColor(idx, CalcExpMax()); if (idx == 0) UpdateRowChartPitch(); });
 
                 // ── 擷取高度 ────────────────────────────────────────────
                 BindBidirectionalSync(_htBars[idx], _htNums[idx], camId,
                     HtMin, HtMax, acq.CameraGrabHeight[idx],
                     v => { acq.CameraGrabHeight[idx] = v; ConfigManager.SaveAcquisitionSettings(acq); },
-                    v => _liveCameraManager?.ApplyParamCoordinated(() => _liveCameraManager.SetGrabHeightForCamera(camId, v)),
+                    v => ApplyCamParam(camId, () => _liveCameraManager.SetGrabHeightForCamera(camId, v)),
                     () => {
                         _liveCameraManager?.RefreshMainDisplay();
                         if (_settings.StitchMode == StitchMode.Global && _liveCameraManager?.IsGlobalMergeActive == true)
@@ -282,8 +282,8 @@ namespace AniloxRoll.Monitor.Forms
 
             void Apply(int v)
             {
-                // 1. 寫硬體（所有 7 台）— 協調式：一起停 → 寫全部 → 一起開（一個週期，offset 一致重建）
-                _liveCameraManager?.ApplyParamCoordinated(() =>
+                // 1. 寫硬體（所有 7 台）— 協調式：一起停 → 寫全部 → 一起開（含參數鎖：套用期間 disable 控制項）
+                ApplyAllCamParam(() =>
                 {
                     for (int j = 0; j < bars.Length; j++)
                         writeHardwareForCam(j, v);
@@ -342,6 +342,70 @@ namespace AniloxRoll.Monitor.Forms
                 Schedule(v);
                 allSyncing = false;
             };
+        }
+
+        // ==================== 相機參數鎖（套用期間真正 disable，防空拉跳值）====================
+        // 套用相機參數＝該台 stop→write→start，需時間恢復出幀。這段期間把所有參數控制項 Enabled=false：
+        //   ① disable 的控制項「拒絕輸入、不排隊」→ 不會解鎖後 replay 跳到空拉位置（你看到的暴力漏洞）。
+        //   ② 解鎖條件＝相機已恢復出幀（FrameCount 前進）或逾時兜底 → 用非阻塞 Forms.Timer 輪詢，不凍 UI。
+        private System.Windows.Forms.Timer _paramUnlockTimer;
+        private System.Collections.Generic.Dictionary<int, long> _paramLockBaseCnts;
+        private DateTime _paramLockDeadlineUtc;
+
+        /// <summary>套用單一相機參數：先鎖控制項 → 只停/寫/開該台 → 啟動解鎖輪詢（恢復出幀/逾時才解鎖）。</summary>
+        private void ApplyCamParam(int camId, Action write)
+        {
+            if (_liveCameraManager == null) { write?.Invoke(); return; }
+            bool live = _liveCameraManager.IsLiveGrabbing;
+            if (live) SetParamControlsLocked(true);
+            _liveCameraManager.ApplyParamCoordinated(camId, write);
+            if (live) BeginParamUnlockPoll();
+        }
+
+        /// <summary>套用「全部相機」參數（All 滑桿）：鎖 → 全停/寫/全開 → 解鎖輪詢。</summary>
+        private void ApplyAllCamParam(Action write)
+        {
+            if (_liveCameraManager == null) { write?.Invoke(); return; }
+            bool live = _liveCameraManager.IsLiveGrabbing;
+            if (live) SetParamControlsLocked(true);
+            _liveCameraManager.ApplyParamCoordinated(write);
+            if (live) BeginParamUnlockPoll();
+        }
+
+        /// <summary>鎖/解鎖所有相機參數控制項（曝光/線掃/高度 ×7 + All）。disable＝拉不動、輸入被拒不排隊。</summary>
+        private void SetParamControlsLocked(bool locked)
+        {
+            bool en = !locked;
+            void SetArr(System.Windows.Forms.Control[] cs) { if (cs != null) foreach (var c in cs) if (c != null) c.Enabled = en; }
+            SetArr(_expBars); SetArr(_expNums);
+            SetArr(_lrBars);  SetArr(_lrNums);
+            SetArr(_htBars);  SetArr(_htNums);
+            if (_expAllBar != null) _expAllBar.Enabled = en; if (_expAllNum != null) _expAllNum.Enabled = en;
+            if (_lrAllBar  != null) _lrAllBar.Enabled  = en; if (_lrAllNum  != null) _lrAllNum.Enabled  = en;
+            if (_htAllBar  != null) _htAllBar.Enabled  = en; if (_htAllNum  != null) _htAllNum.Enabled  = en;
+        }
+
+        /// <summary>啟動非阻塞解鎖輪詢：所有先前在抓的相機都恢復出幀（或 3s 逾時兜底）→ 解鎖。</summary>
+        private void BeginParamUnlockPoll()
+        {
+            _paramLockBaseCnts = _liveCameraManager.SnapshotLiveFrameCounts();
+            _paramLockDeadlineUtc = DateTime.UtcNow.AddSeconds(3);   // stall 永不恢復 → 逾時仍解鎖（避免鎖死）
+            if (_paramUnlockTimer == null)
+            {
+                _paramUnlockTimer = new System.Windows.Forms.Timer { Interval = 120 };
+                _paramUnlockTimer.Tick += ParamUnlockTimer_Tick;
+            }
+            _paramUnlockTimer.Start();
+        }
+
+        private void ParamUnlockTimer_Tick(object sender, EventArgs e)
+        {
+            bool recovered = _liveCameraManager == null || _liveCameraManager.AllAdvancedSince(_paramLockBaseCnts);
+            if (recovered || DateTime.UtcNow >= _paramLockDeadlineUtc)
+            {
+                _paramUnlockTimer.Stop();
+                SetParamControlsLocked(false);
+            }
         }
 
         /// <summary>

@@ -18,6 +18,15 @@ namespace AniloxRoll.Monitor.UI.Managers
 {
     public partial class LiveCameraManager
     {
+        // ==================== Stall 偵測（縮圖 FPS 判據）====================
+        // IsLive 但 FPS≈0 持續數 tick＝stall（改線掃/高度最常見）。此時 IsLive 仍 true → 無法自救。
+        // 實測：停/開（甚至停止抓取→開始抓取）都救不回，只有重開程式 → 這是硬體層 CL 失鎖，
+        // 不做無效的自動停/開（純 thrash），只用縮圖紅「STALL」明確標示；救援交給深度 re-init（後續）。
+        // FPS 可低到 0.1＝合法慢速（一幀 10s），故 floor 設遠低於 0.1，只認真正的 0。
+        private const double StallFpsFloor = 0.05; // FPS 低於此＝真的沒回傳（0.1 仍算活著）
+        private const int StallTicks = 4;          // 連續 N 個 500ms tick（=2s）才判 stall（避開重啟瞬間暫態）
+        private readonly Dictionary<int, int> _stallTicks = new Dictionary<int, int>();
+
         // ==================== Mouse Data ====================
 
         private void HandleMouseDataChanged(int camId, int x, int y, int pixelValue)
@@ -130,12 +139,34 @@ namespace AniloxRoll.Monitor.UI.Managers
                 if (isConnected && cam.UserWantsGrab && !cam.IsLive)
                     cam.ApplyGrabState();
 
-                string statusText = isConnected
-                    ? (cam.IsLive ? $"FPS: {cam.CurrentFps:F1}" : "就緒")
-                    : "斷線";
-                Color color = isConnected
-                    ? (cam.IsLive ? Color.LightGreen : Color.Yellow)
-                    : Color.Pink;
+                string statusText;
+                Color color;
+                if (!isConnected)
+                {
+                    statusText = "斷線"; color = Color.Pink;
+                    _stallTicks[cam.CameraId] = 0;
+                }
+                else if (!cam.IsLive)
+                {
+                    statusText = "就緒"; color = Color.Yellow;
+                    _stallTicks[cam.CameraId] = 0;
+                }
+                else
+                {
+                    double fps = cam.CurrentFps;
+                    if (fps < StallFpsFloor)   // 真正沒回傳（0.1 等慢速不算）
+                    {
+                        int t = (_stallTicks.TryGetValue(cam.CameraId, out var v) ? v : 0) + 1;
+                        _stallTicks[cam.CameraId] = t;
+                        if (t >= StallTicks) { statusText = "STALL"; color = Color.Red; }   // 標示即可，停/開救不回
+                        else { statusText = $"FPS: {fps:F1}"; color = Color.LightGreen; }
+                    }
+                    else
+                    {
+                        _stallTicks[cam.CameraId] = 0;
+                        statusText = $"FPS: {fps:F1}"; color = Color.LightGreen;
+                    }
+                }
 
                 UpdateSingleCameraStatus(cam.CameraId, statusText, color);
             }

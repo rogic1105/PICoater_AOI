@@ -59,15 +59,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public bool IsPeriodMerged => _periodMergedImage != null;
         public CsvConfigSnapshot CurrentGrabConfig => _currentGrabConfig;
 
-        /// <summary>取一張擷取影像的「共用時間戳 key」＝檔名 {ts}-{camId} 去掉 -camId 的部分（同一次擷取的多相機共用）。
-        /// 用來跨相機對齊回顧合圖：缺此 key 的相機那格塞黑布占位。</summary>
-        private static string StitchKey(string path)
-        {
-            string baseName = System.IO.Path.GetFileName(CaptureFileNaming.BaseFromImagePath(path)); // "{ts}-{camId}"
-            int dash = baseName.LastIndexOf('-');
-            return dash > 0 ? baseName.Substring(0, dash) : baseName;
-        }
-
         /// <summary>上一次 Review 頁面的處理模式旗標。</summary>
         public bool LastReviewProcessedMode { get; set; }
 
@@ -149,17 +140,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     int scale = InspectionEngineConfig.DefaultSaveResizeScale;
                     var imgs = new Bitmap[camCount];
 
-                    // 跨相機建「參考時間軸」＝所有相機時間戳 key（檔名 -camId 前的部分，同次擷取共用）的聯集（排序）。
-                    // 每台對齊此基準：有該時間戳→真圖、缺（掉偵）→null（StitchCamera 塞黑布）→ 各台高度一致、上下對齊。
-                    var allKeys = new System.Collections.Generic.SortedSet<string>(System.StringComparer.Ordinal);
-                    var camKeyToPath = new System.Collections.Generic.Dictionary<int, System.Collections.Generic.Dictionary<string, string>>();
-                    foreach (var kv in grouped)
-                    {
-                        var map = new System.Collections.Generic.Dictionary<string, string>();
-                        foreach (var p in kv.Value) { string k = StitchKey(p); map[k] = p; allKeys.Add(k); }
-                        camKeyToPath[kv.Key] = map;
-                    }
-                    var refKeys = new System.Collections.Generic.List<string>(allKeys);
+                    // 跨相機對齊時間軸（唯一來源 FrameTickIndex）：優先「硬體 tick 就近對位」（各台獨立掉幀
+                    // 也能精準定位 → 缺幀那格補黑），舊資料無 _ticks.csv 側車時 fallback 檔名共用戳法。
+                    var allPaths = new System.Collections.Generic.List<string>();
+                    foreach (var kv in grouped) allPaths.AddRange(kv.Value);
+                    var tickMap = FrameTickIndex.LoadTickMap(allPaths);
+                    var alignedByCam = FrameTickIndex.BuildAlignedByTick(grouped, tickMap)
+                                       ?? FrameTickIndex.BuildAlignedByStitchKey(grouped);
 
                     // 7 台相機各自獨立（imgs[i]/curve[i] 各寫各的 index、BitmapPool 有 lock、CurveMergeHelper 無共用 static）
                     // → 平行解碼/拼接，吃滿多核心，削掉最大宗的 Stitch 延遲。每台自帶 try/catch，不外拋 AggregateException。
@@ -170,13 +157,12 @@ namespace AniloxRoll.Monitor.UI.Presenters
                         {
                             try
                             {
-                                // 影像：對齊參考時間軸（缺幀位置塞 null＝黑布占位）
-                                var aligned = refKeys.ConvertAll(k =>
-                                    camKeyToPath[camId].TryGetValue(k, out var ap) ? ap : null);
+                                // 影像：對齊參考時間軸（缺幀位置=null＝黑布占位；tick 法已精準定位掉幀槽）
+                                var aligned = alignedByCam.TryGetValue(camId, out var al) ? al : paths;
                                 imgs[i] = GrabImageStitcher.StitchCamera(aligned, scale, null,
                                     useProcessed: enableProcess, ridgeDirection: ridgeDir);
-                                CurveMergeHelper.MergeCurves(paths, out newCurveMean[i], out newCurveMax[i]);
-                                CurveMergeHelper.MergeRowCurves(paths, out newRowCurveMean[i], out newRowCurveMax[i]);
+                                CurveMergeHelper.MergeCurves(paths, out newCurveMean[i], out newCurveMax[i]);   // 切向(逐欄聚合)：長度不變、不需對齊
+                                CurveMergeHelper.MergeRowCurves(aligned, out newRowCurveMean[i], out newRowCurveMax[i]); // 法向(逐列串接)：對齊參考軸，缺幀補 0 曲線=對上影像黑布
                                 if (imgs[i] != null)
                                     grayArr[i] = AniloxRoll.Monitor.UI.Managers.ReviewDisplayManager.ToGray8(imgs[i], out grayW[i], out grayH[i]);
                             }
