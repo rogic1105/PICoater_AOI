@@ -486,6 +486,21 @@ namespace AniloxRoll.Monitor.UI.Managers
                 // 協調重啟：back-to-back 一起 M_START → 兩台幾乎同時起、offset 一致（barrier 待 main 補後再加 SetActiveCameras）
                 foreach (var cam in paused)
                     if (cam.IsConnected) cam.SetUserGrabIntent(true);
+
+                // ★ 等所有重啟的相機都吐出第一幀才返回（確認重啟真的完成）。期間 UI 凍住＝參數自動鎖住：
+                //   防「上一次重啟還沒完成就改下一個參數」插隊（你觀察的曝光沒改完又改頻率）+ 確認 cam2 也重啟好（減少回顧掉偵）。
+                var baseCnt = new Dictionary<AniloxCamera, long>();
+                foreach (var cam in paused) if (cam.IsConnected) baseCnt[cam] = cam.GetFrameCount();
+                int waited = 0;
+                while (waited < 3000 && baseCnt.Count > 0)
+                {
+                    bool allAdvanced = true;
+                    foreach (var kv in baseCnt)
+                        if (kv.Key.GetFrameCount() <= kv.Value) { allAdvanced = false; break; }
+                    if (allAdvanced) break;
+                    System.Threading.Thread.Sleep(20);
+                    waited += 20;
+                }
                 _coordDepth--;
             }
         }

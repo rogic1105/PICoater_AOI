@@ -42,17 +42,20 @@ namespace AniloxRoll.Monitor.UI.Widgets
             bool useProcessed = false,
             string ridgeDirection = "v")
         {
-            var images = new List<Bitmap>();
-            int refW = 0, refH = 0;
+            // slot-based：保留位置（null/缺檔 = 黑布幀），讓掉偵那格補黑、各台高度一致對齊（不縮短不錯位）。
+            // sortedPaths 可含 null（呼叫端對齊參考時間軸後，缺的位置塞 null）；no-null 時行為與舊版一致。
+            var slots = new Bitmap[sortedPaths.Count];
+            int refW = 0, refH = 0, realCount = 0;
 
-            foreach (string path in sortedPaths)
+            for (int i = 0; i < sortedPaths.Count; i++)
             {
-                if (!File.Exists(path)) continue;
+                string path = sortedPaths[i];
+                if (string.IsNullOrEmpty(path) || !File.Exists(path)) continue;   // 留 null = 黑布
                 try
                 {
                     var bmp = LoadCameraImage(path, bmpResizeScale, bmpLoader, useProcessed, ridgeDirection);
                     if (bmp == null) continue;
-                    images.Add(bmp);
+                    slots[i] = bmp; realCount++;
                     if (refW == 0) { refW = bmp.Width; refH = bmp.Height; }
                 }
                 catch (Exception ex)
@@ -62,31 +65,33 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 }
             }
 
-            if (images.Count == 0) return null;
-            if (images.Count == 1)
+            if (realCount == 0) return null;
+            if (slots.Length == 1 && slots[0] != null)
             {
-                // 取像時序需上下翻轉顯示
-                images[0].RotateFlip(RotateFlipType.RotateNoneFlipY);
-                return images[0];
+                // 單張且無占位：上下翻轉顯示（保留舊捷徑）
+                slots[0].RotateFlip(RotateFlipType.RotateNoneFlipY);
+                return slots[0];
             }
 
-            var result = BitmapPool.Rent(refW, refH * images.Count);
+            var result = BitmapPool.Rent(refW, refH * slots.Length);
             try
             {
                 using (var g = Graphics.FromImage(result))
                 {
+                    g.Clear(Color.Black);   // null slot = 黑布占位（掉偵那格）
                     g.InterpolationMode = InterpolationMode.NearestNeighbor;
                     g.PixelOffsetMode   = PixelOffsetMode.Half;
-                    for (int i = 0; i < images.Count; i++)
-                        g.DrawImage(images[i],
-                            new Rectangle(0, i * refH, refW, refH),
-                            new Rectangle(0, 0, images[i].Width, images[i].Height),
-                            GraphicsUnit.Pixel);
+                    for (int i = 0; i < slots.Length; i++)
+                        if (slots[i] != null)
+                            g.DrawImage(slots[i],
+                                new Rectangle(0, i * refH, refW, refH),
+                                new Rectangle(0, 0, slots[i].Width, slots[i].Height),
+                                GraphicsUnit.Pixel);
                 }
             }
             finally
             {
-                foreach (var img in images) img.Dispose();
+                foreach (var img in slots) img?.Dispose();
             }
 
             // 合成完一次翻轉（取像時序需上下翻轉顯示，與 Period 模式一致）
