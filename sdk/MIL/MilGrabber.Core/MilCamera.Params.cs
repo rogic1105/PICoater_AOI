@@ -115,6 +115,36 @@ namespace MilGrabber.Core
             bool wasLive = IsLive;
             int oldHeight = CameraGrabHeight;
 
+            // ===== 階段二 flag：no-realloc 改高度 =====
+            // buffer 已配 max 且新高度 <= 配置高度 → 只改 M_SOURCE_SIZE_Y、**不 free/realloc**（避開「realloc→re-arm
+            // 累積」＝改高度 stall 的根因路徑）。仍 stop+drain 求穩。log M_SIZE_Y：上機看 ==height（max-buffer 可行）
+            // 還是 ==max（doc 疑慮成立、幀變 max 高度 → 改走 auto-allocate）。
+            if (UseMaxHeightBuffers && _milGrabBuffers[0] != MIL.M_NULL && height <= _grabBufAllocH)
+            {
+                if (wasLive)
+                {
+                    MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize,
+                        MIL.M_STOP + MIL.M_WAIT, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
+                    IsLive = false;
+                }
+                try { MIL.MdigControl(_milDigitizer, MIL.M_GRAB_ABORT, MIL.M_DEFAULT); } catch { }
+
+                MIL.MdigControl(_milDigitizer, MIL.M_SOURCE_SIZE_Y, (MIL_INT)height);
+                MIL_INT sy = MIL.MdigInquire(_milDigitizer, MIL.M_SIZE_Y, MIL.M_NULL);
+                FrameHeight = (int)sy;
+                CameraGrabHeight = height;
+                System.Diagnostics.Trace.WriteLine(
+                    $"[CAM{CameraId}] 階段二 no-realloc 改高度：req={height} M_SIZE_Y={FrameHeight} buf={_grabBufAllocH}（若 M_SIZE_Y≠req＝max-buffer 不可行）");
+
+                if (onStoppedBeforeRestart != null)
+                {
+                    try { onStoppedBeforeRestart(); }
+                    catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}] onStoppedBeforeRestart: {ex.Message}"); }
+                }
+                if (wasLive && _userWantsGrab) StartProcess();
+                return;
+            }
+
             // M_STOP + M_WAIT：等佇列中的 grab 全部跑完才返回（drain，非只取消）→ 之後沒有 FrameReady 在跑。
             if (wasLive)
             {

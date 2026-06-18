@@ -747,6 +747,11 @@ namespace AniloxRoll.Monitor.Forms
                 }
                 catch { }
 
+                // 階段二實驗開關（env var，不用重編）：PICOATER_MAXBUF=1 → buffer 配 max、改高度只改 M_SOURCE_SIZE_Y。
+                // 預設關＝現行 realloc 行為。上機測：設環境變數後啟動，改高度看 Trace「階段二 no-realloc」log 的 M_SIZE_Y。
+                MilGrabber.Core.MilCamera.UseMaxHeightBuffers =
+                    Environment.GetEnvironmentVariable("PICOATER_MAXBUF") == "1";
+
                 _liveCameraManager.AllocateCameras(_settings.EnableMuraEnhance);
                 LoadBackgroundBins();
                 // 全域合圖（MIL 大 buffer alloc）延後到 CLProtocol 就緒後（OnCamerasHwReady）才建立：

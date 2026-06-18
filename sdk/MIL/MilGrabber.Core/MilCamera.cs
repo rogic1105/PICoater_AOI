@@ -27,6 +27,16 @@ namespace MilGrabber.Core
         private MIL_ID _milLastGrabBuffer = MIL.M_NULL;
         private MIL_INT _milGrabBufferListSize = 2;
 
+        // ===== 階段二實驗（feat/grabheight-max-buffer）=====
+        /// <summary>grab/display buffer 一次配「max 高度」，改高度只改 `M_SOURCE_SIZE_Y`、**不 free/realloc** →
+        /// 測「能否避開 realloc→re-arm 累積（=改高度 stall 的根因路徑）」。預設 **false**＝現行安全 realloc 行為。
+        /// ⚠ 未上機驗證：Matrox doc「line-scan 幀填滿整個 destination buffer 才完成」暗示 max-buffer 可能讓
+        /// **幀變成 max 高度（壞）**。上機翻 true 測一次：幀高度正確＝max-buffer 可行；幀變 max 高度＝doc 疑慮
+        /// 成立，改走 auto-allocate（MdigProcess bufarray=M_NULL）。詳見 docs/dev/grabheight-max-buffer-stage2.md。</summary>
+        public static bool UseMaxHeightBuffers = false;
+        private const int MaxGrabHeightPx = 10000;   // 與滑桿 HtMax 一致
+        private int _grabBufAllocH;                   // MIL grab/display buffer 實際配置的高度（max 或當前）
+
         public MIL_ID OwnerSystemId => _ownerSystemId;
         public MIL_ID MilDigitizer => _milDigitizer;
         public MIL_ID MilDisplay => _milDisplay;
@@ -139,16 +149,20 @@ namespace MilGrabber.Core
             FrameWidth = (int)sizeX;
             FrameHeight = (int)sizeY;
 
+            // 階段二 flag：buffer 一次配 max 高度（之後改高度只改 M_SOURCE_SIZE_Y、不 realloc）。
+            int bufH = UseMaxHeightBuffers ? System.Math.Max((int)sizeY, MaxGrabHeightPx) : (int)sizeY;
+            _grabBufAllocH = bufH;
+
             for (int i = 0; i < _milGrabBufferListSize; i++)
             {
-                MIL.MbufAlloc2d(_ownerSystemId, sizeX, sizeY, 8 + MIL.M_UNSIGNED,
+                MIL.MbufAlloc2d(_ownerSystemId, sizeX, bufH, 8 + MIL.M_UNSIGNED,
                     MIL.M_IMAGE + MIL.M_GRAB + MIL.M_PROC, ref _milGrabBuffers[i]);
                 if (_milGrabBuffers[i] == MIL.M_NULL)
                     System.Diagnostics.Trace.TraceWarning($"[MilCamera CAM{CameraId}] MbufAlloc2d(grab[{i}]) 失敗 → 取像將失敗");
                 else MIL.MbufClear(_milGrabBuffers[i], 0);
             }
 
-            MIL.MbufAlloc2d(_ownerSystemId, sizeX, sizeY, 8 + MIL.M_UNSIGNED,
+            MIL.MbufAlloc2d(_ownerSystemId, sizeX, bufH, 8 + MIL.M_UNSIGNED,
                 MIL.M_IMAGE + MIL.M_DISP + MIL.M_PROC, ref _milDisplayBuffer);
             if (_milDisplayBuffer == MIL.M_NULL)
                 System.Diagnostics.Trace.TraceWarning($"[MilCamera CAM{CameraId}] MbufAlloc2d(display buffer) 失敗 → MIL 直繪不可用");
