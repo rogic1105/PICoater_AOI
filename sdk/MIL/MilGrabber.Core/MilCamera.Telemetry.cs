@@ -55,6 +55,13 @@ namespace MilGrabber.Core
             return (long)val / (1024 * 1024);
         }
 
+        /// <summary>所屬板（System）的識別＝OwnerSystemId 的數值（用來把同板相機歸組）。</summary>
+        public long OwnerSystemKey => (long)_ownerSystemId;
+
+        /// <summary>是否已配 grab buffer（Initialize 成功）。實體拔線不會 free buffer → 此旗標反映「實際佔板載」的台數，
+        /// 比 IsConnected（即時在線）更適合算板載安全 grab 高度（斷線時 buffer 仍佔著、安全高度不該放寬）。</summary>
+        public bool HasGrabBuffers => _milGrabBuffers != null && _milGrabBuffers[0] != MIL.M_NULL;
+
         /// <summary>PCIe 通道數。</summary>
         public int GetPcieNumberOfLanes()
         {

@@ -102,6 +102,54 @@ namespace MilGrabber.Core
             }
         }
 
+        /// <summary>查相機/grabber 回報的 grab 高度上限（px）。只讀（MdigInquireFeature，不寫 → 安全，
+        /// 不同於曾搞壞的「寫 Height」）。line-scan 相機高度上限可能掛在不同 feature 名 → 多候選查、回第一個 >0。
+        /// 0＝CLProtocol 未就緒 / 都查不到。診斷「高度拉太高就 stall」是否＝超過相機上限。</summary>
+        public int GetGrabHeightMaxPx()
+        {
+            if (!_clProtocolEnabled || _milDigitizer == MIL.M_NULL) return 0;
+            // 候選 GenICam feature（不同相機/廠商命名不一）：相機影像高度上限。
+            string[] candidates = { "Height", "HeightMax", "SensorHeight" };
+            foreach (var name in candidates)
+            {
+                try
+                {
+                    long max = 0;
+                    MIL.MdigInquireFeature(_milDigitizer, MIL.M_FEATURE_MAX, name, MIL.M_TYPE_INT64, ref max);
+                    if (max > 0)
+                    {
+                        System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}] GrabHeightMax via \"{name}\" = {max}");
+                        // line-scan 相機常回 uint.MaxValue(4294967295)＝無限制 → 視為「無有效上限」回 0。
+                        if (max >= uint.MaxValue) return 0;
+                        return max > int.MaxValue ? int.MaxValue : (int)max;
+                    }
+                }
+                catch { /* feature 不存在 → 試下一個 */ }
+            }
+            return 0;
+        }
+
+        /// <summary>診斷：log 相機 GenICam Height feature 的合法範圍 Min/Max/Increment（CLProtocol 就緒後呼叫）。
+        /// source size 合法值＝Min + k×Increment ≤ Max；設格點外的值（如 8736）→ cam stall（Matrox doc）。
+        /// 只讀查詢，且在就緒後呼叫（非 cam init 序列）→ 安全。</summary>
+        public void LogHeightFeatureInfo()
+        {
+            if (!_clProtocolEnabled || _milDigitizer == MIL.M_NULL) return;
+            try
+            {
+                long min = 0, max = 0, inc = 0;
+                MIL.MdigInquireFeature(_milDigitizer, MIL.M_FEATURE_MIN,       "Height", MIL.M_TYPE_INT64, ref min);
+                MIL.MdigInquireFeature(_milDigitizer, MIL.M_FEATURE_MAX,       "Height", MIL.M_TYPE_INT64, ref max);
+                MIL.MdigInquireFeature(_milDigitizer, MIL.M_FEATURE_INCREMENT, "Height", MIL.M_TYPE_INT64, ref inc);
+                System.Diagnostics.Trace.WriteLine(
+                    $"[HeightFeature] CAM{CameraId} Height Min={min} Max={max} Increment={inc}（合法值=Min+k×Inc）");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine($"[HeightFeature] CAM{CameraId} 查 Height feature 失敗：{ex.Message}");
+            }
+        }
+
         // ==================== Grab Height ====================
 
         /// <summary>變更 Grab 高度並重新分配 MIL Buffer。失敗自動 rollback 至原高度。</summary>

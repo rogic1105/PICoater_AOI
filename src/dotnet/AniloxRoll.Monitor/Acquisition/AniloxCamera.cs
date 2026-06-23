@@ -231,6 +231,12 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>透過 CLProtocol GenICam Feature 讀取 Line Rate（Hz）。CLProtocol 未啟用時回傳 0。</summary>
         public double GetLineRateHz() => _mil.GetLineRateHz();
 
+        /// <summary>相機/grabber 回報的線掃率上限（Hz）。CLProtocol 未就緒回 0。</summary>
+        public double GetLineRateMaxHz() => _mil.GetLineRateMaxHz();
+
+        /// <summary>相機/grabber 回報的 grab 高度上限（px）。只讀查詢；CLProtocol 未就緒 / 查不到回 0。</summary>
+        public int GetGrabHeightMaxPx() => _mil.GetGrabHeightMaxPx();
+
         /// <summary>設定線掃速率（Hz）。CLProtocol 未就緒時僅記錄，待啟用後自動重套。</summary>
         public void SetLineRateHz(double hz) => _mil.SetLineRateHz(hz);
 
@@ -288,6 +294,18 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         /// <summary>取得板卡可用記憶體（MB）。</summary>
         public long GetMemoryFreeMB() => _mil.GetMemoryFreeMB();
+
+        /// <summary>所屬板（System）識別＝同板相機歸組用。</summary>
+        public long OwnerSystemKey => _mil.OwnerSystemKey;
+
+        /// <summary>是否已配 grab buffer（實際佔板載；拔線不釋放）。算板載安全高度用此而非 IsConnected。</summary>
+        public bool HasGrabBuffers => _mil.HasGrabBuffers;
+
+        /// <summary>grab 高度上限（px）。上層算好設入（純供 UI clamp 滑桿/顯示；CameraGrabHeight 設前已 clamp）。</summary>
+        public int  EffectiveMaxGrabHeightPx { get => _mil.EffectiveMaxGrabHeightPx; set => _mil.EffectiveMaxGrabHeightPx = value; }
+
+        /// <summary>診斷：log 相機 Height feature 的合法範圍 Min/Max/Increment。</summary>
+        public void LogHeightFeatureInfo() => _mil.LogHeightFeatureInfo();
 
         /// <summary>取得 PCIe 通道數。</summary>
         public int GetPcieNumberOfLanes() => _mil.GetPcieNumberOfLanes();

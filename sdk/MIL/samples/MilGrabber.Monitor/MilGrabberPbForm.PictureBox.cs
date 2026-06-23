@@ -359,12 +359,21 @@ namespace MilGrabber.Monitor
         private void UpdateTimingLabel()
         {
             if (_lblTiming == null) return;
-            double fps = (_selectedCam >= 0 && _cams != null && _selectedCam < _cams.Length && _cams[_selectedCam] != null)
-                ? _cams[_selectedCam].CurrentFps : 0;
+            var selCam = (_selectedCam >= 0 && _cams != null && _selectedCam < _cams.Length) ? _cams[_selectedCam] : null;
+            double fps = selCam != null ? selCam.CurrentFps : 0;
+
+            // 板載記憶體（grabber 即時可用）：grab buffer 從此池配，同板 channel 共用。
+            string memStr = "-";
+            if (selCam != null)
+            {
+                long free = selCam.GetMemoryFreeMB();
+                if (free >= 0) memStr = $"{free} MB free";
+            }
+
             if (_milMode)
             {
-                _lblTiming.Text = $"模式: MIL 直繪\nFPS: {fps:F1}\n(縮圖/顯示由 MIL\n 硬體直繪，無 CPU 成本)";
-                Trace.WriteLine($"[PbTiming] mode=MIL FPS={fps:F1}");
+                _lblTiming.Text = $"模式: MIL 直繪\nFPS: {fps:F1}\n板載: {memStr}\n(縮圖/顯示由 MIL\n 硬體直繪，無 CPU 成本)";
+                Trace.WriteLine($"[PbTiming] mode=MIL FPS={fps:F1} 板載={memStr}");
                 return;
             }
 
@@ -379,7 +388,7 @@ namespace MilGrabber.Monitor
             double lodCpuMax = _lodCpuTimer.ResetMax();
             string physStr   = physMag > 0 ? $"{physMag:F2}x" : "-（需FOV）";
             _lblTiming.Text =
-                $"模式: PictureBox\n畫面: {merge}\nLOD: {lod}\n  GPU縮放: {lodGpuMax:F1} ms\n  CPU縮放: {lodCpuMax:F1} ms\n餵入倍率: {_resizeScale}\nzoom×fit: {zoomRel:F2}\n實體倍率: {physStr}\n顯示(max): {paintMax:F1} ms\nFPS: {fps:F1}";
+                $"模式: PictureBox\n畫面: {merge}\nLOD: {lod}\n  GPU縮放: {lodGpuMax:F1} ms\n  CPU縮放: {lodCpuMax:F1} ms\n餵入倍率: {_resizeScale}\nzoom×fit: {zoomRel:F2}\n實體倍率: {physStr}\n顯示(max): {paintMax:F1} ms\nFPS: {fps:F1}\n板載: {memStr}";
             Trace.WriteLine($"[PbTiming] mode=PB {merge} LOD={lod} GPU縮放={lodGpuMax:F1}ms CPU縮放={lodCpuMax:F1}ms feed={_resizeScale} zoom×fit={zoomRel:F2} 實體={physStr} 顯示max={paintMax:F1}ms FPS={fps:F1}");
         }
 

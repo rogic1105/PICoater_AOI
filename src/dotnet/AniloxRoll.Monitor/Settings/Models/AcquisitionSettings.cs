@@ -14,6 +14,16 @@ namespace AniloxRoll.Monitor.Core.Data
         /// <summary>7 台相機的線掃速率（Hz），索引 0 = CAM1。</summary>
         public double[] CameraLineRateHz { get; set; } = AcquisitionDefaults.NewLineRateArray();
 
+        /// <summary>grab buffer 高度上限（px）。**0 = 自動依板載算**（跨 grabber 通用）；>0 = 手動覆寫。
+        /// 防撞 grabber 板載記憶體 stall。算法見 AcquisitionDefaults.MaxGrabBufferHeightPx。</summary>
+        public int MaxGrabBufferHeightPx { get; set; } = AcquisitionDefaults.MaxGrabBufferHeightPx;
+
+        /// <summary>板載安全使用率（%）。自動 autoMax = 板載 × 此% ÷ 台數 ÷ 每台每行。預設 80。</summary>
+        public int GrabBufferSafetyPercent { get; set; } = AcquisitionDefaults.GrabBufferSafetyPercent;
+
+        /// <summary>每張板板載總量（MB）。autoMax 用（不查 MIL，避免第一台相機 stall）。換 grabber 改此值。</summary>
+        public int BoardTotalMemMB { get; set; } = AcquisitionDefaults.BoardTotalMemMB;
+
         public void Validate()
         {
             if (CameraGrabHeight == null || CameraGrabHeight.Length != AcquisitionDefaults.CamCount)
@@ -22,6 +32,10 @@ namespace AniloxRoll.Monitor.Core.Data
                 CameraExposureTimeUs = AcquisitionDefaults.NewExposureTimeArray();
             if (CameraLineRateHz == null || CameraLineRateHz.Length != AcquisitionDefaults.CamCount)
                 CameraLineRateHz = AcquisitionDefaults.NewLineRateArray();
+            if (MaxGrabBufferHeightPx < 0) MaxGrabBufferHeightPx = 0;   // 0=自動（合法）；負數歸 0
+            if (GrabBufferSafetyPercent <= 0 || GrabBufferSafetyPercent > 100)
+                GrabBufferSafetyPercent = AcquisitionDefaults.GrabBufferSafetyPercent;
+            if (BoardTotalMemMB <= 0) BoardTotalMemMB = AcquisitionDefaults.BoardTotalMemMB;
 
             for (int i = 0; i < AcquisitionDefaults.CamCount; i++)
             {

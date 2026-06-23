@@ -85,7 +85,7 @@ namespace AniloxRoll.Monitor.Forms
             const int LrMin     =   100;   // Hz
             const int LrMax     = 10000;   // Hz
             const int HtMin     =   100;   // px
-            const int HtMax     = 10000;   // px
+            const int HtMax     = 10000;   // px（grab 高度滑桿上限；單 buffer 156MB < host 256MB chunk，安全）
 
             // ── 7 台相機控制項陣列（存為 Form 欄位，供 SyncFromCamera 存取）────
             var acq = _settings.Acquisition;

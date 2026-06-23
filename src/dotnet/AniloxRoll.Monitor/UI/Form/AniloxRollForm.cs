@@ -774,6 +774,43 @@ namespace AniloxRoll.Monitor.Forms
                     _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
             UpdateCamCountLabel(_liveCameraManager.ConnectedCameraCount, CameraCount);
             RefreshGrabButtonState();
+
+            // CLProtocol 就緒後：把每張板的板載記憶體（總量/可用）標到 listViewHardware（grabber 記憶體大小）。
+            // 記憶體是「每張板」共用（同板 channel 共池）→ 每個 unique System 顯示一列；同時 log 高度/線掃上限診斷。
+            try
+            {
+                // 每張板（OwnerSystemKey）已配 buffer 台數（拔線不釋放→佔板載的台數），供顯示。
+                var boardCamCount = new Dictionary<long, int>();
+                foreach (var cam in _liveCameraManager.Cameras)
+                {
+                    if (cam == null || !cam.HasGrabBuffers) continue;
+                    long key = cam.OwnerSystemKey;
+                    boardCamCount[key] = (boardCamCount.TryGetValue(key, out var n) ? n : 0) + 1;
+                }
+
+                var seenSystems = new HashSet<long>();
+                int boardIdx = 0;
+                foreach (var cam in _liveCameraManager.Cameras)
+                {
+                    if (cam == null) continue;
+                    long memFree = cam.GetMemoryFreeMB();   // 板載即時可用（配 buffer 後剩餘）
+
+                    // 每張板（System）只加一列板載記憶體（去重）：即時可用 + 已配台數（看得出幾隻相機共用板載）
+                    if (listViewHardware != null && !IsDisposed && cam.HasGrabBuffers && seenSystems.Add(cam.OwnerSystemKey))
+                    {
+                        int nCam = boardCamCount.TryGetValue(cam.OwnerSystemKey, out var c) ? c : 1;
+                        listViewHardware.Items.Add(new ListViewItem(new[] {
+                            $"Grabber記憶體_板{boardIdx}（{nCam}台）", $"{memFree} MB free" }));
+                        boardIdx++;
+                    }
+                }
+
+                // 診斷：log 各相機 GenICam Height feature 的合法範圍（Min/Max/Increment）。
+                // 合法 grab 高度 = Min + k×Increment；判斷 9000 為何合法、8736 為何 stall（格點外）。
+                foreach (var cam in _liveCameraManager.Cameras)
+                    cam?.LogHeightFeatureInfo();
+            }
+            catch { }
         }
 
         /// <summary>btnLiveGrab 狀態唯一來源：依「相機就緒 / IO 連線 / 是否抓取中」決定顯示。

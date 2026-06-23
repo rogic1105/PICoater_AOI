@@ -37,6 +37,11 @@ namespace MilGrabber.Core
         private const int MaxGrabHeightPx = 10000;   // 與滑桿 HtMax 一致
         private int _grabBufAllocH;                   // MIL grab/display buffer 實際配置的高度（max 或當前）
 
+        // ===== grab buffer 高度上限（防撞板載 stall）=====
+        /// <summary>本台實際生效的高度上限（px）。由上層 LiveCameraManager 算好設入（CameraGrabHeight 設前已 clamp）；
+        /// 純供 UI clamp 滑桿/顯示。autoMax 計算刻意放上層，**不在 MIL Initialize 內查板載**（會 stall）。</summary>
+        public int EffectiveMaxGrabHeightPx { get; set; }
+
         public MIL_ID OwnerSystemId => _ownerSystemId;
         public MIL_ID MilDigitizer => _milDigitizer;
         public MIL_ID MilDisplay => _milDisplay;
@@ -135,7 +140,9 @@ namespace MilGrabber.Core
             MIL.MdigAlloc(_ownerSystemId, _devNum, _dcfPath, MIL.M_DEFAULT, ref _milDigitizer);
             if (_milDigitizer == MIL.M_NULL) return;
 
-            // 先套用 Grab Height，再查詢實際尺寸以分配正確大小的 Buffer
+            // 先套用 Grab Height，再查詢實際尺寸以分配正確大小的 Buffer。
+            // 高度上限（autoMax / 防撞板載 clamp）由上層 LiveCameraManager 算好、CameraGrabHeight 設進來前已 clamp，
+            // 此處不查板載/不算 autoMax —— 在 MIL 初始化序列中插入額外 MdigInquire 會讓 cam stall（實測）。
             if (CameraGrabHeight > 0)
                 MIL.MdigControl(_milDigitizer, MIL.M_SOURCE_SIZE_Y, (MIL_INT)CameraGrabHeight);
 
