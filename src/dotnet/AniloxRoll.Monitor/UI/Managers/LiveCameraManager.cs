@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Matrox.MatroxImagingLibrary;
@@ -47,10 +48,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private bool _enableAutoCapture;
         private bool _saveOriginalBmp = false;
         private string _captureRootPath = string.Empty;
-        private int[]    _cameraGrabHeight    = new int[7];
-        private int      _grabHeightManualMaxPx   = 0;    // grab 高度上限：0=自動依板載、>0 手動（換 grabber 設定值）
-        private int      _grabBufferSafetyPercent = 80;   // 板載安全使用率
-        private int      _boardTotalMemMB         = 1024; // 每板板載總量（設定常數；不查 MIL 以免 cam1 stall）
+        private int[]    _cameraGrabHeight    = new int[7];   // 已 clamp 到 MaxGrabHeightPx（防超單 path 板載 stall）
         private double[] _cameraExposureTimeUs = new double[7];
         private double[] _cameraLineRateHz     = new double[7];
         private int _saveResizeScale = InspectionEngineConfig.DefaultSaveResizeScale;
@@ -263,10 +261,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.SaveOriginalBmp = _saveOriginalBmp;
                 cam.CaptureRootPath      = _captureRootPath;
 
-                // grab 高度用 json（相機已接受的合法值）直接配，**不主動 clamp 到算出的 autoMax**：
-                // Matrox doc — source size 合法值由相機 GenICam Height feature 的 M_FEATURE_INCREMENT 決定，
-                // 程式算出的任意值（如 8736）落在格點外 → 設下去 cam1 stall。grab buffer 又是配在 Host（非板載），
-                // 故「依板載算上限」前提也不成立。高度合法性由滑桿步進 + Defaults 保證（皆為相機格點值）。
+                // grab 高度走 json（_cameraGrabHeight 已在 UpdateCaptureSettingsCache clamp 到 MaxGrabHeightPx=12000）。
                 cam.CameraGrabHeight = _cameraGrabHeight[camIdx];
 
                 cam.CameraExposureTimeUs = _cameraExposureTimeUs[camIdx]; // Initialize() 會呼叫 SetExposureUs 套用
@@ -434,7 +429,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.EnableAutoCapture    = _enableAutoCapture;
                 cam.SaveOriginalBmp = _saveOriginalBmp;
                 cam.CaptureRootPath      = _captureRootPath;
-                cam.CameraGrabHeight     = _cameraGrabHeight[camIdx];
+                cam.CameraGrabHeight     = _cameraGrabHeight[camIdx]; // 已在 UpdateCaptureSettingsCache clamp 到 MaxGrabHeightPx
                 cam.HessianSigma         = InspectionEngineConfig.DefaultRidgeSigma;
                 cam.HessianFixedMax      = _hessianMaxFactor;
                 cam.RidgeMode            = _ridgeMode;
@@ -474,6 +469,8 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// </summary>
         public void SetGrabHeightForCamera(int camId, int height)
         {
+            // grab 中拉大到 ~12062 會 stall → 一律 cap 在 MaxGrabHeightPx(12000) 以下（per-camera 固定，不分台數）。
+            if (height > AcquisitionDefaults.MaxGrabHeightPx) height = AcquisitionDefaults.MaxGrabHeightPx;
             FindCamera(camId)?.SetGrabHeight(height);
         }
 
@@ -596,10 +593,16 @@ namespace AniloxRoll.Monitor.UI.Managers
             _enableAutoCapture    = settings.EnableAutoCapture;
             _saveOriginalBmp = settings.Storage?.SaveOriginalBmp ?? false;
             _captureRootPath      = settings.CaptureRootPath ?? string.Empty;
-            _cameraGrabHeight     = settings.Acquisition.CameraGrabHeight;  // json 原值；上限 clamp 由 MilCamera 依板載算
-            _grabHeightManualMaxPx   = settings.Acquisition.MaxGrabBufferHeightPx;     // 0=自動依板載
-            _grabBufferSafetyPercent = settings.Acquisition.GrabBufferSafetyPercent;
-            _boardTotalMemMB         = settings.Acquisition.BoardTotalMemMB;           // 板載常數（換 grabber 改）
+            // grab 高度 clamp 到硬上限 MaxGrabHeightPx（grab 中拉大超過 ~12062 會 stall；per-camera 固定不分台數）。
+            // clamp 後是純數字、走與 json 同路徑設給 cam.CameraGrabHeight（不碰 MIL init 查詢）→ 不會 stall。
+            int maxH = AcquisitionDefaults.MaxGrabHeightPx;
+            var srcH = settings.Acquisition.CameraGrabHeight;
+            _cameraGrabHeight = new int[srcH.Length];
+            for (int i = 0; i < srcH.Length; i++)
+            {
+                int h = srcH[i] > 0 ? srcH[i] : AcquisitionDefaults.GrabHeight;
+                _cameraGrabHeight[i] = h > maxH ? maxH : h;
+            }
             _cameraExposureTimeUs = settings.Acquisition.CameraExposureTimeUs;
             _cameraLineRateHz     = settings.Acquisition.CameraLineRateHz;
             _saveResizeScale      = settings.Recipe?.SaveResizeScale ?? InspectionEngineConfig.DefaultSaveResizeScale;

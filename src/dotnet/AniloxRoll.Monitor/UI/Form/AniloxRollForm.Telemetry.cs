@@ -36,6 +36,13 @@ namespace AniloxRoll.Monitor.Forms
         private bool _telemetryFitDone;
         private volatile bool _telemetryCaptureInFlight;   // 背景 telemetry MIL 查詢進行中，避免重疊堆積
 
+        // 板載記憶體 list 列即時更新（改參數後用量會變）：OnCamerasHwReady 填 item，telemetry timer 刷新。
+        // key=OwnerSystemKey（每板一列）。total/nCam 開機定；free 每 tick 背景查、Apply 更新「用量/總量」。
+        private readonly System.Collections.Generic.Dictionary<long, ListViewItem> _boardMemItems
+            = new System.Collections.Generic.Dictionary<long, ListViewItem>();
+        private readonly System.Collections.Generic.Dictionary<long, (int nCam, long total)> _boardMemInfo
+            = new System.Collections.Generic.Dictionary<long, (int, long)>();
+
         private void TelemetryTimer_Tick(object sender, EventArgs e)
         {
             // 連線狀態不受相機釋放影響，先於 gate 更新
@@ -90,6 +97,37 @@ namespace AniloxRoll.Monitor.Forms
 
             if (hwReady && _liveCameraManager.IsAllocated)
                 SyncCameraParamsFromHardware();
+
+            // ── 板載記憶體列即時更新（改參數後用量會變）：背景查每板 free，UI 更新「用量/總量」──
+            if (hwReady && _boardMemItems.Count > 0)
+            {
+                var cams = _liveCameraManager.Cameras;
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    var freeByKey = new System.Collections.Generic.Dictionary<long, long>();
+                    try
+                    {
+                        foreach (var cam in cams)
+                        {
+                            if (cam == null || !cam.HasGrabBuffers) continue;
+                            long k = cam.OwnerSystemKey;
+                            if (!freeByKey.ContainsKey(k)) freeByKey[k] = cam.GetMemoryFreeMB();  // 同板查一次
+                        }
+                    }
+                    catch { return; }
+                    // SafeBeginInvoke：含 IsHandleCreated/IsDisposed/Disposing 守，避免 handle 未建/銷毀時 BeginInvoke 拋。
+                    SafeBeginInvoke(() =>
+                    {
+                        foreach (var kv in freeByKey)
+                        {
+                            if (!_boardMemItems.TryGetValue(kv.Key, out var item)) continue;
+                            if (!_boardMemInfo.TryGetValue(kv.Key, out var info)) continue;
+                            long used = info.total > 0 && kv.Value >= 0 ? info.total - kv.Value : -1;
+                            item.SubItems[1].Text = used >= 0 ? $"{used}/{info.total} MB" : $"{kv.Value} MB free";
+                        }
+                    });
+                });
+            }
 
             // ── Resource Monitor 更新 ──
             UpdateResourceMonitor();

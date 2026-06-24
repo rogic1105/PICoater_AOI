@@ -85,7 +85,9 @@ namespace AniloxRoll.Monitor.Forms
             const int LrMin     =   100;   // Hz
             const int LrMax     = 10000;   // Hz
             const int HtMin     =   100;   // px
-            const int HtMax     = 10000;   // px（grab 高度滑桿上限；單 buffer 156MB < host 256MB chunk，安全）
+            // grab 高度硬上限：grab 中拉大超過 ~12062 會 stall → 一律 cap 12000（per-camera 固定，不分台數；
+            // 板載是 4 path 各自獨立到 ~12062。來源見 AcquisitionDefaults.MaxGrabHeightPx）。
+            int HtMax = AcquisitionDefaults.MaxGrabHeightPx;
 
             // ── 7 台相機控制項陣列（存為 Form 欄位，供 SyncFromCamera 存取）────
             var acq = _settings.Acquisition;
@@ -153,7 +155,7 @@ namespace AniloxRoll.Monitor.Forms
 
                 // ── 擷取高度 ────────────────────────────────────────────
                 BindBidirectionalSync(_htBars[idx], _htNums[idx], camId,
-                    HtMin, HtMax, acq.CameraGrabHeight[idx],
+                    HtMin, HtMax, Math.Max(HtMin, Math.Min(HtMax, acq.CameraGrabHeight[idx])),
                     v => { acq.CameraGrabHeight[idx] = v; ConfigManager.SaveAcquisitionSettings(acq); },
                     v => ApplyCamParam(camId, "Height", v, () => _liveCameraManager.SetGrabHeightForCamera(camId, v)),
                     () => {

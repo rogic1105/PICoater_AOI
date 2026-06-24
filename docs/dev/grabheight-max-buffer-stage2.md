@@ -1,9 +1,74 @@
 # 階段二：改高度 no-realloc（max-buffer / auto-allocate）研究與 scaffold
 
 > 分支 `feat/grabheight-max-buffer`。階段一（`M_GRAB_ABORT` drain，已 merge main）已修「改高度重啟空檔 stall」；
-> 此分支研究 grab 記憶體 + max-buffer。**下方「★ 2026-06-23 釐清」是最終真相，前面舊章節有被推翻處（保留當推理過程）。**
+> 此分支研究 grab 記憶體 + max-buffer。**最新結論在最上方「★ 2026-06-24 ②」，往下越舊、多數已被推翻（保留當推理過程）。**
 
-## ★ 2026-06-23 釐清（MILConfig 截圖 + 實測 + agent 文件，這是最終結論）
+## ★ 2026-06-24 ② 真正定案（dropdiag 揪出真根因＝啟動競態，非板載/高度上限）
+
+**改高度 stall 的主因＝啟動競態，不是板載記憶體、也不是高度上限。** 下方 6/23~6/24 ① 那套「板載溢位/
+per-board 係數」推論**全部被推翻**（是被這個競態的現象誤導 + 我自己的診斷 log 污染了實驗）。
+
+**鐵證（dropdiag 每 500ms 記每台 frame 數）：** 高度 12000 時 **CAM2 正常 grab（FPS=0.83＝10000線掃/12000，數字正確）、
+CAM1 卻 frameCount 卡 0**。兩台都接、都 CLProtocol enabled。→ **12000 不是硬限**（CAM2 證明），是 CAM1 單獨 stall。
+
+**真根因（trace log 抓到）：**
+1. **啟動競態**：套用設定時對每台呼一次 `SetGrabHeight(同值)` → 做了**多餘的 free+realloc（UI 執行緒）**，
+   正好撞上 CAM1 的 **CLProtocol enable（背景執行緒）** → MIL 並發 → CAM1 stall。
+   log 抓到：`[CAM1] CLProtocol: using device ID` 與 `enabled successfully` 之間插進 `[CAM1][HtRealloc] 改高度 12000->12000`。
+2. **診斷自污染**：我加的 `GetMemoryFreeMB()`＝**MsysInquire 插進相機 MIL 序列 → cam1 stall**（既有鐵則 [[project_grabber_board_memory_limit]] 旁那條教訓），雪上加霜。
+
+**修法（本 commit）：**
+- `MilCamera.SetGrabHeight`：**高度未變且 buffer 已配 → 直接 return，不 realloc**（擋掉啟動那個撞 CLProtocol 的多餘 realloc）。
+- 改高度熱路徑**移除所有 MsysInquire（GetMemoryFreeMB）**；板載記憶體改看背景執行緒寫的 resource-monitor CSV。
+- `Program.cs` 加**檔案 trace listener**（`D:\Anilox\Logs\trace-*.log`，AutoFlush）—— 就是它讓這次能離線抓到真根因。
+- 高度上限 `MaxGrabHeightPx=12000`（單純固定值，**移除 6/23 那套按台數算的 per-board 公式**；12000 剛好低於 12062
+  這個「grab 中單台拉高度」的真硬體上限）。
+
+**驗證（上機）：** 修後兩台在 12000 都正常出幀、12000 內任意上下調高度都不 stall。原始目標「避免調參數 stall」達成。
+
+**仍成立的事實：** 12062 是「grab 中把單台高度往上拉」的真硬體上限（on-board 兼 PCIe latency 緩衝，官方
+`Minimum_latency…`），故 cap 設 12000 避開。但它**不是**之前那些 stall 的原因（那些是競態）。
+
+---
+
+## ⚠ 以下 6/24 ① 與 6/23 板載推論【已於 6/24 ② 推翻】，保留當推理過程
+
+## ★ 2026-06-24 定案（受控實測校正係數 → 確認唯一根因＝板載溢位，無 realloc 累積病）〔已推翻〕
+
+**結論：改高度 stall 只有一個根因＝「同板台數 × 各台高度」撞該板板載 1GB。** 6/23 一度以為有第二個「realloc
+累積」病，**是係數抓太低造成的誤判**，校正後消失。**不需要 max-buffer，也不需要 auto-allocate**，只要把高度
+clamp 對（用正確係數依同板台數算）即可根治。
+
+**受控實測（2 台在線，buffer==source realloc 模式）：**
+| 高度 | 板載用量 | 每台每行 |
+|---|---|---|
+| 3000 | 192MB | 0.0320 |
+| 9220 | 581MB | 0.0315 |
+
+- 兩點一致 → **每行成本 = 0.03125 MB/行/台**，且 = **2 grab buffer × 寬16384 ÷ 1MB**（`_milGrabBufferListSize=2`，
+  display buffer 不計板載）＝物理乾淨值，非 fudge。
+- **板載記憶體乾淨回收**：高度降回 3000，板載必回到 192（不洩漏、不累積）→ **沒有 realloc 累積病**。
+- 2 台 9220＝581MB < 1024 → 放得下 → **不 stall**（實測確認）。
+
+**6/23「realloc 累積」誤判的真相：** 當時係數用 0.0236（偏低）→ 算出板0(4台)安全高度 9220（太鬆）→
+4 台拉到 9220：`4 × 9220 × 0.03125 = 1153MB > 1024` → **還是爆板載**。誤以為「板載夠卻 stall ＝ 另一個病」，
+其實是係數錯、根本沒夠。校正係數後 4 台安全高度降到 **~6963**（`4 × 6963 × 0.03125 = 870MB < 1024`）。
+
+**安全高度（校正後，公式唯一來源 `AcquisitionDefaults.CalcBoardSafeMaxHeightPx`）：**
+`板載1024 × 0.85 ÷ (同板台數 × 0.03125)`，再與 per-path 上限 14000 取小：
+- 板0（CAM1-4，4台）≈ **6963**；板1（CAM5-7，3台）≈ **9284**；2 台 ≈ 13926（撞 per-path 14000）。
+
+**實作（已 in code，全在 branch `feat/grabheight-max-buffer` 未 commit）：**
+- `AcquisitionDefaults`：係數 0.03125 + `CalcBoardSafeMaxHeightPx(camsOnBoard)`。
+- `LiveCameraManager.GetSafeMaxHeightPx(camId)`（依 SystemNum 數同板台數）→ clamp 在 AllocateCameras / SetGrabHeightForCamera / SetCaptureSettings。
+- `SettingsTabs` 高度滑桿上限每台依自己板算。
+- `MilCamera.UseMaxHeightBuffers=false`（max-buffer 棄用，buffer==source）；移除猜的 settle sleep。
+
+**待驗（6/24 進行中）：** 接回 4 台、各拉到 6963，確認不 stall + 板載 ~870MB。過了就定案、不需 auto-allocate。
+
+---
+
+## ★ 2026-06-23 釐清（MILConfig 截圖 + 實測 + agent 文件）—— 係數已於 6/24 校正（見上）
 
 **記憶體配置真相（推翻前面多個假設）：**
 - grab buffer 配在 **host 非分頁記憶體池**（MILConfig「Non-Paged Memory」），**不是板載**。本機 MILConfig 實際值：

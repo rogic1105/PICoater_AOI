@@ -295,6 +295,9 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>取得板卡可用記憶體（MB）。</summary>
         public long GetMemoryFreeMB() => _mil.GetMemoryFreeMB();
 
+        /// <summary>取得板卡總記憶體（MB）＝板載 on-board（硬體固定）。</summary>
+        public long GetMemoryTotalMB() => _mil.GetMemoryTotalMB();
+
         /// <summary>所屬板（System）識別＝同板相機歸組用。</summary>
         public long OwnerSystemKey => _mil.OwnerSystemKey;
 

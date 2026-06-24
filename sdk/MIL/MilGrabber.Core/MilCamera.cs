@@ -33,8 +33,12 @@ namespace MilGrabber.Core
         /// ⚠ 未上機驗證：Matrox doc「line-scan 幀填滿整個 destination buffer 才完成」暗示 max-buffer 可能讓
         /// **幀變成 max 高度（壞）**。上機翻 true 測一次：幀高度正確＝max-buffer 可行；幀變 max 高度＝doc 疑慮
         /// 成立，改走 auto-allocate（MdigProcess bufarray=M_NULL）。詳見 docs/dev/grabheight-max-buffer-stage2.md。</summary>
+        /// <summary>max-buffer 模式。**預設 false（已驗證不採用）**：grab 中拉高度真上限 ~12062（per-camera；板載 4 path
+        /// 各自獨立到 ~12062，不是同板總和），且 7 台都配 max 高度 buffer 會撐爆 host 非分頁池。真正的解＝上層把高度一律
+        /// cap 到 MaxGrabHeightPx（=12000，AcquisitionDefaults）。保留 flag 與 scaffold 供紀錄，預設走 buffer==source realloc。</summary>
         public static bool UseMaxHeightBuffers = false;
-        private const int MaxGrabHeightPx = 10000;   // 與滑桿 HtMax 一致
+        /// <summary>max-buffer 配置高度（px，僅 UseMaxHeightBuffers=true 時用；目前預設 false 故未使用）。</summary>
+        public static int MaxBufferHeightPx = 12000;
         private int _grabBufAllocH;                   // MIL grab/display buffer 實際配置的高度（max 或當前）
 
         // ===== grab buffer 高度上限（防撞板載 stall）=====
@@ -157,8 +161,13 @@ namespace MilGrabber.Core
             FrameHeight = (int)sizeY;
 
             // 階段二 flag：buffer 一次配 max 高度（之後改高度只改 M_SOURCE_SIZE_Y、不 realloc）。
-            int bufH = UseMaxHeightBuffers ? System.Math.Max((int)sizeY, MaxGrabHeightPx) : (int)sizeY;
+            int bufH = UseMaxHeightBuffers ? System.Math.Max((int)sizeY, MaxBufferHeightPx) : (int)sizeY;
             _grabBufAllocH = bufH;
+            // 診斷：確認 host grab buffer 真的一次配 max（bufH==MaxBufferHeightPx）而非 json 高度。
+            // 註：板載 M_MEMORY 占用顯示的是 digitizer 的 source-size FIFO（隨 M_SOURCE_SIZE_Y 縮放），
+            // **不是這裡的 host grab buffer**，故占用會隨高度變＝正常，不代表 max-buffer 沒生效。
+            System.Diagnostics.Trace.WriteLine(
+                $"[CAM{CameraId}] Initialize buffer：UseMaxHeightBuffers={UseMaxHeightBuffers} MaxBufferHeightPx={MaxBufferHeightPx} sizeY(json)={(int)sizeY} → bufH(host alloc)={bufH}");
 
             for (int i = 0; i < _milGrabBufferListSize; i++)
             {

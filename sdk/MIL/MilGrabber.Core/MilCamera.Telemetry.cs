@@ -55,6 +55,15 @@ namespace MilGrabber.Core
             return (long)val / (1024 * 1024);
         }
 
+        /// <summary>板卡總記憶體（MB）＝MsysInquire(M_MEMORY_SIZE)，板載 on-board（Radient x8/DF/QB = 1024MB 硬體固定，單位 MB）。</summary>
+        public long GetMemoryTotalMB()
+        {
+            if (_ownerSystemId == MIL.M_NULL) return -1;
+            MIL_INT val = 0;
+            MIL.MsysInquire(_ownerSystemId, MIL.M_MEMORY_SIZE, ref val);
+            return (long)val;   // M_MEMORY_SIZE 單位本就是 MB
+        }
+
         /// <summary>所屬板（System）的識別＝OwnerSystemId 的數值（用來把同板相機歸組）。</summary>
         public long OwnerSystemKey => (long)_ownerSystemId;
 

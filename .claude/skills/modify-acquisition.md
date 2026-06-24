@@ -65,9 +65,11 @@ _isReleased = true → MdigProcess(M_STOP)
 
 ## SetGrabHeight（不可省略步驟）
 
-`M_STOP+M_WAIT → MdigControl(M_GRAB_ABORT) → Free buffers+pool → M_SOURCE_SIZE_Y → Inquire → Realloc → MdispSelectWindow → settle → M_START`
+`同值守門(高度未變+buffer已配→直接 return) → M_STOP+M_WAIT → MdigControl(M_GRAB_ABORT) → Free buffers+pool → M_SOURCE_SIZE_Y → Inquire → Realloc → MdispSelectWindow → settle → M_START`
+- **同值守門必須有**（2026-06-24）：套設定時會對每台呼 `SetGrabHeight(同值)`；不擋會做多餘 free+realloc 撞背景 CLProtocol enable → **CAM1 stall**（見下）。
 - 舊尺寸 buffer ≠ 新尺寸 → MIL 崩潰
 - Rollback：失敗時 FreeGrabBuffers → AllocateAndBind(oldHeight)
+- **高度硬上限 `AcquisitionDefaults.MaxGrabHeightPx=12000`**（固定值，**不分台數**）：12062 是「grab 中把單台高度往上拉」的真硬體上限（on-board 兼 PCIe latency 緩衝），cap 12000 避開。換相機(寬)/grabber 須重新實測（grab 中往上拉找 stall 邊界）。
 
 ### ⚠ 改高度會讓相機永久 stall — 根因與修法（2026-06-18 實機確認）
 
@@ -90,7 +92,19 @@ _isReleased = true → MdigProcess(M_STOP)
 - `…\UserGuide\grabbing\Linescan_cameras.htm`、`…\Readme\milRadienteVCL\milRadienteVCL.htm`（eV-CL 無 SOURCE_SIZE 改尺寸 stall 的 release note）
 - `Mil.h:3693`（`M_GRAB_ABORT = 6643L`）
 
-**未做的階段 2（更直接，agent/Matrox 最推薦）**：**一次配 max 高度 buffer，改高度只改 `M_SOURCE_SIZE_Y`、不 free/realloc** → 從根本拿掉「realloc→re-arm」那步。需先驗證 MIL 語意（buffer 比 M_SOURCE_SIZE_Y 大時幀是否在 M_SOURCE_SIZE_Y 行就完成）+ 追蹤實際高度 vs buffer 高度（hook/顯示/存檔）。潛在大獎：可能 grab 中改高度不用停機（M_QUEUED 幀邊界套用）→ live、不掉幀。
+**階段 2（max-buffer / auto-allocate）已試 → 棄用**：max-buffer（一次配 max、改高度只改 `M_SOURCE_SIZE_Y`）7 台 host ~3.6GB 逼爆非分頁池、且非根因；auto-allocate（MdigProcess bufarray=M_NULL）官方確認對 on-board 占用沒幫助。兩者都不採用。`MilCamera.UseMaxHeightBuffers` flag/scaffold 留著當紀錄但預設 false。
+
+### ⚠⚠ 改高度 stall 的「主因」是啟動競態，非記憶體/高度（2026-06-24 dropdiag 定案，推翻 6/18~6/23 部分推論）
+
+**鐵證**：高度 12000 時 dropdiag 顯示 **CAM2 正常 grab（FPS 0.83）、CAM1 frameCount 卡 0**（兩台都接都 CLProtocol enabled）→ 12000 不是硬限，是 CAM1 單獨 stall。
+
+**真根因**：套設定時對每台呼 `SetGrabHeight(同值)` → **多餘 free+realloc（UI 執行緒）撞上 CAM1 CLProtocol enable（背景執行緒）** → MIL 並發 → CAM1 stall。trace log 抓到 realloc 插在 CAM1「using device ID」與「enabled successfully」之間。
+
+**修法**：`SetGrabHeight` 開頭同值守門（見上）→ 同值不 realloc → 不撞 CLProtocol。**+ 改高度熱路徑禁止 MsysInquire/MdigInquire**（含診斷 `GetMemoryFreeMB()`）：會插進相機 MIL 序列 → cam1 stall（本次診斷一度自污染中招）。板載記憶體看背景寫的 resource-monitor CSV。
+
+**離線判讀工具**：`Program.cs` 已加**檔案 trace listener** → `D:\Anilox\Logs\trace-*.log`（AutoFlush，含 `[HtRealloc]`）。配 dropdiag（每台 frame 數）就能分辨「哪台 stall、stall 在配 buffer 還是 re-arm」。**難重現 stall 一律先看這兩個檔再下結論**（這次差點被「板載上限」帶歪一整天）。
+
+> 註：12062 硬體上限 + 「板載每 path temporary buffer 在 MdigAlloc 預留、占用顯示為 4 台總和」仍是真的（官方 `Grabbing_large_images.htm` / `Minimum_latency…`），但**不是**那些 stall 的原因。完整脈絡見 `docs/dev/grabheight-max-buffer-stage2.md`「★ 2026-06-24 ②」。
 
 ### 改參數掉偵診斷 log（Logs\）
 - `phaselog-yyyyMMdd.csv`：每幀硬體 frame-start tick（`MilCamera.PhaseLog.cs` Data Latch）→ 真實相位/掉幀位置。

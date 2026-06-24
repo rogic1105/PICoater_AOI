@@ -160,6 +160,15 @@ namespace MilGrabber.Core
         {
             if (_milDigitizer == MIL.M_NULL || height <= 0) return;
 
+            // 高度沒變且 buffer 已配 → 什麼都不用做，直接 return。**防呆關鍵**：啟動套設定時會對每台呼一次
+            // SetGrabHeight(同值)，若不擋會做多餘的 free+realloc，撞上正在背景跑的 CLProtocol enable（並發 MIL）
+            // → CAM1 stall（實測 12000→12000 realloc 插進 CAM1 CLProtocol 序列即中招）。同值不 realloc 即避開。
+            if (height == CameraGrabHeight && _milGrabBuffers[0] != MIL.M_NULL)
+            {
+                System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}][HtRealloc] 高度未變({height})＋buffer已配 → 跳過 realloc");
+                return;
+            }
+
             bool wasLive = IsLive;
             int oldHeight = CameraGrabHeight;
 
@@ -192,6 +201,12 @@ namespace MilGrabber.Core
                 if (wasLive && _userWantsGrab) StartProcess();
                 return;
             }
+
+            // ===== 改高度診斷 log（realloc 路徑）。**不在此查 MsysInquire（GetMemoryFreeMB）**：會插進相機 MIL
+            // 序列 → cam1 stall（實測：本診斷一度自己觸發 CAM1 stall，因 MsysInquire 與 CAM1 CLProtocol enable 並發）。
+            // 板載記憶體改看背景執行緒寫的 resource-monitor CSV / telemetry 列表（安全）。
+            System.Diagnostics.Trace.WriteLine(
+                $"[CAM{CameraId}][HtRealloc] 改高度 {oldHeight}->{height} wasLive={wasLive}");
 
             // M_STOP + M_WAIT：等佇列中的 grab 全部跑完才返回（drain，非只取消）→ 之後沒有 FrameReady 在跑。
             if (wasLive)
@@ -236,7 +251,12 @@ namespace MilGrabber.Core
             if (ready) { try { onStoppedBeforeRestart?.Invoke(); } catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}] onStoppedBeforeRestart: {ex.Message}"); } }
 
             // 所有 buffer 就緒後才重啟 grab
-            if (ready && wasLive && _userWantsGrab) StartProcess();
+            if (ready && wasLive && _userWantsGrab)
+            {
+                StartProcess();
+                System.Diagnostics.Trace.WriteLine(
+                    $"[CAM{CameraId}][HtRealloc] 改高度完成、grab 已重啟 M_START（h={height}）。若此後 FPS=0 不恢復＝digitizer re-arm 端 stall，非 buffer 配置。");
+            }
         }
 
         private void StartProcess()
@@ -272,17 +292,36 @@ namespace MilGrabber.Core
             FrameWidth = (int)sizeX;
             FrameHeight = (int)sizeY;
 
+            // 診斷：M_SIZE_Y 是否＝req（≠req＝相機沒吃這高度）+ 每個 buffer 配置成功與否（M_NULL=失敗）。
+            // 不查 MsysInquire（見上：會觸發 cam1 stall）。
+            bool allocFail = false;
             for (int i = 0; i < _milGrabBufferListSize; i++)
             {
                 MIL.MbufAlloc2d(_ownerSystemId, sizeX, sizeY, 8 + MIL.M_UNSIGNED,
                     MIL.M_IMAGE + MIL.M_GRAB + MIL.M_PROC, ref _milGrabBuffers[i]);
-                MIL.MbufClear(_milGrabBuffers[i], 0);
+                if (_milGrabBuffers[i] == MIL.M_NULL)
+                {
+                    allocFail = true;
+                    System.Diagnostics.Trace.WriteLine(
+                        $"[CAM{CameraId}][HtRealloc] ★ MbufAlloc2d(grab[{i}]) 回 M_NULL＝配置失敗（記憶體不足）！");
+                }
+                else MIL.MbufClear(_milGrabBuffers[i], 0);
             }
             MIL.MbufAlloc2d(_ownerSystemId, sizeX, sizeY, 8 + MIL.M_UNSIGNED,
                 MIL.M_IMAGE + MIL.M_DISP + MIL.M_PROC, ref _milDisplayBuffer);
-            MIL.MbufClear(_milDisplayBuffer, 0);
+            if (_milDisplayBuffer == MIL.M_NULL)
+            {
+                allocFail = true;
+                System.Diagnostics.Trace.WriteLine(
+                    $"[CAM{CameraId}][HtRealloc] ★ MbufAlloc2d(display) 回 M_NULL＝配置失敗！");
+            }
+            else MIL.MbufClear(_milDisplayBuffer, 0);
 
-            MIL.MdispSelectWindow(_milDisplay, _milDisplayBuffer, _panelHandle);
+            System.Diagnostics.Trace.WriteLine(
+                $"[CAM{CameraId}][HtRealloc] AllocateAndBind req={targetHeight} M_SIZE_Y={(int)sizeY} allocFail={allocFail}");
+
+            if (_milDisplayBuffer != MIL.M_NULL)
+                MIL.MdispSelectWindow(_milDisplay, _milDisplayBuffer, _panelHandle);
             MIL.MdispControl(_milDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
 
             // settle：改完 M_SOURCE_SIZE_Y 後讓 digitizer/相機套用新尺寸「沉澱」再讓 grab re-arm。

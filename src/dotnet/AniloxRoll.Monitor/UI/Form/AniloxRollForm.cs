@@ -747,10 +747,9 @@ namespace AniloxRoll.Monitor.Forms
                 }
                 catch { }
 
-                // 階段二實驗開關（env var，不用重編）：PICOATER_MAXBUF=1 → buffer 配 max、改高度只改 M_SOURCE_SIZE_Y。
-                // 預設關＝現行 realloc 行為。上機測：設環境變數後啟動，改高度看 Trace「階段二 no-realloc」log 的 M_SIZE_Y。
-                MilGrabber.Core.MilCamera.UseMaxHeightBuffers =
-                    Environment.GetEnvironmentVariable("PICOATER_MAXBUF") == "1";
+                // max-buffer 模式已驗證不採用（2026-06-24）：grab 中拉高度真上限 ~12062（per-camera，板載 4 path 各自獨立），
+                // 改走「高度一律 cap 到 MaxGrabHeightPx=12000」+ 安全的 buffer==source realloc。flag 維持預設 false。
+                MilGrabber.Core.MilCamera.UseMaxHeightBuffers = false;
 
                 _liveCameraManager.AllocateCameras(_settings.EnableMuraEnhance);
                 LoadBackgroundBins();
@@ -793,14 +792,20 @@ namespace AniloxRoll.Monitor.Forms
                 foreach (var cam in _liveCameraManager.Cameras)
                 {
                     if (cam == null) continue;
-                    long memFree = cam.GetMemoryFreeMB();   // 板載即時可用（配 buffer 後剩餘）
 
-                    // 每張板（System）只加一列板載記憶體（去重）：即時可用 + 已配台數（看得出幾隻相機共用板載）
+                    // 每張板（System）只加一列板載記憶體（去重）：用量/總量 + 已配台數。存 item ref → telemetry timer 即時刷新（改參數後用量會變）。
                     if (listViewHardware != null && !IsDisposed && cam.HasGrabBuffers && seenSystems.Add(cam.OwnerSystemKey))
                     {
-                        int nCam = boardCamCount.TryGetValue(cam.OwnerSystemKey, out var c) ? c : 1;
-                        listViewHardware.Items.Add(new ListViewItem(new[] {
-                            $"Grabber記憶體_板{boardIdx}（{nCam}台）", $"{memFree} MB free" }));
+                        long key   = cam.OwnerSystemKey;
+                        long total = cam.GetMemoryTotalMB();    // 板載總量（on-board，硬體固定）
+                        long free  = cam.GetMemoryFreeMB();     // 即時可用
+                        long used  = (total > 0 && free >= 0) ? total - free : -1;
+                        int  nCam  = boardCamCount.TryGetValue(key, out var c) ? c : 1;
+                        string val = (used >= 0) ? $"{used}/{total} MB" : $"{free} MB free";
+                        var item = new ListViewItem(new[] { $"Grabber記憶體_板{boardIdx}（{nCam}台）", val });
+                        listViewHardware.Items.Add(item);
+                        _boardMemItems[key] = item;             // 存 ref 供 timer 更新
+                        _boardMemInfo[key]  = (nCam, total);
                         boardIdx++;
                     }
                 }
