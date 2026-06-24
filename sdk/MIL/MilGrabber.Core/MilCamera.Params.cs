@@ -33,6 +33,7 @@ namespace MilGrabber.Core
                 }
             }
 
+            System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}][Exposure] 寫 {exposureUs}μs（CLProtocol={_clProtocolEnabled}）");
             if (_clProtocolEnabled)
                 MIL.MdigControlFeature(_milDigitizer, MIL.M_FEATURE_VALUE, "ExposureTime", MIL.M_TYPE_DOUBLE, ref exposureUs);
             else
@@ -90,15 +91,22 @@ namespace MilGrabber.Core
         public void SetLineRateHz(double hz)
         {
             if (hz <= 0) return;
+            double prev = _appliedLineRateHz;
             _appliedLineRateHz = hz;
-            if (!_clProtocolEnabled || _milDigitizer == MIL.M_NULL) return;
+            if (!_clProtocolEnabled || _milDigitizer == MIL.M_NULL)
+            {
+                System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}][LineRate] {prev}->{hz}Hz（CLProtocol 未就緒，僅記錄、就緒後重套）");
+                return;
+            }
             try
             {
+                // 診斷：頻率(線掃速率)變更。skill 記「會 stall 的最大宗＝改線掃」→ stall 時對 dropdiag 看是改哪台/哪頻率後卡。
+                System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}][LineRate] 寫 AcquisitionLineRate {prev}->{hz}Hz");
                 MIL.MdigControlFeature(_milDigitizer, MIL.M_FEATURE_VALUE, "AcquisitionLineRate", MIL.M_TYPE_DOUBLE, ref hz);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}] SetLineRateHz({hz}) failed: {ex.GetType().Name}: {ex.Message}");
+                System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}][LineRate] ★ SetLineRateHz({hz}) failed: {ex.GetType().Name}: {ex.Message}");
             }
         }
 

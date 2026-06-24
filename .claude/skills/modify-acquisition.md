@@ -94,17 +94,17 @@ _isReleased = true → MdigProcess(M_STOP)
 
 **階段 2（max-buffer / auto-allocate）已試 → 棄用**：max-buffer（一次配 max、改高度只改 `M_SOURCE_SIZE_Y`）7 台 host ~3.6GB 逼爆非分頁池、且非根因；auto-allocate（MdigProcess bufarray=M_NULL）官方確認對 on-board 占用沒幫助。兩者都不採用。`MilCamera.UseMaxHeightBuffers` flag/scaffold 留著當紀錄但預設 false。
 
-### ⚠⚠ 改高度 stall 的「主因」是啟動競態，非記憶體/高度（2026-06-24 dropdiag 定案，推翻 6/18~6/23 部分推論）
+### ⚠⚠ 改高度/參數 stall 有「兩個並列主因」（2026-06-24 dropdiag 定案，缺一不可）
 
-**鐵證**：高度 12000 時 dropdiag 顯示 **CAM2 正常 grab（FPS 0.83）、CAM1 frameCount 卡 0**（兩台都接都 CLProtocol enabled）→ 12000 不是硬限，是 CAM1 單獨 stall。
-
-**真根因**：套設定時對每台呼 `SetGrabHeight(同值)` → **多餘 free+realloc（UI 執行緒）撞上 CAM1 CLProtocol enable（背景執行緒）** → MIL 並發 → CAM1 stall。trace log 抓到 realloc 插在 CAM1「using device ID」與「enabled successfully」之間。
+**① 啟動競態**：套設定時對每台呼 `SetGrabHeight(同值)` → 多餘 free+realloc（UI 執行緒）撞 CAM1 CLProtocol enable（背景執行緒）→ MIL 並發 → CAM1 stall（**高度正常也會中**）。trace log 抓到 realloc 插在 CAM1「using device ID」與「enabled successfully」之間。
+**② per-camera 硬體高度上限 ~12062**（每台浮動，CAM2 在 12000 正常、CAM1 stall）→ **競態修好後、高度逼近上限那台仍 stall**。
+**鐵證**：高度 12000 時 dropdiag **CAM2 FPS 0.83 frames 遞增、CAM1 frames 卡 0**。
 
 **修法**：`SetGrabHeight` 開頭同值守門（見上）→ 同值不 realloc → 不撞 CLProtocol。**+ 改高度熱路徑禁止 MsysInquire/MdigInquire**（含診斷 `GetMemoryFreeMB()`）：會插進相機 MIL 序列 → cam1 stall（本次診斷一度自污染中招）。板載記憶體看背景寫的 resource-monitor CSV。
 
 **離線判讀工具**：`Program.cs` 已加**檔案 trace listener** → `D:\Anilox\Logs\trace-*.log`（AutoFlush，含 `[HtRealloc]`）。配 dropdiag（每台 frame 數）就能分辨「哪台 stall、stall 在配 buffer 還是 re-arm」。**難重現 stall 一律先看這兩個檔再下結論**（這次差點被「板載上限」帶歪一整天）。
 
-> 註：12062 硬體上限 + 「板載每 path temporary buffer 在 MdigAlloc 預留、占用顯示為 4 台總和」仍是真的（官方 `Grabbing_large_images.htm` / `Minimum_latency…`），但**不是**那些 stall 的原因。完整脈絡見 `docs/dev/grabheight-max-buffer-stage2.md`「★ 2026-06-24 ②」。
+> 註：12062 硬體上限 + 「板載每 path temporary buffer 在 MdigAlloc 預留、占用顯示為 4 台總和」仍是真的（官方 `Grabbing_large_images.htm` / `Minimum_latency…`），但**不是**那些 stall 的原因。**完整統整見 `sdk/MIL/docs/grab-height-param-stall.md`**（根因/修法/硬體上限/診斷工具/已棄用方案的單一定稿）。
 
 ### 改參數掉偵診斷 log（Logs\）
 - `phaselog-yyyyMMdd.csv`：每幀硬體 frame-start tick（`MilCamera.PhaseLog.cs` Data Latch）→ 真實相位/掉幀位置。
