@@ -166,6 +166,9 @@ namespace AniloxRoll.Monitor.UI.Managers
             // SmartCanvas 合圖佈局同步（feedScale=1：主程式餵全解析度顯示 bytes）
             if (SmartCanvasMode && _smartDisplay != null)
                 _smartDisplay.SetLayout(startPosMm, opsUm, 1, RowPitchMm);
+            // Waterfall 合圖佈局同步（對齊全幅合圖；refOpsMm=mm/px 基準像素尺寸）
+            if (_waterfallView != null && _merger != null)
+                _waterfallView.SetLayout(startPosMm, opsUm, _merger.RefOpsMm);
         }
 
         // ==================== Merged Display Refresh ====================

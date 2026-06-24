@@ -83,9 +83,30 @@ namespace AniloxRoll.Monitor.UI.Managers
             }
         }
 
-        // segment 1 骨架：Waterfall 接管/拆除（segment 2 換成真的 WaterfallView 接 camLiveMain）。
-        private void EnableWaterfallDisplay()  { /* TODO segment 2：建 WaterfallView 接 _mainDisplayPanel、訂閱 OnDisplayFrame */ }
-        private void DisableWaterfallDisplay() { /* TODO segment 2：dispose WaterfallView、解訂閱 */ }
+        // ── Waterfall（瀑布圖）顯示路徑 ──
+        private AniloxRoll.Monitor.UI.Widgets.WaterfallView _waterfallView;
+
+        /// <summary>建 WaterfallView 接 camLiveMain，訂閱各相機每幀 bytes → 合成全幅 band 往下接。冪等。</summary>
+        private void EnableWaterfallDisplay()
+        {
+            if (_waterfallView != null) return;
+            if (_mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) return;
+            _waterfallView = new AniloxRoll.Monitor.UI.Widgets.WaterfallView(_mainDisplayPanel, _cameras.Count);
+            if (IsGlobalMergeActive && _merger != null)
+                _waterfallView.SetLayout(_merger.SlotStartsMm, null, _merger.RefOpsMm); // 對齊 live 全域合圖佈局
+            foreach (var cam in _cameras) cam.OnDisplayFrame += OnCameraWaterfallFrame;
+        }
+
+        /// <summary>切離 Waterfall → 解訂閱 + dispose（露出底層由 ApplyMainDisplayMode 接手別的模式）。</summary>
+        private void DisableWaterfallDisplay()
+        {
+            if (_waterfallView == null) return;
+            foreach (var cam in _cameras) cam.OnDisplayFrame -= OnCameraWaterfallFrame;
+            _waterfallView.Dispose();
+            _waterfallView = null;
+        }
+
+        private void OnCameraWaterfallFrame(int camId, byte[] bytes, int w, int h) => _waterfallView?.PushFrame(camId, bytes, w, h);
 
         // ── SmartCanvas 顯示路徑橋接 ──
         /// <summary>SmartCanvas 模式且尚未建立 → 在 camLiveMain 疊 SmartCanvas + 訂閱各相機每幀 bytes（冪等）。
