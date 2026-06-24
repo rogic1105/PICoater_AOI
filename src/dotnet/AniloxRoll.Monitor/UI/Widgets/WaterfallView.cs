@@ -32,6 +32,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
         private readonly byte[][] _latest;       // 各相機最新全解析度幀
         private readonly int[] _lw, _lh;
+        private readonly bool[] _fresh;          // 自上個 band 以來這台有沒有新幀（掉偵補黑：沒新幀那欄留黑）
         private double[] _startMm, _opsUm;
         private double _refOpsMm = 0.024;
         private bool _disposed;
@@ -42,6 +43,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             _latest = new byte[_camCount][];
             _lw = new int[_camCount];
             _lh = new int[_camCount];
+            _fresh = new bool[_camCount];
 
             _canvas = new SmartCanvas { Dock = DockStyle.Fill, BackColor = Color.Black };
             host.Controls.Add(_canvas);
@@ -70,22 +72,39 @@ namespace AniloxRoll.Monitor.UI.Widgets
             int n = w * h;
             var copy = new byte[n];
             Array.Copy(gray, copy, Math.Min(gray.Length, n));
-            lock (_lock) { _latest[camId - 1] = copy; _lw[camId - 1] = w; _lh[camId - 1] = h; }
+            lock (_lock) { _latest[camId - 1] = copy; _lw[camId - 1] = w; _lh[camId - 1] = h; _fresh[camId - 1] = true; }
         }
 
         // ── 合成一個 band（降採樣全幅合圖）並 append ──
         private void CommitBand()
         {
             if (_disposed) return;
-            int bw, bh;
             lock (_lock)
             {
-                if (!TryComposeBand(out var band, out bw, out bh)) return;
-                if (_bandW != 0 && bw != _bandW) return; // 寬變了（佈局改）→ 本版跳過，避免 provider 反查錯
+                if (!TryComposeBand(out var band, out var bw, out var bh)) return;
+                // band 尺寸變了（改高度/佈局）→ 清空重來（provider 用固定 _bandW/_bandH 反查，不可混尺寸）
+                if ((_bandW != 0 && bw != _bandW) || (_bandH != 0 && bh != _bandH))
+                { _bands.Clear(); _totalH = 0; _bandW = 0; _bandH = 0; }
                 _bands.Add(band);
                 _bandW = bw; _bandH = bh; _totalH += bh;
+                ResetFresh(); // 這個 band cycle 已消費 → 清新鮮旗標（下個 cycle 沒新幀的相機＝掉偵補黑）
             }
-            _canvas.UpdateLodVirtualSize(_bandW, _totalH); // 虛擬長圖長高（內含 FitToScreen；auto-scroll 到底＝segment 3）
+            _canvas.UpdateLodVirtualSize(_bandW, _totalH); // 虛擬長圖長高
+            ScrollToBottom();                              // 自動捲到最新（底部）
+        }
+
+        private void ResetFresh() { for (int i = 0; i < _camCount; i++) _fresh[i] = false; }
+
+        /// <summary>自動捲到底：fit 寬 + 底部對齊畫面底，顯示最新 band（往下捲動的瀑布感）。</summary>
+        private void ScrollToBottom()
+        {
+            if (_disposed || _bandW <= 0 || _totalH <= 0) return;
+            int cw = _canvas.Width, ch = _canvas.Height;
+            if (cw <= 0 || ch <= 0) return;
+            float zoom = cw / (float)_bandW;        // fit 寬（整條全幅塞滿畫面寬）
+            float panY = ch - _totalH * zoom;       // 虛擬圖底對齊畫面底 → 看最新
+            _canvas.SetView(zoom, new PointF(0f, panY));
+            _canvas.RefreshLod();
         }
 
         private bool TryComposeBand(out byte[] band, out int bw, out int bh)
@@ -126,7 +145,9 @@ namespace AniloxRoll.Monitor.UI.Widgets
             int bandH = 0;
             for (int i = 0; i < _camCount; i++)
             {
-                if (_latest[i] == null) continue;
+                // 只放「這個 cycle 有新幀」的相機；沒新幀(掉偵/離線)的留 ds[i]=null → 下方 placement 跳過 → 那欄黑。
+                // 佈局(cams/minStart/dsW)仍以所有「曾有幀」的相機算 → band 寬 + 各台 x 位置穩定不抖。
+                if (_latest[i] == null || !_fresh[i]) continue;
                 int nw = Math.Max(1, _lw[i] / scale);
                 int nh = Math.Max(1, _lh[i] / scale);
                 ds[i] = GrayResizeCpu.Resize(_latest[i], _lw[i], _lh[i], nw, nh);
