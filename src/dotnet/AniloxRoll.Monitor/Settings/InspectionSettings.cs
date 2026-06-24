@@ -153,6 +153,10 @@ namespace AniloxRoll.Monitor.Core.Data
         public MainDisplayMode he_MainDisplay { get => ImageView.MainDisplay; set => ImageView.MainDisplay = value; }
         [Category("3. 圖表設定")][DisplayName("動態LOD")][Description("Off=關；GPU=TanukiCv GPU 縮；CPU=純 CPU 縮。放大巨圖看細節用（顯示成本大降）。SmartCanvas 模式即時生效。")]
         public LiveLodMode hf_LiveLod { get => ImageView.LiveLod; set => ImageView.LiveLod = value; }
+        [Category("3. 圖表設定")][DisplayName("瀑布總高")][Description("瀑布圖虛擬長圖總高（px，預設 30000）；點兩下 fit 縮放到此整張高度。只在主畫面顯示=瀑布圖時有效。")]
+        public int hg_WaterfallTotalHeight { get => ImageView.WaterfallTotalHeight; set => ImageView.WaterfallTotalHeight = value; }
+        [Category("3. 圖表設定")][DisplayName("瀑布滿了")][Description("瀑布圖填滿總高後：重來=清空黑幕從頭；循環=從頭覆蓋最舊的連續捲。")]
+        public WaterfallFullMode hh_WaterfallFullMode { get => ImageView.WaterfallFullMode; set => ImageView.WaterfallFullMode = value; }
 
         // 向後相容：程式碼中直接存取的快捷屬性
         [Browsable(false)] public bool EnableMuraEnhance   { get => ImageView.EnableMuraEnhance;   set => ImageView.EnableMuraEnhance   = value; }

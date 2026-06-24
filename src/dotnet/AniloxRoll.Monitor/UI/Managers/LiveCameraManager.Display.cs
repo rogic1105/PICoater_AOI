@@ -91,7 +91,9 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (_waterfallView != null) return;
             if (_mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) return;
-            _waterfallView = new AniloxRoll.Monitor.UI.Widgets.WaterfallView(_mainDisplayPanel, _cameras.Count);
+            int wfH = _inspectionSettings?.ImageView?.WaterfallTotalHeight ?? 30000;
+            var wfMode = _inspectionSettings?.ImageView?.WaterfallFullMode ?? AniloxRoll.Monitor.Core.Data.WaterfallFullMode.Restart;
+            _waterfallView = new AniloxRoll.Monitor.UI.Widgets.WaterfallView(_mainDisplayPanel, _cameras.Count, wfH, wfMode);
             if (IsGlobalMergeActive && _merger != null)
                 _waterfallView.SetLayout(_merger.SlotStartsMm, null, _merger.RefOpsMm); // 對齊 live 全域合圖佈局
             foreach (var cam in _cameras) cam.OnDisplayFrame += OnCameraWaterfallFrame;
@@ -107,6 +109,14 @@ namespace AniloxRoll.Monitor.UI.Managers
         }
 
         private void OnCameraWaterfallFrame(int camId, byte[] bytes, int w, int h) => _waterfallView?.PushFrame(camId, bytes, w, h);
+
+        /// <summary>瀑布圖參數（總高 / 滿了行為）變更 → 重建以套新值（僅瀑布模式中）。</summary>
+        public void RefreshWaterfallDisplay()
+        {
+            if (!WaterfallMode || _waterfallView == null) return;
+            DisableWaterfallDisplay();
+            EnableWaterfallDisplay();
+        }
 
         // ── SmartCanvas 顯示路徑橋接 ──
         /// <summary>SmartCanvas 模式且尚未建立 → 在 camLiveMain 疊 SmartCanvas + 訂閱各相機每幀 bytes（冪等）。

@@ -362,6 +362,8 @@ namespace AniloxRoll.Monitor.Forms
                 _liveCameraManager?.SetLodMode(_settings.LiveLod);
             if (name == nameof(InspectionSettings.he_MainDisplay))
                 _liveCameraManager?.ApplyMainDisplayMode();   // SmartCanvas / MilDirect / Waterfall 即時切換
+            if (name == nameof(InspectionSettings.hg_WaterfallTotalHeight) || name == nameof(InspectionSettings.hh_WaterfallFullMode))
+                _liveCameraManager?.RefreshWaterfallDisplay(); // 瀑布總高/滿了行為變更 → 重建套新值
             if (OpsStartSettingNames.Contains(name) && _liveCameraManager?.IsGlobalMergeActive == true)
                 _liveCameraManager.RefreshGlobalMergeLayout(
                     _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());

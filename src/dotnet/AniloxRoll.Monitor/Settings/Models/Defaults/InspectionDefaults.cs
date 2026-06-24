@@ -41,6 +41,8 @@ namespace AniloxRoll.Monitor.Core.Data
         public const bool EnableReviewEnhance = false;       // 回顧強化
         public static readonly MainDisplayMode MainDisplay = MainDisplayMode.SmartCanvas; // 主畫面顯示（MIL 直繪 / SmartCanvas）
         public static readonly LiveLodMode     LiveLod     = LiveLodMode.CPU;             // 動態LOD（Off / GPU / CPU）
+        public const int       WaterfallTotalHeight = 30000;                              // 瀑布圖虛擬長圖總高（px）；點兩下 fit 到此
+        public static readonly WaterfallFullMode WaterfallFullMode = WaterfallFullMode.Restart; // 瀑布滿了：重來 / 循環
 
         // ── 4. 儲存設定 ────────────────────────────────────────────────────
         public const bool   EnableAutoCapture = true;                              // 存檔

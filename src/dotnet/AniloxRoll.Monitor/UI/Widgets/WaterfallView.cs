@@ -2,55 +2,67 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
+using AniloxRoll.Monitor.Core.Data; // WaterfallFullMode
 using TanukiCv.Controls;   // SmartCanvas / GrayResizeCpu / GrayBitmap
 using TanukiCv.Core;       // MergeLayout / MergeOverlap
 
 namespace AniloxRoll.Monitor.UI.Widgets
 {
     /// <summary>
-    /// 監控主畫面「瀑布圖」：全幅合圖每幀往下接、即時往下捲動（線掃像印表機吐紙）。
+    /// 監控主畫面「瀑布圖」：全幅合圖每幀往下接、即時捲動（線掃像印表機吐紙）。
     ///
-    /// 設計：
-    /// - **記憶體不預配**：每幀合成一個 band（降採樣後的全幅合圖），chunk append 進 list；秒數不限 → 記憶體隨時間
-    ///   線性成長，看資源監控找極限（全解析每幀 ~300MB 2-3 幀就 OOM，故降採樣到 TargetBandW，可長時間測壓力）。
-    /// - **顯示**：SmartCanvas 動態 LOD（虛擬長圖＝全幅寬 × 累積總高；provider 只畫可見區）。
-    /// - **掉偵補黑**：某台沒最新幀那欄留黑（= band 初值 0）；framecount 級的即時掉偵偵測 = segment 3。
+    /// 模型（2026-06-24 更新）：**固定總高度**（WaterfallTotalHeight，預設 30000）的虛擬長圖
+    /// → 記憶體有上界、可預配一塊固定 buffer（總高 × band寬）；點兩下 fit 有確定目標高度。
+    /// 填滿後行為（WaterfallFullMode）：
+    ///   - **Restart 重來**：清空黑幕、從頭重畫。
+    ///   - **Ring 循環**：從頭覆蓋最舊的、連續捲（環狀 buffer + 顯示時 unroll：最舊在上、最新在下）。
     ///
-    /// 假設：一個 waterfall session 內各 band 同高（grabHeight 不變）→ provider 用 gy/_bandH 反查 band。
+    /// 顯示：SmartCanvas 動態 LOD（虛擬圖固定 band寬×總高；provider 只畫可見區，從固定 buffer 反查）。
+    /// 預設 fit 整張 + 點兩下 fit / 三擊實體 1:1（三擊需 mm 校正 → 後續 mm 尺規一起接）。
+    /// 掉偵補黑：某台這個 band cycle 沒新幀那欄留黑（fresh 旗標）。
     /// </summary>
     public sealed class WaterfallView : IDisposable
     {
-        private const int TargetBandW = 2048;   // band 降採樣目標寬（第一版求可用 + 可長時間測壓力；全解析另議）
+        private const int TargetBandW = 2048;   // band 降採樣目標寬（求可用 + band 寬有界）
 
         private readonly SmartCanvas _canvas;
         private readonly int _camCount;
+        private readonly int _totalHeight;       // 虛擬長圖固定總高
+        private readonly WaterfallFullMode _fullMode;
         private readonly System.Windows.Forms.Timer _commitTimer;
         private readonly object _lock = new object();
 
-        private readonly List<byte[]> _bands = new List<byte[]>(); // 每個 = _bandW × _bandH 灰階
-        private int _bandW, _bandH, _totalH;
+        private byte[] _buffer;                  // 固定 buffer = _bandW × _totalHeight（band 寬確定後配）
+        private int _bandW;
+        private int _writeRow;                   // 下一個 band 寫入的起始 row
+        private bool _wrapped;                    // Ring：是否已繞過一圈（決定顯示要不要 unroll）
 
         private readonly byte[][] _latest;       // 各相機最新全解析度幀
         private readonly int[] _lw, _lh;
-        private readonly bool[] _fresh;          // 自上個 band 以來這台有沒有新幀（掉偵補黑：沒新幀那欄留黑）
-        private double[] _startMm, _opsUm;
+        private readonly bool[] _fresh;          // 自上個 band 以來這台有沒有新幀（掉偵補黑）
+        private double[] _startMm;
         private double _refOpsMm = 0.024;
         private bool _disposed;
-        private int _composeLog;   // 診斷：限制 compose log 次數
+        private bool _virtualSet;
+        private int _composeLog;
 
-        public WaterfallView(Panel host, int camCount, int commitMs = 150)
+        public WaterfallView(Panel host, int camCount, int totalHeight, WaterfallFullMode fullMode, int commitMs = 150)
         {
             _camCount = Math.Max(1, camCount);
+            _totalHeight = Math.Max(1000, totalHeight);
+            _fullMode = fullMode;
             _latest = new byte[_camCount][];
             _lw = new int[_camCount];
             _lh = new int[_camCount];
             _fresh = new bool[_camCount];
 
             _canvas = new SmartCanvas { Dock = DockStyle.Fill, BackColor = Color.Black };
-            _canvas.ShowOverlay = true; // SmartCanvas 內建 overlay：游標座標 + 亮度（mm 尺規/縮圖條另接）
+            _canvas.ShowOverlay = true;               // 游標座標 + 亮度
+            _canvas.DoubleClickFitToScreen = true;    // 點兩下 fit 整張（固定總高 → 目標確定）
+            _canvas.TripleClickPhysical1x = true;     // 三擊實體 1:1（需 mm 校正，後續接）
             host.Controls.Add(_canvas);
             _canvas.BringToFront();
-            _canvas.EnableLod(1, 1, ProvideRegion); // 初始虛擬尺寸 1×1，第一個 band 進來才 UpdateLodVirtualSize
+            _canvas.EnableLod(1, 1, ProvideRegion);
 
             _commitTimer = new System.Windows.Forms.Timer { Interval = Math.Max(30, commitMs) };
             _commitTimer.Tick += (s, e) => CommitBand();
@@ -60,11 +72,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         /// <summary>合圖佈局（各台 start mm + 基準像素尺寸 mm/px）。對齊 live 全域合圖。</summary>
         public void SetLayout(double[] startMm, double[] opsUm, double refOpsMm)
         {
-            lock (_lock)
-            {
-                _startMm = startMm; _opsUm = opsUm;
-                if (refOpsMm > 0) _refOpsMm = refOpsMm;
-            }
+            lock (_lock) { _startMm = startMm; if (refOpsMm > 0) _refOpsMm = refOpsMm; }
         }
 
         /// <summary>各相機每幀（可能背景執行緒）：存最新全解析度灰階快照（重用緩衝故複製）。</summary>
@@ -77,36 +85,47 @@ namespace AniloxRoll.Monitor.UI.Widgets
             lock (_lock) { _latest[camId - 1] = copy; _lw[camId - 1] = w; _lh[camId - 1] = h; _fresh[camId - 1] = true; }
         }
 
-        // ── 合成一個 band（降採樣全幅合圖）並 append ──
         private void CommitBand()
         {
             if (_disposed) return;
             lock (_lock)
             {
                 if (!TryComposeBand(out var band, out var bw, out var bh)) return;
-                // band 尺寸變了（改高度/佈局）→ 清空重來（provider 用固定 _bandW/_bandH 反查，不可混尺寸）
-                if ((_bandW != 0 && bw != _bandW) || (_bandH != 0 && bh != _bandH))
-                { _bands.Clear(); _totalH = 0; _bandW = 0; _bandH = 0; }
-                _bands.Add(band);
-                _bandW = bw; _bandH = bh; _totalH += bh;
-                ResetFresh(); // 這個 band cycle 已消費 → 清新鮮旗標（下個 cycle 沒新幀的相機＝掉偵補黑）
+                // band 寬變了（佈局改）或首次 → (重)配固定 buffer
+                if (_buffer == null || bw != _bandW)
+                {
+                    _bandW = bw;
+                    _buffer = new byte[_bandW * _totalHeight];
+                    _writeRow = 0; _wrapped = false; _virtualSet = false;
+                }
+                WriteBand(band, bh);
             }
-            _canvas.UpdateLodVirtualSize(_bandW, _totalH); // 虛擬長圖長高
-            ScrollToBottom();                              // 自動捲到最新（底部）
+            if (!_virtualSet) { _canvas.UpdateLodVirtualSize(_bandW, _totalHeight); _virtualSet = true; } // 固定虛擬尺寸 + fit 一次
+            else _canvas.RefreshLod();                                                                     // 內容變、視角不變
         }
 
-        private void ResetFresh() { for (int i = 0; i < _camCount; i++) _fresh[i] = false; }
-
-        /// <summary>自動捲到底：fit 寬 + 底部對齊畫面底，顯示最新 band（往下捲動的瀑布感）。</summary>
-        private void ScrollToBottom()
+        // 把 band（_bandW × bh）寫進固定 buffer，依模式處理填滿。
+        private void WriteBand(byte[] band, int bh)
         {
-            if (_disposed || _bandW <= 0 || _totalH <= 0) return;
-            int cw = _canvas.Width, ch = _canvas.Height;
-            if (cw <= 0 || ch <= 0) return;
-            float zoom = cw / (float)_bandW;        // fit 寬（整條全幅塞滿畫面寬）
-            float panY = ch - _totalH * zoom;       // 虛擬圖底對齊畫面底 → 看最新
-            _canvas.SetView(zoom, new PointF(0f, panY));
-            _canvas.RefreshLod();
+            if (bh <= 0) return;
+            if (_fullMode == WaterfallFullMode.Restart)
+            {
+                if (_writeRow + bh > _totalHeight) { Array.Clear(_buffer, 0, _buffer.Length); _writeRow = 0; } // 滿 → 黑幕重來
+                int rows = Math.Min(bh, _totalHeight - _writeRow);
+                Array.Copy(band, 0, _buffer, _writeRow * _bandW, rows * _bandW);
+                _writeRow += rows;
+            }
+            else // Ring：環狀寫，逐行 wrap
+            {
+                for (int y = 0; y < bh; y++)
+                {
+                    int dst = ((_writeRow + y) % _totalHeight) * _bandW;
+                    Array.Copy(band, y * _bandW, _buffer, dst, _bandW);
+                }
+                int nw = _writeRow + bh;
+                if (nw >= _totalHeight) _wrapped = true;
+                _writeRow = nw % _totalHeight;
+            }
         }
 
         private bool TryComposeBand(out byte[] band, out int bw, out int bh)
@@ -114,7 +133,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
             band = null; bw = 0; bh = 0;
             if (_startMm == null) return false;
 
-            // 收集有最新幀的相機 + 全域原點
             var cams = new List<MergeLayout.CamGeom>();
             double minStart = double.MaxValue;
             for (int i = 0; i < _camCount; i++)
@@ -131,42 +149,32 @@ namespace AniloxRoll.Monitor.UI.Widgets
             }
             if (cams.Count == 0 || _refOpsMm <= 0) return false;
 
-            // 先算全解析度總寬決定降採樣 scale，使降採樣後 ~TargetBandW
             MergeLayout.Compute(cams, minStart, _refOpsMm, 1, MergeOverlap.Midline, out int fullW);
             if (fullW <= 0) return false;
             int scale = Math.Max(1, (int)Math.Ceiling(fullW / (double)TargetBandW));
 
-            // 診斷（前 8 次）：看每個 band 實際收到幾台、各台 start/fresh、合成寬度 → 定位「只有一台」
-            if (_composeLog < 8)
+            if (_composeLog < 6)
             {
                 _composeLog++;
                 int haveLatest = 0, freshCnt = 0;
-                var sb = new System.Text.StringBuilder();
-                for (int i = 0; i < _camCount; i++)
-                {
-                    if (_latest[i] != null) { haveLatest++; sb.Append($"c{i + 1}:start={(i < _startMm.Length ? _startMm[i] : -1):F0},lw={_lw[i]},fresh={_fresh[i]} "); }
-                    if (_fresh[i]) freshCnt++;
-                }
-                System.Diagnostics.Trace.WriteLine($"[Waterfall] compose haveLatest={haveLatest} fresh={freshCnt} refOps={_refOpsMm:F4} fullW={fullW} scale={scale} startMmLen={_startMm.Length} | {sb}");
+                for (int i = 0; i < _camCount; i++) { if (_latest[i] != null) haveLatest++; if (_fresh[i]) freshCnt++; }
+                System.Diagnostics.Trace.WriteLine($"[Waterfall] compose haveLatest={haveLatest} fresh={freshCnt} refOps={_refOpsMm:F4} fullW={fullW} scale={scale} totalH={_totalHeight} mode={_fullMode}");
             }
 
-            // 降採樣後佈局：**寬度也要降採樣**（MergeLayout 的 xOff 會÷scale，但 WidthPx 不會 → 寬必須先傳 lw/scale，
-            // 否則寬用全解析 16384、位置卻被 scale 除小 → 相鄰相機被前一台整個蓋掉＝只看到一台 bug）。
+            // 降採樣空間佈局：寬度也要 ÷scale（MergeLayout 只對 xOff ÷scale、WidthPx 不動）
             var camsDs = new List<MergeLayout.CamGeom>(cams.Count);
             foreach (var cg in cams)
                 camsDs.Add(new MergeLayout.CamGeom { CameraId = cg.CameraId, StartMm = cg.StartMm, WidthPx = Math.Max(1, cg.WidthPx / scale) });
             var places = MergeLayout.Compute(camsDs, minStart, _refOpsMm, scale, MergeOverlap.Midline, out int dsW);
             if (dsW <= 0) return false;
 
-            // 各相機降採樣成 strip
             var ds = new byte[_camCount][];
             var dsw = new int[_camCount];
             var dsh = new int[_camCount];
             int bandH = 0;
             for (int i = 0; i < _camCount; i++)
             {
-                // 只放「這個 cycle 有新幀」的相機；沒新幀(掉偵/離線)的留 ds[i]=null → 下方 placement 跳過 → 那欄黑。
-                // 佈局(cams/minStart/dsW)仍以所有「曾有幀」的相機算 → band 寬 + 各台 x 位置穩定不抖。
+                // 只放這個 cycle 有新幀的相機；其餘留黑（掉偵補黑）。佈局仍以所有曾有幀的相機算 → 寬/位置穩定。
                 if (_latest[i] == null || !_fresh[i]) continue;
                 int nw = Math.Max(1, _lw[i] / scale);
                 int nh = Math.Max(1, _lh[i] / scale);
@@ -174,9 +182,9 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 dsw[i] = nw; dsh[i] = nh;
                 if (bandH == 0) bandH = nh;
             }
-            if (bandH == 0) return false;
+            if (bandH == 0) return false; // 沒有任何 fresh 相機 → 不出 band（避免重複）
 
-            var outBand = new byte[dsW * bandH]; // 黑底（掉偵那欄自然留黑）
+            var outBand = new byte[dsW * bandH]; // 黑底
             foreach (var p in places)
             {
                 int i = p.CameraId - 1;
@@ -193,39 +201,37 @@ namespace AniloxRoll.Monitor.UI.Widgets
                     Array.Copy(ds[i], y * dsw[i] + sx, outBand, y * dsW + dx, cw);
                 }
             }
+            // 這個 band cycle 消費完 → 清 fresh（下個 cycle 沒新幀的相機＝掉偵補黑）
+            for (int i = 0; i < _camCount; i++) _fresh[i] = false;
             band = outBand; bw = dsW; bh = bandH;
             return true;
         }
 
-        // ── SmartCanvas LOD provider：給虛擬區域 → 回傳該區域縮到 dest 的 bitmap ──
+        // SmartCanvas LOD provider：給虛擬區域 → 回傳該區域縮到 dest 的 bitmap（從固定 buffer 反查；Ring 已繞圈則 unroll）
         private Bitmap ProvideRegion(Rectangle r, Size dest)
         {
             if (dest.Width <= 0 || dest.Height <= 0) return null;
-            byte[] region;
             int rw = Math.Max(1, r.Width), rh = Math.Max(1, r.Height);
+            byte[] region;
             lock (_lock)
             {
-                if (_bandH <= 0 || _bands.Count == 0) return null;
+                if (_buffer == null || _bandW <= 0) return null;
+                bool ring = _fullMode == WaterfallFullMode.Ring && _wrapped;
                 region = new byte[rw * rh]; // 黑底
                 for (int yy = 0; yy < rh; yy++)
                 {
                     int gy = r.Y + yy;
-                    if (gy < 0 || gy >= _totalH) continue;
-                    int bi = gy / _bandH;
-                    if (bi < 0 || bi >= _bands.Count) continue;
-                    int rib = gy % _bandH;
-                    byte[] bandData = _bands[bi];
+                    if (gy < 0 || gy >= _totalHeight) continue;
+                    int bufRow = ring ? (_writeRow + gy) % _totalHeight : gy; // Ring 繞圈：最舊(=_writeRow)在上、最新在下
                     int sx = r.X, cw = rw;
                     if (sx < 0) { cw += sx; sx = 0; }
                     if (sx + cw > _bandW) cw = _bandW - sx;
                     if (cw <= 0) continue;
-                    int dstX = sx - r.X;
-                    Array.Copy(bandData, rib * _bandW + sx, region, yy * rw + dstX, cw);
+                    Array.Copy(_buffer, bufRow * _bandW + sx, region, yy * rw + (sx - r.X), cw);
                 }
             }
             byte[] scaled = GrayResizeCpu.Resize(region, rw, rh, dest.Width, dest.Height);
-            if (scaled == null) return null;
-            return GrayBitmap.From(scaled, dest.Width, dest.Height);
+            return scaled == null ? null : GrayBitmap.From(scaled, dest.Width, dest.Height);
         }
 
         public void Dispose()
@@ -235,7 +241,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             try { _commitTimer.Stop(); _commitTimer.Dispose(); } catch { }
             try { _canvas.DisableLod(); } catch { }
             try { if (_canvas.Parent != null) _canvas.Parent.Controls.Remove(_canvas); _canvas.Dispose(); } catch { }
-            lock (_lock) { _bands.Clear(); _totalH = 0; _bandW = 0; _bandH = 0; }
+            lock (_lock) { _buffer = null; _bandW = 0; _writeRow = 0; _wrapped = false; }
         }
     }
 }

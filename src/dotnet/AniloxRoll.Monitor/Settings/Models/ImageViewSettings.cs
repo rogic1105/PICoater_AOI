@@ -15,6 +15,14 @@ namespace AniloxRoll.Monitor.Core.Data
     /// <summary>監控主畫面動態 LOD：關 / GPU（TanukiCv）/ CPU（GrayResizeCpu）。放大巨圖看細節用，顯示成本 ~180ms→~1ms。</summary>
     public enum LiveLodMode { Off, GPU, CPU }
 
+    /// <summary>瀑布圖滿了的行為：Restart=清空黑幕重來；Ring=從頭覆蓋最舊的、連續捲（環狀）。</summary>
+    [TypeConverter(typeof(EnumDescriptionConverter))]
+    public enum WaterfallFullMode
+    {
+        [Description("重來")] Restart,
+        [Description("循環")] Ring
+    }
+
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public class ImageViewSettings
     {
@@ -23,8 +31,13 @@ namespace AniloxRoll.Monitor.Core.Data
         [DisplayName("回顧強化")]  public bool       EnableReviewEnhance { get; set; } = InspectionDefaults.EnableReviewEnhance;
         [DisplayName("主畫面顯示")] public MainDisplayMode MainDisplay  { get; set; } = InspectionDefaults.MainDisplay;
         [DisplayName("動態LOD")]   public LiveLodMode LiveLod          { get; set; } = InspectionDefaults.LiveLod;
+        [DisplayName("瀑布總高")]  public int       WaterfallTotalHeight { get; set; } = InspectionDefaults.WaterfallTotalHeight;
+        [DisplayName("瀑布滿了")]  public WaterfallFullMode WaterfallFullMode { get; set; } = InspectionDefaults.WaterfallFullMode;
 
-        public void Validate() { }
+        public void Validate()
+        {
+            if (WaterfallTotalHeight < 1000) WaterfallTotalHeight = InspectionDefaults.WaterfallTotalHeight;
+        }
 
         public override string ToString() => "";
     }
