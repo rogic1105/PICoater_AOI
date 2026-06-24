@@ -36,6 +36,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private double[] _startMm, _opsUm;
         private double _refOpsMm = 0.024;
         private bool _disposed;
+        private int _composeLog;   // 診斷：限制 compose log 次數
 
         public WaterfallView(Panel host, int camCount, int commitMs = 150)
         {
@@ -46,6 +47,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             _fresh = new bool[_camCount];
 
             _canvas = new SmartCanvas { Dock = DockStyle.Fill, BackColor = Color.Black };
+            _canvas.ShowOverlay = true; // SmartCanvas 內建 overlay：游標座標 + 亮度（mm 尺規/縮圖條另接）
             host.Controls.Add(_canvas);
             _canvas.BringToFront();
             _canvas.EnableLod(1, 1, ProvideRegion); // 初始虛擬尺寸 1×1，第一個 band 進來才 UpdateLodVirtualSize
@@ -134,8 +136,26 @@ namespace AniloxRoll.Monitor.UI.Widgets
             if (fullW <= 0) return false;
             int scale = Math.Max(1, (int)Math.Ceiling(fullW / (double)TargetBandW));
 
-            // 降採樣後佈局（scale 帶入 → 座標已是降採樣空間）
-            var places = MergeLayout.Compute(cams, minStart, _refOpsMm, scale, MergeOverlap.Midline, out int dsW);
+            // 診斷（前 8 次）：看每個 band 實際收到幾台、各台 start/fresh、合成寬度 → 定位「只有一台」
+            if (_composeLog < 8)
+            {
+                _composeLog++;
+                int haveLatest = 0, freshCnt = 0;
+                var sb = new System.Text.StringBuilder();
+                for (int i = 0; i < _camCount; i++)
+                {
+                    if (_latest[i] != null) { haveLatest++; sb.Append($"c{i + 1}:start={(i < _startMm.Length ? _startMm[i] : -1):F0},lw={_lw[i]},fresh={_fresh[i]} "); }
+                    if (_fresh[i]) freshCnt++;
+                }
+                System.Diagnostics.Trace.WriteLine($"[Waterfall] compose haveLatest={haveLatest} fresh={freshCnt} refOps={_refOpsMm:F4} fullW={fullW} scale={scale} startMmLen={_startMm.Length} | {sb}");
+            }
+
+            // 降採樣後佈局：**寬度也要降採樣**（MergeLayout 的 xOff 會÷scale，但 WidthPx 不會 → 寬必須先傳 lw/scale，
+            // 否則寬用全解析 16384、位置卻被 scale 除小 → 相鄰相機被前一台整個蓋掉＝只看到一台 bug）。
+            var camsDs = new List<MergeLayout.CamGeom>(cams.Count);
+            foreach (var cg in cams)
+                camsDs.Add(new MergeLayout.CamGeom { CameraId = cg.CameraId, StartMm = cg.StartMm, WidthPx = Math.Max(1, cg.WidthPx / scale) });
+            var places = MergeLayout.Compute(camsDs, minStart, _refOpsMm, scale, MergeOverlap.Midline, out int dsW);
             if (dsW <= 0) return false;
 
             // 各相機降採樣成 strip
