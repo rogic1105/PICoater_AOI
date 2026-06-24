@@ -303,7 +303,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _cameraStatusTimer.Start();
             UpdateCameraStatus("已配置", Color.White);
 
-            EnsureSmartDisplay(); // SmartCanvas 模式：在 camLiveMain 疊 SmartCanvas + 訂閱各相機每幀 bytes
+            ApplyMainDisplayMode(); // 依 he_MainDisplay 套用：SmartCanvas / MilDirect / Waterfall（三選一互斥）
 
             SwitchMainDisplay(_selectedMainCameraId);
 
@@ -332,9 +332,8 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (!IsAllocated || IsLiveGrabbing) return;
             IsLiveGrabbing = true;
-            // 切「主畫面顯示」設定後重開抓取即生效：SmartCanvas 模式建立、MilDirect 模式拆除
-            if (SmartCanvasMode) EnsureSmartDisplay();
-            else TeardownSmartDisplay();
+            // 切「主畫面顯示」設定後重開抓取即生效：SmartCanvas / MilDirect / Waterfall 三選一互斥
+            ApplyMainDisplayMode();
             foreach (var cam in _cameras)
                 cam.SetUserGrabIntent(true);
         }

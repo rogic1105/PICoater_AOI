@@ -360,6 +360,8 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (name == nameof(InspectionSettings.hf_LiveLod))
                 _liveCameraManager?.SetLodMode(_settings.LiveLod);
+            if (name == nameof(InspectionSettings.he_MainDisplay))
+                _liveCameraManager?.ApplyMainDisplayMode();   // SmartCanvas / MilDirect / Waterfall 即時切換
             if (OpsStartSettingNames.Contains(name) && _liveCameraManager?.IsGlobalMergeActive == true)
                 _liveCameraManager.RefreshGlobalMergeLayout(
                     _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());

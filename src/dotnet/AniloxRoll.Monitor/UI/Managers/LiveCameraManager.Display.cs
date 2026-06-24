@@ -61,6 +61,32 @@ namespace AniloxRoll.Monitor.UI.Managers
                 borderColor, borderWidth, ButtonBorderStyle.Solid);
         }
 
+        // ── 主畫面顯示模式（SmartCanvas / MilDirect / Waterfall 三選一互斥）──
+        /// <summary>he_MainDisplay==Waterfall。</summary>
+        private bool WaterfallMode => _inspectionSettings != null
+            && _inspectionSettings.he_MainDisplay == AniloxRoll.Monitor.Core.Data.MainDisplayMode.Waterfall;
+
+        /// <summary>依 he_MainDisplay 套用主畫面顯示模式（三選一互斥）。相機配置 / 開始抓取 / 設定即時變更都呼此
+        /// → 切設定即生效、不必重啟程式。每條路徑各自冪等，互斥靠「先拆別的、再建自己」。</summary>
+        public void ApplyMainDisplayMode()
+        {
+            if (WaterfallMode)
+            {
+                TeardownSmartDisplay();        // 露出底層 → 由 Waterfall 接管
+                EnableWaterfallDisplay();
+            }
+            else
+            {
+                DisableWaterfallDisplay();
+                if (SmartCanvasMode) EnsureSmartDisplay();
+                else TeardownSmartDisplay();   // MilDirect：露出底層 MIL 直繪
+            }
+        }
+
+        // segment 1 骨架：Waterfall 接管/拆除（segment 2 換成真的 WaterfallView 接 camLiveMain）。
+        private void EnableWaterfallDisplay()  { /* TODO segment 2：建 WaterfallView 接 _mainDisplayPanel、訂閱 OnDisplayFrame */ }
+        private void DisableWaterfallDisplay() { /* TODO segment 2：dispose WaterfallView、解訂閱 */ }
+
         // ── SmartCanvas 顯示路徑橋接 ──
         /// <summary>SmartCanvas 模式且尚未建立 → 在 camLiveMain 疊 SmartCanvas + 訂閱各相機每幀 bytes（冪等）。
         /// 在「相機配置」與「開始抓取」都呼叫 → 切設定後重開抓取即生效，不必重啟程式。</summary>
