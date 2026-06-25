@@ -93,10 +93,28 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (_mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) return;
             int wfH = _inspectionSettings?.ImageView?.WaterfallTotalHeight ?? 30000;
             var wfMode = _inspectionSettings?.ImageView?.WaterfallFullMode ?? AniloxRoll.Monitor.Core.Data.WaterfallFullMode.Restart;
-            _waterfallView = new AniloxRoll.Monitor.UI.Widgets.WaterfallView(_mainDisplayPanel, _cameras.Count, wfH, wfMode);
-            if (IsGlobalMergeActive && _merger != null)
-                _waterfallView.SetLayout(_merger.SlotStartsMm, null, _merger.RefOpsMm); // 對齊 live 全域合圖佈局
+            // 槽數＝配置相機數（7，含未上線/掉線的黑布槽），非線上台數 _cameras.Count（會變 4）。
+            // 對齊全域合圖「合圖全部」：用所有配置相機 start/寬，camId 直接對應槽位。
+            int slotCount = _inspectionSettings?.GetCameraStartPositionMmArray()?.Length ?? _cameras.Count;
+            _waterfallView = new AniloxRoll.Monitor.UI.Widgets.WaterfallView(_mainDisplayPanel, slotCount, wfH, wfMode, _screenMmPerPx);
+            FeedWaterfallLayout(); // 無條件餵佈局：沒開全域合圖也要有 startMm，否則 PrepareBand 永遠 null → 全黑無畫面
             foreach (var cam in _cameras) cam.OnDisplayFrame += OnCameraWaterfallFrame;
+        }
+
+        /// <summary>餵瀑布圖合圖佈局：全域合圖開→用 merger 槽位（對齊 live 合圖）；沒開→退回設定的相機 start/ops（仍要有佈局才出畫面）。</summary>
+        private void FeedWaterfallLayout()
+        {
+            if (_waterfallView == null) return;
+            if (IsGlobalMergeActive && _merger != null && _merger.SlotStartsMm != null)
+            {
+                _waterfallView.SetLayout(_merger.SlotStartsMm, null, _merger.RefOpsMm);
+                return;
+            }
+            if (_inspectionSettings == null) return;
+            var startMm = _inspectionSettings.GetCameraStartPositionMmArray();
+            var opsUm = _inspectionSettings.GetCameraOpsUmArray();
+            double refOps = (opsUm != null && opsUm.Length > 0 && opsUm[0] > 0) ? opsUm[0] / 1000.0 : 0.024;
+            _waterfallView.SetLayout(startMm, null, refOps);
         }
 
         /// <summary>切離 Waterfall → 解訂閱 + dispose（露出底層由 ApplyMainDisplayMode 接手別的模式）。</summary>
@@ -108,7 +126,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _waterfallView = null;
         }
 
-        private void OnCameraWaterfallFrame(int camId, byte[] bytes, int w, int h) => _waterfallView?.PushFrame(camId, bytes, w, h);
+        private void OnCameraWaterfallFrame(int camId, byte[] bytes, int w, int h, long tick) => _waterfallView?.PushFrame(camId, bytes, w, h, tick);
 
         /// <summary>瀑布圖參數（總高 / 滿了行為）變更 → 重建以套新值（僅瀑布模式中）。</summary>
         public void RefreshWaterfallDisplay()
@@ -201,7 +219,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             }
         }
 
-        private void OnCameraDisplayFrame(int camId, byte[] bytes, int w, int h) => _smartDisplay?.PushFrame(camId, bytes, w, h);
+        private void OnCameraDisplayFrame(int camId, byte[] bytes, int w, int h, long tick) => _smartDisplay?.PushFrame(camId, bytes, w, h);
         private void SmartSelectCamera(int camId) => SwitchMainDisplay(camId);
         /// <summary>監控主畫面（LiveDisplayView）縮放/平移 → 把可見範圍轉給 form 連動 live 曲線圖
         /// （切向/overview 用 X 範圍、法向用 Y 範圍）。bin↔主畫面對齊。</summary>
@@ -433,10 +451,10 @@ namespace AniloxRoll.Monitor.UI.Managers
             public bool PreFilterMessage(ref Message m)
             {
                 if (m.Msg != WM_MOUSEWHEEL) return false;
-                // SmartCanvas 模式：主畫面由 SmartCanvas 自己處理滾輪 zoom（無 MIL 巨圖 display）。
+                // SmartCanvas / Waterfall 模式：主畫面由各自的 SmartCanvas 自己處理滾輪 zoom（無 MIL 巨圖 display）。
                 // filter 不可攔截，否則滾輪被吃掉 → SmartCanvas 收不到 → camLiveMain「縮不動」
                 // （雙三擊是點擊事件、不走此 filter，故一直有反應）。此 filter 只服務 MIL 直繪合圖縮放。
-                if (_mgr.SmartCanvasMode) return false;
+                if (_mgr.SmartCanvasMode || _mgr.WaterfallMode) return false;
                 if (!_mgr.IsLiveGrabbing) return false;
 
                 var panel = _mgr._mainDisplayPanel;

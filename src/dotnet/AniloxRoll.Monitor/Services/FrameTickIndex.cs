@@ -20,6 +20,10 @@ namespace AniloxRoll.Monitor.Core.Services
     /// </summary>
     public static class FrameTickIndex
     {
+        /// <summary>同時間槽的 tick 容差＝半個幀週期（聚類規則單一來源；回顧批次 + 監控瀑布串流共用此公式）。
+        /// 物理同瞬間多相機 tick 差 &lt;0.5ms ≪ 半週期；相鄰瞬間差≈一週期 &gt; 半週期 → 半週期切槽最穩。</summary>
+        public static long ComputeThreshold(long periodTicks) => periodTicks > 0 ? periodTicks / 2 : 0;
+
         /// <summary>讀取一組影像所在資料夾的 _ticks.csv → baseName("{ts}-{camId}") → tick。</summary>
         public static Dictionary<string, long> LoadTickMap(IEnumerable<string> imagePaths)
         {
@@ -74,7 +78,7 @@ namespace AniloxRoll.Monitor.Core.Services
             if (entries.Count == 0) return null;
 
             long period = EstimatePeriod(grouped, pathToTick);
-            long thr = period > 0 ? period / 2 : long.MaxValue / 4;  // 同槽容差＝半個週期
+            long thr = period > 0 ? ComputeThreshold(period) : long.MaxValue / 4;  // 同槽容差＝半個週期（共用規則）
 
             entries.Sort((a, b) => a.tick.CompareTo(b.tick));
 

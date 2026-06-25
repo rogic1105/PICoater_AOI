@@ -147,9 +147,10 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// 參數：(cameraId, fileNameWithoutExt, meanPeak_0to1, maxPeak_0to1)</summary>
         public event Action<int, string, float, float> OnInspectionResult;
 
-        /// <summary>SmartCanvas 顯示路徑用：每幀提供「顯示 bytes(8-bit 灰階)+ 尺寸」(MIL 回呼執行緒)。
-        /// bytes 是重用緩衝 → 訂閱者必須**同步消費**(組 bitmap 複製)、勿存 ref。只在有訂閱者(SmartCanvas 模式)時觸發。</summary>
-        public event Action<int, byte[], int, int> OnDisplayFrame;
+        /// <summary>SmartCanvas / 瀑布顯示路徑用：每幀提供「顯示 bytes(8-bit 灰階)+ 尺寸 + 本幀硬體 frame-start tick」(MIL 回呼執行緒)。
+        /// bytes 是重用緩衝 → 訂閱者必須**同步消費**(組 bitmap 複製)、勿存 ref。只在有訂閱者時觸發。
+        /// tick＝跨相機幀對齊的硬體鑰匙（同 Review 的 FrameTickIndex；瀑布即時用它聚類時間槽）。</summary>
+        public event Action<int, byte[], int, int, long> OnDisplayFrame;
 
         /// <summary>每幀 GPU pipeline 完成後觸發（MIL 回呼執行緒）。
         /// 參數：(cameraId, curveMean_raw255, curveMax_raw255)</summary>
@@ -368,7 +369,7 @@ namespace AniloxRoll.Monitor.Core.Camera
             if (onDisp != null)
             {
                 byte[] disp = showProcessed ? _hostOutputBuffer : _hostInputBuffer;
-                if (disp != null) onDisp(CameraId, disp, FrameWidth, FrameHeight);
+                if (disp != null) onDisp(CameraId, disp, FrameWidth, FrameHeight, _mil.LastFrameStartTicks);
             }
 
             // Global merge 複製（display buffer → 合併 buffer 裁切位置）已移至 MilCamera grab hook，
