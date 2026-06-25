@@ -228,8 +228,13 @@ namespace MilGrabber.Core
             }
             else if (!_userWantsGrab && IsLive)
             {
+                // 乾淨 drain（鏡像 SetGrabHeight）：M_STOP+M_WAIT 等佇列跑完 + M_GRAB_ABORT 立即中止 in-flight/佇列。
+                // 裸 M_STOP 只取消佇列、不保證 in-flight 清乾淨 → re-grab 在「未乾淨」狀態 re-arm，兩台 M_START
+                // 跨 frame 邊界時序不一 → 某台第一個完整幀晚一格（free-run 無 trigger 的量化效應）。
+                // 乾淨 drain 後 re-arm 接近「第一次 grab」的乾淨狀態，兩台較易等到同一個完整 frame。
                 MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize,
-                    MIL.M_STOP, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
+                    MIL.M_STOP + MIL.M_WAIT, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
+                try { MIL.MdigControl(_milDigitizer, MIL.M_GRAB_ABORT, MIL.M_DEFAULT); } catch { }
                 IsLive = false;
             }
         }

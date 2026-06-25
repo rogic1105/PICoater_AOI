@@ -334,6 +334,9 @@ namespace AniloxRoll.Monitor.UI.Managers
             IsLiveGrabbing = true;
             // 切「主畫面顯示」設定後重開抓取即生效：SmartCanvas / MilDirect / Waterfall 三選一互斥
             ApplyMainDisplayMode();
+            // 重 grab：清掉舊瀑布圖 + 重置對齊狀態（EnableWaterfallDisplay 冪等不會重建 → 必須在此重置，
+            // 否則新幀接在舊網格上、兩台重啟相位不一 → 錯位）。
+            if (WaterfallMode) _waterfallView?.Reset();
             foreach (var cam in _cameras)
                 cam.SetUserGrabIntent(true);
         }
@@ -342,8 +345,11 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (!IsAllocated || !IsLiveGrabbing) return;
             IsLiveGrabbing = false;
-            foreach (var cam in _cameras)
-                cam.SetUserGrabIntent(false);
+            // 並行停止：MdigProcess(M_STOP+M_WAIT) 會阻塞等自己 in-progress 那幀完成（~1 frame）。
+            // 逐台序列呼叫 → cam1 的 M_STOP 阻塞那 ~1 frame 期間，cam2 仍在 free-run 多收幾偵（cam2 多跑幾偵的主因；
+            // M_GRAB_ABORT 沒用＝MdigProcess loop 會自動 re-arm 繼續收）。改並行 → 各台同時阻塞、幾乎同幀停。
+            // 不同 digitizer 互不干擾，可並行（每台各自 try/catch 於 ApplyGrabState）。
+            System.Threading.Tasks.Parallel.ForEach(_cameras, cam => cam.SetUserGrabIntent(false));
 
         }
 

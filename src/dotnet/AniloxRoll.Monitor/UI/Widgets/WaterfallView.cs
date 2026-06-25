@@ -5,7 +5,6 @@ using System.Drawing;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using AniloxRoll.Monitor.Core.Data;       // WaterfallFullMode
-using AniloxRoll.Monitor.Core.Services;   // FrameTickIndex（共用聚類規則 ComputeThreshold）
 using TanukiCv.Controls;   // SmartCanvas / GrayBitmap
 using TanukiCv.Core;       // MergeLayout / MergeOverlap
 
@@ -18,21 +17,23 @@ namespace AniloxRoll.Monitor.UI.Widgets
     /// 虛擬長圖 = 全解析合圖寬 `_fullW`（7 槽全排、沒畫面補黑）× 固定總高 `_totalHeight`（預設 30000，LOD 之前的全解析 Y）。
     /// 填滿：Restart 重來＝清黑幕從頂重畫；Ring 循環＝繞回頂端覆蓋最舊、顯示時寫頭畫亮掃描線接縫。
     ///
-    /// 跨相機幀對齊（2026-06-25 與回顧同源）：**用硬體 frame-start tick 半週期聚類成「時間槽」**，
-    /// 一槽＝一個物理瞬間（每槽輸出一條 band）；某台在某槽沒幀＝它在那掉幀 → 該欄補黑。
-    /// 聚類容差 thr = 幀週期/2，與回顧 <see cref="FrameTickIndex"/> 共用 <see cref="FrameTickIndex.ComputeThreshold"/>（單一來源）。
-    /// 週期線上估計＝各相機相鄰 tick 差的「運行最小值」（掉幀只會放大 delta，故 min 天然抗掉幀）。
-    /// 串流（幀多執行緒即時到）用 pending 槽緩衝 + hold-back grace flush（非「下一幀立即 flush」，避免同瞬間晚到的幀被誤判掉幀補黑）。
+    /// 跨相機幀對齊（2026-06-25 定版＝**tick 網格錨定**）：
+    ///   每幀獨立算 `seq = round((tick - origin) / period)` → 同一物理掃描的各台幀（tick 差＝相位 φ，同板實測 ~6 萬≪半週期）
+    ///   落同一格 seq → 放同一條 band；某台在某格沒幀＝該欄補黑。對同步相機穩定不抖（consecutive 同台幀差＝1 週期、恰好落格）。
+    ///   tick 用途：①估週期＝運行**最小** delta（同台連續幀差＝1 週期；掉幀/gap 只放大 delta → min 取真週期；
+    ///   **不可加下限守門**，否則先看到 gap 當種子會誤拒真週期）；②錨定 seq。
+    ///   **延後 bootstrap**：週期學到前先緩衝幀，學到當下設原點(緩衝最小 tick)+ 依 tick 一次入槽，並**丟棄重建殘留的脫隊舊幀**
+    ///   （比最新還舊 >2 週期）→ 修「grab 中切模式重建 WaterfallView 時，某台第一幀是幾個週期前的舊幀 → bootstrap 硬塞同 seq → 整條歪 N 格」。
+    ///   φ 只造成固定垂直小偏移（非掉幀），不再有假黑欄/錯位。
     ///
-    /// ⚠ 跨板限制：cam1-4(板0)/cam5-7(板1) tick epoch 不同、不可跨板相減。目前同板(≤4 台)正確；
-    /// 7 台跨板需先做 board offset 正規化（回顧 FrameTickIndex 亦有此潛在問題，獨立議題）。
+    /// ⚠ 跨板限制：cam1-4(板0)/cam5-7(板1) tick epoch 不同、不可跨板相減；7 台跨板需各板自錨（同板自估 period+origin）。
     /// </summary>
     public sealed class WaterfallView : IDisposable
     {
         private const int ChunkRows = 512;          // 每塊高度（row）；全幅~101000 → 每塊 ~51MB，30000 高約 60 塊
-        private const long HoldGraceMs = 12;        // 槽最後一幀後再等這麼久才 flush（接同瞬間晚到的幀，防偽掉幀補黑）
-        private const long BootstrapGraceMs = 40;   // 週期未知前用 wall-clock 視窗聚類（tick 單位/週期還沒學到時）
-        private const long StaleFlushMs = 250;      // 久未更新的滯留槽強制 flush（grab 暫停也讓畫面前進）
+        private const long StaleBaseMs = 1500;      // 滯留槽 flush 保險（週期 wall 未知時）；正常由序號 watermark flush
+        private const long JoinGraceMs = 150;       // slot 建立後至少等這麼久才憑 complete flush（讓晚到/剛上線的相機加入同 seq，防啟動錯位）
+        private const long StabilizeMs = 1500;      // 相機集合穩定這麼久後恢復即時 flush（不再每 band 等 grace，降延遲）
 
         private static readonly Stopwatch _clock = Stopwatch.StartNew();
 
@@ -49,20 +50,27 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private int _fullW;
         private int _writeRow;                       // 下一個 band 寫入起始 row（也是 Ring 顯示接縫位置）
 
-        // ── 跨相機 tick 聚類（串流）──
+        // ── 跨相機序號配對（串流）──
         private sealed class Slot
         {
-            public long Anchor;                      // 槽最小 tick
-            public long MaxTick;                     // 槽最大 tick
-            public long LastWallMs;                  // 最後一幀到達 wall-clock
+            public long Seq;                         // 全域 band 序號（各台 seq 對齊到此格）
+            public long FirstWallMs, LastWallMs;     // 診斷：槽存活時間
+            public string FlushReason = "?";
             public readonly Dictionary<int, Frame> Frames = new Dictionary<int, Frame>();
         }
-        private struct Frame { public byte[] Gray; public int W, H; }
-        private readonly List<Slot> _pending = new List<Slot>();   // 開啟中的時間槽（依 Anchor 排序，小）
-        private readonly HashSet<int> _seenCams = new HashSet<int>(); // 曾出過幀的相機（判「滿槽」用）
-        private readonly long[] _perCamLastTick;     // 各相機上一幀 tick（估週期）
-        private long _periodTicks;                    // 線上估計幀週期（運行最小 delta）
-        private long _maxTickSeen;                    // watermark
+        private struct Frame { public byte[] Gray; public int W, H; public long Tick; }
+        private struct BufFrame { public int Cam; public Frame F; }
+        private readonly List<BufFrame> _preBuffer = new List<BufFrame>(); // 週期學到前緩衝（學到才依 tick 入槽）
+        private readonly SortedDictionary<long, Slot> _pending = new SortedDictionary<long, Slot>(); // 開啟槽（依 seq）
+        private readonly HashSet<int> _seenCams = new HashSet<int>(); // 曾出過幀的相機
+        private readonly long[] _perCamLastTick;     // 各相機上一幀 tick（估週期 + 偵掉幀）
+        private readonly long[] _perCamLastWall;     // 各相機上一幀 wall-clock（估週期 wall）
+        private readonly long[] _perCamSeq;          // 各相機目前 seq（watermark；初值 -1=尚無幀）
+        private long _periodTicks;                    // 線上估計幀週期（運行最小 tick delta）
+        private long _periodWallMs;                   // 線上估計幀週期（運行最小 wall delta，算 stale）
+        private long _originTick;                     // 序號原點＝第一幀 tick
+        private bool _originSet;
+        private long _lastNewCamWallMs;               // 最後一台新相機被發現的 wall-clock（判相機集合是否穩定）
 
         // ── 背景寫入佇列（compose 在 lock 內輕量；memcpy 在背景）──
         private readonly Queue<BandJob> _writeQueue = new Queue<BandJob>();
@@ -81,6 +89,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private bool _disposed;
         private volatile bool _virtualSet;
         private int _diagLog;
+        private int _dropLog;
 
         public WaterfallView(Panel host, int camCount, int totalHeight, WaterfallFullMode fullMode,
             double screenMmPerPx = 0)
@@ -90,6 +99,9 @@ namespace AniloxRoll.Monitor.UI.Widgets
             _fullMode = fullMode;
             _screenMmPerPx = screenMmPerPx;
             _perCamLastTick = new long[_camCount];
+            _perCamLastWall = new long[_camCount];
+            _perCamSeq = new long[_camCount];
+            for (int i = 0; i < _camCount; i++) _perCamSeq[i] = -1;
 
             _canvas = new SmartCanvas { Dock = DockStyle.Fill, BackColor = Color.Black };
             _canvas.ShowOverlay = true;               // 游標座標 + 亮度
@@ -117,7 +129,23 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 try { _canvas.SetPhysicalCalibration(refOpsMm, _screenMmPerPx); } catch { }
         }
 
-        /// <summary>各相機每幀（MIL hook 多執行緒）：複製幀 + 用硬體 tick 歸入時間槽（同瞬間聚一起）。</summary>
+        /// <summary>重 grab：清掉舊瀑布內容 + 重置對齊狀態（origin/period/seq/pending/緩衝），下次幀重新 bootstrap。
+        /// 重 grab 時呼叫 → 舊圖清空（符合預期）+ 避免新幀接在舊網格上、兩台重啟相位不一而錯位。</summary>
+        public void Reset()
+        {
+            lock (_lock)
+            {
+                if (_chunks != null) for (int i = 0; i < _chunks.Length; i++) _chunks[i] = null; // 清舊圖（釋放）
+                _writeRow = 0; _virtualSet = false;
+                _pending.Clear(); _preBuffer.Clear(); _writeQueue.Clear();
+                _seenCams.Clear();
+                for (int i = 0; i < _camCount; i++) { _perCamLastTick[i] = 0; _perCamLastWall[i] = 0; _perCamSeq[i] = -1; }
+                _periodTicks = 0; _periodWallMs = 0; _originTick = 0; _originSet = false; _lastNewCamWallMs = 0;
+                _diagLog = 0; _dropLog = 0;
+            }
+        }
+
+        /// <summary>各相機每幀（MIL hook 多執行緒）：複製幀 + tick 網格錨定歸入 band（同掃描同 seq；缺幀補黑）。</summary>
         public void PushFrame(int camId, byte[] gray, int w, int h, long tick)
         {
             if (_disposed || camId < 1 || camId > _camCount || gray == null || w <= 0 || h <= 0) return;
@@ -127,73 +155,121 @@ namespace AniloxRoll.Monitor.UI.Widgets
             long nowMs = _clock.ElapsedMilliseconds;
             lock (_lock)
             {
-                _seenCams.Add(camId);
+                if (_seenCams.Add(camId)) _lastNewCamWallMs = nowMs; // 新相機被發現 → 重置穩定計時（啟動期給 join grace）
                 if (w > _defaultFrameW) _defaultFrameW = w;
+                int ci = camId - 1;
 
-                // 線上週期估計：運行最小正 delta（掉幀放大 delta、不縮小 → min 抗掉幀；下限 0.5× 防 glitch）
-                long last = _perCamLastTick[camId - 1];
-                if (tick > 0 && last > 0 && tick > last)
-                {
-                    long d = tick - last;
-                    if (_periodTicks == 0) _periodTicks = d;
-                    else if (d < _periodTicks && d >= _periodTicks / 2) _periodTicks = d;
-                }
-                if (tick > 0) _perCamLastTick[camId - 1] = tick;
-                if (tick > _maxTickSeen) _maxTickSeen = tick;
+                long lastTick = _perCamLastTick[ci];
+                long lastWall = _perCamLastWall[ci];
 
-                long thr = FrameTickIndex.ComputeThreshold(_periodTicks);
+                // 週期估計：運行最小正 delta（同台連續幀差＝1 個週期；掉幀/gap 只放大 delta → min 取到真週期）。
+                // ★ 不可加「d>=period/2」下限：若先看到多週期 gap 當種子，真週期(較小)會被誤拒 → period 永遠錯。
+                if (tick > 0 && lastTick > 0 && tick > lastTick)
+                {
+                    long d = tick - lastTick;
+                    if (_periodTicks == 0 || d < _periodTicks) _periodTicks = d;
+                }
+                if (lastWall > 0 && nowMs > lastWall)
+                {
+                    long dw = nowMs - lastWall;
+                    if (dw >= 1) _periodWallMs = _periodWallMs == 0 ? dw : Math.Min(_periodWallMs, dw);
+                }
 
-                // 找同槽：tick 在某槽 anchor 半週期內（週期未知→wall-clock 視窗），且該槽尚無此相機
-                Slot target = null;
-                foreach (var s in _pending)
-                {
-                    if (s.Frames.ContainsKey(camId)) continue;
-                    bool same = thr > 0 ? Math.Abs(tick - s.Anchor) <= thr
-                                        : (nowMs - s.LastWallMs) <= BootstrapGraceMs;
-                    if (same) { target = s; break; }
-                }
-                if (target == null)
-                {
-                    target = new Slot { Anchor = tick > 0 ? tick : _maxTickSeen, MaxTick = tick, LastWallMs = nowMs };
-                    _pending.Add(target);
-                    _pending.Sort((a, b) => a.Anchor.CompareTo(b.Anchor));
-                }
-                target.Frames[camId] = new Frame { Gray = copy, W = w, H = h };
-                if (tick > target.MaxTick) target.MaxTick = tick;
-                if (tick > 0 && tick < target.Anchor) target.Anchor = tick;
-                target.LastWallMs = nowMs;
+                if (tick > 0) _perCamLastTick[ci] = tick;
+                _perCamLastWall[ci] = nowMs;
+
+                var f = new Frame { Gray = copy, W = w, H = h, Tick = tick };
+                // tick 網格錨定：每幀獨立 seq=round((tick-origin)/period)（同步相機 φ≪半週期→同掃描同 seq）。
+                // 週期未學到前先緩衝；學到當下設原點 + 把緩衝依 tick 一次入槽（並丟棄重建殘留的脫隊舊幀）。
+                if (_periodTicks <= 0) _preBuffer.Add(new BufFrame { Cam = camId, F = f });
+                else if (!_originSet) { _preBuffer.Add(new BufFrame { Cam = camId, F = f }); DrainPreBuffer(); }
+                else PlaceFrame(camId, f);
             }
             TryFlush(nowMs);
         }
 
-        // 把「已完整 / 已過 grace / 已被下一瞬間超越 / 滯留太久」的槽（依 Anchor 由舊到新）送去寫成 band。
+        // tick 網格錨定 → seq → 入槽。watermark _perCamSeq 取最新（最大）。
+        private void PlaceFrame(int camId, Frame f)
+        {
+            int ci = camId - 1;
+            long seq = f.Tick > 0 && _periodTicks > 0
+                ? (long)Math.Round((double)(f.Tick - _originTick) / _periodTicks)
+                : (_perCamSeq[ci] < 0 ? 0 : _perCamSeq[ci] + 1); // tick 無效時退回序號 +1
+            if (seq > _perCamSeq[ci]) _perCamSeq[ci] = seq;
+            long now = _clock.ElapsedMilliseconds;
+            if (!_pending.TryGetValue(seq, out var slot))
+            {
+                slot = new Slot { Seq = seq, FirstWallMs = now };
+                _pending[seq] = slot;
+            }
+            slot.Frames[camId] = f; // 同 seq 同 cam 只留一幀（防呆覆蓋）
+            slot.LastWallMs = now;
+        }
+
+        // 週期到手 → 設原點（緩衝最小 tick，但丟棄比最新還舊 >2 週期的脫隊幀＝重建殘留）+ 把緩衝依 tick 入槽。
+        private void DrainPreBuffer()
+        {
+            if (_preBuffer.Count == 0) { _originSet = _periodTicks > 0; return; }
+            long maxT = long.MinValue;
+            foreach (var b in _preBuffer) if (b.F.Tick > maxT) maxT = b.F.Tick;
+            long cutoff = maxT - 2 * _periodTicks; // 丟棄重建時殘留的舊幀（比最新還舊 >2 週期）
+            long minT = long.MaxValue;
+            foreach (var b in _preBuffer) if (b.F.Tick >= cutoff && b.F.Tick < minT) minT = b.F.Tick;
+            _originTick = minT == long.MaxValue ? maxT : minT;
+            _originSet = true;
+            foreach (var b in _preBuffer) if (b.F.Tick >= cutoff) PlaceFrame(b.Cam, b.F);
+            _preBuffer.Clear();
+        }
+
+        // 依 seq 由小到大，把「每台 seen 相機都已在此 seq 或已推進過此 seq（=該台在這格沒幀=真掉幀）」的槽送去寫；
+        // 滯留太久（相機停了）則 stale 強制 flush。某台缺幀那欄補黑。
         private void TryFlush(long nowMs)
         {
             List<Slot> ready = null;
             lock (_lock)
             {
-                long thr = FrameTickIndex.ComputeThreshold(_periodTicks);
+                long stale = _periodWallMs > 0 ? Math.Max(750, _periodWallMs * 3) : StaleBaseMs;
+                bool stable = (nowMs - _lastNewCamWallMs) >= StabilizeMs; // 相機集合穩定 → 即時 flush；否則啟動期給 join grace
                 while (_pending.Count > 0)
                 {
-                    var s = _pending[0];
-                    bool full = _seenCams.Count > 0 && s.Frames.Count >= _seenCams.Count;
-                    bool nextInstant = thr > 0 && (_maxTickSeen - s.MaxTick > thr);
-                    bool graced = (nowMs - s.LastWallMs) >= HoldGraceMs;
-                    bool stale = (nowMs - s.LastWallMs) >= StaleFlushMs;
-                    // 滿槽或「已證明進入下一瞬間」都要等 grace（接同瞬間晚到的幀）；滯留太久則無條件 flush。
-                    bool flush = stale || ((full || nextInstant) && graced);
-                    if (!flush) break;
-                    _pending.RemoveAt(0);
+                    long firstSeq = FirstPendingSeq();
+                    var s = _pending[firstSeq];
+                    // complete：每台 seen 相機都在此 seq 或已越過；但啟動期（集合未穩）要等 join grace，
+                    // 讓晚到/剛上線的相機加入同 seq（防 cam1 先到就把 slot flush 成單台、cam2 另開一條＝錯位一格）。
+                    bool complete = _seenCams.Count > 0 && AllSeenInOrPast(s.Seq)
+                                    && (stable || (nowMs - s.FirstWallMs) >= JoinGraceMs);
+                    bool isStale = (nowMs - s.FirstWallMs) >= stale;
+                    if (!(complete || isStale)) break;
+                    s.FlushReason = complete ? "complete" : "stale";
+                    _pending.Remove(firstSeq);
                     (ready ?? (ready = new List<Slot>())).Add(s);
                 }
                 if (ready != null)
                     foreach (var s in ready)
                     {
-                        var job = ComposeJob(s);   // 在 lock 內：算佈局 + 推進寫頭（原子、輕量）
+                        var job = ComposeJob(s);
                         if (job != null) _writeQueue.Enqueue(job);
                     }
             }
             KickWriter();
+        }
+
+        // 每台 seen 相機：要嘛此 seq 有幀，要嘛已推進過此 seq（_perCamSeq>seq＝它已產出更後面的幀→此格它沒幀=真掉幀）。
+        private bool AllSeenInOrPast(long seq)
+        {
+            foreach (var c in _seenCams)
+            {
+                if (_pending.TryGetValue(seq, out var s) && s.Frames.ContainsKey(c)) continue;
+                if (_perCamSeq[c - 1] > seq) continue; // 已越過 → 此格該台真掉幀（補黑）
+                return false;                          // 還沒到（相位/處理慢）→ 等
+            }
+            return true;
+        }
+
+        private long FirstPendingSeq()
+        {
+            foreach (var k in _pending.Keys) return k; // SortedDictionary 依 key 升序
+            return 0;
         }
 
         // 在 lock 內：用槽內各相機幀算 7 槽佈局 + 推進寫頭 + 配分塊。回 BandJob 給背景寫 memcpy。
@@ -201,7 +277,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
         {
             if (_startMm == null || _refOpsMm <= 0) { DiagNull("startMm/refOps 未備（未餵佈局）"); return null; }
 
-            // band 高 = 槽內幀最大高度
             int bandH = 0;
             foreach (var kv in slot.Frames) if (kv.Value.H > bandH) bandH = kv.Value.H;
             if (bandH == 0) return null;
@@ -224,7 +299,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
             var places = MergeLayout.Compute(cams, minStart, _refOpsMm, 1, MergeOverlap.Midline, out int fullW);
             if (fullW <= 0) return null;
 
-            // fullW 變了（佈局改）或首次 → (重)配分塊 + 重置寫頭
             if (_chunks == null || _fullW != fullW)
             {
                 _fullW = fullW;
@@ -233,7 +307,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 _writeRow = 0; _virtualSet = false;
             }
 
-            // 填滿處理 + band 起始 row（原子）
             bool ring = _fullMode == WaterfallFullMode.Ring;
             if (!ring && _writeRow + bandH > _totalHeight)
             {
@@ -242,23 +315,29 @@ namespace AniloxRoll.Monitor.UI.Widgets
             }
             int bandStart = _writeRow;
 
-            // 槽內有幀的相機 → 擺放 span；沒幀的槽不放 → 那欄留黑（掉偵補黑）
             var spans = new List<Span>();
             foreach (var p in places)
             {
                 int i = p.CameraId - 1;
                 if (i < 0 || i >= _camCount || p.SrcWidth <= 0) continue;
-                if (!slot.Frames.TryGetValue(p.CameraId, out var f)) continue;
+                if (!slot.Frames.TryGetValue(p.CameraId, out var f)) continue; // 沒幀的槽不放 → 補黑
                 spans.Add(new Span { Src = f.Gray, Sw = f.W, Sh = f.H, DestX = p.DestX, SrcLeft = p.SrcLeft, SrcWidth = p.SrcWidth });
             }
 
             if (ring) _writeRow = (_writeRow + bandH) % _totalHeight;
             else _writeRow += bandH;
 
-            if (_diagLog < 8)
+            // 診斷：掉偵（cams<seen）全記；正常 band 記前 40。含各相機實際 tick → 看相位差。
+            bool drop = slot.Frames.Count < _seenCams.Count;
+            if (drop ? _dropLog < 120 : _diagLog < 40)
             {
-                _diagLog++;
-                System.Diagnostics.Trace.WriteLine($"[Waterfall] band cams={slot.Frames.Count}/{_seenCams.Count} period={_periodTicks} fullW={fullW} bandH={bandH} start={bandStart} mode={_fullMode}");
+                if (drop) _dropLog++; else _diagLog++;
+                var sb = new System.Text.StringBuilder();
+                for (int i = 0; i < _camCount; i++)
+                    sb.Append(slot.Frames.TryGetValue(i + 1, out var f) ? $" c{i + 1}={f.Tick}" : $" c{i + 1}=--");
+                System.Diagnostics.Trace.WriteLine(
+                    $"[Waterfall]{(drop ? " *DROP*" : "")} seq={slot.Seq} cams={slot.Frames.Count}/{_seenCams.Count} reason={slot.FlushReason} " +
+                    $"period={_periodTicks} pWall={_periodWallMs} life={slot.LastWallMs - slot.FirstWallMs}ms pending={_pending.Count} start={bandStart} mode={_fullMode}{sb}");
             }
             return new BandJob { FullW = fullW, BandH = bandH, BandStartRow = bandStart, Ring = ring, Spans = spans };
         }
@@ -392,7 +471,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             try { _flushTimer.Stop(); _flushTimer.Dispose(); } catch { }
             try { _canvas.DisableLod(); } catch { }
             try { if (_canvas.Parent != null) _canvas.Parent.Controls.Remove(_canvas); _canvas.Dispose(); } catch { }
-            lock (_lock) { _chunks = null; _fullW = 0; _writeRow = 0; _pending.Clear(); _writeQueue.Clear(); }
+            lock (_lock) { _chunks = null; _fullW = 0; _writeRow = 0; _pending.Clear(); _preBuffer.Clear(); _writeQueue.Clear(); }
         }
     }
 }
