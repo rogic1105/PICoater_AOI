@@ -170,37 +170,10 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (_smartDisplay == null) return;
             switch (mode)
             {
-                case LiveLodMode.GPU: _lodReleased = false; _smartDisplay.EnableLod(LodResizeGpu); break;
+                case LiveLodMode.GPU: _lodBuffer.Arm(); _smartDisplay.EnableLod(_lodBuffer.Resize); break;
                 case LiveLodMode.CPU: _smartDisplay.EnableLod(GrayResizeCpu.Resize); break;
                 default:              _smartDisplay.DisableLod(); break;
             }
-        }
-
-        /// <summary>GPU LOD resize 委派（LiveDisplayView 背景執行緒呼叫；只縮「可見區」一塊）。</summary>
-        private byte[] LodResizeGpu(byte[] src, int sw, int sh, int dw, int dh)
-        {
-            int srcPix = sw * sh, dstPix = dw * dh;
-            byte[] dst;
-            lock (_lodBufLock)
-            {
-                if (_lodReleased) return null;
-                if (_lodSrcCap < srcPix)
-                {
-                    if (_lodSrcPinned != IntPtr.Zero) NativeMethods.TanukiCv_FreePinned(_lodSrcPinned);
-                    _lodSrcPinned = NativeMethods.TanukiCv_AllocPinned((ulong)srcPix); _lodSrcCap = srcPix;
-                }
-                if (_lodDstCap < dstPix)
-                {
-                    if (_lodDstPinned != IntPtr.Zero) NativeMethods.TanukiCv_FreePinned(_lodDstPinned);
-                    _lodDstPinned = NativeMethods.TanukiCv_AllocPinned((ulong)dstPix); _lodDstCap = dstPix;
-                }
-                if (_lodSrcPinned == IntPtr.Zero || _lodDstPinned == IntPtr.Zero) return null;
-                System.Runtime.InteropServices.Marshal.Copy(src, 0, _lodSrcPinned, srcPix);
-                NativeMethods.TanukiCv_Resize_GPU(_lodSrcPinned, sw, sh, _lodDstPinned, dw, dh);
-                dst = new byte[dstPix];
-                System.Runtime.InteropServices.Marshal.Copy(_lodDstPinned, dst, 0, dstPix);
-            }
-            return dst;
         }
 
         /// <summary>切回 MIL 模式（he_MainDisplay==MilDirect）→ 解訂閱 + dispose SmartCanvas，露出底層 MIL。</summary>
@@ -210,13 +183,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             foreach (var cam in _cameras) cam.OnDisplayFrame -= OnCameraDisplayFrame;
             _smartDisplay.Dispose();
             _smartDisplay = null;
-            // LOD pinned 釋放（鎖內 + 旗標，等背景 provider 用完防 use-after-free）
-            lock (_lodBufLock)
-            {
-                _lodReleased = true;
-                if (_lodSrcPinned != IntPtr.Zero) { NativeMethods.TanukiCv_FreePinned(_lodSrcPinned); _lodSrcPinned = IntPtr.Zero; _lodSrcCap = 0; }
-                if (_lodDstPinned != IntPtr.Zero) { NativeMethods.TanukiCv_FreePinned(_lodDstPinned); _lodDstPinned = IntPtr.Zero; _lodDstCap = 0; }
-            }
+            _lodBuffer.Release();   // LOD pinned 釋放（GpuLodResizeBuffer 內鎖 + 旗標，等背景 provider 用完防 use-after-free）
         }
 
         private void OnCameraDisplayFrame(int camId, byte[] bytes, int w, int h, long tick) => _smartDisplay?.PushFrame(camId, bytes, w, h);

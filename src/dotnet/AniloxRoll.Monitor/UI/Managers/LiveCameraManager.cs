@@ -26,11 +26,9 @@ namespace AniloxRoll.Monitor.UI.Managers
             && _inspectionSettings.he_MainDisplay == AniloxRoll.Monitor.Core.Data.MainDisplayMode.SmartCanvas;
         private readonly Action<string> _updatePixelInfoCallback;
 
-        // 動態 LOD（he_LiveLod）：GPU provider 專用 pinned（只裁可見小區，非每幀全幀）；CPU 走 GrayResizeCpu 無 pinned。
-        private IntPtr _lodSrcPinned, _lodDstPinned;
-        private int _lodSrcCap, _lodDstCap;
-        private readonly object _lodBufLock = new object();
-        private volatile bool _lodReleased;
+        // 動態 LOD（he_LiveLod）：GPU pinned buffer 池職責已提取到 GpuLodResizeBuffer（資源擁有者，含 use-after-free 防護）；
+        // CPU 走 GrayResizeCpu 無 pinned，不經此。
+        private readonly GpuLodResizeBuffer _lodBuffer = new GpuLodResizeBuffer();
 
         /// <summary>法向(Y) mm/影像列（row pitch）：form 從速度+線掃算好餵入 → SetLayout → 法向曲線圖 Y 對齊。
         /// 0 時 LiveDisplayView 退回用 X 的 ops（Y 不對齊）。</summary>
