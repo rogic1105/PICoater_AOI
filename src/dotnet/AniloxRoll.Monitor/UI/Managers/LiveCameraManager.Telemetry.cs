@@ -18,20 +18,8 @@ namespace AniloxRoll.Monitor.UI.Managers
 {
     public partial class LiveCameraManager
     {
-        // ==================== Stall 偵測（幀數前進判據，**非** FPS 門檻）====================
-        // IsLive 但 grab 卡死＝stall（改線掃/高度最常見）。此時 IsLive 仍 true → 無法自救。
-        // 實測：停/開（甚至停止抓取→開始抓取）都救不回，只有重開程式 → 硬體層 CL 失鎖，
-        // 不做無效的自動停/開（純 thrash），只用縮圖紅「STALL」明確標示；救援交給深度 re-init（後續）。
-        //
-        // ★ 判據＝「M_PROCESS_FRAME_COUNT 有沒有前進」，不是 FPS 門檻（2026-06-24 修誤判）：
-        //   低線掃 + 高高度時**合法** FPS 本來就極低（100Hz/12000＝0.0083 fps、一幀 120s），固定 FPS 門檻
-        //   會把「慢但正常」誤判成 stall。改看幀數：真 stall＝幀數凍住不動；慢速 grab＝幀數仍慢慢加（不誤判）。
-        //   偵測窗依「預期幀週期＝高度/線掃」自動拉長：高速 ~2s 偵到、低速自動等久一點（仍會偵到真卡死，只是慢）。
-        private const int StallBaseTicks = 4;        // 基準窗（4×500ms＝2s，避開重啟暫態）
-        private const double StallPeriodFactor = 1.5; // 額外等「預期幀週期 × 此倍數」才判（容忍合法慢速抖動）
-        private const int StatusTickMs = 500;        // CameraStatusTimer 間隔（與 new Timer{Interval=500} 一致）
-        private readonly Dictionary<int, int> _stallTicks = new Dictionary<int, int>();
-        private readonly Dictionary<int, long> _lastFrameCount = new Dictionary<int, long>(); // 上次 tick 的 M_PROCESS_FRAME_COUNT
+        // Stall 偵測職責已提取到 CameraStallDetector（純邏輯、可單獨測；判據＝M_PROCESS_FRAME_COUNT 前進、非 FPS 門檻）。
+        private readonly CameraStallDetector _stallDetector = new CameraStallDetector();
         private readonly Dictionary<int, bool> _lastPresence = new Dictionary<int, bool>();    // 上次 tick 在線狀態（斷線→連線邊緣偵測 → 重跑 CLProtocol）
         private bool _wasHwReady;                                                              // 上次 tick AreCamerasHwReady（偵 false→true 轉變 → 強制刷 count label/解鎖鈕）
 
@@ -165,44 +153,21 @@ namespace AniloxRoll.Monitor.UI.Managers
                 if (!isConnected)
                 {
                     statusText = "斷線"; color = Color.Pink;
-                    _stallTicks[cam.CameraId] = 0;
+                    _stallDetector.Reset(cam.CameraId);
                 }
                 else if (!cam.IsLive)
                 {
                     statusText = "就緒"; color = Color.Yellow;
-                    _stallTicks[cam.CameraId] = 0;
+                    _stallDetector.Reset(cam.CameraId);
                 }
                 else
                 {
-                    double fps = cam.CurrentFps;
-                    long fc = cam.GetFrameCount();   // M_PROCESS_FRAME_COUNT（累計處理幀數）
-                    long lastFc = _lastFrameCount.TryGetValue(cam.CameraId, out var lv) ? lv : -1;
-                    _lastFrameCount[cam.CameraId] = fc;
-
-                    // 幀數有任何變化（前進，或重啟後歸零＝減少）＝grab 活著 → 重置。只有「凍住不動」才累計。
-                    bool advanced = (lastFc < 0) || (fc != lastFc);
-                    if (advanced)
-                    {
-                        _stallTicks[cam.CameraId] = 0;
-                        statusText = $"FPS: {fps:F1}"; color = Color.LightGreen;
-                    }
-                    else
-                    {
-                        int t = (_stallTicks.TryGetValue(cam.CameraId, out var v) ? v : 0) + 1;
-                        _stallTicks[cam.CameraId] = t;
-
-                        // 偵測窗＝基準 + 預期幀週期×倍數（低線掃/高高度合法慢→窗自動拉長，不誤判）。
-                        int needed = StallBaseTicks;
-                        double expFps = (cam.FrameHeight > 0 && cam.AppliedLineRateHz > 0)
-                            ? cam.AppliedLineRateHz / cam.FrameHeight : 0;
-                        if (expFps > 0)
-                        {
-                            double framePeriodMs = 1000.0 / expFps;
-                            needed = StallBaseTicks + (int)Math.Ceiling(framePeriodMs * StallPeriodFactor / StatusTickMs);
-                        }
-                        if (t >= needed) { statusText = "STALL"; color = Color.Red; }   // 幀數凍住超過窗＝真卡死
-                        else { statusText = $"FPS: {fps:F1}"; color = Color.LightGreen; }
-                    }
+                    // stall 偵測委派 CameraStallDetector（純邏輯）：餵累計幀數 + 預期 FPS（=線掃/高度）→ 判是否卡死。
+                    double expFps = (cam.FrameHeight > 0 && cam.AppliedLineRateHz > 0)
+                        ? cam.AppliedLineRateHz / cam.FrameHeight : 0;
+                    bool stalled = _stallDetector.Update(cam.CameraId, cam.GetFrameCount(), expFps);
+                    if (stalled) { statusText = "STALL"; color = Color.Red; }            // 幀數凍住超過窗＝真卡死
+                    else { statusText = $"FPS: {cam.CurrentFps:F1}"; color = Color.LightGreen; }
                 }
 
                 UpdateSingleCameraStatus(cam.CameraId, statusText, color);
