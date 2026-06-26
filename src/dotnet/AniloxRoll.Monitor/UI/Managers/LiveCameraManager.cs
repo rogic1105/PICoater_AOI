@@ -120,19 +120,11 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         // --- Global merge（即時合圖）---
         // 合圖的「拼」（佈局 + 合併 buffer + 每台 merge target）委派給 MultiCameraMerger 工頭（sdk/MIL）。
-        // 本類別只負責「秀」：MdispSelectWindow 顯示、33ms 防閃爍刷新、滑鼠 hook、overview 聯動。
-        private MultiCameraMerger _merger;
-        private MIL_ID _mergedDisplay = MIL.M_NULL;
-        public bool IsGlobalMergeActive { get; private set; }
-        // 座標欄位為工頭值的本地鏡像（值來源 = 工頭），EnableGlobalMerge/RefreshGlobalMergeLayout 後同步。
-        private double _mergedMinStartMm;   // 合併座標系原點（mm）
-        private double _mergedRefOpsMm;     // 合併像素尺寸（mm/px）
-        private int    _mergedTotalW;       // 合併 buffer 寬度（px）
-        private int    _mergedTotalH;       // 合併 buffer 高度（px）
-        private double[] _mergedSlotStartsMm;  // 7 槽位起始 mm（含空缺）
-        private double[] _mergedSlotEndsMm;    // 7 槽位結束 mm（含空缺）
-        private MIL_DISP_HOOK_FUNCTION_PTR _mergedMouseDelegate;
-        private Timer _mergedDisplayTimer;  // 定時刷新合圖 display（取代 MIL 自動刷新，避免多相機非同步閃爍）
+        // 合圖的「秀」（MIL display 顯示/33ms 防閃刷新/滑鼠 hook/視野範圍/merged zoom/pan/1x）整個職責
+        // 已提取到 GlobalMergeCoordinator（擁有 _merger + _mergedDisplay + 座標鏡像 + timer + hook）。
+        // 本類別只留編排（建 MilCamera 清單、決定 SmartCanvas vs MIL 直繪、SmartCanvas/Waterfall 佈局）+ forwarder。
+        private readonly GlobalMergeCoordinator _globalMerge;
+        public bool IsGlobalMergeActive => _globalMerge.IsActive;
 
         private InspectionSettings _inspectionSettings;
         private double _screenMmPerPx;
@@ -154,6 +146,15 @@ namespace AniloxRoll.Monitor.UI.Managers
             _cameraPanels = cameraPanels;
             _updatePixelInfoCallback = updatePixelInfoCallback;
             _mainDisplayPanel.BackColor = Color.Black;
+
+            // 全域合圖「秀」協調者：穩定依賴走 ctor、會變動的值走 Func 委派（不反向參考整個 LCM）。
+            _globalMerge = new GlobalMergeCoordinator(
+                _mainForm, _mainDisplayPanel, _updatePixelInfoCallback,
+                () => IsReleasing,
+                () => _screenMmPerPx,
+                () => _inspectionSettings?.AniloxRollSpeedMPerMin ?? 0,
+                () => (_cameraLineRateHz != null && _cameraLineRateHz.Length > 0) ? _cameraLineRateHz[0] : 0,
+                OnMergedViewCenterCam);
 
             _wheelFilter = new WheelZoomFilter(this);
             Application.AddMessageFilter(_wheelFilter);

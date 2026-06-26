@@ -32,14 +32,9 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// <summary>重置主顯示器（MIL secondary display）的縮放/平移為 fit-to-window。</summary>
         public void ResetMainDisplayView()
         {
-            if (IsGlobalMergeActive && _mergedDisplay != MIL.M_NULL)
+            if (_globalMerge.IsActive && _globalMerge.HasMilDisplay)
             {
-                try
-                {
-                    MIL.MdispControl(_mergedDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
-                    MIL.MdispControl(_mergedDisplay, MIL.M_CENTER_DISPLAY, MIL.M_ENABLE);
-                }
-                catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.ResetView] {ex.GetType().Name}: {ex.Message}"); }
+                _globalMerge.ResetView();
                 return;
             }
             var cam = _cameras.Find(c => c.CameraId == _selectedMainCameraId);
@@ -105,9 +100,9 @@ namespace AniloxRoll.Monitor.UI.Managers
         private void FeedWaterfallLayout()
         {
             if (_waterfallView == null) return;
-            if (IsGlobalMergeActive && _merger != null && _merger.SlotStartsMm != null)
+            if (_globalMerge.IsActive && _globalMerge.Merger != null && _globalMerge.Merger.SlotStartsMm != null)
             {
-                _waterfallView.SetLayout(_merger.SlotStartsMm, null, _merger.RefOpsMm);
+                _waterfallView.SetLayout(_globalMerge.Merger.SlotStartsMm, null, _globalMerge.Merger.RefOpsMm);
                 return;
             }
             if (_inspectionSettings == null) return;
@@ -152,14 +147,15 @@ namespace AniloxRoll.Monitor.UI.Managers
             // SmartCanvas 模式下 MIL 滑鼠 hook 被覆蓋不觸發 → lblPixelInfo 改吃 LiveDisplayView 游標狀態（同源）
             _smartDisplay.CursorStatusChanged += OnSmartCursorStatus;
             _smartDisplay.SetSelected(_selectedMainCameraId);
-            if (IsGlobalMergeActive && _merger != null)
+            if (_globalMerge.IsActive && _globalMerge.Merger != null)
             {
-                var ops = new double[_merger.SlotStartsMm?.Length ?? 0];
-                for (int i = 0; i < ops.Length; i++) ops[i] = _merger.RefOpsMm * 1000.0; // 均勻 ops（µm）
-                _smartDisplay.SetLayout(_merger.SlotStartsMm, ops, 1, RowPitchMm); // 主程式餵全解析度顯示 bytes → feedScale=1
+                var merger = _globalMerge.Merger;
+                var ops = new double[merger.SlotStartsMm?.Length ?? 0];
+                for (int i = 0; i < ops.Length; i++) ops[i] = merger.RefOpsMm * 1000.0; // 均勻 ops（µm）
+                _smartDisplay.SetLayout(merger.SlotStartsMm, ops, 1, RowPitchMm); // 主程式餵全解析度顯示 bytes → feedScale=1
             }
-            _smartDisplay.MergeAll = IsGlobalMergeActive;     // 全域＝合圖全部（含無畫面相機黑占位）
-            _smartDisplay.SetMergeMode(IsGlobalMergeActive);
+            _smartDisplay.MergeAll = _globalMerge.IsActive;     // 全域＝合圖全部（含無畫面相機黑占位）
+            _smartDisplay.SetMergeMode(_globalMerge.IsActive);
             foreach (var cam in _cameras) cam.OnDisplayFrame += OnCameraDisplayFrame;
             if (_inspectionSettings != null) SetLodMode(_inspectionSettings.LiveLod); // 套目前 LOD 設定
         }
@@ -234,9 +230,9 @@ namespace AniloxRoll.Monitor.UI.Managers
                 kvp.Value.Invalidate();
 
             // Global merge 時主畫面由合併 display 控制，不切換單台；但 pan 到相機中心
-            if (IsGlobalMergeActive)
+            if (_globalMerge.IsActive)
             {
-                PanMergedDisplayToCameraCenter(cameraIndex);
+                _globalMerge.PanToCameraCenter(cameraIndex);
                 return;
             }
 
@@ -277,34 +273,9 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (!IsLiveGrabbing || _screenMmPerPx <= 0) return;
 
-            if (IsGlobalMergeActive && _mergedDisplay != MIL.M_NULL)
+            if (_globalMerge.IsActive && _globalMerge.HasMilDisplay)
             {
-                if (_mergedRefOpsMm <= 0) return;
-                double zoom1x = PixelMmMapper.OneToOneZoom(_mergedRefOpsMm, _screenMmPerPx);
-
-                double cx = _mainDisplayPanel.Width / 2.0;
-                double cy = _mainDisplayPanel.Height / 2.0;
-
-                try
-                {
-                    double curZoom = 0, curPanX = 0, curPanY = 0;
-                    MIL.MdispInquire(_mergedDisplay, MIL.M_ZOOM_FACTOR_X, ref curZoom);
-                    MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_X, ref curPanX);
-                    MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_Y, ref curPanY);
-                    if (curZoom <= 0) curZoom = 1.0;
-
-                    double imgCx = curPanX + cx / curZoom;
-                    double imgCy = curPanY + cy / curZoom;
-                    double newPanX = imgCx - cx / zoom1x;
-                    double newPanY = imgCy - cy / zoom1x;
-
-                    MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_DISABLE);
-                    MIL.MdispControl(_mergedDisplay, MIL.M_CENTER_DISPLAY, MIL.M_DISABLE);
-                    MIL.MdispZoom(_mergedDisplay, zoom1x, zoom1x);
-                    MIL.MdispPan(_mergedDisplay, newPanX, newPanY);
-                    MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_ENABLE);
-                }
-                catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.Set1xZoom.Merged] {ex.GetType().Name}: {ex.Message}"); }
+                _globalMerge.SetPhysical1x();
                 return;
             }
 
@@ -348,40 +319,10 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             double zoomX, panX, panY;
 
-            if (IsGlobalMergeActive && _mergedDisplay != MIL.M_NULL)
+            if (_globalMerge.IsActive && _globalMerge.HasMilDisplay)
             {
-                // Global merge 模式：zoom/pan 合併 display
-                try
-                {
-                    zoomX = panX = panY = 0;
-                    MIL.MdispInquire(_mergedDisplay, MIL.M_ZOOM_FACTOR_X, ref zoomX);
-                    MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_X, ref panX);
-                    MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_Y, ref panY);
-                }
-                catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.ApplyCustomZoom.Inquire] {ex.GetType().Name}: {ex.Message}"); return; }
-                if (zoomX <= 0) zoomX = 1.0;
-
-                double factor = wheelDelta > 0 ? 1.1 : (1.0 / 1.1);
-                double newZoom = zoomX * factor;
-                if (newZoom < 0.05) newZoom = 0.05;
-                if (newZoom > 32.0) newZoom = 32.0;
-
-                double cx = _mainDisplayPanel.Width / 2.0;
-                double cy = _mainDisplayPanel.Height / 2.0;
-                double imgX = panX + cx / zoomX;
-                double imgY = panY + cy / zoomX;
-                double newPanX = imgX - cx / newZoom;
-                double newPanY = imgY - cy / newZoom;
-
-                try
-                {
-                    MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_DISABLE);
-                    MIL.MdispControl(_mergedDisplay, MIL.M_CENTER_DISPLAY, MIL.M_DISABLE);
-                    MIL.MdispZoom(_mergedDisplay, newZoom, newZoom);
-                    MIL.MdispPan(_mergedDisplay, newPanX, newPanY);
-                    MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_ENABLE);
-                }
-                catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.ApplyCustomZoom.Apply] {ex.GetType().Name}: {ex.Message}"); }
+                // Global merge 模式：zoom/pan 合併 display（委派 coordinator）
+                _globalMerge.ApplyZoom(wheelDelta);
                 return;
             }
 
