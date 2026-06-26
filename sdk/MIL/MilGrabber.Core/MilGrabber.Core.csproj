@@ -56,6 +56,12 @@
     <Reference Include="System.Core" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\TanukiCv\dotnet\TanukiCv.Core\TanukiCv.Core.csproj">
+      <Project>{27263C11-7FEF-4076-A2F1-F412BB496DF3}</Project>
+      <Name>TanukiCv.Core</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
     <Compile Include="MilCamera.cs" />
     <Compile Include="MilCamera.CLProtocol.cs" />
     <Compile Include="MilCamera.Display.cs" />

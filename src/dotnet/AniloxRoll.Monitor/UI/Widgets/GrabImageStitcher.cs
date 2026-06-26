@@ -99,81 +99,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             return result;
         }
 
-        /// <summary>
-        /// 將多台相機的影像水平合併為一張全域圖。
-        /// 重疊規則：相鄰相機重疊區域各取一半（中點分界），無重疊則留黑。
-        /// opsUm[i]：第 i 台相機的解析度（um/pixel）。
-        /// posMm[i]：第 i 台相機的起始位置（mm）。
-        /// scaleFactor：影像已縮小的倍率（用於將 pixel 換算回實際 mm）。
-        /// </summary>
-        public static Bitmap MergeHorizontal(
-            Bitmap[] cameraImages, double[] opsUm, double[] posMm, int scaleFactor)
-        {
-            if (cameraImages == null) return null;
-
-            // Pass 1：ALL slots（含空缺）計算全域 mm 範圍；空缺槽以 MaxWidth 為標準寬度
-            double globalMinMm = double.MaxValue;
-            double globalMaxMm = double.MinValue;
-            double refOpsPxMm = 0;
-
-            for (int i = 0; i < cameraImages.Length; i++)
-            {
-                double ops = (i < opsUm.Length) ? opsUm[i] : opsUm[0];
-                double pos = (i < posMm.Length) ? posMm[i] : 0;
-                double storedWidthPx = (cameraImages[i] != null)
-                    ? cameraImages[i].Width
-                    : InspectionEngineConfig.MaxWidth / (double)scaleFactor;
-                double widthMm = storedWidthPx * ops * scaleFactor / 1000.0;
-                double endMm = pos + widthMm;
-                if (pos < globalMinMm) globalMinMm = pos;
-                if (endMm > globalMaxMm) globalMaxMm = endMm;
-                if (refOpsPxMm == 0) refOpsPxMm = ops * scaleFactor / 1000.0;
-            }
-
-            // Pass 2：只收集有影像的相機（供後續繪製）
-            var validCams = new List<(Bitmap bmp, double posMm)>();
-            int maxH = 0;
-
-            for (int i = 0; i < cameraImages.Length; i++)
-            {
-                if (cameraImages[i] == null) continue;
-                double pos = (i < posMm.Length) ? posMm[i] : 0;
-                if (cameraImages[i].Height > maxH) maxH = cameraImages[i].Height;
-                validCams.Add((cameraImages[i], pos));
-            }
-
-            if (refOpsPxMm == 0 || validCams.Count == 0) return null;
-
-            int totalW = (int)Math.Ceiling((globalMaxMm - globalMinMm) / refOpsPxMm);
-            if (totalW <= 0 || maxH <= 0) return null;
-
-            // 佈局（xOffset）+ 重疊中點分界委派 sdk 單一來源 TanukiCv.Core.MergeLayout（Midline 與原內嵌邏輯一致）。
-            // CameraId 用 validCams 索引（Compute 依輸入順序回傳）；totalW 仍用上方 ALL-slots 版（含空缺槽），故 out 忽略。
-            var geoms = new List<MergeLayout.CamGeom>(validCams.Count);
-            for (int i = 0; i < validCams.Count; i++)
-                geoms.Add(new MergeLayout.CamGeom { CameraId = i, StartMm = validCams[i].posMm, WidthPx = validCams[i].bmp.Width });
-
-            var placements = MergeLayout.Compute(geoms, globalMinMm, opsUm[0] / 1000.0, scaleFactor,
-                MergeOverlap.Midline, out _);
-
-            var result = BitmapPool.Rent(totalW, maxH);
-            using (var g = Graphics.FromImage(result))
-            {
-                g.InterpolationMode = InterpolationMode.NearestNeighbor;
-                g.PixelOffsetMode = PixelOffsetMode.Half;
-                foreach (var p in placements)
-                {
-                    if (p.SrcWidth <= 0) continue;
-                    Bitmap bmp = validCams[p.CameraId].bmp;
-                    g.DrawImage(bmp,
-                        new Rectangle(p.DestX, 0, p.SrcWidth, bmp.Height),   // dest：全域 x = xOffset + srcLeft
-                        new Rectangle(p.SrcLeft, 0, p.SrcWidth, bmp.Height), // src：重疊分界後裁切
-                        GraphicsUnit.Pixel);
-                }
-            }
-
-            return result;
-        }
+        // 註：舊「水平合圖 MergeHorizontal」已移除（死碼）—— 顯示用合圖統一走 sdk LiveDisplayView.BuildMerge
+        // （MergeLayout + MergeAll 黑占位，與 live/瀑布/曲線同一單一來源）。本檔只留 StitchCamera（垂直拼）+ LoadCameraImage。
 
         internal static Bitmap LoadCameraImage(string path, int bmpResizeScale,
             Func<string, Bitmap> bmpLoader, bool useProcessed, string ridgeDirection = "v")

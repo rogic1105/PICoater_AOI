@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Matrox.MatroxImagingLibrary;
+using TanukiCv.Core; // MergeLayout（合圖佈局唯一來源；MIL 直繪合圖也走這份）
 
 namespace MilGrabber.Core
 {
@@ -16,15 +17,15 @@ namespace MilGrabber.Core
     /// 本類別刻意 0 依賴 System.Windows.Forms：不碰 panel / Label / Timer / Control / Handle。
     /// 顯示與 UI 全留上層。工頭不負責建立/釋放相機（相機生命週期由呼叫端管理）。
     ///
-    /// 佈局/重疊分界算術刻意內嵌於此（MIL-only、自含）：MIL 區是「換 grabber/相機就整包換掉」的
-    /// 拋棄層，不引用上層共用 SDK（避免被迫拉 TanukiCv/WinForms 依賴）。可重用的合圖佈局演算法
-    /// 另存於 TanukiCv.Core.MergeLayout，服務所有 CPU 合圖路徑（範例 / 主程式 LiveDisplayView /
-    /// GrabImageStitcher 都已指向它；durable、跨產品）。
-    /// 兩份刻意分流：MIL 這份隨硬體丟、TanukiCv 那份長期演化（含右覆蓋左/左覆蓋右等策略）。
+    /// 佈局/重疊分界算術走 **TanukiCv.Core.MergeLayout 單一來源**（與 LiveDisplayView/瀑布/曲線同一份；
+    /// 黑槽=沒影像的相機亦參與中線分界，影像與曲線才對齊）。2026-06-26 收斂：原「MIL-only 自含一份」已移除
+    /// —— MergeLayout 是零依賴純算術（不拉 WinForms），從拋棄層引用它依賴方向正確（throwaway→durable），不違反分層。
+    /// 槽數＝呼叫端餵的「設定槽數」（startPosMm/opsUm 長度，可變），沒相機的槽用 defaultSlotWidthPx 占位。
     /// </summary>
     public class MultiCameraMerger
     {
         private readonly List<MilCamera> _cameras;
+        private int _defaultSlotWidthPx;   // 沒相機的槽位占位寬（px）；ComputeLayout 存、ApplyMergeTargets 用
 
         // ==================== 合併資源 ====================
         private MIL_ID _mergedBuffer = MIL.M_NULL;
@@ -190,6 +191,7 @@ namespace MilGrabber.Core
             minStart = double.MaxValue;
             totalW = 0;
             maxH = 0;
+            _defaultSlotWidthPx = defaultSlotWidthPx;   // 供 ApplyMergeTargets 對沒相機的槽占位
 
             double refOpsMm = opsUm[0] / 1000.0;
             if (refOpsMm <= 0) return false;
@@ -221,50 +223,33 @@ namespace MilGrabber.Core
         }
 
         /// <summary>
-        /// 計算每台相機的 xOffset + 重疊中點分界（drawLeft/drawRight），然後對每台 SetMergeTarget。
-        /// MIL-only 自含實作（不引用 TanukiCv.Core.MergeLayout，保 MIL 區可隨硬體整包換）。
+        /// 算每槽 xOffset + 重疊中點分界後對「有相機」的槽 SetMergeTarget。
+        /// 佈局走 sdk 單一來源 <see cref="MergeLayout.Compute"/>（與 LiveDisplayView/瀑布/曲線同一份、Midline 策略）：
+        /// 餵**設定的全槽**（沒相機的槽用 _defaultSlotWidthPx 占位）→ 黑槽亦參與中線分界（影像/曲線一致對齊）；
+        /// 只對 FindCamera 找得到的槽 SetMergeTarget（沒相機的槽 = 留黑、不貼）。
+        /// 順序鎖死：RefOpsMm 須在此之前由 ApplyLayout 設好。
         /// </summary>
         private void ApplyMergeTargets(double[] startPosMm, double minStart)
         {
-            // RefOpsMm 在呼叫此方法前已由 EnableMerge/RefreshLayout 設定，直接使用。
             double refOpsMm = RefOpsMm;
+            if (refOpsMm <= 0 || startPosMm == null) return;
 
-            var entries = new List<CamEntry>();
-            foreach (var cam in _cameras)
-            {
-                int idx = cam.CameraId - 1;
-                double pos = (startPosMm != null && idx >= 0 && idx < startPosMm.Length) ? startPosMm[idx] : 0;
-                int offsetX = (int)Math.Round((pos - minStart) / refOpsMm);
-                entries.Add(new CamEntry { Cam = cam, XOffset = offsetX });
-            }
-            entries.Sort((a, b) => a.XOffset.CompareTo(b.XOffset));
-
-            int n = entries.Count;
-            var drawLeft  = new int[n];
-            var drawRight = new int[n];
+            int n = startPosMm.Length;   // 設定的全槽數（可變）
+            var cams = new List<MergeLayout.CamGeom>(n);
             for (int i = 0; i < n; i++)
             {
-                drawLeft[i]  = 0;
-                drawRight[i] = entries[i].Cam.FrameWidth;
-            }
-            for (int i = 0; i < n - 1; i++)
-            {
-                int rightEdge = entries[i].XOffset + entries[i].Cam.FrameWidth;
-                int leftEdge  = entries[i + 1].XOffset;
-                int overlap   = rightEdge - leftEdge;
-                if (overlap > 0)
-                {
-                    int mid = leftEdge + overlap / 2;
-                    // 前相機：drawRight = mid 在全域座標，轉為 src 座標
-                    drawRight[i]    = Math.Min(drawRight[i], mid - entries[i].XOffset);
-                    // 後相機：drawLeft = mid 在全域座標，轉為 src 座標
-                    drawLeft[i + 1] = Math.Max(drawLeft[i + 1], mid - entries[i + 1].XOffset);
-                }
+                var liveCam = FindCamera(i + 1);
+                int widthPx = (liveCam != null) ? liveCam.FrameWidth : _defaultSlotWidthPx;
+                cams.Add(new MergeLayout.CamGeom { CameraId = i + 1, StartMm = startPosMm[i], WidthPx = widthPx });
             }
 
-            for (int i = 0; i < n; i++)
-                entries[i].Cam.SetMergeTarget(_mergedBuffer, entries[i].XOffset,
-                    drawLeft[i], drawRight[i] - drawLeft[i]);
+            var placements = MergeLayout.Compute(cams, minStart, refOpsMm, 1, MergeOverlap.Midline, out _);
+            foreach (var p in placements)
+            {
+                var cam = FindCamera(p.CameraId);
+                if (cam != null && p.SrcWidth > 0)
+                    cam.SetMergeTarget(_mergedBuffer, p.XOffset, p.SrcLeft, p.SrcWidth);
+            }
         }
 
         private MilCamera FindCamera(int cameraId)
@@ -272,12 +257,6 @@ namespace MilGrabber.Core
             for (int i = 0; i < _cameras.Count; i++)
                 if (_cameras[i].CameraId == cameraId) return _cameras[i];
             return null;
-        }
-
-        private struct CamEntry
-        {
-            public MilCamera Cam;
-            public int XOffset;
         }
     }
 }
