@@ -341,6 +341,9 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>分配後預先啟用 CLProtocol（背景）；grab 前完成，避免 grab 期間重套線掃掉幀。</summary>
         public void BeginCLProtocolInit() => _mil.BeginCLProtocolInit();
 
+        /// <summary>斷線重連後重跑 CLProtocol（啟動時不在線、之後才連上 → 重新啟用才讀得到曝光/線掃參數）。</summary>
+        public void RetryCLProtocolOnReconnect() => _mil.RetryCLProtocolOnReconnect();
+
         public bool CheckPresence() => _mil.CheckPresence();
 
         // ==================== MIL FrameReady 回呼（非 MIL 檢測/合圖/存檔） ====================

@@ -197,6 +197,7 @@ namespace MilGrabber.Core
             double maxEnd = double.MinValue;
             SlotStartsMm = new double[opsUm.Length];
             SlotEndsMm   = new double[opsUm.Length];
+            var diag = new System.Text.StringBuilder(); // 診斷（合圖跑位）：每槽實際用的寬度（live FrameWidth vs 離線預設）
             for (int i = 0; i < opsUm.Length; i++)
             {
                 double pos = (startPosMm != null && i < startPosMm.Length) ? startPosMm[i] : 0;
@@ -208,7 +209,9 @@ namespace MilGrabber.Core
                 if (pos + widthMm > maxEnd) maxEnd = pos + widthMm;
                 SlotStartsMm[i] = pos;
                 SlotEndsMm[i]   = pos + widthMm;
+                diag.Append($" c{i + 1}:w={widthPx}{(liveCam != null ? "" : "(off)")}@{pos:F0}");
             }
+            System.Diagnostics.Trace.WriteLine($"[Merger] ComputeLayout refOps={refOpsMm:F5}{diag}");
 
             foreach (var cam in _cameras)
                 if (cam.FrameHeight > maxH) maxH = cam.FrameHeight;

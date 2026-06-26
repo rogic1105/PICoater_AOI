@@ -34,7 +34,8 @@ MdigAlloc → MdigControl(M_SOURCE_SIZE_Y) → MdispAlloc × 2 → MdigInquire(S
 
 - `BeginCLProtocolInit()`（public，原 `StartCLProtocolAsync`）在**相機分配完成後、第一次 grab 之前**背景啟用（不在 grab 期間 enable + 重套線掃 → 否則首抓掉幀，cam1 最明顯）。
 - 觸發點：`LiveCameraManager.AllocateCameras` 迴圈後 `foreach cam: if (cam.CheckPresence()) cam.BeginCLProtocolInit();`
-  —— **只對在線相機**。對斷線相機 enable 會卡住 MIL 內部鎖（全 0/7 時 7 台全卡 → 逾時翻 true 後 timer 輪詢搶鎖 → UI 凍死）。斷線相機 `_clProtocolInitStarted=false` → `IsHwParamsStable=true`（不擋就緒判定），之後連上走 legacy 參數路徑。
+  —— **只對在線相機**。對斷線相機 enable 會卡住 MIL 內部鎖（全 0/7 時 7 台全卡 → 逾時翻 true 後 timer 輪詢搶鎖 → UI 凍死）。斷線相機 `_clProtocolInitStarted=false` → `IsHwParamsStable=true`（不擋就緒判定）。
+- **斷線→連線自動重跑 CLProtocol**（修「先開程式、之後才接相機 → 曝光/線掃讀不到＝回 0」）：`CameraStatusTimer_Tick` 用 `_lastPresence` 做**邊緣偵測**（斷線→連線那刻），呼 `cam.RetryCLProtocolOnReconnect()`（守門：已啟用/不在線/**grab 中**/in-flight 皆跳過 → grab 中 enable 會掉幀，故只非 grab 時重跑；**邊緣觸發**避免 CL 握手失敗時每 500ms spam）。重跑時 `AreCamerasHwReady` 暫 false（gate-off 防搶鎖）→ 恢復 true 時用 `_wasHwReady` 偵 false→true **強制刷 lblCamCount + 重發 OnHwReady**（否則連線數在 gate-off 前已更新、恢復後沒變 → `OnCameraCountChanged` 不再發 → lblCamCount 卡灰「初始化中」、抓取鈕不恢復）。
 - 耗時 2-5 秒/台；完成前 `IsHwParamsStable=false`。上層就緒判定：`LiveCameraManager.AreCamerasHwReady`（全相機 `IsHwParamsStable`）+ 一次性 `OnHwReady` 事件 → 解鎖「開始抓取」鈕、建立全域合圖。
 - **就緒前 UI 不可碰 MIL**：`CameraStatusTimer_Tick` 在 `!AreCamerasHwReady` 時跳過 `CheckPresence` 輪詢；全域合圖 `EnableGlobalMerge` 延後到 `OnCamerasHwReady`（都避免與背景 CLProtocol 搶 MIL 鎖造成凍結）。
 - **Quad 卡 DevNum>=2 必須明確列舉 Device ID**，`"M_DEFAULT"` 無效

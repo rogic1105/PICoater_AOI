@@ -32,6 +32,8 @@ namespace AniloxRoll.Monitor.UI.Managers
         private const int StatusTickMs = 500;        // CameraStatusTimer 間隔（與 new Timer{Interval=500} 一致）
         private readonly Dictionary<int, int> _stallTicks = new Dictionary<int, int>();
         private readonly Dictionary<int, long> _lastFrameCount = new Dictionary<int, long>(); // 上次 tick 的 M_PROCESS_FRAME_COUNT
+        private readonly Dictionary<int, bool> _lastPresence = new Dictionary<int, bool>();    // 上次 tick 在線狀態（斷線→連線邊緣偵測 → 重跑 CLProtocol）
+        private bool _wasHwReady;                                                              // 上次 tick AreCamerasHwReady（偵 false→true 轉變 → 強制刷 count label/解鎖鈕）
 
         // ==================== Mouse Data ====================
 
@@ -127,7 +129,12 @@ namespace AniloxRoll.Monitor.UI.Managers
             // 否則與背景 CLProtocol enable（MdigControl）搶 MIL 內部鎖 → UI 執行緒卡在 tick 裡 →
             // 整個視窗凍結（拖不動）+ 顯示誤導的暫態連線數。就緒前完全跳過輪詢，UI 維持「初始化中」。
             // AreCamerasHwReady 只讀 _clProtocolInitDone 旗標（非 MIL 呼叫），不造成競爭。
-            if (!AreCamerasHwReady) return;
+            // 重連重跑 CLProtocol 時會暫時 false（gate-off 防搶 MIL 鎖）→ 恢復 true 時需強制刷 count label
+            // 與重發 OnHwReady（否則連線數在 gate-off 前就已更新、恢復後 == 舊值 → 不觸發事件 → lblCamCount 卡灰色「初始化中」）。
+            bool hwReady = AreCamerasHwReady;
+            if (!hwReady) { _wasHwReady = false; _hwReadyRaised = false; return; }
+            bool hwJustReady = !_wasHwReady;
+            _wasHwReady = true;
 
             // 先拍快照：防止 ReleaseAsync 在 background thread 執行 _cameras.Clear() 時，
             // foreach 拋出 InvalidOperationException 或存取已釋放的相機物件。
@@ -140,6 +147,14 @@ namespace AniloxRoll.Monitor.UI.Managers
                 if (IsReleasing) return; // 釋放流程已開始，立即中止
 
                 bool isConnected = cam.CheckPresence();
+
+                // 斷線→連線「邊緣」自動重跑 CLProtocol：啟動時相機不在線（CheckPresence=false 跳過 CLProtocol 啟用）、
+                // 之後才連上的相機 → 此時重新啟用 CLProtocol，否則曝光/線掃等 GenICam 參數一律讀不到（回 0）。
+                // **邊緣觸發**（非每輪）：避免 CL 握手失敗時每 500ms 一直重試 + 反覆 gate-off；下次拔插再觸發。
+                // RetryCLProtocolOnReconnect 內含守門：已啟用/不在線/grab 中/in-flight 皆跳過（grab 中 enable 會掉幀）。
+                bool wasConnected = _lastPresence.TryGetValue(cam.CameraId, out var pv) && pv;
+                _lastPresence[cam.CameraId] = isConnected;
+                if (isConnected && !wasConnected) cam.RetryCLProtocolOnReconnect();
 
                 // 連線恢復且使用者希望抓圖時，自動重啟（同 CameraSession.UpdatePresence）
                 if (isConnected && cam.UserWantsGrab && !cam.IsLive)
@@ -197,13 +212,15 @@ namespace AniloxRoll.Monitor.UI.Managers
             int connected = 0;
             foreach (var cam in snapshot)
                 if (cam.IsConnected) connected++;
-            if (connected != ConnectedCameraCount)
+            // 連線數變化、或剛從重連 CLProtocol gate-off 恢復就緒（hwJustReady）→ 通知 UI 刷 lblCamCount
+            // （後者把 label 從灰色「初始化中」切回正確連線數/顏色）。
+            if (connected != ConnectedCameraCount || hwJustReady)
             {
                 ConnectedCameraCount = connected;
                 OnCameraCountChanged?.Invoke(connected, ExpectedCameraCount);
             }
 
-            // CLProtocol 全就緒 → 一次性通知 UI 解鎖「開始抓取」鈕
+            // CLProtocol 全就緒 → 通知 UI 解鎖「開始抓取」鈕（_hwReadyRaised 於 gate-off 時重置 → 重連恢復後會重發）。
             if (!_hwReadyRaised && AreCamerasHwReady)
             {
                 _hwReadyRaised = true;

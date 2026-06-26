@@ -32,13 +32,28 @@ namespace MilGrabber.Core
             });
         }
 
+        /// <summary>斷線重連後重跑 CLProtocol（啟動時相機不在線、之後才連上的情境 → 重新啟用 CLProtocol 才讀得到
+        /// 曝光/線掃參數）。僅在「已知在線（<see cref="IsConnected"/>）+ 尚未啟用 + 非 grab 中 + 上次 init 已結束」時
+        /// 背景重試一次。判準理由：①不在線就 enable 會卡 MIL 鎖；②grab 中 enable+重套線掃會掉幀；③in-flight 防重複。</summary>
+        public void RetryCLProtocolOnReconnect()
+        {
+            if (_isReleased || _milDigitizer == MIL.M_NULL) return;
+            if (_clProtocolEnabled) return;                              // 已啟用 → 不必重試
+            if (!IsConnected) return;                                    // 不在線 → 不對斷線相機 enable（防卡鎖）
+            if (IsLive) return;                                          // grab 中不重套 CLProtocol（會掉幀）
+            if (_clProtocolInitStarted && !_clProtocolInitDone) return;  // 上次 init 還在跑 → 等
+            _clProtocolInitStarted = false;                             // 重置守門 → 允許 BeginCLProtocolInit 重跑
+            _clProtocolInitDone = false;
+            BeginCLProtocolInit();
+        }
+
         private void TryEnableCLProtocol()
         {
             if (_milDigitizer == MIL.M_NULL) return;
 
             lock (_clProtocolInitLock)
             {
-                if (_isReleased) return;
+                if (_isReleased || _clProtocolEnabled) return;   // 已啟用（防重連重試時雙啟用）
                 try
                 {
                     MIL_INT numDevIds = 0;
