@@ -1,13 +1,12 @@
-﻿// TanukiCv.Core\Utils\FileUtils.cs
-
 using System;
 using System.Diagnostics;
 using System.IO;
 using System.Windows.Forms;
 
-
-namespace TanukiCv.Utils
+namespace TanukiCv.BenchUi.Utils
 {
+    /// <summary>檔案/資料夾 explorer 開啟工具（WinForms：含 MessageBox 錯誤提示）。
+    /// 原在 TanukiCv.Core（純 library 不該帶 WinForms）→ 移到唯一使用者 BenchUi，讓 Core 保持純淨。</summary>
     public static class FileUtils
     {
         public static void OpenFolderAndSelectFile(string filePath)

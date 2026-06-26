@@ -6,7 +6,8 @@ using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 using TanukiCv.Core;
-using TanukiCv.Utils;
+using TanukiCv.Utils;          // ImageUtils（仍在 Core）
+using TanukiCv.BenchUi.Utils;  // FileUtils（已移來 BenchUi）
 
 namespace TanukiCv.BenchUi.Forms
 {

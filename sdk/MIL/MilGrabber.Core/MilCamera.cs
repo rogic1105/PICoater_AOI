@@ -228,15 +228,28 @@ namespace MilGrabber.Core
             }
             else if (!_userWantsGrab && IsLive)
             {
-                // 乾淨 drain（鏡像 SetGrabHeight）：M_STOP+M_WAIT 等佇列跑完 + M_GRAB_ABORT 立即中止 in-flight/佇列。
-                // 裸 M_STOP 只取消佇列、不保證 in-flight 清乾淨 → re-grab 在「未乾淨」狀態 re-arm，兩台 M_START
-                // 跨 frame 邊界時序不一 → 某台第一個完整幀晚一格（free-run 無 trigger 的量化效應）。
-                // 乾淨 drain 後 re-arm 接近「第一次 grab」的乾淨狀態，兩台較易等到同一個完整 frame。
+                // 乾淨 drain（唯一來源 DrainGrab）：裸 M_STOP 只取消佇列、不保證 in-flight 清乾淨 → re-grab 在
+                // 「未乾淨」狀態 re-arm，兩台 M_START 跨 frame 邊界時序不一 → 某台第一個完整幀晚一格
+                // （free-run 無 trigger 的量化效應）。乾淨 drain 後 re-arm 接近「第一次 grab」狀態，兩台較易等到同一完整 frame。
+                DrainGrab();
+            }
+        }
+
+        /// <summary>乾淨 drain grab（唯一來源；停止/改尺寸前清乾淨）。順序鎖死：①若在 grab → `M_STOP+M_WAIT`
+        /// 等佇列全部跑完（drain，非只取消）→ 之後無 FrameReady 在跑；②再 `M_GRAB_ABORT` 立即中止任何 in-flight/佇列殘留
+        /// （防「優雅停止留殘留 → realloc/re-arm 累積壞狀態 → 永久 stall」）。Matrox：M_STOP 只取消佇列、M_GRAB_ABORT 才清
+        /// in-flight；eV-CL 支援，guard 防 .NET wrapper 不支援。`ApplyGrabState` 停止 + `SetGrabHeight` 改尺寸前共用此一份。</summary>
+        private void DrainGrab()
+        {
+            if (_milDigitizer == MIL.M_NULL) return;
+            if (IsLive)
+            {
                 MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize,
                     MIL.M_STOP + MIL.M_WAIT, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
-                try { MIL.MdigControl(_milDigitizer, MIL.M_GRAB_ABORT, MIL.M_DEFAULT); } catch { }
                 IsLive = false;
             }
+            try { MIL.MdigControl(_milDigitizer, MIL.M_GRAB_ABORT, MIL.M_DEFAULT); }
+            catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}] M_GRAB_ABORT 不支援/失敗（continue）：{ex.Message}"); }
         }
 
         public bool CheckPresence()

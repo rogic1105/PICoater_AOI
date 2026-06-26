@@ -88,8 +88,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
         private double _refOpsMm = 0.024;
         private bool _disposed;
         private volatile bool _virtualSet;
-        private int _diagLog;
-        private int _dropLog;
 
         public WaterfallView(Panel host, int camCount, int totalHeight, WaterfallFullMode fullMode,
             double screenMmPerPx = 0)
@@ -141,7 +139,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 _seenCams.Clear();
                 for (int i = 0; i < _camCount; i++) { _perCamLastTick[i] = 0; _perCamLastWall[i] = 0; _perCamSeq[i] = -1; }
                 _periodTicks = 0; _periodWallMs = 0; _originTick = 0; _originSet = false; _lastNewCamWallMs = 0;
-                _diagLog = 0; _dropLog = 0;
             }
         }
 
@@ -275,7 +272,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         // 在 lock 內：用槽內各相機幀算 7 槽佈局 + 推進寫頭 + 配分塊。回 BandJob 給背景寫 memcpy。
         private BandJob ComposeJob(Slot slot)
         {
-            if (_startMm == null || _refOpsMm <= 0) { DiagNull("startMm/refOps 未備（未餵佈局）"); return null; }
+            if (_startMm == null || _refOpsMm <= 0) return null; // 未餵佈局
 
             int bandH = 0;
             foreach (var kv in slot.Frames) if (kv.Value.H > bandH) bandH = kv.Value.H;
@@ -327,18 +324,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
             if (ring) _writeRow = (_writeRow + bandH) % _totalHeight;
             else _writeRow += bandH;
 
-            // 診斷：掉偵（cams<seen）全記；正常 band 記前 40。含各相機實際 tick → 看相位差。
-            bool drop = slot.Frames.Count < _seenCams.Count;
-            if (drop ? _dropLog < 120 : _diagLog < 40)
-            {
-                if (drop) _dropLog++; else _diagLog++;
-                var sb = new System.Text.StringBuilder();
-                for (int i = 0; i < _camCount; i++)
-                    sb.Append(slot.Frames.TryGetValue(i + 1, out var f) ? $" c{i + 1}={f.Tick}" : $" c{i + 1}=--");
-                System.Diagnostics.Trace.WriteLine(
-                    $"[Waterfall]{(drop ? " *DROP*" : "")} seq={slot.Seq} cams={slot.Frames.Count}/{_seenCams.Count} reason={slot.FlushReason} " +
-                    $"period={_periodTicks} pWall={_periodWallMs} life={slot.LastWallMs - slot.FirstWallMs}ms pending={_pending.Count} start={bandStart} mode={_fullMode}{sb}");
-            }
             return new BandJob { FullW = fullW, BandH = bandH, BandStartRow = bandStart, Ring = ring, Spans = spans };
         }
 
@@ -454,14 +439,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 for (int dx = 0; dx < dw; dx++) outp[orow + dx] = 255;
             }
             return GrayBitmap.From(outp, dw, dh);
-        }
-
-        // 節流診斷：沒出 band 的原因 → 沒畫面時看 trace 判斷。
-        private void DiagNull(string reason)
-        {
-            if (_diagLog >= 8) return;
-            _diagLog++;
-            System.Diagnostics.Trace.WriteLine($"[Waterfall] no band: {reason}");
         }
 
         public void Dispose()

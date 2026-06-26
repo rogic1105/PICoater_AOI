@@ -179,15 +179,6 @@ namespace AniloxRoll.Monitor.Forms
         public AniloxRollForm()
         {
             InitializeComponent();
-            // 啟動 banner log — 用來驗證 user 跑的是不是新 build
-            try
-            {
-                System.IO.File.AppendAllText(@"D:\Anilox\stitch-debug.log",
-                    $"========== AniloxRoll.Monitor started at {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} ==========" + Environment.NewLine);
-            }
-            catch { }
-            // 全域 mouse-down 攔截：記錄每次左鍵按下命中的控制項，用來診斷 Live chart click 失蹤。
-            try { Application.AddMessageFilter(new GlobalMouseLogger()); } catch { }
             try
             {
                 using (var stream = System.Reflection.Assembly.GetExecutingAssembly()
@@ -449,7 +440,6 @@ namespace AniloxRoll.Monitor.Forms
             chartReviewVertical.MouseClick += (s, e) =>
             {
                 UiActionLogger.SetSource("chartReviewVertical.Click");
-                LogClick("chartReviewVertical.MouseClick", e);
                 SwitchRidgeDirection("v");
             };
             chartReviewHorizontal.MouseClick += (s, e) =>
@@ -465,7 +455,6 @@ namespace AniloxRoll.Monitor.Forms
             chartLiveVertical.MouseClick += (s, e) =>
             {
                 UiActionLogger.SetSource("chartLiveVertical.Click");
-                LogClick("chartLiveVertical.MouseClick", e);
                 SwitchLiveDisplayDirection("v");
             };
             chartLiveHorizontal.MouseClick += (s, e) =>
@@ -714,9 +703,8 @@ namespace AniloxRoll.Monitor.Forms
             {
                 chartLiveVertical?.BringToFront();
                 chartLiveHorizontal?.BringToFront();
-                LogClick("BringLiveChartsToFront() called");
             }
-            catch (Exception ex) { LogClick("BringLiveChartsToFront throw: " + ex.Message); }
+            catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[BringLiveChartsToFront] {ex.GetType().Name}: {ex.Message}"); }
         }
 
         /// <summary>

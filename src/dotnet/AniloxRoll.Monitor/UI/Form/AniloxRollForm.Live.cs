@@ -384,50 +384,5 @@ namespace AniloxRoll.Monitor.Forms
             _liveCameraManager?.SetLiveDisplayDirection(_liveDisplayDirection);
             UpdateLiveDirectionVisual();
         }
-
-        /// <summary>
-        /// 安全序列化：Live chart 點選切 StitchMode 時，若同時要關掉強化，
-        /// 必須先把 callback thread 的 chart 更新訂閱斷開（C），避免轉場期間 callback
-        /// BeginInvoke 到 chart handle 不穩定的視窗。
-        /// 並把 UpdateLiveDirectionVisual 延後到 OnStitchModeChangedAsync 之後一次性執行（D），
-        /// 減少 Border 屬性變更引起的 paint storm。
-        ///
-        /// **DEBUG**：每步驟 Trace.WriteLine + 寫 D:\Anilox\stitch-debug.log；
-        /// 任何 exception 抓到後彈 MessageBox 顯示完整 stack trace，並寫 log 檔。
-        /// </summary>
-        private static void LogClick(string msg, MouseEventArgs e = null)
-        {
-            string suffix = e != null ? $" (Button={e.Button} Loc={e.X},{e.Y})" : "";
-            string line = $"[{DateTime.Now:HH:mm:ss.fff}] [Click] {msg}{suffix}";
-            try { System.IO.File.AppendAllText(@"D:\Anilox\stitch-debug.log", line + Environment.NewLine); } catch { }
-        }
-
-        /// <summary>
-        /// 全域 IMessageFilter：log 每次 WM_LBUTTONDOWN 命中的控制項 + 螢幕座標。
-        /// 用來診斷 Live chart click 為什麼沒觸發 MouseClick（panel/MIL native window 截獲？
-        /// chart 內部吞掉？bounds 重疊？）。試一次就能看出 click 去了哪裡。
-        /// </summary>
-        private sealed class GlobalMouseLogger : IMessageFilter
-        {
-            private const int WM_LBUTTONDOWN = 0x0201;
-            public bool PreFilterMessage(ref Message m)
-            {
-                if (m.Msg == WM_LBUTTONDOWN)
-                {
-                    try
-                    {
-                        var c = Control.FromHandle(m.HWnd);
-                        var pt = Cursor.Position;
-                        string name = c?.Name ?? "(null)";
-                        string type = c?.GetType().Name ?? "(no-type)";
-                        string line = $"[{DateTime.Now:HH:mm:ss.fff}] [MsgFilter] WM_LBUTTONDOWN hwnd=0x{m.HWnd.ToInt64():X} ctl={name}({type}) screen=({pt.X},{pt.Y})";
-                        System.IO.File.AppendAllText(@"D:\Anilox\stitch-debug.log", line + Environment.NewLine);
-                    }
-                    catch { }
-                }
-                return false; // 不攔截，繼續傳遞
-            }
-        }
-
     }
 }

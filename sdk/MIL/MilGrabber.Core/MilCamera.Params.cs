@@ -186,13 +186,7 @@ namespace MilGrabber.Core
             // 還是 ==max（doc 疑慮成立、幀變 max 高度 → 改走 auto-allocate）。
             if (UseMaxHeightBuffers && _milGrabBuffers[0] != MIL.M_NULL && height <= _grabBufAllocH)
             {
-                if (wasLive)
-                {
-                    MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize,
-                        MIL.M_STOP + MIL.M_WAIT, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
-                    IsLive = false;
-                }
-                try { MIL.MdigControl(_milDigitizer, MIL.M_GRAB_ABORT, MIL.M_DEFAULT); } catch { }
+                DrainGrab();   // 乾淨 drain 唯一來源（M_STOP+M_WAIT + M_GRAB_ABORT）
 
                 MIL.MdigControl(_milDigitizer, MIL.M_SOURCE_SIZE_Y, (MIL_INT)height);
                 MIL_INT sy = MIL.MdigInquire(_milDigitizer, MIL.M_SIZE_Y, MIL.M_NULL);
@@ -216,19 +210,9 @@ namespace MilGrabber.Core
             System.Diagnostics.Trace.WriteLine(
                 $"[CAM{CameraId}][HtRealloc] 改高度 {oldHeight}->{height} wasLive={wasLive}");
 
-            // M_STOP + M_WAIT：等佇列中的 grab 全部跑完才返回（drain，非只取消）→ 之後沒有 FrameReady 在跑。
-            if (wasLive)
-            {
-                MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize,
-                    MIL.M_STOP + MIL.M_WAIT, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
-                IsLive = false;
-            }
-
-            // 硬排空 digitizer grab queue/DMA（不論本路徑是否停的；協調路徑是上層先停的）。
-            // Matrox doc：M_STOP 只取消佇列、M_GRAB_ABORT 才「立即中止 in-flight + 佇列」→ 防「優雅停止留殘留 →
-            // 重複 realloc+re-arm 累積壞狀態 → 永久 stall」。eV-CL 支援；guard 防 .NET wrapper 不支援。
-            try { MIL.MdigControl(_milDigitizer, MIL.M_GRAB_ABORT, MIL.M_DEFAULT); }
-            catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}] M_GRAB_ABORT 不支援/失敗（continue）：{ex.Message}"); }
+            // 改尺寸/realloc 前乾淨 drain（唯一來源 DrainGrab：M_STOP+M_WAIT 等佇列跑完 + M_GRAB_ABORT 清 in-flight，
+            // 防「優雅停止留殘留 → realloc+re-arm 累積壞狀態 → 永久 stall」）。
+            DrainGrab();
 
             FreeGrabBuffers();
 
