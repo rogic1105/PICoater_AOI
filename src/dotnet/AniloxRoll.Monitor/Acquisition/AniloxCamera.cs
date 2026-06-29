@@ -147,7 +147,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// 參數：(cameraId, fileNameWithoutExt, meanPeak_0to1, maxPeak_0to1)</summary>
         public event Action<int, string, float, float> OnInspectionResult;
 
-        /// <summary>SmartCanvas / 瀑布顯示路徑用：每幀提供「顯示 bytes(8-bit 灰階)+ 尺寸 + 本幀硬體 frame-start tick」(MIL 回呼執行緒)。
+        /// <summary>ImageCanvas / 瀑布顯示路徑用：每幀提供「顯示 bytes(8-bit 灰階)+ 尺寸 + 本幀硬體 frame-start tick」(MIL 回呼執行緒)。
         /// bytes 是重用緩衝 → 訂閱者必須**同步消費**(組 bitmap 複製)、勿存 ref。只在有訂閱者時觸發。
         /// tick＝跨相機幀對齊的硬體鑰匙（同 Review 的 FrameTickIndex；瀑布即時用它聚類時間槽）。</summary>
         public event Action<int, byte[], int, int, long> OnDisplayFrame;
@@ -367,7 +367,7 @@ namespace AniloxRoll.Monitor.Core.Camera
             else
                 _mil.CopyToDisplay(modifiedBuffer);       // 顯示原圖
 
-            // SmartCanvas 顯示路徑：每幀把「顯示 bytes」交給訂閱者(同步組 bitmap)。MIL 模式無訂閱者→不觸發。
+            // ImageCanvas 顯示路徑：每幀把「顯示 bytes」交給訂閱者(同步組 bitmap)。MIL 模式無訂閱者→不觸發。
             var onDisp = OnDisplayFrame;
             if (onDisp != null)
             {

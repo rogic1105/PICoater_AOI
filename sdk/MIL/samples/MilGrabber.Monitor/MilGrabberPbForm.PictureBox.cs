@@ -11,7 +11,7 @@ using TanukiCv.Core;     // SystemInfo / PerfTimer
 namespace MilGrabber.Monitor
 {
     // PictureBox 顯示路徑（絞殺榕重寫版）：不讓 MIL 直接畫 panel，改訂閱 MilCamera.FrameReady →
-    //   GetFrameBytes（8-bit 灰階全解析度）→ 餵共用 LiveDisplayView（主畫面 SmartCanvas + 縮圖條 + CPU 合圖 + LOD）。
+    //   GetFrameBytes（8-bit 灰階全解析度）→ 餵共用 LiveDisplayView（主畫面 ImageCanvas + 縮圖條 + CPU 合圖 + LOD）。
     // **不再每幀做全解析度 GPU resize / pinned**（那是舊路的資源殺手：16384×3000=49MB/幀，撐爆 CUDA pinned）。
     //   顯示/縮圖/合圖一律 CPU；LOD 只裁「可見區」小圖，resize 用可插拔委派（GPU TanukiCv / CPU GrayResizeCpu，二選一跑測）。
     public partial class MilGrabberPbForm
@@ -280,7 +280,7 @@ namespace MilGrabber.Monitor
             }
             _mainPanelMil = new Panel { Dock = DockStyle.Fill, BackColor = Color.Black };
             panelMain.Controls.Add(_mainPanelMil);
-            _mainPanelMil.BringToFront(); // 蓋住 SmartCanvas
+            _mainPanelMil.BringToFront(); // 蓋住 ImageCanvas
         }
 
         // 縮圖倍率 / FOV / LOD GPU↔CPU 的切換已融入 PropertyGrid（PbSettings）→ ApplyPbSettings 統一套用。
@@ -363,7 +363,7 @@ namespace MilGrabber.Monitor
                 return;
             }
 
-            SmartCanvas c = _live?.Canvas;
+            ImageCanvas c = _live?.Canvas;
             double paintMax  = c?.ResetMaxPaintMs() ?? 0;
             float  zoomRel   = c?.ZoomRelativeToFit ?? 1f;
             double physMag   = c?.PhysicalMagnification ?? 0;

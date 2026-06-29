@@ -68,8 +68,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
             if (realCount == 0) return null;
             if (slots.Length == 1 && slots[0] != null)
             {
-                // 單張且無占位：上下翻轉顯示（保留舊捷徑）
-                slots[0].RotateFlip(RotateFlipType.RotateNoneFlipY);
                 return slots[0];
             }
 
@@ -94,8 +92,6 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 foreach (var img in slots) img?.Dispose();
             }
 
-            // 合成完一次翻轉（取像時序需上下翻轉顯示，與 Period 模式一致）
-            result.RotateFlip(RotateFlipType.RotateNoneFlipY);
             return result;
         }
 

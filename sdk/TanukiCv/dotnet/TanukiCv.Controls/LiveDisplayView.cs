@@ -10,12 +10,12 @@ namespace TanukiCv.Controls
 {
     /// <summary>灰階影像縮放委派（src wxh → dst dwxdh 的灰階 bytes）。LOD provider 的可插拔縮放步驟：
     /// GPU 版由呼叫端餵（如 core_cv 的 TanukiCv_Resize_GPU），CPU 版 TanukiCv 內建（見 GrayResizeCpu，階段 2）。
-    /// 把「LOD 要不要 GPU」的差異收斂成這一個委派——LOD 機制本身（SmartCanvas）純 CPU。</summary>
+    /// 把「LOD 要不要 GPU」的差異收斂成這一個委派——LOD 機制本身（ImageCanvas）純 CPU。</summary>
     public delegate byte[] GrayResize(byte[] src, int srcW, int srcH, int dstW, int dstH);
 
     /// <summary>
     /// 多相機即時監控顯示元件（**絞殺榕重寫版**，取 app MultiCamLiveView + 範例 MilGrabberPbForm 主畫面兩者成功部分）。
-    /// 純 CPU 骨架、吃 8bpp 灰階 bytes、0 依賴 MIL/app：主 panel 疊 <see cref="SmartCanvas"/>（zoom/pan/雙三擊/mm overlay/LOD）、
+    /// 純 CPU 骨架、吃 8bpp 灰階 bytes、0 依賴 MIL/app：主 panel 疊 <see cref="ImageCanvas"/>（zoom/pan/雙三擊/mm overlay/LOD）、
     /// 各 cam panel 疊 <see cref="ThumbStrip"/>（批量縮圖不閃）。合圖/合圖全部委派 <see cref="MergeLayout"/>。
     ///
     /// 統一介面（收斂 app/sample 4 條接線差異）：
@@ -31,7 +31,7 @@ namespace TanukiCv.Controls
     {
         private readonly Panel _mainPanel;
         private readonly int _camCount;
-        private SmartCanvas _canvas;
+        private ImageCanvas _canvas;
         private ThumbStrip _thumbStrip;
         private readonly double _screenMmPerPx;
 
@@ -121,8 +121,8 @@ namespace TanukiCv.Controls
         }
         private bool _flip;
 
-        /// <summary>內部主畫面 SmartCanvas（供上層接計時 / app 專屬事件等；一般顯示不需碰）。</summary>
-        public SmartCanvas Canvas => _canvas;
+        /// <summary>內部主畫面 ImageCanvas（供上層接計時 / app 專屬事件等；一般顯示不需碰）。</summary>
+        public ImageCanvas Canvas => _canvas;
 
         /// <summary>當前選中相機（1-based）。上層需要「目前哪一台」時讀這裡（唯一來源）。</summary>
         public int SelectedCamId => _selectedCamId;
@@ -148,7 +148,7 @@ namespace TanukiCv.Controls
             _latest = new Frame[_camCount];
             _readySinceMerge = new bool[_camCount];
 
-            _canvas = new SmartCanvas { Dock = DockStyle.Fill };
+            _canvas = new ImageCanvas { Dock = DockStyle.Fill };
             _canvas.FitRelativeZoom = false;        // 可放大也可縮小到 fit 以下（同 camReviewMain / 範例 panelMain）
             _canvas.DoubleClickFitToScreen = true;
             _canvas.TripleClickPhysical1x = true;
@@ -228,7 +228,7 @@ namespace TanukiCv.Controls
         }
 
         /// <summary>啟用動態 LOD（單張模式）：傳入可插拔的灰階縮放委派（GPU 或 CPU）。
-        /// LOD 機制（裁可見區/拉伸/背景重算）在 SmartCanvas（純 CPU）；resize 那一步用此委派。</summary>
+        /// LOD 機制（裁可見區/拉伸/背景重算）在 ImageCanvas（純 CPU）；resize 那一步用此委派。</summary>
         public void EnableLod(GrayResize resize)
         {
             _lodResize = resize;
@@ -387,7 +387,7 @@ namespace TanukiCv.Controls
                 _canvas.SetPhysicalCalibration(opsInMm * sf, _screenMmPerPx);
         }
 
-        /// <summary>LOD provider（SmartCanvas 在背景執行緒呼叫）：從選中相機全解析度快照裁可見虛擬區 → GrayResize（GPU/CPU）→ 灰階 bitmap。</summary>
+        /// <summary>LOD provider（ImageCanvas 在背景執行緒呼叫）：從選中相機全解析度快照裁可見虛擬區 → GrayResize（GPU/CPU）→ 灰階 bitmap。</summary>
         private Bitmap LodProvide(Rectangle srcRect, Size target)
         {
             GrayResize resize = _lodResize;
@@ -402,13 +402,19 @@ namespace TanukiCv.Controls
             int sh = Math.Max(1, Math.Min(srcRect.Height, fh - sy));
             int tw = Math.Max(1, target.Width), th = Math.Max(1, target.Height);
 
-            // 裁可見區到連續緩衝（逐列複製）
+            // 裁可見區到連續緩衝。翻轉時 srcRect 已視為「顯示座標」，
+            // 因此要反向讀來源列，而不是裁完再翻整張 crop。
             var crop = new byte[sw * sh];
-            for (int y = 0; y < sh; y++) Array.Copy(full, (sy + y) * fw + sx, crop, y * sw, sw);
+            for (int y = 0; y < sh; y++)
+            {
+                int srcY = _flip ? (fh - 1 - (sy + y)) : (sy + y);
+                if (srcY < 0 || srcY >= fh) continue;
+                Array.Copy(full, srcY * fw + sx, crop, y * sw, sw);
+            }
 
             byte[] dst = resize(crop, sw, sh, tw, th);
             if (dst == null) return null;
-            return GrayBitmap.From(dst, tw, th, _flip);
+            return GrayBitmap.From(dst, tw, th, false);
         }
 
         /// <summary>合圖 LOD provider（背景執行緒）：從完整合圖虛擬座標裁可見區，逐欄找對應相機合成
@@ -443,16 +449,20 @@ namespace TanukiCv.Controls
                 }
                 if (f == null || srcX < 0 || srcX >= f.W) continue; // 無畫面/越界 → 留黑
                 byte[] fb = f.Bytes; int fwid = f.W, fhei = f.H;
+                int yOffset = _flip ? (vh - fhei) : 0;
                 for (int cy = 0; cy < ch; cy++)
                 {
                     int vy = sy + cy * strideY;
-                    if (vy < fhei) comp[cy * cw + cx] = fb[vy * fwid + srcX];
+                    int localY = vy - yOffset;
+                    if (localY < 0 || localY >= fhei) continue;
+                    int srcY = _flip ? (fhei - 1 - localY) : localY;
+                    comp[cy * cw + cx] = fb[srcY * fwid + srcX];
                 }
             }
 
             byte[] dst = resize(comp, cw, ch, tw, th);
             if (dst == null) return null;
-            return GrayBitmap.From(dst, tw, th, _flip);
+            return GrayBitmap.From(dst, tw, th, false);
         }
 
         // ==================== 建圖（單張 / 合圖）====================
@@ -525,8 +535,9 @@ namespace TanukiCv.Controls
                     int dx = (int)Math.Round(p.DestX / (double)k);
                     int dw = Math.Max(1, (int)Math.Round(p.SrcWidth / (double)k));
                     int dh = Math.Max(1, (int)Math.Round(f.H / (double)k));
+                    int dy = _flip ? Math.Max(0, mh - dh) : 0;
                     using (var cam = GrayBitmap.From(f.Bytes, f.W, f.H, _flip))
-                        g.DrawImage(cam, new Rectangle(dx, 0, dw, dh),
+                        g.DrawImage(cam, new Rectangle(dx, dy, dw, dh),
                             new Rectangle(p.SrcLeft, 0, p.SrcWidth, f.H), GraphicsUnit.Pixel);
                 }
             }

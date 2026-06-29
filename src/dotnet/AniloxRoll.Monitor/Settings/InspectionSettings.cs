@@ -158,9 +158,11 @@ namespace AniloxRoll.Monitor.Core.Data
         public bool hc_EnableMuraEnhance { get => ImageView.EnableMuraEnhance; set => ImageView.EnableMuraEnhance = value; }
         [Category(CategoryCharts)][DisplayName("回顧強化")][TypeConverter(typeof(BoolYesNoConverter))]
         public bool hd_EnableReviewEnhance { get => ImageView.EnableReviewEnhance; set => ImageView.EnableReviewEnhance = value; }
-        [Category(CategoryCharts)][DisplayName("主畫面顯示")][Description("MilDirect=MIL 直繪（現狀）；SmartCanvas=CPU 繪、跟回顧畫布同源。變更後重開抓取生效。")]
+        [Category(CategoryCharts)][DisplayName("主畫面顯示")][Description("即時=CPU 繪、跟回顧畫布同源；瀑布=全幅合圖即時捲動。變更後重開抓取生效。")]
         public MainDisplayMode he_MainDisplay { get => ImageView.MainDisplay; set => ImageView.MainDisplay = value; }
-        [Category(CategoryCharts)][DisplayName("動態LOD")][Description("Off=關；GPU=TanukiCv GPU 縮；CPU=純 CPU 縮。放大巨圖看細節用（顯示成本大降）。SmartCanvas 模式即時生效。")]
+        [Category(CategoryCharts)][DisplayName("上下方向")][Description("監控與回顧主畫面共用；預設由下而上。")]
+        public VerticalDisplayDirection hee_VerticalDirection { get => ImageView.VerticalDirection; set => ImageView.VerticalDirection = value; }
+        [Category(CategoryCharts)][DisplayName("動態LOD")][Description("Off=關；GPU=TanukiCv GPU 縮；CPU=純 CPU 縮。放大巨圖看細節用（顯示成本大降）。即時模式即時生效。")]
         public LiveLodMode hf_LiveLod { get => ImageView.LiveLod; set => ImageView.LiveLod = value; }
         [Category(CategoryCharts)][DisplayName("瀑布總高")][Description("瀑布圖虛擬長圖總高（px，預設 30000）；點兩下 fit 縮放到此整張高度。只在主畫面顯示=瀑布圖時有效。")]
         public int hg_WaterfallTotalHeight { get => ImageView.WaterfallTotalHeight; set => ImageView.WaterfallTotalHeight = value; }
@@ -175,6 +177,7 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public int ChartDataYieldMonthlyYMax { get => Chart.MonthlyYMax; set => Chart.MonthlyYMax = value; }
         [Browsable(false)] public int ChartDataYieldDailyYMax   { get => Chart.DailyYMax;   set => Chart.DailyYMax   = value; }
         [Browsable(false)] public StitchMode StitchMode { get => ImageView.StitchMode; set => ImageView.StitchMode = value; }
+        [Browsable(false)] public VerticalDisplayDirection VerticalDirection { get => ImageView.VerticalDirection; set => ImageView.VerticalDirection = value; }
         [Browsable(false)] public LiveLodMode LiveLod { get => ImageView.LiveLod; set => ImageView.LiveLod = value; }
         [Browsable(false)] public float ErrorValueMeanV { get => Recipe.ErrorValueMeanV; set => Recipe.ErrorValueMeanV = value; }
         [Browsable(false)] public float ErrorValueMaxV  { get => Recipe.ErrorValueMaxV;  set => Recipe.ErrorValueMaxV  = value; }

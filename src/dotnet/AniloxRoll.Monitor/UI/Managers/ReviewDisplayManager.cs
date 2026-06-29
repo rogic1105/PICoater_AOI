@@ -47,7 +47,6 @@ namespace AniloxRoll.Monitor.UI.Managers
             _view = new LiveDisplayView(_mainHost, _thumbHosts, screenMmPerPx);
             _view.ThumbSelectedColor = Color.Orange;   // 與監控同款；選取視覺唯一來源 = sdk ThumbView
             _view.MergeAll = true;                     // 缺台黑占位（與影像/曲線分界一致）
-            _view.FlipVertical = false;                // 回顧影像載入時已翻轉（StitchCamera baked-in），勿再翻
             _view.EnableLod(GrayResizeCpu.Resize);     // 回顧白賺 LOD；CPU provider＝無 GPU 機也跑
             _view.ViewRangeMmChanged += (l, r, tp, bt) => ViewRangeMmChanged?.Invoke(l, r, tp, bt);
             _view.CursorStatusChanged += s => CursorStatusChanged?.Invoke(s);
@@ -58,10 +57,11 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// 純推幀零轉換 → UI 執行緒無負擔、與 Bitmap 生命週期零 race。
         /// </summary>
         public void PushFrames(byte[][] gray, int[] w, int[] h, double[] opsUm, double[] posMm,
-            bool mergeMode, double screenMmPerPx, int feedScale, double rowPitchMm)
+            bool mergeMode, double screenMmPerPx, int feedScale, double rowPitchMm, bool flipVertical)
         {
             if (_disposed || gray == null) return;
             EnsureCreated(screenMmPerPx);
+            _view.FlipVertical = flipVertical;
             _view.SetLayout(posMm, opsUm, Math.Max(1, feedScale), rowPitchMm); // feedScale=降採樣倍率；rowPitchMm=真實 mm/列
             _view.SetMergeMode(mergeMode);
             for (int i = 0; i < gray.Length; i++)
@@ -70,6 +70,13 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         /// <summary>chart 重建後補發當前視野（強化切換/重載後曲線恢復跟隨，免等滑鼠互動）。</summary>
         public void RefireViewRange() => _view?.RefireViewRange();
+
+        public void SetFlipVertical(bool flipVertical)
+        {
+            if (_view == null) return;
+            _view.FlipVertical = flipVertical;
+            _view.RefireViewRange();
+        }
 
         public void SetMergeMode(bool on) => _view?.SetMergeMode(on);
         public void SetSelected(int camId) => _view?.SetSelected(camId);

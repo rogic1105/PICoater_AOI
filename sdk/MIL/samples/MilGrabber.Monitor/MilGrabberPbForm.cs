@@ -102,7 +102,7 @@ namespace MilGrabber.Monitor
             for (int i = 0; i < SubPanelCount; i++)
                 SetupCamPanel(_camContainers[i], i);
 
-            SetupPbMain(); // 建共用 LiveDisplayView（主畫面 SmartCanvas + 各容器疊縮圖；含合圖/LOD）
+            SetupPbMain(); // 建共用 LiveDisplayView（主畫面 ImageCanvas + 各容器疊縮圖；含合圖/LOD）
             SetupMergeTab(); // tabParams 新增「合圖」tab：ops/start 表格 + 重疊演算法選擇
 
             // 參數控制項陣列：從 Designer 具名控制項組成（陣列在 .cs 組、控制項在 Designer 宣告，同 panelCam0..7 模式）。
@@ -217,7 +217,7 @@ namespace MilGrabber.Monitor
             MIL.MappAlloc(MIL.M_NULL, MIL.M_DEFAULT, ref _milApplication);
             MIL.MappControl(MIL.M_DEFAULT, MIL.M_ERROR, MIL.M_PRINT_DISABLE);
 
-            // 依「初始化前選的模式」建立顯示控制項（MIL→Panel 直繪 / PictureBox→現成 PictureBox+SmartCanvas）
+            // 依「初始化前選的模式」建立顯示控制項（MIL→Panel 直繪 / PictureBox→現成 PictureBox+ImageCanvas）
             CreateDisplaysForMode();
 
             // 3. 按 SystemNum 去重，每張卡 MsysAlloc 一次
@@ -309,7 +309,7 @@ namespace MilGrabber.Monitor
             string origText = btnFetchInfo.Text;
             try
             {
-                // PictureBox 版不用 MIL display（已 detach），顯示全走 FrameReady → PictureBox/SmartCanvas，不需開關。
+                // PictureBox 版不用 MIL display（已 detach），顯示全走 FrameReady → PictureBox/ImageCanvas，不需開關。
 
                 // 1. 確保 grab（沒在 grab 就自動啟動，CLProtocol 才會背景啟用）
                 if (!_userWantsGrab)

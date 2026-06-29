@@ -93,7 +93,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         // 合圖的「拼」（佈局 + 合併 buffer + 每台 merge target）委派給 MultiCameraMerger 工頭（sdk/MIL）。
         // 合圖的「秀」（MIL display 顯示/33ms 防閃刷新/滑鼠 hook/視野範圍/merged zoom/pan/1x）整個職責
         // 已提取到 GlobalMergeCoordinator（擁有 _merger + _mergedDisplay + 座標鏡像 + timer + hook）。
-        // 本類別只留編排（建 MilCamera 清單、決定 SmartCanvas vs MIL 直繪、SmartCanvas/Waterfall 佈局）+ forwarder。
+        // 本類別只留編排（建 MilCamera 清單、決定 ImageCanvas vs MIL 直繪、ImageCanvas/Waterfall 佈局）+ forwarder。
         private readonly GlobalMergeCoordinator _globalMerge;
         private readonly LiveDisplayCoordinator _display;
         public bool IsGlobalMergeActive => _globalMerge.IsActive;
@@ -234,7 +234,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _cameraStatusTimer.Start();
             _display.UpdateCameraStatus("已配置", Color.White);
 
-            ApplyMainDisplayMode(); // 依 he_MainDisplay 套用：SmartCanvas / MilDirect / Waterfall（三選一互斥）
+            ApplyMainDisplayMode(); // 依 he_MainDisplay 套用：即時 / 瀑布（三選一互斥；舊值相容）
 
             _display.SwitchMainDisplay(_display.SelectedMainCameraId);
 
@@ -263,7 +263,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (!IsAllocated || IsLiveGrabbing) return;
             IsLiveGrabbing = true;
-            // 切「主畫面顯示」設定後重開抓取即生效：SmartCanvas / MilDirect / Waterfall 三選一互斥
+            // 切「主畫面顯示」設定後重開抓取即生效：即時 / 瀑布 三選一互斥（舊值相容）
             ApplyMainDisplayMode();
             // 重 grab：清掉舊瀑布圖 + 重置對齊狀態（EnableWaterfallDisplay 冪等不會重建 → 必須在此重置，
             // 否則新幀接在舊網格上、兩台重啟相位不一 → 錯位）。
@@ -297,8 +297,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             // 再由工頭 MbufFree 合併 buffer，避免 grab hook 把幀複製進已釋放的 buffer。
             DisableGlobalMerge();
 
-            // SmartCanvas 顯示：解訂閱 + dispose（移除 camLiveMain 上的 SmartCanvas/thumbnail）
-            _display.TeardownSmartDisplay();
+            // ImageCanvas 顯示：解訂閱 + dispose（移除 camLiveMain 上的 ImageCanvas/thumbnail）
+            _display.TeardownImageDisplay();
 
             foreach (var cam in _cameras)
                 cam.Free();

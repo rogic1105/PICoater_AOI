@@ -1,4 +1,4 @@
-﻿// TanukiCv.Controls\UI\SmartCanvas.cs
+// TanukiCv.Controls\UI\ImageCanvas.cs
 
 using System;
 using System.ComponentModel;
@@ -19,7 +19,7 @@ namespace TanukiCv.Controls
         public PointF PanOffset { get; set; }
     }
 
-    public class SmartCanvas : PictureBox
+    public class ImageCanvas : PictureBox
     {
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public new Cursor Cursor
@@ -106,7 +106,7 @@ namespace TanukiCv.Controls
         public bool DoubleClickFitToScreen { get; set; } = false;
         public bool TripleClickPhysical1x  { get; set; } = false;
 
-        // 手勢事件（給上層做 app 專屬的事，如 UiActionLogger 記錄；手勢偵測/動作本身由 SmartCanvas 做）
+        // 手勢事件（給上層做 app 專屬的事，如 UiActionLogger 記錄；手勢偵測/動作本身由 ImageCanvas 做）
         public event EventHandler FitPerformed;        // 雙擊 fit 完成
         public event EventHandler Physical1xPerformed; // 三擊實體 1:1 完成
         public event EventHandler DragStarted;         // 實際拖曳開始（第一次帶鍵移動）
@@ -204,7 +204,7 @@ namespace TanukiCv.Controls
         /// </summary>
         public bool ClampPan { get; set; } = false;
 
-        public SmartCanvas()
+        public ImageCanvas()
         {
             this.DoubleBuffered = true;
             this.SizeMode = PictureBoxSizeMode.Normal;

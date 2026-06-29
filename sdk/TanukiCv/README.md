@@ -9,7 +9,7 @@ TanukiCv 是一個高效能的電腦視覺開發框架，底層採用 CUDA 引�
 >
 > **dotnet 分層**：
 > - `dotnet/TanukiCv.Core`（ns `TanukiCv.Core` / `TanukiCv.Core.Models` / `TanukiCv.Utils`）— 純 library，封裝 `tanuki_cv_api.dll` 的 P/Invoke、GPU helper、檔案/影像工具、合圖佈局（MergeLayout）與曲線合併（CurveOverviewMerger）演算法。
-> - `dotnet/TanukiCv.Controls`（ns `TanukiCv.Controls`）— 獨立 WinForms assembly，含 `SmartCanvas`（zoom/pan）、`LiveDisplayView`（多相機監控）等顯示元件；參考 `TanukiCv.Core`。
+> - `dotnet/TanukiCv.Controls`（ns `TanukiCv.Controls`）— 獨立 WinForms assembly，含 `ImageCanvas`（zoom/pan）、`LiveDisplayView`（多相機監控）等顯示元件；參考 `TanukiCv.Core`。
 
 ## 1. 系統需求 (Prerequisites)
 

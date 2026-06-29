@@ -530,7 +530,8 @@ namespace AniloxRoll.Monitor.Forms
                     _reviewDisplayManager?.PushFrames(gray, ws, hs, ops, pos, isGlobal,
                         _interactionHelper?.ScreenMmPerPixel ?? 0,
                         AniloxRoll.Monitor.Core.Services.InspectionEngineConfig.DefaultSaveResizeScale,
-                        _reviewRowChartHelper?.RowPitchMm ?? 0);   // 灰階已在 RSC 解碼段轉好（零 race）；?.：關閉時序防 NRE
+                        _reviewRowChartHelper?.RowPitchMm ?? 0,
+                        ShouldFlipDisplayVertical());   // 灰階已在 RSC 解碼段轉好（零 race）；?.：關閉時序防 NRE
                 // Stage2：新 canvas 視野 → 回顧曲線圖 zoom 連動（切向=全覽 X、法向=Y；拖曳中即時）
                 _reviewDisplayManager.ViewRangeMmChanged += (l, r, top, bot) =>
                 {
@@ -560,14 +561,9 @@ namespace AniloxRoll.Monitor.Forms
                 _reviewDisplayManager.CursorStatusChanged += s =>
                 {
                     if (lblPixelInfo == null) return;
-                    lblPixelInfo.Text =
-                        $"位置:({s.CurMmX:F2}, {s.CurMmY:F2}) mm | " +
-                        $"X範圍:{s.ViewLeftMm:F1}~{s.ViewRightMm:F1} mm | " +
-                        $"Y範圍:{s.ViewTopMm:F1}~{s.ViewBotMm:F1} mm | " +
-                        $"座標: ({s.CursorX}, {s.CursorY}) | " +
-                        $"亮度: {s.Brightness} | " +
-                        $"實體倍率:{(s.PhysMag > 0 ? $"{s.PhysMag:F2}x" : "-")}";
+                    lblPixelInfo.Text = CursorStatusTextFormatter.Format(s);
                 };
+                _reviewDisplayManager.SetFlipVertical(ShouldFlipDisplayVertical());
             }
 
             _stitchCoordinator.StitchedCurveUpdated += (mean, max, ops, pos, errMean, errMax) =>
@@ -591,7 +587,7 @@ namespace AniloxRoll.Monitor.Forms
 
             // 絞殺榕全劇終（Wave2）：camReviewMain/camReview1~7 已是 Designer 上的 Panel，
             //   顯示/互動/手勢/座標 overlay/雙三擊/縮圖選取全由 sdk LiveDisplayView 內建承接
-            //   （經 ReviewDisplayManager 落地生根）。舊 SmartCanvas/PictureBox/CanvasInteractionHelper/
+            //   （經 ReviewDisplayManager 落地生根）。舊 ImageCanvas/PictureBox/CanvasInteractionHelper/
             //   ThumbnailGridPresenter 顯示鏈已整棵砍除。
 
             UpdateLiveDirectionVisual();

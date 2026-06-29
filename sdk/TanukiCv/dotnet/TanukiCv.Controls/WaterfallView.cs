@@ -35,7 +35,7 @@ namespace TanukiCv.Controls
 
         private static readonly Stopwatch _clock = Stopwatch.StartNew();
 
-        private readonly SmartCanvas _canvas;
+        private readonly ImageCanvas _canvas;
         private readonly int _camCount;             // 配置槽數（7，含黑布槽）
         private readonly int _totalHeight;
         private readonly WaterfallFullMode _fullMode;
@@ -84,8 +84,14 @@ namespace TanukiCv.Controls
         private int _defaultFrameW = 16384;           // 尚無幀的槽位用此寬度排佈局 → 7 槽寬度穩定
         private double[] _startMm;
         private double _refOpsMm = 0.024;
+        private readonly List<CameraPlacement> _cameraPlacements = new List<CameraPlacement>();
+        private CanvasInfo _lastCanvasInfo;
+        private bool _hasCanvasInfo;
         private bool _disposed;
         private volatile bool _virtualSet;
+
+        public event Action<int> SelectRequested;
+        public event Action<LiveDisplayView.CursorStatus> CursorStatusChanged;
 
         public WaterfallView(Panel host, int camCount, int totalHeight, WaterfallFullMode fullMode,
             double screenMmPerPx = 0)
@@ -99,7 +105,7 @@ namespace TanukiCv.Controls
             _perCamSeq = new long[_camCount];
             for (int i = 0; i < _camCount; i++) _perCamSeq[i] = -1;
 
-            _canvas = new SmartCanvas { Dock = DockStyle.Fill, BackColor = Color.Black };
+            _canvas = new ImageCanvas { Dock = DockStyle.Fill, BackColor = Color.Black };
             _canvas.ShowOverlay = true;               // 游標座標 + 亮度
             _canvas.FitRelativeZoom = true;           // 滾輪相對 fit 縮放（fit=1×，與 live/review 一致）
             _canvas.DoubleClickFitToScreen = true;    // 點兩下 fit 整張
@@ -107,6 +113,8 @@ namespace TanukiCv.Controls
             host.Controls.Add(_canvas);
             _canvas.BringToFront();
             _canvas.EnableLod(1, 1, ProvideRegion);
+            _canvas.StatusChanged += OnCanvasStatus;
+            _canvas.MouseClick += OnCanvasMouseClick;
 
             _flushTimer = new System.Windows.Forms.Timer { Interval = 30 };
             _flushTimer.Tick += (s, e) => { TryFlush(_clock.ElapsedMilliseconds); PushLodRefresh(); };
@@ -120,6 +128,7 @@ namespace TanukiCv.Controls
             {
                 _startMm = startMm;
                 if (refOpsMm > 0) _refOpsMm = refOpsMm;
+                RebuildCameraPlacementsLocked();
             }
             if (_screenMmPerPx > 0 && refOpsMm > 0)
                 try { _canvas.SetPhysicalCalibration(refOpsMm, _screenMmPerPx); } catch { }
@@ -151,7 +160,11 @@ namespace TanukiCv.Controls
             lock (_lock)
             {
                 if (_seenCams.Add(camId)) _lastNewCamWallMs = nowMs; // 新相機被發現 → 重置穩定計時（啟動期給 join grace）
-                if (w > _defaultFrameW) _defaultFrameW = w;
+                if (w > _defaultFrameW)
+                {
+                    _defaultFrameW = w;
+                    RebuildCameraPlacementsLocked();
+                }
                 int ci = camId - 1;
 
                 long lastTick = _perCamLastTick[ci];
@@ -396,7 +409,7 @@ namespace TanukiCv.Controls
             else _canvas.RefreshLod();
         }
 
-        // SmartCanvas LOD provider：給虛擬區域 r（全解析座標）+ dest 大小 → 邊讀邊降採樣（nearest）出 dest 大小 bitmap。
+        // ImageCanvas LOD provider：給虛擬區域 r（全解析座標）+ dest 大小 → 邊讀邊降採樣（nearest）出 dest 大小 bitmap。
         private Bitmap ProvideRegion(Rectangle r, Size dest)
         {
             int dw = dest.Width, dh = dest.Height;
@@ -439,11 +452,159 @@ namespace TanukiCv.Controls
             return GrayBitmap.From(outp, dw, dh);
         }
 
+        private void RebuildCameraPlacementsLocked()
+        {
+            _cameraPlacements.Clear();
+            if (_startMm == null || _startMm.Length == 0 || _refOpsMm <= 0) return;
+
+            double minStart = double.MaxValue;
+            for (int i = 0; i < _camCount; i++)
+            {
+                double sm = i < _startMm.Length ? _startMm[i] : 0;
+                if (sm < minStart) minStart = sm;
+            }
+            if (minStart == double.MaxValue) return;
+
+            var cams = new List<MergeLayout.CamGeom>(_camCount);
+            for (int i = 0; i < _camCount; i++)
+            {
+                cams.Add(new MergeLayout.CamGeom
+                {
+                    CameraId = i + 1,
+                    StartMm = i < _startMm.Length ? _startMm[i] : 0,
+                    WidthPx = _defaultFrameW
+                });
+            }
+
+            _cameraPlacements.AddRange(MergeLayout.Compute(
+                cams, minStart, _refOpsMm, 1, MergeOverlap.Midline, out _));
+        }
+
+        private void OnCanvasStatus(CanvasInfo info)
+        {
+            _lastCanvasInfo = info;
+            _hasCanvasInfo = true;
+
+            if (!TryBuildCursorStatus(info.ImageX, info.ImageY, info, out var status))
+            {
+                _canvas.SetRangeOverlay("", "", "", "", "");
+                return;
+            }
+
+            _canvas.SetRangeOverlay(status.PhysMag > 0 ? $"{status.PhysMag:F2}x" : "",
+                $"{status.ViewLeftMm:F1}", $"{status.ViewRightMm:F1}", $"{status.ViewTopMm:F1}", $"{status.ViewBotMm:F1}");
+            _canvas.SetCursorMm(BuildCursorMmText(info.ImageX, info.ImageY));
+            CursorStatusChanged?.Invoke(status);
+        }
+
+        private void OnCanvasMouseClick(object sender, MouseEventArgs e)
+        {
+            if (!_hasCanvasInfo) return;
+            int imageX = (int)((e.X - _lastCanvasInfo.PanOffset.X) / _lastCanvasInfo.Zoom);
+            int imageY = (int)((e.Y - _lastCanvasInfo.PanOffset.Y) / _lastCanvasInfo.Zoom);
+
+            if (e.Button == MouseButtons.Left)
+            {
+                int camId = ResolveCameraAtX(imageX);
+                if (camId > 0) SelectRequested?.Invoke(camId);
+                return;
+            }
+
+            if (e.Button == MouseButtons.Right &&
+                TryBuildCursorStatus(imageX, imageY, _lastCanvasInfo, out var status))
+                CursorStatusChanged?.Invoke(status);
+        }
+
+        private int ResolveCameraAtX(int imageX)
+        {
+            if (_cameraPlacements.Count == 0 || imageX < 0) return -1;
+            foreach (var p in _cameraPlacements)
+            {
+                int left = p.DestX;
+                int right = p.DestX + Math.Max(1, p.SrcWidth);
+                if (imageX >= left && imageX < right)
+                    return p.CameraId;
+            }
+
+            int nearestId = -1;
+            int nearestDist = int.MaxValue;
+            foreach (var p in _cameraPlacements)
+            {
+                int center = p.DestX + Math.Max(1, p.SrcWidth) / 2;
+                int dist = Math.Abs(imageX - center);
+                if (dist < nearestDist)
+                {
+                    nearestDist = dist;
+                    nearestId = p.CameraId;
+                }
+            }
+            return nearestId;
+        }
+
+        private bool TryBuildCursorStatus(int imageX, int imageY, CanvasInfo info, out LiveDisplayView.CursorStatus status)
+        {
+            status = null;
+            if (_disposed || _canvas == null || info.Zoom <= 0) return false;
+            if (_startMm == null || _startMm.Length == 0 || _refOpsMm <= 0) return false;
+
+            int camId = ResolveCameraAtX(imageX);
+            double minStartMm = MinStartMm();
+            double leftMm = PixelMmMapper.PixelToMm((0 - info.PanOffset.X) / info.Zoom, minStartMm, _refOpsMm);
+            double rightMm = PixelMmMapper.PixelToMm((_canvas.Width - info.PanOffset.X) / info.Zoom, minStartMm, _refOpsMm);
+            double topMm = (0 - info.PanOffset.Y) / info.Zoom * _refOpsMm;
+            double botMm = (_canvas.Height - info.PanOffset.Y) / info.Zoom * _refOpsMm;
+            double curMmX = PixelMmMapper.PixelToMm(imageX, minStartMm, _refOpsMm);
+            double curMmY = imageY * _refOpsMm;
+
+            _canvas.SetPhysicalCalibration(_refOpsMm, _screenMmPerPx);
+            status = new LiveDisplayView.CursorStatus
+            {
+                CurMmX = curMmX,
+                CurMmY = curMmY,
+                ViewLeftMm = leftMm,
+                ViewRightMm = rightMm,
+                ViewTopMm = topMm,
+                ViewBotMm = botMm,
+                PhysMag = _canvas.PhysicalMagnification,
+                CursorX = imageX,
+                CursorY = imageY,
+                Brightness = info.PixelColor.R,
+                SelectedCamId = camId > 0 ? camId : 0,
+            };
+            return true;
+        }
+
+        private string BuildCursorMmText(int imageX, int imageY)
+        {
+            if (_startMm == null || _startMm.Length == 0 || _refOpsMm <= 0) return "";
+            int camId = ResolveCameraAtX(imageX);
+            double minStartMm = MinStartMm();
+            double curMmX = PixelMmMapper.PixelToMm(imageX, minStartMm, _refOpsMm);
+            double curMmY = imageY * _refOpsMm;
+            string camText = camId > 0 ? $"CAM {camId}" : "瀑布";
+            return $"{camText} ({curMmX:F2}, {curMmY:F2})";
+        }
+
+        private double MinStartMm()
+        {
+            double min = double.MaxValue;
+            lock (_lock)
+            {
+                if (_startMm != null)
+                {
+                    for (int i = 0; i < _startMm.Length; i++)
+                        if (_startMm[i] < min) min = _startMm[i];
+                }
+            }
+            return min == double.MaxValue ? 0 : min;
+        }
+
         public void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
             try { _flushTimer.Stop(); _flushTimer.Dispose(); } catch { }
+            try { _canvas.StatusChanged -= OnCanvasStatus; _canvas.MouseClick -= OnCanvasMouseClick; } catch { }
             try { _canvas.DisableLod(); } catch { }
             try { if (_canvas.Parent != null) _canvas.Parent.Controls.Remove(_canvas); _canvas.Dispose(); } catch { }
             lock (_lock) { _chunks = null; _fullW = 0; _writeRow = 0; _pending.Clear(); _preBuffer.Clear(); _writeQueue.Clear(); }

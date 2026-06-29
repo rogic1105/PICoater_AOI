@@ -190,15 +190,38 @@ namespace AniloxRoll.Monitor.Forms
         /// <summary>監控主畫面（LiveDisplayView）縮放/平移 → live 曲線圖 zoom 連動（bin↔主畫面對齊）。
         /// 切向(X)/overview(X) 用左右範圍、法向(Y) 用上下範圍。UI 執行緒（ViewRangeMmChanged 來）。</summary>
         // 主畫面即時 X 可見範圍（mm）：ApplyLiveViewRange 存 → LiveViewRangeProvider 給 overview 的 500ms 更新沿用同值
-        // （overview 立即跟隨 + 500ms 重畫沿用同範圍 → 不閃回原點）。NaN=非 SmartCanvas 即時狀態。
+        // （overview 立即跟隨 + 500ms 重畫沿用同範圍 → 不閃回原點）。NaN=非 ImageCanvas 即時狀態。
         private double _liveViewLeftMm = double.NaN, _liveViewRightMm = double.NaN;
+        private double _liveViewTopMm = double.NaN, _liveViewBotMm = double.NaN;
+
+        private bool ShouldFlipDisplayVertical()
+            => (_settings?.VerticalDirection ?? InspectionDefaults.VerticalDirection)
+               == VerticalDisplayDirection.BottomToTop;
+
+        private float[] CloneRowCurveForDisplay(float[] data)
+        {
+            if (data == null) return null;
+            var copy = new float[data.Length];
+            Array.Copy(data, copy, data.Length);
+            if (ShouldFlipDisplayVertical()) Array.Reverse(copy);
+            return copy;
+        }
 
         private void ApplyLiveViewRange(double leftMm, double rightMm, double topMm, double botMm)
         {
             if (IsDisposed) return;
             _liveViewLeftMm = leftMm; _liveViewRightMm = rightMm;     // 供 overview provider 沿用（不閃）
+            _liveViewTopMm = topMm; _liveViewBotMm = botMm;
             _liveRowChartHelper?.UpdateViewRange(topMm, botMm);        // 法向(Y)
             _liveOverviewHelper?.UpdateViewRange(leftMm, rightMm);     // overview 立即跟隨（500ms 重畫用同值不閃）
+        }
+
+        private bool TryApplyLiveImageCanvasRowViewRange()
+        {
+            if (_settings?.he_MainDisplay != MainDisplayMode.ImageCanvas) return false;
+            if (double.IsNaN(_liveViewTopMm) || double.IsNaN(_liveViewBotMm)) return true;
+            _liveRowChartHelper?.UpdateViewRange(_liveViewTopMm, _liveViewBotMm);
+            return true;
         }
 
         private void OnLiveCurveData(int camId, float[] meanArr, float[] maxArr)
@@ -243,6 +266,7 @@ namespace AniloxRoll.Monitor.Forms
                 _liveRowMeanCache[camId] = meanArr;
                 _liveRowMaxCache[camId]  = maxArr;
                 MergeAndUpdateLiveRowChart();
+                if (TryApplyLiveImageCanvasRowViewRange()) return;
 
                 // 同步 Y 軸視野：查詢 _mergedDisplay 的 zoom/pan
                 double rowPitch = _liveRowChartHelper.RowPitchMm;
@@ -256,7 +280,8 @@ namespace AniloxRoll.Monitor.Forms
             {
                 // 垂直模式：只顯示選中相機
                 if (camId != _liveCameraManager.SelectedMainCameraId) return;
-                _liveRowChartHelper.UpdateData(meanArr, maxArr);
+                _liveRowChartHelper.UpdateData(CloneRowCurveForDisplay(meanArr), CloneRowCurveForDisplay(maxArr));
+                if (TryApplyLiveImageCanvasRowViewRange()) return;
 
                 // 同步 Y 軸視野：查詢 MIL 副顯示器 zoom/pan
                 var liveCam = FindCameraById(camId);
@@ -298,7 +323,7 @@ namespace AniloxRoll.Monitor.Forms
                 for (int i = 0; i < minLen; i++)
                     if (arr[i] > mergedMax[i]) mergedMax[i] = arr[i];
 
-            _liveRowChartHelper.UpdateData(mergedMean, mergedMax);
+            _liveRowChartHelper.UpdateData(CloneRowCurveForDisplay(mergedMean), CloneRowCurveForDisplay(mergedMax));
         }
 
         /// <summary>用 A輪速度 和選中相機的取樣頻率（Line Rate）更新法向圖表座標。</summary>
@@ -313,6 +338,15 @@ namespace AniloxRoll.Monitor.Forms
             // 把 row pitch 餵給主畫面顯示 → SetLayout → 法向曲線圖 Y 對齊（否則 LiveDisplayView 用 X ops 比例錯）
             if (_liveCameraManager != null)
                 _liveCameraManager.RowPitchMm = _liveRowChartHelper?.RowPitchMm ?? 0;
+        }
+
+        private void ApplyDisplayDirectionSetting()
+        {
+            _liveCameraManager?.ApplyDisplayDirection();
+            _reviewDisplayManager?.SetFlipVertical(ShouldFlipDisplayVertical());
+            _stitchCoordinator?.RefreshCurrentCameraChartsForSettingsChange();
+            if (_stitchCoordinator?.IsStitchMode != true)
+                _stitchCoordinator?.UpdateRowChartFromRepository();
         }
 
 
@@ -361,7 +395,9 @@ namespace AniloxRoll.Monitor.Forms
             if (name == nameof(InspectionSettings.hf_LiveLod))
                 _liveCameraManager?.SetLodMode(_settings.LiveLod);
             if (name == nameof(InspectionSettings.he_MainDisplay))
-                _liveCameraManager?.ApplyMainDisplayMode();   // SmartCanvas / MilDirect / Waterfall 即時切換
+                _liveCameraManager?.ApplyMainDisplayMode();   // 即時 / 瀑布 即時切換
+            if (name == nameof(InspectionSettings.hee_VerticalDirection))
+                ApplyDisplayDirectionSetting();
             if (name == nameof(InspectionSettings.hg_WaterfallTotalHeight) || name == nameof(InspectionSettings.hh_WaterfallFullMode))
                 _liveCameraManager?.RefreshWaterfallDisplay(); // 瀑布總高/滿了行為變更 → 重建套新值
             if (OpsStartSettingNames.Contains(name) && _liveCameraManager?.IsGlobalMergeActive == true)

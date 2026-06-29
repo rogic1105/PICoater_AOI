@@ -93,4 +93,4 @@ UI 通用思想 =「**長什麼樣 / 做什麼 / 真相是什麼** 三件事分�
 - `FormInteractionHelper` god-facade → 拆 `CanvasCoordinator` + `ReviewFolderCoordinator` + `BusyUiBinder` + `ImageCacheService` + `InspectionSettingsCoordinator` + 殘留 Helper
 - `LiveCameraManager` → 拆 `LiveCameraService`（相機/MIL/grab）+ `LiveDisplayCoordinator`（Panel/display/chart）
 - `OnSettingChanged` 唯一 dispatcher → 拆成多個 feature coordinator 各自訂 Hub
-- 純機制搬 sdk：MultiClickDetector（收斂 SmartCanvas 內建重複那份）/ WheelInterceptor / ProportionalScaler / EventGuard / BitmapPool（RoundedLabel 已搬）
+- 純機制搬 sdk：MultiClickDetector（收斂 ImageCanvas 內建重複那份）/ WheelInterceptor / ProportionalScaler / EventGuard / BitmapPool（RoundedLabel 已搬）

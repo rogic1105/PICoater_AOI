@@ -18,12 +18,12 @@ namespace AniloxRoll.Monitor.UI.Managers
     ///    滑鼠 hook / free）+ 視野範圍查詢 + merged 分支的 zoom / pan / 1x / reset / pan-to-center。
     ///
     /// **狀態擁有權**：本類別獨佔 _merger（工頭）+ _mergedDisplay + 座標鏡像（_minStartMm…）+ timer + 滑鼠 hook。
-    /// LiveCameraManager 不再持有任何 _merged* 欄位；SmartCanvas / Waterfall 路徑要佈局時讀 <see cref="Merger"/>。
+    /// LiveCameraManager 不再持有任何 _merged* 欄位；ImageCanvas / Waterfall 路徑要佈局時讀 <see cref="Merger"/>。
     ///
     /// **與 LCM 的反向依賴**：穩定依賴（mainForm / panel / updatePixelInfo）走 ctor；會變動的值
     /// （screenMmPerPx / speed / lineRate / IsReleasing）走 Func 委派、避免反向參考整個 LCM；
     /// 視野中心選中相機變更走 <c>onViewCenterCamChanged</c> callback（UI selection event，由 LCM 更新選中狀態 + 重繪縮圖）。
-    /// SmartCanvas / Waterfall 編排（mechanism 無關）留 LCM，本類別不知 SmartCanvas 存在。
+    /// ImageCanvas / Waterfall 編排（mechanism 無關）留 LCM，本類別不知 ImageCanvas 存在。
     /// </summary>
     internal sealed class GlobalMergeCoordinator
     {
@@ -52,10 +52,10 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// <summary>合圖是否啟用中。</summary>
         public bool IsActive { get; private set; }
 
-        /// <summary>工頭（合圖佈局來源）；SmartCanvas / Waterfall 路徑讀 SlotStartsMm / RefOpsMm。未啟用為 null。</summary>
+        /// <summary>工頭（合圖佈局來源）；ImageCanvas / Waterfall 路徑讀 SlotStartsMm / RefOpsMm。未啟用為 null。</summary>
         public MultiCameraMerger Merger => _merger;
 
-        /// <summary>是否已綁 MIL 合圖 display（SmartCanvas 模式為 false：合圖由 LiveDisplayView CPU 拼，不綁 MIL display）。</summary>
+        /// <summary>是否已綁 MIL 合圖 display（ImageCanvas 模式為 false：合圖由 LiveDisplayView CPU 拼，不綁 MIL display）。</summary>
         public bool HasMilDisplay => _mergedDisplay != MIL.M_NULL;
 
         /// <summary>合併像素尺寸（mm/px），供 Waterfall 佈局同步。</summary>
@@ -105,9 +105,9 @@ namespace AniloxRoll.Monitor.UI.Managers
             // panel 已 dispose（關閉/釋放期）→ 不碰 .Handle（會觸發 CreateHandle/ObjectDisposedException）
             if (_mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) { _merger.DisableMerge(); _merger = null; return false; }
 
-            // SmartCanvas 模式：合圖由 LiveDisplayView CPU 拼，不需 MIL 合圖 display（showMilDisplay=false）。
+            // ImageCanvas 模式：合圖由 LiveDisplayView CPU 拼，不需 MIL 合圖 display（showMilDisplay=false）。
             // 關鍵：不把 MIL display 綁到 camLiveMain（否則 MIL display 的 M_MOUSE_USE 會攔截滾輪，
-            // 疊在上面的 SmartCanvas 收不到 → 無法縮放）。MIL 直繪模式才走下面整套。
+            // 疊在上面的 ImageCanvas 收不到 → 無法縮放）。MIL 直繪模式才走下面整套。
             if (showMilDisplay)
             {
                 MIL.MdispAlloc(sysId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref _mergedDisplay);

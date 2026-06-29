@@ -325,7 +325,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 float captureHmV = _currentGrabConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
                 HessianRescaleHelper.RescaleInPlace1D(mergedMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
                 HessianRescaleHelper.RescaleInPlace1D(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
-                FlipRowCurveIfNeeded(mergedMean, mergedMax);
+                FlipRowCurveForDisplayIfNeeded(mergedMean, mergedMax);
                 _ctx.RowChartHelper.UpdateData(mergedMean, mergedMax);
                 var nv = SameSourceViewRange?.Invoke();
                 if (nv != null) _ctx.RowChartHelper.UpdateViewRange(nv[2], nv[3]);   // 新路徑：原子帶入當前 Y 視野
@@ -335,11 +335,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         /// <summary>線掃相機由下往上拍攝 → 回顧影像上下翻轉顯示（StitchCamera），故 row 曲線也須反向才能對齊影像。
         /// 即時(live)影像不翻轉、曲線本就對齊，故只在回顧反轉。未來可改成 tool 選項（per-grab）。</summary>
-        private const bool CurveFlipVertical = true;
+        private bool ShouldFlipDisplayVertical()
+            => (_ctx.Settings?.VerticalDirection ?? InspectionDefaults.VerticalDirection)
+               == VerticalDisplayDirection.BottomToTop;
 
-        private static void FlipRowCurveIfNeeded(float[] mean, float[] max)
+        private void FlipRowCurveForDisplayIfNeeded(float[] mean, float[] max)
         {
-            if (!CurveFlipVertical) return;
+            if (!ShouldFlipDisplayVertical()) return;
             if (mean != null) Array.Reverse(mean);
             if (max  != null) Array.Reverse(max);
         }
@@ -461,7 +463,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                         float captureHmV = _currentGrabConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
                         var displayMean = HessianRescaleHelper.CloneAndRescale1D(rowMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
                         var displayMax  = HessianRescaleHelper.CloneAndRescale1D(rowMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
-                        FlipRowCurveIfNeeded(displayMean, displayMax);
+                        FlipRowCurveForDisplayIfNeeded(displayMean, displayMax);
                         _ctx.RowChartHelper.UpdateData(displayMean, displayMax);
                         var nv = SameSourceViewRange?.Invoke();
                         if (nv != null) _ctx.RowChartHelper.UpdateViewRange(nv[2], nv[3]);  // 取代死的 RefreshRowChartRange
@@ -619,7 +621,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             float captureHmV = _ctx.InteractionHelper?.ReviewConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
             HessianRescaleHelper.RescaleInPlace1D(mergedMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
             HessianRescaleHelper.RescaleInPlace1D(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
-            FlipRowCurveIfNeeded(mergedMean, mergedMax);
+            FlipRowCurveForDisplayIfNeeded(mergedMean, mergedMax);
             _ctx.RowChartHelper.UpdateData(mergedMean, mergedMax);
             var nv = SameSourceViewRange?.Invoke();
             if (nv != null) _ctx.RowChartHelper.UpdateViewRange(nv[2], nv[3]);

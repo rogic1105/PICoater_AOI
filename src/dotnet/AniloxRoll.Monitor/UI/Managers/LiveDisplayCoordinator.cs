@@ -12,7 +12,7 @@ using TanukiCv.Controls;
 namespace AniloxRoll.Monitor.UI.Managers
 {
     /// <summary>
-    /// 即時監控顯示協調者：擁有主畫面/縮圖/Waterfall/SmartCanvas/狀態標籤/滾輪縮放的 UI 狀態。
+    /// 即時監控顯示協調者：擁有主畫面/縮圖/Waterfall/ImageCanvas/狀態標籤/滾輪縮放的 UI 狀態。
     /// 相機生命週期與 grab 控制仍留 <see cref="LiveCameraManager"/>；本類別只做顯示編排。
     /// </summary>
     internal sealed class LiveDisplayCoordinator
@@ -33,7 +33,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private readonly Dictionary<int, Panel> _liveParentPanels = new Dictionary<int, Panel>();
         private readonly Dictionary<int, Label> _cameraStatusLabels = new Dictionary<int, Label>();
 
-        private LiveDisplayView _smartDisplay;
+        private LiveDisplayView _imageDisplay;
         private WaterfallView _waterfallView;
         private int _selectedMainCameraId = 1;
         private int _userSelectedMainCameraId = 1;
@@ -47,12 +47,12 @@ namespace AniloxRoll.Monitor.UI.Managers
         public double ScreenMmPerPx => _screenMmPerPx;
         public double RowPitchMm { get; set; }
 
-        public bool SmartCanvasMode
+        public bool ImageCanvasMode
         {
             get
             {
                 var settings = _getSettings();
-                return settings != null && settings.he_MainDisplay == MainDisplayMode.SmartCanvas;
+                return settings != null && settings.he_MainDisplay == MainDisplayMode.ImageCanvas;
             }
         }
 
@@ -64,6 +64,10 @@ namespace AniloxRoll.Monitor.UI.Managers
                 return settings != null && settings.he_MainDisplay == MainDisplayMode.Waterfall;
             }
         }
+
+        private bool ShouldFlipVertical
+            => (_getSettings()?.ImageView?.VerticalDirection ?? InspectionDefaults.VerticalDirection)
+               == VerticalDisplayDirection.BottomToTop;
 
         public LiveDisplayCoordinator(
             Form mainForm,
@@ -144,7 +148,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private void OnLivePanelPaint(object sender, PaintEventArgs e, int cameraIndex)
         {
             if (!(sender is Panel panel)) return;
-            bool isSelected = cameraIndex == _selectedMainCameraId && !SmartCanvasMode;
+            bool isSelected = cameraIndex == _selectedMainCameraId && !ImageCanvasMode;
             Color borderColor = isSelected ? Color.Orange : Color.FromArgb(60, 60, 60);
             int borderWidth = isSelected ? 3 : 1;
             ControlPaint.DrawBorder(e.Graphics, panel.ClientRectangle,
@@ -176,14 +180,14 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (WaterfallMode)
             {
-                TeardownSmartDisplay();
+                TeardownImageDisplay();
                 EnableWaterfallDisplay();
             }
             else
             {
                 DisableWaterfallDisplay();
-                if (SmartCanvasMode) EnsureSmartDisplay();
-                else TeardownSmartDisplay();
+                if (ImageCanvasMode) EnsureImageDisplay();
+                else TeardownImageDisplay();
             }
         }
 
@@ -202,6 +206,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             var wfMode = settings?.ImageView?.WaterfallFullMode ?? WaterfallFullMode.Restart;
             int slotCount = settings?.GetCameraStartPositionMmArray()?.Length ?? Cameras.Count;
             _waterfallView = new WaterfallView(_mainDisplayPanel, slotCount, wfH, wfMode, _screenMmPerPx);
+            _waterfallView.SelectRequested += OnWaterfallSelectRequested;
+            _waterfallView.CursorStatusChanged += OnImageCursorStatus;
             FeedWaterfallLayout();
             foreach (var cam in Cameras) cam.OnDisplayFrame += OnCameraWaterfallFrame;
         }
@@ -227,12 +233,19 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (_waterfallView == null) return;
             foreach (var cam in Cameras) cam.OnDisplayFrame -= OnCameraWaterfallFrame;
+            _waterfallView.SelectRequested -= OnWaterfallSelectRequested;
+            _waterfallView.CursorStatusChanged -= OnImageCursorStatus;
             _waterfallView.Dispose();
             _waterfallView = null;
         }
 
         private void OnCameraWaterfallFrame(int camId, byte[] bytes, int w, int h, long tick)
             => _waterfallView?.PushFrame(camId, bytes, w, h, tick);
+
+        private void OnWaterfallSelectRequested(int camId)
+        {
+            if (camId > 0) SwitchMainDisplay(camId);
+        }
 
         public void RefreshWaterfallDisplay()
         {
@@ -241,30 +254,25 @@ namespace AniloxRoll.Monitor.UI.Managers
             EnableWaterfallDisplay();
         }
 
-        private void EnsureSmartDisplay()
+        private void EnsureImageDisplay()
         {
-            if (!SmartCanvasMode || _smartDisplay != null) return;
+            if (!ImageCanvasMode || _imageDisplay != null) return;
             if (_mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) return;
 
-            _smartDisplay = new LiveDisplayView(_mainDisplayPanel, _cameraPanels, _screenMmPerPx);
-            _smartDisplay.ApplyOptions(new LiveDisplayOptions
-            {
-                ThumbSelectedColor = Color.Orange,
-                MergeAll = _globalMerge.IsActive,
-                MergeMode = _globalMerge.IsActive
-            });
-            _smartDisplay.SelectRequested += SmartSelectCamera;
-            _smartDisplay.SelectedCamChanged += camId => _selectedMainCameraId = camId;
-            _smartDisplay.ViewRangeMmChanged += OnSmartViewRange;
-            _smartDisplay.CursorStatusChanged += OnSmartCursorStatus;
-            _smartDisplay.SetSelected(_selectedMainCameraId);
+            _imageDisplay = new LiveDisplayView(_mainDisplayPanel, _cameraPanels, _screenMmPerPx);
+            ApplyImageDisplayOptions(_globalMerge.IsActive);
+            _imageDisplay.SelectRequested += ImageSelectCamera;
+            _imageDisplay.SelectedCamChanged += camId => _selectedMainCameraId = camId;
+            _imageDisplay.ViewRangeMmChanged += OnImageViewRange;
+            _imageDisplay.CursorStatusChanged += OnImageCursorStatus;
+            _imageDisplay.SetSelected(_selectedMainCameraId);
 
             if (_globalMerge.IsActive && _globalMerge.Merger != null)
             {
                 var merger = _globalMerge.Merger;
                 var ops = new double[merger.SlotStartsMm?.Length ?? 0];
                 for (int i = 0; i < ops.Length; i++) ops[i] = merger.RefOpsMm * 1000.0;
-                _smartDisplay.SetLayout(merger.SlotStartsMm, ops, 1, RowPitchMm);
+                _imageDisplay.SetLayout(merger.SlotStartsMm, ops, 1, RowPitchMm);
             }
             foreach (var cam in Cameras) cam.OnDisplayFrame += OnCameraDisplayFrame;
             var settings = _getSettings();
@@ -273,44 +281,55 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         public void SetLodMode(LiveLodMode mode)
         {
-            if (_smartDisplay == null) return;
+            if (_imageDisplay == null) return;
             switch (mode)
             {
-                case LiveLodMode.GPU: _gpuResizeProvider.Arm(); _smartDisplay.EnableLod(_gpuResizeProvider.Resize); break;
-                case LiveLodMode.CPU: _smartDisplay.EnableLod(GrayResizeCpu.Resize); break;
-                default: _smartDisplay.DisableLod(); break;
+                case LiveLodMode.GPU: _gpuResizeProvider.Arm(); _imageDisplay.EnableLod(_gpuResizeProvider.Resize); break;
+                case LiveLodMode.CPU: _imageDisplay.EnableLod(GrayResizeCpu.Resize); break;
+                default: _imageDisplay.DisableLod(); break;
             }
         }
 
-        public void TeardownSmartDisplay()
+        public void ApplyDisplayDirection()
         {
-            if (_smartDisplay == null) return;
+            if (_imageDisplay == null) return;
+            ApplyImageDisplayOptions(_globalMerge.IsActive);
+            _imageDisplay.RefireViewRange();
+        }
+
+        private void ApplyImageDisplayOptions(bool mergeMode)
+        {
+            _imageDisplay?.ApplyOptions(new LiveDisplayOptions
+            {
+                ThumbSelectedColor = Color.Orange,
+                MergeAll = mergeMode,
+                MergeMode = mergeMode,
+                FlipVertical = ShouldFlipVertical
+            });
+        }
+
+        public void TeardownImageDisplay()
+        {
+            if (_imageDisplay == null) return;
             foreach (var cam in Cameras) cam.OnDisplayFrame -= OnCameraDisplayFrame;
-            _smartDisplay.Dispose();
-            _smartDisplay = null;
+            _imageDisplay.Dispose();
+            _imageDisplay = null;
             _gpuResizeProvider.Release();
         }
 
         private void OnCameraDisplayFrame(int camId, byte[] bytes, int w, int h, long tick)
-            => _smartDisplay?.PushFrame(camId, bytes, w, h);
+            => _imageDisplay?.PushFrame(camId, bytes, w, h);
 
-        private void SmartSelectCamera(int camId) => SwitchMainDisplay(camId);
+        private void ImageSelectCamera(int camId) => SwitchMainDisplay(camId);
 
-        private void OnSmartViewRange(double leftMm, double rightMm, double topMm, double botMm)
+        private void OnImageViewRange(double leftMm, double rightMm, double topMm, double botMm)
             => OnLiveViewRange?.Invoke(leftMm, rightMm, topMm, botMm);
 
-        private void OnSmartCursorStatus(LiveDisplayView.CursorStatus s)
+        private void OnImageCursorStatus(LiveDisplayView.CursorStatus s)
         {
             if (_updatePixelInfoCallback == null) return;
             string tag = _globalMerge.IsActive ? "全域合圖" : $"CAM {s.SelectedCamId}";
-            _updatePixelInfoCallback.Invoke(
-                $"即時影像 [{tag}] | " +
-                $"位置:({s.CurMmX:F2}, {s.CurMmY:F2}) mm | " +
-                $"X範圍:{s.ViewLeftMm:F1}~{s.ViewRightMm:F1} mm | " +
-                $"Y範圍:{s.ViewTopMm:F1}~{s.ViewBotMm:F1} mm | " +
-                $"座標: ({s.CursorX}, {s.CursorY}) | " +
-                $"亮度: {s.Brightness} | " +
-                $"實體倍率:{(s.PhysMag > 0 ? $"{s.PhysMag:F2}x" : "-")}");
+            _updatePixelInfoCallback.Invoke(CursorStatusTextFormatter.Format(s, tag));
         }
 
         public void SwitchMainDisplay(int cameraIndex)
@@ -327,7 +346,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             _selectedMainCameraId = cameraIndex;
             _userSelectedMainCameraId = cameraIndex;
-            _smartDisplay?.SetSelected(cameraIndex);
+            _imageDisplay?.SetSelected(cameraIndex);
 
             foreach (var kvp in _liveParentPanels)
                 kvp.Value.Invalidate();
@@ -340,7 +359,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             foreach (var cam in Cameras)
             {
-                if (!SmartCanvasMode && cam.CameraId == cameraIndex)
+                if (!ImageCanvasMode && cam.CameraId == cameraIndex)
                     cam.SetSecondaryDisplay(_mainDisplayPanel.Handle);
                 else
                     cam.SetSecondaryDisplay(IntPtr.Zero);
@@ -513,31 +532,23 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         public void OnGlobalMergeEnabled(double[] opsUm, double[] startPosMm)
         {
-            if (SmartCanvasMode && _smartDisplay != null)
+            if (ImageCanvasMode && _imageDisplay != null)
             {
-                _smartDisplay.SetLayout(startPosMm, opsUm, 1, RowPitchMm);
-                _smartDisplay.ApplyOptions(new LiveDisplayOptions
-                {
-                    ThumbSelectedColor = Color.Orange,
-                    MergeAll = true,
-                    MergeMode = true
-                });
+                _imageDisplay.SetLayout(startPosMm, opsUm, 1, RowPitchMm);
+                ApplyImageDisplayOptions(true);
             }
         }
 
         public void OnGlobalMergeDisabled()
         {
-            _smartDisplay?.ApplyOptions(new LiveDisplayOptions
-            {
-                ThumbSelectedColor = Color.Orange
-            });
+            ApplyImageDisplayOptions(false);
             SwitchMainDisplay(_userSelectedMainCameraId);
         }
 
         public void RefreshGlobalMergeLayout(double[] opsUm, double[] startPosMm, double refOpsMm)
         {
-            if (SmartCanvasMode && _smartDisplay != null)
-                _smartDisplay.SetLayout(startPosMm, opsUm, 1, RowPitchMm);
+            if (ImageCanvasMode && _imageDisplay != null)
+                _imageDisplay.SetLayout(startPosMm, opsUm, 1, RowPitchMm);
             if (_waterfallView != null && _globalMerge.Merger != null)
                 _waterfallView.SetLayout(startPosMm, opsUm, refOpsMm);
         }
@@ -562,7 +573,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             public bool PreFilterMessage(ref Message m)
             {
                 if (m.Msg != WM_MOUSEWHEEL) return false;
-                if (_display.SmartCanvasMode || _display.WaterfallMode) return false;
+                if (_display.ImageCanvasMode || _display.WaterfallMode) return false;
                 if (!_display._isLiveGrabbing()) return false;
 
                 var panel = _display._mainDisplayPanel;

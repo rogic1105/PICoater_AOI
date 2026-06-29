@@ -180,6 +180,7 @@
     <Compile Include="UI\Presenters\LiveTelemetryPresenter.cs" />
     <Compile Include="UI\Widgets\FormInteractionHelper.cs" />
     <Compile Include="UI\Managers\CameraStallDetector.cs" />
+    <Compile Include="UI\Managers\CursorStatusTextFormatter.cs" />
     <Compile Include="UI\Managers\GlobalMergeCoordinator.cs" />
     <Compile Include="UI\Managers\LiveDisplayCoordinator.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.cs" />

@@ -73,7 +73,7 @@
     <Compile Include="ThumbView.cs">
       <SubType>Component</SubType>
     </Compile>
-    <Compile Include="UI\SmartCanvas.cs" />
+    <Compile Include="UI\ImageCanvas.cs" />
     <Compile Include="Layout\RoundedLabel.cs">
       <SubType>Component</SubType>
     </Compile>

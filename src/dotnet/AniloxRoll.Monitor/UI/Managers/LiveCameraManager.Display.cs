@@ -47,6 +47,11 @@ namespace AniloxRoll.Monitor.UI.Managers
             _display.RefreshWaterfallDisplay();
         }
 
+        public void ApplyDisplayDirection()
+        {
+            _display.ApplyDisplayDirection();
+        }
+
         public void SetLodMode(LiveLodMode mode)
         {
             _display.SetLodMode(mode);
