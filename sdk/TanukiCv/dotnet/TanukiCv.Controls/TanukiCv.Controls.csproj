@@ -66,6 +66,7 @@
     <Compile Include="GrayBitmap.cs" />
     <Compile Include="GrayResizeCpu.cs" />
     <Compile Include="LiveDisplayOptions.cs" />
+    <Compile Include="ImageDisplayView.cs" />
     <Compile Include="LiveDisplayView.cs" />
     <Compile Include="WaterfallFullMode.cs" />
     <Compile Include="WaterfallView.cs" />

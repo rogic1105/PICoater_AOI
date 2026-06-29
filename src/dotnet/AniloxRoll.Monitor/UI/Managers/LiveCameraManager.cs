@@ -8,7 +8,7 @@ using System.Windows.Forms;
 using Matrox.MatroxImagingLibrary;
 using MilGrabber.Core;
 using TanukiCv.Core; // PixelMmMapper（已收進 sdk 唯一來源）
-using TanukiCv.Controls; // LiveDisplayView（共用多相機監控顯示元件）
+using TanukiCv.Controls; // ImageDisplayView（共用多相機監控顯示元件）
 using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;

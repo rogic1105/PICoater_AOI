@@ -48,7 +48,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
         /// <summary>
         /// 回顧資料夾的 CSV #CFG 快照。設定後，回顧曲線/座標優先使用 CFG 的 Ops/Pos/閾值
-        /// （RSC 取座標、PushFrames 餵 LiveDisplayView 用）。
+        /// （RSC 取座標、PushFrames 餵 ImageDisplayView 用）。
         /// </summary>
         public CsvConfigSnapshot ReviewConfig
         {
@@ -74,7 +74,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             _rowChartHelper = context.RowChartHelper;
             _settings = context.Settings;
             // Wave2 2b-ii：CanvasInteractionHelper（回顧顯示路徑）已整棵砍——
-            //   顯示/互動/座標 overlay/視野連動全由 sdk LiveDisplayView 承接（ReviewDisplayManager 包）。
+            //   顯示/互動/座標 overlay/視野連動全由 sdk ImageDisplayView 承接（ReviewDisplayManager 包）。
             //   原本一堆 canvas 事件代理（UpdateCanvasInfo/NavigateCamera/TryComputeCurrentViewRange/
             //   RefreshChartRange/SaveCanvasView/SetMergedMode...）都是死碼，隨枯幹移除。
         }
@@ -160,7 +160,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
                 if (fbd.ShowDialog() == DialogResult.OK)
                 {
-                    // 2b-ii-B：選中相機狀態由 LiveDisplayView 自管（換資料夾不重置）→ 不再記/還原 gallery index。
+                    // 2b-ii-B：選中相機狀態由 ImageDisplayView 自管（換資料夾不重置）→ 不再記/還原 gallery index。
 
                     // 路徑修正：使用者選的目錄無 yyyy 子目錄但底下有 Captures\yyyy → 自動往下走
                     // (使用者誤選 D:\Anilox 時自動轉成 D:\Anilox\Captures)
@@ -205,7 +205,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         // ── 資源清理 ──────────────────────────────────────────────────────
         public void ClearOldImages()
         {
-            // 2b-ii-B：縮圖 PictureBox 已退場（LiveDisplayView 接管）→ 不再 ClearImages；直接 Dispose 快取 Bitmap。
+            // 2b-ii-B：縮圖 PictureBox 已退場（ImageDisplayView 接管）→ 不再 ClearImages；直接 Dispose 快取 Bitmap。
             foreach (var img in _thumbnailCache)
             {
                 try { img.Dispose(); }

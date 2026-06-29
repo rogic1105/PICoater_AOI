@@ -5,13 +5,13 @@ using System.Drawing;
 using System.Windows.Forms;
 using Matrox.MatroxImagingLibrary;
 using MilGrabber.Core;
-using TanukiCv.Controls; // LiveDisplayView / GrayResize / GrayResizeCpu
+using TanukiCv.Controls; // ImageDisplayView / GrayResize / GrayResizeCpu
 using TanukiCv.Core;     // SystemInfo / PerfTimer
 
 namespace MilGrabber.Monitor
 {
     // PictureBox 顯示路徑（絞殺榕重寫版）：不讓 MIL 直接畫 panel，改訂閱 MilCamera.FrameReady →
-    //   GetFrameBytes（8-bit 灰階全解析度）→ 餵共用 LiveDisplayView（主畫面 ImageCanvas + 縮圖條 + CPU 合圖 + LOD）。
+    //   GetFrameBytes（8-bit 灰階全解析度）→ 餵共用 ImageDisplayView（主畫面 ImageCanvas + 縮圖條 + CPU 合圖 + LOD）。
     // **不再每幀做全解析度 GPU resize / pinned**（那是舊路的資源殺手：16384×3000=49MB/幀，撐爆 CUDA pinned）。
     //   顯示/縮圖/合圖一律 CPU；LOD 只裁「可見區」小圖，resize 用可插拔委派（GPU TanukiCv / CPU GrayResizeCpu，二選一跑測）。
     public partial class MilGrabberPbForm
@@ -19,11 +19,11 @@ namespace MilGrabber.Monitor
         // 每相機原始灰階緩衝（同相機 FrameReady 序列觸發 → 同 idx 無併發；PushFrame 內會複製，故可重用）
         private readonly byte[][] _srcBytes = new byte[SubPanelCount][];
 
-        private volatile int  _resizeScale = 1;     // 餵入降採樣倍率（PbSettings.ResizeScale；1=全解析度。feedScale 給 LiveDisplayView）
+        private volatile int  _resizeScale = 1;     // 餵入降採樣倍率（PbSettings.ResizeScale；1=全解析度。feedScale 給 ImageDisplayView）
         private volatile bool _mergeMode;            // 合圖 vs 單張（PbSettings.Display）
         private volatile bool _flipDisplay;          // 上下翻轉（PbSettings.Flip）
 
-        // ── 動態 LOD（PbSettings.Lod = GPU/CPU）：LiveDisplayView 提供 LOD 機制（純 CPU），resize 由本檔插拔委派 ──
+        // ── 動態 LOD（PbSettings.Lod = GPU/CPU）：ImageDisplayView 提供 LOD 機制（純 CPU），resize 由本檔插拔委派 ──
         private volatile bool _lodEnabled;
         private volatile bool _lodUseGpu = true;     // true=GPU(TanukiCv_Resize_GPU)、false=CPU(GrayResizeCpu)
         // GPU LOD provider（只裁「可見區」→ 一次一塊，非每幀全幀；on-settle 觸發）
@@ -32,19 +32,19 @@ namespace MilGrabber.Monitor
         private readonly PerfTimer _lodGpuTimer = new PerfTimer();
         private readonly PerfTimer _lodCpuTimer = new PerfTimer();
 
-        private LiveDisplayView _live;               // 共用顯示元件（主畫面+縮圖+合圖+LOD）；存活到 form 關閉
+        private ImageDisplayView _live;               // 共用顯示元件（主畫面+縮圖+合圖+LOD）；存活到 form 關閉
         private double _screenMmPerPx;               // 螢幕實體 mm/px（SystemInfo 查一次）
 
-        // ── 顯示模式（初始化前選）：MIL 直繪 vs PictureBox（LiveDisplayView） ──
+        // ── 顯示模式（初始化前選）：MIL 直繪 vs PictureBox（ImageDisplayView） ──
         private bool _milMode;                                              // true=MIL 直繪、false=PictureBox
         private readonly Panel[] _displayPanels = new Panel[SubPanelCount]; // MIL 模式子畫面（MIL 直繪目標）
         private Panel _mainPanelMil;                                        // MIL 模式主畫面（MIL secondary 目標）
 
-        /// <summary>建立共用 LiveDisplayView（PictureBox 模式主畫面+縮圖；建構式呼叫）。</summary>
+        /// <summary>建立共用 ImageDisplayView（PictureBox 模式主畫面+縮圖；建構式呼叫）。</summary>
         private void SetupPbMain()
         {
             _screenMmPerPx = SystemInfo.GetScreenMetrics().MmPerPx;
-            _live = new LiveDisplayView(panelMain, _camContainers, _screenMmPerPx);
+            _live = new ImageDisplayView(panelMain, _camContainers, _screenMmPerPx);
             _live.SelectRequested += camId => SelectCamera(camId - 1); // 1-based camId → 0-based idx
 
             // 游標剖面（L0）→ 重用 app 的曲線圖設計（Column/RowCurveChartHelper），閾值線關（純剖面不顯 mura 門檻）
@@ -57,7 +57,7 @@ namespace MilGrabber.Monitor
         private RowCurveChartHelper _profileChartY;
 
         /// <summary>游標剖面（UI 執行緒，StatusChanged 來）→ 共用曲線圖（降採樣 ~600 點防卡）+ zoom 同步。</summary>
-        private void OnCursorProfile(LiveDisplayView.CursorProfile p)
+        private void OnCursorProfile(ImageDisplayView.CursorProfile p)
         {
             if (_isReleasing) return;
             if (p == null) { _profileChartX?.Clear(); _profileChartY?.Clear(); return; } // 游標出界/離開畫布 → 剖面歸零
@@ -102,7 +102,7 @@ namespace MilGrabber.Monitor
             ApplyPbSettings();
         }
 
-        /// <summary>PropertyGrid 改任一設定 → 一次套用全部到 LiveDisplayView（取代原本散落的 chk/num handler；互斥選項用 enum）。</summary>
+        /// <summary>PropertyGrid 改任一設定 → 一次套用全部到 ImageDisplayView（取代原本散落的 chk/num handler；互斥選項用 enum）。</summary>
         private void ApplyPbSettings()
         {
             // 繪圖模式（PictureBox / MIL 直繪）初始化後鎖定（軟鎖：改了就還原 + 刷新顯示）
@@ -144,7 +144,7 @@ namespace MilGrabber.Monitor
         }
 
         /// <summary>座標來源統一：FOV（fovMm/影像寬，全相機等 ops）優先；沒 FOV 用 PropertyGrid 的 ops。
-        /// start 取 PropertyGrid。換算成 LiveDisplayView 的 SetLayout（單張/合圖/overlay 同一條路）。</summary>
+        /// start 取 PropertyGrid。換算成 ImageDisplayView 的 SetLayout（單張/合圖/overlay 同一條路）。</summary>
         private void ApplyLayout()
         {
             if (_live == null) return;
@@ -212,7 +212,7 @@ namespace MilGrabber.Monitor
             [TypeConverter(typeof(EnumDescConverter))]
             public enum InitMode { [Description("PictureBox")] PictureBox, [Description("MIL 直繪")] Mil }
 
-            [Category("顯示")][DisplayName("繪圖模式")][Description("PictureBox（LiveDisplayView CPU 繪，本範例主路徑）/ MIL 直繪（MIL 直接畫 panel）。初始化後鎖定，需釋放才可改")]
+            [Category("顯示")][DisplayName("繪圖模式")][Description("PictureBox（ImageDisplayView CPU 繪，本範例主路徑）/ MIL 直繪（MIL 直接畫 panel）。初始化後鎖定，需釋放才可改")]
             public InitMode Init { get; set; } = InitMode.PictureBox;
             [Category("顯示")][DisplayName("合圖方式")][Description("單張 / 合圖 / 合圖全部（含無畫面相機黑占位）")]
             public DisplayMode Display { get; set; } = DisplayMode.Single;
@@ -260,7 +260,7 @@ namespace MilGrabber.Monitor
         }
 
         /// <summary>依「初始化前選的模式」建立顯示控制項（btnInit 開頭呼叫）。
-        /// MIL 模式：每容器疊 Panel（MIL 直繪目標）+ 主畫面疊 Panel；PictureBox 模式：用現成 LiveDisplayView。</summary>
+        /// MIL 模式：每容器疊 Panel（MIL 直繪目標）+ 主畫面疊 Panel；PictureBox 模式：用現成 ImageDisplayView。</summary>
         private void CreateDisplaysForMode()
         {
             _gpuLodResize.Arm(); // 重新 init → 允許 LOD provider 再配置 pinned
@@ -275,7 +275,7 @@ namespace MilGrabber.Monitor
                 int idx = i;
                 p.MouseClick += (s, e) => SelectCamera(idx);
                 _camContainers[i].Controls.Add(p);
-                p.BringToFront(); // 蓋住 LiveDisplayView 的縮圖
+                p.BringToFront(); // 蓋住 ImageDisplayView 的縮圖
                 _displayPanels[i] = p;
             }
             _mainPanelMil = new Panel { Dock = DockStyle.Fill, BackColor = Color.Black };
@@ -285,7 +285,7 @@ namespace MilGrabber.Monitor
 
         // 縮圖倍率 / FOV / LOD GPU↔CPU 的切換已融入 PropertyGrid（PbSettings）→ ApplyPbSettings 統一套用。
 
-        // ── LOD resize 委派（LiveDisplayView 在背景執行緒呼叫；只縮「可見區」一塊） ──
+        // ── LOD resize 委派（ImageDisplayView 在背景執行緒呼叫；只縮「可見區」一塊） ──
         /// <summary>GPU 版：裁好的可見區 → pinned → TanukiCv_Resize_GPU → 灰階 bytes。計時記 _lodGpuTimer。</summary>
         private byte[] LodResizeGpu(byte[] src, int sw, int sh, int dw, int dh)
         {
@@ -304,7 +304,7 @@ namespace MilGrabber.Monitor
             return dst;
         }
 
-        /// <summary>每幀（MIL 回呼執行緒）：取 8-bit 灰階全解析度 → 餵 LiveDisplayView（不做 GPU resize / pinned）。
+        /// <summary>每幀（MIL 回呼執行緒）：取 8-bit 灰階全解析度 → 餵 ImageDisplayView（不做 GPU resize / pinned）。
         /// numResize>1 時先 CPU stride 降採樣（便宜）→ feedScale 對應。</summary>
         private void OnCameraFrame(int idx, MilCamera cam, MIL_ID buffer)
         {
@@ -378,7 +378,7 @@ namespace MilGrabber.Monitor
             Trace.WriteLine($"[PbTiming] mode=PB {merge} LOD={lod} GPU縮放={lodGpuMax:F1}ms CPU縮放={lodCpuMax:F1}ms feed={_resizeScale} zoom×fit={zoomRel:F2} 實體={physStr} 顯示max={paintMax:F1}ms FPS={fps:F1}");
         }
 
-        /// <summary>釋放（ReleaseAll 呼叫，重 init 與關窗都會走）：MIL 疊圖 + LOD pinned。LiveDisplayView 存活到關窗。</summary>
+        /// <summary>釋放（ReleaseAll 呼叫，重 init 與關窗都會走）：MIL 疊圖 + LOD pinned。ImageDisplayView 存活到關窗。</summary>
         private void ReleasePictureBoxDisplays()
         {
             for (int i = 0; i < SubPanelCount; i++)

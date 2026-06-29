@@ -91,7 +91,7 @@ namespace TanukiCv.Controls
         private volatile bool _virtualSet;
 
         public event Action<int> SelectRequested;
-        public event Action<LiveDisplayView.CursorStatus> CursorStatusChanged;
+        public event Action<ImageDisplayView.CursorStatus> CursorStatusChanged;
 
         public WaterfallView(Panel host, int camCount, int totalHeight, WaterfallFullMode fullMode,
             double screenMmPerPx = 0)
@@ -541,7 +541,7 @@ namespace TanukiCv.Controls
             return nearestId;
         }
 
-        private bool TryBuildCursorStatus(int imageX, int imageY, CanvasInfo info, out LiveDisplayView.CursorStatus status)
+        private bool TryBuildCursorStatus(int imageX, int imageY, CanvasInfo info, out ImageDisplayView.CursorStatus status)
         {
             status = null;
             if (_disposed || _canvas == null || info.Zoom <= 0) return false;
@@ -557,7 +557,7 @@ namespace TanukiCv.Controls
             double curMmY = imageY * _refOpsMm;
 
             _canvas.SetPhysicalCalibration(_refOpsMm, _screenMmPerPx);
-            status = new LiveDisplayView.CursorStatus
+            status = new ImageDisplayView.CursorStatus
             {
                 CurMmX = curMmX,
                 CurMmY = curMmY,

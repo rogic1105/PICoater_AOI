@@ -33,7 +33,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private readonly Dictionary<int, Panel> _liveParentPanels = new Dictionary<int, Panel>();
         private readonly Dictionary<int, Label> _cameraStatusLabels = new Dictionary<int, Label>();
 
-        private LiveDisplayView _imageDisplay;
+        private ImageDisplayView _imageDisplay;
         private WaterfallView _waterfallView;
         private int _selectedMainCameraId = 1;
         private int _userSelectedMainCameraId = 1;
@@ -259,7 +259,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (!ImageCanvasMode || _imageDisplay != null) return;
             if (_mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) return;
 
-            _imageDisplay = new LiveDisplayView(_mainDisplayPanel, _cameraPanels, _screenMmPerPx);
+            _imageDisplay = new ImageDisplayView(_mainDisplayPanel, _cameraPanels, _screenMmPerPx);
             ApplyImageDisplayOptions(_globalMerge.IsActive);
             _imageDisplay.SelectRequested += ImageSelectCamera;
             _imageDisplay.SelectedCamChanged += camId => _selectedMainCameraId = camId;
@@ -325,7 +325,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private void OnImageViewRange(double leftMm, double rightMm, double topMm, double botMm)
             => OnLiveViewRange?.Invoke(leftMm, rightMm, topMm, botMm);
 
-        private void OnImageCursorStatus(LiveDisplayView.CursorStatus s)
+        private void OnImageCursorStatus(ImageDisplayView.CursorStatus s)
         {
             if (_updatePixelInfoCallback == null) return;
             string tag = _globalMerge.IsActive ? "全域合圖" : $"CAM {s.SelectedCamId}";

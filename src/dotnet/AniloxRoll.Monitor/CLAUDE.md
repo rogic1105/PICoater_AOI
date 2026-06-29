@@ -73,7 +73,7 @@ UI 通用思想 =「**長什麼樣 / 做什麼 / 真相是什麼** 三件事分�
 ### app-UI vs sdk-UI 邊界：機制 vs 政策
 - **機制（mechanism）→ sdk `TanukiCv.Controls`**：通用能力，不知資料意義（zoom/pan 畫布、縮圖列、滾輪攔截、圓角 Label、DPI 縮放、bitmap 池）。**換任何影像產品都能用**。
 - **政策（policy）→ 留 app**：出現 Anilox / InspectionSettings / GrabId / Mura / StitchMode / CSV / IO/Light → 留 app。
-- **灰區**：sdk 給 mechanism、app 包 policy（`ReviewDisplayManager` 包 sdk `LiveDisplayView` + overlay + 橘框 + review 預設 = 正確示範）。
+- **灰區**：sdk 給 mechanism、app 包 policy（`ReviewDisplayManager` 包 sdk `ImageDisplayView` + overlay + 橘框 + review 預設 = 正確示範）。
 - sdk UI 工具箱按種類歸檔（**第二個軸，非架構層**）：`TanukiCv.Controls/{Display, Input, Layout, Interaction, Imaging}`。
 
 ### SSoT 嚴格度（別追求零 inline 副作用，WinForms 成本太高）

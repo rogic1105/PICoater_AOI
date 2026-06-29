@@ -187,7 +187,7 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        /// <summary>監控主畫面（LiveDisplayView）縮放/平移 → live 曲線圖 zoom 連動（bin↔主畫面對齊）。
+        /// <summary>監控主畫面（ImageDisplayView）縮放/平移 → live 曲線圖 zoom 連動（bin↔主畫面對齊）。
         /// 切向(X)/overview(X) 用左右範圍、法向(Y) 用上下範圍。UI 執行緒（ViewRangeMmChanged 來）。</summary>
         // 主畫面即時 X 可見範圍（mm）：ApplyLiveViewRange 存 → LiveViewRangeProvider 給 overview 的 500ms 更新沿用同值
         // （overview 立即跟隨 + 500ms 重畫沿用同範圍 → 不閃回原點）。NaN=非 ImageCanvas 即時狀態。
@@ -328,7 +328,7 @@ namespace AniloxRoll.Monitor.Forms
                 _settings.AniloxRollSpeedMPerMin, lineRateHz);
             _reviewRowDisplay?.SetRowPitchFromSpeed(
                 _settings.AniloxRollSpeedMPerMin, lineRateHz);
-            // 把 row pitch 餵給主畫面顯示 → SetLayout → 法向曲線圖 Y 對齊（否則 LiveDisplayView 用 X ops 比例錯）
+            // 把 row pitch 餵給主畫面顯示 → SetLayout → 法向曲線圖 Y 對齊（否則 ImageDisplayView 用 X ops 比例錯）
             if (_liveCameraManager != null)
                 _liveCameraManager.RowPitchMm = _liveRowDisplay?.RowPitchMm ?? 0;
         }

@@ -100,7 +100,7 @@ namespace AniloxRoll.Monitor.Forms
                 _stitchCoordinator.ActiveRidgeDirection = dir;
                 _interactionHelper.SetRidgeDirection(dir);
                 UpdateRidgeDirectionVisual(dir);
-                // 2b-ii：SaveCanvasView（讀已砍 canvas）移除；LiveDisplayView 自管視野
+                // 2b-ii：SaveCanvasView（讀已砍 canvas）移除；ImageDisplayView 自管視野
                 if (_stitchCoordinator.IsStitchMode)
                 {
                     int idx = cbReviewId.SelectedIndex;

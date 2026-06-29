@@ -36,7 +36,7 @@ namespace AniloxRoll.Monitor.Forms
 
         // --- UI Helpers ---
         private DateTimeNavigator _dateTimeNavigator;
-        private ReviewDisplayManager _reviewDisplayManager;   // 回顧同源顯示（sdk LiveDisplayView，絞殺榕收官）
+        private ReviewDisplayManager _reviewDisplayManager;   // 回顧同源顯示（sdk ImageDisplayView，絞殺榕收官）
         private double _reviewViewLeftMm = double.NaN, _reviewViewRightMm, _reviewViewTopMm, _reviewViewBotMm; // 新畫布視野快取（chart 原子更新用）
         private int _reviewSyncCount; private long _reviewSyncOvMax, _reviewSyncRowMax;   // [ReviewSync] 拖曳跟隨計時儀器
         private AniloxRollPresenter _presenter;
@@ -412,7 +412,7 @@ namespace AniloxRoll.Monitor.Forms
             _dateTimeNavigator = new DateTimeNavigator(
                 _imageRepository, cbReviewDate, cbReviewTime);
 
-            // 2b-ii-B：ThumbnailGridPresenter（舊回顧縮圖畫廊）已刪——縮圖顯示/選取全由 sdk LiveDisplayView
+            // 2b-ii-B：ThumbnailGridPresenter（舊回顧縮圖畫廊）已刪——縮圖顯示/選取全由 sdk ImageDisplayView
             //   的 ThumbStrip 承接（camReview1~7 現為 Panel 宿主，見 ReviewDisplayManager）。
             _presenter = new AniloxRollPresenter(
                 _imageRepository, _inspectionService, _dateTimeNavigator);
@@ -525,11 +525,11 @@ namespace AniloxRoll.Monitor.Forms
                 CameraCount               = CameraCount,
             });
 
-            // 絞殺榕收官（Wave2 2b-ii-B）：回顧主畫面/縮圖＝Designer 上的 Panel，直接交給 LiveDisplayView 落地生根。
+            // 絞殺榕收官（Wave2 2b-ii-B）：回顧主畫面/縮圖＝Designer 上的 Panel，直接交給 ImageDisplayView 落地生根。
             {
                 _reviewDisplayManager = new ReviewDisplayManager(camReviewMain,
                     new System.Windows.Forms.Panel[] { camReview1, camReview2, camReview3, camReview4, camReview5, camReview6, camReview7 });
-                // 選中相機 index 來源＝LiveDisplayView（取代舊 ThumbnailGridPresenter.SelectedIndex）
+                // 選中相機 index 來源＝ImageDisplayView（取代舊 ThumbnailGridPresenter.SelectedIndex）
                 _stitchCoordinator.SelectedCamIndexProvider = () => _reviewDisplayManager?.SelectedCamIndex ?? 0;
                 _stitchCoordinator.StitchedImagesReady += (gray, ws, hs, ops, pos, isGlobal) =>
                     _reviewDisplayManager?.PushFrames(gray, ws, hs, ops, pos, isGlobal,
@@ -561,7 +561,7 @@ namespace AniloxRoll.Monitor.Forms
                 _stitchCoordinator.SameSourceViewRange = () =>
                     double.IsNaN(_reviewViewLeftMm) ? null
                     : new[] { _reviewViewLeftMm, _reviewViewRightMm, _reviewViewTopMm, _reviewViewBotMm };
-                // 游標狀態 → 狀態列 lblPixelInfo（mm 換算同源在 LiveDisplayView，這裡只格式化＝app 政策）。
+                // 游標狀態 → 狀態列 lblPixelInfo（mm 換算同源在 ImageDisplayView，這裡只格式化＝app 政策）。
                 // 取代舊 camReviewMain.StatusChanged→UpdateCanvasInfo（覆蓋後已死，#13 遷移時即斷）。
                 _reviewDisplayManager.CursorStatusChanged += s =>
                 {
@@ -577,7 +577,7 @@ namespace AniloxRoll.Monitor.Forms
             _presenter.BusyStateChanged += _interactionHelper.SetUiLoadingState;
             _presenter.LogReported      += OnPresenterLogReported;
             // 4c：舊 gallery 選擇鏈已拆（PictureBox 被 sdk ThumbStrip 覆蓋＝點擊不可達；
-            //     縮圖↔主畫面雙向連動由 LiveDisplayView 內建）。
+            //     縮圖↔主畫面雙向連動由 ImageDisplayView 內建）。
             _dateTimeNavigator.PeriodSelectionChanged += _presenter.UpdatePeriodNavigationState;
             _dateTimeNavigator.PeriodSelectionChanged += () =>
             {
@@ -591,7 +591,7 @@ namespace AniloxRoll.Monitor.Forms
             _presenter.UpdatePeriodNavigationState();
 
             // 絞殺榕全劇終（Wave2）：camReviewMain/camReview1~7 已是 Designer 上的 Panel，
-            //   顯示/互動/手勢/座標 overlay/雙三擊/縮圖選取全由 sdk LiveDisplayView 內建承接
+            //   顯示/互動/手勢/座標 overlay/雙三擊/縮圖選取全由 sdk ImageDisplayView 內建承接
             //   （經 ReviewDisplayManager 落地生根）。舊 ImageCanvas/PictureBox/CanvasInteractionHelper/
             //   ThumbnailGridPresenter 顯示鏈已整棵砍除。
 

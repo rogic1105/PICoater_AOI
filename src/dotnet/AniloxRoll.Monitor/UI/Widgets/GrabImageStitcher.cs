@@ -95,7 +95,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             return result;
         }
 
-        // 註：舊「水平合圖 MergeHorizontal」已移除（死碼）—— 顯示用合圖統一走 sdk LiveDisplayView.BuildMerge
+        // 註：舊「水平合圖 MergeHorizontal」已移除（死碼）—— 顯示用合圖統一走 sdk ImageDisplayView.BuildMerge
         // （MergeLayout + MergeAll 黑占位，與 live/瀑布/曲線同一單一來源）。本檔只留 StitchCamera（垂直拼）+ LoadCameraImage。
 
         internal static Bitmap LoadCameraImage(string path, int bmpResizeScale,

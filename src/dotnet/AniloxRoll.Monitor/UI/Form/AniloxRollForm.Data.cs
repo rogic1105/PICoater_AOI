@@ -93,7 +93,7 @@ namespace AniloxRoll.Monitor.Forms
                 try
                 {
                     await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest);
-                    // 2b-ii：fit 由 LiveDisplayView 首幀自動 fit 承接
+                    // 2b-ii：fit 由 ImageDisplayView 首幀自動 fit 承接
                 }
                 catch (Exception ex) { Trace.WriteLine($"[tabMain → Review] {ex}"); }
             };
@@ -128,7 +128,7 @@ namespace AniloxRoll.Monitor.Forms
                 _presenter.UpdatePeriodNavigationState();
 
                 await _stitchCoordinator.LoadGrabStitchedViewAsync(grabId, earliest, latest);
-                // 2b-ii：SaveCanvasView/fit（讀已砍 canvas）移除；LiveDisplayView 自管視野
+                // 2b-ii：SaveCanvasView/fit（讀已砍 canvas）移除；ImageDisplayView 自管視野
                 _reviewDirty = false;
 
                 // 同步 Data tab

@@ -30,7 +30,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             foreach (var cam in _cameras)
                 cam.SetSecondaryDisplay(IntPtr.Zero);
 
-            // showMilDisplay：ImageCanvas 模式合圖由 LiveDisplayView CPU 拼，不綁 MIL display
+            // showMilDisplay：ImageCanvas 模式合圖由 ImageDisplayView CPU 拼，不綁 MIL display
             if (!_globalMerge.Enable(mils, sysId, opsUm, startPosMm, showMilDisplay: !_display.ImageCanvasMode))
             {
                 _display.SwitchMainDisplay(_display.UserSelectedMainCameraId);   // 啟用失敗 → 復原 secondary display

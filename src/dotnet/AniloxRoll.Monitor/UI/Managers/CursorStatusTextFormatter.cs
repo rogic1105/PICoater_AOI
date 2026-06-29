@@ -4,7 +4,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 {
     internal static class CursorStatusTextFormatter
     {
-        public static string Format(LiveDisplayView.CursorStatus status, string tag = null)
+        public static string Format(ImageDisplayView.CursorStatus status, string tag = null)
         {
             if (status == null) return string.Empty;
 

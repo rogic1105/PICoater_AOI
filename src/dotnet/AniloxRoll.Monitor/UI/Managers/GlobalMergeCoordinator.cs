@@ -55,7 +55,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// <summary>工頭（合圖佈局來源）；ImageCanvas / Waterfall 路徑讀 SlotStartsMm / RefOpsMm。未啟用為 null。</summary>
         public MultiCameraMerger Merger => _merger;
 
-        /// <summary>是否已綁 MIL 合圖 display（ImageCanvas 模式為 false：合圖由 LiveDisplayView CPU 拼，不綁 MIL display）。</summary>
+        /// <summary>是否已綁 MIL 合圖 display（ImageCanvas 模式為 false：合圖由 ImageDisplayView CPU 拼，不綁 MIL display）。</summary>
         public bool HasMilDisplay => _mergedDisplay != MIL.M_NULL;
 
         /// <summary>合併像素尺寸（mm/px），供 Waterfall 佈局同步。</summary>
@@ -105,7 +105,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             // panel 已 dispose（關閉/釋放期）→ 不碰 .Handle（會觸發 CreateHandle/ObjectDisposedException）
             if (_mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) { _merger.DisableMerge(); _merger = null; return false; }
 
-            // ImageCanvas 模式：合圖由 LiveDisplayView CPU 拼，不需 MIL 合圖 display（showMilDisplay=false）。
+            // ImageCanvas 模式：合圖由 ImageDisplayView CPU 拼，不需 MIL 合圖 display（showMilDisplay=false）。
             // 關鍵：不把 MIL display 綁到 camLiveMain（否則 MIL display 的 M_MOUSE_USE 會攔截滾輪，
             // 疊在上面的 ImageCanvas 收不到 → 無法縮放）。MIL 直繪模式才走下面整套。
             if (showMilDisplay)

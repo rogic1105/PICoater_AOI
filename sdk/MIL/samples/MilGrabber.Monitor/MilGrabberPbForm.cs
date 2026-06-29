@@ -102,7 +102,7 @@ namespace MilGrabber.Monitor
             for (int i = 0; i < SubPanelCount; i++)
                 SetupCamPanel(_camContainers[i], i);
 
-            SetupPbMain(); // 建共用 LiveDisplayView（主畫面 ImageCanvas + 各容器疊縮圖；含合圖/LOD）
+            SetupPbMain(); // 建共用 ImageDisplayView（主畫面 ImageCanvas + 各容器疊縮圖；含合圖/LOD）
             SetupMergeTab(); // tabParams 新增「合圖」tab：ops/start 表格 + 重疊演算法選擇
 
             // 參數控制項陣列：從 Designer 具名控制項組成（陣列在 .cs 組、控制項在 Designer 宣告，同 panelCam0..7 模式）。
@@ -279,7 +279,7 @@ namespace MilGrabber.Monitor
                 SelectCamera(0);
 
             _statusTimer.Start();
-            // 主畫面/合圖刷新由 LiveDisplayView 內部 timer 自管（不需這裡的 _displayTimer）
+            // 主畫面/合圖刷新由 ImageDisplayView 內部 timer 自管（不需這裡的 _displayTimer）
             btnGrab.Text = "開始抓取";
             UpdateButtonsEnabled(initialized: true);
 
@@ -454,7 +454,7 @@ namespace MilGrabber.Monitor
         }
 
         // 上下翻轉（線掃相機由下往上拍 → 顯示需反轉）已融入「設定」PropertyGrid（PbSettings.Flip）→ ApplyPbSettings
-        //   同時套用到 LiveDisplayView（PictureBox 模式主畫面+縮圖）與各 MilCamera（MIL 模式 MimFlip）。
+        //   同時套用到 ImageDisplayView（PictureBox 模式主畫面+縮圖）與各 MilCamera（MIL 模式 MimFlip）。
 
         // =========================================================================
         // btnRelease: 釋放（停 timer + 旗標 → 所有 Dispose → MappFreeDefault）
@@ -533,7 +533,7 @@ namespace MilGrabber.Monitor
             }
             else
             {
-                // PictureBox 模式：主畫面由 LiveDisplayView 依選中相機顯示
+                // PictureBox 模式：主畫面由 ImageDisplayView 依選中相機顯示
                 _selectedCam = idx;
                 _live?.SetSelected(idx + 1);   // 0-based idx → 1-based camId
                 ApplyLayout();                 // 選中相機變 → FOV→ops 基準（FrameWidth）可能變

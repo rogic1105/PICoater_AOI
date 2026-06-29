@@ -4,7 +4,7 @@ using TanukiCv.Core;
 namespace TanukiCv.Controls
 {
     /// <summary>
-    /// Shared display switches for <see cref="LiveDisplayView"/> callers.
+    /// Shared display switches for <see cref="ImageDisplayView"/> callers.
     /// Frame feeding, layout, and LOD provider selection remain caller-owned.
     /// </summary>
     public sealed class LiveDisplayOptions
