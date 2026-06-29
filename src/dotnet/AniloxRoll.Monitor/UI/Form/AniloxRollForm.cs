@@ -644,7 +644,10 @@ namespace AniloxRoll.Monitor.Forms
                 OnCamerasHwReady();
             };
 
-            var panelClicker = new MultiClickDetector();
+            var panelClicker = new MultiClickDetector(
+                300,
+                new Size(SystemInformation.DoubleClickSize.Width, SystemInformation.DoubleClickSize.Width),
+                MultiClickDistanceMode.Radius);
             camLiveMain.MouseDown += (s, e) =>
             {
                 if (e.Button != MouseButtons.Left) return;

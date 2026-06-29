@@ -76,6 +76,7 @@
     </Compile>
     <Compile Include="Imaging\BitmapPool.cs" />
     <Compile Include="Interaction\EventGuard.cs" />
+    <Compile Include="Interaction\MultiClickDetector.cs" />
     <Compile Include="Layout\ProportionalScaler.cs" />
     <Compile Include="Input\ComboBoxWheelReverser.cs" />
     <Compile Include="Input\TrackBarWheelInterceptor.cs" />

@@ -188,7 +188,6 @@
     <Compile Include="UI\Managers\LiveCameraManager.Telemetry.cs" />
     <Compile Include="UI\Managers\ReviewDisplayManager.cs" />
     <Compile Include="UI\Widgets\CurveMergeHelper.cs" />
-    <Compile Include="UI\Widgets\MultiClickDetector.cs" />
     <Compile Include="UI\Widgets\GrabImageStitcher.cs" />
     <Compile Include="UI\Widgets\WaterfallView.cs" />
     <Compile Include="UI\Presenters\DataStatisticsPresenter.cs" />
