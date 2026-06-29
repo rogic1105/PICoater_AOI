@@ -107,6 +107,7 @@ sdk/
 - **GPU 灰階 LOD resize provider** = `TanukiCv.Core.GpuGrayResizeProvider`。負責 CUDA pinned host buffer 生命週期（on-demand grow/reuse、Resize/Release 互斥、防背景 LOD use-after-free），簽章可直接餵 `LiveDisplayView.EnableLod`。app 可注入自己的 `NativeMethods` 以保留 P/Invoke 單一宣告；sample/tool 可用 `CreateTanukiCv()`。
 - **LiveDisplayView 顯示選項套用** = `TanukiCv.Controls.LiveDisplayOptions` + `LiveDisplayView.ApplyOptions`。共用 MergeMode/MergeAll/MergeStrategy/FlipVertical/ThumbSelectedColor；frame feed、layout、LOD provider、MIL direct 等策略仍由呼叫端擁有。
 - **多擊偵測** = `TanukiCv.Controls.MultiClickDetector`。SmartCanvas 內建雙擊 fit/三擊 1:1 與 app panel route 共用同一個 detector；呼叫端可設定 interval/距離模式以保留各自手勢語意。
+- **瀑布顯示** = `TanukiCv.Controls.WaterfallView` + `WaterfallFullMode`。使用 SmartCanvas LOD、MergeLayout placement、chunked gray buffer；app 只負責餵 frame/layout/settings。
 - **曝光上限公式** = `MilCameraParams.CalcExposureMaxUs`（`MIL/MilGrabber.Core/MilCamera.Params.cs`）。
 - **曲線圖** = `BaseCurveChartHelper`（Template Method）+ `Column`/`Row` 子類；app 與 sample 共用。
 

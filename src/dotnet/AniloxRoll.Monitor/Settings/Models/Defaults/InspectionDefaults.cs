@@ -1,5 +1,7 @@
 namespace AniloxRoll.Monitor.Core.Data
 {
+    using TanukiCv.Controls;
+
     /// <summary>所有 InspectionSettings 子物件的預設值集中定義。
     /// Model 初始值與 ParseJson fallback 均引用此處，確保兩者一致。
     ///

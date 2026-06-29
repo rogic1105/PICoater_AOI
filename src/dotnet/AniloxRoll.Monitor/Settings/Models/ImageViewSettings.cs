@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using TanukiCv.Controls;
 
 namespace AniloxRoll.Monitor.Core.Data
 {
@@ -14,14 +15,6 @@ namespace AniloxRoll.Monitor.Core.Data
 
     /// <summary>監控主畫面動態 LOD：關 / GPU（TanukiCv）/ CPU（GrayResizeCpu）。放大巨圖看細節用，顯示成本 ~180ms→~1ms。</summary>
     public enum LiveLodMode { Off, GPU, CPU }
-
-    /// <summary>瀑布圖滿了的行為：Restart=清空黑幕重來；Ring=從頭覆蓋最舊的、連續捲（環狀）。</summary>
-    [TypeConverter(typeof(EnumDescriptionConverter))]
-    public enum WaterfallFullMode
-    {
-        [Description("重來")] Restart,
-        [Description("循環")] Ring
-    }
 
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public class ImageViewSettings

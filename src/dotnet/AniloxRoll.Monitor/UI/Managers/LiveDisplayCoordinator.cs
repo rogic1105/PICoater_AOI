@@ -6,7 +6,6 @@ using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Interop;
 using AniloxRoll.Monitor.Core.Services;
-using AniloxRoll.Monitor.UI.Widgets;
 using TanukiCv.Core;
 using TanukiCv.Controls;
 

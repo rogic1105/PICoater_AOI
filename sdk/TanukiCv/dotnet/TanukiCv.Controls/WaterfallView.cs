@@ -4,11 +4,9 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using AniloxRoll.Monitor.Core.Data;       // WaterfallFullMode
-using TanukiCv.Controls;   // SmartCanvas / GrayBitmap
 using TanukiCv.Core;       // MergeLayout / MergeOverlap
 
-namespace AniloxRoll.Monitor.UI.Widgets
+namespace TanukiCv.Controls
 {
     /// <summary>
     /// 監控主畫面「瀑布圖」：全幅 7 相機合圖每幀往下接、即時捲動（線掃像印表機吐紙）。

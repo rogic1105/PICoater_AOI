@@ -189,7 +189,6 @@
     <Compile Include="UI\Managers\ReviewDisplayManager.cs" />
     <Compile Include="UI\Widgets\CurveMergeHelper.cs" />
     <Compile Include="UI\Widgets\GrabImageStitcher.cs" />
-    <Compile Include="UI\Widgets\WaterfallView.cs" />
     <Compile Include="UI\Presenters\DataStatisticsPresenter.cs" />
     <Compile Include="UI\Presenters\ReviewStitchCoordinator.cs" />
     <Compile Include="UI\Presenters\InspectionStatsPresenter.cs" />
