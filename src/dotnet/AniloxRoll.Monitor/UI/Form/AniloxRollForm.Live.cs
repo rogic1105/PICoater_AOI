@@ -211,7 +211,8 @@ namespace AniloxRoll.Monitor.Forms
 
         private bool TryApplyLiveImageCanvasRowViewRange()
         {
-            if (_settings?.he_MainDisplay != MainDisplayMode.ImageCanvas) return false;
+            var mode = _settings?.he_MainDisplay;
+            if (mode != MainDisplayMode.ImageCanvas && mode != MainDisplayMode.Waterfall) return false;
             if (double.IsNaN(_liveViewTopMm) || double.IsNaN(_liveViewBotMm)) return true;
             _liveRowDisplay?.UpdateViewRange(_liveViewTopMm, _liveViewBotMm);
             return true;

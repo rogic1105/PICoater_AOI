@@ -42,6 +42,8 @@ namespace TanukiCv.Controls
         private readonly double _screenMmPerPx;
         private readonly System.Windows.Forms.Timer _flushTimer; // 安全網：flush 滯留槽 + 推 LOD 刷新
         private readonly object _lock = new object();
+        private bool _flipVertical;
+        private double _rowPitchMm;
 
         // 全解析分塊儲存：_chunks[ci] = byte[_fullW * ChunkRows]（lazy 配；null=黑）。
         private byte[][] _chunks;
@@ -91,7 +93,20 @@ namespace TanukiCv.Controls
         private volatile bool _virtualSet;
 
         public event Action<int> SelectRequested;
+        public event Action<double, double, double, double> ViewRangeMmChanged;
         public event Action<ImageDisplayView.CursorStatus> CursorStatusChanged;
+
+        public bool FlipVertical
+        {
+            get => _flipVertical;
+            set
+            {
+                if (_flipVertical == value) return;
+                _flipVertical = value;
+                PushLodRefresh();
+                RefireViewRange();
+            }
+        }
 
         public WaterfallView(Panel host, int camCount, int totalHeight, WaterfallFullMode fullMode,
             double screenMmPerPx = 0)
@@ -132,6 +147,22 @@ namespace TanukiCv.Controls
             }
             if (_screenMmPerPx > 0 && refOpsMm > 0)
                 try { _canvas.SetPhysicalCalibration(refOpsMm, _screenMmPerPx); } catch { }
+        }
+
+        /// <summary>Set material-direction row pitch so waterfall Y range matches the live row chart.</summary>
+        public void SetRowPitch(double mmPerRow)
+        {
+            if (mmPerRow <= 0) return;
+            _rowPitchMm = mmPerRow;
+            RefireViewRange();
+        }
+
+        /// <summary>Re-publish the current visible range without waiting for mouse movement.</summary>
+        public void RefireViewRange()
+        {
+            if (!_hasCanvasInfo) return;
+            if (TryBuildCursorStatus(_lastCanvasInfo.ImageX, _lastCanvasInfo.ImageY, _lastCanvasInfo, out var status))
+                ViewRangeMmChanged?.Invoke(status.ViewLeftMm, status.ViewRightMm, status.ViewTopMm, status.ViewBotMm);
         }
 
         /// <summary>重 grab：清掉舊瀑布內容 + 重置對齊狀態（origin/period/seq/pending/緩衝），下次幀重新 bootstrap。
@@ -424,6 +455,7 @@ namespace TanukiCv.Controls
                 for (int dy = 0; dy < dh; dy++)
                 {
                     long sy = r.Y + (long)dy * rh / dh;
+                    if (_flipVertical) sy = _totalHeight - 1 - sy;
                     if (sy < 0 || sy >= _totalHeight) continue;
                     int ci = (int)(sy / ChunkRows), off = (int)(sy % ChunkRows);
                     if (ci < 0 || ci >= _chunks.Length) continue;
@@ -440,7 +472,7 @@ namespace TanukiCv.Controls
                 }
                 if (_fullMode == WaterfallFullMode.Ring)   // Ring 接縫：寫頭畫亮掃描線 → 一看就知道在循環
                 {
-                    long hy = _writeRow;
+                    long hy = _flipVertical ? (_totalHeight - 1 - _writeRow) : _writeRow;
                     seamDestY = (int)((hy - r.Y) * dh / rh);
                 }
             }
@@ -494,6 +526,7 @@ namespace TanukiCv.Controls
             _canvas.SetRangeOverlay(status.PhysMag > 0 ? $"{status.PhysMag:F2}x" : "",
                 $"{status.ViewLeftMm:F1}", $"{status.ViewRightMm:F1}", $"{status.ViewTopMm:F1}", $"{status.ViewBotMm:F1}");
             _canvas.SetCursorMm(BuildCursorMmText(info.ImageX, info.ImageY));
+            ViewRangeMmChanged?.Invoke(status.ViewLeftMm, status.ViewRightMm, status.ViewTopMm, status.ViewBotMm);
             CursorStatusChanged?.Invoke(status);
         }
 
@@ -551,10 +584,15 @@ namespace TanukiCv.Controls
             double minStartMm = MinStartMm();
             double leftMm = PixelMmMapper.PixelToMm((0 - info.PanOffset.X) / info.Zoom, minStartMm, _refOpsMm);
             double rightMm = PixelMmMapper.PixelToMm((_canvas.Width - info.PanOffset.X) / info.Zoom, minStartMm, _refOpsMm);
-            double topMm = (0 - info.PanOffset.Y) / info.Zoom * _refOpsMm;
-            double botMm = (_canvas.Height - info.PanOffset.Y) / info.Zoom * _refOpsMm;
+            double visualTop = (0 - info.PanOffset.Y) / info.Zoom;
+            double visualBot = (_canvas.Height - info.PanOffset.Y) / info.Zoom;
+            double logicalTop = ToLogicalY(visualTop);
+            double logicalBot = ToLogicalY(visualBot);
+            double yPitch = _rowPitchMm > 0 ? _rowPitchMm : _refOpsMm;
+            double topMm = Math.Min(logicalTop, logicalBot) * yPitch;
+            double botMm = Math.Max(logicalTop, logicalBot) * yPitch;
             double curMmX = PixelMmMapper.PixelToMm(imageX, minStartMm, _refOpsMm);
-            double curMmY = imageY * _refOpsMm;
+            double curMmY = ToLogicalY(imageY) * yPitch;
 
             _canvas.SetPhysicalCalibration(_refOpsMm, _screenMmPerPx);
             status = new ImageDisplayView.CursorStatus
@@ -580,10 +618,14 @@ namespace TanukiCv.Controls
             int camId = ResolveCameraAtX(imageX);
             double minStartMm = MinStartMm();
             double curMmX = PixelMmMapper.PixelToMm(imageX, minStartMm, _refOpsMm);
-            double curMmY = imageY * _refOpsMm;
+            double yPitch = _rowPitchMm > 0 ? _rowPitchMm : _refOpsMm;
+            double curMmY = ToLogicalY(imageY) * yPitch;
             string camText = camId > 0 ? $"CAM {camId}" : "瀑布";
             return $"{camText} ({curMmX:F2}, {curMmY:F2})";
         }
+
+        private double ToLogicalY(double visualY)
+            => _flipVertical ? (_totalHeight - 1 - visualY) : visualY;
 
         private double MinStartMm()
         {

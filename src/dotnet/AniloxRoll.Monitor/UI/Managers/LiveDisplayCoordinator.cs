@@ -45,7 +45,16 @@ namespace AniloxRoll.Monitor.UI.Managers
         public int SelectedMainCameraId => _selectedMainCameraId;
         public int UserSelectedMainCameraId => _userSelectedMainCameraId;
         public double ScreenMmPerPx => _screenMmPerPx;
-        public double RowPitchMm { get; set; }
+        public double RowPitchMm
+        {
+            get => _rowPitchMm;
+            set
+            {
+                _rowPitchMm = value;
+                _waterfallView?.SetRowPitch(value);
+            }
+        }
+        private double _rowPitchMm;
 
         public bool ImageCanvasMode
         {
@@ -206,7 +215,10 @@ namespace AniloxRoll.Monitor.UI.Managers
             var wfMode = settings?.ImageView?.WaterfallFullMode ?? WaterfallFullMode.Restart;
             int slotCount = settings?.GetCameraStartPositionMmArray()?.Length ?? Cameras.Count;
             _waterfallView = new WaterfallView(_mainDisplayPanel, slotCount, wfH, wfMode, _screenMmPerPx);
+            _waterfallView.FlipVertical = ShouldFlipVertical;
+            _waterfallView.SetRowPitch(RowPitchMm);
             _waterfallView.SelectRequested += OnWaterfallSelectRequested;
+            _waterfallView.ViewRangeMmChanged += OnImageViewRange;
             _waterfallView.CursorStatusChanged += OnImageCursorStatus;
             FeedWaterfallLayout();
             foreach (var cam in Cameras) cam.OnDisplayFrame += OnCameraWaterfallFrame;
@@ -234,6 +246,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (_waterfallView == null) return;
             foreach (var cam in Cameras) cam.OnDisplayFrame -= OnCameraWaterfallFrame;
             _waterfallView.SelectRequested -= OnWaterfallSelectRequested;
+            _waterfallView.ViewRangeMmChanged -= OnImageViewRange;
             _waterfallView.CursorStatusChanged -= OnImageCursorStatus;
             _waterfallView.Dispose();
             _waterfallView = null;
@@ -292,9 +305,16 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         public void ApplyDisplayDirection()
         {
-            if (_imageDisplay == null) return;
-            ApplyImageDisplayOptions(_globalMerge.IsActive);
-            _imageDisplay.RefireViewRange();
+            if (_imageDisplay != null)
+            {
+                ApplyImageDisplayOptions(_globalMerge.IsActive);
+                _imageDisplay.RefireViewRange();
+            }
+            if (_waterfallView != null)
+            {
+                _waterfallView.FlipVertical = ShouldFlipVertical;
+                _waterfallView.RefireViewRange();
+            }
         }
 
         private void ApplyImageDisplayOptions(bool mergeMode)
