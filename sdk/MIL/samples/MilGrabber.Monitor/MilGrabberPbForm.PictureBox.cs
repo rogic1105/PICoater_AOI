@@ -126,11 +126,14 @@ namespace MilGrabber.Monitor
 
             if (_live != null)
             {
-                _live.ThumbSelectedColor = _settings.ThumbBorder;   // 選取框唯一來源 = sdk ThumbView，色由設定層選
-                _live.MergeAll      = _mergeAllMode;
-                _live.SetMergeMode(_mergeMode);
-                _live.MergeStrategy = (MergeOverlap)_mergeStrategy;
-                _live.FlipVertical  = _flipDisplay;
+                _live.ApplyOptions(new LiveDisplayOptions
+                {
+                    ThumbSelectedColor = _settings.ThumbBorder,
+                    MergeAll = _mergeAllMode,
+                    MergeMode = _mergeMode,
+                    MergeStrategy = (MergeOverlap)_mergeStrategy,
+                    FlipVertical = _flipDisplay
+                });
                 if (!_lodEnabled) _live.DisableLod();
                 else _live.EnableLod(_lodUseGpu ? (GrayResize)LodResizeGpu : LodResizeCpu); // resize 委派二選一（GPU/CPU 跑測比較）
             }
@@ -156,7 +159,14 @@ namespace MilGrabber.Monitor
                 for (int i = 0; i < ops.Length; i++) ops[i] = fovOpsUm;
             }
             _live.SetLayout(start, ops, _resizeScale, 0);
-            _live.MergeStrategy = (MergeOverlap)_mergeStrategy;
+            _live.ApplyOptions(new LiveDisplayOptions
+            {
+                ThumbSelectedColor = _settings.ThumbBorder,
+                MergeAll = _mergeAllMode,
+                MergeMode = _mergeMode,
+                MergeStrategy = (MergeOverlap)_mergeStrategy,
+                FlipVertical = _flipDisplay
+            });
         }
 
         /// <summary>選中相機的全解析度影像寬（FOV→ops 用）；無則 0。</summary>

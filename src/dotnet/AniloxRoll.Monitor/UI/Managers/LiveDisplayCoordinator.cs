@@ -248,7 +248,12 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (_mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) return;
 
             _smartDisplay = new LiveDisplayView(_mainDisplayPanel, _cameraPanels, _screenMmPerPx);
-            _smartDisplay.ThumbSelectedColor = Color.Orange;
+            _smartDisplay.ApplyOptions(new LiveDisplayOptions
+            {
+                ThumbSelectedColor = Color.Orange,
+                MergeAll = _globalMerge.IsActive,
+                MergeMode = _globalMerge.IsActive
+            });
             _smartDisplay.SelectRequested += SmartSelectCamera;
             _smartDisplay.SelectedCamChanged += camId => _selectedMainCameraId = camId;
             _smartDisplay.ViewRangeMmChanged += OnSmartViewRange;
@@ -262,9 +267,6 @@ namespace AniloxRoll.Monitor.UI.Managers
                 for (int i = 0; i < ops.Length; i++) ops[i] = merger.RefOpsMm * 1000.0;
                 _smartDisplay.SetLayout(merger.SlotStartsMm, ops, 1, RowPitchMm);
             }
-            _smartDisplay.MergeAll = _globalMerge.IsActive;
-            _smartDisplay.SetMergeMode(_globalMerge.IsActive);
-
             foreach (var cam in Cameras) cam.OnDisplayFrame += OnCameraDisplayFrame;
             var settings = _getSettings();
             if (settings != null) SetLodMode(settings.LiveLod);
@@ -515,14 +517,21 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (SmartCanvasMode && _smartDisplay != null)
             {
                 _smartDisplay.SetLayout(startPosMm, opsUm, 1, RowPitchMm);
-                _smartDisplay.MergeAll = true;
-                _smartDisplay.SetMergeMode(true);
+                _smartDisplay.ApplyOptions(new LiveDisplayOptions
+                {
+                    ThumbSelectedColor = Color.Orange,
+                    MergeAll = true,
+                    MergeMode = true
+                });
             }
         }
 
         public void OnGlobalMergeDisabled()
         {
-            _smartDisplay?.SetMergeMode(false);
+            _smartDisplay?.ApplyOptions(new LiveDisplayOptions
+            {
+                ThumbSelectedColor = Color.Orange
+            });
             SwitchMainDisplay(_userSelectedMainCameraId);
         }
 

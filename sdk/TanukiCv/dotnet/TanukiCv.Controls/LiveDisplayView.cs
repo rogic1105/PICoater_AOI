@@ -184,6 +184,16 @@ namespace TanukiCv.Controls
         }
         public void SetMergeMode(bool on) { _mergeMode = on; _mainDirty = true; }
 
+        public void ApplyOptions(LiveDisplayOptions options)
+        {
+            if (options == null) return;
+            if (options.ThumbSelectedColor.HasValue) ThumbSelectedColor = options.ThumbSelectedColor.Value;
+            MergeAll = options.MergeAll;
+            SetMergeMode(options.MergeMode);
+            MergeStrategy = options.MergeStrategy;
+            FlipVertical = options.FlipVertical;
+        }
+
         /// <summary>合圖模式：把主畫面 pan 定位到指定相機的槽中心（保 zoom）。
         /// 縮圖↔主畫面雙向連動的「正向」；非合圖 / 佈局未備則無動作。</summary>
         public void CenterOnCamera(int camId)
