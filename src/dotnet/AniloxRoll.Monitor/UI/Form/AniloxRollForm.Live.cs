@@ -195,24 +195,17 @@ namespace AniloxRoll.Monitor.Forms
         private double _liveViewTopMm = double.NaN, _liveViewBotMm = double.NaN;
 
         private bool ShouldFlipDisplayVertical()
-            => (_settings?.VerticalDirection ?? InspectionDefaults.VerticalDirection)
-               == VerticalDisplayDirection.BottomToTop;
+            => GetVerticalDisplayDirection() == VerticalDisplayDirection.BottomToTop;
 
-        private float[] CloneRowCurveForDisplay(float[] data)
-        {
-            if (data == null) return null;
-            var copy = new float[data.Length];
-            Array.Copy(data, copy, data.Length);
-            if (ShouldFlipDisplayVertical()) Array.Reverse(copy);
-            return copy;
-        }
+        private VerticalDisplayDirection GetVerticalDisplayDirection()
+            => _settings?.VerticalDirection ?? InspectionDefaults.VerticalDirection;
 
         private void ApplyLiveViewRange(double leftMm, double rightMm, double topMm, double botMm)
         {
             if (IsDisposed) return;
             _liveViewLeftMm = leftMm; _liveViewRightMm = rightMm;     // 供 overview provider 沿用（不閃）
             _liveViewTopMm = topMm; _liveViewBotMm = botMm;
-            _liveRowChartHelper?.UpdateViewRange(topMm, botMm);        // 法向(Y)
+            _liveRowDisplay?.UpdateViewRange(topMm, botMm);            // 法向(Y)
             _liveOverviewHelper?.UpdateViewRange(leftMm, rightMm);     // overview 立即跟隨（500ms 重畫用同值不閃）
         }
 
@@ -220,7 +213,7 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (_settings?.he_MainDisplay != MainDisplayMode.ImageCanvas) return false;
             if (double.IsNaN(_liveViewTopMm) || double.IsNaN(_liveViewBotMm)) return true;
-            _liveRowChartHelper?.UpdateViewRange(_liveViewTopMm, _liveViewBotMm);
+            _liveRowDisplay?.UpdateViewRange(_liveViewTopMm, _liveViewBotMm);
             return true;
         }
 
@@ -256,7 +249,7 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
 
-            if (_liveRowChartHelper == null) return;
+            if (_liveRowDisplay == null) return;
 
             bool isGlobal = _liveCameraManager?.IsGlobalMergeActive == true;
 
@@ -269,23 +262,23 @@ namespace AniloxRoll.Monitor.Forms
                 if (TryApplyLiveImageCanvasRowViewRange()) return;
 
                 // 同步 Y 軸視野：查詢 _mergedDisplay 的 zoom/pan
-                double rowPitch = _liveRowChartHelper.RowPitchMm;
+                double rowPitch = _liveRowDisplay.RowPitchMm;
                 if (rowPitch > 0 && _liveCameraManager.TryGetMergedViewRangeY(
                     out double topPixel, out double botPixel))
                 {
-                    _liveRowChartHelper.UpdateViewRange(topPixel * rowPitch, botPixel * rowPitch);
+                    _liveRowDisplay.UpdateViewRange(topPixel * rowPitch, botPixel * rowPitch);
                 }
             }
             else
             {
                 // 垂直模式：只顯示選中相機
                 if (camId != _liveCameraManager.SelectedMainCameraId) return;
-                _liveRowChartHelper.UpdateData(CloneRowCurveForDisplay(meanArr), CloneRowCurveForDisplay(maxArr));
+                _liveRowDisplay.UpdateData(meanArr, maxArr);
                 if (TryApplyLiveImageCanvasRowViewRange()) return;
 
                 // 同步 Y 軸視野：查詢 MIL 副顯示器 zoom/pan
                 var liveCam = FindCameraById(camId);
-                double rowPitch = _liveRowChartHelper.RowPitchMm;
+                double rowPitch = _liveRowDisplay.RowPitchMm;
                 if (liveCam != null && rowPitch > 0 &&
                     liveCam.TryGetSecondaryDisplayGeometry(
                         out double milZoomX, out double milZoomY, out double milPanX, out double milPanY))
@@ -293,7 +286,7 @@ namespace AniloxRoll.Monitor.Forms
                     double panelH  = camLiveMain.Height;
                     double topPixel = milPanY;
                     double botPixel = milPanY + panelH / milZoomY;
-                    _liveRowChartHelper.UpdateViewRange(topPixel * rowPitch, botPixel * rowPitch);
+                    _liveRowDisplay.UpdateViewRange(topPixel * rowPitch, botPixel * rowPitch);
                 }
             }
         }
@@ -323,7 +316,7 @@ namespace AniloxRoll.Monitor.Forms
                 for (int i = 0; i < minLen; i++)
                     if (arr[i] > mergedMax[i]) mergedMax[i] = arr[i];
 
-            _liveRowChartHelper.UpdateData(CloneRowCurveForDisplay(mergedMean), CloneRowCurveForDisplay(mergedMax));
+            _liveRowDisplay?.UpdateData(mergedMean, mergedMax);
         }
 
         /// <summary>用 A輪速度 和選中相機的取樣頻率（Line Rate）更新法向圖表座標。</summary>
@@ -331,13 +324,13 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (_settings == null) return;
             double lineRateHz = _settings.Acquisition.CameraLineRateHz[0]; // CAM1 master
-            _liveRowChartHelper?.SetRowPitchFromSpeed(
+            _liveRowDisplay?.SetRowPitchFromSpeed(
                 _settings.AniloxRollSpeedMPerMin, lineRateHz);
-            _reviewRowChartHelper?.SetRowPitchFromSpeed(
+            _reviewRowDisplay?.SetRowPitchFromSpeed(
                 _settings.AniloxRollSpeedMPerMin, lineRateHz);
             // 把 row pitch 餵給主畫面顯示 → SetLayout → 法向曲線圖 Y 對齊（否則 LiveDisplayView 用 X ops 比例錯）
             if (_liveCameraManager != null)
-                _liveCameraManager.RowPitchMm = _liveRowChartHelper?.RowPitchMm ?? 0;
+                _liveCameraManager.RowPitchMm = _liveRowDisplay?.RowPitchMm ?? 0;
         }
 
         private void ApplyDisplayDirectionSetting()

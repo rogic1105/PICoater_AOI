@@ -8,6 +8,7 @@ using System.Windows.Forms.DataVisualization.Charting;
 using TanukiCv.Controls;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
+using AniloxRoll.Monitor.UI.Managers;
 using AniloxRoll.Monitor.UI.Navigators;
 using AniloxRoll.Monitor.UI.Widgets;
 
@@ -24,6 +25,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public FormInteractionHelper InteractionHelper { get; set; }
         public ColumnCurveChartHelper ColumnChartHelper { get; set; }
         public RowCurveChartHelper RowChartHelper { get; set; }
+        public RowCurveDisplayAdapter RowChartDisplay { get; set; }
         public ColumnCurveChartHelper OverviewHelper { get; set; }
 
         public BatchInspectionService InspectionService { get; set; }
@@ -316,7 +318,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// view-time 想要的目標是 HM_H_current，所以 ratio = HM_V_capture / HM_H_current。</summary>
         private void UpdateGlobalRowChart()
         {
-            if (_ctx.RowChartHelper == null || _stitchedRowCurveMean == null) return;
+            if (_ctx.RowChartDisplay == null || _stitchedRowCurveMean == null) return;
             CurveMergeHelper.MergeRowCurvesOverlap(
                 _stitchedRowCurveMean, _stitchedRowCurveMax,
                 _ctx.CameraCount, out float[] mergedMean, out float[] mergedMax);
@@ -325,25 +327,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 float captureHmV = _currentGrabConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
                 HessianRescaleHelper.RescaleInPlace1D(mergedMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
                 HessianRescaleHelper.RescaleInPlace1D(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
-                FlipRowCurveForDisplayIfNeeded(mergedMean, mergedMax);
-                _ctx.RowChartHelper.UpdateData(mergedMean, mergedMax);
+                _ctx.RowChartDisplay.UpdateData(mergedMean, mergedMax);
                 var nv = SameSourceViewRange?.Invoke();
-                if (nv != null) _ctx.RowChartHelper.UpdateViewRange(nv[2], nv[3]);   // 新路徑：原子帶入當前 Y 視野
+                if (nv != null) _ctx.RowChartDisplay.UpdateViewRange(nv[2], nv[3]);   // 新路徑：原子帶入當前 Y 視野
                 // 舊 else RefreshRowChartRange（讀已砍 canvas，恆 no-op）移除；視野由 LiveDisplayView 連動
             }
-        }
-
-        /// <summary>線掃相機由下往上拍攝 → 回顧影像上下翻轉顯示（StitchCamera），故 row 曲線也須反向才能對齊影像。
-        /// 即時(live)影像不翻轉、曲線本就對齊，故只在回顧反轉。未來可改成 tool 選項（per-grab）。</summary>
-        private bool ShouldFlipDisplayVertical()
-            => (_ctx.Settings?.VerticalDirection ?? InspectionDefaults.VerticalDirection)
-               == VerticalDisplayDirection.BottomToTop;
-
-        private void FlipRowCurveForDisplayIfNeeded(float[] mean, float[] max)
-        {
-            if (!ShouldFlipDisplayVertical()) return;
-            if (mean != null) Array.Reverse(mean);
-            if (max  != null) Array.Reverse(max);
         }
 
         /// <summary>
@@ -446,7 +434,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
 
             // 法向 (Row / H)
-            if (_ctx.RowChartHelper != null)
+            if (_ctx.RowChartDisplay != null)
             {
                 if (_ctx.Settings.StitchMode == StitchMode.Global)
                 {
@@ -463,10 +451,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                         float captureHmV = _currentGrabConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
                         var displayMean = HessianRescaleHelper.CloneAndRescale1D(rowMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
                         var displayMax  = HessianRescaleHelper.CloneAndRescale1D(rowMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
-                        FlipRowCurveForDisplayIfNeeded(displayMean, displayMax);
-                        _ctx.RowChartHelper.UpdateData(displayMean, displayMax);
+                        _ctx.RowChartDisplay.UpdateData(displayMean, displayMax);
                         var nv = SameSourceViewRange?.Invoke();
-                        if (nv != null) _ctx.RowChartHelper.UpdateViewRange(nv[2], nv[3]);  // 取代死的 RefreshRowChartRange
+                        if (nv != null) _ctx.RowChartDisplay.UpdateViewRange(nv[2], nv[3]);  // 取代死的 RefreshRowChartRange
                     }
                 }
             }
@@ -592,7 +579,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// </summary>
         public void UpdateRowChartFromRepository()
         {
-            if (_ctx.RowChartHelper == null || _stitchedImages != null) return;
+            if (_ctx.RowChartDisplay == null || _stitchedImages != null) return;
 
             var images = _ctx.ImageRepository.GetImages(
                 _ctx.DateTimeNavigator.GetCurrentYear(),  _ctx.DateTimeNavigator.GetCurrentMonth(),
@@ -621,10 +608,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
             float captureHmV = _ctx.InteractionHelper?.ReviewConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
             HessianRescaleHelper.RescaleInPlace1D(mergedMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
             HessianRescaleHelper.RescaleInPlace1D(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
-            FlipRowCurveForDisplayIfNeeded(mergedMean, mergedMax);
-            _ctx.RowChartHelper.UpdateData(mergedMean, mergedMax);
+            _ctx.RowChartDisplay.UpdateData(mergedMean, mergedMax);
             var nv = SameSourceViewRange?.Invoke();
-            if (nv != null) _ctx.RowChartHelper.UpdateViewRange(nv[2], nv[3]);
+            if (nv != null) _ctx.RowChartDisplay.UpdateViewRange(nv[2], nv[3]);
         }
 
         /// <summary>#13 同源新路徑的「當前視野」注入（form 快取 LiveDisplayView 視野；[l,r,top,bot]，null=無效）。

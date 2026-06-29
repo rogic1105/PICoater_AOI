@@ -45,6 +45,8 @@ namespace AniloxRoll.Monitor.Forms
         private ColumnCurveChartHelper _liveOverviewHelper;
         private RowCurveChartHelper _liveRowChartHelper;
         private RowCurveChartHelper _reviewRowChartHelper;
+        private RowCurveDisplayAdapter _liveRowDisplay;
+        private RowCurveDisplayAdapter _reviewRowDisplay;
         private LiveCameraManager _liveCameraManager;
         // Global merge 用：快取各相機 row curve 資料，合併後更新圖表
         private readonly Dictionary<int, float[]> _liveRowMeanCache = new Dictionary<int, float[]>();
@@ -428,10 +430,12 @@ namespace AniloxRoll.Monitor.Forms
                 chartLiveVertical.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
 
             _liveRowChartHelper = new RowCurveChartHelper(this.chartLiveHorizontal);
-            _liveRowChartHelper.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
+            _liveRowDisplay = new RowCurveDisplayAdapter(_liveRowChartHelper, GetVerticalDisplayDirection);
+            _liveRowDisplay.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
 
             _reviewRowChartHelper = new RowCurveChartHelper(this.chartReviewHorizontal);
-            _reviewRowChartHelper.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
+            _reviewRowDisplay = new RowCurveDisplayAdapter(_reviewRowChartHelper, GetVerticalDisplayDirection);
+            _reviewRowDisplay.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
 
             UpdateRowChartPitch();
 
@@ -511,6 +515,7 @@ namespace AniloxRoll.Monitor.Forms
                 ChartReviewHorizontal       = chartReviewHorizontal,
                 InteractionHelper         = _interactionHelper,
                 RowChartHelper            = _reviewRowChartHelper,
+                RowChartDisplay           = _reviewRowDisplay,
                 OverviewHelper            = _reviewOverviewHelper,
                 InspectionService         = _inspectionService,
                 ImageRepository           = _imageRepository,
@@ -530,7 +535,7 @@ namespace AniloxRoll.Monitor.Forms
                     _reviewDisplayManager?.PushFrames(gray, ws, hs, ops, pos, isGlobal,
                         _interactionHelper?.ScreenMmPerPixel ?? 0,
                         AniloxRoll.Monitor.Core.Services.InspectionEngineConfig.DefaultSaveResizeScale,
-                        _reviewRowChartHelper?.RowPitchMm ?? 0,
+                        _reviewRowDisplay?.RowPitchMm ?? 0,
                         ShouldFlipDisplayVertical());   // 灰階已在 RSC 解碼段轉好（零 race）；?.：關閉時序防 NRE
                 // Stage2：新 canvas 視野 → 回顧曲線圖 zoom 連動（切向=全覽 X、法向=Y；拖曳中即時）
                 _reviewDisplayManager.ViewRangeMmChanged += (l, r, top, bot) =>
@@ -539,7 +544,7 @@ namespace AniloxRoll.Monitor.Forms
                     var swSync = System.Diagnostics.Stopwatch.StartNew();
                     _reviewOverviewHelper?.UpdateViewRange(l, r);
                     long ovMs = swSync.ElapsedMilliseconds;
-                    _reviewRowChartHelper?.UpdateViewRange(top, bot);
+                    _reviewRowDisplay?.UpdateViewRange(top, bot);
                     long rowMs = swSync.ElapsedMilliseconds - ovMs;
                     // [ReviewSync] 計時儀器：單次 >25ms 即時告警；每 120 次彙總（拖曳 ~4 秒）→ 看瓶頸在 overview/row/事件頻率
                     _reviewSyncCount++; _reviewSyncOvMax = Math.Max(_reviewSyncOvMax, ovMs); _reviewSyncRowMax = Math.Max(_reviewSyncRowMax, rowMs);
@@ -943,8 +948,8 @@ namespace AniloxRoll.Monitor.Forms
                 _liveCameraManager?.SetCaptureSettings(_settings);
                 _reviewOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
                 _liveOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-                _liveRowChartHelper?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
-                _reviewRowChartHelper?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
+                _liveRowDisplay?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
+                _reviewRowDisplay?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
                 UpdateRowChartPitch();
                 _dataStatsPresenter?.RefreshMuraProfileForSettingsChange();
                 if (_stitchCoordinator?.IsStitchMode == true)
