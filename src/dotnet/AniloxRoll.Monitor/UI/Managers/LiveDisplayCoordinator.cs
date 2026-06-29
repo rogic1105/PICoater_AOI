@@ -23,7 +23,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private readonly Panel[] _cameraPanels;
         private readonly Action<string> _updatePixelInfoCallback;
         private readonly GlobalMergeCoordinator _globalMerge;
-        private readonly GpuLodResizeBuffer _lodBuffer = new GpuLodResizeBuffer();
+        private readonly GpuGrayResizeProvider _gpuResizeProvider;
         private readonly Func<IReadOnlyList<AniloxCamera>> _getCameras;
         private readonly Func<InspectionSettings> _getSettings;
         private readonly Func<double[]> _getLineRates;
@@ -86,6 +86,10 @@ namespace AniloxRoll.Monitor.UI.Managers
             _getSettings = getSettings ?? throw new ArgumentNullException(nameof(getSettings));
             _getLineRates = getLineRates ?? throw new ArgumentNullException(nameof(getLineRates));
             _isLiveGrabbing = isLiveGrabbing ?? throw new ArgumentNullException(nameof(isLiveGrabbing));
+            _gpuResizeProvider = new GpuGrayResizeProvider(
+                NativeMethods.TanukiCv_AllocPinned,
+                NativeMethods.TanukiCv_FreePinned,
+                NativeMethods.TanukiCv_Resize_GPU);
 
             _mainDisplayPanel.BackColor = Color.Black;
             for (int i = 0; i < 7; i++)
@@ -271,7 +275,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (_smartDisplay == null) return;
             switch (mode)
             {
-                case LiveLodMode.GPU: _lodBuffer.Arm(); _smartDisplay.EnableLod(_lodBuffer.Resize); break;
+                case LiveLodMode.GPU: _gpuResizeProvider.Arm(); _smartDisplay.EnableLod(_gpuResizeProvider.Resize); break;
                 case LiveLodMode.CPU: _smartDisplay.EnableLod(GrayResizeCpu.Resize); break;
                 default: _smartDisplay.DisableLod(); break;
             }
@@ -283,7 +287,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             foreach (var cam in Cameras) cam.OnDisplayFrame -= OnCameraDisplayFrame;
             _smartDisplay.Dispose();
             _smartDisplay = null;
-            _lodBuffer.Release();
+            _gpuResizeProvider.Release();
         }
 
         private void OnCameraDisplayFrame(int camId, byte[] bytes, int w, int h, long tick)

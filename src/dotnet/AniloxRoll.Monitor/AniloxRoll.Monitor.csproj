@@ -181,7 +181,6 @@
     <Compile Include="UI\Widgets\FormInteractionHelper.cs" />
     <Compile Include="UI\Managers\CameraStallDetector.cs" />
     <Compile Include="UI\Managers\GlobalMergeCoordinator.cs" />
-    <Compile Include="UI\Managers\GpuLodResizeBuffer.cs" />
     <Compile Include="UI\Managers\LiveDisplayCoordinator.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.Display.cs" />

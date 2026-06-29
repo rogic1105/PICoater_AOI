@@ -104,6 +104,7 @@ sdk/
   - `MIL/MultiCameraMerger`（MIL 直繪 live 合圖）**2026-06-26 起也走 `MergeLayout`**（原 MIL-only 自含一份已移除）—— MergeLayout 零依賴純算術，拋棄層引用它依賴方向正確；live/回顧/瀑布/曲線全單一來源。
   - 註：MergeLayout / CurveOverviewMerger 在 **Core**（純算術），非 Controls —— 純 IP 不困在 WinForms assembly，headless/benchmark/範例 皆可用。
 - **像素↔mm** = `TanukiCv.Core.PixelMmMapper`。
+- **GPU 灰階 LOD resize provider** = `TanukiCv.Core.GpuGrayResizeProvider`。負責 CUDA pinned host buffer 生命週期（on-demand grow/reuse、Resize/Release 互斥、防背景 LOD use-after-free），簽章可直接餵 `LiveDisplayView.EnableLod`。app 可注入自己的 `NativeMethods` 以保留 P/Invoke 單一宣告；sample/tool 可用 `CreateTanukiCv()`。
 - **曝光上限公式** = `MilCameraParams.CalcExposureMaxUs`（`MIL/MilGrabber.Core/MilCamera.Params.cs`）。
 - **曲線圖** = `BaseCurveChartHelper`（Template Method）+ `Column`/`Row` 子類；app 與 sample 共用。
 

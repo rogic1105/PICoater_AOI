@@ -2,7 +2,6 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Matrox.MatroxImagingLibrary;
 using MilGrabber.Core;
@@ -27,11 +26,8 @@ namespace MilGrabber.Monitor
         // ── 動態 LOD（PbSettings.Lod = GPU/CPU）：LiveDisplayView 提供 LOD 機制（純 CPU），resize 由本檔插拔委派 ──
         private volatile bool _lodEnabled;
         private volatile bool _lodUseGpu = true;     // true=GPU(TanukiCv_Resize_GPU)、false=CPU(GrayResizeCpu)
-        // GPU LOD provider 專用 pinned（只裁「可見區」→ 一次一塊，非每幀全幀；on-settle 觸發）
-        private IntPtr _lodSrcPinned, _lodDstPinned;
-        private int _lodSrcCap, _lodDstCap;
-        private readonly object _lodBufLock = new object();
-        private volatile bool _lodReleased;
+        // GPU LOD provider（只裁「可見區」→ 一次一塊，非每幀全幀；on-settle 觸發）
+        private readonly GpuGrayResizeProvider _gpuLodResize = GpuGrayResizeProvider.CreateTanukiCv();
         // LOD resize 計時：GPU/CPU 各一 → label 分開顯示（勾 GPU 時 CPU=0，反之）→ 視覺化驗證哪條在跑
         private readonly PerfTimer _lodGpuTimer = new PerfTimer();
         private readonly PerfTimer _lodCpuTimer = new PerfTimer();
@@ -124,6 +120,7 @@ namespace MilGrabber.Monitor
             _flipDisplay   = _settings.Flip;
             _lodUseGpu     = _settings.Lod == PbSettings.LodMode.Gpu;
             _lodEnabled    = _settings.Lod != PbSettings.LodMode.Off;
+            if (_lodEnabled && _lodUseGpu) _gpuLodResize.Arm();
 
             ApplyLayout(); // FOV / ops / start + 縮圖倍率 → SetLayout
 
@@ -256,7 +253,7 @@ namespace MilGrabber.Monitor
         /// MIL 模式：每容器疊 Panel（MIL 直繪目標）+ 主畫面疊 Panel；PictureBox 模式：用現成 LiveDisplayView。</summary>
         private void CreateDisplaysForMode()
         {
-            _lodReleased = false; // 重新 init → 允許 LOD provider 再配置 pinned
+            _gpuLodResize.Arm(); // 重新 init → 允許 LOD provider 再配置 pinned
             _milMode = _settings.Init == PbSettings.InitMode.Mil;
             _lockedInitMode = _settings.Init; _modeLocked = true; // 初始化後鎖定繪圖模式（PropertyGrid 軟鎖）
             propertyGridMerge.Refresh();
@@ -282,30 +279,9 @@ namespace MilGrabber.Monitor
         /// <summary>GPU 版：裁好的可見區 → pinned → TanukiCv_Resize_GPU → 灰階 bytes。計時記 _lodGpuTimer。</summary>
         private byte[] LodResizeGpu(byte[] src, int sw, int sh, int dw, int dh)
         {
-            int srcPix = sw * sh, dstPix = dw * dh;
-            byte[] dst;
-            lock (_lodBufLock)
-            {
-                if (_lodReleased) return null;
-                if (_lodSrcCap < srcPix)
-                {
-                    if (_lodSrcPinned != IntPtr.Zero) NativeResize.TanukiCv_FreePinned(_lodSrcPinned);
-                    _lodSrcPinned = NativeResize.TanukiCv_AllocPinned((ulong)srcPix); _lodSrcCap = srcPix;
-                }
-                if (_lodDstCap < dstPix)
-                {
-                    if (_lodDstPinned != IntPtr.Zero) NativeResize.TanukiCv_FreePinned(_lodDstPinned);
-                    _lodDstPinned = NativeResize.TanukiCv_AllocPinned((ulong)dstPix); _lodDstCap = dstPix;
-                }
-                if (_lodSrcPinned == IntPtr.Zero || _lodDstPinned == IntPtr.Zero) return null;
-
-                _lodGpuTimer.Start();                                  // ── 真 improcess（H2D+縮+D2H）──
-                Marshal.Copy(src, 0, _lodSrcPinned, srcPix);
-                NativeResize.TanukiCv_Resize_GPU(_lodSrcPinned, sw, sh, _lodDstPinned, dw, dh);
-                dst = new byte[dstPix];
-                Marshal.Copy(_lodDstPinned, dst, 0, dstPix);
-                _lodGpuTimer.Stop();
-            }
+            _lodGpuTimer.Start();
+            byte[] dst = _gpuLodResize.Resize(src, sw, sh, dw, dh);
+            _lodGpuTimer.Stop();
             return dst;
         }
 
@@ -406,14 +382,9 @@ namespace MilGrabber.Monitor
                     _displayPanels[i] = null;
                 }
             }
-            // LOD：停用 + 鎖內釋放 pinned（等背景 provider 用完再釋放，防 use-after-free）
+            // LOD：停用 + 釋放 pinned（provider 內部互斥，等背景 provider 用完再釋放，防 use-after-free）
             if (_live != null && _live.Canvas != null && _live.Canvas.LodActive) _live.DisableLod();
-            lock (_lodBufLock)
-            {
-                _lodReleased = true;
-                if (_lodSrcPinned != IntPtr.Zero) { NativeResize.TanukiCv_FreePinned(_lodSrcPinned); _lodSrcPinned = IntPtr.Zero; _lodSrcCap = 0; }
-                if (_lodDstPinned != IntPtr.Zero) { NativeResize.TanukiCv_FreePinned(_lodDstPinned); _lodDstPinned = IntPtr.Zero; _lodDstCap = 0; }
-            }
+            _gpuLodResize.Release();
 
             if (_mainPanelMil != null)
             {

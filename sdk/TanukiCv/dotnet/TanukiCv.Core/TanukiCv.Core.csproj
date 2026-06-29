@@ -75,6 +75,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Core\TanukiCvWrapper.cs" />
+    <Compile Include="GpuGrayResizeProvider.cs" />
     <Compile Include="PixelMmMapper.cs" />
     <Compile Include="MergeLayout.cs" />
     <Compile Include="CurveOverviewMerger.cs" />

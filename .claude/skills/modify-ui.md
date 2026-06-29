@@ -16,6 +16,7 @@ Live 監控顯示邊界：
 - `GlobalMergeCoordinator` 擁有全域合圖 MIL display 生命週期。
 - `LiveDisplayCoordinator` 擁有 SmartCanvas/Waterfall/縮圖/狀態 label/選中相機/LOD/WheelZoomFilter 顯示狀態。
 - 改 live 顯示行為時優先落在 `LiveDisplayCoordinator`；不要把 SmartCanvas/Waterfall 狀態放回 `LiveCameraManager`。
+- GPU LOD pinned buffer 生命週期走 `TanukiCv.Core.GpuGrayResizeProvider`；app 注入 `NativeMethods`，sample/tool 可用 `CreateTanukiCv()`。
 
 ## 注意事項
 
