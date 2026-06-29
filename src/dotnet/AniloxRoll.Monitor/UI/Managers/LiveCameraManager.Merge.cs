@@ -31,19 +31,14 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.SetSecondaryDisplay(IntPtr.Zero);
 
             // showMilDisplay：SmartCanvas 模式合圖由 LiveDisplayView CPU 拼，不綁 MIL display
-            if (!_globalMerge.Enable(mils, sysId, opsUm, startPosMm, showMilDisplay: !SmartCanvasMode))
+            if (!_globalMerge.Enable(mils, sysId, opsUm, startPosMm, showMilDisplay: !_display.SmartCanvasMode))
             {
-                SwitchMainDisplay(_userSelectedMainCameraId);   // 啟用失敗 → 復原 secondary display
+                _display.SwitchMainDisplay(_display.UserSelectedMainCameraId);   // 啟用失敗 → 復原 secondary display
                 return;
             }
 
             // SmartCanvas 合圖：用工頭佈局(各台 start/ops) CPU 拼（feedScale=1：主程式餵全解析度）
-            if (SmartCanvasMode && _smartDisplay != null)
-            {
-                _smartDisplay.SetLayout(startPosMm, opsUm, 1, RowPitchMm);
-                _smartDisplay.MergeAll = true;   // 全域＝合圖全部（含無畫面相機黑占位）
-                _smartDisplay.SetMergeMode(true);
-            }
+            _display.OnGlobalMergeEnabled(opsUm, startPosMm);
         }
 
         /// <summary>停用即時全域合圖：coordinator 釋放 display + 工頭釋放合併 buffer → SmartCanvas 回單相機 → 復原選定相機顯示。</summary>
@@ -52,36 +47,18 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (!_globalMerge.IsActive) return;
 
             _globalMerge.Disable();
-            _smartDisplay?.SetMergeMode(false); // SmartCanvas 回單相機
-
-            // 恢復使用者明確點選的相機 secondary display（_selectedMainCameraId 可能已被視野中心 timer 改寫）
-            SwitchMainDisplay(_userSelectedMainCameraId);
+            _display.OnGlobalMergeDisabled(); // SmartCanvas 回單相機 + 復原使用者明確點選的相機
         }
 
         /// <summary>OPS/Start 變更時，重新計算全域合圖佈局（下一幀生效）。MIL display 重綁委派 coordinator；SmartCanvas/Waterfall 佈局同步留本類別。</summary>
         public void RefreshGlobalMergeLayout(double[] opsUm, double[] startPosMm)
         {
             if (!_globalMerge.IsActive || _cameras.Count == 0) return;
-            if (_mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) return; // 關閉期不碰 .Handle
-
             _globalMerge.RefreshLayout(opsUm, startPosMm);
 
             // SmartCanvas 合圖佈局同步（feedScale=1：主程式餵全解析度顯示 bytes）
-            if (SmartCanvasMode && _smartDisplay != null)
-                _smartDisplay.SetLayout(startPosMm, opsUm, 1, RowPitchMm);
             // Waterfall 合圖佈局同步（對齊全幅合圖；refOpsMm=mm/px 基準像素尺寸）
-            if (_waterfallView != null && _globalMerge.Merger != null)
-                _waterfallView.SetLayout(startPosMm, opsUm, _globalMerge.RefOpsMm);
-        }
-
-        /// <summary>視野中心最近相機變更（coordinator 從合圖 display 視野中心算出）→ 更新選中狀態 + 重繪縮圖選取框。
-        /// 去重留本類別（避免 33ms timer 每次都重繪）。</summary>
-        private void OnMergedViewCenterCam(int newId)
-        {
-            if (newId == _selectedMainCameraId) return;
-            _selectedMainCameraId = newId;
-            foreach (var kvp in _liveParentPanels)
-                kvp.Value.Invalidate();
+            _display.RefreshGlobalMergeLayout(opsUm, startPosMm, _globalMerge.RefOpsMm);
         }
 
         // ==================== View Range forwarder（供 AniloxRollForm overview / 曲線聯動） ====================

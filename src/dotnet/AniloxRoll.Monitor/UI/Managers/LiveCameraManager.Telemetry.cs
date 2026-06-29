@@ -27,79 +27,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         private void HandleMouseDataChanged(int camId, int x, int y, int pixelValue)
         {
-            // MIL display hook 執行緒回 UI；關閉/釋放期 form 已 dispose → 守 guard 防 InvalidOperationException
-            if (IsReleasing || _mainForm == null || _mainForm.IsDisposed || !_mainForm.IsHandleCreated) return;
-            if (_mainForm.InvokeRequired)
-            {
-                try { _mainForm.BeginInvoke(new Action(() => HandleMouseDataChanged(camId, x, y, pixelValue))); }
-                catch (InvalidOperationException) { /* ObjectDisposedException 亦繼承自此 */ }
-                return;
-            }
-
-            string infoText;
-            if (pixelValue == -1)
-            {
-                infoText = $"即時影像 [CAM {camId}] | 游標超出影像範圍";
-            }
-            else
-            {
-                int camIdx = camId - 1;
-                var s = _inspectionSettings;
-                double[] opsUmArr  = s?.GetCameraOpsUmArray();
-                double[] startMmArr = s?.GetCameraStartPositionMmArray();
-
-                if (opsUmArr == null || camIdx < 0 || camIdx >= opsUmArr.Length)
-                {
-                    infoText = $"即時影像 [CAM {camId}] | 座標: ({x}, {y}) | 亮度: {pixelValue}";
-                }
-                else
-                {
-                    double opsInMm    = opsUmArr[camIdx] / 1000.0;
-                    double startPosMm = startMmArr[camIdx];
-                    double physicalX  = PixelMmMapper.PixelToMm(x, startPosMm, opsInMm);
-                    double lineRateHz = (camIdx < _cameraLineRateHz.Length) ? _cameraLineRateHz[camIdx] : 0;
-                    double speedMPerMin = s.AniloxRollSpeedMPerMin;
-                    double rowPitchMm = (speedMPerMin > 0 && lineRateHz > 0)
-                        ? (speedMPerMin / 60.0 * 1000.0) / lineRateHz : 0;
-                    double physicalY  = y * rowPitchMm;
-
-                    // MIL display zoom/pan → 視野範圍
-                    string rangeStr = "";
-                    string magStr = "-";
-                    var cam = _cameras.Find(c => c.CameraId == camId);
-                    if (cam != null && cam.TryGetSecondaryDisplayGeometry(
-                            out double zoomX, out _, out double panOffX, out double panOffY))
-                    {
-                        double panelW = _mainDisplayPanel.Width;
-                        double panelH = _mainDisplayPanel.Height;
-                        double viewLeftMm  = PixelMmMapper.PixelToMm(panOffX, startPosMm, opsInMm);
-                        double viewRightMm = PixelMmMapper.PixelToMm(panOffX + panelW / zoomX, startPosMm, opsInMm);
-                        rangeStr = $"X範圍:{viewLeftMm:F1}~{viewRightMm:F1} mm | ";
-
-                        if (rowPitchMm > 0)
-                        {
-                            double viewTopMm = panOffY * rowPitchMm;
-                            double viewBotMm = (panOffY + panelH / zoomX) * rowPitchMm;
-                            rangeStr += $"Y範圍:{viewTopMm:F1}~{viewBotMm:F1} mm | ";
-                        }
-
-                        if (_screenMmPerPx > 0 && opsInMm > 0)
-                        {
-                            double physicalMag = PixelMmMapper.PhysicalMagnification(zoomX, _screenMmPerPx, opsInMm);
-                            magStr = $"{physicalMag:F2}x";
-                        }
-                    }
-
-                    infoText = $"即時影像 [CAM {camId}] | " +
-                               $"位置:({physicalX:F2}, {physicalY:F2}) mm | " +
-                               rangeStr +
-                               $"座標: ({x}, {y}) | " +
-                               $"亮度: {pixelValue} | " +
-                               $"實體倍率:{magStr}";
-                }
-            }
-
-            _updatePixelInfoCallback?.Invoke(infoText);
+            _display.HandleMouseDataChanged(camId, x, y, pixelValue, IsReleasing);
         }
 
         // ==================== Status Timer ====================
@@ -170,7 +98,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                     else { statusText = $"FPS: {cam.CurrentFps:F1}"; color = Color.LightGreen; }
                 }
 
-                UpdateSingleCameraStatus(cam.CameraId, statusText, color);
+                _display.UpdateSingleCameraStatus(cam.CameraId, statusText, color);
             }
 
             // 彙總連線數，變化時通知 UI

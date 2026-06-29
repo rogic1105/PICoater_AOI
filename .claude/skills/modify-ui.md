@@ -11,6 +11,12 @@
 → 見 `CLAUDE.md` §關鍵檔案速查（subset：`UI/Form/*` + `UI/Widgets/*` + `UI/Presenters/*`）。
 → UI 流程行為與控制項互動見 `docs/user-manual/ui-flow.html`（真相來源）。
 
+Live 監控顯示邊界：
+- `LiveCameraManager` 保留相機/MIL/grab/參數協調與對外 API forwarder。
+- `GlobalMergeCoordinator` 擁有全域合圖 MIL display 生命週期。
+- `LiveDisplayCoordinator` 擁有 SmartCanvas/Waterfall/縮圖/狀態 label/選中相機/LOD/WheelZoomFilter 顯示狀態。
+- 改 live 顯示行為時優先落在 `LiveDisplayCoordinator`；不要把 SmartCanvas/Waterfall 狀態放回 `LiveCameraManager`。
+
 ## 注意事項
 
 ### L2 SSoT 原子結構（最重要 — 改 setting 必看 CLAUDE.md §架構原則）

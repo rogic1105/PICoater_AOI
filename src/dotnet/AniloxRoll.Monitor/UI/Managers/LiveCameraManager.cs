@@ -18,29 +18,9 @@ namespace AniloxRoll.Monitor.UI.Managers
 {
     public partial class LiveCameraManager
     {
-        private readonly Form _mainForm;
-        private readonly Panel _mainDisplayPanel;
-        private Panel[] _cameraPanels;                 // camLive1~7（SmartCanvas 模式 thumbnail 用）
-        private LiveDisplayView _smartDisplay;        // 共用多相機監控顯示（sdk TanukiCv.Controls；he_MainDisplay==SmartCanvas）
-        private bool SmartCanvasMode => _inspectionSettings != null
-            && _inspectionSettings.he_MainDisplay == AniloxRoll.Monitor.Core.Data.MainDisplayMode.SmartCanvas;
-        private readonly Action<string> _updatePixelInfoCallback;
-
-        // 動態 LOD（he_LiveLod）：GPU pinned buffer 池職責已提取到 GpuLodResizeBuffer（資源擁有者，含 use-after-free 防護）；
-        // CPU 走 GrayResizeCpu 無 pinned，不經此。
-        private readonly GpuLodResizeBuffer _lodBuffer = new GpuLodResizeBuffer();
-
-        /// <summary>法向(Y) mm/影像列（row pitch）：form 從速度+線掃算好餵入 → SetLayout → 法向曲線圖 Y 對齊。
-        /// 0 時 LiveDisplayView 退回用 X 的 ops（Y 不對齊）。</summary>
-        public double RowPitchMm { get; set; }
-
         private List<AniloxCamera> _cameras = new List<AniloxCamera>();
         private List<CameraHardwareConfig> _cameraHardwareConfigs;
         private Dictionary<int, MIL_ID> _allocatedSystems = new Dictionary<int, MIL_ID>();
-
-        private readonly Dictionary<int, Panel> _liveViewPanels    = new Dictionary<int, Panel>();
-        private readonly Dictionary<int, Panel> _liveParentPanels  = new Dictionary<int, Panel>();
-        private readonly Dictionary<int, Label> _cameraStatusLabels = new Dictionary<int, Label>();
 
         private Timer _cameraStatusTimer;
         private bool _enableAutoCapture;
@@ -103,20 +83,11 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// <summary>存檔完成回呼：傳入已儲存的檔案路徑陣列（供遠端複製佇列）。</summary>
         public Action<string[]> OnFilesSaved { get; set; }
 
-        /// <summary>Vertical 模式滾輪縮放後立即觸發，讓 chart 不必等下一幀 callback 就同步視野。</summary>
-        public Action OnAfterVerticalZoom { get; set; }
-
         /// <summary>
         /// 正在執行釋放流程時為 true，防止 Timer Tick 在資源已釋放後繼續存取相機。
         /// 同 CameraSession.IsReleasing。
         /// </summary>
         public volatile bool IsReleasing = false;
-
-        private int _selectedMainCameraId = 1;
-        public int SelectedMainCameraId => _selectedMainCameraId;
-
-        /// <summary>使用者明確點選的相機 ID（不受 Global 模式視野中心 timer 影響）。</summary>
-        private int _userSelectedMainCameraId = 1;
 
         // --- Global merge（即時合圖）---
         // 合圖的「拼」（佈局 + 合併 buffer + 每台 merge target）委派給 MultiCameraMerger 工頭（sdk/MIL）。
@@ -124,11 +95,10 @@ namespace AniloxRoll.Monitor.UI.Managers
         // 已提取到 GlobalMergeCoordinator（擁有 _merger + _mergedDisplay + 座標鏡像 + timer + hook）。
         // 本類別只留編排（建 MilCamera 清單、決定 SmartCanvas vs MIL 直繪、SmartCanvas/Waterfall 佈局）+ forwarder。
         private readonly GlobalMergeCoordinator _globalMerge;
+        private readonly LiveDisplayCoordinator _display;
         public bool IsGlobalMergeActive => _globalMerge.IsActive;
 
         private InspectionSettings _inspectionSettings;
-        private double _screenMmPerPx;
-        private WheelZoomFilter _wheelFilter;
 
         public LiveCameraManager(
             Form mainForm,
@@ -141,69 +111,31 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (cameraPanels.Length < 7)
                 throw new ArgumentException("cameraPanels must contain at least 7 panels.", nameof(cameraPanels));
 
-            _mainForm = mainForm;
-            _mainDisplayPanel = mainDisplayPanel;
-            _cameraPanels = cameraPanels;
-            _updatePixelInfoCallback = updatePixelInfoCallback;
-            _mainDisplayPanel.BackColor = Color.Black;
-
             // 全域合圖「秀」協調者：穩定依賴走 ctor、會變動的值走 Func 委派（不反向參考整個 LCM）。
+            LiveDisplayCoordinator displayRef = null;
             _globalMerge = new GlobalMergeCoordinator(
-                _mainForm, _mainDisplayPanel, _updatePixelInfoCallback,
+                mainForm, mainDisplayPanel, updatePixelInfoCallback,
                 () => IsReleasing,
-                () => _screenMmPerPx,
+                () => displayRef?.ScreenMmPerPx ?? 0,
                 () => _inspectionSettings?.AniloxRollSpeedMPerMin ?? 0,
                 () => (_cameraLineRateHz != null && _cameraLineRateHz.Length > 0) ? _cameraLineRateHz[0] : 0,
-                OnMergedViewCenterCam);
+                newId => displayRef?.OnMergedViewCenterCam(newId));
 
-            _wheelFilter = new WheelZoomFilter(this);
-            Application.AddMessageFilter(_wheelFilter);
-
-            for (int i = 0; i < 7; i++)
-                SetupLivePanel(cameraPanels[i], i + 1);
+            _display = new LiveDisplayCoordinator(
+                mainForm, cameraPanels, mainDisplayPanel, updatePixelInfoCallback,
+                _globalMerge,
+                () => _cameras.AsReadOnly(),
+                () => _inspectionSettings,
+                () => _cameraLineRateHz,
+                () => IsLiveGrabbing);
+            displayRef = _display;
 
             _cameraHardwareConfigs = SystemSettings.CreateDefault().CameraDevices;
 
             _cameraStatusTimer = new Timer { Interval = 500 };
             _cameraStatusTimer.Tick += CameraStatusTimer_Tick;
 
-            UpdateCameraStatus("未配置", Color.Gray);
-        }
-
-        private void SetupLivePanel(Panel parentPanel, int cameraIndex)
-        {
-            parentPanel.BackColor = Color.Black;
-            parentPanel.Padding   = new Padding(2);
-            parentPanel.Controls.Clear();
-
-            var displayPanel = new Panel
-            {
-                Dock      = DockStyle.Fill,
-                BackColor = Color.Black
-            };
-
-            var status = new Label
-            {
-                Dock      = DockStyle.Bottom,
-                Height    = 18,
-                ForeColor = Color.DarkGray,
-                BackColor = Color.FromArgb(32, 32, 32),
-                TextAlign = ContentAlignment.MiddleCenter,
-                // 動態建立、未被 ProportionalScaler 記錄縮放 → 直接用較小字級對齊全域 0.85（DPI 感知下 10f 偏大）
-                Font      = new Font("Segoe UI", 8.5f, FontStyle.Regular)
-            };
-
-            displayPanel.MouseClick += (s, e) => SwitchMainDisplay(cameraIndex);
-            status.MouseClick       += (s, e) => SwitchMainDisplay(cameraIndex);
-            parentPanel.Paint       += (s, e) => OnLivePanelPaint(s, e, cameraIndex);
-
-            parentPanel.Controls.Add(displayPanel);
-            parentPanel.Controls.Add(status);
-            displayPanel.BringToFront();
-
-            _liveViewPanels[cameraIndex]     = displayPanel;
-            _liveParentPanels[cameraIndex]   = parentPanel;
-            _cameraStatusLabels[cameraIndex] = status;
+            _display.UpdateCameraStatus("未配置", Color.Gray);
         }
 
         // ==================== Allocate ====================
@@ -237,13 +169,13 @@ namespace AniloxRoll.Monitor.UI.Managers
                     }
                     else
                     {
-                        UpdateSingleCameraStatus(cfg.Id, "分配 System 失敗", Color.Red);
+                        _display.UpdateSingleCameraStatus(cfg.Id, "分配 System 失敗", Color.Red);
                         continue;
                     }
                 }
 
-                if (!_liveViewPanels.TryGetValue(cfg.Id, out Panel displayPanel) ||
-                    !_cameraStatusLabels.ContainsKey(cfg.Id))
+                if (!_display.TryGetDisplayPanel(cfg.Id, out Panel displayPanel) ||
+                    !_display.HasCameraStatusLabel(cfg.Id))
                     continue;
 
                 string dcf = DcfPathHelper.Resolve(!string.IsNullOrEmpty(_dcfPath) ? _dcfPath : cfg.DcfPath);
@@ -273,7 +205,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.TimestampCoordinator = _timestampCoordinator;
 
                 cam.OnMouseDataChanged   += HandleMouseDataChanged;
-                cam.OnCameraClicked      += SwitchMainDisplay;
+                cam.OnCameraClicked      += _display.SwitchMainDisplay;
                 cam.OnInspectionResult   += (camId, fn, mp, xp) =>
                     OnInspectionResult?.Invoke(camId, fn, mp, xp);
                 cam.OnLiveCurveData      += (camId, mean, max) =>
@@ -300,11 +232,11 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             IsAllocated = true;
             _cameraStatusTimer.Start();
-            UpdateCameraStatus("已配置", Color.White);
+            _display.UpdateCameraStatus("已配置", Color.White);
 
             ApplyMainDisplayMode(); // 依 he_MainDisplay 套用：SmartCanvas / MilDirect / Waterfall（三選一互斥）
 
-            SwitchMainDisplay(_selectedMainCameraId);
+            _display.SwitchMainDisplay(_display.SelectedMainCameraId);
 
             // 初始化後立即發布相機數量（分配成功不代表已連線，Timer 會持續更新）
             ConnectedCameraCount = _cameras.Count;
@@ -335,7 +267,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             ApplyMainDisplayMode();
             // 重 grab：清掉舊瀑布圖 + 重置對齊狀態（EnableWaterfallDisplay 冪等不會重建 → 必須在此重置，
             // 否則新幀接在舊網格上、兩台重啟相位不一 → 錯位）。
-            if (WaterfallMode) _waterfallView?.Reset();
+            _display.ResetWaterfallIfActive();
             foreach (var cam in _cameras)
                 cam.SetUserGrabIntent(true);
         }
@@ -366,12 +298,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             DisableGlobalMerge();
 
             // SmartCanvas 顯示：解訂閱 + dispose（移除 camLiveMain 上的 SmartCanvas/thumbnail）
-            if (_smartDisplay != null)
-            {
-                foreach (var cam in _cameras) cam.OnDisplayFrame -= OnCameraDisplayFrame;
-                _smartDisplay.Dispose();
-                _smartDisplay = null;
-            }
+            _display.TeardownSmartDisplay();
 
             foreach (var cam in _cameras)
                 cam.Free();
@@ -384,7 +311,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             CameraSystemManager.FreeApplication();
 
             IsAllocated = false;
-            UpdateCameraStatus("已釋放 (Freed)", Color.Gray);
+            _display.UpdateCameraStatus("已釋放 (Freed)", Color.Gray);
         }
 
         /// <summary>
@@ -418,7 +345,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.LiveDisplayDirection = dir;
         }
 
-        public void SetScreenMmPerPixel(double mmPerPx) => _screenMmPerPx = mmPerPx;
+        public void SetScreenMmPerPixel(double mmPerPx) => _display.SetScreenMmPerPixel(mmPerPx);
 
         public void SetCaptureSettings(InspectionSettings settings)
         {
