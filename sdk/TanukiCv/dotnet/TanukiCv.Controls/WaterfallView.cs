@@ -160,9 +160,8 @@ namespace TanukiCv.Controls
         /// <summary>Re-publish the current visible range without waiting for mouse movement.</summary>
         public void RefireViewRange()
         {
-            if (!_hasCanvasInfo) return;
-            if (TryBuildCursorStatus(_lastCanvasInfo.ImageX, _lastCanvasInfo.ImageY, _lastCanvasInfo, out var status))
-                ViewRangeMmChanged?.Invoke(status.ViewLeftMm, status.ViewRightMm, status.ViewTopMm, status.ViewBotMm);
+            if (TryComputeViewRange(_canvas.Zoom, _canvas.PanOffset, out double leftMm, out double rightMm, out double topMm, out double botMm))
+                ViewRangeMmChanged?.Invoke(leftMm, rightMm, topMm, botMm);
         }
 
         /// <summary>重 grab：清掉舊瀑布內容 + 重置對齊狀態（origin/period/seq/pending/緩衝），下次幀重新 bootstrap。
@@ -436,7 +435,7 @@ namespace TanukiCv.Controls
         private void PushLodRefresh()
         {
             if (_disposed || _fullW <= 0) return;
-            if (!_virtualSet) { _canvas.UpdateLodVirtualSize(_fullW, _totalHeight); _virtualSet = true; }
+            if (!_virtualSet) { _canvas.UpdateLodVirtualSize(_fullW, _totalHeight); _virtualSet = true; RefireViewRange(); }
             else _canvas.RefreshLod();
         }
 
@@ -581,16 +580,10 @@ namespace TanukiCv.Controls
             if (_startMm == null || _startMm.Length == 0 || _refOpsMm <= 0) return false;
 
             int camId = ResolveCameraAtX(imageX);
-            double minStartMm = MinStartMm();
-            double leftMm = PixelMmMapper.PixelToMm((0 - info.PanOffset.X) / info.Zoom, minStartMm, _refOpsMm);
-            double rightMm = PixelMmMapper.PixelToMm((_canvas.Width - info.PanOffset.X) / info.Zoom, minStartMm, _refOpsMm);
-            double visualTop = (0 - info.PanOffset.Y) / info.Zoom;
-            double visualBot = (_canvas.Height - info.PanOffset.Y) / info.Zoom;
-            double logicalTop = ToLogicalY(visualTop);
-            double logicalBot = ToLogicalY(visualBot);
+            if (!TryComputeViewRange(info.Zoom, info.PanOffset, out double leftMm, out double rightMm, out double topMm, out double botMm))
+                return false;
             double yPitch = _rowPitchMm > 0 ? _rowPitchMm : _refOpsMm;
-            double topMm = Math.Min(logicalTop, logicalBot) * yPitch;
-            double botMm = Math.Max(logicalTop, logicalBot) * yPitch;
+            double minStartMm = MinStartMm();
             double curMmX = PixelMmMapper.PixelToMm(imageX, minStartMm, _refOpsMm);
             double curMmY = ToLogicalY(imageY) * yPitch;
 
@@ -626,6 +619,27 @@ namespace TanukiCv.Controls
 
         private double ToLogicalY(double visualY)
             => _flipVertical ? (_totalHeight - 1 - visualY) : visualY;
+
+        private bool TryComputeViewRange(float zoom, PointF panOffset,
+            out double leftMm, out double rightMm, out double topMm, out double botMm)
+        {
+            leftMm = rightMm = topMm = botMm = 0;
+            if (_disposed || _canvas == null || zoom <= 0) return false;
+            if (_startMm == null || _startMm.Length == 0 || _refOpsMm <= 0) return false;
+
+            double minStartMm = MinStartMm();
+            leftMm = PixelMmMapper.PixelToMm((0 - panOffset.X) / zoom, minStartMm, _refOpsMm);
+            rightMm = PixelMmMapper.PixelToMm((_canvas.Width - panOffset.X) / zoom, minStartMm, _refOpsMm);
+
+            double visualTop = (0 - panOffset.Y) / zoom;
+            double visualBot = (_canvas.Height - panOffset.Y) / zoom;
+            double logicalTop = ToLogicalY(visualTop);
+            double logicalBot = ToLogicalY(visualBot);
+            double yPitch = _rowPitchMm > 0 ? _rowPitchMm : _refOpsMm;
+            topMm = Math.Min(logicalTop, logicalBot) * yPitch;
+            botMm = Math.Max(logicalTop, logicalBot) * yPitch;
+            return topMm < botMm;
+        }
 
         private double MinStartMm()
         {
