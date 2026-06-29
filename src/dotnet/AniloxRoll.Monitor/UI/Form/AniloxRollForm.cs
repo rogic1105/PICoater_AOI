@@ -51,6 +51,11 @@ namespace AniloxRoll.Monitor.Forms
         // Global merge 用：快取各相機 row curve 資料，合併後更新圖表
         private readonly Dictionary<int, float[]> _liveRowMeanCache = new Dictionary<int, float[]>();
         private readonly Dictionary<int, float[]> _liveRowMaxCache  = new Dictionary<int, float[]>();
+        private readonly Dictionary<int, float[]> _waterfallRowMeanPending = new Dictionary<int, float[]>();
+        private readonly Dictionary<int, float[]> _waterfallRowMaxPending  = new Dictionary<int, float[]>();
+        private float[] _waterfallRowMean;
+        private float[] _waterfallRowMax;
+        private int _waterfallRowWrite;
         private ProportionalScaler _scaler;
 
         // --- 相機參數控制項陣列（供 SyncFromCamera 存取）---

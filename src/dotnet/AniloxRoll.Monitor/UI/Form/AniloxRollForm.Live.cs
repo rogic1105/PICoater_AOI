@@ -59,6 +59,7 @@ namespace AniloxRoll.Monitor.Forms
                 LightTurnOn();
                 int warmup = _settings?.LightWarmupMs ?? 0;
                 if (warmup > 0) await Task.Delay(warmup);
+                ResetLiveWaterfallRowChart();
             }
 
             if (!_liveCameraManager.IsAllocated)
@@ -252,6 +253,12 @@ namespace AniloxRoll.Monitor.Forms
 
             if (_liveRowDisplay == null) return;
 
+            if (_settings?.he_MainDisplay == MainDisplayMode.Waterfall)
+            {
+                UpdateLiveWaterfallRowChart(camId, meanArr, maxArr);
+                return;
+            }
+
             bool isGlobal = _liveCameraManager?.IsGlobalMergeActive == true;
 
             if (isGlobal)
@@ -318,6 +325,85 @@ namespace AniloxRoll.Monitor.Forms
                     if (arr[i] > mergedMax[i]) mergedMax[i] = arr[i];
 
             _liveRowDisplay?.UpdateData(mergedMean, mergedMax);
+        }
+
+        private void ResetLiveWaterfallRowChart()
+        {
+            _waterfallRowMeanPending.Clear();
+            _waterfallRowMaxPending.Clear();
+            _waterfallRowMean = null;
+            _waterfallRowMax = null;
+            _waterfallRowWrite = 0;
+        }
+
+        private void UpdateLiveWaterfallRowChart(int camId, float[] meanArr, float[] maxArr)
+        {
+            if (meanArr == null || meanArr.Length == 0 || _liveRowDisplay == null) return;
+
+            bool isGlobal = _liveCameraManager?.IsGlobalMergeActive == true;
+            if (!isGlobal)
+            {
+                if (camId != _liveCameraManager.SelectedMainCameraId) return;
+                AppendLiveWaterfallRowBand(meanArr, maxArr);
+                return;
+            }
+
+            _waterfallRowMeanPending[camId] = meanArr;
+            _waterfallRowMaxPending[camId] = maxArr;
+
+            int expected = Math.Max(1, _liveCameraManager?.ConnectedCameraCount ?? CameraCount);
+            if (_waterfallRowMeanPending.Count < expected) return;
+
+            var rowMean = new float[CameraCount][];
+            var rowMax = new float[CameraCount][];
+            foreach (var kv in _waterfallRowMeanPending)
+                if (kv.Key >= 1 && kv.Key <= CameraCount) rowMean[kv.Key - 1] = kv.Value;
+            foreach (var kv in _waterfallRowMaxPending)
+                if (kv.Key >= 1 && kv.Key <= CameraCount) rowMax[kv.Key - 1] = kv.Value;
+
+            CurveMergeHelper.MergeRowCurvesOverlap(rowMean, rowMax, CameraCount,
+                out float[] mergedMean, out float[] mergedMax);
+            if (mergedMean == null) return;
+
+            _waterfallRowMeanPending.Clear();
+            _waterfallRowMaxPending.Clear();
+            AppendLiveWaterfallRowBand(mergedMean, mergedMax);
+        }
+
+        private void AppendLiveWaterfallRowBand(float[] meanBand, float[] maxBand)
+        {
+            int capacity = _settings?.ImageView?.WaterfallTotalHeight ?? InspectionDefaults.WaterfallTotalHeight;
+            capacity = Math.Max(1000, capacity);
+            if (_waterfallRowMean == null || _waterfallRowMean.Length != capacity)
+            {
+                _waterfallRowMean = new float[capacity];
+                _waterfallRowMax = new float[capacity];
+                _waterfallRowWrite = 0;
+            }
+
+            int bandLen = Math.Min(meanBand.Length, capacity);
+            bool ring = (_settings?.ImageView?.WaterfallFullMode ?? InspectionDefaults.WaterfallFullMode) == WaterfallFullMode.Ring;
+            if (!ring && _waterfallRowWrite + bandLen > capacity)
+            {
+                Array.Clear(_waterfallRowMean, 0, _waterfallRowMean.Length);
+                Array.Clear(_waterfallRowMax, 0, _waterfallRowMax.Length);
+                _waterfallRowWrite = 0;
+            }
+
+            for (int i = 0; i < bandLen; i++)
+            {
+                int dst = ring ? (_waterfallRowWrite + i) % capacity : _waterfallRowWrite + i;
+                if (dst < 0 || dst >= capacity) break;
+                _waterfallRowMean[dst] = meanBand[i];
+                _waterfallRowMax[dst] = maxBand != null && i < maxBand.Length ? maxBand[i] : 0;
+            }
+
+            _waterfallRowWrite = ring
+                ? (_waterfallRowWrite + bandLen) % capacity
+                : Math.Min(capacity, _waterfallRowWrite + bandLen);
+
+            _liveRowDisplay.UpdateData(_waterfallRowMean, _waterfallRowMax);
+            if (TryApplyLiveImageCanvasRowViewRange()) return;
         }
 
         /// <summary>用 A輪速度 和選中相機的取樣頻率（Line Rate）更新法向圖表座標。</summary>
@@ -389,11 +475,17 @@ namespace AniloxRoll.Monitor.Forms
             if (name == nameof(InspectionSettings.hf_LiveLod))
                 _liveCameraManager?.SetLodMode(_settings.LiveLod);
             if (name == nameof(InspectionSettings.he_MainDisplay))
+            {
+                ResetLiveWaterfallRowChart();
                 _liveCameraManager?.ApplyMainDisplayMode();   // 即時 / 瀑布 即時切換
+            }
             if (name == nameof(InspectionSettings.hee_VerticalDirection))
                 ApplyDisplayDirectionSetting();
             if (name == nameof(InspectionSettings.hg_WaterfallTotalHeight) || name == nameof(InspectionSettings.hh_WaterfallFullMode))
+            {
+                ResetLiveWaterfallRowChart();
                 _liveCameraManager?.RefreshWaterfallDisplay(); // 瀑布總高/滿了行為變更 → 重建套新值
+            }
             if (OpsStartSettingNames.Contains(name) && _liveCameraManager?.IsGlobalMergeActive == true)
                 _liveCameraManager.RefreshGlobalMergeLayout(
                     _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
