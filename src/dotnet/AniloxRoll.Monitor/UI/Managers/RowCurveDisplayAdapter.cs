@@ -34,6 +34,9 @@ namespace AniloxRoll.Monitor.UI.Managers
         public void UpdateData(float[] mean, float[] max)
             => _chart.UpdateData(CopyForDisplay(mean), CopyForDisplay(max));
 
+        public void UpdateDataAndViewRange(float[] mean, float[] max, double topMm, double botMm)
+            => _chart.UpdateDataAndViewRange(CopyForDisplay(mean), CopyForDisplay(max), topMm, botMm);
+
         private float[] CopyForDisplay(float[] data)
         {
             if (data == null) return null;

@@ -327,9 +327,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 float captureHmV = _currentGrabConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
                 HessianRescaleHelper.RescaleInPlace1D(mergedMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
                 HessianRescaleHelper.RescaleInPlace1D(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
-                _ctx.RowChartDisplay.UpdateData(mergedMean, mergedMax);
                 var nv = SameSourceViewRange?.Invoke();
-                if (nv != null) _ctx.RowChartDisplay.UpdateViewRange(nv[2], nv[3]);   // 新路徑：原子帶入當前 Y 視野
+                if (nv != null) _ctx.RowChartDisplay.UpdateDataAndViewRange(mergedMean, mergedMax, nv[2], nv[3]);
+                else _ctx.RowChartDisplay.UpdateData(mergedMean, mergedMax);
                 // 舊 else RefreshRowChartRange（讀已砍 canvas，恆 no-op）移除；視野由 ImageDisplayView 連動
             }
         }
@@ -451,9 +451,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                         float captureHmV = _currentGrabConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
                         var displayMean = HessianRescaleHelper.CloneAndRescale1D(rowMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
                         var displayMax  = HessianRescaleHelper.CloneAndRescale1D(rowMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
-                        _ctx.RowChartDisplay.UpdateData(displayMean, displayMax);
                         var nv = SameSourceViewRange?.Invoke();
-                        if (nv != null) _ctx.RowChartDisplay.UpdateViewRange(nv[2], nv[3]);  // 取代死的 RefreshRowChartRange
+                        if (nv != null) _ctx.RowChartDisplay.UpdateDataAndViewRange(displayMean, displayMax, nv[2], nv[3]);
+                        else _ctx.RowChartDisplay.UpdateData(displayMean, displayMax);
                     }
                 }
             }
@@ -608,9 +608,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
             float captureHmV = _ctx.InteractionHelper?.ReviewConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
             HessianRescaleHelper.RescaleInPlace1D(mergedMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
             HessianRescaleHelper.RescaleInPlace1D(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
-            _ctx.RowChartDisplay.UpdateData(mergedMean, mergedMax);
             var nv = SameSourceViewRange?.Invoke();
-            if (nv != null) _ctx.RowChartDisplay.UpdateViewRange(nv[2], nv[3]);
+            if (nv != null) _ctx.RowChartDisplay.UpdateDataAndViewRange(mergedMean, mergedMax, nv[2], nv[3]);
+            else _ctx.RowChartDisplay.UpdateData(mergedMean, mergedMax);
         }
 
         /// <summary>#13 同源新路徑的「當前視野」注入（form 快取 ImageDisplayView 視野；[l,r,top,bot]，null=無效）。

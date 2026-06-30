@@ -226,10 +226,19 @@ namespace AniloxRoll.Monitor.Forms
             _liveRowRangeSuspended = true;
         }
 
-        private bool ResumeLiveRowRangeAfterDataUpdate()
+        private bool UpdateLiveRowDataAndViewRange(float[] mean, float[] max)
         {
             _liveRowRangeSuspended = false;
-            return TryApplyLiveImageCanvasRowViewRange();
+            var mode = _settings?.he_MainDisplay;
+            if ((mode == MainDisplayMode.ImageCanvas || mode == MainDisplayMode.Waterfall)
+                && !double.IsNaN(_liveViewTopMm) && !double.IsNaN(_liveViewBotMm))
+            {
+                _liveRowDisplay?.UpdateDataAndViewRange(mean, max, _liveViewTopMm, _liveViewBotMm);
+                return true;
+            }
+
+            _liveRowDisplay?.UpdateData(mean, max);
+            return false;
         }
 
         private void OnLiveCurveData(int camId, float[] meanArr, float[] maxArr)
@@ -279,8 +288,8 @@ namespace AniloxRoll.Monitor.Forms
                 // 全域模式：快取每台相機資料，合併後更新（mean 取 mean, max 取 max）
                 _liveRowMeanCache[camId] = meanArr;
                 _liveRowMaxCache[camId]  = maxArr;
-                MergeAndUpdateLiveRowChart();
-                if (ResumeLiveRowRangeAfterDataUpdate()) return;
+                if (!TryMergeLiveRowCurve(out float[] mergedMean, out float[] mergedMax)) return;
+                if (UpdateLiveRowDataAndViewRange(mergedMean, mergedMax)) return;
 
                 // 同步 Y 軸視野：查詢 _mergedDisplay 的 zoom/pan
                 double rowPitch = _liveRowDisplay.RowPitchMm;
@@ -294,8 +303,7 @@ namespace AniloxRoll.Monitor.Forms
             {
                 // 垂直模式：只顯示選中相機
                 if (camId != _liveCameraManager.SelectedMainCameraId) return;
-                _liveRowDisplay.UpdateData(meanArr, maxArr);
-                if (ResumeLiveRowRangeAfterDataUpdate()) return;
+                if (UpdateLiveRowDataAndViewRange(meanArr, maxArr)) return;
 
                 // 同步 Y 軸視野：查詢 MIL 副顯示器 zoom/pan
                 var liveCam = FindCameraById(camId);
@@ -313,18 +321,20 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         /// <summary>合併所有快取的 row curve 資料：mean 取平均、max 取最大值。</summary>
-        private void MergeAndUpdateLiveRowChart()
+        private bool TryMergeLiveRowCurve(out float[] mergedMean, out float[] mergedMax)
         {
-            if (_liveRowMeanCache.Count == 0) return;
+            mergedMean = null;
+            mergedMax = null;
+            if (_liveRowMeanCache.Count == 0) return false;
 
             // 取最短長度對齊
             int minLen = int.MaxValue;
             foreach (var arr in _liveRowMeanCache.Values)
                 if (arr.Length < minLen) minLen = arr.Length;
-            if (minLen <= 0 || minLen == int.MaxValue) return;
+            if (minLen <= 0 || minLen == int.MaxValue) return false;
 
-            float[] mergedMean = new float[minLen];
-            float[] mergedMax  = new float[minLen];
+            mergedMean = new float[minLen];
+            mergedMax  = new float[minLen];
 
             int camCount = _liveRowMeanCache.Count;
             foreach (var arr in _liveRowMeanCache.Values)
@@ -337,7 +347,7 @@ namespace AniloxRoll.Monitor.Forms
                 for (int i = 0; i < minLen; i++)
                     if (arr[i] > mergedMax[i]) mergedMax[i] = arr[i];
 
-            _liveRowDisplay?.UpdateData(mergedMean, mergedMax);
+            return true;
         }
 
         private void ResetLiveWaterfallRowChart()
@@ -416,8 +426,7 @@ namespace AniloxRoll.Monitor.Forms
                 ? (_waterfallRowWrite + bandLen) % capacity
                 : Math.Min(capacity, _waterfallRowWrite + bandLen);
 
-            _liveRowDisplay.UpdateData(_waterfallRowMean, _waterfallRowMax);
-            if (ResumeLiveRowRangeAfterDataUpdate()) return;
+            if (UpdateLiveRowDataAndViewRange(_waterfallRowMean, _waterfallRowMax)) return;
         }
 
         /// <summary>用 A輪速度 和選中相機的取樣頻率（Line Rate）更新列圖表座標。</summary>
