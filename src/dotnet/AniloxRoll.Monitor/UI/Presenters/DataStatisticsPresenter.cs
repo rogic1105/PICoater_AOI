@@ -95,8 +95,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         private int _lastChartToggleTick;
 
-        // --- Mura Profile Chart ---
-        private ColumnCurveChartHelper _muraProfileHelper;
+        // --- Mura Profile Chart（繪圖職責已提取到 MuraProfileChartPresenter）---
+        private MuraProfileChartPresenter _muraChart;
 
         // --- 常數 ---
         private static readonly Color _detailPass = Color.FromArgb(232, 245, 233);
@@ -144,7 +144,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _ctx.BtnShowFail.Click += BtnShowFail_Click;
             WireStatDateCombos();
             InitGrabDetailListView();
-            InitMuraProfileChart();
+            _muraChart = new MuraProfileChartPresenter(_ctx,
+                () => _activeStatMode, () => _grabIdInfos, () => _statsDataRootPath);
+            _muraChart.Init();
             InitPeriodCharts();
             _ctx.CbChartYear.SelectedIndexChanged += (s, e) => { if (!_chartNavGuard.IsSet) OnChartYearIndexChanged(); };
             _ctx.CbChartMonth.SelectedIndexChanged += (s, e) => { if (!_chartNavGuard.IsSet) OnChartMonthIndexChanged(); };
@@ -549,7 +551,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _statsPresenter.Update(stats);
                 _currentDetails = details;
                 ApplyFailFilter();
-                UpdateMuraProfileChart(null);  // SingleSheet branch 內自己查 cbDataId 取 grab
+                _muraChart.Update(null);  // SingleSheet branch 內自己查 cbDataId 取 grab
                 return;
             }
 
@@ -573,7 +575,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 int ei = _ctx.CbGrabIdEnd.SelectedIndex;
                 int lo = Math.Min(si, ei); int hi = Math.Max(si, ei);
                 var rangeInfos = _grabIdInfos.GetRange(lo, hi - lo + 1);
-                UpdateMuraProfileChart(EvenSample(rangeInfos, 50));
+                _muraChart.Update(EvenSample(rangeInfos, 50));
                 return;
             }
 
@@ -594,14 +596,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
                 _statsPresenter.Update(stats);
                 _currentDetails = details;
-                UpdateMuraProfileChart(EvenSample(grabInfosInRange, 10));
+                _muraChart.Update(EvenSample(grabInfosInRange, 10));
             }
             else
             {
                 var statsTime = InspectionStatisticsService.Compute(_statsDataRootPath, start, end, ctx);
                 _statsPresenter.Update(statsTime);
                 _currentDetails = new List<GrabDetail>();
-                ClearMuraProfileChart();
+                _muraChart.Clear();
             }
             ApplyFailFilter();
         }
@@ -772,138 +774,15 @@ namespace AniloxRoll.Monitor.UI.Presenters
         // Mura 空間分布曲線圖（拼接式，與 chartLiveColumn 相同格式）
         // ══════════════════════════════════════════════════════════════
 
-        private void InitMuraProfileChart()
-        {
-            if (_ctx.ChartDataPatch == null) return;
-            _muraProfileHelper = new ColumnCurveChartHelper(_ctx.ChartDataPatch);
-        }
+        // Mura 分布圖繪圖職責已提取到 MuraProfileChartPresenter（2026-06-30）；以下為對外 public 門面轉發。
 
-        private void UpdateMuraProfileChart(IList<GrabIdInfo> grabIds)
-        {
-            if (_muraProfileHelper == null || _ctx.Settings == null) return;
+        /// <summary>由 PropertyGrid 變更觸發：刷新 chartDataColumn 閾值線 + view-time 正規值 rescale（不重算統計）。</summary>
+        public void RefreshMuraProfileForSettingsChange() => _muraChart?.RefreshForSettingsChange();
 
-            // 單片模式（GrpDataSingleSheet）：永遠用 cbDataId.SelectedIndex 對應 grab，不依賴 caller 傳入的 grabIds。
-            // 原因：listViewGrabDetail 點選時 _suppressRangeOnSingleSheetSync=true 跳過範圍 cb 同步，
-            // 但 caller 仍會用舊 cbDataIdStart/End 範圍呼這函式 → 若用 grabIds[0] 會顯示舊範圍的第一筆而非剛點的 grab。
-            // view-time 正規值 rescale（HM_capture / HM_current）讓改 PropertyGrid 正規值時曲線坡度立即變化。
-            if (_activeStatMode == _ctx.GrpDataSingleSheet)
-            {
-                int singleIdx = _ctx.CbDataGrabId.SelectedIndex;
-                if (singleIdx >= 0 && singleIdx < _grabIdInfos.Count)
-                    UpdateMuraProfileForSingleGrab(_grabIdInfos[singleIdx]);
-                else
-                    ClearMuraProfileChart();
-                return;
-            }
-
-            if (grabIds == null || grabIds.Count == 0)
-            {
-                ClearMuraProfileChart();
-                return;
-            }
-            // 範圍/時間模式：aggregate 多 grab 平均，當作歷史快照不做 view-time rescale
-
-            // ── 範圍/時間模式：舊 aggregate 邏輯 ──
-            var (meanDict, maxDict) = InspectionStatisticsService.LoadAvgMuraProfile(
-                _statsDataRootPath, grabIds);
-            if (meanDict.Count == 0)
-            {
-                ClearMuraProfileChart();
-                return;
-            }
-            int camCount = _ctx.CameraCount;
-            var allMean = new float[camCount][];
-            var allMax  = new float[camCount][];
-            for (int i = 0; i < camCount; i++)
-            {
-                meanDict.TryGetValue(i + 1, out allMean[i]);
-                maxDict.TryGetValue(i + 1, out allMax[i]);
-            }
-            CurveMergeHelper.UpdateOverviewChart(
-                allMean, allMax,
-                _ctx.Settings.GetCameraOpsUmArray(),
-                _ctx.Settings.GetCameraStartPositionMmArray(),
-                _ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV,
-                _muraProfileHelper, camCount,
-                StitchMode.Vertical, null);
-        }
-
-        /// <summary>
-        /// 用單一 grab 的 .bin（MergeCurves 合多 capture）+ 該 grab 的 CSV #CFG OPS/Pos
-        /// 更新 chartDataColumn，與 chartReviewColumn 完全對齊。不依賴 camReviewMain 是否載入。
-        /// 套用 view-time 正規值 rescale：display = (bin/255) × (HM_capture / HM_current)；
-        /// 改 PropertyGrid 正規值會立刻反映在曲線坡度上。
-        /// </summary>
-        private void UpdateMuraProfileForSingleGrab(GrabIdInfo info)
-        {
-            if (_muraProfileHelper == null || _ctx.Settings == null) return;
-            if (string.IsNullOrWhiteSpace(_statsDataRootPath)) return;
-
-            var grabCfg = InspectionStatisticsService.LoadConfigForGrabId(
-                _statsDataRootPath, info.GrabId, info.Earliest, info.Latest);
-            var grouped = InspectionStatisticsService.LoadImagePathsForGrabId(
-                _statsDataRootPath, info.GrabId, info.Earliest, info.Latest);
-
-            int camCount = _ctx.CameraCount;
-            var allMean = new float[camCount][];
-            var allMax  = new float[camCount][];
-            for (int i = 0; i < camCount; i++)
-            {
-                int camId = i + 1;
-                if (grouped.TryGetValue(camId, out var paths) && paths.Count > 0)
-                    CurveMergeHelper.MergeCurves(paths, out allMean[i], out allMax[i]);
-            }
-
-            // view-time 正規值 rescale：chartDataColumn 是欄曲線，用 V 的 capture/current ratio
-            float captureHm = grabCfg?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
-            HessianRescaleHelper.RescaleInPlace2D(allMean, allMax, captureHm, _ctx.Settings.HessianMaxFactorV);
-
-            double[] ops = grabCfg?.CamOps  ?? _ctx.Settings.GetCameraOpsUmArray();
-            double[] pos = grabCfg?.CamPos  ?? _ctx.Settings.GetCameraStartPositionMmArray();
-            float errMean = _ctx.Settings.ErrorValueMeanV;  // view-time 閾值用當前 Settings
-            float errMax  = _ctx.Settings.ErrorValueMaxV;
-
-            CurveMergeHelper.UpdateOverviewChart(
-                allMean, allMax, ops, pos, errMean, errMax,
-                _muraProfileHelper, camCount,
-                _ctx.Settings.StitchMode, null);
-        }
-
-        /// <summary>
-        /// 由 PropertyGrid 變更觸發：刷新 chartDataColumn 的閾值線 + view-time 正規值 rescale。
-        /// 不重做 RefreshStats（避免重算統計）；只重畫 chart。
-        /// </summary>
-        public void RefreshMuraProfileForSettingsChange()
-        {
-            if (_muraProfileHelper == null) return;
-            _muraProfileHelper.SetThresholds(_ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV);
-            // 單片模式才需要按 HM 重算曲線坡度；aggregate 模式維持快照
-            if (_activeStatMode == _ctx.GrpDataSingleSheet
-                && _ctx.CbDataGrabId.SelectedIndex >= 0
-                && _ctx.CbDataGrabId.SelectedIndex < _grabIdInfos.Count)
-            {
-                UpdateMuraProfileForSingleGrab(_grabIdInfos[_ctx.CbDataGrabId.SelectedIndex]);
-            }
-        }
-
-        /// <summary>
-        /// SingleSheet 模式：直接使用 Review tab 已載入的曲線資料（已套 view-time HM rescale），
-        /// 確保 chartDataColumn 與 chartReviewColumn 完全一致（相同 OPS/Pos 與顯示值）。
-        /// </summary>
+        /// <summary>SingleSheet 模式：用 Review tab 已載入曲線資料更新 chartDataColumn，與 chartReviewColumn 一致。</summary>
         public void SyncMuraProfileFromReview(float[][] mean, float[][] max,
             double[] ops, double[] pos, float errMean, float errMax)
-        {
-            if (_muraProfileHelper == null) return;
-            CurveMergeHelper.UpdateOverviewChart(mean, max, ops, pos, errMean, errMax,
-                _muraProfileHelper, _ctx.CameraCount, StitchMode.Vertical, null);
-        }
-
-        private void ClearMuraProfileChart()
-        {
-            if (_ctx.ChartDataPatch == null) return;
-            foreach (var s in _ctx.ChartDataPatch.Series)
-                s.Points.Clear();
-        }
+            => _muraChart?.SyncFromReview(mean, max, ops, pos, errMean, errMax);
 
         private static List<T> EvenSample<T>(IList<T> list, int maxCount)
         {
