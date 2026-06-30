@@ -137,5 +137,3 @@ $guestTokens = @('Guest', '*' + $guestSid, 'Guests', '*S-1-5-32-546')
 ## 文件同步
 
 修改 `deploy/` 內容後：
-- `docs/user-manual/ui-flow.html` → `#網路部署` 章節更新對應步驟
-- 本 skill 與 `ui-flow.html` 保持一致（兩邊是同一件事的不同視角）

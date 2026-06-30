@@ -9,7 +9,7 @@
 ## 關鍵檔案
 
 → 見 `CLAUDE.md` §關鍵檔案速查（subset：`UI/Form/*` + `UI/Widgets/*` + `UI/Presenters/*`）。
-→ UI 流程行為與控制項互動見 `docs/user-manual/ui-flow.html`（真相來源）。
+→ UI 流程行為與控制項互動以 code 與本 skill 為準。
 
 Live 監控顯示邊界：
 - `LiveCameraManager` 保留相機/MIL/grab/參數協調與對外 API forwarder。

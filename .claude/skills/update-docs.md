@@ -23,7 +23,6 @@ Commit 前批次更新專案文件，確保三方同步 + 控制項存在性。
 |----|------|---------|
 | Form | `Designer.cs` | `.Text = "..."` 畫面文字 |
 | CLAUDE.md | 控制項速查 | 標準名稱 + 畫面文字欄 |
-| HTML | `docs/user-manual/ui-flow.html` | 【】內的控制項名稱 |
 
 不一致的列出差異，詢問以哪一方為準。
 
@@ -35,7 +34,7 @@ Commit 前批次更新專案文件，確保三方同步 + 控制項存在性。
 
 | 改動範圍 | 更新目標 |
 |---------|---------|
-| `UI/Form/AniloxRollForm*.cs` | CLAUDE.md 控制項速查 + `ui-flow.html` |
+| `UI/Form/AniloxRollForm*.cs` | Designer.cs + CLAUDE.md 控制項速查 |
 | `UI/Presenters/*.cs` | 對應 `.claude/skills/modify-*.md` |
 | `UI/Widgets/*.cs` | `.claude/skills/modify-ui.md` |
 | `ImageProcessing/*.cs` | `.claude/skills/modify-pipeline.md` |

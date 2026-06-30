@@ -10,7 +10,7 @@
 ## 參考資源
 
 - **CLAUDE.md §控制項速查** — 標準名稱 → 程式碼 Name 對照
-- **`docs/user-manual/ui-flow.html`** — 完整事件流程圖（瀏覽器開啟）
+- **Code 實際事件流程** — handler / presenter / coordinator / service call chain
 
 ## 執行步驟
 
@@ -24,7 +24,7 @@
    - Guard flag 的 enter/exit
    - 更新的 UI 控制項（用標準名稱）
 
-4. **比對流程圖** — 對照 `docs/user-manual/ui-flow.html` 中該控制項的流程，逐項確認
+4. **比對事件流程** — 對照 code 中該控制項的實際事件流程，逐項確認
 
 5. **輸出驗證結果** — 格式：
    ```
@@ -58,4 +58,4 @@
 
 ## 流程圖維護
 
-驗證過程中若發現流程圖與程式碼不一致，同時更新 `docs/user-manual/ui-flow.html`。
+驗證過程中若發現 skill 與程式碼不一致，同時更新對應 skill。

@@ -9,7 +9,7 @@
 ## 關鍵檔案
 
 → 見 `CLAUDE.md` §關鍵檔案速查（subset：`UI/Presenters/DataStatisticsPresenter` + `Services/Inspection*Service` + `Services/CsvConfigSnapshot`）。
-→ Data tab 流程行為見 `docs/user-manual/ui-flow.html` §檢測報表（Data）。
+→ Data tab 流程行為以 code 為準。
 
 ## 注意事項
 

@@ -26,7 +26,7 @@ PICoater_AOI/
 ├── docs/                 ← 文件
 │   ├── config/           ← 設定 JSON 範例
 │   ├── dev/              ← 開發者參考（MIL API / 廠商規格書）
-│   └── user-manual/      ← 操作員說明（ui-flow.html / hardware-specs）
+│   └── user-manual/      ← 操作員說明（hardware-specs / io_diagrams / storage-flow）
 ├── deploy/               ← 現場部署腳本（PowerShell + JSON）
 └── .claude/skills/       ← Claude Code skills（按修改範圍觸發）
 
@@ -258,19 +258,17 @@ PICoater_AOI/
 
 ## Harness 架構
 
-三方同步機制確保控制項命名在所有層級一致：
+兩方同步機制確保控制項命名一致：
 
 | 層 | 檔案 | 內容 |
 |----|------|------|
-| Form | `AniloxRollForm.Designer.cs` | `.Text` 畫面文字 |
+| Form | `AniloxRollForm.Designer.cs` | `.Text` 畫面文字 + 控制項 Name |
 | 速查表 | `CLAUDE.md` §控制項速查 | 標準名稱 + Name |
-| 流程圖 | `docs/user-manual/ui-flow.html` | 【】包裹的控制項名稱 |
 
 **規則：**
-1. 改名時三層同時改，不可只改一層
-2. 【】= 可操作控制項（使用者會點/選/拖的），被動顯示的不加
-3. 同功能控制項共用標準名稱（如 Review/Data 的【讀取資料】）
-4. Commit 前跑 `/update-docs` — 驗證速查表的 Name 全部存在於 Designer.cs
+1. 改名時兩層同時改，不可只改一層
+2. 同功能控制項共用標準名稱（如 Review/Data 的【讀取資料】）
+3. Commit 前跑 `/update-docs` — 驗證速查表的 Name 全部存在於 Designer.cs
 
 ---
 
@@ -279,7 +277,7 @@ PICoater_AOI/
 使用者在【檢測設定】看到的參數。溝通格式：「屬性名-值」（例如「欄正規值-0.2」「存檔-T」）。
 
 **範圍**：此表只列「**what** — 參數是什麼 / 預設值 / 屬性名映射」。
-**互動行為與 chart 聯動**統一在 `docs/user-manual/ui-flow.html`（單一真相）；不在表格內重複描述。
+**互動行為與 chart 聯動**＝以 code 為真相，配合對應 skill（`/modify-ui` 等）查閱；不在表格內重複描述。
 
 ### 0. 機台設定
 
@@ -371,7 +369,7 @@ PICoater_AOI/
 
 ## 控制項速查（標準名稱 → 程式名稱）
 
-每個控制項有一個**標準名稱**（中文），用於對話溝通。流程圖（`docs/user-manual/ui-flow.html`）也使用這些名稱。
+每個控制項有一個**標準名稱**（中文），用於對話溝通。
 
 ### 即時監控（tabPageLiveView）
 
@@ -477,7 +475,6 @@ PICoater_AOI/
 
 | 文件 | 用途 |
 |------|------|
-| [`docs/user-manual/ui-flow.html`](docs/user-manual/ui-flow.html) | **UI 互動流程設計檔（單一真相）**，1800+ 行，瀏覽器開啟 |
 | [`docs/user-manual/io_diagrams.html`](docs/user-manual/io_diagrams.html) | IO FSM 視覺化（ET-7044 ↔ 設備 Nakan）|
 | [`docs/user-manual/storage-flow.html`](docs/user-manual/storage-flow.html) | Storage PC 雙寫架構流程圖 |
 | [`docs/user-manual/hardware-specs.html`](docs/user-manual/hardware-specs.html) | 7 相機 + Grabber + 光源 + PLC 硬體規格 |
