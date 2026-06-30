@@ -276,7 +276,7 @@ PICoater_AOI/
 
 ## 檢測參數速查（PropertyGrid 屬性）
 
-使用者在【檢測設定】看到的參數。溝通格式：「屬性名-值」（例如「垂直正規值-0.2」「存檔-T」）。
+使用者在【檢測設定】看到的參數。溝通格式：「屬性名-值」（例如「欄正規值-0.2」「存檔-T」）。
 
 **範圍**：此表只列「**what** — 參數是什麼 / 預設值 / 屬性名映射」。
 **互動行為與 chart 聯動**統一在 `docs/user-manual/ui-flow.html`（單一真相）；不在表格內重複描述。
@@ -306,14 +306,14 @@ PICoater_AOI/
 |---------|------|--------|------|
 | ── 演算法 ── | （分隔列，唯讀） | — | — |
 | 去背演算法 | `db_Algorithm` → `Algorithm` | SingleFrameBgSub | None / SingleFrameBgSub / StandardBgSub |
-| 垂直正規值 | `dc_HessianMaxFactorV` → `HessianMaxFactorV` | 0.3 | V Hessian 正規化係數（capture-time baked-in） |
-| 水平正規值 | `dd_HessianMaxFactorH` → `HessianMaxFactorH` | 0.3 | H Hessian 正規化係數（view-time only） |
+| 欄正規值 | `dc_HessianMaxFactorV` → `HessianMaxFactorV` | 0.3 | V Hessian 正規化係數（capture-time baked-in） |
+| 列正規值 | `dd_HessianMaxFactorH` → `HessianMaxFactorH` | 0.3 | H Hessian 正規化係數（view-time only） |
 | ── 檢出標準 ── | （分隔列，唯讀） | — | — |
-| 檢出方向 | `eb_RidgeDir` → `RidgeDir` | Both | 垂直 / 水平 / 全部 |
-| 垂直平均閾值 | `ec_ErrorValueMeanV` → `ErrorValueMeanV` | 0.2 | V chart Mean 閾值線 |
-| 垂直最大閾值 | `ed_ErrorValueMaxV` → `ErrorValueMaxV` | 0.6 | V chart Max 閾值線 |
-| 水平平均閾值 | `ee_ErrorValueMeanH` → `ErrorValueMeanH` | 0.2 | H chart Mean 閾值線 |
-| 水平最大閾值 | `ef_ErrorValueMaxH` → `ErrorValueMaxH` | 0.6 | H chart Max 閾值線 |
+| 檢出方向 | `eb_RidgeDir` → `RidgeDir` | Both | 欄 / 列 / 全部 |
+| 欄平均閾值 | `ec_ErrorValueMeanV` → `ErrorValueMeanV` | 0.2 | V chart Mean 閾值線 |
+| 欄最大閾值 | `ed_ErrorValueMaxV` → `ErrorValueMaxV` | 0.6 | V chart Max 閾值線 |
+| 列平均閾值 | `ee_ErrorValueMeanH` → `ErrorValueMeanH` | 0.2 | H chart Mean 閾值線 |
+| 列最大閾值 | `ef_ErrorValueMaxH` → `ErrorValueMaxH` | 0.6 | H chart Max 閾值線 |
 | ── 背景校正 ── | （分隔列，唯讀） | — | — |
 | 取時間 (sec) | `fb_BackgroundSampleSeconds` → `BackgroundSampleSeconds` | 3 | StandardBgSub 採集時間 |
 

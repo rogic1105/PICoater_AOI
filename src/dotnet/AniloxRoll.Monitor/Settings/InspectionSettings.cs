@@ -105,22 +105,22 @@ namespace AniloxRoll.Monitor.Core.Data
         public string da_AlgorithmHeader => "";
         [Category(CategoryInspection)][DisplayName("去背演算法")]
         public BackgroundAlgorithm db_Algorithm { get => Recipe.Algorithm; set => Recipe.Algorithm = value; }
-        [Category(CategoryInspection)][DisplayName("垂直正規值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryInspection)][DisplayName("欄正規值")][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float dc_HessianMaxFactorV { get => Recipe.HessianMaxFactorV; set => Recipe.HessianMaxFactorV = value; }
-        [Category(CategoryInspection)][DisplayName("水平正規值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryInspection)][DisplayName("列正規值")][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float dd_HessianMaxFactorH { get => Recipe.HessianMaxFactorH; set => Recipe.HessianMaxFactorH = value; }
 
         [Category(CategoryInspection)][DisplayName("─ 檢出標準 ─")][ReadOnly(true)]
         public string ea_DetectionHeader => "";
         [Category(CategoryInspection)][DisplayName("檢出方向")]
         public RidgeDirection eb_RidgeDir { get => Recipe.RidgeDir; set => Recipe.RidgeDir = value; }
-        [Category(CategoryInspection)][DisplayName("垂直平均閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryInspection)][DisplayName("欄平均閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float ec_ErrorValueMeanV { get => Recipe.ErrorValueMeanV; set => Recipe.ErrorValueMeanV = value; }
-        [Category(CategoryInspection)][DisplayName("垂直最大閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryInspection)][DisplayName("欄最大閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float ed_ErrorValueMaxV  { get => Recipe.ErrorValueMaxV;  set => Recipe.ErrorValueMaxV  = value; }
-        [Category(CategoryInspection)][DisplayName("水平平均閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryInspection)][DisplayName("列平均閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float ee_ErrorValueMeanH { get => Recipe.ErrorValueMeanH; set => Recipe.ErrorValueMeanH = value; }
-        [Category(CategoryInspection)][DisplayName("水平最大閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryInspection)][DisplayName("列最大閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float ef_ErrorValueMaxH  { get => Recipe.ErrorValueMaxH;  set => Recipe.ErrorValueMaxH  = value; }
 
         [Category(CategoryInspection)][DisplayName("─ 背景校正 ─")][ReadOnly(true)]

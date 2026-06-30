@@ -899,12 +899,12 @@ namespace AniloxRoll.Monitor.Forms
             "ec_ErrorValueMeanV", "ed_ErrorValueMaxV",
             "ee_ErrorValueMeanH", "ef_ErrorValueMaxH",
             // InspectionRecipe.* 真名（程式碼直接改 Recipe 時用）
-            nameof(InspectionRecipe.HessianMaxFactorV), "Hessian Max Factor V", "垂直正規值",
-            nameof(InspectionRecipe.HessianMaxFactorH), "Hessian Max Factor H", "水平正規值",
-            nameof(InspectionRecipe.ErrorValueMeanV),  "Error Value Mean V", "垂直平均閾值",
-            nameof(InspectionRecipe.ErrorValueMaxV),   "Error Value Max V",  "垂直最大閾值",
-            nameof(InspectionRecipe.ErrorValueMeanH),  "Error Value Mean H", "水平平均閾值",
-            nameof(InspectionRecipe.ErrorValueMaxH),   "Error Value Max H",  "水平最大閾值",
+            nameof(InspectionRecipe.HessianMaxFactorV), "Hessian Max Factor V", "欄正規值",
+            nameof(InspectionRecipe.HessianMaxFactorH), "Hessian Max Factor H", "列正規值",
+            nameof(InspectionRecipe.ErrorValueMeanV),  "Error Value Mean V", "欄平均閾值",
+            nameof(InspectionRecipe.ErrorValueMaxV),   "Error Value Max V",  "欄最大閾值",
+            nameof(InspectionRecipe.ErrorValueMeanH),  "Error Value Mean H", "列平均閾值",
+            nameof(InspectionRecipe.ErrorValueMaxH),   "Error Value Max H",  "列最大閾值",
             nameof(InspectionRecipe.Algorithm),        "去背演算法",
             nameof(InspectionRecipe.RidgeDir),         "Ridge 方向",
         };
