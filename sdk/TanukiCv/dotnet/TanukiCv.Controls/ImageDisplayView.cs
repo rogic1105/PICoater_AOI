@@ -376,7 +376,13 @@ namespace TanukiCv.Controls
                 bool firstFrame = _mainW < 0;
                 _mainW = bmp.Width; _mainH = bmp.Height;
                 // 首幀一定 fit；之後尺寸變動只在「使用者仍在 fit 視角」才 fit（live 新幀不把手動縮放拉回 fit）。
-                if (firstFrame || _canvas.IsAtFitView()) _canvas.FitToScreen();
+                if (firstFrame || _canvas.IsAtFitView())
+                {
+                    _canvas.FitToScreen();
+                    // fit 後立即補發視野範圍：否則上層曲線圖（法向/overview）會先用 default 軸畫第一筆資料、
+                    // 等下次互動才 snap 到視野 → 第一次出圖「閃一下」。同步補發，曲線一出來就對齊視野。
+                    RefireViewRange();
+                }
             }
             ApplyCalibration();
         }
