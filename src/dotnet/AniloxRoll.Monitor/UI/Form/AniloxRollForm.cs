@@ -38,6 +38,7 @@ namespace AniloxRoll.Monitor.Forms
         private DateTimeNavigator _dateTimeNavigator;
         private ReviewDisplayManager _reviewDisplayManager;   // 回顧同源顯示（sdk ImageDisplayView，絞殺榕收官）
         private double _reviewViewLeftMm = double.NaN, _reviewViewRightMm, _reviewViewTopMm, _reviewViewBotMm; // 新畫布視野快取（chart 原子更新用）
+        private bool _reviewRowRangeSuspended;
         private int _reviewSyncCount; private long _reviewSyncOvMax, _reviewSyncRowMax;   // [ReviewSync] 拖曳跟隨計時儀器
         private AniloxRollPresenter _presenter;
         private FormInteractionHelper _interactionHelper;
@@ -549,7 +550,8 @@ namespace AniloxRoll.Monitor.Forms
                     var swSync = System.Diagnostics.Stopwatch.StartNew();
                     _reviewOverviewHelper?.UpdateViewRange(l, r);
                     long ovMs = swSync.ElapsedMilliseconds;
-                    _reviewRowDisplay?.UpdateViewRange(top, bot);
+                    if (!_reviewRowRangeSuspended)
+                        _reviewRowDisplay?.UpdateViewRange(top, bot);
                     long rowMs = swSync.ElapsedMilliseconds - ovMs;
                     // [ReviewSync] 計時儀器：單次 >25ms 即時告警；每 120 次彙總（拖曳 ~4 秒）→ 看瓶頸在 overview/row/事件頻率
                     _reviewSyncCount++; _reviewSyncOvMax = Math.Max(_reviewSyncOvMax, ovMs); _reviewSyncRowMax = Math.Max(_reviewSyncRowMax, rowMs);

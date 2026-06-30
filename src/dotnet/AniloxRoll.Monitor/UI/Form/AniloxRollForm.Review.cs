@@ -29,6 +29,26 @@ namespace AniloxRoll.Monitor.Forms
     /// <summary>AniloxRollForm 回顧（資料夾/時段載入、回顧強化）相關方法 — 由主檔拆出的 partial。</summary>
     public partial class AniloxRollForm
     {
+        private async Task LoadGrabStitchedViewGuardRowRangeAsync(string grabId, DateTime earliest, DateTime latest)
+        {
+            await LoadGrabStitchedViewGuardRowRangeAsync(grabId, earliest, latest,
+                _stitchCoordinator.LastReviewProcessedMode);
+        }
+
+        private async Task LoadGrabStitchedViewGuardRowRangeAsync(string grabId, DateTime earliest, DateTime latest,
+            bool enableProcess)
+        {
+            _reviewRowRangeSuspended = true;
+            try
+            {
+                await _stitchCoordinator.LoadGrabStitchedViewAsync(grabId, earliest, latest, enableProcess);
+            }
+            finally
+            {
+                _reviewRowRangeSuspended = false;
+            }
+        }
+
         private async void btnReviewSelectFolder_Click(object sender, EventArgs e)
         {
             try
@@ -92,7 +112,7 @@ namespace AniloxRoll.Monitor.Forms
             if (reviewIdx >= 0 && reviewIdx < _dataStatsPresenter.GrabIdInfos.Count)
             {
                 var info = _dataStatsPresenter.GrabIdInfos[reviewIdx];
-                await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest);
+                await LoadGrabStitchedViewGuardRowRangeAsync(info.GrabId, info.Earliest, info.Latest);
                 _reviewDisplayManager?.RefireViewRange();   // 同上：載入完恢復曲線視野跟隨
                 // 2b-ii：fit-on-load 由 ImageDisplayView 首幀自動 fit 承接（換 ID 保視野＝刻意不再 re-fit）
                 _reviewDirty = false;
@@ -128,7 +148,7 @@ namespace AniloxRoll.Monitor.Forms
             int idx = cbReviewId.SelectedIndex;
             if (idx < 0 || idx >= _dataStatsPresenter.GrabIdInfos.Count) return;
             var info = _dataStatsPresenter.GrabIdInfos[idx];
-            await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest, enableProcess);
+            await LoadGrabStitchedViewGuardRowRangeAsync(info.GrabId, info.Earliest, info.Latest, enableProcess);
             _reviewDisplayManager?.RefireViewRange();   // chart 重建會重設軸 → 補發當前視野（不用等滑鼠動）
         }
 

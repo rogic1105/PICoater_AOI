@@ -92,7 +92,7 @@ namespace AniloxRoll.Monitor.Forms
                 var info = _dataStatsPresenter.GrabIdInfos[idx];
                 try
                 {
-                    await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest);
+                    await LoadGrabStitchedViewGuardRowRangeAsync(info.GrabId, info.Earliest, info.Latest);
                     // 2b-ii：fit 由 ImageDisplayView 首幀自動 fit 承接
                 }
                 catch (Exception ex) { Trace.WriteLine($"[tabMain → Review] {ex}"); }
@@ -127,7 +127,7 @@ namespace AniloxRoll.Monitor.Forms
                     _interactionHelper.NavigateToDateTime(earliest);
                 _presenter.UpdatePeriodNavigationState();
 
-                await _stitchCoordinator.LoadGrabStitchedViewAsync(grabId, earliest, latest);
+                await LoadGrabStitchedViewGuardRowRangeAsync(grabId, earliest, latest);
                 // 2b-ii：SaveCanvasView/fit（讀已砍 canvas）移除；ImageDisplayView 自管視野
                 _reviewDirty = false;
 

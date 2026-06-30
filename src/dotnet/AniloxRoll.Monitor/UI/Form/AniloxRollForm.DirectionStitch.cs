@@ -107,7 +107,7 @@ namespace AniloxRoll.Monitor.Forms
                     if (idx >= 0 && idx < _dataStatsPresenter.GrabIdInfos.Count)
                     {
                         var info = _dataStatsPresenter.GrabIdInfos[idx];
-                        await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest, true);
+                        await LoadGrabStitchedViewGuardRowRangeAsync(info.GrabId, info.Earliest, info.Latest, true);
                     }
                 }
                 else
