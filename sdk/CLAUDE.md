@@ -80,7 +80,7 @@ sdk/
 │   ├── dotnet/
 │   │   ├── TanukiCv.Core         ← 純 library（無 WinForms）：PixelMmMapper 像素↔mm、SystemInfo、PerfTimer、
 │   │   │                             MergeLayout（合圖佈局唯一來源）、CurveOverviewMerger（切向全覽曲線合併唯一來源）
-│   │   └── TanukiCv.Controls     ← WinForms（→Core）：ImageCanvas / LiveDisplayView / ThumbStrip /
+│   │   └── TanukiCv.Controls     ← WinForms（→Core）：ImageCanvas / ImageDisplayView / ThumbStrip /
 │   │                                 曲線圖 helper（Base/Column/Row）/ GrayBitmap / GrayResizeCpu
 │   ├── benchmark/{tanuki_core_bench, TanukiCv.BenchUi}
 │   ├── samples/TanukiCv.SysInfoTool
@@ -99,13 +99,13 @@ sdk/
 
 ## 單一來源（sdk 內已收斂的，勿再抄）
 
-- **合圖佈局** = `TanukiCv.Core.MergeLayout.Compute`（純算術；xOffset + 重疊 boundary，3 策略 `MergeOverlap.Midline/RightOverLeft/LeftOverRight`）。影像合圖（GrabImageStitcher / LiveDisplayView）+ 曲線合圖都呼這份 → 曲線與影像 pixel 對齊。
+- **合圖佈局** = `TanukiCv.Core.MergeLayout.Compute`（純算術；xOffset + 重疊 boundary，3 策略 `MergeOverlap.Midline/RightOverLeft/LeftOverRight`）。影像合圖（GrabImageStitcher / ImageDisplayView）+ 曲線合圖都呼這份 → 曲線與影像 pixel 對齊。
 - **切向全覽曲線合併** = `TanukiCv.Core.CurveOverviewMerger.Merge`（純算術；reuse MergeLayout boundary 唯一歸屬、間空參與分界(黑占位)留 0＝在線相機曲線在與黑布的中線被切、與影像對齊；回傳 mean/max/globalMin/gridMm 純資料，「秀」交呼叫端）。app `CurveMergeHelper.UpdateOverviewChart` 是薄 wrapper（委派 Merge + 接 ColumnCurveChartHelper + StitchMode 視野）；範例可直接呼 Merge 接自己的曲線圖。
   - `MIL/MultiCameraMerger`（MIL 直繪 live 合圖）**2026-06-26 起也走 `MergeLayout`**（原 MIL-only 自含一份已移除）—— MergeLayout 零依賴純算術，拋棄層引用它依賴方向正確；live/回顧/瀑布/曲線全單一來源。
   - 註：MergeLayout / CurveOverviewMerger 在 **Core**（純算術），非 Controls —— 純 IP 不困在 WinForms assembly，headless/benchmark/範例 皆可用。
 - **像素↔mm** = `TanukiCv.Core.PixelMmMapper`。
-- **GPU 灰階 LOD resize provider** = `TanukiCv.Core.GpuGrayResizeProvider`。負責 CUDA pinned host buffer 生命週期（on-demand grow/reuse、Resize/Release 互斥、防背景 LOD use-after-free），簽章可直接餵 `LiveDisplayView.EnableLod`。app 可注入自己的 `NativeMethods` 以保留 P/Invoke 單一宣告；sample/tool 可用 `CreateTanukiCv()`。
-- **LiveDisplayView 顯示選項套用** = `TanukiCv.Controls.LiveDisplayOptions` + `LiveDisplayView.ApplyOptions`。共用 MergeMode/MergeAll/MergeStrategy/FlipVertical/ThumbSelectedColor；frame feed、layout、LOD provider、MIL direct 等策略仍由呼叫端擁有。
+- **GPU 灰階 LOD resize provider** = `TanukiCv.Core.GpuGrayResizeProvider`。負責 CUDA pinned host buffer 生命週期（on-demand grow/reuse、Resize/Release 互斥、防背景 LOD use-after-free），簽章可直接餵 `ImageDisplayView.EnableLod`。app 可注入自己的 `NativeMethods` 以保留 P/Invoke 單一宣告；sample/tool 可用 `CreateTanukiCv()`。
+- **ImageDisplayView 顯示選項套用** = `TanukiCv.Controls.LiveDisplayOptions` + `ImageDisplayView.ApplyOptions`。共用 MergeMode/MergeAll/MergeStrategy/FlipVertical/ThumbSelectedColor；frame feed、layout、LOD provider、MIL direct 等策略仍由呼叫端擁有。
 - **多擊偵測** = `TanukiCv.Controls.MultiClickDetector`。ImageCanvas 內建雙擊 fit/三擊 1:1 與 app panel route 共用同一個 detector；呼叫端可設定 interval/距離模式以保留各自手勢語意。
 - **瀑布顯示** = `TanukiCv.Controls.WaterfallView` + `WaterfallFullMode`。使用 ImageCanvas LOD、MergeLayout placement、chunked gray buffer；app 只負責餵 frame/layout/settings。
 - **曝光上限公式** = `MilCameraParams.CalcExposureMaxUs`（`MIL/MilGrabber.Core/MilCamera.Params.cs`）。
