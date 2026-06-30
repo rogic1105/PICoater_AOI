@@ -194,6 +194,7 @@ namespace AniloxRoll.Monitor.Forms
         // （overview 立即跟隨 + 500ms 重畫沿用同範圍 → 不閃回原點）。NaN=非 ImageCanvas 即時狀態。
         private double _liveViewLeftMm = double.NaN, _liveViewRightMm = double.NaN;
         private double _liveViewTopMm = double.NaN, _liveViewBotMm = double.NaN;
+        private bool _liveRowRangeSuspended;
 
         private bool ShouldFlipDisplayVertical()
             => GetVerticalDisplayDirection() == VerticalDisplayDirection.BottomToTop;
@@ -206,7 +207,8 @@ namespace AniloxRoll.Monitor.Forms
             if (IsDisposed) return;
             _liveViewLeftMm = leftMm; _liveViewRightMm = rightMm;     // 供 overview provider 沿用（不閃）
             _liveViewTopMm = topMm; _liveViewBotMm = botMm;
-            _liveRowDisplay?.UpdateViewRange(topMm, botMm);            // 列(Y)
+            if (!_liveRowRangeSuspended)
+                _liveRowDisplay?.UpdateViewRange(topMm, botMm);            // 列(Y)
             _liveOverviewHelper?.UpdateViewRange(leftMm, rightMm);     // overview 立即跟隨（500ms 重畫用同值不閃）
         }
 
@@ -217,6 +219,17 @@ namespace AniloxRoll.Monitor.Forms
             if (double.IsNaN(_liveViewTopMm) || double.IsNaN(_liveViewBotMm)) return true;
             _liveRowDisplay?.UpdateViewRange(_liveViewTopMm, _liveViewBotMm);
             return true;
+        }
+
+        private void SuspendLiveRowRangeUntilNextData()
+        {
+            _liveRowRangeSuspended = true;
+        }
+
+        private bool ResumeLiveRowRangeAfterDataUpdate()
+        {
+            _liveRowRangeSuspended = false;
+            return TryApplyLiveImageCanvasRowViewRange();
         }
 
         private void OnLiveCurveData(int camId, float[] meanArr, float[] maxArr)
@@ -267,7 +280,7 @@ namespace AniloxRoll.Monitor.Forms
                 _liveRowMeanCache[camId] = meanArr;
                 _liveRowMaxCache[camId]  = maxArr;
                 MergeAndUpdateLiveRowChart();
-                if (TryApplyLiveImageCanvasRowViewRange()) return;
+                if (ResumeLiveRowRangeAfterDataUpdate()) return;
 
                 // 同步 Y 軸視野：查詢 _mergedDisplay 的 zoom/pan
                 double rowPitch = _liveRowDisplay.RowPitchMm;
@@ -282,7 +295,7 @@ namespace AniloxRoll.Monitor.Forms
                 // 垂直模式：只顯示選中相機
                 if (camId != _liveCameraManager.SelectedMainCameraId) return;
                 _liveRowDisplay.UpdateData(meanArr, maxArr);
-                if (TryApplyLiveImageCanvasRowViewRange()) return;
+                if (ResumeLiveRowRangeAfterDataUpdate()) return;
 
                 // 同步 Y 軸視野：查詢 MIL 副顯示器 zoom/pan
                 var liveCam = FindCameraById(camId);
@@ -329,6 +342,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private void ResetLiveWaterfallRowChart()
         {
+            SuspendLiveRowRangeUntilNextData();
             _waterfallRowMeanPending.Clear();
             _waterfallRowMaxPending.Clear();
             _waterfallRowMean = null;
@@ -403,7 +417,7 @@ namespace AniloxRoll.Monitor.Forms
                 : Math.Min(capacity, _waterfallRowWrite + bandLen);
 
             _liveRowDisplay.UpdateData(_waterfallRowMean, _waterfallRowMax);
-            if (TryApplyLiveImageCanvasRowViewRange()) return;
+            if (ResumeLiveRowRangeAfterDataUpdate()) return;
         }
 
         /// <summary>用 A輪速度 和選中相機的取樣頻率（Line Rate）更新列圖表座標。</summary>
