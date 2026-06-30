@@ -15,14 +15,14 @@ namespace AniloxRoll.Monitor.Core.Services
         public int[] CamGrabHeight { get; }    // length 7，高度滑桿（line scan 行數）
         public double[] CamExposureUs { get; } // length 7，曝光滑桿（μs）
         public double[] CamLineRateHz { get; } // length 7，線掃滑桿（Hz）
-        /// <summary>垂直正規值 — 同時是 capture 時送進 native 的單一 HM，bin 中 baked-in 的縮放係數。</summary>
+        /// <summary>欄正規值 — 同時是 capture 時送進 native 的單一 HM，bin 中 baked-in 的縮放係數。</summary>
         public float HessianMaxFactorV { get; }
-        /// <summary>水平正規值 — view-time only，僅供 H 曲線顯示縮放參考。</summary>
+        /// <summary>列正規值 — view-time only，僅供 H 曲線顯示縮放參考。</summary>
         public float HessianMaxFactorH { get; }
-        public float ErrorValueMeanV { get; }  // 垂直平均閾值
-        public float ErrorValueMaxV  { get; }  // 垂直最大閾值
-        public float ErrorValueMeanH { get; }  // 水平平均閾值
-        public float ErrorValueMaxH  { get; }  // 水平最大閾值
+        public float ErrorValueMeanV { get; }  // 欄平均閾值
+        public float ErrorValueMaxV  { get; }  // 欄最大閾值
+        public float ErrorValueMeanH { get; }  // 列平均閾值
+        public float ErrorValueMaxH  { get; }  // 列最大閾值
         public double TrimHeadMm { get; }
         public double TrimTailMm { get; }
         public DateTime Timestamp { get; }

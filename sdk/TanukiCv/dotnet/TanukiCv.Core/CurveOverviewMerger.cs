@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace TanukiCv.Core
 {
     /// <summary>
-    /// 多相機「切向全覽曲線」合併演算法（純算術，0 依賴 WinForms / MIL）：
+    /// 多相機「欄全覽曲線」合併演算法（純算術，0 依賴 WinForms / MIL）：
     /// 把各相機的 mura 曲線依機台布局位置（Start mm）合到單一全域曲線。
     ///
     /// 重疊區依合圖方式（<see cref="MergeOverlap"/>）的 boundary **唯一歸屬** —— 與影像合圖共用
@@ -34,7 +34,7 @@ namespace TanukiCv.Core
         }
 
         /// <summary>
-        /// 合併多台相機的切向曲線。
+        /// 合併多台相機的欄曲線。
         /// </summary>
         /// <param name="allMean">各相機 Mean 曲線（null/空 = 該相機間空，不參與）。</param>
         /// <param name="allMax">各相機 Max 曲線（可 null）。</param>

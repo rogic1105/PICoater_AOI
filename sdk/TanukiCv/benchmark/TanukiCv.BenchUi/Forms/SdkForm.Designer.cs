@@ -55,7 +55,7 @@ namespace TanukiCv.BenchUi.Forms
             this.btnBinary = new System.Windows.Forms.Button();
             this.btnReset = new System.Windows.Forms.Button();
             this.btnLoad = new System.Windows.Forms.Button();
-            this.canvasMain = new TanukiCv.Controls.SmartCanvas();
+            this.canvasMain = new TanukiCv.Controls.ImageCanvas();
             this.statusStrip1 = new System.Windows.Forms.StatusStrip();
             this.lblPixelInfo = new System.Windows.Forms.ToolStripStatusLabel();
             this.tabPage2 = new System.Windows.Forms.TabPage();
@@ -448,7 +448,7 @@ namespace TanukiCv.BenchUi.Forms
 
         #endregion
 
-        private TanukiCv.Controls.SmartCanvas canvasMain;
+        private TanukiCv.Controls.ImageCanvas canvasMain;
         private System.Windows.Forms.TabControl tabControl1;
         private System.Windows.Forms.TabPage tabPage1;
         private System.Windows.Forms.TabPage tabPage2;

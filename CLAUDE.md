@@ -7,14 +7,14 @@ PICoater_AOI/
 ├── src/                  ← 應用程式（產品交付；只剩 UI）
 │   └── dotnet/AniloxRoll.Monitor/  ← C# WinForms 主應用（C++ 演算法已全數搬入 sdk/TanukiCv/native/tanuki_pipeline）
 ├── sdk/                  ← 可獨立 split 的 library（純函式庫，無 GUI、無 exe）。**有自己的 `sdk/CLAUDE.md`（巢狀，編 sdk 檔時載入；放分層鐵則+元件地圖，隨 split 帶走）**
-│   ├── TanukiCv/         ← 以 tanuki_core 為引擎的 .NET 影像 SDK（native/{tanuki_core,tanuki_utils,tanuki_cv_api,tanuki_pipeline〔★演算法流程層 core→module→pipeline：framework(IModule+工頭+registry)+modules(background_sub/ridge_hessian 可換步驟)+pipelines/find_stream_ridgeline(食譜+README+benchmark)+api(tanuki_pipeline_api.dll=app P/Invoke 出口，原 src/native picoater_api 已退場刪除)〕} + dotnet/{TanukiCv.Core 純 library〔含 PixelMmMapper 像素↔mm 公式、SystemInfo CPU/GPU/RAM/螢幕查詢、PerfTimer 通用計時器（量段+視窗 worst-case，計時唯一來源）、MergeLayout 合圖佈局演算法單一來源（純算術；xOffset+重疊分界，3 策略：中線/右覆蓋左/左覆蓋右）、CurveOverviewMerger 切向全覽曲線合併唯一來源（reuse MergeLayout boundary 唯一歸屬、間空參與分界(黑占位)留 0＝在線相機曲線在與黑布的中線被切、與影像對齊；範例同源共用）〕, TanukiCv.Controls WinForms〔→Core；含 SmartCanvas + **顯示 pipeline 共用元件：LiveDisplayView（絞殺榕重寫版多相機監控：主畫面 SmartCanvas+ThumbStrip縮圖+CPU合圖+合圖全部+flip+**LOD 單張&合圖**，統一介面 PushFrame/SetLayout/EnableLod(GrayResize)/FlipVertical；**合圖 LOD＝虛擬圖=完整合圖佈局、provider 逐欄找相機合成可見區+stride 壓緩衝→GrayResize，顯示成本從 ~180ms 降到 ~1ms**；**app（LiveCameraManager）+ 範例（MilGrabberPbForm）都已採用＝兩產品同源唯一來源；舊 MultiCamLiveView 已退場刪除**）/ ThumbStrip（多相機縮圖條：批量 CPU 建圖不閃，唯一來源）/ ThumbView（雙緩衝自繪縮圖葉子）/ GrayBitmap（灰階 bytes→bitmap 唯一來源）/ GrayResizeCpu（純 CPU 雙線性縮放＝LOD 的 CPU provider，無 GPU 機器用）/ GrayResize 委派（LOD resize 插槽：GPU 呼叫端給、CPU 用 GrayResizeCpu）**〕} + benchmark/{tanuki_core_bench,TanukiCv.BenchUi} + samples/TanukiCv.SysInfoTool〔系統資訊 GUI 工具〕 + third_party/stb；self-contained 可 split）
+│   ├── TanukiCv/         ← 以 tanuki_core 為引擎的 .NET 影像 SDK（native/{tanuki_core,tanuki_utils,tanuki_cv_api,tanuki_pipeline〔★演算法流程層 core→module→pipeline：framework(IModule+工頭+registry)+modules(background_sub/ridge_hessian 可換步驟)+pipelines/find_stream_ridgeline(食譜+README+benchmark)+api(tanuki_pipeline_api.dll=app P/Invoke 出口，原 src/native picoater_api 已退場刪除)〕} + dotnet/{TanukiCv.Core 純 library〔含 PixelMmMapper 像素↔mm 公式、SystemInfo CPU/GPU/RAM/螢幕查詢、PerfTimer 通用計時器（量段+視窗 worst-case，計時唯一來源）、MergeLayout 合圖佈局演算法單一來源（純算術；xOffset+重疊分界，3 策略：中線/右覆蓋左/左覆蓋右）、CurveOverviewMerger 欄全覽曲線合併唯一來源（reuse MergeLayout boundary 唯一歸屬、間空參與分界(黑占位)留 0＝在線相機曲線在與黑布的中線被切、與影像對齊；範例同源共用）〕, TanukiCv.Controls WinForms〔→Core；含 ImageCanvas + **顯示 pipeline 共用元件：ImageDisplayView（絞殺榕重寫版多相機監控：主畫面 ImageCanvas+ThumbStrip縮圖+CPU合圖+合圖全部+flip+**LOD 單張&合圖**，統一介面 PushFrame/SetLayout/EnableLod(GrayResize)/FlipVertical；**合圖 LOD＝虛擬圖=完整合圖佈局、provider 逐欄找相機合成可見區+stride 壓緩衝→GrayResize，顯示成本從 ~180ms 降到 ~1ms**；**app（LiveCameraManager）+ 範例（MilGrabberPbForm）都已採用＝兩產品同源唯一來源；舊 MultiCamLiveView 已退場刪除**）/ ThumbStrip（多相機縮圖條：批量 CPU 建圖不閃，唯一來源）/ ThumbView（雙緩衝自繪縮圖葉子）/ GrayBitmap（灰階 bytes→bitmap 唯一來源）/ GrayResizeCpu（純 CPU 雙線性縮放＝LOD 的 CPU provider，無 GPU 機器用）/ GrayResize 委派（LOD resize 插槽：GPU 呼叫端給、CPU 用 GrayResizeCpu）**〕} + benchmark/{tanuki_core_bench,TanukiCv.BenchUi} + samples/TanukiCv.SysInfoTool〔系統資訊 GUI 工具〕 + third_party/stb；self-contained 可 split）
 │   ├── Bridges/          ← 對外設備 / 系統橋接層
 │   │   ├── IoBridge/                         ← ICP DAS ET-7044 IO module（Modbus TCP）
 │   │   │   ├── IoBridge.Core/                ← library（IModbusTcpClient 介面 + ET-7044 實作）
 │   │   │   └── samples/                      ← 可執行範例（ManualControl / Automation GUI）
 │   │   ├── LightBridge/LightBridge.Core/     ← RS-232 LTS-3DPA24 光源
 │   │   └── StorageBridge/StorageBridge.Core/ ← SMB + 檔案複製 + 循環儲存
-│   ├── MIL/              ← MIL 集中區（MilGrabber.Core MIL 封裝 library〔MilCamera=一台相機〕 + samples/MilGrabber.Monitor 多相機監控範例（**繪圖模式 MIL 直繪 panel vs PictureBox**〔「設定」tab PropertyGrid 選、初始化後軟鎖、釋放解鎖〕；PictureBox 模式：MilCamera FrameReady → GetFrameBytes → tanuki_core GPU resize 縮圖 → SmartCanvas 繪 + 合圖，測 GDI 即時取像卡不卡。class=MilGrabberPbForm（1127→535 行，按職責拆 partial：`.cs` 核心生命週期/ctor + `.PictureBox.cs` 顯示路徑 + `.Params.cs` 參數接線 + `.Telemetry.cs` ListView/timer + `.Config.cs` json 載入）；含 `[PbTiming]` 計時 log（縮圖/顯示 max）+ chkLod 動態LOD（停住裁可見區+GPU 縮到 panel→縮小看全圖便宜、放大看真細節）+ 滾輪相對 fit + 雙擊 fit / 三擊實體 1:1〔FOV 輸入框算 mm/px〕。**原獨立 MilGrabber.PictureBox 範例已併入此**。**tabParams 含「設定」tab**（單一 PropertyGrid `propertyGridMerge` 綁 `PbSettings`，仿 app propertyGridSettings 的 SSoT；散落 chk/num/cmb/radio 全收進來：繪圖模式/合圖方式/動態LOD/重疊策略 互斥用 enum〔`EnumDescConverter` 顯示中文 [Description]〕+ 上下翻轉/FOV/縮圖倍率 + OPS/Start CamRow8〔Cam1~8 可展開〕；`PropertyValueChanged`→`ApplyPbSettings` 一次套用全部，view 不擁有邏輯。合圖全部=無畫面相機黑占位；佈局用 sdk `TanukiCv.Controls.MergeLayout`，巨圖 `MergeMaxW=30000` cap 防 GDI 16-bit 座標 wrap 內容錯位）） + docs）；隔離 MIL，換 grabber 整區換。**MIL 合圖（MultiCameraMerger）刻意保 MIL-only 自含中線、不引用 TanukiCv（拋棄層隨硬體換）；可重用合圖演算法在 TanukiCv.Controls.MergeLayout**。**取像同步**：相機需 CLProtocol 套線掃才同頻（btnInit 後自動跑 btnFetchInfo 等 CLProtocol+套線掃，否則 free-run 偶發不同步；硬體無 encoder/外部觸發）
+│   ├── MIL/              ← MIL 集中區（MilGrabber.Core MIL 封裝 library〔MilCamera=一台相機〕 + samples/MilGrabber.Monitor 多相機監控範例（**繪圖模式 MIL 直繪 panel vs PictureBox**〔「設定」tab PropertyGrid 選、初始化後軟鎖、釋放解鎖〕；PictureBox 模式：MilCamera FrameReady → GetFrameBytes → tanuki_core GPU resize 縮圖 → ImageCanvas 繪 + 合圖，測 GDI 即時取像卡不卡。class=MilGrabberPbForm（1127→535 行，按職責拆 partial：`.cs` 核心生命週期/ctor + `.PictureBox.cs` 顯示路徑 + `.Params.cs` 參數接線 + `.Telemetry.cs` ListView/timer + `.Config.cs` json 載入）；含 `[PbTiming]` 計時 log（縮圖/顯示 max）+ chkLod 動態LOD（停住裁可見區+GPU 縮到 panel→縮小看全圖便宜、放大看真細節）+ 滾輪相對 fit + 雙擊 fit / 三擊實體 1:1〔FOV 輸入框算 mm/px〕。**原獨立 MilGrabber.PictureBox 範例已併入此**。**tabParams 含「設定」tab**（單一 PropertyGrid `propertyGridMerge` 綁 `PbSettings`，仿 app propertyGridSettings 的 SSoT；散落 chk/num/cmb/radio 全收進來：繪圖模式/合圖方式/動態LOD/重疊策略 互斥用 enum〔`EnumDescConverter` 顯示中文 [Description]〕+ 上下翻轉/FOV/縮圖倍率 + OPS/Start CamRow8〔Cam1~8 可展開〕；`PropertyValueChanged`→`ApplyPbSettings` 一次套用全部，view 不擁有邏輯。合圖全部=無畫面相機黑占位；佈局用 sdk `TanukiCv.Controls.MergeLayout`，巨圖 `MergeMaxW=30000` cap 防 GDI 16-bit 座標 wrap 內容錯位）） + docs）；隔離 MIL，換 grabber 整區換。**MIL 合圖（MultiCameraMerger）走 sdk 單一來源 `TanukiCv.Core.MergeLayout`（2026-06-26 收斂，原 MIL-only 自含一份已移除）—— MergeLayout 零依賴純算術、從拋棄層引用它依賴方向正確(throwaway→durable)；live/回顧/瀑布/曲線全同一份、黑槽（沒影像相機）一致參與中線分界**。**取像同步**：相機需 CLProtocol 套線掃才同頻（btnInit 後自動跑 btnFetchInfo 等 CLProtocol+套線掃，否則 free-run 偶發不同步；硬體無 encoder/外部觸發）
 │   └── docs/            ← 跨專案工程經驗（repo-style / testing pyramid / FSM）
 ├── tools/                ← 跨元件 / 應用層通用工具（不專屬單一 sdk 元件）
 │   ├── ps/                   ← PowerShell 腳本
@@ -26,7 +26,7 @@ PICoater_AOI/
 ├── docs/                 ← 文件
 │   ├── config/           ← 設定 JSON 範例
 │   ├── dev/              ← 開發者參考（MIL API / 廠商規格書）
-│   └── user-manual/      ← 操作員說明（ui-flow.html / hardware-specs）
+│   └── user-manual/      ← 操作員說明（hardware-specs / io_diagrams / storage-flow）
 ├── deploy/               ← 現場部署腳本（PowerShell + JSON）
 └── .claude/skills/       ← Claude Code skills（按修改範圍觸發）
 
@@ -101,10 +101,28 @@ app 的 UI 架構（SSoT 原子結構 / 四層 View-協調-State-Service / 協�
 **已知教訓（都是抄多份釀的坑）：**
 - 曝光上限公式 `900000/線掃` 曾抄 4 份（主程式 3 + 範例 1）→ 收進 `MilCameraParams.CalcExposureMaxUs`
 - 合圖佈局「設座標 + 算位置」在 `EnableMerge`/`RefreshLayout` 各一份且順序不一致 → 切換 StitchMode 後 `xOffset` 用到 `RefOpsMm=0`（除以 0）變垃圾值 → 合圖全黑 → 收進 `MultiCameraMerger.ApplyLayout`（順序鎖死）
-- 座標換算 `pixel↔mm`：回顧已收斂進 sdk `LiveDisplayView.OnCanvasStatus`（唯一來源，CanvasInteractionHelper 已刪）；Live MIL 直繪路徑 `LiveCameraManager` 仍一份（公式都走 `PixelMmMapper`，待 Wave3 一併檢視）
+- 座標換算 `pixel↔mm`：回顧已收斂進 sdk `ImageDisplayView.OnCanvasStatus`（唯一來源，CanvasInteractionHelper 已刪）；Live MIL 直繪路徑 `LiveCameraManager` 仍一份（公式都走 `PixelMmMapper`，待 Wave3 一併檢視）
 
 **討論 / 設計時的提問順序：**
 「這段邏輯有沒有第二份？」 → 「改一處另一處是否一定要跟著改？」 → 是則「抽哪裡、誰呼叫」 — 而不是「複製過來改一改」。
+
+## 術語標準：軸命名（col/row ↔ 欄/列，唯一一組，無例外）
+
+> 收斂歷史包袱：曾有多組詞講同 2 個軸（現行 欄/列、中文舊稱、Vertical/Horizontal、row/col），
+> 且 `chartLiveVertical` 配的是 col（欄）= 視覺詞天生反向。**一律收斂成下表這一組，舊詞完全刪除（非註解標「已棄用」）。**
+
+| 軸 | **code 識別字** | **中文（註解/UI/標準名稱）** | 影像意義 | 圖表 | 物理 |
+|---|---|---|---|---|---|
+| X | **col**（Column） | **欄** | 每「欄」一個值 | 沿 X 畫 | 沿輥圓周 |
+| Y | **row**（Row） | **列** | 每「列」一個值 | 沿 Y 畫 | 橫向捲動 |
+
+**鐵則：**
+- **欄 = col = X**；**列 = row = Y**。繁中慣例：欄=直行(column)、列=橫列(row)，**勿記反**（此表為唯一來源）。
+- **完全退場（刪除，非註解）**：中文軸舊詞、`切線`、以及**我們自己的** `Vertical`/`Horizontal` 識別字（控制項名、欄位、方法）。
+- **唯一不碰**：WinForms 框架的 `Vertical/Horizontal`（`Orientation`/`DockStyle`/`ScrollBars`/`TextAlign`/`Anchor`…）— 那不是我們的術語，rename 時手術式排除。
+- PropertyGrid「檢出方向」顯示值收斂為 `欄/列/全部`（操作員看 欄/列 比中文軸舊詞直觀、又跟 code 1:1）。
+- sdk 既有 `ColumnCurveChartHelper`/`RowCurveChartHelper` 已是 col/row，為對齊基準，不改。
+- 控制項對齊：`chart{Live,Review,Data}Vertical`→`...Column`、`chart{Live,Review}Horizontal`→`...Row`（修「Vertical 配 Column」反向）。
 
 ## 專案結構
 
@@ -161,28 +179,32 @@ PICoater_AOI/
 | `UI/Form/AniloxRollForm.Telemetry.cs` | Telemetry/資源監控 timer（`TelemetryTimer_Tick`/`UpdateResourceMonitor`）。`TelemetryTimer_Tick` MIL 查詢經 `LiveTelemetryPresenter.Capture` 背景化（`_telemetryCaptureInFlight` 防堆積）+ `AreCamerasHwReady` gate（CLProtocol 初始化期間不碰 MIL）。注意：timer new+Start 仍在 SettingsTabs.SetupSystemTab |
 | `UI/Form/AniloxRollForm.Helpers.cs` | PG refresh（`RefreshGridItem`）/Review 座標（`ViewRangeProvider`）/通用（`FindCameraById`/`IsCanvasFitToScreen`） |
 | `UI/Form/AniloxRollForm.Designer.cs` | Form 控制項佈局（VS Designer）。狀態列順序：相機→儲存→光源→IO連線→IO狀態→DIO |
-| `Program.cs` | 進入點 + **全域例外攔截**（`ThreadException`/`AppDomain.UnhandledException`/`UnobservedTaskException` → 寫 `AniloxRoll-crash.log` 到 bin 與 %TEMP%；背景執行緒未處理例外不再直接 0xffffffff 終止）+ 損毀 user.config 自刪 |
+| `Program.cs` | 進入點 + **全域例外攔截**（`ThreadException`/`AppDomain.UnhandledException`/`UnobservedTaskException` → 寫 `AniloxRoll-crash.log` 到 bin 與 %TEMP%；背景執行緒未處理例外不再直接 0xffffffff 終止）+ 損毀 user.config 自刪 + **檔案 trace listener**（Main 開頭加 `TextWriterTraceListener` → `{AniloxRoot或D:\Anilox}\Logs\trace-*.log`，AutoFlush；所有 `Trace.WriteLine`〔含 `[HtRealloc]` 改高度診斷〕落地檔案供離線判讀，stall/hang 也已 flush） |
 | `UI/Widgets/FormInteractionHelper.cs` | 回顧資料夾載入、忙碌鎖、設定套用、螢幕校正、ReviewConfig（Wave2 後已去 canvas 代理 + gallery；Wave3 待拆 facade） |
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/Interaction/EventGuard.cs` | 可重入 bool 旗標（EventGuard + EventGuardScope），using 自動還原（**Wave1 已搬 sdk**） |
-| `sdk/TanukiCv/dotnet/TanukiCv.Controls/BaseCurveChartHelper.cs` | **曲線圖抽象基底（已搬 sdk 共用唯一來源）**：Template Method（Build 骨架 + Mean/Max 線 + 閾值線工廠 + PostPaint），子類填方向專屬洞。自包含 0 依賴 app；app+sample 共用。`ShowThresholds`（預設 true）可關紅閾值線（純剖面用）；`RowCurveChartHelper.SetRowPitch` 直接設 mm/列。**範例 chartProfileX/Y 重用此 + LiveDisplayView.CursorProfileChanged 游標剖面（單張＝選定相機全幀；**合圖剖面已做**＝游標列橫跨整張合圖、用 BuildMerge 同份 placements 拼故與畫面 pixel 對齊、游標行取所屬相機；sdk LiveDisplayView 內、app+sample 同享）** |
-| `sdk/TanukiCv/dotnet/TanukiCv.Controls/ColumnCurveChartHelper.cs` | 切向（X 軸）曲線圖子類：X=位置 mm/Y=值、右側 Y2 刻度、水平 InnerPlotPosition 對齊補償、zoom 同步（chartLiveVertical/Patch/Review*/DataPatch 用）|
-| `sdk/TanukiCv/dotnet/TanukiCv.Controls/RowCurveChartHelper.cs` | 法向（Y 軸）曲線圖子類：Y=位置、軸旋轉、垂直 InnerPlot 補償（chartLiveHorizontal/ReviewHorizontal 用）|
+| `sdk/TanukiCv/dotnet/TanukiCv.Controls/BaseCurveChartHelper.cs` | **曲線圖抽象基底（已搬 sdk 共用唯一來源）**：Template Method（Build 骨架 + Mean/Max 線 + 閾值線工廠 + PostPaint），子類填方向專屬洞。自包含 0 依賴 app；app+sample 共用。`ShowThresholds`（預設 true）可關紅閾值線（純剖面用）；`RowCurveChartHelper.SetRowPitch` 直接設 mm/列。**範例 chartProfileX/Y 重用此 + ImageDisplayView.CursorProfileChanged 游標剖面（單張＝選定相機全幀；**合圖剖面已做**＝游標列橫跨整張合圖、用 BuildMerge 同份 placements 拼故與畫面 pixel 對齊、游標行取所屬相機；sdk ImageDisplayView 內、app+sample 同享）** |
+| `sdk/TanukiCv/dotnet/TanukiCv.Controls/ColumnCurveChartHelper.cs` | 欄（X 軸）曲線圖子類：X=位置 mm/Y=值、右側 Y2 刻度、水平 InnerPlotPosition 對齊補償、zoom 同步（chartLiveVertical/Patch/Review*/DataPatch 用）|
+| `sdk/TanukiCv/dotnet/TanukiCv.Controls/RowCurveChartHelper.cs` | 列（Y 軸）曲線圖子類：Y=位置、軸旋轉、垂直 InnerPlot 補償（chartLiveHorizontal/ReviewHorizontal 用）|
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/Input/TrackBarWheelInterceptor.cs` | TrackBar 滑鼠滾輪攔截器（**Wave1 已搬 sdk**） |
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/Input/ComboBoxWheelReverser.cs` | ComboBox 滑鼠滾輪方向反轉（**Wave1 已搬 sdk**） |
-| `UI/Widgets/MultiClickDetector.cs` | 多擊偵測器：雙擊/三擊辨識（app panelClicker 用）。**與 SmartCanvas 內建重複＝唯一來源債，Wave3 收** |
-| `UI/Widgets/CurveMergeHelper.cs` | **薄 wrapper**：全覽合併數學已抽到 sdk `TanukiCv.Core.CurveOverviewMerger.Merge`（唯一來源，範例同源可共用），本類別只 `.bin 曲線讀取（MergeCurves/MergeRowCurves/GetCurveBasePath，含 CaptureFileNaming 檔名故留 app）+ UpdateOverviewChart「秀」（委派 Merge → 接 ColumnCurveChartHelper + StitchMode 視野）`。切向全覽重疊區依合圖方式 `MergeOverlap`（app 預設 Midline，對齊影像 MultiCameraMerger 中線）唯一歸屬、不再 avg/max、間空留 0（邏輯在 Core） |
+| `sdk/TanukiCv/dotnet/TanukiCv.Controls/Interaction/MultiClickDetector.cs` | **多擊偵測器（已搬 sdk 共用唯一來源）**：ImageCanvas 雙擊 fit/三擊 1:1 與 app `camLiveMain` panel route 共用；呼叫端可設定 interval/距離模式保留原手勢語意。 |
+| `UI/Widgets/CurveMergeHelper.cs` | **薄 wrapper**：全覽合併數學已抽到 sdk `TanukiCv.Core.CurveOverviewMerger.Merge`（唯一來源，範例同源可共用），本類別只 `.bin 曲線讀取（MergeCurves/MergeRowCurves/GetCurveBasePath，含 CaptureFileNaming 檔名故留 app）+ UpdateOverviewChart「秀」（委派 Merge → 接 ColumnCurveChartHelper + StitchMode 視野）`。欄全覽重疊區依合圖方式 `MergeOverlap`（app 預設 Midline，對齊影像 MultiCameraMerger 中線）唯一歸屬、不再 avg/max、間空留 0（邏輯在 Core） |
 | `UI/Presenters/DataStatisticsPresenter.cs` | Data tab 統計邏輯：統計計算、combo 串聯、Period Charts、Mura 空間分布圖（chartDataPatch）、跨 Tab 同步事件 |
-| `UI/Presenters/ReviewStitchCoordinator.cs` | Review tab 拼接管理：LoadGrabStitchedViewAsync、合圖、ClearStitchedMode、overview chart 聯動。**掉偵補黑（tick 對位）**：跨相機對齊軸交 `FrameTickIndex.BuildAlignedByTick`（硬體 tick）→ fallback `BuildAlignedByStitchKey`（檔名）；每 camId 拿對齊清單（缺幀=null），影像 `StitchCamera`+法向曲線 `MergeRowCurves` 共用同份 → 掉幀那格影像黑布+曲線 0 對齊。**換 ID 載入效能**：`LoadGrabStitchedViewAsync` 的 `Task.Run` 內 7 台相機 `Parallel.For` 平行解碼/拼接（imgs[i]/curve[i] 各寫各 index、BitmapPool 有 lock、CurveMergeHelper 無共用 static → 安全；GDI+ 併發為灰色地帶，留意偶發黑塊）+ **`MergeHorizontal` 也移進背景**（原在 UI 執行緒＝swap 卡頓主因）；計時 log `CSV/Stitch/Merge(bg)/UIapply/Total`。**`CurveFlipVertical`**（旗標，未來可做 tool 選項）+ `FlipRowCurveIfNeeded`：線掃相機由下往上拍→回顧影像上下翻轉（StitchCamera），故 row 曲線兩條路徑（逐相機 + Global）都反向才對齊影像；live 不翻轉故不動 |
+| `UI/Presenters/ReviewStitchCoordinator.cs` | Review tab 拼接管理：LoadGrabStitchedViewAsync、合圖、ClearStitchedMode、overview chart 聯動。**掉偵補黑（tick 對位）**：跨相機對齊軸交 `FrameTickIndex.BuildAlignedByTick`（硬體 tick）→ fallback `BuildAlignedByStitchKey`（檔名）；每 camId 拿對齊清單（缺幀=null），影像 `StitchCamera`+列曲線 `MergeRowCurves` 共用同份 → 掉幀那格影像黑布+曲線 0 對齊。**換 ID 載入效能**：`LoadGrabStitchedViewAsync` 的 `Task.Run` 內 7 台相機 `Parallel.For` 平行解碼/拼接（imgs[i]/curve[i] 各寫各 index、BitmapPool 有 lock、CurveMergeHelper 無共用 static → 安全；GDI+ 併發為灰色地帶，留意偶發黑塊）+ **`MergeHorizontal` 也移進背景**（原在 UI 執行緒＝swap 卡頓主因）；計時 log `CSV/Stitch/Merge(bg)/UIapply/Total`。**`CurveFlipVertical`**（旗標，未來可做 tool 選項）+ `FlipRowCurveIfNeeded`：線掃相機由下往上拍→回顧影像上下翻轉（StitchCamera），故 row 曲線兩條路徑（逐相機 + Global）都反向才對齊影像；live 不翻轉故不動 |
 | `UI/Presenters/LiveTelemetryPresenter.cs` | 16 欄即時 Telemetry。**MIL 查詢背景化**：`Capture(cameras)`（背景執行緒做 16 欄 MdigInquire/MsysInquire ≈195ms，回傳純字串 `CamSnapshot`）+ `Apply(snapshots)`（UI 執行緒只套字串，不碰 MIL）→ 避免 `TelemetryTimer_Tick` 每 500ms 卡 UI 執行緒。`Update()`=同步版（背景用） |
 | `Acquisition/AniloxCamera.cs` | 單台相機 composition：持有 `MilCamera _mil`（`sdk/MIL/MilGrabber.Core`）委派 MIL 資源/grab/display/參數/telemetry；自己做檢測/存檔/合圖/曲線（訂閱 `_mil.FrameReady`，hook 內檢測→顯示`PutDisplayBytes`/`CopyToDisplay`→合圖→存檔）。Global merge child-buffer 來源 |
-| `sdk/MIL/MilGrabber.Core/MilCamera.cs` | MIL 取像/顯示封裝 library（一台相機=一個 MilCamera）：alloc/grab/display/參數/系統資訊/CLProtocol/在線/mouse hook/buffer helper(`GetFrameBytes`/`PutDisplayBytes`/`CopyToDisplay`/`ClearDisplay`)/線掃最大速率(`GetLineRateMaxHz` via CLProtocol M_FEATURE_MAX，grab 後 ~3s 可得)；`FrameReady`/`OnMouseDataChanged`/`OnCameraClicked` 事件。純 MIL 範圍，檢測等非 MIL 由訂閱者做。**ctor `devNum` = 板內固定絕對 device 位置（0-based，對應 M_DEVx）唯一轉換點**：caller（主程式 LiveCameraManager + sample）一律傳 json 固定值、不加 M_DEV0 偏移（相機實體配線固定，少槽卡只列實際 channel）；本機型 M_DEV0=0 為 identity，未來 M_DEV0≠0 只改 ctor 這一行。**原 876 行 God object 已按職責拆 4 partial（同 `partial class MilCamera`，純分檔零邏輯變更）：核心 `MilCamera.cs`（欄位/ctor/Initialize/Grab/Hook/Merge target/Dispose，~342）+ `MilCamera.Params.cs`（Exposure/LineRate/GrabHeight + `MilCameraParams` 公式類）+ `MilCamera.Display.cs`（buffer I/O + 主/副顯示 + mouse hooks）+ `MilCamera.Telemetry.cs`（唯讀遙測 getter）+ `MilCamera.CLProtocol.cs`（CLProtocol 啟用/套參）。Merge target 刻意留核心（hook 內呼叫，耦合緊）**。`MilCameraParams`（純函式參數公式單一真相：`CalcExposureMaxUs(lrHz,expMin,expMaxCap)`=曝光上限=900000/線掃 clamp；主程式+範例共用，勿再各自抄公式）移至 `MilCamera.Params.cs`。**`SetGrabHeight` 改尺寸前 `M_STOP+M_WAIT`+`MdigControl(M_GRAB_ABORT)` drain**（修「改高度→相機永久 stall」根因＝優雅停止沒排乾；**勿寫相機 Height feature**＝會搞壞；詳見 `/modify-acquisition` skill 含 Matrox doc 路徑） |
+| `sdk/MIL/MilGrabber.Core/MilCamera.cs` | MIL 取像/顯示封裝 library（一台相機=一個 MilCamera）：alloc/grab/display/參數/系統資訊/CLProtocol/在線/mouse hook/buffer helper(`GetFrameBytes`/`PutDisplayBytes`/`CopyToDisplay`/`ClearDisplay`)/線掃最大速率(`GetLineRateMaxHz` via CLProtocol M_FEATURE_MAX，grab 後 ~3s 可得)；`FrameReady`/`OnMouseDataChanged`/`OnCameraClicked` 事件。純 MIL 範圍，檢測等非 MIL 由訂閱者做。**ctor `devNum` = 板內固定絕對 device 位置（0-based，對應 M_DEVx）唯一轉換點**：caller（主程式 LiveCameraManager + sample）一律傳 json 固定值、不加 M_DEV0 偏移（相機實體配線固定，少槽卡只列實際 channel）；本機型 M_DEV0=0 為 identity，未來 M_DEV0≠0 只改 ctor 這一行。**原 876 行 God object 已按職責拆 4 partial（同 `partial class MilCamera`，純分檔零邏輯變更）：核心 `MilCamera.cs`（欄位/ctor/Initialize/Grab/Hook/Merge target/Dispose，~342）+ `MilCamera.Params.cs`（Exposure/LineRate/GrabHeight + `MilCameraParams` 公式類）+ `MilCamera.Display.cs`（buffer I/O + 主/副顯示 + mouse hooks）+ `MilCamera.Telemetry.cs`（唯讀遙測 getter）+ `MilCamera.CLProtocol.cs`（CLProtocol 啟用/套參）。Merge target 刻意留核心（hook 內呼叫，耦合緊）**。`MilCameraParams`（純函式參數公式單一真相：`CalcExposureMaxUs(lrHz,expMin,expMaxCap)`=曝光上限=900000/線掃 clamp；主程式+範例共用，勿再各自抄公式）移至 `MilCamera.Params.cs`。**`SetGrabHeight`：①開頭同值守門（高度未變+buffer已配→直接 return 不 realloc）＝防套設定時多餘 realloc 撞背景 CLProtocol enable→CAM1 stall（改高度 stall 主因，2026-06-24 dropdiag 定案）；②改尺寸前 `M_STOP+M_WAIT`+`MdigControl(M_GRAB_ABORT)` drain；③熱路徑禁 MsysInquire/MdigInquire（會 cam1 stall）；高度硬上限 `AcquisitionDefaults.MaxGrabHeightPx=12000`（固定、不分台數；12062 是 grab 中拉單台真硬限）；勿寫相機 Height feature；詳見 `/modify-acquisition` skill** |
 | `sdk/MIL/MilGrabber.Core/MultiCameraMerger.cs` | 多相機即時合圖「工頭」library（純 MIL、無 WinForms）：接收一組 MilCamera，算佈局（全域範圍/xOffset/重疊中點分界）+ 分配合併 buffer + 每台 SetMergeTarget。`EnableMerge`/`RefreshLayout` 共用唯一來源 `ApplyLayout`（先設 RefOpsMm 再算 xOffset，**順序鎖死**避免除以 0 變垃圾值）。回傳 `MergedBuffer` + 座標(MinStartMm/RefOpsMm/TotalW/H) 供上層「秀」。貼圖在 MilCamera grab hook（`SetMergeTarget`/`CopyDisplayToMergeTarget`） |
 | `Acquisition/CameraFrameSaver.cs` | 存檔 I/O：SaveCapture（背景執行緒）、SaveJpegFromBytes、SaveCurveBinFromArray、Resource Log（CSV: CPU%/RAM/VRAM/GPU ms/Live/Review/StitchMode；啟動時 MergeOldResourceLogs 把「昨天以前」的小檔按日合併為 resource-monitor-yyyyMMdd.csv）。**tick 側車**：`AppendTickSidecar` 把每幀硬體 frame-start tick（`CaptureContext.FrameStartTicks`，源 `MilCamera.LastFrameStartTicks`）寫進當日資料夾 `_ticks.csv`（`baseName,ticks`，static lock 多相機共寫）→ 供回顧 tick 對位精準補黑 |
-| `Services/FrameTickIndex.cs` | **跨相機幀對齊唯一來源**（回顧合圖補黑）：各台「各自獨立掉不同幀」→ seq 會歪、檔名軟體協調戳不知道實際掉哪幀 → 用硬體 frame-start tick（同板 125MHz 同 epoch，物理同時兩幀差 <0.5ms）就近聚類成「時間槽」。`LoadTickMap`（讀 `_ticks.csv` 側車）+ `BuildAlignedByTick`（聚類→各 camId 對齊清單，缺槽=null=補黑）+ `BuildAlignedByStitchKey`（舊資料無側車的檔名 fallback）。回傳餵 `GrabImageStitcher.StitchCamera`/`CurveMergeHelper.MergeRowCurves`（吃 null=黑布占位） |
+| `Services/FrameTickIndex.cs` | **跨相機幀對齊唯一來源**（回顧合圖補黑）：各台「各自獨立掉不同幀」→ seq 會歪、檔名軟體協調戳不知道實際掉哪幀 → 用硬體 frame-start tick（同板 125MHz 同 epoch，物理同時兩幀差 <0.5ms）就近聚類成「時間槽」。`LoadTickMap`（讀 `_ticks.csv` 側車）+ `BuildAlignedByTick`（聚類→各 camId 對齊清單，缺槽=null=補黑）+ `BuildAlignedByStitchKey`（舊資料無側車的檔名 fallback）+ `ComputeThreshold(period)=period/2`（**同槽容差規則單一來源**，回顧批次 + 監控瀑布串流共用）。回傳餵 `GrabImageStitcher.StitchCamera`/`CurveMergeHelper.MergeRowCurves`（吃 null=黑布占位）。**⚠ 跨板 tick 不可相減**（cam1-4 板0/cam5-7 板1 epoch 不同）：現裸全域排序，**7 台跨板會錯配，現在沒事只因測試都同板**（待補 board offset 正規化，連瀑布一起） |
+| `UI/Widgets/WaterfallView.cs` | 監控主畫面「瀑布圖」（`he_MainDisplay`==Waterfall）：全幅 7 相機合圖每幀往下接成捲動長圖。**全解析分塊儲存**（`ChunkRows=512` chunk，避開 2GB byte[] 上限）+ **LOD 只在顯示時降採樣**（provider 邊讀邊 nearest 到 dest，不配巨圖暫存）；固定總高 `WaterfallTotalHeight`（預設 30000）。**Ring 循環**＝繞回頂端覆蓋最舊+寫頭畫亮掃描線接縫；**Restart 重來**＝滿了清黑幕重畫。**跨相機對齊與回顧同源**：吃 `AniloxCamera.OnDisplayFrame` 的硬體 tick → 串流半週期聚類成時間槽（pending 槽緩衝 + hold-back grace flush，避免同瞬間晚到幀偽掉幀；週期＝運行最小 delta 抗掉幀；thr 共用 `FrameTickIndex.ComputeThreshold`），某台缺幀那欄補黑。背景 queue+worker 寫 memcpy 不卡 UI。佈局走 `LiveCameraManager.FeedWaterfallLayout`（合圖開用 merger 7 槽、沒開退回設定 start/ops）。**槽數＝配置相機數（7，非線上台數）** |
 | `Services/CaptureFileNaming.cs` | 擷取檔名規則單一真相：suffix 常數（`_raw.jpg`/`_proc_v\|h.jpg`/`_mean_v\|max_v\|mean_h\|max_h.bin` + 5 個 legacy fallback）+ `IsRawJpg`/`StripRawJpg`/`BaseFromImagePath`（影像路徑→base 反推）/`ResolveProcJpg`（v/h+legacy 解析）。寫端（CameraFrameSaver/InspectionEngine 存檔）+ 讀端（CurveMergeHelper/ReviewStitchCoordinator/GrabImageStitcher/ImageRepository/InspectionStatisticsService）共用 —— 改命名格式只改這。**只統一檔名字串，fallback 載入行為留各 caller**（避免改 edge case）。另含背景檔名 `BgBin(w,camId)`/`BgGlob`/`BgGlobForCam(camId)`（AniloxRollForm 載/掃背景共用） |
 | `Services/CaptureStoragePaths.cs` | 擷取資料日期階層儲存路徑單一真相：`DailyCsv(root,d)`=`{root}\{yyyy}\{yyyyMM}\{yyyyMMdd}.csv`、`DateImageDir(root,d\|yyyymmdd)`=該日影像資料夾。寫端 InspectionLogService + 讀端 InspectionStatisticsService 共用 —— 改目錄結構只改這 |
 | `Acquisition/CaptureTimestampCoordinator.cs` | 多相機存檔時間戳同步 |
-| `UI/Managers/LiveCameraManager.cs` | 多台相機生命週期管理、連線數監控（OnCameraCountChanged）、即時全域合圖（EnableGlobalMerge / DisableGlobalMerge / RefreshGlobalMergeLayout；「拼」委派 `MultiCameraMerger` 工頭，本類別只「秀」）、合圖 zoom/pan（WheelZoomFilter）、合圖滑鼠座標（MergedMouseStatusHandler）、合圖 overview 聯動（TryGetMergedViewRange）、顯示同步 Timer（_mergedDisplayTimer）。**巨圖 display 必須「先關 M_UPDATE 再 MdispSelectWindow」**：否則 select+SCALE+CENTER 各觸發一次 8.9 萬寬巨圖重繪 → 切換 lag + 半貼殘影。**改參數協調套用**：`ApplyParamCoordinated(camId,write)`＝只停/寫/開**被改的那一台**（相位已證明不重要 free-run 2-3 條線 → 不再全部一起停/開連累 cam2 stall）；`ApplyParamCoordinated(write)`＝全部（All 滑桿用）。**不同步等出幀**（Thread.Sleep 會凍 UI→Not Responding→拉滑桿排隊 replay 跳值＝暴力漏洞）。**stall 偵測**（`LiveCameraManager.Telemetry.cs` status timer 500ms）：IsLive 但 `CurrentFps<0.05` 持續 2s＝stall（縮圖紅「STALL」；FPS 0.1 是合法慢速不算）；停/開救不回（硬體 CL 失鎖、只有重開程式）故不自動 thrash。**參數鎖**（`AniloxRollForm.SettingsTabs.cs`）：`SnapshotLiveFrameCounts`/`AllAdvancedSince` 供 UI 套用期間 disable 控制項、恢復出幀/3s 逾時才解鎖 |
+| `UI/Managers/GlobalMergeCoordinator.cs` | **即時全域合圖「秀」協調者**（2026-06-26 從 LiveCameraManager 提取，internal sealed）：擁有 `_merger`(MultiCameraMerger 工頭)+`_mergedDisplay`+座標鏡像+33ms 防閃刷新 timer+滑鼠 hook，負責 MIL 合圖 display 整個生命週期（alloc/select window/free）+ 視野範圍查詢（TryGetViewRange[Y]）+ merged 分支 zoom/pan/1x/reset/pan-to-center。穩定依賴走 ctor、變動值走 Func 委派（screenMmPerPx/speed/lineRate/IsReleasing）、視野中心選中相機走 `Action<int>` callback（不反向參考整個 LCM）。`showMilDisplay` 決定綁不綁 MIL display（ImageCanvas 模式 false：合圖由 ImageDisplayView CPU 拼）。**巨圖 display 必須「先關 M_UPDATE 再 MdispSelectWindow」**（select+SCALE+CENTER 各觸發一次 8.9 萬寬巨圖重繪 → lag + 半貼殘影）。⚠ 既有盲區：ImageCanvas+Global 啟用合圖後切 he_MainDisplay→MilDirect，`ApplyMainDisplayMode` 只 teardown ImageCanvas、不補建 MIL 合圖 display → 全黑（fresh MilDirect 起手正常）。**合圖永遠 Global**（`hb_StitchMode` 寫死 Global，2026-06-13 退場 Vertical） |
+| `UI/Managers/LiveDisplayCoordinator.cs` | **即時監控顯示協調者**（2026-06-29 從 LiveCameraManager 提取，internal sealed）：擁有 ImageCanvas/Waterfall/縮圖 panel/狀態 label/選中相機/screen mm-per-px/GPU LOD provider/WheelZoomFilter。負責 `ApplyMainDisplayMode`、`SetLodMode`、`SwitchMainDisplay`、單台 MIL mouse status 文字、ImageCanvas cursor/view-range 轉發、Waterfall layout feeding、非合圖 MIL 直繪 zoom/1x。穩定 UI 依賴走 ctor；變動資料（cameras/settings/lineRate/live 狀態）走 Func，不反向參考整個 LCM；GPU LOD pinned buffer 生命週期委派 `TanukiCv.Core.GpuGrayResizeProvider`（app 注入 `NativeMethods`）。 |
+| `sdk/TanukiCv/dotnet/TanukiCv.Controls/WaterfallView.cs` | **瀑布顯示元件（已搬 sdk 共用）**：ImageCanvas LOD + chunked gray buffer + MergeLayout placement；`WaterfallFullMode` 也在 sdk。app 只負責餵 frame/layout/settings。 |
+| `UI/Managers/LiveCameraManager.cs` | 多台相機生命週期管理、連線數監控（OnCameraCountChanged）、即時全域合圖**編排 + forwarder**（EnableGlobalMerge 建 MilCamera 清單+清各台 secondary；「拼」委派 `MultiCameraMerger`、「秀」委派 `GlobalMergeCoordinator`、ImageCanvas/Waterfall/狀態/滾輪顯示職責委派 `LiveDisplayCoordinator`；`LiveCameraManager.Display.cs` 只留對外 API forwarder）。**改參數協調套用**：`ApplyParamCoordinated(camId,write)`＝只停/寫/開**被改的那一台**（相位已證明不重要 free-run 2-3 條線 → 不再全部一起停/開連累 cam2 stall）；`ApplyParamCoordinated(write)`＝全部（All 滑桿用）。**不同步等出幀**（Thread.Sleep 會凍 UI→Not Responding→拉滑桿排隊 replay 跳值＝暴力漏洞）。**stall 偵測**（`LiveCameraManager.Telemetry.cs` status timer 500ms）：判據＝**`M_PROCESS_FRAME_COUNT`（`GetFrameCount`）有沒有前進**，**非 FPS 門檻**（低線掃合法 FPS 極低如 0.0083，固定門檻會誤判）；幀數凍住超過「2s + 預期幀週期(高度/線掃)×1.5」自動窗才判 stall（縮圖紅「STALL」）；停/開救不回（硬體 CL 失鎖、只有重開程式）故不自動 thrash。詳見 `sdk/MIL/docs/grab-height-param-stall.md`。**參數鎖**（`AniloxRollForm.SettingsTabs.cs`）：`SnapshotLiveFrameCounts`/`AllAdvancedSince` 供 UI 套用期間 disable 控制項、恢復出幀/3s 逾時才解鎖 |
 | `Settings/InspectionSettings.cs` | 根設定物件 |
 | `Settings/Models/ChartSettings.cs` | 圖表 Y 軸範圍設定（ChartScaleMode + YMax）；StitchMode enum（Vertical / Global） |
 | `Settings/Models/ImageViewSettings.cs` | 合圖方式設定（StitchMode） |
@@ -213,7 +235,7 @@ PICoater_AOI/
 | `UI/Widgets/GrabImageStitcher.cs` | 多張影像垂直拼接 + MergeHorizontal 全域合圖（佈局 xOffset + 重疊中點分界委派 sdk `TanukiCv.Controls.MergeLayout.Compute(Midline)` 單一來源，totalW 保留自家 ALL-slots 含空缺占位版）；LoadCameraImage（internal） |
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/Layout/ProportionalScaler.cs` | Form 等比例縮放（重設 Bounds + 重建 Font，非點陣縮放）。`RescaleActiveTabs`（開窗最大化後補縮作用中 tab，解 TabControl lazy-layout）。DPI 感知（`app.manifest` dpiAware=true）+ `WindowState=Maximized` 下文字原生清晰（**Wave1 已搬 sdk**） |
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/Layout/RoundedLabel.cs` | 圓角晶片 Label（`Label` 子類）：反鋸齒繪圓角底 + 文字交 `base.OnPaint` 原生繪製；強制無 BorderStyle 方框。用於 IO 運作區與連線燈視覺分組（**已搬 sdk**） |
-| `sdk/TanukiCv/dotnet/TanukiCv.Controls/UI/SmartCanvas.cs` | PictureBox 子類（`TanukiCv.Controls` 獨立 WinForms assembly）：zoom/pan/edge/ClampPan；自訂白底黑邊十字游標。**畫布資訊 overlay**（`ShowOverlay` 右鍵開關）：游標座標/亮度跟滑鼠、四邊 mm 範圍（X 左右 90° 旋轉、Y 上下）、右下實體倍率；座標/亮度 canvas 自繪，範圍/倍率由 `CanvasInteractionHelper.SetRangeOverlay` 推（mm 換算單一來源仍在 helper）。**效能**：游標 overlay 用 `Region` 區域失效（兩塊分離小矩形，非外接框，快速移動才不變整張）+ 重狀態同步限流 ~30fps + **整圖快取 `_viewCache`**（存「整張圖在當前 zoom 下」的點陣，**不含 pan**；pan 只改 `DrawImageUnscaled` 偏移、不重建 → FitToScreen 拖曳不再每幀重縮整張大圖；只 zoom/Image 變才重建。放大致整圖 > ~6× 控制項面積 → `_viewCache=null` 退回 per-frame 只畫可見區，放大時便宜。**cache 建構內插：縮小(zoom<1，如 fit/overview)用 `HighQualityBilinear` 平滑、放大(zoom>1)用 `NearestNeighbor` 保像素邊界清晰 —— min/mag 標準正解，避免寬圖(如合圖)縮小時 NearestNeighbor 丟像素變馬賽克**）。**滾輪 zoom 防抖**：滾動中不重建 cache、改拉伸舊 cache(`_zoom/_cacheZoom`)，停下 150ms(`_zoomSettleTimer`)才重建一次 → zoom 不每格頓。**動態 LOD（opt-in，預設關）**：`EnableLod(virtualW,virtualH,provider)` 把 zoom/pan 當「導覽虛擬全解析度圖」，停住(150ms)才請 provider 裁可見區+縮到~panel 產 tile（互動用舊 tile 拉伸）；**tile 的 GPU 重算丟背景執行緒**(in-flight guard + pending 用最新視角重算；caller 的 pinned 釋放需與 provider 互斥防 use-after-free)→ 停下不凍 UI；`LodMargin`(1.0=3×3 overscan)+ 拖出範圍節流 120ms 即時補不破圖；`RefreshLod`/`DisableLod`/`UpdateLodVirtualSize`。**`FitRelativeZoom`(opt-in)**：滾輪相對 fit(fit=1×)，上限=bitmap 1:1×`MaxZoomOverBitmap`(8)；滾輪 `×1.1^(e.Delta/120)` 正比轉動量（修卡頓時事件合併漏算）。`ZoomRelativeToFit`=螢幕縮放，**非實體倍率**(兩者互不可取代)；`PhysicalMagnification`=實體倍率(需 SetPhysicalCalibration，唯一來源，1.0x=螢幕1mm=實物1mm)。**多擊手勢(opt-in，單一來源)**：`DoubleClickFitToScreen`(雙擊 fit；只在「非 fit」才動作、已 fit 不歸零讓三擊接手)、`TripleClickPhysical1x`(三擊實體 1:1，需先 `SetPhysicalCalibration(mmPerImagePx,screenMmPerPx)`→`ZoomToOneToOne` 將點選點移到畫布中央，用 `PixelMmMapper.OneToOneZoom`)；自帶最小多擊偵測 + `IsAtFitView()`。事件 `FitPerformed`/`Physical1xPerformed`/`DragStarted` 供上層做 app 專屬記錄(如 `UiActionLogger`)。**主程式回顧畫布 `camReviewMain` 已改用此**(`CanvasInteractionHelper.UpdateCanvasInfo` 餵 `SetPhysicalCalibration`；原 app 的 MultiClickDetector handler/SetPhysicalMagnification1x/IsCanvasFitToScreen 已移除)。Controls→Core 參考。詳見 `sdk/MIL/samples/MilGrabber.Monitor`（先在此驗證，未來搬回顧畫布） |
+| `sdk/TanukiCv/dotnet/TanukiCv.Controls/UI/ImageCanvas.cs` | PictureBox 子類（`TanukiCv.Controls` 獨立 WinForms assembly）：zoom/pan/edge/ClampPan；自訂白底黑邊十字游標。**畫布資訊 overlay**（`ShowOverlay` 右鍵開關）：游標座標/亮度跟滑鼠、四邊 mm 範圍（X 左右 90° 旋轉、Y 上下）、右下實體倍率；座標/亮度 canvas 自繪，範圍/倍率由 `CanvasInteractionHelper.SetRangeOverlay` 推（mm 換算單一來源仍在 helper）。**效能**：游標 overlay 用 `Region` 區域失效（兩塊分離小矩形，非外接框，快速移動才不變整張）+ 重狀態同步限流 ~30fps + **整圖快取 `_viewCache`**（存「整張圖在當前 zoom 下」的點陣，**不含 pan**；pan 只改 `DrawImageUnscaled` 偏移、不重建 → FitToScreen 拖曳不再每幀重縮整張大圖；只 zoom/Image 變才重建。放大致整圖 > ~6× 控制項面積 → `_viewCache=null` 退回 per-frame 只畫可見區，放大時便宜。**cache 建構內插：縮小(zoom<1，如 fit/overview)用 `HighQualityBilinear` 平滑、放大(zoom>1)用 `NearestNeighbor` 保像素邊界清晰 —— min/mag 標準正解，避免寬圖(如合圖)縮小時 NearestNeighbor 丟像素變馬賽克**）。**滾輪 zoom 防抖**：滾動中不重建 cache、改拉伸舊 cache(`_zoom/_cacheZoom`)，停下 150ms(`_zoomSettleTimer`)才重建一次 → zoom 不每格頓。**動態 LOD（opt-in，預設關）**：`EnableLod(virtualW,virtualH,provider)` 把 zoom/pan 當「導覽虛擬全解析度圖」，停住(150ms)才請 provider 裁可見區+縮到~panel 產 tile（互動用舊 tile 拉伸）；**tile 的 GPU 重算丟背景執行緒**(in-flight guard + pending 用最新視角重算；caller 的 pinned 釋放需與 provider 互斥防 use-after-free)→ 停下不凍 UI；`LodMargin`(1.0=3×3 overscan)+ 拖出範圍節流 120ms 即時補不破圖；`RefreshLod`/`DisableLod`/`UpdateLodVirtualSize`。**`FitRelativeZoom`(opt-in)**：滾輪相對 fit(fit=1×)，上限=bitmap 1:1×`MaxZoomOverBitmap`(8)；滾輪 `×1.1^(e.Delta/120)` 正比轉動量（修卡頓時事件合併漏算）。`ZoomRelativeToFit`=螢幕縮放，**非實體倍率**(兩者互不可取代)；`PhysicalMagnification`=實體倍率(需 SetPhysicalCalibration，唯一來源，1.0x=螢幕1mm=實物1mm)。**多擊手勢(opt-in，單一來源)**：`DoubleClickFitToScreen`(雙擊 fit；只在「非 fit」才動作、已 fit 不歸零讓三擊接手)、`TripleClickPhysical1x`(三擊實體 1:1，需先 `SetPhysicalCalibration(mmPerImagePx,screenMmPerPx)`→`ZoomToOneToOne` 將點選點移到畫布中央，用 `PixelMmMapper.OneToOneZoom`)；偵測委派 `TanukiCv.Controls.MultiClickDetector` + `IsAtFitView()`。事件 `FitPerformed`/`Physical1xPerformed`/`DragStarted` 供上層做 app 專屬記錄(如 `UiActionLogger`)。**主程式回顧畫布 `camReviewMain` 已改用此**(`CanvasInteractionHelper.UpdateCanvasInfo` 餵 `SetPhysicalCalibration`；原 app 的 MultiClickDetector handler/SetPhysicalMagnification1x/IsCanvasFitToScreen 已移除)。Controls→Core 參考。詳見 `sdk/MIL/samples/MilGrabber.Monitor`（先在此驗證，未來搬回顧畫布） |
 
 > 路徑前綴 `src/dotnet/AniloxRoll.Monitor/` 省略以節省空間。
 
@@ -236,28 +258,26 @@ PICoater_AOI/
 
 ## Harness 架構
 
-三方同步機制確保控制項命名在所有層級一致：
+兩方同步機制確保控制項命名一致：
 
 | 層 | 檔案 | 內容 |
 |----|------|------|
-| Form | `AniloxRollForm.Designer.cs` | `.Text` 畫面文字 |
+| Form | `AniloxRollForm.Designer.cs` | `.Text` 畫面文字 + 控制項 Name |
 | 速查表 | `CLAUDE.md` §控制項速查 | 標準名稱 + Name |
-| 流程圖 | `docs/user-manual/ui-flow.html` | 【】包裹的控制項名稱 |
 
 **規則：**
-1. 改名時三層同時改，不可只改一層
-2. 【】= 可操作控制項（使用者會點/選/拖的），被動顯示的不加
-3. 同功能控制項共用標準名稱（如 Review/Data 的【讀取資料】）
-4. Commit 前跑 `/update-docs` — 驗證速查表的 Name 全部存在於 Designer.cs
+1. 改名時兩層同時改，不可只改一層
+2. 同功能控制項共用標準名稱（如 Review/Data 的【讀取資料】）
+3. Commit 前跑 `/update-docs` — 驗證速查表的 Name 全部存在於 Designer.cs
 
 ---
 
 ## 檢測參數速查（PropertyGrid 屬性）
 
-使用者在【檢測設定】看到的參數。溝通格式：「屬性名-值」（例如「垂直正規值-0.2」「存檔-T」）。
+使用者在【檢測設定】看到的參數。溝通格式：「屬性名-值」（例如「欄正規值-0.2」「存檔-T」）。
 
 **範圍**：此表只列「**what** — 參數是什麼 / 預設值 / 屬性名映射」。
-**互動行為與 chart 聯動**統一在 `docs/user-manual/ui-flow.html`（單一真相）；不在表格內重複描述。
+**互動行為與 chart 聯動**＝以 code 為真相，配合對應 skill（`/modify-ui` 等）查閱；不在表格內重複描述。
 
 ### 0. 機台設定
 
@@ -284,14 +304,14 @@ PICoater_AOI/
 |---------|------|--------|------|
 | ── 演算法 ── | （分隔列，唯讀） | — | — |
 | 去背演算法 | `db_Algorithm` → `Algorithm` | SingleFrameBgSub | None / SingleFrameBgSub / StandardBgSub |
-| 垂直正規值 | `dc_HessianMaxFactorV` → `HessianMaxFactorV` | 0.3 | V Hessian 正規化係數（capture-time baked-in） |
-| 水平正規值 | `dd_HessianMaxFactorH` → `HessianMaxFactorH` | 0.3 | H Hessian 正規化係數（view-time only） |
+| 欄正規值 | `dc_HessianMaxFactorV` → `HessianMaxFactorV` | 0.3 | V Hessian 正規化係數（capture-time baked-in） |
+| 列正規值 | `dd_HessianMaxFactorH` → `HessianMaxFactorH` | 0.3 | H Hessian 正規化係數（view-time only） |
 | ── 檢出標準 ── | （分隔列，唯讀） | — | — |
-| 檢出方向 | `eb_RidgeDir` → `RidgeDir` | Both | 垂直 / 水平 / 全部 |
-| 垂直平均閾值 | `ec_ErrorValueMeanV` → `ErrorValueMeanV` | 0.2 | V chart Mean 閾值線 |
-| 垂直最大閾值 | `ed_ErrorValueMaxV` → `ErrorValueMaxV` | 0.6 | V chart Max 閾值線 |
-| 水平平均閾值 | `ee_ErrorValueMeanH` → `ErrorValueMeanH` | 0.2 | H chart Mean 閾值線 |
-| 水平最大閾值 | `ef_ErrorValueMaxH` → `ErrorValueMaxH` | 0.6 | H chart Max 閾值線 |
+| 檢出方向 | `eb_RidgeDir` → `RidgeDir` | Both | 欄 / 列 / 全部 |
+| 欄平均閾值 | `ec_ErrorValueMeanV` → `ErrorValueMeanV` | 0.2 | V chart Mean 閾值線 |
+| 欄最大閾值 | `ed_ErrorValueMaxV` → `ErrorValueMaxV` | 0.6 | V chart Max 閾值線 |
+| 列平均閾值 | `ee_ErrorValueMeanH` → `ErrorValueMeanH` | 0.2 | H chart Mean 閾值線 |
+| 列最大閾值 | `ef_ErrorValueMaxH` → `ErrorValueMaxH` | 0.6 | H chart Max 閾值線 |
 | ── 背景校正 ── | （分隔列，唯讀） | — | — |
 | 取時間 (sec) | `fb_BackgroundSampleSeconds` → `BackgroundSampleSeconds` | 3 | StandardBgSub 採集時間 |
 
@@ -308,8 +328,8 @@ PICoater_AOI/
 | 合圖方式 | `hb_StitchMode` → `StitchMode` | Global | Vertical / Global |
 | 監控強化 | `hc_EnableMuraEnhance` → `EnableMuraEnhance` | false | 即時影像強化 Mura |
 | 回顧強化 | `hd_EnableReviewEnhance` → `EnableReviewEnhance` | false | 回顧影像強化 Mura |
-| 主畫面顯示 | `he_MainDisplay` → `ImageView.MainDisplay` | SmartCanvas | MilDirect（MIL 直繪）/ SmartCanvas（CPU 繪、跟回顧畫布同源；共用 `LiveDisplayView`〔sdk TanukiCv.Controls；與範例同源唯一來源〕在 camLiveMain 疊 SmartCanvas+各 cam 疊 ThumbStrip 縮圖，吃 `AniloxCamera.OnDisplayFrame` bytes→bitmap，單相機/CPU合圖+mm overlay+zoom+雙三擊+LOD；MIL 並存於底層被覆蓋。滾輪縮放：`WheelZoomFilter` 在 SmartCanvas 模式讓路（`return false`，否則全域 filter 吃掉滾輪→縮不動；只服務 MIL 直繪合圖）。**bin↔主畫面連動**：`LiveDisplayView.ViewRangeMmChanged(left,right,top,bot)`→`LiveCameraManager.OnSmartViewRange`→`OnLiveViewRange`事件→form `ApplyLiveViewRange`：切向/overview用X、法向用Y zoom 同步（法向需 `LiveCameraManager.RowPitchMm` 餵真 row pitch；overview 用 `LiveViewRangeProvider` 沿用同範圍→500ms 重畫不閃）。**TODO：縮圖多相機同步刷 / 關底層 MIL / 回顧側 CanvasInteractionHelper 視野計算收斂進 sdk / sample 重用曲線圖+閾值線選用 / app live 實體化 LOD/flip UI**）|
-| 動態LOD | `hf_LiveLod` → `ImageView.LiveLod` | CPU | Off / GPU（TanukiCv GPU 縮）/ CPU（GrayResizeCpu 純 CPU 縮）。SmartCanvas 模式放大巨圖看細節用（顯示成本 ~180ms→~1ms），即時生效。預設 CPU＝無 GPU 機也能跑。`LiveCameraManager.SetLodMode` 套到 `LiveDisplayView.EnableLod`/`DisableLod` |
+| 主畫面顯示 | `he_MainDisplay` → `ImageView.MainDisplay` | ImageCanvas | MilDirect（MIL 直繪）/ ImageCanvas（CPU 繪、跟回顧畫布同源；共用 `ImageDisplayView`〔sdk TanukiCv.Controls；與範例同源唯一來源〕在 camLiveMain 疊 ImageCanvas+各 cam 疊 ThumbStrip 縮圖，吃 `AniloxCamera.OnDisplayFrame` bytes→bitmap，單相機/CPU合圖+mm overlay+zoom+雙三擊+LOD；MIL 並存於底層被覆蓋。滾輪縮放：`WheelZoomFilter` 在 ImageCanvas 模式讓路（`return false`，否則全域 filter 吃掉滾輪→縮不動；只服務 MIL 直繪合圖）。**bin↔主畫面連動**：`ImageDisplayView.ViewRangeMmChanged(left,right,top,bot)`→`LiveCameraManager.OnImageViewRange`→`OnLiveViewRange`事件→form `ApplyLiveViewRange`：欄/overview用X、列用Y zoom 同步（列需 `LiveCameraManager.RowPitchMm` 餵真 row pitch；overview 用 `LiveViewRangeProvider` 沿用同範圍→500ms 重畫不閃）。**TODO：縮圖多相機同步刷 / 關底層 MIL / 回顧側 CanvasInteractionHelper 視野計算收斂進 sdk / sample 重用曲線圖+閾值線選用 / app live 實體化 LOD/flip UI**）|
+| 動態LOD | `hf_LiveLod` → `ImageView.LiveLod` | CPU | Off / GPU（TanukiCv GPU 縮）/ CPU（GrayResizeCpu 純 CPU 縮）。ImageCanvas 模式放大巨圖看細節用（顯示成本 ~180ms→~1ms），即時生效。預設 CPU＝無 GPU 機也能跑。`LiveCameraManager.SetLodMode` 套到 `ImageDisplayView.EnableLod`/`DisableLod` |
 
 ### 4. 儲存設定
 
@@ -349,7 +369,7 @@ PICoater_AOI/
 
 ## 控制項速查（標準名稱 → 程式名稱）
 
-每個控制項有一個**標準名稱**（中文），用於對話溝通。流程圖（`docs/user-manual/ui-flow.html`）也使用這些名稱。
+每個控制項有一個**標準名稱**（中文），用於對話溝通。
 
 ### 即時監控（tabPageLiveView）
 
@@ -360,8 +380,8 @@ PICoater_AOI/
 | 預覽背景 | `btnLiveViewBackground` | Button | 預覽背景 |
 | 監控主畫面 | `camLiveMain` | Panel | — |
 | 監控縮圖1~7 | `camLive1~7` | Panel | — |
-| 監控切向曲線圖（全覽） | `chartLiveVertical` | Chart | —（原 chartLivePatch 接位改名；舊單台切向 chart 已刪，曲線走全覽合併路徑） |
-| 監控法向曲線圖 | `chartLiveHorizontal` | Chart | — |
+| 監控欄曲線圖（全覽） | `chartLiveColumn` | Chart | —（原 chartLivePatch 接位改名；舊單台欄 chart 已刪，曲線走全覽合併路徑） |
+| 監控列曲線圖 | `chartLiveRow` | Chart | — |
 | 暫停 Mura 檢測 | `lblIoDoMura`（點擊切換） | Label | DO1 MURA_DET / DO1 MURA ⏸（黃底=暫停中） |
 
 ### 歷史查詢（tabPageReview）
@@ -369,10 +389,10 @@ PICoater_AOI/
 | 標準名稱 | Name | 類型 | 畫面文字 |
 |---------|------|------|---------|
 | 讀取資料 | `btnReviewSelectFolder`（Review）/ `btnDataSelectFolder`（Data） | Button | 讀取資料 |
-| 回顧縮圖1~7 | `camReview1~7` | Panel | —（Wave2：原 PictureBox→Panel，當 LiveDisplayView ThumbStrip 宿主） |
-| 回顧主畫面 | `camReviewMain` | Panel | —（Wave2：原 SmartCanvas→Panel，當 LiveDisplayView 宿主；顯示/互動全由 sdk 承接） |
-| 回顧切向曲線圖（全覽） | `chartReviewVertical` | Chart | —（原 chartReviewPatch 接位改名；舊單台切向 chart 已刪） |
-| 回顧法向曲線圖 | `chartReviewHorizontal` | Chart | — |
+| 回顧縮圖1~7 | `camReview1~7` | Panel | —（Wave2：原 PictureBox→Panel，當 ImageDisplayView ThumbStrip 宿主） |
+| 回顧主畫面 | `camReviewMain` | Panel | —（Wave2：原 ImageCanvas→Panel，當 ImageDisplayView 宿主；顯示/互動全由 sdk 承接） |
+| 回顧欄曲線圖（全覽） | `chartReviewColumn` | Chart | —（原 chartReviewPatch 接位改名；舊單台欄 chart 已刪） |
+| 回顧列曲線圖 | `chartReviewRow` | Chart | — |
 | 時段群組 | `grpReviewTimePeriod` | GroupBox | 時序 |
 | 時段日期（時序cb） | `cbReviewDate` | ComboBox | — |
 | 時段時間（時序cb） | `cbReviewTime` | ComboBox | — |
@@ -389,7 +409,7 @@ PICoater_AOI/
 |---------|------|------|---------|
 | 篩選異常 | `btnDataShowFail` | Button | 篩選異常 / 顯示全部 |
 | 良率卡片1~7 | `camData1~7` | Panel | — |
-| Mura 空間分布圖 | `chartDataVertical` | Chart | —（原 chartDataPatch 改名） |
+| Mura 空間分布圖 | `chartDataColumn` | Chart | —（原 chartDataPatch 改名） |
 | 明細列表 | `listViewGrabDetail` | ListView | — |
 | 序號範圍群組 | `groupBoxGrabIdRange` | GroupBox | 序號範圍 |
 | 起始序號 | `cbDataIdStart` | ComboBox | — |
@@ -455,7 +475,7 @@ PICoater_AOI/
 
 | 文件 | 用途 |
 |------|------|
-| [`docs/user-manual/ui-flow.html`](docs/user-manual/ui-flow.html) | **UI 互動流程設計檔（單一真相）**，1800+ 行，瀏覽器開啟 |
+| [`docs/dev/architecture-map.md`](docs/dev/architecture-map.md) | **Repo 架構地圖**：分層/依賴方向 + 執行期資料流 + 顯示 pipeline 鳥瞰（高層、穩定，找細節的入口）|
 | [`docs/user-manual/io_diagrams.html`](docs/user-manual/io_diagrams.html) | IO FSM 視覺化（ET-7044 ↔ 設備 Nakan）|
 | [`docs/user-manual/storage-flow.html`](docs/user-manual/storage-flow.html) | Storage PC 雙寫架構流程圖 |
 | [`docs/user-manual/hardware-specs.html`](docs/user-manual/hardware-specs.html) | 7 相機 + Grabber + 光源 + PLC 硬體規格 |

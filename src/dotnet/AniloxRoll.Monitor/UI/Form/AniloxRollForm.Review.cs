@@ -29,6 +29,26 @@ namespace AniloxRoll.Monitor.Forms
     /// <summary>AniloxRollForm 回顧（資料夾/時段載入、回顧強化）相關方法 — 由主檔拆出的 partial。</summary>
     public partial class AniloxRollForm
     {
+        private async Task LoadGrabStitchedViewGuardRowRangeAsync(string grabId, DateTime earliest, DateTime latest)
+        {
+            await LoadGrabStitchedViewGuardRowRangeAsync(grabId, earliest, latest,
+                _stitchCoordinator.LastReviewProcessedMode);
+        }
+
+        private async Task LoadGrabStitchedViewGuardRowRangeAsync(string grabId, DateTime earliest, DateTime latest,
+            bool enableProcess)
+        {
+            _reviewRowSync?.SuspendUntilNextData();
+            try
+            {
+                await _stitchCoordinator.LoadGrabStitchedViewAsync(grabId, earliest, latest, enableProcess);
+            }
+            finally
+            {
+                _reviewRowSync?.Resume();
+            }
+        }
+
         private async void btnReviewSelectFolder_Click(object sender, EventArgs e)
         {
             try
@@ -92,9 +112,9 @@ namespace AniloxRoll.Monitor.Forms
             if (reviewIdx >= 0 && reviewIdx < _dataStatsPresenter.GrabIdInfos.Count)
             {
                 var info = _dataStatsPresenter.GrabIdInfos[reviewIdx];
-                await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest);
+                await LoadGrabStitchedViewGuardRowRangeAsync(info.GrabId, info.Earliest, info.Latest);
                 _reviewDisplayManager?.RefireViewRange();   // 同上：載入完恢復曲線視野跟隨
-                // 2b-ii：fit-on-load 由 LiveDisplayView 首幀自動 fit 承接（換 ID 保視野＝刻意不再 re-fit）
+                // 2b-ii：fit-on-load 由 ImageDisplayView 首幀自動 fit 承接（換 ID 保視野＝刻意不再 re-fit）
                 _reviewDirty = false;
             }
             else
@@ -128,7 +148,7 @@ namespace AniloxRoll.Monitor.Forms
             int idx = cbReviewId.SelectedIndex;
             if (idx < 0 || idx >= _dataStatsPresenter.GrabIdInfos.Count) return;
             var info = _dataStatsPresenter.GrabIdInfos[idx];
-            await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest, enableProcess);
+            await LoadGrabStitchedViewGuardRowRangeAsync(info.GrabId, info.Earliest, info.Latest, enableProcess);
             _reviewDisplayManager?.RefireViewRange();   // chart 重建會重設軸 → 補發當前視野（不用等滑鼠動）
         }
 
@@ -165,10 +185,10 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private void ApplyPostLoadDisplay()
         {
-            // 永遠 Global：時序路徑顯示走 LiveDisplayView（ApplyGlobalMergeIfNeeded 發 StitchedImagesReady）。
+            // 永遠 Global：時序路徑顯示走 ImageDisplayView（ApplyGlobalMergeIfNeeded 發 StitchedImagesReady）。
             _stitchCoordinator.ApplyGlobalMergeIfNeeded();
-            _stitchCoordinator.UpdateOverviewChartFromRepository();   // 切向 overview（V 曲線）
-            _stitchCoordinator.UpdateRowChartFromRepository();        // 法向 row chart（H 曲線；時序路徑原本漏更新）
+            _stitchCoordinator.UpdateOverviewChartFromRepository();   // 欄 overview（V 曲線）
+            _stitchCoordinator.UpdateRowChartFromRepository();        // 列 row chart（H 曲線；時序路徑原本漏更新）
             _reviewDisplayManager?.RefireViewRange();   // chart 重建會重設軸 → 補發當前視野
         }
 
@@ -186,7 +206,7 @@ namespace AniloxRoll.Monitor.Forms
             _dataStatsPresenter.SetReviewGroupBoxes(false);
             await _presenter.LoadImagesWithPeriodLockAsync(_stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig);
             ApplyPostLoadDisplay();
-            // 2b-ii：SaveCanvasView/FitToScreen（讀已砍 canvas）移除；LiveDisplayView 自管視野
+            // 2b-ii：SaveCanvasView/FitToScreen（讀已砍 canvas）移除；ImageDisplayView 自管視野
             }
             catch (Exception ex) { Trace.WriteLine($"[OnPeriodComboChanged] {ex}"); }
         }

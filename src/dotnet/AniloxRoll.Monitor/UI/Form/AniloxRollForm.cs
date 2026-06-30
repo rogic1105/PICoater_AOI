@@ -36,7 +36,7 @@ namespace AniloxRoll.Monitor.Forms
 
         // --- UI Helpers ---
         private DateTimeNavigator _dateTimeNavigator;
-        private ReviewDisplayManager _reviewDisplayManager;   // 回顧同源顯示（sdk LiveDisplayView，絞殺榕收官）
+        private ReviewDisplayManager _reviewDisplayManager;   // 回顧同源顯示（sdk ImageDisplayView，絞殺榕收官）
         private double _reviewViewLeftMm = double.NaN, _reviewViewRightMm, _reviewViewTopMm, _reviewViewBotMm; // 新畫布視野快取（chart 原子更新用）
         private int _reviewSyncCount; private long _reviewSyncOvMax, _reviewSyncRowMax;   // [ReviewSync] 拖曳跟隨計時儀器
         private AniloxRollPresenter _presenter;
@@ -45,10 +45,19 @@ namespace AniloxRoll.Monitor.Forms
         private ColumnCurveChartHelper _liveOverviewHelper;
         private RowCurveChartHelper _liveRowChartHelper;
         private RowCurveChartHelper _reviewRowChartHelper;
+        private RowCurveDisplayAdapter _liveRowDisplay;
+        private RowCurveDisplayAdapter _reviewRowDisplay;
+        private RowCurveSyncCoordinator _liveRowSync;
+        private RowCurveSyncCoordinator _reviewRowSync;
         private LiveCameraManager _liveCameraManager;
         // Global merge 用：快取各相機 row curve 資料，合併後更新圖表
         private readonly Dictionary<int, float[]> _liveRowMeanCache = new Dictionary<int, float[]>();
         private readonly Dictionary<int, float[]> _liveRowMaxCache  = new Dictionary<int, float[]>();
+        private readonly Dictionary<int, float[]> _waterfallRowMeanPending = new Dictionary<int, float[]>();
+        private readonly Dictionary<int, float[]> _waterfallRowMaxPending  = new Dictionary<int, float[]>();
+        private float[] _waterfallRowMean;
+        private float[] _waterfallRowMax;
+        private int _waterfallRowWrite;
         private ProportionalScaler _scaler;
 
         // --- 相機參數控制項陣列（供 SyncFromCamera 存取）---
@@ -179,15 +188,6 @@ namespace AniloxRoll.Monitor.Forms
         public AniloxRollForm()
         {
             InitializeComponent();
-            // 啟動 banner log — 用來驗證 user 跑的是不是新 build
-            try
-            {
-                System.IO.File.AppendAllText(@"D:\Anilox\stitch-debug.log",
-                    $"========== AniloxRoll.Monitor started at {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} ==========" + Environment.NewLine);
-            }
-            catch { }
-            // 全域 mouse-down 攔截：記錄每次左鍵按下命中的控制項，用來診斷 Live chart click 失蹤。
-            try { Application.AddMessageFilter(new GlobalMouseLogger()); } catch { }
             try
             {
                 using (var stream = System.Reflection.Assembly.GetExecutingAssembly()
@@ -419,59 +419,61 @@ namespace AniloxRoll.Monitor.Forms
             _dateTimeNavigator = new DateTimeNavigator(
                 _imageRepository, cbReviewDate, cbReviewTime);
 
-            // 2b-ii-B：ThumbnailGridPresenter（舊回顧縮圖畫廊）已刪——縮圖顯示/選取全由 sdk LiveDisplayView
+            // 2b-ii-B：ThumbnailGridPresenter（舊回顧縮圖畫廊）已刪——縮圖顯示/選取全由 sdk ImageDisplayView
             //   的 ThumbStrip 承接（camReview1~7 現為 Panel 宿主，見 ReviewDisplayManager）。
             _presenter = new AniloxRollPresenter(
                 _imageRepository, _inspectionService, _dateTimeNavigator);
 
 
 
-            _reviewOverviewHelper = new ColumnCurveChartHelper(this.chartReviewVertical);
+            _reviewOverviewHelper = new ColumnCurveChartHelper(this.chartReviewColumn);
             _reviewOverviewHelper.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-            if (chartReviewVertical.ChartAreas.Count > 0)
-                chartReviewVertical.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
+            if (chartReviewColumn.ChartAreas.Count > 0)
+                chartReviewColumn.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
 
-            _liveOverviewHelper = new ColumnCurveChartHelper(this.chartLiveVertical);
+            _liveOverviewHelper = new ColumnCurveChartHelper(this.chartLiveColumn);
             _liveOverviewHelper.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-            if (chartLiveVertical.ChartAreas.Count > 0)
-                chartLiveVertical.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
+            if (chartLiveColumn.ChartAreas.Count > 0)
+                chartLiveColumn.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
 
-            _liveRowChartHelper = new RowCurveChartHelper(this.chartLiveHorizontal);
-            _liveRowChartHelper.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
+            _liveRowChartHelper = new RowCurveChartHelper(this.chartLiveRow);
+            _liveRowDisplay = new RowCurveDisplayAdapter(_liveRowChartHelper, GetVerticalDisplayDirection);
+            _liveRowSync = new RowCurveSyncCoordinator(_liveRowDisplay);
+            _liveRowDisplay.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
 
-            _reviewRowChartHelper = new RowCurveChartHelper(this.chartReviewHorizontal);
-            _reviewRowChartHelper.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
+            _reviewRowChartHelper = new RowCurveChartHelper(this.chartReviewRow);
+            _reviewRowDisplay = new RowCurveDisplayAdapter(_reviewRowChartHelper, GetVerticalDisplayDirection);
+            _reviewRowSync = new RowCurveSyncCoordinator(_reviewRowDisplay);
+            _reviewRowDisplay.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
 
             UpdateRowChartPitch();
 
-            // Review tab 切向 chart 點選 —— 過渡語意（mode/強化切換 FSM 待 #13 接入後定案）：
-            //   點全覽圖（接位後的 chartReviewVertical）＝切檢出方向 v；StitchMode/強化暫走 PropertyGrid。TODO-FSM
-            chartReviewVertical.MouseClick += (s, e) =>
+            // Review tab 欄 chart 點選 —— 過渡語意（mode/強化切換 FSM 待 #13 接入後定案）：
+            //   點全覽圖（接位後的 chartReviewColumn）＝切檢出方向 v；StitchMode/強化暫走 PropertyGrid。TODO-FSM
+            chartReviewColumn.MouseClick += (s, e) =>
             {
-                UiActionLogger.SetSource("chartReviewVertical.Click");
-                LogClick("chartReviewVertical.MouseClick", e);
+                UiActionLogger.SetSource("chartReviewColumn.Click");
                 SwitchRidgeDirection("v");
             };
-            chartReviewHorizontal.MouseClick += (s, e) =>
+            chartReviewRow.MouseClick += (s, e) =>
             {
-                UiActionLogger.SetSource("chartReviewHorizontal.Click");
-                UiActionLogger.RecordViewOnly("chartReviewHorizontal.Click");
+                UiActionLogger.SetSource("chartReviewRow.Click");
+                UiActionLogger.RecordViewOnly("chartReviewRow.Click");
                 SwitchRidgeDirection("h");
             };
 
-            // Live tab 切向 chart 點選 —— 過渡語意（mode/強化切換 FSM 待 #13 接入後定案）：
-            //   點全覽圖（接位後的 chartLiveVertical）＝切檢出方向 v（與 Horizontal chart 對稱）；
+            // Live tab 欄 chart 點選 —— 過渡語意（mode/強化切換 FSM 待 #13 接入後定案）：
+            //   點全覽圖（接位後的 chartLiveColumn）＝切檢出方向 v（與 Horizontal chart 對稱）；
             //   StitchMode / 強化切換暫時只走 PropertyGrid（SSoT 正路）。TODO-FSM
-            chartLiveVertical.MouseClick += (s, e) =>
+            chartLiveColumn.MouseClick += (s, e) =>
             {
-                UiActionLogger.SetSource("chartLiveVertical.Click");
-                LogClick("chartLiveVertical.MouseClick", e);
+                UiActionLogger.SetSource("chartLiveColumn.Click");
                 SwitchLiveDisplayDirection("v");
             };
-            chartLiveHorizontal.MouseClick += (s, e) =>
+            chartLiveRow.MouseClick += (s, e) =>
             {
-                UiActionLogger.SetSource("chartLiveHorizontal.Click");
-                UiActionLogger.RecordViewOnly("chartLiveHorizontal.Click");
+                UiActionLogger.SetSource("chartLiveRow.Click");
+                UiActionLogger.RecordViewOnly("chartLiveRow.Click");
                 SwitchLiveDisplayDirection("h");
             };
 
@@ -518,10 +520,12 @@ namespace AniloxRoll.Monitor.Forms
 
             _stitchCoordinator = new ReviewStitchCoordinator(new ReviewStitchContext
             {
-                ChartReviewPatch             = chartReviewVertical,
-                ChartReviewHorizontal       = chartReviewHorizontal,
+                ChartReviewPatch             = chartReviewColumn,
+                ChartReviewHorizontal       = chartReviewRow,
                 InteractionHelper         = _interactionHelper,
                 RowChartHelper            = _reviewRowChartHelper,
+                RowChartDisplay           = _reviewRowDisplay,
+                RowChartSync              = _reviewRowSync,
                 OverviewHelper            = _reviewOverviewHelper,
                 InspectionService         = _inspectionService,
                 ImageRepository           = _imageRepository,
@@ -531,25 +535,26 @@ namespace AniloxRoll.Monitor.Forms
                 CameraCount               = CameraCount,
             });
 
-            // 絞殺榕收官（Wave2 2b-ii-B）：回顧主畫面/縮圖＝Designer 上的 Panel，直接交給 LiveDisplayView 落地生根。
+            // 絞殺榕收官（Wave2 2b-ii-B）：回顧主畫面/縮圖＝Designer 上的 Panel，直接交給 ImageDisplayView 落地生根。
             {
                 _reviewDisplayManager = new ReviewDisplayManager(camReviewMain,
                     new System.Windows.Forms.Panel[] { camReview1, camReview2, camReview3, camReview4, camReview5, camReview6, camReview7 });
-                // 選中相機 index 來源＝LiveDisplayView（取代舊 ThumbnailGridPresenter.SelectedIndex）
+                // 選中相機 index 來源＝ImageDisplayView（取代舊 ThumbnailGridPresenter.SelectedIndex）
                 _stitchCoordinator.SelectedCamIndexProvider = () => _reviewDisplayManager?.SelectedCamIndex ?? 0;
                 _stitchCoordinator.StitchedImagesReady += (gray, ws, hs, ops, pos, isGlobal) =>
                     _reviewDisplayManager?.PushFrames(gray, ws, hs, ops, pos, isGlobal,
                         _interactionHelper?.ScreenMmPerPixel ?? 0,
                         AniloxRoll.Monitor.Core.Services.InspectionEngineConfig.DefaultSaveResizeScale,
-                        _reviewRowChartHelper?.RowPitchMm ?? 0);   // 灰階已在 RSC 解碼段轉好（零 race）；?.：關閉時序防 NRE
-                // Stage2：新 canvas 視野 → 回顧曲線圖 zoom 連動（切向=全覽 X、法向=Y；拖曳中即時）
+                        _reviewRowDisplay?.RowPitchMm ?? 0,
+                        ShouldFlipDisplayVertical());   // 灰階已在 RSC 解碼段轉好（零 race）；?.：關閉時序防 NRE
+                // Stage2：新 canvas 視野 → 回顧曲線圖 zoom 連動（欄=全覽 X、列=Y；拖曳中即時）
                 _reviewDisplayManager.ViewRangeMmChanged += (l, r, top, bot) =>
                 {
                     _reviewViewLeftMm = l; _reviewViewRightMm = r; _reviewViewTopMm = top; _reviewViewBotMm = bot;
                     var swSync = System.Diagnostics.Stopwatch.StartNew();
                     _reviewOverviewHelper?.UpdateViewRange(l, r);
                     long ovMs = swSync.ElapsedMilliseconds;
-                    _reviewRowChartHelper?.UpdateViewRange(top, bot);
+                    _reviewRowSync?.SetViewRange(top, bot);
                     long rowMs = swSync.ElapsedMilliseconds - ovMs;
                     // [ReviewSync] 計時儀器：單次 >25ms 即時告警；每 120 次彙總（拖曳 ~4 秒）→ 看瓶頸在 overview/row/事件頻率
                     _reviewSyncCount++; _reviewSyncOvMax = Math.Max(_reviewSyncOvMax, ovMs); _reviewSyncRowMax = Math.Max(_reviewSyncRowMax, rowMs);
@@ -566,19 +571,14 @@ namespace AniloxRoll.Monitor.Forms
                 _stitchCoordinator.SameSourceViewRange = () =>
                     double.IsNaN(_reviewViewLeftMm) ? null
                     : new[] { _reviewViewLeftMm, _reviewViewRightMm, _reviewViewTopMm, _reviewViewBotMm };
-                // 游標狀態 → 狀態列 lblPixelInfo（mm 換算同源在 LiveDisplayView，這裡只格式化＝app 政策）。
+                // 游標狀態 → 狀態列 lblPixelInfo（mm 換算同源在 ImageDisplayView，這裡只格式化＝app 政策）。
                 // 取代舊 camReviewMain.StatusChanged→UpdateCanvasInfo（覆蓋後已死，#13 遷移時即斷）。
                 _reviewDisplayManager.CursorStatusChanged += s =>
                 {
                     if (lblPixelInfo == null) return;
-                    lblPixelInfo.Text =
-                        $"位置:({s.CurMmX:F2}, {s.CurMmY:F2}) mm | " +
-                        $"X範圍:{s.ViewLeftMm:F1}~{s.ViewRightMm:F1} mm | " +
-                        $"Y範圍:{s.ViewTopMm:F1}~{s.ViewBotMm:F1} mm | " +
-                        $"座標: ({s.CursorX}, {s.CursorY}) | " +
-                        $"亮度: {s.Brightness} | " +
-                        $"實體倍率:{(s.PhysMag > 0 ? $"{s.PhysMag:F2}x" : "-")}";
+                    lblPixelInfo.Text = CursorStatusTextFormatter.Format(s);
                 };
+                _reviewDisplayManager.SetFlipVertical(ShouldFlipDisplayVertical());
             }
 
             _stitchCoordinator.StitchedCurveUpdated += (mean, max, ops, pos, errMean, errMax) =>
@@ -587,7 +587,7 @@ namespace AniloxRoll.Monitor.Forms
             _presenter.BusyStateChanged += _interactionHelper.SetUiLoadingState;
             _presenter.LogReported      += OnPresenterLogReported;
             // 4c：舊 gallery 選擇鏈已拆（PictureBox 被 sdk ThumbStrip 覆蓋＝點擊不可達；
-            //     縮圖↔主畫面雙向連動由 LiveDisplayView 內建）。
+            //     縮圖↔主畫面雙向連動由 ImageDisplayView 內建）。
             _dateTimeNavigator.PeriodSelectionChanged += _presenter.UpdatePeriodNavigationState;
             _dateTimeNavigator.PeriodSelectionChanged += () =>
             {
@@ -601,8 +601,8 @@ namespace AniloxRoll.Monitor.Forms
             _presenter.UpdatePeriodNavigationState();
 
             // 絞殺榕全劇終（Wave2）：camReviewMain/camReview1~7 已是 Designer 上的 Panel，
-            //   顯示/互動/手勢/座標 overlay/雙三擊/縮圖選取全由 sdk LiveDisplayView 內建承接
-            //   （經 ReviewDisplayManager 落地生根）。舊 SmartCanvas/PictureBox/CanvasInteractionHelper/
+            //   顯示/互動/手勢/座標 overlay/雙三擊/縮圖選取全由 sdk ImageDisplayView 內建承接
+            //   （經 ReviewDisplayManager 落地生根）。舊 ImageCanvas/PictureBox/CanvasInteractionHelper/
             //   ThumbnailGridPresenter 顯示鏈已整棵砍除。
 
             UpdateLiveDirectionVisual();
@@ -620,6 +620,7 @@ namespace AniloxRoll.Monitor.Forms
                 pixelText => { if (lblPixelInfo != null) lblPixelInfo.Text = pixelText; }
             );
             _liveCameraManager.SetCaptureSettings(_settings);
+            UpdateRowChartPitch();
             _liveCameraManager.OnFilesSaved = files => _remoteCopyService?.EnqueueFiles(files);
             _liveCameraManager.OnInspectionResult += OnCameraInspectionResult;
             btnLiveGetBackground.Click += btnLiveGetBackground_Click;
@@ -655,7 +656,10 @@ namespace AniloxRoll.Monitor.Forms
                 OnCamerasHwReady();
             };
 
-            var panelClicker = new MultiClickDetector();
+            var panelClicker = new MultiClickDetector(
+                300,
+                new Size(SystemInformation.DoubleClickSize.Width, SystemInformation.DoubleClickSize.Width),
+                MultiClickDistanceMode.Radius);
             camLiveMain.MouseDown += (s, e) =>
             {
                 if (e.Button != MouseButtons.Left) return;
@@ -712,11 +716,10 @@ namespace AniloxRoll.Monitor.Forms
         {
             try
             {
-                chartLiveVertical?.BringToFront();
-                chartLiveHorizontal?.BringToFront();
-                LogClick("BringLiveChartsToFront() called");
+                chartLiveColumn?.BringToFront();
+                chartLiveRow?.BringToFront();
             }
-            catch (Exception ex) { LogClick("BringLiveChartsToFront throw: " + ex.Message); }
+            catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[BringLiveChartsToFront] {ex.GetType().Name}: {ex.Message}"); }
         }
 
         /// <summary>
@@ -747,6 +750,10 @@ namespace AniloxRoll.Monitor.Forms
                 }
                 catch { }
 
+                // max-buffer 模式已驗證不採用（2026-06-24）：grab 中拉高度真上限 ~12062（per-camera，板載 4 path 各自獨立），
+                // 改走「高度一律 cap 到 MaxGrabHeightPx=12000」+ 安全的 buffer==source realloc。flag 維持預設 false。
+                MilGrabber.Core.MilCamera.UseMaxHeightBuffers = false;
+
                 _liveCameraManager.AllocateCameras(_settings.EnableMuraEnhance);
                 LoadBackgroundBins();
                 // 全域合圖（MIL 大 buffer alloc）延後到 CLProtocol 就緒後（OnCamerasHwReady）才建立：
@@ -769,6 +776,49 @@ namespace AniloxRoll.Monitor.Forms
                     _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
             UpdateCamCountLabel(_liveCameraManager.ConnectedCameraCount, CameraCount);
             RefreshGrabButtonState();
+
+            // CLProtocol 就緒後：把每張板的板載記憶體（總量/可用）標到 listViewHardware（grabber 記憶體大小）。
+            // 記憶體是「每張板」共用（同板 channel 共池）→ 每個 unique System 顯示一列；同時 log 高度/線掃上限診斷。
+            try
+            {
+                // 每張板（OwnerSystemKey）已配 buffer 台數（拔線不釋放→佔板載的台數），供顯示。
+                var boardCamCount = new Dictionary<long, int>();
+                foreach (var cam in _liveCameraManager.Cameras)
+                {
+                    if (cam == null || !cam.HasGrabBuffers) continue;
+                    long key = cam.OwnerSystemKey;
+                    boardCamCount[key] = (boardCamCount.TryGetValue(key, out var n) ? n : 0) + 1;
+                }
+
+                var seenSystems = new HashSet<long>();
+                int boardIdx = 0;
+                foreach (var cam in _liveCameraManager.Cameras)
+                {
+                    if (cam == null) continue;
+
+                    // 每張板（System）只加一列板載記憶體（去重）：用量/總量 + 已配台數。存 item ref → telemetry timer 即時刷新（改參數後用量會變）。
+                    if (listViewHardware != null && !IsDisposed && cam.HasGrabBuffers && seenSystems.Add(cam.OwnerSystemKey))
+                    {
+                        long key   = cam.OwnerSystemKey;
+                        long total = cam.GetMemoryTotalMB();    // 板載總量（on-board，硬體固定）
+                        long free  = cam.GetMemoryFreeMB();     // 即時可用
+                        long used  = (total > 0 && free >= 0) ? total - free : -1;
+                        int  nCam  = boardCamCount.TryGetValue(key, out var c) ? c : 1;
+                        string val = (used >= 0) ? $"{used}/{total} MB" : $"{free} MB free";
+                        var item = new ListViewItem(new[] { $"Grabber記憶體_板{boardIdx}（{nCam}台）", val });
+                        listViewHardware.Items.Add(item);
+                        _boardMemItems[key] = item;             // 存 ref 供 timer 更新
+                        _boardMemInfo[key]  = (nCam, total);
+                        boardIdx++;
+                    }
+                }
+
+                // 診斷：log 各相機 GenICam Height feature 的合法範圍（Min/Max/Increment）。
+                // 合法 grab 高度 = Min + k×Increment；判斷 9000 為何合法、8736 為何 stall（格點外）。
+                foreach (var cam in _liveCameraManager.Cameras)
+                    cam?.LogHeightFeatureInfo();
+            }
+            catch { }
         }
 
         /// <summary>btnLiveGrab 狀態唯一來源：依「相機就緒 / IO 連線 / 是否抓取中」決定顯示。
@@ -854,12 +904,12 @@ namespace AniloxRoll.Monitor.Forms
             "ec_ErrorValueMeanV", "ed_ErrorValueMaxV",
             "ee_ErrorValueMeanH", "ef_ErrorValueMaxH",
             // InspectionRecipe.* 真名（程式碼直接改 Recipe 時用）
-            nameof(InspectionRecipe.HessianMaxFactorV), "Hessian Max Factor V", "垂直正規值",
-            nameof(InspectionRecipe.HessianMaxFactorH), "Hessian Max Factor H", "水平正規值",
-            nameof(InspectionRecipe.ErrorValueMeanV),  "Error Value Mean V", "垂直平均閾值",
-            nameof(InspectionRecipe.ErrorValueMaxV),   "Error Value Max V",  "垂直最大閾值",
-            nameof(InspectionRecipe.ErrorValueMeanH),  "Error Value Mean H", "水平平均閾值",
-            nameof(InspectionRecipe.ErrorValueMaxH),   "Error Value Max H",  "水平最大閾值",
+            nameof(InspectionRecipe.HessianMaxFactorV), "Hessian Max Factor V", "欄正規值",
+            nameof(InspectionRecipe.HessianMaxFactorH), "Hessian Max Factor H", "列正規值",
+            nameof(InspectionRecipe.ErrorValueMeanV),  "Error Value Mean V", "欄平均閾值",
+            nameof(InspectionRecipe.ErrorValueMaxV),   "Error Value Max V",  "欄最大閾值",
+            nameof(InspectionRecipe.ErrorValueMeanH),  "Error Value Mean H", "列平均閾值",
+            nameof(InspectionRecipe.ErrorValueMaxH),   "Error Value Max H",  "列最大閾值",
             nameof(InspectionRecipe.Algorithm),        "去背演算法",
             nameof(InspectionRecipe.RidgeDir),         "Ridge 方向",
         };
@@ -909,8 +959,8 @@ namespace AniloxRoll.Monitor.Forms
                 _liveCameraManager?.SetCaptureSettings(_settings);
                 _reviewOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
                 _liveOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-                _liveRowChartHelper?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
-                _reviewRowChartHelper?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
+                _liveRowDisplay?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
+                _reviewRowDisplay?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
                 UpdateRowChartPitch();
                 _dataStatsPresenter?.RefreshMuraProfileForSettingsChange();
                 if (_stitchCoordinator?.IsStitchMode == true)

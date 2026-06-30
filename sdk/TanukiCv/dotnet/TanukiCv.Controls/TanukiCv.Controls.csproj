@@ -61,20 +61,26 @@
   <ItemGroup>
     <Compile Include="BaseCurveChartHelper.cs" />
     <Compile Include="ColumnCurveChartHelper.cs" />
+    <Compile Include="EnumDescriptionConverter.cs" />
     <Compile Include="RowCurveChartHelper.cs" />
     <Compile Include="GrayBitmap.cs" />
     <Compile Include="GrayResizeCpu.cs" />
+    <Compile Include="LiveDisplayOptions.cs" />
+    <Compile Include="ImageDisplayView.cs" />
     <Compile Include="LiveDisplayView.cs" />
+    <Compile Include="WaterfallFullMode.cs" />
+    <Compile Include="WaterfallView.cs" />
     <Compile Include="ThumbStrip.cs" />
     <Compile Include="ThumbView.cs">
       <SubType>Component</SubType>
     </Compile>
-    <Compile Include="UI\SmartCanvas.cs" />
+    <Compile Include="UI\ImageCanvas.cs" />
     <Compile Include="Layout\RoundedLabel.cs">
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="Imaging\BitmapPool.cs" />
     <Compile Include="Interaction\EventGuard.cs" />
+    <Compile Include="Interaction\MultiClickDetector.cs" />
     <Compile Include="Layout\ProportionalScaler.cs" />
     <Compile Include="Input\ComboBoxWheelReverser.cs" />
     <Compile Include="Input\TrackBarWheelInterceptor.cs" />

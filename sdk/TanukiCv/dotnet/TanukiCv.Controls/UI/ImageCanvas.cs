@@ -1,4 +1,4 @@
-﻿// TanukiCv.Controls\UI\SmartCanvas.cs
+// TanukiCv.Controls\UI\ImageCanvas.cs
 
 using System;
 using System.ComponentModel;
@@ -19,7 +19,7 @@ namespace TanukiCv.Controls
         public PointF PanOffset { get; set; }
     }
 
-    public class SmartCanvas : PictureBox
+    public class ImageCanvas : PictureBox
     {
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public new Cursor Cursor
@@ -101,32 +101,18 @@ namespace TanukiCv.Controls
         /// Image/zoom 變時付一次）。即時路徑切勿設 HighQuality —— 全解析度大圖每幀 HighQuality 縮放會卡死取像。</summary>
         public InterpolationMode DownscaleInterpolation { get; set; } = InterpolationMode.NearestNeighbor;
 
-        // 多擊手勢（opt-in；主程式回顧畫布自有 MultiClickDetector 那套，故預設關不影響）：
+        // 多擊手勢（opt-in）：
         //   雙擊 = FitToScreen；三擊 = 實體 1:1（需先 SetPhysicalCalibration）。
         public bool DoubleClickFitToScreen { get; set; } = false;
         public bool TripleClickPhysical1x  { get; set; } = false;
 
-        // 手勢事件（給上層做 app 專屬的事，如 UiActionLogger 記錄；手勢偵測/動作本身由 SmartCanvas 做）
+        // 手勢事件（給上層做 app 專屬的事，如 UiActionLogger 記錄；手勢偵測/動作本身由 ImageCanvas 做）
         public event EventHandler FitPerformed;        // 雙擊 fit 完成
         public event EventHandler Physical1xPerformed; // 三擊實體 1:1 完成
         public event EventHandler DragStarted;         // 實際拖曳開始（第一次帶鍵移動）
         private bool _dragMoved;
 
-        // 多擊偵測（內建，sdk 不可引用 app 的 MultiClickDetector，故在此自帶最小實作）
-        private int _mcCount, _mcLastMs;
-        private Point _mcLastPos;
-        private int RegisterMultiClick(Point p)
-        {
-            int now = Environment.TickCount;
-            if (now - _mcLastMs <= SystemInformation.DoubleClickTime &&
-                Math.Abs(p.X - _mcLastPos.X) <= SystemInformation.DoubleClickSize.Width &&
-                Math.Abs(p.Y - _mcLastPos.Y) <= SystemInformation.DoubleClickSize.Height)
-                _mcCount++;
-            else _mcCount = 1;
-            _mcLastMs = now; _mcLastPos = p;
-            return _mcCount;
-        }
-        private void ConsumeMultiClick() => _mcCount = 0;
+        private readonly MultiClickDetector _multiClickDetector = new MultiClickDetector();
 
         /// <summary>是否在 fit-to-screen 視角（zoom≈fit + pan≈置中）。供多擊「已 fit→不歸零讓三擊接手」用，
         /// 也可給上層當「是否已 fit」單一來源（取代 app 自己重算 fitZoom）。</summary>
@@ -218,7 +204,7 @@ namespace TanukiCv.Controls
         /// </summary>
         public bool ClampPan { get; set; } = false;
 
-        public SmartCanvas()
+        public ImageCanvas()
         {
             this.DoubleBuffered = true;
             this.SizeMode = PictureBoxSizeMode.Normal;
@@ -443,17 +429,17 @@ namespace TanukiCv.Controls
                 _edgeTriggeredInDrag = false; // 重置觸發旗標
 
                 // 多擊手勢：雙擊 fit、三擊實體 1:1（opt-in；歸零防下一下誤觸更高擊數）
-                int clicks = RegisterMultiClick(e.Location);
+                int clicks = _multiClickDetector.RegisterClick(e.Location);
                 if (clicks == 2 && DoubleClickFitToScreen && (this.Image != null || _lodActive) && !IsAtFitView())
                 {
                     // 只有「非 fit」才 fit + 歸零；已在 fit → 不做事也不歸零，讓第三下能觸發三擊。
-                    _isDragging = false; ConsumeMultiClick();
+                    _isDragging = false; _multiClickDetector.Consume();
                     FitToScreen();
                     FitPerformed?.Invoke(this, EventArgs.Empty);
                 }
                 else if (clicks >= 3 && TripleClickPhysical1x && _physCalibrated)
                 {
-                    _isDragging = false; ConsumeMultiClick();
+                    _isDragging = false; _multiClickDetector.Consume();
                     ZoomToOneToOne(e.Location);
                     Physical1xPerformed?.Invoke(this, EventArgs.Empty);
                 }

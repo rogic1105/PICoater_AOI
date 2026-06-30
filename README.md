@@ -12,7 +12,7 @@ PICoater_AOI/
 │   └── TanukiCv/        # 以 tanuki_core 為引擎的 .NET 影像 SDK（self-contained）
 │       ├── native/      # C++：tanuki_core（CUDA primitive）/ tanuki_utils / tanuki_cv_api
 │       │                #      + tanuki_pipeline（演算法流程層 framework/modules/pipelines/api）
-│       ├── dotnet/      # TanukiCv.Core（純 library）+ TanukiCv.Controls（WinForms SmartCanvas）
+│       ├── dotnet/      # TanukiCv.Core（純 library）+ TanukiCv.Controls（WinForms ImageCanvas）
 │       ├── benchmark/   # tanuki_core_bench 速度測試 + TanukiCv.BenchUi（SDK benchmark UI）
 │       └── third_party/stb/
 ├── src/dotnet/          # [介面] C# 使用者介面（src 只剩 UI；C++ 演算法全在 sdk/TanukiCv/native）

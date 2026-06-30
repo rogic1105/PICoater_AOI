@@ -12,7 +12,7 @@ namespace TanukiCv.Controls
     /// **不閃的關鍵**：縮圖不每幀每台 BeginInvoke（8 台灌爆 UI → 閃），改 timer 批量；建圖在 UI 執行緒、
     /// 葉子 ThumbView 自繪雙緩衝（不對容器開雙緩衝——那會反讓子控制項閃）。
     ///
-    /// app（LiveCameraManager 經 LiveDisplayView）與範例（MilGrabberPbForm）共用此唯一來源縮圖路徑。
+    /// app（LiveCameraManager 經 ImageDisplayView）與範例（MilGrabberPbForm）共用此唯一來源縮圖路徑。
     /// </summary>
     public sealed class ThumbStrip : IDisposable
     {

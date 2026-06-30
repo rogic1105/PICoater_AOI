@@ -202,7 +202,7 @@ namespace AniloxRoll.Monitor.Core.Services
             float[] rowCurveMean = LoadCurveBinCompat(baseNoSuffix, CaptureFileNaming.MeanH, CaptureFileNaming.MeanHLegacy);
             float[] rowCurveMax  = LoadCurveBinCompat(baseNoSuffix, CaptureFileNaming.MaxH, CaptureFileNaming.MaxHLegacy);
 
-            Console.WriteLine(
+            System.Diagnostics.Trace.WriteLine(
                 $"[FullRes-New] mode={isProcessedMode,-5} | Total={swTotal.ElapsedMilliseconds,4}ms  ({bmp.Width}x{bmp.Height})");
 
             int scaleFactor = curveMean != null && bmp.Width > 0

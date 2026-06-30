@@ -66,6 +66,7 @@
       <DependentUpon>SdkForm.cs</DependentUpon>
     </Compile>
     <Compile Include="Program.cs" />
+    <Compile Include="Utils\FileUtils.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <EmbeddedResource Include="Forms\SdkForm.resx">
       <DependentUpon>SdkForm.cs</DependentUpon>

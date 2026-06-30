@@ -12,7 +12,7 @@
 ## 2. 功能盤點（2026-06-12 完成；終局前提）
 | 功能 | 結論 |
 |---|---|
-| zoom/pan/overlay/雙三擊/曲線連動/座標 | SmartCanvas+LiveDisplayView 內建 ✓ |
+| zoom/pan/overlay/雙三擊/曲線連動/座標 | ImageCanvas+LiveDisplayView 內建 ✓ |
 | 縮圖↔主畫面雙向連動 | ✅ 已移植 sdk（ThumbView 高亮+CenterOnCamera+SelectedCamChanged；框色 ThumbSelectedColor 各 UI 自選） |
 | 動態 LOD | 監控有 → 回顧接入後白賺 |
 | 視野保留（換 ID 保 zoom/pan） | LiveDisplayView 換幀天然不動視野；驗「影像尺寸變化」edge case；顯示順序需調 |
@@ -30,8 +30,8 @@
 1. **餵圖路徑**：LiveDisplayView 吃 8bpp 灰階 bytes；回顧載入是 Bitmap（JPEG 解碼）。
    選項 A=Bitmap→gray bytes（LockBits 一次性轉，換 ID 才發生、可接受）；
    選項 B=載入管線直接保留 gray bytes（較快但動載入層）。建議 A 起步。
-2. **容器**：camReviewMain 現為 Designer 上的 SmartCanvas 控制項；LiveDisplayView 要 Panel 容器
-   （建構時自建 SmartCanvas）。需 Designer 改 Panel（或用現有 parent panel）+ camReview1~7 縮圖 panel 傳入。
+2. **容器**：camReviewMain 現為 Designer 上的 ImageCanvas 控制項；LiveDisplayView 要 Panel 容器
+   （建構時自建 ImageCanvas）。需 Designer 改 Panel（或用現有 parent panel）+ camReview1~7 縮圖 panel 傳入。
 3. **單張模式語意差**：回顧單張=「載該相機full-res圖」（高解析）vs LiveDisplayView 單張=顯示該台最新幀。
    接入後：7 台圖都 PushFrame，單張=SetSelected 切換（圖已在記憶體）→ 換台變即時、不用重載。記憶體：7×full-res
    灰階 bytes（~16384×H×7）需評估（LOD 顯示便宜但快照仍駐留）。
@@ -63,7 +63,7 @@
   真實 rowPitch 對齊、瞬切雙快取（嘗試後拆除＝無收益+記憶體吃緊）。
 
 ## 🔲 4d 收官清單（需上機逐項驗，勿盲刪）
-1. camReviewMain（SmartCanvas）+ camReview1~7（PictureBox）控制項實體與 Designer 移除
+1. camReviewMain（ImageCanvas）+ camReview1~7（PictureBox）控制項實體與 Designer 移除
    → ReviewDisplayManager 改直接吃 Panel（Designer 放 Panel）；連動 CanvasInteractionHelper ctor。
 2. CanvasInteractionHelper 拆分：顯示路徑（UpdateCanvas/SaveView/RestoreView/UpdateCanvasInfo）刪；
    保留 ScreenMmPerPixel、ReviewConfig 代理、TryComputeCurrentViewRange（RSC fallback/DataStats 用）→ 評估搬家。

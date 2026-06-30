@@ -147,9 +147,10 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// 參數：(cameraId, fileNameWithoutExt, meanPeak_0to1, maxPeak_0to1)</summary>
         public event Action<int, string, float, float> OnInspectionResult;
 
-        /// <summary>SmartCanvas 顯示路徑用：每幀提供「顯示 bytes(8-bit 灰階)+ 尺寸」(MIL 回呼執行緒)。
-        /// bytes 是重用緩衝 → 訂閱者必須**同步消費**(組 bitmap 複製)、勿存 ref。只在有訂閱者(SmartCanvas 模式)時觸發。</summary>
-        public event Action<int, byte[], int, int> OnDisplayFrame;
+        /// <summary>ImageCanvas / 瀑布顯示路徑用：每幀提供「顯示 bytes(8-bit 灰階)+ 尺寸 + 本幀硬體 frame-start tick」(MIL 回呼執行緒)。
+        /// bytes 是重用緩衝 → 訂閱者必須**同步消費**(組 bitmap 複製)、勿存 ref。只在有訂閱者時觸發。
+        /// tick＝跨相機幀對齊的硬體鑰匙（同 Review 的 FrameTickIndex；瀑布即時用它聚類時間槽）。</summary>
+        public event Action<int, byte[], int, int, long> OnDisplayFrame;
 
         /// <summary>每幀 GPU pipeline 完成後觸發（MIL 回呼執行緒）。
         /// 參數：(cameraId, curveMean_raw255, curveMax_raw255)</summary>
@@ -231,6 +232,12 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>透過 CLProtocol GenICam Feature 讀取 Line Rate（Hz）。CLProtocol 未啟用時回傳 0。</summary>
         public double GetLineRateHz() => _mil.GetLineRateHz();
 
+        /// <summary>相機/grabber 回報的線掃率上限（Hz）。CLProtocol 未就緒回 0。</summary>
+        public double GetLineRateMaxHz() => _mil.GetLineRateMaxHz();
+
+        /// <summary>相機/grabber 回報的 grab 高度上限（px）。只讀查詢；CLProtocol 未就緒 / 查不到回 0。</summary>
+        public int GetGrabHeightMaxPx() => _mil.GetGrabHeightMaxPx();
+
         /// <summary>設定線掃速率（Hz）。CLProtocol 未就緒時僅記錄，待啟用後自動重套。</summary>
         public void SetLineRateHz(double hz) => _mil.SetLineRateHz(hz);
 
@@ -289,6 +296,21 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>取得板卡可用記憶體（MB）。</summary>
         public long GetMemoryFreeMB() => _mil.GetMemoryFreeMB();
 
+        /// <summary>取得板卡總記憶體（MB）＝板載 on-board（硬體固定）。</summary>
+        public long GetMemoryTotalMB() => _mil.GetMemoryTotalMB();
+
+        /// <summary>所屬板（System）識別＝同板相機歸組用。</summary>
+        public long OwnerSystemKey => _mil.OwnerSystemKey;
+
+        /// <summary>是否已配 grab buffer（實際佔板載；拔線不釋放）。算板載安全高度用此而非 IsConnected。</summary>
+        public bool HasGrabBuffers => _mil.HasGrabBuffers;
+
+        /// <summary>grab 高度上限（px）。上層算好設入（純供 UI clamp 滑桿/顯示；CameraGrabHeight 設前已 clamp）。</summary>
+        public int  EffectiveMaxGrabHeightPx { get => _mil.EffectiveMaxGrabHeightPx; set => _mil.EffectiveMaxGrabHeightPx = value; }
+
+        /// <summary>診斷：log 相機 Height feature 的合法範圍 Min/Max/Increment。</summary>
+        public void LogHeightFeatureInfo() => _mil.LogHeightFeatureInfo();
+
         /// <summary>取得 PCIe 通道數。</summary>
         public int GetPcieNumberOfLanes() => _mil.GetPcieNumberOfLanes();
 
@@ -319,6 +341,9 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>分配後預先啟用 CLProtocol（背景）；grab 前完成，避免 grab 期間重套線掃掉幀。</summary>
         public void BeginCLProtocolInit() => _mil.BeginCLProtocolInit();
 
+        /// <summary>斷線重連後重跑 CLProtocol（啟動時不在線、之後才連上 → 重新啟用才讀得到曝光/線掃參數）。</summary>
+        public void RetryCLProtocolOnReconnect() => _mil.RetryCLProtocolOnReconnect();
+
         public bool CheckPresence() => _mil.CheckPresence();
 
         // ==================== MIL FrameReady 回呼（非 MIL 檢測/合圖/存檔） ====================
@@ -342,12 +367,12 @@ namespace AniloxRoll.Monitor.Core.Camera
             else
                 _mil.CopyToDisplay(modifiedBuffer);       // 顯示原圖
 
-            // SmartCanvas 顯示路徑：每幀把「顯示 bytes」交給訂閱者(同步組 bitmap)。MIL 模式無訂閱者→不觸發。
+            // ImageCanvas 顯示路徑：每幀把「顯示 bytes」交給訂閱者(同步組 bitmap)。MIL 模式無訂閱者→不觸發。
             var onDisp = OnDisplayFrame;
             if (onDisp != null)
             {
                 byte[] disp = showProcessed ? _hostOutputBuffer : _hostInputBuffer;
-                if (disp != null) onDisp(CameraId, disp, FrameWidth, FrameHeight);
+                if (disp != null) onDisp(CameraId, disp, FrameWidth, FrameHeight, _mil.LastFrameStartTicks);
             }
 
             // Global merge 複製（display buffer → 合併 buffer 裁切位置）已移至 MilCamera grab hook，

@@ -1,7 +1,7 @@
 # find_stream_ridgeline
 
 找「**流水圖**」的**脊線**（mura 檢測）。anilox 滾筒的 mura 缺陷在影像上呈現流水/條紋狀，缺陷處是脊線（ridge）。
-本 pipeline 去掉條紋背景後，用脊線偵測把 mura 凸顯出來，並輸出切向/法向曲線供判定。
+本 pipeline 去掉條紋背景後，用脊線偵測把 mura 凸顯出來，並輸出欄/列曲線供判定。
 
 ## 流程
 ```
@@ -11,7 +11,7 @@
 去背影像
    │
    ▼  ridge_hessian         ── 脊線（gaussian blur → hessian 響應 → 曲線 → scale）
-脊線圖 + 切向/法向曲線（mean/max）
+脊線圖 + 欄/列曲線（mean/max）
 ```
 
 ## module（可抽換）

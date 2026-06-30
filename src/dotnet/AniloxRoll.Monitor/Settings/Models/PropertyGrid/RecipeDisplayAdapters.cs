@@ -36,16 +36,16 @@ namespace AniloxRoll.Monitor.Core.Data
         [DisplayName("去背演算法")]
         public BackgroundAlgorithm Algorithm { get => _recipe.Algorithm; set => _recipe.Algorithm = value; }
 
-        [DisplayName("垂直正規值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [DisplayName("欄正規值")][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float HessianMaxFactorV { get => _recipe.HessianMaxFactorV; set => _recipe.HessianMaxFactorV = value; }
 
-        [DisplayName("水平正規值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [DisplayName("列正規值")][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float HessianMaxFactorH { get => _recipe.HessianMaxFactorH; set => _recipe.HessianMaxFactorH = value; }
 
         public override string ToString() => "";
     }
 
-    // 檢出標準展開：檢出方向 + 4 個閾值（垂直/水平 × 平均/最大）
+    // 檢出標準展開：檢出方向 + 4 個閾值（欄/列 × 平均/最大）
     [TypeConverter(typeof(ExpandableLeftAlignConverter))]
     public class DetectionStandardConfig
     {
@@ -55,16 +55,16 @@ namespace AniloxRoll.Monitor.Core.Data
         [DisplayName("檢出方向")]
         public RidgeDirection RidgeDir { get => _recipe.RidgeDir; set => _recipe.RidgeDir = value; }
 
-        [DisplayName("垂直平均閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [DisplayName("欄平均閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float ErrorValueMeanV { get => _recipe.ErrorValueMeanV; set => _recipe.ErrorValueMeanV = value; }
 
-        [DisplayName("垂直最大閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [DisplayName("欄最大閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float ErrorValueMaxV { get => _recipe.ErrorValueMaxV; set => _recipe.ErrorValueMaxV = value; }
 
-        [DisplayName("水平平均閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [DisplayName("列平均閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float ErrorValueMeanH { get => _recipe.ErrorValueMeanH; set => _recipe.ErrorValueMeanH = value; }
 
-        [DisplayName("水平最大閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [DisplayName("列最大閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float ErrorValueMaxH { get => _recipe.ErrorValueMaxH; set => _recipe.ErrorValueMaxH = value; }
 
         public override string ToString() => "";

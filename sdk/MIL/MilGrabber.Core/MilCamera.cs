@@ -27,6 +27,25 @@ namespace MilGrabber.Core
         private MIL_ID _milLastGrabBuffer = MIL.M_NULL;
         private MIL_INT _milGrabBufferListSize = 2;
 
+        // ===== 階段二實驗（feat/grabheight-max-buffer）=====
+        /// <summary>grab/display buffer 一次配「max 高度」，改高度只改 `M_SOURCE_SIZE_Y`、**不 free/realloc** →
+        /// 測「能否避開 realloc→re-arm 累積（=改高度 stall 的根因路徑）」。預設 **false**＝現行安全 realloc 行為。
+        /// ⚠ 未上機驗證：Matrox doc「line-scan 幀填滿整個 destination buffer 才完成」暗示 max-buffer 可能讓
+        /// **幀變成 max 高度（壞）**。上機翻 true 測一次：幀高度正確＝max-buffer 可行；幀變 max 高度＝doc 疑慮
+        /// 成立，改走 auto-allocate（MdigProcess bufarray=M_NULL）。詳見 docs/dev/grabheight-max-buffer-stage2.md。</summary>
+        /// <summary>max-buffer 模式。**預設 false（已驗證不採用）**：grab 中拉高度真上限 ~12062（per-camera；板載 4 path
+        /// 各自獨立到 ~12062，不是同板總和），且 7 台都配 max 高度 buffer 會撐爆 host 非分頁池。真正的解＝上層把高度一律
+        /// cap 到 MaxGrabHeightPx（=12000，AcquisitionDefaults）。保留 flag 與 scaffold 供紀錄，預設走 buffer==source realloc。</summary>
+        public static bool UseMaxHeightBuffers = false;
+        /// <summary>max-buffer 配置高度（px，僅 UseMaxHeightBuffers=true 時用；目前預設 false 故未使用）。</summary>
+        public static int MaxBufferHeightPx = 12000;
+        private int _grabBufAllocH;                   // MIL grab/display buffer 實際配置的高度（max 或當前）
+
+        // ===== grab buffer 高度上限（防撞板載 stall）=====
+        /// <summary>本台實際生效的高度上限（px）。由上層 LiveCameraManager 算好設入（CameraGrabHeight 設前已 clamp）；
+        /// 純供 UI clamp 滑桿/顯示。autoMax 計算刻意放上層，**不在 MIL Initialize 內查板載**（會 stall）。</summary>
+        public int EffectiveMaxGrabHeightPx { get; set; }
+
         public MIL_ID OwnerSystemId => _ownerSystemId;
         public MIL_ID MilDigitizer => _milDigitizer;
         public MIL_ID MilDisplay => _milDisplay;
@@ -125,37 +144,48 @@ namespace MilGrabber.Core
             MIL.MdigAlloc(_ownerSystemId, _devNum, _dcfPath, MIL.M_DEFAULT, ref _milDigitizer);
             if (_milDigitizer == MIL.M_NULL) return;
 
-            // 先套用 Grab Height，再查詢實際尺寸以分配正確大小的 Buffer
+            // 先套用 Grab Height，再查詢實際尺寸以分配正確大小的 Buffer。
+            // 高度上限（autoMax / 防撞板載 clamp）由上層 LiveCameraManager 算好、CameraGrabHeight 設進來前已 clamp，
+            // 此處不查板載/不算 autoMax —— 在 MIL 初始化序列中插入額外 MdigInquire 會讓 cam stall（實測）。
             if (CameraGrabHeight > 0)
                 MIL.MdigControl(_milDigitizer, MIL.M_SOURCE_SIZE_Y, (MIL_INT)CameraGrabHeight);
 
             MIL.MdispAlloc(_ownerSystemId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref _milDisplay);
             MIL.MdispAlloc(_ownerSystemId, MIL.M_DEFAULT, "M_DEFAULT", MIL.M_DEFAULT, ref _milSecondaryDisplay);
             if (_milDisplay == MIL.M_NULL)
-                System.Diagnostics.Trace.TraceWarning($"[MilCamera CAM{CameraId}] MdispAlloc(primary) 失敗 → 主畫面 MIL 直繪不可用（SmartCanvas 路徑仍可）");
+                System.Diagnostics.Trace.TraceWarning($"[MilCamera CAM{CameraId}] MdispAlloc(primary) 失敗 → 主畫面 MIL 直繪不可用（ImageCanvas 路徑仍可）");
 
             MIL_INT sizeX = MIL.MdigInquire(_milDigitizer, MIL.M_SIZE_X, MIL.M_NULL);
             MIL_INT sizeY = MIL.MdigInquire(_milDigitizer, MIL.M_SIZE_Y, MIL.M_NULL);
             FrameWidth = (int)sizeX;
             FrameHeight = (int)sizeY;
 
+            // 階段二 flag：buffer 一次配 max 高度（之後改高度只改 M_SOURCE_SIZE_Y、不 realloc）。
+            int bufH = UseMaxHeightBuffers ? System.Math.Max((int)sizeY, MaxBufferHeightPx) : (int)sizeY;
+            _grabBufAllocH = bufH;
+            // 診斷：確認 host grab buffer 真的一次配 max（bufH==MaxBufferHeightPx）而非 json 高度。
+            // 註：板載 M_MEMORY 占用顯示的是 digitizer 的 source-size FIFO（隨 M_SOURCE_SIZE_Y 縮放），
+            // **不是這裡的 host grab buffer**，故占用會隨高度變＝正常，不代表 max-buffer 沒生效。
+            System.Diagnostics.Trace.WriteLine(
+                $"[CAM{CameraId}] Initialize buffer：UseMaxHeightBuffers={UseMaxHeightBuffers} MaxBufferHeightPx={MaxBufferHeightPx} sizeY(json)={(int)sizeY} → bufH(host alloc)={bufH}");
+
             for (int i = 0; i < _milGrabBufferListSize; i++)
             {
-                MIL.MbufAlloc2d(_ownerSystemId, sizeX, sizeY, 8 + MIL.M_UNSIGNED,
+                MIL.MbufAlloc2d(_ownerSystemId, sizeX, bufH, 8 + MIL.M_UNSIGNED,
                     MIL.M_IMAGE + MIL.M_GRAB + MIL.M_PROC, ref _milGrabBuffers[i]);
                 if (_milGrabBuffers[i] == MIL.M_NULL)
                     System.Diagnostics.Trace.TraceWarning($"[MilCamera CAM{CameraId}] MbufAlloc2d(grab[{i}]) 失敗 → 取像將失敗");
                 else MIL.MbufClear(_milGrabBuffers[i], 0);
             }
 
-            MIL.MbufAlloc2d(_ownerSystemId, sizeX, sizeY, 8 + MIL.M_UNSIGNED,
+            MIL.MbufAlloc2d(_ownerSystemId, sizeX, bufH, 8 + MIL.M_UNSIGNED,
                 MIL.M_IMAGE + MIL.M_DISP + MIL.M_PROC, ref _milDisplayBuffer);
             if (_milDisplayBuffer == MIL.M_NULL)
                 System.Diagnostics.Trace.TraceWarning($"[MilCamera CAM{CameraId}] MbufAlloc2d(display buffer) 失敗 → MIL 直繪不可用");
             else MIL.MbufClear(_milDisplayBuffer, 0);
 
             // display/buffer 任一 M_NULL → 跳過 MdispSelectWindow（對 M_NULL 操作會 MIL 報錯）。
-            // grab 仍進行，SmartCanvas 顯示路徑不靠 MIL display；只 MIL 直繪模式會黑畫面（已 log）。
+            // grab 仍進行，ImageCanvas 顯示路徑不靠 MIL display；只 MIL 直繪模式會黑畫面（已 log）。
             if (_milDisplay != MIL.M_NULL && _milDisplayBuffer != MIL.M_NULL)
             {
                 MIL.MdispSelectWindow(_milDisplay, _milDisplayBuffer, _panelHandle);
@@ -198,10 +228,28 @@ namespace MilGrabber.Core
             }
             else if (!_userWantsGrab && IsLive)
             {
+                // 乾淨 drain（唯一來源 DrainGrab）：裸 M_STOP 只取消佇列、不保證 in-flight 清乾淨 → re-grab 在
+                // 「未乾淨」狀態 re-arm，兩台 M_START 跨 frame 邊界時序不一 → 某台第一個完整幀晚一格
+                // （free-run 無 trigger 的量化效應）。乾淨 drain 後 re-arm 接近「第一次 grab」狀態，兩台較易等到同一完整 frame。
+                DrainGrab();
+            }
+        }
+
+        /// <summary>乾淨 drain grab（唯一來源；停止/改尺寸前清乾淨）。順序鎖死：①若在 grab → `M_STOP+M_WAIT`
+        /// 等佇列全部跑完（drain，非只取消）→ 之後無 FrameReady 在跑；②再 `M_GRAB_ABORT` 立即中止任何 in-flight/佇列殘留
+        /// （防「優雅停止留殘留 → realloc/re-arm 累積壞狀態 → 永久 stall」）。Matrox：M_STOP 只取消佇列、M_GRAB_ABORT 才清
+        /// in-flight；eV-CL 支援，guard 防 .NET wrapper 不支援。`ApplyGrabState` 停止 + `SetGrabHeight` 改尺寸前共用此一份。</summary>
+        private void DrainGrab()
+        {
+            if (_milDigitizer == MIL.M_NULL) return;
+            if (IsLive)
+            {
                 MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize,
-                    MIL.M_STOP, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
+                    MIL.M_STOP + MIL.M_WAIT, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
                 IsLive = false;
             }
+            try { MIL.MdigControl(_milDigitizer, MIL.M_GRAB_ABORT, MIL.M_DEFAULT); }
+            catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}] M_GRAB_ABORT 不支援/失敗（continue）：{ex.Message}"); }
         }
 
         public bool CheckPresence()

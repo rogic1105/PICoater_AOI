@@ -1,4 +1,4 @@
-﻿using AniloxRoll.Monitor.Core.Data;
+using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.Navigators;
 using System;
@@ -68,7 +68,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
                 sw.Stop();
 
-                // 2b-ii-B：縮圖顯示由 LiveDisplayView 承接（ThumbnailGridPresenter 已刪）。
+                // 2b-ii-B：縮圖顯示由 ImageDisplayView 承接（ThumbnailGridPresenter 已刪）。
                 //   此處仍把 ProcessBatch 產出的影像收進 cacheCollector → 由 ClearOldImages 統一 Dispose（防洩漏）。
                 foreach (var r in results)
                     if (r?.Data?.Image != null) cacheCollector.Add(r.Data.Image);

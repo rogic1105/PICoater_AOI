@@ -1,396 +1,70 @@
 using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.IO;
-using System.Threading.Tasks;
-using System.Windows.Forms;
-using Matrox.MatroxImagingLibrary;
-using MilGrabber.Core;
-using TanukiCv.Core; // PixelMmMapper（已收進 sdk 唯一來源）
-using TanukiCv.Controls; // LiveDisplayView（共用多相機監控顯示元件）
-using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Data;
-using AniloxRoll.Monitor.Core.Services;
-using AniloxRoll.Monitor.Core.Interop; // NativeMethods（LOD GPU resize；P/Invoke 宣告唯一點）
-    // partial：顯示/畫布橋接（Display Switching + SmartCanvas + UI Helpers + 實體倍率 + 滾輪 zoom）→ 未來 LiveDisplayCoordinator
 
 namespace AniloxRoll.Monitor.UI.Managers
 {
+    // partial：顯示職責已提取到 LiveDisplayCoordinator。
+    // 本檔保留既有對外 API，讓 AniloxRollForm 呼叫端不需要改。
     public partial class LiveCameraManager
     {
-        // ==================== Display Switching ====================
+        public int SelectedMainCameraId => _display.SelectedMainCameraId;
 
-        /// <summary>
-        /// <summary>
-        /// 重新套用目前選定相機的主顯示，用於 SetGrabHeight 後重新綁定畫面。
-        /// </summary>
+        public event Action<double, double, double, double> OnLiveViewRange
+        {
+            add { _display.OnLiveViewRange += value; }
+            remove { _display.OnLiveViewRange -= value; }
+        }
+
+        public Action OnAfterVerticalZoom
+        {
+            get { return _display.OnAfterVerticalZoom; }
+            set { _display.OnAfterVerticalZoom = value; }
+        }
+
+        public double RowPitchMm
+        {
+            get { return _display.RowPitchMm; }
+            set { _display.RowPitchMm = value; }
+        }
+
         public void RefreshMainDisplay()
         {
-            SwitchMainDisplay(_selectedMainCameraId);
+            _display.SwitchMainDisplay(_display.SelectedMainCameraId);
         }
 
-        /// <summary>重置主顯示器（MIL secondary display）的縮放/平移為 fit-to-window。</summary>
         public void ResetMainDisplayView()
         {
-            if (IsGlobalMergeActive && _mergedDisplay != MIL.M_NULL)
-            {
-                try
-                {
-                    MIL.MdispControl(_mergedDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
-                    MIL.MdispControl(_mergedDisplay, MIL.M_CENTER_DISPLAY, MIL.M_ENABLE);
-                }
-                catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.ResetView] {ex.GetType().Name}: {ex.Message}"); }
-                return;
-            }
-            var cam = _cameras.Find(c => c.CameraId == _selectedMainCameraId);
-            cam?.ResetSecondaryDisplayView();
+            _display.ResetMainDisplayView();
         }
 
-        private void OnLivePanelPaint(object sender, PaintEventArgs e, int cameraIndex)
+        public void ApplyMainDisplayMode()
         {
-            if (!(sender is Panel panel)) return;
-            // SmartCanvas 模式選取框唯一來源 = sdk ThumbView（橘）；父 panel 只畫中性灰框（避免雙框）。
-            // MIL 直繪模式（無 ThumbView）仍由此畫橘框。
-            bool isSelected = cameraIndex == _selectedMainCameraId && !SmartCanvasMode;
-            Color borderColor = isSelected ? Color.Orange : Color.FromArgb(60, 60, 60);
-            int   borderWidth = isSelected ? 3 : 1;
-            ControlPaint.DrawBorder(e.Graphics, panel.ClientRectangle,
-                borderColor, borderWidth, ButtonBorderStyle.Solid,
-                borderColor, borderWidth, ButtonBorderStyle.Solid,
-                borderColor, borderWidth, ButtonBorderStyle.Solid,
-                borderColor, borderWidth, ButtonBorderStyle.Solid);
+            _display.ApplyMainDisplayMode();
         }
 
-        // ── SmartCanvas 顯示路徑橋接 ──
-        /// <summary>SmartCanvas 模式且尚未建立 → 在 camLiveMain 疊 SmartCanvas + 訂閱各相機每幀 bytes（冪等）。
-        /// 在「相機配置」與「開始抓取」都呼叫 → 切設定後重開抓取即生效，不必重啟程式。</summary>
-        private void EnsureSmartDisplay()
+        public void RefreshWaterfallDisplay()
         {
-            if (!SmartCanvasMode || _smartDisplay != null) return;
-            if (_mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) return;
-            _smartDisplay = new LiveDisplayView(_mainDisplayPanel, _cameraPanels, _screenMmPerPx);
-            _smartDisplay.ThumbSelectedColor = Color.Orange;   // 沿用本產品選取色；選取框唯一來源=sdk ThumbView
-            _smartDisplay.SelectRequested  += SmartSelectCamera;
-            // 反向連動（合圖視野移動 → sdk 已自動高亮縮圖）：只同步 app 選中狀態，不走 SwitchMainDisplay（防重載/遞迴）
-            _smartDisplay.SelectedCamChanged += camId => _selectedMainCameraId = camId;
-            _smartDisplay.ViewRangeMmChanged += OnSmartViewRange;
-            // SmartCanvas 模式下 MIL 滑鼠 hook 被覆蓋不觸發 → lblPixelInfo 改吃 LiveDisplayView 游標狀態（同源）
-            _smartDisplay.CursorStatusChanged += OnSmartCursorStatus;
-            _smartDisplay.SetSelected(_selectedMainCameraId);
-            if (IsGlobalMergeActive && _merger != null)
-            {
-                var ops = new double[_merger.SlotStartsMm?.Length ?? 0];
-                for (int i = 0; i < ops.Length; i++) ops[i] = _merger.RefOpsMm * 1000.0; // 均勻 ops（µm）
-                _smartDisplay.SetLayout(_merger.SlotStartsMm, ops, 1, RowPitchMm); // 主程式餵全解析度顯示 bytes → feedScale=1
-            }
-            _smartDisplay.MergeAll = IsGlobalMergeActive;     // 全域＝合圖全部（含無畫面相機黑占位）
-            _smartDisplay.SetMergeMode(IsGlobalMergeActive);
-            foreach (var cam in _cameras) cam.OnDisplayFrame += OnCameraDisplayFrame;
-            if (_inspectionSettings != null) SetLodMode(_inspectionSettings.LiveLod); // 套目前 LOD 設定
+            _display.RefreshWaterfallDisplay();
         }
 
-        /// <summary>套用動態 LOD 模式到 LiveDisplayView（he_LiveLod 變更 / 顯示建立時呼叫）。</summary>
+        public void ApplyDisplayDirection()
+        {
+            _display.ApplyDisplayDirection();
+        }
+
         public void SetLodMode(LiveLodMode mode)
         {
-            if (_smartDisplay == null) return;
-            switch (mode)
-            {
-                case LiveLodMode.GPU: _lodReleased = false; _smartDisplay.EnableLod(LodResizeGpu); break;
-                case LiveLodMode.CPU: _smartDisplay.EnableLod(GrayResizeCpu.Resize); break;
-                default:              _smartDisplay.DisableLod(); break;
-            }
+            _display.SetLodMode(mode);
         }
 
-        /// <summary>GPU LOD resize 委派（LiveDisplayView 背景執行緒呼叫；只縮「可見區」一塊）。</summary>
-        private byte[] LodResizeGpu(byte[] src, int sw, int sh, int dw, int dh)
-        {
-            int srcPix = sw * sh, dstPix = dw * dh;
-            byte[] dst;
-            lock (_lodBufLock)
-            {
-                if (_lodReleased) return null;
-                if (_lodSrcCap < srcPix)
-                {
-                    if (_lodSrcPinned != IntPtr.Zero) NativeMethods.TanukiCv_FreePinned(_lodSrcPinned);
-                    _lodSrcPinned = NativeMethods.TanukiCv_AllocPinned((ulong)srcPix); _lodSrcCap = srcPix;
-                }
-                if (_lodDstCap < dstPix)
-                {
-                    if (_lodDstPinned != IntPtr.Zero) NativeMethods.TanukiCv_FreePinned(_lodDstPinned);
-                    _lodDstPinned = NativeMethods.TanukiCv_AllocPinned((ulong)dstPix); _lodDstCap = dstPix;
-                }
-                if (_lodSrcPinned == IntPtr.Zero || _lodDstPinned == IntPtr.Zero) return null;
-                System.Runtime.InteropServices.Marshal.Copy(src, 0, _lodSrcPinned, srcPix);
-                NativeMethods.TanukiCv_Resize_GPU(_lodSrcPinned, sw, sh, _lodDstPinned, dw, dh);
-                dst = new byte[dstPix];
-                System.Runtime.InteropServices.Marshal.Copy(_lodDstPinned, dst, 0, dstPix);
-            }
-            return dst;
-        }
-
-        /// <summary>切回 MIL 模式（he_MainDisplay==MilDirect）→ 解訂閱 + dispose SmartCanvas，露出底層 MIL。</summary>
-        private void TeardownSmartDisplay()
-        {
-            if (_smartDisplay == null) return;
-            foreach (var cam in _cameras) cam.OnDisplayFrame -= OnCameraDisplayFrame;
-            _smartDisplay.Dispose();
-            _smartDisplay = null;
-            // LOD pinned 釋放（鎖內 + 旗標，等背景 provider 用完防 use-after-free）
-            lock (_lodBufLock)
-            {
-                _lodReleased = true;
-                if (_lodSrcPinned != IntPtr.Zero) { NativeMethods.TanukiCv_FreePinned(_lodSrcPinned); _lodSrcPinned = IntPtr.Zero; _lodSrcCap = 0; }
-                if (_lodDstPinned != IntPtr.Zero) { NativeMethods.TanukiCv_FreePinned(_lodDstPinned); _lodDstPinned = IntPtr.Zero; _lodDstCap = 0; }
-            }
-        }
-
-        private void OnCameraDisplayFrame(int camId, byte[] bytes, int w, int h) => _smartDisplay?.PushFrame(camId, bytes, w, h);
-        private void SmartSelectCamera(int camId) => SwitchMainDisplay(camId);
-        /// <summary>監控主畫面（LiveDisplayView）縮放/平移 → 把可見範圍轉給 form 連動 live 曲線圖
-        /// （切向/overview 用 X 範圍、法向用 Y 範圍）。bin↔主畫面對齊。</summary>
-        private void OnSmartViewRange(double leftMm, double rightMm, double topMm, double botMm)
-            => OnLiveViewRange?.Invoke(leftMm, rightMm, topMm, botMm);
-
-        /// <summary>SmartCanvas 模式：LiveDisplayView 游標狀態 → lblPixelInfo（mm 換算同源在 sdk，這裡只格式化）。
-        /// 取代 MIL 滑鼠 hook（SmartCanvas 覆蓋 MIL display 後 hook 不觸發）。</summary>
-        private void OnSmartCursorStatus(LiveDisplayView.CursorStatus s)
-        {
-            if (_updatePixelInfoCallback == null) return;
-            string tag = IsGlobalMergeActive ? "全域合圖" : $"CAM {s.SelectedCamId}";
-            _updatePixelInfoCallback.Invoke(
-                $"即時影像 [{tag}] | " +
-                $"位置:({s.CurMmX:F2}, {s.CurMmY:F2}) mm | " +
-                $"X範圍:{s.ViewLeftMm:F1}~{s.ViewRightMm:F1} mm | " +
-                $"Y範圍:{s.ViewTopMm:F1}~{s.ViewBotMm:F1} mm | " +
-                $"座標: ({s.CursorX}, {s.CursorY}) | " +
-                $"亮度: {s.Brightness} | " +
-                $"實體倍率:{(s.PhysMag > 0 ? $"{s.PhysMag:F2}x" : "-")}");
-        }
-
-        /// <summary>監控主畫面可見範圍變更（leftX, rightX, topY, botY mm）→ form 訂閱、連動 live 曲線圖 zoom。</summary>
-        public event Action<double, double, double, double> OnLiveViewRange;
-
-        private void SwitchMainDisplay(int cameraIndex)
-        {
-            // 關閉/釋放期間 form 或 panel 可能已 dispose；存取 .Handle 會觸發 CreateHandle()
-            // 而拋 ObjectDisposedException（FreeCameras→DisableGlobalMerge→此處的崩潰路徑）。
-            if (_mainForm == null || _mainForm.IsDisposed
-                || _mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) return;
-
-            if (_mainForm.InvokeRequired)
-            {
-                try { _mainForm.BeginInvoke(new Action(() => SwitchMainDisplay(cameraIndex))); }
-                catch (InvalidOperationException) { /* ObjectDisposedException 亦繼承自此 */ }
-                return;
-            }
-
-            _selectedMainCameraId = cameraIndex;
-            _userSelectedMainCameraId = cameraIndex;
-            _smartDisplay?.SetSelected(cameraIndex);
-
-            foreach (var kvp in _liveParentPanels)
-                kvp.Value.Invalidate();
-
-            // Global merge 時主畫面由合併 display 控制，不切換單台；但 pan 到相機中心
-            if (IsGlobalMergeActive)
-            {
-                PanMergedDisplayToCameraCenter(cameraIndex);
-                return;
-            }
-
-            // SmartCanvas 模式：主畫面由 LiveDisplayView 顯示，不綁 MIL secondary display 到 camLiveMain
-            // （MIL display 的 M_MOUSE_USE 會攔截滾輪，疊在上面的 SmartCanvas 無法縮放）。一律卸成 IntPtr.Zero。
-            foreach (var cam in _cameras)
-            {
-                if (!SmartCanvasMode && cam.CameraId == cameraIndex)
-                    cam.SetSecondaryDisplay(_mainDisplayPanel.Handle);
-                else
-                    cam.SetSecondaryDisplay(IntPtr.Zero);
-            }
-        }
-        // ==================== UI Helpers ====================
-
-        private void UpdateCameraStatus(string statusText, Color color)
-        {
-            foreach (var pair in _cameraStatusLabels)
-            {
-                pair.Value.Text      = $"{pair.Key}: {statusText}";
-                pair.Value.ForeColor = color;
-            }
-        }
-
-        private void UpdateSingleCameraStatus(int cameraIndex, string statusText, Color color)
-        {
-            if (_cameraStatusLabels.TryGetValue(cameraIndex, out var label))
-            {
-                label.Text      = $"{cameraIndex}: {statusText}";
-                label.ForeColor = color;
-            }
-        }
-
-        // ==================== Physical Magnification 1x ====================
-
-        /// <summary>設定主顯示 zoom 使實體倍率 = 1x（螢幕 1mm = 實際 1mm）。</summary>
         public void SetPhysicalMagnification1x()
         {
-            if (!IsLiveGrabbing || _screenMmPerPx <= 0) return;
-
-            if (IsGlobalMergeActive && _mergedDisplay != MIL.M_NULL)
-            {
-                if (_mergedRefOpsMm <= 0) return;
-                double zoom1x = PixelMmMapper.OneToOneZoom(_mergedRefOpsMm, _screenMmPerPx);
-
-                double cx = _mainDisplayPanel.Width / 2.0;
-                double cy = _mainDisplayPanel.Height / 2.0;
-
-                try
-                {
-                    double curZoom = 0, curPanX = 0, curPanY = 0;
-                    MIL.MdispInquire(_mergedDisplay, MIL.M_ZOOM_FACTOR_X, ref curZoom);
-                    MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_X, ref curPanX);
-                    MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_Y, ref curPanY);
-                    if (curZoom <= 0) curZoom = 1.0;
-
-                    double imgCx = curPanX + cx / curZoom;
-                    double imgCy = curPanY + cy / curZoom;
-                    double newPanX = imgCx - cx / zoom1x;
-                    double newPanY = imgCy - cy / zoom1x;
-
-                    MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_DISABLE);
-                    MIL.MdispControl(_mergedDisplay, MIL.M_CENTER_DISPLAY, MIL.M_DISABLE);
-                    MIL.MdispZoom(_mergedDisplay, zoom1x, zoom1x);
-                    MIL.MdispPan(_mergedDisplay, newPanX, newPanY);
-                    MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_ENABLE);
-                }
-                catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.Set1xZoom.Merged] {ex.GetType().Name}: {ex.Message}"); }
-                return;
-            }
-
-            int camIdx = _selectedMainCameraId - 1;
-            var s = _inspectionSettings;
-            double[] opsUmArr = s?.GetCameraOpsUmArray();
-            if (opsUmArr == null || camIdx < 0 || camIdx >= opsUmArr.Length) return;
-
-            double opsInMm = opsUmArr[camIdx] / 1000.0;
-            if (opsInMm <= 0) return;
-
-            // physicalMag = zoom * screenMmPerPx / opsInMm = 1  →  zoom = opsInMm / screenMmPerPx
-            double zoom1xCam = PixelMmMapper.OneToOneZoom(opsInMm, _screenMmPerPx);
-
-            var cam = _cameras.Find(c => c.CameraId == _selectedMainCameraId);
-            if (cam == null) return;
-
-            // 以面板中心為基準
-            double cxCam = _mainDisplayPanel.Width / 2.0;
-            double cyCam = _mainDisplayPanel.Height / 2.0;
-
-            if (cam.TryGetSecondaryDisplayGeometry(out double curZoomCam, out _, out double curPanXCam, out double curPanYCam) && curZoomCam > 0)
-            {
-                double imgCx = curPanXCam + cxCam / curZoomCam;
-                double imgCy = curPanYCam + cyCam / curZoomCam;
-                double newPanX = imgCx - cxCam / zoom1xCam;
-                double newPanY = imgCy - cyCam / zoom1xCam;
-                cam.SetSecondaryDisplayZoom(zoom1xCam, newPanX, newPanY);
-            }
-            else
-            {
-                cam.SetSecondaryDisplayZoom(zoom1xCam, 0, 0);
-            }
+            _display.SetPhysicalMagnification1x();
         }
-
-        // ==================== Custom Wheel Zoom ====================
 
         internal void ApplyCustomZoom(int wheelDelta)
         {
-            if (!IsLiveGrabbing) return;
-
-            double zoomX, panX, panY;
-
-            if (IsGlobalMergeActive && _mergedDisplay != MIL.M_NULL)
-            {
-                // Global merge 模式：zoom/pan 合併 display
-                try
-                {
-                    zoomX = panX = panY = 0;
-                    MIL.MdispInquire(_mergedDisplay, MIL.M_ZOOM_FACTOR_X, ref zoomX);
-                    MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_X, ref panX);
-                    MIL.MdispInquire(_mergedDisplay, MIL.M_PAN_OFFSET_Y, ref panY);
-                }
-                catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.ApplyCustomZoom.Inquire] {ex.GetType().Name}: {ex.Message}"); return; }
-                if (zoomX <= 0) zoomX = 1.0;
-
-                double factor = wheelDelta > 0 ? 1.1 : (1.0 / 1.1);
-                double newZoom = zoomX * factor;
-                if (newZoom < 0.05) newZoom = 0.05;
-                if (newZoom > 32.0) newZoom = 32.0;
-
-                double cx = _mainDisplayPanel.Width / 2.0;
-                double cy = _mainDisplayPanel.Height / 2.0;
-                double imgX = panX + cx / zoomX;
-                double imgY = panY + cy / zoomX;
-                double newPanX = imgX - cx / newZoom;
-                double newPanY = imgY - cy / newZoom;
-
-                try
-                {
-                    MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_DISABLE);
-                    MIL.MdispControl(_mergedDisplay, MIL.M_CENTER_DISPLAY, MIL.M_DISABLE);
-                    MIL.MdispZoom(_mergedDisplay, newZoom, newZoom);
-                    MIL.MdispPan(_mergedDisplay, newPanX, newPanY);
-                    MIL.MdispControl(_mergedDisplay, MIL.M_UPDATE, MIL.M_ENABLE);
-                }
-                catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.ApplyCustomZoom.Apply] {ex.GetType().Name}: {ex.Message}"); }
-                return;
-            }
-
-            var cam = _cameras.Find(c => c.CameraId == _selectedMainCameraId);
-            if (cam == null) return;
-            if (!cam.TryGetSecondaryDisplayGeometry(out zoomX, out _, out panX, out panY))
-                return;
-
-            double factor2 = wheelDelta > 0 ? 1.1 : (1.0 / 1.1);
-            double newZoom2 = zoomX * factor2;
-            if (newZoom2 < 0.05) newZoom2 = 0.05;
-            if (newZoom2 > 32.0) newZoom2 = 32.0;
-
-            // 以面板中心為縮放基準點
-            double cx2 = _mainDisplayPanel.Width / 2.0;
-            double cy2 = _mainDisplayPanel.Height / 2.0;
-            double imgX2 = panX + cx2 / zoomX;
-            double imgY2 = panY + cy2 / zoomX;
-            double newPanX2 = imgX2 - cx2 / newZoom2;
-            double newPanY2 = imgY2 - cy2 / newZoom2;
-
-            cam.SetSecondaryDisplayZoom(newZoom2, newPanX2, newPanY2);
-            OnAfterVerticalZoom?.Invoke();
-        }
-
-        /// <summary>攔截 camLiveMain 上的 WM_MOUSEWHEEL，用 1.1x 步長取代 MIL 預設的整數倍跳躍。</summary>
-        private class WheelZoomFilter : IMessageFilter
-        {
-            private const int WM_MOUSEWHEEL = 0x020A;
-            private readonly LiveCameraManager _mgr;
-
-            public WheelZoomFilter(LiveCameraManager mgr) => _mgr = mgr;
-
-            public bool PreFilterMessage(ref Message m)
-            {
-                if (m.Msg != WM_MOUSEWHEEL) return false;
-                // SmartCanvas 模式：主畫面由 SmartCanvas 自己處理滾輪 zoom（無 MIL 巨圖 display）。
-                // filter 不可攔截，否則滾輪被吃掉 → SmartCanvas 收不到 → camLiveMain「縮不動」
-                // （雙三擊是點擊事件、不走此 filter，故一直有反應）。此 filter 只服務 MIL 直繪合圖縮放。
-                if (_mgr.SmartCanvasMode) return false;
-                if (!_mgr.IsLiveGrabbing) return false;
-
-                var panel = _mgr._mainDisplayPanel;
-                var screenPt = Cursor.Position;
-                if (!panel.RectangleToScreen(panel.ClientRectangle).Contains(screenPt))
-                    return false;
-
-                int delta = (short)(m.WParam.ToInt64() >> 16);
-                _mgr.ApplyCustomZoom(delta);
-                return true; // 攔截訊息，不讓 MIL 處理
-            }
+            _display.ApplyCustomZoom(wheelDelta);
         }
     }
 }

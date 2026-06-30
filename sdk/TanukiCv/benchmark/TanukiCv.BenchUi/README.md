@@ -1,7 +1,7 @@
 # TanukiCv.BenchUi — TanukiCv benchmark UI
 
 WinForms exe，TanukiCv 的 benchmark 工具：載入 BMP → GPU 濾鏡 + 計時 + 顯示到
-`SmartCanvas`（`TanukiCv.Controls`），量端到端速度。示範 `core_cv_api.dll` 的 P/Invoke 用法
+`ImageCanvas`（`TanukiCv.Controls`），量端到端速度。示範 `core_cv_api.dll` 的 P/Invoke 用法
 （`CoreCV_AllocPinned` / `CoreCV_FastReadBMP` / `CoreCV_Resize_GPU` 等）。
 
 **不參與主 build**：不在 `PICoater_AOI.sln` 內，build 主程式不會 build 這裡。

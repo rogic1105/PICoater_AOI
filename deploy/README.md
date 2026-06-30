@@ -177,5 +177,4 @@ deploy/
 
 ## 相關文件
 
-- `docs/user-manual/ui-flow.html` → 「網路部署」章節（流程圖）
 - `.claude/skills/deploy-network.md` → 開發者端技術細節（編碼陷阱、secedit、排查步驟）

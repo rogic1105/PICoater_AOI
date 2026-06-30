@@ -59,6 +59,7 @@ namespace AniloxRoll.Monitor.Forms
                 LightTurnOn();
                 int warmup = _settings?.LightWarmupMs ?? 0;
                 if (warmup > 0) await Task.Delay(warmup);
+                ResetLiveWaterfallRowChart();
             }
 
             if (!_liveCameraManager.IsAllocated)
@@ -154,7 +155,7 @@ namespace AniloxRoll.Monitor.Forms
 
         /// <summary>
         /// Live 曲線閾值判斷（callback 執行緒呼叫）。
-        /// direction: "v"=垂直, "h"=水平；依 CheckLiveMura 設定的「檢測方向」決定是否觸發 DO1。
+        /// direction: "v"=欄, "h"=列；依 CheckLiveMura 設定的「檢測方向」決定是否觸發 DO1。
         /// 陣列為 0-255，閾值為 0-1，取陣列 max 後除以 255 比較。
         /// </summary>
         private void CheckLiveMura(float[] meanArr, float[] maxArr, string direction)
@@ -187,18 +188,45 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        /// <summary>監控主畫面（LiveDisplayView）縮放/平移 → live 曲線圖 zoom 連動（bin↔主畫面對齊）。
-        /// 切向(X)/overview(X) 用左右範圍、法向(Y) 用上下範圍。UI 執行緒（ViewRangeMmChanged 來）。</summary>
+        /// <summary>監控主畫面（ImageDisplayView）縮放/平移 → live 曲線圖 zoom 連動（bin↔主畫面對齊）。
+        /// 欄(X)/overview(X) 用左右範圍、列(Y) 用上下範圍。UI 執行緒（ViewRangeMmChanged 來）。</summary>
         // 主畫面即時 X 可見範圍（mm）：ApplyLiveViewRange 存 → LiveViewRangeProvider 給 overview 的 500ms 更新沿用同值
-        // （overview 立即跟隨 + 500ms 重畫沿用同範圍 → 不閃回原點）。NaN=非 SmartCanvas 即時狀態。
+        // （overview 立即跟隨 + 500ms 重畫沿用同範圍 → 不閃回原點）。NaN=非 ImageCanvas 即時狀態。
         private double _liveViewLeftMm = double.NaN, _liveViewRightMm = double.NaN;
+        private double _liveViewTopMm = double.NaN, _liveViewBotMm = double.NaN;
+
+        private bool ShouldFlipDisplayVertical()
+            => GetVerticalDisplayDirection() == VerticalDisplayDirection.BottomToTop;
+
+        private VerticalDisplayDirection GetVerticalDisplayDirection()
+            => _settings?.VerticalDirection ?? InspectionDefaults.VerticalDirection;
 
         private void ApplyLiveViewRange(double leftMm, double rightMm, double topMm, double botMm)
         {
             if (IsDisposed) return;
             _liveViewLeftMm = leftMm; _liveViewRightMm = rightMm;     // 供 overview provider 沿用（不閃）
-            _liveRowChartHelper?.UpdateViewRange(topMm, botMm);        // 法向(Y)
+            _liveViewTopMm = topMm; _liveViewBotMm = botMm;
+            _liveRowSync?.SetViewRange(topMm, botMm);
             _liveOverviewHelper?.UpdateViewRange(leftMm, rightMm);     // overview 立即跟隨（500ms 重畫用同值不閃）
+        }
+
+        private bool TryApplyLiveImageCanvasRowViewRange()
+        {
+            var mode = _settings?.he_MainDisplay;
+            if (mode != MainDisplayMode.ImageCanvas && mode != MainDisplayMode.Waterfall) return false;
+            return _liveRowSync?.TryApplyCurrentViewRange() ?? true;
+        }
+
+        private void SuspendLiveRowRangeUntilNextData()
+        {
+            _liveRowSync?.SuspendUntilNextData();
+        }
+
+        private bool UpdateLiveRowDataAndViewRange(float[] mean, float[] max)
+        {
+            var mode = _settings?.he_MainDisplay;
+            bool requireViewRange = mode == MainDisplayMode.ImageCanvas || mode == MainDisplayMode.Waterfall;
+            return _liveRowSync?.UpdateData(mean, max, requireViewRange) ?? true;
         }
 
         private void OnLiveCurveData(int camId, float[] meanArr, float[] maxArr)
@@ -217,13 +245,13 @@ namespace AniloxRoll.Monitor.Forms
 
             // Live Mura 判斷（callback 執行緒，所有相機都檢查）
             CheckLiveMura(meanArr, maxArr, "v");
-            // 單台切向 chart（chartLiveVertical 舊版）已刪除：全覽圖（接位後的 chartLiveVertical）
+            // 單台欄 chart（chartLiveColumn 舊版）已刪除：全覽圖（接位後的 chartLiveColumn）
             // 由 _liveOverviewDirty + UpdateOverviewChart 路徑更新（boundary 唯一歸屬、與影像對齊）。
         }
 
         private void OnLiveRowCurveData(int camId, float[] meanArr, float[] maxArr)
         {
-            // Live Mura 判斷（水平方向）
+            // Live Mura 判斷（列方向）
             CheckLiveMura(meanArr, maxArr, "h");
 
             if (InvokeRequired)
@@ -233,7 +261,13 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
 
-            if (_liveRowChartHelper == null) return;
+            if (_liveRowDisplay == null) return;
+
+            if (_settings?.he_MainDisplay == MainDisplayMode.Waterfall)
+            {
+                UpdateLiveWaterfallRowChart(camId, meanArr, maxArr);
+                return;
+            }
 
             bool isGlobal = _liveCameraManager?.IsGlobalMergeActive == true;
 
@@ -242,25 +276,26 @@ namespace AniloxRoll.Monitor.Forms
                 // 全域模式：快取每台相機資料，合併後更新（mean 取 mean, max 取 max）
                 _liveRowMeanCache[camId] = meanArr;
                 _liveRowMaxCache[camId]  = maxArr;
-                MergeAndUpdateLiveRowChart();
+                if (!TryMergeLiveRowCurve(out float[] mergedMean, out float[] mergedMax)) return;
+                if (UpdateLiveRowDataAndViewRange(mergedMean, mergedMax)) return;
 
                 // 同步 Y 軸視野：查詢 _mergedDisplay 的 zoom/pan
-                double rowPitch = _liveRowChartHelper.RowPitchMm;
+                double rowPitch = _liveRowDisplay.RowPitchMm;
                 if (rowPitch > 0 && _liveCameraManager.TryGetMergedViewRangeY(
                     out double topPixel, out double botPixel))
                 {
-                    _liveRowChartHelper.UpdateViewRange(topPixel * rowPitch, botPixel * rowPitch);
+                    _liveRowDisplay.UpdateViewRange(topPixel * rowPitch, botPixel * rowPitch);
                 }
             }
             else
             {
                 // 垂直模式：只顯示選中相機
                 if (camId != _liveCameraManager.SelectedMainCameraId) return;
-                _liveRowChartHelper.UpdateData(meanArr, maxArr);
+                if (UpdateLiveRowDataAndViewRange(meanArr, maxArr)) return;
 
                 // 同步 Y 軸視野：查詢 MIL 副顯示器 zoom/pan
                 var liveCam = FindCameraById(camId);
-                double rowPitch = _liveRowChartHelper.RowPitchMm;
+                double rowPitch = _liveRowDisplay.RowPitchMm;
                 if (liveCam != null && rowPitch > 0 &&
                     liveCam.TryGetSecondaryDisplayGeometry(
                         out double milZoomX, out double milZoomY, out double milPanX, out double milPanY))
@@ -268,24 +303,26 @@ namespace AniloxRoll.Monitor.Forms
                     double panelH  = camLiveMain.Height;
                     double topPixel = milPanY;
                     double botPixel = milPanY + panelH / milZoomY;
-                    _liveRowChartHelper.UpdateViewRange(topPixel * rowPitch, botPixel * rowPitch);
+                    _liveRowDisplay.UpdateViewRange(topPixel * rowPitch, botPixel * rowPitch);
                 }
             }
         }
 
         /// <summary>合併所有快取的 row curve 資料：mean 取平均、max 取最大值。</summary>
-        private void MergeAndUpdateLiveRowChart()
+        private bool TryMergeLiveRowCurve(out float[] mergedMean, out float[] mergedMax)
         {
-            if (_liveRowMeanCache.Count == 0) return;
+            mergedMean = null;
+            mergedMax = null;
+            if (_liveRowMeanCache.Count == 0) return false;
 
             // 取最短長度對齊
             int minLen = int.MaxValue;
             foreach (var arr in _liveRowMeanCache.Values)
                 if (arr.Length < minLen) minLen = arr.Length;
-            if (minLen <= 0 || minLen == int.MaxValue) return;
+            if (minLen <= 0 || minLen == int.MaxValue) return false;
 
-            float[] mergedMean = new float[minLen];
-            float[] mergedMax  = new float[minLen];
+            mergedMean = new float[minLen];
+            mergedMax  = new float[minLen];
 
             int camCount = _liveRowMeanCache.Count;
             foreach (var arr in _liveRowMeanCache.Values)
@@ -298,21 +335,110 @@ namespace AniloxRoll.Monitor.Forms
                 for (int i = 0; i < minLen; i++)
                     if (arr[i] > mergedMax[i]) mergedMax[i] = arr[i];
 
-            _liveRowChartHelper.UpdateData(mergedMean, mergedMax);
+            return true;
         }
 
-        /// <summary>用 A輪速度 和選中相機的取樣頻率（Line Rate）更新法向圖表座標。</summary>
+        private void ResetLiveWaterfallRowChart()
+        {
+            SuspendLiveRowRangeUntilNextData();
+            _liveRowSync?.ClearPending();
+            _waterfallRowMeanPending.Clear();
+            _waterfallRowMaxPending.Clear();
+            _waterfallRowMean = null;
+            _waterfallRowMax = null;
+            _waterfallRowWrite = 0;
+        }
+
+        private void UpdateLiveWaterfallRowChart(int camId, float[] meanArr, float[] maxArr)
+        {
+            if (meanArr == null || meanArr.Length == 0 || _liveRowDisplay == null) return;
+
+            bool isGlobal = _liveCameraManager?.IsGlobalMergeActive == true;
+            if (!isGlobal)
+            {
+                if (camId != _liveCameraManager.SelectedMainCameraId) return;
+                AppendLiveWaterfallRowBand(meanArr, maxArr);
+                return;
+            }
+
+            _waterfallRowMeanPending[camId] = meanArr;
+            _waterfallRowMaxPending[camId] = maxArr;
+
+            int expected = Math.Max(1, _liveCameraManager?.ConnectedCameraCount ?? CameraCount);
+            if (_waterfallRowMeanPending.Count < expected) return;
+
+            var rowMean = new float[CameraCount][];
+            var rowMax = new float[CameraCount][];
+            foreach (var kv in _waterfallRowMeanPending)
+                if (kv.Key >= 1 && kv.Key <= CameraCount) rowMean[kv.Key - 1] = kv.Value;
+            foreach (var kv in _waterfallRowMaxPending)
+                if (kv.Key >= 1 && kv.Key <= CameraCount) rowMax[kv.Key - 1] = kv.Value;
+
+            CurveMergeHelper.MergeRowCurvesOverlap(rowMean, rowMax, CameraCount,
+                out float[] mergedMean, out float[] mergedMax);
+            if (mergedMean == null) return;
+
+            _waterfallRowMeanPending.Clear();
+            _waterfallRowMaxPending.Clear();
+            AppendLiveWaterfallRowBand(mergedMean, mergedMax);
+        }
+
+        private void AppendLiveWaterfallRowBand(float[] meanBand, float[] maxBand)
+        {
+            int capacity = _settings?.ImageView?.WaterfallTotalHeight ?? InspectionDefaults.WaterfallTotalHeight;
+            capacity = Math.Max(1000, capacity);
+            if (_waterfallRowMean == null || _waterfallRowMean.Length != capacity)
+            {
+                _waterfallRowMean = new float[capacity];
+                _waterfallRowMax = new float[capacity];
+                _waterfallRowWrite = 0;
+            }
+
+            int bandLen = Math.Min(meanBand.Length, capacity);
+            bool ring = (_settings?.ImageView?.WaterfallFullMode ?? InspectionDefaults.WaterfallFullMode) == WaterfallFullMode.Ring;
+            if (!ring && _waterfallRowWrite + bandLen > capacity)
+            {
+                Array.Clear(_waterfallRowMean, 0, _waterfallRowMean.Length);
+                Array.Clear(_waterfallRowMax, 0, _waterfallRowMax.Length);
+                _waterfallRowWrite = 0;
+            }
+
+            for (int i = 0; i < bandLen; i++)
+            {
+                int dst = ring ? (_waterfallRowWrite + i) % capacity : _waterfallRowWrite + i;
+                if (dst < 0 || dst >= capacity) break;
+                _waterfallRowMean[dst] = meanBand[i];
+                _waterfallRowMax[dst] = maxBand != null && i < maxBand.Length ? maxBand[i] : 0;
+            }
+
+            _waterfallRowWrite = ring
+                ? (_waterfallRowWrite + bandLen) % capacity
+                : Math.Min(capacity, _waterfallRowWrite + bandLen);
+
+            if (UpdateLiveRowDataAndViewRange(_waterfallRowMean, _waterfallRowMax)) return;
+        }
+
+        /// <summary>用 A輪速度 和選中相機的取樣頻率（Line Rate）更新列圖表座標。</summary>
         private void UpdateRowChartPitch()
         {
             if (_settings == null) return;
             double lineRateHz = _settings.Acquisition.CameraLineRateHz[0]; // CAM1 master
-            _liveRowChartHelper?.SetRowPitchFromSpeed(
+            _liveRowDisplay?.SetRowPitchFromSpeed(
                 _settings.AniloxRollSpeedMPerMin, lineRateHz);
-            _reviewRowChartHelper?.SetRowPitchFromSpeed(
+            _reviewRowDisplay?.SetRowPitchFromSpeed(
                 _settings.AniloxRollSpeedMPerMin, lineRateHz);
-            // 把 row pitch 餵給主畫面顯示 → SetLayout → 法向曲線圖 Y 對齊（否則 LiveDisplayView 用 X ops 比例錯）
+            // 把 row pitch 餵給主畫面顯示 → SetLayout → 列曲線圖 Y 對齊（否則 ImageDisplayView 用 X ops 比例錯）
             if (_liveCameraManager != null)
-                _liveCameraManager.RowPitchMm = _liveRowChartHelper?.RowPitchMm ?? 0;
+                _liveCameraManager.RowPitchMm = _liveRowDisplay?.RowPitchMm ?? 0;
+        }
+
+        private void ApplyDisplayDirectionSetting()
+        {
+            _liveCameraManager?.ApplyDisplayDirection();
+            _reviewDisplayManager?.SetFlipVertical(ShouldFlipDisplayVertical());
+            _stitchCoordinator?.RefreshCurrentCameraChartsForSettingsChange();
+            if (_stitchCoordinator?.IsStitchMode != true)
+                _stitchCoordinator?.UpdateRowChartFromRepository();
         }
 
 
@@ -360,6 +486,18 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (name == nameof(InspectionSettings.hf_LiveLod))
                 _liveCameraManager?.SetLodMode(_settings.LiveLod);
+            if (name == nameof(InspectionSettings.he_MainDisplay))
+            {
+                ResetLiveWaterfallRowChart();
+                _liveCameraManager?.ApplyMainDisplayMode();   // 即時 / 瀑布 即時切換
+            }
+            if (name == nameof(InspectionSettings.hee_VerticalDirection))
+                ApplyDisplayDirectionSetting();
+            if (name == nameof(InspectionSettings.hg_WaterfallTotalHeight) || name == nameof(InspectionSettings.hh_WaterfallFullMode))
+            {
+                ResetLiveWaterfallRowChart();
+                _liveCameraManager?.RefreshWaterfallDisplay(); // 瀑布總高/滿了行為變更 → 重建套新值
+            }
             if (OpsStartSettingNames.Contains(name) && _liveCameraManager?.IsGlobalMergeActive == true)
                 _liveCameraManager.RefreshGlobalMergeLayout(
                     _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
@@ -380,50 +518,5 @@ namespace AniloxRoll.Monitor.Forms
             _liveCameraManager?.SetLiveDisplayDirection(_liveDisplayDirection);
             UpdateLiveDirectionVisual();
         }
-
-        /// <summary>
-        /// 安全序列化：Live chart 點選切 StitchMode 時，若同時要關掉強化，
-        /// 必須先把 callback thread 的 chart 更新訂閱斷開（C），避免轉場期間 callback
-        /// BeginInvoke 到 chart handle 不穩定的視窗。
-        /// 並把 UpdateLiveDirectionVisual 延後到 OnStitchModeChangedAsync 之後一次性執行（D），
-        /// 減少 Border 屬性變更引起的 paint storm。
-        ///
-        /// **DEBUG**：每步驟 Trace.WriteLine + 寫 D:\Anilox\stitch-debug.log；
-        /// 任何 exception 抓到後彈 MessageBox 顯示完整 stack trace，並寫 log 檔。
-        /// </summary>
-        private static void LogClick(string msg, MouseEventArgs e = null)
-        {
-            string suffix = e != null ? $" (Button={e.Button} Loc={e.X},{e.Y})" : "";
-            string line = $"[{DateTime.Now:HH:mm:ss.fff}] [Click] {msg}{suffix}";
-            try { System.IO.File.AppendAllText(@"D:\Anilox\stitch-debug.log", line + Environment.NewLine); } catch { }
-        }
-
-        /// <summary>
-        /// 全域 IMessageFilter：log 每次 WM_LBUTTONDOWN 命中的控制項 + 螢幕座標。
-        /// 用來診斷 Live chart click 為什麼沒觸發 MouseClick（panel/MIL native window 截獲？
-        /// chart 內部吞掉？bounds 重疊？）。試一次就能看出 click 去了哪裡。
-        /// </summary>
-        private sealed class GlobalMouseLogger : IMessageFilter
-        {
-            private const int WM_LBUTTONDOWN = 0x0201;
-            public bool PreFilterMessage(ref Message m)
-            {
-                if (m.Msg == WM_LBUTTONDOWN)
-                {
-                    try
-                    {
-                        var c = Control.FromHandle(m.HWnd);
-                        var pt = Cursor.Position;
-                        string name = c?.Name ?? "(null)";
-                        string type = c?.GetType().Name ?? "(no-type)";
-                        string line = $"[{DateTime.Now:HH:mm:ss.fff}] [MsgFilter] WM_LBUTTONDOWN hwnd=0x{m.HWnd.ToInt64():X} ctl={name}({type}) screen=({pt.X},{pt.Y})";
-                        System.IO.File.AppendAllText(@"D:\Anilox\stitch-debug.log", line + Environment.NewLine);
-                    }
-                    catch { }
-                }
-                return false; // 不攔截，繼續傳遞
-            }
-        }
-
     }
 }

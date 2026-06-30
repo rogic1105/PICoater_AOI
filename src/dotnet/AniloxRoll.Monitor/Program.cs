@@ -15,6 +15,22 @@ namespace AniloxRoll.Monitor
         [STAThread]
         static void Main()
         {
+            // 檔案 trace log：把所有 Trace.WriteLine（含 [HtRealloc] 改高度診斷）寫進檔案，供離線判讀
+            // （否則只在 VS Output 視窗、跑 exe 看不到）。AutoFlush=true → 即使程式 stall/hang 也已落地。
+            try
+            {
+                string logDir = @"D:\Anilox\Logs";
+                if (!Directory.Exists(logDir))
+                {
+                    try { Directory.CreateDirectory(logDir); } catch { logDir = Path.GetTempPath(); }
+                }
+                string traceFile = Path.Combine(logDir, $"trace-{DateTime.Now:yyyyMMdd_HHmmss}.log");
+                System.Diagnostics.Trace.Listeners.Add(new System.Diagnostics.TextWriterTraceListener(traceFile, "FileTrace"));
+                System.Diagnostics.Trace.AutoFlush = true;
+                System.Diagnostics.Trace.WriteLine($"[Program] trace log 開始：{traceFile}（{DateTime.Now:yyyy-MM-dd HH:mm:ss}）");
+            }
+            catch { /* log 設定失敗不可擋啟動 */ }
+
             // Storage 模式不部署 MIL DLL；若其他路徑意外觸發載入，給出明確錯誤而非 crash
             AppDomain.CurrentDomain.AssemblyResolve += (_, args) =>
             {

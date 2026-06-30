@@ -1,8 +1,11 @@
-# MIL docs — Matrox 廠商規格書/範例
+# MIL docs — 工程筆記 + Matrox 廠商規格書/範例
 
-廠商（Matrox）給的東西（不參與 build），純參考用。
+## 工程筆記（我們踩坑統整，隨 sdk split 帶走）
 
-## Contents
+- **[`grab-height-param-stall.md`](grab-height-param-stall.md)** — 改 grab 高度／線掃／曝光造成相機 stall 的**根因、修法、硬體上限、stall 偵測、診斷工具、已棄用方案**單一定稿（Radient eV-CL + 線掃相機）。改 `SetGrabHeight`/參數/stall 偵測前**必讀**。
+- **[`multicam-regrab-frame-alignment.md`](multicam-regrab-frame-alignment.md)** — 多相機 **free-run** 取像 re-grab 起頭錯位 + 停止某台多跑幾偵的**根因（M_START 接下一完整幀 / M_STOP 阻塞 ~1 frame）與修法（乾淨 drain + 並行停止）**定稿，含官方 MIL `MdigProcess` 語意與來源。改 grab 啟停（`ApplyGrabState`/`StopGrab`/`StartGrab`）前**必讀**。
+
+## 廠商規格書/範例（Matrox 給的，不參與 build，純參考）
 
 - `matrox-grabber/` — Matrox Radient grabber 系列規格書 + 範例 code
 - `matrox-clprotocol/` — Matrox CLProtocol（GenICam over Camera Link）DLL 範例

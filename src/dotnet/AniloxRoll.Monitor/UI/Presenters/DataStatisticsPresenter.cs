@@ -527,7 +527,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         {
             if (string.IsNullOrWhiteSpace(_statsDataRootPath)) return;
 
-            // view-time threshold context：以當前 Settings 的閾值 + 垂直正規值即時重算 Pass/Fail，
+            // view-time threshold context：以當前 Settings 的閾值 + 欄正規值即時重算 Pass/Fail，
             // 不再用 CSV 內的 MaxExceed/MeanExceed（那是 capture-time baked-in）。
             var ctx = new ThresholdContext(
                 _ctx.Settings.HessianMaxFactorV,
@@ -683,7 +683,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 if (_activeStatMode != _ctx.GrpDataSingleSheet)
                 {
                     SwitchActiveStatGroupBox(_ctx.GrpDataSingleSheet);
-                    RefreshStats();  // 切 mode 後 stats + chartDataVertical 對齊單片
+                    RefreshStats();  // 切 mode 後 stats + chartDataColumn 對齊單片
                 }
                 return;
             }
@@ -769,7 +769,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         }
 
         // ══════════════════════════════════════════════════════════════
-        // Mura 空間分布曲線圖（拼接式，與 chartLiveVertical 相同格式）
+        // Mura 空間分布曲線圖（拼接式，與 chartLiveColumn 相同格式）
         // ══════════════════════════════════════════════════════════════
 
         private void InitMuraProfileChart()
@@ -830,7 +830,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         /// <summary>
         /// 用單一 grab 的 .bin（MergeCurves 合多 capture）+ 該 grab 的 CSV #CFG OPS/Pos
-        /// 更新 chartDataVertical，與 chartReviewVertical 完全對齊。不依賴 camReviewMain 是否載入。
+        /// 更新 chartDataColumn，與 chartReviewColumn 完全對齊。不依賴 camReviewMain 是否載入。
         /// 套用 view-time 正規值 rescale：display = (bin/255) × (HM_capture / HM_current)；
         /// 改 PropertyGrid 正規值會立刻反映在曲線坡度上。
         /// </summary>
@@ -854,7 +854,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     CurveMergeHelper.MergeCurves(paths, out allMean[i], out allMax[i]);
             }
 
-            // view-time 正規值 rescale：chartDataVertical 是垂直曲線，用 V 的 capture/current ratio
+            // view-time 正規值 rescale：chartDataColumn 是欄曲線，用 V 的 capture/current ratio
             float captureHm = grabCfg?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
             HessianRescaleHelper.RescaleInPlace2D(allMean, allMax, captureHm, _ctx.Settings.HessianMaxFactorV);
 
@@ -870,7 +870,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         }
 
         /// <summary>
-        /// 由 PropertyGrid 變更觸發：刷新 chartDataVertical 的閾值線 + view-time 正規值 rescale。
+        /// 由 PropertyGrid 變更觸發：刷新 chartDataColumn 的閾值線 + view-time 正規值 rescale。
         /// 不重做 RefreshStats（避免重算統計）；只重畫 chart。
         /// </summary>
         public void RefreshMuraProfileForSettingsChange()
@@ -888,7 +888,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         /// <summary>
         /// SingleSheet 模式：直接使用 Review tab 已載入的曲線資料（已套 view-time HM rescale），
-        /// 確保 chartDataVertical 與 chartReviewVertical 完全一致（相同 OPS/Pos 與顯示值）。
+        /// 確保 chartDataColumn 與 chartReviewColumn 完全一致（相同 OPS/Pos 與顯示值）。
         /// </summary>
         public void SyncMuraProfileFromReview(float[][] mean, float[][] max,
             double[] ops, double[] pos, float errMean, float errMax)
@@ -1330,7 +1330,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         /// <summary>
         /// 由 GroupBox.Click 觸發：切換 active 模式並重算統計（camData / listViewGrabDetail
-        /// / chartDataVertical / chartDataYieldYearly 等）。已是 active 則無動作。
+        /// / chartDataColumn / chartDataYieldYearly 等）。已是 active 則無動作。
         /// 切到範圍類模式時把對應 combo 攤開到資料夾的完整範圍（避免承襲單片模式的單筆設定）：
         ///   - GroupBoxGrabIdRange：cbDataIdStart = 最舊、cbDataIdEnd = 最新
         ///   - GroupBoxTimeRange：cbDataDateStart/Time = _statAvailableTimes.Min、cbDataDateEnd/Time = Max

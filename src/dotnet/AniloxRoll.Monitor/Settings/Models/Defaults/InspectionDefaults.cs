@@ -1,5 +1,7 @@
 namespace AniloxRoll.Monitor.Core.Data
 {
+    using TanukiCv.Controls;
+
     /// <summary>所有 InspectionSettings 子物件的預設值集中定義。
     /// Model 初始值與 ParseJson fallback 均引用此處，確保兩者一致。
     ///
@@ -22,12 +24,12 @@ namespace AniloxRoll.Monitor.Core.Data
         // ── 2. 檢測配方 ────────────────────────────────────────────────────
         public static readonly BackgroundAlgorithm Algorithm  = BackgroundAlgorithm.SingleFrameBgSub; // 去背演算法
         public static readonly RidgeDirection       RidgeDir  = RidgeDirection.Both;                 // 檢出方向
-        public const float  HessianMaxFactorV       = 0.3f;   // 垂直正規值（同時當作 capture-time 送進 native 的 HM）
-        public const float  HessianMaxFactorH       = 0.3f;   // 水平正規值（view-time only，僅作 H 曲線顯示縮放）
-        public const float  ErrorValueMeanV         = 0.2f;   // Mura 圖表 > 垂直平均閾值
-        public const float  ErrorValueMaxV          = 0.6f;   // Mura 圖表 > 垂直最大閾值（PICoater 機台實測）
-        public const float  ErrorValueMeanH         = 0.2f;   // Mura 圖表 > 水平平均閾值
-        public const float  ErrorValueMaxH          = 0.6f;   // Mura 圖表 > 水平最大閾值（PICoater 機台實測）
+        public const float  HessianMaxFactorV       = 0.3f;   // 欄正規值（同時當作 capture-time 送進 native 的 HM）
+        public const float  HessianMaxFactorH       = 0.3f;   // 列正規值（view-time only，僅作 H 曲線顯示縮放）
+        public const float  ErrorValueMeanV         = 0.2f;   // Mura 圖表 > 欄平均閾值
+        public const float  ErrorValueMaxV          = 0.6f;   // Mura 圖表 > 欄最大閾值（PICoater 機台實測）
+        public const float  ErrorValueMeanH         = 0.2f;   // Mura 圖表 > 列平均閾值
+        public const float  ErrorValueMaxH          = 0.6f;   // Mura 圖表 > 列最大閾值（PICoater 機台實測）
         public const int    BackgroundSampleSeconds = 3;      // 取樣秒數
         public const double AniloxRollSpeedMPerMin  = 40.0;   // 輪速 (m/min)
 
@@ -39,8 +41,11 @@ namespace AniloxRoll.Monitor.Core.Data
         public static readonly StitchMode DefaultStitch = StitchMode.Global;        // 主畫面 > 合圖方式
         public const bool EnableMuraEnhance   = false;       // 監控強化
         public const bool EnableReviewEnhance = false;       // 回顧強化
-        public static readonly MainDisplayMode MainDisplay = MainDisplayMode.SmartCanvas; // 主畫面顯示（MIL 直繪 / SmartCanvas）
+        public static readonly MainDisplayMode MainDisplay = MainDisplayMode.ImageCanvas; // 主畫面顯示（即時 / 瀑布）
+        public static readonly VerticalDisplayDirection VerticalDirection = VerticalDisplayDirection.BottomToTop; // 主畫面上下方向
         public static readonly LiveLodMode     LiveLod     = LiveLodMode.CPU;             // 動態LOD（Off / GPU / CPU）
+        public const int       WaterfallTotalHeight = 30000;                              // 瀑布圖虛擬長圖總高（px）；點兩下 fit 到此
+        public static readonly WaterfallFullMode WaterfallFullMode = WaterfallFullMode.Restart; // 瀑布滿了：重來 / 循環
 
         // ── 4. 儲存設定 ────────────────────────────────────────────────────
         public const bool   EnableAutoCapture = true;                              // 存檔

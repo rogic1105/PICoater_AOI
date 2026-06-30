@@ -62,7 +62,7 @@ namespace AniloxRoll.Monitor.Forms
                 ListViewGrabDetail = listViewGrabDetail,
                 PanelStatCams = new[] { camData1, camData2, camData3,
                                         camData4, camData5, camData6, camData7 },
-                ChartDataPatch = chartDataVertical,
+                ChartDataPatch = chartDataColumn,
                 ChartDataYieldYearly = chartDataYieldYearly, ChartDataYieldMonthly = chartDataYieldMonthly, ChartDataYieldDaily = chartDataYieldDaily,
                 CbChartYear = cbDataYieldYear, CbChartMonth = cbDataYieldMonth, CbChartDay = cbDataYieldDay,
                 Settings = _settings, CameraCount = CameraCount,
@@ -92,8 +92,8 @@ namespace AniloxRoll.Monitor.Forms
                 var info = _dataStatsPresenter.GrabIdInfos[idx];
                 try
                 {
-                    await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest);
-                    // 2b-ii：fit 由 LiveDisplayView 首幀自動 fit 承接
+                    await LoadGrabStitchedViewGuardRowRangeAsync(info.GrabId, info.Earliest, info.Latest);
+                    // 2b-ii：fit 由 ImageDisplayView 首幀自動 fit 承接
                 }
                 catch (Exception ex) { Trace.WriteLine($"[tabMain → Review] {ex}"); }
             };
@@ -127,8 +127,8 @@ namespace AniloxRoll.Monitor.Forms
                     _interactionHelper.NavigateToDateTime(earliest);
                 _presenter.UpdatePeriodNavigationState();
 
-                await _stitchCoordinator.LoadGrabStitchedViewAsync(grabId, earliest, latest);
-                // 2b-ii：SaveCanvasView/fit（讀已砍 canvas）移除；LiveDisplayView 自管視野
+                await LoadGrabStitchedViewGuardRowRangeAsync(grabId, earliest, latest);
+                // 2b-ii：SaveCanvasView/fit（讀已砍 canvas）移除；ImageDisplayView 自管視野
                 _reviewDirty = false;
 
                 // 同步 Data tab

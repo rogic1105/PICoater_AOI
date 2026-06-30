@@ -105,6 +105,7 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"EnableMuraEnhance\": {(V.EnableMuraEnhance ? "true" : "false")},");
             sb.AppendLine($"    \"EnableReviewEnhance\": {(V.EnableReviewEnhance ? "true" : "false")},");
             sb.AppendLine($"    \"MainDisplay\": \"{V.MainDisplay}\",");
+            sb.AppendLine($"    \"VerticalDirection\": \"{V.VerticalDirection}\",");
             sb.AppendLine($"    \"LiveLod\": \"{V.LiveLod}\"");
             sb.AppendLine("  },");
 
@@ -263,9 +264,15 @@ namespace AniloxRoll.Monitor.Core.Data
                 stitchMode = InspectionDefaults.DefaultStitch;
 
             // MainDisplay / LiveLod（enum；fallback → InspectionDefaults）
-            if (!System.Enum.TryParse(SettingsStoreHelper.GetString(obj, "MainDisplay", InspectionDefaults.MainDisplay.ToString()),
-                    true, out MainDisplayMode mainDisplay))
+            string mainDisplayText = SettingsStoreHelper.GetString(obj, "MainDisplay", InspectionDefaults.MainDisplay.ToString());
+            if (string.Equals(mainDisplayText, "SmartCanvas", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(mainDisplayText, "MilDirect", System.StringComparison.OrdinalIgnoreCase))
+                mainDisplayText = MainDisplayMode.ImageCanvas.ToString();
+            if (!System.Enum.TryParse(mainDisplayText, true, out MainDisplayMode mainDisplay))
                 mainDisplay = InspectionDefaults.MainDisplay;
+            if (!System.Enum.TryParse(SettingsStoreHelper.GetString(obj, "VerticalDirection", InspectionDefaults.VerticalDirection.ToString()),
+                    true, out VerticalDisplayDirection verticalDirection))
+                verticalDirection = InspectionDefaults.VerticalDirection;
             if (!System.Enum.TryParse(SettingsStoreHelper.GetString(obj, "LiveLod", InspectionDefaults.LiveLod.ToString()),
                     true, out LiveLodMode liveLod))
                 liveLod = InspectionDefaults.LiveLod;
@@ -280,6 +287,7 @@ namespace AniloxRoll.Monitor.Core.Data
                 EnableReviewEnhance = SettingsStoreHelper.GetBool(obj, "EnableReviewEnhance",
                                           SettingsStoreHelper.GetBool(recipeObj, "EnableReviewEnhance", InspectionDefaults.EnableReviewEnhance)),
                 MainDisplay         = mainDisplay,
+                VerticalDirection   = verticalDirection,
                 LiveLod             = liveLod,
             };
         }

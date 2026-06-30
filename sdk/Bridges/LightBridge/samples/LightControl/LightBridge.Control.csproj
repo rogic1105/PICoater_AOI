@@ -39,7 +39,6 @@
     <Reference Include="System.Core" />
     <Reference Include="System.Configuration" />
     <Reference Include="System.Drawing" />
-    <Reference Include="System.IO.Ports" />
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>

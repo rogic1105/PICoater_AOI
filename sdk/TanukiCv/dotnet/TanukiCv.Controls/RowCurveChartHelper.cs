@@ -5,8 +5,8 @@ using System.Windows.Forms.DataVisualization.Charting;
 namespace TanukiCv.Controls
 {
     /// <summary>
-    /// 法向（axial）Mura 曲線圖：row-wise ridge data，旋轉 90° 顯示。
-    /// X 軸（底部）= curve value（0–1 normalized），Y 軸（左側）= 法向位置 mm。
+    /// 列（axial）Mura 曲線圖：row-wise ridge data，旋轉 90° 顯示。
+    /// X 軸（底部）= curve value（0–1 normalized），Y 軸（左側）= 列位置 mm。
     /// Y 軸標籤反轉：視覺上 0 在上、max 在下（透過 Customize 事件修改標籤文字）。
     /// InnerPlotPosition 補償機制對齊 canvas 垂直 viewport。
     /// </summary>
@@ -89,6 +89,60 @@ namespace TanukiCv.Controls
         /// <summary>
         /// 更新 Y 軸視野範圍（對應 canvas 垂直 viewport），單位為 mm。
         /// </summary>
+        public void UpdateDataAndViewRange(float[] meanData, float[] maxData,
+            double canvasTopMm, double canvasBotMm)
+        {
+            if (meanData == null || meanData.Length == 0) return;
+            if (_chart.ChartAreas.Count == 0) return;
+            if (double.IsNaN(canvasTopMm) || double.IsNaN(canvasBotMm) || canvasTopMm >= canvasBotMm)
+            {
+                UpdateData(meanData, maxData);
+                return;
+            }
+
+            int n = meanData.Length;
+            _totalMm = n * _rowPitchMm;
+
+            _logicalTopMm = canvasTopMm;
+            _logicalBotMm = canvasBotMm;
+            GetAdjustedZoom(canvasTopMm, canvasBotMm, out double zMin, out double zMax);
+
+            var axisY = _chart.ChartAreas[0].AxisY;
+            double newMin = Math.Min(0, zMin), newMax = Math.Max(_totalMm, zMax);
+            if (axisY.Minimum != newMin) axisY.Minimum = newMin;
+            if (axisY.Maximum != newMax) axisY.Maximum = newMax;
+            try { axisY.ScaleView.Zoom(zMin, zMax); }
+            catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[RowCurveChartHelper.UpdateDataAndViewRange] {ex.GetType().Name}: {ex.Message}"); }
+
+            _chart.Series.SuspendUpdates();
+
+            var meanSeries = _chart.Series["Mean"];
+            var maxSeries  = _chart.Series["Max"];
+            meanSeries.Points.Clear();
+            maxSeries.Points.Clear();
+
+            const int MaxDisplayPoints = 2000;
+            int stride = Math.Max(1, (n + MaxDisplayPoints - 1) / MaxDisplayPoints);
+            for (int i = 0; i < n; i += stride)
+            {
+                int end = Math.Min(i + stride, n);
+                double sum = 0; double bucketMax = 0; int cnt = 0;
+                for (int j = i; j < end; j++)
+                {
+                    sum += meanData[j]; cnt++;
+                    if (maxData != null && j < maxData.Length && maxData[j] > bucketMax) bucketMax = maxData[j];
+                }
+                int mid = (i + end - 1) / 2;
+                double yMm = (n - 1 - mid) * _rowPitchMm;
+                meanSeries.Points.AddXY(sum / cnt / 255.0, yMm);
+                if (maxData != null)
+                    maxSeries.Points.AddXY(bucketMax / 255.0, yMm);
+            }
+
+            _chart.Series.ResumeUpdates();
+            _chart.Update();
+        }
+
         public void UpdateViewRange(double canvasTopMm, double canvasBotMm)
         {
             if (_chart.ChartAreas.Count == 0) return;

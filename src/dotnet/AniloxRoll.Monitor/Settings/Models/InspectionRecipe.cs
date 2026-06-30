@@ -52,8 +52,8 @@ namespace AniloxRoll.Monitor.Core.Data
     [TypeConverter(typeof(EnumDescriptionConverter))]
     public enum RidgeDirection
     {
-        [Description("垂直")]   Vertical,
-        [Description("水平")]   Horizontal,
+        [Description("欄")]   Vertical,
+        [Description("列")]   Horizontal,
         [Description("全部")]   Both
     }
 

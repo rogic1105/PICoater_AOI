@@ -6,7 +6,8 @@ using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 using TanukiCv.Core;
-using TanukiCv.Utils;
+using TanukiCv.Utils;          // ImageUtils（仍在 Core）
+using TanukiCv.BenchUi.Utils;  // FileUtils（已移來 BenchUi）
 
 namespace TanukiCv.BenchUi.Forms
 {
@@ -28,11 +29,11 @@ namespace TanukiCv.BenchUi.Forms
             // 非同步執行 GPU 暖身
             _ = GPUHelper.WarmUpAsync();
 
-            // [修改] 綁定 SmartCanvas 的 StatusChanged 事件
-            // 配合 SmartCanvas 的更新，顯示完整的座標、亮度、縮放倍率與平移位置
+            // [修改] 綁定 ImageCanvas 的 StatusChanged 事件
+            // 配合 ImageCanvas 的更新，顯示完整的座標、亮度、縮放倍率與平移位置
             canvasMain.StatusChanged += (info) =>
             {
-                // SmartCanvas 內部已經處理過座標邊界與有效性 (ImageX/Y 是最後一次有效位置)
+                // ImageCanvas 內部已經處理過座標邊界與有效性 (ImageX/Y 是最後一次有效位置)
                 // 直接顯示 CanvasInfo 提供的資訊即可
                 lblPixelInfo.Text = $"座標: ({info.ImageX}, {info.ImageY}) | " +
                                     $"亮度: {info.PixelColor.R} | " +

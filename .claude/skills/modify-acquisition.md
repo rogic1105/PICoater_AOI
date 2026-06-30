@@ -34,7 +34,8 @@ MdigAlloc → MdigControl(M_SOURCE_SIZE_Y) → MdispAlloc × 2 → MdigInquire(S
 
 - `BeginCLProtocolInit()`（public，原 `StartCLProtocolAsync`）在**相機分配完成後、第一次 grab 之前**背景啟用（不在 grab 期間 enable + 重套線掃 → 否則首抓掉幀，cam1 最明顯）。
 - 觸發點：`LiveCameraManager.AllocateCameras` 迴圈後 `foreach cam: if (cam.CheckPresence()) cam.BeginCLProtocolInit();`
-  —— **只對在線相機**。對斷線相機 enable 會卡住 MIL 內部鎖（全 0/7 時 7 台全卡 → 逾時翻 true 後 timer 輪詢搶鎖 → UI 凍死）。斷線相機 `_clProtocolInitStarted=false` → `IsHwParamsStable=true`（不擋就緒判定），之後連上走 legacy 參數路徑。
+  —— **只對在線相機**。對斷線相機 enable 會卡住 MIL 內部鎖（全 0/7 時 7 台全卡 → 逾時翻 true 後 timer 輪詢搶鎖 → UI 凍死）。斷線相機 `_clProtocolInitStarted=false` → `IsHwParamsStable=true`（不擋就緒判定）。
+- **斷線→連線自動重跑 CLProtocol**（修「先開程式、之後才接相機 → 曝光/線掃讀不到＝回 0」）：`CameraStatusTimer_Tick` 用 `_lastPresence` 做**邊緣偵測**（斷線→連線那刻），呼 `cam.RetryCLProtocolOnReconnect()`（守門：已啟用/不在線/**grab 中**/in-flight 皆跳過 → grab 中 enable 會掉幀，故只非 grab 時重跑；**邊緣觸發**避免 CL 握手失敗時每 500ms spam）。重跑時 `AreCamerasHwReady` 暫 false（gate-off 防搶鎖）→ 恢復 true 時用 `_wasHwReady` 偵 false→true **強制刷 lblCamCount + 重發 OnHwReady**（否則連線數在 gate-off 前已更新、恢復後沒變 → `OnCameraCountChanged` 不再發 → lblCamCount 卡灰「初始化中」、抓取鈕不恢復）。
 - 耗時 2-5 秒/台；完成前 `IsHwParamsStable=false`。上層就緒判定：`LiveCameraManager.AreCamerasHwReady`（全相機 `IsHwParamsStable`）+ 一次性 `OnHwReady` 事件 → 解鎖「開始抓取」鈕、建立全域合圖。
 - **就緒前 UI 不可碰 MIL**：`CameraStatusTimer_Tick` 在 `!AreCamerasHwReady` 時跳過 `CheckPresence` 輪詢；全域合圖 `EnableGlobalMerge` 延後到 `OnCamerasHwReady`（都避免與背景 CLProtocol 搶 MIL 鎖造成凍結）。
 - **Quad 卡 DevNum>=2 必須明確列舉 Device ID**，`"M_DEFAULT"` 無效
@@ -65,9 +66,11 @@ _isReleased = true → MdigProcess(M_STOP)
 
 ## SetGrabHeight（不可省略步驟）
 
-`M_STOP+M_WAIT → MdigControl(M_GRAB_ABORT) → Free buffers+pool → M_SOURCE_SIZE_Y → Inquire → Realloc → MdispSelectWindow → settle → M_START`
+`同值守門(高度未變+buffer已配→直接 return) → M_STOP+M_WAIT → MdigControl(M_GRAB_ABORT) → Free buffers+pool → M_SOURCE_SIZE_Y → Inquire → Realloc → MdispSelectWindow → settle → M_START`
+- **同值守門必須有**（2026-06-24）：套設定時會對每台呼 `SetGrabHeight(同值)`；不擋會做多餘 free+realloc 撞背景 CLProtocol enable → **CAM1 stall**（見下）。
 - 舊尺寸 buffer ≠ 新尺寸 → MIL 崩潰
 - Rollback：失敗時 FreeGrabBuffers → AllocateAndBind(oldHeight)
+- **高度硬上限 `AcquisitionDefaults.MaxGrabHeightPx=12000`**（固定值，**不分台數**）：12062 是「grab 中把單台高度往上拉」的真硬體上限（on-board 兼 PCIe latency 緩衝），cap 12000 避開。換相機(寬)/grabber 須重新實測（grab 中往上拉找 stall 邊界）。
 
 ### ⚠ 改高度會讓相機永久 stall — 根因與修法（2026-06-18 實機確認）
 
@@ -90,7 +93,19 @@ _isReleased = true → MdigProcess(M_STOP)
 - `…\UserGuide\grabbing\Linescan_cameras.htm`、`…\Readme\milRadienteVCL\milRadienteVCL.htm`（eV-CL 無 SOURCE_SIZE 改尺寸 stall 的 release note）
 - `Mil.h:3693`（`M_GRAB_ABORT = 6643L`）
 
-**未做的階段 2（更直接，agent/Matrox 最推薦）**：**一次配 max 高度 buffer，改高度只改 `M_SOURCE_SIZE_Y`、不 free/realloc** → 從根本拿掉「realloc→re-arm」那步。需先驗證 MIL 語意（buffer 比 M_SOURCE_SIZE_Y 大時幀是否在 M_SOURCE_SIZE_Y 行就完成）+ 追蹤實際高度 vs buffer 高度（hook/顯示/存檔）。潛在大獎：可能 grab 中改高度不用停機（M_QUEUED 幀邊界套用）→ live、不掉幀。
+**階段 2（max-buffer / auto-allocate）已試 → 棄用**：max-buffer（一次配 max、改高度只改 `M_SOURCE_SIZE_Y`）7 台 host ~3.6GB 逼爆非分頁池、且非根因；auto-allocate（MdigProcess bufarray=M_NULL）官方確認對 on-board 占用沒幫助。兩者都不採用。`MilCamera.UseMaxHeightBuffers` flag/scaffold 留著當紀錄但預設 false。
+
+### ⚠⚠ 改高度/參數 stall 有「兩個並列主因」（2026-06-24 dropdiag 定案，缺一不可）
+
+**① 啟動競態**：套設定時對每台呼 `SetGrabHeight(同值)` → 多餘 free+realloc（UI 執行緒）撞 CAM1 CLProtocol enable（背景執行緒）→ MIL 並發 → CAM1 stall（**高度正常也會中**）。trace log 抓到 realloc 插在 CAM1「using device ID」與「enabled successfully」之間。
+**② per-camera 硬體高度上限 ~12062**（每台浮動，CAM2 在 12000 正常、CAM1 stall）→ **競態修好後、高度逼近上限那台仍 stall**。
+**鐵證**：高度 12000 時 dropdiag **CAM2 FPS 0.83 frames 遞增、CAM1 frames 卡 0**。
+
+**修法**：`SetGrabHeight` 開頭同值守門（見上）→ 同值不 realloc → 不撞 CLProtocol。**+ 改高度熱路徑禁止 MsysInquire/MdigInquire**（含診斷 `GetMemoryFreeMB()`）：會插進相機 MIL 序列 → cam1 stall（本次診斷一度自污染中招）。板載記憶體看背景寫的 resource-monitor CSV。
+
+**離線判讀工具**：`Program.cs` 已加**檔案 trace listener** → `D:\Anilox\Logs\trace-*.log`（AutoFlush，含 `[HtRealloc]`）。配 dropdiag（每台 frame 數）就能分辨「哪台 stall、stall 在配 buffer 還是 re-arm」。**難重現 stall 一律先看這兩個檔再下結論**（這次差點被「板載上限」帶歪一整天）。
+
+> 註：12062 硬體上限 + 「板載每 path temporary buffer 在 MdigAlloc 預留、占用顯示為 4 台總和」仍是真的（官方 `Grabbing_large_images.htm` / `Minimum_latency…`），但**不是**那些 stall 的原因。**完整統整見 `sdk/MIL/docs/grab-height-param-stall.md`**（根因/修法/硬體上限/診斷工具/已棄用方案的單一定稿）。
 
 ### 改參數掉偵診斷 log（Logs\）
 - `phaselog-yyyyMMdd.csv`：每幀硬體 frame-start tick（`MilCamera.PhaseLog.cs` Data Latch）→ 真實相位/掉幀位置。

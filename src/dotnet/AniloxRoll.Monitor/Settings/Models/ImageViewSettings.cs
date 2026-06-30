@@ -1,12 +1,25 @@
 using System.ComponentModel;
+using TanukiCv.Controls;
 
 namespace AniloxRoll.Monitor.Core.Data
 {
-    /// <summary>監控主畫面顯示方式：MIL 直繪（現狀）vs SmartCanvas（CPU/bytes→bitmap，跟回顧畫布同源）。</summary>
-    public enum MainDisplayMode { MilDirect, SmartCanvas }
+    /// <summary>監控主畫面顯示方式：即時（CPU/bytes→bitmap，跟回顧畫布同源）/ 瀑布（全幅合圖每幀往下接、即時捲動；掉偵那欄補黑）。</summary>
+    [TypeConverter(typeof(EnumDescriptionConverter))]
+    public enum MainDisplayMode
+    {
+        [Description("即時")] ImageCanvas,
+        [Description("瀑布")] Waterfall
+    }
 
     /// <summary>監控主畫面動態 LOD：關 / GPU（TanukiCv）/ CPU（GrayResizeCpu）。放大巨圖看細節用，顯示成本 ~180ms→~1ms。</summary>
     public enum LiveLodMode { Off, GPU, CPU }
+
+    [TypeConverter(typeof(EnumDescriptionConverter))]
+    public enum VerticalDisplayDirection
+    {
+        [Description("由下而上")] BottomToTop,
+        [Description("由上而下")] TopToBottom
+    }
 
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public class ImageViewSettings
@@ -15,9 +28,15 @@ namespace AniloxRoll.Monitor.Core.Data
         [DisplayName("監控強化")]  public bool       EnableMuraEnhance   { get; set; } = InspectionDefaults.EnableMuraEnhance;
         [DisplayName("回顧強化")]  public bool       EnableReviewEnhance { get; set; } = InspectionDefaults.EnableReviewEnhance;
         [DisplayName("主畫面顯示")] public MainDisplayMode MainDisplay  { get; set; } = InspectionDefaults.MainDisplay;
+        [DisplayName("上下方向")] public VerticalDisplayDirection VerticalDirection { get; set; } = InspectionDefaults.VerticalDirection;
         [DisplayName("動態LOD")]   public LiveLodMode LiveLod          { get; set; } = InspectionDefaults.LiveLod;
+        [DisplayName("瀑布總高")]  public int       WaterfallTotalHeight { get; set; } = InspectionDefaults.WaterfallTotalHeight;
+        [DisplayName("瀑布滿了")]  public WaterfallFullMode WaterfallFullMode { get; set; } = InspectionDefaults.WaterfallFullMode;
 
-        public void Validate() { }
+        public void Validate()
+        {
+            if (WaterfallTotalHeight < 1000) WaterfallTotalHeight = InspectionDefaults.WaterfallTotalHeight;
+        }
 
         public override string ToString() => "";
     }

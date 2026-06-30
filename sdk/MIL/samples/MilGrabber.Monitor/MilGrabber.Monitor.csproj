@@ -89,7 +89,6 @@
     <Compile Include="MilGrabberPbForm.Designer.cs">
       <DependentUpon>MilGrabberPbForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="NativeResize.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <EmbeddedResource Include="MilGrabberPbForm.resx">

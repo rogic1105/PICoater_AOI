@@ -30,7 +30,7 @@ namespace AniloxRoll.Monitor.Forms
     public partial class AniloxRollForm
     {
         /// <summary>
-        /// 切換 Live 顯示的 V/H 處理圖方向，點選 chartLiveVertical/HorizontalLive 觸發。
+        /// 切換 Live 顯示的 V/H 處理圖方向，點選 chartLiveColumn/HorizontalLive 觸發。
         /// 三態邏輯同 Review tab 的 SwitchRidgeDirection：
         /// 未勾選 → 自動勾選 + 設方向；同方向 → 取消勾選；不同方向 → 切換。
         /// </summary>
@@ -56,14 +56,14 @@ namespace AniloxRoll.Monitor.Forms
         private void UpdateLiveDirectionVisual()
         {
             // 視覺規則（2026-06-12 改版）：藍底＝該方向強化圖顯示中；mode 底色 + 橘框已廢
-            //（mode 雙 chart 切換器已隨舊單台切向 chart 刪除；StitchMode 走 PropertyGrid）。
+            //（mode 雙 chart 切換器已隨舊單台欄 chart 刪除；StitchMode 走 PropertyGrid）。
             var enhanceBg = System.Drawing.Color.FromArgb(230, 240, 255);
             var normal    = System.Drawing.SystemColors.Control;
             string dir = (_settings?.EnableMuraEnhance == true) ? _liveDisplayDirection : null;
 
-            chartLiveVertical.BackColor   = dir == "v" ? enhanceBg : normal;
-            chartLiveHorizontal.BackColor = dir == "h" ? enhanceBg : normal;
-            foreach (var c in new[] { chartLiveVertical, chartLiveHorizontal })
+            chartLiveColumn.BackColor   = dir == "v" ? enhanceBg : normal;
+            chartLiveRow.BackColor = dir == "h" ? enhanceBg : normal;
+            foreach (var c in new[] { chartLiveColumn, chartLiveRow })
             {
                 c.BorderlineColor = System.Drawing.Color.Transparent;
                 c.BorderlineWidth = 1;
@@ -72,7 +72,7 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         /// <summary>
-        /// 切換 camReviewMain 的 V/H 處理圖方向，點選 chartReviewVertical/Horizontal 觸發。
+        /// 切換 camReviewMain 的 V/H 處理圖方向，點選 chartReviewColumn/Horizontal 觸發。
         /// 未勾選強化圖時：自動勾選 + 設方向。
         /// 已勾選強化圖且點同方向：取消勾選（回原圖）。
         /// 已勾選強化圖且點不同方向：切換方向。
@@ -100,14 +100,14 @@ namespace AniloxRoll.Monitor.Forms
                 _stitchCoordinator.ActiveRidgeDirection = dir;
                 _interactionHelper.SetRidgeDirection(dir);
                 UpdateRidgeDirectionVisual(dir);
-                // 2b-ii：SaveCanvasView（讀已砍 canvas）移除；LiveDisplayView 自管視野
+                // 2b-ii：SaveCanvasView（讀已砍 canvas）移除；ImageDisplayView 自管視野
                 if (_stitchCoordinator.IsStitchMode)
                 {
                     int idx = cbReviewId.SelectedIndex;
                     if (idx >= 0 && idx < _dataStatsPresenter.GrabIdInfos.Count)
                     {
                         var info = _dataStatsPresenter.GrabIdInfos[idx];
-                        await _stitchCoordinator.LoadGrabStitchedViewAsync(info.GrabId, info.Earliest, info.Latest, true);
+                        await LoadGrabStitchedViewGuardRowRangeAsync(info.GrabId, info.Earliest, info.Latest, true);
                     }
                 }
                 else
@@ -132,10 +132,10 @@ namespace AniloxRoll.Monitor.Forms
             var enhanceBg = System.Drawing.Color.FromArgb(230, 240, 255);
             var normal    = System.Drawing.SystemColors.Control;
 
-            chartReviewVertical.BackColor = dir == "v" ? enhanceBg : normal;
-            if (chartReviewHorizontal != null)
-                chartReviewHorizontal.BackColor = dir == "h" ? enhanceBg : normal;
-            foreach (var c in new[] { chartReviewVertical, chartReviewHorizontal })
+            chartReviewColumn.BackColor = dir == "v" ? enhanceBg : normal;
+            if (chartReviewRow != null)
+                chartReviewRow.BackColor = dir == "h" ? enhanceBg : normal;
+            foreach (var c in new[] { chartReviewColumn, chartReviewRow })
             {
                 if (c == null) continue;
                 c.BorderlineColor = System.Drawing.Color.Transparent;

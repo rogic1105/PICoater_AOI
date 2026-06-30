@@ -8,6 +8,7 @@ using System.Windows.Forms.DataVisualization.Charting;
 using TanukiCv.Controls;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
+using AniloxRoll.Monitor.UI.Managers;
 using AniloxRoll.Monitor.UI.Navigators;
 using AniloxRoll.Monitor.UI.Widgets;
 
@@ -24,6 +25,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public FormInteractionHelper InteractionHelper { get; set; }
         public ColumnCurveChartHelper ColumnChartHelper { get; set; }
         public RowCurveChartHelper RowChartHelper { get; set; }
+        public RowCurveDisplayAdapter RowChartDisplay { get; set; }
+        public RowCurveSyncCoordinator RowChartSync { get; set; }
         public ColumnCurveChartHelper OverviewHelper { get; set; }
 
         public BatchInspectionService InspectionService { get; set; }
@@ -66,8 +69,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public string ActiveRidgeDirection { get; set; } = "v";
 
         /// <summary>
-        /// UpdateStitchedOverviewChart 完成後觸發，傳遞與 chartReviewVertical 相同的曲線資料，
-        /// 供外部（AniloxRollForm）同步 chartDataVertical。
+        /// UpdateStitchedOverviewChart 完成後觸發，傳遞與 chartReviewColumn 相同的曲線資料，
+        /// 供外部（AniloxRollForm）同步 chartDataColumn。
         /// 參數：(mean[][], max[][], opsUm[], startPosMm[], errMean, errMax)
         /// </summary>
         public event Action<float[][], float[][], double[], double[], float, float> StitchedCurveUpdated;
@@ -87,7 +90,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// 載入 GrabId 的拼接影像（使用上次的 processed 模式）。
         /// </summary>
         /// <summary>#13 同源新路徑：一組 grab 影像載好（7 台拼接圖 + CFG 有效 ops/pos + 是否 Global）。
-        /// Form 訂閱 → ReviewDisplayManager.PushImages（LiveDisplayView 顯示）；舊 canvas 路徑照跑（平行建新）。</summary>
+        /// Form 訂閱 → ReviewDisplayManager.PushImages（ImageDisplayView 顯示）；舊 canvas 路徑照跑（平行建新）。</summary>
         public event Action<byte[][], int[], int[], double[], double[], bool> StitchedImagesReady; // gray bytes(不可變快照), w, h, ops, pos, isGlobal —— Bitmap 不出此類（GDI+ 單執行緒物件）
 
         public Task LoadGrabStitchedViewAsync(string grabId, DateTime hintFrom, DateTime hintTo)
@@ -161,8 +164,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                                 var aligned = alignedByCam.TryGetValue(camId, out var al) ? al : paths;
                                 imgs[i] = GrabImageStitcher.StitchCamera(aligned, scale, null,
                                     useProcessed: enableProcess, ridgeDirection: ridgeDir);
-                                CurveMergeHelper.MergeCurves(paths, out newCurveMean[i], out newCurveMax[i]);   // 切向(逐欄聚合)：長度不變、不需對齊
-                                CurveMergeHelper.MergeRowCurves(aligned, out newRowCurveMean[i], out newRowCurveMax[i]); // 法向(逐列串接)：對齊參考軸，缺幀補 0 曲線=對上影像黑布
+                                CurveMergeHelper.MergeCurves(paths, out newCurveMean[i], out newCurveMax[i]);   // 欄(逐欄聚合)：長度不變、不需對齊
+                                CurveMergeHelper.MergeRowCurves(aligned, out newRowCurveMean[i], out newRowCurveMax[i]); // 列(逐列串接)：對齊參考軸，缺幀補 0 曲線=對上影像黑布
                                 if (imgs[i] != null)
                                     grayArr[i] = AniloxRoll.Monitor.UI.Managers.ReviewDisplayManager.ToGray8(imgs[i], out grayW[i], out grayH[i]);
                             }
@@ -176,7 +179,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     stitchMs = swStitch.ElapsedMilliseconds;
 
                     // 全域合圖也在背景做（原本在 UI 執行緒 → 換 ID swap 卡頓的主因；MergeHorizontal 純影像運算可背景化）
-                    // Stage4b：舊 GrabImageStitcher.MergeHorizontal 顯示用合圖已刪（顯示走 LiveDisplayView.BuildMerge）。
+                    // Stage4b：舊 GrabImageStitcher.MergeHorizontal 顯示用合圖已刪（顯示走 ImageDisplayView.BuildMerge）。
                     Bitmap merged = null;
                     double[] ops = null, pos = null;
                     return (imgs, merged, ops, pos);
@@ -199,13 +202,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
                 // Stage4b：舊 PictureBox 縮圖建圖已刪（縮圖走 sdk ThumbStrip）
 
-                // #13 同源新路徑（平行建新）：餵 LiveDisplayView（Vertical 模式 ops/pos 補算 CFG 有效值）
+                // #13 同源新路徑（平行建新）：餵 ImageDisplayView（Vertical 模式 ops/pos 補算 CFG 有效值）
                 var opsEff = opsArr ?? grabCfg?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
                 var posEff = posArr ?? grabCfg?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
                 StitchedImagesReady?.Invoke(grayArr, grayW, grayH, opsEff, posEff,
                     _ctx.Settings.StitchMode == StitchMode.Global);
 
-                UpdateGlobalRowChart();   // 畫布顯示走 LiveDisplayView（同源）；row 曲線照合併更新
+                UpdateGlobalRowChart();   // 畫布顯示走 ImageDisplayView（同源）；row 曲線照合併更新
                 UpdateStitchedOverviewChart();
 
                 Trace.WriteLine($"[StitchView] {grabId} proc={enableProcess} | CSV={csvMs}ms | Stitch={stitchMs}ms | Merge(bg)={mergeMs}ms | UIapply={swTotal.ElapsedMilliseconds - csvMs - stitchMs - mergeMs}ms | Total={swTotal.ElapsedMilliseconds}ms");
@@ -249,14 +252,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (globalMinMm == double.MaxValue) globalMinMm = 0;
 
             // 2b-ii：合圖座標覆寫原餵 CanvasInteractionHelper 顯示路徑（已砍）；overview X 視野連動
-            //   現由 LiveDisplayView.ViewRangeMmChanged → _reviewOverviewHelper.UpdateViewRange 承接。
+            //   現由 ImageDisplayView.ViewRangeMmChanged → _reviewOverviewHelper.UpdateViewRange 承接。
             if (_ctx.ChartReviewPatch.ChartAreas.Count > 0)
                 _ctx.ChartReviewPatch.ChartAreas[0].AxisX.ScaleView.Zoomable = true;
         }
 
         /// <summary>Form 關閉時控制項已 disposed → 這幾條 cleanup 的 UI 操作應 no-op：
         /// Form 自身會清控制項與資源，且關程式時 fire-and-forget 的 StitchMode 切換 async
-        /// 可能續跑碰到已 disposed 的 chartReviewVertical/canvas → NullReferenceException。</summary>
+        /// 可能續跑碰到已 disposed 的 chartReviewColumn/canvas → NullReferenceException。</summary>
         private bool UiDisposed =>
             (_ctx?.ChartReviewPatch?.IsDisposed ?? true);
 
@@ -278,7 +281,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         {
             if (UiDisposed) return;
             DisableMergedOverviewSync();
-            // 2b-ii-B：合圖 bitmap 不再貼到 canvas（顯示走 LiveDisplayView）→ 只還池。
+            // 2b-ii-B：合圖 bitmap 不再貼到 canvas（顯示走 ImageDisplayView）→ 只還池。
             if (_globalMergedImage != null)
             {
                 BitmapPool.Return(_globalMergedImage);
@@ -296,7 +299,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (UiDisposed) return;
             DisposeGlobalMergedImage();
             if (_stitchedImages == null) return;
-            // 2b-ii-B：canvas/縮圖 PictureBox 已退場（LiveDisplayView 接管）→ 不再清它們的 Image。
+            // 2b-ii-B：canvas/縮圖 PictureBox 已退場（ImageDisplayView 接管）→ 不再清它們的 Image。
             foreach (var bmp in _stitchedImages) BitmapPool.Return(bmp);
             _stitchedImages = null;
             _stitchedCurveMean    = null;
@@ -309,14 +312,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _ctx.DataStatsPresenter?.SetReviewGroupBoxes(false);
         }
 
-        /// <summary>Global 模式：7 台 row curves 重疊合併後更新法向曲線圖。
-        /// row chart 是水平 (row) 曲線 → 用 (HM_V_capture / HM_H_current) ratio rescale，
-        /// 讓 PropertyGrid 改水平正規值時 H 曲線坡度立即變化。
+        /// <summary>Global 模式：7 台 row curves 重疊合併後更新列曲線圖。
+        /// row chart 是列 (row) 曲線 → 用 (HM_V_capture / HM_H_current) ratio rescale，
+        /// 讓 PropertyGrid 改列正規值時 H 曲線坡度立即變化。
         /// 公式：bin baked-in 的縮放是 HM_V_capture（native 只用單一 HM=V），
         /// view-time 想要的目標是 HM_H_current，所以 ratio = HM_V_capture / HM_H_current。</summary>
         private void UpdateGlobalRowChart()
         {
-            if (_ctx.RowChartHelper == null || _stitchedRowCurveMean == null) return;
+            if (_ctx.RowChartSync == null || _stitchedRowCurveMean == null) return;
             CurveMergeHelper.MergeRowCurvesOverlap(
                 _stitchedRowCurveMean, _stitchedRowCurveMax,
                 _ctx.CameraCount, out float[] mergedMean, out float[] mergedMax);
@@ -325,23 +328,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 float captureHmV = _currentGrabConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
                 HessianRescaleHelper.RescaleInPlace1D(mergedMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
                 HessianRescaleHelper.RescaleInPlace1D(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
-                FlipRowCurveIfNeeded(mergedMean, mergedMax);
-                _ctx.RowChartHelper.UpdateData(mergedMean, mergedMax);
-                var nv = SameSourceViewRange?.Invoke();
-                if (nv != null) _ctx.RowChartHelper.UpdateViewRange(nv[2], nv[3]);   // 新路徑：原子帶入當前 Y 視野
-                // 舊 else RefreshRowChartRange（讀已砍 canvas，恆 no-op）移除；視野由 LiveDisplayView 連動
+                _ctx.RowChartSync.UpdateData(mergedMean, mergedMax, requireViewRange: true);
+                // 舊 else RefreshRowChartRange（讀已砍 canvas，恆 no-op）移除；視野由 ImageDisplayView 連動
             }
-        }
-
-        /// <summary>線掃相機由下往上拍攝 → 回顧影像上下翻轉顯示（StitchCamera），故 row 曲線也須反向才能對齊影像。
-        /// 即時(live)影像不翻轉、曲線本就對齊，故只在回顧反轉。未來可改成 tool 選項（per-grab）。</summary>
-        private const bool CurveFlipVertical = true;
-
-        private static void FlipRowCurveIfNeeded(float[] mean, float[] max)
-        {
-            if (!CurveFlipVertical) return;
-            if (mean != null) Array.Reverse(mean);
-            if (max  != null) Array.Reverse(max);
         }
 
         /// <summary>
@@ -373,7 +362,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             float errMean = _ctx.Settings.ErrorValueMeanV;
             float errMax  = _ctx.Settings.ErrorValueMaxV;
 
-            // chartReviewVertical 是垂直 (column) 曲線 → 用 V 的 capture/current ratio
+            // chartReviewColumn 是欄 (column) 曲線 → 用 V 的 capture/current ratio
             var displayMean = HessianRescaleHelper.CloneAndRescale2D(_stitchedCurveMean, captureHm, _ctx.Settings.HessianMaxFactorV);
             var displayMax  = HessianRescaleHelper.CloneAndRescale2D(_stitchedCurveMax,  captureHm, _ctx.Settings.HessianMaxFactorV);
 
@@ -387,20 +376,20 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
 
         /// <summary>
-        /// 更新單台相機的 chartReviewVertical（V）+ chartReviewHorizontal（H）。
+        /// 更新單台相機的 chartReviewColumn（V）+ chartReviewRow（H）。
         /// 套用 view-time 正規值 rescale：
-        ///   - V 曲線：(bin/255) × (HM_V_capture / HM_V_current) → 改 PropertyGrid 垂直正規值生效
-        ///   - H 曲線：(bin/255) × (HM_V_capture / HM_H_current) → 改 PropertyGrid 水平正規值生效
+        ///   - V 曲線：(bin/255) × (HM_V_capture / HM_V_current) → 改 PropertyGrid 欄正規值生效
+        ///   - H 曲線：(bin/255) × (HM_V_capture / HM_H_current) → 改 PropertyGrid 列正規值生效
         /// 閾值線用當前 Settings（view-time tunable）。
         /// </summary>
         public void UpdatePerCameraCharts(int idx)
         {
             if (_stitchedImages == null) return;
 
-            // 切向 (Column / V)
+            // 欄 (Column / V)
             if (_ctx.Settings.StitchMode == StitchMode.Global)
             {
-                // Global 模式：單台切向資料無意義，清空
+                // Global 模式：單台欄資料無意義，清空
                 if (_ctx.ChartReviewVertical != null)
                 {
                     _ctx.ChartReviewVertical.Series["Mean"].Points.Clear();
@@ -437,14 +426,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 var displayMax  = HessianRescaleHelper.CloneAndRescale1D(max,  captureHmV, _ctx.Settings.HessianMaxFactorV);
 
                 double startPos = (idx >= 0 && idx < posArr.Length) ? posArr[idx] : 0;
-                // 2b-ii：當前 X 視野改取 LiveDisplayView 快取（原 TryComputeCurrentViewRange 讀已砍 canvas，恆回 0,0）
+                // 2b-ii：當前 X 視野改取 ImageDisplayView 快取（原 TryComputeCurrentViewRange 讀已砍 canvas，恆回 0,0）
                 var nv = SameSourceViewRange?.Invoke();
                 double leftMm = nv?[0] ?? 0, rightMm = nv?[1] ?? 0;
                 _ctx.ColumnChartHelper.UpdateDataAndView(displayMean, displayMax, startPos, leftMm, rightMm);
             }
 
-            // 法向 (Row / H)
-            if (_ctx.RowChartHelper != null)
+            // 列 (Row / H)
+            if (_ctx.RowChartSync != null)
             {
                 if (_ctx.Settings.StitchMode == StitchMode.Global)
                 {
@@ -461,10 +450,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                         float captureHmV = _currentGrabConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
                         var displayMean = HessianRescaleHelper.CloneAndRescale1D(rowMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
                         var displayMax  = HessianRescaleHelper.CloneAndRescale1D(rowMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
-                        FlipRowCurveIfNeeded(displayMean, displayMax);
-                        _ctx.RowChartHelper.UpdateData(displayMean, displayMax);
-                        var nv = SameSourceViewRange?.Invoke();
-                        if (nv != null) _ctx.RowChartHelper.UpdateViewRange(nv[2], nv[3]);  // 取代死的 RefreshRowChartRange
+                        _ctx.RowChartSync.UpdateData(displayMean, displayMax, requireViewRange: true);
                     }
                 }
             }
@@ -508,7 +494,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 : null;
 
             // 時序（cbReviewDate/cbReviewTime）路徑：載 7 台 → 轉灰階 → 發同一個 StitchedImagesReady
-            //（與單片同源 → 顯示走 LiveDisplayView、拿到 LOD）。Bitmap 在本地迴圈內轉灰階即釋放，零 race。
+            //（與單片同源 → 顯示走 ImageDisplayView、拿到 LOD）。Bitmap 在本地迴圈內轉灰階即釋放，零 race。
             int camCount = _ctx.CameraCount;
             var grayArr = new byte[camCount][];
             var grayW = new int[camCount];
@@ -531,7 +517,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         }
 
         /// <summary>
-        /// 原圖路徑：從當前 Repository 時間點讀取 .bin 曲線更新 chartReviewVertical 全覽圖。
+        /// 原圖路徑：從當前 Repository 時間點讀取 .bin 曲線更新 chartReviewColumn 全覽圖。
         /// </summary>
         public void UpdateOverviewChartFromRepository()
         {
@@ -584,13 +570,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
         }
 
         /// <summary>
-        /// 時序（period）路徑：從當前 Repository 時間點讀 H (_mean_h/_max_h) .bin 曲線 → 合併更新法向曲線圖
-        /// （chartReviewHorizontal）。單片路徑走 <see cref="UpdateGlobalRowChart"/>（吃 _stitchedRowCurveMean）；
-        /// period 不進 stitch 模式（_stitchedImages=null），故獨立從 repository 載 → 與切向 overview 對稱。
+        /// 時序（period）路徑：從當前 Repository 時間點讀 H (_mean_h/_max_h) .bin 曲線 → 合併更新列曲線圖
+        /// （chartReviewRow）。單片路徑走 <see cref="UpdateGlobalRowChart"/>（吃 _stitchedRowCurveMean）；
+        /// period 不進 stitch 模式（_stitchedImages=null），故獨立從 repository 載 → 與欄 overview 對稱。
         /// </summary>
         public void UpdateRowChartFromRepository()
         {
-            if (_ctx.RowChartHelper == null || _stitchedImages != null) return;
+            if (_ctx.RowChartSync == null || _stitchedImages != null) return;
 
             var images = _ctx.ImageRepository.GetImages(
                 _ctx.DateTimeNavigator.GetCurrentYear(),  _ctx.DateTimeNavigator.GetCurrentMonth(),
@@ -619,22 +605,19 @@ namespace AniloxRoll.Monitor.UI.Presenters
             float captureHmV = _ctx.InteractionHelper?.ReviewConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
             HessianRescaleHelper.RescaleInPlace1D(mergedMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
             HessianRescaleHelper.RescaleInPlace1D(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
-            FlipRowCurveIfNeeded(mergedMean, mergedMax);
-            _ctx.RowChartHelper.UpdateData(mergedMean, mergedMax);
-            var nv = SameSourceViewRange?.Invoke();
-            if (nv != null) _ctx.RowChartHelper.UpdateViewRange(nv[2], nv[3]);
+            _ctx.RowChartSync.UpdateData(mergedMean, mergedMax, requireViewRange: true);
         }
 
-        /// <summary>#13 同源新路徑的「當前視野」注入（form 快取 LiveDisplayView 視野；[l,r,top,bot]，null=無效）。
+        /// <summary>#13 同源新路徑的「當前視野」注入（form 快取 ImageDisplayView 視野；[l,r,top,bot]，null=無效）。
         /// chart 更新原子帶入此值 → 重載/強化切換不會先閃回預設再跟隨（同 Live 的 _liveViewLeftMm 解法）。</summary>
         public Func<double[]> SameSourceViewRange { get; set; }
 
-        /// <summary>當前選中相機 index（0-based）來源＝LiveDisplayView（2b-ii-B 後取代舊 GalleryManager.SelectedIndex）。</summary>
+        /// <summary>當前選中相機 index（0-based）來源＝ImageDisplayView（2b-ii-B 後取代舊 GalleryManager.SelectedIndex）。</summary>
         public Func<int> SelectedCamIndexProvider { get; set; }
 
         private double ViewRangeProvider(int cameraIndex, bool isLeft, double defaultValue)
         {
-            // 2b-ii：視野唯一來源＝LiveDisplayView 快取（SameSourceViewRange）。
+            // 2b-ii：視野唯一來源＝ImageDisplayView 快取（SameSourceViewRange）。
             //   舊 fallback TryComputeCurrentViewRange 讀已砍 canvas、恆失敗，移除。
             var nv = SameSourceViewRange?.Invoke();
             if (nv != null) return isLeft ? nv[0] : nv[1];

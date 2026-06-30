@@ -125,7 +125,7 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private double LiveViewRangeProvider(int cameraIndex, bool isLeft, double defaultValue)
         {
-            // SmartCanvas 模式：用主畫面即時可見範圍（ApplyLiveViewRange 存）→ overview 500ms 更新沿用同值 → 跟隨且不閃
+            // ImageCanvas 模式：用主畫面即時可見範圍（ApplyLiveViewRange 存）→ overview 500ms 更新沿用同值 → 跟隨且不閃
             if (!double.IsNaN(_liveViewLeftMm) && _liveViewLeftMm < _liveViewRightMm)
                 return isLeft ? _liveViewLeftMm : _liveViewRightMm;
             // MIL 直繪模式：從 MIL 合圖 display 取視野
@@ -147,7 +147,7 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         // 4c：舊「回顧縮圖↔主畫面雙向同步」死碼簇已刪（GetReviewOps/PosArray、TryGetMergedReviewCoords、
-        //     PanCanvasToReviewCameraCenter、UpdateSelectedReviewCamFromViewCenter）——由 sdk LiveDisplayView
+        //     PanCanvasToReviewCameraCenter、UpdateSelectedReviewCamFromViewCenter）——由 sdk ImageDisplayView
         //     內建雙向連動取代（CenterOnCamera + UpdateReverseThumbSync）。
 
         // ── Helper Methods ──────────────────────────────────────────
@@ -203,6 +203,6 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        // IsCanvasFitToScreen 已移除：fit 判斷收進 SmartCanvas.IsAtFitView()（多擊內部用，單一來源）。
+        // IsCanvasFitToScreen 已移除：fit 判斷收進 ImageCanvas.IsAtFitView()（多擊內部用，單一來源）。
     }
 }
