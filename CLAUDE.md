@@ -475,6 +475,7 @@ PICoater_AOI/
 
 | 文件 | 用途 |
 |------|------|
+| [`docs/dev/architecture-map.md`](docs/dev/architecture-map.md) | **Repo 架構地圖**：分層/依賴方向 + 執行期資料流 + 顯示 pipeline 鳥瞰（高層、穩定，找細節的入口）|
 | [`docs/user-manual/io_diagrams.html`](docs/user-manual/io_diagrams.html) | IO FSM 視覺化（ET-7044 ↔ 設備 Nakan）|
 | [`docs/user-manual/storage-flow.html`](docs/user-manual/storage-flow.html) | Storage PC 雙寫架構流程圖 |
 | [`docs/user-manual/hardware-specs.html`](docs/user-manual/hardware-specs.html) | 7 相機 + Grabber + 光源 + PLC 硬體規格 |
