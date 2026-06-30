@@ -106,6 +106,24 @@ app 的 UI 架構（SSoT 原子結構 / 四層 View-協調-State-Service / 協�
 **討論 / 設計時的提問順序：**
 「這段邏輯有沒有第二份？」 → 「改一處另一處是否一定要跟著改？」 → 是則「抽哪裡、誰呼叫」 — 而不是「複製過來改一改」。
 
+## 術語標準：軸命名（col/row ↔ 欄/列，唯一一組，無例外）
+
+> 收斂歷史包袱：曾有 4 組詞講同 2 個軸（切向/法向、水平/垂直、Vertical/Horizontal、row/col），
+> 且 `chartLiveVertical` 配的是 col（切向）= 視覺詞天生反向。**一律收斂成下表這一組，舊詞完全刪除（非註解標「已棄用」）。**
+
+| 軸 | **code 識別字** | **中文（註解/UI/標準名稱）** | 影像意義 | 圖表 | 物理 |
+|---|---|---|---|---|---|
+| X | **col**（Column） | **欄** | 每「欄」一個值 | 沿 X 畫 | 沿輥圓周 |
+| Y | **row**（Row） | **列** | 每「列」一個值 | 沿 Y 畫 | 橫向捲動 |
+
+**鐵則：**
+- **欄 = col = X**；**列 = row = Y**。繁中慣例：欄=直行(column)、列=橫列(row)，**勿記反**（此表為唯一來源）。
+- **完全退場（刪除，非註解）**：`切向`、`法向`、`水平`、`垂直`、`切線`、以及**我們自己的** `Vertical`/`Horizontal` 識別字（控制項名、欄位、方法）。
+- **唯一不碰**：WinForms 框架的 `Vertical/Horizontal`（`Orientation`/`DockStyle`/`ScrollBars`/`TextAlign`/`Anchor`…）— 那不是我們的術語，rename 時手術式排除。
+- PropertyGrid「檢出方向」也收斂：`垂直/水平/全部` → `欄/列/全部`（操作員看 欄/列 比切向/法向 直觀、又跟 code 1:1）。
+- sdk 既有 `ColumnCurveChartHelper`/`RowCurveChartHelper` 已是 col/row，為對齊基準，不改。
+- 控制項對齊：`chart{Live,Review,Data}Vertical`→`...Column`、`chart{Live,Review}Horizontal`→`...Row`（修「Vertical 配 Column」反向）。
+
 ## 專案結構
 
 ```
