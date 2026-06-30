@@ -184,6 +184,7 @@
     <Compile Include="UI\Managers\GlobalMergeCoordinator.cs" />
     <Compile Include="UI\Managers\LiveDisplayCoordinator.cs" />
     <Compile Include="UI\Managers\RowCurveDisplayAdapter.cs" />
+    <Compile Include="UI\Managers\RowCurveSyncCoordinator.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.Display.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.Merge.cs" />

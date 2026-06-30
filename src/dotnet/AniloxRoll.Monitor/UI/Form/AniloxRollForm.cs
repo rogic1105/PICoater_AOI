@@ -38,7 +38,6 @@ namespace AniloxRoll.Monitor.Forms
         private DateTimeNavigator _dateTimeNavigator;
         private ReviewDisplayManager _reviewDisplayManager;   // 回顧同源顯示（sdk ImageDisplayView，絞殺榕收官）
         private double _reviewViewLeftMm = double.NaN, _reviewViewRightMm, _reviewViewTopMm, _reviewViewBotMm; // 新畫布視野快取（chart 原子更新用）
-        private bool _reviewRowRangeSuspended;
         private int _reviewSyncCount; private long _reviewSyncOvMax, _reviewSyncRowMax;   // [ReviewSync] 拖曳跟隨計時儀器
         private AniloxRollPresenter _presenter;
         private FormInteractionHelper _interactionHelper;
@@ -48,6 +47,8 @@ namespace AniloxRoll.Monitor.Forms
         private RowCurveChartHelper _reviewRowChartHelper;
         private RowCurveDisplayAdapter _liveRowDisplay;
         private RowCurveDisplayAdapter _reviewRowDisplay;
+        private RowCurveSyncCoordinator _liveRowSync;
+        private RowCurveSyncCoordinator _reviewRowSync;
         private LiveCameraManager _liveCameraManager;
         // Global merge 用：快取各相機 row curve 資料，合併後更新圖表
         private readonly Dictionary<int, float[]> _liveRowMeanCache = new Dictionary<int, float[]>();
@@ -437,10 +438,12 @@ namespace AniloxRoll.Monitor.Forms
 
             _liveRowChartHelper = new RowCurveChartHelper(this.chartLiveRow);
             _liveRowDisplay = new RowCurveDisplayAdapter(_liveRowChartHelper, GetVerticalDisplayDirection);
+            _liveRowSync = new RowCurveSyncCoordinator(_liveRowDisplay);
             _liveRowDisplay.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
 
             _reviewRowChartHelper = new RowCurveChartHelper(this.chartReviewRow);
             _reviewRowDisplay = new RowCurveDisplayAdapter(_reviewRowChartHelper, GetVerticalDisplayDirection);
+            _reviewRowSync = new RowCurveSyncCoordinator(_reviewRowDisplay);
             _reviewRowDisplay.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
 
             UpdateRowChartPitch();
@@ -522,6 +525,7 @@ namespace AniloxRoll.Monitor.Forms
                 InteractionHelper         = _interactionHelper,
                 RowChartHelper            = _reviewRowChartHelper,
                 RowChartDisplay           = _reviewRowDisplay,
+                RowChartSync              = _reviewRowSync,
                 OverviewHelper            = _reviewOverviewHelper,
                 InspectionService         = _inspectionService,
                 ImageRepository           = _imageRepository,
@@ -550,8 +554,7 @@ namespace AniloxRoll.Monitor.Forms
                     var swSync = System.Diagnostics.Stopwatch.StartNew();
                     _reviewOverviewHelper?.UpdateViewRange(l, r);
                     long ovMs = swSync.ElapsedMilliseconds;
-                    if (!_reviewRowRangeSuspended)
-                        _reviewRowDisplay?.UpdateViewRange(top, bot);
+                    _reviewRowSync?.SetViewRange(top, bot);
                     long rowMs = swSync.ElapsedMilliseconds - ovMs;
                     // [ReviewSync] 計時儀器：單次 >25ms 即時告警；每 120 次彙總（拖曳 ~4 秒）→ 看瓶頸在 overview/row/事件頻率
                     _reviewSyncCount++; _reviewSyncOvMax = Math.Max(_reviewSyncOvMax, ovMs); _reviewSyncRowMax = Math.Max(_reviewSyncRowMax, rowMs);

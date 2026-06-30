@@ -26,6 +26,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public ColumnCurveChartHelper ColumnChartHelper { get; set; }
         public RowCurveChartHelper RowChartHelper { get; set; }
         public RowCurveDisplayAdapter RowChartDisplay { get; set; }
+        public RowCurveSyncCoordinator RowChartSync { get; set; }
         public ColumnCurveChartHelper OverviewHelper { get; set; }
 
         public BatchInspectionService InspectionService { get; set; }
@@ -318,7 +319,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// view-time 想要的目標是 HM_H_current，所以 ratio = HM_V_capture / HM_H_current。</summary>
         private void UpdateGlobalRowChart()
         {
-            if (_ctx.RowChartDisplay == null || _stitchedRowCurveMean == null) return;
+            if (_ctx.RowChartSync == null || _stitchedRowCurveMean == null) return;
             CurveMergeHelper.MergeRowCurvesOverlap(
                 _stitchedRowCurveMean, _stitchedRowCurveMax,
                 _ctx.CameraCount, out float[] mergedMean, out float[] mergedMax);
@@ -327,9 +328,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 float captureHmV = _currentGrabConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
                 HessianRescaleHelper.RescaleInPlace1D(mergedMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
                 HessianRescaleHelper.RescaleInPlace1D(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
-                var nv = SameSourceViewRange?.Invoke();
-                if (nv != null) _ctx.RowChartDisplay.UpdateDataAndViewRange(mergedMean, mergedMax, nv[2], nv[3]);
-                else _ctx.RowChartDisplay.UpdateData(mergedMean, mergedMax);
+                _ctx.RowChartSync.UpdateData(mergedMean, mergedMax, requireViewRange: true);
                 // 舊 else RefreshRowChartRange（讀已砍 canvas，恆 no-op）移除；視野由 ImageDisplayView 連動
             }
         }
@@ -434,7 +433,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
 
             // 列 (Row / H)
-            if (_ctx.RowChartDisplay != null)
+            if (_ctx.RowChartSync != null)
             {
                 if (_ctx.Settings.StitchMode == StitchMode.Global)
                 {
@@ -451,9 +450,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                         float captureHmV = _currentGrabConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
                         var displayMean = HessianRescaleHelper.CloneAndRescale1D(rowMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
                         var displayMax  = HessianRescaleHelper.CloneAndRescale1D(rowMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
-                        var nv = SameSourceViewRange?.Invoke();
-                        if (nv != null) _ctx.RowChartDisplay.UpdateDataAndViewRange(displayMean, displayMax, nv[2], nv[3]);
-                        else _ctx.RowChartDisplay.UpdateData(displayMean, displayMax);
+                        _ctx.RowChartSync.UpdateData(displayMean, displayMax, requireViewRange: true);
                     }
                 }
             }
@@ -579,7 +576,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// </summary>
         public void UpdateRowChartFromRepository()
         {
-            if (_ctx.RowChartDisplay == null || _stitchedImages != null) return;
+            if (_ctx.RowChartSync == null || _stitchedImages != null) return;
 
             var images = _ctx.ImageRepository.GetImages(
                 _ctx.DateTimeNavigator.GetCurrentYear(),  _ctx.DateTimeNavigator.GetCurrentMonth(),
@@ -608,9 +605,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             float captureHmV = _ctx.InteractionHelper?.ReviewConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
             HessianRescaleHelper.RescaleInPlace1D(mergedMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
             HessianRescaleHelper.RescaleInPlace1D(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
-            var nv = SameSourceViewRange?.Invoke();
-            if (nv != null) _ctx.RowChartDisplay.UpdateDataAndViewRange(mergedMean, mergedMax, nv[2], nv[3]);
-            else _ctx.RowChartDisplay.UpdateData(mergedMean, mergedMax);
+            _ctx.RowChartSync.UpdateData(mergedMean, mergedMax, requireViewRange: true);
         }
 
         /// <summary>#13 同源新路徑的「當前視野」注入（form 快取 ImageDisplayView 視野；[l,r,top,bot]，null=無效）。

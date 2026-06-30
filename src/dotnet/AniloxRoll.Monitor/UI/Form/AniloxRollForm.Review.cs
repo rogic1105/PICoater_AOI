@@ -38,14 +38,14 @@ namespace AniloxRoll.Monitor.Forms
         private async Task LoadGrabStitchedViewGuardRowRangeAsync(string grabId, DateTime earliest, DateTime latest,
             bool enableProcess)
         {
-            _reviewRowRangeSuspended = true;
+            _reviewRowSync?.SuspendUntilNextData();
             try
             {
                 await _stitchCoordinator.LoadGrabStitchedViewAsync(grabId, earliest, latest, enableProcess);
             }
             finally
             {
-                _reviewRowRangeSuspended = false;
+                _reviewRowSync?.Resume();
             }
         }
 
