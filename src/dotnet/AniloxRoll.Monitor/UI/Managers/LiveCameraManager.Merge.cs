@@ -67,7 +67,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         public bool TryGetMergedViewRange(out double leftMm, out double rightMm)
             => _globalMerge.TryGetViewRange(out leftMm, out rightMm);
 
-        /// <summary>取得合併 display 的 Y 視野範圍（pixel），供法向曲線圖聯動。</summary>
+        /// <summary>取得合併 display 的 Y 視野範圍（pixel），供列曲線圖聯動。</summary>
         public bool TryGetMergedViewRangeY(out double topPixel, out double botPixel)
             => _globalMerge.TryGetViewRangeY(out topPixel, out botPixel);
     }

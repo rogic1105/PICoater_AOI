@@ -45,7 +45,7 @@ namespace AniloxRoll.Monitor.Core.Data
         public override string ToString() => "";
     }
 
-    // 檢出標準展開：檢出方向 + 4 個閾值（垂直/水平 × 平均/最大）
+    // 檢出標準展開：檢出方向 + 4 個閾值（欄/列 × 平均/最大）
     [TypeConverter(typeof(ExpandableLeftAlignConverter))]
     public class DetectionStandardConfig
     {

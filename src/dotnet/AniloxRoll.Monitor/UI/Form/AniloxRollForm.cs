@@ -444,7 +444,7 @@ namespace AniloxRoll.Monitor.Forms
 
             UpdateRowChartPitch();
 
-            // Review tab 切向 chart 點選 —— 過渡語意（mode/強化切換 FSM 待 #13 接入後定案）：
+            // Review tab 欄 chart 點選 —— 過渡語意（mode/強化切換 FSM 待 #13 接入後定案）：
             //   點全覽圖（接位後的 chartReviewColumn）＝切檢出方向 v；StitchMode/強化暫走 PropertyGrid。TODO-FSM
             chartReviewColumn.MouseClick += (s, e) =>
             {
@@ -458,7 +458,7 @@ namespace AniloxRoll.Monitor.Forms
                 SwitchRidgeDirection("h");
             };
 
-            // Live tab 切向 chart 點選 —— 過渡語意（mode/強化切換 FSM 待 #13 接入後定案）：
+            // Live tab 欄 chart 點選 —— 過渡語意（mode/強化切換 FSM 待 #13 接入後定案）：
             //   點全覽圖（接位後的 chartLiveColumn）＝切檢出方向 v（與 Horizontal chart 對稱）；
             //   StitchMode / 強化切換暫時只走 PropertyGrid（SSoT 正路）。TODO-FSM
             chartLiveColumn.MouseClick += (s, e) =>
@@ -542,7 +542,7 @@ namespace AniloxRoll.Monitor.Forms
                         AniloxRoll.Monitor.Core.Services.InspectionEngineConfig.DefaultSaveResizeScale,
                         _reviewRowDisplay?.RowPitchMm ?? 0,
                         ShouldFlipDisplayVertical());   // 灰階已在 RSC 解碼段轉好（零 race）；?.：關閉時序防 NRE
-                // Stage2：新 canvas 視野 → 回顧曲線圖 zoom 連動（切向=全覽 X、法向=Y；拖曳中即時）
+                // Stage2：新 canvas 視野 → 回顧曲線圖 zoom 連動（欄=全覽 X、列=Y；拖曳中即時）
                 _reviewDisplayManager.ViewRangeMmChanged += (l, r, top, bot) =>
                 {
                     _reviewViewLeftMm = l; _reviewViewRightMm = r; _reviewViewTopMm = top; _reviewViewBotMm = bot;

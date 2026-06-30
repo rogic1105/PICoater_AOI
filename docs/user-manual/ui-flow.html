@@ -304,8 +304,8 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 </div>
 <div class="v-arrow" data-label="平行"></div>
 <div class="out-par">
-<div class="box action">OnLiveCurveData（Mean/Max 曲線 → 監控切向曲線圖）</div>
-<div class="box action">OnLiveRowCurveData（水平曲線 → 監控法向曲線圖）</div>
+<div class="box action">OnLiveCurveData（Mean/Max 曲線 → 監控欄曲線圖）</div>
+<div class="box action">OnLiveRowCurveData（列曲線 → 監控列曲線圖）</div>
 <div class="box action">OnMouseDataChanged（座標 → lblPixelInfo）</div>
 <div class="box action">OnInspectionResult（Mura 判定 → CheckLiveMura → DO_MURA）</div>
 </div>
@@ -362,14 +362,14 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="v-branch">
 <div class="v-branch-path"><span class="branch-label yes">垂直</span>
 <div class="out-par">
-<div class="box output">監控切向曲線圖：Mean/Max 更新</div>
-<div class="box output">監控法向曲線圖：Mean/Max 更新</div>
+<div class="box output">監控欄曲線圖：Mean/Max 更新</div>
+<div class="box output">監控列曲線圖：Mean/Max 更新</div>
 </div>
 </div>
 <div class="v-branch-path"><span class="branch-label no">全域</span>
 <div class="out-par">
-<div class="box output">監控切向曲線圖：不更新（保持清空）</div>
-<div class="box output">監控法向曲線圖：正常更新</div>
+<div class="box output">監控欄曲線圖：不更新（保持清空）</div>
+<div class="box output">監控列曲線圖：正常更新</div>
 </div>
 </div></div>
 <div class="v-arrow"></div>
@@ -519,19 +519,19 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">監控主畫面：顯示處理圖（下一幀生效）</div>
-<div class="box output">監控切向曲線圖/監控法向曲線圖：背景色高亮（藍）</div>
+<div class="box output">監控欄曲線圖/監控列曲線圖：背景色高亮（藍）</div>
 </div>
 <div class="note">也可點擊監控曲線圖觸發（三態切換自動開關此設定）。設定值持久化於 JSON；開程式時若為 True，InitUiLayer 末尾呼叫 UpdateLiveDirectionVisual 預先上底色（方向為 _liveDisplayDirection 預設 "v"）。</div>
 </div>
 <div class="flow-group vflow">
-<div class="flow-title">監控切向曲線圖/監控法向曲線圖 點擊 → 三態切換</div>
-<div class="box input">點擊【監控切向曲線圖】</div>
+<div class="flow-title">監控欄曲線圖/監控列曲線圖 點擊 → 三態切換</div>
+<div class="box input">點擊【監控欄曲線圖】</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">SwitchLiveDisplayDirection("v")</div>
 <div class="v-arrow"></div>
 <div class="out-par">
 <div class="box output">監控主畫面：切換 原圖/V處理圖/H處理圖</div>
-<div class="box output">作用中曲線圖：淺藍底色 + 橘色外框；Vertical 模式 V=【監控切向曲線圖】，Global 模式 V=【監控全覽圖】，H=【監控法向曲線圖】</div>
+<div class="box output">作用中曲線圖：淺藍底色 + 橘色外框；Vertical 模式 V=【監控欄曲線圖】，Global 模式 V=【監控全覽圖】，H=【監控列曲線圖】</div>
 </div>
 <div class="v-arrow"></div>
 <div class="box action">① 未勾選→自動勾選+設方向 ② 同方向→取消勾選 ③ 不同方向→切換</div>
@@ -590,7 +590,7 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="v-branch">
 <div class="v-branch-path"><span class="branch-label yes">垂直</span>
 <div class="out-par">
-<div class="box output">監控切向曲線圖/監控法向曲線圖：切換到 CAM N 資料</div>
+<div class="box output">監控欄曲線圖/監控列曲線圖：切換到 CAM N 資料</div>
 </div>
 </div>
 <div class="v-branch-path"><span class="branch-label no">全域</span>
@@ -598,8 +598,8 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="out-par">
 <div class="box output">監控主畫面：保持<a href="#live-global-merge">全域合圖</a>，視野平移到 CAM N 中心</div>
 <div class="box output">選中縮圖：橘色外框高亮</div>
-<div class="box output">監控切向曲線圖：保持清空</div>
-<div class="box output">監控法向曲線圖：切換到 CAM N 資料</div>
+<div class="box output">監控欄曲線圖：保持清空</div>
+<div class="box output">監控列曲線圖：切換到 CAM N 資料</div>
 </div>
 </div></div>
 </div>
@@ -742,12 +742,12 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="box action">OnLiveCurveData <code>→ return</code>（StitchMode == Global 時跳過 UI chart 更新）</div>
 <div class="v-arrow"></div>
 <div class="out-par">
-<div class="box output">監控切向曲線圖：不更新（單台資料無意義）</div>
+<div class="box output">監控欄曲線圖：不更新（單台資料無意義）</div>
 </div>
 <div class="box action">OnLiveRowCurveData / UpdateLiveOverviewChart（不受 StitchMode 影響）</div>
 <div class="v-arrow"></div>
 <div class="out-par">
-<div class="box output">監控法向曲線圖：正常更新</div>
+<div class="box output">監控列曲線圖：正常更新</div>
 <div class="box output">監控全覽圖：正常更新（7 台合併曲線）</div>
 </div>
 <!-- ── 縮圖←→主畫面雙向同步 ── -->
@@ -834,8 +834,8 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="out-par">
 <div class="box output">回顧縮圖1~7：拼接圖</div>
 <div class="box output">回顧主畫面：選中相機的拼接影像（FitToScreen）</div>
-<div class="box output">回顧切向曲線圖：多幀 Mean 平均/Max 取 Max</div>
-<div class="box output">回顧法向曲線圖：多幀 row curves 串接</div>
+<div class="box output">回顧欄曲線圖：多幀 Mean 平均/Max 取 Max</div>
+<div class="box output">回顧列曲線圖：多幀 row curves 串接</div>
 <div class="box output">回顧全覽圖：閾值線 + X 軸固定（依 CFG 的 ImageWidth × OPS + Start 涵蓋 7 台 FOV）</div>
 </div>
 </div>
@@ -843,8 +843,8 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="out-par">
 <div class="box output">回顧縮圖1~7：拼接圖</div>
 <div class="box output">回顧主畫面：<a href="#review-global-merge">全域合圖</a>（FitToScreen）</div>
-<div class="box output">回顧切向曲線圖：清空（單台資料無意義）</div>
-<div class="box output">回顧法向曲線圖：7 台靠上對齊，重疊區 Mean 平均/Max 取 Max</div>
+<div class="box output">回顧欄曲線圖：清空（單台資料無意義）</div>
+<div class="box output">回顧列曲線圖：7 台靠上對齊，重疊區 Mean 平均/Max 取 Max</div>
 <div class="box output">回顧全覽圖：閾值線 + 7 台按位置串接</div>
 </div>
 </div>
@@ -874,16 +874,16 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="v-branch-path"><span class="branch-label yes">垂直</span>
 <div class="out-par">
 <div class="box output">回顧主畫面：第一台相機影像（保留先前視野位置；若從序號模式切換過來則 FitToScreen）</div>
-<div class="box output">回顧切向曲線圖：多幀 Mean 取平均、Max 取 Max</div>
-<div class="box output">回顧法向曲線圖：多幀 row curves 串接</div>
+<div class="box output">回顧欄曲線圖：多幀 Mean 取平均、Max 取 Max</div>
+<div class="box output">回顧列曲線圖：多幀 row curves 串接</div>
 <div class="box output">回顧全覽圖：X 軸固定（依 CFG 的 ImageWidth × OPS + Start 涵蓋 7 台 FOV）</div>
 </div>
 </div>
 <div class="v-branch-path"><span class="branch-label no">全域</span>
 <div class="out-par">
 <div class="box output">回顧主畫面：<a href="#review-global-merge">全域合圖</a>（保留先前視野位置；若從序號模式切換過來則 FitToScreen）</div>
-<div class="box output">回顧切向曲線圖：清空（單台資料無意義）</div>
-<div class="box output">回顧法向曲線圖：7 台靠上對齊，重疊區 Mean 平均/Max 取 Max，非重疊區保留</div>
+<div class="box output">回顧欄曲線圖：清空（單台資料無意義）</div>
+<div class="box output">回顧列曲線圖：7 台靠上對齊，重疊區 Mean 平均/Max 取 Max，非重疊區保留</div>
 <div class="box output">回顧全覽圖：7 台按位置串接，重疊區 Mean 平均/Max 取 Max</div>
 </div>
 </div></div>
@@ -904,16 +904,16 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="v-branch-path"><span class="branch-label yes">垂直</span>
 <div class="out-par">
 <div class="box output">回顧主畫面：選中相機的拼接影像（FitToScreen）</div>
-<div class="box output">回顧切向曲線圖：多幀 Mean 取平均、Max 取 Max（歷史 OPS/閾值）</div>
-<div class="box output">回顧法向曲線圖：多幀 row curves 串接</div>
+<div class="box output">回顧欄曲線圖：多幀 Mean 取平均、Max 取 Max（歷史 OPS/閾值）</div>
+<div class="box output">回顧列曲線圖：多幀 row curves 串接</div>
 <div class="box output">回顧全覽圖：X 軸固定（依 CFG 的 ImageWidth × OPS + Start 涵蓋 7 台 FOV）</div>
 </div>
 </div>
 <div class="v-branch-path"><span class="branch-label no">全域</span>
 <div class="out-par">
 <div class="box output">回顧主畫面：<a href="#review-global-merge">全域合圖</a>（FitToScreen）</div>
-<div class="box output">回顧切向曲線圖：清空（單台資料無意義）</div>
-<div class="box output">回顧法向曲線圖：7 台靠上對齊，重疊區 Mean 平均/Max 取 Max，非重疊區保留</div>
+<div class="box output">回顧欄曲線圖：清空（單台資料無意義）</div>
+<div class="box output">回顧列曲線圖：7 台靠上對齊，重疊區 Mean 平均/Max 取 Max，非重疊區保留</div>
 <div class="box output">回顧全覽圖：7 台按位置串接，重疊區 Mean 平均/Max 取 Max</div>
 </div>
 </div></div>
@@ -934,7 +934,7 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="v-branch-path"><span class="branch-label yes">垂直</span>
 <div class="out-par">
 <div class="box output">回顧主畫面：切換到 CAM N 影像（FitToScreen）</div>
-<div class="box output">回顧切向曲線圖/回顧法向曲線圖：CAM N Mean/Max</div>
+<div class="box output">回顧欄曲線圖/回顧列曲線圖：CAM N Mean/Max</div>
 </div>
 </div>
 <div class="v-branch-path"><span class="branch-label no">全域</span>
@@ -942,8 +942,8 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="out-par">
 <div class="box output">回顧主畫面：保持<a href="#review-global-merge">全域合圖</a>，視野平移到 CAM N 中心</div>
 <div class="box output">選中縮圖：橘色外框高亮（_galleryManager.Select(N, false)）</div>
-<div class="box output">回顧切向曲線圖：清空</div>
-<div class="box output">回顧法向曲線圖：正常載入</div>
+<div class="box output">回顧欄曲線圖：清空</div>
+<div class="box output">回顧列曲線圖：正常載入</div>
 </div>
 </div></div>
 <div class="v-arrow"></div>
@@ -959,7 +959,7 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="box output">回顧縮圖1~7：原圖 ↔ 處理圖</div>
 <div class="box output">回顧主畫面：原圖 ↔ 處理圖（保持 zoom/pan；點 chartMura V/H 三態切換亦同）</div>
 <div class="note dev">視野保留機制：SwitchRidgeDirection / ReloadCurrentStitchedView 在重載前呼叫 SaveCanvasView 存檔；LoadGrabStitchedViewAsync 內部以 ShowStitchedCameraInCanvas(idx, resetView: false) 顯示，不抹掉 saved view，最後 RestoreCanvasViewOrFit 還原視野。</div>
-<div class="box output">作用中曲線圖：淺藍底色 + 橘色外框（UpdateRidgeDirectionVisual：BackColor + BorderlineColor）；Vertical 模式 V=【回顧切向曲線圖】，Global 模式 V=【回顧全覽圖】，H=【回顧法向曲線圖】</div>
+<div class="box output">作用中曲線圖：淺藍底色 + 橘色外框（UpdateRidgeDirectionVisual：BackColor + BorderlineColor）；Vertical 模式 V=【回顧欄曲線圖】，Global 模式 V=【回顧全覽圖】，H=【回顧列曲線圖】</div>
 </div>
 <div class="v-arrow"></div>
 <div class="box guard">_processedCheckboxGuard 防程式碼設定時觸發</div>
@@ -971,7 +971,7 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="box condition">合圖方式 × 強化狀態（IsEnhanceDisplayActive）？</div>
 <div class="out-par">
 <div>
-<div class="box input">點擊【回顧切向曲線圖】（Vertical 模式）</div>
+<div class="box input">點擊【回顧欄曲線圖】（Vertical 模式）</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">SwitchRidgeDirection("v")</div>
 <div class="setting-change"><span class="user">回顧強化: toggle</span><span class="dev">hd_EnableReviewEnhance: Hub.Set(toggle)</span></div>
@@ -990,14 +990,14 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="setting-change"><span class="user">回顧強化: 是 → 否（若原本強化中）</span><span class="dev">hd_EnableReviewEnhance: true → false (Hub.SetBatch)</span></div>
 </div>
 <div>
-<div class="box input">點擊【回顧切向曲線圖】（Global 模式，含強化中）</div>
+<div class="box input">點擊【回顧欄曲線圖】（Global 模式，含強化中）</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">SwitchReviewStitchModeAndDisableEnhance(Vertical)</div>
 <div class="setting-change"><span class="user">合圖方式: 全域 → 垂直</span><span class="dev">hb_StitchMode: Global → Vertical</span></div>
 <div class="setting-change"><span class="user">回顧強化: 是 → 否（若原本強化中）</span><span class="dev">hd_EnableReviewEnhance: true → false (Hub.SetBatch)</span></div>
 </div>
 <div>
-<div class="box input">點擊【回顧法向曲線圖】（任何模式）</div>
+<div class="box input">點擊【回顧列曲線圖】（任何模式）</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">SwitchRidgeDirection("h")</div>
 <div class="setting-change"><span class="user">回顧強化: toggle</span><span class="dev">hd_EnableReviewEnhance: Hub.Set(toggle)</span></div>
@@ -1019,7 +1019,7 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="box condition">點哪個曲線圖 × 當前合圖方式？</div>
 <div class="out-par">
 <div>
-<div class="box input">點擊【監控切向曲線圖】（Vertical 模式）</div>
+<div class="box input">點擊【監控欄曲線圖】（Vertical 模式）</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">SwitchLiveDisplayDirection("v")</div>
 <div class="setting-change"><span class="user">監控強化: toggle</span><span class="dev">hc_EnableMuraEnhance: Hub.Set(toggle)</span></div>
@@ -1038,14 +1038,14 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="setting-change"><span class="user">監控強化: 是 → 否（若原本強化中）</span><span class="dev">hc_EnableMuraEnhance: true → false (Hub.SetBatch)</span></div>
 </div>
 <div>
-<div class="box input">點擊【監控切向曲線圖】（Global 模式，含強化中）</div>
+<div class="box input">點擊【監控欄曲線圖】（Global 模式，含強化中）</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">SwitchStitchModeWithEnhanceSequence(Vertical)</div>
 <div class="setting-change"><span class="user">合圖方式: 全域 → 垂直</span><span class="dev">hb_StitchMode: Global → Vertical</span></div>
 <div class="setting-change"><span class="user">監控強化: 是 → 否（若原本強化中）</span><span class="dev">hc_EnableMuraEnhance: true → false (Hub.SetBatch)</span></div>
 </div>
 <div>
-<div class="box input">點擊【監控法向曲線圖】（任何模式）</div>
+<div class="box input">點擊【監控列曲線圖】（任何模式）</div>
 <div class="v-arrow dev"></div>
 <div class="box action dev">SwitchLiveDisplayDirection("h")</div>
 <div class="setting-change"><span class="user">監控強化: toggle</span><span class="dev">hc_EnableMuraEnhance: Hub.Set(toggle)</span></div>
@@ -1082,8 +1082,8 @@ body:not(.operator-mode) .setting-table .dev  { display: inline; }
 <div class="box action dev">RefreshChartRange → TryComputeCurrentViewRange</div>
 <div class="v-arrow"></div>
 <div class="out-par">
-<div class="box output">回顧切向曲線圖：X 軸同步 canvas 水平範圍（Vertical / Global 皆同步）</div>
-<div class="box output">回顧法向曲線圖：Y 軸同步 canvas 垂直範圍</div>
+<div class="box output">回顧欄曲線圖：X 軸同步 canvas 水平範圍（Vertical / Global 皆同步）</div>
+<div class="box output">回顧列曲線圖：Y 軸同步 canvas 垂直範圍</div>
 <div class="box output">回顧全覽圖：<b>Global 模式</b>のみ X 軸隨 canvas 水平範圍同步；<b>Vertical 模式</b>固定不隨動（CanvasInteractionHelper 以 StitchMode == Global 為條件才呼叫 OverviewChartHelper.UpdateViewRange）</div>
 <div class="box output">座標狀態列：即時更新</div>
 </div>
@@ -1106,10 +1106,10 @@ Pass 2（繪製）：僅遍歷有影像的槽位，依 mm 偏移放置；空缺�
 <div class="out-par">
 <div class="box output">回顧主畫面：全域合圖（7 台完整佈局，缺圖補黑色空白，FitToScreen 顯示完整範圍）</div>
 </div>
-<div class="box action">清空切向曲線圖（單台資料無意義）</div>
+<div class="box action">清空欄曲線圖（單台資料無意義）</div>
 <div class="v-arrow"></div>
 <div class="out-par">
-<div class="box output">回顧切向曲線圖：清空</div>
+<div class="box output">回顧欄曲線圖：清空</div>
 </div>
 <div class="box action">EnableMergedOverviewSync</div>
 <div class="v-arrow"></div>
@@ -1336,7 +1336,7 @@ PropertyGrid → <code>NotifyExternalChange</code>；chart click / 程式碼 →
 <table class="setting-table">
 <tr><th>值</th><td><span class="user">全域 / 垂直</span><span class="dev"><code>Global</code> / <code>Vertical</code></span></td></tr>
 <tr><th>預設</th><td><span class="user">全域</span><span class="dev"><code>Global</code></span></td></tr>
-<tr><th>UI 入口</th><td><span class="user">設定面板、即時監控的【監控全覽圖】+【監控切向曲線圖】點擊、回顧的【回顧全覽圖】+【回顧切向曲線圖】點擊、【讀取資料】（重置為全域）</span><span class="dev"><code>propertyGridSettings</code>、<code>chartLivePatch</code> click、<code>chartLiveVertical</code> click、<code>chartReviewPatch</code> click、<code>chartReviewVertical</code> click、<code>btnReviewSelectFolder_Click</code>（reset 為 <code>Global</code>）</span></td></tr>
+<tr><th>UI 入口</th><td><span class="user">設定面板、即時監控的【監控全覽圖】+【監控欄曲線圖】點擊、回顧的【回顧全覽圖】+【回顧欄曲線圖】點擊、【讀取資料】（重置為全域）</span><span class="dev"><code>propertyGridSettings</code>、<code>chartLivePatch</code> click、<code>chartLiveVertical</code> click、<code>chartReviewPatch</code> click、<code>chartReviewVertical</code> click、<code>btnReviewSelectFolder_Click</code>（reset 為 <code>Global</code>）</span></td></tr>
 <tr><th>副作用</th><td><span class="user">即時監控切換合圖、曲線圖清空、回顧主畫面重載入</span><span class="dev"><code>OnStitchModeChangedAsync</code> → Live merge enable/disable + mura chart clear + 回顧主畫面 reload（stitch mode 走 <code>MergeAndShowFromStitchedImages</code>/<code>ShowStitchedCameraInCanvas</code>；強化中 chart click 切 mode 走 <code>skipStitchedImageRefresh=true</code> 旁路）</span></td></tr>
 </table>
 </div>
@@ -1436,9 +1436,9 @@ PropertyGrid → <code>NotifyExternalChange</code>；chart click / 程式碼 →
 <div class="note dev">Source=PropertyGrid 跳過 RefreshGridItem（PG 自己改值已自我更新該 cell，避免重複 refresh 閃爍）。完整副作用對照見 §Setting × 副作用矩陣。</div>
 <div class="v-arrow"></div>
 <div class="out-par">
-<div class="box output">曲線圖閾值線：V chart (chartReviewVertical / chartReviewPatch / chartLivePatch / chartLiveVertical / chartDataPatch) 用【垂直平均閾值】+【垂直最大閾值】；H chart (chartReviewHorizontal / chartLiveHorizontal) 用【水平平均閾值】+【水平最大閾值】</div>
-<div class="box output">曲線坡度（view-time 正規值 rescale）：V 曲線套 (HM_V_capture / HM_V_current)；H 曲線套 (HM_V_capture / HM_H_current)。改【垂直正規值】或【水平正規值】立即反映坡度，bin 物理檔不變</div>
-<div class="box output">統計重算（view-time Pass/Fail）：camData（良率卡片）/ listViewGrabDetail（明細列表）/ chartDataYieldYearly/Monthly/Daily 都用當前【垂直平均/最大閾值】+【垂直正規值】重算（CSV 內 MaxExceed/MeanExceed 僅作 fallback）。掃 CSV 時跟隨 #CFG 取每筆 grab 的 capture HM_V</div>
+<div class="box output">曲線圖閾值線：V chart (chartReviewVertical / chartReviewPatch / chartLivePatch / chartLiveVertical / chartDataPatch) 用【欄平均閾值】+【欄最大閾值】；H chart (chartReviewHorizontal / chartLiveHorizontal) 用【列平均閾值】+【列最大閾值】</div>
+<div class="box output">曲線坡度（view-time 正規值 rescale）：V 曲線套 (HM_V_capture / HM_V_current)；H 曲線套 (HM_V_capture / HM_H_current)。改【欄正規值】或【列正規值】立即反映坡度，bin 物理檔不變</div>
+<div class="box output">統計重算（view-time Pass/Fail）：camData（良率卡片）/ listViewGrabDetail（明細列表）/ chartDataYieldYearly/Monthly/Daily 都用當前【欄平均/最大閾值】+【欄正規值】重算（CSV 內 MaxExceed/MeanExceed 僅作 fallback）。掃 CSV 時跟隨 #CFG 取每筆 grab 的 capture HM_V</div>
 <div class="note dev">DO_MURA_DETECTED 觸發：CheckLiveMura 依 direction (v/h) 取對應方向閾值；RidgeDir=Both 時兩方向各自判定（任一超標即觸發）。OnCameraInspectionResult（存檔後 callback）的 meanPeak/maxPeak 為 V 方向，按 V 閾值判定並記錄到 CSV。</div>
 <div class="note dev">view-time 重算用 ThresholdContext（HM_V + ErrorMean/MaxV），InspectionStatisticsService.{Compute, ComputeByGrabIdRange, ComputeDetailedByGrabIdRange, ScanCsvByDateRange} 都吃 optional ctx；ctx=null 時退回 CSV MaxExceed/MeanExceed 舊行為。</div>
 <div class="box output dev">（抓取中）CSV 插入 #CFG 設定快照：timestamp + 機台佈局 OPS×7 / Start×7 / TrimHead / TrimTail + 相機參數 曝光×7 / 線掃×7 / 高度×7 + 正規值 V/H 兩欄 + Mura 閾值（平均/最大）。新檔、換日、或任一欄位變更時寫入一列 #CFG</div>
@@ -1463,7 +1463,7 @@ PropertyGrid → <code>NotifyExternalChange</code>；chart click / 程式碼 →
 <div class="out-par">
 <div class="box action dev">DisposeGlobalMergedImage（清掉殘留 _globalMergedImage / _periodMergedImage，保留 _stitchedImages 與曲線）</div>
 <div class="box output">回顧主畫面：切回單台相機影像（使用記憶體快取 _stitchedImages[idx]，不重讀碟）</div>
-<div class="box output">回顧切向曲線圖/回顧法向曲線圖：自動恢復</div>
+<div class="box output">回顧欄曲線圖/回顧列曲線圖：自動恢復</div>
 <div class="box output">回顧全覽圖：同步更新</div>
 <div class="box output">監控主畫面：恢復單台 MIL 即時影像</div>
 </div>
@@ -1486,10 +1486,10 @@ PropertyGrid → <code>NotifyExternalChange</code>；chart click / 程式碼 →
 </div>
 </div>
 <div class="out-par">
-<div class="box output">回顧切向曲線圖：清空</div>
-<div class="box output">回顧法向曲線圖：正常載入</div>
+<div class="box output">回顧欄曲線圖：清空</div>
+<div class="box output">回顧列曲線圖：正常載入</div>
 <div class="box output">監控主畫面：<a href="#live-global-merge">即時全域合圖</a></div>
-<div class="box output">監控切向曲線圖：清空</div>
+<div class="box output">監控欄曲線圖：清空</div>
 <div class="box output">回顧全覽圖：同步更新</div>
 </div>
 </div>

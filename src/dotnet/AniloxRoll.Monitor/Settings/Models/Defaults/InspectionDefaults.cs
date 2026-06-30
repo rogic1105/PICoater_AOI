@@ -24,12 +24,12 @@ namespace AniloxRoll.Monitor.Core.Data
         // ── 2. 檢測配方 ────────────────────────────────────────────────────
         public static readonly BackgroundAlgorithm Algorithm  = BackgroundAlgorithm.SingleFrameBgSub; // 去背演算法
         public static readonly RidgeDirection       RidgeDir  = RidgeDirection.Both;                 // 檢出方向
-        public const float  HessianMaxFactorV       = 0.3f;   // 垂直正規值（同時當作 capture-time 送進 native 的 HM）
-        public const float  HessianMaxFactorH       = 0.3f;   // 水平正規值（view-time only，僅作 H 曲線顯示縮放）
-        public const float  ErrorValueMeanV         = 0.2f;   // Mura 圖表 > 垂直平均閾值
-        public const float  ErrorValueMaxV          = 0.6f;   // Mura 圖表 > 垂直最大閾值（PICoater 機台實測）
-        public const float  ErrorValueMeanH         = 0.2f;   // Mura 圖表 > 水平平均閾值
-        public const float  ErrorValueMaxH          = 0.6f;   // Mura 圖表 > 水平最大閾值（PICoater 機台實測）
+        public const float  HessianMaxFactorV       = 0.3f;   // 欄正規值（同時當作 capture-time 送進 native 的 HM）
+        public const float  HessianMaxFactorH       = 0.3f;   // 列正規值（view-time only，僅作 H 曲線顯示縮放）
+        public const float  ErrorValueMeanV         = 0.2f;   // Mura 圖表 > 欄平均閾值
+        public const float  ErrorValueMaxV          = 0.6f;   // Mura 圖表 > 欄最大閾值（PICoater 機台實測）
+        public const float  ErrorValueMeanH         = 0.2f;   // Mura 圖表 > 列平均閾值
+        public const float  ErrorValueMaxH          = 0.6f;   // Mura 圖表 > 列最大閾值（PICoater 機台實測）
         public const int    BackgroundSampleSeconds = 3;      // 取樣秒數
         public const double AniloxRollSpeedMPerMin  = 40.0;   // 輪速 (m/min)
 

@@ -155,7 +155,7 @@ namespace AniloxRoll.Monitor.Forms
 
         /// <summary>
         /// Live 曲線閾值判斷（callback 執行緒呼叫）。
-        /// direction: "v"=垂直, "h"=水平；依 CheckLiveMura 設定的「檢測方向」決定是否觸發 DO1。
+        /// direction: "v"=欄, "h"=列；依 CheckLiveMura 設定的「檢測方向」決定是否觸發 DO1。
         /// 陣列為 0-255，閾值為 0-1，取陣列 max 後除以 255 比較。
         /// </summary>
         private void CheckLiveMura(float[] meanArr, float[] maxArr, string direction)
@@ -189,7 +189,7 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         /// <summary>監控主畫面（ImageDisplayView）縮放/平移 → live 曲線圖 zoom 連動（bin↔主畫面對齊）。
-        /// 切向(X)/overview(X) 用左右範圍、法向(Y) 用上下範圍。UI 執行緒（ViewRangeMmChanged 來）。</summary>
+        /// 欄(X)/overview(X) 用左右範圍、列(Y) 用上下範圍。UI 執行緒（ViewRangeMmChanged 來）。</summary>
         // 主畫面即時 X 可見範圍（mm）：ApplyLiveViewRange 存 → LiveViewRangeProvider 給 overview 的 500ms 更新沿用同值
         // （overview 立即跟隨 + 500ms 重畫沿用同範圍 → 不閃回原點）。NaN=非 ImageCanvas 即時狀態。
         private double _liveViewLeftMm = double.NaN, _liveViewRightMm = double.NaN;
@@ -206,7 +206,7 @@ namespace AniloxRoll.Monitor.Forms
             if (IsDisposed) return;
             _liveViewLeftMm = leftMm; _liveViewRightMm = rightMm;     // 供 overview provider 沿用（不閃）
             _liveViewTopMm = topMm; _liveViewBotMm = botMm;
-            _liveRowDisplay?.UpdateViewRange(topMm, botMm);            // 法向(Y)
+            _liveRowDisplay?.UpdateViewRange(topMm, botMm);            // 列(Y)
             _liveOverviewHelper?.UpdateViewRange(leftMm, rightMm);     // overview 立即跟隨（500ms 重畫用同值不閃）
         }
 
@@ -235,13 +235,13 @@ namespace AniloxRoll.Monitor.Forms
 
             // Live Mura 判斷（callback 執行緒，所有相機都檢查）
             CheckLiveMura(meanArr, maxArr, "v");
-            // 單台切向 chart（chartLiveColumn 舊版）已刪除：全覽圖（接位後的 chartLiveColumn）
+            // 單台欄 chart（chartLiveColumn 舊版）已刪除：全覽圖（接位後的 chartLiveColumn）
             // 由 _liveOverviewDirty + UpdateOverviewChart 路徑更新（boundary 唯一歸屬、與影像對齊）。
         }
 
         private void OnLiveRowCurveData(int camId, float[] meanArr, float[] maxArr)
         {
-            // Live Mura 判斷（水平方向）
+            // Live Mura 判斷（列方向）
             CheckLiveMura(meanArr, maxArr, "h");
 
             if (InvokeRequired)
@@ -406,7 +406,7 @@ namespace AniloxRoll.Monitor.Forms
             if (TryApplyLiveImageCanvasRowViewRange()) return;
         }
 
-        /// <summary>用 A輪速度 和選中相機的取樣頻率（Line Rate）更新法向圖表座標。</summary>
+        /// <summary>用 A輪速度 和選中相機的取樣頻率（Line Rate）更新列圖表座標。</summary>
         private void UpdateRowChartPitch()
         {
             if (_settings == null) return;
@@ -415,7 +415,7 @@ namespace AniloxRoll.Monitor.Forms
                 _settings.AniloxRollSpeedMPerMin, lineRateHz);
             _reviewRowDisplay?.SetRowPitchFromSpeed(
                 _settings.AniloxRollSpeedMPerMin, lineRateHz);
-            // 把 row pitch 餵給主畫面顯示 → SetLayout → 法向曲線圖 Y 對齊（否則 ImageDisplayView 用 X ops 比例錯）
+            // 把 row pitch 餵給主畫面顯示 → SetLayout → 列曲線圖 Y 對齊（否則 ImageDisplayView 用 X ops 比例錯）
             if (_liveCameraManager != null)
                 _liveCameraManager.RowPitchMm = _liveRowDisplay?.RowPitchMm ?? 0;
         }

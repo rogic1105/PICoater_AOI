@@ -163,8 +163,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                                 var aligned = alignedByCam.TryGetValue(camId, out var al) ? al : paths;
                                 imgs[i] = GrabImageStitcher.StitchCamera(aligned, scale, null,
                                     useProcessed: enableProcess, ridgeDirection: ridgeDir);
-                                CurveMergeHelper.MergeCurves(paths, out newCurveMean[i], out newCurveMax[i]);   // 切向(逐欄聚合)：長度不變、不需對齊
-                                CurveMergeHelper.MergeRowCurves(aligned, out newRowCurveMean[i], out newRowCurveMax[i]); // 法向(逐列串接)：對齊參考軸，缺幀補 0 曲線=對上影像黑布
+                                CurveMergeHelper.MergeCurves(paths, out newCurveMean[i], out newCurveMax[i]);   // 欄(逐欄聚合)：長度不變、不需對齊
+                                CurveMergeHelper.MergeRowCurves(aligned, out newRowCurveMean[i], out newRowCurveMax[i]); // 列(逐列串接)：對齊參考軸，缺幀補 0 曲線=對上影像黑布
                                 if (imgs[i] != null)
                                     grayArr[i] = AniloxRoll.Monitor.UI.Managers.ReviewDisplayManager.ToGray8(imgs[i], out grayW[i], out grayH[i]);
                             }
@@ -311,9 +311,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _ctx.DataStatsPresenter?.SetReviewGroupBoxes(false);
         }
 
-        /// <summary>Global 模式：7 台 row curves 重疊合併後更新法向曲線圖。
-        /// row chart 是水平 (row) 曲線 → 用 (HM_V_capture / HM_H_current) ratio rescale，
-        /// 讓 PropertyGrid 改水平正規值時 H 曲線坡度立即變化。
+        /// <summary>Global 模式：7 台 row curves 重疊合併後更新列曲線圖。
+        /// row chart 是列 (row) 曲線 → 用 (HM_V_capture / HM_H_current) ratio rescale，
+        /// 讓 PropertyGrid 改列正規值時 H 曲線坡度立即變化。
         /// 公式：bin baked-in 的縮放是 HM_V_capture（native 只用單一 HM=V），
         /// view-time 想要的目標是 HM_H_current，所以 ratio = HM_V_capture / HM_H_current。</summary>
         private void UpdateGlobalRowChart()
@@ -363,7 +363,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             float errMean = _ctx.Settings.ErrorValueMeanV;
             float errMax  = _ctx.Settings.ErrorValueMaxV;
 
-            // chartReviewColumn 是垂直 (column) 曲線 → 用 V 的 capture/current ratio
+            // chartReviewColumn 是欄 (column) 曲線 → 用 V 的 capture/current ratio
             var displayMean = HessianRescaleHelper.CloneAndRescale2D(_stitchedCurveMean, captureHm, _ctx.Settings.HessianMaxFactorV);
             var displayMax  = HessianRescaleHelper.CloneAndRescale2D(_stitchedCurveMax,  captureHm, _ctx.Settings.HessianMaxFactorV);
 
@@ -379,18 +379,18 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// <summary>
         /// 更新單台相機的 chartReviewColumn（V）+ chartReviewRow（H）。
         /// 套用 view-time 正規值 rescale：
-        ///   - V 曲線：(bin/255) × (HM_V_capture / HM_V_current) → 改 PropertyGrid 垂直正規值生效
-        ///   - H 曲線：(bin/255) × (HM_V_capture / HM_H_current) → 改 PropertyGrid 水平正規值生效
+        ///   - V 曲線：(bin/255) × (HM_V_capture / HM_V_current) → 改 PropertyGrid 欄正規值生效
+        ///   - H 曲線：(bin/255) × (HM_V_capture / HM_H_current) → 改 PropertyGrid 列正規值生效
         /// 閾值線用當前 Settings（view-time tunable）。
         /// </summary>
         public void UpdatePerCameraCharts(int idx)
         {
             if (_stitchedImages == null) return;
 
-            // 切向 (Column / V)
+            // 欄 (Column / V)
             if (_ctx.Settings.StitchMode == StitchMode.Global)
             {
-                // Global 模式：單台切向資料無意義，清空
+                // Global 模式：單台欄資料無意義，清空
                 if (_ctx.ChartReviewVertical != null)
                 {
                     _ctx.ChartReviewVertical.Series["Mean"].Points.Clear();
@@ -433,7 +433,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _ctx.ColumnChartHelper.UpdateDataAndView(displayMean, displayMax, startPos, leftMm, rightMm);
             }
 
-            // 法向 (Row / H)
+            // 列 (Row / H)
             if (_ctx.RowChartDisplay != null)
             {
                 if (_ctx.Settings.StitchMode == StitchMode.Global)
@@ -573,9 +573,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
         }
 
         /// <summary>
-        /// 時序（period）路徑：從當前 Repository 時間點讀 H (_mean_h/_max_h) .bin 曲線 → 合併更新法向曲線圖
+        /// 時序（period）路徑：從當前 Repository 時間點讀 H (_mean_h/_max_h) .bin 曲線 → 合併更新列曲線圖
         /// （chartReviewRow）。單片路徑走 <see cref="UpdateGlobalRowChart"/>（吃 _stitchedRowCurveMean）；
-        /// period 不進 stitch 模式（_stitchedImages=null），故獨立從 repository 載 → 與切向 overview 對稱。
+        /// period 不進 stitch 模式（_stitchedImages=null），故獨立從 repository 載 → 與欄 overview 對稱。
         /// </summary>
         public void UpdateRowChartFromRepository()
         {

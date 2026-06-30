@@ -79,7 +79,7 @@ sdk/
 │   │       api/（tanuki_pipeline_api.dll＝app P/Invoke 出口；json_lite 零依賴 parser）
 │   ├── dotnet/
 │   │   ├── TanukiCv.Core         ← 純 library（無 WinForms）：PixelMmMapper 像素↔mm、SystemInfo、PerfTimer、
-│   │   │                             MergeLayout（合圖佈局唯一來源）、CurveOverviewMerger（切向全覽曲線合併唯一來源）
+│   │   │                             MergeLayout（合圖佈局唯一來源）、CurveOverviewMerger（欄全覽曲線合併唯一來源）
 │   │   └── TanukiCv.Controls     ← WinForms（→Core）：ImageCanvas / ImageDisplayView / ThumbStrip /
 │   │                                 曲線圖 helper（Base/Column/Row）/ GrayBitmap / GrayResizeCpu
 │   ├── benchmark/{tanuki_core_bench, TanukiCv.BenchUi}
@@ -100,7 +100,7 @@ sdk/
 ## 單一來源（sdk 內已收斂的，勿再抄）
 
 - **合圖佈局** = `TanukiCv.Core.MergeLayout.Compute`（純算術；xOffset + 重疊 boundary，3 策略 `MergeOverlap.Midline/RightOverLeft/LeftOverRight`）。影像合圖（GrabImageStitcher / ImageDisplayView）+ 曲線合圖都呼這份 → 曲線與影像 pixel 對齊。
-- **切向全覽曲線合併** = `TanukiCv.Core.CurveOverviewMerger.Merge`（純算術；reuse MergeLayout boundary 唯一歸屬、間空參與分界(黑占位)留 0＝在線相機曲線在與黑布的中線被切、與影像對齊；回傳 mean/max/globalMin/gridMm 純資料，「秀」交呼叫端）。app `CurveMergeHelper.UpdateOverviewChart` 是薄 wrapper（委派 Merge + 接 ColumnCurveChartHelper + StitchMode 視野）；範例可直接呼 Merge 接自己的曲線圖。
+- **欄全覽曲線合併** = `TanukiCv.Core.CurveOverviewMerger.Merge`（純算術；reuse MergeLayout boundary 唯一歸屬、間空參與分界(黑占位)留 0＝在線相機曲線在與黑布的中線被切、與影像對齊；回傳 mean/max/globalMin/gridMm 純資料，「秀」交呼叫端）。app `CurveMergeHelper.UpdateOverviewChart` 是薄 wrapper（委派 Merge + 接 ColumnCurveChartHelper + StitchMode 視野）；範例可直接呼 Merge 接自己的曲線圖。
   - `MIL/MultiCameraMerger`（MIL 直繪 live 合圖）**2026-06-26 起也走 `MergeLayout`**（原 MIL-only 自含一份已移除）—— MergeLayout 零依賴純算術，拋棄層引用它依賴方向正確；live/回顧/瀑布/曲線全單一來源。
   - 註：MergeLayout / CurveOverviewMerger 在 **Core**（純算術），非 Controls —— 純 IP 不困在 WinForms assembly，headless/benchmark/範例 皆可用。
 - **像素↔mm** = `TanukiCv.Core.PixelMmMapper`。

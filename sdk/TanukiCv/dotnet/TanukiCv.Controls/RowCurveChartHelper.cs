@@ -5,8 +5,8 @@ using System.Windows.Forms.DataVisualization.Charting;
 namespace TanukiCv.Controls
 {
     /// <summary>
-    /// 法向（axial）Mura 曲線圖：row-wise ridge data，旋轉 90° 顯示。
-    /// X 軸（底部）= curve value（0–1 normalized），Y 軸（左側）= 法向位置 mm。
+    /// 列（axial）Mura 曲線圖：row-wise ridge data，旋轉 90° 顯示。
+    /// X 軸（底部）= curve value（0–1 normalized），Y 軸（左側）= 列位置 mm。
     /// Y 軸標籤反轉：視覺上 0 在上、max 在下（透過 Customize 事件修改標籤文字）。
     /// InnerPlotPosition 補償機制對齊 canvas 垂直 viewport。
     /// </summary>

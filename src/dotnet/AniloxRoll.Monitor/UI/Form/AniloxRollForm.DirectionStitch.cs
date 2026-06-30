@@ -56,7 +56,7 @@ namespace AniloxRoll.Monitor.Forms
         private void UpdateLiveDirectionVisual()
         {
             // 視覺規則（2026-06-12 改版）：藍底＝該方向強化圖顯示中；mode 底色 + 橘框已廢
-            //（mode 雙 chart 切換器已隨舊單台切向 chart 刪除；StitchMode 走 PropertyGrid）。
+            //（mode 雙 chart 切換器已隨舊單台欄 chart 刪除；StitchMode 走 PropertyGrid）。
             var enhanceBg = System.Drawing.Color.FromArgb(230, 240, 255);
             var normal    = System.Drawing.SystemColors.Control;
             string dir = (_settings?.EnableMuraEnhance == true) ? _liveDisplayDirection : null;

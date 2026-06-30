@@ -369,7 +369,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             catch (Exception ex) { Trace.TraceWarning($"[GlobalMergeCoordinator.TryGetViewRange] {ex.GetType().Name}: {ex.Message}"); return false; }
         }
 
-        /// <summary>合圖 display 的 Y 視野範圍（pixel），供法向曲線圖聯動。</summary>
+        /// <summary>合圖 display 的 Y 視野範圍（pixel），供列曲線圖聯動。</summary>
         public bool TryGetViewRangeY(out double topPixel, out double botPixel)
         {
             topPixel = botPixel = 0;

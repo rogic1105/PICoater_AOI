@@ -5,7 +5,7 @@ using System.Windows.Forms.DataVisualization.Charting;
 namespace TanukiCv.Controls
 {
     /// <summary>
-    /// 切向（tangential）Mura 曲線圖：X 軸 = 位置 mm，Y 軸 = normalized value。
+    /// 欄（tangential）Mura 曲線圖：X 軸 = 位置 mm，Y 軸 = normalized value。
     /// 右側 Y2 軸顯示刻度、紅色閾值線、InnerPlotPosition 補償對齊 canvas 水平 viewport。
     /// </summary>
     public class ColumnCurveChartHelper : BaseCurveChartHelper

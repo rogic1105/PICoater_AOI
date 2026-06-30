@@ -73,7 +73,7 @@ namespace TanukiCv.Controls
         /// <summary>選中相機因「視野移動」自動變更（合圖模式反向連動：視野中心最近的相機 → 自動高亮縮圖）。
         /// 1-based camId。程式化來源（非使用者點擊），上層通常只需更新狀態、勿再呼 CenterOnCamera（防遞迴）。</summary>
         public event Action<int> SelectedCamChanged;
-        /// <summary>視野可見範圍（mm）：leftX, rightX, topY, botY → 上層曲線圖（切向用 X、法向用 Y、overview 用 X）zoom 連動。</summary>
+        /// <summary>視野可見範圍（mm）：leftX, rightX, topY, botY → 上層曲線圖（欄用 X、列用 Y、overview 用 X）zoom 連動。</summary>
         public event Action<double, double, double, double> ViewRangeMmChanged;
 
         /// <summary>游標十字剖面（L0 通用：游標那列/行的原始像素值）+ 對齊資訊（曲線圖畫點 + zoom 同步用）。

@@ -527,7 +527,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         {
             if (string.IsNullOrWhiteSpace(_statsDataRootPath)) return;
 
-            // view-time threshold context：以當前 Settings 的閾值 + 垂直正規值即時重算 Pass/Fail，
+            // view-time threshold context：以當前 Settings 的閾值 + 欄正規值即時重算 Pass/Fail，
             // 不再用 CSV 內的 MaxExceed/MeanExceed（那是 capture-time baked-in）。
             var ctx = new ThresholdContext(
                 _ctx.Settings.HessianMaxFactorV,
@@ -854,7 +854,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     CurveMergeHelper.MergeCurves(paths, out allMean[i], out allMax[i]);
             }
 
-            // view-time 正規值 rescale：chartDataColumn 是垂直曲線，用 V 的 capture/current ratio
+            // view-time 正規值 rescale：chartDataColumn 是欄曲線，用 V 的 capture/current ratio
             float captureHm = grabCfg?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
             HessianRescaleHelper.RescaleInPlace2D(allMean, allMax, captureHm, _ctx.Settings.HessianMaxFactorV);
 
