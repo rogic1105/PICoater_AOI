@@ -15,7 +15,7 @@ namespace AniloxRoll.Monitor.Core.Services
     /// 對應 docs/dev/fsm/{state-catalog,transition-table}.csv 跟 viewer.html。
     ///
     /// 用法：
-    ///   click handler 開頭：UiActionLogger.SetSource("chartLiveVertical.Click");
+    ///   click handler 開頭：UiActionLogger.SetSource("chartLiveColumn.Click");
     ///   SettingsHub.Changed 訂閱：UiActionLogger.OnSettingChanged(c);
     /// </summary>
     public static class UiActionLogger

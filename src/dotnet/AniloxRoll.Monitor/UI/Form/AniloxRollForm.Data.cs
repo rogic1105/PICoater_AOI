@@ -62,7 +62,7 @@ namespace AniloxRoll.Monitor.Forms
                 ListViewGrabDetail = listViewGrabDetail,
                 PanelStatCams = new[] { camData1, camData2, camData3,
                                         camData4, camData5, camData6, camData7 },
-                ChartDataPatch = chartDataVertical,
+                ChartDataPatch = chartDataColumn,
                 ChartDataYieldYearly = chartDataYieldYearly, ChartDataYieldMonthly = chartDataYieldMonthly, ChartDataYieldDaily = chartDataYieldDaily,
                 CbChartYear = cbDataYieldYear, CbChartMonth = cbDataYieldMonth, CbChartDay = cbDataYieldDay,
                 Settings = _settings, CameraCount = CameraCount,

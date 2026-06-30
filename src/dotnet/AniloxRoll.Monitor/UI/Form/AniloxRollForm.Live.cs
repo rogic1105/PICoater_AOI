@@ -235,7 +235,7 @@ namespace AniloxRoll.Monitor.Forms
 
             // Live Mura 判斷（callback 執行緒，所有相機都檢查）
             CheckLiveMura(meanArr, maxArr, "v");
-            // 單台切向 chart（chartLiveVertical 舊版）已刪除：全覽圖（接位後的 chartLiveVertical）
+            // 單台切向 chart（chartLiveColumn 舊版）已刪除：全覽圖（接位後的 chartLiveColumn）
             // 由 _liveOverviewDirty + UpdateOverviewChart 路徑更新（boundary 唯一歸屬、與影像對齊）。
         }
 

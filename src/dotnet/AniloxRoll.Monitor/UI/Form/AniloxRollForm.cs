@@ -424,52 +424,52 @@ namespace AniloxRoll.Monitor.Forms
 
 
 
-            _reviewOverviewHelper = new ColumnCurveChartHelper(this.chartReviewVertical);
+            _reviewOverviewHelper = new ColumnCurveChartHelper(this.chartReviewColumn);
             _reviewOverviewHelper.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-            if (chartReviewVertical.ChartAreas.Count > 0)
-                chartReviewVertical.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
+            if (chartReviewColumn.ChartAreas.Count > 0)
+                chartReviewColumn.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
 
-            _liveOverviewHelper = new ColumnCurveChartHelper(this.chartLiveVertical);
+            _liveOverviewHelper = new ColumnCurveChartHelper(this.chartLiveColumn);
             _liveOverviewHelper.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-            if (chartLiveVertical.ChartAreas.Count > 0)
-                chartLiveVertical.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
+            if (chartLiveColumn.ChartAreas.Count > 0)
+                chartLiveColumn.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
 
-            _liveRowChartHelper = new RowCurveChartHelper(this.chartLiveHorizontal);
+            _liveRowChartHelper = new RowCurveChartHelper(this.chartLiveRow);
             _liveRowDisplay = new RowCurveDisplayAdapter(_liveRowChartHelper, GetVerticalDisplayDirection);
             _liveRowDisplay.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
 
-            _reviewRowChartHelper = new RowCurveChartHelper(this.chartReviewHorizontal);
+            _reviewRowChartHelper = new RowCurveChartHelper(this.chartReviewRow);
             _reviewRowDisplay = new RowCurveDisplayAdapter(_reviewRowChartHelper, GetVerticalDisplayDirection);
             _reviewRowDisplay.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
 
             UpdateRowChartPitch();
 
             // Review tab 切向 chart 點選 —— 過渡語意（mode/強化切換 FSM 待 #13 接入後定案）：
-            //   點全覽圖（接位後的 chartReviewVertical）＝切檢出方向 v；StitchMode/強化暫走 PropertyGrid。TODO-FSM
-            chartReviewVertical.MouseClick += (s, e) =>
+            //   點全覽圖（接位後的 chartReviewColumn）＝切檢出方向 v；StitchMode/強化暫走 PropertyGrid。TODO-FSM
+            chartReviewColumn.MouseClick += (s, e) =>
             {
-                UiActionLogger.SetSource("chartReviewVertical.Click");
+                UiActionLogger.SetSource("chartReviewColumn.Click");
                 SwitchRidgeDirection("v");
             };
-            chartReviewHorizontal.MouseClick += (s, e) =>
+            chartReviewRow.MouseClick += (s, e) =>
             {
-                UiActionLogger.SetSource("chartReviewHorizontal.Click");
-                UiActionLogger.RecordViewOnly("chartReviewHorizontal.Click");
+                UiActionLogger.SetSource("chartReviewRow.Click");
+                UiActionLogger.RecordViewOnly("chartReviewRow.Click");
                 SwitchRidgeDirection("h");
             };
 
             // Live tab 切向 chart 點選 —— 過渡語意（mode/強化切換 FSM 待 #13 接入後定案）：
-            //   點全覽圖（接位後的 chartLiveVertical）＝切檢出方向 v（與 Horizontal chart 對稱）；
+            //   點全覽圖（接位後的 chartLiveColumn）＝切檢出方向 v（與 Horizontal chart 對稱）；
             //   StitchMode / 強化切換暫時只走 PropertyGrid（SSoT 正路）。TODO-FSM
-            chartLiveVertical.MouseClick += (s, e) =>
+            chartLiveColumn.MouseClick += (s, e) =>
             {
-                UiActionLogger.SetSource("chartLiveVertical.Click");
+                UiActionLogger.SetSource("chartLiveColumn.Click");
                 SwitchLiveDisplayDirection("v");
             };
-            chartLiveHorizontal.MouseClick += (s, e) =>
+            chartLiveRow.MouseClick += (s, e) =>
             {
-                UiActionLogger.SetSource("chartLiveHorizontal.Click");
-                UiActionLogger.RecordViewOnly("chartLiveHorizontal.Click");
+                UiActionLogger.SetSource("chartLiveRow.Click");
+                UiActionLogger.RecordViewOnly("chartLiveRow.Click");
                 SwitchLiveDisplayDirection("h");
             };
 
@@ -516,8 +516,8 @@ namespace AniloxRoll.Monitor.Forms
 
             _stitchCoordinator = new ReviewStitchCoordinator(new ReviewStitchContext
             {
-                ChartReviewPatch             = chartReviewVertical,
-                ChartReviewHorizontal       = chartReviewHorizontal,
+                ChartReviewPatch             = chartReviewColumn,
+                ChartReviewHorizontal       = chartReviewRow,
                 InteractionHelper         = _interactionHelper,
                 RowChartHelper            = _reviewRowChartHelper,
                 RowChartDisplay           = _reviewRowDisplay,
@@ -711,8 +711,8 @@ namespace AniloxRoll.Monitor.Forms
         {
             try
             {
-                chartLiveVertical?.BringToFront();
-                chartLiveHorizontal?.BringToFront();
+                chartLiveColumn?.BringToFront();
+                chartLiveRow?.BringToFront();
             }
             catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[BringLiveChartsToFront] {ex.GetType().Name}: {ex.Message}"); }
         }

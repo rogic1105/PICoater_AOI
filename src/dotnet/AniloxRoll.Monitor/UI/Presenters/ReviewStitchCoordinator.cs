@@ -68,8 +68,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public string ActiveRidgeDirection { get; set; } = "v";
 
         /// <summary>
-        /// UpdateStitchedOverviewChart 完成後觸發，傳遞與 chartReviewVertical 相同的曲線資料，
-        /// 供外部（AniloxRollForm）同步 chartDataVertical。
+        /// UpdateStitchedOverviewChart 完成後觸發，傳遞與 chartReviewColumn 相同的曲線資料，
+        /// 供外部（AniloxRollForm）同步 chartDataColumn。
         /// 參數：(mean[][], max[][], opsUm[], startPosMm[], errMean, errMax)
         /// </summary>
         public event Action<float[][], float[][], double[], double[], float, float> StitchedCurveUpdated;
@@ -258,7 +258,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         /// <summary>Form 關閉時控制項已 disposed → 這幾條 cleanup 的 UI 操作應 no-op：
         /// Form 自身會清控制項與資源，且關程式時 fire-and-forget 的 StitchMode 切換 async
-        /// 可能續跑碰到已 disposed 的 chartReviewVertical/canvas → NullReferenceException。</summary>
+        /// 可能續跑碰到已 disposed 的 chartReviewColumn/canvas → NullReferenceException。</summary>
         private bool UiDisposed =>
             (_ctx?.ChartReviewPatch?.IsDisposed ?? true);
 
@@ -363,7 +363,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             float errMean = _ctx.Settings.ErrorValueMeanV;
             float errMax  = _ctx.Settings.ErrorValueMaxV;
 
-            // chartReviewVertical 是垂直 (column) 曲線 → 用 V 的 capture/current ratio
+            // chartReviewColumn 是垂直 (column) 曲線 → 用 V 的 capture/current ratio
             var displayMean = HessianRescaleHelper.CloneAndRescale2D(_stitchedCurveMean, captureHm, _ctx.Settings.HessianMaxFactorV);
             var displayMax  = HessianRescaleHelper.CloneAndRescale2D(_stitchedCurveMax,  captureHm, _ctx.Settings.HessianMaxFactorV);
 
@@ -377,7 +377,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
 
         /// <summary>
-        /// 更新單台相機的 chartReviewVertical（V）+ chartReviewHorizontal（H）。
+        /// 更新單台相機的 chartReviewColumn（V）+ chartReviewRow（H）。
         /// 套用 view-time 正規值 rescale：
         ///   - V 曲線：(bin/255) × (HM_V_capture / HM_V_current) → 改 PropertyGrid 垂直正規值生效
         ///   - H 曲線：(bin/255) × (HM_V_capture / HM_H_current) → 改 PropertyGrid 水平正規值生效
@@ -520,7 +520,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         }
 
         /// <summary>
-        /// 原圖路徑：從當前 Repository 時間點讀取 .bin 曲線更新 chartReviewVertical 全覽圖。
+        /// 原圖路徑：從當前 Repository 時間點讀取 .bin 曲線更新 chartReviewColumn 全覽圖。
         /// </summary>
         public void UpdateOverviewChartFromRepository()
         {
@@ -574,7 +574,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         /// <summary>
         /// 時序（period）路徑：從當前 Repository 時間點讀 H (_mean_h/_max_h) .bin 曲線 → 合併更新法向曲線圖
-        /// （chartReviewHorizontal）。單片路徑走 <see cref="UpdateGlobalRowChart"/>（吃 _stitchedRowCurveMean）；
+        /// （chartReviewRow）。單片路徑走 <see cref="UpdateGlobalRowChart"/>（吃 _stitchedRowCurveMean）；
         /// period 不進 stitch 模式（_stitchedImages=null），故獨立從 repository 載 → 與切向 overview 對稱。
         /// </summary>
         public void UpdateRowChartFromRepository()

@@ -641,7 +641,7 @@ namespace AniloxRoll.Monitor.Forms
             _telemetryTimer.Tick += TelemetryTimer_Tick;
             _telemetryTimer.Start();
 
-            // ── Live Overview Timer（chartLiveVertical 全覽圖，動態跟隨最大 FPS）──
+            // ── Live Overview Timer（chartLiveColumn 全覽圖，動態跟隨最大 FPS）──
             _liveOverviewTimer = new System.Windows.Forms.Timer { Interval = 100 };
             _liveOverviewTimer.Tick += LiveOverviewTimer_Tick;
             _liveOverviewTimer.Start();

@@ -30,7 +30,7 @@ namespace AniloxRoll.Monitor.Forms
     public partial class AniloxRollForm
     {
         /// <summary>
-        /// 切換 Live 顯示的 V/H 處理圖方向，點選 chartLiveVertical/HorizontalLive 觸發。
+        /// 切換 Live 顯示的 V/H 處理圖方向，點選 chartLiveColumn/HorizontalLive 觸發。
         /// 三態邏輯同 Review tab 的 SwitchRidgeDirection：
         /// 未勾選 → 自動勾選 + 設方向；同方向 → 取消勾選；不同方向 → 切換。
         /// </summary>
@@ -61,9 +61,9 @@ namespace AniloxRoll.Monitor.Forms
             var normal    = System.Drawing.SystemColors.Control;
             string dir = (_settings?.EnableMuraEnhance == true) ? _liveDisplayDirection : null;
 
-            chartLiveVertical.BackColor   = dir == "v" ? enhanceBg : normal;
-            chartLiveHorizontal.BackColor = dir == "h" ? enhanceBg : normal;
-            foreach (var c in new[] { chartLiveVertical, chartLiveHorizontal })
+            chartLiveColumn.BackColor   = dir == "v" ? enhanceBg : normal;
+            chartLiveRow.BackColor = dir == "h" ? enhanceBg : normal;
+            foreach (var c in new[] { chartLiveColumn, chartLiveRow })
             {
                 c.BorderlineColor = System.Drawing.Color.Transparent;
                 c.BorderlineWidth = 1;
@@ -72,7 +72,7 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         /// <summary>
-        /// 切換 camReviewMain 的 V/H 處理圖方向，點選 chartReviewVertical/Horizontal 觸發。
+        /// 切換 camReviewMain 的 V/H 處理圖方向，點選 chartReviewColumn/Horizontal 觸發。
         /// 未勾選強化圖時：自動勾選 + 設方向。
         /// 已勾選強化圖且點同方向：取消勾選（回原圖）。
         /// 已勾選強化圖且點不同方向：切換方向。
@@ -132,10 +132,10 @@ namespace AniloxRoll.Monitor.Forms
             var enhanceBg = System.Drawing.Color.FromArgb(230, 240, 255);
             var normal    = System.Drawing.SystemColors.Control;
 
-            chartReviewVertical.BackColor = dir == "v" ? enhanceBg : normal;
-            if (chartReviewHorizontal != null)
-                chartReviewHorizontal.BackColor = dir == "h" ? enhanceBg : normal;
-            foreach (var c in new[] { chartReviewVertical, chartReviewHorizontal })
+            chartReviewColumn.BackColor = dir == "v" ? enhanceBg : normal;
+            if (chartReviewRow != null)
+                chartReviewRow.BackColor = dir == "h" ? enhanceBg : normal;
+            foreach (var c in new[] { chartReviewColumn, chartReviewRow })
             {
                 if (c == null) continue;
                 c.BorderlineColor = System.Drawing.Color.Transparent;
