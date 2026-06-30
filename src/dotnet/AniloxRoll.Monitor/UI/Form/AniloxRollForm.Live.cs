@@ -195,6 +195,8 @@ namespace AniloxRoll.Monitor.Forms
         private double _liveViewLeftMm = double.NaN, _liveViewRightMm = double.NaN;
         private double _liveViewTopMm = double.NaN, _liveViewBotMm = double.NaN;
         private bool _liveRowRangeSuspended;
+        private float[] _pendingLiveRowMean;
+        private float[] _pendingLiveRowMax;
 
         private bool ShouldFlipDisplayVertical()
             => GetVerticalDisplayDirection() == VerticalDisplayDirection.BottomToTop;
@@ -210,6 +212,7 @@ namespace AniloxRoll.Monitor.Forms
             if (!_liveRowRangeSuspended)
                 _liveRowDisplay?.UpdateViewRange(topMm, botMm);            // 列(Y)
             _liveOverviewHelper?.UpdateViewRange(leftMm, rightMm);     // overview 立即跟隨（500ms 重畫用同值不閃）
+            FlushPendingLiveRowData();
         }
 
         private bool TryApplyLiveImageCanvasRowViewRange()
@@ -231,7 +234,15 @@ namespace AniloxRoll.Monitor.Forms
             _liveRowRangeSuspended = false;
             var mode = _settings?.he_MainDisplay;
             if ((mode == MainDisplayMode.ImageCanvas || mode == MainDisplayMode.Waterfall)
-                && !double.IsNaN(_liveViewTopMm) && !double.IsNaN(_liveViewBotMm))
+                && (double.IsNaN(_liveViewTopMm) || double.IsNaN(_liveViewBotMm)))
+            {
+                _pendingLiveRowMean = mean;
+                _pendingLiveRowMax = max;
+                _liveRowRangeSuspended = true;
+                return true;
+            }
+
+            if (mode == MainDisplayMode.ImageCanvas || mode == MainDisplayMode.Waterfall)
             {
                 _liveRowDisplay?.UpdateDataAndViewRange(mean, max, _liveViewTopMm, _liveViewBotMm);
                 return true;
@@ -239,6 +250,19 @@ namespace AniloxRoll.Monitor.Forms
 
             _liveRowDisplay?.UpdateData(mean, max);
             return false;
+        }
+
+        private void FlushPendingLiveRowData()
+        {
+            if (_pendingLiveRowMean == null) return;
+            if (double.IsNaN(_liveViewTopMm) || double.IsNaN(_liveViewBotMm)) return;
+
+            var mean = _pendingLiveRowMean;
+            var max = _pendingLiveRowMax;
+            _pendingLiveRowMean = null;
+            _pendingLiveRowMax = null;
+            _liveRowRangeSuspended = false;
+            _liveRowDisplay?.UpdateDataAndViewRange(mean, max, _liveViewTopMm, _liveViewBotMm);
         }
 
         private void OnLiveCurveData(int camId, float[] meanArr, float[] maxArr)
@@ -353,6 +377,8 @@ namespace AniloxRoll.Monitor.Forms
         private void ResetLiveWaterfallRowChart()
         {
             SuspendLiveRowRangeUntilNextData();
+            _pendingLiveRowMean = null;
+            _pendingLiveRowMax = null;
             _waterfallRowMeanPending.Clear();
             _waterfallRowMaxPending.Clear();
             _waterfallRowMean = null;
