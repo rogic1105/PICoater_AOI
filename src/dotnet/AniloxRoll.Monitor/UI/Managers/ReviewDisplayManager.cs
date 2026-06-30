@@ -66,6 +66,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _view.SetMergeMode(mergeMode);
             for (int i = 0; i < gray.Length; i++)
                 if (gray[i] != null) _view.PushFrame(i + 1, gray[i], w[i], h[i]);
+            _view.RefreshNow();
         }
 
         /// <summary>chart 重建後補發當前視野（強化切換/重載後曲線恢復跟隨，免等滑鼠互動）。</summary>

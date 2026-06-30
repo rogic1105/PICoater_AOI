@@ -175,6 +175,11 @@ namespace TanukiCv.Controls
             _timer.Start();
         }
 
+        public void RefreshNow()
+        {
+            RefreshMain();
+        }
+
         // ==================== 介面 ====================
 
         public void SetSelected(int camId)
