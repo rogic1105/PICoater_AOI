@@ -615,6 +615,7 @@ namespace AniloxRoll.Monitor.Forms
                 pixelText => { if (lblPixelInfo != null) lblPixelInfo.Text = pixelText; }
             );
             _liveCameraManager.SetCaptureSettings(_settings);
+            UpdateRowChartPitch();
             _liveCameraManager.OnFilesSaved = files => _remoteCopyService?.EnqueueFiles(files);
             _liveCameraManager.OnInspectionResult += OnCameraInspectionResult;
             btnLiveGetBackground.Click += btnLiveGetBackground_Click;
