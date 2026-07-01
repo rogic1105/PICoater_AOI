@@ -28,21 +28,21 @@
         /// </summary>
         private void InitializeComponent()
         {
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea1 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend1 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series1 = new System.Windows.Forms.DataVisualization.Charting.Series();
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea2 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend2 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series2 = new System.Windows.Forms.DataVisualization.Charting.Series();
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea3 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend3 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series3 = new System.Windows.Forms.DataVisualization.Charting.Series();
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea4 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend4 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series4 = new System.Windows.Forms.DataVisualization.Charting.Series();
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea5 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend5 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series5 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea12 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend12 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series12 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea13 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend13 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series13 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea14 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend14 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series14 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea15 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend15 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series15 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea11 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend11 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series11 = new System.Windows.Forms.DataVisualization.Charting.Series();
             this.tabMain = new System.Windows.Forms.TabControl();
             this.tabPageLiveView = new System.Windows.Forms.TabPage();
             this.btnLiveViewBackground = new System.Windows.Forms.Button();
@@ -97,8 +97,6 @@
             this.groupBoxGrabIdRange = new System.Windows.Forms.GroupBox();
             this.cbDataIdStart = new System.Windows.Forms.ComboBox();
             this.cbDataIdEnd = new System.Windows.Forms.ComboBox();
-            this.lblGrabIdEndLabel = new System.Windows.Forms.Label();
-            this.lblGrabIdStartLabel = new System.Windows.Forms.Label();
             this.groupBoxTimeRange = new System.Windows.Forms.GroupBox();
             this.lblStartTimeHeader = new System.Windows.Forms.Label();
             this.cbDataDateStart = new System.Windows.Forms.ComboBox();
@@ -428,16 +426,16 @@
             // 
             this.chartLiveRow.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            chartArea1.Name = "ChartArea1";
-            this.chartLiveRow.ChartAreas.Add(chartArea1);
-            legend1.Name = "Legend1";
-            this.chartLiveRow.Legends.Add(legend1);
+            chartArea12.Name = "ChartArea1";
+            this.chartLiveRow.ChartAreas.Add(chartArea12);
+            legend12.Name = "Legend1";
+            this.chartLiveRow.Legends.Add(legend12);
             this.chartLiveRow.Location = new System.Drawing.Point(897, 190);
             this.chartLiveRow.Name = "chartLiveRow";
-            series1.ChartArea = "ChartArea1";
-            series1.Legend = "Legend1";
-            series1.Name = "Series1";
-            this.chartLiveRow.Series.Add(series1);
+            series12.ChartArea = "ChartArea1";
+            series12.Legend = "Legend1";
+            series12.Name = "Series1";
+            this.chartLiveRow.Series.Add(series12);
             this.chartLiveRow.Size = new System.Drawing.Size(117, 435);
             this.chartLiveRow.TabIndex = 19;
             this.chartLiveRow.Text = "chart1";
@@ -446,16 +444,16 @@
             // 
             this.chartLiveColumn.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            chartArea2.Name = "ChartArea1";
-            this.chartLiveColumn.ChartAreas.Add(chartArea2);
-            legend2.Name = "Legend1";
-            this.chartLiveColumn.Legends.Add(legend2);
+            chartArea13.Name = "ChartArea1";
+            this.chartLiveColumn.ChartAreas.Add(chartArea13);
+            legend13.Name = "Legend1";
+            this.chartLiveColumn.Legends.Add(legend13);
             this.chartLiveColumn.Location = new System.Drawing.Point(6, 88);
             this.chartLiveColumn.Name = "chartLiveColumn";
-            series2.ChartArea = "ChartArea1";
-            series2.Legend = "Legend1";
-            series2.Name = "Series1";
-            this.chartLiveColumn.Series.Add(series2);
+            series13.ChartArea = "ChartArea1";
+            series13.Legend = "Legend1";
+            series13.Name = "Series1";
+            this.chartLiveColumn.Series.Add(series13);
             this.chartLiveColumn.Size = new System.Drawing.Size(888, 96);
             this.chartLiveColumn.TabIndex = 18;
             this.chartLiveColumn.Text = "chart1";
@@ -557,16 +555,16 @@
             // 
             this.chartReviewRow.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            chartArea3.Name = "ChartArea1";
-            this.chartReviewRow.ChartAreas.Add(chartArea3);
-            legend3.Name = "Legend1";
-            this.chartReviewRow.Legends.Add(legend3);
+            chartArea14.Name = "ChartArea1";
+            this.chartReviewRow.ChartAreas.Add(chartArea14);
+            legend14.Name = "Legend1";
+            this.chartReviewRow.Legends.Add(legend14);
             this.chartReviewRow.Location = new System.Drawing.Point(897, 190);
             this.chartReviewRow.Name = "chartReviewRow";
-            series3.ChartArea = "ChartArea1";
-            series3.Legend = "Legend1";
-            series3.Name = "Series1";
-            this.chartReviewRow.Series.Add(series3);
+            series14.ChartArea = "ChartArea1";
+            series14.Legend = "Legend1";
+            series14.Name = "Series1";
+            this.chartReviewRow.Series.Add(series14);
             this.chartReviewRow.Size = new System.Drawing.Size(117, 435);
             this.chartReviewRow.TabIndex = 58;
             this.chartReviewRow.Text = "chart1";
@@ -575,16 +573,16 @@
             // 
             this.chartReviewColumn.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            chartArea4.Name = "ChartArea1";
-            this.chartReviewColumn.ChartAreas.Add(chartArea4);
-            legend4.Name = "Legend1";
-            this.chartReviewColumn.Legends.Add(legend4);
+            chartArea15.Name = "ChartArea1";
+            this.chartReviewColumn.ChartAreas.Add(chartArea15);
+            legend15.Name = "Legend1";
+            this.chartReviewColumn.Legends.Add(legend15);
             this.chartReviewColumn.Location = new System.Drawing.Point(6, 88);
             this.chartReviewColumn.Name = "chartReviewColumn";
-            series4.ChartArea = "ChartArea1";
-            series4.Legend = "Legend1";
-            series4.Name = "Series1";
-            this.chartReviewColumn.Series.Add(series4);
+            series15.ChartArea = "ChartArea1";
+            series15.Legend = "Legend1";
+            series15.Name = "Series1";
+            this.chartReviewColumn.Series.Add(series15);
             this.chartReviewColumn.Size = new System.Drawing.Size(888, 96);
             this.chartReviewColumn.TabIndex = 57;
             this.chartReviewColumn.Text = "chart1";
@@ -593,7 +591,7 @@
             // 
             this.grpReviewTimePeriod.Controls.Add(this.cbReviewDate);
             this.grpReviewTimePeriod.Controls.Add(this.cbReviewTime);
-            this.grpReviewTimePeriod.Location = new System.Drawing.Point(900, 108);
+            this.grpReviewTimePeriod.Location = new System.Drawing.Point(900, 92);
             this.grpReviewTimePeriod.Name = "grpReviewTimePeriod";
             this.grpReviewTimePeriod.Size = new System.Drawing.Size(119, 76);
             this.grpReviewTimePeriod.TabIndex = 56;
@@ -623,7 +621,7 @@
             this.btnReviewSelectFolder.Font = new System.Drawing.Font("微軟正黑體", 10.2F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(136)));
             this.btnReviewSelectFolder.Location = new System.Drawing.Point(900, 6);
             this.btnReviewSelectFolder.Name = "btnReviewSelectFolder";
-            this.btnReviewSelectFolder.Size = new System.Drawing.Size(115, 49);
+            this.btnReviewSelectFolder.Size = new System.Drawing.Size(115, 27);
             this.btnReviewSelectFolder.TabIndex = 23;
             this.btnReviewSelectFolder.Text = "讀取資料";
             this.btnReviewSelectFolder.UseVisualStyleBackColor = true;
@@ -631,72 +629,65 @@
             // 
             // camReview1
             // 
+            this.camReview1.BackColor = System.Drawing.Color.Black;
             this.camReview1.Location = new System.Drawing.Point(6, 6);
             this.camReview1.Name = "camReview1";
             this.camReview1.Size = new System.Drawing.Size(120, 80);
-            this.camReview1.BackColor = System.Drawing.Color.Black;
             this.camReview1.TabIndex = 8;
-            this.camReview1.TabStop = false;
             // 
             // camReview2
             // 
+            this.camReview2.BackColor = System.Drawing.Color.Black;
             this.camReview2.Location = new System.Drawing.Point(134, 6);
             this.camReview2.Name = "camReview2";
             this.camReview2.Size = new System.Drawing.Size(120, 80);
-            this.camReview2.BackColor = System.Drawing.Color.Black;
             this.camReview2.TabIndex = 9;
-            this.camReview2.TabStop = false;
             // 
             // camReview3
             // 
+            this.camReview3.BackColor = System.Drawing.Color.Black;
             this.camReview3.Location = new System.Drawing.Point(262, 6);
             this.camReview3.Name = "camReview3";
             this.camReview3.Size = new System.Drawing.Size(120, 80);
-            this.camReview3.BackColor = System.Drawing.Color.Black;
             this.camReview3.TabIndex = 10;
-            this.camReview3.TabStop = false;
             // 
             // camReview4
             // 
+            this.camReview4.BackColor = System.Drawing.Color.Black;
             this.camReview4.Location = new System.Drawing.Point(390, 6);
             this.camReview4.Name = "camReview4";
             this.camReview4.Size = new System.Drawing.Size(120, 80);
-            this.camReview4.BackColor = System.Drawing.Color.Black;
             this.camReview4.TabIndex = 11;
-            this.camReview4.TabStop = false;
             // 
             // camReview5
             // 
+            this.camReview5.BackColor = System.Drawing.Color.Black;
             this.camReview5.Location = new System.Drawing.Point(518, 6);
             this.camReview5.Name = "camReview5";
             this.camReview5.Size = new System.Drawing.Size(120, 80);
-            this.camReview5.BackColor = System.Drawing.Color.Black;
             this.camReview5.TabIndex = 12;
-            this.camReview5.TabStop = false;
             // 
             // camReview6
             // 
+            this.camReview6.BackColor = System.Drawing.Color.Black;
             this.camReview6.Location = new System.Drawing.Point(646, 6);
             this.camReview6.Name = "camReview6";
             this.camReview6.Size = new System.Drawing.Size(120, 80);
-            this.camReview6.BackColor = System.Drawing.Color.Black;
             this.camReview6.TabIndex = 13;
-            this.camReview6.TabStop = false;
             // 
             // camReview7
             // 
+            this.camReview7.BackColor = System.Drawing.Color.Black;
             this.camReview7.Location = new System.Drawing.Point(774, 6);
             this.camReview7.Name = "camReview7";
             this.camReview7.Size = new System.Drawing.Size(120, 80);
-            this.camReview7.BackColor = System.Drawing.Color.Black;
             this.camReview7.TabIndex = 14;
-            this.camReview7.TabStop = false;
             // 
             // grpReviewGrabNav
             // 
             this.grpReviewGrabNav.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.grpReviewGrabNav.Controls.Add(this.cbReviewId);
-            this.grpReviewGrabNav.Location = new System.Drawing.Point(899, 61);
+            this.grpReviewGrabNav.Location = new System.Drawing.Point(900, 39);
             this.grpReviewGrabNav.Name = "grpReviewGrabNav";
             this.grpReviewGrabNav.Size = new System.Drawing.Size(118, 47);
             this.grpReviewGrabNav.TabIndex = 55;
@@ -761,16 +752,16 @@
             // 
             this.chartDataColumn.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            chartArea5.Name = "ChartArea1";
-            this.chartDataColumn.ChartAreas.Add(chartArea5);
-            legend5.Name = "Legend1";
-            this.chartDataColumn.Legends.Add(legend5);
+            chartArea11.Name = "ChartArea1";
+            this.chartDataColumn.ChartAreas.Add(chartArea11);
+            legend11.Name = "Legend1";
+            this.chartDataColumn.Legends.Add(legend11);
             this.chartDataColumn.Location = new System.Drawing.Point(6, 88);
             this.chartDataColumn.Name = "chartDataColumn";
-            series5.ChartArea = "ChartArea1";
-            series5.Legend = "Legend1";
-            series5.Name = "Series1";
-            this.chartDataColumn.Series.Add(series5);
+            series11.ChartArea = "ChartArea1";
+            series11.Legend = "Legend1";
+            series11.Name = "Series1";
+            this.chartDataColumn.Series.Add(series11);
             this.chartDataColumn.Size = new System.Drawing.Size(888, 96);
             this.chartDataColumn.TabIndex = 58;
             this.chartDataColumn.Text = "chartDataColumn";
@@ -785,7 +776,7 @@
             // lblChartDataYieldMonthlyUnit
             // 
             this.lblChartDataYieldMonthlyUnit.AutoSize = true;
-            this.lblChartDataYieldMonthlyUnit.Location = new System.Drawing.Point(978, 482);
+            this.lblChartDataYieldMonthlyUnit.Location = new System.Drawing.Point(975, 585);
             this.lblChartDataYieldMonthlyUnit.Name = "lblChartDataYieldMonthlyUnit";
             this.lblChartDataYieldMonthlyUnit.Size = new System.Drawing.Size(22, 15);
             this.lblChartDataYieldMonthlyUnit.TabIndex = 53;
@@ -794,7 +785,7 @@
             // lblChartDataYieldDailyUnit
             // 
             this.lblChartDataYieldDailyUnit.AutoSize = true;
-            this.lblChartDataYieldDailyUnit.Location = new System.Drawing.Point(298, 511);
+            this.lblChartDataYieldDailyUnit.Location = new System.Drawing.Point(295, 614);
             this.lblChartDataYieldDailyUnit.Name = "lblChartDataYieldDailyUnit";
             this.lblChartDataYieldDailyUnit.Size = new System.Drawing.Size(22, 15);
             this.lblChartDataYieldDailyUnit.TabIndex = 52;
@@ -803,7 +794,7 @@
             // lblChartDataYieldYearlyUnit
             // 
             this.lblChartDataYieldYearlyUnit.AutoSize = true;
-            this.lblChartDataYieldYearlyUnit.Location = new System.Drawing.Point(298, 285);
+            this.lblChartDataYieldYearlyUnit.Location = new System.Drawing.Point(295, 388);
             this.lblChartDataYieldYearlyUnit.Name = "lblChartDataYieldYearlyUnit";
             this.lblChartDataYieldYearlyUnit.Size = new System.Drawing.Size(22, 15);
             this.lblChartDataYieldYearlyUnit.TabIndex = 51;
@@ -813,9 +804,9 @@
             // 
             this.grpDataSingleSheet.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.grpDataSingleSheet.Controls.Add(this.cbDataId);
-            this.grpDataSingleSheet.Location = new System.Drawing.Point(899, 93);
+            this.grpDataSingleSheet.Location = new System.Drawing.Point(900, 39);
             this.grpDataSingleSheet.Name = "grpDataSingleSheet";
-            this.grpDataSingleSheet.Size = new System.Drawing.Size(118, 96);
+            this.grpDataSingleSheet.Size = new System.Drawing.Size(118, 47);
             this.grpDataSingleSheet.TabIndex = 50;
             this.grpDataSingleSheet.TabStop = false;
             this.grpDataSingleSheet.Text = "序號選擇";
@@ -823,7 +814,7 @@
             // cbDataId
             // 
             this.cbDataId.FormattingEnabled = true;
-            this.cbDataId.Location = new System.Drawing.Point(10, 21);
+            this.cbDataId.Location = new System.Drawing.Point(7, 18);
             this.cbDataId.Name = "cbDataId";
             this.cbDataId.Size = new System.Drawing.Size(104, 23);
             this.cbDataId.TabIndex = 42;
@@ -831,7 +822,7 @@
             // lblChartNavMonth
             // 
             this.lblChartNavMonth.AutoSize = true;
-            this.lblChartNavMonth.Location = new System.Drawing.Point(978, 369);
+            this.lblChartNavMonth.Location = new System.Drawing.Point(975, 472);
             this.lblChartNavMonth.Name = "lblChartNavMonth";
             this.lblChartNavMonth.Size = new System.Drawing.Size(22, 15);
             this.lblChartNavMonth.TabIndex = 42;
@@ -841,7 +832,7 @@
             // 
             this.cbDataYieldYear.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.cbDataYieldYear.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbDataYieldYear.Location = new System.Drawing.Point(963, 230);
+            this.cbDataYieldYear.Location = new System.Drawing.Point(960, 333);
             this.cbDataYieldYear.Name = "cbDataYieldYear";
             this.cbDataYieldYear.Size = new System.Drawing.Size(50, 23);
             this.cbDataYieldYear.TabIndex = 43;
@@ -849,7 +840,7 @@
             // lblChartNavDay
             // 
             this.lblChartNavDay.AutoSize = true;
-            this.lblChartNavDay.Location = new System.Drawing.Point(298, 398);
+            this.lblChartNavDay.Location = new System.Drawing.Point(295, 501);
             this.lblChartNavDay.Name = "lblChartNavDay";
             this.lblChartNavDay.Size = new System.Drawing.Size(22, 15);
             this.lblChartNavDay.TabIndex = 41;
@@ -859,7 +850,7 @@
             // 
             this.cbDataYieldMonth.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.cbDataYieldMonth.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbDataYieldMonth.Location = new System.Drawing.Point(963, 343);
+            this.cbDataYieldMonth.Location = new System.Drawing.Point(960, 446);
             this.cbDataYieldMonth.Name = "cbDataYieldMonth";
             this.cbDataYieldMonth.Size = new System.Drawing.Size(50, 23);
             this.cbDataYieldMonth.TabIndex = 46;
@@ -867,7 +858,7 @@
             // lblChartNavYear
             // 
             this.lblChartNavYear.AutoSize = true;
-            this.lblChartNavYear.Location = new System.Drawing.Point(978, 256);
+            this.lblChartNavYear.Location = new System.Drawing.Point(975, 359);
             this.lblChartNavYear.Name = "lblChartNavYear";
             this.lblChartNavYear.Size = new System.Drawing.Size(22, 15);
             this.lblChartNavYear.TabIndex = 40;
@@ -877,7 +868,7 @@
             // 
             this.cbDataYieldDay.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.cbDataYieldDay.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbDataYieldDay.Location = new System.Drawing.Point(963, 456);
+            this.cbDataYieldDay.Location = new System.Drawing.Point(960, 559);
             this.cbDataYieldDay.Name = "cbDataYieldDay";
             this.cbDataYieldDay.Size = new System.Drawing.Size(50, 23);
             this.cbDataYieldDay.TabIndex = 49;
@@ -886,7 +877,7 @@
             // 
             this.chartDataYieldYearly.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.chartDataYieldYearly.Location = new System.Drawing.Point(296, 195);
+            this.chartDataYieldYearly.Location = new System.Drawing.Point(293, 298);
             this.chartDataYieldYearly.Name = "chartDataYieldYearly";
             this.chartDataYieldYearly.Size = new System.Drawing.Size(721, 105);
             this.chartDataYieldYearly.TabIndex = 38;
@@ -896,7 +887,7 @@
             // 
             this.chartDataYieldMonthly.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.chartDataYieldMonthly.Location = new System.Drawing.Point(296, 308);
+            this.chartDataYieldMonthly.Location = new System.Drawing.Point(293, 411);
             this.chartDataYieldMonthly.Name = "chartDataYieldMonthly";
             this.chartDataYieldMonthly.Size = new System.Drawing.Size(721, 105);
             this.chartDataYieldMonthly.TabIndex = 39;
@@ -906,7 +897,7 @@
             // 
             this.chartDataYieldDaily.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.chartDataYieldDaily.Location = new System.Drawing.Point(296, 421);
+            this.chartDataYieldDaily.Location = new System.Drawing.Point(293, 524);
             this.chartDataYieldDaily.Name = "chartDataYieldDaily";
             this.chartDataYieldDaily.Size = new System.Drawing.Size(721, 105);
             this.chartDataYieldDaily.TabIndex = 40;
@@ -917,7 +908,7 @@
             this.btnDataShowFail.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.btnDataShowFail.Font = new System.Drawing.Font("新細明體", 8F);
-            this.btnDataShowFail.Location = new System.Drawing.Point(900, 53);
+            this.btnDataShowFail.Location = new System.Drawing.Point(900, 167);
             this.btnDataShowFail.Name = "btnDataShowFail";
             this.btnDataShowFail.Size = new System.Drawing.Size(115, 33);
             this.btnDataShowFail.TabIndex = 41;
@@ -941,11 +932,9 @@
             | System.Windows.Forms.AnchorStyles.Right)));
             this.groupBoxGrabIdRange.Controls.Add(this.cbDataIdStart);
             this.groupBoxGrabIdRange.Controls.Add(this.cbDataIdEnd);
-            this.groupBoxGrabIdRange.Controls.Add(this.lblGrabIdEndLabel);
-            this.groupBoxGrabIdRange.Controls.Add(this.lblGrabIdStartLabel);
-            this.groupBoxGrabIdRange.Location = new System.Drawing.Point(718, 532);
+            this.groupBoxGrabIdRange.Location = new System.Drawing.Point(898, 92);
             this.groupBoxGrabIdRange.Name = "groupBoxGrabIdRange";
-            this.groupBoxGrabIdRange.Size = new System.Drawing.Size(176, 92);
+            this.groupBoxGrabIdRange.Size = new System.Drawing.Size(119, 76);
             this.groupBoxGrabIdRange.TabIndex = 36;
             this.groupBoxGrabIdRange.TabStop = false;
             this.groupBoxGrabIdRange.Text = "序號範圍";
@@ -953,36 +942,18 @@
             // cbDataIdStart
             // 
             this.cbDataIdStart.FormattingEnabled = true;
-            this.cbDataIdStart.Location = new System.Drawing.Point(50, 53);
+            this.cbDataIdStart.Location = new System.Drawing.Point(6, 46);
             this.cbDataIdStart.Name = "cbDataIdStart";
-            this.cbDataIdStart.Size = new System.Drawing.Size(104, 23);
+            this.cbDataIdStart.Size = new System.Drawing.Size(107, 23);
             this.cbDataIdStart.TabIndex = 42;
             // 
             // cbDataIdEnd
             // 
             this.cbDataIdEnd.FormattingEnabled = true;
-            this.cbDataIdEnd.Location = new System.Drawing.Point(50, 24);
+            this.cbDataIdEnd.Location = new System.Drawing.Point(6, 17);
             this.cbDataIdEnd.Name = "cbDataIdEnd";
-            this.cbDataIdEnd.Size = new System.Drawing.Size(104, 23);
+            this.cbDataIdEnd.Size = new System.Drawing.Size(108, 23);
             this.cbDataIdEnd.TabIndex = 43;
-            // 
-            // lblGrabIdEndLabel
-            // 
-            this.lblGrabIdEndLabel.AutoSize = true;
-            this.lblGrabIdEndLabel.Location = new System.Drawing.Point(7, 27);
-            this.lblGrabIdEndLabel.Name = "lblGrabIdEndLabel";
-            this.lblGrabIdEndLabel.Size = new System.Drawing.Size(37, 15);
-            this.lblGrabIdEndLabel.TabIndex = 41;
-            this.lblGrabIdEndLabel.Text = "結束";
-            // 
-            // lblGrabIdStartLabel
-            // 
-            this.lblGrabIdStartLabel.AutoSize = true;
-            this.lblGrabIdStartLabel.Location = new System.Drawing.Point(7, 58);
-            this.lblGrabIdStartLabel.Name = "lblGrabIdStartLabel";
-            this.lblGrabIdStartLabel.Size = new System.Drawing.Size(37, 15);
-            this.lblGrabIdStartLabel.TabIndex = 40;
-            this.lblGrabIdStartLabel.Text = "開始";
             // 
             // groupBoxTimeRange
             // 
@@ -994,7 +965,7 @@
             this.groupBoxTimeRange.Controls.Add(this.lblEndTimeHeader);
             this.groupBoxTimeRange.Controls.Add(this.cbDataDateEnd);
             this.groupBoxTimeRange.Controls.Add(this.cbDataTimeEnd);
-            this.groupBoxTimeRange.Location = new System.Drawing.Point(423, 532);
+            this.groupBoxTimeRange.Location = new System.Drawing.Point(298, 195);
             this.groupBoxTimeRange.Name = "groupBoxTimeRange";
             this.groupBoxTimeRange.Size = new System.Drawing.Size(203, 92);
             this.groupBoxTimeRange.TabIndex = 35;
@@ -1060,7 +1031,7 @@
             this.btnDataSelectFolder.Font = new System.Drawing.Font("微軟正黑體", 10.2F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(136)));
             this.btnDataSelectFolder.Location = new System.Drawing.Point(900, 6);
             this.btnDataSelectFolder.Name = "btnDataSelectFolder";
-            this.btnDataSelectFolder.Size = new System.Drawing.Size(115, 45);
+            this.btnDataSelectFolder.Size = new System.Drawing.Size(115, 27);
             this.btnDataSelectFolder.TabIndex = 34;
             this.btnDataSelectFolder.Text = "讀取資料";
             this.btnDataSelectFolder.UseVisualStyleBackColor = true;
@@ -3152,7 +3123,6 @@
             ((System.ComponentModel.ISupportInitialize)(this.chartDataYieldMonthly)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.chartDataYieldDaily)).EndInit();
             this.groupBoxGrabIdRange.ResumeLayout(false);
-            this.groupBoxGrabIdRange.PerformLayout();
             this.groupBoxTimeRange.ResumeLayout(false);
             this.groupBoxTimeRange.PerformLayout();
             this.statusBarMain.ResumeLayout(false);
@@ -3449,8 +3419,6 @@
         private System.Windows.Forms.GroupBox groupBoxGrabIdRange;
         private System.Windows.Forms.ComboBox cbDataIdStart;
         private System.Windows.Forms.ComboBox cbDataIdEnd;
-        private System.Windows.Forms.Label lblGrabIdEndLabel;
-        private System.Windows.Forms.Label lblGrabIdStartLabel;
         private System.Windows.Forms.GroupBox groupBoxTimeRange;
         private System.Windows.Forms.Label lblStartTimeHeader;
         private System.Windows.Forms.Label lblEndTimeHeader;
