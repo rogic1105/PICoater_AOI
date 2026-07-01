@@ -373,10 +373,10 @@ code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-
       <div class="pre"><b>前置：</b>Data tab 載資料、目前在範圍模式或時序模式（cbDataIdStart/End 已設定範圍）</div>
       <h4>步驟</h4>
       <ol>
-        <li>記下當前 cbDataIdStart、cbDataIdEnd、cbDataDateStart/Time、cbDataDateEnd/Time 值</li>
+        <li>記下當前 cbDataIdStart、cbDataIdEnd 值</li>
         <li>滑鼠按下 listView 任一 row（不放開）→ 觀察該 row 應該反白</li>
         <li>放開滑鼠 → 觀察良率卡片 + chartDataPatch</li>
-        <li>檢查 cbDataIdStart/End、cbDataDateStart/Time、cbDataDateEnd/Time 6 個 cb</li>
+        <li>檢查 cbDataIdStart/End 2 個 cb</li>
       </ol>
       <div class="expect"><b>預期：</b>放開才 commit、6 個 cb 值維持原狀、良率卡片改為單片 stats、chartDataPatch 切到該 grab</div>
       <div class="link">→ ui-flow: <a href="../user-manual/ui-flow.html">檢測報表 §明細列表點選</a></div>
