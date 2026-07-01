@@ -6,6 +6,7 @@ using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
+using AniloxRoll.Monitor.UI.Navigators;
 using AniloxRoll.Monitor.UI.Widgets;
 using TanukiCv.Controls;
 
@@ -77,22 +78,21 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private List<GrabIdInfo> _grabIdInfos = new List<GrabIdInfo>();
         private List<GrabDetail> _currentDetails = new List<GrabDetail>();
         private bool _showFailOnly;
-        private GroupBox _activeStatMode;
 
         // --- 圖表導航 ---
 
         // --- Guards ---
-        internal readonly EventGuard StatComboGuard = new EventGuard();
-        internal readonly EventGuard GrabIdNavGuard = new EventGuard();
-        internal readonly EventGuard GrabIdCrossGuard = new EventGuard();
+        internal EventGuard StatComboGuard => _dateGrabIdNavigator.StatComboGuard;
+        internal EventGuard GrabIdNavGuard => _dateGrabIdNavigator.GrabIdNavGuard;
+        internal EventGuard GrabIdCrossGuard => _dateGrabIdNavigator.GrabIdCrossGuard;
         // listViewGrabDetail commit 時設 true：OnSingleSheetComboChanged 跳過範圍 cb 同步，
         // 保留使用者目前的 cbDataIdStart/End + cbDataDateStart/Time + cbDataDateEnd/Time 不變。
-        private bool _suppressRangeOnSingleSheetSync;
 
 
         // --- Mura Profile Chart（繪圖職責已提取到 MuraProfileChartPresenter）---
         private MuraProfileChartPresenter _muraChart;
         private YieldPeriodChartPresenter _yieldPeriodCharts;
+        private DataDateGrabIdNavigator _dateGrabIdNavigator;
 
         // --- 常數 ---
         private static readonly Color _detailPass = Color.FromArgb(232, 245, 233);
@@ -120,7 +120,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
         {
             _ctx = ctx ?? throw new ArgumentNullException(nameof(ctx));
             _statsPresenter = new InspectionStatsPresenter(ctx.PanelStatCams);
-            _activeStatMode = ctx.GroupBoxGrabIdRange;
+            _dateGrabIdNavigator = new DataDateGrabIdNavigator(_ctx,
+                () => _statAvailableTimes,
+                () => _grabIdInfos,
+                RefreshStats,
+                (grabId, earliest, latest, idx) => GrabIdSelectedFromData?.Invoke(grabId, earliest, latest, idx),
+                (grabId, earliest, latest, idx) => GrabIdSelectedFromReview?.Invoke(grabId, earliest, latest, idx),
+                SetGroupBoxActive);
         }
 
         // ══════════════════════════════════════════════════════════════
@@ -138,25 +144,17 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             _ctx.BtnSelectDataFolder.Click += BtnSelectDataFolder_Click;
             _ctx.BtnShowFail.Click += BtnShowFail_Click;
-            WireStatDateCombos();
+            _dateGrabIdNavigator.WireEvents();
             InitGrabDetailListView();
             _muraChart = new MuraProfileChartPresenter(_ctx,
-                () => _activeStatMode, () => _grabIdInfos, () => _statsDataRootPath);
+                () => _dateGrabIdNavigator.ActiveStatMode, () => _grabIdInfos, () => _statsDataRootPath);
             _muraChart.Init();
             _yieldPeriodCharts = new YieldPeriodChartPresenter(_ctx, () => _statAvailableTimes, () => _statsDataRootPath);
             _yieldPeriodCharts.Init();
 
-            _ctx.CbGrabIdStart.SelectedIndexChanged += (s, e) => OnGrabIdComboChanged(isStart: true);
-            _ctx.CbGrabIdEnd.SelectedIndexChanged += (s, e) => OnGrabIdComboChanged(isStart: false);
-            _ctx.CbDataGrabId.SelectedIndexChanged += (s, e) => OnSingleSheetComboChanged();
-            _ctx.CbReviewGrabId.SelectedIndexChanged += (s, e) => OnReviewGrabIdChanged();
-            _ctx.GrpReviewGrabNav.Click += (s, e) => OnReviewGrabIdChanged();
             _ctx.GrpReviewTimePeriod.Click += (s, e) => PeriodComboManualChanged?.Invoke();
 
             // Data tab：點選 GroupBox 標題切換 active stat 模式（與 GrpReviewGrabNav.Click 相同模式）
-            _ctx.GrpDataSingleSheet.Click   += (s, e) => SwitchActiveStatGroupBox(_ctx.GrpDataSingleSheet);
-            _ctx.GroupBoxGrabIdRange.Click  += (s, e) => SwitchActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);
-            _ctx.GroupBoxTimeRange.Click    += (s, e) => SwitchActiveStatGroupBox(_ctx.GroupBoxTimeRange);
         }
 
         // ══════════════════════════════════════════════════════════════
@@ -201,7 +199,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             // 預設單片模式（與 Review tab btnReviewSelectFolder 一致）— 最新一筆 grab（descending [0]）。
             // 對齊 cbDataIdStart=End=0 → RefreshStats 的單片分支取得單 grab 範圍。
-            SetActiveStatGroupBox(_ctx.GrpDataSingleSheet);
+            _dateGrabIdNavigator.SetActiveStatGroupBox(_ctx.GrpDataSingleSheet);
             if (_grabIdInfos.Count > 0)
             {
                 using (StatComboGuard.Enter())
@@ -235,290 +233,15 @@ namespace AniloxRoll.Monitor.UI.Presenters
         // 日期/時間 ComboBox
         // ══════════════════════════════════════════════════════════════
 
-        private void PopulateStatDateCombos(DateTime start, DateTime end)
-        {
-            // 包 StatComboGuard 抑制 cbDataDateStart/Time + cbDataDateEnd/Time 的 SelectedIndexChanged：
-            // 避免程式化填充觸發 OnStartComboChanged → SetActiveStatGroupBox(TimeRange) +
-            // RefreshStats 級聯（4 次 RefreshStats 用大時間範圍掃 CSV 灌大量資料進 listView，
-            // 隨後 LoadDataFolder 才設回 SingleSheet 收回 — listViewGrabDetail「瞬間爆量再縮回」）。
-            using (StatComboGuard.Enter())
-            {
-                var dates = GetAvailableDateStrings();
-                string startDateStr = start.ToString("yyyy-MM-dd");
-                string endDateStr = end.ToString("yyyy-MM-dd");
-                string startTimeStr = start.ToString("HH:mm:ss");
-                string endTimeStr = end.ToString("HH:mm:ss");
+        private void PopulateStatDateCombos(DateTime start, DateTime end) =>
+            _dateGrabIdNavigator.PopulateStatDateCombos(start, end);
 
-                _ctx.CbStartDate.Items.Clear();
-                _ctx.CbStartDate.Items.AddRange(dates.ToArray());
-                int si = dates.IndexOf(startDateStr);
-                _ctx.CbStartDate.SelectedIndex = si >= 0 ? si : (dates.Count > 0 ? dates.Count - 1 : -1);
-                RefreshStatTimeCombo(_ctx.CbStartDate, _ctx.CbStartTime, startTimeStr);
+        public void SyncDataGrabIdFromReview(int idx, GrabIdInfo info) =>
+            _dateGrabIdNavigator.SyncDataGrabIdFromReview(idx, info);
 
-                _ctx.CbEndDate.Items.Clear();
-                _ctx.CbEndDate.Items.AddRange(dates.ToArray());
-                int ei = dates.IndexOf(endDateStr);
-                _ctx.CbEndDate.SelectedIndex = ei >= 0 ? ei : (dates.Count > 0 ? 0 : -1);
-                RefreshStatTimeCombo(_ctx.CbEndDate, _ctx.CbEndTime, endTimeStr);
-            }
-        }
+        public void UpdateGrabIdNavState() => _dateGrabIdNavigator.UpdateGrabIdNavState();
 
-        private void RefreshStatTimeCombo(ComboBox dateCb, ComboBox timeCb, string preferred)
-        {
-            var times = GetAvailableTimeStrings(dateCb.Text);
-            timeCb.Items.Clear();
-            timeCb.Items.AddRange(times.ToArray());
-            if (times.Count == 0) return;
-            int idx = times.IndexOf(preferred);
-            timeCb.SelectedIndex = idx >= 0 ? idx : (times.Count > 0 ? 0 : -1);
-        }
-
-        // ══════════════════════════════════════════════════════════════
-        // Cascading ComboBox 邏輯
-        // ══════════════════════════════════════════════════════════════
-
-        private void WireStatDateCombos()
-        {
-            _ctx.CbStartDate.SelectedIndexChanged += (s, e) => OnStartComboChanged(1);
-            _ctx.CbStartTime.SelectedIndexChanged += (s, e) => OnStartComboChanged(2);
-            _ctx.CbEndDate.SelectedIndexChanged += (s, e) => OnEndComboChanged(1);
-            _ctx.CbEndTime.SelectedIndexChanged += (s, e) => OnEndComboChanged(2);
-        }
-
-        private void OnStartComboChanged(int fromLevel)
-        {
-            if (StatComboGuard.IsSet) return;
-            SetActiveStatGroupBox(_ctx.GroupBoxTimeRange);
-            if (_statAvailableTimes.Count > 0)
-            {
-                using (StatComboGuard.Enter())
-                {
-                    if (fromLevel <= 1) RefreshStatTimeCombo(_ctx.CbStartDate, _ctx.CbStartTime, _ctx.CbStartTime.Text);
-                    ClampEndToStart();
-                }
-            }
-            RefreshStats();
-        }
-
-        private void OnEndComboChanged(int fromLevel)
-        {
-            if (StatComboGuard.IsSet) return;
-            SetActiveStatGroupBox(_ctx.GroupBoxTimeRange);
-            if (_statAvailableTimes.Count > 0)
-            {
-                using (StatComboGuard.Enter())
-                {
-                    if (fromLevel <= 1) RefreshStatTimeCombo(_ctx.CbEndDate, _ctx.CbEndTime, _ctx.CbEndTime.Text);
-                    ClampStartToEnd();
-                }
-            }
-            RefreshStats();
-        }
-
-        /// <summary>
-        /// 程式化把日期時間 combo 對齊到指定 DateTime（**不會觸發 OnStart/EndComboChanged 切換到 TimeRange 模式**）。
-        /// 呼叫端必須已包在 `StatComboGuard.Enter()` 內 — H4：guard 邊界很重要，新增 caller 時務必確認。
-        /// </summary>
-        private void SetCombosToDateTime(bool isStart, DateTime dt)
-        {
-            string dateStr = dt.ToString("yyyy-MM-dd");
-            string timeStr = dt.ToString("HH:mm:ss");
-            if (isStart)
-            {
-                if (_ctx.CbStartDate.Items.Contains(dateStr)) _ctx.CbStartDate.SelectedItem = dateStr;
-                else _ctx.CbStartDate.Text = dateStr;
-                RefreshStatTimeCombo(_ctx.CbStartDate, _ctx.CbStartTime, timeStr);
-            }
-            else
-            {
-                if (_ctx.CbEndDate.Items.Contains(dateStr)) _ctx.CbEndDate.SelectedItem = dateStr;
-                else _ctx.CbEndDate.Text = dateStr;
-                RefreshStatTimeCombo(_ctx.CbEndDate, _ctx.CbEndTime, timeStr);
-            }
-        }
-
-        private void ClampEndToStart()
-        {
-            if (!TryBuildDateTimeFromCombos(_ctx.CbStartDate, _ctx.CbStartTime, out DateTime start)) return;
-            if (!TryBuildDateTimeFromCombos(_ctx.CbEndDate, _ctx.CbEndTime, out DateTime end)) return;
-            if (start <= end) return;
-            var view = _statAvailableTimes.GetViewBetween(start, DateTime.MaxValue);
-            DateTime newEnd = view.Count > 0 ? view.Min : _statAvailableTimes.Max;
-            SetCombosToDateTime(false, newEnd);
-        }
-
-        private void ClampStartToEnd()
-        {
-            if (!TryBuildDateTimeFromCombos(_ctx.CbStartDate, _ctx.CbStartTime, out DateTime start)) return;
-            if (!TryBuildDateTimeFromCombos(_ctx.CbEndDate, _ctx.CbEndTime, out DateTime end)) return;
-            if (start <= end) return;
-            var view = _statAvailableTimes.GetViewBetween(DateTime.MinValue, end);
-            DateTime newStart = view.Count > 0 ? view.Max : _statAvailableTimes.Min;
-            SetCombosToDateTime(true, newStart);
-        }
-
-        // ══════════════════════════════════════════════════════════════
-        // 序號 ComboBox
-        // ══════════════════════════════════════════════════════════════
-
-        private void OnGrabIdComboChanged(bool isStart)
-        {
-            if (StatComboGuard.IsSet || _grabIdInfos.Count == 0) return;
-            SetActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);
-
-            int idx1 = _ctx.CbGrabIdStart.SelectedIndex;
-            int idx2 = _ctx.CbGrabIdEnd.SelectedIndex;
-            if (idx1 < 0 || idx2 < 0) return;
-
-            using (StatComboGuard.Enter())
-            {
-                if (isStart && idx1 < idx2)
-                    _ctx.CbGrabIdEnd.SelectedIndex = idx1;
-                else if (!isStart && idx2 > idx1)
-                    _ctx.CbGrabIdStart.SelectedIndex = idx2;
-
-                var startInfo = _grabIdInfos[_ctx.CbGrabIdStart.SelectedIndex];
-                var endInfo = _grabIdInfos[_ctx.CbGrabIdEnd.SelectedIndex];
-                SetCombosToDateTime(true, startInfo.Earliest);
-                SetCombosToDateTime(false, endInfo.Latest);
-            }
-
-            RefreshStats();
-        }
-
-        private void OnSingleSheetComboChanged()
-        {
-            UpdateDataGrabIdNavState();
-            if (StatComboGuard.IsSet || _grabIdInfos.Count == 0) return;
-            if (GrabIdCrossGuard.IsSet) return;
-
-            SetActiveStatGroupBox(_ctx.GrpDataSingleSheet);
-            int idx = _ctx.CbDataGrabId.SelectedIndex;
-            if (idx < 0) return;
-
-            if (!_suppressRangeOnSingleSheetSync)
-            {
-                using (StatComboGuard.Enter())
-                {
-                    _ctx.CbGrabIdStart.SelectedIndex = idx;
-                    _ctx.CbGrabIdEnd.SelectedIndex = idx;
-                    var info = _grabIdInfos[idx];
-                    SetCombosToDateTime(true, info.Earliest);
-                    SetCombosToDateTime(false, info.Latest);
-                }
-            }
-
-            RefreshStats();
-
-            // 跨 Tab 同步：通知 Form
-            if (!GrabIdCrossGuard.IsSet && _ctx.CbReviewGrabId.Items.Count > 0
-                && idx < _ctx.CbReviewGrabId.Items.Count)
-            {
-                var info = _grabIdInfos[idx];
-                GrabIdSelectedFromData?.Invoke(info.GrabId, info.Earliest, info.Latest, idx);
-            }
-        }
-
-
-        private void OnReviewGrabIdChanged()
-        {
-            UpdateGrabIdNavState();
-            if (GrabIdNavGuard.IsSet) return;
-            if (GrabIdCrossGuard.IsSet) return;
-            if (_grabIdInfos.Count == 0) return;
-            int idx = _ctx.CbReviewGrabId.SelectedIndex;
-            if (idx < 0 || idx >= _grabIdInfos.Count) return;
-
-            var info = _grabIdInfos[idx];
-            GrabIdSelectedFromReview?.Invoke(info.GrabId, info.Earliest, info.Latest, idx);
-        }
-
-        /// <summary>由 Form 呼叫：Review→Data 同步完成後設定 combo + 統計。</summary>
-        public void SyncDataGrabIdFromReview(int idx, GrabIdInfo info)
-        {
-            using (GrabIdCrossGuard.Enter())
-            {
-                _ctx.CbDataGrabId.SelectedIndex = idx;
-                using (StatComboGuard.Enter())
-                {
-                    _ctx.CbGrabIdStart.SelectedIndex = idx;
-                    _ctx.CbGrabIdEnd.SelectedIndex = idx;
-                    SetCombosToDateTime(true, info.Earliest);
-                    SetCombosToDateTime(false, info.Latest);
-                }
-                RefreshStats();
-                SetActiveStatGroupBox(_ctx.GrpDataSingleSheet);
-            }
-        }
-
-        // ══════════════════════════════════════════════════════════════
-        // 序號導航
-        // ══════════════════════════════════════════════════════════════
-
-        private void StepReviewGrabId(int delta)
-        {
-            if (_grabIdInfos.Count == 0) return;
-            int next = _ctx.CbReviewGrabId.SelectedIndex + delta;
-            if (next >= 0 && next < _ctx.CbReviewGrabId.Items.Count)
-                _ctx.CbReviewGrabId.SelectedIndex = next;
-        }
-
-        private void StepDataGrabId(int delta)
-        {
-            if (_grabIdInfos.Count == 0) return;
-            int next = _ctx.CbDataGrabId.SelectedIndex + delta;
-            if (next >= 0 && next < _ctx.CbDataGrabId.Items.Count)
-                _ctx.CbDataGrabId.SelectedIndex = next;
-        }
-
-        public void UpdateGrabIdNavState()
-        {
-            int idx = _ctx.CbReviewGrabId.SelectedIndex;
-            int count = _ctx.CbReviewGrabId.Items.Count;
-            UpdateDataGrabIdNavState();
-        }
-
-        private void UpdateDataGrabIdNavState()
-        {
-            int idx = _ctx.CbDataGrabId.SelectedIndex;
-            int count = _ctx.CbDataGrabId.Items.Count;
-        }
-
-        /// <summary>時間 ComboBox 變更時，同步 cbReviewId 到包含該時間的序號。</summary>
-        public void SyncGrabIdFromTime(DateTime current)
-        {
-            if (GrabIdNavGuard.IsSet || _grabIdInfos.Count == 0) return;
-
-            int bestIdx = -1;
-            long bestDiff = long.MaxValue;
-            for (int i = 0; i < _grabIdInfos.Count; i++)
-            {
-                var info = _grabIdInfos[i];
-                if (current >= info.Earliest && current <= info.Latest)
-                {
-                    bestIdx = i;
-                    break;
-                }
-                long diff = Math.Abs(current.Ticks - info.Earliest.Ticks);
-                if (diff < bestDiff)
-                {
-                    bestDiff = diff;
-                    bestIdx = i;
-                }
-            }
-
-            if (bestIdx >= 0 && bestIdx < _ctx.CbReviewGrabId.Items.Count
-                && bestIdx != _ctx.CbReviewGrabId.SelectedIndex)
-            {
-                using (GrabIdNavGuard.Enter())
-                    _ctx.CbReviewGrabId.SelectedIndex = bestIdx;
-            }
-        }
-
-        // ══════════════════════════════════════════════════════════════
-        // 統計
-        // ══════════════════════════════════════════════════════════════
-
+        public void SyncGrabIdFromTime(DateTime current) => _dateGrabIdNavigator.SyncGrabIdFromTime(current);
         public void RefreshStats()
         {
             if (string.IsNullOrWhiteSpace(_statsDataRootPath)) return;
@@ -533,7 +256,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             // SingleSheet mode：用 cbDataId.SelectedIndex 算單 grab stats（start=end=該 grab）。
             // 不靠 cbDataIdStart/End 範圍，這樣 listViewGrabDetail 點選後（_suppressRangeOnSingleSheetSync=true
             // 跳過 range cb 同步）stats 仍對齊到剛點的單 grab。
-            if (_activeStatMode == _ctx.GrpDataSingleSheet
+            if (_dateGrabIdNavigator.ActiveStatMode == _ctx.GrpDataSingleSheet
                 && _ctx.CbDataGrabId.SelectedIndex >= 0
                 && _ctx.CbDataGrabId.SelectedIndex < _grabIdInfos.Count)
             {
@@ -549,7 +272,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 return;
             }
 
-            if (_activeStatMode != _ctx.GroupBoxTimeRange
+            if (_dateGrabIdNavigator.ActiveStatMode != _ctx.GroupBoxTimeRange
                 && _ctx.CbGrabIdStart.SelectedIndex >= 0 && _ctx.CbGrabIdEnd.SelectedIndex >= 0
                 && _grabIdInfos.Count > 0)
             {
@@ -628,6 +351,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         // Detail ListView
         // ══════════════════════════════════════════════════════════════
 
+
         private void InitGrabDetailListView()
         {
             var lv = _ctx.ListViewGrabDetail;
@@ -661,11 +385,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (string.IsNullOrEmpty(grabId)) return;
 
             // Toggle：第二次點同 row + 已是 SingleSheet → 切回 GroupBoxGrabIdRange（範圍模式，stats 用 cbDataIdStart/End）
-            if (grabId == _lastListViewSelectedGrabId && _activeStatMode == _ctx.GrpDataSingleSheet)
+            if (grabId == _lastListViewSelectedGrabId && _dateGrabIdNavigator.ActiveStatMode == _ctx.GrpDataSingleSheet)
             {
                 _lastListViewSelectedGrabId = null;
                 lv.SelectedIndices.Clear();  // 清掉反白，視覺回到「無選中」
-                SwitchActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);
+                _dateGrabIdNavigator.SwitchActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);
                 RefreshStats();
                 return;
             }
@@ -676,16 +400,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (_ctx.CbDataGrabId.SelectedIndex == idx)
             {
                 // SelectedIndex 沒變 → 不會觸發 OnSingleSheetComboChanged，但仍需確保 active 模式為單片
-                if (_activeStatMode != _ctx.GrpDataSingleSheet)
+                if (_dateGrabIdNavigator.ActiveStatMode != _ctx.GrpDataSingleSheet)
                 {
-                    SwitchActiveStatGroupBox(_ctx.GrpDataSingleSheet);
+                    _dateGrabIdNavigator.SwitchActiveStatGroupBox(_ctx.GrpDataSingleSheet);
                     RefreshStats();  // 切 mode 後 stats + chartDataColumn 對齊單片
                 }
                 return;
             }
-            _suppressRangeOnSingleSheetSync = true;
-            try { _ctx.CbDataGrabId.SelectedIndex = idx; } // → OnSingleSheetComboChanged 接手（內含 RefreshStats）
-            finally { _suppressRangeOnSingleSheetSync = false; }
+            _dateGrabIdNavigator.CommitDataGrabIdFromDetailList(grabId);
         }
 
         private void UpdateGrabDetailListView(List<GrabDetail> details)
@@ -826,47 +548,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         /// <summary>由 PropertyGrid 設定變更觸發，重新整理 chartDataYieldYearly/Monthly/Daily，讓 Settings 立刻套用 Pass/Fail。</summary>
         public void RefreshPeriodCharts() => _yieldPeriodCharts?.RefreshPeriodCharts();
-        private List<string> GetAvailableDateStrings() =>
-            _statAvailableTimes.Select(t => t.ToString("yyyy-MM-dd")).Distinct()
-                .OrderByDescending(x => x).ToList();
-
-        private List<string> GetAvailableTimeStrings(string dateStr) =>
-            _statAvailableTimes
-                .Where(t => t.ToString("yyyy-MM-dd") == dateStr)
-                .Select(t => t.ToString("HH:mm:ss"))
-                .Distinct().OrderByDescending(x => x).ToList();
-
-        // ══════════════════════════════════════════════════════════════
-        // Populate / GroupBox helpers
-        // ══════════════════════════════════════════════════════════════
-
-        public void PopulateAllGrabIdCombos(bool selectDataGrabId = false)
-        {
-            using (StatComboGuard.Enter())
-            {
-                _ctx.CbReviewGrabId.Items.Clear();
-                _ctx.CbGrabIdStart.Items.Clear();
-                _ctx.CbGrabIdEnd.Items.Clear();
-                _ctx.CbDataGrabId.Items.Clear();
-                foreach (var info in _grabIdInfos)
-                {
-                    _ctx.CbReviewGrabId.Items.Add(info.GrabId);
-                    _ctx.CbGrabIdStart.Items.Add(info.GrabId);
-                    _ctx.CbGrabIdEnd.Items.Add(info.GrabId);
-                    _ctx.CbDataGrabId.Items.Add(info.GrabId);
-                }
-                // SyncGrabIdFromTime 需要外部 DateTimeNavigator，由 Form 呼叫
-                UpdateGrabIdNavState();
-                if (_ctx.CbGrabIdStart.Items.Count > 0)
-                {
-                    _ctx.CbGrabIdStart.SelectedIndex = _ctx.CbGrabIdStart.Items.Count - 1;
-                    _ctx.CbGrabIdEnd.SelectedIndex = 0;
-                    if (selectDataGrabId)
-                        _ctx.CbDataGrabId.SelectedIndex = _ctx.CbGrabIdStart.SelectedIndex;
-                }
-            }
-        }
-
+        public void PopulateAllGrabIdCombos(bool selectDataGrabId = false) =>
+            _dateGrabIdNavigator.PopulateAllGrabIdCombos(selectDataGrabId);
         public void SetReviewGroupBoxes(bool grabNavActive)
         {
             SetGroupBoxActive(_ctx.GrpReviewGrabNav, grabNavActive);
@@ -880,43 +563,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (_ctx.CbDataGrabId.Items.Count > 0)
                 _ctx.CbDataGrabId.SelectedIndex = 0;
         }
-
-        private void SetActiveStatGroupBox(GroupBox active)
-        {
-            _activeStatMode = active;
-            foreach (var box in new[] { _ctx.GroupBoxGrabIdRange, _ctx.GrpDataSingleSheet, _ctx.GroupBoxTimeRange })
-                SetGroupBoxActive(box, box == active);
-        }
-
-        /// <summary>
-        /// 由 GroupBox.Click 觸發：切換 active 模式並重算統計（camData / listViewGrabDetail
-        /// / chartDataColumn / chartDataYieldYearly 等）。已是 active 則無動作。
-        /// 切到範圍類模式時把對應 combo 攤開到資料夾的完整範圍（避免承襲單片模式的單筆設定）：
-        ///   - GroupBoxGrabIdRange：cbDataIdStart = 最舊、cbDataIdEnd = 最新
-        ///   - GroupBoxTimeRange：cbDataDateStart/Time = _statAvailableTimes.Min、cbDataDateEnd/Time = Max
-        /// </summary>
-        private void SwitchActiveStatGroupBox(GroupBox target)
-        {
-            if (target == null || _activeStatMode == target) return;
-            SetActiveStatGroupBox(target);
-
-            if (target == _ctx.GroupBoxGrabIdRange && _grabIdInfos.Count > 0)
-            {
-                using (StatComboGuard.Enter())
-                {
-                    _ctx.CbGrabIdStart.SelectedIndex = _grabIdInfos.Count - 1; // descending 最後一筆 = 最舊
-                    _ctx.CbGrabIdEnd.SelectedIndex = 0;                        // descending 第一筆 = 最新
-                }
-            }
-            else if (target == _ctx.GroupBoxTimeRange && _statAvailableTimes.Count > 0)
-            {
-                // PopulateStatDateCombos 內已包 StatComboGuard，外面不必再包
-                PopulateStatDateCombos(_statAvailableTimes.Min, _statAvailableTimes.Max);
-            }
-            RefreshStats();
-        }
-
-        // ── GroupBox 綠色高亮 ─────────────────────────────────────────
 
         private static void SetGroupBoxActive(GroupBox box, bool active)
         {

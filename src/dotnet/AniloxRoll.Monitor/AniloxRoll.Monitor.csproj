@@ -197,6 +197,7 @@
     <Compile Include="UI\Presenters\YieldPeriodChartPresenter.cs" />
     <Compile Include="UI\Presenters\ReviewStitchCoordinator.cs" />
     <Compile Include="UI\Presenters\InspectionStatsPresenter.cs" />
+    <Compile Include="UI\Navigators\DataDateGrabIdNavigator.cs" />
     <Compile Include="UI\Navigators\DateTimeNavigator.cs" />
     <Compile Include="UI\State\UserSessionState.cs" />
     <Compile Include="Program.cs" />
