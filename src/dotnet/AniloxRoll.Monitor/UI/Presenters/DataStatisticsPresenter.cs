@@ -5,6 +5,7 @@ using System.Linq;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
 using AniloxRoll.Monitor.Core.Data;
+using AniloxRoll.Monitor.Core.Interop;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.Navigators;
 using AniloxRoll.Monitor.UI.Widgets;
@@ -71,6 +72,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private List<GrabIdInfo> _grabIdInfos = new List<GrabIdInfo>();
         private List<GrabDetail> _currentDetails = new List<GrabDetail>();
         private bool _showFailOnly;
+        private bool _preserveDetailListDuringSelection;
 
         // --- 圖表導航 ---
 
@@ -222,6 +224,25 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public void UpdateGrabIdNavState() => _dateGrabIdNavigator.UpdateGrabIdNavState();
 
         public void SyncGrabIdFromTime(DateTime current) => _dateGrabIdNavigator.SyncGrabIdFromTime(current);
+
+        private string GetDetailListStartGrabId()
+        {
+            int idx = _ctx.CbGrabIdStart.SelectedIndex;
+            if (idx >= 0 && idx < _grabIdInfos.Count) return _grabIdInfos[idx].GrabId;
+            idx = _ctx.CbDataGrabId.SelectedIndex;
+            if (idx >= 0 && idx < _grabIdInfos.Count) return _grabIdInfos[idx].GrabId;
+            return _grabIdInfos.Count > 0 ? _grabIdInfos[0].GrabId : string.Empty;
+        }
+
+        private string GetDetailListEndGrabId()
+        {
+            int idx = _ctx.CbGrabIdEnd.SelectedIndex;
+            if (idx >= 0 && idx < _grabIdInfos.Count) return _grabIdInfos[idx].GrabId;
+            idx = _ctx.CbDataGrabId.SelectedIndex;
+            if (idx >= 0 && idx < _grabIdInfos.Count) return _grabIdInfos[idx].GrabId;
+            return _grabIdInfos.Count > 0 ? _grabIdInfos[0].GrabId : string.Empty;
+        }
+
         public void RefreshStats()
         {
             if (string.IsNullOrWhiteSpace(_statsDataRootPath)) return;
@@ -244,10 +265,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 var stats = InspectionStatisticsService.ComputeByGrabIdRange(
                     _statsDataRootPath, grab.GrabId, grab.GrabId, ctx);
                 var details = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
-                    _statsDataRootPath, grab.GrabId, grab.GrabId, ctx);
+                    _statsDataRootPath, GetDetailListStartGrabId(), GetDetailListEndGrabId(), ctx);
                 _statsPresenter.Update(stats);
-                _currentDetails = details;
-                ApplyFailFilter();
+                if (!_preserveDetailListDuringSelection)
+                {
+                    _currentDetails = details;
+                    ApplyFailFilter();
+                }
                 _muraChart.Update(null);  // SingleSheet branch 內自己查 cbDataId 取 grab
                 return;
             }
@@ -264,8 +288,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     _statsDataRootPath, startInfo.GrabId, endInfo.GrabId, ctx);
 
                 _statsPresenter.Update(stats);
-                _currentDetails = details;
-                ApplyFailFilter();
+                if (!_preserveDetailListDuringSelection)
+                {
+                    _currentDetails = details;
+                    ApplyFailFilter();
+                }
 
                 int si = _ctx.CbGrabIdStart.SelectedIndex;
                 int ei = _ctx.CbGrabIdEnd.SelectedIndex;
@@ -288,6 +315,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             lv.View = View.Details;
             lv.FullRowSelect = true;
             lv.GridLines = true;
+            lv.OwnerDraw = true;
             lv.Columns.Clear();
             lv.Items.Clear();
 
@@ -300,6 +328,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
             // MouseUp 才 commit 切到該序號（與 cbDataId 變更流程共用 OnSingleSheetComboChanged）。
             // commit 時包 _suppressRangeOnSingleSheetSync 跳過範圍 cb 同步，
             // 保留 cbDataIdStart/End 不變。
+            lv.DrawColumnHeader -= ListViewGrabDetail_DrawColumnHeader;
+            lv.DrawSubItem -= ListViewGrabDetail_DrawSubItem;
+            lv.DrawColumnHeader += ListViewGrabDetail_DrawColumnHeader;
+            lv.DrawSubItem += ListViewGrabDetail_DrawSubItem;
+            lv.MouseUp -= OnGrabDetailRowCommitted;
             lv.MouseUp += OnGrabDetailRowCommitted;
         }
 
@@ -313,14 +346,19 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (lv.SelectedItems.Count == 0) return;
             string grabId = lv.SelectedItems[0].Text;
             if (string.IsNullOrEmpty(grabId)) return;
+            string topGrabId = GetDetailListTopGrabId(lv, out int topIndex);
 
             // Toggle：第二次點同 row + 已是 SingleSheet → 切回 GroupBoxGrabIdRange（範圍模式，stats 用 cbDataIdStart/End）
             if (grabId == _lastListViewSelectedGrabId && _dateGrabIdNavigator.ActiveStatMode == _ctx.GrpDataSingleSheet)
             {
-                _lastListViewSelectedGrabId = null;
+                ExecuteWithDetailListRedrawSuspended(lv, () =>
+                {
+                    _lastListViewSelectedGrabId = null;
                 lv.SelectedIndices.Clear();  // 清掉反白，視覺回到「無選中」
-                _dateGrabIdNavigator.SwitchActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);
+                _dateGrabIdNavigator.SetActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);
                 RefreshStats();
+                RestoreDetailListTopItem(lv, topGrabId, topIndex);
+                });
                 return;
             }
             _lastListViewSelectedGrabId = grabId;
@@ -330,14 +368,103 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (_ctx.CbDataGrabId.SelectedIndex == idx)
             {
                 // SelectedIndex 沒變 → 不會觸發 OnSingleSheetComboChanged，但仍需確保 active 模式為單片
+                ExecuteWithDetailListRedrawSuspended(lv, () =>
+                {
                 if (_dateGrabIdNavigator.ActiveStatMode != _ctx.GrpDataSingleSheet)
                 {
                     _dateGrabIdNavigator.SwitchActiveStatGroupBox(_ctx.GrpDataSingleSheet);
-                    RefreshStats();  // 切 mode 後 stats + chartDataColumn 對齊單片
                 }
+                RestoreDetailListTopItem(lv, topGrabId, topIndex);
+                });
                 return;
             }
+            ExecuteWithDetailListRedrawSuspended(lv, () =>
+            {
             _dateGrabIdNavigator.CommitDataGrabIdFromDetailList(grabId);
+            RestoreDetailListTopItem(lv, topGrabId, topIndex);
+            });
+        }
+
+        private void ExecuteWithDetailListRedrawSuspended(ListView lv, Action action)
+        {
+            const int WM_SETREDRAW = 0x000B;
+            if (lv == null || action == null) return;
+            if (!lv.IsHandleCreated || lv.IsDisposed)
+            {
+                bool previous = _preserveDetailListDuringSelection;
+                _preserveDetailListDuringSelection = true;
+                try { action(); }
+                finally { _preserveDetailListDuringSelection = previous; }
+                return;
+            }
+
+            NativeMethods.SendMessage(lv.Handle, WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);
+            lv.SuspendLayout();
+            bool savedPreserveDetailList = _preserveDetailListDuringSelection;
+            _preserveDetailListDuringSelection = true;
+            try
+            {
+                action();
+            }
+            finally
+            {
+                _preserveDetailListDuringSelection = savedPreserveDetailList;
+                lv.ResumeLayout();
+                NativeMethods.SendMessage(lv.Handle, WM_SETREDRAW, new IntPtr(1), IntPtr.Zero);
+                if (!lv.IsDisposed) lv.Invalidate();
+            }
+        }
+
+        private static string GetDetailListTopGrabId(ListView lv, out int topIndex)
+        {
+            topIndex = 0;
+            if (lv == null || lv.Items.Count == 0) return null;
+
+            try
+            {
+                var topItem = lv.TopItem;
+                if (topItem == null) return null;
+                topIndex = topItem.Index;
+                return topItem.Text;
+            }
+            catch (InvalidOperationException)
+            {
+                return null;
+            }
+        }
+
+        private static void RestoreDetailListTopItem(ListView lv, string topGrabId, int topIndex)
+        {
+            if (lv == null || lv.Items.Count == 0) return;
+
+            int restoreIndex = -1;
+            if (!string.IsNullOrEmpty(topGrabId))
+            {
+                for (int i = 0; i < lv.Items.Count; i++)
+                {
+                    if (lv.Items[i].Text == topGrabId)
+                    {
+                        restoreIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            if (restoreIndex < 0)
+                restoreIndex = Math.Max(0, Math.Min(topIndex, lv.Items.Count - 1));
+
+            try
+            {
+                lv.TopItem = lv.Items[restoreIndex];
+            }
+            catch (InvalidOperationException)
+            {
+                lv.BeginInvoke(new Action(() =>
+                {
+                    if (!lv.IsDisposed && lv.Items.Count > restoreIndex)
+                        lv.TopItem = lv.Items[restoreIndex];
+                }));
+            }
         }
 
         private void UpdateGrabDetailListView(List<GrabDetail> details)
@@ -368,12 +495,49 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     }
                 }
 
+                item.Tag = rowHasFail;
                 item.BackColor = rowHasFail ? _detailFail : _detailPass;
                 lv.Items.Add(item);
             }
 
             lv.EndUpdate();
             lv.AutoResizeColumns(ColumnHeaderAutoResizeStyle.ColumnContent);
+        }
+
+        private static void ListViewGrabDetail_DrawColumnHeader(object sender, DrawListViewColumnHeaderEventArgs e)
+        {
+            e.DrawDefault = true;
+        }
+
+        private void ListViewGrabDetail_DrawSubItem(object sender, DrawListViewSubItemEventArgs e)
+        {
+            bool rowHasFail = e.Item.Tag is bool failed && failed;
+            Color backColor = rowHasFail ? _detailFail : _detailPass;
+
+            using (var backBrush = new SolidBrush(backColor))
+                e.Graphics.FillRectangle(backBrush, e.Bounds);
+
+            var textFlags = TextFormatFlags.VerticalCenter
+                          | TextFormatFlags.HorizontalCenter
+                          | TextFormatFlags.EndEllipsis
+                          | TextFormatFlags.NoPrefix;
+            TextRenderer.DrawText(e.Graphics, e.SubItem.Text, e.Item.ListView.Font,
+                e.Bounds, e.Item.ForeColor, textFlags);
+
+            bool isMarked = _dateGrabIdNavigator.ActiveStatMode == _ctx.GrpDataSingleSheet
+                         && e.Item.Text == _lastListViewSelectedGrabId;
+            if (!isMarked || e.ColumnIndex != e.Item.SubItems.Count - 1)
+                return;
+
+            Rectangle rowBounds = e.Item.Bounds;
+            rowBounds.Width = e.Item.ListView.Columns.Cast<ColumnHeader>().Sum(c => c.Width);
+            rowBounds.Width = Math.Min(rowBounds.Width, e.Item.ListView.ClientSize.Width - 1);
+            rowBounds.Height -= 1;
+            if (rowBounds.Width <= 0 || rowBounds.Height <= 0) return;
+
+            Color borderColor = rowHasFail ? Color.FromArgb(211, 47, 47) : Color.FromArgb(46, 125, 50);
+            using (var pen = new Pen(borderColor, 2))
+                e.Graphics.DrawRectangle(pen, rowBounds);
         }
 
         public static void FitListViewColumnsProportional(ListView lv, bool useContent = false)

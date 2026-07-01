@@ -143,7 +143,6 @@ namespace AniloxRoll.Monitor.UI.Navigators
                 if (ActiveStatMode != _ctx.GrpDataSingleSheet)
                 {
                     SwitchActiveStatGroupBox(_ctx.GrpDataSingleSheet);
-                    _refreshStats();
                 }
                 return;
             }
