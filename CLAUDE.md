@@ -418,9 +418,6 @@ PICoater_AOI/
 | 報表序號 | `cbDataId` | ComboBox | — |
 | 報表上一序號 | `btnDataIdPrev` | Button | < |
 | 報表下一序號 | `btnDataIdNext` | Button | > |
-| 時序範圍群組 | `groupBoxTimeRange` | GroupBox | 時序範圍 |
-| 起始日期/時間 | `cbDataDateStart/cbDataTimeStart` | ComboBox | — |
-| 結束日期/時間 | `cbDataDateEnd/cbDataTimeEnd` | ComboBox | — |
 | 良率年圖 | `chartDataYieldYearly` | Chart | — |
 | 良率月圖 | `chartDataYieldMonthly` | Chart | — |
 | 良率日圖 | `chartDataYieldDaily` | Chart | — |

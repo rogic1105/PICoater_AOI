@@ -15,12 +15,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
     /// <summary>Data tab 所有 UI 控制項的參照。</summary>
     public class DataStatisticsContext
     {
-        // --- 時間範圍 ---
-        public ComboBox CbStartDate { get; set; }
-        public ComboBox CbStartTime { get; set; }
-        public ComboBox CbEndDate { get; set; }
-        public ComboBox CbEndTime { get; set; }
-
         // --- 序號範圍 ---
         public ComboBox CbGrabIdStart { get; set; }
         public ComboBox CbGrabIdEnd { get; set; }
@@ -38,7 +32,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
         // --- GroupBox ---
         public GroupBox GroupBoxGrabIdRange { get; set; }
         public GroupBox GrpDataSingleSheet { get; set; }
-        public GroupBox GroupBoxTimeRange { get; set; }
         public GroupBox GrpReviewGrabNav { get; set; }
         public GroupBox GrpReviewTimePeriod { get; set; }
 
@@ -86,7 +79,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         internal EventGuard GrabIdNavGuard => _dateGrabIdNavigator.GrabIdNavGuard;
         internal EventGuard GrabIdCrossGuard => _dateGrabIdNavigator.GrabIdCrossGuard;
         // listViewGrabDetail commit 時設 true：OnSingleSheetComboChanged 跳過範圍 cb 同步，
-        // 保留使用者目前的 cbDataIdStart/End + cbDataDateStart/Time + cbDataDateEnd/Time 不變。
+        // 保留使用者目前的 cbDataIdStart/End 不變。
 
 
         // --- Mura Profile Chart（繪圖職責已提取到 MuraProfileChartPresenter）---
@@ -121,7 +114,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _ctx = ctx ?? throw new ArgumentNullException(nameof(ctx));
             _statsPresenter = new InspectionStatsPresenter(ctx.PanelStatCams);
             _dateGrabIdNavigator = new DataDateGrabIdNavigator(_ctx,
-                () => _statAvailableTimes,
                 () => _grabIdInfos,
                 RefreshStats,
                 (grabId, earliest, latest, idx) => GrabIdSelectedFromData?.Invoke(grabId, earliest, latest, idx),
@@ -136,9 +128,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public void Initialize()
         {
             _statsPresenter.Initialize();
-
-            DateTime today = DateTime.Today;
-            PopulateStatDateCombos(today.AddDays(-7), today);
 
             _statsDataRootPath = _ctx.Settings?.CaptureRootPath ?? string.Empty;
 
@@ -191,9 +180,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             PopulateAllGrabIdCombos(selectDataGrabId: false);
 
-            if (_statAvailableTimes.Count > 0)
-                PopulateStatDateCombos(_statAvailableTimes.Min, _statAvailableTimes.Max);
-
             PopulateChartNavigators(_statAvailableTimes.Count > 0
                 ? (DateTime?)_statAvailableTimes.Max : null);
 
@@ -221,20 +207,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             PopulateAllGrabIdCombos();
 
-            if (_statAvailableTimes.Count > 0)
-                PopulateStatDateCombos(_statAvailableTimes.Min, _statAvailableTimes.Max);
-
             PopulateChartNavigators(_statAvailableTimes.Count > 0
                 ? (DateTime?)_statAvailableTimes.Max : null);
             RefreshStats();
         }
 
         // ══════════════════════════════════════════════════════════════
-        // 日期/時間 ComboBox
+        // 序號 ComboBox
         // ══════════════════════════════════════════════════════════════
-
-        private void PopulateStatDateCombos(DateTime start, DateTime end) =>
-            _dateGrabIdNavigator.PopulateStatDateCombos(start, end);
 
         public void SyncDataGrabIdFromReview(int idx, GrabIdInfo info) =>
             _dateGrabIdNavigator.SyncDataGrabIdFromReview(idx, info);
@@ -272,8 +252,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 return;
             }
 
-            if (_dateGrabIdNavigator.ActiveStatMode != _ctx.GroupBoxTimeRange
-                && _ctx.CbGrabIdStart.SelectedIndex >= 0 && _ctx.CbGrabIdEnd.SelectedIndex >= 0
+            if (_ctx.CbGrabIdStart.SelectedIndex >= 0 && _ctx.CbGrabIdEnd.SelectedIndex >= 0
                 && _grabIdInfos.Count > 0)
             {
                 var startInfo = _grabIdInfos[_ctx.CbGrabIdStart.SelectedIndex];
@@ -296,55 +275,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 return;
             }
 
-            if (!TryParseStatDateTime(out DateTime start, out DateTime end)) return;
-
-            var grabInfosInRange = _grabIdInfos
-                .Where(g => g.Earliest <= end && g.Latest >= start).ToList();
-
-            if (grabInfosInRange.Count > 0)
-            {
-                string startId = grabInfosInRange.OrderBy(g => g.GrabId, StringComparer.Ordinal).First().GrabId;
-                string endId = grabInfosInRange.OrderBy(g => g.GrabId, StringComparer.Ordinal).Last().GrabId;
-
-                var stats = InspectionStatisticsService.ComputeByGrabIdRange(
-                    _statsDataRootPath, startId, endId, ctx);
-                var details = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
-                    _statsDataRootPath, startId, endId, ctx);
-
-                _statsPresenter.Update(stats);
-                _currentDetails = details;
-                _muraChart.Update(EvenSample(grabInfosInRange, 10));
-            }
-            else
-            {
-                var statsTime = InspectionStatisticsService.Compute(_statsDataRootPath, start, end, ctx);
-                _statsPresenter.Update(statsTime);
-                _currentDetails = new List<GrabDetail>();
-                _muraChart.Clear();
-            }
-            ApplyFailFilter();
-        }
-
-        private bool TryParseStatDateTime(out DateTime start, out DateTime end)
-        {
-            start = end = DateTime.MinValue;
-            if (!TryBuildDateTimeFromCombos(_ctx.CbStartDate, _ctx.CbStartTime, out start)) return false;
-            if (!TryBuildDateTimeFromCombos(_ctx.CbEndDate, _ctx.CbEndTime, out end)) return false;
-            if (end.Millisecond == 0) end = end.AddMilliseconds(999);
-            return start <= end;
-        }
-
-        private static bool TryBuildDateTimeFromCombos(ComboBox dateCb, ComboBox timeCb, out DateTime result)
-        {
-            result = DateTime.MinValue;
-            string dateText = dateCb.Text ?? "";
-            string timeText = timeCb.Text ?? "";
-            string combined = dateText + " " + timeText;
-            if (DateTime.TryParseExact(combined, new[] { "yyyy-MM-dd HH:mm:ss.fff", "yyyy-MM-dd HH:mm:ss" },
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    System.Globalization.DateTimeStyles.None, out result))
-                return true;
-            return false;
         }
 
         // ══════════════════════════════════════════════════════════════
@@ -369,7 +299,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             // 點選明細列表的列 → MouseDown 時 ListView 預設視覺先反白（顯示被選中），
             // MouseUp 才 commit 切到該序號（與 cbDataId 變更流程共用 OnSingleSheetComboChanged）。
             // commit 時包 _suppressRangeOnSingleSheetSync 跳過範圍 cb 同步，
-            // 保留 cbDataIdStart/End + cbDataDateStart/Time + cbDataDateEnd/Time 不變。
+            // 保留 cbDataIdStart/End 不變。
             lv.MouseUp += OnGrabDetailRowCommitted;
         }
 

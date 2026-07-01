@@ -97,13 +97,6 @@
             this.groupBoxGrabIdRange = new System.Windows.Forms.GroupBox();
             this.cbDataIdStart = new System.Windows.Forms.ComboBox();
             this.cbDataIdEnd = new System.Windows.Forms.ComboBox();
-            this.groupBoxTimeRange = new System.Windows.Forms.GroupBox();
-            this.lblStartTimeHeader = new System.Windows.Forms.Label();
-            this.cbDataDateStart = new System.Windows.Forms.ComboBox();
-            this.cbDataTimeStart = new System.Windows.Forms.ComboBox();
-            this.lblEndTimeHeader = new System.Windows.Forms.Label();
-            this.cbDataDateEnd = new System.Windows.Forms.ComboBox();
-            this.cbDataTimeEnd = new System.Windows.Forms.ComboBox();
             this.btnDataSelectFolder = new System.Windows.Forms.Button();
             this.camData6 = new System.Windows.Forms.Panel();
             this.camData5 = new System.Windows.Forms.Panel();
@@ -278,7 +271,6 @@
             ((System.ComponentModel.ISupportInitialize)(this.chartDataYieldMonthly)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.chartDataYieldDaily)).BeginInit();
             this.groupBoxGrabIdRange.SuspendLayout();
-            this.groupBoxTimeRange.SuspendLayout();
             this.statusBarMain.SuspendLayout();
             this.tabControlRight.SuspendLayout();
             this.tabPageInspSettings.SuspendLayout();
@@ -733,7 +725,6 @@
             this.tabPageData.Controls.Add(this.btnDataShowFail);
             this.tabPageData.Controls.Add(this.listViewGrabDetail);
             this.tabPageData.Controls.Add(this.groupBoxGrabIdRange);
-            this.tabPageData.Controls.Add(this.groupBoxTimeRange);
             this.tabPageData.Controls.Add(this.btnDataSelectFolder);
             this.tabPageData.Controls.Add(this.camData6);
             this.tabPageData.Controls.Add(this.camData5);
@@ -954,77 +945,6 @@
             this.cbDataIdEnd.Name = "cbDataIdEnd";
             this.cbDataIdEnd.Size = new System.Drawing.Size(108, 23);
             this.cbDataIdEnd.TabIndex = 43;
-            // 
-            // groupBoxTimeRange
-            // 
-            this.groupBoxTimeRange.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.groupBoxTimeRange.Controls.Add(this.lblStartTimeHeader);
-            this.groupBoxTimeRange.Controls.Add(this.cbDataDateStart);
-            this.groupBoxTimeRange.Controls.Add(this.cbDataTimeStart);
-            this.groupBoxTimeRange.Controls.Add(this.lblEndTimeHeader);
-            this.groupBoxTimeRange.Controls.Add(this.cbDataDateEnd);
-            this.groupBoxTimeRange.Controls.Add(this.cbDataTimeEnd);
-            this.groupBoxTimeRange.Location = new System.Drawing.Point(298, 195);
-            this.groupBoxTimeRange.Name = "groupBoxTimeRange";
-            this.groupBoxTimeRange.Size = new System.Drawing.Size(203, 92);
-            this.groupBoxTimeRange.TabIndex = 35;
-            this.groupBoxTimeRange.TabStop = false;
-            this.groupBoxTimeRange.Text = "時序範圍";
-            // 
-            // lblStartTimeHeader
-            // 
-            this.lblStartTimeHeader.AutoSize = true;
-            this.lblStartTimeHeader.Location = new System.Drawing.Point(6, 19);
-            this.lblStartTimeHeader.Name = "lblStartTimeHeader";
-            this.lblStartTimeHeader.Size = new System.Drawing.Size(67, 15);
-            this.lblStartTimeHeader.TabIndex = 36;
-            this.lblStartTimeHeader.Text = "開始時間";
-            // 
-            // cbDataDateStart
-            // 
-            this.cbDataDateStart.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbDataDateStart.FormattingEnabled = true;
-            this.cbDataDateStart.Location = new System.Drawing.Point(6, 37);
-            this.cbDataDateStart.Name = "cbDataDateStart";
-            this.cbDataDateStart.Size = new System.Drawing.Size(90, 23);
-            this.cbDataDateStart.TabIndex = 21;
-            // 
-            // cbDataTimeStart
-            // 
-            this.cbDataTimeStart.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbDataTimeStart.FormattingEnabled = true;
-            this.cbDataTimeStart.Location = new System.Drawing.Point(6, 63);
-            this.cbDataTimeStart.Name = "cbDataTimeStart";
-            this.cbDataTimeStart.Size = new System.Drawing.Size(90, 23);
-            this.cbDataTimeStart.TabIndex = 22;
-            // 
-            // lblEndTimeHeader
-            // 
-            this.lblEndTimeHeader.AutoSize = true;
-            this.lblEndTimeHeader.Location = new System.Drawing.Point(100, 19);
-            this.lblEndTimeHeader.Name = "lblEndTimeHeader";
-            this.lblEndTimeHeader.Size = new System.Drawing.Size(67, 15);
-            this.lblEndTimeHeader.TabIndex = 39;
-            this.lblEndTimeHeader.Text = "結束時間";
-            // 
-            // cbDataDateEnd
-            // 
-            this.cbDataDateEnd.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbDataDateEnd.FormattingEnabled = true;
-            this.cbDataDateEnd.Location = new System.Drawing.Point(100, 37);
-            this.cbDataDateEnd.Name = "cbDataDateEnd";
-            this.cbDataDateEnd.Size = new System.Drawing.Size(90, 23);
-            this.cbDataDateEnd.TabIndex = 27;
-            // 
-            // cbDataTimeEnd
-            // 
-            this.cbDataTimeEnd.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbDataTimeEnd.FormattingEnabled = true;
-            this.cbDataTimeEnd.Location = new System.Drawing.Point(100, 63);
-            this.cbDataTimeEnd.Name = "cbDataTimeEnd";
-            this.cbDataTimeEnd.Size = new System.Drawing.Size(90, 23);
-            this.cbDataTimeEnd.TabIndex = 28;
             // 
             // btnDataSelectFolder
             // 
@@ -3123,8 +3043,6 @@
             ((System.ComponentModel.ISupportInitialize)(this.chartDataYieldMonthly)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.chartDataYieldDaily)).EndInit();
             this.groupBoxGrabIdRange.ResumeLayout(false);
-            this.groupBoxTimeRange.ResumeLayout(false);
-            this.groupBoxTimeRange.PerformLayout();
             this.statusBarMain.ResumeLayout(false);
             this.statusBarMain.PerformLayout();
             this.tabControlRight.ResumeLayout(false);
@@ -3411,17 +3329,10 @@
         private System.Windows.Forms.Panel camData3;
         private System.Windows.Forms.Panel camData2;
         private System.Windows.Forms.Panel camData1;
-        private System.Windows.Forms.ComboBox cbDataDateStart;
-        private System.Windows.Forms.ComboBox cbDataTimeStart;
-        private System.Windows.Forms.ComboBox cbDataDateEnd;
-        private System.Windows.Forms.ComboBox cbDataTimeEnd;
         private System.Windows.Forms.Button btnDataSelectFolder;
         private System.Windows.Forms.GroupBox groupBoxGrabIdRange;
         private System.Windows.Forms.ComboBox cbDataIdStart;
         private System.Windows.Forms.ComboBox cbDataIdEnd;
-        private System.Windows.Forms.GroupBox groupBoxTimeRange;
-        private System.Windows.Forms.Label lblStartTimeHeader;
-        private System.Windows.Forms.Label lblEndTimeHeader;
         private System.Windows.Forms.ListView listViewGrabDetail;
         private System.Windows.Forms.TableLayoutPanel panelStatusBar;
         private System.Windows.Forms.Label lblIoConn;

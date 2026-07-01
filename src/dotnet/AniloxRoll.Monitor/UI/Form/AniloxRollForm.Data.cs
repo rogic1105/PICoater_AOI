@@ -51,13 +51,10 @@ namespace AniloxRoll.Monitor.Forms
         {
             _dataStatsPresenter = new DataStatisticsPresenter(new DataStatisticsContext
             {
-                CbStartDate = cbDataDateStart, CbStartTime = cbDataTimeStart,
-                CbEndDate = cbDataDateEnd, CbEndTime = cbDataTimeEnd,
                 CbGrabIdStart = cbDataIdStart, CbGrabIdEnd = cbDataIdEnd,
                 CbDataGrabId = cbDataId, CbReviewGrabId = cbReviewId,
                 BtnSelectDataFolder = btnDataSelectFolder, BtnShowFail = btnDataShowFail,
                 GroupBoxGrabIdRange = groupBoxGrabIdRange, GrpDataSingleSheet = grpDataSingleSheet,
-                GroupBoxTimeRange = groupBoxTimeRange,
                 GrpReviewGrabNav = grpReviewGrabNav, GrpReviewTimePeriod = grpReviewTimePeriod,
                 ListViewGrabDetail = listViewGrabDetail,
                 PanelStatCams = new[] { camData1, camData2, camData3,
