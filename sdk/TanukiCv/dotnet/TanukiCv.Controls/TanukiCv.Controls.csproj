@@ -75,6 +75,7 @@
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="UI\ImageCanvas.cs" />
+    <Compile Include="UI\ColorTextCard.cs" />
     <Compile Include="Layout\RoundedLabel.cs">
       <SubType>Component</SubType>
     </Compile>

@@ -30,9 +30,9 @@
 
 ### camData1~7 良率色卡（`InspectionStatsPresenter`）
 
-- **一張卡片 = 一個雙緩衝自繪控制項 `YieldCardView`**（底色 + CAM名 + 良率 + Pass/Fail 三行字全部在單一 `OnPaint` 一次畫完）。換色只 `SetContent` → 一次 `Invalidate` → **原子重繪**，不會半紅半綠。
+- **一張卡片 = sdk `TanukiCv.Controls.ColorTextCard`**（雙緩衝自繪控制項：底色 + 上/中/下三行字全部在單一 `OnPaint` 一次畫完）。`InspectionStatsPresenter` 算好門檻顏色 + `CAM{i}`/良率/Pass-Fail 字串 → `card.SetContent(back, top, center, bottom)`。換色 → 一次 `Invalidate` → **原子重繪**，不會半紅半綠。
 - **反模式（已修，勿回退）**：舊版用 3 個 Dock 的 `Label` 疊在 `Panel` 上，換色時 panel + 3 label 各自非同步重繪 → 「上半綠下半紅」俄羅斯方塊 flicker。透明或實色 label 都一樣（多控制項 = 多重繪單位）。**單一自繪控制項才是根治**。
-- 顏色門檻（≥95%綠 / ≥80%橙 / <80%紅 / 無資料灰）留 app（政策）；`YieldCardView` 純畫圖不含業務。**未來待辦：`YieldCardView` 是通用機制，可搬 sdk `TanukiCv.Controls` 改名 `ColorTextCard`**（app 保留門檻/命名政策）。
+- **機制/政策邊界**：`ColorTextCard` = sdk 通用機制（純畫「一塊底色 + 三行字」，不知良率/相機）；顏色門檻（≥95%綠 / ≥80%橙 / <80%紅 / 無資料灰）+ CAM 命名 + 良率算法留 app（政策，`InspectionStatsPresenter`）。
 
 ### Data tab 讀取資料 → Review tab 同步
 

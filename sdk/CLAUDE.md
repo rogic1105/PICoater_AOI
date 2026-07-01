@@ -108,6 +108,7 @@ sdk/
 - **ImageDisplayView 顯示選項套用** = `TanukiCv.Controls.LiveDisplayOptions` + `ImageDisplayView.ApplyOptions`。共用 MergeMode/MergeAll/MergeStrategy/FlipVertical/ThumbSelectedColor；frame feed、layout、LOD provider、MIL direct 等策略仍由呼叫端擁有。
 - **多擊偵測** = `TanukiCv.Controls.MultiClickDetector`。ImageCanvas 內建雙擊 fit/三擊 1:1 與 app panel route 共用同一個 detector；呼叫端可設定 interval/距離模式以保留各自手勢語意。
 - **瀑布顯示** = `TanukiCv.Controls.WaterfallView` + `WaterfallFullMode`。使用 ImageCanvas LOD、MergeLayout placement、chunked gray buffer；app 只負責餵 frame/layout/settings。
+- **彩色三行字卡片** = `TanukiCv.Controls.ColorTextCard`（`UI/`）。雙緩衝自繪：底色 + 上/中/下三行字同一 `OnPaint` 一次畫完 → 換色原子重繪、不 flicker。取代「Panel + 3 個 Dock Label」多控制項疊法（各自非同步重繪成半紅半綠）。呼叫端 `SetContent(back, top, center, bottom)`；門檻/文字等業務算好再餵（app `InspectionStatsPresenter` 良率色卡用它）。
 - **曝光上限公式** = `MilCameraParams.CalcExposureMaxUs`（`MIL/MilGrabber.Core/MilCamera.Params.cs`）。
 - **曲線圖** = `BaseCurveChartHelper`（Template Method）+ `Column`/`Row` 子類；app 與 sample 共用。
 
