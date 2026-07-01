@@ -5,11 +5,11 @@ using System.Linq;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
 using AniloxRoll.Monitor.Core.Data;
-using AniloxRoll.Monitor.Core.Interop;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.Navigators;
 using AniloxRoll.Monitor.UI.Widgets;
 using TanukiCv.Controls;
+using TanukiCv.Controls.WinForms;
 
 namespace AniloxRoll.Monitor.UI.Presenters
 {
@@ -346,7 +346,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (lv.SelectedItems.Count == 0) return;
             string grabId = lv.SelectedItems[0].Text;
             if (string.IsNullOrEmpty(grabId)) return;
-            string topGrabId = GetDetailListTopGrabId(lv, out int topIndex);
+            var scrollKeeper = ListViewScrollKeeper.Capture(lv);
 
             // Toggle：第二次點同 row + 已是 SingleSheet → 切回 GroupBoxGrabIdRange（範圍模式，stats 用 cbDataIdStart/End）
             if (grabId == _lastListViewSelectedGrabId && _dateGrabIdNavigator.ActiveStatMode == _ctx.GrpDataSingleSheet)
@@ -357,7 +357,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 lv.SelectedIndices.Clear();  // 清掉反白，視覺回到「無選中」
                 _dateGrabIdNavigator.SetActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);
                 RefreshStats();
-                RestoreDetailListTopItem(lv, topGrabId, topIndex);
+                scrollKeeper.Restore(lv);
                 });
                 return;
             }
@@ -374,20 +374,19 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 {
                     _dateGrabIdNavigator.SwitchActiveStatGroupBox(_ctx.GrpDataSingleSheet);
                 }
-                RestoreDetailListTopItem(lv, topGrabId, topIndex);
+                scrollKeeper.Restore(lv);
                 });
                 return;
             }
             ExecuteWithDetailListRedrawSuspended(lv, () =>
             {
             _dateGrabIdNavigator.CommitDataGrabIdFromDetailList(grabId);
-            RestoreDetailListTopItem(lv, topGrabId, topIndex);
+            scrollKeeper.Restore(lv);
             });
         }
 
         private void ExecuteWithDetailListRedrawSuspended(ListView lv, Action action)
         {
-            const int WM_SETREDRAW = 0x000B;
             if (lv == null || action == null) return;
             if (!lv.IsHandleCreated || lv.IsDisposed)
             {
@@ -398,72 +397,18 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 return;
             }
 
-            NativeMethods.SendMessage(lv.Handle, WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);
-            lv.SuspendLayout();
             bool savedPreserveDetailList = _preserveDetailListDuringSelection;
             _preserveDetailListDuringSelection = true;
-            try
+            using (new RedrawScope(lv))
             {
-                action();
-            }
-            finally
-            {
-                _preserveDetailListDuringSelection = savedPreserveDetailList;
-                lv.ResumeLayout();
-                NativeMethods.SendMessage(lv.Handle, WM_SETREDRAW, new IntPtr(1), IntPtr.Zero);
-                if (!lv.IsDisposed) lv.Invalidate();
-            }
-        }
-
-        private static string GetDetailListTopGrabId(ListView lv, out int topIndex)
-        {
-            topIndex = 0;
-            if (lv == null || lv.Items.Count == 0) return null;
-
-            try
-            {
-                var topItem = lv.TopItem;
-                if (topItem == null) return null;
-                topIndex = topItem.Index;
-                return topItem.Text;
-            }
-            catch (InvalidOperationException)
-            {
-                return null;
-            }
-        }
-
-        private static void RestoreDetailListTopItem(ListView lv, string topGrabId, int topIndex)
-        {
-            if (lv == null || lv.Items.Count == 0) return;
-
-            int restoreIndex = -1;
-            if (!string.IsNullOrEmpty(topGrabId))
-            {
-                for (int i = 0; i < lv.Items.Count; i++)
+                try
                 {
-                    if (lv.Items[i].Text == topGrabId)
-                    {
-                        restoreIndex = i;
-                        break;
-                    }
+                    action();
                 }
-            }
-
-            if (restoreIndex < 0)
-                restoreIndex = Math.Max(0, Math.Min(topIndex, lv.Items.Count - 1));
-
-            try
-            {
-                lv.TopItem = lv.Items[restoreIndex];
-            }
-            catch (InvalidOperationException)
-            {
-                lv.BeginInvoke(new Action(() =>
+                finally
                 {
-                    if (!lv.IsDisposed && lv.Items.Count > restoreIndex)
-                        lv.TopItem = lv.Items[restoreIndex];
-                }));
+                    _preserveDetailListDuringSelection = savedPreserveDetailList;
+                }
             }
         }
 

@@ -84,6 +84,9 @@
     <Compile Include="Layout\ProportionalScaler.cs" />
     <Compile Include="Input\ComboBoxWheelReverser.cs" />
     <Compile Include="Input\TrackBarWheelInterceptor.cs" />
+    <Compile Include="WinForms\ListViewScrollKeeper.cs" />
+    <Compile Include="WinForms\PropertyGridScrollKeeper.cs" />
+    <Compile Include="WinForms\RedrawScope.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

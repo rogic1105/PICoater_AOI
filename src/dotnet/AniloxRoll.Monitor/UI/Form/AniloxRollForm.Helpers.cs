@@ -13,6 +13,7 @@ using StorageBridge.Core;
 using LightBridge.Core;
 using MilGrabber.Core;
 using TanukiCv.Controls;
+using TanukiCv.Controls.WinForms;
 using TanukiCv.Utils;
 using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Data;
@@ -36,6 +37,12 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private void RefreshGridItem(string propertyName)
         {
+            if (PropertyGridScrollKeeper.RefreshGridItem(
+                    propertyGridSettings,
+                    propertyName,
+                    value => _suppressGridSelChange = value))
+                return;
+
             if (string.IsNullOrEmpty(propertyName)) return;
             if (propertyGridSettings == null) return;
             GridItem root = propertyGridSettings.SelectedGridItem;
@@ -89,6 +96,12 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private void RefreshPropertyGridKeepScroll()
         {
+            if (propertyGridSettings != null)
+            {
+                PropertyGridScrollKeeper.RefreshKeepScroll(propertyGridSettings);
+                return;
+            }
+
             const int WM_SETREDRAW = 0x000B;
             Control gridView = null;
             foreach (Control c in propertyGridSettings.Controls)
