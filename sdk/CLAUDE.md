@@ -109,6 +109,7 @@ sdk/
 - **多擊偵測** = `TanukiCv.Controls.MultiClickDetector`。ImageCanvas 內建雙擊 fit/三擊 1:1 與 app panel route 共用同一個 detector；呼叫端可設定 interval/距離模式以保留各自手勢語意。
 - **瀑布顯示** = `TanukiCv.Controls.WaterfallView` + `WaterfallFullMode`。使用 ImageCanvas LOD、MergeLayout placement、chunked gray buffer；app 只負責餵 frame/layout/settings。
 - **彩色三行字卡片** = `TanukiCv.Controls.ColorTextCard`（`UI/`）。雙緩衝自繪：底色 + 上/中/下三行字同一 `OnPaint` 一次畫完 → 換色原子重繪、不 flicker。取代「Panel + 3 個 Dock Label」多控制項疊法（各自非同步重繪成半紅半綠）。呼叫端 `SetContent(back, top, center, bottom)`；門檻/文字等業務算好再餵（app `InspectionStatsPresenter` 良率色卡用它）。
+- **等比例縮放 + tab 預熱** = `TanukiCv.Controls.ProportionalScaler`（`Layout/`）。`RescaleActiveTabs`（開窗最大化補縮作用中 tab）+ **`PrewarmAllTabs`**（逐一切過每個 TabControl 所有分頁，`LockWindowUpdate` 壓住整棵樹繪製下把「設計→最大化」放大重排一次做完 → 消除「首次切 tab 逐控制項放大冒出」的分塊）。`LockWindowUpdate` P/Invoke 在此類別內（機制自足）。⚠ cycle 觸發呼叫端 `SelectedIndexChanged` handler，有副作用者呼叫端自行加守衛（app 用 `_reviewDirty` 守 tabMain→Review 自動載入）。
 - **曝光上限公式** = `MilCameraParams.CalcExposureMaxUs`（`MIL/MilGrabber.Core/MilCamera.Params.cs`）。
 - **曲線圖** = `BaseCurveChartHelper`（Template Method）+ `Column`/`Row` 子類；app 與 sample 共用。
 

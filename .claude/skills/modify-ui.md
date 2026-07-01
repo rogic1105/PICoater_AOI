@@ -113,7 +113,7 @@ bootstrap 例外（line 232 AppRole）：Hub 還沒建構，加註解標明合�
 - TabControl `SelectedIndexChanged` 觸發時除 `RecordRecursive(tab)` 外，主動 `ScaleRecursive(tab, _form.ClientSize)` 重 scale 該 tab。WinForms 對 inactive TabPage 有 lazy layout，maximize 時寫入的 Bounds 可能在 TabPage 變 active 時被 layout 引擎重設回 `Top|Left` Anchor 預設位置 → 不切 tab 直接 maximize 看不到放大；切 tab 主動 scale 解決此問題
 - `_scaler.Initialize()` 在建構子內呼叫（非 Shown 內）：須早於任何 Resize 事件才能正確記錄 baseSize 與 Designer 預設 Bounds 作為 ratio 基準
 - 機台角色 = Storage 時 `ApplyStorageModeUi` 在 Scaler 建立前移除 `tabPageLiveView`，Scaler 自動只處理剩下 2 個 tab
-- **tab 首次切換分塊放大修復**（`AniloxRollForm.PrewarmTabMainPages`，Shown 內 RescaleActiveTabs 後）：上述 lazy layout 讓每個 tab「首次顯示」才逐控制項放大 → 使用者看到俄羅斯方塊式分塊。修法＝Shown（尺寸已最大化）逐一切過每個 tab 觸發放大重排，整段用 `NativeMethods.LockWindowUpdate(Handle)` 壓住**整棵樹**繪製（`WM_SETREDRAW`/`RedrawScope` 只鎖單一視窗、壓不到 chart/ListView 子控制項）→ 放大過程不可見；解鎖 `Invalidate(true)` 一次乾淨重畫。之後真正切 tab 套一樣 Bounds = 零跳動。切換期間 `_reviewDirty=false` 防誤觸發 Review 載入
+- **tab 首次切換分塊放大修復** = sdk `ProportionalScaler.PrewarmAllTabs()`（機制已搬 sdk；`AniloxRollForm` Shown 內 RescaleActiveTabs 後呼叫）：上述 lazy layout 讓每個 tab「首次顯示」才逐控制項放大 → 俄羅斯方塊式分塊。`PrewarmAllTabs` 在尺寸已最大化時逐一切過**每個 TabControl 的所有分頁**觸發放大重排，整段用 `LockWindowUpdate`（P/Invoke 在 sdk ProportionalScaler 內）壓住**整棵樹**繪製（`WM_SETREDRAW`/`RedrawScope` 只鎖單一視窗、壓不到 chart/ListView 子控制項）→ 放大過程不可見；解鎖 `Invalidate(true)` 一次乾淨重畫。之後真正切 tab 套一樣 Bounds = 零跳動。**cycle 會觸發呼叫端 `TabControl.SelectedIndexChanged` handler**，故 app 呼叫外層用 `_reviewDirty=false` 守衛防誤觸發 tabMain→Review 自動載入（sdk 方法不知業務副作用，守衛屬 app 政策）
 
 ### Chart ZoomReset/Clear 禁忌
 - 不可在 `await` 前執行 chart clear/reset（會被後續 `UpdateDataAndView` 覆蓋）

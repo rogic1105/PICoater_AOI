@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace TanukiCv.Controls
@@ -47,6 +48,56 @@ namespace TanukiCv.Controls
                 RescaleActiveTabsRecursive(c);
             }
         }
+
+        /// <summary>
+        /// 開窗最大化後，逐一切過每個 TabControl 的所有分頁，讓每頁的「設計尺寸 → 最大化尺寸」放大重排
+        /// （透過 <see cref="HookTabControls"/> 掛的 SelectedIndexChanged → ScaleRecursive）一次做完。
+        /// 否則各頁在使用者「首次」切到時才 lazy 放大 → 逐控制項設 Bounds 的可見分塊（俄羅斯方塊）。
+        /// <para>
+        /// 整段用 <c>LockWindowUpdate</c> 壓住整個視窗（含所有子控制項）的繪製 → 放大過程完全不可見；
+        /// 解鎖後一次乾淨重畫。之後真正切 tab 套一樣的 Bounds = 零跳動。應在視窗已達最終（最大化）尺寸後
+        /// （如 Form.Shown、且於 <see cref="RescaleActiveTabs"/> 之後）呼叫。
+        /// </para>
+        /// ⚠ cycle 會觸發呼叫端掛在 <c>TabControl.SelectedIndexChanged</c> 的 handler；若那些 handler 有副作用
+        /// （如切到某頁自動載入資料），呼叫端須自行在呼叫本方法前後加守衛（本方法不知道那些業務副作用）。
+        /// </summary>
+        public void PrewarmAllTabs()
+        {
+            if (!_initialized) return;
+            bool locked = false;
+            try
+            {
+                locked = LockWindowUpdate(_form.Handle);
+                PrewarmTabsRecursive(_form);
+            }
+            catch { /* 預熱失敗不影響啟動 */ }
+            finally
+            {
+                if (locked) LockWindowUpdate(IntPtr.Zero);
+                _form.Invalidate(true);   // 解鎖後一次乾淨重畫目前分頁
+            }
+        }
+
+        private void PrewarmTabsRecursive(Control parent)
+        {
+            foreach (Control c in parent.Controls)
+            {
+                if (c is TabControl tc && tc.TabPages.Count > 1)
+                {
+                    var original = tc.SelectedTab;
+                    foreach (TabPage page in tc.TabPages)
+                        tc.SelectedTab = page;   // 觸發該頁 SelectedIndexChanged → ScaleRecursive 放大重排
+                    tc.SelectedTab = original;
+                }
+                PrewarmTabsRecursive(c);
+            }
+        }
+
+        // 鎖住指定視窗「及其所有子控制項」的繪製（傳 IntPtr.Zero 解鎖）。
+        // 預熱放大重排期間壓住整棵樹繪製用；WM_SETREDRAW 只鎖單一視窗、壓不到子控制項故不適用。
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool LockWindowUpdate(IntPtr hWndLock);
 
         public ProportionalScaler(Form form)
         {
