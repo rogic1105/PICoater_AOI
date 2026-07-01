@@ -767,7 +767,7 @@
             // lblChartDataYieldMonthlyUnit
             // 
             this.lblChartDataYieldMonthlyUnit.AutoSize = true;
-            this.lblChartDataYieldMonthlyUnit.Location = new System.Drawing.Point(975, 585);
+            this.lblChartDataYieldMonthlyUnit.Location = new System.Drawing.Point(978, 482);
             this.lblChartDataYieldMonthlyUnit.Name = "lblChartDataYieldMonthlyUnit";
             this.lblChartDataYieldMonthlyUnit.Size = new System.Drawing.Size(22, 15);
             this.lblChartDataYieldMonthlyUnit.TabIndex = 53;
@@ -776,7 +776,7 @@
             // lblChartDataYieldDailyUnit
             // 
             this.lblChartDataYieldDailyUnit.AutoSize = true;
-            this.lblChartDataYieldDailyUnit.Location = new System.Drawing.Point(295, 614);
+            this.lblChartDataYieldDailyUnit.Location = new System.Drawing.Point(298, 511);
             this.lblChartDataYieldDailyUnit.Name = "lblChartDataYieldDailyUnit";
             this.lblChartDataYieldDailyUnit.Size = new System.Drawing.Size(22, 15);
             this.lblChartDataYieldDailyUnit.TabIndex = 52;
@@ -785,7 +785,7 @@
             // lblChartDataYieldYearlyUnit
             // 
             this.lblChartDataYieldYearlyUnit.AutoSize = true;
-            this.lblChartDataYieldYearlyUnit.Location = new System.Drawing.Point(295, 388);
+            this.lblChartDataYieldYearlyUnit.Location = new System.Drawing.Point(298, 285);
             this.lblChartDataYieldYearlyUnit.Name = "lblChartDataYieldYearlyUnit";
             this.lblChartDataYieldYearlyUnit.Size = new System.Drawing.Size(22, 15);
             this.lblChartDataYieldYearlyUnit.TabIndex = 51;
@@ -813,7 +813,7 @@
             // lblChartNavMonth
             // 
             this.lblChartNavMonth.AutoSize = true;
-            this.lblChartNavMonth.Location = new System.Drawing.Point(975, 472);
+            this.lblChartNavMonth.Location = new System.Drawing.Point(978, 369);
             this.lblChartNavMonth.Name = "lblChartNavMonth";
             this.lblChartNavMonth.Size = new System.Drawing.Size(22, 15);
             this.lblChartNavMonth.TabIndex = 42;
@@ -823,7 +823,7 @@
             // 
             this.cbDataYieldYear.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.cbDataYieldYear.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbDataYieldYear.Location = new System.Drawing.Point(960, 333);
+            this.cbDataYieldYear.Location = new System.Drawing.Point(963, 230);
             this.cbDataYieldYear.Name = "cbDataYieldYear";
             this.cbDataYieldYear.Size = new System.Drawing.Size(50, 23);
             this.cbDataYieldYear.TabIndex = 43;
@@ -831,7 +831,7 @@
             // lblChartNavDay
             // 
             this.lblChartNavDay.AutoSize = true;
-            this.lblChartNavDay.Location = new System.Drawing.Point(295, 501);
+            this.lblChartNavDay.Location = new System.Drawing.Point(298, 398);
             this.lblChartNavDay.Name = "lblChartNavDay";
             this.lblChartNavDay.Size = new System.Drawing.Size(22, 15);
             this.lblChartNavDay.TabIndex = 41;
@@ -841,7 +841,7 @@
             // 
             this.cbDataYieldMonth.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.cbDataYieldMonth.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbDataYieldMonth.Location = new System.Drawing.Point(960, 446);
+            this.cbDataYieldMonth.Location = new System.Drawing.Point(963, 343);
             this.cbDataYieldMonth.Name = "cbDataYieldMonth";
             this.cbDataYieldMonth.Size = new System.Drawing.Size(50, 23);
             this.cbDataYieldMonth.TabIndex = 46;
@@ -849,7 +849,7 @@
             // lblChartNavYear
             // 
             this.lblChartNavYear.AutoSize = true;
-            this.lblChartNavYear.Location = new System.Drawing.Point(975, 359);
+            this.lblChartNavYear.Location = new System.Drawing.Point(978, 256);
             this.lblChartNavYear.Name = "lblChartNavYear";
             this.lblChartNavYear.Size = new System.Drawing.Size(22, 15);
             this.lblChartNavYear.TabIndex = 40;
@@ -859,7 +859,7 @@
             // 
             this.cbDataYieldDay.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.cbDataYieldDay.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbDataYieldDay.Location = new System.Drawing.Point(960, 559);
+            this.cbDataYieldDay.Location = new System.Drawing.Point(963, 456);
             this.cbDataYieldDay.Name = "cbDataYieldDay";
             this.cbDataYieldDay.Size = new System.Drawing.Size(50, 23);
             this.cbDataYieldDay.TabIndex = 49;
@@ -868,7 +868,7 @@
             // 
             this.chartDataYieldYearly.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.chartDataYieldYearly.Location = new System.Drawing.Point(293, 298);
+            this.chartDataYieldYearly.Location = new System.Drawing.Point(296, 195);
             this.chartDataYieldYearly.Name = "chartDataYieldYearly";
             this.chartDataYieldYearly.Size = new System.Drawing.Size(721, 105);
             this.chartDataYieldYearly.TabIndex = 38;
@@ -878,7 +878,7 @@
             // 
             this.chartDataYieldMonthly.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.chartDataYieldMonthly.Location = new System.Drawing.Point(293, 411);
+            this.chartDataYieldMonthly.Location = new System.Drawing.Point(296, 308);
             this.chartDataYieldMonthly.Name = "chartDataYieldMonthly";
             this.chartDataYieldMonthly.Size = new System.Drawing.Size(721, 105);
             this.chartDataYieldMonthly.TabIndex = 39;
@@ -888,7 +888,7 @@
             // 
             this.chartDataYieldDaily.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.chartDataYieldDaily.Location = new System.Drawing.Point(293, 524);
+            this.chartDataYieldDaily.Location = new System.Drawing.Point(296, 421);
             this.chartDataYieldDaily.Name = "chartDataYieldDaily";
             this.chartDataYieldDaily.Size = new System.Drawing.Size(721, 105);
             this.chartDataYieldDaily.TabIndex = 40;
@@ -899,9 +899,9 @@
             this.btnDataShowFail.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.btnDataShowFail.Font = new System.Drawing.Font("新細明體", 8F);
-            this.btnDataShowFail.Location = new System.Drawing.Point(900, 167);
+            this.btnDataShowFail.Location = new System.Drawing.Point(601, 568);
             this.btnDataShowFail.Name = "btnDataShowFail";
-            this.btnDataShowFail.Size = new System.Drawing.Size(115, 33);
+            this.btnDataShowFail.Size = new System.Drawing.Size(115, 36);
             this.btnDataShowFail.TabIndex = 41;
             this.btnDataShowFail.Text = "△ 顯示異常";
             this.btnDataShowFail.UseVisualStyleBackColor = true;
