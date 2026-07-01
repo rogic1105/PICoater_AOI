@@ -28,6 +28,12 @@
 - **欄寬 = `FitGrabDetailColumnsToContent`**：VirtualMode 下 `lv.Items` 為空，`AutoResizeColumns(ColumnContent)` / 量 Items 的 `FitListViewColumnsProportional` 都失效 → 改用 `_visibleDetails` 取樣量測，還原「貼齊內容緊湊欄寬」觀感。
 - **4 個 grabId combo 批次填充**：`DataDateGrabIdNavigator.PopulateAllGrabIdCombos` 用 `BeginUpdate` + `Items.AddRange(object[])`（**非逐筆 Add**），一萬筆時重繪 4 萬次 → 4 次，避免每次載入/換日期 UI 凍住。
 
+### camData1~7 良率色卡（`InspectionStatsPresenter`）
+
+- **一張卡片 = 一個雙緩衝自繪控制項 `YieldCardView`**（底色 + CAM名 + 良率 + Pass/Fail 三行字全部在單一 `OnPaint` 一次畫完）。換色只 `SetContent` → 一次 `Invalidate` → **原子重繪**，不會半紅半綠。
+- **反模式（已修，勿回退）**：舊版用 3 個 Dock 的 `Label` 疊在 `Panel` 上，換色時 panel + 3 label 各自非同步重繪 → 「上半綠下半紅」俄羅斯方塊 flicker。透明或實色 label 都一樣（多控制項 = 多重繪單位）。**單一自繪控制項才是根治**。
+- 顏色門檻（≥95%綠 / ≥80%橙 / <80%紅 / 無資料灰）留 app（政策）；`YieldCardView` 純畫圖不含業務。**未來待辦：`YieldCardView` 是通用機制，可搬 sdk `TanukiCv.Controls` 改名 `ColorTextCard`**（app 保留門檻/命名政策）。
+
 ### Data tab 讀取資料 → Review tab 同步
 
 - `btnDataSelectFolder` 觸發 `DataFolderSelected` event → `AniloxRollForm.OnDataFolderSelected`
