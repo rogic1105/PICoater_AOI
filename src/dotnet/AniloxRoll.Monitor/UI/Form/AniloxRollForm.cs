@@ -642,7 +642,7 @@ namespace AniloxRoll.Monitor.Forms
             };
             _liveCameraManager.OnCameraCountChanged += (connected, expected) =>
             {
-                if (InvokeRequired) { if (!IsHandleCreated || IsDisposed || Disposing) return; BeginInvoke(new Action<int, int>(UpdateCamCountLabel), connected, expected); return; }
+                if (InvokeRequired) { if (!IsHandleCreated || IsDisposed || Disposing) return; SafeBeginInvoke(() => UpdateCamCountLabel(connected, expected)); return; }
                 UpdateCamCountLabel(connected, expected);
             };
             // CLProtocol 就緒前「開始抓取」維持灰色 + 相機數顯示「初始化中」，避免 grab 期間才啟用
@@ -652,7 +652,7 @@ namespace AniloxRoll.Monitor.Forms
             if (lblCamCount != null) { lblCamCount.Text = "相機: 初始化中…"; lblCamCount.BackColor = IecGray; }
             _liveCameraManager.OnHwReady += () =>
             {
-                if (InvokeRequired) { if (!IsHandleCreated || IsDisposed || Disposing) return; BeginInvoke(new Action(OnCamerasHwReady)); return; }
+                if (InvokeRequired) { if (!IsHandleCreated || IsDisposed || Disposing) return; SafeBeginInvoke(OnCamerasHwReady); return; }
                 OnCamerasHwReady();
             };
 

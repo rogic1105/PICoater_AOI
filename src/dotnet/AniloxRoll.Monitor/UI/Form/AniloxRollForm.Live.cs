@@ -257,7 +257,7 @@ namespace AniloxRoll.Monitor.Forms
             if (InvokeRequired)
             {
                 if (!IsHandleCreated || IsDisposed || Disposing) return;
-                BeginInvoke(new Action<int, float[], float[]>(OnLiveRowCurveData), camId, meanArr, maxArr);
+                SafeBeginInvoke(() => OnLiveRowCurveData(camId, meanArr, maxArr));
                 return;
             }
 
