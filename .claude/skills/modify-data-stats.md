@@ -19,7 +19,14 @@
 - `OnGrabDetailRowCommitted` 內用 `_suppressRangeOnSingleSheetSync` flag 包住 `cbDataId.SelectedIndex = idx`
 - `OnSingleSheetComboChanged` 看到 flag 跳過範圍 cb 同步（`cbDataIdStart`/`End` + `cbDataDateStart`/`Time` + `cbDataDateEnd`/`Time` 6 個）— **listView 點選時保留範圍 cb 不動**
 - 其他路徑（< > 按鈕、直接改 cbDataId）正常同步範圍 cb
-- `UpdateGrabDetailListView` 重填時不需要 unsubscribe/resubscribe（MouseUp 不被 Items.Clear/Add 觸發）
+- `UpdateGrabDetailListView` 重填時不需要 unsubscribe/resubscribe（MouseUp 不被列表重建觸發）
+
+### 大量資料處理（預估常駐 ~1 萬筆）
+
+- **`listViewGrabDetail` = `VirtualMode`**：不再逐筆建 `ListViewItem`，只存 `_visibleDetails`（List<GrabDetail>）+ 設 `VirtualListSize`；`RetrieveVirtualItem` → `BuildGrabDetailListViewItem(index)` 按需即時產生可見列。點選改用 `SelectedIndices[0]` 對應 `_visibleDetails[index].GrabId`（**不可用 `SelectedItems[0].Text`**，virtual 下不可靠）。
+- **owner-draw 樣式不變**：`DrawSubItem` 照樣讀 `e.Item.Tag`（rowHasFail）畫紅綠底 + 選中外框；symbol 用 unicode `—`/`○`/`×`（無資料/正常/異常），**勿降級成 ASCII**。
+- **欄寬 = `FitGrabDetailColumnsToContent`**：VirtualMode 下 `lv.Items` 為空，`AutoResizeColumns(ColumnContent)` / 量 Items 的 `FitListViewColumnsProportional` 都失效 → 改用 `_visibleDetails` 取樣量測，還原「貼齊內容緊湊欄寬」觀感。
+- **4 個 grabId combo 批次填充**：`DataDateGrabIdNavigator.PopulateAllGrabIdCombos` 用 `BeginUpdate` + `Items.AddRange(object[])`（**非逐筆 Add**），一萬筆時重繪 4 萬次 → 4 次，避免每次載入/換日期 UI 凍住。
 
 ### Data tab 讀取資料 → Review tab 同步
 

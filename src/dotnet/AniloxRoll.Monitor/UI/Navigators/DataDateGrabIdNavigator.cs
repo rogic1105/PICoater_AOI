@@ -57,16 +57,17 @@ namespace AniloxRoll.Monitor.UI.Navigators
             using (StatComboGuard.Enter())
             {
                 var grabIdInfos = _getGrabIdInfos();
-                _ctx.CbReviewGrabId.Items.Clear();
-                _ctx.CbGrabIdStart.Items.Clear();
-                _ctx.CbGrabIdEnd.Items.Clear();
-                _ctx.CbDataGrabId.Items.Clear();
-                foreach (var info in grabIdInfos)
+                // 批次填充：一萬筆時逐筆 Add 會 4 個 combo × N 次重繪 → UI 凍住幾秒。
+                // 先組成陣列，各 combo 用 BeginUpdate + AddRange 一次配置（重繪 4 萬次 → 4 次）。
+                var ids = new object[grabIdInfos.Count];
+                for (int i = 0; i < grabIdInfos.Count; i++)
+                    ids[i] = grabIdInfos[i].GrabId;
+                foreach (var cb in new[] { _ctx.CbReviewGrabId, _ctx.CbGrabIdStart, _ctx.CbGrabIdEnd, _ctx.CbDataGrabId })
                 {
-                    _ctx.CbReviewGrabId.Items.Add(info.GrabId);
-                    _ctx.CbGrabIdStart.Items.Add(info.GrabId);
-                    _ctx.CbGrabIdEnd.Items.Add(info.GrabId);
-                    _ctx.CbDataGrabId.Items.Add(info.GrabId);
+                    cb.BeginUpdate();
+                    cb.Items.Clear();
+                    cb.Items.AddRange(ids);
+                    cb.EndUpdate();
                 }
                 UpdateGrabIdNavState();
                 if (_ctx.CbGrabIdStart.Items.Count > 0)

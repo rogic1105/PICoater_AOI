@@ -71,6 +71,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private SortedSet<DateTime> _statAvailableTimes = new SortedSet<DateTime>();
         private List<GrabIdInfo> _grabIdInfos = new List<GrabIdInfo>();
         private List<GrabDetail> _currentDetails = new List<GrabDetail>();
+        private List<GrabDetail> _visibleDetails = new List<GrabDetail>();
         private bool _showFailOnly;
         private bool _preserveDetailListDuringSelection;
 
@@ -316,13 +317,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
             lv.FullRowSelect = true;
             lv.GridLines = true;
             lv.OwnerDraw = true;
+            lv.VirtualMode = true;
             lv.Columns.Clear();
-            lv.Items.Clear();
+            lv.VirtualListSize = 0;
 
             lv.Columns.Add("料件序號", -1, HorizontalAlignment.Center);
             for (int i = 1; i <= _ctx.CameraCount; i++)
                 lv.Columns.Add($"{i}", -1, HorizontalAlignment.Center);
-            FitListViewColumnsProportional(lv);
+            FitGrabDetailColumnsToContent(lv);
 
             // 點選明細列表的列 → MouseDown 時 ListView 預設視覺先反白（顯示被選中），
             // MouseUp 才 commit 切到該序號（與 cbDataId 變更流程共用 OnSingleSheetComboChanged）。
@@ -330,8 +332,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
             // 保留 cbDataIdStart/End 不變。
             lv.DrawColumnHeader -= ListViewGrabDetail_DrawColumnHeader;
             lv.DrawSubItem -= ListViewGrabDetail_DrawSubItem;
+            lv.RetrieveVirtualItem -= ListViewGrabDetail_RetrieveVirtualItem;
             lv.DrawColumnHeader += ListViewGrabDetail_DrawColumnHeader;
             lv.DrawSubItem += ListViewGrabDetail_DrawSubItem;
+            lv.RetrieveVirtualItem += ListViewGrabDetail_RetrieveVirtualItem;
             lv.MouseUp -= OnGrabDetailRowCommitted;
             lv.MouseUp += OnGrabDetailRowCommitted;
         }
@@ -343,10 +347,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (e.Button != MouseButtons.Left) return;
             if (StatComboGuard.IsSet) return;
             var lv = _ctx.ListViewGrabDetail;
-            if (lv.SelectedItems.Count == 0) return;
-            string grabId = lv.SelectedItems[0].Text;
+            if (lv.SelectedIndices.Count == 0) return;
+            int selectedIndex = lv.SelectedIndices[0];
+            if (selectedIndex < 0 || selectedIndex >= _visibleDetails.Count) return;
+            string grabId = _visibleDetails[selectedIndex].GrabId;
             if (string.IsNullOrEmpty(grabId)) return;
-            var scrollKeeper = ListViewScrollKeeper.Capture(lv);
 
             // Toggle：第二次點同 row + 已是 SingleSheet → 切回 GroupBoxGrabIdRange（範圍模式，stats 用 cbDataIdStart/End）
             if (grabId == _lastListViewSelectedGrabId && _dateGrabIdNavigator.ActiveStatMode == _ctx.GrpDataSingleSheet)
@@ -357,7 +362,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 lv.SelectedIndices.Clear();  // 清掉反白，視覺回到「無選中」
                 _dateGrabIdNavigator.SetActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);
                 RefreshStats();
-                scrollKeeper.Restore(lv);
                 });
                 return;
             }
@@ -374,14 +378,12 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 {
                     _dateGrabIdNavigator.SwitchActiveStatGroupBox(_ctx.GrpDataSingleSheet);
                 }
-                scrollKeeper.Restore(lv);
                 });
                 return;
             }
             ExecuteWithDetailListRedrawSuspended(lv, () =>
             {
             _dateGrabIdNavigator.CommitDataGrabIdFromDetailList(grabId);
-            scrollKeeper.Restore(lv);
             });
         }
 
@@ -415,6 +417,23 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private void UpdateGrabDetailListView(List<GrabDetail> details)
         {
             var lv = _ctx.ListViewGrabDetail;
+            if (lv.VirtualMode)
+            {
+                lv.BeginUpdate();
+                try
+                {
+                    _visibleDetails = details ?? new List<GrabDetail>();
+                    lv.SelectedIndices.Clear();
+                    lv.VirtualListSize = _visibleDetails.Count;
+                    FitGrabDetailColumnsToContent(lv);
+                }
+                finally
+                {
+                    lv.EndUpdate();
+                }
+                return;
+            }
+
             // 改用 MouseUp 訂閱後，Items.Clear/Add 不會觸發 commit 路徑，
             // 不需 unsubscribe/resubscribe；BeginUpdate/EndUpdate 包住批量重填，
             // SelectedIndices.Clear() 避免殘留高亮。
@@ -447,6 +466,61 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             lv.EndUpdate();
             lv.AutoResizeColumns(ColumnHeaderAutoResizeStyle.ColumnContent);
+        }
+
+        private void ListViewGrabDetail_RetrieveVirtualItem(object sender, RetrieveVirtualItemEventArgs e)
+        {
+            e.Item = BuildGrabDetailListViewItem(e.ItemIndex);
+        }
+
+        private ListViewItem BuildGrabDetailListViewItem(int index)
+        {
+            if (index < 0 || index >= _visibleDetails.Count)
+                return new ListViewItem(string.Empty);
+
+            var d = _visibleDetails[index];
+            var item = new ListViewItem(d.GrabId);
+            bool rowHasFail = false;
+
+            for (int i = 0; i < _ctx.CameraCount; i++)
+            {
+                if (d.CamResult[i] == null)
+                    item.SubItems.Add("—");
+                else if (d.CamResult[i] == false)
+                    item.SubItems.Add("○");
+                else
+                {
+                    item.SubItems.Add("×");
+                    rowHasFail = true;
+                }
+            }
+
+            item.Tag = rowHasFail;
+            item.BackColor = rowHasFail ? _detailFail : _detailPass;
+            return item;
+        }
+
+        // VirtualMode 下 lv.Items 為空，AutoResizeColumns(ColumnContent) / 量 Items 的
+        // FitListViewColumnsProportional 都失效。改用 _visibleDetails 取樣量測，
+        // 還原「貼齊內容的緊湊欄寬」（與非 virtual 路徑 AutoResizeColumns(ColumnContent) 同觀感）。
+        private void FitGrabDetailColumnsToContent(ListView lv)
+        {
+            if (lv.Columns.Count == 0) return;
+            using (var g = lv.CreateGraphics())
+            {
+                const int pad = 16; // 比照 AutoResizeColumns 的內距餘裕
+                string sample0 = _visibleDetails.Count > 0 && !string.IsNullOrEmpty(_visibleDetails[0].GrabId)
+                    ? _visibleDetails[0].GrabId
+                    : lv.Columns[0].Text;
+                lv.Columns[0].Width = (int)Math.Ceiling(Math.Max(
+                    g.MeasureString(lv.Columns[0].Text, lv.Font).Width,
+                    g.MeasureString(sample0, lv.Font).Width)) + pad;
+
+                float glyphW = g.MeasureString("×", lv.Font).Width;
+                for (int i = 1; i < lv.Columns.Count; i++)
+                    lv.Columns[i].Width = (int)Math.Ceiling(Math.Max(
+                        g.MeasureString(lv.Columns[i].Text, lv.Font).Width, glyphW)) + pad;
+            }
         }
 
         private static void ListViewGrabDetail_DrawColumnHeader(object sender, DrawListViewColumnHeaderEventArgs e)
