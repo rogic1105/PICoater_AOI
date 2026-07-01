@@ -98,5 +98,11 @@ namespace AniloxRoll.Monitor.Core.Interop
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+        // 鎖住指定視窗「及其所有子控制項」的繪製（傳 IntPtr.Zero 解鎖）。
+        // 用於 tab 預熱放大重排期間壓住整棵樹的繪製（WM_SETREDRAW 只鎖單一視窗、壓不到子控制項）。
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool LockWindowUpdate(IntPtr hWndLock);
     }
 }

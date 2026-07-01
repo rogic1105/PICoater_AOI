@@ -205,6 +205,11 @@ namespace AniloxRoll.Monitor.Forms
                 // （原本要切到別 tab 再切回才放大）。
                 _scaler?.RescaleActiveTabs();
 
+                // 消除「第一次切 tab 整個版面一塊一塊放大冒出」的分塊：老架構是設計小尺寸 → 開窗放大到
+                // 最大化，ProportionalScaler 在每個 tab「首次顯示」才逐控制項放大重排（= 分塊）。此時尺寸
+                // 已最大化，把每個 tab 的放大重排一次做完（過程用 LockWindowUpdate 壓住整棵樹繪製、不可見）。
+                PrewarmTabMainPages();
+
                 // PropertyGrid 字體維持 DPI 原生大小（使用者要求 1.0，不另外收小）
                 AutoFitPropertyGridLabelColumn(propertyGridSettings);
                 // 選取第一個 category 的第一個屬性，PropertyGrid 會自動捲動到頂
@@ -221,6 +226,36 @@ namespace AniloxRoll.Monitor.Forms
                 }
                 catch { }
             };
+        }
+
+        /// <summary>
+        /// 開窗最大化後，逐一切過 tabMain 每個分頁，讓 ProportionalScaler 對每頁做一次
+        /// 「設計尺寸 → 最大化尺寸」的放大重排（否則各頁在使用者「首次」切到時才 lazy 放大 →
+        /// 逐控制項設 Bounds 的可見分塊 = 俄羅斯方塊）。整段用 LockWindowUpdate 壓住整個視窗
+        /// （含所有子控制項）的繪製 → 放大過程完全不可見；解鎖後一次乾淨重畫。之後真正切 tab 時
+        /// 再套一樣的 Bounds = 零跳動。
+        /// </summary>
+        private void PrewarmTabMainPages()
+        {
+            if (tabMain == null || tabMain.TabPages.Count <= 1) return;
+            var original = tabMain.SelectedTab;
+            bool savedReviewDirty = _reviewDirty;
+            _reviewDirty = false;   // 預熱切換期間不要誤觸發 Review 自動載入
+            bool locked = false;
+            try
+            {
+                locked = AniloxRoll.Monitor.Core.Interop.NativeMethods.LockWindowUpdate(this.Handle);
+                foreach (TabPage page in tabMain.TabPages)
+                    tabMain.SelectedTab = page;   // 觸發該頁 ScaleRecursive 放大重排
+                tabMain.SelectedTab = original;
+            }
+            catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"[PrewarmTabMainPages] {ex}"); }
+            finally
+            {
+                _reviewDirty = savedReviewDirty;
+                if (locked) AniloxRoll.Monitor.Core.Interop.NativeMethods.LockWindowUpdate(IntPtr.Zero);
+                this.Invalidate(true);   // 解鎖後一次乾淨重畫目前分頁
+            }
         }
 
         private void InitializeSystem()
