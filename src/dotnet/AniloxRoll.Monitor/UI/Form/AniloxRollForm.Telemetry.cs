@@ -197,6 +197,10 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (_liveCameraManager == null || _liveCameraManager.IsReleasing) return;
             if (!_liveOverviewDirty || _liveOverviewHelper == null || _settings == null) return;
+            // 首幀 fit-to-screen 尚未算出前（_liveViewLeftMm 未就緒）不畫 → 曲線第一次就用 fit 範圍出現、
+            // 不先閃全幅(0起)再跳到 fit。_liveViewLeftMm 由主畫面首幀 fit 後 RefireViewRange 設；跨 grab 保留
+            // （第二次 grab 已就緒即刻畫）。首次就緒由 ApplyLiveViewRange 直接觸發一次。
+            if (double.IsNaN(_liveViewLeftMm) || _liveViewLeftMm >= _liveViewRightMm) return;
             _liveOverviewDirty = false;
             CurveMergeHelper.UpdateOverviewChart(_liveCurveMean, _liveCurveMax,
                 _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray(),

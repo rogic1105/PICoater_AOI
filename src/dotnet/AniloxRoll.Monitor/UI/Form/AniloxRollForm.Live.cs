@@ -204,10 +204,23 @@ namespace AniloxRoll.Monitor.Forms
         private void ApplyLiveViewRange(double leftMm, double rightMm, double topMm, double botMm)
         {
             if (IsDisposed) return;
+            bool wasReady = !double.IsNaN(_liveViewLeftMm) && _liveViewLeftMm < _liveViewRightMm;
             _liveViewLeftMm = leftMm; _liveViewRightMm = rightMm;     // 供 overview provider 沿用（不閃）
             _liveViewTopMm = topMm; _liveViewBotMm = botMm;
             _liveRowSync?.SetViewRange(topMm, botMm);
-            _liveOverviewHelper?.UpdateViewRange(leftMm, rightMm);     // overview 立即跟隨（500ms 重畫用同值不閃）
+
+            bool nowReady = !double.IsNaN(leftMm) && leftMm < rightMm;
+            if (!wasReady && nowReady)
+            {
+                // 首次 fit-to-screen 就緒（主畫面首幀 fit 後 RefireViewRange 發來）→ 立即原子畫一次：
+                // 曲線第一筆就用 fit 範圍出現，不先閃全幅再跳到 fit。UI 執行緒，直接畫（非空 chart 補視野）。
+                _liveOverviewDirty = true;
+                LiveOverviewTimer_Tick(null, EventArgs.Empty);
+            }
+            else if (nowReady)
+            {
+                _liveOverviewHelper?.UpdateViewRange(leftMm, rightMm); // 已有資料 → 即時跟隨（500ms 重畫用同值不閃）
+            }
         }
 
         private bool TryApplyLiveImageCanvasRowViewRange()
