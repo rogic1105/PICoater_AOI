@@ -219,8 +219,12 @@ namespace TanukiCv.Controls
             area.AxisX.Maximum                  = 100;
             area.AxisX.IsMarginVisible          = false;
             area.AxisX.LabelStyle.Format        = "F0";
-            area.AxisX.IsLabelAutoFit           = true;
-            area.AxisX.LabelAutoFitMinFontSize  = 6;
+            // 固定 label 樣式（比照 RowCurveChartHelper）：不用 IsLabelAutoFit —— auto-fit 會依控制項字體
+            // 決定角度/排列，當 ProportionalScaler 把 Font 縮放到不一致時，窄的那個會退化成「逐字元豎排」
+            // （[1][2][3] 一字一行）。固定字體 + Angle 0 → 兩個欄圖一致的乾淨橫排，不受縮放影響。
+            area.AxisX.LabelStyle.Font          = new Font("Segoe UI", 9f);   // 固定大小（不隨視窗縮放，但兩圖一致、不逐字豎排）；要調大小改這裡
+            area.AxisX.LabelStyle.Angle         = 0;
+            area.AxisX.IsLabelAutoFit           = false;
             area.AxisX.MajorGrid.Enabled        = true;
             area.AxisX.MajorGrid.LineColor      = Color.FromArgb(220, 220, 220);
             area.AxisX.MinorGrid.Enabled        = true;
