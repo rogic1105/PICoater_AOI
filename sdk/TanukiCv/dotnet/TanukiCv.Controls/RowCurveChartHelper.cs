@@ -258,9 +258,11 @@ namespace TanukiCv.Controls
             area.Position.Height = 100f;
 
             area.InnerPlotPosition.Auto   = false;
-            area.InnerPlotPosition.X      = 15f;
+            // 左邊界留給位置軸(AxisY, mm)的 label：回顧整卷拼接時 _totalMm 可達 4~5 位數，
+            // 控制項僅 117px 寬，原 15% (~18px) 塞不下 → 數字溢出左緣被切。放寬到 18% (~21px) 容得下。
+            area.InnerPlotPosition.X      = 18f;
             area.InnerPlotPosition.Y      = 2f;
-            area.InnerPlotPosition.Width  = 78f;
+            area.InnerPlotPosition.Width  = 75f;   // X+Width=93，右緣留白同舊
             area.InnerPlotPosition.Height = 88f;
 
             area.AxisX.Minimum                  = 0;

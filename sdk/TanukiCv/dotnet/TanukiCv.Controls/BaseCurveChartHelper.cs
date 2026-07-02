@@ -11,6 +11,12 @@ namespace TanukiCv.Controls
     /// <summary>
     /// Column/Row 曲線圖共用基底：chart 初始化骨架、閾值線、Mean/Max series 建立。
     /// 子類實作方向特定的 ChartArea、series anchor、InnerPlotPosition 補償。
+    ///
+    /// ⚠ 軸/label 外觀的**單一來源**＝各子類的 BuildChartArea（字體、Angle、InnerPlotPosition、Interval…）。
+    ///   同種圖的所有實例（chartLive/Review/Data*）共用同一份 → 改一處全一致。**鐵則**：
+    ///   ① 外觀只在此設，**勿在 Designer.cs 或呼叫端**替單一 chart 設字體/顏色（會 live≠review 漂移）。
+    ///   ② label 字體**寫死**、**勿用 IsLabelAutoFit**——autofit 會跟著控制項字體走，而 ProportionalScaler
+    ///      對各 chart 各自縮放 Font → 兩圖不一致、窄的那個退化成「逐字元豎排」（2026-07 踩過）。
     /// </summary>
     public abstract class BaseCurveChartHelper
     {
