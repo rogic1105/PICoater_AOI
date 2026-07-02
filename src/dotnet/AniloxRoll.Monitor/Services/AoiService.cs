@@ -26,6 +26,13 @@ namespace AniloxRoll.Monitor.Core.Services
             public IntPtr MuraRowCurveMean { get; set; }
             public IntPtr MuraRowCurveMax { get; set; }
             public IntPtr Stream { get; set; }
+
+            // 存檔縮圖（fused）。ResizeWidth/Height=0 或指標 Zero → native 跳過（純 live 幀）。
+            public int ResizeWidth { get; set; }
+            public int ResizeHeight { get; set; }
+            public IntPtr ResizedRaw { get; set; }
+            public IntPtr ResizedRidge { get; set; }
+            public IntPtr ResizedMura { get; set; }
         }
 
         public sealed class AlgorithmParams
@@ -102,7 +109,12 @@ namespace AniloxRoll.Monitor.Core.Services
                 MuraCurveMax = request.Output.MuraCurveMax,
                 MuraRowCurveMean = request.Output.MuraRowCurveMean,
                 MuraRowCurveMax = request.Output.MuraRowCurveMax,
-                Stream = request.Output.Stream != IntPtr.Zero ? request.Output.Stream : request.Input.Stream
+                Stream = request.Output.Stream != IntPtr.Zero ? request.Output.Stream : request.Input.Stream,
+                ResizeWidth = request.Output.ResizeWidth,
+                ResizeHeight = request.Output.ResizeHeight,
+                ResizedRaw = request.Output.ResizedRaw,
+                ResizedRidge = request.Output.ResizedRidge,
+                ResizedMura = request.Output.ResizedMura
             };
 
             // 演算法參數組成 json（InvariantCulture：小數點一律 '.'，不受系統地區影響）

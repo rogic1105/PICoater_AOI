@@ -37,6 +37,15 @@ typedef struct TanukiPipelineOutputC {
     float* mura_row_curve_mean;
     float* mura_row_curve_max;
     void* stream;
+
+    // 存檔縮圖（一進多出：與檢測「同一次 device 停留」就地縮，免二次上傳）。
+    // resize_width/height <= 0 → 整個跳過；個別指標 NULL → 該張跳過。
+    // 來源＝檢測後仍 resident 的 device buffer：raw←input、ridge(V)、mura(H)。host 端 dst，大小 = rw*rh。
+    int resize_width;
+    int resize_height;
+    uint8_t* resized_raw;     // 原圖縮圖（來自 input）
+    uint8_t* resized_ridge;   // V 脊線縮圖（來自 ridge）
+    uint8_t* resized_mura;    // H 脊線縮圖（來自 mura）
 } TanukiPipelineOutputC;
 
 // 建 pipeline。pipeline_name 如 "find_stream_ridgeline"；json_options 可 NULL（如 {"ridge_method":"hessian"}）。

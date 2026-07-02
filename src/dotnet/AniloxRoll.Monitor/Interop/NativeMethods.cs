@@ -25,6 +25,14 @@ namespace AniloxRoll.Monitor.Core.Interop
         public IntPtr MuraRowCurveMean;
         public IntPtr MuraRowCurveMax;
         public IntPtr Stream;
+
+        // 存檔縮圖（fused，一進多出）。順序須與 C 端 TanukiPipelineOutputC 完全一致。
+        // ResizeWidth/Height <= 0 或個別指標 Zero → native 跳過該張（純 live 幀不縮）。
+        public int ResizeWidth;
+        public int ResizeHeight;
+        public IntPtr ResizedRaw;     // 原圖縮圖 dst（host pinned）
+        public IntPtr ResizedRidge;   // V 脊線縮圖 dst
+        public IntPtr ResizedMura;    // H 脊線縮圖 dst
     }
 
     internal static class NativeMethods

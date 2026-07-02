@@ -58,7 +58,8 @@ namespace AniloxRoll.Monitor.Core.Camera
             set => _mil.SetExposureUs(value);
         }
 
-        public double HessianSigma { get; set; } = 85;
+        // 細線濾除（ridge_sigma）。實際值由 LiveCameraManager 從設定注入；此處預設＝唯一來源常數（勿寫誤導死值）。
+        public double HessianSigma { get; set; } = InspectionEngineConfig.DefaultRidgeSigma;
         public double HessianFixedMax { get; set; } = 1.0;
         public string RidgeMode { get; set; } = "vertical";
         /// <summary>Live 顯示方向："v" = vertical ridge, "h" = horizontal ridge。</summary>
@@ -104,10 +105,15 @@ namespace AniloxRoll.Monitor.Core.Camera
         // ==================== Save Format (resize + JPEG) ====================
         private int _saveResizeScale = 5;
         private int _saveJpgQuality  = 90;
-        private IntPtr _rawResizeBuf  = IntPtr.Zero;
-        private IntPtr _procResizeBuf = IntPtr.Zero;
+        // 存檔縮圖目標（host pinned）。fused 一進多出：native 在檢測那次 ProcessImage 直接填這三塊。
+        private IntPtr _rawResizeBuf  = IntPtr.Zero;   // 原圖縮圖
+        private IntPtr _procResizeBuf = IntPtr.Zero;   // V 脊線縮圖
+        private IntPtr _muraResizeBuf = IntPtr.Zero;   // H 脊線縮圖
         private int _resizeWidth  = 0;
         private int _resizeHeight = 0;
+        // 本幀 fused 縮圖是否成功填好三塊 buffer（供 TrySaveCapture 判定；detection 失敗幀不得存舊縮圖）。
+        private bool _lastFrameResized = false;
+        private bool _fusedResizeLogged = false;   // 每台每次開程式只記一筆「fused 路徑已啟用」確認 log
 
         /// <summary>存檔縮小倍率（1=不縮小，5=寬高各除以5）。必須在 Initialize() 之前設定。</summary>
         public int SaveResizeScale
@@ -389,6 +395,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// </summary>
         private bool TryApplyPicoaterRidge(MIL_ID srcBuffer)
         {
+            _lastFrameResized = false;   // 每幀先重置；成功跑完 fused 縮圖才設 true（detection 失敗幀不得存舊縮圖）
             if (srcBuffer == MIL.M_NULL) return false;
             int fw = _mil.FrameWidth;
             int fh = _mil.FrameHeight;
@@ -418,6 +425,15 @@ namespace AniloxRoll.Monitor.Core.Camera
                     IntPtr picoaterRowCurveMean = _nativeBufferPool.CurveRowMeanBuffer;
                     IntPtr picoaterRowCurveMax  = _nativeBufferPool.CurveRowMaxBuffer;
 
+                    // fused 存檔縮圖：只在「這趟 grab 會存圖」時，要 native 在檢測同一次就把縮圖產出（免二次 H2D）。
+                    // grab-level 決策（EnableAutoCapture 整趟固定）；SuppressCapture 期間 + 純 live grab 不縮。
+                    // 去重/暫停跳過的少數幀會白縮一張（可忽略）；true→native 填 _rawResizeBuf/_procResizeBuf/_muraResizeBuf。
+                    bool wantResize = EnableAutoCapture && !SuppressCapture
+                        && !string.IsNullOrWhiteSpace(CaptureRootPath)
+                        && _saveResizeScale > 1
+                        && _resizeWidth > 0 && _resizeHeight > 0
+                        && _rawResizeBuf != IntPtr.Zero && _procResizeBuf != IntPtr.Zero && _muraResizeBuf != IntPtr.Zero;
+
                     var swGpu = System.Diagnostics.Stopwatch.StartNew();
                     _aoiService.ProcessImage(new AoiProcessRequest
                     {
@@ -437,7 +453,13 @@ namespace AniloxRoll.Monitor.Core.Camera
                             MuraCurveMax     = picoaterCurveMax,
                             MuraRowCurveMean = picoaterRowCurveMean,
                             MuraRowCurveMax  = picoaterRowCurveMax,
-                            Stream           = IntPtr.Zero
+                            Stream           = IntPtr.Zero,
+                            // fused 縮圖目標（wantResize=false 時全 0 → native 跳過）
+                            ResizeWidth  = wantResize ? _resizeWidth  : 0,
+                            ResizeHeight = wantResize ? _resizeHeight : 0,
+                            ResizedRaw   = wantResize ? _rawResizeBuf  : IntPtr.Zero,
+                            ResizedRidge = wantResize ? _procResizeBuf : IntPtr.Zero,
+                            ResizedMura  = wantResize ? _muraResizeBuf : IntPtr.Zero
                         },
                         Params = new AoiProcessRequest.AlgorithmParams
                         {
@@ -449,6 +471,14 @@ namespace AniloxRoll.Monitor.Core.Camera
                         }
                     });
                     LastGpuTimeMs = swGpu.ElapsedMilliseconds;
+                    _lastFrameResized = wantResize;   // ProcessImage 成功；縮圖已填好（若有要）
+                    if (wantResize && !_fusedResizeLogged)
+                    {
+                        _fusedResizeLogged = true;
+                        System.Diagnostics.Trace.WriteLine(
+                            $"[FusedResize] CAM{CameraId} 啟用：檢測+縮圖同次 device 產出 {fw}x{fh}→{_resizeWidth}x{_resizeHeight}"
+                            + $"（免二次 H2D）ProcessMs(檢測+縮圖)={LastGpuTimeMs}");
+                    }
 
                     // 從 Mura 曲線計算 peak（0-1 normalized），供 OnInspectionResult 使用
                     int curveLen = _nativeBufferPool.CurveBufferSize / sizeof(float);
@@ -594,38 +624,28 @@ namespace AniloxRoll.Monitor.Core.Camera
 
                 lock (_picoaterLock)
                 {
-                    // fw/fh 在鎖外讀（580）→ 高度變更時可能與「鎖內已重配的 _nativeBufferPool」尺寸不一致：
-                    // 高度調小 → 舊 fw×fh > 新 buffer 容量 → GPU 越界讀 → AccessViolation。
-                    // 守門：來源 fw×fh 超過當前 pool 容量就跳過這幀（高度切換瞬間的 transient，不存即可，不崩）。
-                    if (_nativeBufferPool != null &&
+                    // fused 一進多出：縮圖已由本幀檢測的 ProcessImage 就地產出（免二次 H2D），這裡只讀預縮好的 pinned buffer。
+                    // 守門 `_lastFrameResized`：本幀 detection+縮圖確實成功才讀（detection 失敗幀 → 不存，避免存到上一幀的舊縮圖）。
+                    if (_lastFrameResized &&
                         _rawResizeBuf  != IntPtr.Zero &&
                         _procResizeBuf != IntPtr.Zero &&
-                        (ulong)fw * (ulong)fh <= _nativeBufferPool.ImageBufferSize &&
-                        fw > 0 && fh > 0)
+                        _muraResizeBuf != IntPtr.Zero &&
+                        rw > 0 && rh > 0)
                     {
                         hasResizeData = true;
                         int pixels = rw * rh;
 
-                        // GPU resize raw → _rawResizeBuf
-                        NativeMethods.TanukiCv_Resize_GPU(
-                            _nativeBufferPool.InputBuffer, fw, fh,
-                            _rawResizeBuf, rw, rh);
+                        // raw 縮圖（native 從 device d_input 就地縮）
                         rawBytes = new byte[pixels];
                         Marshal.Copy(_rawResizeBuf, rawBytes, 0, pixels);
 
-                        // _ridgeBuffer = vertical ridge → _proc_v.jpg
-                        NativeMethods.TanukiCv_Resize_GPU(
-                            _nativeBufferPool.RidgeBuffer, fw, fh,
-                            _procResizeBuf, rw, rh);
+                        // V 脊線縮圖（native 從 device d_ridge）→ _proc_v.jpg
                         procVBytes = new byte[pixels];
                         Marshal.Copy(_procResizeBuf, procVBytes, 0, pixels);
 
-                        // _muraBuffer = horizontal ridge → _proc_h.jpg
-                        NativeMethods.TanukiCv_Resize_GPU(
-                            _nativeBufferPool.MuraBuffer, fw, fh,
-                            _rawResizeBuf, rw, rh);
+                        // H 脊線縮圖（native 從 device d_mura）→ _proc_h.jpg
                         procHBytes = new byte[pixels];
-                        Marshal.Copy(_rawResizeBuf, procHBytes, 0, pixels);
+                        Marshal.Copy(_muraResizeBuf, procHBytes, 0, pixels);
 
                         // Col curves（vertical ridge）
                         int curveLen = _nativeBufferPool.CurveBufferSize / sizeof(float);
@@ -729,6 +749,7 @@ namespace AniloxRoll.Monitor.Core.Camera
             ulong sz = (ulong)(_resizeWidth * _resizeHeight);
             _rawResizeBuf  = NativeMethods.TanukiCv_AllocPinned(sz);
             _procResizeBuf = NativeMethods.TanukiCv_AllocPinned(sz);
+            _muraResizeBuf = NativeMethods.TanukiCv_AllocPinned(sz);
         }
 
         private void FreeResizeBuffers()
@@ -742,6 +763,11 @@ namespace AniloxRoll.Monitor.Core.Camera
             {
                 NativeMethods.TanukiCv_FreePinned(_procResizeBuf);
                 _procResizeBuf = IntPtr.Zero;
+            }
+            if (_muraResizeBuf != IntPtr.Zero)
+            {
+                NativeMethods.TanukiCv_FreePinned(_muraResizeBuf);
+                _muraResizeBuf = IntPtr.Zero;
             }
         }
 

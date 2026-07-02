@@ -6,6 +6,7 @@
 #include <string>
 
 #include "tanuki/core/imgproc/core_background.hpp"   // calcColumnMeans_RemoveOutliers（ComputeColumnMean 用）
+#include "tanuki/core/imgproc/core_transform.hpp"     // resize_u8_gpu（存檔縮圖 fused）
 #include "find_stream_ridgeline.hpp"                  // CreateFindStreamRidgeline
 
 namespace {
@@ -30,6 +31,10 @@ struct PipelineContext {
     float* d_row_curve_mean = nullptr;
     float* d_row_curve_max = nullptr;
 
+    // 存檔縮圖用可重用 device workspace（避免每張 resize 各 cudaMalloc/cudaFree）。
+    uint8_t* d_resize = nullptr;
+    size_t   resize_cap = 0;
+
     ~PipelineContext() { ReleaseBuffers(); }
 
     void ReleaseBuffers() {
@@ -41,9 +46,20 @@ struct PipelineContext {
         if (d_curve_max) cudaFree(d_curve_max);
         if (d_row_curve_mean) cudaFree(d_row_curve_mean);
         if (d_row_curve_max) cudaFree(d_row_curve_max);
+        if (d_resize) cudaFree(d_resize);
         d_input = d_background = d_mura = d_ridge = nullptr;
         d_curve_mean = d_curve_max = d_row_curve_mean = d_row_curve_max = nullptr;
+        d_resize = nullptr; resize_cap = 0;
         width = height = 0; image_size = 0;
+    }
+
+    // 確保 d_resize 至少 bytes 大（on-demand 成長、重用）。
+    bool EnsureResize(size_t bytes) {
+        if (d_resize != nullptr && resize_cap >= bytes) return true;
+        if (d_resize) { cudaFree(d_resize); d_resize = nullptr; resize_cap = 0; }
+        if (cudaMalloc(&d_resize, bytes) != cudaSuccess) { d_resize = nullptr; return false; }
+        resize_cap = bytes;
+        return true;
     }
 
     bool EnsureBuffers(int new_width, int new_height, std::string* error) {
@@ -152,6 +168,27 @@ int TanukiPipeline_Process(TanukiPipelineHandle handle,
     if (!d2h(output->mura_curve_max, ctx->d_curve_max, input->width * sizeof(float), "mura max curve")) return -2;
     if (!d2h(output->mura_row_curve_mean, ctx->d_row_curve_mean, input->height * sizeof(float), "row mean curve")) return -2;
     if (!d2h(output->mura_row_curve_max, ctx->d_row_curve_max, input->height * sizeof(float), "row max curve")) return -2;
+
+    // 存檔縮圖（fused，一進多出）：用檢測後仍 resident 的 device buffer 就地縮，免二次 H2D。
+    //   raw←d_input、V←d_ridge、H←d_mura（"vertical+horizontal" 下 d_ridge=V、d_mura=H）。
+    //   個別 dst 為 NULL 則跳過；resize_width/height<=0 則整段跳過（純 live 幀不縮）。
+    if (output->resize_width > 0 && output->resize_height > 0) {
+        int rw = output->resize_width, rh = output->resize_height;
+        size_t rbytes = (size_t)rw * rh;
+        if (!ctx->EnsureResize(rbytes)) { ctx->last_error = "Failed to allocate resize workspace."; return -2; }
+        cudaStream_t rs = (cudaStream_t)out.stream;
+        auto resize_d2h = [&](const uint8_t* d_src, uint8_t* h_dst, const char* what) -> bool {
+            if (h_dst == nullptr) return true;
+            tanuki::core::resize_u8_gpu(d_src, ctx->width, ctx->height, ctx->d_resize, rw, rh, rs);
+            if (cudaMemcpy(h_dst, ctx->d_resize, rbytes, cudaMemcpyDeviceToHost) != cudaSuccess) {
+                ctx->last_error = std::string("Failed to copy resized ") + what + " to host."; return false;
+            }
+            return true;
+        };
+        if (!resize_d2h(ctx->d_input, output->resized_raw,   "raw"))   return -2;
+        if (!resize_d2h(ctx->d_ridge, output->resized_ridge, "ridge")) return -2;
+        if (!resize_d2h(ctx->d_mura,  output->resized_mura,  "mura"))  return -2;
+    }
 
     ctx->last_error.clear();
     return 0;

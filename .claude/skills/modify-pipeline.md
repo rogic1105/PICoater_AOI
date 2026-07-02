@@ -43,6 +43,18 @@
 - JPEG 寫入移至 `Task.Run` 背景執行；BMP 匯出同步（`sourceBuffer` 會被 MIL 回收）
 - 時間戳精確到毫秒（`.fff`），同 Line Rate 相機由 `CaptureTimestampCoordinator` 協調
 
+### 存檔縮圖 fused（一進多出，2026-07）
+- 縮圖**不再**在 `TrySaveCapture` 呼 `TanukiCv_Resize_GPU`（那會把已在 GPU 的圖拉回 host 再二次 H2D）。
+- 改成：`TryApplyPicoaterRidge` 呼 `ProcessImage` 時，output struct 帶 3 個 pinned dst（raw/V/H）+ 目標尺寸 →
+  pipeline（`export_api.cpp`）在**檢測同一次 device 停留**、用 resident `d_input/d_ridge/d_mura` + 可重用 `d_resize`
+  就地縮 → D2H。`TrySaveCapture` 直接讀預縮好的 buffer。
+- **grab-level gate**：`wantResize = EnableAutoCapture && !SuppressCapture && CaptureRootPath && scale>1 && buffers`；
+  純 live 幀傳 0 → pipeline 跳過縮圖（不浪費）。存/不存以 grab 為單位決定，不做 per-frame。
+- **防呆**：`_lastFrameResized`（TryApplyPicoaterRidge 開頭清 false、ProcessImage 成功才設 wantResize）→
+  detection 失敗幀不讀舊縮圖。resize 失敗 pipeline 回 -2（該幀不存，不崩）。
+- `TanukiCv_Resize_GPU` 仍保留給 **GPU LOD 顯示**（它的輸入本來就在 host，非重複上傳）。
+- 上傳次數：原圖 H2D 從「檢測+存檔各 1」降為只有檢測 1 次；省掉每幀 3 次 resize 的 cudaMalloc/H2D。
+
 ### .bin 檔案格式
 ```
 magic(4)="MCBF" | version(4=int) | scale_factor(4=float) | array_length(4=int) | float[]
