@@ -109,6 +109,8 @@ namespace AniloxRoll.Monitor.Core.Data
         public float dc_HessianMaxFactorV { get => Recipe.HessianMaxFactorV; set => Recipe.HessianMaxFactorV = value; }
         [Category(CategoryInspection)][DisplayName("列正規值")][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float dd_HessianMaxFactorH { get => Recipe.HessianMaxFactorH; set => Recipe.HessianMaxFactorH = value; }
+        [Category(CategoryInspection)][DisplayName("細線濾除")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        public float de_RidgeSigma { get => Recipe.RidgeSigma; set => Recipe.RidgeSigma = value; }
 
         [Category(CategoryInspection)][DisplayName("─ 檢出標準 ─")][ReadOnly(true)]
         public string ea_DetectionHeader => "";
@@ -133,6 +135,7 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public RidgeDirection      RidgeDir        { get => Recipe.RidgeDir;        set => Recipe.RidgeDir        = value; }
         [Browsable(false)] public float  HessianMaxFactorV      { get => Recipe.HessianMaxFactorV;      set => Recipe.HessianMaxFactorV      = value; }
         [Browsable(false)] public float  HessianMaxFactorH      { get => Recipe.HessianMaxFactorH;      set => Recipe.HessianMaxFactorH      = value; }
+        [Browsable(false)] public float  RidgeSigma             { get => Recipe.RidgeSigma;             set => Recipe.RidgeSigma             = value; }
         [Browsable(false)] public int    BackgroundSampleSeconds { get => Recipe.BackgroundSampleSeconds; set => Recipe.BackgroundSampleSeconds = value; }
         [Browsable(false)] public double AniloxRollSpeedMPerMin  { get => Recipe.AniloxRollSpeedMPerMin;  set => Recipe.AniloxRollSpeedMPerMin  = value; }
 

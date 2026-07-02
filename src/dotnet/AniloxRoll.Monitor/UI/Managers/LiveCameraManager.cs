@@ -32,6 +32,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private int _saveResizeScale = InspectionEngineConfig.DefaultSaveResizeScale;
         private int _saveJpgQuality  = InspectionEngineConfig.DefaultSaveJpgQuality;
         private float _hessianMaxFactor = InspectionEngineConfig.DefaultHessianMaxFactor;
+        private float _ridgeSigma = InspectionEngineConfig.DefaultRidgeSigma;   // 細線濾除（ridge_sigma）；設定改 → 下次 grab 生效
         private string _ridgeMode = InspectionEngineConfig.DefaultRidgeMode;
         private string _dcfPath = string.Empty;
         private readonly CaptureTimestampCoordinator _timestampCoordinator = new CaptureTimestampCoordinator();
@@ -197,7 +198,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
                 cam.CameraExposureTimeUs = _cameraExposureTimeUs[camIdx]; // Initialize() 會呼叫 SetExposureUs 套用
                 cam.SetLineRateHz(_cameraLineRateHz[camIdx]);  // 記錄 _appliedLineRateHz（CLProtocol 就緒後自動重套）
-                cam.HessianSigma         = InspectionEngineConfig.DefaultRidgeSigma;
+                cam.HessianSigma         = _ridgeSigma;   // 細線濾除（設定值，非硬編常數）
                 cam.HessianFixedMax      = _hessianMaxFactor;
                 cam.RidgeMode            = _ridgeMode;
                 cam.SaveResizeScale      = _saveResizeScale;
@@ -361,7 +362,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.SaveOriginalBmp = _saveOriginalBmp;
                 cam.CaptureRootPath      = _captureRootPath;
                 cam.CameraGrabHeight     = _cameraGrabHeight[camIdx]; // 已在 UpdateCaptureSettingsCache clamp 到 MaxGrabHeightPx
-                cam.HessianSigma         = InspectionEngineConfig.DefaultRidgeSigma;
+                cam.HessianSigma         = _ridgeSigma;   // 細線濾除（設定值，非硬編常數）
                 cam.HessianFixedMax      = _hessianMaxFactor;
                 cam.RidgeMode            = _ridgeMode;
                 cam.SaveResizeScale      = _saveResizeScale;
@@ -542,6 +543,9 @@ namespace AniloxRoll.Monitor.UI.Managers
             _hessianMaxFactor     = settings.HessianMaxFactorV > 0
                 ? settings.HessianMaxFactorV
                 : InspectionEngineConfig.DefaultHessianMaxFactor;
+            _ridgeSigma           = settings.RidgeSigma > 0
+                ? settings.RidgeSigma
+                : InspectionEngineConfig.DefaultRidgeSigma;
             _ridgeMode            = InspectionRecipe.RidgeDirectionToNative(settings.RidgeDir);
             _dcfPath              = settings.DcfPath ?? string.Empty;
         }

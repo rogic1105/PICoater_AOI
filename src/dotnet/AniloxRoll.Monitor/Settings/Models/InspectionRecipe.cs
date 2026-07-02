@@ -64,6 +64,10 @@ namespace AniloxRoll.Monitor.Core.Data
         [DisplayName("Ridge 方向")]    public RidgeDirection RidgeDir { get; set; } = InspectionDefaults.RidgeDir;
         [DisplayName("Hessian Max Factor V")] public float HessianMaxFactorV { get; set; } = InspectionDefaults.HessianMaxFactorV;
         [DisplayName("Hessian Max Factor H")] public float HessianMaxFactorH { get; set; } = InspectionDefaults.HessianMaxFactorH;
+
+        /// <summary>細線濾除 = ridge_sigma（2-1 Gaussian blur 的 sigma）。值越大→模糊越多→濾掉越多細線/雜訊→越不敏感。
+        /// 唯一預設值來源：InspectionEngineConfig.DefaultRidgeSigma。走每幀 json 送進 native pipeline。</summary>
+        [DisplayName("細線濾除")] public float RidgeSigma { get; set; } = InspectionEngineConfig.DefaultRidgeSigma;
         [DisplayName("Error Value Mean V")] public float ErrorValueMeanV { get; set; } = InspectionDefaults.ErrorValueMeanV;
         [DisplayName("Error Value Max V")]  public float ErrorValueMaxV  { get; set; } = InspectionDefaults.ErrorValueMaxV;
         [DisplayName("Error Value Mean H")] public float ErrorValueMeanH { get; set; } = InspectionDefaults.ErrorValueMeanH;
@@ -81,6 +85,8 @@ namespace AniloxRoll.Monitor.Core.Data
         {
             if (HessianMaxFactorV <= 0) HessianMaxFactorV = InspectionDefaults.HessianMaxFactorV;
             if (HessianMaxFactorH <= 0) HessianMaxFactorH = InspectionDefaults.HessianMaxFactorH;
+            if (RidgeSigma < 1f) RidgeSigma = InspectionEngineConfig.DefaultRidgeSigma;   // 過小=近乎不模糊；過大 ksize 爆
+            else if (RidgeSigma > 50f) RidgeSigma = 50f;
             if (ErrorValueMeanV <= 0) ErrorValueMeanV = InspectionDefaults.ErrorValueMeanV;
             if (ErrorValueMaxV  <= 0) ErrorValueMaxV  = InspectionDefaults.ErrorValueMaxV;
             if (ErrorValueMeanH <= 0) ErrorValueMeanH = InspectionDefaults.ErrorValueMeanH;

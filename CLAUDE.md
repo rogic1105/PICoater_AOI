@@ -306,6 +306,7 @@ PICoater_AOI/
 | 去背演算法 | `db_Algorithm` → `Algorithm` | SingleFrameBgSub | None / SingleFrameBgSub / StandardBgSub |
 | 欄正規值 | `dc_HessianMaxFactorV` → `HessianMaxFactorV` | 0.3 | V Hessian 正規化係數（capture-time baked-in） |
 | 列正規值 | `dd_HessianMaxFactorH` → `HessianMaxFactorH` | 0.3 | H Hessian 正規化係數（view-time only） |
+| 細線濾除 | `de_RidgeSigma` → `RidgeSigma` | 9.0 | Ridge 前 Gaussian blur sigma；越大→濾掉越多細線/雜訊（較不敏感），越小→越敏感。走每幀 json 送 native；改設定下次 grab 生效。唯一預設 `InspectionEngineConfig.DefaultRidgeSigma` |
 | ── 檢出標準 ── | （分隔列，唯讀） | — | — |
 | 檢出方向 | `eb_RidgeDir` → `RidgeDir` | Both | 欄 / 列 / 全部 |
 | 欄平均閾值 | `ec_ErrorValueMeanV` → `ErrorValueMeanV` | 0.2 | V chart Mean 閾值線 |
