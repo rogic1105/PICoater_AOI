@@ -272,6 +272,40 @@ namespace TanukiCv.Controls
             }
         }
 
+        /// <summary>Clear one camera slot from the main display and thumbnail strip.</summary>
+        public void ClearFrame(int camId)
+        {
+            if (_disposed || camId < 1 || camId > _camCount) return;
+            int idx = camId - 1;
+            _latest[idx] = null;
+            _readySinceMerge[idx] = false;
+            _thumbStrip?.Clear(idx);
+
+            if (_mergeMode || camId == _selectedCamId)
+            {
+                if (_canvas != null && _canvas.LodActive)
+                {
+                    _canvas.DisableLod();
+                    _lodCamId = -1;
+                    _lodMergeW = _lodMergeH = -1;
+                    _mainW = _mainH = -1;
+                }
+                _mainDirty = true;
+            }
+        }
+
+        /// <summary>Clear all camera slots whose 1-based id is not marked present.</summary>
+        public void ClearFramesExcept(bool[] presentCamIds)
+        {
+            for (int camId = 1; camId <= _camCount; camId++)
+            {
+                bool present = presentCamIds != null
+                    && camId < presentCamIds.Length
+                    && presentCamIds[camId];
+                if (!present) ClearFrame(camId);
+            }
+        }
+
         // ==================== UI timer（33ms）：主畫面更新（縮圖由 ThumbStrip 自管）====================
 
         /// <summary>用「當前」zoom/pan 重發 ViewRangeMmChanged（不需滑鼠互動）。
@@ -372,7 +406,17 @@ namespace TanukiCv.Controls
             Bitmap bmp;
             try { bmp = _mergeMode ? BuildMerge() : BuildSingle(); }
             catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[ImageDisplayView.RefreshMain] {ex.GetType().Name}: {ex.Message}"); return; }
-            if (bmp == null) return;
+            if (bmp == null)
+            {
+                if (_canvas.Image != null)
+                {
+                    var oldBlank = _canvas.Image;
+                    _canvas.Image = null;
+                    oldBlank.Dispose();
+                    _mainW = _mainH = -1;
+                }
+                return;
+            }
             var old = _canvas.Image;
             _canvas.Image = bmp;
             old?.Dispose();

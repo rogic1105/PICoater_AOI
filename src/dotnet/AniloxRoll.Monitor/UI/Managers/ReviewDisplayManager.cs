@@ -64,8 +64,15 @@ namespace AniloxRoll.Monitor.UI.Managers
             _view.FlipVertical = flipVertical;
             _view.SetLayout(posMm, opsUm, Math.Max(1, feedScale), rowPitchMm); // feedScale=降採樣倍率；rowPitchMm=真實 mm/列
             _view.SetMergeMode(mergeMode);
-            for (int i = 0; i < gray.Length; i++)
-                if (gray[i] != null) _view.PushFrame(i + 1, gray[i], w[i], h[i]);
+            var present = new bool[_thumbHosts.Length + 1];
+            int count = Math.Min(gray.Length, _thumbHosts.Length);
+            for (int i = 0; i < count; i++)
+            {
+                if (gray[i] == null) continue;
+                present[i + 1] = true;
+                _view.PushFrame(i + 1, gray[i], w[i], h[i]);
+            }
+            _view.ClearFramesExcept(present);
             _view.RefreshNow();
         }
 

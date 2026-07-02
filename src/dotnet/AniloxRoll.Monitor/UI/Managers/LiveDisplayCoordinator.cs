@@ -288,6 +288,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 _imageDisplay.SetLayout(merger.SlotStartsMm, ops, 1, RowPitchMm);
             }
             foreach (var cam in Cameras) cam.OnDisplayFrame += OnCameraDisplayFrame;
+            ClearMissingCameraFrames();
             var settings = _getSettings();
             if (settings != null) SetLodMode(settings.LiveLod);
         }
@@ -339,6 +340,21 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         private void OnCameraDisplayFrame(int camId, byte[] bytes, int w, int h, long tick)
             => _imageDisplay?.PushFrame(camId, bytes, w, h);
+
+        public void ClearCameraFrame(int camId)
+        {
+            _imageDisplay?.ClearFrame(camId);
+        }
+
+        public void ClearMissingCameraFrames()
+        {
+            if (_imageDisplay == null) return;
+            var present = new bool[_cameraPanels.Length + 1];
+            foreach (var cam in Cameras)
+                if (cam != null && cam.CameraId > 0 && cam.CameraId < present.Length)
+                    present[cam.CameraId] = true;
+            _imageDisplay.ClearFramesExcept(present);
+        }
 
         private void ImageSelectCamera(int camId) => SwitchMainDisplay(camId);
 

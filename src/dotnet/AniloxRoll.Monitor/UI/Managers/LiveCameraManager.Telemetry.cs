@@ -82,6 +82,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 {
                     statusText = "斷線"; color = Color.Pink;
                     _stallDetector.Reset(cam.CameraId);
+                    ClearCameraFrame(cam.CameraId);
                 }
                 else if (!cam.IsLive)
                 {
