@@ -44,7 +44,7 @@
 ### 統計模式（`_activeStatMode` 追蹤）
 - 三模式：`GrpDataSingleSheet`（單片，cbDataId 驅動）、`GroupBoxGrabIdRange`（序號範圍，cbDataIdStart/End 驅動）、`GroupBoxTimeRange`（時序範圍，cbDataDateStart~cbDataTimeEnd 驅動）
 - **三個 GroupBox 標題都可點切模式**（`SwitchActiveStatGroupBox`）— 與 Review tab 的 `grpReviewGrabNav.Click` 對等
-- `btnDataSelectFolder` 預設進入 `GrpDataSingleSheet` 模式 + 最新一筆（descending [0]）— 與 Review tab `btnReviewSelectFolder` 行為對齊
+- `btnDataSelectFolder`/`btnReviewSelectFolder` 讀取資料後預設 `GrpDataSingleSheet` 模式：**單片顯示最新一筆**（`cbDataId` descending [0]）；**序號範圍預設「起始 cbDataIdStart=最舊、結束 cbDataIdEnd=最新」**（切範圍模式即涵蓋全部；明細列表隨 start/end 連動＝顯示全部）。兩路徑共用 `SelectLatestInSingleSheetMode()`（在 `StatComboGuard` 內設 start/end/cbDataId、不觸發 `OnSingleSheetComboChanged`；`SetActiveStatGroupBox` 顯式切模式、`RefreshStats` 由 caller 呼）。**勿在 `PopulateAllGrabIdCombos` guard 外再設 `cbDataId`＝會誤觸發 handler 把 start 拉回最新**
 - **序號模式**：`ComputeByGrabIdRange` — 分母=唯一序號數，同序號同相機一票否決
 - **時間模式**：找時間範圍內 GrabIds → 同樣用 `ComputeByGrabIdRange`
 - Period Charts（`ScanCsvByDateRange`）同樣用 (GrabId, CamId) 一票否決

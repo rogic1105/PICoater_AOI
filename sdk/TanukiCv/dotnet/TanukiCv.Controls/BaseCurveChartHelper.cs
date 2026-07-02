@@ -36,7 +36,7 @@ namespace TanukiCv.Controls
 
         protected BaseCurveChartHelper(Chart chart)
         {
-            _chart = chart;
+            _chart = chart ?? throw new ArgumentNullException(nameof(chart));
         }
 
         /// <summary>清空曲線（Mean/Max 點全清）→ chart 歸零（如游標移出影像時）。保留 anchor series 維持軸範圍。</summary>

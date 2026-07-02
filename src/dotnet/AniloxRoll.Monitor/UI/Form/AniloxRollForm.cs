@@ -448,6 +448,11 @@ namespace AniloxRoll.Monitor.Forms
             if (chartLiveColumn.ChartAreas.Count > 0)
                 chartLiveColumn.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
 
+            if (chartLiveRow == null)
+                throw new InvalidOperationException("chartLiveRow is not initialized. Ensure InitializeComponent runs before UI layer initialization.");
+            if (chartReviewRow == null)
+                throw new InvalidOperationException("chartReviewRow is not initialized. Ensure InitializeComponent runs before UI layer initialization.");
+
             _liveRowChartHelper = new RowCurveChartHelper(this.chartLiveRow);
             _liveRowDisplay = new RowCurveDisplayAdapter(_liveRowChartHelper, GetVerticalDisplayDirection);
             _liveRowSync = new RowCurveSyncCoordinator(_liveRowDisplay);

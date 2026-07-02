@@ -186,18 +186,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
             PopulateChartNavigators(_statAvailableTimes.Count > 0
                 ? (DateTime?)_statAvailableTimes.Max : null);
 
-            // 預設單片模式（與 Review tab btnReviewSelectFolder 一致）— 最新一筆 grab（descending [0]）。
-            // 對齊 cbDataIdStart=End=0 → RefreshStats 的單片分支取得單 grab 範圍。
+            // 預設單片模式（與 Review tab btnReviewSelectFolder 一致）— 顯示最新一筆 grab（cbDataId descending [0]）。
+            // 起始序號 cbDataIdStart 預設「最舊一筆」（descending 清單末筆）、結束序號最新 → 切到範圍模式即涵蓋全部。
+            // 單片分支用 cbDataId 算 stats，不靠 start/end，故 start=最舊不影響單片顯示。
             _dateGrabIdNavigator.SetActiveStatGroupBox(_ctx.GrpDataSingleSheet);
-            if (_grabIdInfos.Count > 0)
-            {
-                using (StatComboGuard.Enter())
-                {
-                    _ctx.CbGrabIdStart.SelectedIndex = 0;
-                    _ctx.CbGrabIdEnd.SelectedIndex = 0;
-                    _ctx.CbDataGrabId.SelectedIndex = 0;
-                }
-            }
+            SelectLatestInSingleSheetMode();
             RefreshStats();
         }
 
@@ -212,6 +205,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             PopulateChartNavigators(_statAvailableTimes.Count > 0
                 ? (DateTime?)_statAvailableTimes.Max : null);
+            SelectLatestInSingleSheetMode();
             RefreshStats();
         }
 
@@ -669,12 +663,22 @@ namespace AniloxRoll.Monitor.UI.Presenters
             SetGroupBoxActive(_ctx.GrpReviewTimePeriod, !grabNavActive);
         }
 
-        /// <summary>讀取資料後預設切到單片模式：觸發 cbDataId SelectedIndexChanged →
-        /// OnSingleSheetComboChanged → SetActiveStatGroupBox(GrpDataSingleSheet) + RefreshStats。</summary>
+        /// <summary>讀取資料後預設切到單片模式，並保留範圍模式預設為全資料範圍。
+        /// btnDataSelectFolder / btnReviewSelectFolder 共用的最後一步。</summary>
         public void SelectLatestInSingleSheetMode()
         {
-            if (_ctx.CbDataGrabId.Items.Count > 0)
-                _ctx.CbDataGrabId.SelectedIndex = 0;
+            if (_grabIdInfos.Count > 0)
+            {
+                using (StatComboGuard.Enter())
+                {
+                    _ctx.CbGrabIdStart.SelectedIndex = _grabIdInfos.Count - 1;   // 最舊
+                    _ctx.CbGrabIdEnd.SelectedIndex = 0;                          // 最新
+                    if (_ctx.CbDataGrabId.Items.Count > 0)
+                        _ctx.CbDataGrabId.SelectedIndex = 0;                      // 單片顯示最新
+                }
+            }
+
+            _dateGrabIdNavigator.SetActiveStatGroupBox(_ctx.GrpDataSingleSheet);
         }
 
         private static void SetGroupBoxActive(GroupBox box, bool active)

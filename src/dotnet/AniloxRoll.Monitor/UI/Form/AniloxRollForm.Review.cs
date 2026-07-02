@@ -105,7 +105,6 @@ namespace AniloxRoll.Monitor.Forms
 
             _stitchCoordinator.ClearStitchedMode();
             _dataStatsPresenter.SetReviewGroupBoxes(true);
-            _dataStatsPresenter.SelectLatestInSingleSheetMode();
 
             // 預設 grpReviewGrabNav（單片序號模式）→ 直接 LoadGrabStitchedViewAsync
             int reviewIdx = cbReviewId.SelectedIndex;

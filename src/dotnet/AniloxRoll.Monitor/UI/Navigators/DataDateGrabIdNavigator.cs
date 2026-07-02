@@ -74,12 +74,11 @@ namespace AniloxRoll.Monitor.UI.Navigators
                 {
                     _ctx.CbGrabIdStart.SelectedIndex = _ctx.CbGrabIdStart.Items.Count - 1;
                     _ctx.CbGrabIdEnd.SelectedIndex = 0;
-                    if (selectDataGrabId)
-                        _ctx.CbDataGrabId.SelectedIndex = _ctx.CbGrabIdStart.SelectedIndex;
+                    _ctx.CbDataGrabId.SelectedIndex = selectDataGrabId
+                        ? _ctx.CbGrabIdStart.SelectedIndex
+                        : 0;
                 }
             }
-            if (_ctx.CbDataGrabId.Items.Count > 0)
-                _ctx.CbDataGrabId.SelectedIndex = 0;
         }
 
         public void SyncDataGrabIdFromReview(int idx, GrabIdInfo info)
