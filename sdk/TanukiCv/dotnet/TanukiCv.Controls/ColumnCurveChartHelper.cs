@@ -223,15 +223,18 @@ namespace TanukiCv.Controls
                 span = 1.0;
 
             double interval = NiceInterval(span / 5.0);
-            axis.Interval = interval;
-            axis.LabelStyle.Interval = interval;
-            axis.MajorGrid.Interval = interval;
-            axis.MajorTickMark.Interval = interval;
-            axis.MinorGrid.Interval = interval / 2.0;
-            axis.LabelStyle.Enabled = true;
-            axis.LabelStyle.Format = interval < 0.1 ? "F2" : interval < 1.0 ? "F1" : "F0";
-            axis.MajorTickMark.Enabled = true;
-            axis.IsLabelAutoFit = false;
+            double minorInterval = interval / 2.0;
+            string labelFormat = interval < 0.1 ? "F2" : interval < 1.0 ? "F1" : "F0";
+
+            if (axis.Interval != interval) axis.Interval = interval;
+            if (axis.LabelStyle.Interval != interval) axis.LabelStyle.Interval = interval;
+            if (axis.MajorGrid.Interval != interval) axis.MajorGrid.Interval = interval;
+            if (axis.MajorTickMark.Interval != interval) axis.MajorTickMark.Interval = interval;
+            if (axis.MinorGrid.Interval != minorInterval) axis.MinorGrid.Interval = minorInterval;
+            if (!axis.LabelStyle.Enabled) axis.LabelStyle.Enabled = true;
+            if (axis.LabelStyle.Format != labelFormat) axis.LabelStyle.Format = labelFormat;
+            if (!axis.MajorTickMark.Enabled) axis.MajorTickMark.Enabled = true;
+            if (axis.IsLabelAutoFit) axis.IsLabelAutoFit = false;
         }
 
         private static double NiceInterval(double raw)
