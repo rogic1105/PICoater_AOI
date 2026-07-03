@@ -16,8 +16,6 @@ namespace AniloxRoll.Monitor.UI.Navigators
         private readonly Action<string, DateTime, DateTime, int> _selectFromReview;
         private readonly Action<GroupBox, bool> _setGroupBoxActive;
 
-        private bool _suppressRangeOnSingleSheetSync;
-
         public EventGuard StatComboGuard { get; } = new EventGuard();
         public EventGuard GrabIdNavGuard { get; } = new EventGuard();
         public EventGuard GrabIdCrossGuard { get; } = new EventGuard();
@@ -147,9 +145,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
                 return;
             }
 
-            _suppressRangeOnSingleSheetSync = true;
-            try { _ctx.CbDataGrabId.SelectedIndex = idx; }
-            finally { _suppressRangeOnSingleSheetSync = false; }
+            _ctx.CbDataGrabId.SelectedIndex = idx;
         }
 
         public void SetActiveStatGroupBox(GroupBox active)
@@ -211,15 +207,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
             int idx = _ctx.CbDataGrabId.SelectedIndex;
             if (idx < 0) return;
 
-            if (!_suppressRangeOnSingleSheetSync)
-            {
-                using (StatComboGuard.Enter())
-                {
-                    _ctx.CbGrabIdStart.SelectedIndex = idx;
-                    _ctx.CbGrabIdEnd.SelectedIndex = idx;
-                }
-            }
-
+            // cbDataId（單片序號）變更「不」連動 cbDataIdStart/End —— 範圍序號獨立，選單片不動範圍。
             _refreshStats();
 
             if (!GrabIdCrossGuard.IsSet && _ctx.CbReviewGrabId.Items.Count > 0

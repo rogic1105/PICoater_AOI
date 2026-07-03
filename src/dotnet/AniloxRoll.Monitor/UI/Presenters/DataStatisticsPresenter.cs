@@ -250,8 +250,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _ctx.Settings.ErrorValueMaxV);
 
             // SingleSheet mode：用 cbDataId.SelectedIndex 算單 grab stats（start=end=該 grab）。
-            // 不靠 cbDataIdStart/End 範圍，這樣 listViewGrabDetail 點選後（_suppressRangeOnSingleSheetSync=true
-            // 跳過 range cb 同步）stats 仍對齊到剛點的單 grab。
+            // 不靠 cbDataIdStart/End 範圍；cbDataId 變更不連動範圍 cb（範圍獨立），
+            // 故 listViewGrabDetail 點選後 stats 仍對齊到剛點的單 grab。
             if (_dateGrabIdNavigator.ActiveStatMode == _ctx.GrpDataSingleSheet
                 && _ctx.CbDataGrabId.SelectedIndex >= 0
                 && _ctx.CbDataGrabId.SelectedIndex < _grabIdInfos.Count)
@@ -322,8 +322,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             // 點選明細列表的列 → MouseDown 時 ListView 預設視覺先反白（顯示被選中），
             // MouseUp 才 commit 切到該序號（與 cbDataId 變更流程共用 OnSingleSheetComboChanged）。
-            // commit 時包 _suppressRangeOnSingleSheetSync 跳過範圍 cb 同步，
-            // 保留 cbDataIdStart/End 不變。
+            // cbDataId 變更不連動 cbDataIdStart/End（範圍獨立），故 commit 後範圍 cb 維持不變。
             lv.DrawColumnHeader -= ListViewGrabDetail_DrawColumnHeader;
             lv.DrawSubItem -= ListViewGrabDetail_DrawSubItem;
             lv.RetrieveVirtualItem -= ListViewGrabDetail_RetrieveVirtualItem;
@@ -353,9 +352,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 ExecuteWithDetailListRedrawSuspended(lv, () =>
                 {
                     _lastListViewSelectedGrabId = null;
-                lv.SelectedIndices.Clear();  // 清掉反白，視覺回到「無選中」
-                _dateGrabIdNavigator.SetActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);
-                RefreshStats();
+                    lv.SelectedIndices.Clear();  // 清掉反白，視覺回到「無選中」
+                    _muraChart?.Clear();          // 先清圖，避免同列二次點選時殘留上一筆 CURVE
+                    _dateGrabIdNavigator.SetActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);
+                    RefreshStats();
                 });
                 return;
             }

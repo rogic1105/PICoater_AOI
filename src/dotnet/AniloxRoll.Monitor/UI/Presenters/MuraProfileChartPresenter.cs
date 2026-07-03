@@ -49,8 +49,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (_muraProfileHelper == null || _ctx.Settings == null) return;
 
             // 單片模式（GrpDataSingleSheet）：永遠用 cbDataId.SelectedIndex 對應 grab，不依賴 caller 傳入的 grabIds。
-            // 原因：listViewGrabDetail 點選時 _suppressRangeOnSingleSheetSync=true 跳過範圍 cb 同步，
-            // 但 caller 仍會用舊 cbDataIdStart/End 範圍呼這函式 → 若用 grabIds[0] 會顯示舊範圍的第一筆而非剛點的 grab。
+            // 原因：cbDataId 變更不連動 cbDataIdStart/End（範圍獨立），caller 仍可能用舊範圍呼這函式
+            // → 若用 grabIds[0] 會顯示舊範圍的第一筆而非剛點的 grab。
             // view-time 正規值 rescale（HM_capture / HM_current）讓改 PropertyGrid 正規值時曲線坡度立即變化。
             var grabIdInfos = _getGrabIdInfos();
             if (_getActiveStatMode() == _ctx.GrpDataSingleSheet)

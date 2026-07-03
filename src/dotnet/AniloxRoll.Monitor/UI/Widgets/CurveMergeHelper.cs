@@ -29,10 +29,19 @@ namespace AniloxRoll.Monitor.UI.Widgets
             Func<int, bool, double, double> viewRangeProvider,
             MergeOverlap overlap = MergeOverlap.Midline)
         {
-            if (target == null || allMean == null) return;
+            if (target == null) return;
+            if (allMean == null)
+            {
+                target.Clear();
+                return;
+            }
 
             var r = CurveOverviewMerger.Merge(allMean, allMax, opsArr, posArr, cameraCount, overlap);
-            if (!r.Valid) return;
+            if (!r.Valid)
+            {
+                target.Clear();
+                return;
+            }
 
             target.SetOps(r.GridMm * 1000.0);
             target.SetThresholds(errMean, errMax);
