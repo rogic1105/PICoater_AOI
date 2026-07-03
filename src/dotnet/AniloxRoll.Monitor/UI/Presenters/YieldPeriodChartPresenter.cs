@@ -42,7 +42,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public void Init()
         {
             var cs = _ctx.Settings.Chart;
-            InitOneChart(_ctx.ChartDataYieldYearly, yDefault: cs.YearlyYMax, xCount: 12, xStart: 1);
+            InitOneChart(_ctx.ChartDataYieldYearly, yDefault: cs.YearlyYMax, xCount: 12, xStart: 1, xUnit: "月");
             InitOneChart(_ctx.ChartDataYieldMonthly, yDefault: cs.MonthlyYMax, xCount: 31, xStart: 1);
             InitOneChart(_ctx.ChartDataYieldDaily, yDefault: cs.DailyYMax, xCount: 24, xStart: 0);
 
@@ -96,7 +96,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         }
 
         private static void InitOneChart(Chart chart, int xLabelAngle = 0, int yDefault = 10,
-            int xCount = 0, int xStart = 1)
+            int xCount = 0, int xStart = 1, string xUnit = "")
         {
             chart.ChartAreas.Clear();
             chart.Series.Clear();
@@ -114,6 +114,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
             area.AxisX.LabelStyle.Angle = xLabelAngle;
             area.AxisX.IsLabelAutoFit = false;
             area.AxisX.LabelStyle.Font = new Font("Arial", 10f);
+            if (!string.IsNullOrEmpty(xUnit))
+            {
+                area.AxisX.Title = xUnit;                            // X 軸單位（年圖＝月）
+                area.AxisX.TitleAlignment = StringAlignment.Near;    // 靠左 → 顯示在左下角
+                area.AxisX.TitleFont = new Font("Arial", 8f);
+                area.AxisX.TitleForeColor = Color.FromArgb(90, 90, 90);
+            }
             area.AxisY.LineColor = Color.Transparent;
             area.AxisY.MajorGrid.Enabled = false;
             area.AxisY.MajorTickMark.Enabled = false;
@@ -136,9 +143,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
             area.AxisY2.LabelStyle.Interval = yDefault;
             area.InnerPlotPosition.Auto = false;
             area.InnerPlotPosition.X = 0f;
-            area.InnerPlotPosition.Y = 12f;
+            area.InnerPlotPosition.Y = 18f;       // 上緣多留空白（原 12）
             area.InnerPlotPosition.Width = 93f;
-            area.InnerPlotPosition.Height = 66f;
+            area.InnerPlotPosition.Height = 60f;  // 縮 6 補回，底部 X 標籤/單位不被擠（下緣仍 78）
             chart.ChartAreas.Add(area);
 
             var legend = new Legend("L");
