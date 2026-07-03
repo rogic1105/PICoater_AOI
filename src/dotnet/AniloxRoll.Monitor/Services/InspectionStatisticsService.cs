@@ -403,7 +403,11 @@ namespace AniloxRoll.Monitor.Core.Services
                 }
             }
 
-            return new List<GrabDetail>(dict.Values);
+            // 明細列表顯示序：新→舊（dict 為字串升冪＝舊→新，反轉成降冪）。
+            // 處理迴圈仍走升冪（captureHmV 跨 CSV carry 依賴日期順序），只反轉輸出。
+            var ordered = new List<GrabDetail>(dict.Values);
+            ordered.Reverse();
+            return ordered;
         }
 
         // ── 載入輔助資料 ─────────────────────────────────────────────────

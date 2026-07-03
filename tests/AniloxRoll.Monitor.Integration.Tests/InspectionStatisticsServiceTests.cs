@@ -87,13 +87,14 @@ namespace AniloxRoll.Monitor.Tests
                 _tempRoot, "260330-100000", "260330-100100");
             Assert.That(details.Count, Is.EqualTo(2));
 
-            Assert.That(details[0].GrabId, Is.EqualTo("260330-100000"));
+            // 明細列表顯示序為新→舊：最新的 260330-100100 在前、最舊的 260330-100000 在後
+            Assert.That(details[0].GrabId, Is.EqualTo("260330-100100"));
             Assert.That(details[0].CamResult[0], Is.False, "CAM1 pass");
-            Assert.That(details[0].CamResult[1], Is.True,  "CAM2 fail");
+            Assert.That(details[0].CamResult[1], Is.Null,  "CAM2 no data");
 
-            Assert.That(details[1].GrabId, Is.EqualTo("260330-100100"));
+            Assert.That(details[1].GrabId, Is.EqualTo("260330-100000"));
             Assert.That(details[1].CamResult[0], Is.False, "CAM1 pass");
-            Assert.That(details[1].CamResult[1], Is.Null,  "CAM2 no data");
+            Assert.That(details[1].CamResult[1], Is.True,  "CAM2 fail");
         }
 
         [Test]
