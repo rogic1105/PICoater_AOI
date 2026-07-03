@@ -267,6 +267,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     _currentDetails = details;
                     ApplyFailFilter();
                 }
+                HighlightDetailRow(grab.GrabId);  // cbDataId 變更 → 明細列表對應列重用點擊選取框 + 捲到可見
                 _muraChart.Update(null);  // SingleSheet branch 內自己查 cbDataId 取 grab
                 return;
             }
@@ -406,6 +407,20 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     _preserveDetailListDuringSelection = savedPreserveDetailList;
                 }
             }
+        }
+
+        /// <summary>cbDataId（單片序號）變更 → 在 listViewGrabDetail 對應列重用「點擊時的選取框」
+        /// （框由 DrawSubItem 依 _lastListViewSelectedGrabId 自繪，非原生選取，故不新增框）+ EnsureVisible 捲到可見。
+        /// 點擊路徑也走這（同值冪等）。僅單片分支呼叫；範圍模式 DrawSubItem 不畫框。</summary>
+        private void HighlightDetailRow(string grabId)
+        {
+            _lastListViewSelectedGrabId = grabId;
+            var lv = _ctx.ListViewGrabDetail;
+            if (lv == null) return;
+            int rowIdx = _visibleDetails.FindIndex(d => d.GrabId == grabId);   // 被 fail filter 濾掉則 -1（不可見不捲）
+            if (rowIdx >= 0 && lv.IsHandleCreated && rowIdx < lv.VirtualListSize)
+                lv.EnsureVisible(rowIdx);
+            lv.Invalidate();
         }
 
         private void UpdateGrabDetailListView(List<GrabDetail> details)
