@@ -36,6 +36,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public GroupBox GrpReviewGrabNav { get; set; }
         public GroupBox GrpReviewTimePeriod { get; set; }
 
+        // --- 年/月/日 期間 label（可點 → 範圍序號取該期間；active 綠色高亮）---
+        public Label LblChartNavYear { get; set; }
+        public Label LblChartNavMonth { get; set; }
+        public Label LblChartNavDay { get; set; }
+
         // --- 統計 ---
         public ListView ListViewGrabDetail { get; set; }
         public Panel[] PanelStatCams { get; set; }
@@ -121,7 +126,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 RefreshStats,
                 (grabId, earliest, latest, idx) => GrabIdSelectedFromData?.Invoke(grabId, earliest, latest, idx),
                 (grabId, earliest, latest, idx) => GrabIdSelectedFromReview?.Invoke(grabId, earliest, latest, idx),
-                SetGroupBoxActive);
+                SetGroupBoxActive, SetChipActive);
         }
 
         // ══════════════════════════════════════════════════════════════
@@ -694,6 +699,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
 
             _dateGrabIdNavigator.SetActiveStatGroupBox(_ctx.GrpDataSingleSheet);
+        }
+
+        /// <summary>年/月/日 期間 label chip 的 active 高亮：綠底綠字（與 groupBox active 同色）／恢復預設。</summary>
+        private static void SetChipActive(Label lbl, bool active)
+        {
+            if (lbl == null) return;
+            lbl.BackColor = active ? _activeGrpFill : System.Drawing.SystemColors.Control;
+            lbl.ForeColor = active ? _activeGrpBorder : System.Drawing.SystemColors.ControlText;
         }
 
         private static void SetGroupBoxActive(GroupBox box, bool active)

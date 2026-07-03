@@ -45,6 +45,7 @@
 - 三模式：`GrpDataSingleSheet`（單片，cbDataId 驅動）、`GroupBoxGrabIdRange`（序號範圍，cbDataIdStart/End 驅動）、`GroupBoxTimeRange`（時序範圍，cbDataDateStart~cbDataTimeEnd 驅動）
 - **三個 GroupBox 標題都可點切模式**（`SwitchActiveStatGroupBox`）— 與 Review tab 的 `grpReviewGrabNav.Click` 對等
 - `btnDataSelectFolder`/`btnReviewSelectFolder` 讀取資料後預設 `GrpDataSingleSheet` 模式：**單片顯示最新一筆**（`cbDataId` descending [0]）；**序號範圍預設「起始 cbDataIdStart=最舊、結束 cbDataIdEnd=最新」**（切範圍模式即涵蓋全部；明細列表隨 start/end 連動＝顯示全部）。兩路徑共用 `SelectLatestInSingleSheetMode()`（在 `StatComboGuard` 內設 start/end/cbDataId、不觸發 `OnSingleSheetComboChanged`；`SetActiveStatGroupBox` 顯式切模式、`RefreshStats` 由 caller 呼）。**勿在 `PopulateAllGrabIdCombos` guard 外再設 `cbDataId`＝會誤觸發 handler 把 start 拉回最新**
+- **年/月/日期間可點設範圍**（`DataDateGrabIdNavigator`，`GrabIdRangeSource` enum：Global/Year/Month/Day/Custom）：點 `lblChartNavYear/Month/Day`（浮雕 Fixed3D 小晶片 + 手指游標）→ cbDataIdStart/End 只取該期間（值取自 `cbDataYieldYear/Month/Day`）；點 `groupBoxGrabIdRange`→全局；手動拖範圍→Custom。**互斥高亮**：同時只有一個來源綠（`SetChipActive`/`SetGroupBoxActive` 同色 `_activeGrpFill/_activeGrpBorder`）。**單片 toggle 記憶**＝`_rangeSource` 保留 + 範圍 cb 不被單片動（見 [[cbDataId 取消同動]]）→ 回範圍自動還原。**active 來源的 cbDataYield 改變→範圍跟著更新**（`OnPeriodComboChangedForRange`，非 active 來源/串聯不觸發）
 - **序號模式**：`ComputeByGrabIdRange` — 分母=唯一序號數，同序號同相機一票否決
 - **時間模式**：找時間範圍內 GrabIds → 同樣用 `ComputeByGrabIdRange`
 - Period Charts（`ScanCsvByDateRange`）同樣用 (GrabId, CamId) 一票否決

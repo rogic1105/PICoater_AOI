@@ -7,6 +7,9 @@ using TanukiCv.Controls;
 
 namespace AniloxRoll.Monitor.UI.Navigators
 {
+    /// <summary>序號範圍的來源：給「哪個來源高亮成綠色」+ 單片 toggle 回範圍時記憶用。</summary>
+    public enum GrabIdRangeSource { Global, Year, Month, Day, Custom }
+
     public sealed class DataDateGrabIdNavigator
     {
         private readonly DataStatisticsContext _ctx;
@@ -15,6 +18,8 @@ namespace AniloxRoll.Monitor.UI.Navigators
         private readonly Action<string, DateTime, DateTime, int> _selectFromData;
         private readonly Action<string, DateTime, DateTime, int> _selectFromReview;
         private readonly Action<GroupBox, bool> _setGroupBoxActive;
+        private readonly Action<Label, bool> _setChipActive;
+        private GrabIdRangeSource _rangeSource = GrabIdRangeSource.Global;
 
         public EventGuard StatComboGuard { get; } = new EventGuard();
         public EventGuard GrabIdNavGuard { get; } = new EventGuard();
@@ -27,7 +32,8 @@ namespace AniloxRoll.Monitor.UI.Navigators
             Action refreshStats,
             Action<string, DateTime, DateTime, int> selectFromData,
             Action<string, DateTime, DateTime, int> selectFromReview,
-            Action<GroupBox, bool> setGroupBoxActive)
+            Action<GroupBox, bool> setGroupBoxActive,
+            Action<Label, bool> setChipActive)
         {
             _ctx = ctx ?? throw new ArgumentNullException(nameof(ctx));
             _getGrabIdInfos = getGrabIdInfos ?? throw new ArgumentNullException(nameof(getGrabIdInfos));
@@ -35,6 +41,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
             _selectFromData = selectFromData ?? throw new ArgumentNullException(nameof(selectFromData));
             _selectFromReview = selectFromReview ?? throw new ArgumentNullException(nameof(selectFromReview));
             _setGroupBoxActive = setGroupBoxActive ?? throw new ArgumentNullException(nameof(setGroupBoxActive));
+            _setChipActive = setChipActive ?? throw new ArgumentNullException(nameof(setChipActive));
             ActiveStatMode = ctx.GroupBoxGrabIdRange;
         }
 
@@ -47,7 +54,27 @@ namespace AniloxRoll.Monitor.UI.Navigators
             _ctx.GrpReviewGrabNav.Click += (s, e) => OnReviewGrabIdChanged();
 
             _ctx.GrpDataSingleSheet.Click += (s, e) => SwitchActiveStatGroupBox(_ctx.GrpDataSingleSheet);
-            _ctx.GroupBoxGrabIdRange.Click += (s, e) => SwitchActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);
+            _ctx.GroupBoxGrabIdRange.Click += (s, e) => ApplyGlobalRange();   // 回全局（永遠重設，不受目前 mode 早退影響）
+
+            // 年/月/日 label 點擊 → 範圍序號只取該期間（值取自 cbDataYieldYear/Month/Day 的選擇）
+            if (_ctx.LblChartNavYear != null)  _ctx.LblChartNavYear.Click  += (s, e) => ApplyPeriodRange(GrabIdRangeSource.Year);
+            if (_ctx.LblChartNavMonth != null) _ctx.LblChartNavMonth.Click += (s, e) => ApplyPeriodRange(GrabIdRangeSource.Month);
+            if (_ctx.LblChartNavDay != null)   _ctx.LblChartNavDay.Click   += (s, e) => ApplyPeriodRange(GrabIdRangeSource.Day);
+
+            // lblChartNav 為 active 來源時，改對應的 cbDataYear/Month/Day → 範圍跟著更新
+            if (_ctx.CbChartYear != null)  _ctx.CbChartYear.SelectedIndexChanged  += (s, e) => OnPeriodComboChangedForRange(GrabIdRangeSource.Year);
+            if (_ctx.CbChartMonth != null) _ctx.CbChartMonth.SelectedIndexChanged += (s, e) => OnPeriodComboChangedForRange(GrabIdRangeSource.Month);
+            if (_ctx.CbChartDay != null)   _ctx.CbChartDay.SelectedIndexChanged   += (s, e) => OnPeriodComboChangedForRange(GrabIdRangeSource.Day);
+
+            UpdateSourceHighlights();   // 初始：反映預設 Global
+        }
+
+        /// <summary>lblChartNav 目前正是 active 來源時，改對應 cbDataYield → 重套該期間範圍。
+        /// 非 active 來源的 combo 變更（含年變更連帶重填月/日的串聯）不觸發，避免亂改範圍。</summary>
+        private void OnPeriodComboChangedForRange(GrabIdRangeSource source)
+        {
+            if (_rangeSource != source) return;
+            ApplyPeriodRange(source);
         }
 
         public void PopulateAllGrabIdCombos(bool selectDataGrabId = false)
@@ -151,10 +178,82 @@ namespace AniloxRoll.Monitor.UI.Navigators
         public void SetActiveStatGroupBox(GroupBox active)
         {
             ActiveStatMode = active;
-            foreach (var box in new[] { _ctx.GroupBoxGrabIdRange, _ctx.GrpDataSingleSheet })
+            UpdateSourceHighlights();
+        }
+
+        /// <summary>互斥高亮：同時間只有一個範圍來源是綠色。單片模式 → 只有 grpDataSingleSheet 綠、來源 chip 全滅
+        /// （但 _rangeSource 保留，toggle 回範圍即還原）。範圍模式 → 依 _rangeSource 綠 groupBoxGrabIdRange(全局)
+        /// 或對應 lblChartNav(年/月/日)；Custom 全滅。</summary>
+        private void UpdateSourceHighlights()
+        {
+            bool single = ActiveStatMode == _ctx.GrpDataSingleSheet;
+            _setGroupBoxActive(_ctx.GrpDataSingleSheet, single);
+            _setGroupBoxActive(_ctx.GroupBoxGrabIdRange, !single && _rangeSource == GrabIdRangeSource.Global);
+            _setChipActive(_ctx.LblChartNavYear,  !single && _rangeSource == GrabIdRangeSource.Year);
+            _setChipActive(_ctx.LblChartNavMonth, !single && _rangeSource == GrabIdRangeSource.Month);
+            _setChipActive(_ctx.LblChartNavDay,   !single && _rangeSource == GrabIdRangeSource.Day);
+        }
+
+        /// <summary>年/月/日 label 點擊：範圍序號只取該期間（值取自 cbDataYieldYear/Month/Day）。</summary>
+        private void ApplyPeriodRange(GrabIdRangeSource source)
+        {
+            var infos = _getGrabIdInfos();
+            if (infos.Count == 0) return;
+            if (!TryGetSelectedPeriod(source, out int year, out int month, out int day)) return;
+
+            // infos 為降冪（0=最新、Count-1=最舊）→ hi=符合期間的最大 idx(最舊)、lo=最小 idx(最新)
+            int lo = -1, hi = -1;
+            for (int i = 0; i < infos.Count; i++)
             {
-                _setGroupBoxActive(box, box == active);
+                var d = infos[i].Earliest;
+                bool match = d.Year == year
+                    && (source == GrabIdRangeSource.Year || d.Month == month)
+                    && (source != GrabIdRangeSource.Day || d.Day == day);
+                if (!match) continue;
+                if (lo < 0) lo = i;
+                hi = i;
             }
+            if (lo < 0) return;   // 該期間無資料（實務不會發生：年月日來自有資料）
+
+            using (StatComboGuard.Enter())
+            {
+                _ctx.CbGrabIdStart.SelectedIndex = hi;   // 最舊
+                _ctx.CbGrabIdEnd.SelectedIndex = lo;     // 最新
+            }
+            _rangeSource = source;
+            SetActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);   // mode=範圍 + UpdateSourceHighlights
+            _refreshStats();
+        }
+
+        /// <summary>點 groupBoxGrabIdRange：回全局（最舊→最新）。永遠重設，不受目前 mode 早退影響。</summary>
+        private void ApplyGlobalRange()
+        {
+            var infos = _getGrabIdInfos();
+            if (infos.Count == 0) return;
+            _rangeSource = GrabIdRangeSource.Global;
+            using (StatComboGuard.Enter())
+            {
+                _ctx.CbGrabIdStart.SelectedIndex = infos.Count - 1;
+                _ctx.CbGrabIdEnd.SelectedIndex = 0;
+            }
+            SetActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);
+            _refreshStats();
+        }
+
+        private bool TryGetSelectedPeriod(GrabIdRangeSource source, out int year, out int month, out int day)
+        {
+            year = month = day = 0;
+            if (!TryParseCombo(_ctx.CbChartYear, out year)) return false;
+            if (source == GrabIdRangeSource.Year) return true;
+            if (!TryParseCombo(_ctx.CbChartMonth, out month)) return false;
+            if (source == GrabIdRangeSource.Month) return true;
+            return TryParseCombo(_ctx.CbChartDay, out day);
+        }
+
+        private static bool TryParseCombo(ComboBox cb, out int v)
+        {
+            v = 0;
+            return cb?.SelectedItem != null && int.TryParse(cb.SelectedItem.ToString(), out v);
         }
 
         public void SwitchActiveStatGroupBox(GroupBox target)
@@ -179,6 +278,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
         {
             var grabIdInfos = _getGrabIdInfos();
             if (StatComboGuard.IsSet || grabIdInfos.Count == 0) return;
+            _rangeSource = GrabIdRangeSource.Custom;   // 手動拖範圍 → 自訂，清來源高亮
             SetActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);
 
             int idx1 = _ctx.CbGrabIdStart.SelectedIndex;

@@ -84,8 +84,19 @@ namespace AniloxRoll.Monitor.Forms
                 ChartDataPatch = chartDataColumn,
                 ChartDataYieldYearly = chartDataYieldYearly, ChartDataYieldMonthly = chartDataYieldMonthly, ChartDataYieldDaily = chartDataYieldDaily,
                 CbChartYear = cbDataYieldYear, CbChartMonth = cbDataYieldMonth, CbChartDay = cbDataYieldDay,
+                LblChartNavYear = lblChartNavYear, LblChartNavMonth = lblChartNavMonth, LblChartNavDay = lblChartNavDay,
                 Settings = _settings, CameraCount = CameraCount,
             });
+
+            // 年/月/日 label 做成「看起來可點」的浮雕小晶片（Fixed3D 外框 + 手指游標）；點擊行為由 navigator 接
+            foreach (var lbl in new[] { lblChartNavYear, lblChartNavMonth, lblChartNavDay })
+            {
+                lbl.BorderStyle = BorderStyle.Fixed3D;
+                lbl.Cursor = Cursors.Hand;
+                lbl.Padding = new Padding(6, 2, 6, 2);
+                lbl.TextAlign = ContentAlignment.MiddleCenter;
+            }
+
             _dataStatsPresenter.Initialize();
 
             // 延遲注入：_stitchCoordinator 在 InitUiLayer 初始化時 _dataStatsPresenter 尚未建立
