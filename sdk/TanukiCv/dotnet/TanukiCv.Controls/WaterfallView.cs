@@ -585,7 +585,7 @@ namespace TanukiCv.Controls
             double yPitch = _rowPitchMm > 0 ? _rowPitchMm : _refOpsMm;
             double minStartMm = MinStartMm();
             double curMmX = PixelMmMapper.PixelToMm(imageX, minStartMm, _refOpsMm);
-            double curMmY = ToLogicalY(imageY) * yPitch;
+            double curMmY = imageY * yPitch;
 
             _canvas.SetPhysicalCalibration(_refOpsMm, _screenMmPerPx);
             status = new ImageDisplayView.CursorStatus
@@ -612,7 +612,7 @@ namespace TanukiCv.Controls
             double minStartMm = MinStartMm();
             double curMmX = PixelMmMapper.PixelToMm(imageX, minStartMm, _refOpsMm);
             double yPitch = _rowPitchMm > 0 ? _rowPitchMm : _refOpsMm;
-            double curMmY = ToLogicalY(imageY) * yPitch;
+            double curMmY = imageY * yPitch;
             string camText = camId > 0 ? $"CAM {camId}" : "瀑布";
             return $"{camText} ({curMmX:F2}, {curMmY:F2})";
         }

@@ -77,15 +77,15 @@ namespace TanukiCv.Controls
                 _logicalLeftMm  = viewLeftMm;
                 _logicalRightMm = viewRightMm;
                 GetAdjustedZoom(viewLeftMm, viewRightMm, out double zMin, out double zMax);
-                area.AxisX.Minimum = Math.Min(_dataMinX, zMin);
-                area.AxisX.Maximum = Math.Max(_dataMaxX, zMax);
+                ApplyAxisBounds(area.AxisX, Math.Min(_dataMinX, zMin), Math.Max(_dataMaxX, zMax));
+                ApplyXAxisTickInterval(area.AxisX, zMin, zMax);
                 try { area.AxisX.ScaleView.Zoom(zMin, zMax); }
                 catch (Exception ex)
                 {
                     System.Diagnostics.Trace.WriteLine(
                         $"[MuraChart] UpdateDataAndView Zoom({zMin:F2}, {zMax:F2}) failed: {ex.GetType().Name}: {ex.Message}");
-                    area.AxisX.Minimum = _dataMinX;
-                    area.AxisX.Maximum = _dataMaxX;
+                    ApplyAxisBounds(area.AxisX, _dataMinX, _dataMaxX);
+                    ApplyXAxisTickInterval(area.AxisX, _dataMinX, _dataMaxX);
                     area.AxisX.ScaleView.ZoomReset();
                 }
             }
@@ -93,8 +93,8 @@ namespace TanukiCv.Controls
             {
                 _logicalLeftMm  = double.NaN;
                 _logicalRightMm = double.NaN;
-                area.AxisX.Minimum = _dataMinX;
-                area.AxisX.Maximum = _dataMaxX;
+                ApplyAxisBounds(area.AxisX, _dataMinX, _dataMaxX);
+                ApplyXAxisTickInterval(area.AxisX, _dataMinX, _dataMaxX);
                 area.AxisX.ScaleView.ZoomReset();
             }
 
@@ -115,8 +115,8 @@ namespace TanukiCv.Controls
             // ⚠ 拖曳即時跟隨效能：設 Minimum/Maximum 會觸發 MSChart 整張重排版（比 ScaleView.Zoom 貴一級）。
             //   30fps 連續跟隨時 Min/Max 其實不變（資料沒換）→ 只在真的變了才設，跟隨只走便宜的 Zoom。
             double newMin = Math.Min(_dataMinX, zMin), newMax = Math.Max(_dataMaxX, zMax);
-            if (axisX.Minimum != newMin) axisX.Minimum = newMin;
-            if (axisX.Maximum != newMax) axisX.Maximum = newMax;
+            ApplyAxisBounds(axisX, newMin, newMax);
+            ApplyXAxisTickInterval(axisX, zMin, zMax);
             try { axisX.ScaleView.Zoom(zMin, zMax); }
             catch (Exception ex)
             {
@@ -136,7 +136,8 @@ namespace TanukiCv.Controls
             if (_chart.ChartAreas.Count == 0) return;
 
             var inner = _chart.ChartAreas[0].InnerPlotPosition;
-            if (inner.Width < 1.0) return;
+            if (_chart.ClientSize.Width < 100 || _chart.ClientSize.Height < 40) return;
+            if (inner.Width < 20.0 || inner.Height < 20.0) return;
 
             const float leftPadding = 0.5f;
 
@@ -186,8 +187,8 @@ namespace TanukiCv.Controls
             // ⚠ 拖曳即時跟隨效能：設 Minimum/Maximum 會觸發 MSChart 整張重排版（比 ScaleView.Zoom 貴一級）。
             //   30fps 連續跟隨時 Min/Max 其實不變（資料沒換）→ 只在真的變了才設，跟隨只走便宜的 Zoom。
             double newMin = Math.Min(_dataMinX, zMin), newMax = Math.Max(_dataMaxX, zMax);
-            if (axisX.Minimum != newMin) axisX.Minimum = newMin;
-            if (axisX.Maximum != newMax) axisX.Maximum = newMax;
+            ApplyAxisBounds(axisX, newMin, newMax);
+            ApplyXAxisTickInterval(axisX, zMin, zMax);
             try { axisX.ScaleView.Zoom(zMin, zMax); }
             catch (Exception ex)
             {
@@ -204,6 +205,52 @@ namespace TanukiCv.Controls
             zoomMax = leftMm + _cachedFRight * s;
         }
 
+        private void ApplyAxisBounds(Axis axis, double min, double max)
+        {
+            if (axis == null) return;
+            if (axis.Minimum != min) axis.Minimum = min;
+            if (axis.Maximum != max) axis.Maximum = max;
+        }
+
+        private void ApplyXAxisTickInterval(Axis axis, double min, double max)
+        {
+            if (axis == null) return;
+            double span = max - min;
+            double dataSpan = _dataMaxX - _dataMinX;
+            if (!double.IsNaN(dataSpan) && !double.IsInfinity(dataSpan))
+                span = Math.Max(span, dataSpan);
+            if (double.IsNaN(span) || double.IsInfinity(span) || span <= 0)
+                span = 1.0;
+
+            double interval = NiceInterval(span / 5.0);
+            axis.Interval = interval;
+            axis.LabelStyle.Interval = interval;
+            axis.MajorGrid.Interval = interval;
+            axis.MajorTickMark.Interval = interval;
+            axis.MinorGrid.Interval = interval / 2.0;
+            axis.LabelStyle.Enabled = true;
+            axis.LabelStyle.Format = interval < 0.1 ? "F2" : interval < 1.0 ? "F1" : "F0";
+            axis.MajorTickMark.Enabled = true;
+            axis.IsLabelAutoFit = false;
+        }
+
+        private static double NiceInterval(double raw)
+        {
+            if (double.IsNaN(raw) || double.IsInfinity(raw) || raw <= 0) return 1.0;
+
+            double exponent = Math.Floor(Math.Log10(raw));
+            double baseValue = Math.Pow(10.0, exponent);
+            double fraction = raw / baseValue;
+
+            double niceFraction;
+            if (fraction <= 1.0) niceFraction = 1.0;
+            else if (fraction <= 2.0) niceFraction = 2.0;
+            else if (fraction <= 5.0) niceFraction = 5.0;
+            else niceFraction = 10.0;
+
+            return niceFraction * baseValue;
+        }
+
         // ── 方向特定實作 ─────────────────────────────────────────────────────
 
         protected override ChartArea BuildChartArea()
@@ -215,6 +262,12 @@ namespace TanukiCv.Controls
             area.Position.Width  = 100f;
             area.Position.Height = 100f;
 
+            area.InnerPlotPosition.Auto   = false;
+            area.InnerPlotPosition.X      = 1.5f;
+            area.InnerPlotPosition.Y      = 5f;
+            area.InnerPlotPosition.Width  = 92f;
+            area.InnerPlotPosition.Height = 72f;
+
             area.AxisX.Minimum                  = 0;
             area.AxisX.Maximum                  = 100;
             area.AxisX.IsMarginVisible          = false;
@@ -225,9 +278,15 @@ namespace TanukiCv.Controls
             area.AxisX.LabelStyle.Font          = new Font("Segoe UI", 9f);   // 固定大小（不隨視窗縮放，但兩圖一致、不逐字豎排）；要調大小改這裡
             area.AxisX.LabelStyle.Angle         = 0;
             area.AxisX.IsLabelAutoFit           = false;
+            area.AxisX.Interval                 = 20;
+            area.AxisX.LabelStyle.Interval      = 20;
+            area.AxisX.MajorTickMark.Enabled    = true;
+            area.AxisX.MajorTickMark.Interval   = 20;
             area.AxisX.MajorGrid.Enabled        = true;
+            area.AxisX.MajorGrid.Interval       = 20;
             area.AxisX.MajorGrid.LineColor      = Color.FromArgb(220, 220, 220);
             area.AxisX.MinorGrid.Enabled        = true;
+            area.AxisX.MinorGrid.Interval       = 10;
             area.AxisX.MinorGrid.LineColor      = Color.FromArgb(220, 220, 220);
             area.AxisX.ScrollBar.Enabled        = false;
             area.AxisX.ScaleView.Zoomable       = true;
