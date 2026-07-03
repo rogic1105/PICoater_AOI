@@ -979,13 +979,11 @@ namespace AniloxRoll.Monitor.Forms
                 _liveRowDisplay?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
                 _reviewRowDisplay?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
                 UpdateRowChartPitch();
-                _dataStatsPresenter?.RefreshMuraProfileForSettingsChange();
                 if (_stitchCoordinator?.IsStitchMode == true)
                 {
                     _stitchCoordinator.UpdateStitchedOverviewChart();
                     _stitchCoordinator.RefreshCurrentCameraChartsForSettingsChange();
                 }
-                ScheduleStatsRefresh();
                 if (_liveCameraManager?.IsLiveGrabbing == true)
                     _inspectionLogService?.ForceWriteConfig(CsvConfigSnapshot.FromSettings(_settings));
 
@@ -994,6 +992,7 @@ namespace AniloxRoll.Monitor.Forms
                 if (HandleAppRoleSettingsChanged(c.Name)) return;  // 早退：機台角色（寫 app-mode.json）
                 HandleLiveLayoutSettingsChanged(c.Name);           // 動態 LOD + OPS/Start 合圖佈局（Live.cs）
                 HandleChartScaleSettingsChanged(c.Name);           // 檢測報表 Y 軸（Data.cs）
+                HandleDataStatsSettingsChanged(c.Name);            // Data 曲線/統計重畫（僅檢測參數變更才跑，避免無關設定閃圖；Data.cs）
                 HandleLightSettingsChanged(c.Name);                // 光源（HardwareStatus.cs）
                 HandleIoSettingsChanged(c.Name);                   // IO IP/Port/型號/啟用 → 重啟 controller 立即生效（HardwareStatus.cs）
                 await HandleEnhanceSettingsChanged(c.Name);        // 監控/回顧強化（Live.cs）

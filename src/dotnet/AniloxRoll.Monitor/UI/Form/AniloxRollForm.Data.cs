@@ -47,6 +47,28 @@ namespace AniloxRoll.Monitor.Forms
                 _dataStatsPresenter.ApplyFixedScaleForChart("Daily", _settings.Chart.DailyYMax);
         }
 
+        /// <summary>檢測參數變更 → 重畫 chartDataColumn 曲線 + 重算統計。
+        /// **只在真正影響 Data 曲線/Pass-Fail 的參數才跑**（正規值 V/H、檢出方向、V/H 平均/最大閾值）；
+        /// 其餘設定（IO/光源/儲存/DO_MURA 暫停/主畫面顯示/LOD/合圖…）不動 Data 曲線，避免無關設定
+        /// 觸發 chartDataColumn reload+重綁造成「閃一下再復原」。細線濾除(de_RidgeSigma)是 capture-time、
+        /// 不改已存 .bin，故不列入。（Wave3：Data 副作用從 OnSettingChanged 共用區搬入本 feature handler。）</summary>
+        private void HandleDataStatsSettingsChanged(string name)
+        {
+            switch (name)
+            {
+                case nameof(InspectionSettings.dc_HessianMaxFactorV):
+                case nameof(InspectionSettings.dd_HessianMaxFactorH):
+                case nameof(InspectionSettings.eb_RidgeDir):
+                case nameof(InspectionSettings.ec_ErrorValueMeanV):
+                case nameof(InspectionSettings.ed_ErrorValueMaxV):
+                case nameof(InspectionSettings.ee_ErrorValueMeanH):
+                case nameof(InspectionSettings.ef_ErrorValueMaxH):
+                    _dataStatsPresenter?.RefreshMuraProfileForSettingsChange();  // 立即重畫曲線（坡度/閾值線即時回饋）
+                    ScheduleStatsRefresh();                                      // debounce 重算 Pass/Fail 統計 + 明細
+                    break;
+            }
+        }
+
         private void SetupDataTab()
         {
             _dataStatsPresenter = new DataStatisticsPresenter(new DataStatisticsContext
