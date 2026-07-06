@@ -241,6 +241,11 @@ namespace AniloxRoll.Monitor.UI.Managers
             _waterfallView.SetLayout(startMm, null, refOps);
         }
 
+        /// <summary>放掉相機時呼叫：瀑布訂閱的是各 cam.OnDisplayFrame，相機被 Free 後這些訂閱指向死物件，
+        /// 且 EnableWaterfallDisplay 冪等（_waterfallView!=null 早退）→ 不 teardown 就不會重新訂閱新相機 → 空白。
+        /// 故 FreeCameras 必須連瀑布一起 teardown（與 TeardownImageDisplay 對稱）。</summary>
+        public void TeardownWaterfallDisplay() => DisableWaterfallDisplay();
+
         private void DisableWaterfallDisplay()
         {
             if (_waterfallView == null) return;

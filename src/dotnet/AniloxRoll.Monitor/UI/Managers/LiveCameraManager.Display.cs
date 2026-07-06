@@ -47,6 +47,11 @@ namespace AniloxRoll.Monitor.UI.Managers
             _display.RefreshWaterfallDisplay();
         }
 
+        public void TeardownWaterfallDisplay()
+        {
+            _display.TeardownWaterfallDisplay();
+        }
+
         public void ClearCameraFrame(int camId)
         {
             _display.ClearCameraFrame(camId);

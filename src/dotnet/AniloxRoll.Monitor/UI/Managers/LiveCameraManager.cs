@@ -298,8 +298,11 @@ namespace AniloxRoll.Monitor.UI.Managers
             // 再由工頭 MbufFree 合併 buffer，避免 grab hook 把幀複製進已釋放的 buffer。
             DisableGlobalMerge();
 
-            // ImageCanvas 顯示：解訂閱 + dispose（移除 camLiveMain 上的 ImageCanvas/thumbnail）
+            // 相機顯示：解訂閱 + dispose。ImageCanvas 與瀑布都訂閱各 cam.OnDisplayFrame，相機即將 Free →
+            // 兩者都必須 teardown。瀑布尤其重要：EnableWaterfallDisplay 冪等（_waterfallView!=null 早退），
+            // 不 teardown 則重建相機後不會重新訂閱新 cam → 瀑布空白（預覽背景→開始抓取 空白的根因）。
             _display.TeardownImageDisplay();
+            _display.TeardownWaterfallDisplay();
 
             foreach (var cam in _cameras)
                 cam.Free();
