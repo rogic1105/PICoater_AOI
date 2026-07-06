@@ -413,7 +413,8 @@ namespace TanukiCv.Controls
                     var oldBlank = _canvas.Image;
                     _canvas.Image = null;
                     oldBlank.Dispose();
-                    _mainW = _mainH = -1;
+                    // 不重設 _mainW/_mainH：間歇 null（如某幀檢測失敗）後，下一張同尺寸有效幀不該被當「首幀」
+                    // 而 re-fit（會把使用者拖曳/縮放一直拉回 fit）。首幀 fit 只認初始 _mainW<0。
                 }
                 return;
             }
