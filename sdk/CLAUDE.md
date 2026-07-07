@@ -106,6 +106,9 @@ sdk/
 - **像素↔mm** = `TanukiCv.Core.PixelMmMapper`。
 - **GPU 灰階 LOD resize provider** = `TanukiCv.Core.GpuGrayResizeProvider`。負責 CUDA pinned host buffer 生命週期（on-demand grow/reuse、Resize/Release 互斥、防背景 LOD use-after-free），簽章可直接餵 `ImageDisplayView.EnableLod`。app 可注入自己的 `NativeMethods` 以保留 P/Invoke 單一宣告；sample/tool 可用 `CreateTanukiCv()`。
 - **ImageDisplayView 顯示選項套用** = `TanukiCv.Controls.LiveDisplayOptions` + `ImageDisplayView.ApplyOptions`。共用 MergeMode/MergeAll/MergeStrategy/FlipVertical/ThumbSelectedColor；frame feed、layout、LOD provider、MIL direct 等策略仍由呼叫端擁有。
+- **互動流跡掛勾** = `ImageCanvas/ImageDisplayView/WaterfallView` 的 `FlowLog`（`Action<string>`，可為 null）：
+  view 在「動視野的決策點」（autoFit 帶原因/lodRebind/clearFrame/wheelZoom）各記一行，**機制在 sdk、log 系統由
+  呼叫端注入**（app 接 FlowTrace 做流程契約驗證；範例可接 Console）。新增會動視野的 API 時比照留痕。
 - **多擊偵測** = `TanukiCv.Controls.MultiClickDetector`。ImageCanvas 內建雙擊 fit/三擊 1:1 與 app panel route 共用同一個 detector；呼叫端可設定 interval/距離模式以保留各自手勢語意。
 - **瀑布顯示** = `TanukiCv.Controls.WaterfallView` + `WaterfallFullMode`。使用 ImageCanvas LOD、MergeLayout placement、chunked gray buffer；app 只負責餵 frame/layout/settings。
 - **彩色三行字卡片** = `TanukiCv.Controls.ColorTextCard`（`UI/`）。雙緩衝自繪：底色 + 上/中/下三行字同一 `OnPaint` 一次畫完 → 換色原子重繪、不 flicker。取代「Panel + 3 個 Dock Label」多控制項疊法（各自非同步重繪成半紅半綠）。呼叫端 `SetContent(back, top, center, bottom)`；門檻/文字等業務算好再餵（app `InspectionStatsPresenter` 良率色卡用它）。
