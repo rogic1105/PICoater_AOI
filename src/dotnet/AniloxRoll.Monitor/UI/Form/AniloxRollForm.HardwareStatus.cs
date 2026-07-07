@@ -260,6 +260,28 @@ namespace AniloxRoll.Monitor.Forms
 
         /// <summary>由 TelemetryTimer 每 tick 呼叫：IO 斷線時顯示重連倒數（秒數源自 IoGrabController）。
         /// 手動暫停（_isIoSuspended）不覆蓋；初始連線中（尚未排程重連）維持「初始化中」。</summary>
+        // ── H 系列：硬體連線邊緣留痕（IO/光源/儲存；狀態轉變才記一行，斷線/恢復現場排障關鍵）──
+        private bool? _lastFlowIoConn, _lastFlowLightConn, _lastFlowStorageConn;
+
+        private void FlowHardwareEdges()
+        {
+            void Edge(ref bool? last, bool now, string name)
+            {
+                if (last == now) return;
+                // 首次觀測（null→值）只記基線斷線（開機就連不上也值得留痕）；恢復/斷線轉變一律記
+                if (last.HasValue)
+                    FlowTrace.Log(now ? $"{name} 恢復連線" : $"⚠ {name} 斷線");
+                else if (!now)
+                    FlowTrace.Log($"⚠ {name} 未連線（開機基線）");
+                last = now;
+            }
+            Edge(ref _lastFlowIoConn, _ioGrabController?.IsConnected == true, "IO");
+            if (_settings?.LightEnabled == true)
+                Edge(ref _lastFlowLightConn, _lightController?.IsConnected == true, "光源");
+            if (!string.IsNullOrWhiteSpace(_settings?.RemotePath))
+                Edge(ref _lastFlowStorageConn, _storageLastConnected == true, "儲存電腦");
+        }
+
         private void RefreshIoConnLabel()
         {
             if (_ioGrabController == null || _isIoSuspended) return;  // 手動暫停 → 保留「IO 暫停 ⏸」
@@ -393,6 +415,7 @@ namespace AniloxRoll.Monitor.Forms
             UpdateLightConnLabel();
             RefreshIoConnLabel();          // IO 重連倒數每 tick 刷新（源自 IoGrabController）
             UpdateStorageConnLabel(null);  // 儲存重連倒數每 tick 刷新（用上次 probe 結果）
+            FlowHardwareEdges();           // H 系列：IO/光源/儲存 斷線/恢復 邊緣留痕
             if (++_lightProbeTickCounter >= LightProbeIntervalTicks)
             {
                 _lightProbeTickCounter = 0;

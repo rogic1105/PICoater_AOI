@@ -246,10 +246,14 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             _display.SwitchMainDisplay(_display.SelectedMainCameraId);
 
-            // 初始化後立即發布相機數量（分配成功不代表已連線，Timer 會持續更新）
-            ConnectedCameraCount = _cameras.Count;
-            OnCameraCountChanged?.Invoke(_cameras.Count, ExpectedCameraCount);
-            FlowTrace.Log($"AllocateCameras done（cams={_cameras.Count}）");
+            // 初始化後立即發布「實際在線」數（上面 CheckPresence 的結果）。配置數≠在線數：
+            // quad 卡空通道也配得起來（2026-07-07 盲測：只接 2 台卻報 4，hwReady gate 開了才修正
+            // ＝幽靈相機數＋假「相機離線 4→2」）。Timer 之後持續更新。
+            int present = 0;
+            foreach (var cam in _cameras) if (cam.IsConnected) present++;
+            ConnectedCameraCount = present;
+            OnCameraCountChanged?.Invoke(present, ExpectedCameraCount);
+            FlowTrace.Log($"AllocateCameras done（配置 {_cameras.Count}、在線 {present}/{ExpectedCameraCount}）");
         }
 
         // ==================== Grab Control ====================

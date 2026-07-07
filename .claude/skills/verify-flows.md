@@ -73,7 +73,8 @@ T1: （前次 view 存在才有）TeardownImageDisplay / TeardownWaterfall
 T1: ApplyMainDisplayMode → {ImageCanvas|Waterfall}
 T1: {EnsureImageDisplay|EnableWaterfall} create + subscribe M cams
 T1: SwitchMainDisplay cam=1 center=False
-T1: AllocateCameras done（cams=M）
+T1: AllocateCameras done（配置 M、在線 P/N）   ← P=CheckPresence 實際在線（配置≠在線：quad 卡空通道
+                                                  也配得起來；報配置數＝幽靈相機數，2026-07-07 修正）
 T1: （CLProtocol 就緒後）EnableGlobalMerge（slots=7）
 ```
 
@@ -137,6 +138,24 @@ T1: （再配置時）F1 全序重跑——view 必須重建+重訂閱新相機�
 現況：取得背景=借用現有 grab 採集（啟停包夾）、預覽=ImageCanvas overlay 蓋最上層（**不得動 MIL 顯示開關**）。
 Wave3 改與 grab 共用顯示 API 後更新本節。
 
+## 硬體連線契約（H 系列）——邊緣觸發（同 MURA 模式：轉變才記，不洗版）
+
+### H1 IO / 光源 / 儲存電腦 連線轉變
+```
+Tn: ⚠ IO 斷線 ／ IO 恢復連線            ← 光源/儲存電腦 同格式
+Tn: ⚠ IO 未連線（開機基線）             ← 首次觀測就不在線（拔線開機/初始化未完，恢復行會跟著出現）
+```
+- 光源停用（LightEnabled=false）/ 遠端路徑空 → 該項不觀測（靜默合法）。
+- 開機常見「未連線（開機基線）→ 恢復連線」＝平行初始化的正常時序，非異常。
+
+### H2 相機在線數轉變
+```
+T1: ⚠ 相機離線 4→3/7 ／ 相機在線 0→4/7   ← 數量變化才記（開機 0→N＝配置完成）
+```
+- 由來 2026-07-07：使用者拔 IO+相機測試，flow log 完全靜默＝硬體事件盲區——現場排障最需要的
+  「什麼時候斷的、斷了多久、有沒有回來」從此有記錄。
+- 判讀：斷線行之後的顯示異常（黑縮圖/幀停）歸硬體事件管，不是接線 bug。
+
 ## 相機參數契約（P 系列）
 
 ### P1 滑桿/數字框調參（曝光/線掃/高度，放開才套用）
@@ -144,7 +163,8 @@ Wave3 改與 grab 共用顯示 API 後更新本節。
 T1: ui:【相機參數】camN {param}={v}｜All {param}={v}    ← 帶參數名+值單行自足（Exp/LineRate/Height…）
 （之後的 SwitchMainDisplay center=False（refresh）等程式化行歸此 intent 管；
   滑桿拖曳 vs 數字框輸入同一路徑，log 不區分）
-（⚠ 判讀例外：開機後 ~1 秒內的「全部套用」×3（曝光/線掃/高度）＝初始值塞進 All 控制項觸發
+（⚠ 判讀例外：開機後 ~1 秒內的「All {param}={v}」**0~3 發**（曝光/線掃/高度；發數＝settings 值與
+  控制項 Designer 預設值不同的個數，相同不觸發——2026-07-07 實測從 3 發變 1 發佐證）＝初始值塞進 All 控制項觸發
   ValueChanged→debounce 套用的**副作用**（出處查證 2026-07-07：7a017a3/993d8cc 皆無「防跑掉」設計記錄；
   **有記錄的防跑掉機制**＝①AllocateCameras/Initialize 套 settings 參數 ②CLProtocol 就緒自動重套線掃）。
   非使用者動作；**行為保留勿抑制**——重複寫同值無害，且無法排除它在替①②兜底。

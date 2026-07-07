@@ -437,8 +437,20 @@ namespace AniloxRoll.Monitor.Forms
         /// <summary>DCF 檔不存在時設為 true，UpdateCamCountLabel 改顯示警語而非相機數量。</summary>
         private bool _dcfMissing = false;
 
+        /// <summary>上次相機在線數（H 系列邊緣觸發：數量變化才記一行，-1=尚未記錄）。</summary>
+        private int _lastFlowCamCount = -1;
+
         private void UpdateCamCountLabel(int connected, int expected)
         {
+            // H 系列：相機在線數變化留痕（邊緣觸發；斷線/回線在現場排障是關鍵事件）
+            if (connected != _lastFlowCamCount)
+            {
+                if (_lastFlowCamCount >= 0)
+                    FlowTrace.Log(connected < _lastFlowCamCount
+                        ? $"⚠ 相機離線 {_lastFlowCamCount}→{connected}/{expected}"
+                        : $"相機在線 {_lastFlowCamCount}→{connected}/{expected}");
+                _lastFlowCamCount = connected;
+            }
             if (_dcfMissing)
             {
                 lblCamCount.Text = "⚠ DCF 缺失";
