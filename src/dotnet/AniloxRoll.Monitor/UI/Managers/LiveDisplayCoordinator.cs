@@ -207,8 +207,13 @@ namespace AniloxRoll.Monitor.UI.Managers
             }
         }
 
+        // 模式錯掛主動偵測（S 系列 view 互斥不變量的執行期自檢）：幀流進「不屬於當前模式」的路徑
+        // ＝訂閱錯掛，立即自報違規（每個 view 週期警一次，避免每幀洗版）。
+        private bool _warnFrameToIcInWf, _warnFrameToWfInIc;
+
         public void ApplyMainDisplayMode()
         {
+            _warnFrameToIcInWf = _warnFrameToWfInIc = false;
             Flow($"ApplyMainDisplayMode → {(WaterfallMode ? "Waterfall" : "ImageCanvas")}");
             if (WaterfallMode)
             {
@@ -299,6 +304,11 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         private void OnCameraWaterfallFrame(int camId, byte[] bytes, int w, int h, long tick)
         {
+            if (ImageCanvasMode && !_warnFrameToWfInIc)
+            {
+                _warnFrameToWfInIc = true;
+                Flow("⚠ 契約違規：即時模式下幀流入瀑布路徑（訂閱錯掛/殘留）");
+            }
             FlowFirstFrame(camId, w, h, "Waterfall");
             _waterfallView?.PushFrame(camId, bytes, w, h, tick);
             _waterfallThumbs?.PushFrame(camId - 1, bytes, w, h);
@@ -406,6 +416,11 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         private void OnCameraDisplayFrame(int camId, byte[] bytes, int w, int h, long tick)
         {
+            if (WaterfallMode && !_warnFrameToIcInWf)
+            {
+                _warnFrameToIcInWf = true;
+                Flow("⚠ 契約違規：瀑布模式下幀流入 IC 路徑（訂閱錯掛/殘留）");
+            }
             FlowFirstFrame(camId, w, h, "ImageDisplayView");
             _imageDisplay?.PushFrame(camId, bytes, w, h);
         }

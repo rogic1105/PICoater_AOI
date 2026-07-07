@@ -189,6 +189,7 @@ namespace AniloxRoll.Monitor.Forms
         public AniloxRollForm()
         {
             InitializeComponent();
+            SetupMainTabRendering();   // 監控/回顧/報表 頁籤文字置中（預設渲染器留 icon 位偏左）
             try
             {
                 using (var stream = System.Reflection.Assembly.GetExecutingAssembly()
@@ -234,6 +235,32 @@ namespace AniloxRoll.Monitor.Forms
                 }
                 catch { }
             };
+        }
+
+        private Font _tabSelFont;     // 選中頁籤＝大字（快取，避免每次重繪 new Font）
+        private Font _tabNormFont;    // 未選中＝小字
+
+        /// <summary>tabMain（監控/回顧/報表）頁籤文字置中：預設渲染器保留 icon 位造成偏移 →
+        /// OwnerDraw 固定尺寸 + 置中繪字；選中頁大字+白底、未選小字。</summary>
+        private void SetupMainTabRendering()
+        {
+            _tabNormFont = tabMain.Font;
+            _tabSelFont  = new Font(tabMain.Font.FontFamily, tabMain.Font.Size + 3f, FontStyle.Bold);
+            tabMain.SizeMode = TabSizeMode.Fixed;
+            tabMain.ItemSize = new Size(104, 34);
+            tabMain.DrawMode = TabDrawMode.OwnerDrawFixed;
+            tabMain.DrawItem += (s, e) =>
+            {
+                if (e.Index < 0 || e.Index >= tabMain.TabPages.Count) return;
+                bool sel = e.Index == tabMain.SelectedIndex;
+                using (var back = new SolidBrush(sel ? Color.White : SystemColors.Control))
+                    e.Graphics.FillRectangle(back, e.Bounds);
+                TextRenderer.DrawText(e.Graphics, tabMain.TabPages[e.Index].Text,
+                    sel ? _tabSelFont : _tabNormFont, e.Bounds, Color.Black,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+            };
+            // 切換時左右兩頁都要重繪字級
+            tabMain.SelectedIndexChanged += (s, e) => tabMain.Invalidate();
         }
 
         private void InitializeSystem()
@@ -968,6 +995,10 @@ namespace AniloxRoll.Monitor.Forms
             await _onSettingChangedSemaphore.WaitAsync().ConfigureAwait(true);
             try
             {
+                // 設定變更 intent（S0 通用）：使用者從 PropertyGrid 改＝ui: 前綴（孤兒判讀規則的主人）；
+                // 程式化來源（自動掃描寫回等）＝set: 前綴（有主人但非使用者動作）。單一掛點蓋所有設定。
+                FlowTrace.Log((c.Source == AniloxRoll.Monitor.Settings.Services.SettingSource.PropertyGrid
+                    ? "ui:設定[" : "set:[") + c.Name + "]");
                 // ── 共用副作用（任何 setting 變更都跑） ────────────────────────
                 // PropertyGrid 顯示同步：「程式碼路徑改值」時用精準 trick 重讀單 cell（不全 Refresh、不閃）。
                 // PropertyGrid 自己改值已自我更新該 cell，不需要外部處理。
