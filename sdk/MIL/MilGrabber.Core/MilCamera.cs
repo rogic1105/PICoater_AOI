@@ -186,7 +186,10 @@ namespace MilGrabber.Core
 
             // display/buffer 任一 M_NULL → 跳過 MdispSelectWindow（對 M_NULL 操作會 MIL 報錯）。
             // grab 仍進行，ImageCanvas 顯示路徑不靠 MIL display；只 MIL 直繪模式會黑畫面（已 log）。
-            if (_milDisplay != MIL.M_NULL && _milDisplayBuffer != MIL.M_NULL)
+            // panelHandle == IntPtr.Zero = headless：不 attach 原生視窗、不裝滑鼠 hook。display buffer 照常配置
+            // → GetFrameBytes/PutDisplayBytes/CopyToDisplay/合圖 merge target 完全不受影響。
+            // caller 用 CPU 顯示（ImageCanvas/ThumbStrip）時傳 Zero（原生視窗會疊在 WinForms 控制項之上）。
+            if (_panelHandle != IntPtr.Zero && _milDisplay != MIL.M_NULL && _milDisplayBuffer != MIL.M_NULL)
             {
                 MIL.MdispSelectWindow(_milDisplay, _milDisplayBuffer, _panelHandle);
                 MIL.MdispControl(_milDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);

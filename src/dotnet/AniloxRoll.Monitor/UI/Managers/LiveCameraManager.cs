@@ -144,6 +144,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         public void AllocateCameras(bool enableImageProcessing)
         {
             if (IsAllocated) return;
+            FlowTrace.Log($"AllocateCameras begin（expect {_cameraHardwareConfigs.Count} cams）");
             IsReleasing = false;
 
             CameraSystemManager.Initialize();
@@ -185,7 +186,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                     cfg.Id,
                     cfg.DevNum,   // 固定 device 位置（絕對值，直接傳）；MIL 轉換收斂在 MilCamera ctor
                     dcf,
-                    displayPanel.Handle,
+                    IntPtr.Zero,  // 顯示鐵則2：app 顯示一律 CPU（ImageDisplayView/ThumbStrip/WaterfallView），
+                                  // 不 attach 任何原生顯示視窗（headless）。panel 留給 ThumbStrip 用。
                     enableImageProcessing);
 
                 int camIdx = cfg.Id - 1; // cfg.Id 為 1–7，轉為 0–6 陣列索引
@@ -235,13 +237,19 @@ namespace AniloxRoll.Monitor.UI.Managers
             _cameraStatusTimer.Start();
             _display.UpdateCameraStatus("已配置", Color.White);
 
-            ApplyMainDisplayMode(); // 依 he_MainDisplay 套用：即時 / 瀑布（三選一互斥；舊值相容）
+            // 顯示 view 訂閱各 cam.OnDisplayFrame，且 Enable* 冪等（view 已存在就早退）→ 若 view 在本批相機
+            // 建立前就存在，會殘留空/舊訂閱、收不到新相機的幀。先 teardown 再 Apply 重建 → 一定訂閱「這批」相機
+            //（與 FreeCameras 的 teardown 對稱）。
+            _display.TeardownImageDisplay();
+            _display.TeardownWaterfallDisplay();
+            ApplyMainDisplayMode(); // 依 he_MainDisplay 套用：即時 / 瀑布
 
             _display.SwitchMainDisplay(_display.SelectedMainCameraId);
 
             // 初始化後立即發布相機數量（分配成功不代表已連線，Timer 會持續更新）
             ConnectedCameraCount = _cameras.Count;
             OnCameraCountChanged?.Invoke(_cameras.Count, ExpectedCameraCount);
+            FlowTrace.Log($"AllocateCameras done（cams={_cameras.Count}）");
         }
 
         // ==================== Grab Control ====================
@@ -263,6 +271,8 @@ namespace AniloxRoll.Monitor.UI.Managers
         public void StartGrab()
         {
             if (!IsAllocated || IsLiveGrabbing) return;
+            FlowTrace.Log($"StartGrab（cams={_cameras.Count}）");
+            _display.ResetFlowFirstFrame();   // 每輪 grab 重驗「幀有流到 view」（各 cam 首幀各記一行）
             IsLiveGrabbing = true;
             // 切「主畫面顯示」設定後重開抓取即生效：即時 / 瀑布 三選一互斥（舊值相容）
             ApplyMainDisplayMode();
@@ -276,6 +286,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         public void StopGrab()
         {
             if (!IsAllocated || !IsLiveGrabbing) return;
+            FlowTrace.Log("StopGrab");
             IsLiveGrabbing = false;
             // 並行停止：MdigProcess(M_STOP+M_WAIT) 會阻塞等自己 in-progress 那幀完成（~1 frame）。
             // 逐台序列呼叫 → cam1 的 M_STOP 阻塞那 ~1 frame 期間，cam2 仍在 free-run 多收幾偵（cam2 多跑幾偵的主因；
@@ -289,6 +300,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         public void FreeCameras()
         {
+            FlowTrace.Log($"FreeCameras（cams={_cameras.Count}）");
             IsReleasing = true;
             _cameraStatusTimer.Stop();
             IsLiveGrabbing = false;

@@ -142,8 +142,8 @@ namespace AniloxRoll.Monitor.Forms
             if (!double.IsNaN(_liveViewLeftMm) && _liveViewLeftMm < _liveViewRightMm)
                 return isLeft ? _liveViewLeftMm : _liveViewRightMm;
             // 未就緒（首幀影像尚未進場）→ 回 defaultValue(NaN) → 曲線圖退回全幅（從 0 起，乾淨穩定）。
-            // 不再退回讀 MIL 合圖 display 視野：MilDirect 已退場，ImageCanvas 下該 display 未初始化，
-            // 讀到的 zoom/pan 是垃圾 → 首幀座標亂跑（24/-39/版面跑掉、每次重啟不一）。
+            // 不從 MIL 合圖 display 讀視野：該 display 未初始化，讀到的 zoom/pan 是垃圾
+            // → 首幀座標亂跑（24/-39/版面跑掉、每次重啟不一）。
             return defaultValue;
         }
 

@@ -263,11 +263,8 @@ namespace AniloxRoll.Monitor.Core.Data
             else if (!System.Enum.TryParse(stitchStr, true, out stitchMode))
                 stitchMode = InspectionDefaults.DefaultStitch;
 
-            // MainDisplay / LiveLod（enum；fallback → InspectionDefaults）
+            // MainDisplay / LiveLod（enum；無法識別的字串 → fallback InspectionDefaults）
             string mainDisplayText = SettingsStoreHelper.GetString(obj, "MainDisplay", InspectionDefaults.MainDisplay.ToString());
-            if (string.Equals(mainDisplayText, "SmartCanvas", System.StringComparison.OrdinalIgnoreCase)
-                || string.Equals(mainDisplayText, "MilDirect", System.StringComparison.OrdinalIgnoreCase))
-                mainDisplayText = MainDisplayMode.ImageCanvas.ToString();
             if (!System.Enum.TryParse(mainDisplayText, true, out MainDisplayMode mainDisplay))
                 mainDisplay = InspectionDefaults.MainDisplay;
             if (!System.Enum.TryParse(SettingsStoreHelper.GetString(obj, "VerticalDirection", InspectionDefaults.VerticalDirection.ToString()),

@@ -30,8 +30,9 @@ namespace AniloxRoll.Monitor.UI.Managers
             foreach (var cam in _cameras)
                 cam.SetSecondaryDisplay(IntPtr.Zero);
 
-            // showMilDisplay：ImageCanvas 模式合圖由 ImageDisplayView CPU 拼，不綁 MIL display
-            if (!_globalMerge.Enable(mils, sysId, opsUm, startPosMm, showMilDisplay: !_display.ImageCanvasMode))
+            // 顯示鐵則：主畫面合圖「秀」一律 CPU（即時=ImageDisplayView、瀑布=WaterfallView），
+            // 工頭只負責佈局+merge buffer（資料照流）。showMilDisplay 恆 false。
+            if (!_globalMerge.Enable(mils, sysId, opsUm, startPosMm, showMilDisplay: false))
             {
                 _display.SwitchMainDisplay(_display.UserSelectedMainCameraId);   // 啟用失敗 → 復原 secondary display
                 return;
@@ -39,13 +40,14 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             // ImageCanvas 合圖：用工頭佈局(各台 start/ops) CPU 拼（feedScale=1：主程式餵全解析度）
             _display.OnGlobalMergeEnabled(opsUm, startPosMm);
+            AniloxRoll.Monitor.Core.Services.FlowTrace.Log($"EnableGlobalMerge（slots={startPosMm?.Length ?? 0}）");
         }
 
         /// <summary>停用即時全域合圖：coordinator 釋放 display + 工頭釋放合併 buffer → ImageCanvas 回單相機 → 復原選定相機顯示。</summary>
         public void DisableGlobalMerge()
         {
             if (!_globalMerge.IsActive) return;
-
+            AniloxRoll.Monitor.Core.Services.FlowTrace.Log("DisableGlobalMerge");
             _globalMerge.Disable();
             _display.OnGlobalMergeDisabled(); // ImageCanvas 回單相機 + 復原使用者明確點選的相機
         }

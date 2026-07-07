@@ -307,17 +307,8 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
 
-            // 先卸載 MIL primary + secondary display，避免 native window 殘影
-            if (_liveCameraManager.IsAllocated)
-            {
-                foreach (var cam in _liveCameraManager.Cameras)
-                {
-                    cam.SetPrimaryDisplayVisible(false);
-                    cam.SetSecondaryDisplay(IntPtr.Zero);
-                }
-            }
-
-            // 清除殘留的最後一幀（MIL native window detach 後面板不會自動重繪）
+            // 不動任何 MIL 顯示開關：detach→re-attach 會把原生視窗提到面板最上層、蓋住 CPU 縮圖/主畫面
+            // （滑鼠座標 overlay 露出、顯示錯亂的根因）。預覽 overlay 用 BringToFront 蓋最上層即可。
             camLiveMain.Invalidate();
             camLiveMain.Update();
 
@@ -547,9 +538,8 @@ namespace AniloxRoll.Monitor.Forms
 
             if (restoreMilDisplay && _liveCameraManager?.IsAllocated == true)
             {
-                // 恢復 primary display（camLive）+ secondary display（camLiveMain）
-                foreach (var cam in _liveCameraManager.Cameras)
-                    cam.SetPrimaryDisplayVisible(true);
+                // 只需刷新選中相機狀態；不動 MIL 顯示開關（re-attach 會把原生視窗提到最上層蓋住 CPU 顯示）。
+                // 底層 CPU 顯示（ImageDisplayView/瀑布）常駐，移除 overlay 即還原畫面。
                 _liveCameraManager.RefreshMainDisplay();
             }
         }
