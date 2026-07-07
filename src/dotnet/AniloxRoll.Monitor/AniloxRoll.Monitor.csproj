@@ -143,30 +143,39 @@
     </Compile>
     <Compile Include="UI\Form\AniloxRollForm.Background.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="UI\Form\AniloxRollForm.DirectionStitch.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="UI\Form\AniloxRollForm.Data.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="UI\Form\AniloxRollForm.Telemetry.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="UI\Form\AniloxRollForm.SettingsTabs.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="UI\Form\AniloxRollForm.Helpers.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="UI\Form\AniloxRollForm.HardwareStatus.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="UI\Form\AniloxRollForm.Review.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="UI\Form\AniloxRollForm.Live.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="UI\Presenters\AniloxRollPresenter.cs" />
     <Compile Include="UI\Presenters\LiveTelemetryPresenter.cs" />
