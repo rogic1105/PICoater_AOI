@@ -359,6 +359,7 @@ namespace AniloxRoll.Monitor.Forms
         /// <summary>套用單一相機參數：記 param-change log → 先鎖控制項 → 只停/寫/開該台 → 啟動解鎖輪詢。</summary>
         private void ApplyCamParam(int camId, string param, int value, Action write)
         {
+            FlowTrace.Log($"ui:【相機參數】cam{camId} {param}={value}");   // intent 帶參數名+值（單行自足）
             LogParamChange("cam", camId, param, value);
             if (_liveCameraManager == null) { write?.Invoke(); return; }
             bool live = _liveCameraManager.IsLiveGrabbing;
@@ -370,6 +371,7 @@ namespace AniloxRoll.Monitor.Forms
         /// <summary>套用「全部相機」參數（All 滑桿）：記 log → 鎖+暫停存檔 → 全停/寫/全開 → 解鎖輪詢。</summary>
         private void ApplyAllCamParam(string param, int value, Action write)
         {
+            FlowTrace.Log($"ui:【相機參數】All {param}={value}");   // intent 帶參數名+值（單行自足；開機初始還原三連發亦經此=同值可辨識）
             LogParamChange("all", 0, param, value);
             if (_liveCameraManager == null) { write?.Invoke(); return; }
             bool live = _liveCameraManager.IsLiveGrabbing;

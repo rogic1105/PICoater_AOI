@@ -137,6 +137,24 @@ T1: （再配置時）F1 全序重跑——view 必須重建+重訂閱新相機�
 現況：取得背景=借用現有 grab 採集（啟停包夾）、預覽=ImageCanvas overlay 蓋最上層（**不得動 MIL 顯示開關**）。
 Wave3 改與 grab 共用顯示 API 後更新本節。
 
+## 相機參數契約（P 系列）
+
+### P1 滑桿/數字框調參（曝光/線掃/高度，放開才套用）
+```
+T1: ui:【相機參數】camN {param}={v}｜All {param}={v}    ← 帶參數名+值單行自足（Exp/LineRate/Height…）
+（之後的 SwitchMainDisplay center=False（refresh）等程式化行歸此 intent 管；
+  滑桿拖曳 vs 數字框輸入同一路徑，log 不區分）
+（⚠ 判讀例外：開機後 ~1 秒內的「全部套用」×3（曝光/線掃/高度）＝初始值塞進 All 控制項觸發
+  ValueChanged→debounce 套用的**副作用**（出處查證 2026-07-07：7a017a3/993d8cc 皆無「防跑掉」設計記錄；
+  **有記錄的防跑掉機制**＝①AllocateCameras/Initialize 套 settings 參數 ②CLProtocol 就緒自動重套線掃）。
+  非使用者動作；**行為保留勿抑制**——重複寫同值無害，且無法排除它在替①②兜底。
+  口述歷史（2026-07-07 使用者）：很早期「開程式時曝光會亂飄」、修正無 commit 記錄可追——
+  三連發可能正是實際擋住它的兜底，動它有復發風險。毫秒級連發＋緊跟開機序列＝辨識特徵。）
+禁止：調參數不得出現任何 MIL 視窗——headless 鐵則：**每一個 MdispSelectWindow 呼叫點都必須帶
+`_panelHandle != IntPtr.Zero` 守門**（MIL 對 Zero handle 會自開獨立浮動視窗；2026-07-07 實例：
+改高度 realloc 路徑漏守門 → 4 台各跳一個視窗）。新增 MdispSelectWindow 呼叫點＝必帶守門。
+```
+
 ## Mura 警告契約（M 系列）
 
 ### M1 曲線超過門檻（grab 中）

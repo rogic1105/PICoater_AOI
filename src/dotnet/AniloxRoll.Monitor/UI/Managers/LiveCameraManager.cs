@@ -430,6 +430,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         public void ApplyParamCoordinated(int camId, Action write)
         {
             if (write == null) return;
+            // intent 行在 SettingsTabs ApplyCamParam/ApplyAllCamParam（帶參數名+值），此處不重複記
             var cam = FindCamera(camId);
             if (cam == null || !IsLiveGrabbing || _coordDepth > 0 || !cam.IsLive) { write?.Invoke(); return; }
 

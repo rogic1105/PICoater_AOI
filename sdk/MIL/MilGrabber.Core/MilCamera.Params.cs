@@ -312,9 +312,13 @@ namespace MilGrabber.Core
             System.Diagnostics.Trace.WriteLine(
                 $"[CAM{CameraId}][HtRealloc] AllocateAndBind req={targetHeight} M_SIZE_Y={(int)sizeY} allocFail={allocFail}");
 
-            if (_milDisplayBuffer != MIL.M_NULL)
+            // headless 守門（同 Initialize）：panelHandle==Zero 時不得 MdispSelectWindow——
+            // MIL 對 Zero handle 會「自開獨立視窗」→ 改高度時每台跳一個浮動視窗（2026-07-07 實測 4 台跳 4 個）。
+            if (_panelHandle != IntPtr.Zero && _milDisplay != MIL.M_NULL && _milDisplayBuffer != MIL.M_NULL)
+            {
                 MIL.MdispSelectWindow(_milDisplay, _milDisplayBuffer, _panelHandle);
-            MIL.MdispControl(_milDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
+                MIL.MdispControl(_milDisplay, MIL.M_SCALE_DISPLAY, MIL.M_ONCE);
+            }
 
             // settle：改完 M_SOURCE_SIZE_Y 後讓 digitizer/相機套用新尺寸「沉澱」再讓 grab re-arm。
             // 根因（實測）：每次「resize→M_START」都有小機率沒乾淨 re-arm → 重複做會累積 stall；
