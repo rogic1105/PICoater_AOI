@@ -269,7 +269,7 @@ PICoater_AOI/
 **規則：**
 1. 改名時兩層同時改，不可只改一層
 2. 同功能控制項共用標準名稱（如 Review/Data 的【讀取資料】）
-3. Commit 前跑 `/update-docs` — 驗證速查表的 Name 全部存在於 Designer.cs
+3. Commit 前驗證速查表的 Name 全部存在於 Designer.cs（改過控制項時 grep 對一輪）
 
 ---
 
@@ -456,20 +456,17 @@ PICoater_AOI/
 
 | 修改範圍 | Skill | 涵蓋內容 |
 |---------|-------|---------|
-| UI 控制項、事件、Chart、Canvas | `/modify-ui` | Guard flags、V/H 決策矩陣、StitchMode、Chart 對齊、跨倍率 View、ProportionalScaler |
+| UI 控制項、事件、Chart、Canvas | `/modify-ui` | Guard flags、V/H 決策矩陣、StitchMode、Chart 對齊、跨倍率 View、ProportionalScaler、**單一權威閘門**（UI 刷新時序/chart 啟動/timer 更新） |
 | Data tab 統計、CSV、Period Charts | `/modify-data-stats` | 統計三模式、CSV 格式、Period Charts、跨 Tab 同步 |
 | GPU pipeline、Buffer、存檔格式 | `/modify-pipeline` | CUDA pinned memory、V/H ridge、.bin 格式、ImageRepository、StandardBgSub |
 | MIL 取像、相機、CLProtocol、PLC | `/modify-acquisition` | 初始化順序、CLProtocol 延遲啟動、資源釋放、SetGrabHeight、IO FSM |
 | C# / WinForms 通用開發 | `/csharp-patterns` | 命名規則、Settings 持久化、WinForms 陷阱、Designer 規則 |
 | Native C API 新增/修改 | `/add-native-api` | P/Invoke 宣告、C++ 實作範本 |
-| 效能瓶頸排查 | `/perf-diagnose` | Stopwatch 計時、IO/GPU/UI 分層診斷 |
-| 追蹤 btn/cb/event I/O 流程 | `/review-flow <控制項>` | 完整 call chain 追蹤 + 文件比對 |
-| 顯示/接線改動後驗證 | `/verify-flows` | UI 動作流程契約（EVT）：F1~F8 flow 契約 + 偏序驗證規則 + `[Flow]` log 比對；改 LiveCameraManager/LiveDisplayCoordinator/ImageDisplayView/WaterfallView 後必跑 |
-| Build 驗證 | `/build` | Release x64 完整 build（**一律 Release，不 build Debug**）|
-| Commit 前文件更新 | `/update-docs` | 批次更新 CLAUDE.md + skills |
-| 提交推送 | `/commit` | build + 文件 + conventional commit |
-| 控制項別名記錄 | `/alias-log` | 對話中新稱呼 → 更新速查表 + 建議標準名稱 |
+| 新增測試 | `/add-test` | Unit/Integration/Stress 三層分類判準 + 模板 |
+| 顯示/接線改動後驗證、控制項流程追蹤 | `/verify-flows` | UI 動作流程契約（EVT）：F1~F8 flow 契約 + 偏序驗證規則 + `[Flow]` log 比對（改 LiveCameraManager/LiveDisplayCoordinator/ImageDisplayView/WaterfallView 後必跑）；含任意控制項 call chain 追蹤法 |
 | 現場部署 / 網路 / SMB | `/deploy-network` | 雙網段架構、單 NIC 雙 IP、匿名 Guest SMB、編碼陷阱（bat ASCII / ps1 UTF-8 BOM / JSON UTF-8 讀法）、secedit SeDenyNetworkLogonRight |
+
+> Build / commit / 文件同步 不是 skill：規則直接在本檔（§Build 驗證、§Git Workflow 規則、§Harness 架構），每次照做。
 
 ### 參考文件（僅供查閱，不自動載入）
 

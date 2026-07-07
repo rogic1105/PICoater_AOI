@@ -89,3 +89,31 @@ Wave3 改與 grab 共用顯示 API 後更新本節。
 
 模擬蓋得住：步驟順序/訂閱生命週期/置中來源/事件接線。蓋不住：硬體時序（stall/掉幀）、native 行為、
 視覺呈現（配色/佈局/重繪）。這三類改動仍需真機 spot check——但頻率遠低於逐項手測。
+
+## 任意控制項 call chain 追蹤（F1~F8 以外的流程）
+
+契約未涵蓋的控制項（如 `/verify-flows 讀取資料`），用通用追蹤法做迴歸驗證：
+
+1. **查對照表**：CLAUDE.md §控制項速查 找程式碼 Name。
+2. **定位 handler**：AniloxRollForm.* / presenter / coordinator 搜事件繫結。
+3. **追呼叫鏈**：直接呼叫（含 async/await）→ 跨元件事件 → guard flag enter/exit → 更新的控制項（標準名稱）。
+4. **輸出驗證結果**：
+   ```
+   [觸發] 讀取資料 (btnReviewSelectFolder)
+     → [動作] ImageRepository.LoadDirectory
+     → [輸出] 時段日期/時間 → 填入最早值 ✅
+     → [同步] Data tab → 序號+時間+統計 ✅
+   [結果] N/N 通過；斷裂處標 ❌ + 行號 + 修法
+   ```
+
+批次驗證（`--all`）的輸入清單：
+
+| Tab | 需驗證的輸入 |
+|-----|------------|
+| Live | 開始抓取、監控強化、監控欄/列曲線圖點擊、監控縮圖點擊、取得背景、預覽背景 |
+| Review | 讀取資料、時段導航、單片序號、回顧縮圖點擊、回顧強化、回顧欄/列曲線圖點擊 |
+| Data | 讀取資料、序號範圍、序號選擇、年/月/日期間、良率圖導航、篩選異常 |
+| 右側 | 檢測設定（Recipe/Algorithm/ChartScale）、相機參數滑桿 |
+| 跨Tab | Review→Data 同步、Data→Review 同步 |
+
+驗證中發現 skill 與 code 不一致 → 同步更新對應 skill（契約跟 code 對齊是本 skill 的存在意義）。

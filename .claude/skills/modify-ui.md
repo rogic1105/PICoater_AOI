@@ -130,3 +130,18 @@ bootstrap 例外（line 232 AppRole）：Hub 還沒建構，加註解標明合�
 2. 確認是否涉及跨 Tab 同步（Review ↔ Data）
 3. 修改 + build 驗證
 4. 若新增/移除控制項，更新 Designer.cs + CLAUDE.md
+
+## 單一權威閘門（UI 刷新時序 / chart 啟動 / timer 驅動更新 / canvas-chart 同步）
+
+- **一條 UI 更新流程只准一個權威閘門**。不要為了「更保險」加第二道——雙閘門＝時序 bug 溫床。
+- live overview chart 的權威閘門＝主畫面 fit 範圍 `_liveViewLeftMm/_liveViewRightMm`：
+  `chartLiveColumn` 延遲到 fit 範圍就緒才畫；**不要**再用 chart `PostPaint`/`Resize`/`ClientSize`/
+  layout-ready 對同一次刷新加第二道閘。
+- chart helper 只擁有「確定性 render」（軸樣式/刻度間隔/字型/plot 位置/有效軸值），
+  **不判斷啟動資料就緒與否**。
+- 不要用軸/刻度下限 clamp 遮啟動範圍 bug——範圍錯就修範圍來源或那個唯一閘門。
+- chart 啟動不穩先查既有閘門路徑：`ApplyLiveViewRange` → `_liveViewLeftMm/_liveViewRightMm` →
+  `LiveOverviewTimer_Tick`。
+- **加任何新 guard flag / timer 閘 / paint-layout 閘 / ready 事件之前**：
+  ① 找出現有的權威就緒來源 ② 檢查新 guard 是否重複它 ③ 優先在「資料/視野範圍」邊界延遲、
+  不在「paint/layout」邊界延遲 ④ 若看似需要兩道閘 → 停手，先重構 ownership。
