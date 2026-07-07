@@ -388,7 +388,7 @@
             this.tabPageLiveView.Padding = new System.Windows.Forms.Padding(3);
             this.tabPageLiveView.Size = new System.Drawing.Size(1020, 631);
             this.tabPageLiveView.TabIndex = 0;
-            this.tabPageLiveView.Text = "即時監控";
+            this.tabPageLiveView.Text = "監控";
             this.tabPageLiveView.UseVisualStyleBackColor = true;
             // 
             // btnLiveViewBackground
@@ -537,7 +537,7 @@
             this.tabPageReview.Padding = new System.Windows.Forms.Padding(3);
             this.tabPageReview.Size = new System.Drawing.Size(1020, 631);
             this.tabPageReview.TabIndex = 1;
-            this.tabPageReview.Text = "歷史查詢";
+            this.tabPageReview.Text = "回顧";
             this.tabPageReview.UseVisualStyleBackColor = true;
             // 
             // chartReviewRow
@@ -730,7 +730,7 @@
             this.tabPageData.Name = "tabPageData";
             this.tabPageData.Size = new System.Drawing.Size(1020, 631);
             this.tabPageData.TabIndex = 2;
-            this.tabPageData.Text = "檢測報表";
+            this.tabPageData.Text = "報表";
             this.tabPageData.UseVisualStyleBackColor = true;
             // 
             // chartDataColumn

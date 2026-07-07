@@ -373,7 +373,7 @@ PICoater_AOI/
 
 每個控制項有一個**標準名稱**（中文），用於對話溝通。
 
-### 即時監控（tabPageLiveView）
+### 監控（tabPageLiveView）
 
 | 標準名稱 | Name | 類型 | 畫面文字 |
 |---------|------|------|---------|
@@ -386,7 +386,7 @@ PICoater_AOI/
 | 監控列曲線圖 | `chartLiveRow` | Chart | — |
 | 暫停 Mura 檢測 | `lblIoDoMura`（點擊切換） | Label | DO1 MURA_DET / DO1 MURA ⏸（黃底=暫停中） |
 
-### 歷史查詢（tabPageReview）
+### 回顧（tabPageReview）
 
 | 標準名稱 | Name | 類型 | 畫面文字 |
 |---------|------|------|---------|
@@ -405,7 +405,7 @@ PICoater_AOI/
 | 上一序號（上下鍵） | `btnReviewIdPrev` | Button | < |
 | 下一序號（上下鍵） | `btnReviewIdNext` | Button | > |
 
-### 檢測報表（tabPageData）
+### 報表（tabPageData）
 
 | 標準名稱 | Name | 類型 | 畫面文字 |
 |---------|------|------|---------|
