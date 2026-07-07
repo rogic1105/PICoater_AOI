@@ -46,8 +46,9 @@ WaterfallView / AniloxRollForm.Live|Background|Review。
 **孤兒判讀規則（多 flow 並行時的歸屬）**：每一行顯示變更，往上找最近的 `ui:...` intent 行——
 找得到＝合法（歸該動作的契約管）；找不到＝孤兒＝違規（系統自己在動）。兩條 flow 同時跑
 （如 grab 中按 Review【讀取資料】→ 出現 DisableGlobalMerge）＝各自歸各自的 intent 驗，交錯本身不驗。
-**intent 行清單**（使用者動作入口各記一行 `ui:...`）：【開始抓取】【取得背景】【預覽背景】
-【讀取資料】(Review/Data)【單片序號】【時段導航】【暫停Mura檢測】【IO暫停】+
+**intent 行清單**（使用者動作入口各記一行 `ui:...`）：tab 切換、【開始抓取】【取得背景】【預覽背景】
+【讀取資料】(Review/Data)【單片序號】【時段導航】【暫停Mura檢測】【IO暫停】
+【明細列表】【報表序號】【序號範圍】【期間-年/月/日/全局】【良率導航】【篩選異常】+
 S0 通用（所有 PropertyGrid 設定自動記 `ui:設定[名]=值`）。新增會動到顯示的入口 → intent 行一併加。
 
 ## 偏序驗證規則（多執行緒鐵則）
@@ -236,11 +237,51 @@ T1: RV loadGrab begin {當前grabId} → … → RV loadGrab done   ← 重載�
 
 （其餘設定逐一補進：每補一個 UI 功能，順手寫它的 S 條目。）
 
-## 報表 tab 契約（D 系列）——🔲 待補（缺口 #2）
+## 報表 tab 契約（D 系列）
 
-素材已在 code（皆為既有行為）：讀取資料(Data) 預設範圍、cbDataId 不連動範圍、年/月/日期間點選
-設範圍+綠高亮互斥、明細列表點選/同列 toggle、良率圖導航。**補法同 R 系列**：裝儀器（Data 目前僅有
-intent 行）→ 寫 D1~Dn → 真機一輪校契約。
+### D0 tab 切換（全域，不限報表）
+```
+T1: ui:tab → 監控|回顧|報表
+（tab 切換本身不觸發顯示重建——例外：切到回顧且 _reviewDirty → 接 R2 載入序列。
+  開機 PrewarmAllTabs 的程式化 cycle 被 _suppressTabIntent 抑制不記——毫秒級三連發 tab 行
+  ＝抑制失效（D 系列首輪誤報實例））
+```
+
+### D1 讀取資料（btnDataSelectFolder）
+```
+T1: ui:【讀取資料】鈕（Data）
+（Data 統計載入無顯示儀器＝靜默合法；會連動 Review → 接 R1 的 RV 序列）
+（預設：單片=最新、序號範圍=最舊→最新）
+```
+
+### D2 明細列表點選
+```
+T1: ui:【明細列表】→ {grabId}
+T1: ui:【報表序號】→ {grabId}          ← 同步行（明細點選經 cbDataId commit，兩行成對＝正常）
+T1: ui:【明細列表】同列再點 {grabId} → 回範圍模式
+（範圍序號 cbDataIdStart/End 不因單片選取而變＝獨立。
+  Review 同步＝標記 dirty **lazy**：切到回顧 tab 才接 R2 載入——明細點選後零 RV 行＝正確，
+  D 系列首輪 log 實證；點選當下就出 RV 行反而是違規）
+```
+
+### D3 報表序號 / 序號範圍
+```
+T1: ui:【報表序號】→ {grabId}          ← 單片切換（同 D2 的 cb 版）
+T1: ui:【序號範圍-起始|結束】變更       ← 手動拖範圍 → 期間高亮全滅（Custom）
+```
+
+### D4 年/月/日期間（lblChartNav 點選）
+```
+T1: ui:【期間-年|月|日】→ 範圍 {最舊}~{最新}   ← 取 cbDataYield 當前值設範圍 + 該期間綠高亮（互斥）
+T1: ui:【期間-全局】→ 全範圍                    ← 點 groupBoxGrabIdRange
+（active 期間改對應 cbDataYield → 範圍跟著更新；非 active 來源不觸發）
+```
+
+### D5 良率導航 / 篩選異常
+```
+T1: ui:【良率導航-年|月|日】→ {值}      ← 良率三圖跟著換週期
+T1: ui:【篩選異常】→ 只顯示異常|顯示全部
+```
 
 ## 附錄：函式路徑（導航用）與真 log 範例
 

@@ -221,6 +221,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
                 _ctx.CbGrabIdEnd.SelectedIndex = lo;     // 最新
             }
             _rangeSource = source;
+            FlowTrace.Log($"ui:【期間-{(source == GrabIdRangeSource.Year ? "年" : source == GrabIdRangeSource.Month ? "月" : "日")}】→ 範圍 {infos[hi].GrabId}~{infos[lo].GrabId}");
             SetActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);   // mode=範圍 + UpdateSourceHighlights
             _refreshStats();
         }
@@ -230,6 +231,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
         {
             var infos = _getGrabIdInfos();
             if (infos.Count == 0) return;
+            FlowTrace.Log("ui:【期間-全局】→ 全範圍");
             _rangeSource = GrabIdRangeSource.Global;
             using (StatComboGuard.Enter())
             {
@@ -278,6 +280,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
         {
             var grabIdInfos = _getGrabIdInfos();
             if (StatComboGuard.IsSet || grabIdInfos.Count == 0) return;
+            FlowTrace.Log($"ui:【序號範圍-{(isStart ? "起始" : "結束")}】變更");
             _rangeSource = GrabIdRangeSource.Custom;   // 手動拖範圍 → 自訂，清來源高亮
             SetActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);
 
@@ -306,6 +309,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
             SetActiveStatGroupBox(_ctx.GrpDataSingleSheet);
             int idx = _ctx.CbDataGrabId.SelectedIndex;
             if (idx < 0) return;
+            FlowTrace.Log($"ui:【報表序號】→ {(idx < grabIdInfos.Count ? grabIdInfos[idx].GrabId : idx.ToString())}");
 
             // cbDataId（單片序號）變更「不」連動 cbDataIdStart/End —— 範圍序號獨立，選單片不動範圍。
             _refreshStats();

@@ -61,9 +61,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _ctx.ChartDataYieldMonthly.MouseClick += PeriodChart_ToggleAutoScale;
             _ctx.ChartDataYieldDaily.MouseClick += PeriodChart_ToggleAutoScale;
 
-            _ctx.CbChartYear.SelectedIndexChanged += (s, e) => { if (!_chartNavGuard.IsSet) OnChartYearIndexChanged(); };
-            _ctx.CbChartMonth.SelectedIndexChanged += (s, e) => { if (!_chartNavGuard.IsSet) OnChartMonthIndexChanged(); };
-            _ctx.CbChartDay.SelectedIndexChanged += (s, e) => { if (!_chartNavGuard.IsSet) OnChartDayIndexChanged(); };
+            _ctx.CbChartYear.SelectedIndexChanged += (s, e) => { if (!_chartNavGuard.IsSet) { FlowTrace.Log($"ui:【良率導航-年】→ {_ctx.CbChartYear.SelectedItem}"); OnChartYearIndexChanged(); } };
+            _ctx.CbChartMonth.SelectedIndexChanged += (s, e) => { if (!_chartNavGuard.IsSet) { FlowTrace.Log($"ui:【良率導航-月】→ {_ctx.CbChartMonth.SelectedItem}"); OnChartMonthIndexChanged(); } };
+            _ctx.CbChartDay.SelectedIndexChanged += (s, e) => { if (!_chartNavGuard.IsSet) { FlowTrace.Log($"ui:【良率導航-日】→ {_ctx.CbChartDay.SelectedItem}"); OnChartDayIndexChanged(); } };
         }
 
         private void PeriodChart_ToggleAutoScale(object sender, MouseEventArgs e)

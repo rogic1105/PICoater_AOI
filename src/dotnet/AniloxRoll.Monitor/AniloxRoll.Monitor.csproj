@@ -167,7 +167,6 @@
     </Compile>
     <Compile Include="UI\Form\AniloxRollForm.Live.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
-      <SubType>Form</SubType>
     </Compile>
     <Compile Include="UI\Presenters\AniloxRollPresenter.cs" />
     <Compile Include="UI\Presenters\LiveTelemetryPresenter.cs" />

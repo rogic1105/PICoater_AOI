@@ -356,6 +356,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             // Toggle：第二次點同 row + 已是 SingleSheet → 切回 GroupBoxGrabIdRange（範圍模式，stats 用 cbDataIdStart/End）
             if (grabId == _lastListViewSelectedGrabId && _dateGrabIdNavigator.ActiveStatMode == _ctx.GrpDataSingleSheet)
             {
+                FlowTrace.Log($"ui:【明細列表】同列再點 {grabId} → 回範圍模式");
                 ExecuteWithDetailListRedrawSuspended(lv, () =>
                 {
                     _lastListViewSelectedGrabId = null;
@@ -367,6 +368,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 return;
             }
             _lastListViewSelectedGrabId = grabId;
+            FlowTrace.Log($"ui:【明細列表】→ {grabId}");
 
             int idx = _ctx.CbDataGrabId.Items.IndexOf(grabId);
             if (idx < 0) return;
@@ -645,6 +647,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private void BtnShowFail_Click(object sender, EventArgs e)
         {
             _showFailOnly = !_showFailOnly;
+            FlowTrace.Log($"ui:【篩選異常】→ {(_showFailOnly ? "只顯示異常" : "顯示全部")}");
             _ctx.BtnShowFail.Text = _showFailOnly ? "○ 顯示全部" : "△ 顯示異常";
             _ctx.BtnShowFail.BackColor = _showFailOnly
                 ? Color.FromArgb(255, 235, 238)

@@ -158,6 +158,7 @@ namespace AniloxRoll.Monitor.Forms
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             base.OnFormClosing(e);
+            FlowTrace.Log("ui:關閉程式");   // session 收尾行——log 無此行而中斷＝異常終止（crash）的訊號
             // Closing 階段：只「停止」非 UI 執行緒活動（避免 Handle 銷毀後它們還在 BeginInvoke）。
             // Dispose 留到 FormClosed 統一處理，避免雙路徑釋放重疊。
             try { if (_liveCameraManager?.IsLiveGrabbing == true) _liveCameraManager.StopGrab(); } catch { }
@@ -218,6 +219,7 @@ namespace AniloxRoll.Monitor.Forms
                     try { _scaler.PrewarmAllTabs(); }
                     finally { _reviewDirty = savedReviewDirty; }
                 }
+                _suppressTabIntent = false;   // 預熱完成 → 之後的 tab 切換才是使用者動作
 
                 // PropertyGrid 字體維持 DPI 原生大小（使用者要求 1.0，不另外收小）
                 AutoFitPropertyGridLabelColumn(propertyGridSettings);
@@ -239,6 +241,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private Font _tabSelFont;     // 選中頁籤＝大字（快取，避免每次重繪 new Font）
         private Font _tabNormFont;    // 未選中＝小字
+        private bool _suppressTabIntent = true;   // 開機預設抑制（PrewarmAllTabs 的程式化 cycle 不記 ui:）；Shown 預熱完解除
 
         /// <summary>tabMain（監控/回顧/報表）頁籤文字置中：預設渲染器保留 icon 位造成偏移 →
         /// OwnerDraw 固定尺寸 + 置中繪字；選中頁大字+白底、未選小字。</summary>
@@ -259,8 +262,13 @@ namespace AniloxRoll.Monitor.Forms
                     sel ? _tabSelFont : _tabNormFont, e.Bounds, Color.Black,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
             };
-            // 切換時左右兩頁都要重繪字級
-            tabMain.SelectedIndexChanged += (s, e) => tabMain.Invalidate();
+            // 切換時左右兩頁都要重繪字級 + tab 切換 intent（盲測輪5：5 次切 tab 全隱形＝盲區）
+            // _suppressTabIntent：開機 PrewarmAllTabs 的程式化 cycle 不記 ui:（D 系列首輪抓到的誤報）
+            tabMain.SelectedIndexChanged += (s, e) =>
+            {
+                tabMain.Invalidate();
+                if (!_suppressTabIntent) FlowTrace.Log($"ui:tab → {tabMain.SelectedTab?.Text}");
+            };
         }
 
         private void InitializeSystem()
