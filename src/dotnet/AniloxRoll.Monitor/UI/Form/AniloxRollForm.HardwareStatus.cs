@@ -646,6 +646,9 @@ namespace AniloxRoll.Monitor.Forms
 
         private void lblIoDoMura_Click(object sender, EventArgs e)
         {
+            // intent 行：此鈕走 Hub（程式化通道）→ 後續 set:[MuraDetectPaused] 記程式來源，
+            // 這行先蓋「使用者親手做的」章（孤兒判讀規則的主人）。
+            FlowTrace.Log("ui:【暫停Mura檢測】鈕");
             // 走 SettingsHub → Changed event → OnSettingChanged 接管 UpdateMuraLed
             _settingsHub.Set(s => s.MuraDetectPaused, !_settings.MuraDetectPaused);
         }
@@ -654,6 +657,7 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (_ioGrabController == null) return;
             _isIoSuspended = !_isIoSuspended;
+            FlowTrace.Log($"ui:【IO暫停】鈕 → {(_isIoSuspended ? "暫停" : "恢復")}");   // intent 行（原本完全無痕＝盲區）
             if (_isIoSuspended)
             {
                 lblIoConn.BackColor = IecYellow;

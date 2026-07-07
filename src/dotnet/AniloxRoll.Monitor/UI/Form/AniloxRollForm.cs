@@ -165,6 +165,7 @@ namespace AniloxRoll.Monitor.Forms
             try { _liveOverviewTimer?.Stop(); } catch { }
             try { _statsRefreshDebouncer?.Stop(); _statsRefreshDebouncer?.Dispose(); _statsRefreshDebouncer = null; } catch { }  // H3 + round-2 H3 補 Dispose
             try { _reviewLoadDebounce?.Stop(); _reviewLoadDebounce?.Dispose(); _reviewLoadDebounce = null; } catch { }  // 回顧序號載入 debounce
+            try { _muraVisualTimer?.Stop(); _muraVisualTimer?.Dispose(); _muraVisualTimer = null; } catch { }  // Mura 視覺警告保持
             try { _cleanupFlagWatcher?.Dispose(); _cleanupFlagWatcher = null; } catch { }  // M3: 10 秒輪詢提前停
             try { _reviewDisplayManager?.Dispose(); _reviewDisplayManager = null; } catch { }  // #13 同源顯示（內含 33ms timer）
             try { System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged; } catch { }
@@ -997,8 +998,11 @@ namespace AniloxRoll.Monitor.Forms
             {
                 // 設定變更 intent（S0 通用）：使用者從 PropertyGrid 改＝ui: 前綴（孤兒判讀規則的主人）；
                 // 程式化來源（自動掃描寫回等）＝set: 前綴（有主人但非使用者動作）。單一掛點蓋所有設定。
+                // 帶新值（截 40 字防長值洗版）→ log 能還原「切到哪一檔」。
+                string nv = c.NewValue?.ToString() ?? "null";
+                if (nv.Length > 40) nv = nv.Substring(0, 40) + "…";
                 FlowTrace.Log((c.Source == AniloxRoll.Monitor.Settings.Services.SettingSource.PropertyGrid
-                    ? "ui:設定[" : "set:[") + c.Name + "]");
+                    ? "ui:設定[" : "set:[") + c.Name + "]=" + nv);
                 // ── 共用副作用（任何 setting 變更都跑） ────────────────────────
                 // PropertyGrid 顯示同步：「程式碼路徑改值」時用精準 trick 重讀單 cell（不全 Refresh、不閃）。
                 // PropertyGrid 自己改值已自我更新該 cell，不需要外部處理。

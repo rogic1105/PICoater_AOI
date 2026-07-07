@@ -47,7 +47,8 @@ WaterfallView / AniloxRollForm.Live|Background|Review。
 找得到＝合法（歸該動作的契約管）；找不到＝孤兒＝違規（系統自己在動）。兩條 flow 同時跑
 （如 grab 中按 Review【讀取資料】→ 出現 DisableGlobalMerge）＝各自歸各自的 intent 驗，交錯本身不驗。
 **intent 行清單**（使用者動作入口各記一行 `ui:...`）：【開始抓取】【取得背景】【預覽背景】
-【讀取資料】(Review/Data)、設定[主畫面顯示]變更。新增會動到顯示的入口 → intent 行一併加。
+【讀取資料】(Review/Data)【單片序號】【時段導航】【暫停Mura檢測】【IO暫停】+
+S0 通用（所有 PropertyGrid 設定自動記 `ui:設定[名]=值`）。新增會動到顯示的入口 → intent 行一併加。
 
 ## 偏序驗證規則（多執行緒鐵則）
 
@@ -117,7 +118,9 @@ T1: centerCam → camX（IC|WF）   ← 中心相機每跨一台一行（快拖�
 ### F6b 滾輪縮放主畫面
 ```
 T1: IC|WF wheelZoom in|out → zoom=Z（fit=F）   ← 每手勢至少一行（100ms 節流）
-（縮放/互動期間**不得出現 `autoFit(...)` 行**——出現＝系統 fit 跟使用者縮放打架（fit 打架回彈家族）。
+T1: IC|WF|RV fit(double-click) / physical1x(triple-click)   ← 使用者 fit/1x 手勢（合法的視野重設主人）
+（縮放/互動期間**不得出現 `autoFit(...)`/`lodRebind(...)` 行**——出現＝系統 fit 跟使用者縮放打架。
+  zoom 突然回 fit 而無 fit(double-click) 行＝有東西在暗中重設（孤兒判讀）。
   `autoFit(firstFrame ...)` 只允許在 view 建立後首幀；`autoFit(sizeChanged@fitView ...)` 只允許在
   使用者「未動過視野」時的尺寸變更。centerCam 行在縮放中出現＝正常（中心相機隨視野變）。）
 ```
@@ -132,6 +135,19 @@ T1: （再配置時）F1 全序重跑——view 必須重建+重訂閱新相機�
 ### F8 取得背景 / 預覽背景
 現況：取得背景=借用現有 grab 採集（啟停包夾）、預覽=ImageCanvas overlay 蓋最上層（**不得動 MIL 顯示開關**）。
 Wave3 改與 grab 共用顯示 API 後更新本節。
+
+## Mura 警告契約（M 系列）
+
+### M1 曲線超過門檻（grab 中）
+```
+Tn: ⚠ MURA 超標（v|h）mean=…/max=…（thr …/…，IO已連線|未連線→僅畫面警告）   ← 邊緣觸發（進入超標一行）
+Tn: MURA 恢復（v|h）                                                        ← 離開超標一行
+```
+- **畫面警告與 IO 解耦**：lblIoDoMura 超標一律亮 3 秒（無 IO 硬體也要看得到）；
+  DO 輸出（給 Nakan）才看 IO 連線。暫停 Mura 檢測（MuraDetectPaused）期間兩者皆不動。
+- 超標期間不洗版（狀態轉變才記）；每輪 grab 啟動重置邊緣狀態。
+- 違規樣本：chart 明顯超標卻無「MURA 超標」行＝判定鏈斷（2026-07-07 盲測抓到：舊版被
+  IO 未連線 early-return 整段跳過＝操作員零警告）。
 
 ## 回顧 tab 契約（R 系列；儀器前綴 RV）
 
@@ -183,14 +199,20 @@ T1: RV pushFrames …（時段模式載入；依實測補完整序列）
 
 ### S0 通用（單一掛點，蓋所有設定）
 ```
-T1: ui:設定[{屬性名}]        ← 使用者從 PropertyGrid 改（孤兒判讀規則的主人）
-T1: set:[{屬性名}]           ← 程式化來源（自動掃描寫回等）；有主人但非使用者動作
+T1: ui:設定[{屬性名}]={新值}   ← 使用者從 PropertyGrid 改（孤兒判讀規則的主人；值截 40 字）
+T1: set:[{屬性名}]={新值}      ← 程式化來源（自動掃描寫回等）；有主人但非使用者動作
 （之後的反應行歸此 intent 管）
 ```
+**⚠ 非 PropertyGrid 的使用者入口（點 label/chart 走 Hub.Set）會被記成 set:（程式來源）**——
+這類入口必須自帶 `ui:` intent 行（如【暫停Mura檢測】【IO暫停】），否則盲測會認錯兇手身份
+（2026-07-07 盲測實例：點 lblIoDoMura 被誤判為程式動作、點 lblIoConn 完全無痕漏抓）。
 
 ### S 系列不變量：view 互斥
 **任一時刻主畫面 view 唯一**：設定[主畫面顯示]=即時 期間，不得出現任何 WF 前綴行/EnableWaterfall；
 =瀑布 期間反之（不得出現 IC 主畫面 view 建立行）。切換瞬間走 F4（teardown 舊→create 新）。
+**執行期自檢**：幀流進不屬於當前模式的路徑時 code 會當下自報
+`⚠ 契約違規：瀑布模式下幀流入 IC 路徑` / `⚠ 契約違規：即時模式下幀流入瀑布路徑`
+（每 view 週期一次）——log 出現此行＝訂閱錯掛/殘留，不用比對即定罪。
 
 ### S1 檢測參數（dc_/dd_ 正規值、eb_ 檢出方向、ec_~ef_ 閾值）
 ```

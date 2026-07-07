@@ -62,6 +62,7 @@ namespace AniloxRoll.Monitor.Forms
                 int warmup = _settings?.LightWarmupMs ?? 0;
                 if (warmup > 0) await Task.Delay(warmup);
                 ResetLiveWaterfallRowChart();
+                _muraExceedLatch[0] = _muraExceedLatch[1] = false;   // 每輪 grab 重新邊緣觸發超標留痕
             }
 
             if (!_liveCameraManager.IsAllocated)
@@ -160,11 +161,13 @@ namespace AniloxRoll.Monitor.Forms
         /// direction: "v"=欄, "h"=列；依 CheckLiveMura 設定的「檢測方向」決定是否觸發 DO1。
         /// 陣列為 0-255，閾值為 0-1，取陣列 max 後除以 255 比較。
         /// </summary>
+        // Mura 超標狀態（[0]=v,[1]=h；邊緣觸發 flow 留痕用，超標期間不洗版）+ 視覺警告保持 timer
+        private readonly bool[] _muraExceedLatch = new bool[2];
+        private Timer _muraVisualTimer;
+
         private void CheckLiveMura(float[] meanArr, float[] maxArr, string direction)
         {
-            if (_settings.MuraDetectPaused) return;
-            if (_ioGrabController?.IsConnected != true) return;
-            if (_settings == null) return;
+            if (_settings == null || _settings.MuraDetectPaused) return;
             if (!_liveCameraManager.IsLiveGrabbing) return;
 
             var ridgeDir = _settings.RidgeDir;
@@ -181,13 +184,57 @@ namespace AniloxRoll.Monitor.Forms
             float thMean = direction == "h" ? _settings.ErrorValueMeanH : _settings.ErrorValueMeanV;
             float thMax  = direction == "h" ? _settings.ErrorValueMaxH  : _settings.ErrorValueMaxV;
 
-            if (meanPeak > thMean || maxPeak > thMax)
+            bool exceed = meanPeak > thMean || maxPeak > thMax;
+            int di = direction == "h" ? 1 : 0;
+            if (exceed != _muraExceedLatch[di])   // 邊緣觸發：進入/離開超標各記一行
+            {
+                _muraExceedLatch[di] = exceed;
+                if (exceed)
+                    FlowTrace.Log($"⚠ MURA 超標（{direction}）mean={meanPeak:F2}/max={maxPeak:F2}"
+                        + $"（thr {thMean:F2}/{thMax:F2}，IO{(_ioGrabController?.IsConnected == true ? "已連線" : "未連線→僅畫面警告")}）");
+                else
+                    FlowTrace.Log($"MURA 恢復（{direction}）");
+            }
+            if (!exceed) return;
+
+            // 畫面警告與 IO 輸出解耦（2026-07-07 盲測抓到：無 IO 時操作員看不到任何警告＝設計缺陷）：
+            // lblIoDoMura 視覺警告一律亮；DO 輸出（給 Nakan）才看 IO 連線。
+            WarnMuraVisual();
+
+            if (_ioGrabController?.IsConnected == true)
             {
                 // fire-and-forget; 寫入失敗不應影響取像流程
                 _ = _ioGrabController.NotifyMuraDetected().ContinueWith(
                     t => { /* swallow — PollTick 會偵測真正的 CommLost */ },
                     TaskContinuationOptions.OnlyOnFaulted);
             }
+        }
+
+        /// <summary>Mura 超標的畫面警告（callback 執行緒 → UI）：lblIoDoMura 亮 3 秒（重複超標重壓計時）。
+        /// 與 IO 解耦——無 IO 硬體也看得到；IO 連線時 500ms snapshot 會照 DO 實況再刷（一致）。</summary>
+        private void WarnMuraVisual()
+        {
+            if (IsDisposed || Disposing) return;
+            try
+            {
+                BeginInvoke(new Action(() =>
+                {
+                    if (IsDisposed || _settings?.MuraDetectPaused == true) return;
+                    UpdateMuraLed(true);
+                    if (_muraVisualTimer == null)
+                    {
+                        _muraVisualTimer = new Timer { Interval = 3000 };
+                        _muraVisualTimer.Tick += (s, e) =>
+                        {
+                            _muraVisualTimer.Stop();
+                            if (_settings?.MuraDetectPaused != true) UpdateMuraLed(false);
+                        };
+                    }
+                    _muraVisualTimer.Stop();
+                    _muraVisualTimer.Start();
+                }));
+            }
+            catch (InvalidOperationException) { }
         }
 
         /// <summary>監控主畫面（ImageDisplayView）縮放/平移 → live 曲線圖 zoom 連動（bin↔主畫面對齊）。
