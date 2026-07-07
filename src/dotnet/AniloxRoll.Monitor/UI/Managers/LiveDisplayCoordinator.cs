@@ -35,6 +35,24 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         private ImageDisplayView _imageDisplay;
         private WaterfallView _waterfallView;
+        private ThumbStrip _waterfallThumbs;   // 顯示鐵則1：縮圖在瀑布模式也一律即時影像（與即時模式同源 CPU ThumbStrip）
+
+        // ── [Flow] 顯示資料流跡：咽喉點各一行（按鈕/設定→接線→首幀→顯示），落 Logs\trace-*.log。
+        //    驗證＝跑一輪操作後把 log 與「預期步驟（EVT）」比對；headless 可驗、不用肉眼盯 UI。
+        //    時間戳+執行緒 ID 由 FlowTrace 統一附加（多執行緒交錯時按執行緒拆序列+時間戳看先後）。
+        private static void Flow(string msg) => FlowTrace.Log(msg);
+        private readonly HashSet<int> _flowFirstFrame = new HashSet<int>();   // 每次 StartGrab/重建後，各 cam 首幀記一行
+
+        /// <summary>重置首幀 log 追蹤（每次 StartGrab 呼叫）→ 每輪 grab 都能驗「幀有流到 view」。</summary>
+        public void ResetFlowFirstFrame() { lock (_flowFirstFrame) _flowFirstFrame.Clear(); }
+
+        /// <summary>各 cam 首幀記一行（MIL 回呼執行緒，多 cam 並發 → 鎖）。target=IC/WF。</summary>
+        private void FlowFirstFrame(int camId, int w, int h, string target)
+        {
+            bool first;
+            lock (_flowFirstFrame) first = _flowFirstFrame.Add(camId);
+            if (first) Flow($"firstFrame cam{camId} {w}x{h} → {target}");
+        }
         private int _selectedMainCameraId = 1;
         private int _userSelectedMainCameraId = 1;
         private double _screenMmPerPx;
@@ -122,7 +140,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private void SetupLivePanel(Panel parentPanel, int cameraIndex)
         {
             parentPanel.BackColor = Color.Black;
-            parentPanel.Padding = new Padding(2);
+            parentPanel.Padding = Padding.Empty;   // 縮圖貼邊（與回顧同款：橘框緊貼 cell 邊緣）
             parentPanel.Controls.Clear();
 
             var displayPanel = new Panel
@@ -131,40 +149,44 @@ namespace AniloxRoll.Monitor.UI.Managers
                 BackColor = Color.Black
             };
 
+            // 狀態列改「浮在縮圖上、內縮於橘框內側」（非 Dock.Bottom 佔空間）：ThumbView 吃滿整個 panel
+            // → 橘框貼邊與回顧同款；label 內縮 3px（框線畫在 1,1,w-3,h-3、2px 粗）→ 不蓋掉橘框。
             var status = new Label
             {
-                Dock = DockStyle.Bottom,
                 Height = 18,
+                Width = Math.Max(1, parentPanel.ClientSize.Width - 6),
+                Top = Math.Max(0, parentPanel.ClientSize.Height - 18 - 3),
+                Left = 3,
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
                 ForeColor = Color.DarkGray,
                 BackColor = Color.FromArgb(32, 32, 32),
                 TextAlign = ContentAlignment.MiddleCenter,
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Regular)
             };
 
-            displayPanel.MouseClick += (s, e) => SwitchMainDisplay(cameraIndex);
-            status.MouseClick += (s, e) => SwitchMainDisplay(cameraIndex);
+            displayPanel.MouseClick += (s, e) => SwitchMainDisplay(cameraIndex, centerView: true);
+            status.MouseClick += (s, e) => SwitchMainDisplay(cameraIndex, centerView: true);
             parentPanel.Paint += (s, e) => OnLivePanelPaint(s, e, cameraIndex);
 
             parentPanel.Controls.Add(displayPanel);
             parentPanel.Controls.Add(status);
-            displayPanel.BringToFront();
+            status.BringToFront();   // 狀態字浮在縮圖上（縮圖 ThumbView 建立後由 BringStatusLabelsToFront 再抬一次）
 
             _liveViewPanels[cameraIndex] = displayPanel;
             _liveParentPanels[cameraIndex] = parentPanel;
             _cameraStatusLabels[cameraIndex] = status;
         }
 
+        /// <summary>ThumbStrip 建立 ThumbView 時會 BringToFront → 蓋掉浮動狀態字；建立後呼叫本方法把狀態字抬回最上。</summary>
+        private void BringStatusLabelsToFront()
+        {
+            foreach (var kvp in _cameraStatusLabels)
+                if (!kvp.Value.IsDisposed) kvp.Value.BringToFront();
+        }
+
         private void OnLivePanelPaint(object sender, PaintEventArgs e, int cameraIndex)
         {
-            if (!(sender is Panel panel)) return;
-            bool isSelected = cameraIndex == _selectedMainCameraId && !ImageCanvasMode;
-            Color borderColor = isSelected ? Color.Orange : Color.FromArgb(60, 60, 60);
-            int borderWidth = isSelected ? 3 : 1;
-            ControlPaint.DrawBorder(e.Graphics, panel.ClientRectangle,
-                borderColor, borderWidth, ButtonBorderStyle.Solid,
-                borderColor, borderWidth, ButtonBorderStyle.Solid,
-                borderColor, borderWidth, ButtonBorderStyle.Solid,
-                borderColor, borderWidth, ButtonBorderStyle.Solid);
+            // 縮圖選中框由 ThumbStrip 橘色高亮唯一負責（顯示鐵則：兩模式縮圖同源同行為）；此處不畫任何框。
         }
 
         public void UpdateCameraStatus(string statusText, Color color)
@@ -187,6 +209,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         public void ApplyMainDisplayMode()
         {
+            Flow($"ApplyMainDisplayMode → {(WaterfallMode ? "Waterfall" : "ImageCanvas")}");
             if (WaterfallMode)
             {
                 TeardownImageDisplay();
@@ -220,8 +243,20 @@ namespace AniloxRoll.Monitor.UI.Managers
             _waterfallView.SelectRequested += OnWaterfallSelectRequested;
             _waterfallView.ViewRangeMmChanged += OnImageViewRange;
             _waterfallView.CursorStatusChanged += OnImageCursorStatus;
+            _waterfallView.CenterCamChanged += OnWaterfallCenterCam;   // 主畫面 pan → 縮圖橘框跟隨（反向連動）
+
+            // 顯示鐵則1：瀑布模式的 7 台縮圖也一律即時影像（CPU ThumbStrip，與即時模式同源；點選/高亮一致）。
+            _waterfallThumbs = new ThumbStrip(_cameraPanels);
+            _waterfallThumbs.FlipVertical = ShouldFlipVertical;
+            _waterfallThumbs.SetSelectedColor(Color.Orange);   // 與即時模式一致（選中框唯一樣式＝橘色）
+            _waterfallThumbs.SelectRequested += idx => SwitchMainDisplay(idx + 1, centerView: true);
+            _waterfallThumbs.SetSelected(_selectedMainCameraId - 1);
+            BringStatusLabelsToFront();
+
             FeedWaterfallLayout();
             foreach (var cam in Cameras) cam.OnDisplayFrame += OnCameraWaterfallFrame;
+            _flowFirstFrame.Clear();
+            Flow($"EnableWaterfall create（view+thumbs）+ subscribe {Cameras.Count} cams");
         }
 
         public void FeedWaterfallLayout()
@@ -249,20 +284,36 @@ namespace AniloxRoll.Monitor.UI.Managers
         private void DisableWaterfallDisplay()
         {
             if (_waterfallView == null) return;
+            Flow($"TeardownWaterfall（unsubscribe {Cameras.Count} cams）");
             foreach (var cam in Cameras) cam.OnDisplayFrame -= OnCameraWaterfallFrame;
             _waterfallView.SelectRequested -= OnWaterfallSelectRequested;
             _waterfallView.ViewRangeMmChanged -= OnImageViewRange;
             _waterfallView.CursorStatusChanged -= OnImageCursorStatus;
+            _waterfallView.CenterCamChanged -= OnWaterfallCenterCam;
             _waterfallView.Dispose();
             _waterfallView = null;
+            _waterfallThumbs?.Dispose();
+            _waterfallThumbs = null;
         }
 
         private void OnCameraWaterfallFrame(int camId, byte[] bytes, int w, int h, long tick)
-            => _waterfallView?.PushFrame(camId, bytes, w, h, tick);
+        {
+            FlowFirstFrame(camId, w, h, "Waterfall");
+            _waterfallView?.PushFrame(camId, bytes, w, h, tick);
+            _waterfallThumbs?.PushFrame(camId - 1, bytes, w, h);
+        }
 
         private void OnWaterfallSelectRequested(int camId)
         {
             if (camId > 0) SwitchMainDisplay(camId);
+        }
+
+        /// <summary>瀑布主畫面 pan/zoom → 視野中心相機變更 → 縮圖橘框跟隨（程式化來源，不再回頭置中防遞迴）。</summary>
+        private void OnWaterfallCenterCam(int camId)
+        {
+            _selectedMainCameraId = camId;
+            _waterfallThumbs?.SetSelected(camId - 1);
+            Flow($"centerCam → cam{camId}（WF）");   // F6：拖主畫面→橘框跟隨（每跨一台一行,可驗）
         }
 
         public void RefreshWaterfallDisplay()
@@ -280,7 +331,11 @@ namespace AniloxRoll.Monitor.UI.Managers
             _imageDisplay = new ImageDisplayView(_mainDisplayPanel, _cameraPanels, _screenMmPerPx);
             ApplyImageDisplayOptions(_globalMerge.IsActive);
             _imageDisplay.SelectRequested += ImageSelectCamera;
-            _imageDisplay.SelectedCamChanged += camId => _selectedMainCameraId = camId;
+            _imageDisplay.SelectedCamChanged += camId =>
+            {
+                _selectedMainCameraId = camId;
+                Flow($"centerCam → cam{camId}（IC）");   // F6：拖主畫面→橘框跟隨（每跨一台一行,可驗）
+            };
             _imageDisplay.ViewRangeMmChanged += OnImageViewRange;
             _imageDisplay.CursorStatusChanged += OnImageCursorStatus;
             _imageDisplay.SetSelected(_selectedMainCameraId);
@@ -294,8 +349,11 @@ namespace AniloxRoll.Monitor.UI.Managers
             }
             foreach (var cam in Cameras) cam.OnDisplayFrame += OnCameraDisplayFrame;
             ClearMissingCameraFrames();
+            BringStatusLabelsToFront();   // ImageDisplayView 內建 ThumbStrip 建立後，狀態字抬回縮圖之上
             var settings = _getSettings();
             if (settings != null) SetLodMode(settings.LiveLod);
+            _flowFirstFrame.Clear();
+            Flow($"EnsureImageDisplay create + subscribe {Cameras.Count} cams（merge={_globalMerge.IsActive}）");
         }
 
         public void SetLodMode(LiveLodMode mode)
@@ -337,6 +395,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         public void TeardownImageDisplay()
         {
             if (_imageDisplay == null) return;
+            Flow($"TeardownImageDisplay（unsubscribe {Cameras.Count} cams）");
             foreach (var cam in Cameras) cam.OnDisplayFrame -= OnCameraDisplayFrame;
             _imageDisplay.Dispose();
             _imageDisplay = null;
@@ -344,7 +403,10 @@ namespace AniloxRoll.Monitor.UI.Managers
         }
 
         private void OnCameraDisplayFrame(int camId, byte[] bytes, int w, int h, long tick)
-            => _imageDisplay?.PushFrame(camId, bytes, w, h);
+        {
+            FlowFirstFrame(camId, w, h, "ImageDisplayView");
+            _imageDisplay?.PushFrame(camId, bytes, w, h);
+        }
 
         public void ClearCameraFrame(int camId)
         {
@@ -373,38 +435,42 @@ namespace AniloxRoll.Monitor.UI.Managers
             _updatePixelInfoCallback.Invoke(CursorStatusTextFormatter.Format(s, tag));
         }
 
-        public void SwitchMainDisplay(int cameraIndex)
+        public void SwitchMainDisplay(int cameraIndex) => SwitchMainDisplay(cameraIndex, centerView: false);
+
+        /// <summary>centerView=true 僅限「明確點縮圖/狀態字」手勢：主畫面置中該相機。
+        /// 其他來源（畫布點擊選取、程式化 refresh、配置後還原）一律 false——置中會蓋掉使用者拖出的視野（回彈）。</summary>
+        public void SwitchMainDisplay(int cameraIndex, bool centerView)
         {
             if (_mainForm == null || _mainForm.IsDisposed
                 || _mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) return;
 
             if (_mainForm.InvokeRequired)
             {
-                try { _mainForm.BeginInvoke(new Action(() => SwitchMainDisplay(cameraIndex))); }
+                try { _mainForm.BeginInvoke(new Action(() => SwitchMainDisplay(cameraIndex, centerView))); }
                 catch (InvalidOperationException) { }
                 return;
             }
 
+            Flow($"SwitchMainDisplay cam={cameraIndex} center={centerView} mode={(WaterfallMode ? "WF" : "IC")}");
             _selectedMainCameraId = cameraIndex;
             _userSelectedMainCameraId = cameraIndex;
             _imageDisplay?.SetSelected(cameraIndex);
+            _waterfallThumbs?.SetSelected(cameraIndex - 1);
 
             foreach (var kvp in _liveParentPanels)
                 kvp.Value.Invalidate();
 
-            if (_globalMerge.IsActive)
+            // 縮圖→主畫面連動：明確點縮圖才置中（即時=ImageDisplayView、瀑布=WaterfallView）。
+            if (centerView)
             {
-                _globalMerge.PanToCameraCenter(cameraIndex);
-                return;
+                if (ImageCanvasMode) _imageDisplay?.CenterOnCamera(cameraIndex);
+                else if (WaterfallMode) _waterfallView?.CenterOnCamera(cameraIndex);
             }
 
+            // 顯示鐵則0：主畫面永遠 CPU 合圖（即時=ImageDisplayView、瀑布=WaterfallView）——
+            // 一律 detach 各台 MIL 副顯示，任何模式都不把原生視窗綁到 camLiveMain（會蓋住 CPU 顯示）。
             foreach (var cam in Cameras)
-            {
-                if (!ImageCanvasMode && cam.CameraId == cameraIndex)
-                    cam.SetSecondaryDisplay(_mainDisplayPanel.Handle);
-                else
-                    cam.SetSecondaryDisplay(IntPtr.Zero);
-            }
+                cam.SetSecondaryDisplay(IntPtr.Zero);
         }
 
         public void OnMergedViewCenterCam(int newId)

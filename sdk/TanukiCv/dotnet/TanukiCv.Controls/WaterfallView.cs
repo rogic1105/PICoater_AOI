@@ -132,7 +132,14 @@ namespace TanukiCv.Controls
             _canvas.MouseClick += OnCanvasMouseClick;
 
             _flushTimer = new System.Windows.Forms.Timer { Interval = 30 };
-            _flushTimer.Tick += (s, e) => { TryFlush(_clock.ElapsedMilliseconds); PushLodRefresh(); };
+            _flushTimer.Tick += (s, e) =>
+            {
+                TryFlush(_clock.ElapsedMilliseconds);
+                PushLodRefresh();
+                // 縮圖高亮反向連動的快拖補刷（同 ImageDisplayView.UpdateReverseThumbSync 的 33ms 保險）：
+                // StatusChanged 互動事件限流/合併時，中心相機變更不被跳過。計算極便宜（找 placement）。
+                UpdateCenterCam(_canvas.Zoom, _canvas.PanOffset);
+            };
             _flushTimer.Start();
         }
 
@@ -162,6 +169,43 @@ namespace TanukiCv.Controls
         {
             if (TryComputeViewRange(_canvas.Zoom, _canvas.PanOffset, out double leftMm, out double rightMm, out double topMm, out double botMm))
                 ViewRangeMmChanged?.Invoke(leftMm, rightMm, topMm, botMm);
+            UpdateCenterCam(_canvas.Zoom, _canvas.PanOffset);
+        }
+
+        /// <summary>視野中心所在相機（1-based）變更時觸發（pan/zoom/置中）。縮圖高亮反向連動用；
+        /// 程式化來源，上層只需更新高亮、勿再呼 CenterOnCamera（防遞迴）。</summary>
+        public event Action<int> CenterCamChanged;
+        private int _lastCenterCamId = -1;
+
+        /// <summary>視野水平置中到指定相機（1-based）欄位中心；保持縮放與垂直位置（縮圖點選→主畫面連動）。</summary>
+        public void CenterOnCamera(int camId)
+        {
+            if (_disposed || _canvas == null) return;
+            bool found = false;
+            CameraPlacement hit = default;
+            lock (_lock)
+            {
+                foreach (var p in _cameraPlacements)
+                    if (p.CameraId == camId) { hit = p; found = true; break; }
+            }
+            if (!found) return;
+            float zoom = _canvas.Zoom;
+            if (zoom <= 0) return;
+            float centerX = hit.DestX + Math.Max(1, hit.SrcWidth) / 2f;
+            _canvas.SetView(zoom, new PointF(_canvas.Width / 2f - centerX * zoom, _canvas.PanOffset.Y));
+            RefireViewRange();
+        }
+
+        private void UpdateCenterCam(float zoom, PointF pan)
+        {
+            if (_disposed || _canvas == null || zoom <= 0) return;
+            int imageX = (int)((_canvas.Width / 2f - pan.X) / zoom);
+            int camId = ResolveCameraAtX(imageX);
+            if (camId > 0 && camId != _lastCenterCamId)
+            {
+                _lastCenterCamId = camId;
+                CenterCamChanged?.Invoke(camId);
+            }
         }
 
         /// <summary>重 grab：清掉舊瀑布內容 + 重置對齊狀態（origin/period/seq/pending/緩衝），下次幀重新 bootstrap。
@@ -526,6 +570,7 @@ namespace TanukiCv.Controls
                 $"{status.ViewLeftMm:F1}", $"{status.ViewRightMm:F1}", $"{status.ViewTopMm:F1}", $"{status.ViewBotMm:F1}");
             _canvas.SetCursorMm(BuildCursorMmText(info.ImageX, info.ImageY));
             ViewRangeMmChanged?.Invoke(status.ViewLeftMm, status.ViewRightMm, status.ViewTopMm, status.ViewBotMm);
+            UpdateCenterCam(info.Zoom, info.PanOffset);
             CursorStatusChanged?.Invoke(status);
         }
 
