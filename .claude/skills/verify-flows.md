@@ -143,8 +143,14 @@ Wave3 改與 grab 共用顯示 API 後更新本節。
 Tn: ⚠ MURA 超標（v|h）mean=…/max=…（thr …/…，IO已連線|未連線→僅畫面警告）   ← 邊緣觸發（進入超標一行）
 Tn: MURA 恢復（v|h）                                                        ← 離開超標一行
 ```
-- **畫面警告與 IO 解耦**：lblIoDoMura 超標一律亮 3 秒（無 IO 硬體也要看得到）；
+- **畫面警告與 IO 解耦**：lblIoDoMura 超標一律亮（無 IO 硬體也要看得到）；
   DO 輸出（給 Nakan）才看 IO 連線。暫停 Mura 檢測（MuraDetectPaused）期間兩者皆不動。
+- **亮燈時序＝閂鎖（latch）非脈衝**（既有 DO_MURA 規範，io_diagrams+FSM 唯一來源）：
+  亮到「該次檢測結束」——清除時機＝grab 停止（=FSM 回 Idle 的無 IO 等價）/ ClearMura / 新一輪 grab 啟動歸零。
+  ⚠ 勿發明固定秒數（2026-07-07 曾誤做 3 秒被使用者抓包＝違反既有時序規範的實例）。
+- **硬體 DO 閂鎖必須同步清**：手動 grab 停止/啟動時呼 ClearMura（手動流程不經 FSM，不清則
+  DO 永遠掛著 → Nakan 誤報 + IO 暫停→恢復後 snapshot 讀回殘留 latch、燈「自己亮」——盲測輪3實例）。
+- **IO 暫停＝視同離線**：暫停中超標不發 DO（僅畫面警告），log 標「IO暫停中→僅畫面警告」三態之一。
 - 超標期間不洗版（狀態轉變才記）；每輪 grab 啟動重置邊緣狀態。
 - 違規樣本：chart 明顯超標卻無「MURA 超標」行＝判定鏈斷（2026-07-07 盲測抓到：舊版被
   IO 未連線 early-return 整段跳過＝操作員零警告）。

@@ -63,6 +63,8 @@ namespace AniloxRoll.Monitor.Forms
                 if (warmup > 0) await Task.Delay(warmup);
                 ResetLiveWaterfallRowChart();
                 _muraExceedLatch[0] = _muraExceedLatch[1] = false;   // 每輪 grab 重新邊緣觸發超標留痕
+                if (_settings?.MuraDetectPaused != true) UpdateMuraLed(false);   // 新一輪檢測：警告閂鎖歸零
+                _ = _ioGrabController?.ClearMura();   // 硬體 DO 閂鎖同步歸零（手動流程與 FSM EnterIdle 對齊）
             }
 
             if (!_liveCameraManager.IsAllocated)
@@ -100,6 +102,11 @@ namespace AniloxRoll.Monitor.Forms
             {
                 LightTurnOff();
                 TriggerRetentionAndFlagAsync();
+                // 檢測結束＝MURA 警告閂鎖清除時機（與 DO latch/FSM 回 Idle 同語意；無 IO 時的等價點）
+                if (_settings?.MuraDetectPaused != true) UpdateMuraLed(false);
+                // 硬體 DO 閂鎖也要清：手動 grab 不經 FSM，不清則 DO_MURA 永遠掛著（Nakan 誤報 +
+                // IO 暫停→恢復後 snapshot 讀回殘留 latch、燈「自己亮」——2026-07-07 盲測輪3抓到）。
+                _ = _ioGrabController?.ClearMura();
             }
 
             UpdateGrabButton(_liveCameraManager.IsLiveGrabbing);
@@ -137,8 +144,8 @@ namespace AniloxRoll.Monitor.Forms
                     _remoteCopyService?.EnqueueFile(csvPath);
             }
 
-            // IO MURA 信號：任一相機超過閾值即通知
-            if (_ioGrabController?.IsConnected == true)
+            // IO MURA 信號：任一相機超過閾值即通知（IO 暫停=視同離線，不發 DO）
+            if (!_isIoSuspended && _ioGrabController?.IsConnected == true)
             {
                 // meanPeak/maxPeak 為 V 方向，按 V 閾值判定
                 bool isMura = meanPeak > _settings.ErrorValueMeanV || maxPeak > _settings.ErrorValueMaxV;
@@ -161,9 +168,8 @@ namespace AniloxRoll.Monitor.Forms
         /// direction: "v"=欄, "h"=列；依 CheckLiveMura 設定的「檢測方向」決定是否觸發 DO1。
         /// 陣列為 0-255，閾值為 0-1，取陣列 max 後除以 255 比較。
         /// </summary>
-        // Mura 超標狀態（[0]=v,[1]=h；邊緣觸發 flow 留痕用，超標期間不洗版）+ 視覺警告保持 timer
+        // Mura 超標狀態（[0]=v,[1]=h；邊緣觸發 flow 留痕用，超標期間不洗版）
         private readonly bool[] _muraExceedLatch = new bool[2];
-        private Timer _muraVisualTimer;
 
         private void CheckLiveMura(float[] meanArr, float[] maxArr, string direction)
         {
@@ -190,18 +196,22 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _muraExceedLatch[di] = exceed;
                 if (exceed)
+                {
+                    string ioState = _ioGrabController?.IsConnected != true ? "IO未連線→僅畫面警告"
+                        : _isIoSuspended ? "IO暫停中→僅畫面警告" : "IO已連線";
                     FlowTrace.Log($"⚠ MURA 超標（{direction}）mean={meanPeak:F2}/max={maxPeak:F2}"
-                        + $"（thr {thMean:F2}/{thMax:F2}，IO{(_ioGrabController?.IsConnected == true ? "已連線" : "未連線→僅畫面警告")}）");
+                        + $"（thr {thMean:F2}/{thMax:F2}，{ioState}）");
+                }
                 else
                     FlowTrace.Log($"MURA 恢復（{direction}）");
             }
             if (!exceed) return;
 
             // 畫面警告與 IO 輸出解耦（2026-07-07 盲測抓到：無 IO 時操作員看不到任何警告＝設計缺陷）：
-            // lblIoDoMura 視覺警告一律亮；DO 輸出（給 Nakan）才看 IO 連線。
+            // lblIoDoMura 視覺警告一律亮；DO 輸出（給 Nakan）看 IO 連線「且未被使用者暫停」（暫停=視同離線）。
             WarnMuraVisual();
 
-            if (_ioGrabController?.IsConnected == true)
+            if (!_isIoSuspended && _ioGrabController?.IsConnected == true)
             {
                 // fire-and-forget; 寫入失敗不應影響取像流程
                 _ = _ioGrabController.NotifyMuraDetected().ContinueWith(
@@ -210,8 +220,9 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        /// <summary>Mura 超標的畫面警告（callback 執行緒 → UI）：lblIoDoMura 亮 3 秒（重複超標重壓計時）。
-        /// 與 IO 解耦——無 IO 硬體也看得到；IO 連線時 500ms snapshot 會照 DO 實況再刷（一致）。</summary>
+        /// <summary>Mura 超標的畫面警告（callback 執行緒 → UI）：lblIoDoMura 亮並**閂鎖到該次檢測結束**
+        /// （與 DO_MURA 同語意：latch 非脈衝；清除時機＝grab 停止＝FSM 回 Idle 的無 IO 等價）。
+        /// 與 IO 輸出解耦——無 IO 硬體也看得到；IO 連線時 500ms snapshot 照 DO 實況刷（DO 同為 latch，一致）。</summary>
         private void WarnMuraVisual()
         {
             if (IsDisposed || Disposing) return;
@@ -221,17 +232,6 @@ namespace AniloxRoll.Monitor.Forms
                 {
                     if (IsDisposed || _settings?.MuraDetectPaused == true) return;
                     UpdateMuraLed(true);
-                    if (_muraVisualTimer == null)
-                    {
-                        _muraVisualTimer = new Timer { Interval = 3000 };
-                        _muraVisualTimer.Tick += (s, e) =>
-                        {
-                            _muraVisualTimer.Stop();
-                            if (_settings?.MuraDetectPaused != true) UpdateMuraLed(false);
-                        };
-                    }
-                    _muraVisualTimer.Stop();
-                    _muraVisualTimer.Start();
                 }));
             }
             catch (InvalidOperationException) { }
