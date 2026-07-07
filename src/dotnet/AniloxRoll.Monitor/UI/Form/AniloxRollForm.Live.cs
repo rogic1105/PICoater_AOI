@@ -253,6 +253,8 @@ namespace AniloxRoll.Monitor.Forms
         private void ApplyLiveViewRange(double leftMm, double rightMm, double topMm, double botMm)
         {
             if (IsDisposed) return;
+            // [UiSlow] 卡頓歸因：拖曳中每次視野變更都走這（chart zoom 同步），chart 重畫慢＝拖曳跳框嫌疑
+            var swVr = System.Diagnostics.Stopwatch.StartNew();
             bool wasReady = !double.IsNaN(_liveViewLeftMm) && _liveViewLeftMm < _liveViewRightMm;
             _liveViewLeftMm = leftMm; _liveViewRightMm = rightMm;     // 供 overview provider 沿用（不閃）
             _liveViewTopMm = topMm; _liveViewBotMm = botMm;
@@ -270,6 +272,8 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _liveOverviewHelper?.UpdateViewRange(leftMm, rightMm); // 已有資料 → 即時跟隨（500ms 重畫用同值不閃）
             }
+            if (swVr.ElapsedMilliseconds > 50)
+                FlowTrace.Log($"[UiSlow] LiveViewRangeSync {swVr.ElapsedMilliseconds}ms");
         }
 
         private bool TryApplyLiveImageCanvasRowViewRange()
@@ -323,6 +327,18 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
 
+            // [UiSlow] 卡頓歸因：列 chart 每幀重建在 UI 執行緒（grab 中每幀一次）
+            var swRow = System.Diagnostics.Stopwatch.StartNew();
+            try { OnLiveRowCurveDataUi(camId, meanArr, maxArr); }
+            finally
+            {
+                if (swRow.ElapsedMilliseconds > 50)
+                    FlowTrace.Log($"[UiSlow] RowChart {swRow.ElapsedMilliseconds}ms");
+            }
+        }
+
+        private void OnLiveRowCurveDataUi(int camId, float[] meanArr, float[] maxArr)
+        {
             if (_liveRowDisplay == null) return;
 
             if (_settings?.he_MainDisplay == MainDisplayMode.Waterfall)

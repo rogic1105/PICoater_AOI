@@ -166,6 +166,7 @@ namespace AniloxRoll.Monitor.Forms
             try { _liveOverviewTimer?.Stop(); } catch { }
             try { _statsRefreshDebouncer?.Stop(); _statsRefreshDebouncer?.Dispose(); _statsRefreshDebouncer = null; } catch { }  // H3 + round-2 H3 補 Dispose
             try { _reviewLoadDebounce?.Stop(); _reviewLoadDebounce?.Dispose(); _reviewLoadDebounce = null; } catch { }  // 回顧序號載入 debounce
+            try { _uiStallDetector?.Dispose(); _uiStallDetector = null; } catch { }  // UI 卡頓儀器
             try { _cleanupFlagWatcher?.Dispose(); _cleanupFlagWatcher = null; } catch { }  // M3: 10 秒輪詢提前停
             try { _reviewDisplayManager?.Dispose(); _reviewDisplayManager = null; } catch { }  // #13 同源顯示（內含 33ms timer）
             try { System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged; } catch { }
@@ -190,6 +191,15 @@ namespace AniloxRoll.Monitor.Forms
         public AniloxRollForm()
         {
             InitializeComponent();
+            _uiStallDetector = new Core.Services.UiStallDetector(this);   // [UiStall]/[UiPing] UI 卡頓常駐儀器（GC 歸因＋佇列飽和判別）
+            // [UiPaint] WM_PAINT 探針：量 chart「真正畫」的時間（UpdateData 快、WM_PAINT 才是重活的盲區）
+            _paintProbes = new[]
+            {
+                new Core.Services.PaintProbe(chartLiveColumn,  "chartLiveColumn"),
+                new Core.Services.PaintProbe(chartLiveRow,     "chartLiveRow"),
+                new Core.Services.PaintProbe(chartReviewColumn,"chartReviewColumn"),
+                new Core.Services.PaintProbe(chartReviewRow,   "chartReviewRow"),
+            };
             SetupMainTabRendering();   // 監控/回顧/報表 頁籤文字置中（預設渲染器留 icon 位偏左）
             try
             {
@@ -241,6 +251,8 @@ namespace AniloxRoll.Monitor.Forms
 
         private Font _tabSelFont;     // 選中頁籤＝大字（快取，避免每次重繪 new Font）
         private Font _tabNormFont;    // 未選中＝小字
+        private Core.Services.UiStallDetector _uiStallDetector;   // UI 卡頓常駐儀器
+        private Core.Services.PaintProbe[] _paintProbes;          // WM_PAINT 探針（chart 畫圖耗時歸因）
         private bool _suppressTabIntent = true;   // 開機預設抑制（PrewarmAllTabs 的程式化 cycle 不記 ui:）；Shown 預熱完解除
 
         /// <summary>tabMain（監控/回顧/報表）頁籤文字置中：預設渲染器保留 icon 位造成偏移 →

@@ -37,89 +37,106 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// IsReleasing = true 時提早返回，防止存取已釋放的相機資源。
         /// 使用快照（ToArray）避免 background FreeCameras 呼叫 _cameras.Clear() 時導致 InvalidOperationException。
         /// </summary>
+        /// <summary>狀態 tick 單飛旗標（背景 MIL 讀取進行中不再疊發，防堆積）。</summary>
+        private volatile bool _statusTickInFlight;
+        /// <summary>UI 執行緒 SynchronizationContext（LCM 在 UI 執行緒建構時捕捉；背景結果 Post 回 UI 套用）。</summary>
+        private readonly System.Threading.SynchronizationContext _uiSync = System.Threading.SynchronizationContext.Current;
+
         private void CameraStatusTimer_Tick(object sender, EventArgs e)
         {
-            if (IsReleasing) return;
+            // MIL 讀取（CheckPresence/GetFrameCount＝MdigInquire）全部移背景執行緒（2026-07-07 [UiStack]
+            // 定罪：空通道 MdigInquire 特別慢 → 每 500ms 卡 UI 63~109ms＝拖曳節奏性跳框主因）。
+            // UI 只做旗標 gate + 套結果（label/事件），與 telemetry 16 欄背景化同一模式。
+            if (IsReleasing || _statusTickInFlight) return;
 
-            // CLProtocol 背景初始化期間（分配後 ~2-10s）：UI 執行緒不可呼叫 CheckPresence（MdigInquire），
-            // 否則與背景 CLProtocol enable（MdigControl）搶 MIL 內部鎖 → UI 執行緒卡在 tick 裡 →
-            // 整個視窗凍結（拖不動）+ 顯示誤導的暫態連線數。就緒前完全跳過輪詢，UI 維持「初始化中」。
-            // AreCamerasHwReady 只讀 _clProtocolInitDone 旗標（非 MIL 呼叫），不造成競爭。
-            // 重連重跑 CLProtocol 時會暫時 false（gate-off 防搶 MIL 鎖）→ 恢復 true 時需強制刷 count label
-            // 與重發 OnHwReady（否則連線數在 gate-off 前就已更新、恢復後 == 舊值 → 不觸發事件 → lblCamCount 卡灰色「初始化中」）。
+            // CLProtocol 背景初始化期間（分配後 ~2-10s）不碰 MIL（與背景 enable 搶 MIL 內部鎖會凍 UI）。
+            // AreCamerasHwReady 只讀旗標。gate-off 恢復時 hwJustReady=true → 強制刷 count label + 重發 OnHwReady。
             bool hwReady = AreCamerasHwReady;
             if (!hwReady) { _wasHwReady = false; _hwReadyRaised = false; return; }
             bool hwJustReady = !_wasHwReady;
             _wasHwReady = true;
 
-            // 先拍快照：防止 ReleaseAsync 在 background thread 執行 _cameras.Clear() 時，
-            // foreach 拋出 InvalidOperationException 或存取已釋放的相機物件。
+            // 快照：防 ReleaseAsync 清 _cameras 時 foreach 炸 InvalidOperationException
             AniloxCamera[] snapshot;
             try { snapshot = _cameras.ToArray(); }
             catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.CameraStatusTimer] {ex.GetType().Name}: {ex.Message}"); return; }
 
-            foreach (var cam in snapshot)
+            _statusTickInFlight = true;
+            Task.Run(() =>
             {
-                if (IsReleasing) return; // 釋放流程已開始，立即中止
-
-                bool isConnected = cam.CheckPresence();
-
-                // 斷線→連線「邊緣」自動重跑 CLProtocol：啟動時相機不在線（CheckPresence=false 跳過 CLProtocol 啟用）、
-                // 之後才連上的相機 → 此時重新啟用 CLProtocol，否則曝光/線掃等 GenICam 參數一律讀不到（回 0）。
-                // **邊緣觸發**（非每輪）：避免 CL 握手失敗時每 500ms 一直重試 + 反覆 gate-off；下次拔插再觸發。
-                // RetryCLProtocolOnReconnect 內含守門：已啟用/不在線/grab 中/in-flight 皆跳過（grab 中 enable 會掉幀）。
-                bool wasConnected = _lastPresence.TryGetValue(cam.CameraId, out var pv) && pv;
-                _lastPresence[cam.CameraId] = isConnected;
-                if (isConnected && !wasConnected) cam.RetryCLProtocolOnReconnect();
-
-                // 連線恢復且使用者希望抓圖時，自動重啟（同 CameraSession.UpdatePresence）
-                if (isConnected && cam.UserWantsGrab && !cam.IsLive)
-                    cam.ApplyGrabState();
-
-                string statusText;
-                Color color;
-                if (!isConnected)
+                try
                 {
-                    statusText = "斷線"; color = Color.Pink;
-                    _stallDetector.Reset(cam.CameraId);
-                    ClearCameraFrame(cam.CameraId);
-                }
-                else if (!cam.IsLive)
-                {
-                    statusText = "就緒"; color = Color.Yellow;
-                    _stallDetector.Reset(cam.CameraId);
-                }
-                else
-                {
-                    // stall 偵測委派 CameraStallDetector（純邏輯）：餵累計幀數 + 預期 FPS（=線掃/高度）→ 判是否卡死。
-                    double expFps = (cam.FrameHeight > 0 && cam.AppliedLineRateHz > 0)
-                        ? cam.AppliedLineRateHz / cam.FrameHeight : 0;
-                    bool stalled = _stallDetector.Update(cam.CameraId, cam.GetFrameCount(), expFps);
-                    if (stalled) { statusText = "STALL"; color = Color.Red; }            // 幀數凍住超過窗＝真卡死
-                    else { statusText = $"FPS: {cam.CurrentFps:F1}"; color = Color.LightGreen; }
-                }
+                    var statuses = new List<(int camId, string text, Color color, bool clearFrame)>();
+                    foreach (var cam in snapshot)
+                    {
+                        if (IsReleasing) return; // 釋放流程已開始，立即中止（finally 仍會清旗標）
 
-                _display.UpdateSingleCameraStatus(cam.CameraId, statusText, color);
-            }
+                        bool isConnected = cam.CheckPresence();
 
-            // 彙總連線數，變化時通知 UI
-            int connected = 0;
-            foreach (var cam in snapshot)
-                if (cam.IsConnected) connected++;
-            // 連線數變化、或剛從重連 CLProtocol gate-off 恢復就緒（hwJustReady）→ 通知 UI 刷 lblCamCount
-            // （後者把 label 從灰色「初始化中」切回正確連線數/顏色）。
-            if (connected != ConnectedCameraCount || hwJustReady)
-            {
-                ConnectedCameraCount = connected;
-                OnCameraCountChanged?.Invoke(connected, ExpectedCameraCount);
-            }
+                        // 斷線→連線「邊緣」自動重跑 CLProtocol（RetryCLProtocolOnReconnect 內含守門：
+                        // 已啟用/不在線/grab 中/in-flight 皆跳過）。_lastPresence/_stallDetector 只被本
+                        // 單飛路徑觸碰 → 背景使用安全。
+                        bool wasConnected = _lastPresence.TryGetValue(cam.CameraId, out var pv) && pv;
+                        _lastPresence[cam.CameraId] = isConnected;
+                        if (isConnected && !wasConnected) cam.RetryCLProtocolOnReconnect();
 
-            // CLProtocol 全就緒 → 通知 UI 解鎖「開始抓取」鈕（_hwReadyRaised 於 gate-off 時重置 → 重連恢復後會重發）。
-            if (!_hwReadyRaised && AreCamerasHwReady)
-            {
-                _hwReadyRaised = true;
-                OnHwReady?.Invoke();
-            }
+                        // 連線恢復且使用者希望抓圖時，自動重啟（MIL 呼叫，本就該在背景）
+                        if (isConnected && cam.UserWantsGrab && !cam.IsLive)
+                            cam.ApplyGrabState();
+
+                        string statusText; Color color; bool clearFrame = false;
+                        if (!isConnected)
+                        {
+                            statusText = "斷線"; color = Color.Pink;
+                            _stallDetector.Reset(cam.CameraId);
+                            clearFrame = true;
+                        }
+                        else if (!cam.IsLive)
+                        {
+                            statusText = "就緒"; color = Color.Yellow;
+                            _stallDetector.Reset(cam.CameraId);
+                        }
+                        else
+                        {
+                            // stall 偵測委派 CameraStallDetector：判據＝M_PROCESS_FRAME_COUNT 有沒有前進
+                            double expFps = (cam.FrameHeight > 0 && cam.AppliedLineRateHz > 0)
+                                ? cam.AppliedLineRateHz / cam.FrameHeight : 0;
+                            bool stalled = _stallDetector.Update(cam.CameraId, cam.GetFrameCount(), expFps);
+                            if (stalled) { statusText = "STALL"; color = Color.Red; }
+                            else { statusText = $"FPS: {cam.CurrentFps:F1}"; color = Color.LightGreen; }
+                        }
+                        statuses.Add((cam.CameraId, statusText, color, clearFrame));
+                    }
+
+                    int connected = 0;
+                    foreach (var cam in snapshot)
+                        if (cam.IsConnected) connected++;
+
+                    // 套用回 UI（label/清幀/事件都是 UI 物件）；IsReleasing 再驗一次
+                    _uiSync?.Post(_ =>
+                    {
+                        if (IsReleasing) return;
+                        foreach (var s in statuses)
+                        {
+                            if (s.clearFrame) ClearCameraFrame(s.camId);
+                            _display.UpdateSingleCameraStatus(s.camId, s.text, s.color);
+                        }
+                        if (connected != ConnectedCameraCount || hwJustReady)
+                        {
+                            ConnectedCameraCount = connected;
+                            OnCameraCountChanged?.Invoke(connected, ExpectedCameraCount);
+                        }
+                        // CLProtocol 全就緒 → 解鎖「開始抓取」鈕（gate-off 時重置 → 重連恢復後會重發）
+                        if (!_hwReadyRaised && AreCamerasHwReady)
+                        {
+                            _hwReadyRaised = true;
+                            OnHwReady?.Invoke();
+                        }
+                    }, null);
+                }
+                catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.CameraStatusTick(bg)] {ex.GetType().Name}: {ex.Message}"); }
+                finally { _statusTickInFlight = false; }
+            });
         }
     }
 }

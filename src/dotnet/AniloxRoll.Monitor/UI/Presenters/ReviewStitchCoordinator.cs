@@ -395,6 +395,17 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private void UpdateGlobalRowChart()
         {
             if (_ctx.RowChartSync == null || _stitchedRowCurveMean == null) return;
+            var swRow = System.Diagnostics.Stopwatch.StartNew();   // [UiSlow] 卡頓歸因
+            try { UpdateGlobalRowChartBody(); }
+            finally
+            {
+                if (swRow.ElapsedMilliseconds > 50)
+                    Core.Services.FlowTrace.Log($"[UiSlow] RvRowChart {swRow.ElapsedMilliseconds}ms");
+            }
+        }
+
+        private void UpdateGlobalRowChartBody()
+        {
             CurveMergeHelper.MergeRowCurvesOverlap(
                 _stitchedRowCurveMean, _stitchedRowCurveMax,
                 _ctx.CameraCount, out float[] mergedMean, out float[] mergedMax);
@@ -418,7 +429,17 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public void UpdateStitchedOverviewChart()
         {
             if (_stitchedCurveMean == null) return;
+            var swOv = System.Diagnostics.Stopwatch.StartNew();   // [UiSlow] 卡頓歸因
+            try { UpdateStitchedOverviewChartBody(); }
+            finally
+            {
+                if (swOv.ElapsedMilliseconds > 50)
+                    Core.Services.FlowTrace.Log($"[UiSlow] RvOverviewChart {swOv.ElapsedMilliseconds}ms");
+            }
+        }
 
+        private void UpdateStitchedOverviewChartBody()
+        {
             double[] opsArr, posArr;
             float captureHm;
             if (_currentGrabConfig != null)

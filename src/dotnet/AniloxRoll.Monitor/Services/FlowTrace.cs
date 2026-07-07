@@ -15,4 +15,128 @@ namespace AniloxRoll.Monitor.Core.Services
             System.Diagnostics.Trace.WriteLine(
                 $"[Flow] {DateTime.Now:HH:mm:ss.fff} T{System.Threading.Thread.CurrentThread.ManagedThreadId,2} {msg}");
     }
+
+    /// <summary>UI 卡頓偵測器（常駐儀器）：
+    /// ① 33ms UI timer 量 tick 間隔 → `[UiStall]`＋GC 增量（分辨 GC vs 同步卡住）。
+    /// ② 背景執行緒每 100ms BeginInvoke ping 量往返 → `[UiPing]`。
+    /// 組合判讀：WM_TIMER 是最低優先權訊息、BeginInvoke（posted message）優先權較高——
+    /// UiStall 大 + UiPing 小＝佇列被 paint/input 飽和（timer 被餓，無單一兇手）；
+    /// UiStall 大 + UiPing 也大＝UI 執行緒真的被某同步呼叫卡住。</summary>
+    public sealed class UiStallDetector : IDisposable
+    {
+        private readonly System.Windows.Forms.Timer _timer;
+        private readonly System.Windows.Forms.Control _pingTarget;
+        private readonly System.Threading.Thread _pingThread;
+        private volatile bool _disposed;
+        private int _lastTick;
+        private int _g0, _g1, _g2;
+        private const int ThresholdMs = 100;   // 33ms timer 遲到 3 倍以上才算卡（避免正常排程抖動洗版）
+
+        public UiStallDetector(System.Windows.Forms.Control pingTarget)
+        {
+            _pingTarget = pingTarget;
+            _lastTick = Environment.TickCount;
+            _g0 = GC.CollectionCount(0); _g1 = GC.CollectionCount(1); _g2 = GC.CollectionCount(2);
+            _timer = new System.Windows.Forms.Timer { Interval = 33 };
+            _timer.Tick += (s, e) =>
+            {
+                int now = Environment.TickCount;
+                int gap = now - _lastTick;
+                _lastTick = now;
+                int g0 = GC.CollectionCount(0), g1 = GC.CollectionCount(1), g2 = GC.CollectionCount(2);
+                if (gap >= ThresholdMs)
+                    FlowTrace.Log($"[UiStall] {gap}ms（GC0+{g0 - _g0} GC1+{g1 - _g1} GC2+{g2 - _g2}）");
+                _g0 = g0; _g1 = g1; _g2 = g2;
+            };
+            _timer.Start();
+
+            var uiThread = System.Threading.Thread.CurrentThread;   // ctor 在 UI 執行緒跑 → 取得 UI 執行緒參考（堆疊取樣用）
+            _pingThread = new System.Threading.Thread(() =>
+            {
+                while (!_disposed)
+                {
+                    System.Threading.Thread.Sleep(100);
+                    var t = _pingTarget;
+                    if (t == null || t.IsDisposed || !t.IsHandleCreated) continue;
+                    int sent = Environment.TickCount;
+                    var ponged = new System.Threading.ManualResetEventSlim(false);
+                    try
+                    {
+                        t.BeginInvoke(new Action(() =>
+                        {
+                            ponged.Set();
+                            int rtt = Environment.TickCount - sent;
+                            if (rtt >= ThresholdMs)
+                                FlowTrace.Log($"[UiPing] {rtt}ms");
+                        }));
+                    }
+                    catch (InvalidOperationException) { continue; }
+
+                    // 200ms 沒回應＝UI 正卡住 → 當場取 UI 執行緒堆疊（卡在哪一行直接點名）。
+                    // Suspend+StackTrace 是 deprecated 診斷手段（.NET Framework 可用）：只在已卡住時取樣、立刻 Resume。
+                    if (!ponged.Wait(200) && !_disposed)
+                    {
+                        try
+                        {
+#pragma warning disable 618
+                            uiThread.Suspend();
+                            string frames;
+                            try
+                            {
+                                var st = new System.Diagnostics.StackTrace(uiThread, false);
+                                var sb = new System.Text.StringBuilder();
+                                int taken = 0;
+                                for (int i = 0; i < st.FrameCount && taken < 10; i++)
+                                {
+                                    var mth = st.GetFrame(i).GetMethod();
+                                    if (mth == null) continue;
+                                    sb.Append(mth.DeclaringType?.Name).Append('.').Append(mth.Name).Append(" ← ");
+                                    taken++;
+                                }
+                                frames = sb.ToString();
+                            }
+                            finally { uiThread.Resume(); }
+#pragma warning restore 618
+                            FlowTrace.Log($"[UiStack] {frames}");
+                        }
+                        catch (Exception ex) { FlowTrace.Log($"[UiStack] 取樣失敗 {ex.GetType().Name}"); }
+                    }
+                }
+            })
+            { IsBackground = true, Name = "UiPing" };
+            _pingThread.Start();
+        }
+
+        public void Dispose() { _disposed = true; _timer.Stop(); _timer.Dispose(); }
+    }
+
+    /// <summary>WM_PAINT 探針（卡頓歸因儀器）：subclass 目標控制項的 WndProc，量「真正畫」的時間。
+    /// 補 [UiSlow]（只量資料更新）的盲區——MSChart 等控制項 UpdateData 快、但之後的 WM_PAINT 才是重活
+    /// （densely-pointed chart 畫一次可達數百 ms 且滑鼠掠過就重畫）。&gt;50ms 記 `[UiPaint] 名稱 Nms`。</summary>
+    public sealed class PaintProbe : System.Windows.Forms.NativeWindow
+    {
+        private const int WM_PAINT = 0x000F;
+        private readonly string _name;
+
+        public PaintProbe(System.Windows.Forms.Control target, string name)
+        {
+            _name = name;
+            if (target.IsHandleCreated) AssignHandle(target.Handle);
+            else target.HandleCreated += (s, e) => AssignHandle(target.Handle);
+            target.HandleDestroyed += (s, e) => ReleaseHandle();
+        }
+
+        protected override void WndProc(ref System.Windows.Forms.Message m)
+        {
+            if (m.Msg == WM_PAINT)
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                base.WndProc(ref m);
+                if (sw.ElapsedMilliseconds > 50)
+                    FlowTrace.Log($"[UiPaint] {_name} {sw.ElapsedMilliseconds}ms");
+                return;
+            }
+            base.WndProc(ref m);
+        }
+    }
 }

@@ -45,6 +45,18 @@ namespace AniloxRoll.Monitor.Forms
 
         private void TelemetryTimer_Tick(object sender, EventArgs e)
         {
+            // [UiSlow] 卡頓歸因儀器：tick 主體超過 50ms 即留痕（與 [UiStall] 對時間戳鎖定兇手）
+            var swTick = System.Diagnostics.Stopwatch.StartNew();
+            try { TelemetryTickBody(); }
+            finally
+            {
+                if (swTick.ElapsedMilliseconds > 50)
+                    FlowTrace.Log($"[UiSlow] TelemetryTick {swTick.ElapsedMilliseconds}ms");
+            }
+        }
+
+        private void TelemetryTickBody()
+        {
             // 連線狀態不受相機釋放影響，先於 gate 更新
             UpdateConnectionStatusLabels();
 
@@ -142,6 +154,18 @@ namespace AniloxRoll.Monitor.Forms
 
         private void UpdateResourceMonitor()
         {
+            // [UiSlow] 卡頓歸因：資源監控（含可能的外部查詢/檔案 IO）在 UI 執行緒
+            var swRm = System.Diagnostics.Stopwatch.StartNew();
+            try { UpdateResourceMonitorBody(); }
+            finally
+            {
+                if (swRm.ElapsedMilliseconds > 50)
+                    FlowTrace.Log($"[UiSlow] ResourceMonitor {swRm.ElapsedMilliseconds}ms");
+            }
+        }
+
+        private void UpdateResourceMonitorBody()
+        {
             try
             {
                 var cameras = _liveCameraManager?.Cameras;
@@ -202,10 +226,13 @@ namespace AniloxRoll.Monitor.Forms
             // （第二次 grab 已就緒即刻畫）。首次就緒由 ApplyLiveViewRange 直接觸發一次。
             if (double.IsNaN(_liveViewLeftMm) || _liveViewLeftMm >= _liveViewRightMm) return;
             _liveOverviewDirty = false;
+            var swOv = System.Diagnostics.Stopwatch.StartNew();
             CurveMergeHelper.UpdateOverviewChart(_liveCurveMean, _liveCurveMax,
                 _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray(),
                 _settings.ErrorValueMeanV, _settings.ErrorValueMaxV,
                 _liveOverviewHelper, CameraCount, _settings.StitchMode, LiveViewRangeProvider);
+            if (swOv.ElapsedMilliseconds > 50)
+                FlowTrace.Log($"[UiSlow] OverviewChart {swOv.ElapsedMilliseconds}ms");
         }
     }
 }

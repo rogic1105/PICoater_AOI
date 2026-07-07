@@ -669,6 +669,18 @@ namespace TanukiCv.Controls
 
         protected override void OnPaint(PaintEventArgs pe)
         {
+            // 卡頓歸因儀器：畫一次超過 50ms 即經 FlowLog 留痕（呼叫端決定 log 去向；null=零成本）
+            var swPaint = FlowLog != null ? System.Diagnostics.Stopwatch.StartNew() : null;
+            try { OnPaintBody(pe); }
+            finally
+            {
+                if (swPaint != null && swPaint.ElapsedMilliseconds > 50)
+                    FlowLog($"paint {swPaint.ElapsedMilliseconds}ms（zoom={_zoom:F2} lod={_lodActive} cache={_viewCache != null}）");
+            }
+        }
+
+        private void OnPaintBody(PaintEventArgs pe)
+        {
             if (_lodActive)
             {
                 _paintTimer.Start();

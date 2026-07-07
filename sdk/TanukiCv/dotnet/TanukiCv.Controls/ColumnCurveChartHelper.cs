@@ -49,16 +49,41 @@ namespace TanukiCv.Controls
             _dataMinX = startPos;
             _dataMaxX = startPos + n * _opsInMm;
 
-            var xs    = new double[n];
-            var yMean = new double[n];
-            var yMax  = new double[n];
-
-            for (int i = 0; i < n; i++)
+            // 顯示降採樣（同 RowCurveChartHelper 慣例；2026-07-07 拖曳佇列飽和定罪：全點 DataBind 讓
+            // 每次 zoom 連動重畫都付全量成本 → 螢幕只有 ~2000px，全點=白畫數倍）：
+            // 上限 ~2000 點；桶內 mean=平均、max=取大（保 Mura 峰值）、位置=桶中心。純顯示瘦身，資料/判定不經此路。
+            const int MaxDisplayPoints = 2000;
+            double[] xs, yMean, yMax;
+            if (n > MaxDisplayPoints)
             {
-                xs[i]    = startPos + i * _opsInMm;
-                yMean[i] = meanData[i] / 255.0;
-                if (maxData != null && i < maxData.Length)
-                    yMax[i] = maxData[i] / 255.0;
+                int stride = (n + MaxDisplayPoints - 1) / MaxDisplayPoints;
+                int m = (n + stride - 1) / stride;
+                xs = new double[m]; yMean = new double[m]; yMax = new double[m];
+                for (int b = 0; b < m; b++)
+                {
+                    int i0 = b * stride, i1 = Math.Min(i0 + stride, n);
+                    double sum = 0, bmax = 0; int cnt = 0;
+                    for (int j = i0; j < i1; j++)
+                    {
+                        sum += meanData[j]; cnt++;
+                        if (maxData != null && j < maxData.Length && maxData[j] > bmax) bmax = maxData[j];
+                    }
+                    int mid = (i0 + i1 - 1) / 2;
+                    xs[b]    = startPos + mid * _opsInMm;
+                    yMean[b] = sum / cnt / 255.0;
+                    yMax[b]  = bmax / 255.0;
+                }
+            }
+            else
+            {
+                xs = new double[n]; yMean = new double[n]; yMax = new double[n];
+                for (int i = 0; i < n; i++)
+                {
+                    xs[i]    = startPos + i * _opsInMm;
+                    yMean[i] = meanData[i] / 255.0;
+                    if (maxData != null && i < maxData.Length)
+                        yMax[i] = maxData[i] / 255.0;
+                }
             }
 
             _chart.Series.SuspendUpdates();

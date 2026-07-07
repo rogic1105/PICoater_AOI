@@ -657,30 +657,55 @@ namespace AniloxRoll.Monitor.Forms
         }
 
 
+        /// <summary>硬體參數同步單飛旗標（背景 CLProtocol 讀取進行中不疊發）。</summary>
+        private volatile bool _paramSyncInFlight;
+
         private void SyncCameraParamsFromHardware()
         {
-            if (_expBars == null || _lrBars == null) return;
-
-            var cameras = _liveCameraManager.Cameras;
-            var acq     = _settings?.Acquisition;
+            // CLProtocol feature 讀取（GetMeasuredExposureUs/GetLineRateHz＝MdigInquireFeature）一次可達
+            // 數百 ms（2026-07-07 [UiStack] 定罪：TelemetryTick 569ms 卡 UI 元凶）→ 讀取移背景、UI 只套滑桿。
+            if (_expBars == null || _lrBars == null || _paramSyncInFlight) return;
+            var acq = _settings?.Acquisition;
             if (acq == null) return;
 
+            var targets = new System.Collections.Generic.List<(int idx, Core.Camera.AniloxCamera cam)>();
             for (int idx = 0; idx < CameraCount; idx++)
             {
+                var cam = FindCameraById(idx + 1);
+                if (cam != null && cam.IsHwParamsStable) targets.Add((idx, cam));
+            }
+            if (targets.Count == 0) return;
+
+            _paramSyncInFlight = true;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                var vals = new System.Collections.Generic.List<(int idx, double exp, double lr)>();
                 try
                 {
-                    var cam = FindCameraById(idx + 1);
-                    if (cam == null) continue;
-                    if (!cam.IsHwParamsStable) continue;
-
-                    SyncHardwareParam(_expBars[idx], _expNums[idx],
-                        cam.GetMeasuredExposureUs(), v => acq.CameraExposureTimeUs[idx] = v);
-
-                    SyncHardwareParam(_lrBars[idx], _lrNums[idx],
-                        cam.GetLineRateHz(), v => acq.CameraLineRateHz[idx] = v);
+                    foreach (var t in targets)
+                    {
+                        try { vals.Add((t.idx, t.cam.GetMeasuredExposureUs(), t.cam.GetLineRateHz())); }
+                        catch (Exception ex) { Trace.WriteLine($"[SyncHw] CAM{t.idx + 1}: {ex.Message}"); }
+                    }
                 }
-                catch (Exception ex) { Debug.WriteLine($"[SyncHw] CAM{idx + 1}: {ex.Message}"); }
-            }
+                finally { _paramSyncInFlight = false; }
+                if (vals.Count == 0 || IsDisposed || Disposing) return;
+                try
+                {
+                    BeginInvoke(new Action(() =>
+                    {
+                        if (IsDisposed) return;
+                        foreach (var v in vals)
+                        {
+                            SyncHardwareParam(_expBars[v.idx], _expNums[v.idx], v.exp,
+                                x => acq.CameraExposureTimeUs[v.idx] = x);
+                            SyncHardwareParam(_lrBars[v.idx], _lrNums[v.idx], v.lr,
+                                x => acq.CameraLineRateHz[v.idx] = x);
+                        }
+                    }));
+                }
+                catch (InvalidOperationException) { }
+            });
         }
 
         // ── Helper Methods ──────────────────────────────────────────
