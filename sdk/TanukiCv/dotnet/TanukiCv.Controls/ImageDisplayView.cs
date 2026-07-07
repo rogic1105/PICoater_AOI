@@ -73,6 +73,15 @@ namespace TanukiCv.Controls
         /// <summary>選中相機因「視野移動」自動變更（合圖模式反向連動：視野中心最近的相機 → 自動高亮縮圖）。
         /// 1-based camId。程式化來源（非使用者點擊），上層通常只需更新狀態、勿再呼 CenterOnCamera（防遞迴）。</summary>
         public event Action<int> SelectedCamChanged;
+
+        /// <summary>互動/決策流跡（診斷用，可為 null）：autoFit 帶原因、wheel 手勢（轉發自 ImageCanvas）。
+        /// 上層接到流程 log（如 FlowTrace）供契約驗證——「誰在動視野」一眼可判。</summary>
+        public Action<string> FlowLog
+        {
+            get => _flowLog;
+            set { _flowLog = value; if (_canvas != null) _canvas.FlowLog = value; }
+        }
+        private Action<string> _flowLog;
         /// <summary>視野可見範圍（mm）：leftX, rightX, topY, botY → 上層曲線圖（欄用 X、列用 Y、overview 用 X）zoom 連動。</summary>
         public event Action<double, double, double, double> ViewRangeMmChanged;
 
@@ -277,6 +286,10 @@ namespace TanukiCv.Controls
         {
             if (_disposed || camId < 1 || camId > _camCount) return;
             int idx = camId - 1;
+            // 冪等：幀本來就空＝無殘影可清 → 不得動顯示狀態。否則離線台被狀態 timer 每 500ms 清一次
+            // → DisableLod→EnableLod 重建 → EnableLod 內建 FitToScreen → 使用者縮放每 0.5s 被拉回 fit。
+            if (_latest[idx] == null) return;
+            _flowLog?.Invoke($"clearFrame cam{camId}");
             _latest[idx] = null;
             _readySinceMerge[idx] = false;
             _thumbStrip?.Clear(idx);
@@ -370,6 +383,9 @@ namespace TanukiCv.Controls
                         if (!_canvas.LodActive || _lodCamId != 0 || _lodMergeW != _mergeTotalW || _lodMergeH != _mergeMaxH)
                         {
                             _lodCamId = 0; _lodMergeW = _mergeTotalW; _lodMergeH = _mergeMaxH; _mergeCapK = 1;
+                            // lodRebind＝EnableLod 內建 FitToScreen 的另一條 fit 路（autoFit 之外）——必留痕，
+                            // 頻繁出現＝視野被反覆重設（如 ClearFrame 誤清空幀那類 churn）。
+                            _flowLog?.Invoke($"lodRebind merge {_mergeTotalW}x{_mergeMaxH}（fit reset）");
                             _canvas.EnableLod(_mergeTotalW, _mergeMaxH, MergeLodProvide);
                             ApplyCalibration();
                         }
@@ -387,6 +403,7 @@ namespace TanukiCv.Controls
                         if (!_canvas.LodActive || _lodCamId != _selectedCamId)
                         {
                             _lodCamId = _selectedCamId;
+                            _flowLog?.Invoke($"lodRebind cam{_selectedCamId} {f.W}x{f.H}（fit reset）");
                             _canvas.EnableLod(f.W, f.H, LodProvide); // 虛擬尺寸=全解析度；停住才請 provider 裁+縮
                             ApplyCalibration();
                         }
@@ -424,10 +441,13 @@ namespace TanukiCv.Controls
             if (bmp.Width != _mainW || bmp.Height != _mainH)
             {
                 bool firstFrame = _mainW < 0;
+                int oldW = _mainW, oldH = _mainH;
                 _mainW = bmp.Width; _mainH = bmp.Height;
                 // 首幀一定 fit；之後尺寸變動只在「使用者仍在 fit 視角」才 fit（live 新幀不把手動縮放拉回 fit）。
                 if (firstFrame || _canvas.IsAtFitView())
                 {
+                    // autoFit 帶原因：流程契約可判「誰在動視野」（縮放中不得出現本行——出現＝fit 打架）。
+                    _flowLog?.Invoke($"autoFit({(firstFrame ? "firstFrame" : "sizeChanged@fitView")} {oldW}x{oldH}→{bmp.Width}x{bmp.Height}）");
                     _canvas.FitToScreen();
                     // fit 後立即補發視野範圍：否則上層曲線圖（法向/overview）會先用 default 軸畫第一筆資料、
                     // 等下次互動才 snap 到視野 → 第一次出圖「閃一下」。同步補發，曲線一出來就對齊視野。

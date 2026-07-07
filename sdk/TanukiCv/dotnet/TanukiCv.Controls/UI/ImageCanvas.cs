@@ -108,6 +108,11 @@ namespace TanukiCv.Controls
 
         // 手勢事件（給上層做 app 專屬的事，如 UiActionLogger 記錄；手勢偵測/動作本身由 ImageCanvas 做）
         public event EventHandler FitPerformed;        // 雙擊 fit 完成
+
+        /// <summary>互動流跡（診斷用，可為 null）：wheel 縮放等「使用者手勢」各記一行，
+        /// 供上層流程契約驗證（誰在動視野：使用者手勢 vs 系統自動 fit）。100ms 節流防洗版。</summary>
+        public Action<string> FlowLog;
+        private int _flowWheelLastTick;
         public event EventHandler Physical1xPerformed; // 三擊實體 1:1 完成
         public event EventHandler DragStarted;         // 實際拖曳開始（第一次帶鍵移動）
         private bool _dragMoved;
@@ -605,6 +610,12 @@ namespace TanukiCv.Controls
             }
 
             float scaleChange = _zoom / oldZoom;
+
+            if (FlowLog != null && Environment.TickCount - _flowWheelLastTick > 100)
+            {
+                _flowWheelLastTick = Environment.TickCount;
+                FlowLog($"wheelZoom {(notches > 0 ? "in" : "out")} → zoom={_zoom:F2}（fit={_fitZoom:F2}）");
+            }
 
             _panOffset.X = e.X - (e.X - _panOffset.X) * scaleChange;
             _panOffset.Y = e.Y - (e.Y - _panOffset.Y) * scaleChange;

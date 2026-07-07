@@ -35,6 +35,8 @@ namespace AniloxRoll.Monitor.Forms
 
         private async void btnLiveGrab_Click(object sender, EventArgs e)
         {
+            FlowTrace.Log("ui:【開始抓取】鈕");   // intent 行：之後的顯示變更行歸此動作管（孤兒判讀規則）
+
             // 背景預覽中按 Grab → 先清除預覽並 Free，讓 MIL 能重新初始化
             if (_bgPreviewActive)
             {
@@ -501,6 +503,7 @@ namespace AniloxRoll.Monitor.Forms
                 _liveCameraManager?.SetLodMode(_settings.LiveLod);
             if (name == nameof(InspectionSettings.he_MainDisplay))
             {
+                FlowTrace.Log($"ui:設定[主畫面顯示] → {_settings.he_MainDisplay}");   // intent 行（孤兒判讀規則）
                 ResetLiveWaterfallRowChart();
                 _liveCameraManager?.ApplyMainDisplayMode();   // 即時 / 瀑布 即時切換
             }

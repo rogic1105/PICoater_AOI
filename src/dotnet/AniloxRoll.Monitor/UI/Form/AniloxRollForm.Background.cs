@@ -34,6 +34,7 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private async void btnLiveGetBackground_Click(object sender, EventArgs e)
         {
+            FlowTrace.Log("ui:【取得背景】鈕");   // intent 行（孤兒判讀規則）
             if (!IsStandardBgSubEnabled)
             {
                 MessageBox.Show("請先將去背演算法切換為「標準去背」。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -296,6 +297,7 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private void btnLiveViewBackground_Click(object sender, EventArgs e)
         {
+            FlowTrace.Log("ui:【預覽背景】鈕");   // intent 行（孤兒判讀規則）
             // 先清除舊預覽（釋放 overlay + 恢復 MIL display），再重新載入
             if (_bgPreviewActive)
                 ClearBackgroundPreview();

@@ -51,6 +51,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private async void btnReviewSelectFolder_Click(object sender, EventArgs e)
         {
+            FlowTrace.Log("ui:【讀取資料】鈕（Review）");   // intent 行（孤兒判讀規則；grab 中按會動到監控合圖）
             try
             {
                 _interactionHelper.SelectAndLoadFolder();

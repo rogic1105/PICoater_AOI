@@ -175,6 +175,13 @@ namespace TanukiCv.Controls
         /// <summary>視野中心所在相機（1-based）變更時觸發（pan/zoom/置中）。縮圖高亮反向連動用；
         /// 程式化來源，上層只需更新高亮、勿再呼 CenterOnCamera（防遞迴）。</summary>
         public event Action<int> CenterCamChanged;
+
+        /// <summary>互動流跡（診斷用，可為 null）：wheel 手勢（轉發自 ImageCanvas）供上層流程契約驗證。</summary>
+        public Action<string> FlowLog
+        {
+            get => _canvas?.FlowLog;
+            set { if (_canvas != null) _canvas.FlowLog = value; }
+        }
         private int _lastCenterCamId = -1;
 
         /// <summary>視野水平置中到指定相機（1-based）欄位中心；保持縮放與垂直位置（縮圖點選→主畫面連動）。</summary>
