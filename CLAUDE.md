@@ -398,12 +398,8 @@ PICoater_AOI/
 | 時段群組 | `grpReviewTimePeriod` | GroupBox | 時序 |
 | 時段日期（時序cb） | `cbReviewDate` | ComboBox | — |
 | 時段時間（時序cb） | `cbReviewTime` | ComboBox | — |
-| 上一時段（上下鍵） | `btnReviewPeriodPrev` | Button | < |
-| 下一時段（上下鍵） | `btnReviewPeriodNext` | Button | > |
 | 單片群組 | `grpReviewGrabNav` | GroupBox | 單片 |
 | 單片序號（序號cb） | `cbReviewId` | ComboBox | — |
-| 上一序號（上下鍵） | `btnReviewIdPrev` | Button | < |
-| 下一序號（上下鍵） | `btnReviewIdNext` | Button | > |
 
 ### 報表（tabPageData）
 
@@ -418,8 +414,6 @@ PICoater_AOI/
 | 結束序號 | `cbDataIdEnd` | ComboBox | — |
 | 序號選擇群組 | `grpDataSingleSheet` | GroupBox | 序號選擇 |
 | 報表序號 | `cbDataId` | ComboBox | — |
-| 報表上一序號 | `btnDataIdPrev` | Button | < |
-| 報表下一序號 | `btnDataIdNext` | Button | > |
 | 良率年圖 | `chartDataYieldYearly` | Chart | — |
 | 良率月圖 | `chartDataYieldMonthly` | Chart | — |
 | 良率日圖 | `chartDataYieldDaily` | Chart | — |

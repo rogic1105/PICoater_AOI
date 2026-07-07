@@ -50,6 +50,9 @@ namespace AniloxRoll.Monitor.UI.Managers
             _view.EnableLod(GrayResizeCpu.Resize);     // 回顧白賺 LOD；CPU provider＝無 GPU 機也跑
             _view.ViewRangeMmChanged += (l, r, tp, bt) => ViewRangeMmChanged?.Invoke(l, r, tp, bt);
             _view.CursorStatusChanged += s => CursorStatusChanged?.Invoke(s);
+            // 互動流跡（RV 前綴）：autoFit 原因/lodRebind/clearFrame/wheelZoom 與監控同一套 sdk 掛勾
+            _view.FlowLog = s => Core.Services.FlowTrace.Log("RV " + s);
+            Core.Services.FlowTrace.Log($"RV EnsureImageDisplay create（thumbs={_thumbHosts.Length}）");
         }
 
         /// <summary>
@@ -66,14 +69,17 @@ namespace AniloxRoll.Monitor.UI.Managers
             _view.SetMergeMode(mergeMode);
             var present = new bool[_thumbHosts.Length + 1];
             int count = Math.Min(gray.Length, _thumbHosts.Length);
+            int pushed = 0;
             for (int i = 0; i < count; i++)
             {
                 if (gray[i] == null) continue;
                 present[i + 1] = true;
                 _view.PushFrame(i + 1, gray[i], w[i], h[i]);
+                pushed++;
             }
             _view.ClearFramesExcept(present);
             _view.RefreshNow();
+            Core.Services.FlowTrace.Log($"RV pushFrames {pushed}/{count}（merge={mergeMode}, feedScale={feedScale}）");
         }
 
         /// <summary>chart 重建後補發當前視野（強化切換/重載後曲線恢復跟隨，免等滑鼠互動）。</summary>

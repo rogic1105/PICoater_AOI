@@ -133,6 +133,42 @@ T1: （再配置時）F1 全序重跑——view 必須重建+重訂閱新相機�
 現況：取得背景=借用現有 grab 採集（啟停包夾）、預覽=ImageCanvas overlay 蓋最上層（**不得動 MIL 顯示開關**）。
 Wave3 改與 grab 共用顯示 API 後更新本節。
 
+## 回顧 tab 契約（R 系列；儀器前綴 RV）
+
+### R1 讀取資料（btnReviewSelectFolder）
+```
+T1: ui:【讀取資料】鈕（Review）
+T1: （首次）RV EnsureImageDisplay create（thumbs=7）
+T1: RV loadGrab begin {grabId}（proc=…）
+T1: RV pushFrames P/7（merge=True, feedScale=…）   ← P=該 grab 有影像的相機數；缺台=黑占位
+T1: RV loadGrab done {grabId}（…ms）
+（grab 中按：另會出現 DisableGlobalMerge 等監控行——歸本 intent 管，見孤兒判讀規則）
+```
+
+### R2 單片序號切換（cbReviewId）——分層載入（2026-07-07 定版）
+```
+T1: ui:【單片序號】→ {grabId}
+T1: RV curves {grabId}（…ms）          ← 快路：欄+列曲線+CFG 即時跟滾動（chart 先行，使用者掃異常）
+（影像 debounce 250ms：滾動中不發完整載入；停下才載「最後選取」）
+T1: RV loadGrab begin {grabId} → RV lodRebind merge …（fit reset）→ RV pushFrames → RV loadGrab done
+```
+- **分層**：曲線每個 intent 都跟（`RV curves`，舊的記 `RV curves stale-drop`）；影像只載 settle 後的最後一張。
+- **換序號＝重設視野（fit）＝預期**（各 grab 高度不同 → lodRebind 合法出現）。
+- **最後贏 token（快路+完整共用）**：最後一個非 stale 的 `curves`/`loadGrab done` 的 grabId
+  必須＝最後一個 intent 的 grabId——不符＝token 破了。
+- begin 無對應 done/stale-drop＝載入中斷；pushFrames P 與 CSV 台數不符＝掉圖。
+
+### R3 時段導航（cbReviewDate/cbReviewTime 手動）
+```
+T1: ui:【時段導航】（cbReviewDate/Time）
+T1: RV pushFrames …（時段模式載入；依實測補完整序列）
+```
+
+### R4 回顧主畫面互動（點縮圖/拖曳/縮放）
+與 F5/F6/F6b 同款（同一個 ImageDisplayView），行前綴=RV：
+點縮圖＝內部置中；拖曳＝橘框跟隨；縮放中不得出現 `RV autoFit`/`RV lodRebind`；
+**回顧靜態看圖＝永久穩態**（無新幀）→ 穩態靜默通則全程適用（比監控更嚴）。
+
 ## 模擬測試的極限（誠實邊界）
 
 模擬蓋得住：步驟順序/訂閱生命週期/置中來源/事件接線。蓋不住：硬體時序（stall/掉幀）、native 行為、

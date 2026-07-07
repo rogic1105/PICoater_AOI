@@ -65,6 +65,66 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// <summary>上一次 Review 頁面的處理模式旗標。</summary>
         public bool LastReviewProcessedMode { get; set; }
 
+        /// <summary>載入序號（最後贏 token）：曲線快路與完整載入共用遞增；舊載入完成時不等於最新＝丟棄。</summary>
+        private int _loadSeq;
+
+        /// <summary>快路：只載曲線（欄+列，.bin 數十 KB + tick 對齊 csv）+CFG → 更新欄/列 chart。
+        /// 滾動掃描用——chart 即時跟著序號跑（使用者快速找異常），影像（重：JPEG 解碼+拼接）由
+        /// debounce 後的完整載入跟上（硬體限制的分層載入）。</summary>
+        public async Task LoadGrabCurvesOnlyAsync(string grabId, DateTime hintFrom, DateTime hintTo)
+        {
+            string root = !string.IsNullOrWhiteSpace(UI.State.UserSessionState.LastDataPath)
+                          ? UI.State.UserSessionState.LastDataPath : _ctx.DataStatsPresenter.StatsDataRootPath;
+            if (string.IsNullOrWhiteSpace(root)) return;
+
+            int my = System.Threading.Interlocked.Increment(ref _loadSeq);
+            var sw = Stopwatch.StartNew();
+            int camCount = _ctx.CameraCount;
+            var mean = new float[camCount][];
+            var max  = new float[camCount][];
+            var rowMean = new float[camCount][];
+            var rowMax  = new float[camCount][];
+            CsvConfigSnapshot cfg = null;
+            try
+            {
+                await Task.Run(() =>
+                {
+                    var grouped = InspectionStatisticsService.LoadImagePathsForGrabId(root, grabId, hintFrom, hintTo);
+                    cfg = InspectionStatisticsService.LoadConfigForGrabId(root, grabId, hintFrom, hintTo);
+
+                    // 列曲線的跨相機對齊（同完整載入：tick 優先、檔名 fallback）——bin+csv 都輕，快路可負擔
+                    var allPaths = new System.Collections.Generic.List<string>();
+                    foreach (var kv in grouped) allPaths.AddRange(kv.Value);
+                    var tickMap = FrameTickIndex.LoadTickMap(allPaths);
+                    var alignedByCam = FrameTickIndex.BuildAlignedByTick(grouped, tickMap)
+                                       ?? FrameTickIndex.BuildAlignedByStitchKey(grouped);
+
+                    for (int i = 0; i < camCount; i++)
+                    {
+                        int camId = i + 1;
+                        if (!grouped.TryGetValue(camId, out var paths) || paths.Count == 0) continue;
+                        CurveMergeHelper.MergeCurves(paths, out mean[i], out max[i]);
+                        var aligned = alignedByCam.TryGetValue(camId, out var al) ? al : paths;
+                        CurveMergeHelper.MergeRowCurves(aligned, out rowMean[i], out rowMax[i]);
+                    }
+                });
+                if (my != System.Threading.Volatile.Read(ref _loadSeq))
+                {
+                    Core.Services.FlowTrace.Log($"RV curves stale-drop {grabId}");
+                    return;
+                }
+                _stitchedCurveMean    = mean;
+                _stitchedCurveMax     = max;
+                _stitchedRowCurveMean = rowMean;
+                _stitchedRowCurveMax  = rowMax;
+                _currentGrabConfig = cfg;
+                UpdateStitchedOverviewChart();
+                UpdateGlobalRowChart();
+                Core.Services.FlowTrace.Log($"RV curves {grabId}（{sw.ElapsedMilliseconds}ms）");
+            }
+            catch (Exception ex) { Trace.WriteLine($"[CurvesOnly] {grabId}: {ex.GetType().Name}: {ex.Message}"); }
+        }
+
         /// <summary>目前的 ridge 方向（"v" 或 "h"）。</summary>
         public string ActiveRidgeDirection { get; set; } = "v";
 
@@ -107,6 +167,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (string.IsNullOrWhiteSpace(root)) return;
 
             _ctx.InteractionHelper.SetUiLoadingState(true);
+            // 最後贏 token：快速滾序號時多個載入並發、done 亂序 → 只有「最新選取」的結果准上畫面，
+            // 舊結果丟棄（否則誰晚 done 誰蓋畫面＝最後顯示的不一定是最後選的）。
+            int myLoad = System.Threading.Interlocked.Increment(ref _loadSeq);
+            Core.Services.FlowTrace.Log($"RV loadGrab begin {grabId}（proc={enableProcess}）");
             LastReviewProcessedMode = enableProcess;
             // L2 SSoT：setting 由 caller 透過 SettingsHub 設置，coordinator 不再 bypass Hub 直接寫 memory。
             // caller 路徑：PropertyGrid → OnSettingChanged → ApplyReviewEnhance → ReloadCurrentStitchedView；
@@ -186,6 +250,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 });
                 var newImages = loaded.imgs;
 
+                // token 閘門：背景載入期間已有更新的選取 → 本結果作廢（不上畫面、不動 chart）
+                if (myLoad != System.Threading.Volatile.Read(ref _loadSeq))
+                {
+                    Core.Services.FlowTrace.Log($"RV loadGrab stale-drop {grabId}（{swTotal.ElapsedMilliseconds}ms）");
+                    foreach (var im in newImages) im?.Dispose();
+                    return;
+                }
+
                 ClearStitchedMode();
                 _stitchedImages       = newImages;
                 _stitchedCurveMean    = newCurveMean;
@@ -212,6 +284,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 UpdateStitchedOverviewChart();
 
                 Trace.WriteLine($"[StitchView] {grabId} proc={enableProcess} | CSV={csvMs}ms | Stitch={stitchMs}ms | Merge(bg)={mergeMs}ms | UIapply={swTotal.ElapsedMilliseconds - csvMs - stitchMs - mergeMs}ms | Total={swTotal.ElapsedMilliseconds}ms");
+                Core.Services.FlowTrace.Log($"RV loadGrab done {grabId}（{swTotal.ElapsedMilliseconds}ms）");
 
                 // Resource log
                 int loadedCams = 0, finalW = 0, finalH = 0;
@@ -239,7 +312,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
             finally
             {
-                _ctx.InteractionHelper.SetUiLoadingState(false);
+                // 只有「仍是最新」的載入才關 loading 燈（stale 早退不關 → 不熄滅還在跑的較新載入）
+                if (myLoad == System.Threading.Volatile.Read(ref _loadSeq))
+                    _ctx.InteractionHelper.SetUiLoadingState(false);
             }
         }
 

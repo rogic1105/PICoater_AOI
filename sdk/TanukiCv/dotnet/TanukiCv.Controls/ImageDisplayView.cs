@@ -160,6 +160,9 @@ namespace TanukiCv.Controls
             _canvas = new ImageCanvas { Dock = DockStyle.Fill };
             _canvas.FitRelativeZoom = false;        // 可放大也可縮小到 fit 以下（同 camReviewMain / 範例 panelMain）
             _canvas.DoubleClickFitToScreen = true;
+            // 使用者 fit/1x 手勢留痕（FlowLog）：縮放序列中 zoom 突然回 fit 才有主人可歸（孤兒判讀規則）
+            _canvas.FitPerformed += (s, e) => _flowLog?.Invoke("fit(double-click)");
+            _canvas.Physical1xPerformed += (s, e) => _flowLog?.Invoke("physical1x(triple-click)");
             _canvas.TripleClickPhysical1x = true;
             _canvas.ClampPan = false;
             _canvas.StatusChanged += OnCanvasStatus;

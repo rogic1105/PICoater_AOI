@@ -329,6 +329,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
             if (idx < 0 || idx >= grabIdInfos.Count) return;
 
             var info = grabIdInfos[idx];
+            FlowTrace.Log($"ui:【單片序號】→ {info.GrabId}");   // intent 行；guard 之後＝只記手動選取
             _selectFromReview(info.GrabId, info.Earliest, info.Latest, idx);
         }
 

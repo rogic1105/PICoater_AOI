@@ -114,7 +114,7 @@ namespace AniloxRoll.Monitor.Forms
                 var info = _dataStatsPresenter.GrabIdInfos[reviewIdx];
                 await LoadGrabStitchedViewGuardRowRangeAsync(info.GrabId, info.Earliest, info.Latest);
                 _reviewDisplayManager?.RefireViewRange();   // 同上：載入完恢復曲線視野跟隨
-                // 2b-ii：fit-on-load 由 ImageDisplayView 首幀自動 fit 承接（換 ID 保視野＝刻意不再 re-fit）
+                // 換序號＝重設視野（2026-07-07 定版）：各 grab 高度不同 → LOD 重綁自帶 fit，視野回全圖＝預期行為
                 _reviewDirty = false;
             }
             else
@@ -200,6 +200,7 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (_dataStatsPresenter.GrabIdNavGuard.IsSet) return;
             if (_imageRepository.FileCount == 0) return;
+            FlowTrace.Log("ui:【時段導航】（cbReviewDate/Time）");   // intent 行；guard 之後＝只記手動
             try
             {
             _stitchCoordinator.ClearStitchedMode();

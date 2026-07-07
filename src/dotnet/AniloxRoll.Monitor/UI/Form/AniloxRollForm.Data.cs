@@ -149,7 +149,12 @@ namespace AniloxRoll.Monitor.Forms
             catch (Exception ex) { Trace.WriteLine($"[OnDataGrabIdSelected] {ex}"); }
         }
 
-        private async void OnReviewGrabIdSelected(string grabId, DateTime earliest, DateTime latest, int idx)
+        // 快速滾序號的載入 debounce（250ms）：滾動中只更新 combo/日期同步（順、零 IO），
+        // 停頓才載入「最後選取」那張；RSC 的最後贏 token 保底（debounce 邊緣並發時舊結果也上不了畫面）。
+        private Timer _reviewLoadDebounce;
+        private (string grabId, DateTime earliest, DateTime latest) _pendingReviewLoad;
+
+        private void OnReviewGrabIdSelected(string grabId, DateTime earliest, DateTime latest, int idx)
         {
             try
             {
@@ -157,11 +162,29 @@ namespace AniloxRoll.Monitor.Forms
                     _interactionHelper.NavigateToDateTime(earliest);
                 _presenter.UpdatePeriodNavigationState();
 
-                await LoadGrabStitchedViewGuardRowRangeAsync(grabId, earliest, latest);
-                // 2b-ii：SaveCanvasView/fit（讀已砍 canvas）移除；ImageDisplayView 自管視野
-                _reviewDirty = false;
+                // 分層載入：曲線（輕）即時跟滾動 → 使用者快速掃 chart 找異常；影像（重）settle 才載。
+                _ = _stitchCoordinator.LoadGrabCurvesOnlyAsync(grabId, earliest, latest);
 
-                // 同步 Data tab
+                _pendingReviewLoad = (grabId, earliest, latest);
+                if (_reviewLoadDebounce == null)
+                {
+                    _reviewLoadDebounce = new Timer { Interval = 250 };
+                    _reviewLoadDebounce.Tick += async (s2, e2) =>
+                    {
+                        _reviewLoadDebounce.Stop();
+                        var p = _pendingReviewLoad;
+                        try
+                        {
+                            await LoadGrabStitchedViewGuardRowRangeAsync(p.grabId, p.earliest, p.latest);
+                            _reviewDirty = false;
+                        }
+                        catch (Exception ex) { Trace.WriteLine($"[ReviewLoadDebounce] {ex}"); }
+                    };
+                }
+                _reviewLoadDebounce.Stop();
+                _reviewLoadDebounce.Start();   // 重壓計時：每次選取重新等 250ms，停下才載入最終選取
+
+                // 同步 Data tab（便宜，維持即時）
                 if (!_dataStatsPresenter.GrabIdCrossGuard.IsSet
                     && cbDataId.Items.Count > 0 && idx < cbDataId.Items.Count)
                 {
