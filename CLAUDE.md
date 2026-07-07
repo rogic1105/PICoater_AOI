@@ -196,7 +196,7 @@ PICoater_AOI/
 | `sdk/MIL/MilGrabber.Core/MilCamera.cs` | MIL 取像/顯示封裝 library（一台相機=一個 MilCamera）：alloc/grab/display/參數/系統資訊/CLProtocol/在線/mouse hook/buffer helper(`GetFrameBytes`/`PutDisplayBytes`/`CopyToDisplay`/`ClearDisplay`)/線掃最大速率(`GetLineRateMaxHz` via CLProtocol M_FEATURE_MAX，grab 後 ~3s 可得)；`FrameReady`/`OnMouseDataChanged`/`OnCameraClicked` 事件。純 MIL 範圍，檢測等非 MIL 由訂閱者做。**ctor `devNum` = 板內固定絕對 device 位置（0-based，對應 M_DEVx）唯一轉換點**：caller（主程式 LiveCameraManager + sample）一律傳 json 固定值、不加 M_DEV0 偏移（相機實體配線固定，少槽卡只列實際 channel）；本機型 M_DEV0=0 為 identity，未來 M_DEV0≠0 只改 ctor 這一行。**原 876 行 God object 已按職責拆 4 partial（同 `partial class MilCamera`，純分檔零邏輯變更）：核心 `MilCamera.cs`（欄位/ctor/Initialize/Grab/Hook/Merge target/Dispose，~342）+ `MilCamera.Params.cs`（Exposure/LineRate/GrabHeight + `MilCameraParams` 公式類）+ `MilCamera.Display.cs`（buffer I/O + 主/副顯示 + mouse hooks）+ `MilCamera.Telemetry.cs`（唯讀遙測 getter）+ `MilCamera.CLProtocol.cs`（CLProtocol 啟用/套參）。Merge target 刻意留核心（hook 內呼叫，耦合緊）**。`MilCameraParams`（純函式參數公式單一真相：`CalcExposureMaxUs(lrHz,expMin,expMaxCap)`=曝光上限=900000/線掃 clamp；主程式+範例共用，勿再各自抄公式）移至 `MilCamera.Params.cs`。**`SetGrabHeight`：①開頭同值守門（高度未變+buffer已配→直接 return 不 realloc）＝防套設定時多餘 realloc 撞背景 CLProtocol enable→CAM1 stall（改高度 stall 主因，2026-06-24 dropdiag 定案）；②改尺寸前 `M_STOP+M_WAIT`+`MdigControl(M_GRAB_ABORT)` drain；③熱路徑禁 MsysInquire/MdigInquire（會 cam1 stall）；高度硬上限 `AcquisitionDefaults.MaxGrabHeightPx=12000`（固定、不分台數；12062 是 grab 中拉單台真硬限）；勿寫相機 Height feature；詳見 `/modify-acquisition` skill** |
 | `sdk/MIL/MilGrabber.Core/MultiCameraMerger.cs` | 多相機即時合圖「工頭」library（純 MIL、無 WinForms）：接收一組 MilCamera，算佈局（全域範圍/xOffset/重疊中點分界）+ 分配合併 buffer + 每台 SetMergeTarget。`EnableMerge`/`RefreshLayout` 共用唯一來源 `ApplyLayout`（先設 RefOpsMm 再算 xOffset，**順序鎖死**避免除以 0 變垃圾值）。回傳 `MergedBuffer` + 座標(MinStartMm/RefOpsMm/TotalW/H) 供上層「秀」。貼圖在 MilCamera grab hook（`SetMergeTarget`/`CopyDisplayToMergeTarget`） |
 | `Acquisition/CameraFrameSaver.cs` | 存檔 I/O：SaveCapture（背景執行緒）、SaveJpegFromBytes、SaveCurveBinFromArray、Resource Log（CSV: CPU%/RAM/VRAM/GPU ms/Live/Review/StitchMode；啟動時 MergeOldResourceLogs 把「昨天以前」的小檔按日合併為 resource-monitor-yyyyMMdd.csv）。**tick 側車**：`AppendTickSidecar` 把每幀硬體 frame-start tick（`CaptureContext.FrameStartTicks`，源 `MilCamera.LastFrameStartTicks`）寫進當日資料夾 `_ticks.csv`（`baseName,ticks`，static lock 多相機共寫）→ 供回顧 tick 對位精準補黑 |
-| `Services/FlowTrace.cs` | **[Flow] 顯示資料流跡唯一出口**：咽喉點各一行（AllocateCameras/StartGrab/StopGrab/FreeCameras/ApplyMainDisplayMode/Enable-Teardown view/firstFrame/SwitchMainDisplay/EnableGlobalMerge），每行帶時間戳+執行緒 ID → 落 `Logs\trace-*.log`。驗證＝與 `/verify-flows` 的 flow 契約（EVT）比對：執行緒內驗全序、跨執行緒驗因果+完整性（不驗非決定性交錯）。首幀追蹤每次 StartGrab 重置＝每輪 grab 都證明「幀有流到 view」 |
+| `Services/FlowTrace.cs` | **[Flow] 資料流跡唯一出口**：使用者動作（ui:/set: intent）＋接線咽喉點＋view 決策（autoFit/lodRebind/clearFrame）＋業務事件（MURA 超標）各一行，每行帶時間戳+執行緒 ID → 落 `Logs\trace-*.log`。**行清單與契約（EVT）唯一來源＝`/verify-flows`**（此處不列舉防過時）。驗證＝執行緒內驗全序、跨執行緒驗因果+完整性；「裝儀器＝同步契約」鐵則見 §Git Workflow 檢查清單 |
 | `Services/FrameTickIndex.cs` | **跨相機幀對齊唯一來源**（回顧合圖補黑）：各台「各自獨立掉不同幀」→ seq 會歪、檔名軟體協調戳不知道實際掉哪幀 → 用硬體 frame-start tick（同板 125MHz 同 epoch，物理同時兩幀差 <0.5ms）就近聚類成「時間槽」。`LoadTickMap`（讀 `_ticks.csv` 側車）+ `BuildAlignedByTick`（聚類→各 camId 對齊清單，缺槽=null=補黑）+ `BuildAlignedByStitchKey`（舊資料無側車的檔名 fallback）+ `ComputeThreshold(period)=period/2`（**同槽容差規則單一來源**，回顧批次 + 監控瀑布串流共用）。回傳餵 `GrabImageStitcher.StitchCamera`/`CurveMergeHelper.MergeRowCurves`（吃 null=黑布占位）。**⚠ 跨板 tick 不可相減**（cam1-4 板0/cam5-7 板1 epoch 不同）：現裸全域排序，**7 台跨板會錯配，現在沒事只因測試都同板**（待補 board offset 正規化，連瀑布一起） |
 | `UI/Widgets/WaterfallView.cs` | 監控主畫面「瀑布圖」（`he_MainDisplay`==Waterfall）：全幅 7 相機合圖每幀往下接成捲動長圖。**全解析分塊儲存**（`ChunkRows=512` chunk，避開 2GB byte[] 上限）+ **LOD 只在顯示時降採樣**（provider 邊讀邊 nearest 到 dest，不配巨圖暫存）；固定總高 `WaterfallTotalHeight`（預設 30000）。**Ring 循環**＝繞回頂端覆蓋最舊+寫頭畫亮掃描線接縫；**Restart 重來**＝滿了清黑幕重畫。**跨相機對齊與回顧同源**：吃 `AniloxCamera.OnDisplayFrame` 的硬體 tick → 串流半週期聚類成時間槽（pending 槽緩衝 + hold-back grace flush，避免同瞬間晚到幀偽掉幀；週期＝運行最小 delta 抗掉幀；thr 共用 `FrameTickIndex.ComputeThreshold`），某台缺幀那欄補黑。背景 queue+worker 寫 memcpy 不卡 UI。佈局走 `LiveCameraManager.FeedWaterfallLayout`（合圖開用 merger 7 槽、沒開退回設定 start/ops）。**槽數＝配置相機數（7，非線上台數）** |
 | `Services/CaptureFileNaming.cs` | 擷取檔名規則單一真相：suffix 常數（`_raw.jpg`/`_proc_v\|h.jpg`/`_mean_v\|max_v\|mean_h\|max_h.bin` + 5 個 legacy fallback）+ `IsRawJpg`/`StripRawJpg`/`BaseFromImagePath`（影像路徑→base 反推）/`ResolveProcJpg`（v/h+legacy 解析）。寫端（CameraFrameSaver/InspectionEngine 存檔）+ 讀端（CurveMergeHelper/ReviewStitchCoordinator/GrabImageStitcher/ImageRepository/InspectionStatisticsService）共用 —— 改命名格式只改這。**只統一檔名字串，fallback 載入行為留各 caller**（避免改 edge case）。另含背景檔名 `BgBin(w,camId)`/`BgGlob`/`BgGlobForCam(camId)`（AniloxRollForm 載/掃背景共用） |
@@ -542,10 +542,15 @@ docs/
 
 **未經使用者明確說「commit/push」，不得主動執行任何 git commit 或 git push。**
 
-**每次 commit / push 前，必須先更新相關文件：**
+**commit 前檢查清單（逐項勾，是動作不是原則）：**
 
-1. `CLAUDE.md` — 更新關鍵檔案速查、Skills 路由
-2. `.claude/skills/*.md` — 更新對應的 skill 注意事項（根據改動內容選擇）
-3. `README.md` — 更新對外專案說明（若有重大功能變更）
+1. ☐ **Build Release|x64 過**（零 CS 錯誤；exe 被跑著的 app 鎖住只是複製失敗，code 仍須零錯）
+2. ☐ **CLAUDE.md**：關鍵檔案速查、Skills 路由、控制項速查（改過控制項 → grep 驗證 Name 存在於 Designer）
+3. ☐ **skills 同步**：改到哪個領域 → 對應 skill 更新。**鐵則：「裝 flow 儀器」和「更新 /verify-flows 契約」
+   是同一個動作**——新 intent 行→補 intent 清單、新決策/自檢行→補對應契約/不變量
+   （拆成兩步必漏，2026-07-07 實證）
+4. ☐ **退場字眼歸零**：這批有退場的東西（控制項/模式/API）→ grep 該字眼於 app code+註解+文件應為 0
+5. ☐ **README.md**（僅重大功能變更）
+6. ☐ **分邏輯 commit**：一批多主題 → 按主題拆筆；訊息寫 why 不只 what
 
 確保文件反映最新的程式碼狀態，讓下次對話能快速上手。
