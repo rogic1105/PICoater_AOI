@@ -458,7 +458,7 @@ PICoater_AOI/
 | Native C API 新增/修改 | `/add-native-api` | P/Invoke 宣告、C++ 實作範本 |
 | 新增測試 | `/add-test` | Unit/Integration/Stress 三層分類判準 + 模板 |
 | 上下方向、列 chart、垂直座標、overlay Y | `/row-chart-coordinates` | 座標定版規格＋轉換架構（全鏈僅兩轉換點）＋排版鐵則（IsReversed 永久禁用）＋log 驗證判準 |
-| 顯示/接線改動後驗證、控制項流程追蹤 | `/verify-flows` | UI 動作流程契約（EVT）：F1~F8 flow 契約 + 偏序驗證規則 + `[Flow]` log 比對（改 LiveCameraManager/LiveDisplayCoordinator/ImageDisplayView/WaterfallView 後必跑）；含任意控制項 call chain 追蹤法 |
+| 顯示/接線改動後驗證、控制項流程追蹤、**方向/座標/單位/轉換鏈**（語意病→轉換點盤點） | `/verify-flows` | UI 動作流程契約（EVT）：F1~F8 flow 契約 + 偏序驗證規則 + `[Flow]` log 比對（改 LiveCameraManager/LiveDisplayCoordinator/ImageDisplayView/WaterfallView 後必跑）；含任意控制項 call chain 追蹤法 |
 | 現場部署 / 網路 / SMB | `/deploy-network` | 雙網段架構、單 NIC 雙 IP、匿名 Guest SMB、編碼陷阱（bat ASCII / ps1 UTF-8 BOM / JSON UTF-8 讀法）、secedit SeDenyNetworkLogonRight |
 
 > Build / commit / 文件同步 不是 skill：規則直接在本檔（§Build 驗證、§Git Workflow 規則、§Harness 架構），每次照做。

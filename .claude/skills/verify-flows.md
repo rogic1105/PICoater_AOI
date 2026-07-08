@@ -1,6 +1,8 @@
 # verify-flows — UI 動作流程契約（EVT）與驗證
 
-app ＝【監控/回顧/報表】三個 tab。改任何「使用者動作 → 接線 → 顯示/資料連動」流程後**必跑本 skill**：
+app ＝【監控/回顧/報表】三個 tab。本 skill 治兩類病（見「兩類病、兩類工具」章）：
+①非同步接線病（事件/訂閱/時序）→ log 契約；②同步語意病（方向/座標/單位/轉換）→ 轉換點盤點＋正向拆解。
+改任何「使用者動作 → 接線 → 顯示/資料連動」流程後**必跑本 skill**：
 先「模擬測試」（順 code 推演對契約）再（必要時）真機比對 log。
 顯示接線核心檔（改到必跑）：LiveCameraManager / LiveDisplayCoordinator / ImageDisplayView /
 WaterfallView / AniloxRollForm.Live|Background|Review。
