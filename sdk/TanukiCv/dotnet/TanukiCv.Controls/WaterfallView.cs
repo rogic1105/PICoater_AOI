@@ -637,7 +637,7 @@ namespace TanukiCv.Controls
             double yPitch = _rowPitchMm > 0 ? _rowPitchMm : _refOpsMm;
             double minStartMm = MinStartMm();
             double curMmX = PixelMmMapper.PixelToMm(imageX, minStartMm, _refOpsMm);
-            double curMmY = imageY * yPitch;
+            double curMmY = ToLogicalY(imageY) * yPitch;   // 游標與視野同一座標約定（flip 時 0 在畫面底；原漏換算）
 
             _canvas.SetPhysicalCalibration(_refOpsMm, _screenMmPerPx);
             status = new ImageDisplayView.CursorStatus
@@ -664,7 +664,7 @@ namespace TanukiCv.Controls
             double minStartMm = MinStartMm();
             double curMmX = PixelMmMapper.PixelToMm(imageX, minStartMm, _refOpsMm);
             double yPitch = _rowPitchMm > 0 ? _rowPitchMm : _refOpsMm;
-            double curMmY = imageY * yPitch;
+            double curMmY = ToLogicalY(imageY) * yPitch;   // 同上：游標走 logical（flip 時 0 在畫面底）
             string camText = camId > 0 ? $"CAM {camId}" : "瀑布";
             return $"{camText} ({curMmX:F2}, {curMmY:F2})";
         }
@@ -688,9 +688,11 @@ namespace TanukiCv.Controls
             double logicalTop = ToLogicalY(visualTop);
             double logicalBot = ToLogicalY(visualBot);
             double yPitch = _rowPitchMm > 0 ? _rowPitchMm : _refOpsMm;
-            topMm = Math.Min(logicalTop, logicalBot) * yPitch;
-            botMm = Math.Max(logicalTop, logicalBot) * yPitch;
-            return topMm < botMm;
+            // 邊界值保留「邊的身份」（top＝畫面上緣的 logical 值；flip 時上緣＝大值）——
+            // 原 min/max 排序毀掉邊界語意 → overlay 上下邊顯錯（與游標兩套座標）。排序需求由消費端自理。
+            topMm = logicalTop * yPitch;
+            botMm = logicalBot * yPitch;
+            return topMm != botMm;
         }
 
         private double MinStartMm()

@@ -346,7 +346,7 @@ namespace TanukiCv.Controls
             if (VerticalZeroAtBottom)   // 垂直物理座標（同 OnCanvasStatus）：由下而上＝0 錨定畫面底
             {
                 double totalYMm = TotalRowsMm(yPitch, sf);
-                if (totalYMm > 0) { double t = totalYMm - botMm, b = totalYMm - topMm; topMm = t; botMm = b; }
+                if (totalYMm > 0) { double t = totalYMm - topMm, b = totalYMm - botMm; topMm = t; botMm = b; }   // 各邊映自己的值（勿交叉）
             }
             ViewRangeMmChanged?.Invoke(leftMm, rightMm, topMm, botMm);
         }
@@ -681,8 +681,10 @@ namespace TanukiCv.Controls
                 double totalYMm = TotalRowsMm(yPitch, sf);
                 if (totalYMm > 0)
                 {
-                    double t = totalYMm - botMm, b = totalYMm - topMm;
-                    topMm = t; botMm = b;                    // 翻轉後上緣值 > 下緣值（上大下小＝由下而上）
+                    // 每個邊映射「自己」的物理值（勿交叉調換——2026-07-08 邊界方向錯的根因）：
+                    // 上緣 phys=總高−v_top（大）、下緣 phys=總高−v_bot（小≈0）＝上大下小（由下而上）
+                    double t = totalYMm - topMm, b = totalYMm - botMm;
+                    topMm = t; botMm = b;
                     curMmY = totalYMm - curMmY;
                 }
             }

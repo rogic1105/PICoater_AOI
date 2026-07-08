@@ -41,16 +41,6 @@ namespace TanukiCv.Controls
         /// <summary>直接設 row pitch（mm/影像列）；純剖面用（CursorProfile.OpsYmm）。</summary>
         public void SetRowPitch(double mmPerRow) { if (mmPerRow > 0) _rowPitchMm = mmPerRow; }
 
-        /// <summary>位置「值方向」（⚠ 不用 AxisY.IsReversed——它會連動重排軸標籤/InnerPlot、毀掉
-        /// 調校好的排版，2026-07-08 第三次驗證；排版屬性零接觸）。改用「資料映射＋視窗鏡射」：
-        /// true＝物理 0 渲染在圖表頂端（由上而下/瀑布）；false＝0 在底端（由下而上，MSChart 預設向上）。
-        /// 資料點畫在 _zeroAtTop ? (total−phys) : phys；視野視窗同步鏡射（UpdateViewRange/UpdateDataAndViewRange）。</summary>
-        private bool _zeroAtTop;
-        public void SetPositionZeroAtTop(bool zeroAtTop) => _zeroAtTop = zeroAtTop;
-
-        /// <summary>物理位置 → 圖表軸值（唯一映射點：資料與視窗共用，方向不可能分岔）。</summary>
-        private double PhysToChart(double physMm, double totalMm) => _zeroAtTop ? totalMm - physMm : physMm;
-
         /// <summary>
         /// 更新 row-wise 曲線資料。meanData[i] / maxData[i] 為 row i 的值（0–255 raw）。
         /// </summary>
@@ -83,7 +73,7 @@ namespace TanukiCv.Controls
                     if (maxData != null && j < maxData.Length && maxData[j] > bucketMax) bucketMax = maxData[j];
                 }
                 int mid = (i + end - 1) / 2;
-                double yMm = PhysToChart(mid * _rowPitchMm, _totalMm);   // 物理→圖表軸值（唯一映射點；total 與視窗鏡射同一基準）
+                double yMm = ZeroAtTop ? (n - 1 - mid) * _rowPitchMm : mid * _rowPitchMm;   // 方向同源映射
                 meanSeries.Points.AddXY(sum / cnt / 255.0, yMm);
                 if (maxData != null)
                     maxSeries.Points.AddXY(bucketMax / 255.0, yMm);
@@ -104,7 +94,7 @@ namespace TanukiCv.Controls
         {
             if (meanData == null || meanData.Length == 0) return;
             if (_chart.ChartAreas.Count == 0) return;
-            if (double.IsNaN(canvasTopMm) || double.IsNaN(canvasBotMm) || canvasTopMm >= canvasBotMm)
+            if (double.IsNaN(canvasTopMm) || double.IsNaN(canvasBotMm) || canvasTopMm == canvasBotMm)
             {
                 UpdateData(meanData, maxData);
                 return;
@@ -113,11 +103,6 @@ namespace TanukiCv.Controls
             int n = meanData.Length;
             _totalMm = n * _rowPitchMm;
 
-            // 視窗與資料同一映射（PhysToChart）：zeroAtTop 時鏡射，映後重排序（chart 需 lo<hi）
-            {
-                double a = PhysToChart(canvasTopMm, _totalMm), b = PhysToChart(canvasBotMm, _totalMm);
-                canvasTopMm = Math.Min(a, b); canvasBotMm = Math.Max(a, b);
-            }
             _logicalTopMm = canvasTopMm;
             _logicalBotMm = canvasBotMm;
             GetAdjustedZoom(canvasTopMm, canvasBotMm, out double zMin, out double zMax);
@@ -148,7 +133,7 @@ namespace TanukiCv.Controls
                     if (maxData != null && j < maxData.Length && maxData[j] > bucketMax) bucketMax = maxData[j];
                 }
                 int mid = (i + end - 1) / 2;
-                double yMm = PhysToChart(mid * _rowPitchMm, _totalMm);   // 物理→圖表軸值（唯一映射點；total 與視窗鏡射同一基準）
+                double yMm = ZeroAtTop ? (n - 1 - mid) * _rowPitchMm : mid * _rowPitchMm;   // 方向同源映射
                 meanSeries.Points.AddXY(sum / cnt / 255.0, yMm);
                 if (maxData != null)
                     maxSeries.Points.AddXY(bucketMax / 255.0, yMm);
@@ -161,12 +146,7 @@ namespace TanukiCv.Controls
         public void UpdateViewRange(double canvasTopMm, double canvasBotMm)
         {
             if (_chart.ChartAreas.Count == 0) return;
-            if (double.IsNaN(canvasTopMm) || double.IsNaN(canvasBotMm) || canvasTopMm >= canvasBotMm) return;
-            // 視窗與資料同一映射（PhysToChart）：zeroAtTop 時鏡射，映後重排序
-            {
-                double a = PhysToChart(canvasTopMm, _totalMm), b = PhysToChart(canvasBotMm, _totalMm);
-                canvasTopMm = Math.Min(a, b); canvasBotMm = Math.Max(a, b);
-            }
+            if (double.IsNaN(canvasTopMm) || double.IsNaN(canvasBotMm) || canvasTopMm == canvasBotMm) return;
 
             _logicalTopMm = canvasTopMm;
             _logicalBotMm = canvasBotMm;
@@ -247,12 +227,20 @@ namespace TanukiCv.Controls
         private void GetAdjustedZoom(double canvasTopMm, double canvasBotMm,
                                      out double zoomMin, out double zoomMax)
         {
-            double chartHighY = _totalMm - canvasTopMm;
-            double chartLowY  = _totalMm - canvasBotMm;
+            // canvasTop/Bot＝畫面上/下緣的「輸入空間」值（邊界身份保留，非排序值）。
+            // 由上而下（ZeroAtTop）：內部值=total−輸入（原調校）；由下而上：直通（天然軸向，零轉換）。
+            double chartHighY = ZeroAtTop ? _totalMm - canvasTopMm : canvasTopMm;
+            double chartLowY  = ZeroAtTop ? _totalMm - canvasBotMm : canvasBotMm;
             double span = chartLowY - chartHighY;
             zoomMax = chartHighY + _cachedFTop    * span;
             zoomMin = chartHighY + _cachedFBottom * span;
         }
+
+        /// <summary>方向旗標（唯一決策點，資料映射/視窗換算/標籤三者同源——排版/渲染零接觸）：
+        /// true（原調校行為）＝0 在圖表「頂端」（由上而下）：資料 (n-1-i)、視窗 total−、標籤反轉；
+        /// false＝0 在「底端」（由下而上）＝軸的天然方向：資料/視窗/標籤**全直通、零轉換**。
+        /// 2026-07-08 抵銷層歸零重構：外層（adapter）不得再有任何鏡射。</summary>
+        public bool ZeroAtTop { get; set; } = true;
 
         private void OnCustomizeLabels(object sender, EventArgs e)
         {
@@ -261,8 +249,8 @@ namespace TanukiCv.Controls
             foreach (CustomLabel label in axisY.CustomLabels)
             {
                 double mid = (label.FromPosition + label.ToPosition) / 2.0;
-                double inverted = _totalMm - mid;
-                label.Text = Math.Round(inverted).ToString("F0");
+                double shown = ZeroAtTop ? _totalMm - mid : mid;
+                label.Text = Math.Round(shown).ToString("F0");
             }
         }
 
