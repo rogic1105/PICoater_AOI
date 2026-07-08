@@ -62,6 +62,18 @@ WaterfallView / AniloxRollForm.Live|Background|Review。
 【明細列表】【報表序號】【序號範圍】【期間-年/月/日/全局】【良率導航】【篩選異常】+
 S0 通用（所有 PropertyGrid 設定自動記 `ui:設定[名]=值`）。新增會動到顯示的入口 → intent 行一併加。
 
+## 本檔的效力位階（先讀這個再用本檔）
+
+1. **契約＝「當下定案的行為描述」，不是真理**。log 與契約不符時有兩種可能：
+   改壞了（修 code）、或行為該進化（修契約）——**判定權在使用者/設計意圖，不在文件**。
+2. **架構演化的正確姿勢**：先「有意識地改契約」（commit 訊息聲明哪些條款作廢＋為何），
+   再改 code。契約擋的是「無意識偏離」，不是擋演化——被契約否決的架構改動，
+   正確反應是質疑契約，不是放棄改動。
+3. **分級**：🔒使用者定版鐵則（列圖表排版嚴禁動／拖曳連動不可節流／IsReversed 禁用——
+   只有使用者能解鎖）vs 一般契約（agent 可提案修訂，說明理由）。
+4. **文件會過時**：與 code 衝突時，code 是「事實」、文件是「意圖」——先 git 考古判斷
+   哪邊該改，勿直接信任任一邊（蓋章/驗證紀錄跟語意版本綁定，版本變了要重驗）。
+
 ## 兩類病、兩類工具（2026-07-08 座標戰役 30+ 輪的教義修正）
 
 | 病類 | 特徵 | 工具 |
@@ -160,6 +172,8 @@ AutoAllocateCameras(Form)                    顯示基線 set:[顯示基線] 一
 不變量：view 建立前必 teardown（防空訂閱家族）；MdispSelectWindow 必帶 panelHandle 守門。
 
 ### F2 開始抓取（btnLiveGrab，已配置）
+
+**log-flow（執行期腳印＝判準）**
 ```
 T1: StartGrab（cams=M）
 T1: ApplyMainDisplayMode → 同模式    ← 冪等：不得出現 create/teardown 行
@@ -167,13 +181,88 @@ Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線�
 （首幀齊後進入穩態 → 適用「穩態靜默通則」：無互動下不得再有顯示狀態變更行）
 ```
 
+**code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
+```
+btnLiveGrab_Click@AniloxRollForm.Live.cs             intent 行 ui:【開始抓取】鈕
+ ├（_bgPreviewActive）ClearBackgroundPreview@AniloxRollForm.Background.cs
+ │   └ FreeCameras@LiveCameraManager.cs（→ F7）
+ ├ AreCamerasHwReady@LiveCameraManager.cs 未就緒 → return   ← 守門：擋 IO 觸發路徑
+ │                                                （IoStartGrab 直呼本方法繞過按鈕灰色）
+ ├（未抓取→啟動）await Task.Run(LightTurnOn@AniloxRollForm.HardwareStatus.cs)
+ │   → await Task.Delay(LightWarmupMs)               ⚠ 序列埠寫入一律背景（UI 執行緒零 MIL/序列埠鐵則）
+ ├（未抓取）ResetLiveWaterfallRowChart@AniloxRollForm.Live.cs ＋ _muraExceedLatch 歸零
+ │   ＋ UpdateMuraLed(false) ＋ ClearMura@IoGrabController.cs   ← MURA 閂鎖歸零（latch 非脈衝，M1）
+ ├（未配置）EnsureAllocatedAndToggleGrab@LiveCameraManager.cs → AllocateCameras（=F1 全序）→ ToggleGrab
+ │   └（回 form）LoadBackgroundBins@AniloxRollForm.Background.cs ＋ EnableGlobalMerge@LiveCameraManager.Merge.cs
+ ├（已配置）ToggleGrab@LiveCameraManager.cs
+ │   └ StartGrab@LiveCameraManager.cs
+ │      ├ WaitStopDrain@LiveCameraManager.cs         ← 不變量：上輪停止排水未完不得 M_START（快速停→開競態）
+ │      ├ ResetFlowFirstFrame@LiveDisplayCoordinator.cs（每輪 grab 重驗「幀有流到 view」）
+ │      ├ IsLiveGrabbing = true
+ │      ├ ApplyMainDisplayMode@LiveDisplayCoordinator.cs   ← 冪等（view 已存在早退）＝本 flow 不得出現 create/teardown 行
+ │      ├ ResetWaterfallIfActive@LiveDisplayCoordinator.cs → Reset@WaterfallView.cs（清舊圖＋重置 tick 對齊，防新幀接舊網格錯位）
+ │      └ per-cam SetUserGrabIntent(true)@AniloxCamera.cs
+ │         └ SetUserGrabIntent@MilCamera.cs → ApplyGrabState@MilCamera.cs → MdigProcess(M_START)
+ ├（啟動成功）NextGrabId@InspectionLogService.cs → _currentGrabId
+ └ UpdateGrabButton@AniloxRollForm.Live.cs
+（每幀幀流，MIL 回呼執行緒 Tn）
+ProcessingFunction@MilCamera.cs（MdigProcess hook，static）
+ └ FrameReady 事件 → OnMilFrameReady@AniloxCamera.cs
+    ├ TryApplyPicoaterRidge@AniloxCamera.cs（GPU 檢測，一律跑）  ⚠ _picoaterLock＋尺寸守門（高度變更瞬間跳過幀防 AV）
+    │  ├ ProcessImage@AoiService.cs（P/Invoke TanukiPipeline_Process；fused 存檔縮圖 wantResize＝grab-level 決策）
+    │  ├ OnLiveCurveData 事件 → OnLiveCurveData@AniloxRollForm.Live.cs → CheckLiveMura("v")（M1）＋ _liveOverviewDirty=true
+    │  └ OnLiveRowCurveData 事件 → OnLiveRowCurveData@AniloxRollForm.Live.cs → CheckLiveMura("h")
+    │     ＋ SafeBeginInvoke→UI → OnLiveRowCurveDataUi@AniloxRollForm.Live.cs（列 chart）
+    ├ PutDisplayBytes@MilCamera.Display.cs（強化）｜CopyToDisplay@MilCamera.Display.cs（原圖）
+    ├ OnDisplayFrame 事件（bytes）→ OnCameraDisplayFrame｜OnCameraWaterfallFrame@LiveDisplayCoordinator.cs
+    │  ├ 模式錯掛自檢（⚠ 契約違規 行）＋ FlowFirstFrame（firstFrame 行，每台恰一）
+    │  ├（即時）PushFrame@ImageDisplayView.cs（存快照＋餵 ThumbStrip＋_mainDirty）
+    │  └（瀑布）PushFrame@WaterfallView.cs → PlaceFrame（tick 網格錨定）→ TryFlush → ComposeJob
+    │      （佈局=MergeLayout.Compute 唯一來源）→ KickWriter → Task.Run WriteBand（背景 memcpy，不卡 UI）
+    │      ＋ PushFrame@ThumbStrip.cs（縮圖一律即時，兩模式同源）
+    ├（hook 返回 MilCamera 後）CopyDisplayToMergeTarget@MilCamera.cs   ← 合圖貼圖在 grab hook（display buffer 更新後）
+    └ TrySaveCapture@AniloxCamera.cs（→ CameraFrameSaver 背景存檔）
+（顯示重繪，UI 執行緒 T1）
+RefreshMain@ImageDisplayView.cs（33ms _timer）
+ ├ UpdateReverseThumbSync@ImageDisplayView.cs（快拖補刷）
+ ├（LOD）lodRebind 留痕 → EnableLod/RefreshLod@ImageCanvas.cs
+ └（非 LOD）BuildMerge｜BuildSingle@ImageDisplayView.cs → autoFit(firstFrame) 留痕 → FitToScreen@ImageCanvas.cs
+     → RefireViewRange@ImageDisplayView.cs        ← 首幀 fit＋同步補發視野＝曲線第一筆就對齊、不閃全幅
+瀑布顯示：_flushTimer(30ms)@WaterfallView.cs → TryFlush ＋ PushLodRefresh ＋ UpdateCenterCam
+```
+
 ### F3 停止抓取
+
+**log-flow（執行期腳印＝判準）**
 ```
 T1: StopGrab
 （之後不得再出現 firstFrame / 任何 [Flow] 顯示行，直到下一個動作）
 ```
 
+**code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
+```
+btnLiveGrab_Click@AniloxRollForm.Live.cs（wasGrabbing=true，同鈕 toggle）   intent 行 ui:【開始抓取】鈕
+ └ ToggleGrab@LiveCameraManager.cs
+    └ StopGrab@LiveCameraManager.cs
+       ├ FlowTrace "StopGrab" ＋ IsLiveGrabbing=false（先翻旗標）
+       └ _stopDrainTask = Task.Run(Parallel.ForEach cams → SetUserGrabIntent(false))
+          ⚠ 排水整包背景：Parallel.ForEach 會徵用「呼叫執行緒」當 worker——在 UI 執行緒跑＝
+             按停止時 UI 被抓去跑 M_STOP+M_WAIT（低線掃秒級凍結，2026-07-07 [UiStack] 定罪）
+          └（背景執行緒）SetUserGrabIntent@AniloxCamera.cs → SetUserGrabIntent@MilCamera.cs
+             → ApplyGrabState@MilCamera.cs
+                └ DrainGrab@MilCamera.cs      ← 順序鎖死：M_STOP+M_WAIT（drain 佇列）→ M_GRAB_ABORT（清 in-flight）；
+                                                 唯一來源（停止與 SetGrabHeight 改尺寸前共用）
+（form 收尾，T1）
+ ├ Task.Run(LightTurnOff@AniloxRollForm.HardwareStatus.cs)   ⚠ [UiStack] 曾定罪停止時卡 SerialStream.Write → 一律背景
+ ├ TriggerRetentionAndFlagAsync@AniloxRollForm.HardwareStatus.cs
+ ├ UpdateMuraLed(false) ＋ ClearMura@IoGrabController.cs   ← MURA latch 清除時機＝檢測結束（M1；手動流程不經 FSM 必須自清 DO）
+ └ UpdateGrabButton@AniloxRollForm.Live.cs
+競態收口：下一次 StartGrab / FreeCameras 開頭 WaitStopDrain@LiveCameraManager.cs（排水未完等它，平時零成本）
+```
+
 ### F4 切「主畫面顯示」設定（即時↔瀑布，即時生效）
+
+**log-flow（執行期腳印＝判準）**
 ```
 T1: ApplyMainDisplayMode → 新模式
 T1: Teardown{舊 view}（unsubscribe M）
@@ -181,7 +270,31 @@ T1: {新 view} create + subscribe M
 （grab 中切換：接著每台在線相機 firstFrame → 新 view）
 ```
 
+**code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
+```
+propertyGridSettings.PropertyValueChanged → _propertyGrid_PropertyValueChanged@AniloxRollForm.cs
+ └ NotifyExternalChange@SettingsHub.cs            ← SSoT：所有變更走 Hub（Source=PropertyGrid）
+    └ Changed 事件 → OnSettingChanged@AniloxRollForm.cs（唯一 dispatcher，semaphore 序列化；勿拆）
+       └ HandleLiveLayoutSettingsChanged@AniloxRollForm.Live.cs（name==he_MainDisplay）
+          ├ FlowTrace "ui:設定[主畫面顯示] → …"（intent 行）
+          ├ ResetLiveWaterfallRowChart@AniloxRollForm.Live.cs（列 chart 瀑布緩衝歸零）
+          └ ApplyMainDisplayMode@LiveCameraManager.Display.cs（forwarder）
+             └ ApplyMainDisplayMode@LiveDisplayCoordinator.cs   ← 模式單一決策點（he_MainDisplay 唯一入口）＋錯掛自檢旗標歸零
+                ├ →瀑布：TeardownImageDisplay@LiveDisplayCoordinator.cs（unsubscribe OnDisplayFrame＋Dispose＋GPU LOD Release）
+                │        → EnableWaterfallDisplay@LiveDisplayCoordinator.cs
+                │           （new WaterfallView＋new ThumbStrip〔縮圖一律即時，鐵則1〕＋FeedWaterfallLayout
+                │             ＋subscribe 各 cam.OnDisplayFrame）
+                └ →即時：DisableWaterfallDisplay@LiveDisplayCoordinator.cs（unsubscribe＋Dispose view+thumbs）
+                         → EnsureImageDisplay@LiveDisplayCoordinator.cs
+                            （new ImageDisplayView＋ApplyImageDisplayOptions〔FlipVertical/VerticalZeroAtBottom＝
+                              轉換點#1/#3〕＋SetLayout＋subscribe＋ClearMissingCameraFrames＋SetLodMode）
+（grab 中切換）幀流不中斷 → 新 view FlowFirstFrame → 每台在線相機 firstFrame → 新 view
+不變量：Enable*/Ensure* 冪等（view!=null 早退）→ 建新 view 前必先 teardown 舊 view（否則殘留舊訂閱；與 F1/F7 對稱）
+```
+
 ### F5 點縮圖/狀態字（縮圖→主畫面連動）
+
+**log-flow（執行期腳印＝判準）**
 ```
 即時模式點縮圖：T1: SwitchMainDisplay cam=N center=False
   ← 置中由 ImageDisplayView「內部」完成（thumb click → CenterOnCamera），外部呼叫只同步選中 → False 是對的
@@ -190,7 +303,34 @@ T1: {新 view} create + subscribe M
 （兩者皆：主畫面置中到 cam N、橘框=N）
 ```
 
+**code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
+```
+即時模式點縮圖（置中在 view 內部完成）：
+ThumbView.MouseClick@ThumbStrip.cs → SelectRequested 事件
+ └ ThumbStrip.SelectRequested handler（ctor 內）@ImageDisplayView.cs
+    ├（合圖）CenterOnCamera@ImageDisplayView.cs   ← 內部置中：pan 定位該相機槽中心（保 zoom；用 _mergePlacements 同份佈局）
+    ├ SetSelected@ImageDisplayView.cs（橘框）
+    └ SelectRequested 事件 → ImageSelectCamera@LiveDisplayCoordinator.cs
+       → SwitchMainDisplay(camId)＝center=False    ← False 是對的（置中已在 view 內部做完，再置中＝重複/回彈）
+瀑布模式點縮圖：
+ThumbView.MouseClick@ThumbStrip.cs → _waterfallThumbs.SelectRequested handler
+（EnableWaterfallDisplay 內）@LiveDisplayCoordinator.cs → SwitchMainDisplay(idx+1, centerView:true)
+任一模式點狀態字/縮圖底 panel（浮動 label）：
+displayPanel/status.MouseClick（SetupLivePanel 內）@LiveDisplayCoordinator.cs → SwitchMainDisplay(cameraIndex, centerView:true)
+共同下游：SwitchMainDisplay(cameraIndex, centerView)@LiveDisplayCoordinator.cs
+ ├（InvokeRequired）BeginInvoke 自轉 UI 執行緒
+ ├ Flow "SwitchMainDisplay cam=N center=…"
+ ├ SetSelected@ImageDisplayView.cs ／ SetSelected@ThumbStrip.cs（橘框＝選中框唯一視覺來源）
+ ├（centerView=true）CenterOnCamera@ImageDisplayView.cs｜CenterOnCamera@WaterfallView.cs   ← coordinator 置中（契約 True 分支）
+ └ per-cam SetSecondaryDisplay(IntPtr.Zero)@AniloxCamera.cs   ← 顯示鐵則：任何模式不綁原生視窗到 camLiveMain
+另一入口（瀑布主畫面點擊選台，center=False）：
+OnCanvasMouseClick@WaterfallView.cs → SelectRequested 事件 → OnWaterfallSelectRequested@LiveDisplayCoordinator.cs
+ → SwitchMainDisplay(camId)（畫布點擊選取＝不置中，否則蓋掉使用者拖出的視野）
+```
+
 ### F6 拖動主畫面（主畫面→縮圖反向連動）
+
+**log-flow（執行期腳印＝判準）**
 ```
 （不得出現任何 center=True 行——出現即回彈 bug）
 T1: centerCam → camX（IC|WF）   ← 中心相機每跨一台一行（快拖連續數行=正常；跳號=補刷失效）
@@ -198,7 +338,35 @@ T1: centerCam → camX（IC|WF）   ← 中心相機每跨一台一行（快拖�
   兩者皆有 30/33ms timer 補刷，快拖不跳格）
 ```
 
+**code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
+```
+OnMouseMove@ImageCanvas.cs（拖曳中；UI 執行緒 T1）
+ ├ pan 每 move 累積＋重繪限流 ~120fps（只限「畫」，MouseUp 尾緣補繪）   ← 不變量：paint 風暴防護（IC stats paints ≤~130/s）
+ └ TriggerStatusChange@ImageCanvas.cs（~30fps 限流）→ StatusChanged 事件
+即時分支：OnCanvasStatus@ImageDisplayView.cs
+ ├ PixelMmMapper 換算＋VerticalZeroAtBottom 鏡射    ← 轉換點#3（各邊映自己的值，勿交叉——2026-07-08 邊界方向錯根因）
+ ├ ViewRangeMmChanged 事件 → OnImageViewRange@LiveDisplayCoordinator.cs → OnLiveViewRange 事件
+ │  → ApplyLiveViewRange@AniloxRollForm.Live.cs      ⚠ 勿節流此連動（三次教訓：拖曳中曲線必須逐事件跟隨）
+ │     ├ SetViewRange@RowCurveSyncCoordinator.cs → RowCurveDisplayAdapter → RowCurveChartHelper（列 chart Y zoom＝轉換點#4/#5）
+ │     └ UpdateViewRange@ColumnCurveChartHelper（欄全覽 X zoom；首次就緒→LiveOverviewTimer_Tick 原子畫一次不閃）
+ ├ CursorStatusChanged 事件 → OnImageCursorStatus@LiveDisplayCoordinator.cs → lblPixelInfo（狀態列）
+ └ UpdateReverseThumbSync@ImageDisplayView.cs → SelectedCamChanged 事件
+    → handler（EnsureImageDisplay 內）@LiveDisplayCoordinator.cs → Flow "centerCam → camX（IC）"
+瀑布分支：OnCanvasStatus@WaterfallView.cs
+ ├ TryComputeViewRange@WaterfallView.cs → ViewRangeMmChanged 事件 → OnImageViewRange@LiveDisplayCoordinator.cs
+ │  →（同上）ApplyLiveViewRange@AniloxRollForm.Live.cs
+ ├ UpdateCenterCam@WaterfallView.cs → CenterCamChanged 事件 → OnWaterfallCenterCam@LiveDisplayCoordinator.cs
+ │  → SetSelected@ThumbStrip.cs＋Flow "centerCam → camX（WF）"（程式化來源，不回頭置中防遞迴）
+ └ CursorStatusChanged 事件 → OnImageCursorStatus@LiveDisplayCoordinator.cs（同上）
+補刷保險（快拖事件合併不跳格）：
+ 即時：_timer(33ms) → RefreshMain@ImageDisplayView.cs 開頭 UpdateReverseThumbSync
+ 瀑布：_flushTimer(30ms)@WaterfallView.cs → UpdateCenterCam
+拖曳尾緣：OnMouseUp@ImageCanvas.cs → Invalidate＋TriggerStatusChange 補發＋FlowLog "viewEdges …" 一行
+```
+
 ### F6b 滾輪縮放主畫面
+
+**log-flow（執行期腳印＝判準）**
 ```
 T1: IC|WF wheelZoom in|out → zoom=Z（fit=F）   ← 每手勢至少一行（100ms 節流）
 T1: IC|WF|RV fit(double-click) / physical1x(triple-click)   ← 使用者 fit/1x 手勢（合法的視野重設主人）
@@ -208,16 +376,88 @@ T1: IC|WF|RV fit(double-click) / physical1x(triple-click)   ← 使用者 fit/1x
   使用者「未動過視野」時的尺寸變更。centerCam 行在縮放中出現＝正常（中心相機隨視野變）。）
 ```
 
+**code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
+```
+（訊息前濾）PreFilterMessage@LiveDisplayCoordinator.cs（WheelZoomFilter，全域 IMessageFilter）
+ ← IC/WF 模式 return false 讓路（否則全域 filter 吃掉滾輪→主畫面縮不動）；非 IC/WF 才走 ApplyCustomZoom
+ → OnMouseWheel@ImageCanvas.cs
+    ├ zoom ×1.1^(e.Delta/120)     ← 正比實際轉動量（事件合併時大 e.Delta 也按比例；修卡頓漏算）
+    ├ FlowLog "wheelZoom in|out"（100ms 節流＝每手勢至少一行）
+    ├ pan 錨定游標點＋Invalidate（zoom 防抖：滾動中拉伸舊 cache/tile，_zoomSettleTimer 停 150ms 才重建）
+    ├ TriggerStatusChange@ImageCanvas.cs → StatusChanged 事件 →（下游同 F6：OnCanvasStatus →
+    │   ViewRangeMmChanged/CursorStatusChanged/centerCam → chart 連動）
+    └ RestartLodSettle@ImageCanvas.cs（LOD 停住才重算 crisp tile，互動中先用舊 tile 拉伸）
+fit/1x 手勢（合法視野重設主人）：OnMouseDown@ImageCanvas.cs → MultiClickDetector.RegisterClick
+ ├ 雙擊（非 fit 時才動作）：FitToScreen@ImageCanvas.cs → FitPerformed 事件 → FlowLog "fit(double-click)"
+ │  （ImageDisplayView ctor 接線）
+ └ 三擊：ZoomToOneToOne@ImageCanvas.cs → Physical1xPerformed 事件 → FlowLog "physical1x(triple-click)"
+違規源頭定位（縮放中不得出現的兩行，只有這些產地）：
+ autoFit 只在 RefreshMain@ImageDisplayView.cs（firstFrame / IsAtFitView 下的尺寸變更）；
+ lodRebind 只在 RefreshMain 的 LOD 綁定處（EnableLod 內建 FitToScreen）——縮放中出現＝
+ ClearFrame/尺寸 churn 在暗中重設（孤兒判讀；ClearFrame@ImageDisplayView.cs 已冪等守門：空幀不動顯示狀態）
+```
+
 ### F7 重配置（FreeCameras → 再配置）
+
+**log-flow（執行期腳印＝判準）**
 ```
 T1: FreeCameras（cams=M）
 T1: TeardownImageDisplay / TeardownWaterfall（有哪個拆哪個）
 T1: （再配置時）F1 全序重跑——view 必須重建+重訂閱新相機批次
 ```
 
+**code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
+```
+FreeCameras@LiveCameraManager.cs
+ ├ WaitStopDrain@LiveCameraManager.cs     ← 不變量：M_STOP 排水進行中就 MbufFree＝UAF 家族，先等完
+ ├ IsReleasing=true ＋ _cameraStatusTimer.Stop ＋ IsLiveGrabbing=false
+ ├ DisableGlobalMerge@LiveCameraManager.Merge.cs   ← 順序鎖死：必在 cam.Free 之前
+ │   （先清各台 merge target 再由工頭 MbufFree 合併 buffer，防 grab hook 把幀複製進已釋放 buffer）
+ ├ TeardownImageDisplay@LiveDisplayCoordinator.cs ＋ TeardownWaterfallDisplay@LiveDisplayCoordinator.cs
+ │   ← Enable*/Ensure* 冪等（view!=null 早退）→ 不 teardown 就不會重訂閱新相機批次
+ │     （「預覽背景→開始抓取」瀑布空白的根因）
+ ├ per-cam Free@AniloxCamera.cs → Dispose（MIL digitizer/buffer 釋放）
+ ├ FreeSystem@CameraSystemManager.cs ×板 ＋ FreeApplication@CameraSystemManager.cs
+ └ IsAllocated=false
+（背景釋放路徑）ReleaseAsync@LiveCameraManager.cs：先「呼叫端執行緒」Stop timer → Task.Run(FreeCameras)
+   ← Timer.Tick 跑在 UI 執行緒，不先 Stop 則 Tick 可能在背景 cam.Free() 期間存取同一台相機
+（再配置）AllocateCameras@LiveCameraManager.cs＝F1 全序
+   （開頭 TeardownImageDisplay/Waterfall → ApplyMainDisplayMode 先拆後建，與本 flow 對稱＝訂閱一定綁「這批」相機）
+```
+
 ### F8 取得背景 / 預覽背景
 現況：取得背景=借用現有 grab 採集（啟停包夾）、預覽=ImageCanvas overlay 蓋最上層（**不得動 MIL 顯示開關**）。
 Wave3 改與 grab 共用顯示 API 後更新本節。
+
+**code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
+```
+取得背景：
+btnLiveGetBackground_Click@AniloxRollForm.Background.cs      intent 行 ui:【取得背景】鈕
+ ├ IsStandardBgSubEnabled 守門（非標準去背 → MessageBox return）
+ ├（舊預覽）ClearBackgroundPreview@AniloxRollForm.Background.cs
+ ├（未配置）EnsureAllocatedAndToggleGrab@LiveCameraManager.cs（=F1＋F2 借道，不開影像處理）
+ ├（未抓取）LightTurnOn@AniloxRollForm.HardwareStatus.cs → await Task.Delay(LightWarmupMs)
+ │   → ToggleGrab@LiveCameraManager.cs ＋ UpdateGrabButton(true)   ← 借用現有 grab（啟停包夾）
+ ├ 採集迴圈（await Task.Delay(100) × N 秒，UI 執行緒非阻塞、按鈕倒數）
+ │   └ per-cam TryComputeColumnMean@AniloxCamera.cs → accum 累加
+ ├ 平均 → SaveBackgroundBin@AniloxRollForm.Background.cs（MCBF v2：含 light level＋exposure）
+ ├ LoadBackgroundBins@AniloxRollForm.Background.cs（bin → TanukiCv_AllocPinned → cam.PrecomputedColMean）
+ │   ← pinned 生命週期：舊 buffer 先 FreePinned 再換新（防漏）
+ ├ finally：ToggleGrab 停止（=F3）＋ LightTurnOff ＋ UpdateStandardBgSubLockState@AniloxRollForm.Background.cs
+ ├（_autoStartGrabAfterBg）FreeCameras → btnLiveGrab_Click（IO 觸發自動回抓）→ return
+ └ 尾端自動預覽：btnLiveViewBackground_Click（直呼）
+預覽背景：
+btnLiveViewBackground_Click@AniloxRollForm.Background.cs     intent 行 ui:【預覽背景】鈕
+ ├（舊預覽）ClearBackgroundPreview
+ ├ per-cam LoadCurveBin@InspectionEngine → ExpandColMeanToBitmap@AniloxRollForm.Live.cs
+ ├ 每台 new ImageCanvas overlay 疊 camLive（BringToFront＋FitToScreen＋Click→BgPreviewPanel_Click）
+ │   ← 不變量：不得動 MIL 顯示開關（detach→re-attach 會把原生視窗提最上層蓋住 CPU 顯示；overlay 蓋最上即可）
+ └ camLiveMain 疊 _bgPreviewMainCanvas（縮放/拖曳）
+     StatusChanged 事件 → BgPreviewCanvas_StatusChanged@AniloxRollForm.Background.cs → lblPixelInfo
+切台：BgPreviewPanel_Click@AniloxRollForm.Background.cs → 主畫面換該台背景＋FitToScreen
+清除：ClearBackgroundPreview@AniloxRollForm.Background.cs（解訂閱＋Dispose overlay/bitmaps；
+ restoreMilDisplay=true → RefreshMainDisplay@LiveCameraManager.Display.cs＝只刷選中狀態，不動 MIL）
+```
 
 ## 硬體連線契約（H 系列）——邊緣觸發（同 MURA 模式：轉變才記，不洗版）
 
@@ -402,11 +642,12 @@ T1: ui:【良率導航-年|月|日】→ {值}      ← 良率三圖跟著換週
 T1: ui:【篩選異常】→ 只顯示異常|顯示全部
 ```
 
-## 附錄：函式路徑（導航用）與真 log 範例
+## 附錄：真 log 範例（導航用）
 
-> 路徑僅供快速定位，**重構會變、log 行才是判準**；範例取自真機（4 配置/2 在線），數值隨機台不同。
+> 函式路徑已全數升級為各契約內的 code-flow（F1~F8），本附錄只留真機 log 範例；
+> 範例取自真機（4 配置/2 在線），數值隨機台不同，**log 行才是判準**。
 
-**F1 路徑**：已升級為 F1 契約內的 code-flow（本附錄各路徑將逐步同款遷移；遷移後此處刪除）。
+**F1 範例**：
 ```
 10:35:07.029 T 1 AllocateCameras begin（expect 7 cams）
 10:35:07.388 T 1 ApplyMainDisplayMode → ImageCanvas
@@ -416,9 +657,7 @@ T1: ui:【篩選異常】→ 只顯示異常|顯示全部
 10:35:12.901 T 1 EnableGlobalMerge（slots=7）
 ```
 
-**F2 路徑**：`btnLiveGrab_Click` → `ToggleGrab` → `StartGrab`（ResetFlowFirstFrame）→ `ApplyMainDisplayMode`
-→ `cam.SetUserGrabIntent(true)` →（每幀，MIL 回呼執行緒）`MilCamera.FrameReady` → `AniloxCamera.OnMilFrameReady`
-→ `OnDisplayFrame` → `OnCameraDisplayFrame|OnCameraWaterfallFrame` → `PushFrame`
+**F2 範例**：
 ```
 10:37:13.854 T 1 StartGrab（cams=4）
 10:37:13.855 T 1 ApplyMainDisplayMode → ImageCanvas
@@ -426,39 +665,31 @@ T1: ui:【篩選異常】→ 只顯示異常|顯示全部
 10:37:15.207 T30 firstFrame cam2 16384x3000 → ImageDisplayView
 ```
 
-**F3 路徑**：`btnLiveGrab_Click` → `ToggleGrab` → `StopGrab` → 並行 `SetUserGrabIntent(false)`
+**F3 範例**：
 ```
 10:37:21.226 T 1 StopGrab
 ```
 
-**F4 路徑**：PropertyGrid → `SettingsHub.Set(he_MainDisplay)` → `OnSettingChanged` →
-`HandleLiveLayoutSettingsChanged` → `ApplyMainDisplayMode` → Teardown(舊) + Enable(新)
+**F4 範例**：
 ```
 10:13:40.107 T 1 ApplyMainDisplayMode → ImageCanvas
 10:13:40.108 T 1 TeardownWaterfall（unsubscribe 4 cams）
 10:13:40.124 T 1 EnsureImageDisplay create + subscribe 4 cams（merge=True）
 ```
 
-**F5 路徑**：`ThumbStrip.SelectRequested` → 即時＝ImageDisplayView 內部 `CenterOnCamera` 再轉外部
-`ImageSelectCamera→SwitchMainDisplay(center=False)`；瀑布＝coordinator `SwitchMainDisplay(center=True)`
-→ `WaterfallView.CenterOnCamera`。（範例待真機補）
-
-**F6 路徑**：ImageCanvas 拖曳 → `StatusChanged` → 即時＝`ImageDisplayView.UpdateReverseThumbSync`
-→ `SelectedCamChanged`；瀑布＝`WaterfallView.UpdateCenterCam` → `CenterCamChanged` → `OnWaterfallCenterCam`。
-兩者另有 30/33ms timer 補刷。
+**F6 範例**：
 ```
 10:13:27.999 T 1 centerCam → cam3（WF）   ← 相鄰台階梯式、間隔不規則＝健康手拖
 10:13:28.372 T 1 centerCam → cam2（WF）
 ```
 
-**F6b 路徑**：`ImageCanvas.OnMouseWheel`（FlowLog 100ms 節流）。違規樣本（2026-07-07 修復前，教學用）：
+**F6b 違規樣本**（2026-07-07 修復前，教學用）：
 ```
 10:37:16.868 T 1 IC wheelZoom in → zoom=0.02（fit=0.01）
 10:37:16.973 T 1 IC wheelZoom in → zoom=0.01   ← 滾放大卻回到 fit＝有人在重設（該次＝ClearFrame 空轉→lodRebind）
 ```
 
-**F7 路徑**：`FreeCameras` → `DisableGlobalMerge` → `TeardownImageDisplay`+`TeardownWaterfall` →
-`cam.Free()`×N →（再配置＝F1 全序）。（範例待真機補）
+（F5/F7 範例待真機補。）
 
 ## 任意控制項 call chain 追蹤（F1~F8 以外的流程）
 
