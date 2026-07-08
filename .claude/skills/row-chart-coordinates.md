@@ -27,28 +27,52 @@
 都跟「上下方向」設定走。故 sdk `ImageDisplayView.VerticalZeroAtBottom`（座標）與 `FlipVertical`
 （影像）是**兩個獨立旗標**，app 各自設定。
 
-## 轉換架構（各只有一個轉換點，嚴禁再疊層）
+## 最終定案（2026-07-08 三旋鈕現場蓋章 + 影像翻轉回正後，全對稱、模式無關）
 
+**四行公式（一切只由「上下方向」決定）：**
 ```
-ImageDisplayView.OnCanvasStatus / RefireViewRange   ← 顯示幾何 → 物理 的唯一轉換點
-  由上而下：直通                                       （overlay/游標/ViewRangeMmChanged 同源）
-  由下而上：phys = 總高(ContentH×sf×pitch) − v
-        ↓ 物理座標
-RowCurveDisplayAdapter（app policy）                 ← 方向旗標推送 + 視窗排序歸一（lo<hi）
-  zeroAtTop = 瀑布(顯示順序資料) || 由上而下
-        ↓
-RowCurveChartHelper.PhysToChart（sdk）               ← 物理 → 圖表軸值 的唯一映射點
-  chartVal = zeroAtTop ? total − phys : phys           （資料點與視窗共用同一函式，方向不可能分岔）
+影像翻轉（即時+瀑布同規則）＝ 由下而上
+資料反向（adapter）        ＝ 由下而上
+視窗預鏡射（adapter）      ＝ 由下而上
+標籤反轉（helper LabelInvert）＝ 由上而下
 ```
 
-**反模式（全是踩過的雷）**：adapter 內 Array.Reverse 資料、adapter 內視窗鏡射、helper 內寫死
-`(n-1-i)` 反向映射、IsReversed——四層各自轉一次疊出顛倒。現制：轉換只在上表兩點。
+**反轉層全盤點（歸零重構後＝6 點、零冗餘；動任何一點前先看這張表）：**
+| # | 位置 | 何時作用 | 性質 |
+|---|---|---|---|
+| 1 | ImageDisplayView.FlipVertical | 由下而上 | 影像翻轉（即時），物理必需 |
+| 2 | WaterfallView.FlipVertical | 由下而上 | 影像翻轉（瀑布），物理必需 |
+| 3 | VerticalZeroAtBottom / ToLogicalY | 由下而上 | 座標約定（overlay/游標/視野＝0 在畫面底），語意必需 |
+| 4 | helper.ZeroAtTop（單一旗標） | 由上而下 | 資料 (n-1-i)＋視窗 total−＋標籤反轉 三者同源（原調校那套；因軸天然 0 在底，0 在頂數學上必需一次反向） |
+| 5 | adapter 資料反向 | 瀑布×由下而上 | 顯示順序 buffer → 邏輯空間，真轉換非抵銷 |
+| ~~6~~ | ~~adapter 視窗預鏡射/排序、外層 Reverse、(n-1-i) 恆有、live 取反~~ | — | **全數退場**（曾與內建成對抵銷＝層層包事故元兇） |
 
-## 驗證（每次改完跑一輪，log 判準）
+**由下而上＝軸天然方向＝chart 全鏈零轉換**；由上而下＝helper 內一次反向（同源三件）。
+外層（adapter）再出現任何 `total−`/`Reverse`/排序＝重蹈事故，code review 直接退。
 
-- `set:[顯示基線] 上下方向=… 主畫面=…`（開機一行）
-- `IC/WF viewEdges X a~b｜Y c~d`（拖曳放開＝畫面四邊實際值）：由下而上時 **Y 下緣≈0/小、上緣大**
-- `LC/RV row rowView view a~b → chart lo~hi`（chart 收到的視野與套用值；每秒一樣本）
-- 眼睛：影像特徵與曲線峰對位、拖曳同向、瀑布照舊、切換方向後鏡像成立、**排版不動**
+## 防「層層包反轉」鐵則（這場 30+ 輪戰役的根本教訓）
+
+1. **動方向/翻轉前必做「反轉盤點」**：grep `Flip|Reverse|Invert|total.*-|n - 1 -` 列出全鏈現有層
+   ＋上表比對——**看到症狀就地包一層＝本次事故的成因**（每層局部合理，疊加後奇偶失控）。
+2. **方向政策單一決策點**：只准 RowCurveDisplayAdapter（chart 側）與 ShouldFlipVertical（影像側）決定
+   方向；其他層一律是「被參數控制的機制」。
+3. **數字化驗證**：`rowView`/`viewEdges`/游標三組數字同套＝對；用眼睛只驗「特徵對位/跟隨」。
+4. **現場旋鈕校正法**（終審工具）：解空間不明時，加 XOR 旋鈕（F9 資料/F10 標籤/F11 視窗）＋
+   「停止 grab＝蓋章」＋log 記錄 → 使用者現場調 → 讀 log 換算（**蓋章是 XOR 相對值，必須對照
+   當時 build 的基準規則換算；語意/基準改版＝舊蓋章全失效，要重校**）。
+5. 校正定案後旋鈕即拆（退場不留）。
+
+## 基準矩陣（2026-07-08 使用者實測 7/2 版 0fe0980＝定版前的行為錨點）
+
+| 模式/方向 | 主畫面座標 | 列chart垂直座標 | 跟隨方向 | 圖片翻轉 |
+|---|---|---|---|---|
+| 瀑布/由上而下 | ✓ | ✓ | ✓ | ✓ |
+| 瀑布/由下而上 | ✓（0在底＝新規格） | ✗ 反向 | ✓ 貼齊 | ✓ |
+| 即時/由上而下 | ✓ | ✓ | ✓ | ✗ |
+| 即時/由下而上 | ✗ | ✗ | ✗ 相反 | ✗ |
+
+判讀：瀑布幾乎全對（僅由下而上 chart 座標反向）＝瀑布的空間關係是可信參照；
+即時的翻轉兩方向都錯＝live 影像翻轉接線與方向設定脫鉤（「live 不翻」舊設計＝bug）。
+驗收＝新實作必須讓 16 格全綠（含即時圖片翻轉跟隨方向設定）。
 
 相關記憶：project_row_coordinate_design_spec / feedback_axis_direction / feedback_review_chart_live_during_drag

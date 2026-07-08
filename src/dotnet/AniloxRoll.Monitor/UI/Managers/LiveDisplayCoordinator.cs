@@ -391,6 +391,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                 _waterfallView.FlipVertical = ShouldFlipVertical;
                 _waterfallView.RefireViewRange();
             }
+            if (_waterfallThumbs != null)
+                _waterfallThumbs.FlipVertical = ShouldFlipVertical;   // 縮圖翻轉跟上方向變更（原只在建立時設＝中途改方向縮圖殘舊）
         }
 
         private void ApplyImageDisplayOptions(bool mergeMode)
@@ -400,6 +402,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                 ThumbSelectedColor = Color.Orange,
                 MergeAll = mergeMode,
                 MergeMode = mergeMode,
+                // 影像翻轉與瀑布同一條規則（由下而上=翻）。曾為修「切換方向反」而取反 → 物理朝向顛倒
+                // （2026-07-08 使用者抓包），已回正；chart 資料規則同步去 XOR（見 RowCurveDisplayAdapter）。
                 FlipVertical = ShouldFlipVertical
             });
             // 垂直座標約定與影像翻轉解耦（live 影像不翻但座標要照「上下方向」）：由下而上＝0 錨定畫面底
