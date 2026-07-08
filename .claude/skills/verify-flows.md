@@ -62,6 +62,33 @@ S0 通用（所有 PropertyGrid 設定自動記 `ui:設定[名]=值`）。新增
 - app 內零 MIL 原生顯示視窗/滑鼠 hook（headless；MilCamera panelHandle=Zero）。
 - 主畫面永遠合圖（即時=ImageDisplayView、瀑布=WaterfallView）；縮圖兩模式一律即時 ThumbStrip（橘框選中）。
 - `SwitchMainDisplay` 的 `center=True` **只**允許出現在明確點縮圖/狀態字之後（拖曳/程式化路徑=False，否則回彈）。
+- **UI 執行緒零 MIL/序列埠同步呼叫**（2026-07-07 [UiStack] 全清單）：MdigInquire/MdigControl/
+  MdigProcess/CLProtocol feature 讀寫/SerialPort.Write 一律背景。已修：CamStatusTick、
+  SyncCameraParamsFromHardware、StopGrab 排水（Parallel.ForEach 會徵用呼叫執行緒！）、LightTurnOn/Off。
+  已知例外：AllocateCameras/Initialize（開機 ~1.8s×2，使用者接受）。新增 MIL 呼叫點自問「在哪條執行緒」。
+- **拖曳/hover 重繪限流 ~120fps**（ImageCanvas）：高輪詢滑鼠每 move Invalidate＝paint 風暴
+  （386/s）餓死全體 WM_TIMER。pan 值照每 move 累積、只限「畫」；MouseUp 尾緣補繪。
+
+## 效能卡頓儀器（U 系列——常駐，判讀決策樹）
+
+儀器（`Services/FlowTrace.cs` + ImageCanvas）：
+```
+[UiStall] {gap}ms（GC0+a GC1+b GC2+c） ← 33ms UI timer 遲到 ≥100ms（含 GC 世代增量）
+[UiPing] {rtt}ms                        ← 背景 BeginInvoke 往返 ≥100ms
+[UiStack] {top frames}                  ← ping 200ms 無回應當下的 UI 執行緒堆疊（直接點名）
+[UiSlow] {name} {ms}ms                  ← 7 個 handler 計時 >50ms
+[UiPaint] {control} {ms}ms              ← chart WM_PAINT >50ms；IC/RV paint …=canvas OnPaint
+IC stats paints=N/s paintMs=M statusEv=K/s ← canvas 每秒重繪組成（>5 次/秒才記）
+```
+**判讀決策樹（2026-07-07 十輪教訓的結晶）**：
+1. UiStall 有 GC 增量 → GC/LOH 問題；全零 → 往下。
+2. UiStall 大 + UiPing 也大 → **阻塞型**（單件慢）→ 看 UiStack 點名。⚠ 按時間窗切開判讀
+   （開機時段的大 ping 會污染整體結論）。
+3. UiStall 大 + UiPing 靜默 → **飽和型**（件多不慢）→ 看 IC stats：paints > ~150/s＝paint 風暴回歸
+   （限流後正常 ≤ ~130/s）。**飽和型用計數器抓、阻塞型用計時器抓——只裝計時器抓不到飽和**。
+4. UiStack 點到的都是真 bug 但不一定是你要的 bug——修掉後重測，別急收工。
+契約：拖曳中 `IC stats paints` 不得 >150/s（風暴回歸紅旗）；`[UiSlow] CamStatusTick/TelemetryTick`
+出現＝MIL 查詢又回到 UI 執行緒（背景化被回退）。
 - view 訂閱 `cam.OnDisplayFrame` 且 Enable* 冪等 → **相機批次換新（Allocate/Free）前後必有對稱 teardown**。
 
 ## Flow 契約

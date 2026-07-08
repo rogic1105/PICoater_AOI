@@ -63,6 +63,7 @@ namespace TanukiCv.Controls
         private bool _edgeTriggeredInDrag = false;
         private int  _lastStatusTickMs = 0;
         private const int StatusThrottleMs = 32; // 拖曳中 chart/statusbar 最高 ~30 fps
+        private int  _lastPanPaintMs = 0;        // 拖曳/hover 重繪限流 ~120fps（防高輪詢滑鼠 paint 風暴餓死 timer）
 
         public float Zoom => _zoom;
         public PointF PanOffset => _panOffset;
@@ -165,8 +166,8 @@ namespace TanukiCv.Controls
         public bool LodActive => _lodActive;
 
         // 內容尺寸：LOD 模式用虛擬尺寸，否則用實際 Image 尺寸（座標/fit/clamp/overlay 共用）
-        private int ContentW => _lodActive ? _lodVirtualW : (this.Image?.Width  ?? 0);
-        private int ContentH => _lodActive ? _lodVirtualH : (this.Image?.Height ?? 0);
+        internal int ContentW => _lodActive ? _lodVirtualW : (this.Image?.Width  ?? 0);
+        internal int ContentH => _lodActive ? _lodVirtualH : (this.Image?.Height ?? 0);   // ImageDisplayView 垂直物理座標總高用（同幾何公式基準）
 
         /// <summary>是否在畫布上疊顯資訊（游標座標/亮度、四邊 mm 範圍、右下實體倍率）。滑鼠右鍵切換。</summary>
         public bool ShowOverlay
@@ -386,6 +387,7 @@ namespace TanukiCv.Controls
 
         private void TriggerStatusChange()
         {
+            _statStatusCount++;   // 飽和組成計數（stats 行用）
             StatusChanged?.Invoke(new CanvasInfo
             {
                 ImageX = _lastImgX,
@@ -458,8 +460,13 @@ namespace TanukiCv.Controls
         protected override void OnMouseUp(MouseEventArgs e)
         {
             base.OnMouseUp(e);
+            bool wasDragging = _isDragging && _dragMoved;
             _isDragging = false;
+            this.Invalidate();     // 重繪限流的尾緣保證：最終 pan 位置必上畫（中間跳過的只是超過螢幕更新率的浪費幀）
             TriggerStatusChange(); // 拖曳結束後補一次，更新 chart range 與 status bar
+            // 拖曳放開＝一行四邊座標（上層 SetRangeOverlay 推入的 mm 字串；遠端驗「畫面上下左右範圍」用）
+            if (wasDragging && FlowLog != null && (_ovXLeft != "" || _ovYTop != ""))
+                FlowLog($"viewEdges X {_ovXLeft}~{_ovXRight}｜Y {_ovYTop}~{_ovYBottom}");
         }
 
         protected override void OnMouseMove(MouseEventArgs e)
@@ -476,7 +483,16 @@ namespace TanukiCv.Controls
                 _panOffset.Y += e.Y - _lastMousePos.Y;
                 _lastMousePos = e.Location;
                 if (ClampPan) ApplyPanClamp();
-                this.Invalidate();
+                // 重繪限流 ~120fps：高輪詢率滑鼠（500~1000Hz）每則 move 都 Invalidate → 「input→paint」
+                // 死循環每秒畫 300~400 次（螢幕才 60Hz＝白畫 6 倍）、佇列永遠不空 → WM_TIMER（最低優先權）
+                // 全體餓死＝縮圖橘框/33ms 補刷卡死（2026-07-07 IC stats paints=386/s 定罪）。
+                // pan 值照每則 move 累積（最終位置不失真），只有「畫」限流；MouseUp 補一次最終重繪。
+                int nowPan = Environment.TickCount;
+                if (nowPan - _lastPanPaintMs >= 8)
+                {
+                    _lastPanPaintMs = nowPan;
+                    this.Invalidate();
+                }
                 LodOnDrag(); // LOD：停住重算 + 拖出 overscan 範圍即時補
 
                 // [新增] 檢查是否拉到邊界
@@ -515,14 +531,19 @@ namespace TanukiCv.Controls
                     _lastColor = Color.Black;
                 }
 
-                // 重的 status/chart 同步限流 ~30fps；游標 overlay（便宜）每次都更新跟手
+                // 重的 status/chart 同步限流 ~30fps；游標 overlay 區域失效限流 ~120fps
+                //（高輪詢滑鼠 hover 也會 paint 風暴，同拖曳 pan 的病）
                 int now = Environment.TickCount;
                 if (now - _lastStatusTickMs >= StatusThrottleMs)
                 {
                     _lastStatusTickMs = now;
                     TriggerStatusChange();
                 }
-                if (_showOverlay) InvalidateCursorOverlay();
+                if (_showOverlay && now - _lastPanPaintMs >= 8)
+                {
+                    _lastPanPaintMs = now;
+                    InvalidateCursorOverlay();
+                }
             }
             }
         }
@@ -667,6 +688,9 @@ namespace TanukiCv.Controls
         public double ResetMaxPaintMs() => _paintTimer.ResetMax();
         private readonly PerfTimer _paintTimer = new PerfTimer(); // 繪製計時（TanukiCv.Core 通用計時器，與範例縮圖計時同一來源）
 
+        // 飽和組成計數（FlowLog 有接才啟用）：每秒一行 paint 次數/總耗時/狀態事件數 → 看拖曳時 UI 在忙什麼比例
+        private int _statWinStartMs, _statPaintCount, _statPaintMs, _statStatusCount;
+
         protected override void OnPaint(PaintEventArgs pe)
         {
             // 卡頓歸因儀器：畫一次超過 50ms 即經 FlowLog 留痕（呼叫端決定 log 去向；null=零成本）
@@ -674,8 +698,21 @@ namespace TanukiCv.Controls
             try { OnPaintBody(pe); }
             finally
             {
-                if (swPaint != null && swPaint.ElapsedMilliseconds > 50)
-                    FlowLog($"paint {swPaint.ElapsedMilliseconds}ms（zoom={_zoom:F2} lod={_lodActive} cache={_viewCache != null}）");
+                if (swPaint != null)
+                {
+                    int ms = (int)swPaint.ElapsedMilliseconds;
+                    if (ms > 50)
+                        FlowLog($"paint {ms}ms（zoom={_zoom:F2} lod={_lodActive} cache={_viewCache != null}）");
+                    _statPaintCount++; _statPaintMs += ms;
+                    int now = Environment.TickCount;
+                    if (_statWinStartMs == 0) _statWinStartMs = now;
+                    else if (now - _statWinStartMs >= 1000)
+                    {
+                        if (_statPaintCount > 5)   // 靜態畫面偶發重繪不洗版；拖曳/串流時每秒一行
+                            FlowLog($"stats paints={_statPaintCount}/s paintMs={_statPaintMs} statusEv={_statStatusCount}/s");
+                        _statWinStartMs = now; _statPaintCount = 0; _statPaintMs = 0; _statStatusCount = 0;
+                    }
+                }
             }
         }
 

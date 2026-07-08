@@ -275,6 +275,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         public void StartGrab()
         {
             if (!IsAllocated || IsLiveGrabbing) return;
+            WaitStopDrain();   // 上一輪停止排水若還在跑（快速 停→開），等它完成再 M_START（防競態）
             FlowTrace.Log($"StartGrab（cams={_cameras.Count}）");
             _display.ResetFlowFirstFrame();   // 每輪 grab 重驗「幀有流到 view」（各 cam 首幀各記一行）
             IsLiveGrabbing = true;
@@ -287,23 +288,39 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.SetUserGrabIntent(true);
         }
 
+        /// <summary>停止排水背景 task（M_STOP+M_WAIT 需 ~1 幀；StartGrab/FreeCameras 開頭等它完成防競態）。</summary>
+        private System.Threading.Tasks.Task _stopDrainTask = System.Threading.Tasks.Task.CompletedTask;
+
         public void StopGrab()
         {
             if (!IsAllocated || !IsLiveGrabbing) return;
             FlowTrace.Log("StopGrab");
             IsLiveGrabbing = false;
             // 並行停止：MdigProcess(M_STOP+M_WAIT) 會阻塞等自己 in-progress 那幀完成（~1 frame）。
-            // 逐台序列呼叫 → cam1 的 M_STOP 阻塞那 ~1 frame 期間，cam2 仍在 free-run 多收幾偵（cam2 多跑幾偵的主因；
-            // M_GRAB_ABORT 沒用＝MdigProcess loop 會自動 re-arm 繼續收）。改並行 → 各台同時阻塞、幾乎同幀停。
-            // 不同 digitizer 互不干擾，可並行（每台各自 try/catch 於 ApplyGrabState）。
-            System.Threading.Tasks.Parallel.ForEach(_cameras, cam => cam.SetUserGrabIntent(false));
+            // 逐台序列呼叫 → cam1 阻塞期間 cam2 仍 free-run 多收幾偵；改並行同幀停（各台自帶 try/catch）。
+            // 整包移背景：Parallel.ForEach 會徵用「呼叫執行緒」當 worker → 按停止時 UI 被抓去跑
+            // M_STOP+M_WAIT（低線掃＝秒級凍結，2026-07-07 [UiStack] 定罪）。IsLiveGrabbing 已先設 false；
+            // 快速 停→開 / 停→釋放 的競態由 StartGrab / FreeCameras 開頭 WaitStopDrain 擋。
+            var cams = _cameras.ToArray();
+            _stopDrainTask = System.Threading.Tasks.Task.Run(() =>
+            {
+                try { System.Threading.Tasks.Parallel.ForEach(cams, cam => cam.SetUserGrabIntent(false)); }
+                catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[StopGrab.drain] {ex.GetType().Name}: {ex.Message}"); }
+            });
+        }
 
+        /// <summary>等停止排水完成（防 M_STOP 進行中又 M_START / MbufFree 的競態；平時已完成＝零成本）。</summary>
+        private void WaitStopDrain()
+        {
+            try { if (!_stopDrainTask.IsCompleted) _stopDrainTask.Wait(5000); }
+            catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[WaitStopDrain] {ex.GetType().Name}: {ex.Message}"); }
         }
 
         // ==================== Release ====================
 
         public void FreeCameras()
         {
+            WaitStopDrain();   // 停止排水未完就釋放 → M_STOP 進行中 MbufFree＝UAF 家族，先等完
             FlowTrace.Log($"FreeCameras（cams={_cameras.Count}）");
             IsReleasing = true;
             _cameraStatusTimer.Stop();
