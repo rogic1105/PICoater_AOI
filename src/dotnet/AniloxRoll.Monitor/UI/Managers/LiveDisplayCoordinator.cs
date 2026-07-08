@@ -402,6 +402,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                 MergeMode = mergeMode,
                 FlipVertical = ShouldFlipVertical
             });
+            // 垂直座標約定與影像翻轉解耦（live 影像不翻但座標要照「上下方向」）：由下而上＝0 錨定畫面底
+            if (_imageDisplay != null) _imageDisplay.VerticalZeroAtBottom = ShouldFlipVertical;
         }
 
         public void TeardownImageDisplay()

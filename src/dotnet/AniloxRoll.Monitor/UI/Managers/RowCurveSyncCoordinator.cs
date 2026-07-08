@@ -47,7 +47,8 @@ namespace AniloxRoll.Monitor.UI.Managers
         public void SetViewRange(double topMm, double botMm)
         {
             if (_display == null) return;
-            if (double.IsNaN(topMm) || double.IsNaN(botMm) || topMm >= botMm) return;
+            // 物理座標（2026-07-08 定版）：由下而上時上緣值 > 下緣值＝合法；只擋 NaN/零跨距，排序由 adapter 歸一
+            if (double.IsNaN(topMm) || double.IsNaN(botMm) || topMm == botMm) return;
 
             _topMm = topMm;
             _botMm = botMm;

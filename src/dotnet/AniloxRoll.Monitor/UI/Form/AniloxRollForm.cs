@@ -514,12 +514,12 @@ namespace AniloxRoll.Monitor.Forms
                 throw new InvalidOperationException("chartReviewRow is not initialized. Ensure InitializeComponent runs before UI layer initialization.");
 
             _liveRowChartHelper = new RowCurveChartHelper(this.chartLiveRow);
-            _liveRowDisplay = new RowCurveDisplayAdapter(_liveRowChartHelper, GetVerticalDisplayDirection);
+            _liveRowDisplay = new RowCurveDisplayAdapter(_liveRowChartHelper, GetVerticalDisplayDirection) { FlowName = "LC row" };
             _liveRowSync = new RowCurveSyncCoordinator(_liveRowDisplay);
             _liveRowDisplay.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
 
             _reviewRowChartHelper = new RowCurveChartHelper(this.chartReviewRow);
-            _reviewRowDisplay = new RowCurveDisplayAdapter(_reviewRowChartHelper, GetVerticalDisplayDirection);
+            _reviewRowDisplay = new RowCurveDisplayAdapter(_reviewRowChartHelper, GetVerticalDisplayDirection) { FlowName = "RV row" };
             _reviewRowSync = new RowCurveSyncCoordinator(_reviewRowDisplay);
             _reviewRowDisplay.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
 
@@ -806,6 +806,8 @@ namespace AniloxRoll.Monitor.Forms
         private void AutoAllocateCameras()
         {
             if (_liveCameraManager == null || _liveCameraManager.IsAllocated) return;
+            // 顯示狀態開機基線（S0 只記「變更」，開機值沒人記 → 遠端判方向/模式類問題缺基準）
+            FlowTrace.Log($"set:[顯示基線] 上下方向={_settings?.VerticalDirection} 主畫面={_settings?.he_MainDisplay} LOD={_settings?.ImageView?.LiveLod} 合圖={_settings?.StitchMode}");
             try
             {
                 // 多相機相位量測 log（診斷）：設了路徑 → 每幀記 frame-start 硬體時戳 → Logs\phaselog-yyyyMMdd.csv。

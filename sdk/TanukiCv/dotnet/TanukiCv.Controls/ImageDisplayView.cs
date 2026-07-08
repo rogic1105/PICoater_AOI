@@ -130,6 +130,11 @@ namespace TanukiCv.Controls
         }
         private bool _flip;
 
+        /// <summary>垂直「座標約定」（與影像翻轉 FlipVertical 解耦——live 影像不翻但座標仍要照方向）：
+        /// true＝物理 0 錨定畫面底（由下而上：overlay 下緣≈0、上緣=大值、游標在底部 Y≈0）；
+        /// false＝0 在畫面頂（由上而下，幾何直通）。overlay/游標/ViewRangeMmChanged 同一轉換點。</summary>
+        public bool VerticalZeroAtBottom { get; set; }
+
         /// <summary>內部主畫面 ImageCanvas（供上層接計時 / app 專屬事件等；一般顯示不需碰）。</summary>
         public ImageCanvas Canvas => _canvas;
 
@@ -338,8 +343,18 @@ namespace TanukiCv.Controls
             double yPitch = _rowPitchMm > 0 ? _rowPitchMm : opsInMm;
             double topMm = (0 - pan.Y) / zoom * sf * yPitch;
             double botMm = (_canvas.Height - pan.Y) / zoom * sf * yPitch;
+            if (VerticalZeroAtBottom)   // 垂直物理座標（同 OnCanvasStatus）：由下而上＝0 錨定畫面底
+            {
+                double totalYMm = TotalRowsMm(yPitch, sf);
+                if (totalYMm > 0) { double t = totalYMm - botMm, b = totalYMm - topMm; topMm = t; botMm = b; }
+            }
             ViewRangeMmChanged?.Invoke(leftMm, rightMm, topMm, botMm);
         }
+
+        /// <summary>影像總高（mm）＝畫布內容高 × sf × 列距——與 top/botMm 的幾何公式同基準
+        /// （LOD=虛擬全解析度、非 LOD=bitmap 高，ContentH 已按模式取對），保證鏡射不偏移。</summary>
+        private double TotalRowsMm(double yPitch, double sf)
+            => _canvas != null ? _canvas.ContentH * sf * yPitch : 0;
 
         /// <summary>縮圖↔主畫面雙向連動（反向）：合圖模式視野中心最近的相機 → 自動高亮縮圖
         /// （不觸發 SelectRequested 防遞迴）。OnCanvasStatus（互動）+ 33ms timer（快拖事件合併時補刷，
@@ -658,13 +673,26 @@ namespace TanukiCv.Controls
             double topMm = (0 - info.PanOffset.Y) / info.Zoom * sf * yPitch;
             double botMm = (_canvas.Height - info.PanOffset.Y) / info.Zoom * sf * yPitch;
 
+            // 垂直物理座標（2026-07-08 定版）：0 錨定方向原點。由上而下＝幾何直通（0 在畫面頂）；
+            // 由下而上（VerticalZeroAtBottom）＝ phys = 總高 − v（0 在畫面底）。overlay/游標/事件同一來源。
+            double curMmY = info.ImageY * sf * yPitch;
+            if (VerticalZeroAtBottom)
+            {
+                double totalYMm = TotalRowsMm(yPitch, sf);
+                if (totalYMm > 0)
+                {
+                    double t = totalYMm - botMm, b = totalYMm - topMm;
+                    topMm = t; botMm = b;                    // 翻轉後上緣值 > 下緣值（上大下小＝由下而上）
+                    curMmY = totalYMm - curMmY;
+                }
+            }
+
             _canvas.SetPhysicalCalibration(opsInMm * sf, _screenMmPerPx);
             double physMag = _canvas.PhysicalMagnification;
             _canvas.SetRangeOverlay(physMag > 0 ? $"{physMag:F2}x" : "",
                 $"{leftMm:F1}", $"{rightMm:F1}", $"{topMm:F1}", $"{botMm:F1}");
 
             double curMmX = PixelMmMapper.PixelToMm(info.ImageX * sf, startMm, opsInMm);
-            double curMmY = info.ImageY * sf * yPitch;
             _canvas.SetCursorMm($"({curMmX:F2}, {curMmY:F2})");
 
             ViewRangeMmChanged?.Invoke(leftMm, rightMm, topMm, botMm);

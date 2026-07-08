@@ -58,7 +58,7 @@ namespace AniloxRoll.Monitor.Forms
             // 啟動路徑：先亮燈 → 等光源穩定 → 再開始 grab
             if (!wasGrabbing)
             {
-                LightTurnOn();
+                await Task.Run(() => LightTurnOn());   // 序列埠寫入 ~百 ms，不佔 UI（順序仍保證：燈亮→暖機→grab）
                 int warmup = _settings?.LightWarmupMs ?? 0;
                 if (warmup > 0) await Task.Delay(warmup);
                 ResetLiveWaterfallRowChart();
@@ -100,7 +100,7 @@ namespace AniloxRoll.Monitor.Forms
             // 剛從「抓取中」→「停止」：關燈 + 觸發循環儲存 + 通知儲存機清理
             if (wasGrabbing && !_liveCameraManager.IsLiveGrabbing)
             {
-                LightTurnOff();
+                _ = Task.Run(() => LightTurnOff());   // 序列埠寫入不佔 UI（[UiStack] 抓到停止時卡在 SerialStream.Write）
                 TriggerRetentionAndFlagAsync();
                 // 檢測結束＝MURA 警告閂鎖清除時機（與 DO latch/FSM 回 Idle 同語意；無 IO 時的等價點）
                 if (_settings?.MuraDetectPaused != true) UpdateMuraLed(false);
@@ -253,6 +253,8 @@ namespace AniloxRoll.Monitor.Forms
         private void ApplyLiveViewRange(double leftMm, double rightMm, double topMm, double botMm)
         {
             if (IsDisposed) return;
+            // ⚠ 勿節流此連動：曾試 100ms 節流 → 「圖表跟不上主畫面」立即被使用者退回（2026-07-07；
+            // 加上先前兩次共三次教訓）。拖曳中曲線必須逐事件即時連動——優化只能降低單次成本，不能降頻。
             // [UiSlow] 卡頓歸因：拖曳中每次視野變更都走這（chart zoom 同步），chart 重畫慢＝拖曳跳框嫌疑
             var swVr = System.Diagnostics.Stopwatch.StartNew();
             bool wasReady = !double.IsNaN(_liveViewLeftMm) && _liveViewLeftMm < _liveViewRightMm;
@@ -292,6 +294,9 @@ namespace AniloxRoll.Monitor.Forms
         {
             var mode = _settings?.he_MainDisplay;
             bool requireViewRange = mode == MainDisplayMode.ImageCanvas || mode == MainDisplayMode.Waterfall;
+            // 瀑布餵的是「顯示順序」band 緩衝（index 0=畫面最上列）；即時餵原始擷取順序 → 反向規則不同（adapter 內）
+            if (_liveRowDisplay != null)
+                _liveRowDisplay.DataIsDisplayOrdered = mode == MainDisplayMode.Waterfall;
             return _liveRowSync?.UpdateData(mean, max, requireViewRange) ?? true;
         }
 

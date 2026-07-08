@@ -65,6 +65,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (_disposed || gray == null) return;
             EnsureCreated(screenMmPerPx);
             _view.FlipVertical = flipVertical;
+            _view.VerticalZeroAtBottom = flipVertical;   // 垂直座標約定同方向（由下而上＝0 錨定畫面底）
             _view.SetLayout(posMm, opsUm, Math.Max(1, feedScale), rowPitchMm); // feedScale=降採樣倍率；rowPitchMm=真實 mm/列
             _view.SetMergeMode(mergeMode);
             var present = new bool[_thumbHosts.Length + 1];
@@ -89,6 +90,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (_view == null) return;
             _view.FlipVertical = flipVertical;
+            _view.VerticalZeroAtBottom = flipVertical;   // 垂直座標約定同方向（由下而上＝0 錨定畫面底）
             _view.RefireViewRange();
         }
 
