@@ -38,6 +38,22 @@
 ```
 
 **反轉層全盤點（歸零重構後＝6 點、零冗餘；動任何一點前先看這張表）：**
+**稽核（commit 前跑；狗糧驗證 2026-07-08）**：概念點 6 個 ↔ 實作點 15 個——**對「清單」不對「數字」**：
+```
+grep -rnE "Array\.Reverse|n - 1 -|- 1 - |totalMm - |totalYMm - |_totalHeight - 1 -|_totalMm - "   sdk/TanukiCv/dotnet/TanukiCv.Controls src/dotnet/AniloxRoll.Monitor/UI --include=*.cs
+```
+命中 − 下方已登記實作點 ＝ **應為空集合**；多出來的＝新包的層，退回。
+
+**已登記實作點（函式級，不記行號）：**
+| 概念點 | 實作點（函式@檔） |
+|---|---|
+| #1 影像翻轉(即時) | BuildMerge/BuildSingle/LOD provider 的 `_flip` 取列 @ImageDisplayView |
+| #2 影像翻轉(瀑布) | LOD provider sy 翻轉、寫入列 hy 翻轉 @WaterfallView |
+| #3 座標約定 | OnCanvasStatus、RefireViewRange（邊界+游標）@ImageDisplayView；ToLogicalY @WaterfallView |
+| #4 helper.ZeroAtTop 同源 | 資料映射×2（UpdateData/UpdateDataAndViewRange）、GetAdjustedZoom 視窗×2、OnCustomizeLabels 標籤 @RowCurveChartHelper |
+| #5 瀑布資料反向 | CopyForDisplay 的 Array.Reverse @RowCurveDisplayAdapter |
+| （佈線層不入表） | FlipVertical/ZeroAtTop/VerticalZeroAtBottom 的「旗標指派/轉發」＝已登記旗標的佈線，允許多處；**新旗標名**才需登記 |
+
 | # | 位置 | 何時作用 | 性質 |
 |---|---|---|---|
 | 1 | ImageDisplayView.FlipVertical | 由下而上 | 影像翻轉（即時），物理必需 |

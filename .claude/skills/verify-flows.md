@@ -1,7 +1,16 @@
 # verify-flows — UI 動作流程契約（EVT）與驗證
 
-app ＝【監控/回顧/報表】三個 tab。本 skill 治兩類病（見「兩類病、兩類工具」章）：
-①非同步接線病（事件/訂閱/時序）→ log 契約；②同步語意病（方向/座標/單位/轉換）→ 轉換點盤點＋正向拆解。
+app ＝【監控/回顧/報表】三個 tab。每條 flow 有兩面，**驗證時兩面都要對**：
+- **log-flow**（執行期腳印）：`[Flow]` 行序列＝行為判準——治非同步接線病（事件/訂閱/時序）。
+- **code-flow**（靜態地圖）＝兩種工件，各有完備性要求：
+  ① **責任鏈（hop chain）**：每條 flow 一份＝「Ctrl+點擊追蹤」的完整跳點序列（`函式名@檔名`，
+     一跳一行、幾十跳記完整；**不記行號**——行號腐化最快，函式名可 grep 重定位）。
+     「少量穩定載重」只決定**哪些跳加注解**（⚠地雷/不變量/單一決策點/轉換點#），不拿來刪跳。
+  ② **值鏈盤點表**：每個「值維度」（如垂直方向值）一張＝該值**每一個**產生/轉換/消費點，
+     必須完備＋附 grep pattern，且列到**實作點**層級（概念點 6 個可對應實作點 15 個——狗糧實測）。
+     **防包層的偵測機制＝grep 對清單**：命中 − 已登記實作點清單 ＝ 應為空集合；多出來的
+     ＝新包的層，當場現形（稀疏節點防不了包層，完備性才防得了；「對數字」會因佈線誤報）。
+  F1 為責任鏈範本、/row-chart-coordinates 6 點表為值鏈範本；其餘契約逐步補。
 改任何「使用者動作 → 接線 → 顯示/資料連動」流程後**必跑本 skill**：
 先「模擬測試」（順 code 推演對契約）再（必要時）真機比對 log。
 顯示接線核心檔（改到必跑）：LiveCameraManager / LiveDisplayCoordinator / ImageDisplayView /
@@ -72,6 +81,8 @@ S0 通用（所有 PropertyGrid 設定自動記 `ui:設定[名]=值`）。新增
 **明文禁止「就地包一層」**：看到方向/正負/顛倒症狀，在出錯處新包一層轉換＝本次事故成因
 （每層局部合理、疊加後奇偶失控、且下一個 agent 看不見）。新增任何轉換層的前提：
 ①盤點表已更新 ②證明不是抵銷層（抵銷層＝去改參數化根源，不准包） ③符合單一決策點原則。
+**稽核機制（包層必被抓）**：值鏈盤點表附 grep pattern＋已登記實作點清單，commit 前跑 grep——
+命中 − 清單 ＝ 應為空集合，多出者退回。（清單完備性是前提；「旗標佈線」不入清單、新旗標名才登記。）
 
 **函式級記錄的界線（修正版）**：一般呼叫鏈不記（重構即腐化）；**轉換點/單一決策點/不變量**
 （少量、穩定、載重）必須記——它們是「值在哪裡被改變」的地圖，語意病的 audit 靠它不靠 log。
@@ -119,6 +130,8 @@ IC stats paints=N/s paintMs=M statusEv=K/s ← canvas 每秒重繪組成（>5 �
 ## Flow 契約
 
 ### F1 開機配置（AutoAllocateCameras）
+
+**log-flow（執行期腳印＝判準）**
 ```
 T1: AllocateCameras begin（expect N）
 T1: （前次 view 存在才有）TeardownImageDisplay / TeardownWaterfall
@@ -129,6 +142,22 @@ T1: AllocateCameras done（配置 M、在線 P/N）   ← P=CheckPresence 實際
                                                   也配得起來；報配置數＝幽靈相機數，2026-07-07 修正）
 T1: （CLProtocol 就緒後）EnableGlobalMerge（slots=7）
 ```
+
+**code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
+```
+AutoAllocateCameras(Form)                    顯示基線 set:[顯示基線] 一行
+ └ LiveCameraManager.AllocateCameras
+    ├ CameraSystemManager.Initialize / per-cfg AllocateSystem（板=SystemNum 共用）
+    ├ per-cam AniloxCamera.Initialize        ⚠ MIL 呼叫在 UI 執行緒（已知接受，~1.8s×2）
+    ├ per-cam CheckPresence → BeginCLProtocolInit（只對在線台；空通道 enable 會卡 MIL 鎖）
+    ├ TeardownImageDisplay/Waterfall → ApplyMainDisplayMode   ← 先拆後建＝訂閱綁「這批」相機
+    │    └ EnsureImageDisplay：FlipVertical=方向、VerticalZeroAtBottom=方向（座標約定，轉換點#1/#3）
+    ├ SwitchMainDisplay(Selected)            center=False（程式化不置中）
+    └ 發布「在線數」（非配置數）→ OnCameraCountChanged
+（背景）CLProtocol 全就緒 → OnHwReady → 解鎖 grab 鈕 + EnableGlobalMerge（佈局=MergeLayout 唯一來源）
+```
+單一決策點：模式=he_MainDisplay（ApplyMainDisplayMode 唯一入口）；方向=ShouldFlipVertical。
+不變量：view 建立前必 teardown（防空訂閱家族）；MdispSelectWindow 必帶 panelHandle 守門。
 
 ### F2 開始抓取（btnLiveGrab，已配置）
 ```
@@ -377,9 +406,7 @@ T1: ui:【篩選異常】→ 只顯示異常|顯示全部
 
 > 路徑僅供快速定位，**重構會變、log 行才是判準**；範例取自真機（4 配置/2 在線），數值隨機台不同。
 
-**F1 路徑**：`AutoAllocateCameras(Form)` → `LiveCameraManager.AllocateCameras`（teardown 兩 view）→
-`ApplyMainDisplayMode` → `EnsureImageDisplay|EnableWaterfallDisplay`（subscribe）→ `SwitchMainDisplay` →
-（CLProtocol 就緒）`OnCamerasHwReady` → `EnableGlobalMerge`
+**F1 路徑**：已升級為 F1 契約內的 code-flow（本附錄各路徑將逐步同款遷移；遷移後此處刪除）。
 ```
 10:35:07.029 T 1 AllocateCameras begin（expect 7 cams）
 10:35:07.388 T 1 ApplyMainDisplayMode → ImageCanvas
