@@ -1,13 +1,7 @@
-using System;
 using System.Collections.Generic;
-using System.Windows.Forms;
-using Matrox.MatroxImagingLibrary;
 using MilGrabber.Core;
-using AniloxRoll.Monitor.Core.Camera;
-    // partial：全域合圖編排 + forwarder。
-    // 「秀」整個生命週期（MIL display / timer / 滑鼠 hook / 視野範圍 / merged zoom-pan-1x）已提取到
-    // GlobalMergeCoordinator（2026-06-26 重構）。本檔只留：①編排（建 MilCamera 清單、決定 ImageCanvas vs
-    // MIL 直繪、ImageCanvas/Waterfall 佈局）②對外公開方法的 forwarder ③視野中心選中相機 callback。
+    // partial：全域合圖編排 + forwarder。工頭生命週期在 GlobalMergeCoordinator；
+    // 「秀」一律 CPU（顯示鐵則：即時=ImageDisplayView、瀑布=WaterfallView，佈局讀工頭）。
 
 namespace AniloxRoll.Monitor.UI.Managers
 {
@@ -15,8 +9,8 @@ namespace AniloxRoll.Monitor.UI.Managers
     {
         // ==================== Global Merge（編排 + forwarder） ====================
 
-        /// <summary>啟用即時全域合圖：建底層相機清單 + 解除各台 secondary display → 委派 coordinator 啟動合圖
-        /// （ImageCanvas 模式不綁 MIL display，避免 M_MOUSE_USE 攔截滾輪）→ ImageCanvas 模式再 CPU 拼。</summary>
+        /// <summary>啟用即時全域合圖：建底層相機清單 → 委派 coordinator 啟動工頭
+        /// （佈局 + 合併 buffer + 每台 merge target）→ 顯示層同步合圖佈局（CPU 拼）。</summary>
         public void EnableGlobalMerge(double[] opsUm, double[] startPosMm)
         {
             if (_globalMerge.IsActive || _cameras.Count == 0) return;
@@ -24,26 +18,14 @@ namespace AniloxRoll.Monitor.UI.Managers
             // 「拼」委派工頭：傳入底層 MilCamera 清單
             var mils = new List<MilCamera>(_cameras.Count);
             foreach (var cam in _cameras) mils.Add(cam.Mil);
-            MIL_ID sysId = _cameras[0].OwnerSystemId;
-
-            // 解除所有相機的 secondary display（合併 display / ImageCanvas 接管主畫面）
-            foreach (var cam in _cameras)
-                cam.SetSecondaryDisplay(IntPtr.Zero);
-
-            // 顯示鐵則：主畫面合圖「秀」一律 CPU（即時=ImageDisplayView、瀑布=WaterfallView），
-            // 工頭只負責佈局+merge buffer（資料照流）。showMilDisplay 恆 false。
-            if (!_globalMerge.Enable(mils, sysId, opsUm, startPosMm, showMilDisplay: false))
-            {
-                _display.SwitchMainDisplay(_display.UserSelectedMainCameraId);   // 啟用失敗 → 復原 secondary display
-                return;
-            }
+            if (!_globalMerge.Enable(mils, opsUm, startPosMm)) return;
 
             // ImageCanvas 合圖：用工頭佈局(各台 start/ops) CPU 拼（feedScale=1：主程式餵全解析度）
             _display.OnGlobalMergeEnabled(opsUm, startPosMm);
             AniloxRoll.Monitor.Core.Services.FlowTrace.Log($"EnableGlobalMerge（slots={startPosMm?.Length ?? 0}）");
         }
 
-        /// <summary>停用即時全域合圖：coordinator 釋放 display + 工頭釋放合併 buffer → ImageCanvas 回單相機 → 復原選定相機顯示。</summary>
+        /// <summary>停用即時全域合圖：工頭釋放合併 buffer → 顯示層回單相機 + 復原選定相機。</summary>
         public void DisableGlobalMerge()
         {
             if (!_globalMerge.IsActive) return;
@@ -52,7 +34,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _display.OnGlobalMergeDisabled(); // ImageCanvas 回單相機 + 復原使用者明確點選的相機
         }
 
-        /// <summary>OPS/Start 變更時，重新計算全域合圖佈局（下一幀生效）。MIL display 重綁委派 coordinator；ImageCanvas/Waterfall 佈局同步留本類別。</summary>
+        /// <summary>OPS/Start 變更時，重新計算全域合圖佈局（下一幀生效）；ImageCanvas/Waterfall 佈局同步。</summary>
         public void RefreshGlobalMergeLayout(double[] opsUm, double[] startPosMm)
         {
             if (!_globalMerge.IsActive || _cameras.Count == 0) return;
@@ -62,15 +44,5 @@ namespace AniloxRoll.Monitor.UI.Managers
             // Waterfall 合圖佈局同步（對齊全幅合圖；refOpsMm=mm/px 基準像素尺寸）
             _display.RefreshGlobalMergeLayout(opsUm, startPosMm, _globalMerge.RefOpsMm);
         }
-
-        // ==================== View Range forwarder（供 AniloxRollForm overview / 曲線聯動） ====================
-
-        /// <summary>取得合併 display 的 X 視野範圍（mm），供 overview chart 聯動。</summary>
-        public bool TryGetMergedViewRange(out double leftMm, out double rightMm)
-            => _globalMerge.TryGetViewRange(out leftMm, out rightMm);
-
-        /// <summary>取得合併 display 的 Y 視野範圍（pixel），供列曲線圖聯動。</summary>
-        public bool TryGetMergedViewRangeY(out double topPixel, out double botPixel)
-            => _globalMerge.TryGetViewRangeY(out topPixel, out botPixel);
     }
 }

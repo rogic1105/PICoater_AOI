@@ -27,7 +27,6 @@ namespace AniloxRoll.Monitor.UI.Managers
         private readonly Func<InspectionSettings> _getSettings;
         private readonly Func<double[]> _getLineRates;
         private readonly Func<bool> _isLiveGrabbing;
-        private readonly WheelZoomFilter _wheelFilter;
 
         private readonly Dictionary<int, Panel> _liveViewPanels = new Dictionary<int, Panel>();
         private readonly Dictionary<int, Panel> _liveParentPanels = new Dictionary<int, Panel>();
@@ -58,7 +57,6 @@ namespace AniloxRoll.Monitor.UI.Managers
         private double _screenMmPerPx;
 
         public event Action<double, double, double, double> OnLiveViewRange;
-        public Action OnAfterVerticalZoom { get; set; }
 
         public int SelectedMainCameraId => _selectedMainCameraId;
         public int UserSelectedMainCameraId => _userSelectedMainCameraId;
@@ -125,8 +123,6 @@ namespace AniloxRoll.Monitor.UI.Managers
             for (int i = 0; i < 7; i++)
                 SetupLivePanel(_cameraPanels[i], i + 1);
 
-            _wheelFilter = new WheelZoomFilter(this);
-            Application.AddMessageFilter(_wheelFilter);
         }
 
         public void SetScreenMmPerPixel(double mmPerPx) => _screenMmPerPx = mmPerPx;
@@ -546,175 +542,6 @@ namespace AniloxRoll.Monitor.UI.Managers
                 if (ImageCanvasMode) _imageDisplay?.CenterOnCamera(cameraIndex);
                 else if (WaterfallMode) _waterfallView?.CenterOnCamera(cameraIndex);
             }
-
-            // 顯示鐵則0：主畫面永遠 CPU 合圖（即時=ImageDisplayView、瀑布=WaterfallView）——
-            // 一律 detach 各台 MIL 副顯示，任何模式都不把原生視窗綁到 camLiveMain（會蓋住 CPU 顯示）。
-            foreach (var cam in Cameras)
-                cam.SetSecondaryDisplay(IntPtr.Zero);
-        }
-
-        public void OnMergedViewCenterCam(int newId)
-        {
-            if (newId == _selectedMainCameraId) return;
-            _selectedMainCameraId = newId;
-            foreach (var kvp in _liveParentPanels)
-                kvp.Value.Invalidate();
-        }
-
-        public void ResetMainDisplayView()
-        {
-            if (_globalMerge.IsActive && _globalMerge.HasMilDisplay)
-            {
-                _globalMerge.ResetView();
-                return;
-            }
-            FindCamera(_selectedMainCameraId)?.ResetSecondaryDisplayView();
-        }
-
-        public void SetPhysicalMagnification1x()
-        {
-            if (!_isLiveGrabbing() || _screenMmPerPx <= 0) return;
-
-            if (_globalMerge.IsActive && _globalMerge.HasMilDisplay)
-            {
-                _globalMerge.SetPhysical1x();
-                return;
-            }
-
-            int camIdx = _selectedMainCameraId - 1;
-            var settings = _getSettings();
-            double[] opsUmArr = settings?.GetCameraOpsUmArray();
-            if (opsUmArr == null || camIdx < 0 || camIdx >= opsUmArr.Length) return;
-
-            double opsInMm = opsUmArr[camIdx] / 1000.0;
-            if (opsInMm <= 0) return;
-
-            double zoom1xCam = PixelMmMapper.OneToOneZoom(opsInMm, _screenMmPerPx);
-            var cam = FindCamera(_selectedMainCameraId);
-            if (cam == null) return;
-
-            double cxCam = _mainDisplayPanel.Width / 2.0;
-            double cyCam = _mainDisplayPanel.Height / 2.0;
-
-            if (cam.TryGetSecondaryDisplayGeometry(out double curZoomCam, out _, out double curPanXCam, out double curPanYCam) && curZoomCam > 0)
-            {
-                double imgCx = curPanXCam + cxCam / curZoomCam;
-                double imgCy = curPanYCam + cyCam / curZoomCam;
-                double newPanX = imgCx - cxCam / zoom1xCam;
-                double newPanY = imgCy - cyCam / zoom1xCam;
-                cam.SetSecondaryDisplayZoom(zoom1xCam, newPanX, newPanY);
-            }
-            else
-            {
-                cam.SetSecondaryDisplayZoom(zoom1xCam, 0, 0);
-            }
-        }
-
-        internal void ApplyCustomZoom(int wheelDelta)
-        {
-            if (!_isLiveGrabbing()) return;
-
-            if (_globalMerge.IsActive && _globalMerge.HasMilDisplay)
-            {
-                _globalMerge.ApplyZoom(wheelDelta);
-                return;
-            }
-
-            var cam = FindCamera(_selectedMainCameraId);
-            if (cam == null) return;
-            if (!cam.TryGetSecondaryDisplayGeometry(out double zoomX, out _, out double panX, out double panY))
-                return;
-
-            double factor2 = wheelDelta > 0 ? 1.1 : (1.0 / 1.1);
-            double newZoom2 = zoomX * factor2;
-            if (newZoom2 < 0.05) newZoom2 = 0.05;
-            if (newZoom2 > 32.0) newZoom2 = 32.0;
-
-            double cx2 = _mainDisplayPanel.Width / 2.0;
-            double cy2 = _mainDisplayPanel.Height / 2.0;
-            double imgX2 = panX + cx2 / zoomX;
-            double imgY2 = panY + cy2 / zoomX;
-            double newPanX2 = imgX2 - cx2 / newZoom2;
-            double newPanY2 = imgY2 - cy2 / newZoom2;
-
-            cam.SetSecondaryDisplayZoom(newZoom2, newPanX2, newPanY2);
-            OnAfterVerticalZoom?.Invoke();
-        }
-
-        public void HandleMouseDataChanged(int camId, int x, int y, int pixelValue, bool isReleasing)
-        {
-            if (isReleasing || _mainForm == null || _mainForm.IsDisposed || !_mainForm.IsHandleCreated) return;
-            if (_mainForm.InvokeRequired)
-            {
-                try { _mainForm.BeginInvoke(new Action(() => HandleMouseDataChanged(camId, x, y, pixelValue, isReleasing))); }
-                catch (InvalidOperationException) { }
-                return;
-            }
-
-            string infoText;
-            if (pixelValue == -1)
-            {
-                infoText = $"即時影像 [CAM {camId}] | 游標超出影像範圍";
-            }
-            else
-            {
-                int camIdx = camId - 1;
-                var settings = _getSettings();
-                double[] opsUmArr = settings?.GetCameraOpsUmArray();
-                double[] startMmArr = settings?.GetCameraStartPositionMmArray();
-
-                if (opsUmArr == null || camIdx < 0 || camIdx >= opsUmArr.Length)
-                {
-                    infoText = $"即時影像 [CAM {camId}] | 座標: ({x}, {y}) | 亮度: {pixelValue}";
-                }
-                else
-                {
-                    double opsInMm = opsUmArr[camIdx] / 1000.0;
-                    double startPosMm = startMmArr[camIdx];
-                    double physicalX = PixelMmMapper.PixelToMm(x, startPosMm, opsInMm);
-                    double[] lineRates = _getLineRates();
-                    double lineRateHz = (lineRates != null && camIdx < lineRates.Length) ? lineRates[camIdx] : 0;
-                    double speedMPerMin = settings.AniloxRollSpeedMPerMin;
-                    double rowPitchMm = (speedMPerMin > 0 && lineRateHz > 0)
-                        ? (speedMPerMin / 60.0 * 1000.0) / lineRateHz : 0;
-                    double physicalY = y * rowPitchMm;
-
-                    string rangeStr = "";
-                    string magStr = "-";
-                    var cam = FindCamera(camId);
-                    if (cam != null && cam.TryGetSecondaryDisplayGeometry(
-                            out double zoomX, out _, out double panOffX, out double panOffY))
-                    {
-                        double panelW = _mainDisplayPanel.Width;
-                        double panelH = _mainDisplayPanel.Height;
-                        double viewLeftMm = PixelMmMapper.PixelToMm(panOffX, startPosMm, opsInMm);
-                        double viewRightMm = PixelMmMapper.PixelToMm(panOffX + panelW / zoomX, startPosMm, opsInMm);
-                        rangeStr = $"X範圍:{viewLeftMm:F1}~{viewRightMm:F1} mm | ";
-
-                        if (rowPitchMm > 0)
-                        {
-                            double viewTopMm = panOffY * rowPitchMm;
-                            double viewBotMm = (panOffY + panelH / zoomX) * rowPitchMm;
-                            rangeStr += $"Y範圍:{viewTopMm:F1}~{viewBotMm:F1} mm | ";
-                        }
-
-                        if (_screenMmPerPx > 0 && opsInMm > 0)
-                        {
-                            double physicalMag = PixelMmMapper.PhysicalMagnification(zoomX, _screenMmPerPx, opsInMm);
-                            magStr = $"{physicalMag:F2}x";
-                        }
-                    }
-
-                    infoText = $"即時影像 [CAM {camId}] | " +
-                               $"位置:({physicalX:F2}, {physicalY:F2}) mm | " +
-                               rangeStr +
-                               $"座標: ({x}, {y}) | " +
-                               $"亮度: {pixelValue} | " +
-                               $"實體倍率:{magStr}";
-                }
-            }
-
-            _updatePixelInfoCallback?.Invoke(infoText);
         }
 
         public void OnGlobalMergeEnabled(double[] opsUm, double[] startPosMm)
@@ -741,37 +568,5 @@ namespace AniloxRoll.Monitor.UI.Managers
         }
 
         private IReadOnlyList<AniloxCamera> Cameras => _getCameras() ?? Array.Empty<AniloxCamera>();
-
-        private AniloxCamera FindCamera(int camId)
-        {
-            var cameras = Cameras;
-            for (int i = 0; i < cameras.Count; i++)
-                if (cameras[i].CameraId == camId) return cameras[i];
-            return null;
-        }
-
-        private sealed class WheelZoomFilter : IMessageFilter
-        {
-            private const int WM_MOUSEWHEEL = 0x020A;
-            private readonly LiveDisplayCoordinator _display;
-
-            public WheelZoomFilter(LiveDisplayCoordinator display) => _display = display;
-
-            public bool PreFilterMessage(ref Message m)
-            {
-                if (m.Msg != WM_MOUSEWHEEL) return false;
-                if (_display.ImageCanvasMode || _display.WaterfallMode) return false;
-                if (!_display._isLiveGrabbing()) return false;
-
-                var panel = _display._mainDisplayPanel;
-                var screenPt = Cursor.Position;
-                if (!panel.RectangleToScreen(panel.ClientRectangle).Contains(screenPt))
-                    return false;
-
-                int delta = (short)(m.WParam.ToInt64() >> 16);
-                _display.ApplyCustomZoom(delta);
-                return true;
-            }
-        }
     }
 }

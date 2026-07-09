@@ -132,11 +132,9 @@ _isReleased = true → MdigProcess(M_STOP)
 - `EnableGlobalMerge(opsUm, startPosMm)`：在第一台相機的 System 上 `MbufAlloc2d` 合併 buffer，計算各相機 X 偏移
 - **Overlap 分割**：相鄰相機重疊區域取中點分界（與 `GrabImageStitcher.MergeHorizontal` 一致），每台相機存 `_mergedSrcClipLeft` / `_mergedSrcClipWidth`
 - 每幀 `ProcessingFunction` callback：`MbufChild2d` 建立裁切子 buffer → `MbufCopyClip(childBuf, mergedBuf, dstX, 0)` → `MbufFree(childBuf)`
-- `MdispSelectWindow(mergedDisplay, mergedBuffer, mainPanel.Handle)` 綁定顯示
-- **Zoom/Pan**：`WheelZoomFilter` 攔截滾輪，`IsGlobalMergeActive` 時直接操作 `_mergedDisplay`（`MdispZoom` / `MdispPan`）
-- **滑鼠座標**：`MdispHookFunction(M_MOUSE_MOVE)` 掛在 `_mergedDisplay`，buffer 座標 → mm 座標（`_mergedMinStartMm + x * _mergedRefOpsMm`）
-- **Overview 聯動**：`TryGetMergedViewRange()` 從 `_mergedDisplay` 的 zoom/pan 計算 X 視野 mm 範圍，供 `LiveViewRangeProvider` 使用
-- `DisableGlobalMerge()`：先清除各相機 `_mergedTargetBuffer = M_NULL`，unhook 滑鼠，再 `MbufFree` + `MdispFree`
+- **「秀」一律 CPU**：合併 buffer 只當資料源（merge target 幀源）；顯示/縮放/滑鼠座標/視野聯動
+  全走 ImageDisplayView / WaterfallView / ImageCanvas 事件（app 不綁任何原生顯示視窗）
+- `DisableGlobalMerge()`：先清除各相機 `_mergedTargetBuffer = M_NULL`，再 `MbufFree`
 - `FreeCameras()` 會先呼叫 `DisableGlobalMerge()`
 - CAM1-4 在 System0、CAM5-7 在 System1，合併 buffer 在 System0，MbufCopyClip 跨 System 由 MIL 處理 DMA
 - Global 模式下 `SwitchMainDisplay` 只切換高亮縮圖，不切換主畫面

@@ -706,17 +706,6 @@ namespace AniloxRoll.Monitor.Forms
             _liveCameraManager.OnLiveCurveData      += OnLiveCurveData;
             _liveCameraManager.OnLiveRowCurveData   += OnLiveRowCurveData;
             _liveCameraManager.OnLiveViewRange      += ApplyLiveViewRange; // 主畫面縮放/平移 → live 曲線圖 zoom 連動（bin↔主畫面對齊）
-            _liveCameraManager.OnAfterVerticalZoom   = () =>
-            {
-                if (_settings?.StitchMode != StitchMode.Vertical) return;
-                int camId = _liveCameraManager.SelectedMainCameraId;
-                int idx   = camId - 1;
-                if (idx < 0 || idx >= CameraCount) return;
-                var mean = _liveCurveMean[idx];
-                var max  = _liveCurveMax[idx];
-                if (mean == null) return;
-                OnLiveCurveData(camId, mean, max);
-            };
             _liveCameraManager.OnCameraCountChanged += (connected, expected) =>
             {
                 if (InvokeRequired) { if (!IsHandleCreated || IsDisposed || Disposing) return; SafeBeginInvoke(() => UpdateCamCountLabel(connected, expected)); return; }
@@ -731,29 +720,6 @@ namespace AniloxRoll.Monitor.Forms
             {
                 if (InvokeRequired) { if (!IsHandleCreated || IsDisposed || Disposing) return; SafeBeginInvoke(OnCamerasHwReady); return; }
                 OnCamerasHwReady();
-            };
-
-            var panelClicker = new MultiClickDetector(
-                300,
-                new Size(SystemInformation.DoubleClickSize.Width, SystemInformation.DoubleClickSize.Width),
-                MultiClickDistanceMode.Radius);
-            camLiveMain.MouseDown += (s, e) =>
-            {
-                if (e.Button != MouseButtons.Left) return;
-                int clicks = panelClicker.RegisterClick(e.Location);
-
-                // 背景預覽已走共用 ImageDisplayView（雙擊 fit／三擊 1x＝view 內建手勢），不再分支
-                if (clicks == 2)
-                {
-                    if (_liveCameraManager.IsLiveGrabbing)
-                        _liveCameraManager.ResetMainDisplayView();
-                }
-                else if (clicks >= 3)
-                {
-                    panelClicker.Consume();
-                    if (_liveCameraManager.IsLiveGrabbing)
-                        _liveCameraManager.SetPhysicalMagnification1x();
-                }
             };
 
             FormClosed += async (_, __) =>

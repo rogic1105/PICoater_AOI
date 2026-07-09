@@ -23,13 +23,6 @@ namespace AniloxRoll.Monitor.UI.Managers
         private readonly Dictionary<int, bool> _lastPresence = new Dictionary<int, bool>();    // 上次 tick 在線狀態（斷線→連線邊緣偵測 → 重跑 CLProtocol）
         private bool _wasHwReady;                                                              // 上次 tick AreCamerasHwReady（偵 false→true 轉變 → 強制刷 count label/解鎖鈕）
 
-        // ==================== Mouse Data ====================
-
-        private void HandleMouseDataChanged(int camId, int x, int y, int pixelValue)
-        {
-            _display.HandleMouseDataChanged(camId, x, y, pixelValue, IsReleasing);
-        }
-
         // ==================== Status Timer ====================
 
         /// <summary>

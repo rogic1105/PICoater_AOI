@@ -43,22 +43,16 @@
 **討論 / 設計時的提問順序：**
 「這是改哪個 setting？」 → 「副作用是什麼？」 → 「哪些 view 要更新？」— 而不是「按下按鈕跑哪些函式？」
 
-## 顯示鐵則（2026-07-06 使用者定版）：MIL 在 app 完全退場、縮圖一律即時、主畫面永遠合圖
+## 顯示鐵則（2026-07-06 使用者定版）：顯示一律 CPU、MIL 只取像、主畫面永遠合圖
 
 0. **主畫面（camLiveMain）永遠顯示「合圖」**——模式差別只在：即時合圖（ImageDisplayView）vs
    瀑布合圖（WaterfallView 捲動）。點縮圖＝選中/置中該相機。預覽背景的主畫面＝7 台背景合圖。
-1. **監控縮圖（camLive1~7）在「即時」與「瀑布」兩種主畫面模式下，一律顯示即時相機影像**——同一來源
+1. **監控縮圖（camLive1~7）在兩種主畫面模式下一律顯示即時相機影像**——同一來源
    （`AniloxCamera.OnDisplayFrame` bytes → CPU ThumbStrip），兩模式同源、行為一致（點選/高亮）。
-2. **MIL 顯示在 app 完全退場**：app 內不得有任何 MIL 原生顯示視窗（per-cam primary/secondary、合圖 merged
-   display、MIL mouse hook、`MdispSelectWindow` 綁 app panel）。顯示一律 CPU：ImageDisplayView / ThumbStrip /
-   WaterfallView / ImageCanvas。MIL 只負責取像（grab hook）；`_milDisplayBuffer` 保留（合圖 merge target 幀源）。
-3. 滑鼠座標/點選/縮放/視野查詢一律走 ImageCanvas 事件（StatusChanged / Click / wheel），不走 MIL hook。
-4. sample（sdk/MIL/samples）不在此限（MIL 直繪示範保留在範例）。
-
-> 歷史：MIL 視窗曾是瀑布縮圖/滑鼠座標/點選/合圖 pan 的隱藏地基，第一次退場嘗試連鎖失敗（2026-07-06 退回）。
-> 完整顯示架構地圖與退場三波計畫見記憶 project_mil_display_retirement_attempt1。
-> ⚠ 退場完成（Wave3）後：本節改寫成純正向規格（「顯示一律 CPU、MIL 只取像」），**全文不留任何
-> 「MIL 顯示」字眼**；app code/註解亦同（使用者鐵則：退場的東西不留字眼、不留相容 code）。
+2. **顯示一律 CPU 元件**：ImageDisplayView / ThumbStrip / WaterfallView / ImageCanvas。
+   **MIL 只負責取像**（grab hook）；`_milDisplayBuffer` 保留（合圖 merge target 幀源）。
+3. 滑鼠座標/點選/縮放/視野查詢一律走 ImageCanvas 事件（StatusChanged / Click / wheel）。
+4. sample（sdk/MIL/samples）不在此限（原生直繪示範保留在範例）。
 
 ## 架構原則：前端 UI 分層（View / 協調 / State / Service）
 

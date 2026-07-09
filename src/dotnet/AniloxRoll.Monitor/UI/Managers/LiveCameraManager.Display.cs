@@ -15,26 +15,10 @@ namespace AniloxRoll.Monitor.UI.Managers
             remove { _display.OnLiveViewRange -= value; }
         }
 
-        public Action OnAfterVerticalZoom
-        {
-            get { return _display.OnAfterVerticalZoom; }
-            set { _display.OnAfterVerticalZoom = value; }
-        }
-
         public double RowPitchMm
         {
             get { return _display.RowPitchMm; }
             set { _display.RowPitchMm = value; }
-        }
-
-        public void RefreshMainDisplay()
-        {
-            _display.SwitchMainDisplay(_display.SelectedMainCameraId);
-        }
-
-        public void ResetMainDisplayView()
-        {
-            _display.ResetMainDisplayView();
         }
 
         public void ApplyMainDisplayMode()
@@ -71,16 +55,6 @@ namespace AniloxRoll.Monitor.UI.Managers
         public void SetLodMode(LiveLodMode mode)
         {
             _display.SetLodMode(mode);
-        }
-
-        public void SetPhysicalMagnification1x()
-        {
-            _display.SetPhysicalMagnification1x();
-        }
-
-        internal void ApplyCustomZoom(int wheelDelta)
-        {
-            _display.ApplyCustomZoom(wheelDelta);
         }
     }
 }

@@ -350,40 +350,20 @@ namespace AniloxRoll.Monitor.Forms
 
             bool isGlobal = _liveCameraManager?.IsGlobalMergeActive == true;
 
+            // 視野同步走 ImageDisplayView.ViewRangeMmChanged → ApplyLiveViewRange（唯一路）
             if (isGlobal)
             {
                 // 全域模式：快取每台相機資料，合併後更新（mean 取 mean, max 取 max）
                 _liveRowMeanCache[camId] = meanArr;
                 _liveRowMaxCache[camId]  = maxArr;
                 if (!TryMergeLiveRowCurve(out float[] mergedMean, out float[] mergedMax)) return;
-                if (UpdateLiveRowDataAndViewRange(mergedMean, mergedMax)) return;
-
-                // 同步 Y 軸視野：查詢 _mergedDisplay 的 zoom/pan
-                double rowPitch = _liveRowDisplay.RowPitchMm;
-                if (rowPitch > 0 && _liveCameraManager.TryGetMergedViewRangeY(
-                    out double topPixel, out double botPixel))
-                {
-                    _liveRowDisplay.UpdateViewRange(topPixel * rowPitch, botPixel * rowPitch);
-                }
+                UpdateLiveRowDataAndViewRange(mergedMean, mergedMax);
             }
             else
             {
-                // 垂直模式：只顯示選中相機
+                // 合圖未啟用（啟用失敗/尚未啟用）：只顯示選中相機
                 if (camId != _liveCameraManager.SelectedMainCameraId) return;
-                if (UpdateLiveRowDataAndViewRange(meanArr, maxArr)) return;
-
-                // 同步 Y 軸視野：查詢 MIL 副顯示器 zoom/pan
-                var liveCam = FindCameraById(camId);
-                double rowPitch = _liveRowDisplay.RowPitchMm;
-                if (liveCam != null && rowPitch > 0 &&
-                    liveCam.TryGetSecondaryDisplayGeometry(
-                        out double milZoomX, out double milZoomY, out double milPanX, out double milPanY))
-                {
-                    double panelH  = camLiveMain.Height;
-                    double topPixel = milPanY;
-                    double botPixel = milPanY + panelH / milZoomY;
-                    _liveRowDisplay.UpdateViewRange(topPixel * rowPitch, botPixel * rowPitch);
-                }
+                UpdateLiveRowDataAndViewRange(meanArr, maxArr);
             }
         }
 

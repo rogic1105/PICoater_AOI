@@ -122,7 +122,6 @@ namespace AniloxRoll.Monitor.Forms
                 (j, v) => _liveCameraManager?.SetGrabHeightForCamera(j + 1, v),
                 (j, v) => { acq.CameraGrabHeight[j] = v; ConfigManager.SaveAcquisitionSettings(acq); },
                 () => {
-                    _liveCameraManager?.RefreshMainDisplay();
                     if (_settings.StitchMode == StitchMode.Global && _liveCameraManager?.IsGlobalMergeActive == true)
                         _liveCameraManager.RefreshGlobalMergeLayout(_settings.Ops.ToArray(), _settings.StartPosition.ToArray());
                 });
@@ -159,7 +158,6 @@ namespace AniloxRoll.Monitor.Forms
                     v => { acq.CameraGrabHeight[idx] = v; ConfigManager.SaveAcquisitionSettings(acq); },
                     v => ApplyCamParam(camId, "Height", v, () => _liveCameraManager.SetGrabHeightForCamera(camId, v)),
                     () => {
-                        _liveCameraManager?.RefreshMainDisplay();
                         if (_settings.StitchMode == StitchMode.Global && _liveCameraManager?.IsGlobalMergeActive == true)
                             _liveCameraManager.RefreshGlobalMergeLayout(_settings.Ops.ToArray(), _settings.StartPosition.ToArray());
                     });

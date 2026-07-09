@@ -91,10 +91,9 @@ namespace AniloxRoll.Monitor.UI.Managers
         public volatile bool IsReleasing = false;
 
         // --- Global merge（即時合圖）---
-        // 合圖的「拼」（佈局 + 合併 buffer + 每台 merge target）委派給 MultiCameraMerger 工頭（sdk/MIL）。
-        // 合圖的「秀」（MIL display 顯示/33ms 防閃刷新/滑鼠 hook/視野範圍/merged zoom/pan/1x）整個職責
-        // 已提取到 GlobalMergeCoordinator（擁有 _merger + _mergedDisplay + 座標鏡像 + timer + hook）。
-        // 本類別只留編排（建 MilCamera 清單、決定 ImageCanvas vs MIL 直繪、ImageCanvas/Waterfall 佈局）+ forwarder。
+        // 「拼」（佈局 + 合併 buffer + 每台 merge target）委派 MultiCameraMerger 工頭（sdk/MIL），
+        // 生命週期由 GlobalMergeCoordinator 擁有；「秀」一律 CPU（ImageDisplayView / WaterfallView 讀工頭佈局）。
+        // 本類別只留編排 + forwarder。
         private readonly GlobalMergeCoordinator _globalMerge;
         private readonly LiveDisplayCoordinator _display;
         public bool IsGlobalMergeActive => _globalMerge.IsActive;
@@ -112,15 +111,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (cameraPanels.Length < 7)
                 throw new ArgumentException("cameraPanels must contain at least 7 panels.", nameof(cameraPanels));
 
-            // 全域合圖「秀」協調者：穩定依賴走 ctor、會變動的值走 Func 委派（不反向參考整個 LCM）。
-            LiveDisplayCoordinator displayRef = null;
-            _globalMerge = new GlobalMergeCoordinator(
-                mainForm, mainDisplayPanel, updatePixelInfoCallback,
-                () => IsReleasing,
-                () => displayRef?.ScreenMmPerPx ?? 0,
-                () => _inspectionSettings?.AniloxRollSpeedMPerMin ?? 0,
-                () => (_cameraLineRateHz != null && _cameraLineRateHz.Length > 0) ? _cameraLineRateHz[0] : 0,
-                newId => displayRef?.OnMergedViewCenterCam(newId));
+            _globalMerge = new GlobalMergeCoordinator();
 
             _display = new LiveDisplayCoordinator(
                 mainForm, cameraPanels, mainDisplayPanel, updatePixelInfoCallback,
@@ -129,7 +120,6 @@ namespace AniloxRoll.Monitor.UI.Managers
                 () => _inspectionSettings,
                 () => _cameraLineRateHz,
                 () => IsLiveGrabbing);
-            displayRef = _display;
 
             _cameraHardwareConfigs = SystemSettings.CreateDefault().CameraDevices;
 
@@ -207,8 +197,6 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.SaveJpgQuality       = _saveJpgQuality;
                 cam.TimestampCoordinator = _timestampCoordinator;
 
-                cam.OnMouseDataChanged   += HandleMouseDataChanged;
-                cam.OnCameraClicked      += _display.SwitchMainDisplay;
                 cam.OnInspectionResult   += (camId, fn, mp, xp) =>
                     OnInspectionResult?.Invoke(camId, fn, mp, xp);
                 cam.OnLiveCurveData      += (camId, mean, max) =>

@@ -14,7 +14,7 @@
 Live 監控顯示邊界：
 - `LiveCameraManager` 保留相機/MIL/grab/參數協調與對外 API forwarder。
 - `GlobalMergeCoordinator` 擁有全域合圖 MIL display 生命週期。
-- `LiveDisplayCoordinator` 擁有 SmartCanvas/Waterfall/縮圖/狀態 label/選中相機/LOD/WheelZoomFilter 顯示狀態。
+- `LiveDisplayCoordinator` 擁有 SmartCanvas/Waterfall/縮圖/狀態 label/選中相機/LOD 顯示狀態。
 - 改 live 顯示行為時優先落在 `LiveDisplayCoordinator`；不要把 SmartCanvas/Waterfall 狀態放回 `LiveCameraManager`。
 - GPU LOD pinned buffer 生命週期走 `TanukiCv.Core.GpuGrayResizeProvider`；app 注入 `NativeMethods`，sample/tool 可用 `CreateTanukiCv()`。
 
@@ -63,16 +63,13 @@ bootstrap 例外（line 232 AppRole）：Hub 還沒建構，加註解標明合�
 - Chart 曲線永遠雙方向同時更新（不受 direction 影響）
 - GPU Pipeline 永遠 `"vertical+horizontal"`，direction 只影響 UI 選圖
 
-### StitchMode 行為
-- **Global 模式**：
-  - Live：`EnableGlobalMerge` → 監控主畫面即時合圖（MbufChild2d + MbufCopyClip，含 overlap 分割）；chartLiveVertical 不更新；chartLivePatch X 軸隨合併 display zoom 聯動（`LiveViewRangeProvider` → `TryGetMergedViewRange`）；lblPixelInfo 由 `_mergedDisplay` 的 `M_MOUSE_MOVE` hook 更新（mm 座標）
-  - Live 手勢:雙擊=`ResetMainDisplayView`（fit-to-window）、三擊=`SetPhysicalMagnification1x`（1:1）、滾輪=`ApplyCustomZoom`（1.1x 步進），Global/單台共用邏輯
-  - Live 初始化：`btnLiveGrab_Click` 首次分配相機後，若已為 Global 模式則立即 `EnableGlobalMerge`
-  - Review：`ApplyGlobalMergeIfNeeded` → 回顧主畫面全域合圖；chartReviewVertical 清空；chartReviewHorizontal 正常載入
-  - 切換時立即觸發（`_propertyGrid_PropertyValueChanged`）
-  - OPS/Start 變更：Global 啟用中 → `RefreshGlobalMergeLayout`（暫停複製→重算 clip→buffer 大小變則重分配→恢復，下一幀生效）
-- **Vertical 模式**：overview X 軸固定（不隨 canvas zoom）；muraVertical/Horizontal 隨動；Live 單台 MIL 顯示
-- **Global → Vertical 切換**：必須呼叫 `ReviewStitchCoordinator.DisposeGlobalMergedImage()` 清掉殘留 `_globalMergedImage` / `_periodMergedImage`。否則 IsGlobalMerged 仍為 true，會誤觸發其他守門條件（`UpdateSelectedReviewCamFromViewCenter` 現已改用 `StitchMode == Global` 判斷，但 bitmap 仍須釋放避免佔記憶體）。
+### StitchMode 行為（合圖永遠 Global；`hb_StitchMode` 寫死 Global）
+- Live：`EnableGlobalMerge` → 工頭算佈局+合併 buffer（MbufChild2d + MbufCopyClip，含 overlap 中線分割）；
+  「秀」一律 CPU（即時=ImageDisplayView、瀑布=WaterfallView）；滑鼠座標/縮放/視野聯動全走 ImageCanvas 事件
+- Live 手勢：雙擊 fit／三擊實體 1:1＝ImageDisplayView 內建（sdk）；滾輪＝ImageCanvas 自理
+- Live 初始化：`btnLiveGrab_Click` 首次分配相機後立即 `EnableGlobalMerge`
+- Review：`ApplyGlobalMergeIfNeeded` → 回顧主畫面全域合圖
+- OPS/Start 變更：Global 啟用中 → `RefreshGlobalMergeLayout`（重算 clip→buffer 大小變則重分配，下一幀生效）
 
 ### SmartCanvas opt-in 功能（TanukiCv.Controls，預設關，主程式回顧畫布未啟用）
 先在 `sdk/MIL/samples/MilGrabber.Monitor` 驗證（原 MilGrabber.PictureBox 範例，已併入並改名），未來可搬回顧畫布（見記憶 project_smartcanvas_lod / project_review_lod_grid_todo）：
@@ -80,7 +77,7 @@ bootstrap 例外（line 232 AppRole）：Hub 還沒建構，加註解標明合�
 - **`FitRelativeZoom`**：滾輪相對 fit(fit=1×)，上限=bitmap 1:1 ×`MaxZoomOverBitmap`(8)。滾輪 `_zoom *= 1.1^(e.Delta/120)` 正比轉動量——**修掉卡頓時 Windows 合併滾輪事件、舊算法每事件只乘一次造成的跨 scale 不一致**。
 - ⚠ **`ZoomRelativeToFit` 是螢幕縮放，不是實體倍率**（主程式 `_ovMag` 由 mm 校正算，兩者互不可取代）。
 - **滾輪 zoom 防抖**：滾動中拉伸現有畫面（非 LOD 拉伸舊 `_viewCache`、LOD 拉伸舊 tile），停下 150ms 才做昂貴重建 → 不每格頓。LOD tile 的 GPU 重算丟背景執行緒（in-flight guard + pending；釋放 pinned 需與 provider 互斥）。
-- **多擊手勢（單一來源）**：`DoubleClickFitToScreen`(雙擊 fit)、`TripleClickPhysical1x`(三擊實體 1:1，需 `SetPhysicalCalibration`)。SmartCanvas 使用 sdk `MultiClickDetector` + `IsAtFitView()`；雙擊只在非 fit 時動作、已 fit 不歸零讓三擊接手。事件 `FitPerformed`/`Physical1xPerformed`/`DragStarted` 給上層記 log。**主程式 `camReviewMain` 已改用**（`CanvasInteractionHelper.UpdateCanvasInfo` 餵 `SetPhysicalCalibration(_imageScaleFactor×opsInMm, _screenMmPerPx)`；移除了 app 的手勢 handler / SetPhysicalMagnification1x / IsCanvasFitToScreen）。`camLiveMain` 仍是 Panel 在「bg 預覽 SmartCanvas vs MIL live」間路由，但偵測器已改用 sdk `MultiClickDetector`。
+- **多擊手勢（單一來源）**：`DoubleClickFitToScreen`(雙擊 fit)、`TripleClickPhysical1x`(三擊實體 1:1，需 `SetPhysicalCalibration`)。SmartCanvas 使用 sdk `MultiClickDetector` + `IsAtFitView()`；雙擊只在非 fit 時動作、已 fit 不歸零讓三擊接手。事件 `FitPerformed`/`Physical1xPerformed`/`DragStarted` 給上層記 log。**主程式 `camReviewMain` 已改用**（`CanvasInteractionHelper.UpdateCanvasInfo` 餵 `SetPhysicalCalibration(_imageScaleFactor×opsInMm, _screenMmPerPx)`；移除了 app 的手勢 handler / SetPhysicalMagnification1x / IsCanvasFitToScreen）。`camLiveMain` 的雙擊 fit／三擊實體 1:1＝ImageDisplayView 內建手勢（grab 與背景預覽同一套，form 無自建路由）。
 
 ### 系統資訊 / 實體校正（TanukiCv.Core 唯一來源）
 - `TanukiCv.Core.SystemInfo`：`GetScreenMetrics()`(GDI32 螢幕 mm/px)、`GetGenericHardwareRows()`(CPU/RAM/GPU WMI)、`GetScreenRows()`。主程式 `SettingsTabs` listViewHardware 的 CPU/GPU/RAM/螢幕已改吃這個（Grabber/Disk/Storage/Resource 仍留 app；MIL Grabber 不進 sdk）。

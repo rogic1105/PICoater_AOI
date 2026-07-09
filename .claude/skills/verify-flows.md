@@ -321,8 +321,7 @@ displayPanel/status.MouseClick（SetupLivePanel 內）@LiveDisplayCoordinator.cs
  ├（InvokeRequired）BeginInvoke 自轉 UI 執行緒
  ├ Flow "SwitchMainDisplay cam=N center=…"
  ├ SetSelected@ImageDisplayView.cs ／ SetSelected@ThumbStrip.cs（橘框＝選中框唯一視覺來源）
- ├（centerView=true）CenterOnCamera@ImageDisplayView.cs｜CenterOnCamera@WaterfallView.cs   ← coordinator 置中（契約 True 分支）
- └ per-cam SetSecondaryDisplay(IntPtr.Zero)@AniloxCamera.cs   ← 顯示鐵則：任何模式不綁原生視窗到 camLiveMain
+ └（centerView=true）CenterOnCamera@ImageDisplayView.cs｜CenterOnCamera@WaterfallView.cs   ← coordinator 置中（契約 True 分支）
 另一入口（瀑布主畫面點擊選台，center=False）：
 OnCanvasMouseClick@WaterfallView.cs → SelectRequested 事件 → OnWaterfallSelectRequested@LiveDisplayCoordinator.cs
  → SwitchMainDisplay(camId)（畫布點擊選取＝不置中，否則蓋掉使用者拖出的視野）
@@ -378,9 +377,7 @@ T1: IC|WF|RV fit(double-click) / physical1x(triple-click)   ← 使用者 fit/1x
 
 **code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
 ```
-（訊息前濾）PreFilterMessage@LiveDisplayCoordinator.cs（WheelZoomFilter，全域 IMessageFilter）
- ← IC/WF 模式 return false 讓路（否則全域 filter 吃掉滾輪→主畫面縮不動）；非 IC/WF 才走 ApplyCustomZoom
- → OnMouseWheel@ImageCanvas.cs
+OnMouseWheel@ImageCanvas.cs   ← 滾輪一律 canvas 自理（app 無全域訊息濾鏡）
     ├ zoom ×1.1^(e.Delta/120)     ← 正比實際轉動量（事件合併時大 e.Delta 也按比例；修卡頓漏算）
     ├ FlowLog "wheelZoom in|out"（100ms 節流＝每手勢至少一行）
     ├ pan 錨定游標點＋Invalidate（zoom 防抖：滾動中拉伸舊 cache/tile，_zoomSettleTimer 停 150ms 才重建）

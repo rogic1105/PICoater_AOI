@@ -23,8 +23,6 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>底層 MIL 封裝（合圖等需直接存取 MIL buffer 時使用）。</summary>
         public MIL_ID OwnerSystemId => _mil.OwnerSystemId;
         public MIL_ID MilDigitizer => _mil.MilDigitizer;
-        public MIL_ID MilDisplay => _mil.MilDisplay;
-        public MIL_ID MilSecondaryDisplay => _mil.MilSecondaryDisplay;
 
         // ==================== State（委派 MIL） ====================
         public bool IsLive => _mil.IsLive;
@@ -146,9 +144,6 @@ namespace AniloxRoll.Monitor.Core.Camera
         public double CurrentFps => _mil.CurrentFps;
 
         // ==================== Events ====================
-        public event Action<int, int, int, int> OnMouseDataChanged;
-        public event Action<int> OnCameraClicked;
-
         /// <summary>每次 TrySaveCapture 成功存檔後觸發（MIL 回呼執行緒）。
         /// 參數：(cameraId, fileNameWithoutExt, meanPeak_0to1, maxPeak_0to1)</summary>
         public event Action<int, string, float, float> OnInspectionResult;
@@ -179,9 +174,6 @@ namespace AniloxRoll.Monitor.Core.Camera
 
             // MIL 每幀回呼 → 本類別跑檢測/合圖/存檔
             _mil.FrameReady += OnMilFrameReady;
-            // 滑鼠/點擊事件由 MIL 射出，原樣轉發給上層
-            _mil.OnMouseDataChanged += (camId, x, y, p) => OnMouseDataChanged?.Invoke(camId, x, y, p);
-            _mil.OnCameraClicked += camId => OnCameraClicked?.Invoke(camId);
         }
 
         // ==================== Initialize ====================
@@ -202,24 +194,6 @@ namespace AniloxRoll.Monitor.Core.Camera
             _nativeBufferPool = new NativeBufferPool(w, h, 1);
             AllocateResizeBuffers();
         }
-
-        // ==================== Primary / Secondary Display（委派 MIL） ====================
-
-        /// <summary>Detach / restore 主顯示（camLive 上的 MIL 顯示）。</summary>
-        public void SetPrimaryDisplayVisible(bool visible) => _mil.SetPrimaryDisplayVisible(visible);
-
-        public void SetSecondaryDisplay(IntPtr handle) => _mil.SetSecondaryDisplay(handle);
-
-        /// <summary>查詢副顯示器（camLiveMain）的 zoom/pan 狀態。</summary>
-        public bool TryGetSecondaryDisplayGeometry(out double zoomX, out double zoomY, out double panX, out double panY)
-            => _mil.TryGetSecondaryDisplayGeometry(out zoomX, out zoomY, out panX, out panY);
-
-        /// <summary>設定副顯示器的縮放與平移（用於自訂滾輪縮放）。</summary>
-        public void SetSecondaryDisplayZoom(double zoom, double panX, double panY)
-            => _mil.SetSecondaryDisplayZoom(zoom, panX, panY);
-
-        /// <summary>重置副顯示器的縮放/平移為 fit-to-window。</summary>
-        public void ResetSecondaryDisplayView() => _mil.ResetSecondaryDisplayView();
 
         // ==================== Exposure / Line Rate（委派 MIL） ====================
 
