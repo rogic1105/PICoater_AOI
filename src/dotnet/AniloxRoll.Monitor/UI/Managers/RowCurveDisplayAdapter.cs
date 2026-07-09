@@ -60,7 +60,17 @@ namespace AniloxRoll.Monitor.UI.Managers
                 for (int i = 0; i < mean.Length; i++) if (mean[i] != 0) { i0 = i; break; }
                 for (int i = mean.Length - 1; i >= 0; i--) if (mean[i] != 0) { i1 = i; break; }
                 double p = _chart.RowPitchMm;
-                occ = i0 < 0 ? " dataPhys=空" : $" dataPhys {i0 * p:F0}~{i1 * p:F0}mm";
+                if (i0 < 0) occ = " dataPhys=空";
+                else
+                {
+                    // dataChart＝映射後 chart 值域（故障注入盲測抓到的缺口：dataPhys 是映射前，
+                    // 抓不到「映射反向」；兩者並列＝映射層也可對數）
+                    double total = mean.Length * p;
+                    bool zeroAtTop = _getDirection() == VerticalDisplayDirection.TopToBottom;
+                    double c0 = zeroAtTop ? total - i1 * p : i0 * p;
+                    double c1 = zeroAtTop ? total - i0 * p : i1 * p;
+                    occ = $" dataPhys {i0 * p:F0}~{i1 * p:F0}mm dataChart {c0:F0}~{c1:F0}";
+                }
             }
             Core.Services.FlowTrace.Log(
                 $"{FlowName} {kind} dir={dir} n={n} total={_chart.TotalMm:F0}mm view {topMm:F0}~{botMm:F0}{occ}");
