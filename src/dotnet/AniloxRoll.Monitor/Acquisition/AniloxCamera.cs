@@ -161,6 +161,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>存檔完成回呼：傳入已儲存的檔案路徑陣列（供遠端複製佇列）。</summary>
         public Action<string[]> OnFilesSaved { get; set; }
 
+        private bool _flowLoggedDrainFrameDrop;
         private float _lastMeanPeak = 0f;
         private float _lastMaxPeak  = 0f;
 
@@ -336,6 +337,16 @@ namespace AniloxRoll.Monitor.Core.Camera
         {
             if (_isReleased) return;
             if (modifiedBuffer == MIL.M_NULL) return;
+            if (!mil.UserWantsGrab)
+            {
+                if (!_flowLoggedDrainFrameDrop)
+                {
+                    _flowLoggedDrainFrameDrop = true;
+                    FlowTrace.Log($"drop drainedFrame after StopGrab cam{CameraId}");
+                }
+                return;
+            }
+            _flowLoggedDrainFrameDrop = false;
 
             // 不管 EnableImageProcessing，一律執行 GPU 處理以取得 Mura 曲線（供 CSV 日誌判斷）
             bool processedByPicoater = TryApplyPicoaterRidge(modifiedBuffer);

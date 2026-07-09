@@ -12,6 +12,9 @@ namespace AniloxRoll.Monitor.UI.Managers
         private double _botMm;
         private float[] _pendingMean;
         private float[] _pendingMax;
+        private float[] _currentMean;
+        private float[] _currentMax;
+        private bool _currentRequiresViewRange;
 
         public RowCurveSyncCoordinator(RowCurveDisplayAdapter display)
         {
@@ -42,6 +45,10 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             _pendingMean = null;
             _pendingMax = null;
+            _currentMean = null;
+            _currentMax = null;
+            _rangeSuspended = false;
+            _display?.Clear();
         }
 
         public void SetViewRange(double topMm, double botMm)
@@ -83,6 +90,9 @@ namespace AniloxRoll.Monitor.UI.Managers
             _pendingMean = null;
             _pendingMax = null;
             _rangeSuspended = false;
+            _currentMean = mean;
+            _currentMax = max;
+            _currentRequiresViewRange = requireViewRange;
 
             if (requireViewRange)
             {
@@ -92,6 +102,22 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             _display.UpdateData(mean, max);
             return false;
+        }
+
+        public void RefreshDirection()
+        {
+            if (_display == null) return;
+            if (_currentMean != null)
+            {
+                if (_currentRequiresViewRange && _hasViewRange)
+                    _display.UpdateDataAndViewRange(_currentMean, _currentMax, _topMm, _botMm);
+                else
+                    _display.UpdateData(_currentMean, _currentMax);
+                return;
+            }
+
+            if (_hasViewRange)
+                _display.UpdateViewRange(_topMm, _botMm);
         }
 
         private void FlushPending()
@@ -104,6 +130,9 @@ namespace AniloxRoll.Monitor.UI.Managers
             _pendingMean = null;
             _pendingMax = null;
             _rangeSuspended = false;
+            _currentMean = mean;
+            _currentMax = max;
+            _currentRequiresViewRange = true;
             _display.UpdateDataAndViewRange(mean, max, _topMm, _botMm);
         }
     }

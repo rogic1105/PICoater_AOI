@@ -37,6 +37,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         public void SetRowPitchFromSpeed(double speedMPerMin, double lineRateHz)
             => _chart.SetRowPitchFromSpeed(speedMPerMin, lineRateHz);
         public void SetRowPitch(double mmPerRow) => _chart.SetRowPitch(mmPerRow);
+        public void Clear() => _chart.Clear();
 
         private void ApplyDirection()
             => _chart.ZeroAtTop = _getDirection() == VerticalDisplayDirection.TopToBottom;

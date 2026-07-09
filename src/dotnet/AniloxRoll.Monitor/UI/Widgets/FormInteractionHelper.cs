@@ -142,6 +142,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public void LoadDirectoryAndInitNavigator(string path)
         {
             _imageRepository.LoadDirectory(path);
+            FlowTrace.Log($"RV repo scan root={path} files={_imageRepository.FileCount}");
             if (_imageRepository.FileCount > 0)
                 _timeNavigator.Initialize(UserSessionState.LastYear);
         }
@@ -174,7 +175,9 @@ namespace AniloxRoll.Monitor.UI.Widgets
                     UserSessionState.SetLastDataPath(selectedPath);
                     UserSessionState.Save();
 
+                    FlowTrace.Log($"RV folder selected root={selectedPath}");
                     _imageRepository.LoadDirectory(selectedPath);
+                    FlowTrace.Log($"RV repo scan root={selectedPath} files={_imageRepository.FileCount}");
                     if (_imageRepository.FileCount == 0)
                     {
                         MessageBox.Show(_form, "該路徑下無符合格式的圖片！");

@@ -57,7 +57,7 @@ namespace AniloxRoll.Monitor.Forms
                 await Task.Run(() => LightTurnOn());   // 序列埠寫入 ~百 ms，不佔 UI（順序仍保證：燈亮→暖機→grab）
                 int warmup = _settings?.LightWarmupMs ?? 0;
                 if (warmup > 0) await Task.Delay(warmup);
-                ResetLiveWaterfallRowChart();
+                ResetLiveChartsForDisplayTransition();
                 _muraExceedLatch[0] = _muraExceedLatch[1] = false;   // 每輪 grab 重新邊緣觸發超標留痕
                 if (_settings?.MuraDetectPaused != true) UpdateMuraLed(false);   // 新一輪檢測：警告閂鎖歸零
                 _ = _ioGrabController?.ClearMura();   // 硬體 DO 閂鎖同步歸零（手動流程與 FSM EnterIdle 對齊）
@@ -91,6 +91,15 @@ namespace AniloxRoll.Monitor.Forms
             if (!wasGrabbing && _liveCameraManager.IsLiveGrabbing)
             {
                 _currentGrabId = _inspectionLogService.NextGrabId();
+                DateTime captureDate = DateTime.Now;
+                string captureRoot = _settings?.CaptureRootPath ?? string.Empty;
+                string imageDir = string.IsNullOrWhiteSpace(captureRoot)
+                    ? "(empty)" : CaptureStoragePaths.DateImageDir(captureRoot, captureDate);
+                string csvPath = string.IsNullOrWhiteSpace(captureRoot)
+                    ? "(empty)" : CaptureStoragePaths.DailyCsv(captureRoot, captureDate);
+                FlowTrace.Log($"capture plan grab={_currentGrabId} root={captureRoot} imageDir={imageDir} csv={csvPath} " +
+                    $"files=*{CaptureFileNaming.RawJpg}|*{CaptureFileNaming.ProcV}|*{CaptureFileNaming.ProcH}|*{CaptureFileNaming.MeanV}|*{CaptureFileNaming.MaxV}|*{CaptureFileNaming.MeanH}|*{CaptureFileNaming.MaxH} " +
+                    $"scale={InspectionEngineConfig.DefaultSaveResizeScale}");
             }
 
             // 剛從「抓取中」→「停止」：關燈 + 觸發循環儲存 + 通知儲存機清理
@@ -408,6 +417,22 @@ namespace AniloxRoll.Monitor.Forms
             _waterfallRowWrite = 0;
         }
 
+        private void ResetLiveChartsForDisplayTransition()
+        {
+            ResetLiveWaterfallRowChart();
+            _liveRowMeanCache.Clear();
+            _liveRowMaxCache.Clear();
+            for (int i = 0; i < CameraCount; i++)
+            {
+                _liveCurveMean[i] = null;
+                _liveCurveMax[i] = null;
+            }
+            _liveOverviewDirty = false;
+            _liveOverviewHelper?.Clear();
+            _liveViewLeftMm = _liveViewRightMm = double.NaN;
+            _liveViewTopMm = _liveViewBotMm = double.NaN;
+        }
+
         private void UpdateLiveWaterfallRowChart(int camId, float[] meanArr, float[] maxArr)
         {
             if (meanArr == null || meanArr.Length == 0 || _liveRowDisplay == null) return;
@@ -494,7 +519,9 @@ namespace AniloxRoll.Monitor.Forms
         private void ApplyDisplayDirectionSetting()
         {
             _liveCameraManager?.ApplyDisplayDirection();
+            _liveRowSync?.RefreshDirection();
             _reviewDisplayManager?.SetFlipVertical(ShouldFlipDisplayVertical());
+            _reviewRowSync?.RefreshDirection();
             _stitchCoordinator?.RefreshCurrentCameraChartsForSettingsChange();
             if (_stitchCoordinator?.IsStitchMode != true)
                 _stitchCoordinator?.UpdateRowChartFromRepository();
@@ -548,14 +575,14 @@ namespace AniloxRoll.Monitor.Forms
             if (name == nameof(InspectionSettings.he_MainDisplay))
             {
                 FlowTrace.Log($"ui:設定[主畫面顯示] → {_settings.he_MainDisplay}");   // intent 行（孤兒判讀規則）
-                ResetLiveWaterfallRowChart();
+                ResetLiveChartsForDisplayTransition();
                 _liveCameraManager?.ApplyMainDisplayMode();   // 即時 / 瀑布 即時切換
             }
             if (name == nameof(InspectionSettings.hee_VerticalDirection))
                 ApplyDisplayDirectionSetting();
             if (name == nameof(InspectionSettings.hg_WaterfallTotalHeight) || name == nameof(InspectionSettings.hh_WaterfallFullMode))
             {
-                ResetLiveWaterfallRowChart();
+                ResetLiveChartsForDisplayTransition();
                 _liveCameraManager?.RefreshWaterfallDisplay(); // 瀑布總高/滿了行為變更 → 重建套新值
             }
             if (OpsStartSettingNames.Contains(name) && _liveCameraManager?.IsGlobalMergeActive == true)

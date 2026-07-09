@@ -96,8 +96,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     var allPaths = new System.Collections.Generic.List<string>();
                     foreach (var kv in grouped) allPaths.AddRange(kv.Value);
                     var tickMap = FrameTickIndex.LoadTickMap(allPaths);
-                    var alignedByCam = FrameTickIndex.BuildAlignedByTick(grouped, tickMap)
-                                       ?? FrameTickIndex.BuildAlignedByStitchKey(grouped);
+                    var alignedByTick = FrameTickIndex.BuildAlignedByTick(grouped, tickMap);
+                    var alignedByCam = alignedByTick ?? FrameTickIndex.BuildAlignedByStitchKey(grouped);
+                    Core.Services.FlowTrace.Log($"RV curves paths {grabId} root={root} images={allPaths.Count} cams={grouped.Count} cfg={(cfg != null ? "yes" : "no")} align={(alignedByTick != null ? "tick" : "filename")}");
 
                     for (int i = 0; i < camCount; i++)
                     {
@@ -212,8 +213,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     var allPaths = new System.Collections.Generic.List<string>();
                     foreach (var kv in grouped) allPaths.AddRange(kv.Value);
                     var tickMap = FrameTickIndex.LoadTickMap(allPaths);
-                    var alignedByCam = FrameTickIndex.BuildAlignedByTick(grouped, tickMap)
-                                       ?? FrameTickIndex.BuildAlignedByStitchKey(grouped);
+                    var alignedByTick = FrameTickIndex.BuildAlignedByTick(grouped, tickMap);
+                    var alignedByCam = alignedByTick ?? FrameTickIndex.BuildAlignedByStitchKey(grouped);
+                    Core.Services.FlowTrace.Log($"RV loadGrab paths {grabId} root={root} images={totalImgCount} cams={grouped.Count} cfg={(grabCfg != null ? "yes" : "no")} align={(alignedByTick != null ? "tick" : "filename")}");
 
                     // 7 台相機各自獨立（imgs[i]/curve[i] 各寫各的 index、BitmapPool 有 lock、CurveMergeHelper 無共用 static）
                     // → 平行解碼/拼接，吃滿多核心，削掉最大宗的 Stitch 延遲。每台自帶 try/catch，不外拋 AggregateException。
@@ -584,6 +586,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _ctx.DateTimeNavigator.GetCurrentMin(),
                 _ctx.DateTimeNavigator.GetCurrentSec());
             if (filesMap == null || filesMap.Count == 0) return;
+            Core.Services.FlowTrace.Log($"RV period load {CurrentPeriodLabel()} images={filesMap.Count}/{_ctx.CameraCount} proc={LastReviewProcessedMode} cfg={(cfg != null ? "yes" : "no")}");
 
             Func<string, Bitmap> bmpLoader = _ctx.InspectionService != null
                 ? (Func<string, Bitmap>)(p => _ctx.InspectionService.LoadBmpAtScale(p, scale))
@@ -710,6 +713,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         /// <summary>當前選中相機 index（0-based）來源＝ImageDisplayView（2b-ii-B 後取代舊 GalleryManager.SelectedIndex）。</summary>
         public Func<int> SelectedCamIndexProvider { get; set; }
+
+        private string CurrentPeriodLabel()
+            => $"{_ctx.DateTimeNavigator.GetCurrentYear()}-{_ctx.DateTimeNavigator.GetCurrentMonth()}-{_ctx.DateTimeNavigator.GetCurrentDay()} " +
+               $"{_ctx.DateTimeNavigator.GetCurrentHour()}:{_ctx.DateTimeNavigator.GetCurrentMin()}:{_ctx.DateTimeNavigator.GetCurrentSec()}";
 
         private double ViewRangeProvider(int cameraIndex, bool isLeft, double defaultValue)
         {

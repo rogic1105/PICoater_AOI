@@ -211,6 +211,7 @@ AutoAllocateCameras(Form)                    顯示基線 set:[顯示基線] 一
 ```
 T1: StartGrab（cams=M）
 T1: ApplyMainDisplayMode → 同模式    ← 冪等：不得出現 create/teardown 行
+T1: capture plan grab=… root=… imageDir=… csv=… files=… scale=…
 Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線」相機恰一行，順序不定
 （首幀齊後進入穩態 → 適用「穩態靜默通則」：無互動下不得再有顯示狀態**變更**行。
   狀態**快照**行〔rowChart/WF state/IC state/stats，見§狀態快照儀器〕＝儀器輸出，穩態每秒出現正常）
@@ -225,7 +226,7 @@ btnLiveGrab_Click@AniloxRollForm.Live.cs             intent 行 ui:【開始抓�
  │                                                （IoStartGrab 直呼本方法繞過按鈕灰色）
  ├（未抓取→啟動）await Task.Run(LightTurnOn@AniloxRollForm.HardwareStatus.cs)
  │   → await Task.Delay(LightWarmupMs)               ⚠ 序列埠寫入一律背景（UI 執行緒零 MIL/序列埠鐵則）
- ├（未抓取）ResetLiveWaterfallRowChart@AniloxRollForm.Live.cs ＋ _muraExceedLatch 歸零
+ ├（未抓取）ResetLiveChartsForDisplayTransition@AniloxRollForm.Live.cs ＋ _muraExceedLatch 歸零
  │   ＋ UpdateMuraLed(false) ＋ ClearMura@IoGrabController.cs   ← MURA 閂鎖歸零（latch 非脈衝，M1）
  ├（未配置）EnsureAllocatedAndToggleGrab@LiveCameraManager.cs → AllocateCameras（=F1 全序）→ ToggleGrab
  │   └（回 form）LoadBackgroundBins@AniloxRollForm.Background.cs ＋ EnableGlobalMerge@LiveCameraManager.Merge.cs
@@ -238,7 +239,7 @@ btnLiveGrab_Click@AniloxRollForm.Live.cs             intent 行 ui:【開始抓�
  │      ├ ResetWaterfallIfActive@LiveDisplayCoordinator.cs → Reset@WaterfallView.cs（清舊圖＋重置 tick 對齊，防新幀接舊網格錯位）
  │      └ per-cam SetUserGrabIntent(true)@AniloxCamera.cs
  │         └ SetUserGrabIntent@MilCamera.cs → ApplyGrabState@MilCamera.cs → MdigProcess(M_START)
- ├（啟動成功）NextGrabId@InspectionLogService.cs → _currentGrabId
+ ├（啟動成功）NextGrabId@InspectionLogService.cs → _currentGrabId ＋ capture plan 行（C1）
  └ UpdateGrabButton@AniloxRollForm.Live.cs
 （每幀幀流，MIL 回呼執行緒 Tn）
 ProcessingFunction@MilCamera.cs（MdigProcess hook，static）
@@ -257,7 +258,7 @@ ProcessingFunction@MilCamera.cs（MdigProcess hook，static）
     │      （佈局=MergeLayout.Compute 唯一來源）→ KickWriter → Task.Run WriteBand（背景 memcpy，不卡 UI）
     │      ＋ PushFrame@ThumbStrip.cs（縮圖一律即時，兩模式同源）
     ├（hook 返回 MilCamera 後）CopyDisplayToMergeTarget@MilCamera.cs   ← 合圖貼圖在 grab hook（display buffer 更新後）
-    └ TrySaveCapture@AniloxCamera.cs（→ CameraFrameSaver 背景存檔）
+    └ TrySaveCapture@AniloxCamera.cs（→ CameraFrameSaver 背景存檔 → C1/C2）
 （顯示重繪，UI 執行緒 T1）
 RefreshMain@ImageDisplayView.cs（33ms _timer）
  ├ UpdateReverseThumbSync@ImageDisplayView.cs（快拖補刷）
@@ -274,7 +275,9 @@ RefreshMain@ImageDisplayView.cs（33ms _timer）
 **log-flow（執行期腳印＝判準）**
 ```
 T1: StopGrab
-（之後不得再出現 firstFrame / 任何 [Flow] 顯示行，直到下一個動作）
+Tn: drop drainedFrame after StopGrab camN（可選；每台最多一行）
+（之後不得再出現 firstFrame / 任何 [Flow] 顯示行，直到下一個動作；
+  drain drop 行是清尾幀儀器，不是顯示更新）
 ```
 
 **code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
@@ -290,6 +293,8 @@ btnLiveGrab_Click@AniloxRollForm.Live.cs（wasGrabbing=true，同鈕 toggle）  
              → ApplyGrabState@MilCamera.cs
                 └ DrainGrab@MilCamera.cs      ← 順序鎖死：M_STOP+M_WAIT（drain 佇列）→ M_GRAB_ABORT（清 in-flight）；
                                                  唯一來源（停止與 SetGrabHeight 改尺寸前共用）
+             → drained FrameReady@AniloxCamera.cs 若發生：UserWantsGrab=false → drop，不進 Hessian/row chart/CSV/存檔
+                ← 防停止尾幀「有效影像 + 黑尾」被 Hessian 當水平脊線（黑白硬邊界）寫到最後 row
 （form 收尾，T1）
  ├ Task.Run(LightTurnOff@AniloxRollForm.HardwareStatus.cs)   ⚠ [UiStack] 曾定罪停止時卡 SerialStream.Write → 一律背景
  ├ TriggerRetentionAndFlagAsync@AniloxRollForm.HardwareStatus.cs
@@ -297,6 +302,12 @@ btnLiveGrab_Click@AniloxRollForm.Live.cs（wasGrabbing=true，同鈕 toggle）  
  └ UpdateGrabButton@AniloxRollForm.Live.cs
 競態收口：下一次 StartGrab / FreeCameras 開頭 WaitStopDrain@LiveCameraManager.cs（排水未完等它，平時零成本）
 ```
+
+**StopGrab 校稿工具**
+```
+python tools/python/check_stopgrab_flow.py [trace.log]
+```
+- PASS 判準：每個 `StopGrab` 後、下一個 `ui:`/`StartGrab`/`AllocateCameras begin` 前，只允許 `drop drainedFrame after StopGrab camN`；不得再出現 `firstFrame`、`LC row`、`capture csv`、IC/WF display 更新。
 
 ### F4 切「主畫面顯示」設定（即時↔瀑布，即時生效）
 
@@ -306,6 +317,7 @@ T1: ApplyMainDisplayMode → 新模式
 T1: Teardown{舊 view}（unsubscribe M）
 T1: {新 view} create + subscribe M
 （grab 中切換：接著每台在線相機 firstFrame → 新 view）
+座標發布順序：`ImageDisplayView.RefireViewRange` / `OnCanvasStatus` 必須先確認 `ContentW/H > 0` 才發布 view range；column/row chart 初始化不得吃空畫面的暫態 range。
 ```
 
 **code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
@@ -315,7 +327,7 @@ propertyGridSettings.PropertyValueChanged → _propertyGrid_PropertyValueChanged
     └ Changed 事件 → OnSettingChanged@AniloxRollForm.cs（唯一 dispatcher，semaphore 序列化；勿拆）
        └ HandleLiveLayoutSettingsChanged@AniloxRollForm.Live.cs（name==he_MainDisplay）
           ├ FlowTrace "ui:設定[主畫面顯示] → …"（intent 行）
-          ├ ResetLiveWaterfallRowChart@AniloxRollForm.Live.cs（列 chart 瀑布緩衝歸零）
+          ├ ResetLiveChartsForDisplayTransition@AniloxRollForm.Live.cs（column/row chart、row cache、waterfall row buffer、live view range 歸零）
           └ ApplyMainDisplayMode@LiveCameraManager.Display.cs（forwarder）
              └ ApplyMainDisplayMode@LiveDisplayCoordinator.cs   ← 模式單一決策點（he_MainDisplay 唯一入口）＋錯掛自檢旗標歸零
                 ├ →瀑布：TeardownImageDisplay@LiveDisplayCoordinator.cs（unsubscribe OnDisplayFrame＋Dispose＋GPU LOD Release）
@@ -566,13 +578,39 @@ Tn: MURA 恢復（v|h）                                                        
 - 違規樣本：chart 明顯超標卻無「MURA 超標」行＝判定鏈斷（2026-07-07 盲測抓到：舊版被
   IO 未連線 early-return 整段跳過＝操作員零警告）。
 
+## 資料存放與檢測契約（C 系列；capture/storage）
+
+### C1 抓取存放計畫（開始 grab 後一次）
+```
+T1: capture plan grab={yyMMdd-HHmmss} root={CaptureRootPath}
+    imageDir={root}\yyyy\yyyyMM\yyyyMMdd
+    csv={root}\yyyy\yyyyMM\yyyyMMdd.csv
+    files=*_raw.jpg|*_proc_v.jpg|*_proc_h.jpg|*_mean_v.bin|*_max_v.bin|*_mean_h.bin|*_max_h.bin
+    scale={DefaultSaveResizeScale}
+```
+- `imageDir` 與 `csv` 必須由 `CaptureStoragePaths` 推導；檔名 suffix 必須由 `CaptureFileNaming` 推導。
+- 這行是每輪 grab 的「存放方式/位置」摘要；逐幀大小與資源量仍歸 `resource-monitor-*.csv`，不得用 `[Flow]` 洗版。
+
+### C2 檢測 CSV 寫入（每個 grab 首筆 + CFG 變更）
+```
+Tn: capture csv open path=… cfg=yes|no              ← 新檔或換日首次開啟
+Tn: capture csv cfg path=… HM=V/H thrV=mean/max thrH=mean/max
+Tn: capture csv firstRecord grab=… path=… file=… verdict=max0|1/mean0|1 peak=…/… thrV=…/…
+```
+- `firstRecord` 每個 grab 只出一行，用來確認檢測結果有落到哪一份 CSV；逐相機逐幀細節看 CSV 本體。
+- `cfg` 行出現代表 `#CFG` 已寫入同一 CSV；回顧曲線座標/捕捉時正規值可從該 CSV 追溯。
+- `verdict` 使用寫入 CSV 同一組 V 閾值，與 `AppendRecord@InspectionLogService.cs` 的 `MaxExceed/MeanExceed` 同源。
+
 ## 回顧 tab 契約（R 系列；儀器前綴 RV）
 
 ### R1 讀取資料（btnReviewSelectFolder）
 ```
 T1: ui:【讀取資料】鈕（Review）
+T1: RV folder selected root=…
+T1: RV repo scan root=… files=N
 T1: （首次）RV EnsureImageDisplay create（thumbs=7）
 T1: RV loadGrab begin {grabId}（proc=…）
+Tn: RV loadGrab paths {grabId} root=… images=N cams=P cfg=yes|no align=tick|filename
 T1: RV pushFrames P/7（merge=True, feedScale=…）   ← P=該 grab 有影像的相機數；缺台=黑占位
 T1: RV loadGrab done {grabId}（…ms）
 （grab 中按：另會出現 DisableGlobalMerge 等監控行——歸本 intent 管，見孤兒判讀規則）
@@ -581,9 +619,10 @@ T1: RV loadGrab done {grabId}（…ms）
 ### R2 單片序號切換（cbReviewId）——分層載入（2026-07-07 定版）
 ```
 T1: ui:【單片序號】→ {grabId}
+Tn: RV curves paths {grabId} root=… images=N cams=P cfg=yes|no align=tick|filename
 T1: RV curves {grabId}（…ms）          ← 快路：欄+列曲線+CFG 即時跟滾動（chart 先行，使用者掃異常）
 （影像 debounce 250ms：滾動中不發完整載入；停下才載「最後選取」）
-T1: RV loadGrab begin {grabId} → RV lodRebind merge …（fit reset）→ RV pushFrames → RV loadGrab done
+T1/Tn: RV loadGrab begin {grabId} → RV loadGrab paths … → RV lodRebind merge …（fit reset）→ RV pushFrames → RV loadGrab done
 ```
 - **分層**：曲線每個 intent 都跟（`RV curves`，舊的記 `RV curves stale-drop`）；影像只載 settle 後的最後一張。
 - **換序號＝重設視野（fit）＝預期**（各 grab 高度不同 → lodRebind 合法出現）。
@@ -594,8 +633,12 @@ T1: RV loadGrab begin {grabId} → RV lodRebind merge …（fit reset）→ RV p
 ### R3 時段導航（cbReviewDate/cbReviewTime 手動）
 ```
 T1: ui:【時段導航】（cbReviewDate/Time）
-T1: RV pushFrames …（時段模式載入；依實測補完整序列）
+T1: RV period load {yyyy-MM-dd HH:mm:ss.fff} images=P/7 proc=True|False cfg=yes|no
+T1: RV pushFrames P/7（merge=True, feedScale=…）
+T1: RV row … / RV state …（chart/狀態快照視資料而定）
 ```
+- 時段模式不進 `RV loadGrab begin/done`；它走 repository 當前時間點 → `ApplyGlobalMergeIfNeeded` → `StitchedImagesReady` → `ReviewDisplayManager.PushFrames`。
+- `RV period load` 中 `cfg=yes` 代表 `RefreshReviewConfigForCurrentPeriod` 已從該日 CSV 找到 #CFG；`cfg=no` 時座標/閾值 fallback 當前 settings。
 
 ### R4 回顧主畫面互動（點縮圖/拖曳/縮放）
 與 F5/F6/F6b 同款（同一個 ImageDisplayView），行前綴=RV：
@@ -646,6 +689,18 @@ T1: ui:設定[ec_ErrorValueMeanV]（例）
 T1: ui:設定[hd_EnableReviewEnhance]
 T1: RV loadGrab begin {當前grabId} → … → RV loadGrab done   ← 重載當前拼接視圖
 ```
+
+### S3 上下方向（hee_VerticalDirection）
+```
+T1: ui:設定[hee_VerticalDirection]=TopToBottom|BottomToTop
+T1: ApplyMainDisplayMode / 影像方向套用（依目前主畫面模式）
+T1: LC row rowChart dir=… 或 LC row rowView dir=…     ← grab 停止後也要重套最後一組列圖表資料/視野
+T1: RV row …（Review 有資料時）或 RV load/update row（依當前 Review 模式）
+```
+- 改上下方向不得新增 `AxisY.IsReversed`、`Reverse`、`total-` 等外層鏡像層；只准透過
+  `RowCurveDisplayAdapter.ApplyDirection → RowCurveChartHelper.ZeroAtTop` 重畫既有資料/視野。
+- 違規樣本：grab 停止後改 PropertyGrid 上下方向，主監控畫面跟著翻，但 `chartLiveRow`
+  仍維持舊方向＝`RowCurveSyncCoordinator` 沒有對最後資料做方向刷新。
 
 （其餘設定逐一補進：每補一個 UI 功能，順手寫它的 S 條目。）
 

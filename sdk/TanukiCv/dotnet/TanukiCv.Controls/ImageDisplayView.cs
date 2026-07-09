@@ -331,6 +331,31 @@ namespace TanukiCv.Controls
 
         private int _lastStateLogMs;   // 每幀視野快照節流（免滑鼠；修「要滑鼠移動才更新」的 log 誤判源）
 
+        private bool TryComputeViewRange(float zoom, PointF pan, out double leftMm, out double rightMm, out double topMm, out double botMm)
+        {
+            leftMm = rightMm = topMm = botMm = 0;
+            if (_canvas == null || zoom <= 0) return false;
+            if (_canvas.ContentW <= 0 || _canvas.ContentH <= 0) return false;
+            if (!GetDisplayCoords(out double startMm, out double opsInMm, out double sf)) return false;
+
+            leftMm = PixelMmMapper.PixelToMm((0 - pan.X) / zoom * sf, startMm, opsInMm);
+            rightMm = PixelMmMapper.PixelToMm((_canvas.Width - pan.X) / zoom * sf, startMm, opsInMm);
+            double yPitch = _rowPitchMm > 0 ? _rowPitchMm : opsInMm;
+            topMm = (0 - pan.Y) / zoom * sf * yPitch;
+            botMm = (_canvas.Height - pan.Y) / zoom * sf * yPitch;
+            if (VerticalZeroAtBottom)
+            {
+                double totalYMm = TotalRowsMm(yPitch, sf);
+                if (totalYMm > 0)
+                {
+                    double t = totalYMm - topMm, b = totalYMm - botMm;
+                    topMm = t; botMm = b;
+                }
+            }
+
+            return leftMm != rightMm && topMm != botMm;
+        }
+
         /// <summary>狀態快照：新內容上畫時記當前視野四邊（每秒一行），與 chart 視窗直接對數。</summary>
         private void FlowViewState()
         {
@@ -338,20 +363,7 @@ namespace TanukiCv.Controls
             int now = Environment.TickCount;
             if (now - _lastStateLogMs < 1000) return;
             _lastStateLogMs = now;
-            if (!GetDisplayCoords(out double startMm, out double opsInMm, out double sf)) return;
-            float zoom = _canvas.Zoom;
-            if (zoom <= 0) return;
-            var pan = _canvas.PanOffset;
-            double leftMm = PixelMmMapper.PixelToMm((0 - pan.X) / zoom * sf, startMm, opsInMm);
-            double rightMm = PixelMmMapper.PixelToMm((_canvas.Width - pan.X) / zoom * sf, startMm, opsInMm);
-            double yPitch = _rowPitchMm > 0 ? _rowPitchMm : opsInMm;
-            double topMm = (0 - pan.Y) / zoom * sf * yPitch;
-            double botMm = (_canvas.Height - pan.Y) / zoom * sf * yPitch;
-            if (VerticalZeroAtBottom)
-            {
-                double totalYMm = TotalRowsMm(yPitch, sf);
-                if (totalYMm > 0) { double t = totalYMm - topMm, b = totalYMm - botMm; topMm = t; botMm = b; }
-            }
+            if (!TryComputeViewRange(_canvas.Zoom, _canvas.PanOffset, out double leftMm, out double rightMm, out double topMm, out double botMm)) return;
             _flowLog($"state viewX {leftMm:F0}~{rightMm:F0} viewY {topMm:F0}~{botMm:F0}");
         }
 
@@ -360,6 +372,7 @@ namespace TanukiCv.Controls
         public void RefireViewRange()
         {
             if (_canvas == null || ViewRangeMmChanged == null) return;
+            if (_canvas.ContentW <= 0 || _canvas.ContentH <= 0) return;
             if (!GetDisplayCoords(out double startMm, out double opsInMm, out double sf)) return;
             float zoom = _canvas.Zoom;
             if (zoom <= 0) return;
@@ -692,6 +705,11 @@ namespace TanukiCv.Controls
         private void OnCanvasStatus(CanvasInfo info)
         {
             if (_disposed || _canvas == null || info.Zoom <= 0) return;
+            if (_canvas.ContentW <= 0 || _canvas.ContentH <= 0)
+            {
+                _canvas.SetRangeOverlay("", "", "", "", "");
+                return;
+            }
             if (!GetDisplayCoords(out double startMm, out double opsInMm, out double sf))
             { _canvas.SetRangeOverlay("", "", "", "", ""); return; }
 

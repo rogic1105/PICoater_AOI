@@ -37,7 +37,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private ThumbStrip _waterfallThumbs;   // 顯示鐵則1：縮圖在瀑布模式也一律即時影像（與即時模式同源 CPU ThumbStrip）
 
         // ── [Flow] 顯示資料流跡：咽喉點各一行（按鈕/設定→接線→首幀→顯示），落 Logs\trace-*.log。
-        //    驗證＝跑一輪操作後把 log 與「預期步驟（EVT）」比對；headless 可驗、不用肉眼盯 UI。
+        //    驗證＝跑一輪操作後把 log 與「預期步驟（DVT）」比對；headless 可驗、不用肉眼盯 UI。
         //    時間戳+執行緒 ID 由 FlowTrace 統一附加（多執行緒交錯時按執行緒拆序列+時間戳看先後）。
         private static void Flow(string msg) => FlowTrace.Log(msg);
         private readonly HashSet<int> _flowFirstFrame = new HashSet<int>();   // 每次 StartGrab/重建後，各 cam 首幀記一行

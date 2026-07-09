@@ -22,6 +22,7 @@ namespace AniloxRoll.Monitor.Core.Services
         // #CFG 變更偵測
         private string _lastWrittenConfigKey;
         private string _lastCsvPath;
+        private string _lastFlowRecordGrabId;
 
         /// <summary>最近一次成功寫入的 CSV 完整路徑（供呼叫端排入遠端複製佇列）。</summary>
         public string LastCsvPath => _lastCsvPath;
@@ -89,6 +90,9 @@ namespace AniloxRoll.Monitor.Core.Services
 
                 int maxExceed  = maxPeak  > errMax  ? 1 : 0;
                 int meanExceed = meanPeak > errMean ? 1 : 0;
+                bool flowCsvOpen = false;
+                bool flowCfgWrite = false;
+                bool flowFirstRecordForGrab = false;
 
                 lock (_csvLock)
                 {
@@ -107,24 +111,42 @@ namespace AniloxRoll.Monitor.Core.Services
                             {
                                 sw.WriteLine(config.ToCsvLine());
                                 _lastWrittenConfigKey = config.ContentKey;
+                                flowCfgWrite = true;
                             }
                             if (isNewFile)
                                 sw.WriteLine(Header);
                             _lastCsvPath = csvPath;
+                            flowCsvOpen = true;
                         }
                         else if (config != null && config.ContentKey != _lastWrittenConfigKey)
                         {
                             // 設定變更 → 插入新的 #CFG 列
                             sw.WriteLine(config.ToCsvLine());
                             _lastWrittenConfigKey = config.ContentKey;
+                            flowCfgWrite = true;
                         }
 
                         sw.WriteLine(string.Format(CultureInfo.InvariantCulture,
                             "{0},{1},{2},{3},{4:F4},{5:F4},{6},{7:F1},{8:F1}",
                             grabId, fileName, maxExceed, meanExceed,
                             meanPeak, maxPeak, grabHeight, lineRateHz, exposureUs));
+
+                        if (!string.Equals(_lastFlowRecordGrabId, grabId, StringComparison.Ordinal))
+                        {
+                            _lastFlowRecordGrabId = grabId;
+                            flowFirstRecordForGrab = true;
+                        }
                     }
                 }
+
+                if (flowCsvOpen)
+                    FlowTrace.Log($"capture csv open path={csvPath} cfg={(flowCfgWrite ? "yes" : "no")}");
+                if (flowCfgWrite && config != null)
+                    FlowTrace.Log($"capture csv cfg path={csvPath} HM={config.HessianMaxFactorV:F4}/{config.HessianMaxFactorH:F4} " +
+                        $"thrV={config.ErrorValueMeanV:F4}/{config.ErrorValueMaxV:F4} thrH={config.ErrorValueMeanH:F4}/{config.ErrorValueMaxH:F4}");
+                if (flowFirstRecordForGrab)
+                    FlowTrace.Log($"capture csv firstRecord grab={grabId} path={csvPath} file={fileName} " +
+                        $"verdict=max{maxExceed}/mean{meanExceed} peak={meanPeak:F4}/{maxPeak:F4} thrV={errMean:F4}/{errMax:F4}");
             }
             catch (Exception ex)
             {
@@ -170,6 +192,9 @@ namespace AniloxRoll.Monitor.Core.Services
                     _lastWrittenConfigKey = config.ContentKey;
                     _lastCsvPath = csvPath;
                 }
+
+                FlowTrace.Log($"capture csv cfg path={csvPath} HM={config.HessianMaxFactorV:F4}/{config.HessianMaxFactorH:F4} " +
+                    $"thrV={config.ErrorValueMeanV:F4}/{config.ErrorValueMaxV:F4} thrH={config.ErrorValueMeanH:F4}/{config.ErrorValueMaxH:F4}");
             }
             catch (Exception ex)
             {
