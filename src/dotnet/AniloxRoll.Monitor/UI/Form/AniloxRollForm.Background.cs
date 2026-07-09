@@ -42,7 +42,7 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             // 先清除舊的背景預覽（釋放 overlay + 恢復 MIL display）
-            if (_bgPreviewActive) ClearBackgroundPreview();
+            if (IsBgPreviewActive) ClearBackgroundPreview();
 
             // 確保相機已 allocate
             if (!_liveCameraManager.IsAllocated)
@@ -165,7 +165,7 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             // 採集完成後直接預覽（先清除舊預覽，確保每次都重新開啟）
-            if (_bgPreviewActive) ClearBackgroundPreview();
+            if (IsBgPreviewActive) ClearBackgroundPreview();
             btnLiveViewBackground_Click(btnLiveViewBackground, EventArgs.Empty);
         }
 
@@ -287,7 +287,8 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         // --- 背景預覽狀態 ---
-        private bool _bgPreviewActive;
+        /// <summary>預覽狀態唯讀轉發（唯一真相在 LiveDisplayCoordinator 靜音鍵，form 不自存＝不會分歧）。</summary>
+        private bool IsBgPreviewActive => _liveCameraManager?.IsBgPreviewActive ?? false;
 
         /// <summary>
         /// 預覽背景（顯示鐵則0：主畫面＝7 台背景合圖，走 grab 同一個 ImageDisplayView 共用路）：
@@ -297,7 +298,7 @@ namespace AniloxRoll.Monitor.Forms
         private void btnLiveViewBackground_Click(object sender, EventArgs e)
         {
             FlowTrace.Log("ui:【預覽背景】鈕");   // intent 行（孤兒判讀規則）
-            if (_bgPreviewActive) { ClearBackgroundPreview(); return; }
+            if (IsBgPreviewActive) { ClearBackgroundPreview(); return; }
 
             string bgDir = _settings.Storage.BackgroundPath;
             if (!Directory.Exists(bgDir))
@@ -327,7 +328,6 @@ namespace AniloxRoll.Monitor.Forms
                 MessageBox.Show("未找到背景 bin 檔。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            _bgPreviewActive = true;
         }
 
         /// <summary>清除背景預覽：清共用顯示的幀 + 回設定模式（coordinator 負責）——不再自建/銷毀 canvas、
@@ -335,7 +335,6 @@ namespace AniloxRoll.Monitor.Forms
         private void ClearBackgroundPreview()
         {
             _liveCameraManager?.ExitBackgroundPreview();
-            _bgPreviewActive = false;
         }
 
         private bool IsStandardBgSubEnabled =>

@@ -184,8 +184,8 @@ Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線�
 **code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
 ```
 btnLiveGrab_Click@AniloxRollForm.Live.cs             intent 行 ui:【開始抓取】鈕
- ├（_bgPreviewActive）ClearBackgroundPreview@AniloxRollForm.Background.cs
- │   └ FreeCameras@LiveCameraManager.cs（→ F7）
+ ├（IsBgPreviewActive）ClearBackgroundPreview@AniloxRollForm.Background.cs
+ │   └＝ExitBackgroundPreview（清幀＋回設定模式；共用顯示路後不再 FreeCameras）
  ├ AreCamerasHwReady@LiveCameraManager.cs 未就緒 → return   ← 守門：擋 IO 觸發路徑
  │                                                （IoStartGrab 直呼本方法繞過按鈕灰色）
  ├（未抓取→啟動）await Task.Run(LightTurnOn@AniloxRollForm.HardwareStatus.cs)
@@ -426,8 +426,9 @@ FreeCameras@LiveCameraManager.cs
 ```
 
 ### F8 取得背景 / 預覽背景
-現況：取得背景=借用現有 grab 採集（啟停包夾）、預覽=ImageCanvas overlay 蓋最上層（**不得動 MIL 顯示開關**）。
-Wave3 改與 grab 共用顯示 API 後更新本節。
+取得背景=借用現有 grab 採集（啟停包夾）；預覽=走 grab 同一個 ImageDisplayView 共用路（顯示鐵則0：
+預覽主畫面＝7 台背景合圖）。預覽狀態＝coordinator 靜音鍵（不動 he_MainDisplay 設定），
+**建拆唯一權威＝ApplyMainDisplayMode 閘門**（靜音鍵是閘門輸入之一，非平行通道——2026-07-09 對齊）。
 
 **code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
 ```
@@ -448,15 +449,31 @@ btnLiveGetBackground_Click@AniloxRollForm.Background.cs      intent 行 ui:【�
  └ 尾端自動預覽：btnLiveViewBackground_Click（直呼）
 預覽背景：
 btnLiveViewBackground_Click@AniloxRollForm.Background.cs     intent 行 ui:【預覽背景】鈕
- ├（舊預覽）ClearBackgroundPreview
- ├ per-cam LoadCurveBin@InspectionEngine → ExpandColMeanToBitmap@AniloxRollForm.Live.cs
- ├ 每台 new ImageCanvas overlay 疊 camLive（BringToFront＋FitToScreen＋Click→BgPreviewPanel_Click）
- │   ← 不變量：不得動 MIL 顯示開關（detach→re-attach 會把原生視窗提最上層蓋住 CPU 顯示；overlay 蓋最上即可）
- └ camLiveMain 疊 _bgPreviewMainCanvas（縮放/拖曳）
-     StatusChanged 事件 → BgPreviewCanvas_StatusChanged@AniloxRollForm.Background.cs → lblPixelInfo
-切台：BgPreviewPanel_Click@AniloxRollForm.Background.cs → 主畫面換該台背景＋FitToScreen
-清除：ClearBackgroundPreview@AniloxRollForm.Background.cs（解訂閱＋Dispose overlay/bitmaps；
- restoreMilDisplay=true → RefreshMainDisplay@LiveCameraManager.Display.cs＝只刷選中狀態，不動 MIL）
+ ├（IsBgPreviewActive）ClearBackgroundPreview → return       ← 再按一次＝清除（toggle）
+ ├ EnterBackgroundPreview@LiveDisplayCoordinator.cs（LCM forwarder 經過）
+ │   └＝靜音鍵 _bgPreviewOverride=true → ApplyMainDisplayMode()   ⚠ 只改狀態→呼閘門，不自建/拆 view
+ │       閘門 BgPreview 分支：DisableWaterfall＋EnsureImageDisplay＋ApplyBgPreviewLayout
+ │                            （合圖未啟用→用設定 start/ops 餵佈局）
+ ├ per-cam LoadCurveBin@InspectionEngine → ExpandColMeanToGray@AniloxRollForm.Live.cs
+ │   → PushStaticFrame@LiveDisplayCoordinator.cs（與 grab 幀同一條 PushFrame 路＝合圖/縮圖/縮放/overlay 全免費）
+ └（pushed==0）ExitBackgroundPreview＋MessageBox
+清除：ClearBackgroundPreview@AniloxRollForm.Background.cs＝ExitBackgroundPreview
+ └ Exit＝靜音鍵 off → ClearFrame×N → ApplyMainDisplayMode()（回設定模式；WF 設定則重建瀑布）
+不變量（S 系列同源）：
+ - 顯示狀態＝f(he_MainDisplay 設定, 靜音鍵)，唯一計算點＝ApplyMainDisplayMode 閘門；
+   閘門以外任何路徑自建/拆 view＝退件（「平行通道」是 2026-07-09 前東漏西漏的病根）
+ - 「存活」policy：預覽中改設定/相機數變化/合圖重建 → 呼閘門仍得預覽畫面（設定記著，Exit 才生效）
+ - 預覽狀態唯一真相＝coordinator `IsBgPreviewActive`（form 唯讀轉發，不自存旗標）
+ - 相機殘幀 gate：OnCameraDisplayFrame 首行 `_bgPreviewOverride → return`（取得背景自動停後晚到幀不進 view）
+```
+
+**log-flow（預覽背景）**
+```
+T1: ui:【預覽背景】鈕
+T1: ApplyMainDisplayMode → BgPreview（靜音鍵，設定不動）    ← 閘門分支（WF 設定時前面多一行 TeardownWaterfall）
+T1: EnterBackgroundPreview（view=True merge=… mode=…）
+T1: bgPreview push camN WxH（view=True）× 有 bin 的台數
+再按/開始抓取：ExitBackgroundPreview → ApplyMainDisplayMode → {Waterfall|ImageCanvas}（回設定模式）
 ```
 
 ## 硬體連線契約（H 系列）——邊緣觸發（同 MURA 模式：轉變才記，不洗版）

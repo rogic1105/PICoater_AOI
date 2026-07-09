@@ -38,7 +38,7 @@ namespace AniloxRoll.Monitor.Forms
             FlowTrace.Log("ui:【開始抓取】鈕");   // intent 行：之後的顯示變更行歸此動作管（孤兒判讀規則）
 
             // 背景預覽中按 Grab → 清除預覽即可（共用顯示路：清幀＋回設定模式；舊 Free 重配已退場）
-            if (_bgPreviewActive)
+            if (IsBgPreviewActive)
                 ClearBackgroundPreview();
 
             bool wasGrabbing = _liveCameraManager.IsLiveGrabbing;

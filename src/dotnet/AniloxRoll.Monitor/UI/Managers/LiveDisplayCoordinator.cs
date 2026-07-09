@@ -214,6 +214,16 @@ namespace AniloxRoll.Monitor.UI.Managers
         public void ApplyMainDisplayMode()
         {
             _warnFrameToIcInWf = _warnFrameToWfInIc = false;
+            // 靜音鍵＝閘門輸入之一：預覽中任何人呼叫閘門（改設定/相機數/合圖重建）都得到預覽畫面
+            // ＝「存活」policy（設定記著、退出預覽才生效）。修「平行通道被閘門踩壞」整類病（2026-07-09）。
+            if (_bgPreviewOverride)
+            {
+                Flow("ApplyMainDisplayMode → BgPreview（靜音鍵，設定不動）");
+                DisableWaterfallDisplay();
+                EnsureImageDisplay();
+                ApplyBgPreviewLayout();
+                return;
+            }
             Flow($"ApplyMainDisplayMode → {(WaterfallMode ? "Waterfall" : "ImageCanvas")}");
             if (WaterfallMode)
             {
@@ -372,20 +382,26 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// <summary>預覽期間暫用 IC view 的「view 層靜音鍵」——不動 he_MainDisplay 設定（SSoT 不被暫時態污染）。</summary>
         private bool _bgPreviewOverride;
 
-        /// <summary>進入背景預覽：暫讓瀑布、確保 IC view 存在；合圖不啟用（未 grab）時用設定值餵佈局。
+        /// <summary>預覽狀態唯一真相（form 唯讀轉發，不再自存一份）。</summary>
+        public bool IsBgPreviewActive => _bgPreviewOverride;
+
+        /// <summary>進入背景預覽：只改狀態→呼閘門（建拆一律閘門做，本方法不再自己動手）。
         /// 之後由呼叫端 PushStaticFrame 餵各台背景灰階 → 合圖/縮圖/縮放/overlay 全走共用路。</summary>
         public void EnterBackgroundPreview()
         {
             _bgPreviewOverride = true;
-            TeardownWaterfallDisplay();   // 冪等；WF 模式暫讓位（設定不動）
-            EnsureImageDisplay();
+            ApplyMainDisplayMode();
             Flow($"EnterBackgroundPreview（view={(_imageDisplay != null)} merge={_globalMerge.IsActive} mode={(WaterfallMode ? "WF設定" : "IC")}）");
-            if (_imageDisplay != null && !(_globalMerge.IsActive && _globalMerge.Merger != null))
-            {
-                var st = _getSettings();
-                if (st != null)
-                    _imageDisplay.SetLayout(st.GetCameraStartPositionMmArray(), st.GetCameraOpsUmArray(), 1, RowPitchMm);
-            }
+        }
+
+        /// <summary>預覽佈局：合圖未啟用（未 grab）時用設定值餵佈局（合圖啟用時 EnsureImageDisplay 已設）。</summary>
+        private void ApplyBgPreviewLayout()
+        {
+            if (_imageDisplay == null) return;
+            if (_globalMerge.IsActive && _globalMerge.Merger != null) return;
+            var st = _getSettings();
+            if (st != null)
+                _imageDisplay.SetLayout(st.GetCameraStartPositionMmArray(), st.GetCameraOpsUmArray(), 1, RowPitchMm);
         }
 
         /// <summary>離開背景預覽：清幀 + 回設定模式（WF 會重建）。呼叫端負責 grab 前先呼叫本方法。</summary>
