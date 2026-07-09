@@ -252,6 +252,9 @@ namespace TanukiCv.Controls
             _lodSettleTimer.Stop();
             if (_lodTile != null) { _lodTile.Dispose(); _lodTile = null; }
             _lodProvider = null;
+            // 必須重繪：LOD 模式下 .Image 為 null，不 Invalidate 則螢幕殘留最後一次 tile 像素
+            // 且之後無人觸發 paint（「清空內容」路徑的殘影根因，2026-07-09 預覽第二按定罪）
+            Invalidate();
         }
 
         /// <summary>新幀進來（內容變、視角沒變）→ 立刻用當前視角重算 tile（不延遲）。</summary>
