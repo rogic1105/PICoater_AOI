@@ -63,13 +63,9 @@ namespace AniloxRoll.Monitor.UI.Managers
                 if (i0 < 0) occ = " dataPhys=空";
                 else
                 {
-                    // dataChart＝映射後 chart 值域（故障注入盲測抓到的缺口：dataPhys 是映射前，
-                    // 抓不到「映射反向」；兩者並列＝映射層也可對數）
-                    double total = mean.Length * p;
-                    bool zeroAtTop = _getDirection() == VerticalDisplayDirection.TopToBottom;
-                    double c0 = zeroAtTop ? total - i1 * p : i0 * p;
-                    double c1 = zeroAtTop ? total - i0 * p : i1 * p;
-                    occ = $" dataPhys {i0 * p:F0}~{i1 * p:F0}mm dataChart {c0:F0}~{c1:F0}";
+                    // dataChart＝helper「實際畫上」的值域（量實際非意圖——第二次注入測驗抓到的量測學錯誤：
+                    // 原版是 adapter 按規則自算的預期值，映射層壞了照樣印對＝假綠）
+                    occ = $" dataPhys {i0 * p:F0}~{i1 * p:F0}mm dataChart {_chart.LastDataOccLo:F0}~{_chart.LastDataOccHi:F0}";
                 }
             }
             Core.Services.FlowTrace.Log(
@@ -92,8 +88,8 @@ namespace AniloxRoll.Monitor.UI.Managers
         public void UpdateDataAndViewRange(float[] mean, float[] max, double topMm, double botMm)
         {
             ApplyDirection();
-            FlowApply("rowChart", mean?.Length ?? 0, topMm, botMm, mean);
             _chart.UpdateDataAndViewRange(mean, max, topMm, botMm);
+            FlowApply("rowChart", mean?.Length ?? 0, topMm, botMm, mean);   // 在更新後記＝dataChart 讀「實際」
         }
     }
 }

@@ -57,6 +57,7 @@ namespace TanukiCv.Controls
             var maxSeries  = _chart.Series["Max"];
             meanSeries.Points.Clear();
             maxSeries.Points.Clear();
+            LastDataOccLo = LastDataOccHi = double.NaN;   // 實際值域重算
 
             // 顯示降採樣（[ReviewSync] 實測：全點上 chart 重繪 22~67ms/次 → 拖曳跟隨吃滿 UI）：
             // 上限 ~2000 點（同 overview 慣例）。桶內 mean=平均、max=取大（保峰值）、位置=桶中心；
@@ -75,6 +76,8 @@ namespace TanukiCv.Controls
                 int mid = (i + end - 1) / 2;
                 double yMm = ZeroAtTop ? (n - 1 - mid) * _rowPitchMm : mid * _rowPitchMm;   // 方向同源映射
                 meanSeries.Points.AddXY(sum / cnt / 255.0, yMm);
+                if (sum > 0) { if (double.IsNaN(LastDataOccLo) || yMm < LastDataOccLo) LastDataOccLo = yMm;
+                               if (double.IsNaN(LastDataOccHi) || yMm > LastDataOccHi) LastDataOccHi = yMm; }
                 if (maxData != null)
                     maxSeries.Points.AddXY(bucketMax / 255.0, yMm);
             }
@@ -120,6 +123,7 @@ namespace TanukiCv.Controls
             var maxSeries  = _chart.Series["Max"];
             meanSeries.Points.Clear();
             maxSeries.Points.Clear();
+            LastDataOccLo = LastDataOccHi = double.NaN;   // 實際值域重算
 
             const int MaxDisplayPoints = 2000;
             int stride = Math.Max(1, (n + MaxDisplayPoints - 1) / MaxDisplayPoints);
@@ -135,6 +139,8 @@ namespace TanukiCv.Controls
                 int mid = (i + end - 1) / 2;
                 double yMm = ZeroAtTop ? (n - 1 - mid) * _rowPitchMm : mid * _rowPitchMm;   // 方向同源映射
                 meanSeries.Points.AddXY(sum / cnt / 255.0, yMm);
+                if (sum > 0) { if (double.IsNaN(LastDataOccLo) || yMm < LastDataOccLo) LastDataOccLo = yMm;
+                               if (double.IsNaN(LastDataOccHi) || yMm > LastDataOccHi) LastDataOccHi = yMm; }
                 if (maxData != null)
                     maxSeries.Points.AddXY(bucketMax / 255.0, yMm);
             }
@@ -241,6 +247,11 @@ namespace TanukiCv.Controls
         /// false＝0 在「底端」（由下而上）＝軸的天然方向：資料/視窗/標籤**全直通、零轉換**。
         /// 2026-07-08 抵銷層歸零重構：外層（adapter）不得再有任何鏡射。</summary>
         public bool ZeroAtTop { get; set; } = true;
+
+        /// <summary>最近一次資料更新「實際畫上 chart」的非零值域（量實際非意圖——供 M-state dataChart 對數；
+        /// 若與方向規則推算的預期關係不符＝映射層壞）。NaN=無資料。</summary>
+        public double LastDataOccLo { get; private set; } = double.NaN;
+        public double LastDataOccHi { get; private set; } = double.NaN;
 
         private void OnCustomizeLabels(object sender, EventArgs e)
         {
