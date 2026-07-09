@@ -1,4 +1,7 @@
-# verify-flows — UI 動作流程契約（EVT）與驗證
+# verify-flows — UI 行為契約與驗證（DVT）
+
+> DVT＝設計驗證測試（Design Verification Test）：契約＝設計規格、跑一輪 log 對數＝測試。
+> 與硬體階段性 DVT 不同——本檔是**每次改接線都重跑的持續迴歸契約**，非一次性階段 gate。
 
 app ＝【監控/回顧/報表】三個 tab。每條 flow 有兩面，**驗證時兩面都要對**：
 - **log-flow**（執行期腳印）：`[Flow]` 行序列＝行為判準——治非同步接線病（事件/訂閱/時序）。
@@ -126,7 +129,7 @@ S0 通用（所有 PropertyGrid 設定自動記 `ui:設定[名]=值`）。新增
 [UiStack] {top frames}                  ← ping 200ms 無回應當下的 UI 執行緒堆疊（直接點名）
 [UiSlow] {name} {ms}ms                  ← 7 個 handler 計時 >50ms
 [UiPaint] {control} {ms}ms              ← chart WM_PAINT >50ms；IC/RV paint …=canvas OnPaint
-IC stats paints=N/s paintMs=M statusEv=K/s ← canvas 每秒重繪組成（>5 次/秒才記）
+IC|WF stats paints=N/s paintMs=M statusEv=K/s ← canvas 每秒重繪組成（>5 次/秒才記；瀑布同儀器 WF 前綴）
 ```
 **判讀決策樹（2026-07-07 十輪教訓的結晶）**：
 1. UiStall 有 GC 增量 → GC/LOH 問題；全零 → 往下。
@@ -138,6 +141,37 @@ IC stats paints=N/s paintMs=M statusEv=K/s ← canvas 每秒重繪組成（>5 �
 契約：拖曳中 `IC stats paints` 不得 >150/s（風暴回歸紅旗）；`[UiSlow] CamStatusTick/TelemetryTick`
 出現＝MIL 查詢又回到 UI 執行緒（背景化被回退）。
 - view 訂閱 `cam.OnDisplayFrame` 且 Enable* 冪等 → **相機批次換新（Allocate/Free）前後必有對稱 teardown**。
+
+## 狀態快照儀器（方向/座標「機器可判」——2026-07-09 故障注入盲測 4 例定版）
+
+**目的**：改 A 壞 B 當下從 log 抓到，不靠肉眼盯畫面。每幀狀態自動記錄（免滑鼠——「要滑鼠移動才更新」
+曾是 log 誤判源）、每秒節流。**快照行＝儀器輸出、非狀態變更行——穩態靜默通則對其豁免。**
+
+**行清單（產地）**：
+```
+LC|RV row rowChart dir=D n=N total=Tmm view a~b dataPhys c~dmm dataChart e~f
+      ← RowCurveDisplayAdapter.FlowApply（chart 更新後記）；dataPhys=映射前資料非零物理值域、
+        dataChart=helper「實際畫上 chart」的值域（LastDataOccLo/Hi，量實際非意圖——
+        adapter 自算預期值＝假綠，第二輪盲測抓到的量測學錯誤）
+WF state 占用=0~w/H 最新內容畫面端={頂|底}   ← WaterfallView.FlowState（band 寫入後）
+IC state viewX a~b viewY c~d                 ← ImageDisplayView.FlowViewState（RefreshMain 上畫後）
+IC|WF viewEdges X …｜Y …                     ← 拖曳放開時畫面四邊（滑鼠驅動，與 IC state 同源不同路）
+```
+
+**方向判讀基準（關係跑掉＝哪層壞，直接定罪）**：
+| 量 | 由上而下（TopToBottom） | 由下而上（BottomToTop） |
+|---|---|---|
+| dataPhys↔dataChart | **鏡射**（dataChart=total−dataPhys） | **直通**（同值） |
+| WF state 畫面端 | 頂 | 底 |
+| viewY / view（chart 視窗） | 上小下大 | 上大下小 |
+
+**判讀規則**：
+- **雙快照對數**：`viewEdges` vs `IC state` 同秒同源——矛盾＝兩條換算路分岔（B 類故障一行定罪）。
+- **WF 自我矛盾**：`畫面端` label 與方向設定不符＝翻轉接線反（C 類故障）。
+- **映射層試金石＝瀑布漸進填充**：即時模式每幀滿幅→鏡射=自身、值域不可判（已知限制）；
+  瀑布 dataPhys 逐秒增長，dataChart 關係一眼可判（D 類故障）。
+- **盲測法**（使用者提議、4 例驗證）：故意反接一處鏡像 → 跑 2×2 流程 → 只讀 log 定罪到層。
+  改方向/座標/翻轉鏈後的迴歸驗證＝跑一輪對上表，不用肉眼。
 
 ## Flow 契約
 
@@ -168,7 +202,7 @@ AutoAllocateCameras(Form)                    顯示基線 set:[顯示基線] 一
     └ 發布「在線數」（非配置數）→ OnCameraCountChanged
 （背景）CLProtocol 全就緒 → OnHwReady → 解鎖 grab 鈕 + EnableGlobalMerge（佈局=MergeLayout 唯一來源）
 ```
-單一決策點：模式=he_MainDisplay（ApplyMainDisplayMode 唯一入口）；方向=ShouldFlipVertical。
+單一決策點：顯示狀態=f(he_MainDisplay, 背景預覽靜音鍵)——ApplyMainDisplayMode 唯一計算點（F8）；方向=ShouldFlipVertical。
 不變量：view 建立前必 teardown（防空訂閱家族）；MdispSelectWindow 必帶 panelHandle 守門。
 
 ### F2 開始抓取（btnLiveGrab，已配置）
@@ -178,7 +212,8 @@ AutoAllocateCameras(Form)                    顯示基線 set:[顯示基線] 一
 T1: StartGrab（cams=M）
 T1: ApplyMainDisplayMode → 同模式    ← 冪等：不得出現 create/teardown 行
 Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線」相機恰一行，順序不定
-（首幀齊後進入穩態 → 適用「穩態靜默通則」：無互動下不得再有顯示狀態變更行）
+（首幀齊後進入穩態 → 適用「穩態靜默通則」：無互動下不得再有顯示狀態**變更**行。
+  狀態**快照**行〔rowChart/WF state/IC state/stats，見§狀態快照儀器〕＝儀器輸出，穩態每秒出現正常）
 ```
 
 **code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
@@ -212,7 +247,8 @@ ProcessingFunction@MilCamera.cs（MdigProcess hook，static）
     │  ├ ProcessImage@AoiService.cs（P/Invoke TanukiPipeline_Process；fused 存檔縮圖 wantResize＝grab-level 決策）
     │  ├ OnLiveCurveData 事件 → OnLiveCurveData@AniloxRollForm.Live.cs → CheckLiveMura("v")（M1）＋ _liveOverviewDirty=true
     │  └ OnLiveRowCurveData 事件 → OnLiveRowCurveData@AniloxRollForm.Live.cs → CheckLiveMura("h")
-    │     ＋ SafeBeginInvoke→UI → OnLiveRowCurveDataUi@AniloxRollForm.Live.cs（列 chart）
+    │     ＋ SafeBeginInvoke→UI → OnLiveRowCurveDataUi@AniloxRollForm.Live.cs（列 chart；視野同步唯一路＝
+    │       ViewRangeMmChanged→ApplyLiveViewRange）→ RowCurveDisplayAdapter.FlowApply（rowChart 快照行）
     ├ PutDisplayBytes@MilCamera.Display.cs（強化）｜CopyToDisplay@MilCamera.Display.cs（原圖）
     ├ OnDisplayFrame 事件（bytes）→ OnCameraDisplayFrame｜OnCameraWaterfallFrame@LiveDisplayCoordinator.cs
     │  ├ 模式錯掛自檢（⚠ 契約違規 行）＋ FlowFirstFrame（firstFrame 行，每台恰一）
@@ -226,9 +262,11 @@ ProcessingFunction@MilCamera.cs（MdigProcess hook，static）
 RefreshMain@ImageDisplayView.cs（33ms _timer）
  ├ UpdateReverseThumbSync@ImageDisplayView.cs（快拖補刷）
  ├（LOD）lodRebind 留痕 → EnableLod/RefreshLod@ImageCanvas.cs
- └（非 LOD）BuildMerge｜BuildSingle@ImageDisplayView.cs → autoFit(firstFrame) 留痕 → FitToScreen@ImageCanvas.cs
-     → RefireViewRange@ImageDisplayView.cs        ← 首幀 fit＋同步補發視野＝曲線第一筆就對齊、不閃全幅
+ ├（非 LOD）BuildMerge｜BuildSingle@ImageDisplayView.cs → autoFit(firstFrame) 留痕 → FitToScreen@ImageCanvas.cs
+ │   → RefireViewRange@ImageDisplayView.cs        ← 首幀 fit＋同步補發視野＝曲線第一筆就對齊、不閃全幅
+ └ FlowViewState@ImageDisplayView.cs（上畫後，1s 節流）→ IC state 快照行（免滑鼠）
 瀑布顯示：_flushTimer(30ms)@WaterfallView.cs → TryFlush ＋ PushLodRefresh ＋ UpdateCenterCam
+ ＋ FlowState@WaterfallView.cs（band 寫入後，1s 節流）→ WF state 快照行
 ```
 
 ### F3 停止抓取
@@ -496,8 +534,7 @@ T1: ⚠ 相機離線 4→3/7 ／ 相機在線 0→4/7   ← 數量變化才記�
 ### P1 滑桿/數字框調參（曝光/線掃/高度，放開才套用）
 ```
 T1: ui:【相機參數】camN {param}={v}｜All {param}={v}    ← 帶參數名+值單行自足（Exp/LineRate/Height…）
-（之後的 SwitchMainDisplay center=False（refresh）等程式化行歸此 intent 管；
-  滑桿拖曳 vs 數字框輸入同一路徑，log 不區分）
+（之後的 HtRealloc/合圖佈局重算等程式化行歸此 intent 管；滑桿拖曳 vs 數字框輸入同一路徑，log 不區分）
 （⚠ 判讀例外：開機後 ~1 秒內的「All {param}={v}」**0~3 發**（曝光/線掃/高度；發數＝settings 值與
   控制項 Designer 預設值不同的個數，相同不觸發——2026-07-07 實測從 3 發變 1 發佐證）＝初始值塞進 All 控制項觸發
   ValueChanged→debounce 套用的**副作用**（出處查證 2026-07-07：7a017a3/993d8cc 皆無「防跑掉」設計記錄；
@@ -590,6 +627,8 @@ T1: set:[{屬性名}]={新值}      ← 程式化來源（自動掃描寫回等�
 ### S 系列不變量：view 互斥
 **任一時刻主畫面 view 唯一**：設定[主畫面顯示]=即時 期間，不得出現任何 WF 前綴行/EnableWaterfall；
 =瀑布 期間反之（不得出現 IC 主畫面 view 建立行）。切換瞬間走 F4（teardown 舊→create 新）。
+**第三態＝背景預覽**（靜音鍵，F8）：預覽期間主畫面恆 IC view（顯示背景合圖）、瀑布讓位；
+預覽中改設定→閘門仍出預覽畫面（「存活」policy），**不得出現 F4 的 teardown/create 序列**，Exit 才生效。
 **執行期自檢**：幀流進不屬於當前模式的路徑時 code 會當下自報
 `⚠ 契約違規：瀑布模式下幀流入 IC 路徑` / `⚠ 契約違規：即時模式下幀流入瀑布路徑`
 （每 view 週期一次）——log 出現此行＝訂閱錯掛/殘留，不用比對即定罪。
