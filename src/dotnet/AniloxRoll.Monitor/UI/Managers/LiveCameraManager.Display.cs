@@ -52,6 +52,11 @@ namespace AniloxRoll.Monitor.UI.Managers
             _display.TeardownWaterfallDisplay();
         }
 
+        // ── 背景預覽（共用顯示路 forwarder；政策見 AniloxRollForm.Background.cs）──
+        public void EnterBackgroundPreview() => _display.EnterBackgroundPreview();
+        public void ExitBackgroundPreview() => _display.ExitBackgroundPreview(ExpectedCameraCount > 0 ? ExpectedCameraCount : 7);
+        public void PushStaticFrame(int camId, byte[] gray, int w, int h) => _display.PushStaticFrame(camId, gray, w, h);
+
         public void ClearCameraFrame(int camId)
         {
             _display.ClearCameraFrame(camId);

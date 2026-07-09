@@ -742,11 +742,10 @@ namespace AniloxRoll.Monitor.Forms
                 if (e.Button != MouseButtons.Left) return;
                 int clicks = panelClicker.RegisterClick(e.Location);
 
+                // 背景預覽已走共用 ImageDisplayView（雙擊 fit／三擊 1x＝view 內建手勢），不再分支
                 if (clicks == 2)
                 {
-                    if (_bgPreviewMainCanvas != null && _bgPreviewActive)
-                        _bgPreviewMainCanvas.FitToScreen();
-                    else if (_liveCameraManager.IsLiveGrabbing)
+                    if (_liveCameraManager.IsLiveGrabbing)
                         _liveCameraManager.ResetMainDisplayView();
                 }
                 else if (clicks >= 3)
@@ -754,8 +753,6 @@ namespace AniloxRoll.Monitor.Forms
                     panelClicker.Consume();
                     if (_liveCameraManager.IsLiveGrabbing)
                         _liveCameraManager.SetPhysicalMagnification1x();
-                    else if (_bgPreviewMainCanvas != null && _bgPreviewActive)
-                        SetBgPreviewPhysicalMag1x();
                 }
             };
 

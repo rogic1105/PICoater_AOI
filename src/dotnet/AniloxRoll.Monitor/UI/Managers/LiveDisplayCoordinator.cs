@@ -336,7 +336,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         private void EnsureImageDisplay()
         {
-            if (!ImageCanvasMode || _imageDisplay != null) return;
+            if ((!ImageCanvasMode && !_bgPreviewOverride) || _imageDisplay != null) return;
             if (_mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) return;
 
             _imageDisplay = new ImageDisplayView(_mainDisplayPanel, _cameraPanels, _screenMmPerPx);
@@ -366,6 +366,44 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (settings != null) SetLodMode(settings.LiveLod);
             _flowFirstFrame.Clear();
             Flow($"EnsureImageDisplay create + subscribe {Cameras.Count} cams（merge={_globalMerge.IsActive}）");
+        }
+
+        // ==================== 背景預覽（顯示鐵則0：預覽主畫面＝7 台背景合圖，走同一個 ImageDisplayView）====================
+        /// <summary>預覽期間暫用 IC view 的「view 層靜音鍵」——不動 he_MainDisplay 設定（SSoT 不被暫時態污染）。</summary>
+        private bool _bgPreviewOverride;
+
+        /// <summary>進入背景預覽：暫讓瀑布、確保 IC view 存在；合圖不啟用（未 grab）時用設定值餵佈局。
+        /// 之後由呼叫端 PushStaticFrame 餵各台背景灰階 → 合圖/縮圖/縮放/overlay 全走共用路。</summary>
+        public void EnterBackgroundPreview()
+        {
+            _bgPreviewOverride = true;
+            TeardownWaterfallDisplay();   // 冪等；WF 模式暫讓位（設定不動）
+            EnsureImageDisplay();
+            Flow($"EnterBackgroundPreview（view={(_imageDisplay != null)} merge={_globalMerge.IsActive} mode={(WaterfallMode ? "WF設定" : "IC")}）");
+            if (_imageDisplay != null && !(_globalMerge.IsActive && _globalMerge.Merger != null))
+            {
+                var st = _getSettings();
+                if (st != null)
+                    _imageDisplay.SetLayout(st.GetCameraStartPositionMmArray(), st.GetCameraOpsUmArray(), 1, RowPitchMm);
+            }
+        }
+
+        /// <summary>離開背景預覽：清幀 + 回設定模式（WF 會重建）。呼叫端負責 grab 前先呼叫本方法。</summary>
+        public void ExitBackgroundPreview(int camCount)
+        {
+            if (!_bgPreviewOverride) return;
+            _bgPreviewOverride = false;
+            Flow("ExitBackgroundPreview");
+            if (_imageDisplay != null)
+                for (int camId = 1; camId <= camCount; camId++) _imageDisplay.ClearFrame(camId);
+            ApplyMainDisplayMode();
+        }
+
+        /// <summary>餵「靜態幀」（背景預覽等非相機來源）進共用顯示；與 grab 幀同一條路（PushFrame）。</summary>
+        public void PushStaticFrame(int camId, byte[] gray, int w, int h)
+        {
+            Flow($"bgPreview push cam{camId} {w}x{h}（view={(_imageDisplay != null)}）");
+            _imageDisplay?.PushFrame(camId, gray, w, h);
         }
 
         public void SetLodMode(LiveLodMode mode)
@@ -422,6 +460,9 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         private void OnCameraDisplayFrame(int camId, byte[] bytes, int w, int h, long tick)
         {
+            // 背景預覽期間相機幀不進 view（預覽=靜態幀來源）：取得背景自動停後的「排水殘幀」
+            // 晚到 ~1s 會蓋掉剛推的背景（2026-07-09 log 定罪 29.585 firstFrame→IC）。Exit 即恢復。
+            if (_bgPreviewOverride) return;
             if (WaterfallMode && !_warnFrameToIcInWf)
             {
                 _warnFrameToIcInWf = true;

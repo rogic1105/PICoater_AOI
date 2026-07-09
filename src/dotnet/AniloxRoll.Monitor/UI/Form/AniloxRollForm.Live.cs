@@ -37,13 +37,9 @@ namespace AniloxRoll.Monitor.Forms
         {
             FlowTrace.Log("ui:【開始抓取】鈕");   // intent 行：之後的顯示變更行歸此動作管（孤兒判讀規則）
 
-            // 背景預覽中按 Grab → 先清除預覽並 Free，讓 MIL 能重新初始化
+            // 背景預覽中按 Grab → 清除預覽即可（共用顯示路：清幀＋回設定模式；舊 Free 重配已退場）
             if (_bgPreviewActive)
-            {
-                ClearBackgroundPreview(restoreMilDisplay: true);
-                _liveCameraManager.FreeCameras();
-                _telemetryPresenter?.ResetAll();
-            }
+                ClearBackgroundPreview();
 
             bool wasGrabbing = _liveCameraManager.IsLiveGrabbing;
 
@@ -532,10 +528,10 @@ namespace AniloxRoll.Monitor.Forms
         };
 
         /// <summary>
-        /// 將 float[] column mean 擴展為 width×height 的 8bpp 灰階 Bitmap。
+        /// 將 float[] column mean 擴展為 width×height 的 8bpp 灰階 bytes（共用顯示 PushStaticFrame 用）。
         /// 每列（row）相同：pixel[x] = clamp(colMean[x], 0, 255)。
         /// </summary>
-        private static Bitmap ExpandColMeanToBitmap(float[] colMean, int width, int height)
+        private static byte[] ExpandColMeanToGray(float[] colMean, int width, int height)
         {
             byte[] row = new byte[width];
             for (int x = 0; x < width; x++)
@@ -548,7 +544,7 @@ namespace AniloxRoll.Monitor.Forms
             for (int y = 0; y < height; y++)
                 Buffer.BlockCopy(row, 0, pixels, y * width, width);
 
-            return ImageUtils.Create8bppBitmap(pixels, width, height);
+            return pixels;
         }
 
         private void UpdateGrabButton(bool isGrabbing)

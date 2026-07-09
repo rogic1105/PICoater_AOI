@@ -266,6 +266,12 @@ namespace AniloxRoll.Monitor.Forms
             // 故所有 enable 都 AND camReady（與 RefreshGrabButtonState 一致）。
             bool camReady = _liveCameraManager?.AreCamerasHwReady ?? false;
 
+            // 背景鈕不歸 IO 管（借 grab 取樣：光源+相機就緒、非抓取中即可）——原本放在 IO early-return
+            // 之後 → IO 開機即連線的機台每 tick 提前返回、開機鎖死到第一次 grab 才被 UpdateGrabButton 解
+            // （2026-07-09 使用者回報）。
+            btnLiveGetBackground.Enabled = IsLightReadyForBg && camReady
+                && !(_liveCameraManager?.IsLiveGrabbing ?? false);
+
             // IO 已連線且未暫停：btnLiveGrab 由 IO 連線邏輯控制，不覆寫
             if (_ioGrabController?.IsConnected == true && !_isIoSuspended) return;
             // IO 暫停模式：交由使用者手動控制，不受 StandardBgSub bin 限制
@@ -273,34 +279,25 @@ namespace AniloxRoll.Monitor.Forms
 
             if (!IsStandardBgSubEnabled)
             {
-                // 非 StandardBgSub：正常解鎖（仍需光源就緒 + 相機就緒）
                 btnLiveGrab.Enabled = camReady;
-                btnLiveGetBackground.Enabled = IsLightReadyForBg;
                 return;
             }
 
-            btnLiveGetBackground.Enabled = IsLightReadyForBg;
             btnLiveGrab.Enabled = camReady && IsBgBinReady();
         }
 
         // --- 背景預覽狀態 ---
-        private Bitmap[] _bgPreviewBitmaps;
         private bool _bgPreviewActive;
-        private ImageCanvas[] _bgPreviewBoxes;      // camLive 上的 overlay（ImageCanvas with ClampPan）
-        private ImageCanvas _bgPreviewMainCanvas;  // camLiveMain 上的 ImageCanvas（支援縮放/拖曳）
-        private int _bgPreviewSelectedCamIndex;    // 目前預覽中的相機 index (0-based)
 
         /// <summary>
-        /// 預覽背景：讀取各相機的 bg bin → 擴展為 width × grabHeight 灰階影像。
-        /// 用 PictureBox 疊在 camLive 上方，ImageCanvas 疊在 camLiveMain 上方（支援縮放拖曳）。
-        /// 點選 camLive 可切換 camLiveMain。再按一次清除預覽。
+        /// 預覽背景（顯示鐵則0：主畫面＝7 台背景合圖，走 grab 同一個 ImageDisplayView 共用路）：
+        /// 讀各相機 bg bin → 擴成灰階 bytes → PushStaticFrame 餵共用顯示（合圖/縮圖/縮放/overlay 全免費）。
+        /// 再按一次＝清除預覽。瀑布模式下暫用即時 view（設定不動，離開預覽即還原）。
         /// </summary>
         private void btnLiveViewBackground_Click(object sender, EventArgs e)
         {
             FlowTrace.Log("ui:【預覽背景】鈕");   // intent 行（孤兒判讀規則）
-            // 先清除舊預覽（釋放 overlay + 恢復 MIL display），再重新載入
-            if (_bgPreviewActive)
-                ClearBackgroundPreview();
+            if (_bgPreviewActive) { ClearBackgroundPreview(); return; }
 
             string bgDir = _settings.Storage.BackgroundPath;
             if (!Directory.Exists(bgDir))
@@ -309,241 +306,36 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
 
-            // 不動任何 MIL 顯示開關：detach→re-attach 會把原生視窗提到面板最上層、蓋住 CPU 縮圖/主畫面
-            // （滑鼠座標 overlay 露出、顯示錯亂的根因）。預覽 overlay 用 BringToFront 蓋最上層即可。
-            camLiveMain.Invalidate();
-            camLiveMain.Update();
-
-            Panel[] livePanels = GetLivePanels();
-            foreach (var p in livePanels) { p.Invalidate(); p.Update(); }
             int[] grabHeights = _settings.Acquisition.CameraGrabHeight;
-            _bgPreviewBitmaps = new Bitmap[livePanels.Length];
-            _bgPreviewBoxes = new ImageCanvas[livePanels.Length];
-            int firstValid = -1;
-
-            for (int i = 0; i < livePanels.Length; i++)
+            _liveCameraManager.EnterBackgroundPreview();
+            int pushed = 0;
+            for (int i = 0; i < CameraCount; i++)
             {
                 int camId = i + 1;
                 string[] matches = Directory.GetFiles(bgDir, CaptureFileNaming.BgGlobForCam(camId));
                 if (matches.Length == 0) continue;
-
                 float[] colMean = InspectionEngine.LoadCurveBin(matches[0]);
                 if (colMean == null || colMean.Length == 0) continue;
-
                 int height = (i < grabHeights.Length && grabHeights[i] > 0) ? grabHeights[i] : 3000;
-                Bitmap bmp = ExpandColMeanToBitmap(colMean, colMean.Length, height);
-                _bgPreviewBitmaps[i] = bmp;
-
-                // ImageCanvas 疊在 panel 最上層（ClampPan 模式，同 grab 的 MIL 顯示行為）
-                var sc = new ImageCanvas
-                {
-                    Dock = DockStyle.Fill,
-                    ClampPan = true,
-                    Tag = i,
-                    BackColor = Color.Black
-                };
-                sc.Image = bmp;
-                livePanels[i].Controls.Add(sc);
-                sc.BringToFront();
-                sc.FitToScreen();
-                sc.Click += BgPreviewPanel_Click;
-                _bgPreviewBoxes[i] = sc;
-
-                if (firstValid < 0) firstValid = i;
+                _liveCameraManager.PushStaticFrame(camId,
+                    ExpandColMeanToGray(colMean, colMean.Length, height), colMean.Length, height);
+                pushed++;
             }
-
-            if (firstValid >= 0)
+            if (pushed == 0)
             {
-                // ImageCanvas 覆蓋 camLiveMain：支援滑鼠滾輪縮放 + 左鍵拖曳
-                _bgPreviewMainCanvas = new ImageCanvas { Dock = DockStyle.Fill, ClampPan = true };
-                _bgPreviewMainCanvas.Image = _bgPreviewBitmaps[firstValid];
-                _bgPreviewMainCanvas.StatusChanged += BgPreviewCanvas_StatusChanged;
-                camLiveMain.Controls.Add(_bgPreviewMainCanvas);
-                _bgPreviewMainCanvas.BringToFront();
-                _bgPreviewMainCanvas.FitToScreen();
-                _bgPreviewActive = true;
-                _bgPreviewSelectedCamIndex = firstValid;
-            }
-            else
-            {
-                _bgPreviewBitmaps = null;
-                _bgPreviewBoxes = null;
+                _liveCameraManager.ExitBackgroundPreview();
                 MessageBox.Show("未找到背景 bin 檔。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
             }
+            _bgPreviewActive = true;
         }
 
-        /// <summary>點選 camLive 上的 PictureBox → 切換 camLiveMain 顯示該相機背景。</summary>
-        private void BgPreviewPanel_Click(object sender, EventArgs e)
+        /// <summary>清除背景預覽：清共用顯示的幀 + 回設定模式（coordinator 負責）——不再自建/銷毀 canvas、
+        /// 不 Free 相機（舊「預覽後 grab 重配」路徑已退場）。</summary>
+        private void ClearBackgroundPreview()
         {
-            if (!_bgPreviewActive || _bgPreviewBitmaps == null || _bgPreviewMainCanvas == null) return;
-
-            var sc = sender as ImageCanvas;
-            if (sc?.Tag is int idx && idx >= 0 && idx < _bgPreviewBitmaps.Length && _bgPreviewBitmaps[idx] != null)
-            {
-                _bgPreviewMainCanvas.Image = _bgPreviewBitmaps[idx];
-                _bgPreviewMainCanvas.FitToScreen();
-                _bgPreviewSelectedCamIndex = idx;
-            }
-        }
-
-        /// <summary>ImageCanvas 滑鼠移動時更新 lblPixelInfo（與 camReviewMain 同格式：mm 座標 + 範圍 + 倍率）。</summary>
-        private void BgPreviewCanvas_StatusChanged(CanvasInfo info)
-        {
-            if (lblPixelInfo == null) return;
-
-            int camIdx = _bgPreviewSelectedCamIndex;
-            int camId = camIdx + 1;
-            string text;
-            if (info.ImageX < 0 || info.ImageY < 0 ||
-                _bgPreviewMainCanvas?.Image == null ||
-                info.ImageX >= _bgPreviewMainCanvas.Image.Width ||
-                info.ImageY >= _bgPreviewMainCanvas.Image.Height)
-            {
-                text = $"背景預覽 [CAM {camId}] | 游標超出影像範圍";
-            }
-            else if (_settings == null)
-            {
-                int gray = info.PixelColor.R;
-                text = $"背景預覽 [CAM {camId}] | 座標: ({info.ImageX}, {info.ImageY}) | 亮度: {gray} | 縮放: {info.Zoom:F2}x";
-            }
-            else
-            {
-                double[] opsUmArr  = _settings.GetCameraOpsUmArray();
-                double[] startMmArr = _settings.GetCameraStartPositionMmArray();
-                if (camIdx < 0 || camIdx >= opsUmArr.Length)
-                {
-                    int gray = info.PixelColor.R;
-                    text = $"背景預覽 [CAM {camId}] | 座標: ({info.ImageX}, {info.ImageY}) | 亮度: {gray} | 縮放: {info.Zoom:F2}x";
-                }
-                else
-                {
-                    double opsInMm    = opsUmArr[camIdx] / 1000.0;
-                    double startPosMm = startMmArr[camIdx];
-
-                    // 背景圖為全解析度，scaleFactor = 1
-                    double physicalX = startPosMm + info.ImageX * opsInMm;
-                    double rowPitchMm = _interactionHelper?.RowPitchMm ?? 0;
-                    double physicalY = info.ImageY * rowPitchMm;
-
-                    // 視野範圍
-                    double viewLeftMm = 0, viewRightMm = 0;
-                    double viewTopMm = 0, viewBotMm = 0;
-                    if (info.Zoom > 0)
-                    {
-                        double pixelLeft  = (0                            - info.PanOffset.X) / info.Zoom;
-                        double pixelRight = (_bgPreviewMainCanvas.Width   - info.PanOffset.X) / info.Zoom;
-                        viewLeftMm  = startPosMm + pixelLeft  * opsInMm;
-                        viewRightMm = startPosMm + pixelRight * opsInMm;
-
-                        if (rowPitchMm > 0)
-                        {
-                            double pixelTop = (0                            - info.PanOffset.Y) / info.Zoom;
-                            double pixelBot = (_bgPreviewMainCanvas.Height  - info.PanOffset.Y) / info.Zoom;
-                            viewTopMm = pixelTop * rowPitchMm;
-                            viewBotMm = pixelBot * rowPitchMm;
-                        }
-                    }
-
-                    // 實體倍率
-                    double screenMmPerPx = _interactionHelper?.ScreenMmPerPixel ?? 0;
-                    string magStr = "-";
-                    if (info.Zoom > 0 && screenMmPerPx > 0 && opsInMm > 0)
-                    {
-                        double physicalMag = (info.Zoom * screenMmPerPx) / opsInMm;
-                        magStr = $"{physicalMag:F2}x";
-                    }
-
-                    text = $"背景預覽 [CAM {camId}] | " +
-                           $"位置:({physicalX:F2}, {physicalY:F2}) mm | " +
-                           $"X範圍:{viewLeftMm:F1}~{viewRightMm:F1} mm | " +
-                           $"Y範圍:{viewTopMm:F1}~{viewBotMm:F1} mm | " +
-                           $"座標: ({info.ImageX}, {info.ImageY}) | " +
-                           $"亮度: {info.PixelColor.R} | " +
-                           $"實體倍率:{magStr}";
-                }
-            }
-
-            SafeBeginInvoke(() => lblPixelInfo.Text = text);
-        }
-
-        /// <summary>背景預覽模式：將 camLiveMain 上的 ImageCanvas 設為實體倍率 1x（畫面中心不動）。</summary>
-        private void SetBgPreviewPhysicalMag1x()
-        {
-            if (_bgPreviewMainCanvas?.Image == null || _settings == null) return;
-
-            int camIdx = _bgPreviewSelectedCamIndex;
-            double[] opsUmArr = _settings.GetCameraOpsUmArray();
-            if (camIdx < 0 || camIdx >= opsUmArr.Length) return;
-
-            double opsInMm = opsUmArr[camIdx] / 1000.0;
-            double screenMmPerPx = _interactionHelper?.ScreenMmPerPixel ?? 0;
-            if (opsInMm <= 0 || screenMmPerPx <= 0) return;
-
-            // scaleFactor=1 for background preview
-            float zoom1x = (float)(opsInMm / screenMmPerPx);
-
-            // keep center of current view stable
-            float oldZoom = _bgPreviewMainCanvas.Zoom;
-            PointF oldPan = _bgPreviewMainCanvas.PanOffset;
-            float cx = _bgPreviewMainCanvas.Width / 2f;
-            float cy = _bgPreviewMainCanvas.Height / 2f;
-            float imgCx = (cx - oldPan.X) / oldZoom;
-            float imgCy = (cy - oldPan.Y) / oldZoom;
-            float newPanX = cx - imgCx * zoom1x;
-            float newPanY = cy - imgCy * zoom1x;
-
-            _bgPreviewMainCanvas.SetView(zoom1x, new PointF(newPanX, newPanY));
-        }
-
-        /// <summary>
-        /// 清除所有面板的背景預覽。
-        /// restoreMilDisplay=true 時恢復 MIL display（用於 btnLiveGrab 等需要回到即時畫面的場景）。
-        /// 預設 false，避免在即將重新進入預覽時產生殘影。
-        /// </summary>
-        private void ClearBackgroundPreview(bool restoreMilDisplay = false)
-        {
-            // 移除 camLive 上的 overlay ImageCanvas
-            Panel[] livePanels = GetLivePanels();
-            if (_bgPreviewBoxes != null)
-            {
-                for (int i = 0; i < _bgPreviewBoxes.Length; i++)
-                {
-                    var sc = _bgPreviewBoxes[i];
-                    if (sc == null) continue;
-                    sc.Click -= BgPreviewPanel_Click;
-                    sc.Image = null;
-                    livePanels[i].Controls.Remove(sc);
-                    sc.Dispose();
-                }
-                _bgPreviewBoxes = null;
-            }
-
-            // 移除 camLiveMain 上的 ImageCanvas
-            if (_bgPreviewMainCanvas != null)
-            {
-                _bgPreviewMainCanvas.StatusChanged -= BgPreviewCanvas_StatusChanged;
-                _bgPreviewMainCanvas.Image = null;
-                camLiveMain.Controls.Remove(_bgPreviewMainCanvas);
-                _bgPreviewMainCanvas.Dispose();
-                _bgPreviewMainCanvas = null;
-            }
-
-            // Dispose bitmaps
-            if (_bgPreviewBitmaps != null)
-            {
-                foreach (var bmp in _bgPreviewBitmaps)
-                    bmp?.Dispose();
-                _bgPreviewBitmaps = null;
-            }
-
+            _liveCameraManager?.ExitBackgroundPreview();
             _bgPreviewActive = false;
-
-            if (restoreMilDisplay && _liveCameraManager?.IsAllocated == true)
-            {
-                // 只需刷新選中相機狀態；不動 MIL 顯示開關（re-attach 會把原生視窗提到最上層蓋住 CPU 顯示）。
-                // 底層 CPU 顯示（ImageDisplayView/瀑布）常駐，移除 overlay 即還原畫面。
-                _liveCameraManager.RefreshMainDisplay();
-            }
         }
 
         private bool IsStandardBgSubEnabled =>
