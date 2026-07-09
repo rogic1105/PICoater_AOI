@@ -49,6 +49,18 @@ namespace TanukiCv.Controls
         private byte[][] _chunks;
         private int _fullW;
         private int _writeRow;                       // 下一個 band 寫入起始 row（也是 Ring 顯示接縫位置）
+        private int _lastStateLogMs;                 // 狀態快照節流（每秒一行）
+
+        /// <summary>狀態快照（改A壞B即時可抓）：占用列/總高＋最新內容渲染在畫面哪端（方向可判量）。</summary>
+        private void FlowState()
+        {
+            if (FlowLog == null) return;
+            int now = Environment.TickCount;
+            if (now - _lastStateLogMs < 1000) return;
+            _lastStateLogMs = now;
+            FlowLog($"state 占用=0~{_writeRow}/{_totalHeight} 最新內容畫面端={(_flipVertical ? "底" : "頂")}");
+        }
+
 
         // ── 跨相機序號配對（串流）──
         private sealed class Slot
@@ -415,6 +427,7 @@ namespace TanukiCv.Controls
 
             if (ring) _writeRow = (_writeRow + bandH) % _totalHeight;
             else _writeRow += bandH;
+            FlowState();   // 狀態快照（每秒一行）：占用/總高+畫面端＝方向可判量
 
             return new BandJob { FullW = fullW, BandH = bandH, BandStartRow = bandStart, Ring = ring, Spans = spans };
         }

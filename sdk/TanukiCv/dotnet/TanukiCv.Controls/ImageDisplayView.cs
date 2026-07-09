@@ -329,6 +329,32 @@ namespace TanukiCv.Controls
 
         // ==================== UI timer（33ms）：主畫面更新（縮圖由 ThumbStrip 自管）====================
 
+        private int _lastStateLogMs;   // 每幀視野快照節流（免滑鼠；修「要滑鼠移動才更新」的 log 誤判源）
+
+        /// <summary>狀態快照：新內容上畫時記當前視野四邊（每秒一行），與 chart 視窗直接對數。</summary>
+        private void FlowViewState()
+        {
+            if (_flowLog == null || _canvas == null) return;
+            int now = Environment.TickCount;
+            if (now - _lastStateLogMs < 1000) return;
+            _lastStateLogMs = now;
+            if (!GetDisplayCoords(out double startMm, out double opsInMm, out double sf)) return;
+            float zoom = _canvas.Zoom;
+            if (zoom <= 0) return;
+            var pan = _canvas.PanOffset;
+            double leftMm = PixelMmMapper.PixelToMm((0 - pan.X) / zoom * sf, startMm, opsInMm);
+            double rightMm = PixelMmMapper.PixelToMm((_canvas.Width - pan.X) / zoom * sf, startMm, opsInMm);
+            double yPitch = _rowPitchMm > 0 ? _rowPitchMm : opsInMm;
+            double topMm = (0 - pan.Y) / zoom * sf * yPitch;
+            double botMm = (_canvas.Height - pan.Y) / zoom * sf * yPitch;
+            if (VerticalZeroAtBottom)
+            {
+                double totalYMm = TotalRowsMm(yPitch, sf);
+                if (totalYMm > 0) { double t = totalYMm - topMm, b = totalYMm - botMm; topMm = t; botMm = b; }
+            }
+            _flowLog($"state viewX {leftMm:F0}~{rightMm:F0} viewY {topMm:F0}~{botMm:F0}");
+        }
+
         /// <summary>用「當前」zoom/pan 重發 ViewRangeMmChanged（不需滑鼠互動）。
         /// 用途：上層 chart 重建（重載/強化切換）會重設軸範圍 → 載入完呼此補發，曲線立即恢復跟隨視野。</summary>
         public void RefireViewRange()
@@ -409,6 +435,7 @@ namespace TanukiCv.Controls
                         }
                         else if (_mainDirty) _canvas.RefreshLod();
                         _mainDirty = false;
+                        FlowViewState();
                         return;
                     }
                 }
@@ -427,6 +454,7 @@ namespace TanukiCv.Controls
                         }
                         else if (_mainDirty) _canvas.RefreshLod();
                         _mainDirty = false;
+                        FlowViewState();
                         return;
                     }
                 }

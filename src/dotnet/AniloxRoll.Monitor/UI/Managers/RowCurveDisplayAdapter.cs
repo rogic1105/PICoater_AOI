@@ -45,15 +45,25 @@ namespace AniloxRoll.Monitor.UI.Managers
         // 歸零後 helper 映射已直通，再 Reverse＝多翻一次（瀑布/由下而上內容反轉的回歸根因，
         // 剝層前重建版 A/B+四格符號推導定罪）。adapter 從此真正零轉換。
 
-        private void FlowApply(string kind, int n, double topMm, double botMm)
+        private void FlowApply(string kind, int n, double topMm, double botMm, float[] mean = null)
         {
             if (FlowName == null) return;
             var dir = _getDirection();
             int now = Environment.TickCount;
             if (dir == _lastLoggedDir && n == _lastLoggedN && now - _lastFlowMs < 1000) return;
             _lastLoggedDir = dir; _lastLoggedN = n; _lastFlowMs = now;
+            // 資料非零「物理範圍」（方向可判量：內容 pad 在哪端一眼見；改A壞B即時可抓）
+            string occ = "";
+            if (mean != null && mean.Length > 0)
+            {
+                int i0 = -1, i1 = -1;
+                for (int i = 0; i < mean.Length; i++) if (mean[i] != 0) { i0 = i; break; }
+                for (int i = mean.Length - 1; i >= 0; i--) if (mean[i] != 0) { i1 = i; break; }
+                double p = _chart.RowPitchMm;
+                occ = i0 < 0 ? " dataPhys=空" : $" dataPhys {i0 * p:F0}~{i1 * p:F0}mm";
+            }
             Core.Services.FlowTrace.Log(
-                $"{FlowName} {kind} dir={dir} n={n} total={_chart.TotalMm:F0}mm view {topMm:F0}~{botMm:F0}");
+                $"{FlowName} {kind} dir={dir} n={n} total={_chart.TotalMm:F0}mm view {topMm:F0}~{botMm:F0}{occ}");
         }
 
         public void UpdateViewRange(double topMm, double botMm)
@@ -72,7 +82,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         public void UpdateDataAndViewRange(float[] mean, float[] max, double topMm, double botMm)
         {
             ApplyDirection();
-            FlowApply("rowChart", mean?.Length ?? 0, topMm, botMm);
+            FlowApply("rowChart", mean?.Length ?? 0, topMm, botMm, mean);
             _chart.UpdateDataAndViewRange(mean, max, topMm, botMm);
         }
     }
