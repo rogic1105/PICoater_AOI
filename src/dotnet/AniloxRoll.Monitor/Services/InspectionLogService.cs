@@ -125,7 +125,7 @@ namespace AniloxRoll.Monitor.Core.Services
                         _schemaCheckedCsvPath = csvPath;
                     }
 
-                    // B-H1：FileShare.ReadWrite 對齊 reader 端的 OpenCsvShared，避免跨 process race
+                    // B-H1：FileShare.ReadWrite 對齊 InspectionCsvReader.OpenShared，避免跨 process race
                     // 造成 reader 偶發 IOException。
                     using (var fs = new FileStream(csvPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
                     using (var sw = new StreamWriter(fs, new UTF8Encoding(false)))

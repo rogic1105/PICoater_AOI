@@ -86,7 +86,8 @@ against current code with `rg` before editing because lookup data can become sta
 | `ImageCatalog/ImageRepository.cs` | 掃描目錄建立索引 |
 | `Services/AoiService.cs` | C# ↔ Native P/Invoke wrapper（ProcessImage + ComputeColumnMean） |
 | `Services/InspectionLogService.cs` | 每日 CSV 寫入；GrabId = `yyMMdd-HHmmss` 時間戳格式 |
-| `Services/InspectionStatisticsService.cs` | CSV 統計、期間查詢、grab 設定與曲線資料定位 |
+| `Services/InspectionCsvReader.cs` | CSV 資料列唯一 parser、檔名時間/相機解析、`FileShare.ReadWrite` 共用讀取 |
+| `Services/InspectionStatisticsService.cs` | 統計、期間查詢、grab 設定與曲線資料定位（CSV 格式委派 `InspectionCsvReader`） |
 | `Services/IoState.cs` | IoState enum（FSM 狀態）+ IoSnapshot struct（IO 快照） |
 | `Services/IoGrabController.cs` | IO-Grab 連動：IoState FSM、IO 追蹤、Watchdog keepalive；支援 IModbusTcpClient 注入測試。`ReadWriteTimeoutMs`（可設）= 斷線偵測下限（拔線 OS 即報錯近 0ms；斷電靠逾時 ~500ms）；`NextReconnectAtUtc` 供 UI 重連倒數 |
 | `Services/CsvConfigSnapshot.cs` | 不可變設定快照（CamOps/CamPos/CamGrabHeight/CamExposureUs/CamLineRateHz/Hessian/ErrorValue/TrimHead/TrimTail） |
@@ -115,6 +116,7 @@ against current code with `rg` before editing because lookup data can become sta
 | `AcquisitionSettingsTests.cs` | Validate fallback、JSON Save/Load |
 | `InspectionLogServiceTests.cs` | CSV 寫入、#CFG 插入、Pass/Fail 判定 |
 | `InspectionStatisticsServiceTests.cs` | 時間/序號統計、veto 邏輯、Period 分組 |
+| `InspectionCsvReaderTests.cs` | 4/10 欄 CSV、CFG、檔名時間與相機解析 |
 | `IoGrabControllerTests.cs` | FSM 狀態機：連線、邊緣偵測、故障恢復、CommLost |
 | `StressTests.cs` | 長時間壓力：PLC 100 萬循環、CSV 50 萬筆、Settings 14.5 萬讀寫；STRESS_MINUTES 環境變數控制時長 |
 

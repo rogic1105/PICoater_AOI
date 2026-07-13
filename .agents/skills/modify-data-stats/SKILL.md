@@ -77,7 +77,7 @@ description: Modify the Data tab, inspection CSV schema, statistics, report list
 - 不依賴 camReviewMain — Data tab 操作即時顯示對齊圖；Review tab 載入後 `SyncMuraProfileFromReview` 覆寫為同源資料，無視覺差
 
 ### CSV 讀寫並發保護
-- 所有新增的 CSV reader 用 `InspectionStatisticsService.OpenCsvShared(path)` 而非 `new StreamReader(path)` — 內部用 `FileShare.ReadWrite` 對齊 writer 端，避免跨 process race（Storage PC 讀 vs Inspection PC 寫）。Writer 端 `InspectionLogService` 已同樣指定 `FileShare.ReadWrite`。
+- 所有 CSV reader 共用 `InspectionCsvReader.OpenShared(path)`，資料列共用 `TryParseRecord`；不得在統計／回顧／curve 查詢另寫 `Split(',')` parser。Reader 內用 `FileShare.ReadWrite` 對齊 writer，避免 Storage PC 讀與 Inspection PC 寫的跨 process race；`InspectionLogService` writer 端同樣指定 `FileShare.ReadWrite`。
 - 新增依時間掃 CSV 的方法時，要 `Array.Sort(csvFiles, StringComparer.Ordinal)` 使 captureHmV 跨日邊界正確沿用 — 路徑 `{yyyy}\{yyyyMM}\{yyyyMMdd}.csv` 字串序 = 時間序。
 
 ### PropertyGrid → Stats 重算的 debounce

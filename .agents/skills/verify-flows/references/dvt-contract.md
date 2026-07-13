@@ -606,7 +606,8 @@ Tn: capture csv firstRecord grab=… path=… file=… verdict=max0|1/mean0|1 pe
 - `verdict` 使用寫入 CSV 同一組 V 閾值，與 `AppendRecord@InspectionLogService.cs` 的 `MaxExceed/MeanExceed` 同源。
 - CSV 資料列格式＝`Id,FileName,MaxExceed,MeanExceed,MeanPeak,MaxPeak,GrabHeight,LineRateHz,ExposureUs,MaxCMean`；
   `MaxCMean`＝該幀 `MaxC`（column curve）全點平均後除以 255（0~1），是報表範圍 `CurveMax` 候選排序值，**不是 MaxPeak**。
-- 舊 9 欄 CSV 合法：parser 將缺少的 `MaxCMean` 視為 unknown；範圍內找不到任何有效分數時，`CurveMax` 回退均勻 50 筆。
+- CSV 讀取唯一格式入口＝`InspectionCsvReader.TryParseRecord`（統計／回顧影像查詢／curve 候選共用）；
+  舊 4/9 欄 CSV 合法，缺少的 `MaxCMean` 視為 unknown；範圍內找不到任何有效分數時，`CurveMax` 回退均勻 50 筆。
 
 **code-flow（曲線統計值寫入）**
 ```
@@ -690,6 +691,14 @@ T1/Tn: RV loadGrab begin {grabId} → RV loadGrab paths … → RV lodRebind mer
   每個序號 intent 立即 invalidate 舊圖片，settle 回呼另以 selection token 守住 Data 同步。
 - 最後一個非 stale 的 `curves`/`loadGrab done` 的 grabId 必須＝最後一個 intent 的 grabId——不符＝token 破了。
 - begin 無對應 done/stale-drop＝載入中斷；pushFrames P 與 CSV 台數不符＝掉圖。
+
+**code-flow（序號對應影像／CFG 查詢）**
+```
+LoadGrabStitchedViewGuardRowRangeAsync@ReviewStitchCoordinator.cs
+ → LoadImagePathsForGrabId＋LoadConfigForGrabId@InspectionStatisticsService.cs
+   → InspectionCsvReader.OpenShared＋TryParseRecord（CSV 格式與共享讀取唯一來源）
+   → TryExtractCameraId（影像依 cam 分組）
+```
 
 ### R3 時段導航（cbReviewDate/cbReviewTime 手動）
 ```
@@ -870,8 +879,10 @@ cbDataIdStart|End／期間變更
  → DT range settle → RefreshStats@DataStatisticsPresenter.cs
    ├ ComputeByGrabIdRange（範圍色卡）
    ├ ComputeDetailedByGrabIdRange → ApplyFailFilter → GrabDetailListBinder.SetItems
+   │  └ InspectionCsvReader.OpenShared＋TryParseRecord（CSV 格式／FileShare 唯一來源）
    ├ MuraProfileChartPresenter.Update(rangeInfos)
    │  └ LoadRangeMuraProfile（掃範圍 CSV；按 cam 分組並保留 FileName）
+   │     ├ InspectionCsvReader.TryParseRecord＋TryParseTimestamp＋TryExtractCameraId
    │     ├ Mean 候選＝EvenSampleCurveRecords(rows,50) → 對應 MeanC 逐點平均
    │     └ Max 候選＝MaxCMean 排序前 50 → 對應 MaxC 逐點最大（缺分數→均勻 fallback）
    └ DT list reload …＋DT curve candidates …

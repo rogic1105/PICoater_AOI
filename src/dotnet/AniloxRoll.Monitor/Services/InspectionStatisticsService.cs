@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 
 namespace AniloxRoll.Monitor.Core.Services
@@ -77,16 +76,6 @@ namespace AniloxRoll.Monitor.Core.Services
     /// </summary>
     public static class InspectionStatisticsService
     {
-        /// <summary>
-        /// 共用的 CSV 讀取 helper — 用 FileShare.ReadWrite 開檔，避免與 InspectionLogService
-        /// 寫入競爭（特別是 Storage PC 讀 / Inspection PC 寫的跨 process 情境）。
-        /// </summary>
-        private static StreamReader OpenCsvShared(string path)
-        {
-            var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            return new StreamReader(fs);
-        }
-
         // ── 時間範圍統計（舊模式：以張數為分母）────────────────────────────
 
         /// <summary>
@@ -114,26 +103,23 @@ namespace AniloxRoll.Monitor.Core.Services
             {
                 try
                 {
-                    using (var sr = OpenCsvShared(csvPath))
+                    using (var sr = InspectionCsvReader.OpenShared(csvPath))
                     {
                         string line;
                         while ((line = sr.ReadLine()) != null)
                         {
-                            if (TryUpdateHmFromCfg(line, ref captureHmV)) continue;
-                            if (!TryParseLineEx(line, out _, out string fileName,
-                                out int maxExceed, out int meanExceed,
-                                out float meanPeak, out float maxPeak,
-                                out _, out _, out _)) continue;
+                            if (InspectionCsvReader.TryUpdateHmFromConfig(line, ref captureHmV)) continue;
+                            if (!InspectionCsvReader.TryParseRecord(line, out var record)) continue;
 
-                            if (!TryParseFileNameDateTime(fileName, out DateTime ts)) continue;
+                            if (!InspectionCsvReader.TryParseTimestamp(record.FileName, out DateTime ts)) continue;
                             if (ts < start || ts > end) continue;
 
-                            if (!TryExtractCamId(fileName, out int camId)) continue;
+                            if (!InspectionCsvReader.TryExtractCameraId(record.FileName, out int camId)) continue;
                             if (!stats.TryGetValue(camId, out var s)) continue;
 
                             bool isFail = ctx != null
-                                ? ctx.IsFail(meanPeak, maxPeak, captureHmV)
-                                : (maxExceed > 0 || meanExceed > 0);
+                                ? ctx.IsFail(record.MeanPeak, record.MaxPeak, captureHmV)
+                                : (record.MaxExceed > 0 || record.MeanExceed > 0);
                             if (isFail) s.Fail++;
                             else        s.Pass++;
                         }
@@ -146,17 +132,6 @@ namespace AniloxRoll.Monitor.Core.Services
             }
 
             return stats;
-        }
-
-        /// <summary>
-        /// 偵測 #CFG 列並更新 captureHmV。回傳 true 表示這行是 #CFG（呼叫端應 continue 不當資料列處理）。
-        /// </summary>
-        private static bool TryUpdateHmFromCfg(string line, ref float captureHmV)
-        {
-            if (string.IsNullOrEmpty(line) || !line.StartsWith("#CFG,")) return false;
-            if (CsvConfigSnapshot.TryParse(line, out var cfg) && cfg.HessianMaxFactorV > 0f)
-                captureHmV = cfg.HessianMaxFactorV;
-            return true;
         }
 
         // ── 序號範圍統計（新模式：以唯一序號為分母）────────────────────────
@@ -192,28 +167,25 @@ namespace AniloxRoll.Monitor.Core.Services
             {
                 try
                 {
-                    using (var sr = OpenCsvShared(csvPath))
+                    using (var sr = InspectionCsvReader.OpenShared(csvPath))
                     {
                         string line;
                         while ((line = sr.ReadLine()) != null)
                         {
-                            if (TryUpdateHmFromCfg(line, ref captureHmV)) continue;
-                            if (!TryParseLineEx(line, out string grabId, out string fileName,
-                                out int maxExceed, out int meanExceed,
-                                out float meanPeak, out float maxPeak,
-                                out _, out _, out _)) continue;
+                            if (InspectionCsvReader.TryUpdateHmFromConfig(line, ref captureHmV)) continue;
+                            if (!InspectionCsvReader.TryParseRecord(line, out var record)) continue;
 
-                            if (StringComparer.Ordinal.Compare(grabId, lo) < 0 ||
-                                StringComparer.Ordinal.Compare(grabId, hi) > 0) continue;
+                            if (StringComparer.Ordinal.Compare(record.GrabId, lo) < 0 ||
+                                StringComparer.Ordinal.Compare(record.GrabId, hi) > 0) continue;
 
-                            if (!TryExtractCamId(fileName, out int camId)) continue;
+                            if (!InspectionCsvReader.TryExtractCameraId(record.FileName, out int camId)) continue;
 
-                            if (!grabCamFail.TryGetValue(grabId, out var camMap))
-                                grabCamFail[grabId] = camMap = new Dictionary<int, bool>();
+                            if (!grabCamFail.TryGetValue(record.GrabId, out var camMap))
+                                grabCamFail[record.GrabId] = camMap = new Dictionary<int, bool>();
 
                             bool thisFail = ctx != null
-                                ? ctx.IsFail(meanPeak, maxPeak, captureHmV)
-                                : (maxExceed > 0 || meanExceed > 0);
+                                ? ctx.IsFail(record.MeanPeak, record.MaxPeak, captureHmV)
+                                : (record.MaxExceed > 0 || record.MeanExceed > 0);
                             if (!camMap.TryGetValue(camId, out bool prev))
                                 camMap[camId] = thisFail;
                             else if (thisFail)
@@ -351,28 +323,27 @@ namespace AniloxRoll.Monitor.Core.Services
                 if (!File.Exists(csvPath)) continue;
                 try
                 {
-                    using (var sr = OpenCsvShared(csvPath))
+                    using (var sr = InspectionCsvReader.OpenShared(csvPath))
                     {
                         string line;
                         while ((line = sr.ReadLine()) != null)
                         {
-                            if (!TryParseLineEx(line, out string grabId, out string fileName,
-                                out _, out _, out _, out _, out _, out _, out _,
-                                out float maxCMean)) continue;
-                            if (!rangeIds.Contains(grabId) || !TryExtractCamId(fileName, out int camId) ||
-                                !TryParseFileNameDateTime(fileName, out DateTime timestamp)) continue;
+                            if (!InspectionCsvReader.TryParseRecord(line, out var record)) continue;
+                            if (!rangeIds.Contains(record.GrabId) ||
+                                !InspectionCsvReader.TryExtractCameraId(record.FileName, out int camId) ||
+                                !InspectionCsvReader.TryParseTimestamp(record.FileName, out DateTime timestamp)) continue;
 
                             if (!recordsByCam.TryGetValue(camId, out var records))
                                 recordsByCam[camId] = records = new List<MuraCurveRecord>();
                             string dateDir = CaptureStoragePaths.DateImageDir(rootPath, timestamp);
                             records.Add(new MuraCurveRecord
                             {
-                                MeanCPath = CaptureFileNaming.ResolveMeanC(Path.Combine(dateDir, fileName)),
-                                MaxCPath = CaptureFileNaming.ResolveMaxC(Path.Combine(dateDir, fileName)),
-                                MaxCMean = maxCMean
+                                MeanCPath = CaptureFileNaming.ResolveMeanC(Path.Combine(dateDir, record.FileName)),
+                                MaxCPath = CaptureFileNaming.ResolveMaxC(Path.Combine(dateDir, record.FileName)),
+                                MaxCMean = record.MaxCMean
                             });
                             totalRows++;
-                            if (!float.IsNaN(maxCMean) && !float.IsInfinity(maxCMean)) scoredRows++;
+                            if (!float.IsNaN(record.MaxCMean) && !float.IsInfinity(record.MaxCMean)) scoredRows++;
                         }
                     }
                 }
@@ -518,33 +489,30 @@ namespace AniloxRoll.Monitor.Core.Services
             {
                 try
                 {
-                    using (var sr = OpenCsvShared(csvPath))
+                    using (var sr = InspectionCsvReader.OpenShared(csvPath))
                     {
                         string line;
                         while ((line = sr.ReadLine()) != null)
                         {
-                            if (TryUpdateHmFromCfg(line, ref captureHmV)) continue;
-                            if (!TryParseLineEx(line, out string grabId, out string fileName,
-                                out int maxExceed, out int meanExceed,
-                                out float meanPeak, out float maxPeak,
-                                out _, out _, out _)) continue;
+                            if (InspectionCsvReader.TryUpdateHmFromConfig(line, ref captureHmV)) continue;
+                            if (!InspectionCsvReader.TryParseRecord(line, out var record)) continue;
 
-                            if (StringComparer.Ordinal.Compare(grabId, lo) < 0 ||
-                                StringComparer.Ordinal.Compare(grabId, hi) > 0) continue;
+                            if (StringComparer.Ordinal.Compare(record.GrabId, lo) < 0 ||
+                                StringComparer.Ordinal.Compare(record.GrabId, hi) > 0) continue;
 
-                            if (!TryExtractCamId(fileName, out int camId)) continue;
+                            if (!InspectionCsvReader.TryExtractCameraId(record.FileName, out int camId)) continue;
                             if (camId < 1 || camId > 7) continue;
 
-                            if (!dict.TryGetValue(grabId, out var detail))
+                            if (!dict.TryGetValue(record.GrabId, out var detail))
                             {
-                                detail = new GrabDetail { GrabId = grabId };
-                                dict[grabId] = detail;
+                                detail = new GrabDetail { GrabId = record.GrabId };
+                                dict[record.GrabId] = detail;
                             }
 
                             int idx = camId - 1;
                             bool thisFail = ctx != null
-                                ? ctx.IsFail(meanPeak, maxPeak, captureHmV)
-                                : (maxExceed > 0 || meanExceed > 0);
+                                ? ctx.IsFail(record.MeanPeak, record.MaxPeak, captureHmV)
+                                : (record.MaxExceed > 0 || record.MeanExceed > 0);
                             if (detail.CamResult[idx] == null)
                                 detail.CamResult[idx] = thisFail;
                             else if (thisFail)
@@ -582,25 +550,25 @@ namespace AniloxRoll.Monitor.Core.Services
             {
                 try
                 {
-                    using (var sr = OpenCsvShared(csvPath))
+                    using (var sr = InspectionCsvReader.OpenShared(csvPath))
                     {
                         sr.ReadLine(); // skip header
                         string line;
                         while ((line = sr.ReadLine()) != null)
                         {
-                            if (!TryParseLine(line, out string grabId, out string fileName, out _, out _)) continue;
-                            if (string.IsNullOrEmpty(grabId)) continue;
-                            if (!TryParseFileNameDateTime(fileName, out DateTime dt)) continue;
+                            if (!InspectionCsvReader.TryParseRecord(line, out var record)) continue;
+                            if (string.IsNullOrEmpty(record.GrabId)) continue;
+                            if (!InspectionCsvReader.TryParseTimestamp(record.FileName, out DateTime dt)) continue;
 
-                            if (dict.TryGetValue(grabId, out var existing))
+                            if (dict.TryGetValue(record.GrabId, out var existing))
                             {
-                                dict[grabId] = (
+                                dict[record.GrabId] = (
                                     dt < existing.earliest ? dt : existing.earliest,
                                     dt > existing.latest   ? dt : existing.latest);
                             }
                             else
                             {
-                                dict[grabId] = (dt, dt);
+                                dict[record.GrabId] = (dt, dt);
                             }
                         }
                     }
@@ -645,14 +613,14 @@ namespace AniloxRoll.Monitor.Core.Services
             {
                 try
                 {
-                    using (var sr = OpenCsvShared(csvPath))
+                    using (var sr = InspectionCsvReader.OpenShared(csvPath))
                     {
                         sr.ReadLine();
                         string line;
                         while ((line = sr.ReadLine()) != null)
                         {
-                            if (!TryParseLine(line, out _, out string fileName, out _, out _)) continue;
-                            if (!TryParseFileNameDateTime(fileName, out DateTime dt)) continue;
+                            if (!InspectionCsvReader.TryParseRecord(line, out var record)) continue;
+                            if (!InspectionCsvReader.TryParseTimestamp(record.FileName, out DateTime dt)) continue;
                             times.Add(dt);
                         }
                     }
@@ -750,24 +718,21 @@ namespace AniloxRoll.Monitor.Core.Services
             {
                 try
                 {
-                    using (var sr = OpenCsvShared(csvPath))
+                    using (var sr = InspectionCsvReader.OpenShared(csvPath))
                     {
                         string line;
                         while ((line = sr.ReadLine()) != null)
                         {
-                            if (TryUpdateHmFromCfg(line, ref captureHmV)) continue;
-                            if (!TryParseLineEx(line, out string grabId, out string fileName,
-                                out int maxExceed, out int meanExceed,
-                                out float meanPeak, out float maxPeak,
-                                out _, out _, out _)) continue;
-                            if (!TryParseFileNameDateTime(fileName, out DateTime ts)) continue;
+                            if (InspectionCsvReader.TryUpdateHmFromConfig(line, ref captureHmV)) continue;
+                            if (!InspectionCsvReader.TryParseRecord(line, out var record)) continue;
+                            if (!InspectionCsvReader.TryParseTimestamp(record.FileName, out DateTime ts)) continue;
                             if (ts < start || ts > end) continue;
-                            if (!TryExtractCamId(fileName, out int camId)) continue;
+                            if (!InspectionCsvReader.TryExtractCameraId(record.FileName, out int camId)) continue;
 
-                            var key = (grabId, camId);
+                            var key = (record.GrabId, camId);
                             bool thisFail = ctx != null
-                                ? ctx.IsFail(meanPeak, maxPeak, captureHmV)
-                                : (maxExceed > 0 || meanExceed > 0);
+                                ? ctx.IsFail(record.MeanPeak, record.MaxPeak, captureHmV)
+                                : (record.MaxExceed > 0 || record.MeanExceed > 0);
 
                             if (!groups.TryGetValue(key, out var prev))
                                 groups[key] = (ts, thisFail);
@@ -785,95 +750,6 @@ namespace AniloxRoll.Monitor.Core.Services
 
             foreach (var kv in groups)
                 onRecord(kv.Value.ts, kv.Value.hasFail);
-        }
-
-        // ── 私有輔助 ──────────────────────────────────────────────────────
-
-        /// <summary>
-        /// 從 FileName（e.g. "20260316_102301.123-3"）解析出完整 DateTime（精確到毫秒）。
-        /// 格式：yyyyMMdd_HHmmss.fff-CamId
-        /// </summary>
-        private static bool TryParseFileNameDateTime(string fileName, out DateTime result)
-        {
-            result = DateTime.MinValue;
-            if (string.IsNullOrEmpty(fileName)) return false;
-            int underscoreIdx = fileName.IndexOf('_');
-            if (underscoreIdx != 8 || fileName.Length < 19) return false;  // "yyyyMMdd_HHmmss.fff" = 19 chars
-            string datePart = fileName.Substring(0, 8);      // "yyyyMMdd"
-            string timePart = fileName.Substring(9, 10);     // "HHmmss.fff"
-            return DateTime.TryParseExact(datePart + timePart, "yyyyMMddHHmmss.fff",
-                CultureInfo.InvariantCulture, DateTimeStyles.None, out result);
-        }
-
-        /// <summary>解析一行 CSV 資料列（跳過 #CFG 等註解列）。
-        /// 相容 4/9 欄舊格式與 10 欄新格式。</summary>
-        private static bool TryParseLine(string line,
-            out string grabId, out string fileName,
-            out int maxExceed, out int meanExceed)
-        {
-            grabId     = null;
-            fileName   = null;
-            maxExceed  = 0;
-            meanExceed = 0;
-
-            if (string.IsNullOrWhiteSpace(line)) return false;
-            if (line[0] == '#') return false; // #CFG 等註解列
-            string[] cols = line.Split(',');
-            if (cols.Length < 4) return false;
-
-            grabId   = cols[0].Trim();
-            fileName = cols[1].Trim();
-            return int.TryParse(cols[2].Trim(), out maxExceed) &&
-                   int.TryParse(cols[3].Trim(), out meanExceed);
-        }
-
-        /// <summary>解析 10 欄格式，額外取得 MeanPeak/MaxPeak/GrabHeight/LineRateHz/ExposureUs/MaxCMean。</summary>
-        private static bool TryParseLineEx(string line,
-            out string grabId, out string fileName,
-            out int maxExceed, out int meanExceed,
-            out float meanPeak, out float maxPeak,
-            out int grabHeight, out double lineRateHz, out double exposureUs)
-        {
-            return TryParseLineEx(line, out grabId, out fileName,
-                out maxExceed, out meanExceed, out meanPeak, out maxPeak,
-                out grabHeight, out lineRateHz, out exposureUs, out _);
-        }
-
-        private static bool TryParseLineEx(string line,
-            out string grabId, out string fileName,
-            out int maxExceed, out int meanExceed,
-            out float meanPeak, out float maxPeak,
-            out int grabHeight, out double lineRateHz, out double exposureUs,
-            out float maxCMean)
-        {
-            meanPeak = 0; maxPeak = 0; grabHeight = 0; lineRateHz = 0; exposureUs = 0;
-            maxCMean = float.NaN;
-
-            if (!TryParseLine(line, out grabId, out fileName, out maxExceed, out meanExceed))
-                return false;
-
-            string[] cols = line.Split(',');
-            if (cols.Length >= 9)
-            {
-                float.TryParse(cols[4].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out meanPeak);
-                float.TryParse(cols[5].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out maxPeak);
-                int.TryParse(cols[6].Trim(), out grabHeight);
-                double.TryParse(cols[7].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out lineRateHz);
-                double.TryParse(cols[8].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out exposureUs);
-            }
-            if (cols.Length >= 10)
-                float.TryParse(cols[9].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out maxCMean);
-            return true;
-        }
-
-        /// <summary>從 FileName（e.g. "20260316_102301.123-3"）提取相機 ID。</summary>
-        private static bool TryExtractCamId(string fileName, out int camId)
-        {
-            camId = 0;
-            if (string.IsNullOrEmpty(fileName)) return false;
-            int dashIdx = fileName.LastIndexOf('-');
-            if (dashIdx < 0 || dashIdx >= fileName.Length - 1) return false;
-            return int.TryParse(fileName.Substring(dashIdx + 1), out camId);
         }
 
         /// <summary>
@@ -913,18 +789,18 @@ namespace AniloxRoll.Monitor.Core.Services
             {
                 try
                 {
-                    using (var sr = OpenCsvShared(csvPath))
+                    using (var sr = InspectionCsvReader.OpenShared(csvPath))
                     {
                         sr.ReadLine(); // skip header
                         string line;
                         while ((line = sr.ReadLine()) != null)
                         {
-                            if (!TryParseLine(line, out string id, out string fileName, out _, out _)) continue;
-                            if (id != grabId) continue;
-                            if (!TryExtractCamId(fileName, out int camId)) continue;
+                            if (!InspectionCsvReader.TryParseRecord(line, out var record)) continue;
+                            if (record.GrabId != grabId) continue;
+                            if (!InspectionCsvReader.TryExtractCameraId(record.FileName, out int camId)) continue;
                             if (!camFileNames.ContainsKey(camId))
                                 camFileNames[camId] = new HashSet<string>();
-                            camFileNames[camId].Add(fileName);
+                            camFileNames[camId].Add(record.FileName);
                         }
                     }
                 }
@@ -991,7 +867,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 try
                 {
                     CsvConfigSnapshot lastCfg = null;
-                    using (var sr = OpenCsvShared(csvPath))
+                    using (var sr = InspectionCsvReader.OpenShared(csvPath))
                     {
                         string line;
                         while ((line = sr.ReadLine()) != null)
@@ -1002,8 +878,8 @@ namespace AniloxRoll.Monitor.Core.Services
                                     lastCfg = cfg;
                                 continue;
                             }
-                            if (!TryParseLine(line, out string id, out _, out _, out _)) continue;
-                            if (id == grabId && lastCfg != null) return lastCfg;
+                            if (!InspectionCsvReader.TryParseRecord(line, out var record)) continue;
+                            if (record.GrabId == grabId && lastCfg != null) return lastCfg;
                         }
                     }
                 }
@@ -1044,7 +920,7 @@ namespace AniloxRoll.Monitor.Core.Services
             CsvConfigSnapshot latest = null;
             try
             {
-                using (var sr = OpenCsvShared(csvPath))
+                using (var sr = InspectionCsvReader.OpenShared(csvPath))
                 {
                     string line;
                     while ((line = sr.ReadLine()) != null)
