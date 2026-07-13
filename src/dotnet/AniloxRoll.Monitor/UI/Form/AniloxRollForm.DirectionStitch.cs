@@ -85,7 +85,7 @@ namespace AniloxRoll.Monitor.Forms
                 if (!_stitchCoordinator.LastReviewProcessedMode)
                 {
                     _stitchCoordinator.ActiveRidgeDirection = dir;
-                    _interactionHelper.SetRidgeDirection(dir);
+                    _inspectionSettingsCoordinator.SetRidgeDirection(dir);
                     UpdateRidgeDirectionVisual(dir);
                     _settingsHub.Set(s => s.hd_EnableReviewEnhance, true);  // event → ApplyReviewEnhance(true)
                     return;
@@ -98,7 +98,7 @@ namespace AniloxRoll.Monitor.Forms
                 }
                 // 不同方向：純 ridge dir 切換（沒有 setting 變更，直接 reload 處理圖）
                 _stitchCoordinator.ActiveRidgeDirection = dir;
-                _interactionHelper.SetRidgeDirection(dir);
+                _inspectionSettingsCoordinator.SetRidgeDirection(dir);
                 UpdateRidgeDirectionVisual(dir);
                 // 2b-ii：SaveCanvasView（讀已砍 canvas）移除；ImageDisplayView 自管視野
                 if (_stitchCoordinator.IsStitchMode)
@@ -113,7 +113,7 @@ namespace AniloxRoll.Monitor.Forms
                 else
                 {
                     _stitchCoordinator.ClearStitchedMode();
-                    await _presenter.LoadImagesWithPeriodLockAsync(true, _interactionHelper.LoadImages);
+                    await _presenter.LoadImagesWithPeriodLockAsync(true, _presenter.RunWorkflowAsync);
                     ApplyPostLoadDisplay();
                 }
             }

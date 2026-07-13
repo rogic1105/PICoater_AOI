@@ -19,6 +19,7 @@ using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Interop;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.State;
+using AniloxRoll.Monitor.UI.Coordinators;
 using AniloxRoll.Monitor.UI.Managers;
 using AniloxRoll.Monitor.UI.Navigators;
 using AniloxRoll.Monitor.UI.Presenters;
@@ -38,6 +39,9 @@ namespace AniloxRoll.Monitor.Forms
         private async Task LoadGrabStitchedViewGuardRowRangeAsync(string grabId, DateTime earliest, DateTime latest,
             bool enableProcess)
         {
+            // R2 與 R3 是互斥顯示 intent：切回序號時，使仍在 IO 的時序結果失效，
+            // 禁止舊 period 在稍後覆蓋新 grabId。
+            _reviewPeriodLoadCoordinator?.Invalidate();
             _reviewRowSync?.SuspendUntilNextData();
             try
             {
@@ -54,7 +58,7 @@ namespace AniloxRoll.Monitor.Forms
             FlowTrace.Log("ui:【讀取資料】鈕（Review）");   // intent 行（孤兒判讀規則；grab 中按會動到監控合圖）
             try
             {
-                _interactionHelper.SelectAndLoadFolder();
+                _reviewFolderCoordinator.SelectAndLoadFolder();
                 _presenter.UpdatePeriodNavigationState();
                 await ResetAndLoadReviewAfterFolderChanged(dataPresenterAlreadySynced: false);
             }
@@ -108,7 +112,7 @@ namespace AniloxRoll.Monitor.Forms
                     using (_dataStatsPresenter.GrabIdNavGuard.Enter())
                     {
                         cbReviewId.SelectedIndex = 0;
-                        _interactionHelper.NavigateToDateTime(_dataStatsPresenter.GrabIdInfos[0].Earliest);
+                        _reviewFolderCoordinator.NavigateToDateTime(_dataStatsPresenter.GrabIdInfos[0].Earliest);
                     }
                 }
                 var current = _dateTimeNavigator.GetCurrentPeriodOrDefault(DateTime.MinValue);
@@ -149,7 +153,7 @@ namespace AniloxRoll.Monitor.Forms
             }
             _stitchCoordinator.LastReviewProcessedMode = enableProcess;
             _stitchCoordinator.ClearStitchedMode();
-            await _presenter.LoadImagesWithPeriodLockAsync(enableProcess, _interactionHelper.LoadImages);
+            await _presenter.LoadImagesWithPeriodLockAsync(enableProcess, _presenter.RunWorkflowAsync);
             ApplyPostLoadDisplay();
             }
             catch (Exception ex) { Trace.WriteLine($"[ApplyReviewEnhance] {ex}"); }
@@ -170,14 +174,18 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private void RefreshReviewConfigForCurrentPeriod()
         {
-            string rootPath = UserSessionState.LastDataPath;
-            if (string.IsNullOrWhiteSpace(rootPath)) { _interactionHelper.ReviewConfig = null; return; }
-
             var periodDate = _dateTimeNavigator.GetCurrentPeriodOrDefault(DateTime.MinValue);
-            if (periodDate == DateTime.MinValue) { _interactionHelper.ReviewConfig = null; return; }
+            _reviewRuntimeState.Config = periodDate == DateTime.MinValue
+                ? null
+                : LoadReviewConfigForPeriod(periodDate);
+        }
 
-            var cfg = InspectionStatisticsService.LoadConfigForDate(rootPath, periodDate);
-            _interactionHelper.ReviewConfig = cfg;
+        private static CsvConfigSnapshot LoadReviewConfigForPeriod(DateTime period)
+        {
+            string rootPath = UserSessionState.LastDataPath;
+            return string.IsNullOrWhiteSpace(rootPath)
+                ? null
+                : InspectionStatisticsService.LoadConfigForDate(rootPath, period);
         }
 
         /// <summary>
@@ -187,7 +195,7 @@ namespace AniloxRoll.Monitor.Forms
         private async Task LoadImagesWithReviewConfig(bool enableProcess)
         {
             RefreshReviewConfigForCurrentPeriod();
-            await _interactionHelper.LoadImages(enableProcess);
+            await _presenter.RunWorkflowAsync(enableProcess);
         }
 
         /// <summary>
@@ -204,24 +212,52 @@ namespace AniloxRoll.Monitor.Forms
             _reviewDisplayManager?.RefireViewRange();   // chart 重建會重設軸 → 補發當前視野
         }
 
-
+        private void ApplyPostLoadDisplay(DateTime period)
+        {
+            // R3 使用 intent 當下的 immutable period；不得在 await 後重讀 ComboBox，否則多個
+            // handler 都會套用同一個最新時點，造成重複 push/lodRebind/curve 重畫。
+            _stitchCoordinator.ApplyGlobalMergeForPeriod(period);
+            _stitchCoordinator.UpdateOverviewChartForPeriod(period);
+            _stitchCoordinator.UpdateRowChartForPeriod(period);
+            _reviewDisplayManager?.RefireViewRange();
+        }
 
         /// <summary>cbReviewDate/cbReviewTime 手動滾動時載入對應圖片（同 btnReviewPeriodPrev/Next）。
         /// _dataStatsPresenter.GrabIdNavGuard 時跳過（由 OnReviewGrabIdChanged 等程式碼觸發的 NavigateToDateTime）。</summary>
-        private async void OnPeriodComboChanged()
+        private void OnPeriodComboChanged()
         {
             if (_dataStatsPresenter.GrabIdNavGuard.IsSet) return;
             if (_imageRepository.FileCount == 0) return;
+            DateTime period = _dateTimeNavigator.GetCurrentPeriodOrDefault(DateTime.MinValue);
+            if (period == DateTime.MinValue) return;
             FlowTrace.Log("ui:【時段導航】（cbReviewDate/Time）");   // intent 行；guard 之後＝只記手動
-            try
-            {
+            _dateTimeNavigator.SaveCurrentSelection();
+            _stitchCoordinator.InvalidateImageLoad();
             _stitchCoordinator.ClearStitchedMode();
             _dataStatsPresenter.SetReviewGroupBoxes(false);
-            await _presenter.LoadImagesWithPeriodLockAsync(_stitchCoordinator.LastReviewProcessedMode, LoadImagesWithReviewConfig);
-            ApplyPostLoadDisplay();
-            // 2b-ii：SaveCanvasView/FitToScreen（讀已砍 canvas）移除；ImageDisplayView 自管視野
+            _ = _reviewPeriodLoadCoordinator.Enqueue(period, _stitchCoordinator.LastReviewProcessedMode);
+        }
+
+        private async Task LoadReviewPeriodRequestAsync(
+            ReviewPeriodLoadCoordinator.Request request,
+            Func<bool> canApply)
+        {
+            FlowTrace.Log($"RV period begin {request.Period:yyyy-MM-dd HH:mm:ss.fff}");
+            CsvConfigSnapshot config = LoadReviewConfigForPeriod(request.Period);
+            await _presenter.LoadImagesWithPeriodLockAsync(
+                request.ProcessedMode,
+                _ => _presenter.RunWorkflowForPeriodAsync(request.ProcessedMode, request.Period));
+
+            if (!canApply())
+            {
+                FlowTrace.Log($"RV period stale-drop {request.Period:yyyy-MM-dd HH:mm:ss.fff}");
+                return;
             }
-            catch (Exception ex) { Trace.WriteLine($"[OnPeriodComboChanged] {ex}"); }
+
+            _reviewRuntimeState.Config = config;
+            _stitchCoordinator.LastReviewProcessedMode = request.ProcessedMode;
+            ApplyPostLoadDisplay(request.Period);
+            FlowTrace.Log($"RV period done {request.Period:yyyy-MM-dd HH:mm:ss.fff}");
         }
     }
 }

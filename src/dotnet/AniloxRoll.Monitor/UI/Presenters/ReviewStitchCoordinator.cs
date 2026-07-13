@@ -8,8 +8,10 @@ using System.Windows.Forms.DataVisualization.Charting;
 using TanukiCv.Controls;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
+using AniloxRoll.Monitor.UI.Binders;
 using AniloxRoll.Monitor.UI.Managers;
 using AniloxRoll.Monitor.UI.Navigators;
+using AniloxRoll.Monitor.UI.State;
 using AniloxRoll.Monitor.UI.Widgets;
 
 namespace AniloxRoll.Monitor.UI.Presenters
@@ -22,7 +24,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public Chart ChartReviewPatch { get; set; }
         public Chart ChartReviewVertical { get; set; }
         public Chart ChartReviewHorizontal { get; set; }
-        public FormInteractionHelper InteractionHelper { get; set; }
+        public BusyUiBinder BusyUi { get; set; }
+        public ReviewRuntimeState ReviewState { get; set; }
         public ColumnCurveChartHelper ColumnChartHelper { get; set; }
         public RowCurveChartHelper RowChartHelper { get; set; }
         public RowCurveDisplayAdapter RowChartDisplay { get; set; }
@@ -52,7 +55,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private float[][] _stitchedCurveMax;
         private float[][] _stitchedRowCurveMean;
         private float[][] _stitchedRowCurveMax;
-        private CsvConfigSnapshot _currentGrabConfig;
         private Bitmap _globalMergedImage;
         private Bitmap _periodMergedImage;
 
@@ -60,7 +62,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public bool IsStitchMode => _stitchedImages != null;
         public bool IsGlobalMerged => _globalMergedImage != null;
         public bool IsPeriodMerged => _periodMergedImage != null;
-        public CsvConfigSnapshot CurrentGrabConfig => _currentGrabConfig;
+        public CsvConfigSnapshot CurrentGrabConfig => _ctx.ReviewState.Config;
 
         /// <summary>上一次 Review 頁面的處理模式旗標。</summary>
         public bool LastReviewProcessedMode { get; set; }
@@ -174,7 +176,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _stitchedCurveMax     = max;
                 _stitchedRowCurveMean = rowMean;
                 _stitchedRowCurveMax  = rowMax;
-                _currentGrabConfig = cfg;
+                _ctx.ReviewState.Config = cfg;
                 UpdateStitchedOverviewChart();
                 UpdateGlobalRowChart();
                 Core.Services.FlowTrace.Log($"RV curves {grabId}（{sw.ElapsedMilliseconds}ms）");
@@ -223,7 +225,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                           ? UI.State.UserSessionState.LastDataPath : _ctx.DataStatsPresenter.StatsDataRootPath;
             if (string.IsNullOrWhiteSpace(root)) return;
 
-            _ctx.InteractionHelper.SetUiLoadingState(true);
+            _ctx.BusyUi.SetBusy(true);
             // 圖片自己的最後贏 token；序號 intent 會先 InvalidateImageLoad，防舊圖片在 debounce 前上畫面。
             int myLoad = System.Threading.Interlocked.Increment(ref _imageLoadSeq);
             Core.Services.FlowTrace.Log($"RV loadGrab begin {grabId}（proc={enableProcess}）");
@@ -321,8 +323,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _stitchedCurveMax     = newCurveMax;
                 _stitchedRowCurveMean = newRowCurveMean;
                 _stitchedRowCurveMax  = newRowCurveMax;
-                _currentGrabConfig = grabCfg;
-                _ctx.InteractionHelper.ReviewConfig = grabCfg;
+                _ctx.ReviewState.Config = grabCfg;
                 _ctx.DataStatsPresenter?.SetReviewGroupBoxes(true);
 
                 double[] opsArr = loaded.ops, posArr = loaded.pos;
@@ -371,7 +372,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             {
                 // 只有「仍是最新」的載入才關 loading 燈（stale 早退不關 → 不熄滅還在跑的較新載入）
                 if (myLoad == System.Threading.Volatile.Read(ref _imageLoadSeq))
-                    _ctx.InteractionHelper.SetUiLoadingState(false);
+                    _ctx.BusyUi.SetBusy(false);
             }
         }
 
@@ -438,7 +439,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _stitchedCurveMax     = null;
             _stitchedRowCurveMean = null;
             _stitchedRowCurveMax  = null;
-            _currentGrabConfig = null;
+            _ctx.ReviewState.Config = null;
             _ctx.ColumnChartHelper?.SetOps(_ctx.Settings.Cam1_Ops);
             _ctx.ColumnChartHelper?.SetThresholds(_ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV);
             _ctx.DataStatsPresenter?.SetReviewGroupBoxes(false);
@@ -468,7 +469,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _ctx.CameraCount, out float[] mergedMean, out float[] mergedMax);
             if (mergedMean != null)
             {
-                float captureHmV = _currentGrabConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
+                float captureHmV = _ctx.ReviewState.Config?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
                 HessianRescaleHelper.RescaleInPlace1D(mergedMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
                 HessianRescaleHelper.RescaleInPlace1D(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
                 _ctx.RowChartSync.UpdateData(mergedMean, mergedMax, requireViewRange: true);
@@ -499,11 +500,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
         {
             double[] opsArr, posArr;
             float captureHm;
-            if (_currentGrabConfig != null)
+            if (_ctx.ReviewState.Config != null)
             {
-                opsArr    = _currentGrabConfig.CamOps;
-                posArr    = _currentGrabConfig.CamPos;
-                captureHm = _currentGrabConfig.HessianMaxFactorV;
+                opsArr    = _ctx.ReviewState.Config.CamOps;
+                posArr    = _ctx.ReviewState.Config.CamPos;
+                captureHm = _ctx.ReviewState.Config.HessianMaxFactorV;
             }
             else
             {
@@ -511,7 +512,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 posArr    = _ctx.Settings.GetCameraStartPositionMmArray();
                 captureHm = _ctx.Settings.HessianMaxFactorV;
             }
-            // 閾值固定用當前 Settings（view-time 可調），不再從 _currentGrabConfig 取
+            // 閾值固定用當前 Settings（view-time 可調），不再從 capture config 取
             float errMean = _ctx.Settings.ErrorValueMeanV;
             float errMax  = _ctx.Settings.ErrorValueMaxV;
 
@@ -558,13 +559,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
                 double[] posArr;
                 float captureHmV;
-                if (_currentGrabConfig != null)
+                if (_ctx.ReviewState.Config != null)
                 {
-                    double opsUm = (idx >= 0 && idx < _currentGrabConfig.CamOps.Length)
-                        ? _currentGrabConfig.CamOps[idx] : _ctx.Settings.Cam1_Ops;
+                    double opsUm = (idx >= 0 && idx < _ctx.ReviewState.Config.CamOps.Length)
+                        ? _ctx.ReviewState.Config.CamOps[idx] : _ctx.Settings.Cam1_Ops;
                     _ctx.ColumnChartHelper.SetOps(opsUm);
-                    posArr = _currentGrabConfig.CamPos;
-                    captureHmV = _currentGrabConfig.HessianMaxFactorV;
+                    posArr = _ctx.ReviewState.Config.CamPos;
+                    captureHmV = _ctx.ReviewState.Config.HessianMaxFactorV;
                 }
                 else
                 {
@@ -600,7 +601,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                         ? _stitchedRowCurveMax[idx] : null;
                     if (rowMean != null)
                     {
-                        float captureHmV = _currentGrabConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
+                        float captureHmV = _ctx.ReviewState.Config?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
                         var displayMean = HessianRescaleHelper.CloneAndRescale1D(rowMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
                         var displayMax  = HessianRescaleHelper.CloneAndRescale1D(rowMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
                         _ctx.RowChartSync.UpdateData(displayMean, displayMax, requireViewRange: true);
@@ -625,23 +626,23 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// 原圖路徑（非 Stitch）：合併全域圖（Period 切換用）。
         /// </summary>
         public void ApplyGlobalMergeIfNeeded()
+            => ApplyGlobalMergeCore(null);
+
+        public void ApplyGlobalMergeForPeriod(DateTime period)
+            => ApplyGlobalMergeCore(period);
+
+        private void ApplyGlobalMergeCore(DateTime? period)
         {
             if (_ctx.Settings.StitchMode != StitchMode.Global) return;
 
-            var cfg = _ctx.InteractionHelper.ReviewConfig;
+            var cfg = _ctx.ReviewState.Config;
             double[] opsArr = cfg?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
             double[] posArr = cfg?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
             int scale = InspectionEngineConfig.DefaultSaveResizeScale;
 
-            var filesMap = _ctx.ImageRepository.GetImages(
-                _ctx.DateTimeNavigator.GetCurrentYear(),
-                _ctx.DateTimeNavigator.GetCurrentMonth(),
-                _ctx.DateTimeNavigator.GetCurrentDay(),
-                _ctx.DateTimeNavigator.GetCurrentHour(),
-                _ctx.DateTimeNavigator.GetCurrentMin(),
-                _ctx.DateTimeNavigator.GetCurrentSec());
+            var filesMap = GetPeriodImages(period);
             if (filesMap == null || filesMap.Count == 0) return;
-            Core.Services.FlowTrace.Log($"RV period load {CurrentPeriodLabel()} images={filesMap.Count}/{_ctx.CameraCount} proc={LastReviewProcessedMode} cfg={(cfg != null ? "yes" : "no")}");
+            Core.Services.FlowTrace.Log($"RV period load {PeriodLabel(period)} images={filesMap.Count}/{_ctx.CameraCount} proc={LastReviewProcessedMode} cfg={(cfg != null ? "yes" : "no")}");
 
             Func<string, Bitmap> bmpLoader = _ctx.InspectionService != null
                 ? (Func<string, Bitmap>)(p => _ctx.InspectionService.LoadBmpAtScale(p, scale))
@@ -674,16 +675,16 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// 原圖路徑：從當前 Repository 時間點讀取 .bin 曲線更新 chartReviewColumn 全覽圖。
         /// </summary>
         public void UpdateOverviewChartFromRepository()
+            => UpdateOverviewChartCore(null);
+
+        public void UpdateOverviewChartForPeriod(DateTime period)
+            => UpdateOverviewChartCore(period);
+
+        private void UpdateOverviewChartCore(DateTime? period)
         {
             if (_ctx.OverviewHelper == null || _stitchedImages != null) return;
 
-            var images = _ctx.ImageRepository.GetImages(
-                _ctx.DateTimeNavigator.GetCurrentYear(),
-                _ctx.DateTimeNavigator.GetCurrentMonth(),
-                _ctx.DateTimeNavigator.GetCurrentDay(),
-                _ctx.DateTimeNavigator.GetCurrentHour(),
-                _ctx.DateTimeNavigator.GetCurrentMin(),
-                _ctx.DateTimeNavigator.GetCurrentSec());
+            var images = GetPeriodImages(period);
 
             if (images == null || images.Count == 0)
             {
@@ -705,7 +706,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 curveMax[i]  = InspectionEngine.LoadCurveBin(CaptureFileNaming.ResolveMaxC(basePath));
             }
 
-            var reviewCfg = _ctx.InteractionHelper?.ReviewConfig;
+            var reviewCfg = _ctx.ReviewState.Config;
             if (reviewCfg != null)
             {
                 CurveMergeHelper.UpdateOverviewChart(curveMean, curveMax,
@@ -727,13 +728,16 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// period 不進 stitch 模式（_stitchedImages=null），故獨立從 repository 載 → 與欄 overview 對稱。
         /// </summary>
         public void UpdateRowChartFromRepository()
+            => UpdateRowChartCore(null);
+
+        public void UpdateRowChartForPeriod(DateTime period)
+            => UpdateRowChartCore(period);
+
+        private void UpdateRowChartCore(DateTime? period)
         {
             if (_ctx.RowChartSync == null || _stitchedImages != null) return;
 
-            var images = _ctx.ImageRepository.GetImages(
-                _ctx.DateTimeNavigator.GetCurrentYear(),  _ctx.DateTimeNavigator.GetCurrentMonth(),
-                _ctx.DateTimeNavigator.GetCurrentDay(),   _ctx.DateTimeNavigator.GetCurrentHour(),
-                _ctx.DateTimeNavigator.GetCurrentMin(),   _ctx.DateTimeNavigator.GetCurrentSec());
+            var images = GetPeriodImages(period);
             if (images == null || images.Count == 0) return;
 
             int camCount = _ctx.CameraCount;
@@ -752,7 +756,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (mergedMean == null) return;
 
             // 與 UpdateGlobalRowChart 同公式：bin baked-in 縮放=HM_V_capture，view-time 目標=HM_H_current。
-            float captureHmV = _ctx.InteractionHelper?.ReviewConfig?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
+            float captureHmV = _ctx.ReviewState.Config?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
             HessianRescaleHelper.RescaleInPlace1D(mergedMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
             HessianRescaleHelper.RescaleInPlace1D(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
             _ctx.RowChartSync.UpdateData(mergedMean, mergedMax, requireViewRange: true);
@@ -765,9 +769,20 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// <summary>當前選中相機 index（0-based）來源＝ImageDisplayView（2b-ii-B 後取代舊 GalleryManager.SelectedIndex）。</summary>
         public Func<int> SelectedCamIndexProvider { get; set; }
 
-        private string CurrentPeriodLabel()
-            => $"{_ctx.DateTimeNavigator.GetCurrentYear()}-{_ctx.DateTimeNavigator.GetCurrentMonth()}-{_ctx.DateTimeNavigator.GetCurrentDay()} " +
-               $"{_ctx.DateTimeNavigator.GetCurrentHour()}:{_ctx.DateTimeNavigator.GetCurrentMin()}:{_ctx.DateTimeNavigator.GetCurrentSec()}";
+        private Dictionary<int, string> GetPeriodImages(DateTime? period)
+        {
+            if (period.HasValue) return _ctx.ImageRepository.GetImages(period.Value);
+            return _ctx.ImageRepository.GetImages(
+                _ctx.DateTimeNavigator.GetCurrentYear(), _ctx.DateTimeNavigator.GetCurrentMonth(),
+                _ctx.DateTimeNavigator.GetCurrentDay(), _ctx.DateTimeNavigator.GetCurrentHour(),
+                _ctx.DateTimeNavigator.GetCurrentMin(), _ctx.DateTimeNavigator.GetCurrentSec());
+        }
+
+        private string PeriodLabel(DateTime? period)
+            => period.HasValue
+                ? period.Value.ToString("yyyy-MM-dd HH:mm:ss.fff")
+                : $"{_ctx.DateTimeNavigator.GetCurrentYear()}-{_ctx.DateTimeNavigator.GetCurrentMonth()}-{_ctx.DateTimeNavigator.GetCurrentDay()} " +
+                  $"{_ctx.DateTimeNavigator.GetCurrentHour()}:{_ctx.DateTimeNavigator.GetCurrentMin()}:{_ctx.DateTimeNavigator.GetCurrentSec()}";
 
         private double ViewRangeProvider(int cameraIndex, bool isLeft, double defaultValue)
         {

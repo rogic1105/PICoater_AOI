@@ -603,7 +603,7 @@ namespace AniloxRoll.Monitor.Forms
             var screen = SystemInfo.GetScreenMetrics();
             if (screen.HorzPx > 0)
             {
-                _interactionHelper?.SetScreenMmPerPixel(screen.MmPerPx);
+                _reviewRuntimeState.ScreenMmPerPixel = screen.MmPerPx;
                 _liveCameraManager?.SetScreenMmPerPixel(screen.MmPerPx);
             }
 

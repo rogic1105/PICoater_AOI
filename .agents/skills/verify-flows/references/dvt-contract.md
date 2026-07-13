@@ -391,7 +391,9 @@ T1: centerCam → camX（IC|WF）   ← 中心相機每跨一台一行（快拖�
 ```
 OnMouseMove@ImageCanvas.cs（拖曳中；UI 執行緒 T1）
  ├ pan 每 move 累積＋重繪限流 ~120fps（只限「畫」，MouseUp 尾緣補繪）   ← 不變量：paint 風暴防護（IC stats paints ≤~130/s）
- └ TriggerStatusChange@ImageCanvas.cs（~30fps 限流）→ StatusChanged 事件
+ └ 首個位移立即 TriggerStatusChange，其後 ~30fps 限流 → StatusChanged 事件
+    └ `IC|WF|RV drag(view-published)` 在同步 subscriber 全返回後才留痕
+       （圖片跟手但 curve 只在 MouseUp 動＝首發被 hover 共用節流窗吃掉；2026-07-13 修）
 即時分支：OnCanvasStatus@ImageDisplayView.cs
  ├ PixelMmMapper 換算＋VerticalZeroAtBottom 鏡射    ← 轉換點#3（各邊映自己的值，勿交叉——2026-07-08 邊界方向錯根因）
  ├ ViewRangeMmChanged 事件 → OnImageViewRange@LiveDisplayCoordinator.cs → OnLiveViewRange 事件
@@ -660,6 +662,11 @@ T1: RV loadGrab done {grabId}（…ms）
 （grab 中按：另會出現 DisableGlobalMerge 等監控行——歸本 intent 管，見孤兒判讀規則）
 不變量：手按【讀取資料】＝刷新+跳最新（loadGrab 的 grabId=清單最新；2026-07-10 修「停在舊選取」）；
 開機自動恢復上次位置不在此限。
+載入 busy 視覺唯一 owner＝`BusyUiBinder`；`AniloxRollPresenter.BusyStateChanged` 與
+`ReviewStitchCoordinator.LoadGrabStitchedViewAsync` 共用同一實例。圖片 loader 只有 latest token 可解除 busy，
+stale loader 不得提早恢復游標或按鈕。
+回顧 CFG 與螢幕校正 runtime state 唯一 owner＝`ReviewRuntimeState`；單片曲線快路、完整圖片載入與時段載入
+都只更新/讀取此實例，不得在 Form、Presenter 或 Coordinator 另存第二份 CFG。
 ```
 
 ### R2 單片序號切換（cbReviewId）——分層載入（2026-07-07 定版）
@@ -687,16 +694,38 @@ T1/Tn: RV loadGrab begin {grabId} → RV loadGrab paths … → RV lodRebind mer
 ### R3 時段導航（cbReviewDate/cbReviewTime 手動）
 ```
 T1: ui:【時段導航】（cbReviewDate/Time）
+T1: RV period begin {yyyy-MM-dd HH:mm:ss.fff}
 T1: RV period load {yyyy-MM-dd HH:mm:ss.fff} images=P/7 proc=True|False cfg=yes|no
 T1: RV pushFrames P/7（merge=True, feedScale=…）
 T1: RV row … / RV state …（chart/狀態快照視資料而定）
+T1: RV period done {yyyy-MM-dd HH:mm:ss.fff}
 ```
-- 時段模式不進 `RV loadGrab begin/done`；它走 repository 當前時間點 → `ApplyGlobalMergeIfNeeded` → `StitchedImagesReady` → `ReviewDisplayManager.PushFrames`。
-- **時序選擇 policy（使用者定版 2026-07-13）**：每個有效時點 intent 都立即刷新三項＝圖片＋欄曲線＋列曲線；
-  資料量小，不套 R2 的 250ms debounce／曲線 latest-only。三項可共用最終顯示 API，但 loader 流程保持 R3 語意。
+- 時段模式不進 `RV loadGrab begin/done`；它走 request 的 immutable period → `ApplyGlobalMergeForPeriod` → `StitchedImagesReady` → `ReviewDisplayManager.PushFrames`。
+- **時序選擇 policy（使用者定版 2026-07-13）**：每個有效且不同的時點 intent 都刷新三項＝圖片＋欄曲線＋列曲線；
+  資料量小，不套 R2 的 250ms debounce／latest-only。loader 由 `ReviewPeriodLoadCoordinator` 去重後 FIFO single-flight，
+  各 request 持有 immutable period；不得並行後在 await 尾端重讀 ComboBox（會讓多筆都套用最新時點）。
+  切回 R2 序號時 `Invalidate` 清 pending，running request 只能記 stale-drop、不得上畫面。
 - **同一時點只載一次**：日期 combo 串聯改時間 combo 必掛 `_updating`（DateTimeNavigator）；
   同時點連發 `RV period load`＝串聯去重失效（2026-07-10 修 ×2~×6 重複載入）。
 - `RV period load` 中 `cfg=yes` 代表 `RefreshReviewConfigForCurrentPeriod` 已從該日 CSV 找到 #CFG；`cfg=no` 時座標/閾值 fallback 當前 settings。
+
+**code-flow**
+```
+PeriodSelectionChanged@DateTimeNavigator.cs
+ → OnPeriodComboChanged@AniloxRollForm.Review.cs（擷取 immutable DateTime）
+   ├ InvalidateImageLoad@ReviewStitchCoordinator.cs（R2 舊圖片不得覆蓋 R3）
+   └ Enqueue@ReviewPeriodLoadCoordinator.cs
+      ├ 同 period+mode running/pending → 去重
+      ├ 不同 period → FIFO single-flight（不得平行）
+      └ LoadReviewPeriodRequestAsync@AniloxRollForm.Review.cs
+         ├ RunWorkflowForPeriodAsync@AniloxRollPresenter.cs → GetImages(DateTime)@ImageRepository.cs
+         ├ generation 失效 → stale-drop（不得 apply）
+         └ ApplyPostLoadDisplay(period)
+            ├ ApplyGlobalMergeForPeriod → PushFrames（圖片/LOD）
+            ├ UpdateOverviewChartForPeriod（欄 curve）
+            └ UpdateRowChartForPeriod（列 curve）
+R2 入口：LoadGrabStitchedViewGuardRowRangeAsync → ReviewPeriodLoadCoordinator.Invalidate
+```
 
 ### R4 回顧主畫面互動（點縮圖/拖曳/縮放）
 與 F5/F6/F6b 同款（同一個 ImageDisplayView），行前綴=RV：

@@ -1,6 +1,7 @@
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.Navigators;
+using AniloxRoll.Monitor.UI.Services;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -16,6 +17,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private readonly ImageRepository _repository;
         private readonly BatchInspectionService _inspectionService;
         private readonly DateTimeNavigator _timeManager;
+        private readonly ImageCacheService _imageCache;
         private int _periodNavigationBusyCount = 0;
 
         public event Action<bool> BusyStateChanged;
@@ -25,11 +27,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public AniloxRollPresenter(
             ImageRepository repo,
             BatchInspectionService service,
-            DateTimeNavigator timeMgr)
+            DateTimeNavigator timeMgr,
+            ImageCacheService imageCache)
         {
             _repository = repo;
             _inspectionService = service;
             _timeManager = timeMgr;
+            _imageCache = imageCache ?? throw new ArgumentNullException(nameof(imageCache));
 
             // 啟動時 WarmUp
             Task.Run(() =>
@@ -43,23 +47,37 @@ namespace AniloxRoll.Monitor.UI.Presenters
             });
         }
 
-        public async Task RunWorkflowAsync(bool enableProcess, List<Image> cacheCollector)
+        public Task RunWorkflowAsync(bool enableProcess)
+            => RunWorkflowCoreAsync(enableProcess, null);
+
+        public Task RunWorkflowForPeriodAsync(bool enableProcess, DateTime period)
+            => RunWorkflowCoreAsync(enableProcess, period);
+
+        private async Task RunWorkflowCoreAsync(bool enableProcess, DateTime? period)
         {
+            _imageCache.Clear();
             if (_inspectionService == null) return;
 
             BusyStateChanged?.Invoke(true);
 
             try
             {
-                _timeManager.SaveCurrentSelection();
-
-                var filesMap = _repository.GetImages(
-                    _timeManager.GetCurrentYear(),
-                    _timeManager.GetCurrentMonth(),
-                    _timeManager.GetCurrentDay(),
-                    _timeManager.GetCurrentHour(),
-                    _timeManager.GetCurrentMin(),
-                    _timeManager.GetCurrentSec());
+                Dictionary<int, string> filesMap;
+                if (period.HasValue)
+                {
+                    filesMap = _repository.GetImages(period.Value);
+                }
+                else
+                {
+                    _timeManager.SaveCurrentSelection();
+                    filesMap = _repository.GetImages(
+                        _timeManager.GetCurrentYear(),
+                        _timeManager.GetCurrentMonth(),
+                        _timeManager.GetCurrentDay(),
+                        _timeManager.GetCurrentHour(),
+                        _timeManager.GetCurrentMin(),
+                        _timeManager.GetCurrentSec());
+                }
 
                 var sw = System.Diagnostics.Stopwatch.StartNew();
 
@@ -69,9 +87,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 sw.Stop();
 
                 // 2b-ii-B：縮圖顯示由 ImageDisplayView 承接（ThumbnailGridPresenter 已刪）。
-                //   此處仍把 ProcessBatch 產出的影像收進 cacheCollector → 由 ClearOldImages 統一 Dispose（防洩漏）。
+                //   ProcessBatch 產出的影像由 ImageCacheService 統一管理生命週期（防洩漏）。
                 foreach (var r in results)
-                    if (r?.Data?.Image != null) cacheCollector.Add(r.Data.Image);
+                    _imageCache.Track(r?.Data?.Image);
 
                 BusyStateChanged?.Invoke(false);
 

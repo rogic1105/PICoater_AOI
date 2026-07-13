@@ -478,10 +478,17 @@ namespace TanukiCv.Controls
 
             _cursorPos = e.Location;   // overlay 游標座標/亮度跟手用
             _cursorInside = true;
+            bool firstDragMove = false;
 
             if (_isDragging)
             {
-                if (!_dragMoved) { _dragMoved = true; DragStarted?.Invoke(this, EventArgs.Empty); }
+                if (!_dragMoved)
+                {
+                    firstDragMove = true;
+                    _dragMoved = true;
+                    DragStarted?.Invoke(this, EventArgs.Empty);
+                    FlowLog?.Invoke("drag(start)");
+                }
                 _panOffset.X += e.X - _lastMousePos.X;
                 _panOffset.Y += e.Y - _lastMousePos.Y;
                 _lastMousePos = e.Location;
@@ -515,10 +522,15 @@ namespace TanukiCv.Controls
                 // 拖曳中：跳過 GetPixel（慢），chart/statusbar 限流到 ~30 fps
                 // 讓 canvas Invalidate() 能以最快速度進入 OnPaint
                 int now = Environment.TickCount;
-                if (now - _lastStatusTickMs >= StatusThrottleMs)
+                // 首個位移不能吃到 hover 共用的 32ms 節流窗；否則短拖曳只剩 MouseUp 尾緣，
+                // 圖片雖跟手，curve 卻看起來完全不動。首發後才回到既有 ~30fps 上限。
+                if (firstDragMove || now - _lastStatusTickMs >= StatusThrottleMs)
                 {
                     _lastStatusTickMs = now;
                     TriggerStatusChange();
+                    // StatusChanged 是同步事件；這行出現代表所有 view-range subscriber 已返回，
+                    // 可作 DVT 的「首個 curve 視野已落地」證據，而不只是事件已送出。
+                    if (firstDragMove) FlowLog?.Invoke("drag(view-published)");
                 }
             }
             else

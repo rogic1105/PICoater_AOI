@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -139,6 +140,16 @@ namespace AniloxRoll.Monitor.Core.Data
             }
             return result;
         }
+
+        /// <summary>以不可變的時點快照查詢影像，避免 async 載入期間再讀 UI ComboBox 的共享選取。</summary>
+        public Dictionary<int, string> GetImages(DateTime period)
+            => GetImages(
+                period.ToString("yyyy", CultureInfo.InvariantCulture),
+                period.ToString("MM", CultureInfo.InvariantCulture),
+                period.ToString("dd", CultureInfo.InvariantCulture),
+                period.ToString("HH", CultureInfo.InvariantCulture),
+                period.ToString("mm", CultureInfo.InvariantCulture),
+                period.ToString("ss.fff", CultureInfo.InvariantCulture));
     }
 
 

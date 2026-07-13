@@ -179,7 +179,11 @@
     </Compile>
     <Compile Include="UI\Presenters\AniloxRollPresenter.cs" />
     <Compile Include="UI\Presenters\LiveTelemetryPresenter.cs" />
-    <Compile Include="UI\Widgets\FormInteractionHelper.cs" />
+    <Compile Include="UI\Binders\BusyUiBinder.cs" />
+    <Compile Include="UI\Coordinators\InspectionSettingsCoordinator.cs" />
+    <Compile Include="UI\Coordinators\ReviewPeriodLoadCoordinator.cs" />
+    <Compile Include="UI\Coordinators\ReviewFolderCoordinator.cs" />
+    <Compile Include="UI\Services\ImageCacheService.cs" />
     <Compile Include="UI\Managers\CameraStallDetector.cs" />
     <Compile Include="UI\Managers\CursorStatusTextFormatter.cs" />
     <Compile Include="UI\Managers\GlobalMergeCoordinator.cs" />
@@ -201,6 +205,7 @@
     <Compile Include="UI\Navigators\DataDateGrabIdNavigator.cs" />
     <Compile Include="UI\Navigators\DateTimeNavigator.cs" />
     <Compile Include="UI\State\UserSessionState.cs" />
+    <Compile Include="UI\State\ReviewRuntimeState.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <EmbeddedResource Include="assets\AniloxRoll.ico">

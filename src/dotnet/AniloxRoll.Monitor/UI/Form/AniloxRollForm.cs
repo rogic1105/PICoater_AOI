@@ -18,6 +18,9 @@ using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Interop;
 using AniloxRoll.Monitor.Core.Services;
+using AniloxRoll.Monitor.UI.Binders;
+using AniloxRoll.Monitor.UI.Coordinators;
+using AniloxRoll.Monitor.UI.Services;
 using AniloxRoll.Monitor.UI.State;
 using AniloxRoll.Monitor.UI.Managers;
 using AniloxRoll.Monitor.UI.Navigators;
@@ -40,7 +43,12 @@ namespace AniloxRoll.Monitor.Forms
         private double _reviewViewLeftMm = double.NaN, _reviewViewRightMm, _reviewViewTopMm, _reviewViewBotMm; // 新畫布視野快取（chart 原子更新用）
         private int _reviewSyncCount; private long _reviewSyncOvMax, _reviewSyncRowMax;   // [ReviewSync] 拖曳跟隨計時儀器
         private AniloxRollPresenter _presenter;
-        private FormInteractionHelper _interactionHelper;
+        private BusyUiBinder _reviewBusyUi;
+        private ReviewFolderCoordinator _reviewFolderCoordinator;
+        private ReviewPeriodLoadCoordinator _reviewPeriodLoadCoordinator;
+        private InspectionSettingsCoordinator _inspectionSettingsCoordinator;
+        private readonly ReviewRuntimeState _reviewRuntimeState = new ReviewRuntimeState();
+        private readonly ImageCacheService _reviewImageCache = new ImageCacheService();
         private ColumnCurveChartHelper _reviewOverviewHelper;
         private ColumnCurveChartHelper _liveOverviewHelper;
         private RowCurveChartHelper _liveRowChartHelper;
@@ -116,7 +124,6 @@ namespace AniloxRoll.Monitor.Forms
         private DataStatisticsPresenter _dataStatsPresenter;
 
         // --- 資料緩存 ---
-        private readonly List<Image> _thumbnailCache = new List<Image>();
         private InspectionSettings _settings;
         private AniloxRoll.Monitor.Settings.Services.SettingsHub _settingsHub;
 
@@ -495,7 +502,12 @@ namespace AniloxRoll.Monitor.Forms
             // 2b-ii-B：ThumbnailGridPresenter（舊回顧縮圖畫廊）已刪——縮圖顯示/選取全由 sdk ImageDisplayView
             //   的 ThumbStrip 承接（camReview1~7 現為 Panel 宿主，見 ReviewDisplayManager）。
             _presenter = new AniloxRollPresenter(
-                _imageRepository, _inspectionService, _dateTimeNavigator);
+                _imageRepository, _inspectionService, _dateTimeNavigator, _reviewImageCache);
+            _reviewPeriodLoadCoordinator = new ReviewPeriodLoadCoordinator(
+                LoadReviewPeriodRequestAsync,
+                ex => Trace.WriteLine($"[ReviewPeriodLoadCoordinator] {ex}"));
+            _reviewFolderCoordinator = new ReviewFolderCoordinator(
+                this, _imageRepository, _dateTimeNavigator, _settings);
 
 
 
@@ -582,25 +594,17 @@ namespace AniloxRoll.Monitor.Forms
             AutoFitPropertyGridLabelColumn(propertyGridSettings);
 
 
-            _interactionHelper = new FormInteractionHelper(new FormInteractionContext
-            {
-                Form             = this,
-                ButtonsToLock    = new Button[] { btnReviewSelectFolder },
-                ThumbnailCache   = _thumbnailCache,
-                Presenter        = _presenter,
-                InspectionService = _inspectionService,
-                ImageRepository  = _imageRepository,
-                TimeNavigator    = _dateTimeNavigator,
-                Settings         = _settings,
-                RowChartHelper = _reviewRowChartHelper,
-            });
-            _interactionHelper.ApplySettingsToService();
+            _inspectionSettingsCoordinator = new InspectionSettingsCoordinator(
+                _inspectionService, _settings);
+            _inspectionSettingsCoordinator.ApplySettingsToService();
+            _reviewBusyUi = new BusyUiBinder(this, btnReviewSelectFolder);
 
             _stitchCoordinator = new ReviewStitchCoordinator(new ReviewStitchContext
             {
                 ChartReviewPatch             = chartReviewColumn,
                 ChartReviewHorizontal       = chartReviewRow,
-                InteractionHelper         = _interactionHelper,
+                BusyUi                   = _reviewBusyUi,
+                ReviewState              = _reviewRuntimeState,
                 RowChartHelper            = _reviewRowChartHelper,
                 RowChartDisplay           = _reviewRowDisplay,
                 RowChartSync              = _reviewRowSync,
@@ -620,8 +624,8 @@ namespace AniloxRoll.Monitor.Forms
                 // 選中相機 index 來源＝ImageDisplayView（取代舊 ThumbnailGridPresenter.SelectedIndex）
                 _stitchCoordinator.SelectedCamIndexProvider = () => _reviewDisplayManager?.SelectedCamIndex ?? 0;
                 _stitchCoordinator.StitchedImagesReady += (gray, ws, hs, ops, pos, isGlobal) =>
-                    _reviewDisplayManager?.PushFrames(gray, ws, hs, ops, pos, isGlobal,
-                        _interactionHelper?.ScreenMmPerPixel ?? 0,
+                        _reviewDisplayManager?.PushFrames(gray, ws, hs, ops, pos, isGlobal,
+                        _reviewRuntimeState.ScreenMmPerPixel,
                         AniloxRoll.Monitor.Core.Services.InspectionEngineConfig.DefaultSaveResizeScale,
                         _reviewRowDisplay?.RowPitchMm ?? 0,
                         ShouldFlipDisplayVertical());   // 灰階已在 RSC 解碼段轉好（零 race）；?.：關閉時序防 NRE
@@ -662,7 +666,7 @@ namespace AniloxRoll.Monitor.Forms
             _stitchCoordinator.StitchedCurveUpdated += (mean, max, ops, pos, errMean, errMax) =>
                 _dataStatsPresenter?.SyncMuraProfileFromReview(mean, max, ops, pos, errMean, errMax);
 
-            _presenter.BusyStateChanged += _interactionHelper.SetUiLoadingState;
+            _presenter.BusyStateChanged += _reviewBusyUi.SetBusy;
             _presenter.LogReported      += OnPresenterLogReported;
             // 4c：舊 gallery 選擇鏈已拆（PictureBox 被 sdk ThumbStrip 覆蓋＝點擊不可達；
             //     縮圖↔主畫面雙向連動由 ImageDisplayView 內建）。
@@ -1005,7 +1009,7 @@ namespace AniloxRoll.Monitor.Forms
                 // PropertyGrid 自己改值已自我更新該 cell，不需要外部處理。
                 if (c.Source == AniloxRoll.Monitor.Settings.Services.SettingSource.Programmatic)
                     RefreshGridItem(c.Name);
-                _interactionHelper.HandleSettingsChanged();
+                _inspectionSettingsCoordinator.HandleSettingsChanged();
                 _liveCameraManager?.SetCaptureSettings(_settings);
                 _reviewOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
                 _liveOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);

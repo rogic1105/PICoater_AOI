@@ -37,7 +37,9 @@ class ReviewFlowValidator:
         self._check_ui_stall(session, report)
         self._check_reload_jumps_to_newest(session, report)
         self._check_period_dedup(session, report)
+        self._check_period_single_flight(session, report)
         self._check_curve_single_flight(session, report)
+        self._check_drag_first_publish(session, report)
         self._check_direction(session, report)
         return report
 
@@ -240,6 +242,41 @@ class ReviewFlowValidator:
             + (f"；首例 {overlaps[0]}" if overlaps else ""),
         )
 
+    def _check_period_single_flight(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        active = None
+        starts = 0
+        overlaps = []
+        open_periods = []
+        for line in session.lines:
+            message = line.message
+            if message.startswith("RV period begin "):
+                period = message[len("RV period begin "):]
+                starts += 1
+                if active is not None:
+                    overlaps.append(f"{active}->{period}")
+                active = period
+                open_periods.append(period)
+            elif message.startswith(("RV period done ", "RV period stale-drop ")):
+                prefix = "RV period done " if message.startswith("RV period done ") else "RV period stale-drop "
+                period = message[len(prefix):]
+                if period in open_periods:
+                    open_periods.remove(period)
+                if active == period:
+                    active = None
+
+        if starts == 0:
+            report.add(self.domain, "R3.single-flight", CheckStatus.NOT_COVERED, "無新版 period begin/done 儀器")
+            return
+        report.add(
+            self.domain,
+            "R3.single-flight",
+            CheckStatus.PASS if not overlaps and not open_periods else CheckStatus.FAIL,
+            f"啟動={starts}；重疊={len(overlaps)}；未結束={open_periods or 0}"
+            + (f"；首例 {overlaps[0]}" if overlaps else ""),
+        )
+
     def _check_direction(
         self, session: FlowSession, report: CheckReport, tolerance_mm: float = 15.0
     ) -> None:
@@ -276,4 +313,32 @@ class ReviewFlowValidator:
             "R2.direction",
             CheckStatus.PASS if not bad else CheckStatus.FAIL,
             f"檢查={checked}；違規={len(bad)}" + (f"；首例 {bad[0]}" if bad else ""),
+        )
+
+    def _check_drag_first_publish(self, session: FlowSession, report: CheckReport) -> None:
+        starts = 0
+        active = None
+        failures = []
+        for line in session.lines:
+            message = line.message
+            if message == "RV drag(start)":
+                starts += 1
+                active = False
+            elif message == "RV drag(view-published)" and active is False:
+                active = True
+            elif message.startswith("RV viewEdges") and active is not None:
+                if active is not True:
+                    failures.append(f"{line.elapsed:.3f}s")
+                active = None
+        if active is False:
+            failures.append("未結束")
+        if starts == 0:
+            report.add(self.domain, "R4.first-view", CheckStatus.NOT_COVERED, "無回顧主畫面拖曳")
+            return
+        report.add(
+            self.domain,
+            "R4.first-view",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"拖曳={starts}；首位移未發布={len(failures)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
         )

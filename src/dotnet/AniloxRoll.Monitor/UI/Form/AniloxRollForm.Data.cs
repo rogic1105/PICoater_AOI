@@ -222,7 +222,7 @@ namespace AniloxRoll.Monitor.Forms
                 // 同步 Review tab：先載入 ImageRepository + Navigator，再走共用 reset + 主畫面載入。
                 UserSessionState.SetLastDataPath(path);
                 UserSessionState.Save();
-                _interactionHelper.LoadDirectoryAndInitNavigator(path);
+                _reviewFolderCoordinator.LoadDirectoryAndInitNavigator(path);
                 _presenter.UpdatePeriodNavigationState();
                 // DataPresenter 已透過 LoadDataFolder 同步 _grabIdInfos，skip SyncFromReviewFolder
                 await ResetAndLoadReviewAfterFolderChanged(dataPresenterAlreadySynced: true);

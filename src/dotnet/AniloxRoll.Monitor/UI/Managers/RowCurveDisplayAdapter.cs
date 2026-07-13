@@ -76,8 +76,10 @@ namespace AniloxRoll.Monitor.UI.Managers
         public void UpdateViewRange(double topMm, double botMm)
         {
             ApplyDirection();
-            FlowApply("rowView", -1, topMm, botMm);
             _chart.UpdateViewRange(topMm, botMm);
+            // 必須在同步 Chart.Update 返回後才留痕；舊順序只證明事件進入 adapter，會把
+            // 「chart 沒真正畫完」誤判為成功。
+            FlowApply("rowView", -1, topMm, botMm);
         }
 
         public void UpdateData(float[] mean, float[] max)
