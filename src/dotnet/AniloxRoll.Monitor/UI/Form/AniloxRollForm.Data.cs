@@ -18,6 +18,7 @@ using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Interop;
 using AniloxRoll.Monitor.Core.Services;
+using AniloxRoll.Monitor.UI.Binders;
 using AniloxRoll.Monitor.UI.State;
 using AniloxRoll.Monitor.UI.Managers;
 using AniloxRoll.Monitor.UI.Navigators;
@@ -78,7 +79,7 @@ namespace AniloxRoll.Monitor.Forms
                 BtnSelectDataFolder = btnDataSelectFolder, BtnShowFail = btnDataShowFail,
                 GroupBoxGrabIdRange = groupBoxGrabIdRange, GrpDataSingleSheet = grpDataSingleSheet,
                 GrpReviewGrabNav = grpReviewGrabNav, GrpReviewTimePeriod = grpReviewTimePeriod,
-                ListViewGrabDetail = listViewGrabDetail,
+                GrabDetailList = new GrabDetailListBinder(listViewGrabDetail, CameraCount),
                 PanelStatCams = new[] { camData1, camData2, camData3,
                                         camData4, camData5, camData6, camData7 },
                 ChartDataPatch = chartDataColumn,

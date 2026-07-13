@@ -818,6 +818,16 @@ T1: ui:【明細列表】同列再點 {grabId} → 回範圍模式
   D 系列首輪 log 實證；點選當下就出 RV 行反而是違規）
 ```
 
+**code-flow（清單 View wiring 與報表 policy 分離）**
+```
+listViewGrabDetail.MouseUp
+ → OnMouseUp@GrabDetailListBinder.cs（virtual row → grabId＋是否同列再點）
+ → RowCommitted event
+ → OnGrabDetailRowCommitted@DataStatisticsPresenter.cs
+   ├ 同列再點＋SingleSheet → GrabDetailListBinder.ClearSelection → SetActiveStatGroupBox(range) → RefreshStats
+   └ 一般點選 → CommitDataGrabIdFromDetailList@DataDateGrabIdNavigator.cs → D3 單片快路
+```
+
 ### D3 報表序號 / 序號範圍
 ```
 T1: ui:【報表序號】→ {grabId}          ← 單片切換（同 D2 的 cb 版）
@@ -829,8 +839,8 @@ T1: DT list reload range={start}~{end} rows=N ms=N
 T1: DT curve candidates meanRows=N maxRows=M method=top-maxcmean|mixed|even coverage=S/R rankedCams=C/T
 ```
 - **List ownership**：明細 List 屬於範圍結果，不屬於單片序號；`ui:【報表序號】` 後只准 `list=keep`，
-  不得出現 `DT list reload`／重設 `_visibleDetails`／`VirtualListSize`／欄寬。只有資料夾、範圍、期間、閾值改變才重算 List。
-- **List 捲動顯示**：資料已全在 `_visibleDetails`，VirtualMode 不需資料預載；ListView 啟用雙緩衝，選中列只在接近
+  不得出現 `DT list reload`／`GrabDetailListBinder.SetItems`／重設 `VirtualListSize`／欄寬。只有資料夾、範圍、期間、閾值改變才重算 List。
+- **List 捲動顯示**：資料已全在 `GrabDetailListBinder._visibleDetails`，VirtualMode 不需資料預載；ListView 啟用雙緩衝，選中列只在接近
   可視區上下邊界時以 margin 捲動，反白變更只重畫舊／新兩列，不得每格整窗 `Invalidate()`（跨視窗白閃的根因）。
 - **跨 tab lazy**：報表序號只輕量同步 Review combo/date 並標 `_reviewDirty`，不得逐格 `NavigateTo` 寫 session／重建日期清單，
   也不得當下載 Review 圖片；切到 Review tab 才接 R2 完整載入。
@@ -850,7 +860,7 @@ cbDataId.SelectedIndexChanged
    → RefreshSelectedGrab@DataStatisticsPresenter.cs
      ├ _currentDetails.FirstOrDefault（命中→BuildSingleGrabStats；未命中→單 ID CSV scan fallback）
      ├ InspectionStatsPresenter.Update（7 台色卡）
-     ├ HighlightDetailRow（只移反白＋EnsureVisible＋Invalidate）
+     ├ GrabDetailListBinder.Highlight（只移反白＋EnsureVisible＋RedrawItems）
      └ MuraProfileChartPresenter.Update（該 ID curve）→ DT selected … list=keep
    → GrabIdSelectedFromData → OnDataGrabIdSelected@AniloxRollForm.Data.cs
      └ cbReviewId＋DateTimeNavigator.SetPeriodToCombo（輕量）＋_reviewDirty=true
@@ -859,7 +869,7 @@ cbDataIdStart|End／期間變更
  → ScheduleRangeRefresh@DataStatisticsPresenter.cs（WinForms Timer 250ms latest-only）
  → DT range settle → RefreshStats@DataStatisticsPresenter.cs
    ├ ComputeByGrabIdRange（範圍色卡）
-   ├ ComputeDetailedByGrabIdRange → ApplyFailFilter → UpdateGrabDetailListView
+   ├ ComputeDetailedByGrabIdRange → ApplyFailFilter → GrabDetailListBinder.SetItems
    ├ MuraProfileChartPresenter.Update(rangeInfos)
    │  └ LoadRangeMuraProfile（掃範圍 CSV；按 cam 分組並保留 FileName）
    │     ├ Mean 候選＝EvenSampleCurveRecords(rows,50) → 對應 MeanC 逐點平均

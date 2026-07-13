@@ -180,6 +180,7 @@
     <Compile Include="UI\Presenters\AniloxRollPresenter.cs" />
     <Compile Include="UI\Presenters\LiveTelemetryPresenter.cs" />
     <Compile Include="UI\Binders\BusyUiBinder.cs" />
+    <Compile Include="UI\Binders\GrabDetailListBinder.cs" />
     <Compile Include="UI\Coordinators\InspectionSettingsCoordinator.cs" />
     <Compile Include="UI\Coordinators\ReviewPeriodLoadCoordinator.cs" />
     <Compile Include="UI\Coordinators\ReviewFolderCoordinator.cs" />

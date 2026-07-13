@@ -3,15 +3,14 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
-using System.Reflection;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
+using AniloxRoll.Monitor.UI.Binders;
 using AniloxRoll.Monitor.UI.Navigators;
 using AniloxRoll.Monitor.UI.Widgets;
 using TanukiCv.Controls;
-using TanukiCv.Controls.WinForms;
 
 namespace AniloxRoll.Monitor.UI.Presenters
 {
@@ -44,7 +43,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public Label LblChartNavDay { get; set; }
 
         // --- 統計 ---
-        public ListView ListViewGrabDetail { get; set; }
+        public GrabDetailListBinder GrabDetailList { get; set; }
         public Panel[] PanelStatCams { get; set; }
         public Chart ChartDataPatch { get; set; }
 
@@ -78,7 +77,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private SortedSet<DateTime> _statAvailableTimes = new SortedSet<DateTime>();
         private List<GrabIdInfo> _grabIdInfos = new List<GrabIdInfo>();
         private List<GrabDetail> _currentDetails = new List<GrabDetail>();
-        private List<GrabDetail> _visibleDetails = new List<GrabDetail>();
         private bool _showFailOnly;
         private bool _preserveDetailListDuringSelection;
         private Timer _rangeRefreshDebounce;
@@ -99,8 +97,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private DataDateGrabIdNavigator _dateGrabIdNavigator;
 
         // --- 常數 ---
-        private static readonly Color _detailPass = Color.FromArgb(232, 245, 233);
-        private static readonly Color _detailFail = Color.FromArgb(255, 235, 238);
         private static readonly Color _activeGrpFill = Color.FromArgb(220, 248, 225);
         private static readonly Color _activeGrpBorder = Color.FromArgb(0, 140, 60);
 
@@ -131,6 +127,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 (grabId, earliest, latest, idx) => GrabIdSelectedFromData?.Invoke(grabId, earliest, latest, idx),
                 (grabId, earliest, latest, idx) => GrabIdSelectedFromReview?.Invoke(grabId, earliest, latest, idx),
                 SetGroupBoxActive, SetChipActive);
+            _ctx.GrabDetailList.IsSelectionActive =
+                () => _dateGrabIdNavigator.ActiveStatMode == _ctx.GrpDataSingleSheet;
         }
 
         // ══════════════════════════════════════════════════════════════
@@ -146,7 +144,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _ctx.BtnSelectDataFolder.Click += BtnSelectDataFolder_Click;
             _ctx.BtnShowFail.Click += BtnShowFail_Click;
             _dateGrabIdNavigator.WireEvents();
-            InitGrabDetailListView();
+            _ctx.GrabDetailList.RowCommitted += OnGrabDetailRowCommitted;
+            _ctx.GrabDetailList.Initialize();
             _muraChart = new MuraProfileChartPresenter(_ctx,
                 () => _dateGrabIdNavigator.ActiveStatMode, () => _grabIdInfos, () => _statsDataRootPath);
             _muraChart.Init();
@@ -330,6 +329,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _rangeRefreshDebounce?.Stop();
             _rangeRefreshDebounce?.Dispose();
             _rangeRefreshDebounce = null;
+            _ctx.GrabDetailList.RowCommitted -= OnGrabDetailRowCommitted;
+            _ctx.GrabDetailList.Dispose();
         }
 
         /// <summary>單片序號快路：List 範圍內容不變，只更新該筆統計、Mura curve 與反白。</summary>
@@ -359,7 +360,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
 
             _statsPresenter.Update(stats);
-            HighlightDetailRow(grab.GrabId);
+            _ctx.GrabDetailList.Highlight(grab.GrabId);
             _muraChart.Update(null);
             FlowTrace.Log($"DT selected {grab.GrabId} stats={(cacheHit ? "cache" : "scan")} list=keep ms={sw.ElapsedMilliseconds}");
         }
@@ -386,64 +387,24 @@ namespace AniloxRoll.Monitor.UI.Presenters
         // ══════════════════════════════════════════════════════════════
 
 
-        private void InitGrabDetailListView()
+        private void OnGrabDetailRowCommitted(object sender, GrabDetailRowCommittedEventArgs e)
         {
-            var lv = _ctx.ListViewGrabDetail;
-            lv.View = View.Details;
-            lv.FullRowSelect = true;
-            lv.GridLines = true;
-            lv.OwnerDraw = true;
-            lv.VirtualMode = true;
-            EnableDoubleBuffering(lv);
-            lv.Columns.Clear();
-            lv.VirtualListSize = 0;
-
-            lv.Columns.Add("料件序號", -1, HorizontalAlignment.Center);
-            for (int i = 1; i <= _ctx.CameraCount; i++)
-                lv.Columns.Add($"{i}", -1, HorizontalAlignment.Center);
-            FitGrabDetailColumnsToContent(lv);
-
-            // 點選明細列表的列 → MouseDown 時 ListView 預設視覺先反白（顯示被選中），
-            // MouseUp 才 commit 切到該序號（與 cbDataId 變更流程共用 OnSingleSheetComboChanged）。
-            // cbDataId 變更不連動 cbDataIdStart/End（範圍獨立），故 commit 後範圍 cb 維持不變。
-            lv.DrawColumnHeader -= ListViewGrabDetail_DrawColumnHeader;
-            lv.DrawSubItem -= ListViewGrabDetail_DrawSubItem;
-            lv.RetrieveVirtualItem -= ListViewGrabDetail_RetrieveVirtualItem;
-            lv.DrawColumnHeader += ListViewGrabDetail_DrawColumnHeader;
-            lv.DrawSubItem += ListViewGrabDetail_DrawSubItem;
-            lv.RetrieveVirtualItem += ListViewGrabDetail_RetrieveVirtualItem;
-            lv.MouseUp -= OnGrabDetailRowCommitted;
-            lv.MouseUp += OnGrabDetailRowCommitted;
-        }
-
-        private string _lastListViewSelectedGrabId;
-
-        private void OnGrabDetailRowCommitted(object sender, MouseEventArgs e)
-        {
-            if (e.Button != MouseButtons.Left) return;
             if (StatComboGuard.IsSet) return;
-            var lv = _ctx.ListViewGrabDetail;
-            if (lv.SelectedIndices.Count == 0) return;
-            int selectedIndex = lv.SelectedIndices[0];
-            if (selectedIndex < 0 || selectedIndex >= _visibleDetails.Count) return;
-            string grabId = _visibleDetails[selectedIndex].GrabId;
-            if (string.IsNullOrEmpty(grabId)) return;
+            string grabId = e.GrabId;
 
             // Toggle：第二次點同 row + 已是 SingleSheet → 切回 GroupBoxGrabIdRange（範圍模式，stats 用 cbDataIdStart/End）
-            if (grabId == _lastListViewSelectedGrabId && _dateGrabIdNavigator.ActiveStatMode == _ctx.GrpDataSingleSheet)
+            if (e.IsRepeated && _dateGrabIdNavigator.ActiveStatMode == _ctx.GrpDataSingleSheet)
             {
                 FlowTrace.Log($"ui:【明細列表】同列再點 {grabId} → 回範圍模式");
-                ExecuteWithDetailListRedrawSuspended(lv, () =>
+                ExecuteWithDetailListRedrawSuspended(() =>
                 {
-                    _lastListViewSelectedGrabId = null;
-                    lv.SelectedIndices.Clear();  // 清掉反白，視覺回到「無選中」
+                    _ctx.GrabDetailList.ClearSelection();
                     _muraChart?.Clear();          // 先清圖，避免同列二次點選時殘留上一筆 CURVE
                     _dateGrabIdNavigator.SetActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);
                     RefreshStats();
                 });
                 return;
             }
-            _lastListViewSelectedGrabId = grabId;
             FlowTrace.Log($"ui:【明細列表】→ {grabId}");
 
             int idx = _ctx.CbDataGrabId.Items.IndexOf(grabId);
@@ -451,294 +412,27 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (_ctx.CbDataGrabId.SelectedIndex == idx)
             {
                 // SelectedIndex 沒變 → 不會觸發 OnSingleSheetComboChanged，但仍需確保 active 模式為單片
-                ExecuteWithDetailListRedrawSuspended(lv, () =>
+                ExecuteWithDetailListRedrawSuspended(() =>
                 {
-                if (_dateGrabIdNavigator.ActiveStatMode != _ctx.GrpDataSingleSheet)
-                {
-                    _dateGrabIdNavigator.SwitchActiveStatGroupBox(_ctx.GrpDataSingleSheet);
-                }
+                    if (_dateGrabIdNavigator.ActiveStatMode != _ctx.GrpDataSingleSheet)
+                        _dateGrabIdNavigator.SwitchActiveStatGroupBox(_ctx.GrpDataSingleSheet);
                 });
                 return;
             }
-            ExecuteWithDetailListRedrawSuspended(lv, () =>
-            {
-            _dateGrabIdNavigator.CommitDataGrabIdFromDetailList(grabId);
-            });
+            ExecuteWithDetailListRedrawSuspended(
+                () => _dateGrabIdNavigator.CommitDataGrabIdFromDetailList(grabId));
         }
 
-        private void ExecuteWithDetailListRedrawSuspended(ListView lv, Action action)
+        private void ExecuteWithDetailListRedrawSuspended(Action action)
         {
-            if (lv == null || action == null) return;
-            if (!lv.IsHandleCreated || lv.IsDisposed)
-            {
-                bool previous = _preserveDetailListDuringSelection;
-                _preserveDetailListDuringSelection = true;
-                try { action(); }
-                finally { _preserveDetailListDuringSelection = previous; }
-                return;
-            }
-
-            bool savedPreserveDetailList = _preserveDetailListDuringSelection;
+            if (action == null) return;
+            bool previous = _preserveDetailListDuringSelection;
             _preserveDetailListDuringSelection = true;
-            using (new RedrawScope(lv))
-            {
-                try
-                {
-                    action();
-                }
-                finally
-                {
-                    _preserveDetailListDuringSelection = savedPreserveDetailList;
-                }
-            }
-        }
-
-        /// <summary>cbDataId（單片序號）變更 → 在 listViewGrabDetail 對應列重用「點擊時的選取框」
-        /// （框由 DrawSubItem 依 _lastListViewSelectedGrabId 自繪，非原生選取，故不新增框）+ EnsureVisible 捲到可見。
-        /// 點擊路徑也走這（同值冪等）。僅單片分支呼叫；範圍模式 DrawSubItem 不畫框。</summary>
-        private void HighlightDetailRow(string grabId)
-        {
-            int previousRow = _visibleDetails.FindIndex(d => d.GrabId == _lastListViewSelectedGrabId);
-            _lastListViewSelectedGrabId = grabId;
-            var lv = _ctx.ListViewGrabDetail;
-            if (lv == null) return;
-            int rowIdx = _visibleDetails.FindIndex(d => d.GrabId == grabId);   // 被 fail filter 濾掉則 -1（不可見不捲）
-            if (rowIdx >= 0 && lv.IsHandleCreated && rowIdx < lv.VirtualListSize)
-                EnsureDetailRowInBufferedViewport(lv, rowIdx);
-            RedrawDetailRow(lv, previousRow);
-            RedrawDetailRow(lv, rowIdx);
-        }
-
-        private static void EnableDoubleBuffering(ListView listView)
-        {
             try
             {
-                typeof(Control).GetProperty("DoubleBuffered", BindingFlags.Instance | BindingFlags.NonPublic)
-                    ?.SetValue(listView, true, null);
+                _ctx.GrabDetailList.ExecuteWithRedrawSuspended(action);
             }
-            catch (Exception ex)
-            {
-                Trace.WriteLine($"[DataListDoubleBuffer] {ex.GetType().Name}: {ex.Message}");
-            }
-        }
-
-        /// <summary>選中列接近上下邊界才捲動，並預留數列視窗緩衝，避免每跨一列就整窗重畫。</summary>
-        private static void EnsureDetailRowInBufferedViewport(ListView listView, int rowIndex)
-        {
-            int itemHeight = Math.Max(18, listView.Font.Height + 6);
-            int visibleRows = Math.Max(1, (listView.ClientSize.Height - 24) / itemHeight);
-            int margin = Math.Min(5, Math.Max(1, visibleRows / 4));
-            int topIndex = 0;
-            try
-            {
-                if (listView.TopItem != null)
-                    topIndex = listView.TopItem.Index;
-            }
-            catch (InvalidOperationException) { }
-
-            int bottomIndex = Math.Min(listView.VirtualListSize - 1, topIndex + visibleRows - 1);
-            if (rowIndex < topIndex + margin)
-                listView.EnsureVisible(Math.Max(0, rowIndex - margin));
-            else if (rowIndex > bottomIndex - margin)
-                listView.EnsureVisible(Math.Min(listView.VirtualListSize - 1, rowIndex + margin));
-        }
-
-        private static void RedrawDetailRow(ListView listView, int rowIndex)
-        {
-            if (listView == null || !listView.IsHandleCreated) return;
-            if (rowIndex < 0 || rowIndex >= listView.VirtualListSize) return;
-            try { listView.RedrawItems(rowIndex, rowIndex, true); }
-            catch (InvalidOperationException)
-            {
-                try { listView.Invalidate(listView.GetItemRect(rowIndex)); }
-                catch (InvalidOperationException) { }
-            }
-            catch (ArgumentOutOfRangeException) { }
-        }
-
-        private void UpdateGrabDetailListView(List<GrabDetail> details)
-        {
-            var lv = _ctx.ListViewGrabDetail;
-            if (lv.VirtualMode)
-            {
-                lv.BeginUpdate();
-                try
-                {
-                    _visibleDetails = details ?? new List<GrabDetail>();
-                    lv.SelectedIndices.Clear();
-                    lv.VirtualListSize = _visibleDetails.Count;
-                    FitGrabDetailColumnsToContent(lv);
-                }
-                finally
-                {
-                    lv.EndUpdate();
-                }
-                return;
-            }
-
-            // 改用 MouseUp 訂閱後，Items.Clear/Add 不會觸發 commit 路徑，
-            // 不需 unsubscribe/resubscribe；BeginUpdate/EndUpdate 包住批量重填，
-            // SelectedIndices.Clear() 避免殘留高亮。
-            lv.BeginUpdate();
-            lv.Items.Clear();
-            lv.SelectedIndices.Clear();
-
-            foreach (var d in details)
-            {
-                var item = new ListViewItem(d.GrabId);
-                bool rowHasFail = false;
-
-                for (int i = 0; i < _ctx.CameraCount; i++)
-                {
-                    if (d.CamResult[i] == null)
-                        item.SubItems.Add("—");
-                    else if (d.CamResult[i] == false)
-                        item.SubItems.Add("○");
-                    else
-                    {
-                        item.SubItems.Add("×");
-                        rowHasFail = true;
-                    }
-                }
-
-                item.Tag = rowHasFail;
-                item.BackColor = rowHasFail ? _detailFail : _detailPass;
-                lv.Items.Add(item);
-            }
-
-            lv.EndUpdate();
-            lv.AutoResizeColumns(ColumnHeaderAutoResizeStyle.ColumnContent);
-        }
-
-        private void ListViewGrabDetail_RetrieveVirtualItem(object sender, RetrieveVirtualItemEventArgs e)
-        {
-            e.Item = BuildGrabDetailListViewItem(e.ItemIndex);
-        }
-
-        private ListViewItem BuildGrabDetailListViewItem(int index)
-        {
-            if (index < 0 || index >= _visibleDetails.Count)
-                return new ListViewItem(string.Empty);
-
-            var d = _visibleDetails[index];
-            var item = new ListViewItem(d.GrabId);
-            bool rowHasFail = false;
-
-            for (int i = 0; i < _ctx.CameraCount; i++)
-            {
-                if (d.CamResult[i] == null)
-                    item.SubItems.Add("—");
-                else if (d.CamResult[i] == false)
-                    item.SubItems.Add("○");
-                else
-                {
-                    item.SubItems.Add("×");
-                    rowHasFail = true;
-                }
-            }
-
-            item.Tag = rowHasFail;
-            item.BackColor = rowHasFail ? _detailFail : _detailPass;
-            return item;
-        }
-
-        // VirtualMode 下 lv.Items 為空，AutoResizeColumns(ColumnContent) / 量 Items 的
-        // FitListViewColumnsProportional 都失效。改用 _visibleDetails 取樣量測，
-        // 還原「貼齊內容的緊湊欄寬」（與非 virtual 路徑 AutoResizeColumns(ColumnContent) 同觀感）。
-        private void FitGrabDetailColumnsToContent(ListView lv)
-        {
-            if (lv.Columns.Count == 0) return;
-            using (var g = lv.CreateGraphics())
-            {
-                const int pad = 16; // 比照 AutoResizeColumns 的內距餘裕
-                string sample0 = _visibleDetails.Count > 0 && !string.IsNullOrEmpty(_visibleDetails[0].GrabId)
-                    ? _visibleDetails[0].GrabId
-                    : lv.Columns[0].Text;
-                lv.Columns[0].Width = (int)Math.Ceiling(Math.Max(
-                    g.MeasureString(lv.Columns[0].Text, lv.Font).Width,
-                    g.MeasureString(sample0, lv.Font).Width)) + pad;
-
-                float glyphW = g.MeasureString("×", lv.Font).Width;
-                for (int i = 1; i < lv.Columns.Count; i++)
-                    lv.Columns[i].Width = (int)Math.Ceiling(Math.Max(
-                        g.MeasureString(lv.Columns[i].Text, lv.Font).Width, glyphW)) + pad;
-            }
-        }
-
-        private static void ListViewGrabDetail_DrawColumnHeader(object sender, DrawListViewColumnHeaderEventArgs e)
-        {
-            e.DrawDefault = true;
-        }
-
-        private void ListViewGrabDetail_DrawSubItem(object sender, DrawListViewSubItemEventArgs e)
-        {
-            bool rowHasFail = e.Item.Tag is bool failed && failed;
-            Color backColor = rowHasFail ? _detailFail : _detailPass;
-
-            using (var backBrush = new SolidBrush(backColor))
-                e.Graphics.FillRectangle(backBrush, e.Bounds);
-
-            var textFlags = TextFormatFlags.VerticalCenter
-                          | TextFormatFlags.HorizontalCenter
-                          | TextFormatFlags.EndEllipsis
-                          | TextFormatFlags.NoPrefix;
-            TextRenderer.DrawText(e.Graphics, e.SubItem.Text, e.Item.ListView.Font,
-                e.Bounds, e.Item.ForeColor, textFlags);
-
-            bool isMarked = _dateGrabIdNavigator.ActiveStatMode == _ctx.GrpDataSingleSheet
-                         && e.Item.Text == _lastListViewSelectedGrabId;
-            if (!isMarked || e.ColumnIndex != e.Item.SubItems.Count - 1)
-                return;
-
-            Rectangle rowBounds = e.Item.Bounds;
-            rowBounds.Width = e.Item.ListView.Columns.Cast<ColumnHeader>().Sum(c => c.Width);
-            rowBounds.Width = Math.Min(rowBounds.Width, e.Item.ListView.ClientSize.Width - 1);
-            rowBounds.Height -= 1;
-            if (rowBounds.Width <= 0 || rowBounds.Height <= 0) return;
-
-            Color borderColor = rowHasFail ? Color.FromArgb(211, 47, 47) : Color.FromArgb(46, 125, 50);
-            using (var pen = new Pen(borderColor, 2))
-                e.Graphics.DrawRectangle(pen, rowBounds);
-        }
-
-        public static void FitListViewColumnsProportional(ListView lv, bool useContent = false)
-        {
-            if (lv.Columns.Count == 0) return;
-            int available = lv.ClientSize.Width - SystemInformation.VerticalScrollBarWidth;
-            if (available <= 0) return;
-
-            using (var g = lv.CreateGraphics())
-            {
-                var weights = new float[lv.Columns.Count];
-                float totalWeight = 0;
-                for (int i = 0; i < lv.Columns.Count; i++)
-                {
-                    float w = g.MeasureString(lv.Columns[i].Text + "WW", lv.Font).Width;
-                    if (useContent)
-                    {
-                        foreach (ListViewItem item in lv.Items)
-                        {
-                            string text = i == 0 ? item.Text
-                                        : i < item.SubItems.Count ? item.SubItems[i].Text : "";
-                            float cw = g.MeasureString(text + "WW", lv.Font).Width;
-                            if (cw > w) w = cw;
-                        }
-                    }
-                    weights[i] = w;
-                    totalWeight += w;
-                }
-                if (totalWeight <= 0) return;
-
-                int assigned = 0;
-                for (int i = 0; i < lv.Columns.Count; i++)
-                {
-                    int colW = (i < lv.Columns.Count - 1)
-                        ? (int)(available * weights[i] / totalWeight)
-                        : available - assigned;
-                    lv.Columns[i].Width = Math.Max(20, colW);
-                    assigned += lv.Columns[i].Width;
-                }
-            }
+            finally { _preserveDetailListDuringSelection = previous; }
         }
 
         // ══════════════════════════════════════════════════════════════
@@ -775,7 +469,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             var toShow = _showFailOnly
                 ? _currentDetails.Where(d => d.CamResult.Any(r => r == true)).ToList()
                 : _currentDetails;
-            UpdateGrabDetailListView(toShow);
+            _ctx.GrabDetailList.SetItems(toShow);
         }
 
         // ══════════════════════════════════════════════════════════════

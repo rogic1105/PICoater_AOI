@@ -23,6 +23,7 @@
 
 - `Binders/`
   - `BusyUiBinder.cs`：回顧載入期間的等待游標與命令按鈕鎖定。
+  - `GrabDetailListBinder.cs`：報表明細虛擬清單、繪圖、捲動與選取視覺；報表選取規則留在 presenter。
 
 - `Services/`
   - `ImageCacheService.cs`：回顧處理影像的生命週期與釋放。
