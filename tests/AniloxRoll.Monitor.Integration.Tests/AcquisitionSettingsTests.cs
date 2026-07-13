@@ -17,9 +17,9 @@ namespace AniloxRoll.Monitor.Tests
             Assert.That(s.CameraGrabHeight.Length, Is.EqualTo(7));
             Assert.That(s.CameraExposureTimeUs.Length, Is.EqualTo(7));
             Assert.That(s.CameraLineRateHz.Length, Is.EqualTo(7));
-            Assert.That(s.CameraGrabHeight[0], Is.EqualTo(3001));
-            Assert.That(s.CameraExposureTimeUs[0], Is.EqualTo(149));
-            Assert.That(s.CameraLineRateHz[0], Is.EqualTo(3001));
+            Assert.That(s.CameraGrabHeight[0], Is.EqualTo(AcquisitionDefaults.GrabHeight));
+            Assert.That(s.CameraExposureTimeUs[0], Is.EqualTo(AcquisitionDefaults.ExposureTimeUs));
+            Assert.That(s.CameraLineRateHz[0], Is.EqualTo(AcquisitionDefaults.LineRateHz));
         }
 
         [Test]
@@ -60,9 +60,9 @@ namespace AniloxRoll.Monitor.Tests
             s.CameraExposureTimeUs[3] = 0;
             s.CameraLineRateHz[4] = -100;
             s.Validate();
-            Assert.That(s.CameraGrabHeight[2], Is.EqualTo(3001));
-            Assert.That(s.CameraExposureTimeUs[3], Is.EqualTo(149));
-            Assert.That(s.CameraLineRateHz[4], Is.EqualTo(3001));
+            Assert.That(s.CameraGrabHeight[2], Is.EqualTo(AcquisitionDefaults.GrabHeight));
+            Assert.That(s.CameraExposureTimeUs[3], Is.EqualTo(AcquisitionDefaults.ExposureTimeUs));
+            Assert.That(s.CameraLineRateHz[4], Is.EqualTo(AcquisitionDefaults.LineRateHz));
         }
 
         [Test]
