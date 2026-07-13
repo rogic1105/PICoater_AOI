@@ -65,19 +65,75 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// <summary>上一次 Review 頁面的處理模式旗標。</summary>
         public bool LastReviewProcessedMode { get; set; }
 
-        /// <summary>載入序號（最後贏 token）：曲線快路與完整載入共用遞增；舊載入完成時不等於最新＝丟棄。</summary>
-        private int _loadSeq;
+        private sealed class CurveLoadRequest
+        {
+            public string GrabId;
+            public DateTime HintFrom;
+            public DateTime HintTo;
+            public int Sequence;
+        }
+
+        // 曲線與圖片是兩條獨立資料流：曲線 latest-only，圖片由 Form 的 250ms debounce 觸發。
+        // 不共用 token，避免圖片開始載入時把同一序號仍在讀取的曲線誤判為 stale。
+        private readonly object _curveLoadGate = new object();
+        private CurveLoadRequest _pendingCurveLoad;
+        private bool _curveLoadRunning;
+        private int _curveRequestSeq;
+        private int _imageLoadSeq;
 
         /// <summary>快路：只載曲線（欄+列，.bin 數十 KB + tick 對齊 csv）+CFG → 更新欄/列 chart。
         /// 滾動掃描用——chart 即時跟著序號跑（使用者快速找異常），影像（重：JPEG 解碼+拼接）由
         /// debounce 後的完整載入跟上（硬體限制的分層載入）。</summary>
-        public async Task LoadGrabCurvesOnlyAsync(string grabId, DateTime hintFrom, DateTime hintTo)
+        public Task LoadGrabCurvesOnlyAsync(string grabId, DateTime hintFrom, DateTime hintTo)
         {
+            lock (_curveLoadGate)
+            {
+                _pendingCurveLoad = new CurveLoadRequest
+                {
+                    GrabId = grabId,
+                    HintFrom = hintFrom,
+                    HintTo = hintTo,
+                    Sequence = System.Threading.Interlocked.Increment(ref _curveRequestSeq)
+                };
+                if (_curveLoadRunning)
+                    return Task.CompletedTask;
+                _curveLoadRunning = true;
+            }
+            return DrainCurveLoadsAsync();
+        }
+
+        /// <summary>使正在解碼的舊圖片結果失效；每次使用者改序號時呼叫，不等待 250ms。</summary>
+        public void InvalidateImageLoad()
+            => System.Threading.Interlocked.Increment(ref _imageLoadSeq);
+
+        private async Task DrainCurveLoadsAsync()
+        {
+            while (true)
+            {
+                CurveLoadRequest request;
+                lock (_curveLoadGate)
+                {
+                    request = _pendingCurveLoad;
+                    _pendingCurveLoad = null;
+                    if (request == null)
+                    {
+                        _curveLoadRunning = false;
+                        return;
+                    }
+                }
+                await LoadGrabCurvesCoreAsync(request);
+            }
+        }
+
+        private async Task LoadGrabCurvesCoreAsync(CurveLoadRequest request)
+        {
+            string grabId = request.GrabId;
+            DateTime hintFrom = request.HintFrom;
+            DateTime hintTo = request.HintTo;
             string root = !string.IsNullOrWhiteSpace(UI.State.UserSessionState.LastDataPath)
                           ? UI.State.UserSessionState.LastDataPath : _ctx.DataStatsPresenter.StatsDataRootPath;
             if (string.IsNullOrWhiteSpace(root)) return;
 
-            int my = System.Threading.Interlocked.Increment(ref _loadSeq);
             var sw = Stopwatch.StartNew();
             int camCount = _ctx.CameraCount;
             var mean = new float[camCount][];
@@ -109,7 +165,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                         CurveMergeHelper.MergeRowCurves(aligned, out rowMean[i], out rowMax[i]);
                     }
                 });
-                if (my != System.Threading.Volatile.Read(ref _loadSeq))
+                if (request.Sequence != System.Threading.Volatile.Read(ref _curveRequestSeq))
                 {
                     Core.Services.FlowTrace.Log($"RV curves stale-drop {grabId}");
                     return;
@@ -168,9 +224,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (string.IsNullOrWhiteSpace(root)) return;
 
             _ctx.InteractionHelper.SetUiLoadingState(true);
-            // 最後贏 token：快速滾序號時多個載入並發、done 亂序 → 只有「最新選取」的結果准上畫面，
-            // 舊結果丟棄（否則誰晚 done 誰蓋畫面＝最後顯示的不一定是最後選的）。
-            int myLoad = System.Threading.Interlocked.Increment(ref _loadSeq);
+            // 圖片自己的最後贏 token；序號 intent 會先 InvalidateImageLoad，防舊圖片在 debounce 前上畫面。
+            int myLoad = System.Threading.Interlocked.Increment(ref _imageLoadSeq);
             Core.Services.FlowTrace.Log($"RV loadGrab begin {grabId}（proc={enableProcess}）");
             LastReviewProcessedMode = enableProcess;
             // L2 SSoT：setting 由 caller 透過 SettingsHub 設置，coordinator 不再 bypass Hub 直接寫 memory。
@@ -253,7 +308,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 var newImages = loaded.imgs;
 
                 // token 閘門：背景載入期間已有更新的選取 → 本結果作廢（不上畫面、不動 chart）
-                if (myLoad != System.Threading.Volatile.Read(ref _loadSeq))
+                if (myLoad != System.Threading.Volatile.Read(ref _imageLoadSeq))
                 {
                     Core.Services.FlowTrace.Log($"RV loadGrab stale-drop {grabId}（{swTotal.ElapsedMilliseconds}ms）");
                     foreach (var im in newImages) im?.Dispose();
@@ -315,7 +370,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             finally
             {
                 // 只有「仍是最新」的載入才關 loading 燈（stale 早退不關 → 不熄滅還在跑的較新載入）
-                if (myLoad == System.Threading.Volatile.Read(ref _loadSeq))
+                if (myLoad == System.Threading.Volatile.Read(ref _imageLoadSeq))
                     _ctx.InteractionHelper.SetUiLoadingState(false);
             }
         }

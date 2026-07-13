@@ -601,7 +601,36 @@ Tn: capture csv firstRecord grab=… path=… file=… verdict=max0|1/mean0|1 pe
 - `cfg` 行出現代表 `#CFG` 已寫入同一 CSV；回顧曲線座標/捕捉時正規值可從該 CSV 追溯。
 - `verdict` 使用寫入 CSV 同一組 V 閾值，與 `AppendRecord@InspectionLogService.cs` 的 `MaxExceed/MeanExceed` 同源。
 
+## 全天 Flow DVT 自動校稿架構
+
+```
+python tools/python/check_all_flows.py --latest
+python tools/python/check_all_flows.py --date 2026-07-13
+python tools/python/check_all_flows.py trace-a.log trace-b.log
+```
+
+- `check_all_flows.py`＝總入口：依 trace 檔切分 app session，逐一呼叫 registry 內的 validator，再輸出全天摘要。
+- `tools/python/flow_checks/core.py`＝唯一 log parser、session model、結果三態（PASS／FAIL／NOT COVERED）。
+- `flow_checks/registry.py`＝validator 掛載點；每個 domain 獨立模組，不得把所有規則堆回總入口。
+- `NOT COVERED`＝該 session 沒操作到該 flow，**不得算 PASS**；validator 尚未實作則列在 `尚待自動化`，
+  總結必標 `PARTIAL`，不得宣稱整份 DVT 全綠。
+- 現況（2026-07-13）：已掛 `GLOBAL`（任何 `契約違規` 行即 FAIL）＋`REVIEW/R`＋`DATA/D`；
+  LIVE/F、CAPTURE/C、SETTINGS/S、MURA/M、PARAM/P、HARDWARE/H 依戰役逐步接入。
+- domain 專用舊指令保留為薄 wrapper（例如 `check_review_flows.py`），規則實作只能存在
+  `flow_checks/{domain}.py` 一份，避免 wrapper／總入口兩份判準分歧。
+
 ## 回顧 tab 契約（R 系列；儀器前綴 RV）
+
+**回顧鏈自動校稿工具**（`flow_checks/review.py` 的相容入口；改回顧/跨 tab 同步後必跑）：
+```
+python tools/python/check_review_flows.py [trace.log]    # 預設抓最新 log；exit 0=全 PASS
+```
+判準：①R2 快路跟隨（最後選取的 grabId 必有成功 `RV curves`，全 drop=曲線沒跟上）②R2 token+begin/done 配對
+③卡頓紅線（回顧互動期間 UiStall ≤1000ms）④讀取資料跳最新（第 2 次起不得停在舊序號）
+⑤時段導航去重（同時點不得重複載入）⑥曲線 single-flight（兩個 paths 間必有 done/stale）
+⑦方向對數（dataPhys↔dataChart 鏡射/直通，見§狀態快照儀器）。
+2026-07-10 基線：①③④⑤ 皆紅＝回顧戰役待修清單（兇手=每格序號同步觸發 Data 統計全重算於 UI 執行緒
+〔SyncDataGrabIdFromReview→RefreshStats→掃目錄+CSV 全解析〕＋時段 date/time 串聯重複觸發）。
 
 ### R1 讀取資料（btnReviewSelectFolder）
 ```
@@ -614,6 +643,8 @@ Tn: RV loadGrab paths {grabId} root=… images=N cams=P cfg=yes|no align=tick|fi
 T1: RV pushFrames P/7（merge=True, feedScale=…）   ← P=該 grab 有影像的相機數；缺台=黑占位
 T1: RV loadGrab done {grabId}（…ms）
 （grab 中按：另會出現 DisableGlobalMerge 等監控行——歸本 intent 管，見孤兒判讀規則）
+不變量：手按【讀取資料】＝刷新+跳最新（loadGrab 的 grabId=清單最新；2026-07-10 修「停在舊選取」）；
+開機自動恢復上次位置不在此限。
 ```
 
 ### R2 單片序號切換（cbReviewId）——分層載入（2026-07-07 定版）
@@ -621,13 +652,21 @@ T1: RV loadGrab done {grabId}（…ms）
 T1: ui:【單片序號】→ {grabId}
 Tn: RV curves paths {grabId} root=… images=N cams=P cfg=yes|no align=tick|filename
 T1: RV curves {grabId}（…ms）          ← 快路：欄+列曲線+CFG 即時跟滾動（chart 先行，使用者掃異常）
-（影像 debounce 250ms：滾動中不發完整載入；停下才載「最後選取」）
+（快速滾動：曲線 single-flight/latest-only，中間 intent 可無 paths；正在讀的舊筆完成後 stale-drop，再直接讀最新筆）
+（影像 debounce 250ms：滾動中不發完整載入；停下才載「最後選取」；session 也只在 settle 落盤一次）
 T1/Tn: RV loadGrab begin {grabId} → RV loadGrab paths … → RV lodRebind merge …（fit reset）→ RV pushFrames → RV loadGrab done
 ```
-- **分層**：曲線每個 intent 都跟（`RV curves`，舊的記 `RV curves stale-drop`）；影像只載 settle 後的最後一張。
+- **分層**：單步時曲線立即載；快速滾動時曲線最多「執行中 1 筆＋等待中最新 1 筆」，中間序號不讀檔；
+  最後一個 intent 必有成功 `RV curves`。圖片只載 settle 後的最後一張；
+  **Data tab 同步（統計/Mura 圖重算）也只在 settle 後做一次、排在影像之後**——唯一觸發點
+  `SyncDataTabFromReviewSettled@AniloxRollForm.Data.cs`，不得回到逐格 inline
+  （2026-07-10 定罪：逐格全量重算＝快撥 UiStall 5.7s＋曲線快路全餓死）。
+- **日期/session 分層**：滾動中只走 `SetPeriodToCombo`（同日不重建 time items），不得走 `NavigateTo`
+  的完整 Initialize/Save；`SaveCurrentSelection` 只在 250ms settle 執行一次。
 - **換序號＝重設視野（fit）＝預期**（各 grab 高度不同 → lodRebind 合法出現）。
-- **最後贏 token（快路+完整共用）**：最後一個非 stale 的 `curves`/`loadGrab done` 的 grabId
-  必須＝最後一個 intent 的 grabId——不符＝token 破了。
+- **token 分治**：曲線與圖片各自最後贏，兩者不得共用 token（圖片開始載入不得讓同序號曲線 stale）；
+  每個序號 intent 立即 invalidate 舊圖片，settle 回呼另以 selection token 守住 Data 同步。
+- 最後一個非 stale 的 `curves`/`loadGrab done` 的 grabId 必須＝最後一個 intent 的 grabId——不符＝token 破了。
 - begin 無對應 done/stale-drop＝載入中斷；pushFrames P 與 CSV 台數不符＝掉圖。
 
 ### R3 時段導航（cbReviewDate/cbReviewTime 手動）
@@ -638,6 +677,10 @@ T1: RV pushFrames P/7（merge=True, feedScale=…）
 T1: RV row … / RV state …（chart/狀態快照視資料而定）
 ```
 - 時段模式不進 `RV loadGrab begin/done`；它走 repository 當前時間點 → `ApplyGlobalMergeIfNeeded` → `StitchedImagesReady` → `ReviewDisplayManager.PushFrames`。
+- **時序選擇 policy（使用者定版 2026-07-13）**：每個有效時點 intent 都立即刷新三項＝圖片＋欄曲線＋列曲線；
+  資料量小，不套 R2 的 250ms debounce／曲線 latest-only。三項可共用最終顯示 API，但 loader 流程保持 R3 語意。
+- **同一時點只載一次**：日期 combo 串聯改時間 combo 必掛 `_updating`（DateTimeNavigator）；
+  同時點連發 `RV period load`＝串聯去重失效（2026-07-10 修 ×2~×6 重複載入）。
 - `RV period load` 中 `cfg=yes` 代表 `RefreshReviewConfigForCurrentPeriod` 已從該日 CSV 找到 #CFG；`cfg=no` 時座標/閾值 fallback 當前 settings。
 
 ### R4 回顧主畫面互動（點縮圖/拖曳/縮放）
@@ -734,7 +777,35 @@ T1: ui:【明細列表】同列再點 {grabId} → 回範圍模式
 ### D3 報表序號 / 序號範圍
 ```
 T1: ui:【報表序號】→ {grabId}          ← 單片切換（同 D2 的 cb 版）
+T1: DT selected {grabId} stats=cache|scan list=keep ms=N
+     ← 單片快路：更新色卡＋Mura curve＋List 反白；`cache`＝從既有明細推導統計，`scan`＝選中項不在目前範圍時 fallback
 T1: ui:【序號範圍-起始|結束】變更       ← 手動拖範圍 → 期間高亮全滅（Custom）
+T1: DT list reload range={start}~{end} rows=N ms=N
+```
+- **List ownership**：明細 List 屬於範圍結果，不屬於單片序號；`ui:【報表序號】` 後只准 `list=keep`，
+  不得出現 `DT list reload`／重設 `_visibleDetails`／`VirtualListSize`／欄寬。只有資料夾、範圍、期間、閾值改變才重算 List。
+- **List 捲動顯示**：資料已全在 `_visibleDetails`，VirtualMode 不需資料預載；ListView 啟用雙緩衝，選中列只在接近
+  可視區上下邊界時以 margin 捲動，反白變更只重畫舊／新兩列，不得每格整窗 `Invalidate()`（跨視窗白閃的根因）。
+- **跨 tab lazy**：報表序號只輕量同步 Review combo/date 並標 `_reviewDirty`，不得逐格 `NavigateTo` 寫 session／重建日期清單，
+  也不得當下載 Review 圖片；切到 Review tab 才接 R2 完整載入。
+
+**code-flow（單片快路 vs 範圍完整刷新）**
+```
+cbDataId.SelectedIndexChanged
+ → OnSingleSheetComboChanged@DataDateGrabIdNavigator.cs
+   → RefreshSelectedGrab@DataStatisticsPresenter.cs
+     ├ _currentDetails.FirstOrDefault（命中→BuildSingleGrabStats；未命中→單 ID CSV scan fallback）
+     ├ InspectionStatsPresenter.Update（7 台色卡）
+     ├ HighlightDetailRow（只移反白＋EnsureVisible＋Invalidate）
+     └ MuraProfileChartPresenter.Update（該 ID curve）→ DT selected … list=keep
+   → GrabIdSelectedFromData → OnDataGrabIdSelected@AniloxRollForm.Data.cs
+     └ cbReviewId＋DateTimeNavigator.SetPeriodToCombo（輕量）＋_reviewDirty=true
+
+cbDataIdStart|End／期間／資料夾／閾值變更
+ → RefreshStats@DataStatisticsPresenter.cs
+   ├ ComputeByGrabIdRange（範圍色卡）
+   ├ ComputeDetailedByGrabIdRange → ApplyFailFilter → UpdateGrabDetailListView
+   └ DT list reload …
 ```
 
 ### D4 年/月/日期間（lblChartNav 點選）

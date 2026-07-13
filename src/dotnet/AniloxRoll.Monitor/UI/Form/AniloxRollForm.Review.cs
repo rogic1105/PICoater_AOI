@@ -99,6 +99,18 @@ namespace AniloxRoll.Monitor.Forms
                     if (!string.IsNullOrWhiteSpace(reviewPath))
                         _dataStatsPresenter.SyncFromReviewFolder(reviewPath);
                 }
+                // 手按【讀取資料】＝刷新+跳最新（GrabIdInfos 降冪，index 0=最新）。
+                // 原本沿用當前選取＝使用者預期落空（2026-07-10 對數）。guard 抑制 combo 事件
+                // （載入由下方顯式做，避免 debounce 路重複載）；日期/時間跟著最新。
+                if (cbReviewId.Items.Count > 0 && _dataStatsPresenter.GrabIdInfos.Count > 0)
+                {
+                    using (_dataStatsPresenter.GrabIdCrossGuard.Enter())
+                    using (_dataStatsPresenter.GrabIdNavGuard.Enter())
+                    {
+                        cbReviewId.SelectedIndex = 0;
+                        _interactionHelper.NavigateToDateTime(_dataStatsPresenter.GrabIdInfos[0].Earliest);
+                    }
+                }
                 var current = _dateTimeNavigator.GetCurrentPeriodOrDefault(DateTime.MinValue);
                 if (current != DateTime.MinValue)
                     _dataStatsPresenter.SyncGrabIdFromTime(current);

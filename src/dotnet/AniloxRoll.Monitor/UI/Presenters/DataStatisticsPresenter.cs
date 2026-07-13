@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
+using System.Reflection;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
 using AniloxRoll.Monitor.Core.Data;
@@ -124,6 +126,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _dateGrabIdNavigator = new DataDateGrabIdNavigator(_ctx,
                 () => _grabIdInfos,
                 RefreshStats,
+                RefreshSelectedGrab,
                 (grabId, earliest, latest, idx) => GrabIdSelectedFromData?.Invoke(grabId, earliest, latest, idx),
                 (grabId, earliest, latest, idx) => GrabIdSelectedFromReview?.Invoke(grabId, earliest, latest, idx),
                 SetGroupBoxActive, SetChipActive);
@@ -262,19 +265,15 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 && _ctx.CbDataGrabId.SelectedIndex >= 0
                 && _ctx.CbDataGrabId.SelectedIndex < _grabIdInfos.Count)
             {
-                var grab = _grabIdInfos[_ctx.CbDataGrabId.SelectedIndex];
-                var stats = InspectionStatisticsService.ComputeByGrabIdRange(
-                    _statsDataRootPath, grab.GrabId, grab.GrabId, ctx);
-                var details = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
-                    _statsDataRootPath, GetDetailListStartGrabId(), GetDetailListEndGrabId(), ctx);
-                _statsPresenter.Update(stats);
                 if (!_preserveDetailListDuringSelection)
                 {
-                    _currentDetails = details;
+                    var swList = Stopwatch.StartNew();
+                    _currentDetails = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
+                        _statsDataRootPath, GetDetailListStartGrabId(), GetDetailListEndGrabId(), ctx);
                     ApplyFailFilter();
+                    FlowTrace.Log($"DT list reload range={GetDetailListStartGrabId()}~{GetDetailListEndGrabId()} rows={_currentDetails.Count} ms={swList.ElapsedMilliseconds}");
                 }
-                HighlightDetailRow(grab.GrabId);  // cbDataId 變更 → 明細列表對應列重用點擊選取框 + 捲到可見
-                _muraChart.Update(null);  // SingleSheet branch 內自己查 cbDataId 取 grab
+                RefreshSelectedGrab();
                 return;
             }
 
@@ -286,14 +285,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
                 var stats = InspectionStatisticsService.ComputeByGrabIdRange(
                     _statsDataRootPath, startInfo.GrabId, endInfo.GrabId, ctx);
-                var details = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
-                    _statsDataRootPath, startInfo.GrabId, endInfo.GrabId, ctx);
-
                 _statsPresenter.Update(stats);
                 if (!_preserveDetailListDuringSelection)
                 {
-                    _currentDetails = details;
+                    var swList = Stopwatch.StartNew();
+                    _currentDetails = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
+                        _statsDataRootPath, startInfo.GrabId, endInfo.GrabId, ctx);
                     ApplyFailFilter();
+                    FlowTrace.Log($"DT list reload range={startInfo.GrabId}~{endInfo.GrabId} rows={_currentDetails.Count} ms={swList.ElapsedMilliseconds}");
                 }
 
                 int si = _ctx.CbGrabIdStart.SelectedIndex;
@@ -304,6 +303,55 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 return;
             }
 
+        }
+
+        /// <summary>單片序號快路：List 範圍內容不變，只更新該筆統計、Mura curve 與反白。</summary>
+        private void RefreshSelectedGrab()
+        {
+            if (string.IsNullOrWhiteSpace(_statsDataRootPath)) return;
+            int selectedIndex = _ctx.CbDataGrabId.SelectedIndex;
+            if (selectedIndex < 0 || selectedIndex >= _grabIdInfos.Count) return;
+
+            var sw = Stopwatch.StartNew();
+            var grab = _grabIdInfos[selectedIndex];
+            var detail = _currentDetails.FirstOrDefault(item => item.GrabId == grab.GrabId);
+            bool cacheHit = detail != null;
+            Dictionary<int, CameraStats> stats;
+            if (cacheHit)
+            {
+                stats = BuildSingleGrabStats(detail);
+            }
+            else
+            {
+                var threshold = new ThresholdContext(
+                    _ctx.Settings.HessianMaxFactorV,
+                    _ctx.Settings.ErrorValueMeanV,
+                    _ctx.Settings.ErrorValueMaxV);
+                stats = InspectionStatisticsService.ComputeByGrabIdRange(
+                    _statsDataRootPath, grab.GrabId, grab.GrabId, threshold);
+            }
+
+            _statsPresenter.Update(stats);
+            HighlightDetailRow(grab.GrabId);
+            _muraChart.Update(null);
+            FlowTrace.Log($"DT selected {grab.GrabId} stats={(cacheHit ? "cache" : "scan")} list=keep ms={sw.ElapsedMilliseconds}");
+        }
+
+        private static Dictionary<int, CameraStats> BuildSingleGrabStats(GrabDetail detail)
+        {
+            var stats = new Dictionary<int, CameraStats>();
+            for (int i = 0; i < 7; i++)
+            {
+                var camera = new CameraStats { CamId = i + 1 };
+                bool? failed = detail.CamResult[i];
+                if (failed.HasValue)
+                {
+                    if (failed.Value) camera.Fail = 1;
+                    else camera.Pass = 1;
+                }
+                stats[camera.CamId] = camera;
+            }
+            return stats;
         }
 
         // ══════════════════════════════════════════════════════════════
@@ -319,6 +367,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             lv.GridLines = true;
             lv.OwnerDraw = true;
             lv.VirtualMode = true;
+            EnableDoubleBuffering(lv);
             lv.Columns.Clear();
             lv.VirtualListSize = 0;
 
@@ -422,13 +471,62 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// 點擊路徑也走這（同值冪等）。僅單片分支呼叫；範圍模式 DrawSubItem 不畫框。</summary>
         private void HighlightDetailRow(string grabId)
         {
+            int previousRow = _visibleDetails.FindIndex(d => d.GrabId == _lastListViewSelectedGrabId);
             _lastListViewSelectedGrabId = grabId;
             var lv = _ctx.ListViewGrabDetail;
             if (lv == null) return;
             int rowIdx = _visibleDetails.FindIndex(d => d.GrabId == grabId);   // 被 fail filter 濾掉則 -1（不可見不捲）
             if (rowIdx >= 0 && lv.IsHandleCreated && rowIdx < lv.VirtualListSize)
-                lv.EnsureVisible(rowIdx);
-            lv.Invalidate();
+                EnsureDetailRowInBufferedViewport(lv, rowIdx);
+            RedrawDetailRow(lv, previousRow);
+            RedrawDetailRow(lv, rowIdx);
+        }
+
+        private static void EnableDoubleBuffering(ListView listView)
+        {
+            try
+            {
+                typeof(Control).GetProperty("DoubleBuffered", BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?.SetValue(listView, true, null);
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"[DataListDoubleBuffer] {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
+        /// <summary>選中列接近上下邊界才捲動，並預留數列視窗緩衝，避免每跨一列就整窗重畫。</summary>
+        private static void EnsureDetailRowInBufferedViewport(ListView listView, int rowIndex)
+        {
+            int itemHeight = Math.Max(18, listView.Font.Height + 6);
+            int visibleRows = Math.Max(1, (listView.ClientSize.Height - 24) / itemHeight);
+            int margin = Math.Min(5, Math.Max(1, visibleRows / 4));
+            int topIndex = 0;
+            try
+            {
+                if (listView.TopItem != null)
+                    topIndex = listView.TopItem.Index;
+            }
+            catch (InvalidOperationException) { }
+
+            int bottomIndex = Math.Min(listView.VirtualListSize - 1, topIndex + visibleRows - 1);
+            if (rowIndex < topIndex + margin)
+                listView.EnsureVisible(Math.Max(0, rowIndex - margin));
+            else if (rowIndex > bottomIndex - margin)
+                listView.EnsureVisible(Math.Min(listView.VirtualListSize - 1, rowIndex + margin));
+        }
+
+        private static void RedrawDetailRow(ListView listView, int rowIndex)
+        {
+            if (listView == null || !listView.IsHandleCreated) return;
+            if (rowIndex < 0 || rowIndex >= listView.VirtualListSize) return;
+            try { listView.RedrawItems(rowIndex, rowIndex, true); }
+            catch (InvalidOperationException)
+            {
+                try { listView.Invalidate(listView.GetItemRect(rowIndex)); }
+                catch (InvalidOperationException) { }
+            }
+            catch (ArgumentOutOfRangeException) { }
         }
 
         private void UpdateGrabDetailListView(List<GrabDetail> details)

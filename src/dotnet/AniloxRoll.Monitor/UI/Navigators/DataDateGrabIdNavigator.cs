@@ -15,6 +15,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
         private readonly DataStatisticsContext _ctx;
         private readonly Func<List<GrabIdInfo>> _getGrabIdInfos;
         private readonly Action _refreshStats;
+        private readonly Action _refreshSelectedGrab;
         private readonly Action<string, DateTime, DateTime, int> _selectFromData;
         private readonly Action<string, DateTime, DateTime, int> _selectFromReview;
         private readonly Action<GroupBox, bool> _setGroupBoxActive;
@@ -30,6 +31,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
             DataStatisticsContext ctx,
             Func<List<GrabIdInfo>> getGrabIdInfos,
             Action refreshStats,
+            Action refreshSelectedGrab,
             Action<string, DateTime, DateTime, int> selectFromData,
             Action<string, DateTime, DateTime, int> selectFromReview,
             Action<GroupBox, bool> setGroupBoxActive,
@@ -38,6 +40,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
             _ctx = ctx ?? throw new ArgumentNullException(nameof(ctx));
             _getGrabIdInfos = getGrabIdInfos ?? throw new ArgumentNullException(nameof(getGrabIdInfos));
             _refreshStats = refreshStats ?? throw new ArgumentNullException(nameof(refreshStats));
+            _refreshSelectedGrab = refreshSelectedGrab ?? throw new ArgumentNullException(nameof(refreshSelectedGrab));
             _selectFromData = selectFromData ?? throw new ArgumentNullException(nameof(selectFromData));
             _selectFromReview = selectFromReview ?? throw new ArgumentNullException(nameof(selectFromReview));
             _setGroupBoxActive = setGroupBoxActive ?? throw new ArgumentNullException(nameof(setGroupBoxActive));
@@ -111,13 +114,8 @@ namespace AniloxRoll.Monitor.UI.Navigators
             using (GrabIdCrossGuard.Enter())
             {
                 _ctx.CbDataGrabId.SelectedIndex = idx;
-                using (StatComboGuard.Enter())
-                {
-                    _ctx.CbGrabIdStart.SelectedIndex = idx;
-                    _ctx.CbGrabIdEnd.SelectedIndex = idx;
-                }
-                _refreshStats();
                 SetActiveStatGroupBox(_ctx.GrpDataSingleSheet);
+                _refreshSelectedGrab();
             }
         }
 
@@ -273,7 +271,10 @@ namespace AniloxRoll.Monitor.UI.Navigators
                 }
             }
 
-            _refreshStats();
+            if (target == _ctx.GrpDataSingleSheet)
+                _refreshSelectedGrab();
+            else
+                _refreshStats();
         }
 
         private void OnGrabIdComboChanged(bool isStart)
@@ -312,7 +313,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
             FlowTrace.Log($"ui:【報表序號】→ {(idx < grabIdInfos.Count ? grabIdInfos[idx].GrabId : idx.ToString())}");
 
             // cbDataId（單片序號）變更「不」連動 cbDataIdStart/End —— 範圍序號獨立，選單片不動範圍。
-            _refreshStats();
+            _refreshSelectedGrab();
 
             if (!GrabIdCrossGuard.IsSet && _ctx.CbReviewGrabId.Items.Count > 0
                 && idx < _ctx.CbReviewGrabId.Items.Count)

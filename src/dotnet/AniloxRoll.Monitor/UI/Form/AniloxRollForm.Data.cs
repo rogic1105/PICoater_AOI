@@ -138,7 +138,7 @@ namespace AniloxRoll.Monitor.Forms
                     using (_dataStatsPresenter.GrabIdNavGuard.Enter())
                     {
                         cbReviewId.SelectedIndex = idx;
-                        _interactionHelper.NavigateToDateTime(earliest);
+                        _dateTimeNavigator.SetPeriodToCombo(earliest);
                     }
                     _presenter.UpdatePeriodNavigationState();
                     _dataStatsPresenter.UpdateGrabIdNavState();
@@ -149,23 +149,28 @@ namespace AniloxRoll.Monitor.Forms
             catch (Exception ex) { Trace.WriteLine($"[OnDataGrabIdSelected] {ex}"); }
         }
 
-        // 快速滾序號的載入 debounce（250ms）：滾動中只更新 combo/日期同步（順、零 IO），
-        // 停頓才載入「最後選取」那張；RSC 的最後贏 token 保底（debounce 邊緣並發時舊結果也上不了畫面）。
+        // 快速滾序號的載入 debounce（250ms）：滾動中只做輕量日期同步與 latest-only 曲線；
+        // 停頓才載入最後一張圖片、儲存 session、同步 Data tab。
         private Timer _reviewLoadDebounce;
-        private (string grabId, DateTime earliest, DateTime latest) _pendingReviewLoad;
+        private (string grabId, DateTime earliest, DateTime latest, int idx, int sequence) _pendingReviewLoad;
+        private int _reviewSelectionSeq;
 
         private void OnReviewGrabIdSelected(string grabId, DateTime earliest, DateTime latest, int idx)
         {
             try
             {
+                int selectionSeq = ++_reviewSelectionSeq;
+                _stitchCoordinator.InvalidateImageLoad();
+
+                // 滾動中只同步畫面上的日期/時間，不寫 session、不重建完整日期清單。
                 using (_dataStatsPresenter.GrabIdNavGuard.Enter())
-                    _interactionHelper.NavigateToDateTime(earliest);
+                    _dateTimeNavigator.SetPeriodToCombo(earliest);
                 _presenter.UpdatePeriodNavigationState();
 
                 // 分層載入：曲線（輕）即時跟滾動 → 使用者快速掃 chart 找異常；影像（重）settle 才載。
                 _ = _stitchCoordinator.LoadGrabCurvesOnlyAsync(grabId, earliest, latest);
 
-                _pendingReviewLoad = (grabId, earliest, latest);
+                _pendingReviewLoad = (grabId, earliest, latest, idx, selectionSeq);
                 if (_reviewLoadDebounce == null)
                 {
                     _reviewLoadDebounce = new Timer { Interval = 250 };
@@ -173,26 +178,41 @@ namespace AniloxRoll.Monitor.Forms
                     {
                         _reviewLoadDebounce.Stop();
                         var p = _pendingReviewLoad;
+                        // session 只在使用者停下後落盤一次。
+                        _dateTimeNavigator.SaveCurrentSelection();
                         try
                         {
                             await LoadGrabStitchedViewGuardRowRangeAsync(p.grabId, p.earliest, p.latest);
+                            if (p.sequence != _reviewSelectionSeq) return;
                             _reviewDirty = false;
                         }
                         catch (Exception ex) { Trace.WriteLine($"[ReviewLoadDebounce] {ex}"); }
+                        // Data tab 同步排在影像之後：統計全重算（掃目錄+CSV 解析+Mura 圖 bin IO）
+                        // 是 UI 執行緒重活——settle 才做一次，且使用者先看到影像。
+                        // （原在每格序號 inline 跑、註解自稱「便宜」→ 快撥 18 格＝18 輪重算
+                        //   ＝UiStall 5.7s＋曲線快路全餓死，2026-07-10 log 定罪）
+                        if (p.sequence == _reviewSelectionSeq)
+                            SyncDataTabFromReviewSettled(p.idx);
                     };
                 }
                 _reviewLoadDebounce.Stop();
                 _reviewLoadDebounce.Start();   // 重壓計時：每次選取重新等 250ms，停下才載入最終選取
-
-                // 同步 Data tab（便宜，維持即時）
-                if (!_dataStatsPresenter.GrabIdCrossGuard.IsSet
-                    && cbDataId.Items.Count > 0 && idx < cbDataId.Items.Count)
-                {
-                    var info = _dataStatsPresenter.GrabIdInfos[idx];
-                    _dataStatsPresenter.SyncDataGrabIdFromReview(idx, info);
-                }
             }
             catch (Exception ex) { Trace.WriteLine($"[OnReviewGrabIdSelected] {ex}"); }
+        }
+
+        /// <summary>Review 序號 settle 後同步 Data tab（統計/Mura 圖重算的唯一觸發點——不得回到逐格 inline）。</summary>
+        private void SyncDataTabFromReviewSettled(int idx)
+        {
+            try
+            {
+                if (_dataStatsPresenter.GrabIdCrossGuard.IsSet) return;
+                if (cbDataId.Items.Count == 0 || idx < 0 || idx >= cbDataId.Items.Count) return;
+                if (idx >= _dataStatsPresenter.GrabIdInfos.Count) return;
+                var info = _dataStatsPresenter.GrabIdInfos[idx];
+                _dataStatsPresenter.SyncDataGrabIdFromReview(idx, info);
+            }
+            catch (Exception ex) { Trace.WriteLine($"[SyncDataTabFromReviewSettled] {ex}"); }
         }
 
         private async void OnDataFolderSelected(string path)

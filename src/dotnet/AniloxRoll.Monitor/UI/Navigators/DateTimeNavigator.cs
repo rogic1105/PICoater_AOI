@@ -28,8 +28,13 @@ namespace AniloxRoll.Monitor.UI.Navigators
 
             _cbReviewDate.SelectedIndexChanged += (s, e) =>
             {
-                if (!_updating) UpdateTimeCombo();
-                if (!_updating) OnPeriodSelectionChanged();
+                if (_updating) return;
+                // 串聯改時間 combo 掛 _updating：否則時間 handler 也開火一次
+                // ＝每動一格日期載入 ×2（2026-07-10 log 定罪「同時點重複載入」）
+                _updating = true;
+                try { UpdateTimeCombo(); }
+                finally { _updating = false; }
+                OnPeriodSelectionChanged();   // 一次動作＝一次載入
             };
             _cbReviewTime.SelectedIndexChanged += (s, e) =>
             {
@@ -150,13 +155,17 @@ namespace AniloxRoll.Monitor.UI.Navigators
             {
                 string dateStr = dt.ToString("yyyy-MM-dd");
                 string timeStr = dt.ToString("HH:mm:ss.fff");
-                if (_cbReviewDate.Items.Contains(dateStr))
-                    _cbReviewDate.SelectedItem = dateStr;
-                else
-                    _cbReviewDate.Text = dateStr;
+                bool dateChanged = !string.Equals(_cbReviewDate.Text, dateStr, StringComparison.Ordinal);
+                if (dateChanged)
+                {
+                    if (_cbReviewDate.Items.Contains(dateStr))
+                        _cbReviewDate.SelectedItem = dateStr;
+                    else
+                        _cbReviewDate.Text = dateStr;
 
-                // 日期變更後必須刷新 time combo 的 Items，否則殘留前一天的時間列表
-                UpdateTimeCombo(autoSelect: false);
+                    // 只有跨日才重建時間清單；同一天快速滾序號只改 SelectedItem。
+                    UpdateTimeCombo(autoSelect: false);
+                }
 
                 if (_cbReviewTime.Items.Contains(timeStr))
                     _cbReviewTime.SelectedItem = timeStr;
