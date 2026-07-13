@@ -1,3 +1,8 @@
+---
+name: row-chart-coordinates
+description: Change or diagnose row-curve chart and vertical image-coordinate behavior. Use for top-to-bottom or bottom-to-top direction, mirroring, chart ranges, padding, pan, zoom, and row physical-coordinate mapping.
+---
+
 # 列圖表（chartLiveRow / chartReviewRow）座標設計說明書
 
 > 2026-07-08 定版。改任何「上下方向 / 列 chart / 主畫面垂直座標」相關 code 前**必讀**。

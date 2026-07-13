@@ -13,7 +13,7 @@ app ＝【監控/回顧/報表】三個 tab。每條 flow 有兩面，**驗證�
      必須完備＋附 grep pattern，且列到**實作點**層級（概念點 6 個可對應實作點 15 個——狗糧實測）。
      **防包層的偵測機制＝grep 對清單**：命中 − 已登記實作點清單 ＝ 應為空集合；多出來的
      ＝新包的層，當場現形（稀疏節點防不了包層，完備性才防得了；「對數字」會因佈線誤報）。
-  F1 為責任鏈範本、/row-chart-coordinates 6 點表為值鏈範本；其餘契約逐步補。
+  F1 為責任鏈範本、`$row-chart-coordinates` 6 點表為值鏈範本；其餘契約逐步補。
 改任何「使用者動作 → 接線 → 顯示/資料連動」流程後**必跑本 skill**：
 先「模擬測試」（順 code 推演對契約）再（必要時）真機比對 log。
 顯示接線核心檔（改到必跑）：LiveCameraManager / LiveDisplayCoordinator / ImageDisplayView /
@@ -44,7 +44,7 @@ WaterfallView / AniloxRollForm.Live|Background|Review。
 
 契約驗「行為」不驗「實作」：函式呼叫鏈重構就變（契約跟著重寫＝白費）；log 級契約
 （使用者做 X → 觀察到哪些 `[Flow]` 行）重構後依然成立，只有行為真的變了才改。
-函式流程屬於 CLAUDE.md/程式註解，不進契約。每條契約用三種型態組合：
+函式流程屬於 `AGENTS.md`／程式註解，不進契約。每條契約用三種型態組合：
 
 | 型態 | 寫法 | 抓什麼 |
 |---|---|---|
@@ -91,7 +91,7 @@ S0 通用（所有 PropertyGrid 設定自動記 `ui:設定[名]=值`）。新增
 1. `grep -rn "Flip|Reverse|Invert|IsReversed|total.*-|n - 1 -|ToLogical"` 相關鏈全檔
 2. 列「轉換點盤點表」：位置｜何時作用｜性質（物理必需/語意必需/數學必需/**抵銷層**）
 3. 奇偶配對分析（每條路徑翻轉總次數）→ 才准動刀
-4. 盤點表放對應領域 skill（例：/row-chart-coordinates 的 6 點表）並隨改動同步
+4. 盤點表放對應領域 skill（例：`$row-chart-coordinates` 的 6 點表）並隨改動同步
 
 **明文禁止「就地包一層」**：看到方向/正負/顛倒症狀，在出錯處新包一層轉換＝本次事故成因
 （每層局部合理、疊加後奇偶失控、且下一個 agent 看不見）。新增任何轉換層的前提：
@@ -108,7 +108,7 @@ S0 通用（所有 PropertyGrid 設定自動記 `ui:設定[名]=值`）。新增
 - **跨執行緒只驗「因果 + 完整性」**：如 `StartGrab 必早於所有 firstFrame`、`每台在線相機首幀必出現`。
   **不驗**非決定性交錯（cam1/cam2 誰先本來就不定，驗了必誤報）。
 
-## 不變量（任何 flow 都不得違反；見 app 巢狀 CLAUDE.md 顯示鐵則）
+## 不變量（任何 flow 都不得違反；見 app 巢狀 `AGENTS.md` 顯示鐵則）
 
 - app 內零 MIL 原生顯示視窗/滑鼠 hook（headless；MilCamera panelHandle=Zero）。
 - 主畫面永遠合圖（即時=ImageDisplayView、瀑布=WaterfallView）；縮圖兩模式一律即時 ThumbStrip（橘框選中）。
@@ -922,9 +922,9 @@ ApplyChartScaleForChart（YMax 設定）────┘
 
 ## 任意控制項 call chain 追蹤（F1~F8 以外的流程）
 
-契約未涵蓋的控制項（如 `/verify-flows 讀取資料`），用通用追蹤法做迴歸驗證：
+契約未涵蓋的控制項，用 `$verify-flows` 的通用追蹤法做迴歸驗證：
 
-1. **查對照表**：CLAUDE.md §控制項速查 找程式碼 Name。
+1. **查對照表**：repo 根 `AGENTS.md` §控制項速查 找程式碼 Name。
 2. **定位 handler**：AniloxRollForm.* / presenter / coordinator 搜事件繫結。
 3. **追呼叫鏈**：直接呼叫（含 async/await）→ 跨元件事件 → guard flag enter/exit → 更新的控制項（標準名稱）。
 4. **輸出驗證結果**：

@@ -1,3 +1,8 @@
+---
+name: deploy-network
+description: Configure or troubleshoot inspection-PC and storage-PC networking and deployment. Use for deploy scripts, dual-subnet NIC settings, SMB Guest access, RDP, firewall, and storage connectivity.
+---
+
 # deploy-network
 
 現場部署：檢測機 + 儲存機網路設定（含匿名 SMB Guest 存取）。

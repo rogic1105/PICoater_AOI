@@ -47,7 +47,7 @@
 | 2 | 功能接線：StitchMode/MergeAll/Flip/LOD/雙向連動/NavigateCamera/chart 視野連動（含 chart 取代案） | 上機逐項 |
 | 3 | 時段合併處理（按 §4.5 決定） | 上機 |
 | 4 | 刪舊：CanvasInteractionHelper 顯示路徑、GrabImageStitcher.MergeHorizontal 顯示用部分、舊接線 | 全方案 build + 上機回歸 |
-| 5 | docs/skills 同步（CLAUDE.md 速查表、ui-flow.html） | /update-docs |
+| 5 | docs/skills 同步（AGENTS.md 速查表、ui-flow.html） | 更新對應文件 |
 
 ## 6. 風險
 - 回顧的「強化重載」「背景預覽」也畫在 camReviewMain → 接入後改推幀（Background.cs 接點）。
@@ -71,6 +71,6 @@
 4. StitchMode 死碼掃除（~75 處 Global 恆真分支）+ enum/設定殘骸。
 5. GrabImageStitcher.MergeHorizontal 本體（先查 period/時段合併路徑呼叫端；時段合併去留=使用者測 LOD 後決定）。
 6. 預覽背景（Background.cs 對 camReviewMain 的繪製）改推 LiveDisplayView 或確認路徑。
-7. 驗證：視野保留（換 ID 保 zoom/pan）、換 ID fit 閃爍（先算佈局再首繪）、CLAUDE.md 控制項表+ui-flow 後續。
+7. 驗證：視野保留（換 ID 保 zoom/pan）、換 ID fit 閃爍（先算佈局再首繪）、AGENTS.md 控制項表+ui-flow 後續。
 完成後 #13 收官 → merge main → 絞殺榕全劇終。
 

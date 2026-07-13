@@ -22,7 +22,7 @@ sdk 範例庫的「取像/顯示」一塊。新專案 / Agent 可拿 `samples/Mi
 
 ## 工程紀錄：批次套用（display 巨圖刷新）
 
-> 原則見全域 `~/.claude/CLAUDE.md`「架構原則：批次套用（先算好，最後一次提交）」。此處記 MIL display 的具體案例。
+> 原則見 repo 根 `AGENTS.md`「架構原則：批次套用（先算好，最後一次提交）」。此處記 MIL display 的具體案例。
 
 **問題**：合圖巨圖（7 相機 ≈ 89112×3001 ≈ 2.7 億像素）重繪很貴。`EnableGlobalMerge` 早期把 `MdispSelectWindow` + `M_SCALE_DISPLAY` + `M_CENTER_DISPLAY` 在 `M_UPDATE` 仍 ENABLE 下連續執行 → 每個 control 各觸發一次巨圖重繪（切換 lag）；且 select 瞬間顯示「grab hook 尚未貼滿的合併 buffer」→ 橫條半貼殘影閃一下。
 

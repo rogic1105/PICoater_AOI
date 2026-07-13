@@ -1,3 +1,8 @@
+---
+name: csharp-patterns
+description: Apply repository-specific C# 7.3, .NET Framework 4.8, and WinForms patterns. Use when changing settings persistence, controls, threading, bitmap ownership, naming, or project files.
+---
+
 # csharp-patterns
 
 C# / WinForms 開發模式與陷阱速查。

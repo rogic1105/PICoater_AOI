@@ -157,16 +157,16 @@
 
 2. **`Services/StorageRetentionService.cs` / `CleanupFlagWatcher.cs`** 已列 ✅。
 
-3. **`_statsRefreshDebouncer`** 是 Form 私有欄位 — 不必列關鍵檔案，但 `.claude/skills/modify-data-stats.md` 可補一段提醒：「PropertyGrid 觸發 RefreshStats 走 300ms debounce（`ScheduleStatsRefresh`），新增 caller 時應呼叫 helper 而非直接 `_dataStatsPresenter.RefreshStats()`，否則無 debounce 保護。」
+3. **`_statsRefreshDebouncer`** 是 Form 私有欄位 — 不必列關鍵檔案，但 `.agents/skills/modify-data-stats/SKILL.md` 可補一段提醒：「PropertyGrid 觸發 RefreshStats 走 300ms debounce（`ScheduleStatsRefresh`），新增 caller 時應呼叫 helper 而非直接 `_dataStatsPresenter.RefreshStats()`，否則無 debounce 保護。」
 
-4. **`OpenCsvShared`** 是 InspectionStatisticsService 私有 helper，不必列 — 但 `.claude/skills/modify-data-stats.md` 應提一句：「新增 CSV reader 用 OpenCsvShared（FileShare.ReadWrite）避免跨 process race」。
+4. **`OpenCsvShared`** 是 InspectionStatisticsService 私有 helper，不必列 — 但 `.agents/skills/modify-data-stats/SKILL.md` 應提一句：「新增 CSV reader 用 OpenCsvShared（FileShare.ReadWrite）避免跨 process race」。
 
 ### dead-code-candidates.md
 ✅ 已更新（line 8 第二輪 SetExposureForAll/SetGrabHeightForAll 紀錄）。
 
 ### ui-flow.html
 1. line 1170 加 output「切到時序範圍：cbDataDateStart/EndDate 攤開到資料夾全範圍」對應 C1。
-2. line 1202 H5 註可加「未來改 async 模式時需注意 try/finally」（B-M3）— 但屬實作細節，非 user flow，建議移到 skills/modify-data-stats.md。
+2. line 1202 H5 註可加「未來改 async 模式時需注意 try/finally」（B-M3）— 但屬實作細節，非 user flow，建議移到 `.agents/skills/modify-data-stats/SKILL.md`。
 
 ---
 

@@ -1,7 +1,7 @@
 # PICoater AOI — Repo 架構地圖
 
 > 高層「東西住哪 + 怎麼流」的鳥瞰圖。**穩定、不隨 UI 改動漂移**（取代已廢除的 ui-flow.html）。
-> 細節（每個檔的職責、控制項名、參數預設）在 repo 根 `CLAUDE.md` 的速查表 + `.claude/skills/`；
+> 細節（每個檔的職責、控制項名、參數預設）在 repo 根 `AGENTS.md` 的速查表 + `.agents/skills/`；
 > 本檔只給「層次 / 依賴方向 / 資料流」三張地圖，看完知道去哪找。
 
 ---
@@ -57,11 +57,11 @@ durable（演算法/合圖/像素↔mm）放 `TanukiCv/`；throwaway（MIL）放
                               │ 曲線資料
                   ┌───────────▼──────────────────────────────┐
                   │ 欄曲線 ColumnCurveChartHelper (X/切向)     │
-                  │ 列曲線 RowCurveChartHelper  (Y/法向)       │ ← 軸命名見 CLAUDE.md「術語標準」
+                  │ 列曲線 RowCurveChartHelper  (Y/法向)       │ ← 軸命名見 AGENTS.md「術語標準」
                   │  經 RowCurveDisplayAdapter（live/回顧共用）│
                   └───────────────────────────────────────────┘
 
-設定真相：SettingsHub(SSoT) → InspectionSettings；UI 改值走 Hub event 扇出（見 src 巢狀 CLAUDE.md）。
+設定真相：SettingsHub(SSoT) → InspectionSettings；UI 改值走 Hub event 扇出（見 src 巢狀 AGENTS.md）。
 硬體無 encoder/外部觸發 → 相機靠 CLProtocol 套線掃才同頻（free-run 偶發不同步靠 tick 對齊補黑）。
 ```
 
@@ -90,13 +90,13 @@ LiveCameraManager(app)  ── 編排 + 生命週期，「秀」全委派 ──
 
 | 想找 | 看 |
 |------|-----|
-| 每個檔的職責 | `CLAUDE.md` §關鍵檔案速查 |
-| 控制項標準名↔程式名 | `CLAUDE.md` §控制項速查 |
-| PropertyGrid 參數/預設 | `CLAUDE.md` §檢測參數速查 |
-| 軸命名（欄/列 ↔ col/row） | `CLAUDE.md` §術語標準 |
-| sdk 元件地圖 / 分層鐵則 | `sdk/CLAUDE.md` |
-| app UI 四層分工 / 協調層角色 | `src/dotnet/AniloxRoll.Monitor/CLAUDE.md` |
-| 改某範圍的注意事項 | `.claude/skills/`（modify-ui / modify-acquisition / modify-pipeline …） |
-| 演算法分層（kernel→pipeline） | `sdk/CLAUDE.md` §演算法分層 |
+| 每個檔的職責 | `AGENTS.md` §關鍵檔案速查 |
+| 控制項標準名↔程式名 | `AGENTS.md` §控制項速查 |
+| PropertyGrid 參數/預設 | `AGENTS.md` §檢測參數速查 |
+| 軸命名（欄/列 ↔ col/row） | `AGENTS.md` §術語標準 |
+| sdk 元件地圖 / 分層鐵則 | `sdk/AGENTS.md` |
+| app UI 四層分工 / 協調層角色 | `src/dotnet/AniloxRoll.Monitor/AGENTS.md` |
+| 改某範圍的注意事項 | `.agents/skills/`（modify-ui / modify-acquisition / modify-pipeline …） |
+| 演算法分層（kernel→pipeline） | `sdk/AGENTS.md` §演算法分層 |
 | MIL 取像/stall/併發踩坑 | `sdk/MIL/docs/` + `docs/dev/MIL_API_Reference.md` |
 ```

@@ -1,0 +1,25 @@
+---
+name: verify-flows
+description: Verify PICoater AOI monitoring, review, report, storage, and hardware behavior against DVT log-flow and code-flow contracts. Use after changing event wiring, async sequencing, display modes, coordinates, persistence, navigation, or UI architecture, and when diagnosing a full-day trace log.
+---
+
+# verify-flows
+
+Use the DVT contract to check both sides of every affected behavior:
+
+- `log-flow`: runtime evidence, ordering, tokens, counts, snapshots, and forbidden lines.
+- `code-flow`: current responsibility chain, state owner, conversion formulas, and structural invariants.
+
+## Workflow
+
+1. Read the effectiveness and interpretation rules at the start of
+   [`references/dvt-contract.md`](references/dvt-contract.md).
+2. Identify every affected flow family from the change or observed operation.
+3. Read the corresponding sections in the contract; do not assume a previously verified contract is immutable.
+4. Audit current code before judging it. Code is implementation fact; the contract is design intent. Use git history when they conflict.
+5. Run the smallest applicable checker under `tools/python/`. Use `check_all_flows.py` for a broad or full-day trace and domain checkers for focused work.
+6. Compare checker output with the raw trace around each failure. A checker narrows evidence; it does not replace causal analysis.
+7. When behavior or architecture intentionally changes, update the contract in the same change and explain which clause changed and why.
+8. After build, DVT, and required on-machine smoke checks pass, commit the verified state immediately as a recoverable baseline.
+
+For coordinate or mirror changes, also use the `row-chart-coordinates` skill.

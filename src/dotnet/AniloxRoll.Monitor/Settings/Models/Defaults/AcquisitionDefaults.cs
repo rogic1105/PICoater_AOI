@@ -28,7 +28,7 @@ namespace AniloxRoll.Monitor.Core.Data
         ///
         /// 取 **12000**（= 實測動態 stall 邊界 ~12062 保守取整、留 ~60 餘裕）。**換相機（寬）或 grabber（path/板載）必須
         /// 重新實測**（測法：grab 中高度從小往大拉，找剛好開始 stall 的值，再保守取整）。詳見 docs/dev/grabheight-max-buffer-stage2.md
-        /// + CLAUDE.md /modify-acquisition skill。</summary>
+        /// + AGENTS.md / $modify-acquisition skill。</summary>
         public const int    MaxGrabHeightPx = 12000;
 
         public static int[]    NewGrabHeightArray()   => Enumerable.Repeat(GrabHeight,     CamCount).ToArray();

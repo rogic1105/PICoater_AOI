@@ -1,3 +1,8 @@
+---
+name: add-hardware-bridge
+description: Add or change a hardware or external-service bridge, including PLC, light, storage, camera SDK, and CLProtocol integrations. Use when creating bridge libraries, simulators, tools, app adapters, or bridge tests.
+---
+
 # add-hardware-bridge
 
 新增「硬體 bridge」（PLC、光源、儲存、相機 SDK、CLProtocol grabber 等任何外部硬體/服務的通訊封裝）時遵循的結構模板。

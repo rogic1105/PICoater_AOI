@@ -183,7 +183,7 @@ pip install numpy opencv-python
 
 ## 7. 開發文件
 
-詳見 `CLAUDE.md`（Claude Code 規則 + 文件路由）和 `docs/` 目錄：
+詳見 `AGENTS.md`（Codex 專案規則 + 文件路由）和 `docs/` 目錄：
 
 | 文件 | 內容 |
 |------|------|
@@ -192,8 +192,8 @@ pip install numpy opencv-python
 | `docs/architecture-acquisition.md` | MIL 取像模組、IO FSM（IoState enum、IO 快照、Watchdog） |
 | `docs/user-manual/io_diagrams.html` | IO 狀態機視覺化（State Machine / SFC / Ladder / Timing） |
 | `docs/dev/MIL_API_Reference.md` | MIL API 參考 |
-| `.claude/skills/*.md` | 開發模式（依修改範圍觸發對應 skill — 詳見 CLAUDE.md §Skills 路由）|
-| `CLAUDE.md` | Claude Code 規則 + 架構原則 + 控制項速查 + Skills 路由 |
+| `.agents/skills/*/SKILL.md` | Codex 工作流程（依 description 自動觸發，也可用 `$skill-name` 指定）|
+| `AGENTS.md` | Codex 專案規則 + 架構原則 + 控制項速查 + Skills 路由 |
 
 ## 8. 開發規範 (Development Guide)
 

@@ -1,3 +1,8 @@
+---
+name: add-native-api
+description: Add or modify native C or C++ APIs and their C# P/Invoke declarations. Use for tanuki_cv_api, tanuki_pipeline_api, CUDA exports, ABI changes, and NativeMethods integration.
+---
+
 # add-native-api
 
 新增或修改 Native C API 函式（C++ 實作 + C# P/Invoke）

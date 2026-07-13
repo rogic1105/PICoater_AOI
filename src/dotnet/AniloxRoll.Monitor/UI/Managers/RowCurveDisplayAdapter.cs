@@ -6,7 +6,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 {
     /// <summary>
     /// App-layer row chart policy shared by live/review displays.
-    /// 2026-07-08 抵銷層歸零定案（詳 /row-chart-coordinates）：方向的資料/視窗/標籤三轉換
+    /// 2026-07-08 抵銷層歸零定案（詳 $row-chart-coordinates）：方向的資料/視窗/標籤三轉換
     /// **全部同源在 helper.ZeroAtTop**（由上而下=原調校那套；由下而上=軸天然方向、零轉換）。
     /// adapter 零鏡射、零排序（邊界值保留「邊的身份」直通 helper）——外層再出現任何
     /// total−/Reverse/排序＝重蹈「層層包反轉」事故。

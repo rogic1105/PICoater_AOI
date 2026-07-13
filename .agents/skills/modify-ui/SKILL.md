@@ -1,3 +1,8 @@
+---
+name: modify-ui
+description: Modify PICoater AOI WinForms UI behavior or architecture. Use for Form partials, presenters, coordinators, controls, charts, canvases, interaction flows, SSoT settings, and UI god-object refactors.
+---
+
 # modify-ui
 
 修改 UI 相關程式碼（Form、控制項、事件、Chart、Canvas）前的檢查清單。
@@ -8,7 +13,7 @@
 
 ## 關鍵檔案
 
-→ 見 `CLAUDE.md` §關鍵檔案速查（subset：`UI/Form/*` + `UI/Widgets/*` + `UI/Presenters/*`）。
+→ 見 repo 根 `AGENTS.md` §關鍵檔案速查（subset：`UI/Form/*` + `UI/Widgets/*` + `UI/Presenters/*`）。
 → UI 流程行為與控制項互動以 code 與本 skill 為準。
 
 Live 監控顯示邊界：
@@ -20,7 +25,7 @@ Live 監控顯示邊界：
 
 ## 注意事項
 
-### L2 SSoT 原子結構（最重要 — 改 setting 必看 CLAUDE.md §架構原則）
+### L2 SSoT 原子結構（最重要 — 改 setting 必看 app `AGENTS.md` §架構原則）
 
 所有 setting 變更走 `SettingsHub`（`Settings/Services/SettingsHub.cs`）：
 
@@ -126,7 +131,7 @@ bootstrap 例外（line 232 AppRole）：Hub 還沒建構，加註解標明合�
 1. 讀取要修改的 handler 及其相關 guard flags
 2. 確認是否涉及跨 Tab 同步（Review ↔ Data）
 3. 修改 + build 驗證
-4. 若新增/移除控制項，更新 Designer.cs + CLAUDE.md
+4. 若新增/移除控制項，更新 Designer.cs + 對應 `AGENTS.md`
 
 ## 單一權威閘門（UI 刷新時序 / chart 啟動 / timer 驅動更新 / canvas-chart 同步）
 

@@ -1,3 +1,8 @@
+---
+name: add-test
+description: Add or reorganize automated tests in the PICoater AOI repository. Use when deciding between unit, integration, stress, UI, or DVT log checks and when wiring new test projects.
+---
+
 # add-test
 
 新增測試時遵循的分類 + 模板。

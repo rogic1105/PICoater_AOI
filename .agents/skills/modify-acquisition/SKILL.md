@@ -1,3 +1,8 @@
+---
+name: modify-acquisition
+description: Modify acquisition behavior including MIL grabbing, cameras, CLProtocol, telemetry, PLC coordination, live display frame routing, background capture, and grab lifecycle.
+---
+
 # modify-acquisition
 
 修改 MIL 取像、相機控制、CLProtocol、Telemetry、PLC 連動相關程式碼。
@@ -16,7 +21,7 @@ MIL 取像/顯示資源已抽到 **`sdk/MIL/MilGrabber.Core/MilCamera.cs`**（�
 
 ## 關鍵檔案
 
-→ 見 `CLAUDE.md` §關鍵檔案速查（subset：`Acquisition/*` + `UI/Managers/LiveCameraManager` + `Services/IoGrabController` + `Services/IoState` + `UI/Presenters/LiveTelemetryPresenter` + `Settings/Stores/AcquisitionSettingsStore`）。
+→ 見 repo 根 `AGENTS.md` §關鍵檔案速查（subset：`Acquisition/*` + `UI/Managers/LiveCameraManager` + `Services/IoGrabController` + `Services/IoState` + `UI/Presenters/LiveTelemetryPresenter` + `Settings/Stores/AcquisitionSettingsStore`）。
 → MIL .NET API 完整參考 `docs/dev/MIL_API_Reference.md`。
 → IO FSM 視覺化 `docs/user-manual/io_diagrams.html`。
 

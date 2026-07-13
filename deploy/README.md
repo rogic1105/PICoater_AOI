@@ -177,4 +177,4 @@ deploy/
 
 ## 相關文件
 
-- `.claude/skills/deploy-network.md` → 開發者端技術細節（編碼陷阱、secedit、排查步驟）
+- `.agents/skills/deploy-network/SKILL.md` → 開發者端技術細節（編碼陷阱、secedit、排查步驟）

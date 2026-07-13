@@ -1,3 +1,8 @@
+---
+name: modify-pipeline
+description: Modify image-processing pipelines, native processing calls, buffer management, curve generation, background subtraction, resize behavior, or inspection output persistence.
+---
+
 # modify-pipeline
 
 修改影像處理 pipeline、Buffer 管理、存檔格式相關程式碼。
@@ -8,7 +13,7 @@
 
 ## 關鍵檔案
 
-→ 見 `CLAUDE.md` §關鍵檔案速查（subset：`ImageProcessing/*` + `Services/AoiService` + `Interop/NativeMethods` + `ImageCatalog/ImageRepository`）。
+→ 見 repo 根 `AGENTS.md` §關鍵檔案速查（subset：`ImageProcessing/*` + `Services/AoiService` + `Interop/NativeMethods` + `ImageCatalog/ImageRepository`）。
 → Native pipeline 細節見 `sdk/TanukiCv/native/tanuki_pipeline/`（framework/modules/pipelines/api 分層；modules/background_sub + ridge_hessian）與 `docs/dev/MIL_API_Reference.md`。
 
 ## 注意事項
@@ -81,4 +86,4 @@ magic(4)="MCBF" | version(4=int) | scale_factor(4=float) | array_length(4=int) |
 1. 讀取要修改的 pipeline 階段
 2. 確認 buffer 映射是否正確
 3. 修改 + build 驗證（Release|x64）
-4. 若修改 native API，同步更新 `/add-native-api` skill 的範本
+4. 若修改 native API，同步更新 `$add-native-api` skill 的範本

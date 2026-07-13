@@ -1,3 +1,8 @@
+---
+name: modify-data-stats
+description: Modify the Data tab, inspection CSV schema, statistics, report lists, period charts, range curves, or cross-tab selection synchronization. Use for report performance and data compatibility work.
+---
+
 # modify-data-stats
 
 修改 Data tab 統計、CSV、Period Charts、跨 Tab 同步相關程式碼。
@@ -8,7 +13,7 @@
 
 ## 關鍵檔案
 
-→ 見 `CLAUDE.md` §關鍵檔案速查（subset：`UI/Presenters/DataStatisticsPresenter` + `Services/Inspection*Service` + `Services/CsvConfigSnapshot`）。
+→ 見 repo 根 `AGENTS.md` §關鍵檔案速查（subset：`UI/Presenters/DataStatisticsPresenter` + `Services/Inspection*Service` + `Services/CsvConfigSnapshot`）。
 → Data tab 流程行為以 code 為準。
 
 ## 注意事項
