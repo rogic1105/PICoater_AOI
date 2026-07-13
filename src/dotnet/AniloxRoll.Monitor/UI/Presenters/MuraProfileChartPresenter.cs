@@ -126,7 +126,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             string statsRoot = _getStatsRoot();
             if (string.IsNullOrWhiteSpace(statsRoot)) return;
 
-            var grabCfg = InspectionStatisticsService.LoadConfigForGrabId(
+            var grabCfg = InspectionConfigRepository.LoadForGrabId(
                 statsRoot, info.GrabId, info.Earliest, info.Latest);
             var grouped = InspectionStatisticsService.LoadImagePathsForGrabId(
                 statsRoot, info.GrabId, info.Earliest, info.Latest);

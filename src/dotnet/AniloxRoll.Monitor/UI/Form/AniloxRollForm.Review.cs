@@ -185,7 +185,7 @@ namespace AniloxRoll.Monitor.Forms
             string rootPath = UserSessionState.LastDataPath;
             return string.IsNullOrWhiteSpace(rootPath)
                 ? null
-                : InspectionStatisticsService.LoadConfigForDate(rootPath, period);
+                : InspectionConfigRepository.LoadForDate(rootPath, period);
         }
 
         /// <summary>
