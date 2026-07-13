@@ -40,11 +40,11 @@ namespace AniloxRoll.Monitor.Forms
             if (name == nameof(InspectionSettings.gb_ChartScaleMode))
                 _dataStatsPresenter.ApplyChartScaleFromSettings();
             else if (name == nameof(InspectionSettings.gc_YearlyYMax))
-                _dataStatsPresenter.ApplyFixedScaleForChart("Yearly", _settings.Chart.YearlyYMax);
+                _dataStatsPresenter.ApplyChartScaleForChart("Yearly");
             else if (name == nameof(InspectionSettings.gd_MonthlyYMax))
-                _dataStatsPresenter.ApplyFixedScaleForChart("Monthly", _settings.Chart.MonthlyYMax);
+                _dataStatsPresenter.ApplyChartScaleForChart("Monthly");
             else if (name == nameof(InspectionSettings.ge_DailyYMax))
-                _dataStatsPresenter.ApplyFixedScaleForChart("Daily", _settings.Chart.DailyYMax);
+                _dataStatsPresenter.ApplyChartScaleForChart("Daily");
         }
 
         /// <summary>檢測參數變更 → 重畫 chartDataColumn 曲線 + 重算統計。

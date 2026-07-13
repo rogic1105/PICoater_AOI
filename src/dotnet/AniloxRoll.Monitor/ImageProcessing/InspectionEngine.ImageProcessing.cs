@@ -150,10 +150,10 @@ namespace AniloxRoll.Monitor.Core.Services
                     g.DrawImage(srcBmp, 0, 0, targetThumbWidth, thumbH);
                 srcBmp.Dispose();
 
-                float[] curveMean    = LoadCurveBinCompat(baseNoSuffix, CaptureFileNaming.MeanV, CaptureFileNaming.MeanVLegacy);
-                float[] curveMax     = LoadCurveBinCompat(baseNoSuffix, CaptureFileNaming.MaxV, CaptureFileNaming.MaxVLegacy);
-                float[] rowCurveMean = LoadCurveBinCompat(baseNoSuffix, CaptureFileNaming.MeanH, CaptureFileNaming.MeanHLegacy);
-                float[] rowCurveMax  = LoadCurveBinCompat(baseNoSuffix, CaptureFileNaming.MaxH, CaptureFileNaming.MaxHLegacy);
+                float[] curveMean    = LoadCurveBin(CaptureFileNaming.ResolveMeanC(baseNoSuffix));
+                float[] curveMax     = LoadCurveBin(CaptureFileNaming.ResolveMaxC(baseNoSuffix));
+                float[] rowCurveMean = LoadCurveBin(CaptureFileNaming.ResolveMeanR(baseNoSuffix));
+                float[] rowCurveMax  = LoadCurveBin(CaptureFileNaming.ResolveMaxR(baseNoSuffix));
                 long bmpMs = sw.ElapsedMilliseconds;
 
                 return new TimedResult<InspectionData>(
@@ -182,8 +182,8 @@ namespace AniloxRoll.Monitor.Core.Services
             string baseNoSuffix = CaptureFileNaming.StripRawJpg(rawJpgPath);
             // 依方向選擇處理圖：_proc_v.jpg 或 _proc_h.jpg（新命名優先，否則舊命名 _proc.jpg）
             string procJpgPath  = CaptureFileNaming.ResolveProcJpg(baseNoSuffix, ridgeDirection);
-            string meanBinPath  = ResolveCompatPath(baseNoSuffix, CaptureFileNaming.MeanV, CaptureFileNaming.MeanVLegacy);
-            string maxBinPath   = ResolveCompatPath(baseNoSuffix, CaptureFileNaming.MaxV, CaptureFileNaming.MaxVLegacy);
+            string meanBinPath  = CaptureFileNaming.ResolveMeanC(baseNoSuffix);
+            string maxBinPath   = CaptureFileNaming.ResolveMaxC(baseNoSuffix);
 
             string imgPath = (isProcessedMode && File.Exists(procJpgPath)) ? procJpgPath : rawJpgPath;
 
@@ -199,8 +199,8 @@ namespace AniloxRoll.Monitor.Core.Services
 
             float[] curveMean    = LoadCurveBin(meanBinPath);
             float[] curveMax     = LoadCurveBin(maxBinPath);
-            float[] rowCurveMean = LoadCurveBinCompat(baseNoSuffix, CaptureFileNaming.MeanH, CaptureFileNaming.MeanHLegacy);
-            float[] rowCurveMax  = LoadCurveBinCompat(baseNoSuffix, CaptureFileNaming.MaxH, CaptureFileNaming.MaxHLegacy);
+            float[] rowCurveMean = LoadCurveBin(CaptureFileNaming.ResolveMeanR(baseNoSuffix));
+            float[] rowCurveMax  = LoadCurveBin(CaptureFileNaming.ResolveMaxR(baseNoSuffix));
 
             System.Diagnostics.Trace.WriteLine(
                 $"[FullRes-New] mode={isProcessedMode,-5} | Total={swTotal.ElapsedMilliseconds,4}ms  ({bmp.Width}x{bmp.Height})");
@@ -281,8 +281,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 curveMax  = new float[w];
                 Marshal.Copy(_curveMeanBuffer, curveMean, 0, w);
                 Marshal.Copy(_curveMaxBuffer,  curveMax,  0, w);
-                string meanBinPath = basePath + CaptureFileNaming.MeanV;
-                string maxBinPath  = basePath + CaptureFileNaming.MaxV;
+                string meanBinPath = basePath + CaptureFileNaming.MeanC;
+                string maxBinPath  = basePath + CaptureFileNaming.MaxC;
                 if (!File.Exists(meanBinPath)) SaveCurveBin(curveMean, 1, meanBinPath);
                 if (!File.Exists(maxBinPath))  SaveCurveBin(curveMax,  1, maxBinPath);
 
@@ -291,8 +291,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 float[] rowMax  = new float[h];
                 Marshal.Copy(_curveRowMeanBuffer, rowMean, 0, h);
                 Marshal.Copy(_curveRowMaxBuffer,  rowMax,  0, h);
-                string rowMeanBinPath = basePath + CaptureFileNaming.MeanH;
-                string rowMaxBinPath  = basePath + CaptureFileNaming.MaxH;
+                string rowMeanBinPath = basePath + CaptureFileNaming.MeanR;
+                string rowMaxBinPath  = basePath + CaptureFileNaming.MaxR;
                 if (!File.Exists(rowMeanBinPath)) SaveCurveBin(rowMean, 1, rowMeanBinPath);
                 if (!File.Exists(rowMaxBinPath))  SaveCurveBin(rowMax,  1, rowMaxBinPath);
 

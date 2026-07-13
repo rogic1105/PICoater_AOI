@@ -72,10 +72,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             foreach (string path in imagePaths)
             {
                 string basePath = GetCurveBasePath(path);
-                var mean = InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MeanV)
-                        ?? InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MeanVLegacy);
-                var max = InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MaxV)
-                        ?? InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MaxVLegacy);
+                var mean = InspectionEngine.LoadCurveBin(CaptureFileNaming.ResolveMeanC(basePath));
+                var max = InspectionEngine.LoadCurveBin(CaptureFileNaming.ResolveMaxC(basePath));
                 if (mean != null && max != null && mean.Length > 0)
                 {
                     allMean.Add(mean);
@@ -122,10 +120,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             {
                 if (string.IsNullOrEmpty(path)) { allMean.Add(null); allMax.Add(null); continue; }
                 string basePath = GetCurveBasePath(path);
-                var mean = InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MeanH)
-                        ?? InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MeanHLegacy);
-                var max = InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MaxH)
-                        ?? InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MaxHLegacy);
+                var mean = InspectionEngine.LoadCurveBin(CaptureFileNaming.ResolveMeanR(basePath));
+                var max = InspectionEngine.LoadCurveBin(CaptureFileNaming.ResolveMaxR(basePath));
                 if (mean != null && max != null && mean.Length > 0)
                 {
                     allMean.Add(mean);

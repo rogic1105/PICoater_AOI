@@ -585,21 +585,36 @@ Tn: MURA 恢復（v|h）                                                        
 T1: capture plan grab={yyMMdd-HHmmss} root={CaptureRootPath}
     imageDir={root}\yyyy\yyyyMM\yyyyMMdd
     csv={root}\yyyy\yyyyMM\yyyyMMdd.csv
-    files=*_raw.jpg|*_proc_v.jpg|*_proc_h.jpg|*_mean_v.bin|*_max_v.bin|*_mean_h.bin|*_max_h.bin
+    files=*_raw.jpg|*_proc_v.jpg|*_proc_h.jpg|*_mean_c.bin|*_max_c.bin|*_mean_r.bin|*_max_r.bin
     scale={DefaultSaveResizeScale}
 ```
 - `imageDir` 與 `csv` 必須由 `CaptureStoragePaths` 推導；檔名 suffix 必須由 `CaptureFileNaming` 推導。
+- 曲線持久化新格式一律 C/R：`_mean_c/_max_c/_mean_r/_max_r.bin`；讀端依序 fallback 上一代
+  `_mean_v/_max_v/_mean_h/_max_h.bin` 與最舊 `_mean/_max/_row_mean/_row_max.bin`，寫端不得再產生 V/H curve bin。
 - 這行是每輪 grab 的「存放方式/位置」摘要；逐幀大小與資源量仍歸 `resource-monitor-*.csv`，不得用 `[Flow]` 洗版。
 
 ### C2 檢測 CSV 寫入（每個 grab 首筆 + CFG 變更）
 ```
 Tn: capture csv open path=… cfg=yes|no              ← 新檔或換日首次開啟
 Tn: capture csv cfg path=… HM=V/H thrV=mean/max thrH=mean/max
-Tn: capture csv firstRecord grab=… path=… file=… verdict=max0|1/mean0|1 peak=…/… thrV=…/…
+Tn: capture csv firstRecord grab=… path=… file=… verdict=max0|1/mean0|1 peak=…/… maxCMean=… thrV=…/…
 ```
 - `firstRecord` 每個 grab 只出一行，用來確認檢測結果有落到哪一份 CSV；逐相機逐幀細節看 CSV 本體。
 - `cfg` 行出現代表 `#CFG` 已寫入同一 CSV；回顧曲線座標/捕捉時正規值可從該 CSV 追溯。
 - `verdict` 使用寫入 CSV 同一組 V 閾值，與 `AppendRecord@InspectionLogService.cs` 的 `MaxExceed/MeanExceed` 同源。
+- CSV 資料列格式＝`Id,FileName,MaxExceed,MeanExceed,MeanPeak,MaxPeak,GrabHeight,LineRateHz,ExposureUs,MaxCMean`；
+  `MaxCMean`＝該幀 `MaxC`（column curve）全點平均後除以 255（0~1），是報表範圍 `CurveMax` 候選排序值，**不是 MaxPeak**。
+- 舊 9 欄 CSV 合法：parser 將缺少的 `MaxCMean` 視為 unknown；範圍內找不到任何有效分數時，`CurveMax` 回退均勻 50 筆。
+
+**code-flow（曲線統計值寫入）**
+```
+TrySaveCapture@AniloxCamera.cs
+ → CaptureContext.MaxC → SaveCapture@CameraFrameSaver.cs
+   → ComputeCurveMeanNormalized（sum(MaxC)/length/255）
+   → OnInspectionResult(camId,file,meanPeak,maxPeak,maxCMean)
+     → LiveCameraManager forwarder → OnCameraInspectionResult@AniloxRollForm.Live.cs
+       → AppendRecord@InspectionLogService.cs → CSV 第 10 欄 MaxCMean
+```
 
 ## 全天 Flow DVT 自動校稿架構
 
@@ -780,7 +795,9 @@ T1: ui:【報表序號】→ {grabId}          ← 單片切換（同 D2 的 cb 
 T1: DT selected {grabId} stats=cache|scan list=keep ms=N
      ← 單片快路：更新色卡＋Mura curve＋List 反白；`cache`＝從既有明細推導統計，`scan`＝選中項不在目前範圍時 fallback
 T1: ui:【序號範圍-起始|結束】變更       ← 手動拖範圍 → 期間高亮全滅（Custom）
+T1: DT range settle → refresh             ← 最後一次變更後 250ms；一串連續滾動只准一行
 T1: DT list reload range={start}~{end} rows=N ms=N
+T1: DT curve candidates meanRows=N maxRows=M method=top-maxcmean|mixed|even coverage=S/R rankedCams=C/T
 ```
 - **List ownership**：明細 List 屬於範圍結果，不屬於單片序號；`ui:【報表序號】` 後只准 `list=keep`，
   不得出現 `DT list reload`／重設 `_visibleDetails`／`VirtualListSize`／欄寬。只有資料夾、範圍、期間、閾值改變才重算 List。
@@ -788,6 +805,14 @@ T1: DT list reload range={start}~{end} rows=N ms=N
   可視區上下邊界時以 margin 捲動，反白變更只重畫舊／新兩列，不得每格整窗 `Invalidate()`（跨視窗白閃的根因）。
 - **跨 tab lazy**：報表序號只輕量同步 Review combo/date 並標 `_reviewDirty`，不得逐格 `NavigateTo` 寫 session／重建日期清單，
   也不得當下載 Review 圖片；切到 Review tab 才接 R2 完整載入。
+- **範圍 latest-only**：起始／結束 combo 連續滾動時只更新選取值並重壓 250ms timer；停止後才跑一次
+  `RefreshStats`。`DT range settle` 前出現 `DT list reload` 或 `DT curve candidates`＝逐格重算回歸。
+- **範圍曲線只有兩條**：每台相機各自選候選再合成全寬；`CurveMean`＝範圍 CSV 資料列均勻取樣最多 50 筆後
+  對對應 `MeanC` bin 逐點平均；`CurveMax`＝依 `MaxCMean` 排序取前 50 筆，再對其 `MaxC` bin 做逐點最大值。
+  候選必須保留 CSV `FileName` 並載入同一筆 bin，不得只選序號後誤讀該序號第一張。這個設計保留平坦趨勢，也不讓
+  1/1000~1/10000 的凸波因均勻抽樣直接消失；畫面不得再增加操作員難以判讀的第三條曲線。
+- `coverage=S/R` 是有 `MaxCMean` 的 CSV 資料列數／範圍資料列數；任一相機候選資料不完整時，該相機
+  `CurveMax` 回退均勻取樣，避免拿新舊混合資料宣稱精確排名。
 
 **code-flow（單片快路 vs 範圍完整刷新）**
 ```
@@ -801,11 +826,16 @@ cbDataId.SelectedIndexChanged
    → GrabIdSelectedFromData → OnDataGrabIdSelected@AniloxRollForm.Data.cs
      └ cbReviewId＋DateTimeNavigator.SetPeriodToCombo（輕量）＋_reviewDirty=true
 
-cbDataIdStart|End／期間／資料夾／閾值變更
- → RefreshStats@DataStatisticsPresenter.cs
+cbDataIdStart|End／期間變更
+ → ScheduleRangeRefresh@DataStatisticsPresenter.cs（WinForms Timer 250ms latest-only）
+ → DT range settle → RefreshStats@DataStatisticsPresenter.cs
    ├ ComputeByGrabIdRange（範圍色卡）
    ├ ComputeDetailedByGrabIdRange → ApplyFailFilter → UpdateGrabDetailListView
-   └ DT list reload …
+   ├ MuraProfileChartPresenter.Update(rangeInfos)
+   │  └ LoadRangeMuraProfile（掃範圍 CSV；按 cam 分組並保留 FileName）
+   │     ├ Mean 候選＝EvenSampleCurveRecords(rows,50) → 對應 MeanC 逐點平均
+   │     └ Max 候選＝MaxCMean 排序前 50 → 對應 MaxC 逐點最大（缺分數→均勻 fallback）
+   └ DT list reload …＋DT curve candidates …
 ```
 
 ### D4 年/月/日期間（lblChartNav 點選）
@@ -815,11 +845,31 @@ T1: ui:【期間-全局】→ 全範圍                    ← 點 groupBoxGrabI
 （active 期間改對應 cbDataYield → 範圍跟著更新；非 active 來源不觸發）
 ```
 
-### D5 良率導航 / 篩選異常
+### D5 良率導航 / Y 軸暫時切換 / 篩選異常
 ```
 T1: ui:【良率導航-年|月|日】→ {值}      ← 良率三圖跟著換週期
+T1: ui:【良率圖-年|月|日】→ Y軸={Auto|Fixed} setting={Auto|Fixed} override={Auto|Fixed|off}
+    ← 點圖表本體；暫時態不回寫 Chart.ScaleMode。有效模式＝該圖 override ?? setting；資料刷新與設定變更
+      都從 YieldPeriodChartPresenter.ApplyScale 單點套用，禁止以 chart.Tag 另存狀態。
 T1: ui:【篩選異常】→ 只顯示異常|顯示全部
 ```
+
+**code-flow（Y 軸暫時切換）**
+```
+Chart.MouseClick → PeriodChart_ToggleAutoScale@YieldPeriodChartPresenter.cs
+ ├ GetEffectiveScaleMode＝該圖 override ?? Settings.Chart.ScaleMode
+ ├ next＝Auto↔Fixed；next 等於 setting → override off，否則只改 Presenter 內該圖 override
+ └ ApplyScale（唯一套用點）→ ApplyAutoScale｜ApplyFixedScale → SetChartYRange
+
+FillPeriodChart（資料刷新）──────────────┐
+ApplyChartScaleFromSettings（模式設定） ├→ GetEffectiveScaleMode → ApplyScale
+ApplyChartScaleForChart（YMax 設定）────┘
+```
+不變量：`Chart.Tag` 不得保存 Y 軸模式；圖表點擊不得回寫 `Settings.Chart.ScaleMode`。
+500ms 防連點以 `uint TickCount` elapsed 計算，必須可跨 24.9 天有號轉負與 49.7 天回繞；
+不得用 `Environment.TickCount - 0 < 500`（2026-07-13 開機 26.74 天實測會永久吞點擊）。
+`check_all_flows.py` 的 `DATA/D5.y-scale` 會檢查 log 格式與
+`effective = override ?? setting` 關係；未操作圖表時為 `NOT COVERED`。
 
 ## 附錄：真 log 範例（導航用）
 
@@ -892,7 +942,7 @@ T1: ui:【篩選異常】→ 只顯示異常|顯示全部
 |-----|------------|
 | Live | 開始抓取、監控強化、監控欄/列曲線圖點擊、監控縮圖點擊、取得背景、預覽背景 |
 | Review | 讀取資料、時段導航、單片序號、回顧縮圖點擊、回顧強化、回顧欄/列曲線圖點擊 |
-| Data | 讀取資料、序號範圍、序號選擇、年/月/日期間、良率圖導航、篩選異常 |
+| Data | 讀取資料、序號範圍、序號選擇、年/月/日期間、良率圖導航、良率圖 Y 軸 Auto/Fixed、篩選異常 |
 | 右側 | 檢測設定（Recipe/Algorithm/ChartScale）、相機參數滑桿 |
 | 跨Tab | Review→Data 同步、Data→Review 同步 |
 

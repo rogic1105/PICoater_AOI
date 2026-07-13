@@ -701,10 +701,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             {
                 if (!images.TryGetValue(i + 1, out string path)) continue;
                 string basePath = CurveMergeHelper.GetCurveBasePath(path);
-                curveMean[i] = InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MeanV)
-                            ?? InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MeanVLegacy);
-                curveMax[i]  = InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MaxV)
-                            ?? InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MaxVLegacy);
+                curveMean[i] = InspectionEngine.LoadCurveBin(CaptureFileNaming.ResolveMeanC(basePath));
+                curveMax[i]  = InspectionEngine.LoadCurveBin(CaptureFileNaming.ResolveMaxC(basePath));
             }
 
             var reviewCfg = _ctx.InteractionHelper?.ReviewConfig;
@@ -724,7 +722,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         }
 
         /// <summary>
-        /// 時序（period）路徑：從當前 Repository 時間點讀 H (_mean_h/_max_h) .bin 曲線 → 合併更新列曲線圖
+        /// 時序（period）路徑：從當前 Repository 時間點讀 MeanR/MaxR bin 曲線 → 合併更新列曲線圖
         /// （chartReviewRow）。單片路徑走 <see cref="UpdateGlobalRowChart"/>（吃 _stitchedRowCurveMean）；
         /// period 不進 stitch 模式（_stitchedImages=null），故獨立從 repository 載 → 與欄 overview 對稱。
         /// </summary>
@@ -745,10 +743,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             {
                 if (!images.TryGetValue(i + 1, out string path)) continue;
                 string basePath = CurveMergeHelper.GetCurveBasePath(path);
-                rowMean[i] = InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MeanH)
-                          ?? InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MeanHLegacy);
-                rowMax[i]  = InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MaxH)
-                          ?? InspectionEngine.LoadCurveBin(basePath + CaptureFileNaming.MaxHLegacy);
+                rowMean[i] = InspectionEngine.LoadCurveBin(CaptureFileNaming.ResolveMeanR(basePath));
+                rowMax[i]  = InspectionEngine.LoadCurveBin(CaptureFileNaming.ResolveMaxR(basePath));
             }
 
             CurveMergeHelper.MergeRowCurvesOverlap(rowMean, rowMax, camCount,

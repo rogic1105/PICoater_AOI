@@ -244,7 +244,7 @@ namespace AniloxRoll.Monitor.Core.Services
         // ── Mura 空間分布曲線（.bin 抽樣平均）──────────────────────────────
 
         /// <summary>
-        /// 從指定 grabIdInfos 讀取每台相機的 _mean_v.bin / _max_v.bin，按位置平均後返回。
+        /// 從指定 grabIdInfos 讀取每台相機的 MeanC / MaxC bin，按位置平均後返回。
         /// grabIds 由呼叫方依三種模式完成抽樣（≤50 筆）。
         /// 值域：0-255（raw，與 ColumnCurveChartHelper 一致）。
         /// </summary>
@@ -264,8 +264,10 @@ namespace AniloxRoll.Monitor.Core.Services
 
                 for (int camId = 1; camId <= 7; camId++)
                 {
-                    string[] mFiles = Directory.GetFiles(dateDir, $"{prefix}*-{camId}{CaptureFileNaming.MeanV}");
-                    string[] xFiles = Directory.GetFiles(dateDir, $"{prefix}*-{camId}{CaptureFileNaming.MaxV}");
+                    string[] mFiles = FindCurveFiles(dateDir, prefix, camId,
+                        CaptureFileNaming.MeanC, CaptureFileNaming.MeanCPrevious, CaptureFileNaming.MeanCLegacy);
+                    string[] xFiles = FindCurveFiles(dateDir, prefix, camId,
+                        CaptureFileNaming.MaxC, CaptureFileNaming.MaxCPrevious, CaptureFileNaming.MaxCLegacy);
                     if (mFiles.Length == 0) continue;
 
                     float[] mean = TryLoadBin(mFiles[0]);
@@ -305,6 +307,159 @@ namespace AniloxRoll.Monitor.Core.Services
                 resultMax[kvp.Key]  = accMax[kvp.Key];   // max 取各幀最大值（非平均）
             }
             return (resultMean, resultMax);
+        }
+
+        private sealed class MuraCurveRecord
+        {
+            public string MeanCPath;
+            public string MaxCPath;
+            public float MaxCMean;
+        }
+
+        public static (
+            Dictionary<int, float[]> Mean,
+            Dictionary<int, float[]> Max,
+            int MeanRows,
+            int MaxRows,
+            int ScoredRows,
+            int TotalRows,
+            int RankedCams,
+            int TotalCams)
+            LoadRangeMuraProfile(string rootPath, IList<GrabIdInfo> rangeInfos, int limit)
+        {
+            var meanResult = new Dictionary<int, float[]>();
+            var maxResult = new Dictionary<int, float[]>();
+            int meanRows = 0, maxRows = 0, scoredRows = 0, totalRows = 0;
+            int rankedCams = 0;
+            if (string.IsNullOrWhiteSpace(rootPath) || rangeInfos == null ||
+                rangeInfos.Count == 0 || limit <= 0)
+                return (meanResult, maxResult, 0, 0, 0, 0, 0, 0);
+
+            var rangeIds = new HashSet<string>(StringComparer.Ordinal);
+            var dates = new HashSet<DateTime>();
+            foreach (var info in rangeInfos)
+            {
+                if (info == null || string.IsNullOrEmpty(info.GrabId)) continue;
+                rangeIds.Add(info.GrabId);
+                dates.Add(info.Earliest.Date);
+            }
+
+            var recordsByCam = new Dictionary<int, List<MuraCurveRecord>>();
+            foreach (DateTime date in dates)
+            {
+                string csvPath = CaptureStoragePaths.DailyCsv(rootPath, date);
+                if (!File.Exists(csvPath)) continue;
+                try
+                {
+                    using (var sr = OpenCsvShared(csvPath))
+                    {
+                        string line;
+                        while ((line = sr.ReadLine()) != null)
+                        {
+                            if (!TryParseLineEx(line, out string grabId, out string fileName,
+                                out _, out _, out _, out _, out _, out _, out _,
+                                out float maxCMean)) continue;
+                            if (!rangeIds.Contains(grabId) || !TryExtractCamId(fileName, out int camId) ||
+                                !TryParseFileNameDateTime(fileName, out DateTime timestamp)) continue;
+
+                            if (!recordsByCam.TryGetValue(camId, out var records))
+                                recordsByCam[camId] = records = new List<MuraCurveRecord>();
+                            string dateDir = CaptureStoragePaths.DateImageDir(rootPath, timestamp);
+                            records.Add(new MuraCurveRecord
+                            {
+                                MeanCPath = CaptureFileNaming.ResolveMeanC(Path.Combine(dateDir, fileName)),
+                                MaxCPath = CaptureFileNaming.ResolveMaxC(Path.Combine(dateDir, fileName)),
+                                MaxCMean = maxCMean
+                            });
+                            totalRows++;
+                            if (!float.IsNaN(maxCMean) && !float.IsInfinity(maxCMean)) scoredRows++;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine($"[InspectionStatisticsService.LoadRangeMuraProfile] {csvPath}: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+
+            foreach (var camRecords in recordsByCam)
+            {
+                List<MuraCurveRecord> records = camRecords.Value;
+                List<MuraCurveRecord> meanCandidates = EvenSampleCurveRecords(records, limit);
+                var scored = records.FindAll(r =>
+                    !float.IsNaN(r.MaxCMean) && !float.IsInfinity(r.MaxCMean));
+                List<MuraCurveRecord> maxCandidates;
+                if (scored.Count == records.Count && scored.Count > 0)
+                {
+                    scored.Sort((a, b) => b.MaxCMean.CompareTo(a.MaxCMean));
+                    maxCandidates = scored.GetRange(0, Math.Min(limit, scored.Count));
+                    rankedCams++;
+                }
+                else
+                {
+                    maxCandidates = EvenSampleCurveRecords(records, limit);
+                }
+
+                float[] mean = AggregateCurveRecords(meanCandidates, true);
+                float[] max = AggregateCurveRecords(maxCandidates, false);
+                if (mean != null) meanResult[camRecords.Key] = mean;
+                if (max != null) maxResult[camRecords.Key] = max;
+                meanRows += meanCandidates.Count;
+                maxRows += maxCandidates.Count;
+            }
+
+            return (meanResult, maxResult, meanRows, maxRows, scoredRows, totalRows,
+                rankedCams, recordsByCam.Count);
+        }
+
+        private static List<MuraCurveRecord> EvenSampleCurveRecords(
+            List<MuraCurveRecord> records, int limit)
+        {
+            if (records.Count <= limit) return new List<MuraCurveRecord>(records);
+            if (limit == 1) return new List<MuraCurveRecord> { records[0] };
+            var sampled = new List<MuraCurveRecord>(limit);
+            for (int i = 0; i < limit; i++)
+            {
+                int index = (int)((long)i * (records.Count - 1) / (limit - 1));
+                sampled.Add(records[index]);
+            }
+            return sampled;
+        }
+
+        private static string[] FindCurveFiles(
+            string directory, string prefix, int camId,
+            string current, string previous, string legacy)
+        {
+            string[] files = Directory.GetFiles(directory, $"{prefix}*-{camId}{current}");
+            if (files.Length > 0) return files;
+            files = Directory.GetFiles(directory, $"{prefix}*-{camId}{previous}");
+            return files.Length > 0
+                ? files
+                : Directory.GetFiles(directory, $"{prefix}*-{camId}{legacy}");
+        }
+
+        private static float[] AggregateCurveRecords(List<MuraCurveRecord> records, bool mean)
+        {
+            float[] result = null;
+            int loaded = 0;
+            foreach (var record in records)
+            {
+                float[] curve = TryLoadBin(mean ? record.MeanCPath : record.MaxCPath);
+                if (curve == null || curve.Length == 0) continue;
+                if (result == null) result = new float[curve.Length];
+                if (result.Length != curve.Length) continue;
+
+                for (int i = 0; i < curve.Length; i++)
+                {
+                    if (mean) result[i] += curve[i];
+                    else if (curve[i] > result[i]) result[i] = curve[i];
+                }
+                loaded++;
+            }
+
+            if (mean && result != null && loaded > 0)
+                for (int i = 0; i < result.Length; i++) result[i] /= loaded;
+            return result;
         }
 
         private static float[] TryLoadBin(string path)
@@ -651,7 +806,7 @@ namespace AniloxRoll.Monitor.Core.Services
         }
 
         /// <summary>解析一行 CSV 資料列（跳過 #CFG 等註解列）。
-        /// 相容 4 欄舊格式與 9 欄新格式。</summary>
+        /// 相容 4/9 欄舊格式與 10 欄新格式。</summary>
         private static bool TryParseLine(string line,
             out string grabId, out string fileName,
             out int maxExceed, out int meanExceed)
@@ -672,14 +827,27 @@ namespace AniloxRoll.Monitor.Core.Services
                    int.TryParse(cols[3].Trim(), out meanExceed);
         }
 
-        /// <summary>解析 9 欄新格式，額外取得 MeanPeak/MaxPeak/GrabHeight/LineRateHz/ExposureUs。</summary>
+        /// <summary>解析 10 欄格式，額外取得 MeanPeak/MaxPeak/GrabHeight/LineRateHz/ExposureUs/MaxCMean。</summary>
         private static bool TryParseLineEx(string line,
             out string grabId, out string fileName,
             out int maxExceed, out int meanExceed,
             out float meanPeak, out float maxPeak,
             out int grabHeight, out double lineRateHz, out double exposureUs)
         {
+            return TryParseLineEx(line, out grabId, out fileName,
+                out maxExceed, out meanExceed, out meanPeak, out maxPeak,
+                out grabHeight, out lineRateHz, out exposureUs, out _);
+        }
+
+        private static bool TryParseLineEx(string line,
+            out string grabId, out string fileName,
+            out int maxExceed, out int meanExceed,
+            out float meanPeak, out float maxPeak,
+            out int grabHeight, out double lineRateHz, out double exposureUs,
+            out float maxCMean)
+        {
             meanPeak = 0; maxPeak = 0; grabHeight = 0; lineRateHz = 0; exposureUs = 0;
+            maxCMean = float.NaN;
 
             if (!TryParseLine(line, out grabId, out fileName, out maxExceed, out meanExceed))
                 return false;
@@ -693,6 +861,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 double.TryParse(cols[7].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out lineRateHz);
                 double.TryParse(cols[8].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out exposureUs);
             }
+            if (cols.Length >= 10)
+                float.TryParse(cols[9].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out maxCMean);
             return true;
         }
 

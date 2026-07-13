@@ -70,8 +70,8 @@ namespace AniloxRoll.Monitor.UI.Managers
         }
 
         /// <summary>每台相機存檔並完成 inspection 後觸發。
-        /// 參數：(cameraId, fileNameWithoutExt, meanPeak_0to1, maxPeak_0to1)</summary>
-        public event Action<int, string, float, float> OnInspectionResult;
+        /// 參數：(cameraId, fileNameWithoutExt, meanPeak_0to1, maxPeak_0to1, maxCMean_0to1)</summary>
+        public event Action<int, string, float, float, float> OnInspectionResult;
 
         /// <summary>每幀 GPU pipeline 完成後觸發（MIL 回呼執行緒）。
         /// 參數：(cameraId, curveMean_raw255, curveMax_raw255)</summary>
@@ -197,8 +197,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.SaveJpgQuality       = _saveJpgQuality;
                 cam.TimestampCoordinator = _timestampCoordinator;
 
-                cam.OnInspectionResult   += (camId, fn, mp, xp) =>
-                    OnInspectionResult?.Invoke(camId, fn, mp, xp);
+                cam.OnInspectionResult   += (camId, fn, mp, xp, maxCMean) =>
+                    OnInspectionResult?.Invoke(camId, fn, mp, xp, maxCMean);
                 cam.OnLiveCurveData      += (camId, mean, max) =>
                     OnLiveCurveData?.Invoke(camId, mean, max);
                 cam.OnLiveRowCurveData   += (camId, mean, max) =>

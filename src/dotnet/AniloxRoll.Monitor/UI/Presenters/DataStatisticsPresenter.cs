@@ -68,7 +68,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
     /// 管理 tabPageData 的所有邏輯：統計、ComboBox 級聯、序號導航、趨勢圖、Detail ListView。
     /// 跨 Tab 同步透過事件通知 Form。
     /// </summary>
-    public class DataStatisticsPresenter
+    public class DataStatisticsPresenter : IDisposable
     {
         private readonly DataStatisticsContext _ctx;
         private readonly InspectionStatsPresenter _statsPresenter;
@@ -81,6 +81,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private List<GrabDetail> _visibleDetails = new List<GrabDetail>();
         private bool _showFailOnly;
         private bool _preserveDetailListDuringSelection;
+        private Timer _rangeRefreshDebounce;
 
         // --- 圖表導航 ---
 
@@ -125,7 +126,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _statsPresenter = new InspectionStatsPresenter(ctx.PanelStatCams);
             _dateGrabIdNavigator = new DataDateGrabIdNavigator(_ctx,
                 () => _grabIdInfos,
-                RefreshStats,
+                ScheduleRangeRefresh,
                 RefreshSelectedGrab,
                 (grabId, earliest, latest, idx) => GrabIdSelectedFromData?.Invoke(grabId, earliest, latest, idx),
                 (grabId, earliest, latest, idx) => GrabIdSelectedFromReview?.Invoke(grabId, earliest, latest, idx),
@@ -151,6 +152,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _muraChart.Init();
             _yieldPeriodCharts = new YieldPeriodChartPresenter(_ctx, () => _statAvailableTimes, () => _statsDataRootPath);
             _yieldPeriodCharts.Init();
+
+            _rangeRefreshDebounce = new Timer { Interval = 250 };
+            _rangeRefreshDebounce.Tick += (s, e) =>
+            {
+                _rangeRefreshDebounce.Stop();
+                FlowTrace.Log("DT range settle → refresh");
+                RefreshStats();
+            };
 
             _ctx.GrpReviewTimePeriod.Click += (s, e) => PeriodComboManualChanged?.Invoke();
 
@@ -299,10 +308,28 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 int ei = _ctx.CbGrabIdEnd.SelectedIndex;
                 int lo = Math.Min(si, ei); int hi = Math.Max(si, ei);
                 var rangeInfos = _grabIdInfos.GetRange(lo, hi - lo + 1);
-                _muraChart.Update(EvenSample(rangeInfos, 50));
+                _muraChart.Update(rangeInfos, rangeInfos);
                 return;
             }
 
+        }
+
+        private void ScheduleRangeRefresh()
+        {
+            if (_rangeRefreshDebounce == null)
+            {
+                RefreshStats();
+                return;
+            }
+            _rangeRefreshDebounce.Stop();
+            _rangeRefreshDebounce.Start();
+        }
+
+        public void Dispose()
+        {
+            _rangeRefreshDebounce?.Stop();
+            _rangeRefreshDebounce?.Dispose();
+            _rangeRefreshDebounce = null;
         }
 
         /// <summary>單片序號快路：List 範圍內容不變，只更新該筆統計、Mura curve 與反白。</summary>
@@ -728,16 +755,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
             double[] ops, double[] pos, float errMean, float errMax)
             => _muraChart?.SyncFromReview(mean, max, ops, pos, errMean, errMax);
 
-        private static List<T> EvenSample<T>(IList<T> list, int maxCount)
-        {
-            if (list.Count <= maxCount) return new List<T>(list);
-            var result = new List<T>(maxCount);
-            double step = (list.Count - 1.0) / (maxCount - 1);
-            for (int i = 0; i < maxCount; i++)
-                result.Add(list[(int)Math.Round(i * step)]);
-            return result;
-        }
-
         // ══════════════════════════════════════════════════════════════
         // 異常篩選
         // ══════════════════════════════════════════════════════════════
@@ -767,8 +784,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         public void ApplyChartScaleFromSettings() => _yieldPeriodCharts?.ApplyChartScaleFromSettings();
 
-        public void ApplyFixedScaleForChart(string chartName, int fixedMax) =>
-            _yieldPeriodCharts?.ApplyFixedScaleForChart(chartName, fixedMax);
+        public void ApplyChartScaleForChart(string chartName) =>
+            _yieldPeriodCharts?.ApplyChartScaleForChart(chartName);
 
         public void PopulateChartNavigators() => _yieldPeriodCharts?.PopulateChartNavigators();
 

@@ -14,7 +14,7 @@ namespace AniloxRoll.Monitor.Core.Services
     public class InspectionLogService
     {
         private const string Header =
-            "Id,FileName,MaxExceed,MeanExceed,MeanPeak,MaxPeak,GrabHeight,LineRateHz,ExposureUs";
+            "Id,FileName,MaxExceed,MeanExceed,MeanPeak,MaxPeak,GrabHeight,LineRateHz,ExposureUs,MaxCMean";
 
         private readonly Func<string> _getCaptureRoot;
         private readonly object _csvLock = new object();
@@ -23,6 +23,7 @@ namespace AniloxRoll.Monitor.Core.Services
         private string _lastWrittenConfigKey;
         private string _lastCsvPath;
         private string _lastFlowRecordGrabId;
+        private string _schemaCheckedCsvPath;
 
         /// <summary>最近一次成功寫入的 CSV 完整路徑（供呼叫端排入遠端複製佇列）。</summary>
         public string LastCsvPath => _lastCsvPath;
@@ -49,13 +50,14 @@ namespace AniloxRoll.Monitor.Core.Services
         }
 
         /// <summary>
-        /// 寫入一筆單相機檢測結果到當日 CSV（新格式 9 欄 + #CFG）。
+        /// 寫入一筆單相機檢測結果到當日 CSV（新格式 10 欄 + #CFG）。
         /// </summary>
         public void AppendRecord(
             string grabId,
             string fileName,
             float  meanPeak,
             float  maxPeak,
+            float  maxCMean,
             float  errMean,
             float  errMax,
             int    grabHeight,
@@ -63,8 +65,26 @@ namespace AniloxRoll.Monitor.Core.Services
             double exposureUs,
             CsvConfigSnapshot config)
         {
-            AppendRecord(grabId, fileName, meanPeak, maxPeak, errMean, errMax,
+            AppendRecord(grabId, fileName, meanPeak, maxPeak, maxCMean, errMean, errMax,
                 grabHeight, lineRateHz, exposureUs, config, DateTime.Now);
+        }
+
+        public void AppendRecord(
+            string grabId, string fileName, float meanPeak, float maxPeak,
+            float errMean, float errMax, int grabHeight, double lineRateHz,
+            double exposureUs, CsvConfigSnapshot config)
+        {
+            AppendRecord(grabId, fileName, meanPeak, maxPeak, float.NaN, errMean, errMax,
+                grabHeight, lineRateHz, exposureUs, config, DateTime.Now);
+        }
+
+        internal void AppendRecord(
+            string grabId, string fileName, float meanPeak, float maxPeak,
+            float errMean, float errMax, int grabHeight, double lineRateHz,
+            double exposureUs, CsvConfigSnapshot config, DateTime timestamp)
+        {
+            AppendRecord(grabId, fileName, meanPeak, maxPeak, float.NaN, errMean, errMax,
+                grabHeight, lineRateHz, exposureUs, config, timestamp);
         }
 
         internal void AppendRecord(
@@ -72,6 +92,7 @@ namespace AniloxRoll.Monitor.Core.Services
             string   fileName,
             float    meanPeak,
             float    maxPeak,
+            float    maxCMean,
             float    errMean,
             float    errMax,
             int      grabHeight,
@@ -98,6 +119,11 @@ namespace AniloxRoll.Monitor.Core.Services
                 {
                     bool isNewFile = !File.Exists(csvPath);
                     bool isNewDay  = !string.Equals(_lastCsvPath, csvPath, StringComparison.OrdinalIgnoreCase);
+                    if (!isNewFile && !string.Equals(_schemaCheckedCsvPath, csvPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        UpgradeHeaderIfNeeded(csvPath);
+                        _schemaCheckedCsvPath = csvPath;
+                    }
 
                     // B-H1：FileShare.ReadWrite 對齊 reader 端的 OpenCsvShared，避免跨 process race
                     // 造成 reader 偶發 IOException。
@@ -127,9 +153,9 @@ namespace AniloxRoll.Monitor.Core.Services
                         }
 
                         sw.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                            "{0},{1},{2},{3},{4:F4},{5:F4},{6},{7:F1},{8:F1}",
+                            "{0},{1},{2},{3},{4:F4},{5:F4},{6},{7:F1},{8:F1},{9:F6}",
                             grabId, fileName, maxExceed, meanExceed,
-                            meanPeak, maxPeak, grabHeight, lineRateHz, exposureUs));
+                            meanPeak, maxPeak, grabHeight, lineRateHz, exposureUs, maxCMean));
 
                         if (!string.Equals(_lastFlowRecordGrabId, grabId, StringComparison.Ordinal))
                         {
@@ -146,12 +172,34 @@ namespace AniloxRoll.Monitor.Core.Services
                         $"thrV={config.ErrorValueMeanV:F4}/{config.ErrorValueMaxV:F4} thrH={config.ErrorValueMeanH:F4}/{config.ErrorValueMaxH:F4}");
                 if (flowFirstRecordForGrab)
                     FlowTrace.Log($"capture csv firstRecord grab={grabId} path={csvPath} file={fileName} " +
-                        $"verdict=max{maxExceed}/mean{meanExceed} peak={meanPeak:F4}/{maxPeak:F4} thrV={errMean:F4}/{errMax:F4}");
+                        $"verdict=max{maxExceed}/mean{meanExceed} peak={meanPeak:F4}/{maxPeak:F4} " +
+                        $"maxCMean={maxCMean:F6} thrV={errMean:F4}/{errMax:F4}");
             }
             catch (Exception ex)
             {
                 Trace.WriteLine(
                     $"[InspectionLogService] {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
+        private static void UpgradeHeaderIfNeeded(string csvPath)
+        {
+            string[] lines = File.ReadAllLines(csvPath, Encoding.UTF8);
+            int headerIndex = Array.FindIndex(lines, line =>
+                line.StartsWith("Id,FileName,", StringComparison.Ordinal));
+            if (headerIndex < 0 || string.Equals(lines[headerIndex], Header, StringComparison.Ordinal))
+                return;
+
+            lines[headerIndex] = Header;
+            string tempPath = csvPath + ".schema.tmp";
+            try
+            {
+                File.WriteAllLines(tempPath, lines, new UTF8Encoding(false));
+                File.Replace(tempPath, csvPath, null);
+            }
+            finally
+            {
+                if (File.Exists(tempPath)) File.Delete(tempPath);
             }
         }
 

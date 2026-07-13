@@ -45,20 +45,20 @@ namespace AniloxRoll.Monitor.Core.Camera
                 SaveJpegFromBytes(ctx.ProcHBytes, ctx.ResizeWidth, ctx.ResizeHeight,
                     Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.ProcH), ctx.JpgQuality);
 
-            if (ctx.MeanArr != null)
+            if (ctx.MeanC != null)
             {
-                SaveCurveBinFromArray(ctx.MeanArr, ctx.ScaleForHeader,
-                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.MeanV));
-                SaveCurveBinFromArray(ctx.MaxArr, ctx.ScaleForHeader,
-                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.MaxV));
+                SaveCurveBinFromArray(ctx.MeanC, ctx.ScaleForHeader,
+                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.MeanC));
+                SaveCurveBinFromArray(ctx.MaxC, ctx.ScaleForHeader,
+                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.MaxC));
             }
 
-            if (ctx.RowMeanArr != null)
+            if (ctx.MeanR != null)
             {
-                SaveCurveBinFromArray(ctx.RowMeanArr, ctx.ScaleForHeader,
-                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.MeanH));
-                SaveCurveBinFromArray(ctx.RowMaxArr, ctx.ScaleForHeader,
-                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.MaxH));
+                SaveCurveBinFromArray(ctx.MeanR, ctx.ScaleForHeader,
+                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.MeanR));
+                SaveCurveBinFromArray(ctx.MaxR, ctx.ScaleForHeader,
+                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.MaxR));
             }
 
             // 每幀硬體 frame-start tick 側車（回顧用 tick 就近對位補黑：cam 各自獨立掉幀位置不同，
@@ -89,7 +89,18 @@ namespace AniloxRoll.Monitor.Core.Camera
                 ctx.OnFilesSaved(savedFiles);
             }
 
-            ctx.OnResult?.Invoke(ctx.CameraId, ctx.BaseName, ctx.MeanPeak, ctx.MaxPeak);
+            float maxCMean = ComputeCurveMeanNormalized(ctx.MaxC);
+            ctx.OnResult?.Invoke(ctx.CameraId, ctx.BaseName, ctx.MeanPeak, ctx.MaxPeak, maxCMean);
+        }
+
+        internal static float ComputeCurveMeanNormalized(float[] curve)
+        {
+            if (curve == null || curve.Length == 0) return float.NaN;
+
+            double sum = 0;
+            for (int i = 0; i < curve.Length; i++)
+                sum += curve[i];
+            return (float)(sum / curve.Length / 255.0);
         }
 
         // ── JPEG 存檔 ───────────────────────────────────────────────────────
@@ -427,10 +438,10 @@ namespace AniloxRoll.Monitor.Core.Camera
         public byte[] RawBytes;
         public byte[] ProcVBytes;
         public byte[] ProcHBytes;
-        public float[] MeanArr;
-        public float[] MaxArr;
-        public float[] RowMeanArr;
-        public float[] RowMaxArr;
+        public float[] MeanC;
+        public float[] MaxC;
+        public float[] MeanR;
+        public float[] MaxR;
         public int ResizeWidth;
         public int ResizeHeight;
         public int JpgQuality;
@@ -446,7 +457,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>本幀 frame-start 硬體時戳（Data Latch ticks）。0＝未取得。
         /// 寫進 _ticks.csv 側車，供回顧用「tick 就近對位」精準補黑（免疫 seq 歪掉/軟體戳抖動）。</summary>
         public long FrameStartTicks;
-        public Action<int, string, float, float> OnResult;
+        public Action<int, string, float, float, float> OnResult;
         /// <summary>存檔完成後回呼，傳入已儲存的檔案路徑陣列（供遠端複製佇列用）。</summary>
         public Action<string[]> OnFilesSaved;
     }

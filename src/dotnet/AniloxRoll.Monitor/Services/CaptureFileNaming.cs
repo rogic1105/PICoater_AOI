@@ -8,8 +8,8 @@ namespace AniloxRoll.Monitor.Core.Services
     /// 與讀端（回顧 / 統計 / 合圖 / 縮圖）共用同一套 suffix —— 改命名格式只改這裡。
     ///
     /// 一張擷取（base = "{yyyyMMdd_HHmmss.fff}-{camId}"）對應的產出：
-    ///   {base}_raw.jpg / _proc_v.jpg / _proc_h.jpg / _mean_v.bin / _max_v.bin / _mean_h.bin / _max_h.bin
-    /// 舊格式（_proc.jpg / _mean.bin / _max.bin / _row_mean.bin / _row_max.bin）僅供讀端 fallback。
+    ///   {base}_raw.jpg / _proc_v.jpg / _proc_h.jpg / _mean_c.bin / _max_c.bin / _mean_r.bin / _max_r.bin
+    /// 上一代曲線格式（_mean_v/_max_v/_mean_h/_max_h）與更早格式僅供讀端 fallback。
     ///
     /// 本類只統一「檔名字串」；fallback 的「載入行為」（new ?? legacy）仍由各 caller 決定，
     /// 因為不同 caller 對「new 存在但讀失敗」的處理略有差異，統一會改變 edge case。
@@ -20,17 +20,21 @@ namespace AniloxRoll.Monitor.Core.Services
         public const string RawJpg = "_raw.jpg";
         public const string ProcV  = "_proc_v.jpg";
         public const string ProcH  = "_proc_h.jpg";
-        public const string MeanV  = "_mean_v.bin";
-        public const string MaxV   = "_max_v.bin";
-        public const string MeanH  = "_mean_h.bin";
-        public const string MaxH   = "_max_h.bin";
+        public const string MeanC  = "_mean_c.bin";
+        public const string MaxC   = "_max_c.bin";
+        public const string MeanR  = "_mean_r.bin";
+        public const string MaxR   = "_max_r.bin";
 
         // ── 舊格式 suffix（向後相容 fallback）──────────────────────────────
+        public const string MeanCPrevious = "_mean_v.bin";
+        public const string MaxCPrevious  = "_max_v.bin";
+        public const string MeanRPrevious = "_mean_h.bin";
+        public const string MaxRPrevious  = "_max_h.bin";
         public const string ProcLegacy  = "_proc.jpg";
-        public const string MeanVLegacy = "_mean.bin";
-        public const string MaxVLegacy  = "_max.bin";
-        public const string MeanHLegacy = "_row_mean.bin";
-        public const string MaxHLegacy  = "_row_max.bin";
+        public const string MeanCLegacy = "_mean.bin";
+        public const string MaxCLegacy  = "_max.bin";
+        public const string MeanRLegacy = "_row_mean.bin";
+        public const string MaxRLegacy  = "_row_max.bin";
 
         // ── glob ─────────────────────────────────────────────────────────
         public const string RawJpgGlob = "*" + RawJpg;
@@ -62,8 +66,30 @@ namespace AniloxRoll.Monitor.Core.Services
 
         // ── 方向（"h" / 其餘視為 "v"）選 suffix ─────────────────────────
         public static string ProcSuffix(string dir) => dir == "h" ? ProcH : ProcV;
-        public static string MeanSuffix(string dir) => dir == "h" ? MeanH : MeanV;
-        public static string MaxSuffix(string dir)  => dir == "h" ? MaxH : MaxV;
+        public static string MeanSuffix(string dir) => dir == "h" ? MeanR : MeanC;
+        public static string MaxSuffix(string dir)  => dir == "h" ? MaxR : MaxC;
+
+        public static string ResolveMeanC(string baseNoSuffix) =>
+            ResolveExisting(baseNoSuffix, MeanC, MeanCPrevious, MeanCLegacy);
+
+        public static string ResolveMaxC(string baseNoSuffix) =>
+            ResolveExisting(baseNoSuffix, MaxC, MaxCPrevious, MaxCLegacy);
+
+        public static string ResolveMeanR(string baseNoSuffix) =>
+            ResolveExisting(baseNoSuffix, MeanR, MeanRPrevious, MeanRLegacy);
+
+        public static string ResolveMaxR(string baseNoSuffix) =>
+            ResolveExisting(baseNoSuffix, MaxR, MaxRPrevious, MaxRLegacy);
+
+        private static string ResolveExisting(
+            string baseNoSuffix, string current, string previous, string legacy)
+        {
+            string path = baseNoSuffix + current;
+            if (File.Exists(path)) return path;
+            path = baseNoSuffix + previous;
+            if (File.Exists(path)) return path;
+            return baseNoSuffix + legacy;
+        }
 
         /// <summary>解析處理圖路徑：新 v/h 命名存在則用之，否則回傳舊命名 _proc.jpg（不保證存在）。</summary>
         public static string ResolveProcJpg(string baseNoSuffix, string dir)

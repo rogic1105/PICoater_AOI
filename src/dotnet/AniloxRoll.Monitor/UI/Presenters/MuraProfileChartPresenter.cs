@@ -44,7 +44,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _muraProfileHelper = new ColumnCurveChartHelper(_ctx.ChartDataPatch);
         }
 
-        public void Update(IList<GrabIdInfo> grabIds)
+        public void Update(IList<GrabIdInfo> grabIds, IList<GrabIdInfo> candidateRange = null)
         {
             if (_muraProfileHelper == null || _ctx.Settings == null) return;
 
@@ -71,8 +71,27 @@ namespace AniloxRoll.Monitor.UI.Presenters
             // 範圍/時間模式：aggregate 多 grab 平均，當作歷史快照不做 view-time rescale
 
             // ── 範圍/時間模式：舊 aggregate 邏輯 ──
-            var (meanDict, maxDict) = InspectionStatisticsService.LoadAvgMuraProfile(
-                _getStatsRoot(), grabIds);
+            Dictionary<int, float[]> meanDict;
+            Dictionary<int, float[]> maxDict;
+            if (candidateRange != null)
+            {
+                var profiles = InspectionStatisticsService.LoadRangeMuraProfile(
+                    _getStatsRoot(), candidateRange, 50);
+                meanDict = profiles.Mean;
+                maxDict = profiles.Max;
+                string method = profiles.RankedCams == 0 ? "even" :
+                    profiles.RankedCams == profiles.TotalCams ? "top-maxcmean" : "mixed";
+                FlowTrace.Log($"DT curve candidates meanRows={profiles.MeanRows} maxRows={profiles.MaxRows} " +
+                    $"method={method} coverage={profiles.ScoredRows}/{profiles.TotalRows} " +
+                    $"rankedCams={profiles.RankedCams}/{profiles.TotalCams}");
+            }
+            else
+            {
+                var profiles = InspectionStatisticsService.LoadAvgMuraProfile(
+                    _getStatsRoot(), grabIds);
+                meanDict = profiles.Mean;
+                maxDict = profiles.Max;
+            }
             if (meanDict.Count == 0)
             {
                 Clear();

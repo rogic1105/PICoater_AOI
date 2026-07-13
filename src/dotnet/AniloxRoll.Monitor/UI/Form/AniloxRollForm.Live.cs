@@ -98,7 +98,7 @@ namespace AniloxRoll.Monitor.Forms
                 string csvPath = string.IsNullOrWhiteSpace(captureRoot)
                     ? "(empty)" : CaptureStoragePaths.DailyCsv(captureRoot, captureDate);
                 FlowTrace.Log($"capture plan grab={_currentGrabId} root={captureRoot} imageDir={imageDir} csv={csvPath} " +
-                    $"files=*{CaptureFileNaming.RawJpg}|*{CaptureFileNaming.ProcV}|*{CaptureFileNaming.ProcH}|*{CaptureFileNaming.MeanV}|*{CaptureFileNaming.MaxV}|*{CaptureFileNaming.MeanH}|*{CaptureFileNaming.MaxH} " +
+                    $"files=*{CaptureFileNaming.RawJpg}|*{CaptureFileNaming.ProcV}|*{CaptureFileNaming.ProcH}|*{CaptureFileNaming.MeanC}|*{CaptureFileNaming.MaxC}|*{CaptureFileNaming.MeanR}|*{CaptureFileNaming.MaxR} " +
                     $"scale={InspectionEngineConfig.DefaultSaveResizeScale}");
             }
 
@@ -121,7 +121,8 @@ namespace AniloxRoll.Monitor.Forms
         /// 相機存檔後回呼（MIL 執行緒，非 UI 執行緒）。
         /// EnableAutoCapture=true 且抓取中時才會觸發。
         /// </summary>
-        private void OnCameraInspectionResult(int camId, string fileNameNoExt, float meanPeak, float maxPeak)
+        private void OnCameraInspectionResult(
+            int camId, string fileNameNoExt, float meanPeak, float maxPeak, float maxCMean)
         {
             if (string.IsNullOrEmpty(_currentGrabId)) return;
             int idx = camId - 1;
@@ -133,6 +134,7 @@ namespace AniloxRoll.Monitor.Forms
                     fileNameNoExt,
                     meanPeak,
                     maxPeak,
+                    maxCMean,
                     _settings.ErrorValueMeanV,
                     _settings.ErrorValueMaxV,
                     idx >= 0 && idx < _settings.Acquisition.CameraGrabHeight.Length

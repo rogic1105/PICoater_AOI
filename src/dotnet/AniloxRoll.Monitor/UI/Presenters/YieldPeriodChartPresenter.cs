@@ -27,7 +27,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private List<int> _chartYears = new List<int>();
         private List<int> _chartMonths = new List<int>();
         private List<int> _chartDays = new List<int>();
-        private int _lastChartToggleTick;
+        private uint _lastChartToggleTick;
+        private bool _hasChartToggleTick;
+        private ChartScaleMode? _yearlyScaleOverride;
+        private ChartScaleMode? _monthlyScaleOverride;
+        private ChartScaleMode? _dailyScaleOverride;
 
         public YieldPeriodChartPresenter(
             DataStatisticsContext ctx,
@@ -46,12 +50,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
             InitOneChart(_ctx.ChartDataYieldMonthly, yDefault: cs.MonthlyYMax, xCount: 31, xStart: 1);
             InitOneChart(_ctx.ChartDataYieldDaily, yDefault: cs.DailyYMax, xCount: 24, xStart: 0);
 
-            if (cs.ScaleMode == ChartScaleMode.Auto)
+            foreach (var chart in new[]
             {
-                var empty = new List<PeriodStats>();
-                ApplyAutoScale(_ctx.ChartDataYieldYearly, empty);
-                ApplyAutoScale(_ctx.ChartDataYieldMonthly, empty);
-                ApplyAutoScale(_ctx.ChartDataYieldDaily, empty);
+                _ctx.ChartDataYieldYearly,
+                _ctx.ChartDataYieldMonthly,
+                _ctx.ChartDataYieldDaily
+            })
+            {
+                ApplyScale(chart, GetEffectiveScaleMode(chart), ReadChartData(chart));
             }
 
             _ctx.ChartDataYieldYearly.MouseClick -= PeriodChart_ToggleAutoScale;
@@ -68,31 +74,28 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         private void PeriodChart_ToggleAutoScale(object sender, MouseEventArgs e)
         {
-            int now = Environment.TickCount;
-            if (now - _lastChartToggleTick < 500) return;
+            uint now = unchecked((uint)Environment.TickCount);
+            if (_hasChartToggleTick && unchecked(now - _lastChartToggleTick) < 500u) return;
             _lastChartToggleTick = now;
+            _hasChartToggleTick = true;
 
             var chart = (Chart)sender;
             if (chart.ChartAreas.Count == 0) return;
 
-            bool isAuto = "auto".Equals(chart.Tag);
+            ChartScaleMode settingMode = _ctx.Settings.Chart.ScaleMode;
+            ChartScaleMode effectiveMode = GetEffectiveScaleMode(chart);
+            ChartScaleMode nextMode = effectiveMode == ChartScaleMode.Auto
+                ? ChartScaleMode.Fixed
+                : ChartScaleMode.Auto;
 
-            if (isAuto)
-            {
-                int fixedMax = chart == _ctx.ChartDataYieldYearly ? _ctx.Settings.Chart.YearlyYMax
-                             : chart == _ctx.ChartDataYieldMonthly ? _ctx.Settings.Chart.MonthlyYMax
-                             : _ctx.Settings.Chart.DailyYMax;
-                ApplyFixedScale(chart, fixedMax);
-            }
-            else
-            {
-                var data = new List<PeriodStats>();
-                var sPass = chart.Series[PassSeriesName];
-                var sFail = chart.Series[FailSeriesName];
-                for (int i = 0; i < sPass.Points.Count; i++)
-                    data.Add(new PeriodStats { Label = "", Pass = (int)sPass.Points[i].YValues[0], Fail = (int)sFail.Points[i].YValues[0] });
-                ApplyAutoScale(chart, data);
-            }
+            // 圖表點擊是暫時顯示鍵，不回寫 PropertyGrid setting。
+            // 切回 setting 本身時收掉 override，之後設定變更便會自然生效。
+            SetScaleOverride(chart, nextMode == settingMode ? (ChartScaleMode?)null : nextMode);
+            ApplyScale(chart, nextMode, ReadChartData(chart));
+
+            ChartScaleMode? scaleOverride = GetScaleOverride(chart);
+            FlowTrace.Log($"ui:【良率圖-{GetChartPeriodName(chart)}】→ Y軸={GetScaleModeName(nextMode)} "
+                + $"setting={GetScaleModeName(settingMode)} override={(scaleOverride.HasValue ? GetScaleModeName(scaleOverride.Value) : "off")}");
         }
 
         private static void InitOneChart(Chart chart, int xLabelAngle = 0, int yDefault = 10,
@@ -196,13 +199,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 sFail.Points.AddXY(p.Label, p.Fail);
             }
 
-            if (_ctx.Settings.Chart.ScaleMode == ChartScaleMode.Auto || "auto".Equals(chart.Tag))
-                ApplyAutoScale(chart, data);
+            ApplyScale(chart, GetEffectiveScaleMode(chart), data);
         }
 
         private static void ApplyAutoScale(Chart chart, List<PeriodStats> data)
         {
-            chart.Tag = "auto";
             int maxTotal = 0;
             foreach (var p in data)
                 maxTotal = Math.Max(maxTotal, p.Pass + p.Fail);
@@ -212,8 +213,63 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         private static void ApplyFixedScale(Chart chart, int fixedMax)
         {
-            chart.Tag = null;
             SetChartYRange(chart, fixedMax, fixedMax / 5.0, fixedMax);
+        }
+
+        private void ApplyScale(Chart chart, ChartScaleMode mode, List<PeriodStats> data)
+        {
+            if (mode == ChartScaleMode.Auto)
+                ApplyAutoScale(chart, data);
+            else
+                ApplyFixedScale(chart, GetFixedScaleMax(chart));
+        }
+
+        private ChartScaleMode GetEffectiveScaleMode(Chart chart) =>
+            GetScaleOverride(chart) ?? _ctx.Settings.Chart.ScaleMode;
+
+        private ChartScaleMode? GetScaleOverride(Chart chart)
+        {
+            if (chart == _ctx.ChartDataYieldYearly) return _yearlyScaleOverride;
+            if (chart == _ctx.ChartDataYieldMonthly) return _monthlyScaleOverride;
+            return _dailyScaleOverride;
+        }
+
+        private void SetScaleOverride(Chart chart, ChartScaleMode? mode)
+        {
+            if (chart == _ctx.ChartDataYieldYearly)
+                _yearlyScaleOverride = mode;
+            else if (chart == _ctx.ChartDataYieldMonthly)
+                _monthlyScaleOverride = mode;
+            else
+                _dailyScaleOverride = mode;
+        }
+
+        private int GetFixedScaleMax(Chart chart) =>
+            chart == _ctx.ChartDataYieldYearly ? _ctx.Settings.Chart.YearlyYMax
+          : chart == _ctx.ChartDataYieldMonthly ? _ctx.Settings.Chart.MonthlyYMax
+          : _ctx.Settings.Chart.DailyYMax;
+
+        private string GetChartPeriodName(Chart chart) =>
+            chart == _ctx.ChartDataYieldYearly ? "年"
+          : chart == _ctx.ChartDataYieldMonthly ? "月"
+          : "日";
+
+        private static string GetScaleModeName(ChartScaleMode mode) =>
+            mode == ChartScaleMode.Auto ? "Auto" : "Fixed";
+
+        private static List<PeriodStats> ReadChartData(Chart chart)
+        {
+            var data = new List<PeriodStats>();
+            var sPass = chart.Series[PassSeriesName];
+            var sFail = chart.Series[FailSeriesName];
+            for (int i = 0; i < sPass.Points.Count; i++)
+                data.Add(new PeriodStats
+                {
+                    Label = "",
+                    Pass = (int)sPass.Points[i].YValues[0],
+                    Fail = (int)sFail.Points[i].YValues[0]
+                });
+            return data;
         }
 
         private static void SetChartYRange(Chart chart, double yMax, double yStep, double labelInterval)
@@ -230,33 +286,19 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         public void ApplyChartScaleFromSettings()
         {
-            if (_ctx.Settings.Chart.ScaleMode == ChartScaleMode.Fixed)
+            foreach (var chart in new[] { _ctx.ChartDataYieldYearly, _ctx.ChartDataYieldMonthly, _ctx.ChartDataYieldDaily })
             {
-                ApplyFixedScale(_ctx.ChartDataYieldYearly, _ctx.Settings.Chart.YearlyYMax);
-                ApplyFixedScale(_ctx.ChartDataYieldMonthly, _ctx.Settings.Chart.MonthlyYMax);
-                ApplyFixedScale(_ctx.ChartDataYieldDaily, _ctx.Settings.Chart.DailyYMax);
-            }
-            else
-            {
-                foreach (var chart in new[] { _ctx.ChartDataYieldYearly, _ctx.ChartDataYieldMonthly, _ctx.ChartDataYieldDaily })
-                {
-                    if (chart.ChartAreas.Count == 0) continue;
-                    var sPass = chart.Series[PassSeriesName];
-                    var sFail = chart.Series[FailSeriesName];
-                    var data = new List<PeriodStats>();
-                    for (int i = 0; i < sPass.Points.Count; i++)
-                        data.Add(new PeriodStats { Label = "", Pass = (int)sPass.Points[i].YValues[0], Fail = (int)sFail.Points[i].YValues[0] });
-                    ApplyAutoScale(chart, data);
-                }
+                if (chart.ChartAreas.Count == 0) continue;
+                ApplyScale(chart, GetEffectiveScaleMode(chart), ReadChartData(chart));
             }
         }
 
-        public void ApplyFixedScaleForChart(string chartName, int fixedMax)
+        public void ApplyChartScaleForChart(string chartName)
         {
             var chart = chartName == "Yearly" ? _ctx.ChartDataYieldYearly
                       : chartName == "Monthly" ? _ctx.ChartDataYieldMonthly
                       : _ctx.ChartDataYieldDaily;
-            ApplyFixedScale(chart, fixedMax);
+            ApplyScale(chart, GetEffectiveScaleMode(chart), ReadChartData(chart));
         }
 
         private void RefillChartComboBox(ComboBox cb, List<int> values, int preferred = -1)
