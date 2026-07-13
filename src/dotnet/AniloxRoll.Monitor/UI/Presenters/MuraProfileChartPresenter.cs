@@ -128,7 +128,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             var grabCfg = InspectionConfigRepository.LoadForGrabId(
                 statsRoot, info.GrabId, info.Earliest, info.Latest);
-            var grouped = InspectionStatisticsService.LoadImagePathsForGrabId(
+            var grouped = InspectionImagePathRepository.LoadForGrabId(
                 statsRoot, info.GrabId, info.Earliest, info.Latest);
 
             int camCount = _ctx.CameraCount;

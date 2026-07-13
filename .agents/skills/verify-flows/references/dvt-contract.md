@@ -695,7 +695,7 @@ T1/Tn: RV loadGrab begin {grabId} → RV loadGrab paths … → RV lodRebind mer
 **code-flow（序號對應影像／CFG 查詢）**
 ```
 LoadGrabStitchedViewGuardRowRangeAsync@ReviewStitchCoordinator.cs
- ├ LoadImagePathsForGrabId@InspectionStatisticsService.cs
+ ├ LoadForGrabId@InspectionImagePathRepository.cs
  │  └ InspectionCsvReader.OpenShared＋TryParseRecord＋TryExtractCameraId（影像依 cam 分組）
  └ LoadForGrabId@InspectionConfigRepository.cs
     └ InspectionCsvReader.OpenShared＋TryParseRecord（取 grab 上方最近 #CFG）

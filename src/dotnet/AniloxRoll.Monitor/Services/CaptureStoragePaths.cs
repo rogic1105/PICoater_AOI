@@ -5,7 +5,7 @@ namespace AniloxRoll.Monitor.Core.Services
 {
     /// <summary>
     /// 擷取資料的日期階層儲存路徑單一真相。寫端（InspectionLogService）與讀端
-    /// （InspectionStatisticsService）共用 —— 改目錄結構只改這裡。
+    /// （統計與資料 repositories）共用 —— 改目錄結構只改這裡。
     ///
     /// 結構：
     ///   {root}\{yyyy}\{yyyyMM}\{yyyyMMdd}.csv   ← 每日檢測 CSV（檔，位於 yyyyMM 資料夾）

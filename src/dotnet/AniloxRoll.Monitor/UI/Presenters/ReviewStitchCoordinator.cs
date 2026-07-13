@@ -147,7 +147,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             {
                 await Task.Run(() =>
                 {
-                    var grouped = InspectionStatisticsService.LoadImagePathsForGrabId(root, grabId, hintFrom, hintTo);
+                    var grouped = InspectionImagePathRepository.LoadForGrabId(root, grabId, hintFrom, hintTo);
                     cfg = InspectionConfigRepository.LoadForGrabId(root, grabId, hintFrom, hintTo);
 
                     // 列曲線的跨相機對齊（同完整載入：tick 優先、檔名 fallback）——bin+csv 都輕，快路可負擔
@@ -254,7 +254,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 var loaded = await Task.Run(() =>
                 {
                     var swCsv = Stopwatch.StartNew();
-                    var grouped = InspectionStatisticsService.LoadImagePathsForGrabId(
+                    var grouped = InspectionImagePathRepository.LoadForGrabId(
                         root, grabId, hintFrom, hintTo);
                     grabCfg = InspectionConfigRepository.LoadForGrabId(
                         root, grabId, hintFrom, hintTo);

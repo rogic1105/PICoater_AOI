@@ -73,7 +73,7 @@ description: Modify the Data tab, inspection CSV schema, statistics, report list
 ### chartDataColumn（Mura 空間分布圖）
 - **永遠**顯示「最新一筆」單 grab 的 stitch 視圖（不再多 grab 平均；多 grab 平均會稀釋峰值）
 - 觸發點：`RefreshStats` → `UpdateMuraProfileChart(grabIds)` → 取 `grabIds[0]`（descending order = 最新）→ `UpdateMuraProfileForSingleGrab(info)`
-- 資料來源：`InspectionConfigRepository.LoadForGrabId`（取該 grab 的 #CFG OPS/Pos）+ `InspectionStatisticsService.LoadImagePathsForGrabId` + `CurveMergeHelper.MergeCurves`（合該 grab 內所有 capture）→ 與 `ReviewStitchCoordinator.UpdateStitchedOverviewChart` 同源 → `chartDataColumn` 與 `chartReviewColumn` 對齊
+- 資料來源：`InspectionConfigRepository.LoadForGrabId`（取該 grab 的 #CFG OPS/Pos）+ `InspectionImagePathRepository.LoadForGrabId` + `CurveMergeHelper.MergeCurves`（合該 grab 內所有 capture）→ 與 `ReviewStitchCoordinator.UpdateStitchedOverviewChart` 同源 → `chartDataColumn` 與 `chartReviewColumn` 對齊
 - 不依賴 camReviewMain — Data tab 操作即時顯示對齊圖；Review tab 載入後 `SyncMuraProfileFromReview` 覆寫為同源資料，無視覺差
 
 ### CSV 讀寫並發保護

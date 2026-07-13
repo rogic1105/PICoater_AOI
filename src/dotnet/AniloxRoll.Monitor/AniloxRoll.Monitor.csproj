@@ -131,6 +131,7 @@
     <Compile Include="Services\InspectionStatisticsService.cs" />
     <Compile Include="Services\InspectionCsvReader.cs" />
     <Compile Include="Services\InspectionConfigRepository.cs" />
+    <Compile Include="Services\InspectionImagePathRepository.cs" />
     <Compile Include="Services\HessianRescaleHelper.cs" />
     <Compile Include="ImageProcessing\BatchInspectionService.cs" />
     <Compile Include="ImageProcessing\InspectionEngine.cs" />

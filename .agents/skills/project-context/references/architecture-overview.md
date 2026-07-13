@@ -38,7 +38,7 @@ Results and events travel upward; dependencies and commands travel downward.
 | **Adapter / Binder** | One control group's wiring, guards, formatting, busy/selection visuals | Control event adapters; display gestures are owned by SDK controls | `DateTimeNavigator`, `BusyUiBinder` | `DataDateGrabIdNavigator`, `GrabDetailListBinder`, and chart selection adapters |
 | **Coordinator / Presenter** | One feature workflow, async token, debounce/latest-only, state/service composition | `LiveCameraManager` acquisition facade; `LiveDisplayCoordinator`; `GlobalMergeCoordinator` | `ReviewStitchCoordinator`, `ReviewFolderCoordinator`, `InspectionSettingsCoordinator` | `DataStatisticsPresenter`, `YieldPeriodChartPresenter`, `MuraProfileChartPresenter` |
 | **State** | One truth per setting/session/runtime fact; no IO or rendering | `SettingsHub` plus explicit live coordinator state | `SettingsHub`, `ReviewRuntimeState` | `SettingsHub` plus presenter-local navigation/chart state |
-| **Service / Repository** | Product rules, inspection, statistics, persistence, hardware FSM; no WinForms | `AniloxCamera`, `CameraFrameSaver`, `InspectionEngine`, `InspectionLogService` | `ImageRepository`, `FrameTickIndex`, `ImageCacheService`, `InspectionConfigRepository`, batch/curve loaders | `InspectionCsvReader`, `InspectionStatisticsService`, `InspectionConfigRepository`, and bin query paths |
+| **Service / Repository** | Product rules, inspection, statistics, persistence, hardware FSM; no WinForms | `AniloxCamera`, `CameraFrameSaver`, `InspectionEngine`, `InspectionLogService` | `ImageRepository`, `FrameTickIndex`, `ImageCacheService`, `InspectionConfigRepository`, `InspectionImagePathRepository`, batch/curve loaders | `InspectionCsvReader`, `InspectionStatisticsService`, `InspectionConfigRepository`, `InspectionImagePathRepository`, and bin query paths |
 | **SDK / Bridge** | Reusable mechanism and protocol/transport | `MilGrabber.Core`, `TanukiCv.Core`, `TanukiCv.Controls`, hardware bridges | `TanukiCv.Controls.ImageDisplayView`, `TanukiCv.Core` | Shared chart helpers and reusable parsers only |
 | **Native / External** | ABI, vendor runtime, hardware, filesystem | `tanuki_pipeline_api`, MIL, cameras, PLC, light, storage PC | Pipeline/native image decoding and capture files | CSV and curve bin files |
 
@@ -97,7 +97,7 @@ Normative SSoT and transition rules are defined only in the app `AGENTS.md`.
 | Area | Current status | Refactor direction |
 |---|---|---|
 | `FormInteractionHelper` | Removed; responsibilities split into binder/coordinators/service/state | Do not recreate a Form-wide helper or service locator |
-| `InspectionStatisticsService` | Transitional report god object; CSV parsing extracted to `InspectionCsvReader`, CFG queries to `InspectionConfigRepository` | Continue splitting statistics, range-curve, and image-path repositories behind the presenter |
+| `InspectionStatisticsService` | Transitional report god object; CSV parsing, CFG queries, and image-path queries have dedicated owners | Continue splitting statistics and range-curve repositories behind the presenter |
 | `ReviewStitchCoordinator` | Valid workflow owner but broad | Audit lifecycle/alignment/display responsibilities before deciding whether to split |
 | `LiveCameraManager` | Acquisition facade after display extraction | Keep display state in `LiveDisplayCoordinator`; only split further from evidence |
 | `OnSettingChanged` | Transitional central setting router | Move new side effects to feature owners; reduce existing cases incrementally |
