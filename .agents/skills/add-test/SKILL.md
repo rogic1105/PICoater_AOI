@@ -11,6 +11,8 @@ description: Add or reorganize automated tests in the PICoater AOI repository. U
 
 寫任何新測試（單元 / 整合 / 壓力）前，先決定該歸哪一層。
 
+長時間 load、soak 或失效注入另讀 [`references/stress-and-soak.md`](references/stress-and-soak.md)。
+
 ## 三層測試 csproj
 
 | 類型 | 位置 | 何時寫 |

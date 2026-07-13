@@ -22,7 +22,7 @@ MIL 取像/顯示資源已抽到 **`sdk/MIL/MilGrabber.Core/MilCamera.cs`**（�
 ## 關鍵檔案
 
 → 見 repo 根 `AGENTS.md` §關鍵檔案速查（subset：`Acquisition/*` + `UI/Managers/LiveCameraManager` + `Services/IoGrabController` + `Services/IoState` + `UI/Presenters/LiveTelemetryPresenter` + `Settings/Stores/AcquisitionSettingsStore`）。
-→ MIL .NET API 完整參考 `docs/dev/MIL_API_Reference.md`。
+→ MIL .NET API 完整參考 [`references/mil-api-reference.md`](references/mil-api-reference.md)。
 → IO FSM 視覺化 `docs/user-manual/io_diagrams.html`。
 
 ## MIL 初始化順序（不可打亂）

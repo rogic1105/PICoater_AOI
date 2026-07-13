@@ -83,9 +83,11 @@ UI 通用思想 =「**長什麼樣 / 做什麼 / 真相是什麼** 三件事分�
 
 ### 分層依賴與責任邊界（監控／回顧／報表重構的統管）
 
-本節是 app 分層與 ownership 的**唯一規範來源**。`$verify-flows` 的 DVT 契約管「行為有沒有變」，本節管
-「行為應由哪一層擁有」；skill 只寫操作 SOP，不得另抄一份架構。契約是當下設計意圖而非真理：
-要改邊界時先有意識更新本節與理由，再改 code；與 code 衝突時先考古，不直接信任任一邊。
+本節只負責 app 分層的**規範與禁止事項**。現行 feature owner 與重構壓力點的唯一清單在
+[`architecture-overview.md`](../../../.agents/skills/project-context/references/architecture-overview.md)；檔案位置由
+`repository-reference.md` 管，行為由 `$verify-flows` 管，不得在本檔重抄 current owner 表。
+規範是當下設計意圖而非真理：要改邊界時先有意識更新本節與理由，再改 code；與 code 衝突時先考古，
+不直接信任任一邊。
 
 ```
 View/Form ─→ ControlAdapter/Binder ─→ Feature Coordinator/Presenter
@@ -107,15 +109,6 @@ View/Form ─→ ControlAdapter/Binder ─→ Feature Coordinator/Presenter
 
 `Helper` 不是第七層：只有 `static`、純函式、無 Form/control/service 欄位才可叫 Helper；否則按責任歸入
 Adapter、Coordinator、Service 或 Repository。
-
-### 三大功能 ownership map（2026-07-13 現況與目標）
-
-| Feature | View intent / render | 協調 owner | Service / Repository owner | 重構邊界 |
-|---|---|---|---|---|
-| **監控** | `AniloxRollForm.Live.cs`、`Background.cs` | `LiveCameraManager`＝相機/grab 對外 facade；`LiveDisplayCoordinator`＝主畫面/縮圖/瀑布/背景預覽顯示狀態 | `AniloxCamera`、`CameraFrameSaver`、`InspectionEngine`、`InspectionLogService` | 顯示狀態不得回流 `LiveCameraManager`；先稽核 acquisition facade 剩餘責任，再決定是否續拆，禁止只因檔案大就拆 |
-| **回顧** | `AniloxRollForm.Review.cs` | `ReviewStitchCoordinator`＝單片/時段載入生命週期與 latest-only；`DateTimeNavigator`＝日期時間控制項 adapter | `ImageRepository`、`FrameTickIndex`、曲線/影像載入服務 | `FormInteractionHelper` 不得再擴張；資料夾、busy UI、cache、設定套用各歸獨立 owner。`ReviewStitchCoordinator` 先盤責任再判是否拆 |
-| **報表** | `AniloxRollForm.Data.cs` | `DataStatisticsPresenter`＝報表 feature 門面；`DataDateGrabIdNavigator`＝序號/期間 adapter；`YieldPeriodChartPresenter`、`MuraProfileChartPresenter`＝各自圖表 | `InspectionStatisticsService`（現為過渡 god：CSV parse/query、統計、curve bin、CFG） | 先拆 service 的資料責任；Presenter 只保留協調，明細虛擬 List 可獨立 Presenter。圖表暫時態留各圖 Presenter，不回寫 setting |
-| **跨功能設定** | PropertyGrid / Form setting intent | 各 feature 的 setting handler/coordinator | `SettingsHub`、settings store | `OnSettingChanged` 只做路由過渡；副作用逐步下放 feature owner，不新增中央 case 堆積 |
 
 ### God object 判準與拆分驗收
 
@@ -139,18 +132,7 @@ Adapter、Coordinator、Service 或 Repository。
 - bootstrap 例外 OK，但加註解
 
 ### 反模式
-- ❌ **god object**：一個類同時抓 View、IO、state 與多個 feature（現存重點：`FormInteractionHelper`、`InspectionStatisticsService`、`OnSettingChanged` 路由堆積）→ 按 ownership 拆，不按行數拆
+- ❌ **god object**：一個類同時抓 View、IO、state 與多個 feature → 按 ownership 拆，不按行數拆
 - ❌ **Context 變 service-locator**：`*Context` DTO 只能當 constructor 參數傳依賴，不能變「什麼都拿得到」的萬能袋
 - ❌ 機制留在 app（純通用元件沒進 sdk）
 - ❌ 協調層後綴動物園（Presenter/Manager/Coordinator/Navigator 無判準混用）
-
-### 已知重構目標（按上述判準）
-- `FormInteractionHelper` god-facade → `ReviewFolderCoordinator`（folder/session/repository+navigator）+
-  `BusyUiBinder`（cursor/buttons）+ `ImageCacheService`（bitmap 生命週期）+
-  `InspectionSettingsCoordinator`（pipeline/chart setting 副作用）；review config/calibration state 回各 review owner。
-- `InspectionStatisticsService` 過渡 god → CSV parser/repository、統計 query、range curve repository、CFG repository；
-  相容格式判讀留 repository，不散到 Presenter。
-- `DataStatisticsPresenter` → 保留報表流程門面；明細 ListView virtualization/selection 抽獨立 Presenter，導航與圖表已有 owner 不再搬回。
-- `ReviewStitchCoordinator` → 先做責任/caller 盤點；只有載入生命週期、幀對齊、顯示協調能形成獨立 owner 時才拆。
-- `LiveCameraManager` 的 display 拆分已完成；目前作 acquisition facade。後續只依責任稽核結果續拆，顯示不得回流。
-- `OnSettingChanged` 中央路由逐 feature 下放；不要求一次砍完，但新增 setting 優先由 feature owner 訂閱。

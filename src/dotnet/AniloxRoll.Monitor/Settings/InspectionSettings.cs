@@ -217,7 +217,7 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category(CategoryIo)][DisplayName("Mura檢出")][PropertyOrder(5)][TypeConverter(typeof(BoolYesNoConverter))]  public bool   MuraDetectPaused { get; set; } = false;
 
         // ===== 8. 開發者（PG 隱藏，編輯 inspection-settings.json 啟用） =====
-        // FSM Action Logger 開關。對應 docs/dev/fsm/ + Services/UiActionLogger.cs。
+        // 原始 UI action/state JSONL 診斷開關；DVT 契約與判讀在 $verify-flows。
         // 預設 false（production 零 overhead）；改 true 後重啟程式生效，log 寫 D:\Anilox\Logs\ui-actions-YYYYMMDD.jsonl。
         [Browsable(false)] public bool DebugUiActionLog { get; set; } = false;
     }

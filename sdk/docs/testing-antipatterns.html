@@ -6,9 +6,9 @@
 <link rel="stylesheet" href="_shared.css">
 </head>
 <body>
-<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-playbook.html">Playbook</a></nav>
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-e2e.html">E2E</a></nav>
 
-<h1>Testing Antipatterns<br><span class="small">測試金字塔 + FSM 常見反模式</span></h1>
+<h1>Testing Antipatterns<br><span class="small">測試金字塔 + DVT 常見反模式</span></h1>
 
 <h2>1. 在 Unit Test 裡測 UI 顯示</h2>
 
@@ -24,18 +24,18 @@ WinForms 控制項要 message pump，Unit 沒 <code>Application.Run</code>。看
 真硬體 = 跑 CI 跑不動，現場才能驗證。
 </div>
 
-<h2>3. SetBatch 後忘記補 FSM entry</h2>
+<h2>3. 把 raw action log 當成行為契約</h2>
 
 <div class="bad">
-見 <a href="testing-fsm-impl.html">testing-fsm-impl.html §4</a>。SetBatch 不 raise event，logger 看不到，下次 Set 時 stateBefore 是 stale，viewer 誤標 ❌。<br>
-<b>修法：</b><code>OnSettingChanged</code> 開頭加 stale state 偵測（ComputeStateBefore reverse trick），補 (batch) entry。
+Raw logger 只證明某個 source/setting transition 被記到，不知道 async token、begin/done、顯示快照或禁止行。<br>
+<b>修法：</b>以產品 DVT code-flow + log-flow 為契約；raw log 只當輔助證據。
 </div>
 
-<h2>4. transition-table 跟 ComputeStateId() 不同步</h2>
+<h2>4. checker 跟 code-flow 不同步</h2>
 
 <div class="bad">
-新增第 4 個 setting 但忘記擴充 state-catalog → 所有舊 row 的 from/to id 都對不上。
-<b>改 ComputeStateId() 時必須同步改 catalog + table</b>。
+流程有意改版但只改 code，checker 仍驗舊順序，會產生假紅；反過來只放寬 checker 會造成假綠。
+<b>行為改版時 code、DVT 契約與 checker 必須同一批更新。</b>
 </div>
 
 <h2>5. UI 觸發 inline 跑多個 apply</h2>
@@ -73,6 +73,6 @@ Test 內呼 <code>await _ctrl.StartAsync(...)</code> 後背景 loop 跑，再手
 而不是：「按下按鈕跑哪些函式？」
 </div>
 
-<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-playbook.html">Playbook</a></nav>
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-e2e.html">E2E</a></nav>
 </body>
 </html>

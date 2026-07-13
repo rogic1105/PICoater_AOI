@@ -56,7 +56,7 @@ using IoBridge.Core;   // ❌ 一個 sdk/ 元件引用另一個</code></pre>
 <div class="good">
 <p>三種解法（按合適度）：</p>
 <ol>
-  <li><b>抽共用 sdk/ 元件</b>：把共用邏輯抽到 <code>sdk/Common/Common.Core/</code>，兩邊都引用</li>
+  <li><b>抽共用 sdk/ 元件</b>：放進真正擁有該抽象的既有共享元件（例如 <code>sdk/TanukiCv/</code>），兩邊都引用</li>
   <li><b>傳基本型別</b>：不要傳 IoBridge 物件，傳基本參數（int / string / enum）</li>
   <li><b>應用層做橋接</b>：應用層 src/ 同時引用兩個 sdk/，自己接</li>
 </ol>
@@ -68,7 +68,7 @@ using IoBridge.Core;   // ❌ 一個 sdk/ 元件引用另一個</code></pre>
 
 <div class="bad">
 <pre><code>docs/dev/LTS_3DPA24/manual.pdf       ← 應該放 sdk/Bridges/LightBridge/vendor/manual/
-docs/dev/Matrox-Grabber/sample.cpp   ← 應該放 sdk/Grabber/vendor/matrox-grabber/samples/</code></pre>
+docs/dev/Matrox-Grabber/sample.cpp   ← 應該放 sdk/MIL/docs/matrox-grabber/</code></pre>
 </div>
 
 <p><b>為什麼：</b>未來 split <code>sdk/Bridges/LightBridge/</code> 時廠商規格書孤兒留在原 repo。

@@ -61,8 +61,6 @@ src (C# UI)  選 pipeline 名 + 給 json 參數     （⚪ 產品 UI；src 不�
 4. **驗證**：tanuki_core_bench 加一個 case（效能相關才加）；nvcc 注意傳統巢狀 namespace。
 5. **文件**：對應 `core_<分類>.hpp` 的宣告加一行中文註解；本檔元件地圖若新增分類才更新。
 
-歷史與細節：`docs/dev/migration-native-to-sdk-pipeline.md`（已完成的遷移紀錄）。
-
 ## 元件地圖
 
 ```

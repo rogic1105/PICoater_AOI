@@ -32,7 +32,7 @@ namespace MilGrabber.Core
         /// 測「能否避開 realloc→re-arm 累積（=改高度 stall 的根因路徑）」。預設 **false**＝現行安全 realloc 行為。
         /// ⚠ 未上機驗證：Matrox doc「line-scan 幀填滿整個 destination buffer 才完成」暗示 max-buffer 可能讓
         /// **幀變成 max 高度（壞）**。上機翻 true 測一次：幀高度正確＝max-buffer 可行；幀變 max 高度＝doc 疑慮
-        /// 成立，改走 auto-allocate（MdigProcess bufarray=M_NULL）。詳見 docs/dev/grabheight-max-buffer-stage2.md。</summary>
+        /// 成立，改走 auto-allocate（MdigProcess bufarray=M_NULL）。詳見 sdk/MIL/docs/grab-height-param-stall.md。</summary>
         /// <summary>max-buffer 模式。**預設 false（已驗證不採用）**：grab 中拉高度真上限 ~12062（per-camera；板載 4 path
         /// 各自獨立到 ~12062，不是同板總和），且 7 台都配 max 高度 buffer 會撐爆 host 非分頁池。真正的解＝上層把高度一律
         /// cap 到 MaxGrabHeightPx（=12000，AcquisitionDefaults）。保留 flag 與 scaffold 供紀錄，預設走 buffer==source realloc。</summary>

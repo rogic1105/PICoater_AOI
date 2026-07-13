@@ -183,16 +183,15 @@ pip install numpy opencv-python
 
 ## 7. 開發文件
 
-詳見 `AGENTS.md`（Codex 專案規則 + 文件路由）和 `docs/` 目錄：
+Agent 工程文件統一收在 owning skill；`docs/` 只留操作員與 vendor artifact：
 
 | 文件 | 內容 |
 |------|------|
-| `docs/architecture-ui.md` | UI 架構、控制項觸發關係 |
-| `docs/architecture-image-pipeline.md` | GPU pipeline、存檔格式 |
-| `docs/architecture-acquisition.md` | MIL 取像模組、IO FSM（IoState enum、IO 快照、Watchdog） |
+| `.agents/skills/project-context/` | Repo 架構、檔案 ownership、控制項與設定地圖 |
+| `.agents/skills/modify-acquisition/` | MIL 取像、相機、CLProtocol 與 MIL API 參考 |
+| `.agents/skills/verify-flows/` | UI/硬體行為 DVT code-flow + log-flow 契約 |
+| `.agents/skills/add-test/` | Unit / Integration / Stress / Soak 測試方法 |
 | `docs/user-manual/io_diagrams.html` | IO 狀態機視覺化（State Machine / SFC / Ladder / Timing） |
-| `docs/dev/MIL_API_Reference.md` | MIL API 參考 |
-| `.agents/skills/*/SKILL.md` | Codex 工作流程（依 description 自動觸發，也可用 `$skill-name` 指定）|
 | `AGENTS.md` | Codex 專案規則 + 架構原則 + 控制項速查 + Skills 路由 |
 
 ## 8. 開發規範 (Development Guide)

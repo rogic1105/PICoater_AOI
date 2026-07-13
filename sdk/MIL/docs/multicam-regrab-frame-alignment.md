@@ -109,7 +109,7 @@ System.Threading.Tasks.Parallel.ForEach(_cameras, cam => cam.SetUserGrabIntent(f
 
 ## 7. Source（來源標註）
 
-- **MIL API 語意**：Matrox MIL `MdigProcess`（`M_START`/`M_STOP`/`M_WAIT`）、`MdigControl(M_GRAB_ABORT)` 官方行為。專案內對照：[`docs/dev/MIL_API_Reference.md`](../../../docs/dev/MIL_API_Reference.md)（MdigProcess 連續抓圖、釋放逆序、SetGrabHeight buffer 重配流程）。
+- **MIL API 語意**：Matrox MIL `MdigProcess`（`M_START`/`M_STOP`/`M_WAIT`）、`MdigControl(M_GRAB_ABORT)` 官方行為。專案內對照：[MIL API reference](../../../.agents/skills/modify-acquisition/references/mil-api-reference.md)（MdigProcess 連續抓圖、釋放逆序、SetGrabHeight buffer 重配流程）。
 - **已驗證的乾淨 drain pattern 出處**：[`MilCamera.Params.cs`](../MilGrabber.Core/MilCamera.Params.cs) `SetGrabHeight`（改尺寸前 `M_STOP+M_WAIT` + `M_GRAB_ABORT` drain，註解「M_STOP 只取消佇列、M_GRAB_ABORT 才立即中止 in-flight+佇列」）。相關坑文件：[`grab-height-param-stall.md`](grab-height-param-stall.md)。
 - **frame-start tick 量測機制**：[`MilCamera.PhaseLog.cs`](../MilGrabber.Core/MilCamera.PhaseLog.cs)（Data Latch `M_GRAB_FRAME_START` + `M_TIME_STAMP`；參考 Matrox BoardSpecific/DataLatch 範例）。
 - **實證資料**：現場 trace log `{AniloxRoot}\Logs\trace-*.log` 的 `[Waterfall]` 行（每條 band 記各台 frame-start tick；fresh grab 兩台差 φ≈6 萬、re-grab cam2 晚 1 period≈1.25 億、停止時 cam2 多出 tick 在 cam1 之後）。

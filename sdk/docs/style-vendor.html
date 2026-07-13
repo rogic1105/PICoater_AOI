@@ -24,18 +24,15 @@
 
 <h2>5.2 多廠商怎麼分</h2>
 
-<p>當一個 sdk/ 元件對應多個廠商 SDK（如 <code>sdk/Grabber/</code> 同時包 Matrox Grabber 跟 Matrox CLProtocol），用子子目錄區分：</p>
+<p>當一個 sdk/ 元件對應多個廠商 SDK（如 <code>sdk/MIL/</code> 同時包 Matrox Grabber 跟 Matrox CLProtocol），用子目錄區分：</p>
 
-<pre><code>sdk/Grabber/vendor/
+<pre><code>sdk/MIL/
 ├── README.md                   <span class="com">總說明，列出兩個子 SDK</span>
-├── matrox-grabber/
-│   ├── README.md               <span class="com">這個子 SDK 的細節</span>
-│   ├── manual/
-│   └── samples/
-└── matrox-clprotocol/
-    ├── README.md
-    ├── manual/
-    └── samples/</code></pre>
+├── docs/
+│   ├── matrox-grabber/         <span class="com">Grabber 原廠資料</span>
+│   └── matrox-clprotocol/      <span class="com">CLProtocol 原廠資料</span>
+├── MilGrabber.Core/
+└── samples/</code></pre>
 
 <h2>5.3 vendor/ 內絕對不改</h2>
 

@@ -101,7 +101,7 @@ using IoBridge.Core;   <span class="com">// ❌ 一個 sdk/ 元件引用另一�
 <div class="good">
 <b>解法（按合適度）：</b>
 <ol>
-  <li><b>抽共用</b>：把共用邏輯抽到 <code>sdk/Common/Common.Core/</code>，兩邊都引用底層</li>
+  <li><b>抽共用</b>：放進真正擁有該抽象的既有共享元件（例如 <code>sdk/TanukiCv/</code>），兩邊都引用底層</li>
   <li><b>傳基本型別</b>：不傳 IoBridge 物件，傳 int / string / enum</li>
   <li><b>應用層橋接</b>：src/ 同時引用兩個 sdk/，自己接（最常用）</li>
 </ol>

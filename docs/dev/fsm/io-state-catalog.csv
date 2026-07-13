@@ -1,8 +1,0 @@
-state_id,IoState,note
-1,Disconnected,未連線（背景每 5s 重連中）
-2,Idle,待機（DO_PC_ALIVE=1，等 DI_INSPECT_START 上升緣）
-3,Running,取像中（DO_PC_INSPECT=1；DO_MURA 視瑕疵而定）
-4,Stopping,停止中（過渡：清 DO_MURA / DO_PC_INSPECT 後回 Idle）
-5,Faulted,設備離線（DI_NAKAN_ALIVE=0，保持 DO_PC_ALIVE 等恢復）
-6,CommLost,通訊中斷（TCP 例外，連線已斷、背景重連中）
-7,Closed,已關閉（StopAsync 呼叫，清所有 DO + 釋放連線）

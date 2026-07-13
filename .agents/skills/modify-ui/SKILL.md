@@ -9,18 +9,14 @@ description: Modify PICoater AOI WinForms UI behavior or architecture. Use for F
 
 ## 使用時機
 
-修改 AniloxRollForm、FormInteractionHelper、CanvasInteractionHelper、ReviewStitchCoordinator、EventGuard 或任何 UI 控制項行為時。
+修改 AniloxRollForm、ReviewFolderCoordinator、BusyUiBinder、ReviewStitchCoordinator、EventGuard 或任何 UI 控制項行為時。
 
 ## 關鍵檔案
 
-→ 見 repo 根 `AGENTS.md` §關鍵檔案速查（subset：`UI/Form/*` + `UI/Widgets/*` + `UI/Presenters/*`）。
+→ 現行 feature owner 只查 `project-context/references/architecture-overview.md`；檔案位置只查
+`project-context/references/repository-reference.md`，本 skill 不另抄 owner 表。
 → UI 流程行為與控制項互動以 code 與本 skill 為準。
 
-Live 監控顯示邊界：
-- `LiveCameraManager` 保留相機/MIL/grab/參數協調與對外 API forwarder。
-- `GlobalMergeCoordinator` 擁有全域合圖 MIL display 生命週期。
-- `LiveDisplayCoordinator` 擁有 SmartCanvas/Waterfall/縮圖/狀態 label/選中相機/LOD 顯示狀態。
-- 改 live 顯示行為時優先落在 `LiveDisplayCoordinator`；不要把 SmartCanvas/Waterfall 狀態放回 `LiveCameraManager`。
 - GPU LOD pinned buffer 生命週期走 `TanukiCv.Core.GpuGrayResizeProvider`；app 注入 `NativeMethods`，sample/tool 可用 `CreateTanukiCv()`。
 
 ## 注意事項

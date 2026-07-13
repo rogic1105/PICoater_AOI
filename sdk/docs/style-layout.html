@@ -13,41 +13,23 @@
 <h2>4.1 完整結構</h2>
 
 <pre><code>PICoater_AOI/
+├── .agents/                      <span class="com">Codex 規則、skills 與工程 references</span>
 ├── src/                          <span class="com">應用程式（產品交付）</span>
 │   ├── dotnet/AniloxRoll.Monitor/
 │   └── native/
 ├── sdk/                          <span class="com">我們寫的 library（可獨立 split）</span>
-│   ├── AOI/                  <span class="com">影像處理 SDK</span>
-│   ├── LightBridge/
-│   │   ├── LightBridge.Core/     <span class="com">code（純 .NET library）</span>
-│   │   ├── vendor/               <span class="com">★ 廠商東西（self-contained）</span>
-│   │   │   ├── README.md
-│   │   │   ├── manual/
-│   │   │   │   └── LTS_3DPA24_說明書.pdf
-│   │   │   └── samples/
-│   │   │       └── 光源控制 DEMO VC(3DPA)/
-│   │   └── README.md             <span class="com">元件總說明 + vendor ref</span>
-│   ├── IoBridge/IoBridge.Core/
-│   ├── StorageBridge/StorageBridge.Core/
-│   ├── Grabber/                  <span class="com">★ 殼目錄（範例 + vendor，未來收 code）</span>
-│   │   ├── vendor/
-│   │   │   ├── README.md
-│   │   │   ├── matrox-grabber/
-│   │   │   └── matrox-clprotocol/
-│   │   └── README.md
-│   ├── Common/                  <span class="com">跨元件共用（含 vendored third-party）</span>
-│   │   └── stb/                 <span class="com">stb_image.h 等 application-wide build-time lib</span>
+│   ├── Bridges/                  <span class="com">IO / Light / Storage bridge</span>
+│   ├── MIL/                      <span class="com">MIL 取像封裝、工具與廠商資料</span>
+│   ├── TanukiCv/                 <span class="com">影像處理與共用顯示元件</span>
 │   └── docs/                     <span class="com">跨元件通用文件（本目錄）</span>
 │       ├── index.html
 │       ├── style-*.html          <span class="com">repo coding style atoms</span>
 │       └── testing-*.html
 ├── tools/                        <span class="com">內部工具 exe / 腳本</span>
 ├── tests/                        <span class="com">純測試（Unit / Integration / Stress）</span>
-├── docs/                         <span class="com">應用文件（user-manual / dev 參考）</span>
-│   ├── config/                   <span class="com">設定 JSON 範例</span>
-│   ├── dev/                      <span class="com">應用層 dev 文件（MIL_API_Reference 等）</span>
-│   ├── user-manual/              <span class="com">操作員說明（ui-flow.html / hardware-specs）</span>
-│   └── sample/
+├── docs/                         <span class="com">操作員文件與原廠附件；工程知識不放這裡</span>
+│   ├── dev/                      <span class="com">原廠對照表等非 agent 工件</span>
+│   └── user-manual/              <span class="com">操作員流程與硬體規格</span>
 └── deploy/                       <span class="com">部署腳本（PowerShell + JSON）</span>
 </code></pre>
 
@@ -57,20 +39,21 @@
   <tr><th>目錄</th><th>放什麼</th><th>業界對照</th></tr>
   <tr><td><code>src/</code></td><td>應用程式（產品交付給客戶的主程式）</td><td>Nx apps/、.NET src/</td></tr>
   <tr><td><code>sdk/</code></td><td>我們寫的 library（無 GUI、無 exe，可獨立 split）</td><td>Nx packages/、.NET lib/</td></tr>
-  <tr><td><code>sdk/&lt;元件&gt;/third_party/</code></td><td>該元件 vendored 的 build-time lib（如 AOI 的 stb）</td><td>各元件 self-contained</td></tr>
+  <tr><td><code>sdk/&lt;元件&gt;/third_party/</code></td><td>該元件 vendored 的 build-time lib（如 TanukiCv 的 stb）</td><td>各元件 self-contained</td></tr>
   <tr><td><code>sdk/docs/</code></td><td>跨元件通用工程經驗（本目錄）</td><td>—（前端常見每元件自己 docs/）</td></tr>
   <tr><td><code>tools/</code></td><td>內部工具 exe / 廠區維護 / 測試用 / 腳本</td><td>tools/、bin/</td></tr>
   <tr><td><code>tests/</code></td><td>純測試（Unit / Integration / Stress 子目錄）</td><td>tests/、test/、spec/</td></tr>
-  <tr><td><code>docs/</code></td><td>應用文件（user-manual / 開發者參考）</td><td>docs/</td></tr>
+  <tr><td><code>.agents/skills/</code></td><td>Agent 工程規則、架構、API 與驗證契約</td><td>skills / internal handbook</td></tr>
+  <tr><td><code>docs/</code></td><td>操作員文件與原廠非 agent 附件</td><td>docs/</td></tr>
   <tr><td><code>deploy/</code></td><td>現場部署腳本</td><td>infra/、ops/、scripts/</td></tr>
 </table>
 
 <div class="info">
 <b>為什麼沒 top-level <code>third_party/</code>？</b>對齊 Lerna/Nx 派「廠商物品跟著使用者走」原則。
-stb 主要被 AOI 使用，vendored 進 <code>sdk/AOI/third_party/stb/</code> → AOI self-contained，整包 split 帶得走（不依賴外部共用層）。
+stb 主要被 TanukiCv 使用，vendored 進 <code>sdk/TanukiCv/third_party/stb/</code>，整包 split 帶得走（不依賴外部共用層）。
 </div>
 
-<h2>4.3 sdk/Common/ vs sdk/&lt;元件&gt;/vendor/ 的分界</h2>
+<h2>4.3 sdk/&lt;元件&gt;/third_party vs docs 的分界</h2>
 
 <p>這是最常見搞混的地方。判斷依據：「<b>有沒有對應的 sdk/ 元件</b>」+「<b>build-time 還是純參考</b>」。</p>
 
@@ -109,13 +92,13 @@ stb 主要被 AOI 使用，vendored 進 <code>sdk/AOI/third_party/stb/</code> �
     <td>現場操作員 + 客戶</td>
   </tr>
   <tr>
-    <td><code>docs/dev/</code></td>
-    <td>應用層 dev 文件（MIL_API_Reference、system-resources、code review 紀錄）</td>
-    <td>本專案 dev</td>
+    <td><code>.agents/skills/*/references/</code></td>
+    <td>Agent 需要的工程 reference（API、架構、DVT、資源與測試方法）</td>
+    <td>Codex / 本專案 dev</td>
   </tr>
   <tr>
     <td><code>sdk/docs/</code>（本目錄）</td>
-    <td>跨專案可複製的工程經驗（repo style、testing pyramid、FSM）</td>
+    <td>跨專案可複製的工程經驗（repo style、testing pyramid）</td>
     <td>本專案 + 未來複製到的同類專案</td>
   </tr>
   <tr>

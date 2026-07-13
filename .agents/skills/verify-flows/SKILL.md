@@ -23,3 +23,10 @@ Use the DVT contract to check both sides of every affected behavior:
 8. After build, DVT, and required on-machine smoke checks pass, commit the verified state immediately as a recoverable baseline.
 
 For coordinate or mirror changes, also use the `row-chart-coordinates` skill.
+
+## Optional raw UI action log
+
+`InspectionSettings.DebugUiActionLog=true` enables `UiActionLogger` and writes JSONL under
+`D:\Anilox\Logs\fsm\`. Treat it as raw source/setting transition evidence only. The retired
+state-catalog/viewer is not a contract; current expected behavior lives in the DVT reference and
+is checked from `trace-*.log`.

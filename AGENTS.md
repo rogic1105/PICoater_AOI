@@ -11,7 +11,7 @@ This file is the repository instruction SSoT. Nested `AGENTS.md` files add rules
 - `tools/`: repository-wide tools. Component-specific executable samples stay under that component's `samples/`.
 - `tests/`: automated unit, integration, and stress tests.
 - `algtest/`: algorithm prototypes and feasibility work, not automated product tests.
-- `docs/`: developer references and operator documentation.
+- `docs/`: operator/vendor artifacts that are not agent Markdown. Agent engineering references live under the owning skill.
 - `.agents/skills/`: repo-scoped Codex workflows. Use `$project-context` for detailed file, setting, control, and repository maps.
 
 Dependency direction is `src -> sdk`; SDK and Bridge projects must never reference
@@ -112,7 +112,7 @@ new test assembly needs internal app APIs.
 - Nested `AGENTS.md`: subtree architecture and ownership.
 - `.agents/skills/*/SKILL.md`: repeatable task workflow.
 - `$verify-flows` reference: behavior/DVT contracts.
-- `docs/dev/`: large engineering context and rationale.
+- `.agents/skills/*/references/`: detailed engineering context, API references, architecture, and rationale.
 - `docs/user-manual/`: operator-visible behavior.
 
 Do not duplicate full rules across these surfaces. When behavior changes, update the owning skill or

@@ -27,7 +27,7 @@ namespace AniloxRoll.Monitor.Core.Data
         ///   • 要更高只能改架構（Host 大 buffer + child-buffer 分段擷取，官方 Grabbing_large_images.htm），非本專案需求。
         ///
         /// 取 **12000**（= 實測動態 stall 邊界 ~12062 保守取整、留 ~60 餘裕）。**換相機（寬）或 grabber（path/板載）必須
-        /// 重新實測**（測法：grab 中高度從小往大拉，找剛好開始 stall 的值，再保守取整）。詳見 docs/dev/grabheight-max-buffer-stage2.md
+        /// 重新實測**（測法：grab 中高度從小往大拉，找剛好開始 stall 的值，再保守取整）。詳見 sdk/MIL/docs/grab-height-param-stall.md
         /// + AGENTS.md / $modify-acquisition skill。</summary>
         public const int    MaxGrabHeightPx = 12000;
 

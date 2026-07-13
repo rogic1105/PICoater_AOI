@@ -10,9 +10,9 @@ using AniloxRoll.Monitor.Settings.Services;
 namespace AniloxRoll.Monitor.Core.Services
 {
     /// <summary>
-    /// FSM Action Logger：記錄 UI 互動 → setting 變更 → state transition。
+    /// UI Action Logger：記錄 UI 互動 → setting 變更 → state transition 原始證據。
     /// Runtime flag 控制（PG 設定），Release build 內保留邏輯，預設 Off 零 overhead。
-    /// 對應 docs/dev/fsm/{state-catalog,transition-table}.csv 跟 viewer.html。
+    /// 預期行為由 $verify-flows DVT 契約判定，本 logger 不自帶 transition table。
     ///
     /// 用法：
     ///   click handler 開頭：UiActionLogger.SetSource("chartLiveColumn.Click");
@@ -23,25 +23,7 @@ namespace AniloxRoll.Monitor.Core.Services
         // ── 開關 + 路徑 ────────────────────────────────────────────────
         public static volatile bool Enabled;
 
-        // Log 路徑：自動偵測 dev (exe 在 repo bin/x64/Release) 或 prod。
-        // dev → 寫 docs/dev/fsm/logs/（跟 viewer.html 同層目錄樹，直接 fetch）
-        // prod → 寫 D:\Anilox\Logs\fsm\（跟其他 log 並列）
-        public static string LogFolder = DetectLogFolder();
-
-        private static string DetectLogFolder()
-        {
-            try
-            {
-                // 從 exe 位置往上找 3 層（bin/x64/Release → repo root）→ docs/dev/fsm/logs
-                var exeDir = AppDomain.CurrentDomain.BaseDirectory;
-                var repoRoot = Path.GetFullPath(Path.Combine(exeDir, "..", "..", ".."));
-                var devLogDir = Path.Combine(repoRoot, "docs", "dev", "fsm", "logs");
-                var viewerPath = Path.Combine(repoRoot, "docs", "dev", "fsm", "viewer.html");
-                if (File.Exists(viewerPath)) return devLogDir;  // dev：exe 在 repo 內
-            }
-            catch { }
-            return @"D:\Anilox\Logs\fsm";  // prod fallback
-        }
+        public static string LogFolder = @"D:\Anilox\Logs\fsm";
 
         // ── ThreadStatic / AsyncLocal source（跨 await 保留）─────────────
         private static readonly AsyncLocal<string> _currentSource = new AsyncLocal<string>();
@@ -123,8 +105,8 @@ namespace AniloxRoll.Monitor.Core.Services
             _queue.TryAdd(entry);
         }
 
-        // ── State id 計算（對齊 docs/dev/fsm/state-catalog.csv）────────────
-        // 規則：3 個 setting → 8 state，編碼 = bit0(hb=Global) + bit1(hc) + bit2(hd) + 1
+        // ── State id：保留既有 JSONL schema，供同版本 session 內前後狀態對照 ──
+        // 編碼 = bit0(hb=Global) + bit1(hc) + bit2(hd) + 1；不是跨版本契約。
         // 1=V/F/F, 2=V/T/F, 3=V/F/T, 4=V/T/T, 5=G/F/F, 6=G/T/F, 7=G/F/T, 8=G/T/T
         public static int ComputeStateId()
         {

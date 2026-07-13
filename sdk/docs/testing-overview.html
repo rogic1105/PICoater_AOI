@@ -7,7 +7,7 @@
 <style>
   .pyramid { display: flex; flex-direction: column; align-items: center; margin: 20px 0; gap: 4px; }
   .pyramid div { padding: 10px 24px; text-align: center; font-weight: 600; color: #fff; border-radius: 4px; }
-  .l-fsm   { background: #6366f1; width: 35%; }
+  .l-dvt   { background: #6366f1; width: 35%; }
   .l-e2e   { background: #ef4444; width: 50%; }
   .l-int   { background: #f59e0b; width: 70%; }
   .l-unit  { background: #10b981; width: 90%; }
@@ -16,18 +16,18 @@
 <body>
 <nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 下一篇：<a href="testing-unit.html">Unit Test</a></nav>
 
-<h1>Testing Overview<br><span class="small">為什麼需要四層測試 + FSM Action Log</span></h1>
+<h1>Testing Overview<br><span class="small">為什麼需要四層測試 + DVT log checker</span></h1>
 
 <h2>1. 金字塔</h2>
 
 <div class="pyramid">
-  <div class="l-fsm">FSM Action Log（UI transition 自動驗證）</div>
+  <div class="l-dvt">DVT log checker（執行期行為契約）</div>
   <div class="l-e2e">E2E Manual Checklist（人工點操作）</div>
   <div class="l-int">Integration（含檔案 IO / mock 硬體）</div>
   <div class="l-unit">Unit（純邏輯 / 無外部依賴）</div>
 </div>
 
-<p>傳統金字塔只有底下三層。<b>FSM Action Log 是新增層</b>——把「點按鈕 → setting 變更 → 哪些狀態應該轉到哪些狀態」變成可驗證的 transition table，補上 E2E 一直無法自動覆蓋的「人工點操作」邏輯。</p>
+<p>傳統金字塔只有底下三層。<b>DVT log checker 是新增層</b>——把「使用者 intent → async 流程 → 顯示/資料狀態」變成可驗證的 code-flow + log-flow 契約，補上 E2E 難以自動覆蓋的實機時序。</p>
 
 <h2>2. 對照表</h2>
 
@@ -50,8 +50,8 @@
     <td>UI 跨控制項聯動、跨倍率顯示、硬體串接</td><td>邊界值、回歸測試自動化</td>
   </tr>
   <tr>
-    <td><a href="testing-fsm-design.html">FSM Action Log</a></td><td>跑 E2E 同時產出</td><td>state 化 setting 組合 + transition table 對照</td>
-    <td>「點 X 應該到 Y」自動標 ✓/❌</td><td>連續行為、效能</td>
+    <td>DVT log checker</td><td>跑 E2E 後分析 trace</td><td>intent、順序、token、快照與禁止行</td>
+    <td>行為契約回歸與故障定位</td><td>純函式邊界值</td>
   </tr>
 </table>
 
@@ -67,9 +67,8 @@
 
 <table>
   <tr><th>Atom</th><th>關係</th></tr>
-  <tr><td><a href="testing-playbook.html">testing-playbook.html</a></td><td>新專案落地 11 步驟（讀這篇後直接照做）</td></tr>
   <tr><td><a href="testing-antipatterns.html">testing-antipatterns.html</a></td><td>常見錯誤分類，review 時引用</td></tr>
-  <tr><td><a href="testing-fsm-design.html">testing-fsm-design / impl</a></td><td>FSM Action Log 兩篇細節</td></tr>
+  <tr><td>產品 owning skill 的 DVT reference</td><td>行為契約與 log checker 規則</td></tr>
 </table>
 
 <nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 下一篇：<a href="testing-unit.html">Unit Test</a></nav>

@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="_shared.css">
 </head>
 <body>
-<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-stress.html">Stress</a> ｜ 下一篇：<a href="testing-fsm-design.html">FSM Design</a></nav>
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-stress.html">Stress</a> ｜ 下一篇：<a href="testing-antipatterns.html">Antipatterns</a></nav>
 
 <h1>E2E Manual Checklist<br><span class="small">人工點操作 — 真硬體 + 真 UI</span></h1>
 
@@ -15,34 +15,13 @@
 <p>WinForms 的 UI 互動很難寫穩定的自動化測試（控制項 hierarchy 變動、async paint timing、跨倍率縮放）。
 真硬體（PLC / 光源 / 相機）也沒辦法在 CI 環境模擬。</p>
 
-<p>先用「人工 checklist + 結果勾選」確保可重現的驗證 protocol。E2E 跑同時打開 <a href="testing-fsm-design.html">FSM Action Log</a> 自動驗證 UI transition。</p>
+<p>先用「人工 checklist + 結果勾選」確保可重現的驗證 protocol。E2E 同時保留產品 trace，跑 DVT checker 驗證流程與狀態。</p>
 
-<h2>2. 用 HTML + localStorage 寫 checklist</h2>
+<h2>2. 驗證紀錄放在哪裡</h2>
 
-<p>放 <code>docs/user-manual/test-checklist.html</code>，每個 case 一行 <code>&lt;tr&gt;</code> + 三個 button（Pass / Fail / Skip），localStorage 持久化勾選結果跨 reload。範例：</p>
-
-<pre><code>&lt;tr data-case="C01"&gt;
-  &lt;td&gt;C01&lt;/td&gt;
-  &lt;td&gt;主畫面 fit：開檔→雙擊→fit→拖曳→雙擊恢復&lt;/td&gt;
-  &lt;td&gt;&lt;button onclick="mark('C01','pass')"&gt;✓&lt;/button&gt;
-      &lt;button onclick="mark('C01','fail')"&gt;✗&lt;/button&gt;
-      &lt;button onclick="mark('C01','skip')"&gt;–&lt;/button&gt;&lt;/td&gt;
-  &lt;td class="status" id="st-C01"&gt;&lt;/td&gt;
-&lt;/tr&gt;</code></pre>
-
-<pre><code>&lt;script&gt;
-function mark(id, status) {
-  localStorage.setItem('chk-' + id, status);
-  document.getElementById('st-' + id).textContent =
-    status === 'pass' ? '✓' : status === 'fail' ? '✗' : '–';
-}
-window.onload = () =&gt; document.querySelectorAll('tr[data-case]').forEach(tr =&gt; {
-  const id = tr.dataset.case;
-  const s = localStorage.getItem('chk-' + id);
-  if (s) document.getElementById('st-' + id).textContent =
-    s === 'pass' ? '✓' : s === 'fail' ? '✗' : '–';
-});
-&lt;/script&gt;</code></pre>
+<p>人工操作步驟與預期行為由對應的 <code>.agents/skills/</code> 契約管理，不另外維護一份容易過時的 HTML checklist。
+執行 E2E 時保留 <code>D:\Anilox\Logs\trace-*.log</code>，再由 <code>tools/python/check_all_flows.py</code>
+以及功能專屬 checker 判讀。人工觀察只補充無法從 log 判定的純視覺結果。</p>
 
 <h2>3. 寫 checklist 的 case granularity</h2>
 
@@ -54,9 +33,8 @@ window.onload = () =&gt; document.querySelectorAll('tr[data-case]').forEach(tr =
 </ul>
 
 <div class="tip">
-<b>配合 <a href="testing-fsm-design.html">FSM Action Log</a></b>：跑 checklist 時打開 logger（PG 設 <code>DebugUiActionLog=true</code>），
-log 寫到 <code>docs/dev/fsm/logs/</code>。跑完後瀏覽器開 viewer.html 一鍵載入，
-看哪些 transition 標 ❌（漏列或設計 vs 實作矛盾）。
+<b>配合產品 DVT</b>：跑 checklist 時保留 trace，使用 owning skill 的 DVT checker 驗證 intent、順序、token、
+狀態快照與禁止行；checker 失敗後再回原始 log 定位，不能只靠人工目視。
 </div>
 
 <h2>4. 跟其他層的關係</h2>
@@ -66,9 +44,9 @@ log 寫到 <code>docs/dev/fsm/logs/</code>。跑完後瀏覽器開 viewer.html �
   <tr><td><a href="testing-unit.html">Unit</a></td><td>「按鈕 click handler 邏輯」抽出純函式，Unit 驗證</td></tr>
   <tr><td><a href="testing-integration.html">Integration</a></td><td>「click handler → Hub.Set → JSON 持久化」整套</td></tr>
   <tr><td><b>E2E（這篇）</b></td><td>「使用者點按鈕 → UI 跟著變 → 硬體真的動」</td></tr>
-  <tr><td><a href="testing-fsm-design.html">FSM Log</a></td><td>跑 E2E 時自動產出 transition 報告</td></tr>
+  <tr><td>DVT log checker</td><td>跑 E2E 後依產品契約檢查 trace，定位流程與時序回歸</td></tr>
 </table>
 
-<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-stress.html">Stress</a> ｜ 下一篇：<a href="testing-fsm-design.html">FSM Design</a></nav>
+<nav class="atom-nav"><a href="index.html">← 索引</a> ｜ 上一篇：<a href="testing-stress.html">Stress</a> ｜ 下一篇：<a href="testing-antipatterns.html">Antipatterns</a></nav>
 </body>
 </html>
