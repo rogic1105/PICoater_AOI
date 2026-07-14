@@ -24,8 +24,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
     /// </summary>
     public sealed class MuraProfileChartPresenter : IDisposable
     {
-        private const int SingleGrabCacheEntries = 64;
-        private const long SingleGrabCacheBytes = 64L * 1024 * 1024;
+        private const int SingleGrabCacheEntries = 512;
+        private const int SingleGrabCacheMegabytes = 128;
+        private const long SingleGrabCacheBytes = SingleGrabCacheMegabytes * 1024L * 1024L;
         private const int PrefetchLookAhead = 4;
 
         private readonly DataStatisticsContext _ctx;
@@ -58,6 +59,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         {
             if (_ctx.ChartDataPatch == null) return;
             _muraProfileHelper = new ColumnCurveChartHelper(_ctx.ChartDataPatch);
+            FlowTrace.Log($"DT curve cache policy entries={SingleGrabCacheEntries} maxMB={SingleGrabCacheMegabytes} prefetch={PrefetchLookAhead} scale=merged-only");
         }
 
         public void Update(IList<GrabIdInfo> grabIds, IList<GrabIdInfo> candidateRange = null)
@@ -216,12 +218,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
 
             if (profile == null) return;
-            float[][] allMean = profile.CloneMean();
-            float[][] allMax = profile.CloneMax();
 
             // view-time 正規值 rescale：chartDataColumn 是欄曲線，用 V 的 capture/current ratio
             float captureHm = grabCfg?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
-            HessianRescaleHelper.RescaleInPlace2D(allMean, allMax, captureHm, _ctx.Settings.HessianMaxFactorV);
+            float valueScale = HessianRescaleHelper.Ratio(
+                captureHm, _ctx.Settings.HessianMaxFactorV);
 
             double[] ops = grabCfg?.CamOps  ?? _ctx.Settings.GetCameraOpsUmArray();
             double[] pos = grabCfg?.CamPos  ?? _ctx.Settings.GetCameraStartPositionMmArray();
@@ -230,9 +231,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             long drawStartMs = sw.ElapsedMilliseconds;
             CurveMergeHelper.UpdateOverviewChart(
-                allMean, allMax, ops, pos, errMean, errMax,
+                profile.Mean, profile.Max, ops, pos, errMean, errMax,
                 _muraProfileHelper, camCount,
-                _ctx.Settings.StitchMode, null);
+                _ctx.Settings.StitchMode, null, valueScale: valueScale);
             string source = cacheHit ? "cache" : joinedPrefetch ? "prefetch" : "disk";
             FlowTrace.Log($"DT curve load {info.GrabId} captures={profile.CaptureCount} " +
                 $"source={source} storage={profile.StorageSource} configMs={configMs} waitMs={waitMs} " +

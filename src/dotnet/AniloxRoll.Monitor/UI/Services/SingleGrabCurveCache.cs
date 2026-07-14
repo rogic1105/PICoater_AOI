@@ -30,17 +30,6 @@ namespace AniloxRoll.Monitor.UI.Services
         public long SummaryMs { get; }
         public long EstimatedBytes { get; }
 
-        public float[][] CloneMean() => CloneArrays(Mean);
-        public float[][] CloneMax() => CloneArrays(Max);
-
-        private static float[][] CloneArrays(float[][] source)
-        {
-            var clone = new float[source.Length][];
-            for (int i = 0; i < source.Length; i++)
-                clone[i] = source[i] == null ? null : (float[])source[i].Clone();
-            return clone;
-        }
-
         private static long EstimateBytes(float[][] arrays)
         {
             long bytes = 0;

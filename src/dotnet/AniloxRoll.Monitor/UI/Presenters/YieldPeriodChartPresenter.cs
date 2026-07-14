@@ -21,7 +21,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         private readonly DataStatisticsContext _ctx;
         private readonly Func<SortedSet<DateTime>> _getAvailableTimes;
-        private readonly Func<string> _getStatsRoot;
+        private readonly Func<IList<GrabIdInfo>> _getGrabIds;
+        private readonly Func<IDictionary<string, GrabDetail>> _getDetails;
         private readonly EventGuard _chartNavGuard = new EventGuard();
 
         private List<int> _chartYears = new List<int>();
@@ -36,11 +37,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public YieldPeriodChartPresenter(
             DataStatisticsContext ctx,
             Func<SortedSet<DateTime>> getAvailableTimes,
-            Func<string> getStatsRoot)
+            Func<IList<GrabIdInfo>> getGrabIds,
+            Func<IDictionary<string, GrabDetail>> getDetails)
         {
             _ctx = ctx ?? throw new ArgumentNullException(nameof(ctx));
             _getAvailableTimes = getAvailableTimes ?? throw new ArgumentNullException(nameof(getAvailableTimes));
-            _getStatsRoot = getStatsRoot ?? throw new ArgumentNullException(nameof(getStatsRoot));
+            _getGrabIds = getGrabIds ?? throw new ArgumentNullException(nameof(getGrabIds));
+            _getDetails = getDetails ?? throw new ArgumentNullException(nameof(getDetails));
         }
 
         public void Init()
@@ -339,18 +342,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             if (!ok) return;
             int year = _chartYears[idx];
-            var ctx = BuildThresholdContext();
             FillPeriodChart(_ctx.ChartDataYieldYearly,
-                InspectionStatisticsService.ComputeGroupedByMonthOfYear(_getStatsRoot(),
-                    new DateTime(year, 1, 1), new DateTime(year, 12, 31, 23, 59, 59), ctx));
+                InspectionStatisticsService.ComputeGroupedByMonthOfYear(
+                    _getGrabIds(), _getDetails(),
+                    new DateTime(year, 1, 1),
+                    new DateTime(year, 12, 31, 23, 59, 59)));
 
             OnChartMonthIndexChanged(hint);
         }
-
-        private ThresholdContext BuildThresholdContext() => new ThresholdContext(
-            _ctx.Settings.HessianMaxFactorV,
-            _ctx.Settings.ErrorValueMeanV,
-            _ctx.Settings.ErrorValueMaxV);
 
         public void RefreshPeriodCharts()
         {
@@ -372,9 +371,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
             int month = _chartMonths[idx];
             int lastDay = DateTime.DaysInMonth(year, month);
             FillPeriodChart(_ctx.ChartDataYieldMonthly,
-                InspectionStatisticsService.ComputeGroupedByDayOfMonth(_getStatsRoot(),
-                    new DateTime(year, month, 1), new DateTime(year, month, lastDay, 23, 59, 59),
-                    BuildThresholdContext()));
+                InspectionStatisticsService.ComputeGroupedByDayOfMonth(
+                    _getGrabIds(), _getDetails(),
+                    new DateTime(year, month, 1),
+                    new DateTime(year, month, lastDay, 23, 59, 59)));
 
             OnChartDayIndexChanged();
         }
@@ -392,9 +392,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
             int month = _chartMonths[mIdx];
             int day = _chartDays[dIdx];
             FillPeriodChart(_ctx.ChartDataYieldDaily,
-                InspectionStatisticsService.ComputeGroupedByHourOfDay(_getStatsRoot(),
-                    new DateTime(year, month, day), new DateTime(year, month, day, 23, 59, 59),
-                    BuildThresholdContext()));
+                InspectionStatisticsService.ComputeGroupedByHourOfDay(
+                    _getGrabIds(), _getDetails(),
+                    new DateTime(year, month, day),
+                    new DateTime(year, month, day, 23, 59, 59)));
         }
 
         private List<int> GetAvailableYears() =>

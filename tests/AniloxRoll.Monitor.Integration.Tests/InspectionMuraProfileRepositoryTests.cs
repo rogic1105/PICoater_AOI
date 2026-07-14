@@ -11,6 +11,18 @@ namespace AniloxRoll.Monitor.Tests
     [TestFixture]
     public class InspectionMuraProfileRepositoryTests
     {
+        [Test]
+        public void ScaleMergedCurveValues_ScalesDisplayCopyOnly()
+        {
+            var mean = new[] { 2f, 4f };
+            var max = new[] { 6f, 8f };
+
+            CurveMergeHelper.ScaleMergedCurveValues(mean, max, 0.5f);
+
+            Assert.That(mean, Is.EqualTo(new[] { 1f, 2f }));
+            Assert.That(max, Is.EqualTo(new[] { 3f, 4f }));
+        }
+
         private string _tempRoot;
 
         [SetUp]

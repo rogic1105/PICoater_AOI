@@ -41,6 +41,33 @@ namespace AniloxRoll.Monitor.Core.Services
     }
 
     /// <summary>
+    /// One-pass, bounded in-memory view of report CSV data. UI navigators, detail
+    /// lists, and period charts share this snapshot instead of rescanning disk.
+    /// </summary>
+    public sealed class InspectionStatisticsSnapshot
+    {
+        internal InspectionStatisticsSnapshot(
+            SortedSet<DateTime> availableTimes,
+            List<GrabIdInfo> grabIdsDescending,
+            Dictionary<string, GrabDetail> detailsByGrabId,
+            int csvFileCount,
+            int recordCount)
+        {
+            AvailableTimes = availableTimes;
+            GrabIdsDescending = grabIdsDescending;
+            DetailsByGrabId = detailsByGrabId;
+            CsvFileCount = csvFileCount;
+            RecordCount = recordCount;
+        }
+
+        public SortedSet<DateTime> AvailableTimes { get; }
+        public List<GrabIdInfo> GrabIdsDescending { get; }
+        public Dictionary<string, GrabDetail> DetailsByGrabId { get; }
+        public int CsvFileCount { get; }
+        public int RecordCount { get; }
+    }
+
+    /// <summary>
     /// View-time Pass/Fail 重算 context：以「當前 Settings」的閾值 + 正規值，
     /// 對 CSV 內 raw peak（capture-time 已 baked by HM_V_capture）重算判定，
     /// 而非沿用 CSV 內 MaxExceed/MeanExceed（capture-time 寫死）。
@@ -76,6 +103,129 @@ namespace AniloxRoll.Monitor.Core.Services
     /// </summary>
     public static class InspectionStatisticsService
     {
+        /// <summary>
+        /// Parses every report CSV once and materializes all shared report indexes.
+        /// The snapshot retains one GrabIdInfo and one seven-camera result per grab,
+        /// not every CSV record.
+        /// </summary>
+        public static InspectionStatisticsSnapshot LoadSnapshot(
+            string captureRootPath,
+            ThresholdContext ctx = null)
+        {
+            var availableTimes = new SortedSet<DateTime>();
+            var infosByGrabId =
+                new SortedDictionary<string, GrabIdInfo>(StringComparer.Ordinal);
+            var detailsByGrabId =
+                new Dictionary<string, GrabDetail>(StringComparer.Ordinal);
+            int recordCount = 0;
+
+            if (string.IsNullOrWhiteSpace(captureRootPath) ||
+                !Directory.Exists(captureRootPath))
+            {
+                return new InspectionStatisticsSnapshot(
+                    availableTimes, new List<GrabIdInfo>(), detailsByGrabId, 0, 0);
+            }
+
+            string[] csvFiles = GetInspectionCsvFiles(captureRootPath);
+            Array.Sort(csvFiles, StringComparer.Ordinal);
+            float captureHmV = ctx?.CurrentHmV ?? 0f;
+            foreach (string csvPath in csvFiles)
+            {
+                try
+                {
+                    using (var reader = InspectionCsvReader.OpenShared(csvPath))
+                    {
+                        string line;
+                        while ((line = reader.ReadLine()) != null)
+                        {
+                            if (InspectionCsvReader.TryUpdateHmFromConfig(
+                                line, ref captureHmV))
+                                continue;
+                            if (!InspectionCsvReader.TryParseRecord(line, out var record))
+                                continue;
+                            if (!InspectionCsvReader.TryParseTimestamp(
+                                record.FileName, out DateTime timestamp))
+                                continue;
+
+                            recordCount++;
+                            availableTimes.Add(timestamp);
+                            if (infosByGrabId.TryGetValue(
+                                record.GrabId, out GrabIdInfo info))
+                            {
+                                if (timestamp < info.Earliest) info.Earliest = timestamp;
+                                if (timestamp > info.Latest) info.Latest = timestamp;
+                            }
+                            else
+                            {
+                                info = new GrabIdInfo
+                                {
+                                    GrabId = record.GrabId,
+                                    Earliest = timestamp,
+                                    Latest = timestamp
+                                };
+                                infosByGrabId[record.GrabId] = info;
+                            }
+
+                            if (!InspectionCsvReader.TryExtractCameraId(
+                                record.FileName, out int cameraId) ||
+                                cameraId < 1 || cameraId > 7)
+                                continue;
+                            if (!detailsByGrabId.TryGetValue(
+                                record.GrabId, out GrabDetail detail))
+                            {
+                                detail = new GrabDetail { GrabId = record.GrabId };
+                                detailsByGrabId[record.GrabId] = detail;
+                            }
+
+                            bool failed = ctx != null
+                                ? ctx.IsFail(record.MeanPeak, record.MaxPeak, captureHmV)
+                                : (record.MaxExceed > 0 || record.MeanExceed > 0);
+                            int cameraIndex = cameraId - 1;
+                            if (!detail.CamResult[cameraIndex].HasValue || failed)
+                                detail.CamResult[cameraIndex] = failed;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine(
+                        $"[InspectionStatisticsService.LoadSnapshot] {csvPath}: " +
+                        $"{ex.GetType().Name}: {ex.Message}");
+                }
+            }
+
+            var grabIds = new List<GrabIdInfo>(infosByGrabId.Values);
+            grabIds.Reverse();
+            return new InspectionStatisticsSnapshot(
+                availableTimes, grabIds, detailsByGrabId,
+                csvFiles.Length, recordCount);
+        }
+
+        private static string[] GetInspectionCsvFiles(string captureRootPath)
+        {
+            string[] candidates = Directory.GetFiles(
+                captureRootPath, "*.csv", SearchOption.AllDirectories);
+            var result = new List<string>(candidates.Length);
+            foreach (string path in candidates)
+            {
+                string name = Path.GetFileNameWithoutExtension(path);
+                if (name.Length != 8) continue;
+
+                bool allDigits = true;
+                for (int i = 0; i < name.Length; i++)
+                {
+                    if (name[i] < '0' || name[i] > '9')
+                    {
+                        allDigits = false;
+                        break;
+                    }
+                }
+                if (allDigits) result.Add(path);
+            }
+            result.Sort(StringComparer.Ordinal);
+            return result.ToArray();
+        }
+
         // ── 時間範圍統計（舊模式：以張數為分母）────────────────────────────
 
         /// <summary>
@@ -417,6 +567,18 @@ namespace AniloxRoll.Monitor.Core.Services
         /// 按月份（1–12）彙總 Pass/Fail，固定回傳 12 筆，無資料月份為 0。
         /// </summary>
         public static List<PeriodStats> ComputeGroupedByMonthOfYear(
+            IList<GrabIdInfo> grabIds,
+            IDictionary<string, GrabDetail> details,
+            DateTime start,
+            DateTime end)
+        {
+            return ComputeGroupedFromIndex(
+                grabIds, details, start, end, 12,
+                timestamp => timestamp.Month - 1,
+                index => (index + 1).ToString());
+        }
+
+        public static List<PeriodStats> ComputeGroupedByMonthOfYear(
             string captureRootPath, DateTime start, DateTime end,
             ThresholdContext ctx = null)
         {
@@ -435,6 +597,18 @@ namespace AniloxRoll.Monitor.Core.Services
         /// <summary>
         /// 按日期（1–31）彙總 Pass/Fail，固定回傳 31 筆，無資料日期為 0。
         /// </summary>
+        public static List<PeriodStats> ComputeGroupedByDayOfMonth(
+            IList<GrabIdInfo> grabIds,
+            IDictionary<string, GrabDetail> details,
+            DateTime start,
+            DateTime end)
+        {
+            return ComputeGroupedFromIndex(
+                grabIds, details, start, end, 31,
+                timestamp => timestamp.Day - 1,
+                index => (index + 1).ToString());
+        }
+
         public static List<PeriodStats> ComputeGroupedByDayOfMonth(
             string captureRootPath, DateTime start, DateTime end,
             ThresholdContext ctx = null)
@@ -455,6 +629,18 @@ namespace AniloxRoll.Monitor.Core.Services
         /// 按小時（0–23）彙總 Pass/Fail，固定回傳 24 筆，無資料小時為 0。
         /// </summary>
         public static List<PeriodStats> ComputeGroupedByHourOfDay(
+            IList<GrabIdInfo> grabIds,
+            IDictionary<string, GrabDetail> details,
+            DateTime start,
+            DateTime end)
+        {
+            return ComputeGroupedFromIndex(
+                grabIds, details, start, end, 24,
+                timestamp => timestamp.Hour,
+                index => index.ToString());
+        }
+
+        public static List<PeriodStats> ComputeGroupedByHourOfDay(
             string captureRootPath, DateTime start, DateTime end,
             ThresholdContext ctx = null)
         {
@@ -467,6 +653,53 @@ namespace AniloxRoll.Monitor.Core.Services
             var result = new List<PeriodStats>(24);
             for (int h = 0; h < 24; h++)
                 result.Add(new PeriodStats { Label = h.ToString(), Pass = counts[h].Pass, Fail = counts[h].Fail });
+            return result;
+        }
+
+        private static List<PeriodStats> ComputeGroupedFromIndex(
+            IList<GrabIdInfo> grabIds,
+            IDictionary<string, GrabDetail> details,
+            DateTime start,
+            DateTime end,
+            int bucketCount,
+            Func<DateTime, int> getBucket,
+            Func<int, string> getLabel)
+        {
+            var pass = new int[bucketCount];
+            var fail = new int[bucketCount];
+            if (grabIds != null && details != null)
+            {
+                foreach (GrabIdInfo info in grabIds)
+                {
+                    DateTime timestamp = info.Earliest;
+                    if (timestamp < start || timestamp > end) continue;
+                    if (!details.TryGetValue(info.GrabId, out GrabDetail detail))
+                        continue;
+
+                    int bucket = getBucket(timestamp);
+                    if (bucket < 0 || bucket >= bucketCount) continue;
+                    for (int cameraIndex = 0;
+                        cameraIndex < detail.CamResult.Length;
+                        cameraIndex++)
+                    {
+                        bool? failed = detail.CamResult[cameraIndex];
+                        if (!failed.HasValue) continue;
+                        if (failed.Value) fail[bucket]++;
+                        else pass[bucket]++;
+                    }
+                }
+            }
+
+            var result = new List<PeriodStats>(bucketCount);
+            for (int index = 0; index < bucketCount; index++)
+            {
+                result.Add(new PeriodStats
+                {
+                    Label = getLabel(index),
+                    Pass = pass[index],
+                    Fail = fail[index]
+                });
+            }
             return result;
         }
 

@@ -28,7 +28,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             int cameraCount,
             StitchMode stitchMode,
             Func<int, bool, double, double> viewRangeProvider,
-            MergeOverlap overlap = MergeOverlap.Midline)
+            MergeOverlap overlap = MergeOverlap.Midline,
+            float valueScale = 1f)
         {
             if (target == null) return;
             if (allMean == null)
@@ -43,6 +44,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 target.Clear();
                 return;
             }
+            ScaleMergedCurveValues(r.Mean, r.Max, valueScale);
 
             target.SetOps(r.GridMm * 1000.0);
             target.SetThresholds(errMean, errMax);
@@ -55,6 +57,19 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 viewRight = viewRangeProvider(0, false, double.NaN);
             }
             target.UpdateDataAndView(r.Mean, r.Max, r.GlobalMinMm, viewLeft, viewRight);
+        }
+
+        internal static void ScaleMergedCurveValues(float[] mean, float[] max, float valueScale)
+        {
+            if (HessianRescaleHelper.IsNoOp(valueScale)) return;
+            ScaleInPlace(mean, valueScale);
+            ScaleInPlace(max, valueScale);
+        }
+
+        private static void ScaleInPlace(float[] values, float scale)
+        {
+            if (values == null) return;
+            for (int i = 0; i < values.Length; i++) values[i] *= scale;
         }
 
         /// <summary>

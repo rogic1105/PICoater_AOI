@@ -27,7 +27,9 @@ class DataFlowValidator:
             report.add(self.domain, "D0", CheckStatus.NOT_COVERED, "本 session 無報表操作")
             return report
 
+        self._check_statistics_snapshot(session, report)
         self._check_single_selection(session, report)
+        self._check_single_curve_policy(session, report)
         self._check_single_curve(session, report)
         self._check_list_ownership(session, report)
         self._check_range_policy(session, report)
@@ -37,6 +39,68 @@ class DataFlowValidator:
         self._check_y_scale_toggle(session, report)
         self._check_ui_stall(session, report)
         return report
+
+    def _check_statistics_snapshot(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        load_positions = [
+            index for index, line in enumerate(session.lines)
+            if line.message == "ui:【讀取資料】鈕（Data）"
+        ]
+        snapshot_pattern = re.compile(
+            r"^DT stats snapshot csv=(\d+) records=(\d+) grabs=(\d+) ms=(\d+)$"
+        )
+        snapshots = []
+        invalid = []
+        for index, line in enumerate(session.lines):
+            if not line.message.startswith("DT stats snapshot"):
+                continue
+            match = snapshot_pattern.match(line.message)
+            if not match:
+                invalid.append(f"{line.timestamp} 格式錯誤")
+                continue
+            csv_count, record_count, grab_count, elapsed_ms = map(
+                int, match.groups()
+            )
+            valid_counts = (
+                record_count >= grab_count
+                and (csv_count > 0 or (record_count == 0 and grab_count == 0))
+            )
+            if not valid_counts:
+                invalid.append(
+                    f"{line.timestamp} csv={csv_count} records={record_count} grabs={grab_count}"
+                )
+            snapshots.append((index, csv_count, record_count, grab_count, elapsed_ms))
+
+        if not snapshots:
+            report.add(
+                self.domain,
+                "D1.snapshot",
+                CheckStatus.NOT_COVERED,
+                "舊版 log 無一次式統計 snapshot 儀器",
+            )
+            return
+
+        missing = 0
+        for position, load_index in enumerate(load_positions):
+            next_load = (
+                load_positions[position + 1]
+                if position + 1 < len(load_positions)
+                else len(session.lines)
+            )
+            if not any(load_index < item[0] < next_load for item in snapshots):
+                missing += 1
+
+        worst_ms = max(item[4] for item in snapshots)
+        ok = not invalid and missing == 0
+        report.add(
+            self.domain,
+            "D1.snapshot",
+            CheckStatus.PASS if ok else CheckStatus.FAIL,
+            f"讀取={len(load_positions)} snapshot={len(snapshots)} "
+            f"缺少={missing} 格式/計數錯誤={len(invalid)} 最慢={worst_ms}ms"
+            + (f"；首筆 {invalid[0]}" if invalid else ""),
+        )
 
     def _check_single_selection(self, session: FlowSession, report: CheckReport) -> None:
         intents = [
@@ -133,6 +197,33 @@ class DataFlowValidator:
             f"cache={sources['cache']} 缺Curve={len(missing)} 格式錯誤={len(invalid)}"
             + (f"；首筆 {missing[0]}" if missing else "")
             + ("；舊版儀器無 source 分段" if not has_current_instrument else ""),
+        )
+
+    def _check_single_curve_policy(self, session: FlowSession, report: CheckReport) -> None:
+        lines = [
+            line.message for line in session.lines
+            if line.message.startswith("DT curve cache policy ")
+        ]
+        if not lines:
+            report.add(
+                self.domain,
+                "D3.curve-policy",
+                CheckStatus.NOT_COVERED,
+                "舊版 log 無 curve cache policy 儀器",
+            )
+            return
+
+        expected = (
+            "DT curve cache policy entries=512 maxMB=128 "
+            "prefetch=4 scale=merged-only"
+        )
+        unique = sorted(set(lines))
+        ok = len(lines) == 1 and unique == [expected]
+        report.add(
+            self.domain,
+            "D3.curve-policy",
+            CheckStatus.PASS if ok else CheckStatus.FAIL,
+            f"行數={len(lines)} 實際={' | '.join(unique)}",
         )
 
     def _check_list_ownership(self, session: FlowSession, report: CheckReport) -> None:

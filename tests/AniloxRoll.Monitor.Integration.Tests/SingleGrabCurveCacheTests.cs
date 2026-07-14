@@ -77,17 +77,6 @@ namespace AniloxRoll.Monitor.Integration.Tests
             }
         }
 
-        [Test]
-        public void CloneMean_DoesNotMutateCachedRawProfile()
-        {
-            var profile = Profile(3f);
-
-            float[][] clone = profile.CloneMean();
-            clone[0][0] = 9f;
-
-            Assert.That(profile.Mean[0][0], Is.EqualTo(3f));
-        }
-
         private static SingleGrabCurveProfile Profile(float value)
         {
             return new SingleGrabCurveProfile(

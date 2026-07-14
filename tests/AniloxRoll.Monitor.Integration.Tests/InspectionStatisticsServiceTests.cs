@@ -122,6 +122,39 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void LoadSnapshot_OnePassIndexesFeedPeriodCharts()
+        {
+            string csv =
+                "#CFG,2026-03-30T10:00:00.000,HessianMaxFactorV=1.0000\n" +
+                "Id,FileName,MaxExceed,MeanExceed,MeanPeak,MaxPeak,GrabHeight,LineRateHz,ExposureUs\n" +
+                "260330-100000,20260330_100000.000-1,0,0,0.1,0.2,3001,3001.0,149.0\n" +
+                "260330-100000,20260330_100001.000-2,1,0,0.1,0.8,3001,3001.0,149.0\n" +
+                "260330-140000,20260330_140000.000-1,0,0,0.1,0.2,3001,3001.0,149.0\n";
+            WriteCsv("20260330", csv);
+
+            var threshold = new ThresholdContext(1f, 0.2f, 0.5f);
+            InspectionStatisticsSnapshot snapshot =
+                InspectionStatisticsService.LoadSnapshot(_tempRoot, threshold);
+
+            Assert.That(snapshot.CsvFileCount, Is.EqualTo(1));
+            Assert.That(snapshot.RecordCount, Is.EqualTo(3));
+            Assert.That(snapshot.GrabIdsDescending.Count, Is.EqualTo(2));
+            Assert.That(snapshot.GrabIdsDescending[0].GrabId, Is.EqualTo("260330-140000"));
+            Assert.That(snapshot.AvailableTimes.Count, Is.EqualTo(3));
+            Assert.That(snapshot.DetailsByGrabId["260330-100000"].CamResult[0], Is.False);
+            Assert.That(snapshot.DetailsByGrabId["260330-100000"].CamResult[1], Is.True);
+
+            var hourly = InspectionStatisticsService.ComputeGroupedByHourOfDay(
+                snapshot.GrabIdsDescending,
+                snapshot.DetailsByGrabId,
+                new DateTime(2026, 3, 30),
+                new DateTime(2026, 3, 30, 23, 59, 59));
+            Assert.That(hourly[10].Pass, Is.EqualTo(1));
+            Assert.That(hourly[10].Fail, Is.EqualTo(1));
+            Assert.That(hourly[14].Pass, Is.EqualTo(1));
+        }
+
+        [Test]
         public void Compute_EmptyDirectory_ReturnsDefault7CameraStats()
         {
             var stats = InspectionStatisticsService.Compute(

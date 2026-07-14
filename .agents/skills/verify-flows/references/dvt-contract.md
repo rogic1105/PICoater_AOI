@@ -814,9 +814,25 @@ T1: ui:tab → 監控|回顧|報表
 ### D1 讀取資料（btnDataSelectFolder）
 ```
 T1: ui:【讀取資料】鈕（Data）
-（Data 統計載入無顯示儀器＝靜默合法；會連動 Review → 接 R1 的 RV 序列）
+T1: DT stats snapshot csv=N records=N grabs=N ms=N
+    ← 報表 CSV 只掃一次，同時建立時間、序號、七台 Pass/Fail 索引
+（會連動 Review → 接 R1 的 RV 序列）
 （預設：單片=最新、序號範圍=最舊→最新）
 ```
+
+**code-flow（一次解析，多個 view 共用）**
+```
+LoadDataFolder|SyncFromReviewFolder@DataStatisticsPresenter.cs
+ → LoadStatisticsSnapshot@DataStatisticsPresenter.cs
+ → LoadSnapshot@InspectionStatisticsService.cs
+    ├ 只讀 yyyyMMdd.csv（排除 _ticks.csv）
+    └ 一次產生 AvailableTimes／GrabIdsDescending／DetailsByGrabId
+ → PopulateAllGrabIdCombos／RefreshStats／YieldPeriodChartPresenter
+    └ ComputeGroupedByMonthOfYear|DayOfMonth|HourOfDay（索引 overload，不再掃 CSV）
+```
+- **初始載入 SSoT**：同一資料夾＋同一門檻下，序號 List、色卡、年月日圖表必須共用同一份
+  `InspectionStatisticsSnapshot`。初始【讀取資料】不得分別呼叫 `LoadAvailableTimes`、
+  `LoadGrabIdInfosDescending`、`ScanCsvByDateRange`重複掃磁碟。
 
 ### D2 明細列表點選
 ```
@@ -843,6 +859,8 @@ listViewGrabDetail.MouseUp
 T1: ui:【報表序號】→ {grabId}          ← 單片切換（同 D2 的 cb 版）
 T1: DT curve load {grabId} captures=N source=disk|prefetch|cache storage=summary|bins configMs=N waitMs=N pathMs=N mergeMs=N summaryMs=N points=N drawMs=N totalMs=N
      ← 每格都更新 Curve；storage=summary 讀持久匯總，storage=bins 代表匯總缺少／失效而由原始 bin 重建
+T1: DT curve cache policy entries=512 maxMB=128 prefetch=4 scale=merged-only
+     ← Presenter 初始化一次；目前驗綠的 bounded LRU／配置策略，改值須同步契約＋checker 並重驗
 Tn: DT curve prefetch {grabId} readyMs=N storage=summary|bins cacheEntries=N cacheMB=N
      ← 依滾動方向背景預讀下一個尚未快取的相鄰序號（前看最多 4 格，只允許一個預讀工作）
 Tn: DT curve summary {grabId} write=queued|ok|failed|dropped|skip-incomplete captures=N merged=N ms=N
@@ -850,7 +868,8 @@ Tn: DT curve summary {grabId} write=queued|ok|failed|dropped|skip-incomplete cap
 T1: DT selected {grabId} stats=cache|scan list=keep ms=N
      ← 單片快路：更新色卡＋Mura curve＋List 反白；`cache`＝從既有明細／全序號索引推導統計，`scan`＝索引找不到該序號時 fallback
 T1: DT stats index rows=N ms=N
-     ← 第一次選到目前 List 範圍外時建立一次全序號 Pass/Fail 索引；同資料夾＋同閾值後續不得逐格重掃 CSV
+     ← 門檻設定變更使 snapshot 簽章失效時，重建一次全序號 Pass/Fail 索引；
+       初始讀取已由 D1 snapshot 建立，同資料夾＋同閾值後續不得重掃 CSV
 T1: ui:【序號範圍-起始|結束】變更       ← 手動拖範圍 → 期間高亮全滅（Custom）
 T1: DT range policy listMs=33 curveMs=80 settleMs=150 curveMode=monotonic
      ← Presenter 初始化一次；目前上機驗綠的排程基準，改值必須同步本契約＋checker 並重驗
@@ -871,7 +890,10 @@ T1: DT list reload range={start}~{end} rows=N ms=N source=index
   只能對既有索引做查找，不得在 UI 執行緒重新解析全部影像檔名、`Distinct`、`OrderBy`。
 - **單片 Curve 不掠過**：每個 `ui:【報表序號】` 必有同 grabId 的 `DT curve load`。`source=disk`＝前景首次完整讀取；
   `source=prefetch`＝選取加入已在背景完整讀取的同一工作；`source=cache`＝使用之前完整合併完成的原始 Curve。
-  快取只保存 rescale 前 Mean/Max 合併結果，LRU 上限 64 筆／64 MB；資料夾重載或 Presenter Dispose 必清空。
+  快取只保存 rescale 前 Mean/Max 合併結果；資料夾重載或 Presenter Dispose 必清空。
+- **單片 Curve cache 基準**：LRU 上限 `512 筆／128 MB`，以目前 278 筆實測資料可整批容納，避免往返滾動時
+  反覆淘汰／重載造成 Gen2 GC；30,000 筆時仍保持固定上限。view-time HM rescale 不得 clone 每台完整 raw Curve，
+  只能在 `CurveOverviewMerger` 產生最多約 2,000 點的 merged result 後縮放。這些是可重驗調整的效能參數，非鐵則。
 - `check_all_flows.py` 的 `DATA/D3.selected` 允許最多一筆真正缺 ID 的 `stats=scan` fallback；同 session 多筆
   `stats=scan` 代表全序號索引失效或未使用，直接 FAIL。
 - **持久匯總不取代原始資料**：讀取順序＝記憶體 cache → `SingleGrabCurveSummaryStore` → 原始 MeanC/MaxC bins。
@@ -916,7 +938,8 @@ cbDataId.SelectedIndexChanged
        ├ summary miss/stale/corrupt → InspectionImagePathRepository.LoadForGrabId → CurveMergeHelper.MergeCurves
        │        → CurveBinFile.Load（每個 bin bulk read；邊讀邊合併）→ SingleGrabCurveSummaryStore.QueueSave
        │          → idle 750ms → 單一 writer → TrySave（原子寫回）
-       ├ CloneMean/CloneMax → HessianRescaleHelper.RescaleInPlace2D → UpdateOverviewChart
+       ├ cache raw Curve 唯讀直入 CurveOverviewMerger → 合併後小曲線套 Hessian ratio → UpdateOverviewChart
+       │  （不得為 view-time rescale 複製每台完整 raw Curve；只縮放新建的 merged display result）
        │  └ ColumnCurveChartHelper.UpdateDataAndView（每兩個畫布像素一個顯示桶；Mean=桶平均、Max=桶最大，
        │       點數相同時原地更新既有 DataPoint；不得逐格 Clear＋DataBind 重建）
        └ ScheduleAdjacentPrefetch（依方向找下一個未命中項）→ DT curve prefetch

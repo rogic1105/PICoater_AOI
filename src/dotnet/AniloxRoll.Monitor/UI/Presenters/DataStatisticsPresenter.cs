@@ -167,7 +167,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _muraChart = new MuraProfileChartPresenter(_ctx,
                 () => _dateGrabIdNavigator.ActiveStatMode, () => _grabIdInfos, () => _statsDataRootPath);
             _muraChart.Init();
-            _yieldPeriodCharts = new YieldPeriodChartPresenter(_ctx, () => _statAvailableTimes, () => _statsDataRootPath);
+            _yieldPeriodCharts = new YieldPeriodChartPresenter(
+                _ctx,
+                () => _statAvailableTimes,
+                () => _grabIdInfos,
+                () => _singleGrabDetailIndex);
             _yieldPeriodCharts.Init();
 
             _rangeRefreshDebounce = new System.Windows.Forms.Timer { Interval = RangeSettleIntervalMs };
@@ -221,8 +225,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _muraChart?.ResetSingleGrabCache();
             ResetSingleGrabDetailIndex();
             _statsDataRootPath = path;
-            _statAvailableTimes = InspectionStatisticsService.LoadAvailableTimes(path);
-            _grabIdInfos = InspectionStatisticsService.LoadGrabIdInfosDescending(path);
+            LoadStatisticsSnapshot(path);
 
             PopulateAllGrabIdCombos(selectDataGrabId: false);
 
@@ -244,8 +247,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _muraChart?.ResetSingleGrabCache();
             ResetSingleGrabDetailIndex();
             _statsDataRootPath = path;
-            _statAvailableTimes = InspectionStatisticsService.LoadAvailableTimes(path);
-            _grabIdInfos = InspectionStatisticsService.LoadGrabIdInfosDescending(path);
+            LoadStatisticsSnapshot(path);
 
             PopulateAllGrabIdCombos();
 
@@ -253,6 +255,33 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 ? (DateTime?)_statAvailableTimes.Max : null);
             SelectLatestInSingleSheetMode();
             RefreshStats();
+        }
+
+        private void LoadStatisticsSnapshot(string path)
+        {
+            var watch = Stopwatch.StartNew();
+            var threshold = new ThresholdContext(
+                _ctx.Settings.HessianMaxFactorV,
+                _ctx.Settings.ErrorValueMeanV,
+                _ctx.Settings.ErrorValueMaxV);
+            InspectionStatisticsSnapshot snapshot =
+                InspectionStatisticsService.LoadSnapshot(path, threshold);
+
+            _statAvailableTimes = snapshot.AvailableTimes;
+            _grabIdInfos = snapshot.GrabIdsDescending;
+            _singleGrabDetailIndex.Clear();
+            foreach (var entry in snapshot.DetailsByGrabId)
+                _singleGrabDetailIndex[entry.Key] = entry.Value;
+            _singleGrabDetailIndexRoot = path;
+            _singleGrabDetailIndexHmV = threshold.CurrentHmV;
+            _singleGrabDetailIndexErrMean = threshold.CurrentErrMean;
+            _singleGrabDetailIndexErrMax = threshold.CurrentErrMax;
+            _singleGrabDetailIndexReady = true;
+
+            FlowTrace.Log(
+                $"DT stats snapshot csv={snapshot.CsvFileCount} " +
+                $"records={snapshot.RecordCount} grabs={_grabIdInfos.Count} " +
+                $"ms={watch.ElapsedMilliseconds}");
         }
 
         // ══════════════════════════════════════════════════════════════
@@ -289,13 +318,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (updateRangeCurve) CancelRangePreview();
             if (string.IsNullOrWhiteSpace(_statsDataRootPath)) return;
 
-            // view-time threshold context：以當前 Settings 的閾值 + 欄正規值即時重算 Pass/Fail，
-            // 不再用 CSV 內的 MaxExceed/MeanExceed（那是 capture-time baked-in）。
-            var ctx = new ThresholdContext(
-                _ctx.Settings.HessianMaxFactorV,
-                _ctx.Settings.ErrorValueMeanV,
-                _ctx.Settings.ErrorValueMaxV);
-
             // SingleSheet mode：用 cbDataId.SelectedIndex 算單 grab stats（start=end=該 grab）。
             // 不靠 cbDataIdStart/End 範圍；cbDataId 變更不連動範圍 cb（範圍獨立），
             // 故 listViewGrabDetail 點選後 stats 仍對齊到剛點的單 grab。
@@ -308,11 +330,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     var swList = Stopwatch.StartNew();
                     string listStart = GetDetailListStartGrabId();
                     string listEnd = GetDetailListEndGrabId();
-                    _currentDetails = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
-                        _statsDataRootPath, listStart, listEnd, ctx);
-                    SeedDetailIndexIfFullRange(_currentDetails, listStart, listEnd, ctx);
+                    EnsureSingleGrabDetailIndex();
+                    _currentDetails = GetIndexedDetailsForSelectedRange();
                     ApplyFailFilter();
-                    FlowTrace.Log($"DT list reload range={listStart}~{listEnd} rows={_currentDetails.Count} ms={swList.ElapsedMilliseconds}");
+                    FlowTrace.Log($"DT list reload range={listStart}~{listEnd} rows={_currentDetails.Count} ms={swList.ElapsedMilliseconds} source=index");
                 }
                 RefreshSelectedGrab();
                 return;
@@ -575,32 +596,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
             return true;
         }
 
-        private void SeedDetailIndexIfFullRange(
-            IList<GrabDetail> details,
-            string startGrabId,
-            string endGrabId,
-            ThresholdContext threshold)
-        {
-            if (_grabIdInfos.Count == 0 || details == null) return;
-            string oldest = _grabIdInfos[_grabIdInfos.Count - 1].GrabId;
-            string newest = _grabIdInfos[0].GrabId;
-            string lo = StringComparer.Ordinal.Compare(startGrabId, endGrabId) <= 0
-                ? startGrabId : endGrabId;
-            string hi = lo == startGrabId ? endGrabId : startGrabId;
-            if (!string.Equals(lo, oldest, StringComparison.Ordinal) ||
-                !string.Equals(hi, newest, StringComparison.Ordinal))
-                return;
-
-            _singleGrabDetailIndex.Clear();
-            foreach (GrabDetail detail in details)
-                _singleGrabDetailIndex[detail.GrabId] = detail;
-            _singleGrabDetailIndexRoot = _statsDataRootPath;
-            _singleGrabDetailIndexHmV = threshold.CurrentHmV;
-            _singleGrabDetailIndexErrMean = _ctx.Settings.ErrorValueMeanV;
-            _singleGrabDetailIndexErrMax = _ctx.Settings.ErrorValueMaxV;
-            _singleGrabDetailIndexReady = true;
-        }
-
         private List<GrabDetail> GetIndexedDetailsForSelectedRange()
         {
             int lo = Math.Min(
@@ -739,7 +734,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _yieldPeriodCharts?.PopulateChartNavigators(hintDate);
 
         /// <summary>由 PropertyGrid 設定變更觸發，重新整理 chartDataYieldYearly/Monthly/Daily，讓 Settings 立刻套用 Pass/Fail。</summary>
-        public void RefreshPeriodCharts() => _yieldPeriodCharts?.RefreshPeriodCharts();
+        public void RefreshPeriodCharts()
+        {
+            EnsureSingleGrabDetailIndex();
+            _yieldPeriodCharts?.RefreshPeriodCharts();
+        }
         public void PopulateAllGrabIdCombos(bool selectDataGrabId = false) =>
             _dateGrabIdNavigator.PopulateAllGrabIdCombos(selectDataGrabId);
         public void SetReviewGroupBoxes(bool grabNavActive)
