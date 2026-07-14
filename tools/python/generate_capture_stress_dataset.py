@@ -36,7 +36,7 @@ FILE_SUFFIXES = (
 )
 CSV_HEADER = (
     "Id,FileName,MaxExceed,MeanExceed,MeanPeak,MaxPeak,"
-    "GrabHeight,LineRateHz,ExposureUs,MaxCMean"
+    "GrabHeight,LineRateHz,ExposureUs,MaxCMean,MeanRPeak,MaxRPeak"
 )
 MARKER_NAME = ".stress-capture-dataset.json"
 POOL_DIR_NAME = "._stress_link_pool"
@@ -213,15 +213,19 @@ def load_mcbf_values(path: Path) -> List[float]:
 
 def template_curve_metrics(
     camera_templates: Dict[int, Path]
-) -> Dict[int, Tuple[float, float, float]]:
-    result: Dict[int, Tuple[float, float, float]] = {}
+) -> Dict[int, Tuple[float, float, float, float, float]]:
+    result: Dict[int, Tuple[float, float, float, float, float]] = {}
     for camera_id, base_path in camera_templates.items():
         mean_values = load_mcbf_values(Path(str(base_path) + "_mean_c.bin"))
         max_values = load_mcbf_values(Path(str(base_path) + "_max_c.bin"))
+        mean_r_values = load_mcbf_values(Path(str(base_path) + "_mean_r.bin"))
+        max_r_values = load_mcbf_values(Path(str(base_path) + "_max_r.bin"))
         result[camera_id] = (
             max(mean_values) / 255.0,
             max(max_values) / 255.0,
             sum(max_values) / len(max_values) / 255.0,
+            max(mean_r_values) / 255.0,
+            max(max_r_values) / 255.0,
         )
     return result
 
@@ -230,7 +234,7 @@ def build_bucket(
     output: Path,
     bucket: Bucket,
     camera_templates: Dict[int, Path],
-    camera_metrics: Dict[int, Tuple[float, float, float]],
+    camera_metrics: Dict[int, Tuple[float, float, float, float, float]],
     links_per_pool_file: int,
 ) -> Tuple[int, int]:
     date = bucket.date
@@ -262,12 +266,13 @@ def build_bucket(
 
             for camera_id in range(1, CAMERA_COUNT + 1):
                 file_name = f"{base_stamp}-{camera_id}"
-                mean_peak, max_peak, max_c_mean = camera_metrics[camera_id]
+                mean_peak, max_peak, max_c_mean, mean_r_peak, max_r_peak = camera_metrics[camera_id]
                 max_exceed = 1 if max_peak > 0.5 else 0
                 mean_exceed = 1 if mean_peak > 0.2 else 0
                 csv_file.write(
                     f"{grab_id},{file_name},{max_exceed},{mean_exceed},"
-                    f"{mean_peak:.4f},{max_peak:.4f},3000,3000.0,100.0,{max_c_mean:.6f}\n"
+                    f"{mean_peak:.4f},{max_peak:.4f},3000,3000.0,100.0,{max_c_mean:.6f},"
+                    f"{mean_r_peak:.6f},{max_r_peak:.6f}\n"
                 )
                 ticks_file.write(f"{file_name},{frame_tick}\n")
 

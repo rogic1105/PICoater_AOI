@@ -70,15 +70,18 @@ namespace AniloxRoll.Monitor.Core.Data
         public override string ToString() => "";
     }
 
-    // 背景校正展開：取樣秒數
+    // 時間設定展開：背景採樣 + 單次抓取上限
     [TypeConverter(typeof(ExpandableLeftAlignConverter))]
-    public class BackgroundCorrectionConfig
+    public class TimeSettingsConfig
     {
         private readonly InspectionRecipe _recipe;
-        public BackgroundCorrectionConfig(InspectionRecipe recipe) { _recipe = recipe; }
+        public TimeSettingsConfig(InspectionRecipe recipe) { _recipe = recipe; }
 
-        [DisplayName("取樣秒數")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [DisplayName("背景採樣(sec)")][TypeConverter(typeof(LeftAlignNumericConverter))]
         public int BackgroundSampleSeconds { get => _recipe.BackgroundSampleSeconds; set => _recipe.BackgroundSampleSeconds = value; }
+
+        [DisplayName("抓取上限(sec)")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        public int GrabLimitSeconds { get => _recipe.GrabLimitSeconds; set => _recipe.GrabLimitSeconds = value; }
 
         public override string ToString() => "";
     }

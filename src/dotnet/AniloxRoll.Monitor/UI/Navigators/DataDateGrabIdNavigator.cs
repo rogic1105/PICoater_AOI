@@ -59,10 +59,10 @@ namespace AniloxRoll.Monitor.UI.Navigators
             _ctx.GrpDataSingleSheet.Click += (s, e) => SwitchActiveStatGroupBox(_ctx.GrpDataSingleSheet);
             _ctx.GroupBoxGrabIdRange.Click += (s, e) => ApplyGlobalRange();   // 回全局（永遠重設，不受目前 mode 早退影響）
 
-            // 年/月/日 label 點擊 → 範圍序號只取該期間（值取自 cbDataYieldYear/Month/Day 的選擇）
-            if (_ctx.LblChartNavYear != null)  _ctx.LblChartNavYear.Click  += (s, e) => ApplyPeriodRange(GrabIdRangeSource.Year);
-            if (_ctx.LblChartNavMonth != null) _ctx.LblChartNavMonth.Click += (s, e) => ApplyPeriodRange(GrabIdRangeSource.Month);
-            if (_ctx.LblChartNavDay != null)   _ctx.LblChartNavDay.Click   += (s, e) => ApplyPeriodRange(GrabIdRangeSource.Day);
+            // 年/月/日 label 點擊 → 套用該期間；範圍模式下再點同一個來源則解除綁定並保留目前範圍。
+            if (_ctx.LblChartNavYear != null)  _ctx.LblChartNavYear.Click  += (s, e) => TogglePeriodRange(GrabIdRangeSource.Year);
+            if (_ctx.LblChartNavMonth != null) _ctx.LblChartNavMonth.Click += (s, e) => TogglePeriodRange(GrabIdRangeSource.Month);
+            if (_ctx.LblChartNavDay != null)   _ctx.LblChartNavDay.Click   += (s, e) => TogglePeriodRange(GrabIdRangeSource.Day);
 
             // lblChartNav 為 active 來源時，改對應的 cbDataYear/Month/Day → 範圍跟著更新
             if (_ctx.CbChartYear != null)  _ctx.CbChartYear.SelectedIndexChanged  += (s, e) => OnPeriodComboChangedForRange(GrabIdRangeSource.Year);
@@ -192,6 +192,20 @@ namespace AniloxRoll.Monitor.UI.Navigators
             _setChipActive(_ctx.LblChartNavDay,   !single && _rangeSource == GrabIdRangeSource.Day);
         }
 
+        /// <summary>同一期間第二按解除綁定；只取消後續連動，不改目前序號範圍。</summary>
+        private void TogglePeriodRange(GrabIdRangeSource source)
+        {
+            if (ActiveStatMode == _ctx.GroupBoxGrabIdRange && _rangeSource == source)
+            {
+                _rangeSource = GrabIdRangeSource.Custom;
+                UpdateSourceHighlights();
+                FlowTrace.Log($"ui:【期間-{GetPeriodLabel(source)}】→ 取消綁定 保留範圍 {_ctx.CbGrabIdStart.Text}~{_ctx.CbGrabIdEnd.Text}");
+                return;
+            }
+
+            ApplyPeriodRange(source);
+        }
+
         /// <summary>年/月/日 label 點擊：範圍序號只取該期間（值取自 cbDataYieldYear/Month/Day）。</summary>
         private void ApplyPeriodRange(GrabIdRangeSource source)
         {
@@ -219,7 +233,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
                 _ctx.CbGrabIdEnd.SelectedIndex = lo;     // 最新
             }
             _rangeSource = source;
-            FlowTrace.Log($"ui:【期間-{(source == GrabIdRangeSource.Year ? "年" : source == GrabIdRangeSource.Month ? "月" : "日")}】→ 範圍 {infos[hi].GrabId}~{infos[lo].GrabId}");
+            FlowTrace.Log($"ui:【期間-{GetPeriodLabel(source)}】→ 範圍 {infos[hi].GrabId}~{infos[lo].GrabId}");
             SetActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);   // mode=範圍 + UpdateSourceHighlights
             _refreshStats();
         }
@@ -248,6 +262,13 @@ namespace AniloxRoll.Monitor.UI.Navigators
             if (!TryParseCombo(_ctx.CbChartMonth, out month)) return false;
             if (source == GrabIdRangeSource.Month) return true;
             return TryParseCombo(_ctx.CbChartDay, out day);
+        }
+
+        private static string GetPeriodLabel(GrabIdRangeSource source)
+        {
+            return source == GrabIdRangeSource.Year ? "年"
+                : source == GrabIdRangeSource.Month ? "月"
+                : "日";
         }
 
         private static bool TryParseCombo(ComboBox cb, out int v)

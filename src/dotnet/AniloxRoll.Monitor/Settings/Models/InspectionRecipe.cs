@@ -72,7 +72,8 @@ namespace AniloxRoll.Monitor.Core.Data
         [DisplayName("Error Value Max V")]  public float ErrorValueMaxV  { get; set; } = InspectionDefaults.ErrorValueMaxV;
         [DisplayName("Error Value Mean H")] public float ErrorValueMeanH { get; set; } = InspectionDefaults.ErrorValueMeanH;
         [DisplayName("Error Value Max H")]  public float ErrorValueMaxH  { get; set; } = InspectionDefaults.ErrorValueMaxH;
-        [DisplayName("背景取樣秒數")]  public int BackgroundSampleSeconds { get; set; } = InspectionDefaults.BackgroundSampleSeconds;
+        [DisplayName("背景採樣(sec)")] public int BackgroundSampleSeconds { get; set; } = InspectionDefaults.BackgroundSampleSeconds;
+        [DisplayName("抓取上限(sec)")] public int GrabLimitSeconds { get; set; } = InspectionDefaults.GrabLimitSeconds;
         [DisplayName("A輪速度 (m/min)")]  public double AniloxRollSpeedMPerMin { get; set; } = InspectionDefaults.AniloxRollSpeedMPerMin;
 
         /// <summary>存檔縮小倍率。原圖寬高各除以此值後存成 JPEG。唯一預設值來源：InspectionEngineConfig.DefaultSaveResizeScale。</summary>
@@ -92,6 +93,7 @@ namespace AniloxRoll.Monitor.Core.Data
             if (ErrorValueMeanH <= 0) ErrorValueMeanH = InspectionDefaults.ErrorValueMeanH;
             if (ErrorValueMaxH  <= 0) ErrorValueMaxH  = InspectionDefaults.ErrorValueMaxH;
             if (BackgroundSampleSeconds < 1) BackgroundSampleSeconds = InspectionDefaults.BackgroundSampleSeconds;
+            if (GrabLimitSeconds < 1) GrabLimitSeconds = InspectionDefaults.GrabLimitSeconds;
             if (AniloxRollSpeedMPerMin <= 0) AniloxRollSpeedMPerMin = InspectionDefaults.AniloxRollSpeedMPerMin;
             if (SaveResizeScale <= 0) SaveResizeScale = InspectionEngineConfig.DefaultSaveResizeScale;
             if (SaveJpgQuality  < 1 || SaveJpgQuality > 100) SaveJpgQuality = InspectionEngineConfig.DefaultSaveJpgQuality;

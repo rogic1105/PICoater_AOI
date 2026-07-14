@@ -8,6 +8,7 @@ using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.Services;
 using AniloxRoll.Monitor.UI.Widgets;
+using AniloxRoll.Monitor.UI.Managers;
 using TanukiCv.Controls;
 
 namespace AniloxRoll.Monitor.UI.Presenters
@@ -25,9 +26,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
     public sealed class MuraProfileChartPresenter : IDisposable
     {
         private const int SingleGrabCacheEntries = 512;
-        private const int SingleGrabCacheMegabytes = 128;
+        private const int SingleGrabCacheMegabytes = 256;
         private const long SingleGrabCacheBytes = SingleGrabCacheMegabytes * 1024L * 1024L;
         private const int PrefetchLookAhead = 4;
+        private const int ColdMergeParallelism = 2;
 
         private readonly DataStatisticsContext _ctx;
         private readonly Func<System.Windows.Forms.GroupBox> _getActiveStatMode;
@@ -37,6 +39,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             new SingleGrabCurveCache(SingleGrabCacheEntries, SingleGrabCacheBytes);
 
         private ColumnCurveChartHelper _muraProfileHelper;
+        private RowCurveDisplayAdapter _rowDisplay;
+        private bool _rowHasData;
         private CancellationTokenSource _prefetchCancellation;
         private Task<SingleGrabCurveProfile> _prefetchTask;
         private string _prefetchKey;
@@ -59,7 +63,21 @@ namespace AniloxRoll.Monitor.UI.Presenters
         {
             if (_ctx.ChartDataPatch == null) return;
             _muraProfileHelper = new ColumnCurveChartHelper(_ctx.ChartDataPatch);
-            FlowTrace.Log($"DT curve cache policy entries={SingleGrabCacheEntries} maxMB={SingleGrabCacheMegabytes} prefetch={PrefetchLookAhead} scale=merged-only");
+            if (_ctx.ChartDataRow != null)
+            {
+                _rowDisplay = new RowCurveDisplayAdapter(
+                    new RowCurveChartHelper(_ctx.ChartDataRow),
+                    () => _ctx.Settings.VerticalDirection)
+                {
+                    FlowName = "DT row"
+                };
+                _rowDisplay.SetThresholds(
+                    _ctx.Settings.ErrorValueMeanH,
+                    _ctx.Settings.ErrorValueMaxH);
+            }
+            FlowTrace.Log($"DT curve cache policy entries={SingleGrabCacheEntries} " +
+                $"maxMB={SingleGrabCacheMegabytes} prefetch={PrefetchLookAhead} " +
+                $"coldParallel={ColdMergeParallelism} scale=merged-only");
         }
 
         public void Update(IList<GrabIdInfo> grabIds, IList<GrabIdInfo> candidateRange = null)
@@ -87,6 +105,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 return;
             }
             // 範圍/時間模式：aggregate 多 grab 平均，當作歷史快照不做 view-time rescale
+            ClearRow("range");
 
             // ── 範圍/時間模式：舊 aggregate 邏輯 ──
             Dictionary<int, float[]> meanDict;
@@ -235,6 +254,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _muraProfileHelper, camCount,
                 _ctx.Settings.StitchMode, null, valueScale: valueScale);
             string source = cacheHit ? "cache" : joinedPrefetch ? "prefetch" : "disk";
+            UpdateRowChart(profile, grabCfg, info.GrabId, source);
             FlowTrace.Log($"DT curve load {info.GrabId} captures={profile.CaptureCount} " +
                 $"source={source} storage={profile.StorageSource} configMs={configMs} waitMs={waitMs} " +
                 $"pathMs={profile.LookupMs} mergeMs={profile.MergeMs} " +
@@ -262,29 +282,49 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 statsRoot, info, camCount, out SingleGrabCurveSummary summary))
             {
                 return new SingleGrabCurveProfile(
-                    summary.Mean, summary.Max, summary.CaptureCount,
+                    summary.Mean, summary.Max, summary.RowMean, summary.RowMax,
+                    summary.CaptureCount,
                     "summary", 0, 0, sw.ElapsedMilliseconds);
             }
 
             var grouped = InspectionImagePathRepository.LoadForGrabId(
                 statsRoot, info.GrabId, info.Earliest, info.Latest);
             long lookupMs = sw.ElapsedMilliseconds;
-            int captureCount = 0;
-            int mergedCaptureCount = 0;
             var allMean = new float[camCount][];
             var allMax = new float[camCount][];
+            var allRowMean = new float[camCount][];
+            var allRowMax = new float[camCount][];
+            var captureCounts = new int[camCount];
+            var mergedCaptureCounts = new int[camCount];
 
-            for (int i = 0; i < camCount; i++)
+            Parallel.For(0, camCount, new ParallelOptions
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                CancellationToken = cancellationToken,
+                MaxDegreeOfParallelism = ColdMergeParallelism
+            }, i =>
+            {
                 int camId = i + 1;
-                if (!grouped.TryGetValue(camId, out var paths) || paths.Count == 0) continue;
-                captureCount += paths.Count;
+                if (!grouped.TryGetValue(camId, out var paths) || paths.Count == 0) return;
+                captureCounts[i] = paths.Count;
                 CurveMergeHelper.MergeCurves(
                     paths, out allMean[i], out allMax[i], out int mergedForCamera,
                     cancellationToken);
-                mergedCaptureCount += mergedForCamera;
+                mergedCaptureCounts[i] = mergedForCamera;
+                CurveMergeHelper.MergeRowCurves(
+                    paths, out allRowMean[i], out allRowMax[i], cancellationToken);
+            });
+
+            int captureCount = 0;
+            int mergedCaptureCount = 0;
+            for (int i = 0; i < camCount; i++)
+            {
+                captureCount += captureCounts[i];
+                mergedCaptureCount += mergedCaptureCounts[i];
             }
+
+            CurveMergeHelper.MergeRowCurvesOverlap(
+                allRowMean, allRowMax, camCount,
+                out float[] rowMean, out float[] rowMax);
 
             long mergeMs = sw.ElapsedMilliseconds - lookupMs;
             long summaryStartMs = sw.ElapsedMilliseconds;
@@ -293,7 +333,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             {
                 bool queued = SingleGrabCurveSummaryStore.QueueSave(
                     statsRoot, info, camCount,
-                    new SingleGrabCurveSummary(allMean, allMax, captureCount));
+                    new SingleGrabCurveSummary(
+                        allMean, allMax, rowMean, rowMax, captureCount));
                 summaryWrite = queued ? "queued" : "dropped";
             }
             else
@@ -304,8 +345,40 @@ namespace AniloxRoll.Monitor.UI.Presenters
             FlowTrace.Log($"DT curve summary {info.GrabId} write={summaryWrite} " +
                 $"captures={captureCount} merged={mergedCaptureCount} ms={summaryMs}");
             return new SingleGrabCurveProfile(
-                allMean, allMax, captureCount,
+                allMean, allMax, rowMean, rowMax, captureCount,
                 "bins", lookupMs, mergeMs, summaryMs);
+        }
+
+        private void UpdateRowChart(
+            SingleGrabCurveProfile profile, CsvConfigSnapshot grabCfg,
+            string grabId, string source)
+        {
+            if (_rowDisplay == null) return;
+            if (profile?.RowMean == null || profile.RowMean.Length == 0)
+            {
+                ClearRow("missing");
+                FlowTrace.Log($"DT row curve missing {grabId}");
+                return;
+            }
+
+            float captureHmV = grabCfg?.HessianMaxFactorV ??
+                _ctx.Settings.HessianMaxFactorV;
+            float[] mean = HessianRescaleHelper.CloneAndRescale1D(
+                profile.RowMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
+            float[] max = HessianRescaleHelper.CloneAndRescale1D(
+                profile.RowMax, captureHmV, _ctx.Settings.HessianMaxFactorH);
+            double lineRateHz = _ctx.Settings.Acquisition.CameraLineRateHz[0];
+            if (grabCfg?.CamLineRateHz != null && grabCfg.CamLineRateHz.Length > 0 &&
+                grabCfg.CamLineRateHz[0] > 0)
+                lineRateHz = grabCfg.CamLineRateHz[0];
+            _rowDisplay.SetRowPitchFromSpeed(
+                _ctx.Settings.AniloxRollSpeedMPerMin, lineRateHz);
+            _rowDisplay.SetThresholds(
+                _ctx.Settings.ErrorValueMeanH, _ctx.Settings.ErrorValueMaxH);
+            _rowDisplay.UpdateData(mean, max);
+            _rowHasData = true;
+            FlowTrace.Log($"DT row curve load {grabId} source={source} " +
+                $"points={mean.Length} pitch={_rowDisplay.RowPitchMm:F6}mm");
         }
 
         private void ScheduleAdjacentPrefetch(
@@ -399,6 +472,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
         {
             if (_muraProfileHelper == null) return;
             _muraProfileHelper.SetThresholds(_ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV);
+            _rowDisplay?.SetThresholds(
+                _ctx.Settings.ErrorValueMeanH, _ctx.Settings.ErrorValueMaxH);
             // 單片模式才需要按 HM 重算曲線坡度；aggregate 模式維持快照
             var grabIdInfos = _getGrabIdInfos();
             if (_getActiveStatMode() == _ctx.GrpDataSingleSheet
@@ -427,6 +502,15 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (_ctx.ChartDataPatch == null) return;
             foreach (var s in _ctx.ChartDataPatch.Series)
                 s.Points.Clear();
+            ClearRow("all");
+        }
+
+        public void ClearRow(string reason = "range")
+        {
+            _rowDisplay?.Clear();
+            if (_rowHasData)
+                FlowTrace.Log($"DT row curve clear mode={reason}");
+            _rowHasData = false;
         }
     }
 }

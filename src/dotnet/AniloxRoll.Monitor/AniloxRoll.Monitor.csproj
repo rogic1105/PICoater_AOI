@@ -111,6 +111,7 @@
     <Compile Include="Settings\Models\PropertyGrid\ExpandableLeftAlignConverter.cs" />
     <Compile Include="Settings\Models\PropertyGrid\RecipeDisplayAdapters.cs" />
     <Compile Include="Settings\Models\PropertyGrid\BoolYesNoConverter.cs" />
+    <Compile Include="Settings\Models\PropertyGrid\IoEndpointTypeConverters.cs" />
     <Compile Include="Settings\Models\PropertyGrid\InspectionSettingsDescriptionProvider.cs" />
     <Compile Include="Settings\Models\PropertyGrid\PropertyOrderAttribute.cs" />
     <Compile Include="Settings\Services\ConfigManager.cs" />
@@ -187,6 +188,7 @@
     <Compile Include="UI\Presenters\LiveTelemetryPresenter.cs" />
     <Compile Include="UI\Binders\BusyUiBinder.cs" />
     <Compile Include="UI\Binders\GrabDetailListBinder.cs" />
+    <Compile Include="UI\Coordinators\GrabDurationCoordinator.cs" />
     <Compile Include="UI\Coordinators\InspectionSettingsCoordinator.cs" />
     <Compile Include="UI\Coordinators\ReviewPeriodLoadCoordinator.cs" />
     <Compile Include="UI\Coordinators\ReviewFolderCoordinator.cs" />

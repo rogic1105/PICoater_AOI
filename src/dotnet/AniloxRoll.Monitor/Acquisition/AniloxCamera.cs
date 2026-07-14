@@ -146,7 +146,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         // ==================== Events ====================
         /// <summary>每次 TrySaveCapture 成功存檔後觸發（MIL 回呼執行緒）。
         /// 參數：(cameraId, fileNameWithoutExt, meanPeak_0to1, maxPeak_0to1, maxCMean_0to1)</summary>
-        public event Action<int, string, float, float, float> OnInspectionResult;
+        public event Action<int, string, float, float, float, float, float> OnInspectionResult;
 
         /// <summary>ImageCanvas / 瀑布顯示路徑用：每幀提供「顯示 bytes(8-bit 灰階)+ 尺寸 + 本幀硬體 frame-start tick」(MIL 回呼執行緒)。
         /// bytes 是重用緩衝 → 訂閱者必須**同步消費**(組 bitmap 複製)、勿存 ref。只在有訂閱者時觸發。
@@ -710,7 +710,8 @@ namespace AniloxRoll.Monitor.Core.Camera
                     // Resize buffer 不可用時的 fallback（不應發生）
                     Directory.CreateDirectory(saveDir);
                     MIL.MbufExport(Path.Combine(saveDir, baseName + ".bmp"), MIL.M_BMP, sourceBuffer);
-                    OnInspectionResult?.Invoke(CameraId, baseName, _lastMeanPeak, _lastMaxPeak, float.NaN);
+                    OnInspectionResult?.Invoke(CameraId, baseName,
+                        _lastMeanPeak, _lastMaxPeak, float.NaN, float.NaN, float.NaN);
                 }
             }
             catch (Exception ex)

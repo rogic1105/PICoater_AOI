@@ -31,6 +31,8 @@ class DataFlowValidator:
         self._check_single_selection(session, report)
         self._check_single_curve_policy(session, report)
         self._check_single_curve(session, report)
+        self._check_curve_summary_writes(session, report)
+        self._check_single_row_curve(session, report)
         self._check_list_ownership(session, report)
         self._check_range_policy(session, report)
         self._check_range_debounce(session, report)
@@ -214,8 +216,8 @@ class DataFlowValidator:
             return
 
         expected = (
-            "DT curve cache policy entries=512 maxMB=128 "
-            "prefetch=4 scale=merged-only"
+            "DT curve cache policy entries=512 maxMB=256 "
+            "prefetch=4 coldParallel=2 scale=merged-only"
         )
         unique = sorted(set(lines))
         ok = len(lines) == 1 and unique == [expected]
@@ -224,6 +226,115 @@ class DataFlowValidator:
             "D3.curve-policy",
             CheckStatus.PASS if ok else CheckStatus.FAIL,
             f"行數={len(lines)} 實際={' | '.join(unique)}",
+        )
+
+    def _check_single_row_curve(self, session: FlowSession, report: CheckReport) -> None:
+        intents = [
+            (index, grab_id(line.message))
+            for index, line in enumerate(session.lines)
+            if line.message.startswith("ui:【報表序號】")
+        ]
+        if not intents:
+            report.add(self.domain, "D3.row-curve", CheckStatus.NOT_COVERED, "無報表序號操作")
+            return
+
+        pattern = re.compile(
+            r"^DT row curve load (\d{6}-\d{6}) source=(disk|prefetch|cache) "
+            r"points=(\d+) pitch=([0-9.]+)mm$"
+        )
+        missing_terminal = []
+        invalid = []
+        loaded = 0
+        unavailable = 0
+        for position, (line_index, selected_id) in enumerate(intents):
+            next_index = intents[position + 1][0] if position + 1 < len(intents) else len(session.lines)
+            messages = [
+                line.message for line in session.lines[line_index + 1 : next_index]
+                if line.message.startswith((
+                    f"DT row curve load {selected_id} ",
+                    f"DT row curve missing {selected_id}",
+                ))
+            ]
+            if not messages:
+                missing_terminal.append(selected_id)
+                continue
+            terminal = messages[-1]
+            if terminal == f"DT row curve missing {selected_id}":
+                unavailable += 1
+                continue
+            match = pattern.match(terminal)
+            if not match or int(match.group(3)) <= 0 or float(match.group(4)) <= 0:
+                invalid.append(terminal)
+                continue
+            loaded += 1
+
+        status = CheckStatus.PASS if not missing_terminal and not invalid else CheckStatus.FAIL
+        report.add(
+            self.domain,
+            "D3.row-curve",
+            status,
+            f"intent={len(intents)} loaded={loaded} legacy/missing={unavailable} "
+            f"缺終態={len(missing_terminal)} 格式錯誤={len(invalid)}"
+            + (f"；首筆 {missing_terminal[0]}" if missing_terminal else ""),
+        )
+
+    def _check_curve_summary_writes(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        lines = [
+            line.message for line in session.lines
+            if line.message.startswith("DT curve summary ")
+        ]
+        if not lines:
+            report.add(
+                self.domain,
+                "D3.summary-write",
+                CheckStatus.NOT_COVERED,
+                "本 session 沒有由 bins 重建匯總",
+            )
+            return
+
+        pattern = re.compile(
+            r"^DT curve summary (\d{6}-\d{6}) "
+            r"write=(queued|ok|failed|dropped|evicted|skip-incomplete) "
+            r"captures=(\d+) merged=(\d+) ms=(\d+)"
+            r"(?: reason=(idle|pressure))?$"
+        )
+        counts = {
+            "queued": 0,
+            "ok": 0,
+            "failed": 0,
+            "dropped": 0,
+            "evicted": 0,
+            "skip-incomplete": 0,
+        }
+        invalid = []
+        for message in lines:
+            match = pattern.match(message)
+            if not match:
+                invalid.append(message)
+                continue
+            status = match.group(2)
+            captures = int(match.group(3))
+            merged = int(match.group(4))
+            reason = match.group(6)
+            counts[status] += 1
+            if status in ("queued", "ok") and captures != merged:
+                invalid.append(message)
+            if status in ("ok", "failed") and reason not in ("idle", "pressure"):
+                invalid.append(message)
+
+        bad = counts["failed"] + counts["dropped"] + counts["evicted"]
+        ok = not invalid and bad == 0
+        report.add(
+            self.domain,
+            "D3.summary-write",
+            CheckStatus.PASS if ok else CheckStatus.FAIL,
+            f"queued={counts['queued']} ok={counts['ok']} "
+            f"failed={counts['failed']} dropped={counts['dropped']} "
+            f"evicted={counts['evicted']} incomplete={counts['skip-incomplete']} "
+            f"格式錯誤={len(invalid)}"
+            + (f"；首筆 {invalid[0]}" if invalid else ""),
         )
 
     def _check_list_ownership(self, session: FlowSession, report: CheckReport) -> None:

@@ -11,14 +11,25 @@ namespace AniloxRoll.Monitor.Core.Services
     internal sealed class SingleGrabCurveSummary
     {
         public SingleGrabCurveSummary(float[][] mean, float[][] max, int captureCount)
+            : this(mean, max, null, null, captureCount)
+        {
+        }
+
+        public SingleGrabCurveSummary(
+            float[][] mean, float[][] max, float[] rowMean, float[] rowMax,
+            int captureCount)
         {
             Mean = mean ?? new float[0][];
             Max = max ?? new float[0][];
+            RowMean = rowMean;
+            RowMax = rowMax;
             CaptureCount = captureCount;
         }
 
         public float[][] Mean { get; }
         public float[][] Max { get; }
+        public float[] RowMean { get; }
+        public float[] RowMax { get; }
         public int CaptureCount { get; }
     }
 
@@ -28,13 +39,17 @@ namespace AniloxRoll.Monitor.Core.Services
     /// </summary>
     internal static class SingleGrabCurveSummaryStore
     {
-        private const int FormatVersion = 1;
+        private const int FormatVersion = 2;
         private const int AggregationVersion = 1;
         private const int MaxCameraCount = 64;
-        private const int MaxCurveLength = 200000;
+        // A persisted row curve concatenates many per-frame bins and can legitimately
+        // exceed CurveBinFile's 200k single-file guard.
+        private const int MaxCurveLength = 2000000;
         private const int MaxGrabIdBytes = 64;
         private const int WriteIdleMs = 750;
-        private const long MaxPendingBytes = 96L * 1024 * 1024;
+        private const long MaxSummaryBytes = 96L * 1024 * 1024;
+        private const long MaxPendingBytes = MaxSummaryBytes;
+        private const long PressureDrainBytes = 72L * 1024 * 1024;
         private static readonly byte[] Magic = { (byte)'M', (byte)'C', (byte)'S', (byte)'F' };
         private static readonly object WriteSync = new object();
         private static readonly Dictionary<string, PendingWrite> Pending =
@@ -48,6 +63,7 @@ namespace AniloxRoll.Monitor.Core.Services
         private static DateTime _lastReadActivityUtc = DateTime.MinValue;
         private static long _pendingBytes;
         private static bool _writerRunning;
+        private static bool _pressureDrainRequested;
 
         [ThreadStatic]
         private static byte[] _payloadBuffer;
@@ -63,20 +79,25 @@ namespace AniloxRoll.Monitor.Core.Services
             public LinkedListNode<string> Node;
         }
 
-        /// <summary>Signals interactive curve IO so summary writes yield to foreground reads.</summary>
+        /// <summary>
+        /// Signals interactive curve IO so summary writes normally yield to foreground reads.
+        /// The bounded pressure-drain path remains armed when pending memory is near its limit.
+        /// </summary>
         public static void NotifyReadActivity()
         {
             lock (WriteSync)
             {
                 _lastReadActivityUtc = DateTime.UtcNow;
                 if (Pending.Count > 0 && !_writerRunning)
-                    WriteTimer.Change(WriteIdleMs, Timeout.Infinite);
+                    WriteTimer.Change(
+                        _pressureDrainRequested ? 1 : WriteIdleMs,
+                        Timeout.Infinite);
             }
         }
 
         /// <summary>
-        /// Queues a complete summary for one idle background writer. Pending data is bounded;
-        /// an oversized entry is rejected instead of increasing application memory without limit.
+        /// Queues a complete summary for one serial background writer. It normally waits for
+        /// read idle, but drains under bounded-memory pressure. Oversized entries are rejected.
         /// </summary>
         public static bool QueueSave(
             string root, GrabIdInfo info, int cameraCount, SingleGrabCurveSummary summary)
@@ -84,10 +105,13 @@ namespace AniloxRoll.Monitor.Core.Services
             if (!IsIdentityValid(root, info, cameraCount) || summary == null) return false;
             if (summary.Mean.Length != cameraCount || summary.Max.Length != cameraCount) return false;
 
-            long estimatedBytes = EstimateBytes(summary.Mean) + EstimateBytes(summary.Max);
+            long estimatedBytes = EstimateBytes(summary.Mean) + EstimateBytes(summary.Max) +
+                EstimateBytes(summary.RowMean) + EstimateBytes(summary.RowMax);
             if (estimatedBytes > MaxPendingBytes) return false;
             string identityKey = BuildIdentityKey(root, info, cameraCount);
 
+            List<PendingWrite> evicted = null;
+            bool accepted;
             lock (WriteSync)
             {
                 if (Completed.Contains(identityKey)) return true;
@@ -125,11 +149,29 @@ namespace AniloxRoll.Monitor.Core.Services
                 }
 
                 while (_pendingBytes > MaxPendingBytes && PendingOrder.First != null)
-                    RemovePending(PendingOrder.First.Value);
+                {
+                    PendingWrite removed = RemovePending(PendingOrder.First.Value);
+                    if (removed != null)
+                    {
+                        if (evicted == null) evicted = new List<PendingWrite>();
+                        evicted.Add(removed);
+                    }
+                }
 
-                WriteTimer.Change(WriteIdleMs, Timeout.Infinite);
-                return Pending.ContainsKey(identityKey) || Completed.Contains(identityKey);
+                _pressureDrainRequested = _pendingBytes >= PressureDrainBytes;
+                WriteTimer.Change(
+                    _pressureDrainRequested ? 1 : WriteIdleMs, Timeout.Infinite);
+                accepted = Pending.ContainsKey(identityKey) || Completed.Contains(identityKey);
             }
+
+            if (evicted != null)
+            {
+                foreach (PendingWrite removed in evicted)
+                    FlowTrace.Log($"DT curve summary {removed.Info.GrabId} write=evicted " +
+                        $"captures={removed.Summary.CaptureCount} " +
+                        $"merged={removed.Summary.CaptureCount} ms=0");
+            }
+            return accepted;
         }
 
         public static bool TryLoad(
@@ -159,15 +201,19 @@ namespace AniloxRoll.Monitor.Core.Services
                     int captureCount = reader.ReadInt32();
                     if (captureCount < 0) return false;
 
+                    long remainingCurveBytes = MaxSummaryBytes;
                     var mean = new float[cameraCount][];
                     var max = new float[cameraCount][];
                     for (int i = 0; i < cameraCount; i++)
                     {
-                        mean[i] = ReadCurve(reader, stream);
-                        max[i] = ReadCurve(reader, stream);
+                        mean[i] = ReadCurve(reader, stream, ref remainingCurveBytes);
+                        max[i] = ReadCurve(reader, stream, ref remainingCurveBytes);
                     }
+                    float[] rowMean = ReadCurve(reader, stream, ref remainingCurveBytes);
+                    float[] rowMax = ReadCurve(reader, stream, ref remainingCurveBytes);
 
-                    summary = new SingleGrabCurveSummary(mean, max, captureCount);
+                    summary = new SingleGrabCurveSummary(
+                        mean, max, rowMean, rowMax, captureCount);
                     return true;
                 }
             }
@@ -184,6 +230,9 @@ namespace AniloxRoll.Monitor.Core.Services
         {
             if (!IsIdentityValid(root, info, cameraCount) || summary == null) return false;
             if (summary.Mean.Length != cameraCount || summary.Max.Length != cameraCount) return false;
+            long estimatedBytes = EstimateBytes(summary.Mean) + EstimateBytes(summary.Max) +
+                EstimateBytes(summary.RowMean) + EstimateBytes(summary.RowMax);
+            if (estimatedBytes > MaxSummaryBytes) return false;
 
             string path = CaptureStoragePaths.GrabCurveSummary(root, info.Earliest, info.GrabId);
             string directory = Path.GetDirectoryName(path);
@@ -210,6 +259,8 @@ namespace AniloxRoll.Monitor.Core.Services
                         WriteCurve(writer, summary.Mean[i]);
                         WriteCurve(writer, summary.Max[i]);
                     }
+                    WriteCurve(writer, summary.RowMean);
+                    WriteCurve(writer, summary.RowMax);
                     writer.Flush();
                     stream.Flush(true);
                 }
@@ -244,12 +295,14 @@ namespace AniloxRoll.Monitor.Core.Services
         private static void DrainPending(object state)
         {
             PendingWrite pending;
+            string reason;
             lock (WriteSync)
             {
                 if (_writerRunning || PendingOrder.First == null) return;
 
                 double idleMs = (DateTime.UtcNow - _lastReadActivityUtc).TotalMilliseconds;
-                if (idleMs < WriteIdleMs)
+                bool pressure = _pressureDrainRequested || _pendingBytes >= PressureDrainBytes;
+                if (!pressure && idleMs < WriteIdleMs)
                 {
                     WriteTimer.Change(
                         Math.Max(1, WriteIdleMs - (int)idleMs), Timeout.Infinite);
@@ -259,7 +312,9 @@ namespace AniloxRoll.Monitor.Core.Services
                 string key = PendingOrder.First.Value;
                 pending = Pending[key];
                 RemovePending(key);
+                _pressureDrainRequested = _pendingBytes >= PressureDrainBytes;
                 _writerRunning = true;
+                reason = pressure ? "pressure" : "idle";
             }
 
             var sw = Stopwatch.StartNew();
@@ -267,7 +322,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 pending.Root, pending.Info, pending.CameraCount, pending.Summary);
             FlowTrace.Log($"DT curve summary {pending.Info.GrabId} " +
                 $"write={(saved ? "ok" : "failed")} captures={pending.Summary.CaptureCount} " +
-                $"merged={pending.Summary.CaptureCount} ms={sw.ElapsedMilliseconds}");
+                $"merged={pending.Summary.CaptureCount} ms={sw.ElapsedMilliseconds} reason={reason}");
 
             lock (WriteSync)
             {
@@ -275,8 +330,9 @@ namespace AniloxRoll.Monitor.Core.Services
                 _writerRunning = false;
                 if (PendingOrder.First != null)
                 {
+                    _pressureDrainRequested = _pendingBytes >= PressureDrainBytes;
                     double idleMs = (DateTime.UtcNow - _lastReadActivityUtc).TotalMilliseconds;
-                    int dueMs = idleMs >= WriteIdleMs
+                    int dueMs = _pressureDrainRequested || idleMs >= WriteIdleMs
                         ? 1
                         : Math.Max(1, WriteIdleMs - (int)idleMs);
                     WriteTimer.Change(dueMs, Timeout.Infinite);
@@ -284,12 +340,13 @@ namespace AniloxRoll.Monitor.Core.Services
             }
         }
 
-        private static void RemovePending(string identityKey)
+        private static PendingWrite RemovePending(string identityKey)
         {
-            if (!Pending.TryGetValue(identityKey, out PendingWrite pending)) return;
+            if (!Pending.TryGetValue(identityKey, out PendingWrite pending)) return null;
             _pendingBytes -= pending.EstimatedBytes;
             PendingOrder.Remove(pending.Node);
             Pending.Remove(identityKey);
+            return pending;
         }
 
         private static string BuildIdentityKey(string root, GrabIdInfo info, int cameraCount) =>
@@ -304,6 +361,9 @@ namespace AniloxRoll.Monitor.Core.Services
                 if (curves[i] != null) bytes += (long)curves[i].Length * sizeof(float);
             return bytes;
         }
+
+        private static long EstimateBytes(float[] curve) =>
+            curve == null ? 0 : (long)curve.Length * sizeof(float);
 
         private static bool ReadAndMatchMagic(BinaryReader reader)
         {
@@ -347,7 +407,8 @@ namespace AniloxRoll.Monitor.Core.Services
             writer.Write(payload, 0, byteCount);
         }
 
-        private static float[] ReadCurve(BinaryReader reader, Stream stream)
+        private static float[] ReadCurve(
+            BinaryReader reader, Stream stream, ref long remainingCurveBytes)
         {
             int length = reader.ReadInt32();
             if (length == -1) return null;
@@ -355,6 +416,9 @@ namespace AniloxRoll.Monitor.Core.Services
                 throw new InvalidDataException("Invalid curve length.");
 
             int byteCount = checked(length * sizeof(float));
+            if (byteCount > remainingCurveBytes)
+                throw new InvalidDataException("Summary curve payload is too large.");
+            remainingCurveBytes -= byteCount;
             if (stream.Length - stream.Position < byteCount) throw new EndOfStreamException();
             byte[] payload = GetPayloadBuffer(byteCount);
             int offset = 0;

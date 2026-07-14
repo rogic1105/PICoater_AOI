@@ -10,19 +10,33 @@ namespace AniloxRoll.Monitor.UI.Services
         public SingleGrabCurveProfile(
             float[][] mean, float[][] max, int captureCount,
             string storageSource, long lookupMs, long mergeMs, long summaryMs)
+            : this(mean, max, null, null, captureCount,
+                storageSource, lookupMs, mergeMs, summaryMs)
+        {
+        }
+
+        public SingleGrabCurveProfile(
+            float[][] mean, float[][] max, float[] rowMean, float[] rowMax,
+            int captureCount, string storageSource,
+            long lookupMs, long mergeMs, long summaryMs)
         {
             Mean = mean ?? new float[0][];
             Max = max ?? new float[0][];
+            RowMean = rowMean;
+            RowMax = rowMax;
             CaptureCount = captureCount;
             StorageSource = storageSource ?? "bins";
             LookupMs = lookupMs;
             MergeMs = mergeMs;
             SummaryMs = summaryMs;
-            EstimatedBytes = EstimateBytes(Mean) + EstimateBytes(Max);
+            EstimatedBytes = EstimateBytes(Mean) + EstimateBytes(Max) +
+                EstimateBytes(RowMean) + EstimateBytes(RowMax);
         }
 
         public float[][] Mean { get; }
         public float[][] Max { get; }
+        public float[] RowMean { get; }
+        public float[] RowMax { get; }
         public int CaptureCount { get; }
         public string StorageSource { get; }
         public long LookupMs { get; }
@@ -37,6 +51,9 @@ namespace AniloxRoll.Monitor.UI.Services
                 if (arrays[i] != null) bytes += (long)arrays[i].Length * sizeof(float);
             return bytes;
         }
+
+        private static long EstimateBytes(float[] array) =>
+            array == null ? 0 : (long)array.Length * sizeof(float);
     }
 
     /// <summary>

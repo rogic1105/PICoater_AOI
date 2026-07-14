@@ -58,6 +58,7 @@ namespace AniloxRoll.Monitor.Forms
         private RowCurveSyncCoordinator _liveRowSync;
         private RowCurveSyncCoordinator _reviewRowSync;
         private LiveCameraManager _liveCameraManager;
+        private GrabDurationCoordinator _grabDurationCoordinator;
         // Global merge 用：快取各相機 row curve 資料，合併後更新圖表
         private readonly Dictionary<int, float[]> _liveRowMeanCache = new Dictionary<int, float[]>();
         private readonly Dictionary<int, float[]> _liveRowMaxCache  = new Dictionary<int, float[]>();
@@ -169,6 +170,7 @@ namespace AniloxRoll.Monitor.Forms
             // Closing 階段：只「停止」非 UI 執行緒活動（避免 Handle 銷毀後它們還在 BeginInvoke）。
             // Dispose 留到 FormClosed 統一處理，避免雙路徑釋放重疊。
             try { if (_liveCameraManager?.IsLiveGrabbing == true) _liveCameraManager.StopGrab(); } catch { }
+            try { _grabDurationCoordinator?.Dispose(); _grabDurationCoordinator = null; } catch { }
             try { _telemetryTimer?.Stop(); } catch { }
             try { _liveOverviewTimer?.Stop(); } catch { }
             try { _statsRefreshDebouncer?.Stop(); _statsRefreshDebouncer?.Dispose(); _statsRefreshDebouncer = null; } catch { }  // H3 + round-2 H3 補 Dispose
@@ -701,6 +703,8 @@ namespace AniloxRoll.Monitor.Forms
                 camLiveMain,
                 pixelText => { if (lblPixelInfo != null) lblPixelInfo.Text = pixelText; }
             );
+            _grabDurationCoordinator = new GrabDurationCoordinator(seconds =>
+                SafeBeginInvoke(() => HandleGrabLimitElapsed(seconds)));
             _liveCameraManager.SetCaptureSettings(_settings);
             UpdateRowChartPitch();
             _liveCameraManager.OnFilesSaved = files => _remoteCopyService?.EnqueueFiles(files);

@@ -212,6 +212,7 @@ AutoAllocateCameras(Form)                    顯示基線 set:[顯示基線] 一
 T1: StartGrab（cams=M）
 T1: ApplyMainDisplayMode → 同模式    ← 冪等：不得出現 create/teardown 行
 T1: capture plan grab=… root=… imageDir=… csv=… files=… scale=…
+T1: grab limit armed Ns grab=…       ← 正式監控 grab 成功後啟動 one-shot；背景採樣借用 grab 不武裝
 Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線」相機恰一行，順序不定
 （首幀齊後進入穩態 → 適用「穩態靜默通則」：無互動下不得再有顯示狀態**變更**行。
   狀態**快照**行〔rowChart/WF state/IC state/stats，見§狀態快照儀器〕＝儀器輸出，穩態每秒出現正常）
@@ -219,7 +220,8 @@ Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線�
 
 **code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
 ```
-btnLiveGrab_Click@AniloxRollForm.Live.cs             intent 行 ui:【開始抓取】鈕
+ btnLiveGrab_Click@AniloxRollForm.Live.cs → ToggleLiveGrabAsync
+                                                    intent 行 ui:【開始抓取】鈕
  ├（IsBgPreviewActive）ClearBackgroundPreview@AniloxRollForm.Background.cs
  │   └＝ExitBackgroundPreview（清幀＋回設定模式；共用顯示路後不再 FreeCameras）
  ├ AreCamerasHwReady@LiveCameraManager.cs 未就緒 → return   ← 守門：擋 IO 觸發路徑
@@ -240,6 +242,8 @@ btnLiveGrab_Click@AniloxRollForm.Live.cs             intent 行 ui:【開始抓�
  │      └ per-cam SetUserGrabIntent(true)@AniloxCamera.cs
  │         └ SetUserGrabIntent@MilCamera.cs → ApplyGrabState@MilCamera.cs → MdigProcess(M_START)
  ├（啟動成功）NextGrabId@InspectionLogService.cs → _currentGrabId ＋ capture plan 行（C1）
+ │  └ Arm(GrabLimitSeconds)@GrabDurationCoordinator.cs → grab limit armed 行
+ │     ← 設定在本輪開始時拍快照；PropertyGrid 中途改值從下一輪生效
  └ UpdateGrabButton@AniloxRollForm.Live.cs
 （每幀幀流，MIL 回呼執行緒 Tn）
 ProcessingFunction@MilCamera.cs（MdigProcess hook，static）
@@ -282,8 +286,12 @@ Tn: drop drainedFrame after StopGrab camN（可選；每台最多一行）
 
 **code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
 ```
-btnLiveGrab_Click@AniloxRollForm.Live.cs（wasGrabbing=true，同鈕 toggle）   intent 行 ui:【開始抓取】鈕
- └ ToggleGrab@LiveCameraManager.cs
+手動：btnLiveGrab_Click@AniloxRollForm.Live.cs（wasGrabbing=true）→ ToggleLiveGrabAsync
+                                                          intent 行 ui:【開始抓取】鈕
+逾時：Elapsed@GrabDurationCoordinator.cs → SafeBeginInvoke → HandleGrabLimitElapsed@AniloxRollForm.Live.cs
+                                                          intent 行 auto:抓取上限到時 limit=Ns grab=… → 停止
+ ├ ToggleLiveGrabAsync@AniloxRollForm.Live.cs
+ │  └ ToggleGrab@LiveCameraManager.cs
     └ StopGrab@LiveCameraManager.cs
        ├ FlowTrace "StopGrab" ＋ IsLiveGrabbing=false（先翻旗標）
        └ _stopDrainTask = Task.Run(Parallel.ForEach cams → SetUserGrabIntent(false))
@@ -296,10 +304,14 @@ btnLiveGrab_Click@AniloxRollForm.Live.cs（wasGrabbing=true，同鈕 toggle）  
              → drained FrameReady@AniloxCamera.cs 若發生：UserWantsGrab=false → drop，不進 Hessian/row chart/CSV/存檔
                 ← 防停止尾幀「有效影像 + 黑尾」被 Hessian 當水平脊線（黑白硬邊界）寫到最後 row
 （form 收尾，T1）
+ ├ Disarm@GrabDurationCoordinator.cs                         ← 作廢 generation，舊 callback 不得停掉下一輪
  ├ Task.Run(LightTurnOff@AniloxRollForm.HardwareStatus.cs)   ⚠ [UiStack] 曾定罪停止時卡 SerialStream.Write → 一律背景
  ├ TriggerRetentionAndFlagAsync@AniloxRollForm.HardwareStatus.cs
  ├ UpdateMuraLed(false) ＋ ClearMura@IoGrabController.cs   ← MURA latch 清除時機＝檢測結束（M1；手動流程不經 FSM 必須自清 DO）
- └ UpdateGrabButton@AniloxRollForm.Live.cs
+ ├ UpdateGrabButton@AniloxRollForm.Live.cs
+ └（逾時來源）NotifyGrabStopped@IoGrabController.cs          ← 先把 DO_PC_INSPECT 拉低；FSM 在 DI START
+                                                            維持 High 時刻意留 Running（沒有新上升緣，不會重啟），
+                                                            等 START 真正下降後才走既有 falling-edge 收尾回 Idle
 競態收口：下一次 StartGrab / FreeCameras 開頭 WaitStopDrain@LiveCameraManager.cs（排水未完等它，平時零成本）
 ```
 
@@ -488,7 +500,7 @@ btnLiveGetBackground_Click@AniloxRollForm.Background.cs      intent 行 ui:【�
  ├（未配置）EnsureAllocatedAndToggleGrab@LiveCameraManager.cs（=F1＋F2 借道，不開影像處理）
  ├（未抓取）LightTurnOn@AniloxRollForm.HardwareStatus.cs → await Task.Delay(LightWarmupMs)
  │   → ToggleGrab@LiveCameraManager.cs ＋ UpdateGrabButton(true)   ← 借用現有 grab（啟停包夾）
- ├ 採集迴圈（await Task.Delay(100) × N 秒，UI 執行緒非阻塞、按鈕倒數）
+ ├ 採集迴圈（await Task.Delay(100) × BackgroundSampleSeconds，UI 執行緒非阻塞、按鈕倒數）
  │   └ per-cam TryComputeColumnMean@AniloxCamera.cs → accum 累加
  ├ 平均 → SaveBackgroundBin@AniloxRollForm.Background.cs（MCBF v2：含 light level＋exposure）
  ├ LoadBackgroundBins@AniloxRollForm.Background.cs（bin → TanukiCv_AllocPinned → cam.PrecomputedColMean）
@@ -496,6 +508,8 @@ btnLiveGetBackground_Click@AniloxRollForm.Background.cs      intent 行 ui:【�
  ├ finally：ToggleGrab 停止（=F3）＋ LightTurnOff ＋ UpdateStandardBgSubLockState@AniloxRollForm.Background.cs
  ├（_autoStartGrabAfterBg）FreeCameras → btnLiveGrab_Click（IO 觸發自動回抓）→ return
  └ 尾端自動預覽：btnLiveViewBackground_Click（直呼）
+時間設定不變量：`BackgroundSampleSeconds` 只管本段背景採樣；`GrabLimitSeconds` 只在 F2 正式監控啟動成功後
+武裝，兩者不得互相中止。PropertyGrid 顯示於「時間設定」下：`背景採樣(sec)`、`抓取上限(sec)`。
 預覽背景：
 btnLiveViewBackground_Click@AniloxRollForm.Background.cs     intent 行 ui:【預覽背景】鈕
  ├（IsBgPreviewActive）ClearBackgroundPreview → return       ← 再按一次＝清除（toggle）
@@ -599,24 +613,27 @@ T1: capture plan grab={yyMMdd-HHmmss} root={CaptureRootPath}
 ```
 Tn: capture csv open path=… cfg=yes|no              ← 新檔或換日首次開啟
 Tn: capture csv cfg path=… HM=V/H thrV=mean/max thrH=mean/max
-Tn: capture csv firstRecord grab=… path=… file=… verdict=max0|1/mean0|1 peak=…/… maxCMean=… thrV=…/…
+Tn: capture csv firstRecord grab=… path=… file=… verdict=max0|1/mean0|1 peak=…/… rowPeak=…/… maxCMean=… thrV=…/…
 ```
 - `firstRecord` 每個 grab 只出一行，用來確認檢測結果有落到哪一份 CSV；逐相機逐幀細節看 CSV 本體。
 - `cfg` 行出現代表 `#CFG` 已寫入同一 CSV；回顧曲線座標/捕捉時正規值可從該 CSV 追溯。
 - `verdict` 使用寫入 CSV 同一組 V 閾值，與 `AppendRecord@InspectionLogService.cs` 的 `MaxExceed/MeanExceed` 同源。
-- CSV 資料列格式＝`Id,FileName,MaxExceed,MeanExceed,MeanPeak,MaxPeak,GrabHeight,LineRateHz,ExposureUs,MaxCMean`；
+- CSV 資料列格式＝`Id,FileName,MaxExceed,MeanExceed,MeanPeak,MaxPeak,GrabHeight,LineRateHz,ExposureUs,MaxCMean,MeanRPeak,MaxRPeak`；
   `MaxCMean`＝該幀 `MaxC`（column curve）全點平均後除以 255（0~1），是報表範圍 `CurveMax` 候選排序值，**不是 MaxPeak**。
+  `MeanRPeak/MaxRPeak`＝同幀 Row curve 峰值除以 255，供報表用當前列正規值／門檻重判 O/X。
 - CSV 讀取唯一格式入口＝`InspectionCsvReader.TryParseRecord`（統計／回顧影像查詢／curve 候選共用）；
-  舊 4/9 欄 CSV 合法，缺少的 `MaxCMean` 視為 unknown；範圍內找不到任何有效分數時，`CurveMax` 回退均勻 50 筆。
+  舊 4/9/10 欄 CSV 合法，缺少的 `MaxCMean` 視為 unknown；缺少 Row peaks 時列判定顯示 `—`；
+  範圍內找不到任何有效分數時，`CurveMax` 回退均勻 50 筆。
 
 **code-flow（曲線統計值寫入）**
 ```
 TrySaveCapture@AniloxCamera.cs
- → CaptureContext.MaxC → SaveCapture@CameraFrameSaver.cs
+ → CaptureContext.MaxC/MeanR/MaxR → SaveCapture@CameraFrameSaver.cs
    → ComputeCurveMeanNormalized（sum(MaxC)/length/255）
-   → OnInspectionResult(camId,file,meanPeak,maxPeak,maxCMean)
+   ＋ ComputeCurvePeakNormalized（Row peak/255）
+   → OnInspectionResult(camId,file,meanPeak,maxPeak,maxCMean,meanRPeak,maxRPeak)
      → LiveCameraManager forwarder → OnCameraInspectionResult@AniloxRollForm.Live.cs
-       → AppendRecord@InspectionLogService.cs → CSV 第 10 欄 MaxCMean
+       → AppendRecord@InspectionLogService.cs → CSV 第 10~12 欄 MaxCMean/MeanRPeak/MaxRPeak
 ```
 
 ## 全天 Flow DVT 自動校稿架構
@@ -815,7 +832,7 @@ T1: ui:tab → 監控|回顧|報表
 ```
 T1: ui:【讀取資料】鈕（Data）
 T1: DT stats snapshot csv=N records=N grabs=N ms=N
-    ← 報表 CSV 只掃一次，同時建立時間、序號、七台 Pass/Fail 索引
+    ← 報表 CSV 只掃一次，同時建立時間、序號、七台欄判定與整筆列判定索引
 （會連動 Review → 接 R1 的 RV 序列）
 （預設：單片=最新、序號範圍=最舊→最新）
 ```
@@ -833,7 +850,8 @@ LoadDataFolder|SyncFromReviewFolder@DataStatisticsPresenter.cs
 - **初始載入 SSoT**：同一資料夾＋同一門檻下，序號 List、色卡、年月日圖表必須共用同一份
   `InspectionStatisticsSnapshot`。初始【讀取資料】不得分別呼叫 `LoadAvailableTimes`、
   `LoadGrabIdInfosDescending`、`ScanCsvByDateRange`重複掃磁碟。
-- **Curve／判定一致**：MeanC/MaxC bin 是 Curve 樣本 SSoT；CSV `MeanPeak/MaxPeak/MaxCMean`
+- **Curve／判定一致**：MeanC/MaxC/MeanR/MaxR bin 是 Curve 樣本 SSoT；CSV
+  `MeanPeak/MaxPeak/MaxCMean/MeanRPeak/MaxRPeak`
   是 capture 當下從同份資料產生的可重建標量索引。改欄正規值／Mean／Max 門檻後，
   300ms debounce 只依新設定重判 snapshot／List／色卡／年月日圖表，不改寫歷史 CSV、
   不逐筆重讀 bin。bin 被外部修改時必須重建 CSV 索引；兩者分歧＝資料完整性 FAIL。
@@ -863,14 +881,22 @@ listViewGrabDetail.MouseUp
 T1: ui:【報表序號】→ {grabId}          ← 單片切換（同 D2 的 cb 版）
 T1: DT curve load {grabId} captures=N source=disk|prefetch|cache storage=summary|bins configMs=N waitMs=N pathMs=N mergeMs=N summaryMs=N points=N drawMs=N totalMs=N
      ← 每格都更新 Curve；storage=summary 讀持久匯總，storage=bins 代表匯總缺少／失效而由原始 bin 重建
-T1: DT curve cache policy entries=512 maxMB=128 prefetch=4 scale=merged-only
+T1: DT row curve load {grabId} source=disk|prefetch|cache points=N pitch=Nmm
+     ← 單片模式列 Curve；與欄 Curve 共用同一個 profile/cache/prefetch，不得另掃一次路徑
+（舊資料缺 Row bin）DT row curve missing {grabId}，畫面清空
+（切序號範圍／年/月/日）DT row curve clear mode=range
+     ← 列沒有相機起始線，只對單序號反映；範圍模式不得保留上一筆列 Curve
+T1: DT curve cache policy entries=512 maxMB=256 prefetch=4 coldParallel=2 scale=merged-only
      ← Presenter 初始化一次；目前驗綠的 bounded LRU／配置策略，改值須同步契約＋checker 並重驗
 Tn: DT curve prefetch {grabId} readyMs=N storage=summary|bins cacheEntries=N cacheMB=N
      ← 依滾動方向背景預讀下一個尚未快取的相鄰序號（前看最多 4 格，只允許一個預讀工作）
-Tn: DT curve summary {grabId} write=queued|ok|failed|dropped|skip-incomplete captures=N merged=N ms=N
-     ← merged=captures 才排入 bounded queue；序號互動停止 750ms 後單一背景 writer 才寫，互動中不得與冷讀取搶磁碟
+Tn: DT curve summary {grabId} write=queued|ok|failed|dropped|evicted|skip-incomplete captures=N merged=N ms=N [reason=idle|pressure]
+     ← merged=captures 才排入 bounded queue；一般於序號互動停止 750ms 後由單一背景 writer 寫入；
+       pending 達 72 MB 壓力線時允許單線 pressure drain，防止持續滾動只排隊不落盤
+     ← `check_all_flows.py` 的 `D3.summary-write` 將 failed/dropped/evicted 或格式錯誤直接判 FAIL；
+       避免畫面因記憶體 cache 正常而掩蓋「匯總其實沒有落盤」
 T1: DT selected {grabId} stats=cache|scan list=keep ms=N
-     ← 單片快路：更新色卡＋Mura curve＋List 反白；`cache`＝從既有明細／全序號索引推導統計，`scan`＝索引找不到該序號時 fallback
+     ← 單片快路：更新七台色卡＋列 O/X 色卡＋欄/列 Curve＋List 反白；`cache`＝從既有明細／全序號索引推導統計，`scan`＝索引找不到該序號時 fallback
 T1: DT stats index rows=N ms=N
      ← 門檻設定變更使 snapshot 簽章失效時，重建一次全序號 Pass/Fail 索引；
        初始讀取已由 D1 snapshot 建立，同資料夾＋同閾值後續不得重掃 CSV
@@ -886,16 +912,20 @@ T1: DT list reload range={start}~{end} rows=N ms=N source=index
 ```
 - **List ownership**：明細 List 屬於範圍結果，不屬於單片序號；`ui:【報表序號】` 後只准 `list=keep`，
   不得出現 `DT list reload`／`GrabDetailListBinder.SetItems`／重設 `VirtualListSize`／欄寬。只有資料夾、範圍、期間、閾值改變才重算 List。
+- **列判定索引**：明細第 8 判定欄固定為「列」；O/X 由同序號所有相機／capture 的
+  `MeanRPeak/MaxRPeak` 一票否決。view-time 公式＝raw row peak × `HM_V_capture/HM_H_current`
+  對當前列門檻。舊 CSV 沒列峰值只能顯示 `—`，不得當 Pass。篩選異常也必納入列 Fail。
 - **List 捲動顯示**：資料已全在 `GrabDetailListBinder._visibleDetails`，VirtualMode 不需資料預載；ListView 啟用雙緩衝，選中列只在接近
   可視區上下邊界時以 margin 捲動，反白變更只重畫舊／新兩列，不得每格整窗 `Invalidate()`（跨視窗白閃的根因）。
 - **跨 tab lazy**：報表序號只覆寫 pending selection 並標 `_reviewDirty`，不得逐格操作隱藏的 Review combo/date、
   `NavigateTo` 寫 session／重建日期清單，也不得當下載 Review 圖片；切到 Review tab 才一次套控制項並接 R2 完整載入。
 - **時序索引只建一次**：`ImageRepository.LoadDirectory` 建立排序去重的 available-period index；報表／回顧每格同步
   只能對既有索引做查找，不得在 UI 執行緒重新解析全部影像檔名、`Distinct`、`OrderBy`。
-- **單片 Curve 不掠過**：每個 `ui:【報表序號】` 必有同 grabId 的 `DT curve load`。`source=disk`＝前景首次完整讀取；
+- **單片 Curve 不掠過**：每個 `ui:【報表序號】` 必有同 grabId 的 `DT curve load`，且列 bin 存在時
+  必有同 grabId 的 `DT row curve load`。`source=disk`＝前景首次完整讀取；
   `source=prefetch`＝選取加入已在背景完整讀取的同一工作；`source=cache`＝使用之前完整合併完成的原始 Curve。
-  快取只保存 rescale 前 Mean/Max 合併結果；資料夾重載或 Presenter Dispose 必清空。
-- **單片 Curve cache 基準**：LRU 上限 `512 筆／128 MB`，以目前 278 筆實測資料可整批容納，避免往返滾動時
+  快取保存 rescale 前欄 Mean/Max 與合併後列 Mean/Max；資料夾重載或 Presenter Dispose 必清空。
+- **單片 Curve cache 基準**：LRU 上限 `512 筆／256 MB`，納入列 Curve 後以目前 278 筆實測資料可整批容納，避免往返滾動時
   反覆淘汰／重載造成 Gen2 GC；30,000 筆時仍保持固定上限。view-time HM rescale 不得 clone 每台完整 raw Curve，
   只能在 `CurveOverviewMerger` 產生最多約 2,000 點的 merged result 後縮放。這些是可重驗調整的效能參數，非鐵則。
 - `check_all_flows.py` 的 `DATA/D3.selected` 允許最多一筆真正缺 ID 的 `stats=scan` fallback；同 session 多筆
@@ -903,7 +933,9 @@ T1: DT list reload range={start}~{end} rows=N ms=N source=index
 - **持久匯總不取代原始資料**：讀取順序＝記憶體 cache → `SingleGrabCurveSummaryStore` → 原始 MeanC/MaxC bins。
   `.mcsf` 是可重建 materialized view；格式版本、grabId、Earliest/Latest、cameraCount 任一不符或內容損壞時必退回 bins，
   完整重建後先顯示 Curve，再由 idle writer 以同目錄暫存檔原子替換；不得讓 UI 等待落盤。原始 bins 仍是 SSoT，
-  匯總只保存 rescale 前逐相機 Mean 平均／Max 最大結果；pending queue 上限 96 MB，超限可 drop 而不可無界吃記憶體。
+  匯總保存 rescale 前逐相機欄 Mean 平均／Max 最大，以及合併後列 Mean／Max；pending queue 上限 96 MB，
+  72 MB 起由單一 writer pressure drain；writer 仍追不上時可 evict/drop，不可無界吃記憶體。列匯總是多幀串接，
+  合法長度可超過單一 bin 的 200,000 點；匯總以 2,000,000 點／曲線及 96 MB／檔雙重守門。
   `merged != captures` 時只能回傳當下可讀結果並記 `write=skip-incomplete`，不得產生匯總；下次選取必重新嘗試原始 bins。
 - **範圍雙速 monotonic throttle**：起始／結束 combo 連續滾動時，33ms List timer 從完整明細索引切出當代範圍並更新
   List＋7 台色卡；獨立 80ms Curve timer 最多啟動一個背景預覽。兩者共用 generation；新 intent 不取消已經開始的
@@ -934,18 +966,24 @@ cbDataId.SelectedIndexChanged
    → RefreshSelectedGrab@DataStatisticsPresenter.cs
      ├ _currentDetails.FirstOrDefault（範圍內命中）／EnsureSingleGrabDetailIndex（範圍外只建一次全序號索引）
      │  └ 命中→BuildSingleGrabStats；索引仍無該 ID 才允許單 ID CSV scan fallback
-     ├ InspectionStatsPresenter.Update（7 台色卡）
+     ├ InspectionStatsPresenter.Update／UpdateRowResult（7 台色卡＋camDataRow 列 O/X）
      ├ GrabDetailListBinder.Highlight（只移反白＋EnsureVisible＋RedrawItems）
      └ MuraProfileChartPresenter.Update（該 ID curve）
        ├ SingleGrabCurveCache.TryGet／GetOrLoadAsync（同 key in-flight 共用；rescale 前結果 LRU）
        ├ miss → SingleGrabCurveSummaryStore.TryLoad（命中＝一次 sequential read）
-       ├ summary miss/stale/corrupt → InspectionImagePathRepository.LoadForGrabId → CurveMergeHelper.MergeCurves
+       ├ summary miss/stale/corrupt → InspectionImagePathRepository.LoadForGrabId
+       │        ├ Parallel.For（最多 2 台相機；降低冷讀等待且避免 7 路冷碟亂跳）
+       │        │  ├ CurveMergeHelper.MergeCurves（MeanC/MaxC）
+       │        │  └ MergeRowCurves（MeanR/MaxR；支援取消）
+       │        └ MergeRowCurvesOverlap（所有相機同一列重疊）
        │        → CurveBinFile.Load（每個 bin bulk read；邊讀邊合併）→ SingleGrabCurveSummaryStore.QueueSave
-       │          → idle 750ms → 單一 writer → TrySave（原子寫回）
+       │          → idle 750ms／pending 72MB pressure → 單一 writer → TrySave（原子寫回）
        ├ cache raw Curve 唯讀直入 CurveOverviewMerger → 合併後小曲線套 Hessian ratio → UpdateOverviewChart
        │  （不得為 view-time rescale 複製每台完整 raw Curve；只縮放新建的 merged display result）
        │  └ ColumnCurveChartHelper.UpdateDataAndView（每兩個畫布像素一個顯示桶；Mean=桶平均、Max=桶最大，
        │       點數相同時原地更新既有 DataPoint；不得逐格 Clear＋DataBind 重建）
+       ├ row raw Curve clone＋HM_V_capture/HM_H_current rescale
+       │  → RowCurveDisplayAdapter.UpdateData → RowCurveChartHelper（與監控／回顧列圖表同格式與方向規則）
        └ ScheduleAdjacentPrefetch（依方向找下一個未命中項）→ DT curve prefetch
      → DT selected … list=keep
      → GrabIdSelectedFromData → OnDataGrabIdSelected@AniloxRollForm.Data.cs
@@ -958,6 +996,7 @@ tabMain.SelectedIndexChanged（進 Review 且有 pending）
 
 cbDataIdStart|End 手動變更
  → ScheduleRangeRefresh@DataStatisticsPresenter.cs
+   ├ MuraProfileChartPresenter.ClearRow（列圖只屬單序號；範圍 mode 清空）
    ├ generation++（不取消已開始的 Curve 樣本；資料夾／模式 teardown 才取消 token）
    ├ 33ms repeating throttle → RangeListPreviewTimer_Tick
    │  └ ApplyRangeListPreview（只在完整 detail index 簽章有效時）
@@ -986,8 +1025,10 @@ cbDataIdStart|End 手動變更
 ### D4 年/月/日期間（lblChartNav 點選）
 ```
 T1: ui:【期間-年|月|日】→ 範圍 {最舊}~{最新}   ← 取 cbDataYield 當前值設範圍 + 該期間綠高亮（互斥）
+T1: ui:【期間-年|月|日】→ 取消綁定 保留範圍 {最舊}~{最新}
+    ← 範圍模式再點同一 active 期間：轉 Custom、綠高亮熄滅；起訖序號不變且不重算
 T1: ui:【期間-全局】→ 全範圍                    ← 點 groupBoxGrabIdRange
-（active 期間改對應 cbDataYield → 範圍跟著更新；非 active 來源不觸發）
+（active 期間改對應 cbDataYield → 範圍跟著更新；取消綁定或非 active 來源不觸發）
 ```
 
 ### D5 良率導航 / Y 軸暫時切換 / 篩選異常

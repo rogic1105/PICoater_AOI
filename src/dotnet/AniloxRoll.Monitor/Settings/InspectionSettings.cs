@@ -125,10 +125,12 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category(CategoryInspection)][DisplayName("列最大閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float ef_ErrorValueMaxH  { get => Recipe.ErrorValueMaxH;  set => Recipe.ErrorValueMaxH  = value; }
 
-        [Category(CategoryInspection)][DisplayName("─ 背景校正 ─")][ReadOnly(true)]
-        public string fa_BgHeader => "";
-        [Category(CategoryInspection)][DisplayName("取時間 (sec)")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryInspection)][DisplayName("─ 時間設定 ─")][ReadOnly(true)]
+        public string fa_TimeHeader => "";
+        [Category(CategoryInspection)][DisplayName("背景採樣(sec)")][TypeConverter(typeof(LeftAlignNumericConverter))]
         public int fb_BackgroundSampleSeconds { get => Recipe.BackgroundSampleSeconds; set => Recipe.BackgroundSampleSeconds = value; }
+        [Category(CategoryInspection)][DisplayName("抓取上限(sec)")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        public int fc_GrabLimitSeconds { get => Recipe.GrabLimitSeconds; set => Recipe.GrabLimitSeconds = value; }
 
         // 向後相容：程式碼中直接存取的快捷屬性
         [Browsable(false)] public BackgroundAlgorithm Algorithm       { get => Recipe.Algorithm;       set => Recipe.Algorithm       = value; }
@@ -137,6 +139,7 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public float  HessianMaxFactorH      { get => Recipe.HessianMaxFactorH;      set => Recipe.HessianMaxFactorH      = value; }
         [Browsable(false)] public float  RidgeSigma             { get => Recipe.RidgeSigma;             set => Recipe.RidgeSigma             = value; }
         [Browsable(false)] public int    BackgroundSampleSeconds { get => Recipe.BackgroundSampleSeconds; set => Recipe.BackgroundSampleSeconds = value; }
+        [Browsable(false)] public int    GrabLimitSeconds        { get => Recipe.GrabLimitSeconds;        set => Recipe.GrabLimitSeconds        = value; }
         [Browsable(false)] public double AniloxRollSpeedMPerMin  { get => Recipe.AniloxRollSpeedMPerMin;  set => Recipe.AniloxRollSpeedMPerMin  = value; }
 
         // ===== 3. 圖表設定 =====
@@ -209,10 +212,14 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category(CategoryLight)][DisplayName("暖機延遲 (ms)")][TypeConverter(typeof(LeftAlignNumericConverter))] public int    LightWarmupMs   { get => Light.WarmupMs;   set => Light.WarmupMs   = value; }
 
         // ===== 7. IO 設定 =====
-        [Category(CategoryIo)][DisplayName("IO IP")][PropertyOrder(1)]   public string IoIp      { get; set; } = InspectionDefaults.IoIp;
+        [Category(CategoryIo)][DisplayName("IO IP")][PropertyOrder(1)][TypeConverter(typeof(IoIpTypeConverter))]
+        [Description("實機通常使用 192.168.255.1；本機模擬器使用 127.0.0.1。可輸入其他 IP。")]
+        public string IoIp { get; set; } = InspectionDefaults.IoIp;
         [Category(CategoryIo)][DisplayName("IO 型號")][PropertyOrder(2)] public string IoModel { get; set; } = InspectionDefaults.IoModel;
         [Category(CategoryIo)][DisplayName("啟用 IO")][PropertyOrder(3)][TypeConverter(typeof(BoolYesNoConverter))]  public bool   IoEnabled { get; set; } = InspectionDefaults.IoEnabled;
-        [Category(CategoryIo)][DisplayName("IO Port")][PropertyOrder(4)][TypeConverter(typeof(LeftAlignNumericConverter))]  public int    IoPort    { get; set; } = InspectionDefaults.IoPort;
+        [Category(CategoryIo)][DisplayName("IO Port")][PropertyOrder(4)][TypeConverter(typeof(IoPortTypeConverter))]
+        [Description("ET-7044 實機使用 502；IoSimulator 使用 1502。可輸入其他 Port。")]
+        public int IoPort { get; set; } = InspectionDefaults.IoPort;
         // Mura 檢出（DO1 MURA_DET）：runtime toggle，不持久化 — 每次啟動為 false（避免漏檢）
         [Category(CategoryIo)][DisplayName("Mura檢出")][PropertyOrder(5)][TypeConverter(typeof(BoolYesNoConverter))]  public bool   MuraDetectPaused { get; set; } = false;
 

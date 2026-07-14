@@ -171,9 +171,25 @@ namespace AniloxRoll.Monitor.Tests
 
             string csvPath = CaptureStoragePaths.DailyCsv(_tempRoot, ts);
             string[] lines = File.ReadAllLines(csvPath);
-            Assert.That(lines[1], Does.EndWith(",MaxCMean"));
-            Assert.That(lines[2].Split(',').Length, Is.EqualTo(10));
+            Assert.That(lines[1], Does.EndWith(",MaxCMean,MeanRPeak,MaxRPeak"));
+            Assert.That(lines[2].Split(',').Length, Is.EqualTo(12));
             Assert.That(lines[2].Split(',')[9], Is.EqualTo("0.412345"));
+        }
+
+        [Test]
+        public void AppendRecord_WritesRowPeakColumns()
+        {
+            var svc = new InspectionLogService(() => _tempRoot);
+            var ts = new DateTime(2026, 3, 30, 11, 5, 0);
+
+            svc.AppendRecord("260330-110500", "20260330_110500.000-1",
+                0.1f, 0.2f, 0.15f, 0.35f, 0.75f,
+                0.2f, 0.6f, 3001, 3001, 149, null, ts);
+
+            string[] columns = File.ReadAllLines(
+                CaptureStoragePaths.DailyCsv(_tempRoot, ts))[1].Split(',');
+            Assert.That(columns[10], Is.EqualTo("0.3500"));
+            Assert.That(columns[11], Is.EqualTo("0.7500"));
         }
 
         [Test]
@@ -193,9 +209,9 @@ namespace AniloxRoll.Monitor.Tests
                 0.1f, 0.2f, 0.3f, 0.5f, 0.8f, 3001, 3001, 149, null, ts);
 
             string[] lines = File.ReadAllLines(csvPath);
-            Assert.That(lines[0], Does.EndWith(",MaxCMean"));
+            Assert.That(lines[0], Does.EndWith(",MaxCMean,MeanRPeak,MaxRPeak"));
             Assert.That(lines[1].Split(',').Length, Is.EqualTo(9));
-            Assert.That(lines[2].Split(',').Length, Is.EqualTo(10));
+            Assert.That(lines[2].Split(',').Length, Is.EqualTo(12));
         }
 
         [Test]
@@ -266,6 +282,15 @@ namespace AniloxRoll.Monitor.Tests
                 new[] { 0f, 127.5f, 255f });
 
             Assert.That(value, Is.EqualTo(0.5f).Within(0.000001f));
+        }
+
+        [Test]
+        public void ComputeCurvePeakNormalized_ReturnsZeroToOnePeak()
+        {
+            float value = CameraFrameSaver.ComputeCurvePeakNormalized(
+                new[] { 12f, 127.5f, 204f });
+
+            Assert.That(value, Is.EqualTo(0.8f).Within(0.000001f));
         }
 
         [Test]

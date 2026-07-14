@@ -174,8 +174,9 @@ against current code with `rg` before editing because lookup data can become sta
 | 欄最大閾值 | `ed_ErrorValueMaxV` → `ErrorValueMaxV` | 0.6 | V chart Max 閾值線 |
 | 列平均閾值 | `ee_ErrorValueMeanH` → `ErrorValueMeanH` | 0.2 | H chart Mean 閾值線 |
 | 列最大閾值 | `ef_ErrorValueMaxH` → `ErrorValueMaxH` | 0.6 | H chart Max 閾值線 |
-| ── 背景校正 ── | （分隔列，唯讀） | — | — |
-| 取時間 (sec) | `fb_BackgroundSampleSeconds` → `BackgroundSampleSeconds` | 3 | StandardBgSub 採集時間 |
+| ── 時間設定 ── | （分隔列，唯讀） | — | — |
+| 背景採樣(sec) | `fb_BackgroundSampleSeconds` → `BackgroundSampleSeconds` | 3 | StandardBgSub 背景採樣時間 |
+| 抓取上限(sec) | `fc_GrabLimitSeconds` → `GrabLimitSeconds` | 10 | 正式監控單次 grab 最長時間；到時走共用停止流程 |
 
 ### 3. 圖表設定
 

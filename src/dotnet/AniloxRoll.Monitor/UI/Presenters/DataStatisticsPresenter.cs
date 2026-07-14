@@ -46,7 +46,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
         // --- 統計 ---
         public GrabDetailListBinder GrabDetailList { get; set; }
         public Panel[] PanelStatCams { get; set; }
+        public Panel PanelStatRow { get; set; }
         public Chart ChartDataPatch { get; set; }
+        public Chart ChartDataRow { get; set; }
 
         // --- 趨勢圖 ---
         public Chart ChartDataYieldYearly { get; set; }
@@ -84,6 +86,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private float _singleGrabDetailIndexHmV;
         private float _singleGrabDetailIndexErrMean;
         private float _singleGrabDetailIndexErrMax;
+        private float _singleGrabDetailIndexHmH;
+        private float _singleGrabDetailIndexRowErrMean;
+        private float _singleGrabDetailIndexRowErrMax;
         private bool _singleGrabDetailIndexReady;
         private bool _showFailOnly;
         private bool _preserveDetailListDuringSelection;
@@ -137,7 +142,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public DataStatisticsPresenter(DataStatisticsContext ctx)
         {
             _ctx = ctx ?? throw new ArgumentNullException(nameof(ctx));
-            _statsPresenter = new InspectionStatsPresenter(ctx.PanelStatCams);
+            _statsPresenter = new InspectionStatsPresenter(ctx.PanelStatCams, ctx.PanelStatRow);
             _dateGrabIdNavigator = new DataDateGrabIdNavigator(_ctx,
                 () => _grabIdInfos,
                 ScheduleRangeRefresh,
@@ -260,10 +265,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private void LoadStatisticsSnapshot(string path)
         {
             var watch = Stopwatch.StartNew();
-            var threshold = new ThresholdContext(
-                _ctx.Settings.HessianMaxFactorV,
-                _ctx.Settings.ErrorValueMeanV,
-                _ctx.Settings.ErrorValueMaxV);
+            var threshold = CreateThresholdContext();
             InspectionStatisticsSnapshot snapshot =
                 InspectionStatisticsService.LoadSnapshot(path, threshold);
 
@@ -276,6 +278,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _singleGrabDetailIndexHmV = threshold.CurrentHmV;
             _singleGrabDetailIndexErrMean = threshold.CurrentErrMean;
             _singleGrabDetailIndexErrMax = threshold.CurrentErrMax;
+            _singleGrabDetailIndexHmH = threshold.CurrentHmH;
+            _singleGrabDetailIndexRowErrMean = threshold.CurrentRowErrMean;
+            _singleGrabDetailIndexRowErrMax = threshold.CurrentRowErrMax;
             _singleGrabDetailIndexReady = true;
 
             FlowTrace.Log(
@@ -342,6 +347,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (_ctx.CbGrabIdStart.SelectedIndex >= 0 && _ctx.CbGrabIdEnd.SelectedIndex >= 0
                 && _grabIdInfos.Count > 0)
             {
+                _statsPresenter.UpdateRowResult(null);
+                _muraChart?.ClearRow();
                 var startInfo = _grabIdInfos[_ctx.CbGrabIdStart.SelectedIndex];
                 var endInfo = _grabIdInfos[_ctx.CbGrabIdEnd.SelectedIndex];
 
@@ -374,6 +381,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         private void ScheduleRangeRefresh()
         {
+            // 列圖只屬單序號；範圍 intent 一發生就清掉，不能在 150ms settle 期間殘留上一筆。
+            _muraChart?.ClearRow();
+            _statsPresenter.UpdateRowResult(null);
             if (_rangeRefreshDebounce == null)
             {
                 RefreshStats();
@@ -517,15 +527,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
             else
             {
-                var threshold = new ThresholdContext(
-                    _ctx.Settings.HessianMaxFactorV,
-                    _ctx.Settings.ErrorValueMeanV,
-                    _ctx.Settings.ErrorValueMaxV);
+                var threshold = CreateThresholdContext();
                 stats = InspectionStatisticsService.ComputeByGrabIdRange(
                     _statsDataRootPath, grab.GrabId, grab.GrabId, threshold);
             }
 
             _statsPresenter.Update(stats);
+            _statsPresenter.UpdateRowResult(detail?.RowResult);
             _ctx.GrabDetailList.Highlight(grab.GrabId);
             _muraChart.Update(null);
             FlowTrace.Log($"DT selected {grab.GrabId} stats={(cacheHit ? "cache" : "scan")} list=keep ms={sw.ElapsedMilliseconds}");
@@ -544,7 +552,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 && string.Equals(_singleGrabDetailIndexRoot, _statsDataRootPath, StringComparison.OrdinalIgnoreCase)
                 && _singleGrabDetailIndexHmV == _ctx.Settings.HessianMaxFactorV
                 && _singleGrabDetailIndexErrMean == _ctx.Settings.ErrorValueMeanV
-                && _singleGrabDetailIndexErrMax == _ctx.Settings.ErrorValueMaxV;
+                && _singleGrabDetailIndexErrMax == _ctx.Settings.ErrorValueMaxV
+                && _singleGrabDetailIndexHmH == _ctx.Settings.HessianMaxFactorH
+                && _singleGrabDetailIndexRowErrMean == _ctx.Settings.ErrorValueMeanH
+                && _singleGrabDetailIndexRowErrMax == _ctx.Settings.ErrorValueMaxH;
         }
 
         private void EnsureSingleGrabDetailIndex()
@@ -559,7 +570,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _singleGrabDetailIndex.Clear();
             if (_grabIdInfos.Count > 0)
             {
-                var threshold = new ThresholdContext(hmV, errMean, errMax);
+                var threshold = CreateThresholdContext();
                 List<GrabDetail> details = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
                     _statsDataRootPath,
                     _grabIdInfos[_grabIdInfos.Count - 1].GrabId,
@@ -573,6 +584,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _singleGrabDetailIndexHmV = hmV;
             _singleGrabDetailIndexErrMean = errMean;
             _singleGrabDetailIndexErrMax = errMax;
+            _singleGrabDetailIndexHmH = _ctx.Settings.HessianMaxFactorH;
+            _singleGrabDetailIndexRowErrMean = _ctx.Settings.ErrorValueMeanH;
+            _singleGrabDetailIndexRowErrMax = _ctx.Settings.ErrorValueMaxH;
             _singleGrabDetailIndexReady = true;
             FlowTrace.Log($"DT stats index rows={_singleGrabDetailIndex.Count} ms={sw.ElapsedMilliseconds}");
         }
@@ -628,6 +642,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
             return stats;
         }
+
+        private ThresholdContext CreateThresholdContext() => new ThresholdContext(
+            _ctx.Settings.HessianMaxFactorV,
+            _ctx.Settings.ErrorValueMeanV,
+            _ctx.Settings.ErrorValueMaxV,
+            _ctx.Settings.HessianMaxFactorH,
+            _ctx.Settings.ErrorValueMeanH,
+            _ctx.Settings.ErrorValueMaxH);
 
         // ══════════════════════════════════════════════════════════════
         // Detail ListView
@@ -714,7 +736,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private void ApplyFailFilter()
         {
             var toShow = _showFailOnly
-                ? _currentDetails.Where(d => d.CamResult.Any(r => r == true)).ToList()
+                ? _currentDetails.Where(d => d.CamResult.Any(r => r == true) || d.RowResult == true).ToList()
                 : _currentDetails;
             _ctx.GrabDetailList.SetItems(toShow);
         }

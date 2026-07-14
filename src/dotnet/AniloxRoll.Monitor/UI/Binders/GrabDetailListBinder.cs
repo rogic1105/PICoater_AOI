@@ -63,6 +63,7 @@ namespace AniloxRoll.Monitor.UI.Binders
             _listView.Columns.Add("序號", -1, HorizontalAlignment.Center);
             for (int i = 1; i <= _cameraCount; i++)
                 _listView.Columns.Add($"{i}", -1, HorizontalAlignment.Center);
+            _listView.Columns.Add("列", -1, HorizontalAlignment.Center);
             FitColumnsToContent();
 
             _listView.DrawColumnHeader += OnDrawColumnHeader;
@@ -169,6 +170,15 @@ namespace AniloxRoll.Monitor.UI.Binders
                     item.SubItems.Add("×");
                     rowHasFail = true;
                 }
+            }
+            if (!detail.RowResult.HasValue)
+                item.SubItems.Add("—");
+            else if (!detail.RowResult.Value)
+                item.SubItems.Add("○");
+            else
+            {
+                item.SubItems.Add("×");
+                rowHasFail = true;
             }
 
             item.Tag = rowHasFail;

@@ -35,6 +35,20 @@ namespace AniloxRoll.Monitor.Tests
             Assert.That(record.LineRateHz, Is.EqualTo(6000.5d));
             Assert.That(record.ExposureUs, Is.EqualTo(50.25d));
             Assert.That(record.MaxCMean, Is.EqualTo(0.75f));
+            Assert.That(float.IsNaN(record.MeanRPeak), Is.True);
+            Assert.That(float.IsNaN(record.MaxRPeak), Is.True);
+        }
+
+        [Test]
+        public void TryParseRecord_CurrentTwelveColumns_ReturnsRowPeaks()
+        {
+            bool parsed = InspectionCsvReader.TryParseRecord(
+                "260713-120000,20260713_120000.123-3,1,0,0.25,0.5,3001,6000.5,50.25,0.75,0.125,0.875",
+                out var record);
+
+            Assert.That(parsed, Is.True);
+            Assert.That(record.MeanRPeak, Is.EqualTo(0.125f));
+            Assert.That(record.MaxRPeak, Is.EqualTo(0.875f));
         }
 
         [TestCase("")]

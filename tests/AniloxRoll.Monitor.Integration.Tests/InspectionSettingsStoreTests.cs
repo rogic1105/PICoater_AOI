@@ -53,5 +53,19 @@ namespace AniloxRoll.Monitor.Tests
             Assert.That(loaded.IoIp, Is.EqualTo("10.20.30.40"));
             Assert.That(loaded.IoPort, Is.EqualTo(1502));
         }
+
+        [Test]
+        public void SaveAndLoad_PersistsTimeSettings()
+        {
+            var settings = new InspectionSettings();
+            settings.BackgroundSampleSeconds = 4;
+            settings.GrabLimitSeconds = 17;
+
+            InspectionSettingsStore.Save(settings);
+            var loaded = InspectionSettingsStore.Load();
+
+            Assert.That(loaded.BackgroundSampleSeconds, Is.EqualTo(4));
+            Assert.That(loaded.GrabLimitSeconds, Is.EqualTo(17));
+        }
     }
 }

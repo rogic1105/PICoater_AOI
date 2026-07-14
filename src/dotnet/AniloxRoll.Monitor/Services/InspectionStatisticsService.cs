@@ -22,6 +22,8 @@ namespace AniloxRoll.Monitor.Core.Services
     {
         public string  GrabId    { get; set; }
         public bool?[] CamResult { get; } = new bool?[7];
+        /// <summary>null=舊資料未保存列峰值，false=Pass，true=任一列曲線超標。</summary>
+        public bool? RowResult { get; set; }
     }
 
     /// <summary>每個序號（grabId）的時間範圍資訊。</summary>
@@ -80,12 +82,26 @@ namespace AniloxRoll.Monitor.Core.Services
         public float CurrentHmV     { get; }
         public float CurrentErrMean { get; }
         public float CurrentErrMax  { get; }
+        public float CurrentHmH { get; }
+        public float CurrentRowErrMean { get; }
+        public float CurrentRowErrMax { get; }
 
         public ThresholdContext(float currentHmV, float currentErrMean, float currentErrMax)
+            : this(currentHmV, currentErrMean, currentErrMax,
+                currentHmV, currentErrMean, currentErrMax)
+        {
+        }
+
+        public ThresholdContext(
+            float currentHmV, float currentErrMean, float currentErrMax,
+            float currentHmH, float currentRowErrMean, float currentRowErrMax)
         {
             CurrentHmV     = currentHmV;
             CurrentErrMean = currentErrMean;
             CurrentErrMax  = currentErrMax;
+            CurrentHmH = currentHmH;
+            CurrentRowErrMean = currentRowErrMean;
+            CurrentRowErrMax = currentRowErrMax;
         }
 
         public bool IsFail(float meanPeak, float maxPeak, float captureHmV)
@@ -94,6 +110,15 @@ namespace AniloxRoll.Monitor.Core.Services
             float displayMean = meanPeak * ratio;
             float displayMax  = maxPeak  * ratio;
             return displayMean > CurrentErrMean || displayMax > CurrentErrMax;
+        }
+
+        public bool? IsRowFail(float meanPeak, float maxPeak, float captureHmV)
+        {
+            if (float.IsNaN(meanPeak) || float.IsNaN(maxPeak)) return null;
+            float ratio = (captureHmV > 0f && CurrentHmH > 0f)
+                ? captureHmV / CurrentHmH : 1f;
+            return meanPeak * ratio > CurrentRowErrMean ||
+                   maxPeak * ratio > CurrentRowErrMax;
         }
     }
 
@@ -183,6 +208,8 @@ namespace AniloxRoll.Monitor.Core.Services
                             int cameraIndex = cameraId - 1;
                             if (!detail.CamResult[cameraIndex].HasValue || failed)
                                 detail.CamResult[cameraIndex] = failed;
+                            MergeRowResult(detail, ctx?.IsRowFail(
+                                record.MeanRPeak, record.MaxRPeak, captureHmV));
                         }
                     }
                 }
@@ -421,6 +448,8 @@ namespace AniloxRoll.Monitor.Core.Services
                                 detail.CamResult[idx] = thisFail;
                             else if (thisFail)
                                 detail.CamResult[idx] = true; // 一票否決
+                            MergeRowResult(detail, ctx?.IsRowFail(
+                                record.MeanRPeak, record.MaxRPeak, captureHmV));
                         }
                     }
                 }
@@ -435,6 +464,13 @@ namespace AniloxRoll.Monitor.Core.Services
             var ordered = new List<GrabDetail>(dict.Values);
             ordered.Reverse();
             return ordered;
+        }
+
+        private static void MergeRowResult(GrabDetail detail, bool? failed)
+        {
+            if (detail == null || !failed.HasValue) return;
+            if (!detail.RowResult.HasValue || failed.Value)
+                detail.RowResult = failed.Value;
         }
 
         public static Dictionary<int, CameraStats> ComputeStatsFromDetails(

@@ -146,6 +146,14 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public static void MergeRowCurves(IList<string> imagePaths,
             out float[] mergedMean, out float[] mergedMax)
         {
+            MergeRowCurves(
+                imagePaths, out mergedMean, out mergedMax, CancellationToken.None);
+        }
+
+        public static void MergeRowCurves(IList<string> imagePaths,
+            out float[] mergedMean, out float[] mergedMax,
+            CancellationToken cancellationToken)
+        {
             mergedMean = null;
             mergedMax = null;
 
@@ -157,6 +165,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
             foreach (string path in imagePaths)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (string.IsNullOrEmpty(path)) { allMean.Add(null); allMax.Add(null); continue; }
                 string basePath = GetCurveBasePath(path);
                 var mean = CurveBinFile.Load(CaptureFileNaming.ResolveMeanR(basePath));

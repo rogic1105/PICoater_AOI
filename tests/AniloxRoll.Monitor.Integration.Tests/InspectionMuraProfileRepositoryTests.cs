@@ -126,6 +126,17 @@ namespace AniloxRoll.Monitor.Tests
             Assert.That(max, Is.EqualTo(new[] { 2f }));
         }
 
+        [Test]
+        public void MergeRowCurves_CancelledBeforeRead_Throws()
+        {
+            var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+
+            Assert.Throws<OperationCanceledException>(() =>
+                CurveMergeHelper.MergeRowCurves(
+                    new[] { "unused-image-path" }, out _, out _, cancellation.Token));
+        }
+
         private void WriteCurves(DateTime timestamp, float[] mean, float[] max)
         {
             string directory = CaptureStoragePaths.DateImageDir(_tempRoot, timestamp);

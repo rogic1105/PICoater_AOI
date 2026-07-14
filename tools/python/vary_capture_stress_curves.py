@@ -29,7 +29,7 @@ CURVE_SUFFIXES = (
     "_max_r.bin",
 )
 FORMULA_VERSION = 4
-METRICS_VERSION = 1
+METRICS_VERSION = 2
 
 
 def parse_args() -> argparse.Namespace:
@@ -264,8 +264,8 @@ def build_variant_pool(
 
 def build_variant_metrics(
     output: Path, variants: int
-) -> Dict[Tuple[int, int], Tuple[float, float, float]]:
-    result: Dict[Tuple[int, int], Tuple[float, float, float]] = {}
+) -> Dict[Tuple[int, int], Tuple[float, float, float, float, float]]:
+    result: Dict[Tuple[int, int], Tuple[float, float, float, float, float]] = {}
     for camera_id in range(1, 8):
         for variant in range(variants):
             mean_values = read_mcbf_values(
@@ -274,10 +274,18 @@ def build_variant_metrics(
             max_values = read_mcbf_values(
                 variant_path(output, camera_id, "_max_c.bin", variant)
             )
+            mean_r_values = read_mcbf_values(
+                variant_path(output, camera_id, "_mean_r.bin", variant)
+            )
+            max_r_values = read_mcbf_values(
+                variant_path(output, camera_id, "_max_r.bin", variant)
+            )
             result[(camera_id, variant)] = (
                 max(mean_values) / 255.0,
                 max(max_values) / 255.0,
                 sum(max_values) / len(max_values) / 255.0,
+                max(mean_r_values) / 255.0,
+                max(max_r_values) / 255.0,
             )
     return result
 
@@ -285,7 +293,7 @@ def build_variant_metrics(
 def rewrite_csv_metrics(
     csv_path: Path,
     grab_order: Dict[str, int],
-    metrics: Dict[Tuple[int, int], Tuple[float, float, float]],
+    metrics: Dict[Tuple[int, int], Tuple[float, float, float, float, float]],
     variants: int,
 ) -> int:
     with csv_path.open("r", encoding="utf-8", newline="") as stream:
@@ -304,18 +312,28 @@ def rewrite_csv_metrics(
                 elif field.startswith("ErrorValueMaxV="):
                     error_max = float(field.split("=", 1)[1])
             continue
-        if columns[0] == "Id" or len(columns) < 10:
+        if columns[0] == "Id":
+            while len(columns) < 12:
+                columns.append("")
+            columns[10] = "MeanRPeak"
+            columns[11] = "MaxRPeak"
+            continue
+        if len(columns) < 10:
             continue
 
         grab_id, file_name = columns[0], columns[1]
         camera_id = int(file_name.rsplit("-", 1)[1])
         variant = grab_order[grab_id] % variants
-        mean_peak, max_peak, max_c_mean = metrics[(camera_id, variant)]
+        mean_peak, max_peak, max_c_mean, mean_r_peak, max_r_peak = metrics[(camera_id, variant)]
+        while len(columns) < 12:
+            columns.append("")
         columns[2] = "1" if max_peak > error_max else "0"
         columns[3] = "1" if mean_peak > error_mean else "0"
         columns[4] = f"{mean_peak:.4f}"
         columns[5] = f"{max_peak:.4f}"
         columns[9] = f"{max_c_mean:.6f}"
+        columns[10] = f"{mean_r_peak:.6f}"
+        columns[11] = f"{max_r_peak:.6f}"
         updated += 1
 
     temp = csv_path.with_suffix(".csv.tmp")
@@ -331,7 +349,7 @@ def relink_dataset(
     csv_files: List[Path],
     variants: int,
     marker: dict,
-    metrics: Dict[Tuple[int, int], Tuple[float, float, float]],
+    metrics: Dict[Tuple[int, int], Tuple[float, float, float, float, float]],
 ) -> None:
     completed = set(marker.get("curveVariationCompletedCsv", []))
     metrics_completed = set(marker.get("curveMetricsCompletedCsv", []))
@@ -456,18 +474,20 @@ def verify(output: Path, csv_files: List[Path], variants: int, marker: dict) -> 
                         elif field.startswith("ErrorValueMaxV="):
                             error_max = float(field.split("=", 1)[1])
                     continue
-                if columns[0] == "Id" or len(columns) < 10:
+                if columns[0] == "Id" or len(columns) < 12:
                     continue
                 grab_id, file_name = columns[0], columns[1]
                 camera_id = int(file_name.rsplit("-", 1)[1])
                 variant = grab_order[grab_id] % variants
-                mean_peak, max_peak, max_c_mean = metrics[(camera_id, variant)]
+                mean_peak, max_peak, max_c_mean, mean_r_peak, max_r_peak = metrics[(camera_id, variant)]
                 expected_values = (
                     1 if max_peak > error_max else 0,
                     1 if mean_peak > error_mean else 0,
                     mean_peak,
                     max_peak,
                     max_c_mean,
+                    mean_r_peak,
+                    max_r_peak,
                 )
                 actual_values = (
                     int(columns[2]),
@@ -475,6 +495,8 @@ def verify(output: Path, csv_files: List[Path], variants: int, marker: dict) -> 
                     float(columns[4]),
                     float(columns[5]),
                     float(columns[9]),
+                    float(columns[10]),
+                    float(columns[11]),
                 )
                 if (
                     actual_values[0] != expected_values[0]
@@ -482,6 +504,8 @@ def verify(output: Path, csv_files: List[Path], variants: int, marker: dict) -> 
                     or abs(actual_values[2] - expected_values[2]) > 0.00011
                     or abs(actual_values[3] - expected_values[3]) > 0.00011
                     or abs(actual_values[4] - expected_values[4]) > 0.0000011
+                    or abs(actual_values[5] - expected_values[5]) > 0.0000011
+                    or abs(actual_values[6] - expected_values[6]) > 0.0000011
                 ):
                     metric_mismatches += 1
         global_grab_index += len(grab_order)
@@ -549,6 +573,12 @@ def main() -> int:
         raise RuntimeError(
             f"Existing variant count {existing_variants} differs from {args.variants}."
         )
+    if marker.get("curveMetricsVersion") != METRICS_VERSION:
+        print(
+            f"upgrade curve metrics v{marker.get('curveMetricsVersion')} -> v{METRICS_VERSION} "
+            "(add MeanRPeak/MaxRPeak)"
+        )
+        marker["curveMetricsCompletedCsv"] = []
     if existing_formula == 1:
         print("upgrade curve formula v1 -> v2 (balanced pass/fail variants)")
         upgrade_variant_pool_v1_to_v2(output, args.variants)

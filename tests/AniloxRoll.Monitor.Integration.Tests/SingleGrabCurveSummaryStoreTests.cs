@@ -39,6 +39,8 @@ namespace AniloxRoll.Monitor.Integration.Tests
             var expected = new SingleGrabCurveSummary(
                 new[] { new[] { 1f, 2f }, null, new[] { 3.5f } },
                 new[] { new[] { 5f, 4f }, null, new[] { 9.5f } },
+                new[] { 11f, 12f, 13f },
+                new[] { 21f, 22f, 23f },
                 17);
 
             Assert.That(SingleGrabCurveSummaryStore.TrySave(
@@ -53,9 +55,36 @@ namespace AniloxRoll.Monitor.Integration.Tests
             Assert.That(actual.Max[1], Is.Null);
             Assert.That(actual.Mean[2], Is.EqualTo(new[] { 3.5f }));
             Assert.That(actual.Max[2], Is.EqualTo(new[] { 9.5f }));
+            Assert.That(actual.RowMean, Is.EqualTo(new[] { 11f, 12f, 13f }));
+            Assert.That(actual.RowMax, Is.EqualTo(new[] { 21f, 22f, 23f }));
             Assert.That(Directory.GetFiles(
                 Path.GetDirectoryName(CaptureStoragePaths.GrabCurveSummary(
                     _tempRoot, _info.Earliest, _info.GrabId)), "*.tmp"), Is.Empty);
+        }
+
+        [Test]
+        public void SaveThenLoad_MergedRowLongerThanSingleBin_RoundTrips()
+        {
+            var rowMean = new float[250001];
+            var rowMax = new float[250001];
+            rowMean[0] = 1.25f;
+            rowMean[rowMean.Length - 1] = 2.5f;
+            rowMax[0] = 3.75f;
+            rowMax[rowMax.Length - 1] = 5f;
+            var expected = new SingleGrabCurveSummary(
+                new[] { new[] { 1f } }, new[] { new[] { 2f } },
+                rowMean, rowMax, 167);
+
+            Assert.That(SingleGrabCurveSummaryStore.TrySave(
+                _tempRoot, _info, 1, expected), Is.True);
+            Assert.That(SingleGrabCurveSummaryStore.TryLoad(
+                _tempRoot, _info, 1, out var actual), Is.True);
+
+            Assert.That(actual.RowMean.Length, Is.EqualTo(250001));
+            Assert.That(actual.RowMean[0], Is.EqualTo(1.25f));
+            Assert.That(actual.RowMean[actual.RowMean.Length - 1], Is.EqualTo(2.5f));
+            Assert.That(actual.RowMax[0], Is.EqualTo(3.75f));
+            Assert.That(actual.RowMax[actual.RowMax.Length - 1], Is.EqualTo(5f));
         }
 
         [Test]

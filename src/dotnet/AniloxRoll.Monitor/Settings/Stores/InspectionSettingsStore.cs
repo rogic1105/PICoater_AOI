@@ -86,6 +86,7 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"ErrorValueMeanH\": {F(R.ErrorValueMeanH)},");
             sb.AppendLine($"    \"ErrorValueMaxH\": {F(R.ErrorValueMaxH)},");
             sb.AppendLine($"    \"BackgroundSampleSeconds\": {R.BackgroundSampleSeconds},");
+            sb.AppendLine($"    \"GrabLimitSeconds\": {R.GrabLimitSeconds},");
             sb.AppendLine($"    \"AniloxRollSpeedMPerMin\": {D(R.AniloxRollSpeedMPerMin)},");
             sb.AppendLine($"    \"SaveResizeScale\": {R.SaveResizeScale},");
             sb.AppendLine($"    \"SaveJpgQuality\": {R.SaveJpgQuality}");
@@ -223,6 +224,7 @@ namespace AniloxRoll.Monitor.Core.Data
                 ErrorValueMeanH  = SettingsStoreHelper.GetFloat(obj, "ErrorValueMeanH", InspectionDefaults.ErrorValueMeanH),
                 ErrorValueMaxH   = SettingsStoreHelper.GetFloat(obj, "ErrorValueMaxH",  InspectionDefaults.ErrorValueMaxH),
                 BackgroundSampleSeconds = SettingsStoreHelper.GetInt(obj, "BackgroundSampleSeconds", InspectionDefaults.BackgroundSampleSeconds),
+                GrabLimitSeconds = SettingsStoreHelper.GetInt(obj, "GrabLimitSeconds", InspectionDefaults.GrabLimitSeconds),
                 AniloxRollSpeedMPerMin = SettingsStoreHelper.GetDouble(obj, "AniloxRollSpeedMPerMin", InspectionDefaults.AniloxRollSpeedMPerMin),
                 SaveResizeScale      = SettingsStoreHelper.GetInt(obj, "SaveResizeScale",   5),
                 SaveJpgQuality       = SettingsStoreHelper.GetInt(obj, "SaveJpgQuality",    90),

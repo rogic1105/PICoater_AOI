@@ -14,6 +14,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
     public class InspectionStatsPresenter
     {
         private readonly Panel[] _panels;   // index 0 = CAM1 … index 6 = CAM7
+        private readonly Panel _rowPanel;
 
         private static readonly Color ColorGood    = Color.FromArgb(102, 187, 106);
         private static readonly Color ColorWarning = Color.FromArgb(255, 167,  38);
@@ -21,12 +22,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private static readonly Color ColorEmpty   = Color.FromArgb(158, 158, 158);
 
         private readonly ColorTextCard[] _cards = new ColorTextCard[7];
+        private ColorTextCard _rowCard;
 
-        public InspectionStatsPresenter(Panel[] panels)
+        public InspectionStatsPresenter(Panel[] panels, Panel rowPanel = null)
         {
             if (panels == null || panels.Length < 7)
                 throw new ArgumentException("panels must contain 7 entries.");
             _panels = panels;
+            _rowPanel = rowPanel;
         }
 
         public void Initialize()
@@ -49,6 +52,21 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 panel.Controls.Add(card);
                 _cards[i] = card;
             }
+
+            if (_rowPanel != null)
+            {
+                _rowPanel.Controls.Clear();
+                _rowPanel.BackColor = ColorEmpty;
+                _rowCard = new ColorTextCard
+                {
+                    Dock = DockStyle.Fill,
+                    TopBandHeight = 0,
+                    BottomBandHeight = 0,
+                    CenterFont = new Font("Microsoft JhengHei", 13f, FontStyle.Bold)
+                };
+                _rowCard.SetContent(ColorEmpty, string.Empty, "列檢測　—", string.Empty);
+                _rowPanel.Controls.Add(_rowCard);
+            }
         }
 
         /// <summary>更新 7 個色卡（Pass/Fail/Rate）。</summary>
@@ -59,6 +77,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 CameraStats s = stats.TryGetValue(i, out var v) ? v : null;
                 UpdateCard(i - 1, s);
             }
+        }
+
+        public void UpdateRowResult(bool? failed)
+        {
+            if (_rowCard == null) return;
+            Color back = !failed.HasValue ? ColorEmpty : failed.Value ? ColorBad : ColorGood;
+            string verdict = !failed.HasValue ? "—" : failed.Value ? "×" : "○";
+            _rowCard.SetContent(back, string.Empty, $"列檢測　{verdict}", string.Empty);
         }
 
         private void UpdateCard(int idx, CameraStats s)

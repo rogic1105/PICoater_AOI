@@ -16,6 +16,8 @@ namespace AniloxRoll.Monitor.Core.Services
         public double LineRateHz { get; set; }
         public double ExposureUs { get; set; }
         public float MaxCMean { get; set; } = float.NaN;
+        public float MeanRPeak { get; set; } = float.NaN;
+        public float MaxRPeak { get; set; } = float.NaN;
     }
 
     /// <summary>
@@ -69,6 +71,15 @@ namespace AniloxRoll.Monitor.Core.Services
             if (columns.Length >= 10 && float.TryParse(columns[9].Trim(), NumberStyles.Float,
                 CultureInfo.InvariantCulture, out float maxCMean))
                 record.MaxCMean = maxCMean;
+            if (columns.Length >= 12)
+            {
+                if (float.TryParse(columns[10].Trim(), NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out float meanRPeak))
+                    record.MeanRPeak = meanRPeak;
+                if (float.TryParse(columns[11].Trim(), NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out float maxRPeak))
+                    record.MaxRPeak = maxRPeak;
+            }
             return true;
         }
 

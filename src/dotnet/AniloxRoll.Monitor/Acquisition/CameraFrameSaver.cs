@@ -90,7 +90,10 @@ namespace AniloxRoll.Monitor.Core.Camera
             }
 
             float maxCMean = ComputeCurveMeanNormalized(ctx.MaxC);
-            ctx.OnResult?.Invoke(ctx.CameraId, ctx.BaseName, ctx.MeanPeak, ctx.MaxPeak, maxCMean);
+            float meanRPeak = ComputeCurvePeakNormalized(ctx.MeanR);
+            float maxRPeak = ComputeCurvePeakNormalized(ctx.MaxR);
+            ctx.OnResult?.Invoke(ctx.CameraId, ctx.BaseName,
+                ctx.MeanPeak, ctx.MaxPeak, maxCMean, meanRPeak, maxRPeak);
         }
 
         internal static float ComputeCurveMeanNormalized(float[] curve)
@@ -101,6 +104,15 @@ namespace AniloxRoll.Monitor.Core.Camera
             for (int i = 0; i < curve.Length; i++)
                 sum += curve[i];
             return (float)(sum / curve.Length / 255.0);
+        }
+
+        internal static float ComputeCurvePeakNormalized(float[] curve)
+        {
+            if (curve == null || curve.Length == 0) return float.NaN;
+            float peak = curve[0];
+            for (int i = 1; i < curve.Length; i++)
+                if (curve[i] > peak) peak = curve[i];
+            return peak / 255f;
         }
 
         // ── JPEG 存檔 ───────────────────────────────────────────────────────
@@ -457,7 +469,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>本幀 frame-start 硬體時戳（Data Latch ticks）。0＝未取得。
         /// 寫進 _ticks.csv 側車，供回顧用「tick 就近對位」精準補黑（免疫 seq 歪掉/軟體戳抖動）。</summary>
         public long FrameStartTicks;
-        public Action<int, string, float, float, float> OnResult;
+        public Action<int, string, float, float, float, float, float> OnResult;
         /// <summary>存檔完成後回呼，傳入已儲存的檔案路徑陣列（供遠端複製佇列用）。</summary>
         public Action<string[]> OnFilesSaved;
     }

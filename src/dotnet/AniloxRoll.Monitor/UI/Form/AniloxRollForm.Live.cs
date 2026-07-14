@@ -35,7 +35,13 @@ namespace AniloxRoll.Monitor.Forms
 
         private async void btnLiveGrab_Click(object sender, EventArgs e)
         {
-            FlowTrace.Log("ui:【開始抓取】鈕");   // intent 行：之後的顯示變更行歸此動作管（孤兒判讀規則）
+            await ToggleLiveGrabAsync("ui:【開始抓取】鈕");
+        }
+
+        /// <summary>開始/停止抓取的共用命令；按鈕、IO 接續與抓取上限都必須走這條收尾鏈。</summary>
+        private async Task<bool> ToggleLiveGrabAsync(string intentLine)
+        {
+            FlowTrace.Log(intentLine);
 
             // 背景預覽中按 Grab → 清除預覽即可（共用顯示路：清幀＋回設定模式；舊 Free 重配已退場）
             if (IsBgPreviewActive)
@@ -48,7 +54,7 @@ namespace AniloxRoll.Monitor.Forms
             if (!wasGrabbing && _liveCameraManager.IsAllocated && !_liveCameraManager.AreCamerasHwReady)
             {
                 Trace.WriteLine("[Grab] CLProtocol 尚未就緒，忽略開始抓取請求。");
-                return;
+                return false;
             }
 
             // 啟動路徑：先亮燈 → 等光源穩定 → 再開始 grab
@@ -79,7 +85,7 @@ namespace AniloxRoll.Monitor.Forms
                 {
                     LightTurnOff();
                     MessageBox.Show($"相機配置失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
+                    return false;
                 }
             }
             else
@@ -100,11 +106,16 @@ namespace AniloxRoll.Monitor.Forms
                 FlowTrace.Log($"capture plan grab={_currentGrabId} root={captureRoot} imageDir={imageDir} csv={csvPath} " +
                     $"files=*{CaptureFileNaming.RawJpg}|*{CaptureFileNaming.ProcV}|*{CaptureFileNaming.ProcH}|*{CaptureFileNaming.MeanC}|*{CaptureFileNaming.MaxC}|*{CaptureFileNaming.MeanR}|*{CaptureFileNaming.MaxR} " +
                     $"scale={InspectionEngineConfig.DefaultSaveResizeScale}");
+
+                int limitSeconds = Math.Max(1, _settings?.GrabLimitSeconds ?? InspectionDefaults.GrabLimitSeconds);
+                _grabDurationCoordinator?.Arm(limitSeconds);
+                FlowTrace.Log($"grab limit armed {limitSeconds}s grab={_currentGrabId}");
             }
 
             // 剛從「抓取中」→「停止」：關燈 + 觸發循環儲存 + 通知儲存機清理
             if (wasGrabbing && !_liveCameraManager.IsLiveGrabbing)
             {
+                _grabDurationCoordinator?.Disarm();
                 _ = Task.Run(() => LightTurnOff());   // 序列埠寫入不佔 UI（[UiStack] 抓到停止時卡在 SerialStream.Write）
                 TriggerRetentionAndFlagAsync();
                 // 檢測結束＝MURA 警告閂鎖清除時機（與 DO latch/FSM 回 Idle 同語意；無 IO 時的等價點）
@@ -115,6 +126,23 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             UpdateGrabButton(_liveCameraManager.IsLiveGrabbing);
+            return wasGrabbing != _liveCameraManager.IsLiveGrabbing;
+        }
+
+        /// <summary>倒數執行緒只送 intent；實際停止回 UI 後走共用命令，保留燈號、retention、MURA 與 IO 收尾。</summary>
+        private async void HandleGrabLimitElapsed(int limitSeconds)
+        {
+            if (_liveCameraManager?.IsLiveGrabbing != true) return;
+
+            bool stopped = await ToggleLiveGrabAsync(
+                $"auto:抓取上限到時 limit={limitSeconds}s grab={_currentGrabId} → 停止");
+            if (stopped && _ioGrabController != null)
+            {
+                // 只拉低 PC_INSPECT，不把 FSM 強制改 Idle：若產線 START 卡在 High，保留 Running
+                // 才不會把同一個 High 誤認成新一輪；START 下降後既有 edge flow 會正常回 Idle。
+                try { await _ioGrabController.NotifyGrabStopped(); }
+                catch (Exception ex) { Trace.WriteLine($"[GrabLimit.NotifyStopped] {ex.GetType().Name}: {ex.Message}"); }
+            }
         }
 
         /// <summary>
@@ -122,7 +150,8 @@ namespace AniloxRoll.Monitor.Forms
         /// EnableAutoCapture=true 且抓取中時才會觸發。
         /// </summary>
         private void OnCameraInspectionResult(
-            int camId, string fileNameNoExt, float meanPeak, float maxPeak, float maxCMean)
+            int camId, string fileNameNoExt, float meanPeak, float maxPeak,
+            float maxCMean, float meanRPeak, float maxRPeak)
         {
             if (string.IsNullOrEmpty(_currentGrabId)) return;
             int idx = camId - 1;
@@ -135,6 +164,8 @@ namespace AniloxRoll.Monitor.Forms
                     meanPeak,
                     maxPeak,
                     maxCMean,
+                    meanRPeak,
+                    maxRPeak,
                     _settings.ErrorValueMeanV,
                     _settings.ErrorValueMaxV,
                     idx >= 0 && idx < _settings.Acquisition.CameraGrabHeight.Length

@@ -14,7 +14,7 @@ namespace AniloxRoll.Monitor.Core.Services
     public class InspectionLogService
     {
         private const string Header =
-            "Id,FileName,MaxExceed,MeanExceed,MeanPeak,MaxPeak,GrabHeight,LineRateHz,ExposureUs,MaxCMean";
+            "Id,FileName,MaxExceed,MeanExceed,MeanPeak,MaxPeak,GrabHeight,LineRateHz,ExposureUs,MaxCMean,MeanRPeak,MaxRPeak";
 
         private readonly Func<string> _getCaptureRoot;
         private readonly object _csvLock = new object();
@@ -50,7 +50,7 @@ namespace AniloxRoll.Monitor.Core.Services
         }
 
         /// <summary>
-        /// 寫入一筆單相機檢測結果到當日 CSV（新格式 10 欄 + #CFG）。
+        /// 寫入一筆單相機檢測結果到當日 CSV（12 欄 + #CFG）。
         /// </summary>
         public void AppendRecord(
             string grabId,
@@ -58,6 +58,8 @@ namespace AniloxRoll.Monitor.Core.Services
             float  meanPeak,
             float  maxPeak,
             float  maxCMean,
+            float  meanRPeak,
+            float  maxRPeak,
             float  errMean,
             float  errMax,
             int    grabHeight,
@@ -65,7 +67,18 @@ namespace AniloxRoll.Monitor.Core.Services
             double exposureUs,
             CsvConfigSnapshot config)
         {
-            AppendRecord(grabId, fileName, meanPeak, maxPeak, maxCMean, errMean, errMax,
+            AppendRecord(grabId, fileName, meanPeak, maxPeak, maxCMean,
+                meanRPeak, maxRPeak, errMean, errMax,
+                grabHeight, lineRateHz, exposureUs, config, DateTime.Now);
+        }
+
+        public void AppendRecord(
+            string grabId, string fileName, float meanPeak, float maxPeak, float maxCMean,
+            float errMean, float errMax, int grabHeight, double lineRateHz,
+            double exposureUs, CsvConfigSnapshot config)
+        {
+            AppendRecord(grabId, fileName, meanPeak, maxPeak, maxCMean,
+                float.NaN, float.NaN, errMean, errMax,
                 grabHeight, lineRateHz, exposureUs, config, DateTime.Now);
         }
 
@@ -74,7 +87,8 @@ namespace AniloxRoll.Monitor.Core.Services
             float errMean, float errMax, int grabHeight, double lineRateHz,
             double exposureUs, CsvConfigSnapshot config)
         {
-            AppendRecord(grabId, fileName, meanPeak, maxPeak, float.NaN, errMean, errMax,
+            AppendRecord(grabId, fileName, meanPeak, maxPeak, float.NaN,
+                float.NaN, float.NaN, errMean, errMax,
                 grabHeight, lineRateHz, exposureUs, config, DateTime.Now);
         }
 
@@ -83,7 +97,19 @@ namespace AniloxRoll.Monitor.Core.Services
             float errMean, float errMax, int grabHeight, double lineRateHz,
             double exposureUs, CsvConfigSnapshot config, DateTime timestamp)
         {
-            AppendRecord(grabId, fileName, meanPeak, maxPeak, float.NaN, errMean, errMax,
+            AppendRecord(grabId, fileName, meanPeak, maxPeak, float.NaN,
+                float.NaN, float.NaN, errMean, errMax,
+                grabHeight, lineRateHz, exposureUs, config, timestamp);
+        }
+
+        internal void AppendRecord(
+            string grabId, string fileName, float meanPeak, float maxPeak,
+            float maxCMean, float errMean, float errMax, int grabHeight,
+            double lineRateHz, double exposureUs, CsvConfigSnapshot config,
+            DateTime timestamp)
+        {
+            AppendRecord(grabId, fileName, meanPeak, maxPeak, maxCMean,
+                float.NaN, float.NaN, errMean, errMax,
                 grabHeight, lineRateHz, exposureUs, config, timestamp);
         }
 
@@ -93,6 +119,8 @@ namespace AniloxRoll.Monitor.Core.Services
             float    meanPeak,
             float    maxPeak,
             float    maxCMean,
+            float    meanRPeak,
+            float    maxRPeak,
             float    errMean,
             float    errMax,
             int      grabHeight,
@@ -153,9 +181,10 @@ namespace AniloxRoll.Monitor.Core.Services
                         }
 
                         sw.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                            "{0},{1},{2},{3},{4:F4},{5:F4},{6},{7:F1},{8:F1},{9:F6}",
+                            "{0},{1},{2},{3},{4:F4},{5:F4},{6},{7:F1},{8:F1},{9:F6},{10:F4},{11:F4}",
                             grabId, fileName, maxExceed, meanExceed,
-                            meanPeak, maxPeak, grabHeight, lineRateHz, exposureUs, maxCMean));
+                            meanPeak, maxPeak, grabHeight, lineRateHz, exposureUs, maxCMean,
+                            meanRPeak, maxRPeak));
 
                         if (!string.Equals(_lastFlowRecordGrabId, grabId, StringComparison.Ordinal))
                         {
@@ -173,7 +202,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 if (flowFirstRecordForGrab)
                     FlowTrace.Log($"capture csv firstRecord grab={grabId} path={csvPath} file={fileName} " +
                         $"verdict=max{maxExceed}/mean{meanExceed} peak={meanPeak:F4}/{maxPeak:F4} " +
-                        $"maxCMean={maxCMean:F6} thrV={errMean:F4}/{errMax:F4}");
+                        $"rowPeak={meanRPeak:F4}/{maxRPeak:F4} maxCMean={maxCMean:F6} " +
+                        $"thrV={errMean:F4}/{errMax:F4}");
             }
             catch (Exception ex)
             {
