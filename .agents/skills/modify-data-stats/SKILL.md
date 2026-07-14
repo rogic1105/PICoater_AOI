@@ -61,6 +61,10 @@ description: Modify the Data tab, inspection CSV schema, statistics, report list
 - GrabId：`yyMMdd-HHmmss`（時間戳，字典序=時間序）
 - CamId 從 FileName 提取：`fileName.LastIndexOf('-')` 後的數字
 - `#CFG` 行格式：`#CFG,ISO-timestamp,key=value,...`
+- **Curve SSoT 與報表索引**：`MeanC/MaxC .bin` 是完整 Curve 樣本的真實來源；CSV
+  `MeanPeak/MaxPeak/MaxCMean` 是 capture 當下從同份 bin 資料算出的可重建標量索引。
+  報表調整欄正規值或 Mean/Max 門檻時，以 CSV 索引重判全資料，不逐筆重讀 bin；
+  不改寫歷史 CSV。若外部修改 bin，必須同步重建 CSV 索引，不得讓 Curve 與判定分歧。
 
 ### Period Charts
 - StackedColumn 綁 `YAxisType.Secondary`（AxisY2 右側顯示 label）

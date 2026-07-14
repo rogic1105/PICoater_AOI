@@ -16,6 +16,7 @@ import json
 import os
 import re
 import shutil
+import struct
 import sys
 import time
 from dataclasses import dataclass
@@ -197,10 +198,39 @@ def ensure_hard_link(source: Path, destination: Path) -> bool:
     return True
 
 
+def load_mcbf_values(path: Path) -> List[float]:
+    raw = path.read_bytes()
+    if len(raw) < 16 or raw[:4] != b"MCBF":
+        raise RuntimeError(f"Not an MCBF curve: {path}")
+    version = struct.unpack_from("<i", raw, 4)[0]
+    length_offset = 20 if version >= 2 else 12
+    length = struct.unpack_from("<i", raw, length_offset)[0]
+    payload_offset = length_offset + 4
+    if length <= 0 or len(raw) < payload_offset + length * 4:
+        raise RuntimeError(f"Invalid MCBF curve: {path}")
+    return list(struct.unpack_from(f"<{length}f", raw, payload_offset))
+
+
+def template_curve_metrics(
+    camera_templates: Dict[int, Path]
+) -> Dict[int, Tuple[float, float, float]]:
+    result: Dict[int, Tuple[float, float, float]] = {}
+    for camera_id, base_path in camera_templates.items():
+        mean_values = load_mcbf_values(Path(str(base_path) + "_mean_c.bin"))
+        max_values = load_mcbf_values(Path(str(base_path) + "_max_c.bin"))
+        result[camera_id] = (
+            max(mean_values) / 255.0,
+            max(max_values) / 255.0,
+            sum(max_values) / len(max_values) / 255.0,
+        )
+    return result
+
+
 def build_bucket(
     output: Path,
     bucket: Bucket,
     camera_templates: Dict[int, Path],
+    camera_metrics: Dict[int, Tuple[float, float, float]],
     links_per_pool_file: int,
 ) -> Tuple[int, int]:
     date = bucket.date
@@ -227,17 +257,17 @@ def build_bucket(
             capture_time = date + timedelta(seconds=local_index)
             grab_id = capture_time.strftime("%y%m%d-%H%M%S")
             base_stamp = capture_time.strftime("%Y%m%d_%H%M%S.000")
-            max_exceed = 1 if global_index % 997 == 0 else 0
-            mean_exceed = 1 if global_index % 1499 == 0 else 0
-            max_c_mean = (global_index % 1000) / 1000.0
             frame_tick = (global_index + 1) * 1_000_000
             pool_group = global_index // links_per_pool_file
 
             for camera_id in range(1, CAMERA_COUNT + 1):
                 file_name = f"{base_stamp}-{camera_id}"
+                mean_peak, max_peak, max_c_mean = camera_metrics[camera_id]
+                max_exceed = 1 if max_peak > 0.5 else 0
+                mean_exceed = 1 if mean_peak > 0.2 else 0
                 csv_file.write(
                     f"{grab_id},{file_name},{max_exceed},{mean_exceed},"
-                    f"0.0100,0.0300,3000,3000.0,100.0,{max_c_mean:.6f}\n"
+                    f"{mean_peak:.4f},{max_peak:.4f},3000,3000.0,100.0,{max_c_mean:.6f}\n"
                 )
                 ticks_file.write(f"{file_name},{frame_tick}\n")
 
@@ -392,6 +422,7 @@ def main() -> int:
     buckets = build_buckets(start, args.grabs, args.months)
     discovered = find_complete_template_bases(source)
     camera_templates = map_seven_cameras(discovered)
+    camera_metrics = template_curve_metrics(camera_templates)
     files_per_grab = CAMERA_COUNT * len(FILE_SUFFIXES)
     pool_groups = (args.grabs + args.links_per_pool_file - 1) // args.links_per_pool_file
     pool_files = pool_groups * files_per_grab
@@ -444,7 +475,7 @@ def main() -> int:
             continue
         bucket_start = time.monotonic()
         linked, skipped = build_bucket(
-            output, bucket, camera_templates, args.links_per_pool_file
+            output, bucket, camera_templates, camera_metrics, args.links_per_pool_file
         )
         total_linked += linked
         total_skipped += skipped

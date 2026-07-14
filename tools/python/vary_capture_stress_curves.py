@@ -28,7 +28,8 @@ CURVE_SUFFIXES = (
     "_mean_r.bin",
     "_max_r.bin",
 )
-FORMULA_VERSION = 1
+FORMULA_VERSION = 4
+METRICS_VERSION = 1
 
 
 def parse_args() -> argparse.Namespace:
@@ -122,6 +123,21 @@ def read_mcbf(path: Path) -> Tuple[bytes, int]:
     return raw[:payload_offset], length
 
 
+def read_mcbf_values(path: Path) -> List[float]:
+    raw = path.read_bytes()
+    if len(raw) < 16 or raw[:4] != b"MCBF":
+        raise RuntimeError(f"Not an MCBF curve: {path}")
+    version = struct.unpack_from("<i", raw, 4)[0]
+    length_offset = 20 if version >= 2 else 12
+    if len(raw) < length_offset + 4:
+        raise RuntimeError(f"Truncated MCBF header: {path}")
+    length = struct.unpack_from("<i", raw, length_offset)[0]
+    payload_offset = length_offset + 4
+    if length <= 0 or len(raw) < payload_offset + length * 4:
+        raise RuntimeError(f"Invalid MCBF length: {path}")
+    return list(struct.unpack_from(f"<{length}f", raw, payload_offset))
+
+
 def variant_path(
     output: Path, camera_id: int, suffix: str, variant: int
 ) -> Path:
@@ -147,13 +163,82 @@ def curve_values(
     width = 0.018 + (variant % 4) * 0.006
     phase = (camera_id * 0.7) + (variant * 0.25)
     result: List[float] = []
+    if is_max:
+        severity_scale = 0.55 if variant < variants // 2 else 1.0
+    else:
+        severity_scale = 0.55 if variant < variants // 2 else 0.44
     denominator = max(1, length - 1)
     for index in range(length):
         x = index / denominator
         peak = amplitude * math.exp(-0.5 * ((x - center) / width) ** 2)
         ripple = (5.0 if is_max else 2.0) * math.sin(x * math.tau * 3.0 + phase)
-        result.append(max(0.0, min(250.0, baseline + peak + ripple)))
+        result.append(
+            max(0.0, min(250.0, (baseline + peak + ripple) * severity_scale))
+        )
     return result
+
+
+def upgrade_variant_pool_v1_to_v2(output: Path, variants: int) -> None:
+    """Scale the lower half in place so every existing hard link sees v2."""
+    for camera_id in range(1, 8):
+        for suffix in CURVE_SUFFIXES:
+            for variant in range(variants // 2):
+                path = variant_path(output, camera_id, suffix, variant)
+                raw = path.read_bytes()
+                version = struct.unpack_from("<i", raw, 4)[0]
+                length_offset = 20 if version >= 2 else 12
+                length = struct.unpack_from("<i", raw, length_offset)[0]
+                payload_offset = length_offset + 4
+                values = struct.unpack_from(f"<{length}f", raw, payload_offset)
+                payload = struct.pack(
+                    f"<{length}f", *(value * 0.55 for value in values)
+                )
+                with path.open("r+b") as stream:
+                    stream.seek(payload_offset)
+                    stream.write(payload)
+                    stream.truncate(payload_offset + len(payload))
+
+
+def upgrade_variant_pool_v2_to_v3(output: Path, variants: int) -> None:
+    """Keep Mean below its threshold so Max can be tested independently."""
+    for camera_id in range(1, 8):
+        for suffix in ("_mean_c.bin", "_mean_r.bin"):
+            for variant in range(variants // 2, variants):
+                path = variant_path(output, camera_id, suffix, variant)
+                raw = path.read_bytes()
+                version = struct.unpack_from("<i", raw, 4)[0]
+                length_offset = 20 if version >= 2 else 12
+                length = struct.unpack_from("<i", raw, length_offset)[0]
+                payload_offset = length_offset + 4
+                values = struct.unpack_from(f"<{length}f", raw, payload_offset)
+                payload = struct.pack(
+                    f"<{length}f", *(value * 0.55 for value in values)
+                )
+                with path.open("r+b") as stream:
+                    stream.seek(payload_offset)
+                    stream.write(payload)
+                    stream.truncate(payload_offset + len(payload))
+
+
+def upgrade_variant_pool_v3_to_v4(output: Path, variants: int) -> None:
+    """Finish isolating Max by keeping every Mean variant below 0.2."""
+    for camera_id in range(1, 8):
+        for suffix in ("_mean_c.bin", "_mean_r.bin"):
+            for variant in range(variants // 2, variants):
+                path = variant_path(output, camera_id, suffix, variant)
+                raw = path.read_bytes()
+                version = struct.unpack_from("<i", raw, 4)[0]
+                length_offset = 20 if version >= 2 else 12
+                length = struct.unpack_from("<i", raw, length_offset)[0]
+                payload_offset = length_offset + 4
+                values = struct.unpack_from(f"<{length}f", raw, payload_offset)
+                payload = struct.pack(
+                    f"<{length}f", *(value * 0.8 for value in values)
+                )
+                with path.open("r+b") as stream:
+                    stream.seek(payload_offset)
+                    stream.write(payload)
+                    stream.truncate(payload_offset + len(payload))
 
 
 def build_variant_pool(
@@ -177,8 +262,79 @@ def build_variant_pool(
                 os.replace(str(temp), str(destination))
 
 
-def relink_dataset(output: Path, csv_files: List[Path], variants: int, marker: dict) -> None:
+def build_variant_metrics(
+    output: Path, variants: int
+) -> Dict[Tuple[int, int], Tuple[float, float, float]]:
+    result: Dict[Tuple[int, int], Tuple[float, float, float]] = {}
+    for camera_id in range(1, 8):
+        for variant in range(variants):
+            mean_values = read_mcbf_values(
+                variant_path(output, camera_id, "_mean_c.bin", variant)
+            )
+            max_values = read_mcbf_values(
+                variant_path(output, camera_id, "_max_c.bin", variant)
+            )
+            result[(camera_id, variant)] = (
+                max(mean_values) / 255.0,
+                max(max_values) / 255.0,
+                sum(max_values) / len(max_values) / 255.0,
+            )
+    return result
+
+
+def rewrite_csv_metrics(
+    csv_path: Path,
+    grab_order: Dict[str, int],
+    metrics: Dict[Tuple[int, int], Tuple[float, float, float]],
+    variants: int,
+) -> int:
+    with csv_path.open("r", encoding="utf-8", newline="") as stream:
+        rows = list(csv.reader(stream))
+
+    error_mean = 0.2
+    error_max = 0.5
+    updated = 0
+    for columns in rows:
+        if not columns:
+            continue
+        if columns[0] == "#CFG":
+            for field in columns[2:]:
+                if field.startswith("ErrorValueMeanV="):
+                    error_mean = float(field.split("=", 1)[1])
+                elif field.startswith("ErrorValueMaxV="):
+                    error_max = float(field.split("=", 1)[1])
+            continue
+        if columns[0] == "Id" or len(columns) < 10:
+            continue
+
+        grab_id, file_name = columns[0], columns[1]
+        camera_id = int(file_name.rsplit("-", 1)[1])
+        variant = grab_order[grab_id] % variants
+        mean_peak, max_peak, max_c_mean = metrics[(camera_id, variant)]
+        columns[2] = "1" if max_peak > error_max else "0"
+        columns[3] = "1" if mean_peak > error_mean else "0"
+        columns[4] = f"{mean_peak:.4f}"
+        columns[5] = f"{max_peak:.4f}"
+        columns[9] = f"{max_c_mean:.6f}"
+        updated += 1
+
+    temp = csv_path.with_suffix(".csv.tmp")
+    with temp.open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.writer(stream, lineterminator="\n")
+        writer.writerows(rows)
+    os.replace(str(temp), str(csv_path))
+    return updated
+
+
+def relink_dataset(
+    output: Path,
+    csv_files: List[Path],
+    variants: int,
+    marker: dict,
+    metrics: Dict[Tuple[int, int], Tuple[float, float, float]],
+) -> None:
     completed = set(marker.get("curveVariationCompletedCsv", []))
+    metrics_completed = set(marker.get("curveMetricsCompletedCsv", []))
     global_grab_index = 0
     linked = 0
     existing = 0
@@ -212,6 +368,15 @@ def relink_dataset(output: Path, csv_files: List[Path], variants: int, marker: d
             )
             save_marker(output, marker)
 
+        if csv_key not in metrics_completed:
+            rewrite_csv_metrics(csv_path, grab_order, metrics, variants)
+            metrics_completed.add(csv_key)
+            marker["curveMetricsCompletedCsv"] = sorted(metrics_completed)
+            marker["curveMetricsUpdatedUtc"] = time.strftime(
+                "%Y-%m-%dT%H:%M:%SZ", time.gmtime()
+            )
+            save_marker(output, marker)
+
         global_grab_index += len(grab_order)
         print(
             f"[{csv_index + 1}/{len(csv_files)}] {csv_key} grabs={len(grab_order):,} "
@@ -224,6 +389,7 @@ def relink_dataset(output: Path, csv_files: List[Path], variants: int, marker: d
         summary.unlink()
         removed_summaries += 1
     marker["curveVariationStatus"] = "complete"
+    marker["curveMetricsStatus"] = "complete"
     marker["curveVariationCompletedUtc"] = time.strftime(
         "%Y-%m-%dT%H:%M:%SZ", time.gmtime()
     )
@@ -246,11 +412,17 @@ def verify(output: Path, csv_files: List[Path], variants: int, marker: dict) -> 
         failures.append(
             f"formulaVersion={marker.get('curveVariationFormulaVersion')!r}"
         )
+    if marker.get("curveMetricsStatus") != "complete":
+        failures.append(f"curveMetricsStatus={marker.get('curveMetricsStatus')!r}")
+    if marker.get("curveMetricsVersion") != METRICS_VERSION:
+        failures.append(f"curveMetricsVersion={marker.get('curveMetricsVersion')!r}")
 
+    metrics = build_variant_metrics(output, variants)
     global_grab_index = 0
     checked = 0
     missing = 0
     wrong = 0
+    metric_mismatches = 0
     for csv_path in csv_files:
         records = list(csv_records(csv_path))
         grab_order: Dict[str, int] = {}
@@ -269,6 +441,49 @@ def verify(output: Path, csv_files: List[Path], variants: int, marker: dict) -> 
                     missing += 1
                 elif not os.path.samefile(expected, actual):
                     wrong += 1
+
+        error_mean = 0.2
+        error_max = 0.5
+        with csv_path.open("r", encoding="utf-8", newline="") as stream:
+            rows = csv.reader(stream)
+            for columns in rows:
+                if not columns:
+                    continue
+                if columns[0] == "#CFG":
+                    for field in columns[2:]:
+                        if field.startswith("ErrorValueMeanV="):
+                            error_mean = float(field.split("=", 1)[1])
+                        elif field.startswith("ErrorValueMaxV="):
+                            error_max = float(field.split("=", 1)[1])
+                    continue
+                if columns[0] == "Id" or len(columns) < 10:
+                    continue
+                grab_id, file_name = columns[0], columns[1]
+                camera_id = int(file_name.rsplit("-", 1)[1])
+                variant = grab_order[grab_id] % variants
+                mean_peak, max_peak, max_c_mean = metrics[(camera_id, variant)]
+                expected_values = (
+                    1 if max_peak > error_max else 0,
+                    1 if mean_peak > error_mean else 0,
+                    mean_peak,
+                    max_peak,
+                    max_c_mean,
+                )
+                actual_values = (
+                    int(columns[2]),
+                    int(columns[3]),
+                    float(columns[4]),
+                    float(columns[5]),
+                    float(columns[9]),
+                )
+                if (
+                    actual_values[0] != expected_values[0]
+                    or actual_values[1] != expected_values[1]
+                    or abs(actual_values[2] - expected_values[2]) > 0.00011
+                    or abs(actual_values[3] - expected_values[3]) > 0.00011
+                    or abs(actual_values[4] - expected_values[4]) > 0.0000011
+                ):
+                    metric_mismatches += 1
         global_grab_index += len(grab_order)
 
     pool_files = list((output / VARIANT_DIR_NAME).rglob("*.bin"))
@@ -281,12 +496,15 @@ def verify(output: Path, csv_files: List[Path], variants: int, marker: dict) -> 
         )
     if max_links > safe_max:
         failures.append(f"max hard links={max_links}, safe maximum={safe_max}")
-    if missing or wrong:
-        failures.append(f"missing={missing} wrongVariant={wrong}")
+    if missing or wrong or metric_mismatches:
+        failures.append(
+            f"missing={missing} wrongVariant={wrong} csvMetricMismatch={metric_mismatches}"
+        )
 
     print(
         f"verify grabs={global_grab_index:,} curves={checked:,} variants={variants} "
-        f"poolFiles={len(pool_files):,} maxLinks={max_links:,}"
+        f"poolFiles={len(pool_files):,} maxLinks={max_links:,} "
+        f"csvMetricMismatch={metric_mismatches:,}"
     )
     for failure in failures:
         print(f"FAIL: {failure}")
@@ -322,7 +540,7 @@ def main() -> int:
         return 0
 
     existing_formula = marker.get("curveVariationFormulaVersion")
-    if existing_formula not in (None, FORMULA_VERSION):
+    if existing_formula not in (None, 1, 2, 3, FORMULA_VERSION):
         raise RuntimeError(
             f"Existing formula version {existing_formula} differs from {FORMULA_VERSION}."
         )
@@ -331,14 +549,30 @@ def main() -> int:
         raise RuntimeError(
             f"Existing variant count {existing_variants} differs from {args.variants}."
         )
+    if existing_formula == 1:
+        print("upgrade curve formula v1 -> v2 (balanced pass/fail variants)")
+        upgrade_variant_pool_v1_to_v2(output, args.variants)
+        existing_formula = 2
+    if existing_formula == 2:
+        print("upgrade curve formula v2 -> v3 (Max-only threshold variants)")
+        upgrade_variant_pool_v2_to_v3(output, args.variants)
+        existing_formula = 3
+    if existing_formula == 3:
+        print("upgrade curve formula v3 -> v4 (Mean isolation)")
+        upgrade_variant_pool_v3_to_v4(output, args.variants)
+        marker["curveMetricsCompletedCsv"] = []
+
     marker["curveVariationFormulaVersion"] = FORMULA_VERSION
     marker["curveVariants"] = args.variants
     marker["curveVariationStatus"] = "building"
+    marker["curveMetricsVersion"] = METRICS_VERSION
+    marker["curveMetricsStatus"] = "building"
     save_marker(output, marker)
 
     templates = template_paths(output, csv_files)
     build_variant_pool(output, templates, args.variants)
-    relink_dataset(output, csv_files, args.variants, marker)
+    metrics = build_variant_metrics(output, args.variants)
+    relink_dataset(output, csv_files, args.variants, marker, metrics)
     return 0
 
 

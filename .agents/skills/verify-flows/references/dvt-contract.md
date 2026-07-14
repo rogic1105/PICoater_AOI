@@ -833,6 +833,10 @@ LoadDataFolder|SyncFromReviewFolder@DataStatisticsPresenter.cs
 - **初始載入 SSoT**：同一資料夾＋同一門檻下，序號 List、色卡、年月日圖表必須共用同一份
   `InspectionStatisticsSnapshot`。初始【讀取資料】不得分別呼叫 `LoadAvailableTimes`、
   `LoadGrabIdInfosDescending`、`ScanCsvByDateRange`重複掃磁碟。
+- **Curve／判定一致**：MeanC/MaxC bin 是 Curve 樣本 SSoT；CSV `MeanPeak/MaxPeak/MaxCMean`
+  是 capture 當下從同份資料產生的可重建標量索引。改欄正規值／Mean／Max 門檻後，
+  300ms debounce 只依新設定重判 snapshot／List／色卡／年月日圖表，不改寫歷史 CSV、
+  不逐筆重讀 bin。bin 被外部修改時必須重建 CSV 索引；兩者分歧＝資料完整性 FAIL。
 
 ### D2 明細列表點選
 ```
