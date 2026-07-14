@@ -702,8 +702,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             {
                 if (!images.TryGetValue(i + 1, out string path)) continue;
                 string basePath = CurveMergeHelper.GetCurveBasePath(path);
-                curveMean[i] = InspectionEngine.LoadCurveBin(CaptureFileNaming.ResolveMeanC(basePath));
-                curveMax[i]  = InspectionEngine.LoadCurveBin(CaptureFileNaming.ResolveMaxC(basePath));
+                curveMean[i] = CurveBinFile.Load(CaptureFileNaming.ResolveMeanC(basePath));
+                curveMax[i]  = CurveBinFile.Load(CaptureFileNaming.ResolveMaxC(basePath));
             }
 
             var reviewCfg = _ctx.ReviewState.Config;
@@ -747,8 +747,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             {
                 if (!images.TryGetValue(i + 1, out string path)) continue;
                 string basePath = CurveMergeHelper.GetCurveBasePath(path);
-                rowMean[i] = InspectionEngine.LoadCurveBin(CaptureFileNaming.ResolveMeanR(basePath));
-                rowMax[i]  = InspectionEngine.LoadCurveBin(CaptureFileNaming.ResolveMaxR(basePath));
+                rowMean[i] = CurveBinFile.Load(CaptureFileNaming.ResolveMeanR(basePath));
+                rowMax[i]  = CurveBinFile.Load(CaptureFileNaming.ResolveMaxR(basePath));
             }
 
             CurveMergeHelper.MergeRowCurvesOverlap(rowMean, rowMax, camCount,

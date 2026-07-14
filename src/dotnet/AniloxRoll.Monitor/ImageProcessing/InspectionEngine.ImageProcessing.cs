@@ -150,10 +150,10 @@ namespace AniloxRoll.Monitor.Core.Services
                     g.DrawImage(srcBmp, 0, 0, targetThumbWidth, thumbH);
                 srcBmp.Dispose();
 
-                float[] curveMean    = LoadCurveBin(CaptureFileNaming.ResolveMeanC(baseNoSuffix));
-                float[] curveMax     = LoadCurveBin(CaptureFileNaming.ResolveMaxC(baseNoSuffix));
-                float[] rowCurveMean = LoadCurveBin(CaptureFileNaming.ResolveMeanR(baseNoSuffix));
-                float[] rowCurveMax  = LoadCurveBin(CaptureFileNaming.ResolveMaxR(baseNoSuffix));
+                float[] curveMean    = CurveBinFile.Load(CaptureFileNaming.ResolveMeanC(baseNoSuffix));
+                float[] curveMax     = CurveBinFile.Load(CaptureFileNaming.ResolveMaxC(baseNoSuffix));
+                float[] rowCurveMean = CurveBinFile.Load(CaptureFileNaming.ResolveMeanR(baseNoSuffix));
+                float[] rowCurveMax  = CurveBinFile.Load(CaptureFileNaming.ResolveMaxR(baseNoSuffix));
                 long bmpMs = sw.ElapsedMilliseconds;
 
                 return new TimedResult<InspectionData>(
@@ -197,10 +197,10 @@ namespace AniloxRoll.Monitor.Core.Services
             }
             catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[InspectionEngine.LoadFromPrecomputedFiles] {ex.GetType().Name}: {ex.Message}"); return null; }
 
-            float[] curveMean    = LoadCurveBin(meanBinPath);
-            float[] curveMax     = LoadCurveBin(maxBinPath);
-            float[] rowCurveMean = LoadCurveBin(CaptureFileNaming.ResolveMeanR(baseNoSuffix));
-            float[] rowCurveMax  = LoadCurveBin(CaptureFileNaming.ResolveMaxR(baseNoSuffix));
+            float[] curveMean    = CurveBinFile.Load(meanBinPath);
+            float[] curveMax     = CurveBinFile.Load(maxBinPath);
+            float[] rowCurveMean = CurveBinFile.Load(CaptureFileNaming.ResolveMeanR(baseNoSuffix));
+            float[] rowCurveMax  = CurveBinFile.Load(CaptureFileNaming.ResolveMaxR(baseNoSuffix));
 
             System.Diagnostics.Trace.WriteLine(
                 $"[FullRes-New] mode={isProcessedMode,-5} | Total={swTotal.ElapsedMilliseconds,4}ms  ({bmp.Width}x{bmp.Height})");
@@ -396,36 +396,6 @@ namespace AniloxRoll.Monitor.Core.Services
             catch { return 1; }
         }
 
-        /// <summary>
-        /// 讀取 .bin 曲線檔案。格式：magic(4) + version(4) + scale_factor(4f) + array_length(4) + float[]
-        /// </summary>
-        internal static float[] LoadCurveBin(string path)
-        {
-            if (!File.Exists(path)) return null;
-            try
-            {
-                using (var br = new BinaryReader(File.OpenRead(path)))
-                {
-                    byte[] magic = br.ReadBytes(4);
-                    if (magic[0] != 'M' || magic[1] != 'C' || magic[2] != 'B' || magic[3] != 'F')
-                        return null;
-                    int version = br.ReadInt32();
-                    br.ReadSingle();   // scale_factor
-                    if (version >= 2)
-                    {
-                        br.ReadInt32();  // lightLevel (light controller 0-255)
-                        br.ReadSingle(); // exposureUs
-                    }
-                    int len = br.ReadInt32();
-                    float[] arr = new float[len];
-                    for (int i = 0; i < len; i++)
-                        arr[i] = br.ReadSingle();
-                    return arr;
-                }
-            }
-            catch { return null; }
-        }
-
         internal static (int Light, float ExposureUs)? ReadBgBinMeta(string path)
         {
             if (!File.Exists(path)) return null;
@@ -443,14 +413,6 @@ namespace AniloxRoll.Monitor.Core.Services
                 }
             }
             catch { return null; }
-        }
-
-        /// <summary>向後相容：優先讀新命名，不存在則嘗試舊命名。</summary>
-        private static float[] LoadCurveBinCompat(string baseNoSuffix, string newSuffix, string oldSuffix)
-        {
-            string path = baseNoSuffix + newSuffix;
-            if (File.Exists(path)) return LoadCurveBin(path);
-            return LoadCurveBin(baseNoSuffix + oldSuffix);
         }
 
         /// <summary>向後相容：優先回傳新命名路徑，不存在則回傳舊命名路徑。</summary>

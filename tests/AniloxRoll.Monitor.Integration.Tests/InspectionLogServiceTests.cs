@@ -199,7 +199,7 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
-        public void LoadRangeMuraProfile_UsesEvenMeanAndTopScoredMaxRows()
+        public void MuraProfileRepository_LoadRange_UsesEvenMeanAndTopScoredMaxRows()
         {
             var svc = new InspectionLogService(() => _tempRoot);
             var ts = new DateTime(2026, 3, 30, 12, 0, 0);
@@ -233,7 +233,7 @@ namespace AniloxRoll.Monitor.Tests
             {
                 new GrabIdInfo { GrabId = "260330-120000", Earliest = ts }
             };
-            var profiles = InspectionStatisticsService.LoadRangeMuraProfile(_tempRoot, range, 2);
+            var profiles = InspectionMuraProfileRepository.LoadRange(_tempRoot, range, 2);
 
             Assert.That(profiles.RankedCams, Is.EqualTo(1));
             Assert.That(profiles.TotalCams, Is.EqualTo(1));

@@ -1,7 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
+using AniloxRoll.Monitor.UI.Services;
 using AniloxRoll.Monitor.UI.Widgets;
 using TanukiCv.Controls;
 
@@ -17,14 +22,25 @@ namespace AniloxRoll.Monitor.UI.Presenters
     /// （DataStatisticsPresenter 仍是這些狀態的單一真相）。對外 public 門面（RefreshForSettingsChange /
     /// SyncFromReview）由 DataStatisticsPresenter 轉發，外部呼叫端零修改。
     /// </summary>
-    public sealed class MuraProfileChartPresenter
+    public sealed class MuraProfileChartPresenter : IDisposable
     {
+        private const int SingleGrabCacheEntries = 64;
+        private const long SingleGrabCacheBytes = 64L * 1024 * 1024;
+        private const int PrefetchLookAhead = 4;
+
         private readonly DataStatisticsContext _ctx;
         private readonly Func<System.Windows.Forms.GroupBox> _getActiveStatMode;
         private readonly Func<List<GrabIdInfo>> _getGrabIdInfos;
         private readonly Func<string> _getStatsRoot;
+        private readonly SingleGrabCurveCache _singleGrabCache =
+            new SingleGrabCurveCache(SingleGrabCacheEntries, SingleGrabCacheBytes);
 
         private ColumnCurveChartHelper _muraProfileHelper;
+        private CancellationTokenSource _prefetchCancellation;
+        private Task<SingleGrabCurveProfile> _prefetchTask;
+        private string _prefetchKey;
+        private int _lastSingleGrabIndex = -1;
+        private int _lastScrollDirection = 1;
 
         public MuraProfileChartPresenter(
             DataStatisticsContext ctx,
@@ -57,7 +73,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             {
                 int singleIdx = _ctx.CbDataGrabId.SelectedIndex;
                 if (singleIdx >= 0 && singleIdx < grabIdInfos.Count)
-                    UpdateForSingleGrab(grabIdInfos[singleIdx]);
+                    UpdateForSingleGrab(grabIdInfos[singleIdx], singleIdx);
                 else
                     Clear();
                 return;
@@ -75,7 +91,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             Dictionary<int, float[]> maxDict;
             if (candidateRange != null)
             {
-                var profiles = InspectionStatisticsService.LoadRangeMuraProfile(
+                var profiles = InspectionMuraProfileRepository.LoadRange(
                     _getStatsRoot(), candidateRange, 50);
                 meanDict = profiles.Mean;
                 maxDict = profiles.Max;
@@ -87,7 +103,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
             else
             {
-                var profiles = InspectionStatisticsService.LoadAvgMuraProfile(
+                var profiles = InspectionMuraProfileRepository.LoadAverage(
                     _getStatsRoot(), grabIds);
                 meanDict = profiles.Mean;
                 maxDict = profiles.Max;
@@ -120,26 +136,38 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// 套用 view-time 正規值 rescale：display = (bin/255) × (HM_capture / HM_current)；
         /// 改 PropertyGrid 正規值會立刻反映在曲線坡度上。
         /// </summary>
-        private void UpdateForSingleGrab(GrabIdInfo info)
+        private void UpdateForSingleGrab(GrabIdInfo info, int selectedIndex)
         {
             if (_muraProfileHelper == null || _ctx.Settings == null) return;
             string statsRoot = _getStatsRoot();
             if (string.IsNullOrWhiteSpace(statsRoot)) return;
+            SingleGrabCurveSummaryStore.NotifyReadActivity();
 
+            var sw = Stopwatch.StartNew();
             var grabCfg = InspectionConfigRepository.LoadForGrabId(
                 statsRoot, info.GrabId, info.Earliest, info.Latest);
-            var grouped = InspectionImagePathRepository.LoadForGrabId(
-                statsRoot, info.GrabId, info.Earliest, info.Latest);
-
+            long configMs = sw.ElapsedMilliseconds;
             int camCount = _ctx.CameraCount;
-            var allMean = new float[camCount][];
-            var allMax  = new float[camCount][];
-            for (int i = 0; i < camCount; i++)
+            string cacheKey = BuildCacheKey(statsRoot, info, camCount);
+
+            bool cacheHit = _singleGrabCache.TryGet(cacheKey, out SingleGrabCurveProfile profile);
+            bool joinedPrefetch = !cacheHit && string.Equals(
+                cacheKey, _prefetchKey, StringComparison.OrdinalIgnoreCase);
+            long waitMs = 0;
+            if (!cacheHit)
             {
-                int camId = i + 1;
-                if (grouped.TryGetValue(camId, out var paths) && paths.Count > 0)
-                    CurveMergeHelper.MergeCurves(paths, out allMean[i], out allMax[i]);
+                if (!joinedPrefetch) CancelPrefetch();
+                long waitStartMs = sw.ElapsedMilliseconds;
+                profile = _singleGrabCache.GetOrLoadAsync(cacheKey,
+                    () => LoadSingleGrabProfile(
+                        statsRoot, info, camCount, CancellationToken.None))
+                    .GetAwaiter().GetResult();
+                waitMs = sw.ElapsedMilliseconds - waitStartMs;
             }
+
+            if (profile == null) return;
+            float[][] allMean = profile.CloneMean();
+            float[][] allMax = profile.CloneMax();
 
             // view-time 正規值 rescale：chartDataColumn 是欄曲線，用 V 的 capture/current ratio
             float captureHm = grabCfg?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
@@ -150,16 +178,172 @@ namespace AniloxRoll.Monitor.UI.Presenters
             float errMean = _ctx.Settings.ErrorValueMeanV;  // view-time 閾值用當前 Settings
             float errMax  = _ctx.Settings.ErrorValueMaxV;
 
+            long drawStartMs = sw.ElapsedMilliseconds;
             CurveMergeHelper.UpdateOverviewChart(
                 allMean, allMax, ops, pos, errMean, errMax,
                 _muraProfileHelper, camCount,
                 _ctx.Settings.StitchMode, null);
+            string source = cacheHit ? "cache" : joinedPrefetch ? "prefetch" : "disk";
+            FlowTrace.Log($"DT curve load {info.GrabId} captures={profile.CaptureCount} " +
+                $"source={source} storage={profile.StorageSource} configMs={configMs} waitMs={waitMs} " +
+                $"pathMs={profile.LookupMs} mergeMs={profile.MergeMs} " +
+                $"summaryMs={profile.SummaryMs} " +
+                $"drawMs={sw.ElapsedMilliseconds - drawStartMs} totalMs={sw.ElapsedMilliseconds}");
+
+            int direction = _lastSingleGrabIndex < 0
+                ? 1
+                : Math.Sign(selectedIndex - _lastSingleGrabIndex);
+            if (direction != 0) _lastScrollDirection = direction;
+            _lastSingleGrabIndex = selectedIndex;
+            ScheduleAdjacentPrefetch(
+                statsRoot, _getGrabIdInfos(), selectedIndex, _lastScrollDirection, camCount, cacheKey);
         }
 
         /// <summary>
         /// 由 PropertyGrid 變更觸發：刷新 chartDataColumn 的閾值線 + view-time 正規值 rescale。
         /// 不重做 RefreshStats（避免重算統計）；只重畫 chart。
         /// </summary>
+        private static SingleGrabCurveProfile LoadSingleGrabProfile(
+            string statsRoot, GrabIdInfo info, int camCount, CancellationToken cancellationToken)
+        {
+            var sw = Stopwatch.StartNew();
+            if (SingleGrabCurveSummaryStore.TryLoad(
+                statsRoot, info, camCount, out SingleGrabCurveSummary summary))
+            {
+                return new SingleGrabCurveProfile(
+                    summary.Mean, summary.Max, summary.CaptureCount,
+                    "summary", 0, 0, sw.ElapsedMilliseconds);
+            }
+
+            var grouped = InspectionImagePathRepository.LoadForGrabId(
+                statsRoot, info.GrabId, info.Earliest, info.Latest);
+            long lookupMs = sw.ElapsedMilliseconds;
+            int captureCount = 0;
+            int mergedCaptureCount = 0;
+            var allMean = new float[camCount][];
+            var allMax = new float[camCount][];
+
+            for (int i = 0; i < camCount; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                int camId = i + 1;
+                if (!grouped.TryGetValue(camId, out var paths) || paths.Count == 0) continue;
+                captureCount += paths.Count;
+                CurveMergeHelper.MergeCurves(
+                    paths, out allMean[i], out allMax[i], out int mergedForCamera,
+                    cancellationToken);
+                mergedCaptureCount += mergedForCamera;
+            }
+
+            long mergeMs = sw.ElapsedMilliseconds - lookupMs;
+            long summaryStartMs = sw.ElapsedMilliseconds;
+            string summaryWrite;
+            if (captureCount > 0 && mergedCaptureCount == captureCount)
+            {
+                bool queued = SingleGrabCurveSummaryStore.QueueSave(
+                    statsRoot, info, camCount,
+                    new SingleGrabCurveSummary(allMean, allMax, captureCount));
+                summaryWrite = queued ? "queued" : "dropped";
+            }
+            else
+            {
+                summaryWrite = "skip-incomplete";
+            }
+            long summaryMs = sw.ElapsedMilliseconds - summaryStartMs;
+            FlowTrace.Log($"DT curve summary {info.GrabId} write={summaryWrite} " +
+                $"captures={captureCount} merged={mergedCaptureCount} ms={summaryMs}");
+            return new SingleGrabCurveProfile(
+                allMean, allMax, captureCount,
+                "bins", lookupMs, mergeMs, summaryMs);
+        }
+
+        private void ScheduleAdjacentPrefetch(
+            string statsRoot,
+            IList<GrabIdInfo> grabIdInfos,
+            int selectedIndex,
+            int direction,
+            int camCount,
+            string selectedKey)
+        {
+            if (grabIdInfos == null || grabIdInfos.Count == 0)
+            {
+                CancelPrefetch();
+                return;
+            }
+
+            int candidateIndex = -1;
+            string candidateKey = null;
+            SingleGrabCurveProfile ignored;
+            for (int step = 1; step <= PrefetchLookAhead; step++)
+            {
+                int index = selectedIndex + direction * step;
+                if (index < 0 || index >= grabIdInfos.Count) break;
+                string key = BuildCacheKey(statsRoot, grabIdInfos[index], camCount);
+                if (string.Equals(key, selectedKey, StringComparison.OrdinalIgnoreCase)) continue;
+                if (_singleGrabCache.TryGet(key, out ignored)) continue;
+                candidateIndex = index;
+                candidateKey = key;
+                break;
+            }
+
+            if (candidateIndex < 0)
+            {
+                CancelPrefetch();
+                return;
+            }
+            if (string.Equals(candidateKey, _prefetchKey, StringComparison.OrdinalIgnoreCase) &&
+                _prefetchTask != null && !_prefetchTask.IsCompleted)
+                return;
+
+            CancelPrefetch();
+            GrabIdInfo candidate = grabIdInfos[candidateIndex];
+            _prefetchCancellation = new CancellationTokenSource();
+            CancellationToken token = _prefetchCancellation.Token;
+            _prefetchKey = candidateKey;
+            var prefetchWatch = Stopwatch.StartNew();
+            _prefetchTask = _singleGrabCache.GetOrLoadAsync(candidateKey,
+                () => LoadSingleGrabProfile(statsRoot, candidate, camCount, token));
+            _prefetchTask.ContinueWith(task =>
+            {
+                if (task.Status != TaskStatus.RanToCompletion) return;
+                FlowTrace.Log($"DT curve prefetch {candidate.GrabId} readyMs={prefetchWatch.ElapsedMilliseconds} " +
+                    $"storage={task.Result.StorageSource} " +
+                    $"cacheEntries={_singleGrabCache.Count} " +
+                    $"cacheMB={_singleGrabCache.CachedBytes / (1024 * 1024)}");
+            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        }
+
+        private static string BuildCacheKey(string statsRoot, GrabIdInfo info, int camCount)
+        {
+            string root = Path.GetFullPath(statsRoot).TrimEnd(
+                Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return root + "|" + info.GrabId + "|" + info.Earliest.Ticks + "|" +
+                info.Latest.Ticks + "|" + camCount;
+        }
+
+        public void ResetSingleGrabCache()
+        {
+            CancelPrefetch();
+            _singleGrabCache.Clear();
+            _lastSingleGrabIndex = -1;
+            _lastScrollDirection = 1;
+        }
+
+        public void Dispose()
+        {
+            CancelPrefetch();
+            _singleGrabCache.Dispose();
+        }
+
+        private void CancelPrefetch()
+        {
+            _prefetchCancellation?.Cancel();
+            _prefetchCancellation?.Dispose();
+            _prefetchCancellation = null;
+            _prefetchTask = null;
+            _prefetchKey = null;
+        }
+
         public void RefreshForSettingsChange()
         {
             if (_muraProfileHelper == null) return;
@@ -170,7 +354,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 && _ctx.CbDataGrabId.SelectedIndex >= 0
                 && _ctx.CbDataGrabId.SelectedIndex < grabIdInfos.Count)
             {
-                UpdateForSingleGrab(grabIdInfos[_ctx.CbDataGrabId.SelectedIndex]);
+                int index = _ctx.CbDataGrabId.SelectedIndex;
+                UpdateForSingleGrab(grabIdInfos[index], index);
             }
         }
 

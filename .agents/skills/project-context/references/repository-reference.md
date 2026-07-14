@@ -89,7 +89,11 @@ against current code with `rg` before editing because lookup data can become sta
 | `Services/InspectionCsvReader.cs` | CSV 資料列唯一 parser、檔名時間/相機解析、`FileShare.ReadWrite` 共用讀取 |
 | `Services/InspectionConfigRepository.cs` | 依 grabId／日期／檔案／最新位置查詢 `#CFG` 快照 |
 | `Services/InspectionImagePathRepository.cs` | 依 grabId 查詢、分組並排序實際存在的擷取影像路徑 |
-| `Services/InspectionStatisticsService.cs` | 統計、期間查詢與範圍曲線聚合（CSV 格式委派 `InspectionCsvReader`） |
+| `Services/InspectionMuraProfileRepository.cs` | 讀取 MeanC/MaxC bin，執行均勻平均與 MaxCMean 候選排名聚合 |
+| `Services/CurveBinFile.cs` | MCBF 曲線檔唯一讀取器；驗證 header 後 bulk read float payload |
+| `Services/SingleGrabCurveSummaryStore.cs` | 報表單 grab 的版本化 `.mcsf` 匯總；驗證來源身分、一次順序讀取、原子寫回，原始 bin 仍是 SSoT |
+| `UI/Services/SingleGrabCurveCache.cs` | 報表單序號 Curve 的 64 筆／64 MB LRU；共用同 key in-flight 載入並保存 rescale 前合併結果 |
+| `Services/InspectionStatisticsService.cs` | Pass/Fail、序號明細、可用時段與期間統計（CSV 格式委派 `InspectionCsvReader`） |
 | `Services/IoState.cs` | IoState enum（FSM 狀態）+ IoSnapshot struct（IO 快照） |
 | `Services/IoGrabController.cs` | IO-Grab 連動：IoState FSM、IO 追蹤、Watchdog keepalive；支援 IModbusTcpClient 注入測試。`ReadWriteTimeoutMs`（可設）= 斷線偵測下限（拔線 OS 即報錯近 0ms；斷電靠逾時 ~500ms）；`NextReconnectAtUtc` 供 UI 重連倒數 |
 | `Services/CsvConfigSnapshot.cs` | 不可變設定快照（CamOps/CamPos/CamGrabHeight/CamExposureUs/CamLineRateHz/Hessian/ErrorValue/TrimHead/TrimTail） |
@@ -121,6 +125,9 @@ against current code with `rg` before editing because lookup data can become sta
 | `InspectionCsvReaderTests.cs` | 4/10 欄 CSV、CFG、檔名時間與相機解析 |
 | `InspectionConfigRepositoryTests.cs` | 同檔最後 CFG、grabId 最近 CFG、跨日最新 CFG |
 | `InspectionImagePathRepositoryTests.cs` | 影像格式 fallback、去重排序、日期提示縮限 |
+| `InspectionMuraProfileRepositoryTests.cs` | 多序號 MeanC 平均與 MaxC 逐點最大聚合 |
+| `SingleGrabCurveCacheTests.cs` | 同 key single-flight、LRU 淘汰、重載世代隔離與 raw Curve 複製隔離 |
+| `SingleGrabCurveSummaryStoreTests.cs` | `.mcsf` round-trip、來源時間失效、損壞退回與原子覆寫 |
 | `IoGrabControllerTests.cs` | FSM 狀態機：連線、邊緣偵測、故障恢復、CommLost |
 | `StressTests.cs` | 長時間壓力：PLC 100 萬循環、CSV 50 萬筆、Settings 14.5 萬讀寫；STRESS_MINUTES 環境變數控制時長 |
 

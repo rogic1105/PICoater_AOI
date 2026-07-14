@@ -123,6 +123,7 @@
     <Compile Include="Services\FlowTrace.cs" />
     <Compile Include="Services\FrameTickIndex.cs" />
     <Compile Include="Services\CaptureStoragePaths.cs" />
+    <Compile Include="Services\CurveBinFile.cs" />
     <Compile Include="Services\UiActionLogger.cs" />
     <Compile Include="Services\CsvConfigSnapshot.cs" />
     <Compile Include="Services\InspectionLogService.cs" />
@@ -132,6 +133,8 @@
     <Compile Include="Services\InspectionCsvReader.cs" />
     <Compile Include="Services\InspectionConfigRepository.cs" />
     <Compile Include="Services\InspectionImagePathRepository.cs" />
+    <Compile Include="Services\InspectionMuraProfileRepository.cs" />
+    <Compile Include="Services\SingleGrabCurveSummaryStore.cs" />
     <Compile Include="Services\HessianRescaleHelper.cs" />
     <Compile Include="ImageProcessing\BatchInspectionService.cs" />
     <Compile Include="ImageProcessing\InspectionEngine.cs" />
@@ -188,6 +191,7 @@
     <Compile Include="UI\Coordinators\ReviewPeriodLoadCoordinator.cs" />
     <Compile Include="UI\Coordinators\ReviewFolderCoordinator.cs" />
     <Compile Include="UI\Services\ImageCacheService.cs" />
+    <Compile Include="UI\Services\SingleGrabCurveCache.cs" />
     <Compile Include="UI\Managers\CameraStallDetector.cs" />
     <Compile Include="UI\Managers\CursorStatusTextFormatter.cs" />
     <Compile Include="UI\Managers\GlobalMergeCoordinator.cs" />

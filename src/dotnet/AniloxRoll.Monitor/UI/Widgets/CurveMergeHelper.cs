@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
 using TanukiCv.Core;     // CurveOverviewMerger / MergeLayout / MergeOverlap（純算法 唯一來源）
@@ -62,42 +63,65 @@ namespace AniloxRoll.Monitor.UI.Widgets
         public static void MergeCurves(IList<string> imagePaths,
             out float[] mergedMean, out float[] mergedMax)
         {
+            MergeCurves(
+                imagePaths, out mergedMean, out mergedMax, out _, CancellationToken.None);
+        }
+
+        public static void MergeCurves(IList<string> imagePaths,
+            out float[] mergedMean, out float[] mergedMax, CancellationToken cancellationToken)
+        {
+            MergeCurves(
+                imagePaths, out mergedMean, out mergedMax, out _, cancellationToken);
+        }
+
+        public static void MergeCurves(IList<string> imagePaths,
+            out float[] mergedMean, out float[] mergedMax, out int mergedCaptureCount,
+            CancellationToken cancellationToken)
+        {
             mergedMean = null;
             mergedMax = null;
+            mergedCaptureCount = 0;
 
-            var allMean = new List<float[]>();
-            var allMax = new List<float[]>();
             int curveLen = 0;
+            int[] meanCounts = null;
 
             foreach (string path in imagePaths)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 string basePath = GetCurveBasePath(path);
-                var mean = InspectionEngine.LoadCurveBin(CaptureFileNaming.ResolveMeanC(basePath));
-                var max = InspectionEngine.LoadCurveBin(CaptureFileNaming.ResolveMaxC(basePath));
+                var mean = CurveBinFile.Load(CaptureFileNaming.ResolveMeanC(basePath));
+                var max = CurveBinFile.Load(CaptureFileNaming.ResolveMaxC(basePath));
                 if (mean != null && max != null && mean.Length > 0)
                 {
-                    allMean.Add(mean);
-                    allMax.Add(max);
-                    if (curveLen == 0) curveLen = mean.Length;
+                    mergedCaptureCount++;
+                    if (curveLen == 0)
+                    {
+                        curveLen = mean.Length;
+                        mergedMean = new float[curveLen];
+                        mergedMax = new float[curveLen];
+                        meanCounts = new int[curveLen];
+                        for (int i = 0; i < curveLen; i++) mergedMax[i] = float.MinValue;
+                    }
+
+                    int meanLength = Math.Min(curveLen, mean.Length);
+                    for (int i = 0; i < meanLength; i++)
+                    {
+                        mergedMean[i] += mean[i];
+                        meanCounts[i]++;
+                    }
+
+                    int maxLength = Math.Min(curveLen, max.Length);
+                    for (int i = 0; i < maxLength; i++)
+                        if (max[i] > mergedMax[i]) mergedMax[i] = max[i];
                 }
             }
 
-            if (allMean.Count == 0 || curveLen == 0) return;
+            if (curveLen == 0) return;
 
-            mergedMean = new float[curveLen];
-            mergedMax = new float[curveLen];
             for (int x = 0; x < curveLen; x++)
             {
-                float sumMean = 0;
-                float maxVal = float.MinValue;
-                int count = 0;
-                for (int j = 0; j < allMean.Count; j++)
-                {
-                    if (x < allMean[j].Length) { sumMean += allMean[j][x]; count++; }
-                    if (x < allMax[j].Length && allMax[j][x] > maxVal) maxVal = allMax[j][x];
-                }
-                mergedMean[x] = count > 0 ? sumMean / count : 0;
-                mergedMax[x] = maxVal > float.MinValue ? maxVal : 0;
+                mergedMean[x] = meanCounts[x] > 0 ? mergedMean[x] / meanCounts[x] : 0;
+                if (mergedMax[x] == float.MinValue) mergedMax[x] = 0;
             }
         }
 
@@ -120,8 +144,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             {
                 if (string.IsNullOrEmpty(path)) { allMean.Add(null); allMax.Add(null); continue; }
                 string basePath = GetCurveBasePath(path);
-                var mean = InspectionEngine.LoadCurveBin(CaptureFileNaming.ResolveMeanR(basePath));
-                var max = InspectionEngine.LoadCurveBin(CaptureFileNaming.ResolveMaxR(basePath));
+                var mean = CurveBinFile.Load(CaptureFileNaming.ResolveMeanR(basePath));
+                var max = CurveBinFile.Load(CaptureFileNaming.ResolveMaxR(basePath));
                 if (mean != null && max != null && mean.Length > 0)
                 {
                     allMean.Add(mean);

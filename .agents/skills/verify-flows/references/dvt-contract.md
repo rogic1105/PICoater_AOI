@@ -503,7 +503,7 @@ btnLiveViewBackground_Click@AniloxRollForm.Background.cs     intent 行 ui:【�
  │   └＝靜音鍵 _bgPreviewOverride=true → ApplyMainDisplayMode()   ⚠ 只改狀態→呼閘門，不自建/拆 view
  │       閘門 BgPreview 分支：DisableWaterfall＋EnsureImageDisplay＋ApplyBgPreviewLayout
  │                            （合圖未啟用→用設定 start/ops 餵佈局）
- ├ per-cam LoadCurveBin@InspectionEngine → ExpandColMeanToGray@AniloxRollForm.Live.cs
+ ├ per-cam Load@CurveBinFile.cs → ExpandColMeanToGray@AniloxRollForm.Live.cs
  │   → PushStaticFrame@LiveDisplayCoordinator.cs（與 grab 幀同一條 PushFrame 路＝合圖/縮圖/縮放/overlay 全免費）
  └（pushed==0）ExitBackgroundPreview＋MessageBox
 清除：ClearBackgroundPreview@AniloxRollForm.Background.cs＝ExitBackgroundPreview
@@ -841,6 +841,12 @@ listViewGrabDetail.MouseUp
 ### D3 報表序號 / 序號範圍
 ```
 T1: ui:【報表序號】→ {grabId}          ← 單片切換（同 D2 的 cb 版）
+T1: DT curve load {grabId} captures=N source=disk|prefetch|cache storage=summary|bins configMs=N waitMs=N pathMs=N mergeMs=N summaryMs=N drawMs=N totalMs=N
+     ← 每格都更新 Curve；storage=summary 讀持久匯總，storage=bins 代表匯總缺少／失效而由原始 bin 重建
+Tn: DT curve prefetch {grabId} readyMs=N storage=summary|bins cacheEntries=N cacheMB=N
+     ← 依滾動方向背景預讀下一個尚未快取的相鄰序號（前看最多 4 格，只允許一個預讀工作）
+Tn: DT curve summary {grabId} write=queued|ok|failed|dropped|skip-incomplete captures=N merged=N ms=N
+     ← merged=captures 才排入 bounded queue；序號互動停止 750ms 後單一背景 writer 才寫，互動中不得與冷讀取搶磁碟
 T1: DT selected {grabId} stats=cache|scan list=keep ms=N
      ← 單片快路：更新色卡＋Mura curve＋List 反白；`cache`＝從既有明細推導統計，`scan`＝選中項不在目前範圍時 fallback
 T1: ui:【序號範圍-起始|結束】變更       ← 手動拖範圍 → 期間高亮全滅（Custom）
@@ -854,6 +860,14 @@ T1: DT curve candidates meanRows=N maxRows=M method=top-maxcmean|mixed|even cove
   可視區上下邊界時以 margin 捲動，反白變更只重畫舊／新兩列，不得每格整窗 `Invalidate()`（跨視窗白閃的根因）。
 - **跨 tab lazy**：報表序號只輕量同步 Review combo/date 並標 `_reviewDirty`，不得逐格 `NavigateTo` 寫 session／重建日期清單，
   也不得當下載 Review 圖片；切到 Review tab 才接 R2 完整載入。
+- **單片 Curve 不掠過**：每個 `ui:【報表序號】` 必有同 grabId 的 `DT curve load`。`source=disk`＝前景首次完整讀取；
+  `source=prefetch`＝選取加入已在背景完整讀取的同一工作；`source=cache`＝使用之前完整合併完成的原始 Curve。
+  快取只保存 rescale 前 Mean/Max 合併結果，LRU 上限 64 筆／64 MB；資料夾重載或 Presenter Dispose 必清空。
+- **持久匯總不取代原始資料**：讀取順序＝記憶體 cache → `SingleGrabCurveSummaryStore` → 原始 MeanC/MaxC bins。
+  `.mcsf` 是可重建 materialized view；格式版本、grabId、Earliest/Latest、cameraCount 任一不符或內容損壞時必退回 bins，
+  完整重建後先顯示 Curve，再由 idle writer 以同目錄暫存檔原子替換；不得讓 UI 等待落盤。原始 bins 仍是 SSoT，
+  匯總只保存 rescale 前逐相機 Mean 平均／Max 最大結果；pending queue 上限 96 MB，超限可 drop 而不可無界吃記憶體。
+  `merged != captures` 時只能回傳當下可讀結果並記 `write=skip-incomplete`，不得產生匯總；下次選取必重新嘗試原始 bins。
 - **範圍 latest-only**：起始／結束 combo 連續滾動時只更新選取值並重壓 250ms timer；停止後才跑一次
   `RefreshStats`。`DT range settle` 前出現 `DT list reload` 或 `DT curve candidates`＝逐格重算回歸。
 - **範圍曲線只有兩條**：每台相機各自選候選再合成全寬；`CurveMean`＝範圍 CSV 資料列均勻取樣最多 50 筆後
@@ -871,7 +885,15 @@ cbDataId.SelectedIndexChanged
      ├ _currentDetails.FirstOrDefault（命中→BuildSingleGrabStats；未命中→單 ID CSV scan fallback）
      ├ InspectionStatsPresenter.Update（7 台色卡）
      ├ GrabDetailListBinder.Highlight（只移反白＋EnsureVisible＋RedrawItems）
-     └ MuraProfileChartPresenter.Update（該 ID curve）→ DT selected … list=keep
+     └ MuraProfileChartPresenter.Update（該 ID curve）
+       ├ SingleGrabCurveCache.TryGet／GetOrLoadAsync（同 key in-flight 共用；rescale 前結果 LRU）
+       ├ miss → SingleGrabCurveSummaryStore.TryLoad（命中＝一次 sequential read）
+       ├ summary miss/stale/corrupt → InspectionImagePathRepository.LoadForGrabId → CurveMergeHelper.MergeCurves
+       │        → CurveBinFile.Load（每個 bin bulk read；邊讀邊合併）→ SingleGrabCurveSummaryStore.QueueSave
+       │          → idle 750ms → 單一 writer → TrySave（原子寫回）
+       ├ CloneMean/CloneMax → HessianRescaleHelper.RescaleInPlace2D → UpdateOverviewChart
+       └ ScheduleAdjacentPrefetch（依方向找下一個未命中項）→ DT curve prefetch
+     → DT selected … list=keep
    → GrabIdSelectedFromData → OnDataGrabIdSelected@AniloxRollForm.Data.cs
      └ cbReviewId＋DateTimeNavigator.SetPeriodToCombo（輕量）＋_reviewDirty=true
 
@@ -882,9 +904,9 @@ cbDataIdStart|End／期間變更
    ├ ComputeDetailedByGrabIdRange → ApplyFailFilter → GrabDetailListBinder.SetItems
    │  └ InspectionCsvReader.OpenShared＋TryParseRecord（CSV 格式／FileShare 唯一來源）
    ├ MuraProfileChartPresenter.Update(rangeInfos)
-   │  └ LoadRangeMuraProfile（掃範圍 CSV；按 cam 分組並保留 FileName）
+   │  └ LoadRange@InspectionMuraProfileRepository.cs（掃範圍 CSV；按 cam 分組並保留 FileName）
    │     ├ InspectionCsvReader.TryParseRecord＋TryParseTimestamp＋TryExtractCameraId
-   │     ├ Mean 候選＝EvenSampleCurveRecords(rows,50) → 對應 MeanC 逐點平均
+   │     ├ Mean 候選＝EvenSample(rows,50) → 對應 MeanC 逐點平均
    │     └ Max 候選＝MaxCMean 排序前 50 → 對應 MaxC 逐點最大（缺分數→均勻 fallback）
    └ DT list reload …＋DT curve candidates …
 ```

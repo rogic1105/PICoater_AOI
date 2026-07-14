@@ -194,6 +194,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// <summary>載入指定資料夾的統計資料，填充所有 ComboBox。</summary>
         public void LoadDataFolder(string path)
         {
+            _muraChart?.ResetSingleGrabCache();
             _statsDataRootPath = path;
             _statAvailableTimes = InspectionStatisticsService.LoadAvailableTimes(path);
             _grabIdInfos = InspectionStatisticsService.LoadGrabIdInfosDescending(path);
@@ -214,6 +215,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// <summary>從 Review tab 選擇資料夾後同步載入序號清單。</summary>
         public void SyncFromReviewFolder(string path)
         {
+            _muraChart?.ResetSingleGrabCache();
             _statsDataRootPath = path;
             _statAvailableTimes = InspectionStatisticsService.LoadAvailableTimes(path);
             _grabIdInfos = InspectionStatisticsService.LoadGrabIdInfosDescending(path);
@@ -329,6 +331,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _rangeRefreshDebounce?.Stop();
             _rangeRefreshDebounce?.Dispose();
             _rangeRefreshDebounce = null;
+            _muraChart?.Dispose();
+            _muraChart = null;
             _ctx.GrabDetailList.RowCommitted -= OnGrabDetailRowCommitted;
             _ctx.GrabDetailList.Dispose();
         }

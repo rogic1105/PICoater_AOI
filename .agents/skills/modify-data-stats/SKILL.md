@@ -71,9 +71,13 @@ description: Modify the Data tab, inspection CSV schema, statistics, report list
 - chart.Tag = `"auto"` 代表 AutoScale 模式，null = FixedScale
 
 ### chartDataColumn（Mura 空間分布圖）
-- **永遠**顯示「最新一筆」單 grab 的 stitch 視圖（不再多 grab 平均；多 grab 平均會稀釋峰值）
-- 觸發點：`RefreshStats` → `UpdateMuraProfileChart(grabIds)` → 取 `grabIds[0]`（descending order = 最新）→ `UpdateMuraProfileForSingleGrab(info)`
-- 資料來源：`InspectionConfigRepository.LoadForGrabId`（取該 grab 的 #CFG OPS/Pos）+ `InspectionImagePathRepository.LoadForGrabId` + `CurveMergeHelper.MergeCurves`（合該 grab 內所有 capture）→ 與 `ReviewStitchCoordinator.UpdateStitchedOverviewChart` 同源 → `chartDataColumn` 與 `chartReviewColumn` 對齊
+- 單序號模式每格都顯示該 grab 的完整 Curve，不得用 debounce/latest-only 掠過中間序號；範圍模式則顯示 50 筆 Mean 均勻候選與 50 筆 MaxCMean 排名候選。
+- 單序號資料來源：`InspectionConfigRepository.LoadForGrabId`（#CFG OPS/Pos）+ `SingleGrabCurveSummaryStore`；匯總缺少／失效時才走 `InspectionImagePathRepository.LoadForGrabId` + `CurveMergeHelper.MergeCurves` 完整合併所有 capture，先顯示 Curve，再於互動停止 750ms 後由單一背景 writer 原子寫回。
+- `.mcsf` 匯總是可重建 materialized view，只保存 rescale 前的逐相機 MeanC 平均／MaxC 最大；原始 MeanC/MaxC bins 仍是 SSoT。格式版本、grab 時間範圍或相機數不符時不得使用舊匯總。
+- 只有所有預期 capture 的 MeanC/MaxC 都成功讀取（`merged == captures`）才可落匯總；remote copy 未完成或 bin 損壞時記 `skip-incomplete`，避免固化部分資料。
+- 匯總 writer 必對序號互動讓路，pending raw profile 以 96 MB 為硬上限；不可在每格同步 `Flush(true)`，也不可用無界背景 task 製造記憶體或磁碟競爭。
+- `SingleGrabCurveCache` 只保存 rescale 前的完整 Mean/Max 合併結果（LRU 64 筆／64 MB），相同 key 的前景與背景載入 single-flight；Presenter 依滾動方向只預讀下一個未命中相鄰序號，資料夾重載時必清空。
+- cache 命中後必 clone 再做 view-time Hessian rescale，禁止直接修改 raw cache；設定變更可用同一 raw Curve 重新套目前比例與門檻。
 - 不依賴 camReviewMain — Data tab 操作即時顯示對齊圖；Review tab 載入後 `SyncMuraProfileFromReview` 覆寫為同源資料，無視覺差
 
 ### CSV 讀寫並發保護

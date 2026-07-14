@@ -26,5 +26,12 @@ namespace AniloxRoll.Monitor.Core.Services
         /// <summary>該日影像資料夾（從 "yyyyMMdd…" 字串，須 ≥ 8 字元）：取前 4/6/8 字元組階層。</summary>
         public static string DateImageDir(string root, string yyyymmdd) =>
             Path.Combine(root, yyyymmdd.Substring(0, 4), yyyymmdd.Substring(0, 6), yyyymmdd.Substring(0, 8));
+
+        /// <summary>
+        /// Rebuildable per-grab curve summary. The original curve bins remain the source of truth.
+        /// Keeping the summary under the capture date makes retention remove both together.
+        /// </summary>
+        public static string GrabCurveSummary(string root, DateTime captureDate, string grabId) =>
+            Path.Combine(DateImageDir(root, captureDate), "_curve_summary", grabId + ".mcsf");
     }
 }

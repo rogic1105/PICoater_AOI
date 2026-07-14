@@ -216,7 +216,7 @@ namespace AniloxRoll.Monitor.Forms
                 if (cam.FrameWidth <= 0) continue;
 
                 string binPath = Path.Combine(bgDir, CaptureFileNaming.BgBin(cam.FrameWidth, cam.CameraId));
-                float[] colMean = InspectionEngine.LoadCurveBin(binPath);
+                float[] colMean = CurveBinFile.Load(binPath);
                 if (colMean != null && colMean.Length == cam.FrameWidth)
                 {
                     // 分配 pinned memory 並複製
@@ -315,7 +315,7 @@ namespace AniloxRoll.Monitor.Forms
                 int camId = i + 1;
                 string[] matches = Directory.GetFiles(bgDir, CaptureFileNaming.BgGlobForCam(camId));
                 if (matches.Length == 0) continue;
-                float[] colMean = InspectionEngine.LoadCurveBin(matches[0]);
+                float[] colMean = CurveBinFile.Load(matches[0]);
                 if (colMean == null || colMean.Length == 0) continue;
                 int height = (i < grabHeights.Length && grabHeights[i] > 0) ? grabHeights[i] : 3000;
                 _liveCameraManager.PushStaticFrame(camId,

@@ -65,6 +65,9 @@ description: Modify image-processing pipelines, native processing calls, buffer 
 magic(4)="MCBF" | version(4=int) | scale_factor(4=float) | array_length(4=int) | float[]
 ```
 - `scale_factor` = `SaveResizeScale`；曲線長度 = 全解析度圖寬
+- 讀端唯一入口為 `CurveBinFile.Load`：header 逐欄驗證、float payload 一次 bulk read；禁止回退成逐元素 `ReadSingle()`。
+- 多 capture 欄曲線由 `CurveMergeHelper.MergeCurves` 邊讀邊累加 Mean／Max，不保留全部來源陣列做第二輪掃描；每個 bin 仍完整讀取，不得用 latest-only 掠過序號。
+- 報表單序號可使用 `SingleGrabCurveSummaryStore` 的 `.mcsf` 可重建匯總，避免冷磁碟開啟數百個小 bin；匯總不改統計公式、不取代原始 bin。重建後先回 UI，互動停止 750ms 才由 bounded 單一 writer 採同目錄暫存檔原子替換。
 
 ### ImageRepository 掃描
 - 同時掃 `*_raw.jpg` + `*.bmp`，兩格式共存

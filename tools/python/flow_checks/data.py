@@ -28,6 +28,7 @@ class DataFlowValidator:
             return report
 
         self._check_single_selection(session, report)
+        self._check_single_curve(session, report)
         self._check_list_ownership(session, report)
         self._check_range_debounce(session, report)
         self._check_y_scale_toggle(session, report)
@@ -68,6 +69,67 @@ class DataFlowValidator:
             CheckStatus.PASS if not missing else CheckStatus.FAIL,
             f"intent={len(intents)} cache={cache_hits} scan={scans} 缺終態={len(missing)}"
             + (f"；首筆 {missing[0]}" if missing else ""),
+        )
+
+    def _check_single_curve(self, session: FlowSession, report: CheckReport) -> None:
+        intents = [
+            (index, grab_id(line.message))
+            for index, line in enumerate(session.lines)
+            if line.message.startswith("ui:【報表序號】")
+        ]
+        if not intents:
+            report.add(self.domain, "D3.curve", CheckStatus.NOT_COVERED, "無報表序號操作")
+            return
+
+        pattern = re.compile(
+            r"^DT curve load (\d{6}-\d{6}) captures=(\d+) "
+            r"source=(disk|prefetch|cache) storage=(summary|bins) "
+            r"configMs=(\d+) waitMs=(\d+) pathMs=(\d+) mergeMs=(\d+) "
+            r"summaryMs=(\d+) drawMs=(\d+) totalMs=(\d+)$"
+        )
+        missing = []
+        invalid = []
+        sources = {"disk": 0, "prefetch": 0, "cache": 0}
+        storage = {"summary": 0, "bins": 0}
+        has_current_instrument = any(
+            line.message.startswith("DT curve load ") and " source=" in line.message
+            for line in session.lines
+        )
+
+        for position, (line_index, selected_id) in enumerate(intents):
+            next_index = intents[position + 1][0] if position + 1 < len(intents) else len(session.lines)
+            matching = [
+                line.message
+                for line in session.lines[line_index + 1 : next_index]
+                if line.message.startswith(f"DT curve load {selected_id} ")
+            ]
+            if not matching:
+                missing.append(selected_id)
+                continue
+            if not has_current_instrument:
+                continue
+            match = pattern.match(matching[-1])
+            if not match:
+                invalid.append(matching[-1])
+                continue
+            sources[match.group(3)] += 1
+            storage[match.group(4)] += 1
+
+        if missing or invalid:
+            status = CheckStatus.FAIL
+        elif not has_current_instrument:
+            status = CheckStatus.NOT_COVERED
+        else:
+            status = CheckStatus.PASS
+        report.add(
+            self.domain,
+            "D3.curve",
+            status,
+            f"intent={len(intents)} disk={sources['disk']} prefetch={sources['prefetch']} "
+            f"summary={storage['summary']} bins={storage['bins']} "
+            f"cache={sources['cache']} 缺Curve={len(missing)} 格式錯誤={len(invalid)}"
+            + (f"；首筆 {missing[0]}" if missing else "")
+            + ("；舊版儀器無 source 分段" if not has_current_instrument else ""),
         )
 
     def _check_list_ownership(self, session: FlowSession, report: CheckReport) -> None:
