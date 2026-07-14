@@ -251,8 +251,8 @@ namespace AniloxRoll.Monitor.Forms
             }
             else
             {
-                // 不顯示靜止「IO 離線」：斷線一律走重連倒數（RefreshIoConnLabel 每 tick 補上秒數）
-                lblIoConn.Text = "● IO 重連中…";
+                // 尚未排出下一次重連時間＝目前正在嘗試，倒數明確落在 0s。
+                lblIoConn.Text = "● IO 重連中 0s…";
                 lblIoConn.BackColor = IecRed;
             }
             RefreshGrabButtonState();
@@ -293,7 +293,7 @@ namespace AniloxRoll.Monitor.Forms
             var next = _ioGrabController.NextReconnectAtUtc;
             if (!next.HasValue) return;  // 尚未排程重連（初始連線進行中）→ 維持「初始化中」
             int sec = (int)Math.Ceiling((next.Value - DateTime.UtcNow).TotalSeconds);
-            sec = Math.Max(1, Math.Min(sec, _ioGrabController.ReconnectIntervalMs / 1000));
+            sec = Math.Max(0, Math.Min(sec, _ioGrabController.ReconnectIntervalMs / 1000));
             lblIoConn.Text = $"● IO 重連中 {sec}s…";
             lblIoConn.BackColor = IecRed;
             lblIoConn.ForeColor = Color.White;
@@ -572,12 +572,20 @@ namespace AniloxRoll.Monitor.Forms
             lbl.BackColor = on ? IecGreen : IecDarkGray;
         }
 
-        /// <summary>檢測暫停 setting 變更 → LED 先顯示 ×（下次 IO snapshot 由 UpdateIoLeds 更新真實 ◎/×）。
-        /// （Wave3 選項1：從 OnSettingChanged dispatcher 搬入。）</summary>
+        /// <summary>Mura pause is an output policy: clear the edge state and force DO1 low.</summary>
         private void HandleMuraPauseSettingsChanged(string name)
         {
-            if (name == nameof(InspectionSettings.MuraDetectPaused))
-                UpdateMuraLed(false);
+            if (name != nameof(InspectionSettings.MuraDetectPaused)) return;
+
+            _muraExceedLatch[0] = false;
+            _muraExceedLatch[1] = false;
+            UpdateMuraLed(false);
+
+            if (_settings.MuraDetectPaused)
+            {
+                FlowTrace.Log("MURA 暫停 → 清除 DO1");
+                _ = _ioGrabController?.ClearMura();
+            }
         }
 
         private void UpdateMuraLed(bool doMuraOn)
@@ -625,9 +633,12 @@ namespace AniloxRoll.Monitor.Forms
             });
         }
 
+        private bool _storageModeLayoutApplied;
+
         private void ApplyStorageModeUi()
         {
-            if (_appMode?.Role != MachineRole.Storage) return;
+            if (_appMode?.Role != MachineRole.Storage || _storageModeLayoutApplied) return;
+            _storageModeLayoutApplied = true;
 
             tabMain.TabPages.Remove(tabPageLiveView);
             tabControlRight.TabPages.Remove(tabPageCamera);
@@ -637,17 +648,21 @@ namespace AniloxRoll.Monitor.Forms
                 new StorageModeSettingsFilter(TypeDescriptor.GetProvider(_settings)), _settings);
             propertyGridSettings.Refresh();
 
-            lblCamCount.Visible      = false;
-            lblStorageConn.Visible   = false;
-
-            lblIoState.Visible    = false;
-            lblIoConn.Visible     = false;
-            lblLightConn.Visible   = false;
-            lblIoDiAlive.Visible   = false;
-            lblIoDiStart.Visible   = false;
-            lblIoDoPcAlive.Visible = false;
-            lblIoDoMura.Visible    = false;
-            lblIoDoPcBusy.Visible  = false;
+            // The remaining panes are anchored at a fixed Y instead of Dock.Fill, so
+            // hiding the parent alone does not reclaim its row. Compact both panes
+            // before ProportionalScaler captures the storage-mode baseline.
+            int releasedHeight = panelStatusBar.Height;
+            panelStatusBar.Visible = false;
+            tabMain.SetBounds(
+                tabMain.Left,
+                tabMain.Top - releasedHeight,
+                tabMain.Width,
+                tabMain.Height + releasedHeight);
+            tabControlRight.SetBounds(
+                tabControlRight.Left,
+                tabControlRight.Top - releasedHeight,
+                tabControlRight.Width,
+                tabControlRight.Height + releasedHeight);
         }
 
         // \\server\share → \\server\AniloxConfig（cleanup-request.flag 目標）

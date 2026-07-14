@@ -11,7 +11,7 @@ namespace IoBridge.IoSimulator
     ///   DI-1 = START（grab 訊號；上升緣開抓、下降緣停）← 自動循環這個
     ///   DO-0/1/2 = PC_ALIVE / MURA / PC_BUSY（app 寫，本工具顯示）
     /// 用途：長期測試模擬真實「拍 N 秒 → 停 M 秒」循環取像。
-    /// ⚠ 監聽 502（&lt;1024）需系統管理員權限；或改用高 port 並把 app IoPort 一起改。
+    /// 實體 ET-7044 與本模擬器都使用標準 Modbus TCP Port 502；app 只需切換 IO IP。
     /// </summary>
     public sealed class MainForm : Form
     {
@@ -51,7 +51,7 @@ namespace IoBridge.IoSimulator
             _btnStart = new Button { Text = "啟動 server", Location = new Point(160, y - 2), Width = 110 };
             _btnStart.Click += (s, e) => ToggleServer();
             Controls.Add(_btnStart);
-            Controls.Add(new Label { Text = "(502<1024 需系統管理員)", Location = new Point(280, y + 3), AutoSize = true, ForeColor = Color.Gray });
+            Controls.Add(new Label { Text = "(標準 Modbus TCP Port)", Location = new Point(280, y + 3), AutoSize = true, ForeColor = Color.Gray });
 
             y += 40;
             Controls.Add(new Label { Text = "── DI（送給 app）──", Location = new Point(12, y), AutoSize = true, ForeColor = Color.DarkBlue });
@@ -108,13 +108,13 @@ namespace IoBridge.IoSimulator
 做長期「拍 N 秒 / 停 M 秒」循環取像測試。
 
 ── 步驟 ──
-1. 監聽 Port 預設 502
-   （502<1024 → 需「以系統管理員執行」；
-    或填高 port 如 1502，並把 app 的
-    IO Port 一起改成相同值）。
+1. 監聽 Port 使用標準 Modbus TCP 502。
+   實體 ET-7044 與本模擬器使用相同 Port，
+   app 的 IO Port 固定設成 502 即可。
 2. 按「啟動 server」。
 3. AniloxRoll.Monitor 設定：
    • IO IP = 127.0.0.1（同一台機器）
+   • IO Port = 502
    • 啟用 IO = 是
    → app 會連上（DI-0 ALIVE 預設勾，
      app 才認為 PLC 在線）。
@@ -153,7 +153,7 @@ tools/python/analyze_phaselog.py 分析
                 _srv.Start(int.Parse(_port.Text));
                 _btnStart.Text = "停止 server";
             }
-            catch (Exception ex) { AppendLog("啟動失敗：" + ex.Message + "（502 試以系統管理員執行）"); }
+            catch (Exception ex) { AppendLog("啟動失敗：" + ex.Message + "（請檢查 Port 是否已被其他程式占用）"); }
         }
 
         private void ToggleCycle()

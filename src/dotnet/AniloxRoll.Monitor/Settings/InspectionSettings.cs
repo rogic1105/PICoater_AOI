@@ -218,7 +218,7 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category(CategoryIo)][DisplayName("IO 型號")][PropertyOrder(2)] public string IoModel { get; set; } = InspectionDefaults.IoModel;
         [Category(CategoryIo)][DisplayName("啟用 IO")][PropertyOrder(3)][TypeConverter(typeof(BoolYesNoConverter))]  public bool   IoEnabled { get; set; } = InspectionDefaults.IoEnabled;
         [Category(CategoryIo)][DisplayName("IO Port")][PropertyOrder(4)][TypeConverter(typeof(IoPortTypeConverter))]
-        [Description("ET-7044 實機使用 502；IoSimulator 使用 1502。可輸入其他 Port。")]
+        [Description("ET-7044 實機與 IoSimulator 都使用 502；1502 僅作 Port 衝突時的備援。")]
         public int IoPort { get; set; } = InspectionDefaults.IoPort;
         // Mura 檢出（DO1 MURA_DET）：runtime toggle，不持久化 — 每次啟動為 false（避免漏檢）
         [Category(CategoryIo)][DisplayName("Mura檢出")][PropertyOrder(5)][TypeConverter(typeof(BoolYesNoConverter))]  public bool   MuraDetectPaused { get; set; } = false;

@@ -182,14 +182,6 @@ namespace AniloxRoll.Monitor.Forms
                     _remoteCopyService?.EnqueueFile(csvPath);
             }
 
-            // IO MURA 信號：任一相機超過閾值即通知（IO 暫停=視同離線，不發 DO）
-            if (!_isIoSuspended && _ioGrabController?.IsConnected == true)
-            {
-                // meanPeak/maxPeak 為 V 方向，按 V 閾值判定
-                bool isMura = meanPeak > _settings.ErrorValueMeanV || maxPeak > _settings.ErrorValueMaxV;
-                if (isMura) _ = _ioGrabController.NotifyMuraDetected();
-            }
-
             // 抓圖計數器 + watchdog 時間戳（Inspection 模式）
             if (_appMode?.Role != MachineRole.Storage)
             {
@@ -244,6 +236,10 @@ namespace AniloxRoll.Monitor.Forms
                     FlowTrace.Log($"MURA 恢復（{direction}）");
             }
             if (!exceed) return;
+
+            // Pause can change while this callback is computing. Re-check at the
+            // output boundary so stale work cannot re-assert DO1 after ClearMura.
+            if (_settings.MuraDetectPaused) return;
 
             // 畫面警告與 IO 輸出解耦（2026-07-07 盲測抓到：無 IO 時操作員看不到任何警告＝設計缺陷）：
             // lblIoDoMura 視覺警告一律亮；DO 輸出（給 Nakan）看 IO 連線「且未被使用者暫停」（暫停=視同離線）。

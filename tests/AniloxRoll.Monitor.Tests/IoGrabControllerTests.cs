@@ -200,6 +200,14 @@ namespace AniloxRoll.Monitor.Tests
             _mockPlc.Verify(p => p.WriteDo(1, true), Times.Once);
         }
 
+        [Test]
+        public async Task ClearMura_WritesMuraDetectedLow()
+        {
+            _mockPlc.Setup(p => p.IsConnected).Returns(true);
+            await _ctrl.ClearMura();
+            _mockPlc.Verify(p => p.WriteDo(1, false), Times.Once);
+        }
+
         // ── IO 快照 ──
 
         [Test]

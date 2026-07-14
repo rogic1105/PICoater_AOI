@@ -51,7 +51,9 @@ SettingsHub.Changed → AniloxRollForm.OnSettingChanged(c)
 ## IoSimulator（samples/IoSimulator）— 測試用 Modbus server
 
 模擬 ET-7044 連到 app 做長期循環取像測試（不需真硬體）。Modbus TCP server 回應 client 的 FC01/02/05；GUI 手動切 DI + 自動循環 DI-1 START（拍 N 秒/停 M 秒）+ 顯示 app 寫回的 DO。
-- 用法：跑 IoSimulator（**502<1024 需系統管理員**；或用高 port 如 1502 並把 app IO Port 一起改）→ 啟動 server → app 設 IO IP=`127.0.0.1` → 開始循環。
+- 用法：跑 IoSimulator（標準 Modbus TCP Port `502`）→ 啟動 server → app 的 IO Port 固定 `502`、
+  IO IP 設 `127.0.0.1` → 開始循環。切回實體 ET-7044 時只把 IO IP 改回 `192.168.255.1`。
+  若 502 啟動失敗，先檢查是否被其他 Modbus server 占用；`1502` 僅作衝突排查的備援 Port。
 - icon 用官方 `sdk/tools/icon-gen/make_icon.py`（藍＝Bridge 工具）。
 
 ## Build

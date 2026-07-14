@@ -546,6 +546,8 @@ T1: bgPreview push camN WxH（view=True）× 有 bin 的台數
 Tn: ⚠ IO 斷線 ／ IO 恢復連線            ← 光源/儲存電腦 同格式
 Tn: ⚠ IO 未連線（開機基線）             ← 首次觀測就不在線（拔線開機/初始化未完，恢復行會跟著出現）
 ```
+- IO 重連倒數以 `IoGrabController.NextReconnectAtUtc` 為唯一來源，顯示到 `0s` 代表正在嘗試連線；
+  不得在 `1s` 後退回沒有秒數的空白狀態。
 - 光源停用（LightEnabled=false）/ 遠端路徑空 → 該項不觀測（靜默合法）。
 - 開機常見「未連線（開機基線）→ 恢復連線」＝平行初始化的正常時序，非異常。
 
@@ -581,6 +583,7 @@ T1: ui:【相機參數】camN {param}={v}｜All {param}={v}    ← 帶參數名+
 ```
 Tn: ⚠ MURA 超標（v|h）mean=…/max=…（thr …/…，IO已連線|未連線→僅畫面警告）   ← 邊緣觸發（進入超標一行）
 Tn: MURA 恢復（v|h）                                                        ← 離開超標一行
+暫停：ui:【暫停Mura檢測】鈕 → set:[MuraDetectPaused]=True → MURA 暫停 → 清除 DO1
 ```
 - **畫面警告與 IO 解耦**：lblIoDoMura 超標一律亮（無 IO 硬體也要看得到）；
   DO 輸出（給 Nakan）才看 IO 連線。暫停 Mura 檢測（MuraDetectPaused）期間兩者皆不動。
@@ -591,6 +594,9 @@ Tn: MURA 恢復（v|h）                                                        
   DO 永遠掛著 → Nakan 誤報 + IO 暫停→恢復後 snapshot 讀回殘留 latch、燈「自己亮」——盲測輪3實例）。
 - **IO 暫停＝視同離線**：暫停中超標不發 DO（僅畫面警告），log 標「IO暫停中→僅畫面警告」三態之一。
 - 超標期間不洗版（狀態轉變才記）；每輪 grab 啟動重置邊緣狀態。
+- **唯一輸出路**：`OnLiveCurveData|OnLiveRowCurveData → CheckLiveMura → WarnMuraVisual + NotifyMuraDetected`；
+  `OnCameraInspectionResult` 只負責 CSV/遠端存放，不得直接寫 Mura DO。暫停切換由
+  `HandleMuraPauseSettingsChanged` 重設兩方向 edge latch 並立即 `ClearMura`，恢復後只接受新的超標事件。
 - 違規樣本：chart 明顯超標卻無「MURA 超標」行＝判定鏈斷（2026-07-07 盲測抓到：舊版被
   IO 未連線 early-return 整段跳過＝操作員零警告）。
 
