@@ -841,14 +841,16 @@ listViewGrabDetail.MouseUp
 ### D3 報表序號 / 序號範圍
 ```
 T1: ui:【報表序號】→ {grabId}          ← 單片切換（同 D2 的 cb 版）
-T1: DT curve load {grabId} captures=N source=disk|prefetch|cache storage=summary|bins configMs=N waitMs=N pathMs=N mergeMs=N summaryMs=N drawMs=N totalMs=N
+T1: DT curve load {grabId} captures=N source=disk|prefetch|cache storage=summary|bins configMs=N waitMs=N pathMs=N mergeMs=N summaryMs=N points=N drawMs=N totalMs=N
      ← 每格都更新 Curve；storage=summary 讀持久匯總，storage=bins 代表匯總缺少／失效而由原始 bin 重建
 Tn: DT curve prefetch {grabId} readyMs=N storage=summary|bins cacheEntries=N cacheMB=N
      ← 依滾動方向背景預讀下一個尚未快取的相鄰序號（前看最多 4 格，只允許一個預讀工作）
 Tn: DT curve summary {grabId} write=queued|ok|failed|dropped|skip-incomplete captures=N merged=N ms=N
      ← merged=captures 才排入 bounded queue；序號互動停止 750ms 後單一背景 writer 才寫，互動中不得與冷讀取搶磁碟
 T1: DT selected {grabId} stats=cache|scan list=keep ms=N
-     ← 單片快路：更新色卡＋Mura curve＋List 反白；`cache`＝從既有明細推導統計，`scan`＝選中項不在目前範圍時 fallback
+     ← 單片快路：更新色卡＋Mura curve＋List 反白；`cache`＝從既有明細／全序號索引推導統計，`scan`＝索引找不到該序號時 fallback
+T1: DT stats index rows=N ms=N
+     ← 第一次選到目前 List 範圍外時建立一次全序號 Pass/Fail 索引；同資料夾＋同閾值後續不得逐格重掃 CSV
 T1: ui:【序號範圍-起始|結束】變更       ← 手動拖範圍 → 期間高亮全滅（Custom）
 T1: DT range settle → refresh             ← 最後一次變更後 250ms；一串連續滾動只准一行
 T1: DT list reload range={start}~{end} rows=N ms=N
@@ -858,11 +860,15 @@ T1: DT curve candidates meanRows=N maxRows=M method=top-maxcmean|mixed|even cove
   不得出現 `DT list reload`／`GrabDetailListBinder.SetItems`／重設 `VirtualListSize`／欄寬。只有資料夾、範圍、期間、閾值改變才重算 List。
 - **List 捲動顯示**：資料已全在 `GrabDetailListBinder._visibleDetails`，VirtualMode 不需資料預載；ListView 啟用雙緩衝，選中列只在接近
   可視區上下邊界時以 margin 捲動，反白變更只重畫舊／新兩列，不得每格整窗 `Invalidate()`（跨視窗白閃的根因）。
-- **跨 tab lazy**：報表序號只輕量同步 Review combo/date 並標 `_reviewDirty`，不得逐格 `NavigateTo` 寫 session／重建日期清單，
-  也不得當下載 Review 圖片；切到 Review tab 才接 R2 完整載入。
+- **跨 tab lazy**：報表序號只覆寫 pending selection 並標 `_reviewDirty`，不得逐格操作隱藏的 Review combo/date、
+  `NavigateTo` 寫 session／重建日期清單，也不得當下載 Review 圖片；切到 Review tab 才一次套控制項並接 R2 完整載入。
+- **時序索引只建一次**：`ImageRepository.LoadDirectory` 建立排序去重的 available-period index；報表／回顧每格同步
+  只能對既有索引做查找，不得在 UI 執行緒重新解析全部影像檔名、`Distinct`、`OrderBy`。
 - **單片 Curve 不掠過**：每個 `ui:【報表序號】` 必有同 grabId 的 `DT curve load`。`source=disk`＝前景首次完整讀取；
   `source=prefetch`＝選取加入已在背景完整讀取的同一工作；`source=cache`＝使用之前完整合併完成的原始 Curve。
   快取只保存 rescale 前 Mean/Max 合併結果，LRU 上限 64 筆／64 MB；資料夾重載或 Presenter Dispose 必清空。
+- `check_all_flows.py` 的 `DATA/D3.selected` 允許最多一筆真正缺 ID 的 `stats=scan` fallback；同 session 多筆
+  `stats=scan` 代表全序號索引失效或未使用，直接 FAIL。
 - **持久匯總不取代原始資料**：讀取順序＝記憶體 cache → `SingleGrabCurveSummaryStore` → 原始 MeanC/MaxC bins。
   `.mcsf` 是可重建 materialized view；格式版本、grabId、Earliest/Latest、cameraCount 任一不符或內容損壞時必退回 bins，
   完整重建後先顯示 Curve，再由 idle writer 以同目錄暫存檔原子替換；不得讓 UI 等待落盤。原始 bins 仍是 SSoT，
@@ -882,7 +888,8 @@ T1: DT curve candidates meanRows=N maxRows=M method=top-maxcmean|mixed|even cove
 cbDataId.SelectedIndexChanged
  → OnSingleSheetComboChanged@DataDateGrabIdNavigator.cs
    → RefreshSelectedGrab@DataStatisticsPresenter.cs
-     ├ _currentDetails.FirstOrDefault（命中→BuildSingleGrabStats；未命中→單 ID CSV scan fallback）
+     ├ _currentDetails.FirstOrDefault（範圍內命中）／EnsureSingleGrabDetailIndex（範圍外只建一次全序號索引）
+     │  └ 命中→BuildSingleGrabStats；索引仍無該 ID 才允許單 ID CSV scan fallback
      ├ InspectionStatsPresenter.Update（7 台色卡）
      ├ GrabDetailListBinder.Highlight（只移反白＋EnsureVisible＋RedrawItems）
      └ MuraProfileChartPresenter.Update（該 ID curve）
@@ -892,10 +899,17 @@ cbDataId.SelectedIndexChanged
        │        → CurveBinFile.Load（每個 bin bulk read；邊讀邊合併）→ SingleGrabCurveSummaryStore.QueueSave
        │          → idle 750ms → 單一 writer → TrySave（原子寫回）
        ├ CloneMean/CloneMax → HessianRescaleHelper.RescaleInPlace2D → UpdateOverviewChart
+       │  └ ColumnCurveChartHelper.UpdateDataAndView（每兩個畫布像素一個顯示桶；Mean=桶平均、Max=桶最大，
+       │       點數相同時原地更新既有 DataPoint；不得逐格 Clear＋DataBind 重建）
        └ ScheduleAdjacentPrefetch（依方向找下一個未命中項）→ DT curve prefetch
      → DT selected … list=keep
-   → GrabIdSelectedFromData → OnDataGrabIdSelected@AniloxRollForm.Data.cs
-     └ cbReviewId＋DateTimeNavigator.SetPeriodToCombo（輕量）＋_reviewDirty=true
+     → GrabIdSelectedFromData → OnDataGrabIdSelected@AniloxRollForm.Data.cs
+      └ 覆寫 pending selection＋_reviewDirty=true（不碰隱藏 Review 控制項）
+
+tabMain.SelectedIndexChanged（進 Review 且有 pending）
+ → cbReviewId＋DateTimeNavigator.SetPeriodToCombo＋UpdatePeriodNavigationState（只套最後一筆）
+   → ImageRepository.GetAvailablePeriods（預建索引＋binary search）
+ → DT review sync apply {grabId} → LoadGrabStitchedViewGuardRowRangeAsync（R2）
 
 cbDataIdStart|End／期間變更
  → ScheduleRangeRefresh@DataStatisticsPresenter.cs（WinForms Timer 250ms latest-only）

@@ -66,7 +66,7 @@ class DataFlowValidator:
         report.add(
             self.domain,
             "D3.selected",
-            CheckStatus.PASS if not missing else CheckStatus.FAIL,
+            CheckStatus.PASS if not missing and scans <= 1 else CheckStatus.FAIL,
             f"intent={len(intents)} cache={cache_hits} scan={scans} 缺終態={len(missing)}"
             + (f"；首筆 {missing[0]}" if missing else ""),
         )
@@ -85,7 +85,7 @@ class DataFlowValidator:
             r"^DT curve load (\d{6}-\d{6}) captures=(\d+) "
             r"source=(disk|prefetch|cache) storage=(summary|bins) "
             r"configMs=(\d+) waitMs=(\d+) pathMs=(\d+) mergeMs=(\d+) "
-            r"summaryMs=(\d+) drawMs=(\d+) totalMs=(\d+)$"
+            r"summaryMs=(\d+) (?:points=(\d+) )?drawMs=(\d+) totalMs=(\d+)$"
         )
         missing = []
         invalid = []

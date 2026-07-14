@@ -19,6 +19,7 @@ namespace AniloxRoll.Monitor.Core.Data
     public class ImageRepository
     {
         private List<ImageMetadata> _metadataCache = new List<ImageMetadata>();
+        private DateTime[] _availablePeriods = new DateTime[0];
         // Regex: YYYYMMDD_HHMMSS.fff-CamID
         private readonly Regex _fileNameRegex = new Regex(@"(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})\.(\d{3})-(\d)");
 
@@ -27,6 +28,7 @@ namespace AniloxRoll.Monitor.Core.Data
         public void LoadDirectory(string rootPath)
         {
             _metadataCache.Clear();
+            _availablePeriods = new DateTime[0];
             if (!Directory.Exists(rootPath)) return;
 
             var files = Directory.GetFiles(rootPath, CaptureFileNaming.RawJpgGlob, SearchOption.AllDirectories);
@@ -43,6 +45,16 @@ namespace AniloxRoll.Monitor.Core.Data
                 })
                 .Where(x => x != null)
                 .ToList();
+
+            // Period navigation reads this on every selection change. Build the sorted index once
+            // with the file catalog instead of reparsing and sorting every image on the UI thread.
+            _availablePeriods = _metadataCache
+                .Select(x => BuildDateTime(x.Year, x.Month, x.Day, x.Hour, x.Minute, x.Second + "." + x.Millisecond))
+                .Where(x => x.HasValue)
+                .Select(x => x.Value)
+                .Distinct()
+                .OrderBy(x => x)
+                .ToArray();
         }
 
         private ImageMetadata ParsePath(string path)
@@ -84,16 +96,7 @@ namespace AniloxRoll.Monitor.Core.Data
                 .OrderByDescending(x => x)
                 .ToList();
 
-        public List<DateTime> GetAvailablePeriods()
-        {
-            return _metadataCache
-                .Select(x => BuildDateTime(x.Year, x.Month, x.Day, x.Hour, x.Minute, x.Second + "." + x.Millisecond))
-                .Where(x => x.HasValue)
-                .Select(x => x.Value)
-                .Distinct()
-                .OrderBy(x => x)
-                .ToList();
-        }
+        public IReadOnlyList<DateTime> GetAvailablePeriods() => _availablePeriods;
 
         /// <summary>
         /// 從 "ss.fff" 格式解析秒與毫秒，建構 DateTime。

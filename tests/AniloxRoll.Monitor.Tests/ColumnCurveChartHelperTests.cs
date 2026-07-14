@@ -1,0 +1,64 @@
+using System.Drawing;
+using System.Linq;
+using System.Threading;
+using System.Windows.Forms.DataVisualization.Charting;
+using NUnit.Framework;
+using TanukiCv.Controls;
+
+namespace AniloxRoll.Monitor.Tests
+{
+    [TestFixture]
+    [Apartment(ApartmentState.STA)]
+    public class ColumnCurveChartHelperTests
+    {
+        [Test]
+        public void UpdateDataAndView_SameDisplayLength_ReusesDataPointsAndUpdatesValues()
+        {
+            using (var chart = new Chart())
+            {
+                var helper = new ColumnCurveChartHelper(chart);
+                helper.SetOps(1000);
+                helper.UpdateDataAndView(
+                    new float[] { 10, 20, 30 },
+                    new float[] { 40, 50, 60 },
+                    5,
+                    double.NaN,
+                    double.NaN);
+
+                DataPoint firstMeanPoint = chart.Series["Mean"].Points[0];
+                DataPoint firstMaxPoint = chart.Series["Max"].Points[0];
+
+                helper.UpdateDataAndView(
+                    new float[] { 70, 80, 90 },
+                    new float[] { 100, 110, 120 },
+                    7,
+                    double.NaN,
+                    double.NaN);
+
+                Assert.That(chart.Series["Mean"].Points[0], Is.SameAs(firstMeanPoint));
+                Assert.That(chart.Series["Max"].Points[0], Is.SameAs(firstMaxPoint));
+                Assert.That(firstMeanPoint.XValue, Is.EqualTo(7));
+                Assert.That(firstMeanPoint.YValues[0], Is.EqualTo(70.0 / 255.0).Within(1e-9));
+                Assert.That(firstMaxPoint.YValues[0], Is.EqualTo(100.0 / 255.0).Within(1e-9));
+            }
+        }
+
+        [Test]
+        public void UpdateData_WideInput_UsesPixelBudgetAndPreservesMaxPeak()
+        {
+            using (var chart = new Chart { Size = new Size(800, 100) })
+            {
+                var helper = new ColumnCurveChartHelper(chart);
+                var mean = new float[16384];
+                var max = new float[16384];
+                max[8123] = 255;
+
+                helper.UpdateData(mean, max, 0);
+
+                Assert.That(helper.DisplayPointCount, Is.LessThanOrEqualTo(400));
+                Assert.That(chart.Series["Mean"].Points.Count, Is.EqualTo(helper.DisplayPointCount));
+                Assert.That(chart.Series["Max"].Points.Max(p => p.YValues[0]), Is.EqualTo(1.0));
+            }
+        }
+    }
+}

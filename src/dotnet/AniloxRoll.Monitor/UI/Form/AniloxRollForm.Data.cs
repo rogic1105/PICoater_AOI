@@ -113,39 +113,55 @@ namespace AniloxRoll.Monitor.Forms
             _dataStatsPresenter.PeriodComboManualChanged += OnPeriodComboChanged;
             _dataStatsPresenter.DataFolderSelected += OnDataFolderSelected;
 
-            // Data → Review tab 切換時，若有 pending grabId 才載圖（避免 Data 操作中等待 IO）
+            // Data → Review tab 切換時才把 pending selection 套進回顧控制項並載圖。
             tabMain.SelectedIndexChanged += async (s, e) =>
             {
-                if (tabMain.SelectedTab != tabPageReview || !_reviewDirty) return;
-                int idx = cbReviewId.SelectedIndex;
+                if (tabMain.SelectedTab != tabPageReview || !_reviewDirty || !_hasPendingDataReviewSelection) return;
+                var pending = _pendingDataReviewSelection;
+                int idx = pending.idx;
+                if (idx < 0 || idx >= _dataStatsPresenter.GrabIdInfos.Count ||
+                    !string.Equals(_dataStatsPresenter.GrabIdInfos[idx].GrabId, pending.grabId, StringComparison.Ordinal))
+                {
+                    idx = _dataStatsPresenter.GrabIdInfos.FindIndex(
+                        candidate => string.Equals(candidate.GrabId, pending.grabId, StringComparison.Ordinal));
+                }
                 if (idx < 0 || idx >= _dataStatsPresenter.GrabIdInfos.Count) return;
-                _reviewDirty = false;
                 var info = _dataStatsPresenter.GrabIdInfos[idx];
                 try
                 {
+                    using (_dataStatsPresenter.GrabIdCrossGuard.Enter())
+                    using (_dataStatsPresenter.GrabIdNavGuard.Enter())
+                    {
+                        cbReviewId.SelectedIndex = idx;
+                        _dateTimeNavigator.SetPeriodToCombo(info.Earliest);
+                    }
+                    _presenter.UpdatePeriodNavigationState();
+                    _dataStatsPresenter.UpdateGrabIdNavState();
+                    _dataStatsPresenter.SetReviewGroupBoxes(true);
+                    _reviewDirty = false;
+                    _hasPendingDataReviewSelection = false;
+                    FlowTrace.Log($"DT review sync apply {info.GrabId}");
                     await LoadGrabStitchedViewGuardRowRangeAsync(info.GrabId, info.Earliest, info.Latest);
                     // 2b-ii：fit 由 ImageDisplayView 首幀自動 fit 承接
                 }
-                catch (Exception ex) { Trace.WriteLine($"[tabMain → Review] {ex}"); }
+                catch (Exception ex)
+                {
+                    _reviewDirty = true;
+                    Trace.WriteLine($"[tabMain → Review] {ex}");
+                }
             };
         }
+
+        private (string grabId, int idx) _pendingDataReviewSelection;
+        private bool _hasPendingDataReviewSelection;
 
         private void OnDataGrabIdSelected(string grabId, DateTime earliest, DateTime latest, int idx)
         {
             try
             {
-                using (_dataStatsPresenter.GrabIdCrossGuard.Enter())
-                {
-                    using (_dataStatsPresenter.GrabIdNavGuard.Enter())
-                    {
-                        cbReviewId.SelectedIndex = idx;
-                        _dateTimeNavigator.SetPeriodToCombo(earliest);
-                    }
-                    _presenter.UpdatePeriodNavigationState();
-                    _dataStatsPresenter.UpdateGrabIdNavState();
-                    _dataStatsPresenter.SetReviewGroupBoxes(true);
-                    _reviewDirty = true;
-                }
+                _pendingDataReviewSelection = (grabId, idx);
+                _hasPendingDataReviewSelection = true;
+                _reviewDirty = true;
             }
             catch (Exception ex) { Trace.WriteLine($"[OnDataGrabIdSelected] {ex}"); }
         }

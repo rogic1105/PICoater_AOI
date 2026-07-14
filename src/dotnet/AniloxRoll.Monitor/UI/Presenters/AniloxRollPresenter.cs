@@ -128,12 +128,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
 
             DateTime current = _timeManager.GetCurrentPeriodOrDefault(periods[0]);
-            int idx = periods.FindIndex(x => x == current);
-            if (idx < 0)
-            {
-                idx = periods.FindLastIndex(x => x <= current);
-                if (idx < 0) idx = 0;
-            }
+            int idx = FindPeriodIndex(periods, current);
 
             int target = Math.Max(0, Math.Min(periods.Count - 1, idx + step));
             if (target == idx)
@@ -176,15 +171,26 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
 
             DateTime current = _timeManager.GetCurrentPeriodOrDefault(periods[0]);
-            int idx = periods.FindIndex(x => x == current);
-            if (idx < 0)
-            {
-                idx = periods.FindLastIndex(x => x <= current);
-                if (idx < 0) idx = 0;
-            }
+            int idx = FindPeriodIndex(periods, current);
 
             bool canOperate = !GetIsPeriodNavigationBusy();
             PeriodNavigationStateChanged?.Invoke(canOperate && idx > 0, canOperate && idx < periods.Count - 1);
+        }
+
+        private static int FindPeriodIndex(IReadOnlyList<DateTime> periods, DateTime current)
+        {
+            int low = 0;
+            int high = periods.Count - 1;
+            while (low <= high)
+            {
+                int middle = low + ((high - low) / 2);
+                int comparison = periods[middle].CompareTo(current);
+                if (comparison == 0) return middle;
+                if (comparison < 0) low = middle + 1;
+                else high = middle - 1;
+            }
+
+            return Math.Max(0, high);
         }
     }
 }

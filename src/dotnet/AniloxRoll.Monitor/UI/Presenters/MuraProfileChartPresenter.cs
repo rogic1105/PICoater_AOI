@@ -187,7 +187,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             FlowTrace.Log($"DT curve load {info.GrabId} captures={profile.CaptureCount} " +
                 $"source={source} storage={profile.StorageSource} configMs={configMs} waitMs={waitMs} " +
                 $"pathMs={profile.LookupMs} mergeMs={profile.MergeMs} " +
-                $"summaryMs={profile.SummaryMs} " +
+                $"summaryMs={profile.SummaryMs} points={_muraProfileHelper.DisplayPointCount} " +
                 $"drawMs={sw.ElapsedMilliseconds - drawStartMs} totalMs={sw.ElapsedMilliseconds}");
 
             int direction = _lastSingleGrabIndex < 0

@@ -10,6 +10,9 @@ namespace TanukiCv.Controls
     /// </summary>
     public class ColumnCurveChartHelper : BaseCurveChartHelper
     {
+        private const int AbsoluteMaxDisplayPoints = 2000;
+        private const int MinDisplayPoints = 128;
+
         private double _opsInMm        = 0.01;
         private double _dataMinX       = 0;
         private double _dataMaxX       = 100;
@@ -21,6 +24,12 @@ namespace TanukiCv.Controls
         // 上次設定的「邏輯視野」（canvas 的 leftMm/rightMm）
         private double _logicalLeftMm  = double.NaN;
         private double _logicalRightMm = double.NaN;
+        private double[] _displayXs = new double[0];
+        private double[] _displayMean = new double[0];
+        private double[] _displayMax = new double[0];
+
+        /// <summary>最近一次更新實際送進圖表的顯示點數。</summary>
+        public int DisplayPointCount => _displayXs.Length;
 
         public ColumnCurveChartHelper(Chart chart) : base(chart)
         {
@@ -49,17 +58,15 @@ namespace TanukiCv.Controls
             _dataMinX = startPos;
             _dataMaxX = startPos + n * _opsInMm;
 
-            // 顯示降採樣（同 RowCurveChartHelper 慣例；2026-07-07 拖曳佇列飽和定罪：全點 DataBind 讓
-            // 每次 zoom 連動重畫都付全量成本 → 螢幕只有 ~2000px，全點=白畫數倍）：
-            // 上限 ~2000 點；桶內 mean=平均、max=取大（保 Mura 峰值）、位置=桶中心。純顯示瘦身，資料/判定不經此路。
-            const int MaxDisplayPoints = 2000;
-            double[] xs, yMean, yMax;
-            if (n > MaxDisplayPoints)
+            // 依圖表寬度降採樣：每兩個水平像素一個桶；Mean 取桶平均、Max 取桶最大，
+            // 因此不漏窄凸波。這只是顯示瘦身，完整資料與判定不經此路。
+            int maxDisplayPoints = GetDisplayPointLimit();
+            int stride = Math.Max(1, (n + maxDisplayPoints - 1) / maxDisplayPoints);
+            int displayCount = (n + stride - 1) / stride;
+            EnsureDisplayBuffers(displayCount);
+            if (stride > 1)
             {
-                int stride = (n + MaxDisplayPoints - 1) / MaxDisplayPoints;
-                int m = (n + stride - 1) / stride;
-                xs = new double[m]; yMean = new double[m]; yMax = new double[m];
-                for (int b = 0; b < m; b++)
+                for (int b = 0; b < displayCount; b++)
                 {
                     int i0 = b * stride, i1 = Math.Min(i0 + stride, n);
                     double sum = 0, bmax = 0; int cnt = 0;
@@ -69,30 +76,30 @@ namespace TanukiCv.Controls
                         if (maxData != null && j < maxData.Length && maxData[j] > bmax) bmax = maxData[j];
                     }
                     int mid = (i0 + i1 - 1) / 2;
-                    xs[b]    = startPos + mid * _opsInMm;
-                    yMean[b] = sum / cnt / 255.0;
-                    yMax[b]  = bmax / 255.0;
+                    _displayXs[b]   = startPos + mid * _opsInMm;
+                    _displayMean[b] = sum / cnt / 255.0;
+                    _displayMax[b]  = bmax / 255.0;
                 }
             }
             else
             {
-                xs = new double[n]; yMean = new double[n]; yMax = new double[n];
                 for (int i = 0; i < n; i++)
                 {
-                    xs[i]    = startPos + i * _opsInMm;
-                    yMean[i] = meanData[i] / 255.0;
-                    if (maxData != null && i < maxData.Length)
-                        yMax[i] = maxData[i] / 255.0;
+                    _displayXs[i]   = startPos + i * _opsInMm;
+                    _displayMean[i] = meanData[i] / 255.0;
+                    _displayMax[i]  = maxData != null && i < maxData.Length
+                        ? maxData[i] / 255.0
+                        : 0.0;
                 }
             }
 
             _chart.Series.SuspendUpdates();
 
-            _chart.Series["Mean"].Points.Clear();
-            _chart.Series["Max"].Points.Clear();
-            _chart.Series["Mean"].Points.DataBindXY(xs, yMean);
+            BindOrUpdatePoints(_chart.Series["Mean"], _displayXs, _displayMean);
             if (maxData != null && maxData.Length > 0)
-                _chart.Series["Max"].Points.DataBindXY(xs, yMax);
+                BindOrUpdatePoints(_chart.Series["Max"], _displayXs, _displayMax);
+            else
+                _chart.Series["Max"].Points.Clear();
 
             var area = _chart.ChartAreas[0];
 
@@ -124,6 +131,48 @@ namespace TanukiCv.Controls
             }
 
             _chart.Series.ResumeUpdates();
+            _chart.Invalidate();
+        }
+
+        private void EnsureDisplayBuffers(int count)
+        {
+            if (_displayXs.Length == count) return;
+            _displayXs = new double[count];
+            _displayMean = new double[count];
+            _displayMax = new double[count];
+        }
+
+        private int GetDisplayPointLimit()
+        {
+            int width = _chart.ClientSize.Width;
+            if (width <= 0) return AbsoluteMaxDisplayPoints;
+            return Math.Min(AbsoluteMaxDisplayPoints, Math.Max(MinDisplayPoints, width / 2));
+        }
+
+        private static void BindOrUpdatePoints(Series series, double[] xs, double[] ys)
+        {
+            DataPointCollection points = series.Points;
+            points.SuspendUpdates();
+            try
+            {
+                if (points.Count != xs.Length)
+                {
+                    points.Clear();
+                    points.DataBindXY(xs, ys);
+                    return;
+                }
+
+                for (int i = 0; i < xs.Length; i++)
+                {
+                    DataPoint point = points[i];
+                    point.XValue = xs[i];
+                    point.YValues[0] = ys[i];
+                }
+            }
+            finally
+            {
+                points.ResumeUpdates();
+            }
         }
 
         // ── Canvas 聯動（X 軸 zoom）────────────────────────────────────────────

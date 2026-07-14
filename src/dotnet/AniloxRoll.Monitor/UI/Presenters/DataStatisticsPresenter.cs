@@ -77,6 +77,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private SortedSet<DateTime> _statAvailableTimes = new SortedSet<DateTime>();
         private List<GrabIdInfo> _grabIdInfos = new List<GrabIdInfo>();
         private List<GrabDetail> _currentDetails = new List<GrabDetail>();
+        private Dictionary<string, GrabDetail> _singleGrabDetailIndex =
+            new Dictionary<string, GrabDetail>(StringComparer.Ordinal);
+        private string _singleGrabDetailIndexRoot = string.Empty;
+        private float _singleGrabDetailIndexHmV;
+        private float _singleGrabDetailIndexErrMean;
+        private float _singleGrabDetailIndexErrMax;
+        private bool _singleGrabDetailIndexReady;
         private bool _showFailOnly;
         private bool _preserveDetailListDuringSelection;
         private Timer _rangeRefreshDebounce;
@@ -101,7 +108,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private static readonly Color _activeGrpBorder = Color.FromArgb(0, 140, 60);
 
         // --- 事件 ---
-        /// <summary>Data tab 序號選取 → 通知 Form 載入拼接圖。
+        /// <summary>Data tab 序號選取 → 通知 Form 記錄待同步至 Review 的最後一筆。
         /// (grabId, earliest, latest, selectedIndex)</summary>
         public event Action<string, DateTime, DateTime, int> GrabIdSelectedFromData;
 
@@ -195,6 +202,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public void LoadDataFolder(string path)
         {
             _muraChart?.ResetSingleGrabCache();
+            ResetSingleGrabDetailIndex();
             _statsDataRootPath = path;
             _statAvailableTimes = InspectionStatisticsService.LoadAvailableTimes(path);
             _grabIdInfos = InspectionStatisticsService.LoadGrabIdInfosDescending(path);
@@ -216,6 +224,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public void SyncFromReviewFolder(string path)
         {
             _muraChart?.ResetSingleGrabCache();
+            ResetSingleGrabDetailIndex();
             _statsDataRootPath = path;
             _statAvailableTimes = InspectionStatisticsService.LoadAvailableTimes(path);
             _grabIdInfos = InspectionStatisticsService.LoadGrabIdInfosDescending(path);
@@ -347,6 +356,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
             var sw = Stopwatch.StartNew();
             var grab = _grabIdInfos[selectedIndex];
             var detail = _currentDetails.FirstOrDefault(item => item.GrabId == grab.GrabId);
+            if (detail == null)
+            {
+                EnsureSingleGrabDetailIndex();
+                _singleGrabDetailIndex.TryGetValue(grab.GrabId, out detail);
+            }
             bool cacheHit = detail != null;
             Dictionary<int, CameraStats> stats;
             if (cacheHit)
@@ -367,6 +381,47 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _ctx.GrabDetailList.Highlight(grab.GrabId);
             _muraChart.Update(null);
             FlowTrace.Log($"DT selected {grab.GrabId} stats={(cacheHit ? "cache" : "scan")} list=keep ms={sw.ElapsedMilliseconds}");
+        }
+
+        private void ResetSingleGrabDetailIndex()
+        {
+            _singleGrabDetailIndex.Clear();
+            _singleGrabDetailIndexRoot = string.Empty;
+            _singleGrabDetailIndexReady = false;
+        }
+
+        private void EnsureSingleGrabDetailIndex()
+        {
+            float hmV = _ctx.Settings.HessianMaxFactorV;
+            float errMean = _ctx.Settings.ErrorValueMeanV;
+            float errMax = _ctx.Settings.ErrorValueMaxV;
+            if (_singleGrabDetailIndexReady
+                && string.Equals(_singleGrabDetailIndexRoot, _statsDataRootPath, StringComparison.OrdinalIgnoreCase)
+                && _singleGrabDetailIndexHmV == hmV
+                && _singleGrabDetailIndexErrMean == errMean
+                && _singleGrabDetailIndexErrMax == errMax)
+                return;
+
+            var sw = Stopwatch.StartNew();
+            _singleGrabDetailIndex.Clear();
+            if (_grabIdInfos.Count > 0)
+            {
+                var threshold = new ThresholdContext(hmV, errMean, errMax);
+                List<GrabDetail> details = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
+                    _statsDataRootPath,
+                    _grabIdInfos[_grabIdInfos.Count - 1].GrabId,
+                    _grabIdInfos[0].GrabId,
+                    threshold);
+                foreach (GrabDetail item in details)
+                    _singleGrabDetailIndex[item.GrabId] = item;
+            }
+
+            _singleGrabDetailIndexRoot = _statsDataRootPath;
+            _singleGrabDetailIndexHmV = hmV;
+            _singleGrabDetailIndexErrMean = errMean;
+            _singleGrabDetailIndexErrMax = errMax;
+            _singleGrabDetailIndexReady = true;
+            FlowTrace.Log($"DT stats index rows={_singleGrabDetailIndex.Count} ms={sw.ElapsedMilliseconds}");
         }
 
         private static Dictionary<int, CameraStats> BuildSingleGrabStats(GrabDetail detail)
