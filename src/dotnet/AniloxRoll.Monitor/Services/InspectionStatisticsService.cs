@@ -287,6 +287,28 @@ namespace AniloxRoll.Monitor.Core.Services
             return ordered;
         }
 
+        public static Dictionary<int, CameraStats> ComputeStatsFromDetails(
+            IList<GrabDetail> details)
+        {
+            var stats = new Dictionary<int, CameraStats>();
+            for (int camId = 1; camId <= 7; camId++)
+                stats[camId] = new CameraStats { CamId = camId };
+            if (details == null) return stats;
+
+            foreach (GrabDetail detail in details)
+            {
+                if (detail == null) continue;
+                for (int i = 0; i < detail.CamResult.Length && i < 7; i++)
+                {
+                    bool? failed = detail.CamResult[i];
+                    if (!failed.HasValue) continue;
+                    if (failed.Value) stats[i + 1].Fail++;
+                    else stats[i + 1].Pass++;
+                }
+            }
+            return stats;
+        }
+
         // ── 載入輔助資料 ─────────────────────────────────────────────────
 
         /// <summary>

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using NUnit.Framework;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.Widgets;
@@ -43,6 +44,27 @@ namespace AniloxRoll.Monitor.Tests
 
             Assert.That(result.Mean[1], Is.EqualTo(new[] { 20f, 40f }));
             Assert.That(result.Max[1], Is.EqualTo(new[] { 40f, 60f }));
+        }
+
+        [Test]
+        public void LoadRange_CancelledBeforeStart_Throws()
+        {
+            var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+
+            Assert.Throws<OperationCanceledException>(() =>
+                InspectionMuraProfileRepository.LoadRange(
+                    _tempRoot,
+                    new List<GrabIdInfo>
+                    {
+                        new GrabIdInfo
+                        {
+                            GrabId = "260713-100000",
+                            Earliest = new DateTime(2026, 7, 13, 10, 0, 0)
+                        }
+                    },
+                    50,
+                    cancellation.Token));
         }
 
         [Test]

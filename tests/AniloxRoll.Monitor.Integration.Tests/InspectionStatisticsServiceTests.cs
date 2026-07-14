@@ -95,6 +95,13 @@ namespace AniloxRoll.Monitor.Tests
             Assert.That(details[1].GrabId, Is.EqualTo("260330-100000"));
             Assert.That(details[1].CamResult[0], Is.False, "CAM1 pass");
             Assert.That(details[1].CamResult[1], Is.True,  "CAM2 fail");
+
+            var stats = InspectionStatisticsService.ComputeStatsFromDetails(details);
+            Assert.That(stats[1].Pass, Is.EqualTo(2));
+            Assert.That(stats[1].Fail, Is.EqualTo(0));
+            Assert.That(stats[2].Pass, Is.EqualTo(0));
+            Assert.That(stats[2].Fail, Is.EqualTo(1));
+            Assert.That(stats[3].Total, Is.EqualTo(0));
         }
 
         [Test]

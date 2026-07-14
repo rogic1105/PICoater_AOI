@@ -852,9 +852,14 @@ T1: DT selected {grabId} stats=cache|scan list=keep ms=N
 T1: DT stats index rows=N ms=N
      ← 第一次選到目前 List 範圍外時建立一次全序號 Pass/Fail 索引；同資料夾＋同閾值後續不得逐格重掃 CSV
 T1: ui:【序號範圍-起始|結束】變更       ← 手動拖範圍 → 期間高亮全滅（Custom）
-T1: DT range settle → refresh             ← 最後一次變更後 250ms；一串連續滾動只准一行
-T1: DT list reload range={start}~{end} rows=N ms=N
-T1: DT curve candidates meanRows=N maxRows=M method=top-maxcmean|mixed|even coverage=S/R rankedCams=C/T
+T1: DT range policy listMs=33 curveMs=80 settleMs=150 curveMode=monotonic
+     ← Presenter 初始化一次；目前上機驗綠的排程基準，改值必須同步本契約＋checker 並重驗
+T1: DT range list preview gen=G range={start}~{end} rows=N ms=N source=index
+     ← 滾動期間 List＋7 台色卡預覽；獨立 33ms 節拍，只切記憶體完整索引，不讀磁碟
+T1: DT range preview apply gen=G range={start}~{end} loadMs=N drawMs=N meanRows=N maxRows=M method=top-maxcmean|mixed|even coverage=S/R rankedCams=C/T index=H/B
+     ← 滾動期間 Curve 背景取樣；與 List 共用 generation，已開始的樣本允許完成，但上畫 generation 只能向前
+T1: DT range settle → refresh             ← 最後一次變更後 150ms；一串連續滾動只准一行
+T1: DT list reload range={start}~{end} rows=N ms=N source=index
 ```
 - **List ownership**：明細 List 屬於範圍結果，不屬於單片序號；`ui:【報表序號】` 後只准 `list=keep`，
   不得出現 `DT list reload`／`GrabDetailListBinder.SetItems`／重設 `VirtualListSize`／欄寬。只有資料夾、範圍、期間、閾值改變才重算 List。
@@ -874,14 +879,27 @@ T1: DT curve candidates meanRows=N maxRows=M method=top-maxcmean|mixed|even cove
   完整重建後先顯示 Curve，再由 idle writer 以同目錄暫存檔原子替換；不得讓 UI 等待落盤。原始 bins 仍是 SSoT，
   匯總只保存 rescale 前逐相機 Mean 平均／Max 最大結果；pending queue 上限 96 MB，超限可 drop 而不可無界吃記憶體。
   `merged != captures` 時只能回傳當下可讀結果並記 `write=skip-incomplete`，不得產生匯總；下次選取必重新嘗試原始 bins。
-- **範圍 latest-only**：起始／結束 combo 連續滾動時只更新選取值並重壓 250ms timer；停止後才跑一次
-  `RefreshStats`。`DT range settle` 前出現 `DT list reload` 或 `DT curve candidates`＝逐格重算回歸。
+- **範圍雙速 monotonic throttle**：起始／結束 combo 連續滾動時，33ms List timer 從完整明細索引切出當代範圍並更新
+  List＋7 台色卡；獨立 80ms Curve timer 最多啟動一個背景預覽。兩者共用 generation；新 intent 不取消已經開始的
+  Curve 樣本，避免輸入間隔短於 12~21ms 計算時間時 Curve 永遠無法完成。樣本可落後當前選擇，但只能按 generation
+  單調向前上畫；完成後下一輪取最新範圍，停止後最終 Curve generation 必須追上 List。150ms timer 只跑一次最終對帳。
+  `DT range settle` 前允許 `DT range list preview`／`DT range preview apply`，但出現 `DT list reload` 或同步
+  `DT curve candidates`＝逐格完整重算回歸。List 預覽只能使用已就緒且資料夾／閾值簽章相同的記憶體索引；
+  索引未就緒時略過預覽，交由 settle 建立，禁止在 80ms 路徑掃 CSV。
+- **節拍參數的效力**：`33/80/150ms` 是目前驗綠基準，不是不可修改的使用者鐵則。它們必須集中在
+  `DataStatisticsPresenter` 的具名常數並由 `DT range policy` 量出實際執行值；任何調整都視為排程行為變更，
+  同一批修改 DVT 與 checker 後重跑上機測試。不可散落 magic number，也不可只改文件或只改 code。
 - **範圍曲線只有兩條**：每台相機各自選候選再合成全寬；`CurveMean`＝範圍 CSV 資料列均勻取樣最多 50 筆後
   對對應 `MeanC` bin 逐點平均；`CurveMax`＝依 `MaxCMean` 排序取前 50 筆，再對其 `MaxC` bin 做逐點最大值。
   候選必須保留 CSV `FileName` 並載入同一筆 bin，不得只選序號後誤讀該序號第一張。這個設計保留平坦趨勢，也不讓
   1/1000~1/10000 的凸波因均勻抽樣直接消失；畫面不得再增加操作員難以判讀的第三條曲線。
 - `coverage=S/R` 是有 `MaxCMean` 的 CSV 資料列數／範圍資料列數；任一相機候選資料不完整時，該相機
   `CurveMax` 回退均勻取樣，避免拿新舊混合資料宣稱精確排名。
+- **候選索引是衍生快取，不是資料真相**：`LoadRange` 以每日 CSV 完整路徑＋檔案長度＋最後修改時間驗證
+  記憶體索引；簽章相同才可命中，CSV append/替換後必重建。原始 CSV 與 Curve bin 仍是 SSoT；索引只保存
+  `grabId/camera/basePath/MaxCMean`，以 LRU 限制最多 25 萬筆／1024 日且可隨時丟棄。`index=H/B`＝本次命中／重建的日數；
+  連續滾動在第一次暖索引後應以 `H>0,B=0` 為主。每日索引開始建立後允許完成並供下一代共用，
+  不跟 range token 中途取消；token 仍在候選彙整／bin 載入／上畫前生效，故舊 generation 不得上畫。
 
 **code-flow（單片快路 vs 範圍完整刷新）**
 ```
@@ -911,18 +929,31 @@ tabMain.SelectedIndexChanged（進 Review 且有 pending）
    → ImageRepository.GetAvailablePeriods（預建索引＋binary search）
  → DT review sync apply {grabId} → LoadGrabStitchedViewGuardRowRangeAsync（R2）
 
-cbDataIdStart|End／期間變更
- → ScheduleRangeRefresh@DataStatisticsPresenter.cs（WinForms Timer 250ms latest-only）
- → DT range settle → RefreshStats@DataStatisticsPresenter.cs
-   ├ ComputeByGrabIdRange（範圍色卡）
-   ├ ComputeDetailedByGrabIdRange → ApplyFailFilter → GrabDetailListBinder.SetItems
-   │  └ InspectionCsvReader.OpenShared＋TryParseRecord（CSV 格式／FileShare 唯一來源）
-   ├ MuraProfileChartPresenter.Update(rangeInfos)
-   │  └ LoadRange@InspectionMuraProfileRepository.cs（掃範圍 CSV；按 cam 分組並保留 FileName）
-   │     ├ InspectionCsvReader.TryParseRecord＋TryParseTimestamp＋TryExtractCameraId
-   │     ├ Mean 候選＝EvenSample(rows,50) → 對應 MeanC 逐點平均
-   │     └ Max 候選＝MaxCMean 排序前 50 → 對應 MaxC 逐點最大（缺分數→均勻 fallback）
-   └ DT list reload …＋DT curve candidates …
+cbDataIdStart|End 手動變更
+ → ScheduleRangeRefresh@DataStatisticsPresenter.cs
+   ├ generation++（不取消已開始的 Curve 樣本；資料夾／模式 teardown 才取消 token）
+   ├ 33ms repeating throttle → RangeListPreviewTimer_Tick
+   │  └ ApplyRangeListPreview（只在完整 detail index 簽章有效時）
+   │     └ 依 `_grabIdInfos` 切片 → ApplyFailFilter／GrabDetailListBinder.SetItems
+   │        ＋ ComputeStatsFromDetails／InspectionStatsPresenter.Update → DT range list preview
+   ├ 80ms repeating throttle → RangePreviewTimer_Tick（同時最多一個 Curve 工作）
+   │  └ UpdateRangePreviewAsync@MuraProfileChartPresenter.cs
+   │    → Task.Run → LoadRange@InspectionMuraProfileRepository.cs（可取消）
+   │       ├ 每日 CSV 簽章相同 → DailyIndex 依 grabId 取候選資料（不重掃 CSV）
+   │       └ 簽章改變／首次使用 → 重建該日索引（LRU bounded 25 萬筆／1024 日）
+   │    → 回 UI 執行緒；token 有效且 generation 大於前次上畫才 UpdateOverviewChart → DT range preview apply
+   └ 重壓 150ms settle timer → DT range settle → RefreshStats(updateRangeCurve:false)（最終對帳）
+    ├ EnsureSingleGrabDetailIndex（資料夾／閾值未變時沿用完整 GrabDetail 衍生索引）
+    ├ 依 `_grabIdInfos` 選取範圍切出 detail 子集 → ApplyFailFilter → GrabDetailListBinder.SetItems
+    ├ ComputeStatsFromDetails（同一 detail 子集彙總 7 台色卡；不得再掃第二次 CSV）
+    └ DT list reload …
+
+期間變更／初次載入（非手動連續滾動）
+ → RefreshStats(updateRangeCurve:true) → MuraProfileChartPresenter.Update
+   → LoadRange@InspectionMuraProfileRepository.cs（同步精確結果；候選算法同上）
+     ├ InspectionCsvReader.TryParseRecord＋TryParseTimestamp＋TryExtractCameraId
+     ├ Mean 候選＝EvenSample(rows,50) → 對應 MeanC 逐點平均
+     └ Max 候選＝MaxCMean 排序前 50 → 對應 MaxC 逐點最大（缺分數→均勻 fallback）
 ```
 
 ### D4 年/月/日期間（lblChartNav 點選）

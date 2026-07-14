@@ -30,7 +30,10 @@ class DataFlowValidator:
         self._check_single_selection(session, report)
         self._check_single_curve(session, report)
         self._check_list_ownership(session, report)
+        self._check_range_policy(session, report)
         self._check_range_debounce(session, report)
+        self._check_range_list_preview(session, report)
+        self._check_range_preview(session, report)
         self._check_y_scale_toggle(session, report)
         self._check_ui_stall(session, report)
         return report
@@ -214,6 +217,131 @@ class DataFlowValidator:
             CheckStatus.PASS if ok else CheckStatus.FAIL,
             f"intent={range_intents} settle={settles} settle前重算={len(premature)}"
             + (f"；首筆 {premature[0]}" if premature else ""),
+        )
+
+    def _check_range_policy(self, session: FlowSession, report: CheckReport) -> None:
+        lines = [
+            line.message for line in session.lines
+            if line.message.startswith("DT range policy ")
+        ]
+        if not lines:
+            report.add(
+                self.domain,
+                "D3.range-policy",
+                CheckStatus.NOT_COVERED,
+                "舊版 log 無 range policy 儀器",
+            )
+            return
+
+        expected = "DT range policy listMs=33 curveMs=80 settleMs=150 curveMode=monotonic"
+        unique = sorted(set(lines))
+        ok = len(lines) == 1 and unique == [expected]
+        report.add(
+            self.domain,
+            "D3.range-policy",
+            CheckStatus.PASS if ok else CheckStatus.FAIL,
+            f"行數={len(lines)} 實際={' | '.join(unique)}",
+        )
+
+    def _check_range_preview(self, session: FlowSession, report: CheckReport) -> None:
+        intents = sum(
+            1 for line in session.lines
+            if line.message.startswith("ui:【序號範圍-")
+        )
+        pattern = re.compile(
+            r"^DT range preview apply gen=(\d+) range=(\d{6}-\d{6})~(\d{6}-\d{6}) "
+            r"loadMs=(\d+) drawMs=(\d+) meanRows=(\d+) maxRows=(\d+) "
+            r"method=(top-maxcmean|mixed|even) coverage=(\d+)/(\d+) rankedCams=(\d+)/(\d+)"
+            r" index=(\d+)/(\d+)$"
+        )
+        generations = []
+        invalid = []
+        for line in session.lines:
+            if not line.message.startswith("DT range preview apply"):
+                continue
+            match = pattern.match(line.message)
+            if not match:
+                invalid.append(f"{line.timestamp} 格式錯誤")
+                continue
+            generations.append(int(match.group(1)))
+
+        if intents == 0:
+            report.add(self.domain, "D3.range-preview", CheckStatus.NOT_COVERED, "無序號範圍滾動")
+            return
+        if not generations:
+            report.add(
+                self.domain,
+                "D3.range-preview",
+                CheckStatus.FAIL,
+                f"intent={intents}，沒有 Curve 預覽上畫",
+            )
+            return
+
+        monotonic = all(
+            current > previous
+            for previous, current in zip(generations, generations[1:])
+        )
+        list_generations = []
+        for line in session.lines:
+            match = re.match(r"^DT range list preview gen=(\d+) ", line.message)
+            if match:
+                list_generations.append(int(match.group(1)))
+        final_caught_up = not list_generations or generations[-1] >= list_generations[-1]
+        ok = not invalid and monotonic and final_caught_up
+        report.add(
+            self.domain,
+            "D3.range-preview",
+            CheckStatus.PASS if ok else CheckStatus.FAIL,
+            f"intent={intents} apply={len(generations)} generation={generations[0]}~{generations[-1]} "
+            f"倒退上畫={0 if monotonic else 1} 最終追上={1 if final_caught_up else 0} "
+            f"格式錯誤={len(invalid)}",
+        )
+
+    def _check_range_list_preview(self, session: FlowSession, report: CheckReport) -> None:
+        intents = sum(
+            1 for line in session.lines
+            if line.message.startswith("ui:【序號範圍-")
+        )
+        pattern = re.compile(
+            r"^DT range list preview gen=(\d+) range=(\d{6}-\d{6})~(\d{6}-\d{6}) "
+            r"rows=(\d+) ms=(\d+) source=index$"
+        )
+        generations = []
+        invalid = []
+        worst_ms = 0
+        for line in session.lines:
+            if not line.message.startswith("DT range list preview"):
+                continue
+            match = pattern.match(line.message)
+            if not match:
+                invalid.append(f"{line.timestamp} 格式錯誤")
+                continue
+            generations.append(int(match.group(1)))
+            worst_ms = max(worst_ms, int(match.group(5)))
+
+        if intents == 0:
+            report.add(self.domain, "D3.list-preview", CheckStatus.NOT_COVERED, "無序號範圍滾動")
+            return
+        if not generations:
+            report.add(
+                self.domain,
+                "D3.list-preview",
+                CheckStatus.FAIL,
+                f"intent={intents}，沒有 List 預覽套用",
+            )
+            return
+
+        monotonic = all(
+            current > previous
+            for previous, current in zip(generations, generations[1:])
+        )
+        ok = not invalid and monotonic
+        report.add(
+            self.domain,
+            "D3.list-preview",
+            CheckStatus.PASS if ok else CheckStatus.FAIL,
+            f"intent={intents} apply={len(generations)} generation={generations[0]}~{generations[-1]} "
+            f"最大={worst_ms}ms 過期套用={0 if monotonic else 1} 格式錯誤={len(invalid)}",
         )
 
     def _check_y_scale_toggle(self, session: FlowSession, report: CheckReport) -> None:

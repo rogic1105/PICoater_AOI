@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
+using System.Threading;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
 using AniloxRoll.Monitor.Core.Data;
@@ -86,7 +87,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private bool _singleGrabDetailIndexReady;
         private bool _showFailOnly;
         private bool _preserveDetailListDuringSelection;
-        private Timer _rangeRefreshDebounce;
+        private System.Windows.Forms.Timer _rangeRefreshDebounce;
+        private System.Windows.Forms.Timer _rangeListPreviewTimer;
+        private System.Windows.Forms.Timer _rangePreviewTimer;
+        private CancellationTokenSource _rangePreviewCancellation;
+        private int _rangePreviewGeneration;
+        private int _rangeListPreviewAppliedGeneration;
+        private int _rangePreviewAppliedGeneration;
+        private bool _rangePreviewRunning;
 
         // --- 圖表導航 ---
 
@@ -104,6 +112,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private DataDateGrabIdNavigator _dateGrabIdNavigator;
 
         // --- 常數 ---
+        private const int RangeListPreviewIntervalMs = 33;
+        private const int RangeCurvePreviewIntervalMs = 80;
+        private const int RangeSettleIntervalMs = 150;
         private static readonly Color _activeGrpFill = Color.FromArgb(220, 248, 225);
         private static readonly Color _activeGrpBorder = Color.FromArgb(0, 140, 60);
 
@@ -159,13 +170,18 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _yieldPeriodCharts = new YieldPeriodChartPresenter(_ctx, () => _statAvailableTimes, () => _statsDataRootPath);
             _yieldPeriodCharts.Init();
 
-            _rangeRefreshDebounce = new Timer { Interval = 250 };
+            _rangeRefreshDebounce = new System.Windows.Forms.Timer { Interval = RangeSettleIntervalMs };
             _rangeRefreshDebounce.Tick += (s, e) =>
             {
                 _rangeRefreshDebounce.Stop();
                 FlowTrace.Log("DT range settle → refresh");
-                RefreshStats();
+                RefreshStats(updateRangeCurve: false);
             };
+            _rangeListPreviewTimer = new System.Windows.Forms.Timer { Interval = RangeListPreviewIntervalMs };
+            _rangeListPreviewTimer.Tick += RangeListPreviewTimer_Tick;
+            _rangePreviewTimer = new System.Windows.Forms.Timer { Interval = RangeCurvePreviewIntervalMs };
+            _rangePreviewTimer.Tick += RangePreviewTimer_Tick;
+            FlowTrace.Log($"DT range policy listMs={RangeListPreviewIntervalMs} curveMs={RangeCurvePreviewIntervalMs} settleMs={RangeSettleIntervalMs} curveMode=monotonic");
 
             _ctx.GrpReviewTimePeriod.Click += (s, e) => PeriodComboManualChanged?.Invoke();
 
@@ -201,6 +217,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// <summary>載入指定資料夾的統計資料，填充所有 ComboBox。</summary>
         public void LoadDataFolder(string path)
         {
+            CancelRangePreview();
             _muraChart?.ResetSingleGrabCache();
             ResetSingleGrabDetailIndex();
             _statsDataRootPath = path;
@@ -223,6 +240,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// <summary>從 Review tab 選擇資料夾後同步載入序號清單。</summary>
         public void SyncFromReviewFolder(string path)
         {
+            CancelRangePreview();
             _muraChart?.ResetSingleGrabCache();
             ResetSingleGrabDetailIndex();
             _statsDataRootPath = path;
@@ -266,8 +284,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
             return _grabIdInfos.Count > 0 ? _grabIdInfos[0].GrabId : string.Empty;
         }
 
-        public void RefreshStats()
+        public void RefreshStats(bool updateRangeCurve = true)
         {
+            if (updateRangeCurve) CancelRangePreview();
             if (string.IsNullOrWhiteSpace(_statsDataRootPath)) return;
 
             // view-time threshold context：以當前 Settings 的閾值 + 欄正規值即時重算 Pass/Fail，
@@ -287,10 +306,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 if (!_preserveDetailListDuringSelection)
                 {
                     var swList = Stopwatch.StartNew();
+                    string listStart = GetDetailListStartGrabId();
+                    string listEnd = GetDetailListEndGrabId();
                     _currentDetails = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
-                        _statsDataRootPath, GetDetailListStartGrabId(), GetDetailListEndGrabId(), ctx);
+                        _statsDataRootPath, listStart, listEnd, ctx);
+                    SeedDetailIndexIfFullRange(_currentDetails, listStart, listEnd, ctx);
                     ApplyFailFilter();
-                    FlowTrace.Log($"DT list reload range={GetDetailListStartGrabId()}~{GetDetailListEndGrabId()} rows={_currentDetails.Count} ms={swList.ElapsedMilliseconds}");
+                    FlowTrace.Log($"DT list reload range={listStart}~{listEnd} rows={_currentDetails.Count} ms={swList.ElapsedMilliseconds}");
                 }
                 RefreshSelectedGrab();
                 return;
@@ -302,23 +324,28 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 var startInfo = _grabIdInfos[_ctx.CbGrabIdStart.SelectedIndex];
                 var endInfo = _grabIdInfos[_ctx.CbGrabIdEnd.SelectedIndex];
 
-                var stats = InspectionStatisticsService.ComputeByGrabIdRange(
-                    _statsDataRootPath, startInfo.GrabId, endInfo.GrabId, ctx);
-                _statsPresenter.Update(stats);
                 if (!_preserveDetailListDuringSelection)
                 {
                     var swList = Stopwatch.StartNew();
-                    _currentDetails = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
-                        _statsDataRootPath, startInfo.GrabId, endInfo.GrabId, ctx);
+                    EnsureSingleGrabDetailIndex();
+                    _currentDetails = GetIndexedDetailsForSelectedRange();
                     ApplyFailFilter();
-                    FlowTrace.Log($"DT list reload range={startInfo.GrabId}~{endInfo.GrabId} rows={_currentDetails.Count} ms={swList.ElapsedMilliseconds}");
+                    _statsPresenter.Update(
+                        InspectionStatisticsService.ComputeStatsFromDetails(_currentDetails));
+                    FlowTrace.Log($"DT list reload range={startInfo.GrabId}~{endInfo.GrabId} rows={_currentDetails.Count} ms={swList.ElapsedMilliseconds} source=index");
                 }
+                else
+                    _statsPresenter.Update(
+                        InspectionStatisticsService.ComputeStatsFromDetails(_currentDetails));
 
-                int si = _ctx.CbGrabIdStart.SelectedIndex;
-                int ei = _ctx.CbGrabIdEnd.SelectedIndex;
-                int lo = Math.Min(si, ei); int hi = Math.Max(si, ei);
-                var rangeInfos = _grabIdInfos.GetRange(lo, hi - lo + 1);
-                _muraChart.Update(rangeInfos, rangeInfos);
+                if (updateRangeCurve)
+                {
+                    int si = _ctx.CbGrabIdStart.SelectedIndex;
+                    int ei = _ctx.CbGrabIdEnd.SelectedIndex;
+                    int lo = Math.Min(si, ei); int hi = Math.Max(si, ei);
+                    var rangeInfos = _grabIdInfos.GetRange(lo, hi - lo + 1);
+                    _muraChart.Update(rangeInfos, rangeInfos);
+                }
                 return;
             }
 
@@ -333,6 +360,100 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
             _rangeRefreshDebounce.Stop();
             _rangeRefreshDebounce.Start();
+
+            _rangePreviewGeneration++;
+            if (_rangeListPreviewTimer != null && !_rangeListPreviewTimer.Enabled)
+                _rangeListPreviewTimer.Start();
+            if (_rangePreviewTimer != null && !_rangePreviewTimer.Enabled)
+                _rangePreviewTimer.Start();
+        }
+
+        private void RangeListPreviewTimer_Tick(object sender, EventArgs e)
+        {
+            if (_rangeListPreviewAppliedGeneration == _rangePreviewGeneration)
+            {
+                _rangeListPreviewTimer.Stop();
+                return;
+            }
+            if (!TryGetSelectedRange(out List<GrabIdInfo> _))
+            {
+                _rangeListPreviewTimer.Stop();
+                return;
+            }
+
+            int generation = _rangePreviewGeneration;
+            if (!ApplyRangeListPreview(generation))
+            {
+                _rangeListPreviewTimer.Stop();
+                return;
+            }
+            if (generation == _rangePreviewGeneration)
+                _rangeListPreviewAppliedGeneration = generation;
+        }
+
+        private async void RangePreviewTimer_Tick(object sender, EventArgs e)
+        {
+            if (_rangePreviewRunning ||
+                _rangePreviewAppliedGeneration == _rangePreviewGeneration)
+            {
+                if (!_rangePreviewRunning) _rangePreviewTimer.Stop();
+                return;
+            }
+            if (!TryGetSelectedRange(out List<GrabIdInfo> rangeInfos))
+            {
+                _rangePreviewTimer.Stop();
+                return;
+            }
+
+            int generation = _rangePreviewGeneration;
+            var cancellation = new CancellationTokenSource();
+            _rangePreviewCancellation = cancellation;
+            _rangePreviewRunning = true;
+            try
+            {
+                await _muraChart.UpdateRangePreviewAsync(
+                    rangeInfos, generation, cancellation.Token);
+                if (!cancellation.IsCancellationRequested)
+                    _rangePreviewAppliedGeneration = generation;
+            }
+            catch (OperationCanceledException)
+            {
+                // Folder/mode teardown owns cancellation; range input is sampled, not debounced.
+            }
+            finally
+            {
+                if (ReferenceEquals(_rangePreviewCancellation, cancellation))
+                    _rangePreviewCancellation = null;
+                cancellation.Dispose();
+                _rangePreviewRunning = false;
+                if (_rangePreviewAppliedGeneration == _rangePreviewGeneration)
+                    _rangePreviewTimer?.Stop();
+            }
+        }
+
+        private bool TryGetSelectedRange(out List<GrabIdInfo> rangeInfos)
+        {
+            rangeInfos = null;
+            if (_dateGrabIdNavigator.ActiveStatMode != _ctx.GroupBoxGrabIdRange ||
+                _ctx.CbGrabIdStart.SelectedIndex < 0 ||
+                _ctx.CbGrabIdEnd.SelectedIndex < 0 ||
+                _grabIdInfos.Count == 0)
+                return false;
+
+            int lo = Math.Min(
+                _ctx.CbGrabIdStart.SelectedIndex, _ctx.CbGrabIdEnd.SelectedIndex);
+            int hi = Math.Max(
+                _ctx.CbGrabIdStart.SelectedIndex, _ctx.CbGrabIdEnd.SelectedIndex);
+            rangeInfos = _grabIdInfos.GetRange(lo, hi - lo + 1);
+            return rangeInfos.Count > 0;
+        }
+
+        private void CancelRangePreview()
+        {
+            _rangePreviewGeneration++;
+            _rangePreviewCancellation?.Cancel();
+            _rangeListPreviewTimer?.Stop();
+            _rangePreviewTimer?.Stop();
         }
 
         public void Dispose()
@@ -340,6 +461,12 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _rangeRefreshDebounce?.Stop();
             _rangeRefreshDebounce?.Dispose();
             _rangeRefreshDebounce = null;
+            CancelRangePreview();
+            _rangeListPreviewTimer?.Dispose();
+            _rangeListPreviewTimer = null;
+            _rangePreviewTimer?.Dispose();
+            _rangePreviewTimer = null;
+            _rangePreviewCancellation = null;
             _muraChart?.Dispose();
             _muraChart = null;
             _ctx.GrabDetailList.RowCommitted -= OnGrabDetailRowCommitted;
@@ -390,16 +517,21 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _singleGrabDetailIndexReady = false;
         }
 
+        private bool IsSingleGrabDetailIndexCurrent()
+        {
+            return _singleGrabDetailIndexReady
+                && string.Equals(_singleGrabDetailIndexRoot, _statsDataRootPath, StringComparison.OrdinalIgnoreCase)
+                && _singleGrabDetailIndexHmV == _ctx.Settings.HessianMaxFactorV
+                && _singleGrabDetailIndexErrMean == _ctx.Settings.ErrorValueMeanV
+                && _singleGrabDetailIndexErrMax == _ctx.Settings.ErrorValueMaxV;
+        }
+
         private void EnsureSingleGrabDetailIndex()
         {
             float hmV = _ctx.Settings.HessianMaxFactorV;
             float errMean = _ctx.Settings.ErrorValueMeanV;
             float errMax = _ctx.Settings.ErrorValueMaxV;
-            if (_singleGrabDetailIndexReady
-                && string.Equals(_singleGrabDetailIndexRoot, _statsDataRootPath, StringComparison.OrdinalIgnoreCase)
-                && _singleGrabDetailIndexHmV == hmV
-                && _singleGrabDetailIndexErrMean == errMean
-                && _singleGrabDetailIndexErrMax == errMax)
+            if (IsSingleGrabDetailIndexCurrent())
                 return;
 
             var sw = Stopwatch.StartNew();
@@ -422,6 +554,67 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _singleGrabDetailIndexErrMax = errMax;
             _singleGrabDetailIndexReady = true;
             FlowTrace.Log($"DT stats index rows={_singleGrabDetailIndex.Count} ms={sw.ElapsedMilliseconds}");
+        }
+
+        private bool ApplyRangeListPreview(int generation)
+        {
+            if (generation != _rangePreviewGeneration
+                || _preserveDetailListDuringSelection
+                || !IsSingleGrabDetailIndexCurrent())
+                return false;
+
+            var sw = Stopwatch.StartNew();
+            _currentDetails = GetIndexedDetailsForSelectedRange();
+            ApplyFailFilter();
+            _statsPresenter.Update(
+                InspectionStatisticsService.ComputeStatsFromDetails(_currentDetails));
+
+            string start = _grabIdInfos[_ctx.CbGrabIdStart.SelectedIndex].GrabId;
+            string end = _grabIdInfos[_ctx.CbGrabIdEnd.SelectedIndex].GrabId;
+            FlowTrace.Log($"DT range list preview gen={generation} range={start}~{end} rows={_currentDetails.Count} ms={sw.ElapsedMilliseconds} source=index");
+            return true;
+        }
+
+        private void SeedDetailIndexIfFullRange(
+            IList<GrabDetail> details,
+            string startGrabId,
+            string endGrabId,
+            ThresholdContext threshold)
+        {
+            if (_grabIdInfos.Count == 0 || details == null) return;
+            string oldest = _grabIdInfos[_grabIdInfos.Count - 1].GrabId;
+            string newest = _grabIdInfos[0].GrabId;
+            string lo = StringComparer.Ordinal.Compare(startGrabId, endGrabId) <= 0
+                ? startGrabId : endGrabId;
+            string hi = lo == startGrabId ? endGrabId : startGrabId;
+            if (!string.Equals(lo, oldest, StringComparison.Ordinal) ||
+                !string.Equals(hi, newest, StringComparison.Ordinal))
+                return;
+
+            _singleGrabDetailIndex.Clear();
+            foreach (GrabDetail detail in details)
+                _singleGrabDetailIndex[detail.GrabId] = detail;
+            _singleGrabDetailIndexRoot = _statsDataRootPath;
+            _singleGrabDetailIndexHmV = threshold.CurrentHmV;
+            _singleGrabDetailIndexErrMean = _ctx.Settings.ErrorValueMeanV;
+            _singleGrabDetailIndexErrMax = _ctx.Settings.ErrorValueMaxV;
+            _singleGrabDetailIndexReady = true;
+        }
+
+        private List<GrabDetail> GetIndexedDetailsForSelectedRange()
+        {
+            int lo = Math.Min(
+                _ctx.CbGrabIdStart.SelectedIndex, _ctx.CbGrabIdEnd.SelectedIndex);
+            int hi = Math.Max(
+                _ctx.CbGrabIdStart.SelectedIndex, _ctx.CbGrabIdEnd.SelectedIndex);
+            var details = new List<GrabDetail>(hi - lo + 1);
+            for (int i = lo; i <= hi; i++)
+            {
+                string grabId = _grabIdInfos[i].GrabId;
+                if (_singleGrabDetailIndex.TryGetValue(grabId, out GrabDetail detail))
+                    details.Add(detail);
+            }
+            return details;
         }
 
         private static Dictionary<int, CameraStats> BuildSingleGrabStats(GrabDetail detail)

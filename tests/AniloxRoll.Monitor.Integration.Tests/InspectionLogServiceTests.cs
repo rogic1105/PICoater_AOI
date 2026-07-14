@@ -240,6 +240,23 @@ namespace AniloxRoll.Monitor.Tests
             Assert.That(profiles.ScoredRows, Is.EqualTo(3));
             Assert.That(profiles.Mean[1][0], Is.EqualTo(20f).Within(0.001f));
             Assert.That(profiles.Max[1][0], Is.EqualTo(90f).Within(0.001f));
+            Assert.That(profiles.IndexBuilds, Is.EqualTo(1));
+            Assert.That(profiles.IndexHits, Is.EqualTo(0));
+
+            var cached = InspectionMuraProfileRepository.LoadRange(_tempRoot, range, 2);
+            Assert.That(cached.IndexHits, Is.EqualTo(1));
+            Assert.That(cached.IndexBuilds, Is.EqualTo(0));
+
+            const string appendedFile = "20260330_120000.300-1";
+            svc.AppendRecord("260330-120000", appendedFile,
+                0.1f, 0.7f, 0.7f, 0.5f, 0.8f, 3001, 3001, 149, config, ts);
+            WriteCurveBin(Path.Combine(imageDir, appendedFile + CaptureFileNaming.MeanC), 70f);
+            WriteCurveBin(Path.Combine(imageDir, appendedFile + CaptureFileNaming.MaxC), 70f);
+
+            var refreshed = InspectionMuraProfileRepository.LoadRange(_tempRoot, range, 2);
+            Assert.That(refreshed.IndexBuilds, Is.EqualTo(1));
+            Assert.That(refreshed.IndexHits, Is.EqualTo(0));
+            Assert.That(refreshed.TotalRows, Is.EqualTo(4));
         }
 
         [Test]

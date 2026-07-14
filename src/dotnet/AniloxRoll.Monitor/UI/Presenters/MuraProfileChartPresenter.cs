@@ -99,7 +99,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     profiles.RankedCams == profiles.TotalCams ? "top-maxcmean" : "mixed";
                 FlowTrace.Log($"DT curve candidates meanRows={profiles.MeanRows} maxRows={profiles.MaxRows} " +
                     $"method={method} coverage={profiles.ScoredRows}/{profiles.TotalRows} " +
-                    $"rankedCams={profiles.RankedCams}/{profiles.TotalCams}");
+                    $"rankedCams={profiles.RankedCams}/{profiles.TotalCams} " +
+                    $"index={profiles.IndexHits}/{profiles.IndexBuilds}");
             }
             else
             {
@@ -108,26 +109,75 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 meanDict = profiles.Mean;
                 maxDict = profiles.Max;
             }
+            int camCount = _ctx.CameraCount;
+            ApplyAggregateProfiles(
+                meanDict, maxDict, camCount,
+                _ctx.Settings.GetCameraOpsUmArray(),
+                _ctx.Settings.GetCameraStartPositionMmArray(),
+                _ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV);
+        }
+
+        public async Task UpdateRangePreviewAsync(
+            IList<GrabIdInfo> candidateRange, int generation, CancellationToken cancellationToken)
+        {
+            if (_muraProfileHelper == null || _ctx.Settings == null ||
+                candidateRange == null || candidateRange.Count == 0)
+                return;
+
+            string statsRoot = _getStatsRoot();
+            var rangeSnapshot = new List<GrabIdInfo>(candidateRange);
+            int camCount = _ctx.CameraCount;
+            double[] ops = _ctx.Settings.GetCameraOpsUmArray();
+            double[] positions = _ctx.Settings.GetCameraStartPositionMmArray();
+            float errorMean = _ctx.Settings.ErrorValueMeanV;
+            float errorMax = _ctx.Settings.ErrorValueMaxV;
+            string range = rangeSnapshot[0].GrabId + "~" +
+                rangeSnapshot[rangeSnapshot.Count - 1].GrabId;
+            var sw = Stopwatch.StartNew();
+
+            var profiles = await Task.Run(() =>
+                InspectionMuraProfileRepository.LoadRange(
+                    statsRoot, rangeSnapshot, 50, cancellationToken), cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            long loadMs = sw.ElapsedMilliseconds;
+
+            ApplyAggregateProfiles(
+                profiles.Mean, profiles.Max, camCount, ops, positions, errorMean, errorMax);
+            string method = profiles.RankedCams == 0 ? "even" :
+                profiles.RankedCams == profiles.TotalCams ? "top-maxcmean" : "mixed";
+            FlowTrace.Log($"DT range preview apply gen={generation} range={range} " +
+                $"loadMs={loadMs} drawMs={sw.ElapsedMilliseconds - loadMs} " +
+                $"meanRows={profiles.MeanRows} maxRows={profiles.MaxRows} method={method} " +
+                $"coverage={profiles.ScoredRows}/{profiles.TotalRows} " +
+                $"rankedCams={profiles.RankedCams}/{profiles.TotalCams} " +
+                $"index={profiles.IndexHits}/{profiles.IndexBuilds}");
+        }
+
+        private void ApplyAggregateProfiles(
+            Dictionary<int, float[]> meanDict,
+            Dictionary<int, float[]> maxDict,
+            int camCount,
+            double[] ops,
+            double[] positions,
+            float errorMean,
+            float errorMax)
+        {
             if (meanDict.Count == 0)
             {
                 Clear();
                 return;
             }
-            int camCount = _ctx.CameraCount;
+
             var allMean = new float[camCount][];
-            var allMax  = new float[camCount][];
+            var allMax = new float[camCount][];
             for (int i = 0; i < camCount; i++)
             {
                 meanDict.TryGetValue(i + 1, out allMean[i]);
                 maxDict.TryGetValue(i + 1, out allMax[i]);
             }
             CurveMergeHelper.UpdateOverviewChart(
-                allMean, allMax,
-                _ctx.Settings.GetCameraOpsUmArray(),
-                _ctx.Settings.GetCameraStartPositionMmArray(),
-                _ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV,
-                _muraProfileHelper, camCount,
-                StitchMode.Vertical, null);
+                allMean, allMax, ops, positions, errorMean, errorMax,
+                _muraProfileHelper, camCount, StitchMode.Vertical, null);
         }
 
         /// <summary>
