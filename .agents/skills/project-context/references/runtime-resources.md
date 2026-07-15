@@ -26,4 +26,14 @@ Use measured runtime evidence instead of static memory or hardware estimates. Fr
 - Review load scales with decoded images, stitched frames, curve arrays, and selected range; latest-only cancellation must release stale results.
 - Report memory should remain bounded by virtualized visible rows and cached parsed data, not ListView item count.
 - Save throughput and disk lifetime must be calculated from `SaveKB`/session bytes measured in the actual recipe. Do not reuse old BMP/JPEG daily-volume estimates.
+- A simulated extra pipeline is not equivalent to another physical camera: MIL buffers, grabber memory, transport, and scheduling differ. Label simulated and physical counts separately.
+- Low CPU usage during GPU saturation or IO backpressure does not prove CPU headroom; always read it together with per-camera fps, `ProcessMs`, dropped frames, and queue growth.
+- Save-mode comparisons must include per-camera frame counts. Similar aggregate throughput can hide one camera chain falling behind another.
 - Hardware purchasing or lifetime recommendations require a dated measurement report outside the agent rules; they are not durable architecture knowledge.
+
+## Dated baseline
+
+[`docs/user-manual/hardware-specs.html`](../../../../docs/user-manual/hardware-specs.html) is the
+2026-04-10 Phantom seven-camera measurement report. It supersedes the earlier 2026-04-09 drafts.
+Treat its numbers as historical evidence for that commit, branch, machine, and recipe only;
+remeasure before applying them to current production sizing.
