@@ -13,6 +13,7 @@ namespace StorageBridge.Core
     {
         private readonly Func<string> _getRootPath;
         private readonly Func<long>   _getMinFreeBytes;
+        private readonly Func<string, bool> _shouldPreserveDayFolder;
 
         private volatile int _running;
 
@@ -30,10 +31,12 @@ namespace StorageBridge.Core
 
         public StorageRetentionService(
             Func<string> getRootPath,
-            Func<long>   getMinFreeBytes)
+            Func<long>   getMinFreeBytes,
+            Func<string, bool> shouldPreserveDayFolder = null)
         {
-            _getRootPath     = getRootPath;
+            _getRootPath = getRootPath;
             _getMinFreeBytes = getMinFreeBytes;
+            _shouldPreserveDayFolder = shouldPreserveDayFolder;
         }
 
         /// <summary>觸發一次清理（事件驅動：grab 結束 / watchdog / 每 10 grab / 啟動時）。</summary>
@@ -64,6 +67,13 @@ namespace StorageBridge.Core
                 {
                     (freeBytes, _) = GetDriveFreeSpace(root);
                     if (freeBytes >= minFreeBytes) break;
+
+                    if (_shouldPreserveDayFolder?.Invoke(dayFolder.Path) == true)
+                    {
+                        Trace.TraceWarning(
+                            $"[StorageRetention] Preserve pending remote-copy folder: {dayFolder.Path}");
+                        continue;
+                    }
 
                     long freed = DeleteDayFolderImages(dayFolder.Path);
                     if (freed > 0)
@@ -180,7 +190,11 @@ namespace StorageBridge.Core
                         Directory.Delete(yearDir, false);
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning(
+                    $"[StorageRetention] Remove empty folder failed {dayDir}: {ex.Message}");
+            }
         }
 
         // ── 工具方法 ─────────────────────────────────────────────────────
@@ -193,19 +207,34 @@ namespace StorageBridge.Core
                 var di = new DriveInfo(root);
                 return (di.AvailableFreeSpace, di.TotalSize);
             }
-            catch { return (long.MaxValue, 0); }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning(
+                    $"[StorageRetention] Drive probe failed {path}: {ex.Message}");
+                return (long.MaxValue, 0);
+            }
         }
 
         private static string[] SafeGetDirectories(string path)
         {
             try { return Directory.GetDirectories(path); }
-            catch { return Array.Empty<string>(); }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning(
+                    $"[StorageRetention] Directory scan failed {path}: {ex.Message}");
+                return Array.Empty<string>();
+            }
         }
 
         private static string[] SafeGetFiles(string path, string pattern)
         {
             try { return Directory.GetFiles(path, pattern); }
-            catch { return Array.Empty<string>(); }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning(
+                    $"[StorageRetention] File scan failed {path}: {ex.Message}");
+                return Array.Empty<string>();
+            }
         }
 
         public void Dispose() { }

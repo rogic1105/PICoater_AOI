@@ -98,10 +98,10 @@ against current code with `rg` before editing because lookup data can become sta
 | `Services/IoGrabController.cs` | IO-Grab 連動：IoState FSM、IO 追蹤、Watchdog keepalive；支援 IModbusTcpClient 注入測試。`ReadWriteTimeoutMs`（可設）= 斷線偵測下限（拔線 OS 即報錯近 0ms；斷電靠逾時 ~500ms）；`NextReconnectAtUtc` 供 UI 重連倒數 |
 | `Services/CsvConfigSnapshot.cs` | 不可變設定快照（CamOps/CamPos/CamGrabHeight/CamExposureUs/CamLineRateHz/Hessian/ErrorValue/TrimHead/TrimTail） |
 | `Services/HessianRescaleHelper.cs` | View-time HM rescale 共用：Ratio / IsNoOp / RescaleInPlace1D\|2D / CloneAndRescale1D\|2D — 5 個公式單一來源 |
-| `Services/StorageRetentionService.cs` | 循環儲存：事件驅動（grab 結束/每 10 grab/watchdog），磁碟可用空間低於門檻時刪最舊日期資料夾影像，保留 CSV |
+| `sdk/Bridges/StorageBridge/StorageBridge.Core/StorageRetentionService.cs` | 循環儲存：事件驅動（grab 結束/每 10 grab/watchdog），磁碟可用空間低於門檻時刪最舊日期資料夾影像，保留 CSV 與仍待遠端發布的日期資料夾 |
 | `Services/CleanupFlagWatcher.cs` | Storage PC 專用：每 10 秒自主查空間 + 清理；同時輪詢 cleanup-request.flag（Inspection PC 寫入）立即觸發 |
 | `Settings/Models/AppModeConfig.cs` | 機台角色設定：Role（Inspection/Storage）、StorageMachineConfigFolder、StorageMachineDataPath；Load/Save → Config\app-mode.json |
-| `Services/RemoteCopyService.cs` | 背景遠端複製：ConcurrentQueue + 背景執行緒，File.Copy 含重試（3 次） |
+| `sdk/Bridges/StorageBridge/StorageBridge.Core/RemoteCopyService.cs` | 背景遠端複製：持久 pending 佇列、斷線退避重試、重開復原、`.part-*` 長度驗證後原子發布、分享路徑可寫探針 |
 | `Services/LightController.cs` | LTS-3DPA24 光源控制器 RS-232 通訊：AutoDetect（先試設定 COM 再掃描）、嚴格 probe（PDF §4.1.4 表-4 驗證：8-byte、cmd/ch echo、XOR checksum）、TurnOn/Off/SetBrightness，跟隨 IO Grab 開關 |
 | `UI/Widgets/GrabImageStitcher.cs` | 多張影像垂直拼接 + MergeHorizontal 全域合圖（佈局 xOffset + 重疊中點分界委派 sdk `TanukiCv.Controls.MergeLayout.Compute(Midline)` 單一來源，totalW 保留自家 ALL-slots 含空缺占位版）；LoadCameraImage（internal） |
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/Layout/ProportionalScaler.cs` | WinForms 控制項樹的等比例 layout scaler |
@@ -300,7 +300,7 @@ against current code with `rg` before editing because lookup data can become sta
 | IO 狀態 | `lblIoState` | RoundedLabel | -- → 待機/取像/停止/故障/斷線/關閉/未連線（FSM 運作狀態，非連線燈；已移入 `panelIo` IO 運作區當開頭，與 DIO 燈號同組，皆圓角晶片） |
 | IO 連線狀態 | `lblIoConn` | Label | ● IO: -- |
 | 光源連線狀態 | `lblLightConn` | Label | ● 光源: -- |
-| 儲存電腦連線狀態 | `lblStorageConn` | Label | ● 儲存電腦: -- |
+| 儲存電腦連線狀態 | `lblStorageConn` | Label | TCP 445 + 分享路徑實際可寫才顯示已連線 |
 | IO 燈號 | `lblIoDiAlive~lblIoDoPcBusy` | Label×5 | DI0~DO2 |
 
 ---

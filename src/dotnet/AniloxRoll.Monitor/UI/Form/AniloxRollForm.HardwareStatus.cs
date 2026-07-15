@@ -383,8 +383,8 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         /// <summary>
-        /// 由 TelemetryTimer_Tick 每 500ms 呼叫。光源每 5 秒背景 probe 一次（SerialPort.IsOpen 偵測不到拔線，
-        /// 必須實際送命令驗證）；儲存機每 5 秒背景 probe 一次（UNC Directory.Exists 可能阻塞，不可在 UI thread）。
+        /// 由 TelemetryTimer_Tick 每 500ms 呼叫。光源與儲存機每 2 秒背景 probe 一次；
+        /// SerialPort 與 SMB 分享路徑都必須實際操作驗證，不可只相信 transport 狀態。
         /// </summary>
         private void UpdateConnectionStatusLabels()
         {
@@ -494,7 +494,7 @@ namespace AniloxRoll.Monitor.Forms
                 }
             }
 
-            // 儲存機：每 5 秒背景 probe UNC 路徑
+            // 儲存機：每 2 秒先探 TCP 445，再實際建立/寫入/刪除探針檔。
             if (++_storageProbeTickCounter < StorageProbeIntervalTicks) return;
             _storageProbeTickCounter = 0;
 
@@ -510,8 +510,25 @@ namespace AniloxRoll.Monitor.Forms
             System.Threading.Tasks.Task.Run(() =>
             {
                 bool ok;
-                try { ok = ProbeStorageReachable(path); }
-                catch { ok = false; }
+                try
+                {
+                    bool transportReachable = ProbeStorageTransportReachable(path);
+                    if (transportReachable)
+                    {
+                        ok = _remoteCopyService?.ProbeRemoteWritable() == true;
+                    }
+                    else
+                    {
+                        _remoteCopyService?.ReportRemoteUnavailable("TCP 445 unavailable.");
+                        ok = false;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _remoteCopyService?.ReportRemoteUnavailable(
+                        ex.GetType().Name + ": " + ex.Message);
+                    ok = false;
+                }
                 finally { _storageProbeInFlight = false; }
 
                 if (IsDisposed || Disposing) return;
@@ -529,11 +546,11 @@ namespace AniloxRoll.Monitor.Forms
             SafeBeginInvoke(() => { _storageProbeTickCounter = StorageProbeIntervalTicks; });
         }
 
-        /// <summary>儲存機可達性探測：解析 UNC host 後 TCP 連 445(SMB) port，2s 逾時。
+        /// <summary>儲存機 transport 探測：解析 UNC host 後 TCP 連 445(SMB) port，1s 逾時。
         /// 不用 Directory.Exists —— 拔網路線後 Windows SMB redirector 會把該 server 快取為不可達，
         /// 重插網路線甚至重開程式都恢復不了（"找不到"）。直接 TCP 探測繞過 SMB session 快取，
-        /// 網路一通就立刻恢復綠燈。實際檔案複製仍由 RemoteCopyService 處理。</summary>
-        private static bool ProbeStorageReachable(string uncPath)
+        /// 網路一通後仍須通過 RemoteCopyService 的分享路徑寫入探針才可恢復綠燈。</summary>
+        private static bool ProbeStorageTransportReachable(string uncPath)
         {
             string host = ParseUncHost(uncPath);
             if (string.IsNullOrEmpty(host)) return false;
@@ -555,8 +572,7 @@ namespace AniloxRoll.Monitor.Forms
                 }
                 return false;
             }
-            catch { return false; }
-            finally { try { sock?.Close(); } catch { } }
+            finally { sock?.Dispose(); }
         }
 
         /// <summary>從 UNC 路徑（\\host\share\...）解析出 host。</summary>

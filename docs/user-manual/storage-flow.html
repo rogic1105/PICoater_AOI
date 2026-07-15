@@ -148,13 +148,15 @@ details.subflow > .vflow { padding: 6px 0; }
             padding: 8px 12px; margin: 8px 0; font-size: 0.85em; line-height: 1.6; }
 .bug-box { background: #fce4ec; border: 2px solid #c62828; border-radius: 6px;
            padding: 8px 12px; margin: 8px 0; font-size: 0.85em; line-height: 1.6; }
+.ok-box { background: #e8f5e9; border: 2px solid #2e7d32; border-radius: 6px;
+          padding: 8px 12px; margin: 8px 0; font-size: 0.85em; line-height: 1.6; }
 .decision-tag { display: inline-block; background: #e8f5e9; border: 1px solid #2e7d32;
                 border-radius: 4px; padding: 1px 7px; font-size: 0.8em; color: #1b5e20; margin-left: 4px; }
 </style>
 </head>
 <body>
 <h1>AniloxRoll Monitor — 儲存流程</h1>
-<p class="subtitle">版本：2026-04-30 ｜ 雙機同程式，Config 控制功能開關；無 Timer，事件驅動</p>
+<p class="subtitle">版本：2026-07-15 ｜ 雙機同程式，Config 控制功能開關；遠端複製可斷線復原</p>
 
 <div class="toolbar">
   <button onclick="expandAll()">全部展開</button>
@@ -307,7 +309,7 @@ details.subflow > .vflow { padding: 6px 0; }
       </div>
       <div class="v-arrow"></div>
       <div class="box queue"><code>OnFilesSaved</code> → <code>RemoteCopyService.EnqueueFiles(savedFiles)</code><br>
-        <span class="note">若 RemotePath 空 → 直接 return；佇列無上限，斷線期間持續累積，重連後自動消化</span>
+        <span class="note">若 RemotePath 空 → 直接 return；否則先把待傳標記寫入本機，再交給背景 worker。斷線或程式重開都會保留，重連後自動消化</span>
       </div>
       <div class="v-arrow"></div>
       <div class="box insp">累計已完成幀數 <code>_completedGrabCount++</code><br>
@@ -325,17 +327,15 @@ details.subflow > .vflow { padding: 6px 0; }
   <div class="flow-group">
     <div class="flow-title">佇列項目生命週期</div>
     <div class="fsm-grid">
-      <div><div class="fsm-state s-queue">QUEUED</div><div class="note" style="text-align:center">EnqueueFiles</div></div>
+      <div><div class="fsm-state s-queue">PENDING</div><div class="note" style="text-align:center">本機標記已落盤</div></div>
       <span class="fsm-arrow">→</span>
       <div><div class="fsm-state s-copying">COPYING</div><div class="note" style="text-align:center">worker 取出</div></div>
       <span class="fsm-arrow">→</span>
-      <div><div class="fsm-state s-ok">CONFIRMED</div><div class="note" style="text-align:center">File.Copy 成功<br>= 確認收到</div></div>
-      <span style="color:#9e9e9e;font-size:1.1em;align-self:flex-start;margin-top:6px">|</span>
-      <div><div class="fsm-state s-skip">SKIPPED</div><div class="note" style="text-align:center">本地檔案已被<br>Retention 刪除</div></div>
+      <div><div class="fsm-state s-ok">CONFIRMED</div><div class="note" style="text-align:center">長度驗證 + 原子發布<br>待傳標記已刪除</div></div>
     </div>
     <div class="note" style="margin-top:6px">
-      ★ 被動策略：worker 取出時若 <code>!File.Exists(localPath)</code> → 直接 SKIPPED，不重試。容量優先，偶爾缺失 OK。<br>
-      ★ 佇列無上限：SMB 斷線期間無限累積；重連後 worker 自動處理，此時 File.Exists 過濾已刪檔案。
+      ★ 失敗仍維持 PENDING：2、4、8、16、30 秒退避重試；寫入探針偵測遠端恢復時會立即喚醒 worker。<br>
+      ★ 程式重開會從 <code>.remote-copy-pending</code> 復原；Retention 看到待傳日期資料夾時必須跳過。
     </div>
   </div>
 
@@ -353,38 +353,34 @@ details.subflow > .vflow { padding: 6px 0; }
         <div class="v-branch-path">
           <span class="branch-label yes">有</span>
           <div class="v-arrow"></div>
-          <div class="box insp">取出 LocalPath</div>
+          <div class="box insp">取出持久化的 LocalPath + RelativePath</div>
           <div class="v-arrow"></div>
           <div class="box cond">本地檔案存在？</div>
           <div class="v-branch">
             <div class="v-branch-path">
               <span class="branch-label no">不存在</span>
-              <div class="box warn">SKIPPED（被 Retention 刪除）<br>不重試，直接下一項</div>
+              <div class="box warn">維持 PENDING 並記錄錯誤<br>等待來源復原或人工處理</div>
             </div>
             <div class="v-branch-path">
               <span class="branch-label yes">存在</span>
               <div class="v-arrow"></div>
               <details class="subflow">
-                <summary>File.Copy + 最多 3 次重試</summary>
+                <summary>暫存檔 + 長度驗證 + 原子發布</summary>
                 <div class="vflow">
                   <div class="v-arrow"></div>
                   <div class="box queue"><code>Directory.CreateDirectory(destDir)</code></div>
                   <div class="v-arrow"></div>
-                  <div class="box queue"><code>File.Copy(src, dest, overwrite:true)</code></div>
+                  <div class="box queue"><code>File.Copy(src, dest.part-GUID)</code></div>
                   <div class="v-arrow"></div>
-                  <div class="box cond">成功？</div>
+                  <div class="box cond">來源前後長度與 part 長度一致？</div>
                   <div class="v-branch">
                     <div class="v-branch-path">
-                      <span class="branch-label yes">成功</span>
-                      <div class="box ok">CONFIRMED<br>TotalCopiedFiles++</div>
+                      <span class="branch-label yes">一致</span>
+                      <div class="box ok">Move/Replace 正式檔名<br>刪 pending 標記 → CONFIRMED</div>
                     </div>
                     <div class="v-branch-path">
-                      <span class="branch-label retry">失敗 ≤ 3</span>
-                      <div class="box warn">等 2 秒後重試</div>
-                    </div>
-                    <div class="v-branch-path">
-                      <span class="branch-label no">失敗 3 次</span>
-                      <div class="box warn">TotalFailedFiles++<br>Trace 記錄，繼續下一項</div>
+                      <span class="branch-label retry">失敗</span>
+                      <div class="box warn">刪除 part、保留 pending<br>退避後持續重試</div>
                     </div>
                   </div>
                   <div class="v-arrow"></div>
@@ -399,10 +395,9 @@ details.subflow > .vflow { padding: 6px 0; }
     </div>
   </div>
 
-  <div class="bug-box">
-    🐛 <strong>已知 Bug（待修）</strong>：<code>StorageRetentionService._running</code> 使用 <code>volatile bool</code> 的 check-then-set 不是原子操作。
-    若兩個觸發同時進入會各自通過 <code>if (_running) return</code> 判斷。
-    修法：改用 <code>int _running</code> + <code>Interlocked.CompareExchange(ref _running, 1, 0) != 0</code>。
+  <div class="ok-box">
+    ✓ <code>StorageRetentionService</code> 以 <code>Interlocked.CompareExchange</code> 防止重入；
+    待遠端發布的日期資料夾會被保留。
   </div>
 </div>
 
@@ -454,8 +449,8 @@ details.subflow > .vflow { padding: 6px 0; }
         <div class="v-branch-path">
           <span class="branch-label no">不足</span>
           <div class="v-arrow"></div>
-          <div class="box warn">找最舊日資料夾並刪除 .jpg / .bmp / .bin<br>
-            <span class="note">CSV 永不刪除；空目錄自動移除</span>
+          <div class="box warn">找最舊且沒有待傳檔案的日期資料夾，刪除 .jpg / .bmp / .bin<br>
+            <span class="note">CSV 與遠端 pending 資料永不刪除；空目錄自動移除</span>
           </div>
           <div class="v-arrow"></div>
           <div class="box cond">現在充足？</div>
@@ -501,22 +496,21 @@ details.subflow > .vflow { padding: 6px 0; }
     </div>
   </div>
 
-  <div class="warn-box">
-    ⚠ 競態：Retention 刪除某日檔案時，RemoteCopyService 佇列可能還有那批檔案待傳。
-    策略：空間優先，被動跳過（File.Exists 為 false → SKIPPED）。實際場域中舊資料超過一定時間已無實用價值。
+  <div class="ok-box">
+    ✓ RemoteCopyService 的 pending 路徑是 Retention 的保護來源；尚未確認送達的日期資料夾不參與清理。
   </div>
 </div>
 
 <!-- ===== 6. 連線狀態回報 ===== -->
 <h2 onclick="toggle(this)">6. 連線狀態回報（lblStorageConn）</h2>
 <div class="section">
-  <p class="note" style="margin-bottom:10px">lblStorageConn 已實作（Designer.cs 完整），每 500ms tick → 每 5 秒背景 probe。</p>
+  <p class="note" style="margin-bottom:10px">lblStorageConn 已實作（Designer.cs 完整），每 500ms tick → 每 2 秒背景 probe。</p>
 
   <div class="side-by-side">
     <div class="side-box insp-box">
       <h4>Inspection mode（現行）</h4>
       <ul class="attr-list" style="font-size:0.84em;line-height:2.0">
-        <li>背景 Task：<code>Directory.Exists(RemotePath)</code>（UNC）</li>
+        <li>背景 Task：先探 TCP 445，再於 <code>RemotePath</code> 建立、寫入、flush、刪除唯一探針檔</li>
         <li>連線 → <span style="background:#c8e6c9;padding:1px 6px;border-radius:3px">● 儲存電腦 已連線</span></li>
         <li>離線 → <span style="background:#ffcdd2;padding:1px 6px;border-radius:3px">● 儲存電腦 離線</span></li>
         <li>停用（RemotePath 空）→ <span style="background:#eee;padding:1px 6px;border-radius:3px">● 儲存電腦 停用</span></li>
@@ -544,9 +538,9 @@ details.subflow > .vflow { padding: 6px 0; }
     </thead>
     <tbody>
       <tr><td>每幀本地存檔（jpg / bin）</td><td><span class="tag done">✓ 完成</span></td><td><code>CameraFrameSaver.cs</code></td><td></td></tr>
-      <tr><td>RemoteCopyService（佇列 + File.Copy）</td><td><span class="tag done">✓ 完成</span></td><td><code>RemoteCopyService.cs</code></td><td>Storage mode 不啟動</td></tr>
+      <tr><td>RemoteCopyService（持久佇列 + 原子發布）</td><td><span class="tag done">✓ 完成</span></td><td><code>RemoteCopyService.cs</code></td><td>Storage mode 不啟動；斷線/重開不丟資料</td></tr>
       <tr><td>StorageRetentionService（刪最舊日）</td><td><span class="tag done">✓ 完成</span></td><td><code>StorageRetentionService.cs</code></td><td>Timer 已移除，純事件驅動</td></tr>
-      <tr><td>lblStorageConn UNC probe（Inspection）</td><td><span class="tag done">✓ 完成</span></td><td><code>AniloxRollForm.cs</code></td><td>Storage mode 跳過 probe</td></tr>
+      <tr><td>lblStorageConn TCP + 寫入交握（Inspection）</td><td><span class="tag done">✓ 完成</span></td><td><code>AniloxRollForm.HardwareStatus.cs</code></td><td>實際可寫才亮綠；Storage mode 跳過 probe</td></tr>
       <tr><td>SMB deploy（網路 / 共用）</td><td><span class="tag done">✓ 完成</span></td><td><code>deploy/storage-pc/</code></td><td>已驗證；新增 AniloxConfig 共用</td></tr>
       <tr><td>🐛 _running volatile bool → Interlocked</td><td><span class="tag done">✓ 完成</span></td><td><code>StorageRetentionService.cs</code></td><td>Interlocked.CompareExchange 原子操作</td></tr>
       <tr><td>StorageRetentionService 移除 Timer → 事件觸發</td><td><span class="tag done">✓ 完成</span></td><td><code>StorageRetentionService.cs</code></td><td>移除 Start()/Timer；啟動時 Task.Run 一次</td></tr>

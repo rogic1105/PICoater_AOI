@@ -134,9 +134,13 @@ $guestTokens = @('Guest', '*' + $guestSid, 'Guests', '*S-1-5-32-546')
 
 ## RemoteCopyService（對應程式端）
 
-- `Services/RemoteCopyService.cs` — ConcurrentQueue + 背景執行緒，File.Copy 含 3 次重試、間隔 2 秒
+- `sdk/Bridges/StorageBridge/StorageBridge.Core/RemoteCopyService.cs` — 本機持久 pending 標記 +
+  背景 worker；SMB 斷線持續退避重試，程式重開自動復原，不得固定次數後丟資料
 - `CameraFrameSaver.OnFilesSaved` 回呼 → `EnqueueFiles`
 - 空 `RemotePath` → 靜默略過（不報錯）
+- 遠端發布走同目錄 `.part-*` → 長度驗證 → atomic move/replace；正式檔名不得暴露半檔
+- 綠燈接受條件是 TCP 445 + `RemotePath` 實際 create/write/flush/delete 探針，不是只有 port 通
+- `StorageRetentionService` 必須跳過仍有 pending 檔案的日期資料夾
 - 執行緒優先級 `BelowNormal`，不影響取像
 
 ## 文件同步

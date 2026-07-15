@@ -561,6 +561,15 @@ Tn: ⚠ IO 未連線（開機基線）             ← 首次觀測就不在線�
   `ObjectDisposedException/NullReferenceException` first-chance 例外。
 - **冷開機恢復**：app 先開、IO 後上電不得要求重開 app；Bridge log 第 1 次及每 10 次失敗記
   `IO reconnect pending: attempt N, {TCP unavailable|handshake rejected}`，成功行必帶 attempt。
+- **儲存電腦恢復連線的定義＝TCP 445 + 分享路徑寫入交握全過**：TCP 成功後，必須在
+  `RemotePath` 建立、寫入、flush、刪除唯一探針檔；完成後才可亮綠燈。只有 TCP 成功、路徑不存在、
+  Guest/ACL 無寫入權限都禁止假綠。斷線時每 2 秒重試，app 先開、儲存機後上電不得要求重開 app。
+- **遠端複製不丟資料**：`EnqueueFiles` 必須先在本機 `.remote-copy-pending` 持久化標記才進 worker；
+  複製失敗保持 pending 並退避重試，程式重開從標記復原。禁止恢復「重試固定次數後丟棄」語意。
+- **發布原子性**：遠端先寫同目錄 `.part-*`，確認來源前後長度穩定且遠端長度一致後，再原子
+  move/replace 成正式檔名；正式發布且 pending 標記成功刪除後才算完成。
+- **Retention 保護**：本機日期資料夾含任何 pending 遠端檔案時必須跳過，禁止為了空間清理刪除
+  尚未送達的來源檔。
 - **光源釋放**：SerialPort ownership 必須先在 lock 內從 `_port` 移除，再對 detached instance 單次 Dispose；
   全天 crash log 不得新增 `SerialStream.Finalize → ObjectDisposedException（已關閉安全控制代碼）`。
 - **光源重連防呆**：開機首次偵測 `AutoDetect` 全 port；離線後每 2 秒先 `TryConnect` 設定 COM，
@@ -568,6 +577,17 @@ Tn: ⚠ IO 未連線（開機基線）             ← 首次觀測就不在線�
   工廠現場無法自救，也禁止每輪全掃描造成 SerialPort handle churn。
 - 光源停用（LightEnabled=false）/ 遠端路徑空 → 該項不觀測（靜默合法）。
 - 開機常見「未連線（開機基線）→ 恢復連線」＝平行初始化的正常時序，非異常。
+
+**儲存電腦 trace 判讀**：
+```
+[RemoteCopy] remote share unavailable: ...             ← TCP/路徑/寫入任一層未通
+[RemoteCopy] remote share accepted (write verified)    ← 實際寫入交握通過
+[RemoteCopy] retry pending attempt=N queue=N file=...  ← 保留待傳；第 1 次及每 10 次留痕
+[RemoteCopy] restored pending queue count=N            ← 程式重開復原
+[RemoteCopy] backlog drained: copied=N bytes=N          ← 斷線積壓清空
+```
+狀態轉換：`未排程 --持久標記成功--> 待傳 --複製失敗/重開--> 待傳
+--長度驗證+原子發布+刪標記--> 完成`。任何失敗不得進完成態。
 
 ### H2 相機在線數轉變
 ```

@@ -427,7 +427,9 @@ namespace AniloxRoll.Monitor.Forms
             // 循環儲存（事件驅動：grab 結束 / watchdog / 每 10 grab / 啟動時各觸發一次）
             _retentionService = new StorageRetentionService(
                 getRootPath:     () => GetStorageRetentionRoot(),
-                getMinFreeBytes: () => (long)(_settings?.LocalMinFreeGB ?? 100) * 1024L * 1024L * 1024L);
+                getMinFreeBytes: () => (long)(_settings?.LocalMinFreeGB ?? 100) * 1024L * 1024L * 1024L,
+                shouldPreserveDayFolder: path =>
+                    _remoteCopyService?.HasPendingFilesUnder(path) == true);
 
             if (_appMode?.Role == MachineRole.Storage)
             {

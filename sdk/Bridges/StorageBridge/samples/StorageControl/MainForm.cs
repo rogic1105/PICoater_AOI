@@ -1,6 +1,6 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
-using System.IO;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using StorageBridge.Core;
@@ -9,7 +9,7 @@ namespace StorageBridge.Control
 {
     /// <summary>
     /// 儲存電腦連線測試 GUI。仿 AniloxRoll.Monitor 的 storage 連線檢測：
-    /// 背景 probe 遠端 UNC 路徑 Directory.Exists → 燈號（綠 已連線 / 紅 離線 / 灰 停用），
+    /// 背景 probe 遠端 UNC 路徑實際可寫 → 燈號（綠 已連線 / 紅 離線 / 灰 停用），
     /// 複製測試重用 StorageBridge.Core.RemoteCopyService（主程式同機制）。
     ///
     /// UI 原型用途：未來主程式「儲存設定 / 連線狀態」UI 以此為藍本。
@@ -32,7 +32,8 @@ namespace StorageBridge.Control
         public MainForm()
         {
             Text = "儲存電腦連線測試 (StorageBridge)";
-            try { Icon = System.Drawing.Icon.ExtractAssociatedIcon(System.Windows.Forms.Application.ExecutablePath); } catch { }
+            try { Icon = System.Drawing.Icon.ExtractAssociatedIcon(System.Windows.Forms.Application.ExecutablePath); }
+            catch (Exception ex) { Trace.WriteLine("[StorageControl] Icon: " + ex.Message); }
             Font = new Font("Microsoft JhengHei", 9F);
             ClientSize = new Size(480, 250);
             FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -81,7 +82,7 @@ namespace StorageBridge.Control
             });
         }
 
-        // 背景 probe 遠端 UNC 路徑（同主程式：UNC Directory.Exists 可能阻塞，不可在 UI thread）
+        // 背景 probe 遠端 UNC 路徑（SMB redirector 可能阻塞，不可在 UI thread）
         private void ProbeAsync()
         {
             string path = _txtRemote.Text.Trim();
@@ -90,10 +91,10 @@ namespace StorageBridge.Control
             _probeInFlight = true;
             Task.Run(() =>
             {
-                bool ok;
-                try { ok = Directory.Exists(path); }
-                catch { ok = false; }
-                finally { _probeInFlight = false; }
+                string error;
+                bool ok = RemoteCopyService.TryProbeRemoteWritable(path, out error);
+                if (!ok) Trace.WriteLine("[StorageControl] Probe: " + error);
+                _probeInFlight = false;
                 if (IsDisposed || Disposing) return;
                 try { BeginInvoke(new Action<bool?>(UpdateStatus), (bool?)ok); }
                 catch (InvalidOperationException) { }
