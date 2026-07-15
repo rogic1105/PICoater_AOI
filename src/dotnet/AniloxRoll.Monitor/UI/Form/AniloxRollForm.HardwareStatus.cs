@@ -56,6 +56,7 @@ namespace AniloxRoll.Monitor.Forms
         private void InitLightController()
         {
             if (!_settings.LightEnabled) return;
+            System.Threading.Interlocked.Exchange(ref _lightReconnectAttemptCount, 0);
 
             // AutoDetect 會先試設定 COM，失敗則掃描全部 port —— 這是阻塞數秒的序列埠 IO。
             // 過去直接跑在 UI 執行緒（InitServiceLayer）→ 啟動期間整個視窗拖不動（光源是真正瓶頸，不是相機）。
@@ -333,6 +334,7 @@ namespace AniloxRoll.Monitor.Forms
         private int _storageProbeTickCounter;
         private volatile bool _storageProbeInFlight;
         private int _lightProbeTickCounter;
+        private int _lightReconnectAttemptCount;
         private volatile bool _lightProbeInFlight;
         private bool? _storageLastConnected;   // 最後一次 probe 結果（供每 tick 刷新倒數用）
         private bool _lightProbedOnce;         // 光源初次偵測是否完成（未完成前 label 維持「初始化中」）
@@ -340,7 +342,13 @@ namespace AniloxRoll.Monitor.Forms
         // ── 重連倒數 / probe 排程的單一真實來源（秒數由此推導，不寫死）──────────────
         internal const int TelemetryTickMs = 500;          // = SettingsTabs 的 _telemetryTimer.Interval
         private const int LightProbeIntervalTicks = 4;     // 光源每 4 tick(2s) 背景 probe / 重連一次
+        private const int LightFullScanEveryAttempts = 5;  // 固定 COM 失敗約 10s 後全 port 防呆掃描
         private const int StorageProbeIntervalTicks = 4;   // 儲存每 4 tick(2s) 背景 probe 一次
+
+        internal static bool ShouldRunFullLightPortScan(int reconnectAttempt)
+        {
+            return reconnectAttempt > 0 && reconnectAttempt % LightFullScanEveryAttempts == 0;
+        }
 
         /// <summary>倒數剩餘秒數 = (intervalTicks − 已過 ticks) × tick 間隔，至少 1。</summary>
         private static int CountdownSec(int elapsedTicks, int intervalTicks)
@@ -432,15 +440,22 @@ namespace AniloxRoll.Monitor.Forms
                             if (lc != null && lc.IsConnected)
                             {
                                 // 已連線 → 實測（拔線會被 Probe 偵測，內部關 port）
-                                lc.Probe(channel);
+                                if (lc.Probe(channel))
+                                    System.Threading.Interlocked.Exchange(ref _lightReconnectAttemptCount, 0);
                             }
                             else
                             {
-                                // 未連線 → 嘗試重連（背景 AutoDetect，成功才接管欄位）
+                                // 未連線先快速試設定 COM；連續失敗後定期全掃描，兼顧
+                                // handle churn 與工廠現場 COM 重新編號/設定錯誤的自救能力。
+                                int attempt = System.Threading.Interlocked.Increment(ref _lightReconnectAttemptCount);
+                                bool fullScan = ShouldRunFullLightPortScan(attempt);
                                 var fresh = new LightController();
-                                string found = fresh.AutoDetect(preferredPort, channel);
+                                string found = fullScan
+                                    ? fresh.AutoDetect(preferredPort, channel)
+                                    : (fresh.TryConnect(preferredPort, channel) ? preferredPort : null);
                                 if (found != null && !IsDisposed && !Disposing)
                                 {
+                                    System.Threading.Interlocked.Exchange(ref _lightReconnectAttemptCount, 0);
                                     try
                                     {
                                         BeginInvoke(new Action(() =>

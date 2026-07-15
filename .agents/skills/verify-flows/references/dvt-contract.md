@@ -547,7 +547,25 @@ Tn: ⚠ IO 斷線 ／ IO 恢復連線            ← 光源/儲存電腦 同格�
 Tn: ⚠ IO 未連線（開機基線）             ← 首次觀測就不在線（拔線開機/初始化未完，恢復行會跟著出現）
 ```
 - IO 重連倒數以 `IoGrabController.NextReconnectAtUtc` 為唯一來源，顯示到 `0s` 代表正在嘗試連線；
-  不得在 `1s` 後退回沒有秒數的空白狀態。
+  不得在 `1s` 後退回沒有秒數的空白狀態。`ReconnectIntervalMs` 是 connect 嘗試起點間隔，
+  TCP timeout 必須包含在週期內，不得 timeout 後再重複等待完整週期。
+- **IO 恢復連線的定義＝TCP + 安全交握全過**：`ReconnectTick → ConnectAsync → TryAcceptConnectedModule`
+  必須完成 `EnterIdle`（DO1=0 → DO2=0 → DO0=1，ALIVE 最後發布）及一次合法 `ReadDiStatuses`，之後才可
+  `OnConnectionChanged(true)`；任一步失敗須 Dispose 並維持 Disconnected/CommLost，禁止假綠。
+- **連線狀態 SSoT**：業務層一律讀 `IoGrabController.IsConnected`（accepted gate）；TCP 已接上但交握未過時，
+  `NotifyGrabStarted/Stopped` 與 `NotifyMuraDetected/ClearMura` 必須靜默拒絕，不得用 `_plc.IsConnected` 繞過。
+- **逾時收口**：`SendAndReceive` read/write 逾時先 `ObserveLateFault` 再關 transport；Connect timeout
+  關 socket 後等待 SAEA completion 再釋放 args。全天 crash log 不得新增來源為 ConnectAsync/NetworkStream 的
+  `UnobservedTaskException`。
+  Connect 必須走 `SocketAsyncEventArgs`；debugger 不得再出現晚到 `TcpClient.EndConnect` 的
+  `ObjectDisposedException/NullReferenceException` first-chance 例外。
+- **冷開機恢復**：app 先開、IO 後上電不得要求重開 app；Bridge log 第 1 次及每 10 次失敗記
+  `IO reconnect pending: attempt N, {TCP unavailable|handshake rejected}`，成功行必帶 attempt。
+- **光源釋放**：SerialPort ownership 必須先在 lock 內從 `_port` 移除，再對 detached instance 單次 Dispose；
+  全天 crash log 不得新增 `SerialStream.Finalize → ObjectDisposedException（已關閉安全控制代碼）`。
+- **光源重連防呆**：開機首次偵測 `AutoDetect` 全 port；離線後每 2 秒先 `TryConnect` 設定 COM，
+  每 5 次失敗（約 10 秒）必須 `AutoDetect` 全 port 一次。找到不同 COM 要回寫 SSoT；禁止移除全掃描造成
+  工廠現場無法自救，也禁止每輪全掃描造成 SerialPort handle churn。
 - 光源停用（LightEnabled=false）/ 遠端路徑空 → 該項不觀測（靜默合法）。
 - 開機常見「未連線（開機基線）→ 恢復連線」＝平行初始化的正常時序，非異常。
 

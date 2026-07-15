@@ -33,6 +33,30 @@ sdk/Bridges/IoBridge/
 - **`Services/IoGrabController.cs`**：背景 Modbus 輪詢 loop（Task.Run，不依賴 message pump）。連線時以 DI-1 START 邊緣控制 grab 啟停；未連線退回 UI 按鈕。注入 `IModbusTcpClient`（可 mock 測試）。
 - **`UI/Form/AniloxRollForm.HardwareStatus.cs` `InitIoController()`**：`new IoGrabController(IoModel)` + 接事件（OnStart/Stop/StateChanged/ConnectionChanged/IoUpdated）+ `StartAsync(IoIp, IoPort)` 背景連線。`IoEnabled=false` 時 early-return（不建）。
 
+### 重連可用性定義（不是 TCP connected 就算成功）
+
+```
+ReconnectTick
+  → IcpDasModbusTcpClient.ConnectAsync             // TCP
+  → TryAcceptConnectedModule
+      → EnterIdle                                  // DO1=0 → DO2=0 → DO0=1（ALIVE 最後發布）
+      → ReadDiStatuses                             // 至少一筆合法 Modbus DI 回應
+  → OnConnectionChanged(true)                     // 兩關都過才發布綠燈
+```
+- read/write 逾時：立即關 socket，晚到 NetworkStream task 必由 `ObserveLateFault` 收走；不得進 process-wide
+  `UnobservedTaskException`。`.NET Framework` 的 NetworkStream async 無可用 cancellation token，故以 close+observe 收口。
+- connect 使用 `SocketAsyncEventArgs`，不得退回 `TcpClient.ConnectAsync` + timeout Close；後者在 .NET Framework
+  會讓晚到 `TcpClient.EndConnect` 產生 first-chance `ObjectDisposedException/NullReferenceException`。Connect timeout
+  關 socket 後須等 SAEA completion，再解除事件並 Dispose args。
+- `Dispose` 會遞增 transport generation；進行中的 connect 即使晚到成功也不得重新發布 socket（切 IP/關程式競態）。
+- `IoGrabController.IsConnected` 是安全交握完成後的 accepted gate；抓取/MURA 業務輸出一律讀這個狀態，
+  不得直接用底層 `_plc.IsConnected`。底層狀態只供 transport 生命週期（背景 poll/reconnect 與停止清輸出）使用。
+- app 先開、IO 後上電必須能自行恢復，不得要求重開 app。`IoBridge_*.log` 於第 1 次及每 10 次失敗留下
+  `IO reconnect pending`，成功行帶 attempt；其餘輪次靜默，兼顧可診斷性與全天 log 量。
+- `ReconnectIntervalMs` 定義為兩次 connect **起點**的間隔；TCP timeout 已算在週期內，不得 timeout 後再等完整週期
+  （否則 UI 顯示 3s、實際最差 6s，會造成重開 app 反而較快的假象）。
+- 不用 exponential backoff：單一區網設備恢復後要快速接回；既有 `500ms poll / 3s retry` 保留，可靠性靠生命週期與交握，不靠更密集重試。
+
 ## ★ IO 設定改完「立即生效」流程（不用重開程式）
 
 改 **IO IP / Port / 型號 / 啟用** 在 PropertyGrid → 走 SSoT：
@@ -59,3 +83,6 @@ SettingsHub.Changed → AniloxRollForm.OnSettingChanged(c)
 ## Build
 
 一律 `Release|x64`。`sdk/Bridges/IoBridge/*.sln` 或主 `PICoater_AOI.sln`（已收四個 IoBridge sample 含 IoSimulator）。`.Core` 輸出位置不可改（共用 bin 是刻意設計）。
+
+重連變更至少跑：Unit `IoGrabControllerTests`、Integration `IcpDasModbusTcpClientIntegrationTests`
+（含 app 先開/server 延後上線）、Stress category `BridgeStress`（真 socket 對端斷線/重連 100 輪）。

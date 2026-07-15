@@ -18,36 +18,48 @@ namespace LightBridge.Core
         private SerialPort _port;
         private readonly object _lock = new object();
 
-        public bool IsConnected => _port != null && _port.IsOpen;
+        public bool IsConnected
+        {
+            get
+            {
+                lock (_lock)
+                    return _port != null && _port.IsOpen;
+            }
+        }
 
         /// <summary>連線成功後記錄實際使用的 COM port（可能與 settings 不同，由 AutoDetect 決定）。</summary>
         public string ActiveComPort { get; private set; }
 
         public bool Connect(string comPort)
         {
+            SerialPort candidate = null;
+            SerialPort previous = null;
             lock (_lock)
             {
                 try
                 {
-                    if (_port != null && _port.IsOpen)
-                        _port.Close();
-
-                    _port = new SerialPort(comPort, BaudRate, Parity.None, 8, StopBits.One)
+                    candidate = new SerialPort(comPort, BaudRate, Parity.None, 8, StopBits.One)
                     {
                         ReadTimeout = ResponseTimeoutMs,
                         WriteTimeout = ResponseTimeoutMs
                     };
-                    _port.Open();
+                    candidate.Open();
+                    previous = _port;
+                    _port = candidate;
+                    candidate = null;
                     ActiveComPort = comPort;
                     Trace.WriteLine($"[LightController] Connected: {comPort}");
-                    return true;
                 }
                 catch (Exception ex)
                 {
                     Trace.WriteLine($"[LightController] Connect failed: {ex.Message}");
+                    DisposePort(candidate);
                     return false;
                 }
             }
+
+            DisposePort(previous);
+            return true;
         }
 
         /// <summary>
@@ -131,27 +143,28 @@ namespace LightBridge.Core
 
                 if (!ValidateReadResponse(buf, read, channel, out readBrightness))
                 {
-                    tmp.Close();
-                    tmp.Dispose();
+                    DisposePort(tmp);
                     return false;
                 }
 
                 // 驗證通過 → 取代當前連線
+                SerialPort previous;
                 lock (_lock)
                 {
-                    if (_port != null && _port.IsOpen) _port.Close();
+                    previous = _port;
                     _port = tmp;
+                    tmp = null;
                     _port.ReadTimeout = ResponseTimeoutMs;
                     _port.WriteTimeout = ResponseTimeoutMs;
                     ActiveComPort = comPort;
                 }
+                DisposePort(previous);
                 return true;
             }
             catch (Exception ex)
             {
                 Trace.WriteLine($"[LightController] Probe {comPort} failed: {ex.GetType().Name}");
-                try { tmp?.Close(); } catch { }
-                tmp?.Dispose();
+                DisposePort(tmp);
                 return false;
             }
         }
@@ -189,6 +202,7 @@ namespace LightBridge.Core
             // 直接跳過這輪，避免與取像期間的光源開關操作競爭（不影響取像時序）
             if (!System.Threading.Monitor.TryEnter(_lock, 0))
                 return true;
+            SerialPort failed = null;
             try
             {
                 if (_port == null || !_port.IsOpen) return false;
@@ -215,34 +229,30 @@ namespace LightBridge.Core
                     Trace.WriteLine($"[LightController] Probe error: {ex.Message}");
                 }
 
-                // 回應不符或 I/O 例外 → 視為斷線，關閉 port
-                try { _port.Close(); } catch { }
+                // 回應不符或 I/O 例外 → 視為斷線。先清欄位再釋放，
+                // 其他執行緒不會再取得同一個 SerialPort ownership。
+                failed = _port;
+                _port = null;
+                ActiveComPort = null;
                 return false;
             }
             finally
             {
                 System.Threading.Monitor.Exit(_lock);
+                DisposePort(failed);
             }
         }
 
         public void Disconnect()
         {
+            SerialPort detached;
             lock (_lock)
             {
-                try
-                {
-                    if (_port != null && _port.IsOpen)
-                        _port.Close();
-                }
-                catch (Exception ex)
-                {
-                    Trace.WriteLine($"[LightController] Disconnect error: {ex.Message}");
-                }
-                finally
-                {
-                    ActiveComPort = null;
-                }
+                detached = _port;
+                _port = null;
+                ActiveComPort = null;
             }
+            DisposePort(detached);
         }
 
         /// <summary>設定亮度並開啟通道。</summary>
@@ -366,7 +376,16 @@ namespace LightBridge.Core
         public void Dispose()
         {
             Disconnect();
-            _port?.Dispose();
+        }
+
+        private static void DisposePort(SerialPort port)
+        {
+            if (port == null) return;
+            try { port.Dispose(); }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"[LightController] Dispose error: {ex.Message}");
+            }
         }
     }
 }

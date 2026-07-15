@@ -43,9 +43,11 @@ namespace AniloxRoll.Monitor.Core.Services
         private bool _doPcAlive;
         private bool _doMura;
         private bool _doPcBusy;
+        private int _connectionAccepted;
+        private int _reconnectAttemptCount;
 
-        /// <summary>IO module 是否已連線。</summary>
-        public bool IsConnected => _plc.IsConnected;
+        /// <summary>IO module 已完成 TCP + safe-output + DI handshake。</summary>
+        public bool IsConnected => Volatile.Read(ref _connectionAccepted) == 1 && _plc.IsConnected;
 
         /// <summary>目前 FSM 狀態。</summary>
         public IoState CurrentState => _currentState;
@@ -70,6 +72,11 @@ namespace AniloxRoll.Monitor.Core.Services
                 long t = System.Threading.Interlocked.Read(ref _nextReconnectAtTicksUtc);
                 return t == 0 ? (DateTime?)null : new DateTime(t, DateTimeKind.Utc);
             }
+        }
+
+        internal static int CalculateReconnectDelayMs(int intervalMs, int elapsedMs)
+        {
+            return Math.Max(0, intervalMs - Math.Max(0, elapsedMs));
         }
 
         /// <summary>讀寫逾時（ms）。調小 → 斷線偵測更快（健康設備回應 &lt;100ms，故可安全縮短）。</summary>
@@ -118,18 +125,19 @@ namespace AniloxRoll.Monitor.Core.Services
         /// <summary>啟動：嘗試連線 IO module，不論成功失敗都啟動背景 loop（自動重連 + poll）。</summary>
         public async Task StartAsync(string ip, int port = 502)
         {
+            Volatile.Write(ref _connectionAccepted, 0);
+            Interlocked.Exchange(ref _reconnectAttemptCount, 0);
             _plcIp = ip;
             _plcPort = port;
 
-            bool ok = await _plc.ConnectAsync(ip, port, 3000);
-            if (ok)
+            bool tcpConnected = await _plc.ConnectAsync(ip, port, 3000);
+            bool accepted = tcpConnected && await TryAcceptConnectedModule("initial", IoState.Disconnected);
+            if (accepted)
             {
-                try { await EnterIdle(); }
-                catch (Exception ex) { IoLogger.Error("EnterIdle on initial connect failed", ex); }
                 OnConnectionChanged?.Invoke(true);
                 IoLogger.Info($"IO module connected: {ip}:{port}");
             }
-            else
+            else if (!tcpConnected)
             {
                 IoLogger.Warn($"IO module initial connect failed ({ip}:{port}), background loop will retry every {ReconnectIntervalMs}ms.");
             }
@@ -157,13 +165,17 @@ namespace AniloxRoll.Monitor.Core.Services
                     }
                     else
                     {
+                        DateTime attemptStartedUtc = DateTime.UtcNow;
                         await ReconnectTick();
                         if (!_plc.IsConnected)
                         {
-                            // 記錄下次重連時刻供 UI 倒數（單一真實來源 = ReconnectIntervalMs）
+                            // ReconnectIntervalMs 是「兩次嘗試起點」的週期。ConnectAsync 本身可能
+                            // 已等待數秒，不可在它後面再完整 delay 一次，否則 3s 設定會變成最差 6s。
+                            int elapsedMs = (int)(DateTime.UtcNow - attemptStartedUtc).TotalMilliseconds;
+                            int delayMs = CalculateReconnectDelayMs(ReconnectIntervalMs, elapsedMs);
                             System.Threading.Interlocked.Exchange(ref _nextReconnectAtTicksUtc,
-                                DateTime.UtcNow.AddMilliseconds(ReconnectIntervalMs).Ticks);
-                            try { await Task.Delay(ReconnectIntervalMs, ct); } catch (OperationCanceledException) { break; }
+                                DateTime.UtcNow.AddMilliseconds(delayMs).Ticks);
+                            try { await Task.Delay(delayMs, ct); } catch (OperationCanceledException) { break; }
                         }
                     }
                 }
@@ -179,6 +191,7 @@ namespace AniloxRoll.Monitor.Core.Services
         /// <summary>停止：清除所有 DO、斷線、停止背景 loop。</summary>
         public async Task StopAsync()
         {
+            Volatile.Write(ref _connectionAccepted, 0);
             _bgCts?.Cancel();
             if (_bgTask != null)
             {
@@ -207,7 +220,7 @@ namespace AniloxRoll.Monitor.Core.Services
         /// <summary>通知 IO：Grab 已開始（PC BUSY = High）。</summary>
         public async Task NotifyGrabStarted()
         {
-            if (!_plc.IsConnected) return;
+            if (!IsConnected) return;
             try
             {
                 await _plc.WriteDo(DO_PC_INSPECT, true);
@@ -219,7 +232,7 @@ namespace AniloxRoll.Monitor.Core.Services
         /// <summary>通知 IO：Grab 已停止（PC BUSY = Low）。</summary>
         public async Task NotifyGrabStopped()
         {
-            if (!_plc.IsConnected) return;
+            if (!IsConnected) return;
             try
             {
                 await _plc.WriteDo(DO_PC_INSPECT, false);
@@ -231,7 +244,7 @@ namespace AniloxRoll.Monitor.Core.Services
         /// <summary>通知 IO：檢測到 MURA（MURA = High）。</summary>
         public async Task NotifyMuraDetected()
         {
-            if (!_plc.IsConnected) return;
+            if (!IsConnected) return;
             try
             {
                 await _plc.WriteDo(DO_MURA_DETECTED, true);
@@ -243,7 +256,7 @@ namespace AniloxRoll.Monitor.Core.Services
         /// <summary>通知 IO：清除 MURA 信號（MURA = Low）。</summary>
         public async Task ClearMura()
         {
-            if (!_plc.IsConnected) return;
+            if (!IsConnected) return;
             try
             {
                 await _plc.WriteDo(DO_MURA_DETECTED, false);
@@ -256,15 +269,47 @@ namespace AniloxRoll.Monitor.Core.Services
 
         private async Task EnterIdle()
         {
-            await _plc.WriteDo(DO_PC_ALIVE, true);
-            _isPcAlive = true;
-            _doPcAlive = true;
+            // Clear business outputs before publishing PC ALIVE. A reconnect may
+            // inherit stale remote coils from the previous transport session.
             await _plc.WriteDo(DO_MURA_DETECTED, false);
             _doMura = false;
             await _plc.WriteDo(DO_PC_INSPECT, false);
             _doPcBusy = false;
+            await _plc.WriteDo(DO_PC_ALIVE, true);
+            _isPcAlive = true;
+            _doPcAlive = true;
             _lastDiStart = false;
-            SetState(IoState.Idle);
+        }
+
+        /// <summary>
+        /// TCP connected is not enough: publish connected only after safe DO initialization
+        /// and one valid Modbus DI response. DI values are not consumed here, so a held-high
+        /// START still becomes a rising edge on the next PollTick.
+        /// </summary>
+        private async Task<bool> TryAcceptConnectedModule(string phase, IoState failureState)
+        {
+            try
+            {
+                await EnterIdle();
+                bool[] di = await _plc.ReadDiStatuses();
+                if (di == null || di.Length < 2)
+                    throw new InvalidOperationException("Handshake returned an invalid DI response");
+                Volatile.Write(ref _connectionAccepted, 1);
+                SetState(IoState.Idle);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                IoLogger.Error($"IO {phase} handshake failed; connection rejected", ex);
+                _isPcAlive = false;
+                _doPcAlive = false;
+                _doMura = false;
+                _doPcBusy = false;
+                Volatile.Write(ref _connectionAccepted, 0);
+                _plc.Dispose();
+                SetState(failureState);
+                return false;
+            }
         }
 
         private void SetState(IoState state)
@@ -364,6 +409,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 _doPcAlive = false;
                 _doMura = false;
                 _doPcBusy = false;
+                Volatile.Write(ref _connectionAccepted, 0);
                 OnConnectionChanged?.Invoke(false);
                 OnStopRequested?.Invoke();
                 FireIoSnapshot(false, false);
@@ -374,19 +420,36 @@ namespace AniloxRoll.Monitor.Core.Services
 
         internal async Task ReconnectTick()
         {
-            bool ok = await _plc.ConnectAsync(_plcIp, _plcPort, 3000);
-            if (ok)
+            Volatile.Write(ref _connectionAccepted, 0);
+            int attempt = Interlocked.Increment(ref _reconnectAttemptCount);
+            bool tcpConnected = await _plc.ConnectAsync(_plcIp, _plcPort, 3000);
+            bool accepted = false;
+            if (tcpConnected)
             {
-                IoLogger.Info("IO module reconnected successfully.");
-                try { await EnterIdle(); }
-                catch (Exception ex) { IoLogger.Error("EnterIdle after reconnect failed", ex); }
-                OnConnectionChanged?.Invoke(true);
+                IoState failureState = _currentState == IoState.Disconnected
+                    ? IoState.Disconnected
+                    : IoState.CommLost;
+                accepted = await TryAcceptConnectedModule("reconnect", failureState);
+                if (accepted)
+                {
+                    Interlocked.Exchange(ref _nextReconnectAtTicksUtc, 0);
+                    Interlocked.Exchange(ref _reconnectAttemptCount, 0);
+                    IoLogger.Info($"IO module reconnected and handshake verified (attempt {attempt}).");
+                    OnConnectionChanged?.Invoke(true);
+                }
+            }
+
+            if (!accepted && (attempt == 1 || attempt % 10 == 0))
+            {
+                string stage = tcpConnected ? "handshake rejected" : "TCP unavailable";
+                IoLogger.Warn($"IO reconnect pending: attempt {attempt}, {stage} ({_plcIp}:{_plcPort}).");
             }
             // 失敗時不做任何事，BackgroundLoop 會 Task.Delay(ReconnectIntervalMs) 後再次呼叫。
         }
 
         public void Dispose()
         {
+            Volatile.Write(ref _connectionAccepted, 0);
             _bgCts?.Cancel();
             _bgCts?.Dispose();
             _plc.Dispose();

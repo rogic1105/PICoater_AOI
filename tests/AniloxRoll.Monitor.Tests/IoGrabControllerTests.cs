@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Moq;
 using NUnit.Framework;
@@ -14,6 +15,7 @@ namespace AniloxRoll.Monitor.Tests
         private Mock<IModbusTcpClient> _mockPlc;
         private IoGrabController _ctrl;
         private List<IoState> _stateLog;
+        private List<bool> _connectionLog;
         private int _startCount;
         private int _stopCount;
 
@@ -23,15 +25,19 @@ namespace AniloxRoll.Monitor.Tests
             _mockPlc = new Mock<IModbusTcpClient>();
             _mockPlc.SetupProperty(p => p.ReadWriteTimeoutMs, 2000);
             _mockPlc.Setup(p => p.WriteDo(It.IsAny<int>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
+            _mockPlc.Setup(p => p.ReadDiStatuses())
+                .ReturnsAsync(new bool[] { true, false, false, false, false, false, false, false });
 
             _ctrl = new IoGrabController(_mockPlc.Object);
             // 關閉背景 loop，避免跟手動 PollTick / ReconnectTick race（純單元測試模式）
             _ctrl.AutoBackgroundLoop = false;
             _stateLog = new List<IoState>();
+            _connectionLog = new List<bool>();
             _startCount = 0;
             _stopCount = 0;
 
             _ctrl.OnStateChanged += s => _stateLog.Add(s);
+            _ctrl.OnConnectionChanged += connected => _connectionLog.Add(connected);
             _ctrl.OnStartRequested += () => _startCount++;
             _ctrl.OnStopRequested += () => _stopCount++;
         }
@@ -55,10 +61,19 @@ namespace AniloxRoll.Monitor.Tests
         {
             _mockPlc.Setup(p => p.ConnectAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>()))
                 .ReturnsAsync(true);
+            _mockPlc.Setup(p => p.IsConnected).Returns(true);
 
             await _ctrl.StartAsync("192.168.255.1");
             Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Idle));
+            Assert.That(_ctrl.IsConnected, Is.True);
             Assert.That(_stateLog, Does.Contain(IoState.Idle));
+            Assert.That(_connectionLog, Is.EqualTo(new[] { true }));
+            _mockPlc.Verify(p => p.ReadDiStatuses(), Times.Once);
+            string[] handshakeWrites = _mockPlc.Invocations
+                .Where(i => i.Method.Name == nameof(IModbusTcpClient.WriteDo))
+                .Select(i => $"{i.Arguments[0]}={i.Arguments[1]}")
+                .ToArray();
+            Assert.That(handshakeWrites, Is.EqualTo(new[] { "1=False", "2=False", "0=True" }));
         }
 
         [Test]
@@ -69,6 +84,27 @@ namespace AniloxRoll.Monitor.Tests
 
             await _ctrl.StartAsync("192.168.255.1");
             Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Disconnected));
+        }
+
+        [Test]
+        public async Task StartAsync_HandshakeReadFails_RejectsConnection()
+        {
+            _mockPlc.Setup(p => p.ConnectAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>()))
+                .ReturnsAsync(true);
+            _mockPlc.Setup(p => p.ReadDiStatuses())
+                .ThrowsAsync(new TimeoutException("Handshake read timeout"));
+
+            await _ctrl.StartAsync("192.168.255.1");
+
+            Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Disconnected));
+            Assert.That(_ctrl.IsConnected, Is.False);
+            Assert.That(_connectionLog, Does.Not.Contain(true));
+            _mockPlc.Verify(p => p.Dispose(), Times.Once);
+
+            await _ctrl.NotifyGrabStarted();
+            await _ctrl.NotifyMuraDetected();
+            _mockPlc.Verify(p => p.WriteDo(2, true), Times.Never);
+            _mockPlc.Verify(p => p.WriteDo(1, true), Times.Never);
         }
 
         // ── START 上升/下降緣 ──
@@ -161,14 +197,28 @@ namespace AniloxRoll.Monitor.Tests
 
         // ── ReconnectTick ──
 
+        [TestCase(3000, 0, 3000)]
+        [TestCase(3000, 750, 2250)]
+        [TestCase(3000, 3000, 0)]
+        [TestCase(3000, 4500, 0)]
+        public void CalculateReconnectDelayMs_IncludesConnectTimeInPeriod(
+            int intervalMs, int elapsedMs, int expectedMs)
+        {
+            Assert.That(IoGrabController.CalculateReconnectDelayMs(intervalMs, elapsedMs),
+                Is.EqualTo(expectedMs));
+        }
+
         [Test]
         public async Task ReconnectTick_Success_EntersIdle()
         {
             _mockPlc.Setup(p => p.ConnectAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>()))
                 .ReturnsAsync(true);
+            _mockPlc.Setup(p => p.IsConnected).Returns(true);
 
             await _ctrl.ReconnectTick();
             Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Idle));
+            Assert.That(_ctrl.IsConnected, Is.True);
+            Assert.That(_connectionLog, Is.EqualTo(new[] { true }));
         }
 
         [Test]
@@ -182,12 +232,29 @@ namespace AniloxRoll.Monitor.Tests
             Assert.That(_ctrl.CurrentState, Is.Not.EqualTo(IoState.Idle));
         }
 
+        [Test]
+        public async Task ReconnectTick_HandshakeReadFails_DoesNotSignalConnected()
+        {
+            _mockPlc.Setup(p => p.ConnectAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>()))
+                .ReturnsAsync(true);
+            _mockPlc.Setup(p => p.ReadDiStatuses())
+                .ThrowsAsync(new TimeoutException("Handshake read timeout"));
+
+            await _ctrl.ReconnectTick();
+
+            Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Disconnected));
+            Assert.That(_connectionLog, Does.Not.Contain(true));
+            _mockPlc.Verify(p => p.Dispose(), Times.Once);
+        }
+
         // ── DO 通知 ──
 
         [Test]
         public async Task NotifyGrabStarted_WritesDoPcInspect()
         {
-            _mockPlc.Setup(p => p.IsConnected).Returns(true);
+            await ConnectAndEnterIdle();
+            _mockPlc.Invocations.Clear();
+
             await _ctrl.NotifyGrabStarted();
             _mockPlc.Verify(p => p.WriteDo(2, true), Times.Once);
         }
@@ -195,7 +262,9 @@ namespace AniloxRoll.Monitor.Tests
         [Test]
         public async Task NotifyMuraDetected_WritesMuraDetected()
         {
-            _mockPlc.Setup(p => p.IsConnected).Returns(true);
+            await ConnectAndEnterIdle();
+            _mockPlc.Invocations.Clear();
+
             await _ctrl.NotifyMuraDetected();
             _mockPlc.Verify(p => p.WriteDo(1, true), Times.Once);
         }
@@ -203,7 +272,9 @@ namespace AniloxRoll.Monitor.Tests
         [Test]
         public async Task ClearMura_WritesMuraDetectedLow()
         {
-            _mockPlc.Setup(p => p.IsConnected).Returns(true);
+            await ConnectAndEnterIdle();
+            _mockPlc.Invocations.Clear();
+
             await _ctrl.ClearMura();
             _mockPlc.Verify(p => p.WriteDo(1, false), Times.Once);
         }
