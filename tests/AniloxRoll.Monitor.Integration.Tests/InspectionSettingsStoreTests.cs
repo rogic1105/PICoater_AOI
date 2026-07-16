@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using NUnit.Framework;
 using AniloxRoll.Monitor.Core.Data;
+using TanukiCv.Controls;
 
 namespace AniloxRoll.Monitor.Tests
 {
@@ -66,6 +67,14 @@ namespace AniloxRoll.Monitor.Tests
 
             Assert.That(loaded.BackgroundSampleSeconds, Is.EqualTo(4));
             Assert.That(loaded.GrabLimitSeconds, Is.EqualTo(17));
+        }
+
+        [Test]
+        public void Load_WhenConfigIsMissing_DefaultsMainDisplayToWaterfall()
+        {
+            var loaded = InspectionSettingsStore.Load();
+
+            Assert.That(loaded.he_MainDisplay, Is.EqualTo(MainDisplayMode.Waterfall));
         }
     }
 }

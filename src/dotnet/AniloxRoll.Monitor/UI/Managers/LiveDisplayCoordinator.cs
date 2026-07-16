@@ -20,7 +20,6 @@ namespace AniloxRoll.Monitor.UI.Managers
         private readonly Form _mainForm;
         private readonly Panel _mainDisplayPanel;
         private readonly Panel[] _cameraPanels;
-        private readonly Action<string> _updatePixelInfoCallback;
         private readonly GlobalMergeCoordinator _globalMerge;
         private readonly GpuGrayResizeProvider _gpuResizeProvider;
         private readonly Func<IReadOnlyList<AniloxCamera>> _getCameras;
@@ -98,7 +97,6 @@ namespace AniloxRoll.Monitor.UI.Managers
             Form mainForm,
             Panel[] cameraPanels,
             Panel mainDisplayPanel,
-            Action<string> updatePixelInfoCallback,
             GlobalMergeCoordinator globalMerge,
             Func<IReadOnlyList<AniloxCamera>> getCameras,
             Func<InspectionSettings> getSettings,
@@ -108,7 +106,6 @@ namespace AniloxRoll.Monitor.UI.Managers
             _mainForm = mainForm;
             _cameraPanels = cameraPanels ?? throw new ArgumentNullException(nameof(cameraPanels));
             _mainDisplayPanel = mainDisplayPanel ?? throw new ArgumentNullException(nameof(mainDisplayPanel));
-            _updatePixelInfoCallback = updatePixelInfoCallback;
             _globalMerge = globalMerge ?? throw new ArgumentNullException(nameof(globalMerge));
             _getCameras = getCameras ?? throw new ArgumentNullException(nameof(getCameras));
             _getSettings = getSettings ?? throw new ArgumentNullException(nameof(getSettings));
@@ -253,7 +250,6 @@ namespace AniloxRoll.Monitor.UI.Managers
             _waterfallView.SetRowPitch(RowPitchMm);
             _waterfallView.SelectRequested += OnWaterfallSelectRequested;
             _waterfallView.ViewRangeMmChanged += OnImageViewRange;
-            _waterfallView.CursorStatusChanged += OnImageCursorStatus;
             _waterfallView.CenterCamChanged += OnWaterfallCenterCam;   // 主畫面 pan → 縮圖橘框跟隨（反向連動）
             _waterfallView.FlowLog = s => Flow("WF " + s);             // 互動 intent（wheel 等）
 
@@ -300,7 +296,6 @@ namespace AniloxRoll.Monitor.UI.Managers
             foreach (var cam in Cameras) cam.OnDisplayFrame -= OnCameraWaterfallFrame;
             _waterfallView.SelectRequested -= OnWaterfallSelectRequested;
             _waterfallView.ViewRangeMmChanged -= OnImageViewRange;
-            _waterfallView.CursorStatusChanged -= OnImageCursorStatus;
             _waterfallView.CenterCamChanged -= OnWaterfallCenterCam;
             _waterfallView.Dispose();
             _waterfallView = null;
@@ -355,7 +350,6 @@ namespace AniloxRoll.Monitor.UI.Managers
             };
             _imageDisplay.FlowLog = s => Flow("IC " + s);   // 互動 intent + autoFit 原因（誰在動視野）
             _imageDisplay.ViewRangeMmChanged += OnImageViewRange;
-            _imageDisplay.CursorStatusChanged += OnImageCursorStatus;
             _imageDisplay.SetSelected(_selectedMainCameraId);
 
             if (_globalMerge.IsActive && _globalMerge.Merger != null)
@@ -503,13 +497,6 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         private void OnImageViewRange(double leftMm, double rightMm, double topMm, double botMm)
             => OnLiveViewRange?.Invoke(leftMm, rightMm, topMm, botMm);
-
-        private void OnImageCursorStatus(ImageDisplayView.CursorStatus s)
-        {
-            if (_updatePixelInfoCallback == null) return;
-            string tag = _globalMerge.IsActive ? "全域合圖" : $"CAM {s.SelectedCamId}";
-            _updatePixelInfoCallback.Invoke(CursorStatusTextFormatter.Format(s, tag));
-        }
 
         public void SwitchMainDisplay(int cameraIndex) => SwitchMainDisplay(cameraIndex, centerView: false);
 

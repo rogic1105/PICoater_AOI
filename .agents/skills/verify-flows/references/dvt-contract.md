@@ -203,6 +203,7 @@ AutoAllocateCameras(Form)                    顯示基線 set:[顯示基線] 一
 （背景）CLProtocol 全就緒 → OnHwReady → 解鎖 grab 鈕 + EnableGlobalMerge（佈局=MergeLayout 唯一來源）
 ```
 單一決策點：顯示狀態=f(he_MainDisplay, 背景預覽靜音鍵)——ApplyMainDisplayMode 唯一計算點（F8）；方向=ShouldFlipVertical。
+設定契約：新生成設定或 JSON 缺少 `MainDisplay` 時預設 `Waterfall`；既有 JSON 的明確值優先，不做遷移覆寫。
 不變量：view 建立前必 teardown（防空訂閱家族）；MdispSelectWindow 必帶 panelHandle 守門。
 
 ### F2 開始抓取（btnLiveGrab，已配置）
@@ -408,11 +409,13 @@ OnMouseMove@ImageCanvas.cs（拖曳中；UI 執行緒 T1）
        （圖片跟手但 curve 只在 MouseUp 動＝首發被 hover 共用節流窗吃掉；2026-07-13 修）
 即時分支：OnCanvasStatus@ImageDisplayView.cs
  ├ PixelMmMapper 換算＋VerticalZeroAtBottom 鏡射    ← 轉換點#3（各邊映自己的值，勿交叉——2026-07-08 邊界方向錯根因）
+ ├ SetRangeOverlay＋SetCursorMm@ImageCanvas.cs → DrawOverlays
+ │  → 滑鼠旁顯示位置 mm＋目前顯示像素亮度；四邊顯示視野範圍、右下顯示實體倍率
+ │    （游標固定 `(x, y)mm | 亮度:N`；LOD 從目前 tile 取亮度；`lblInfo` 不接游標事件；文字以實際尺寸失效舊/新區域，不得留下移動殘影）
  ├ ViewRangeMmChanged 事件 → OnImageViewRange@LiveDisplayCoordinator.cs → OnLiveViewRange 事件
  │  → ApplyLiveViewRange@AniloxRollForm.Live.cs      ⚠ 勿節流此連動（三次教訓：拖曳中曲線必須逐事件跟隨）
  │     ├ SetViewRange@RowCurveSyncCoordinator.cs → RowCurveDisplayAdapter → RowCurveChartHelper（列 chart Y zoom＝轉換點#4/#5）
  │     └ UpdateViewRange@ColumnCurveChartHelper（欄全覽 X zoom；首次就緒→LiveOverviewTimer_Tick 原子畫一次不閃）
- ├ CursorStatusChanged 事件 → OnImageCursorStatus@LiveDisplayCoordinator.cs → lblPixelInfo（狀態列）
  └ UpdateReverseThumbSync@ImageDisplayView.cs → SelectedCamChanged 事件
     → handler（EnsureImageDisplay 內）@LiveDisplayCoordinator.cs → Flow "centerCam → camX（IC）"
 瀑布分支：OnCanvasStatus@WaterfallView.cs
@@ -420,7 +423,7 @@ OnMouseMove@ImageCanvas.cs（拖曳中；UI 執行緒 T1）
  │  →（同上）ApplyLiveViewRange@AniloxRollForm.Live.cs
  ├ UpdateCenterCam@WaterfallView.cs → CenterCamChanged 事件 → OnWaterfallCenterCam@LiveDisplayCoordinator.cs
  │  → SetSelected@ThumbStrip.cs＋Flow "centerCam → camX（WF）"（程式化來源，不回頭置中防遞迴）
- └ CursorStatusChanged 事件 → OnImageCursorStatus@LiveDisplayCoordinator.cs（同上）
+ └ SetRangeOverlay＋SetCursorMm@ImageCanvas.cs → DrawOverlays（同上，含 LOD tile 亮度）
 補刷保險（快拖事件合併不跳格）：
  即時：_timer(33ms) → RefreshMain@ImageDisplayView.cs 開頭 UpdateReverseThumbSync
  瀑布：_flushTimer(30ms)@WaterfallView.cs → UpdateCenterCam
@@ -543,8 +546,10 @@ T1: bgPreview push camN WxH（view=True）× 有 bin 的台數
 
 ### H1 IO / 光源 / 儲存電腦 連線轉變
 ```
-Tn: ⚠ IO 斷線 ／ IO 恢復連線            ← 光源/儲存電腦 同格式
+Tn: ⚠ IO 斷線 ／ IO 恢復連線            ← 光源/儲存分享 同格式
 Tn: ⚠ IO 未連線（開機基線）             ← 首次觀測就不在線（拔線開機/初始化未完，恢復行會跟著出現）
+Tn: 儲存程式 heartbeat 恢復 pid=N age=Ns
+Tn: ⚠ 儲存程式 heartbeat 未回報 reason=…
 ```
 - IO 重連倒數以 `IoGrabController.NextReconnectAtUtc` 為唯一來源，顯示到 `0s` 代表正在嘗試連線；
   不得在 `1s` 後退回沒有秒數的空白狀態。`ReconnectIntervalMs` 是 connect 嘗試起點間隔，
@@ -561,15 +566,31 @@ Tn: ⚠ IO 未連線（開機基線）             ← 首次觀測就不在線�
   `ObjectDisposedException/NullReferenceException` first-chance 例外。
 - **冷開機恢復**：app 先開、IO 後上電不得要求重開 app；Bridge log 第 1 次及每 10 次失敗記
   `IO reconnect pending: attempt N, {TCP unavailable|handshake rejected}`，成功行必帶 attempt。
-- **儲存電腦恢復連線的定義＝TCP 445 + 分享路徑寫入交握全過**：TCP 成功後，必須在
-  `RemotePath` 建立、寫入、flush、刪除唯一探針檔；完成後才可亮綠燈。只有 TCP 成功、路徑不存在、
-  Guest/ACL 無寫入權限都禁止假綠。斷線時每 2 秒重試，app 先開、儲存機後上電不得要求重開 app。
+- **儲存電腦綠燈＝兩層都通**：第一層為 TCP 445 + `RemotePath` 建立/寫入/flush/刪除唯一探針檔；
+  第二層為 `RemoteConfigPath\storage-app-heartbeat.json` 的 `LastSeenUtc` 不超過 15 秒。分享不可用顯示紅色；
+  分享可寫但 heartbeat 缺少/過期顯示黃色；兩層都通才綠。斷線時每 2 秒重試，app 先開、儲存機後上電
+  不得要求重開 app。
+- **儲存程式自舉**：Release 根目錄 `setup.bat` 自動選擇完整安裝或更新；兩路都必須移除 payload 下載封鎖標記，並以
+  `BUILTIN\Administrators` 群組主體安裝「任一使用者登入」＋「每分鐘保活」雙觸發排程；
+  `RdpUser` 只供遠端登入，不得綁死排程。程式存活時 `MultipleInstances=IgnoreNew` 必須讓保活觸發靜默略過；
+  正常關閉或異常退出後，最晚一分鐘內必須重新啟動。
+  安裝當下必須由目前登入的系統管理員立即啟動，並在 10 秒內確認正確 EXE process 存活；
+  `LastTaskResult=267011 (0x00041303)` 代表尚未執行，必須判定失敗而非歸因 DLL 封鎖。Storage role 每 5 秒原子發布
+  heartbeat（PID、啟動/回報時間、磁碟與最後清理結果）。SMB 可寫只證明分享，不得當成程式存活。
+- **儲存資料捷徑**：檢測電腦 `setup.bat` 必須冪等在 Public Desktop 建立
+  `Anilox 儲存資料.lnk`，目標由 `\\VerifyPingTarget\StorageShareName` 計算，不得額外寫死 `192.168.10.20`。
+- **程式桌面捷徑**：Storage 與 Inspection 的安裝及更新都必須冪等建立 Public Desktop
+  `PICoater AOI.lnk`；TargetPath＝`AppDir\AniloxRoll.Monitor.exe`、WorkingDirectory＝`AppDir`、圖示＝同一 EXE，
+  不得寫死磁碟位置。捷徑存在但目標過時必須覆寫修正。
 - **遠端複製不丟資料**：`EnqueueFiles` 必須先在本機 `.remote-copy-pending` 持久化標記才進 worker；
   複製失敗保持 pending 並退避重試，程式重開從標記復原。禁止恢復「重試固定次數後丟棄」語意。
 - **發布原子性**：遠端先寫同目錄 `.part-*`，確認來源前後長度穩定且遠端長度一致後，再原子
   move/replace 成正式檔名；正式發布且 pending 標記成功刪除後才算完成。
+- **可變側車不漏尾筆**：`_ticks.csv` 追加期間若同一路徑已 pending/in-flight，必須標記 dirty；首輪發布後
+  保留 durable marker 並再排一輪，直到遠端內容等於最新本機 snapshot 才可刪 marker。
 - **Retention 保護**：本機日期資料夾含任何 pending 遠端檔案時必須跳過，禁止為了空間清理刪除
-  尚未送達的來源檔。
+  尚未送達的來源檔。可刪集合必須包含日期資料夾下遞迴的 jpg/bmp/bin、`_ticks.csv` 與
+  `_curve_summary\*.mcsf`；月份層 `yyyyMMdd.csv` 永遠保留。
 - **光源釋放**：SerialPort ownership 必須先在 lock 內從 `_port` 移除，再對 detached instance 單次 Dispose；
   全天 crash log 不得新增 `SerialStream.Finalize → ObjectDisposedException（已關閉安全控制代碼）`。
 - **光源重連防呆**：開機首次偵測 `AutoDetect` 全 port；離線後每 2 秒先 `TryConnect` 設定 COM，
@@ -645,7 +666,7 @@ Tn: MURA 恢復（v|h）                                                        
 T1: capture plan grab={yyMMdd-HHmmss} root={CaptureRootPath}
     imageDir={root}\yyyy\yyyyMM\yyyyMMdd
     csv={root}\yyyy\yyyyMM\yyyyMMdd.csv
-    files=*_raw.jpg|*_proc_v.jpg|*_proc_h.jpg|*_mean_c.bin|*_max_c.bin|*_mean_r.bin|*_max_r.bin
+    files=*_raw.jpg|*_proc_c.jpg|*_proc_r.jpg|*_mean_c.bin|*_max_c.bin|*_mean_r.bin|*_max_r.bin
     scale={DefaultSaveResizeScale}
 ```
 - `imageDir` 與 `csv` 必須由 `CaptureStoragePaths` 推導；檔名 suffix 必須由 `CaptureFileNaming` 推導。
@@ -680,6 +701,32 @@ TrySaveCapture@AniloxCamera.cs
        → AppendRecord@InspectionLogService.cs → CSV 第 10~12 欄 MaxCMean/MeanRPeak/MaxRPeak
 ```
 
+### C3 遠端交付與循環儲存
+```
+CameraFrameSaver.SaveCapture
+ → OnFilesSaved（本幀固定輸出 + 當日共享 `_ticks.csv`）
+   → RemoteCopyService.EnqueueFiles
+     → 本機 `.remote-copy-pending` durable marker
+     → remote `{destination}.part-{guid}`
+     → 來源穩定/長度一致 → Move|Replace 正式檔 → 刪 marker
+
+StorageRetentionService.RunCleanup
+ → Storage role 使用 app-mode `StorageMinFreeGB`；Inspection role 使用 `LocalMinFreeGB`
+ → minFree >= volumeTotal → `Cleanup skipped... No files were deleted`（狀態邊緣單發）
+ → free < minFree < volumeTotal → 最舊日期資料夾優先
+ → pending 日期跳過
+ → 遞迴刪 jpg/bmp/bin + `_ticks.csv` + `_curve_summary/*.mcsf`
+ → 月份層 `yyyyMMdd.csv` 保留
+
+容量狀態列（`lblInfo`，不顯示游標座標）
+ → Storage role：TelemetryTimer → DriveInfo(`StorageMachineDataPath`) → `儲存電腦：剩餘/總容量`
+ → Inspection role 本機：TelemetryTimer → DriveInfo(`CaptureRootPath`) → `檢測電腦：剩餘/總容量`
+ → Inspection role 遠端：儲存 probe → heartbeat FreeBytes/TotalBytes → `儲存電腦：剩餘/總容量`
+ → heartbeat/磁碟不可讀 → 對應電腦顯示`無法讀取`
+```
+低磁碟整合測試使用隔離 volume/root，將門檻設為高於該測試磁碟目前可用空間、但低於磁碟總容量即可直接觸發，
+不必真的填滿磁碟；禁止對正式 Captures 執行。
+
 ## 全天 Flow DVT 自動校稿架構
 
 ```
@@ -693,8 +740,8 @@ python tools/python/check_all_flows.py trace-a.log trace-b.log
 - `flow_checks/registry.py`＝validator 掛載點；每個 domain 獨立模組，不得把所有規則堆回總入口。
 - `NOT COVERED`＝該 session 沒操作到該 flow，**不得算 PASS**；validator 尚未實作則列在 `尚待自動化`，
   總結必標 `PARTIAL`，不得宣稱整份 DVT 全綠。
-- 現況（2026-07-13）：已掛 `GLOBAL`（任何 `契約違規` 行即 FAIL）＋`REVIEW/R`＋`DATA/D`；
-  LIVE/F、CAPTURE/C、SETTINGS/S、MURA/M、PARAM/P、HARDWARE/H 依戰役逐步接入。
+- 現況（2026-07-15）：已掛 `GLOBAL`（任何 `契約違規` 行即 FAIL）＋`LIVE/F`＋`REVIEW/R`＋
+  `DATA/D`＋`CAPTURE/C`＋`HARDWARE/H`；`SETTINGS/S`、`MURA/M`、`PARAM/P` 依戰役逐步接入。
 - domain 專用舊指令保留為薄 wrapper（例如 `check_review_flows.py`），規則實作只能存在
   `flow_checks/{domain}.py` 一份，避免 wrapper／總入口兩份判準分歧。
 
@@ -707,7 +754,9 @@ python tools/python/check_review_flows.py [trace.log]    # 預設抓最新 log�
 判準：①R2 快路跟隨（最後選取的 grabId 必有成功 `RV curves`，全 drop=曲線沒跟上）②R2 token+begin/done 配對
 ③卡頓紅線（回顧互動期間 UiStall ≤1000ms）④讀取資料跳最新（第 2 次起不得停在舊序號）
 ⑤時段導航去重（同時點不得重複載入）⑥曲線 single-flight（兩個 paths 間必有 done/stale）
-⑦方向對數（dataPhys↔dataChart 鏡射/直通，見§狀態快照儀器）。
+⑦方向對數（dataPhys↔dataChart 鏡射/直通，見§狀態快照儀器）⑧切入回顧必有
+`RV tabVisible repaint view=True`，且其後必有 `RV visiblePaint ready=True lod=… size=WxH` 證明內容真正可畫；
+只有 repaint intent 不算通過。
 2026-07-10 基線：①③④⑤ 皆紅＝回顧戰役待修清單（兇手=每格序號同步觸發 Data 統計全重算於 UI 執行緒
 〔SyncDataGrabIdFromReview→RefreshStats→掃目錄+CSV 全解析〕＋時段 date/time 串聯重複觸發）。
 
@@ -721,6 +770,8 @@ T1: RV loadGrab begin {grabId}（proc=…）
 Tn: RV loadGrab paths {grabId} root=… images=N cams=P cfg=yes|no align=tick|filename
 T1: RV pushFrames P/7（merge=True, feedScale=…）   ← P=該 grab 有影像的相機數；缺台=黑占位
 T1: RV loadGrab done {grabId}（…ms）
+（若由 Data 頁隱藏預載：切到回顧後延後一個 UI message，出現 `RV tabVisible repaint view=True` →
+ `RV visiblePaint ready=True lod=… size=WxH`；以可見尺寸補 LOD tile + paint，不重讀檔、不重設視野）
 （grab 中按：另會出現 DisableGlobalMerge 等監控行——歸本 intent 管，見孤兒判讀規則）
 不變量：手按【讀取資料】＝刷新+跳最新（loadGrab 的 grabId=清單最新；2026-07-10 修「停在舊選取」）；
 開機自動恢復上次位置不在此限。
@@ -867,7 +918,8 @@ T1: RV row …（Review 有資料時）或 RV load/update row（依當前 Review
 ### D0 tab 切換（全域，不限報表）
 ```
 T1: ui:tab → 監控|回顧|報表
-（tab 切換本身不觸發顯示重建——例外：切到回顧且 _reviewDirty → 接 R2 載入序列。
+（tab 切換本身不觸發顯示重建；切到回顧固定接 `RV tabVisible repaint view=True|False`，只補可見重繪；
+  若 `_reviewDirty` 且有 Data pending selection，先接 R2 載入序列再重繪。
   開機 PrewarmAllTabs 的程式化 cycle 被 _suppressTabIntent 抑制不記——毫秒級三連發 tab 行
   ＝抑制失效（D 系列首輪誤報實例））
 ```

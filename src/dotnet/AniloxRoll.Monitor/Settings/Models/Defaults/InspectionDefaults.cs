@@ -42,7 +42,7 @@ namespace AniloxRoll.Monitor.Core.Data
         public static readonly StitchMode DefaultStitch = StitchMode.Global;        // 主畫面 > 合圖方式
         public const bool EnableMuraEnhance   = false;       // 監控強化
         public const bool EnableReviewEnhance = false;       // 回顧強化
-        public static readonly MainDisplayMode MainDisplay = MainDisplayMode.ImageCanvas; // 主畫面顯示（即時 / 瀑布）
+        public static readonly MainDisplayMode MainDisplay = MainDisplayMode.Waterfall; // 主畫面顯示（即時 / 瀑布）
         public static readonly VerticalDisplayDirection VerticalDirection = VerticalDisplayDirection.BottomToTop; // 主畫面上下方向
         public static readonly LiveLodMode     LiveLod     = LiveLodMode.CPU;             // 動態LOD（Off / GPU / CPU）
         public const int       WaterfallTotalHeight = 30000;                              // 瀑布圖虛擬長圖總高（px）；點兩下 fit 到此

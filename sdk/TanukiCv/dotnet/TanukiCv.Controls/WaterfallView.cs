@@ -588,7 +588,7 @@ namespace TanukiCv.Controls
 
             _canvas.SetRangeOverlay(status.PhysMag > 0 ? $"{status.PhysMag:F2}x" : "",
                 $"{status.ViewLeftMm:F1}", $"{status.ViewRightMm:F1}", $"{status.ViewTopMm:F1}", $"{status.ViewBotMm:F1}");
-            _canvas.SetCursorMm(BuildCursorMmText(info.ImageX, info.ImageY));
+            _canvas.SetCursorMm(status.CurMmX, status.CurMmY);
             ViewRangeMmChanged?.Invoke(status.ViewLeftMm, status.ViewRightMm, status.ViewTopMm, status.ViewBotMm);
             UpdateCenterCam(info.Zoom, info.PanOffset);
             CursorStatusChanged?.Invoke(status);
@@ -668,18 +668,6 @@ namespace TanukiCv.Controls
                 SelectedCamId = camId > 0 ? camId : 0,
             };
             return true;
-        }
-
-        private string BuildCursorMmText(int imageX, int imageY)
-        {
-            if (_startMm == null || _startMm.Length == 0 || _refOpsMm <= 0) return "";
-            int camId = ResolveCameraAtX(imageX);
-            double minStartMm = MinStartMm();
-            double curMmX = PixelMmMapper.PixelToMm(imageX, minStartMm, _refOpsMm);
-            double yPitch = _rowPitchMm > 0 ? _rowPitchMm : _refOpsMm;
-            double curMmY = ToLogicalY(imageY) * yPitch;   // 同上：游標走 logical（flip 時 0 在畫面底）
-            string camText = camId > 0 ? $"CAM {camId}" : "瀑布";
-            return $"{camText} ({curMmX:F2}, {curMmY:F2})";
         }
 
         private double ToLogicalY(double visualY)

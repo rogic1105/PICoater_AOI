@@ -114,6 +114,7 @@ namespace AniloxRoll.Monitor.Forms
         // --- 儲存管理 ---
         private StorageRetentionService _retentionService;
         private RemoteCopyService _remoteCopyService;
+        private StorageAppHeartbeatService _storageHeartbeatService;
         private int _completedGrabCount;
         private DateTime _lastGrabEventTime;
 
@@ -178,6 +179,7 @@ namespace AniloxRoll.Monitor.Forms
             try { _dataStatsPresenter?.Dispose(); } catch { }  // 報表範圍選擇 debounce
             try { _uiStallDetector?.Dispose(); _uiStallDetector = null; } catch { }  // UI 卡頓儀器
             try { _cleanupFlagWatcher?.Dispose(); _cleanupFlagWatcher = null; } catch { }  // M3: 10 秒輪詢提前停
+            try { _storageHeartbeatService?.Dispose(); _storageHeartbeatService = null; } catch { }
             try { _reviewDisplayManager?.Dispose(); _reviewDisplayManager = null; } catch { }  // #13 同源顯示（內含 33ms timer）
             try { System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged; } catch { }
         }
@@ -427,7 +429,7 @@ namespace AniloxRoll.Monitor.Forms
             // 循環儲存（事件驅動：grab 結束 / watchdog / 每 10 grab / 啟動時各觸發一次）
             _retentionService = new StorageRetentionService(
                 getRootPath:     () => GetStorageRetentionRoot(),
-                getMinFreeBytes: () => (long)(_settings?.LocalMinFreeGB ?? 100) * 1024L * 1024L * 1024L,
+                getMinFreeBytes: () => GetStorageMinFreeBytes(),
                 shouldPreserveDayFolder: path =>
                     _remoteCopyService?.HasPendingFilesUnder(path) == true);
 
@@ -438,6 +440,12 @@ namespace AniloxRoll.Monitor.Forms
                     () => _appMode.StorageMachineConfigFolder,
                     _retentionService);
                 _cleanupFlagWatcher.Start();
+                _storageHeartbeatService = new StorageAppHeartbeatService(
+                    () => _appMode.StorageMachineConfigFolder,
+                    () => _appMode.StorageMachineDataPath);
+                _retentionService.OnCleanupCompleted += result =>
+                    _storageHeartbeatService?.RecordCleanup(result.FreedBytes);
+                _storageHeartbeatService.Start();
             }
             else
             {
@@ -542,8 +550,8 @@ namespace AniloxRoll.Monitor.Forms
 
             UpdateRowChartPitch();
 
-            // Review tab 欄 chart 點選 —— 過渡語意（mode/強化切換 FSM 待 #13 接入後定案）：
-            //   點全覽圖（接位後的 chartReviewColumn）＝切檢出方向 v；StitchMode/強化暫走 PropertyGrid。TODO-FSM
+            // Review chart click only selects the displayed inspection direction.
+            // Stitch/enhance settings remain owned by PropertyGrid and SettingsHub.
             chartReviewColumn.MouseClick += (s, e) =>
             {
                 UiActionLogger.SetSource("chartReviewColumn.Click");
@@ -556,9 +564,8 @@ namespace AniloxRoll.Monitor.Forms
                 SwitchRidgeDirection("h");
             };
 
-            // Live tab 欄 chart 點選 —— 過渡語意（mode/強化切換 FSM 待 #13 接入後定案）：
-            //   點全覽圖（接位後的 chartLiveColumn）＝切檢出方向 v（與 Horizontal chart 對稱）；
-            //   StitchMode / 強化切換暫時只走 PropertyGrid（SSoT 正路）。TODO-FSM
+            // Live chart click only selects the displayed inspection direction.
+            // Stitch/enhance settings remain owned by PropertyGrid and SettingsHub.
             chartLiveColumn.MouseClick += (s, e) =>
             {
                 UiActionLogger.SetSource("chartLiveColumn.Click");
@@ -657,13 +664,6 @@ namespace AniloxRoll.Monitor.Forms
                 _stitchCoordinator.SameSourceViewRange = () =>
                     double.IsNaN(_reviewViewLeftMm) ? null
                     : new[] { _reviewViewLeftMm, _reviewViewRightMm, _reviewViewTopMm, _reviewViewBotMm };
-                // 游標狀態 → 狀態列 lblPixelInfo（mm 換算同源在 ImageDisplayView，這裡只格式化＝app 政策）。
-                // 取代舊 camReviewMain.StatusChanged→UpdateCanvasInfo（覆蓋後已死，#13 遷移時即斷）。
-                _reviewDisplayManager.CursorStatusChanged += s =>
-                {
-                    if (lblPixelInfo == null) return;
-                    lblPixelInfo.Text = CursorStatusTextFormatter.Format(s);
-                };
                 _reviewDisplayManager.SetFlipVertical(ShouldFlipDisplayVertical());
             }
 
@@ -702,8 +702,7 @@ namespace AniloxRoll.Monitor.Forms
                 this,
                 new[] { camLive1, camLive2, camLive3,
                         camLive4, camLive5, camLive6, camLive7 },
-                camLiveMain,
-                pixelText => { if (lblPixelInfo != null) lblPixelInfo.Text = pixelText; }
+                camLiveMain
             );
             _grabDurationCoordinator = new GrabDurationCoordinator(seconds =>
                 SafeBeginInvoke(() => HandleGrabLimitElapsed(seconds)));
@@ -747,6 +746,7 @@ namespace AniloxRoll.Monitor.Forms
                 // 相機釋放後再 dispose CUDA pipeline（依賴關係安全；C2 修正）
                 _inspectionService?.Dispose();
                 _lightController?.Dispose();   _lightController = null;
+                _storageHeartbeatService?.Dispose(); _storageHeartbeatService = null;
                 _retentionService?.Dispose();  _retentionService = null;
                 _remoteCopyService?.Dispose(); _remoteCopyService = null;
             };

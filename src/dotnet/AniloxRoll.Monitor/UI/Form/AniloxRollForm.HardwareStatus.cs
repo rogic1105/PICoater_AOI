@@ -262,7 +262,7 @@ namespace AniloxRoll.Monitor.Forms
         /// <summary>由 TelemetryTimer 每 tick 呼叫：IO 斷線時顯示重連倒數（秒數源自 IoGrabController）。
         /// 手動暫停（_isIoSuspended）不覆蓋；初始連線中（尚未排程重連）維持「初始化中」。</summary>
         // ── H 系列：硬體連線邊緣留痕（IO/光源/儲存；狀態轉變才記一行，斷線/恢復現場排障關鍵）──
-        private bool? _lastFlowIoConn, _lastFlowLightConn, _lastFlowStorageConn;
+        private bool? _lastFlowIoConn, _lastFlowLightConn, _lastFlowStorageShareConn;
 
         private void FlowHardwareEdges()
         {
@@ -280,7 +280,7 @@ namespace AniloxRoll.Monitor.Forms
             if (_settings?.LightEnabled == true)
                 Edge(ref _lastFlowLightConn, _lightController?.IsConnected == true, "光源");
             if (!string.IsNullOrWhiteSpace(_settings?.RemotePath))
-                Edge(ref _lastFlowStorageConn, _storageLastConnected == true, "儲存電腦");
+                Edge(ref _lastFlowStorageShareConn, _storageLastConnected == true, "儲存分享");
         }
 
         private void RefreshIoConnLabel()
@@ -337,7 +337,13 @@ namespace AniloxRoll.Monitor.Forms
         private int _lightReconnectAttemptCount;
         private volatile bool _lightProbeInFlight;
         private bool? _storageLastConnected;   // 最後一次 probe 結果（供每 tick 刷新倒數用）
+        private bool? _storageAppAlive;        // 遠端 heartbeat 是否在 15 秒有效期內
         private bool _lightProbedOnce;         // 光源初次偵測是否完成（未完成前 label 維持「初始化中」）
+        private long _localCapacityFreeBytes = -1;
+        private long _localCapacityTotalBytes;
+        private long _remoteCapacityFreeBytes = -1;
+        private long _remoteCapacityTotalBytes;
+        private bool _capacityProbeErrorReported;
 
         // ── 重連倒數 / probe 排程的單一真實來源（秒數由此推導，不寫死）──────────────
         internal const int TelemetryTickMs = 500;          // = SettingsTabs 的 _telemetryTimer.Interval
@@ -354,6 +360,56 @@ namespace AniloxRoll.Monitor.Forms
         private static int CountdownSec(int elapsedTicks, int intervalTicks)
             => Math.Max(1, (int)Math.Ceiling((intervalTicks - elapsedTicks) * TelemetryTickMs / 1000.0));
 
+        private bool TryReadDriveCapacity(string root, out long freeBytes, out long totalBytes)
+        {
+            freeBytes = -1;
+            totalBytes = 0;
+            try
+            {
+                if (string.IsNullOrWhiteSpace(root)) return false;
+                var drive = new System.IO.DriveInfo(
+                    System.IO.Path.GetPathRoot(System.IO.Path.GetFullPath(root)));
+                if (!drive.IsReady) return false;
+                freeBytes = drive.AvailableFreeSpace;
+                totalBytes = drive.TotalSize;
+                if (_capacityProbeErrorReported)
+                    System.Diagnostics.Trace.WriteLine("[CapacityInfo] local drive probe recovered.");
+                _capacityProbeErrorReported = false;
+                return totalBytes > 0;
+            }
+            catch (Exception ex)
+            {
+                if (!_capacityProbeErrorReported)
+                    System.Diagnostics.Trace.WriteLine(
+                        "[CapacityInfo] local drive probe failed: " + ex.Message);
+                _capacityProbeErrorReported = true;
+                return false;
+            }
+        }
+
+        private static string FormatCapacity(string computerName, long freeBytes, long totalBytes)
+        {
+            if (freeBytes < 0 || totalBytes <= 0)
+                return computerName + "：無法讀取";
+
+            double freeGb = freeBytes / (1024.0 * 1024 * 1024);
+            double totalGb = totalBytes / (1024.0 * 1024 * 1024);
+            return $"{computerName}：剩餘 {freeGb:N1} / {totalGb:N1} GB";
+        }
+
+        private void RefreshCapacityInfoLabel()
+        {
+            if (lblInfo == null) return;
+
+            string text = _appMode?.Role == MachineRole.Storage
+                ? FormatCapacity("儲存電腦", _localCapacityFreeBytes, _localCapacityTotalBytes)
+                : FormatCapacity("檢測電腦", _localCapacityFreeBytes, _localCapacityTotalBytes) +
+                  " ｜ " + FormatCapacity("儲存電腦", _remoteCapacityFreeBytes, _remoteCapacityTotalBytes);
+
+            if (!string.Equals(lblInfo.Text, text, StringComparison.Ordinal))
+                lblInfo.Text = text;
+        }
+
         private void UpdateStorageConnLabel(bool? connected)
         {
             // connected 有值 = probe 回報新結果；null = 每 tick 刷新倒數（沿用上次結果）
@@ -364,12 +420,26 @@ namespace AniloxRoll.Monitor.Forms
             {
                 lblStorageConn.Text = "● 儲存電腦 停用";
                 lblStorageConn.BackColor = IecGray;
+                if (_appMode?.Role != MachineRole.Storage)
+                {
+                    _remoteCapacityFreeBytes = -1;
+                    _remoteCapacityTotalBytes = 0;
+                    RefreshCapacityInfoLabel();
+                }
                 return;
             }
             if (_storageLastConnected == true)
             {
-                lblStorageConn.Text = "● 儲存電腦 已連線";
-                lblStorageConn.BackColor = IecGreen;
+                if (_storageAppAlive == true)
+                {
+                    lblStorageConn.Text = "● 儲存電腦 已連線";
+                    lblStorageConn.BackColor = IecGreen;
+                }
+                else
+                {
+                    lblStorageConn.Text = "● 儲存分享可用 / 程式未回報";
+                    lblStorageConn.BackColor = IecYellow;
+                }
             }
             else if (_storageLastConnected == false)
             {
@@ -390,24 +460,23 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (_appMode?.Role == MachineRole.Storage)
             {
-                if (_storageDiskFreeRow != null)
+                string root = GetStorageRetentionRoot();
+                if (TryReadDriveCapacity(root, out _localCapacityFreeBytes, out _localCapacityTotalBytes))
                 {
-                    try
+                    if (_storageDiskFreeRow != null)
                     {
-                        string root = GetStorageRetentionRoot();
-                        if (!string.IsNullOrWhiteSpace(root))
-                        {
-                            var di = new System.IO.DriveInfo(
-                                System.IO.Path.GetPathRoot(System.IO.Path.GetFullPath(root)));
-                            double freeGb  = di.AvailableFreeSpace / (1024.0 * 1024 * 1024);
-                            double totalGb = di.TotalSize           / (1024.0 * 1024 * 1024);
-                            _storageDiskFreeRow.SubItems[1].Text = $"{freeGb:F1} / {totalGb:F1} GB";
-                        }
+                        double freeGb = _localCapacityFreeBytes / (1024.0 * 1024 * 1024);
+                        double totalGb = _localCapacityTotalBytes / (1024.0 * 1024 * 1024);
+                        _storageDiskFreeRow.SubItems[1].Text = $"{freeGb:F1} / {totalGb:F1} GB";
                     }
-                    catch { }
                 }
+                RefreshCapacityInfoLabel();
                 return;
             }
+
+            TryReadDriveCapacity(GetStorageRetentionRoot(),
+                out _localCapacityFreeBytes, out _localCapacityTotalBytes);
+            RefreshCapacityInfoLabel();
 
             // Grab watchdog：取像中超過 30 秒沒有 result callback → 觸發循環儲存
             if (_liveCameraManager?.IsLiveGrabbing == true &&
@@ -499,6 +568,9 @@ namespace AniloxRoll.Monitor.Forms
             _storageProbeTickCounter = 0;
 
             string path = _settings?.RemotePath ?? string.Empty;
+            string configPath = _settings?.RemoteConfigPath ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(configPath))
+                configPath = DeriveFlagSharePath(path);
             if (string.IsNullOrWhiteSpace(path))
             {
                 UpdateStorageConnLabel(null);
@@ -510,12 +582,23 @@ namespace AniloxRoll.Monitor.Forms
             System.Threading.Tasks.Task.Run(() =>
             {
                 bool ok;
+                bool appAlive = false;
+                string heartbeatError = null;
+                StorageAppHeartbeatRecord heartbeatRecord = null;
                 try
                 {
                     bool transportReachable = ProbeStorageTransportReachable(path);
                     if (transportReachable)
                     {
                         ok = _remoteCopyService?.ProbeRemoteWritable() == true;
+                        if (ok)
+                        {
+                            appAlive = StorageAppHeartbeatService.TryRead(
+                                configPath,
+                                DateTime.UtcNow,
+                                out heartbeatRecord,
+                                out heartbeatError);
+                        }
                     }
                     else
                     {
@@ -532,7 +615,33 @@ namespace AniloxRoll.Monitor.Forms
                 finally { _storageProbeInFlight = false; }
 
                 if (IsDisposed || Disposing) return;
-                try { BeginInvoke(new Action<bool?>(UpdateStorageConnLabel), (bool?)ok); }
+                try
+                {
+                    BeginInvoke(new Action(() =>
+                    {
+                        if (_storageAppAlive != appAlive)
+                        {
+                            if (appAlive)
+                            {
+                                double ageSec = Math.Max(0,
+                                    (DateTime.UtcNow - heartbeatRecord.LastSeenUtc.ToUniversalTime()).TotalSeconds);
+                                FlowTrace.Log($"儲存程式 heartbeat 恢復 pid={heartbeatRecord.ProcessId} age={ageSec:F1}s");
+                            }
+                            else
+                            {
+                                FlowTrace.Log("⚠ 儲存程式 heartbeat 未回報 reason=" +
+                                    (heartbeatError ?? (ok ? "unknown" : "storage share unavailable")));
+                            }
+                        }
+                        _storageAppAlive = appAlive;
+                        _remoteCapacityFreeBytes = appAlive && heartbeatRecord != null
+                            ? heartbeatRecord.FreeBytes : -1;
+                        _remoteCapacityTotalBytes = appAlive && heartbeatRecord != null
+                            ? heartbeatRecord.TotalBytes : 0;
+                        RefreshCapacityInfoLabel();
+                        UpdateStorageConnLabel(ok);
+                    }));
+                }
                 catch (InvalidOperationException) { }
             });
         }
@@ -711,6 +820,18 @@ namespace AniloxRoll.Monitor.Forms
                 !string.IsNullOrWhiteSpace(_appMode.StorageMachineDataPath))
                 return _appMode.StorageMachineDataPath;
             return _settings?.CaptureRootPath ?? string.Empty;
+        }
+
+        private long GetStorageMinFreeBytes()
+        {
+            int minFreeGb = _settings?.LocalMinFreeGB ?? InspectionDefaults.LocalMinFreeGB;
+            if (_appMode?.Role == MachineRole.Storage)
+            {
+                minFreeGb = _appMode.StorageMinFreeGB > 0
+                    ? _appMode.StorageMinFreeGB
+                    : AppModeDefaults.StorageMinFreeGB;
+            }
+            return (long)minFreeGb * 1024L * 1024L * 1024L;
         }
 
         private void lblIoDoMura_Click(object sender, EventArgs e)

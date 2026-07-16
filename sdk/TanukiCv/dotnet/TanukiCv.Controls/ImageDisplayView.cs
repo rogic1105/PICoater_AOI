@@ -197,6 +197,17 @@ namespace TanukiCv.Controls
             RefreshMain();
         }
 
+        /// <summary>
+        /// 內容在隱藏宿主中完成載入後，宿主重新可見時要求畫布重繪。
+        /// 不重建影像或重設視野，只補上可能在隱藏期間被略過的 paint。
+        /// </summary>
+        public void RefreshVisible()
+        {
+            if (_disposed || _canvas == null || _canvas.IsDisposed) return;
+            RefreshMain();
+            _canvas.RefreshVisibleContent();
+        }
+
         // ==================== 介面 ====================
 
         public void SetSelected(int camId)
@@ -741,7 +752,7 @@ namespace TanukiCv.Controls
                 $"{leftMm:F1}", $"{rightMm:F1}", $"{topMm:F1}", $"{botMm:F1}");
 
             double curMmX = PixelMmMapper.PixelToMm(info.ImageX * sf, startMm, opsInMm);
-            _canvas.SetCursorMm($"({curMmX:F2}, {curMmY:F2})");
+            _canvas.SetCursorMm(curMmX, curMmY);
 
             ViewRangeMmChanged?.Invoke(leftMm, rightMm, topMm, botMm);
 

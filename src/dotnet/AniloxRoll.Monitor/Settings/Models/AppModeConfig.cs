@@ -26,10 +26,15 @@ namespace AniloxRoll.Monitor.Core.Data
         /// <summary>Storage 模式：循環儲存的根目錄；空字串時 fallback 至 CaptureRootPath。</summary>
         public string StorageMachineDataPath { get; set; } = AppModeDefaults.StorageMachineDataPath;
 
+        /// <summary>Storage 模式專用的資料磁碟預留空間；Inspection 模式仍使用 StorageSettings.LocalMinFreeGB。</summary>
+        public int StorageMinFreeGB { get; set; } = AppModeDefaults.StorageMinFreeGB;
+
         public static AppModeConfig Load()
         {
             string fullPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"Config\app-mode.json");
             var loaded = JsonConfigLoader.LoadOrDefault(@"Config\app-mode.json", new AppModeConfig());
+            if (loaded.StorageMinFreeGB <= 0)
+                loaded.StorageMinFreeGB = AppModeDefaults.StorageMinFreeGB;
             if (!File.Exists(fullPath))
                 JsonConfigLoader.SaveJson(fullPath, loaded);
             return loaded;

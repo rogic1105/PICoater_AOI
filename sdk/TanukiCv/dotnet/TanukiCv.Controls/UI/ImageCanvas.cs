@@ -36,6 +36,7 @@ namespace TanukiCv.Controls
         private int _lastImgX = 0;
         private int _lastImgY = 0;
         private Color _lastColor = Color.Black;
+        private bool _hasLastColor;
         private string _cursorMm = ""; // 上層推入的「位置 mm」字串；空=fallback 像素座標
 
         // ── 畫布資訊 overlay（游標座標/亮度跟滑鼠、四邊 mm 範圍、右下實體倍率；右鍵開關）──
@@ -79,6 +80,7 @@ namespace TanukiCv.Controls
         private Rectangle _lodTileRect;                         // _lodTile 代表的虛擬區
         private volatile bool _lodRecomputeInFlight;            // provider(GPU) 背景進行中
         private volatile bool _lodRecomputePending;            // 進行中又有新請求 → 完成後再算一次（用最新視角）
+        private bool _visibleRefreshPending;                    // 隱藏宿主轉可見後，等待第一張可畫 LOD tile
         private Timer _lodSettleTimer;                          // 停住才重算 crisp tile
         private const int LodSettleMs = 150;
 
@@ -204,6 +206,12 @@ namespace TanukiCv.Controls
             _cursorMm = text ?? "";
         }
 
+        /// <summary>設定游標實體座標；即時、瀑布等呼叫端共用固定的 `(x, y)mm` 顯示格式。</summary>
+        public void SetCursorMm(double x, double y)
+        {
+            _cursorMm = $"({x:F2}, {y:F2})mm";
+        }
+
         /// <summary>
         /// 啟用後 pan 限制在控制項邊界內（影像不會拖出可見區域），
         /// 行為與 MIL M_CENTER_DISPLAY 一致。預設 false（自由拖曳）。
@@ -261,6 +269,29 @@ namespace TanukiCv.Controls
         public void RefreshLod()
         {
             if (_lodActive) RecomputeLodTile();
+        }
+
+        /// <summary>
+        /// 宿主由隱藏轉為可見時，以完成 layout 後的控制項尺寸補畫內容。
+        /// LOD 尚無 tile 時主動重算；已有 tile 或一般 Image 時同步 paint，避免必須先有滑鼠互動才顯示。
+        /// </summary>
+        public void RefreshVisibleContent()
+        {
+            if (IsDisposed) return;
+
+            bool ready = _lodActive ? _lodTile != null : Image != null;
+            if (_lodActive)
+            {
+                _visibleRefreshPending = !ready;
+                RefreshLod();
+            }
+
+            Invalidate();
+            Update();
+            if (ready)
+                FlowLog?.Invoke($"visiblePaint ready=True lod={_lodActive} size={ClientSize.Width}x{ClientSize.Height}");
+            else if (!_lodActive)
+                FlowLog?.Invoke($"visiblePaint ready=False lod=False size={ClientSize.Width}x{ClientSize.Height}");
         }
 
         private void RestartLodSettle()
@@ -355,6 +386,11 @@ namespace TanukiCv.Controls
                 _lodTileRect = rect;
                 _lodLastRecomputeMs = Environment.TickCount;
                 this.Invalidate();
+            }
+            if (_visibleRefreshPending)
+            {
+                FlowLog?.Invoke($"visiblePaint ready={tile != null} lod=True size={ClientSize.Width}x{ClientSize.Height}");
+                if (tile != null) _visibleRefreshPending = false;
             }
             if (_lodRecomputePending) { _lodRecomputePending = false; RecomputeLodTile(); }
         }
@@ -535,15 +571,21 @@ namespace TanukiCv.Controls
             }
             else
             {
-                if (this.Image is Bitmap bmp &&
-                    _lastImgX >= 0 && _lastImgX < bmp.Width &&
-                    _lastImgY >= 0 && _lastImgY < bmp.Height)
+                if (_lodActive)
+                {
+                    _hasLastColor = TrySampleLodColor(_lastImgX, _lastImgY, out _lastColor);
+                }
+                else if (this.Image is Bitmap bmp &&
+                         _lastImgX >= 0 && _lastImgX < bmp.Width &&
+                         _lastImgY >= 0 && _lastImgY < bmp.Height)
                 {
                     _lastColor = bmp.GetPixel(_lastImgX, _lastImgY);
+                    _hasLastColor = true;
                 }
                 else
                 {
                     _lastColor = Color.Black;
+                    _hasLastColor = false;
                 }
 
                 // 重的 status/chart 同步限流 ~30fps；游標 overlay 區域失效限流 ~120fps
@@ -563,14 +605,64 @@ namespace TanukiCv.Controls
             }
         }
 
-        /// <summary>只失效游標 overlay 的區域（上次 + 這次當「兩塊分離小矩形」，非外接框）。
-        /// 用 Region 而非 Rectangle.Union：快速移動時舊/新位置離很遠，外接框會幾乎=整張 → 失去意義。
-        /// GDI 把 OnPaint 的 DrawImage 裁切到此區 → 成本只剩這兩小塊。</summary>
+        private bool TrySampleLodColor(int imageX, int imageY, out Color color)
+        {
+            color = Color.Black;
+            if (_lodTile == null || _lodTileRect.Width <= 0 || _lodTileRect.Height <= 0 ||
+                !_lodTileRect.Contains(imageX, imageY))
+                return false;
+
+            int tileX = (int)((long)(imageX - _lodTileRect.X) * _lodTile.Width / _lodTileRect.Width);
+            int tileY = (int)((long)(imageY - _lodTileRect.Y) * _lodTile.Height / _lodTileRect.Height);
+            tileX = Math.Max(0, Math.Min(_lodTile.Width - 1, tileX));
+            tileY = Math.Max(0, Math.Min(_lodTile.Height - 1, tileY));
+            color = _lodTile.GetPixel(tileX, tileY);
+            return true;
+        }
+
+        private string GetCursorOverlayText()
+        {
+            string head = string.IsNullOrEmpty(_cursorMm)
+                ? $"({_lastImgX}, {_lastImgY})"
+                : _cursorMm;
+            string tail = _hasLastColor ? $" | 亮度:{_lastColor.R}" : " | 亮度:--";
+            return head + tail;
+        }
+
+        private Rectangle GetCursorLabelBounds(Point cursorPosition)
+        {
+            string text = GetCursorOverlayText();
+            Size size = TextRenderer.MeasureText(text, _ovFont, Size.Empty,
+                TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+
+            int x = cursorPosition.X + 14;
+            int y = cursorPosition.Y + 14;
+            x = Math.Max(0, Math.Min(x, Math.Max(0, Width - size.Width)));
+            y = Math.Max(0, Math.Min(y, Math.Max(0, Height - size.Height)));
+            return new Rectangle(x, y, size.Width, size.Height);
+        }
+
+        private Rectangle GetCursorOverlayBounds(Point cursorPosition)
+        {
+            var bounds = Rectangle.Inflate(GetCursorLabelBounds(cursorPosition), 3, 2);
+            return Rectangle.Intersect(ClientRectangle, bounds);
+        }
+
+        private void DrawCursorLabel(Graphics g)
+        {
+            string text = GetCursorOverlayText();
+            Rectangle bounds = GetCursorLabelBounds(_cursorPos);
+            Rectangle background = Rectangle.Inflate(bounds, 2, 1);
+            g.FillRectangle(_ovBackBrush, background);
+            TextRenderer.DrawText(g, text, _ovFont, bounds.Location, Color.White,
+                TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+        }
+
+        /// <summary>只失效游標 overlay 的實際區域（上次 + 這次兩塊分離矩形）。
+        /// 文字包含座標/亮度且會因數值改變寬度，不得用固定框估算，否則框外尾字會留下殘影。</summary>
         private void InvalidateCursorOverlay()
         {
-            // 框需完整蓋住標籤實際繪製範圍（標籤在游標右下 +14；邊界 clamp 時可能移到左/上）。
-            // 不足會殘留黑底殘影 → 兩側都給足（最寬座標文字約 170px）。
-            var box = new Rectangle(_cursorPos.X - 190, _cursorPos.Y - 28, 380, 74);
+            var box = GetCursorOverlayBounds(_cursorPos);
             using (var region = new Region(box))
             {
                 if (_cursorDirty != Rectangle.Empty)
@@ -855,13 +947,7 @@ namespace TanukiCv.Controls
                 _lastImgX >= 0 && _lastImgY >= 0 &&
                 _lastImgX < ContentW && _lastImgY < ContentH)
             {
-                string head = string.IsNullOrEmpty(_cursorMm)
-                    ? $"({_lastImgX}, {_lastImgY})"
-                    : _cursorMm;
-                // LOD 模式 this.Image 為 null → 無亮度（_lastColor 預設黑），只顯示座標
-                string tail = _lodActive ? "" : $"  {_lastColor.R}";
-                DrawLabel(g, $"{head}{tail}",
-                          _cursorPos.X + 14, _cursorPos.Y + 14, 0f, 0f);
+                DrawCursorLabel(g);
             }
         }
 

@@ -6,5 +6,6 @@ namespace AniloxRoll.Monitor.Core.Data
         public const MachineRole Role              = MachineRole.Inspection;
         public const string      StorageMachineConfigFolder = @"D:\Anilox\Config";
         public const string      StorageMachineDataPath = "";
+        public const int         StorageMinFreeGB = 100;
     }
 }

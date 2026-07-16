@@ -4,6 +4,8 @@
 > feature ownership, or refactor plans. Start with
 > [`architecture-overview.md`](architecture-overview.md) for logical owners and use
 > [`repository-layout.md`](repository-layout.md) for directory responsibilities.
+> Produced-file locations and copy/retention policy are owned by
+> [`output-storage-map.md`](output-storage-map.md).
 
 Paths in the tables are repository-relative unless a shorter prefix is stated. Confirm every entry
 against current code with `rg` before editing because lookup data can become stale.
@@ -191,7 +193,7 @@ against current code with `rg` before editing because lookup data can become sta
 | 合圖方式 | `hb_StitchMode` → `StitchMode` | Global | Vertical / Global |
 | 監控強化 | `hc_EnableMuraEnhance` → `EnableMuraEnhance` | false | 即時影像強化 Mura |
 | 回顧強化 | `hd_EnableReviewEnhance` → `EnableReviewEnhance` | false | 回顧影像強化 Mura |
-| 主畫面顯示 | `he_MainDisplay` → `ImageView.MainDisplay` | ImageCanvas | ImageCanvas（即時合圖）/ Waterfall（瀑布合圖） |
+| 主畫面顯示 | `he_MainDisplay` → `ImageView.MainDisplay` | Waterfall | ImageCanvas（即時合圖）/ Waterfall（瀑布合圖） |
 | 動態LOD | `hf_LiveLod` → `ImageView.LiveLod` | CPU | Off / GPU（TanukiCv GPU 縮）/ CPU（GrayResizeCpu 純 CPU 縮）。ImageCanvas 模式放大巨圖看細節用（顯示成本 ~180ms→~1ms），即時生效。預設 CPU＝無 GPU 機也能跑。`LiveCameraManager.SetLodMode` 套到 `ImageDisplayView.EnableLod`/`DisableLod` |
 
 ### 4. 儲存設定
@@ -295,12 +297,12 @@ against current code with `rg` before editing because lookup data can become sta
 | 引擎常數列表 | `listViewEngine` | ListView | — |
 | 圖表常數列表 | `listViewChartConst` | ListView | — |
 | 硬體參數列表 | `listViewHardware` | ListView | — |
-| 座標狀態列 | `lblPixelInfo` | Label | 位置:... |
+| 電腦容量狀態列 | `lblInfo` | Label | 檢測電腦：剩餘 N / Total GB｜儲存電腦：剩餘 N / Total GB（座標與亮度由 ImageCanvas 顯示在滑鼠旁） |
 | 相機數狀態 | `lblCamCount` | Label | 相機: N/7 |
 | IO 狀態 | `lblIoState` | RoundedLabel | -- → 待機/取像/停止/故障/斷線/關閉/未連線（FSM 運作狀態，非連線燈；已移入 `panelIo` IO 運作區當開頭，與 DIO 燈號同組，皆圓角晶片） |
 | IO 連線狀態 | `lblIoConn` | Label | ● IO: -- |
 | 光源連線狀態 | `lblLightConn` | Label | ● 光源: -- |
-| 儲存電腦連線狀態 | `lblStorageConn` | Label | TCP 445 + 分享路徑實際可寫才顯示已連線 |
+| 儲存電腦連線狀態 | `lblStorageConn` | Label | TCP 445 + 分享可寫 + 遠端 app heartbeat 新鮮才顯示已連線；分享通但 app 未回報顯示黃燈 |
 | IO 燈號 | `lblIoDiAlive~lblIoDoPcBusy` | Label×5 | DI0~DO2 |
 
 ---
@@ -310,7 +312,7 @@ against current code with `rg` before editing because lookup data can become sta
 | 文件 | 用途 |
 |------|------|
 | [`docs/user-manual/io_diagrams.html`](../../../../docs/user-manual/io_diagrams.html) | IO FSM 視覺化（ET-7044 ↔ 設備 Nakan）|
-| [`docs/user-manual/storage-flow.html`](../../../../docs/user-manual/storage-flow.html) | Storage PC 雙寫架構流程圖 |
+| [`docs/user-manual/storage-flow.html`](../../../../docs/user-manual/storage-flow.html) | 逐步退場中的 Storage 操作/部署視覺說明；工程契約以 verify-flows 與 output-storage-map 為準 |
 | [`docs/user-manual/hardware-specs.html`](../../../../docs/user-manual/hardware-specs.html) | 7 相機 + Grabber + 光源 + PLC 硬體規格 |
 | [`modify-acquisition/references/mil-api-reference.md`](../../modify-acquisition/references/mil-api-reference.md) | MIL .NET API 完整參考 |
 | [`runtime-resources.md`](runtime-resources.md) | 現行資源儀器與量測方法 |

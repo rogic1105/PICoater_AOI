@@ -23,9 +23,6 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// 回顧曲線圖 zoom 連動（拖曳中也即時，鐵則：不可為效能抑制）。</summary>
         public event Action<double, double, double, double> ViewRangeMmChanged;
 
-        /// <summary>游標狀態（mm 位置/範圍/亮度/倍率）pass-through → 上層更新狀態列 lblPixelInfo。</summary>
-        public event Action<ImageDisplayView.CursorStatus> CursorStatusChanged;
-
         /// <summary>sdk 顯示元件（接事件 / 進階用；未建立前 null）。</summary>
         public ImageDisplayView View => _view;
 
@@ -49,7 +46,6 @@ namespace AniloxRoll.Monitor.UI.Managers
             _view.MergeAll = true;                     // 缺台黑占位（與影像/曲線分界一致）
             _view.EnableLod(GrayResizeCpu.Resize);     // 回顧白賺 LOD；CPU provider＝無 GPU 機也跑
             _view.ViewRangeMmChanged += (l, r, tp, bt) => ViewRangeMmChanged?.Invoke(l, r, tp, bt);
-            _view.CursorStatusChanged += s => CursorStatusChanged?.Invoke(s);
             // 互動流跡（RV 前綴）：autoFit 原因/lodRebind/clearFrame/wheelZoom 與監控同一套 sdk 掛勾
             _view.FlowLog = s => Core.Services.FlowTrace.Log("RV " + s);
             Core.Services.FlowTrace.Log($"RV EnsureImageDisplay create（thumbs={_thumbHosts.Length}）");
@@ -85,6 +81,13 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         /// <summary>chart 重建後補發當前視野（強化切換/重載後曲線恢復跟隨，免等滑鼠互動）。</summary>
         public void RefireViewRange() => _view?.RefireViewRange();
+
+        /// <summary>回顧頁由隱藏轉為可見時補畫既有內容，不重讀檔或重設視野。</summary>
+        public void RefreshVisible()
+        {
+            Core.Services.FlowTrace.Log($"RV tabVisible repaint view={_view != null}");
+            _view?.RefreshVisible();
+        }
 
         public void SetFlipVertical(bool flipVertical)
         {

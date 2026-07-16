@@ -41,7 +41,57 @@ class ReviewFlowValidator:
         self._check_curve_single_flight(session, report)
         self._check_drag_first_publish(session, report)
         self._check_direction(session, report)
+        self._check_tab_visible_repaint(session, report)
         return report
+
+    def _check_tab_visible_repaint(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        review_tabs = [
+            index
+            for index, line in enumerate(session.lines)
+            if line.message == "ui:tab → 回顧"
+        ]
+        if not review_tabs:
+            report.add(
+                self.domain,
+                "R0.tab-visible",
+                CheckStatus.NOT_COVERED,
+                "無使用者切到回顧頁操作",
+            )
+            return
+
+        missing = []
+        not_ready = []
+        for start in review_tabs:
+            end = next(
+                (
+                    index
+                    for index in range(start + 1, len(session.lines))
+                    if session.lines[index].message.startswith("ui:tab → ")
+                ),
+                len(session.lines),
+            )
+            if not any(
+                line.message.startswith("RV tabVisible repaint ")
+                for line in session.lines[start + 1 : end]
+            ):
+                missing.append(session.lines[start].timestamp)
+            if not any(
+                line.message.startswith("RV visiblePaint ready=True ")
+                for line in session.lines[start + 1 : end]
+            ):
+                not_ready.append(session.lines[start].timestamp)
+
+        report.add(
+            self.domain,
+            "R0.tab-visible",
+            CheckStatus.PASS if not missing and not not_ready else CheckStatus.FAIL,
+            f"切入={len(review_tabs)}；缺少可見重繪={len(missing)}"
+            + f"；未證明內容上畫={len(not_ready)}"
+            + (f"；首筆={missing[0]}" if missing else "")
+            + (f"；首筆未上畫={not_ready[0]}" if not_ready else ""),
+        )
 
     def _check_curves_follow(self, session: FlowSession, report: CheckReport) -> None:
         intents = [

@@ -109,7 +109,7 @@
             this.propertyGridSettings = new System.Windows.Forms.PropertyGrid();
             this.helpRichText = new System.Windows.Forms.RichTextBox();
             this.statusBarMain = new System.Windows.Forms.StatusStrip();
-            this.lblPixelInfo = new System.Windows.Forms.ToolStripStatusLabel();
+            this.lblInfo = new System.Windows.Forms.ToolStripStatusLabel();
             this.tabControlRight = new System.Windows.Forms.TabControl();
             this.tabPageInspSettings = new System.Windows.Forms.TabPage();
             this.tabPageCamera = new System.Windows.Forms.TabPage();
@@ -1028,18 +1028,18 @@
             // 
             this.statusBarMain.ImageScalingSize = new System.Drawing.Size(20, 20);
             this.statusBarMain.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.lblPixelInfo});
+            this.lblInfo});
             this.statusBarMain.Location = new System.Drawing.Point(0, 696);
             this.statusBarMain.Name = "statusBarMain";
             this.statusBarMain.Size = new System.Drawing.Size(1262, 25);
             this.statusBarMain.TabIndex = 15;
             this.statusBarMain.Text = "statusBarMain";
             // 
-            // lblPixelInfo
+            // lblInfo
             // 
-            this.lblPixelInfo.Name = "lblPixelInfo";
-            this.lblPixelInfo.Size = new System.Drawing.Size(395, 19);
-            this.lblPixelInfo.Text = "位置:0.00mm | 座標:(0, 0) | 亮度: 0  | 倍率:0.0x | 平移:(0, 0)";
+            this.lblInfo.Name = "lblInfo";
+            this.lblInfo.Size = new System.Drawing.Size(423, 19);
+            this.lblInfo.Text = "檢測電腦：讀取中… ｜ 儲存電腦：讀取中…";
             // 
             // tabControlRight
             // 
@@ -3176,7 +3176,7 @@
         private System.Windows.Forms.ComboBox cbReviewTime;
         private System.Windows.Forms.Button btnReviewSelectFolder;
         private System.Windows.Forms.StatusStrip statusBarMain;
-        private System.Windows.Forms.ToolStripStatusLabel lblPixelInfo;
+        private System.Windows.Forms.ToolStripStatusLabel lblInfo;
         private System.Windows.Forms.DataVisualization.Charting.Chart chartDataYieldYearly;
         private System.Windows.Forms.DataVisualization.Charting.Chart chartDataYieldMonthly;
         private System.Windows.Forms.DataVisualization.Charting.Chart chartDataYieldDaily;

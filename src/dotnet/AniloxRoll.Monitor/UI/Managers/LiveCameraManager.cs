@@ -104,8 +104,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         public LiveCameraManager(
             Form mainForm,
             Panel[] cameraPanels,
-            Panel mainDisplayPanel,
-            Action<string> updatePixelInfoCallback)
+            Panel mainDisplayPanel)
         {
             if (cameraPanels == null)
                 throw new ArgumentNullException(nameof(cameraPanels));
@@ -115,7 +114,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _globalMerge = new GlobalMergeCoordinator();
 
             _display = new LiveDisplayCoordinator(
-                mainForm, cameraPanels, mainDisplayPanel, updatePixelInfoCallback,
+                mainForm, cameraPanels, mainDisplayPanel,
                 _globalMerge,
                 () => _cameras.AsReadOnly(),
                 () => _inspectionSettings,

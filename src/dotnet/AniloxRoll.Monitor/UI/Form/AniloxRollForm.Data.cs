@@ -115,41 +115,62 @@ namespace AniloxRoll.Monitor.Forms
             _dataStatsPresenter.PeriodComboManualChanged += OnPeriodComboChanged;
             _dataStatsPresenter.DataFolderSelected += OnDataFolderSelected;
 
-            // Data → Review tab 切換時才把 pending selection 套進回顧控制項並載圖。
+            // Data → Review tab 切換：pending selection 才載圖；既有內容一律補一次可見重繪。
             tabMain.SelectedIndexChanged += async (s, e) =>
             {
-                if (tabMain.SelectedTab != tabPageReview || !_reviewDirty || !_hasPendingDataReviewSelection) return;
-                var pending = _pendingDataReviewSelection;
-                int idx = pending.idx;
-                if (idx < 0 || idx >= _dataStatsPresenter.GrabIdInfos.Count ||
-                    !string.Equals(_dataStatsPresenter.GrabIdInfos[idx].GrabId, pending.grabId, StringComparison.Ordinal))
+                if (tabMain.SelectedTab != tabPageReview || _suppressTabIntent) return;
+
+                if (_reviewDirty && _hasPendingDataReviewSelection)
                 {
-                    idx = _dataStatsPresenter.GrabIdInfos.FindIndex(
-                        candidate => string.Equals(candidate.GrabId, pending.grabId, StringComparison.Ordinal));
-                }
-                if (idx < 0 || idx >= _dataStatsPresenter.GrabIdInfos.Count) return;
-                var info = _dataStatsPresenter.GrabIdInfos[idx];
-                try
-                {
-                    using (_dataStatsPresenter.GrabIdCrossGuard.Enter())
-                    using (_dataStatsPresenter.GrabIdNavGuard.Enter())
+                    var pending = _pendingDataReviewSelection;
+                    int idx = pending.idx;
+                    if (idx < 0 || idx >= _dataStatsPresenter.GrabIdInfos.Count ||
+                        !string.Equals(_dataStatsPresenter.GrabIdInfos[idx].GrabId, pending.grabId, StringComparison.Ordinal))
                     {
-                        cbReviewId.SelectedIndex = idx;
-                        _dateTimeNavigator.SetPeriodToCombo(info.Earliest);
+                        idx = _dataStatsPresenter.GrabIdInfos.FindIndex(
+                            candidate => string.Equals(candidate.GrabId, pending.grabId, StringComparison.Ordinal));
                     }
-                    _presenter.UpdatePeriodNavigationState();
-                    _dataStatsPresenter.UpdateGrabIdNavState();
-                    _dataStatsPresenter.SetReviewGroupBoxes(true);
-                    _reviewDirty = false;
-                    _hasPendingDataReviewSelection = false;
-                    FlowTrace.Log($"DT review sync apply {info.GrabId}");
-                    await LoadGrabStitchedViewGuardRowRangeAsync(info.GrabId, info.Earliest, info.Latest);
-                    // 2b-ii：fit 由 ImageDisplayView 首幀自動 fit 承接
+                    if (idx >= 0 && idx < _dataStatsPresenter.GrabIdInfos.Count)
+                    {
+                        var info = _dataStatsPresenter.GrabIdInfos[idx];
+                        try
+                        {
+                            using (_dataStatsPresenter.GrabIdCrossGuard.Enter())
+                            using (_dataStatsPresenter.GrabIdNavGuard.Enter())
+                            {
+                                cbReviewId.SelectedIndex = idx;
+                                _dateTimeNavigator.SetPeriodToCombo(info.Earliest);
+                            }
+                            _presenter.UpdatePeriodNavigationState();
+                            _dataStatsPresenter.UpdateGrabIdNavState();
+                            _dataStatsPresenter.SetReviewGroupBoxes(true);
+                            _reviewDirty = false;
+                            _hasPendingDataReviewSelection = false;
+                            FlowTrace.Log($"DT review sync apply {info.GrabId}");
+                            await LoadGrabStitchedViewGuardRowRangeAsync(info.GrabId, info.Earliest, info.Latest);
+                            // 2b-ii：fit 由 ImageDisplayView 首幀自動 fit 承接
+                        }
+                        catch (Exception ex)
+                        {
+                            _reviewDirty = true;
+                            Trace.WriteLine($"[tabMain → Review] {ex}");
+                        }
+                    }
                 }
-                catch (Exception ex)
+
+                // SelectedIndexChanged 發生時子控制項的可見 layout 尚未保證完成；延後一個 UI message，
+                // 再以目前尺寸補 LOD tile + paint。只補顯示，不重讀檔或重設視野。
+                if (IsHandleCreated && !IsDisposed && !Disposing)
                 {
-                    _reviewDirty = true;
-                    Trace.WriteLine($"[tabMain → Review] {ex}");
+                    try
+                    {
+                        BeginInvoke(new Action(() =>
+                        {
+                            if (tabMain.SelectedTab == tabPageReview)
+                                _reviewDisplayManager?.RefreshVisible();
+                        }));
+                    }
+                    catch (InvalidOperationException) { /* Form 正在關閉 */ }
                 }
             };
         }

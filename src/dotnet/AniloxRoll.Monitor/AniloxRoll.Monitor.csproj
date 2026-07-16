@@ -136,6 +136,7 @@
     <Compile Include="Services\InspectionImagePathRepository.cs" />
     <Compile Include="Services\InspectionMuraProfileRepository.cs" />
     <Compile Include="Services\SingleGrabCurveSummaryStore.cs" />
+    <Compile Include="Services\StorageAppHeartbeatService.cs" />
     <Compile Include="Services\HessianRescaleHelper.cs" />
     <Compile Include="ImageProcessing\BatchInspectionService.cs" />
     <Compile Include="ImageProcessing\InspectionEngine.cs" />
@@ -195,7 +196,6 @@
     <Compile Include="UI\Services\ImageCacheService.cs" />
     <Compile Include="UI\Services\SingleGrabCurveCache.cs" />
     <Compile Include="UI\Managers\CameraStallDetector.cs" />
-    <Compile Include="UI\Managers\CursorStatusTextFormatter.cs" />
     <Compile Include="UI\Managers\GlobalMergeCoordinator.cs" />
     <Compile Include="UI\Managers\LiveDisplayCoordinator.cs" />
     <Compile Include="UI\Managers\RowCurveDisplayAdapter.cs" />

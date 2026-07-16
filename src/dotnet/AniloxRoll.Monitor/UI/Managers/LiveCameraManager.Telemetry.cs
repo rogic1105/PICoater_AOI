@@ -12,7 +12,7 @@ using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.Core.Interop; // NativeMethods（LOD GPU resize；P/Invoke 宣告唯一點）
-    // partial：游標座標 + 狀態 timer（lblPixelInfo / hw-ready）→ 未來 LiveDisplayCoordinator
+    // partial：相機狀態 timer / hw-ready；游標資訊由 ImageCanvas overlay 自行顯示。
 
 namespace AniloxRoll.Monitor.UI.Managers
 {
