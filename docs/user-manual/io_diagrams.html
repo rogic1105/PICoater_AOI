@@ -89,12 +89,133 @@
 
   .note { color: #888; font-size: 13px; margin-top: 8px; font-style: italic; }
   .note-en { color: #666; font-size: 12px; }
+  .vendor-guide { border: 3px solid var(--accent); background: #f7fbff; padding: 20px 24px; margin: 18px 0 28px; }
+  .vendor-guide h2 { margin-top: 0; color: var(--accent); }
+  .vendor-guide h3 { margin: 20px 0 8px; color: #333; }
+  .vendor-alert { border-left: 5px solid #e65100; background: #fff8e1; padding: 10px 14px; margin: 12px 0; }
+  .vendor-ok { border-left: 5px solid var(--green); background: #eef8ef; padding: 10px 14px; margin: 12px 0; }
+  .vendor-guide ol { line-height: 1.8; padding-left: 26px; }
+
+  @media print {
+    @page { size: A4 landscape; margin: 9mm; }
+    html, body { background: #fff; }
+    body { padding: 0; font-size: 10pt; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    h1 { font-size: 22pt; margin-top: 0; }
+    .subtitle { margin-bottom: 8mm; }
+    .vendor-guide { margin: 0; break-after: page; page-break-after: always; }
+    body > h2 {
+      margin: 0 0 5mm;
+      break-before: page;
+      page-break-before: always;
+      break-after: avoid-page;
+      page-break-after: avoid;
+    }
+    .diagram-container {
+      margin: 0;
+      padding: 6mm;
+      border-radius: 0;
+      overflow: visible;
+    }
+    .diagram-container > svg {
+      display: block;
+      width: 100% !important;
+      max-height: 165mm;
+      object-fit: contain;
+      margin: 0 auto;
+    }
+    .io-pause-print { padding: 4mm; font-size: 9pt; }
+    .io-pause-print > p:first-child { margin-bottom: 2mm !important; }
+    .io-pause-print > svg { height: 88mm; max-height: 88mm; }
+    .io-pause-print .io-table { margin-top: 2mm !important; font-size: 9pt; }
+    .io-pause-print .io-table th, .io-pause-print .io-table td { padding: 3px 8px; }
+    .io-pause-print .note { margin-top: 2mm !important; }
+    table, .sfc-step, .sfc-action, .vendor-alert, .vendor-ok {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    a { color: inherit; text-decoration: none; }
+  }
 </style>
 </head>
 <body>
 
 <h1>PICoater AOI — IO FSM Diagrams</h1>
 <p class="subtitle">IoGrabController 狀態機（ET-7044 IO 模組 ↔ 設備 Nakan） — Timing / UML / State Machine / SFC</p>
+
+<section class="vendor-guide" id="plc-vendor-guide">
+  <h2>設備／PLC 廠商先看這裡 — PLC 訊號交付規格</h2>
+  <p>
+    PLC 程式只需要依本節完成訊號交握；詳細波形請接著看
+    <a href="#io-timing">第 1 章 IO Timing Diagram</a>。本文件所有 HIGH／LOW 都是
+    <strong>ET-7044 邏輯點狀態</strong>。
+  </p>
+
+  <table class="io-table">
+    <tr><th>ET-7044 點位</th><th>方向</th><th>PLC 要做什麼／看到什麼</th><th>重要規則</th></tr>
+    <tr>
+      <td><strong>DI-0</strong><br><code>PLC_ALIVE</code></td>
+      <td>PLC → AOI</td>
+      <td>設備可運轉時設為 HIGH。</td>
+      <td>運轉期間持續保持 HIGH；變 LOW 會使 AOI 緊急停止並進入 Faulted。</td>
+    </tr>
+    <tr>
+      <td><strong>DI-1</strong><br><code>INSPECT_START</code></td>
+      <td>PLC → AOI</td>
+      <td>LOW→HIGH 開始取像；HIGH→LOW 停止取像。</td>
+      <td><strong>這是保持訊號，不是短脈衝。</strong>檢測期間保持 HIGH；下一輪一定要先 LOW，再重新 HIGH。</td>
+    </tr>
+    <tr>
+      <td><strong>DO-0</strong><br><code>PC_ALIVE</code></td>
+      <td>AOI → PLC</td>
+      <td>HIGH 代表 AOI 已完成 IO 連線與安全初始化。</td>
+      <td>PLC 只可在此訊號 HIGH 且 DO-2 LOW 時啟動新一輪。</td>
+    </tr>
+    <tr>
+      <td><strong>DO-2</strong><br><code>PC_BUSY</code></td>
+      <td>AOI → PLC</td>
+      <td>HIGH 代表正在取像；LOW 代表停止收尾完成。</td>
+      <td>PLC 不要用固定延遲猜 AOI 狀態，應等待此回授。</td>
+    </tr>
+    <tr>
+      <td><strong>DO-1</strong><br><code>MURA</code></td>
+      <td>AOI → PLC</td>
+      <td>本輪檢測到瑕疵後變 HIGH。</td>
+      <td>本輪內保持 HIGH，DI-1 下降停止時清除；PLC 如需保留結果，必須在本輪自行 latch。</td>
+    </tr>
+  </table>
+
+  <h3>PLC 標準循環（照這 6 步寫）</h3>
+  <ol>
+    <li>設備準備完成後，將 <strong>DI-0 PLC_ALIVE</strong> 設為 HIGH 並持續保持。</li>
+    <li>等待 AOI 回覆 <strong>DO-0 PC_ALIVE = HIGH</strong>，並確認 <strong>DO-2 PC_BUSY = LOW</strong>。</li>
+    <li>要開始檢測時，將 <strong>DI-1 INSPECT_START</strong> 從 LOW 切成 HIGH，檢測期間持續保持 HIGH。</li>
+    <li>等待 <strong>DO-2 PC_BUSY = HIGH</strong>，表示 AOI 已實際開始取像；同時監看並自行保存 DO-1 MURA。</li>
+    <li>設備本輪結束時，將 <strong>DI-1</strong> 切回 LOW。</li>
+    <li>等待 <strong>DO-2 = LOW</strong>；此時本輪結束，下一輪再從第 2 步開始。</li>
+  </ol>
+
+  <div class="vendor-alert">
+    <strong>不要把 DI-1 做成瞬間 pulse。</strong>AOI 約每 500ms 輪詢一次，短脈衝可能完全讀不到。
+    第一次取像還可能包含光源暖機與相機初始化，因此 PLC 應等待 DO-2 回授，不要只寫固定 timer。
+  </div>
+  <div class="vendor-alert">
+    AOI 有「抓取上限(sec)」安全設定，預設 10 秒。若 PLC 忘記將 DI-1 拉回 LOW，AOI 會自行停止並將 DO-2 拉低；
+    PLC 看到此情況後仍須把 DI-1 拉回 LOW，完成重新武裝，下一輪才能再次產生上升緣。
+  </div>
+  <div class="vendor-alert">
+    <strong>本節是邏輯交握規格，不是電氣接線圖。</strong>實際配線前，雙方必須依 ET-7044 端子文件與 PLC 輸出模組確認
+    24V、COM、NPN／PNP（sink／source）及是否需要中繼 Relay；未確認前不可直接送電。
+  </div>
+
+  <h3>廠商交機驗收</h3>
+  <div class="vendor-ok">
+    □ DI-0 HIGH 後 AOI 顯示 IO 已連線，DO-0 HIGH<br>
+    □ DI-1 上升後 AOI 開始取像，DO-2 HIGH<br>
+    □ 模擬瑕疵時 DO-1 HIGH，PLC 能在本輪保存結果<br>
+    □ DI-1 下降後 AOI 停止，DO-2／DO-1 回 LOW<br>
+    □ DI-0 斷開時 AOI 停止並顯示故障；DI-0 恢復後自動回待機
+  </div>
+</section>
 
 <!-- ════════════════════════════════════════════════════════════════
      0. ENUM REFERENCE
@@ -137,7 +258,7 @@
 <!-- ════════════════════════════════════════════════════════════════
      1. IO TIMING DIAGRAM (SVG waveforms + causal arrows)
      ════════════════════════════════════════════════════════════════ -->
-<h2>1. IO Timing Diagram 時序圖（含因果關係箭頭）</h2>
+<h2 id="io-timing">1. IO Timing Diagram 時序圖（含因果關係箭頭）</h2>
 <div class="diagram-container">
   <svg viewBox="0 0 960 510" width="100%" style="max-width:960px; display:block; margin:0 auto;" font-family="'Segoe UI','Microsoft JhengHei',sans-serif">
     <defs>
@@ -542,6 +663,7 @@
   </table>
 </div>
 
+<!-- ════════════════════════════════════════════════════════════════
      3. STATE MACHINE DIAGRAM (Pure SVG — orthogonal lines)
      ════════════════════════════════════════════════════════════════ -->
 <h2>3. State Machine Diagram 狀態機圖</h2>
@@ -917,7 +1039,7 @@
      6. IO 暫停模式（lblIoConn 點擊）
      ════════════════════════════════════════════════════════════════ -->
 <h2>6. IO 暫停模式 — <code>lblIoConn</code> 點擊切換</h2>
-<div class="diagram-container">
+<div class="diagram-container io-pause-print">
   <p style="margin-bottom:16px; font-size:14px; color:#555;">
     點擊狀態列的 IO 連線燈即可暫停 IO 控制（軟體層旗標），PLC TCP 連線與 keepalive DO_PC_ALIVE 保持不變。再點一次恢復。
   </p>
