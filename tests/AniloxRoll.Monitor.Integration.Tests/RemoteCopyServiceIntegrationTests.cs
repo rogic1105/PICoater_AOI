@@ -105,11 +105,49 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void EnqueueMutableFile_UpdatedWhilePending_PublishesLatestSnapshot()
+        {
+            string blockedPath = CreateBlockedRemotePath();
+            string currentRemote = blockedPath;
+            string source = CreateCaptureFile("_ticks.csv", "frame-1,100\r\n");
+
+            using (var service = new RemoteCopyService(() => currentRemote, () => _localRoot))
+            {
+                service.EnqueueFile(source);
+                WaitUntil(() => service.QueueCount == 1, 2000, "mutable file pending");
+
+                File.AppendAllText(source, "frame-2,200\r\n");
+                service.EnqueueFile(source);
+
+                Directory.CreateDirectory(_remoteRoot);
+                currentRemote = _remoteRoot;
+                Assert.That(service.ProbeRemoteWritable(), Is.True);
+                WaitUntil(() => service.QueueCount == 0, 5000, "mutable file republish");
+
+                string destination = Path.Combine(
+                    _remoteRoot, "2026", "202607", "20260715", "_ticks.csv");
+                Assert.That(File.ReadAllText(destination), Is.EqualTo(File.ReadAllText(source)));
+                Assert.That(service.TotalCopiedFiles, Is.EqualTo(2));
+                Assert.That(FindPendingMarkers(), Is.Empty);
+                Assert.That(FindPartFiles(_remoteRoot), Is.Empty);
+            }
+        }
+
+        [Test]
         public void Retention_PendingRemoteCopy_PreservesSourceUntilPublished()
         {
             string blockedPath = CreateBlockedRemotePath();
             string currentRemote = blockedPath;
             string source = CreateCaptureFile("protected.bin", "payload-3");
+            string dayDirectory = Path.GetDirectoryName(source);
+            string summaryDirectory = Path.Combine(dayDirectory, "_curve_summary");
+            Directory.CreateDirectory(summaryDirectory);
+            string summary = Path.Combine(summaryDirectory, "260715-120000.mcsf");
+            string ticks = Path.Combine(dayDirectory, "_ticks.csv");
+            string dailyCsv = Path.Combine(Path.GetDirectoryName(dayDirectory), "20260715.csv");
+            File.WriteAllText(summary, "derived");
+            File.WriteAllText(ticks, "frame,100\r\n");
+            File.WriteAllText(dailyCsv, "inspection-record");
 
             using (var service = new RemoteCopyService(() => currentRemote, () => _localRoot))
             {
@@ -118,7 +156,7 @@ namespace AniloxRoll.Monitor.Tests
 
                 var retention = new StorageRetentionService(
                     () => _localRoot,
-                    () => long.MaxValue,
+                    () => GetCleanupTriggerThreshold(_localRoot),
                     service.HasPendingFilesUnder);
                 retention.RunCleanup();
                 Assert.That(File.Exists(source), Is.True, "pending source was deleted");
@@ -130,7 +168,25 @@ namespace AniloxRoll.Monitor.Tests
 
                 retention.RunCleanup();
                 Assert.That(File.Exists(source), Is.False, "published source was not eligible for cleanup");
+                Assert.That(File.Exists(summary), Is.False, "derived curve summary was retained");
+                Assert.That(File.Exists(ticks), Is.False, "orphaned tick sidecar was retained");
+                Assert.That(File.Exists(dailyCsv), Is.True, "daily inspection CSV must be retained");
             }
+        }
+
+        [Test]
+        public void Retention_MinFreeAtOrAboveVolumeTotal_DoesNotDeleteCaptures()
+        {
+            string source = CreateCaptureFile("must-remain.bin", "payload");
+            var retention = new StorageRetentionService(
+                () => _localRoot,
+                () => long.MaxValue);
+
+            retention.RunCleanup();
+
+            Assert.That(File.Exists(source), Is.True);
+            Assert.That(retention.LastCleanedBytes, Is.Zero);
+            Assert.That(retention.LastDriveTotalBytes, Is.GreaterThan(0));
         }
 
         private string CreateBlockedRemotePath()
@@ -138,6 +194,12 @@ namespace AniloxRoll.Monitor.Tests
             string blocker = Path.Combine(_tempRoot, "blocked-parent");
             File.WriteAllText(blocker, "not a directory");
             return Path.Combine(blocker, "share");
+        }
+
+        private static long GetCleanupTriggerThreshold(string path)
+        {
+            string root = Path.GetPathRoot(Path.GetFullPath(path));
+            return new DriveInfo(root).TotalSize - 1;
         }
 
         private string CreateCaptureFile(string fileName, string content)

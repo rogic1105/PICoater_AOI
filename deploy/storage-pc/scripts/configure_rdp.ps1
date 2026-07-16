@@ -1,9 +1,13 @@
 ﻿# 儲存機：啟用遠端桌面（RDP）+ 建立 RDP 帳號
-# 依賴先跑過 setup_storage_pc.ps1（讀同一份 storage-config.json）
+# 依賴同一份 storage-config.json
 #
 # 內網專用設計：
 # - switch 不對外，帳密可以簡單（預設 aroll/aroll）
 # - 若要換強密碼，改 storage-config.json 的 RdpUser/RdpPassword 再重跑即可
+
+param(
+    [string] $Config = (Join-Path (Split-Path -Parent $PSScriptRoot) 'storage-config.json')
+)
 
 function Die([string]$msg) { Write-Host ("[FAIL] " + $msg) -ForegroundColor Red; exit 1 }
 
@@ -13,7 +17,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 }
 
 # 讀取設定檔
-$cfgPath = Join-Path $PSScriptRoot 'storage-config.json'
+$cfgPath = $Config
 if (-not (Test-Path $cfgPath)) { Die ("找不到 " + $cfgPath) }
 $json = [System.IO.File]::ReadAllText((Resolve-Path $cfgPath).Path, [System.Text.Encoding]::UTF8)
 $cfg  = $json | ConvertFrom-Json

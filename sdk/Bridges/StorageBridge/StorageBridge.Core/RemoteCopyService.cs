@@ -29,6 +29,8 @@ namespace StorageBridge.Core
         private readonly ConcurrentQueue<CopyItem> _queue = new ConcurrentQueue<CopyItem>();
         private readonly HashSet<string> _pendingPaths =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _dirtyPaths =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly object _pendingSync = new object();
         private readonly object _stateSync = new object();
         private readonly ManualResetEventSlim _workSignal = new ManualResetEventSlim(false);
@@ -265,8 +267,14 @@ namespace StorageBridge.Core
                 if (publishedSize != sourceSizeAfter)
                     throw new IOException("Published remote file length does not match the source.");
 
-                if (!TryCompletePendingItem(item))
+                CopyItem followUp;
+                if (!TryCompletePendingItem(item, out followUp))
                     throw new IOException("Remote file was published but pending marker remains.");
+                if (followUp.LocalPath != null)
+                {
+                    _queue.Enqueue(followUp);
+                    _workSignal.Set();
+                }
                 Interlocked.Increment(ref _totalCopiedFiles);
                 Interlocked.Add(ref _totalCopiedBytes, sourceSizeAfter);
                 MarkRemoteWritable(true, null);
@@ -318,7 +326,11 @@ namespace StorageBridge.Core
 
                 lock (_pendingSync)
                 {
-                    if (_pendingPaths.Contains(normalizedPath)) return false;
+                    if (_pendingPaths.Contains(normalizedPath))
+                    {
+                        _dirtyPaths.Add(normalizedPath);
+                        return false;
+                    }
 
                     Directory.CreateDirectory(_pendingDirectory);
                     string markerPath = Path.Combine(
@@ -456,22 +468,34 @@ namespace StorageBridge.Core
             }
         }
 
-        private bool TryCompletePendingItem(CopyItem item)
+        private bool TryCompletePendingItem(CopyItem item, out CopyItem followUp)
         {
-            try
-            {
-                File.Delete(item.MarkerPath);
-                if (File.Exists(item.MarkerPath)) return false;
-            }
-            catch (Exception ex)
-            {
-                Trace.TraceWarning(
-                    $"[RemoteCopy] copied but marker delete failed {item.MarkerPath}: {ex.Message}");
-                return false;
-            }
-
+            followUp = default(CopyItem);
             lock (_pendingSync)
             {
+                if (_dirtyPaths.Remove(item.LocalPath))
+                {
+                    followUp = new CopyItem
+                    {
+                        LocalPath = item.LocalPath,
+                        RelativePath = item.RelativePath,
+                        MarkerPath = item.MarkerPath,
+                        Attempt = 0
+                    };
+                    return true;
+                }
+
+                try
+                {
+                    File.Delete(item.MarkerPath);
+                    if (File.Exists(item.MarkerPath)) return false;
+                }
+                catch (Exception ex)
+                {
+                    Trace.TraceWarning(
+                        $"[RemoteCopy] copied but marker delete failed {item.MarkerPath}: {ex.Message}");
+                    return false;
+                }
                 _pendingPaths.Remove(item.LocalPath);
             }
             return true;

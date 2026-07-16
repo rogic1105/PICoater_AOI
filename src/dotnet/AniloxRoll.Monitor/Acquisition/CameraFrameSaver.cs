@@ -37,13 +37,13 @@ namespace AniloxRoll.Monitor.Core.Camera
             SaveJpegFromBytes(ctx.RawBytes, ctx.ResizeWidth, ctx.ResizeHeight,
                 Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.RawJpg), ctx.JpgQuality);
 
-            if (ctx.ProcVBytes != null)
-                SaveJpegFromBytes(ctx.ProcVBytes, ctx.ResizeWidth, ctx.ResizeHeight,
-                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.ProcV), ctx.JpgQuality);
+            if (ctx.ProcCBytes != null)
+                SaveJpegFromBytes(ctx.ProcCBytes, ctx.ResizeWidth, ctx.ResizeHeight,
+                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.ProcC), ctx.JpgQuality);
 
-            if (ctx.ProcHBytes != null)
-                SaveJpegFromBytes(ctx.ProcHBytes, ctx.ResizeWidth, ctx.ResizeHeight,
-                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.ProcH), ctx.JpgQuality);
+            if (ctx.ProcRBytes != null)
+                SaveJpegFromBytes(ctx.ProcRBytes, ctx.ResizeWidth, ctx.ResizeHeight,
+                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.ProcR), ctx.JpgQuality);
 
             if (ctx.MeanC != null)
             {
@@ -86,6 +86,15 @@ namespace AniloxRoll.Monitor.Core.Camera
             if (ctx.OnFilesSaved != null)
             {
                 var savedFiles = Directory.GetFiles(ctx.SaveDir, ctx.BaseName + "*");
+                if (ctx.FrameStartTicks > 0)
+                {
+                    string tickSidecar = Path.Combine(ctx.SaveDir, TickSidecarName);
+                    if (File.Exists(tickSidecar))
+                    {
+                        Array.Resize(ref savedFiles, savedFiles.Length + 1);
+                        savedFiles[savedFiles.Length - 1] = tickSidecar;
+                    }
+                }
                 ctx.OnFilesSaved(savedFiles);
             }
 
@@ -448,8 +457,8 @@ namespace AniloxRoll.Monitor.Core.Camera
     public struct CaptureContext
     {
         public byte[] RawBytes;
-        public byte[] ProcVBytes;
-        public byte[] ProcHBytes;
+        public byte[] ProcCBytes;
+        public byte[] ProcRBytes;
         public float[] MeanC;
         public float[] MaxC;
         public float[] MeanR;

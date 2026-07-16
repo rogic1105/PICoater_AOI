@@ -599,7 +599,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                 int fw = _mil.FrameWidth;
                 int fh = _mil.FrameHeight;
 
-                byte[] rawBytes = null, procVBytes = null, procHBytes = null;
+                byte[] rawBytes = null, procCBytes = null, procRBytes = null;
                 float[] meanArr = null, maxArr = null;
                 float[] rowMeanArr = null, rowMaxArr = null;
                 int rw = _resizeWidth, rh = _resizeHeight;
@@ -624,13 +624,13 @@ namespace AniloxRoll.Monitor.Core.Camera
                         rawBytes = new byte[pixels];
                         Marshal.Copy(_rawResizeBuf, rawBytes, 0, pixels);
 
-                        // V 脊線縮圖（native 從 device d_ridge）→ _proc_v.jpg
-                        procVBytes = new byte[pixels];
-                        Marshal.Copy(_procResizeBuf, procVBytes, 0, pixels);
+                        // Column ridge thumbnail.
+                        procCBytes = new byte[pixels];
+                        Marshal.Copy(_procResizeBuf, procCBytes, 0, pixels);
 
-                        // H 脊線縮圖（native 從 device d_mura）→ _proc_h.jpg
-                        procHBytes = new byte[pixels];
-                        Marshal.Copy(_muraResizeBuf, procHBytes, 0, pixels);
+                        // Row ridge thumbnail.
+                        procRBytes = new byte[pixels];
+                        Marshal.Copy(_muraResizeBuf, procRBytes, 0, pixels);
 
                         // Col curves（vertical ridge）
                         int curveLen = _nativeBufferPool.CurveBufferSize / sizeof(float);
@@ -680,7 +680,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                     // 建立快照，背景執行緒存檔
                     var ctx = new CaptureContext
                     {
-                        RawBytes = rawBytes, ProcVBytes = procVBytes, ProcHBytes = procHBytes,
+                        RawBytes = rawBytes, ProcCBytes = procCBytes, ProcRBytes = procRBytes,
                         MeanC = meanArr, MaxC = maxArr,
                         MeanR = rowMeanArr, MaxR = rowMaxArr,
                         ResizeWidth = rw, ResizeHeight = rh,

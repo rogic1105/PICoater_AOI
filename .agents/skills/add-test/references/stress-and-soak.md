@@ -19,6 +19,16 @@ Inspect the current test names before documenting a case; do not rely on old cou
 4. **Soak, shift or 24 hours**: no crash; frame, save, remote-copy, RAM, handle, VRAM, and queue trends remain bounded.
 5. **Failure injection**: disconnect/reconnect PLC, light, camera, storage network, and low-disk conditions one at a time. Verify recovery and retained data.
 
+For the shift/24-hour phase, run `IoBridge.IoSimulator` as the repeatable IO source and schedule
+start/stop/Mura transitions throughout the run. Include at least one simulator restart and one
+inspection-app restart; the soak still needs separate short runs against the physical IO before
+release because the simulator cannot reproduce wiring, switch, or power-supply faults.
+
+Low-disk retention does not require filling a disk. On an isolated test volume, set
+`LocalMinFreeGB` above that volume's current free space, run cleanup once, and verify oldest-first
+deletion, pending-copy protection, `_ticks.csv`/`_curve_summary` deletion, and daily CSV retention.
+Never point this test at production captures.
+
 ## Evidence
 
 - `D:\Anilox\Logs\trace-*.log`: flow, stalls, slow handlers, hardware transitions.

@@ -8,7 +8,7 @@ namespace AniloxRoll.Monitor.Core.Services
     /// 與讀端（回顧 / 統計 / 合圖 / 縮圖）共用同一套 suffix —— 改命名格式只改這裡。
     ///
     /// 一張擷取（base = "{yyyyMMdd_HHmmss.fff}-{camId}"）對應的產出：
-    ///   {base}_raw.jpg / _proc_v.jpg / _proc_h.jpg / _mean_c.bin / _max_c.bin / _mean_r.bin / _max_r.bin
+    ///   {base}_raw.jpg / _proc_c.jpg / _proc_r.jpg / _mean_c.bin / _max_c.bin / _mean_r.bin / _max_r.bin
     /// 上一代曲線格式（_mean_v/_max_v/_mean_h/_max_h）與更早格式僅供讀端 fallback。
     ///
     /// 本類只統一「檔名字串」；fallback 的「載入行為」（new ?? legacy）仍由各 caller 決定，
@@ -18,8 +18,8 @@ namespace AniloxRoll.Monitor.Core.Services
     {
         // ── 新格式 suffix ──────────────────────────────────────────────────
         public const string RawJpg = "_raw.jpg";
-        public const string ProcV  = "_proc_v.jpg";
-        public const string ProcH  = "_proc_h.jpg";
+        public const string ProcC  = "_proc_c.jpg";
+        public const string ProcR  = "_proc_r.jpg";
         public const string MeanC  = "_mean_c.bin";
         public const string MaxC   = "_max_c.bin";
         public const string MeanR  = "_mean_r.bin";
@@ -30,6 +30,8 @@ namespace AniloxRoll.Monitor.Core.Services
         public const string MaxCPrevious  = "_max_v.bin";
         public const string MeanRPrevious = "_mean_h.bin";
         public const string MaxRPrevious  = "_max_h.bin";
+        public const string ProcCPrevious = "_proc_v.jpg";
+        public const string ProcRPrevious = "_proc_h.jpg";
         public const string ProcLegacy  = "_proc.jpg";
         public const string MeanCLegacy = "_mean.bin";
         public const string MaxCLegacy  = "_max.bin";
@@ -65,7 +67,8 @@ namespace AniloxRoll.Monitor.Core.Services
         }
 
         // ── 方向（"h" / 其餘視為 "v"）選 suffix ─────────────────────────
-        public static string ProcSuffix(string dir) => dir == "h" ? ProcH : ProcV;
+        public static string ProcSuffix(string axis) =>
+            axis == "r" || axis == "h" ? ProcR : ProcC;
         public static string MeanSuffix(string dir) => dir == "h" ? MeanR : MeanC;
         public static string MaxSuffix(string dir)  => dir == "h" ? MaxR : MaxC;
 
@@ -92,10 +95,13 @@ namespace AniloxRoll.Monitor.Core.Services
         }
 
         /// <summary>解析處理圖路徑：新 v/h 命名存在則用之，否則回傳舊命名 _proc.jpg（不保證存在）。</summary>
-        public static string ResolveProcJpg(string baseNoSuffix, string dir)
+        public static string ResolveProcJpg(string baseNoSuffix, string axis)
         {
-            string p = baseNoSuffix + ProcSuffix(dir);
-            return File.Exists(p) ? p : baseNoSuffix + ProcLegacy;
+            bool row = axis == "r" || axis == "h";
+            string current = baseNoSuffix + (row ? ProcR : ProcC);
+            if (File.Exists(current)) return current;
+            string previous = baseNoSuffix + (row ? ProcRPrevious : ProcCPrevious);
+            return File.Exists(previous) ? previous : baseNoSuffix + ProcLegacy;
         }
     }
 }

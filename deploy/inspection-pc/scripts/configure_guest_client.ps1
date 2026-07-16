@@ -1,6 +1,10 @@
 ﻿# 檢測機：允許匿名 Guest 存取遠端 SMB（Windows 10/11 預設會擋）
 # 對應 registry：LanmanWorkstation\Parameters\AllowInsecureGuestAuth
 
+param(
+    [string] $Config = (Join-Path (Split-Path -Parent $PSScriptRoot) 'inspection-config.json')
+)
+
 function Die([string]$msg) { Write-Host ("[FAIL] " + $msg) -ForegroundColor Red; exit 1 }
 
 $principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
@@ -37,5 +41,7 @@ Get-ItemProperty -Path $reg1 -Name AllowInsecureGuestAuth | Select-Object AllowI
 
 Write-Host ""
 Write-Host "[完成] 設定已套用。" -ForegroundColor Cyan
-Write-Host "        測試：Win+R 輸入 \\192.168.10.20\AniloxStorage 應直接開啟（不再要求帳密）"
+$json = [System.IO.File]::ReadAllText((Resolve-Path $Config).Path, [System.Text.Encoding]::UTF8)
+$cfg = $json | ConvertFrom-Json
+Write-Host ("        測試：Win+R 輸入 \\" + $cfg.VerifyPingTarget + "\" + $cfg.StorageShareName + " 應直接開啟（不再要求帳密）")
 Write-Host "        若仍要求，執行 gpupdate /force 或重開機"

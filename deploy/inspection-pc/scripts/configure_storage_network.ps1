@@ -1,7 +1,7 @@
 ﻿# 檢測機新增 secondary IP：讓同一張 NIC 同時在 PLC 網段 + 儲存網段
 # 不動現有 PLC IP（只新增別名，Modbus 通訊不中斷）
 # 用法（以系統管理員身分執行 PowerShell）：
-#   powershell -NoProfile -ExecutionPolicy Bypass -File setup_inspection_nic.ps1
+#   powershell -NoProfile -ExecutionPolicy Bypass -File configure_storage_network.ps1
 #
 # 參數來自同目錄 inspection-config.json：
 #   PlcSubnetPrefix       PLC 網段前綴（用來自動找現有 NIC，例 "192.168.255."）
@@ -25,7 +25,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 }
 
 # ── 讀取設定 ─────────────────────────────────
-if (-not $Config) { $Config = Join-Path $PSScriptRoot 'inspection-config.json' }
+if (-not $Config) { $Config = Join-Path (Split-Path -Parent $PSScriptRoot) 'inspection-config.json' }
 if (-not (Test-Path $Config)) { Die ("找不到設定檔: " + $Config) }
 # 明確以 UTF-8 讀 JSON（PS 5.1 預設 ANSI 會把 UTF-8 中文當 Big5 解碼）
 $json = [System.IO.File]::ReadAllText((Resolve-Path $Config).Path, [System.Text.Encoding]::UTF8)

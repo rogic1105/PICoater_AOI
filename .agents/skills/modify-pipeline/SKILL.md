@@ -43,7 +43,7 @@ description: Modify image-processing pipelines, native processing calls, buffer 
 - NativeBufferPool.Dispose：`_isDisposed = true` 必須在所有 `FreePinned` 之前設定（防重複 Free）
 
 ### 存檔格式（TrySaveCapture）
-- 7 個固定檔案：`_raw.jpg`, `_proc_v.jpg`, `_proc_h.jpg`, `_mean_v.bin`, `_max_v.bin`, `_mean_h.bin`, `_max_h.bin`
+- 7 個固定檔案：`_raw.jpg`, `_proc_c.jpg`, `_proc_r.jpg`, `_mean_c.bin`, `_max_c.bin`, `_mean_r.bin`, `_max_r.bin`
 - 額外（`SaveOriginalBmp=true`）：全解析度 `.bmp`（必須在 callback 同步完成）
 - JPEG 寫入移至 `Task.Run` 背景執行；BMP 匯出同步（`sourceBuffer` 會被 MIL 回收）
 - 時間戳精確到毫秒（`.fff`），同 Line Rate 相機由 `CaptureTimestampCoordinator` 協調

@@ -31,7 +31,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         /// 拼接同一相機的多張影像（依 sortedPaths 順序，第一張在最上方）。
         /// bmpLoader：BMP 檔案的快速載入器（TanukiCv_FastReadBMP + GPU resize）；
         ///            為 null 時退回 GDI+ 路徑（慢）。
-        /// useProcessed：true 時 _raw.jpg 改讀 _proc_v/h.jpg（若存在）；BMP 路徑不受影響。
+        /// useProcessed：true 時 _raw.jpg 改讀 _proc_c/r.jpg（若存在）；BMP 路徑不受影響。
         /// ridgeDirection：處理圖方向 "v"（預設）或 "h"。
         /// 若只有一張則直接回傳該張的 Bitmap。全部失敗則回傳 null。
         /// </summary>

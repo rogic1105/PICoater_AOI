@@ -16,6 +16,7 @@ namespace StorageBridge.Core
         private readonly Func<string, bool> _shouldPreserveDayFolder;
 
         private volatile int _running;
+        private bool _invalidThresholdReported;
 
         /// <summary>最近一次清理的日期資料夾數。</summary>
         public int LastCleanedDayFolders { get; private set; }
@@ -54,6 +55,25 @@ namespace StorageBridge.Core
                 var (freeBytes, driveTotal) = GetDriveFreeSpace(root);
                 LastDriveTotalBytes   = driveTotal;
                 LastScannedTotalBytes = driveTotal > 0 ? driveTotal - freeBytes : 0;
+
+                if (driveTotal > 0 && minFreeBytes >= driveTotal)
+                {
+                    if (!_invalidThresholdReported)
+                    {
+                        Trace.TraceError(
+                            $"[StorageRetention] Cleanup skipped: min free {minFreeBytes} bytes " +
+                            $">= volume total {driveTotal} bytes. No files were deleted.");
+                        _invalidThresholdReported = true;
+                    }
+                    return;
+                }
+                if (_invalidThresholdReported)
+                {
+                    Trace.TraceInformation(
+                        $"[StorageRetention] Cleanup threshold valid again: min free {minFreeBytes} bytes, " +
+                        $"volume total {driveTotal} bytes");
+                    _invalidThresholdReported = false;
+                }
 
                 if (freeBytes >= minFreeBytes) return;
 
@@ -152,12 +172,14 @@ namespace StorageBridge.Core
         private static long DeleteDayFolderImages(string dayDir)
         {
             long freedBytes = 0;
-            string[] extensions = { ".jpg", ".bmp", ".bin" };
+            string[] extensions = { ".jpg", ".bmp", ".bin", ".mcsf" };
 
-            foreach (string file in SafeGetFiles(dayDir, "*.*"))
+            foreach (string file in SafeGetFiles(dayDir, "*.*", SearchOption.AllDirectories))
             {
                 string ext = Path.GetExtension(file).ToLowerInvariant();
-                if (Array.IndexOf(extensions, ext) < 0) continue;
+                bool tickSidecar = string.Equals(
+                    Path.GetFileName(file), "_ticks.csv", StringComparison.OrdinalIgnoreCase);
+                if (!tickSidecar && Array.IndexOf(extensions, ext) < 0) continue;
 
                 try
                 {
@@ -178,7 +200,14 @@ namespace StorageBridge.Core
         {
             try
             {
-                if (Directory.GetFiles(dayDir).Length > 0) return;
+                string[] children = Directory.GetDirectories(dayDir, "*", SearchOption.AllDirectories);
+                Array.Sort(children, (left, right) => right.Length.CompareTo(left.Length));
+                foreach (string child in children)
+                {
+                    if (Directory.GetFileSystemEntries(child).Length == 0)
+                        Directory.Delete(child, false);
+                }
+                if (Directory.GetFileSystemEntries(dayDir).Length > 0) return;
                 Directory.Delete(dayDir, false);
 
                 string monthDir = Path.GetDirectoryName(dayDir);
@@ -228,7 +257,13 @@ namespace StorageBridge.Core
 
         private static string[] SafeGetFiles(string path, string pattern)
         {
-            try { return Directory.GetFiles(path, pattern); }
+            return SafeGetFiles(path, pattern, SearchOption.TopDirectoryOnly);
+        }
+
+        private static string[] SafeGetFiles(
+            string path, string pattern, SearchOption searchOption)
+        {
+            try { return Directory.GetFiles(path, pattern, searchOption); }
             catch (Exception ex)
             {
                 Trace.TraceWarning(

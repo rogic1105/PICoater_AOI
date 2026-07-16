@@ -128,7 +128,7 @@ namespace AniloxRoll.Monitor.Core.Services
             catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[InspectionEngine.LoadRawThumbnailFromJpeg] {ex.GetType().Name}: {ex.Message}"); return new TimedResult<InspectionData>(); }
         }
 
-        /// <summary>從 _proc_v.jpg + .bin 讀取縮圖與曲線，用於批次縮圖牆（處理模式）。</summary>
+        /// <summary>從 _proc_c.jpg + .bin 讀取縮圖與曲線，用於批次縮圖牆（處理模式）。</summary>
         private static TimedResult<InspectionData> LoadProcessedThumbnailFromJpeg(string rawJpgPath, int targetThumbWidth)
         {
             var sw = Stopwatch.StartNew();
@@ -171,7 +171,7 @@ namespace AniloxRoll.Monitor.Core.Services
         }
 
         /// <summary>
-        /// 載入預先存好的新格式檔案（_raw.jpg / _proc_v.jpg / _proc_h.jpg / .bin），無需 GPU。
+        /// 載入預先存好的新格式檔案（_raw.jpg / _proc_c.jpg / _proc_r.jpg / .bin），無需 GPU。
         /// ridgeDirection: "v" = vertical, "h" = horizontal（控制處理模式顯示哪張）。
         /// </summary>
         private static InspectionData LoadFromPrecomputedFiles(string rawJpgPath, bool isProcessedMode,
@@ -180,7 +180,7 @@ namespace AniloxRoll.Monitor.Core.Services
             var swTotal = Stopwatch.StartNew();
 
             string baseNoSuffix = CaptureFileNaming.StripRawJpg(rawJpgPath);
-            // 依方向選擇處理圖：_proc_v.jpg 或 _proc_h.jpg（新命名優先，否則舊命名 _proc.jpg）
+            // 依軸向選擇處理圖；解析器同時支援既有 v/h 舊檔。
             string procJpgPath  = CaptureFileNaming.ResolveProcJpg(baseNoSuffix, ridgeDirection);
             string meanBinPath  = CaptureFileNaming.ResolveMeanC(baseNoSuffix);
             string maxBinPath   = CaptureFileNaming.ResolveMaxC(baseNoSuffix);
@@ -299,9 +299,9 @@ namespace AniloxRoll.Monitor.Core.Services
                 int dstW = Math.Max(1, w / scale);
                 int dstH = Math.Max(1, h / scale);
 
-                // _muraBuffer = horizontal ridge → _proc_h.jpg（先存，resize 前 _muraBuffer 還沒被覆蓋）
-                string procHPath = basePath + CaptureFileNaming.ProcH;
-                if (!File.Exists(procHPath))
+                // _muraBuffer = row ridge；先存，resize 前 buffer 尚未被覆蓋。
+                string procRPath = basePath + CaptureFileNaming.ProcR;
+                if (!File.Exists(procRPath))
                 {
                     int retH = NativeMethods.TanukiCv_Resize_GPU(_muraBuffer, w, h, _inputBuffer, dstW, dstH);
                     if (retH == 0)
@@ -311,24 +311,24 @@ namespace AniloxRoll.Monitor.Core.Services
                         using (var g = Graphics.FromImage(bmp24))
                         {
                             g.DrawImage(bmpH, 0, 0, dstW, dstH);
-                            SaveBitmapAsJpeg(bmp24, procHPath, 90);
+                            SaveBitmapAsJpeg(bmp24, procRPath, 90);
                         }
                     }
                 }
 
-                // _ridgeBuffer = vertical ridge → resize 至 _muraBuffer 作為回傳 Bitmap + 存 _proc_v.jpg
+                // _ridgeBuffer = column ridge；resize 至 _muraBuffer 作為回傳 Bitmap。
                 int ret = NativeMethods.TanukiCv_Resize_GPU(_ridgeBuffer, w, h, _muraBuffer, dstW, dstH);
                 if (ret != 0) return null;
 
-                string procVPath = basePath + CaptureFileNaming.ProcV;
-                if (!File.Exists(procVPath))
+                string procCPath = basePath + CaptureFileNaming.ProcC;
+                if (!File.Exists(procCPath))
                 {
                     using (var bmpProc = ImageUtils.Create8bppBitmap(_muraBuffer, dstW, dstH, flipY: true))
                     using (var bmp24 = new Bitmap(dstW, dstH, PixelFormat.Format24bppRgb))
                     using (var g = Graphics.FromImage(bmp24))
                     {
                         g.DrawImage(bmpProc, 0, 0, dstW, dstH);
-                        SaveBitmapAsJpeg(bmp24, procVPath, 90);
+                        SaveBitmapAsJpeg(bmp24, procCPath, 90);
                     }
                 }
 

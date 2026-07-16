@@ -3,15 +3,15 @@ generate_mock_captures.py
 =========================
 將 mock BMP 影像轉換為 PICoater AOI 的存檔格式：
   - 每個 CAM 資料夾內的 BMP 逐張獨立處理（不拼接，AniloxRollForm 可自行合成）
-  - JPG（縮小 1/5，quality=90）：_raw.jpg, _proc_v.jpg, _proc_h.jpg
-  - .bin 曲線檔（MCBF 格式）：_mean_v, _max_v, _mean_h, _max_h
+  - JPG（縮小 1/5，quality=90）：_raw.jpg, _proc_c.jpg, _proc_r.jpg
+  - .bin 曲線檔（MCBF 格式）：_mean_c, _max_c, _mean_r, _max_r
   - CSV 檢測紀錄（每日一個 .csv）
 
 Pipeline（與 C# AniloxCamera.cs 一致）：
   1. 讀取每張 BMP，垂直翻轉
   2. remove_column_background（全解析度）
   3. compute_hessian_ridge V/H（全解析度，sigma=9.0）
-  4. INTER_AREA resize 1/5（raw / proc_v / proc_h）→ 存 JPG
+  4. INTER_AREA resize 1/5（raw / proc_c / proc_r）→ 存 JPG
   5. 從全解析度 hessian 計算曲線 → 存 MCBF .bin
 
 Usage:
@@ -150,27 +150,27 @@ def process_cam(bmp_paths, cam_id, output_root, shared_grab_id=None):
 
         # ── 4. 存 JPG ──
         encode_params = [cv2.IMWRITE_JPEG_QUALITY, JPG_QUALITY]
-        # proc_v/h 是 float ridge response（resize 後仍 float）→ 顯示圖才 clip u8；
+        # proc_c/r 是 float ridge response（resize 後仍 float）→ 顯示圖才 clip u8；
         # 曲線（下方 step 5）直接從 full-res float res_v/h 算（保峰值，同 native u8 之前）。
         cv2.imwrite(os.path.join(day_dir, base_name + "_raw.jpg"), raw_resized, encode_params)
-        cv2.imwrite(os.path.join(day_dir, base_name + "_proc_v.jpg"), ridge_to_uint8(proc_v_resized), encode_params)
-        cv2.imwrite(os.path.join(day_dir, base_name + "_proc_h.jpg"), ridge_to_uint8(proc_h_resized), encode_params)
+        cv2.imwrite(os.path.join(day_dir, base_name + "_proc_c.jpg"), ridge_to_uint8(proc_v_resized), encode_params)
+        cv2.imwrite(os.path.join(day_dir, base_name + "_proc_r.jpg"), ridge_to_uint8(proc_h_resized), encode_params)
 
         # ── 5. 從全解析度 hessian 計算曲線（與 C# AniloxCamera.cs 一致）──
-        col_mean_v = np.mean(res_v, axis=0).astype(np.float32)  # (W,) 全解析度
-        col_max_v = np.max(res_v, axis=0).astype(np.float32)    # (W,) 全解析度
-        row_mean_h = np.mean(res_h, axis=1).astype(np.float32)  # (H,) 全解析度
-        row_max_h = np.max(res_h, axis=1).astype(np.float32)    # (H,) 全解析度
+        col_mean = np.mean(res_v, axis=0).astype(np.float32)  # (W,) 全解析度
+        col_max = np.max(res_v, axis=0).astype(np.float32)    # (W,) 全解析度
+        row_mean = np.mean(res_h, axis=1).astype(np.float32)  # (H,) 全解析度
+        row_max = np.max(res_h, axis=1).astype(np.float32)    # (H,) 全解析度
 
         # ── 6. 存 .bin 曲線檔（scale_factor = RESIZE_SCALE，與 C# _saveResizeScale 一致）──
-        save_curve_bin(col_mean_v.tolist(), RESIZE_SCALE, os.path.join(day_dir, base_name + "_mean_v.bin"))
-        save_curve_bin(col_max_v.tolist(), RESIZE_SCALE, os.path.join(day_dir, base_name + "_max_v.bin"))
-        save_curve_bin(row_mean_h.tolist(), RESIZE_SCALE, os.path.join(day_dir, base_name + "_mean_h.bin"))
-        save_curve_bin(row_max_h.tolist(), RESIZE_SCALE, os.path.join(day_dir, base_name + "_max_h.bin"))
+        save_curve_bin(col_mean.tolist(), RESIZE_SCALE, os.path.join(day_dir, base_name + "_mean_c.bin"))
+        save_curve_bin(col_max.tolist(), RESIZE_SCALE, os.path.join(day_dir, base_name + "_max_c.bin"))
+        save_curve_bin(row_mean.tolist(), RESIZE_SCALE, os.path.join(day_dir, base_name + "_mean_r.bin"))
+        save_curve_bin(row_max.tolist(), RESIZE_SCALE, os.path.join(day_dir, base_name + "_max_r.bin"))
 
         # CSV 用的 peak 值（從全解析度 V 曲線取最大值 / 255，與 C# _lastMeanPeak 計算一致）
-        mean_peak = float(col_mean_v.max()) / 255.0
-        max_peak = float(col_max_v.max()) / 255.0
+        mean_peak = float(col_mean.max()) / 255.0
+        max_peak = float(col_max.max()) / 255.0
 
         print(f"           jpg={rw}x{rh}  meanPeak={mean_peak:.4f}  maxPeak={max_peak:.4f}")
 

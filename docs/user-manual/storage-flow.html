@@ -156,7 +156,13 @@ details.subflow > .vflow { padding: 6px 0; }
 </head>
 <body>
 <h1>AniloxRoll Monitor — 儲存流程</h1>
-<p class="subtitle">版本：2026-07-15 ｜ 雙機同程式，Config 控制功能開關；遠端複製可斷線復原</p>
+<p class="subtitle">版本：2026-07-15 ｜ 操作/部署視覺說明（逐步退場）；工程契約以 verify-flows 與 output-storage-map 為準</p>
+<div class="box warn" style="margin-bottom:12px">
+  本頁不再作為程式真相來源。產出位置與刪除規則請查
+  <code>.agents/skills/project-context/references/output-storage-map.md</code>；執行時序與驗證請查
+  <code>.agents/skills/verify-flows/references/dvt-contract.md</code>。
+  新版安裝與無腳本備援請直接開啟 <code>deploy/*-pc/manual-install.html</code>。
+</div>
 
 <div class="toolbar">
   <button onclick="expandAll()">全部展開</button>
@@ -279,8 +285,8 @@ details.subflow > .vflow { padding: 6px 0; }
   <div class="flow-group">
     <div class="flow-title">Deploy 腳本更新點（<code>deploy/</code>）</div>
     <ul class="attr-list" style="font-size:0.86em;line-height:2.0">
-      <li><code>storage-pc/setup_storage_pc.ps1</code>：部署後寫入 <code>Config\app-mode.json</code>（Storage mode）</li>
-      <li><code>inspection-pc/</code>：部署後寫入 <code>Config\app-mode.json</code>（Inspection mode）</li>
+      <li><code>storage-pc/install.bat</code>：首次部署並寫入 <code>Config\app-mode.json</code>（Storage mode）</li>
+      <li><code>inspection-pc/install.bat</code>：首次部署並寫入 <code>Config\app-mode.json</code>（Inspection mode）</li>
       <li><code>storage-pc/storage-config.json</code>：補充 <code>AppMinFreeGB</code>、<code>AppCaptureRootPath</code> 欄位</li>
     </ul>
   </div>
@@ -302,8 +308,8 @@ details.subflow > .vflow { padding: 6px 0; }
           本地存檔（<code>CaptureRootPath\YYYY\YYYYMM\YYYYMMDD\</code>）
           <div class="out-par" style="margin-top:6px">
             <div class="box insp"><code>{GrabId}_raw.jpg</code></div>
-            <div class="box insp"><code>{GrabId}_proc_v/h.jpg</code>（若啟用強化）</div>
-            <div class="box insp"><code>{GrabId}_mean/max_v/h.bin</code></div>
+            <div class="box insp"><code>{GrabId}_proc_c/r.jpg</code>（若啟用強化）</div>
+            <div class="box insp"><code>{GrabId}_mean/max_c/r.bin</code></div>
           </div>
         </div>
       </div>
@@ -511,20 +517,22 @@ details.subflow > .vflow { padding: 6px 0; }
       <h4>Inspection mode（現行）</h4>
       <ul class="attr-list" style="font-size:0.84em;line-height:2.0">
         <li>背景 Task：先探 TCP 445，再於 <code>RemotePath</code> 建立、寫入、flush、刪除唯一探針檔</li>
-        <li>連線 → <span style="background:#c8e6c9;padding:1px 6px;border-radius:3px">● 儲存電腦 已連線</span></li>
+        <li>分享可寫且 heartbeat 新鮮 → <span style="background:#c8e6c9;padding:1px 6px;border-radius:3px">● 儲存電腦 已連線</span></li>
+        <li>分享可寫但程式未回報 → <span style="background:#fff9c4;padding:1px 6px;border-radius:3px">● 儲存分享可用 / 程式未回報</span></li>
         <li>離線 → <span style="background:#ffcdd2;padding:1px 6px;border-radius:3px">● 儲存電腦 離線</span></li>
         <li>停用（RemotePath 空）→ <span style="background:#eee;padding:1px 6px;border-radius:3px">● 儲存電腦 停用</span></li>
         <li>probe 進行中 → 保留上次顯示（null 不更新）</li>
       </ul>
     </div>
     <div class="side-box store-box">
-      <h4>Storage mode（需實作）</h4>
+      <h4>Storage mode（現行）</h4>
       <ul class="attr-list" style="font-size:0.84em;line-height:2.0">
         <li>不 probe（RemotePath 為空，App 也不往外連）</li>
         <li>啟動後固定顯示：<span style="background:#c8e6c9;padding:1px 6px;border-radius:3px">● Storage 模式</span></li>
+        <li>每 5 秒原子更新 <code>Config\storage-app-heartbeat.json</code></li>
         <li>其餘硬體狀態列（PLC / 光源）隱藏</li>
       </ul>
-      <p class="note" style="margin-top:6px">「無 MIL / 無相機」的顯示方式待確認，後續視設計調整。</p>
+      <p class="note" style="margin-top:6px">Storage mode 不載入 MIL，也不初始化相機、IO 或光源。</p>
     </div>
   </div>
 </div>
@@ -541,7 +549,9 @@ details.subflow > .vflow { padding: 6px 0; }
       <tr><td>RemoteCopyService（持久佇列 + 原子發布）</td><td><span class="tag done">✓ 完成</span></td><td><code>RemoteCopyService.cs</code></td><td>Storage mode 不啟動；斷線/重開不丟資料</td></tr>
       <tr><td>StorageRetentionService（刪最舊日）</td><td><span class="tag done">✓ 完成</span></td><td><code>StorageRetentionService.cs</code></td><td>Timer 已移除，純事件驅動</td></tr>
       <tr><td>lblStorageConn TCP + 寫入交握（Inspection）</td><td><span class="tag done">✓ 完成</span></td><td><code>AniloxRollForm.HardwareStatus.cs</code></td><td>實際可寫才亮綠；Storage mode 跳過 probe</td></tr>
-      <tr><td>SMB deploy（網路 / 共用）</td><td><span class="tag done">✓ 完成</span></td><td><code>deploy/storage-pc/</code></td><td>已驗證；新增 AniloxConfig 共用</td></tr>
+      <tr><td>Storage app heartbeat</td><td><span class="tag done">✓ 完成</span></td><td><code>StorageAppHeartbeatService.cs</code></td><td>分享可寫與遠端程式存活分開判定</td></tr>
+      <tr><td>Storage app 登入自啟/異常重啟</td><td><span class="tag done">✓ 完成</span></td><td><code>deploy/storage-pc/scripts/configure_app_task.ps1</code></td><td>install.bat 安裝排程工作；update_app.bat 只更新程式</td></tr>
+      <tr><td>SMB deploy（網路 / 共用）</td><td><span class="tag done">✓ 完成</span></td><td><code>deploy/storage-pc/</code></td><td>單一 Anilox 共用內含 Captures 與 Config</td></tr>
       <tr><td>🐛 _running volatile bool → Interlocked</td><td><span class="tag done">✓ 完成</span></td><td><code>StorageRetentionService.cs</code></td><td>Interlocked.CompareExchange 原子操作</td></tr>
       <tr><td>StorageRetentionService 移除 Timer → 事件觸發</td><td><span class="tag done">✓ 完成</span></td><td><code>StorageRetentionService.cs</code></td><td>移除 Start()/Timer；啟動時 Task.Run 一次</td></tr>
       <tr><td>Grab 超過 30 秒 Watchdog → RunCleanup()</td><td><span class="tag done">✓ 完成</span></td><td><code>AniloxRollForm.cs</code></td><td>TelemetryTimer tick 中檢查 _lastGrabEventTime</td></tr>
@@ -552,7 +562,7 @@ details.subflow > .vflow { padding: 6px 0; }
       <tr><td>lblStorageConn Storage mode 顯示「Storage 模式」</td><td><span class="tag done">✓ 完成</span></td><td><code>AniloxRollForm.cs ApplyStorageModeUi()</code></td><td>IecGreen 固定顯示</td></tr>
       <tr><td>Storage 機 Polling 60 秒偵測 flag</td><td><span class="tag done">✓ 完成</span></td><td><code>Services/CleanupFlagWatcher.cs</code></td><td>背景執行緒輪詢；啟動時掃描殘留</td></tr>
       <tr><td>Startup Recovery（掃描殘留 flag + RunCleanup）</td><td><span class="tag done">✓ 完成</span></td><td><code>CleanupFlagWatcher.Start() + InitServiceLayer()</code></td><td>雙模式啟動時各執行一次 RunCleanup</td></tr>
-      <tr><td>deploy 腳本寫入 app-mode.json</td><td><span class="tag done">✓ 完成</span></td><td><code>deploy/storage-pc/setup_storage_pc.ps1<br/>deploy/inspection-pc/setup_appmode.ps1</code></td><td>AppDir 參數指定安裝目錄</td></tr>
+      <tr><td>deploy 腳本寫入 app-mode.json</td><td><span class="tag done">✓ 完成</span></td><td><code>deploy/*-pc/scripts/configure_app_role.ps1</code></td><td>角色設定由 install/update 共用</td></tr>
     </tbody>
   </table>
 </div>

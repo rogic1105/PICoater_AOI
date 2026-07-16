@@ -14,6 +14,8 @@ tables needed by the current task. Treat root and nested `AGENTS.md` files as au
 
 For performance or hardware sizing work, read
 [`references/runtime-resources.md`](references/runtime-resources.md) and use current measurements.
+For produced files, local/remote placement, and retention classification, read
+[`references/output-storage-map.md`](references/output-storage-map.md).
 
 ## Document ownership
 
@@ -25,6 +27,7 @@ Each fact has one documentation owner. Do not copy the same table or rule into a
 | `architecture-overview.md` | Current logical topology, feature owners, and refactor pressure points | Detailed paths, control names, or normative rules |
 | `repository-layout.md` | Physical directory responsibilities and placement decisions | Feature workflow or current class ownership |
 | `repository-reference.md` | File/API/setting/control lookup facts | Architecture decisions or refactor plans |
+| `output-storage-map.md` | Produced-file paths and copy/retention classification | Runtime sequencing or operator instructions |
 | `$verify-flows` | Runtime behavior, sequencing, log evidence, and DVT contracts | Static directory or owner catalogs |
 
 Update only the owner of the changed fact:

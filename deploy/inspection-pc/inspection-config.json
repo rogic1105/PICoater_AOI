@@ -1,6 +1,13 @@
 {
+  "AppDir": "C:\\AniloxMonitor",
+  "IoNicName": "乙太網路",
+  "IoIp": "192.168.255.10",
+  "IoPrefixLength": 24,
+  "IoVerifyPingTarget": "192.168.255.1",
   "PlcSubnetPrefix": "192.168.255.",
   "StorageIp": "192.168.10.10",
   "StoragePrefixLength": 24,
-  "VerifyPingTarget": "192.168.10.20"
+  "VerifyPingTarget": "192.168.10.20",
+  "StorageShareName": "Anilox",
+  "StorageMachineConfigFolder": "D:\\Anilox\\Config"
 }

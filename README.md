@@ -163,12 +163,12 @@ GrabId 取自 CAM1 的最早時間戳（模擬單次 DO_PC_BUSY 觸發）。
 | 檔案 | 說明 |
 |------|------|
 | `{ts}-{camId}_raw.jpg` | 原圖縮圖（1/5，JPEG Q90） |
-| `{ts}-{camId}_proc_v.jpg` | V 方向 Hessian Ridge 處理圖 |
-| `{ts}-{camId}_proc_h.jpg` | H 方向 Hessian Ridge 處理圖 |
-| `{ts}-{camId}_mean_v.bin` | V 方向 Column Mean 曲線（MCBF） |
-| `{ts}-{camId}_max_v.bin` | V 方向 Column Max 曲線 |
-| `{ts}-{camId}_mean_h.bin` | H 方向 Row Mean 曲線 |
-| `{ts}-{camId}_max_h.bin` | H 方向 Row Max 曲線 |
+| `{ts}-{camId}_proc_c.jpg` | Column（欄）Hessian Ridge 處理圖 |
+| `{ts}-{camId}_proc_r.jpg` | Row（列）Hessian Ridge 處理圖 |
+| `{ts}-{camId}_mean_c.bin` | Column（欄）Mean 曲線（MCBF） |
+| `{ts}-{camId}_max_c.bin` | Column（欄）Max 曲線 |
+| `{ts}-{camId}_mean_r.bin` | Row（列）Mean 曲線 |
+| `{ts}-{camId}_max_r.bin` | Row（列）Max 曲線 |
 | `{yyyyMMdd}.csv` | 每日檢測紀錄（含 #CFG 設定行） |
 
 #### 相依套件

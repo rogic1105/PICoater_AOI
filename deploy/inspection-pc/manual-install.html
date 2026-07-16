@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PICoater 檢測電腦安裝說明</title>
+  <style>
+    body{font-family:"Microsoft JhengHei",sans-serif;line-height:1.65;color:#202124;max-width:980px;margin:0 auto;padding:28px;background:#f5f6f7}
+    main{background:#fff;padding:28px 34px;border:1px solid #d9dde2}h1{margin-top:0}h2{border-bottom:2px solid #2f7d32;padding-bottom:6px}
+    code,pre{font-family:Consolas,monospace;background:#f1f3f4}code{padding:2px 5px}pre{padding:12px;overflow:auto}
+    .ok{border-left:5px solid #2f8f3a;background:#edf7ee;padding:10px 14px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #cfd4da;padding:8px;text-align:left}th{background:#eef1f3}
+  </style>
+</head>
+<body><main>
+  <h1>PICoater 檢測電腦安裝</h1>
+  <p>第一次安裝做程式與 Windows 設定；以後只更新程式。所有現場參數以 <code>deploy\inspection-pc\inspection-config.json</code> 為準。</p>
+
+  <h2>一般安裝</h2>
+  <ol><li>解壓縮整個 Release，進入解壓後的 <code>PICoater-Inspection-版本</code> 資料夾。</li><li>確認 <code>inspection-config.json</code>。</li><li>第一次安裝與日後更新都雙擊唯一的 <code>setup.bat</code>。</li></ol>
+  <div class="ok"><code>setup.bat</code> 會自動判斷完整安裝或安全更新；更新時保留 Config，不會重新設定網卡。</div>
+
+  <h2>BAT 不能執行</h2>
+  <pre>powershell -NoProfile -ExecutionPolicy Bypass -File ".\deploy\inspection-pc\setup.ps1"</pre>
+  <p>需要人工強制指定時，在尾端加 <code>-Mode Install</code> 或 <code>-Mode Update</code>。</p>
+
+  <h2>BAT 與 PowerShell 都不能執行</h2>
+  <ol>
+    <li><strong>程式：</strong>把壓縮包 <code>app</code> 複製到 <code>AppDir</code>；更新時保留目的地 <code>Config</code>。</li>
+    <li><strong>IO IP：</strong>在 <code>IoNicName</code> 指定網卡的 IPv4 進階設定加入 <code>IoIp</code>/<code>IoPrefixLength</code>。</li>
+    <li><strong>儲存網段：</strong>在具有 <code>PlcSubnetPrefix</code> IP 的同一網卡，再加入 <code>StorageIp</code>/<code>StoragePrefixLength</code>，不要刪除原有 IP。</li>
+    <li><strong>Guest SMB：</strong>在登錄編輯器把下列兩處的 <code>AllowInsecureGuestAuth</code> DWORD 設為 1：
+      <pre>HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters
+HKLM\SOFTWARE\Policies\Microsoft\Windows\LanmanWorkstation</pre>
+    </li>
+    <li><strong>儲存資料捷徑：</strong>在 Public Desktop 建立指向 <code>\\VerifyPingTarget\StorageShareName</code> 的捷徑。</li>
+    <li><strong>檢測模式：</strong>在 <code>AppDir\Config\app-mode.json</code> 寫入：
+      <pre>{
+  "Role": "Inspection",
+  "StorageMachineConfigFolder": "&lt;StorageMachineConfigFolder&gt;",
+  "StorageMachineDataPath": ""
+}</pre>
+    </li>
+    <li><strong>電源：</strong>把睡眠、休眠與硬碟關閉時間設為「永不」。</li>
+  </ol>
+
+  <h2>驗證</h2>
+  <table><tr><th>檢查</th><th>正確結果</th></tr>
+    <tr><td><code>ping &lt;IoVerifyPingTarget&gt;</code></td><td>IO 有供電接線時可達</td></tr>
+    <tr><td><code>ping &lt;VerifyPingTarget&gt;</code></td><td>儲存電腦可達</td></tr>
+    <tr><td>檔案總管開啟 <code>\\&lt;VerifyPingTarget&gt;\&lt;StorageShareName&gt;</code></td><td>不要求密碼，能建立並刪除測試檔</td></tr>
+    <tr><td>啟動 AniloxRoll.Monitor</td><td>顯示監控模式，儲存電腦狀態可恢復為綠色</td></tr>
+  </table>
+</main></body></html>

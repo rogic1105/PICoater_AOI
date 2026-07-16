@@ -1,6 +1,7 @@
 ﻿# 儲存機一鍵部署：固定 IP + 共用資料夾 + SMB + 防火牆
+# Windows 設定：固定 IP + 共用資料夾 + SMB + 防火牆
 # 用法（以系統管理員身分執行 PowerShell）：
-#   powershell -NoProfile -ExecutionPolicy Bypass -File setup_storage_pc.ps1
+#   powershell -NoProfile -ExecutionPolicy Bypass -File configure_network_share.ps1
 #   (可選) -Config <路徑>
 #
 # 參數來自同目錄 storage-config.json：
@@ -29,7 +30,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 }
 
 # ── 讀取設定 ─────────────────────────────────
-if (-not $Config) { $Config = Join-Path $PSScriptRoot 'storage-config.json' }
+if (-not $Config) { $Config = Join-Path (Split-Path -Parent $PSScriptRoot) 'storage-config.json' }
 if (-not (Test-Path $Config)) { Die ("找不到設定檔: " + $Config) }
 # 明確以 UTF-8 讀 JSON（PS 5.1 預設 ANSI 會把 UTF-8 中文當 Big5 解碼）
 $json = [System.IO.File]::ReadAllText((Resolve-Path $Config).Path, [System.Text.Encoding]::UTF8)
@@ -43,7 +44,6 @@ Write-Host ("  AniloxRoot      = " + $cfg.AniloxRoot)
 Write-Host ("  ShareName       = " + $cfg.ShareName)
 Write-Host ("  Subdirs         = " + ($cfg.Subdirs -join ', '))
 Write-Host ("  AllowedUser     = " + $cfg.AllowedUser)
-Write-Host ("  AppDir          = " + $cfg.AppDir + "  (空=不寫 app-mode.json)")
 Write-Host ""
 
 # ── 1. 選 NIC ────────────────────────────────
@@ -64,7 +64,7 @@ if (-not (Get-NetAdapter -Name $nicName -ErrorAction SilentlyContinue)) {
 }
 
 # ── 2. 固定 IP ───────────────────────────────
-Write-Host "[1/7] 套用固定 IP..."
+Write-Host "[1/6] 套用固定 IP..."
 Get-NetIPAddress -InterfaceAlias $nicName -AddressFamily IPv4 -ErrorAction SilentlyContinue |
     Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
 Get-NetRoute -InterfaceAlias $nicName -AddressFamily IPv4 -ErrorAction SilentlyContinue |
@@ -83,7 +83,7 @@ New-NetIPAddress @newIpArgs | Out-Null
 Write-Host ("  -> " + $cfg.IpAddress + "/" + $cfg.PrefixLength + " on " + $nicName) -ForegroundColor Green
 
 # ── 3. 建立 Anilox 根目錄 + 子目錄 ──────────────
-Write-Host "[2/7] 建立資料夾結構..."
+Write-Host "[2/6] 建立資料夾結構..."
 if (-not (Test-Path $cfg.AniloxRoot)) {
     New-Item -ItemType Directory -Path $cfg.AniloxRoot -Force | Out-Null
 }
@@ -97,7 +97,7 @@ foreach ($sub in $cfg.Subdirs) {
 }
 
 # ── 4. NTFS 權限 ─────────────────────────────
-Write-Host "[3/7] 設定 NTFS 權限..."
+Write-Host "[3/6] 設定 NTFS 權限..."
 $acl = Get-Acl $cfg.AniloxRoot
 $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
     $cfg.AllowedUser, 'Modify', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
@@ -115,12 +115,12 @@ New-SmbShare -Name $cfg.ShareName -Path $cfg.AniloxRoot -FullAccess $cfg.Allowed
 Write-Host ("  -> \\" + $env:COMPUTERNAME + "\" + $cfg.ShareName + " → " + $cfg.AniloxRoot) -ForegroundColor Green
 
 # ── 6. 防火牆 + 網路設定檔 ───────────────────
-Write-Host "[5/7] 開放 SMB 防火牆規則..."
+Write-Host "[5/6] 開放 SMB 防火牆規則..."
 Enable-NetFirewallRule -DisplayGroup "檔案及印表機共用" -ErrorAction SilentlyContinue
 Enable-NetFirewallRule -DisplayGroup "File and Printer Sharing" -ErrorAction SilentlyContinue
 Write-Host "  -> File and Printer Sharing 已啟用" -ForegroundColor Green
 
-Write-Host "[6/7] 設定網路設定檔為「私人」..."
+Write-Host "[6/6] 設定網路設定檔為「私人」..."
 try {
     Set-NetConnectionProfile -InterfaceAlias $nicName -NetworkCategory Private -ErrorAction Stop
     Write-Host "  -> Private" -ForegroundColor Green
@@ -145,41 +145,6 @@ try {
     Write-Host "[驗證] 寫入測試: OK" -ForegroundColor Green
 } catch {
     Write-Host ("[驗證] 寫入測試: FAIL - " + $_.Exception.Message) -ForegroundColor Red
-}
-
-# ── 7. App 部署：寫 app-mode.json + 移除 MIL DLL ────
-# Matrox MIL 是 C++/CLI 混合組件：DLL 載入時即觸發授權檢查，與是否呼叫 MappAlloc 無關。
-# Storage 模式不需要 MIL，刪除 DLL 以避免授權對話框。
-if ($cfg.AppDir) {
-    # 7a. 寫入 app-mode.json
-    $cfgDir = Join-Path $cfg.AppDir 'Config'
-    if (-not (Test-Path $cfgDir)) {
-        New-Item -ItemType Directory -Path $cfgDir -Force | Out-Null
-    }
-    # StorageMachineConfigFolder = AniloxRoot\Config；StorageMachineDataPath = AniloxRoot\Captures
-    $localConfigDir = (Join-Path $cfg.AniloxRoot 'Config').Replace('\','\\')
-    $storageDir     = (Join-Path $cfg.AniloxRoot 'Captures').Replace('\','\\')
-    $appModeJson = @"
-{
-  "Role": "Storage",
-  "StorageMachineConfigFolder": "$localConfigDir",
-  "StorageMachineDataPath": "$storageDir"
-}
-"@
-    $appModeFile = Join-Path $cfgDir 'app-mode.json'
-    [System.IO.File]::WriteAllText($appModeFile, $appModeJson, [System.Text.Encoding]::UTF8)
-    Write-Host ("[7a] 已寫入 app-mode.json -> " + $appModeFile) -ForegroundColor Green
-
-    # 7b. 移除 MIL DLL（C++/CLI 混合組件，載入時即觸發授權對話框）
-    $milDll = Join-Path $cfg.AppDir 'Matrox.MatroxImagingLibrary.dll'
-    if (Test-Path $milDll) {
-        Remove-Item $milDll -Force
-        Write-Host ("[7b] 已移除 " + $milDll) -ForegroundColor Green
-    } else {
-        Write-Host "[7b] Matrox.MatroxImagingLibrary.dll 不存在，略過" -ForegroundColor Cyan
-    }
-} else {
-    Write-Host "[7] AppDir 未設定，跳過 app-mode.json 與 MIL DLL 清除（請手動設定）" -ForegroundColor Yellow
 }
 
 Write-Host ""

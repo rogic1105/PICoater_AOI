@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PICoater 儲存電腦安裝說明</title>
+  <style>
+    body{font-family:"Microsoft JhengHei",sans-serif;line-height:1.65;color:#202124;max-width:980px;margin:0 auto;padding:28px;background:#f5f6f7}
+    main{background:#fff;padding:28px 34px;border:1px solid #d9dde2}
+    h1{margin-top:0} h2{border-bottom:2px solid #2f7d32;padding-bottom:6px} h3{margin-bottom:4px}
+    code,pre{font-family:Consolas,monospace;background:#f1f3f4} code{padding:2px 5px} pre{padding:12px;overflow:auto}
+    .ok{border-left:5px solid #2f8f3a;background:#edf7ee;padding:10px 14px}.warn{border-left:5px solid #c48300;background:#fff8e5;padding:10px 14px}
+    table{border-collapse:collapse;width:100%}th,td{border:1px solid #cfd4da;padding:8px;text-align:left;vertical-align:top}th{background:#eef1f3}
+  </style>
+</head>
+<body><main>
+  <h1>PICoater 儲存電腦安裝</h1>
+  <p>第一次安裝做「程式安裝 + Windows 設定」；日後換版本只做「更新程式」。所有現場參數以 <code>deploy\storage-pc\storage-config.json</code> 為準。</p>
+
+  <h2>一般安裝</h2>
+  <ol>
+    <li>解壓縮整個 Release，進入解壓後的 <code>PICoater-Storage-版本</code> 資料夾，不能只取出 BAT。</li>
+    <li>用記事本確認 <code>deploy\storage-pc\storage-config.json</code>；<code>StorageMinFreeGB</code> 預設為 100。正式循環清理需設為小於 <code>AniloxRoot</code> 所在磁碟總容量；若設定錯誤，程式只警告、不刪檔。</li>
+    <li>雙擊版本資料夾根目錄唯一的 <code>setup.bat</code>。</li>
+    <li>它會自動判斷：沒有既有主程式就完整安裝；已有主程式就只更新程式。更新時影像、CSV 與既有 <code>Config</code> 不會被覆蓋。</li>
+  </ol>
+  <div class="ok">看到綠色「完成」後，Public Desktop 應出現 <code>PICoater AOI</code> 程式捷徑。先不要刪除壓縮包；完成下方驗證再移除。</div>
+  <div class="warn">舊版若安裝在 <code>D:\AniloxMonitor</code>，BAT 會在新 <code>C:\AniloxMonitor\Config</code> 尚未建立時複製舊 Config，再將排程改指向 C 槽。舊 D 目錄會先保留，確認新程式與 heartbeat 正常後才可刪除。</div>
+
+  <h2>BAT 不能執行</h2>
+  <h3>PowerShell 還能執行</h3>
+  <p>在版本資料夾根目錄空白處按 Shift + 滑鼠右鍵，開啟 PowerShell，執行：</p>
+  <pre>powershell -NoProfile -ExecutionPolicy Bypass -File ".\deploy\storage-pc\setup.ps1"</pre>
+  <p>需要人工強制指定時，在尾端加 <code>-Mode Install</code> 或 <code>-Mode Update</code>。</p>
+
+  <h2>BAT 與 PowerShell 都不能執行</h2>
+  <p>依序手動完成以下項目。欄位值一律查看 <code>storage-config.json</code>，不要從舊機器憑記憶抄寫。</p>
+
+  <h3>1. 安裝程式檔案</h3>
+  <ol>
+    <li>建立設定檔 <code>AppDir</code> 指定的資料夾。</li>
+    <li>把壓縮包 <code>app</code> 內所有檔案複製進去。</li>
+    <li>檢查複製後的 EXE/DLL 「屬性」；如果有「解除鎖定」請勾選。BAT 安裝會自動處理這一步。</li>
+    <li>更新舊版本時保留目的地的 <code>Config</code> 資料夾。</li>
+  </ol>
+
+  <h3>2. 固定網路 IP</h3>
+  <ol>
+    <li>開啟「控制台 → 網路和共用中心 → 變更介面卡設定」。</li>
+    <li>選擇 <code>NicName</code> 指定的網卡，開啟 IPv4 內容。</li>
+    <li>IP 填 <code>IpAddress</code>，遮罩長度 24 對應 <code>255.255.255.0</code>；<code>Gateway</code> 空白時不要填閘道。</li>
+    <li>把該網路設定為「私人網路」。</li>
+  </ol>
+
+  <h3>3. 建立資料夾與 SMB 共用</h3>
+  <ol>
+    <li>建立 <code>AniloxRoot</code>，並在其中建立 <code>Subdirs</code> 所列資料夾。</li>
+    <li>根資料夾內容 →「共用 → 進階共用」，共用名稱填 <code>ShareName</code>。</li>
+    <li>共用權限給 <code>AllowedUser</code> 完全控制；安全性頁籤給相同對象「修改」。</li>
+    <li>Windows 防火牆允許「檔案及印表機共用」。</li>
+  </ol>
+
+  <h3>4. 允許 Guest 存取</h3>
+  <ol>
+    <li>「電腦管理 → 本機使用者和群組 → 使用者」啟用 Guest。</li>
+    <li>在共用權限與資料夾安全性中加入 Guest，分別給完全控制與修改。</li>
+    <li>開啟 <code>secpol.msc</code>：「從網路存取這台電腦」加入 Guest；「拒絕從網路存取這台電腦」移除 Guest/Guests。</li>
+  </ol>
+
+  <h3>5. 遠端桌面</h3>
+  <ol>
+    <li>依 <code>RdpUser</code>/<code>RdpPassword</code> 建立本機帳號並加入 Administrators。</li>
+    <li>「設定 → 系統 → 遠端桌面」啟用遠端桌面，並允許防火牆規則。</li>
+  </ol>
+
+  <h3>6. 設定儲存模式</h3>
+  <p>在 <code>AppDir\Config</code> 建立 <code>app-mode.json</code>：</p>
+  <pre>{
+  "Role": "Storage",
+  "StorageMachineConfigFolder": "&lt;AniloxRoot&gt;\\Config",
+  "StorageMachineDataPath": "&lt;AniloxRoot&gt;\\Captures"
+}</pre>
+  <p>儲存電腦不使用 MIL；若程式目錄存在 <code>Matrox.MatroxImagingLibrary.dll</code>，請移除。</p>
+
+  <h3>7. 自動啟動與異常重啟</h3>
+  <ol>
+    <li>開啟工作排程器，建立名稱為 <code>StorageTaskName</code> 的工作。</li>
+    <li>觸發程序一：「任何使用者登入時」。觸發程序二：「一次」，每 1 分鐘無限重複。動作：執行 <code>AppDir\AniloxRoll.Monitor.exe</code>，起始位置填 <code>AppDir</code>。</li>
+    <li>安全性主體選 <code>BUILTIN\Administrators</code> 並勾選最高權限；<code>RdpUser</code> 只供遠端登入，不要把排程綁死在該帳號。</li>
+    <li>工作失敗時每 1 分鐘重新啟動，重複執行時忽略新執行個體。每分鐘保活觸發可處理「正常關閉」；建立後立即執行，確認程式真正出現。</li>
+  </ol>
+
+  <h3>8. 關閉睡眠</h3>
+  <p>「控制台 → 電源選項 → 變更進階電源設定」把睡眠、休眠與硬碟關閉時間設為「永不」。螢幕關閉時間可以保留。</p>
+
+  <h2>驗證</h2>
+  <table><tr><th>檢查</th><th>正確結果</th></tr>
+    <tr><td><code>ipconfig</code></td><td>指定網卡具有 <code>IpAddress</code></td></tr>
+    <tr><td>檢測電腦開啟 <code>\\&lt;IpAddress&gt;\&lt;ShareName&gt;</code></td><td>不要求密碼，能建立並刪除測試檔</td></tr>
+    <tr><td>Public Desktop</td><td><code>PICoater AOI</code> 捷徑指向 <code>AppDir\AniloxRoll.Monitor.exe</code></td></tr>
+    <tr><td>工作排程器</td><td><code>StorageTaskName</code> 存在且有登入＋每分鐘兩種觸發；關閉程式後最晚一分鐘內重開</td></tr>
+    <tr><td>檢測電腦狀態列</td><td>儲存電腦共用與儲存程式心跳皆為正常</td></tr>
+  </table>
+  <div class="warn">若 Guest SMB 被公司資安政策禁止，不要繞過公司政策；改由管理員建立專用帳號並同步調整兩台電腦。</div>
+</main></body></html>

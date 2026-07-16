@@ -104,7 +104,7 @@ namespace AniloxRoll.Monitor.Forms
                 string csvPath = string.IsNullOrWhiteSpace(captureRoot)
                     ? "(empty)" : CaptureStoragePaths.DailyCsv(captureRoot, captureDate);
                 FlowTrace.Log($"capture plan grab={_currentGrabId} root={captureRoot} imageDir={imageDir} csv={csvPath} " +
-                    $"files=*{CaptureFileNaming.RawJpg}|*{CaptureFileNaming.ProcV}|*{CaptureFileNaming.ProcH}|*{CaptureFileNaming.MeanC}|*{CaptureFileNaming.MaxC}|*{CaptureFileNaming.MeanR}|*{CaptureFileNaming.MaxR} " +
+                    $"files=*{CaptureFileNaming.RawJpg}|*{CaptureFileNaming.ProcC}|*{CaptureFileNaming.ProcR}|*{CaptureFileNaming.MeanC}|*{CaptureFileNaming.MaxC}|*{CaptureFileNaming.MeanR}|*{CaptureFileNaming.MaxR} " +
                     $"scale={InspectionEngineConfig.DefaultSaveResizeScale}");
 
                 int limitSeconds = Math.Max(1, _settings?.GrabLimitSeconds ?? InspectionDefaults.GrabLimitSeconds);

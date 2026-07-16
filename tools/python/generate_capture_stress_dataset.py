@@ -27,8 +27,8 @@ from typing import Dict, Iterable, List, Tuple
 
 FILE_SUFFIXES = (
     "_raw.jpg",
-    "_proc_v.jpg",
-    "_proc_h.jpg",
+    "_proc_c.jpg",
+    "_proc_r.jpg",
     "_mean_c.bin",
     "_max_c.bin",
     "_mean_r.bin",
