@@ -204,6 +204,10 @@ AutoAllocateCameras(Form)                    顯示基線 set:[顯示基線] 一
 ```
 單一決策點：顯示狀態=f(he_MainDisplay, 背景預覽靜音鍵)——ApplyMainDisplayMode 唯一計算點（F8）；方向=ShouldFlipVertical。
 設定契約：新生成設定或 JSON 缺少 `MainDisplay` 時預設 `Waterfall`；既有 JSON 的明確值優先，不做遷移覆寫。
+瀑布空畫面契約：`FeedWaterfallLayout → SetLayout` 必須在首幀前用 PropertyGrid 的
+`OPS + START + WaterfallTotalHeight` 建立 7 槽黑底 LOD，Y 軸使用速度／線掃率算出的 row pitch，
+並立即發布 `ViewRangeMmChanged`、四邊座標、倍率與游標 mm。`Reset` 只清像素及寫入狀態，
+不得關閉 LOD、改變 zoom/pan 或清除座標；實際幀寬等於配置寬時，第一個 band 只填內容，不得再次 fit。
 不變量：view 建立前必 teardown（防空訂閱家族）；MdispSelectWindow 必帶 panelHandle 守門。
 
 ### F2 開始抓取（btnLiveGrab，已配置）

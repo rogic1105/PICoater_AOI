@@ -103,6 +103,7 @@ namespace TanukiCv.Controls
         private bool _hasCanvasInfo;
         private bool _disposed;
         private volatile bool _virtualSet;
+        private volatile bool _lodContentDirty;
 
         public event Action<int> SelectRequested;
         public event Action<double, double, double, double> ViewRangeMmChanged;
@@ -115,6 +116,7 @@ namespace TanukiCv.Controls
             {
                 if (_flipVertical == value) return;
                 _flipVertical = value;
+                _lodContentDirty = true;
                 PushLodRefresh();
                 RefireViewRange();
             }
@@ -139,7 +141,6 @@ namespace TanukiCv.Controls
             _canvas.TripleClickPhysical1x = true;     // 三擊實體 1:1（需 mm 校正；SetLayout 後設）
             host.Controls.Add(_canvas);
             _canvas.BringToFront();
-            _canvas.EnableLod(1, 1, ProvideRegion);
             _canvas.StatusChanged += OnCanvasStatus;
             _canvas.MouseClick += OnCanvasMouseClick;
 
@@ -155,17 +156,46 @@ namespace TanukiCv.Controls
             _flushTimer.Start();
         }
 
-        /// <summary>合圖佈局（各台 start mm + 基準像素尺寸 mm/px）。對齊 live 全域合圖；opsUm 目前未用（保留簽名相容）。</summary>
+        /// <summary>合圖佈局（各台 start mm + 基準像素尺寸 mm/px）。對齊 live 全域合圖；
+        /// 在首幀前即建立由設定決定的黑底座標畫布，使 grab 前後使用同一組視野。</summary>
         public void SetLayout(double[] startMm, double[] opsUm, double refOpsMm)
         {
+            int layoutW;
+            bool sizeChanged;
+            double calibrationOps;
             lock (_lock)
             {
                 _startMm = startMm;
                 if (refOpsMm > 0) _refOpsMm = refOpsMm;
-                RebuildCameraPlacementsLocked();
+                calibrationOps = _refOpsMm;
+                layoutW = RebuildCameraPlacementsLocked();
+                sizeChanged = layoutW > 0 && (_chunks == null || _fullW != layoutW);
+                if (sizeChanged)
+                {
+                    _fullW = layoutW;
+                    _chunks = new byte[(_totalHeight + ChunkRows - 1) / ChunkRows][];
+                    _writeRow = 0;
+                }
             }
-            if (_screenMmPerPx > 0 && refOpsMm > 0)
-                try { _canvas.SetPhysicalCalibration(refOpsMm, _screenMmPerPx); } catch { }
+
+            if (_screenMmPerPx > 0 && calibrationOps > 0)
+                try { _canvas.SetPhysicalCalibration(calibrationOps, _screenMmPerPx); } catch { }
+            if (layoutW <= 0) return;
+
+            if (!_virtualSet || !_canvas.LodActive)
+            {
+                _virtualSet = true;
+                _canvas.EnableLod(layoutW, _totalHeight, ProvideRegion);
+            }
+            else if (sizeChanged)
+            {
+                _canvas.UpdateLodVirtualSize(layoutW, _totalHeight);
+            }
+            else
+            {
+                // START/OPS may change without changing the pixel width; republish the same view with new physical coordinates.
+                _canvas.SetView(_canvas.Zoom, _canvas.PanOffset);
+            }
         }
 
         /// <summary>Set material-direction row pitch so waterfall Y range matches the live row chart.</summary>
@@ -217,7 +247,7 @@ namespace TanukiCv.Controls
 
         private void UpdateCenterCam(float zoom, PointF pan)
         {
-            if (_disposed || _canvas == null || zoom <= 0) return;
+            if (_disposed || !_virtualSet || _canvas == null || zoom <= 0) return;
             int imageX = (int)((_canvas.Width / 2f - pan.X) / zoom);
             int camId = ResolveCameraAtX(imageX);
             if (camId > 0 && camId != _lastCenterCamId)
@@ -234,12 +264,14 @@ namespace TanukiCv.Controls
             lock (_lock)
             {
                 if (_chunks != null) for (int i = 0; i < _chunks.Length; i++) _chunks[i] = null; // 清舊圖（釋放）
-                _writeRow = 0; _virtualSet = false;
+                _writeRow = 0;
                 _pending.Clear(); _preBuffer.Clear(); _writeQueue.Clear();
                 _seenCams.Clear();
                 for (int i = 0; i < _camCount; i++) { _perCamLastTick[i] = 0; _perCamLastWall[i] = 0; _perCamSeq[i] = -1; }
                 _periodTicks = 0; _periodWallMs = 0; _originTick = 0; _originSet = false; _lastNewCamWallMs = 0;
             }
+            _lodContentDirty = true;
+            PushLodRefresh();
         }
 
         /// <summary>各相機每幀（MIL hook 多執行緒）：複製幀 + tick 網格錨定歸入 band（同掃描同 seq；缺幀補黑）。</summary>
@@ -492,15 +524,27 @@ namespace TanukiCv.Controls
                     }
                 }
             }
-            // LOD 刷新（含首次設虛擬尺寸）由 flushTimer 的 PushLodRefresh 在 UI 執行緒做，避免每 band BeginInvoke。
+            _lodContentDirty = true;
+            // LOD 刷新由 flushTimer 的 PushLodRefresh 在 UI 執行緒做，避免每 band BeginInvoke。
         }
 
         // UI 執行緒（flushTimer）：固定虛擬尺寸一次 + 刷 LOD（內容變、視角不變）。
         private void PushLodRefresh()
         {
             if (_disposed || _fullW <= 0) return;
-            if (!_virtualSet) { _canvas.UpdateLodVirtualSize(_fullW, _totalHeight); _virtualSet = true; RefireViewRange(); }
-            else _canvas.RefreshLod();
+            if (!_virtualSet)
+            {
+                // EnableLod synchronously publishes CanvasInfo through FitToScreen.
+                // This fallback is only used when the actual frame width differs from the configured 16384-pixel layout.
+                _virtualSet = true;
+                _canvas.EnableLod(_fullW, _totalHeight, ProvideRegion);
+                _lodContentDirty = false;
+            }
+            else if (_lodContentDirty)
+            {
+                _lodContentDirty = false;
+                _canvas.RefreshLod();
+            }
         }
 
         // ImageCanvas LOD provider：給虛擬區域 r（全解析座標）+ dest 大小 → 邊讀邊降採樣（nearest）出 dest 大小 bitmap。
@@ -547,10 +591,10 @@ namespace TanukiCv.Controls
             return GrayBitmap.From(outp, dw, dh);
         }
 
-        private void RebuildCameraPlacementsLocked()
+        private int RebuildCameraPlacementsLocked()
         {
             _cameraPlacements.Clear();
-            if (_startMm == null || _startMm.Length == 0 || _refOpsMm <= 0) return;
+            if (_startMm == null || _startMm.Length == 0 || _refOpsMm <= 0) return 0;
 
             double minStart = double.MaxValue;
             for (int i = 0; i < _camCount; i++)
@@ -558,7 +602,7 @@ namespace TanukiCv.Controls
                 double sm = i < _startMm.Length ? _startMm[i] : 0;
                 if (sm < minStart) minStart = sm;
             }
-            if (minStart == double.MaxValue) return;
+            if (minStart == double.MaxValue) return 0;
 
             var cams = new List<MergeLayout.CamGeom>(_camCount);
             for (int i = 0; i < _camCount; i++)
@@ -572,7 +616,8 @@ namespace TanukiCv.Controls
             }
 
             _cameraPlacements.AddRange(MergeLayout.Compute(
-                cams, minStart, _refOpsMm, 1, MergeOverlap.Midline, out _));
+                cams, minStart, _refOpsMm, 1, MergeOverlap.Midline, out int fullW));
+            return fullW;
         }
 
         private void OnCanvasStatus(CanvasInfo info)
@@ -677,7 +722,7 @@ namespace TanukiCv.Controls
             out double leftMm, out double rightMm, out double topMm, out double botMm)
         {
             leftMm = rightMm = topMm = botMm = 0;
-            if (_disposed || _canvas == null || zoom <= 0) return false;
+            if (_disposed || !_virtualSet || _canvas == null || zoom <= 0) return false;
             if (_startMm == null || _startMm.Length == 0 || _refOpsMm <= 0) return false;
 
             double minStartMm = MinStartMm();
