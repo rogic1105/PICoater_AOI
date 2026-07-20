@@ -107,12 +107,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     cfg = InspectionConfigRepository.LoadForGrabId(root, grabId, hintFrom, hintTo);
 
                     // 列曲線的跨相機對齊（同完整載入：tick 優先、檔名 fallback）——bin+csv 都輕，快路可負擔
-                    var allPaths = new System.Collections.Generic.List<string>();
-                    foreach (var kv in grouped) allPaths.AddRange(kv.Value);
-                    var tickMap = FrameTickIndex.LoadTickMap(allPaths);
-                    var alignedByTick = FrameTickIndex.BuildAlignedByTick(grouped, tickMap);
-                    var alignedByCam = alignedByTick ?? FrameTickIndex.BuildAlignedByStitchKey(grouped);
-                    Core.Services.FlowTrace.Log($"RV curves paths {grabId} root={root} images={allPaths.Count} cams={grouped.Count} cfg={(cfg != null ? "yes" : "no")} align={(alignedByTick != null ? "tick" : "filename")}");
+                    var alignment = FrameTickIndex.ResolveAlignment(grouped);
+                    var alignedByCam = alignment.ByCamera;
+                    Core.Services.FlowTrace.Log($"RV curves paths {grabId} root={root} images={alignment.AllPaths.Count} cams={grouped.Count} cfg={(cfg != null ? "yes" : "no")} align={alignment.Mode}");
 
                     for (int i = 0; i < camCount; i++)
                     {
@@ -224,12 +221,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
                     // 跨相機對齊時間軸（唯一來源 FrameTickIndex）：優先「硬體 tick 就近對位」（各台獨立掉幀
                     // 也能精準定位 → 缺幀那格補黑），舊資料無 _ticks.csv 側車時 fallback 檔名共用戳法。
-                    var allPaths = new System.Collections.Generic.List<string>();
-                    foreach (var kv in grouped) allPaths.AddRange(kv.Value);
-                    var tickMap = FrameTickIndex.LoadTickMap(allPaths);
-                    var alignedByTick = FrameTickIndex.BuildAlignedByTick(grouped, tickMap);
-                    var alignedByCam = alignedByTick ?? FrameTickIndex.BuildAlignedByStitchKey(grouped);
-                    Core.Services.FlowTrace.Log($"RV loadGrab paths {grabId} root={root} images={totalImgCount} cams={grouped.Count} cfg={(grabCfg != null ? "yes" : "no")} align={(alignedByTick != null ? "tick" : "filename")}");
+                    var alignment = FrameTickIndex.ResolveAlignment(grouped);
+                    var alignedByCam = alignment.ByCamera;
+                    Core.Services.FlowTrace.Log($"RV loadGrab paths {grabId} root={root} images={totalImgCount} cams={grouped.Count} cfg={(grabCfg != null ? "yes" : "no")} align={alignment.Mode}");
 
                     // 7 台相機各自獨立（imgs[i]/curve[i] 各寫各的 index、BitmapPool 有 lock、CurveMergeHelper 無共用 static）
                     // → 平行解碼/拼接，吃滿多核心，削掉最大宗的 Stitch 延遲。每台自帶 try/catch，不外拋 AggregateException。

@@ -98,7 +98,7 @@ Normative SSoT and transition rules are defined only in the app `AGENTS.md`.
 |---|---|---|
 | `FormInteractionHelper` | Removed; responsibilities split into binder/coordinators/service/state | Do not recreate a Form-wide helper or service locator |
 | `InspectionStatisticsService` | Report statistics owner after CSV parsing, CFG, image-path, and Mura-profile queries were extracted | Keep report aggregation here; do not move persistence queries back in |
-| `ReviewStitchCoordinator` | Curve latest-only scheduling extracted; image load, curve IO/apply, period projection, and display lifecycle remain broad | Continue one responsibility at a time; preserve R2/R3 log contracts at each checkpoint |
+| `ReviewStitchCoordinator` | Curve latest-only scheduling extracted; alignment policy moved to `FrameTickIndex`; image load, curve IO/apply, period projection, and display lifecycle remain broad | Continue one responsibility at a time; preserve R2/R3 log contracts at each checkpoint |
 | `LiveCameraManager` | Acquisition facade after display extraction | Keep display state in `LiveDisplayCoordinator`; only split further from evidence |
 | `OnSettingChanged` | Transitional central setting router | Move new side effects to feature owners; reduce existing cases incrementally |
 

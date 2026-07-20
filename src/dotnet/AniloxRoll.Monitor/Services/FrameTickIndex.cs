@@ -5,6 +5,14 @@ using AniloxRoll.Monitor.Core.Camera;   // CameraFrameSaver.TickSidecarName
 
 namespace AniloxRoll.Monitor.Core.Services
 {
+    internal sealed class FrameAlignmentResult
+    {
+        public List<string> AllPaths { get; set; }
+        public Dictionary<int, List<string>> ByCamera { get; set; }
+        public bool UsedHardwareTicks { get; set; }
+        public string Mode => UsedHardwareTicks ? "tick" : "filename";
+    }
+
     /// <summary>
     /// 多相機回顧合圖的「跨相機幀對齊」唯一來源。
     ///
@@ -16,16 +24,55 @@ namespace AniloxRoll.Monitor.Core.Services
     /// 某台在某時間槽沒有幀 = 它在那裡掉幀 → 該格補黑（StitchCamera 的 null slot）。
     ///
     /// tick 由存檔側車 _ticks.csv（<see cref="CameraFrameSaver.AppendTickSidecar"/>）提供；
-    /// 舊資料無側車時 <see cref="BuildAlignedByTick"/> 回 null，呼叫端 fallback <see cref="BuildAlignedByStitchKey"/>。
+    /// <see cref="ResolveAlignment(IDictionary{int, List{string}})"/> 是唯一決策點，舊資料無側車時會自動 fallback 檔名法。
     /// </summary>
     public static class FrameTickIndex
     {
+        internal static FrameAlignmentResult ResolveAlignment(
+            IDictionary<int, List<string>> grouped)
+        {
+            var allPaths = FlattenPaths(grouped);
+            return ResolveAlignment(grouped, allPaths, LoadTickMap(allPaths));
+        }
+
+        internal static FrameAlignmentResult ResolveAlignment(
+            IDictionary<int, List<string>> grouped,
+            Dictionary<string, long> pathToTick)
+        {
+            var allPaths = FlattenPaths(grouped);
+            return ResolveAlignment(grouped, allPaths, pathToTick);
+        }
+
+        private static FrameAlignmentResult ResolveAlignment(
+            IDictionary<int, List<string>> grouped,
+            List<string> allPaths,
+            Dictionary<string, long> pathToTick)
+        {
+            var byTick = BuildAlignedByTick(grouped, pathToTick);
+            return new FrameAlignmentResult
+            {
+                AllPaths = allPaths,
+                ByCamera = byTick ?? BuildAlignedByStitchKey(grouped),
+                UsedHardwareTicks = byTick != null
+            };
+        }
+
+        private static List<string> FlattenPaths(IDictionary<int, List<string>> grouped)
+        {
+            var allPaths = new List<string>();
+            if (grouped == null) return allPaths;
+            foreach (var item in grouped)
+                if (item.Value != null)
+                    allPaths.AddRange(item.Value);
+            return allPaths;
+        }
+
         /// <summary>同時間槽的 tick 容差＝半個幀週期（聚類規則單一來源；回顧批次 + 監控瀑布串流共用此公式）。
         /// 物理同瞬間多相機 tick 差 &lt;0.5ms ≪ 半週期；相鄰瞬間差≈一週期 &gt; 半週期 → 半週期切槽最穩。</summary>
         public static long ComputeThreshold(long periodTicks) => periodTicks > 0 ? periodTicks / 2 : 0;
 
         /// <summary>讀取一組影像所在資料夾的 _ticks.csv → baseName("{ts}-{camId}") → tick。</summary>
-        public static Dictionary<string, long> LoadTickMap(IEnumerable<string> imagePaths)
+        private static Dictionary<string, long> LoadTickMap(IEnumerable<string> imagePaths)
         {
             var map = new Dictionary<string, long>(StringComparer.Ordinal);
             var dirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -63,7 +110,7 @@ namespace AniloxRoll.Monitor.Core.Services
         /// 回傳 camId → 對齊後 path 清單（缺幀位置=null，長度=時間槽數，各台一致）。
         /// 任一影像缺 tick（舊資料/latch 失敗）→ 回 null，請 caller fallback 檔名法。
         /// </summary>
-        public static Dictionary<int, List<string>> BuildAlignedByTick(
+        private static Dictionary<int, List<string>> BuildAlignedByTick(
             IDictionary<int, List<string>> grouped, Dictionary<string, long> pathToTick)
         {
             if (grouped == null || pathToTick == null || pathToTick.Count == 0) return null;
@@ -132,10 +179,12 @@ namespace AniloxRoll.Monitor.Core.Services
         /// 舊資料 fallback：用檔名共用時間戳 key（"{ts}-{camId}" 去掉 -camId）建聯集參考軸。
         /// 同次擷取多相機共用軟體協調戳時可對齊；但各台獨立掉幀時不如 tick 精準（會補錯位置）。
         /// </summary>
-        public static Dictionary<int, List<string>> BuildAlignedByStitchKey(IDictionary<int, List<string>> grouped)
+        private static Dictionary<int, List<string>> BuildAlignedByStitchKey(IDictionary<int, List<string>> grouped)
         {
             var allKeys = new SortedSet<string>(StringComparer.Ordinal);
             var camKeyToPath = new Dictionary<int, Dictionary<string, string>>();
+            if (grouped == null)
+                return new Dictionary<int, List<string>>();
             foreach (var kv in grouped)
             {
                 var map = new Dictionary<string, string>();

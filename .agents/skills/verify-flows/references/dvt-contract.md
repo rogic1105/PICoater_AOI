@@ -1067,6 +1067,7 @@ OnReviewGrabIdSelected@AniloxRollForm.Data.cs
  │     └ LoadGrabCurvesCoreAsync@ReviewStitchCoordinator.cs
  │        ├ LoadForGrabId@InspectionImagePathRepository.cs
  │        ├ LoadForGrabId@InspectionConfigRepository.cs
+ │        ├ ResolveAlignment@FrameTickIndex.cs（tick 優先、檔名 fallback 的唯一決策點）
  │        ├ MergeCurves＋MergeRowCurves@CurveMergeHelper.cs
  │        └ IsCurrent@ReviewCurveLoadCoordinator.cs
  │           ├ false → RV curves stale-drop
@@ -1075,8 +1076,9 @@ OnReviewGrabIdSelected@AniloxRollForm.Data.cs
     └ LoadGrabStitchedViewAsync@ReviewStitchCoordinator.cs
        ├ LoadForGrabId@InspectionImagePathRepository.cs
        │  └ InspectionCsvReader.OpenShared＋TryParseRecord＋TryExtractCameraId（影像依 cam 分組）
-       └ LoadForGrabId@InspectionConfigRepository.cs
-          └ InspectionCsvReader.OpenShared＋TryParseRecord（取 grab 上方最近 #CFG）
+       ├ LoadForGrabId@InspectionConfigRepository.cs
+       │  └ InspectionCsvReader.OpenShared＋TryParseRecord（取 grab 上方最近 #CFG）
+       └ ResolveAlignment@FrameTickIndex.cs（與曲線快路共用，不得另寫 fallback）
 ```
 
 ### R3 時段導航（cbReviewDate/cbReviewTime 手動）

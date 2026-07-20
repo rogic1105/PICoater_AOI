@@ -64,7 +64,7 @@ against current code with `rg` before editing because lookup data can become sta
 | `sdk/MIL/MilGrabber.Core/MultiCameraMerger.cs` | 多相機 MIL 合併 buffer、layout 與 merge target 管理 |
 | `Acquisition/CameraFrameSaver.cs` | 擷取影像、曲線、資源紀錄與 frame tick sidecar 的背景持久化 |
 | `Services/FlowTrace.cs` | 產品 `[Flow]` trace 的單一輸出介面 |
-| `Services/FrameTickIndex.cs` | 硬體 tick 索引與跨相機時間槽對齊 |
+| `Services/FrameTickIndex.cs` | 跨相機時間槽對齊唯一決策點：硬體 tick 優先，任一 tick 缺失時整批 fallback 檔名，並回報實際模式。 |
 | `UI/Widgets/WaterfallView.cs` | App 對瀑布顯示流程的相容入口 |
 | `Services/CaptureFileNaming.cs` | 擷取影像、曲線與背景檔名規則及 legacy 解析 |
 | `Services/CaptureStoragePaths.cs` | 每日 CSV 與日期影像目錄的路徑規則 |
