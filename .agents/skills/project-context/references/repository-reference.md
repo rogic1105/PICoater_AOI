@@ -47,6 +47,7 @@ against current code with `rg` before editing because lookup data can become sta
 | `UI/Coordinators/ReviewCurveLoadCoordinator.cs` | 回顧單序號曲線快路的 latest-only／single-flight 排程與 stale token owner；不負責讀 bin 或畫 chart。 |
 | `UI/Coordinators/ReviewPeriodLoadCoordinator.cs` | 回顧時段載入的 FIFO single-flight、重複 request 去重與 generation 失效 owner。 |
 | `UI/Services/ImageCacheService.cs` | ProcessBatch 產出但不直接顯示的 Bitmap 生命週期唯一 owner；下一次 workflow 前統一 Dispose。 |
+| `UI/Services/ReviewCurveDataLoader.cs` | 單序號回顧曲線的無 UI application service：找影像／CFG、跨相機對齊、合併欄與列 curve bin，回傳不可直接上畫面的資料結果。 |
 | `UI/State/ReviewRuntimeState.cs` | 回顧 CSV CFG 快照與螢幕 mm/px 的 runtime SSoT；Form 與 ReviewStitchCoordinator 共用。 |
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/Interaction/EventGuard.cs` | 可重入事件 guard 與 scope |
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/BaseCurveChartHelper.cs` | Mean/Max、閾值與 plot lifecycle 的共用曲線圖基底 |

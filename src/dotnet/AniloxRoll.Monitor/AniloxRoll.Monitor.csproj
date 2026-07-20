@@ -198,6 +198,7 @@
     <Compile Include="UI\Coordinators\ReviewFolderCoordinator.cs" />
     <Compile Include="UI\Coordinators\SettingImpactClassifier.cs" />
     <Compile Include="UI\Services\ImageCacheService.cs" />
+    <Compile Include="UI\Services\ReviewCurveDataLoader.cs" />
     <Compile Include="UI\Services\SingleGrabCurveCache.cs" />
     <Compile Include="UI\Managers\CameraStallDetector.cs" />
     <Compile Include="UI\Managers\GlobalMergeCoordinator.cs" />

@@ -12,6 +12,7 @@ using AniloxRoll.Monitor.UI.Binders;
 using AniloxRoll.Monitor.UI.Coordinators;
 using AniloxRoll.Monitor.UI.Managers;
 using AniloxRoll.Monitor.UI.Navigators;
+using AniloxRoll.Monitor.UI.Services;
 using AniloxRoll.Monitor.UI.State;
 using AniloxRoll.Monitor.UI.Widgets;
 
@@ -71,6 +72,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         // 曲線與圖片是兩條獨立資料流：曲線 latest-only，圖片由 Form 的 250ms debounce 觸發。
         // 不共用 token，避免圖片開始載入時把同一序號仍在讀取的曲線誤判為 stale。
         private readonly ReviewCurveLoadCoordinator _curveLoads;
+        private readonly ReviewCurveDataLoader _curveDataLoader;
         private int _imageLoadSeq;
 
         /// <summary>快路：只載曲線（欄+列，.bin 數十 KB + tick 對齊 csv）+CFG → 更新欄/列 chart。
@@ -94,42 +96,25 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             var sw = Stopwatch.StartNew();
             int camCount = _ctx.CameraCount;
-            var mean = new float[camCount][];
-            var max  = new float[camCount][];
-            var rowMean = new float[camCount][];
-            var rowMax  = new float[camCount][];
-            CsvConfigSnapshot cfg = null;
             try
             {
-                await Task.Run(() =>
+                ReviewCurveData loaded = await Task.Run(() =>
                 {
-                    var grouped = InspectionImagePathRepository.LoadForGrabId(root, grabId, hintFrom, hintTo);
-                    cfg = InspectionConfigRepository.LoadForGrabId(root, grabId, hintFrom, hintTo);
-
-                    // 列曲線的跨相機對齊（同完整載入：tick 優先、檔名 fallback）——bin+csv 都輕，快路可負擔
-                    var alignment = FrameTickIndex.ResolveAlignment(grouped);
-                    var alignedByCam = alignment.ByCamera;
-                    Core.Services.FlowTrace.Log($"RV curves paths {grabId} root={root} images={alignment.AllPaths.Count} cams={grouped.Count} cfg={(cfg != null ? "yes" : "no")} align={alignment.Mode}");
-
-                    for (int i = 0; i < camCount; i++)
-                    {
-                        int camId = i + 1;
-                        if (!grouped.TryGetValue(camId, out var paths) || paths.Count == 0) continue;
-                        CurveMergeHelper.MergeCurves(paths, out mean[i], out max[i]);
-                        var aligned = alignedByCam.TryGetValue(camId, out var al) ? al : paths;
-                        CurveMergeHelper.MergeRowCurves(aligned, out rowMean[i], out rowMax[i]);
-                    }
+                    ReviewCurveData data = _curveDataLoader.Load(
+                        root, grabId, hintFrom, hintTo, camCount);
+                    Core.Services.FlowTrace.Log($"RV curves paths {grabId} root={root} images={data.ImageCount} cams={data.MatchedCameraCount} cfg={(data.Config != null ? "yes" : "no")} align={data.AlignmentMode}");
+                    return data;
                 });
                 if (!_curveLoads.IsCurrent(request))
                 {
                     Core.Services.FlowTrace.Log($"RV curves stale-drop {grabId}");
                     return;
                 }
-                _stitchedCurveMean    = mean;
-                _stitchedCurveMax     = max;
-                _stitchedRowCurveMean = rowMean;
-                _stitchedRowCurveMax  = rowMax;
-                _ctx.ReviewState.Config = cfg;
+                _stitchedCurveMean = loaded.ColumnMean;
+                _stitchedCurveMax = loaded.ColumnMax;
+                _stitchedRowCurveMean = loaded.RowMean;
+                _stitchedRowCurveMax = loaded.RowMax;
+                _ctx.ReviewState.Config = loaded.Config;
                 UpdateStitchedOverviewChart();
                 UpdateGlobalRowChart();
                 Core.Services.FlowTrace.Log($"RV curves {grabId}（{sw.ElapsedMilliseconds}ms）");
@@ -150,6 +135,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public ReviewStitchCoordinator(ReviewStitchContext ctx)
         {
             _ctx = ctx;
+            _curveDataLoader = new ReviewCurveDataLoader();
             _curveLoads = new ReviewCurveLoadCoordinator(LoadGrabCurvesCoreAsync);
         }
 

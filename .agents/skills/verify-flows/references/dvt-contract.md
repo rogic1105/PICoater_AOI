@@ -1065,13 +1065,14 @@ OnReviewGrabIdSelected@AniloxRollForm.Data.cs
  │  └ Enqueue@ReviewCurveLoadCoordinator.cs
  │     ├ pending 僅保留最新一筆；running 恆單工
  │     └ LoadGrabCurvesCoreAsync@ReviewStitchCoordinator.cs
- │        ├ LoadForGrabId@InspectionImagePathRepository.cs
- │        ├ LoadForGrabId@InspectionConfigRepository.cs
- │        ├ ResolveAlignment@FrameTickIndex.cs（tick 優先、檔名 fallback 的唯一決策點）
- │        ├ MergeCurves＋MergeRowCurves@CurveMergeHelper.cs
+ │        ├ Load@ReviewCurveDataLoader.cs（無 WinForms 的 IO／合併 service）
+ │        │  ├ LoadForGrabId@InspectionImagePathRepository.cs
+ │        │  ├ LoadForGrabId@InspectionConfigRepository.cs
+ │        │  ├ ResolveAlignment@FrameTickIndex.cs（tick 優先、檔名 fallback 的唯一決策點）
+ │        │  └ MergeCurves＋MergeRowCurves@CurveMergeHelper.cs
  │        └ IsCurrent@ReviewCurveLoadCoordinator.cs
  │           ├ false → RV curves stale-drop
- │           └ true → UpdateStitchedOverviewChart＋UpdateGlobalRowChart
+ │           └ true → 套 ReviewRuntimeState＋UpdateStitchedOverviewChart＋UpdateGlobalRowChart
  └ 250ms settle → LoadGrabStitchedViewGuardRowRangeAsync@AniloxRollForm.Review.cs
     └ LoadGrabStitchedViewAsync@ReviewStitchCoordinator.cs
        ├ LoadForGrabId@InspectionImagePathRepository.cs
