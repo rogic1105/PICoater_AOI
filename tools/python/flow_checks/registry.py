@@ -5,7 +5,10 @@ from .capture import CaptureFlowValidator
 from .data import DataFlowValidator
 from .hardware import HardwareFlowValidator
 from .live import LiveFlowValidator
+from .mura import MuraFlowValidator
+from .parameter import ParameterFlowValidator
 from .review import ReviewFlowValidator
+from .settings import SettingsFlowValidator
 
 
 VALIDATORS = (
@@ -15,11 +18,10 @@ VALIDATORS = (
     DataFlowValidator(),
     CaptureFlowValidator(),
     HardwareFlowValidator(),
+    SettingsFlowValidator(),
+    MuraFlowValidator(),
+    ParameterFlowValidator(),
 )
 
-# These domains remain visible so an all-flow run cannot be mistaken for full coverage.
-PENDING_DOMAINS = (
-    "SETTINGS/S",
-    "MURA/M",
-    "PARAM/P",
-)
+# Keep this explicit so newly documented domains cannot silently appear covered.
+PENDING_DOMAINS = ()

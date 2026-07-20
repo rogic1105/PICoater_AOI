@@ -4,21 +4,27 @@
 import argparse
 import sys
 
-from flow_checks.core import CheckReport, CheckStatus, FlowSession, configure_stdout, resolve_log_paths
+from flow_checks.core import (
+    CheckReport,
+    CheckStatus,
+    FlowSession,
+    configure_stdout,
+    resolve_log_paths,
+)
 from flow_checks.registry import PENDING_DOMAINS, VALIDATORS
 
 
 def main() -> int:
     configure_stdout()
-    parser = argparse.ArgumentParser(description="全天 flow-log DVT 總入口")
-    parser.add_argument("logs", nargs="*", help="指定一或多個 trace log")
-    parser.add_argument("--date", help="掃描指定日期全部 session，例如 2026-07-13")
+    parser = argparse.ArgumentParser(description="檢查單一 session 或全天的 flow-log DVT")
+    parser.add_argument("logs", nargs="*", help="一個或多個 trace log")
+    parser.add_argument("--date", help="檢查指定日期全部 session，例如 2026-07-20")
     parser.add_argument("--log-dir", default=r"D:\Anilox\Logs", help="trace log 目錄")
     parser.add_argument("--latest", action="store_true", help="只檢查最新 session")
     args = parser.parse_args()
 
     if args.logs and args.date:
-        parser.error("指定 logs 與 --date 只能擇一")
+        parser.error("不可同時指定 logs 與 --date")
 
     paths = resolve_log_paths(
         args.logs or None,
@@ -27,11 +33,11 @@ def main() -> int:
         latest=args.latest or (not args.logs and not args.date),
     )
     if not paths:
-        print("找不到符合條件的 trace log")
+        print("找不到可讀取的 trace log")
         return 2
 
-    print("已掛載 validator：" + ", ".join(validator.domain for validator in VALIDATORS))
-    print("尚待自動化：" + ", ".join(PENDING_DOMAINS))
+    print("已掛載 validators：" + ", ".join(validator.domain for validator in VALIDATORS))
+    print("尚待自動化：" + (", ".join(PENDING_DOMAINS) if PENDING_DOMAINS else "無"))
 
     all_results = CheckReport()
     failed_sessions = 0
@@ -54,7 +60,13 @@ def main() -> int:
         f"FAIL={all_results.count(CheckStatus.FAIL)} "
         f"NOT_COVERED={all_results.count(CheckStatus.NOT_COVERED)}"
     )
-    print("覆蓋狀態：PARTIAL（尚待自動化的 domain 見上方清單）")
+    if PENDING_DOMAINS:
+        print("自動化範圍：PARTIAL（仍有未掛 validator 的 domain）")
+    else:
+        print(
+            "自動化範圍：FULL（所有已登記 domain 均有 validator；"
+            "NOT COVERED 仍表示該 session 未操作）"
+        )
     return 1 if all_results.has_failures else 0
 
 

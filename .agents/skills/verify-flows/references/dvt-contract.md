@@ -697,6 +697,14 @@ T1: ui:【相機參數】camN {param}={v}｜All {param}={v}    ← 帶參數名+
 改高度 realloc 路徑漏守門 → 4 台各跳一個視窗）。新增 MdispSelectWindow 呼叫點＝必帶守門。
 ```
 
+**自動校稿（`flow_checks/parameter.py`）**：
+- `P1.startup`：從配置開始至 `AllocateCameras done` 後 1 秒為開機靜默窗口，不得出現相機參數 intent。
+  多留 1 秒是為了抓「初始化時誤排 debounce、配置完成後才發作」的歷史病。
+- `P1.intent`：只接受 `cam1~7 Exp|LineRate|Height=N` 或
+  `All ExpAll|LineRateAll|HeightAll=N`，scope 與參數尾綴必須一致。
+- `P1.responsiveness`：調參後 5 秒內 `UiStall > 1000ms` 判 FAIL；沒有使用者調參則回
+  `NOT COVERED`，開機靜默仍可獨立判 PASS/FAIL。
+
 ## Mura 警告契約（M 系列）
 
 ### M1 曲線超過門檻（grab 中）
@@ -719,6 +727,13 @@ Tn: MURA 恢復（v|h）                                                        
   `HandleMuraPauseSettingsChanged` 重設兩方向 edge latch 並立即 `ClearMura`，恢復後只接受新的超標事件。
 - 違規樣本：chart 明顯超標卻無「MURA 超標」行＝判定鏈斷（2026-07-07 盲測抓到：舊版被
   IO 未連線 early-return 整段跳過＝操作員零警告）。
+
+**自動校稿（`flow_checks/mura.py`）**：
+- `M1.edges`：v/h 各自必須超標→恢復交替；Start/Stop grab 或暫停切換會重置 edge latch。
+- `M1.health`：每筆超標/恢復後 1 秒內，必有同方向且未被前一事件使用的
+  `OutputHealth raise/resolve`；整份 session 完全沒有此儀器的舊版 log 回 `NOT COVERED`。
+- `M1.pause`：每次按暫停鈕 3 秒內必有 `set:[MuraDetectPaused]`；切到 True 後 3 秒內
+  必有 `MURA 暫停 → 清除 DO1`。未操作的子流程回 `NOT COVERED`。
 
 ## 資料存放與檢測契約（C 系列；capture/storage）
 
@@ -875,8 +890,10 @@ python tools/python/check_all_flows.py trace-a.log trace-b.log
 - `flow_checks/registry.py`＝validator 掛載點；每個 domain 獨立模組，不得把所有規則堆回總入口。
 - `NOT COVERED`＝該 session 沒操作到該 flow，**不得算 PASS**；validator 尚未實作則列在 `尚待自動化`，
   總結必標 `PARTIAL`，不得宣稱整份 DVT 全綠。
-- 現況（2026-07-17）：已掛 `GLOBAL`（任何 `契約違規` 行即 FAIL）＋`LIVE/F`＋`REVIEW/R`＋
-  `DATA/D`＋`CAPTURE/C`＋`HARDWARE/H`；`SETTINGS/S`、`MURA/M`、`PARAM/P` 依戰役逐步接入。
+- 現況（2026-07-20）：已掛 `GLOBAL`（任何 `契約違規` 行即 FAIL）＋`LIVE/F`＋`REVIEW/R`＋
+  `DATA/D`＋`CAPTURE/C`＋`HARDWARE/H`＋`SETTINGS/S`＋`MURA/M`＋`PARAM/P`，registry 無待接 domain。
+  `FULL` 只表示每個已登記 domain 都有 validator；單一 session 未操作到的 flow 仍必須回
+  `NOT COVERED`，不可把「有檢查器」誤寫成「所有功能已實際測過」。
 - domain 專用舊指令保留為薄 wrapper（例如 `check_review_flows.py`），規則實作只能存在
   `flow_checks/{domain}.py` 一份，避免 wrapper／總入口兩份判準分歧。
 
@@ -1045,6 +1062,13 @@ T1: RV row …（Review 有資料時）或 RV load/update row（依當前 Review
   `RowCurveDisplayAdapter.ApplyDirection → RowCurveChartHelper.ZeroAtTop` 重畫既有資料/視野。
 - 違規樣本：grab 停止後改 PropertyGrid 上下方向，主監控畫面跟著翻，但 `chartLiveRow`
   仍維持舊方向＝`RowCurveSyncCoordinator` 沒有對最後資料做方向刷新。
+
+**自動校稿（`flow_checks/settings.py`）**：
+- `S0.format`：所有 `ui:設定[]`／`set:[]` 必須同時帶屬性名與新值。
+- `S2.review-enhance`：已有回顧序號時，切強化必須以同一 grabId 完成
+  `RV loadGrab begin → done`；尚無回顧資料則回 `NOT COVERED`。
+- `S3.direction`：方向變更後、下一次方向變更前，必須看見相同方向的
+  `LC|RV row rowChart|rowView`，證明最後一組列資料/視野已重畫。
 
 （其餘設定逐一補進：每補一個 UI 功能，順手寫它的 S 條目。）
 
