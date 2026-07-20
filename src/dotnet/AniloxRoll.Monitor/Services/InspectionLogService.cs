@@ -199,7 +199,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 if (flowCsvOpen)
                     FlowTrace.Log($"capture csv open path={csvPath} cfg={(flowCfgWrite ? "yes" : "no")}");
                 if (flowCfgWrite && config != null)
-                    FlowTrace.Log($"capture csv cfg path={csvPath} HM={config.HessianMaxFactorV:F4}/{config.HessianMaxFactorH:F4} " +
+                    FlowTrace.Log($"capture csv cfg path={csvPath} HM={config.HessianMaxFactorV:F4}/{config.HessianMaxFactorH:F4} ridge={config.RidgeSigma:F4} " +
                         $"thrV={config.ErrorValueMeanV:F4}/{config.ErrorValueMaxV:F4} thrH={config.ErrorValueMeanH:F4}/{config.ErrorValueMaxH:F4}");
                 if (flowFirstRecordForGrab)
                     FlowTrace.Log($"capture csv firstRecord grab={grabId} path={csvPath} file={fileName} " +
@@ -275,7 +275,7 @@ namespace AniloxRoll.Monitor.Core.Services
                     _lastCsvPath = csvPath;
                 }
 
-                FlowTrace.Log($"capture csv cfg path={csvPath} HM={config.HessianMaxFactorV:F4}/{config.HessianMaxFactorH:F4} " +
+                FlowTrace.Log($"capture csv cfg path={csvPath} HM={config.HessianMaxFactorV:F4}/{config.HessianMaxFactorH:F4} ridge={config.RidgeSigma:F4} " +
                     $"thrV={config.ErrorValueMeanV:F4}/{config.ErrorValueMaxV:F4} thrH={config.ErrorValueMeanH:F4}/{config.ErrorValueMaxH:F4}");
                 WriteSucceeded?.Invoke();
             }

@@ -684,11 +684,15 @@ T1: capture plan grab={yyMMdd-HHmmss} root={CaptureRootPath}
 ### C2 檢測 CSV 寫入（每個 grab 首筆 + CFG 變更）
 ```
 Tn: capture csv open path=… cfg=yes|no              ← 新檔或換日首次開啟
-Tn: capture csv cfg path=… HM=V/H thrV=mean/max thrH=mean/max
+Tn: capture csv cfg path=… HM=V/H ridge=N thrV=mean/max thrH=mean/max
 Tn: capture csv firstRecord grab=… path=… file=… verdict=max0|1/mean0|1 peak=…/… rowPeak=…/… maxCMean=… thrV=…/…
 ```
 - `firstRecord` 每個 grab 只出一行，用來確認檢測結果有落到哪一份 CSV；逐相機逐幀細節看 CSV 本體。
-- `cfg` 行出現代表 `#CFG` 已寫入同一 CSV；回顧曲線座標/捕捉時正規值可從該 CSV 追溯。
+- `cfg` 行出現代表 `#CFG` 已寫入同一 CSV；`ridge` 是捕捉時的細線濾除值。
+- `#CFG` 的機台佈局必須完整保存 `OPS + START(CamN_Pos) + CROP(TrimHead/TrimTail)`；
+  檢測設定必須包含欄／列正規值、細線濾除與欄／列門檻。設定變更後，下一筆資料前必須出現新版 `#CFG`。
+- `#CFG` 刻意與每日資料列同檔，不拆成平行設定檔：每筆資料以上方最近一行 `#CFG` 為設定版本，
+  避免斷電或跨檔寫入失敗造成資料與設定失配。
 - `verdict` 使用寫入 CSV 同一組 V 閾值，與 `AppendRecord@InspectionLogService.cs` 的 `MaxExceed/MeanExceed` 同源。
 - CSV 資料列格式＝`Id,FileName,MaxExceed,MeanExceed,MeanPeak,MaxPeak,GrabHeight,LineRateHz,ExposureUs,MaxCMean,MeanRPeak,MaxRPeak`；
   `MaxCMean`＝該幀 `MaxC`（column curve）全點平均後除以 255（0~1），是報表範圍 `CurveMax` 候選排序值，**不是 MaxPeak**。

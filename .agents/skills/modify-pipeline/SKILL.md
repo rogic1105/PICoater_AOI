@@ -36,7 +36,8 @@ description: Modify image-processing pipelines, native processing calls, buffer 
   - V/欄曲線（`chartLiveColumn` / `chartReviewColumn` / `chartDataColumn`）：`display = (bin/255) × (HM_V_capture / HM_V_current)` — 改 V 即時生效
   - H/列曲線（`chartLiveRow` / `chartReviewRow`）：`display = (bin/255) × (HM_V_capture / HM_H_current)` — 改 H 即時生效；公式 numerator 用 V_capture 因為 bin 是被 V baked-in
 - 改 PropertyGrid 正規值 V/H 時，Form 的 `_propertyGrid_PropertyValueChanged` 呼叫 `RefreshMuraProfileForSettingsChange` + `_stitchCoordinator.UpdateStitchedOverviewChart` 立即重畫
-- CSV `#CFG` 記錄兩個欄位 `HessianMaxFactorV`、`HessianMaxFactorH`；舊單一 `HessianMaxFactor` 欄位讀檔時 fallback 到 V=H=該值
+- CSV `#CFG` 記錄 `HessianMaxFactorV`、`HessianMaxFactorH` 與 capture-time `RidgeSigma`；
+  細線濾除變更必須產生新版快照。舊資料缺少 `RidgeSigma` 時維持可讀，該值視為未知（0）。
 
 ### CUDA Pinned Memory
 - 所有 NativeBufferPool buffer 使用 `TanukiCv_AllocPinned`（cudaMallocHost）

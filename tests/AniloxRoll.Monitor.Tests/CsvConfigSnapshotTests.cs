@@ -16,11 +16,16 @@ namespace AniloxRoll.Monitor.Tests
             var grabH = new int[] { 3001, 3001, 3001, 3001, 3001, 3001, 3001 };
             var expUs = new double[] { 149, 150, 151, 152, 153, 154, 155 };
             var lrHz = new double[] { 3001, 3002, 3003, 3004, 3005, 3006, 3007 };
-            var snap = new CsvConfigSnapshot(ops, pos, grabH, expUs, lrHz, 1.2345f, 1.6789f,
+            var snap = new CsvConfigSnapshot(ops, pos, grabH, expUs, lrHz, 1.2345f, 1.6789f, 9.25f,
                 0.5678f, 0.9012f, 0.5678f, 0.9012f, 5.0, 3.5, ts);
 
             string csv = snap.ToCsvLine();
             Assert.That(csv.StartsWith("#CFG,"), Is.True);
+            Assert.That(csv, Does.Contain("RidgeSigma=9.2500"));
+            Assert.That(csv.IndexOf("Cam7_Pos=", StringComparison.Ordinal),
+                Is.LessThan(csv.IndexOf("TrimHead=", StringComparison.Ordinal)));
+            Assert.That(csv.IndexOf("TrimTail=", StringComparison.Ordinal),
+                Is.LessThan(csv.IndexOf("Cam1_GrabH=", StringComparison.Ordinal)));
 
             bool ok = CsvConfigSnapshot.TryParse(csv, out var parsed);
             Assert.That(ok, Is.True);
@@ -28,6 +33,7 @@ namespace AniloxRoll.Monitor.Tests
             Assert.That(parsed.Timestamp, Is.EqualTo(ts));
             Assert.That(parsed.HessianMaxFactorV, Is.EqualTo(1.2345f).Within(0.001f));
             Assert.That(parsed.HessianMaxFactorH, Is.EqualTo(1.6789f).Within(0.001f));
+            Assert.That(parsed.RidgeSigma, Is.EqualTo(9.25f).Within(0.001f));
             Assert.That(parsed.ErrorValueMeanV, Is.EqualTo(0.5678f).Within(0.001f));
             Assert.That(parsed.ErrorValueMaxV,  Is.EqualTo(0.9012f).Within(0.001f));
             Assert.That(parsed.ErrorValueMeanH, Is.EqualTo(0.5678f).Within(0.001f));
@@ -64,6 +70,30 @@ namespace AniloxRoll.Monitor.Tests
             var a = new CsvConfigSnapshot(ops1, pos, null, null, null, 1.0f, 1.5f, 2.0f, 3.0f, 2.0f, 3.0f, 0.0, 0.0, DateTime.Now);
             var b = new CsvConfigSnapshot(ops2, pos, null, null, null, 1.0f, 1.5f, 2.0f, 3.0f, 2.0f, 3.0f, 0.0, 0.0, DateTime.Now);
             Assert.That(a.ContentKey, Is.Not.EqualTo(b.ContentKey));
+        }
+
+        [Test]
+        public void ContentKey_DifferentRidgeSigma_NotEqual()
+        {
+            var ops = new double[] { 1, 2, 3, 4, 5, 6, 7 };
+            var pos = new double[] { 10, 20, 30, 40, 50, 60, 70 };
+            var a = new CsvConfigSnapshot(ops, pos, null, null, null, 1.0f, 1.5f, 8.0f,
+                2.0f, 3.0f, 2.0f, 3.0f, 0.0, 0.0, DateTime.Now);
+            var b = new CsvConfigSnapshot(ops, pos, null, null, null, 1.0f, 1.5f, 9.0f,
+                2.0f, 3.0f, 2.0f, 3.0f, 0.0, 0.0, DateTime.Now);
+            Assert.That(a.ContentKey, Is.Not.EqualTo(b.ContentKey));
+        }
+
+        [Test]
+        public void TryParse_LegacyLineWithoutRidgeSigma_RemainsCompatible()
+        {
+            const string line =
+                "#CFG,2026-03-30T14:30:45.123,Cam1_Ops=1.00,HessianMaxFactorV=0.3000,HessianMaxFactorH=0.4000";
+
+            Assert.That(CsvConfigSnapshot.TryParse(line, out var parsed), Is.True);
+            Assert.That(parsed.HessianMaxFactorV, Is.EqualTo(0.3f).Within(0.001f));
+            Assert.That(parsed.HessianMaxFactorH, Is.EqualTo(0.4f).Within(0.001f));
+            Assert.That(parsed.RidgeSigma, Is.EqualTo(0f));
         }
 
         [Test]

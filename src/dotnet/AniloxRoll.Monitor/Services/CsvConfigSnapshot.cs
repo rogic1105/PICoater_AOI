@@ -11,7 +11,7 @@ namespace AniloxRoll.Monitor.Core.Services
     public class CsvConfigSnapshot
     {
         public double[] CamOps { get; }   // length 7
-        public double[] CamPos { get; }   // length 7
+        public double[] CamPos { get; }   // START (mm), length 7
         public int[] CamGrabHeight { get; }    // length 7，高度滑桿（line scan 行數）
         public double[] CamExposureUs { get; } // length 7，曝光滑桿（μs）
         public double[] CamLineRateHz { get; } // length 7，線掃滑桿（Hz）
@@ -19,6 +19,8 @@ namespace AniloxRoll.Monitor.Core.Services
         public float HessianMaxFactorV { get; }
         /// <summary>列正規值 — view-time only，僅供 H 曲線顯示縮放參考。</summary>
         public float HessianMaxFactorH { get; }
+        /// <summary>細線濾除（capture-time ridge_sigma）。</summary>
+        public float RidgeSigma { get; }
         public float ErrorValueMeanV { get; }  // 欄平均閾值
         public float ErrorValueMaxV  { get; }  // 欄最大閾值
         public float ErrorValueMeanH { get; }  // 列平均閾值
@@ -35,6 +37,22 @@ namespace AniloxRoll.Monitor.Core.Services
             float errorValueMeanH, float errorValueMaxH,
             double trimHeadMm, double trimTailMm,
             DateTime timestamp)
+            : this(
+                camOps, camPos, camGrabHeight, camExposureUs, camLineRateHz,
+                hessianMaxFactorV, hessianMaxFactorH, 0f,
+                errorValueMeanV, errorValueMaxV, errorValueMeanH, errorValueMaxH,
+                trimHeadMm, trimTailMm, timestamp)
+        {
+        }
+
+        public CsvConfigSnapshot(
+            double[] camOps, double[] camPos, int[] camGrabHeight,
+            double[] camExposureUs, double[] camLineRateHz,
+            float hessianMaxFactorV, float hessianMaxFactorH, float ridgeSigma,
+            float errorValueMeanV, float errorValueMaxV,
+            float errorValueMeanH, float errorValueMaxH,
+            double trimHeadMm, double trimTailMm,
+            DateTime timestamp)
         {
             CamOps = camOps ?? new double[7];
             CamPos = camPos ?? new double[7];
@@ -43,6 +61,7 @@ namespace AniloxRoll.Monitor.Core.Services
             CamLineRateHz = camLineRateHz ?? new double[7];
             HessianMaxFactorV = hessianMaxFactorV;
             HessianMaxFactorH = hessianMaxFactorH;
+            RidgeSigma = ridgeSigma;
             ErrorValueMeanV = errorValueMeanV;
             ErrorValueMaxV  = errorValueMaxV;
             ErrorValueMeanH = errorValueMeanH;
@@ -61,7 +80,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 (int[])s.Acquisition?.CameraGrabHeight?.Clone(),
                 (double[])s.Acquisition?.CameraExposureTimeUs?.Clone(),
                 (double[])s.Acquisition?.CameraLineRateHz?.Clone(),
-                s.HessianMaxFactorV, s.HessianMaxFactorH,
+                s.HessianMaxFactorV, s.HessianMaxFactorH, s.RidgeSigma,
                 s.ErrorValueMeanV, s.ErrorValueMaxV,
                 s.ErrorValueMeanH, s.ErrorValueMaxH,
                 s.TrimHeadMm,
@@ -84,6 +103,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 for (int i = 0; i < 7; i++) sb.Append(CamLineRateHz[i].ToString("R", inv)).Append(',');
                 sb.Append(HessianMaxFactorV.ToString("R", inv)).Append(',');
                 sb.Append(HessianMaxFactorH.ToString("R", inv)).Append(',');
+                sb.Append(RidgeSigma.ToString("R", inv)).Append(',');
                 sb.Append(ErrorValueMeanV.ToString("R", inv)).Append(',');
                 sb.Append(ErrorValueMaxV.ToString("R", inv)).Append(',');
                 sb.Append(ErrorValueMeanH.ToString("R", inv)).Append(',');
@@ -104,6 +124,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 sb.Append($",Cam{i + 1}_Ops={CamOps[i]:F2}");
             for (int i = 0; i < 7; i++)
                 sb.Append($",Cam{i + 1}_Pos={CamPos[i]:F2}");
+            sb.Append($",TrimHead={TrimHeadMm:F2}");
+            sb.Append($",TrimTail={TrimTailMm:F2}");
             for (int i = 0; i < 7; i++)
                 sb.Append($",Cam{i + 1}_GrabH={CamGrabHeight[i]}");
             for (int i = 0; i < 7; i++)
@@ -112,12 +134,11 @@ namespace AniloxRoll.Monitor.Core.Services
                 sb.Append($",Cam{i + 1}_Lr={CamLineRateHz[i]:F2}");
             sb.Append($",HessianMaxFactorV={HessianMaxFactorV:F4}");
             sb.Append($",HessianMaxFactorH={HessianMaxFactorH:F4}");
+            sb.Append($",RidgeSigma={RidgeSigma:F4}");
             sb.Append($",ErrorValueMeanV={ErrorValueMeanV:F4}");
             sb.Append($",ErrorValueMaxV={ErrorValueMaxV:F4}");
             sb.Append($",ErrorValueMeanH={ErrorValueMeanH:F4}");
             sb.Append($",ErrorValueMaxH={ErrorValueMaxH:F4}");
-            sb.Append($",TrimHead={TrimHeadMm:F2}");
-            sb.Append($",TrimTail={TrimTailMm:F2}");
             return sb.ToString();
         }
 
@@ -128,7 +149,7 @@ namespace AniloxRoll.Monitor.Core.Services
             if (string.IsNullOrEmpty(line) || !line.StartsWith("#CFG,")) return false;
 
             string[] parts = line.Split(',');
-            if (parts.Length < 19) return false;
+            if (parts.Length < 3) return false;
 
             if (!DateTime.TryParseExact(parts[1].Trim(), "yyyy-MM-ddTHH:mm:ss.fff",
                 CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime ts))
@@ -139,7 +160,7 @@ namespace AniloxRoll.Monitor.Core.Services
             int[] grabH = new int[7];
             double[] expUs = new double[7];
             double[] lrHz = new double[7];
-            float hessianV = 0, hessianH = 0;
+            float hessianV = 0, hessianH = 0, ridgeSigma = 0;
             float meanV = 0, maxV = 0, meanH = 0, maxH = 0;
             double trimHead = 0, trimTail = 0;
 
@@ -185,6 +206,8 @@ namespace AniloxRoll.Monitor.Core.Services
                     float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out hessianV);
                 else if (key == "HessianMaxFactorH")
                     float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out hessianH);
+                else if (key == "RidgeSigma")
+                    float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out ridgeSigma);
                 else if (key == "ErrorValueMeanV")
                     float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out meanV);
                 else if (key == "ErrorValueMaxV")
@@ -209,7 +232,8 @@ namespace AniloxRoll.Monitor.Core.Services
             else if (maxH > 0f && maxV <= 0f) maxV = maxH;
 
             result = new CsvConfigSnapshot(ops, pos, grabH, expUs, lrHz,
-                hessianV, hessianH, meanV, maxV, meanH, maxH, trimHead, trimTail, ts);
+                hessianV, hessianH, ridgeSigma,
+                meanV, maxV, meanH, maxH, trimHead, trimTail, ts);
             return true;
         }
     }

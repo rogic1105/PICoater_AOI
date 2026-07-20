@@ -134,6 +134,35 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void AppendRecord_RidgeSigmaChange_InsertNewCfg()
+        {
+            var svc = new InspectionLogService(() => _tempRoot);
+            var ts = new DateTime(2026, 3, 30, 10, 0, 0, 0);
+            var config1 = new CsvConfigSnapshot(
+                new double[7], new double[7], null, null, null,
+                1.0f, 1.0f, 8.0f, 0.5f, 0.8f, 0.5f, 0.8f, 0.0, 0.0, ts);
+            var config2 = new CsvConfigSnapshot(
+                new double[7], new double[7], null, null, null,
+                1.0f, 1.0f, 9.0f, 0.5f, 0.8f, 0.5f, 0.8f, 0.0, 0.0, ts);
+
+            svc.AppendRecord(
+                InspectionLogService.FormatGrabId(ts), "20260330_100000.000-1",
+                0.1f, 0.2f, 0.5f, 0.8f, 3001, 3001.0, 149.0, config1, ts);
+            svc.AppendRecord(
+                InspectionLogService.FormatGrabId(ts.AddSeconds(1)), "20260330_100001.000-1",
+                0.1f, 0.2f, 0.5f, 0.8f, 3001, 3001.0, 149.0, config2, ts);
+
+            string csvPath = Path.Combine(_tempRoot, "2026", "202603", "20260330.csv");
+            string[] cfgLines = Array.FindAll(
+                File.ReadAllLines(csvPath),
+                line => line.StartsWith("#CFG,", StringComparison.Ordinal));
+
+            Assert.That(cfgLines.Length, Is.EqualTo(2));
+            Assert.That(cfgLines[0], Does.Contain("RidgeSigma=8.0000"));
+            Assert.That(cfgLines[1], Does.Contain("RidgeSigma=9.0000"));
+        }
+
+        [Test]
         public void AppendRecord_PassFail_MaxExceedMeanExceed()
         {
             var svc = new InspectionLogService(() => _tempRoot);
