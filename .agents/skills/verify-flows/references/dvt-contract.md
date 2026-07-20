@@ -758,9 +758,11 @@ StorageRetentionService.RunCleanup
 | 任意 | 新問題或既有問題變更 | 各問題維持自身狀態 | 每個 code 一個獨立 label；嚴重度高者排前 |
 | 異常 active | 使用者點該問題 label | 不變 | 未解決問題不得被確認清掉 |
 | 異常 resolved | 使用者點該問題 label | 只移除該 code | 其他 active／resolved label 不受影響 |
-| 任意 | 問題恢復 | 同色但 resolved 待確認 | 保留提示，直到使用者看到並點選 |
+| 任意 | 問題恢復 | 黃色 resolved 待確認 | 保留原嚴重度供 log／排序，UI 改黃底黑字，直到使用者看到並點選 |
 
-顏色語意固定：預設背景＝資訊區、黃＝容量／積壓警示、深橘＝產出失敗或資料捨棄、紅＝檢測異常或硬體／網路連線異常。
+顏色語意固定：預設背景＝資訊區、黃＝容量／積壓警示或已恢復待確認、深橘＝產出失敗或資料捨棄、
+紅＝檢測異常或硬體／網路連線異常。已恢復狀態除黃色外，必須同時顯示「已恢復，點擊關閉」，
+不得只用顏色傳達可操作性。
 產出問題不停止抓取、不觸發 IO 異常；歷史細節交給 log。
 
 **log-flow（只記狀態邊緣，不洗版）**
@@ -773,7 +775,8 @@ ui:【產出狀態】確認 code=C
 [OutputHealth] state Notice -> Normal code=none active=False
 ```
 - 同 code、同 severity、同 message 重複回報不得重記。
-- 非最高嚴重度問題 raise／resolve 也必須刷新 incident labels；`resolve` 後未確認仍保留該 label 與顏色。
+- 非最高嚴重度問題 raise／resolve 也必須刷新 incident labels；`resolve` 後未確認仍保留該 label，
+  並統一顯示黃色待確認，不沿用 active 時的深橘／紅色。
 - active 問題即使點擊也不得被移除；確認 resolved code 只能移除同 code，不得一次清掉其他已恢復問題。
 - `CAPTURE/C4.output-health` validator 必須檢查：同 code 未 resolve 前不得重複 raise、resolve 必須有 active
   來源、每筆 ack 恰好一個且只能移除 resolved code；沒有操作到健康度轉變時回 `NOT COVERED`，不得假綠。

@@ -463,6 +463,13 @@ namespace AniloxRoll.Monitor.Forms
                 ? "問題尚未排除；恢復後可點擊關閉這一項"
                 : "點擊只關閉這一項已恢復的問題";
 
+            if (!incident.IsActive)
+            {
+                label.BackColor = IecYellow;
+                label.ForeColor = Color.Black;
+                return;
+            }
+
             switch (incident.Severity)
             {
                 case OutputHealthSeverity.Notice:
