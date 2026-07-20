@@ -5,6 +5,9 @@ namespace AniloxRoll.Monitor.Core.Services
 {
     public sealed class NativeBufferPool : IDisposable
     {
+        private const ulong Alignment = 64;
+
+        private IntPtr _slabBuffer = IntPtr.Zero;
         private IntPtr _inputBuffer = IntPtr.Zero;
         private IntPtr _thumbnailBuffer = IntPtr.Zero;
         private IntPtr _muraBuffer = IntPtr.Zero;
@@ -27,26 +30,60 @@ namespace AniloxRoll.Monitor.Core.Services
         public int ThumbnailBufferSize { get; }
         public int CurveBufferSize { get; }
         public int CurveRowBufferSize { get; }
+        public ulong PinnedBytes { get; }
 
+        private readonly Action<IntPtr> _freePinned;
         private bool _isDisposed;
 
         public NativeBufferPool(int maxWidth, int maxHeight, int maxThumbnailSide)
+            : this(maxWidth, maxHeight, maxThumbnailSide, AllocatePinned, FreePinned)
         {
-            ImageBufferSize = (ulong)(maxWidth * maxHeight);
-            ThumbnailBufferSize = maxThumbnailSide * maxThumbnailSide;
-            CurveBufferSize = maxWidth * sizeof(float);
-            CurveRowBufferSize = maxHeight * sizeof(float);
+        }
 
-            // 使用 CUDA Pinned Memory（cudaMallocHost），讓 H<->D memcpy 走非同步 DMA，
-            // 對應 de24f715 版本的 PICoater_AllocPinned 設計。
-            _inputBuffer        = AllocatePinned(ImageBufferSize);
-            _muraBuffer         = AllocatePinned(ImageBufferSize);
-            _ridgeBuffer        = AllocatePinned(ImageBufferSize);
-            _thumbnailBuffer    = AllocatePinned((ulong)ThumbnailBufferSize);
-            _curveMeanBuffer    = AllocatePinned((ulong)CurveBufferSize);
-            _curveMaxBuffer     = AllocatePinned((ulong)CurveBufferSize);
-            _curveRowMeanBuffer = AllocatePinned((ulong)CurveRowBufferSize);
-            _curveRowMaxBuffer  = AllocatePinned((ulong)CurveRowBufferSize);
+        internal NativeBufferPool(
+            int maxWidth,
+            int maxHeight,
+            int maxThumbnailSide,
+            Func<ulong, IntPtr> allocatePinned,
+            Action<IntPtr> freePinned)
+        {
+            if (maxWidth <= 0) throw new ArgumentOutOfRangeException(nameof(maxWidth));
+            if (maxHeight <= 0) throw new ArgumentOutOfRangeException(nameof(maxHeight));
+            if (maxThumbnailSide < 0) throw new ArgumentOutOfRangeException(nameof(maxThumbnailSide));
+            if (allocatePinned == null) throw new ArgumentNullException(nameof(allocatePinned));
+            if (freePinned == null) throw new ArgumentNullException(nameof(freePinned));
+
+            ImageBufferSize = checked((ulong)maxWidth * (ulong)maxHeight);
+            ThumbnailBufferSize = checked(maxThumbnailSide * maxThumbnailSide);
+            CurveBufferSize = checked(maxWidth * sizeof(float));
+            CurveRowBufferSize = checked(maxHeight * sizeof(float));
+            _freePinned = freePinned;
+
+            ulong total = 0;
+            ulong inputOffset = Reserve(ref total, ImageBufferSize);
+            ulong muraOffset = Reserve(ref total, ImageBufferSize);
+            ulong ridgeOffset = Reserve(ref total, ImageBufferSize);
+            ulong thumbnailOffset = Reserve(ref total, (ulong)ThumbnailBufferSize);
+            ulong curveMeanOffset = Reserve(ref total, (ulong)CurveBufferSize);
+            ulong curveMaxOffset = Reserve(ref total, (ulong)CurveBufferSize);
+            ulong curveRowMeanOffset = Reserve(ref total, (ulong)CurveRowBufferSize);
+            ulong curveRowMaxOffset = Reserve(ref total, (ulong)CurveRowBufferSize);
+            PinnedBytes = total;
+
+            // One cudaMallocHost call per pool avoids repeating CUDA context/OS page-lock overhead.
+            _slabBuffer = allocatePinned(PinnedBytes);
+            if (_slabBuffer == IntPtr.Zero)
+                throw new OutOfMemoryException(
+                    $"CUDA pinned slab allocation failed. Requested size={PinnedBytes}.");
+
+            _inputBuffer = Add(_slabBuffer, inputOffset);
+            _muraBuffer = Add(_slabBuffer, muraOffset);
+            _ridgeBuffer = Add(_slabBuffer, ridgeOffset);
+            _thumbnailBuffer = Add(_slabBuffer, thumbnailOffset);
+            _curveMeanBuffer = Add(_slabBuffer, curveMeanOffset);
+            _curveMaxBuffer = Add(_slabBuffer, curveMaxOffset);
+            _curveRowMeanBuffer = Add(_slabBuffer, curveRowMeanOffset);
+            _curveRowMaxBuffer = Add(_slabBuffer, curveRowMaxOffset);
         }
 
         public void Dispose()
@@ -54,14 +91,20 @@ namespace AniloxRoll.Monitor.Core.Services
             if (_isDisposed) return;
             _isDisposed = true; // 先設旗標，即使後續 Free 拋例外也不會重複釋放
 
-            FreePinned(ref _inputBuffer);
-            FreePinned(ref _thumbnailBuffer);
-            FreePinned(ref _muraBuffer);
-            FreePinned(ref _ridgeBuffer);
-            FreePinned(ref _curveMeanBuffer);
-            FreePinned(ref _curveMaxBuffer);
-            FreePinned(ref _curveRowMeanBuffer);
-            FreePinned(ref _curveRowMaxBuffer);
+            if (_slabBuffer != IntPtr.Zero)
+            {
+                _freePinned(_slabBuffer);
+                _slabBuffer = IntPtr.Zero;
+            }
+
+            _inputBuffer = IntPtr.Zero;
+            _thumbnailBuffer = IntPtr.Zero;
+            _muraBuffer = IntPtr.Zero;
+            _ridgeBuffer = IntPtr.Zero;
+            _curveMeanBuffer = IntPtr.Zero;
+            _curveMaxBuffer = IntPtr.Zero;
+            _curveRowMeanBuffer = IntPtr.Zero;
+            _curveRowMaxBuffer = IntPtr.Zero;
         }
 
         private static IntPtr AllocatePinned(ulong size)
@@ -75,15 +118,28 @@ namespace AniloxRoll.Monitor.Core.Services
             return ptr;
         }
 
-        private static void FreePinned(ref IntPtr ptr)
+        private static void FreePinned(IntPtr ptr)
         {
-            if (ptr == IntPtr.Zero)
-            {
-                return;
-            }
+            if (ptr != IntPtr.Zero)
+                NativeMethods.TanukiCv_FreePinned(ptr);
+        }
 
-            NativeMethods.TanukiCv_FreePinned(ptr);
-            ptr = IntPtr.Zero;
+        private static ulong Reserve(ref ulong total, ulong size)
+        {
+            total = Align(total);
+            ulong offset = total;
+            total = checked(total + size);
+            return offset;
+        }
+
+        private static ulong Align(ulong value)
+        {
+            return checked((value + Alignment - 1) & ~(Alignment - 1));
+        }
+
+        private static IntPtr Add(IntPtr basePointer, ulong offset)
+        {
+            return new IntPtr(checked(basePointer.ToInt64() + (long)offset));
         }
     }
 }

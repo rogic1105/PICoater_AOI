@@ -165,17 +165,29 @@ namespace AniloxRoll.Monitor.Forms
         private readonly float[][] _liveCurveMax  = new float[CameraCount][];
         private volatile bool _liveOverviewDirty;
         private bool _isIoSuspended;
+        private bool _shutdownInProgress;
+        private bool _shutdownComplete;
 
         // --- Review tab 拼接管理 ---
         private ReviewStitchCoordinator _stitchCoordinator;
 
 
-        protected override void OnFormClosing(FormClosingEventArgs e)
+        protected override async void OnFormClosing(FormClosingEventArgs e)
         {
+            if (_shutdownComplete)
+            {
+                base.OnFormClosing(e);
+                return;
+            }
+
             base.OnFormClosing(e);
+            if (e.Cancel) return;
+            e.Cancel = true;
+            if (_shutdownInProgress) return;
+
+            _shutdownInProgress = true;
             FlowTrace.Log("ui:關閉程式");   // session 收尾行——log 無此行而中斷＝異常終止（crash）的訊號
-            // Closing 階段：只「停止」非 UI 執行緒活動（避免 Handle 銷毀後它們還在 BeginInvoke）。
-            // Dispose 留到 FormClosed 統一處理，避免雙路徑釋放重疊。
+            // 先停止所有可能回 UI 的活動；視窗保持存活，直到必要 native 資源完成釋放。
             try { if (_liveCameraManager?.IsLiveGrabbing == true) _liveCameraManager.StopGrab(); } catch { }
             try { _grabDurationCoordinator?.Dispose(); _grabDurationCoordinator = null; } catch { }
             try { _telemetryTimer?.Stop(); } catch { }
@@ -189,6 +201,67 @@ namespace AniloxRoll.Monitor.Forms
             try { _reviewDisplayManager?.Dispose(); _reviewDisplayManager = null; } catch { }  // #13 同源顯示（內含 33ms timer）
             try { SettingsStoreHelper.IssueRaised -= HandleSettingsStoreIssue; } catch { }
             try { System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged; } catch { }
+
+            try
+            {
+                await ReleaseRuntimeResourcesAsync();
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning(
+                    $"[Shutdown] {ex.GetType().Name}: {ex.Message}");
+            }
+            finally
+            {
+                FlowTrace.Log("shutdown resources released");
+                _shutdownComplete = true;
+                _shutdownInProgress = false;
+                Close();
+            }
+        }
+
+        private async Task ReleaseRuntimeResourcesAsync()
+        {
+            if (_ioGrabController != null)
+            {
+                try { await _ioGrabController.StopAsync(); }
+                catch (Exception ex)
+                {
+                    Trace.TraceWarning(
+                        $"[Shutdown.IO] {ex.GetType().Name}: {ex.Message}");
+                }
+                try { _ioGrabController.Dispose(); } catch { }
+                _ioGrabController = null;
+            }
+
+            try { FreePrecomputedColMeanBuffers(); }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning(
+                    $"[Shutdown.Background] {ex.GetType().Name}: {ex.Message}");
+            }
+
+            if (_liveCameraManager != null)
+            {
+                try { await _liveCameraManager.ReleaseAsync(); }
+                catch (Exception ex)
+                {
+                    Trace.TraceWarning(
+                        $"[Shutdown.Camera] {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+
+            try { _inspectionService?.Dispose(); } catch { }
+            try { _lightController?.Dispose(); } catch { }
+            _lightController = null;
+            try { _storageHeartbeatService?.Dispose(); } catch { }
+            _storageHeartbeatService = null;
+            try { _logRetentionService?.Dispose(); } catch { }
+            _logRetentionService = null;
+            try { _retentionService?.Dispose(); } catch { }
+            _retentionService = null;
+            try { _remoteCopyService?.Dispose(); } catch { }
+            _remoteCopyService = null;
         }
 
         /// <summary>
@@ -265,6 +338,10 @@ namespace AniloxRoll.Monitor.Forms
                     }
                 }
                 catch { }
+
+                // 從使用者真正看得到、可互動的時刻起算卡頓。AutoAllocate 已由另一個 Shown
+                // handler 排進 BeginInvoke，故接下來的 MIL 配置仍會被完整量到。
+                _uiStallDetector?.BeginInteractiveMeasurement();
             };
         }
 
@@ -810,26 +887,6 @@ namespace AniloxRoll.Monitor.Forms
                 OnCamerasHwReady();
             };
 
-            FormClosed += async (_, __) =>
-            {
-                // Closed 階段：統一 Dispose 路徑（Closing 已負責停止活動，這裡不重複 Stop）
-                if (_ioGrabController != null)
-                {
-                    try { await _ioGrabController.StopAsync(); } catch { }
-                    _ioGrabController.Dispose();
-                    _ioGrabController = null;
-                }
-                FreePrecomputedColMeanBuffers();
-                _liveCameraManager.FreeCameras();
-                // 相機釋放後再 dispose CUDA pipeline（依賴關係安全；C2 修正）
-                _inspectionService?.Dispose();
-                _lightController?.Dispose();   _lightController = null;
-                _storageHeartbeatService?.Dispose(); _storageHeartbeatService = null;
-                _logRetentionService?.Dispose(); _logRetentionService = null;
-                _retentionService?.Dispose();  _retentionService = null;
-                _remoteCopyService?.Dispose(); _remoteCopyService = null;
-            };
-
             // 程式啟動後自動分配相機（不 Grab），讓 lblCamCount 在按下【開始抓取】前就能顯示連線狀態。
             // 用 BeginInvoke 延後一個 UI 週期：讓最大化/layout/首幀 paint 先完成，再進 MIL 配置 + 啟動
             // CLProtocol，使視窗先變可互動（Codex 建議；不背景化以免動到 panel handle/timer/status UI）。
@@ -856,7 +913,7 @@ namespace AniloxRoll.Monitor.Forms
         /// 啟動時自動分配相機資源（不啟動 Grab）。
         /// 同時載入背景 .bin 與初始化 Global merge，使後續按【開始抓取】直接進入 ToggleGrab。
         /// </summary>
-        private void AutoAllocateCameras()
+        private async void AutoAllocateCameras()
         {
             if (_liveCameraManager == null || _liveCameraManager.IsAllocated) return;
             // 顯示狀態開機基線（S0 只記「變更」，開機值沒人記 → 遠端判方向/模式類問題缺基準）
@@ -886,7 +943,8 @@ namespace AniloxRoll.Monitor.Forms
                 // 改走「高度一律 cap 到 MaxGrabHeightPx=12000」+ 安全的 buffer==source realloc。flag 維持預設 false。
                 MilGrabber.Core.MilCamera.UseMaxHeightBuffers = false;
 
-                _liveCameraManager.AllocateCameras(_settings.EnableMuraEnhance);
+                await _liveCameraManager.AllocateCamerasAsync(_settings.EnableMuraEnhance);
+                if (!_liveCameraManager.IsAllocated) return;
                 LoadBackgroundBins();
                 // 全域合圖（MIL 大 buffer alloc）延後到 CLProtocol 就緒後（OnCamerasHwReady）才建立：
                 // 否則在 Shown 的 UI 執行緒上 alloc 會與剛啟動的背景 CLProtocol enable 搶 MIL 內部鎖，

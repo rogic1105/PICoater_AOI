@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -36,8 +37,12 @@ namespace AniloxRoll.Monitor.UI.Managers
         private string _ridgeMode = InspectionEngineConfig.DefaultRidgeMode;
         private string _dcfPath = string.Empty;
         private readonly CaptureTimestampCoordinator _timestampCoordinator = new CaptureTimestampCoordinator();
+        private readonly System.Threading.SemaphoreSlim _allocationGate =
+            new System.Threading.SemaphoreSlim(1, 1);
+        private volatile bool _isAllocating;
 
         public bool IsAllocated    { get; private set; } = false;
+        public bool IsAllocating => _isAllocating;
         public bool IsLiveGrabbing { get; private set; } = false;
 
         /// <summary>目前已初始化的相機清單（唯讀），供 LiveTelemetryPresenter 查詢 Telemetry。</summary>
@@ -132,11 +137,38 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         // ==================== Allocate ====================
 
-        public void AllocateCameras(bool enableImageProcessing)
+        public async Task AllocateCamerasAsync(bool enableImageProcessing)
+        {
+            await _allocationGate.WaitAsync();
+            try
+            {
+                if (IsAllocated || IsReleasing) return;
+                _isAllocating = true;
+                try
+                {
+                    await AllocateCamerasCoreAsync(enableImageProcessing);
+                }
+                catch
+                {
+                    FreeCamerasCore();
+                    IsReleasing = false;
+                    throw;
+                }
+            }
+            finally
+            {
+                _isAllocating = false;
+                _allocationGate.Release();
+            }
+        }
+
+        private async Task AllocateCamerasCoreAsync(bool enableImageProcessing)
         {
             if (IsAllocated) return;
             FlowTrace.Log($"AllocateCameras begin（expect {_cameraHardwareConfigs.Count} cams）");
             IsReleasing = false;
+            var totalSw = Stopwatch.StartNew();
+            var acquisitionSw = Stopwatch.StartNew();
 
             CameraSystemManager.Initialize();
 
@@ -189,7 +221,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 // grab 高度走 json（_cameraGrabHeight 已在 UpdateCaptureSettingsCache clamp 到 MaxGrabHeightPx=12000）。
                 cam.CameraGrabHeight = _cameraGrabHeight[camIdx];
 
-                cam.CameraExposureTimeUs = _cameraExposureTimeUs[camIdx]; // Initialize() 會呼叫 SetExposureUs 套用
+                cam.CameraExposureTimeUs = _cameraExposureTimeUs[camIdx]; // InitializeAcquisition() 會呼叫 SetExposureUs 套用
                 cam.SetLineRateHz(_cameraLineRateHz[camIdx]);  // 記錄 _appliedLineRateHz（CLProtocol 就緒後自動重套）
                 cam.HessianSigma         = _ridgeSigma;   // 細線濾除（設定值，非硬編常數）
                 cam.HessianFixedMax      = _hessianMaxFactor;
@@ -209,9 +241,31 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.OnFilesSaved = files =>
                     OnFilesSaved?.Invoke(captureCameraId, files);
                 cam.OnCaptureSaveFailed = OnCaptureSaveFailed;
-                cam.Initialize();   // 拿已 clamp 的 CameraGrabHeight 配 buffer（與可行版本同路徑，不 stall）
+                cam.InitializeAcquisition();
                 _cameras.Add(cam);
             }
+
+            acquisitionSw.Stop();
+            FlowTrace.Log(
+                $"camera init phase=acquisition done cams={_cameras.Count} " +
+                $"ms={acquisitionSw.ElapsedMilliseconds}");
+
+            var processingSw = Stopwatch.StartNew();
+            FlowTrace.Log($"camera init phase=processing begin cams={_cameras.Count}");
+            AniloxCamera[] processingCameras = _cameras.ToArray();
+            await Task.Run(() =>
+            {
+                foreach (var cam in processingCameras)
+                {
+                    if (IsReleasing) return;
+                    cam.InitializeProcessingResources();
+                }
+            });
+            processingSw.Stop();
+            FlowTrace.Log(
+                $"camera init phase=processing done cams={processingCameras.Length} " +
+                $"ms={processingSw.ElapsedMilliseconds}");
+            if (IsReleasing) return;
 
             // CLProtocol 啟用移到「所有相機 buffer 分配完成後」的背景階段：不與 MbufAlloc/MdispAlloc 競爭
             // MIL 內部鎖，也不在 grab 期間 enable + 重套線掃（會掉幀，cam1 最明顯）。利用「分配 → 使用者點抓取」
@@ -232,7 +286,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             // 顯示 view 訂閱各 cam.OnDisplayFrame，且 Enable* 冪等（view 已存在就早退）→ 若 view 在本批相機
             // 建立前就存在，會殘留空/舊訂閱、收不到新相機的幀。先 teardown 再 Apply 重建 → 一定訂閱「這批」相機
-            //（與 FreeCameras 的 teardown 對稱）。
+            //（與 ReleaseAsync 的 teardown 對稱）。
             _display.TeardownImageDisplay();
             _display.TeardownWaterfallDisplay();
             ApplyMainDisplayMode(); // 依 he_MainDisplay 套用：即時 / 瀑布
@@ -247,6 +301,10 @@ namespace AniloxRoll.Monitor.UI.Managers
             ConnectedCameraCount = present;
             OnCameraCountChanged?.Invoke(present, ExpectedCameraCount);
             FlowTrace.Log($"AllocateCameras done（配置 {_cameras.Count}、在線 {present}/{ExpectedCameraCount}）");
+            totalSw.Stop();
+            FlowTrace.Log(
+                $"camera init summary cams={_cameras.Count} totalMs={totalSw.ElapsedMilliseconds} " +
+                $"acquisitionMs={acquisitionSw.ElapsedMilliseconds} processingMs={processingSw.ElapsedMilliseconds}");
         }
 
         // ==================== Grab Control ====================
@@ -258,11 +316,12 @@ namespace AniloxRoll.Monitor.UI.Managers
             else StartGrab();
         }
 
-        public void EnsureAllocatedAndToggleGrab(bool enableImageProcessing)
+        public async Task EnsureAllocatedAndToggleGrabAsync(bool enableImageProcessing)
         {
             if (!IsAllocated)
-                AllocateCameras(enableImageProcessing);
-            ToggleGrab();
+                await AllocateCamerasAsync(enableImageProcessing);
+            if (IsAllocated)
+                ToggleGrab();
         }
 
         public void StartGrab()
@@ -281,7 +340,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.SetUserGrabIntent(true);
         }
 
-        /// <summary>停止排水背景 task（M_STOP+M_WAIT 需 ~1 幀；StartGrab/FreeCameras 開頭等它完成防競態）。</summary>
+        /// <summary>停止排水背景 task（M_STOP+M_WAIT 需 ~1 幀；StartGrab/ReleaseAsync 開頭等它完成防競態）。</summary>
         private System.Threading.Tasks.Task _stopDrainTask = System.Threading.Tasks.Task.CompletedTask;
 
         public void StopGrab()
@@ -293,7 +352,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             // 逐台序列呼叫 → cam1 阻塞期間 cam2 仍 free-run 多收幾偵；改並行同幀停（各台自帶 try/catch）。
             // 整包移背景：Parallel.ForEach 會徵用「呼叫執行緒」當 worker → 按停止時 UI 被抓去跑
             // M_STOP+M_WAIT（低線掃＝秒級凍結，2026-07-07 [UiStack] 定罪）。IsLiveGrabbing 已先設 false；
-            // 快速 停→開 / 停→釋放 的競態由 StartGrab / FreeCameras 開頭 WaitStopDrain 擋。
+            // 快速 停→開 / 停→釋放 的競態由 StartGrab / ReleaseAsync 開頭 WaitStopDrain 擋。
             var cams = _cameras.ToArray();
             _stopDrainTask = System.Threading.Tasks.Task.Run(() =>
             {
@@ -311,7 +370,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         // ==================== Release ====================
 
-        public void FreeCameras()
+        private void FreeCamerasCore()
         {
             WaitStopDrain();   // 停止排水未完就釋放 → M_STOP 進行中 MbufFree＝UAF 家族，先等完
             FlowTrace.Log($"FreeCameras（cams={_cameras.Count}）");
@@ -345,19 +404,23 @@ namespace AniloxRoll.Monitor.UI.Managers
         }
 
         /// <summary>
-        /// 非同步釋放所有 MIL 資源，避免阻塞 UI 執行緒。
-        /// 先在呼叫端執行緒停止 Timer，防止 background thread 釋放相機時
-        /// UI thread 的 Tick 仍在存取 _cameras（可能 InvalidOperationException 或 MdigInquire on freed digitizer）。
-        /// 同 CameraSession.ReleaseAsync()。
+        /// 等待進行中的配置工作離開 native call 後再釋放，避免 processing allocation 與 Free 競態。
+        /// Timer 必須先在呼叫端停止；耗時的 native teardown 保持在背景執行。
         /// </summary>
         public async Task ReleaseAsync()
         {
-            // 在交給 background thread 之前，先於呼叫端執行緒停止 Timer。
-            // WinForms Timer.Tick 在 UI thread 執行，若 FreeCameras 在 background thread 執行，
-            // Stop() 必須先呼叫，否則 Tick 可能在 cam.Free() 期間存取同一台相機資源。
             _cameraStatusTimer.Stop();
             IsReleasing = true;
-            await Task.Run(() => FreeCameras());
+            await _allocationGate.WaitAsync();
+            try
+            {
+                await Task.Run(() => FreeCamerasCore());
+            }
+            finally
+            {
+                IsReleasing = false;
+                _allocationGate.Release();
+            }
         }
 
         // ==================== Settings ====================

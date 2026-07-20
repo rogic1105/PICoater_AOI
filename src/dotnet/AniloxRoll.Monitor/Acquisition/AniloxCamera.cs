@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.IO;
 using System.Threading.Tasks;
@@ -91,6 +92,9 @@ namespace AniloxRoll.Monitor.Core.Camera
         private readonly object _picoaterLock = new object();
         private readonly AoiService _aoiService = new AoiService();
         private NativeBufferPool _nativeBufferPool;
+        private volatile bool _processingResourcesReady;
+
+        public bool IsProcessingResourcesReady => _processingResourcesReady;
 
         private string _lastCaptureKey = string.Empty;
 
@@ -107,13 +111,15 @@ namespace AniloxRoll.Monitor.Core.Camera
         private IntPtr _rawResizeBuf  = IntPtr.Zero;   // 原圖縮圖
         private IntPtr _procResizeBuf = IntPtr.Zero;   // V 脊線縮圖
         private IntPtr _muraResizeBuf = IntPtr.Zero;   // H 脊線縮圖
+        private IntPtr _resizeSlabBuf = IntPtr.Zero;
+        private ulong _resizePinnedBytes;
         private int _resizeWidth  = 0;
         private int _resizeHeight = 0;
         // 本幀 fused 縮圖是否成功填好三塊 buffer（供 TrySaveCapture 判定；detection 失敗幀不得存舊縮圖）。
         private bool _lastFrameResized = false;
         private bool _fusedResizeLogged = false;   // 每台每次開程式只記一筆「fused 路徑已啟用」確認 log
 
-        /// <summary>存檔縮小倍率（1=不縮小，5=寬高各除以5）。必須在 Initialize() 之前設定。</summary>
+        /// <summary>存檔縮小倍率（1=不縮小，5=寬高各除以5）。必須在 InitializeProcessingResources() 之前設定。</summary>
         public int SaveResizeScale
         {
             get => _saveResizeScale;
@@ -179,14 +185,32 @@ namespace AniloxRoll.Monitor.Core.Camera
         }
 
         // ==================== Initialize ====================
-        public void Initialize()
+        public void InitializeAcquisition()
         {
+            var sw = Stopwatch.StartNew();
             _mil.CameraGrabHeight = CameraGrabHeight;
             _mil.Initialize();
 
             int w = _mil.FrameWidth;
             int h = _mil.FrameHeight;
-            if (w <= 0 || h <= 0) return; // digitizer alloc 失敗
+            sw.Stop();
+            FlowTrace.Log(
+                $"camera init cam={CameraId} phase=acquisition ms={sw.ElapsedMilliseconds} " +
+                $"size={w}x{h} thread={Environment.CurrentManagedThreadId}");
+        }
+
+        public void InitializeProcessingResources()
+        {
+            if (_processingResourcesReady) return;
+            if (_isReleased) throw new ObjectDisposedException(nameof(AniloxCamera));
+
+            int w = _mil.FrameWidth;
+            int h = _mil.FrameHeight;
+            if (w <= 0 || h <= 0)
+                throw new InvalidOperationException(
+                    $"CAM{CameraId} cannot allocate processing resources before MIL dimensions are ready.");
+
+            var sw = Stopwatch.StartNew();
 
             // 檢測記憶體（非 MIL）
             _hostInputBuffer  = new byte[w * h];
@@ -195,6 +219,14 @@ namespace AniloxRoll.Monitor.Core.Camera
             _aoiService.Initialize();
             _nativeBufferPool = new NativeBufferPool(w, h, 1);
             AllocateResizeBuffers();
+            _processingResourcesReady = true;
+
+            sw.Stop();
+            ulong pinnedBytes = _nativeBufferPool.PinnedBytes + _resizePinnedBytes;
+            FlowTrace.Log(
+                $"camera init cam={CameraId} phase=processing ms={sw.ElapsedMilliseconds} " +
+                $"pinnedMB={pinnedBytes / 1048576.0:F1} allocCalls=2 " +
+                $"thread={Environment.CurrentManagedThreadId}");
         }
 
         // ==================== Exposure / Line Rate（委派 MIL） ====================
@@ -243,13 +275,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                 if (w <= 0 || h <= 0) return;
 
                 FreeInspectionBuffers();   // 釋放舊 native/host/resize（此刻 grab 停著、無 callback）
-                _hostInputBuffer  = new byte[w * h];
-                _hostOutputBuffer = new byte[w * h];
-                lock (_picoaterLock)
-                {
-                    _nativeBufferPool = new NativeBufferPool(w, h, 1);
-                }
-                AllocateResizeBuffers();
+                InitializeProcessingResources();
             });
             CameraGrabHeight = _mil.CameraGrabHeight;
         }
@@ -257,6 +283,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>釋放檢測記憶體（host + NativeBufferPool + resize pinned buffer）。MIL buffer 不在此處理。</summary>
         private void FreeInspectionBuffers()
         {
+            _processingResourcesReady = false;
             FreeResizeBuffers();
             lock (_picoaterLock)
             {
@@ -737,29 +764,30 @@ namespace AniloxRoll.Monitor.Core.Camera
             _resizeHeight = fh / _saveResizeScale;
             if (_resizeWidth <= 0 || _resizeHeight <= 0) return;
 
-            ulong sz = (ulong)(_resizeWidth * _resizeHeight);
-            _rawResizeBuf  = NativeMethods.TanukiCv_AllocPinned(sz);
-            _procResizeBuf = NativeMethods.TanukiCv_AllocPinned(sz);
-            _muraResizeBuf = NativeMethods.TanukiCv_AllocPinned(sz);
+            ulong sz = checked((ulong)_resizeWidth * (ulong)_resizeHeight);
+            ulong stride = (sz + 63UL) & ~63UL;
+            _resizePinnedBytes = checked(stride * 3UL);
+            _resizeSlabBuf = NativeMethods.TanukiCv_AllocPinned(_resizePinnedBytes);
+            if (_resizeSlabBuf == IntPtr.Zero)
+                throw new OutOfMemoryException(
+                    $"CAM{CameraId} resize pinned slab allocation failed. Requested size={_resizePinnedBytes}.");
+
+            _rawResizeBuf = _resizeSlabBuf;
+            _procResizeBuf = new IntPtr(checked(_resizeSlabBuf.ToInt64() + (long)stride));
+            _muraResizeBuf = new IntPtr(checked(_resizeSlabBuf.ToInt64() + (long)(stride * 2UL)));
         }
 
         private void FreeResizeBuffers()
         {
-            if (_rawResizeBuf != IntPtr.Zero)
+            if (_resizeSlabBuf != IntPtr.Zero)
             {
-                NativeMethods.TanukiCv_FreePinned(_rawResizeBuf);
-                _rawResizeBuf = IntPtr.Zero;
+                NativeMethods.TanukiCv_FreePinned(_resizeSlabBuf);
+                _resizeSlabBuf = IntPtr.Zero;
             }
-            if (_procResizeBuf != IntPtr.Zero)
-            {
-                NativeMethods.TanukiCv_FreePinned(_procResizeBuf);
-                _procResizeBuf = IntPtr.Zero;
-            }
-            if (_muraResizeBuf != IntPtr.Zero)
-            {
-                NativeMethods.TanukiCv_FreePinned(_muraResizeBuf);
-                _muraResizeBuf = IntPtr.Zero;
-            }
+            _rawResizeBuf = IntPtr.Zero;
+            _procResizeBuf = IntPtr.Zero;
+            _muraResizeBuf = IntPtr.Zero;
+            _resizePinnedBytes = 0;
         }
 
         // ==================== Dispose ====================

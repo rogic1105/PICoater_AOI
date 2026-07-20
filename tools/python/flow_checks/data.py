@@ -370,7 +370,15 @@ class DataFlowValidator:
         data_times = [
             line.elapsed
             for line in session.lines
-            if line.message.startswith(("DT ", "ui:【報表", "ui:【明細列表】", "ui:【序號範圍-", "ui:【期間-", "ui:【良率"))
+            if (
+                line.message.startswith(
+                    ("ui:【報表", "ui:【明細列表】", "ui:【序號範圍-", "ui:【期間-", "ui:【良率")
+                )
+                or (
+                    line.message.startswith("DT ")
+                    and not line.message.startswith(("DT curve cache policy ", "DT range policy "))
+                )
+            )
         ]
         if not data_times:
             report.add(self.domain, "U.stall", CheckStatus.NOT_COVERED, "無可量測的報表互動")

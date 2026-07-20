@@ -49,7 +49,8 @@ namespace AniloxRoll.Monitor.Forms
             {
                 try
                 {
-                    _liveCameraManager.EnsureAllocatedAndToggleGrab(false); // 不需影像處理
+                    await _liveCameraManager.EnsureAllocatedAndToggleGrabAsync(false);
+                    if (!_liveCameraManager.IsAllocated) return;
                 }
                 catch (Exception ex)
                 {
@@ -187,7 +188,7 @@ namespace AniloxRoll.Monitor.Forms
             if (_autoStartGrabAfterBg)
             {
                 _autoStartGrabAfterBg = false;
-                _liveCameraManager.FreeCameras();
+                await _liveCameraManager.ReleaseAsync();
                 btnLiveGrab_Click(null, null);
                 _ = _ioGrabController?.NotifyGrabStarted();
                 return;

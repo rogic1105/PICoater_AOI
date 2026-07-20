@@ -75,7 +75,13 @@ namespace AniloxRoll.Monitor.Forms
             {
                 try
                 {
-                    _liveCameraManager.EnsureAllocatedAndToggleGrab(_settings.EnableMuraEnhance);
+                    await _liveCameraManager.EnsureAllocatedAndToggleGrabAsync(
+                        _settings.EnableMuraEnhance);
+                    if (!_liveCameraManager.IsAllocated)
+                    {
+                        LightTurnOff();
+                        return false;
+                    }
                     LoadBackgroundBins();
 
                     // 初次分配即為 Global 模式 → 立即啟用即時合圖

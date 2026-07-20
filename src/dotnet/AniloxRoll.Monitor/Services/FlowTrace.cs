@@ -28,6 +28,7 @@ namespace AniloxRoll.Monitor.Core.Services
         private readonly System.Windows.Forms.Control _pingTarget;
         private readonly System.Threading.Thread _pingThread;
         private volatile bool _disposed;
+        private volatile bool _measurementActive;
         private int _lastTick;
         private int _g0, _g1, _g2;
         private const int ThresholdMs = 100;   // 33ms timer 遲到 3 倍以上才算卡（避免正常排程抖動洗版）
@@ -44,7 +45,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 int gap = now - _lastTick;
                 _lastTick = now;
                 int g0 = GC.CollectionCount(0), g1 = GC.CollectionCount(1), g2 = GC.CollectionCount(2);
-                if (gap >= ThresholdMs)
+                if (_measurementActive && gap >= ThresholdMs)
                     FlowTrace.Log($"[UiStall] {gap}ms（GC0+{g0 - _g0} GC1+{g1 - _g1} GC2+{g2 - _g2}）");
                 _g0 = g0; _g1 = g1; _g2 = g2;
             };
@@ -56,6 +57,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 while (!_disposed)
                 {
                     System.Threading.Thread.Sleep(100);
+                    if (!_measurementActive) continue;
                     var t = _pingTarget;
                     if (t == null || t.IsDisposed || !t.IsHandleCreated) continue;
                     int sent = Environment.TickCount;
@@ -105,6 +107,19 @@ namespace AniloxRoll.Monitor.Core.Services
             })
             { IsBackground = true, Name = "UiPing" };
             _pingThread.Start();
+        }
+
+        /// <summary>
+        /// Form 首次顯示與不可見 tab 預熱完成後才開始量測。建構期尚不能互動，
+        /// 若從 ctor 起算，第一個 WM_TIMER 會把整段啟動時間誤報成 UI stall。
+        /// </summary>
+        public void BeginInteractiveMeasurement()
+        {
+            _lastTick = Environment.TickCount;
+            _g0 = GC.CollectionCount(0);
+            _g1 = GC.CollectionCount(1);
+            _g2 = GC.CollectionCount(2);
+            _measurementActive = true;
         }
 
         public void Dispose() { _disposed = true; _timer.Stop(); _timer.Dispose(); }

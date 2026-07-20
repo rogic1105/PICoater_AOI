@@ -116,7 +116,9 @@ S0 通用（所有 PropertyGrid 設定自動記 `ui:設定[名]=值`）。新增
 - **UI 執行緒零 MIL/序列埠同步呼叫**（2026-07-07 [UiStack] 全清單）：MdigInquire/MdigControl/
   MdigProcess/CLProtocol feature 讀寫/SerialPort.Write 一律背景。已修：CamStatusTick、
   SyncCameraParamsFromHardware、StopGrab 排水（Parallel.ForEach 會徵用呼叫執行緒！）、LightTurnOn/Off。
-  已知例外：AllocateCameras/Initialize（開機 ~1.8s×2，使用者接受）。新增 MIL 呼叫點自問「在哪條執行緒」。
+  開機配置只允許 acquisition 階段的 MIL System／Digitizer／grab-buffer 建立留在 UI 執行緒；
+  AOI pipeline、managed buffer、CUDA pinned slab 必須由單一背景 worker 依相機順序建立。
+  新增 native 呼叫點一律先確認執行緒與釋放競態。
 - **拖曳/hover 重繪限流 ~120fps**（ImageCanvas）：高輪詢滑鼠每 move Invalidate＝paint 風暴
   （386/s）餓死全體 WM_TIMER。pan 值照每 move 累積、只限「畫」；MouseUp 尾緣補繪。
 
@@ -131,6 +133,8 @@ S0 通用（所有 PropertyGrid 設定自動記 `ui:設定[名]=值`）。新增
 [UiPaint] {control} {ms}ms              ← chart WM_PAINT >50ms；IC/RV paint …=canvas OnPaint
 IC|WF stats paints=N/s paintMs=M statusEv=K/s ← canvas 每秒重繪組成（>5 次/秒才記；瀑布同儀器 WF 前綴）
 ```
+`UiStallDetector` 在 Form ctor 建立，但必須等 `Shown` 的全 tab 預熱完成後才
+`BeginInteractiveMeasurement`；建構期使用者尚不能互動，不得把 ctor／預熱時間算成第一筆 stall。
 **判讀決策樹（2026-07-07 十輪教訓的結晶）**：
 1. UiStall 有 GC 增量 → GC/LOH 問題；全零 → 往下。
 2. UiStall 大 + UiPing 也大 → **阻塞型**（單件慢）→ 看 UiStack 點名。⚠ 按時間窗切開判讀
@@ -177,24 +181,54 @@ IC|WF viewEdges X …｜Y …                     ← 拖曳放開時畫面四�
 
 ### F1 開機配置（AutoAllocateCameras）
 
+**初始化狀態與事件表（相機配置只有這一條路）**
+
+| State | Event | Next State | Action |
+|---|---|---|---|
+| Unallocated | EnsureAllocated | AllocatingAcquisition | UI 執行緒依序建立 MIL System／Digitizer／grab buffers |
+| AllocatingAcquisition | MIL 全部完成 | AllocatingProcessing | 單一背景 worker 依序建立 AOI pipeline、managed buffers、pinned slabs |
+| AllocatingProcessing | processing 全部完成 | Allocated | 回 UI 執行緒啟動 CLProtocol、建立顯示 view、發布實際在線數 |
+| AllocatingAcquisition／AllocatingProcessing | 任一步失敗 | Unallocated | 釋放本輪已建立資源、保留 Grab gate、回報錯誤 |
+| 任意配置中狀態 | Release | Releasing → Unallocated | 等目前 native call 返回後釋放；晚到結果不得發布 Ready |
+| Allocated | EnsureAllocated | Allocated | 冪等，不重複配置 |
+
+禁止：多台相機平行呼叫 `TanukiCv_AllocPinned`；MIL 與 processing 不得各自建立第二條配置入口。
+
 **log-flow（執行期腳印＝判準）**
 ```
 T1: AllocateCameras begin（expect N）
+T1: camera init cam=N phase=acquisition ms=X size=WxH thread=U       × 配置成功台數；U 為 UI thread
+T1: camera init phase=acquisition done cams=M ms=X
+T1: camera init phase=processing begin cams=M
+Tbg: camera init cam=N phase=processing ms=X pinnedMB=P allocCalls=2 thread=K
+                                                                    × M；K 必須固定且不得為 T1
+T1: camera init phase=processing done cams=M ms=X
 T1: （前次 view 存在才有）TeardownImageDisplay / TeardownWaterfall
 T1: ApplyMainDisplayMode → {ImageCanvas|Waterfall}
 T1: {EnsureImageDisplay|EnableWaterfall} create + subscribe M cams
 T1: SwitchMainDisplay cam=1 center=False
 T1: AllocateCameras done（配置 M、在線 P/N）   ← P=CheckPresence 實際在線（配置≠在線：quad 卡空通道
                                                   也配得起來；報配置數＝幽靈相機數，2026-07-07 修正）
+T1: camera init summary cams=M totalMs=X acquisitionMs=A processingMs=B
 T1: （CLProtocol 就緒後）EnableGlobalMerge（slots=7）
 ```
+
+效能判準：完整配置期間單筆 UI stall 不得超過 1000ms；processing 期間 UI heartbeat 不得出現
+由 `TanukiCv_AllocPinned` 引起的 `[UiStall]`／`[UiStack]`。
+每台 processing 必須 `allocCalls=2`（AOI pool slab 1 次＋存檔縮圖 slab 1 次），同一台不得退回 11 次小配置。
 
 **code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
 ```
 AutoAllocateCameras(Form)                    顯示基線 set:[顯示基線] 一行
- └ LiveCameraManager.AllocateCameras
+ └ await LiveCameraManager.AllocateCamerasAsync
+    ├ SemaphoreSlim allocation gate（Ensure／Release 共用；配置只有一條入口）
     ├ CameraSystemManager.Initialize / per-cfg AllocateSystem（板=SystemNum 共用）
-    ├ per-cam AniloxCamera.Initialize        ⚠ MIL 呼叫在 UI 執行緒（已知接受，~1.8s×2）
+    ├ T1 per-cam AniloxCamera.InitializeAcquisition
+    │   └ MilCamera.Initialize（System／Digitizer／grab buffers；保持既有 MIL 配置順序）
+    ├ Task.Run（單一 worker、per-cam 依序）→ AniloxCamera.InitializeProcessingResources
+    │   ├ managed input/output buffers＋AoiService.Initialize
+    │   ├ NativeBufferPool：8 區共用 1 個 64-byte aligned pinned slab
+    │   └ resize raw/proc_c/proc_r：3 區共用 1 個 64-byte aligned pinned slab
     ├ per-cam CheckPresence → BeginCLProtocolInit（只對在線台；空通道 enable 會卡 MIL 鎖）
     ├ TeardownImageDisplay/Waterfall → ApplyMainDisplayMode   ← 先拆後建＝訂閱綁「這批」相機
     │    └ EnsureImageDisplay：FlipVertical=方向、VerticalZeroAtBottom=方向（座標約定，轉換點#1/#3）
@@ -235,7 +269,8 @@ Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線�
  │   → await Task.Delay(LightWarmupMs)               ⚠ 序列埠寫入一律背景（UI 執行緒零 MIL/序列埠鐵則）
  ├（未抓取）ResetLiveChartsForDisplayTransition@AniloxRollForm.Live.cs ＋ _muraExceedLatch 歸零
  │   ＋ UpdateMuraLed(false) ＋ ClearMura@IoGrabController.cs   ← MURA 閂鎖歸零（latch 非脈衝，M1）
- ├（未配置）EnsureAllocatedAndToggleGrab@LiveCameraManager.cs → AllocateCameras（=F1 全序）→ ToggleGrab
+ ├（未配置）await EnsureAllocatedAndToggleGrabAsync@LiveCameraManager.cs
+ │   → AllocateCamerasAsync（=F1 全序）→ ToggleGrab
  │   └（回 form）LoadBackgroundBins@AniloxRollForm.Background.cs ＋ EnableGlobalMerge@LiveCameraManager.Merge.cs
  ├（已配置）ToggleGrab@LiveCameraManager.cs
  │   └ StartGrab@LiveCameraManager.cs
@@ -317,7 +352,8 @@ Tn: drop drainedFrame after StopGrab camN（可選；每台最多一行）
  └（逾時來源）NotifyGrabStopped@IoGrabController.cs          ← 先把 DO_PC_INSPECT 拉低；FSM 在 DI START
                                                             維持 High 時刻意留 Running（沒有新上升緣，不會重啟），
                                                             等 START 真正下降後才走既有 falling-edge 收尾回 Idle
-競態收口：下一次 StartGrab / FreeCameras 開頭 WaitStopDrain@LiveCameraManager.cs（排水未完等它，平時零成本）
+競態收口：下一次 StartGrab / ReleaseAsync 內的 FreeCamerasCore 開頭
+WaitStopDrain@LiveCameraManager.cs（排水未完等它，平時零成本）
 ```
 
 **StopGrab 校稿工具**
@@ -467,16 +503,33 @@ fit/1x 手勢（合法視野重設主人）：OnMouseDown@ImageCanvas.cs → Mul
 
 ### F7 重配置（FreeCameras → 再配置）
 
+**視窗關閉狀態與事件表**
+
+| State | Event | Next State | Action |
+|---|---|---|---|
+| Running | FormClosing | ClosingAsync | `e.Cancel=true`；停止 UI timers／grab；await IO stop＋camera Release＋service Dispose |
+| ClosingAsync | FormClosing | ClosingAsync | 忽略重複關閉，不啟動第二條釋放鏈 |
+| ClosingAsync | cleanup 完成或失敗 | ReadyToClose | 記 `shutdown resources released`；設完成旗標後再次 `Close()` |
+| ReadyToClose | FormClosing | Closed | 不再 cancel，交還 WinForms 正常結束 |
+
+禁止把必要釋放放在 `async FormClosed`：WinForms 不等待 async event handler，程序可能在第一個 `await`
+後直接退出，造成 `FreeCameras` 未執行。
+
 **log-flow（執行期腳印＝判準）**
 ```
-T1: FreeCameras（cams=M）
-T1: TeardownImageDisplay / TeardownWaterfall（有哪個拆哪個）
+T1: ui:關閉程式
+Tbg: FreeCameras（cams=M）
+Tbg: TeardownImageDisplay / TeardownWaterfall（有哪個拆哪個）
+T1: shutdown resources released
 T1: （再配置時）F1 全序重跑——view 必須重建+重訂閱新相機批次
 ```
 
 **code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
 ```
-FreeCameras@LiveCameraManager.cs
+ReleaseAsync@LiveCameraManager.cs
+ ├ 呼叫端先 _cameraStatusTimer.Stop ＋ IsReleasing=true
+ ├ await allocation gate（配置中的 native call 返回前不得釋放）
+ └ Task.Run → FreeCamerasCore@LiveCameraManager.cs
  ├ WaitStopDrain@LiveCameraManager.cs     ← 不變量：M_STOP 排水進行中就 MbufFree＝UAF 家族，先等完
  ├ IsReleasing=true ＋ _cameraStatusTimer.Stop ＋ IsLiveGrabbing=false
  ├ DisableGlobalMerge@LiveCameraManager.Merge.cs   ← 順序鎖死：必在 cam.Free 之前
@@ -487,9 +540,10 @@ FreeCameras@LiveCameraManager.cs
  ├ per-cam Free@AniloxCamera.cs → Dispose（MIL digitizer/buffer 釋放）
  ├ FreeSystem@CameraSystemManager.cs ×板 ＋ FreeApplication@CameraSystemManager.cs
  └ IsAllocated=false
-（背景釋放路徑）ReleaseAsync@LiveCameraManager.cs：先「呼叫端執行緒」Stop timer → Task.Run(FreeCameras)
-   ← Timer.Tick 跑在 UI 執行緒，不先 Stop 則 Tick 可能在背景 cam.Free() 期間存取同一台相機
-（再配置）AllocateCameras@LiveCameraManager.cs＝F1 全序
+Timer.Tick 跑在 UI 執行緒，不先 Stop 則 Tick 可能在背景 cam.Free() 期間存取同一台相機。
+`IsReleasing` 使仍在 processing 迴圈的 worker 於相機邊界提早離開；allocation gate 保證同一 native call
+不會同時 Allocate／Free。
+（再配置）AllocateCamerasAsync@LiveCameraManager.cs＝F1 全序
    （開頭 TeardownImageDisplay/Waterfall → ApplyMainDisplayMode 先拆後建，與本 flow 對稱＝訂閱一定綁「這批」相機）
 ```
 
@@ -504,7 +558,7 @@ FreeCameras@LiveCameraManager.cs
 btnLiveGetBackground_Click@AniloxRollForm.Background.cs      intent 行 ui:【取得背景】鈕
  ├ IsStandardBgSubEnabled 守門（非標準去背 → MessageBox return）
  ├（舊預覽）ClearBackgroundPreview@AniloxRollForm.Background.cs
- ├（未配置）EnsureAllocatedAndToggleGrab@LiveCameraManager.cs（=F1＋F2 借道，不開影像處理）
+ ├（未配置）await EnsureAllocatedAndToggleGrabAsync@LiveCameraManager.cs（=F1＋F2 借道，不開影像處理）
  ├（未抓取）LightTurnOn@AniloxRollForm.HardwareStatus.cs → await Task.Delay(LightWarmupMs)
  │   → ToggleGrab@LiveCameraManager.cs ＋ UpdateGrabButton(true)   ← 借用現有 grab（啟停包夾）
  ├ 採集迴圈（await Task.Delay(100) × BackgroundSampleSeconds，UI 執行緒非阻塞、按鈕倒數）
@@ -518,7 +572,7 @@ btnLiveGetBackground_Click@AniloxRollForm.Background.cs      intent 行 ui:【�
  ├ 任一相機失敗 → 刪本次 version 檔、manifest 不動、上一組背景繼續生效
  │   → OutputHealth `BackgroundCaptureFailure` 深橘提示
  ├ finally：ToggleGrab 停止（=F3）＋ LightTurnOff ＋ UpdateStandardBgSubLockState@AniloxRollForm.Background.cs
- ├（_autoStartGrabAfterBg）FreeCameras → btnLiveGrab_Click（IO 觸發自動回抓）→ return
+ ├（_autoStartGrabAfterBg）await ReleaseAsync → btnLiveGrab_Click（IO 觸發自動回抓）→ return
  └ 尾端自動預覽：btnLiveViewBackground_Click（直呼）
 時間設定不變量：`BackgroundSampleSeconds` 只管本段背景採樣；`GrabLimitSeconds` 只在 F2 正式監控啟動成功後
 武裝，兩者不得互相中止。PropertyGrid 顯示於「時間設定」下：`背景採樣(sec)`、`抓取上限(sec)`。
