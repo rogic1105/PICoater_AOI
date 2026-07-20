@@ -255,8 +255,9 @@
          （刪 bin → rebuild = 回到 *Defaults.cs 預設）。若把 json commit 並複製進 bin，
          開機會永遠以那份舊 json 為輸入，蓋掉 *Defaults.cs 這個唯一真相。
          僅 DCF 保留複製（MIL 二進位設定，非 Defaults 產生）。 -->
-    <!-- MIL DCF：跟 exe 走（exe\Config\Radient_Config.dcf）。DcfPathHelper.Resolve 進 MIL 前轉絕對。 -->
-    <None Include="Config\Radient_Config.dcf">
+    <!-- MIL DCF：repo 唯一來源在 sdk\MIL\Config，build 連結複製到 exe\Config。 -->
+    <None Include="..\..\..\sdk\MIL\Config\Radient_Config.dcf">
+      <Link>Config\Radient_Config.dcf</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

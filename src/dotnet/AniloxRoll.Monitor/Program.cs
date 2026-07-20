@@ -7,29 +7,19 @@ using System.Configuration;
 using System.IO;
 using System.Windows.Forms;
 using AniloxRoll.Monitor.Forms;
+using IoBridge.Core;
 
 namespace AniloxRoll.Monitor
 {
     internal static class Program
     {
+        private const string DefaultLogDirectory = @"D:\Anilox\Logs";
+        private static string _runtimeLogDirectory = Path.GetTempPath();
+
         [STAThread]
         static void Main()
         {
-            // 檔案 trace log：把所有 Trace.WriteLine（含 [HtRealloc] 改高度診斷）寫進檔案，供離線判讀
-            // （否則只在 VS Output 視窗、跑 exe 看不到）。AutoFlush=true → 即使程式 stall/hang 也已落地。
-            try
-            {
-                string logDir = @"D:\Anilox\Logs";
-                if (!Directory.Exists(logDir))
-                {
-                    try { Directory.CreateDirectory(logDir); } catch { logDir = Path.GetTempPath(); }
-                }
-                string traceFile = Path.Combine(logDir, $"trace-{DateTime.Now:yyyyMMdd_HHmmss}.log");
-                System.Diagnostics.Trace.Listeners.Add(new System.Diagnostics.TextWriterTraceListener(traceFile, "FileTrace"));
-                System.Diagnostics.Trace.AutoFlush = true;
-                System.Diagnostics.Trace.WriteLine($"[Program] trace log 開始：{traceFile}（{DateTime.Now:yyyy-MM-dd HH:mm:ss}）");
-            }
-            catch { /* log 設定失敗不可擋啟動 */ }
+            InitializeRuntimeLogging();
 
             // Storage 模式不部署 MIL DLL；若其他路徑意外觸發載入，給出明確錯誤而非 crash
             AppDomain.CurrentDomain.AssemblyResolve += (_, args) =>
@@ -62,18 +52,47 @@ namespace AniloxRoll.Monitor
             Application.Run(new AniloxRollForm());
         }
 
-        /// <summary>把致命例外的完整 stack 寫到 %TEMP% 與 exe 目錄的 crash log，並輸出到 Trace（VS 輸出視窗可見）。</summary>
+        private static void InitializeRuntimeLogging()
+        {
+            try
+            {
+                Directory.CreateDirectory(DefaultLogDirectory);
+                _runtimeLogDirectory = DefaultLogDirectory;
+            }
+            catch
+            {
+                _runtimeLogDirectory = Path.GetTempPath();
+            }
+
+            try
+            {
+                IoLogger.LogDirectory = _runtimeLogDirectory;
+                IoLogger.FilePrefix = "io";
+                string traceFile = Path.Combine(
+                    _runtimeLogDirectory, $"trace-{DateTime.Now:yyyyMMdd_HHmmss}.log");
+                System.Diagnostics.Trace.Listeners.Add(
+                    new System.Diagnostics.TextWriterTraceListener(traceFile, "FileTrace"));
+                System.Diagnostics.Trace.AutoFlush = true;
+                System.Diagnostics.Trace.WriteLine(
+                    $"[Program] runtime logs={_runtimeLogDirectory} trace={traceFile}");
+            }
+            catch { /* Logging must never prevent application startup. */ }
+        }
+
+        /// <summary>Writes an unhandled exception to Trace and the managed runtime log directory.</summary>
         private static void LogFatal(string source, Exception ex)
         {
             string msg = $"[FATAL][{source}] {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}\r\n" +
                          (ex?.ToString() ?? "(null exception object)") + "\r\n" +
                          new string('-', 80) + "\r\n";
             System.Diagnostics.Trace.WriteLine(msg);
-            foreach (var dir in new[] { Path.GetTempPath(), AppDomain.CurrentDomain.BaseDirectory })
+            try
             {
-                try { File.AppendAllText(Path.Combine(dir, "AniloxRoll-crash.log"), msg); }
-                catch { /* log 失敗不可再丟例外 */ }
+                Directory.CreateDirectory(_runtimeLogDirectory);
+                File.AppendAllText(
+                    Path.Combine(_runtimeLogDirectory, "AniloxRoll-crash.log"), msg);
             }
+            catch { /* Logging failure must not throw another unhandled exception. */ }
         }
 
         /// <summary>

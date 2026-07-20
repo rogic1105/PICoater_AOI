@@ -35,8 +35,9 @@ MIL_ID app = MIL.M_NULL, sys = MIL.M_NULL;
 MIL.MappAlloc(MIL.M_NULL, MIL.M_DEFAULT, ref app);
 MIL.MsysAlloc(app, MIL.M_SYSTEM_RADIENTEVCL, 0, MIL.M_DEFAULT, ref sys);
 
-// 2. 一台相機 = 一個 MilCamera（panelHandle 給顯示用，無顯示可傳 IntPtr.Zero）
-var cam = new MilCamera(sys, id: 1, devNum: MIL.M_DEV0, dcfPath: @"D:\Anilox\Dcf\Radient_Config.dcf", panelHandle: panel.Handle);
+// 2. DCF 跟著 exe 部署；呼叫 MIL 前使用絕對路徑。
+string dcfPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "Radient_Config.dcf");
+var cam = new MilCamera(sys, id: 1, devNum: MIL.M_DEV0, dcfPath: dcfPath, panelHandle: panel.Handle);
 cam.Initialize();
 
 // 3. 取像（可選：訂閱 FrameReady 自己做檢測/存檔；不訂閱則 library 自動把原圖顯示到 panel）

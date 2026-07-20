@@ -28,6 +28,7 @@ namespace MilGrabber.Monitor
                     var cfg = new JavaScriptSerializer().Deserialize<SystemConfig>(json);
                     if (cfg?.CameraDevices != null && cfg.CameraDevices.Count > 0)
                     {
+                        ResolveDcfPaths(cfg.CameraDevices);
                         Trace.WriteLine($"[Config] 讀取 {path}：{cfg.CameraDevices.Count} 台相機。");
                         return cfg.CameraDevices;
                     }
@@ -51,8 +52,8 @@ namespace MilGrabber.Monitor
         private static List<CameraDeviceConfig> CreateFallbackDevices()
         {
             const string desc = "M_SYSTEM_RADIENTEVCL";
-            const string dcf = @"D:\Anilox\Dcf\Radient_Config.dcf";
-            return new List<CameraDeviceConfig>
+            const string dcf = @"Config\Radient_Config.dcf";
+            var devices = new List<CameraDeviceConfig>
             {
                 new CameraDeviceConfig { Id = 1, SystemDescriptor = desc, SystemNum = 0, DevNum = 0, DcfPath = dcf },
                 new CameraDeviceConfig { Id = 2, SystemDescriptor = desc, SystemNum = 0, DevNum = 1, DcfPath = dcf },
@@ -62,6 +63,20 @@ namespace MilGrabber.Monitor
                 new CameraDeviceConfig { Id = 6, SystemDescriptor = desc, SystemNum = 1, DevNum = 1, DcfPath = dcf },
                 new CameraDeviceConfig { Id = 7, SystemDescriptor = desc, SystemNum = 1, DevNum = 2, DcfPath = dcf },
             };
+            ResolveDcfPaths(devices);
+            return devices;
+        }
+
+        private static void ResolveDcfPaths(IEnumerable<CameraDeviceConfig> devices)
+        {
+            string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+            foreach (CameraDeviceConfig device in devices)
+            {
+                if (device == null || string.IsNullOrWhiteSpace(device.DcfPath))
+                    continue;
+                if (!Path.IsPathRooted(device.DcfPath))
+                    device.DcfPath = Path.GetFullPath(Path.Combine(baseDirectory, device.DcfPath));
+            }
         }
 
         /// <summary>

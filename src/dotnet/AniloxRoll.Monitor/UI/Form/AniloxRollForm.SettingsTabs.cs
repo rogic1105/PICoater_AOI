@@ -30,6 +30,8 @@ namespace AniloxRoll.Monitor.Forms
     /// <summary>AniloxRollForm 右側設定面板 tab 建構（相機參數 / 系統）相關方法 — 由主檔拆出的 partial。</summary>
     public partial class AniloxRollForm
     {
+        private bool _cameraParameterControlsReady;
+
         // ==========================================
         // --- 右側面板：初始化 ---
         // ==========================================
@@ -80,6 +82,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private void SetupCameraTab()
         {
+            _cameraParameterControlsReady = false;
             const int ExpMin    =     1;   // μs
             const int ExpMaxCap = 10000;   // μs 硬上限
             const int LrMin     =   100;   // Hz
@@ -193,6 +196,7 @@ namespace AniloxRoll.Monitor.Forms
             RegisterWheelInterceptors(_lrBars);
             RegisterWheelInterceptors(_htBars);
             RegisterWheelInterceptors(new[] { _expAllBar, _lrAllBar, _htAllBar });
+            _cameraParameterControlsReady = true;
         }
 
         /// <summary>
@@ -245,7 +249,7 @@ namespace AniloxRoll.Monitor.Forms
             };
             bar.ValueChanged += (s, e) =>
             {
-                if (syncing || _syncingFromHw) return; syncing = true;
+                if (!_cameraParameterControlsReady || syncing || _syncingFromHw) return; syncing = true;
                 num.Value = bar.Value;
                 saveSetting(bar.Value);
                 if (!_dragging.Contains(bar)) ScheduleWrite(bar.Value);
@@ -254,7 +258,7 @@ namespace AniloxRoll.Monitor.Forms
             };
             num.ValueChanged += (s, e) =>
             {
-                if (syncing || _syncingFromHw) return; syncing = true;
+                if (!_cameraParameterControlsReady || syncing || _syncingFromHw) return; syncing = true;
                 int v = (int)num.Value;
                 bar.Value = Math.Max(min, Math.Min(max, v));
                 saveSetting(v);
@@ -331,13 +335,13 @@ namespace AniloxRoll.Monitor.Forms
                 Apply(barAll.Value);
             };
             barAll.ValueChanged += (s, e) => {
-                if (allSyncing || _syncingFromHw) return; allSyncing = true;
+                if (!_cameraParameterControlsReady || allSyncing || _syncingFromHw) return; allSyncing = true;
                 numAll.Value = barAll.Value;
                 if (!_dragging.Contains(barAll)) Schedule(barAll.Value);
                 allSyncing = false;
             };
             numAll.ValueChanged += (s, e) => {
-                if (allSyncing || _syncingFromHw) return; allSyncing = true;
+                if (!_cameraParameterControlsReady || allSyncing || _syncingFromHw) return; allSyncing = true;
                 int v = (int)numAll.Value;
                 barAll.Value = Math.Max(barAll.Minimum, Math.Min(barAll.Maximum, v));
                 Schedule(v);

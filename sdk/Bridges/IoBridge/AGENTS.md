@@ -51,7 +51,7 @@ ReconnectTick
 - `Dispose` 會遞增 transport generation；進行中的 connect 即使晚到成功也不得重新發布 socket（切 IP/關程式競態）。
 - `IoGrabController.IsConnected` 是安全交握完成後的 accepted gate；抓取/MURA 業務輸出一律讀這個狀態，
   不得直接用底層 `_plc.IsConnected`。底層狀態只供 transport 生命週期（背景 poll/reconnect 與停止清輸出）使用。
-- app 先開、IO 後上電必須能自行恢復，不得要求重開 app。`IoBridge_*.log` 於第 1 次及每 10 次失敗留下
+- app 先開、IO 後上電必須能自行恢復，不得要求重開 app。共用 log 目錄的 `io-*.log` 於第 1 次及每 10 次失敗留下
   `IO reconnect pending`，成功行帶 attempt；其餘輪次靜默，兼顧可診斷性與全天 log 量。
 - `ReconnectIntervalMs` 定義為兩次 connect **起點**的間隔；TCP timeout 已算在週期內，不得 timeout 後再等完整週期
   （否則 UI 顯示 3s、實際最差 6s，會造成重開 app 反而較快的假象）。

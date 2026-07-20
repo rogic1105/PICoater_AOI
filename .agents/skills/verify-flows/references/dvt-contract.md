@@ -631,13 +631,9 @@ T1: ⚠ 相機離線 4→3/7 ／ 相機在線 0→4/7   ← 數量變化才記�
 ```
 T1: ui:【相機參數】camN {param}={v}｜All {param}={v}    ← 帶參數名+值單行自足（Exp/LineRate/Height…）
 （之後的 HtRealloc/合圖佈局重算等程式化行歸此 intent 管；滑桿拖曳 vs 數字框輸入同一路徑，log 不區分）
-（⚠ 判讀例外：開機後 ~1 秒內的「All {param}={v}」**0~3 發**（曝光/線掃/高度；發數＝settings 值與
-  控制項 Designer 預設值不同的個數，相同不觸發——2026-07-07 實測從 3 發變 1 發佐證）＝初始值塞進 All 控制項觸發
-  ValueChanged→debounce 套用的**副作用**（出處查證 2026-07-07：7a017a3/993d8cc 皆無「防跑掉」設計記錄；
-  **有記錄的防跑掉機制**＝①AllocateCameras/Initialize 套 settings 參數 ②CLProtocol 就緒自動重套線掃）。
-  非使用者動作；**行為保留勿抑制**——重複寫同值無害，且無法排除它在替①②兜底。
-  口述歷史（2026-07-07 使用者）：很早期「開程式時曝光會亂飄」、修正無 commit 記錄可追——
-  三連發可能正是實際擋住它的兜底，動它有復發風險。毫秒級連發＋緊跟開機序列＝辨識特徵。）
+開機初始化控制項期間 `_cameraParameterControlsReady=false`，不得排程硬體寫入、不得出現上述 `ui:` 行，
+也不得建立 `paramchange-*.csv`。初始硬體值的權威路徑是 Allocate/Initialize 套用 settings，及 CLProtocol
+就緒後重套線掃；`paramchange` 只記使用者完成的實際調整。
 禁止：調參數不得出現任何 MIL 視窗——headless 鐵則：**每一個 MdispSelectWindow 呼叫點都必須帶
 `_panelHandle != IntPtr.Zero` 守門**（MIL 對 Zero handle 會自開獨立浮動視窗；2026-07-07 實例：
 改高度 realloc 路徑漏守門 → 4 台各跳一個視窗）。新增 MdispSelectWindow 呼叫點＝必帶守門。
@@ -794,6 +790,9 @@ ui:【產出狀態】確認 code=C
 - 診斷檔只由 `LogFileCatalog` 納管：`trace`、`resource-monitor`、`dropdiag`、`phaselog`、
   `paramchange`、`ui-actions`、`io`、`crash`。`LogRetentionHours` 預設 168 小時，啟動後 5 秒及每小時清理；
   目前 process 建立的 log 與未知檔案不得刪。PropertyGrid 改保存時間後立即補跑一次清理。
+- `Program.InitializeRuntimeLogging` 決定本次可寫目錄（正常為 `D:\Anilox\Logs`，不可寫才退到 `%TEMP%`），
+  trace、`io-yyyyMMdd.log` 與 `AniloxRoll-crash.log` 必須共用這個目錄。app 注入 IoLogger 的目錄與 `io`
+  前綴；Bridge sample 保持自己的 exe-relative 預設，禁止 SDK 反向硬編產品路徑。
 - CSV 與影像寫入是兩條獨立咽喉：`InspectionLogService.WriteFailed/WriteSucceeded` 與
   `AniloxCamera.OnCaptureSaveFailed/OnFilesSaved` 都必須進 `OutputHealth`；任一條失敗都不得被另一條成功假綠。
   影像事件碼使用 `CaptureWriteFailure.CAMn`，成功只能 resolve 同一台相機，禁止 CAM2 成功解除 CAM1 失敗。

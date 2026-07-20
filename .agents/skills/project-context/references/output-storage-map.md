@@ -26,6 +26,15 @@
 Readers accept legacy `_proc_v.jpg` / `_proc_h.jpg` and legacy curve-bin names. New writers must
 emit only the c/r names above.
 
+The repository source of truth for the MIL binary configuration is
+`sdk/MIL/Config/Radient_Config.dcf`. The product and MIL monitor sample link that one file into
+their projects and copy it to `{ExeDir}\Config\Radient_Config.dcf` at build time.
+
+Daily inspection CSV keeps data rows and versioned `#CFG` rows together. Each data row belongs to
+the nearest preceding `#CFG`; this intentionally avoids a second settings file that could become
+out of sync after a crash. A new snapshot contains the complete `OPS + START + CROP` layout,
+column/row normalization, `RidgeSigma` (細線濾除), thresholds, and capture parameters.
+
 `_ticks.csv` is a shared index inside each date image folder. Each row maps one image base name to
 its frame-start monotonic tick, allowing review to align cameras even when filenames jitter. It is
 appended by `CameraFrameSaver` and recopied whenever it changes.
@@ -56,8 +65,11 @@ destination directory is next used. Full-day retention removes the rest with the
 
 The managed log catalog is `trace-*.log`, `resource-monitor-*.csv`, `dropdiag-*.csv`,
 `phaselog-*.csv`, `paramchange-*.csv`, `ui-actions-*.jsonl`, `io-*.log`, and
-`AniloxRoll-crash.log`. `LogRetentionService` deletes only cataloged files older than the configured
-hours; unknown operator files and logs created by the current process are not cleanup candidates.
+`AniloxRoll-crash.log`. Product startup injects the selected writable runtime-log directory into
+`IoLogger`, so trace, IO, and crash evidence are retained together. `paramchange` is created lazily
+only after an actual operator parameter change; control initialization is not a parameter change.
+`LogRetentionService` deletes only cataloged files older than the configured hours; unknown operator
+files and logs created by the current process are not cleanup candidates.
 
 ## Verification ownership
 
