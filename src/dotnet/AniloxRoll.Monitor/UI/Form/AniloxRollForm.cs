@@ -1135,9 +1135,9 @@ namespace AniloxRoll.Monitor.Forms
         private readonly System.Threading.SemaphoreSlim _onSettingChangedSemaphore = new System.Threading.SemaphoreSlim(1, 1);
 
         /// <summary>
-        /// L2 SettingsHub Changed event 的唯一訂閱者：所有 setting 變更的副作用都跑這個 switch。
+        /// L2 SettingsHub Changed event 的唯一副作用入口。
         /// 來源不論：PropertyGrid（NotifyExternalChange）/ chart click（Set / SetBatch+inline）/ AutoDetect 回寫（Set）。
-        /// 副作用順序：共用前段（chart 閾值、Live 設定、統計） → 個別 case dispatch（早退：AppRole）。
+        /// 副作用順序：分類一次 → 精準套用跨功能影響 → 交給單一 feature owner。
         /// SemaphoreSlim 序列化：連點時排隊處理，避免多個 reload 並行 race。
         /// </summary>
         private async void OnSettingChanged(AniloxRoll.Monitor.Settings.Services.SettingChange c)
@@ -1152,56 +1152,96 @@ namespace AniloxRoll.Monitor.Forms
                 if (nv.Length > 40) nv = nv.Substring(0, 40) + "…";
                 FlowTrace.Log((c.Source == AniloxRoll.Monitor.Settings.Services.SettingSource.PropertyGrid
                     ? "ui:設定[" : "set:[") + c.Name + "]=" + nv);
-                // ── 共用副作用（任何 setting 變更都跑） ────────────────────────
+
+                SettingRoute route = SettingImpactClassifier.Classify(c.Name);
+                FlowTrace.Log($"setting route {c.Name} {route.ToLogText()}");
+
                 // PropertyGrid 顯示同步：「程式碼路徑改值」時用精準 trick 重讀單 cell（不全 Refresh、不閃）。
                 // PropertyGrid 自己改值已自我更新該 cell，不需要外部處理。
                 if (c.Source == AniloxRoll.Monitor.Settings.Services.SettingSource.Programmatic)
                     RefreshGridItem(c.Name);
-                _inspectionSettingsCoordinator.HandleSettingsChanged();
-                _liveCameraManager?.SetCaptureSettings(_settings);
-                _reviewOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-                _liveOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-                _liveRowDisplay?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
-                _reviewRowDisplay?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
-                UpdateRowChartPitch();
-                if (_stitchCoordinator?.IsStitchMode == true)
-                {
-                    _stitchCoordinator.UpdateStitchedOverviewChart();
-                    _stitchCoordinator.RefreshCurrentCameraChartsForSettingsChange();
-                }
+
+                ApplySettingImpacts(route.Impacts);
                 if (_liveCameraManager?.IsLiveGrabbing == true)
                     _inspectionLogService?.ForceWriteConfig(CsvConfigSnapshot.FromSettings(_settings));
-
-                // ── 各 feature 副作用 dispatch（Wave3 選項1：邏輯搬各 feature partial；
-                //    dispatcher 只「持鎖 + 跑共用前段 + 依序 fan-out」，不擁有 feature 細節）──────────
-                if (HandleAppRoleSettingsChanged(c.Name)) return;  // 早退：機台角色（寫 app-mode.json）
-                HandleLiveLayoutSettingsChanged(c.Name);           // 動態 LOD + OPS/Start 合圖佈局（Live.cs）
-                HandleChartScaleSettingsChanged(c.Name);           // 檢測報表 Y 軸（Data.cs）
-                HandleDataStatsSettingsChanged(c.Name);            // Data 曲線/統計重畫（僅檢測參數變更才跑，避免無關設定閃圖；Data.cs）
-                HandleLightSettingsChanged(c.Name);                // 光源（HardwareStatus.cs）
-                HandleIoSettingsChanged(c.Name);                   // IO IP/Port/型號/啟用 → 重啟 controller 立即生效（HardwareStatus.cs）
-                HandleStorageSettingsChanged(c.Name);              // 預留空間 / log 保存（HardwareStatus.cs）
-                await HandleEnhanceSettingsChanged(c.Name);        // 監控/回顧強化（Live.cs）
-                HandleMuraPauseSettingsChanged(c.Name);            // IO 檢測暫停 LED（HardwareStatus.cs）
-                HandleAlgorithmSettingsChanged(c.Name);            // 去背演算法（Background.cs）
-
-                // 註：Recipe 變更（正規值/閾值/Ridge 方向）影響 PASS/FAIL + 閾值線 + 曲線坡度，
-                //     已由共用前段（SetThresholds + UpdateStitchedOverviewChart）處理；不影響影像 bytes，無需 reload。
+                await DispatchSettingOwner(route.Owner, c.Name);
             }
             catch (Exception ex) { Trace.WriteLine($"[OnSettingChanged {c?.Name}] {ex}"); }
             finally { _onSettingChangedSemaphore.Release(); }
         }
 
-        /// <summary>機台角色變更 → 寫 app-mode.json + 提示重開。回 true=已處理（dispatcher 早退、跳過其餘 feature）。</summary>
-        private bool HandleAppRoleSettingsChanged(string name)
+        private void ApplySettingImpacts(SettingImpact impacts)
         {
-            if (name != nameof(InspectionSettings.AppRole)) return false;
+            if ((impacts & SettingImpact.InspectionService) != 0)
+                _inspectionSettingsCoordinator.ApplySettingsToService();
+            if ((impacts & SettingImpact.CapturePolicy) != 0)
+                _liveCameraManager?.RefreshCapturePolicy(_settings);
+            if ((impacts & SettingImpact.ColumnThresholds) != 0)
+            {
+                _reviewOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
+                _liveOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
+            }
+            if ((impacts & SettingImpact.RowThresholds) != 0)
+            {
+                _liveRowDisplay?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
+                _reviewRowDisplay?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
+            }
+            if ((impacts & SettingImpact.RowPitch) != 0)
+                UpdateRowChartPitch();
+            if ((impacts & SettingImpact.ReviewCurves) != 0 &&
+                _stitchCoordinator?.IsStitchMode == true)
+            {
+                _stitchCoordinator.UpdateStitchedOverviewChart();
+                _stitchCoordinator.RefreshCurrentCameraChartsForSettingsChange();
+            }
+        }
+
+        private async Task DispatchSettingOwner(SettingFeatureOwner owner, string name)
+        {
+            switch (owner)
+            {
+                case SettingFeatureOwner.AppRole:
+                    HandleAppRoleSettingsChanged(name);
+                    break;
+                case SettingFeatureOwner.LiveLayout:
+                    HandleLiveLayoutSettingsChanged(name);
+                    break;
+                case SettingFeatureOwner.ChartScale:
+                    HandleChartScaleSettingsChanged(name);
+                    break;
+                case SettingFeatureOwner.DataStats:
+                    HandleDataStatsSettingsChanged(name);
+                    break;
+                case SettingFeatureOwner.Light:
+                    HandleLightSettingsChanged(name);
+                    break;
+                case SettingFeatureOwner.Io:
+                    HandleIoSettingsChanged(name);
+                    break;
+                case SettingFeatureOwner.Storage:
+                    HandleStorageSettingsChanged(name);
+                    break;
+                case SettingFeatureOwner.Enhance:
+                    await HandleEnhanceSettingsChanged(name);
+                    break;
+                case SettingFeatureOwner.MuraPause:
+                    HandleMuraPauseSettingsChanged(name);
+                    break;
+                case SettingFeatureOwner.Background:
+                    HandleAlgorithmSettingsChanged(name);
+                    break;
+            }
+        }
+
+        /// <summary>機台角色變更 → 寫 app-mode.json + 提示重開。</summary>
+        private void HandleAppRoleSettingsChanged(string name)
+        {
+            if (name != nameof(InspectionSettings.AppRole)) return;
             if (_appMode == null) _appMode = new AppModeConfig();
             _appMode.Role = _settings.AppRole;
             _appMode.Save();
             MessageBox.Show("機台角色已儲存，重新開啟程式後生效。",
                 "機台設定", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return true;
         }
 
         // OPS/Start setting 名稱清單（用來判斷是不是「機台佈局」群組的 setting）

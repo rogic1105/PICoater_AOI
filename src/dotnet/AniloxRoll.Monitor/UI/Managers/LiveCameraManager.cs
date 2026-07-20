@@ -831,25 +831,44 @@ namespace AniloxRoll.Monitor.UI.Managers
             _inspectionSettings = settings;
 
             UpdateCaptureSettingsCache(settings);
+            ApplyCapturePolicyToCameras();
 
             foreach (var cam in _cameras)
             {
                 int camIdx = cam.CameraId - 1;
-                cam.EnableAutoCapture    = _enableAutoCapture;
-                cam.SaveOriginalBmp = _saveOriginalBmp;
-                cam.CaptureRootPath      = _captureRootPath;
                 cam.CameraGrabHeight     = _cameraGrabHeight[camIdx]; // 已在 UpdateCaptureSettingsCache clamp 到 MaxGrabHeightPx
-                cam.HessianSigma         = _ridgeSigma;   // 細線濾除（設定值，非硬編常數）
+                // 曝光：走 CLProtocol-aware SetExposureUs（CLProtocol 未就緒時記錄，就緒後自動重套）
+                cam.SetExposureUs(_cameraExposureTimeUs[camIdx]);
+                // 線掃速率：同上，CLProtocol 未就緒時記錄，就緒後自動重套
+                cam.SetLineRateHz(_cameraLineRateHz[camIdx]);
+            }
+        }
+
+        /// <summary>
+        /// 套用執行期存檔/演算法政策，不重送曝光、線掃速率或擷取高度。
+        /// PropertyGrid 設定變更走這條；完整相機 timing 只在初始化或專用相機參數流程套用。
+        /// </summary>
+        public void RefreshCapturePolicy(InspectionSettings settings)
+        {
+            if (settings == null) return;
+            _inspectionSettings = settings;
+            UpdateCaptureSettingsCache(settings);
+            ApplyCapturePolicyToCameras();
+        }
+
+        private void ApplyCapturePolicyToCameras()
+        {
+            foreach (var cam in _cameras)
+            {
+                cam.EnableAutoCapture    = _enableAutoCapture;
+                cam.SaveOriginalBmp      = _saveOriginalBmp;
+                cam.CaptureRootPath      = _captureRootPath;
+                cam.HessianSigma         = _ridgeSigma;
                 cam.HessianFixedMax      = _hessianMaxFactor;
                 cam.RidgeMode            = _ridgeMode;
                 cam.SaveResizeScale      = _saveResizeScale;
                 cam.SaveJpgQuality       = _saveJpgQuality;
                 cam.TimestampCoordinator = _timestampCoordinator;
-
-                // 曝光：走 CLProtocol-aware SetExposureUs（CLProtocol 未就緒時記錄，就緒後自動重套）
-                cam.SetExposureUs(_cameraExposureTimeUs[camIdx]);
-                // 線掃速率：同上，CLProtocol 未就緒時記錄，就緒後自動重套
-                cam.SetLineRateHz(_cameraLineRateHz[camIdx]);
             }
         }
 

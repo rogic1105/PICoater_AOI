@@ -676,7 +676,6 @@ namespace AniloxRoll.Monitor.Forms
                 _liveCameraManager?.SetLodMode(_settings.LiveLod);
             if (name == nameof(InspectionSettings.he_MainDisplay))
             {
-                FlowTrace.Log($"ui:設定[主畫面顯示] → {_settings.he_MainDisplay}");   // intent 行（孤兒判讀規則）
                 ResetLiveChartsForDisplayTransition();
                 _liveCameraManager?.ApplyMainDisplayMode();   // 即時 / 瀑布 即時切換
             }

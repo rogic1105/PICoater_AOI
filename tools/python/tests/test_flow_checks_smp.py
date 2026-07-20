@@ -42,13 +42,16 @@ class SettingsFlowValidatorTests(unittest.TestCase):
             session(
                 "RV loadGrab done 260720-120000（20ms）",
                 "ui:設定[hd_EnableReviewEnhance]=True",
+                "setting route hd_EnableReviewEnhance owner=Enhance effects=None",
                 "RV loadGrab begin 260720-120000（proc=True）",
                 "RV loadGrab done 260720-120000（21ms）",
                 "ui:設定[hee_VerticalDirection]=TopToBottom",
+                "setting route hee_VerticalDirection owner=LiveLayout effects=None",
                 "LC row rowView dir=TopToBottom n=-1 total=100mm view 0~100",
             )
         )
         self.assertEqual(CheckStatus.PASS, result(report, "S0.format").status)
+        self.assertEqual(CheckStatus.PASS, result(report, "S0.route").status)
         self.assertEqual(
             CheckStatus.PASS, result(report, "S2.review-enhance").status
         )
@@ -56,9 +59,27 @@ class SettingsFlowValidatorTests(unittest.TestCase):
 
     def test_direction_without_row_refresh_fails(self):
         report = SettingsFlowValidator().validate(
-            session("ui:設定[hee_VerticalDirection]=BottomToTop")
+            session(
+                "ui:設定[hee_VerticalDirection]=BottomToTop",
+                "setting route hee_VerticalDirection owner=LiveLayout effects=None",
+            )
         )
         self.assertEqual(CheckStatus.FAIL, result(report, "S3.direction").status)
+
+    def test_setting_without_route_fails(self):
+        report = SettingsFlowValidator().validate(
+            session("ui:設定[IoIp]=127.0.0.1")
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "S0.route").status)
+
+    def test_unrelated_setting_with_capture_policy_fails(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "ui:設定[IoIp]=127.0.0.1",
+                "setting route IoIp owner=Io effects=CapturePolicy",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "S0.route").status)
 
 
 class MuraFlowValidatorTests(unittest.TestCase):

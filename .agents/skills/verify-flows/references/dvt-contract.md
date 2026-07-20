@@ -428,8 +428,8 @@ T1: {新 view} create + subscribe M
 propertyGridSettings.PropertyValueChanged → _propertyGrid_PropertyValueChanged@AniloxRollForm.cs
  └ NotifyExternalChange@SettingsHub.cs            ← SSoT：所有變更走 Hub（Source=PropertyGrid）
     └ Changed 事件 → OnSettingChanged@AniloxRollForm.cs（唯一 dispatcher，semaphore 序列化；勿拆）
-       └ HandleLiveLayoutSettingsChanged@AniloxRollForm.Live.cs（name==he_MainDisplay）
-          ├ FlowTrace "ui:設定[主畫面顯示] → …"（intent 行）
+       └ SettingImpactClassifier → owner=LiveLayout
+          └ HandleLiveLayoutSettingsChanged@AniloxRollForm.Live.cs（name==he_MainDisplay）
           ├ ResetLiveChartsForDisplayTransition@AniloxRollForm.Live.cs（column/row chart、row cache、waterfall row buffer、live view range 歸零）
           └ ApplyMainDisplayMode@LiveCameraManager.Display.cs（forwarder）
              └ ApplyMainDisplayMode@LiveDisplayCoordinator.cs   ← 模式單一決策點（he_MainDisplay 唯一入口）＋錯掛自檢旗標歸零
@@ -1123,11 +1123,35 @@ R2 入口：LoadGrabStitchedViewGuardRowRangeAsync → ReviewPeriodLoadCoordinat
 ```
 T1: ui:設定[{屬性名}]={新值}   ← 使用者從 PropertyGrid 改（孤兒判讀規則的主人；值截 40 字）
 T1: set:[{屬性名}]={新值}      ← 程式化來源（自動掃描寫回等）；有主人但非使用者動作
+T1: setting route {屬性名} owner={owner|None} effects={effect+effect|None}
+    ← 每個 setting intent 的下一行；分類一次後才執行副作用
 （之後的反應行歸此 intent 管）
 ```
 **⚠ 非 PropertyGrid 的使用者入口（點 label/chart 走 Hub.Set）會被記成 set:（程式來源）**——
 這類入口必須自帶 `ui:` intent 行（如【暫停Mura檢測】【IO暫停】），否則盲測會認錯兇手身份
 （2026-07-07 盲測實例：點 lblIoDoMura 被誤判為程式動作、點 lblIoConn 完全無痕漏抓）。
+
+**設定副作用路由不變量**：
+- `OnSettingChanged` 是唯一序列化 dispatcher；不得新增平行 `SettingsHub.Changed` 副作用訂閱者。
+- `SettingImpactClassifier` 是「setting → feature owner + cross-feature impacts」唯一決策表；
+  owner 內部可以依同一 setting 選動作，但不得在其他 feature 再複製跨域判斷。
+- `CapturePolicy` 只准出現在 `AniloxRootPath`、`EnableAutoCapture`、`SaveOriginalBmp`、
+  `dc_HessianMaxFactorV`、`de_RidgeSigma`、`eb_RidgeDir`。IO、光源、顯示、報表等設定
+  不得重送相機曝光／線掃速率／擷取高度。
+- `owner=None effects=None` 代表設定已保存、但本次不需立即 runtime 副作用，不是漏接。
+
+**code-flow（設定變更）**：
+```
+SettingsHub.Changed
+ → OnSettingChanged@AniloxRollForm.cs（SemaphoreSlim 單線序列化）
+    ├ S0 intent → SettingImpactClassifier.Classify → setting route
+    ├ ApplySettingImpacts（只套 route 指定的跨功能影響）
+    ├ grab 中 ForceWriteConfig（ContentKey 去重，僅 #CFG 真值變更才落盤）
+    └ DispatchSettingOwner（只呼叫一個 feature handler）
+CapturePolicy
+ → RefreshCapturePolicy@LiveCameraManager.cs
+    └ 只更新存檔／演算法政策；不得呼叫 SetExposureUs／SetLineRateHz 或改 CameraGrabHeight
+```
 
 ### S 系列不變量：view 互斥
 **任一時刻主畫面 view 唯一**：設定[主畫面顯示]=即時 期間，不得出現任何 WF 前綴行/EnableWaterfall；
@@ -1166,6 +1190,8 @@ T1: RV row …（Review 有資料時）或 RV load/update row（依當前 Review
 
 **自動校稿（`flow_checks/settings.py`）**：
 - `S0.format`：所有 `ui:設定[]`／`set:[]` 必須同時帶屬性名與新值。
+- `S0.route`：每個設定 intent 下一行必須有同名 `setting route`；並檢查
+  `CapturePolicy` 只出現在允許的六個設定，防止無關設定重送相機參數。
 - `S2.review-enhance`：已有回顧序號時，切強化必須以同一 grabId 完成
   `RV loadGrab begin → done`；尚無回顧資料則回 `NOT COVERED`。
 - `S3.direction`：方向變更後、下一次方向變更前，必須看見相同方向的

@@ -33,10 +33,5 @@ namespace AniloxRoll.Monitor.UI.Coordinators
         public void SetRidgeDirection(string direction)
             => _inspectionService?.SetRidgeDirection(direction);
 
-        public void HandleSettingsChanged()
-        {
-            if (_settings == null) return;
-            ApplySettingsToService();
-        }
     }
 }

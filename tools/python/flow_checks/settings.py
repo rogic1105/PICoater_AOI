@@ -18,6 +18,18 @@ class SettingsFlowValidator:
         r"^(?:LC|RV) row (?:rowChart|rowView) "
         r"dir=(?P<direction>TopToBottom|BottomToTop)\b"
     )
+    _route_pattern = re.compile(
+        r"^setting route (?P<name>\S+) "
+        r"owner=(?P<owner>\w+) effects=(?P<effects>[\w+]+)$"
+    )
+    _capture_policy_settings = {
+        "AniloxRootPath",
+        "EnableAutoCapture",
+        "SaveOriginalBmp",
+        "dc_HessianMaxFactorV",
+        "de_RidgeSigma",
+        "eb_RidgeDir",
+    }
 
     def validate(self, session: FlowSession) -> CheckReport:
         report = CheckReport()
@@ -32,6 +44,7 @@ class SettingsFlowValidator:
             return report
 
         self._check_format(settings, report)
+        self._check_routes(session, settings, report)
         self._check_review_enhance(session, settings, report)
         self._check_direction_refresh(session, settings, report)
         return report
@@ -52,6 +65,42 @@ class SettingsFlowValidator:
             "S0.format",
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
             f"changes={len(settings)} invalid={len(failures)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_routes(
+        self, session: FlowSession, settings, report: CheckReport
+    ) -> None:
+        failures = []
+        for index, line, setting_match in settings:
+            if not setting_match:
+                continue
+            expected_name = setting_match.group("name")
+            if index + 1 >= len(session.lines):
+                failures.append(f"{line.timestamp} {expected_name} 缺 route")
+                continue
+
+            route_line = session.lines[index + 1]
+            route_match = self._route_pattern.match(route_line.message)
+            if not route_match or route_match.group("name") != expected_name:
+                failures.append(
+                    f"{line.timestamp} {expected_name} 下一行不是同名 route"
+                )
+                continue
+
+            effects = set(route_match.group("effects").split("+"))
+            has_capture_policy = "CapturePolicy" in effects
+            expects_capture_policy = expected_name in self._capture_policy_settings
+            if has_capture_policy != expects_capture_policy:
+                failures.append(
+                    f"{line.timestamp} {expected_name} CapturePolicy={has_capture_policy}"
+                )
+
+        report.add(
+            self.domain,
+            "S0.route",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"changes={len(settings)} failures={len(failures)}"
             + (f"；首例 {failures[0]}" if failures else ""),
         )
 
