@@ -1057,13 +1057,26 @@ T1/Tn: RV loadGrab begin {grabId} → RV loadGrab paths … → RV lodRebind mer
 - 最後一個非 stale 的 `curves`/`loadGrab done` 的 grabId 必須＝最後一個 intent 的 grabId——不符＝token 破了。
 - begin 無對應 done/stale-drop＝載入中斷；pushFrames P 與 CSV 台數不符＝掉圖。
 
-**code-flow（序號對應影像／CFG 查詢）**
+**code-flow（曲線快路與 settle 圖片路分治）**
 ```
-LoadGrabStitchedViewGuardRowRangeAsync@ReviewStitchCoordinator.cs
- ├ LoadForGrabId@InspectionImagePathRepository.cs
- │  └ InspectionCsvReader.OpenShared＋TryParseRecord＋TryExtractCameraId（影像依 cam 分組）
- └ LoadForGrabId@InspectionConfigRepository.cs
-    └ InspectionCsvReader.OpenShared＋TryParseRecord（取 grab 上方最近 #CFG）
+OnReviewGrabIdSelected@AniloxRollForm.Data.cs
+ ├ InvalidateImageLoad@ReviewStitchCoordinator.cs（立即讓舊圖片失效）
+ ├ LoadGrabCurvesOnlyAsync@ReviewStitchCoordinator.cs
+ │  └ Enqueue@ReviewCurveLoadCoordinator.cs
+ │     ├ pending 僅保留最新一筆；running 恆單工
+ │     └ LoadGrabCurvesCoreAsync@ReviewStitchCoordinator.cs
+ │        ├ LoadForGrabId@InspectionImagePathRepository.cs
+ │        ├ LoadForGrabId@InspectionConfigRepository.cs
+ │        ├ MergeCurves＋MergeRowCurves@CurveMergeHelper.cs
+ │        └ IsCurrent@ReviewCurveLoadCoordinator.cs
+ │           ├ false → RV curves stale-drop
+ │           └ true → UpdateStitchedOverviewChart＋UpdateGlobalRowChart
+ └ 250ms settle → LoadGrabStitchedViewGuardRowRangeAsync@AniloxRollForm.Review.cs
+    └ LoadGrabStitchedViewAsync@ReviewStitchCoordinator.cs
+       ├ LoadForGrabId@InspectionImagePathRepository.cs
+       │  └ InspectionCsvReader.OpenShared＋TryParseRecord＋TryExtractCameraId（影像依 cam 分組）
+       └ LoadForGrabId@InspectionConfigRepository.cs
+          └ InspectionCsvReader.OpenShared＋TryParseRecord（取 grab 上方最近 #CFG）
 ```
 
 ### R3 時段導航（cbReviewDate/cbReviewTime 手動）

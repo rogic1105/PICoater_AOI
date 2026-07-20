@@ -9,6 +9,7 @@ using TanukiCv.Controls;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.Binders;
+using AniloxRoll.Monitor.UI.Coordinators;
 using AniloxRoll.Monitor.UI.Managers;
 using AniloxRoll.Monitor.UI.Navigators;
 using AniloxRoll.Monitor.UI.State;
@@ -67,67 +68,22 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// <summary>上一次 Review 頁面的處理模式旗標。</summary>
         public bool LastReviewProcessedMode { get; set; }
 
-        private sealed class CurveLoadRequest
-        {
-            public string GrabId;
-            public DateTime HintFrom;
-            public DateTime HintTo;
-            public int Sequence;
-        }
-
         // 曲線與圖片是兩條獨立資料流：曲線 latest-only，圖片由 Form 的 250ms debounce 觸發。
         // 不共用 token，避免圖片開始載入時把同一序號仍在讀取的曲線誤判為 stale。
-        private readonly object _curveLoadGate = new object();
-        private CurveLoadRequest _pendingCurveLoad;
-        private bool _curveLoadRunning;
-        private int _curveRequestSeq;
+        private readonly ReviewCurveLoadCoordinator _curveLoads;
         private int _imageLoadSeq;
 
         /// <summary>快路：只載曲線（欄+列，.bin 數十 KB + tick 對齊 csv）+CFG → 更新欄/列 chart。
         /// 滾動掃描用——chart 即時跟著序號跑（使用者快速找異常），影像（重：JPEG 解碼+拼接）由
         /// debounce 後的完整載入跟上（硬體限制的分層載入）。</summary>
         public Task LoadGrabCurvesOnlyAsync(string grabId, DateTime hintFrom, DateTime hintTo)
-        {
-            lock (_curveLoadGate)
-            {
-                _pendingCurveLoad = new CurveLoadRequest
-                {
-                    GrabId = grabId,
-                    HintFrom = hintFrom,
-                    HintTo = hintTo,
-                    Sequence = System.Threading.Interlocked.Increment(ref _curveRequestSeq)
-                };
-                if (_curveLoadRunning)
-                    return Task.CompletedTask;
-                _curveLoadRunning = true;
-            }
-            return DrainCurveLoadsAsync();
-        }
+            => _curveLoads.Enqueue(grabId, hintFrom, hintTo);
 
         /// <summary>使正在解碼的舊圖片結果失效；每次使用者改序號時呼叫，不等待 250ms。</summary>
         public void InvalidateImageLoad()
             => System.Threading.Interlocked.Increment(ref _imageLoadSeq);
 
-        private async Task DrainCurveLoadsAsync()
-        {
-            while (true)
-            {
-                CurveLoadRequest request;
-                lock (_curveLoadGate)
-                {
-                    request = _pendingCurveLoad;
-                    _pendingCurveLoad = null;
-                    if (request == null)
-                    {
-                        _curveLoadRunning = false;
-                        return;
-                    }
-                }
-                await LoadGrabCurvesCoreAsync(request);
-            }
-        }
-
-        private async Task LoadGrabCurvesCoreAsync(CurveLoadRequest request)
+        private async Task LoadGrabCurvesCoreAsync(ReviewCurveLoadRequest request)
         {
             string grabId = request.GrabId;
             DateTime hintFrom = request.HintFrom;
@@ -167,7 +123,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                         CurveMergeHelper.MergeRowCurves(aligned, out rowMean[i], out rowMax[i]);
                     }
                 });
-                if (request.Sequence != System.Threading.Volatile.Read(ref _curveRequestSeq))
+                if (!_curveLoads.IsCurrent(request))
                 {
                     Core.Services.FlowTrace.Log($"RV curves stale-drop {grabId}");
                     return;
@@ -197,6 +153,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public ReviewStitchCoordinator(ReviewStitchContext ctx)
         {
             _ctx = ctx;
+            _curveLoads = new ReviewCurveLoadCoordinator(LoadGrabCurvesCoreAsync);
         }
 
         /// <summary>延遲注入 DataStatsPresenter（初始化順序：coordinator 先於 presenter 建立）。</summary>

@@ -193,6 +193,7 @@
     <Compile Include="UI\Binders\GrabDetailListBinder.cs" />
     <Compile Include="UI\Coordinators\GrabDurationCoordinator.cs" />
     <Compile Include="UI\Coordinators\InspectionSettingsCoordinator.cs" />
+    <Compile Include="UI\Coordinators\ReviewCurveLoadCoordinator.cs" />
     <Compile Include="UI\Coordinators\ReviewPeriodLoadCoordinator.cs" />
     <Compile Include="UI\Coordinators\ReviewFolderCoordinator.cs" />
     <Compile Include="UI\Coordinators\SettingImpactClassifier.cs" />

@@ -44,6 +44,8 @@ against current code with `rg` before editing because lookup data can become sta
 | `UI/Binders/BusyUiBinder.cs` | 回顧載入忙碌視覺唯一 owner：等待游標、命令按鈕鎖與 UI-thread marshal。Presenter workflow 與 stitched image loader 共用同一實例。 |
 | `UI/Coordinators/ReviewFolderCoordinator.cs` | 回顧資料夾選擇、路徑修正、ImageRepository refresh、DateTimeNavigator 初始化。 |
 | `UI/Coordinators/InspectionSettingsCoordinator.cs` | InspectionSettings 到 BatchInspectionService 的 pipeline 副作用唯一 owner。 |
+| `UI/Coordinators/ReviewCurveLoadCoordinator.cs` | 回顧單序號曲線快路的 latest-only／single-flight 排程與 stale token owner；不負責讀 bin 或畫 chart。 |
+| `UI/Coordinators/ReviewPeriodLoadCoordinator.cs` | 回顧時段載入的 FIFO single-flight、重複 request 去重與 generation 失效 owner。 |
 | `UI/Services/ImageCacheService.cs` | ProcessBatch 產出但不直接顯示的 Bitmap 生命週期唯一 owner；下一次 workflow 前統一 Dispose。 |
 | `UI/State/ReviewRuntimeState.cs` | 回顧 CSV CFG 快照與螢幕 mm/px 的 runtime SSoT；Form 與 ReviewStitchCoordinator 共用。 |
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/Interaction/EventGuard.cs` | 可重入事件 guard 與 scope |
@@ -55,7 +57,7 @@ against current code with `rg` before editing because lookup data can become sta
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/Interaction/MultiClickDetector.cs` | 雙擊與三擊手勢辨識 |
 | `UI/Widgets/CurveMergeHelper.cs` | 曲線 bin 讀取與全覽曲線合併的 app adapter |
 | `UI/Presenters/DataStatisticsPresenter.cs` | 報表統計、導航、明細清單與圖表的 feature presenter |
-| `UI/Presenters/ReviewStitchCoordinator.cs` | 回顧單片/時段載入、幀對齊、拼接與顯示套用 workflow |
+| `UI/Presenters/ReviewStitchCoordinator.cs` | 回顧單片影像／曲線 IO、時段投影、幀對齊、拼接與顯示套用 workflow；曲線與時段排程分別交由專用 coordinator。 |
 | `UI/Presenters/LiveTelemetryPresenter.cs` | 相機 telemetry 擷取與 UI snapshot 套用 |
 | `Acquisition/AniloxCamera.cs` | 單台產品相機 composition：取像事件、檢測、顯示資料與存檔協調 |
 | `sdk/MIL/MilGrabber.Core/MilCamera.cs` | 單台相機的 MIL 資源、取像、參數、CLProtocol 與 telemetry wrapper |
