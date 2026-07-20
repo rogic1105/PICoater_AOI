@@ -163,6 +163,13 @@ details.subflow > .vflow { padding: 6px 0; }
   <code>.agents/skills/verify-flows/references/dvt-contract.md</code>。
   新版安裝與無腳本備援請直接開啟 <code>deploy/*-pc/manual-install.html</code>。
 </div>
+<div class="ok-box">
+  <strong>目前操作重點：</strong>
+  底部預設背景的資訊區顯示本機／儲存電腦剩餘空間、待傳量、最後本機存檔與最後遠端傳送時間。
+  每個問題會另外顯示一個獨立色塊：黃色＝容量、待傳或清理中；深橘＝產出失敗、資料捨棄、
+  設定重建或背景失敗；紅色只代表檢測異常或硬體／網路連線異常。問題解除後該色塊仍會保留，
+  操作員點擊該色塊只會關閉這一項，不會影響其他問題。
+</div>
 
 <div class="toolbar">
   <button onclick="expandAll()">全部展開</button>
@@ -341,7 +348,8 @@ details.subflow > .vflow { padding: 6px 0; }
     </div>
     <div class="note" style="margin-top:6px">
       ★ 失敗仍維持 PENDING：2、4、8、16、30 秒退避重試；寫入探針偵測遠端恢復時會立即喚醒 worker。<br>
-      ★ 程式重開會從 <code>.remote-copy-pending</code> 復原；Retention 看到待傳日期資料夾時必須跳過。
+      ★ 程式重開會從 <code>.remote-copy-pending</code> 復原；若低空間必須刪除最舊完整日，
+      會先取消該日的待傳標記再刪除，避免 worker 對已不存在的來源永久重試。
     </div>
   </div>
 
@@ -403,7 +411,7 @@ details.subflow > .vflow { padding: 6px 0; }
 
   <div class="ok-box">
     ✓ <code>StorageRetentionService</code> 以 <code>Interlocked.CompareExchange</code> 防止重入；
-    待遠端發布的日期資料夾會被保留。
+    低空間清理前會先取消該完整日的 durable pending；刪到尚未送達資料會留下深橘警示。
   </div>
 </div>
 
@@ -455,8 +463,8 @@ details.subflow > .vflow { padding: 6px 0; }
         <div class="v-branch-path">
           <span class="branch-label no">不足</span>
           <div class="v-arrow"></div>
-          <div class="box warn">找最舊且沒有待傳檔案的日期資料夾，刪除 .jpg / .bmp / .bin<br>
-            <span class="note">CSV 與遠端 pending 資料永不刪除；空目錄自動移除</span>
+          <div class="box warn">找最舊完整日期（永不刪今天），先取消該日待傳，再刪除整個日期資料夾<br>
+            <span class="note">同時刪除月份層的同日 CSV；圖片、curve bin、_ticks.csv、_curve_summary 都隨日期一起刪除</span>
           </div>
           <div class="v-arrow"></div>
           <div class="box cond">現在充足？</div>
@@ -503,7 +511,8 @@ details.subflow > .vflow { padding: 6px 0; }
   </div>
 
   <div class="ok-box">
-    ✓ RemoteCopyService 的 pending 路徑是 Retention 的保護來源；尚未確認送達的日期資料夾不參與清理。
+    ✓ RemoteCopyService 的 pending 是可恢復傳送清單；低空間時仍以「最舊完整日」為唯一刪除順序，
+    並先取消該日 pending。現在進行中的今天永遠不刪。
   </div>
 </div>
 

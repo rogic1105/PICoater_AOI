@@ -73,6 +73,9 @@ namespace AniloxRoll.Monitor.Forms
 
             int sampleSeconds = Math.Max(1, _settings.Recipe.BackgroundSampleSeconds);
             string bgDir = _settings.Storage.BackgroundPath;
+            string version = DateTime.Now.ToString("yyyyMMdd-HHmmssfff");
+            var newVersionFiles = new List<string>();
+            bool captureSucceeded = false;
 
             try
             {
@@ -120,24 +123,44 @@ namespace AniloxRoll.Monitor.Forms
                 // 平均並存檔
                 for (int i = 0; i < camCount; i++)
                 {
-                    if (frameCount[i] == 0 || accum[i] == null) continue;
-
                     var cam = cameras[i];
+                    if (!cam.IsConnected || cam.FrameWidth <= 0) continue;
+                    if (frameCount[i] == 0 || accum[i] == null)
+                        throw new IOException($"CAM{cam.CameraId} 沒有取得有效背景樣本");
+
                     float[] avgColMean = new float[cam.FrameWidth];
                     double invN = 1.0 / frameCount[i];
                     for (int c = 0; c < cam.FrameWidth; c++)
                         avgColMean[c] = (float)(accum[i][c] * invN);
 
-                    string binPath = Path.Combine(bgDir, CaptureFileNaming.BgBin(cam.FrameWidth, cam.CameraId));
+                    string binPath = Path.Combine(
+                        bgDir,
+                        CaptureFileNaming.BgVersionedBin(
+                            cam.FrameWidth, cam.CameraId, version));
                     SaveBackgroundBin(avgColMean, binPath, _settings.LightBrightness, (float)cam.CameraExposureTimeUs); // LightBrightness = light controller level (0-255)
+                    newVersionFiles.Add(binPath);
                 }
 
+                if (newVersionFiles.Count == 0)
+                    throw new IOException("沒有任何相機產生背景檔");
+
+                ActivateBackgroundVersion(bgDir, version);
                 // 載入到各相機
                 LoadBackgroundBins();
+                captureSucceeded = true;
+                _outputHealthService?.Resolve("BackgroundCaptureFailure");
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"背景採集失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                foreach (string path in newVersionFiles)
+                {
+                    try { if (File.Exists(path)) File.Delete(path); } catch { }
+                }
+                _outputHealthService?.Report(
+                    "BackgroundCaptureFailure",
+                    OutputHealthSeverity.OutputFault,
+                    "背景取得失敗，繼續使用上一組背景：" + ex.Message);
+                _outputHealthService?.Resolve("BackgroundCaptureFailure");
             }
             finally
             {
@@ -153,6 +176,12 @@ namespace AniloxRoll.Monitor.Forms
                 }
 
                 UpdateStandardBgSubLockState();
+            }
+
+            if (!captureSucceeded)
+            {
+                _autoStartGrabAfterBg = false;
+                return;
             }
 
             if (_autoStartGrabAfterBg)
@@ -172,7 +201,10 @@ namespace AniloxRoll.Monitor.Forms
         /// <summary>MCBF v2 格式存 background column mean（含光源等級與曝光時間）。</summary>
         private static void SaveBackgroundBin(float[] data, string path, int lightLevel, float exposureUs)
         {
-            using (var bw = new BinaryWriter(File.Open(path, FileMode.Create, FileAccess.Write)))
+            using (var stream = new FileStream(
+                path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096,
+                FileOptions.WriteThrough))
+            using (var bw = new BinaryWriter(stream))
             {
                 bw.Write(new byte[] { (byte)'M', (byte)'C', (byte)'B', (byte)'F' });
                 bw.Write(2);                    // version 2
@@ -181,7 +213,83 @@ namespace AniloxRoll.Monitor.Forms
                 bw.Write(exposureUs);           // camera exposure (µs)
                 bw.Write(data.Length);          // array_length
                 foreach (float v in data) bw.Write(v);
+                bw.Flush();
+                stream.Flush(true);
             }
+        }
+
+        private static void ActivateBackgroundVersion(string bgDir, string version)
+        {
+            string manifest = Path.Combine(bgDir, CaptureFileNaming.BgActiveManifest);
+            string temp = manifest + ".tmp-" + Guid.NewGuid().ToString("N");
+            try
+            {
+                byte[] bytes = System.Text.Encoding.UTF8.GetBytes(
+                    "{\r\n  \"Version\": \"" + version + "\"\r\n}");
+                using (var stream = new FileStream(
+                    temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096,
+                    FileOptions.WriteThrough))
+                {
+                    stream.Write(bytes, 0, bytes.Length);
+                    stream.Flush(true);
+                }
+                if (File.Exists(manifest))
+                    File.Replace(temp, manifest, null, true);
+                else
+                    File.Move(temp, manifest);
+            }
+            finally
+            {
+                try { if (File.Exists(temp)) File.Delete(temp); } catch { }
+            }
+        }
+
+        private static string ReadActiveBackgroundVersion(string bgDir)
+        {
+            try
+            {
+                string manifest = Path.Combine(bgDir, CaptureFileNaming.BgActiveManifest);
+                if (!File.Exists(manifest)) return null;
+                string json = File.ReadAllText(manifest, System.Text.Encoding.UTF8);
+                return SettingsStoreHelper.GetString(json, "Version", null);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static bool HasActiveBackgroundManifest(string bgDir)
+        {
+            return !string.IsNullOrWhiteSpace(bgDir) &&
+                   File.Exists(Path.Combine(bgDir, CaptureFileNaming.BgActiveManifest));
+        }
+
+        private static string ResolveBackgroundBinPath(
+            string bgDir, int width, int camId)
+        {
+            string version = ReadActiveBackgroundVersion(bgDir);
+            if (!string.IsNullOrWhiteSpace(version))
+            {
+                return Path.Combine(
+                    bgDir, CaptureFileNaming.BgVersionedBin(width, camId, version));
+            }
+            if (HasActiveBackgroundManifest(bgDir))
+                return Path.Combine(bgDir, "__invalid-active-background__.bin");
+            return Path.Combine(bgDir, CaptureFileNaming.BgBin(width, camId));
+        }
+
+        private static string ResolveBackgroundBinPathForPreview(
+            string bgDir, int camId)
+        {
+            string version = ReadActiveBackgroundVersion(bgDir);
+            if (string.IsNullOrWhiteSpace(version) && HasActiveBackgroundManifest(bgDir))
+                return null;
+            string pattern = string.IsNullOrWhiteSpace(version)
+                ? CaptureFileNaming.BgGlobForCam(camId)
+                : CaptureFileNaming.BgVersionedGlobForCam(camId, version);
+            string[] matches = Directory.GetFiles(bgDir, pattern);
+            return matches.Length == 0 ? null : matches[0];
         }
 
         /// <summary>
@@ -211,11 +319,23 @@ namespace AniloxRoll.Monitor.Forms
             string bgDir = _settings.Storage.BackgroundPath;
             if (!Directory.Exists(bgDir)) return;
 
+            if (HasActiveBackgroundManifest(bgDir) &&
+                string.IsNullOrWhiteSpace(ReadActiveBackgroundVersion(bgDir)))
+            {
+                _outputHealthService?.Report(
+                    "BackgroundManifestInvalid",
+                    OutputHealthSeverity.OutputFault,
+                    "背景啟用清單損壞，未切換背景");
+                return;
+            }
+            _outputHealthService?.Resolve("BackgroundManifestInvalid");
+
             foreach (var cam in _liveCameraManager.Cameras)
             {
                 if (cam.FrameWidth <= 0) continue;
 
-                string binPath = Path.Combine(bgDir, CaptureFileNaming.BgBin(cam.FrameWidth, cam.CameraId));
+                string binPath = ResolveBackgroundBinPath(
+                    bgDir, cam.FrameWidth, cam.CameraId);
                 float[] colMean = CurveBinFile.Load(binPath);
                 if (colMean != null && colMean.Length == cam.FrameWidth)
                 {
@@ -231,6 +351,11 @@ namespace AniloxRoll.Monitor.Forms
 
                         cam.PrecomputedColMean = pinned;
                     }
+                }
+                else if (cam.PrecomputedColMean != IntPtr.Zero)
+                {
+                    NativeMethods.TanukiCv_FreePinned(cam.PrecomputedColMean);
+                    cam.PrecomputedColMean = IntPtr.Zero;
                 }
             }
 
@@ -313,9 +438,9 @@ namespace AniloxRoll.Monitor.Forms
             for (int i = 0; i < CameraCount; i++)
             {
                 int camId = i + 1;
-                string[] matches = Directory.GetFiles(bgDir, CaptureFileNaming.BgGlobForCam(camId));
-                if (matches.Length == 0) continue;
-                float[] colMean = CurveBinFile.Load(matches[0]);
+                string binPath = ResolveBackgroundBinPathForPreview(bgDir, camId);
+                if (binPath == null) continue;
+                float[] colMean = CurveBinFile.Load(binPath);
                 if (colMean == null || colMean.Length == 0) continue;
                 int height = (i < grabHeights.Length && grabHeights[i] > 0) ? grabHeights[i] : 3000;
                 _liveCameraManager.PushStaticFrame(camId,
@@ -355,12 +480,50 @@ namespace AniloxRoll.Monitor.Forms
                 {
                     if (!cam.IsConnected) continue;
                     if (cam.FrameWidth <= 0) continue;
-                    string binPath = Path.Combine(bgDir, CaptureFileNaming.BgBin(cam.FrameWidth, cam.CameraId));
+                    string binPath = ResolveBackgroundBinPath(
+                        bgDir, cam.FrameWidth, cam.CameraId);
                     if (!File.Exists(binPath)) return false;
                 }
                 return true;
             }
-            return Directory.Exists(bgDir) && Directory.GetFiles(bgDir, CaptureFileNaming.BgGlob).Length > 0;
+            if (!Directory.Exists(bgDir)) return false;
+            string activeVersion = ReadActiveBackgroundVersion(bgDir);
+            if (string.IsNullOrWhiteSpace(activeVersion) &&
+                HasActiveBackgroundManifest(bgDir))
+            {
+                _outputHealthService?.Report(
+                    "BackgroundManifestInvalid",
+                    OutputHealthSeverity.OutputFault,
+                    "背景啟用清單損壞，無法確認有效背景");
+                return false;
+            }
+            _outputHealthService?.Resolve("BackgroundManifestInvalid");
+            return !string.IsNullOrWhiteSpace(activeVersion)
+                ? Directory.GetFiles(
+                    bgDir, CaptureFileNaming.BgVersionedGlobForCam(1, activeVersion)).Length > 0
+                : Directory.GetFiles(bgDir, CaptureFileNaming.BgGlob).Length > 0;
+        }
+
+        private void CleanupInactiveBackgroundVersions()
+        {
+            string bgDir = _settings?.Storage?.BackgroundPath;
+            if (string.IsNullOrWhiteSpace(bgDir) || !Directory.Exists(bgDir)) return;
+
+            string activeVersion = ReadActiveBackgroundVersion(bgDir);
+            if (string.IsNullOrWhiteSpace(activeVersion)) return;
+
+            foreach (string path in Directory.GetFiles(bgDir, CaptureFileNaming.BgGlob))
+            {
+                string name = Path.GetFileNameWithoutExtension(path);
+                if (name.EndsWith("_" + activeVersion, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                try { File.Delete(path); }
+                catch (Exception ex)
+                {
+                    Trace.TraceWarning(
+                        $"[BackgroundRetention] delete failed {path}: {ex.Message}");
+                }
+            }
         }
     }
 }

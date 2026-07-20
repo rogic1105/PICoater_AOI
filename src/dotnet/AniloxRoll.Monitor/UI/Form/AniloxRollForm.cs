@@ -115,6 +115,11 @@ namespace AniloxRoll.Monitor.Forms
         private StorageRetentionService _retentionService;
         private RemoteCopyService _remoteCopyService;
         private StorageAppHeartbeatService _storageHeartbeatService;
+        private LogRetentionService _logRetentionService;
+        private OutputHealthService _outputHealthService;
+        private readonly Dictionary<string, ToolStripStatusLabel> _outputHealthLabels =
+            new Dictionary<string, ToolStripStatusLabel>(StringComparer.OrdinalIgnoreCase);
+        private long _lastLocalSaveUtcTicks;
         private int _completedGrabCount;
         private DateTime _lastGrabEventTime;
 
@@ -150,6 +155,7 @@ namespace AniloxRoll.Monitor.Forms
         private static readonly Color IecGreen    = Color.FromArgb(56, 142, 60);
         private static readonly Color IecBlue     = Color.FromArgb(0, 122, 204);
         private static readonly Color IecYellow   = Color.FromArgb(249, 168, 37);
+        private static readonly Color IecDeepOrange = Color.FromArgb(230, 81, 0);
         private static readonly Color IecRed      = Color.FromArgb(198, 40, 40);
         private static readonly Color IecGray     = Color.FromArgb(117, 117, 117);
         private static readonly Color IecDarkGray = Color.FromArgb(60, 60, 60);
@@ -181,6 +187,7 @@ namespace AniloxRoll.Monitor.Forms
             try { _cleanupFlagWatcher?.Dispose(); _cleanupFlagWatcher = null; } catch { }  // M3: 10 秒輪詢提前停
             try { _storageHeartbeatService?.Dispose(); _storageHeartbeatService = null; } catch { }
             try { _reviewDisplayManager?.Dispose(); _reviewDisplayManager = null; } catch { }  // #13 同源顯示（內含 33ms timer）
+            try { SettingsStoreHelper.IssueRaised -= HandleSettingsStoreIssue; } catch { }
             try { System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged; } catch { }
         }
 
@@ -303,9 +310,20 @@ namespace AniloxRoll.Monitor.Forms
             // AppRole 來自 app-mode.json（外部檔），啟動時同步進 InspectionSettings 記憶體；
             // 後續若使用者透過 PG 改 AppRole，會走 Hub 正常管線。
             _settings.AppRole = _appMode?.Role ?? MachineRole.Inspection;
+            // StorageMinFreeGB 是部署 bootstrap；Storage role 的 PropertyGrid 必須顯示並編輯
+            // 實際生效值，避免畫面與 app-mode 兩份數字分歧。
+            if (_appMode?.Role == MachineRole.Storage && _appMode.StorageMinFreeGB > 0)
+                _settings.Storage.LocalMinFreeGB = _appMode.StorageMinFreeGB;
             // L2 SettingsHub：所有 setting 變更走 Changed event，OnSettingChanged 接管 Apply* 副作用。
             _settingsHub = new AniloxRoll.Monitor.Settings.Services.SettingsHub(_settings);
             _settingsHub.Changed += OnSettingChanged;
+            _outputHealthService = new OutputHealthService();
+            _outputHealthService.Changed += snapshot =>
+                SafeBeginInvoke(() => ApplyOutputHealthSnapshot(snapshot));
+            InitializeOutputHealthUi();
+            foreach (SettingsStoreIssue issue in SettingsStoreHelper.DrainIssues())
+                HandleSettingsStoreIssue(issue);
+            SettingsStoreHelper.IssueRaised += HandleSettingsStoreIssue;
             // FSM Action Logger（runtime flag，預設 Off 零 overhead）
             UiActionLogger.Init(_settings);
             UiActionLogger.Enabled = _settings.DebugUiActionLog;
@@ -425,13 +443,52 @@ namespace AniloxRoll.Monitor.Forms
             }
             _inspectionLogService = new InspectionLogService(
                 () => _settings?.CaptureRootPath ?? string.Empty);
+            _inspectionLogService.WriteFailed += error =>
+                _outputHealthService?.Report(
+                    "InspectionCsvWriteFailure",
+                    OutputHealthSeverity.OutputFault,
+                    "檢測 CSV 寫入失敗：" + error);
+            _inspectionLogService.WriteSucceeded += () =>
+                _outputHealthService?.Resolve("InspectionCsvWriteFailure");
+            _logRetentionService = new LogRetentionService(
+                () => _settings?.Storage?.LogsPath ?? string.Empty,
+                () => _settings?.Storage?.LogRetentionHours ?? InspectionDefaults.LogRetentionHours);
+            _logRetentionService.CleanupFailed += error =>
+                _outputHealthService?.Report(
+                    "LogCleanupFailure",
+                    OutputHealthSeverity.OutputFault,
+                    "Log 清理失敗：" + error);
+            _logRetentionService.CleanupSucceeded += () =>
+                _outputHealthService?.Resolve("LogCleanupFailure");
+
+            if (_appMode?.Role != MachineRole.Storage)
+            {
+                _remoteCopyService = new RemoteCopyService(
+                    getRemotePath: () => _settings?.RemotePath ?? string.Empty,
+                    getLocalRoot:  () => _settings?.CaptureRootPath ?? string.Empty);
+                _remoteCopyService.PendingPersistenceFailed += error =>
+                    _outputHealthService?.Report(
+                        "RemoteQueueWriteFailure",
+                        OutputHealthSeverity.OutputFault,
+                        "待傳清單寫入失敗：" + error);
+                _remoteCopyService.PendingPersistenceRecovered += () =>
+                    _outputHealthService?.Resolve("RemoteQueueWriteFailure");
+                if (_remoteCopyService.QuarantinedMarkerCount > 0)
+                {
+                    _outputHealthService?.Report(
+                        "RemotePendingQuarantined",
+                        OutputHealthSeverity.OutputFault,
+                        $"待傳清單損壞，已隔離 {_remoteCopyService.QuarantinedMarkerCount} 筆");
+                    _outputHealthService?.Resolve("RemotePendingQuarantined");
+                }
+            }
 
             // 循環儲存（事件驅動：grab 結束 / watchdog / 每 10 grab / 啟動時各觸發一次）
             _retentionService = new StorageRetentionService(
                 getRootPath:     () => GetStorageRetentionRoot(),
                 getMinFreeBytes: () => GetStorageMinFreeBytes(),
-                shouldPreserveDayFolder: path =>
-                    _remoteCopyService?.HasPendingFilesUnder(path) == true);
+                cancelPendingForDay: CancelRemoteCopyForDay);
+            _retentionService.OnCleanupCompleted += HandleRetentionCleanupCompleted;
 
             if (_appMode?.Role == MachineRole.Storage)
             {
@@ -443,16 +500,11 @@ namespace AniloxRoll.Monitor.Forms
                 _storageHeartbeatService = new StorageAppHeartbeatService(
                     () => _appMode.StorageMachineConfigFolder,
                     () => _appMode.StorageMachineDataPath);
-                _retentionService.OnCleanupCompleted += result =>
-                    _storageHeartbeatService?.RecordCleanup(result.FreedBytes);
                 _storageHeartbeatService.Start();
             }
             else
             {
                 // Inspection 模式：遠端複製 + IO + 光源
-                _remoteCopyService = new RemoteCopyService(
-                    getRemotePath: () => _settings?.RemotePath ?? string.Empty,
-                    getLocalRoot:  () => _settings?.CaptureRootPath ?? string.Empty);
                 // 初始化順序對齊狀態列由左至右（相機→儲存→光源→IO）：光源先於 IO，
                 // IO（快速 TCP）最後啟動，避免它最先亮綠讓人誤以為系統已就緒。
                 InitLightController();
@@ -498,11 +550,26 @@ namespace AniloxRoll.Monitor.Forms
             }
             lblCamCount.Text = $"相機: {connected}/{expected}";
             if (connected >= expected)
+            {
                 lblCamCount.BackColor = IecGreen;   // 綠：全連
+                _outputHealthService?.Resolve("CameraConnection");
+            }
             else if (connected > 0)
+            {
                 lblCamCount.BackColor = IecYellow;  // 黃：部分連線
+                _outputHealthService?.Report(
+                    "CameraConnection",
+                    OutputHealthSeverity.Critical,
+                    $"相機僅連線 {connected}/{expected}");
+            }
             else
+            {
                 lblCamCount.BackColor = IecRed;   // 紅：全斷
+                _outputHealthService?.Report(
+                    "CameraConnection",
+                    OutputHealthSeverity.Critical,
+                    "相機全部離線");
+            }
         }
 
         /// <summary>UI 層：Presenter、Helper、PropertyGrid、Canvas 事件。</summary>
@@ -708,7 +775,18 @@ namespace AniloxRoll.Monitor.Forms
                 SafeBeginInvoke(() => HandleGrabLimitElapsed(seconds)));
             _liveCameraManager.SetCaptureSettings(_settings);
             UpdateRowChartPitch();
-            _liveCameraManager.OnFilesSaved = files => _remoteCopyService?.EnqueueFiles(files);
+            _liveCameraManager.OnFilesSaved = (camId, files) =>
+            {
+                System.Threading.Interlocked.Exchange(
+                    ref _lastLocalSaveUtcTicks, DateTime.UtcNow.Ticks);
+                _remoteCopyService?.EnqueueFiles(files);
+                _outputHealthService?.Resolve("CaptureWriteFailure.CAM" + camId);
+            };
+            _liveCameraManager.OnCaptureSaveFailed = (camId, error) =>
+                _outputHealthService?.Report(
+                    "CaptureWriteFailure.CAM" + camId,
+                    OutputHealthSeverity.OutputFault,
+                    $"CAM{camId} 存檔失敗：{error}");
             _liveCameraManager.OnInspectionResult += OnCameraInspectionResult;
             btnLiveGetBackground.Click += btnLiveGetBackground_Click;
             btnLiveViewBackground.Click += btnLiveViewBackground_Click;
@@ -747,6 +825,7 @@ namespace AniloxRoll.Monitor.Forms
                 _inspectionService?.Dispose();
                 _lightController?.Dispose();   _lightController = null;
                 _storageHeartbeatService?.Dispose(); _storageHeartbeatService = null;
+                _logRetentionService?.Dispose(); _logRetentionService = null;
                 _retentionService?.Dispose();  _retentionService = null;
                 _remoteCopyService?.Dispose(); _remoteCopyService = null;
             };
@@ -1038,6 +1117,7 @@ namespace AniloxRoll.Monitor.Forms
                 HandleDataStatsSettingsChanged(c.Name);            // Data 曲線/統計重畫（僅檢測參數變更才跑，避免無關設定閃圖；Data.cs）
                 HandleLightSettingsChanged(c.Name);                // 光源（HardwareStatus.cs）
                 HandleIoSettingsChanged(c.Name);                   // IO IP/Port/型號/啟用 → 重啟 controller 立即生效（HardwareStatus.cs）
+                HandleStorageSettingsChanged(c.Name);              // 預留空間 / log 保存（HardwareStatus.cs）
                 await HandleEnhanceSettingsChanged(c.Name);        // 監控/回顧強化（Live.cs）
                 HandleMuraPauseSettingsChanged(c.Name);            // IO 檢測暫停 LED（HardwareStatus.cs）
                 HandleAlgorithmSettingsChanged(c.Name);            // 去背演算法（Background.cs）

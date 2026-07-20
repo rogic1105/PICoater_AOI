@@ -26,7 +26,9 @@ namespace AniloxRoll.Monitor.Core.Data
         /// <summary>Storage 模式：循環儲存的根目錄；空字串時 fallback 至 CaptureRootPath。</summary>
         public string StorageMachineDataPath { get; set; } = AppModeDefaults.StorageMachineDataPath;
 
-        /// <summary>Storage 模式專用的資料磁碟預留空間；Inspection 模式仍使用 StorageSettings.LocalMinFreeGB。</summary>
+        /// <summary>
+        /// Storage 部署的預留空間 bootstrap；執行時與 PropertyGrid 的 LocalMinFreeGB 同步。
+        /// </summary>
         public int StorageMinFreeGB { get; set; } = AppModeDefaults.StorageMinFreeGB;
 
         public static AppModeConfig Load()

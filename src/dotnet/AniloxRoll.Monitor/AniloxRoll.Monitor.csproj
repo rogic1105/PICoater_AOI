@@ -137,6 +137,8 @@
     <Compile Include="Services\InspectionMuraProfileRepository.cs" />
     <Compile Include="Services\SingleGrabCurveSummaryStore.cs" />
     <Compile Include="Services\StorageAppHeartbeatService.cs" />
+    <Compile Include="Services\OutputHealthService.cs" />
+    <Compile Include="Services\LogRetentionService.cs" />
     <Compile Include="Services\HessianRescaleHelper.cs" />
     <Compile Include="ImageProcessing\BatchInspectionService.cs" />
     <Compile Include="ImageProcessing\InspectionEngine.cs" />

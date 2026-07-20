@@ -6,14 +6,13 @@ using System.IO;
 namespace StorageBridge.Core
 {
     /// <summary>
-    /// 循環儲存管理：監控磁碟可用空間，低於門檻時從最舊的日資料夾開始刪除圖片。
-    /// CSV 永不刪除。
+    /// 循環儲存管理：監控磁碟可用空間，低於門檻時刪除最舊完整一天的全部產出。
     /// </summary>
     public class StorageRetentionService : IDisposable
     {
         private readonly Func<string> _getRootPath;
         private readonly Func<long>   _getMinFreeBytes;
-        private readonly Func<string, bool> _shouldPreserveDayFolder;
+        private readonly Func<string, int> _cancelPendingForDay;
 
         private volatile int _running;
         private bool _invalidThresholdReported;
@@ -33,11 +32,11 @@ namespace StorageBridge.Core
         public StorageRetentionService(
             Func<string> getRootPath,
             Func<long>   getMinFreeBytes,
-            Func<string, bool> shouldPreserveDayFolder = null)
+            Func<string, int> cancelPendingForDay = null)
         {
             _getRootPath = getRootPath;
             _getMinFreeBytes = getMinFreeBytes;
-            _shouldPreserveDayFolder = shouldPreserveDayFolder;
+            _cancelPendingForDay = cancelPendingForDay;
         }
 
         /// <summary>觸發一次清理（事件驅動：grab 結束 / watchdog / 每 10 grab / 啟動時）。</summary>
@@ -82,25 +81,30 @@ namespace StorageBridge.Core
 
                 int deletedDayFolders = 0;
                 long deletedBytes = 0;
+                int canceledPendingFiles = 0;
 
                 foreach (var dayFolder in dayFolders)
                 {
                     (freeBytes, _) = GetDriveFreeSpace(root);
                     if (freeBytes >= minFreeBytes) break;
 
-                    if (_shouldPreserveDayFolder?.Invoke(dayFolder.Path) == true)
+                    if (dayFolder.Date >= DateTime.Today)
                     {
-                        Trace.TraceWarning(
-                            $"[StorageRetention] Preserve pending remote-copy folder: {dayFolder.Path}");
+                        Trace.TraceInformation(
+                            $"[StorageRetention] Preserve active day folder: {dayFolder.Path}");
                         continue;
                     }
 
-                    long freed = DeleteDayFolderImages(dayFolder.Path);
+                    int canceledForDay =
+                        _cancelPendingForDay?.Invoke(dayFolder.Path) ?? 0;
+                    canceledPendingFiles += canceledForDay;
+
+                    long freed = DeleteCompleteDay(dayFolder.Path);
                     if (freed > 0)
                     {
                         deletedBytes += freed;
                         deletedDayFolders++;
-                        TryRemoveEmptyFolder(dayFolder.Path);
+                        TryRemoveEmptyParents(dayFolder.Path);
                     }
                 }
 
@@ -114,7 +118,10 @@ namespace StorageBridge.Core
                     DeletedDayFolders = deletedDayFolders,
                     FreedBytes = deletedBytes,
                     RemainingBytes = LastScannedTotalBytes,
-                    MinFreeBytes = minFreeBytes
+                    MinFreeBytes = minFreeBytes,
+                    AvailableFreeBytes = freeBytes,
+                    CanceledPendingFiles = canceledPendingFiles,
+                    ThresholdSatisfied = freeBytes >= minFreeBytes
                 };
 
                 Trace.TraceInformation(
@@ -168,54 +175,65 @@ namespace StorageBridge.Core
 
         // ── 刪除邏輯 ────────────────────────────────────────────────────
 
-        /// <summary>刪除日資料夾中的圖片/bin 檔案，保留 CSV。回傳釋放的 bytes。</summary>
-        private static long DeleteDayFolderImages(string dayDir)
+        /// <summary>刪除日期資料夾與月份層同日期 CSV，回傳實際釋放的 bytes。</summary>
+        private static long DeleteCompleteDay(string dayDir)
         {
-            long freedBytes = 0;
-            string[] extensions = { ".jpg", ".bmp", ".bin", ".mcsf" };
+            string monthDir = Path.GetDirectoryName(dayDir);
+            string dailyCsv = monthDir == null
+                ? null
+                : Path.Combine(monthDir, Path.GetFileName(dayDir) + ".csv");
+            long before = GetDirectoryBytes(dayDir) + GetFileBytes(dailyCsv);
 
-            foreach (string file in SafeGetFiles(dayDir, "*.*", SearchOption.AllDirectories))
+            try
             {
-                string ext = Path.GetExtension(file).ToLowerInvariant();
-                bool tickSidecar = string.Equals(
-                    Path.GetFileName(file), "_ticks.csv", StringComparison.OrdinalIgnoreCase);
-                if (!tickSidecar && Array.IndexOf(extensions, ext) < 0) continue;
-
-                try
-                {
-                    long size = new FileInfo(file).Length;
-                    File.Delete(file);
-                    freedBytes += size;
-                }
-                catch (Exception ex)
-                {
-                    Trace.TraceWarning($"[StorageRetention] Delete failed {file}: {ex.Message}");
-                }
+                if (Directory.Exists(dayDir)) Directory.Delete(dayDir, true);
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning($"[StorageRetention] Delete day folder failed {dayDir}: {ex.Message}");
             }
 
-            return freedBytes;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(dailyCsv) && File.Exists(dailyCsv))
+                    File.Delete(dailyCsv);
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning($"[StorageRetention] Delete daily CSV failed {dailyCsv}: {ex.Message}");
+            }
+
+            long after = GetDirectoryBytes(dayDir) + GetFileBytes(dailyCsv);
+            return Math.Max(0, before - after);
         }
 
-        private static void TryRemoveEmptyFolder(string dayDir)
+        private static long GetDirectoryBytes(string path)
+        {
+            long total = 0;
+            foreach (string file in SafeGetFiles(path, "*.*", SearchOption.AllDirectories))
+                total += GetFileBytes(file);
+            return total;
+        }
+
+        private static long GetFileBytes(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return 0;
+            try { return File.Exists(path) ? new FileInfo(path).Length : 0; }
+            catch { return 0; }
+        }
+
+        private static void TryRemoveEmptyParents(string dayDir)
         {
             try
             {
-                string[] children = Directory.GetDirectories(dayDir, "*", SearchOption.AllDirectories);
-                Array.Sort(children, (left, right) => right.Length.CompareTo(left.Length));
-                foreach (string child in children)
-                {
-                    if (Directory.GetFileSystemEntries(child).Length == 0)
-                        Directory.Delete(child, false);
-                }
-                if (Directory.GetFileSystemEntries(dayDir).Length > 0) return;
-                Directory.Delete(dayDir, false);
-
                 string monthDir = Path.GetDirectoryName(dayDir);
-                if (monthDir != null && Directory.GetFileSystemEntries(monthDir).Length == 0)
+                if (monthDir != null && Directory.Exists(monthDir) &&
+                    Directory.GetFileSystemEntries(monthDir).Length == 0)
                 {
                     Directory.Delete(monthDir, false);
                     string yearDir = Path.GetDirectoryName(monthDir);
-                    if (yearDir != null && Directory.GetFileSystemEntries(yearDir).Length == 0)
+                    if (yearDir != null && Directory.Exists(yearDir) &&
+                        Directory.GetFileSystemEntries(yearDir).Length == 0)
                         Directory.Delete(yearDir, false);
                 }
             }
@@ -287,5 +305,8 @@ namespace StorageBridge.Core
         public long FreedBytes { get; set; }
         public long RemainingBytes { get; set; }
         public long MinFreeBytes { get; set; }
+        public long AvailableFreeBytes { get; set; }
+        public int CanceledPendingFiles { get; set; }
+        public bool ThresholdSatisfied { get; set; }
     }
 }

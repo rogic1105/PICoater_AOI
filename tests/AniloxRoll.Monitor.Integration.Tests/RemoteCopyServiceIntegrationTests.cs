@@ -86,6 +86,49 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void Restart_WithCorruptPendingMarker_MovesMarkerToQuarantine()
+        {
+            string pendingDirectory = Path.Combine(_localRoot, ".remote-copy-pending");
+            Directory.CreateDirectory(pendingDirectory);
+            string corruptMarker = Path.Combine(pendingDirectory, "broken.pending");
+            File.WriteAllText(corruptMarker, "not-a-valid-pending-marker");
+
+            using (var service = new RemoteCopyService(() => _remoteRoot, () => _localRoot))
+            {
+                Assert.That(service.QuarantinedMarkerCount, Is.EqualTo(1));
+                Assert.That(service.QueueCount, Is.Zero);
+            }
+
+            Assert.That(File.Exists(corruptMarker), Is.False);
+            string quarantine = Path.Combine(pendingDirectory, "quarantine");
+            Assert.That(Directory.GetFiles(quarantine, "*broken.pending"), Has.Length.EqualTo(1));
+        }
+
+        [Test]
+        public void EnqueueFile_RemoteHasStalePart_CleansPartAndRecordsLastSuccess()
+        {
+            string destinationDirectory = Path.Combine(
+                _remoteRoot, "2026", "202607", "20260715");
+            Directory.CreateDirectory(destinationDirectory);
+            string stalePart = Path.Combine(destinationDirectory, "capture.bin.part-orphan");
+            File.WriteAllText(stalePart, "incomplete");
+            File.SetLastWriteTimeUtc(stalePart, DateTime.UtcNow.AddDays(-2));
+            string source = CreateCaptureFile("capture.bin", "payload");
+
+            using (var service = new RemoteCopyService(() => _remoteRoot, () => _localRoot))
+            {
+                service.EnqueueFile(source);
+                WaitUntil(() => service.QueueCount == 0, 5000, "copy and stale part cleanup");
+
+                Assert.That(File.Exists(stalePart), Is.False);
+                Assert.That(service.LastSuccessfulCopyUtc, Is.Not.Null);
+                Assert.That(
+                    service.LastSuccessfulCopyUtc.Value,
+                    Is.GreaterThan(DateTime.UtcNow.AddMinutes(-1)));
+            }
+        }
+
+        [Test]
         public void ProbeRemoteWritable_RequiresUsableShareAndLeavesNoProbeFile()
         {
             string currentRemote = Path.Combine(_tempRoot, "missing");
@@ -134,7 +177,7 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
-        public void Retention_PendingRemoteCopy_PreservesSourceUntilPublished()
+        public void Retention_LowSpace_DeletesCompleteOldestDayAndCancelsPending()
         {
             string blockedPath = CreateBlockedRemotePath();
             string currentRemote = blockedPath;
@@ -151,26 +194,30 @@ namespace AniloxRoll.Monitor.Tests
 
             using (var service = new RemoteCopyService(() => currentRemote, () => _localRoot))
             {
-                service.EnqueueFile(source);
-                WaitUntil(() => service.QueueCount == 1, 2000, "pending source protection");
+                service.EnqueueFiles(new[] { source, dailyCsv });
+                WaitUntil(() => service.QueueCount == 2, 2000, "pending sources");
 
                 var retention = new StorageRetentionService(
                     () => _localRoot,
                     () => GetCleanupTriggerThreshold(_localRoot),
-                    service.HasPendingFilesUnder);
+                    dayDirectoryToDelete =>
+                    {
+                        int canceled = service.CancelPendingFilesUnder(dayDirectoryToDelete);
+                        string month = Path.GetDirectoryName(dayDirectoryToDelete);
+                        string csv = Path.Combine(
+                            month, Path.GetFileName(dayDirectoryToDelete) + ".csv");
+                        if (service.CancelPendingFile(csv)) canceled++;
+                        return canceled;
+                    });
                 retention.RunCleanup();
-                Assert.That(File.Exists(source), Is.True, "pending source was deleted");
-
-                Directory.CreateDirectory(_remoteRoot);
-                currentRemote = _remoteRoot;
-                Assert.That(service.ProbeRemoteWritable(), Is.True);
-                WaitUntil(() => service.QueueCount == 0, 5000, "protected source publication");
-
-                retention.RunCleanup();
-                Assert.That(File.Exists(source), Is.False, "published source was not eligible for cleanup");
+                Assert.That(File.Exists(source), Is.False, "oldest-day source was retained");
                 Assert.That(File.Exists(summary), Is.False, "derived curve summary was retained");
                 Assert.That(File.Exists(ticks), Is.False, "orphaned tick sidecar was retained");
-                Assert.That(File.Exists(dailyCsv), Is.True, "daily inspection CSV must be retained");
+                Assert.That(File.Exists(dailyCsv), Is.False, "daily inspection CSV was retained");
+                Assert.That(service.QueueCount, Is.Zero);
+                Assert.That(service.PendingBytes, Is.Zero);
+                Assert.That(FindPendingMarkers(), Is.Empty);
+                Assert.That(retention.LastCleanedDayFolders, Is.EqualTo(1));
             }
         }
 

@@ -505,9 +505,14 @@ btnLiveGetBackground_Click@AniloxRollForm.Background.cs      intent 行 ui:【�
  │   → ToggleGrab@LiveCameraManager.cs ＋ UpdateGrabButton(true)   ← 借用現有 grab（啟停包夾）
  ├ 採集迴圈（await Task.Delay(100) × BackgroundSampleSeconds，UI 執行緒非阻塞、按鈕倒數）
  │   └ per-cam TryComputeColumnMean@AniloxCamera.cs → accum 累加
- ├ 平均 → SaveBackgroundBin@AniloxRollForm.Background.cs（MCBF v2：含 light level＋exposure）
- ├ LoadBackgroundBins@AniloxRollForm.Background.cs（bin → TanukiCv_AllocPinned → cam.PrecomputedColMean）
+ ├ 產生 version=`yyyyMMdd-HHmmssfff`
+ ├ per-cam 平均 → SaveBackgroundBin@AniloxRollForm.Background.cs
+ │   → `bg_{width}_{cam}_{version}.bin`（MCBF v2；CreateNew＋WriteThrough＋Flush）
+ ├ 全部在線相機成功 → ActivateBackgroundVersion 原子替換 `active-background.json`
+ ├ LoadBackgroundBins@AniloxRollForm.Background.cs（manifest 指向的同一版 bin → TanukiCv_AllocPinned → cam.PrecomputedColMean）
  │   ← pinned 生命週期：舊 buffer 先 FreePinned 再換新（防漏）
+ ├ 任一相機失敗 → 刪本次 version 檔、manifest 不動、上一組背景繼續生效
+ │   → OutputHealth `BackgroundCaptureFailure` 深橘提示
  ├ finally：ToggleGrab 停止（=F3）＋ LightTurnOff ＋ UpdateStandardBgSubLockState@AniloxRollForm.Background.cs
  ├（_autoStartGrabAfterBg）FreeCameras → btnLiveGrab_Click（IO 觸發自動回抓）→ return
  └ 尾端自動預覽：btnLiveViewBackground_Click（直呼）
@@ -520,7 +525,8 @@ btnLiveViewBackground_Click@AniloxRollForm.Background.cs     intent 行 ui:【�
  │   └＝靜音鍵 _bgPreviewOverride=true → ApplyMainDisplayMode()   ⚠ 只改狀態→呼閘門，不自建/拆 view
  │       閘門 BgPreview 分支：DisableWaterfall＋EnsureImageDisplay＋ApplyBgPreviewLayout
  │                            （合圖未啟用→用設定 start/ops 餵佈局）
- ├ per-cam Load@CurveBinFile.cs → ExpandColMeanToGray@AniloxRollForm.Live.cs
+ ├ ReadActiveBackgroundVersion → per-cam Load@CurveBinFile.cs（同一 active version）
+ │   → ExpandColMeanToGray@AniloxRollForm.Live.cs
  │   → PushStaticFrame@LiveDisplayCoordinator.cs（與 grab 幀同一條 PushFrame 路＝合圖/縮圖/縮放/overlay 全免費）
  └（pushed==0）ExitBackgroundPreview＋MessageBox
 清除：ClearBackgroundPreview@AniloxRollForm.Background.cs＝ExitBackgroundPreview
@@ -588,9 +594,10 @@ Tn: ⚠ 儲存程式 heartbeat 未回報 reason=…
   move/replace 成正式檔名；正式發布且 pending 標記成功刪除後才算完成。
 - **可變側車不漏尾筆**：`_ticks.csv` 追加期間若同一路徑已 pending/in-flight，必須標記 dirty；首輪發布後
   保留 durable marker 並再排一輪，直到遠端內容等於最新本機 snapshot 才可刪 marker。
-- **Retention 保護**：本機日期資料夾含任何 pending 遠端檔案時必須跳過，禁止為了空間清理刪除
-  尚未送達的來源檔。可刪集合必須包含日期資料夾下遞迴的 jpg/bmp/bin、`_ticks.csv` 與
-  `_curve_summary\*.mcsf`；月份層 `yyyyMMdd.csv` 永遠保留。
+- **Retention 以可持續寫入優先**：空間低於預留值時，檢測與儲存電腦都刪除「最舊的完整一天」；
+  今天的資料不得刪。刪除集合＝日期資料夾內全部影像/bin/`_ticks.csv`/`_curve_summary`
+  ＋月份層同日期 `yyyyMMdd.csv`；任一低空間清理成功後，非 active 的舊背景版本也列入候選。若該日仍有 pending 遠端檔案，必須先取消並移除
+  對應 durable marker，再刪檔，禁止 worker 對已刪來源永久重試。刪到未送達資料須留下深橘狀態與 log。
 - **光源釋放**：SerialPort ownership 必須先在 lock 內從 `_port` 移除，再對 detached instance 單次 Dispose；
   全天 crash log 不得新增 `SerialStream.Finalize → ObjectDisposedException（已關閉安全控制代碼）`。
 - **光源重連防呆**：開機首次偵測 `AutoDetect` 全 port；離線後每 2 秒先 `TryConnect` 設定 COM，
@@ -712,20 +719,84 @@ CameraFrameSaver.SaveCapture
 
 StorageRetentionService.RunCleanup
  → Storage role 使用 app-mode `StorageMinFreeGB`；Inspection role 使用 `LocalMinFreeGB`
- → minFree >= volumeTotal → `Cleanup skipped... No files were deleted`（狀態邊緣單發）
+ → Inspection PropertyGrid 輸入 `LocalMinFreeGB >= volumeTotal` → 自動調整為 `floor(totalGB)-1`，
+   深橘提示保留到使用者確認，不跳 MessageBox
+ → Storage role 的 app-mode `minFree >= volumeTotal` → `Cleanup skipped... No files were deleted`（狀態邊緣單發）
  → free < minFree < volumeTotal → 最舊日期資料夾優先
- → pending 日期跳過
- → 遞迴刪 jpg/bmp/bin + `_ticks.csv` + `_curve_summary/*.mcsf`
- → 月份層 `yyyyMMdd.csv` 保留
+ → 今天跳過，只處理已結束日期
+ → 取消該日 pending marker/worker 任務
+ → 刪除整個日期資料夾＋月份層 `yyyyMMdd.csv`
+ → 空月份/年份資料夾一併移除
 
 容量狀態列（`lblInfo`，不顯示游標座標）
  → Storage role：TelemetryTimer → DriveInfo(`StorageMachineDataPath`) → `儲存電腦：剩餘/總容量`
  → Inspection role 本機：TelemetryTimer → DriveInfo(`CaptureRootPath`) → `檢測電腦：剩餘/總容量`
  → Inspection role 遠端：儲存 probe → heartbeat FreeBytes/TotalBytes → `儲存電腦：剩餘/總容量`
+ → Inspection role 待傳：`RemoteCopyService.PendingBytes/QueueCount` → `待傳：N GB（M 檔）`
+ → Inspection role 成功時間：`OnFilesSaved`／`RemoteCopyService.LastSuccessfulCopyUtc`
+   → `最近存檔 HH:mm:ss`／`最近遠傳 HH:mm:ss`
  → heartbeat/磁碟不可讀 → 對應電腦顯示`無法讀取`
 ```
 低磁碟整合測試使用隔離 volume/root，將門檻設為高於該測試磁碟目前可用空間、但低於磁碟總容量即可直接觸發，
 不必真的填滿磁碟；禁止對正式 Captures 執行。
+
+### C4 產出健康度與底部狀態列
+
+`OutputHealthService` 是產出健康度唯一狀態機；writer、remote-copy、retention、設定與背景流程只回報事件，
+不得各自在 UI 判斷顏色。`lblInfo` 使用 StatusStrip 預設背景，只顯示容量、待傳量與最近成功時間；每個未確認問題各自
+對應一個 `ToolStripStatusLabel`，顯示 service 的完整 incident 清單，禁止只顯示最高嚴重度而藏掉其他問題。
+
+| Current state | Event | Next state | Action |
+|---|---|---|---|
+| 任意 | 檢測／硬體／網路連線異常 | 紅色 Critical | 繼續可執行流程；顯示原因 |
+| Normal/Notice | 本機寫檔失敗、資料被捨棄、設定自動重建、背景取得失敗 | 深橘 OutputFault | 保留可用舊資料或預設值並繼續；顯示原因 |
+| Normal | 待傳超過 20 GB、接近預留空間、正在清理 | 黃色 Notice | 繼續抓取／重試／清理 |
+| 任意 | 新問題或既有問題變更 | 各問題維持自身狀態 | 每個 code 一個獨立 label；嚴重度高者排前 |
+| 異常 active | 使用者點該問題 label | 不變 | 未解決問題不得被確認清掉 |
+| 異常 resolved | 使用者點該問題 label | 只移除該 code | 其他 active／resolved label 不受影響 |
+| 任意 | 問題恢復 | 同色但 resolved 待確認 | 保留提示，直到使用者看到並點選 |
+
+顏色語意固定：預設背景＝資訊區、黃＝容量／積壓警示、深橘＝產出失敗或資料捨棄、紅＝檢測異常或硬體／網路連線異常。
+產出問題不停止抓取、不觸發 IO 異常；歷史細節交給 log。
+
+**log-flow（只記狀態邊緣，不洗版）**
+```
+[OutputHealth] raise code=C severity=Notice|OutputFault|Critical message=...
+[OutputHealth] resolve code=C message=...
+[OutputHealth] state Normal -> Notice code=C active=True
+ui:【產出狀態】確認 code=C
+[OutputHealth] ack codes=C
+[OutputHealth] state Notice -> Normal code=none active=False
+```
+- 同 code、同 severity、同 message 重複回報不得重記。
+- 非最高嚴重度問題 raise／resolve 也必須刷新 incident labels；`resolve` 後未確認仍保留該 label 與顏色。
+- active 問題即使點擊也不得被移除；確認 resolved code 只能移除同 code，不得一次清掉其他已恢復問題。
+- `CAPTURE/C4.output-health` validator 必須檢查：同 code 未 resolve 前不得重複 raise、resolve 必須有 active
+  來源、每筆 ack 恰好一個且只能移除 resolved code；沒有操作到健康度轉變時回 `NOT COVERED`，不得假綠。
+- DVT 必驗：每次 raise/resolve 僅一行、穩態無重複、恢復後確認才轉黑、低空間只刪最舊完整一天、
+  刪除日的日期資料夾與月份 CSV 同時消失、pending marker 不得留下幽靈重試。
+
+### C5 設定、背景與診斷資料保存
+
+- 設定 JSON 缺少時由 `*Defaults.cs` 重建並寫回；JSON 損壞時同樣重建，但必留下深橘 resolved 事件，
+  等使用者點狀態列確認。寫入採同目錄 temp + `Flush(true)` + replace/move；執行中寫入失敗必即時進
+  `OutputHealth`，不可只留到下次啟動才看到。
+- `app-mode.json` 與 `system-settings.json` 也必須走同一個 `SettingsStoreHelper` 原子寫入／損壞回報；
+  Storage role 的 `StorageMinFreeGB` 是部署 bootstrap，啟動後與 PropertyGrid `LocalMinFreeGB` 同值，
+  使用者修改時同步寫回 app-mode，禁止顯示值與實際清理門檻分歧。
+- 背景版本只有在所有在線相機都完成 `CreateNew + WriteThrough + Flush` 後，才原子替換
+  `active-background.json`。manifest 存在但無法解析時不得 fallback 到 legacy bin 混用；保留目前已載入背景，
+  並回報 `BackgroundManifestInvalid`。
+- 診斷檔只由 `LogFileCatalog` 納管：`trace`、`resource-monitor`、`dropdiag`、`phaselog`、
+  `paramchange`、`ui-actions`、`io`、`crash`。`LogRetentionHours` 預設 168 小時，啟動後 5 秒及每小時清理；
+  目前 process 建立的 log 與未知檔案不得刪。PropertyGrid 改保存時間後立即補跑一次清理。
+- CSV 與影像寫入是兩條獨立咽喉：`InspectionLogService.WriteFailed/WriteSucceeded` 與
+  `AniloxCamera.OnCaptureSaveFailed/OnFilesSaved` 都必須進 `OutputHealth`；任一條失敗都不得被另一條成功假綠。
+  影像事件碼使用 `CaptureWriteFailure.CAMn`，成功只能 resolve 同一台相機，禁止 CAM2 成功解除 CAM1 失敗。
+- pending marker 無法解析時移到 `.remote-copy-pending\quarantine`，保留檔案供工程追查並留下深橘提示；
+  不得每次開機反覆讀同一損壞 marker。pending marker 建立失敗必即時顯示，下一次成功建立才 resolve。
+- 遠端 `.part-*` 是未完成發布檔；worker 每次首次使用一個目的資料夾時清除超過 24 小時的 stale part，
+  低空間日期清理也會連同當日資料夾移除。讀取端永遠不得把 `.part-*` 當正式產出。
 
 ## 全天 Flow DVT 自動校稿架構
 
@@ -740,7 +811,7 @@ python tools/python/check_all_flows.py trace-a.log trace-b.log
 - `flow_checks/registry.py`＝validator 掛載點；每個 domain 獨立模組，不得把所有規則堆回總入口。
 - `NOT COVERED`＝該 session 沒操作到該 flow，**不得算 PASS**；validator 尚未實作則列在 `尚待自動化`，
   總結必標 `PARTIAL`，不得宣稱整份 DVT 全綠。
-- 現況（2026-07-15）：已掛 `GLOBAL`（任何 `契約違規` 行即 FAIL）＋`LIVE/F`＋`REVIEW/R`＋
+- 現況（2026-07-17）：已掛 `GLOBAL`（任何 `契約違規` 行即 FAIL）＋`LIVE/F`＋`REVIEW/R`＋
   `DATA/D`＋`CAPTURE/C`＋`HARDWARE/H`；`SETTINGS/S`、`MURA/M`、`PARAM/P` 依戰役逐步接入。
 - domain 專用舊指令保留為薄 wrapper（例如 `check_review_flows.py`），規則實作只能存在
   `flow_checks/{domain}.py` 一份，避免 wrapper／總入口兩份判準分歧。

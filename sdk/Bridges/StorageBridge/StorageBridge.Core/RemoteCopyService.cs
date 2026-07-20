@@ -31,6 +31,10 @@ namespace StorageBridge.Core
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _dirtyPaths =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, long> _pendingSizes =
+            new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _cleanedRemoteDirectories =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly object _pendingSync = new object();
         private readonly object _stateSync = new object();
         private readonly ManualResetEventSlim _workSignal = new ManualResetEventSlim(false);
@@ -45,6 +49,9 @@ namespace StorageBridge.Core
         private long _totalCopiedBytes;
         private long _totalFailedFiles;
         private long _totalRetryAttempts;
+        private long _pendingBytes;
+        private long _lastSuccessfulCopyUtcTicks;
+        private int _quarantinedMarkerCount;
         private string _lastError = string.Empty;
 
         public RemoteCopyService(Func<string> getRemotePath, Func<string> getLocalRoot)
@@ -73,6 +80,15 @@ namespace StorageBridge.Core
             }
         }
 
+        /// <summary>Total current source bytes waiting for confirmed remote publication.</summary>
+        public long PendingBytes
+        {
+            get
+            {
+                lock (_pendingSync) return _pendingBytes;
+            }
+        }
+
         public long TotalCopiedFiles => Interlocked.Read(ref _totalCopiedFiles);
         public long TotalCopiedBytes => Interlocked.Read(ref _totalCopiedBytes);
 
@@ -80,6 +96,19 @@ namespace StorageBridge.Core
         public long TotalFailedFiles => Interlocked.Read(ref _totalFailedFiles);
 
         public long TotalRetryAttempts => Interlocked.Read(ref _totalRetryAttempts);
+        public int QuarantinedMarkerCount => Volatile.Read(ref _quarantinedMarkerCount);
+
+        public DateTime? LastSuccessfulCopyUtc
+        {
+            get
+            {
+                long ticks = Interlocked.Read(ref _lastSuccessfulCopyUtcTicks);
+                return ticks <= 0 ? (DateTime?)null : new DateTime(ticks, DateTimeKind.Utc);
+            }
+        }
+
+        public event Action<string> PendingPersistenceFailed;
+        public event Action PendingPersistenceRecovered;
 
         public bool? IsRemoteWritable
         {
@@ -196,7 +225,7 @@ namespace StorageBridge.Core
                 : reason);
         }
 
-        /// <summary>Prevents retention from deleting a day folder that still has pending files.</summary>
+        /// <summary>Reports whether a directory still owns pending files.</summary>
         public bool HasPendingFilesUnder(string directory)
         {
             string prefix = NormalizeDirectoryPrefix(directory);
@@ -211,6 +240,74 @@ namespace StorageBridge.Core
                 }
             }
             return false;
+        }
+
+        /// <summary>
+        /// Cancels durable delivery for sources under a directory before retention deletes that
+        /// complete day. Already queued items become harmless no-ops.
+        /// </summary>
+        public int CancelPendingFilesUnder(string directory)
+        {
+            string prefix = NormalizeDirectoryPrefix(directory);
+            if (prefix == null) return 0;
+
+            var canceled = new List<string>();
+            lock (_pendingSync)
+            {
+                foreach (string path in _pendingPaths)
+                {
+                    if (path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                        canceled.Add(path);
+                }
+
+                foreach (string path in canceled)
+                {
+                    _pendingPaths.Remove(path);
+                    _dirtyPaths.Remove(path);
+                    long size;
+                    if (_pendingSizes.TryGetValue(path, out size))
+                    {
+                        _pendingBytes = Math.Max(0, _pendingBytes - size);
+                        _pendingSizes.Remove(path);
+                    }
+                    TryDelete(Path.Combine(
+                        _pendingDirectory, ComputeMarkerName(path) + PendingExtension));
+                }
+            }
+
+            if (canceled.Count > 0)
+            {
+                Trace.TraceWarning(
+                    $"[RemoteCopy] retention canceled pending count={canceled.Count} under={directory}");
+            }
+            return canceled.Count;
+        }
+
+        public bool CancelPendingFile(string localFilePath)
+        {
+            if (string.IsNullOrWhiteSpace(localFilePath)) return false;
+            string normalizedPath;
+            try { normalizedPath = NormalizeFullPath(localFilePath); }
+            catch { return false; }
+
+            bool canceled;
+            lock (_pendingSync)
+            {
+                canceled = _pendingPaths.Remove(normalizedPath);
+                _dirtyPaths.Remove(normalizedPath);
+                long size;
+                if (_pendingSizes.TryGetValue(normalizedPath, out size))
+                {
+                    _pendingBytes = Math.Max(0, _pendingBytes - size);
+                    _pendingSizes.Remove(normalizedPath);
+                }
+                TryDelete(Path.Combine(
+                    _pendingDirectory, ComputeMarkerName(normalizedPath) + PendingExtension));
+            }
+
+            if (canceled)
+                Trace.TraceWarning("[RemoteCopy] retention canceled pending file=" + normalizedPath);
+            return canceled;
         }
 
         private void WorkerLoop()
@@ -235,6 +332,8 @@ namespace StorageBridge.Core
 
         private bool TryProcessItem(CopyItem item)
         {
+            if (!IsPending(item.LocalPath)) return true;
+
             string tempPath = null;
             try
             {
@@ -250,6 +349,7 @@ namespace StorageBridge.Core
                     throw new IOException("Unable to resolve remote destination directory.");
 
                 Directory.CreateDirectory(destinationDirectory);
+                CleanupStalePartFilesOnce(destinationDirectory);
 
                 long sourceSizeBefore = new FileInfo(item.LocalPath).Length;
                 tempPath = destinationPath + ".part-" + Guid.NewGuid().ToString("N");
@@ -259,6 +359,12 @@ namespace StorageBridge.Core
                 long tempSize = new FileInfo(tempPath).Length;
                 if (sourceSizeBefore != sourceSizeAfter || tempSize != sourceSizeAfter)
                     throw new IOException("Source changed during remote copy; retrying a stable snapshot.");
+                if (!IsPending(item.LocalPath))
+                {
+                    TryDelete(tempPath);
+                    tempPath = null;
+                    return true;
+                }
 
                 PublishTempFile(tempPath, destinationPath);
                 tempPath = null;
@@ -277,6 +383,7 @@ namespace StorageBridge.Core
                 }
                 Interlocked.Increment(ref _totalCopiedFiles);
                 Interlocked.Add(ref _totalCopiedBytes, sourceSizeAfter);
+                Interlocked.Exchange(ref _lastSuccessfulCopyUtcTicks, DateTime.UtcNow.Ticks);
                 MarkRemoteWritable(true, null);
 
                 if (item.Attempt > 0)
@@ -294,6 +401,7 @@ namespace StorageBridge.Core
             catch (Exception ex)
             {
                 TryDelete(tempPath);
+                if (!IsPending(item.LocalPath)) return true;
                 item.Attempt++;
                 Interlocked.Increment(ref _totalRetryAttempts);
                 if (item.Attempt == 1) Interlocked.Increment(ref _totalFailedFiles);
@@ -329,6 +437,7 @@ namespace StorageBridge.Core
                     if (_pendingPaths.Contains(normalizedPath))
                     {
                         _dirtyPaths.Add(normalizedPath);
+                        UpdatePendingSizeLocked(normalizedPath);
                         return false;
                     }
 
@@ -347,6 +456,8 @@ namespace StorageBridge.Core
                     }
 
                     _pendingPaths.Add(normalizedPath);
+                    UpdatePendingSizeLocked(normalizedPath);
+                    PendingPersistenceRecovered?.Invoke();
                     item = new CopyItem
                     {
                         LocalPath = normalizedPath,
@@ -360,9 +471,11 @@ namespace StorageBridge.Core
             catch (Exception ex)
             {
                 Interlocked.Increment(ref _totalFailedFiles);
+                string error = ex.GetType().Name + ": " + ex.Message;
                 Trace.TraceError(
                     $"[RemoteCopy] unable to persist pending item {localFilePath}: " +
-                    $"{ex.GetType().Name}: {ex.Message}");
+                    error);
+                PendingPersistenceFailed?.Invoke(error);
                 return false;
             }
         }
@@ -382,7 +495,11 @@ namespace StorageBridge.Core
                     _pendingDirectory, "*" + PendingExtension))
                 {
                     CopyItem item;
-                    if (!TryReadMarker(markerPath, out item)) continue;
+                    if (!TryReadMarker(markerPath, out item))
+                    {
+                        QuarantinePendingMarker(markerPath);
+                        continue;
+                    }
                     string relativePath = GetRelativePath(_getLocalRoot(), item.LocalPath);
                     if (relativePath == null)
                     {
@@ -395,6 +512,7 @@ namespace StorageBridge.Core
                     lock (_pendingSync)
                     {
                         if (!_pendingPaths.Add(item.LocalPath)) continue;
+                        UpdatePendingSizeLocked(item.LocalPath);
                     }
                     _queue.Enqueue(item);
                     restored++;
@@ -473,6 +591,8 @@ namespace StorageBridge.Core
             followUp = default(CopyItem);
             lock (_pendingSync)
             {
+                if (!_pendingPaths.Contains(item.LocalPath)) return true;
+
                 if (_dirtyPaths.Remove(item.LocalPath))
                 {
                     followUp = new CopyItem
@@ -497,8 +617,88 @@ namespace StorageBridge.Core
                     return false;
                 }
                 _pendingPaths.Remove(item.LocalPath);
+                long size;
+                if (_pendingSizes.TryGetValue(item.LocalPath, out size))
+                {
+                    _pendingBytes = Math.Max(0, _pendingBytes - size);
+                    _pendingSizes.Remove(item.LocalPath);
+                }
             }
             return true;
+        }
+
+        private bool IsPending(string path)
+        {
+            lock (_pendingSync) return _pendingPaths.Contains(path);
+        }
+
+        private void QuarantinePendingMarker(string markerPath)
+        {
+            try
+            {
+                string quarantine = Path.Combine(_pendingDirectory, "quarantine");
+                Directory.CreateDirectory(quarantine);
+                string destination = Path.Combine(
+                    quarantine,
+                    DateTime.UtcNow.ToString("yyyyMMdd-HHmmssfff") + "-" +
+                    Path.GetFileName(markerPath));
+                File.Move(markerPath, destination);
+                Interlocked.Increment(ref _quarantinedMarkerCount);
+                Trace.TraceError(
+                    "[RemoteCopy] quarantined invalid pending marker: " + destination);
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceError(
+                    $"[RemoteCopy] unable to quarantine pending marker {markerPath}: " +
+                    $"{ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
+        private void CleanupStalePartFilesOnce(string directory)
+        {
+            lock (_stateSync)
+            {
+                if (!_cleanedRemoteDirectories.Add(directory)) return;
+            }
+
+            DateTime cutoffUtc = DateTime.UtcNow.AddHours(-24);
+            try
+            {
+                foreach (string path in Directory.GetFiles(directory, "*.part-*"))
+                {
+                    try
+                    {
+                        if (File.GetLastWriteTimeUtc(path) < cutoffUtc)
+                            File.Delete(path);
+                    }
+                    catch (Exception ex)
+                    {
+                        Trace.TraceWarning(
+                            $"[RemoteCopy] stale part cleanup failed {path}: {ex.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning(
+                    $"[RemoteCopy] stale part scan failed {directory}: {ex.Message}");
+            }
+        }
+
+        private void UpdatePendingSizeLocked(string path)
+        {
+            long previous;
+            _pendingSizes.TryGetValue(path, out previous);
+            long current = GetFileLengthOrZero(path);
+            _pendingSizes[path] = current;
+            _pendingBytes = Math.Max(0, _pendingBytes - previous + current);
+        }
+
+        private static long GetFileLengthOrZero(string path)
+        {
+            try { return File.Exists(path) ? new FileInfo(path).Length : 0; }
+            catch { return 0; }
         }
 
         private void MarkRemoteWritable(bool writable, string error)

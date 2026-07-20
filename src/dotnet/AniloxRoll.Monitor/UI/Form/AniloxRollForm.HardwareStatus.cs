@@ -281,6 +281,32 @@ namespace AniloxRoll.Monitor.Forms
                 Edge(ref _lastFlowLightConn, _lightController?.IsConnected == true, "光源");
             if (!string.IsNullOrWhiteSpace(_settings?.RemotePath))
                 Edge(ref _lastFlowStorageShareConn, _storageLastConnected == true, "儲存分享");
+
+            if (_settings?.IoEnabled == true && _ioGrabController != null)
+            {
+                if (_ioGrabController.IsConnected)
+                    _outputHealthService?.Resolve("IoConnection");
+                else
+                    _outputHealthService?.Report(
+                        "IoConnection", OutputHealthSeverity.Critical, "IO 未連線");
+            }
+            else
+            {
+                _outputHealthService?.Resolve("IoConnection");
+            }
+
+            if (_settings?.LightEnabled == true && _lightProbedOnce)
+            {
+                if (_lightController?.IsConnected == true)
+                    _outputHealthService?.Resolve("LightConnection");
+                else
+                    _outputHealthService?.Report(
+                        "LightConnection", OutputHealthSeverity.Critical, "光源未連線");
+            }
+            else if (_settings?.LightEnabled != true)
+            {
+                _outputHealthService?.Resolve("LightConnection");
+            }
         }
 
         private void RefreshIoConnLabel()
@@ -350,6 +376,7 @@ namespace AniloxRoll.Monitor.Forms
         private const int LightProbeIntervalTicks = 4;     // 光源每 4 tick(2s) 背景 probe / 重連一次
         private const int LightFullScanEveryAttempts = 5;  // 固定 COM 失敗約 10s 後全 port 防呆掃描
         private const int StorageProbeIntervalTicks = 4;   // 儲存每 4 tick(2s) 背景 probe 一次
+        private const long RemoteBacklogWarningBytes = 20L * 1024 * 1024 * 1024;
 
         internal static bool ShouldRunFullLightPortScan(int reconnectAttempt)
         {
@@ -359,6 +386,261 @@ namespace AniloxRoll.Monitor.Forms
         /// <summary>倒數剩餘秒數 = (intervalTicks − 已過 ticks) × tick 間隔，至少 1。</summary>
         private static int CountdownSec(int elapsedTicks, int intervalTicks)
             => Math.Max(1, (int)Math.Ceiling((intervalTicks - elapsedTicks) * TelemetryTickMs / 1000.0));
+
+        private void InitializeOutputHealthUi()
+        {
+            statusBarMain.SizingGrip = false;
+            lblInfo.Spring = true;
+            lblInfo.TextAlign = ContentAlignment.MiddleLeft;
+            ApplyOutputHealthSnapshot(OutputHealthSnapshot.Normal);
+        }
+
+        private void OutputHealthLabel_Click(object sender, EventArgs e)
+        {
+            var label = sender as ToolStripStatusLabel;
+            string code = label?.Tag as string;
+            if (string.IsNullOrWhiteSpace(code)) return;
+
+            FlowTrace.Log($"ui:【產出狀態】確認 code={code}");
+            _outputHealthService?.AcknowledgeResolved(code);
+        }
+
+        private void ApplyOutputHealthSnapshot(OutputHealthSnapshot snapshot)
+        {
+            RefreshOutputHealthLabels();
+            RefreshCapacityInfoLabel();
+        }
+
+        private void RefreshOutputHealthLabels()
+        {
+            OutputHealthSnapshot[] incidents =
+                _outputHealthService?.Incidents ?? new OutputHealthSnapshot[0];
+            var currentCodes = new HashSet<string>(
+                incidents.Select(x => x.Code),
+                StringComparer.OrdinalIgnoreCase);
+
+            foreach (string obsoleteCode in _outputHealthLabels.Keys
+                .Where(code => !currentCodes.Contains(code))
+                .ToArray())
+            {
+                ToolStripStatusLabel obsolete = _outputHealthLabels[obsoleteCode];
+                statusBarMain.Items.Remove(obsolete);
+                obsolete.Dispose();
+                _outputHealthLabels.Remove(obsoleteCode);
+            }
+
+            foreach (ToolStripStatusLabel label in _outputHealthLabels.Values)
+                statusBarMain.Items.Remove(label);
+
+            int insertIndex = 0;
+            foreach (OutputHealthSnapshot incident in incidents)
+            {
+                ToolStripStatusLabel label;
+                if (!_outputHealthLabels.TryGetValue(incident.Code, out label))
+                {
+                    label = new ToolStripStatusLabel
+                    {
+                        AutoSize = true,
+                        Margin = new Padding(0, 0, 2, 0),
+                        Padding = new Padding(6, 0, 6, 0)
+                    };
+                    label.Click += OutputHealthLabel_Click;
+                    _outputHealthLabels.Add(incident.Code, label);
+                }
+
+                ApplyOutputHealthLabel(label, incident);
+                statusBarMain.Items.Insert(insertIndex++, label);
+            }
+        }
+
+        private static void ApplyOutputHealthLabel(
+            ToolStripStatusLabel label, OutputHealthSnapshot incident)
+        {
+            label.Tag = incident.Code;
+            label.Text = incident.Message +
+                (incident.IsActive ? string.Empty : "（已恢復，點擊關閉）");
+            label.ToolTipText = incident.IsActive
+                ? "問題尚未排除；恢復後可點擊關閉這一項"
+                : "點擊只關閉這一項已恢復的問題";
+
+            switch (incident.Severity)
+            {
+                case OutputHealthSeverity.Notice:
+                    label.BackColor = IecYellow;
+                    label.ForeColor = Color.Black;
+                    break;
+                case OutputHealthSeverity.OutputFault:
+                    label.BackColor = IecDeepOrange;
+                    label.ForeColor = Color.White;
+                    break;
+                case OutputHealthSeverity.Critical:
+                    label.BackColor = IecRed;
+                    label.ForeColor = Color.White;
+                    break;
+                default:
+                    label.BackColor = Color.Black;
+                    label.ForeColor = Color.White;
+                    break;
+            }
+        }
+
+        private void RefreshOutputCapacityHealth()
+        {
+            if (_outputHealthService == null) return;
+
+            long minFreeBytes = GetStorageMinFreeBytes();
+            if (_localCapacityFreeBytes >= 0 && _localCapacityTotalBytes > 0)
+            {
+                if (minFreeBytes >= _localCapacityTotalBytes)
+                {
+                    _outputHealthService.Report(
+                        "StorageThresholdInvalid",
+                        OutputHealthSeverity.OutputFault,
+                        "預留空間設定超過磁碟容量，已停止自動清理");
+                    _outputHealthService.Resolve("LocalLowSpace");
+                }
+                else
+                {
+                    _outputHealthService.Resolve("StorageThresholdInvalid");
+                    if (_localCapacityFreeBytes < minFreeBytes)
+                    {
+                        _outputHealthService.Report(
+                            "LocalLowSpace",
+                            OutputHealthSeverity.Notice,
+                            (_appMode?.Role == MachineRole.Storage ? "儲存電腦" : "檢測電腦") +
+                            "空間低於預留值，正在清理最舊資料");
+                    }
+                    else
+                    {
+                        _outputHealthService.Resolve("LocalLowSpace");
+                    }
+                }
+            }
+
+            long pendingBytes = _remoteCopyService?.PendingBytes ?? 0;
+            if (pendingBytes >= RemoteBacklogWarningBytes)
+            {
+                _outputHealthService.Report(
+                    "RemoteBacklog",
+                    OutputHealthSeverity.Notice,
+                    "遠端待傳已超過 20 GB");
+            }
+            else
+            {
+                _outputHealthService.Resolve("RemoteBacklog");
+            }
+        }
+
+        private void HandleSettingsStoreIssue(SettingsStoreIssue issue)
+        {
+            if (issue == null || _outputHealthService == null) return;
+
+            string file = Path.GetFileName(issue.Path);
+            if (issue.Kind == SettingsStoreIssueKind.RebuiltDefaults)
+            {
+                _outputHealthService.Report(
+                    "ConfigRebuilt." + file,
+                    OutputHealthSeverity.OutputFault,
+                    $"{file} 損壞，已用預設值重建");
+                _outputHealthService.Resolve("ConfigRebuilt." + file);
+                return;
+            }
+
+            _outputHealthService.Report(
+                "ConfigSaveFailed." + file,
+                OutputHealthSeverity.OutputFault,
+                $"{file} 寫入失敗：{issue.Reason}");
+        }
+
+        private void HandleStorageSettingsChanged(string changedPropertyName)
+        {
+            if (changedPropertyName == nameof(InspectionSettings.LogRetentionHours))
+            {
+                Task.Run(() => _logRetentionService?.RunCleanup());
+                return;
+            }
+
+            if (changedPropertyName != nameof(InspectionSettings.LocalMinFreeGB)) return;
+
+            long totalBytes = _localCapacityTotalBytes;
+            if (totalBytes <= 0)
+            {
+                TryReadDriveCapacity(
+                    GetStorageRetentionRoot(),
+                    out _localCapacityFreeBytes,
+                    out totalBytes);
+                _localCapacityTotalBytes = totalBytes;
+            }
+
+            int requestedGb = _settings.LocalMinFreeGB;
+            int maxGb = totalBytes > 0
+                ? Math.Max(1, (int)(totalBytes / (1024L * 1024L * 1024L)) - 1)
+                : requestedGb;
+            if (totalBytes > 0 && requestedGb > maxGb)
+            {
+                _settingsHub.SetBatch(s => s.LocalMinFreeGB = maxGb);
+                requestedGb = maxGb;
+                RefreshGridItem(nameof(InspectionSettings.LocalMinFreeGB));
+                _outputHealthService?.Report(
+                    "StorageThresholdAdjusted",
+                    OutputHealthSeverity.OutputFault,
+                    $"預留空間超過磁碟容量，已調整為 {maxGb} GB");
+                _outputHealthService?.Resolve("StorageThresholdAdjusted");
+            }
+
+            if (_appMode?.Role == MachineRole.Storage &&
+                _appMode.StorageMinFreeGB != requestedGb)
+            {
+                _appMode.StorageMinFreeGB = requestedGb;
+                _appMode.Save();
+            }
+
+            RefreshOutputCapacityHealth();
+            Task.Run(() => _retentionService?.RunCleanup());
+        }
+
+        private int CancelRemoteCopyForDay(string dayDirectory)
+        {
+            if (_remoteCopyService == null || string.IsNullOrWhiteSpace(dayDirectory)) return 0;
+
+            int canceled = _remoteCopyService.CancelPendingFilesUnder(dayDirectory);
+            string monthDirectory = Path.GetDirectoryName(dayDirectory);
+            string dailyCsv = monthDirectory == null
+                ? null
+                : Path.Combine(monthDirectory, Path.GetFileName(dayDirectory) + ".csv");
+            if (_remoteCopyService.CancelPendingFile(dailyCsv)) canceled++;
+            return canceled;
+        }
+
+        private void HandleRetentionCleanupCompleted(RetentionCleanupResult result)
+        {
+            if (result == null) return;
+            _storageHeartbeatService?.RecordCleanup(result.FreedBytes);
+            if (result.DeletedDayFolders > 0 &&
+                _appMode?.Role != MachineRole.Storage)
+            {
+                CleanupInactiveBackgroundVersions();
+            }
+
+            if (result.CanceledPendingFiles > 0)
+            {
+                const string code = "RetentionDiscardedPending";
+                _outputHealthService?.Report(
+                    code,
+                    OutputHealthSeverity.OutputFault,
+                    $"空間不足，已刪除最舊資料（含 {result.CanceledPendingFiles} 個未傳檔案）");
+                _outputHealthService?.Resolve(code);
+            }
+            else if (result.DeletedDayFolders > 0)
+            {
+                const string code = "RetentionCleanup";
+                _outputHealthService?.Report(
+                    code,
+                    OutputHealthSeverity.Notice,
+                    $"空間不足，已清理最舊 {result.DeletedDayFolders} 天資料");
+                _outputHealthService?.Resolve(code);
+            }
+        }
 
         private bool TryReadDriveCapacity(string root, out long freeBytes, out long totalBytes)
         {
@@ -401,13 +683,32 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (lblInfo == null) return;
 
-            string text = _appMode?.Role == MachineRole.Storage
+            RefreshOutputCapacityHealth();
+
+            string capacityText = _appMode?.Role == MachineRole.Storage
                 ? FormatCapacity("儲存電腦", _localCapacityFreeBytes, _localCapacityTotalBytes)
                 : FormatCapacity("檢測電腦", _localCapacityFreeBytes, _localCapacityTotalBytes) +
                   " ｜ " + FormatCapacity("儲存電腦", _remoteCapacityFreeBytes, _remoteCapacityTotalBytes);
 
-            if (!string.Equals(lblInfo.Text, text, StringComparison.Ordinal))
-                lblInfo.Text = text;
+            if (_appMode?.Role != MachineRole.Storage && _remoteCopyService != null)
+            {
+                capacityText += $" ｜ 待傳：{_remoteCopyService.PendingBytes / (1024.0 * 1024 * 1024):N1} GB" +
+                    $"（{_remoteCopyService.QueueCount} 檔）";
+                long localTicks = System.Threading.Interlocked.Read(
+                    ref _lastLocalSaveUtcTicks);
+                DateTime? remoteUtc = _remoteCopyService.LastSuccessfulCopyUtc;
+                capacityText += " ｜ 最近存檔：" +
+                    (localTicks > 0
+                        ? new DateTime(localTicks, DateTimeKind.Utc).ToLocalTime().ToString("HH:mm:ss")
+                        : "--");
+                capacityText += " ｜ 最近遠傳：" +
+                    (remoteUtc.HasValue
+                        ? remoteUtc.Value.ToLocalTime().ToString("HH:mm:ss")
+                        : "--");
+            }
+
+            if (!string.Equals(lblInfo.Text, capacityText, StringComparison.Ordinal))
+                lblInfo.Text = capacityText;
         }
 
         private void UpdateStorageConnLabel(bool? connected)
@@ -420,6 +721,8 @@ namespace AniloxRoll.Monitor.Forms
             {
                 lblStorageConn.Text = "● 儲存電腦 停用";
                 lblStorageConn.BackColor = IecGray;
+                _outputHealthService?.Resolve("StorageConnection");
+                _outputHealthService?.Resolve("StorageHeartbeat");
                 if (_appMode?.Role != MachineRole.Storage)
                 {
                     _remoteCapacityFreeBytes = -1;
@@ -430,19 +733,30 @@ namespace AniloxRoll.Monitor.Forms
             }
             if (_storageLastConnected == true)
             {
+                _outputHealthService?.Resolve("StorageConnection");
                 if (_storageAppAlive == true)
                 {
                     lblStorageConn.Text = "● 儲存電腦 已連線";
                     lblStorageConn.BackColor = IecGreen;
+                    _outputHealthService?.Resolve("StorageHeartbeat");
                 }
                 else
                 {
                     lblStorageConn.Text = "● 儲存分享可用 / 程式未回報";
                     lblStorageConn.BackColor = IecYellow;
+                    _outputHealthService?.Report(
+                        "StorageHeartbeat",
+                        OutputHealthSeverity.Critical,
+                        "儲存電腦程式未回報");
                 }
             }
             else if (_storageLastConnected == false)
             {
+                _outputHealthService?.Resolve("StorageHeartbeat");
+                _outputHealthService?.Report(
+                    "StorageConnection",
+                    OutputHealthSeverity.Critical,
+                    "儲存電腦連線中斷，本機持續存檔");
                 // 斷線 → 重連倒數（探測進行中顯示「探測中」）。秒數源自 StorageProbeIntervalTicks。
                 lblStorageConn.Text = _storageProbeInFlight
                     ? "● 儲存電腦 探測中…"
@@ -719,6 +1033,8 @@ namespace AniloxRoll.Monitor.Forms
 
             _muraExceedLatch[0] = false;
             _muraExceedLatch[1] = false;
+            _outputHealthService?.Resolve("MuraExceed.v");
+            _outputHealthService?.Resolve("MuraExceed.h");
             UpdateMuraLed(false);
 
             if (_settings.MuraDetectPaused)

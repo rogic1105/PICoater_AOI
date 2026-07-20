@@ -9,24 +9,12 @@ namespace AniloxRoll.Monitor.Core.Data
     {
         public static T LoadOrDefault<T>(string relativePath, T fallback) where T : class
         {
-            try
-            {
-                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                string fullPath = Path.Combine(baseDir, relativePath);
-
-                if (!File.Exists(fullPath)) return fallback;
-
-                string json = File.ReadAllText(fullPath, Encoding.UTF8);
-                if (string.IsNullOrWhiteSpace(json)) return fallback;
-
-                JavaScriptSerializer serializer = new JavaScriptSerializer();
-                var result = serializer.Deserialize<T>(json);
-                return result ?? fallback;
-            }
-            catch
-            {
-                return fallback;
-            }
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string fullPath = Path.Combine(baseDir, relativePath);
+            return SettingsStoreHelper.LoadJsonFile(
+                fullPath,
+                json => new JavaScriptSerializer().Deserialize<T>(json),
+                () => fallback);
         }
 
         /// <summary>簡單 JSON 格式化（縮排 2 空格），供各 Store 共用。</summary>
@@ -63,9 +51,9 @@ namespace AniloxRoll.Monitor.Core.Data
 
         public static void SaveJson<T>(string fullPath, T obj) where T : class
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(fullPath));
             string json = new JavaScriptSerializer().Serialize(obj);
-            File.WriteAllText(fullPath, FormatJson(json), Encoding.UTF8);
+            SettingsStoreHelper.SaveJsonFile(
+                fullPath, FormatJson(json), typeof(T).Name);
         }
     }
 }

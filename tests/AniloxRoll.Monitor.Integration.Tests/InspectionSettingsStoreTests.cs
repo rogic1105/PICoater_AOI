@@ -15,6 +15,7 @@ namespace AniloxRoll.Monitor.Tests
         [SetUp]
         public void SetUp()
         {
+            SettingsStoreHelper.DrainIssues();
             _configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"Config\inspection-settings.json");
             _backupPath = _configPath + ".bak_test";
 
@@ -75,6 +76,81 @@ namespace AniloxRoll.Monitor.Tests
             var loaded = InspectionSettingsStore.Load();
 
             Assert.That(loaded.he_MainDisplay, Is.EqualTo(MainDisplayMode.Waterfall));
+        }
+
+        [Test]
+        public void SaveAndLoad_PersistsLogRetentionHours()
+        {
+            var settings = new InspectionSettings();
+            settings.LogRetentionHours = 72;
+
+            InspectionSettingsStore.Save(settings);
+            var loaded = InspectionSettingsStore.Load();
+
+            Assert.That(loaded.LogRetentionHours, Is.EqualTo(72));
+        }
+
+        [Test]
+        public void Load_WhenConfigIsCorrupt_RebuildsDefaultsAndRecordsIssue()
+        {
+            File.WriteAllText(_configPath, "{ invalid json");
+
+            var loaded = InspectionSettingsStore.Load();
+            SettingsStoreIssue[] issues = SettingsStoreHelper.DrainIssues();
+
+            Assert.That(loaded.he_MainDisplay, Is.EqualTo(MainDisplayMode.Waterfall));
+            Assert.That(File.Exists(_configPath), Is.True);
+            Assert.That(
+                Array.Exists(issues, x => x.Kind == SettingsStoreIssueKind.RebuiltDefaults),
+                Is.True);
+        }
+
+        [Test]
+        public void SaveFailure_RaisesRuntimeIssueImmediately()
+        {
+            string parentFile = Path.Combine(
+                Path.GetDirectoryName(_configPath), "not-a-directory");
+            File.WriteAllText(parentFile, "block directory creation");
+            SettingsStoreIssue observed = null;
+            Action<SettingsStoreIssue> handler = issue => observed = issue;
+            SettingsStoreHelper.IssueRaised += handler;
+            try
+            {
+                SettingsStoreHelper.SaveJsonFile(
+                    Path.Combine(parentFile, "settings.json"),
+                    "{}",
+                    "RuntimeIssueTest");
+            }
+            finally
+            {
+                SettingsStoreHelper.IssueRaised -= handler;
+                File.Delete(parentFile);
+            }
+
+            Assert.That(observed, Is.Not.Null);
+            Assert.That(observed.Kind, Is.EqualTo(SettingsStoreIssueKind.SaveFailed));
+        }
+
+        [Test]
+        public void JsonConfigLoader_CorruptJson_ReturnsFallbackAndRecordsIssue()
+        {
+            string fileName = "json-loader-" + Guid.NewGuid().ToString("N") + ".json";
+            string relativePath = Path.Combine("Config", fileName);
+            string fullPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, relativePath);
+            File.WriteAllText(fullPath, "{ invalid json");
+            var fallback = new AppModeConfig { StorageMinFreeGB = 321 };
+
+            var loaded = JsonConfigLoader.LoadOrDefault(relativePath, fallback);
+            SettingsStoreIssue[] issues = SettingsStoreHelper.DrainIssues();
+
+            Assert.That(loaded, Is.SameAs(fallback));
+            Assert.That(File.Exists(fullPath), Is.False);
+            Assert.That(
+                Array.Exists(
+                    issues,
+                    x => x.Kind == SettingsStoreIssueKind.RebuiltDefaults &&
+                         string.Equals(x.Path, fullPath, StringComparison.OrdinalIgnoreCase)),
+                Is.True);
         }
     }
 }

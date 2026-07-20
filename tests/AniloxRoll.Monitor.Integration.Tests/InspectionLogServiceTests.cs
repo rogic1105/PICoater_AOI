@@ -89,6 +89,25 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void AppendRecord_CsvPathCannotBeCreated_RaisesWriteFailed()
+        {
+            string blockedRoot = Path.Combine(_tempRoot, "blocked");
+            File.WriteAllText(blockedRoot, "not a directory");
+            var svc = new InspectionLogService(() => blockedRoot);
+            string failure = null;
+            svc.WriteFailed += message => failure = message;
+            var ts = new DateTime(2026, 3, 30, 10, 15, 30);
+
+            svc.AppendRecord(
+                InspectionLogService.FormatGrabId(ts),
+                "20260330_101530.000-1",
+                0.1f, 0.2f, 0.5f, 0.8f,
+                3001, 3001.0, 149.0, null, ts);
+
+            Assert.That(failure, Is.Not.Null.And.Not.Empty);
+        }
+
+        [Test]
         public void AppendRecord_ConfigChange_InsertNewCfg()
         {
             var svc = new InspectionLogService(() => _tempRoot);

@@ -198,6 +198,8 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category(CategoryStorage)][DisplayName("遠端路徑")][PropertyOrder(3)]      public string RemotePath           { get => Storage.RemotePath;           set => Storage.RemotePath           = value; }
         [Category(CategoryStorage)][DisplayName("存檔")][PropertyOrder(4)][TypeConverter(typeof(BoolYesNoConverter))]          public bool   EnableAutoCapture    { get => Storage.EnableAutoCapture;    set => Storage.EnableAutoCapture    = value; }
         [Category(CategoryStorage)][DisplayName("存原圖")][PropertyOrder(5)][TypeConverter(typeof(BoolYesNoConverter))]        public bool   SaveOriginalBmp      { get => Storage.SaveOriginalBmp;      set => Storage.SaveOriginalBmp      = value; }
+        [Category(CategoryStorage)][DisplayName("Log 保留時間 (小時)")][PropertyOrder(6)][TypeConverter(typeof(LeftAlignNumericConverter))]
+        public int LogRetentionHours { get => Storage.LogRetentionHours; set => Storage.LogRetentionHours = value; }
         // 開發者設定：PropertyGrid 不顯示，部署時直接改 JSON
         [Browsable(false)] public string RemoteConfigPath { get => Storage.RemoteConfigPath; set => Storage.RemoteConfigPath = value; }
 

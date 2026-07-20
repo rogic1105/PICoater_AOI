@@ -82,8 +82,9 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// 參數：(cameraId, rowCurveMean_raw255, rowCurveMax_raw255)</summary>
         public event Action<int, float[], float[]> OnLiveRowCurveData;
 
-        /// <summary>存檔完成回呼：傳入已儲存的檔案路徑陣列（供遠端複製佇列）。</summary>
-        public Action<string[]> OnFilesSaved { get; set; }
+        /// <summary>存檔完成回呼：(cameraId, 已儲存檔案路徑陣列)。</summary>
+        public Action<int, string[]> OnFilesSaved { get; set; }
+        public Action<int, string> OnCaptureSaveFailed { get; set; }
 
         /// <summary>
         /// 正在執行釋放流程時為 true，防止 Timer Tick 在資源已釋放後繼續存取相機。
@@ -204,7 +205,10 @@ namespace AniloxRoll.Monitor.UI.Managers
                     OnLiveCurveData?.Invoke(camId, mean, max);
                 cam.OnLiveRowCurveData   += (camId, mean, max) =>
                     OnLiveRowCurveData?.Invoke(camId, mean, max);
-                cam.OnFilesSaved = OnFilesSaved;
+                int captureCameraId = cam.CameraId;
+                cam.OnFilesSaved = files =>
+                    OnFilesSaved?.Invoke(captureCameraId, files);
+                cam.OnCaptureSaveFailed = OnCaptureSaveFailed;
                 cam.Initialize();   // 拿已 clamp 的 CameraGrabHeight 配 buffer（與可行版本同路徑，不 stall）
                 _cameras.Add(cam);
             }

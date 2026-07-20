@@ -65,6 +65,8 @@ namespace AniloxRoll.Monitor.Forms
                 if (warmup > 0) await Task.Delay(warmup);
                 ResetLiveChartsForDisplayTransition();
                 _muraExceedLatch[0] = _muraExceedLatch[1] = false;   // 每輪 grab 重新邊緣觸發超標留痕
+                _outputHealthService?.Resolve("MuraExceed.v");
+                _outputHealthService?.Resolve("MuraExceed.h");
                 if (_settings?.MuraDetectPaused != true) UpdateMuraLed(false);   // 新一輪檢測：警告閂鎖歸零
                 _ = _ioGrabController?.ClearMura();   // 硬體 DO 閂鎖同步歸零（手動流程與 FSM EnterIdle 對齊）
             }
@@ -118,6 +120,9 @@ namespace AniloxRoll.Monitor.Forms
                 _grabDurationCoordinator?.Disarm();
                 _ = Task.Run(() => LightTurnOff());   // 序列埠寫入不佔 UI（[UiStack] 抓到停止時卡在 SerialStream.Write）
                 TriggerRetentionAndFlagAsync();
+                _muraExceedLatch[0] = _muraExceedLatch[1] = false;
+                _outputHealthService?.Resolve("MuraExceed.v");
+                _outputHealthService?.Resolve("MuraExceed.h");
                 // 檢測結束＝MURA 警告閂鎖清除時機（與 DO latch/FSM 回 Idle 同語意；無 IO 時的等價點）
                 if (_settings?.MuraDetectPaused != true) UpdateMuraLed(false);
                 // 硬體 DO 閂鎖也要清：手動 grab 不經 FSM，不清則 DO_MURA 永遠掛著（Nakan 誤報 +
@@ -231,9 +236,16 @@ namespace AniloxRoll.Monitor.Forms
                         : _isIoSuspended ? "IO暫停中→僅畫面警告" : "IO已連線";
                     FlowTrace.Log($"⚠ MURA 超標（{direction}）mean={meanPeak:F2}/max={maxPeak:F2}"
                         + $"（thr {thMean:F2}/{thMax:F2}，{ioState}）");
+                    _outputHealthService?.Report(
+                        "MuraExceed." + direction,
+                        OutputHealthSeverity.Critical,
+                        $"檢測異常（{(direction == "v" ? "欄" : "列")}）");
                 }
                 else
+                {
                     FlowTrace.Log($"MURA 恢復（{direction}）");
+                    _outputHealthService?.Resolve("MuraExceed." + direction);
+                }
             }
             if (!exceed) return;
 

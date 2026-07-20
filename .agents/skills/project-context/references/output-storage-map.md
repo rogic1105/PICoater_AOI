@@ -8,19 +8,19 @@
 
 | Output | Default path | Source of truth | Remote copy | Retention |
 |---|---|---|---|---|
-| Daily inspection records | `D:\Anilox\Captures\yyyy\yyyyMM\yyyyMMdd.csv` | Yes | Yes | Keep |
-| Raw image | `...\yyyyMMdd\{yyyyMMdd_HHmmss.fff}-{cam}_raw.jpg` | Yes | Yes | Delete oldest when low on space |
-| Column processed image | `...\yyyyMMdd\{base}_proc_c.jpg` | Yes | Yes | Delete oldest when low on space |
-| Row processed image | `...\yyyyMMdd\{base}_proc_r.jpg` | Yes | Yes | Delete oldest when low on space |
-| Column curves | `...\yyyyMMdd\{base}_{mean|max}_c.bin` | Yes | Yes | Delete oldest when low on space |
-| Row curves | `...\yyyyMMdd\{base}_{mean|max}_r.bin` | Yes | Yes | Delete oldest when low on space |
+| Daily inspection records | `D:\Anilox\Captures\yyyy\yyyyMM\yyyyMMdd.csv` | Yes | Yes | Delete with the oldest complete day when low on space |
+| Raw image | `...\yyyyMMdd\{yyyyMMdd_HHmmss.fff}-{cam}_raw.jpg` | Yes | Yes | Delete with the oldest complete day when low on space |
+| Column processed image | `...\yyyyMMdd\{base}_proc_c.jpg` | Yes | Yes | Delete with the oldest complete day when low on space |
+| Row processed image | `...\yyyyMMdd\{base}_proc_r.jpg` | Yes | Yes | Delete with the oldest complete day when low on space |
+| Column curves | `...\yyyyMMdd\{base}_{mean|max}_c.bin` | Yes | Yes | Delete with the oldest complete day when low on space |
+| Row curves | `...\yyyyMMdd\{base}_{mean|max}_r.bin` | Yes | Yes | Delete with the oldest complete day when low on space |
 | Frame-start tick index | `...\yyyyMMdd\_ticks.csv` | Alignment source while images exist | Yes | Delete with the day output |
 | Rebuildable curve summary | `...\yyyyMMdd\_curve_summary\{grabId}.mcsf` | No; bins are authoritative | No | Delete with the day output |
-| Background calibration | `D:\Anilox\Bg\bg_{width}_{cam}.bin` | Yes for local acquisition | No | Not part of capture retention |
-| Runtime trace and diagnostics | `D:\Anilox\Logs\` | Diagnostic evidence | No | Managed separately |
+| Background calibration | `D:\Anilox\Bg\bg_{width}_{cam}_{yyyyMMdd-HHmmssfff}.bin`; active manifest `Bg\active-background.json` | Yes for local acquisition | No | Active set protected; a successful low-space cleanup also removes inactive timestamped sets |
+| Runtime trace and diagnostics | `D:\Anilox\Logs\` | Diagnostic evidence | No | Cataloged logs expire after `LogRetentionHours` (default 168 h) |
 | Runtime settings | `{ExeDir}\Config\*.json`, `Radient_Config.dcf` | Yes for that machine | No | Not part of capture retention |
 | Review/session state | `{ExeDir}\Config\session-state.json` | UI convenience only | No | Replaceable |
-| Durable remote-copy ledger | `D:\Anilox\Captures\.remote-copy-pending\*.pending` | Delivery state | No | Remove only after confirmed publish |
+| Durable remote-copy ledger | `D:\Anilox\Captures\.remote-copy-pending\*.pending` | Delivery state | No | Remove after confirmed publish or explicit retention cancellation; corrupt markers move to `quarantine\` |
 | Stress dataset | `D:\Anilox\StressCaptures_30000` | Test-only | No | Remove manually after testing |
 
 Readers accept legacy `_proc_v.jpg` / `_proc_h.jpg` and legacy curve-bin names. New writers must
@@ -42,7 +42,7 @@ the summary directory together with the images and bins for that date.
 | Storage-app heartbeat | `D:\Anilox\Config\storage-app-heartbeat.json` | Atomic liveness/status snapshot from the Storage-role app |
 | Cleanup request | `D:\Anilox\Config\cleanup-request.flag` | Transient fixed command; watcher consumes and deletes it |
 | Publish temporary file | `{destination}.part-{guid}` | Incomplete remote copy; length-verified then atomically renamed, normally absent |
-| Storage runtime settings | `D:\AniloxMonitor\Config\*.json` | Configuration for the Storage-role app only |
+| Storage runtime settings | `C:\AniloxMonitor\Config\*.json` | Configuration for the Storage-role app only |
 | Storage runtime logs | `D:\Anilox\Logs\` | Local evidence from the Storage-role app |
 
 The SMB defaults are `\\192.168.10.20\Anilox\Captures` and
@@ -51,12 +51,18 @@ heartbeat proves the Storage-role application is running. These are separate sta
 
 A `.part-*` file is a remote staging file, not a capture result. The copy worker publishes it under
 the final filename only after the source stayed stable and both lengths match. A crash can leave an
-old part file behind; readers ignore it and a later retry publishes a fresh snapshot.
+old part file behind; readers ignore it, and the worker deletes parts older than 24 hours when that
+destination directory is next used. Full-day retention removes the rest with the date folder.
+
+The managed log catalog is `trace-*.log`, `resource-monitor-*.csv`, `dropdiag-*.csv`,
+`phaselog-*.csv`, `paramchange-*.csv`, `ui-actions-*.jsonl`, `io-*.log`, and
+`AniloxRoll-crash.log`. `LogRetentionService` deletes only cataloged files older than the configured
+hours; unknown operator files and logs created by the current process are not cleanup candidates.
 
 ## Verification ownership
 
 - File naming and path derivation: unit/integration tests.
-- Copy, restart recovery, pending protection, and retention: StorageBridge integration tests.
+- Copy, restart recovery, pending cancellation, and full-day retention: StorageBridge integration tests.
 - Large backlog and repeated disconnect/reconnect: stress tests.
 - Shift/24-hour operation with IO simulator and hardware failure injection: soak procedure.
 - Runtime sequence and operator-visible state: `$verify-flows` C/H contracts and validators.
@@ -65,5 +71,7 @@ Low-disk tests must use an isolated root or test volume. Set the effective thres
 drive's current free space but below its total capacity to trigger cleanup without physically filling
 the disk; thresholds at or above total capacity are invalid and must delete nothing. Never aim the test
 at production captures. Storage role uses `app-mode.json` `StorageMinFreeGB`; Inspection role uses
-`LocalMinFreeGB`. The storage-role deployment default is 100 GB; smaller test volumes therefore exercise
-the invalid-threshold guard until their deployment setting is lowered deliberately.
+`LocalMinFreeGB`. In Storage role the deployment value is copied into the same PropertyGrid field at
+startup, and edits are synchronized back to `app-mode.json`; the operator therefore sees the effective
+threshold. The storage-role deployment default is 100 GB; smaller test volumes exercise the input clamp
+until their setting is lowered deliberately.

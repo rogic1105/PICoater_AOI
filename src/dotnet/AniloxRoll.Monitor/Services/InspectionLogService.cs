@@ -27,6 +27,8 @@ namespace AniloxRoll.Monitor.Core.Services
 
         /// <summary>最近一次成功寫入的 CSV 完整路徑（供呼叫端排入遠端複製佇列）。</summary>
         public string LastCsvPath => _lastCsvPath;
+        public event Action<string> WriteFailed;
+        public event Action WriteSucceeded;
 
         /// <param name="getCaptureRoot">取得 CaptureRootPath 的委派（支援動態更新）</param>
         public InspectionLogService(Func<string> getCaptureRoot)
@@ -204,11 +206,13 @@ namespace AniloxRoll.Monitor.Core.Services
                         $"verdict=max{maxExceed}/mean{meanExceed} peak={meanPeak:F4}/{maxPeak:F4} " +
                         $"rowPeak={meanRPeak:F4}/{maxRPeak:F4} maxCMean={maxCMean:F6} " +
                         $"thrV={errMean:F4}/{errMax:F4}");
+                WriteSucceeded?.Invoke();
             }
             catch (Exception ex)
             {
-                Trace.WriteLine(
-                    $"[InspectionLogService] {ex.GetType().Name}: {ex.Message}");
+                string error = ex.GetType().Name + ": " + ex.Message;
+                Trace.WriteLine("[InspectionLogService] " + error);
+                WriteFailed?.Invoke(error);
             }
         }
 
@@ -273,11 +277,13 @@ namespace AniloxRoll.Monitor.Core.Services
 
                 FlowTrace.Log($"capture csv cfg path={csvPath} HM={config.HessianMaxFactorV:F4}/{config.HessianMaxFactorH:F4} " +
                     $"thrV={config.ErrorValueMeanV:F4}/{config.ErrorValueMaxV:F4} thrH={config.ErrorValueMeanH:F4}/{config.ErrorValueMaxH:F4}");
+                WriteSucceeded?.Invoke();
             }
             catch (Exception ex)
             {
-                Trace.WriteLine(
-                    $"[InspectionLogService.ForceWriteConfig] {ex.GetType().Name}: {ex.Message}");
+                string error = ex.GetType().Name + ": " + ex.Message;
+                Trace.WriteLine("[InspectionLogService.ForceWriteConfig] " + error);
+                WriteFailed?.Invoke(error);
             }
         }
 

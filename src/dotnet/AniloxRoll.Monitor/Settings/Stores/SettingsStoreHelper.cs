@@ -4,15 +4,32 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Collections.Generic;
+using System.Web.Script.Serialization;
 
 namespace AniloxRoll.Monitor.Core.Data
 {
     /// <summary>
     /// Settings Store 共用工具：Load/Save 檔案 I/O + regex JSON 欄位提取。
-    /// 不使用 JavaScriptSerializer（user.config 損毀時拋 ConfigurationErrorsException）。
+    /// JavaScriptSerializer 只用來驗證 JSON 結構；實際欄位仍由明確 parser 讀取。
     /// </summary>
     internal static class SettingsStoreHelper
     {
+        private static readonly object IssueSync = new object();
+        private static readonly List<SettingsStoreIssue> Issues = new List<SettingsStoreIssue>();
+
+        internal static event Action<SettingsStoreIssue> IssueRaised;
+
+        internal static SettingsStoreIssue[] DrainIssues()
+        {
+            lock (IssueSync)
+            {
+                SettingsStoreIssue[] result = Issues.ToArray();
+                Issues.Clear();
+                return result;
+            }
+        }
+
         // ── Load/Save ─────────────────────────────────────────────────
 
         /// <summary>
@@ -29,14 +46,17 @@ namespace AniloxRoll.Monitor.Core.Data
 
                 string json = File.ReadAllText(configPath, Encoding.UTF8);
                 if (string.IsNullOrWhiteSpace(json))
-                    return createDefault();
+                    return RebuildFromDefault(configPath, "檔案是空的", createDefault);
+
+                new JavaScriptSerializer().DeserializeObject(json);
 
                 var result = parser(json);
-                return result ?? createDefault();
+                return result ?? RebuildFromDefault(configPath, "解析結果為空", createDefault);
             }
-            catch
+            catch (Exception ex)
             {
-                return createDefault();
+                return RebuildFromDefault(
+                    configPath, ex.GetType().Name + ": " + ex.Message, createDefault);
             }
         }
 
@@ -50,15 +70,70 @@ namespace AniloxRoll.Monitor.Core.Data
                 string dir = Path.GetDirectoryName(configPath);
                 Directory.CreateDirectory(dir);
                 byte[] bytes = new UTF8Encoding(false).GetBytes(json);
-                using (var fs = new FileStream(configPath, FileMode.Create,
-                                               FileAccess.Write, FileShare.ReadWrite))
+                string tempPath = configPath + ".tmp-" + Guid.NewGuid().ToString("N");
+                try
                 {
-                    fs.Write(bytes, 0, bytes.Length);
+                    using (var fs = new FileStream(
+                        tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096,
+                        FileOptions.WriteThrough))
+                    {
+                        fs.Write(bytes, 0, bytes.Length);
+                        fs.Flush(true);
+                    }
+
+                    if (File.Exists(configPath))
+                        File.Replace(tempPath, configPath, null, true);
+                    else
+                        File.Move(tempPath, configPath);
+                }
+                finally
+                {
+                    try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
                 }
             }
             catch (Exception ex)
             {
                 Trace.TraceWarning($"[{callerName}.Save] {ex.GetType().Name}: {ex.Message}");
+                AddIssue(new SettingsStoreIssue(
+                    SettingsStoreIssueKind.SaveFailed, configPath,
+                    ex.GetType().Name + ": " + ex.Message));
+            }
+        }
+
+        private static T RebuildFromDefault<T>(
+            string configPath, string reason, Func<T> createDefault) where T : class
+        {
+            Trace.TraceWarning(
+                $"[SettingsStore] invalid config; rebuilding defaults path={configPath} reason={reason}");
+            AddIssue(new SettingsStoreIssue(
+                SettingsStoreIssueKind.RebuiltDefaults, configPath, reason));
+            try { if (File.Exists(configPath)) File.Delete(configPath); }
+            catch (Exception ex)
+            {
+                AddIssue(new SettingsStoreIssue(
+                    SettingsStoreIssueKind.SaveFailed, configPath,
+                    "無法移除損壞設定: " + ex.Message));
+            }
+            return createDefault();
+        }
+
+        private static void AddIssue(SettingsStoreIssue issue)
+        {
+            Action<SettingsStoreIssue> handler;
+            lock (IssueSync)
+            {
+                handler = IssueRaised;
+                if (handler == null)
+                    Issues.Add(issue);
+            }
+
+            if (handler == null) return;
+            try { handler(issue); }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning(
+                    "[SettingsStore] issue handler failed: " +
+                    ex.GetType().Name + ": " + ex.Message);
             }
         }
 
@@ -116,5 +191,26 @@ namespace AniloxRoll.Monitor.Core.Data
 
         public static string EscapeJson(string s)
             => (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"");
+    }
+
+    internal enum SettingsStoreIssueKind
+    {
+        RebuiltDefaults,
+        SaveFailed
+    }
+
+    internal sealed class SettingsStoreIssue
+    {
+        public SettingsStoreIssue(
+            SettingsStoreIssueKind kind, string path, string reason)
+        {
+            Kind = kind;
+            Path = path;
+            Reason = reason;
+        }
+
+        public SettingsStoreIssueKind Kind { get; }
+        public string Path { get; }
+        public string Reason { get; }
     }
 }

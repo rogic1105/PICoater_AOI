@@ -160,6 +160,7 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         /// <summary>存檔完成回呼：傳入已儲存的檔案路徑陣列（供遠端複製佇列）。</summary>
         public Action<string[]> OnFilesSaved { get; set; }
+        public Action<int, string> OnCaptureSaveFailed { get; set; }
 
         private bool _flowLoggedDrainFrameDrop;
         private float _lastMeanPeak = 0f;
@@ -700,8 +701,10 @@ namespace AniloxRoll.Monitor.Core.Camera
                         try { saver.SaveCapture(ctx); }
                         catch (Exception ex)
                         {
+                            string error = ex.GetType().Name + ": " + ex.Message;
                             System.Diagnostics.Trace.WriteLine(
-                                $"[CAM{camId}] TrySaveCapture(bg) failed: {ex.GetType().Name}: {ex.Message}");
+                                $"[CAM{camId}] TrySaveCapture(bg) failed: {error}");
+                            OnCaptureSaveFailed?.Invoke(camId, error);
                         }
                     });
                 }
@@ -716,8 +719,10 @@ namespace AniloxRoll.Monitor.Core.Camera
             }
             catch (Exception ex)
             {
+                string error = ex.GetType().Name + ": " + ex.Message;
                 System.Diagnostics.Trace.WriteLine(
-                    $"[CAM{CameraId}] TrySaveCapture failed: {ex.GetType().Name}: {ex.Message}");
+                    $"[CAM{CameraId}] TrySaveCapture failed: {error}");
+                OnCaptureSaveFailed?.Invoke(CameraId, error);
             }
         }
 

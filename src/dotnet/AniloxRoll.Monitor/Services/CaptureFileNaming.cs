@@ -44,6 +44,12 @@ namespace AniloxRoll.Monitor.Core.Services
         // ── 背景 .bin（每相機一張，依影像寬度區分）──────────────────────
         /// <summary>背景檔名：bg_{width}_{camId}.bin</summary>
         public static string BgBin(int width, int camId) => $"bg_{width}_{camId}.bin";
+        public const string BgActiveManifest = "active-background.json";
+        /// <summary>背景版本檔名：bg_{width}_{camId}_{yyyyMMdd-HHmmssfff}.bin</summary>
+        public static string BgVersionedBin(int width, int camId, string version) =>
+            $"bg_{width}_{camId}_{version}.bin";
+        public static string BgVersionedGlobForCam(int camId, string version) =>
+            $"bg_*_{camId}_{version}.bin";
         /// <summary>背景檔 glob（全部）：bg_*.bin</summary>
         public const string BgGlob = "bg_*.bin";
         /// <summary>背景檔 glob（指定相機，不分寬度）：bg_*_{camId}.bin</summary>
