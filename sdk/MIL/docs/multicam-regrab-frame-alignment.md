@@ -1,4 +1,4 @@
-# 多相機 free-run 取像：re-grab 起頭錯位 + 停止 cam2 多跑幾偵 — 根因與修法定稿
+# 多相機 free-run 取像：hot standby 與全域收幀 gate
 
 > 適用：Matrox Radient eV-CL grabber + Camera Link **line-scan** 相機，多台同板、**free-run（TriggerMode=Off、無外部/硬體 trigger/encoder）**。
 > 症狀出現在「監控瀑布圖（WaterfallView，逐幀往下接的即時長圖）」上最明顯，因為它把「每台第 N 幀」並排顯示 → 兩台差一幀立刻看得到。但**根因在取像層（MIL grab 啟停），不是顯示層**。
@@ -38,38 +38,50 @@
 
 ---
 
-## 3. 修法（取像層，兩個一起才頭尾都齊）
+## 3. 現行修法（取像持續、產品收幀一次切換）
 
-### 3A. 停止改「乾淨 drain」→ 修起頭錯位（A）
+### 3A. ReadyIdle 保持 hot standby
 
-`MilCamera.ApplyGrabState()` 的停止分支，從裸 `M_STOP` 改成乾淨 drain（**鏡像 `SetGrabHeight` 已驗證的 pattern**）：
+CLProtocol 與 processing buffers 就緒後，產品對在線相機啟用 `KeepAcquiringWhenIdle`。每台相機真的從
+raw callback 觀測到第一個 frame-start tick 後才算 Ready，不用固定延遲猜測不同電腦要等多久。
 
-```csharp
-// MilCamera.cs ApplyGrabState() 停止分支
-MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize,
-    MIL.M_STOP + MIL.M_WAIT, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
-try { MIL.MdigControl(_milDigitizer, MIL.M_GRAB_ABORT, MIL.M_DEFAULT); } catch { }
-IsLive = false;
-```
-
-- `M_STOP + M_WAIT`：等佇列中的 grab 全部跑完才返回（**drain**，非只取消），之後沒有 FrameReady 在跑。
-- `M_GRAB_ABORT`：再立即中止任何 in-flight + 佇列殘留（防「優雅停止留殘留」）。
-- 效果：下次 re-grab 從**乾淨狀態 re-arm，接近第一次 grab** → 兩台較易等到同一個完整 frame、起頭齊。
-
-### 3B. 停止改「並行」→ 修結尾多跑（B）
-
-`LiveCameraManager.StopGrab()`：多相機停止從**逐台序列**改成**並行**：
+這裡的「CLProtocol 就緒」必須是初始化工作及曝光／線掃參數寫入均已實際返回。10 秒 timeout
+只能留下診斷，不能把仍在執行的工作視為完成；若其中一台在 `MdigProcess` 已運行後才重寫
+線掃率，該台的實體 frame phase 會被改變，全域產品 gate 無法補救。
 
 ```csharp
-// 各台 M_STOP+M_WAIT 各自阻塞等自己 in-progress 幀（~1 frame）；
-// 並行 → 同時阻塞、彼此只差 φ → 兩台幾乎「同一幀」停下。
-System.Threading.Tasks.Parallel.ForEach(_cameras, cam => cam.SetUserGrabIntent(false));
+cam.EnableHotStandby();
+if (cam.IsAcquisitionWarm) { /* camera is ReadyIdle */ }
 ```
 
-- 不同 digitizer 互不干擾，可並行（每台各自 try/catch 於 ApplyGrabState）。
-- 啟動 `M_START` 不阻塞（只是 arm），逐台序列即可、不必並行。
+- raw callback 在 standby 只更新 readiness／tick；不進 GPU、顯示、CSV 或存檔。
+- idle frame 不寫 phase log，避免程式整天待機造成診斷檔無限增長。
+- SDK samples 預設不啟用此功能，保留原本的 Start/Stop 語意。
 
-### 3C. 顯示層配套（不是主修，但要對）
+### 3B. Start/Stop 只切全域產品 gate
+
+`StartGrab(deferCaptureGate:true)` 完成顯示 reset 與各相機產品意圖設定；Form 先建立新的 GrabId、
+capture plan 與 duration guard，再呼 `OpenCaptureGate()` 做一次全域 gate 寫入。這個順序避免 standby
+的立即首幀沿用上一輪資料 owner。`StopGrab` 的第一個動作則關閉同一個 gate，再清各相機產品意圖：
+
+```csharp
+_captureGateOpen = true;   // Start: all callbacks gain product acceptance together
+_captureGateOpen = false;  // Stop: all callbacks lose product acceptance together
+```
+
+- `OnMilFrameReady` 必須同時看到 `UserWantsGrab && CaptureGateOpen` 才可進產品流程。
+- Stop 不再逐台 `M_STOP`，所以沒有「停 cam1 時 cam2 又多跑幾幀」。
+- 下一輪 Start 不再逐台 re-arm，因而消除跨 frame boundary 的固定等待與電腦速度差異。
+
+### 3C. 實體 Pause 只用於重配置與 Release
+
+高度／參數需要重配置，或程式釋放 MIL 資源時，才使用已驗證的：
+
+`PauseAcquisition → M_STOP+M_WAIT → M_GRAB_ABORT → 修改／釋放`
+
+重配置完成後 `ResumeAcquisition`，再次以 raw callback 實測 warm，不用 sleep。
+
+### 3D. 顯示層配套
 
 - **重 grab 時 Reset 瀑布**（`WaterfallView.Reset()`，於 `StartGrab` 呼叫）：清舊圖 + 重置對齊狀態，下次幀重新 bootstrap。符合「重 grab 該清舊圖」的預期，也避免新幀接在舊網格上。
 - **tick 網格錨定**（`WaterfallView`）：每幀獨立 `seq = round((tick − origin) / period)`，同一掃描各台（φ≪半週期）落同格。3A/3B 把取像層的幀邊界對齊後，顯示層就如實呈現齊頭。
@@ -80,6 +92,7 @@ System.Threading.Tasks.Parallel.ForEach(_cameras, cam => cam.SetUserGrabIntent(f
 
 | 嘗試 | 為何失敗 |
 |------|---------|
+| **每次 Stop 做並行 M_STOP+M_WAIT，再於 Start 逐台 M_START** | 比序列停止好，但 free-run 的 re-arm 仍可能跨 frame boundary，且低線掃時停止會有秒級等待；現已由 hot standby + gate 取代。 |
 | **顯示層「啟動等湊齊預期相機數才畫第一條」** | 加了明顯 lag、且沒解根本（取像層仍錯位）。使用者要求退回。 |
 | **`M_GRAB_ABORT` 當 pass-1 快停** | 只中止當前一張，`MdigProcess` loop 自動 re-arm → 相機沒停，cam2 照樣多跑。 |
 | **per-camera 序號累加（第 N 幀對第 N 幀，用 round(delta/period) 偵掉幀）** | 重建/re-grab 時某台第一幀是舊幀 → 整條序號歪。改純 tick 網格錨定才穩。 |
@@ -96,13 +109,17 @@ System.Threading.Tasks.Parallel.ForEach(_cameras, cam => cam.SetUserGrabIntent(f
 - **`M_GRAB_ABORT`（`MdigControl`）**＝立即中止 in-flight + 佇列；但**對 `MdigProcess` 連續模式不等於「停止」**，loop 會 re-arm。要停 loop 只能 `M_STOP`。
 - **free-run + TriggerMode Off**：相機 frame phase 不受 grabber 控制；grabber 只能選「接哪一個完整 frame」。真正硬體同步兩台 frame 邊界需 HW trigger / encoder / 共用 line-frame reset。
 
-> 本專案另有 B-linesync 路線（`feat`/`fix` 別的分支）嘗試用「兩階段叢集啟動 TIMER1」收斂啟動相位差，屬硬體 trigger 同步方向；**本分支（free-run）不含**，故只能用 §3 的「乾淨 drain + 並行停止」把啟停瞬間的量化誤差壓到最小。
+> 本專案另有 B-linesync 路線嘗試用硬體 trigger 同步 frame phase；本分支維持 free-run，
+> 因此 §3 解決的是產品收幀邊界與反覆 re-arm 問題，不宣稱改變相機的硬體 phase。
 
 ---
 
 ## 6. 限制與後續
 
-- §3 是把「啟停瞬間量化到不同 frame」的**機率壓到最低**（乾淨狀態 + 同時停），對 free-run 已足夠（實測頭尾皆齊）。但**free-run 本質**上仍無法 100% 保證 `M_START` 不跨 frame 邊界 —— 若未來偶發再現，codex 建議的「保證解」是 **交付前建立共同 frame epoch**：start 後讀兩台第一筆 `M_GRAB_FRAME_START` tick，差≈1 period 就丟掉早的那台一幀，兩台從同一 scan 才放行（仍是取像層修，不是顯示層補）。
+- 全域 gate 保證的是「產品何時開始／停止接受幀」只有一個原子決策點。它不會改變 free-run 相機
+  的硬體 phase，也不會把七個 callback 自動組成不可分割的 frame set。
+- 若實機仍偶發跨相機週期差，下一階段是 **owned-buffer frame-set barrier**：依硬體 tick 對齊一組
+  完整 frame set，整組到齊才發布；不能在 MIL callback 裡持有原始 buffer 等其他相機。
 - 跨板（cam1-4 板0 / cam5-7 板1）tick epoch 不同、不可直接相減；7 台上線需各板自錨 period/origin。
 
 ---
@@ -114,4 +131,8 @@ System.Threading.Tasks.Parallel.ForEach(_cameras, cam => cam.SetUserGrabIntent(f
 - **frame-start tick 量測機制**：[`MilCamera.PhaseLog.cs`](../MilGrabber.Core/MilCamera.PhaseLog.cs)（Data Latch `M_GRAB_FRAME_START` + `M_TIME_STAMP`；參考 Matrox BoardSpecific/DataLatch 範例）。
 - **實證資料**：現場 trace log `{AniloxRoot}\Logs\trace-*.log` 的 `[Waterfall]` 行（每條 band 記各台 frame-start tick；fresh grab 兩台差 φ≈6 萬、re-grab cam2 晚 1 period≈1.25 億、停止時 cam2 多出 tick 在 cam1 之後）。
 - **第二模型 review**：以 Codex（OpenAI CLI，read-only 讀本 repo 實際 code）交叉驗證根因與修法優先序（乾淨 drain > 並行/back-to-back > 共同 frame epoch；排除 `M_GRAB_ABORT` 快停、`MdigGrabContinuous`、CLProtocol re-enable）。
-- **程式碼落點**：取像層 [`MilCamera.cs`](../MilGrabber.Core/MilCamera.cs) `ApplyGrabState`（乾淨 drain）+ [`LiveCameraManager.cs`](../../../src/dotnet/AniloxRoll.Monitor/UI/Managers/LiveCameraManager.cs) `StopGrab`（並行）/`StartGrab`（Reset 瀑布）；顯示層 [`WaterfallView.cs`](../../../src/dotnet/AniloxRoll.Monitor/UI/Widgets/WaterfallView.cs)（tick 網格錨定）。
+- **程式碼落點**：取像層 [`MilCamera.cs`](../MilGrabber.Core/MilCamera.cs)
+  `EnableHotStandby/PauseAcquisition`；產品閘門
+  [`LiveCameraManager.cs`](../../../src/dotnet/AniloxRoll.Monitor/UI/Managers/LiveCameraManager.cs)
+  `StartGrab/StopGrab`；顯示層
+  [`WaterfallView.cs`](../../../src/dotnet/AniloxRoll.Monitor/UI/Widgets/WaterfallView.cs)（tick 網格錨定）。

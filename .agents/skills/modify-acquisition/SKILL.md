@@ -49,11 +49,16 @@ managed input/output → AoiService.Initialize
   `foreach cam: if (cam.CheckPresence()) cam.BeginCLProtocolInit();`
   —— **只對在線相機**。對斷線相機 enable 會卡住 MIL 內部鎖（全 0/7 時 7 台全卡 → 逾時翻 true 後 timer 輪詢搶鎖 → UI 凍死）。斷線相機 `_clProtocolInitStarted=false` → `IsHwParamsStable=true`（不擋就緒判定）。
 - **斷線→連線自動重跑 CLProtocol**（修「先開程式、之後才接相機 → 曝光/線掃讀不到＝回 0」）：`CameraStatusTimer_Tick` 用 `_lastPresence` 做**邊緣偵測**（斷線→連線那刻），呼 `cam.RetryCLProtocolOnReconnect()`（守門：已啟用/不在線/**grab 中**/in-flight 皆跳過 → grab 中 enable 會掉幀，故只非 grab 時重跑；**邊緣觸發**避免 CL 握手失敗時每 500ms spam）。重跑時 `AreCamerasHwReady` 暫 false（gate-off 防搶鎖）→ 恢復 true 時用 `_wasHwReady` 偵 false→true **強制刷 lblCamCount + 重發 OnHwReady**（否則連線數在 gate-off 前已更新、恢復後沒變 → `OnCameraCountChanged` 不再發 → lblCamCount 卡灰「初始化中」、抓取鈕不恢復）。
-- 耗時 2-5 秒/台；完成前 `IsHwParamsStable=false`。上層就緒判定：`LiveCameraManager.AreCamerasHwReady`（全相機 `IsHwParamsStable`）+ 一次性 `OnHwReady` 事件 → 解鎖「開始抓取」鈕、建立全域合圖。
-- **就緒前 UI 不可碰 MIL**：`CameraStatusTimer_Tick` 在 `!AreCamerasHwReady` 時跳過 `CheckPresence` 輪詢；全域合圖 `EnableGlobalMerge` 延後到 `OnCamerasHwReady`（都避免與背景 CLProtocol 搶 MIL 鎖造成凍結）。
+- 耗時 2-5 秒/台；完成前 `IsHwParamsStable=false`。CLProtocol 完成後進入 hot standby；上層就緒判定
+  `LiveCameraManager.AreCamerasHwReady`＝全相機參數已穩定，且每台在線相機已從 raw callback 觀測到首幀。
+  只有這個實測條件成立才發一次 `OnHwReady`，解鎖「開始抓取」並建立全域合圖。
+- **就緒前 UI 不可碰耗時 MIL API**：`CameraStatusTimer_Tick` 在參數未穩定時跳過 presence／standby；
+  全域合圖 `EnableGlobalMerge` 延後到 `OnCamerasHwReady`，避免與背景 CLProtocol 搶 MIL 鎖造成凍結。
 - **Quad 卡 DevNum>=2 必須明確列舉 Device ID**，`"M_DEFAULT"` 無效
 - `_clProtocolInitLock`（static）序列化同卡多 digitizer；`_clProtocolInitStarted`（volatile）防重複；`IsHwParamsStable => !_clProtocolInitStarted || _clProtocolInitDone`
-- 逾時保護：`Task.WhenAny(initTask, Task.Delay(10s))`，不取消（MIL 不支援安全取消）—— 只設 `_clProtocolInitDone` 旗標，故**斷線相機不可啟動**（MIL 呼叫實際仍會卡，逾時無法中止）
+- 逾時診斷：`Task.WhenAny(initTask, Task.Delay(10s))` 只記警告，不取消（MIL 不支援安全取消），
+  也**不得**設 `_clProtocolInitDone`。只有 CLProtocol 與曝光／線掃寫入工作實際返回，才可發布參數穩定；
+  否則 hot standby 會在參數仍被改寫時啟動，造成多相機實體幀相位分離。
 - **光源 `InitLightController` 的 `AutoDetect`（掃 COM 阻塞數秒）必須背景 `Task.Run`**（不可在 UI 執行緒）；四硬體（相機/IO/光源/儲存）為**平行**初始化，非依序
 
 ## 曝光/線掃設定
@@ -69,13 +74,30 @@ managed input/output → AoiService.Initialize
 ## MIL 資源釋放順序
 
 ```
-_isReleased = true → MdigProcess(M_STOP)
+capture gate=false → Parallel PauseAcquisition
+→ MdigProcess(M_STOP+M_WAIT) → M_GRAB_ABORT
+→ _isReleased=true
 → MdispHookFunction(UNHOOK) → MdispSelectWindow(M_NULL)
 → MbufFree × 4 → NativeBufferPool.Dispose → AoiService.Dispose
 → MdispFree × 2 → MdigFree → GCHandle.Free
 ```
 - `IsReleasing = true` 必須在 `Timer.Stop()` 之前
 - Timer Tick 快照相機清單 `_cameras.ToArray()`，mid-loop 檢查 `IsReleasing`
+
+## Hot standby 與產品收幀 gate
+
+- SDK 的 `KeepAcquiringWhenIdle` 是 opt-in；產品在 CLProtocol 完成後啟用，SDK samples 預設仍維持舊啟停行為。
+- hot standby 的必要順序是 `parameters ready → standby start → standby ready → capture gate open`；
+  `parameters ready` 指 CLProtocol 工作與曝光／線掃重套均已實際返回，不是固定秒數或 timeout fallback。
+- `MdigProcess` 在 `ReadyIdle` 與 `Capturing` 期間持續運作。`StartGrab(deferCaptureGate:true)` 不再逐台
+  M_START，而是先完成 view/reset/使用者意圖；Form 建立新 GrabId、capture plan 與 duration guard 後，
+  才呼 `OpenCaptureGate()` 一次把 `LiveCameraManager._captureGateOpen` 設為 true。
+- `OnMilFrameReady` 必須同時看到 `UserWantsGrab` 與全域 gate=true 才可進 GPU、顯示、CSV 與存檔。
+  `StopGrab` 第一個動作關閉 gate，MIL 留在 hot standby，因此不同電腦不再依賴固定首幀等待時間。
+- 只有參數／高度重配置與 Release 可以呼叫 `PauseAcquisition` 做實體
+  `M_STOP+M_WAIT → M_GRAB_ABORT`；完成後 `ResumeAcquisition` 重新暖機。
+- 這個 gate 保證「產品何時開始接受幀」為單一決策點；它不宣稱把不同 digitizer callback 組成硬體級
+  frame set。若實機仍出現跨相機週期差，下一階段才導入具完整 tick barrier 的 owned-buffer frame set。
 
 ## SetGrabHeight（不可省略步驟）
 

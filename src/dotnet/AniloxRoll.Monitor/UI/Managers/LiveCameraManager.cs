@@ -44,6 +44,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         public bool IsAllocated    { get; private set; } = false;
         public bool IsAllocating => _isAllocating;
         public bool IsLiveGrabbing { get; private set; } = false;
+        private volatile bool _captureGateOpen;
 
         /// <summary>目前已初始化的相機清單（唯讀），供 LiveTelemetryPresenter 查詢 Telemetry。</summary>
         public IReadOnlyList<AniloxCamera> Cameras => _cameras.AsReadOnly();
@@ -64,6 +65,22 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         /// <summary>所有相機 CLProtocol 是否就緒（已套曝光/線掃）。未就緒時上層應禁用「開始抓取」。</summary>
         public bool AreCamerasHwReady
+        {
+            get
+            {
+                if (!AreCameraParametersReady) return false;
+                bool hasConnectedCamera = false;
+                foreach (var cam in _cameras)
+                {
+                    if (!cam.IsConnected) continue;
+                    hasConnectedCamera = true;
+                    if (!cam.IsAcquisitionWarm) return false;
+                }
+                return hasConnectedCamera;
+            }
+        }
+
+        private bool AreCameraParametersReady
         {
             get
             {
@@ -165,6 +182,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private async Task AllocateCamerasCoreAsync(bool enableImageProcessing)
         {
             if (IsAllocated) return;
+            _captureGateOpen = false;
             FlowTrace.Log($"AllocateCameras begin（expect {_cameraHardwareConfigs.Count} cams）");
             IsReleasing = false;
             var totalSw = Stopwatch.StartNew();
@@ -229,6 +247,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.SaveResizeScale      = _saveResizeScale;
                 cam.SaveJpgQuality       = _saveJpgQuality;
                 cam.TimestampCoordinator = _timestampCoordinator;
+                cam.CaptureGateOpen = () => _captureGateOpen;
 
                 cam.OnInspectionResult += (camId, fn, mp, xp, maxCMean, meanRPeak, maxRPeak) =>
                     OnInspectionResult?.Invoke(
@@ -269,10 +288,11 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             // CLProtocol 啟用移到「所有相機 buffer 分配完成後」的背景階段：不與 MbufAlloc/MdispAlloc 競爭
             // MIL 內部鎖，也不在 grab 期間 enable + 重套線掃（會掉幀，cam1 最明顯）。利用「分配 → 使用者點抓取」
-            // 空檔跑完 2-5s/台；完成前 AreCamerasHwReady=false，上層把「開始抓取」鈕維持灰色。
+            // 空檔跑完 2-5s/台；之後還要由 hot standby 實測每台第一幀，兩階段完成前
+            // AreCamerasHwReady=false，上層把「開始抓取」鈕維持灰色。
             // 只對「在線」相機啟用 CLProtocol：對斷線相機 enable 會卡住 MIL 內部鎖（全斷線時 7 台全卡 →
             // 10s 逾時旗標翻 true 後 timer 恢復、CheckPresence 跟還卡著的背景 MIL 搶鎖 → 整個 UI 凍死）。
-            // 斷線相機 _clProtocolInitStarted=false → IsHwParamsStable=true（不擋 AreCamerasHwReady）；
+            // 斷線相機 _clProtocolInitStarted=false → IsHwParamsStable=true（不擋參數就緒判定）；
             // 若之後才連上，走 legacy 參數路徑（與導入 CLProtocol 前行為相同）。順帶：正常 2/7 時 init
             // 不再空等 5 台死相機逾時 → 從 ~10s 縮到 ~2-4s。
             _hwReadyRaised = false;
@@ -309,25 +329,52 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         // ==================== Grab Control ====================
 
-        public void ToggleGrab()
+        public void ToggleGrab(bool deferCaptureGate = false)
         {
             if (!IsAllocated) return;
             if (IsLiveGrabbing) StopGrab();
-            else StartGrab();
+            else StartGrab(deferCaptureGate);
         }
 
-        public async Task EnsureAllocatedAndToggleGrabAsync(bool enableImageProcessing)
+        public async Task EnsureAllocatedAndToggleGrabAsync(
+            bool enableImageProcessing, bool deferCaptureGate = false)
         {
             if (!IsAllocated)
                 await AllocateCamerasAsync(enableImageProcessing);
-            if (IsAllocated)
-                ToggleGrab();
+            if (IsAllocated && !AreCamerasHwReady)
+                await WaitForCamerasReadyAsync();
+            if (IsAllocated && AreCamerasHwReady)
+                ToggleGrab(deferCaptureGate);
         }
 
-        public void StartGrab()
+        private async Task<bool> WaitForCamerasReadyAsync()
         {
-            if (!IsAllocated || IsLiveGrabbing) return;
-            WaitStopDrain();   // 上一輪停止排水若還在跑（快速 停→開），等它完成再 M_START（防競態）
+            if (AreCamerasHwReady) return true;
+
+            var ready = new TaskCompletionSource<bool>();
+            Action handler = null;
+            handler = () => ready.TrySetResult(true);
+            OnHwReady += handler;
+            try
+            {
+                if (AreCamerasHwReady) return true;
+                Task completed = await Task.WhenAny(
+                    ready.Task, Task.Delay(TimeSpan.FromSeconds(15)));
+                bool ok = completed == ready.Task && AreCamerasHwReady;
+                if (!ok)
+                    FlowTrace.Log("acquisition standby timeout 15s");
+                return ok;
+            }
+            finally
+            {
+                OnHwReady -= handler;
+            }
+        }
+
+        public void StartGrab(bool deferCaptureGate = false)
+        {
+            if (!IsAllocated || IsLiveGrabbing || !AreCamerasHwReady) return;
+            _captureGateOpen = false;
             FlowTrace.Log($"StartGrab（cams={_cameras.Count}）");
             _display.ResetFlowFirstFrame();   // 每輪 grab 重驗「幀有流到 view」（各 cam 首幀各記一行）
             IsLiveGrabbing = true;
@@ -338,46 +385,62 @@ namespace AniloxRoll.Monitor.UI.Managers
             _display.ResetWaterfallIfActive();
             foreach (var cam in _cameras)
                 cam.SetUserGrabIntent(true);
+            if (!deferCaptureGate)
+                OpenCaptureGate();
         }
 
-        /// <summary>停止排水背景 task（M_STOP+M_WAIT 需 ~1 幀；StartGrab/ReleaseAsync 開頭等它完成防競態）。</summary>
-        private System.Threading.Tasks.Task _stopDrainTask = System.Threading.Tasks.Task.CompletedTask;
+        /// <summary>
+        /// Opens the single product-frame acceptance boundary after the form has created the new
+        /// grab id, capture plan, and duration guard. Hot standby can deliver a callback
+        /// immediately, so those data owners must be ready first.
+        /// </summary>
+        public bool OpenCaptureGate()
+        {
+            if (!IsAllocated || !IsLiveGrabbing || !AreCamerasHwReady)
+                return false;
+            if (_captureGateOpen)
+                return true;
+            _captureGateOpen = true;
+            FlowTrace.Log(
+                $"capture gate open cams={ConnectedCameraCount} warm={AreCamerasHwReady}");
+            return true;
+        }
 
         public void StopGrab()
         {
             if (!IsAllocated || !IsLiveGrabbing) return;
             FlowTrace.Log("StopGrab");
+            _captureGateOpen = false;
             IsLiveGrabbing = false;
-            // 並行停止：MdigProcess(M_STOP+M_WAIT) 會阻塞等自己 in-progress 那幀完成（~1 frame）。
-            // 逐台序列呼叫 → cam1 阻塞期間 cam2 仍 free-run 多收幾偵；改並行同幀停（各台自帶 try/catch）。
-            // 整包移背景：Parallel.ForEach 會徵用「呼叫執行緒」當 worker → 按停止時 UI 被抓去跑
-            // M_STOP+M_WAIT（低線掃＝秒級凍結，2026-07-07 [UiStack] 定罪）。IsLiveGrabbing 已先設 false；
-            // 快速 停→開 / 停→釋放 的競態由 StartGrab / ReleaseAsync 開頭 WaitStopDrain 擋。
-            var cams = _cameras.ToArray();
-            _stopDrainTask = System.Threading.Tasks.Task.Run(() =>
-            {
-                try { System.Threading.Tasks.Parallel.ForEach(cams, cam => cam.SetUserGrabIntent(false)); }
-                catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[StopGrab.drain] {ex.GetType().Name}: {ex.Message}"); }
-            });
-        }
-
-        /// <summary>等停止排水完成（防 M_STOP 進行中又 M_START / MbufFree 的競態；平時已完成＝零成本）。</summary>
-        private void WaitStopDrain()
-        {
-            try { if (!_stopDrainTask.IsCompleted) _stopDrainTask.Wait(5000); }
-            catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[WaitStopDrain] {ex.GetType().Name}: {ex.Message}"); }
+            foreach (var cam in _cameras)
+                cam.SetUserGrabIntent(false);
+            FlowTrace.Log("capture gate closed standby=on");
         }
 
         // ==================== Release ====================
 
         private void FreeCamerasCore()
         {
-            WaitStopDrain();   // 停止排水未完就釋放 → M_STOP 進行中 MbufFree＝UAF 家族，先等完
             FlowTrace.Log($"FreeCameras（cams={_cameras.Count}）");
             IsReleasing = true;
             _cameraStatusTimer.Stop();
+            _captureGateOpen = false;
             IsLiveGrabbing = false;
             _hwReadyRaised = false;
+
+            // Release is the physical stop boundary. Drain every digitizer in parallel before any
+            // MIL buffer is freed; business StopGrab deliberately does not enter this path.
+            var camerasToPause = _cameras.ToArray();
+            try
+            {
+                System.Threading.Tasks.Parallel.ForEach(
+                    camerasToPause, cam => cam.PauseAcquisition());
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"[FreeCameras.pause] {ex.GetType().Name}: {ex.Message}");
+            }
 
             // 先停止 global merge（必須在 cam.Free 之前）：DisableGlobalMerge 會先清各相機 merge target
             // 再由工頭 MbufFree 合併 buffer，避免 grab hook 把幀複製進已釋放的 buffer。
@@ -495,7 +558,11 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             // grab 中拉大到 ~12062 會 stall → 一律 cap 在 MaxGrabHeightPx(12000) 以下（per-camera 固定，不分台數）。
             if (height > AcquisitionDefaults.MaxGrabHeightPx) height = AcquisitionDefaults.MaxGrabHeightPx;
-            FindCamera(camId)?.SetGrabHeight(height);
+            var cam = FindCamera(camId);
+            if (cam == null) return;
+            cam.PauseAcquisition();
+            try { cam.SetGrabHeight(height); }
+            finally { cam.ResumeAcquisition(); }
         }
 
         private int _coordDepth;
@@ -514,12 +581,12 @@ namespace AniloxRoll.Monitor.UI.Managers
             _coordDepth++;
             try
             {
-                cam.SetUserGrabIntent(false);   // 只停這一台
+                cam.PauseAcquisition();
                 write();
             }
             finally
             {
-                if (cam.IsConnected) cam.SetUserGrabIntent(true);   // 只重啟這一台
+                cam.ResumeAcquisition();
                 // 不在此同步等出幀：同步 Thread.Sleep 會凍 UI（stall 時必卡滿）→ Windows 變灰 Not Responding →
                 // 拉滑桿被排隊 replay → 解凍後「跳到空拉位置」再觸發一次套用＝暴力漏洞。stop→write→start 本身
                 // 同步序列化（MouseUp handler 跑完才處理下一個事件），不需凍結等待。stall 偵測交給 status timer。
@@ -541,14 +608,14 @@ namespace AniloxRoll.Monitor.UI.Managers
             try
             {
                 foreach (var cam in _cameras)
-                    if (cam != null && cam.IsLive) { cam.SetUserGrabIntent(false); paused.Add(cam); }
+                    if (cam != null && cam.IsLive) { cam.PauseAcquisition(); paused.Add(cam); }
                 write();
             }
             finally
             {
                 // 協調重啟：back-to-back 一起 M_START（All 一次套 7 台才用此版；單台走 camId overload）
                 foreach (var cam in paused)
-                    if (cam.IsConnected) cam.SetUserGrabIntent(true);
+                    cam.ResumeAcquisition();
 
                 // 不同步等出幀（會凍 UI → 變灰 Not Responding → 拉滑桿排隊 replay 跳值＝暴力漏洞）。
                 // stall 偵測交給 status timer（FPS≈0 判據）。

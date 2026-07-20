@@ -76,7 +76,7 @@ namespace AniloxRoll.Monitor.Forms
                 try
                 {
                     await _liveCameraManager.EnsureAllocatedAndToggleGrabAsync(
-                        _settings.EnableMuraEnhance);
+                        _settings.EnableMuraEnhance, deferCaptureGate: true);
                     if (!_liveCameraManager.IsAllocated)
                     {
                         LightTurnOff();
@@ -98,7 +98,7 @@ namespace AniloxRoll.Monitor.Forms
             }
             else
             {
-                _liveCameraManager.ToggleGrab();
+                _liveCameraManager.ToggleGrab(deferCaptureGate: true);
             }
 
             // 剛從「未抓取」→「抓取中」：分配新的抓圖編號（燈已在上方開啟）
@@ -118,6 +118,15 @@ namespace AniloxRoll.Monitor.Forms
                 int limitSeconds = Math.Max(1, _settings?.GrabLimitSeconds ?? InspectionDefaults.GrabLimitSeconds);
                 _grabDurationCoordinator?.Arm(limitSeconds);
                 FlowTrace.Log($"grab limit armed {limitSeconds}s grab={_currentGrabId}");
+
+                if (!_liveCameraManager.OpenCaptureGate())
+                {
+                    _grabDurationCoordinator?.Disarm();
+                    _liveCameraManager.StopGrab();
+                    LightTurnOff();
+                    UpdateGrabButton(false);
+                    return false;
+                }
             }
 
             // 剛從「抓取中」→「停止」：關燈 + 觸發循環儲存 + 通知儲存機清理

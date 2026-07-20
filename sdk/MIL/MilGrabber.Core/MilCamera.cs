@@ -68,7 +68,14 @@ namespace MilGrabber.Core
         public bool IsLive { get; private set; } = false;
         public bool IsConnected { get; private set; } = false;
         public bool UserWantsGrab => _userWantsGrab;
+        public bool KeepAcquiringWhenIdle => _keepAcquiringWhenIdle;
+        public bool HasObservedFrameSinceAcquisitionStart =>
+            IsLive && _hasObservedFrameSinceAcquisitionStart;
         private bool _userWantsGrab = false;
+        private bool _keepAcquiringWhenIdle;
+        private volatile bool _hasObservedFrameSinceAcquisitionStart;
+        private int _acquisitionPauseDepth;
+        private readonly object _grabStateLock = new object();
         private bool _isReleased = false;
         private bool _isSecondaryHooked = false;
 
@@ -212,8 +219,61 @@ namespace MilGrabber.Core
 
         public void SetUserGrabIntent(bool enable)
         {
-            _userWantsGrab = enable;
-            ApplyGrabState();
+            lock (_grabStateLock)
+            {
+                _userWantsGrab = enable;
+                ApplyGrabStateLocked();
+            }
+        }
+
+        /// <summary>
+        /// Keeps MdigProcess armed while the product capture gate is closed. It is opt-in so SDK
+        /// samples retain their existing start/stop behavior.
+        /// </summary>
+        public bool EnableHotStandby()
+        {
+            lock (_grabStateLock)
+            {
+                if (_isReleased || _milDigitizer == MIL.M_NULL) return false;
+                bool wasLive = IsLive;
+                _keepAcquiringWhenIdle = true;
+                ApplyGrabStateLocked();
+                return !wasLive && IsLive;
+            }
+        }
+
+        public void DisableHotStandby()
+        {
+            lock (_grabStateLock)
+            {
+                _keepAcquiringWhenIdle = false;
+                ApplyGrabStateLocked();
+            }
+        }
+
+        /// <summary>
+        /// Physically stops acquisition for reconfiguration or release. Calls may be nested; only
+        /// the outermost ResumeAcquisition can re-arm the digitizer.
+        /// </summary>
+        public void PauseAcquisition()
+        {
+            lock (_grabStateLock)
+            {
+                _acquisitionPauseDepth++;
+                if (_acquisitionPauseDepth == 1)
+                    DrainGrabLocked();
+            }
+        }
+
+        public void ResumeAcquisition()
+        {
+            lock (_grabStateLock)
+            {
+                if (_acquisitionPauseDepth <= 0) return;
+                _acquisitionPauseDepth--;
+                if (_acquisitionPauseDepth == 0)
+                    ApplyGrabStateLocked();
+            }
         }
 
         /// <summary>依 _userWantsGrab 與 IsLive 決定啟動/停止 MdigProcess。
@@ -221,20 +281,27 @@ namespace MilGrabber.Core
         /// 避免第一次 grab 進行中才 enable + 重套線掃造成掉幀（cam1 最明顯）。</summary>
         public void ApplyGrabState()
         {
+            lock (_grabStateLock)
+            {
+                ApplyGrabStateLocked();
+            }
+        }
+
+        private void ApplyGrabStateLocked()
+        {
             if (_isReleased || _milDigitizer == MIL.M_NULL) return;
 
-            if (_userWantsGrab && !IsLive && CheckPresence())
+            bool shouldRun = _acquisitionPauseDepth == 0 &&
+                (_userWantsGrab || _keepAcquiringWhenIdle);
+            if (shouldRun && !IsLive && CheckPresence())
             {
-                MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize,
-                    MIL.M_START, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
-                IsLive = true;
+                StartProcess();
             }
-            else if (!_userWantsGrab && IsLive)
+            else if (!shouldRun && IsLive)
             {
-                // 乾淨 drain（唯一來源 DrainGrab）：裸 M_STOP 只取消佇列、不保證 in-flight 清乾淨 → re-grab 在
-                // 「未乾淨」狀態 re-arm，兩台 M_START 跨 frame 邊界時序不一 → 某台第一個完整幀晚一格
-                // （free-run 無 trigger 的量化效應）。乾淨 drain 後 re-arm 接近「第一次 grab」狀態，兩台較易等到同一完整 frame。
-                DrainGrab();
+                // Physical stop is reserved for hot-standby disable, reconfiguration, or release.
+                // Business StopGrab only clears its acceptance gate and does not enter this branch.
+                DrainGrabLocked();
             }
         }
 
@@ -244,6 +311,14 @@ namespace MilGrabber.Core
         /// in-flight；eV-CL 支援，guard 防 .NET wrapper 不支援。`ApplyGrabState` 停止 + `SetGrabHeight` 改尺寸前共用此一份。</summary>
         private void DrainGrab()
         {
+            lock (_grabStateLock)
+            {
+                DrainGrabLocked();
+            }
+        }
+
+        private void DrainGrabLocked()
+        {
             if (_milDigitizer == MIL.M_NULL) return;
             if (IsLive)
             {
@@ -251,6 +326,7 @@ namespace MilGrabber.Core
                     MIL.M_STOP + MIL.M_WAIT, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
                 IsLive = false;
             }
+            _hasObservedFrameSinceAcquisitionStart = false;
             try { MIL.MdigControl(_milDigitizer, MIL.M_GRAB_ABORT, MIL.M_DEFAULT); }
             catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}] M_GRAB_ABORT 不支援/失敗（continue）：{ex.Message}"); }
         }
@@ -262,6 +338,8 @@ namespace MilGrabber.Core
             MIL_INT presence = 0;
             MIL.MdigInquire(_milDigitizer, MIL.M_CAMERA_PRESENT, ref presence);
             IsConnected = (presence == MIL.M_YES);
+            if (!IsConnected)
+                _hasObservedFrameSinceAcquisitionStart = false;
             return IsConnected;
         }
 
@@ -278,7 +356,11 @@ namespace MilGrabber.Core
             MIL_ID modifiedBuffer = MIL.M_NULL;
             MIL.MdigGetHookInfo(eventId, MIL.M_MODIFIED_BUFFER + MIL.M_BUFFER_ID, ref modifiedBuffer);
             cam._milLastGrabBuffer = modifiedBuffer;
-            cam.CaptureFrameStartLatch(eventId);   // 多相機相位：讀本幀 frame-start 硬體時戳 + 記 phase log（診斷）
+            // Idle standby only needs one observed frame to prove readiness. During product grab,
+            // continue reading every latch for alignment diagnostics and display timestamps.
+            if (!cam._hasObservedFrameSinceAcquisitionStart || cam._userWantsGrab)
+                cam.CaptureFrameStartLatch(eventId);
+            cam._hasObservedFrameSinceAcquisitionStart = true;
 
             if (modifiedBuffer != MIL.M_NULL && cam._milDisplayBuffer != MIL.M_NULL)
             {
@@ -292,7 +374,8 @@ namespace MilGrabber.Core
 
                 // 全域合圖：display buffer 更新完成後，把裁切範圍貼到合併 buffer 的對應位置。
                 // 以 displayBuffer 為來源 → 合併圖反映「目前顯示的內容」（原圖或上層處理後）。
-                cam.CopyDisplayToMergeTarget();
+                if (cam._userWantsGrab)
+                    cam.CopyDisplayToMergeTarget();
             }
 
             return MIL.M_NULL;
@@ -361,18 +444,19 @@ namespace MilGrabber.Core
 
         public void Dispose()
         {
-            if (_isReleased)
+            lock (_grabStateLock)
             {
-                if (_hUserData.IsAllocated) _hUserData.Free();
-                return;
-            }
-            _isReleased = true;
+                if (_isReleased)
+                {
+                    if (_hUserData.IsAllocated) _hUserData.Free();
+                    return;
+                }
 
-            if (_milDigitizer != MIL.M_NULL && IsLive)
-            {
-                MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize,
-                    MIL.M_STOP, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
-                IsLive = false;
+                _userWantsGrab = false;
+                _keepAcquiringWhenIdle = false;
+                _acquisitionPauseDepth++;
+                DrainGrabLocked();
+                _isReleased = true;
             }
 
             if (_isSecondaryHooked && _milSecondaryDisplay != MIL.M_NULL)

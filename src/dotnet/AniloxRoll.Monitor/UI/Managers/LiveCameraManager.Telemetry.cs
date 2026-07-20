@@ -21,6 +21,8 @@ namespace AniloxRoll.Monitor.UI.Managers
         // Stall 偵測職責已提取到 CameraStallDetector（純邏輯、可單獨測；判據＝M_PROCESS_FRAME_COUNT 前進、非 FPS 門檻）。
         private readonly CameraStallDetector _stallDetector = new CameraStallDetector();
         private readonly Dictionary<int, bool> _lastPresence = new Dictionary<int, bool>();    // 上次 tick 在線狀態（斷線→連線邊緣偵測 → 重跑 CLProtocol）
+        private readonly HashSet<int> _parameterReadyLogged = new HashSet<int>();
+        private readonly HashSet<int> _warmReadyLogged = new HashSet<int>();
         private bool _wasHwReady;                                                              // 上次 tick AreCamerasHwReady（偵 false→true 轉變 → 強制刷 count label/解鎖鈕）
 
         // ==================== Status Timer ====================
@@ -44,10 +46,17 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             // CLProtocol 背景初始化期間（分配後 ~2-10s）不碰 MIL（與背景 enable 搶 MIL 內部鎖會凍 UI）。
             // AreCamerasHwReady 只讀旗標。gate-off 恢復時 hwJustReady=true → 強制刷 count label + 重發 OnHwReady。
+            if (!AreCameraParametersReady)
+            {
+                _parameterReadyLogged.Clear();
+                _wasHwReady = false;
+                _hwReadyRaised = false;
+                return;
+            }
             bool hwReady = AreCamerasHwReady;
-            if (!hwReady) { _wasHwReady = false; _hwReadyRaised = false; return; }
-            bool hwJustReady = !_wasHwReady;
-            _wasHwReady = true;
+            bool hwJustReady = hwReady && !_wasHwReady;
+            if (!hwReady) _hwReadyRaised = false;
+            _wasHwReady = hwReady;
 
             // 快照：防 ReleaseAsync 清 _cameras 時 foreach 炸 InvalidOperationException
             AniloxCamera[] snapshot;
@@ -71,11 +80,38 @@ namespace AniloxRoll.Monitor.UI.Managers
                         // 單飛路徑觸碰 → 背景使用安全。
                         bool wasConnected = _lastPresence.TryGetValue(cam.CameraId, out var pv) && pv;
                         _lastPresence[cam.CameraId] = isConnected;
-                        if (isConnected && !wasConnected) cam.RetryCLProtocolOnReconnect();
+                        if (isConnected && !wasConnected)
+                            cam.RetryCLProtocolOnReconnect();
 
-                        // 連線恢復且使用者希望抓圖時，自動重啟（MIL 呼叫，本就該在背景）
-                        if (isConnected && cam.UserWantsGrab && !cam.IsLive)
-                            cam.ApplyGrabState();
+                        // Reconnect may have just started a new CLProtocol handshake. Do not arm
+                        // MdigProcess until that handshake and its parameter writes have settled.
+                        if (isConnected && cam.IsHwParamsStable)
+                        {
+                            if (_parameterReadyLogged.Add(cam.CameraId))
+                            {
+                                FlowTrace.Log(
+                                    $"acquisition parameters ready cam{cam.CameraId} " +
+                                    $"cl={cam.IsClProtocolEnabled} lineRate={cam.AppliedLineRateHz:F0}");
+                            }
+
+                            bool started = cam.EnableHotStandby();
+                            if (started)
+                                FlowTrace.Log($"acquisition standby start cam{cam.CameraId}");
+                        }
+
+                        if (isConnected && cam.IsAcquisitionWarm)
+                        {
+                            if (_warmReadyLogged.Add(cam.CameraId))
+                            {
+                                FlowTrace.Log(
+                                    $"acquisition standby ready cam{cam.CameraId} " +
+                                    $"tick={cam.LastFrameStartTicks}");
+                            }
+                        }
+                        else
+                        {
+                            _warmReadyLogged.Remove(cam.CameraId);
+                        }
 
                         string statusText; Color color; bool clearFrame = false;
                         if (!isConnected)
@@ -84,9 +120,9 @@ namespace AniloxRoll.Monitor.UI.Managers
                             _stallDetector.Reset(cam.CameraId);
                             clearFrame = true;
                         }
-                        else if (!cam.IsLive)
+                        else if (!cam.IsLive || !cam.IsAcquisitionWarm)
                         {
-                            statusText = "就緒"; color = Color.Yellow;
+                            statusText = "暖機中"; color = Color.LightGray;
                             _stallDetector.Reset(cam.CameraId);
                         }
                         else
@@ -96,7 +132,14 @@ namespace AniloxRoll.Monitor.UI.Managers
                                 ? cam.AppliedLineRateHz / cam.FrameHeight : 0;
                             bool stalled = _stallDetector.Update(cam.CameraId, cam.GetFrameCount(), expFps);
                             if (stalled) { statusText = "STALL"; color = Color.Red; }
-                            else { statusText = $"FPS: {cam.CurrentFps:F1}"; color = Color.LightGreen; }
+                            else if (!cam.UserWantsGrab)
+                            {
+                                statusText = "就緒"; color = Color.LightGreen;
+                            }
+                            else
+                            {
+                                statusText = $"FPS: {cam.CurrentFps:F1}"; color = Color.LightGreen;
+                            }
                         }
                         statuses.Add((cam.CameraId, statusText, color, clearFrame));
                     }

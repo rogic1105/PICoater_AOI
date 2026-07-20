@@ -13,6 +13,7 @@ class LiveFlowValidator:
     def validate(self, session: FlowSession) -> CheckReport:
         report = CheckReport()
         self._check_camera_initialization(session, report)
+        self._check_capture_standby(session, report)
         if not any(
             line.message.startswith(("LC ", "IC ", "WF ", "ui:【開始抓取】"))
             for line in session.lines
@@ -169,6 +170,149 @@ class LiveFlowValidator:
             f"allocationWorstStall={worst_allocation_stall}ms；"
             f"processingWorstStall={worst_stall}ms"
             + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_capture_standby(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        if not any(
+            line.message.startswith(
+                (
+                    "acquisition parameters ready ",
+                    "acquisition standby start ",
+                    "acquisition standby ready ",
+                    "capture gate open ",
+                    "capture gate closed ",
+                )
+            )
+            for line in session.lines
+        ):
+            report.add(
+                self.domain,
+                "F2.standby",
+                CheckStatus.NOT_COVERED,
+                "session predates acquisition standby instrumentation",
+            )
+            return
+
+        parameter_ready_cameras = set()
+        ready_cameras = set()
+        start_pending = False
+        capture_open = False
+        stop_pending = False
+        plan_ready = False
+        background_capture = False
+        starts = 0
+        stops = 0
+        failures = []
+
+        for line in session.lines:
+            message = line.message
+            parameter_match = re.match(
+                r"acquisition parameters ready cam(\d+) "
+                r"cl=(True|False) lineRate=([0-9]+(?:\.[0-9]+)?)",
+                message,
+            )
+            if parameter_match:
+                parameter_ready_cameras.add(int(parameter_match.group(1)))
+                continue
+
+            standby_start_match = re.match(
+                r"acquisition standby start cam(\d+)", message
+            )
+            if standby_start_match:
+                camera_id = int(standby_start_match.group(1))
+                if camera_id not in parameter_ready_cameras:
+                    failures.append(
+                        f"standby started before parameters ready for cam{camera_id} "
+                        f"at {line.timestamp}"
+                    )
+                continue
+
+            ready_match = re.match(
+                r"acquisition standby ready cam(\d+) tick=(-?\d+)", message
+            )
+            if ready_match:
+                camera_id = int(ready_match.group(1))
+                if camera_id not in parameter_ready_cameras:
+                    failures.append(
+                        f"standby ready before parameters ready for cam{camera_id} "
+                        f"at {line.timestamp}"
+                    )
+                ready_cameras.add(camera_id)
+                continue
+
+            if message == "ui:【取得背景】鈕":
+                background_capture = True
+                continue
+
+            if message.startswith("StartGrab"):
+                starts += 1
+                start_pending = True
+                stop_pending = False
+                plan_ready = background_capture
+                continue
+
+            if message.startswith("capture plan "):
+                plan_ready = True
+                continue
+
+            gate_match = re.match(
+                r"capture gate open cams=(\d+) warm=(True|False)", message
+            )
+            if gate_match:
+                expected = int(gate_match.group(1))
+                warm = gate_match.group(2) == "True"
+                if not start_pending:
+                    failures.append(f"gate open without StartGrab at {line.timestamp}")
+                if not plan_ready:
+                    failures.append(
+                        f"gate opened before capture plan at {line.timestamp}"
+                    )
+                if not warm or len(ready_cameras) < expected:
+                    failures.append(
+                        f"gate opened before warm ready at {line.timestamp}: "
+                        f"ready={len(ready_cameras)} expected={expected} warm={warm}"
+                    )
+                if len(parameter_ready_cameras) < expected:
+                    failures.append(
+                        f"gate opened before parameters ready at {line.timestamp}: "
+                        f"ready={len(parameter_ready_cameras)} expected={expected}"
+                    )
+                start_pending = False
+                plan_ready = False
+                capture_open = True
+                continue
+
+            if message == "StopGrab":
+                stops += 1
+                capture_open = False
+                stop_pending = True
+                background_capture = False
+                continue
+
+            if message == "capture gate closed standby=on":
+                if not stop_pending:
+                    failures.append(f"gate closed without StopGrab at {line.timestamp}")
+                stop_pending = False
+                continue
+
+            if "firstFrame " in message and not capture_open:
+                failures.append(f"firstFrame while capture gate closed at {line.timestamp}")
+
+        if start_pending:
+            failures.append("last StartGrab has no capture gate open")
+        if stop_pending:
+            failures.append("last StopGrab has no capture gate closed")
+
+        report.add(
+            self.domain,
+            "F2.standby",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"parameterReadyCams={len(parameter_ready_cameras)} "
+            f"readyCams={len(ready_cameras)} starts={starts} stops={stops} "
+            f"failures={len(failures)}"
+            + (f"; first={failures[0]}" if failures else ""),
         )
 
     def _check_drag_first_publish(self, session: FlowSession, report: CheckReport) -> None:

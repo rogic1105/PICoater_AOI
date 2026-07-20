@@ -12,6 +12,7 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 from flow_checks.core import CheckStatus, FlowLine, FlowSession
+from flow_checks.live import LiveFlowValidator
 from flow_checks.mura import MuraFlowValidator
 from flow_checks.parameter import ParameterFlowValidator
 from flow_checks.registry import PENDING_DOMAINS
@@ -136,3 +137,64 @@ class ParameterFlowValidatorTests(unittest.TestCase):
 
     def test_registry_has_no_pending_domains(self):
         self.assertEqual((), PENDING_DOMAINS)
+
+
+class LiveStandbyFlowValidatorTests(unittest.TestCase):
+    def test_warm_ready_gate_start_and_stop_pass(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "acquisition parameters ready cam1 cl=True lineRate=3001",
+                "acquisition parameters ready cam2 cl=True lineRate=3001",
+                "acquisition standby start cam1",
+                "acquisition standby start cam2",
+                "acquisition standby ready cam1 tick=100",
+                "acquisition standby ready cam2 tick=102",
+                "StartGrab cams=4",
+                "capture plan grab=260720-120000 root=D:\\Anilox",
+                "capture gate open cams=2 warm=True",
+                "firstFrame cam1 100x100 -> ImageDisplayView",
+                "firstFrame cam2 100x100 -> ImageDisplayView",
+                "StopGrab",
+                "capture gate closed standby=on",
+                "drop drainedFrame after StopGrab cam1",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "F2.standby").status)
+
+    def test_gate_before_all_cameras_are_ready_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "acquisition parameters ready cam1 cl=True lineRate=3001",
+                "acquisition parameters ready cam2 cl=True lineRate=3001",
+                "acquisition standby start cam1",
+                "acquisition standby start cam2",
+                "acquisition standby ready cam1 tick=100",
+                "StartGrab cams=4",
+                "capture plan grab=260720-120000 root=D:\\Anilox",
+                "capture gate open cams=2 warm=False",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "F2.standby").status)
+
+    def test_gate_before_capture_plan_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "acquisition parameters ready cam1 cl=True lineRate=3001",
+                "acquisition standby ready cam1 tick=100",
+                "StartGrab cams=4",
+                "capture gate open cams=1 warm=True",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "F2.standby").status)
+
+    def test_standby_before_parameter_work_completes_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "acquisition standby start cam1",
+                "acquisition standby ready cam1 tick=100",
+                "StartGrab cams=4",
+                "capture plan grab=260720-120000 root=D:\\Anilox",
+                "capture gate open cams=1 warm=True",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "F2.standby").status)

@@ -113,9 +113,10 @@ S0 通用（所有 PropertyGrid 設定自動記 `ui:設定[名]=值`）。新增
 - app 內零 MIL 原生顯示視窗/滑鼠 hook（headless；MilCamera panelHandle=Zero）。
 - 主畫面永遠合圖（即時=ImageDisplayView、瀑布=WaterfallView）；縮圖兩模式一律即時 ThumbStrip（橘框選中）。
 - `SwitchMainDisplay` 的 `center=True` **只**允許出現在明確點縮圖/狀態字之後（拖曳/程式化路徑=False，否則回彈）。
-- **UI 執行緒零 MIL/序列埠同步呼叫**（2026-07-07 [UiStack] 全清單）：MdigInquire/MdigControl/
-  MdigProcess/CLProtocol feature 讀寫/SerialPort.Write 一律背景。已修：CamStatusTick、
-  SyncCameraParamsFromHardware、StopGrab 排水（Parallel.ForEach 會徵用呼叫執行緒！）、LightTurnOn/Off。
+- **UI 執行緒零耗時 MIL/序列埠同步呼叫**（2026-07-07 [UiStack] 全清單）：MdigInquire/MdigControl/
+  MdigProcess/CLProtocol feature 讀寫/SerialPort.Write 一律背景或限於已證明零阻塞的旗標切換。
+  `StopGrab` 只關產品 gate、不碰 MdigProcess；實體 Pause／Release 在背景執行。已修：
+  CamStatusTick、SyncCameraParamsFromHardware、StopGrab、LightTurnOn/Off。
   開機配置只允許 acquisition 階段的 MIL System／Digitizer／grab-buffer 建立留在 UI 執行緒；
   AOI pipeline、managed buffer、CUDA pinned slab 必須由單一背景 worker 依相機順序建立。
   新增 native 呼叫點一律先確認執行緒與釋放競態。
@@ -187,10 +188,15 @@ IC|WF viewEdges X …｜Y …                     ← 拖曳放開時畫面四�
 |---|---|---|---|
 | Unallocated | EnsureAllocated | AllocatingAcquisition | UI 執行緒依序建立 MIL System／Digitizer／grab buffers |
 | AllocatingAcquisition | MIL 全部完成 | AllocatingProcessing | 單一背景 worker 依序建立 AOI pipeline、managed buffers、pinned slabs |
-| AllocatingProcessing | processing 全部完成 | Allocated | 回 UI 執行緒啟動 CLProtocol、建立顯示 view、發布實際在線數 |
+| AllocatingProcessing | processing 全部完成 | Parameterizing | 回 UI 執行緒啟動 CLProtocol、建立顯示 view、發布實際在線數 |
+| Parameterizing | 每台 CLProtocol 工作與曝光／線掃寫入實際返回 | Warming | 發布 `acquisition parameters ready`；各在線相機才可啟動 hot standby。10 秒 timeout 只告警，不解除 gate |
+| Warming | 各在線相機觀測到第一個 raw frame | ReadyIdle | 發布 `OnHwReady`、解鎖 Grab；產品收幀 gate 仍關閉 |
+| ReadyIdle | StartGrab | Capturing | 先設各相機使用者意圖，再一次開啟全域收幀 gate |
+| Capturing | StopGrab | ReadyIdle | 先關全域收幀 gate，再清使用者意圖；MIL 保持 hot standby |
+| ReadyIdle／Capturing | 參數重配置 | Reconfiguring → Warming | `PauseAcquisition` 實體 drain，改參數／重配 buffer，再 `ResumeAcquisition` 等新首幀 |
 | AllocatingAcquisition／AllocatingProcessing | 任一步失敗 | Unallocated | 釋放本輪已建立資源、保留 Grab gate、回報錯誤 |
 | 任意配置中狀態 | Release | Releasing → Unallocated | 等目前 native call 返回後釋放；晚到結果不得發布 Ready |
-| Allocated | EnsureAllocated | Allocated | 冪等，不重複配置 |
+| ReadyIdle／Capturing | EnsureAllocated | 原狀態 | 冪等，不重複配置 |
 
 禁止：多台相機平行呼叫 `TanukiCv_AllocPinned`；MIL 與 processing 不得各自建立第二條配置入口。
 
@@ -210,7 +216,10 @@ T1: SwitchMainDisplay cam=1 center=False
 T1: AllocateCameras done（配置 M、在線 P/N）   ← P=CheckPresence 實際在線（配置≠在線：quad 卡空通道
                                                   也配得起來；報配置數＝幽靈相機數，2026-07-07 修正）
 T1: camera init summary cams=M totalMs=X acquisitionMs=A processingMs=B
-T1: （CLProtocol 就緒後）EnableGlobalMerge（slots=7）
+Tbg: acquisition parameters ready camN cl={True|False} lineRate=R × 在線相機；必早於同台 standby start
+Tbg: acquisition standby start camN                          × 在線相機（只在本次實體 M_START 時出現）
+Tbg: acquisition standby ready camN tick=T                  × 在線相機（raw callback 實測，不用固定等待）
+T1: （全部在線相機 warm 後）EnableGlobalMerge（slots=7）
 ```
 
 效能判準：完整配置期間單筆 UI stall 不得超過 1000ms；processing 期間 UI heartbeat 不得出現
@@ -234,7 +243,11 @@ AutoAllocateCameras(Form)                    顯示基線 set:[顯示基線] 一
     │    └ EnsureImageDisplay：FlipVertical=方向、VerticalZeroAtBottom=方向（座標約定，轉換點#1/#3）
     ├ SwitchMainDisplay(Selected)            center=False（程式化不置中）
     └ 發布「在線數」（非配置數）→ OnCameraCountChanged
-（背景）CLProtocol 全就緒 → OnHwReady → 解鎖 grab 鈕 + EnableGlobalMerge（佈局=MergeLayout 唯一來源）
+（背景）CLProtocol 工作全數實際返回 → CameraStatusTimer_Tick
+ ├ per-cam `acquisition parameters ready`（含 CL 啟用結果與套用線掃率）
+ ├ per-cam EnableHotStandby@AniloxCamera.cs → EnableHotStandby@MilCamera.cs → MdigProcess(M_START)
+ ├ ProcessingFunction raw callback → HasObservedFrameSinceAcquisitionStart=true
+ └ 全部在線相機 warm → OnHwReady → 解鎖 grab 鈕 + EnableGlobalMerge（佈局=MergeLayout 唯一來源）
 ```
 單一決策點：顯示狀態=f(he_MainDisplay, 背景預覽靜音鍵)——ApplyMainDisplayMode 唯一計算點（F8）；方向=ShouldFlipVertical。
 設定契約：新生成設定或 JSON 缺少 `MainDisplay` 時預設 `Waterfall`；既有 JSON 的明確值優先，不做遷移覆寫。
@@ -252,6 +265,7 @@ T1: StartGrab（cams=M）
 T1: ApplyMainDisplayMode → 同模式    ← 冪等：不得出現 create/teardown 行
 T1: capture plan grab=… root=… imageDir=… csv=… files=… scale=…
 T1: grab limit armed Ns grab=…       ← 正式監控 grab 成功後啟動 one-shot；背景採樣借用 grab 不武裝
+T1: capture gate open cams=P warm=True   ← P=在線數；必晚於 plan/limit 與全部 standby ready，早於所有 firstFrame
 Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線」相機恰一行，順序不定
 （首幀齊後進入穩態 → 適用「穩態靜默通則」：無互動下不得再有顯示狀態**變更**行。
   狀態**快照**行〔rowChart/WF state/IC state/stats，見§狀態快照儀器〕＝儀器輸出，穩態每秒出現正常）
@@ -269,25 +283,29 @@ Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線�
  │   → await Task.Delay(LightWarmupMs)               ⚠ 序列埠寫入一律背景（UI 執行緒零 MIL/序列埠鐵則）
  ├（未抓取）ResetLiveChartsForDisplayTransition@AniloxRollForm.Live.cs ＋ _muraExceedLatch 歸零
  │   ＋ UpdateMuraLed(false) ＋ ClearMura@IoGrabController.cs   ← MURA 閂鎖歸零（latch 非脈衝，M1）
- ├（未配置）await EnsureAllocatedAndToggleGrabAsync@LiveCameraManager.cs
+ ├（未配置）await EnsureAllocatedAndToggleGrabAsync(deferCaptureGate:true)@LiveCameraManager.cs
  │   → AllocateCamerasAsync（=F1 全序）→ ToggleGrab
  │   └（回 form）LoadBackgroundBins@AniloxRollForm.Background.cs ＋ EnableGlobalMerge@LiveCameraManager.Merge.cs
- ├（已配置）ToggleGrab@LiveCameraManager.cs
+ ├（已配置）ToggleGrab(deferCaptureGate:true)@LiveCameraManager.cs
  │   └ StartGrab@LiveCameraManager.cs
- │      ├ WaitStopDrain@LiveCameraManager.cs         ← 不變量：上輪停止排水未完不得 M_START（快速停→開競態）
+ │      ├ AreCamerasHwReady（CLProtocol ready＋每台在線相機已觀測 raw frame）未滿足 → return
+ │      ├ _captureGateOpen=false                     ← 組態調整期間不接受任何 callback
  │      ├ ResetFlowFirstFrame@LiveDisplayCoordinator.cs（每輪 grab 重驗「幀有流到 view」）
  │      ├ IsLiveGrabbing = true
  │      ├ ApplyMainDisplayMode@LiveDisplayCoordinator.cs   ← 冪等（view 已存在早退）＝本 flow 不得出現 create/teardown 行
  │      ├ ResetWaterfallIfActive@LiveDisplayCoordinator.cs → Reset@WaterfallView.cs（清舊圖＋重置 tick 對齊，防新幀接舊網格錯位）
  │      └ per-cam SetUserGrabIntent(true)@AniloxCamera.cs
- │         └ SetUserGrabIntent@MilCamera.cs → ApplyGrabState@MilCamera.cs → MdigProcess(M_START)
+ │         └ SetUserGrabIntent@MilCamera.cs（只開產品意圖；MIL 已在 hot standby，不重做 M_START）
  ├（啟動成功）NextGrabId@InspectionLogService.cs → _currentGrabId ＋ capture plan 行（C1）
  │  └ Arm(GrabLimitSeconds)@GrabDurationCoordinator.cs → grab limit armed 行
  │     ← 設定在本輪開始時拍快照；PropertyGrid 中途改值從下一輪生效
+ ├ OpenCaptureGate@LiveCameraManager.cs
+ │  └ _captureGateOpen=true                         ← 單一全域寫入點；資料 owner 已準備後，7 台 callback 才一起取得資格
  └ UpdateGrabButton@AniloxRollForm.Live.cs
 （每幀幀流，MIL 回呼執行緒 Tn）
 ProcessingFunction@MilCamera.cs（MdigProcess hook，static）
  └ FrameReady 事件 → OnMilFrameReady@AniloxCamera.cs
+    ├ UserWantsGrab && CaptureGateOpen 才繼續；gate 關閉時不進 GPU／顯示／CSV／存檔
     ├ TryApplyPicoaterRidge@AniloxCamera.cs（GPU 檢測，一律跑）  ⚠ _picoaterLock＋尺寸守門（高度變更瞬間跳過幀防 AV）
     │  ├ ProcessImage@AoiService.cs（P/Invoke TanukiPipeline_Process；fused 存檔縮圖 wantResize＝grab-level 決策）
     │  ├ OnLiveCurveData 事件 → OnLiveCurveData@AniloxRollForm.Live.cs → CheckLiveMura("v")（M1）＋ _liveOverviewDirty=true
@@ -319,9 +337,10 @@ RefreshMain@ImageDisplayView.cs（33ms _timer）
 **log-flow（執行期腳印＝判準）**
 ```
 T1: StopGrab
+T1: capture gate closed standby=on
 Tn: drop drainedFrame after StopGrab camN（可選；每台最多一行）
 （之後不得再出現 firstFrame / 任何 [Flow] 顯示行，直到下一個動作；
-  drain drop 行是清尾幀儀器，不是顯示更新）
+  drop 行是 gate 關閉競態的觀測儀器，不是顯示更新）
 ```
 
 **code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
@@ -333,16 +352,13 @@ Tn: drop drainedFrame after StopGrab camN（可選；每台最多一行）
  ├ ToggleLiveGrabAsync@AniloxRollForm.Live.cs
  │  └ ToggleGrab@LiveCameraManager.cs
     └ StopGrab@LiveCameraManager.cs
-       ├ FlowTrace "StopGrab" ＋ IsLiveGrabbing=false（先翻旗標）
-       └ _stopDrainTask = Task.Run(Parallel.ForEach cams → SetUserGrabIntent(false))
-          ⚠ 排水整包背景：Parallel.ForEach 會徵用「呼叫執行緒」當 worker——在 UI 執行緒跑＝
-             按停止時 UI 被抓去跑 M_STOP+M_WAIT（低線掃秒級凍結，2026-07-07 [UiStack] 定罪）
-          └（背景執行緒）SetUserGrabIntent@AniloxCamera.cs → SetUserGrabIntent@MilCamera.cs
-             → ApplyGrabState@MilCamera.cs
-                └ DrainGrab@MilCamera.cs      ← 順序鎖死：M_STOP+M_WAIT（drain 佇列）→ M_GRAB_ABORT（清 in-flight）；
-                                                 唯一來源（停止與 SetGrabHeight 改尺寸前共用）
-             → drained FrameReady@AniloxCamera.cs 若發生：UserWantsGrab=false → drop，不進 Hessian/row chart/CSV/存檔
-                ← 防停止尾幀「有效影像 + 黑尾」被 Hessian 當水平脊線（黑白硬邊界）寫到最後 row
+       ├ FlowTrace "StopGrab"
+       ├ _captureGateOpen=false               ← 第一個動作；所有相機同一個原子 gate，晚到 callback 一律跳過
+       ├ IsLiveGrabbing=false
+       ├ per-cam SetUserGrabIntent(false)      ← 清產品意圖；KeepAcquiringWhenIdle=true，故不做 M_STOP
+       └ FlowTrace "capture gate closed standby=on"
+          └ callback 若已跨過 gate 讀取邊界：最多一個 drop 行，不進 Hessian/row chart/CSV/存檔
+             ← 防停止尾幀「有效影像 + 黑尾」被 Hessian 當水平脊線（黑白硬邊界）寫到最後 row
 （form 收尾，T1）
  ├ Disarm@GrabDurationCoordinator.cs                         ← 作廢 generation，舊 callback 不得停掉下一輪
  ├ Task.Run(LightTurnOff@AniloxRollForm.HardwareStatus.cs)   ⚠ [UiStack] 曾定罪停止時卡 SerialStream.Write → 一律背景
@@ -352,15 +368,18 @@ Tn: drop drainedFrame after StopGrab camN（可選；每台最多一行）
  └（逾時來源）NotifyGrabStopped@IoGrabController.cs          ← 先把 DO_PC_INSPECT 拉低；FSM 在 DI START
                                                             維持 High 時刻意留 Running（沒有新上升緣，不會重啟），
                                                             等 START 真正下降後才走既有 falling-edge 收尾回 Idle
-競態收口：下一次 StartGrab / ReleaseAsync 內的 FreeCamerasCore 開頭
-WaitStopDrain@LiveCameraManager.cs（排水未完等它，平時零成本）
+實體停止邊界只有兩種：
+ - 參數／高度重配置：PauseAcquisition → M_STOP+M_WAIT＋M_GRAB_ABORT → 修改 → ResumeAcquisition
+ - Release：先關 capture gate，再平行 PauseAcquisition，完成後才能釋放 merge／camera buffers
 ```
 
 **StopGrab 校稿工具**
 ```
 python tools/python/check_stopgrab_flow.py [trace.log]
 ```
-- PASS 判準：每個 `StopGrab` 後、下一個 `ui:`/`StartGrab`/`AllocateCameras begin` 前，只允許 `drop drainedFrame after StopGrab camN`；不得再出現 `firstFrame`、`LC row`、`capture csv`、IC/WF display 更新。
+- PASS 判準：每個 `StopGrab` 必接 `capture gate closed standby=on`；其後到下一個
+  `ui:`/`StartGrab`/`AllocateCameras begin` 前只允許 `drop drainedFrame after StopGrab camN`，
+  不得再出現 `firstFrame`、`LC row`、`capture csv`、IC/WF display 更新。
 
 ### F4 切「主畫面顯示」設定（即時↔瀑布，即時生效）
 
@@ -530,8 +549,10 @@ ReleaseAsync@LiveCameraManager.cs
  ├ 呼叫端先 _cameraStatusTimer.Stop ＋ IsReleasing=true
  ├ await allocation gate（配置中的 native call 返回前不得釋放）
  └ Task.Run → FreeCamerasCore@LiveCameraManager.cs
- ├ WaitStopDrain@LiveCameraManager.cs     ← 不變量：M_STOP 排水進行中就 MbufFree＝UAF 家族，先等完
- ├ IsReleasing=true ＋ _cameraStatusTimer.Stop ＋ IsLiveGrabbing=false
+ ├ IsReleasing=true ＋ _cameraStatusTimer.Stop ＋ _captureGateOpen=false ＋ IsLiveGrabbing=false
+ ├ Parallel.ForEach cams → PauseAcquisition@MilCamera.cs
+ │  └ DrainGrab：M_STOP+M_WAIT → M_GRAB_ABORT
+ │     ← 不變量：所有 digitizer 完成實體 drain 後才可釋放任何 MIL buffer（防 UAF）
  ├ DisableGlobalMerge@LiveCameraManager.Merge.cs   ← 順序鎖死：必在 cam.Free 之前
  │   （先清各台 merge target 再由工頭 MbufFree 合併 buffer，防 grab hook 把幀複製進已釋放 buffer）
  ├ TeardownImageDisplay@LiveDisplayCoordinator.cs ＋ TeardownWaterfallDisplay@LiveDisplayCoordinator.cs
@@ -1324,6 +1345,12 @@ ApplyChartScaleForChart（YMax 設定）────┘
 10:35:07.436 T 1 EnsureImageDisplay create + subscribe 4 cams（merge=False）
 10:35:07.438 T 1 SwitchMainDisplay cam=1 center=False mode=IC
 10:35:07.439 T 1 AllocateCameras done（cams=4）
+Tbg acquisition parameters ready cam1 cl=True lineRate=3001
+Tbg acquisition standby start cam1
+Tbg acquisition standby ready cam1 tick=T
+Tbg acquisition parameters ready cam2 cl=True lineRate=3001
+Tbg acquisition standby start cam2
+Tbg acquisition standby ready cam2 tick=T
 10:35:12.901 T 1 EnableGlobalMerge（slots=7）
 ```
 
@@ -1331,6 +1358,9 @@ ApplyChartScaleForChart（YMax 設定）────┘
 ```
 10:37:13.854 T 1 StartGrab（cams=4）
 10:37:13.855 T 1 ApplyMainDisplayMode → ImageCanvas
+T1 capture plan grab=… root=… imageDir=… csv=… files=… scale=…
+T1 grab limit armed 10s grab=…
+T1 capture gate open cams=2 warm=True
 10:37:15.170 T31 firstFrame cam1 16384x3000 → ImageDisplayView
 10:37:15.207 T30 firstFrame cam2 16384x3000 → ImageDisplayView
 ```
@@ -1338,6 +1368,7 @@ ApplyChartScaleForChart（YMax 設定）────┘
 **F3 範例**：
 ```
 10:37:21.226 T 1 StopGrab
+T1 capture gate closed standby=on
 ```
 
 **F4 範例**：

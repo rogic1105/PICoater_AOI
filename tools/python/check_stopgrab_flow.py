@@ -36,6 +36,7 @@ FORBIDDEN_PATTERNS = (
 )
 
 ALLOWED_AFTER_STOP = (
+    "capture gate closed standby=on",
     "drop drainedFrame after StopGrab cam",
 )
 
@@ -77,18 +78,28 @@ def check(rows):
     violations = []
     stop_windows = 0
     in_stop_window = False
+    gate_closed = False
 
     for lineno, msg in rows:
         if msg == "StopGrab":
+            if in_stop_window and not gate_closed:
+                violations.append((lineno, "previous StopGrab has no capture gate closed"))
             stop_windows += 1
             in_stop_window = True
+            gate_closed = False
             continue
 
         if not in_stop_window:
             continue
 
         if is_boundary(msg):
+            if not gate_closed:
+                violations.append((lineno, "StopGrab has no capture gate closed"))
             in_stop_window = False
+            continue
+
+        if msg == "capture gate closed standby=on":
+            gate_closed = True
             continue
 
         if is_allowed(msg):
@@ -97,12 +108,15 @@ def check(rows):
         if is_forbidden(msg):
             violations.append((lineno, msg))
 
+    if in_stop_window and not gate_closed:
+        violations.append((0, "last StopGrab has no capture gate closed"))
+
     return stop_windows, violations
 
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Check that post-StopGrab drain frames do not reach display, charts, CSV, or firstFrame flow."
+        description="Check the StopGrab capture gate and reject post-stop display, chart, CSV, or firstFrame flow."
     )
     ap.add_argument("trace", nargs="?", help="trace-*.log path. Defaults to latest D:\\Anilox\\Logs\\trace-*.log")
     args = ap.parse_args()
@@ -126,7 +140,7 @@ def main():
             print(f"  line {lineno}: {msg}")
         return 1
 
-    print("PASS no post-StopGrab forbidden flow lines")
+    print("PASS StopGrab gate closed and no post-stop forbidden flow lines")
     return 0
 
 

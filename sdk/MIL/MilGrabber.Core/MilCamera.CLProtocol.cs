@@ -12,7 +12,8 @@ namespace MilGrabber.Core
 
         /// <summary>背景啟用 CLProtocol（2-5s）+ 套用曝光/線掃。應在「相機分配完成後、第一次 grab 之前」呼叫
         /// （不與 MbufAlloc/MdispAlloc 競爭 MIL 內部鎖，也不在 grab 期間執行）。idempotent（_clProtocolInitStarted 守門）。
-        /// 完成（或逾時/失敗）前 <see cref="IsHwParamsStable"/>=false，供上層把「開始抓取」鈕維持灰色。</summary>
+        /// 實際工作完成（成功或失敗）前 <see cref="IsHwParamsStable"/>=false，供上層把「開始抓取」鈕維持灰色。
+        /// 逾時只記錄診斷，不得把仍在執行的參數寫入誤報為已完成。</summary>
         public void BeginCLProtocolInit()
         {
             if (_clProtocolInitStarted) return;
@@ -26,8 +27,7 @@ namespace MilGrabber.Core
                 if (!initTask.IsCompleted)
                 {
                     System.Diagnostics.Trace.WriteLine(
-                        $"[CAM{CameraId}] CLProtocol 初始化逾時（>10s）。CLProtocol 已停用，曝光/線掃維持 fallback 路徑。");
-                    _clProtocolInitDone = true;
+                        $"[CAM{CameraId}] CLProtocol 初始化超過 10s，工作仍在執行；參數就緒 gate 保持關閉。");
                 }
             });
         }
@@ -49,11 +49,19 @@ namespace MilGrabber.Core
 
         private void TryEnableCLProtocol()
         {
-            if (_milDigitizer == MIL.M_NULL) return;
+            if (_milDigitizer == MIL.M_NULL)
+            {
+                _clProtocolInitDone = true;
+                return;
+            }
 
             lock (_clProtocolInitLock)
             {
-                if (_isReleased || _clProtocolEnabled) return;   // 已啟用（防重連重試時雙啟用）
+                if (_isReleased || _clProtocolEnabled)
+                {
+                    _clProtocolInitDone = true;
+                    return;
+                }
                 try
                 {
                     MIL_INT numDevIds = 0;
@@ -83,13 +91,17 @@ namespace MilGrabber.Core
                         if (_appliedExposureUs > 0) SetExposureUs(_appliedExposureUs);
                         if (_appliedLineRateHz > 0) SetLineRateHz(_appliedLineRateHz);
                     }
-                    _clProtocolInitDone = true;
                 }
                 catch (Exception ex)
                 {
                     _clProtocolEnabled = false;
-                    _clProtocolInitDone = true;
                     System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}] CLProtocol init failed: {ex.GetType().Name}: {ex.Message}");
+                }
+                finally
+                {
+                    // This is the only normal completion edge. A diagnostic timeout must never
+                    // publish stable while CLProtocol or its parameter writes are still running.
+                    _clProtocolInitDone = true;
                 }
             }
         }

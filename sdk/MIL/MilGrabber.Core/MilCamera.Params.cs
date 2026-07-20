@@ -200,7 +200,7 @@ namespace MilGrabber.Core
                     try { onStoppedBeforeRestart(); }
                     catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}] onStoppedBeforeRestart: {ex.Message}"); }
                 }
-                if (wasLive && _userWantsGrab) StartProcess();
+                if (wasLive && (_userWantsGrab || _keepAcquiringWhenIdle)) StartProcess();
                 return;
             }
 
@@ -243,7 +243,7 @@ namespace MilGrabber.Core
             if (ready) { try { onStoppedBeforeRestart?.Invoke(); } catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}] onStoppedBeforeRestart: {ex.Message}"); } }
 
             // 所有 buffer 就緒後才重啟 grab
-            if (ready && wasLive && _userWantsGrab)
+            if (ready && wasLive && (_userWantsGrab || _keepAcquiringWhenIdle))
             {
                 StartProcess();
                 System.Diagnostics.Trace.WriteLine(
@@ -253,6 +253,7 @@ namespace MilGrabber.Core
 
         private void StartProcess()
         {
+            _hasObservedFrameSinceAcquisitionStart = false;
             MIL.MdigProcess(_milDigitizer, _milGrabBuffers, _milGrabBufferListSize,
                 MIL.M_START, MIL.M_DEFAULT, _processingDelegate, GCHandle.ToIntPtr(_hUserData));
             IsLive = true;

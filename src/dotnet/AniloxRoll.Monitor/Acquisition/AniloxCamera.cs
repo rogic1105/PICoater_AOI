@@ -30,8 +30,11 @@ namespace AniloxRoll.Monitor.Core.Camera
         public int CameraId { get; private set; }
         public bool IsConnected => _mil.IsConnected;
         public bool UserWantsGrab => _mil.UserWantsGrab;
+        public bool IsAcquisitionWarm => _mil.HasObservedFrameSinceAcquisitionStart;
+        public long LastFrameStartTicks => _mil.LastFrameStartTicks;
         /// <summary>CLProtocol 初始化（含參數重套）已完成，可安全從硬體讀回參數。</summary>
         public bool IsHwParamsStable => _mil.IsHwParamsStable;
+        public bool IsClProtocolEnabled => _mil.IsClProtocolEnabled;
 
         public int FrameWidth  => _mil.FrameWidth;
         public int FrameHeight => _mil.FrameHeight;
@@ -103,6 +106,11 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// 為 null 時各台獨立使用 DateTime.Now。
         /// </summary>
         public CaptureTimestampCoordinator TimestampCoordinator { get; set; }
+        /// <summary>
+        /// Atomic product gate shared by every camera. MIL may stay armed while this gate is
+        /// closed; closed frames never enter processing, display, or persistence.
+        /// </summary>
+        public Func<bool> CaptureGateOpen { get; set; }
 
         // ==================== Save Format (resize + JPEG) ====================
         private int _saveResizeScale = 5;
@@ -169,6 +177,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         public Action<int, string> OnCaptureSaveFailed { get; set; }
 
         private bool _flowLoggedDrainFrameDrop;
+        private bool _hasAcceptedCaptureFrame;
         private float _lastMeanPeak = 0f;
         private float _lastMaxPeak  = 0f;
 
@@ -347,6 +356,12 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         public void ApplyGrabState() => _mil.ApplyGrabState();
 
+        public bool EnableHotStandby() => _mil.EnableHotStandby();
+
+        public void PauseAcquisition() => _mil.PauseAcquisition();
+
+        public void ResumeAcquisition() => _mil.ResumeAcquisition();
+
         /// <summary>分配後預先啟用 CLProtocol（背景）；grab 前完成，避免 grab 期間重套線掃掉幀。</summary>
         public void BeginCLProtocolInit() => _mil.BeginCLProtocolInit();
 
@@ -365,15 +380,18 @@ namespace AniloxRoll.Monitor.Core.Camera
         {
             if (_isReleased) return;
             if (modifiedBuffer == MIL.M_NULL) return;
-            if (!mil.UserWantsGrab)
+            bool captureOpen = mil.UserWantsGrab &&
+                (CaptureGateOpen == null || CaptureGateOpen());
+            if (!captureOpen)
             {
-                if (!_flowLoggedDrainFrameDrop)
+                if (_hasAcceptedCaptureFrame && !mil.UserWantsGrab && !_flowLoggedDrainFrameDrop)
                 {
                     _flowLoggedDrainFrameDrop = true;
                     FlowTrace.Log($"drop drainedFrame after StopGrab cam{CameraId}");
                 }
                 return;
             }
+            _hasAcceptedCaptureFrame = true;
             _flowLoggedDrainFrameDrop = false;
 
             // 不管 EnableImageProcessing，一律執行 GPU 處理以取得 Mura 曲線（供 CSV 日誌判斷）

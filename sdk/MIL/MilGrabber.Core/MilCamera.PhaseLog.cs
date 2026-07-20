@@ -50,7 +50,9 @@ namespace MilGrabber.Core
         /// 排乾＝每幀都拿到乾淨硬體時戳、不重用、不殘留。對齊用「tick 值就近配對」（兩台共用板載時鐘 epoch）。</summary>
         internal void CaptureFrameStartLatch(MIL_ID eventId, long latchIndex = MIL.M_LATCH0)
         {
-            string path = PhaseLogPath;
+            // The first hot-standby frame reads the latch for readiness, but idle frames must not
+            // grow the diagnostic phase log indefinitely.
+            string path = _userWantsGrab ? PhaseLogPath : null;
             try
             {
                 MIL_INT cnt = 0;
