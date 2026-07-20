@@ -62,6 +62,9 @@ namespace AniloxRoll.Monitor.Forms
         // Global merge 用：快取各相機 row curve 資料，合併後更新圖表
         private readonly Dictionary<int, float[]> _liveRowMeanCache = new Dictionary<int, float[]>();
         private readonly Dictionary<int, float[]> _liveRowMaxCache  = new Dictionary<int, float[]>();
+        private readonly object _pendingLiveRowCurveLock = new object();
+        private readonly Dictionary<int, float[]> _pendingLiveRowMean = new Dictionary<int, float[]>();
+        private readonly Dictionary<int, float[]> _pendingLiveRowMax = new Dictionary<int, float[]>();
         private readonly Dictionary<int, float[]> _waterfallRowMeanPending = new Dictionary<int, float[]>();
         private readonly Dictionary<int, float[]> _waterfallRowMaxPending  = new Dictionary<int, float[]>();
         private float[] _waterfallRowMean;
@@ -870,6 +873,8 @@ namespace AniloxRoll.Monitor.Forms
             UpdateStandardBgSubLockState();
             _liveCameraManager.OnLiveCurveData      += OnLiveCurveData;
             _liveCameraManager.OnLiveRowCurveData   += OnLiveRowCurveData;
+            _liveCameraManager.OnMainContentPresented += PresentPendingLiveRowCurves;
+            _liveCameraManager.OnCaptureSequenceReset += ResetLiveChartsForDisplayTransition;
             _liveCameraManager.OnLiveViewRange      += ApplyLiveViewRange; // 主畫面縮放/平移 → live 曲線圖 zoom 連動（bin↔主畫面對齊）
             _liveCameraManager.OnCameraCountChanged += (connected, expected) =>
             {

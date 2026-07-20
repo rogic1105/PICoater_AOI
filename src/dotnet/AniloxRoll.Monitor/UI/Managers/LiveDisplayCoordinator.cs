@@ -56,6 +56,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private double _screenMmPerPx;
 
         public event Action<double, double, double, double> OnLiveViewRange;
+        public event Action MainContentPresented;
 
         public int SelectedMainCameraId => _selectedMainCameraId;
         public int UserSelectedMainCameraId => _userSelectedMainCameraId;
@@ -250,6 +251,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _waterfallView.SetRowPitch(RowPitchMm);
             _waterfallView.SelectRequested += OnWaterfallSelectRequested;
             _waterfallView.ViewRangeMmChanged += OnImageViewRange;
+            _waterfallView.ContentPresented += OnMainContentPresented;
             _waterfallView.CenterCamChanged += OnWaterfallCenterCam;   // 主畫面 pan → 縮圖橘框跟隨（反向連動）
             _waterfallView.FlowLog = s => Flow("WF " + s);             // 互動 intent（wheel 等）
 
@@ -296,6 +298,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             foreach (var cam in Cameras) cam.OnDisplayFrame -= OnCameraWaterfallFrame;
             _waterfallView.SelectRequested -= OnWaterfallSelectRequested;
             _waterfallView.ViewRangeMmChanged -= OnImageViewRange;
+            _waterfallView.ContentPresented -= OnMainContentPresented;
             _waterfallView.CenterCamChanged -= OnWaterfallCenterCam;
             _waterfallView.Dispose();
             _waterfallView = null;
@@ -350,6 +353,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             };
             _imageDisplay.FlowLog = s => Flow("IC " + s);   // 互動 intent + autoFit 原因（誰在動視野）
             _imageDisplay.ViewRangeMmChanged += OnImageViewRange;
+            _imageDisplay.ContentPresented += OnMainContentPresented;
             _imageDisplay.SetSelected(_selectedMainCameraId);
 
             if (_globalMerge.IsActive && _globalMerge.Merger != null)
@@ -459,6 +463,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (_imageDisplay == null) return;
             Flow($"TeardownImageDisplay（unsubscribe {Cameras.Count} cams）");
             foreach (var cam in Cameras) cam.OnDisplayFrame -= OnCameraDisplayFrame;
+            _imageDisplay.ContentPresented -= OnMainContentPresented;
             _imageDisplay.Dispose();
             _imageDisplay = null;
             _gpuResizeProvider.Release();
@@ -497,6 +502,16 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         private void OnImageViewRange(double leftMm, double rightMm, double topMm, double botMm)
             => OnLiveViewRange?.Invoke(leftMm, rightMm, topMm, botMm);
+
+        private void OnMainContentPresented()
+        {
+            try { MainContentPresented?.Invoke(); }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"[LiveDisplayCoordinator.MainContentPresented] {ex.GetType().Name}: {ex.Message}");
+            }
+        }
 
         public void SwitchMainDisplay(int cameraIndex) => SwitchMainDisplay(cameraIndex, centerView: false);
 

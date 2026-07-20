@@ -87,17 +87,20 @@ capture gate=false → Parallel PauseAcquisition
 ## Hot standby 與產品收幀 gate
 
 - SDK 的 `KeepAcquiringWhenIdle` 是 opt-in；產品在 CLProtocol 完成後啟用，SDK samples 預設仍維持舊啟停行為。
-- hot standby 的必要順序是 `parameters ready → standby start → standby ready → capture gate open`；
+- hot standby 的開機必要順序是 `parameters ready → standby start → standby ready`；
   `parameters ready` 指 CLProtocol 工作與曝光／線掃重套均已實際返回，不是固定秒數或 timeout fallback。
-- `MdigProcess` 在 `ReadyIdle` 與 `Capturing` 期間持續運作。`StartGrab(deferCaptureGate:true)` 不再逐台
-  M_START，而是先完成 view/reset/使用者意圖；Form 建立新 GrabId、capture plan 與 duration guard 後，
-  才呼 `OpenCaptureGate()` 一次把 `LiveCameraManager._captureGateOpen` 設為 true。
+- 每次 Start 都走 `SynchronizeAcquisitionAsync`：產品 gate 保持關閉，平行 drain 全部在線相機，
+  停止狀態重套各台現行 Line Rate，再 back-to-back resume。各台 raw callback 到齊後讀同板
+  Data Latch 首幀 tick；spread ≤ 5ms 才可發布 `StartGrab`，超限最多重試 3 次，仍失敗就不放行。
+- `StartGrabAsync(deferCaptureGate:true)` 同步成功後才完成 view/reset/使用者意圖；Form 建立新 GrabId、
+  capture plan 與 duration guard 後，才呼 `OpenCaptureGate()` 一次把
+  `LiveCameraManager._captureGateOpen` 設為 true。
 - `OnMilFrameReady` 必須同時看到 `UserWantsGrab` 與全域 gate=true 才可進 GPU、顯示、CSV 與存檔。
   `StopGrab` 第一個動作關閉 gate，MIL 留在 hot standby，因此不同電腦不再依賴固定首幀等待時間。
-- 只有參數／高度重配置與 Release 可以呼叫 `PauseAcquisition` 做實體
+- Start 同步、停止狀態的高度重配置與 Release 才可呼叫 `PauseAcquisition` 做實體
   `M_STOP+M_WAIT → M_GRAB_ABORT`；完成後 `ResumeAcquisition` 重新暖機。
-- 這個 gate 保證「產品何時開始接受幀」為單一決策點；它不宣稱把不同 digitizer callback 組成硬體級
-  frame set。若實機仍出現跨相機週期差，下一階段才導入具完整 tick barrier 的 owned-buffer frame set。
+- 同板 tick 可直接比對；跨板 tick epoch 不同，只能各板內驗證。這個流程不宣稱把不同 callback
+  組成硬體級 frame set；若產品要求跨板不可分割幀組，仍需硬體 trigger 或 owned-buffer barrier。
 
 ## SetGrabHeight（不可省略步驟）
 
@@ -148,12 +151,13 @@ capture gate=false → Parallel PauseAcquisition
 - `paramchange-yyyyMMdd_HHmmss.csv`：每次改參數 time,scope,cam,param,value（`AniloxRollForm.ParamChangeLogPath`）→ 對齊 `_ticks.csv` 看掉偵 vs 改參數。
 - 結論：**穩態 0 掉偵；掉偵 100% 來自改參數的重啟空檔**。
 
-## Grab 中改參數（協調套用 + 參數鎖 + stall）
+## Grab 中改曝光（不中斷快速套用 + 參數鎖）
 
-- **`LiveCameraManager.ApplyParamCoordinated(camId, write)`**＝只停/寫/開**被改的那一台**（曝光/線掃/高度單滑桿走此）。相位已用 phaselog 證明不重要（free-run 2-3 條線）→ **不再全部相機一起停/開**（會連累沒被改的 cam2 反覆 stop/start → stall）。All 滑桿才用無參數版 `ApplyParamCoordinated(write)`（全停全開）。
-- **絕不在套用後同步 `Thread.Sleep` 等出幀** → 會凍 UI（Windows 變灰 Not Responding）→ 拉滑桿被排隊、解凍後 replay「跳到空拉位置」＝暴力漏洞。stop→write→start 本身已被 MouseUp handler 序列化。
-- **參數鎖**（`AniloxRollForm.SettingsTabs.cs` `ApplyCamParam`/`SetParamControlsLocked`）：套用期間 `Enabled=false` 所有參數控制項（拒輸入不排隊）→ 非阻塞 `Forms.Timer` 輪詢 `LiveCameraManager.AllAdvancedSince`（恢復出幀）**且**至少鎖滿 **2 個完整幀週期**（`GetMaxFramePeriodMs`＝高度/線掃率，實測 2 週期才不 stall）或 5s 逾時才解鎖 → 逼「改完馬上又改」慢下來。
-- **改參數窗口暫停存檔**（`LiveCameraManager.SetCaptureSuppressed` → `AniloxCamera.SuppressCapture` → `TrySaveCapture` 早退）：套用時全相機暫停存檔、等全部恢復同步（解鎖時）才恢復 → 存出的序列不含重啟空檔、各台齊全（不影響 grab/檢測/顯示）。
+- **產品規則：Grab 中只有曝光可調**。線掃速度與擷取高度只能在停止 Grab 後修改；UI 的單台／All 控制項停用，Form command 與 `LiveCameraManager` setter 都要守門，禁止只靠 UI 防護。
+- **`LiveCameraManager.ApplyExposureFastAsync` 是 Grab 中曝光的唯一調參路徑**：曝光只改 integration time，不改 Line Rate、幀高或資料節奏，因此只在 `_allocationGate` 內背景寫硬體；不關 capture gate、不 pause/resume、不重套 Line Rate、不清顯示世代。
+- **UI settle**：曝光 TrackBar／NumericUpDown 以 200ms debounce 合併輸入；拖曳放開立即套用。實際寫入期間曝光控制項鎖住，完成後立即解鎖，不再等待幀週期 cooldown。
+- **`SetCaptureSuppressed` 只保護存檔**：硬體寫曝光期間暫停落盤，GPU／Curve／主畫面仍持續。若同時 StopGrab，Stop 的 gate=false 優先，terminal log 必須記實際 gate 狀態。
+- **列曲線跟主畫面呈現同步**：GPU row curve 只寫 latest-only pending cache；ImageDisplayView／WaterfallView 在 bitmap 或對應 LOD content generation 真正套上畫布後發布 `ContentPresented`，Form 才更新列 chart。禁止固定 sleep 猜畫面完成。
 - **stall 偵測**（`LiveCameraManager.Telemetry.cs` status timer 500ms）：IsLive 但 `CurrentFps < 0.05` 持續 2s ＝ stall（縮圖紅「STALL」）。**FPS 0.1 是合法慢速（一幀 10s）不算**，只認真正的 0。stall＝硬體層 CL 失鎖，**停/開（含停止抓取→開始抓取）救不回、只有重開程式** → 不做無效自動 thrash（會 stall 的最大宗＝改線掃；高度也會）。深度救援（MdigFree+MdigAlloc+CLProtocol）暫不做，先靠 prevention。
 
 ## 已知 MIL .NET Wrapper 限制

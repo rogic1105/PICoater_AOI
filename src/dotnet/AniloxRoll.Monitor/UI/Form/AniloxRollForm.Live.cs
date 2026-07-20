@@ -71,11 +71,12 @@ namespace AniloxRoll.Monitor.Forms
                 _ = _ioGrabController?.ClearMura();   // 硬體 DO 閂鎖同步歸零（手動流程與 FSM EnterIdle 對齊）
             }
 
+            bool grabStateChanged;
             if (!_liveCameraManager.IsAllocated)
             {
                 try
                 {
-                    await _liveCameraManager.EnsureAllocatedAndToggleGrabAsync(
+                    grabStateChanged = await _liveCameraManager.EnsureAllocatedAndToggleGrabAsync(
                         _settings.EnableMuraEnhance, deferCaptureGate: true);
                     if (!_liveCameraManager.IsAllocated)
                     {
@@ -98,7 +99,16 @@ namespace AniloxRoll.Monitor.Forms
             }
             else
             {
-                _liveCameraManager.ToggleGrab(deferCaptureGate: true);
+                grabStateChanged = await _liveCameraManager.ToggleGrabAsync(
+                    deferCaptureGate: true);
+            }
+
+            if (!grabStateChanged)
+            {
+                if (!wasGrabbing)
+                    LightTurnOff();
+                UpdateGrabButton(_liveCameraManager.IsLiveGrabbing);
+                return false;
             }
 
             // 剛從「未抓取」→「抓取中」：分配新的抓圖編號（燈已在上方開啟）
@@ -386,16 +396,46 @@ namespace AniloxRoll.Monitor.Forms
             // Live Mura 判斷（列方向）
             CheckLiveMura(meanArr, maxArr, "h");
 
+            lock (_pendingLiveRowCurveLock)
+            {
+                _pendingLiveRowMean[camId] = meanArr;
+                _pendingLiveRowMax[camId] = maxArr;
+            }
+        }
+
+        private void PresentPendingLiveRowCurves()
+        {
             if (InvokeRequired)
             {
                 if (!IsHandleCreated || IsDisposed || Disposing) return;
-                SafeBeginInvoke(() => OnLiveRowCurveData(camId, meanArr, maxArr));
+                SafeBeginInvoke(PresentPendingLiveRowCurves);
                 return;
             }
 
-            // [UiSlow] 卡頓歸因：列 chart 每幀重建在 UI 執行緒（grab 中每幀一次）
+            Dictionary<int, float[]> readyMean;
+            Dictionary<int, float[]> readyMax;
+            lock (_pendingLiveRowCurveLock)
+            {
+                if (_pendingLiveRowMean.Count == 0) return;
+                readyMean = new Dictionary<int, float[]>(_pendingLiveRowMean);
+                readyMax = new Dictionary<int, float[]>(_pendingLiveRowMax);
+                _pendingLiveRowMean.Clear();
+                _pendingLiveRowMax.Clear();
+            }
+
+            FlowTrace.Log(
+                $"rowCurve present after=mainImage cams={readyMean.Count} " +
+                $"mode={(_settings?.he_MainDisplay == MainDisplayMode.Waterfall ? "WF" : "IC")}");
             var swRow = System.Diagnostics.Stopwatch.StartNew();
-            try { OnLiveRowCurveDataUi(camId, meanArr, maxArr); }
+            try
+            {
+                for (int camId = 1; camId <= CameraCount; camId++)
+                {
+                    if (!readyMean.TryGetValue(camId, out float[] meanArr)) continue;
+                    if (!readyMax.TryGetValue(camId, out float[] maxArr)) continue;
+                    OnLiveRowCurveDataUi(camId, meanArr, maxArr);
+                }
+            }
             finally
             {
                 if (swRow.ElapsedMilliseconds > 50)
@@ -476,6 +516,11 @@ namespace AniloxRoll.Monitor.Forms
         private void ResetLiveChartsForDisplayTransition()
         {
             ResetLiveWaterfallRowChart();
+            lock (_pendingLiveRowCurveLock)
+            {
+                _pendingLiveRowMean.Clear();
+                _pendingLiveRowMax.Clear();
+            }
             _liveRowMeanCache.Clear();
             _liveRowMaxCache.Clear();
             for (int i = 0; i < CameraCount; i++)
@@ -616,6 +661,7 @@ namespace AniloxRoll.Monitor.Forms
             // 抓取中：凍結取得背景/預覽背景；停止後解鎖
             btnLiveGetBackground.Enabled = !isGrabbing;
             btnLiveViewBackground.Enabled = !isGrabbing;
+            RefreshCameraParameterControlState(isGrabbing);
             if (!isGrabbing)
             {
                 UpdateStandardBgSubLockState(); // 停止後依 bin 狀態重新檢查

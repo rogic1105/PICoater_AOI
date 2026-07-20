@@ -1,4 +1,4 @@
-# 多相機 free-run 取像：hot standby 與全域收幀 gate
+# 多相機 free-run 取像：hot standby、啟動同步與全域收幀 gate
 
 > 適用：Matrox Radient eV-CL grabber + Camera Link **line-scan** 相機，多台同板、**free-run（TriggerMode=Off、無外部/硬體 trigger/encoder）**。
 > 症狀出現在「監控瀑布圖（WaterfallView，逐幀往下接的即時長圖）」上最明顯，因為它把「每台第 N 幀」並排顯示 → 兩台差一幀立刻看得到。但**根因在取像層（MIL grab 啟停），不是顯示層**。
@@ -38,7 +38,7 @@
 
 ---
 
-## 3. 現行修法（取像持續、產品收幀一次切換）
+## 3. 現行修法（待機持續、開始時實測同步、產品收幀一次切換）
 
 ### 3A. ReadyIdle 保持 hot standby
 
@@ -58,11 +58,22 @@ if (cam.IsAcquisitionWarm) { /* camera is ReadyIdle */ }
 - idle frame 不寫 phase log，避免程式整天待機造成診斷檔無限增長。
 - SDK samples 預設不啟用此功能，保留原本的 Start/Stop 語意。
 
-### 3B. Start/Stop 只切全域產品 gate
+### 3B. Start 先做實體同步，Stop 只切產品 gate
 
-`StartGrab(deferCaptureGate:true)` 完成顯示 reset 與各相機產品意圖設定；Form 先建立新的 GrabId、
-capture plan 與 duration guard，再呼 `OpenCaptureGate()` 做一次全域 gate 寫入。這個順序避免 standby
-的立即首幀沿用上一輪資料 owner。`StopGrab` 的第一個動作則關閉同一個 gate，再清各相機產品意圖：
+hot standby 能避免 Stop 時逐台阻塞，但不能證明多台 free-run 相機仍在相同 frame phase。每次
+Start 都先在產品 gate 關閉時執行 `SynchronizeAcquisitionAsync`：
+
+1. 平行 `PauseAcquisition`，完整 drain 全部在線相機。
+2. 在停止狀態重套各台**現行** `AcquisitionLineRate`。實機證據顯示，只有
+   `M_STOP/M_START` 不一定改變相機自由運轉相位；重寫 Line Rate 才會重建 timing。
+3. 從同一 worker back-to-back `ResumeAcquisition`。
+4. 等各台第一個新 raw callback，讀 Data Latch frame-start tick。
+5. 同板相機 spread ≤ 5ms 才成功；超限最多重試 3 次，仍超限就保持 gate 關閉。
+
+同步成功後，`StartGrabAsync(deferCaptureGate:true)` 完成顯示 reset 與各相機產品意圖設定；Form
+再建立新的 GrabId、capture plan 與 duration guard，最後呼 `OpenCaptureGate()` 做一次全域 gate
+寫入。這個順序避免 standby 的立即首幀沿用上一輪資料 owner。`StopGrab` 的第一個動作則關閉同一個
+gate，再清各相機產品意圖：
 
 ```csharp
 _captureGateOpen = true;   // Start: all callbacks gain product acceptance together
@@ -71,15 +82,18 @@ _captureGateOpen = false;  // Stop: all callbacks lose product acceptance togeth
 
 - `OnMilFrameReady` 必須同時看到 `UserWantsGrab && CaptureGateOpen` 才可進產品流程。
 - Stop 不再逐台 `M_STOP`，所以沒有「停 cam1 時 cam2 又多跑幾幀」。
-- 下一輪 Start 不再逐台 re-arm，因而消除跨 frame boundary 的固定等待與電腦速度差異。
+- Start 不使用固定等待；是否可開始由實際首幀 tick 決定，所以不同電腦速度只影響等待多久，
+  不影響成功條件。
 
-### 3C. 實體 Pause 只用於重配置與 Release
+### 3C. 實體 Pause 的合法入口
 
-高度／參數需要重配置，或程式釋放 MIL 資源時，才使用已驗證的：
+Start 同步、停止狀態的高度重配置或程式釋放 MIL 資源時，使用已驗證的：
 
 `PauseAcquisition → M_STOP+M_WAIT → M_GRAB_ABORT → 修改／釋放`
 
-重配置完成後 `ResumeAcquisition`，再次以 raw callback 實測 warm，不用 sleep。
+Grab 中曝光只在背景寫入 integration time，不改 Line Rate／幀高，因此沿用目前 acquisition
+generation，不走實體 pause/resume，也不關產品 gate。線掃速度與擷取高度只能在停止 Grab 後修改，
+避免運轉中改變 frame timing 或重配 buffer。Start 同步仍以 raw callback 與硬體 tick 實測，不用 sleep。
 
 ### 3D. 顯示層配套
 
@@ -116,11 +130,14 @@ _captureGateOpen = false;  // Stop: all callbacks lose product acceptance togeth
 
 ## 6. 限制與後續
 
-- 全域 gate 保證的是「產品何時開始／停止接受幀」只有一個原子決策點。它不會改變 free-run 相機
-  的硬體 phase，也不會把七個 callback 自動組成不可分割的 frame set。
-- 若實機仍偶發跨相機週期差，下一階段是 **owned-buffer frame-set barrier**：依硬體 tick 對齊一組
-  完整 frame set，整組到齊才發布；不能在 MIL callback 裡持有原始 buffer 等其他相機。
-- 跨板（cam1-4 板0 / cam5-7 板1）tick epoch 不同、不可直接相減；7 台上線需各板自錨 period/origin。
+- 全域 gate 保證「產品何時開始／停止接受幀」只有一個決策點；Start 同步器再保證每個同板群組
+  放行前的首幀 spread ≤ 5ms。
+- 這仍不是硬體 trigger。重套 Line Rate 是本機型實測有效的 free-run timing reset；更換相機、
+  grabber 或 firmware 後必須重跑 phase DVT。
+- 不同板（cam1-4 板0 / cam5-7 板1）的 tick epoch 不同、不可直接相減；目前只能各板內驗證。
+- 若產品要求七台 callback 組成不可分割 frame set，下一階段是硬體 trigger，或
+  **owned-buffer frame-set barrier**：依硬體 tick 對齊完整 frame set，整組到齊才發布；不能在
+  MIL callback 裡持有原始 buffer 等其他相機。
 
 ---
 

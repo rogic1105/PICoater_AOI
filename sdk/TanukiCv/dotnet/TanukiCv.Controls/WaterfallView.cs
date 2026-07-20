@@ -104,10 +104,12 @@ namespace TanukiCv.Controls
         private bool _disposed;
         private volatile bool _virtualSet;
         private volatile bool _lodContentDirty;
+        private long _awaitedLodGeneration;
 
         public event Action<int> SelectRequested;
         public event Action<double, double, double, double> ViewRangeMmChanged;
         public event Action<ImageDisplayView.CursorStatus> CursorStatusChanged;
+        public event Action ContentPresented;
 
         public bool FlipVertical
         {
@@ -142,6 +144,7 @@ namespace TanukiCv.Controls
             host.Controls.Add(_canvas);
             _canvas.BringToFront();
             _canvas.StatusChanged += OnCanvasStatus;
+            _canvas.LodTileApplied += OnLodTileApplied;
             _canvas.MouseClick += OnCanvasMouseClick;
 
             _flushTimer = new System.Windows.Forms.Timer { Interval = 30 };
@@ -538,12 +541,27 @@ namespace TanukiCv.Controls
                 // This fallback is only used when the actual frame width differs from the configured 16384-pixel layout.
                 _virtualSet = true;
                 _canvas.EnableLod(_fullW, _totalHeight, ProvideRegion);
+                _awaitedLodGeneration = _canvas.LodContentGeneration;
                 _lodContentDirty = false;
             }
             else if (_lodContentDirty)
             {
                 _lodContentDirty = false;
                 _canvas.RefreshLod();
+                _awaitedLodGeneration = _canvas.LodContentGeneration;
+            }
+        }
+
+        private void OnLodTileApplied(long contentGeneration)
+        {
+            if (_awaitedLodGeneration <= 0 || contentGeneration < _awaitedLodGeneration)
+                return;
+            _awaitedLodGeneration = 0;
+            try { ContentPresented?.Invoke(); }
+            catch (System.Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"[WaterfallView.ContentPresented] {ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -760,7 +778,13 @@ namespace TanukiCv.Controls
             if (_disposed) return;
             _disposed = true;
             try { _flushTimer.Stop(); _flushTimer.Dispose(); } catch { }
-            try { _canvas.StatusChanged -= OnCanvasStatus; _canvas.MouseClick -= OnCanvasMouseClick; } catch { }
+            try
+            {
+                _canvas.StatusChanged -= OnCanvasStatus;
+                _canvas.LodTileApplied -= OnLodTileApplied;
+                _canvas.MouseClick -= OnCanvasMouseClick;
+            }
+            catch { }
             try { _canvas.DisableLod(); } catch { }
             try { if (_canvas.Parent != null) _canvas.Parent.Controls.Remove(_canvas); _canvas.Dispose(); } catch { }
             lock (_lock) { _chunks = null; _fullW = 0; _writeRow = 0; _pending.Clear(); _preBuffer.Clear(); _writeQueue.Clear(); }

@@ -191,9 +191,16 @@ IC|WF viewEdges X …｜Y …                     ← 拖曳放開時畫面四�
 | AllocatingProcessing | processing 全部完成 | Parameterizing | 回 UI 執行緒啟動 CLProtocol、建立顯示 view、發布實際在線數 |
 | Parameterizing | 每台 CLProtocol 工作與曝光／線掃寫入實際返回 | Warming | 發布 `acquisition parameters ready`；各在線相機才可啟動 hot standby。10 秒 timeout 只告警，不解除 gate |
 | Warming | 各在線相機觀測到第一個 raw frame | ReadyIdle | 發布 `OnHwReady`、解鎖 Grab；產品收幀 gate 仍關閉 |
-| ReadyIdle | StartGrab | Capturing | 先設各相機使用者意圖，再一次開啟全域收幀 gate |
+| ReadyIdle | Start intent | Synchronizing | 保持產品 gate 關閉；平行 drain 全部在線相機 |
+| Synchronizing | 全部 drain 完成 | Warming | 在相機停止時重套各台現行 Line Rate，再 back-to-back resume |
+| Warming | 各台新 raw frame 到齊且同板首幀 spread ≤ 5ms | Armed | 清顯示世代、設使用者意圖、發布 `StartGrab`；產品 gate 仍關閉 |
+| Warming | 相位超限且 attempt < 3 | Synchronizing | 重新 drain／timing-reset／resume，不用固定等待 |
+| Warming | 第 3 次仍超限或 warm timeout | ReadyIdle | 保持 gate 關閉，不建立 capture plan |
+| Armed | capture plan 與抓取上限已就緒 | Capturing | 一次開啟全域收幀 gate |
 | Capturing | StopGrab | ReadyIdle | 先關全域收幀 gate，再清使用者意圖；MIL 保持 hot standby |
-| ReadyIdle／Capturing | 參數重配置 | Reconfiguring → Warming | `PauseAcquisition` 實體 drain，改參數／重配 buffer，再 `ResumeAcquisition` 等新首幀 |
+| ReadyIdle | 參數重配置 | ReadyIdle | 背景執行參數寫入；產品 gate 原本即關閉 |
+| Capturing | 單台／All 曝光調整 | Capturing | 背景寫曝光；gate 保持 open，不 stop/start、不重設顯示世代 |
+| Capturing | 線掃速度／擷取高度修改 | Capturing | UI 停用且 Form／Manager 拒絕，不寫設定或硬體、不關 gate |
 | AllocatingAcquisition／AllocatingProcessing | 任一步失敗 | Unallocated | 釋放本輪已建立資源、保留 Grab gate、回報錯誤 |
 | 任意配置中狀態 | Release | Releasing → Unallocated | 等目前 native call 返回後釋放；晚到結果不得發布 Ready |
 | ReadyIdle／Capturing | EnsureAllocated | 原狀態 | 冪等，不重複配置 |
@@ -261,11 +268,19 @@ AutoAllocateCameras(Form)                    顯示基線 set:[顯示基線] 一
 
 **log-flow（執行期腳印＝判準）**
 ```
+T1: acquisition sync begin reason=start attempt=A gate=closed cams=P
+T1: acquisition sync paused reason=start attempt=A cams=P
+Tbg: acquisition sync timing-reset reason=start lineRates=cam1=R,cam2=R,...
+T1: acquisition sync resumed reason=start attempt=A cams=P
+T1: acquisition sync ready reason=start attempt=A camN system=S tick=T freq=F       × P
+T1: acquisition sync phase reason=start attempt=A system=S cams=... spreadTicks=D
+    spreadMs=X limitMs=5.000 measurable=True aligned=True                          × 有在線相機的板
+T1: acquisition sync complete reason=start attempts=A cams=P phase=True
 T1: StartGrab（cams=M）
 T1: ApplyMainDisplayMode → 同模式    ← 冪等：不得出現 create/teardown 行
 T1: capture plan grab=… root=… imageDir=… csv=… files=… scale=…
 T1: grab limit armed Ns grab=…       ← 正式監控 grab 成功後啟動 one-shot；背景採樣借用 grab 不武裝
-T1: capture gate open cams=P warm=True   ← P=在線數；必晚於 plan/limit 與全部 standby ready，早於所有 firstFrame
+T1: capture gate open cams=P warm=True   ← P=在線數；必晚於同步完成與 plan/limit，早於所有 firstFrame
 Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線」相機恰一行，順序不定
 （首幀齊後進入穩態 → 適用「穩態靜默通則」：無互動下不得再有顯示狀態**變更**行。
   狀態**快照**行〔rowChart/WF state/IC state/stats，見§狀態快照儀器〕＝儀器輸出，穩態每秒出現正常）
@@ -284,18 +299,24 @@ Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線�
  ├（未抓取）ResetLiveChartsForDisplayTransition@AniloxRollForm.Live.cs ＋ _muraExceedLatch 歸零
  │   ＋ UpdateMuraLed(false) ＋ ClearMura@IoGrabController.cs   ← MURA 閂鎖歸零（latch 非脈衝，M1）
  ├（未配置）await EnsureAllocatedAndToggleGrabAsync(deferCaptureGate:true)@LiveCameraManager.cs
- │   → AllocateCamerasAsync（=F1 全序）→ ToggleGrab
+ │   → AllocateCamerasAsync（=F1 全序）→ ToggleGrabAsync
  │   └（回 form）LoadBackgroundBins@AniloxRollForm.Background.cs ＋ EnableGlobalMerge@LiveCameraManager.Merge.cs
- ├（已配置）ToggleGrab(deferCaptureGate:true)@LiveCameraManager.cs
- │   └ StartGrab@LiveCameraManager.cs
+ ├（已配置）await ToggleGrabAsync(deferCaptureGate:true)@LiveCameraManager.cs
+ │   └ StartGrabAsync@LiveCameraManager.cs
  │      ├ AreCamerasHwReady（CLProtocol ready＋每台在線相機已觀測 raw frame）未滿足 → return
  │      ├ _captureGateOpen=false                     ← 組態調整期間不接受任何 callback
+ │      ├ SynchronizeAcquisitionAsync(reason=start)
+ │      │  ├ Parallel PauseAcquisition：全部在線相機 M_STOP+M_WAIT＋M_GRAB_ABORT
+ │      │  ├ ReapplyLineRatesForSynchronization：停止狀態重套各台現行 Line Rate
+ │      │  ├ back-to-back ResumeAcquisition
+ │      │  ├ raw callback 到齊後讀 Data Latch 首幀 tick
+ │      │  └ 同板 spread≤5ms 才成功；超限最多重試 3 次，失敗不進產品狀態
  │      ├ ResetFlowFirstFrame@LiveDisplayCoordinator.cs（每輪 grab 重驗「幀有流到 view」）
  │      ├ IsLiveGrabbing = true
  │      ├ ApplyMainDisplayMode@LiveDisplayCoordinator.cs   ← 冪等（view 已存在早退）＝本 flow 不得出現 create/teardown 行
  │      ├ ResetWaterfallIfActive@LiveDisplayCoordinator.cs → Reset@WaterfallView.cs（清舊圖＋重置 tick 對齊，防新幀接舊網格錯位）
  │      └ per-cam SetUserGrabIntent(true)@AniloxCamera.cs
- │         └ SetUserGrabIntent@MilCamera.cs（只開產品意圖；MIL 已在 hot standby，不重做 M_START）
+ │         └ SetUserGrabIntent@MilCamera.cs（同步 M_START 已完成；此處只開產品意圖）
  ├（啟動成功）NextGrabId@InspectionLogService.cs → _currentGrabId ＋ capture plan 行（C1）
  │  └ Arm(GrabLimitSeconds)@GrabDurationCoordinator.cs → grab limit armed 行
  │     ← 設定在本輪開始時拍快照；PropertyGrid 中途改值從下一輪生效
@@ -310,8 +331,7 @@ ProcessingFunction@MilCamera.cs（MdigProcess hook，static）
     │  ├ ProcessImage@AoiService.cs（P/Invoke TanukiPipeline_Process；fused 存檔縮圖 wantResize＝grab-level 決策）
     │  ├ OnLiveCurveData 事件 → OnLiveCurveData@AniloxRollForm.Live.cs → CheckLiveMura("v")（M1）＋ _liveOverviewDirty=true
     │  └ OnLiveRowCurveData 事件 → OnLiveRowCurveData@AniloxRollForm.Live.cs → CheckLiveMura("h")
-    │     ＋ SafeBeginInvoke→UI → OnLiveRowCurveDataUi@AniloxRollForm.Live.cs（列 chart；視野同步唯一路＝
-    │       ViewRangeMmChanged→ApplyLiveViewRange）→ RowCurveDisplayAdapter.FlowApply（rowChart 快照行）
+    │     ＋ pending latest-only cache（不得直接更新列 chart）
     ├ PutDisplayBytes@MilCamera.Display.cs（強化）｜CopyToDisplay@MilCamera.Display.cs（原圖）
     ├ OnDisplayFrame 事件（bytes）→ OnCameraDisplayFrame｜OnCameraWaterfallFrame@LiveDisplayCoordinator.cs
     │  ├ 模式錯掛自檢（⚠ 契約違規 行）＋ FlowFirstFrame（firstFrame 行，每台恰一）
@@ -325,12 +345,23 @@ ProcessingFunction@MilCamera.cs（MdigProcess hook，static）
 RefreshMain@ImageDisplayView.cs（33ms _timer）
  ├ UpdateReverseThumbSync@ImageDisplayView.cs（快拖補刷）
  ├（LOD）lodRebind 留痕 → EnableLod/RefreshLod@ImageCanvas.cs
+ │   → LodTileApplied(generation) → ContentPresented
  ├（非 LOD）BuildMerge｜BuildSingle@ImageDisplayView.cs → autoFit(firstFrame) 留痕 → FitToScreen@ImageCanvas.cs
- │   → RefireViewRange@ImageDisplayView.cs        ← 首幀 fit＋同步補發視野＝曲線第一筆就對齊、不閃全幅
+ │   → RefireViewRange@ImageDisplayView.cs → ContentPresented
  └ FlowViewState@ImageDisplayView.cs（上畫後，1s 節流）→ IC state 快照行（免滑鼠）
 瀑布顯示：_flushTimer(30ms)@WaterfallView.cs → TryFlush ＋ PushLodRefresh ＋ UpdateCenterCam
+ → LodTileApplied(generation) → ContentPresented
  ＋ FlowState@WaterfallView.cs（band 寫入後，1s 節流）→ WF state 快照行
+ContentPresented → MainContentPresented@LiveDisplayCoordinator/LiveCameraManager
+ → PresentPendingLiveRowCurves@AniloxRollForm.Live.cs
+ → OnLiveRowCurveDataUi → RowCurveDisplayAdapter.FlowApply（rowChart 快照行）
 ```
+
+列曲線顯示不變量：GPU 完成只能更新 pending cache；必須等同一條主畫面 API 發出
+`ContentPresented` 才可更新 chart。LOD 以 content generation 對應實際安裝的 tile，不能在
+`RefreshLod` 僅提出請求時提前發布。每次發布留
+`rowCurve present after=mainImage cams=N mode=IC|WF`；快速累積時只保留每台最新一筆，禁止
+用固定延遲猜影像完成時間。
 
 ### F3 停止抓取
 
@@ -369,7 +400,7 @@ Tn: drop drainedFrame after StopGrab camN（可選；每台最多一行）
                                                             維持 High 時刻意留 Running（沒有新上升緣，不會重啟），
                                                             等 START 真正下降後才走既有 falling-edge 收尾回 Idle
 實體停止邊界只有兩種：
- - 參數／高度重配置：PauseAcquisition → M_STOP+M_WAIT＋M_GRAB_ABORT → 修改 → ResumeAcquisition
+ - Start 同步／停止狀態的高度重配置：PauseAcquisition → M_STOP+M_WAIT＋M_GRAB_ABORT → 修改 → ResumeAcquisition
  - Release：先關 capture gate，再平行 PauseAcquisition，完成後才能釋放 merge／camera buffers
 ```
 
@@ -706,10 +737,14 @@ T1: ⚠ 相機離線 4→3/7 ／ 相機在線 0→4/7   ← 數量變化才記�
 
 ## 相機參數契約（P 系列）
 
-### P1 滑桿/數字框調參（曝光/線掃/高度，放開才套用）
+### P1 滑桿/數字框調參（停止時三種皆可；Grab 中只開放曝光）
 ```
 T1: ui:【相機參數】camN {param}={v}｜All {param}={v}    ← 帶參數名+值單行自足（Exp/LineRate/Height…）
 （之後的 HtRealloc/合圖佈局重算等程式化行歸此 intent 管；滑桿拖曳 vs 數字框輸入同一路徑，log 不區分）
+停止 Grab 時可調曝光、線掃速度與擷取高度；Grab 中只開放曝光。線掃速度與擷取高度的單台／All
+控制項必須停用，Form command 與 LiveCameraManager setter 也必須拒絕繞過 UI 的寫入。
+拒絕時只留 `parameter change blocked scope={scope} param={param} reason=GrabActive`，不得寫硬體、
+不得產生使用者 intent 或進入 parameter reconfigure。
 開機初始化控制項期間 `_cameraParameterControlsReady=false`，不得排程硬體寫入、不得出現上述 `ui:` 行，
 也不得建立 `paramchange-*.csv`。初始硬體值的權威路徑是 Allocate/Initialize 套用 settings，及 CLProtocol
 就緒後重套線掃；`paramchange` 只記使用者完成的實際調整。
@@ -723,8 +758,53 @@ T1: ui:【相機參數】camN {param}={v}｜All {param}={v}    ← 帶參數名+
   多留 1 秒是為了抓「初始化時誤排 debounce、配置完成後才發作」的歷史病。
 - `P1.intent`：只接受 `cam1~7 Exp|LineRate|Height=N` 或
   `All ExpAll|LineRateAll|HeightAll=N`，scope 與參數尾綴必須一致。
+- `P1.live-policy`：capture gate 開啟期間只允許 `Exp|ExpAll` intent；任何
+  `LineRate|LineRateAll|Height|HeightAll` intent 直接 FAIL。後端正確拒絕的 `parameter change blocked`
+  算已覆蓋且不算違規。
 - `P1.responsiveness`：調參後 5 秒內 `UiStall > 1000ms` 判 FAIL；沒有使用者調參則回
   `NOT COVERED`，開機靜默仍可獨立判 PASS/FAIL。
+- `P1.synchronization`：只驗 Grab 中曝光調整。每個 intent 必須完成以下同 scope 快速套用；
+  不得關 capture gate、不得 stop/start digitizer、不得重設顯示世代或重跑相位同步。套用失敗、
+  超過 5 秒或出現任何 `parameter reconfigure`／`acquisition sync reason=parameter` 都判 FAIL。
+  調參途中若使用者 StopGrab，曝光寫入可完成，但 terminal 必須如實記 `gate=closed`。
+
+**Grab 中曝光 log-flow（單台與 All 共用）**：
+```
+T1: ui:【相機參數】{scope} {param}={v}
+T1: exposure live apply begin scope={scope} gate=open
+Tbg: （實際曝光寫入）
+T1: exposure live apply complete scope={scope} gate=open elapsedMs=N
+（禁止 capture gate closed／parameter reconfigure／parameter sequence reset／firstFrame）
+```
+
+**調參途中 StopGrab log-flow（抓取上限與手動停止共用）**：
+```
+T1: exposure live apply begin scope={scope} gate=open
+T1: StopGrab
+T1: capture gate closed standby=on
+T1: exposure live apply complete scope={scope} gate=closed elapsedMs=N
+```
+
+**code-flow 與不變量**：
+```
+TrackBar/NUD settle
+ → ApplyCamParamAsync｜ApplyAllCamParamAsync@AniloxRollForm.SettingsTabs.cs
+   ├（Grab 中非曝光）parameter change blocked → return
+   ├（Grab 中曝光）SetParamControlsLocked(true)＋SetCaptureSuppressed(true)
+   └（Grab 中曝光）await ApplyExposureFastAsync@LiveCameraManager.cs
+       ├ _allocationGate 序列化實際硬體寫入
+       ├ Task.Run：寫曝光；不碰 line timing
+       └ finally：恢復存檔、立即解鎖控制項
+UpdateGrabButton@AniloxRollForm.Live.cs
+ └ RefreshCameraParameterControlState
+    ├ 停止：曝光／線掃／高度皆 Enabled
+    └ Grab：只有曝光 Enabled；線掃／高度（單台＋All）Disabled
+```
+- **曝光不重啟原則**：曝光只改 integration time，不改 Line Rate／幀高／資料節奏；因此沿用目前
+  acquisition generation 才是最小副作用。為曝光去 stop/start 反而會製造多秒空窗與相位重建風險。
+- **存檔保護**：`SuppressCapture` 只在硬體曝光寫入期間暫停落盤；GPU、主畫面與曲線仍持續，
+  capture gate 全程保持 open。若使用者同時 StopGrab，Stop 的 gate 狀態優先。
+- **UI 執行緒零 MIL**：實際曝光寫入在背景執行，UI 不固定睡秒數、不輪詢 `MdigInquire`。
 
 ## Mura 警告契約（M 系列）
 

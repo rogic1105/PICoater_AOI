@@ -40,6 +40,28 @@ namespace AniloxRoll.Monitor.UI.Managers
         private readonly System.Threading.SemaphoreSlim _allocationGate =
             new System.Threading.SemaphoreSlim(1, 1);
         private volatile bool _isAllocating;
+        private volatile bool _isParameterReconfiguring;
+        private volatile bool _isCaptureSynchronizing;
+
+        private const int CaptureSynchronizationMaxAttempts = 3;
+        private const double CapturePhaseToleranceMs = 5.0;
+
+        private sealed class AcquisitionWarmSample
+        {
+            public int CameraId;
+            public int SystemNum;
+            public long FrameStartTicks;
+            public long ClockFrequencyHz;
+        }
+
+        private sealed class AcquisitionSyncResult
+        {
+            public bool Succeeded;
+            public bool Canceled;
+            public string Error;
+            public List<AcquisitionWarmSample> Samples =
+                new List<AcquisitionWarmSample>();
+        }
 
         public bool IsAllocated    { get; private set; } = false;
         public bool IsAllocating => _isAllocating;
@@ -61,6 +83,19 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// <summary>所有相機 CLProtocol 初始化完成（曝光/線掃已套，可安全 grab）時一次性觸發，供 UI 解鎖
         /// 「開始抓取」鈕。CLProtocol 逾時/失敗也算完成（fallback legacy 參數），故按鈕不會永久卡死。</summary>
         public event Action OnHwReady;
+        /// <summary>
+        /// Raised after reconfigured cameras have produced a new raw frame and immediately before
+        /// the product-frame gate reopens. UI subscribers clear any curve state from the old
+        /// parameter generation here.
+        /// </summary>
+        public event Action OnCaptureSequenceReset;
+
+        public event Action OnMainContentPresented
+        {
+            add { _display.MainContentPresented += value; }
+            remove { _display.MainContentPresented -= value; }
+        }
+
         private bool _hwReadyRaised;
 
         /// <summary>所有相機 CLProtocol 是否就緒（已套曝光/線掃）。未就緒時上層應禁用「開始抓取」。</summary>
@@ -329,14 +364,18 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         // ==================== Grab Control ====================
 
-        public void ToggleGrab(bool deferCaptureGate = false)
+        public async Task<bool> ToggleGrabAsync(bool deferCaptureGate = false)
         {
-            if (!IsAllocated) return;
-            if (IsLiveGrabbing) StopGrab();
-            else StartGrab(deferCaptureGate);
+            if (!IsAllocated) return false;
+            if (IsLiveGrabbing)
+            {
+                StopGrab();
+                return true;
+            }
+            return await StartGrabAsync(deferCaptureGate);
         }
 
-        public async Task EnsureAllocatedAndToggleGrabAsync(
+        public async Task<bool> EnsureAllocatedAndToggleGrabAsync(
             bool enableImageProcessing, bool deferCaptureGate = false)
         {
             if (!IsAllocated)
@@ -344,7 +383,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (IsAllocated && !AreCamerasHwReady)
                 await WaitForCamerasReadyAsync();
             if (IsAllocated && AreCamerasHwReady)
-                ToggleGrab(deferCaptureGate);
+                return await ToggleGrabAsync(deferCaptureGate);
+            return false;
         }
 
         private async Task<bool> WaitForCamerasReadyAsync()
@@ -371,22 +411,62 @@ namespace AniloxRoll.Monitor.UI.Managers
             }
         }
 
-        public void StartGrab(bool deferCaptureGate = false)
+        private async Task<bool> StartGrabAsync(bool deferCaptureGate)
         {
-            if (!IsAllocated || IsLiveGrabbing || !AreCamerasHwReady) return;
-            _captureGateOpen = false;
-            FlowTrace.Log($"StartGrab（cams={_cameras.Count}）");
-            _display.ResetFlowFirstFrame();   // 每輪 grab 重驗「幀有流到 view」（各 cam 首幀各記一行）
-            IsLiveGrabbing = true;
-            // 切「主畫面顯示」設定後重開抓取即生效：即時 / 瀑布 三選一互斥（舊值相容）
-            ApplyMainDisplayMode();
-            // 重 grab：清掉舊瀑布圖 + 重置對齊狀態（EnableWaterfallDisplay 冪等不會重建 → 必須在此重置，
-            // 否則新幀接在舊網格上、兩台重啟相位不一 → 錯位）。
-            _display.ResetWaterfallIfActive();
-            foreach (var cam in _cameras)
-                cam.SetUserGrabIntent(true);
-            if (!deferCaptureGate)
-                OpenCaptureGate();
+            await _allocationGate.WaitAsync();
+            try
+            {
+                if (!IsAllocated || IsLiveGrabbing || IsReleasing ||
+                    _isParameterReconfiguring || _isCaptureSynchronizing ||
+                    !AreCamerasHwReady)
+                    return false;
+
+                var targets = _cameras
+                    .Where(cam => cam != null && cam.IsConnected)
+                    .ToArray();
+                if (targets.Length == 0) return false;
+
+                _captureGateOpen = false;
+                ClearUserGrabIntents();
+                _isCaptureSynchronizing = true;
+                AcquisitionSyncResult sync;
+                try
+                {
+                    sync = await SynchronizeAcquisitionAsync(
+                        "start",
+                        targets,
+                        null,
+                        () => ReapplyLineRatesForSynchronization("start", targets),
+                        () => IsReleasing);
+                }
+                finally
+                {
+                    _isCaptureSynchronizing = false;
+                }
+
+                if (!sync.Succeeded)
+                {
+                    FlowTrace.Log(
+                        $"capture synchronize failed gate=closed error={sync.Error}");
+                    return false;
+                }
+
+                _display.ResetFlowFirstFrame();
+                ApplyMainDisplayMode();
+                _display.ResetWaterfallIfActive();
+                IsLiveGrabbing = true;
+                foreach (var cam in targets)
+                    cam.SetUserGrabIntent(true);
+
+                FlowTrace.Log($"StartGrab（cams={_cameras.Count}）");
+                if (!deferCaptureGate)
+                    return OpenCaptureGate();
+                return true;
+            }
+            finally
+            {
+                _allocationGate.Release();
+            }
         }
 
         /// <summary>
@@ -412,9 +492,251 @@ namespace AniloxRoll.Monitor.UI.Managers
             FlowTrace.Log("StopGrab");
             _captureGateOpen = false;
             IsLiveGrabbing = false;
+            if (_isParameterReconfiguring)
+            {
+                // PauseAcquisition owns the per-camera grab lock while draining. Waiting for that
+                // lock here would freeze the UI when the duration guard stops during a parameter
+                // change. The global product gate is already closed, so intent cleanup can wait
+                // until reconfiguration has left the camera locks.
+                FlowTrace.Log("parameter stop deferred intent-clear");
+            }
+            else
+            {
+                ClearUserGrabIntents();
+            }
+            FlowTrace.Log("capture gate closed standby=on");
+        }
+
+        private void ClearUserGrabIntents()
+        {
             foreach (var cam in _cameras)
                 cam.SetUserGrabIntent(false);
-            FlowTrace.Log("capture gate closed standby=on");
+        }
+
+        private async Task<AcquisitionSyncResult> SynchronizeAcquisitionAsync(
+            string reason,
+            AniloxCamera[] targets,
+            Action applyWhilePaused,
+            Action resetTimingWhilePaused,
+            Func<bool> cancellationRequested)
+        {
+            var result = new AcquisitionSyncResult();
+            bool actionApplied = applyWhilePaused == null;
+
+            for (int attempt = 1; attempt <= CaptureSynchronizationMaxAttempts; attempt++)
+            {
+                if (cancellationRequested != null && cancellationRequested())
+                {
+                    result.Canceled = true;
+                    result.Error = "Canceled";
+                    return result;
+                }
+
+                FlowTrace.Log(
+                    $"acquisition sync begin reason={reason} attempt={attempt} " +
+                    $"gate=closed cams={targets.Length}");
+
+                Exception failure = null;
+                try
+                {
+                    await Task.Run(() =>
+                        System.Threading.Tasks.Parallel.ForEach(
+                            targets, cam => cam.PauseAcquisition()));
+                    FlowTrace.Log(
+                        $"acquisition sync paused reason={reason} attempt={attempt} " +
+                        $"cams={targets.Length}");
+
+                    if (!actionApplied)
+                    {
+                        await Task.Run(applyWhilePaused);
+                        actionApplied = true;
+                    }
+                    if (resetTimingWhilePaused != null)
+                        await Task.Run(resetTimingWhilePaused);
+                }
+                catch (Exception ex)
+                {
+                    failure = ex;
+                }
+                finally
+                {
+                    try
+                    {
+                        // M_START is intentionally issued back-to-back from one worker. The
+                        // measured first hardware ticks, not a fixed delay, decide readiness.
+                        await Task.Run(() =>
+                        {
+                            foreach (var cam in targets)
+                                cam.ResumeAcquisition();
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        if (failure == null) failure = ex;
+                    }
+                }
+
+                if (failure != null)
+                {
+                    result.Error = failure.GetType().Name;
+                    FlowTrace.Log(
+                        $"acquisition sync failed reason={reason} attempt={attempt} " +
+                        $"gate=closed error={result.Error}");
+                    return result;
+                }
+
+                FlowTrace.Log(
+                    $"acquisition sync resumed reason={reason} attempt={attempt} " +
+                    $"cams={targets.Length}");
+
+                AcquisitionSyncResult warm = await WaitForAcquisitionWarmAsync(
+                    reason, attempt, targets, cancellationRequested);
+                if (!warm.Succeeded)
+                    return warm;
+
+                result.Samples = warm.Samples;
+                if (LogAndValidateCapturePhase(reason, attempt, warm.Samples))
+                {
+                    result.Succeeded = true;
+                    result.Error = null;
+                    FlowTrace.Log(
+                        $"acquisition sync complete reason={reason} attempts={attempt} " +
+                        $"cams={targets.Length} phase=True");
+                    return result;
+                }
+
+                FlowTrace.Log(
+                    $"acquisition sync retry reason={reason} attempt={attempt} " +
+                    $"error=PhaseOutOfRange");
+            }
+
+            result.Error = "PhaseOutOfRange";
+            return result;
+        }
+
+        private async Task<AcquisitionSyncResult> WaitForAcquisitionWarmAsync(
+            string reason,
+            int attempt,
+            IList<AniloxCamera> targets,
+            Func<bool> cancellationRequested)
+        {
+            var result = new AcquisitionSyncResult();
+            int framePeriodMs = GetMaxFramePeriodMs(targets);
+            int timeoutMs = Math.Max(5000, Math.Min(60000, framePeriodMs * 5 + 2000));
+            var pending = new HashSet<int>(targets.Select(cam => cam.CameraId));
+            var stopwatch = Stopwatch.StartNew();
+
+            while (pending.Count > 0 && stopwatch.ElapsedMilliseconds <= timeoutMs)
+            {
+                if (IsReleasing ||
+                    (cancellationRequested != null && cancellationRequested()))
+                {
+                    result.Canceled = true;
+                    result.Error = "Canceled";
+                    FlowTrace.Log(
+                        $"acquisition sync canceled reason={reason} attempt={attempt} " +
+                        $"gate=closed");
+                    return result;
+                }
+
+                foreach (var cam in targets)
+                {
+                    if (!pending.Contains(cam.CameraId) || !cam.IsAcquisitionWarm)
+                        continue;
+
+                    var sample = new AcquisitionWarmSample
+                    {
+                        CameraId = cam.CameraId,
+                        SystemNum = GetCameraSystemNum(cam.CameraId),
+                        FrameStartTicks = cam.LastFrameStartTicks,
+                        ClockFrequencyHz = cam.DataLatchClockFreqHz
+                    };
+                    result.Samples.Add(sample);
+                    pending.Remove(cam.CameraId);
+                    FlowTrace.Log(
+                        $"acquisition sync ready reason={reason} attempt={attempt} " +
+                        $"cam{sample.CameraId} system={sample.SystemNum} " +
+                        $"tick={sample.FrameStartTicks} freq={sample.ClockFrequencyHz}");
+                }
+
+                if (pending.Count == 0)
+                {
+                    result.Succeeded = true;
+                    return result;
+                }
+                await Task.Delay(20);
+            }
+
+            result.Error = "WarmTimeout";
+            FlowTrace.Log(
+                $"acquisition sync timeout reason={reason} attempt={attempt} " +
+                $"pending={string.Join(",", pending)} limitMs={timeoutMs}");
+            return result;
+        }
+
+        private bool LogAndValidateCapturePhase(
+            string reason,
+            int attempt,
+            IList<AcquisitionWarmSample> samples)
+        {
+            bool allAligned = samples != null && samples.Count > 0;
+            foreach (var group in (samples ?? new List<AcquisitionWarmSample>())
+                .GroupBy(sample => sample.SystemNum))
+            {
+                var ordered = group.OrderBy(sample => sample.CameraId).ToArray();
+                bool measurable = (ordered.Length == 1 || group.Key >= 0) &&
+                    ordered.All(sample =>
+                        sample.FrameStartTicks > 0 &&
+                        sample.ClockFrequencyHz > 0 &&
+                        sample.ClockFrequencyHz == ordered[0].ClockFrequencyHz);
+                long spreadTicks = measurable && ordered.Length > 1
+                    ? ordered.Max(sample => sample.FrameStartTicks) -
+                      ordered.Min(sample => sample.FrameStartTicks)
+                    : 0;
+                double spreadMs = measurable && ordered.Length > 1
+                    ? spreadTicks * 1000.0 / ordered[0].ClockFrequencyHz
+                    : 0.0;
+                bool aligned = measurable &&
+                    (ordered.Length == 1 || spreadMs <= CapturePhaseToleranceMs);
+                allAligned &= aligned;
+
+                string spreadText = spreadMs.ToString(
+                    "F3", System.Globalization.CultureInfo.InvariantCulture);
+                string limitText = CapturePhaseToleranceMs.ToString(
+                    "F3", System.Globalization.CultureInfo.InvariantCulture);
+                FlowTrace.Log(
+                    $"acquisition sync phase reason={reason} attempt={attempt} " +
+                    $"system={group.Key} cams={string.Join(",", ordered.Select(s => s.CameraId))} " +
+                    $"spreadTicks={spreadTicks} spreadMs={spreadText} " +
+                    $"limitMs={limitText} measurable={measurable} aligned={aligned}");
+            }
+            return allAligned;
+        }
+
+        private int GetCameraSystemNum(int cameraId)
+        {
+            CameraHardwareConfig config = _cameraHardwareConfigs?
+                .FirstOrDefault(item => item.Id == cameraId);
+            return config?.SystemNum ?? -1;
+        }
+
+        private static void ReapplyLineRatesForSynchronization(
+            string reason, IEnumerable<AniloxCamera> targets)
+        {
+            var applied = new List<string>();
+            foreach (var cam in targets)
+            {
+                double lineRateHz = cam.AppliedLineRateHz;
+                if (lineRateHz <= 0) continue;
+                cam.SetLineRateHz(lineRateHz);
+                applied.Add(
+                    "cam" + cam.CameraId + "=" +
+                    lineRateHz.ToString(
+                        "0.###", System.Globalization.CultureInfo.InvariantCulture));
+            }
+            FlowTrace.Log(
+                $"acquisition sync timing-reset reason={reason} " +
+                $"lineRates={string.Join(",", applied)}");
         }
 
         // ==================== Release ====================
@@ -546,6 +868,12 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// </summary>
         public void SetLineRateForCamera(int camId, double hz)
         {
+            if (IsLiveGrabbing)
+            {
+                FlowTrace.Log(
+                    $"parameter change blocked scope=cam{camId} param=LineRate reason=GrabActive");
+                return;
+            }
             FindCamera(camId)?.SetLineRateHz(hz);
         }
 
@@ -556,6 +884,12 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// </summary>
         public void SetGrabHeightForCamera(int camId, int height)
         {
+            if (IsLiveGrabbing)
+            {
+                FlowTrace.Log(
+                    $"parameter change blocked scope=cam{camId} param=Height reason=GrabActive");
+                return;
+            }
             // grab 中拉大到 ~12062 會 stall → 一律 cap 在 MaxGrabHeightPx(12000) 以下（per-camera 固定，不分台數）。
             if (height > AcquisitionDefaults.MaxGrabHeightPx) height = AcquisitionDefaults.MaxGrabHeightPx;
             var cam = FindCamera(camId);
@@ -565,61 +899,195 @@ namespace AniloxRoll.Monitor.UI.Managers
             finally { cam.ResumeAcquisition(); }
         }
 
-        private int _coordDepth;
-
-        /// <summary>協調式套用「單一相機」參數（#3 修正）：只停**該台**→寫→重啟該台，其他相機完全不碰。
-        /// 相位已用 phaselog 證明不重要（free-run 2-3 條線就夠好）→ 不再全部一起停/開，
-        /// 避免沒被改的相機（最常見 cam2）被反覆 stop/start 連累而 stall。
-        /// 重入 / 非抓取中 / 該台未在抓 → 直接寫。</summary>
-        public void ApplyParamCoordinated(int camId, Action write)
+        /// <summary>
+        /// Applies one camera parameter, then restarts every connected digitizer as one physical
+        /// generation. Restarting only the edited camera would shift its phase against the rest.
+        /// </summary>
+        public Task<bool> ApplyParamCoordinatedAsync(int camId, Action write)
         {
-            if (write == null) return;
-            // intent 行在 SettingsTabs ApplyCamParam/ApplyAllCamParam（帶參數名+值），此處不重複記
             var cam = FindCamera(camId);
-            if (cam == null || !IsLiveGrabbing || _coordDepth > 0 || !cam.IsLive) { write?.Invoke(); return; }
+            var targets = cam == null
+                ? new AniloxCamera[0]
+                : _cameras.ToArray();
+            return ApplyParamCoordinatedCoreAsync("cam" + camId, targets, write);
+        }
 
-            _coordDepth++;
+        /// <summary>
+        /// Applies an All parameter as one reconfiguration generation. All connected digitizers
+        /// are drained, written, resumed, and observed warm before product frames are accepted.
+        /// </summary>
+        public Task<bool> ApplyParamCoordinatedAsync(Action write)
+        {
+            return ApplyParamCoordinatedCoreAsync("All", _cameras.ToArray(), write);
+        }
+
+        /// <summary>
+        /// Applies exposure without restarting acquisition. Exposure changes integration time but
+        /// does not change line timing, so closing the capture gate and rebuilding the physical
+        /// frame generation would only add several seconds of avoidable latency.
+        /// </summary>
+        public Task<bool> ApplyExposureFastAsync(int camId, Action write)
+        {
+            return ApplyExposureFastCoreAsync("cam" + camId, write);
+        }
+
+        /// <summary>Applies the all-camera exposure command while the current grab keeps flowing.</summary>
+        public Task<bool> ApplyExposureFastAsync(Action write)
+        {
+            return ApplyExposureFastCoreAsync("All", write);
+        }
+
+        private async Task<bool> ApplyExposureFastCoreAsync(string scope, Action write)
+        {
+            if (write == null) return true;
+
+            await _allocationGate.WaitAsync();
             try
             {
-                cam.PauseAcquisition();
-                write();
+                if (IsReleasing) return false;
+
+                bool live = IsLiveGrabbing && _captureGateOpen;
+                var sw = Stopwatch.StartNew();
+                if (live)
+                    FlowTrace.Log($"exposure live apply begin scope={scope} gate=open");
+
+                await Task.Run(write);
+
+                if (live)
+                {
+                    FlowTrace.Log(
+                        $"exposure live apply complete scope={scope} " +
+                        $"gate={(_captureGateOpen ? "open" : "closed")} " +
+                        $"elapsedMs={sw.ElapsedMilliseconds}");
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                FlowTrace.Log(
+                    $"exposure live apply failed scope={scope} gate={(_captureGateOpen ? "open" : "closed")} " +
+                    $"error={ex.GetType().Name}");
+                Trace.TraceWarning(
+                    $"[ApplyExposureFastCoreAsync.{scope}] {ex.GetType().Name}: {ex.Message}");
+                return false;
             }
             finally
             {
-                cam.ResumeAcquisition();
-                // 不在此同步等出幀：同步 Thread.Sleep 會凍 UI（stall 時必卡滿）→ Windows 變灰 Not Responding →
-                // 拉滑桿被排隊 replay → 解凍後「跳到空拉位置」再觸發一次套用＝暴力漏洞。stop→write→start 本身
-                // 同步序列化（MouseUp handler 跑完才處理下一個事件），不需凍結等待。stall 偵測交給 status timer。
-                _coordDepth--;
+                _allocationGate.Release();
             }
         }
 
-        /// <summary>協調式套用參數（#3）：grab 中改任何相機參數時，**全部相機一起停 → 寫 → 一起重啟**，
-        /// 讓重啟後相位 offset 一致重建（測「停→寫→開」對相位的效果；高度也順帶安全＝停著重配）。
-        /// 重入保護：巢狀呼叫（如 All 一次套 7 台）只寫、不重複停/開。非抓取中 → 直接寫。
-        /// 寫入時全部相機停著：SetGrabHeight 見 wasLive=false → 只重配 buffer 不自行重啟；曝光/線掃 live 寫即可。</summary>
-        public void ApplyParamCoordinated(Action write)
+        private async Task<bool> ApplyParamCoordinatedCoreAsync(
+            string scope, AniloxCamera[] requestedTargets, Action write)
         {
-            if (write == null) return;
-            if (!IsLiveGrabbing || _coordDepth > 0) { write(); return; }
+            if (write == null) return true;
 
-            _coordDepth++;
-            var paused = new List<AniloxCamera>();
+            await _allocationGate.WaitAsync();
+            bool enteredReconfiguration = false;
             try
             {
-                foreach (var cam in _cameras)
-                    if (cam != null && cam.IsLive) { cam.PauseAcquisition(); paused.Add(cam); }
-                write();
+                if (IsReleasing) return false;
+
+                var targets = (requestedTargets ?? new AniloxCamera[0])
+                    .Where(cam => cam != null && cam.IsConnected)
+                    .Distinct()
+                    .ToArray();
+                bool wasCapturing = IsLiveGrabbing;
+                if (!wasCapturing || targets.Length == 0)
+                {
+                    await Task.Run(write);
+                    return true;
+                }
+
+                _isParameterReconfiguring = true;
+                enteredReconfiguration = true;
+                // This must precede every physical stop. Callbacks already inside the old
+                // generation are discarded by the display/curve reset before the gate reopens.
+                _captureGateOpen = false;
+                FlowTrace.Log(
+                    $"parameter reconfigure begin scope={scope} gate=closed targets={targets.Length}");
+
+                AcquisitionSyncResult sync = await SynchronizeAcquisitionAsync(
+                    "parameter:" + scope,
+                    targets,
+                    () =>
+                    {
+                        FlowTrace.Log(
+                            $"parameter reconfigure paused scope={scope} cams={targets.Length}");
+                        write();
+                        FlowTrace.Log($"parameter reconfigure applied scope={scope}");
+                    },
+                    () => ReapplyLineRatesForSynchronization(
+                        "parameter:" + scope, targets),
+                    () => !IsLiveGrabbing || IsReleasing);
+
+                if (!sync.Succeeded)
+                {
+                    if (sync.Canceled || !IsLiveGrabbing || IsReleasing)
+                    {
+                        if (!IsReleasing)
+                        {
+                            ClearUserGrabIntents();
+                            FlowTrace.Log(
+                                $"parameter stop intent-clear complete scope={scope}");
+                        }
+                        FlowTrace.Log(
+                            $"parameter reconfigure canceled scope={scope} " +
+                            $"gate=closed reason=StopGrab");
+                        return true;
+                    }
+                    IsLiveGrabbing = false;
+                    ClearUserGrabIntents();
+                    FlowTrace.Log(
+                        $"parameter reconfigure failed scope={scope} gate=closed " +
+                        $"error={sync.Error}");
+                    FlowTrace.Log("capture gate closed standby=on");
+                    return false;
+                }
+
+                foreach (AcquisitionWarmSample sample in sync.Samples)
+                {
+                    FlowTrace.Log(
+                        $"parameter warm ready scope={scope} cam{sample.CameraId} " +
+                        $"tick={sample.FrameStartTicks}");
+                }
+
+                // Stop/close may run while reconfiguration is awaiting a frame. Never reopen a
+                // generation that the user has already ended.
+                if (!IsLiveGrabbing || IsReleasing)
+                {
+                    if (!IsReleasing)
+                    {
+                        ClearUserGrabIntents();
+                        FlowTrace.Log(
+                            $"parameter stop intent-clear complete scope={scope}");
+                    }
+                    FlowTrace.Log(
+                        $"parameter reconfigure canceled scope={scope} gate=closed reason=StopGrab");
+                    return true;
+                }
+
+                _display.ResetFlowFirstFrame();
+                _display.ResetWaterfallIfActive();
+                OnCaptureSequenceReset?.Invoke();
+                FlowTrace.Log($"parameter sequence reset scope={scope}");
+
+                _captureGateOpen = true;
+                FlowTrace.Log(
+                    $"parameter reconfigure complete scope={scope} gate=open warm=True");
+                return true;
             }
             finally
             {
-                // 協調重啟：back-to-back 一起 M_START（All 一次套 7 台才用此版；單台走 camId overload）
-                foreach (var cam in paused)
-                    cam.ResumeAcquisition();
-
-                // 不同步等出幀（會凍 UI → 變灰 Not Responding → 拉滑桿排隊 replay 跳值＝暴力漏洞）。
-                // stall 偵測交給 status timer（FPS≈0 判據）。
-                _coordDepth--;
+                if (enteredReconfiguration)
+                {
+                    _isParameterReconfiguring = false;
+                    // Covers stop/release races that exit through a failure path before the
+                    // normal StopGrab cancellation branch above.
+                    if (!IsLiveGrabbing && !IsReleasing)
+                        ClearUserGrabIntents();
+                }
+                _allocationGate.Release();
             }
         }
 
@@ -642,8 +1110,13 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// 供改參數後的參數鎖：至少鎖住一個完整幀週期，確保改完的相機跑完一張乾淨幀才放行下一次改（防連改太快 stall）。</summary>
         public int GetMaxFramePeriodMs()
         {
+            return GetMaxFramePeriodMs(_cameras);
+        }
+
+        private static int GetMaxFramePeriodMs(IEnumerable<AniloxCamera> cameras)
+        {
             int maxMs = 0;
-            foreach (var cam in _cameras)
+            foreach (var cam in cameras)
             {
                 if (cam == null || !cam.IsLive) continue;
                 double lr = cam.AppliedLineRateHz;
@@ -655,28 +1128,6 @@ namespace AniloxRoll.Monitor.UI.Managers
                 }
             }
             return maxMs;
-        }
-
-        /// <summary>快照所有「正在抓」相機的 FrameCount（camId→count）；供 UI 參數鎖判「重啟後是否已恢復出幀」。</summary>
-        public Dictionary<int, long> SnapshotLiveFrameCounts()
-        {
-            var d = new Dictionary<int, long>();
-            foreach (var cam in _cameras)
-                if (cam != null && cam.IsLive) d[cam.CameraId] = cam.GetFrameCount();
-            return d;
-        }
-
-        /// <summary>baseline 內每台是否都已出至少一張新幀（FrameCount 前進）＝重啟落定。
-        /// stalled 相機永不前進 → 回 false，呼叫端用逾時兜底解鎖。</summary>
-        public bool AllAdvancedSince(Dictionary<int, long> baseCounts)
-        {
-            if (baseCounts == null) return true;
-            foreach (var kv in baseCounts)
-            {
-                var cam = FindCamera(kv.Key);
-                if (cam != null && cam.GetFrameCount() <= kv.Value) return false;
-            }
-            return true;
         }
 
         private void UpdateCaptureSettingsCache(InspectionSettings settings)

@@ -57,6 +57,12 @@ namespace TanukiCv.Controls
 
         public event Action<CanvasInfo> StatusChanged;
 
+        /// <summary>
+        /// Raised on the UI thread after a requested LOD content generation has installed a tile.
+        /// View-only recomputes retain the current generation.
+        /// </summary>
+        public event Action<long> LodTileApplied;
+
         // [新增] 邊緣觸發事件 (int direction: -1=上一張, 1=下一張)
         public event Action<int> EdgeReached;
 
@@ -80,6 +86,7 @@ namespace TanukiCv.Controls
         private Rectangle _lodTileRect;                         // _lodTile 代表的虛擬區
         private volatile bool _lodRecomputeInFlight;            // provider(GPU) 背景進行中
         private volatile bool _lodRecomputePending;            // 進行中又有新請求 → 完成後再算一次（用最新視角）
+        private long _lodContentGeneration;
         private bool _visibleRefreshPending;                    // 隱藏宿主轉可見後，等待第一張可畫 LOD tile
         private Timer _lodSettleTimer;                          // 停住才重算 crisp tile
         private const int LodSettleMs = 150;
@@ -166,6 +173,7 @@ namespace TanukiCv.Controls
         }
 
         public bool LodActive => _lodActive;
+        public long LodContentGeneration => _lodContentGeneration;
 
         // 內容尺寸：LOD 模式用虛擬尺寸，否則用實際 Image 尺寸（座標/fit/clamp/overlay 共用）
         internal int ContentW => _lodActive ? _lodVirtualW : (this.Image?.Width  ?? 0);
@@ -241,7 +249,12 @@ namespace TanukiCv.Controls
             _lodVirtualH = Math.Max(1, virtualH);
             _lodProvider = provider;
             _lodActive   = provider != null;
-            if (_lodActive) { FitToScreen(); RecomputeLodTile(); }
+            if (_lodActive)
+            {
+                System.Threading.Interlocked.Increment(ref _lodContentGeneration);
+                FitToScreen();
+                RecomputeLodTile();
+            }
         }
 
         /// <summary>虛擬尺寸變了（如換相機/換合圖大小）但仍要 LOD → 更新尺寸並重 fit。</summary>
@@ -250,6 +263,7 @@ namespace TanukiCv.Controls
             if (!_lodActive) return;
             _lodVirtualW = Math.Max(1, virtualW);
             _lodVirtualH = Math.Max(1, virtualH);
+            System.Threading.Interlocked.Increment(ref _lodContentGeneration);
             FitToScreen();
             RecomputeLodTile();
         }
@@ -268,7 +282,9 @@ namespace TanukiCv.Controls
         /// <summary>新幀進來（內容變、視角沒變）→ 立刻用當前視角重算 tile（不延遲）。</summary>
         public void RefreshLod()
         {
-            if (_lodActive) RecomputeLodTile();
+            if (!_lodActive) return;
+            System.Threading.Interlocked.Increment(ref _lodContentGeneration);
+            RecomputeLodTile();
         }
 
         /// <summary>
@@ -360,6 +376,7 @@ namespace TanukiCv.Controls
             _lodRecomputeInFlight = true;
             var provider = _lodProvider;
             var size = new Size(tw, th);
+            long contentGeneration = _lodContentGeneration;
             Task.Run(() =>
             {
                 Bitmap tile = null;
@@ -367,7 +384,7 @@ namespace TanukiCv.Controls
                 try
                 {
                     if (IsHandleCreated && !IsDisposed)
-                        BeginInvoke((Action)(() => ApplyLodTile(tile, srcRect)));
+                        BeginInvoke((Action)(() => ApplyLodTile(tile, srcRect, contentGeneration)));
                     else { tile?.Dispose(); _lodRecomputeInFlight = false; }
                 }
                 catch { tile?.Dispose(); _lodRecomputeInFlight = false; }
@@ -375,7 +392,7 @@ namespace TanukiCv.Controls
         }
 
         /// <summary>背景 provider 完成 → UI 執行緒套 tile + 若有 pending 再算一次（最新視角）。</summary>
-        private void ApplyLodTile(Bitmap tile, Rectangle rect)
+        private void ApplyLodTile(Bitmap tile, Rectangle rect, long contentGeneration)
         {
             _lodRecomputeInFlight = false;
             if (!_lodActive) { tile?.Dispose(); return; }
@@ -386,6 +403,7 @@ namespace TanukiCv.Controls
                 _lodTileRect = rect;
                 _lodLastRecomputeMs = Environment.TickCount;
                 this.Invalidate();
+                LodTileApplied?.Invoke(contentGeneration);
             }
             if (_visibleRefreshPending)
             {

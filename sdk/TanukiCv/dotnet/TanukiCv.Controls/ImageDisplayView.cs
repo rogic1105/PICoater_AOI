@@ -64,6 +64,7 @@ namespace TanukiCv.Controls
         private volatile bool _lodWanted;
         private int _lodCamId = -1;           // 單張：目前 LOD 綁的相機（換相機要重綁虛擬尺寸）
         private int _lodMergeW = -1, _lodMergeH = -1; // 合圖：目前 LOD 綁的虛擬尺寸（變了要重綁）
+        private long _awaitedLodGeneration;
 
         private const int MergeMaxW = 30000; // 合圖點陣寬上限（GDI 16-bit 座標 wrap 防護）
 
@@ -73,6 +74,12 @@ namespace TanukiCv.Controls
         /// <summary>選中相機因「視野移動」自動變更（合圖模式反向連動：視野中心最近的相機 → 自動高亮縮圖）。
         /// 1-based camId。程式化來源（非使用者點擊），上層通常只需更新狀態、勿再呼 CenterOnCamera（防遞迴）。</summary>
         public event Action<int> SelectedCamChanged;
+
+        /// <summary>
+        /// Raised after new main-image content has been committed. LOD mode waits for the matching
+        /// tile generation instead of firing when the resize was only requested.
+        /// </summary>
+        public event Action ContentPresented;
 
         /// <summary>互動/決策流跡（診斷用，可為 null）：autoFit 帶原因、wheel 手勢（轉發自 ImageCanvas）。
         /// 上層接到流程 log（如 FlowTrace）供契約驗證——「誰在動視野」一眼可判。</summary>
@@ -171,6 +178,7 @@ namespace TanukiCv.Controls
             _canvas.TripleClickPhysical1x = true;
             _canvas.ClampPan = false;
             _canvas.StatusChanged += OnCanvasStatus;
+            _canvas.LodTileApplied += OnLodTileApplied;
             _canvas.MouseLeave += (s, e) => ClearCursorProfile(); // 游標離開畫布 → 剖面歸零
             _mainPanel.Controls.Add(_canvas);
             _canvas.BringToFront();
@@ -455,9 +463,14 @@ namespace TanukiCv.Controls
                             // 頻繁出現＝視野被反覆重設（如 ClearFrame 誤清空幀那類 churn）。
                             _flowLog?.Invoke($"lodRebind merge {_mergeTotalW}x{_mergeMaxH}（fit reset）");
                             _canvas.EnableLod(_mergeTotalW, _mergeMaxH, MergeLodProvide);
+                            _awaitedLodGeneration = _canvas.LodContentGeneration;
                             ApplyCalibration();
                         }
-                        else if (_mainDirty) _canvas.RefreshLod();
+                        else if (_mainDirty)
+                        {
+                            _canvas.RefreshLod();
+                            _awaitedLodGeneration = _canvas.LodContentGeneration;
+                        }
                         _mainDirty = false;
                         FlowViewState();
                         return;
@@ -474,9 +487,14 @@ namespace TanukiCv.Controls
                             _lodCamId = _selectedCamId;
                             _flowLog?.Invoke($"lodRebind cam{_selectedCamId} {f.W}x{f.H}（fit reset）");
                             _canvas.EnableLod(f.W, f.H, LodProvide); // 虛擬尺寸=全解析度；停住才請 provider 裁+縮
+                            _awaitedLodGeneration = _canvas.LodContentGeneration;
                             ApplyCalibration();
                         }
-                        else if (_mainDirty) _canvas.RefreshLod();
+                        else if (_mainDirty)
+                        {
+                            _canvas.RefreshLod();
+                            _awaitedLodGeneration = _canvas.LodContentGeneration;
+                        }
                         _mainDirty = false;
                         FlowViewState();
                         return;
@@ -525,6 +543,25 @@ namespace TanukiCv.Controls
                 }
             }
             ApplyCalibration();
+            PublishContentPresented();
+        }
+
+        private void OnLodTileApplied(long contentGeneration)
+        {
+            if (_awaitedLodGeneration <= 0 || contentGeneration < _awaitedLodGeneration)
+                return;
+            _awaitedLodGeneration = 0;
+            PublishContentPresented();
+        }
+
+        private void PublishContentPresented()
+        {
+            try { ContentPresented?.Invoke(); }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"[ImageDisplayView.ContentPresented] {ex.GetType().Name}: {ex.Message}");
+            }
         }
 
         private void ApplyCalibration()
@@ -878,6 +915,7 @@ namespace TanukiCv.Controls
             if (_canvas != null)
             {
                 _canvas.StatusChanged -= OnCanvasStatus;
+                _canvas.LodTileApplied -= OnLodTileApplied;
                 if (_canvas.LodActive) _canvas.DisableLod();
                 var old = _canvas.Image; _canvas.Image = null; old?.Dispose();
                 _mainPanel?.Controls.Remove(_canvas);

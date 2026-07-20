@@ -49,8 +49,9 @@ namespace AniloxRoll.Monitor.Forms
             {
                 try
                 {
-                    await _liveCameraManager.EnsureAllocatedAndToggleGrabAsync(false);
-                    if (!_liveCameraManager.IsAllocated) return;
+                    bool started =
+                        await _liveCameraManager.EnsureAllocatedAndToggleGrabAsync(false);
+                    if (!_liveCameraManager.IsAllocated || !started) return;
                 }
                 catch (Exception ex)
                 {
@@ -65,7 +66,8 @@ namespace AniloxRoll.Monitor.Forms
                 LightTurnOn();
                 int warmup = _settings?.LightWarmupMs ?? 0;
                 if (warmup > 0) await Task.Delay(warmup);
-                _liveCameraManager.ToggleGrab();
+                bool started = await _liveCameraManager.ToggleGrabAsync();
+                if (!started) return;
                 UpdateGrabButton(true);
             }
 
@@ -171,7 +173,7 @@ namespace AniloxRoll.Monitor.Forms
                 // 採集完成後一律停止 grab
                 if (_liveCameraManager.IsLiveGrabbing)
                 {
-                    _liveCameraManager.ToggleGrab();
+                    _liveCameraManager.StopGrab();
                     LightTurnOff();
                     UpdateGrabButton(false);
                 }

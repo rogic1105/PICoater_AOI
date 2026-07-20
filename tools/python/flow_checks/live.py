@@ -14,6 +14,7 @@ class LiveFlowValidator:
         report = CheckReport()
         self._check_camera_initialization(session, report)
         self._check_capture_standby(session, report)
+        self._check_row_presentation(session, report)
         if not any(
             line.message.startswith(("LC ", "IC ", "WF ", "ui:【開始抓取】"))
             for line in session.lines
@@ -23,6 +24,51 @@ class LiveFlowValidator:
 
         self._check_drag_first_publish(session, report)
         return report
+
+    def _check_row_presentation(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        latest_presentation = None
+        presentations = 0
+        rows = 0
+        failures = []
+
+        for line in session.lines:
+            if re.match(
+                r"^rowCurve present after=mainImage cams=\d+ mode=(IC|WF)$",
+                line.message,
+            ):
+                latest_presentation = line
+                presentations += 1
+                continue
+            if not line.message.startswith("LC row rowChart "):
+                continue
+
+            rows += 1
+            if latest_presentation is None:
+                failures.append(f"{line.timestamp} rowChart 無 mainImage 呈現證據")
+                continue
+            delay = line.elapsed - latest_presentation.elapsed
+            if delay < 0 or delay > 1.0:
+                failures.append(
+                    f"{line.timestamp} rowChart 距 mainImage 呈現 {delay:.3f}s"
+                )
+
+        if rows == 0:
+            report.add(
+                self.domain,
+                "F2.row-presentation",
+                CheckStatus.NOT_COVERED,
+                "本 session 無監控列曲線更新",
+            )
+            return
+        report.add(
+            self.domain,
+            "F2.row-presentation",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"presentations={presentations} rowUpdates={rows} failures={len(failures)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
+        )
 
     def _check_camera_initialization(
         self, session: FlowSession, report: CheckReport
@@ -47,38 +93,51 @@ class LiveFlowValidator:
                 continue
 
             covered += 1
+            summary_index = next(
+                (
+                    index
+                    for index, line in enumerate(lines)
+                    if line.message.startswith("camera init summary ")
+                ),
+                None,
+            )
+            # Height reallocation intentionally reuses the per-camera processing metric later in
+            # the session. F1 only owns the initial allocation window ending at its summary.
+            initialization_lines = (
+                lines if summary_index is None else lines[: summary_index + 1]
+            )
             acquisition = [
-                line for line in lines
+                line for line in initialization_lines
                 if re.match(r"camera init cam=\d+ phase=acquisition ", line.message)
             ]
             processing = [
-                line for line in lines
+                line for line in initialization_lines
                 if re.match(r"camera init cam=\d+ phase=processing ", line.message)
             ]
             acquisition_done = next(
                 (
-                    line for line in lines
+                    line for line in initialization_lines
                     if line.message.startswith("camera init phase=acquisition done ")
                 ),
                 None,
             )
             processing_begin = next(
                 (
-                    line for line in lines
+                    line for line in initialization_lines
                     if line.message.startswith("camera init phase=processing begin ")
                 ),
                 None,
             )
             processing_done = next(
                 (
-                    line for line in lines
+                    line for line in initialization_lines
                     if line.message.startswith("camera init phase=processing done ")
                 ),
                 None,
             )
             summary = next(
                 (
-                    line for line in lines
+                    line for line in initialization_lines
                     if line.message.startswith("camera init summary ")
                 ),
                 None,
@@ -181,6 +240,7 @@ class LiveFlowValidator:
                     "acquisition parameters ready ",
                     "acquisition standby start ",
                     "acquisition standby ready ",
+                    "acquisition sync begin ",
                     "capture gate open ",
                     "capture gate closed ",
                 )
@@ -204,6 +264,12 @@ class LiveFlowValidator:
         background_capture = False
         starts = 0
         stops = 0
+        start_syncs = 0
+        start_sync_ready = False
+        parameter_sync_ready = False
+        sync_expected = {}
+        sync_ready_cameras = {}
+        sync_phase_results = {}
         failures = []
 
         for line in session.lines:
@@ -242,12 +308,131 @@ class LiveFlowValidator:
                 ready_cameras.add(camera_id)
                 continue
 
+            sync_begin_match = re.match(
+                r"acquisition sync begin reason=(\S+) attempt=(\d+) "
+                r"gate=closed cams=(\d+)",
+                message,
+            )
+            if sync_begin_match:
+                reason = sync_begin_match.group(1)
+                attempt = int(sync_begin_match.group(2))
+                key = (reason, attempt)
+                sync_expected[key] = int(sync_begin_match.group(3))
+                sync_ready_cameras[key] = set()
+                sync_phase_results[key] = []
+                if reason == "start":
+                    if capture_open:
+                        failures.append(
+                            f"start synchronization began while capture gate open "
+                            f"at {line.timestamp}"
+                        )
+                    if int(sync_begin_match.group(2)) == 1:
+                        start_syncs += 1
+                        start_sync_ready = False
+                elif reason.startswith("parameter:"):
+                    parameter_sync_ready = False
+                continue
+
+            sync_ready_match = re.match(
+                r"acquisition sync ready reason=(\S+) attempt=(\d+) "
+                r"cam(\d+) system=(-?\d+) tick=(-?\d+) freq=(-?\d+)",
+                message,
+            )
+            if sync_ready_match:
+                key = (
+                    sync_ready_match.group(1),
+                    int(sync_ready_match.group(2)),
+                )
+                sync_ready_cameras.setdefault(key, set()).add(
+                    int(sync_ready_match.group(3))
+                )
+                continue
+
+            sync_phase_match = re.match(
+                r"acquisition sync phase reason=(\S+) attempt=(\d+) "
+                r"system=(-?\d+) cams=([\d,]+) spreadTicks=(-?\d+) "
+                r"spreadMs=([0-9]+(?:\.[0-9]+)?) "
+                r"limitMs=([0-9]+(?:\.[0-9]+)?) "
+                r"measurable=(True|False) aligned=(True|False)",
+                message,
+            )
+            if sync_phase_match:
+                measurable = sync_phase_match.group(8) == "True"
+                aligned = sync_phase_match.group(9) == "True"
+                spread_ms = float(sync_phase_match.group(6))
+                limit_ms = float(sync_phase_match.group(7))
+                if aligned and (not measurable or spread_ms > limit_ms):
+                    failures.append(
+                        f"invalid aligned phase evidence at {line.timestamp}: "
+                        f"measurable={measurable} spread={spread_ms} limit={limit_ms}"
+                    )
+                key = (
+                    sync_phase_match.group(1),
+                    int(sync_phase_match.group(2)),
+                )
+                sync_phase_results.setdefault(key, []).append(
+                    measurable and aligned and spread_ms <= limit_ms
+                )
+                continue
+
+            sync_complete_match = re.match(
+                r"acquisition sync complete reason=(\S+) attempts=(\d+) "
+                r"cams=(\d+) phase=(True|False)",
+                message,
+            )
+            if sync_complete_match:
+                reason = sync_complete_match.group(1)
+                attempt = int(sync_complete_match.group(2))
+                key = (reason, attempt)
+                phase_ok = sync_complete_match.group(4) == "True"
+                expected = sync_expected.get(key)
+                ready_count = len(sync_ready_cameras.get(key, set()))
+                phase_results = sync_phase_results.get(key, [])
+                evidence_ok = (
+                    expected is not None
+                    and ready_count == expected
+                    and bool(phase_results)
+                    and all(phase_results)
+                )
+                if not phase_ok:
+                    failures.append(
+                        f"synchronization completed without phase proof "
+                        f"at {line.timestamp}"
+                    )
+                if not evidence_ok:
+                    failures.append(
+                        f"synchronization evidence incomplete at {line.timestamp}: "
+                        f"ready={ready_count}/{expected} phases={phase_results}"
+                    )
+                phase_ok = phase_ok and evidence_ok
+                if reason == "start":
+                    start_sync_ready = phase_ok
+                elif reason.startswith("parameter:"):
+                    parameter_sync_ready = phase_ok
+                continue
+
+            if message.startswith(
+                ("acquisition sync failed ", "capture synchronize failed ")
+            ):
+                failures.append(
+                    f"acquisition synchronization failed at {line.timestamp}: {message}"
+                )
+                start_sync_ready = False
+                parameter_sync_ready = False
+                continue
+
             if message == "ui:【取得背景】鈕":
                 background_capture = True
                 continue
 
             if message.startswith("StartGrab"):
                 starts += 1
+                if not start_sync_ready:
+                    failures.append(
+                        f"StartGrab without successful physical synchronization "
+                        f"at {line.timestamp}"
+                    )
+                start_sync_ready = False
                 start_pending = True
                 stop_pending = False
                 plan_ready = background_capture
@@ -297,6 +482,35 @@ class LiveFlowValidator:
                 stop_pending = False
                 continue
 
+            if message.startswith("parameter reconfigure begin "):
+                if not capture_open:
+                    failures.append(
+                        f"parameter reconfigure began while capture gate closed at {line.timestamp}"
+                    )
+                capture_open = False
+                parameter_sync_ready = False
+                continue
+
+            if message.startswith("parameter reconfigure complete "):
+                if "gate=open warm=True" not in message:
+                    failures.append(
+                        f"parameter reconfigure reopened before warm at {line.timestamp}"
+                    )
+                if not parameter_sync_ready:
+                    failures.append(
+                        f"parameter reconfigure reopened without phase synchronization "
+                        f"at {line.timestamp}"
+                    )
+                parameter_sync_ready = False
+                capture_open = True
+                continue
+
+            if message.startswith(
+                ("parameter reconfigure failed ", "parameter reconfigure canceled ")
+            ):
+                capture_open = False
+                continue
+
             if "firstFrame " in message and not capture_open:
                 failures.append(f"firstFrame while capture gate closed at {line.timestamp}")
 
@@ -311,7 +525,7 @@ class LiveFlowValidator:
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
             f"parameterReadyCams={len(parameter_ready_cameras)} "
             f"readyCams={len(ready_cameras)} starts={starts} stops={stops} "
-            f"failures={len(failures)}"
+            f"startSyncs={start_syncs} failures={len(failures)}"
             + (f"; first={failures[0]}" if failures else ""),
         )
 
