@@ -47,6 +47,8 @@ against current code with `rg` before editing because lookup data can become sta
 | `UI/Coordinators/LatestCurveLoadCoordinator.cs` | 回顧／報表共用的單序號 Curve latest-only／single-flight 排程與 stale token owner；不負責讀 bin 或畫 chart。 |
 | `UI/Coordinators/ReviewPeriodLoadCoordinator.cs` | 回顧時段載入的 FIFO single-flight、重複 request 去重與 generation 失效 owner。 |
 | `UI/Services/ImageCacheService.cs` | ProcessBatch 產出但不直接顯示的 Bitmap 生命週期唯一 owner；下一次 workflow 前統一 Dispose。 |
+| `UI/Services/ReviewImageDataLoader.cs` | 回顧單片完整載入 service：查影像/CFG、幀對齊、每台拼接、欄列 curve 合併與灰階轉換；背景執行且不持有 WinForms 狀態。 |
+| `UI/Services/BitmapGrayConverter.cs` | 回顧 Bitmap 轉 8-bit 灰階 frame 的純轉換 helper。 |
 | `UI/Services/SingleGrabCurveDataLoader.cs` | 回顧／報表共用的單序號 Curve application service：讀 CFG，依記憶體快取→`_curve_summary`→原始 bin 取得欄／列資料，且不持有 WinForms 狀態。 |
 | `UI/State/ReviewRuntimeState.cs` | 回顧 CSV CFG 快照與螢幕 mm/px 的 runtime SSoT；Form 與 ReviewStitchCoordinator 共用。 |
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/Interaction/EventGuard.cs` | 可重入事件 guard 與 scope |
@@ -58,7 +60,7 @@ against current code with `rg` before editing because lookup data can become sta
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/Interaction/MultiClickDetector.cs` | 雙擊與三擊手勢辨識 |
 | `UI/Widgets/CurveMergeHelper.cs` | 曲線 bin 讀取與全覽曲線合併的 app adapter |
 | `UI/Presenters/DataStatisticsPresenter.cs` | 報表統計、導航、明細清單與圖表的 feature presenter |
-| `UI/Presenters/ReviewStitchCoordinator.cs` | 回顧單片影像／曲線 IO、時段投影、幀對齊、拼接與顯示套用 workflow；曲線與時段排程分別交由專用 coordinator。 |
+| `UI/Presenters/ReviewStitchCoordinator.cs` | 回顧單片／時段的 async token、runtime state 與顯示套用 workflow；完整單片 IO 交由 ReviewImageDataLoader，曲線與時段排程交由專用 coordinator。 |
 | `UI/Presenters/LiveTelemetryPresenter.cs` | 相機 telemetry 擷取與 UI snapshot 套用 |
 | `Acquisition/AniloxCamera.cs` | 單台產品相機 composition：取像事件、檢測、顯示資料與存檔協調 |
 | `sdk/MIL/MilGrabber.Core/MilCamera.cs` | 單台相機的 MIL 資源、取像、參數、CLProtocol 與 telemetry wrapper |

@@ -1082,11 +1082,16 @@ OnReviewGrabIdSelected@AniloxRollForm.Data.cs
  │           └ true → 套 ReviewRuntimeState＋UpdateStitchedOverviewChart＋UpdateGlobalRowChart
  └ 250ms settle → LoadGrabStitchedViewGuardRowRangeAsync@AniloxRollForm.Review.cs
     └ LoadGrabStitchedViewAsync@ReviewStitchCoordinator.cs
-       ├ LoadForGrabId@InspectionImagePathRepository.cs
-       │  └ InspectionCsvReader.OpenShared＋TryParseRecord＋TryExtractCameraId（影像依 cam 分組）
-       ├ LoadForGrabId@InspectionConfigRepository.cs
-       │  └ InspectionCsvReader.OpenShared＋TryParseRecord（取 grab 上方最近 #CFG）
-       └ ResolveAlignment@FrameTickIndex.cs（與曲線快路共用，不得另寫 fallback）
+       ├ Load@ReviewImageDataLoader.cs（背景執行；不得讀寫 WinForms control）
+       │  ├ LoadForGrabId@InspectionImagePathRepository.cs
+       │  │  └ InspectionCsvReader.OpenShared＋TryParseRecord＋TryExtractCameraId（影像依 cam 分組）
+       │  ├ LoadForGrabId@InspectionConfigRepository.cs
+       │  │  └ InspectionCsvReader.OpenShared＋TryParseRecord（取 grab 上方最近 #CFG）
+       │  ├ ResolveAlignment@FrameTickIndex.cs（與曲線快路共用，不得另寫 fallback）
+       │  └ StitchCamera＋MergeCurves／MergeRowCurves＋BitmapGrayConverter
+       └ IsCurrent@ReviewImageLoadGate.cs
+          ├ false → DisposeImages＋RV loadGrab stale-drop（不得套 UI）
+          └ true → ReviewRuntimeState＋StitchedImagesReady＋欄／列 chart
 ```
 
 ### R3 時段導航（cbReviewDate/cbReviewTime 手動）

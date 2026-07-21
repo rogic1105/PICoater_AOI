@@ -1,6 +1,5 @@
 using System;
 using System.Drawing;
-using System.Drawing.Imaging;
 using System.Windows.Forms;
 using TanukiCv.Controls;
 
@@ -99,43 +98,6 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         public void SetMergeMode(bool on) => _view?.SetMergeMode(on);
         public void SetSelected(int camId) => _view?.SetSelected(camId);
-
-        /// <summary>Bitmap（8bpp 索引灰階或 24/32bpp）→ 8bpp 灰階 bytes。</summary>
-        internal static byte[] ToGray8(Bitmap bmp, out int w, out int h)
-        {
-            w = bmp.Width; h = bmp.Height;
-            if (w <= 0 || h <= 0) return null;
-            var rect = new Rectangle(0, 0, w, h);
-            var dst = new byte[w * h];
-
-            if (bmp.PixelFormat == PixelFormat.Format8bppIndexed)
-            {
-                var bd = bmp.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format8bppIndexed);
-                try
-                {
-                    for (int y = 0; y < h; y++)
-                        System.Runtime.InteropServices.Marshal.Copy(bd.Scan0 + y * bd.Stride, dst, y * w, w);
-                }
-                finally { bmp.UnlockBits(bd); }
-                return dst;
-            }
-
-            // 24/32bpp：取 G 通道（灰階 JPEG 解成 RGB 時 R=G=B，足夠；非灰圖也可接受近似）
-            var bd2 = bmp.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format24bppRgb);
-            try
-            {
-                int stride = bd2.Stride;
-                var row = new byte[stride];
-                for (int y = 0; y < h; y++)
-                {
-                    System.Runtime.InteropServices.Marshal.Copy(bd2.Scan0 + y * stride, row, 0, stride);
-                    int o = y * w;
-                    for (int x = 0; x < w; x++) dst[o + x] = row[x * 3 + 1];
-                }
-            }
-            finally { bmp.UnlockBits(bd2); }
-            return dst;
-        }
 
         public void Dispose()
         {

@@ -75,6 +75,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         // 不共用 token，避免圖片開始載入時把同一序號仍在讀取的曲線誤判為 stale。
         private readonly LatestCurveLoadCoordinator _curveLoads;
         private readonly SingleGrabCurveDataLoader _curveDataLoader;
+        private readonly ReviewImageDataLoader _imageDataLoader;
         private readonly ReviewImageLoadGate _imageLoads = new ReviewImageLoadGate();
 
         /// <summary>快路：只載曲線（欄+列，.bin 數十 KB + tick 對齊 csv）+CFG → 更新欄/列 chart。
@@ -144,6 +145,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         {
             _ctx = ctx;
             _curveDataLoader = new SingleGrabCurveDataLoader();
+            _imageDataLoader = new ReviewImageDataLoader();
             _curveLoads = new LatestCurveLoadCoordinator(LoadGrabCurvesCoreAsync);
         }
 
@@ -184,111 +186,41 @@ namespace AniloxRoll.Monitor.UI.Presenters
             var swTotal = Stopwatch.StartNew();
             try
             {
-                long csvMs = 0, stitchMs = 0, mergeMs = 0;
-                int totalImgCount = 0;
                 string ridgeDir = ActiveRidgeDirection;
                 int camCount = _ctx.CameraCount;
-                float[][] newCurveMean    = new float[camCount][];
-                float[][] newCurveMax     = new float[camCount][];
-                // #13 同源：灰階轉換在「解碼同段背景、Bitmap 仍獨佔未發布」時做 → 與後續任何讀取零 race
-                //（教訓：GDI+ Bitmap 單執行緒物件，發布後背景 LockBits 會與快速換 ID 的下一輪讀取相撞）。
-                var grayArr = new byte[camCount][];
-                var grayW = new int[camCount];
-                var grayH = new int[camCount];
-                float[][] newRowCurveMean = new float[camCount][];
-                float[][] newRowCurveMax  = new float[camCount][];
-                CsvConfigSnapshot grabCfg = null;
-                var inspSvc = _ctx.InspectionService;
-                var loaded = await Task.Run(() =>
-                {
-                    var swCsv = Stopwatch.StartNew();
-                    var grouped = InspectionImagePathRepository.LoadForGrabId(
-                        root, grabId, hintFrom, hintTo);
-                    grabCfg = InspectionConfigRepository.LoadForGrabId(
-                        root, grabId, hintFrom, hintTo);
-                    csvMs = swCsv.ElapsedMilliseconds;
-                    foreach (var kv in grouped) totalImgCount += kv.Value.Count;
-
-                    var swStitch = Stopwatch.StartNew();
-                    int scale = InspectionEngineConfig.DefaultSaveResizeScale;
-                    var imgs = new Bitmap[camCount];
-
-                    // 跨相機對齊時間軸（唯一來源 FrameTickIndex）：優先「硬體 tick 就近對位」（各台獨立掉幀
-                    // 也能精準定位 → 缺幀那格補黑），舊資料無 _ticks.csv 側車時 fallback 檔名共用戳法。
-                    var alignment = FrameTickIndex.ResolveAlignment(grouped);
-                    var alignedByCam = alignment.ByCamera;
-                    Core.Services.FlowTrace.Log($"RV loadGrab paths {grabId} root={root} images={totalImgCount} cams={grouped.Count} cfg={(grabCfg != null ? "yes" : "no")} align={alignment.Mode}");
-
-                    // 7 台相機各自獨立（imgs[i]/curve[i] 各寫各的 index、BitmapPool 有 lock、CurveMergeHelper 無共用 static）
-                    // → 平行解碼/拼接，吃滿多核心，削掉最大宗的 Stitch 延遲。每台自帶 try/catch，不外拋 AggregateException。
-                    System.Threading.Tasks.Parallel.For(0, camCount, i =>
-                    {
-                        int camId = i + 1;
-                        if (grouped.TryGetValue(camId, out var paths) && paths.Count > 0)
-                        {
-                            try
-                            {
-                                // 影像：對齊參考時間軸（缺幀位置=null＝黑布占位；tick 法已精準定位掉幀槽）
-                                var aligned = alignedByCam.TryGetValue(camId, out var al) ? al : paths;
-                                imgs[i] = GrabImageStitcher.StitchCamera(aligned, scale, null,
-                                    useProcessed: enableProcess, ridgeDirection: ridgeDir);
-                                CurveMergeHelper.MergeCurves(paths, out newCurveMean[i], out newCurveMax[i]);   // 欄(逐欄聚合)：長度不變、不需對齊
-                                CurveMergeHelper.MergeRowCurves(aligned, out newRowCurveMean[i], out newRowCurveMax[i]); // 列(逐列串接)：對齊參考軸，缺幀補 0 曲線=對上影像黑布
-                                if (imgs[i] != null)
-                                    grayArr[i] = AniloxRoll.Monitor.UI.Managers.ReviewDisplayManager.ToGray8(imgs[i], out grayW[i], out grayH[i]);
-                            }
-                            catch (Exception ex)
-                            {
-                                Trace.WriteLine(
-                                    $"[StitchView] CAM{camId}: {ex.GetType().Name}: {ex.Message}");
-                            }
-                        }
-                    });
-                    stitchMs = swStitch.ElapsedMilliseconds;
-
-                    // 全域合圖也在背景做（原本在 UI 執行緒 → 換 ID swap 卡頓的主因；MergeHorizontal 純影像運算可背景化）
-                    // Stage4b：舊 GrabImageStitcher.MergeHorizontal 顯示用合圖已刪（顯示走 ImageDisplayView.BuildMerge）。
-                    Bitmap merged = null;
-                    double[] ops = null, pos = null;
-                    return (imgs, merged, ops, pos);
-                });
-                var newImages = loaded.imgs;
+                ReviewImageData loaded = await Task.Run(() => _imageDataLoader.Load(
+                    root, grabId, hintFrom, hintTo, camCount, enableProcess, ridgeDir));
+                var newImages = loaded.Images;
 
                 // token 閘門：背景載入期間已有更新的選取 → 本結果作廢（不上畫面、不動 chart）
                 if (!_imageLoads.IsCurrent(myLoad))
                 {
                     Core.Services.FlowTrace.Log($"RV loadGrab stale-drop {grabId}（{swTotal.ElapsedMilliseconds}ms）");
-                    foreach (var im in newImages) im?.Dispose();
+                    loaded.DisposeImages();
                     return;
                 }
 
                 ClearStitchedMode();
                 _stitchedImages       = newImages;
-                _stitchedCurveMean    = newCurveMean;
-                _stitchedCurveMax     = newCurveMax;
-                _stitchedRowCurveMean = newRowCurveMean;
-                _stitchedRowCurveMax  = newRowCurveMax;
+                _stitchedCurveMean    = loaded.ColumnMean;
+                _stitchedCurveMax     = loaded.ColumnMax;
+                _stitchedRowCurveMean = loaded.RowMean;
+                _stitchedRowCurveMax  = loaded.RowMax;
                 _stitchedMergedRowCurveMean = null;
                 _stitchedMergedRowCurveMax = null;
-                _ctx.ReviewState.Config = grabCfg;
+                _ctx.ReviewState.Config = loaded.Config;
                 _ctx.DataStatsPresenter?.SetReviewGroupBoxes(true);
 
-                double[] opsArr = loaded.ops, posArr = loaded.pos;
-                if (loaded.merged != null)
-                    _globalMergedImage = loaded.merged; // 已於背景 Task.Run 合好
-
-                // Stage4b：舊 PictureBox 縮圖建圖已刪（縮圖走 sdk ThumbStrip）
-
-                // #13 同源新路徑（平行建新）：餵 ImageDisplayView（Vertical 模式 ops/pos 補算 CFG 有效值）
-                var opsEff = opsArr ?? grabCfg?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
-                var posEff = posArr ?? grabCfg?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
-                StitchedImagesReady?.Invoke(grayArr, grayW, grayH, opsEff, posEff,
+                var opsEff = loaded.Config?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
+                var posEff = loaded.Config?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
+                StitchedImagesReady?.Invoke(
+                    loaded.GrayFrames, loaded.GrayWidths, loaded.GrayHeights, opsEff, posEff,
                     _ctx.Settings.StitchMode == StitchMode.Global);
 
                 UpdateGlobalRowChart();   // 畫布顯示走 ImageDisplayView（同源）；row 曲線照合併更新
                 UpdateStitchedOverviewChart();
 
-                Trace.WriteLine($"[StitchView] {grabId} proc={enableProcess} | CSV={csvMs}ms | Stitch={stitchMs}ms | Merge(bg)={mergeMs}ms | UIapply={swTotal.ElapsedMilliseconds - csvMs - stitchMs - mergeMs}ms | Total={swTotal.ElapsedMilliseconds}ms");
+                Trace.WriteLine($"[StitchView] {grabId} proc={enableProcess} | CSV={loaded.ConfigMs}ms | Stitch={loaded.StitchMs}ms | Merge(bg)=0ms | UIapply={swTotal.ElapsedMilliseconds - loaded.ConfigMs - loaded.StitchMs}ms | Total={swTotal.ElapsedMilliseconds}ms");
                 Core.Services.FlowTrace.Log($"RV loadGrab done {grabId}（{swTotal.ElapsedMilliseconds}ms）");
 
                 // Resource log
@@ -310,9 +242,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 }
                 else
                 {
-                    mode = (totalImgCount > loadedCams) ? "Stitch" : "Single";
+                    mode = (loaded.TotalImageCount > loadedCams) ? "Stitch" : "Single";
                 }
-                Core.Camera.CameraFrameSaver.AppendReviewResourceLog(mode, loadedCams, totalImgCount,
+                Core.Camera.CameraFrameSaver.AppendReviewResourceLog(mode, loadedCams, loaded.TotalImageCount,
                     finalW, finalH, swTotal.ElapsedMilliseconds);
             }
             finally
@@ -630,7 +562,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     bmp = GrabImageStitcher.LoadCameraImage(path, scale, bmpLoader,
                         useProcessed: LastReviewProcessedMode, ridgeDirection: ActiveRidgeDirection);
                     if (bmp != null)
-                        grayArr[i] = AniloxRoll.Monitor.UI.Managers.ReviewDisplayManager.ToGray8(bmp, out grayW[i], out grayH[i]);
+                        grayArr[i] = BitmapGrayConverter.ToGray8(bmp, out grayW[i], out grayH[i]);
                 }
                 catch (Exception ex) { Trace.WriteLine($"[GlobalMerge] CAM{i + 1}: {ex.GetType().Name}: {ex.Message}"); }
                 finally { bmp?.Dispose(); }
