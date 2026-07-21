@@ -100,7 +100,7 @@ Normative SSoT and transition rules are defined only in the app `AGENTS.md`.
 | `InspectionStatisticsService` | Report statistics owner after CSV parsing, CFG, image-path, and Mura-profile queries were extracted | Keep report aggregation here; do not move persistence queries back in |
 | `ReviewStitchCoordinator` | Curve, single-grab image IO, and period persisted-data projection extracted; alignment policy lives in `FrameTickIndex`; curve display apply and display lifecycle remain broad | Continue one responsibility at a time; preserve R2/R3 log contracts at each checkpoint |
 | `LiveCameraManager` | Acquisition facade after display extraction | Keep display state in `LiveDisplayCoordinator`; only split further from evidence |
-| `OnSettingChanged` | Transitional central setting router | Move new side effects to feature owners; reduce existing cases incrementally |
+| `OnSettingChanged` | Deliberate single serialized sequencer; route classification is centralized while owner handlers live in their feature partials | Keep one `SettingsHub.Changed` side-effect subscriber; add behavior to the owning handler and reserve the sequencer for ordering and cross-feature impacts |
 
 ## Where to read next
 

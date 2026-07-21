@@ -31,7 +31,9 @@ description: Modify PICoater AOI WinForms UI behavior or architecture. Use for F
 | `Hub.SetBatch(s => { ... })` | 多 setting 嚴格 transition 順序，caller 自己 await | save once，**不** raise event |
 | `Hub.NotifyExternalChange(name, old, new)` | PropertyGrid 改值（setter 已寫 memory）| save disk + raise event（Source=PropertyGrid）|
 
-`Form.OnSettingChanged(SettingChange c)` 是唯一訂閱者：共用前段（chart 閾值同步、Live SetCaptureSettings、ScheduleStatsRefresh 等）+ switch case（StitchMode/EnableEnhance/Algorithm/OPS-Start/Light 等個別 dispatch）。
+`Form.OnSettingChanged(SettingChange c)` 是唯一且序列化的副作用入口：先由 `SettingImpactClassifier` 分類，
+再套明示的跨功能 impacts，最後只分派一個 feature handler。各 handler 位於 Live/Data/HardwareStatus/Background
+等 owning partial；不得新增平行 `SettingsHub.Changed` 副作用訂閱者，也不要把 feature 行為搬回共用前段。
 
 **chart click / 按鈕 click 改 setting** — 永遠走 Hub，**不要** 直接 `_settings.X = ...`：
 - 用 wrapper alias name（`s.hc_EnableMuraEnhance` 不是 `s.EnableMuraEnhance`）— PG GridItem.PropertyDescriptor.Name 是 wrapper name，OnSettingChanged case 也比對 wrapper name

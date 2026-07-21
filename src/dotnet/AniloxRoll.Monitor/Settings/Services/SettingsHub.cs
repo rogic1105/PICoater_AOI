@@ -16,7 +16,7 @@ namespace AniloxRoll.Monitor.Settings.Services
     ///   SetBatch(mutator, ...names)         — 多個 setting 一次 save、依序 raise event
     ///   NotifyExternalChange(name, old, new)— PropertyGrid 改值（setter 已寫 memory，Hub 只負責 save + event）
     ///
-    /// 訂閱方：Form.OnSettingChanged 用 switch case 接管 Apply* 副作用。
+    /// 副作用訂閱方只有 Form.OnSettingChanged：它序列化變更、套跨功能 impacts，再分派到 feature handler。
     /// </summary>
     public sealed class SettingsHub
     {

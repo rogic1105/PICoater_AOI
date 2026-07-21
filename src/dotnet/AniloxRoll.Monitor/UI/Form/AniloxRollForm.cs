@@ -1162,7 +1162,7 @@ namespace AniloxRoll.Monitor.Forms
                 if (c.Source == AniloxRoll.Monitor.Settings.Services.SettingSource.Programmatic)
                     RefreshGridItem(c.Name);
 
-                ApplySettingImpacts(route.Impacts);
+                ApplyCrossFeatureSettingImpacts(route.Impacts);
                 if (_liveCameraManager?.IsLiveGrabbing == true)
                     _inspectionLogService?.ForceWriteConfig(CsvConfigSnapshot.FromSettings(_settings));
                 await DispatchSettingOwner(route.Owner, c.Name);
@@ -1171,7 +1171,7 @@ namespace AniloxRoll.Monitor.Forms
             finally { _onSettingChangedSemaphore.Release(); }
         }
 
-        private void ApplySettingImpacts(SettingImpact impacts)
+        private void ApplyCrossFeatureSettingImpacts(SettingImpact impacts)
         {
             if ((impacts & SettingImpact.InspectionService) != 0)
                 _inspectionSettingsCoordinator.ApplySettingsToService();

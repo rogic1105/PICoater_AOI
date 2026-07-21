@@ -1173,7 +1173,7 @@ T1: setting route {屬性名} owner={owner|None} effects={effect+effect|None}
 SettingsHub.Changed
  → OnSettingChanged@AniloxRollForm.cs（SemaphoreSlim 單線序列化）
     ├ S0 intent → SettingImpactClassifier.Classify → setting route
-    ├ ApplySettingImpacts（只套 route 指定的跨功能影響）
+    ├ ApplyCrossFeatureSettingImpacts（只套 route 指定的跨功能影響）
     ├ grab 中 ForceWriteConfig（ContentKey 去重，僅 #CFG 真值變更才落盤）
     └ DispatchSettingOwner（只呼叫一個 feature handler）
 CapturePolicy
