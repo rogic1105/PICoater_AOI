@@ -73,7 +73,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         // 不共用 token，避免圖片開始載入時把同一序號仍在讀取的曲線誤判為 stale。
         private readonly ReviewCurveLoadCoordinator _curveLoads;
         private readonly ReviewCurveDataLoader _curveDataLoader;
-        private int _imageLoadSeq;
+        private readonly ReviewImageLoadGate _imageLoads = new ReviewImageLoadGate();
 
         /// <summary>快路：只載曲線（欄+列，.bin 數十 KB + tick 對齊 csv）+CFG → 更新欄/列 chart。
         /// 滾動掃描用——chart 即時跟著序號跑（使用者快速找異常），影像（重：JPEG 解碼+拼接）由
@@ -83,7 +83,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         /// <summary>使正在解碼的舊圖片結果失效；每次使用者改序號時呼叫，不等待 250ms。</summary>
         public void InvalidateImageLoad()
-            => System.Threading.Interlocked.Increment(ref _imageLoadSeq);
+        {
+            if (!_imageLoads.Invalidate()) return;
+            _ctx.BusyUi.SetBusy(false);
+            Core.Services.FlowTrace.Log("RV loadGrab busy off reason=invalidated");
+        }
 
         private async Task LoadGrabCurvesCoreAsync(ReviewCurveLoadRequest request)
         {
@@ -165,9 +169,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                           ? UI.State.UserSessionState.LastDataPath : _ctx.DataStatsPresenter.StatsDataRootPath;
             if (string.IsNullOrWhiteSpace(root)) return;
 
-            _ctx.BusyUi.SetBusy(true);
             // 圖片自己的最後贏 token；序號 intent 會先 InvalidateImageLoad，防舊圖片在 debounce 前上畫面。
-            int myLoad = System.Threading.Interlocked.Increment(ref _imageLoadSeq);
+            int myLoad = _imageLoads.Begin();
+            _ctx.BusyUi.SetBusy(true);
             Core.Services.FlowTrace.Log($"RV loadGrab begin {grabId}（proc={enableProcess}）");
             LastReviewProcessedMode = enableProcess;
             // L2 SSoT：setting 由 caller 透過 SettingsHub 設置，coordinator 不再 bypass Hub 直接寫 memory。
@@ -247,7 +251,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 var newImages = loaded.imgs;
 
                 // token 閘門：背景載入期間已有更新的選取 → 本結果作廢（不上畫面、不動 chart）
-                if (myLoad != System.Threading.Volatile.Read(ref _imageLoadSeq))
+                if (!_imageLoads.IsCurrent(myLoad))
                 {
                     Core.Services.FlowTrace.Log($"RV loadGrab stale-drop {grabId}（{swTotal.ElapsedMilliseconds}ms）");
                     foreach (var im in newImages) im?.Dispose();
@@ -307,8 +311,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
             finally
             {
-                // 只有「仍是最新」的載入才關 loading 燈（stale 早退不關 → 不熄滅還在跑的較新載入）
-                if (myLoad == System.Threading.Volatile.Read(ref _imageLoadSeq))
+                // 只釋放自己持有的 busy lease；新的載入開始後，舊 finally 不得關掉新游標。
+                if (_imageLoads.Complete(myLoad))
                     _ctx.BusyUi.SetBusy(false);
             }
         }

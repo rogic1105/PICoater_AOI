@@ -1029,8 +1029,9 @@ T1: RV loadGrab done {grabId}（…ms）
 不變量：手按【讀取資料】＝刷新+跳最新（loadGrab 的 grabId=清單最新；2026-07-10 修「停在舊選取」）；
 開機自動恢復上次位置不在此限。
 載入 busy 視覺唯一 owner＝`BusyUiBinder`；`AniloxRollPresenter.BusyStateChanged` 與
-`ReviewStitchCoordinator.LoadGrabStitchedViewAsync` 共用同一實例。圖片 loader 只有 latest token 可解除 busy，
-stale loader 不得提早恢復游標或按鈕。
+`ReviewStitchCoordinator.LoadGrabStitchedViewAsync` 共用同一實例。圖片 latest token 與 busy lease 由
+`ReviewImageLoadGate` 同時管理：新序號 intent 作廢舊圖片時，若舊圖片仍持有 lease，必須立即出現
+`RV loadGrab busy off reason=invalidated` 並恢復游標；新 loader 已開始時，舊 loader 的 finally 不得解除新 lease。
 回顧 CFG 與螢幕校正 runtime state 唯一 owner＝`ReviewRuntimeState`；單片曲線快路、完整圖片載入與時段載入
 都只更新/讀取此實例，不得在 Form、Presenter 或 Coordinator 另存第二份 CFG。
 ```
@@ -1060,7 +1061,8 @@ T1/Tn: RV loadGrab begin {grabId} → RV loadGrab paths … → RV lodRebind mer
 **code-flow（曲線快路與 settle 圖片路分治）**
 ```
 OnReviewGrabIdSelected@AniloxRollForm.Data.cs
- ├ InvalidateImageLoad@ReviewStitchCoordinator.cs（立即讓舊圖片失效）
+ ├ InvalidateImageLoad@ReviewStitchCoordinator.cs
+ │  └ Invalidate@ReviewImageLoadGate.cs（立即讓舊圖片失效；同時釋放該圖片的 busy lease）
  ├ LoadGrabCurvesOnlyAsync@ReviewStitchCoordinator.cs
  │  └ Enqueue@ReviewCurveLoadCoordinator.cs
  │     ├ pending 僅保留最新一筆；running 恆單工
