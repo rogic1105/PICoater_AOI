@@ -90,7 +90,9 @@ bootstrap 例外（line 232 AppRole）：Hub 還沒建構，加註解標明合�
 1. 未勾選 → 自動勾選 + 設方向
 2. 已勾選 + 同方向 → 取消勾選（回原圖）
 3. 已勾選 + 不同方向 → 切換方向（不改 checkbox）
-- **視野保留**：所有切換路徑（含 `ApplyReviewEnhance` → `ReloadCurrentStitchedView`）在重載前先 `SaveCanvasView()` 存檔；`LoadGrabStitchedViewAsync` 內部以 `ShowStitchedCameraInCanvas(idx, resetView: false)` 顯示，不抹掉 saved view，由 `RestoreCanvasViewOrFit()` 還原。`ShowStitchedCameraInCanvas` 預設 `resetView=true`（camReview 切換相機時 Vertical 強制 fit to screen），呼叫端要保留視野必須明確傳 `false`。
+- **視野保留**：同序號切原圖／欄強化／列強化必走 `ReviewContentLoadMode.ImageVariantOnly`。
+  此模式只重解碼圖片，禁止 `StitchedLayoutReady` prefit、Curve bin reload 與 chart apply；
+  `ReviewDisplayManager.PushFrames(... preserveChartView:true)` 不重發 view range。換序號才走 `Full` 並重新 fit。
 - **視覺一致性**：Review tab `UpdateRidgeDirectionVisual(dir)` 與 Live tab `UpdateLiveDirectionVisual()` 兩版本邏輯對稱（淡藍底 + 橘色外框 BorderlineColor=`FromArgb(255,140,0)` Width=2 Solid）；新增/修改方向視覺時兩邊同步維護。Live 版自行從 `_settings.EnableMuraEnhance` + `_liveDisplayDirection` 推斷 dir；Review 版由呼叫端傳入。
 
 ### Chart 對齊與效能

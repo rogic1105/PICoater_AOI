@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Matrox.MatroxImagingLibrary;
-using TanukiCv.Core; // MergeLayout（合圖佈局唯一來源；MIL 直繪合圖也走這份）
+using TanukiCv.Core; // MergeLayout（所有合圖 consumer 的佈局唯一來源）
 
 namespace MilGrabber.Core
 {
@@ -11,8 +11,8 @@ namespace MilGrabber.Core
     /// 職責分工：
     ///  - 工頭負責「拼」：算佈局（全域範圍、每台 xOffset、重疊中點分界）+ 分配 MIL 合併 buffer
     ///    + 設定每台相機把 grab 幀貼到 buffer。
-    ///  - 上層（主程式）負責「秀」：拿 <see cref="MergedBuffer"/> 自己 MdispSelectWindow 顯示、
-    ///    定時刷新、滑鼠 hook、overview 聯動 —— 用工頭提供的座標（<see cref="MinStartMm"/> 等）換算。
+    ///  - 上層負責消費 <see cref="MergedBuffer"/>：產品可轉成 CPU frame，SDK 範例也可選擇 MIL display；
+    ///    座標換算使用工頭提供的 <see cref="MinStartMm"/> 等佈局資訊。
     ///
     /// 本類別刻意 0 依賴 System.Windows.Forms：不碰 panel / Label / Timer / Control / Handle。
     /// 顯示與 UI 全留上層。工頭不負責建立/釋放相機（相機生命週期由呼叫端管理）。
@@ -30,7 +30,7 @@ namespace MilGrabber.Core
         // ==================== 合併資源 ====================
         private MIL_ID _mergedBuffer = MIL.M_NULL;
 
-        /// <summary>合併 buffer 的 MIL_ID handle，供上層 MdispSelectWindow 顯示。未啟用時為 M_NULL。</summary>
+        /// <summary>合併 buffer 的 MIL_ID handle，供上層讀取或顯示。未啟用時為 M_NULL。</summary>
         public MIL_ID MergedBuffer => _mergedBuffer;
 
         /// <summary>合圖是否啟用中。</summary>
@@ -99,8 +99,8 @@ namespace MilGrabber.Core
         /// buffer 尺寸改變才重新分配；否則只清空 buffer + 重設 target。
         /// </summary>
         /// <returns>
-        /// 若 buffer 因尺寸改變而重新分配，回傳 true（上層需重新 MdispSelectWindow 綁定 <see cref="MergedBuffer"/>）；
-        /// 否則回傳 false（buffer handle 不變，上層不需重綁）。
+        /// 若 buffer 因尺寸改變而重新分配，回傳 true（上層需重新取得 <see cref="MergedBuffer"/> handle）；
+        /// 否則回傳 false（buffer handle 不變）。
         /// </returns>
         public bool RefreshLayout(double[] opsUm, double[] startPosMm, int defaultSlotWidthPx)
         {
@@ -118,7 +118,7 @@ namespace MilGrabber.Core
 
             bool reallocated = false;
 
-            // ③ buffer 大小改變 → 重新分配（上層需重綁 display）
+            // ③ buffer 大小改變 → 重新分配（上層需重新取得 handle）
             if (totalW != TotalW || maxH != TotalH)
             {
                 MIL_ID sysId = _cameras[0].OwnerSystemId;

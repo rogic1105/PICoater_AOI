@@ -290,7 +290,7 @@ namespace AniloxRoll.Monitor.Forms
                             await LoadGrabStitchedViewGuardRowRangeAsync(
                                 info.GrabId, info.Earliest, info.Latest,
                                 _stitchCoordinator.LastReviewProcessedMode,
-                                preferSharedCurves: true);
+                                ReviewContentLoadMode.ReuseSharedCurves);
                             // 2b-ii：fit 由 ImageDisplayView 首幀自動 fit 承接
                         }
                         catch (Exception ex)

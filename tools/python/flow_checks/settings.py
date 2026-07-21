@@ -157,6 +157,21 @@ class SettingsFlowValidator:
                     failures.append(
                         f"{line.timestamp} period 缺同時點 RV period load"
                     )
+                if not any(
+                    item.message == "RV period curves=keep source=display"
+                    for item in window
+                ):
+                    failures.append(
+                        f"{line.timestamp} period 強化不應重畫 Curve"
+                    )
+                if not any(
+                    item.message.startswith("RV pushFrames ")
+                    and "chartView=keep" in item.message
+                    for item in window
+                ):
+                    failures.append(
+                        f"{line.timestamp} period 強化未保留 chart view"
+                    )
                 continue
 
             current_id = grab_id(previous_view.message)
@@ -181,6 +196,39 @@ class SettingsFlowValidator:
             ):
                 failures.append(
                     f"{line.timestamp} grab={current_id} 缺 RV loadGrab done"
+                )
+                continue
+            load_window = window[begin_pos + 1:]
+            if not any(
+                item.message ==
+                f"RV loadGrab curves=keep source=display {current_id}"
+                for item in load_window
+            ):
+                failures.append(
+                    f"{line.timestamp} grab={current_id} 強化未保留既有 Curve"
+                )
+            if any(
+                item.message.startswith(f"RV prefit {current_id} ")
+                for item in load_window
+            ):
+                failures.append(
+                    f"{line.timestamp} grab={current_id} 強化不應重新 prefit"
+                )
+            if any(
+                item.message.startswith("RV loadGrab curves=load source=")
+                and item.message.endswith(f" {current_id}")
+                for item in load_window
+            ):
+                failures.append(
+                    f"{line.timestamp} grab={current_id} 強化不應重讀 Curve"
+                )
+            if not any(
+                item.message.startswith("RV pushFrames ")
+                and "chartView=keep" in item.message
+                for item in load_window
+            ):
+                failures.append(
+                    f"{line.timestamp} grab={current_id} 強化未保留 chart view"
                 )
 
         if exercised == 0:

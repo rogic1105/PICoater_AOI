@@ -61,7 +61,9 @@ against current code with `rg` before editing because lookup data can become sta
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/Interaction/MultiClickDetector.cs` | 雙擊與三擊手勢辨識 |
 | `UI/Widgets/CurveMergeHelper.cs` | 曲線 bin 讀取與全覽曲線合併的 app adapter |
 | `UI/Presenters/DataStatisticsPresenter.cs` | 報表統計、導航、明細清單與圖表的 feature presenter |
-| `UI/Presenters/ReviewStitchCoordinator.cs` | 回顧單片／時段的 async token、runtime state 與顯示套用 workflow；完整單片 IO 交由 ReviewImageDataLoader，曲線與時段排程交由專用 coordinator。 |
+| `UI/Presenters/ReviewStitchCoordinator.cs` | 回顧單片／時段載入指揮：async token、busy lease、prepared layout、報表 Curve 共用與顯示事件發布；不持有圖表公式。 |
+| `UI/Presenters/ReviewChartPresenter.cs` | 回顧欄／列圖表唯一套用 owner：正規值轉換、單片合圖、時序 Curve 與視野連動。 |
+| `UI/State/ReviewDisplayContent.cs` | 當前回顧 Bitmap／欄列 Curve 的所有權與清理；不排程 IO、不操作控制項。 |
 | `UI/Presenters/LiveTelemetryPresenter.cs` | 相機 telemetry 擷取與 UI snapshot 套用 |
 | `Acquisition/AniloxCamera.cs` | 單台產品相機 composition：取像事件、檢測、顯示資料與存檔協調 |
 | `sdk/MIL/MilGrabber.Core/MilCamera.cs` | 單台相機的 MIL 資源、取像、參數、CLProtocol 與 telemetry wrapper |

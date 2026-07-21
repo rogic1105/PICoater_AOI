@@ -100,21 +100,23 @@ namespace AniloxRoll.Monitor.Forms
                 _stitchCoordinator.ActiveRidgeDirection = dir;
                 _inspectionSettingsCoordinator.SetRidgeDirection(dir);
                 UpdateRidgeDirectionVisual(dir);
-                // 2b-ii：SaveCanvasView（讀已砍 canvas）移除；ImageDisplayView 自管視野
+                // 同序號只切圖片版本；ImageDisplayView 保留當前視野。
                 if (_stitchCoordinator.IsStitchMode)
                 {
                     int idx = cbReviewId.SelectedIndex;
                     if (idx >= 0 && idx < _dataStatsPresenter.GrabIdInfos.Count)
                     {
                         var info = _dataStatsPresenter.GrabIdInfos[idx];
-                        await LoadGrabStitchedViewGuardRowRangeAsync(info.GrabId, info.Earliest, info.Latest, true);
+                        await LoadGrabStitchedViewGuardRowRangeAsync(
+                            info.GrabId, info.Earliest, info.Latest, true,
+                            ReviewContentLoadMode.ImageVariantOnly);
                     }
                 }
                 else
                 {
-                    _stitchCoordinator.ClearStitchedMode();
                     await _presenter.LoadImagesWithPeriodLockAsync(true, _presenter.RunWorkflowAsync);
-                    ApplyPostLoadDisplay();
+                    _stitchCoordinator.ApplyGlobalMergeIfNeeded(preserveChartView: true);
+                    FlowTrace.Log("RV period curves=keep source=display");
                 }
             }
             catch (Exception ex) { Trace.WriteLine($"[SwitchRidgeDirection] {ex}"); }

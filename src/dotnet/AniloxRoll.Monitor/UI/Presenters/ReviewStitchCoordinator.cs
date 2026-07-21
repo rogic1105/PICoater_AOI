@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Threading.Tasks;
-using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
 using TanukiCv.Controls;
 using AniloxRoll.Monitor.Core.Data;
@@ -18,19 +17,21 @@ using AniloxRoll.Monitor.UI.Widgets;
 
 namespace AniloxRoll.Monitor.UI.Presenters
 {
+    public enum ReviewContentLoadMode
+    {
+        Full,
+        ReuseSharedCurves,
+        ImageVariantOnly
+    }
+
     /// <summary>
     /// Context 物件：傳遞 UI 控制項與服務參考給 <see cref="ReviewStitchCoordinator"/>。
     /// </summary>
     public class ReviewStitchContext
     {
         public Chart ChartReviewPatch { get; set; }
-        public Chart ChartReviewVertical { get; set; }
-        public Chart ChartReviewHorizontal { get; set; }
         public BusyUiBinder BusyUi { get; set; }
         public ReviewRuntimeState ReviewState { get; set; }
-        public ColumnCurveChartHelper ColumnChartHelper { get; set; }
-        public RowCurveChartHelper RowChartHelper { get; set; }
-        public RowCurveDisplayAdapter RowChartDisplay { get; set; }
         public RowCurveSyncCoordinator RowChartSync { get; set; }
         public ColumnCurveChartHelper OverviewHelper { get; set; }
 
@@ -44,28 +45,18 @@ namespace AniloxRoll.Monitor.UI.Presenters
     }
 
     /// <summary>
-    /// Review tab 的 Stitch 模式管理：LoadGrabStitchedViewAsync、合圖、overview chart 聯動。
-    /// 持有 _stitchedImages、_globalMergedImage、_periodMergedImage 等生命週期。
+    /// Review tab 的載入協調者：負責 latest-only、debounce 後圖片載入、共用曲線與事件發布。
+    /// 顯示內容生命週期由 ReviewDisplayContent 管理；欄／列圖表套用由 ReviewChartPresenter 管理。
     /// </summary>
     public class ReviewStitchCoordinator
     {
         private readonly ReviewStitchContext _ctx;
 
-        // ── State ──
-        private Bitmap[] _stitchedImages;
-        private float[][] _stitchedCurveMean;
-        private float[][] _stitchedCurveMax;
-        private float[][] _stitchedRowCurveMean;
-        private float[][] _stitchedRowCurveMax;
-        private float[] _stitchedMergedRowCurveMean;
-        private float[] _stitchedMergedRowCurveMax;
-        private Bitmap _globalMergedImage;
-        private Bitmap _periodMergedImage;
+        private readonly ReviewDisplayContent _content = new ReviewDisplayContent();
+        private readonly ReviewChartPresenter _charts;
 
         // ── Public State ──
-        public bool IsStitchMode => _stitchedImages != null;
-        public bool IsGlobalMerged => _globalMergedImage != null;
-        public bool IsPeriodMerged => _periodMergedImage != null;
+        public bool IsStitchMode => _content.HasImages;
         public CsvConfigSnapshot CurrentGrabConfig => _ctx.ReviewState.Config;
 
         /// <summary>上一次 Review 頁面的處理模式旗標。</summary>
@@ -140,16 +131,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     $"RV layout intent {grabId} images={layoutPlan.TotalImageCount} " +
                     $"cams={layoutPlan.GroupedPaths.Count} align={layoutPlan.Alignment.Mode} " +
                     "before=curves");
-                _stitchedCurveMean = loaded.ColumnMean;
-                _stitchedCurveMax = loaded.ColumnMax;
-                _stitchedRowCurveMean = loaded.RowMean;
-                _stitchedRowCurveMax = loaded.RowMax;
-                _stitchedMergedRowCurveMean = loaded.MergedRowMean;
-                _stitchedMergedRowCurveMax = loaded.MergedRowMax;
+                _content.SetCurves(
+                    loaded.ColumnMean, loaded.ColumnMax,
+                    loaded.RowMean, loaded.RowMax,
+                    loaded.MergedRowMean, loaded.MergedRowMax);
                 _ctx.ReviewState.Config = loaded.Config;
-                ApplyRowPhysicalScale(loaded.Config);
+                _charts.ApplyRowPhysicalScale(loaded.Config);
                 UpdateStitchedOverviewChart();
-                UpdateGlobalRowChart();
+                _charts.UpdateGlobalRowChart();
                 Core.Services.FlowTrace.Log($"RV curves {grabId}（{sw.ElapsedMilliseconds}ms）");
             }
             catch (Exception ex) { Trace.WriteLine($"[CurvesOnly] {grabId}: {ex.GetType().Name}: {ex.Message}"); }
@@ -171,6 +160,23 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _curveDataLoader = new SingleGrabCurveDataLoader();
             _imageDataLoader = new ReviewImageDataLoader();
             _periodDataLoader = new ReviewPeriodDataLoader();
+            _charts = new ReviewChartPresenter(
+                new ReviewChartContext
+                {
+                    OverviewChart = ctx.ChartReviewPatch,
+                    ReviewState = ctx.ReviewState,
+                    RowChartSync = ctx.RowChartSync,
+                    OverviewHelper = ctx.OverviewHelper,
+                    Settings = ctx.Settings,
+                    ImageRepository = ctx.ImageRepository,
+                    DateTimeNavigator = ctx.DateTimeNavigator,
+                    CameraCount = ctx.CameraCount
+                },
+                _content,
+                _periodDataLoader);
+            _charts.CurvesUpdated += (mean, max, ops, positions, errorMean, errorMax) =>
+                StitchedCurveUpdated?.Invoke(
+                    mean, max, ops, positions, errorMean, errorMax);
             _curveLoads = new LatestCurveLoadCoordinator(LoadGrabCurvesCoreAsync);
         }
 
@@ -201,9 +207,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// <summary>
         /// 載入 GrabId 的拼接影像（使用上次的 processed 模式）。
         /// </summary>
-        /// <summary>#13 同源新路徑：一組 grab 影像載好（7 台拼接圖 + CFG 有效 ops/pos + 是否 Global）。
-        /// Form 訂閱 → ReviewDisplayManager.PushImages（ImageDisplayView 顯示）；舊 canvas 路徑照跑（平行建新）。</summary>
-        public event Action<byte[][], int[], int[], double[], double[], bool> StitchedImagesReady; // gray bytes(不可變快照), w, h, ops, pos, isGlobal —— Bitmap 不出此類（GDI+ 單執行緒物件）
+        /// <summary>一組 grab 影像載好（7 台拼接圖 + CFG 有效 ops/pos + 是否 Global）。
+        /// Form 訂閱後交給 ReviewDisplayManager.PushImages，以 ImageDisplayView 顯示。</summary>
+        public event Action<byte[][], int[], int[], double[], double[], bool, bool> StitchedImagesReady; // gray bytes, w, h, ops, pos, isGlobal, preserveChartView
 
         /// <summary>JPEG 表頭與 CFG 就緒後、完整解碼前發布預期合圖尺寸，供主畫面同源 fit 預算。</summary>
         public event Action<string, int[], int[], double[], double[], bool> StitchedLayoutReady;
@@ -215,7 +221,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// 載入 GrabId 的拼接影像。背景執行拼接後更新 UI。
         /// </summary>
         public async Task LoadGrabStitchedViewAsync(string grabId, DateTime hintFrom, DateTime hintTo,
-            bool enableProcess, bool preferSharedCurves = false)
+            bool enableProcess, ReviewContentLoadMode loadMode = ReviewContentLoadMode.Full)
         {
             string root = !string.IsNullOrWhiteSpace(UI.State.UserSessionState.LastDataPath)
                           ? UI.State.UserSessionState.LastDataPath : _ctx.DataStatsPresenter.StatsDataRootPath;
@@ -251,17 +257,24 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     return;
                 }
 
-                PublishPreparedLayout(grabId, plan);
+                bool keepDisplayedCurves =
+                    loadMode == ReviewContentLoadMode.ImageVariantOnly && _content.HasImages;
+                if (!keepDisplayedCurves)
+                    PublishPreparedLayout(grabId, plan);
                 var opsEff = plan.Config?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
                 var posEff = plan.Config?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
                 bool isGlobal = _ctx.Settings.StitchMode == StitchMode.Global;
-                bool reuseCurves = preferSharedCurves &&
+                bool reuseSharedCurves = loadMode == ReviewContentLoadMode.ReuseSharedCurves &&
                     TryActivateSharedCurves(root, grabId);
+                bool preserveCurves = keepDisplayedCurves || reuseSharedCurves;
+                string curveSource = keepDisplayedCurves
+                    ? "keep source=display"
+                    : reuseSharedCurves ? "reuse source=Data" : "load source=bin";
                 Core.Services.FlowTrace.Log(
-                    $"RV loadGrab curves={(reuseCurves ? "reuse source=Data" : "load source=bin")} {grabId}");
+                    $"RV loadGrab curves={curveSource} {grabId}");
 
                 ReviewImageData loaded = await Task.Run(() => _imageDataLoader.Load(
-                    plan, camCount, enableProcess, ridgeDir, includeCurves: !reuseCurves));
+                    plan, camCount, enableProcess, ridgeDir, includeCurves: !preserveCurves));
                 var newImages = loaded.Images;
 
                 // token 閘門：背景載入期間已有更新的選取 → 本結果作廢（不上畫面、不動 chart）
@@ -272,33 +285,36 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     return;
                 }
 
-                if (reuseCurves)
-                    ClearStitchedImages();
+                if (preserveCurves)
+                    _content.ReplaceImages(newImages);
                 else
-                    ClearStitchedMode();
-                _stitchedImages       = newImages;
-                if (!reuseCurves)
                 {
-                    _stitchedCurveMean    = loaded.ColumnMean;
-                    _stitchedCurveMax     = loaded.ColumnMax;
-                    _stitchedRowCurveMean = loaded.RowMean;
-                    _stitchedRowCurveMax  = loaded.RowMax;
-                    _stitchedMergedRowCurveMean = null;
-                    _stitchedMergedRowCurveMax = null;
+                    ClearStitchedMode();
+                    _content.ReplaceImages(newImages);
                 }
-                _ctx.ReviewState.Config = loaded.Config;
-                // The image layout and row chart must receive the same capture-time mm/row
-                // before either is presented. ImageDisplayView then publishes the fitted range.
-                ApplyRowPhysicalScale(loaded.Config);
+                if (!preserveCurves)
+                {
+                    _content.SetCurves(
+                        loaded.ColumnMean, loaded.ColumnMax,
+                        loaded.RowMean, loaded.RowMax,
+                        null, null);
+                }
+                if (!keepDisplayedCurves)
+                {
+                    _ctx.ReviewState.Config = loaded.Config;
+                    // The image layout and row chart must receive the same capture-time mm/row
+                    // before either is presented. ImageDisplayView then publishes the fitted range.
+                    _charts.ApplyRowPhysicalScale(loaded.Config);
+                }
                 _ctx.DataStatsPresenter?.SetReviewGroupBoxes(true);
 
                 StitchedImagesReady?.Invoke(
                     loaded.GrayFrames, loaded.GrayWidths, loaded.GrayHeights, opsEff, posEff,
-                    isGlobal);
+                    isGlobal, keepDisplayedCurves);
 
-                if (!reuseCurves)
+                if (!preserveCurves)
                 {
-                    UpdateGlobalRowChart();   // 畫布顯示走 ImageDisplayView（同源）；row 曲線照合併更新
+                    _charts.UpdateGlobalRowChart();   // 畫布顯示走 ImageDisplayView（同源）；row 曲線照合併更新
                     UpdateStitchedOverviewChart();
                 }
 
@@ -315,17 +331,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                         if (finalW == 0) { finalW = newImages[i].Width; finalH = newImages[i].Height; }
                     }
                 }
-                string mode;
-                if (_globalMergedImage != null)
-                {
-                    mode = "Global";
-                    finalW = _globalMergedImage.Width;
-                    finalH = _globalMergedImage.Height;
-                }
-                else
-                {
-                    mode = (loaded.TotalImageCount > loadedCams) ? "Stitch" : "Single";
-                }
+                string mode = (loaded.TotalImageCount > loadedCams) ? "Stitch" : "Single";
                 Core.Camera.CameraFrameSaver.AppendReviewResourceLog(mode, loadedCams, loaded.TotalImageCount,
                     finalW, finalH, swTotal.ElapsedMilliseconds);
             }
@@ -337,79 +343,12 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
         }
 
-        public void EnableMergedOverviewSync(double[] opsArr, double[] posArr)
-        {
-            double globalMinMm = double.MaxValue;
-            double refOpsUm = opsArr[0];
-            for (int i = 0; i < opsArr.Length && i < _ctx.CameraCount; i++)
-                if (posArr[i] < globalMinMm) globalMinMm = posArr[i];
-            if (globalMinMm == double.MaxValue) globalMinMm = 0;
-
-            // 2b-ii：合圖座標覆寫原餵 CanvasInteractionHelper 顯示路徑（已砍）；overview X 視野連動
-            //   現由 ImageDisplayView.ViewRangeMmChanged → _reviewOverviewHelper.UpdateViewRange 承接。
-            if (_ctx.ChartReviewPatch.ChartAreas.Count > 0)
-                _ctx.ChartReviewPatch.ChartAreas[0].AxisX.ScaleView.Zoomable = true;
-        }
-
-        /// <summary>Form 關閉時控制項已 disposed → 這幾條 cleanup 的 UI 操作應 no-op：
-        /// Form 自身會清控制項與資源，且關程式時 fire-and-forget 的 StitchMode 切換 async
-        /// 可能續跑碰到已 disposed 的 chartReviewColumn/canvas → NullReferenceException。</summary>
-        private bool UiDisposed =>
-            (_ctx?.ChartReviewPatch?.IsDisposed ?? true);
-
-        /// <summary>離開合圖模式：清除座標覆寫、停用互動 zoom。
-        /// 不重設 ScaleView（ZoomReset）：避免 await 期間 message pump 渲染出全範圍閃爍，
-        /// 由後續 UpdateDataAndView 原子性地取代資料與 zoom。</summary>
-        public void DisableMergedOverviewSync()
-        {
-            if (UiDisposed) return;
-            // 2b-ii：原 ClearMergedMode 清的是 CanvasInteractionHelper 座標覆寫（已砍）。
-            if (_ctx.ChartReviewPatch.ChartAreas.Count > 0)
-            {
-                _ctx.ChartReviewPatch.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
-            }
-        }
-
-        /// <summary>切到 Vertical 時清掉殘留的 Global/Period 合圖 bitmap（保留 _stitchedImages 與曲線）。</summary>
-        public void DisposeGlobalMergedImage()
-        {
-            if (UiDisposed) return;
-            DisableMergedOverviewSync();
-            // 2b-ii-B：合圖 bitmap 不再貼到 canvas（顯示走 ImageDisplayView）→ 只還池。
-            if (_globalMergedImage != null)
-            {
-                BitmapPool.Return(_globalMergedImage);
-                _globalMergedImage = null;
-            }
-            if (_periodMergedImage != null)
-            {
-                BitmapPool.Return(_periodMergedImage);
-                _periodMergedImage = null;
-            }
-        }
-
         public void ClearStitchedMode()
         {
-            if (UiDisposed) return;
-            ClearStitchedImages();
-            _stitchedCurveMean    = null;
-            _stitchedCurveMax     = null;
-            _stitchedRowCurveMean = null;
-            _stitchedRowCurveMax  = null;
-            _stitchedMergedRowCurveMean = null;
-            _stitchedMergedRowCurveMax = null;
+            _content.ClearAll();
             _ctx.ReviewState.Config = null;
-            _ctx.ColumnChartHelper?.SetOps(_ctx.Settings.Cam1_Ops);
-            _ctx.ColumnChartHelper?.SetThresholds(_ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV);
+            if (_ctx.ChartReviewPatch?.IsDisposed ?? true) return;
             _ctx.DataStatsPresenter?.SetReviewGroupBoxes(false);
-        }
-
-        private void ClearStitchedImages()
-        {
-            DisposeGlobalMergedImage();
-            if (_stitchedImages == null) return;
-            foreach (var bmp in _stitchedImages) BitmapPool.Return(bmp);
-            _stitchedImages = null;
         }
 
         private bool TryActivateSharedCurves(string root, string grabId)
@@ -424,79 +363,25 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 data = _sharedCurveData;
             }
 
-            _stitchedCurveMean = data.ColumnMean;
-            _stitchedCurveMax = data.ColumnMax;
-            _stitchedRowCurveMean = data.RowMean;
-            _stitchedRowCurveMax = data.RowMax;
-            _stitchedMergedRowCurveMean = data.MergedRowMean;
-            _stitchedMergedRowCurveMax = data.MergedRowMax;
+            _content.SetCurves(
+                data.ColumnMean, data.ColumnMax,
+                data.RowMean, data.RowMax,
+                data.MergedRowMean, data.MergedRowMax);
             _ctx.ReviewState.Config = data.Config;
-            ApplyRowPhysicalScale(data.Config);
+            _charts.ApplyRowPhysicalScale(data.Config);
 
             // 回顧與報表是兩個實體 chart，仍各需一次畫面套用；但這裡只吃記憶體快照，
             // 不再讀 bin、合併曲線，也不反向通知報表重畫。
             UpdateStitchedOverviewChart(notifyData: false);
-            UpdateGlobalRowChart();
+            _charts.UpdateGlobalRowChart();
             return true;
-        }
-
-        /// <summary>Global 模式：7 台 row curves 重疊合併後更新列曲線圖。
-        /// row chart 是列 (row) 曲線 → 用 (HM_V_capture / HM_H_current) ratio rescale，
-        /// 讓 PropertyGrid 改列正規值時 H 曲線坡度立即變化。
-        /// 公式：bin baked-in 的縮放是 HM_V_capture（native 只用單一 HM=V），
-        /// view-time 想要的目標是 HM_H_current，所以 ratio = HM_V_capture / HM_H_current。</summary>
-        private void UpdateGlobalRowChart()
-        {
-            if (_ctx.RowChartSync == null ||
-                (_stitchedRowCurveMean == null && _stitchedMergedRowCurveMean == null)) return;
-            var swRow = System.Diagnostics.Stopwatch.StartNew();   // [UiSlow] 卡頓歸因
-            try { UpdateGlobalRowChartBody(); }
-            finally
-            {
-                if (swRow.ElapsedMilliseconds > 50)
-                    Core.Services.FlowTrace.Log($"[UiSlow] RvRowChart {swRow.ElapsedMilliseconds}ms");
-            }
-        }
-
-        private void UpdateGlobalRowChartBody()
-        {
-            float[] mergedMean;
-            float[] mergedMax;
-            if (_stitchedMergedRowCurveMean != null)
-            {
-                mergedMean = (float[])_stitchedMergedRowCurveMean.Clone();
-                mergedMax = _stitchedMergedRowCurveMax == null
-                    ? null
-                    : (float[])_stitchedMergedRowCurveMax.Clone();
-            }
-            else
-            {
-                CurveMergeHelper.MergeRowCurvesOverlap(
-                    _stitchedRowCurveMean, _stitchedRowCurveMax,
-                    _ctx.CameraCount, out mergedMean, out mergedMax);
-            }
-            if (mergedMean != null)
-            {
-                float captureHmV = _ctx.ReviewState.Config?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
-                HessianRescaleHelper.RescaleInPlace1D(mergedMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
-                HessianRescaleHelper.RescaleInPlace1D(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
-                _ctx.RowChartSync.UpdateData(mergedMean, mergedMax, requireViewRange: true);
-                // 舊 else RefreshRowChartRange（讀已砍 canvas，恆 no-op）移除；視野由 ImageDisplayView 連動
-            }
-        }
-
-        private void ApplyRowPhysicalScale(CsvConfigSnapshot config)
-        {
-            if (_ctx.RowChartSync == null) return;
-            RowCurvePhysicalScale scale = RowCurvePhysicalScaleResolver.Resolve(config, _ctx.Settings);
-            _ctx.RowChartSync.SetRowPitchFromSpeed(scale.SpeedMPerMin, scale.LineRateHz);
         }
 
         private void PublishPreparedLayout(string grabId, ReviewImageLoadPlan plan)
         {
             if (plan == null) return;
             _ctx.ReviewState.Config = plan.Config;
-            ApplyRowPhysicalScale(plan.Config);
+            _charts.ApplyRowPhysicalScale(plan.Config);
             var ops = plan.Config?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
             var positions = plan.Config?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
             StitchedLayoutReady?.Invoke(
@@ -551,6 +436,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public void Dispose()
         {
             _curveDataLoader.Dispose();
+            _content.ClearAll();
             lock (_preparedPlanGate)
             {
                 _preparedPlan = null;
@@ -558,162 +444,22 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
         }
 
-        /// <summary>
-        /// 合圖路徑：用 _stitchedCurveMean/Max 更新 chart1 全覽圖。
-        /// 套用 view-time 正規值 rescale + 當前閾值：
-        ///   - 曲線：(bin/255) × (HM_capture / HM_current) ← 改 PropertyGrid 正規值會立即反映坡度
-        ///   - 閾值線：用 _ctx.Settings 的當前 ErrorValueMeanV/MaxV ← 改 PropertyGrid 閾值會立即移動門檻線
-        ///   - OPS/Pos：用該 grab 的 #CFG 快照（與資料一起 baked-in，不可後驗調整）
-        /// </summary>
         public void UpdateStitchedOverviewChart(bool notifyData = true)
-        {
-            if (_stitchedCurveMean == null) return;
-            var swOv = System.Diagnostics.Stopwatch.StartNew();   // [UiSlow] 卡頓歸因
-            try { UpdateStitchedOverviewChartBody(notifyData); }
-            finally
-            {
-                if (swOv.ElapsedMilliseconds > 50)
-                    Core.Services.FlowTrace.Log($"[UiSlow] RvOverviewChart {swOv.ElapsedMilliseconds}ms");
-            }
-        }
+            => _charts.UpdateStitchedOverviewChart(notifyData);
 
-        private void UpdateStitchedOverviewChartBody(bool notifyData)
-        {
-            double[] opsArr, posArr;
-            float captureHm;
-            if (_ctx.ReviewState.Config != null)
-            {
-                opsArr    = _ctx.ReviewState.Config.CamOps;
-                posArr    = _ctx.ReviewState.Config.CamPos;
-                captureHm = _ctx.ReviewState.Config.HessianMaxFactorV;
-            }
-            else
-            {
-                opsArr    = _ctx.Settings.GetCameraOpsUmArray();
-                posArr    = _ctx.Settings.GetCameraStartPositionMmArray();
-                captureHm = _ctx.Settings.HessianMaxFactorV;
-            }
-            // 閾值固定用當前 Settings（view-time 可調），不再從 capture config 取
-            float errMean = _ctx.Settings.ErrorValueMeanV;
-            float errMax  = _ctx.Settings.ErrorValueMaxV;
-
-            // chartReviewColumn 是欄 (column) 曲線 → 用 V 的 capture/current ratio
-            var displayMean = HessianRescaleHelper.CloneAndRescale2D(_stitchedCurveMean, captureHm, _ctx.Settings.HessianMaxFactorV);
-            var displayMax  = HessianRescaleHelper.CloneAndRescale2D(_stitchedCurveMax,  captureHm, _ctx.Settings.HessianMaxFactorV);
-
-            CurveMergeHelper.UpdateOverviewChart(displayMean, displayMax,
-                opsArr, posArr, errMean, errMax,
-                _ctx.OverviewHelper, _ctx.CameraCount, _ctx.Settings.StitchMode,
-                ViewRangeProvider);
-
-            if (notifyData)
-                StitchedCurveUpdated?.Invoke(displayMean, displayMax, opsArr, posArr, errMean, errMax);
-        }
-
-
-        /// <summary>
-        /// 更新單台相機的 chartReviewColumn（V）+ chartReviewRow（H）。
-        /// 套用 view-time 正規值 rescale：
-        ///   - V 曲線：(bin/255) × (HM_V_capture / HM_V_current) → 改 PropertyGrid 欄正規值生效
-        ///   - H 曲線：(bin/255) × (HM_V_capture / HM_H_current) → 改 PropertyGrid 列正規值生效
-        /// 閾值線用當前 Settings（view-time tunable）。
-        /// </summary>
-        public void UpdatePerCameraCharts(int idx)
-        {
-            if (_stitchedImages == null) return;
-
-            // 欄 (Column / V)
-            if (_ctx.Settings.StitchMode == StitchMode.Global)
-            {
-                // Global 模式：單台欄資料無意義，清空
-                if (_ctx.ChartReviewVertical != null)
-                {
-                    _ctx.ChartReviewVertical.Series["Mean"].Points.Clear();
-                    _ctx.ChartReviewVertical.Series["Max"].Points.Clear();
-                }
-            }
-            else if (_ctx.ColumnChartHelper != null && _ctx.Settings != null)
-            {
-                float[] mean = (_stitchedCurveMean != null && idx >= 0 && idx < _stitchedCurveMean.Length)
-                    ? _stitchedCurveMean[idx] : null;
-                float[] max = (_stitchedCurveMax != null && idx >= 0 && idx < _stitchedCurveMax.Length)
-                    ? _stitchedCurveMax[idx] : null;
-
-                double[] posArr;
-                float captureHmV;
-                if (_ctx.ReviewState.Config != null)
-                {
-                    double opsUm = (idx >= 0 && idx < _ctx.ReviewState.Config.CamOps.Length)
-                        ? _ctx.ReviewState.Config.CamOps[idx] : _ctx.Settings.Cam1_Ops;
-                    _ctx.ColumnChartHelper.SetOps(opsUm);
-                    posArr = _ctx.ReviewState.Config.CamPos;
-                    captureHmV = _ctx.ReviewState.Config.HessianMaxFactorV;
-                }
-                else
-                {
-                    posArr = _ctx.Settings.GetCameraStartPositionMmArray();
-                    captureHmV = _ctx.Settings.HessianMaxFactorV;
-                }
-                // 閾值固定用當前 Settings（view-time tunable）
-                _ctx.ColumnChartHelper.SetThresholds(
-                    _ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV);
-
-                var displayMean = HessianRescaleHelper.CloneAndRescale1D(mean, captureHmV, _ctx.Settings.HessianMaxFactorV);
-                var displayMax  = HessianRescaleHelper.CloneAndRescale1D(max,  captureHmV, _ctx.Settings.HessianMaxFactorV);
-
-                double startPos = (idx >= 0 && idx < posArr.Length) ? posArr[idx] : 0;
-                // 2b-ii：當前 X 視野改取 ImageDisplayView 快取（原 TryComputeCurrentViewRange 讀已砍 canvas，恆回 0,0）
-                var nv = SameSourceViewRange?.Invoke();
-                double leftMm = nv?[0] ?? 0, rightMm = nv?[1] ?? 0;
-                _ctx.ColumnChartHelper.UpdateDataAndView(displayMean, displayMax, startPos, leftMm, rightMm);
-            }
-
-            // 列 (Row / H)
-            if (_ctx.RowChartSync != null)
-            {
-                if (_ctx.Settings.StitchMode == StitchMode.Global)
-                {
-                    UpdateGlobalRowChart();
-                }
-                else
-                {
-                    float[] rowMean = (_stitchedRowCurveMean != null && idx >= 0 && idx < _stitchedRowCurveMean.Length)
-                        ? _stitchedRowCurveMean[idx] : null;
-                    float[] rowMax = (_stitchedRowCurveMax != null && idx >= 0 && idx < _stitchedRowCurveMax.Length)
-                        ? _stitchedRowCurveMax[idx] : null;
-                    if (rowMean != null)
-                    {
-                        float captureHmV = _ctx.ReviewState.Config?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
-                        var displayMean = HessianRescaleHelper.CloneAndRescale1D(rowMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
-                        var displayMax  = HessianRescaleHelper.CloneAndRescale1D(rowMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
-                        _ctx.RowChartSync.UpdateData(displayMean, displayMax, requireViewRange: true);
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// 由 PropertyGrid 變更觸發：重畫當前選中相機的 V/H per-camera charts。
-        /// 不重設 canvas view（避免使用者 zoom/pan 被打斷）。
-        /// </summary>
-        public void RefreshCurrentCameraChartsForSettingsChange()
-        {
-            if (_stitchedImages == null) return;
-            int idx = SelectedCamIndexProvider?.Invoke() ?? 0;
-            if (idx < 0) idx = 0;
-            UpdatePerCameraCharts(idx);
-        }
+        public void RefreshChartsForSettingsChange()
+            => _charts.RefreshChartsForSettingsChange();
 
         /// <summary>
         /// 原圖路徑（非 Stitch）：合併全域圖（Period 切換用）。
         /// </summary>
-        public void ApplyGlobalMergeIfNeeded()
-            => ApplyGlobalMergeCore(null);
+        public void ApplyGlobalMergeIfNeeded(bool preserveChartView = false)
+            => ApplyGlobalMergeCore(null, preserveChartView);
 
         public void ApplyGlobalMergeForPeriod(DateTime period)
-            => ApplyGlobalMergeCore(period);
+            => ApplyGlobalMergeCore(period, preserveChartView: false);
 
-        private void ApplyGlobalMergeCore(DateTime? period)
+        private void ApplyGlobalMergeCore(DateTime? period, bool preserveChartView)
         {
             if (_ctx.Settings.StitchMode != StitchMode.Global) return;
 
@@ -734,89 +480,29 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 filesMap, _ctx.CameraCount, scale, bmpLoader,
                 LastReviewProcessedMode, ActiveRidgeDirection);
             StitchedImagesReady?.Invoke(
-                frames.GrayFrames, frames.Widths, frames.Heights, opsArr, posArr, true);
+                frames.GrayFrames, frames.Widths, frames.Heights, opsArr, posArr, true,
+                preserveChartView);
         }
 
-        /// <summary>
-        /// 原圖路徑：從當前 Repository 時間點讀取 .bin 曲線更新 chartReviewColumn 全覽圖。
-        /// </summary>
         public void UpdateOverviewChartFromRepository()
-            => UpdateOverviewChartCore(null);
+            => _charts.UpdateOverviewChart(null);
 
         public void UpdateOverviewChartForPeriod(DateTime period)
-            => UpdateOverviewChartCore(period);
+            => _charts.UpdateOverviewChart(period);
 
-        private void UpdateOverviewChartCore(DateTime? period)
-        {
-            if (_ctx.OverviewHelper == null || _stitchedImages != null) return;
-
-            var images = GetPeriodImages(period);
-
-            if (images == null || images.Count == 0)
-            {
-                _ctx.ChartReviewPatch.Series["Mean"].Points.Clear();
-                _ctx.ChartReviewPatch.Series["Max"].Points.Clear();
-                if (_ctx.ChartReviewPatch.ChartAreas.Count > 0)
-                    _ctx.ChartReviewPatch.ChartAreas[0].AxisX.ScaleView.ZoomReset();
-                return;
-            }
-
-            int camCount = _ctx.CameraCount;
-            ReviewPeriodColumnCurves curves = _periodDataLoader.LoadColumnCurves(images, camCount);
-
-            var reviewCfg = _ctx.ReviewState.Config;
-            if (reviewCfg != null)
-            {
-                CurveMergeHelper.UpdateOverviewChart(curves.Mean, curves.Max,
-                    reviewCfg.CamOps, reviewCfg.CamPos, reviewCfg.ErrorValueMeanV, reviewCfg.ErrorValueMaxV,
-                    _ctx.OverviewHelper, camCount, _ctx.Settings.StitchMode, ViewRangeProvider);
-            }
-            else
-            {
-                CurveMergeHelper.UpdateOverviewChart(curves.Mean, curves.Max,
-                    _ctx.Settings.GetCameraOpsUmArray(), _ctx.Settings.GetCameraStartPositionMmArray(),
-                    _ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV,
-                    _ctx.OverviewHelper, camCount, _ctx.Settings.StitchMode, ViewRangeProvider);
-            }
-        }
-
-        /// <summary>
-        /// 時序（period）路徑：從當前 Repository 時間點讀 MeanR/MaxR bin 曲線 → 合併更新列曲線圖
-        /// （chartReviewRow）。單片路徑走 <see cref="UpdateGlobalRowChart"/>（吃 _stitchedRowCurveMean）；
-        /// period 不進 stitch 模式（_stitchedImages=null），故獨立從 repository 載 → 與欄 overview 對稱。
-        /// </summary>
         public void UpdateRowChartFromRepository()
-            => UpdateRowChartCore(null);
+            => _charts.UpdateRowChart(null);
 
         public void UpdateRowChartForPeriod(DateTime period)
-            => UpdateRowChartCore(period);
-
-        private void UpdateRowChartCore(DateTime? period)
-        {
-            if (_ctx.RowChartSync == null || _stitchedImages != null) return;
-
-            var images = GetPeriodImages(period);
-            if (images == null || images.Count == 0) return;
-
-            ReviewPeriodRowCurves curves = _periodDataLoader.LoadMergedRowCurves(
-                images, _ctx.CameraCount);
-            if (curves.Mean == null) return;
-
-            ApplyRowPhysicalScale(_ctx.ReviewState.Config);
-
-            // 與 UpdateGlobalRowChart 同公式：bin baked-in 縮放=HM_V_capture，view-time 目標=HM_H_current。
-            float captureHmV = _ctx.ReviewState.Config?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
-            HessianRescaleHelper.RescaleInPlace1D(curves.Mean, captureHmV, _ctx.Settings.HessianMaxFactorH);
-            HessianRescaleHelper.RescaleInPlace1D(curves.Max, captureHmV, _ctx.Settings.HessianMaxFactorH);
-            _ctx.RowChartSync.UpdateData(curves.Mean, curves.Max, requireViewRange: true);
-        }
+            => _charts.UpdateRowChart(period);
 
         /// <summary>#13 同源新路徑的「當前視野」注入（form 快取 ImageDisplayView 視野；[l,r,top,bot]，null=無效）。
         /// chart 更新原子帶入此值 → 重載/強化切換不會先閃回預設再跟隨（同 Live 的 _liveViewLeftMm 解法）。</summary>
-        public Func<double[]> SameSourceViewRange { get; set; }
-
-        /// <summary>當前選中相機 index（0-based）來源＝ImageDisplayView（2b-ii-B 後取代舊 GalleryManager.SelectedIndex）。</summary>
-        public Func<int> SelectedCamIndexProvider { get; set; }
+        public Func<double[]> SameSourceViewRange
+        {
+            get => _charts.SameSourceViewRange;
+            set => _charts.SameSourceViewRange = value;
+        }
 
         private Dictionary<int, string> GetPeriodImages(DateTime? period)
         {
@@ -833,13 +519,5 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 : $"{_ctx.DateTimeNavigator.GetCurrentYear()}-{_ctx.DateTimeNavigator.GetCurrentMonth()}-{_ctx.DateTimeNavigator.GetCurrentDay()} " +
                   $"{_ctx.DateTimeNavigator.GetCurrentHour()}:{_ctx.DateTimeNavigator.GetCurrentMin()}:{_ctx.DateTimeNavigator.GetCurrentSec()}";
 
-        private double ViewRangeProvider(int cameraIndex, bool isLeft, double defaultValue)
-        {
-            // 2b-ii：視野唯一來源＝ImageDisplayView 快取（SameSourceViewRange）。
-            //   舊 fallback TryComputeCurrentViewRange 讀已砍 canvas、恆失敗，移除。
-            var nv = SameSourceViewRange?.Invoke();
-            if (nv != null) return isLeft ? nv[0] : nv[1];
-            return defaultValue;
-        }
     }
 }

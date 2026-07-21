@@ -37,20 +37,23 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         private async Task LoadGrabStitchedViewGuardRowRangeAsync(string grabId, DateTime earliest, DateTime latest,
-            bool enableProcess, bool preferSharedCurves = false)
+            bool enableProcess, ReviewContentLoadMode loadMode = ReviewContentLoadMode.Full)
         {
             // R2 與 R3 是互斥顯示 intent：切回序號時，使仍在 IO 的時序結果失效，
             // 禁止舊 period 在稍後覆蓋新 grabId。
             _reviewPeriodLoadCoordinator?.Invalidate();
-            _reviewRowSync?.SuspendUntilNextData();
+            bool imageVariantOnly = loadMode == ReviewContentLoadMode.ImageVariantOnly;
+            if (!imageVariantOnly)
+                _reviewRowSync?.SuspendUntilNextData();
             try
             {
                 await _stitchCoordinator.LoadGrabStitchedViewAsync(
-                    grabId, earliest, latest, enableProcess, preferSharedCurves);
+                    grabId, earliest, latest, enableProcess, loadMode);
             }
             finally
             {
-                _reviewRowSync?.Resume();
+                if (!imageVariantOnly)
+                    _reviewRowSync?.Resume();
             }
         }
 
@@ -153,9 +156,9 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
             _stitchCoordinator.LastReviewProcessedMode = enableProcess;
-            _stitchCoordinator.ClearStitchedMode();
             await _presenter.LoadImagesWithPeriodLockAsync(enableProcess, _presenter.RunWorkflowAsync);
-            ApplyPostLoadDisplay();
+            _stitchCoordinator.ApplyGlobalMergeIfNeeded(preserveChartView: true);
+            FlowTrace.Log("RV period curves=keep source=display");
             }
             catch (Exception ex) { Trace.WriteLine($"[ApplyReviewEnhance] {ex}"); }
         }
@@ -165,8 +168,9 @@ namespace AniloxRoll.Monitor.Forms
             int idx = cbReviewId.SelectedIndex;
             if (idx < 0 || idx >= _dataStatsPresenter.GrabIdInfos.Count) return;
             var info = _dataStatsPresenter.GrabIdInfos[idx];
-            await LoadGrabStitchedViewGuardRowRangeAsync(info.GrabId, info.Earliest, info.Latest, enableProcess);
-            _reviewDisplayManager?.RefireViewRange();   // chart 重建會重設軸 → 補發當前視野（不用等滑鼠動）
+            await LoadGrabStitchedViewGuardRowRangeAsync(
+                info.GrabId, info.Earliest, info.Latest, enableProcess,
+                ReviewContentLoadMode.ImageVariantOnly);
         }
 
         /// <summary>

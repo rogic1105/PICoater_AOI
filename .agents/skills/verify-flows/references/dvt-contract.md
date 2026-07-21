@@ -19,18 +19,19 @@ app ＝【監控/回顧/報表】三個 tab。每條 flow 有兩面，**驗證�
 顯示接線核心檔（改到必跑）：LiveCameraManager / LiveDisplayCoordinator / ImageDisplayView /
 WaterfallView / AniloxRollForm.Live|Background|Review。
 
-## 三種執行方式（同一份契約，三種檢查法——契約永遠只寫一份）
+## 三層驗證（同一份契約，責任不同——契約永遠只寫一份）
 
-1. **function（模擬測試，不開 UI）**：順著 code 把每條 flow 追一遍，推導預期的 `[Flow]` 序列，對照契約。
-   改壞接線（漏訂閱/漏 teardown/置中掛錯來源）在這一步就會現形。隨時可跑、免費，**預設第一道**。
-2. **log-smoke（真機比對）**：使用者操作一輪 → 讀 `{AniloxRoot}\Logs\trace-*.log` 的 `[Flow]` 行對照契約。
-   log 格式：`[Flow] HH:mm:ss.fff T{執行緒} 訊息`（唯一出口 `Services/FlowTrace.cs`）。
-   只在動到「模擬蓋不住的三類」（硬體時序/native/視覺）才需要。
-3. **log-nunit（headless 自動測試，🔲 未落地）**：NUnit 直接 new view/coordinator（不開視窗不接相機），
-   程式扮相機 PushFrame + 扮使用者呼事件 → 收 `[Flow]` 行、契約規則寫成斷言。
-   B1=sdk view 層（現有 code 即可測）；B2=coordinator 層（需開相機介面縫，與 Wave3 一起做）。
+1. **code-flow 稽核（不開 UI）**：順著 code 把受影響 flow 的責任鏈追一遍，對照本契約；
+   漏訂閱、漏 teardown、狀態 owner 分岔在這一步處理。
+2. **自動測試**：NUnit 驗純邏輯、IO boundary 與 coordinator 機制；`tools/python/tests/` 驗
+   `check_all_flows.py` 的判讀規則。它們保證零件與裁判正確，**不假裝已操作真實 WinForms／硬體**。
+3. **log-smoke（真機比對）**：使用者操作一輪後，執行 `python tools/python/check_all_flows.py --latest`。
+   `FAIL` 是已操作但違反契約；`NOT COVERED` 是這輪沒有操作到。每次 smoke 結束必直接回報
+   `NOT COVERED` 清單，讓使用者決定補測哪些，不靠人工一邊盯畫面一邊猜流程。
 
-**自動化標記**：契約條目被 log-nunit 蓋到後，標題加 `[auto]`（一看便知哪些還要手測）。目前全部未自動化。
+log 格式為 `[Flow] HH:mm:ss.fff T{執行緒} 訊息`，唯一出口是 `Services/FlowTrace.cs`。
+未建立「自動駕駛整個 WinForms UI」的 headless harness；除非未來實機 smoke 成本成為瓶頸，否則不以它取代
+真實 MIL、GDI、硬體與視覺驗收。
 
 ## Log 記錄範圍（PropertyGrid 可直接找到）
 
@@ -1077,7 +1078,7 @@ T1: RV chartRange {grabId} chart=col|row axis=A~B/view=L~R
     ← 真實狀態邊緣：主畫面 ViewRangeMmChanged 與 MSChart PostPaint 只有在座標值改變時才記；不是 intent。
       圖片／Curve 上畫後若又出現不同的 chart axis 或 view，代表座標仍有二次跳位，不能因首個
       prefitPaint 很快就判綠。主畫面視野同時擁有 Axis 與 ScaleView；Curve 資料長度不得擴張座標軸。
-T1: RV pushFrames P/7（merge=True, feedScale=…）   ← P=該 grab 有影像的相機數；缺台=黑占位
+T1: RV pushFrames P/7（merge=True, feedScale=…, chartView=publish）   ← P=該 grab 有影像的相機數；缺台=黑占位
 T1: RV loadGrab done {grabId}（…ms）
 （若由 Data 頁隱藏預載：切到回顧後延後一個 UI message，出現 `RV tabVisible repaint view=True` →
  `RV visiblePaint ready=True lod=… size=WxH`；以可見尺寸補 LOD tile + paint，不重讀檔、不重設視野）
@@ -1153,7 +1154,8 @@ OnReviewGrabIdSelected@AniloxRollForm.Data.cs
  │        └ IsCurrent@LatestCurveLoadCoordinator.cs
  │           ├ false → RV curves stale-drop
  │           └ true → CachePreparedPlan＋StitchedLayoutReady（先發布 fit）
- │                    → 套 ReviewRuntimeState＋UpdateStitchedOverviewChart＋UpdateGlobalRowChart
+ │                    → ReviewRuntimeState＋SetCurves@ReviewDisplayContent.cs
+ │                    → UpdateStitchedOverviewChart＋UpdateGlobalRowChart@ReviewChartPresenter.cs
  └ 250ms settle → LoadGrabStitchedViewGuardRowRangeAsync@AniloxRollForm.Review.cs
     ├ SuspendUntilNextData@RowCurveSyncCoordinator.cs（舊 view range 失效；新 row data 等新 fit）
     └ LoadGrabStitchedViewAsync@ReviewStitchCoordinator.cs
@@ -1171,17 +1173,29 @@ OnReviewGrabIdSelected@AniloxRollForm.Data.cs
        │  └ StitchCamera＋MergeCurves／MergeRowCurves＋BitmapGrayConverter
        └ IsCurrent@ReviewImageLoadGate.cs
           ├ false → DisposeImages＋RV loadGrab stale-drop（不得套 UI）
-          └ true → ReviewRuntimeState＋RowCurvePhysicalScaleResolver
-                   → StitchedImagesReady（先餵同一 mm/row）
+           └ true → ReplaceImages@ReviewDisplayContent.cs＋ReviewRuntimeState
+                    → ApplyRowPhysicalScale@ReviewChartPresenter.cs
+                    → StitchedImagesReady（先餵同一 mm/row）
                    → PushFrames.RefreshNow＋RefireViewRange → 欄／列 chart
 ```
+
+`LoadGrabStitchedViewAsync` 的載入模式是行為邊界，不得以布林特例分散回 Form：
+
+| 模式 | 使用時機 | Curve／視野行為 |
+|---|---|---|
+| `Full` | 新序號 settle 後載圖 | 發布 prefit、載入 bin，並以實際圖片視野覆核 Curve |
+| `ReuseSharedCurves` | 報表已載 Curve 後切到回顧 | 套用報表共用快照，不重讀 bin；仍為新序號建立 fit |
+| `ImageVariantOnly` | 同序號切原圖／欄強化／列強化 | 只解碼並換圖；不 Suspend、不 prefit、不讀 bin、不發布 view range、不重畫 Curve |
+
+快速滾動的 latest-only 機制只適用「新序號」；同序號切圖片版本必須保留現有 Curve 與視野，
+不得用完整載入來間接重畫。
 
 ### R3 時段導航（cbReviewDate/cbReviewTime 手動）
 ```
 T1: ui:【時段導航】（cbReviewDate/Time）
 T1: RV period begin {yyyy-MM-dd HH:mm:ss.fff}
 T1: RV period load {yyyy-MM-dd HH:mm:ss.fff} images=P/7 proc=True|False cfg=yes|no
-T1: RV pushFrames P/7（merge=True, feedScale=…）
+T1: RV pushFrames P/7（merge=True, feedScale=…, chartView=publish）
 T1: RV row … / RV state …（chart/狀態快照視資料而定）
 T1: RV period done {yyyy-MM-dd HH:mm:ss.fff}
 ```
@@ -1283,9 +1297,13 @@ T1: ui:設定[ec_ErrorValueMeanV]（例）
 ### S2 回顧強化（hd_EnableReviewEnhance）
 ```
 T1: ui:設定[hd_EnableReviewEnhance]
-單序號模式：RV loadGrab begin {當前grabId} → … → RV loadGrab done
+單序號模式：RV loadGrab begin {當前grabId}
+ → RV loadGrab curves=keep source=display {當前grabId}
+ → RV pushFrames … chartView=keep → RV loadGrab done
+    禁止：RV prefit／RV curves／curves=load source=bin（同序號只換圖片版本，不重畫 Curve 或視野）
 時序模式：RV period load {當前時點} images=P/7 proc=True|False cfg=yes|no
-    ← 重載目前真正顯示的模式；不得一律假設單序號
+ → RV pushFrames … chartView=keep → RV period curves=keep source=display
+    ← 重載目前真正顯示的模式；不得一律假設單序號，也不得重畫 Curve
 ```
 
 ### S4 監控強化（hc_EnableMuraEnhance）

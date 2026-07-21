@@ -455,7 +455,13 @@ class DataFlowValidator:
                     "paints": {},
                     "apply": None,
                     "chart_ranges": [],
+                    "keep_curves": False,
+                    "push_keep": False,
                 }
+                continue
+            if active and line.message == (
+                    f"RV loadGrab curves=keep source=display {active['id']}"):
+                active["keep_curves"] = True
                 continue
             if active and line.message.startswith("RV prefit "):
                 match = pattern.match(line.message)
@@ -494,12 +500,17 @@ class DataFlowValidator:
                 active["lod"] = (index, int(match.group(1)), int(match.group(2)))
             if active and line.message.startswith("RV pushFrames ") and active["push"] is None:
                 active["push"] = index
+                active["push_keep"] = "chartView=keep" in line.message
             if line.message.startswith(("RV loadGrab done ", "RV loadGrab stale-drop ")):
                 completed = line.message.startswith("RV loadGrab done ")
                 if active and active["lod"]:
                     lod_index, width, height = active["lod"]
                     actual.append((active["id"], width, height))
                 if active and completed and (active["lod"] or active["push"]):
+                    image_variant_only = active["keep_curves"] and active["push_keep"]
+                    if image_variant_only:
+                        active = None
+                        continue
                     deadlines = [item[0] for item in [active["lod"]] if item]
                     if active["push"] is not None:
                         deadlines.append(active["push"])

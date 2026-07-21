@@ -768,11 +768,8 @@ namespace AniloxRoll.Monitor.Forms
             _stitchCoordinator = new ReviewStitchCoordinator(new ReviewStitchContext
             {
                 ChartReviewPatch             = chartReviewColumn,
-                ChartReviewHorizontal       = chartReviewRow,
                 BusyUi                   = _reviewBusyUi,
                 ReviewState              = _reviewRuntimeState,
-                RowChartHelper            = _reviewRowChartHelper,
-                RowChartDisplay           = _reviewRowDisplay,
                 RowChartSync              = _reviewRowSync,
                 OverviewHelper            = _reviewOverviewHelper,
                 InspectionService         = _inspectionService,
@@ -787,8 +784,6 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _reviewDisplayManager = new ReviewDisplayManager(camReviewMain,
                     new System.Windows.Forms.Panel[] { camReview1, camReview2, camReview3, camReview4, camReview5, camReview6, camReview7 });
-                // 選中相機 index 來源＝ImageDisplayView（取代舊 ThumbnailGridPresenter.SelectedIndex）
-                _stitchCoordinator.SelectedCamIndexProvider = () => _reviewDisplayManager?.SelectedCamIndex ?? 0;
                 _stitchCoordinator.StitchedLayoutReady += (grabId, ws, hs, ops, pos, isGlobal) =>
                 {
                     ImageViewRange? computed = ComputeReviewFitViewRange(
@@ -808,12 +803,13 @@ namespace AniloxRoll.Monitor.Forms
                         prepared: true);
                     LogReviewPrefitApplied();
                 };
-                _stitchCoordinator.StitchedImagesReady += (gray, ws, hs, ops, pos, isGlobal) =>
+                _stitchCoordinator.StitchedImagesReady += (gray, ws, hs, ops, pos, isGlobal, preserveChartView) =>
                         _reviewDisplayManager?.PushFrames(gray, ws, hs, ops, pos, isGlobal,
                         _reviewRuntimeState.ScreenMmPerPixel,
                         AniloxRoll.Monitor.Core.Services.InspectionEngineConfig.DefaultSaveResizeScale,
                         _reviewRowDisplay?.RowPitchMm ?? 0,
-                        ShouldFlipDisplayVertical());   // 灰階已在 RSC 解碼段轉好（零 race）；?.：關閉時序防 NRE
+                        ShouldFlipDisplayVertical(),
+                        preserveChartView);   // 灰階已在 RSC 解碼段轉好（零 race）；?.：關閉時序防 NRE
                 // Stage2：新 canvas 視野 → 回顧曲線圖 zoom 連動（欄=全覽 X、列=Y；拖曳中即時）
                 _reviewDisplayManager.ViewRangeMmChanged += (l, r, top, bot) =>
                 {
@@ -1205,7 +1201,7 @@ namespace AniloxRoll.Monitor.Forms
                 _stitchCoordinator?.IsStitchMode == true)
             {
                 _stitchCoordinator.UpdateStitchedOverviewChart();
-                _stitchCoordinator.RefreshCurrentCameraChartsForSettingsChange();
+                _stitchCoordinator.RefreshChartsForSettingsChange();
             }
         }
 

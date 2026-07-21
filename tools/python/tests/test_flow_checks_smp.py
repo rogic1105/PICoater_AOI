@@ -46,6 +46,8 @@ class SettingsFlowValidatorTests(unittest.TestCase):
                 "ui:設定[hd_EnableReviewEnhance]=True",
                 "setting route hd_EnableReviewEnhance owner=Enhance effects=None",
                 "RV loadGrab begin 260720-120000（proc=True）",
+                "RV loadGrab curves=keep source=display 260720-120000",
+                "RV pushFrames 7/7（merge=True, feedScale=1, chartView=keep）",
                 "RV loadGrab done 260720-120000（21ms）",
                 "ui:設定[hee_VerticalDirection]=TopToBottom",
                 "setting route hee_VerticalDirection owner=LiveLayout effects=None",
@@ -88,9 +90,42 @@ class SettingsFlowValidatorTests(unittest.TestCase):
                 "ui:設定[hd_EnableReviewEnhance]=True",
                 "setting route hd_EnableReviewEnhance owner=Enhance effects=None",
                 "RV period load 2026-07-21 08:00:00.000 images=7/7 proc=True cfg=yes",
+                "RV pushFrames 7/7（merge=True, feedScale=1, chartView=keep）",
+                "RV period curves=keep source=display",
             )
         )
         self.assertEqual(CheckStatus.PASS, result(report, "S2.review-enhance").status)
+
+    def test_review_enhance_curve_reload_or_prefit_fails(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "RV loadGrab done 260720-120000（20ms）",
+                "ui:設定[hd_EnableReviewEnhance]=True",
+                "setting route hd_EnableReviewEnhance owner=Enhance effects=None",
+                "RV loadGrab begin 260720-120000（proc=True）",
+                "RV prefit 260720-120000 content=100x100 viewport=50x50 viewX=0~1 viewY=0~1",
+                "RV loadGrab curves=load source=bin 260720-120000",
+                "RV loadGrab done 260720-120000（21ms）",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "S2.review-enhance").status
+        )
+
+    def test_image_variant_only_does_not_require_a_new_prefit(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT curve load policy latest-only shared-loader entries=512 maxMB=256 scale=merged-only",
+                "RV prefit 260720-120000 content=100x100 viewport=50x50 viewX=0~1 viewY=0~1",
+                "RV mainRange 260720-120000 viewX=0~1 viewY=0~1",
+                "RV chartRange 260720-120000 chart=col axis=0~1/view=0~1",
+                "RV loadGrab begin 260720-120000（proc=True）",
+                "RV loadGrab curves=keep source=display 260720-120000",
+                "RV pushFrames 7/7（merge=True, feedScale=1, chartView=keep）",
+                "RV loadGrab done 260720-120000（21ms）",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "D3.fit").status)
 
     def test_direction_without_row_refresh_fails(self):
         report = SettingsFlowValidator().validate(

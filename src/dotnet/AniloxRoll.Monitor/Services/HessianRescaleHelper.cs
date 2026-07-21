@@ -5,7 +5,7 @@ namespace AniloxRoll.Monitor.Core.Services
     /// <summary>
     /// 統一處理 view-time 正規值 rescale 公式：display = (bin/255) × (HM_capture / HM_current)。
     ///
-    /// 為什麼集中：rescale 邏輯原本散在 4 處（DataStatisticsPresenter / ReviewStitchCoordinator
+    /// 為什麼集中：rescale 邏輯原本散在 4 處（DataStatisticsPresenter / ReviewChartPresenter
     /// 各 2 份），公式雖一致但易漂移（未來改 ratio 計算邏輯必須 4 處同改）。
     /// </summary>
     public static class HessianRescaleHelper

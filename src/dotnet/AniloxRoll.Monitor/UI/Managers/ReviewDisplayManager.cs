@@ -18,6 +18,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private readonly Panel[] _thumbHosts;
         private ImageDisplayView _view;
         private bool _disposed;
+        private bool _suppressViewRangeEvents;
 
         /// <summary>視野可見範圍（mm）pass-through（View 為 lazy，外部訂這裡）：left,right,top,bot →
         /// 回顧曲線圖 zoom 連動（拖曳中也即時，鐵則：不可為效能抑制）。</summary>
@@ -25,9 +26,6 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         /// <summary>sdk 顯示元件（接事件 / 進階用；未建立前 null）。</summary>
         public ImageDisplayView View => _view;
-
-        /// <summary>當前選中相機 index（0-based；未建立前回 0）。供 RSC 重畫 per-cam 曲線用。</summary>
-        public int SelectedCamIndex => (_view?.SelectedCamId ?? 1) - 1;
 
         public ReviewDisplayManager(Panel mainHost, Panel[] thumbHosts)
         {
@@ -45,7 +43,11 @@ namespace AniloxRoll.Monitor.UI.Managers
             _view.ThumbSelectedColor = Color.Orange;   // 與監控同款；選取視覺唯一來源 = sdk ThumbView
             _view.MergeAll = true;                     // 缺台黑占位（與影像/曲線分界一致）
             _view.EnableLod(GrayResizeCpu.Resize);     // 回顧白賺 LOD；CPU provider＝無 GPU 機也跑
-            _view.ViewRangeMmChanged += (l, r, tp, bt) => ViewRangeMmChanged?.Invoke(l, r, tp, bt);
+            _view.ViewRangeMmChanged += (l, r, tp, bt) =>
+            {
+                if (!_suppressViewRangeEvents)
+                    ViewRangeMmChanged?.Invoke(l, r, tp, bt);
+            };
             // 互動流跡（RV 前綴）：autoFit 原因/lodRebind/clearFrame/wheelZoom 與監控同一套 sdk 掛勾
             _view.FlowLog = s => Core.Services.FlowTrace.Display("RV", s);
             Core.Services.FlowTrace.Log($"RV EnsureImageDisplay create（thumbs={_thumbHosts.Length}）");
@@ -56,31 +58,43 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// 純推幀零轉換 → UI 執行緒無負擔、與 Bitmap 生命週期零 race。
         /// </summary>
         public void PushFrames(byte[][] gray, int[] w, int[] h, double[] opsUm, double[] posMm,
-            bool mergeMode, double screenMmPerPx, int feedScale, double rowPitchMm, bool flipVertical)
+            bool mergeMode, double screenMmPerPx, int feedScale, double rowPitchMm, bool flipVertical,
+            bool preserveChartView = false)
         {
             if (_disposed || gray == null) return;
             EnsureCreated(screenMmPerPx);
-            _view.FlipVertical = flipVertical;
-            _view.VerticalZeroAtBottom = flipVertical;   // 垂直座標約定同方向（由下而上＝0 錨定畫面底）
-            _view.SetLayout(posMm, opsUm, Math.Max(1, feedScale), rowPitchMm); // feedScale=降採樣倍率；rowPitchMm=真實 mm/列
-            _view.SetMergeMode(mergeMode);
-            var present = new bool[_thumbHosts.Length + 1];
-            int count = Math.Min(gray.Length, _thumbHosts.Length);
-            int pushed = 0;
-            for (int i = 0; i < count; i++)
+            _suppressViewRangeEvents = preserveChartView;
+            try
             {
-                if (gray[i] == null) continue;
-                present[i + 1] = true;
-                _view.PushFrame(i + 1, gray[i], w[i], h[i]);
-                pushed++;
+                _view.FlipVertical = flipVertical;
+                _view.VerticalZeroAtBottom = flipVertical;   // 垂直座標約定同方向（由下而上＝0 錨定畫面底）
+                _view.SetLayout(posMm, opsUm, Math.Max(1, feedScale), rowPitchMm); // feedScale=降採樣倍率；rowPitchMm=真實 mm/列
+                _view.SetMergeMode(mergeMode);
+                var present = new bool[_thumbHosts.Length + 1];
+                int count = Math.Min(gray.Length, _thumbHosts.Length);
+                int pushed = 0;
+                for (int i = 0; i < count; i++)
+                {
+                    if (gray[i] == null) continue;
+                    present[i + 1] = true;
+                    _view.PushFrame(i + 1, gray[i], w[i], h[i]);
+                    pushed++;
+                }
+                _view.ClearFramesExcept(present);
+                _view.RefreshNow();
+                // A new record may have different geometry and must publish its fitted range.
+                // An image variant has identical geometry; publishing again would redraw charts
+                // and briefly replace the user's current view with the fit range.
+                if (!preserveChartView)
+                    _view.RefireViewRange();
+                Core.Services.FlowTrace.Log(
+                    $"RV pushFrames {pushed}/{count}（merge={mergeMode}, feedScale={feedScale}, " +
+                    $"chartView={(preserveChartView ? "keep" : "publish")}）");
             }
-            _view.ClearFramesExcept(present);
-            _view.RefreshNow();
-            // Same pixel dimensions do not rebind LOD, but OPS/start/row pitch may still differ
-            // between grabs. Re-publish the range from ImageDisplayView's single conversion path
-            // before the new column/row curves are applied, so no chart paints with stale units.
-            _view.RefireViewRange();
-            Core.Services.FlowTrace.Log($"RV pushFrames {pushed}/{count}（merge={mergeMode}, feedScale={feedScale}）");
+            finally
+            {
+                _suppressViewRangeEvents = false;
+            }
         }
 
         /// <summary>

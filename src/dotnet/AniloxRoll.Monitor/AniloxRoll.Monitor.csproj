@@ -220,12 +220,14 @@
     <Compile Include="UI\Widgets\GrabImageStitcher.cs" />
     <Compile Include="UI\Presenters\DataStatisticsPresenter.cs" />
     <Compile Include="UI\Presenters\MuraProfileChartPresenter.cs" />
+    <Compile Include="UI\Presenters\ReviewChartPresenter.cs" />
     <Compile Include="UI\Presenters\YieldPeriodChartPresenter.cs" />
     <Compile Include="UI\Presenters\ReviewStitchCoordinator.cs" />
     <Compile Include="UI\Presenters\InspectionStatsPresenter.cs" />
     <Compile Include="UI\Navigators\DataDateGrabIdNavigator.cs" />
     <Compile Include="UI\Navigators\DateTimeNavigator.cs" />
     <Compile Include="UI\State\UserSessionState.cs" />
+    <Compile Include="UI\State\ReviewDisplayContent.cs" />
     <Compile Include="UI\State\ReviewRuntimeState.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

@@ -623,7 +623,7 @@ namespace AniloxRoll.Monitor.Forms
             _liveRowSync?.RefreshDirection();
             _reviewDisplayManager?.SetFlipVertical(ShouldFlipDisplayVertical());
             _reviewRowSync?.RefreshDirection();
-            _stitchCoordinator?.RefreshCurrentCameraChartsForSettingsChange();
+            _stitchCoordinator?.RefreshChartsForSettingsChange();
             if (_stitchCoordinator?.IsStitchMode != true)
                 _stitchCoordinator?.UpdateRowChartFromRepository();
         }
