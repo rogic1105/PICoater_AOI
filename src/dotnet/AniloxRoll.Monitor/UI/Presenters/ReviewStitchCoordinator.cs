@@ -76,6 +76,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private readonly LatestCurveLoadCoordinator _curveLoads;
         private readonly SingleGrabCurveDataLoader _curveDataLoader;
         private readonly ReviewImageDataLoader _imageDataLoader;
+        private readonly ReviewPeriodDataLoader _periodDataLoader;
         private readonly ReviewImageLoadGate _imageLoads = new ReviewImageLoadGate();
 
         /// <summary>快路：只載曲線（欄+列，.bin 數十 KB + tick 對齊 csv）+CFG → 更新欄/列 chart。
@@ -146,6 +147,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _ctx = ctx;
             _curveDataLoader = new SingleGrabCurveDataLoader();
             _imageDataLoader = new ReviewImageDataLoader();
+            _periodDataLoader = new ReviewPeriodDataLoader();
             _curveLoads = new LatestCurveLoadCoordinator(LoadGrabCurvesCoreAsync);
         }
 
@@ -547,27 +549,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 ? (Func<string, Bitmap>)(p => _ctx.InspectionService.LoadBmpAtScale(p, scale))
                 : null;
 
-            // 時序（cbReviewDate/cbReviewTime）路徑：載 7 台 → 轉灰階 → 發同一個 StitchedImagesReady
-            //（與單片同源 → 顯示走 ImageDisplayView、拿到 LOD）。Bitmap 在本地迴圈內轉灰階即釋放，零 race。
-            int camCount = _ctx.CameraCount;
-            var grayArr = new byte[camCount][];
-            var grayW = new int[camCount];
-            var grayH = new int[camCount];
-            for (int i = 0; i < camCount; i++)
-            {
-                if (!filesMap.TryGetValue(i + 1, out string path)) continue;
-                Bitmap bmp = null;
-                try
-                {
-                    bmp = GrabImageStitcher.LoadCameraImage(path, scale, bmpLoader,
-                        useProcessed: LastReviewProcessedMode, ridgeDirection: ActiveRidgeDirection);
-                    if (bmp != null)
-                        grayArr[i] = BitmapGrayConverter.ToGray8(bmp, out grayW[i], out grayH[i]);
-                }
-                catch (Exception ex) { Trace.WriteLine($"[GlobalMerge] CAM{i + 1}: {ex.GetType().Name}: {ex.Message}"); }
-                finally { bmp?.Dispose(); }
-            }
-            StitchedImagesReady?.Invoke(grayArr, grayW, grayH, opsArr, posArr, true);
+            ReviewPeriodFrames frames = _periodDataLoader.LoadFrames(
+                filesMap, _ctx.CameraCount, scale, bmpLoader,
+                LastReviewProcessedMode, ActiveRidgeDirection);
+            StitchedImagesReady?.Invoke(
+                frames.GrayFrames, frames.Widths, frames.Heights, opsArr, posArr, true);
         }
 
         /// <summary>
@@ -595,26 +581,18 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
 
             int camCount = _ctx.CameraCount;
-            var curveMean = new float[camCount][];
-            var curveMax  = new float[camCount][];
-            for (int i = 0; i < camCount; i++)
-            {
-                if (!images.TryGetValue(i + 1, out string path)) continue;
-                string basePath = CurveMergeHelper.GetCurveBasePath(path);
-                curveMean[i] = CurveBinFile.Load(CaptureFileNaming.ResolveMeanC(basePath));
-                curveMax[i]  = CurveBinFile.Load(CaptureFileNaming.ResolveMaxC(basePath));
-            }
+            ReviewPeriodColumnCurves curves = _periodDataLoader.LoadColumnCurves(images, camCount);
 
             var reviewCfg = _ctx.ReviewState.Config;
             if (reviewCfg != null)
             {
-                CurveMergeHelper.UpdateOverviewChart(curveMean, curveMax,
+                CurveMergeHelper.UpdateOverviewChart(curves.Mean, curves.Max,
                     reviewCfg.CamOps, reviewCfg.CamPos, reviewCfg.ErrorValueMeanV, reviewCfg.ErrorValueMaxV,
                     _ctx.OverviewHelper, camCount, _ctx.Settings.StitchMode, ViewRangeProvider);
             }
             else
             {
-                CurveMergeHelper.UpdateOverviewChart(curveMean, curveMax,
+                CurveMergeHelper.UpdateOverviewChart(curves.Mean, curves.Max,
                     _ctx.Settings.GetCameraOpsUmArray(), _ctx.Settings.GetCameraStartPositionMmArray(),
                     _ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV,
                     _ctx.OverviewHelper, camCount, _ctx.Settings.StitchMode, ViewRangeProvider);
@@ -639,26 +617,15 @@ namespace AniloxRoll.Monitor.UI.Presenters
             var images = GetPeriodImages(period);
             if (images == null || images.Count == 0) return;
 
-            int camCount = _ctx.CameraCount;
-            var rowMean = new float[camCount][];
-            var rowMax  = new float[camCount][];
-            for (int i = 0; i < camCount; i++)
-            {
-                if (!images.TryGetValue(i + 1, out string path)) continue;
-                string basePath = CurveMergeHelper.GetCurveBasePath(path);
-                rowMean[i] = CurveBinFile.Load(CaptureFileNaming.ResolveMeanR(basePath));
-                rowMax[i]  = CurveBinFile.Load(CaptureFileNaming.ResolveMaxR(basePath));
-            }
-
-            CurveMergeHelper.MergeRowCurvesOverlap(rowMean, rowMax, camCount,
-                out float[] mergedMean, out float[] mergedMax);
-            if (mergedMean == null) return;
+            ReviewPeriodRowCurves curves = _periodDataLoader.LoadMergedRowCurves(
+                images, _ctx.CameraCount);
+            if (curves.Mean == null) return;
 
             // 與 UpdateGlobalRowChart 同公式：bin baked-in 縮放=HM_V_capture，view-time 目標=HM_H_current。
             float captureHmV = _ctx.ReviewState.Config?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
-            HessianRescaleHelper.RescaleInPlace1D(mergedMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
-            HessianRescaleHelper.RescaleInPlace1D(mergedMax,  captureHmV, _ctx.Settings.HessianMaxFactorH);
-            _ctx.RowChartSync.UpdateData(mergedMean, mergedMax, requireViewRange: true);
+            HessianRescaleHelper.RescaleInPlace1D(curves.Mean, captureHmV, _ctx.Settings.HessianMaxFactorH);
+            HessianRescaleHelper.RescaleInPlace1D(curves.Max, captureHmV, _ctx.Settings.HessianMaxFactorH);
+            _ctx.RowChartSync.UpdateData(curves.Mean, curves.Max, requireViewRange: true);
         }
 
         /// <summary>#13 同源新路徑的「當前視野」注入（form 快取 ImageDisplayView 視野；[l,r,top,bot]，null=無效）。

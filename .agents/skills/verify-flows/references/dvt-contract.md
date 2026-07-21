@@ -1124,9 +1124,9 @@ PeriodSelectionChanged@DateTimeNavigator.cs
          ├ RunWorkflowForPeriodAsync@AniloxRollPresenter.cs → GetImages(DateTime)@ImageRepository.cs
          ├ generation 失效 → stale-drop（不得 apply）
          └ ApplyPostLoadDisplay(period)
-            ├ ApplyGlobalMergeForPeriod → PushFrames（圖片/LOD）
-            ├ UpdateOverviewChartForPeriod（欄 curve）
-            └ UpdateRowChartForPeriod（列 curve）
+             ├ ApplyGlobalMergeForPeriod → LoadFrames@ReviewPeriodDataLoader.cs → PushFrames（圖片/LOD）
+             ├ UpdateOverviewChartForPeriod → LoadColumnCurves@ReviewPeriodDataLoader.cs（欄 curve）
+             └ UpdateRowChartForPeriod → LoadMergedRowCurves@ReviewPeriodDataLoader.cs（列 curve）
 R2 入口：LoadGrabStitchedViewGuardRowRangeAsync → ReviewPeriodLoadCoordinator.Invalidate
 ```
 

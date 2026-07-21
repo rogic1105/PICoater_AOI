@@ -201,6 +201,7 @@
     <Compile Include="UI\Services\ImageCacheService.cs" />
     <Compile Include="UI\Services\BitmapGrayConverter.cs" />
     <Compile Include="UI\Services\ReviewImageDataLoader.cs" />
+    <Compile Include="UI\Services\ReviewPeriodDataLoader.cs" />
     <Compile Include="UI\Services\SingleGrabCurveDataLoader.cs" />
     <Compile Include="UI\Services\SingleGrabCurveCache.cs" />
     <Compile Include="UI\Managers\CameraStallDetector.cs" />

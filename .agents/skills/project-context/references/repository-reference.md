@@ -48,6 +48,7 @@ against current code with `rg` before editing because lookup data can become sta
 | `UI/Coordinators/ReviewPeriodLoadCoordinator.cs` | 回顧時段載入的 FIFO single-flight、重複 request 去重與 generation 失效 owner。 |
 | `UI/Services/ImageCacheService.cs` | ProcessBatch 產出但不直接顯示的 Bitmap 生命週期唯一 owner；下一次 workflow 前統一 Dispose。 |
 | `UI/Services/ReviewImageDataLoader.cs` | 回顧單片完整載入 service：查影像/CFG、幀對齊、每台拼接、欄列 curve 合併與灰階轉換；背景執行且不持有 WinForms 狀態。 |
+| `UI/Services/ReviewPeriodDataLoader.cs` | 回顧時段投影 service：將某時點的每台影像轉灰階 frame、讀欄 curve、合併列 curve；不持有設定或 WinForms 狀態。 |
 | `UI/Services/BitmapGrayConverter.cs` | 回顧 Bitmap 轉 8-bit 灰階 frame 的純轉換 helper。 |
 | `UI/Services/SingleGrabCurveDataLoader.cs` | 回顧／報表共用的單序號 Curve application service：讀 CFG，依記憶體快取→`_curve_summary`→原始 bin 取得欄／列資料，且不持有 WinForms 狀態。 |
 | `UI/State/ReviewRuntimeState.cs` | 回顧 CSV CFG 快照與螢幕 mm/px 的 runtime SSoT；Form 與 ReviewStitchCoordinator 共用。 |
