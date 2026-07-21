@@ -326,6 +326,13 @@ class ReviewFlowValidator:
     def _check_direction(
         self, session: FlowSession, report: CheckReport, tolerance_mm: float = 15.0
     ) -> None:
+        if not session.dvt_enabled:
+            report.add(
+                self.domain, "R2.direction", CheckStatus.NOT_COVERED,
+                "記錄範圍為日常運行；請切到流程驗證後重跑",
+            )
+            return
+        session = session.dvt_only()
         bad = []
         checked = 0
         for line in session.lines:
@@ -362,6 +369,13 @@ class ReviewFlowValidator:
         )
 
     def _check_drag_first_publish(self, session: FlowSession, report: CheckReport) -> None:
+        if not session.dvt_enabled:
+            report.add(
+                self.domain, "R4.first-view", CheckStatus.NOT_COVERED,
+                "記錄範圍為日常運行；請切到流程驗證後重跑",
+            )
+            return
+        session = session.dvt_only()
         starts = 0
         active = None
         failures = []

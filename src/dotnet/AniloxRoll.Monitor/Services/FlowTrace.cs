@@ -1,4 +1,5 @@
 using System;
+using AniloxRoll.Monitor.Core.Data;
 
 namespace AniloxRoll.Monitor.Core.Services
 {
@@ -11,7 +12,45 @@ namespace AniloxRoll.Monitor.Core.Services
     /// </summary>
     public static class FlowTrace
     {
-        public static void Log(string msg) =>
+        private static int _mode = (int)LogRecordingMode.Operational;
+
+        public static LogRecordingMode Mode => (LogRecordingMode)_mode;
+        public static bool DvtEnabled => _mode >= (int)LogRecordingMode.FlowVerification;
+        public static bool DiagnosticEnabled => _mode >= (int)LogRecordingMode.FullDiagnostic;
+
+        public static void Configure(LogRecordingMode mode)
+        {
+            _mode = (int)mode;
+            Log($"log mode={mode}");
+        }
+
+        public static void Log(string msg) => Write(msg);
+
+        public static void Dvt(string msg)
+        {
+            if (DvtEnabled) Write(msg);
+        }
+
+        public static void Diagnostic(string msg)
+        {
+            if (DiagnosticEnabled) Write(msg);
+        }
+
+        /// <summary>SDK 顯示元件共用出口；依訊息種類分流，不讓 SDK 依賴 app 的設定 enum。</summary>
+        public static void Display(string owner, string message)
+        {
+            if (message == null) return;
+            string full = owner + " " + message;
+            if (message.StartsWith("stats ", StringComparison.Ordinal))
+                Diagnostic(full);
+            else if (message.StartsWith("state ", StringComparison.Ordinal) ||
+                     message.StartsWith("viewEdges ", StringComparison.Ordinal))
+                Dvt(full);
+            else
+                Log(full);
+        }
+
+        private static void Write(string msg) =>
             System.Diagnostics.Trace.WriteLine(
                 $"[Flow] {DateTime.Now:HH:mm:ss.fff} T{System.Threading.Thread.CurrentThread.ManagedThreadId,2} {msg}");
     }

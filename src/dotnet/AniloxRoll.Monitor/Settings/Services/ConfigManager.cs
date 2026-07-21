@@ -9,7 +9,7 @@ namespace AniloxRoll.Monitor.Core.Data
         {
             var settings = InspectionSettingsStore.Load();
             settings.Acquisition = AcquisitionSettingsStore.Load();
-            // 啟動時 idempotent Save 一次：把新增的 setting 欄位（如 DebugUiActionLog）用 default value
+            // 啟動時 idempotent Save 一次：把新增的 setting 欄位用 default value
             // 補進現有 json，避免使用者手動編輯。對既有 key 不改值，僅補缺。
             try { InspectionSettingsStore.Save(settings); } catch { }
             try { AcquisitionSettingsStore.Save(settings.Acquisition); } catch { }

@@ -238,6 +238,13 @@ class DataFlowValidator:
         )
 
     def _check_single_fit(self, session: FlowSession, report: CheckReport) -> None:
+        if not session.dvt_enabled:
+            report.add(
+                self.domain, "D3.fit", CheckStatus.NOT_COVERED,
+                "記錄範圍為日常運行；請切到流程驗證後重跑",
+            )
+            return
+        session = session.dvt_only()
         number = r"-?\d+(?:\.\d+)?"
         pattern = re.compile(
             r"^RV prefit (\d{6}-\d{6}) content=(\d+)x(\d+) "

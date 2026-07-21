@@ -32,6 +32,21 @@ WaterfallView / AniloxRollForm.Live|Background|Review。
 
 **自動化標記**：契約條目被 log-nunit 蓋到後，標題加 `[auto]`（一看便知哪些還要手測）。目前全部未自動化。
 
+## Log 記錄範圍（PropertyGrid 可直接找到）
+
+設定位置固定為 `5. Log 設定（記錄／除錯） > 記錄範圍`，每個 session 啟動或切換模式時記
+`log mode=Operational|FlowVerification|FullDiagnostic`：
+
+| UI 選項 | 適用時機 | 額外證據 |
+|---|---|---|
+| 日常運行（預設，檔案較小） | 產線常駐 | 操作、連線、錯誤、存檔、開始／停止、異常觸發的 UiStall/UiPing/UiStack/UiSlow/UiPaint |
+| 流程驗證（測試／驗收） | smoke/DVT 驗收 | 再加 rowChart、IC/WF state、viewEdges、prefit、mainRange、chartRange |
+| 完整診斷（除錯，檔案較大） | 短時間深度除錯 | 再加 IC/WF stats 與 `Logs\fsm\` 原始 UI action JSONL |
+
+`check_all_flows.py` 必讀 session 的 mode；日常模式缺少 DVT-only 證據時回 `NOT COVERED`，不得誤判
+`FAIL`。需要完整驗收時先切到「流程驗證」再操作；測完可切回日常運行。舊 trace 無 mode 行，視為
+舊版全探針開啟。
+
 ## 檔案組織規則
 
 - **按領域拆、永不按方法拆**（按方法拆＝同一條契約抄三份，違反唯一來源）。
@@ -132,7 +147,7 @@ S0 通用（所有 PropertyGrid 設定自動記 `ui:設定[名]=值`）。新增
 [UiStack] {top frames}                  ← ping 200ms 無回應當下的 UI 執行緒堆疊（直接點名）
 [UiSlow] {name} {ms}ms                  ← 7 個 handler 計時 >50ms
 [UiPaint] {control} {ms}ms              ← chart WM_PAINT >50ms；IC/RV paint …=canvas OnPaint
-IC|WF stats paints=N/s paintMs=M statusEv=K/s ← canvas 每秒重繪組成（>5 次/秒才記；瀑布同儀器 WF 前綴）
+IC|WF stats paints=N/s paintMs=M statusEv=K/s ← 完整診斷；canvas 每秒重繪組成（>5 次/秒才記）
 ```
 `UiStallDetector` 在 Form ctor 建立，但必須等 `Shown` 的全 tab 預熱完成後才
 `BeginInteractiveMeasurement`；建構期使用者尚不能互動，不得把 ctor／預熱時間算成第一筆 stall。
@@ -152,6 +167,8 @@ IC|WF stats paints=N/s paintMs=M statusEv=K/s ← canvas 每秒重繪組成（>5
 - view 訂閱 `cam.OnDisplayFrame` 且 Enable* 冪等 → **相機批次換新（Allocate/Free）前後必有對稱 teardown**。
 
 ## 狀態快照儀器（方向/座標「機器可判」——2026-07-09 故障注入盲測 4 例定版）
+
+**啟用條件**：記錄範圍＝「流程驗證」或「完整診斷」。
 
 **目的**：改 A 壞 B 當下從 log 抓到，不靠肉眼盯畫面。每幀狀態自動記錄（免滑鼠——「要滑鼠移動才更新」
 曾是 log 誤判源）、每秒節流。**快照行＝儀器輸出、非狀態變更行——穩態靜默通則對其豁免。**
@@ -972,6 +989,8 @@ ui:【產出狀態】確認 code=C
 - 診斷檔只由 `LogFileCatalog` 納管：`trace`、`resource-monitor`、`dropdiag`、`phaselog`、
   `paramchange`、`ui-actions`、`io`、`crash`。`LogRetentionHours` 預設 168 小時，啟動後 5 秒及每小時清理；
   目前 process 建立的 log 與未知檔案不得刪。PropertyGrid 改保存時間後立即補跑一次清理。
+- Log 模式與保留時間共用 PropertyGrid `5. Log 設定（記錄／除錯）` 類別；JSON 寫入 `Logging.Mode`
+  與 `Logging.RetentionHours`。舊 `Storage.LogRetentionHours` 與 `DebugUiActionLog` 只在載入時遷移，禁止再寫回。
 - `Program.InitializeRuntimeLogging` 決定本次可寫目錄（正常為 `D:\Anilox\Logs`，不可寫才退到 `%TEMP%`），
   trace、`io-yyyyMMdd.log` 與 `AniloxRoll-crash.log` 必須共用這個目錄。app 注入 IoLogger 的目錄與 `io`
   前綴；Bridge sample 保持自己的 exe-relative 預設，禁止 SDK 反向硬編產品路徑。
@@ -996,6 +1015,8 @@ python tools/python/check_all_flows.py trace-a.log trace-b.log
 - `flow_checks/registry.py`＝validator 掛載點；每個 domain 獨立模組，不得把所有規則堆回總入口。
 - `NOT COVERED`＝該 session 沒操作到該 flow，**不得算 PASS**；validator 尚未實作則列在 `尚待自動化`，
   總結必標 `PARTIAL`，不得宣稱整份 DVT 全綠。
+- session 若為 `Operational`，需 DVT 探針的規則同樣回 `NOT COVERED` 並提示切換「流程驗證」；
+  一般操作／錯誤／生命週期規則仍照常判定。
 - 現況（2026-07-20）：已掛 `GLOBAL`（任何 `契約違規` 行即 FAIL）＋`LIVE/F`＋`REVIEW/R`＋
   `DATA/D`＋`CAPTURE/C`＋`HARDWARE/H`＋`SETTINGS/S`＋`MURA/M`＋`PARAM/P`，registry 無待接 domain。
   `FULL` 只表示每個已登記 domain 都有 validator；單一 session 未操作到的 flow 仍必須回

@@ -105,7 +105,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             else
                 _lastColumnRangeState = stateKey;
 
-            FlowTrace.Log(
+            FlowTrace.Dvt(
                 $"DT chartRange {grabId} chart={(isRow ? "row" : "col")} {state}");
         }
 
@@ -301,14 +301,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 if (preparedView.HasValue)
                 {
                     ImageViewRange range = preparedView.Value;
-                    FlowTrace.Log(
+                    FlowTrace.Dvt(
                         $"DT prefit {request.GrabId} content={range.ContentWidth}x{range.ContentHeight} " +
                         $"viewX={range.LeftMm:F0}~{range.RightMm:F0} " +
                         $"viewY={range.TopMm:F0}~{range.BottomMm:F0} source=main-geometry");
                 }
                 else
                 {
-                    FlowTrace.Log($"DT prefit unavailable {request.GrabId}");
+                    FlowTrace.Dvt($"DT prefit unavailable {request.GrabId}");
                 }
                 Func<int, bool, double, double> fitViewRange = view != null && view.Length >= 4
                     ? (Func<int, bool, double, double>)((_, isLeft, __) =>

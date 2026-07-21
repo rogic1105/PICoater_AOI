@@ -19,7 +19,6 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public string LogsPath        => Path.Combine(AniloxRootPath, "Logs");
 
         [DisplayName("本地預留磁碟空間")] public int LocalMinFreeGB { get; set; } = InspectionDefaults.LocalMinFreeGB;
-        [DisplayName("Log 保留時間 (小時)")] public int LogRetentionHours { get; set; } = InspectionDefaults.LogRetentionHours;
         [DisplayName("遠端路徑")]         public string RemotePath       { get; set; } = InspectionDefaults.RemotePath;
         [DisplayName("遠端 Config 路徑")] public string RemoteConfigPath { get; set; } = InspectionDefaults.RemoteConfigPath;
 
@@ -27,7 +26,6 @@ namespace AniloxRoll.Monitor.Core.Data
         {
             if (string.IsNullOrWhiteSpace(AniloxRootPath)) AniloxRootPath = InspectionDefaults.AniloxRootPath;
             if (LocalMinFreeGB < 1) LocalMinFreeGB = InspectionDefaults.LocalMinFreeGB;
-            if (LogRetentionHours < 1) LogRetentionHours = InspectionDefaults.LogRetentionHours;
             if (RemotePath == null) RemotePath = InspectionDefaults.RemotePath;
             if (RemoteConfigPath == null) RemoteConfigPath = InspectionDefaults.RemoteConfigPath;
         }

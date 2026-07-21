@@ -19,6 +19,9 @@ FLOW_RE = re.compile(
 GRABID_RE = re.compile(r"\b(\d{6}-\d{6})\b")
 UI_STALL_RE = re.compile(r"^\[UiStall\]\s+(?P<ms>\d+)ms(?:（(?P<gc>.*)）)?")
 UI_PING_RE = re.compile(r"^\[UiPing\]\s+(?P<ms>\d+)ms")
+LOG_MODE_RE = re.compile(
+    r"^log mode=(Operational|FlowVerification|FullDiagnostic)$"
+)
 
 
 def configure_stdout() -> None:
@@ -74,6 +77,45 @@ class FlowSession:
     @property
     def label(self) -> str:
         return self.path.stem
+
+    @property
+    def recording_mode(self) -> str:
+        modes = []
+        for line in self.lines:
+            match = LOG_MODE_RE.match(line.message)
+            if match and (not modes or modes[-1] != match.group(1)):
+                modes.append(match.group(1))
+        if modes:
+            return " -> ".join(modes)
+        # 舊版沒有分級，等同所有 DVT 探針皆開啟。
+        return "LegacyAll"
+
+    @property
+    def dvt_enabled(self) -> bool:
+        if self.recording_mode == "LegacyAll":
+            return True
+        return any(
+            LOG_MODE_RE.match(line.message)
+            and LOG_MODE_RE.match(line.message).group(1) != "Operational"
+            for line in self.lines
+        )
+
+    def dvt_only(self) -> "FlowSession":
+        """Return lines recorded while DVT-or-higher mode was active.
+
+        A legacy trace had no mode marker and all of its probes were unconditional.
+        """
+        if self.recording_mode == "LegacyAll":
+            return self
+        enabled = False
+        selected = []
+        for line in self.lines:
+            match = LOG_MODE_RE.match(line.message)
+            if match:
+                enabled = match.group(1) != "Operational"
+            if enabled:
+                selected.append(line)
+        return FlowSession(self.path, selected)
 
 
 @dataclass(frozen=True)

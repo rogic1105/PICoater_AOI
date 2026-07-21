@@ -253,7 +253,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _waterfallView.ViewRangeMmChanged += OnImageViewRange;
             _waterfallView.ContentPresented += OnMainContentPresented;
             _waterfallView.CenterCamChanged += OnWaterfallCenterCam;   // 主畫面 pan → 縮圖橘框跟隨（反向連動）
-            _waterfallView.FlowLog = s => Flow("WF " + s);             // 互動 intent（wheel 等）
+            _waterfallView.FlowLog = s => FlowTrace.Display("WF", s);  // 互動 intent與診斷快照分級
 
             // 顯示鐵則1：瀑布模式的 7 台縮圖也一律即時影像（CPU ThumbStrip，與即時模式同源；點選/高亮一致）。
             _waterfallThumbs = new ThumbStrip(_cameraPanels);
@@ -351,7 +351,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 _selectedMainCameraId = camId;
                 Flow($"centerCam → cam{camId}（IC）");   // F6：拖主畫面→橘框跟隨（每跨一台一行,可驗）
             };
-            _imageDisplay.FlowLog = s => Flow("IC " + s);   // 互動 intent + autoFit 原因（誰在動視野）
+            _imageDisplay.FlowLog = s => FlowTrace.Display("IC", s);   // 互動 intent與診斷快照分級
             _imageDisplay.ViewRangeMmChanged += OnImageViewRange;
             _imageDisplay.ContentPresented += OnMainContentPresented;
             _imageDisplay.SetSelected(_selectedMainCameraId);

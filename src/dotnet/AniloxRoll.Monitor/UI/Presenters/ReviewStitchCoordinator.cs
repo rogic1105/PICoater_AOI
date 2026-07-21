@@ -132,7 +132,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 }
                 CachePreparedPlan(root, grabId, enableProcess, ridgeDir, layoutPlan);
                 PublishPreparedLayout(grabId, layoutPlan);
-                Core.Services.FlowTrace.Log(
+                Core.Services.FlowTrace.Dvt(
                     $"RV layout intent {grabId} images={layoutPlan.TotalImageCount} " +
                     $"cams={layoutPlan.GroupedPaths.Count} align={layoutPlan.Alignment.Mode} " +
                     "before=curves");

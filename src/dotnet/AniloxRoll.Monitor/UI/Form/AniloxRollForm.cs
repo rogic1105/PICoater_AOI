@@ -413,10 +413,11 @@ namespace AniloxRoll.Monitor.Forms
             foreach (SettingsStoreIssue issue in SettingsStoreHelper.DrainIssues())
                 HandleSettingsStoreIssue(issue);
             SettingsStoreHelper.IssueRaised += HandleSettingsStoreIssue;
-            // FSM Action Logger（runtime flag，預設 Off 零 overhead）
+            FlowTrace.Configure(_settings.LogMode);
+            // 原始 UI Action Logger 只在「完整診斷」啟用；固定訂閱，模式切換時不重複掛事件。
             UiActionLogger.Init(_settings);
-            UiActionLogger.Enabled = _settings.DebugUiActionLog;
-            if (UiActionLogger.Enabled) _settingsHub.Changed += UiActionLogger.OnSettingChanged;
+            UiActionLogger.Enabled = FlowTrace.DiagnosticEnabled;
+            _settingsHub.Changed += UiActionLogger.OnSettingChanged;
             EnsureAniloxFolderStructure();
             CameraFrameSaver.InitResourceLog(_settings?.Storage?.LogsPath);
             CameraFrameSaver.GetUiStateCallback = () =>
@@ -541,7 +542,7 @@ namespace AniloxRoll.Monitor.Forms
                 _outputHealthService?.Resolve("InspectionCsvWriteFailure");
             _logRetentionService = new LogRetentionService(
                 () => _settings?.Storage?.LogsPath ?? string.Empty,
-                () => _settings?.Storage?.LogRetentionHours ?? InspectionDefaults.LogRetentionHours);
+                () => _settings?.Logging?.RetentionHours ?? InspectionDefaults.LogRetentionHours);
             _logRetentionService.CleanupFailed += error =>
                 _outputHealthService?.Report(
                     "LogCleanupFailure",
@@ -802,7 +803,7 @@ namespace AniloxRoll.Monitor.Forms
                     ImageViewRange range = computed.Value;
 
                     var viewport = camReviewMain.ClientSize;
-                    FlowTrace.Log($"RV prefit {grabId} content={range.ContentWidth}x{range.ContentHeight} " +
+                    FlowTrace.Dvt($"RV prefit {grabId} content={range.ContentWidth}x{range.ContentHeight} " +
                         $"viewport={viewport.Width}x{viewport.Height} " +
                         $"viewX={range.LeftMm:F0}~{range.RightMm:F0} " +
                         $"viewY={range.TopMm:F0}~{range.BottomMm:F0}");
@@ -1238,6 +1239,9 @@ namespace AniloxRoll.Monitor.Forms
                 case SettingFeatureOwner.Storage:
                     HandleStorageSettingsChanged(name);
                     break;
+                case SettingFeatureOwner.Logging:
+                    HandleLoggingSettingsChanged(name);
+                    break;
                 case SettingFeatureOwner.Enhance:
                     await HandleEnhanceSettingsChanged(name);
                     break;
@@ -1259,6 +1263,19 @@ namespace AniloxRoll.Monitor.Forms
             _appMode.Save();
             MessageBox.Show("機台角色已儲存，重新開啟程式後生效。",
                 "機台設定", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private void HandleLoggingSettingsChanged(string name)
+        {
+            if (name == nameof(InspectionSettings.LogMode))
+            {
+                FlowTrace.Configure(_settings.LogMode);
+                UiActionLogger.Enabled = FlowTrace.DiagnosticEnabled;
+                return;
+            }
+
+            if (name == nameof(InspectionSettings.LogRetentionHours))
+                Task.Run(() => _logRetentionService?.RunCleanup());
         }
 
         // OPS/Start setting 名稱清單（用來判斷是不是「機台佈局」群組的 setting）

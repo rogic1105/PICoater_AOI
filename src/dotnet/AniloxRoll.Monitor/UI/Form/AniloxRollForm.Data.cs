@@ -99,7 +99,7 @@ namespace AniloxRoll.Monitor.Forms
         private void LogReviewPrefitApplied()
         {
             if (_reviewPrefitGeneration <= 0) return;
-            FlowTrace.Log(
+            FlowTrace.Dvt(
                 $"RV prefitApply {_reviewPrefitGrabId} after={PrefitElapsedMs()}ms " +
                 $"visible={tabMain.SelectedTab == tabPageReview} " +
                 $"col={DescribeReviewAxis(chartReviewColumn, isRow: false)} " +
@@ -122,7 +122,7 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             var chart = isRow ? chartReviewRow : chartReviewColumn;
-            FlowTrace.Log(
+            FlowTrace.Dvt(
                 $"RV prefitPaint {_reviewPrefitGrabId} chart={(isRow ? "row" : "col")} " +
                 $"after={PrefitElapsedMs()}ms {DescribeReviewAxis(chart, isRow)}");
         }
@@ -132,7 +132,7 @@ namespace AniloxRoll.Monitor.Forms
             string state = $"viewX={leftMm:F2}~{rightMm:F2} viewY={topMm:F2}~{bottomMm:F2}";
             if (string.Equals(_reviewLastMainRangeState, state, StringComparison.Ordinal)) return;
             _reviewLastMainRangeState = state;
-            FlowTrace.Log($"RV mainRange {CurrentReviewRangeGrabId()} {state}");
+            FlowTrace.Dvt($"RV mainRange {CurrentReviewRangeGrabId()} {state}");
         }
 
         private void LogReviewChartPaint(bool isRow)
@@ -147,7 +147,7 @@ namespace AniloxRoll.Monitor.Forms
                 _reviewLastRowRangeState = state;
             else
                 _reviewLastColumnRangeState = state;
-            FlowTrace.Log(
+            FlowTrace.Dvt(
                 $"RV chartRange {CurrentReviewRangeGrabId()} chart={(isRow ? "row" : "col")} {state}");
         }
 

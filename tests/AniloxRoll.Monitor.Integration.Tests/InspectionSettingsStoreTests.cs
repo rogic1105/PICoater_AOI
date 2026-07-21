@@ -91,6 +91,32 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void SaveAndLoad_PersistsLogRecordingMode()
+        {
+            var settings = new InspectionSettings
+            {
+                LogMode = LogRecordingMode.FlowVerification
+            };
+
+            InspectionSettingsStore.Save(settings);
+            var loaded = InspectionSettingsStore.Load();
+
+            Assert.That(loaded.LogMode, Is.EqualTo(LogRecordingMode.FlowVerification));
+        }
+
+        [Test]
+        public void Load_LegacyDebugUiActionLog_MapsToFullDiagnostic()
+        {
+            File.WriteAllText(_configPath,
+                "{\"Storage\":{\"LogRetentionHours\":72},\"DebugUiActionLog\":true}");
+
+            var loaded = InspectionSettingsStore.Load();
+
+            Assert.That(loaded.LogMode, Is.EqualTo(LogRecordingMode.FullDiagnostic));
+            Assert.That(loaded.LogRetentionHours, Is.EqualTo(72));
+        }
+
+        [Test]
         public void Load_WhenConfigIsCorrupt_RebuildsDefaultsAndRecordsIssue()
         {
             File.WriteAllText(_configPath, "{ invalid json");

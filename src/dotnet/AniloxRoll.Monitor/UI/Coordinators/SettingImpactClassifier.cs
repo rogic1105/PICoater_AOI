@@ -14,6 +14,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
         Light,
         Io,
         Storage,
+        Logging,
         Enhance,
         MuraPause,
         Background
@@ -139,7 +140,9 @@ namespace AniloxRoll.Monitor.UI.Coordinators
             Add(routes, nameof(InspectionSettings.SaveOriginalBmp), SettingFeatureOwner.None,
                 SettingImpact.CapturePolicy);
             AddMany(routes, SettingFeatureOwner.Storage,
-                nameof(InspectionSettings.LocalMinFreeGB),
+                nameof(InspectionSettings.LocalMinFreeGB));
+            AddMany(routes, SettingFeatureOwner.Logging,
+                nameof(InspectionSettings.LogMode),
                 nameof(InspectionSettings.LogRetentionHours));
 
             AddMany(routes, SettingFeatureOwner.Light,

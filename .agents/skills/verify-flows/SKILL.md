@@ -24,9 +24,17 @@ Use the DVT contract to check both sides of every affected behavior:
 
 For coordinate or mirror changes, also use the `row-chart-coordinates` skill.
 
-## Optional raw UI action log
+## Log recording modes
 
-`InspectionSettings.DebugUiActionLog=true` enables `UiActionLogger` and writes JSONL under
-`D:\Anilox\Logs\fsm\`. Treat it as raw source/setting transition evidence only. The retired
-state-catalog/viewer is not a contract; current expected behavior lives in the DVT reference and
-is checked from `trace-*.log`.
+PropertyGrid `5. Log 設定（記錄／除錯） > 記錄範圍` is the runtime SSoT:
+
+- `日常運行（預設，檔案較小）`: operations, connections, errors, persistence, capture lifecycle,
+  and anomaly-triggered performance evidence.
+- `流程驗證（測試／驗收）`: adds coordinate/direction snapshots, prefit, main/chart ranges, and
+  other evidence required for full DVT checking.
+- `完整診斷（除錯，檔案較大）`: adds per-second paint/stat evidence and raw `UiActionLogger`
+  JSONL under `D:\Anilox\Logs\fsm\`.
+
+`check_all_flows.py` reads the `log mode=...` session marker. Rules that require DVT-only evidence
+must return `NOT COVERED`, not `FAIL`, when a session used the operational mode. Legacy traces have
+no marker and are treated as fully instrumented because all probes were unconditional then.

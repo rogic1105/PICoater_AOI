@@ -12,8 +12,9 @@ namespace AniloxRoll.Monitor.Core.Data
         private const string CategoryInspection = "2. 檢測設定";
         private const string CategoryCharts = "3. 圖表設定";
         private const string CategoryStorage = "4. 儲存設定";
-        private const string CategoryLight = "5. 光源設定";
-        private const string CategoryIo = "6. IO設定";
+        private const string CategoryLogging = "5. Log 設定（記錄／除錯）";
+        private const string CategoryLight = "6. 光源設定";
+        private const string CategoryIo = "7. IO設定";
 
         // 子物件隱藏於 PropertyGrid，屬性直接平鋪於各 Category（兩層顯示）
         [Browsable(false)] public MachineLayoutConfig MachineLayout { get; set; } = new MachineLayoutConfig();
@@ -22,6 +23,7 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public ChartSettings       Chart         { get; set; } = new ChartSettings();
         [Browsable(false)] public ImageViewSettings   ImageView     { get; set; } = new ImageViewSettings();
         [Browsable(false)] public StorageSettings     Storage       { get; set; } = new StorageSettings();
+        [Browsable(false)] public LoggingSettings     Logging       { get; set; } = new LoggingSettings();
         [Browsable(false)] public CameraParamSettings CameraParam   { get; set; } = new CameraParamSettings();
         [Browsable(false)] public LightSettings      Light         { get; set; } = new LightSettings();
 
@@ -33,6 +35,7 @@ namespace AniloxRoll.Monitor.Core.Data
             if (Chart == null) Chart = new ChartSettings();
             if (ImageView == null) ImageView = new ImageViewSettings();
             if (Storage == null) Storage = new StorageSettings();
+            if (Logging == null) Logging = new LoggingSettings();
             if (CameraParam == null) CameraParam = new CameraParamSettings();
             if (Light == null) Light = new LightSettings();
 
@@ -42,6 +45,7 @@ namespace AniloxRoll.Monitor.Core.Data
             Chart.Validate();
             ImageView.Validate();
             Storage.Validate();
+            Logging.Validate();
             CameraParam.Validate();
             Light.Validate();
         }
@@ -198,10 +202,17 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category(CategoryStorage)][DisplayName("遠端路徑")][PropertyOrder(3)]      public string RemotePath           { get => Storage.RemotePath;           set => Storage.RemotePath           = value; }
         [Category(CategoryStorage)][DisplayName("存檔")][PropertyOrder(4)][TypeConverter(typeof(BoolYesNoConverter))]          public bool   EnableAutoCapture    { get => Storage.EnableAutoCapture;    set => Storage.EnableAutoCapture    = value; }
         [Category(CategoryStorage)][DisplayName("存原圖")][PropertyOrder(5)][TypeConverter(typeof(BoolYesNoConverter))]        public bool   SaveOriginalBmp      { get => Storage.SaveOriginalBmp;      set => Storage.SaveOriginalBmp      = value; }
-        [Category(CategoryStorage)][DisplayName("Log 保留時間 (小時)")][PropertyOrder(6)][TypeConverter(typeof(LeftAlignNumericConverter))]
-        public int LogRetentionHours { get => Storage.LogRetentionHours; set => Storage.LogRetentionHours = value; }
         // 開發者設定：PropertyGrid 不顯示，部署時直接改 JSON
         [Browsable(false)] public string RemoteConfigPath { get => Storage.RemoteConfigPath; set => Storage.RemoteConfigPath = value; }
+
+        // ===== 5. Log 設定 =====
+        [Category(CategoryLogging)][DisplayName("記錄範圍")][PropertyOrder(1)]
+        [Description("日常運行供產線使用；流程驗證增加座標與顯示流程探針；完整診斷再記錄原始 UI 動作與高密度統計。")]
+        public LogRecordingMode LogMode { get => Logging.RecordingMode; set => Logging.RecordingMode = value; }
+
+        [Category(CategoryLogging)][DisplayName("保留時間 (小時)")][PropertyOrder(2)][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Description("超過此時間的歷史 Log 會由清理服務移除。預設 168 小時（7 天）。")]
+        public int LogRetentionHours { get => Logging.RetentionHours; set => Logging.RetentionHours = value; }
 
         // DcfPath 固定為 Config\Radient_Config.dcf（跟 exe 走，build 自動複製）；PG 隱藏不讓使用者改
         [Browsable(false)] public string DcfPath { get => CameraParam.DcfPath; set => CameraParam.DcfPath = value; }
@@ -225,9 +236,5 @@ namespace AniloxRoll.Monitor.Core.Data
         // Mura 檢出（DO1 MURA_DET）：runtime toggle，不持久化 — 每次啟動為 false（避免漏檢）
         [Category(CategoryIo)][DisplayName("Mura檢出")][PropertyOrder(5)][TypeConverter(typeof(BoolYesNoConverter))]  public bool   MuraDetectPaused { get; set; } = false;
 
-        // ===== 8. 開發者（PG 隱藏，編輯 inspection-settings.json 啟用） =====
-        // 原始 UI action/state JSONL 診斷開關；DVT 契約與判讀在 $verify-flows。
-        // 預設 false（production 零 overhead）；改 true 後重啟程式生效，log 寫 D:\Anilox\Logs\ui-actions-YYYYMMDD.jsonl。
-        [Browsable(false)] public bool DebugUiActionLog { get; set; } = false;
     }
 }

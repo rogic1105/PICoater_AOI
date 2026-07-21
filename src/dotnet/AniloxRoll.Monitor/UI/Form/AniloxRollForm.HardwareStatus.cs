@@ -561,12 +561,6 @@ namespace AniloxRoll.Monitor.Forms
 
         private void HandleStorageSettingsChanged(string changedPropertyName)
         {
-            if (changedPropertyName == nameof(InspectionSettings.LogRetentionHours))
-            {
-                Task.Run(() => _logRetentionService?.RunCleanup());
-                return;
-            }
-
             if (changedPropertyName != nameof(InspectionSettings.LocalMinFreeGB)) return;
 
             long totalBytes = _localCapacityTotalBytes;

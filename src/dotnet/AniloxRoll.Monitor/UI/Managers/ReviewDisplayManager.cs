@@ -47,7 +47,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _view.EnableLod(GrayResizeCpu.Resize);     // 回顧白賺 LOD；CPU provider＝無 GPU 機也跑
             _view.ViewRangeMmChanged += (l, r, tp, bt) => ViewRangeMmChanged?.Invoke(l, r, tp, bt);
             // 互動流跡（RV 前綴）：autoFit 原因/lodRebind/clearFrame/wheelZoom 與監控同一套 sdk 掛勾
-            _view.FlowLog = s => Core.Services.FlowTrace.Log("RV " + s);
+            _view.FlowLog = s => Core.Services.FlowTrace.Display("RV", s);
             Core.Services.FlowTrace.Log($"RV EnsureImageDisplay create（thumbs={_thumbHosts.Length}）");
         }
 

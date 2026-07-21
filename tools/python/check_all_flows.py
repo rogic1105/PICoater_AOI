@@ -47,7 +47,17 @@ def main() -> int:
         for validator in VALIDATORS:
             session_report.extend(validator.validate(session).results)
 
-        print(f"\n=== {session.label} | [Flow] {len(session.lines)} 行 ===")
+        print(
+            f"\n=== {session.label} | [Flow] {len(session.lines)} 行 "
+            f"| 記錄範圍={session.recording_mode} ==="
+        )
+        if not session.dvt_enabled:
+            session_report.add(
+                "CONTRACT",
+                "LOG-MODE",
+                CheckStatus.NOT_COVERED,
+                "本 session 使用日常運行記錄；座標／預排版等 DVT 規則不做完整判定",
+            )
         session_report.dump()
         all_results.extend(session_report.results)
         if session_report.has_failures:

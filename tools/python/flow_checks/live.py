@@ -530,6 +530,13 @@ class LiveFlowValidator:
         )
 
     def _check_drag_first_publish(self, session: FlowSession, report: CheckReport) -> None:
+        if not session.dvt_enabled:
+            report.add(
+                self.domain, "F6.first-view", CheckStatus.NOT_COVERED,
+                "記錄範圍為日常運行；請切到流程驗證後重跑",
+            )
+            return
+        session = session.dvt_only()
         starts = []
         failures = []
         active = {"IC": None, "WF": None}

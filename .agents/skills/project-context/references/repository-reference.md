@@ -214,11 +214,17 @@ against current code with `rg` before editing because lookup data can become sta
 | Logs 目錄 | （computed）| `{AniloxRoot}\Logs` | Resource Log；不顯示 |
 | Dcf 檔 | （跟 exe 走）| `{ExeDir}\Config\Radient_Config.dcf` | MIL DCF；repo 唯一來源 `sdk/MIL/Config/Radient_Config.dcf`，app/sample build 連結複製，PG 隱藏 |
 | 預留空間 (GB) | `LocalMinFreeGB` | 100 | 磁碟可用空間低於此值時刪除最舊完整一天的全部產出（含月份 CSV）；輸入超過磁碟容量時自動調整 |
-| Log 保留時間 (小時) | `LogRetentionHours` | 168 | 只清理 Log catalog 內的診斷檔；目前 process 的 log 與未知檔案保留 |
 | 遠端路徑 | `RemotePath` | \\192.168.10.20\Anilox\Captures | 遠端複製目標路徑（空=不複製）。單一 SMB share `Anilox` 子目錄 |
 | 遠端設定路徑 | `RemoteConfigPath` | \\192.168.10.20\Anilox\Config | [Browsable(false)] 開發者設定；cleanup-request.flag 寫入位置 |
 
-### 5. 光源設定
+### 5. Log 設定（記錄／除錯）
+
+| 顯示名稱 | 屬性 | 預設值 | 說明 |
+|---------|------|--------|------|
+| 記錄範圍 | `LogMode` | 日常運行 | 日常／流程驗證／完整診斷三級；用途直接顯示在下拉名稱中 |
+| 保留時間 (小時) | `LogRetentionHours` | 168 | 只清理 Log catalog 內的診斷檔；目前 process 的 log 與未知檔案保留 |
+
+### 6. 光源設定
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
@@ -228,7 +234,7 @@ against current code with `rg` before editing because lookup data can become sta
 | 亮度 | `LightBrightness` | 255 | 亮度（0~255） |
 | 暖機延遲 (ms) | `LightWarmupMs` | 300 | 開燈後等待光源穩定的延遲；Grab 啟動前插入此延遲 |
 
-### 6. IO 設定
+### 7. IO 設定
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|

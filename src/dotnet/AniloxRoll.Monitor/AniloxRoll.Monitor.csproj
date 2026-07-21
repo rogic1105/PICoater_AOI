@@ -100,6 +100,7 @@
     <Compile Include="Settings\Models\MuraChartConfig.cs" />
     <Compile Include="Settings\Models\AppModeConfig.cs" />
     <Compile Include="Settings\Models\StorageSettings.cs" />
+    <Compile Include="Settings\Models\LoggingSettings.cs" />
     <Compile Include="Settings\Models\CameraParamSettings.cs" />
     <Compile Include="Settings\Models\LightSettings.cs" />
     <Compile Include="Settings\Models\Defaults\InspectionDefaults.cs" />

@@ -51,6 +51,7 @@ namespace AniloxRoll.Monitor.Core.Data
             var C = s.Chart         ?? new ChartSettings();
             var V = s.ImageView     ?? new ImageViewSettings();
             var T = s.Storage       ?? new StorageSettings();
+            var G = s.Logging       ?? new LoggingSettings();
 
             var sb = new StringBuilder();
             sb.AppendLine("{");
@@ -116,7 +117,6 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"AniloxRootPath\": \"{SettingsStoreHelper.EscapeJson(T.AniloxRootPath)}\",");
             sb.AppendLine($"    \"SaveOriginalBmp\": {(T.SaveOriginalBmp ? "true" : "false")},");
             sb.AppendLine($"    \"LocalMinFreeGB\": {T.LocalMinFreeGB},");
-            sb.AppendLine($"    \"LogRetentionHours\": {T.LogRetentionHours},");
             sb.AppendLine($"    \"RemotePath\": \"{SettingsStoreHelper.EscapeJson(T.RemotePath)}\",");
             sb.AppendLine($"    \"RemoteConfigPath\": \"{SettingsStoreHelper.EscapeJson(T.RemoteConfigPath)}\"");
             sb.AppendLine("  },");
@@ -145,8 +145,11 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"WarmupMs\": {LT.WarmupMs}");
             sb.AppendLine("  },");
 
-            // Debug flags（PG 隱藏，編輯 json 啟用）
-            sb.AppendLine($"  \"DebugUiActionLog\": {(s.DebugUiActionLog ? "true" : "false")}");
+            // Logging
+            sb.AppendLine("  \"Logging\": {");
+            sb.AppendLine($"    \"Mode\": \"{G.RecordingMode}\",");
+            sb.AppendLine($"    \"RetentionHours\": {G.RetentionHours}");
+            sb.AppendLine("  }");
 
             sb.Append("}");
             return sb.ToString();
@@ -166,13 +169,13 @@ namespace AniloxRoll.Monitor.Core.Data
                 Chart         = ParseChart(json),
                 ImageView     = ParseImageView(json),
                 Storage       = ParseStorage(json),
+                Logging       = ParseLogging(json),
                 CameraParam   = ParseCameraParam(json),
                 Light         = ParseLight(json),
                 IoModel      = ParseIoModel(json),
                 IoEnabled    = ParseIoEnabled(json),
                 IoIp         = ParseIoIp(json),
                 IoPort       = ParseIoPort(json),
-                DebugUiActionLog = SettingsStoreHelper.GetBool(json, "DebugUiActionLog", false),
             };
         }
 
@@ -308,9 +311,31 @@ namespace AniloxRoll.Monitor.Core.Data
                     ? SettingsStoreHelper.GetBool(obj, "SaveOriginalBmp", InspectionDefaults.SaveOriginalBmp)
                     : !SettingsStoreHelper.GetBool(obj, "UseCompressedCapture", true),
                 LocalMinFreeGB       = SettingsStoreHelper.GetInt   (obj, "LocalMinFreeGB",   InspectionDefaults.LocalMinFreeGB),
-                LogRetentionHours    = SettingsStoreHelper.GetInt   (obj, "LogRetentionHours", InspectionDefaults.LogRetentionHours),
                 RemotePath           = SettingsStoreHelper.GetString(obj, "RemotePath",       InspectionDefaults.RemotePath),
                 RemoteConfigPath     = SettingsStoreHelper.GetString(obj, "RemoteConfigPath", InspectionDefaults.RemoteConfigPath),
+            };
+        }
+
+        private static LoggingSettings ParseLogging(string json)
+        {
+            string obj = SettingsStoreHelper.ExtractObject(json, "Logging");
+            string modeText = SettingsStoreHelper.GetString(obj, "Mode", "");
+            LogRecordingMode mode;
+            if (!System.Enum.TryParse(modeText, true, out mode))
+            {
+                // 舊版只有隱藏的 DebugUiActionLog；true 對應新版完整診斷。
+                mode = SettingsStoreHelper.GetBool(json, "DebugUiActionLog", false)
+                    ? LogRecordingMode.FullDiagnostic
+                    : InspectionDefaults.DefaultLogRecordingMode;
+            }
+
+            string storageObj = SettingsStoreHelper.ExtractObject(json, "Storage");
+            int legacyRetention = SettingsStoreHelper.GetInt(
+                storageObj, "LogRetentionHours", InspectionDefaults.LogRetentionHours);
+            return new LoggingSettings
+            {
+                RecordingMode = mode,
+                RetentionHours = SettingsStoreHelper.GetInt(obj, "RetentionHours", legacyRetention),
             };
         }
 

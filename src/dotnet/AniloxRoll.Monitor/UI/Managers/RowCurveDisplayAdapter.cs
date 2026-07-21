@@ -69,7 +69,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                     occ = $" dataPhys {i0 * p:F0}~{i1 * p:F0}mm dataChart {_chart.LastDataOccLo:F0}~{_chart.LastDataOccHi:F0}";
                 }
             }
-            Core.Services.FlowTrace.Log(
+            Core.Services.FlowTrace.Dvt(
                 $"{FlowName} {kind} dir={dir} n={n} total={_chart.TotalMm:F0}mm view {topMm:F0}~{botMm:F0}{occ}");
         }
 

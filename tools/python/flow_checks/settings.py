@@ -199,6 +199,32 @@ class SettingsFlowValidator:
             )
             return
 
+        if not session.dvt_enabled:
+            report.add(
+                self.domain, "S3.direction", CheckStatus.NOT_COVERED,
+                "記錄範圍為日常運行；請切到流程驗證後重跑",
+            )
+            return
+
+        session = session.dvt_only()
+        settings = [
+            (index, line, self._setting_pattern.match(line.message))
+            for index, line in enumerate(session.lines)
+            if line.message.startswith(("ui:設定[", "set:["))
+            and not line.message.startswith("set:[顯示基線]")
+        ]
+        changes = [
+            (index, line, match)
+            for index, line, match in settings
+            if match and match.group("name") == "hee_VerticalDirection"
+        ]
+        if not changes:
+            report.add(
+                self.domain, "S3.direction", CheckStatus.NOT_COVERED,
+                "流程驗證模式期間未切換上下方向",
+            )
+            return
+
         failures = []
         for sequence, (index, line, match) in enumerate(changes):
             expected = match.group("value") or match.group("arrow")
