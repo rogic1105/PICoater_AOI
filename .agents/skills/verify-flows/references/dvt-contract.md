@@ -1572,7 +1572,7 @@ cbDataIdStart|End 手動變更
    ├ generation++（不取消已開始的 Curve 樣本；資料夾／模式 teardown 才取消 token）
    ├ 33ms repeating throttle → RangeListPreviewTimer_Tick
    │  └ ApplyRangeListPreview（只在完整 detail index 簽章有效時）
-   │     └ 依 `_grabIdInfos` 切片 → ApplyFailFilter／GrabDetailListBinder.SetItems
+   │     └ 依 navigator 的範圍序號 SSoT 切片 → ApplyFailFilter／GrabDetailListBinder.SetItems
    │        ＋ ComputeStatsFromDetails／InspectionStatsPresenter.Update → DT range list preview
    ├ 80ms repeating throttle → RangePreviewTimer_Tick（同時最多一個 Curve 工作）
    │  └ UpdateRangePreviewAsync@MuraProfileChartPresenter.cs
@@ -1582,7 +1582,7 @@ cbDataIdStart|End 手動變更
    │    → 回 UI 執行緒；token 有效且 generation 大於前次上畫才 UpdateOverviewChart → DT range preview apply
    └ 重壓 150ms settle timer → DT range settle → RefreshStats(updateRangeCurve:false)（最終對帳）
     ├ EnsureSingleGrabDetailIndex（資料夾／閾值未變時沿用完整 GrabDetail 衍生索引）
-    ├ 依 `_grabIdInfos` 選取範圍切出 detail 子集 → ApplyFailFilter → GrabDetailListBinder.SetItems
+    ├ 依 navigator 的範圍序號 SSoT 切出 detail 子集 → ApplyFailFilter → GrabDetailListBinder.SetItems
     ├ ComputeStatsFromDetails（同一 detail 子集彙總 7 台色卡；不得再掃第二次 CSV）
     └ DT list reload …
 
@@ -1609,8 +1609,24 @@ T1: ui:【良率導航-年|月|日】→ {值}      ← 良率三圖跟著換週
 T1: ui:【良率圖-年|月|日】→ Y軸={Auto|Fixed} setting={Auto|Fixed} override={Auto|Fixed|off}
     ← 點圖表本體；暫時態不回寫 Chart.ScaleMode。有效模式＝該圖 override ?? setting；資料刷新與設定變更
       都從 YieldPeriodChartPresenter.ApplyScale 單點套用，禁止以 chart.Tag 另存狀態。
-T1: ui:【篩選異常】→ 只顯示異常|顯示全部
+T1: ui:【篩選異常】→ 只顯示異常|顯示全部 dataOptions=N rangeOptions=N selected={序號|empty} range={最舊}~{最新}|empty
 ```
+
+**code-flow（篩選異常）**
+```
+BtnShowFail.Click → BtnShowFail_Click@DataStatisticsPresenter.cs
+ ├ EnsureSingleGrabDetailIndex（Pass/Fail 依目前欄／列門檻重算）
+ ├ SelectFailRangeInfos（相機任一 Fail 或列 Fail）→ `_rangeGrabIdInfos`
+ ├ RefreshFilteredGrabIdCombos@DataDateGrabIdNavigator.cs
+ │  ├ 同一份 `_rangeGrabIdInfos` → cbDataId、cbDataIdStart、cbDataIdEnd
+ │  ├ cbDataId 優先保留切換前序號；被篩掉時依全量清單位置選距離最近者
+ │  └ cbReviewId 維持全量；跨頁同步依 GrabId 查找，不共用 filtered index
+ ├ 單序號模式：cbDataId 當前 GrabId → 統計、欄／列 Curve
+ └ 範圍模式：同一份 `_rangeGrabIdInfos` → 明細、統計、範圍 Curve
+```
+不變量：異常模式的 cbDataId 與起始／結束下拉只含異常序號，三者數量相同；單序號與範圍運算
+不得以 filtered ComboBox index 直接索引全量 `_grabIdInfos`；切換篩選不得無條件跳到第一筆，且
+listViewGrabDetail 高亮必須與 cbDataId 相同；再按一次「顯示全部」才恢復全量報表序號。
 
 **code-flow（Y 軸暫時切換）**
 ```

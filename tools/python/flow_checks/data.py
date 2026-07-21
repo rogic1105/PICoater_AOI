@@ -23,6 +23,7 @@ class DataFlowValidator:
             "ui:【序號範圍-",
             "ui:【期間-",
             "ui:【良率",
+            "ui:【篩選異常】",
             "ui:【讀取資料】鈕（Data）",
         )
         return any(line.message.startswith(prefixes) for line in session.lines)
@@ -47,6 +48,7 @@ class DataFlowValidator:
         self._check_range_list_preview(session, report)
         self._check_range_preview(session, report)
         self._check_y_scale_toggle(session, report)
+        self._check_fail_filter(session, report)
         self._check_ui_stall(session, report)
         return report
 
@@ -953,5 +955,54 @@ class DataFlowValidator:
             "D5.y-scale",
             CheckStatus.PASS if not invalid else CheckStatus.FAIL,
             f"點擊={len(lines)} 狀態矛盾={len(invalid)}"
+            + (f"；首筆 {invalid[0]}" if invalid else ""),
+        )
+
+    def _check_fail_filter(self, session: FlowSession, report: CheckReport) -> None:
+        pattern = re.compile(
+            r"^ui:【篩選異常】→ (只顯示異常|顯示全部) "
+            r"dataOptions=(\d+) rangeOptions=(\d+) "
+            r"selected=(empty|\d{6}-\d{6}) "
+            r"range=(empty|\d{6}-\d{6}~\d{6}-\d{6})$"
+        )
+        lines = [
+            line for line in session.lines
+            if line.message.startswith("ui:【篩選異常】")
+        ]
+        if not lines:
+            report.add(self.domain, "D5.fail-filter", CheckStatus.NOT_COVERED, "未切換異常篩選")
+            return
+
+        invalid = []
+        previous_mode = None
+        for line in lines:
+            match = pattern.match(line.message)
+            if not match:
+                invalid.append(f"{line.timestamp} 格式錯誤或缺少範圍證據")
+                continue
+            mode, data_count_text, range_count_text, selected, range_text = match.groups()
+            data_count = int(data_count_text)
+            range_count = int(range_count_text)
+            if data_count != range_count:
+                invalid.append(
+                    f"{line.timestamp} dataOptions={data_count} rangeOptions={range_count}"
+                )
+            if (range_count == 0) != (range_text == "empty"):
+                invalid.append(
+                    f"{line.timestamp} rangeOptions={range_count} range={range_text}"
+                )
+            if (data_count == 0) != (selected == "empty"):
+                invalid.append(
+                    f"{line.timestamp} dataOptions={data_count} selected={selected}"
+                )
+            if previous_mode == mode:
+                invalid.append(f"{line.timestamp} toggle 未換狀態：{mode}")
+            previous_mode = mode
+
+        report.add(
+            self.domain,
+            "D5.fail-filter",
+            CheckStatus.PASS if not invalid else CheckStatus.FAIL,
+            f"切換={len(lines)} 範圍矛盾={len(invalid)}"
             + (f"；首筆 {invalid[0]}" if invalid else ""),
         )

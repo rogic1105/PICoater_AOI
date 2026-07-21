@@ -14,6 +14,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
     {
         private readonly DataStatisticsContext _ctx;
         private readonly Func<List<GrabIdInfo>> _getGrabIdInfos;
+        private readonly Func<List<GrabIdInfo>> _getRangeGrabIdInfos;
         private readonly Action _refreshStats;
         private readonly Action _refreshSelectedGrab;
         private readonly Action<string, DateTime, DateTime, int> _selectFromData;
@@ -30,6 +31,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
         public DataDateGrabIdNavigator(
             DataStatisticsContext ctx,
             Func<List<GrabIdInfo>> getGrabIdInfos,
+            Func<List<GrabIdInfo>> getRangeGrabIdInfos,
             Action refreshStats,
             Action refreshSelectedGrab,
             Action<string, DateTime, DateTime, int> selectFromData,
@@ -39,6 +41,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
         {
             _ctx = ctx ?? throw new ArgumentNullException(nameof(ctx));
             _getGrabIdInfos = getGrabIdInfos ?? throw new ArgumentNullException(nameof(getGrabIdInfos));
+            _getRangeGrabIdInfos = getRangeGrabIdInfos ?? throw new ArgumentNullException(nameof(getRangeGrabIdInfos));
             _refreshStats = refreshStats ?? throw new ArgumentNullException(nameof(refreshStats));
             _refreshSelectedGrab = refreshSelectedGrab ?? throw new ArgumentNullException(nameof(refreshSelectedGrab));
             _selectFromData = selectFromData ?? throw new ArgumentNullException(nameof(selectFromData));
@@ -90,30 +93,118 @@ namespace AniloxRoll.Monitor.UI.Navigators
                 var ids = new object[grabIdInfos.Count];
                 for (int i = 0; i < grabIdInfos.Count; i++)
                     ids[i] = grabIdInfos[i].GrabId;
-                foreach (var cb in new[] { _ctx.CbReviewGrabId, _ctx.CbGrabIdStart, _ctx.CbGrabIdEnd, _ctx.CbDataGrabId })
-                {
-                    cb.BeginUpdate();
-                    cb.Items.Clear();
-                    cb.Items.AddRange(ids);
-                    cb.EndUpdate();
-                }
+                ReplaceItems(_ctx.CbReviewGrabId, ids);
+                PopulateDataGrabIdComboCore(selectDataGrabId);
+                PopulateRangeGrabIdCombosCore();
                 UpdateGrabIdNavState();
-                if (_ctx.CbGrabIdStart.Items.Count > 0)
-                {
-                    _ctx.CbGrabIdStart.SelectedIndex = _ctx.CbGrabIdStart.Items.Count - 1;
-                    _ctx.CbGrabIdEnd.SelectedIndex = 0;
-                    _ctx.CbDataGrabId.SelectedIndex = selectDataGrabId
-                        ? _ctx.CbGrabIdStart.SelectedIndex
-                        : 0;
-                }
             }
+        }
+
+        /// <summary>依目前篩選來源重建報表單片與範圍序號；回顧序號維持全量。</summary>
+        public int RefreshFilteredGrabIdCombos(string preferredDataGrabId = null)
+        {
+            using (StatComboGuard.Enter())
+            {
+                PopulateDataGrabIdComboCore(selectOldest: false, preferredDataGrabId);
+                PopulateRangeGrabIdCombosCore();
+            }
+            _rangeSource = GrabIdRangeSource.Global;
+            UpdateSourceHighlights();
+            return _ctx.CbGrabIdStart.Items.Count;
+        }
+
+        public bool TryGetSelectedRange(out List<GrabIdInfo> rangeInfos)
+        {
+            rangeInfos = null;
+            List<GrabIdInfo> infos = _getRangeGrabIdInfos();
+            int start = _ctx.CbGrabIdStart.SelectedIndex;
+            int end = _ctx.CbGrabIdEnd.SelectedIndex;
+            if (start < 0 || end < 0 || start >= infos.Count || end >= infos.Count)
+                return false;
+
+            int lo = Math.Min(start, end);
+            int hi = Math.Max(start, end);
+            rangeInfos = infos.GetRange(lo, hi - lo + 1);
+            return rangeInfos.Count > 0;
+        }
+
+        private void PopulateRangeGrabIdCombosCore()
+        {
+            List<GrabIdInfo> infos = _getRangeGrabIdInfos();
+            var ids = new object[infos.Count];
+            for (int i = 0; i < infos.Count; i++)
+                ids[i] = infos[i].GrabId;
+
+            ReplaceItems(_ctx.CbGrabIdStart, ids);
+            ReplaceItems(_ctx.CbGrabIdEnd, ids);
+            if (ids.Length == 0) return;
+            _ctx.CbGrabIdStart.SelectedIndex = ids.Length - 1;
+            _ctx.CbGrabIdEnd.SelectedIndex = 0;
+        }
+
+        private void PopulateDataGrabIdComboCore(bool selectOldest, string preferredGrabId = null)
+        {
+            List<GrabIdInfo> infos = _getRangeGrabIdInfos();
+            var ids = new object[infos.Count];
+            for (int i = 0; i < infos.Count; i++)
+                ids[i] = infos[i].GrabId;
+
+            ReplaceItems(_ctx.CbDataGrabId, ids);
+            if (ids.Length > 0)
+                _ctx.CbDataGrabId.SelectedIndex = selectOldest
+                    ? ids.Length - 1
+                    : FindClosestDataIndex(infos, preferredGrabId);
+        }
+
+        private int FindClosestDataIndex(List<GrabIdInfo> candidates, string preferredGrabId)
+        {
+            if (candidates.Count == 0) return -1;
+            if (string.IsNullOrWhiteSpace(preferredGrabId)) return 0;
+
+            int exact = candidates.FindIndex(info =>
+                string.Equals(info.GrabId, preferredGrabId, StringComparison.Ordinal));
+            if (exact >= 0) return exact;
+
+            List<GrabIdInfo> all = _getGrabIdInfos();
+            var allIndices = new Dictionary<string, int>(StringComparer.Ordinal);
+            for (int i = 0; i < all.Count; i++)
+            {
+                if (all[i] != null && !string.IsNullOrWhiteSpace(all[i].GrabId))
+                    allIndices[all[i].GrabId] = i;
+            }
+            if (!allIndices.TryGetValue(preferredGrabId, out int preferredIndex)) return 0;
+
+            int bestCandidateIndex = 0;
+            int bestDistance = int.MaxValue;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                if (candidates[i] == null ||
+                    !allIndices.TryGetValue(candidates[i].GrabId, out int candidateIndex))
+                    continue;
+                int distance = Math.Abs(candidateIndex - preferredIndex);
+                if (distance >= bestDistance) continue;
+                bestDistance = distance;
+                bestCandidateIndex = i;
+            }
+            return bestCandidateIndex;
+        }
+
+        private static void ReplaceItems(ComboBox combo, object[] items)
+        {
+            combo.BeginUpdate();
+            combo.Items.Clear();
+            combo.Items.AddRange(items);
+            combo.EndUpdate();
         }
 
         public void SyncDataGrabIdFromReview(int idx, GrabIdInfo info)
         {
+            if (info == null) return;
+            int dataIndex = _ctx.CbDataGrabId.Items.IndexOf(info.GrabId);
+            if (dataIndex < 0) return;
             using (GrabIdCrossGuard.Enter())
             {
-                _ctx.CbDataGrabId.SelectedIndex = idx;
+                _ctx.CbDataGrabId.SelectedIndex = dataIndex;
                 SetActiveStatGroupBox(_ctx.GrpDataSingleSheet);
                 _refreshSelectedGrab();
             }
@@ -209,7 +300,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
         /// <summary>年/月/日 label 點擊：範圍序號只取該期間（值取自 cbDataYieldYear/Month/Day）。</summary>
         private void ApplyPeriodRange(GrabIdRangeSource source)
         {
-            var infos = _getGrabIdInfos();
+            var infos = _getRangeGrabIdInfos();
             if (infos.Count == 0) return;
             if (!TryGetSelectedPeriod(source, out int year, out int month, out int day)) return;
 
@@ -241,7 +332,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
         /// <summary>點 groupBoxGrabIdRange：回全局（最舊→最新）。永遠重設，不受目前 mode 早退影響。</summary>
         private void ApplyGlobalRange()
         {
-            var infos = _getGrabIdInfos();
+            var infos = _getRangeGrabIdInfos();
             if (infos.Count == 0) return;
             FlowTrace.Log("ui:【期間-全局】→ 全範圍");
             _rangeSource = GrabIdRangeSource.Global;
@@ -282,7 +373,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
             if (target == null || ActiveStatMode == target) return;
             SetActiveStatGroupBox(target);
 
-            var grabIdInfos = _getGrabIdInfos();
+            var grabIdInfos = _getRangeGrabIdInfos();
             if (target == _ctx.GroupBoxGrabIdRange && grabIdInfos.Count > 0)
             {
                 using (StatComboGuard.Enter())
@@ -300,7 +391,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
 
         private void OnGrabIdComboChanged(bool isStart)
         {
-            var grabIdInfos = _getGrabIdInfos();
+            var grabIdInfos = _getRangeGrabIdInfos();
             if (StatComboGuard.IsSet || grabIdInfos.Count == 0) return;
             FlowTrace.Log($"ui:【序號範圍-{(isStart ? "起始" : "結束")}】變更");
             _rangeSource = GrabIdRangeSource.Custom;   // 手動拖範圍 → 自訂，清來源高亮
@@ -323,24 +414,27 @@ namespace AniloxRoll.Monitor.UI.Navigators
 
         private void OnSingleSheetComboChanged()
         {
-            var grabIdInfos = _getGrabIdInfos();
+            var dataGrabIdInfos = _getRangeGrabIdInfos();
+            var allGrabIdInfos = _getGrabIdInfos();
             UpdateDataGrabIdNavState();
-            if (StatComboGuard.IsSet || grabIdInfos.Count == 0) return;
+            if (StatComboGuard.IsSet || dataGrabIdInfos.Count == 0) return;
             if (GrabIdCrossGuard.IsSet) return;
 
             SetActiveStatGroupBox(_ctx.GrpDataSingleSheet);
             int idx = _ctx.CbDataGrabId.SelectedIndex;
-            if (idx < 0) return;
-            FlowTrace.Log($"ui:【報表序號】→ {(idx < grabIdInfos.Count ? grabIdInfos[idx].GrabId : idx.ToString())}");
+            if (idx < 0 || idx >= dataGrabIdInfos.Count) return;
+            GrabIdInfo info = dataGrabIdInfos[idx];
+            int allIndex = allGrabIdInfos.FindIndex(candidate =>
+                string.Equals(candidate.GrabId, info.GrabId, StringComparison.Ordinal));
+            if (allIndex < 0) return;
+            FlowTrace.Log($"ui:【報表序號】→ {info.GrabId}");
 
             // cbDataId（單片序號）變更「不」連動 cbDataIdStart/End —— 範圍序號獨立，選單片不動範圍。
             _refreshSelectedGrab();
 
-            if (!GrabIdCrossGuard.IsSet && _ctx.CbReviewGrabId.Items.Count > 0
-                && idx < _ctx.CbReviewGrabId.Items.Count)
+            if (!GrabIdCrossGuard.IsSet && allIndex < _ctx.CbReviewGrabId.Items.Count)
             {
-                var info = grabIdInfos[idx];
-                _selectFromData(info.GrabId, info.Earliest, info.Latest, idx);
+                _selectFromData(info.GrabId, info.Earliest, info.Latest, allIndex);
             }
         }
 

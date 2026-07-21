@@ -390,8 +390,7 @@ namespace AniloxRoll.Monitor.Forms
             try
             {
                 if (_dataStatsPresenter.GrabIdCrossGuard.IsSet) return;
-                if (cbDataId.Items.Count == 0 || idx < 0 || idx >= cbDataId.Items.Count) return;
-                if (idx >= _dataStatsPresenter.GrabIdInfos.Count) return;
+                if (idx < 0 || idx >= _dataStatsPresenter.GrabIdInfos.Count) return;
                 var info = _dataStatsPresenter.GrabIdInfos[idx];
                 _dataStatsPresenter.SyncDataGrabIdFromReview(idx, info);
             }

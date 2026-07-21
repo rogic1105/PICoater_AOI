@@ -122,9 +122,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
             var grabIdInfos = _getGrabIdInfos();
             if (_getActiveStatMode() == _ctx.GrpDataSingleSheet)
             {
-                int singleIdx = _ctx.CbDataGrabId.SelectedIndex;
-                if (singleIdx >= 0 && singleIdx < grabIdInfos.Count)
-                    ScheduleSingleGrab(grabIdInfos[singleIdx]);
+                GrabIdInfo selected = FindSelectedDataGrab(grabIdInfos);
+                if (selected != null)
+                    ScheduleSingleGrab(selected);
                 else
                     Clear();
                 return;
@@ -391,13 +391,19 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _ctx.Settings.ErrorValueMeanH, _ctx.Settings.ErrorValueMaxH);
             // 單片模式才需要按 HM 重算曲線坡度；aggregate 模式維持快照
             var grabIdInfos = _getGrabIdInfos();
-            if (_getActiveStatMode() == _ctx.GrpDataSingleSheet
-                && _ctx.CbDataGrabId.SelectedIndex >= 0
-                && _ctx.CbDataGrabId.SelectedIndex < grabIdInfos.Count)
+            if (_getActiveStatMode() == _ctx.GrpDataSingleSheet)
             {
-                int index = _ctx.CbDataGrabId.SelectedIndex;
-                ScheduleSingleGrab(grabIdInfos[index]);
+                GrabIdInfo selected = FindSelectedDataGrab(grabIdInfos);
+                if (selected != null)
+                    ScheduleSingleGrab(selected);
             }
+        }
+
+        private GrabIdInfo FindSelectedDataGrab(List<GrabIdInfo> grabIdInfos)
+        {
+            string grabId = Convert.ToString(_ctx.CbDataGrabId.SelectedItem);
+            return grabIdInfos.Find(candidate =>
+                string.Equals(candidate.GrabId, grabId, StringComparison.Ordinal));
         }
 
         /// <summary>

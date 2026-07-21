@@ -216,6 +216,32 @@ class ReviewFlowValidatorTests(unittest.TestCase):
 
 
 class DataFlowValidatorTests(unittest.TestCase):
+    def test_fail_filter_requires_range_option_evidence(self):
+        report = DataFlowValidator().validate(
+            session(
+                "ui:【篩選異常】→ 只顯示異常 dataOptions=2 rangeOptions=2 "
+                "selected=260721-080001 range=260721-080001~260721-080003",
+                "ui:【篩選異常】→ 顯示全部 dataOptions=4 rangeOptions=4 "
+                "selected=260721-080001 range=260721-080000~260721-080003",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "D5.fail-filter").status)
+
+    def test_fail_filter_rejects_data_and_range_option_mismatch(self):
+        report = DataFlowValidator().validate(
+            session(
+                "ui:【篩選異常】→ 只顯示異常 dataOptions=3 rangeOptions=2 "
+                "selected=260721-080001 range=260721-080001~260721-080003"
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "D5.fail-filter").status)
+
+    def test_fail_filter_rejects_stale_list_only_log(self):
+        report = DataFlowValidator().validate(
+            session("ui:【篩選異常】→ 只顯示異常")
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "D5.fail-filter").status)
+
     def test_report_to_review_reuses_presented_curves(self):
         report = DataFlowValidator().validate(
             session(
