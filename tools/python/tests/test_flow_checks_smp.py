@@ -17,6 +17,7 @@ from flow_checks.live import LiveFlowValidator
 from flow_checks.mura import MuraFlowValidator
 from flow_checks.parameter import ParameterFlowValidator
 from flow_checks.registry import PENDING_DOMAINS
+from flow_checks.review import ReviewFlowValidator
 from flow_checks.settings import SettingsFlowValidator
 
 
@@ -58,6 +59,39 @@ class SettingsFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(CheckStatus.PASS, result(report, "S3.direction").status)
 
+    def test_live_enhance_applies_persistently_to_all_cameras(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "ui:設定[hc_EnableMuraEnhance]=True",
+                "setting route hc_EnableMuraEnhance owner=Enhance effects=None",
+                "WF layer raw->column writeRow=3000 history=preserved",
+                "live enhance enabled=True direction=column cams=7 "
+                "scope=all-cameras waterfallHistory=preserved",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "S4.live-enhance").status)
+
+    def test_live_enhance_requires_history_policy(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "ui:設定[hc_EnableMuraEnhance]=True",
+                "setting route hc_EnableMuraEnhance owner=Enhance effects=None",
+                "live enhance enabled=True direction=column cams=7 scope=all-cameras",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "S4.live-enhance").status)
+
+    def test_review_enhance_reloads_current_period_mode(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "RV period load 2026-07-21 08:00:00.000 images=7/7 proc=False cfg=yes",
+                "ui:設定[hd_EnableReviewEnhance]=True",
+                "setting route hd_EnableReviewEnhance owner=Enhance effects=None",
+                "RV period load 2026-07-21 08:00:00.000 images=7/7 proc=True cfg=yes",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "S2.review-enhance").status)
+
     def test_direction_without_row_refresh_fails(self):
         report = SettingsFlowValidator().validate(
             session(
@@ -83,7 +117,60 @@ class SettingsFlowValidatorTests(unittest.TestCase):
         self.assertEqual(CheckStatus.FAIL, result(report, "S0.route").status)
 
 
+class ReviewFlowValidatorTests(unittest.TestCase):
+    def test_initial_empty_review_tab_does_not_require_visible_content(self):
+        report = ReviewFlowValidator().validate(
+            session(
+                "ui:tab → 回顧",
+                "RV tabVisible repaint view=False",
+                "ui:tab → 報表",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "R0.tab-visible").status)
+
+    def test_review_with_preloaded_data_requires_visible_content(self):
+        report = ReviewFlowValidator().validate(
+            session(
+                "DT curve share 260721-080001 target=Review",
+                "ui:tab → 回顧",
+                "RV tabVisible repaint view=True",
+                "ui:tab → 報表",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "R0.tab-visible").status)
+
+
 class DataFlowValidatorTests(unittest.TestCase):
+    def test_report_to_review_reuses_presented_curves(self):
+        report = DataFlowValidator().validate(
+            session(
+                "ui:【報表序號】→ 260721-080001",
+                "DT selected 260721-080001 stats=cache list=keep ms=1",
+                "DT curve share 260721-080001 target=Review",
+                "DT curve load 260721-080001 captures=7 source=shared storage=summary configMs=1 waitMs=2 pathMs=0 mergeMs=0 summaryMs=1 points=100 drawMs=3 totalMs=5",
+                "DT review sync apply 260721-080001",
+                "RV loadGrab begin 260721-080001（proc=False）",
+                "RV loadGrab curves=reuse source=Data 260721-080001",
+                "RV loadGrab done 260721-080001（50ms）",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "D3.review-reuse").status)
+
+    def test_report_to_review_curve_bin_reload_fails(self):
+        report = DataFlowValidator().validate(
+            session(
+                "ui:【報表序號】→ 260721-080001",
+                "DT selected 260721-080001 stats=cache list=keep ms=1",
+                "DT curve share 260721-080001 target=Review",
+                "DT review sync apply 260721-080001",
+                "RV loadGrab begin 260721-080001（proc=False）",
+                "RV loadGrab curves=load source=bin 260721-080001",
+                "RV curves paths 260721-080001 root=D:\\Anilox images=7 cams=7 cfg=yes align=tick source=bins",
+                "RV loadGrab done 260721-080001（50ms）",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "D3.review-reuse").status)
+
     def test_timer_starvation_without_ping_or_stack_is_not_a_hard_ui_block(self):
         lines = [
             FlowLine(0.0, "00:00:00.000", 1, "ui:【報表序號】→ 260721-080000"),
@@ -301,6 +388,35 @@ class DataFlowValidatorTests(unittest.TestCase):
                 "DT chartRange 260721-080001 chart=col axis=-952~3422/view=-900~3350",
                 "DT chartRange 260721-080001 chart=row axis=-439~17105/view=-400~17000",
                 "DT curve load 260721-080001 captures=7 source=shared storage=summary configMs=1 waitMs=2 pathMs=0 mergeMs=0 summaryMs=1 points=100 drawMs=3 totalMs=5",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "D3.fit").status)
+
+    def test_report_single_fit_stops_tracking_after_range_mode(self):
+        report = DataFlowValidator().validate(
+            session(
+                "ui:【報表序號】→ 260721-080001",
+                "DT prefit 260721-080001 content=20236x15000 viewX=-952~3422 viewY=17105~-439 source=main-geometry",
+                "DT chartRange 260721-080001 chart=col axis=-952~3422/view=-900~3350",
+                "DT chartRange 260721-080001 chart=row axis=-439~17105/view=-400~17000",
+                "DT curve load 260721-080001 captures=7 source=shared storage=summary configMs=1 waitMs=2 pathMs=0 mergeMs=0 summaryMs=1 points=100 drawMs=3 totalMs=5",
+                "ui:【期間-日】→ 範圍 260721-080001~260721-090001",
+                "DT chartRange 260721-080001 chart=col axis=0~2470/view=0~2470",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "D3.fit").status)
+
+    def test_review_image_load_ignores_newer_curve_prefit(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT prefit 260721-080002 content=20236x3000 viewX=-65~2535 viewY=6880~-3546 source=main-geometry",
+                "RV loadGrab begin 260721-080001（proc=False）",
+                "RV prefit 260721-080002 content=20236x3000 viewport=1353x596 viewX=-65~2535 viewY=6880~-3546",
+                "RV prefitPaint 260721-080002 chart=col after=0ms axis=-13~2365/view=-13~2365",
+                "RV prefitApply 260721-080002 after=0ms visible=True col=axis=-13~2365/view=-13~2365 row=axis=-2503~6618/view=-2503~6618",
+                "RV mainRange 260721-080002 viewX=-65~2535 viewY=6880~-3546",
+                "RV chartRange 260721-080002 chart=col axis=-13~2365/view=-13~2365",
+                "RV loadGrab stale-drop 260721-080001（20ms）",
             )
         )
         self.assertEqual(CheckStatus.PASS, result(report, "D3.fit").status)

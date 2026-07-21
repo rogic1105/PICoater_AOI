@@ -354,12 +354,14 @@ ProcessingFunction@MilCamera.cs（MdigProcess hook，static）
     │  └ OnLiveRowCurveData 事件 → OnLiveRowCurveData@AniloxRollForm.Live.cs → CheckLiveMura("h")
     │     ＋ pending latest-only cache（不得直接更新列 chart）
     ├ PutDisplayBytes@MilCamera.Display.cs（強化）｜CopyToDisplay@MilCamera.Display.cs（原圖）
-    ├ OnDisplayFrame 事件（bytes）→ OnCameraDisplayFrame｜OnCameraWaterfallFrame@LiveDisplayCoordinator.cs
+    ├ OnDisplayFrame 事件（目前選定影像）→ OnCameraDisplayFrame@LiveDisplayCoordinator.cs
     │  ├ 模式錯掛自檢（⚠ 契約違規 行）＋ FlowFirstFrame（firstFrame 行，每台恰一）
-    │  ├（即時）PushFrame@ImageDisplayView.cs（存快照＋餵 ThumbStrip＋_mainDirty）
-    │  └（瀑布）PushFrame@WaterfallView.cs → PlaceFrame（tick 網格錨定）→ TryFlush → ComposeJob
-    │      （佈局=MergeLayout.Compute 唯一來源）→ KickWriter → Task.Run WriteBand（背景 memcpy，不卡 UI）
-    │      ＋ PushFrame@ThumbStrip.cs（縮圖一律即時，兩模式同源）
+    │  └（即時）PushFrame@ImageDisplayView.cs（存快照＋餵 ThumbStrip＋_mainDirty）
+    ├ OnWaterfallFrame 事件（同幀 raw＋column＋row）→ OnCameraWaterfallFrame@LiveDisplayCoordinator.cs
+    │  ├ 模式錯掛自檢（⚠ 契約違規 行）＋ FlowFirstFrame（firstFrame 行，每台恰一）
+    │  └ PushFrameVariants@WaterfallView.cs → PlaceFrame（tick 網格只對齊一次）→ TryFlush → ComposeJob
+    │      （佈局=MergeLayout.Compute 唯一來源）→ KickWriter → Task.Run WriteBand（三層背景 memcpy，不卡 UI）
+    │      ＋ PushFrame@ThumbStrip.cs（縮圖顯示目前選定層）
     ├（hook 返回 MilCamera 後）CopyDisplayToMergeTarget@MilCamera.cs   ← 合圖貼圖在 grab hook（display buffer 更新後）
     └ TrySaveCapture@AniloxCamera.cs（→ CameraFrameSaver 背景存檔 → C1/C2）
 （顯示重繪，UI 執行緒 T1）
@@ -687,7 +689,19 @@ Tn: ⚠ IO 斷線 ／ IO 恢復連線            ← 光源/儲存分享 同格�
 Tn: ⚠ IO 未連線（開機基線）             ← 首次觀測就不在線（拔線開機/初始化未完，恢復行會跟著出現）
 Tn: 儲存程式 heartbeat 恢復 pid=N age=Ns
 Tn: ⚠ 儲存程式 heartbeat 未回報 reason=…
+T1: IO controller start generation=N endpoint=IP:Port
+設定變更：IO controller stop generation=N reason=settings
+        → IO controller start generation=N+1 endpoint=IP:Port
+快速連改：IO controller restart coalesced generation=N（可有；該代不得再 start）
+關閉：IO controller stop generation=N reason=shutdown
+DI START：io:DI START 上升緣 → 開始抓取
+       → IO grab accepted busy=on …｜IO grab rejected busy=off reason=…（恰一）
 ```
+- **單 process／單 controller**：`Program` named mutex 必須在 Form 建立前擋掉同機第二份程式；同一 session
+  任一時刻只能有一個 active generation。restart 以 lifecycle gate 序列化，舊 generation callback 不得進 UI/Grab。
+- **BUSY 代表事實，不代表請求**：DI 上升緣只提出 intent；必須等共用 `ToggleLiveGrabAsync` 成功且 capture gate
+  已開啟，才能 `NotifyGrabStarted` 拉高 PC BUSY。CLProtocol 未就緒／相位同步失敗時回
+  `IO grab rejected busy=off`，FSM 回 Idle；禁止「沒抓到但 PLC 看見 BUSY」。
 - IO 重連倒數以 `IoGrabController.NextReconnectAtUtc` 為唯一來源，顯示到 `0s` 代表正在嘗試連線；
   不得在 `1s` 後退回沒有秒數的空白狀態。`ReconnectIntervalMs` 是 connect 嘗試起點間隔，
   TCP timeout 必須包含在週期內，不得 timeout 後再重複等待完整週期。
@@ -1035,8 +1049,9 @@ python tools/python/check_review_flows.py [trace.log]    # 預設抓最新 log�
 ④讀取資料跳最新（第 2 次起不得停在舊序號）
 ⑤時段導航去重（同時點不得重複載入）⑥曲線 single-flight（兩個 paths 間必有 done/stale）
 ⑦方向對數（dataPhys↔dataChart 鏡射/直通，見§狀態快照儀器）⑧切入回顧必有
-`RV tabVisible repaint view=True`，且其後必有 `RV visiblePaint ready=True lod=… size=WxH` 證明內容真正可畫；
-只有 repaint intent 不算通過。
+`RV tabVisible repaint view=True|False`；若先前已有回顧內容或 Data 預載選取，必須再有
+`RV visiblePaint ready=True lod=… size=WxH` 證明內容真正可畫。程式啟動後尚未讀取任何資料時，
+`view=False` 是合法空狀態，不得誤判為上畫失敗；已有內容時只有 repaint intent 仍不算通過。
 2026-07-10 基線：①③④⑤ 皆紅＝回顧戰役待修清單（兇手=每格序號同步觸發 Data 統計全重算於 UI 執行緒
 〔SyncDataGrabIdFromReview→RefreshStats→掃目錄+CSV 全解析〕＋時段 date/time 串聯重複觸發）。
 
@@ -1268,8 +1283,29 @@ T1: ui:設定[ec_ErrorValueMeanV]（例）
 ### S2 回顧強化（hd_EnableReviewEnhance）
 ```
 T1: ui:設定[hd_EnableReviewEnhance]
-T1: RV loadGrab begin {當前grabId} → … → RV loadGrab done   ← 重載當前拼接視圖
+單序號模式：RV loadGrab begin {當前grabId} → … → RV loadGrab done
+時序模式：RV period load {當前時點} images=P/7 proc=True|False cfg=yes|no
+    ← 重載目前真正顯示的模式；不得一律假設單序號
 ```
+
+### S4 監控強化（hc_EnableMuraEnhance）
+```
+T1: ui:設定[hc_EnableMuraEnhance]=True|False
+T1: setting route hc_EnableMuraEnhance owner=Enhance effects=None
+T1: live enhance enabled=True|False direction=raw|column|row cams=N scope=all-cameras waterfallHistory=preserved
+T1: WF layer raw|column|row->raw|column|row writeRow=N history=preserved   ← 只在瀑布 view 已存在時
+```
+- 設定套到所有已配置相機；`AniloxCamera.OnMilFrameReady` 每幀重新讀
+  `EnableImageProcessing`，因此 grab 中切換會影響後續全部幀，不是只處理按下當下的單張。
+- GPU 每幀本來就同時計算欄／列強化；`OnWaterfallFrame` 把 raw／column／row 當成同一物理幀，
+  `WaterfallView` 只做一次 tick 對齊，再把同一 band 寫入三個 lazy chunk layer。
+- 瀑布切換強化或欄／列方向時 `waterfallHistory=preserved`：只准 `SetDisplayLayer` 換 LOD 讀取層；
+  `_writeRow`、pending slots、tick 網格、zoom 與 pan 都必須不變，禁止呼叫 `Reset` 或重建 view。
+- 三層固定上限：以 101171×30000 灰階計約 8.48 GiB；採 512-row lazy chunk，尚未寫到的區域不配置，
+  view dispose 時全部釋放。這是使用者核准的記憶體換無縫切換政策，不得退回清空瀑布。
+- `WaterfallView.Reset` 必須遞增 content generation；已被背景 writer 取走的舊 generation band
+  在真正重新 Grab、改總高或佈局 Reset 後不得寫回，避免清空後殘留一條舊來源影像。
+- 新配置相機由 `AllocateCamerasAsync(enableEnhance)` 取得同一設定，不能另有預設值。
 
 ### S3 上下方向（hee_VerticalDirection）
 ```
@@ -1287,8 +1323,11 @@ T1: RV row …（Review 有資料時）或 RV load/update row（依當前 Review
 - `S0.format`：所有 `ui:設定[]`／`set:[]` 必須同時帶屬性名與新值。
 - `S0.route`：每個設定 intent 下一行必須有同名 `setting route`；並檢查
   `CapturePolicy` 只出現在允許的六個設定，防止無關設定重送相機參數。
-- `S2.review-enhance`：已有回顧序號時，切強化必須以同一 grabId 完成
-  `RV loadGrab begin → done`；尚無回顧資料則回 `NOT COVERED`。
+- `S2.review-enhance`：切強化必須依當前回顧模式，以同一 grabId 完成
+  `RV loadGrab begin → done`，或以同一時點完成 `RV period load`；尚無回顧資料則回 `NOT COVERED`。
+- `S4.live-enhance`：有已配置相機時，切監控強化必須出現相同值且
+  `scope=all-cameras waterfallHistory=preserved` 的狀態行；enabled=False 必須是 raw，
+  enabled=True 必須是 column 或 row，證明全相機狀態一致且瀑布歷史未被清除。
 - `S3.direction`：方向變更後、下一次方向變更前，必須看見相同方向的
   `LC|RV row rowChart|rowView`，證明最後一組列資料/視野已重畫。
 
@@ -1396,18 +1435,25 @@ T1: DT list reload range={start}~{end} rows=N ms=N source=index
   可視區上下邊界時以 margin 捲動，反白變更只重畫舊／新兩列，不得每格整窗 `Invalidate()`（跨視窗白閃的根因）。
 - **跨 tab lazy**：報表序號只覆寫 pending selection 並標 `_reviewDirty`，不得逐格操作隱藏的 Review combo/date、
   `NavigateTo` 寫 session／重建日期清單，也不得當下載 Review 圖片；切到 Review tab 才一次套控制項並接 R2 完整載入。
+- **跨 tab 曲線重用**：報表欄／列曲線完成後記 `DT curve share {grabId} target=Review`，保存同 root、同 grabId
+  的原始 `SingleGrabCurveData`。切到回顧時，兩個回顧 chart 可各自套用一次記憶體資料，但圖片載入必記
+  `RV loadGrab curves=reuse source=Data {grabId}` 並跳過四種 curve bin；不得反向通知隱藏報表再畫。
+  無相符快照才准 `curves=load source=bin` fallback。`DATA/D3.review-reuse` 自動驗這條不變量。
 - **時序索引只建一次**：`ImageRepository.LoadDirectory` 建立排序去重的 available-period index；報表／回顧每格同步
   只能對既有索引做查找，不得在 UI 執行緒重新解析全部影像檔名、`Distinct`、`OrderBy`。
 - **單片 Curve latest-only**：快速滾動時 running request 可記 `DT curve stale-drop`，尚未開始的 request 只保留最新一筆；
   最後停住的 `ui:【報表序號】` 必有同 grabId 的 `DT curve load`，且列資料存在時必有 `DT row curve load`。
   欄／列必共用同一份 `SingleGrabCurveData`；快取保存 rescale 前欄 Mean/Max 與合併後列 Mean/Max，資料夾重載或 Presenter Dispose 必清空。
+- **快 Curve／慢圖片可並行**：R2 圖片仍在 debounce 載入舊 grabId 時，後續序號的 `RV prefit/prefitPaint/prefitApply`
+  可先推進 Curve；DVT 只把同 grabId 的證據歸入該次圖片 lifecycle，不得把不同 grabId 當格式錯誤。
 - **單片 Curve 預排版**：報表選取序號後，以 `ReviewImageDataLoader.Prepare` 只讀該筆路徑、CFG 與 JPEG header
   （不解碼圖片），再經 `ReviewDisplayManager.TryComputeFitViewRange` 使用與回顧主畫面相同的合圖／fit 公式。
   `DT prefit {grabId} content=WxH viewX=L~R viewY=T~B source=main-geometry` 必須在同 grabId 的欄／列 Curve
   上畫前出現；報表不得讀取回顧頁上一筆 view，也不得維護第二套 fit 公式。切到回顧後，R2 的 `RV prefit`
   以同一公式先同步主畫面與欄／列圖表，完整回顧載入的 `ViewRangeMmChanged` 再覆核。
   `DT chartRange {grabId} chart=col|row axis=A~B/view=L~R` 是報表圖表 PostPaint 的實際狀態邊緣；
-  同一選取在資料上畫後不得出現第二組 Axis／View。不得以 `null` 視野覆寫成全幅。
+  同一選取在資料上畫後、且仍處於單序號模式時不得出現第二組 Axis／View。切入序號範圍或期間模式後，
+  Curve 改顯示範圍統計，座標改變合法，DVT 必須停止追蹤前一筆單序號視野。不得以 `null` 視野覆寫成全幅。
 - **單片 Curve cache 基準**：LRU 上限 `512 筆／256 MB`，納入列 Curve 後以目前 278 筆實測資料可整批容納，避免往返滾動時
   反覆淘汰／重載造成 Gen2 GC；30,000 筆時仍保持固定上限。view-time HM rescale 不得 clone 每台完整 raw Curve，
   只能在 `CurveOverviewMerger` 產生最多約 2,000 點的 merged result 後縮放。這些是可重驗調整的效能參數，非鐵則。
@@ -1480,6 +1526,10 @@ tabMain.SelectedIndexChanged（進 Review 且有 pending）
  → cbReviewId＋DateTimeNavigator.SetPeriodToCombo＋UpdatePeriodNavigationState（只套最後一筆）
    → ImageRepository.GetAvailablePeriods（預建索引＋binary search）
  → DT review sync apply {grabId} → LoadGrabStitchedViewGuardRowRangeAsync（R2）
+   ├ 已有 `DT curve share {grabId}`：套用報表的 `SingleGrabCurveData` 記憶體快照
+   │  → RV loadGrab curves=reuse source=Data {grabId}
+   │  → ReviewImageDataLoader.Load(includeCurves=false)（只載圖片；不得再讀 MeanC/MaxC/MeanR/MaxR）
+   └ 無同 root／同 grabId 快照：RV loadGrab curves=load source=bin {grabId}（完整 fallback）
 
 cbDataIdStart|End 手動變更
  → ScheduleRangeRefresh@DataStatisticsPresenter.cs
