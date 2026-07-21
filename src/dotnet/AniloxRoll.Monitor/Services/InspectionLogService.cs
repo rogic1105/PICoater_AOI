@@ -199,8 +199,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 if (flowCsvOpen)
                     FlowTrace.Log($"capture csv open path={csvPath} cfg={(flowCfgWrite ? "yes" : "no")}");
                 if (flowCfgWrite && config != null)
-                    FlowTrace.Log($"capture csv cfg path={csvPath} HM={config.HessianMaxFactorV:F4}/{config.HessianMaxFactorH:F4} ridge={config.RidgeSigma:F4} " +
-                        $"thrV={config.ErrorValueMeanV:F4}/{config.ErrorValueMaxV:F4} thrH={config.ErrorValueMeanH:F4}/{config.ErrorValueMaxH:F4}");
+                    FlowConfigWrite(csvPath, config);
                 if (flowFirstRecordForGrab)
                     FlowTrace.Log($"capture csv firstRecord grab={grabId} path={csvPath} file={fileName} " +
                         $"verdict=max{maxExceed}/mean{meanExceed} peak={meanPeak:F4}/{maxPeak:F4} " +
@@ -275,8 +274,7 @@ namespace AniloxRoll.Monitor.Core.Services
                     _lastCsvPath = csvPath;
                 }
 
-                FlowTrace.Log($"capture csv cfg path={csvPath} HM={config.HessianMaxFactorV:F4}/{config.HessianMaxFactorH:F4} ridge={config.RidgeSigma:F4} " +
-                    $"thrV={config.ErrorValueMeanV:F4}/{config.ErrorValueMaxV:F4} thrH={config.ErrorValueMeanH:F4}/{config.ErrorValueMaxH:F4}");
+                FlowConfigWrite(csvPath, config);
                 WriteSucceeded?.Invoke();
             }
             catch (Exception ex)
@@ -285,6 +283,16 @@ namespace AniloxRoll.Monitor.Core.Services
                 Trace.WriteLine("[InspectionLogService.ForceWriteConfig] " + error);
                 WriteFailed?.Invoke(error);
             }
+        }
+
+        private static void FlowConfigWrite(string csvPath, CsvConfigSnapshot config)
+        {
+            double lineRate = config.CamLineRateHz != null && config.CamLineRateHz.Length > 0
+                ? config.CamLineRateHz[0]
+                : 0;
+            FlowTrace.Log($"capture csv cfg path={csvPath} speed={config.AniloxRollSpeedMPerMin:F4} lr={lineRate:F2} " +
+                $"HM={config.HessianMaxFactorV:F4}/{config.HessianMaxFactorH:F4} ridge={config.RidgeSigma:F4} " +
+                $"thrV={config.ErrorValueMeanV:F4}/{config.ErrorValueMaxV:F4} thrH={config.ErrorValueMeanH:F4}/{config.ErrorValueMaxH:F4}");
         }
 
     }

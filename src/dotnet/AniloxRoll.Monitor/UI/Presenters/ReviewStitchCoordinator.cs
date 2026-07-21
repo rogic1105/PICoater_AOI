@@ -78,6 +78,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private readonly ReviewImageDataLoader _imageDataLoader;
         private readonly ReviewPeriodDataLoader _periodDataLoader;
         private readonly ReviewImageLoadGate _imageLoads = new ReviewImageLoadGate();
+        private readonly object _preparedPlanGate = new object();
+        private ReviewImageLoadPlan _preparedPlan;
+        private string _preparedPlanKey;
 
         /// <summary>快路：只載曲線（欄+列，.bin 數十 KB + tick 對齊 csv）+CFG → 更新欄/列 chart。
         /// 滾動掃描用——chart 即時跟著序號跑（使用者快速找異常），影像（重：JPEG 解碼+拼接）由
@@ -104,10 +107,19 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             var sw = Stopwatch.StartNew();
             int camCount = _ctx.CameraCount;
+            bool enableProcess = LastReviewProcessedMode;
+            string ridgeDir = ActiveRidgeDirection;
             try
             {
+                ReviewImageLoadPlan layoutPlan = null;
                 SingleGrabCurveData loaded = await Task.Run(() =>
                 {
+                    // Geometry is intentionally prepared before curve presentation. The image
+                    // decode remains debounced, but charts must never render the new record with
+                    // the previous record's viewport.
+                    layoutPlan = _imageDataLoader.Prepare(
+                        root, grabId, hintFrom, hintTo, camCount,
+                        enableProcess, ridgeDir, logPaths: false);
                     SingleGrabCurveData data = _curveDataLoader.Load(
                         root, grabId, hintFrom, hintTo, camCount);
                     Core.Services.FlowTrace.Log($"RV curves paths {grabId} root={root} images={data.ImageCount} cams={data.MatchedCameraCount} cfg={(data.Config != null ? "yes" : "no")} align={data.AlignmentMode} source={data.StorageSource}");
@@ -118,6 +130,12 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     Core.Services.FlowTrace.Log($"RV curves stale-drop {grabId}");
                     return;
                 }
+                CachePreparedPlan(root, grabId, enableProcess, ridgeDir, layoutPlan);
+                PublishPreparedLayout(grabId, layoutPlan);
+                Core.Services.FlowTrace.Log(
+                    $"RV layout intent {grabId} images={layoutPlan.TotalImageCount} " +
+                    $"cams={layoutPlan.GroupedPaths.Count} align={layoutPlan.Alignment.Mode} " +
+                    "before=curves");
                 _stitchedCurveMean = loaded.ColumnMean;
                 _stitchedCurveMax = loaded.ColumnMax;
                 _stitchedRowCurveMean = loaded.RowMean;
@@ -125,6 +143,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _stitchedMergedRowCurveMean = loaded.MergedRowMean;
                 _stitchedMergedRowCurveMax = loaded.MergedRowMax;
                 _ctx.ReviewState.Config = loaded.Config;
+                ApplyRowPhysicalScale(loaded.Config);
                 UpdateStitchedOverviewChart();
                 UpdateGlobalRowChart();
                 Core.Services.FlowTrace.Log($"RV curves {grabId}（{sw.ElapsedMilliseconds}ms）");
@@ -164,6 +183,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// Form 訂閱 → ReviewDisplayManager.PushImages（ImageDisplayView 顯示）；舊 canvas 路徑照跑（平行建新）。</summary>
         public event Action<byte[][], int[], int[], double[], double[], bool> StitchedImagesReady; // gray bytes(不可變快照), w, h, ops, pos, isGlobal —— Bitmap 不出此類（GDI+ 單執行緒物件）
 
+        /// <summary>JPEG 表頭與 CFG 就緒後、完整解碼前發布預期合圖尺寸，供主畫面同源 fit 預算。</summary>
+        public event Action<string, int[], int[], double[], double[], bool> StitchedLayoutReady;
+
         public Task LoadGrabStitchedViewAsync(string grabId, DateTime hintFrom, DateTime hintTo)
             => LoadGrabStitchedViewAsync(grabId, hintFrom, hintTo, LastReviewProcessedMode);
 
@@ -190,8 +212,30 @@ namespace AniloxRoll.Monitor.UI.Presenters
             {
                 string ridgeDir = ActiveRidgeDirection;
                 int camCount = _ctx.CameraCount;
+                ReviewImageLoadPlan plan;
+                if (TryGetPreparedPlan(root, grabId, enableProcess, ridgeDir, out plan))
+                {
+                    LogImagePlan(grabId, root, plan);
+                    Core.Services.FlowTrace.Log($"RV loadGrab plan reuse {grabId}");
+                }
+                else
+                {
+                    plan = await Task.Run(() => _imageDataLoader.Prepare(
+                        root, grabId, hintFrom, hintTo, camCount, enableProcess, ridgeDir));
+                }
+                if (!_imageLoads.IsCurrent(myLoad))
+                {
+                    Core.Services.FlowTrace.Log($"RV loadGrab stale-drop {grabId}（prefit {swTotal.ElapsedMilliseconds}ms）");
+                    return;
+                }
+
+                PublishPreparedLayout(grabId, plan);
+                var opsEff = plan.Config?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
+                var posEff = plan.Config?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
+                bool isGlobal = _ctx.Settings.StitchMode == StitchMode.Global;
+
                 ReviewImageData loaded = await Task.Run(() => _imageDataLoader.Load(
-                    root, grabId, hintFrom, hintTo, camCount, enableProcess, ridgeDir));
+                    plan, camCount, enableProcess, ridgeDir));
                 var newImages = loaded.Images;
 
                 // token 閘門：背景載入期間已有更新的選取 → 本結果作廢（不上畫面、不動 chart）
@@ -211,13 +255,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _stitchedMergedRowCurveMean = null;
                 _stitchedMergedRowCurveMax = null;
                 _ctx.ReviewState.Config = loaded.Config;
+                // The image layout and row chart must receive the same capture-time mm/row
+                // before either is presented. ImageDisplayView then publishes the fitted range.
+                ApplyRowPhysicalScale(loaded.Config);
                 _ctx.DataStatsPresenter?.SetReviewGroupBoxes(true);
 
-                var opsEff = loaded.Config?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
-                var posEff = loaded.Config?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
                 StitchedImagesReady?.Invoke(
                     loaded.GrayFrames, loaded.GrayWidths, loaded.GrayHeights, opsEff, posEff,
-                    _ctx.Settings.StitchMode == StitchMode.Global);
+                    isGlobal);
 
                 UpdateGlobalRowChart();   // 畫布顯示走 ImageDisplayView（同源）；row 曲線照合併更新
                 UpdateStitchedOverviewChart();
@@ -373,9 +418,77 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
         }
 
+        private void ApplyRowPhysicalScale(CsvConfigSnapshot config)
+        {
+            if (_ctx.RowChartSync == null) return;
+            RowCurvePhysicalScale scale = RowCurvePhysicalScaleResolver.Resolve(config, _ctx.Settings);
+            _ctx.RowChartSync.SetRowPitchFromSpeed(scale.SpeedMPerMin, scale.LineRateHz);
+        }
+
+        private void PublishPreparedLayout(string grabId, ReviewImageLoadPlan plan)
+        {
+            if (plan == null) return;
+            _ctx.ReviewState.Config = plan.Config;
+            ApplyRowPhysicalScale(plan.Config);
+            var ops = plan.Config?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
+            var positions = plan.Config?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
+            StitchedLayoutReady?.Invoke(
+                grabId, plan.ExpectedWidths, plan.ExpectedHeights,
+                ops, positions, _ctx.Settings.StitchMode == StitchMode.Global);
+        }
+
+        private void CachePreparedPlan(
+            string root, string grabId, bool enableProcess, string ridgeDirection,
+            ReviewImageLoadPlan plan)
+        {
+            lock (_preparedPlanGate)
+            {
+                _preparedPlanKey = BuildPreparedPlanKey(
+                    root, grabId, enableProcess, ridgeDirection);
+                _preparedPlan = plan;
+            }
+        }
+
+        private bool TryGetPreparedPlan(
+            string root, string grabId, bool enableProcess, string ridgeDirection,
+            out ReviewImageLoadPlan plan)
+        {
+            string key = BuildPreparedPlanKey(root, grabId, enableProcess, ridgeDirection);
+            lock (_preparedPlanGate)
+            {
+                if (string.Equals(_preparedPlanKey, key, StringComparison.Ordinal))
+                {
+                    plan = _preparedPlan;
+                    return plan != null;
+                }
+            }
+            plan = null;
+            return false;
+        }
+
+        private static string BuildPreparedPlanKey(
+            string root, string grabId, bool enableProcess, string ridgeDirection)
+            => string.Concat(
+                root ?? "", "|", grabId ?? "", "|",
+                enableProcess ? "1" : "0", "|", ridgeDirection ?? "");
+
+        private static void LogImagePlan(
+            string grabId, string root, ReviewImageLoadPlan plan)
+        {
+            FlowTrace.Log(
+                $"RV loadGrab paths {grabId} root={root} images={plan.TotalImageCount} " +
+                $"cams={plan.GroupedPaths.Count} cfg={(plan.Config != null ? "yes" : "no")} " +
+                $"align={plan.Alignment.Mode}");
+        }
+
         public void Dispose()
         {
             _curveDataLoader.Dispose();
+            lock (_preparedPlanGate)
+            {
+                _preparedPlan = null;
+                _preparedPlanKey = null;
+            }
         }
 
         /// <summary>
@@ -620,6 +733,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             ReviewPeriodRowCurves curves = _periodDataLoader.LoadMergedRowCurves(
                 images, _ctx.CameraCount);
             if (curves.Mean == null) return;
+
+            ApplyRowPhysicalScale(_ctx.ReviewState.Config);
 
             // 與 UpdateGlobalRowChart 同公式：bin baked-in 縮放=HM_V_capture，view-time 目標=HM_H_current。
             float captureHmV = _ctx.ReviewState.Config?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;

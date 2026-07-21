@@ -32,7 +32,15 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         public void SuspendUntilNextData()
         {
+            // New content must never inherit the previous image's fitted viewport. Keep the
+            // currently painted curve in place, but hold replacement data until the new image
+            // publishes its first fitted range through SetViewRange.
             _rangeSuspended = true;
+            _hasViewRange = false;
+            _topMm = double.NaN;
+            _botMm = double.NaN;
+            _pendingMean = null;
+            _pendingMax = null;
         }
 
         public void Resume()
@@ -65,6 +73,20 @@ namespace AniloxRoll.Monitor.UI.Managers
                 _display.UpdateViewRange(topMm, botMm);
 
             FlushPending();
+        }
+
+        /// <summary>
+        /// 完整影像解碼前已由同源 fit 算出的新視野。即使資料仍暫停換代，也先更新座標軸，
+        /// 避免圖片上畫時才跳動；新曲線仍等 Resume 後原子換入。
+        /// </summary>
+        public void SetPreparedViewRange(double topMm, double botMm)
+        {
+            if (_display == null) return;
+            if (double.IsNaN(topMm) || double.IsNaN(botMm) || topMm == botMm) return;
+            _topMm = topMm;
+            _botMm = botMm;
+            _hasViewRange = true;
+            _display.UpdateViewRangeImmediate(topMm, botMm);
         }
 
         public bool TryApplyCurrentViewRange()

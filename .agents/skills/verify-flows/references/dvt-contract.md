@@ -858,12 +858,13 @@ T1: capture plan grab={yyMMdd-HHmmss} root={CaptureRootPath}
 ### C2 檢測 CSV 寫入（每個 grab 首筆 + CFG 變更）
 ```
 Tn: capture csv open path=… cfg=yes|no              ← 新檔或換日首次開啟
-Tn: capture csv cfg path=… HM=V/H ridge=N thrV=mean/max thrH=mean/max
+Tn: capture csv cfg path=… speed=N lr=N HM=V/H ridge=N thrV=mean/max thrH=mean/max
 Tn: capture csv firstRecord grab=… path=… file=… verdict=max0|1/mean0|1 peak=…/… rowPeak=…/… maxCMean=… thrV=…/…
 ```
 - `firstRecord` 每個 grab 只出一行，用來確認檢測結果有落到哪一份 CSV；逐相機逐幀細節看 CSV 本體。
 - `cfg` 行出現代表 `#CFG` 已寫入同一 CSV；`ridge` 是捕捉時的細線濾除值。
 - `#CFG` 的機台佈局必須完整保存 `OPS + START(CamN_Pos) + CROP(TrimHead/TrimTail)`；
+  列實體尺度必須保存 `AniloxRollSpeedMPerMin + CamN_Lr`（總高由 row bin 點數推導，不另存衍生尺寸）；
   檢測設定必須包含欄／列正規值、細線濾除與欄／列門檻。設定變更後，下一筆資料前必須出現新版 `#CFG`。
 - `#CFG` 刻意與每日資料列同檔，不拆成平行設定檔：每筆資料以上方最近一行 `#CFG` 為設定版本，
   避免斷電或跨檔寫入失敗造成資料與設定失配。
@@ -1026,6 +1027,20 @@ T1: RV repo scan root=… files=N
 T1: （首次）RV EnsureImageDisplay create（thumbs=7）
 T1: RV loadGrab begin {grabId}（proc=…）
 Tn: RV loadGrab paths {grabId} root=… images=N cams=P cfg=yes|no align=tick|filename
+T1: RV prefit {grabId} content=WxH viewport=WxH viewX=L~R viewY=T~B
+    ← 只讀 JPEG 表頭＋CFG，完整解碼前先由主畫面同源公式算好欄／列視野
+T1: RV prefitPaint {grabId} chart=col|row after=Nms axis=A~B/view=L~R
+T1: RV prefitApply {grabId} after=Nms visible=True col=axis=…/view=… row=axis=…/view=…
+    ← `prefitPaint` 是 MSChart 的實際 PostPaint，不是呼叫意圖；回顧頁可見時兩張圖都必須早於
+      該筆第一個 `lodRebind` 或 `pushFrames`。只改 Axis 後呼叫 `Update()` 不算完成：prepared 路必須
+      `Invalidate() → Update()`，否則沒有 pending paint 時會等到圖片／Curve 上畫才重繪，肉眼仍看到座標跳位。
+      第一次可見 paint 才能取得 MSChart 真實 `InnerPlotPosition`；若本次 paint 才完成 plot 凍結，prepared 路
+      必須在同一 UI 動作內以同一主畫面範圍再套一次補償後 zoom，不能把第二次修正留給 BeginInvoke／資料上畫。
+T1: RV mainRange {grabId} viewX=L~R viewY=T~B
+T1: RV chartRange {grabId} chart=col|row axis=A~B/view=L~R
+    ← 真實狀態邊緣：主畫面 ViewRangeMmChanged 與 MSChart PostPaint 只有在座標值改變時才記；不是 intent。
+      圖片／Curve 上畫後若又出現不同的 chart axis 或 view，代表座標仍有二次跳位，不能因首個
+      prefitPaint 很快就判綠。主畫面視野同時擁有 Axis 與 ScaleView；Curve 資料長度不得擴張座標軸。
 T1: RV pushFrames P/7（merge=True, feedScale=…）   ← P=該 grab 有影像的相機數；缺台=黑占位
 T1: RV loadGrab done {grabId}（…ms）
 （若由 Data 頁隱藏預載：切到回顧後延後一個 UI message，出現 `RV tabVisible repaint view=True` →
@@ -1045,10 +1060,12 @@ T1: RV loadGrab done {grabId}（…ms）
 ```
 T1: ui:【單片序號】→ {grabId}
 Tn: RV curves paths {grabId} root=… images=N cams=P cfg=yes|no align=tick|filename|summary source=bins|summary|memory-bins|memory-summary
-T1: RV curves {grabId}（…ms）          ← 快路：欄+列曲線+CFG 即時跟滾動（chart 先行，使用者掃異常）
+T1: RV prefit {grabId} …
+T1: RV layout intent {grabId} images=N cams=P align=tick|filename before=curves
+T1: RV curves {grabId}（…ms）          ← 快路：先套新序號主畫面幾何，再讓欄+列曲線即時跟滾動
 （快速滾動：曲線 single-flight/latest-only，中間 intent 可無 paths；正在讀的舊筆完成後 stale-drop，再直接讀最新筆）
 （影像 debounce 250ms：滾動中不發完整載入；停下才載「最後選取」；session 也只在 settle 落盤一次）
-T1/Tn: RV loadGrab begin {grabId} → RV loadGrab paths … → RV lodRebind merge …（fit reset）→ RV pushFrames → RV loadGrab done
+T1/Tn: RV loadGrab begin {grabId} → RV loadGrab paths … → RV prefit … → RV lodRebind merge …（fit reset）→ RV pushFrames → RV loadGrab done
 ```
 - **分層**：單步時曲線立即載；快速滾動時曲線最多「執行中 1 筆＋等待中最新 1 筆」，中間序號不讀檔；
   最後一個 intent 必有成功 `RV curves`。圖片只載 settle 後的最後一張；
@@ -1058,6 +1075,25 @@ T1/Tn: RV loadGrab begin {grabId} → RV loadGrab paths … → RV lodRebind mer
 - **日期/session 分層**：滾動中只走 `SetPeriodToCombo`（同日不重建 time items），不得走 `NavigateTo`
   的完整 Initialize/Save；`SaveCurrentSelection` 只在 250ms settle 執行一次。
 - **換序號＝重設視野（fit）＝預期**（各 grab 高度不同 → lodRebind 合法出現）。
+- **報表／回顧初始 fit SSoT**：`ReviewImageDataLoader.Prepare` 只讀 JPEG 表頭與 `#CFG`，不解碼像素；
+  `ImageDisplayView.TryComputeMergeFitViewRange` 再以實際主畫面的 `MergeLayout + AspectFitCalculator + PixelMmMapper`
+  預算四邊界。實際上畫後的 `ViewRangeMmChanged` 也走同一座標換算核心，不得由 bin 長度另推一份公式，
+  也不另存 CSV 總長寬。`RV prefit` 必早於同 grab 的 `RV lodRebind merge`，且兩者 `content=WxH` 必相等；
+  完整回顧圖載入後仍須以實際 `ViewRangeMmChanged` 覆核並同步報表欄／列視野。
+- **Curve 快路也必須先取得同源 fit**：每筆成功 `RV curves` 前必有同 grabId 的
+  `RV curves paths → RV prefit → RV layout intent → RV curves`；圖片像素仍維持 250ms settle 後才解碼。
+  這不是提前載圖，而是先讀表頭／CFG 並發布座標。欄、列 helper 在同步模式下，Axis 與 ScaleView 都只由
+  主畫面 viewport 決定；新 bin 的資料長度不得把 Axis 先撐大，再等圖片出現後縮回。
+- **settle 後的列 Curve 首次上畫必須原子帶入新影像 fit 範圍**：
+  `SuspendUntilNextData` 先讓上一筆 view range 失效；`StitchedLayoutReady → SetPreparedViewRange` 在完整解碼前
+  以 `UpdateViewRangeImmediate` 定位並實際重繪座標軸，新 row bin 仍只可 pending，直到 Resume 才整筆換入。
+  一般拖曳／實際 view range 覆核仍走原本 `UpdateViewRange`，不得把 prepared 強制 invalidation 擴散到連續互動路。
+  實際圖片的
+  `PushFrames → RefreshNow／RefireViewRange → ViewRangeMmChanged` 負責覆核；相同像素尺寸不會重綁 LOD，
+  因此 `RefireViewRange` 不可省略。禁止新資料先套舊範圍，或圖片出現後座標才跳位。
+- **列實體尺度 SSoT**：回顧主畫面、回顧列 Curve、報表列 Curve 皆由
+  `RowCurvePhysicalScaleResolver` 取同一筆 `#CFG` 的 A 輪速度＋CAM1 線掃速率；舊 CFG 缺值才回退目前設定。
+  總長＝row bin 點數 × mm/row，不另存 CSV 總長／總高欄位。
 - **token 分治**：曲線與圖片各自最後贏，兩者不得共用 token（圖片開始載入不得讓同序號曲線 stale）；
   每個序號 intent 立即 invalidate 舊圖片，settle 回呼另以 selection token 守住 Data 同步。
 - 最後一個非 stale 的 `curves`/`loadGrab done` 的 grabId 必須＝最後一個 intent 的 grabId——不符＝token 破了。
@@ -1072,6 +1108,7 @@ OnReviewGrabIdSelected@AniloxRollForm.Data.cs
  │  └ Enqueue@LatestCurveLoadCoordinator.cs
  │     ├ pending 僅保留最新一筆；running 恆單工
  │     └ LoadGrabCurvesCoreAsync@ReviewStitchCoordinator.cs
+ │        ├ Prepare@ReviewImageDataLoader.cs（只讀 CFG／JPEG 表頭，與曲線 IO 同在背景執行）
  │        ├ Load@SingleGrabCurveDataLoader.cs（回顧／報表共用、無 WinForms 的 IO／合併 service）
  │        │  ├ SingleGrabCurveCache（512 筆／256 MB 上限；回顧／報表各自持有 bounded cache）
  │        │  ├ TryLoad@SingleGrabCurveSummaryStore.cs（與報表共用 `_curve_summary` materialized view）
@@ -1079,19 +1116,28 @@ OnReviewGrabIdSelected@AniloxRollForm.Data.cs
  │        │       └ QueueSave summary（下次回顧／報表直接讀匯總；原始 bins 仍是 SSoT）
  │        └ IsCurrent@LatestCurveLoadCoordinator.cs
  │           ├ false → RV curves stale-drop
- │           └ true → 套 ReviewRuntimeState＋UpdateStitchedOverviewChart＋UpdateGlobalRowChart
+ │           └ true → CachePreparedPlan＋StitchedLayoutReady（先發布 fit）
+ │                    → 套 ReviewRuntimeState＋UpdateStitchedOverviewChart＋UpdateGlobalRowChart
  └ 250ms settle → LoadGrabStitchedViewGuardRowRangeAsync@AniloxRollForm.Review.cs
+    ├ SuspendUntilNextData@RowCurveSyncCoordinator.cs（舊 view range 失效；新 row data 等新 fit）
     └ LoadGrabStitchedViewAsync@ReviewStitchCoordinator.cs
-       ├ Load@ReviewImageDataLoader.cs（背景執行；不得讀寫 WinForms control）
+       ├ TryGetPreparedPlan；快路已有同 grab plan 時直接重用，否則 Prepare
        │  ├ LoadForGrabId@InspectionImagePathRepository.cs
        │  │  └ InspectionCsvReader.OpenShared＋TryParseRecord＋TryExtractCameraId（影像依 cam 分組）
        │  ├ LoadForGrabId@InspectionConfigRepository.cs
        │  │  └ InspectionCsvReader.OpenShared＋TryParseRecord（取 grab 上方最近 #CFG）
        │  ├ ResolveAlignment@FrameTickIndex.cs（與曲線快路共用，不得另寫 fallback）
+       │  └ TryGetStitchedSize@GrabImageStitcher.cs（只取尺寸，不解碼全圖）
+       ├ StitchedLayoutReady → TryComputeMergeFitViewRange@ImageDisplayView.cs
+       │  └ ApplyReviewViewRangeToCharts(prepared=true)
+       │     └ UpdateViewRangeImmediate（Invalidate→Update；先畫回顧＋報表欄／列座標）→ RV prefitPaint
+       ├ Load(plan)@ReviewImageDataLoader.cs
        │  └ StitchCamera＋MergeCurves／MergeRowCurves＋BitmapGrayConverter
        └ IsCurrent@ReviewImageLoadGate.cs
           ├ false → DisposeImages＋RV loadGrab stale-drop（不得套 UI）
-          └ true → ReviewRuntimeState＋StitchedImagesReady＋欄／列 chart
+          └ true → ReviewRuntimeState＋RowCurvePhysicalScaleResolver
+                   → StitchedImagesReady（先餵同一 mm/row）
+                   → PushFrames.RefreshNow＋RefireViewRange → 欄／列 chart
 ```
 
 ### R3 時段導航（cbReviewDate/cbReviewTime 手動）
@@ -1334,6 +1380,13 @@ T1: DT list reload range={start}~{end} rows=N ms=N source=index
 - **單片 Curve latest-only**：快速滾動時 running request 可記 `DT curve stale-drop`，尚未開始的 request 只保留最新一筆；
   最後停住的 `ui:【報表序號】` 必有同 grabId 的 `DT curve load`，且列資料存在時必有 `DT row curve load`。
   欄／列必共用同一份 `SingleGrabCurveData`；快取保存 rescale 前欄 Mean/Max 與合併後列 Mean/Max，資料夾重載或 Presenter Dispose 必清空。
+- **單片 Curve 預排版**：報表選取序號後，以 `ReviewImageDataLoader.Prepare` 只讀該筆路徑、CFG 與 JPEG header
+  （不解碼圖片），再經 `ReviewDisplayManager.TryComputeFitViewRange` 使用與回顧主畫面相同的合圖／fit 公式。
+  `DT prefit {grabId} content=WxH viewX=L~R viewY=T~B source=main-geometry` 必須在同 grabId 的欄／列 Curve
+  上畫前出現；報表不得讀取回顧頁上一筆 view，也不得維護第二套 fit 公式。切到回顧後，R2 的 `RV prefit`
+  以同一公式先同步主畫面與欄／列圖表，完整回顧載入的 `ViewRangeMmChanged` 再覆核。
+  `DT chartRange {grabId} chart=col|row axis=A~B/view=L~R` 是報表圖表 PostPaint 的實際狀態邊緣；
+  同一選取在資料上畫後不得出現第二組 Axis／View。不得以 `null` 視野覆寫成全幅。
 - **單片 Curve cache 基準**：LRU 上限 `512 筆／256 MB`，納入列 Curve 後以目前 278 筆實測資料可整批容納，避免往返滾動時
   反覆淘汰／重載造成 Gen2 GC；30,000 筆時仍保持固定上限。view-time HM rescale 不得 clone 每台完整 raw Curve，
   只能在 `CurveOverviewMerger` 產生最多約 2,000 點的 merged result 後縮放。這些是可重驗調整的效能參數，非鐵則。
@@ -1379,7 +1432,12 @@ cbDataId.SelectedIndexChanged
      ├ GrabDetailListBinder.Highlight（只移反白＋EnsureVisible＋RedrawItems）
      └ MuraProfileChartPresenter.Update（該 ID curve）
        ├ LatestCurveLoadCoordinator.Enqueue（running 保留、pending 覆寫成最新；stale result 不上畫）
-       └ LoadSingleGrabCoreAsync → Task.Run → SingleGrabCurveDataLoader.Load（與回顧共用）
+       └ LoadSingleGrabCoreAsync → Task.Run
+          ├ ReviewImageDataLoader.Prepare（只讀路徑／CFG／JPEG header，不解碼圖片）
+          │  → ReviewFitViewRangeProvider → ReviewDisplayManager.TryComputeFitViewRange
+          │    → ImageDisplayView.TryComputeMergeFitViewRange（報表／回顧主畫面 fit 公式唯一來源）
+          │      → DT prefit（同 grabId，必在欄／列 Curve 上畫前）
+          └ SingleGrabCurveDataLoader.Load（與回顧共用）
           ├ SingleGrabCurveCache.TryGet／GetOrLoadAsync（同 key in-flight 共用；rescale 前結果 LRU）
           ├ miss → SingleGrabCurveSummaryStore.TryLoad（命中＝一次 sequential read）
           ├ summary miss/stale/corrupt → InspectionImagePathRepository.LoadForGrabId

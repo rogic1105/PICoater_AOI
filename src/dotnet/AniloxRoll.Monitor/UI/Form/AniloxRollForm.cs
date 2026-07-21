@@ -42,6 +42,14 @@ namespace AniloxRoll.Monitor.Forms
         private ReviewDisplayManager _reviewDisplayManager;   // 回顧同源顯示（sdk ImageDisplayView，絞殺榕收官）
         private double _reviewViewLeftMm = double.NaN, _reviewViewRightMm, _reviewViewTopMm, _reviewViewBotMm; // 新畫布視野快取（chart 原子更新用）
         private int _reviewSyncCount; private long _reviewSyncOvMax, _reviewSyncRowMax;   // [ReviewSync] 拖曳跟隨計時儀器
+        private int _reviewPrefitGeneration;
+        private int _reviewPrefitStartTick;
+        private int _reviewPrefitColumnPaintGeneration;
+        private int _reviewPrefitRowPaintGeneration;
+        private string _reviewPrefitGrabId;
+        private string _reviewLastMainRangeState;
+        private string _reviewLastColumnRangeState;
+        private string _reviewLastRowRangeState;
         private AniloxRollPresenter _presenter;
         private BusyUiBinder _reviewBusyUi;
         private ReviewFolderCoordinator _reviewFolderCoordinator;
@@ -696,6 +704,9 @@ namespace AniloxRoll.Monitor.Forms
             _reviewRowSync = new RowCurveSyncCoordinator(_reviewRowDisplay);
             _reviewRowDisplay.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
 
+            chartReviewColumn.PostPaint += (s, e) => LogReviewChartPaint(isRow: false);
+            chartReviewRow.PostPaint += (s, e) => LogReviewChartPaint(isRow: true);
+
             UpdateRowChartPitch();
 
             // Review chart click only selects the displayed inspection direction.
@@ -782,6 +793,25 @@ namespace AniloxRoll.Monitor.Forms
                     new System.Windows.Forms.Panel[] { camReview1, camReview2, camReview3, camReview4, camReview5, camReview6, camReview7 });
                 // 選中相機 index 來源＝ImageDisplayView（取代舊 ThumbnailGridPresenter.SelectedIndex）
                 _stitchCoordinator.SelectedCamIndexProvider = () => _reviewDisplayManager?.SelectedCamIndex ?? 0;
+                _stitchCoordinator.StitchedLayoutReady += (grabId, ws, hs, ops, pos, isGlobal) =>
+                {
+                    ImageViewRange? computed = ComputeReviewFitViewRange(
+                        ws, hs, ops, pos, isGlobal,
+                        _reviewRowSync?.RowPitchMm ?? 0);
+                    if (!computed.HasValue) return;
+                    ImageViewRange range = computed.Value;
+
+                    var viewport = camReviewMain.ClientSize;
+                    FlowTrace.Log($"RV prefit {grabId} content={range.ContentWidth}x{range.ContentHeight} " +
+                        $"viewport={viewport.Width}x{viewport.Height} " +
+                        $"viewX={range.LeftMm:F0}~{range.RightMm:F0} " +
+                        $"viewY={range.TopMm:F0}~{range.BottomMm:F0}");
+                    BeginReviewPrefitProbe(grabId);
+                    ApplyReviewViewRangeToCharts(
+                        range.LeftMm, range.RightMm, range.TopMm, range.BottomMm,
+                        prepared: true);
+                    LogReviewPrefitApplied();
+                };
                 _stitchCoordinator.StitchedImagesReady += (gray, ws, hs, ops, pos, isGlobal) =>
                         _reviewDisplayManager?.PushFrames(gray, ws, hs, ops, pos, isGlobal,
                         _reviewRuntimeState.ScreenMmPerPixel,
@@ -791,22 +821,8 @@ namespace AniloxRoll.Monitor.Forms
                 // Stage2：新 canvas 視野 → 回顧曲線圖 zoom 連動（欄=全覽 X、列=Y；拖曳中即時）
                 _reviewDisplayManager.ViewRangeMmChanged += (l, r, top, bot) =>
                 {
-                    _reviewViewLeftMm = l; _reviewViewRightMm = r; _reviewViewTopMm = top; _reviewViewBotMm = bot;
-                    var swSync = System.Diagnostics.Stopwatch.StartNew();
-                    _reviewOverviewHelper?.UpdateViewRange(l, r);
-                    long ovMs = swSync.ElapsedMilliseconds;
-                    _reviewRowSync?.SetViewRange(top, bot);
-                    long rowMs = swSync.ElapsedMilliseconds - ovMs;
-                    // [ReviewSync] 計時儀器：單次 >25ms 即時告警；每 120 次彙總（拖曳 ~4 秒）→ 看瓶頸在 overview/row/事件頻率
-                    _reviewSyncCount++; _reviewSyncOvMax = Math.Max(_reviewSyncOvMax, ovMs); _reviewSyncRowMax = Math.Max(_reviewSyncRowMax, rowMs);
-                    long gapMs = swSync.ElapsedMilliseconds; // handler 總耗時
-                    if (gapMs > 25)
-                        Trace.WriteLine($"[ReviewSync] SLOW ov={ovMs}ms row={rowMs}ms");
-                    if (_reviewSyncCount >= 120)
-                    {
-                        Trace.WriteLine($"[ReviewSync] 120 events: ovMax={_reviewSyncOvMax}ms rowMax={_reviewSyncRowMax}ms");
-                        _reviewSyncCount = 0; _reviewSyncOvMax = 0; _reviewSyncRowMax = 0;
-                    }
+                    LogReviewMainRange(l, r, top, bot);
+                    ApplyReviewViewRangeToCharts(l, r, top, bot, prepared: false);
                 };
                 // chart 重建（重載/強化切換）原子帶入當前視野 → 不先閃回預設（同 Live 解法）
                 _stitchCoordinator.SameSourceViewRange = () =>

@@ -466,15 +466,11 @@ namespace TanukiCv.Controls
         public void FitToScreen()
         {
             int iw = ContentW, ih = ContentH;
-            if (iw <= 0 || ih <= 0) return;
+            if (!AspectFitCalculator.TryCompute(
+                iw, ih, Width, Height, out AspectFitTransform fit)) return;
 
-            float ratioW = (float)this.Width / iw;
-            float ratioH = (float)this.Height / ih;
-            _zoom = Math.Min(ratioW, ratioH) * 0.95f;
-
-            float drawW = iw * _zoom;
-            float drawH = ih * _zoom;
-            _panOffset = new PointF((this.Width - drawW) / 2, (this.Height - drawH) / 2);
+            _zoom = fit.Zoom;
+            _panOffset = new PointF(fit.PanX, fit.PanY);
             _fitZoom = _zoom;                 // 記下「1×」基準（FitRelativeZoom 用）
 
             this.Invalidate();

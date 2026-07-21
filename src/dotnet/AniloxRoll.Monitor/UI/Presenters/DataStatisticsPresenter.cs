@@ -63,6 +63,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
         // --- 設定 ---
         public InspectionSettings Settings { get; set; }
 
+        public Func<double[]> ReviewViewRangeProvider { get; set; }
+        internal Func<int[], int[], double[], double[], bool, double, ImageViewRange?>
+            ReviewFitViewRangeProvider { get; set; }
+
         public int CameraCount { get; set; } = 7;
     }
 
@@ -717,6 +721,12 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public void SyncMuraProfileFromReview(float[][] mean, float[][] max,
             double[] ops, double[] pos, float errMean, float errMax)
             => _muraChart?.SyncFromReview(mean, max, ops, pos, errMean, errMax);
+
+        public void SetReviewViewRange(double leftMm, double rightMm, double topMm, double bottomMm)
+            => _muraChart?.SetReviewViewRange(leftMm, rightMm, topMm, bottomMm);
+
+        public void SetPreparedReviewViewRange(double leftMm, double rightMm, double topMm, double bottomMm)
+            => _muraChart?.SetPreparedReviewViewRange(leftMm, rightMm, topMm, bottomMm);
 
         // ══════════════════════════════════════════════════════════════
         // 異常篩選

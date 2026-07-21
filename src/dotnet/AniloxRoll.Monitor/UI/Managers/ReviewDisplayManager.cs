@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 using TanukiCv.Controls;
+using TanukiCv.Core;
 
 namespace AniloxRoll.Monitor.UI.Managers
 {
@@ -75,7 +76,30 @@ namespace AniloxRoll.Monitor.UI.Managers
             }
             _view.ClearFramesExcept(present);
             _view.RefreshNow();
+            // Same pixel dimensions do not rebind LOD, but OPS/start/row pitch may still differ
+            // between grabs. Re-publish the range from ImageDisplayView's single conversion path
+            // before the new column/row curves are applied, so no chart paints with stale units.
+            _view.RefireViewRange();
             Core.Services.FlowTrace.Log($"RV pushFrames {pushed}/{count}（merge={mergeMode}, feedScale={feedScale}）");
+        }
+
+        /// <summary>
+        /// 只計算回顧合圖在 fit 狀態下的四邊，不建立 ImageDisplayView，也不觸發重繪。
+        /// </summary>
+        public bool TryComputeFitViewRange(
+            int[] widths, int[] heights, double[] opsUm, double[] posMm,
+            bool mergeMode, int feedScale, double rowPitchMm, bool flipVertical,
+            out ImageViewRange range)
+        {
+            range = default(ImageViewRange);
+            if (_disposed || !mergeMode || _mainHost.IsDisposed) return false;
+            return ImageDisplayView.TryComputeMergeFitViewRange(
+                widths, heights, posMm, opsUm,
+                Math.Max(1, feedScale), rowPitchMm,
+                mergeAll: true, mergeStrategy: MergeOverlap.Midline,
+                verticalZeroAtBottom: flipVertical,
+                viewport: _mainHost.ClientSize,
+                range: out range);
         }
 
         /// <summary>chart 重建後補發當前視野（強化切換/重載後曲線恢復跟隨，免等滑鼠互動）。</summary>

@@ -37,6 +37,7 @@ class DataFlowValidator:
         self._check_single_selection(session, report)
         self._check_single_curve_policy(session, report)
         self._check_single_curve(session, report)
+        self._check_single_fit(session, report)
         self._check_curve_summary_writes(session, report)
         self._check_single_row_curve(session, report)
         self._check_list_ownership(session, report)
@@ -234,6 +235,289 @@ class DataFlowValidator:
             "D3.curve-policy",
             CheckStatus.PASS if ok else CheckStatus.FAIL,
             f"行數={len(lines)} 實際={' | '.join(unique)}",
+        )
+
+    def _check_single_fit(self, session: FlowSession, report: CheckReport) -> None:
+        number = r"-?\d+(?:\.\d+)?"
+        pattern = re.compile(
+            r"^RV prefit (\d{6}-\d{6}) content=(\d+)x(\d+) "
+            r"viewport=(\d+)x(\d+) viewX=(-?\d+)~(-?\d+) "
+            r"viewY=(-?\d+)~(-?\d+)$"
+        )
+        report_fit_pattern = re.compile(
+            rf"^DT prefit (\d{{6}}-\d{{6}}) content=(\d+)x(\d+) "
+            rf"viewX=({number})~({number}) viewY=({number})~({number}) "
+            r"source=main-geometry$"
+        )
+        fits = []
+        invalid = []
+        report_fits = []
+        invalid_report_fits = []
+        for index, line in enumerate(session.lines):
+            if line.message.startswith("DT prefit "):
+                report_match = report_fit_pattern.match(line.message)
+                if not report_match:
+                    invalid_report_fits.append(line.message)
+                    continue
+                width = int(report_match.group(2))
+                height = int(report_match.group(3))
+                view = tuple(float(report_match.group(group)) for group in range(4, 8))
+                if width <= 0 or height <= 0 or view[0] == view[1] or view[2] == view[3]:
+                    invalid_report_fits.append(line.message)
+                    continue
+                report_fits.append((index, report_match.group(1), width, height, view))
+                continue
+            if not line.message.startswith("RV prefit "):
+                continue
+            match = pattern.match(line.message)
+            if not match:
+                invalid.append(line.message)
+                continue
+            values = tuple(map(int, match.groups()[1:]))
+            if min(values[:4]) <= 0 or values[4] == values[5] or values[6] == values[7]:
+                invalid.append(line.message)
+                continue
+            fits.append((index, match.group(1), values[0], values[1]))
+
+        if not fits and not invalid and not report_fits and not invalid_report_fits:
+            report.add(
+                self.domain, "D3.fit", CheckStatus.NOT_COVERED,
+                "舊版 log 無報表／回顧預排版儀器",
+            )
+            return
+
+        intents = [
+            (index, grab_id(line.message))
+            for index, line in enumerate(session.lines)
+            if line.message.startswith("ui:【報表序號】")
+        ]
+        final_ok = True
+        if intents:
+            final_index, final_id = intents[-1]
+            final_ok = any(index > final_index and item_id == final_id
+                           for index, item_id, _, _, _ in report_fits)
+
+        actual = []
+        ordering_failures = []
+        curve_ordering_failures = []
+        missing_prefit = []
+        missing_paints = []
+        late_paints = []
+        chart_drifts = []
+        report_chart_drifts = []
+        report_prefit_ordering_failures = []
+        active = None
+        lod_pattern = re.compile(r"^RV lodRebind merge (\d+)x(\d+)")
+        paint_pattern = re.compile(
+            r"^RV prefitPaint (\d{6}-\d{6}) chart=(col|row) after=\d+ms "
+        )
+        apply_pattern = re.compile(
+            rf"^RV prefitApply (\d{{6}}-\d{{6}}) after=\d+ms visible=(True|False) "
+            rf"col=axis=({number})~({number})/view=({number})~({number}) "
+            rf"row=axis=({number})~({number})/view=({number})~({number})$"
+        )
+        chart_range_pattern = re.compile(
+            rf"^RV chartRange (\d{{6}}-\d{{6}}|-) chart=(col|row) "
+            rf"axis=({number})~({number})/view=({number})~({number})$"
+        )
+        report_chart_range_pattern = re.compile(
+            rf"^DT chartRange (\d{{6}}-\d{{6}}|-) chart=(col|row) "
+            rf"axis=({number})~({number})/view=({number})~({number})$"
+        )
+        has_main_range_edges = any(
+            line.message.startswith("RV mainRange ") for line in session.lines
+        )
+        has_chart_range_edges = any(
+            line.message.startswith("RV chartRange ") for line in session.lines
+        )
+        last_curve_paths = {}
+        last_prefit = {}
+        last_layout = {}
+        last_report_intent = {}
+        last_report_prefit = {}
+        report_chart_ranges = []
+        for index, line in enumerate(session.lines):
+            if line.message.startswith("ui:【報表序號】"):
+                last_report_intent[grab_id(line.message)] = index
+            elif line.message.startswith("DT prefit "):
+                report_match = report_fit_pattern.match(line.message)
+                if report_match:
+                    last_report_prefit[report_match.group(1)] = index
+            elif line.message.startswith("DT curve load "):
+                item_id = grab_id(line.message)
+                intent_index = last_report_intent.get(item_id)
+                prefit_index = last_report_prefit.get(item_id)
+                if (intent_index is not None and
+                        (prefit_index is None or not intent_index < prefit_index < index)):
+                    report_prefit_ordering_failures.append(item_id)
+            elif line.message.startswith("RV curves paths "):
+                last_curve_paths[grab_id(line.message)] = index
+            elif line.message.startswith("RV prefit "):
+                last_prefit[grab_id(line.message)] = index
+            elif line.message.startswith("RV layout intent "):
+                last_layout[grab_id(line.message)] = index
+            elif (line.message.startswith("RV curves ")
+                  and not line.message.startswith(("RV curves paths ", "RV curves stale-drop "))):
+                item_id = grab_id(line.message)
+                path_index = last_curve_paths.get(item_id)
+                prefit_index = last_prefit.get(item_id)
+                layout_index = last_layout.get(item_id)
+                if (path_index is None or prefit_index is None or layout_index is None
+                        or not path_index < prefit_index < layout_index < index):
+                    curve_ordering_failures.append(item_id)
+
+            report_match = report_chart_range_pattern.match(line.message)
+            if report_match:
+                report_chart_ranges.append((
+                    index, report_match.group(1), report_match.group(2),
+                    tuple(float(report_match.group(group)) for group in range(3, 7)),
+                ))
+
+            if line.message.startswith("RV loadGrab begin "):
+                active = {
+                    "id": grab_id(line.message),
+                    "begin": index,
+                    "prefit": None,
+                    "lod": None,
+                    "push": None,
+                    "visible": None,
+                    "paints": {},
+                    "apply": None,
+                    "chart_ranges": [],
+                }
+                continue
+            if active and line.message.startswith("RV prefit "):
+                match = pattern.match(line.message)
+                if match and match.group(1) == active["id"]:
+                    active["prefit"] = (
+                        index, int(match.group(2)), int(match.group(3))
+                    )
+                else:
+                    invalid.append(line.message)
+                continue
+            match = paint_pattern.match(line.message)
+            if active and match:
+                if match.group(1) == active["id"]:
+                    active["paints"][match.group(2)] = index
+                else:
+                    invalid.append(line.message)
+                continue
+            match = apply_pattern.match(line.message)
+            if active and match:
+                if match.group(1) == active["id"]:
+                    active["visible"] = match.group(2) == "True"
+                    active["apply"] = {
+                        "index": index,
+                        "col": tuple(float(match.group(group)) for group in range(3, 7)),
+                        "row": tuple(float(match.group(group)) for group in range(7, 11)),
+                    }
+                else:
+                    invalid.append(line.message)
+                continue
+            match = chart_range_pattern.match(line.message)
+            if active and match:
+                if match.group(1) in (active["id"], "-"):
+                    active["chart_ranges"].append((
+                        index, match.group(2),
+                        tuple(float(match.group(group)) for group in range(3, 7)),
+                    ))
+                else:
+                    invalid.append(line.message)
+                continue
+            match = lod_pattern.match(line.message)
+            if active and match and active["lod"] is None:
+                active["lod"] = (index, int(match.group(1)), int(match.group(2)))
+            if active and line.message.startswith("RV pushFrames ") and active["push"] is None:
+                active["push"] = index
+            if line.message.startswith(("RV loadGrab done ", "RV loadGrab stale-drop ")):
+                completed = line.message.startswith("RV loadGrab done ")
+                if active and active["lod"]:
+                    lod_index, width, height = active["lod"]
+                    actual.append((active["id"], width, height))
+                if active and completed and (active["lod"] or active["push"]):
+                    deadlines = [item[0] for item in [active["lod"]] if item]
+                    if active["push"] is not None:
+                        deadlines.append(active["push"])
+                    deadline = min(deadlines)
+                    if active["prefit"] is None:
+                        missing_prefit.append(active["id"])
+                    elif active["prefit"][0] >= deadline:
+                        ordering_failures.append(active["id"])
+
+                    if active["visible"] is True:
+                        absent = {"col", "row"} - set(active["paints"])
+                        if absent:
+                            missing_paints.append(
+                                f"{active['id']}:{','.join(sorted(absent))}"
+                            )
+                        for chart, paint_index in active["paints"].items():
+                            if paint_index >= deadline:
+                                late_paints.append(f"{active['id']}:{chart}")
+                    elif active["visible"] is None:
+                        missing_paints.append(f"{active['id']}:prefitApply")
+
+                    if active["apply"] is not None:
+                        apply_index = active["apply"]["index"]
+                        for range_index, chart, view in active["chart_ranges"]:
+                            if range_index <= apply_index:
+                                continue
+                            expected_view = active["apply"][chart]
+                            if any(abs(actual_value - expected_value) > 0.05
+                                   for actual_value, expected_value in zip(view, expected_view)):
+                                chart_drifts.append(
+                                    f"{active['id']}:{chart} "
+                                    f"axis/view {expected_view}->{view}"
+                                )
+                active = None
+
+        report_edges_ok = not intents
+        if intents:
+            final_intent_index, final_intent_id = intents[-1]
+            final_ranges = [
+                (chart, state) for index, item_id, chart, state in report_chart_ranges
+                if index > final_intent_index and item_id == final_intent_id
+            ]
+            report_edges_ok = {chart for chart, _ in final_ranges} >= {"col", "row"}
+            for chart in ("col", "row"):
+                states = [state for item_chart, state in final_ranges if item_chart == chart]
+                if states and any(
+                    any(abs(actual_value - expected_value) > 0.05
+                        for actual_value, expected_value in zip(state, states[0]))
+                    for state in states[1:]
+                ):
+                    report_chart_drifts.append(f"{final_intent_id}:{chart}")
+
+        predicted = {item_id: (width, height) for _, item_id, width, height in fits}
+        mismatches = [
+            f"{item_id}:{predicted[item_id][0]}x{predicted[item_id][1]}!={width}x{height}"
+            for item_id, width, height in actual
+            if item_id in predicted and predicted[item_id] != (width, height)
+        ]
+        review_edges_ok = not fits or (has_main_range_edges and has_chart_range_edges)
+        ok = (
+            not invalid and not invalid_report_fits and final_ok and not mismatches
+            and not ordering_failures and not curve_ordering_failures and not missing_prefit
+            and not missing_paints and not late_paints
+            and review_edges_ok and not chart_drifts
+            and report_edges_ok and not report_chart_drifts
+            and not report_prefit_ordering_failures
+        )
+        report.add(
+            self.domain,
+            "D3.fit",
+            CheckStatus.PASS if ok else CheckStatus.FAIL,
+            f"rvPrefit={len(fits)} dtPrefit={len(report_fits)} actual={len(actual)} "
+            f"final={'ok' if final_ok else 'missing'} "
+            f"格式錯誤={len(invalid) + len(invalid_report_fits)} 尺寸矛盾={len(mismatches)} "
+            f"圖片順序錯誤={len(ordering_failures)} Curve順序錯誤={len(curve_ordering_failures)} "
+            f"報表順序錯誤={len(report_prefit_ordering_failures)} "
+            f"缺prefit={len(missing_prefit)} "
+            f"缺paint={len(missing_paints)} paint過晚={len(late_paints)} "
+            f"mainEdge={'yes' if has_main_range_edges else 'no'} "
+            f"chartEdge={'yes' if has_chart_range_edges else 'no'} "
+            f"reportEdge={'yes' if report_edges_ok else 'no'} "
+            f"二次跳位={len(chart_drifts)} 報表跳位={len(report_chart_drifts)}"
+            + (f"；首筆 {mismatches[0]}" if mismatches else ""),
         )
 
     def _check_single_row_curve(self, session: FlowSession, report: CheckReport) -> None:

@@ -109,7 +109,7 @@ namespace TanukiCv.Controls
                 _logicalLeftMm  = viewLeftMm;
                 _logicalRightMm = viewRightMm;
                 GetAdjustedZoom(viewLeftMm, viewRightMm, out double zMin, out double zMax);
-                ApplyAxisBounds(area.AxisX, Math.Min(_dataMinX, zMin), Math.Max(_dataMaxX, zMax));
+                ApplyViewportBounds(area.AxisX, zMin, zMax);
                 ApplyXAxisTickInterval(area.AxisX, zMin, zMax);
                 try { area.AxisX.ScaleView.Zoom(zMin, zMax); }
                 catch (Exception ex)
@@ -178,6 +178,24 @@ namespace TanukiCv.Controls
         // ── Canvas 聯動（X 軸 zoom）────────────────────────────────────────────
 
         public void UpdateViewRange(double minMm, double maxMm)
+            => UpdateViewRangeCore(minMm, maxMm, invalidateBeforeUpdate: false);
+
+        /// <summary>
+        /// Updates the visible physical range and forces it to paint immediately.
+        /// Use when a prepared range must appear before later image or data work invalidates the chart.
+        /// </summary>
+        public void UpdateViewRangeImmediate(double minMm, double maxMm)
+        {
+            bool plotWasFrozen = _innerPlotPositionFrozen;
+            UpdateViewRangeCore(minMm, maxMm, invalidateBeforeUpdate: true);
+            // The first real paint discovers MSChart's InnerPlotPosition. Reapply in the same
+            // UI action so the prepared range already includes plot-area compensation instead
+            // of changing again when image/curve data is presented.
+            if (!plotWasFrozen && _innerPlotPositionFrozen)
+                UpdateViewRangeCore(minMm, maxMm, invalidateBeforeUpdate: true);
+        }
+
+        private void UpdateViewRangeCore(double minMm, double maxMm, bool invalidateBeforeUpdate)
         {
             if (_chart.ChartAreas.Count == 0) return;
             if (double.IsNaN(minMm) || double.IsNaN(maxMm) || minMm >= maxMm) return;
@@ -188,8 +206,9 @@ namespace TanukiCv.Controls
             var axisX = _chart.ChartAreas[0].AxisX;
             // ⚠ 拖曳即時跟隨效能：設 Minimum/Maximum 會觸發 MSChart 整張重排版（比 ScaleView.Zoom 貴一級）。
             //   30fps 連續跟隨時 Min/Max 其實不變（資料沒換）→ 只在真的變了才設，跟隨只走便宜的 Zoom。
-            double newMin = Math.Min(_dataMinX, zMin), newMax = Math.Max(_dataMaxX, zMax);
-            ApplyAxisBounds(axisX, newMin, newMax);
+            // While synchronized to the image, the image viewport is the coordinate SSoT.
+            // Curve extent must not resize the axis before the debounced image is presented.
+            ApplyViewportBounds(axisX, zMin, zMax);
             ApplyXAxisTickInterval(axisX, zMin, zMax);
             try { axisX.ScaleView.Zoom(zMin, zMax); }
             catch (Exception ex)
@@ -199,6 +218,8 @@ namespace TanukiCv.Controls
             }
             // 拖曳即時跟隨：滑鼠訊息佔滿佇列時 WM_PAINT（最低優先級）會飢餓 → chart 放開滑鼠才動。
             // Update() 同步畫掉 pending paint → 真即時（鐵則：互動中不可抑制曲線連動）。
+            if (invalidateBeforeUpdate)
+                _chart.Invalidate();
             _chart.Update();
         }
 
@@ -260,8 +281,7 @@ namespace TanukiCv.Controls
             var axisX = _chart.ChartAreas[0].AxisX;
             // ⚠ 拖曳即時跟隨效能：設 Minimum/Maximum 會觸發 MSChart 整張重排版（比 ScaleView.Zoom 貴一級）。
             //   30fps 連續跟隨時 Min/Max 其實不變（資料沒換）→ 只在真的變了才設，跟隨只走便宜的 Zoom。
-            double newMin = Math.Min(_dataMinX, zMin), newMax = Math.Max(_dataMaxX, zMax);
-            ApplyAxisBounds(axisX, newMin, newMax);
+            ApplyViewportBounds(axisX, zMin, zMax);
             ApplyXAxisTickInterval(axisX, zMin, zMax);
             try { axisX.ScaleView.Zoom(zMin, zMax); }
             catch (Exception ex)
@@ -284,6 +304,11 @@ namespace TanukiCv.Controls
             if (axis == null) return;
             if (axis.Minimum != min) axis.Minimum = min;
             if (axis.Maximum != max) axis.Maximum = max;
+        }
+
+        private void ApplyViewportBounds(Axis axis, double first, double second)
+        {
+            ApplyAxisBounds(axis, Math.Min(first, second), Math.Max(first, second));
         }
 
         private void ApplyXAxisTickInterval(Axis axis, double min, double max)

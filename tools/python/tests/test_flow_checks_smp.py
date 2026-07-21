@@ -137,6 +137,187 @@ class DataFlowValidatorTests(unittest.TestCase):
         self.assertEqual(CheckStatus.FAIL, result(report, "D3.curve").status)
         self.assertEqual(CheckStatus.FAIL, result(report, "D3.row-curve").status)
 
+    def test_single_fit_matches_later_review_lod_geometry(self):
+        report = DataFlowValidator().validate(
+            session(
+                "ui:【報表序號】→ 260721-080001",
+                "DT selected 260721-080001 stats=cache list=keep ms=1",
+                "DT prefit 260721-080001 content=20236x15000 viewX=-952~3422 viewY=17105~-439 source=main-geometry",
+                "RV loadGrab begin 260721-080001（proc=False）",
+                "RV prefit 260721-080001 content=20236x15000 viewport=1353x596 viewX=-952~3422 viewY=17105~-439",
+                "RV prefitPaint 260721-080001 chart=col after=0ms axis=-952~3422/view=-900~3350",
+                "RV chartRange 260721-080001 chart=col axis=-952~3422/view=-900~3350",
+                "RV prefitPaint 260721-080001 chart=row after=1ms axis=-439~17105/view=-400~17000",
+                "RV chartRange 260721-080001 chart=row axis=-439~17105/view=-400~17000",
+                "RV prefitApply 260721-080001 after=1ms visible=True col=axis=-952~3422/view=-900~3350 row=axis=-439~17105/view=-400~17000",
+                "RV mainRange 260721-080001 viewX=-952.00~3422.00 viewY=17105.00~-439.00",
+                "DT chartRange 260721-080001 chart=col axis=-952~3422/view=-900~3350",
+                "DT chartRange 260721-080001 chart=row axis=-439~17105/view=-400~17000",
+                "RV lodRebind merge 20236x15000（fit reset）",
+                "RV loadGrab done 260721-080001（100ms）",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "D3.fit").status)
+
+    def test_single_fit_fails_when_review_lod_geometry_differs(self):
+        report = DataFlowValidator().validate(
+            session(
+                "ui:【報表序號】→ 260721-080001",
+                "DT selected 260721-080001 stats=cache list=keep ms=1",
+                "DT prefit 260721-080001 content=20236x15000 viewX=-952~3422 viewY=17105~-439 source=main-geometry",
+                "RV loadGrab begin 260721-080001（proc=False）",
+                "RV prefit 260721-080001 content=20233x15000 viewport=1353x596 viewX=-952~3422 viewY=17105~-439",
+                "RV prefitPaint 260721-080001 chart=col after=0ms axis=-952~3422/view=-900~3350",
+                "RV chartRange 260721-080001 chart=col axis=-952~3422/view=-900~3350",
+                "RV prefitPaint 260721-080001 chart=row after=1ms axis=-439~17105/view=-400~17000",
+                "RV chartRange 260721-080001 chart=row axis=-439~17105/view=-400~17000",
+                "RV prefitApply 260721-080001 after=1ms visible=True col=axis=-952~3422/view=-900~3350 row=axis=-439~17105/view=-400~17000",
+                "RV mainRange 260721-080001 viewX=-952.00~3422.00 viewY=17105.00~-439.00",
+                "DT chartRange 260721-080001 chart=col axis=-952~3422/view=-900~3350",
+                "DT chartRange 260721-080001 chart=row axis=-439~17105/view=-400~17000",
+                "RV lodRebind merge 20236x15000（fit reset）",
+                "RV loadGrab done 260721-080001（100ms）",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "D3.fit").status)
+
+    def test_single_fit_fails_when_prefit_runs_after_image_rebind(self):
+        report = DataFlowValidator().validate(
+            session(
+                "ui:【報表序號】→ 260721-080001",
+                "DT selected 260721-080001 stats=cache list=keep ms=1",
+                "DT prefit 260721-080001 content=20236x15000 viewX=-952~3422 viewY=17105~-439 source=main-geometry",
+                "RV loadGrab begin 260721-080001（proc=False）",
+                "RV lodRebind merge 20236x15000（fit reset）",
+                "RV prefit 260721-080001 content=20236x15000 viewport=1353x596 viewX=-952~3422 viewY=17105~-439",
+                "RV prefitPaint 260721-080001 chart=col after=0ms axis=-952~3422/view=-900~3350",
+                "RV chartRange 260721-080001 chart=col axis=-952~3422/view=-900~3350",
+                "RV prefitPaint 260721-080001 chart=row after=1ms axis=-439~17105/view=-400~17000",
+                "RV chartRange 260721-080001 chart=row axis=-439~17105/view=-400~17000",
+                "RV prefitApply 260721-080001 after=1ms visible=True col=axis=-952~3422/view=-900~3350 row=axis=-439~17105/view=-400~17000",
+                "RV mainRange 260721-080001 viewX=-952.00~3422.00 viewY=17105.00~-439.00",
+                "DT chartRange 260721-080001 chart=col axis=-952~3422/view=-900~3350",
+                "DT chartRange 260721-080001 chart=row axis=-439~17105/view=-400~17000",
+                "RV loadGrab done 260721-080001（100ms）",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "D3.fit").status)
+
+    def test_single_fit_fails_when_chart_paints_after_image_rebind(self):
+        report = DataFlowValidator().validate(
+            session(
+                "ui:【報表序號】→ 260721-080001",
+                "DT selected 260721-080001 stats=cache list=keep ms=1",
+                "DT prefit 260721-080001 content=20236x15000 viewX=-952~3422 viewY=17105~-439 source=main-geometry",
+                "RV loadGrab begin 260721-080001（proc=False）",
+                "RV prefit 260721-080001 content=20236x15000 viewport=1353x596 viewX=-952~3422 viewY=17105~-439",
+                "RV chartRange 260721-080001 chart=col axis=-952~3422/view=-900~3350",
+                "RV chartRange 260721-080001 chart=row axis=-439~17105/view=-400~17000",
+                "RV prefitApply 260721-080001 after=0ms visible=True col=axis=-952~3422/view=-900~3350 row=axis=-439~17105/view=-400~17000",
+                "RV mainRange 260721-080001 viewX=-952.00~3422.00 viewY=17105.00~-439.00",
+                "DT chartRange 260721-080001 chart=col axis=-952~3422/view=-900~3350",
+                "DT chartRange 260721-080001 chart=row axis=-439~17105/view=-400~17000",
+                "RV lodRebind merge 20236x15000（fit reset）",
+                "RV prefitPaint 260721-080001 chart=col after=350ms axis=-952~3422/view=-900~3350",
+                "RV prefitPaint 260721-080001 chart=row after=350ms axis=-439~17105/view=-400~17000",
+                "RV loadGrab done 260721-080001（400ms）",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "D3.fit").status)
+
+    def test_single_fit_fails_when_chart_view_changes_after_prefit(self):
+        report = DataFlowValidator().validate(
+            session(
+                "ui:【報表序號】→ 260721-080001",
+                "DT selected 260721-080001 stats=cache list=keep ms=1",
+                "DT prefit 260721-080001 content=20236x15000 viewX=-952~3422 viewY=17105~-439 source=main-geometry",
+                "RV loadGrab begin 260721-080001（proc=False）",
+                "RV prefit 260721-080001 content=20236x15000 viewport=1353x596 viewX=-952~3422 viewY=17105~-439",
+                "RV prefitPaint 260721-080001 chart=col after=0ms axis=-952~3422/view=-900~3350",
+                "RV chartRange 260721-080001 chart=col axis=-952~3422/view=-900~3350",
+                "RV prefitPaint 260721-080001 chart=row after=0ms axis=-439~17105/view=-400~17000",
+                "RV chartRange 260721-080001 chart=row axis=-439~17105/view=-400~17000",
+                "RV prefitApply 260721-080001 after=0ms visible=True col=axis=-952~3422/view=-900~3350 row=axis=-439~17105/view=-400~17000",
+                "RV mainRange 260721-080001 viewX=-952.00~3422.00 viewY=17105.00~-439.00",
+                "DT chartRange 260721-080001 chart=col axis=-952~3422/view=-900~3350",
+                "DT chartRange 260721-080001 chart=row axis=-439~17105/view=-400~17000",
+                "RV chartRange 260721-080001 chart=row axis=-439~17105/view=-350~16950",
+                "RV lodRebind merge 20236x15000（fit reset）",
+                "RV loadGrab done 260721-080001（100ms）",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "D3.fit").status)
+
+    def test_single_fit_fails_when_chart_axis_changes_but_view_stays_equal(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT selected 260721-080001 stats=cache list=keep ms=1",
+                "RV loadGrab begin 260721-080001（proc=False）",
+                "RV prefit 260721-080001 content=20236x15000 viewport=1353x596 viewX=-952~3422 viewY=17105~-439",
+                "RV prefitPaint 260721-080001 chart=col after=0ms axis=-952~3422/view=-900~3350",
+                "RV chartRange 260721-080001 chart=col axis=-952~3422/view=-900~3350",
+                "RV prefitPaint 260721-080001 chart=row after=0ms axis=-439~17105/view=-400~17000",
+                "RV chartRange 260721-080001 chart=row axis=-439~17105/view=-400~17000",
+                "RV prefitApply 260721-080001 after=0ms visible=True col=axis=-952~3422/view=-900~3350 row=axis=-439~17105/view=-400~17000",
+                "RV mainRange 260721-080001 viewX=-952.00~3422.00 viewY=17105.00~-439.00",
+                "RV chartRange 260721-080001 chart=row axis=0~22000/view=-400~17000",
+                "RV lodRebind merge 20236x15000（fit reset）",
+                "RV loadGrab done 260721-080001（100ms）",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "D3.fit").status)
+
+    def test_single_fit_requires_layout_before_successful_curve(self):
+        messages = [
+            "DT selected 260721-080001 stats=cache list=keep ms=1",
+            "RV curves paths 260721-080001 root=D:\\Anilox images=7 cams=7 cfg=yes align=tick source=bins",
+            "RV prefit 260721-080001 content=20236x15000 viewport=1353x596 viewX=-952~3422 viewY=17105~-439",
+            "RV layout intent 260721-080001 images=7 cams=7 align=tick before=curves",
+            "RV curves 260721-080001（10ms）",
+            "RV loadGrab begin 260721-080001（proc=False）",
+            "RV prefit 260721-080001 content=20236x15000 viewport=1353x596 viewX=-952~3422 viewY=17105~-439",
+            "RV prefitPaint 260721-080001 chart=col after=0ms axis=-952~3422/view=-900~3350",
+            "RV chartRange 260721-080001 chart=col axis=-952~3422/view=-900~3350",
+            "RV prefitPaint 260721-080001 chart=row after=0ms axis=-439~17105/view=-400~17000",
+            "RV chartRange 260721-080001 chart=row axis=-439~17105/view=-400~17000",
+            "RV prefitApply 260721-080001 after=0ms visible=True col=axis=-952~3422/view=-900~3350 row=axis=-439~17105/view=-400~17000",
+            "RV mainRange 260721-080001 viewX=-952.00~3422.00 viewY=17105.00~-439.00",
+            "RV lodRebind merge 20236x15000（fit reset）",
+            "RV loadGrab done 260721-080001（100ms）",
+        ]
+        report = DataFlowValidator().validate(session(*messages))
+        self.assertEqual(CheckStatus.PASS, result(report, "D3.fit").status)
+
+        messages[3:4] = []
+        report = DataFlowValidator().validate(session(*messages))
+        self.assertEqual(CheckStatus.FAIL, result(report, "D3.fit").status)
+
+    def test_report_single_fit_precedes_curve_and_covers_both_charts(self):
+        report = DataFlowValidator().validate(
+            session(
+                "ui:【報表序號】→ 260721-080001",
+                "DT selected 260721-080001 stats=cache list=keep ms=1",
+                "DT prefit 260721-080001 content=20236x15000 viewX=-952~3422 viewY=17105~-439 source=main-geometry",
+                "DT chartRange 260721-080001 chart=col axis=-952~3422/view=-900~3350",
+                "DT chartRange 260721-080001 chart=row axis=-439~17105/view=-400~17000",
+                "DT curve load 260721-080001 captures=7 source=shared storage=summary configMs=1 waitMs=2 pathMs=0 mergeMs=0 summaryMs=1 points=100 drawMs=3 totalMs=5",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "D3.fit").status)
+
+    def test_report_single_fit_fails_when_prefit_follows_curve(self):
+        report = DataFlowValidator().validate(
+            session(
+                "ui:【報表序號】→ 260721-080001",
+                "DT selected 260721-080001 stats=cache list=keep ms=1",
+                "DT chartRange 260721-080001 chart=col axis=-952~3422/view=-900~3350",
+                "DT chartRange 260721-080001 chart=row axis=-439~17105/view=-400~17000",
+                "DT curve load 260721-080001 captures=7 source=shared storage=summary configMs=1 waitMs=2 pathMs=0 mergeMs=0 summaryMs=1 points=100 drawMs=3 totalMs=5",
+                "DT prefit 260721-080001 content=20236x15000 viewX=-952~3422 viewY=17105~-439 source=main-geometry",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "D3.fit").status)
+
 class MuraFlowValidatorTests(unittest.TestCase):
     def test_edges_health_and_pause_sequences_pass(self):
         report = MuraFlowValidator().validate(

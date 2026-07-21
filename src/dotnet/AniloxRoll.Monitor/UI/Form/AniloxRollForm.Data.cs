@@ -34,6 +34,140 @@ namespace AniloxRoll.Monitor.Forms
         // --- 檢測數據 Tab ---
         // ==========================================
 
+        private void ApplyReviewViewRangeToCharts(
+            double leftMm, double rightMm, double topMm, double bottomMm,
+            bool prepared)
+        {
+            _reviewViewLeftMm = leftMm;
+            _reviewViewRightMm = rightMm;
+            _reviewViewTopMm = topMm;
+            _reviewViewBotMm = bottomMm;
+
+            var swSync = System.Diagnostics.Stopwatch.StartNew();
+            if (prepared)
+            {
+                _reviewOverviewHelper?.UpdateViewRangeImmediate(leftMm, rightMm);
+                _dataStatsPresenter?.SetPreparedReviewViewRange(leftMm, rightMm, topMm, bottomMm);
+            }
+            else
+            {
+                _reviewOverviewHelper?.UpdateViewRange(leftMm, rightMm);
+                _dataStatsPresenter?.SetReviewViewRange(leftMm, rightMm, topMm, bottomMm);
+            }
+            long ovMs = swSync.ElapsedMilliseconds;
+            if (prepared)
+                _reviewRowSync?.SetPreparedViewRange(topMm, bottomMm);
+            else
+                _reviewRowSync?.SetViewRange(topMm, bottomMm);
+            long rowMs = swSync.ElapsedMilliseconds - ovMs;
+
+            _reviewSyncCount++;
+            _reviewSyncOvMax = Math.Max(_reviewSyncOvMax, ovMs);
+            _reviewSyncRowMax = Math.Max(_reviewSyncRowMax, rowMs);
+            long totalMs = swSync.ElapsedMilliseconds;
+            if (totalMs > 25)
+                Trace.WriteLine($"[ReviewSync] SLOW ov={ovMs}ms row={rowMs}ms");
+            if (_reviewSyncCount >= 120)
+            {
+                Trace.WriteLine($"[ReviewSync] 120 events: ovMax={_reviewSyncOvMax}ms rowMax={_reviewSyncRowMax}ms");
+                _reviewSyncCount = 0;
+                _reviewSyncOvMax = 0;
+                _reviewSyncRowMax = 0;
+            }
+        }
+
+        private ImageViewRange? ComputeReviewFitViewRange(
+            int[] widths, int[] heights, double[] opsUm, double[] positionsMm,
+            bool isGlobal, double rowPitchMm)
+        {
+            if (_reviewDisplayManager == null) return null;
+            if (!_reviewDisplayManager.TryComputeFitViewRange(
+                widths, heights, opsUm, positionsMm, isGlobal,
+                InspectionEngineConfig.DefaultSaveResizeScale,
+                rowPitchMm, ShouldFlipDisplayVertical(), out ImageViewRange range))
+                return null;
+            return range;
+        }
+
+        private void BeginReviewPrefitProbe(string grabId)
+        {
+            _reviewPrefitGeneration++;
+            _reviewPrefitGrabId = grabId ?? "";
+            _reviewPrefitStartTick = Environment.TickCount;
+        }
+
+        private void LogReviewPrefitApplied()
+        {
+            if (_reviewPrefitGeneration <= 0) return;
+            FlowTrace.Log(
+                $"RV prefitApply {_reviewPrefitGrabId} after={PrefitElapsedMs()}ms " +
+                $"visible={tabMain.SelectedTab == tabPageReview} " +
+                $"col={DescribeReviewAxis(chartReviewColumn, isRow: false)} " +
+                $"row={DescribeReviewAxis(chartReviewRow, isRow: true)}");
+        }
+
+        private void LogReviewPrefitPaint(bool isRow)
+        {
+            int generation = _reviewPrefitGeneration;
+            if (generation <= 0) return;
+            if (isRow)
+            {
+                if (_reviewPrefitRowPaintGeneration == generation) return;
+                _reviewPrefitRowPaintGeneration = generation;
+            }
+            else
+            {
+                if (_reviewPrefitColumnPaintGeneration == generation) return;
+                _reviewPrefitColumnPaintGeneration = generation;
+            }
+
+            var chart = isRow ? chartReviewRow : chartReviewColumn;
+            FlowTrace.Log(
+                $"RV prefitPaint {_reviewPrefitGrabId} chart={(isRow ? "row" : "col")} " +
+                $"after={PrefitElapsedMs()}ms {DescribeReviewAxis(chart, isRow)}");
+        }
+
+        private void LogReviewMainRange(double leftMm, double rightMm, double topMm, double bottomMm)
+        {
+            string state = $"viewX={leftMm:F2}~{rightMm:F2} viewY={topMm:F2}~{bottomMm:F2}";
+            if (string.Equals(_reviewLastMainRangeState, state, StringComparison.Ordinal)) return;
+            _reviewLastMainRangeState = state;
+            FlowTrace.Log($"RV mainRange {CurrentReviewRangeGrabId()} {state}");
+        }
+
+        private void LogReviewChartPaint(bool isRow)
+        {
+            LogReviewPrefitPaint(isRow);
+
+            var chart = isRow ? chartReviewRow : chartReviewColumn;
+            string state = DescribeReviewAxis(chart, isRow);
+            string previous = isRow ? _reviewLastRowRangeState : _reviewLastColumnRangeState;
+            if (string.Equals(previous, state, StringComparison.Ordinal)) return;
+            if (isRow)
+                _reviewLastRowRangeState = state;
+            else
+                _reviewLastColumnRangeState = state;
+            FlowTrace.Log(
+                $"RV chartRange {CurrentReviewRangeGrabId()} chart={(isRow ? "row" : "col")} {state}");
+        }
+
+        private string CurrentReviewRangeGrabId()
+            => string.IsNullOrWhiteSpace(_reviewPrefitGrabId) ? "-" : _reviewPrefitGrabId;
+
+        private int PrefitElapsedMs()
+            => unchecked(Environment.TickCount - _reviewPrefitStartTick);
+
+        private static string DescribeReviewAxis(
+            System.Windows.Forms.DataVisualization.Charting.Chart chart, bool isRow)
+        {
+            if (chart == null || chart.IsDisposed || chart.ChartAreas.Count == 0)
+                return "unavailable";
+            var axis = isRow
+                ? chart.ChartAreas[0].AxisY
+                : chart.ChartAreas[0].AxisX;
+            return $"axis={axis.Minimum:F2}~{axis.Maximum:F2}/view={axis.ScaleView.ViewMinimum:F2}~{axis.ScaleView.ViewMaximum:F2}";
+        }
+
         /// <summary>檢測報表 Y 軸 setting（gb 模式 / gc/gd/ge 各週期 YMax）→ 套到 Data 統計 charts。
         /// （Wave3 選項1：從 OnSettingChanged dispatcher 搬入。）</summary>
         private void HandleChartScaleSettingsChanged(string name)
@@ -89,6 +223,10 @@ namespace AniloxRoll.Monitor.Forms
                 CbChartYear = cbDataYieldYear, CbChartMonth = cbDataYieldMonth, CbChartDay = cbDataYieldDay,
                 LblChartNavYear = lblChartNavYear, LblChartNavMonth = lblChartNavMonth, LblChartNavDay = lblChartNavDay,
                 Settings = _settings, CameraCount = CameraCount,
+                ReviewViewRangeProvider = () => double.IsNaN(_reviewViewLeftMm)
+                    ? null
+                    : new[] { _reviewViewLeftMm, _reviewViewRightMm, _reviewViewTopMm, _reviewViewBotMm },
+                ReviewFitViewRangeProvider = ComputeReviewFitViewRange,
             });
 
             // 年/月/日 label 做成「看起來可點」的浮雕小晶片（Fixed3D 外框 + 手指游標）；點擊行為由 navigator 接

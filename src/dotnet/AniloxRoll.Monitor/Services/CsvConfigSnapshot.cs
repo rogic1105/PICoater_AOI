@@ -15,6 +15,8 @@ namespace AniloxRoll.Monitor.Core.Services
         public int[] CamGrabHeight { get; }    // length 7，高度滑桿（line scan 行數）
         public double[] CamExposureUs { get; } // length 7，曝光滑桿（μs）
         public double[] CamLineRateHz { get; } // length 7，線掃滑桿（Hz）
+        /// <summary>擷取當下的 A 輪速度；與線掃速率共同決定列方向 mm/row。</summary>
+        public double AniloxRollSpeedMPerMin { get; }
         /// <summary>欄正規值 — 同時是 capture 時送進 native 的單一 HM，bin 中 baked-in 的縮放係數。</summary>
         public float HessianMaxFactorV { get; }
         /// <summary>列正規值 — view-time only，僅供 H 曲線顯示縮放參考。</summary>
@@ -36,12 +38,13 @@ namespace AniloxRoll.Monitor.Core.Services
             float errorValueMeanV, float errorValueMaxV,
             float errorValueMeanH, float errorValueMaxH,
             double trimHeadMm, double trimTailMm,
-            DateTime timestamp)
+            DateTime timestamp,
+            double aniloxRollSpeedMPerMin = 0)
             : this(
                 camOps, camPos, camGrabHeight, camExposureUs, camLineRateHz,
                 hessianMaxFactorV, hessianMaxFactorH, 0f,
                 errorValueMeanV, errorValueMaxV, errorValueMeanH, errorValueMaxH,
-                trimHeadMm, trimTailMm, timestamp)
+                trimHeadMm, trimTailMm, timestamp, aniloxRollSpeedMPerMin)
         {
         }
 
@@ -52,13 +55,15 @@ namespace AniloxRoll.Monitor.Core.Services
             float errorValueMeanV, float errorValueMaxV,
             float errorValueMeanH, float errorValueMaxH,
             double trimHeadMm, double trimTailMm,
-            DateTime timestamp)
+            DateTime timestamp,
+            double aniloxRollSpeedMPerMin = 0)
         {
             CamOps = camOps ?? new double[7];
             CamPos = camPos ?? new double[7];
             CamGrabHeight = camGrabHeight ?? new int[7];
             CamExposureUs = camExposureUs ?? new double[7];
             CamLineRateHz = camLineRateHz ?? new double[7];
+            AniloxRollSpeedMPerMin = aniloxRollSpeedMPerMin;
             HessianMaxFactorV = hessianMaxFactorV;
             HessianMaxFactorH = hessianMaxFactorH;
             RidgeSigma = ridgeSigma;
@@ -85,7 +90,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 s.ErrorValueMeanH, s.ErrorValueMaxH,
                 s.TrimHeadMm,
                 s.TrimTailMm,
-                DateTime.Now);
+                DateTime.Now,
+                s.AniloxRollSpeedMPerMin);
         }
 
         /// <summary>不含時間戳的內容鍵，用於偵測設定是否變更。</summary>
@@ -101,6 +107,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 for (int i = 0; i < 7; i++) sb.Append(CamGrabHeight[i]).Append(',');
                 for (int i = 0; i < 7; i++) sb.Append(CamExposureUs[i].ToString("R", inv)).Append(',');
                 for (int i = 0; i < 7; i++) sb.Append(CamLineRateHz[i].ToString("R", inv)).Append(',');
+                sb.Append(AniloxRollSpeedMPerMin.ToString("R", inv)).Append(',');
                 sb.Append(HessianMaxFactorV.ToString("R", inv)).Append(',');
                 sb.Append(HessianMaxFactorH.ToString("R", inv)).Append(',');
                 sb.Append(RidgeSigma.ToString("R", inv)).Append(',');
@@ -132,6 +139,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 sb.Append($",Cam{i + 1}_Exp={CamExposureUs[i]:F2}");
             for (int i = 0; i < 7; i++)
                 sb.Append($",Cam{i + 1}_Lr={CamLineRateHz[i]:F2}");
+            sb.Append($",AniloxRollSpeedMPerMin={AniloxRollSpeedMPerMin:F4}");
             sb.Append($",HessianMaxFactorV={HessianMaxFactorV:F4}");
             sb.Append($",HessianMaxFactorH={HessianMaxFactorH:F4}");
             sb.Append($",RidgeSigma={RidgeSigma:F4}");
@@ -160,6 +168,7 @@ namespace AniloxRoll.Monitor.Core.Services
             int[] grabH = new int[7];
             double[] expUs = new double[7];
             double[] lrHz = new double[7];
+            double aniloxRollSpeedMPerMin = 0;
             float hessianV = 0, hessianH = 0, ridgeSigma = 0;
             float meanV = 0, maxV = 0, meanH = 0, maxH = 0;
             double trimHead = 0, trimTail = 0;
@@ -202,6 +211,8 @@ namespace AniloxRoll.Monitor.Core.Services
                     if (camIdx >= 0 && camIdx < 7)
                         double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out lrHz[camIdx]);
                 }
+                else if (key == "AniloxRollSpeedMPerMin")
+                    double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out aniloxRollSpeedMPerMin);
                 else if (key == "HessianMaxFactorV")
                     float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out hessianV);
                 else if (key == "HessianMaxFactorH")
@@ -233,7 +244,8 @@ namespace AniloxRoll.Monitor.Core.Services
 
             result = new CsvConfigSnapshot(ops, pos, grabH, expUs, lrHz,
                 hessianV, hessianH, ridgeSigma,
-                meanV, maxV, meanH, maxH, trimHead, trimTail, ts);
+                meanV, maxV, meanH, maxH, trimHead, trimTail, ts,
+                aniloxRollSpeedMPerMin);
             return true;
         }
     }

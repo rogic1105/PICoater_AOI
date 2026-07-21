@@ -43,8 +43,14 @@ namespace AniloxRoll.Monitor.Integration.Tests
             WriteCsv(date, grabId, fileName);
 
             var loader = new ReviewImageDataLoader();
-            ReviewImageData result = loader.Load(
+            ReviewImageLoadPlan plan = loader.Prepare(
                 _tempRoot, grabId, date, date, 2, false, "v");
+            Assert.That(plan.ExpectedWidths[0], Is.EqualTo(4));
+            Assert.That(plan.ExpectedHeights[0], Is.EqualTo(3));
+            Assert.That(plan.ExpectedWidths[1], Is.Zero);
+            Assert.That(plan.ExpectedHeights[1], Is.Zero);
+
+            ReviewImageData result = loader.Load(plan, 2, false, "v");
 
             try
             {

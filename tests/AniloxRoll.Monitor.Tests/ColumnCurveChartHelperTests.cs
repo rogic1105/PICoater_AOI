@@ -60,5 +60,29 @@ namespace AniloxRoll.Monitor.Tests
                 Assert.That(chart.Series["Max"].Points.Max(p => p.YValues[0]), Is.EqualTo(1.0));
             }
         }
+
+        [Test]
+        public void UpdateDataAndView_DataExtentChanges_KeepsAxisOwnedByViewport()
+        {
+            using (var chart = new Chart { Size = new Size(800, 120) })
+            {
+                var helper = new ColumnCurveChartHelper(chart);
+                helper.SetOps(1000);
+
+                helper.UpdateDataAndView(
+                    new float[100], new float[100], 0, 20, 40);
+                var axis = chart.ChartAreas[0].AxisX;
+                double minimum = axis.Minimum;
+                double maximum = axis.Maximum;
+
+                helper.UpdateDataAndView(
+                    new float[1000], new float[1000], 0, 20, 40);
+
+                Assert.That(axis.Minimum, Is.EqualTo(minimum).Within(1e-9));
+                Assert.That(axis.Maximum, Is.EqualTo(maximum).Within(1e-9));
+                Assert.That(axis.Minimum, Is.EqualTo(axis.ScaleView.ViewMinimum).Within(1e-9));
+                Assert.That(axis.Maximum, Is.EqualTo(axis.ScaleView.ViewMaximum).Within(1e-9));
+            }
+        }
     }
 }

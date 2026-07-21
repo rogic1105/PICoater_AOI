@@ -111,9 +111,7 @@ namespace TanukiCv.Controls
             GetAdjustedZoom(canvasTopMm, canvasBotMm, out double zMin, out double zMax);
 
             var axisY = _chart.ChartAreas[0].AxisY;
-            double newMin = Math.Min(0, zMin), newMax = Math.Max(_totalMm, zMax);
-            if (axisY.Minimum != newMin) axisY.Minimum = newMin;
-            if (axisY.Maximum != newMax) axisY.Maximum = newMax;
+            ApplyViewportBounds(axisY, zMin, zMax);
             try { axisY.ScaleView.Zoom(zMin, zMax); }
             catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[RowCurveChartHelper.UpdateDataAndViewRange] {ex.GetType().Name}: {ex.Message}"); }
 
@@ -150,6 +148,23 @@ namespace TanukiCv.Controls
         }
 
         public void UpdateViewRange(double canvasTopMm, double canvasBotMm)
+            => UpdateViewRangeCore(canvasTopMm, canvasBotMm, invalidateBeforeUpdate: false);
+
+        /// <summary>
+        /// Updates the visible physical range and forces it to paint immediately.
+        /// Use when a prepared range must appear before later image or data work invalidates the chart.
+        /// </summary>
+        public void UpdateViewRangeImmediate(double canvasTopMm, double canvasBotMm)
+        {
+            bool plotWasFrozen = _innerPlotPositionFrozen;
+            UpdateViewRangeCore(canvasTopMm, canvasBotMm, invalidateBeforeUpdate: true);
+            // The first real paint discovers MSChart's InnerPlotPosition. Reapply in the same
+            // UI action so replacement row data cannot reveal a second, compensated range.
+            if (!plotWasFrozen && _innerPlotPositionFrozen)
+                UpdateViewRangeCore(canvasTopMm, canvasBotMm, invalidateBeforeUpdate: true);
+        }
+
+        private void UpdateViewRangeCore(double canvasTopMm, double canvasBotMm, bool invalidateBeforeUpdate)
         {
             if (_chart.ChartAreas.Count == 0) return;
             if (double.IsNaN(canvasTopMm) || double.IsNaN(canvasBotMm) || canvasTopMm == canvasBotMm) return;
@@ -160,11 +175,14 @@ namespace TanukiCv.Controls
             GetAdjustedZoom(canvasTopMm, canvasBotMm, out double zMin, out double zMax);
             var axisY = _chart.ChartAreas[0].AxisY;
             // 同 ColumnCurveChartHelper：Min/Max 變了才設（避免拖曳跟隨時每次整張重排版）。
-            double newMin = Math.Min(0, zMin), newMax = Math.Max(_totalMm, zMax);
-            if (axisY.Minimum != newMin) axisY.Minimum = newMin;
-            if (axisY.Maximum != newMax) axisY.Maximum = newMax;
+            // While synchronized to the image, the image viewport is the coordinate SSoT.
+            // A fast curve replacement may change total data length, but it must not move the
+            // coordinate scale before the debounced image selection is committed.
+            ApplyViewportBounds(axisY, zMin, zMax);
             try { axisY.ScaleView.Zoom(zMin, zMax); }
             catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[RowCurveChartHelper.UpdateViewRange] {ex.GetType().Name}: {ex.Message}"); }
+            if (invalidateBeforeUpdate)
+                _chart.Invalidate();
             _chart.Update();   // 同 ColumnCurveChartHelper：防拖曳時 WM_PAINT 飢餓（chart 放開滑鼠才動）
         }
 
@@ -209,8 +227,7 @@ namespace TanukiCv.Controls
                         {
                             GetAdjustedZoom(top, bot, out double zMin, out double zMax);
                             var axisY = _chart.ChartAreas[0].AxisY;
-                            axisY.Minimum = Math.Min(0, zMin);
-                            axisY.Maximum = Math.Max(_totalMm, zMax);
+                            ApplyViewportBounds(axisY, zMin, zMax);
                             try { axisY.ScaleView.Zoom(zMin, zMax); }
                             catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[RowCurveChartHelper.OnPostPaint] {ex.GetType().Name}: {ex.Message}"); }
                         }));
@@ -240,6 +257,14 @@ namespace TanukiCv.Controls
             double span = chartLowY - chartHighY;
             zoomMax = chartHighY + _cachedFTop    * span;
             zoomMin = chartHighY + _cachedFBottom * span;
+        }
+
+        private static void ApplyViewportBounds(Axis axis, double first, double second)
+        {
+            double min = Math.Min(first, second);
+            double max = Math.Max(first, second);
+            if (axis.Minimum != min) axis.Minimum = min;
+            if (axis.Maximum != max) axis.Maximum = max;
         }
 
         /// <summary>方向旗標（唯一決策點，資料映射/視窗換算/標籤三者同源——排版/渲染零接觸）：

@@ -82,6 +82,13 @@ namespace AniloxRoll.Monitor.UI.Managers
             FlowApply("rowView", -1, topMm, botMm);
         }
 
+        public void UpdateViewRangeImmediate(double topMm, double botMm)
+        {
+            ApplyDirection();
+            _chart.UpdateViewRangeImmediate(topMm, botMm);
+            FlowApply("rowView", -1, topMm, botMm);
+        }
+
         public void UpdateData(float[] mean, float[] max)
         {
             ApplyDirection();

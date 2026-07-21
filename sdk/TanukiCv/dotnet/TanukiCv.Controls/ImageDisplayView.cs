@@ -13,6 +13,17 @@ namespace TanukiCv.Controls
     /// 把「LOD 要不要 GPU」的差異收斂成這一個委派——LOD 機制本身（ImageCanvas）純 CPU。</summary>
     public delegate byte[] GrayResize(byte[] src, int srcW, int srcH, int dstW, int dstH);
 
+    /// <summary>主畫面在 fit 狀態下的內容尺寸與四邊物理座標。</summary>
+    public struct ImageViewRange
+    {
+        public int ContentWidth;
+        public int ContentHeight;
+        public double LeftMm;
+        public double RightMm;
+        public double TopMm;
+        public double BottomMm;
+    }
+
     /// <summary>
     /// 多相機即時監控顯示元件（**絞殺榕重寫版**，取 app MultiCamLiveView + 範例 MilGrabberPbForm 主畫面兩者成功部分）。
     /// 純 CPU 骨架、吃 8bpp 灰階 bytes、0 依賴 MIL/app：主 panel 疊 <see cref="ImageCanvas"/>（zoom/pan/雙三擊/mm overlay/LOD）、
@@ -268,6 +279,56 @@ namespace TanukiCv.Controls
             _mergeReady = startPosMm != null && opsUm != null && opsUm.Length > 0 && opsUm[0] > 0;
         }
 
+        /// <summary>
+        /// 不建立畫布內容、不解碼像素，僅依預期影像尺寸與目前 viewport 計算合圖 fit 後的物理視野。
+        /// 實際合圖與預算都走同一個 MergeLayout、AspectFitCalculator 與座標換算核心。
+        /// </summary>
+        public static bool TryComputeMergeFitViewRange(
+            int[] widths, int[] heights,
+            double[] startPosMm, double[] opsUm,
+            int feedScale, double rowPitchMm,
+            bool mergeAll, MergeOverlap mergeStrategy,
+            bool verticalZeroAtBottom, Size viewport,
+            out ImageViewRange range)
+        {
+            range = default(ImageViewRange);
+            int cameraCount = Math.Max(widths?.Length ?? 0, heights?.Length ?? 0);
+            if (!TryComputeMergeGeometry(
+                widths, heights, cameraCount,
+                startPosMm, opsUm, Math.Max(1, feedScale),
+                mergeAll, mergeStrategy,
+                out _, out int totalWidth, out int maxHeight))
+                return false;
+            if (!AspectFitCalculator.TryCompute(
+                totalWidth, maxHeight, viewport.Width, viewport.Height,
+                out AspectFitTransform fit))
+                return false;
+
+            double startMm = MinStart(startPosMm);
+            double opsInMm = opsUm[0] / 1000.0;
+            double scale = Math.Max(1, feedScale);
+            if (!TryMapViewRange(
+                viewport.Width, viewport.Height,
+                totalWidth, maxHeight,
+                fit.Zoom, new PointF(fit.PanX, fit.PanY),
+                startMm, opsInMm, scale, rowPitchMm,
+                verticalZeroAtBottom,
+                out double leftMm, out double rightMm,
+                out double topMm, out double bottomMm))
+                return false;
+
+            range = new ImageViewRange
+            {
+                ContentWidth = totalWidth,
+                ContentHeight = maxHeight,
+                LeftMm = leftMm,
+                RightMm = rightMm,
+                TopMm = topMm,
+                BottomMm = bottomMm
+            };
+            return true;
+        }
+
         /// <summary>啟用動態 LOD（單張模式）：傳入可插拔的灰階縮放委派（GPU 或 CPU）。
         /// LOD 機制（裁可見區/拉伸/背景重算）在 ImageCanvas（純 CPU）；resize 那一步用此委派。</summary>
         public void EnableLod(GrayResize resize)
@@ -356,23 +417,12 @@ namespace TanukiCv.Controls
             if (_canvas == null || zoom <= 0) return false;
             if (_canvas.ContentW <= 0 || _canvas.ContentH <= 0) return false;
             if (!GetDisplayCoords(out double startMm, out double opsInMm, out double sf)) return false;
-
-            leftMm = PixelMmMapper.PixelToMm((0 - pan.X) / zoom * sf, startMm, opsInMm);
-            rightMm = PixelMmMapper.PixelToMm((_canvas.Width - pan.X) / zoom * sf, startMm, opsInMm);
-            double yPitch = _rowPitchMm > 0 ? _rowPitchMm : opsInMm;
-            topMm = (0 - pan.Y) / zoom * sf * yPitch;
-            botMm = (_canvas.Height - pan.Y) / zoom * sf * yPitch;
-            if (VerticalZeroAtBottom)
-            {
-                double totalYMm = TotalRowsMm(yPitch, sf);
-                if (totalYMm > 0)
-                {
-                    double t = totalYMm - topMm, b = totalYMm - botMm;
-                    topMm = t; botMm = b;
-                }
-            }
-
-            return leftMm != rightMm && topMm != botMm;
+            return TryMapViewRange(
+                _canvas.Width, _canvas.Height,
+                _canvas.ContentW, _canvas.ContentH,
+                zoom, pan, startMm, opsInMm, sf, _rowPitchMm,
+                VerticalZeroAtBottom,
+                out leftMm, out rightMm, out topMm, out botMm);
         }
 
         /// <summary>狀態快照：新內容上畫時記當前視野四邊（每秒一行），與 chart 視窗直接對數。</summary>
@@ -391,21 +441,10 @@ namespace TanukiCv.Controls
         public void RefireViewRange()
         {
             if (_canvas == null || ViewRangeMmChanged == null) return;
-            if (_canvas.ContentW <= 0 || _canvas.ContentH <= 0) return;
-            if (!GetDisplayCoords(out double startMm, out double opsInMm, out double sf)) return;
-            float zoom = _canvas.Zoom;
-            if (zoom <= 0) return;
-            var pan = _canvas.PanOffset;
-            double leftMm = PixelMmMapper.PixelToMm((0 - pan.X) / zoom * sf, startMm, opsInMm);
-            double rightMm = PixelMmMapper.PixelToMm((_canvas.Width - pan.X) / zoom * sf, startMm, opsInMm);
-            double yPitch = _rowPitchMm > 0 ? _rowPitchMm : opsInMm;
-            double topMm = (0 - pan.Y) / zoom * sf * yPitch;
-            double botMm = (_canvas.Height - pan.Y) / zoom * sf * yPitch;
-            if (VerticalZeroAtBottom)   // 垂直物理座標（同 OnCanvasStatus）：由下而上＝0 錨定畫面底
-            {
-                double totalYMm = TotalRowsMm(yPitch, sf);
-                if (totalYMm > 0) { double t = totalYMm - topMm, b = totalYMm - botMm; topMm = t; botMm = b; }   // 各邊映自己的值（勿交叉）
-            }
+            if (!TryComputeViewRange(
+                _canvas.Zoom, _canvas.PanOffset,
+                out double leftMm, out double rightMm,
+                out double topMm, out double botMm)) return;
             ViewRangeMmChanged?.Invoke(leftMm, rightMm, topMm, botMm);
         }
 
@@ -413,6 +452,40 @@ namespace TanukiCv.Controls
         /// （LOD=虛擬全解析度、非 LOD=bitmap 高，ContentH 已按模式取對），保證鏡射不偏移。</summary>
         private double TotalRowsMm(double yPitch, double sf)
             => _canvas != null ? _canvas.ContentH * sf * yPitch : 0;
+
+        private static bool TryMapViewRange(
+            int viewportWidth, int viewportHeight,
+            int contentWidth, int contentHeight,
+            float zoom, PointF pan,
+            double startMm, double opsInMm, double scale, double rowPitchMm,
+            bool verticalZeroAtBottom,
+            out double leftMm, out double rightMm,
+            out double topMm, out double bottomMm)
+        {
+            leftMm = rightMm = topMm = bottomMm = 0;
+            if (viewportWidth <= 0 || viewportHeight <= 0 ||
+                contentWidth <= 0 || contentHeight <= 0 ||
+                zoom <= 0 || opsInMm <= 0 || scale <= 0)
+                return false;
+
+            leftMm = PixelMmMapper.PixelToMm(
+                (0 - pan.X) / zoom * scale, startMm, opsInMm);
+            rightMm = PixelMmMapper.PixelToMm(
+                (viewportWidth - pan.X) / zoom * scale, startMm, opsInMm);
+            double yPitch = rowPitchMm > 0 ? rowPitchMm : opsInMm;
+            topMm = (0 - pan.Y) / zoom * scale * yPitch;
+            bottomMm = (viewportHeight - pan.Y) / zoom * scale * yPitch;
+            if (verticalZeroAtBottom)
+            {
+                double totalMm = contentHeight * scale * yPitch;
+                double mappedTop = totalMm - topMm;
+                double mappedBottom = totalMm - bottomMm;
+                topMm = mappedTop;
+                bottomMm = mappedBottom;
+            }
+
+            return leftMm != rightMm && topMm != bottomMm;
+        }
 
         /// <summary>縮圖↔主畫面雙向連動（反向）：合圖模式視野中心最近的相機 → 自動高亮縮圖
         /// （不觸發 SelectRequested 防遞迴）。OnCanvasStatus（互動）+ 33ms timer（快拖事件合併時補刷，
@@ -664,34 +737,85 @@ namespace TanukiCv.Controls
         private bool TryComputeMergeGeometry()
         {
             _mergePlacements = null; _mergeTotalW = 0; _mergeMaxH = 0;
-            if (!_mergeReady || _opsUm == null || _opsUm.Length == 0) return false;
-            double refOpsMm = _opsUm[0] / 1000.0;
-            if (refOpsMm <= 0) return false;
+            if (!_mergeReady) return false;
 
-            int defW = 0, defH = 0;
-            for (int i = 0; i < _camCount; i++)
-                if (_latest[i] != null) { defW = _latest[i].W; defH = _latest[i].H; break; }
-            if (defW == 0) return false;
-
-            double minStart = MinStart();
-            var geoms = new List<MergeLayout.CamGeom>();
-            int maxH = 0;
+            var widths = new int[_camCount];
+            var heights = new int[_camCount];
             for (int i = 0; i < _camCount; i++)
             {
-                bool present = _latest[i] != null;
-                if (!MergeAll && !present) continue;   // 一般合圖只納入有畫面的；合圖全部 8 槽全納入（無畫面占黑）
-                double st = (_startPosMm != null && i < _startPosMm.Length) ? _startPosMm[i] : 0;
-                int wpx = present ? _latest[i].W : defW;
-                int hpx = present ? _latest[i].H : defH;
-                if (hpx > maxH) maxH = hpx;
-                geoms.Add(new MergeLayout.CamGeom { CameraId = i + 1, StartMm = st, WidthPx = wpx });
+                Frame frame = _latest[i];
+                if (frame == null) continue;
+                widths[i] = frame.W;
+                heights[i] = frame.H;
             }
-            if (geoms.Count == 0 || maxH <= 0) return false;
+            if (!TryComputeMergeGeometry(
+                widths, heights, _camCount,
+                _startPosMm, _opsUm, _feedScale,
+                MergeAll, MergeStrategy,
+                out List<CameraPlacement> placements,
+                out int totalW, out int maxH))
+                return false;
 
-            var placements = MergeLayout.Compute(geoms, minStart, refOpsMm, _feedScale, MergeStrategy, out int totalW);
-            if (totalW <= 0) return false;
-            _mergePlacements = placements; _mergeTotalW = totalW; _mergeMaxH = maxH;
+            _mergePlacements = placements;
+            _mergeTotalW = totalW;
+            _mergeMaxH = maxH;
             return true;
+        }
+
+        private static bool TryComputeMergeGeometry(
+            int[] widths, int[] heights, int cameraCount,
+            double[] startPosMm, double[] opsUm, int feedScale,
+            bool mergeAll, MergeOverlap mergeStrategy,
+            out List<CameraPlacement> placements,
+            out int totalWidth, out int maxHeight)
+        {
+            placements = null;
+            totalWidth = 0;
+            maxHeight = 0;
+            if (cameraCount <= 0 || opsUm == null || opsUm.Length == 0) return false;
+            double refOpsMm = opsUm[0] / 1000.0;
+            if (refOpsMm <= 0) return false;
+
+            int defaultWidth = 0, defaultHeight = 0;
+            for (int i = 0; i < cameraCount; i++)
+            {
+                int width = widths != null && i < widths.Length ? widths[i] : 0;
+                int height = heights != null && i < heights.Length ? heights[i] : 0;
+                if (width <= 0 || height <= 0) continue;
+                defaultWidth = width;
+                defaultHeight = height;
+                break;
+            }
+            if (defaultWidth <= 0 || defaultHeight <= 0) return false;
+
+            double minStart = MinStart(startPosMm);
+            var geoms = new List<MergeLayout.CamGeom>();
+            for (int i = 0; i < cameraCount; i++)
+            {
+                int width = widths != null && i < widths.Length ? widths[i] : 0;
+                int height = heights != null && i < heights.Length ? heights[i] : 0;
+                bool present = width > 0 && height > 0;
+                if (!mergeAll && !present) continue;
+
+                double start = startPosMm != null && i < startPosMm.Length
+                    ? startPosMm[i]
+                    : 0;
+                int effectiveWidth = present ? width : defaultWidth;
+                int effectiveHeight = present ? height : defaultHeight;
+                if (effectiveHeight > maxHeight) maxHeight = effectiveHeight;
+                geoms.Add(new MergeLayout.CamGeom
+                {
+                    CameraId = i + 1,
+                    StartMm = start,
+                    WidthPx = effectiveWidth
+                });
+            }
+            if (geoms.Count == 0 || maxHeight <= 0) return false;
+
+            placements = MergeLayout.Compute(
+                geoms, minStart, refOpsMm, Math.Max(1, feedScale),
+                mergeStrategy, out totalWidth);
+            return totalWidth > 0;
         }
 
         private Bitmap BuildMerge()
@@ -744,9 +868,14 @@ namespace TanukiCv.Controls
         }
 
         private double MinStart()
+            => MinStart(_startPosMm);
+
+        private static double MinStart(double[] startPosMm)
         {
             double m = double.MaxValue;
-            if (_startPosMm != null) for (int i = 0; i < _startPosMm.Length; i++) if (_startPosMm[i] < m) m = _startPosMm[i];
+            if (startPosMm != null)
+                for (int i = 0; i < startPosMm.Length; i++)
+                    if (startPosMm[i] < m) m = startPosMm[i];
             return m == double.MaxValue ? 0 : m;
         }
 
@@ -761,11 +890,19 @@ namespace TanukiCv.Controls
             if (!GetDisplayCoords(out double startMm, out double opsInMm, out double sf))
             { _canvas.SetRangeOverlay("", "", "", "", ""); return; }
 
-            double leftMm = PixelMmMapper.PixelToMm((0 - info.PanOffset.X) / info.Zoom * sf, startMm, opsInMm);
-            double rightMm = PixelMmMapper.PixelToMm((_canvas.Width - info.PanOffset.X) / info.Zoom * sf, startMm, opsInMm);
             double yPitch = _rowPitchMm > 0 ? _rowPitchMm : opsInMm;
-            double topMm = (0 - info.PanOffset.Y) / info.Zoom * sf * yPitch;
-            double botMm = (_canvas.Height - info.PanOffset.Y) / info.Zoom * sf * yPitch;
+            if (!TryMapViewRange(
+                _canvas.Width, _canvas.Height,
+                _canvas.ContentW, _canvas.ContentH,
+                info.Zoom, info.PanOffset,
+                startMm, opsInMm, sf, _rowPitchMm,
+                VerticalZeroAtBottom,
+                out double leftMm, out double rightMm,
+                out double topMm, out double botMm))
+            {
+                _canvas.SetRangeOverlay("", "", "", "", "");
+                return;
+            }
 
             // 垂直物理座標（2026-07-08 定版）：0 錨定方向原點。由上而下＝幾何直通（0 在畫面頂）；
             // 由下而上（VerticalZeroAtBottom）＝ phys = 總高 − v（0 在畫面底）。overlay/游標/事件同一來源。
@@ -777,8 +914,6 @@ namespace TanukiCv.Controls
                 {
                     // 每個邊映射「自己」的物理值（勿交叉調換——2026-07-08 邊界方向錯的根因）：
                     // 上緣 phys=總高−v_top（大）、下緣 phys=總高−v_bot（小≈0）＝上大下小（由下而上）
-                    double t = totalYMm - topMm, b = totalYMm - botMm;
-                    topMm = t; botMm = b;
                     curMmY = totalYMm - curMmY;
                 }
             }

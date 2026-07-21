@@ -36,10 +36,15 @@ class CaptureFlowValidator:
         csv_lines = [
             line for line in session.lines if line.message.startswith("capture csv ")
         ]
+        configs = [
+            line for line in session.lines
+            if line.message.startswith("capture csv cfg ")
+        ]
         if not plans and not csv_lines:
             report.add(self.domain, "C0", CheckStatus.NOT_COVERED, "本 session 無存檔/檢測輸出")
         else:
             self._check_capture_plan(plans, report)
+            self._check_config_snapshots(configs, report)
             self._check_first_records(plans, records, report)
         self._check_output_health(session, report)
         return report
@@ -86,6 +91,39 @@ class CaptureFlowValidator:
             "C1.plan",
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
             f"plans={len(plans)} grabs={len(ids)} invalid={len(failures)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_config_snapshots(self, configs, report: CheckReport) -> None:
+        failures = []
+        pattern = re.compile(
+            r"^capture csv cfg path=.+ speed=(?P<speed>[-+0-9.]+) "
+            r"lr=(?P<line_rate>[-+0-9.]+) HM="
+        )
+        for line in configs:
+            match = pattern.match(line.message)
+            if match is None:
+                failures.append(f"{line.timestamp} 缺 speed/lr")
+                continue
+            try:
+                if float(match.group("speed")) <= 0 or float(match.group("line_rate")) <= 0:
+                    failures.append(f"{line.timestamp} speed/lr 必須 > 0")
+            except ValueError:
+                failures.append(f"{line.timestamp} speed/lr 格式錯誤")
+
+        if not configs:
+            report.add(
+                self.domain,
+                "C2.cfg-scale",
+                CheckStatus.NOT_COVERED,
+                "本 session 未寫入新版 #CFG",
+            )
+            return
+        report.add(
+            self.domain,
+            "C2.cfg-scale",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"configs={len(configs)} invalid={len(failures)}"
             + (f"；首例 {failures[0]}" if failures else ""),
         )
 

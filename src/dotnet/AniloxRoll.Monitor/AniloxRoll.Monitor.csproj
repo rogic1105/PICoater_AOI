@@ -127,6 +127,7 @@
     <Compile Include="Services\CurveBinFile.cs" />
     <Compile Include="Services\UiActionLogger.cs" />
     <Compile Include="Services\CsvConfigSnapshot.cs" />
+    <Compile Include="Services\RowCurvePhysicalScaleResolver.cs" />
     <Compile Include="Services\InspectionLogService.cs" />
     <Compile Include="Services\IoGrabController.cs" />
     <Compile Include="Services\IoState.cs" />

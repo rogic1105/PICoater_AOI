@@ -30,11 +30,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private readonly Func<List<GrabIdInfo>> _getGrabIdInfos;
         private readonly Func<string> _getStatsRoot;
         private readonly SingleGrabCurveDataLoader _singleGrabDataLoader;
+        private readonly ReviewImageDataLoader _reviewImageDataLoader;
         private readonly LatestCurveLoadCoordinator _singleGrabLoads;
 
         private ColumnCurveChartHelper _muraProfileHelper;
         private RowCurveDisplayAdapter _rowDisplay;
         private bool _rowHasData;
+        private string _lastColumnRangeState;
+        private string _lastRowRangeState;
 
         public MuraProfileChartPresenter(
             DataStatisticsContext ctx,
@@ -47,6 +50,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _getGrabIdInfos = getGrabIdInfos ?? throw new ArgumentNullException(nameof(getGrabIdInfos));
             _getStatsRoot = getStatsRoot ?? throw new ArgumentNullException(nameof(getStatsRoot));
             _singleGrabDataLoader = new SingleGrabCurveDataLoader();
+            _reviewImageDataLoader = new ReviewImageDataLoader();
             _singleGrabLoads = new LatestCurveLoadCoordinator(LoadSingleGrabCoreAsync);
         }
 
@@ -66,8 +70,43 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     _ctx.Settings.ErrorValueMeanH,
                     _ctx.Settings.ErrorValueMaxH);
             }
+            _ctx.ChartDataPatch.PostPaint += OnColumnChartPostPaint;
+            if (_ctx.ChartDataRow != null)
+                _ctx.ChartDataRow.PostPaint += OnRowChartPostPaint;
             FlowTrace.Log("DT curve load policy latest-only shared-loader " +
                 "entries=512 maxMB=256 scale=merged-only");
+        }
+
+        private void OnColumnChartPostPaint(
+            object sender, System.Windows.Forms.DataVisualization.Charting.ChartPaintEventArgs e)
+            => LogChartRange(isRow: false);
+
+        private void OnRowChartPostPaint(
+            object sender, System.Windows.Forms.DataVisualization.Charting.ChartPaintEventArgs e)
+            => LogChartRange(isRow: true);
+
+        private void LogChartRange(bool isRow)
+        {
+            var chart = isRow ? _ctx.ChartDataRow : _ctx.ChartDataPatch;
+            if (chart == null || chart.IsDisposed || chart.ChartAreas.Count == 0) return;
+            var axis = isRow
+                ? chart.ChartAreas[0].AxisY
+                : chart.ChartAreas[0].AxisX;
+            string grabId = Convert.ToString(_ctx.CbDataGrabId?.SelectedItem);
+            if (string.IsNullOrWhiteSpace(grabId)) grabId = "-";
+            string state =
+                $"axis={axis.Minimum:F2}~{axis.Maximum:F2}/" +
+                $"view={axis.ScaleView.ViewMinimum:F2}~{axis.ScaleView.ViewMaximum:F2}";
+            string stateKey = grabId + "|" + state;
+            string previous = isRow ? _lastRowRangeState : _lastColumnRangeState;
+            if (string.Equals(previous, stateKey, StringComparison.Ordinal)) return;
+            if (isRow)
+                _lastRowRangeState = stateKey;
+            else
+                _lastColumnRangeState = stateKey;
+
+            FlowTrace.Log(
+                $"DT chartRange {grabId} chart={(isRow ? "row" : "col")} {state}");
         }
 
         public void Update(IList<GrabIdInfo> grabIds, IList<GrabIdInfo> candidateRange = null)
@@ -216,16 +255,24 @@ namespace AniloxRoll.Monitor.UI.Presenters
             try
             {
                 int camCount = _ctx.CameraCount;
+                ReviewImageLoadPlan layoutPlan = null;
                 SingleGrabCurveData data = await Task.Run(() =>
-                    _singleGrabDataLoader.Load(
-                        statsRoot, request.GrabId, request.HintFrom, request.HintTo, camCount));
+                {
+                    // Geometry preparation reads paths, CFG, and JPEG headers only. It deliberately
+                    // avoids image decoding while following the same layout rules as Review.
+                    layoutPlan = _reviewImageDataLoader.Prepare(
+                        statsRoot, request.GrabId, request.HintFrom, request.HintTo,
+                        camCount, enableProcess: false, ridgeDirection: "c", logPaths: false);
+                    return _singleGrabDataLoader.Load(
+                        statsRoot, request.GrabId, request.HintFrom, request.HintTo, camCount);
+                });
                 if (!_singleGrabLoads.IsCurrent(request))
                 {
                     FlowTrace.Log($"DT curve stale-drop {request.GrabId}");
                     return;
                 }
 
-                CsvConfigSnapshot grabCfg = data.Config;
+                CsvConfigSnapshot grabCfg = layoutPlan?.Config ?? data.Config;
                 float captureHm = grabCfg?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
                 float valueScale = HessianRescaleHelper.Ratio(
                     captureHm, _ctx.Settings.HessianMaxFactorV);
@@ -233,13 +280,47 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 double[] pos = grabCfg?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
                 float errMean = _ctx.Settings.ErrorValueMeanV;
                 float errMax = _ctx.Settings.ErrorValueMaxV;
+                RowCurvePhysicalScale physicalScale = RowCurvePhysicalScaleResolver.Resolve(
+                    grabCfg, _ctx.Settings);
+                _rowDisplay?.SetRowPitchFromSpeed(
+                    physicalScale.SpeedMPerMin, physicalScale.LineRateHz);
+                double rowPitchMm = _rowDisplay?.RowPitchMm ?? 0.01;
+                ImageViewRange? preparedView = layoutPlan == null
+                    ? null
+                    : _ctx.ReviewFitViewRangeProvider?.Invoke(
+                        layoutPlan.ExpectedWidths, layoutPlan.ExpectedHeights,
+                        ops, pos, _ctx.Settings.StitchMode == StitchMode.Global,
+                        rowPitchMm);
+                double[] view = preparedView.HasValue
+                    ? new[]
+                    {
+                        preparedView.Value.LeftMm, preparedView.Value.RightMm,
+                        preparedView.Value.TopMm, preparedView.Value.BottomMm
+                    }
+                    : null;
+                if (preparedView.HasValue)
+                {
+                    ImageViewRange range = preparedView.Value;
+                    FlowTrace.Log(
+                        $"DT prefit {request.GrabId} content={range.ContentWidth}x{range.ContentHeight} " +
+                        $"viewX={range.LeftMm:F0}~{range.RightMm:F0} " +
+                        $"viewY={range.TopMm:F0}~{range.BottomMm:F0} source=main-geometry");
+                }
+                else
+                {
+                    FlowTrace.Log($"DT prefit unavailable {request.GrabId}");
+                }
+                Func<int, bool, double, double> fitViewRange = view != null && view.Length >= 4
+                    ? (Func<int, bool, double, double>)((_, isLeft, __) =>
+                        isLeft ? view[0] : view[1])
+                    : null;
 
                 long drawStartMs = sw.ElapsedMilliseconds;
                 CurveMergeHelper.UpdateOverviewChart(
                     data.ColumnMean, data.ColumnMax, ops, pos, errMean, errMax,
                     _muraProfileHelper, camCount,
-                    _ctx.Settings.StitchMode, null, valueScale: valueScale);
-                UpdateRowChart(data, grabCfg, request.GrabId);
+                    _ctx.Settings.StitchMode, fitViewRange, valueScale: valueScale);
+                UpdateRowChart(data, grabCfg, request.GrabId, view, physicalScale);
                 FlowTrace.Log($"DT curve load {request.GrabId} captures={data.ImageCount} " +
                     $"source=shared storage={data.StorageSource} configMs={data.ConfigMs} " +
                     $"waitMs={drawStartMs} pathMs={data.LookupMs} mergeMs={data.MergeMs} " +
@@ -254,7 +335,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         private void UpdateRowChart(
             SingleGrabCurveData data, CsvConfigSnapshot grabCfg,
-            string grabId)
+            string grabId, double[] view, RowCurvePhysicalScale scale)
         {
             if (_rowDisplay == null) return;
             if (data?.MergedRowMean == null || data.MergedRowMean.Length == 0)
@@ -270,15 +351,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 data.MergedRowMean, captureHmV, _ctx.Settings.HessianMaxFactorH);
             float[] max = HessianRescaleHelper.CloneAndRescale1D(
                 data.MergedRowMax, captureHmV, _ctx.Settings.HessianMaxFactorH);
-            double lineRateHz = _ctx.Settings.Acquisition.CameraLineRateHz[0];
-            if (grabCfg?.CamLineRateHz != null && grabCfg.CamLineRateHz.Length > 0 &&
-                grabCfg.CamLineRateHz[0] > 0)
-                lineRateHz = grabCfg.CamLineRateHz[0];
             _rowDisplay.SetRowPitchFromSpeed(
-                _ctx.Settings.AniloxRollSpeedMPerMin, lineRateHz);
+                scale.SpeedMPerMin, scale.LineRateHz);
             _rowDisplay.SetThresholds(
                 _ctx.Settings.ErrorValueMeanH, _ctx.Settings.ErrorValueMaxH);
-            _rowDisplay.UpdateData(mean, max);
+            if (view != null && view.Length >= 4)
+                _rowDisplay.UpdateDataAndViewRange(mean, max, view[2], view[3]);
+            else
+                _rowDisplay.UpdateData(mean, max);
             _rowHasData = true;
             FlowTrace.Log($"DT row curve load {grabId} source=shared storage={data.StorageSource} " +
                 $"points={mean.Length} pitch={_rowDisplay.RowPitchMm:F6}mm");
@@ -292,6 +372,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         public void Dispose()
         {
+            if (_ctx.ChartDataPatch != null)
+                _ctx.ChartDataPatch.PostPaint -= OnColumnChartPostPaint;
+            if (_ctx.ChartDataRow != null)
+                _ctx.ChartDataRow.PostPaint -= OnRowChartPostPaint;
             _singleGrabLoads.Invalidate();
             _singleGrabDataLoader.Dispose();
         }
@@ -321,8 +405,30 @@ namespace AniloxRoll.Monitor.UI.Presenters
             double[] ops, double[] pos, float errMean, float errMax)
         {
             if (_muraProfileHelper == null) return;
+            double[] view = _ctx.ReviewViewRangeProvider?.Invoke();
+            Func<int, bool, double, double> viewRange = view != null && view.Length >= 4
+                ? (Func<int, bool, double, double>)((_, isLeft, __) => isLeft ? view[0] : view[1])
+                : null;
             CurveMergeHelper.UpdateOverviewChart(mean, max, ops, pos, errMean, errMax,
-                _muraProfileHelper, _ctx.CameraCount, StitchMode.Vertical, null);
+                _muraProfileHelper, _ctx.CameraCount, _ctx.Settings.StitchMode, viewRange);
+            if (_rowHasData && view != null && view.Length >= 4)
+                _rowDisplay?.UpdateViewRange(view[2], view[3]);
+        }
+
+        public void SetReviewViewRange(
+            double leftMm, double rightMm, double topMm, double bottomMm)
+        {
+            _muraProfileHelper?.UpdateViewRange(leftMm, rightMm);
+            if (_rowHasData)
+                _rowDisplay?.UpdateViewRange(topMm, bottomMm);
+        }
+
+        public void SetPreparedReviewViewRange(
+            double leftMm, double rightMm, double topMm, double bottomMm)
+        {
+            _muraProfileHelper?.UpdateViewRangeImmediate(leftMm, rightMm);
+            if (_rowHasData)
+                _rowDisplay?.UpdateViewRangeImmediate(topMm, bottomMm);
         }
 
         public void Clear()

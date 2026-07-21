@@ -1,6 +1,7 @@
 using TanukiCv.Controls;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -95,6 +96,43 @@ namespace AniloxRoll.Monitor.UI.Widgets
             return result;
         }
 
+        /// <summary>
+        /// Reads only enough JPEG metadata to predict the stitched bitmap size. This follows the
+        /// same slot and source-selection rules as <see cref="StitchCamera"/>, without decoding all
+        /// frames or allocating the stitched bitmap.
+        /// </summary>
+        internal static bool TryGetStitchedSize(
+            IList<string> sortedPaths, bool useProcessed, string ridgeDirection,
+            out int width, out int height)
+        {
+            width = 0;
+            height = 0;
+            if (sortedPaths == null || sortedPaths.Count == 0) return false;
+
+            for (int i = 0; i < sortedPaths.Count; i++)
+            {
+                string loadPath = ResolveLoadPath(sortedPaths[i], useProcessed, ridgeDirection);
+                if (string.IsNullOrEmpty(loadPath) || !File.Exists(loadPath)) continue;
+                try
+                {
+                    using (var stream = new FileStream(
+                        loadPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                    using (var image = Image.FromStream(stream, false, false))
+                    {
+                        width = image.Width;
+                        height = checked(image.Height * sortedPaths.Count);
+                        return width > 0 && height > 0;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine(
+                        $"[GrabImageStitcher.Size] {Path.GetFileName(loadPath)}: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+            return false;
+        }
+
         // 註：舊「水平合圖 MergeHorizontal」已移除（死碼）—— 顯示用合圖統一走 sdk ImageDisplayView.BuildMerge
         // （MergeLayout + MergeAll 黑占位，與 live/瀑布/曲線同一單一來源）。本檔只留 StitchCamera（垂直拼）+ LoadCameraImage。
 
@@ -104,16 +142,22 @@ namespace AniloxRoll.Monitor.UI.Widgets
             if (!CaptureFileNaming.IsRawJpg(path))
                 return null;
 
-            string loadPath = path;
-            if (useProcessed)
-            {
-                string baseName = CaptureFileNaming.StripRawJpg(path);
-                string procPath = CaptureFileNaming.ResolveProcJpg(baseName, ridgeDirection);
-                if (File.Exists(procPath)) loadPath = procPath;
-            }
+            string loadPath = ResolveLoadPath(path, useProcessed, ridgeDirection);
             byte[] bytes = File.ReadAllBytes(loadPath);
             using (var ms = new MemoryStream(bytes))
                 return new Bitmap(ms);
+        }
+
+        private static string ResolveLoadPath(
+            string path, bool useProcessed, string ridgeDirection)
+        {
+            if (string.IsNullOrEmpty(path) || !CaptureFileNaming.IsRawJpg(path))
+                return null;
+            if (!useProcessed) return path;
+
+            string baseName = CaptureFileNaming.StripRawJpg(path);
+            string procPath = CaptureFileNaming.ResolveProcJpg(baseName, ridgeDirection);
+            return File.Exists(procPath) ? procPath : path;
         }
 
     }

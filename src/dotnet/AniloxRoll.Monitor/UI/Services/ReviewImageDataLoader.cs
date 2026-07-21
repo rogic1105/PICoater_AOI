@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Threading.Tasks;
@@ -8,6 +9,17 @@ using AniloxRoll.Monitor.UI.Widgets;
 
 namespace AniloxRoll.Monitor.UI.Services
 {
+    internal sealed class ReviewImageLoadPlan
+    {
+        public Dictionary<int, List<string>> GroupedPaths { get; set; }
+        public FrameAlignmentResult Alignment { get; set; }
+        public CsvConfigSnapshot Config { get; set; }
+        public int[] ExpectedWidths { get; set; }
+        public int[] ExpectedHeights { get; set; }
+        public int TotalImageCount { get; set; }
+        public long ConfigMs { get; set; }
+    }
+
     internal sealed class ReviewImageData
     {
         public Bitmap[] Images { get; set; }
@@ -37,14 +49,15 @@ namespace AniloxRoll.Monitor.UI.Services
     /// </summary>
     internal sealed class ReviewImageDataLoader
     {
-        public ReviewImageData Load(
+        public ReviewImageLoadPlan Prepare(
             string root,
             string grabId,
             DateTime hintFrom,
             DateTime hintTo,
             int cameraCount,
             bool enableProcess,
-            string ridgeDirection)
+            string ridgeDirection,
+            bool logPaths = true)
         {
             var configWatch = Stopwatch.StartNew();
             var grouped = InspectionImagePathRepository.LoadForGrabId(
@@ -55,6 +68,42 @@ namespace AniloxRoll.Monitor.UI.Services
 
             int totalImageCount = 0;
             foreach (var camera in grouped) totalImageCount += camera.Value.Count;
+
+            var alignment = FrameTickIndex.ResolveAlignment(grouped);
+            var expectedWidths = new int[cameraCount];
+            var expectedHeights = new int[cameraCount];
+            for (int index = 0; index < cameraCount; index++)
+            {
+                int cameraId = index + 1;
+                if (!alignment.ByCamera.TryGetValue(cameraId, out var aligned)) continue;
+                GrabImageStitcher.TryGetStitchedSize(
+                    aligned, enableProcess, ridgeDirection,
+                    out expectedWidths[index], out expectedHeights[index]);
+            }
+
+            if (logPaths)
+                FlowTrace.Log($"RV loadGrab paths {grabId} root={root} images={totalImageCount} cams={grouped.Count} cfg={(config != null ? "yes" : "no")} align={alignment.Mode}");
+            return new ReviewImageLoadPlan
+            {
+                GroupedPaths = grouped,
+                Alignment = alignment,
+                Config = config,
+                ExpectedWidths = expectedWidths,
+                ExpectedHeights = expectedHeights,
+                TotalImageCount = totalImageCount,
+                ConfigMs = configMs
+            };
+        }
+
+        public ReviewImageData Load(
+            ReviewImageLoadPlan plan,
+            int cameraCount,
+            bool enableProcess,
+            string ridgeDirection)
+        {
+            if (plan == null) throw new ArgumentNullException(nameof(plan));
+            var grouped = plan.GroupedPaths;
+            var config = plan.Config;
 
             var images = new Bitmap[cameraCount];
             var grayFrames = new byte[cameraCount][];
@@ -67,9 +116,8 @@ namespace AniloxRoll.Monitor.UI.Services
 
             var stitchWatch = Stopwatch.StartNew();
             int scale = InspectionEngineConfig.DefaultSaveResizeScale;
-            var alignment = FrameTickIndex.ResolveAlignment(grouped);
+            var alignment = plan.Alignment;
             var alignedByCamera = alignment.ByCamera;
-            FlowTrace.Log($"RV loadGrab paths {grabId} root={root} images={totalImageCount} cams={grouped.Count} cfg={(config != null ? "yes" : "no")} align={alignment.Mode}");
 
             Parallel.For(0, cameraCount, index =>
             {
@@ -110,10 +158,24 @@ namespace AniloxRoll.Monitor.UI.Services
                 RowMean = rowMean,
                 RowMax = rowMax,
                 Config = config,
-                TotalImageCount = totalImageCount,
-                ConfigMs = configMs,
+                TotalImageCount = plan.TotalImageCount,
+                ConfigMs = plan.ConfigMs,
                 StitchMs = stitchWatch.ElapsedMilliseconds
             };
+        }
+
+        public ReviewImageData Load(
+            string root,
+            string grabId,
+            DateTime hintFrom,
+            DateTime hintTo,
+            int cameraCount,
+            bool enableProcess,
+            string ridgeDirection)
+        {
+            ReviewImageLoadPlan plan = Prepare(
+                root, grabId, hintFrom, hintTo, cameraCount, enableProcess, ridgeDirection);
+            return Load(plan, cameraCount, enableProcess, ridgeDirection);
         }
     }
 }
