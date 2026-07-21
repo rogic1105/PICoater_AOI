@@ -193,13 +193,13 @@
     <Compile Include="UI\Binders\GrabDetailListBinder.cs" />
     <Compile Include="UI\Coordinators\GrabDurationCoordinator.cs" />
     <Compile Include="UI\Coordinators\InspectionSettingsCoordinator.cs" />
-    <Compile Include="UI\Coordinators\ReviewCurveLoadCoordinator.cs" />
+    <Compile Include="UI\Coordinators\LatestCurveLoadCoordinator.cs" />
     <Compile Include="UI\Coordinators\ReviewImageLoadGate.cs" />
     <Compile Include="UI\Coordinators\ReviewPeriodLoadCoordinator.cs" />
     <Compile Include="UI\Coordinators\ReviewFolderCoordinator.cs" />
     <Compile Include="UI\Coordinators\SettingImpactClassifier.cs" />
     <Compile Include="UI\Services\ImageCacheService.cs" />
-    <Compile Include="UI\Services\ReviewCurveDataLoader.cs" />
+    <Compile Include="UI\Services\SingleGrabCurveDataLoader.cs" />
     <Compile Include="UI\Services\SingleGrabCurveCache.cs" />
     <Compile Include="UI\Managers\CameraStallDetector.cs" />
     <Compile Include="UI\Managers\GlobalMergeCoordinator.cs" />

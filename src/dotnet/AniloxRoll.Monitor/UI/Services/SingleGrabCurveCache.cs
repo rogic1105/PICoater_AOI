@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
+using AniloxRoll.Monitor.Core.Services;
 
 namespace AniloxRoll.Monitor.UI.Services
 {
@@ -18,7 +20,8 @@ namespace AniloxRoll.Monitor.UI.Services
         public SingleGrabCurveProfile(
             float[][] mean, float[][] max, float[] rowMean, float[] rowMax,
             int captureCount, string storageSource,
-            long lookupMs, long mergeMs, long summaryMs)
+            long lookupMs, long mergeMs, long summaryMs,
+            int matchedCameraCount = 0, string alignmentMode = null)
         {
             Mean = mean ?? new float[0][];
             Max = max ?? new float[0][];
@@ -29,6 +32,8 @@ namespace AniloxRoll.Monitor.UI.Services
             LookupMs = lookupMs;
             MergeMs = mergeMs;
             SummaryMs = summaryMs;
+            MatchedCameraCount = matchedCameraCount;
+            AlignmentMode = alignmentMode ?? "unknown";
             EstimatedBytes = EstimateBytes(Mean) + EstimateBytes(Max) +
                 EstimateBytes(RowMean) + EstimateBytes(RowMax);
         }
@@ -42,6 +47,8 @@ namespace AniloxRoll.Monitor.UI.Services
         public long LookupMs { get; }
         public long MergeMs { get; }
         public long SummaryMs { get; }
+        public int MatchedCameraCount { get; }
+        public string AlignmentMode { get; }
         public long EstimatedBytes { get; }
 
         private static long EstimateBytes(float[][] arrays)
@@ -87,6 +94,18 @@ namespace AniloxRoll.Monitor.UI.Services
             if (maxBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxBytes));
             _maxEntries = maxEntries;
             _maxBytes = maxBytes;
+        }
+
+        public static string BuildKey(
+            string root, GrabIdInfo info, int cameraCount)
+        {
+            if (string.IsNullOrWhiteSpace(root))
+                throw new ArgumentException("Root path is required.", nameof(root));
+            if (info == null) throw new ArgumentNullException(nameof(info));
+            string normalizedRoot = Path.GetFullPath(root).TrimEnd(
+                Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return normalizedRoot + "|" + info.GrabId + "|" + info.Earliest.Ticks + "|" +
+                info.Latest.Ticks + "|" + cameraCount;
         }
 
         public long CachedBytes

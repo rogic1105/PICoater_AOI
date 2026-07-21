@@ -17,6 +17,8 @@ FLOW_RE = re.compile(
     r"\[Flow\]\s+(?P<ts>\d{2}:\d{2}:\d{2}\.\d{3})\s+T\s*(?P<thread>\d+)\s+(?P<msg>.*)$"
 )
 GRABID_RE = re.compile(r"\b(\d{6}-\d{6})\b")
+UI_STALL_RE = re.compile(r"^\[UiStall\]\s+(?P<ms>\d+)ms(?:（(?P<gc>.*)）)?")
+UI_PING_RE = re.compile(r"^\[UiPing\]\s+(?P<ms>\d+)ms")
 
 
 def configure_stdout() -> None:
@@ -72,6 +74,106 @@ class FlowSession:
     @property
     def label(self) -> str:
         return self.path.stem
+
+
+@dataclass(frozen=True)
+class UiResponsivenessAssessment:
+    worst_timer_gap_ms: int
+    over_limit_count: int
+    hard_block_count: int
+    timer_starvation_count: int
+    worst_correlated_ping_ms: int
+    correlated_stack_count: int
+    gc_observed_count: int
+
+    @property
+    def passed(self) -> bool:
+        return self.hard_block_count == 0
+
+    def detail(self, limit_ms: int) -> str:
+        return (
+            f"最大Timer={self.worst_timer_gap_ms}ms；>{limit_ms}ms "
+            f"真阻塞={self.hard_block_count} 計時器飢餓={self.timer_starvation_count}；"
+            f"最大關聯UiPing={self.worst_correlated_ping_ms}ms "
+            f"UiStack={self.correlated_stack_count} GC伴隨={self.gc_observed_count}"
+        )
+
+
+def assess_ui_responsiveness(
+    session: FlowSession,
+    activity_times: Sequence[float],
+    limit_ms: int = 1000,
+    activity_before_s: float = 1.0,
+    activity_after_s: float = 3.0,
+) -> UiResponsivenessAssessment:
+    """Distinguish a blocked UI thread from a starved low-priority WM_TIMER.
+
+    UiStall alone only says that the WinForms timer fired late. A matching UiStack,
+    or a sufficiently large BeginInvoke round trip in the same interval, is required
+    before the delay is classified as a synchronous UI block.
+    """
+    stalls = []
+    for line in session.lines:
+        match = UI_STALL_RE.match(line.message)
+        if not match:
+            continue
+        if not any(
+            event_time - activity_before_s <= line.elapsed <= event_time + activity_after_s
+            for event_time in activity_times
+        ):
+            continue
+        stalls.append((line, int(match.group("ms")), match.group("gc") or ""))
+
+    pings = []
+    stacks = []
+    for line in session.lines:
+        ping_match = UI_PING_RE.match(line.message)
+        if ping_match:
+            pings.append((line.elapsed, int(ping_match.group("ms"))))
+        elif line.message.startswith("[UiStack]"):
+            stacks.append(line.elapsed)
+
+    hard_blocks = 0
+    timer_starvations = 0
+    worst_ping = 0
+    correlated_stacks = 0
+    gc_observed = 0
+    for line, duration_ms, gc_text in stalls:
+        if duration_ms <= limit_ms:
+            continue
+        interval_start = line.elapsed - duration_ms / 1000.0 - 0.25
+        interval_end = line.elapsed + 0.25
+        related_pings = [
+            duration
+            for elapsed, duration in pings
+            if interval_start <= elapsed <= interval_end
+        ]
+        related_stacks = sum(
+            interval_start <= elapsed <= interval_end for elapsed in stacks
+        )
+        worst_related_ping = max(related_pings) if related_pings else 0
+        worst_ping = max(worst_ping, worst_related_ping)
+        correlated_stacks += related_stacks
+        if re.search(r"GC[012]\+[1-9]\d*", gc_text):
+            gc_observed += 1
+
+        # A ping must consume at least half the timer gap (minimum 200 ms,
+        # capped at the contract limit) to corroborate a blocking stall.
+        ping_block_ms = max(200, min(limit_ms, duration_ms // 2))
+        if related_stacks > 0 or worst_related_ping >= ping_block_ms:
+            hard_blocks += 1
+        else:
+            timer_starvations += 1
+
+    return UiResponsivenessAssessment(
+        worst_timer_gap_ms=max((duration for _, duration, _ in stalls), default=0),
+        over_limit_count=sum(duration > limit_ms for _, duration, _ in stalls),
+        hard_block_count=hard_blocks,
+        timer_starvation_count=timer_starvations,
+        worst_correlated_ping_ms=worst_ping,
+        correlated_stack_count=correlated_stacks,
+        gc_observed_count=gc_observed,
+    )
 
 
 class CheckStatus(Enum):

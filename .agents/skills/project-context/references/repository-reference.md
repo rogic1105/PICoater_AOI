@@ -44,10 +44,10 @@ against current code with `rg` before editing because lookup data can become sta
 | `UI/Binders/BusyUiBinder.cs` | 回顧載入忙碌視覺唯一 owner：等待游標、命令按鈕鎖與 UI-thread marshal。Presenter workflow 與 stitched image loader 共用同一實例。 |
 | `UI/Coordinators/ReviewFolderCoordinator.cs` | 回顧資料夾選擇、路徑修正、ImageRepository refresh、DateTimeNavigator 初始化。 |
 | `UI/Coordinators/InspectionSettingsCoordinator.cs` | InspectionSettings 到 BatchInspectionService 的 pipeline 副作用唯一 owner。 |
-| `UI/Coordinators/ReviewCurveLoadCoordinator.cs` | 回顧單序號曲線快路的 latest-only／single-flight 排程與 stale token owner；不負責讀 bin 或畫 chart。 |
+| `UI/Coordinators/LatestCurveLoadCoordinator.cs` | 回顧／報表共用的單序號 Curve latest-only／single-flight 排程與 stale token owner；不負責讀 bin 或畫 chart。 |
 | `UI/Coordinators/ReviewPeriodLoadCoordinator.cs` | 回顧時段載入的 FIFO single-flight、重複 request 去重與 generation 失效 owner。 |
 | `UI/Services/ImageCacheService.cs` | ProcessBatch 產出但不直接顯示的 Bitmap 生命週期唯一 owner；下一次 workflow 前統一 Dispose。 |
-| `UI/Services/ReviewCurveDataLoader.cs` | 單序號回顧曲線的無 UI application service：找影像／CFG、跨相機對齊、合併欄與列 curve bin，回傳不可直接上畫面的資料結果。 |
+| `UI/Services/SingleGrabCurveDataLoader.cs` | 回顧／報表共用的單序號 Curve application service：讀 CFG，依記憶體快取→`_curve_summary`→原始 bin 取得欄／列資料，且不持有 WinForms 狀態。 |
 | `UI/State/ReviewRuntimeState.cs` | 回顧 CSV CFG 快照與螢幕 mm/px 的 runtime SSoT；Form 與 ReviewStitchCoordinator 共用。 |
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/Interaction/EventGuard.cs` | 可重入事件 guard 與 scope |
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/BaseCurveChartHelper.cs` | Mean/Max、閾值與 plot lifecycle 的共用曲線圖基底 |

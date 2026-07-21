@@ -57,6 +57,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private float[][] _stitchedCurveMax;
         private float[][] _stitchedRowCurveMean;
         private float[][] _stitchedRowCurveMax;
+        private float[] _stitchedMergedRowCurveMean;
+        private float[] _stitchedMergedRowCurveMax;
         private Bitmap _globalMergedImage;
         private Bitmap _periodMergedImage;
 
@@ -71,8 +73,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         // 曲線與圖片是兩條獨立資料流：曲線 latest-only，圖片由 Form 的 250ms debounce 觸發。
         // 不共用 token，避免圖片開始載入時把同一序號仍在讀取的曲線誤判為 stale。
-        private readonly ReviewCurveLoadCoordinator _curveLoads;
-        private readonly ReviewCurveDataLoader _curveDataLoader;
+        private readonly LatestCurveLoadCoordinator _curveLoads;
+        private readonly SingleGrabCurveDataLoader _curveDataLoader;
         private readonly ReviewImageLoadGate _imageLoads = new ReviewImageLoadGate();
 
         /// <summary>快路：只載曲線（欄+列，.bin 數十 KB + tick 對齊 csv）+CFG → 更新欄/列 chart。
@@ -89,7 +91,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             Core.Services.FlowTrace.Log("RV loadGrab busy off reason=invalidated");
         }
 
-        private async Task LoadGrabCurvesCoreAsync(ReviewCurveLoadRequest request)
+        private async Task LoadGrabCurvesCoreAsync(SingleGrabCurveLoadRequest request)
         {
             string grabId = request.GrabId;
             DateTime hintFrom = request.HintFrom;
@@ -102,11 +104,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
             int camCount = _ctx.CameraCount;
             try
             {
-                ReviewCurveData loaded = await Task.Run(() =>
+                SingleGrabCurveData loaded = await Task.Run(() =>
                 {
-                    ReviewCurveData data = _curveDataLoader.Load(
+                    SingleGrabCurveData data = _curveDataLoader.Load(
                         root, grabId, hintFrom, hintTo, camCount);
-                    Core.Services.FlowTrace.Log($"RV curves paths {grabId} root={root} images={data.ImageCount} cams={data.MatchedCameraCount} cfg={(data.Config != null ? "yes" : "no")} align={data.AlignmentMode}");
+                    Core.Services.FlowTrace.Log($"RV curves paths {grabId} root={root} images={data.ImageCount} cams={data.MatchedCameraCount} cfg={(data.Config != null ? "yes" : "no")} align={data.AlignmentMode} source={data.StorageSource}");
                     return data;
                 });
                 if (!_curveLoads.IsCurrent(request))
@@ -118,6 +120,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _stitchedCurveMax = loaded.ColumnMax;
                 _stitchedRowCurveMean = loaded.RowMean;
                 _stitchedRowCurveMax = loaded.RowMax;
+                _stitchedMergedRowCurveMean = loaded.MergedRowMean;
+                _stitchedMergedRowCurveMax = loaded.MergedRowMax;
                 _ctx.ReviewState.Config = loaded.Config;
                 UpdateStitchedOverviewChart();
                 UpdateGlobalRowChart();
@@ -139,8 +143,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public ReviewStitchCoordinator(ReviewStitchContext ctx)
         {
             _ctx = ctx;
-            _curveDataLoader = new ReviewCurveDataLoader();
-            _curveLoads = new ReviewCurveLoadCoordinator(LoadGrabCurvesCoreAsync);
+            _curveDataLoader = new SingleGrabCurveDataLoader();
+            _curveLoads = new LatestCurveLoadCoordinator(LoadGrabCurvesCoreAsync);
         }
 
         /// <summary>延遲注入 DataStatsPresenter（初始化順序：coordinator 先於 presenter 建立）。</summary>
@@ -264,6 +268,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _stitchedCurveMax     = newCurveMax;
                 _stitchedRowCurveMean = newRowCurveMean;
                 _stitchedRowCurveMax  = newRowCurveMax;
+                _stitchedMergedRowCurveMean = null;
+                _stitchedMergedRowCurveMax = null;
                 _ctx.ReviewState.Config = grabCfg;
                 _ctx.DataStatsPresenter?.SetReviewGroupBoxes(true);
 
@@ -380,6 +386,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _stitchedCurveMax     = null;
             _stitchedRowCurveMean = null;
             _stitchedRowCurveMax  = null;
+            _stitchedMergedRowCurveMean = null;
+            _stitchedMergedRowCurveMax = null;
             _ctx.ReviewState.Config = null;
             _ctx.ColumnChartHelper?.SetOps(_ctx.Settings.Cam1_Ops);
             _ctx.ColumnChartHelper?.SetThresholds(_ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV);
@@ -393,7 +401,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// view-time 想要的目標是 HM_H_current，所以 ratio = HM_V_capture / HM_H_current。</summary>
         private void UpdateGlobalRowChart()
         {
-            if (_ctx.RowChartSync == null || _stitchedRowCurveMean == null) return;
+            if (_ctx.RowChartSync == null ||
+                (_stitchedRowCurveMean == null && _stitchedMergedRowCurveMean == null)) return;
             var swRow = System.Diagnostics.Stopwatch.StartNew();   // [UiSlow] 卡頓歸因
             try { UpdateGlobalRowChartBody(); }
             finally
@@ -405,9 +414,21 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         private void UpdateGlobalRowChartBody()
         {
-            CurveMergeHelper.MergeRowCurvesOverlap(
-                _stitchedRowCurveMean, _stitchedRowCurveMax,
-                _ctx.CameraCount, out float[] mergedMean, out float[] mergedMax);
+            float[] mergedMean;
+            float[] mergedMax;
+            if (_stitchedMergedRowCurveMean != null)
+            {
+                mergedMean = (float[])_stitchedMergedRowCurveMean.Clone();
+                mergedMax = _stitchedMergedRowCurveMax == null
+                    ? null
+                    : (float[])_stitchedMergedRowCurveMax.Clone();
+            }
+            else
+            {
+                CurveMergeHelper.MergeRowCurvesOverlap(
+                    _stitchedRowCurveMean, _stitchedRowCurveMax,
+                    _ctx.CameraCount, out mergedMean, out mergedMax);
+            }
             if (mergedMean != null)
             {
                 float captureHmV = _ctx.ReviewState.Config?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
@@ -416,6 +437,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _ctx.RowChartSync.UpdateData(mergedMean, mergedMax, requireViewRange: true);
                 // 舊 else RefreshRowChartRange（讀已砍 canvas，恆 no-op）移除；視野由 ImageDisplayView 連動
             }
+        }
+
+        public void Dispose()
+        {
+            _curveDataLoader.Dispose();
         }
 
         /// <summary>

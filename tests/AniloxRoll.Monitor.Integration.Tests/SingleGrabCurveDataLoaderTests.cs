@@ -7,7 +7,7 @@ using NUnit.Framework;
 namespace AniloxRoll.Monitor.Integration.Tests
 {
     [TestFixture]
-    public class ReviewCurveDataLoaderTests
+    public class SingleGrabCurveDataLoaderTests
     {
         private string _tempRoot;
 
@@ -15,7 +15,7 @@ namespace AniloxRoll.Monitor.Integration.Tests
         public void SetUp()
         {
             _tempRoot = Path.Combine(Path.GetTempPath(),
-                "ReviewCurveDataLoaderTests_" + Guid.NewGuid().ToString("N"));
+                "SingleGrabCurveDataLoaderTests_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_tempRoot);
         }
 
@@ -42,19 +42,24 @@ namespace AniloxRoll.Monitor.Integration.Tests
                 new[] { 50f, 60f }, new[] { 70f, 80f });
             WriteCsv(date, grabId, first, second);
 
-            var loader = new ReviewCurveDataLoader();
-            ReviewCurveData result = loader.Load(_tempRoot, grabId, date, date, 2);
+            var loader = new SingleGrabCurveDataLoader();
+            SingleGrabCurveData result = loader.Load(_tempRoot, grabId, date, date, 2);
 
             Assert.That(result.ImageCount, Is.EqualTo(2));
             Assert.That(result.MatchedCameraCount, Is.EqualTo(1));
             Assert.That(result.AlignmentMode, Is.EqualTo("filename"));
+            Assert.That(result.StorageSource, Is.EqualTo("bins"));
             Assert.That(result.Config, Is.Not.Null);
             Assert.That(result.Config.HessianMaxFactorV, Is.EqualTo(0.75f));
             Assert.That(result.ColumnMean[0], Is.EqualTo(new[] { 2f, 4f }));
             Assert.That(result.ColumnMax[0], Is.EqualTo(new[] { 5f, 7f }));
-            Assert.That(result.RowMean[0], Is.EqualTo(new[] { 10f, 20f, 50f, 60f }));
-            Assert.That(result.RowMax[0], Is.EqualTo(new[] { 30f, 40f, 70f, 80f }));
+            Assert.That(result.MergedRowMean, Is.EqualTo(new[] { 10f, 20f, 50f, 60f }));
+            Assert.That(result.MergedRowMax, Is.EqualTo(new[] { 30f, 40f, 70f, 80f }));
             Assert.That(result.ColumnMean[1], Is.Null);
+
+            SingleGrabCurveData cached = loader.Load(_tempRoot, grabId, date, date, 2);
+            Assert.That(cached.StorageSource, Is.EqualTo("memory-bins"));
+            loader.Dispose();
         }
 
         private void WriteCsv(DateTime date, string grabId, params string[] fileNames)

@@ -143,6 +143,10 @@ IC|WF stats paints=N/s paintMs=M statusEv=K/s ← canvas 每秒重繪組成（>5
 3. UiStall 大 + UiPing 靜默 → **飽和型**（件多不慢）→ 看 IC stats：paints > ~150/s＝paint 風暴回歸
    （限流後正常 ≤ ~130/s）。**飽和型用計數器抓、阻塞型用計時器抓——只裝計時器抓不到飽和**。
 4. UiStack 點到的都是真 bug 但不一定是你要的 bug——修掉後重測，別急收工。
+自動 checker 的 `U.stall` 依同一原則成對判讀：`UiStall >1000ms` 只有在該 gap 時間窗內同時出現
+`UiStack`，或 `UiPing >= max(200ms, min(1000ms, gap/2))` 才判 **FAIL／真阻塞**；沒有佐證的
+大 `UiStall` 記為「計時器飢餓」並保留次數，但不得單獨判 FAIL。這避免高速滾輪持續產生 input/paint 時，
+低優先 `WM_TIMER` 晚執行卻被誤報為 UI 執行緒停止；GC 增量只作歸因線索，也不能單獨定罪。
 契約：拖曳中 `IC stats paints` 不得 >150/s（風暴回歸紅旗）；`[UiSlow] CamStatusTick/TelemetryTick`
 出現＝MIL 查詢又回到 UI 執行緒（背景化被回退）。
 - view 訂閱 `cam.OnDisplayFrame` 且 Enable* 冪等 → **相機批次換新（Allocate/Free）前後必有對稱 teardown**。
@@ -1005,7 +1009,8 @@ python tools/python/check_all_flows.py trace-a.log trace-b.log
 python tools/python/check_review_flows.py [trace.log]    # 預設抓最新 log；exit 0=全 PASS
 ```
 判準：①R2 快路跟隨（最後選取的 grabId 必有成功 `RV curves`，全 drop=曲線沒跟上）②R2 token+begin/done 配對
-③卡頓紅線（回顧互動期間 UiStall ≤1000ms）④讀取資料跳最新（第 2 次起不得停在舊序號）
+③卡頓紅線（回顧互動期間 `UiStall >1000ms` 且同窗有高 `UiPing`／`UiStack` 才算真阻塞）
+④讀取資料跳最新（第 2 次起不得停在舊序號）
 ⑤時段導航去重（同時點不得重複載入）⑥曲線 single-flight（兩個 paths 間必有 done/stale）
 ⑦方向對數（dataPhys↔dataChart 鏡射/直通，見§狀態快照儀器）⑧切入回顧必有
 `RV tabVisible repaint view=True`，且其後必有 `RV visiblePaint ready=True lod=… size=WxH` 證明內容真正可畫；
@@ -1039,7 +1044,7 @@ T1: RV loadGrab done {grabId}（…ms）
 ### R2 單片序號切換（cbReviewId）——分層載入（2026-07-07 定版）
 ```
 T1: ui:【單片序號】→ {grabId}
-Tn: RV curves paths {grabId} root=… images=N cams=P cfg=yes|no align=tick|filename
+Tn: RV curves paths {grabId} root=… images=N cams=P cfg=yes|no align=tick|filename|summary source=bins|summary|memory-bins|memory-summary
 T1: RV curves {grabId}（…ms）          ← 快路：欄+列曲線+CFG 即時跟滾動（chart 先行，使用者掃異常）
 （快速滾動：曲線 single-flight/latest-only，中間 intent 可無 paths；正在讀的舊筆完成後 stale-drop，再直接讀最新筆）
 （影像 debounce 250ms：滾動中不發完整載入；停下才載「最後選取」；session 也只在 settle 落盤一次）
@@ -1064,15 +1069,15 @@ OnReviewGrabIdSelected@AniloxRollForm.Data.cs
  ├ InvalidateImageLoad@ReviewStitchCoordinator.cs
  │  └ Invalidate@ReviewImageLoadGate.cs（立即讓舊圖片失效；同時釋放該圖片的 busy lease）
  ├ LoadGrabCurvesOnlyAsync@ReviewStitchCoordinator.cs
- │  └ Enqueue@ReviewCurveLoadCoordinator.cs
+ │  └ Enqueue@LatestCurveLoadCoordinator.cs
  │     ├ pending 僅保留最新一筆；running 恆單工
  │     └ LoadGrabCurvesCoreAsync@ReviewStitchCoordinator.cs
- │        ├ Load@ReviewCurveDataLoader.cs（無 WinForms 的 IO／合併 service）
- │        │  ├ LoadForGrabId@InspectionImagePathRepository.cs
- │        │  ├ LoadForGrabId@InspectionConfigRepository.cs
- │        │  ├ ResolveAlignment@FrameTickIndex.cs（tick 優先、檔名 fallback 的唯一決策點）
- │        │  └ MergeCurves＋MergeRowCurves@CurveMergeHelper.cs
- │        └ IsCurrent@ReviewCurveLoadCoordinator.cs
+ │        ├ Load@SingleGrabCurveDataLoader.cs（回顧／報表共用、無 WinForms 的 IO／合併 service）
+ │        │  ├ SingleGrabCurveCache（512 筆／256 MB 上限；回顧／報表各自持有 bounded cache）
+ │        │  ├ TryLoad@SingleGrabCurveSummaryStore.cs（與報表共用 `_curve_summary` materialized view）
+ │        │  └ miss → LoadForGrabId＋ResolveAlignment＋MergeCurves／MergeRowCurves
+ │        │       └ QueueSave summary（下次回顧／報表直接讀匯總；原始 bins 仍是 SSoT）
+ │        └ IsCurrent@LatestCurveLoadCoordinator.cs
  │           ├ false → RV curves stale-drop
  │           └ true → 套 ReviewRuntimeState＋UpdateStitchedOverviewChart＋UpdateGlobalRowChart
  └ 250ms settle → LoadGrabStitchedViewGuardRowRangeAsync@AniloxRollForm.Review.cs
@@ -1279,17 +1284,17 @@ listViewGrabDetail.MouseUp
 ### D3 報表序號 / 序號範圍
 ```
 T1: ui:【報表序號】→ {grabId}          ← 單片切換（同 D2 的 cb 版）
-T1: DT curve load {grabId} captures=N source=disk|prefetch|cache storage=summary|bins configMs=N waitMs=N pathMs=N mergeMs=N summaryMs=N points=N drawMs=N totalMs=N
-     ← 每格都更新 Curve；storage=summary 讀持久匯總，storage=bins 代表匯總缺少／失效而由原始 bin 重建
-T1: DT row curve load {grabId} source=disk|prefetch|cache points=N pitch=Nmm
-     ← 單片模式列 Curve；與欄 Curve 共用同一個 profile/cache/prefetch，不得另掃一次路徑
+T1: DT curve load {grabId} captures=N source=shared storage=summary|bins|memory-summary|memory-bins configMs=N waitMs=N pathMs=N mergeMs=N summaryMs=N points=N drawMs=N totalMs=N
+     ← 回顧／報表共用 `SingleGrabCurveDataLoader`；storage 表示持久匯總、原始 bin 或同來源的記憶體命中
+T1: DT row curve load {grabId} source=shared storage=summary|bins|memory-summary|memory-bins points=N pitch=Nmm
+     ← 單片模式欄／列 Curve 同一刻套用同一份 load result，不得另掃一次路徑
+（快速滾過的舊選取）DT curve stale-drop {grabId}
+     ← running IO 允許完成但不得上畫；pending 只保留最新一筆，禁止每格排隊造成越滾越慢
 （舊資料缺 Row bin）DT row curve missing {grabId}，畫面清空
 （切序號範圍／年/月/日）DT row curve clear mode=range
      ← 列沒有相機起始線，只對單序號反映；範圍模式不得保留上一筆列 Curve
-T1: DT curve cache policy entries=512 maxMB=256 prefetch=4 coldParallel=2 scale=merged-only
-     ← Presenter 初始化一次；目前驗綠的 bounded LRU／配置策略，改值須同步契約＋checker 並重驗
-Tn: DT curve prefetch {grabId} readyMs=N storage=summary|bins cacheEntries=N cacheMB=N
-     ← 依滾動方向背景預讀下一個尚未快取的相鄰序號（前看最多 4 格，只允許一個預讀工作）
+T1: DT curve load policy latest-only shared-loader entries=512 maxMB=256 scale=merged-only
+     ← Presenter 初始化一次；報表不再自行同步等待或相鄰預讀，排程與回顧共用 latest-only coordinator
 Tn: DT curve summary {grabId} write=queued|ok|failed|dropped|evicted|skip-incomplete captures=N merged=N ms=N [reason=idle|pressure]
      ← merged=captures 才排入 bounded queue；一般於序號互動停止 750ms 後由單一背景 writer 寫入；
        pending 達 72 MB 壓力線時允許單線 pressure drain，防止持續滾動只排隊不落盤
@@ -1321,10 +1326,9 @@ T1: DT list reload range={start}~{end} rows=N ms=N source=index
   `NavigateTo` 寫 session／重建日期清單，也不得當下載 Review 圖片；切到 Review tab 才一次套控制項並接 R2 完整載入。
 - **時序索引只建一次**：`ImageRepository.LoadDirectory` 建立排序去重的 available-period index；報表／回顧每格同步
   只能對既有索引做查找，不得在 UI 執行緒重新解析全部影像檔名、`Distinct`、`OrderBy`。
-- **單片 Curve 不掠過**：每個 `ui:【報表序號】` 必有同 grabId 的 `DT curve load`，且列 bin 存在時
-  必有同 grabId 的 `DT row curve load`。`source=disk`＝前景首次完整讀取；
-  `source=prefetch`＝選取加入已在背景完整讀取的同一工作；`source=cache`＝使用之前完整合併完成的原始 Curve。
-  快取保存 rescale 前欄 Mean/Max 與合併後列 Mean/Max；資料夾重載或 Presenter Dispose 必清空。
+- **單片 Curve latest-only**：快速滾動時 running request 可記 `DT curve stale-drop`，尚未開始的 request 只保留最新一筆；
+  最後停住的 `ui:【報表序號】` 必有同 grabId 的 `DT curve load`，且列資料存在時必有 `DT row curve load`。
+  欄／列必共用同一份 `SingleGrabCurveData`；快取保存 rescale 前欄 Mean/Max 與合併後列 Mean/Max，資料夾重載或 Presenter Dispose 必清空。
 - **單片 Curve cache 基準**：LRU 上限 `512 筆／256 MB`，納入列 Curve 後以目前 278 筆實測資料可整批容納，避免往返滾動時
   反覆淘汰／重載造成 Gen2 GC；30,000 筆時仍保持固定上限。view-time HM rescale 不得 clone 每台完整 raw Curve，
   只能在 `CurveOverviewMerger` 產生最多約 2,000 點的 merged result 後縮放。這些是可重驗調整的效能參數，非鐵則。
@@ -1369,22 +1373,21 @@ cbDataId.SelectedIndexChanged
      ├ InspectionStatsPresenter.Update／UpdateRowResult（7 台色卡＋camDataRow 列 O/X）
      ├ GrabDetailListBinder.Highlight（只移反白＋EnsureVisible＋RedrawItems）
      └ MuraProfileChartPresenter.Update（該 ID curve）
-       ├ SingleGrabCurveCache.TryGet／GetOrLoadAsync（同 key in-flight 共用；rescale 前結果 LRU）
-       ├ miss → SingleGrabCurveSummaryStore.TryLoad（命中＝一次 sequential read）
-       ├ summary miss/stale/corrupt → InspectionImagePathRepository.LoadForGrabId
-       │        ├ Parallel.For（最多 2 台相機；降低冷讀等待且避免 7 路冷碟亂跳）
-       │        │  ├ CurveMergeHelper.MergeCurves（MeanC/MaxC）
-       │        │  └ MergeRowCurves（MeanR/MaxR；支援取消）
-       │        └ MergeRowCurvesOverlap（所有相機同一列重疊）
-       │        → CurveBinFile.Load（每個 bin bulk read；邊讀邊合併）→ SingleGrabCurveSummaryStore.QueueSave
-       │          → idle 750ms／pending 72MB pressure → 單一 writer → TrySave（原子寫回）
-       ├ cache raw Curve 唯讀直入 CurveOverviewMerger → 合併後小曲線套 Hessian ratio → UpdateOverviewChart
-       │  （不得為 view-time rescale 複製每台完整 raw Curve；只縮放新建的 merged display result）
-       │  └ ColumnCurveChartHelper.UpdateDataAndView（每兩個畫布像素一個顯示桶；Mean=桶平均、Max=桶最大，
-       │       點數相同時原地更新既有 DataPoint；不得逐格 Clear＋DataBind 重建）
-       ├ row raw Curve clone＋HM_V_capture/HM_H_current rescale
-       │  → RowCurveDisplayAdapter.UpdateData → RowCurveChartHelper（與監控／回顧列圖表同格式與方向規則）
-       └ ScheduleAdjacentPrefetch（依方向找下一個未命中項）→ DT curve prefetch
+       ├ LatestCurveLoadCoordinator.Enqueue（running 保留、pending 覆寫成最新；stale result 不上畫）
+       └ LoadSingleGrabCoreAsync → Task.Run → SingleGrabCurveDataLoader.Load（與回顧共用）
+          ├ SingleGrabCurveCache.TryGet／GetOrLoadAsync（同 key in-flight 共用；rescale 前結果 LRU）
+          ├ miss → SingleGrabCurveSummaryStore.TryLoad（命中＝一次 sequential read）
+          ├ summary miss/stale/corrupt → InspectionImagePathRepository.LoadForGrabId
+          │  ├ 各相機依序 CurveMergeHelper.MergeCurves（MeanC/MaxC）＋MergeRowCurves（MeanR/MaxR）
+          │  └ MergeRowCurvesOverlap（所有相機同一列重疊）
+          │     → CurveBinFile.Load（每個 bin bulk read；邊讀邊合併）→ SingleGrabCurveSummaryStore.QueueSave
+          │       → idle 750ms／pending 72MB pressure → 單一 writer → TrySave（原子寫回）
+          ├ cache raw Curve 唯讀直入 CurveOverviewMerger → 合併後小曲線套 Hessian ratio → UpdateOverviewChart
+          │  （不得為 view-time rescale 複製每台完整 raw Curve；只縮放新建的 merged display result）
+          │  └ ColumnCurveChartHelper.UpdateDataAndView（每兩個畫布像素一個顯示桶；Mean=桶平均、Max=桶最大，
+          │       點數相同時原地更新既有 DataPoint；不得逐格 Clear＋DataBind 重建）
+          └ row raw Curve clone＋HM_V_capture/HM_H_current rescale
+             → RowCurveDisplayAdapter.UpdateData → RowCurveChartHelper（與監控／回顧列圖表同格式與方向規則）
      → DT selected … list=keep
      → GrabIdSelectedFromData → OnDataGrabIdSelected@AniloxRollForm.Data.cs
       └ 覆寫 pending selection＋_reviewDirty=true（不碰隱藏 Review 控制項）
@@ -1397,6 +1400,7 @@ tabMain.SelectedIndexChanged（進 Review 且有 pending）
 cbDataIdStart|End 手動變更
  → ScheduleRangeRefresh@DataStatisticsPresenter.cs
    ├ MuraProfileChartPresenter.ClearRow（列圖只屬單序號；範圍 mode 清空）
+   │  └ LatestCurveLoadCoordinator.Invalidate（單片 running result 不得晚到覆蓋範圍 Curve）
    ├ generation++（不取消已開始的 Curve 樣本；資料夾／模式 teardown 才取消 token）
    ├ 33ms repeating throttle → RangeListPreviewTimer_Tick
    │  └ ApplyRangeListPreview（只在完整 detail index 簽章有效時）

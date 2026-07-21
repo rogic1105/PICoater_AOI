@@ -12,6 +12,7 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 from flow_checks.core import CheckStatus, FlowLine, FlowSession
+from flow_checks.data import DataFlowValidator
 from flow_checks.live import LiveFlowValidator
 from flow_checks.mura import MuraFlowValidator
 from flow_checks.parameter import ParameterFlowValidator
@@ -81,6 +82,60 @@ class SettingsFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(CheckStatus.FAIL, result(report, "S0.route").status)
 
+
+class DataFlowValidatorTests(unittest.TestCase):
+    def test_timer_starvation_without_ping_or_stack_is_not_a_hard_ui_block(self):
+        lines = [
+            FlowLine(0.0, "00:00:00.000", 1, "ui:【報表序號】→ 260721-080000"),
+            FlowLine(1.5, "00:00:01.500", 1, "[UiStall] 1500ms（GC0+2 GC1+1 GC2+0）"),
+            FlowLine(1.51, "00:00:01.510", 1, "DT selected 260721-080000 stats=cache list=keep ms=1"),
+        ]
+        report = DataFlowValidator().validate(FlowSession(Path("synthetic.log"), lines))
+        responsiveness = result(report, "U.stall")
+        self.assertEqual(CheckStatus.PASS, responsiveness.status)
+        self.assertIn("計時器飢餓=1", responsiveness.detail)
+
+    def test_correlated_ping_and_stack_are_a_hard_ui_block(self):
+        lines = [
+            FlowLine(0.0, "00:00:00.000", 1, "ui:【報表序號】→ 260721-080000"),
+            FlowLine(0.8, "00:00:00.800", 3, "[UiStack] BlockingCall.Wait ←"),
+            FlowLine(1.5, "00:00:01.500", 1, "[UiPing] 1400ms"),
+            FlowLine(1.51, "00:00:01.510", 1, "[UiStall] 1500ms（GC0+0 GC1+0 GC2+0）"),
+            FlowLine(1.52, "00:00:01.520", 1, "DT selected 260721-080000 stats=cache list=keep ms=1"),
+        ]
+        report = DataFlowValidator().validate(FlowSession(Path("synthetic.log"), lines))
+        responsiveness = result(report, "U.stall")
+        self.assertEqual(CheckStatus.FAIL, responsiveness.status)
+        self.assertIn("真阻塞=1", responsiveness.detail)
+
+    def test_single_curve_latest_only_allows_stale_intermediate_and_requires_final(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT curve load policy latest-only shared-loader entries=512 maxMB=256 scale=merged-only",
+                "ui:【報表序號】→ 260721-080000",
+                "DT selected 260721-080000 stats=cache list=keep ms=1",
+                "ui:【報表序號】→ 260721-080001",
+                "DT selected 260721-080001 stats=cache list=keep ms=1",
+                "DT curve stale-drop 260721-080000",
+                "DT row curve load 260721-080001 source=shared storage=summary points=100 pitch=0.010000mm",
+                "DT curve load 260721-080001 captures=7 source=shared storage=summary configMs=1 waitMs=2 pathMs=0 mergeMs=0 summaryMs=1 points=100 drawMs=3 totalMs=5",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "D3.curve-policy").status)
+        self.assertEqual(CheckStatus.PASS, result(report, "D3.curve").status)
+        self.assertEqual(CheckStatus.PASS, result(report, "D3.row-curve").status)
+
+    def test_single_curve_latest_only_fails_when_final_selection_never_applies(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT curve load policy latest-only shared-loader entries=512 maxMB=256 scale=merged-only",
+                "ui:【報表序號】→ 260721-080001",
+                "DT selected 260721-080001 stats=cache list=keep ms=1",
+                "DT curve stale-drop 260721-080001",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "D3.curve").status)
+        self.assertEqual(CheckStatus.FAIL, result(report, "D3.row-curve").status)
 
 class MuraFlowValidatorTests(unittest.TestCase):
     def test_edges_health_and_pause_sequences_pass(self):

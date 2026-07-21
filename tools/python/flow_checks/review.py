@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import re
 
-from .core import CheckReport, CheckStatus, FlowSession, grab_id
+from .core import (
+    CheckReport,
+    CheckStatus,
+    FlowSession,
+    assess_ui_responsiveness,
+    grab_id,
+)
 
 
 ROW_RE = re.compile(
@@ -171,22 +177,12 @@ class ReviewFlowValidator:
                 ("RV ", "ui:【單片序號】", "ui:【讀取資料】", "ui:【時段導航】")
             )
         ]
-        stalls = []
-        for line in session.lines:
-            if not line.message.startswith("[UiStall]"):
-                continue
-            if not any(event_time - 1 <= line.elapsed <= event_time + 3 for event_time in review_times):
-                continue
-            match = re.search(r"\[UiStall\]\s+(\d+)ms（(.*)）", line.message)
-            if match:
-                stalls.append((int(match.group(1)), match.group(2)))
-        worst = max(stalls) if stalls else (0, "")
+        assessment = assess_ui_responsiveness(session, review_times, limit_ms)
         report.add(
             self.domain,
             "U.stall",
-            CheckStatus.PASS if worst[0] <= limit_ms else CheckStatus.FAIL,
-            f"最大={worst[0]}ms（{worst[1]}）；>{limit_ms}ms 共 "
-            f"{sum(1 for duration, _ in stalls if duration > limit_ms)} 次",
+            CheckStatus.PASS if assessment.passed else CheckStatus.FAIL,
+            assessment.detail(limit_ms),
         )
 
     def _check_reload_jumps_to_newest(

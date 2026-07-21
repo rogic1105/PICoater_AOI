@@ -2,7 +2,13 @@
 
 import re
 
-from .core import CheckReport, CheckStatus, FlowSession, grab_id
+from .core import (
+    CheckReport,
+    CheckStatus,
+    FlowSession,
+    assess_ui_responsiveness,
+    grab_id,
+)
 
 
 class DataFlowValidator:
@@ -152,39 +158,41 @@ class DataFlowValidator:
 
         pattern = re.compile(
             r"^DT curve load (\d{6}-\d{6}) captures=(\d+) "
-            r"source=(disk|prefetch|cache) storage=(summary|bins) "
+            r"source=shared storage=(summary|bins|memory-summary|memory-bins) "
             r"configMs=(\d+) waitMs=(\d+) pathMs=(\d+) mergeMs=(\d+) "
             r"summaryMs=(\d+) (?:points=(\d+) )?drawMs=(\d+) totalMs=(\d+)$"
         )
-        missing = []
         invalid = []
-        sources = {"disk": 0, "prefetch": 0, "cache": 0}
-        storage = {"summary": 0, "bins": 0}
+        storage = {"summary": 0, "bins": 0, "memory-summary": 0, "memory-bins": 0}
         has_current_instrument = any(
             line.message.startswith("DT curve load ") and " source=" in line.message
             for line in session.lines
         )
 
-        for position, (line_index, selected_id) in enumerate(intents):
-            next_index = intents[position + 1][0] if position + 1 < len(intents) else len(session.lines)
-            matching = [
-                line.message
-                for line in session.lines[line_index + 1 : next_index]
-                if line.message.startswith(f"DT curve load {selected_id} ")
-            ]
-            if not matching:
-                missing.append(selected_id)
-                continue
-            if not has_current_instrument:
-                continue
-            match = pattern.match(matching[-1])
+        loads = [
+            (index, line.message)
+            for index, line in enumerate(session.lines)
+            if line.message.startswith("DT curve load ")
+            and not line.message.startswith("DT curve load policy ")
+        ]
+        for _, message in loads:
+            match = pattern.match(message)
             if not match:
-                invalid.append(matching[-1])
+                invalid.append(message)
                 continue
-            sources[match.group(3)] += 1
-            storage[match.group(4)] += 1
+            storage[match.group(3)] += 1
 
-        if missing or invalid:
+        final_index, final_id = intents[-1]
+        final_loaded = any(
+            index > final_index and message.startswith(f"DT curve load {final_id} ")
+            for index, message in loads
+        )
+        stale = sum(
+            1 for line in session.lines
+            if line.message.startswith("DT curve stale-drop ")
+        )
+
+        if not final_loaded or invalid:
             status = CheckStatus.FAIL
         elif not has_current_instrument:
             status = CheckStatus.NOT_COVERED
@@ -194,30 +202,30 @@ class DataFlowValidator:
             self.domain,
             "D3.curve",
             status,
-            f"intent={len(intents)} disk={sources['disk']} prefetch={sources['prefetch']} "
+            f"intent={len(intents)} applied={len(loads)} stale={stale} "
             f"summary={storage['summary']} bins={storage['bins']} "
-            f"cache={sources['cache']} 缺Curve={len(missing)} 格式錯誤={len(invalid)}"
-            + (f"；首筆 {missing[0]}" if missing else "")
+            f"memory={storage['memory-summary'] + storage['memory-bins']} "
+            f"final={'ok' if final_loaded else 'missing'} 格式錯誤={len(invalid)}"
             + ("；舊版儀器無 source 分段" if not has_current_instrument else ""),
         )
 
     def _check_single_curve_policy(self, session: FlowSession, report: CheckReport) -> None:
         lines = [
             line.message for line in session.lines
-            if line.message.startswith("DT curve cache policy ")
+            if line.message.startswith("DT curve load policy ")
         ]
         if not lines:
             report.add(
                 self.domain,
                 "D3.curve-policy",
                 CheckStatus.NOT_COVERED,
-                "舊版 log 無 curve cache policy 儀器",
+                "舊版 log 無 curve load policy 儀器",
             )
             return
 
         expected = (
-            "DT curve cache policy entries=512 maxMB=256 "
-            "prefetch=4 coldParallel=2 scale=merged-only"
+            "DT curve load policy latest-only shared-loader "
+            "entries=512 maxMB=256 scale=merged-only"
         )
         unique = sorted(set(lines))
         ok = len(lines) == 1 and unique == [expected]
@@ -239,43 +247,42 @@ class DataFlowValidator:
             return
 
         pattern = re.compile(
-            r"^DT row curve load (\d{6}-\d{6}) source=(disk|prefetch|cache) "
+            r"^DT row curve load (\d{6}-\d{6}) source=shared "
+            r"storage=(summary|bins|memory-summary|memory-bins) "
             r"points=(\d+) pitch=([0-9.]+)mm$"
         )
-        missing_terminal = []
         invalid = []
         loaded = 0
         unavailable = 0
-        for position, (line_index, selected_id) in enumerate(intents):
-            next_index = intents[position + 1][0] if position + 1 < len(intents) else len(session.lines)
-            messages = [
-                line.message for line in session.lines[line_index + 1 : next_index]
-                if line.message.startswith((
-                    f"DT row curve load {selected_id} ",
-                    f"DT row curve missing {selected_id}",
-                ))
-            ]
-            if not messages:
-                missing_terminal.append(selected_id)
-                continue
-            terminal = messages[-1]
-            if terminal == f"DT row curve missing {selected_id}":
+        terminals = []
+        for index, line in enumerate(session.lines):
+            if line.message.startswith("DT row curve load ") or line.message.startswith("DT row curve missing "):
+                terminals.append((index, line.message))
+            if line.message.startswith("DT row curve missing "):
                 unavailable += 1
                 continue
-            match = pattern.match(terminal)
+            if not line.message.startswith("DT row curve load "):
+                continue
+            match = pattern.match(line.message)
             if not match or int(match.group(3)) <= 0 or float(match.group(4)) <= 0:
-                invalid.append(terminal)
+                invalid.append(line.message)
                 continue
             loaded += 1
 
-        status = CheckStatus.PASS if not missing_terminal and not invalid else CheckStatus.FAIL
+        final_index, final_id = intents[-1]
+        final_terminal = any(
+            index > final_index and message.startswith((
+                f"DT row curve load {final_id} ",
+                f"DT row curve missing {final_id}"))
+            for index, message in terminals
+        )
+        status = CheckStatus.PASS if final_terminal and not invalid else CheckStatus.FAIL
         report.add(
             self.domain,
             "D3.row-curve",
             status,
             f"intent={len(intents)} loaded={loaded} legacy/missing={unavailable} "
-            f"缺終態={len(missing_terminal)} 格式錯誤={len(invalid)}"
-            + (f"；首筆 {missing_terminal[0]}" if missing_terminal else ""),
+            f"final={'ok' if final_terminal else 'missing'} 格式錯誤={len(invalid)}",
         )
 
     def _check_curve_summary_writes(
@@ -376,29 +383,19 @@ class DataFlowValidator:
                 )
                 or (
                     line.message.startswith("DT ")
-                    and not line.message.startswith(("DT curve cache policy ", "DT range policy "))
+                    and not line.message.startswith(("DT curve load policy ", "DT range policy "))
                 )
             )
         ]
         if not data_times:
             report.add(self.domain, "U.stall", CheckStatus.NOT_COVERED, "無可量測的報表互動")
             return
-        stalls = []
-        for line in session.lines:
-            if not line.message.startswith("[UiStall]"):
-                continue
-            if not any(event_time - 1 <= line.elapsed <= event_time + 3 for event_time in data_times):
-                continue
-            match = re.search(r"\[UiStall\]\s+(\d+)ms（(.*)）", line.message)
-            if match:
-                stalls.append((int(match.group(1)), match.group(2)))
-        worst = max(stalls) if stalls else (0, "")
+        assessment = assess_ui_responsiveness(session, data_times, limit_ms)
         report.add(
             self.domain,
             "U.stall",
-            CheckStatus.PASS if worst[0] <= limit_ms else CheckStatus.FAIL,
-            f"最大={worst[0]}ms（{worst[1]}）；>{limit_ms}ms 共 "
-            f"{sum(1 for duration, _ in stalls if duration > limit_ms)} 次",
+            CheckStatus.PASS if assessment.passed else CheckStatus.FAIL,
+            assessment.detail(limit_ms),
         )
 
     def _check_range_debounce(self, session: FlowSession, report: CheckReport) -> None:
