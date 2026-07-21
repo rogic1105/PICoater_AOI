@@ -83,6 +83,46 @@ class SettingsFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(CheckStatus.FAIL, result(report, "S4.live-enhance").status)
 
+    def test_enhance_heatmap_is_main_only_and_does_not_reload_data(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "ui:設定[hda_EnhanceHeatmap]=BlueYellowRed",
+                "setting route hda_EnhanceHeatmap owner=Enhance effects=None",
+                "enhance heatmap mode=BlueYellowRed live=blue-yellow-red review=gray "
+                "scope=main-only data=unchanged",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "S5.enhance-heatmap").status
+        )
+
+    def test_enhance_heatmap_rejects_missing_immediate_state_line(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "ui:設定[hda_EnhanceHeatmap]=Off",
+                "setting route hda_EnhanceHeatmap owner=Enhance effects=None",
+                "RV loadGrab begin 260720-120000（proc=True）",
+                "enhance heatmap mode=Off live=gray review=gray "
+                "scope=main-only data=unchanged",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "S5.enhance-heatmap").status
+        )
+
+    def test_enhance_heatmap_rejects_palette_different_from_selected_mode(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "ui:設定[hda_EnhanceHeatmap]=Warm",
+                "setting route hda_EnhanceHeatmap owner=Enhance effects=None",
+                "enhance heatmap mode=Warm live=cold review=gray "
+                "scope=main-only data=unchanged",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "S5.enhance-heatmap").status
+        )
+
     def test_review_enhance_reloads_current_period_mode(self):
         report = SettingsFlowValidator().validate(
             session(

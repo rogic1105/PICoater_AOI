@@ -148,6 +148,20 @@ namespace TanukiCv.Controls
         }
         private bool _flip;
 
+        /// <summary>只套用於主畫面；縮圖恒保持灰階。變更只重畫現有 bytes，不改視野。</summary>
+        public IntensityColorMap MainColorMap
+        {
+            get => _mainColorMap;
+            set
+            {
+                if (_mainColorMap == value) return;
+                _mainColorMap = value;
+                _canvas.BrightnessSelector = GrayBitmap.GetBrightnessSelector(value);
+                _mainDirty = true;
+            }
+        }
+        private IntensityColorMap _mainColorMap = IntensityColorMap.Grayscale;
+
         /// <summary>垂直「座標約定」（與影像翻轉 FlipVertical 解耦——live 影像不翻但座標仍要照方向）：
         /// true＝物理 0 錨定畫面底（由下而上：overlay 下緣≈0、上緣=大值、游標在底部 Y≈0）；
         /// false＝0 在畫面頂（由上而下，幾何直通）。overlay/游標/ViewRangeMmChanged 同一轉換點。</summary>
@@ -670,7 +684,7 @@ namespace TanukiCv.Controls
 
             byte[] dst = resize(crop, sw, sh, tw, th);
             if (dst == null) return null;
-            return GrayBitmap.From(dst, tw, th, false);
+            return GrayBitmap.From(dst, tw, th, false, _mainColorMap);
         }
 
         /// <summary>合圖 LOD provider（背景執行緒）：從完整合圖虛擬座標裁可見區，逐欄找對應相機合成
@@ -718,7 +732,7 @@ namespace TanukiCv.Controls
 
             byte[] dst = resize(comp, cw, ch, tw, th);
             if (dst == null) return null;
-            return GrayBitmap.From(dst, tw, th, false);
+            return GrayBitmap.From(dst, tw, th, false, _mainColorMap);
         }
 
         // ==================== 建圖（單張 / 合圖）====================
@@ -727,7 +741,7 @@ namespace TanukiCv.Controls
         {
             int idx = _selectedCamId - 1;
             Frame f = (idx >= 0 && idx < _latest.Length) ? _latest[idx] : null;
-            return f != null ? GrayBitmap.From(f.Bytes, f.W, f.H, _flip) : null;
+            return f != null ? GrayBitmap.From(f.Bytes, f.W, f.H, _flip, _mainColorMap) : null;
         }
 
         /// <summary>CPU 合圖：佈局/重疊分界委派 <see cref="MergeLayout"/>（含 8 槽全納入：無畫面相機留黑占位）；
@@ -843,7 +857,7 @@ namespace TanukiCv.Controls
                     int dw = Math.Max(1, (int)Math.Round(p.SrcWidth / (double)k));
                     int dh = Math.Max(1, (int)Math.Round(f.H / (double)k));
                     int dy = _flip ? Math.Max(0, mh - dh) : 0;
-                    using (var cam = GrayBitmap.From(f.Bytes, f.W, f.H, _flip))
+                    using (var cam = GrayBitmap.From(f.Bytes, f.W, f.H, _flip, _mainColorMap))
                         g.DrawImage(cam, new Rectangle(dx, dy, dw, dh),
                             new Rectangle(p.SrcLeft, 0, p.SrcWidth, f.H), GraphicsUnit.Pixel);
                 }
@@ -935,7 +949,7 @@ namespace TanukiCv.Controls
                 ViewLeftMm = leftMm, ViewRightMm = rightMm, ViewTopMm = topMm, ViewBotMm = botMm,
                 PhysMag = physMag,
                 CursorX = info.ImageX, CursorY = info.ImageY,
-                Brightness = info.PixelColor.R,
+                Brightness = info.Brightness,
                 SelectedCamId = _selectedCamId,
             });
 
@@ -1027,6 +1041,7 @@ namespace TanukiCv.Controls
             _cursorProfileCleared = true;
             CursorProfileChanged?.Invoke(null);
         }
+
 
         private bool AllActiveReadySinceMerge()
         {

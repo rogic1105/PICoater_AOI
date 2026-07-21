@@ -39,5 +39,53 @@ namespace AniloxRoll.Monitor.Tests
             Assert.That(range.TopMm, Is.EqualTo(102.632).Within(0.001));
             Assert.That(range.BottomMm, Is.EqualTo(-2.632).Within(0.001));
         }
+
+        [Test]
+        public void GrayBitmap_ColdHeatmapPreservesIntensityInBlueChannel()
+        {
+            using (Bitmap bitmap = GrayBitmap.From(
+                new byte[] { 0, 128, 255 }, 3, 1, false,
+                IntensityColorMap.HeatmapCold))
+            {
+                Assert.That(bitmap.GetPixel(0, 0).ToArgb(), Is.EqualTo(Color.Black.ToArgb()));
+                Assert.That(bitmap.GetPixel(1, 0).ToArgb(), Is.EqualTo(Color.FromArgb(0, 51, 128).ToArgb()));
+                Assert.That(bitmap.GetPixel(2, 0).ToArgb(), Is.EqualTo(Color.White.ToArgb()));
+                Assert.That(bitmap.GetPixel(1, 0).B, Is.EqualTo(128));
+            }
+        }
+
+        [Test]
+        public void GrayBitmap_WarmHeatmapPreservesIntensityInRedChannel()
+        {
+            using (Bitmap bitmap = GrayBitmap.From(
+                new byte[] { 0, 128, 255 }, 3, 1, false,
+                IntensityColorMap.HeatmapWarm))
+            {
+                Assert.That(bitmap.GetPixel(0, 0).ToArgb(), Is.EqualTo(Color.Black.ToArgb()));
+                Assert.That(bitmap.GetPixel(1, 0).ToArgb(), Is.EqualTo(Color.FromArgb(128, 51, 0).ToArgb()));
+                Assert.That(bitmap.GetPixel(2, 0).ToArgb(), Is.EqualTo(Color.White.ToArgb()));
+                Assert.That(bitmap.GetPixel(1, 0).R, Is.EqualTo(128));
+            }
+        }
+
+        [Test]
+        public void GrayBitmap_BlueYellowRedHeatmapUsesExplicitAnchorsAndRoundTripsIntensity()
+        {
+            using (Bitmap bitmap = GrayBitmap.From(
+                new byte[] { 0, 85, 128, 170, 255 }, 5, 1, false,
+                IntensityColorMap.HeatmapBlueYellowRed))
+            {
+                Assert.That(bitmap.GetPixel(0, 0).ToArgb(), Is.EqualTo(Color.Black.ToArgb()));
+                Assert.That(bitmap.GetPixel(1, 0).ToArgb(), Is.EqualTo(Color.Blue.ToArgb()));
+                Assert.That(bitmap.GetPixel(3, 0).ToArgb(), Is.EqualTo(Color.Yellow.ToArgb()));
+                Assert.That(bitmap.GetPixel(4, 0).ToArgb(), Is.EqualTo(Color.Red.ToArgb()));
+                var selector = GrayBitmap.GetBrightnessSelector(IntensityColorMap.HeatmapBlueYellowRed);
+                Assert.That(selector(bitmap.GetPixel(0, 0)), Is.EqualTo(0));
+                Assert.That(selector(bitmap.GetPixel(1, 0)), Is.EqualTo(85));
+                Assert.That(selector(bitmap.GetPixel(2, 0)), Is.EqualTo(128));
+                Assert.That(selector(bitmap.GetPixel(3, 0)), Is.EqualTo(170));
+                Assert.That(selector(bitmap.GetPixel(4, 0)), Is.EqualTo(255));
+            }
+        }
     }
 }

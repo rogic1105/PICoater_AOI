@@ -168,6 +168,8 @@ namespace AniloxRoll.Monitor.Core.Data
         public bool hc_EnableMuraEnhance { get => ImageView.EnableMuraEnhance; set => ImageView.EnableMuraEnhance = value; }
         [Category(CategoryCharts)][DisplayName("回顧強化")][TypeConverter(typeof(BoolYesNoConverter))]
         public bool hd_EnableReviewEnhance { get => ImageView.EnableReviewEnhance; set => ImageView.EnableReviewEnhance = value; }
+        [Category(CategoryCharts)][DisplayName("強化熱力圖")][Description("關閉／冷色／暖色／藍黃紅；只有主畫面的欄／列強化圖上色，原圖、縮圖、檢測與存檔資料不變。")]
+        public EnhanceHeatmapMode hda_EnhanceHeatmap { get => ImageView.EnhanceHeatmap; set => ImageView.EnhanceHeatmap = value; }
         [Category(CategoryCharts)][DisplayName("主畫面顯示")][Description("即時=CPU 繪、跟回顧畫布同源；瀑布=全幅合圖即時捲動。變更後重開抓取生效。")]
         public MainDisplayMode he_MainDisplay { get => ImageView.MainDisplay; set => ImageView.MainDisplay = value; }
         [Category(CategoryCharts)][DisplayName("上下方向")][Description("監控與回顧主畫面共用；預設由下而上。")]
@@ -182,6 +184,7 @@ namespace AniloxRoll.Monitor.Core.Data
         // 向後相容：程式碼中直接存取的快捷屬性
         [Browsable(false)] public bool EnableMuraEnhance   { get => ImageView.EnableMuraEnhance;   set => ImageView.EnableMuraEnhance   = value; }
         [Browsable(false)] public bool EnableReviewEnhance { get => ImageView.EnableReviewEnhance; set => ImageView.EnableReviewEnhance = value; }
+        [Browsable(false)] public EnhanceHeatmapMode EnhanceHeatmap { get => ImageView.EnhanceHeatmap; set => ImageView.EnhanceHeatmap = value; }
         [Browsable(false)] public ChartScaleMode ChartScaleMode { get => Chart.ScaleMode; set => Chart.ScaleMode = value; }
         [Browsable(false)] public int ChartDataYieldYearlyYMax  { get => Chart.YearlyYMax;  set => Chart.YearlyYMax  = value; }
         [Browsable(false)] public int ChartDataYieldMonthlyYMax { get => Chart.MonthlyYMax; set => Chart.MonthlyYMax = value; }

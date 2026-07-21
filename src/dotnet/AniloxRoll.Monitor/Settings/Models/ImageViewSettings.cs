@@ -21,12 +21,22 @@ namespace AniloxRoll.Monitor.Core.Data
         [Description("由上而下")] TopToBottom
     }
 
+    [TypeConverter(typeof(EnumDescriptionConverter))]
+    public enum EnhanceHeatmapMode
+    {
+        [Description("關閉")] Off,
+        [Description("冷色（黑→藍→青→白）")] Cold,
+        [Description("暖色（黑→紅→黃→白）")] Warm,
+        [Description("藍黃紅（黑底不上色）")] BlueYellowRed
+    }
+
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public class ImageViewSettings
     {
         [DisplayName("合圖方式")]  public StitchMode StitchMode       { get => StitchMode.Global; set { } } // 永遠 Global（選項退場；setter 吞掉舊 json 殘值）
         [DisplayName("監控強化")]  public bool       EnableMuraEnhance   { get; set; } = InspectionDefaults.EnableMuraEnhance;
         [DisplayName("回顧強化")]  public bool       EnableReviewEnhance { get; set; } = InspectionDefaults.EnableReviewEnhance;
+        [DisplayName("強化熱力圖")] public EnhanceHeatmapMode EnhanceHeatmap { get; set; } = InspectionDefaults.EnhanceHeatmap;
         [DisplayName("主畫面顯示")] public MainDisplayMode MainDisplay  { get; set; } = InspectionDefaults.MainDisplay;
         [DisplayName("上下方向")] public VerticalDisplayDirection VerticalDirection { get; set; } = InspectionDefaults.VerticalDirection;
         [DisplayName("動態LOD")]   public LiveLodMode LiveLod          { get; set; } = InspectionDefaults.LiveLod;
@@ -36,6 +46,29 @@ namespace AniloxRoll.Monitor.Core.Data
         public void Validate()
         {
             if (WaterfallTotalHeight < 1000) WaterfallTotalHeight = InspectionDefaults.WaterfallTotalHeight;
+        }
+
+        public IntensityColorMap ResolveColorMap(bool enhanced)
+        {
+            if (!enhanced) return IntensityColorMap.Grayscale;
+            switch (EnhanceHeatmap)
+            {
+                case EnhanceHeatmapMode.Cold: return IntensityColorMap.HeatmapCold;
+                case EnhanceHeatmapMode.Warm: return IntensityColorMap.HeatmapWarm;
+                case EnhanceHeatmapMode.BlueYellowRed: return IntensityColorMap.HeatmapBlueYellowRed;
+                default: return IntensityColorMap.Grayscale;
+            }
+        }
+
+        public static string ColorMapFlowName(IntensityColorMap colorMap)
+        {
+            switch (colorMap)
+            {
+                case IntensityColorMap.HeatmapCold: return "cold";
+                case IntensityColorMap.HeatmapWarm: return "warm";
+                case IntensityColorMap.HeatmapBlueYellowRed: return "blue-yellow-red";
+                default: return "gray";
+            }
         }
 
         public override string ToString() => "";

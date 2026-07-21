@@ -52,6 +52,11 @@ namespace AniloxRoll.Monitor.UI.Managers
             _display.ApplyDisplayDirection();
         }
 
+        public void RefreshEnhanceColorMap()
+        {
+            _display.RefreshEnhanceColorMap();
+        }
+
         public void SetLodMode(LiveLodMode mode)
         {
             _display.SetLodMode(mode);

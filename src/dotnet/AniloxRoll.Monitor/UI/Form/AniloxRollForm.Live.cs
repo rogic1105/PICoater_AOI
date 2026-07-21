@@ -691,19 +691,45 @@ namespace AniloxRoll.Monitor.Forms
                     _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
         }
 
-        /// <summary>強化 setting（監控 hc / 回顧 hd）→ 套用對應強化。（Wave3 選項1：從 dispatcher 搬入。）</summary>
+        /// <summary>強化 setting（監控 hc / 回顧 hd / 熱力圖 hda）→ 套用對應顯示。（Wave3 選項1：從 dispatcher 搬入。）</summary>
         private async Task HandleEnhanceSettingsChanged(string name)
         {
             if (name == nameof(InspectionSettings.hc_EnableMuraEnhance))
                 ApplyMuraEnhance(_settings.EnableMuraEnhance);
             if (name == nameof(InspectionSettings.hd_EnableReviewEnhance))
                 await ApplyReviewEnhance(_settings.EnableReviewEnhance);
+            if (name == nameof(InspectionSettings.hda_EnhanceHeatmap))
+            {
+                RefreshEnhanceColorMaps();
+                IntensityColorMap liveMap = ResolveLiveColorMap();
+                IntensityColorMap reviewMap = ResolveReviewColorMap();
+                FlowTrace.Log(
+                    $"enhance heatmap mode={_settings.EnhanceHeatmap} " +
+                    $"live={ImageViewSettings.ColorMapFlowName(liveMap)} " +
+                    $"review={ImageViewSettings.ColorMapFlowName(reviewMap)} " +
+                    "scope=main-only data=unchanged");
+            }
         }
 
         private void ApplyMuraEnhance(bool enabled)
         {
             _liveCameraManager?.SetLiveDisplayMode(enabled, _liveDisplayDirection);
+            _liveCameraManager?.RefreshEnhanceColorMap();
             UpdateLiveDirectionVisual();
         }
+
+        private void RefreshEnhanceColorMaps()
+        {
+            _liveCameraManager?.RefreshEnhanceColorMap();
+            _reviewDisplayManager?.SetMainColorMap(ResolveReviewColorMap());
+        }
+
+        private IntensityColorMap ResolveLiveColorMap()
+            => _settings?.ImageView?.ResolveColorMap(_settings.EnableMuraEnhance)
+               ?? IntensityColorMap.Grayscale;
+
+        private IntensityColorMap ResolveReviewColorMap()
+            => _settings?.ImageView?.ResolveColorMap(_settings.EnableReviewEnhance)
+               ?? IntensityColorMap.Grayscale;
     }
 }

@@ -220,6 +220,21 @@ namespace TanukiCv.Controls
             }
         }
 
+        /// <summary>只改 LOD tile 調色盤；累積的三層 8-bit 資料不轉換、不重建。</summary>
+        public IntensityColorMap ColorMap
+        {
+            get => _colorMap;
+            set
+            {
+                if (_colorMap == value) return;
+                _colorMap = value;
+                _canvas.BrightnessSelector = GrayBitmap.GetBrightnessSelector(value);
+                _lodContentDirty = true;
+                PushLodRefresh();
+            }
+        }
+        private IntensityColorMap _colorMap = IntensityColorMap.Grayscale;
+
         public WaterfallFrameLayer DisplayLayer => _displayLayer;
 
         /// <summary>切換原圖／欄強化／列強化；保留累積內容、寫頭、tick 對齊與目前視野。</summary>
@@ -699,7 +714,7 @@ namespace TanukiCv.Controls
                 int orow = seamDestY * dw;
                 for (int dx = 0; dx < dw; dx++) outp[orow + dx] = 255;
             }
-            return GrayBitmap.From(outp, dw, dh);
+            return GrayBitmap.From(outp, dw, dh, false, _colorMap);
         }
 
         private byte[][][] CreateLayerChunks()
@@ -841,7 +856,7 @@ namespace TanukiCv.Controls
                 PhysMag = _canvas.PhysicalMagnification,
                 CursorX = imageX,
                 CursorY = imageY,
-                Brightness = info.PixelColor.R,
+                Brightness = info.Brightness,
                 SelectedCamId = camId > 0 ? camId : 0,
             };
             return true;
@@ -849,6 +864,7 @@ namespace TanukiCv.Controls
 
         private double ToLogicalY(double visualY)
             => _flipVertical ? (_totalHeight - 1 - visualY) : visualY;
+
 
         private bool TryComputeViewRange(float zoom, PointF panOffset,
             out double leftMm, out double rightMm, out double topMm, out double botMm)

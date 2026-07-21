@@ -47,6 +47,7 @@ class SettingsFlowValidator:
         self._check_routes(session, settings, report)
         self._check_review_enhance(session, settings, report)
         self._check_live_enhance(session, settings, report)
+        self._check_enhance_heatmap(session, settings, report)
         self._check_direction_refresh(session, settings, report)
         return report
 
@@ -347,6 +348,72 @@ class SettingsFlowValidator:
             "S4.live-enhance",
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
             f"changes={len(changes)} exercised={exercised} failures={len(failures)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_enhance_heatmap(
+        self, session: FlowSession, settings, report: CheckReport
+    ) -> None:
+        changes = [
+            (index, line, match)
+            for index, line, match in settings
+            if match and match.group("name") == "hda_EnhanceHeatmap"
+        ]
+        if not changes:
+            report.add(
+                self.domain,
+                "S5.enhance-heatmap",
+                CheckStatus.NOT_COVERED,
+                "未切換強化熱力圖",
+            )
+            return
+
+        pattern = re.compile(
+            r"^enhance heatmap mode=(Off|Cold|Warm|BlueYellowRed) "
+            r"live=(cold|warm|blue-yellow-red|gray) review=(cold|warm|blue-yellow-red|gray) "
+            r"scope=main-only data=unchanged$"
+        )
+        failures = []
+        for index, line, match in changes:
+            expected = (match.group("value") or match.group("arrow")).strip()
+            state_index = index + 2  # intent 後固定為 setting route，再來必須是顯示狀態行
+            if state_index >= len(session.lines):
+                failures.append(f"{line.timestamp} 缺熱力圖狀態行")
+                continue
+            state_line = session.lines[state_index]
+            state_match = pattern.match(state_line.message)
+            if state_match is None:
+                failures.append(f"{state_line.timestamp} 熱力圖狀態行缺失或格式錯誤")
+                continue
+            mode = state_match.group(1)
+            if mode.lower() != expected.lower():
+                failures.append(
+                    f"{line.timestamp} 設定={expected} 實際={mode}"
+                )
+            if mode == "Off" and (
+                state_match.group(2) != "gray" or state_match.group(3) != "gray"
+            ):
+                failures.append(f"{state_line.timestamp} 關閉後主畫面仍有熱力圖")
+            expected_map = {
+                "Cold": "cold",
+                "Warm": "warm",
+                "BlueYellowRed": "blue-yellow-red",
+            }.get(mode)
+            if expected_map is not None:
+                for target, actual in (
+                    ("live", state_match.group(2)),
+                    ("review", state_match.group(3)),
+                ):
+                    if actual not in ("gray", expected_map):
+                        failures.append(
+                            f"{state_line.timestamp} {target}={actual} 與 mode={mode} 不一致"
+                        )
+
+        report.add(
+            self.domain,
+            "S5.enhance-heatmap",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"changes={len(changes)} failures={len(failures)}"
             + (f"；首例 {failures[0]}" if failures else ""),
         )
 

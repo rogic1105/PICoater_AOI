@@ -1325,6 +1325,19 @@ T1: WF layer raw|column|row->raw|column|row writeRow=N history=preserved   ← �
   在真正重新 Grab、改總高或佈局 Reset 後不得寫回，避免清空後殘留一條舊來源影像。
 - 新配置相機由 `AllocateCamerasAsync(enableEnhance)` 取得同一設定，不能另有預設值。
 
+### S5 強化熱力圖（hda_EnhanceHeatmap）
+```
+T1: ui:設定[hda_EnhanceHeatmap]=Off|Cold|Warm|BlueYellowRed
+T1: setting route hda_EnhanceHeatmap owner=Enhance effects=None
+T1: enhance heatmap mode=Off|Cold|Warm|BlueYellowRed live=gray|cold|warm|blue-yellow-red review=gray|cold|warm|blue-yellow-red scope=main-only data=unchanged
+```
+- 熱力圖是 **8-bit 顯示調色盤**，固定以 0..255 映射；不得依每張圖的 min/max 自動拉伸，
+  否則不同時間的顏色不能比較。三種模式都讓 0 保持純黑：Cold=黑→藍→青→白、
+  Warm=黑→紅→黃→白、BlueYellowRed=黑→藍→黃→紅。
+- 只套用監控與回顧的主畫面強化圖；原圖、背景預覽與縮圖恒為灰階。滑鼠亮度仍回報原始 0..255 值。
+- 切換只准重畫現有 bytes／瀑布 LOD tile；不得重讀圖片、重算 Curve、清空瀑布、改 fit／pan／zoom，
+  也不得修改 raw/proc 圖檔、bin、CSV 或檢測結果。
+
 ### S3 上下方向（hee_VerticalDirection）
 ```
 T1: ui:設定[hee_VerticalDirection]=TopToBottom|BottomToTop
@@ -1346,6 +1359,9 @@ T1: RV row …（Review 有資料時）或 RV load/update row（依當前 Review
 - `S4.live-enhance`：有已配置相機時，切監控強化必須出現相同值且
   `scope=all-cameras waterfallHistory=preserved` 的狀態行；enabled=False 必須是 raw，
   enabled=True 必須是 column 或 row，證明全相機狀態一致且瀑布歷史未被清除。
+- `S5.enhance-heatmap`：熱力圖 intent 後必須緊接 route 與 `scope=main-only data=unchanged`
+  狀態行；Off 後 live/review 都必須回灰階，非灰階輸出必須與所選模式一致。固定相鄰行也保證
+  切換中沒有插入圖片或 Curve 重載。
 - `S3.direction`：方向變更後、下一次方向變更前，必須看見相同方向的
   `LC|RV row rowChart|rowView`，證明最後一組列資料/視野已重畫。
 

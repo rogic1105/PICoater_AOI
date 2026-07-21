@@ -36,7 +36,7 @@ namespace TanukiCv.BenchUi.Forms
                 // ImageCanvas 內部已經處理過座標邊界與有效性 (ImageX/Y 是最後一次有效位置)
                 // 直接顯示 CanvasInfo 提供的資訊即可
                 lblPixelInfo.Text = $"座標: ({info.ImageX}, {info.ImageY}) | " +
-                                    $"亮度: {info.PixelColor.R} | " +
+                                    $"亮度: {info.Brightness} | " +
                                     $"倍率: {info.Zoom:F5}x | " +
                                     $"平移: ({info.PanOffset.X:F0}, {info.PanOffset.Y:F0})";
             };

@@ -131,7 +131,8 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                 nameof(InspectionSettings.ge_DailyYMax));
             AddMany(routes, SettingFeatureOwner.Enhance,
                 nameof(InspectionSettings.hc_EnableMuraEnhance),
-                nameof(InspectionSettings.hd_EnableReviewEnhance));
+                nameof(InspectionSettings.hd_EnableReviewEnhance),
+                nameof(InspectionSettings.hda_EnhanceHeatmap));
 
             Add(routes, nameof(InspectionSettings.AniloxRootPath), SettingFeatureOwner.None,
                 SettingImpact.CapturePolicy);

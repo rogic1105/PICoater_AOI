@@ -15,6 +15,7 @@ namespace TanukiCv.Controls
         public int ImageX { get; set; }
         public int ImageY { get; set; }
         public Color PixelColor { get; set; }
+        public int Brightness { get; set; }
         public float Zoom { get; set; }
         public PointF PanOffset { get; set; }
     }
@@ -56,6 +57,9 @@ namespace TanukiCv.Controls
         private static readonly Brush _ovTextBrush = new SolidBrush(Color.White);
 
         public event Action<CanvasInfo> StatusChanged;
+
+        /// <summary>從顯示色取回原始灰階強度；預設灰階讀 R，偽彩色可指定保留強度的通道。</summary>
+        public Func<Color, int> BrightnessSelector { get; set; } = color => color.R;
 
         /// <summary>
         /// Raised on the UI thread after a requested LOD content generation has installed a tile.
@@ -450,6 +454,7 @@ namespace TanukiCv.Controls
                 ImageX = _lastImgX,
                 ImageY = _lastImgY,
                 PixelColor = _lastColor,
+                Brightness = _hasLastColor ? ResolveBrightness(_lastColor) : 0,
                 Zoom = _zoom,
                 PanOffset = _panOffset
             });
@@ -639,8 +644,15 @@ namespace TanukiCv.Controls
             string head = string.IsNullOrEmpty(_cursorMm)
                 ? $"({_lastImgX}, {_lastImgY})"
                 : _cursorMm;
-            string tail = _hasLastColor ? $" | 亮度:{_lastColor.R}" : " | 亮度:--";
+            string tail = _hasLastColor ? $" | 亮度:{ResolveBrightness(_lastColor)}" : " | 亮度:--";
             return head + tail;
+        }
+
+        private int ResolveBrightness(Color color)
+        {
+            Func<Color, int> selector = BrightnessSelector;
+            if (selector == null) return color.R;
+            return Math.Max(0, Math.Min(255, selector(color)));
         }
 
         private Rectangle GetCursorLabelBounds(Point cursorPosition)

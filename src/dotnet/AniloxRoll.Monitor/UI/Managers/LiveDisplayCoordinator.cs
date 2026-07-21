@@ -216,6 +216,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 Flow("ApplyMainDisplayMode → BgPreview（靜音鍵，設定不動）");
                 DisableWaterfallDisplay();
                 EnsureImageDisplay();
+                RefreshEnhanceColorMap();
                 ApplyBgPreviewLayout();
                 return;
             }
@@ -231,6 +232,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 if (ImageCanvasMode) EnsureImageDisplay();
                 else TeardownImageDisplay();
             }
+            RefreshEnhanceColorMap();
         }
 
         public void ResetWaterfallIfActive()
@@ -242,6 +244,30 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             _waterfallDisplayLayer = layer;
             _waterfallView?.SetDisplayLayer(layer);
+            RefreshEnhanceColorMap();
+        }
+
+        /// <summary>
+        /// 強化熱力圖只改主畫面調色盤；縮圖、背景預覽與原圖恒保持灰階。
+        /// 現有 8-bit 幀與瀑布歷史直接重畫，不重讀檔、不重算 Curve。
+        /// </summary>
+        public void RefreshEnhanceColorMap()
+        {
+            var settings = _getSettings();
+            IntensityColorMap imageMap = _bgPreviewOverride || settings?.ImageView == null
+                ? IntensityColorMap.Grayscale
+                : settings.ImageView.ResolveColorMap(settings.EnableMuraEnhance);
+            IntensityColorMap waterfallMap = _bgPreviewOverride || settings?.ImageView == null
+                ? IntensityColorMap.Grayscale
+                : settings.ImageView.ResolveColorMap(_waterfallDisplayLayer != WaterfallFrameLayer.Raw);
+
+            if (_imageDisplay != null)
+            {
+                _imageDisplay.MainColorMap = imageMap;
+                _imageDisplay.RefreshNow();
+            }
+            if (_waterfallView != null)
+                _waterfallView.ColorMap = waterfallMap;
         }
 
         private void EnableWaterfallDisplay()
@@ -255,6 +281,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             int slotCount = settings?.GetCameraStartPositionMmArray()?.Length ?? Cameras.Count;
             _waterfallView = new WaterfallView(_mainDisplayPanel, slotCount, wfH, wfMode, _screenMmPerPx);
             _waterfallView.SetDisplayLayer(_waterfallDisplayLayer);
+            _waterfallView.ColorMap = ResolveWaterfallColorMap();
             _waterfallView.FlipVertical = ShouldFlipVertical;
             _waterfallView.SetRowPitch(RowPitchMm);
             _waterfallView.SelectRequested += OnWaterfallSelectRequested;
@@ -467,7 +494,27 @@ namespace AniloxRoll.Monitor.UI.Managers
                 FlipVertical = ShouldFlipVertical
             });
             // 垂直座標約定與影像翻轉解耦（live 影像不翻但座標要照「上下方向」）：由下而上＝0 錨定畫面底
-            if (_imageDisplay != null) _imageDisplay.VerticalZeroAtBottom = ShouldFlipVertical;
+            if (_imageDisplay != null)
+            {
+                _imageDisplay.VerticalZeroAtBottom = ShouldFlipVertical;
+                _imageDisplay.MainColorMap = ResolveImageColorMap();
+            }
+        }
+
+        private IntensityColorMap ResolveImageColorMap()
+        {
+            var settings = _getSettings();
+            return _bgPreviewOverride || settings?.ImageView == null
+                ? IntensityColorMap.Grayscale
+                : settings.ImageView.ResolveColorMap(settings.EnableMuraEnhance);
+        }
+
+        private IntensityColorMap ResolveWaterfallColorMap()
+        {
+            var settings = _getSettings();
+            return _bgPreviewOverride || settings?.ImageView == null
+                ? IntensityColorMap.Grayscale
+                : settings.ImageView.ResolveColorMap(_waterfallDisplayLayer != WaterfallFrameLayer.Raw);
         }
 
         public void TeardownImageDisplay()

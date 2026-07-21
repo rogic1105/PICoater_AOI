@@ -804,12 +804,15 @@ namespace AniloxRoll.Monitor.Forms
                     LogReviewPrefitApplied();
                 };
                 _stitchCoordinator.StitchedImagesReady += (gray, ws, hs, ops, pos, isGlobal, preserveChartView) =>
-                        _reviewDisplayManager?.PushFrames(gray, ws, hs, ops, pos, isGlobal,
+                {
+                    _reviewDisplayManager?.SetMainColorMap(ResolveReviewColorMap());
+                    _reviewDisplayManager?.PushFrames(gray, ws, hs, ops, pos, isGlobal,
                         _reviewRuntimeState.ScreenMmPerPixel,
                         AniloxRoll.Monitor.Core.Services.InspectionEngineConfig.DefaultSaveResizeScale,
                         _reviewRowDisplay?.RowPitchMm ?? 0,
                         ShouldFlipDisplayVertical(),
                         preserveChartView);   // 灰階已在 RSC 解碼段轉好（零 race）；?.：關閉時序防 NRE
+                };
                 // Stage2：新 canvas 視野 → 回顧曲線圖 zoom 連動（欄=全覽 X、列=Y；拖曳中即時）
                 _reviewDisplayManager.ViewRangeMmChanged += (l, r, top, bot) =>
                 {

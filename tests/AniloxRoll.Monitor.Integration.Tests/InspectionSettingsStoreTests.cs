@@ -105,6 +105,42 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void SaveAndLoad_PersistsEnhanceHeatmap()
+        {
+            var settings = new InspectionSettings
+            {
+                EnhanceHeatmap = EnhanceHeatmapMode.BlueYellowRed
+            };
+
+            InspectionSettingsStore.Save(settings);
+            var loaded = InspectionSettingsStore.Load();
+
+            Assert.That(loaded.EnhanceHeatmap, Is.EqualTo(EnhanceHeatmapMode.BlueYellowRed));
+        }
+
+        [Test]
+        public void Load_LegacyHeatmapBooleanTrue_MapsToCold()
+        {
+            File.WriteAllText(_configPath,
+                "{\"ImageView\":{\"EnableEnhanceHeatmap\":true}}");
+
+            var loaded = InspectionSettingsStore.Load();
+
+            Assert.That(loaded.EnhanceHeatmap, Is.EqualTo(EnhanceHeatmapMode.Cold));
+        }
+
+        [Test]
+        public void Load_LegacyBlueRedMode_MapsToBlueYellowRed()
+        {
+            File.WriteAllText(_configPath,
+                "{\"ImageView\":{\"EnhanceHeatmap\":\"BlueRed\"}}");
+
+            var loaded = InspectionSettingsStore.Load();
+
+            Assert.That(loaded.EnhanceHeatmap, Is.EqualTo(EnhanceHeatmapMode.BlueYellowRed));
+        }
+
+        [Test]
         public void Load_LegacyDebugUiActionLog_MapsToFullDiagnostic()
         {
             File.WriteAllText(_configPath,

@@ -106,6 +106,7 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"StitchMode\": \"{V.StitchMode}\",");
             sb.AppendLine($"    \"EnableMuraEnhance\": {(V.EnableMuraEnhance ? "true" : "false")},");
             sb.AppendLine($"    \"EnableReviewEnhance\": {(V.EnableReviewEnhance ? "true" : "false")},");
+            sb.AppendLine($"    \"EnhanceHeatmap\": \"{V.EnhanceHeatmap}\",");
             sb.AppendLine($"    \"MainDisplay\": \"{V.MainDisplay}\",");
             sb.AppendLine($"    \"VerticalDirection\": \"{V.VerticalDirection}\",");
             sb.AppendLine($"    \"LiveLod\": \"{V.LiveLod}\"");
@@ -279,6 +280,16 @@ namespace AniloxRoll.Monitor.Core.Data
             if (!System.Enum.TryParse(SettingsStoreHelper.GetString(obj, "LiveLod", InspectionDefaults.LiveLod.ToString()),
                     true, out LiveLodMode liveLod))
                 liveLod = InspectionDefaults.LiveLod;
+            string heatmapText = SettingsStoreHelper.GetString(obj, "EnhanceHeatmap", "");
+            if (string.Equals(heatmapText, "BlueRed", System.StringComparison.OrdinalIgnoreCase))
+                heatmapText = EnhanceHeatmapMode.BlueYellowRed.ToString();
+            if (!System.Enum.TryParse(heatmapText, true, out EnhanceHeatmapMode enhanceHeatmap))
+            {
+                // 短期布林版相容：曾開啟者沿用當時的冷色；缺值／False 回到關閉。
+                enhanceHeatmap = SettingsStoreHelper.GetBool(obj, "EnableEnhanceHeatmap", false)
+                    ? EnhanceHeatmapMode.Cold
+                    : InspectionDefaults.EnhanceHeatmap;
+            }
 
             // 向後相容：EnableMuraEnhance/EnableReviewEnhance 原在 Recipe 區塊
             string recipeObj = SettingsStoreHelper.ExtractObject(json, "Recipe");
@@ -289,6 +300,7 @@ namespace AniloxRoll.Monitor.Core.Data
                                           SettingsStoreHelper.GetBool(recipeObj, "EnableMuraEnhance",   InspectionDefaults.EnableMuraEnhance)),
                 EnableReviewEnhance = SettingsStoreHelper.GetBool(obj, "EnableReviewEnhance",
                                           SettingsStoreHelper.GetBool(recipeObj, "EnableReviewEnhance", InspectionDefaults.EnableReviewEnhance)),
+                EnhanceHeatmap      = enhanceHeatmap,
                 MainDisplay         = mainDisplay,
                 VerticalDirection   = verticalDirection,
                 LiveLod             = liveLod,
