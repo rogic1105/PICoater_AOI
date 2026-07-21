@@ -37,7 +37,7 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         private async Task LoadGrabStitchedViewGuardRowRangeAsync(string grabId, DateTime earliest, DateTime latest,
-            bool enableProcess)
+            bool enableProcess, bool preferSharedCurves = false)
         {
             // R2 與 R3 是互斥顯示 intent：切回序號時，使仍在 IO 的時序結果失效，
             // 禁止舊 period 在稍後覆蓋新 grabId。
@@ -45,7 +45,8 @@ namespace AniloxRoll.Monitor.Forms
             _reviewRowSync?.SuspendUntilNextData();
             try
             {
-                await _stitchCoordinator.LoadGrabStitchedViewAsync(grabId, earliest, latest, enableProcess);
+                await _stitchCoordinator.LoadGrabStitchedViewAsync(
+                    grabId, earliest, latest, enableProcess, preferSharedCurves);
             }
             finally
             {

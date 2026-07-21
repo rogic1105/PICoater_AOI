@@ -242,6 +242,8 @@ namespace AniloxRoll.Monitor.Forms
 
             // 延遲注入：_stitchCoordinator 在 InitUiLayer 初始化時 _dataStatsPresenter 尚未建立
             _stitchCoordinator.SetDataStatsPresenter(_dataStatsPresenter);
+            _dataStatsPresenter.SingleGrabCurvePresented +=
+                _stitchCoordinator.CacheDataCurveSnapshot;
 
             // 滾輪上滾 = 數值增加（反轉 ComboBox 預設行為）——僅用於升序排列的 ComboBox
             foreach (var cb in new[] { cbDataYieldYear, cbDataYieldMonth, cbDataYieldDay })
@@ -285,7 +287,10 @@ namespace AniloxRoll.Monitor.Forms
                             _reviewDirty = false;
                             _hasPendingDataReviewSelection = false;
                             FlowTrace.Log($"DT review sync apply {info.GrabId}");
-                            await LoadGrabStitchedViewGuardRowRangeAsync(info.GrabId, info.Earliest, info.Latest);
+                            await LoadGrabStitchedViewGuardRowRangeAsync(
+                                info.GrabId, info.Earliest, info.Latest,
+                                _stitchCoordinator.LastReviewProcessedMode,
+                                preferSharedCurves: true);
                             // 2b-ii：fit 由 ImageDisplayView 首幀自動 fit 承接
                         }
                         catch (Exception ex)

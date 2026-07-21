@@ -78,12 +78,23 @@ class ReviewFlowValidator:
                 ),
                 len(session.lines),
             )
-            if not any(
-                line.message.startswith("RV tabVisible repaint ")
-                for line in session.lines[start + 1 : end]
-            ):
+            repaint = next(
+                (
+                    line for line in session.lines[start + 1 : end]
+                    if line.message.startswith("RV tabVisible repaint ")
+                ),
+                None,
+            )
+            if repaint is None:
                 missing.append(session.lines[start].timestamp)
-            if not any(
+
+            content_expected = any(
+                line.message.startswith((
+                    "RV loadGrab done ", "RV period load ", "DT curve share "
+                ))
+                for line in session.lines[:start]
+            )
+            if content_expected and not any(
                 line.message.startswith("RV visiblePaint ready=True ")
                 for line in session.lines[start + 1 : end]
             ):

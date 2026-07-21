@@ -37,6 +37,7 @@ class DataFlowValidator:
         self._check_single_selection(session, report)
         self._check_single_curve_policy(session, report)
         self._check_single_curve(session, report)
+        self._check_cross_tab_curve_reuse(session, report)
         self._check_single_fit(session, report)
         self._check_curve_summary_writes(session, report)
         self._check_single_row_curve(session, report)
@@ -48,6 +49,69 @@ class DataFlowValidator:
         self._check_y_scale_toggle(session, report)
         self._check_ui_stall(session, report)
         return report
+
+    def _check_cross_tab_curve_reuse(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        shares = {}
+        for index, line in enumerate(session.lines):
+            if line.message.startswith("DT curve share "):
+                shares.setdefault(grab_id(line.message), []).append(index)
+
+        syncs = [
+            (index, grab_id(line.message))
+            for index, line in enumerate(session.lines)
+            if line.message.startswith("DT review sync apply ")
+        ]
+        exercised = []
+        failures = []
+        for sequence, (index, item_id) in enumerate(syncs):
+            prior_shares = [position for position in shares.get(item_id, []) if position < index]
+            if not prior_shares:
+                continue
+            exercised.append(item_id)
+            end = syncs[sequence + 1][0] if sequence + 1 < len(syncs) else len(session.lines)
+            window = session.lines[index + 1:end]
+            completion = next(
+                (
+                    position for position, line in enumerate(window)
+                    if line.message.startswith(("RV loadGrab done ", "RV loadGrab stale-drop "))
+                    and grab_id(line.message) == item_id
+                ),
+                None,
+            )
+            if completion is not None:
+                window = window[:completion + 1]
+            reuse = any(
+                line.message == f"RV loadGrab curves=reuse source=Data {item_id}"
+                for line in window
+            )
+            duplicate = any(
+                line.message == f"RV loadGrab curves=load source=bin {item_id}"
+                or line.message.startswith(f"RV curves paths {item_id} ")
+                for line in window
+            )
+            if not reuse or duplicate:
+                failures.append(
+                    f"{item_id} reuse={'yes' if reuse else 'no'} "
+                    f"duplicate={'yes' if duplicate else 'no'}"
+                )
+
+        if not exercised:
+            report.add(
+                self.domain,
+                "D3.review-reuse",
+                CheckStatus.NOT_COVERED,
+                "沒有『報表曲線已完成後切到回顧』的同序號案例",
+            )
+            return
+        report.add(
+            self.domain,
+            "D3.review-reuse",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"cases={len(exercised)} failures={len(failures)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
+        )
 
     def _check_statistics_snapshot(
         self, session: FlowSession, report: CheckReport
@@ -399,15 +463,13 @@ class DataFlowValidator:
                     active["prefit"] = (
                         index, int(match.group(2)), int(match.group(3))
                     )
-                else:
-                    invalid.append(line.message)
+                # Curve fast-path may advance while an older debounced image
+                # load is still active. Only matching evidence belongs here.
                 continue
             match = paint_pattern.match(line.message)
             if active and match:
                 if match.group(1) == active["id"]:
                     active["paints"][match.group(2)] = index
-                else:
-                    invalid.append(line.message)
                 continue
             match = apply_pattern.match(line.message)
             if active and match:
@@ -418,8 +480,6 @@ class DataFlowValidator:
                         "col": tuple(float(match.group(group)) for group in range(3, 7)),
                         "row": tuple(float(match.group(group)) for group in range(7, 11)),
                     }
-                else:
-                    invalid.append(line.message)
                 continue
             match = chart_range_pattern.match(line.message)
             if active and match:
@@ -428,8 +488,6 @@ class DataFlowValidator:
                         index, match.group(2),
                         tuple(float(match.group(group)) for group in range(3, 7)),
                     ))
-                else:
-                    invalid.append(line.message)
                 continue
             match = lod_pattern.match(line.message)
             if active and match and active["lod"] is None:
@@ -480,9 +538,18 @@ class DataFlowValidator:
         report_edges_ok = not intents
         if intents:
             final_intent_index, final_intent_id = intents[-1]
+            final_mode_end = next(
+                (
+                    index for index in range(final_intent_index + 1, len(session.lines))
+                    if session.lines[index].message.startswith((
+                        "ui:【序號範圍-", "ui:【期間-", "ui:【明細列表】同列再點 "
+                    ))
+                ),
+                len(session.lines),
+            )
             final_ranges = [
                 (chart, state) for index, item_id, chart, state in report_chart_ranges
-                if index > final_intent_index and item_id == final_intent_id
+                if final_intent_index < index < final_mode_end and item_id == final_intent_id
             ]
             report_edges_ok = {chart for chart, _ in final_ranges} >= {"col", "row"}
             for chart in ("col", "row"):

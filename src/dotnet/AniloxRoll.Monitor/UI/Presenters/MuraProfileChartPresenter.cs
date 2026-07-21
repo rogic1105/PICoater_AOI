@@ -39,6 +39,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private string _lastColumnRangeState;
         private string _lastRowRangeState;
 
+        internal event Action<string, string, SingleGrabCurveData> SingleGrabCurvePresented;
+
         public MuraProfileChartPresenter(
             DataStatisticsContext ctx,
             Func<System.Windows.Forms.GroupBox> getActiveStatMode,
@@ -321,6 +323,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     _muraProfileHelper, camCount,
                     _ctx.Settings.StitchMode, fitViewRange, valueScale: valueScale);
                 UpdateRowChart(data, grabCfg, request.GrabId, view, physicalScale);
+                SingleGrabCurvePresented?.Invoke(statsRoot, request.GrabId, data);
                 FlowTrace.Log($"DT curve load {request.GrabId} captures={data.ImageCount} " +
                     $"source=shared storage={data.StorageSource} configMs={data.ConfigMs} " +
                     $"waitMs={drawStartMs} pathMs={data.LookupMs} mergeMs={data.MergeMs} " +

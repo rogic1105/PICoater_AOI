@@ -72,6 +72,38 @@ namespace AniloxRoll.Monitor.Integration.Tests
             }
         }
 
+        [Test]
+        public void Load_ImagesOnly_SkipsCurveBins()
+        {
+            DateTime date = new DateTime(2026, 7, 21);
+            string grabId = "260721-081000";
+            string fileName = "20260721_081000.000-1";
+            string imageDir = CaptureStoragePaths.DateImageDir(_tempRoot, date);
+            Directory.CreateDirectory(imageDir);
+            WriteJpeg(Path.Combine(imageDir, fileName + CaptureFileNaming.RawJpg));
+            WriteCsv(date, grabId, fileName);
+
+            var loader = new ReviewImageDataLoader();
+            ReviewImageLoadPlan plan = loader.Prepare(
+                _tempRoot, grabId, date, date, 1, false, "v");
+            ReviewImageData result = loader.Load(
+                plan, 1, false, "v", includeCurves: false);
+
+            try
+            {
+                Assert.That(result.Images[0], Is.Not.Null);
+                Assert.That(result.GrayFrames[0], Has.Length.EqualTo(12));
+                Assert.That(result.ColumnMean, Is.Null);
+                Assert.That(result.ColumnMax, Is.Null);
+                Assert.That(result.RowMean, Is.Null);
+                Assert.That(result.RowMax, Is.Null);
+            }
+            finally
+            {
+                result.DisposeImages();
+            }
+        }
+
         private void WriteCsv(DateTime date, string grabId, string fileName)
         {
             string csvPath = CaptureStoragePaths.DailyCsv(_tempRoot, date);

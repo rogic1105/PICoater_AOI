@@ -10,6 +10,7 @@ using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.Binders;
 using AniloxRoll.Monitor.UI.Navigators;
+using AniloxRoll.Monitor.UI.Services;
 using AniloxRoll.Monitor.UI.Widgets;
 using TanukiCv.Controls;
 
@@ -139,6 +140,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// <summary>通知 Form period combo 手動變更。</summary>
         public event Action PeriodComboManualChanged;
 
+        /// <summary>報表單序號曲線完成後，提供同一份原始曲線給回顧重用。</summary>
+        internal event Action<string, string, SingleGrabCurveData> SingleGrabCurvePresented;
+
         public string StatsDataRootPath => _statsDataRootPath;
         public SortedSet<DateTime> StatAvailableTimes => _statAvailableTimes;
         public List<GrabIdInfo> GrabIdInfos => _grabIdInfos;
@@ -175,6 +179,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _ctx.GrabDetailList.Initialize();
             _muraChart = new MuraProfileChartPresenter(_ctx,
                 () => _dateGrabIdNavigator.ActiveStatMode, () => _grabIdInfos, () => _statsDataRootPath);
+            _muraChart.SingleGrabCurvePresented += OnSingleGrabCurvePresented;
             _muraChart.Init();
             _yieldPeriodCharts = new YieldPeriodChartPresenter(
                 _ctx,
@@ -502,10 +507,20 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _rangePreviewTimer?.Dispose();
             _rangePreviewTimer = null;
             _rangePreviewCancellation = null;
-            _muraChart?.Dispose();
+            if (_muraChart != null)
+            {
+                _muraChart.SingleGrabCurvePresented -= OnSingleGrabCurvePresented;
+                _muraChart.Dispose();
+            }
             _muraChart = null;
             _ctx.GrabDetailList.RowCommitted -= OnGrabDetailRowCommitted;
             _ctx.GrabDetailList.Dispose();
+        }
+
+        private void OnSingleGrabCurvePresented(
+            string root, string grabId, SingleGrabCurveData data)
+        {
+            SingleGrabCurvePresented?.Invoke(root, grabId, data);
         }
 
         /// <summary>單片序號快路：List 範圍內容不變，只更新該筆統計、Mura curve 與反白。</summary>

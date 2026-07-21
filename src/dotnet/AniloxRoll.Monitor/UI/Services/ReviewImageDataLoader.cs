@@ -45,7 +45,7 @@ namespace AniloxRoll.Monitor.UI.Services
 
     /// <summary>
     /// Loads one Review grab into a background result. Owns filesystem lookup, frame alignment,
-    /// image stitching, curve-bin reads, and grayscale conversion; never touches WinForms controls.
+    /// image stitching, optional curve-bin reads, and grayscale conversion; never touches WinForms controls.
     /// </summary>
     internal sealed class ReviewImageDataLoader
     {
@@ -99,7 +99,8 @@ namespace AniloxRoll.Monitor.UI.Services
             ReviewImageLoadPlan plan,
             int cameraCount,
             bool enableProcess,
-            string ridgeDirection)
+            string ridgeDirection,
+            bool includeCurves = true)
         {
             if (plan == null) throw new ArgumentNullException(nameof(plan));
             var grouped = plan.GroupedPaths;
@@ -109,10 +110,10 @@ namespace AniloxRoll.Monitor.UI.Services
             var grayFrames = new byte[cameraCount][];
             var grayWidths = new int[cameraCount];
             var grayHeights = new int[cameraCount];
-            var columnMean = new float[cameraCount][];
-            var columnMax = new float[cameraCount][];
-            var rowMean = new float[cameraCount][];
-            var rowMax = new float[cameraCount][];
+            var columnMean = includeCurves ? new float[cameraCount][] : null;
+            var columnMax = includeCurves ? new float[cameraCount][] : null;
+            var rowMean = includeCurves ? new float[cameraCount][] : null;
+            var rowMax = includeCurves ? new float[cameraCount][] : null;
 
             var stitchWatch = Stopwatch.StartNew();
             int scale = InspectionEngineConfig.DefaultSaveResizeScale;
@@ -130,10 +131,13 @@ namespace AniloxRoll.Monitor.UI.Services
                         : paths;
                     images[index] = GrabImageStitcher.StitchCamera(
                         aligned, scale, null, enableProcess, ridgeDirection);
-                    CurveMergeHelper.MergeCurves(
-                        paths, out columnMean[index], out columnMax[index]);
-                    CurveMergeHelper.MergeRowCurves(
-                        aligned, out rowMean[index], out rowMax[index]);
+                    if (includeCurves)
+                    {
+                        CurveMergeHelper.MergeCurves(
+                            paths, out columnMean[index], out columnMax[index]);
+                        CurveMergeHelper.MergeRowCurves(
+                            aligned, out rowMean[index], out rowMax[index]);
+                    }
                     if (images[index] != null)
                     {
                         grayFrames[index] = BitmapGrayConverter.ToGray8(
@@ -171,11 +175,12 @@ namespace AniloxRoll.Monitor.UI.Services
             DateTime hintTo,
             int cameraCount,
             bool enableProcess,
-            string ridgeDirection)
+            string ridgeDirection,
+            bool includeCurves = true)
         {
             ReviewImageLoadPlan plan = Prepare(
                 root, grabId, hintFrom, hintTo, cameraCount, enableProcess, ridgeDirection);
-            return Load(plan, cameraCount, enableProcess, ridgeDirection);
+            return Load(plan, cameraCount, enableProcess, ridgeDirection, includeCurves);
         }
     }
 }

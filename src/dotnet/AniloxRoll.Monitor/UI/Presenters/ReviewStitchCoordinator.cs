@@ -81,6 +81,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private readonly object _preparedPlanGate = new object();
         private ReviewImageLoadPlan _preparedPlan;
         private string _preparedPlanKey;
+        private readonly object _sharedCurveGate = new object();
+        private string _sharedCurveRoot;
+        private string _sharedCurveGrabId;
+        private SingleGrabCurveData _sharedCurveData;
 
         /// <summary>快路：只載曲線（欄+列，.bin 數十 KB + tick 對齊 csv）+CFG → 更新欄/列 chart。
         /// 滾動掃描用——chart 即時跟著序號跑（使用者快速找異常），影像（重：JPEG 解碼+拼接）由
@@ -177,6 +181,24 @@ namespace AniloxRoll.Monitor.UI.Presenters
         }
 
         /// <summary>
+        /// 保存報表已完成的原始欄／列曲線。切到回顧時可直接套用，不再讀取同一批 bin。
+        /// </summary>
+        internal void CacheDataCurveSnapshot(
+            string root, string grabId, SingleGrabCurveData data)
+        {
+            if (string.IsNullOrWhiteSpace(root) ||
+                string.IsNullOrWhiteSpace(grabId) || data == null) return;
+
+            lock (_sharedCurveGate)
+            {
+                _sharedCurveRoot = root;
+                _sharedCurveGrabId = grabId;
+                _sharedCurveData = data;
+            }
+            Core.Services.FlowTrace.Log($"DT curve share {grabId} target=Review");
+        }
+
+        /// <summary>
         /// 載入 GrabId 的拼接影像（使用上次的 processed 模式）。
         /// </summary>
         /// <summary>#13 同源新路徑：一組 grab 影像載好（7 台拼接圖 + CFG 有效 ops/pos + 是否 Global）。
@@ -193,7 +215,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// 載入 GrabId 的拼接影像。背景執行拼接後更新 UI。
         /// </summary>
         public async Task LoadGrabStitchedViewAsync(string grabId, DateTime hintFrom, DateTime hintTo,
-            bool enableProcess)
+            bool enableProcess, bool preferSharedCurves = false)
         {
             string root = !string.IsNullOrWhiteSpace(UI.State.UserSessionState.LastDataPath)
                           ? UI.State.UserSessionState.LastDataPath : _ctx.DataStatsPresenter.StatsDataRootPath;
@@ -233,9 +255,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 var opsEff = plan.Config?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
                 var posEff = plan.Config?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
                 bool isGlobal = _ctx.Settings.StitchMode == StitchMode.Global;
+                bool reuseCurves = preferSharedCurves &&
+                    TryActivateSharedCurves(root, grabId);
+                Core.Services.FlowTrace.Log(
+                    $"RV loadGrab curves={(reuseCurves ? "reuse source=Data" : "load source=bin")} {grabId}");
 
                 ReviewImageData loaded = await Task.Run(() => _imageDataLoader.Load(
-                    plan, camCount, enableProcess, ridgeDir));
+                    plan, camCount, enableProcess, ridgeDir, includeCurves: !reuseCurves));
                 var newImages = loaded.Images;
 
                 // token 閘門：背景載入期間已有更新的選取 → 本結果作廢（不上畫面、不動 chart）
@@ -246,14 +272,20 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     return;
                 }
 
-                ClearStitchedMode();
+                if (reuseCurves)
+                    ClearStitchedImages();
+                else
+                    ClearStitchedMode();
                 _stitchedImages       = newImages;
-                _stitchedCurveMean    = loaded.ColumnMean;
-                _stitchedCurveMax     = loaded.ColumnMax;
-                _stitchedRowCurveMean = loaded.RowMean;
-                _stitchedRowCurveMax  = loaded.RowMax;
-                _stitchedMergedRowCurveMean = null;
-                _stitchedMergedRowCurveMax = null;
+                if (!reuseCurves)
+                {
+                    _stitchedCurveMean    = loaded.ColumnMean;
+                    _stitchedCurveMax     = loaded.ColumnMax;
+                    _stitchedRowCurveMean = loaded.RowMean;
+                    _stitchedRowCurveMax  = loaded.RowMax;
+                    _stitchedMergedRowCurveMean = null;
+                    _stitchedMergedRowCurveMax = null;
+                }
                 _ctx.ReviewState.Config = loaded.Config;
                 // The image layout and row chart must receive the same capture-time mm/row
                 // before either is presented. ImageDisplayView then publishes the fitted range.
@@ -264,8 +296,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     loaded.GrayFrames, loaded.GrayWidths, loaded.GrayHeights, opsEff, posEff,
                     isGlobal);
 
-                UpdateGlobalRowChart();   // 畫布顯示走 ImageDisplayView（同源）；row 曲線照合併更新
-                UpdateStitchedOverviewChart();
+                if (!reuseCurves)
+                {
+                    UpdateGlobalRowChart();   // 畫布顯示走 ImageDisplayView（同源）；row 曲線照合併更新
+                    UpdateStitchedOverviewChart();
+                }
 
                 Trace.WriteLine($"[StitchView] {grabId} proc={enableProcess} | CSV={loaded.ConfigMs}ms | Stitch={loaded.StitchMs}ms | Merge(bg)=0ms | UIapply={swTotal.ElapsedMilliseconds - loaded.ConfigMs - loaded.StitchMs}ms | Total={swTotal.ElapsedMilliseconds}ms");
                 Core.Services.FlowTrace.Log($"RV loadGrab done {grabId}（{swTotal.ElapsedMilliseconds}ms）");
@@ -356,11 +391,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public void ClearStitchedMode()
         {
             if (UiDisposed) return;
-            DisposeGlobalMergedImage();
-            if (_stitchedImages == null) return;
-            // 2b-ii-B：canvas/縮圖 PictureBox 已退場（ImageDisplayView 接管）→ 不再清它們的 Image。
-            foreach (var bmp in _stitchedImages) BitmapPool.Return(bmp);
-            _stitchedImages = null;
+            ClearStitchedImages();
             _stitchedCurveMean    = null;
             _stitchedCurveMax     = null;
             _stitchedRowCurveMean = null;
@@ -371,6 +402,42 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _ctx.ColumnChartHelper?.SetOps(_ctx.Settings.Cam1_Ops);
             _ctx.ColumnChartHelper?.SetThresholds(_ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV);
             _ctx.DataStatsPresenter?.SetReviewGroupBoxes(false);
+        }
+
+        private void ClearStitchedImages()
+        {
+            DisposeGlobalMergedImage();
+            if (_stitchedImages == null) return;
+            foreach (var bmp in _stitchedImages) BitmapPool.Return(bmp);
+            _stitchedImages = null;
+        }
+
+        private bool TryActivateSharedCurves(string root, string grabId)
+        {
+            SingleGrabCurveData data;
+            lock (_sharedCurveGate)
+            {
+                if (!string.Equals(_sharedCurveRoot, root, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(_sharedCurveGrabId, grabId, StringComparison.Ordinal) ||
+                    _sharedCurveData == null)
+                    return false;
+                data = _sharedCurveData;
+            }
+
+            _stitchedCurveMean = data.ColumnMean;
+            _stitchedCurveMax = data.ColumnMax;
+            _stitchedRowCurveMean = data.RowMean;
+            _stitchedRowCurveMax = data.RowMax;
+            _stitchedMergedRowCurveMean = data.MergedRowMean;
+            _stitchedMergedRowCurveMax = data.MergedRowMax;
+            _ctx.ReviewState.Config = data.Config;
+            ApplyRowPhysicalScale(data.Config);
+
+            // 回顧與報表是兩個實體 chart，仍各需一次畫面套用；但這裡只吃記憶體快照，
+            // 不再讀 bin、合併曲線，也不反向通知報表重畫。
+            UpdateStitchedOverviewChart(notifyData: false);
+            UpdateGlobalRowChart();
+            return true;
         }
 
         /// <summary>Global 模式：7 台 row curves 重疊合併後更新列曲線圖。
@@ -498,11 +565,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
         ///   - 閾值線：用 _ctx.Settings 的當前 ErrorValueMeanV/MaxV ← 改 PropertyGrid 閾值會立即移動門檻線
         ///   - OPS/Pos：用該 grab 的 #CFG 快照（與資料一起 baked-in，不可後驗調整）
         /// </summary>
-        public void UpdateStitchedOverviewChart()
+        public void UpdateStitchedOverviewChart(bool notifyData = true)
         {
             if (_stitchedCurveMean == null) return;
             var swOv = System.Diagnostics.Stopwatch.StartNew();   // [UiSlow] 卡頓歸因
-            try { UpdateStitchedOverviewChartBody(); }
+            try { UpdateStitchedOverviewChartBody(notifyData); }
             finally
             {
                 if (swOv.ElapsedMilliseconds > 50)
@@ -510,7 +577,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
         }
 
-        private void UpdateStitchedOverviewChartBody()
+        private void UpdateStitchedOverviewChartBody(bool notifyData)
         {
             double[] opsArr, posArr;
             float captureHm;
@@ -539,7 +606,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _ctx.OverviewHelper, _ctx.CameraCount, _ctx.Settings.StitchMode,
                 ViewRangeProvider);
 
-            StitchedCurveUpdated?.Invoke(displayMean, displayMax, opsArr, posArr, errMean, errMax);
+            if (notifyData)
+                StitchedCurveUpdated?.Invoke(displayMean, displayMax, opsArr, posArr, errMean, errMax);
         }
 
 
