@@ -136,6 +136,11 @@ namespace AniloxRoll.Monitor.Forms
 
         // --- IO 連動 ---
         private IoGrabController _ioGrabController;
+        private Task _ioControllerStartTask = Task.CompletedTask;
+        private readonly System.Threading.SemaphoreSlim _ioControllerLifecycleGate =
+            new System.Threading.SemaphoreSlim(1, 1);
+        private int _ioControllerGeneration;
+        private int _ioControllerActiveGeneration;
         private LightController _lightController;
 
         // --- 統計 ---
@@ -234,17 +239,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private async Task ReleaseRuntimeResourcesAsync()
         {
-            if (_ioGrabController != null)
-            {
-                try { await _ioGrabController.StopAsync(); }
-                catch (Exception ex)
-                {
-                    Trace.TraceWarning(
-                        $"[Shutdown.IO] {ex.GetType().Name}: {ex.Message}");
-                }
-                try { _ioGrabController.Dispose(); } catch { }
-                _ioGrabController = null;
-            }
+            await ShutdownIoControllerAsync();
 
             try { FreePrecomputedColMeanBuffers(); }
             catch (Exception ex)

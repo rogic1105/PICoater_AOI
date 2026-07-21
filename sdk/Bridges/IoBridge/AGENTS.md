@@ -63,12 +63,17 @@ ReconnectTick
 ```
 SettingsHub.Changed → AniloxRollForm.OnSettingChanged(c)
   → HandleIoSettingsChanged(c.Name)            // HardwareStatus.cs
-      case IoIp / IoPort / IoModel / IoEnabled → RestartIoController()
-  → RestartIoController()                       // 停舊(StopAsync+Dispose) → InitIoController()(用新設定重建+背景重連)
+      case IoIp / IoPort / IoModel / IoEnabled → RestartIoControllerAsync(generation)
+  → lifecycle gate                              // 快速連續設定只保留最後一代
+  → StopAsync+Dispose 舊 controller             // 等初次 connect 收口後才釋放
+  → StartIoController(generation)               // 用新設定重建+背景重連
 ```
 - **新增「要立即生效」的 IO 設定** → 加進 `HandleIoSettingsChanged` 的 case 即可（別在別處 inline 重啟）。
-- `RestartIoController` 是 `async void`（StopAsync 背景跑、不阻塞 dispatcher）；重建期間 `_ioGrabController` 短暫 null → 讀取端一律 `_ioGrabController?.`（null-safe）。
+- restart 以 `SemaphoreSlim + generation` 序列化；舊 generation 的 START/STOP/狀態/LED callback 必須在
+  marshal 前後各驗一次 current controller，不得碰目前 UI 或 Grab。
 - 改的瞬間先 `UpdateIoConnectionUi(false)`＝顯示斷線/重連中，避免殘留舊 IP 的「已連線」假象。
+- 同一台電腦只能有一個 app process；`Program` 的 named mutex 在 Form 建立前擋掉第二份，避免兩個
+  controller 同時輪詢同一台 ET-7044、同一個 DI 邊緣觸發兩次 Grab。
 
 > 此「設定改完立即生效」是專案 SSoT 慣例（[[feedback_settings_as_single_source]]）：UI 控制項只是入口，副作用（重啟 controller）由 OnSettingChanged 訂閱者跑，不在 PropertyGrid handler inline。光源（HandleLightSettingsChanged）同模式。
 

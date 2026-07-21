@@ -5,6 +5,7 @@
 using System;
 using System.Configuration;
 using System.IO;
+using System.Threading;
 using System.Windows.Forms;
 using AniloxRoll.Monitor.Forms;
 using IoBridge.Core;
@@ -14,11 +15,26 @@ namespace AniloxRoll.Monitor
     internal static class Program
     {
         private const string DefaultLogDirectory = @"D:\Anilox\Logs";
+        private const string SingleInstanceMutexName = @"Global\PICoater.AOI.AniloxRoll.Monitor";
         private static string _runtimeLogDirectory = Path.GetTempPath();
+        private static Mutex _singleInstanceMutex;
 
         [STAThread]
         static void Main()
         {
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            if (!TryAcquireSingleInstance())
+            {
+                MessageBox.Show(
+                    "PICoater AOI 已在這台電腦執行。\r\n\r\n" +
+                    "請使用目前已開啟的視窗，避免 IO、相機與光源被兩個程式同時控制。",
+                    "程式已開啟",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
             InitializeRuntimeLogging();
 
             // Storage 模式不部署 MIL DLL；若其他路徑意外觸發載入，給出明確錯誤而非 crash
@@ -46,10 +62,48 @@ namespace AniloxRoll.Monitor
                 e.SetObserved();
             };
 
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
             TryDeleteCorruptedUserConfig();
-            Application.Run(new AniloxRollForm());
+            try
+            {
+                Application.Run(new AniloxRollForm());
+            }
+            finally
+            {
+                try { _singleInstanceMutex?.ReleaseMutex(); } catch (ApplicationException) { }
+                _singleInstanceMutex?.Dispose();
+                _singleInstanceMutex = null;
+            }
+        }
+
+        private static bool TryAcquireSingleInstance()
+        {
+            try
+            {
+                bool createdNew;
+                _singleInstanceMutex = new Mutex(true, SingleInstanceMutexName, out createdNew);
+                if (!createdNew)
+                {
+                    _singleInstanceMutex.Dispose();
+                    _singleInstanceMutex = null;
+                }
+                return createdNew;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Some locked-down factory images deny Global\ kernel objects. A session-wide
+                // mutex still prevents the normal operator mistake of launching the app twice.
+                bool createdNew;
+                _singleInstanceMutex = new Mutex(
+                    true,
+                    @"Local\PICoater.AOI.AniloxRoll.Monitor",
+                    out createdNew);
+                if (!createdNew)
+                {
+                    _singleInstanceMutex.Dispose();
+                    _singleInstanceMutex = null;
+                }
+                return createdNew;
+            }
         }
 
         private static void InitializeRuntimeLogging()
@@ -75,6 +129,8 @@ namespace AniloxRoll.Monitor
                 System.Diagnostics.Trace.AutoFlush = true;
                 System.Diagnostics.Trace.WriteLine(
                     $"[Program] runtime logs={_runtimeLogDirectory} trace={traceFile}");
+                System.Diagnostics.Trace.WriteLine(
+                    $"[Program] single instance acquired pid={System.Diagnostics.Process.GetCurrentProcess().Id}");
             }
             catch { /* Logging must never prevent application startup. */ }
         }

@@ -32,25 +32,71 @@ namespace AniloxRoll.Monitor.Forms
         /// <summary>初始化 IO 連動：自動偵測連線，連上後以 DI START 控制 Grab。</summary>
         private void InitIoController()
         {
-            if (!_settings.IoEnabled) return;
+            int generation = System.Threading.Interlocked.Increment(ref _ioControllerGeneration);
+            StartIoController(generation);
+        }
 
-            _ioGrabController = new IoGrabController(_settings.IoModel);
-            _ioGrabController.ReconnectIntervalMs = 3000;   // 重連週期 5s→3s（TCP 連線嘗試很輕量）
-            _ioGrabController.ReadWriteTimeoutMs = 500;     // 讀寫逾時 2000→500ms：斷線偵測更快（健康設備回應 <100ms，零資源代價）
+        private void StartIoController(int generation)
+        {
+            if (!_settings.IoEnabled || generation != System.Threading.Volatile.Read(ref _ioControllerGeneration))
+                return;
 
-            // 背景 Modbus 輪詢執行緒回 UI 更新；關閉時 Handle 已銷毀 → SafeBeginInvoke 守 guard 防 InvalidOperationException
-            _ioGrabController.OnStartRequested += () => SafeBeginInvoke(IoStartGrab);
+            var controller = new IoGrabController(_settings.IoModel)
+            {
+                ReconnectIntervalMs = 3000,
+                ReadWriteTimeoutMs = 500
+            };
+            string ip = _settings.IoIp;
+            int port = _settings.IoPort;
+            _ioGrabController = controller;
+            _ioControllerActiveGeneration = generation;
 
-            _ioGrabController.OnStopRequested += () => SafeBeginInvoke(IoStopGrab);
+            controller.OnStartRequested += () => DispatchCurrentIoController(
+                controller, generation, () => _ = IoStartGrabAsync(controller, generation));
+            controller.OnStopRequested += () => DispatchCurrentIoController(
+                controller, generation, () => _ = IoStopGrabAsync(controller, generation));
+            controller.OnStateChanged += state => DispatchCurrentIoController(
+                controller, generation, () => UpdateIoStateLabel(state));
+            controller.OnConnectionChanged += connected => DispatchCurrentIoController(
+                controller, generation, () => UpdateIoConnectionUi(connected));
+            controller.OnIoUpdated += snapshot => DispatchCurrentIoController(
+                controller, generation, () => UpdateIoLeds(snapshot));
 
-            _ioGrabController.OnStateChanged += state => SafeBeginInvoke(() => UpdateIoStateLabel(state));
+            FlowTrace.Log($"IO controller start generation={generation} endpoint={ip}:{port}");
+            _ioControllerStartTask = StartIoControllerAsync(controller, generation, ip, port);
+        }
 
-            _ioGrabController.OnConnectionChanged += connected => SafeBeginInvoke(() => UpdateIoConnectionUi(connected));
+        private async Task StartIoControllerAsync(
+            IoGrabController controller, int generation, string ip, int port)
+        {
+            try
+            {
+                await controller.StartAsync(ip, port);
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning(
+                    $"[IO.Start generation={generation}] {ex.GetType().Name}: {ex.Message}");
+                DispatchCurrentIoController(
+                    controller, generation, () => UpdateIoConnectionUi(false));
+            }
+        }
 
-            _ioGrabController.OnIoUpdated += snapshot => SafeBeginInvoke(() => UpdateIoLeds(snapshot));
+        private bool IsCurrentIoController(IoGrabController controller, int generation)
+        {
+            return !_shutdownInProgress &&
+                   generation == System.Threading.Volatile.Read(ref _ioControllerGeneration) &&
+                   ReferenceEquals(_ioGrabController, controller);
+        }
 
-            // 背景嘗試連線（不阻塞 Form 顯示）
-            _ = _ioGrabController.StartAsync(_settings.IoIp, _settings.IoPort);
+        private void DispatchCurrentIoController(
+            IoGrabController controller, int generation, Action action)
+        {
+            if (!IsCurrentIoController(controller, generation)) return;
+            SafeBeginInvoke(() =>
+            {
+                if (IsCurrentIoController(controller, generation)) action();
+            });
         }
 
         private void InitLightController()
@@ -99,27 +145,71 @@ namespace AniloxRoll.Monitor.Forms
             });
         }
 
-        private void IoStartGrab()
+        private async Task IoStartGrabAsync(IoGrabController controller, int generation)
         {
-            if (_isIoSuspended) return;
-            if (_liveCameraManager == null || _liveCameraManager.IsLiveGrabbing) return;
+            if (!IsCurrentIoController(controller, generation)) return;
+            if (_isIoSuspended)
+            {
+                await RejectIoGrabStartAsync(controller, generation, "io-suspended");
+                return;
+            }
+            if (_liveCameraManager == null)
+            {
+                await RejectIoGrabStartAsync(controller, generation, "camera-manager-unavailable");
+                return;
+            }
+            if (_liveCameraManager.IsLiveGrabbing)
+            {
+                await controller.NotifyGrabStarted();
+                FlowTrace.Log("IO grab accepted busy=on state=already-grabbing");
+                return;
+            }
             if (IsStandardBgSubEnabled && !IsBgBinReady())
             {
                 System.Diagnostics.Trace.TraceWarning("[IoStartGrab] StandardBgSub 無背景 bin，自動取得背景後接續 grab");
                 _autoStartGrabAfterBg = true;
+                _autoStartGrabIoGeneration = generation;
                 btnLiveGetBackground_Click(null, null);
                 return;
             }
-            btnLiveGrab_Click(null, null);
-            _ = _ioGrabController?.NotifyGrabStarted();
+
+            try
+            {
+                bool started = await ToggleLiveGrabAsync("io:DI START 上升緣 → 開始抓取");
+                if (!IsCurrentIoController(controller, generation)) return;
+                if (started && _liveCameraManager.IsLiveGrabbing && controller.CurrentState == IoState.Running)
+                {
+                    await controller.NotifyGrabStarted();
+                    FlowTrace.Log("IO grab accepted busy=on");
+                    return;
+                }
+
+                if (started && _liveCameraManager.IsLiveGrabbing)
+                    await ToggleLiveGrabAsync("io:START 已下降或 controller 已換代 → 停止晚到抓取");
+                await RejectIoGrabStartAsync(controller, generation, "capture-start-failed");
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning($"[IO.GrabStart] {ex.GetType().Name}: {ex.Message}");
+                await RejectIoGrabStartAsync(controller, generation, "exception");
+            }
         }
 
-        private void IoStopGrab()
+        private async Task RejectIoGrabStartAsync(
+            IoGrabController controller, int generation, string reason)
         {
-            if (_isIoSuspended) return;
+            if (!IsCurrentIoController(controller, generation)) return;
+            await controller.NotifyGrabStartRejected();
+            FlowTrace.Log($"IO grab rejected busy=off reason={reason}");
+        }
+
+        private async Task IoStopGrabAsync(IoGrabController controller, int generation)
+        {
+            if (!IsCurrentIoController(controller, generation) || _isIoSuspended) return;
             if (_liveCameraManager == null || !_liveCameraManager.IsLiveGrabbing) return;
-            btnLiveGrab_Click(null, null);
-            _ = _ioGrabController?.NotifyGrabStopped();
+            bool stopped = await ToggleLiveGrabAsync("io:DI START 下降緣 → 停止抓取");
+            if (stopped && IsCurrentIoController(controller, generation))
+                await controller.NotifyGrabStopped();
         }
 
         private void LightTurnOn()
@@ -183,23 +273,79 @@ namespace AniloxRoll.Monitor.Forms
                 case nameof(InspectionSettings.IoIp):
                 case nameof(InspectionSettings.IoPort):
                 case nameof(InspectionSettings.IoModel):
-                    RestartIoController();
+                    int generation = System.Threading.Interlocked.Increment(ref _ioControllerGeneration);
+                    _ = RestartIoControllerAsync(generation);
                     break;
             }
         }
 
-        /// <summary>停掉舊 IO controller 並依目前設定重建（IoEnabled=false 時 InitIoController 會 early-return＝關閉）。
-        /// async void：StopAsync 在背景跑、不阻塞 dispatcher；重建期間 _ioGrabController 短暫為 null（讀取端皆 null-safe）。</summary>
-        private async void RestartIoController()
+        /// <summary>序列化停舊與重建；快速連續改設定只建立最後一代 controller。</summary>
+        private async Task RestartIoControllerAsync(int requestedGeneration)
         {
-            if (_ioGrabController != null)
+            await _ioControllerLifecycleGate.WaitAsync();
+            try
             {
-                try { await _ioGrabController.StopAsync(); } catch { }
-                _ioGrabController.Dispose();
+                if (requestedGeneration != System.Threading.Volatile.Read(ref _ioControllerGeneration))
+                {
+                    FlowTrace.Log($"IO controller restart coalesced generation={requestedGeneration}");
+                    return;
+                }
+
+                var oldController = _ioGrabController;
+                var oldStartTask = _ioControllerStartTask;
+                int oldGeneration = _ioControllerActiveGeneration;
                 _ioGrabController = null;
+                _ioControllerActiveGeneration = 0;
+                _ioControllerStartTask = Task.CompletedTask;
+                if (oldController != null)
+                {
+                    FlowTrace.Log($"IO controller stop generation={oldGeneration} reason=settings");
+                    try { await oldStartTask; } catch { }
+                    try { await oldController.StopAsync(); } catch { }
+                    oldController.Dispose();
+                }
+
+                if (requestedGeneration != System.Threading.Volatile.Read(ref _ioControllerGeneration) ||
+                    _shutdownInProgress)
+                    return;
+
+                UpdateIoConnectionUi(false);
+                StartIoController(requestedGeneration);
             }
-            UpdateIoConnectionUi(false);   // 立即顯示斷線（重連中），避免殘留舊 IP 的「已連線」狀態
-            InitIoController();            // 用新設定（IP/Port/型號）重建並背景連線
+            finally
+            {
+                _ioControllerLifecycleGate.Release();
+            }
+        }
+
+        private async Task ShutdownIoControllerAsync()
+        {
+            System.Threading.Interlocked.Increment(ref _ioControllerGeneration);
+            await _ioControllerLifecycleGate.WaitAsync();
+            try
+            {
+                var controller = _ioGrabController;
+                var startTask = _ioControllerStartTask;
+                int activeGeneration = _ioControllerActiveGeneration;
+                _ioGrabController = null;
+                _ioControllerActiveGeneration = 0;
+                _ioControllerStartTask = Task.CompletedTask;
+                if (controller == null) return;
+
+                FlowTrace.Log($"IO controller stop generation={activeGeneration} reason=shutdown");
+                try { await startTask; } catch { }
+                try { await controller.StopAsync(); }
+                catch (Exception ex)
+                {
+                    Trace.TraceWarning(
+                        $"[Shutdown.IO] {ex.GetType().Name}: {ex.Message}");
+                }
+                try { controller.Dispose(); } catch { }
+            }
+            finally
+            {
+                _ioControllerLifecycleGate.Release();
+            }
         }
 
         private void UpdateIoStateLabel(IoState state)

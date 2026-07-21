@@ -183,16 +183,38 @@ namespace AniloxRoll.Monitor.Forms
 
             if (!captureSucceeded)
             {
+                int ioGeneration = _autoStartGrabIoGeneration;
+                var ioController = _ioGrabController;
                 _autoStartGrabAfterBg = false;
+                _autoStartGrabIoGeneration = 0;
+                if (ioController != null && IsCurrentIoController(ioController, ioGeneration))
+                    await RejectIoGrabStartAsync(ioController, ioGeneration, "background-capture-failed");
                 return;
             }
 
             if (_autoStartGrabAfterBg)
             {
+                int ioGeneration = _autoStartGrabIoGeneration;
+                var ioController = _ioGrabController;
                 _autoStartGrabAfterBg = false;
+                _autoStartGrabIoGeneration = 0;
+                if (ioController == null || !IsCurrentIoController(ioController, ioGeneration) ||
+                    ioController.CurrentState != IoState.Running)
+                {
+                    FlowTrace.Log("IO background continuation cancelled reason=stale-or-start-low");
+                    return;
+                }
                 await _liveCameraManager.ReleaseAsync();
-                btnLiveGrab_Click(null, null);
-                _ = _ioGrabController?.NotifyGrabStarted();
+                bool started = await ToggleLiveGrabAsync("io:背景取得完成 → 開始抓取");
+                if (started && IsCurrentIoController(ioController, ioGeneration))
+                {
+                    await ioController.NotifyGrabStarted();
+                    FlowTrace.Log("IO grab accepted busy=on source=background");
+                }
+                else
+                {
+                    await RejectIoGrabStartAsync(ioController, ioGeneration, "background-continuation-failed");
+                }
                 return;
             }
 
@@ -472,6 +494,7 @@ namespace AniloxRoll.Monitor.Forms
             !(_settings?.LightEnabled == true) || (_lightController != null && _lightController.IsConnected);
 
         private bool _autoStartGrabAfterBg;
+        private int _autoStartGrabIoGeneration;
 
         private bool IsBgBinReady()
         {

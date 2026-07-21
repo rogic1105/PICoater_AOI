@@ -21,6 +21,7 @@ class HardwareFlowValidator:
             self._edge_pattern.match(line.message)
             or self._camera_pattern.match(line.message)
             or line.message.startswith(("儲存程式 heartbeat ", "⚠ 儲存程式 heartbeat "))
+            or line.message.startswith(("IO controller ", "io:DI START ", "IO grab "))
             for line in session.lines
         )
         if not covered:
@@ -30,7 +31,66 @@ class HardwareFlowValidator:
         self._check_connection_edges(session, report)
         self._check_storage_heartbeat(session, report)
         self._check_camera_edges(session, report)
+        self._check_io_controller_lifecycle(session, report)
+        self._check_io_grab_outcomes(session, report)
         return report
+
+    def _check_io_controller_lifecycle(self, session: FlowSession, report: CheckReport) -> None:
+        pattern = re.compile(r"^IO controller (start|stop) generation=(\d+)")
+        lines = [(line, pattern.match(line.message)) for line in session.lines]
+        lines = [(line, match) for line, match in lines if match]
+        if not lines:
+            report.add(self.domain, "H1.io-lifecycle", CheckStatus.NOT_COVERED, "舊版或本 session 無 IO controller 生命週期")
+            return
+
+        active = None
+        failures = []
+        for line, match in lines:
+            action = match.group(1)
+            generation = int(match.group(2))
+            if action == "start":
+                if active is not None:
+                    failures.append(f"{line.timestamp} generation={generation} 啟動時 generation={active} 尚未停止")
+                active = generation
+            else:
+                if active != generation:
+                    failures.append(f"{line.timestamp} stop generation={generation} 但 active={active}")
+                active = None
+
+        report.add(
+            self.domain,
+            "H1.io-lifecycle",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"events={len(lines)} invalid={len(failures)}" + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_io_grab_outcomes(self, session: FlowSession, report: CheckReport) -> None:
+        starts = [
+            index for index, line in enumerate(session.lines)
+            if line.message == "io:DI START 上升緣 → 開始抓取"
+        ]
+        if not starts:
+            report.add(self.domain, "H3.io-grab", CheckStatus.NOT_COVERED, "本 session 無 IO START Grab")
+            return
+
+        failures = []
+        for position, start_index in enumerate(starts):
+            end = starts[position + 1] if position + 1 < len(starts) else len(session.lines)
+            outcomes = [
+                line.message for line in session.lines[start_index + 1:end]
+                if line.message.startswith(("IO grab accepted busy=on", "IO grab rejected busy=off"))
+            ]
+            if len(outcomes) != 1:
+                failures.append(
+                    f"{session.lines[start_index].timestamp} outcome={len(outcomes)}（應恰一）"
+                )
+
+        report.add(
+            self.domain,
+            "H3.io-grab",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"starts={len(starts)} invalid={len(failures)}" + (f"；首例 {failures[0]}" if failures else ""),
+        )
 
     def _check_connection_edges(self, session: FlowSession, report: CheckReport) -> None:
         last = {}

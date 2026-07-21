@@ -260,6 +260,29 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public async Task NotifyGrabStartRejected_ClearsBusyAndWaitsForNextFullEdge()
+        {
+            await ConnectAndEnterIdle();
+            SetupDiStatuses(true, true);
+            await _ctrl.PollTick();
+            Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Running));
+
+            _mockPlc.Invocations.Clear();
+            await _ctrl.NotifyGrabStartRejected();
+
+            Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Idle));
+            _mockPlc.Verify(p => p.WriteDo(2, false), Times.Once);
+
+            await _ctrl.PollTick(); // START still high: not a new edge.
+            Assert.That(_startCount, Is.EqualTo(1));
+            SetupDiStatuses(true, false);
+            await _ctrl.PollTick();
+            SetupDiStatuses(true, true);
+            await _ctrl.PollTick();
+            Assert.That(_startCount, Is.EqualTo(2));
+        }
+
+        [Test]
         public async Task NotifyMuraDetected_WritesMuraDetected()
         {
             await ConnectAndEnterIdle();

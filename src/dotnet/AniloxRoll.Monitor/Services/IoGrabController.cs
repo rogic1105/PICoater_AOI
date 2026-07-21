@@ -241,6 +241,14 @@ namespace AniloxRoll.Monitor.Core.Services
             catch (Exception ex) { IoLogger.Error("WriteDo PC_BUSY=false failed", ex); }
         }
 
+        /// <summary>App 拒絕或無法開始 Grab：BUSY 保持 Low，FSM 回 Idle 等待下一個完整 START 邊緣。</summary>
+        public async Task NotifyGrabStartRejected()
+        {
+            await NotifyGrabStopped();
+            if (_currentState == IoState.Running)
+                SetState(IoState.Idle);
+        }
+
         /// <summary>通知 IO：檢測到 MURA（MURA = High）。</summary>
         public async Task NotifyMuraDetected()
         {
