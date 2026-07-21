@@ -9,6 +9,7 @@ using System.Windows.Forms.DataVisualization.Charting;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.Binders;
+using AniloxRoll.Monitor.UI.Coordinators;
 using AniloxRoll.Monitor.UI.Navigators;
 using AniloxRoll.Monitor.UI.Services;
 using AniloxRoll.Monitor.UI.Widgets;
@@ -98,14 +99,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private bool _singleGrabDetailIndexReady;
         private bool _showFailOnly;
         private bool _preserveDetailListDuringSelection;
-        private System.Windows.Forms.Timer _rangeRefreshDebounce;
-        private System.Windows.Forms.Timer _rangeListPreviewTimer;
-        private System.Windows.Forms.Timer _rangePreviewTimer;
-        private CancellationTokenSource _rangePreviewCancellation;
-        private int _rangePreviewGeneration;
-        private int _rangeListPreviewAppliedGeneration;
-        private int _rangePreviewAppliedGeneration;
-        private bool _rangePreviewRunning;
+        private DataRangePreviewCoordinator _rangePreview;
 
         // --- 圖表導航 ---
 
@@ -123,9 +117,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private DataDateGrabIdNavigator _dateGrabIdNavigator;
 
         // --- 常數 ---
-        private const int RangeListPreviewIntervalMs = 33;
-        private const int RangeCurvePreviewIntervalMs = 80;
-        private const int RangeSettleIntervalMs = 150;
         private static readonly Color _activeGrpFill = Color.FromArgb(220, 248, 225);
         private static readonly Color _activeGrpBorder = Color.FromArgb(0, 140, 60);
 
@@ -190,18 +181,18 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 () => _singleGrabDetailIndex);
             _yieldPeriodCharts.Init();
 
-            _rangeRefreshDebounce = new System.Windows.Forms.Timer { Interval = RangeSettleIntervalMs };
-            _rangeRefreshDebounce.Tick += (s, e) =>
-            {
-                _rangeRefreshDebounce.Stop();
-                FlowTrace.Log("DT range settle → refresh");
-                RefreshStats(updateRangeCurve: false);
-            };
-            _rangeListPreviewTimer = new System.Windows.Forms.Timer { Interval = RangeListPreviewIntervalMs };
-            _rangeListPreviewTimer.Tick += RangeListPreviewTimer_Tick;
-            _rangePreviewTimer = new System.Windows.Forms.Timer { Interval = RangeCurvePreviewIntervalMs };
-            _rangePreviewTimer.Tick += RangePreviewTimer_Tick;
-            FlowTrace.Log($"DT range policy listMs={RangeListPreviewIntervalMs} curveMs={RangeCurvePreviewIntervalMs} settleMs={RangeSettleIntervalMs} curveMode=monotonic");
+            _rangePreview = new DataRangePreviewCoordinator(
+                ClearRangePreviewPresentation,
+                () => RefreshStats(updateRangeCurve: false),
+                ApplyRangeListPreview,
+                ApplyRangeCurvePreviewAsync,
+                FlowTrace.Log);
+            FlowTrace.Log(
+                $"DT range policy listMs={DataRangePreviewCoordinator.ListPreviewIntervalMs} " +
+                $"curveMs={DataRangePreviewCoordinator.CurvePreviewIntervalMs} " +
+                $"settleMs={DataRangePreviewCoordinator.SettleIntervalMs} curveMode=latest-only " +
+                $"curveCacheEntries={InspectionMuraProfileRepository.RangeCurveCacheEntryCapacity} " +
+                $"curveCacheMB={InspectionMuraProfileRepository.RangeCurveCacheByteCapacityMb}");
 
             _ctx.GrpReviewTimePeriod.Click += (s, e) => PeriodComboManualChanged?.Invoke();
 
@@ -399,85 +390,29 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         private void ScheduleRangeRefresh()
         {
-            // 列圖只屬單序號；範圍 intent 一發生就清掉，不能在 150ms settle 期間殘留上一筆。
-            _muraChart?.ClearRow();
-            _statsPresenter.UpdateRowResult(null);
-            if (_rangeRefreshDebounce == null)
+            if (_rangePreview == null)
             {
                 RefreshStats();
                 return;
             }
-            _rangeRefreshDebounce.Stop();
-            _rangeRefreshDebounce.Start();
-
-            _rangePreviewGeneration++;
-            if (_rangeListPreviewTimer != null && !_rangeListPreviewTimer.Enabled)
-                _rangeListPreviewTimer.Start();
-            if (_rangePreviewTimer != null && !_rangePreviewTimer.Enabled)
-                _rangePreviewTimer.Start();
+            _rangePreview.Start();
         }
 
-        private void RangeListPreviewTimer_Tick(object sender, EventArgs e)
+        private void ClearRangePreviewPresentation()
         {
-            if (_rangeListPreviewAppliedGeneration == _rangePreviewGeneration)
-            {
-                _rangeListPreviewTimer.Stop();
-                return;
-            }
-            if (!TryGetSelectedRange(out List<GrabIdInfo> _))
-            {
-                _rangeListPreviewTimer.Stop();
-                return;
-            }
-
-            int generation = _rangePreviewGeneration;
-            if (!ApplyRangeListPreview(generation))
-            {
-                _rangeListPreviewTimer.Stop();
-                return;
-            }
-            if (generation == _rangePreviewGeneration)
-                _rangeListPreviewAppliedGeneration = generation;
+            // Row data belongs to a single grab. Never leave it visible while a range is moving.
+            _muraChart?.ClearRow();
+            _statsPresenter.UpdateRowResult(null);
         }
 
-        private async void RangePreviewTimer_Tick(object sender, EventArgs e)
+        private async System.Threading.Tasks.Task<bool> ApplyRangeCurvePreviewAsync(
+            int generation, Func<bool> isCurrent, CancellationToken cancellationToken)
         {
-            if (_rangePreviewRunning ||
-                _rangePreviewAppliedGeneration == _rangePreviewGeneration)
-            {
-                if (!_rangePreviewRunning) _rangePreviewTimer.Stop();
-                return;
-            }
             if (!TryGetSelectedRange(out List<GrabIdInfo> rangeInfos))
-            {
-                _rangePreviewTimer.Stop();
-                return;
-            }
+                return false;
 
-            int generation = _rangePreviewGeneration;
-            var cancellation = new CancellationTokenSource();
-            _rangePreviewCancellation = cancellation;
-            _rangePreviewRunning = true;
-            try
-            {
-                await _muraChart.UpdateRangePreviewAsync(
-                    rangeInfos, generation, cancellation.Token);
-                if (!cancellation.IsCancellationRequested)
-                    _rangePreviewAppliedGeneration = generation;
-            }
-            catch (OperationCanceledException)
-            {
-                // Folder/mode teardown owns cancellation; range input is sampled, not debounced.
-            }
-            finally
-            {
-                if (ReferenceEquals(_rangePreviewCancellation, cancellation))
-                    _rangePreviewCancellation = null;
-                cancellation.Dispose();
-                _rangePreviewRunning = false;
-                if (_rangePreviewAppliedGeneration == _rangePreviewGeneration)
-                    _rangePreviewTimer?.Stop();
-            }
+            return await _muraChart.UpdateRangePreviewAsync(
+                rangeInfos, generation, isCurrent, cancellationToken);
         }
 
         private bool TryGetSelectedRange(out List<GrabIdInfo> rangeInfos)
@@ -492,23 +427,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         private void CancelRangePreview()
         {
-            _rangePreviewGeneration++;
-            _rangePreviewCancellation?.Cancel();
-            _rangeListPreviewTimer?.Stop();
-            _rangePreviewTimer?.Stop();
+            _rangePreview?.Cancel();
         }
 
         public void Dispose()
         {
-            _rangeRefreshDebounce?.Stop();
-            _rangeRefreshDebounce?.Dispose();
-            _rangeRefreshDebounce = null;
-            CancelRangePreview();
-            _rangeListPreviewTimer?.Dispose();
-            _rangeListPreviewTimer = null;
-            _rangePreviewTimer?.Dispose();
-            _rangePreviewTimer = null;
-            _rangePreviewCancellation = null;
+            _rangePreview?.Dispose();
+            _rangePreview = null;
             if (_muraChart != null)
             {
                 _muraChart.SingleGrabCurvePresented -= OnSingleGrabCurvePresented;
@@ -622,8 +547,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         private bool ApplyRangeListPreview(int generation)
         {
-            if (generation != _rangePreviewGeneration
-                || _preserveDetailListDuringSelection
+            if (_preserveDetailListDuringSelection
                 || !IsSingleGrabDetailIndexCurrent())
                 return false;
 

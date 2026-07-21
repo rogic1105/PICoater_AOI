@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace AniloxRoll.Monitor.Core.Services
 {
@@ -16,6 +17,16 @@ namespace AniloxRoll.Monitor.Core.Services
             new Dictionary<string, CachedDailyRecords>(StringComparer.OrdinalIgnoreCase);
         private static long _dailyIndexAccess;
         private static int _dailyIndexRecords;
+
+        internal const int RangeCurveCacheEntryCapacity = 2048;
+        internal const int RangeCurveCacheByteCapacityMb = 256;
+        private const long RangeCurveCacheByteCapacity =
+            (long)RangeCurveCacheByteCapacityMb * 1024 * 1024;
+        private static readonly object RangeCurveCacheLock = new object();
+        private static readonly Dictionary<string, CachedCurve> RangeCurveCache =
+            new Dictionary<string, CachedCurve>(StringComparer.OrdinalIgnoreCase);
+        private static readonly LinkedList<string> RangeCurveLru = new LinkedList<string>();
+        private static long _rangeCurveCacheBytes;
 
         private sealed class MuraCurveRecord
         {
@@ -31,6 +42,13 @@ namespace AniloxRoll.Monitor.Core.Services
             public long LastAccess;
             public int RecordCount;
             public Dictionary<string, List<MuraCurveRecord>> ByGrabId;
+        }
+
+        private sealed class CachedCurve
+        {
+            public float[] Values;
+            public long Bytes;
+            public LinkedListNode<string> Node;
         }
 
         public static (Dictionary<int, float[]> Mean, Dictionary<int, float[]> Max)
@@ -107,7 +125,9 @@ namespace AniloxRoll.Monitor.Core.Services
             int RankedCams,
             int TotalCams,
             int IndexHits,
-            int IndexBuilds)
+            int IndexBuilds,
+            int CurveCacheHits,
+            int CurveCacheMisses)
             LoadRange(string rootPath, IList<GrabIdInfo> rangeInfos, int limit,
                 CancellationToken cancellationToken = default(CancellationToken))
         {
@@ -118,7 +138,7 @@ namespace AniloxRoll.Monitor.Core.Services
             int rankedCams = 0;
             if (string.IsNullOrWhiteSpace(rootPath) || rangeInfos == null ||
                 rangeInfos.Count == 0 || limit <= 0)
-                return (meanResult, maxResult, 0, 0, 0, 0, 0, 0, 0, 0);
+                return (meanResult, maxResult, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
             var rangeIds = new HashSet<string>(StringComparer.Ordinal);
             var dates = new HashSet<DateTime>();
@@ -158,9 +178,15 @@ namespace AniloxRoll.Monitor.Core.Services
                 }
             }
 
-            foreach (var camera in recordsByCam)
+            int curveCacheHits = 0, curveCacheMisses = 0;
+            object resultLock = new object();
+            var parallelOptions = new ParallelOptions
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                CancellationToken = cancellationToken,
+                MaxDegreeOfParallelism = Math.Min(4, Math.Max(1, recordsByCam.Count))
+            };
+            Parallel.ForEach(recordsByCam, parallelOptions, camera =>
+            {
                 List<MuraCurveRecord> records = camera.Value;
                 List<MuraCurveRecord> meanCandidates = EvenSample(records, limit);
                 var scored = records.FindAll(record =>
@@ -170,23 +196,35 @@ namespace AniloxRoll.Monitor.Core.Services
                 {
                     scored.Sort((left, right) => right.MaxCMean.CompareTo(left.MaxCMean));
                     maxCandidates = scored.GetRange(0, Math.Min(limit, scored.Count));
-                    rankedCams++;
                 }
                 else
                 {
                     maxCandidates = EvenSample(records, limit);
                 }
 
-                float[] mean = Aggregate(meanCandidates, true, cancellationToken);
-                float[] max = Aggregate(maxCandidates, false, cancellationToken);
-                if (mean != null) meanResult[camera.Key] = mean;
-                if (max != null) maxResult[camera.Key] = max;
-                meanRows += meanCandidates.Count;
-                maxRows += maxCandidates.Count;
-            }
+                int localCacheHits = 0, localCacheMisses = 0;
+                float[] mean = Aggregate(
+                    meanCandidates, true, cancellationToken,
+                    ref localCacheHits, ref localCacheMisses);
+                float[] max = Aggregate(
+                    maxCandidates, false, cancellationToken,
+                    ref localCacheHits, ref localCacheMisses);
+                lock (resultLock)
+                {
+                    if (mean != null) meanResult[camera.Key] = mean;
+                    if (max != null) maxResult[camera.Key] = max;
+                    meanRows += meanCandidates.Count;
+                    maxRows += maxCandidates.Count;
+                    if (scored.Count == records.Count && scored.Count > 0)
+                        rankedCams++;
+                    curveCacheHits += localCacheHits;
+                    curveCacheMisses += localCacheMisses;
+                }
+            });
 
             return (meanResult, maxResult, meanRows, maxRows, scoredRows, totalRows,
-                rankedCams, recordsByCam.Count, indexHits, indexBuilds);
+                rankedCams, recordsByCam.Count, indexHits, indexBuilds,
+                curveCacheHits, curveCacheMisses);
         }
 
         private static CachedDailyRecords GetDailyRecords(
@@ -311,7 +349,8 @@ namespace AniloxRoll.Monitor.Core.Services
         }
 
         private static float[] Aggregate(
-            List<MuraCurveRecord> records, bool mean, CancellationToken cancellationToken)
+            List<MuraCurveRecord> records, bool mean, CancellationToken cancellationToken,
+            ref int curveCacheHits, ref int curveCacheMisses)
         {
             float[] result = null;
             int loaded = 0;
@@ -321,7 +360,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 string curvePath = mean
                     ? CaptureFileNaming.ResolveMeanC(record.BasePath)
                     : CaptureFileNaming.ResolveMaxC(record.BasePath);
-                float[] curve = CurveBinFile.Load(curvePath);
+                float[] curve = LoadRangeCurve(
+                    curvePath, ref curveCacheHits, ref curveCacheMisses);
                 if (curve == null || curve.Length == 0) continue;
                 if (result == null) result = new float[curve.Length];
                 if (result.Length != curve.Length) continue;
@@ -342,6 +382,64 @@ namespace AniloxRoll.Monitor.Core.Services
                     result[i] /= loaded;
                 }
             return result;
+        }
+
+        private static float[] LoadRangeCurve(
+            string path, ref int cacheHits, ref int cacheMisses)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return null;
+            string key;
+            try { key = Path.GetFullPath(path); }
+            catch { key = path; }
+
+            lock (RangeCurveCacheLock)
+            {
+                if (RangeCurveCache.TryGetValue(key, out CachedCurve cached))
+                {
+                    RangeCurveLru.Remove(cached.Node);
+                    RangeCurveLru.AddFirst(cached.Node);
+                    cacheHits++;
+                    return cached.Values;
+                }
+            }
+
+            float[] loaded = CurveBinFile.Load(key);
+            cacheMisses++;
+            if (loaded == null || loaded.Length == 0) return loaded;
+            long bytes = (long)loaded.Length * sizeof(float);
+            if (bytes > RangeCurveCacheByteCapacity) return loaded;
+
+            lock (RangeCurveCacheLock)
+            {
+                if (RangeCurveCache.TryGetValue(key, out CachedCurve existing))
+                    return existing.Values;
+
+                var node = new LinkedListNode<string>(key);
+                RangeCurveLru.AddFirst(node);
+                RangeCurveCache[key] = new CachedCurve
+                {
+                    Values = loaded,
+                    Bytes = bytes,
+                    Node = node
+                };
+                _rangeCurveCacheBytes += bytes;
+                TrimRangeCurveCache();
+            }
+            return loaded;
+        }
+
+        private static void TrimRangeCurveCache()
+        {
+            while (RangeCurveCache.Count > RangeCurveCacheEntryCapacity ||
+                   _rangeCurveCacheBytes > RangeCurveCacheByteCapacity)
+            {
+                LinkedListNode<string> oldest = RangeCurveLru.Last;
+                if (oldest == null) return;
+                CachedCurve removed = RangeCurveCache[oldest.Value];
+                _rangeCurveCacheBytes -= removed.Bytes;
+                RangeCurveCache.Remove(oldest.Value);
+                RangeCurveLru.RemoveLast();
+            }
         }
 
     }

@@ -20,6 +20,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private bool _disposed;
         private bool _suppressViewRangeEvents;
         private IntensityColorMap _mainColorMap = IntensityColorMap.Grayscale;
+        private Func<string> _informationTextProvider;
 
         /// <summary>視野可見範圍（mm）pass-through（View 為 lazy，外部訂這裡）：left,right,top,bot →
         /// 回顧曲線圖 zoom 連動（拖曳中也即時，鐵則：不可為效能抑制）。</summary>
@@ -41,6 +42,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (_view != null || _disposed) return;
 
             _view = new ImageDisplayView(_mainHost, _thumbHosts, screenMmPerPx);
+            _view.Canvas.InformationTextProvider = _informationTextProvider;
             _view.MainColorMap = _mainColorMap;
             _view.ThumbSelectedColor = Color.Orange;   // 與監控同款；選取視覺唯一來源 = sdk ThumbView
             _view.MergeAll = true;                     // 缺台黑占位（與影像/曲線分界一致）
@@ -138,6 +140,12 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         public void SetMergeMode(bool on) => _view?.SetMergeMode(on);
         public void SetSelected(int camId) => _view?.SetSelected(camId);
+
+        public void SetInformationTextProvider(Func<string> provider)
+        {
+            _informationTextProvider = provider;
+            if (_view != null) _view.Canvas.InformationTextProvider = provider;
+        }
 
         /// <summary>只替現有回顧主畫面換調色盤；不重讀圖片、Curve 或改變視野。</summary>
         public void SetMainColorMap(IntensityColorMap colorMap)

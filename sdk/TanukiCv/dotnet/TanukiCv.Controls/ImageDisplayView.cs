@@ -195,6 +195,7 @@ namespace TanukiCv.Controls
             _readySinceMerge = new bool[_camCount];
 
             _canvas = new ImageCanvas { Dock = DockStyle.Fill };
+            _canvas.CameraFrameRegionsProvider = GetCameraFrameRegions;
             _canvas.FitRelativeZoom = false;        // 可放大也可縮小到 fit 以下（同 camReviewMain / 範例 panelMain）
             _canvas.DoubleClickFitToScreen = true;
             // 使用者 fit/1x 手勢留痕（FlowLog）：縮放序列中 zoom 突然回 fit 才有主人可歸（孤兒判讀規則）
@@ -223,6 +224,34 @@ namespace TanukiCv.Controls
             _timer = new System.Windows.Forms.Timer { Interval = 33 };
             _timer.Tick += (s, e) => RefreshMain();
             _timer.Start();
+        }
+
+        private IReadOnlyList<RectangleF> GetCameraFrameRegions()
+        {
+            var placements = _mergePlacements;
+            if (!_mergeMode || placements == null || placements.Count == 0)
+            {
+                if (_canvas.ContentW <= 0 || _canvas.ContentH <= 0)
+                    return new RectangleF[0];
+                return new[] { new RectangleF(0, 0, _canvas.ContentW, _canvas.ContentH) };
+            }
+
+            int k = Math.Max(1, _mergeCapK);
+            var regions = new List<RectangleF>(placements.Count);
+            foreach (CameraPlacement placement in placements)
+            {
+                int cameraIndex = placement.CameraId - 1;
+                Frame frame = cameraIndex >= 0 && cameraIndex < _latest.Length
+                    ? _latest[cameraIndex]
+                    : null;
+                int height = frame?.H ?? _mergeMaxH;
+                regions.Add(new RectangleF(
+                    placement.DestX / (float)k,
+                    0,
+                    Math.Max(1, placement.SrcWidth / (float)k),
+                    Math.Max(1, height / (float)k)));
+            }
+            return regions;
         }
 
         public void RefreshNow()

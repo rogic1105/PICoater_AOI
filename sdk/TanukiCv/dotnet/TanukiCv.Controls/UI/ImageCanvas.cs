@@ -1,6 +1,7 @@
 // TanukiCv.Controls\UI\ImageCanvas.cs
 
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -10,6 +11,14 @@ using TanukiCv.Core; // PixelMmMapper（實體 1:1 zoom 公式）
 
 namespace TanukiCv.Controls
 {
+    public enum CanvasOverlayMode
+    {
+        Coordinates = 0,
+        CoordinateFrames = 1,
+        CoordinateFramesParameters = 2,
+        Hidden = 3
+    }
+
     public class CanvasInfo
     {
         public int ImageX { get; set; }
@@ -41,7 +50,7 @@ namespace TanukiCv.Controls
         private string _cursorMm = ""; // 上層推入的「位置 mm」字串；空=fallback 像素座標
 
         // ── 畫布資訊 overlay（游標座標/亮度跟滑鼠、四邊 mm 範圍、右下實體倍率；右鍵開關）──
-        private bool _showOverlay = true;
+        private CanvasOverlayMode _overlayMode = CanvasOverlayMode.Coordinates;
         private string _ovMag = "", _ovXLeft = "", _ovXRight = "", _ovYTop = "", _ovYBottom = "";
         private Point _cursorPos;
         private bool _cursorInside;
@@ -53,6 +62,7 @@ namespace TanukiCv.Controls
         private float _cacheZoom = float.NaN;
         private Image _cacheImg;
         private static readonly Font  _ovFont      = new Font("Segoe UI", 9f);
+        private static readonly Font  _infoFont    = new Font("Consolas", 7.5f);
         private static readonly Brush _ovBackBrush = new SolidBrush(Color.FromArgb(150, 0, 0, 0));
         private static readonly Brush _ovTextBrush = new SolidBrush(Color.White);
 
@@ -186,9 +196,33 @@ namespace TanukiCv.Controls
         /// <summary>是否在畫布上疊顯資訊（游標座標/亮度、四邊 mm 範圍、右下實體倍率）。滑鼠右鍵切換。</summary>
         public bool ShowOverlay
         {
-            get => _showOverlay;
-            set { _showOverlay = value; Invalidate(); }
+            get => _overlayMode != CanvasOverlayMode.Hidden;
+            set { OverlayMode = value ? CanvasOverlayMode.Coordinates : CanvasOverlayMode.Hidden; }
         }
+
+        /// <summary>
+        /// Right-click cumulative display cycle: coordinates, coordinates with camera frames,
+        /// coordinates with frames and parameters, then hidden.
+        /// </summary>
+        public CanvasOverlayMode OverlayMode
+        {
+            get => _overlayMode;
+            set
+            {
+                if (_overlayMode == value) return;
+                _overlayMode = value;
+                Invalidate();
+            }
+        }
+
+        /// <summary>Optional caller-owned text. The SDK only renders it and has no product-setting dependency.</summary>
+        public Func<string> InformationTextProvider { get; set; }
+
+        /// <summary>
+        /// Optional image-space camera regions. The SDK transforms and draws the supplied rectangles;
+        /// camera layout policy remains owned by the caller.
+        /// </summary>
+        public Func<IReadOnlyList<RectangleF>> CameraFrameRegionsProvider { get; set; }
 
         /// <summary>由上層（CanvasInteractionHelper）推入算好的「四邊範圍 + 倍率」字串。
         /// 座標與亮度由 canvas 自繪（已知 _lastImgX/Y、_lastColor，不必繞上層、確保跟手）。</summary>
@@ -206,7 +240,7 @@ namespace TanukiCv.Controls
             _ovMag   = magnification;
             _ovXLeft = xLeft; _ovXRight  = xRight;
             _ovYTop  = yTop;  _ovYBottom = yBottom;
-            if (_showOverlay) Invalidate(); // 範圍真的變了（zoom/pan）才整張重畫
+            if (ShowOverlay) Invalidate(); // 範圍真的變了（zoom/pan）才整張重畫
         }
 
         /// <summary>由上層（CanvasInteractionHelper）推入算好的「游標位置 mm」字串。
@@ -511,7 +545,8 @@ namespace TanukiCv.Controls
             }
             else if (e.Button == MouseButtons.Right)
             {
-                ShowOverlay = !ShowOverlay; // 右鍵開關畫布資訊
+                OverlayMode = (CanvasOverlayMode)(((int)OverlayMode + 1) % 4);
+                FlowLog?.Invoke($"overlay mode={OverlayMode}");
             }
         }
 
@@ -615,7 +650,7 @@ namespace TanukiCv.Controls
                     _lastStatusTickMs = now;
                     TriggerStatusChange();
                 }
-                if (_showOverlay && now - _lastPanPaintMs >= 8)
+                if (ShowOverlay && now - _lastPanPaintMs >= 8)
                 {
                     _lastPanPaintMs = now;
                     InvalidateCursorOverlay();
@@ -702,7 +737,7 @@ namespace TanukiCv.Controls
         {
             base.OnMouseLeave(e);
             _cursorInside = false;
-            if (_showOverlay && _cursorDirty != Rectangle.Empty)
+            if (ShowOverlay && _cursorDirty != Rectangle.Empty)
             {
                 Invalidate(_cursorDirty); // 只清掉游標 overlay 那一小塊
                 _cursorDirty = Rectangle.Empty;
@@ -867,7 +902,7 @@ namespace TanukiCv.Controls
                     pe.Graphics.PixelOffsetMode   = PixelOffsetMode.Half;
                     pe.Graphics.DrawImage(_lodTile, dx, dy, dw, dh);
                 }
-                if (_showOverlay) DrawOverlays(pe.Graphics);
+                if (ShowOverlay) DrawOverlays(pe.Graphics);
                 _paintTimer.Stop();
                 return;
             }
@@ -905,7 +940,7 @@ namespace TanukiCv.Controls
                     this.Image.Width * _zoom, this.Image.Height * _zoom);
             }
 
-            if (_showOverlay) DrawOverlays(pe.Graphics);
+            if (ShowOverlay) DrawOverlays(pe.Graphics);
 
             _paintTimer.Stop();
         }
@@ -959,13 +994,16 @@ namespace TanukiCv.Controls
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
             const int pad = 4;
 
-            // 四邊範圍：Y 上/下邊中央、X 左/右邊垂直（90° 旋轉）
+            bool drawFrames = _overlayMode == CanvasOverlayMode.CoordinateFrames ||
+                _overlayMode == CanvasOverlayMode.CoordinateFramesParameters;
+            if (drawFrames)
+                DrawCameraFrames(g);
+
+            // All visible modes retain coordinates; later modes add camera regions and CFG.
             if (!string.IsNullOrEmpty(_ovYTop))    DrawLabel(g, _ovYTop,    Width / 2,    pad,           0.5f, 0f);
             if (!string.IsNullOrEmpty(_ovYBottom)) DrawLabel(g, _ovYBottom, Width / 2,    Height - pad,  0.5f, 1f);
             if (!string.IsNullOrEmpty(_ovXLeft))   DrawRotatedLabel(g, _ovXLeft,  pad,          Height / 2, true);
             if (!string.IsNullOrEmpty(_ovXRight))  DrawRotatedLabel(g, _ovXRight, Width - pad,  Height / 2, false);
-
-            // 右下角：實體倍率
             if (!string.IsNullOrEmpty(_ovMag)) DrawLabel(g, _ovMag, Width - pad, Height - pad, 1f, 1f);
 
             // 游標位置 mm + 亮度（跟滑鼠）；無 mm 字串時 fallback 像素座標
@@ -975,6 +1013,51 @@ namespace TanukiCv.Controls
             {
                 DrawCursorLabel(g);
             }
+
+            if (_overlayMode == CanvasOverlayMode.CoordinateFramesParameters)
+                DrawInformationPanel(g);
+        }
+
+        private void DrawCameraFrames(Graphics g)
+        {
+            IReadOnlyList<RectangleF> regions = null;
+            try { regions = CameraFrameRegionsProvider?.Invoke(); }
+            catch { regions = null; }
+            if (regions == null || regions.Count == 0) return;
+
+            using (var pen = new Pen(Color.FromArgb(249, 168, 37), 2f))
+            {
+                for (int i = 0; i < regions.Count; i++)
+                {
+                    RectangleF region = regions[i];
+                    if (region.Width <= 0 || region.Height <= 0) continue;
+                    float x = _panOffset.X + region.X * _zoom;
+                    float y = _panOffset.Y + region.Y * _zoom;
+                    float w = region.Width * _zoom;
+                    float h = region.Height * _zoom;
+                    g.DrawRectangle(pen, x, y, w, h);
+                }
+            }
+        }
+
+        private void DrawInformationPanel(Graphics g)
+        {
+            string text = null;
+            try { text = InformationTextProvider?.Invoke(); }
+            catch { text = null; }
+            if (string.IsNullOrWhiteSpace(text)) return;
+
+            int maxWidth = Math.Max(160, Math.Min(520, Width / 2));
+            Size proposed = new Size(maxWidth, Math.Max(40, Height - 16));
+            TextFormatFlags flags = TextFormatFlags.Left | TextFormatFlags.Top |
+                TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix;
+            Size measured = TextRenderer.MeasureText(g, text, _infoFont, proposed, flags);
+            var bounds = new Rectangle(8, 8,
+                Math.Min(maxWidth, measured.Width + 10),
+                Math.Min(Math.Max(24, Height - 16), measured.Height + 8));
+            g.FillRectangle(_ovBackBrush, bounds);
+            TextRenderer.DrawText(g, text, _infoFont,
+                Rectangle.Inflate(bounds, -5, -4), Color.White, flags);
         }
 
         /// <summary>畫帶半透明底的文字。(ax, ay) 為錨點對齊比例（0=左/上，0.5=中，1=右/下），再 clamp 進畫布。</summary>

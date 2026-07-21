@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Drawing;
 using System.Threading.Tasks;
 using System.Windows.Forms.DataVisualization.Charting;
 using TanukiCv.Controls;
@@ -68,6 +67,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private readonly SingleGrabCurveDataLoader _curveDataLoader;
         private readonly ReviewImageDataLoader _imageDataLoader;
         private readonly ReviewPeriodDataLoader _periodDataLoader;
+        private readonly ReviewPeriodImagePresenter _periodImages;
         private readonly ReviewImageLoadGate _imageLoads = new ReviewImageLoadGate();
         private readonly object _preparedPlanGate = new object();
         private ReviewImageLoadPlan _preparedPlan;
@@ -160,6 +160,20 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _curveDataLoader = new SingleGrabCurveDataLoader();
             _imageDataLoader = new ReviewImageDataLoader();
             _periodDataLoader = new ReviewPeriodDataLoader();
+            _periodImages = new ReviewPeriodImagePresenter(
+                new ReviewPeriodImageContext
+                {
+                    ReviewState = ctx.ReviewState,
+                    Settings = ctx.Settings,
+                    ImageRepository = ctx.ImageRepository,
+                    DateTimeNavigator = ctx.DateTimeNavigator,
+                    InspectionService = ctx.InspectionService,
+                    CameraCount = ctx.CameraCount,
+                    PublishFrames = (frames, widths, heights, ops, positions, isGlobal, preserveView) =>
+                        StitchedImagesReady?.Invoke(
+                            frames, widths, heights, ops, positions, isGlobal, preserveView)
+                },
+                _periodDataLoader);
             _charts = new ReviewChartPresenter(
                 new ReviewChartContext
                 {
@@ -461,27 +475,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         private void ApplyGlobalMergeCore(DateTime? period, bool preserveChartView)
         {
-            if (_ctx.Settings.StitchMode != StitchMode.Global) return;
-
-            var cfg = _ctx.ReviewState.Config;
-            double[] opsArr = cfg?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
-            double[] posArr = cfg?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
-            int scale = InspectionEngineConfig.DefaultSaveResizeScale;
-
-            var filesMap = GetPeriodImages(period);
-            if (filesMap == null || filesMap.Count == 0) return;
-            Core.Services.FlowTrace.Log($"RV period load {PeriodLabel(period)} images={filesMap.Count}/{_ctx.CameraCount} proc={LastReviewProcessedMode} cfg={(cfg != null ? "yes" : "no")}");
-
-            Func<string, Bitmap> bmpLoader = _ctx.InspectionService != null
-                ? (Func<string, Bitmap>)(p => _ctx.InspectionService.LoadBmpAtScale(p, scale))
-                : null;
-
-            ReviewPeriodFrames frames = _periodDataLoader.LoadFrames(
-                filesMap, _ctx.CameraCount, scale, bmpLoader,
+            _periodImages.Apply(
+                period, preserveChartView,
                 LastReviewProcessedMode, ActiveRidgeDirection);
-            StitchedImagesReady?.Invoke(
-                frames.GrayFrames, frames.Widths, frames.Heights, opsArr, posArr, true,
-                preserveChartView);
         }
 
         public void UpdateOverviewChartFromRepository()
@@ -503,21 +499,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
             get => _charts.SameSourceViewRange;
             set => _charts.SameSourceViewRange = value;
         }
-
-        private Dictionary<int, string> GetPeriodImages(DateTime? period)
-        {
-            if (period.HasValue) return _ctx.ImageRepository.GetImages(period.Value);
-            return _ctx.ImageRepository.GetImages(
-                _ctx.DateTimeNavigator.GetCurrentYear(), _ctx.DateTimeNavigator.GetCurrentMonth(),
-                _ctx.DateTimeNavigator.GetCurrentDay(), _ctx.DateTimeNavigator.GetCurrentHour(),
-                _ctx.DateTimeNavigator.GetCurrentMin(), _ctx.DateTimeNavigator.GetCurrentSec());
-        }
-
-        private string PeriodLabel(DateTime? period)
-            => period.HasValue
-                ? period.Value.ToString("yyyy-MM-dd HH:mm:ss.fff")
-                : $"{_ctx.DateTimeNavigator.GetCurrentYear()}-{_ctx.DateTimeNavigator.GetCurrentMonth()}-{_ctx.DateTimeNavigator.GetCurrentDay()} " +
-                  $"{_ctx.DateTimeNavigator.GetCurrentHour()}:{_ctx.DateTimeNavigator.GetCurrentMin()}:{_ctx.DateTimeNavigator.GetCurrentSec()}";
 
     }
 }

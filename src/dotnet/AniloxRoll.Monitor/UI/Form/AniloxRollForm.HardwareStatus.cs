@@ -1,8 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
-using System.Linq;
 using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
@@ -532,110 +530,6 @@ namespace AniloxRoll.Monitor.Forms
         /// <summary>倒數剩餘秒數 = (intervalTicks − 已過 ticks) × tick 間隔，至少 1。</summary>
         private static int CountdownSec(int elapsedTicks, int intervalTicks)
             => Math.Max(1, (int)Math.Ceiling((intervalTicks - elapsedTicks) * TelemetryTickMs / 1000.0));
-
-        private void InitializeOutputHealthUi()
-        {
-            statusBarMain.SizingGrip = false;
-            lblInfo.Spring = true;
-            lblInfo.TextAlign = ContentAlignment.MiddleLeft;
-            ApplyOutputHealthSnapshot(OutputHealthSnapshot.Normal);
-        }
-
-        private void OutputHealthLabel_Click(object sender, EventArgs e)
-        {
-            var label = sender as ToolStripStatusLabel;
-            string code = label?.Tag as string;
-            if (string.IsNullOrWhiteSpace(code)) return;
-
-            FlowTrace.Log($"ui:【產出狀態】確認 code={code}");
-            _outputHealthService?.AcknowledgeResolved(code);
-        }
-
-        private void ApplyOutputHealthSnapshot(OutputHealthSnapshot snapshot)
-        {
-            RefreshOutputHealthLabels();
-            RefreshCapacityInfoLabel();
-        }
-
-        private void RefreshOutputHealthLabels()
-        {
-            OutputHealthSnapshot[] incidents =
-                _outputHealthService?.Incidents ?? new OutputHealthSnapshot[0];
-            var currentCodes = new HashSet<string>(
-                incidents.Select(x => x.Code),
-                StringComparer.OrdinalIgnoreCase);
-
-            foreach (string obsoleteCode in _outputHealthLabels.Keys
-                .Where(code => !currentCodes.Contains(code))
-                .ToArray())
-            {
-                ToolStripStatusLabel obsolete = _outputHealthLabels[obsoleteCode];
-                statusBarMain.Items.Remove(obsolete);
-                obsolete.Dispose();
-                _outputHealthLabels.Remove(obsoleteCode);
-            }
-
-            foreach (ToolStripStatusLabel label in _outputHealthLabels.Values)
-                statusBarMain.Items.Remove(label);
-
-            int insertIndex = 0;
-            foreach (OutputHealthSnapshot incident in incidents)
-            {
-                ToolStripStatusLabel label;
-                if (!_outputHealthLabels.TryGetValue(incident.Code, out label))
-                {
-                    label = new ToolStripStatusLabel
-                    {
-                        AutoSize = true,
-                        Margin = new Padding(0, 0, 2, 0),
-                        Padding = new Padding(6, 0, 6, 0)
-                    };
-                    label.Click += OutputHealthLabel_Click;
-                    _outputHealthLabels.Add(incident.Code, label);
-                }
-
-                ApplyOutputHealthLabel(label, incident);
-                statusBarMain.Items.Insert(insertIndex++, label);
-            }
-        }
-
-        private static void ApplyOutputHealthLabel(
-            ToolStripStatusLabel label, OutputHealthSnapshot incident)
-        {
-            label.Tag = incident.Code;
-            label.Text = incident.Message +
-                (incident.IsActive ? string.Empty : "（已恢復，點擊關閉）");
-            label.ToolTipText = incident.IsActive
-                ? "問題尚未排除；恢復後可點擊關閉這一項"
-                : "點擊只關閉這一項已恢復的問題";
-
-            if (!incident.IsActive)
-            {
-                label.BackColor = IecYellow;
-                label.ForeColor = Color.Black;
-                return;
-            }
-
-            switch (incident.Severity)
-            {
-                case OutputHealthSeverity.Notice:
-                    label.BackColor = IecYellow;
-                    label.ForeColor = Color.Black;
-                    break;
-                case OutputHealthSeverity.OutputFault:
-                    label.BackColor = IecDeepOrange;
-                    label.ForeColor = Color.White;
-                    break;
-                case OutputHealthSeverity.Critical:
-                    label.BackColor = IecRed;
-                    label.ForeColor = Color.White;
-                    break;
-                default:
-                    label.BackColor = Color.Black;
-                    label.ForeColor = Color.White;
-                    break;
-            }
-        }
 
         private void RefreshOutputCapacityHealth()
         {

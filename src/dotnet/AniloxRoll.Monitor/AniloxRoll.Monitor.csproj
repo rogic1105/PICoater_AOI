@@ -198,8 +198,10 @@
     <Compile Include="UI\Coordinators\LatestCurveLoadCoordinator.cs" />
     <Compile Include="UI\Coordinators\ReviewImageLoadGate.cs" />
     <Compile Include="UI\Coordinators\ReviewPeriodLoadCoordinator.cs" />
+    <Compile Include="UI\Coordinators\DataRangePreviewCoordinator.cs" />
     <Compile Include="UI\Coordinators\ReviewFolderCoordinator.cs" />
     <Compile Include="UI\Coordinators\SettingImpactClassifier.cs" />
+    <Compile Include="UI\Coordinators\MainWorkspaceLayoutController.cs" />
     <Compile Include="UI\Services\ImageCacheService.cs" />
     <Compile Include="UI\Services\BitmapGrayConverter.cs" />
     <Compile Include="UI\Services\ReviewImageDataLoader.cs" />
@@ -218,12 +220,15 @@
     <Compile Include="UI\Managers\ReviewDisplayManager.cs" />
     <Compile Include="UI\Widgets\CurveMergeHelper.cs" />
     <Compile Include="UI\Widgets\GrabImageStitcher.cs" />
+    <Compile Include="UI\Widgets\CanvasParameterTextBuilder.cs" />
     <Compile Include="UI\Presenters\DataStatisticsPresenter.cs" />
     <Compile Include="UI\Presenters\MuraProfileChartPresenter.cs" />
     <Compile Include="UI\Presenters\ReviewChartPresenter.cs" />
     <Compile Include="UI\Presenters\YieldPeriodChartPresenter.cs" />
     <Compile Include="UI\Presenters\ReviewStitchCoordinator.cs" />
+    <Compile Include="UI\Presenters\ReviewPeriodImagePresenter.cs" />
     <Compile Include="UI\Presenters\InspectionStatsPresenter.cs" />
+    <Compile Include="UI\Presenters\OutputHealthPresenter.cs" />
     <Compile Include="UI\Navigators\DataDateGrabIdNavigator.cs" />
     <Compile Include="UI\Navigators\DateTimeNavigator.cs" />
     <Compile Include="UI\State\UserSessionState.cs" />

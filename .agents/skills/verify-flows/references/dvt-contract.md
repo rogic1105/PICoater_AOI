@@ -544,6 +544,46 @@ OnMouseMove@ImageCanvas.cs（拖曳中；UI 執行緒 T1）
 拖曳尾緣：OnMouseUp@ImageCanvas.cs → Invalidate＋TriggerStatusChange 補發＋FlowLog "viewEdges …" 一行
 ```
 
+### F6a 畫布資訊模式／主工作區全寬
+
+**log-flow**
+```
+T1: IC|WF|RV overlay mode=Coordinates|CoordinateFrames|CoordinateFramesParameters|Hidden
+T1: ui:IO state five-click rightPanel=hidden|visible
+T1: workspace restore rightPanel=hidden|visible
+```
+
+- 主畫面右鍵循環順序固定為：全空 → 座標數值 → 座標數值＋七台相機影像框線 →
+  座標數值＋七台相機影像框線＋參數表格 → 全空；後兩態為累加顯示。
+- 監控參數資訊讀目前 PropertyGrid；回顧／報表共用的回顧畫布讀該序號拍攝時 `#CFG`。
+  SDK 只負責畫字，不得引用 `InspectionSettings` 或其他 app policy。
+- 相機框線使用與合圖相同的 `MergeLayout` placements；每台畫實際影像區域，七台相鄰時必可見外框與六條分隔線，
+  不得以 control 外框冒充影像邊界。
+- `lblIoState` 連續左鍵五下只切換一次右側 `tabControlRight`；隱藏時 `tabMain` 使用原右側邊界，
+  還原時回到 Designer／ProportionalScaler 的正常佈局。狀態寫入 `Config/session-state.json`，下次啟動在
+  `PrewarmAllTabs` 後還原。這是 UI session 狀態，不屬於檢測設定或 CSV `#CFG`。
+
+**code-flow**
+```
+OnMouseDown@ImageCanvas.cs（右鍵）
+ → CanvasOverlayMode 累加四態
+   ├ Hidden：全空
+   ├ Coordinates：座標數值
+   ├ CoordinateFrames：座標數值＋CameraFrameRegionsProvider
+   │  └ ImageDisplayView|WaterfallView 以現行 MergeLayout placements 提供七台影像區域
+   └ CoordinateFramesParameters：座標數值＋框線＋InformationTextProvider
+      ├ Live：CanvasParameterTextBuilder.FromCurrentSettings
+      └ Review：CanvasParameterTextBuilder.FromCaptureConfig(CurrentGrabConfig)
+
+lblIoState.MouseDown
+ → MainWorkspaceLayoutController 連續按下計數（相鄰按下間隔 ≤1200ms）
+   └ 第五下 → MainWorkspaceLayoutController.ApplyLayout
+      ├ tabControlRight.Visible 切換＋tabMain 寬度重算＋ProportionalScaler.RescaleActiveTabs
+      └ UserSessionState.SaveMainWorkspaceFullWidth
+啟動 PrewarmAllTabs 完成
+ → MainWorkspaceLayoutController.ApplyPersistedLayout
+```
+
 ### F6b 滾輪縮放主畫面
 
 **log-flow（執行期腳印＝判準）**
@@ -948,14 +988,17 @@ StorageRetentionService.RunCleanup
    → `最近存檔 HH:mm:ss`／`最近遠傳 HH:mm:ss`
  → heartbeat/磁碟不可讀 → 對應電腦顯示`無法讀取`
 ```
-低磁碟整合測試使用隔離 volume/root，將門檻設為高於該測試磁碟目前可用空間、但低於磁碟總容量即可直接觸發，
-不必真的填滿磁碟；禁止對正式 Captures 執行。
+低磁碟整合測試原則上使用隔離 volume/root，將門檻設為高於該測試磁碟目前可用空間、但低於磁碟總容量即可直接觸發，
+不必真的填滿磁碟。只有使用者明確確認目前沒有正式資料時，才可直接使用實際 Captures；執行前仍須記錄來源、目的地與檔案量，
+複製只能合併、不得 `/MIR` 或預先刪除目的資料。
 
 ### C4 產出健康度與底部狀態列
 
 `OutputHealthService` 是產出健康度唯一狀態機；writer、remote-copy、retention、設定與背景流程只回報事件，
 不得各自在 UI 判斷顏色。`lblInfo` 使用 StatusStrip 預設背景，只顯示容量、待傳量與最近成功時間；每個未確認問題各自
 對應一個 `ToolStripStatusLabel`，顯示 service 的完整 incident 清單，禁止只顯示最高嚴重度而藏掉其他問題。
+`OutputHealthPresenter` 是唯一 UI owner：訂閱 service snapshot、建立／排序／移除獨立 label，並把使用者確認回送
+`AcknowledgeResolved(code)`；Form 不得另存 incident label 字典或自行套色。
 
 | Current state | Event | Next state | Action |
 |---|---|---|---|
@@ -1219,6 +1262,11 @@ PeriodSelectionChanged@DateTimeNavigator.cs
       └ LoadReviewPeriodRequestAsync@AniloxRollForm.Review.cs
          ├ RunWorkflowForPeriodAsync@AniloxRollPresenter.cs → GetImages(DateTime)@ImageRepository.cs
          ├ generation 失效 → stale-drop（不得 apply）
+         └ ApplyGlobalMergeForPeriod@ReviewStitchCoordinator.cs
+            → Apply@ReviewPeriodImagePresenter.cs
+              ├ GetImages(DateTime)@ImageRepository.cs
+              ├ LoadFrames@ReviewPeriodDataLoader.cs
+              └ StitchedImagesReady（ReviewStitchCoordinator 只轉發，不再自行找檔／解碼）
          └ ApplyPostLoadDisplay(period)
              ├ ApplyGlobalMergeForPeriod → LoadFrames@ReviewPeriodDataLoader.cs → PushFrames（圖片/LOD）
              ├ UpdateOverviewChartForPeriod → LoadColumnCurves@ReviewPeriodDataLoader.cs（欄 curve）
@@ -1451,12 +1499,14 @@ T1: DT stats index rows=N ms=N
      ← 門檻設定變更使 snapshot 簽章失效時，重建一次全序號 Pass/Fail 索引；
        初始讀取已由 D1 snapshot 建立，同資料夾＋同閾值後續不得重掃 CSV
 T1: ui:【序號範圍-起始|結束】變更       ← 手動拖範圍 → 期間高亮全滅（Custom）
-T1: DT range policy listMs=33 curveMs=80 settleMs=150 curveMode=monotonic
-     ← Presenter 初始化一次；目前上機驗綠的排程基準，改值必須同步本契約＋checker 並重驗
+T1: DT range policy listMs=33 curveMs=80 settleMs=150 curveMode=latest-only curveCacheEntries=2048 curveCacheMB=256
+     ← DataRangePreviewCoordinator 初始化一次；目前上機驗綠的排程基準，改值必須同步本契約＋checker並重驗
 T1: DT range list preview gen=G range={start}~{end} rows=N ms=N source=index
      ← 滾動期間 List＋7 台色卡預覽；獨立 33ms 節拍，只切記憶體完整索引，不讀磁碟
-T1: DT range preview apply gen=G range={start}~{end} loadMs=N drawMs=N meanRows=N maxRows=M method=top-maxcmean|mixed|even coverage=S/R rankedCams=C/T index=H/B
-     ← 滾動期間 Curve 背景取樣；與 List 共用 generation，已開始的樣本允許完成，但上畫 generation 只能向前
+T1: DT range preview apply gen=G range={start}~{end} loadMs=N drawMs=N meanRows=N maxRows=M method=top-maxcmean|mixed|even coverage=S/R rankedCams=C/T index=H/B cache=H/M
+     ← 滾動期間 Curve 背景取樣；與 List 共用 generation，只有完成時仍為當代的結果可以上畫
+（舊代完成）DT range preview stale-drop gen=G range={start}~{end} loadMs=N cache=H/M
+     ← 已開始的磁碟／計算工作允許完成以暖索引，但不得讓舊 Curve 蓋過目前 List；下一輪直接取最新 generation
 T1: DT range settle → refresh             ← 最後一次變更後 150ms；一串連續滾動只准一行
 T1: DT list reload range={start}~{end} rows=N ms=N source=index
 ```
@@ -1467,6 +1517,7 @@ T1: DT list reload range={start}~{end} rows=N ms=N source=index
   對當前列門檻。舊 CSV 沒列峰值只能顯示 `—`，不得當 Pass。篩選異常也必納入列 Fail。
 - **List 捲動顯示**：資料已全在 `GrabDetailListBinder._visibleDetails`，VirtualMode 不需資料預載；ListView 啟用雙緩衝，選中列只在接近
   可視區上下邊界時以 margin 捲動，反白變更只重畫舊／新兩列，不得每格整窗 `Invalidate()`（跨視窗白閃的根因）。
+  欄寬先依內容 fit；工作區縮放後若總欄寬小於可視寬度，剩餘寬度全補到序號欄，避免全寬模式留下白色空欄。
 - **跨 tab lazy**：報表序號只覆寫 pending selection 並標 `_reviewDirty`，不得逐格操作隱藏的 Review combo/date、
   `NavigateTo` 寫 session／重建日期清單，也不得當下載 Review 圖片；切到 Review tab 才一次套控制項並接 R2 完整載入。
 - **跨 tab 曲線重用**：報表欄／列曲線完成後記 `DT curve share {grabId} target=Review`，保存同 root、同 grabId
@@ -1500,20 +1551,24 @@ T1: DT list reload range={start}~{end} rows=N ms=N source=index
   72 MB 起由單一 writer pressure drain；writer 仍追不上時可 evict/drop，不可無界吃記憶體。列匯總是多幀串接，
   合法長度可超過單一 bin 的 200,000 點；匯總以 2,000,000 點／曲線及 96 MB／檔雙重守門。
   `merged != captures` 時只能回傳當下可讀結果並記 `write=skip-incomplete`，不得產生匯總；下次選取必重新嘗試原始 bins。
-- **範圍雙速 monotonic throttle**：起始／結束 combo 連續滾動時，33ms List timer 從完整明細索引切出當代範圍並更新
+- **範圍雙速 latest-only throttle**：起始／結束 combo 連續滾動時，33ms List timer 從完整明細索引切出當代範圍並更新
   List＋7 台色卡；獨立 80ms Curve timer 最多啟動一個背景預覽。兩者共用 generation；新 intent 不取消已經開始的
-  Curve 樣本，避免輸入間隔短於 12~21ms 計算時間時 Curve 永遠無法完成。樣本可落後當前選擇，但只能按 generation
-  單調向前上畫；完成後下一輪取最新範圍，停止後最終 Curve generation 必須追上 List。150ms timer 只跑一次最終對帳。
-  `DT range settle` 前允許 `DT range list preview`／`DT range preview apply`，但出現 `DT list reload` 或同步
+  Curve 樣本，避免輸入間隔短於計算時間時 Curve 永遠無法完成；舊樣本完成後記 `stale-drop` 且不上畫，下一輪取最新範圍，
+  停止後最終 Curve generation 必須追上 List。150ms timer 只跑一次最終對帳。
+  `DT range settle` 前允許 `DT range list preview`／`DT range preview apply|stale-drop`，但出現 `DT list reload` 或同步
   `DT curve candidates`＝逐格完整重算回歸。List 預覽只能使用已就緒且資料夾／閾值簽章相同的記憶體索引；
   索引未就緒時略過預覽，交由 settle 建立，禁止在 80ms 路徑掃 CSV。
 - **節拍參數的效力**：`33/80/150ms` 是目前驗綠基準，不是不可修改的使用者鐵則。它們必須集中在
-  `DataStatisticsPresenter` 的具名常數並由 `DT range policy` 量出實際執行值；任何調整都視為排程行為變更，
+  `DataRangePreviewCoordinator` 的具名常數並由 `DT range policy` 量出實際執行值；任何調整都視為排程行為變更，
   同一批修改 DVT 與 checker 後重跑上機測試。不可散落 magic number，也不可只改文件或只改 code。
 - **範圍曲線只有兩條**：每台相機各自選候選再合成全寬；`CurveMean`＝範圍 CSV 資料列均勻取樣最多 50 筆後
   對對應 `MeanC` bin 逐點平均；`CurveMax`＝依 `MaxCMean` 排序取前 50 筆，再對其 `MaxC` bin 做逐點最大值。
   候選必須保留 CSV `FileName` 並載入同一筆 bin，不得只選序號後誤讀該序號第一張。這個設計保留平坦趨勢，也不讓
   1/1000~1/10000 的凸波因均勻抽樣直接消失；畫面不得再增加操作員難以判讀的第三條曲線。
+- **範圍 Curve bin 快取**：候選與統計規則完全不變；不同相機最多四路平行載入，已讀取的 immutable capture bin
+  以完整路徑放入 LRU，固定上限 `2048 筆／256 MB`。`cache=H/M`＝本次命中／冷讀檔數；相同範圍或重疊範圍
+  再次計算應逐步轉成 `H>0`。快取只保存原始 float 陣列並視為唯讀，原始 bin 仍是 SSoT，可隨時淘汰重建。
+  這兩個容量值和四路平行度是可重驗的效能參數，不得用快取改變 50/50 候選集合或 Max 排名。
 - `coverage=S/R` 是有 `MaxCMean` 的 CSV 資料列數／範圍資料列數；任一相機候選資料不完整時，該相機
   `CurveMax` 回退均勻取樣，避免拿新舊混合資料宣稱精確排名。
 - **候選索引是衍生快取，不是資料真相**：`LoadRange` 以每日 CSV 完整路徑＋檔案長度＋最後修改時間驗證
@@ -1567,20 +1622,21 @@ tabMain.SelectedIndexChanged（進 Review 且有 pending）
 
 cbDataIdStart|End 手動變更
  → ScheduleRangeRefresh@DataStatisticsPresenter.cs
-   ├ MuraProfileChartPresenter.ClearRow（列圖只屬單序號；範圍 mode 清空）
-   │  └ LatestCurveLoadCoordinator.Invalidate（單片 running result 不得晚到覆蓋範圍 Curve）
-   ├ generation++（不取消已開始的 Curve 樣本；資料夾／模式 teardown 才取消 token）
-   ├ 33ms repeating throttle → RangeListPreviewTimer_Tick
-   │  └ ApplyRangeListPreview（只在完整 detail index 簽章有效時）
-   │     └ 依 navigator 的範圍序號 SSoT 切片 → ApplyFailFilter／GrabDetailListBinder.SetItems
-   │        ＋ ComputeStatsFromDetails／InspectionStatsPresenter.Update → DT range list preview
-   ├ 80ms repeating throttle → RangePreviewTimer_Tick（同時最多一個 Curve 工作）
-   │  └ UpdateRangePreviewAsync@MuraProfileChartPresenter.cs
-   │    → Task.Run → LoadRange@InspectionMuraProfileRepository.cs（可取消）
-   │       ├ 每日 CSV 簽章相同 → DailyIndex 依 grabId 取候選資料（不重掃 CSV）
-   │       └ 簽章改變／首次使用 → 重建該日索引（LRU bounded 25 萬筆／1024 日）
-   │    → 回 UI 執行緒；token 有效且 generation 大於前次上畫才 UpdateOverviewChart → DT range preview apply
-   └ 重壓 150ms settle timer → DT range settle → RefreshStats(updateRangeCurve:false)（最終對帳）
+   → Start@DataRangePreviewCoordinator.cs（Timer／generation／cancellation 唯一 owner）
+     ├ MuraProfileChartPresenter.ClearRow（列圖只屬單序號；範圍 mode 清空）
+     │  └ LatestCurveLoadCoordinator.Invalidate（單片 running result 不得晚到覆蓋範圍 Curve）
+     ├ generation++（不取消已開始的 Curve 樣本；資料夾／模式 teardown 才取消 token）
+     ├ 33ms repeating throttle → ListTimer_Tick@DataRangePreviewCoordinator.cs
+     │  └ ApplyRangeListPreview（只在完整 detail index 簽章有效時）
+     │     └ 依 navigator 的範圍序號 SSoT 切片 → ApplyFailFilter／GrabDetailListBinder.SetItems
+     │        ＋ ComputeStatsFromDetails／InspectionStatsPresenter.Update → DT range list preview
+     ├ 80ms repeating throttle → CurveTimer_Tick@DataRangePreviewCoordinator.cs（同時最多一個 Curve 工作）
+     │  └ UpdateRangePreviewAsync@MuraProfileChartPresenter.cs
+     │    → Task.Run → LoadRange@InspectionMuraProfileRepository.cs（可取消）
+     │       ├ 每日 CSV 簽章相同 → DailyIndex 依 grabId 取候選資料（不重掃 CSV）
+     │       └ 簽章改變／首次使用 → 重建該日索引（LRU bounded 25 萬筆／1024 日）
+     │    → 回 UI 執行緒；token 有效且 generation 大於前次上畫才 UpdateOverviewChart → DT range preview apply
+     └ 重壓 150ms settle timer → DT range settle → RefreshStats(updateRangeCurve:false)（最終對帳）
     ├ EnsureSingleGrabDetailIndex（資料夾／閾值未變時沿用完整 GrabDetail 衍生索引）
     ├ 依 navigator 的範圍序號 SSoT 切出 detail 子集 → ApplyFailFilter → GrabDetailListBinder.SetItems
     ├ ComputeStatsFromDetails（同一 detail 子集彙總 7 台色卡；不得再掃第二次 CSV）

@@ -216,6 +216,26 @@ class ReviewFlowValidatorTests(unittest.TestCase):
 
 
 class DataFlowValidatorTests(unittest.TestCase):
+    def test_range_preview_drops_stale_generation_and_applies_latest(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT range policy listMs=33 curveMs=80 settleMs=150 curveMode=latest-only "
+                "curveCacheEntries=2048 curveCacheMB=256",
+                "ui:【序號範圍-起始】變更",
+                "DT range list preview gen=1 range=260721-080000~260721-080010 rows=11 ms=1 source=index",
+                "ui:【序號範圍-結束】變更",
+                "DT range list preview gen=2 range=260721-080000~260721-080020 rows=21 ms=1 source=index",
+                "DT range preview stale-drop gen=1 range=260721-080000~260721-080010 "
+                "loadMs=120 cache=0/100",
+                "DT range preview apply gen=2 range=260721-080000~260721-080020 loadMs=10 drawMs=2 "
+                "meanRows=21 maxRows=21 method=top-maxcmean coverage=21/21 rankedCams=7/7 "
+                "index=1/0 cache=100/0",
+                "DT range settle → refresh",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "D3.range-policy").status)
+        self.assertEqual(CheckStatus.PASS, result(report, "D3.range-preview").status)
+
     def test_fail_filter_requires_range_option_evidence(self):
         report = DataFlowValidator().validate(
             session(

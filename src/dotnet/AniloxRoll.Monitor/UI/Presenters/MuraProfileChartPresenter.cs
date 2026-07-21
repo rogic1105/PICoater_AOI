@@ -156,7 +156,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 FlowTrace.Log($"DT curve candidates meanRows={profiles.MeanRows} maxRows={profiles.MaxRows} " +
                     $"method={method} coverage={profiles.ScoredRows}/{profiles.TotalRows} " +
                     $"rankedCams={profiles.RankedCams}/{profiles.TotalCams} " +
-                    $"index={profiles.IndexHits}/{profiles.IndexBuilds}");
+                    $"index={profiles.IndexHits}/{profiles.IndexBuilds} " +
+                    $"cache={profiles.CurveCacheHits}/{profiles.CurveCacheMisses}");
             }
             else
             {
@@ -173,12 +174,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV);
         }
 
-        public async Task UpdateRangePreviewAsync(
-            IList<GrabIdInfo> candidateRange, int generation, CancellationToken cancellationToken)
+        public async Task<bool> UpdateRangePreviewAsync(
+            IList<GrabIdInfo> candidateRange, int generation,
+            Func<bool> isCurrent, CancellationToken cancellationToken)
         {
             if (_muraProfileHelper == null || _ctx.Settings == null ||
                 candidateRange == null || candidateRange.Count == 0)
-                return;
+                return false;
 
             string statsRoot = _getStatsRoot();
             var rangeSnapshot = new List<GrabIdInfo>(candidateRange);
@@ -196,6 +198,12 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     statsRoot, rangeSnapshot, 50, cancellationToken), cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             long loadMs = sw.ElapsedMilliseconds;
+            if (isCurrent == null || !isCurrent())
+            {
+                FlowTrace.Log($"DT range preview stale-drop gen={generation} range={range} " +
+                    $"loadMs={loadMs} cache={profiles.CurveCacheHits}/{profiles.CurveCacheMisses}");
+                return false;
+            }
 
             ApplyAggregateProfiles(
                 profiles.Mean, profiles.Max, camCount, ops, positions, errorMean, errorMax);
@@ -206,7 +214,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 $"meanRows={profiles.MeanRows} maxRows={profiles.MaxRows} method={method} " +
                 $"coverage={profiles.ScoredRows}/{profiles.TotalRows} " +
                 $"rankedCams={profiles.RankedCams}/{profiles.TotalCams} " +
-                $"index={profiles.IndexHits}/{profiles.IndexBuilds}");
+                $"index={profiles.IndexHits}/{profiles.IndexBuilds} " +
+                $"cache={profiles.CurveCacheHits}/{profiles.CurveCacheMisses}");
+            return true;
         }
 
         private void ApplyAggregateProfiles(

@@ -70,6 +70,7 @@ namespace AniloxRoll.Monitor.UI.Binders
             _listView.DrawSubItem += OnDrawSubItem;
             _listView.RetrieveVirtualItem += OnRetrieveVirtualItem;
             _listView.MouseUp += OnMouseUp;
+            _listView.Resize += OnResize;
         }
 
         public void SetItems(List<GrabDetail> details)
@@ -127,7 +128,13 @@ namespace AniloxRoll.Monitor.UI.Binders
             _listView.DrawSubItem -= OnDrawSubItem;
             _listView.RetrieveVirtualItem -= OnRetrieveVirtualItem;
             _listView.MouseUp -= OnMouseUp;
+            _listView.Resize -= OnResize;
             _initialized = false;
+        }
+
+        private void OnResize(object sender, EventArgs e)
+        {
+            FitColumnsToContent();
         }
 
         private void OnMouseUp(object sender, MouseEventArgs e)
@@ -239,6 +246,15 @@ namespace AniloxRoll.Monitor.UI.Binders
                         graphics.MeasureString(_listView.Columns[i].Text, _listView.Font).Width,
                         glyphWidth)) + padding;
             }
+            int itemHeight = Math.Max(18, _listView.Font.Height + 6);
+            int visibleRows = Math.Max(1, (_listView.ClientSize.Height - 24) / itemHeight);
+            int scrollbarWidth = _visibleDetails.Count > visibleRows
+                ? SystemInformation.VerticalScrollBarWidth
+                : 0;
+            int available = Math.Max(0, _listView.ClientSize.Width - scrollbarWidth - 2);
+            int used = _listView.Columns.Cast<ColumnHeader>().Sum(column => column.Width);
+            if (available > used)
+                _listView.Columns[0].Width += available - used;
         }
 
         private void EnsureRowInBufferedViewport(int row)

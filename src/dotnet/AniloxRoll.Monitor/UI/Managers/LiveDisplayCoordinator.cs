@@ -6,6 +6,7 @@ using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Interop;
 using AniloxRoll.Monitor.Core.Services;
+using AniloxRoll.Monitor.UI.Widgets;
 using TanukiCv.Core;
 using TanukiCv.Controls;
 
@@ -280,6 +281,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             var wfMode = settings?.ImageView?.WaterfallFullMode ?? WaterfallFullMode.Restart;
             int slotCount = settings?.GetCameraStartPositionMmArray()?.Length ?? Cameras.Count;
             _waterfallView = new WaterfallView(_mainDisplayPanel, slotCount, wfH, wfMode, _screenMmPerPx);
+            _waterfallView.InformationTextProvider = () =>
+                CanvasParameterTextBuilder.FromCurrentSettings(_getSettings());
             _waterfallView.SetDisplayLayer(_waterfallDisplayLayer);
             _waterfallView.ColorMap = ResolveWaterfallColorMap();
             _waterfallView.FlipVertical = ShouldFlipVertical;
@@ -383,6 +386,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (_mainDisplayPanel == null || _mainDisplayPanel.IsDisposed) return;
 
             _imageDisplay = new ImageDisplayView(_mainDisplayPanel, _cameraPanels, _screenMmPerPx);
+            _imageDisplay.Canvas.InformationTextProvider = () =>
+                CanvasParameterTextBuilder.FromCurrentSettings(_getSettings());
             ApplyImageDisplayOptions(_globalMerge.IsActive);
             _imageDisplay.SelectRequested += ImageSelectCamera;
             _imageDisplay.SelectedCamChanged += camId =>

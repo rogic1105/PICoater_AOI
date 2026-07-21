@@ -79,6 +79,7 @@ namespace AniloxRoll.Monitor.Forms
         private float[] _waterfallRowMax;
         private int _waterfallRowWrite;
         private ProportionalScaler _scaler;
+        private MainWorkspaceLayoutController _workspaceLayout;
 
         // --- 相機參數控制項陣列（供 SyncFromCamera 存取）---
         private TrackBar[]      _expBars;
@@ -128,8 +129,7 @@ namespace AniloxRoll.Monitor.Forms
         private StorageAppHeartbeatService _storageHeartbeatService;
         private LogRetentionService _logRetentionService;
         private OutputHealthService _outputHealthService;
-        private readonly Dictionary<string, ToolStripStatusLabel> _outputHealthLabels =
-            new Dictionary<string, ToolStripStatusLabel>(StringComparer.OrdinalIgnoreCase);
+        private OutputHealthPresenter _outputHealthPresenter;
         private long _lastLocalSaveUtcTicks;
         private int _completedGrabCount;
         private DateTime _lastGrabEventTime;
@@ -212,6 +212,8 @@ namespace AniloxRoll.Monitor.Forms
             try { _reviewLoadDebounce?.Stop(); _reviewLoadDebounce?.Dispose(); _reviewLoadDebounce = null; } catch { }  // 回顧序號載入 debounce
             try { _dataStatsPresenter?.Dispose(); } catch { }  // 報表範圍選擇 debounce
             try { _stitchCoordinator?.Dispose(); } catch { }
+            try { _outputHealthPresenter?.Dispose(); _outputHealthPresenter = null; } catch { }
+            try { _workspaceLayout?.Dispose(); _workspaceLayout = null; } catch { }
             try { _uiStallDetector?.Dispose(); _uiStallDetector = null; } catch { }  // UI 卡頓儀器
             try { _cleanupFlagWatcher?.Dispose(); _cleanupFlagWatcher = null; } catch { }  // M3: 10 秒輪詢提前停
             try { _storageHeartbeatService?.Dispose(); _storageHeartbeatService = null; } catch { }
@@ -310,6 +312,15 @@ namespace AniloxRoll.Monitor.Forms
             InitializeSystem();
             _scaler = new ProportionalScaler(this);
             _scaler.Initialize();
+            _workspaceLayout = new MainWorkspaceLayoutController(
+                this,
+                lblIoState,
+                tabMain,
+                tabControlRight,
+                UserSessionState.MainWorkspaceFullWidth,
+                () => _scaler?.RescaleActiveTabs(),
+                UserSessionState.SaveMainWorkspaceFullWidth,
+                FlowTrace.Log);
             Shown += (s, e) =>
             {
                 // 開窗即最大化後，補縮一次「作用中 tab」（tabPageLiveView 等）的內容：
@@ -329,6 +340,7 @@ namespace AniloxRoll.Monitor.Forms
                     finally { _reviewDirty = savedReviewDirty; }
                 }
                 _suppressTabIntent = false;   // 預熱完成 → 之後的 tab 切換才是使用者動作
+                _workspaceLayout?.ApplyPersistedLayout();
 
                 // PropertyGrid 字體維持 DPI 原生大小（使用者要求 1.0，不另外收小）
                 AutoFitPropertyGridLabelColumn(propertyGridSettings);
@@ -402,9 +414,16 @@ namespace AniloxRoll.Monitor.Forms
             _settingsHub = new AniloxRoll.Monitor.Settings.Services.SettingsHub(_settings);
             _settingsHub.Changed += OnSettingChanged;
             _outputHealthService = new OutputHealthService();
-            _outputHealthService.Changed += snapshot =>
-                SafeBeginInvoke(() => ApplyOutputHealthSnapshot(snapshot));
-            InitializeOutputHealthUi();
+            _outputHealthPresenter = new OutputHealthPresenter(
+                _outputHealthService,
+                statusBarMain,
+                lblInfo,
+                SafeBeginInvoke,
+                RefreshCapacityInfoLabel,
+                FlowTrace.Log,
+                IecYellow,
+                IecDeepOrange,
+                IecRed);
             foreach (SettingsStoreIssue issue in SettingsStoreHelper.DrainIssues())
                 HandleSettingsStoreIssue(issue);
             SettingsStoreHelper.IssueRaised += HandleSettingsStoreIssue;
@@ -784,6 +803,8 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _reviewDisplayManager = new ReviewDisplayManager(camReviewMain,
                     new System.Windows.Forms.Panel[] { camReview1, camReview2, camReview3, camReview4, camReview5, camReview6, camReview7 });
+                _reviewDisplayManager.SetInformationTextProvider(() =>
+                    CanvasParameterTextBuilder.FromCaptureConfig(_stitchCoordinator?.CurrentGrabConfig));
                 _stitchCoordinator.StitchedLayoutReady += (grabId, ws, hs, ops, pos, isGlobal) =>
                 {
                     ImageViewRange? computed = ComputeReviewFitViewRange(

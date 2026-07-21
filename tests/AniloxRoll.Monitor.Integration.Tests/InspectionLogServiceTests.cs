@@ -306,10 +306,14 @@ namespace AniloxRoll.Monitor.Tests
             Assert.That(profiles.Max[1][0], Is.EqualTo(90f).Within(0.001f));
             Assert.That(profiles.IndexBuilds, Is.EqualTo(1));
             Assert.That(profiles.IndexHits, Is.EqualTo(0));
+            Assert.That(profiles.CurveCacheHits, Is.EqualTo(0));
+            Assert.That(profiles.CurveCacheMisses, Is.EqualTo(4));
 
             var cached = InspectionMuraProfileRepository.LoadRange(_tempRoot, range, 2);
             Assert.That(cached.IndexHits, Is.EqualTo(1));
             Assert.That(cached.IndexBuilds, Is.EqualTo(0));
+            Assert.That(cached.CurveCacheHits, Is.EqualTo(4));
+            Assert.That(cached.CurveCacheMisses, Is.EqualTo(0));
 
             const string appendedFile = "20260330_120000.300-1";
             svc.AppendRecord("260330-120000", appendedFile,

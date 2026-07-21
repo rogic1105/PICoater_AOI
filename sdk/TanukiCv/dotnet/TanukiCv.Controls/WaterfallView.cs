@@ -130,6 +130,12 @@ namespace TanukiCv.Controls
         public event Action<ImageDisplayView.CursorStatus> CursorStatusChanged;
         public event Action ContentPresented;
 
+        public Func<string> InformationTextProvider
+        {
+            get => _canvas.InformationTextProvider;
+            set => _canvas.InformationTextProvider = value;
+        }
+
         public bool FlipVertical
         {
             get => _flipVertical;
@@ -156,6 +162,7 @@ namespace TanukiCv.Controls
             for (int i = 0; i < _camCount; i++) _perCamSeq[i] = -1;
 
             _canvas = new ImageCanvas { Dock = DockStyle.Fill, BackColor = Color.Black };
+            _canvas.CameraFrameRegionsProvider = GetCameraFrameRegions;
             _canvas.ShowOverlay = true;               // 游標座標 + 亮度
             _canvas.FitRelativeZoom = true;           // 滾輪相對 fit 縮放（fit=1×，與 live/review 一致）
             _canvas.DoubleClickFitToScreen = true;    // 點兩下 fit 整張
@@ -217,6 +224,23 @@ namespace TanukiCv.Controls
             {
                 // START/OPS may change without changing the pixel width; republish the same view with new physical coordinates.
                 _canvas.SetView(_canvas.Zoom, _canvas.PanOffset);
+            }
+        }
+
+        private IReadOnlyList<RectangleF> GetCameraFrameRegions()
+        {
+            lock (_lock)
+            {
+                var regions = new List<RectangleF>(_cameraPlacements.Count);
+                foreach (CameraPlacement placement in _cameraPlacements)
+                {
+                    regions.Add(new RectangleF(
+                        placement.DestX,
+                        0,
+                        Math.Max(1, placement.SrcWidth),
+                        _totalHeight));
+                }
+                return regions;
             }
         }
 

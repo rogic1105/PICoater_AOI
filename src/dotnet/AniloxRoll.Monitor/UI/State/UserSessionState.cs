@@ -104,8 +104,22 @@ namespace AniloxRoll.Monitor.UI.State
         public static string LastHour                  => Get("LastHour");
         public static string LastMin                   => Get("LastMin");
         public static string LastSec                   => Get("LastSec");
+        public static bool MainWorkspaceFullWidth
+        {
+            get
+            {
+                return bool.TryParse(Get("MainWorkspaceFullWidth"), out bool value) && value;
+            }
+        }
+
         public static void SetLastDataPath(string path)
             => _data["LastDataPath"] = path ?? string.Empty;
+
+        public static void SaveMainWorkspaceFullWidth(bool fullWidth)
+        {
+            _data["MainWorkspaceFullWidth"] = fullWidth ? "true" : "false";
+            Save();
+        }
 
         public static void SaveDateTimeSelection(string year, string month, string day,
                                                   string hour, string min, string sec)

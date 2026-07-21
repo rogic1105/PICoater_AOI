@@ -811,7 +811,10 @@ class DataFlowValidator:
             )
             return
 
-        expected = "DT range policy listMs=33 curveMs=80 settleMs=150 curveMode=monotonic"
+        expected = (
+            "DT range policy listMs=33 curveMs=80 settleMs=150 curveMode=latest-only "
+            "curveCacheEntries=2048 curveCacheMB=256"
+        )
         unique = sorted(set(lines))
         ok = len(lines) == 1 and unique == [expected]
         report.add(
@@ -830,18 +833,28 @@ class DataFlowValidator:
             r"^DT range preview apply gen=(\d+) range=(\d{6}-\d{6})~(\d{6}-\d{6}) "
             r"loadMs=(\d+) drawMs=(\d+) meanRows=(\d+) maxRows=(\d+) "
             r"method=(top-maxcmean|mixed|even) coverage=(\d+)/(\d+) rankedCams=(\d+)/(\d+)"
-            r" index=(\d+)/(\d+)$"
+            r" index=(\d+)/(\d+) cache=(\d+)/(\d+)$"
+        )
+        stale_pattern = re.compile(
+            r"^DT range preview stale-drop gen=(\d+) "
+            r"range=(\d{6}-\d{6})~(\d{6}-\d{6}) loadMs=(\d+) cache=(\d+)/(\d+)$"
         )
         generations = []
+        stale_generations = []
         invalid = []
         for line in session.lines:
-            if not line.message.startswith("DT range preview apply"):
-                continue
-            match = pattern.match(line.message)
-            if not match:
-                invalid.append(f"{line.timestamp} 格式錯誤")
-                continue
-            generations.append(int(match.group(1)))
+            if line.message.startswith("DT range preview apply"):
+                match = pattern.match(line.message)
+                if not match:
+                    invalid.append(f"{line.timestamp} apply 格式錯誤")
+                    continue
+                generations.append(int(match.group(1)))
+            elif line.message.startswith("DT range preview stale-drop"):
+                match = stale_pattern.match(line.message)
+                if not match:
+                    invalid.append(f"{line.timestamp} stale-drop 格式錯誤")
+                    continue
+                stale_generations.append(int(match.group(1)))
 
         if intents == 0:
             report.add(self.domain, "D3.range-preview", CheckStatus.NOT_COVERED, "無序號範圍滾動")
@@ -870,7 +883,8 @@ class DataFlowValidator:
             self.domain,
             "D3.range-preview",
             CheckStatus.PASS if ok else CheckStatus.FAIL,
-            f"intent={intents} apply={len(generations)} generation={generations[0]}~{generations[-1]} "
+            f"intent={intents} apply={len(generations)} stale={len(stale_generations)} "
+            f"generation={generations[0]}~{generations[-1]} "
             f"倒退上畫={0 if monotonic else 1} 最終追上={1 if final_caught_up else 0} "
             f"格式錯誤={len(invalid)}",
         )
