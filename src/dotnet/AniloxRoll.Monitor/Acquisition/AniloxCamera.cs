@@ -91,7 +91,8 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         // ==================== 檢測記憶體（非 MIL） ====================
         private byte[] _hostInputBuffer = null;
-        private byte[] _hostOutputBuffer = null;
+        private byte[] _hostColumnOutputBuffer = null;
+        private byte[] _hostRowOutputBuffer = null;
 
         private readonly object _picoaterLock = new object();
         private readonly AoiService _aoiService = new AoiService();
@@ -168,6 +169,12 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// tick＝跨相機幀對齊的硬體鑰匙（同 Review 的 FrameTickIndex；瀑布即時用它聚類時間槽）。</summary>
         public event Action<int, byte[], int, int, long> OnDisplayFrame;
 
+        /// <summary>
+        /// 瀑布歷史用：同一物理幀一次提供原圖、欄強化與列強化。
+        /// 三個陣列皆為重用緩衝，訂閱者必須在回呼內同步複製。
+        /// </summary>
+        public event Action<int, byte[], byte[], byte[], int, int, long> OnWaterfallFrame;
+
         /// <summary>每幀 GPU pipeline 完成後觸發（MIL 回呼執行緒）。
         /// 參數：(cameraId, curveMean_raw255, curveMax_raw255)</summary>
         public event Action<int, float[], float[]> OnLiveCurveData;
@@ -223,8 +230,9 @@ namespace AniloxRoll.Monitor.Core.Camera
             var sw = Stopwatch.StartNew();
 
             // 檢測記憶體（非 MIL）
-            _hostInputBuffer  = new byte[w * h];
-            _hostOutputBuffer = new byte[w * h];
+            _hostInputBuffer        = new byte[w * h];
+            _hostColumnOutputBuffer = new byte[w * h];
+            _hostRowOutputBuffer    = new byte[w * h];
 
             _aoiService.Initialize();
             _nativeBufferPool = new NativeBufferPool(w, h, 1);
@@ -301,7 +309,8 @@ namespace AniloxRoll.Monitor.Core.Camera
                 _nativeBufferPool = null;
             }
             _hostInputBuffer  = null;
-            _hostOutputBuffer = null;
+            _hostColumnOutputBuffer = null;
+            _hostRowOutputBuffer = null;
         }
 
         // ==================== Telemetry（委派 MIL） ====================
@@ -400,8 +409,11 @@ namespace AniloxRoll.Monitor.Core.Camera
 
             // EnableImageProcessing 控制「顯示」：勾選且處理成功才顯示處理結果，否則顯示原圖
             bool showProcessed = EnableImageProcessing && processedByPicoater;
+            byte[] processedDisplay = LiveDisplayDirection == "h"
+                ? _hostRowOutputBuffer
+                : _hostColumnOutputBuffer;
             if (showProcessed)
-                _mil.PutDisplayBytes(_hostOutputBuffer); // 已填好的處理結果寫入顯示 buffer
+                _mil.PutDisplayBytes(processedDisplay); // 已填好的處理結果寫入顯示 buffer
             else
                 _mil.CopyToDisplay(modifiedBuffer);       // 顯示原圖
 
@@ -409,8 +421,18 @@ namespace AniloxRoll.Monitor.Core.Camera
             var onDisp = OnDisplayFrame;
             if (onDisp != null)
             {
-                byte[] disp = showProcessed ? _hostOutputBuffer : _hostInputBuffer;
+                byte[] disp = showProcessed ? processedDisplay : _hostInputBuffer;
                 if (disp != null) onDisp(CameraId, disp, FrameWidth, FrameHeight, _mil.LastFrameStartTicks);
+            }
+
+            var onWaterfall = OnWaterfallFrame;
+            if (onWaterfall != null && _hostInputBuffer != null)
+            {
+                byte[] column = processedByPicoater ? _hostColumnOutputBuffer : _hostInputBuffer;
+                byte[] row = processedByPicoater ? _hostRowOutputBuffer : _hostInputBuffer;
+                onWaterfall(
+                    CameraId, _hostInputBuffer, column, row,
+                    FrameWidth, FrameHeight, _mil.LastFrameStartTicks);
             }
 
             // Global merge 複製（display buffer → 合併 buffer 裁切位置）已移至 MilCamera grab hook，
@@ -422,8 +444,8 @@ namespace AniloxRoll.Monitor.Core.Camera
         // ==================== Picoater Ridge Processing ====================
 
         /// <summary>
-        /// 跑 GPU pipeline：MIL buffer → host → picoater → 填 _hostOutputBuffer + 觸發曲線事件。
-        /// 顯示交由 OnMilFrameReady 用 _mil.PutDisplayBytes(_hostOutputBuffer) 處理（不在此寫 MIL buffer）。
+        /// 跑 GPU pipeline：MIL buffer → host → picoater → 填欄／列輸出緩衝 + 觸發曲線事件。
+        /// 顯示交由 OnMilFrameReady 選取輸出後處理（不在此寫 MIL buffer）。
         /// </summary>
         private bool TryApplyPicoaterRidge(MIL_ID srcBuffer)
         {
@@ -432,7 +454,7 @@ namespace AniloxRoll.Monitor.Core.Camera
             int fw = _mil.FrameWidth;
             int fh = _mil.FrameHeight;
             if (fw <= 0 || fh <= 0) return false;
-            if (_hostInputBuffer == null || _hostOutputBuffer == null) return false;
+            if (_hostInputBuffer == null || _hostColumnOutputBuffer == null || _hostRowOutputBuffer == null) return false;
 
             lock (_picoaterLock)
             {
@@ -441,7 +463,8 @@ namespace AniloxRoll.Monitor.Core.Camera
                 // GPU/Marshal 越界 → AccessViolation。守門：尺寸超過任一 buffer 容量就跳過這幀（transient，不崩）。
                 if ((ulong)fw * (ulong)fh > _nativeBufferPool.ImageBufferSize) return false;
                 if (_hostInputBuffer == null || _hostInputBuffer.Length < fw * fh ||
-                    _hostOutputBuffer == null || _hostOutputBuffer.Length < fw * fh) return false;
+                    _hostColumnOutputBuffer == null || _hostColumnOutputBuffer.Length < fw * fh ||
+                    _hostRowOutputBuffer == null || _hostRowOutputBuffer.Length < fw * fh) return false;
 
                 IntPtr picoaterInputBuffer = _nativeBufferPool.InputBuffer;
                 IntPtr picoaterRidgeBuffer = _nativeBufferPool.RidgeBuffer;
@@ -543,11 +566,17 @@ namespace AniloxRoll.Monitor.Core.Camera
                         }
                     }
 
-                    // LiveDisplayDirection 控制顯示 V 或 H ridge → 填 _hostOutputBuffer（顯示由 OnMilFrameReady 做）
-                    IntPtr displaySrc = (LiveDisplayDirection == "h")
-                        ? _nativeBufferPool.MuraBuffer   // horizontal ridge
-                        : picoaterRidgeBuffer;            // vertical ridge（預設）
-                    Marshal.Copy(displaySrc, _hostOutputBuffer, 0, _hostOutputBuffer.Length);
+                    // GPU 已同時計算欄／列；兩份都留給瀑布歷史，OnMilFrameReady 再決定即時畫面顯示哪一份。
+                    Marshal.Copy(
+                        picoaterRidgeBuffer,
+                        _hostColumnOutputBuffer,
+                        0,
+                        _hostColumnOutputBuffer.Length);
+                    Marshal.Copy(
+                        _nativeBufferPool.MuraBuffer,
+                        _hostRowOutputBuffer,
+                        0,
+                        _hostRowOutputBuffer.Length);
                     return true;
                 }
                 catch (Exception ex)
@@ -834,7 +863,8 @@ namespace AniloxRoll.Monitor.Core.Camera
                 _aoiService.Dispose();
             }
             _hostInputBuffer  = null;
-            _hostOutputBuffer = null;
+            _hostColumnOutputBuffer = null;
+            _hostRowOutputBuffer = null;
         }
     }
 }

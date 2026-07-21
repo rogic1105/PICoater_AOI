@@ -35,6 +35,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private float _hessianMaxFactor = InspectionEngineConfig.DefaultHessianMaxFactor;
         private float _ridgeSigma = InspectionEngineConfig.DefaultRidgeSigma;   // 細線濾除（ridge_sigma）；設定改 → 下次 grab 生效
         private string _ridgeMode = InspectionEngineConfig.DefaultRidgeMode;
+        private string _liveDisplayDirection = "v";
         private string _dcfPath = string.Empty;
         private readonly CaptureTimestampCoordinator _timestampCoordinator = new CaptureTimestampCoordinator();
         private readonly System.Threading.SemaphoreSlim _allocationGate =
@@ -191,6 +192,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         public async Task AllocateCamerasAsync(bool enableImageProcessing)
         {
+            _display.SetWaterfallDisplayLayer(ToWaterfallLayer(enableImageProcessing, _liveDisplayDirection));
             await _allocationGate.WaitAsync();
             try
             {
@@ -265,6 +267,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                     IntPtr.Zero,  // 顯示鐵則2：app 顯示一律 CPU（ImageDisplayView/ThumbStrip/WaterfallView），
                                   // 不 attach 任何原生顯示視窗（headless）。panel 留給 ThumbStrip 用。
                     enableImageProcessing);
+                cam.LiveDisplayDirection = _liveDisplayDirection;
 
                 int camIdx = cfg.Id - 1; // cfg.Id 為 1–7，轉為 0–6 陣列索引
                 cam.EnableAutoCapture    = _enableAutoCapture;
@@ -810,17 +813,28 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         // ==================== Settings ====================
 
-        public void SetImageProcessingEnabled(bool enable)
+        public void SetLiveDisplayMode(bool enable, string direction)
         {
+            string normalizedDirection = direction == "h" ? "h" : "v";
+            _liveDisplayDirection = normalizedDirection;
             foreach (var cam in _cameras)
+            {
                 cam.EnableImageProcessing = enable;
+                cam.LiveDisplayDirection = normalizedDirection;
+            }
+
+            WaterfallFrameLayer layer = ToWaterfallLayer(enable, normalizedDirection);
+            _display.SetWaterfallDisplayLayer(layer);
+
+            FlowTrace.Log(
+                $"live enhance enabled={enable} direction={layer.ToString().ToLowerInvariant()} " +
+                $"cams={_cameras.Count} scope=all-cameras waterfallHistory=preserved");
         }
 
-        /// <summary>即時顯示方向（"v"/"h"）套到所有相機，控制 grab hook 顯示 V 或 H ridge。</summary>
-        public void SetLiveDisplayDirection(string dir)
+        private static WaterfallFrameLayer ToWaterfallLayer(bool enable, string direction)
         {
-            foreach (var cam in _cameras)
-                cam.LiveDisplayDirection = dir;
+            if (!enable) return WaterfallFrameLayer.Raw;
+            return direction == "h" ? WaterfallFrameLayer.Row : WaterfallFrameLayer.Column;
         }
 
         public void SetScreenMmPerPixel(double mmPerPx) => _display.SetScreenMmPerPixel(mmPerPx);

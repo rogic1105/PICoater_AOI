@@ -34,6 +34,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private ImageDisplayView _imageDisplay;
         private WaterfallView _waterfallView;
         private ThumbStrip _waterfallThumbs;   // 顯示鐵則1：縮圖在瀑布模式也一律即時影像（與即時模式同源 CPU ThumbStrip）
+        private WaterfallFrameLayer _waterfallDisplayLayer = WaterfallFrameLayer.Raw;
 
         // ── [Flow] 顯示資料流跡：咽喉點各一行（按鈕/設定→接線→首幀→顯示），落 Logs\trace-*.log。
         //    驗證＝跑一輪操作後把 log 與「預期步驟（DVT）」比對；headless 可驗、不用肉眼盯 UI。
@@ -237,6 +238,12 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (WaterfallMode) _waterfallView?.Reset();
         }
 
+        public void SetWaterfallDisplayLayer(WaterfallFrameLayer layer)
+        {
+            _waterfallDisplayLayer = layer;
+            _waterfallView?.SetDisplayLayer(layer);
+        }
+
         private void EnableWaterfallDisplay()
         {
             if (_waterfallView != null) return;
@@ -247,6 +254,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             var wfMode = settings?.ImageView?.WaterfallFullMode ?? WaterfallFullMode.Restart;
             int slotCount = settings?.GetCameraStartPositionMmArray()?.Length ?? Cameras.Count;
             _waterfallView = new WaterfallView(_mainDisplayPanel, slotCount, wfH, wfMode, _screenMmPerPx);
+            _waterfallView.SetDisplayLayer(_waterfallDisplayLayer);
             _waterfallView.FlipVertical = ShouldFlipVertical;
             _waterfallView.SetRowPitch(RowPitchMm);
             _waterfallView.SelectRequested += OnWaterfallSelectRequested;
@@ -264,7 +272,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             BringStatusLabelsToFront();
 
             FeedWaterfallLayout();
-            foreach (var cam in Cameras) cam.OnDisplayFrame += OnCameraWaterfallFrame;
+            foreach (var cam in Cameras) cam.OnWaterfallFrame += OnCameraWaterfallFrame;
             _flowFirstFrame.Clear();
             Flow($"EnableWaterfall create（view+thumbs）+ subscribe {Cameras.Count} cams");
         }
@@ -286,7 +294,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _waterfallView.SetLayout(startMm, null, refOps);
         }
 
-        /// <summary>放掉相機時呼叫：瀑布訂閱的是各 cam.OnDisplayFrame，相機被 Free 後這些訂閱指向死物件，
+        /// <summary>放掉相機時呼叫：瀑布訂閱的是各 cam.OnWaterfallFrame，相機被 Free 後這些訂閱指向死物件，
         /// 且 EnableWaterfallDisplay 冪等（_waterfallView!=null 早退）→ 不 teardown 就不會重新訂閱新相機 → 空白。
         /// 故 FreeCameras 必須連瀑布一起 teardown（與 TeardownImageDisplay 對稱）。</summary>
         public void TeardownWaterfallDisplay() => DisableWaterfallDisplay();
@@ -295,7 +303,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (_waterfallView == null) return;
             Flow($"TeardownWaterfall（unsubscribe {Cameras.Count} cams）");
-            foreach (var cam in Cameras) cam.OnDisplayFrame -= OnCameraWaterfallFrame;
+            foreach (var cam in Cameras) cam.OnWaterfallFrame -= OnCameraWaterfallFrame;
             _waterfallView.SelectRequested -= OnWaterfallSelectRequested;
             _waterfallView.ViewRangeMmChanged -= OnImageViewRange;
             _waterfallView.ContentPresented -= OnMainContentPresented;
@@ -306,7 +314,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             _waterfallThumbs = null;
         }
 
-        private void OnCameraWaterfallFrame(int camId, byte[] bytes, int w, int h, long tick)
+        private void OnCameraWaterfallFrame(
+            int camId, byte[] raw, byte[] column, byte[] row, int w, int h, long tick)
         {
             if (ImageCanvasMode && !_warnFrameToWfInIc)
             {
@@ -314,8 +323,11 @@ namespace AniloxRoll.Monitor.UI.Managers
                 Flow("⚠ 契約違規：即時模式下幀流入瀑布路徑（訂閱錯掛/殘留）");
             }
             FlowFirstFrame(camId, w, h, "Waterfall");
-            _waterfallView?.PushFrame(camId, bytes, w, h, tick);
-            _waterfallThumbs?.PushFrame(camId - 1, bytes, w, h);
+            _waterfallView?.PushFrameVariants(camId, raw, column, row, w, h, tick);
+            byte[] thumb = _waterfallDisplayLayer == WaterfallFrameLayer.Column ? column
+                : _waterfallDisplayLayer == WaterfallFrameLayer.Row ? row
+                : raw;
+            _waterfallThumbs?.PushFrame(camId - 1, thumb ?? raw, w, h);
         }
 
         private void OnWaterfallSelectRequested(int camId)

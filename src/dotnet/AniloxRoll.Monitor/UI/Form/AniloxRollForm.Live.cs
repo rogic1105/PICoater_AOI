@@ -702,8 +702,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private void ApplyMuraEnhance(bool enabled)
         {
-            _liveCameraManager?.SetImageProcessingEnabled(enabled);
-            _liveCameraManager?.SetLiveDisplayDirection(_liveDisplayDirection);
+            _liveCameraManager?.SetLiveDisplayMode(enabled, _liveDisplayDirection);
             UpdateLiveDirectionVisual();
         }
     }

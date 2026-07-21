@@ -46,6 +46,7 @@ class SettingsFlowValidator:
         self._check_format(settings, report)
         self._check_routes(session, settings, report)
         self._check_review_enhance(session, settings, report)
+        self._check_live_enhance(session, settings, report)
         self._check_direction_refresh(session, settings, report)
         return report
 
@@ -124,24 +125,41 @@ class SettingsFlowValidator:
         failures = []
         exercised = 0
         for sequence, (index, line, _) in enumerate(changes):
-            previous_done = next(
+            previous_view = next(
                 (
                     item
                     for item in reversed(session.lines[:index])
-                    if item.message.startswith("RV loadGrab done ")
+                    if item.message.startswith(("RV loadGrab done ", "RV period load "))
                 ),
                 None,
             )
-            if previous_done is None:
+            if previous_view is None:
                 continue
 
-            current_id = grab_id(previous_done.message)
             next_change = (
                 changes[sequence + 1][0]
                 if sequence + 1 < len(changes)
                 else len(session.lines)
             )
             window = session.lines[index + 1:next_change]
+            exercised += 1
+            if previous_view.message.startswith("RV period load "):
+                period_match = re.match(
+                    r"^RV period load (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) ",
+                    previous_view.message,
+                )
+                if period_match is None or not any(
+                    item.message.startswith(
+                        f"RV period load {period_match.group(1)} "
+                    )
+                    for item in window
+                ):
+                    failures.append(
+                        f"{line.timestamp} period 缺同時點 RV period load"
+                    )
+                continue
+
+            current_id = grab_id(previous_view.message)
             begin_pos = next(
                 (
                     pos
@@ -151,7 +169,6 @@ class SettingsFlowValidator:
                 ),
                 None,
             )
-            exercised += 1
             if begin_pos is None:
                 failures.append(
                     f"{line.timestamp} grab={current_id} 缺 RV loadGrab begin"
@@ -177,6 +194,109 @@ class SettingsFlowValidator:
         report.add(
             self.domain,
             "S2.review-enhance",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"changes={len(changes)} exercised={exercised} failures={len(failures)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_live_enhance(
+        self, session: FlowSession, settings, report: CheckReport
+    ) -> None:
+        changes = [
+            (index, line, match)
+            for index, line, match in settings
+            if match and match.group("name") == "hc_EnableMuraEnhance"
+        ]
+        if not changes:
+            report.add(
+                self.domain,
+                "S4.live-enhance",
+                CheckStatus.NOT_COVERED,
+                "未切換監控強化",
+            )
+            return
+        if not any(
+            line.message.startswith("live enhance enabled=")
+            for line in session.lines
+        ):
+            report.add(
+                self.domain,
+                "S4.live-enhance",
+                CheckStatus.NOT_COVERED,
+                "舊版 log 無監控強化持續狀態儀器",
+            )
+            return
+
+        pattern = re.compile(
+            r"^live enhance enabled=(True|False) direction=(raw|column|row) "
+            r"cams=(\d+) scope=all-cameras waterfallHistory=preserved$"
+        )
+        failures = []
+        exercised = 0
+        for sequence, (index, line, match) in enumerate(changes):
+            next_change = (
+                changes[sequence + 1][0]
+                if sequence + 1 < len(changes)
+                else len(session.lines)
+            )
+            expected = (match.group("value") or match.group("arrow")).strip()
+            state_line = next(
+                (
+                    item for item in session.lines[index + 1:next_change]
+                    if item.message.startswith("live enhance enabled=")
+                ),
+                None,
+            )
+            if state_line is None:
+                failures.append(f"{line.timestamp} 缺持續狀態行")
+                continue
+            state_match = pattern.match(state_line.message)
+            if not state_match:
+                failures.append(f"{state_line.timestamp} 格式錯誤")
+                continue
+            cameras = int(state_match.group(3))
+            if cameras == 0:
+                continue
+            exercised += 1
+            if state_match.group(1).lower() != expected.lower():
+                failures.append(
+                    f"{line.timestamp} 設定={expected} 實際={state_match.group(1)}"
+                )
+            layer = state_match.group(2)
+            enabled = state_match.group(1).lower() == "true"
+            if (enabled and layer == "raw") or (not enabled and layer != "raw"):
+                failures.append(
+                    f"{state_line.timestamp} enabled={enabled} 與 direction={layer} 矛盾"
+                )
+            waterfall_lines = [
+                item for item in session.lines[index + 1:next_change]
+                if item.message.startswith("WF layer ")
+            ]
+            for waterfall_line in waterfall_lines:
+                waterfall_match = re.match(
+                    r"^WF layer (raw|column|row)->(raw|column|row) "
+                    r"writeRow=(\d+) history=preserved$",
+                    waterfall_line.message,
+                )
+                if waterfall_match is None:
+                    failures.append(f"{waterfall_line.timestamp} WF layer 格式錯誤")
+                elif waterfall_match.group(2) != layer:
+                    failures.append(
+                        f"{waterfall_line.timestamp} WF={waterfall_match.group(2)} "
+                        f"但 manager={layer}"
+                    )
+
+        if exercised == 0 and not failures:
+            report.add(
+                self.domain,
+                "S4.live-enhance",
+                CheckStatus.NOT_COVERED,
+                f"changes={len(changes)}；切換時沒有已配置相機",
+            )
+            return
+        report.add(
+            self.domain,
+            "S4.live-enhance",
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
             f"changes={len(changes)} exercised={exercised} failures={len(failures)}"
             + (f"；首例 {failures[0]}" if failures else ""),

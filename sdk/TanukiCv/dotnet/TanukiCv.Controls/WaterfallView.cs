@@ -8,6 +8,13 @@ using TanukiCv.Core;       // MergeLayout / MergeOverlap
 
 namespace TanukiCv.Controls
 {
+    public enum WaterfallFrameLayer
+    {
+        Raw = 0,
+        Column = 1,
+        Row = 2
+    }
+
     /// <summary>
     /// 監控主畫面「瀑布圖」：全幅 7 相機合圖每幀往下接、即時捲動（線掃像印表機吐紙）。
     ///
@@ -45,8 +52,10 @@ namespace TanukiCv.Controls
         private bool _flipVertical;
         private double _rowPitchMm;
 
-        // 全解析分塊儲存：_chunks[ci] = byte[_fullW * ChunkRows]（lazy 配；null=黑）。
-        private byte[][] _chunks;
+        // 三種顯示共用同一套時間軸與寫頭；各層分塊 lazy 配置，切換只換讀取層，不清歷史。
+        // _layerChunks[layer][ci] = byte[_fullW * ChunkRows]（null=黑）。
+        private byte[][][] _layerChunks;
+        private WaterfallFrameLayer _displayLayer = WaterfallFrameLayer.Raw;
         private int _fullW;
         private int _writeRow;                       // 下一個 band 寫入起始 row（也是 Ring 顯示接縫位置）
         private int _lastStateLogMs;                 // 狀態快照節流（每秒一行）
@@ -70,7 +79,12 @@ namespace TanukiCv.Controls
             public string FlushReason = "?";
             public readonly Dictionary<int, Frame> Frames = new Dictionary<int, Frame>();
         }
-        private struct Frame { public byte[] Gray; public int W, H; public long Tick; }
+        private struct Frame
+        {
+            public byte[] Raw, Column, Row;
+            public int W, H;
+            public long Tick;
+        }
         private struct BufFrame { public int Cam; public Frame F; }
         private readonly List<BufFrame> _preBuffer = new List<BufFrame>(); // 週期學到前緩衝（學到才依 tick 入槽）
         private readonly SortedDictionary<long, Slot> _pending = new SortedDictionary<long, Slot>(); // 開啟槽（依 seq）
@@ -87,13 +101,18 @@ namespace TanukiCv.Controls
         // ── 背景寫入佇列（compose 在 lock 內輕量；memcpy 在背景）──
         private readonly Queue<BandJob> _writeQueue = new Queue<BandJob>();
         private bool _writerRunning;
+        private int _contentGeneration;
         private sealed class BandJob
         {
-            public int FullW, BandH, BandStartRow;
+            public int Generation, FullW, BandH, BandStartRow;
             public bool Ring;
             public List<Span> Spans;
         }
-        private struct Span { public byte[] Src; public int Sw, Sh, DestX, SrcLeft, SrcWidth; }
+        private struct Span
+        {
+            public byte[] Raw, Column, Row;
+            public int Sw, Sh, DestX, SrcLeft, SrcWidth;
+        }
 
         private int _defaultFrameW = 16384;           // 尚無幀的槽位用此寬度排佈局 → 7 槽寬度穩定
         private double[] _startMm;
@@ -172,11 +191,11 @@ namespace TanukiCv.Controls
                 if (refOpsMm > 0) _refOpsMm = refOpsMm;
                 calibrationOps = _refOpsMm;
                 layoutW = RebuildCameraPlacementsLocked();
-                sizeChanged = layoutW > 0 && (_chunks == null || _fullW != layoutW);
+                sizeChanged = layoutW > 0 && (_layerChunks == null || _fullW != layoutW);
                 if (sizeChanged)
                 {
                     _fullW = layoutW;
-                    _chunks = new byte[(_totalHeight + ChunkRows - 1) / ChunkRows][];
+                    _layerChunks = CreateLayerChunks();
                     _writeRow = 0;
                 }
             }
@@ -199,6 +218,28 @@ namespace TanukiCv.Controls
                 // START/OPS may change without changing the pixel width; republish the same view with new physical coordinates.
                 _canvas.SetView(_canvas.Zoom, _canvas.PanOffset);
             }
+        }
+
+        public WaterfallFrameLayer DisplayLayer => _displayLayer;
+
+        /// <summary>切換原圖／欄強化／列強化；保留累積內容、寫頭、tick 對齊與目前視野。</summary>
+        public void SetDisplayLayer(WaterfallFrameLayer layer)
+        {
+            if (_disposed) return;
+            WaterfallFrameLayer previous;
+            int writeRow;
+            lock (_lock)
+            {
+                if (_displayLayer == layer) return;
+                previous = _displayLayer;
+                _displayLayer = layer;
+                writeRow = _writeRow;
+            }
+            FlowLog?.Invoke(
+                $"layer {previous.ToString().ToLowerInvariant()}->{layer.ToString().ToLowerInvariant()} " +
+                $"writeRow={writeRow} history=preserved");
+            _lodContentDirty = true;
+            PushLodRefresh();
         }
 
         /// <summary>Set material-direction row pitch so waterfall Y range matches the live row chart.</summary>
@@ -266,7 +307,8 @@ namespace TanukiCv.Controls
         {
             lock (_lock)
             {
-                if (_chunks != null) for (int i = 0; i < _chunks.Length; i++) _chunks[i] = null; // 清舊圖（釋放）
+                _contentGeneration++;
+                ClearLayerChunksLocked();
                 _writeRow = 0;
                 _pending.Clear(); _preBuffer.Clear(); _writeQueue.Clear();
                 _seenCams.Clear();
@@ -279,11 +321,22 @@ namespace TanukiCv.Controls
 
         /// <summary>各相機每幀（MIL hook 多執行緒）：複製幀 + tick 網格錨定歸入 band（同掃描同 seq；缺幀補黑）。</summary>
         public void PushFrame(int camId, byte[] gray, int w, int h, long tick)
+            => PushFrameVariants(camId, gray, gray, gray, w, h, tick);
+
+        /// <summary>
+        /// 同一物理幀的原圖、欄強化與列強化。三層只做一次 tick 對齊並落在同一個 band；
+        /// 傳入陣列會在回呼內同步複製，呼叫端可安全重用緩衝。
+        /// </summary>
+        public void PushFrameVariants(
+            int camId, byte[] raw, byte[] column, byte[] row, int w, int h, long tick)
         {
-            if (_disposed || camId < 1 || camId > _camCount || gray == null || w <= 0 || h <= 0) return;
+            if (_disposed || camId < 1 || camId > _camCount || raw == null || w <= 0 || h <= 0) return;
             int n = w * h;
-            var copy = new byte[n];
-            Array.Copy(gray, copy, Math.Min(gray.Length, n));
+            byte[] rawCopy = CopyFrame(raw, n);
+            byte[] columnCopy = ReferenceEquals(column, raw) ? rawCopy : CopyFrame(column ?? raw, n);
+            byte[] rowCopy = ReferenceEquals(row, raw) ? rawCopy
+                : ReferenceEquals(row, column) ? columnCopy
+                : CopyFrame(row ?? raw, n);
             long nowMs = _clock.ElapsedMilliseconds;
             lock (_lock)
             {
@@ -314,7 +367,15 @@ namespace TanukiCv.Controls
                 if (tick > 0) _perCamLastTick[ci] = tick;
                 _perCamLastWall[ci] = nowMs;
 
-                var f = new Frame { Gray = copy, W = w, H = h, Tick = tick };
+                var f = new Frame
+                {
+                    Raw = rawCopy,
+                    Column = columnCopy,
+                    Row = rowCopy,
+                    W = w,
+                    H = h,
+                    Tick = tick
+                };
                 // tick 網格錨定：每幀獨立 seq=round((tick-origin)/period)（同步相機 φ≪半週期→同掃描同 seq）。
                 // 週期未學到前先緩衝；學到當下設原點 + 把緩衝依 tick 一次入槽（並丟棄重建殘留的脫隊舊幀）。
                 if (_periodTicks <= 0) _preBuffer.Add(new BufFrame { Cam = camId, F = f });
@@ -322,6 +383,13 @@ namespace TanukiCv.Controls
                 else PlaceFrame(camId, f);
             }
             TryFlush(nowMs);
+        }
+
+        private static byte[] CopyFrame(byte[] source, int length)
+        {
+            var copy = new byte[length];
+            Array.Copy(source, copy, Math.Min(source.Length, length));
+            return copy;
         }
 
         // tick 網格錨定 → seq → 入槽。watermark _perCamSeq 取最新（最大）。
@@ -435,18 +503,17 @@ namespace TanukiCv.Controls
             var places = MergeLayout.Compute(cams, minStart, _refOpsMm, 1, MergeOverlap.Midline, out int fullW);
             if (fullW <= 0) return null;
 
-            if (_chunks == null || _fullW != fullW)
+            if (_layerChunks == null || _fullW != fullW)
             {
                 _fullW = fullW;
-                int nChunks = (_totalHeight + ChunkRows - 1) / ChunkRows;
-                _chunks = new byte[nChunks][];
+                _layerChunks = CreateLayerChunks();
                 _writeRow = 0; _virtualSet = false;
             }
 
             bool ring = _fullMode == WaterfallFullMode.Ring;
             if (!ring && _writeRow + bandH > _totalHeight)
             {
-                for (int i = 0; i < _chunks.Length; i++) _chunks[i] = null; // Restart：滿 → 黑幕重來
+                ClearLayerChunksLocked(); // Restart：滿 → 三層黑幕一起重來
                 _writeRow = 0;
             }
             int bandStart = _writeRow;
@@ -457,14 +524,32 @@ namespace TanukiCv.Controls
                 int i = p.CameraId - 1;
                 if (i < 0 || i >= _camCount || p.SrcWidth <= 0) continue;
                 if (!slot.Frames.TryGetValue(p.CameraId, out var f)) continue; // 沒幀的槽不放 → 補黑
-                spans.Add(new Span { Src = f.Gray, Sw = f.W, Sh = f.H, DestX = p.DestX, SrcLeft = p.SrcLeft, SrcWidth = p.SrcWidth });
+                spans.Add(new Span
+                {
+                    Raw = f.Raw,
+                    Column = f.Column,
+                    Row = f.Row,
+                    Sw = f.W,
+                    Sh = f.H,
+                    DestX = p.DestX,
+                    SrcLeft = p.SrcLeft,
+                    SrcWidth = p.SrcWidth
+                });
             }
 
             if (ring) _writeRow = (_writeRow + bandH) % _totalHeight;
             else _writeRow += bandH;
             FlowState();   // 狀態快照（每秒一行）：占用/總高+畫面端＝方向可判量
 
-            return new BandJob { FullW = fullW, BandH = bandH, BandStartRow = bandStart, Ring = ring, Spans = spans };
+            return new BandJob
+            {
+                Generation = _contentGeneration,
+                FullW = fullW,
+                BandH = bandH,
+                BandStartRow = bandStart,
+                Ring = ring,
+                Spans = spans
+            };
         }
 
         private void KickWriter()
@@ -509,21 +594,28 @@ namespace TanukiCv.Controls
                 int ci = gy / ChunkRows, off = gy % ChunkRows;
                 lock (_lock)
                 {
-                    if (_chunks == null || _fullW != fullW) return; // 佈局已換 → 放棄這份 job
-                    var chunk = _chunks[ci];
-                    if (chunk == null) { chunk = new byte[fullW * ChunkRows]; _chunks[ci] = chunk; }
+                    if (job.Generation != _contentGeneration) return;
+                    if (_layerChunks == null || _fullW != fullW) return; // 佈局已換 → 放棄這份 job
                     int rowBase = off * fullW;
-                    Array.Clear(chunk, rowBase, fullW); // 黑底（補黑 + 槽間空隙 + Ring 覆蓋舊內容）
-                    foreach (var s in job.Spans)
+                    for (int layerIndex = 0; layerIndex < _layerChunks.Length; layerIndex++)
                     {
-                        if (y >= s.Sh) continue;
-                        int sx = s.SrcLeft, dx = s.DestX, cw = s.SrcWidth;
-                        if (sx < 0) { dx -= sx; cw += sx; sx = 0; }
-                        if (dx < 0) { sx -= dx; cw += dx; dx = 0; }
-                        if (sx + cw > s.Sw) cw = s.Sw - sx;
-                        if (dx + cw > fullW) cw = fullW - dx;
-                        if (cw <= 0) continue;
-                        Array.Copy(s.Src, y * s.Sw + sx, chunk, rowBase + dx, cw);
+                        byte[][] layerChunks = _layerChunks[layerIndex];
+                        var chunk = layerChunks[ci];
+                        if (chunk == null) { chunk = new byte[fullW * ChunkRows]; layerChunks[ci] = chunk; }
+                        Array.Clear(chunk, rowBase, fullW); // 黑底（補黑 + 槽間空隙 + Ring 覆蓋舊內容）
+                        foreach (var s in job.Spans)
+                        {
+                            if (y >= s.Sh) continue;
+                            byte[] source = GetSpanSource(s, layerIndex);
+                            if (source == null) continue;
+                            int sx = s.SrcLeft, dx = s.DestX, cw = s.SrcWidth;
+                            if (sx < 0) { dx -= sx; cw += sx; sx = 0; }
+                            if (dx < 0) { sx -= dx; cw += dx; dx = 0; }
+                            if (sx + cw > s.Sw) cw = s.Sw - sx;
+                            if (dx + cw > fullW) cw = fullW - dx;
+                            if (cw <= 0) continue;
+                            Array.Copy(source, y * s.Sw + sx, chunk, rowBase + dx, cw);
+                        }
                     }
                 }
             }
@@ -575,7 +667,8 @@ namespace TanukiCv.Controls
             int seamDestY = -1;
             lock (_lock)
             {
-                if (_chunks == null || _fullW <= 0) return null;
+                if (_layerChunks == null || _fullW <= 0) return null;
+                byte[][] chunks = _layerChunks[(int)_displayLayer];
                 outp = new byte[dw * dh]; // 黑底
                 for (int dy = 0; dy < dh; dy++)
                 {
@@ -583,8 +676,8 @@ namespace TanukiCv.Controls
                     if (_flipVertical) sy = _totalHeight - 1 - sy;
                     if (sy < 0 || sy >= _totalHeight) continue;
                     int ci = (int)(sy / ChunkRows), off = (int)(sy % ChunkRows);
-                    if (ci < 0 || ci >= _chunks.Length) continue;
-                    var chunk = _chunks[ci];
+                    if (ci < 0 || ci >= chunks.Length) continue;
+                    var chunk = chunks[ci];
                     if (chunk == null) continue;
                     int rowBase = off * _fullW;
                     int orow = dy * dw;
@@ -607,6 +700,27 @@ namespace TanukiCv.Controls
                 for (int dx = 0; dx < dw; dx++) outp[orow + dx] = 255;
             }
             return GrayBitmap.From(outp, dw, dh);
+        }
+
+        private byte[][][] CreateLayerChunks()
+        {
+            int nChunks = (_totalHeight + ChunkRows - 1) / ChunkRows;
+            return new[] { new byte[nChunks][], new byte[nChunks][], new byte[nChunks][] };
+        }
+
+        private void ClearLayerChunksLocked()
+        {
+            if (_layerChunks == null) return;
+            for (int layer = 0; layer < _layerChunks.Length; layer++)
+                for (int i = 0; i < _layerChunks[layer].Length; i++)
+                    _layerChunks[layer][i] = null;
+        }
+
+        private static byte[] GetSpanSource(Span span, int layerIndex)
+        {
+            if (layerIndex == (int)WaterfallFrameLayer.Column) return span.Column ?? span.Raw;
+            if (layerIndex == (int)WaterfallFrameLayer.Row) return span.Row ?? span.Raw;
+            return span.Raw;
         }
 
         private int RebuildCameraPlacementsLocked()
@@ -787,7 +901,7 @@ namespace TanukiCv.Controls
             catch { }
             try { _canvas.DisableLod(); } catch { }
             try { if (_canvas.Parent != null) _canvas.Parent.Controls.Remove(_canvas); _canvas.Dispose(); } catch { }
-            lock (_lock) { _chunks = null; _fullW = 0; _writeRow = 0; _pending.Clear(); _preBuffer.Clear(); _writeQueue.Clear(); }
+            lock (_lock) { _layerChunks = null; _fullW = 0; _writeRow = 0; _pending.Clear(); _preBuffer.Clear(); _writeQueue.Clear(); }
         }
     }
 }
