@@ -100,7 +100,7 @@ Normative SSoT and transition rules are defined only in the app `AGENTS.md`.
 | `InspectionStatisticsService` | Report statistics owner after CSV parsing, CFG, image-path, and Mura-profile queries were extracted | Keep report aggregation here; do not move persistence queries back in |
 | Review loading/display boundary | `ReviewStitchCoordinator` owns grab-id loading and tokens; `ReviewPeriodImagePresenter` owns period image lookup/decode/publish; `ReviewDisplayContent` owns current Bitmap/Curve lifetime; `ReviewChartPresenter` owns column/row chart application | Preserve this boundary; loaders and presenters must not reacquire each other's state or IO responsibilities |
 | Hardware/output status | `AniloxRollForm.HardwareStatus` still sequences IO/light/storage telemetry; `OutputHealthPresenter` exclusively renders independent output incidents | Continue splitting transport lifecycles only with focused hardware smoke evidence; never move protocol policy into UI presenters |
-| `LiveCameraManager` | Acquisition facade after display extraction | Keep display state in `LiveDisplayCoordinator`; only split further from evidence |
+| `LiveCameraManager` | Acquisition facade；同步與參數重配已分到 `AcquisitionSync`／`Parameters` partial，主檔只保留配置、Grab/Stop、釋放與顯示轉發 | Keep display state in `LiveDisplayCoordinator`; MIL experiments must change the owning partial instead of rebuilding a mixed manager |
 | `OnSettingChanged` | Deliberate single serialized sequencer; route classification is centralized while owner handlers live in their feature partials | Keep one `SettingsHub.Changed` side-effect subscriber; add behavior to the owning handler and reserve the sequencer for ordering and cross-feature impacts |
 
 ## Where to read next

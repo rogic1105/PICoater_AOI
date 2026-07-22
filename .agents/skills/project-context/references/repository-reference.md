@@ -78,7 +78,9 @@ against current code with `rg` before editing because lookup data can become sta
 | `UI/Managers/GlobalMergeCoordinator.cs` | MultiCameraMerger 的 app lifecycle coordinator |
 | `UI/Managers/LiveDisplayCoordinator.cs` | 即時、瀑布、背景預覽、縮圖、選取與 LOD 的顯示 coordinator |
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/WaterfallView.cs` | 可重用瀑布顯示、chunk storage 與 LOD control |
-| `UI/Managers/LiveCameraManager.cs` | 多相機 acquisition facade、生命週期與參數套用協調 |
+| `UI/Managers/LiveCameraManager.cs` | 多相機 acquisition facade：配置、Grab/Stop、釋放與顯示命令轉發 |
+| `UI/Managers/LiveCameraManager.AcquisitionSync.cs` | 多相機暫停／重啟、warm-frame 等待與硬體 tick 相位驗證 |
+| `UI/Managers/LiveCameraManager.Parameters.cs` | 擷取政策快取、相機參數寫入與 Grab 中參數重配協調 |
 | `Settings/InspectionSettings.cs` | 根設定物件 |
 | `Settings/Models/ChartSettings.cs` | 圖表 Y 軸範圍設定（ChartScaleMode + YMax）；StitchMode enum（Vertical / Global） |
 | `Settings/Models/ImageViewSettings.cs` | 合圖方式設定（StitchMode） |

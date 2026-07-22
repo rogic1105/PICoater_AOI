@@ -214,6 +214,8 @@
     <Compile Include="UI\Managers\RowCurveDisplayAdapter.cs" />
     <Compile Include="UI\Managers\RowCurveSyncCoordinator.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.cs" />
+    <Compile Include="UI\Managers\LiveCameraManager.AcquisitionSync.cs" />
+    <Compile Include="UI\Managers\LiveCameraManager.Parameters.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.Display.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.Merge.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.Telemetry.cs" />

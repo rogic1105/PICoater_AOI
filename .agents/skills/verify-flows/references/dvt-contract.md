@@ -327,7 +327,7 @@ Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線�
  │   └ StartGrabAsync@LiveCameraManager.cs
  │      ├ AreCamerasHwReady（CLProtocol ready＋每台在線相機已觀測 raw frame）未滿足 → return
  │      ├ _captureGateOpen=false                     ← 組態調整期間不接受任何 callback
- │      ├ SynchronizeAcquisitionAsync(reason=start)
+ │      ├ SynchronizeAcquisitionAsync(reason=start)@LiveCameraManager.AcquisitionSync.cs
  │      │  ├ Parallel PauseAcquisition：全部在線相機 M_STOP+M_WAIT＋M_GRAB_ABORT
  │      │  ├ ReapplyLineRatesForSynchronization：停止狀態重套各台現行 Line Rate
  │      │  ├ back-to-back ResumeAcquisition
@@ -876,7 +876,7 @@ TrackBar/NUD settle
  → ApplyCamParamAsync｜ApplyAllCamParamAsync@AniloxRollForm.SettingsTabs.cs
    ├（Grab 中非曝光）parameter change blocked → return
    ├（Grab 中曝光）SetParamControlsLocked(true)＋SetCaptureSuppressed(true)
-   └（Grab 中曝光）await ApplyExposureFastAsync@LiveCameraManager.cs
+   └（Grab 中曝光）await ApplyExposureFastAsync@LiveCameraManager.Parameters.cs
        ├ _allocationGate 序列化實際硬體寫入
        ├ Task.Run：寫曝光；不碰 line timing
        └ finally：恢復存檔、立即解鎖控制項
@@ -1330,7 +1330,7 @@ SettingsHub.Changed
     ├ grab 中 ForceWriteConfig（ContentKey 去重，僅 #CFG 真值變更才落盤）
     └ DispatchSettingOwner（只呼叫一個 feature handler）
 CapturePolicy
- → RefreshCapturePolicy@LiveCameraManager.cs
+ → RefreshCapturePolicy@LiveCameraManager.Parameters.cs
     └ 只更新存檔／演算法政策；不得呼叫 SetExposureUs／SetLineRateHz 或改 CameraGrabHeight
 ```
 
