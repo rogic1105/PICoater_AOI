@@ -288,9 +288,63 @@ AutoAllocateCameras(Form)                    顯示基線 set:[顯示基線] 一
 
 ### F2 開始抓取（btnLiveGrab，已配置）
 
+**相位資格狀態機（2026-07-22）**：正常 Stop 只關閉產品幀 gate，MIL 保持熱待機，
+因此下一輪不應再無條件停止／重啟全部 digitizer。快速路仍須以硬體 tick 守門，不能只靠
+`AreCamerasHwReady` 或固定等待時間猜測同步。
+
+| State | Event | Next state | Action |
+|---|---|---|---|
+| `Invalid` | Start | `Synchronizing` | 全相機 Pause／Resume，讀第一組硬體 tick 驗證同板 spread |
+| `Synchronizing` | phase 驗證通過 | `Verified` | 記住相位資格；arm 未來共同幀後才開產品 gate |
+| `Synchronizing` | timeout／phase 超差／取消 | `Invalid` | gate 維持關閉，Start 失敗 |
+| `Verified` | 正常 Stop → 再 Start，當下週期相位差 ≤ 5ms | `Verified` | 不重啟 MIL；確認 callback 新鮮，並以 `frame tick mod frame period` 重驗當下相位後，arm 未來共同幀 |
+| `Verified` | 再 Start 時當下週期相位差 > 5ms／不可量測 | `Synchronizing` | 熱待機資格立即失效，改走全相機 Pause／Resume；不得以歷史驗證結果放行 |
+| `Verified` | 相機斷線／重連、STALL、LineRate／Height、MIL realloc／Free | `Invalid` | 下一次 Start 必走完整同步 |
+| `Verified` | Exposure 變更 | `Verified` | 曝光不改 line timing，沿用目前 generation |
+| `Capturing` | 500ms 巡檢發現週期相位差 > 5ms／不可量測 | `Capturing + Invalid` | 本輪固定 High 視窗繼續抓滿；只將下一輪資格 invalid 並留一次告警，正常 Stop 後於 IO Low 重新對相 |
+| `ReadyIdle + Invalid` | 500ms 待機巡檢 | `Synchronizing → Verified` | 在 IO Low 期間自動 Pause／Resume 對相；失敗每 3s 重試，不得等 DI START 才同步 |
+
+**兩條合法 Start 路徑**：
+```
+首次或 Invalid：acquisition sync ... → acquisition phase verified reason=start-sync
+              → acquisition start path=full-sync cams=P reason=...
+待機預備：     acquisition idle prepare begin ... → acquisition sync ... reason=idle
+              → acquisition phase verified reason=idle-sync → acquisition idle prepare ready cams=P
+正常 Stop 後： acquisition standby phase system=S cams=... periodMs=P spreadMs=X limitMs=5.000 measurable=True aligned=True
+              → acquisition start path=verified-standby cams=P
+共同尾段：     StartGrab → capture plan／grab limit
+              → capture gate arm path={full-sync|verified-standby} cams=P marginMs=10 targets=S:T,...
+              → capture gate open ... path=...
+              → capture frame admitted ... camN tick=T target=U × P
+              → capture frame-set phase ... spreadMs=X limitMs=5.000 measurable=True aligned=True
+              → capture frame-set ready ... cams=P
+              → firstFrame camN ... × P
+```
+- `marginMs=10` 不是等待 10ms；它把每個 MIL System 目前最大硬體 tick 往未來推 10ms，
+  防止 gate 恰好開在各相機 callback 中間而混到兩個 frame generation。
+- 每台 `firstFrame` 前必有同台 `capture frame admitted`，且 `tick >= target`；否則
+  `check_all_flows.py` 的 `LIVE/F2.standby` 必須 FAIL。
+- `verified-standby` 只能在最後一次 phase 驗證後沒有 invalidation 時使用；一般 Stop 不 invalid，
+  實體重連、STALL、LineRate／Height 與釋放資源必須 invalid。
+- 「最後一次驗證過」不能代表永遠同步：free-run 相機會在長時間 hot standby／負載變化後漂移。
+  每次 `verified-standby` Start 前必以最近硬體 tick 對預期 frame period 取模，量出最小圓周相位差；
+  超過 5ms 就自動改走 full-sync。首組 admitted frame 到齊後再量 raw spread，超限時
+  `LIVE/F2.standby` 必須 FAIL，禁止只檢查各台 `tick >= target` 而假綠（2026-07-22 半小時 IO
+  模擬測試抓到 978.539ms 首幀差）。
+- 抓取中每 500ms 由既有相機健康巡檢重算相位，但健康時不寫 log；超限才輸出
+  `capture runtime phase ... aligned=False` 與一次 `capture phase drift deferred ... gate=open next=resync`。
+  DI High 是固定產品視窗，本輪不得因此被截短；只 invalid 下一輪熱待機資格並以深橘色
+  `CapturePhaseDrift` 告警。正常 Stop 後在 IO Low 重新對相，下一次 Start 成功後 resolve 告警。
+- DI START 是機台固定 High 視窗，不是同步命令。首次暖機或待機漂移必在 IO Low 時跑
+  `acquisition idle prepare`；IO 上升緣只接受 `verified-standby`。尚未預備完成時須回
+  `IO grab rejected ... reason=capture-not-ready:...` 並略過整輪，禁止先 full-sync 再產出 6～8 秒的截短資料。
+
 **log-flow（執行期腳印＝判準）**
 ```
-T1: acquisition sync begin reason=start attempt=A gate=closed cams=P
+（首次／Invalid 才有）T1: acquisition sync begin reason=start attempt=A gate=closed cams=P
+（待機預備才有）Tbg: acquisition idle prepare begin reason=... cams=P
+Tbg: acquisition sync begin reason=idle attempt=A gate=closed cams=P → ... → complete
+Tbg: acquisition phase verified reason=idle-sync → acquisition idle prepare ready cams=P
 T1: acquisition sync paused reason=start attempt=A cams=P
 Tbg: acquisition sync timing-reset reason=start lineRates=cam1=R,cam2=R,...
 T1: acquisition sync resumed reason=start attempt=A cams=P
@@ -298,12 +352,28 @@ T1: acquisition sync ready reason=start attempt=A camN system=S tick=T freq=F   
 T1: acquisition sync phase reason=start attempt=A system=S cams=... spreadTicks=D
     spreadMs=X limitMs=5.000 measurable=True aligned=True                          × 有在線相機的板
 T1: acquisition sync complete reason=start attempts=A cams=P phase=True
+T1: acquisition phase verified reason=start-sync
+T1: （沿用熱待機前）acquisition standby phase system=S cams=... periodMs=P periodMismatchMs=D
+    spreadTicks=T spreadMs=X limitMs=5.000 measurable=True aligned=True
+T1: acquisition start path={full-sync|verified-standby} cams=P [reason=...]
 T1: StartGrab（cams=M）
 T1: ApplyMainDisplayMode → 同模式    ← 冪等：不得出現 create/teardown 行
-T1: capture plan grab=… root=… imageDir=… csv=… files=… scale=…
+T1: viewRange refire reason=capture-start mode=WF|IC
+    ← 清除上一輪 Curve 視野後，立即用主畫面既有幾何重發空白視野；不得等滑鼠或首幀才補
+T1: capture plan grab=… root=… imageDir=… csv=… archive={grabId}.acap scale=…
 T1: grab limit armed Ns grab=…       ← 正式監控 grab 成功後啟動 one-shot；背景採樣借用 grab 不武裝
-T1: capture gate open cams=P warm=True   ← P=在線數；必晚於同步完成與 plan/limit，早於所有 firstFrame
+T1: capture gate arm path={full-sync|verified-standby} cams=P marginMs=10 targets=S:T,...
+T1: capture gate open cams=P warm=True path={full-sync|verified-standby}
+Tn: capture frame admitted path=... camN system=S tick=T target=U                 × P
+Tn: capture frame-set phase path=... system=S cams=... spreadTicks=T
+    spreadMs=X limitMs=5.000 measurable=True aligned=True
+Tn: capture frame-set ready path=... cams=P
 Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線」相機恰一行，順序不定
+（相位漂移才有）Tbg: capture runtime phase ... spreadMs=X limitMs=5.000 measurable=True aligned=False
+Tbg: capture phase drift deferred reason=phase-drift-systemS gate=open next=resync（每輪最多一次）
+T1: 正常抓取上限／DI 下降 → StopGrab → capture gate closed standby=on
+T1: columnCurve first-present cams=P mode=WF|IC          ← 每輪一次；代表欄 Curve 已實際送入 chart
+T1: rowCurve present after=mainImage cams=P mode=WF|IC   ← 主畫面上畫後；代表列 Curve 已實際送入 chart
 （首幀齊後進入穩態 → 適用「穩態靜默通則」：無互動下不得再有顯示狀態**變更**行。
   狀態**快照**行〔rowChart/WF state/IC state/stats，見§狀態快照儀器〕＝儀器輸出，穩態每秒出現正常）
 ```
@@ -327,7 +397,10 @@ Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線�
  │   └ StartGrabAsync@LiveCameraManager.cs
  │      ├ AreCamerasHwReady（CLProtocol ready＋每台在線相機已觀測 raw frame）未滿足 → return
  │      ├ _captureGateOpen=false                     ← 組態調整期間不接受任何 callback
- │      ├ SynchronizeAcquisitionAsync(reason=start)
+ │      ├ CanUseVerifiedStandby：phase=Verified、每台 callback 新鮮，且
+ │      │  TryValidateStandbyPhase（最近 tick mod 預期 frame period）同板 spread≤5ms
+ │      │  ├ true：沿用 MIL generation，不做 stop/start
+ │      │  └ false／相位漂移：SynchronizeAcquisitionAsync(reason=start)
  │      │  ├ Parallel PauseAcquisition：全部在線相機 M_STOP+M_WAIT＋M_GRAB_ABORT
  │      │  ├ ReapplyLineRatesForSynchronization：停止狀態重套各台現行 Line Rate
  │      │  ├ back-to-back ResumeAcquisition
@@ -337,18 +410,23 @@ Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線�
  │      ├ IsLiveGrabbing = true
  │      ├ ApplyMainDisplayMode@LiveDisplayCoordinator.cs   ← 冪等（view 已存在早退）＝本 flow 不得出現 create/teardown 行
  │      ├ ResetWaterfallIfActive@LiveDisplayCoordinator.cs → Reset@WaterfallView.cs（清舊圖＋重置 tick 對齊，防新幀接舊網格錯位）
+ │      ├ RefireMainViewRange("capture-start")@LiveDisplayCoordinator.cs
+ │      │  └ RefireViewRange@ImageDisplayView.cs｜WaterfallView.cs
+ │      │     ← ResetLiveChartsForDisplayTransition 已清除舊視野，必須在 gate open 前重發目前主畫面幾何
  │      └ per-cam SetUserGrabIntent(true)@AniloxCamera.cs
  │         └ SetUserGrabIntent@MilCamera.cs（同步 M_START 已完成；此處只開產品意圖）
  ├（啟動成功）NextGrabId@InspectionLogService.cs → _currentGrabId ＋ capture plan 行（C1）
  │  └ Arm(GrabLimitSeconds)@GrabDurationCoordinator.cs → grab limit armed 行
  │     ← 設定在本輪開始時拍快照；PropertyGrid 中途改值從下一輪生效
  ├ OpenCaptureGate@LiveCameraManager.cs
- │  └ _captureGateOpen=true                         ← 單一全域寫入點；資料 owner 已準備後，7 台 callback 才一起取得資格
+ │  └ TryArmCaptureFrameSet：依 MIL System 取目前最大 tick＋10ms 作 target，再開全域 gate
  └ UpdateGrabButton@AniloxRollForm.Live.cs
 （每幀幀流，MIL 回呼執行緒 Tn）
 ProcessingFunction@MilCamera.cs（MdigProcess hook，static）
  └ FrameReady 事件 → OnMilFrameReady@AniloxCamera.cs
-    ├ UserWantsGrab && CaptureGateOpen 才繼續；gate 關閉時不進 GPU／顯示／CSV／存檔
+    ├ UserWantsGrab && IsCaptureFrameAccepted(camId, frameTick) 才繼續；
+    │  gate 關閉或 tick 未達該 System target 時不進 GPU／顯示／CSV／存檔；全部 admitted 後量同板
+    │  raw spread 並記 `capture frame-set phase`，超過 5ms 立即 invalid 下一輪資格且 DVT 必須 FAIL
     ├ TryApplyPicoaterRidge@AniloxCamera.cs（GPU 檢測，一律跑）  ⚠ _picoaterLock＋尺寸守門（高度變更瞬間跳過幀防 AV）
     │  ├ ProcessImage@AoiService.cs（P/Invoke TanukiPipeline_Process；fused 存檔縮圖 wantResize＝grab-level 決策）
     │  ├ OnLiveCurveData 事件 → OnLiveCurveData@AniloxRollForm.Live.cs → CheckLiveMura("v")（M1）＋ _liveOverviewDirty=true
@@ -384,18 +462,28 @@ ContentPresented → MainContentPresented@LiveDisplayCoordinator/LiveCameraManag
 列曲線顯示不變量：GPU 完成只能更新 pending cache；必須等同一條主畫面 API 發出
 `ContentPresented` 才可更新 chart。LOD 以 content generation 對應實際安裝的 tile，不能在
 `RefreshLod` 僅提出請求時提前發布。每次發布留
-`rowCurve present after=mainImage cams=N mode=IC|WF`；快速累積時只保留每台最新一筆，禁止
+`rowCurve present after=mainImage cams=N mode=IC|WF` 必須在 chart 真正接受資料後才寫，不得在嘗試更新前
+先寫造成假綠；快速累積時只保留每台最新一筆，禁止
 用固定延遲猜影像完成時間。
+
+每輪 Grab 的 Curve 活性判準：長度至少 3 秒的 Grab，首幀後 3 秒內必須同時出現
+`columnCurve first-present` 與 `rowCurve present`，且必須有本輪 `viewRange refire`。由
+`check_all_flows.py` 的 `LIVE/F2.curve-liveness` 自動檢查；缺任一條代表 Curve 已產生但未完成上畫。
 
 ### F3 停止抓取
 
 **log-flow（執行期腳印＝判準）**
 ```
 T1: StopGrab
+T1: display capture quiesce mode=WF（瀑布模式；保留最後完整畫面，作廢未完成上畫）
 T1: capture gate closed standby=on
 Tn: drop drainedFrame after StopGrab camN（可選；每台最多一行）
-（之後不得再出現 firstFrame / 任何 [Flow] 顯示行，直到下一個動作；
-  drop 行是 gate 關閉競態的觀測儀器，不是顯示更新）
+T1: capture save drain begin grab=…
+Tn: capture archive append …／capture csv …（可選；只能是 Stop 前已接受的存檔工作）
+T1: capture save drain done grab=…
+T1: capture remote release grab=… files=2 bytes=N
+（drain done 後不得再出現該 grab 的 archive append／capture csv；全段不得再出現 firstFrame
+ 或任何 [Flow] 顯示行，直到下一個動作。drop 行是 gate 關閉競態的觀測儀器，不是顯示更新）
 ```
 
 **code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
@@ -409,6 +497,10 @@ Tn: drop drainedFrame after StopGrab camN（可選；每台最多一行）
     └ StopGrab@LiveCameraManager.cs
        ├ FlowTrace "StopGrab"
        ├ _captureGateOpen=false               ← 第一個動作；所有相機同一個原子 gate，晚到 callback 一律跳過
+       ├ ClearCaptureAdmission                ← 清本輪 target／pending；保留 Verified 相位資格供下一輪快速 Start
+       ├ QuiesceCapture@LiveDisplayCoordinator.cs
+       │  └ QuiesceCapture@WaterfallView.cs   ← 保留最後完整 tile；作廢未完成 band 與 in-flight LOD generation
+       ├ CloseCaptureSaveSession×N             ← 拒絕新的存檔工作；已接受工作保留 in-flight 計數
        ├ IsLiveGrabbing=false
        ├ per-cam SetUserGrabIntent(false)      ← 清產品意圖；KeepAcquiringWhenIdle=true，故不做 M_STOP
        └ FlowTrace "capture gate closed standby=on"
@@ -417,6 +509,9 @@ Tn: drop drainedFrame after StopGrab camN（可選；每台最多一行）
 （form 收尾，T1）
  ├ Disarm@GrabDurationCoordinator.cs                         ← 作廢 generation，舊 callback 不得停掉下一輪
  ├ Task.Run(LightTurnOff@AniloxRollForm.HardwareStatus.cs)   ⚠ [UiStack] 曾定罪停止時卡 SerialStream.Write → 一律背景
+ ├ WaitForCaptureSavesAsync@LiveCameraManager.cs             ← 等所有 per-camera saver 完成 ACAP＋CSV
+ ├ ReleaseCaptureRemoteDelivery@AniloxRollForm.Live.cs
+ │  └ ReleaseStagedFiles@RemoteCopyService.cs                ← 此刻才允許 ACAP＋每日 CSV 開始網路傳輸
  ├ TriggerRetentionAndFlagAsync@AniloxRollForm.HardwareStatus.cs
  ├ UpdateMuraLed(false) ＋ ClearMura@IoGrabController.cs   ← MURA latch 清除時機＝檢測結束（M1；手動流程不經 FSM 必須自清 DO）
  ├ UpdateGrabButton@AniloxRollForm.Live.cs
@@ -432,9 +527,12 @@ Tn: drop drainedFrame after StopGrab camN（可選；每台最多一行）
 ```
 python tools/python/check_stopgrab_flow.py [trace.log]
 ```
-- PASS 判準：每個 `StopGrab` 必接 `capture gate closed standby=on`；其後到下一個
-  `ui:`/`StartGrab`/`AllocateCameras begin` 前只允許 `drop drainedFrame after StopGrab camN`，
-  不得再出現 `firstFrame`、`LC row`、`capture csv`、IC/WF display 更新。
+- PASS 判準：每個 `StopGrab` 必接 `capture gate closed standby=on`；有 `capture plan` 的產品 grab
+  還必須依序出現 drain begin → drain done → remote release。drain 期間只允許完成 Stop 前已接受的
+  `capture archive append/csv`；drain done 後不得再寫該 grab。全段不得出現 `firstFrame`、`LC row`、
+  `rowCurve present after=mainImage` 或 IC/WF display 更新。背景校正等沒有 `capture plan` 的 Stop 不要求
+  remote release。瀑布 Stop 必有 `display capture quiesce mode=WF`；UI timer 取不到 Waterfall lock 時略過
+  本 tick，不得等待背景 writer，舊 LOD generation 完成後也不得覆蓋最後完整畫面。
 
 ### F4 切「主畫面顯示」設定（即時↔瀑布，即時生效）
 
@@ -697,7 +795,8 @@ btnLiveGetBackground_Click@AniloxRollForm.Background.cs      intent 行 ui:【�
  ├ 任一相機失敗 → 刪本次 version 檔、manifest 不動、上一組背景繼續生效
  │   → OutputHealth `BackgroundCaptureFailure` 深橘提示
  ├ finally：ToggleGrab 停止（=F3）＋ LightTurnOff ＋ UpdateStandardBgSubLockState@AniloxRollForm.Background.cs
- ├（_autoStartGrabAfterBg）await ReleaseAsync → btnLiveGrab_Click（IO 觸發自動回抓）→ return
+ ├（IO 觸發且背景不存在）IoStartGrabAsync 先 Reject 本輪再進本流程；背景完成後不接續半輪 Grab，
+ │   等下一個完整 DI START 上升緣
  └ 尾端自動預覽：btnLiveViewBackground_Click（直呼）
 時間設定不變量：`BackgroundSampleSeconds` 只管本段背景採樣；`GrabLimitSeconds` 只在 F2 正式監控啟動成功後
 武裝，兩者不得互相中止。PropertyGrid 顯示於「時間設定」下：`背景採樣(sec)`、`抓取上限(sec)`。
@@ -745,13 +844,21 @@ T1: IO controller start generation=N endpoint=IP:Port
 快速連改：IO controller restart coalesced generation=N（可有；該代不得再 start）
 關閉：IO controller stop generation=N reason=shutdown
 DI START：io:DI START 上升緣 → 開始抓取
-       → IO grab accepted busy=on …｜IO grab rejected busy=off reason=…（恰一）
+       →（ready）acquisition start path=verified-standby → IO grab accepted busy=on …
+       ｜（not ready）IO grab rejected busy=off reason=capture-not-ready:…（恰一）
 ```
 - **單 process／單 controller**：`Program` named mutex 必須在 Form 建立前擋掉同機第二份程式；同一 session
   任一時刻只能有一個 active generation。restart 以 lifecycle gate 序列化，舊 generation callback 不得進 UI/Grab。
 - **BUSY 代表事實，不代表請求**：DI 上升緣只提出 intent；必須等共用 `ToggleLiveGrabAsync` 成功且 capture gate
   已開啟，才能 `NotifyGrabStarted` 拉高 PC BUSY。CLProtocol 未就緒／相位同步失敗時回
   `IO grab rejected busy=off`，FSM 回 Idle；禁止「沒抓到但 PLC 看見 BUSY」。
+- **固定 High 視窗不得拿來同步**：accepted 的 DI START 到 BUSY 區間內不得出現
+  `acquisition sync begin reason=start`，且 Start path 必須為 `verified-standby`；`HARDWARE/H3.io-window`
+  會將 edge 後才 full-sync 或 edge→accepted 超過 2 秒的截短擷取判為 FAIL。啟動段另記
+  `capture light prepare begin/done commandAndWarmupMs=... configuredWarmupMs=...`，用來區分光源命令慢
+  與相機路徑慢。
+- StandardBgSub 缺背景時，本輪先回 `IO grab rejected ... reason=background-not-ready`，再自動取得背景；
+  取得完成後必須等待下一個完整 DI 上升緣，禁止在仍為 High 的半輪中接續 Grab。
 - IO 重連倒數以 `IoGrabController.NextReconnectAtUtc` 為唯一來源，顯示到 `0s` 代表正在嘗試連線；
   不得在 `1s` 後退回沒有秒數的空白狀態。`ReconnectIntervalMs` 是 connect 嘗試起點間隔，
   TCP timeout 必須包含在週期內，不得 timeout 後再重複等待完整週期。
@@ -783,14 +890,19 @@ DI START：io:DI START 上升緣 → 開始抓取
 - **程式桌面捷徑**：Storage 與 Inspection 的安裝及更新都必須冪等建立 Public Desktop
   `PICoater AOI.lnk`；TargetPath＝`AppDir\AniloxRoll.Monitor.exe`、WorkingDirectory＝`AppDir`、圖示＝同一 EXE，
   不得寫死磁碟位置。捷徑存在但目標過時必須覆寫修正。
-- **遠端複製不丟資料**：`EnqueueFiles` 必須先在本機 `.remote-copy-pending` 持久化標記才進 worker；
-  複製失敗保持 pending 並退避重試，程式重開從標記復原。禁止恢復「重試固定次數後丟棄」語意。
+- **遠端複製不丟資料**：grab writer 以 `StageFiles` 先在本機 `.remote-copy-pending` 持久化標記，
+  但 hold 期間不得進 worker；Stop 關閉 save session、等 in-flight saver 歸零後，才由
+  `ReleaseStagedFiles` 進 worker。複製失敗保持 pending 並退避重試；程式若在 release 前退出，
+  下次啟動從 durable marker 復原並傳送當時最後完整版本。禁止恢復「重試固定次數後丟棄」語意。
 - **發布原子性**：遠端先寫同目錄 `.part-*`，確認來源前後長度穩定且遠端長度一致後，再原子
   move/replace 成正式檔名；正式發布且 pending 標記成功刪除後才算完成。
-- **可變側車不漏尾筆**：`_ticks.csv` 追加期間若同一路徑已 pending/in-flight，必須標記 dirty；首輪發布後
-  保留 durable marker 並再排一輪，直到遠端內容等於最新本機 snapshot 才可刪 marker。
+- **可變來源不得被遠端讀取鎖住**：worker 讀取來源 snapshot 時必須允許其他 writer 繼續追加
+  （share read/write/delete）；若複製期間來源長度改變，丟棄 `.part-*` 並保留 pending 重試，
+  禁止因遠端複製造成 `CaptureWriteFailure`。
+- **同日 CSV 跨 grab 不偷跑**：每日 CSV 可能仍在上一輪 pending/retry；下一輪 `StageFiles` 必須把同一路徑
+  重新設為 held，worker 看見舊 queue entry 要讓位。只有下一輪 Stop 的 release 才能傳送最新 CSV。
 - **Retention 以可持續寫入優先**：空間低於預留值時，檢測與儲存電腦都刪除「最舊的完整一天」；
-  今天的資料不得刪。刪除集合＝日期資料夾內全部影像/bin/`_ticks.csv`/`_curve_summary`
+  今天的資料不得刪。刪除集合＝日期資料夾內 ACAP、既有影像/bin/`_ticks.csv`/`_curve_summary`
   ＋月份層同日期 `yyyyMMdd.csv`；任一低空間清理成功後，非 active 的舊背景版本也列入候選。若該日仍有 pending 遠端檔案，必須先取消並移除
   對應 durable marker，再刪檔，禁止 worker 對已刪來源永久重試。刪到未送達資料須留下深橘狀態與 log。
 - **光源釋放**：SerialPort ownership 必須先在 lock 內從 `_port` 移除，再對 detached instance 單次 Dispose；
@@ -809,8 +921,19 @@ DI START：io:DI START 上升緣 → 開始抓取
 [RemoteCopy] restored pending queue count=N            ← 程式重開復原
 [RemoteCopy] backlog drained: copied=N bytes=N          ← 斷線積壓清空
 ```
-狀態轉換：`未排程 --持久標記成功--> 待傳 --複製失敗/重開--> 待傳
---長度驗證+原子發布+刪標記--> 完成`。任何失敗不得進完成態。
+狀態轉換：
+
+| State | Event | Next | Action |
+|---|---|---|---|
+| 未排程 | Stage | 已標記／暫停 | 原子寫 pending marker，不碰網路 |
+| 已標記／暫停 | 再次 Stage | 已標記／暫停 | 更新 backlog bytes，保留最後本機版本 |
+| 已標記／暫停 | Stop 排水完成／Release | 待傳 | 入 worker queue |
+| 待傳 | 下一輪 Stage 同一路徑 | 已標記／暫停 | 取消尚未開始的舊 queue；in-flight 完成後不自動續傳 |
+| 待傳 | 複製失敗 | 待傳 | 保留 marker、退避重試 |
+| 已標記／暫停或待傳 | 程式重開 | 待傳 | marker 復原；傳送最後完整本機版本 |
+| 待傳 | 長度驗證＋原子發布＋刪 marker | 完成 | 正式檔可見 |
+
+任何失敗不得進完成態；hold 狀態不得建立遠端 `.part-*`。
 
 ### H2 相機在線數轉變
 ```
@@ -928,13 +1051,15 @@ Tn: MURA 恢復（v|h）                                                        
 T1: capture plan grab={yyMMdd-HHmmss} root={CaptureRootPath}
     imageDir={root}\yyyy\yyyyMM\yyyyMMdd
     csv={root}\yyyy\yyyyMM\yyyyMMdd.csv
-    files=*_raw.jpg|*_proc_c.jpg|*_proc_r.jpg|*_mean_c.bin|*_max_c.bin|*_mean_r.bin|*_max_r.bin
+    archive={grabId}.acap
     scale={DefaultSaveResizeScale}
 ```
-- `imageDir` 與 `csv` 必須由 `CaptureStoragePaths` 推導；檔名 suffix 必須由 `CaptureFileNaming` 推導。
-- 曲線持久化新格式一律 C/R：`_mean_c/_max_c/_mean_r/_max_r.bin`；讀端依序 fallback 上一代
+- `imageDir`、`csv` 與 archive 必須由 `CaptureStoragePaths` 推導；同一 grab 的 JPEG、C/R curve 與 frame tick
+  都以獨立 record 寫入單一 ACAP，不能先把影像空間合併後再拆。
+- ACAP record 的資產名稱一律 C/R：`_mean_c/_max_c/_mean_r/_max_r.bin`；讀端依序 fallback 上一代
   `_mean_v/_max_v/_mean_h/_max_h.bin` 與最舊 `_mean/_max/_row_mean/_row_max.bin`，寫端不得再產生 V/H curve bin。
-- 這行是每輪 grab 的「存放方式/位置」摘要；逐幀大小與資源量仍歸 `resource-monitor-*.csv`，不得用 `[Flow]` 洗版。
+- `capture archive append grab=… cam=N frame=… assets=N bytes=N` 是逐幀完整 record 落盤證據；尾端 record
+  若因斷電不完整，讀端只忽略該尾端，前面完整 record 仍可讀。逐幀資源量仍歸 `resource-monitor-*.csv`。
 
 ### C2 檢測 CSV 寫入（每個 grab 首筆 + CFG 變更）
 ```
@@ -963,7 +1088,7 @@ TrySaveCapture@AniloxCamera.cs
  → CaptureContext.MaxC/MeanR/MaxR → SaveCapture@CameraFrameSaver.cs
    → ComputeCurveMeanNormalized（sum(MaxC)/length/255）
    ＋ ComputeCurvePeakNormalized（Row peak/255）
-   → OnInspectionResult(camId,file,meanPeak,maxPeak,maxCMean,meanRPeak,maxRPeak)
+   → OnInspectionResult(grabId,camId,file,meanPeak,maxPeak,maxCMean,meanRPeak,maxRPeak)
      → LiveCameraManager forwarder → OnCameraInspectionResult@AniloxRollForm.Live.cs
        → AppendRecord@InspectionLogService.cs → CSV 第 10~12 欄 MaxCMean/MeanRPeak/MaxRPeak
 ```
@@ -971,11 +1096,24 @@ TrySaveCapture@AniloxCamera.cs
 ### C3 遠端交付與循環儲存
 ```
 CameraFrameSaver.SaveCapture
- → OnFilesSaved（本幀固定輸出 + 當日共享 `_ticks.csv`）
-   → RemoteCopyService.EnqueueFiles
-     → 本機 `.remote-copy-pending` durable marker
+ → CaptureArchiveStore.AppendFrame（同 grab 共用 `{grabId}.acap`；record 各自帶 frame tick/CRC）
+ → OnFilesSaved（本 grab ACAP 路徑）→ RemoteCopyService.StageFiles
+ → OnInspectionResult → AppendRecord（日 CSV）→ RemoteCopyService.StageFiles
+   → 本機 `.remote-copy-pending` durable marker；held，不進網路 worker
+
+StopGrab
+ → CloseCaptureSaveSession×N（拒絕新工作）
+ → WaitForCaptureSavesAsync（等待已接受 saver 歸零）
+ → ReleaseCaptureRemoteDelivery（由 CaptureStoragePaths 推導本 grab ACAP＋日 CSV）
+   → RemoteCopyService.ReleaseStagedFiles
      → remote `{destination}.part-{guid}`
+     → shared snapshot read（允許 crash-recovery／舊呼叫者仍安全讀取）
      → 來源穩定/長度一致 → Move|Replace 正式檔 → 刪 marker
+
+`check_all_flows.py` 的 `C3.write-integrity` 只要在有 capture 的 session 看見任何
+`CaptureWriteFailure.CAMn` raise 就必須 FAIL；後續 resolve 只代表 writer 恢復，不可抹掉已遺失的那一幀。
+`C3.delivery-release` 要求有 Stop 的 capture 依序出現 drain begin → drain done → remote release；
+有 ACAP append 的 grab 必須 release `files=2`（ACAP＋CSV），且 drain done 後不得再 append。
 
 StorageRetentionService.RunCleanup
  → Storage role 使用 app-mode `StorageMinFreeGB`；Inspection role 使用 `LocalMinFreeGB`
@@ -1154,13 +1292,15 @@ T1: RV layout intent {grabId} images=N cams=P align=tick|filename before=curves
 T1: RV curves {grabId}（…ms）          ← 快路：先套新序號主畫面幾何，再讓欄+列曲線即時跟滾動
 （快速滾動：曲線 single-flight/latest-only，中間 intent 可無 paths；正在讀的舊筆完成後 stale-drop，再直接讀最新筆）
 （影像 debounce 250ms：滾動中不發完整載入；停下才載「最後選取」；session 也只在 settle 落盤一次）
-T1/Tn: RV loadGrab begin {grabId} → RV loadGrab paths … → RV prefit … → RV lodRebind merge …（fit reset）→ RV pushFrames → RV loadGrab done
+T1/Tn: RV loadGrab begin {grabId} → RV loadGrab paths … source=acap|legacy → RV prefit … → RV lodRebind merge …（fit reset）→ RV pushFrames → RV loadGrab done
 ```
 - **分層**：單步時曲線立即載；快速滾動時曲線最多「執行中 1 筆＋等待中最新 1 筆」，中間序號不讀檔；
   最後一個 intent 必有成功 `RV curves`。圖片只載 settle 後的最後一張；
   **Data tab 同步（統計/Mura 圖重算）也只在 settle 後做一次、排在影像之後**——唯一觸發點
   `SyncDataTabFromReviewSettled@AniloxRollForm.Data.cs`，不得回到逐格 inline
   （2026-07-10 定罪：逐格全量重算＝快撥 UiStall 5.7s＋曲線快路全餓死）。
+- **存放來源**：新資料 `source=acap`，一個 grab 開一包並從 record 索引讀 JPEG/curve/tick；既有資料尚未
+  轉包或缺少 ACAP record 時 `source=legacy`，維持舊檔 fallback。兩條來源的圖片、Curve 與對位結果必須一致。
 - **日期/session 分層**：滾動中只走 `SetPeriodToCombo`（同日不重建 time items），不得走 `NavigateTo`
   的完整 Initialize/Save；`SaveCurrentSelection` 只在 250ms settle 執行一次。
 - **換序號＝重設視野（fit）＝預期**（各 grab 高度不同 → lodRebind 合法出現）。
@@ -1734,7 +1874,7 @@ Tbg acquisition standby ready cam2 tick=T
 ```
 10:37:13.854 T 1 StartGrab（cams=4）
 10:37:13.855 T 1 ApplyMainDisplayMode → ImageCanvas
-T1 capture plan grab=… root=… imageDir=… csv=… files=… scale=…
+T1 capture plan grab=… root=… imageDir=… csv=… archive={grabId}.acap scale=…
 T1 grab limit armed 10s grab=…
 T1 capture gate open cams=2 warm=True
 10:37:15.170 T31 firstFrame cam1 16384x3000 → ImageDisplayView

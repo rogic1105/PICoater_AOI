@@ -33,6 +33,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         public bool IsAcquisitionWarm => _mil.HasObservedFrameSinceAcquisitionStart;
         public long LastFrameStartTicks => _mil.LastFrameStartTicks;
         public long DataLatchClockFreqHz => _mil.DataLatchClockFreqHz;
+        public long LastFrameObservedTimestamp => _mil.LastFrameObservedTimestamp;
         /// <summary>CLProtocol 初始化（含參數重套）已完成，可安全從硬體讀回參數。</summary>
         public bool IsHwParamsStable => _mil.IsHwParamsStable;
         public bool IsClProtocolEnabled => _mil.IsClProtocolEnabled;
@@ -48,6 +49,8 @@ namespace AniloxRoll.Monitor.Core.Camera
         public bool SuppressCapture { get; set; } = false;
         public bool SaveOriginalBmp { get; set; } = false;
         public string CaptureRootPath { get; set; } = string.Empty;
+        /// <summary>Copied into each background save context before the next grab can replace it.</summary>
+        public string ActiveGrabId { get; set; } = string.Empty;
         /// <summary>Grab 高度（0 = 用 DCF 預設）。必須在 Initialize() 之前設定（轉發給 _mil）。</summary>
         public int CameraGrabHeight { get; set; } = 0;
 
@@ -109,10 +112,11 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// </summary>
         public CaptureTimestampCoordinator TimestampCoordinator { get; set; }
         /// <summary>
-        /// Atomic product gate shared by every camera. MIL may stay armed while this gate is
-        /// closed; closed frames never enter processing, display, or persistence.
+        /// Product admission policy shared by every camera. The manager uses the hardware tick to
+        /// admit a common future frame set while MIL remains in hot standby. Rejected frames never
+        /// enter processing, display, or persistence.
         /// </summary>
-        public Func<bool> CaptureGateOpen { get; set; }
+        public Func<int, long, bool> CaptureFrameAccepted { get; set; }
 
         // ==================== Save Format (resize + JPEG) ====================
         private int _saveResizeScale = 5;
@@ -145,6 +149,8 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         // ==================== Resource Monitor ====================
         private readonly CameraFrameSaver _frameSaver = new CameraFrameSaver();
+        private readonly CaptureSaveSessionGate _captureSaveSession =
+            new CaptureSaveSessionGate();
 
         /// <summary>最近一幀 GPU ProcessPipeline 耗時（ms）。</summary>
         public long LastGpuTimeMs { get; private set; }
@@ -155,6 +161,19 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>本次 session 累計存檔幀數。</summary>
         public long SessionFrameCount => _frameSaver.SessionFrameCount;
 
+        public void BeginCaptureSaveSession(string grabId)
+        {
+            ActiveGrabId = grabId ?? string.Empty;
+            _captureSaveSession.Begin(ActiveGrabId);
+        }
+
+        public Task CloseCaptureSaveSession() => _captureSaveSession.Close();
+
+        private bool TryBeginCaptureSave(string grabId) =>
+            _captureSaveSession.TryEnter(grabId);
+
+        private void CompleteCaptureSave() => _captureSaveSession.Complete();
+
         // ==================== Telemetry（委派 MIL） ====================
         /// <summary>目前實際量測的 FPS（MdigInquire M_PROCESS_FRAME_RATE）。抓圖未啟動時回傳 0。</summary>
         public double CurrentFps => _mil.CurrentFps;
@@ -162,7 +181,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         // ==================== Events ====================
         /// <summary>每次 TrySaveCapture 成功存檔後觸發（MIL 回呼執行緒）。
         /// 參數：(cameraId, fileNameWithoutExt, meanPeak_0to1, maxPeak_0to1, maxCMean_0to1)</summary>
-        public event Action<int, string, float, float, float, float, float> OnInspectionResult;
+        public event Action<string, int, string, float, float, float, float, float> OnInspectionResult;
 
         /// <summary>ImageCanvas / 瀑布顯示路徑用：每幀提供「顯示 bytes(8-bit 灰階)+ 尺寸 + 本幀硬體 frame-start tick」(MIL 回呼執行緒)。
         /// bytes 是重用緩衝 → 訂閱者必須**同步消費**(組 bitmap 複製)、勿存 ref。只在有訂閱者時觸發。
@@ -391,7 +410,8 @@ namespace AniloxRoll.Monitor.Core.Camera
             if (_isReleased) return;
             if (modifiedBuffer == MIL.M_NULL) return;
             bool captureOpen = mil.UserWantsGrab &&
-                (CaptureGateOpen == null || CaptureGateOpen());
+                (CaptureFrameAccepted == null ||
+                 CaptureFrameAccepted(CameraId, mil.LastFrameStartTicks));
             if (!captureOpen)
             {
                 if (_hasAcceptedCaptureFrame && !mil.UserWantsGrab && !_flowLoggedDrainFrameDrop)
@@ -762,6 +782,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                         ResizeWidth = rw, ResizeHeight = rh,
                         JpgQuality = quality, ScaleForHeader = scale,
                         SaveDir = saveDir, BaseName = baseName,
+                        GrabId = ActiveGrabId,
                         CameraId = camId, OrigWidth = origW, OrigHeight = origH,
                         MeanPeak = meanPeak, MaxPeak = maxPeak,
                         GpuTimeMs = LastGpuTimeMs,
@@ -770,26 +791,62 @@ namespace AniloxRoll.Monitor.Core.Camera
                         OnFilesSaved = OnFilesSaved
                     };
 
-                    var saver = _frameSaver;
-                    Task.Run(() =>
+                    if (!TryBeginCaptureSave(ctx.GrabId))
                     {
-                        try { saver.SaveCapture(ctx); }
-                        catch (Exception ex)
+                        FlowTrace.Log(
+                            $"capture save skipped closedSession grab={ctx.GrabId} cam={camId}");
+                        return;
+                    }
+
+                    var saver = _frameSaver;
+                    try
+                    {
+                        Task.Run(() =>
                         {
-                            string error = ex.GetType().Name + ": " + ex.Message;
-                            System.Diagnostics.Trace.WriteLine(
-                                $"[CAM{camId}] TrySaveCapture(bg) failed: {error}");
-                            OnCaptureSaveFailed?.Invoke(camId, error);
-                        }
-                    });
+                            try { saver.SaveCapture(ctx); }
+                            catch (Exception ex)
+                            {
+                                string error = ex.GetType().Name + ": " + ex.Message;
+                                System.Diagnostics.Trace.WriteLine(
+                                    $"[CAM{camId}] TrySaveCapture(bg) failed: {error}");
+                                OnCaptureSaveFailed?.Invoke(camId, error);
+                            }
+                            finally
+                            {
+                                CompleteCaptureSave();
+                            }
+                        });
+                    }
+                    catch
+                    {
+                        CompleteCaptureSave();
+                        throw;
+                    }
                 }
                 else
                 {
                     // Resize buffer 不可用時的 fallback（不應發生）
-                    Directory.CreateDirectory(saveDir);
-                    MIL.MbufExport(Path.Combine(saveDir, baseName + ".bmp"), MIL.M_BMP, sourceBuffer);
-                    OnInspectionResult?.Invoke(CameraId, baseName,
-                        _lastMeanPeak, _lastMaxPeak, float.NaN, float.NaN, float.NaN);
+                    string grabId = ActiveGrabId;
+                    if (!TryBeginCaptureSave(grabId))
+                    {
+                        FlowTrace.Log(
+                            $"capture save skipped closedSession grab={grabId} cam={camId}");
+                        return;
+                    }
+                    try
+                    {
+                        Directory.CreateDirectory(saveDir);
+                        MIL.MbufExport(
+                            Path.Combine(saveDir, baseName + ".bmp"),
+                            MIL.M_BMP,
+                            sourceBuffer);
+                        OnInspectionResult?.Invoke(grabId, CameraId, baseName,
+                            _lastMeanPeak, _lastMaxPeak, float.NaN, float.NaN, float.NaN);
+                    }
+                    finally
+                    {
+                        CompleteCaptureSave();
+                    }
                 }
             }
             catch (Exception ex)

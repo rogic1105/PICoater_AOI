@@ -33,5 +33,9 @@ namespace AniloxRoll.Monitor.Core.Services
         /// </summary>
         public static string GrabCurveSummary(string root, DateTime captureDate, string grabId) =>
             Path.Combine(DateImageDir(root, captureDate), "_curve_summary", grabId + ".mcsf");
+
+        /// <summary>One appendable archive per grab, stored beside that day's capture outputs.</summary>
+        public static string GrabArchive(string root, DateTime captureDate, string grabId) =>
+            Path.Combine(DateImageDir(root, captureDate), grabId + CaptureArchiveStore.Extension);
     }
 }

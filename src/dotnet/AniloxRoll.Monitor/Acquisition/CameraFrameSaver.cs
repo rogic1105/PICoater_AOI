@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
@@ -33,6 +34,12 @@ namespace AniloxRoll.Monitor.Core.Camera
         public void SaveCapture(CaptureContext ctx)
         {
             Directory.CreateDirectory(ctx.SaveDir);
+
+            if (!string.IsNullOrWhiteSpace(ctx.GrabId))
+            {
+                SaveCaptureArchive(ctx);
+                return;
+            }
 
             SaveJpegFromBytes(ctx.RawBytes, ctx.ResizeWidth, ctx.ResizeHeight,
                 Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.RawJpg), ctx.JpgQuality);
@@ -101,8 +108,77 @@ namespace AniloxRoll.Monitor.Core.Camera
             float maxCMean = ComputeCurveMeanNormalized(ctx.MaxC);
             float meanRPeak = ComputeCurvePeakNormalized(ctx.MeanR);
             float maxRPeak = ComputeCurvePeakNormalized(ctx.MaxR);
-            ctx.OnResult?.Invoke(ctx.CameraId, ctx.BaseName,
+            ctx.OnResult?.Invoke(ctx.GrabId, ctx.CameraId, ctx.BaseName,
                 ctx.MeanPeak, ctx.MaxPeak, maxCMean, meanRPeak, maxRPeak);
+        }
+
+        private void SaveCaptureArchive(CaptureContext ctx)
+        {
+            string archivePath = Path.Combine(
+                ctx.SaveDir, ctx.GrabId + CaptureArchiveStore.Extension);
+            var assets = new List<CaptureArchiveAsset>(7)
+            {
+                new CaptureArchiveAsset
+                {
+                    Kind = CaptureAssetKind.RawJpeg,
+                    Data = EncodeJpegFromBytes(
+                        ctx.RawBytes, ctx.ResizeWidth, ctx.ResizeHeight, ctx.JpgQuality)
+                }
+            };
+            AddJpegAsset(assets, CaptureAssetKind.ProcessedColumnJpeg, ctx.ProcCBytes, ctx);
+            AddJpegAsset(assets, CaptureAssetKind.ProcessedRowJpeg, ctx.ProcRBytes, ctx);
+            AddCurveAsset(assets, CaptureAssetKind.MeanColumnCurve, ctx.MeanC, ctx.ScaleForHeader);
+            AddCurveAsset(assets, CaptureAssetKind.MaxColumnCurve, ctx.MaxC, ctx.ScaleForHeader);
+            AddCurveAsset(assets, CaptureAssetKind.MeanRowCurve, ctx.MeanR, ctx.ScaleForHeader);
+            AddCurveAsset(assets, CaptureAssetKind.MaxRowCurve, ctx.MaxR, ctx.ScaleForHeader);
+
+            long frameBytes = CaptureArchiveStore.AppendFrame(
+                archivePath, ctx.GrabId, ctx.BaseName, ctx.CameraId,
+                ctx.FrameStartTicks, assets);
+            LastSaveBytesTotal = frameBytes;
+            SessionSaveBytes += frameBytes;
+            SessionFrameCount++;
+
+            long ramMB = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / (1024 * 1024);
+            AppendResourceLog(ctx.CameraId, ctx.OrigWidth, ctx.OrigHeight,
+                ctx.GpuTimeMs, frameBytes, SessionSaveBytes, SessionFrameCount, ramMB);
+
+            FlowTrace.Log(
+                $"capture archive append grab={ctx.GrabId} cam={ctx.CameraId} " +
+                $"frame={ctx.BaseName} assets={assets.Count} bytes={frameBytes}");
+            ctx.OnFilesSaved?.Invoke(new[] { archivePath });
+
+            float maxCMean = ComputeCurveMeanNormalized(ctx.MaxC);
+            float meanRPeak = ComputeCurvePeakNormalized(ctx.MeanR);
+            float maxRPeak = ComputeCurvePeakNormalized(ctx.MaxR);
+            ctx.OnResult?.Invoke(ctx.GrabId, ctx.CameraId, ctx.BaseName,
+                ctx.MeanPeak, ctx.MaxPeak, maxCMean, meanRPeak, maxRPeak);
+        }
+
+        private static void AddJpegAsset(
+            List<CaptureArchiveAsset> assets,
+            CaptureAssetKind kind,
+            byte[] data,
+            CaptureContext ctx)
+        {
+            if (data == null || data.Length == 0) return;
+            assets.Add(new CaptureArchiveAsset
+            {
+                Kind = kind,
+                Data = EncodeJpegFromBytes(
+                    data, ctx.ResizeWidth, ctx.ResizeHeight, ctx.JpgQuality)
+            });
+        }
+
+        private static void AddCurveAsset(
+            List<CaptureArchiveAsset> assets,
+            CaptureAssetKind kind,
+            float[] curve,
+            int scaleForHeader)
+        {
+            byte[] data = EncodeCurveBin(curve, scaleForHeader);
+            if (data == null) return;
+            assets.Add(new CaptureArchiveAsset { Kind = kind, Data = data });
         }
 
         internal static float ComputeCurveMeanNormalized(float[] curve)
@@ -145,6 +221,11 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// </summary>
         internal static void SaveJpegFromBytes(byte[] data, int w, int h, string path, int quality)
         {
+            File.WriteAllBytes(path, EncodeJpegFromBytes(data, w, h, quality));
+        }
+
+        internal static byte[] EncodeJpegFromBytes(byte[] data, int w, int h, int quality)
+        {
             var gch = GCHandle.Alloc(data, GCHandleType.Pinned);
             try
             {
@@ -161,12 +242,20 @@ namespace AniloxRoll.Monitor.Core.Camera
                         g.DrawImage(bmp8, 0, 0, w, h);
 
                     var codec = GetJpegEncoder();
-                    if (codec == null) { _reuseBmp24.Save(path); return; }
-
-                    using (var ep = new EncoderParameters(1))
+                    using (var output = new MemoryStream())
                     {
-                        ep.Param[0] = new EncoderParameter(Encoder.Quality, (long)quality);
-                        _reuseBmp24.Save(path, codec, ep);
+                        if (codec == null)
+                        {
+                            _reuseBmp24.Save(output, ImageFormat.Jpeg);
+                            return output.ToArray();
+                        }
+
+                        using (var ep = new EncoderParameters(1))
+                        {
+                            ep.Param[0] = new EncoderParameter(Encoder.Quality, (long)quality);
+                            _reuseBmp24.Save(output, codec, ep);
+                        }
+                        return output.ToArray();
                     }
                 }
             }
@@ -184,8 +273,15 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// </summary>
         internal static void SaveCurveBinFromArray(float[] arr, int scaleForHeader, string path)
         {
-            if (arr == null || arr.Length == 0) return;
-            using (var bw = new BinaryWriter(File.Open(path, FileMode.Create, FileAccess.Write)))
+            byte[] data = EncodeCurveBin(arr, scaleForHeader);
+            if (data != null) File.WriteAllBytes(path, data);
+        }
+
+        internal static byte[] EncodeCurveBin(float[] arr, int scaleForHeader)
+        {
+            if (arr == null || arr.Length == 0) return null;
+            using (var output = new MemoryStream(16 + arr.Length * sizeof(float)))
+            using (var bw = new BinaryWriter(output))
             {
                 bw.Write(new byte[] { (byte)'M', (byte)'C', (byte)'B', (byte)'F' });
                 bw.Write(1);                        // version
@@ -193,6 +289,8 @@ namespace AniloxRoll.Monitor.Core.Camera
                 bw.Write(arr.Length);               // array_length
                 for (int i = 0; i < arr.Length; i++)
                     bw.Write(arr[i]);
+                bw.Flush();
+                return output.ToArray();
             }
         }
 
@@ -469,6 +567,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         public int ScaleForHeader;
         public string SaveDir;
         public string BaseName;
+        public string GrabId;
         public int CameraId;
         public int OrigWidth;
         public int OrigHeight;
@@ -478,7 +577,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>本幀 frame-start 硬體時戳（Data Latch ticks）。0＝未取得。
         /// 寫進 _ticks.csv 側車，供回顧用「tick 就近對位」精準補黑（免疫 seq 歪掉/軟體戳抖動）。</summary>
         public long FrameStartTicks;
-        public Action<int, string, float, float, float, float, float> OnResult;
+        public Action<string, int, string, float, float, float, float, float> OnResult;
         /// <summary>存檔完成後回呼，傳入已儲存的檔案路徑陣列（供遠端複製佇列用）。</summary>
         public Action<string[]> OnFilesSaved;
     }

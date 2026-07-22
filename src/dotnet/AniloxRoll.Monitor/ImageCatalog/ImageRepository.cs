@@ -31,7 +31,11 @@ namespace AniloxRoll.Monitor.Core.Data
             _availablePeriods = new DateTime[0];
             if (!Directory.Exists(rootPath)) return;
 
-            var files = Directory.GetFiles(rootPath, CaptureFileNaming.RawJpgGlob, SearchOption.AllDirectories);
+            var files = new List<string>(Directory.GetFiles(
+                rootPath, CaptureFileNaming.RawJpgGlob, SearchOption.AllDirectories));
+            foreach (string archive in Directory.GetFiles(
+                rootPath, "*" + CaptureArchiveStore.Extension, SearchOption.AllDirectories))
+                files.AddRange(CaptureArchiveStore.ListAllVirtualRawPaths(archive));
 
             _metadataCache = files.AsParallel()
                 .Select(f =>
@@ -44,6 +48,13 @@ namespace AniloxRoll.Monitor.Core.Data
                     }
                 })
                 .Where(x => x != null)
+                .GroupBy(x => string.Concat(
+                    x.Year, x.Month, x.Day, x.Hour, x.Minute,
+                    x.Second, x.Millisecond, "-", x.CameraId),
+                    StringComparer.Ordinal)
+                .Select(group => group
+                    .OrderByDescending(x => CaptureArchiveStore.IsVirtualPath(x.FullPath))
+                    .First())
                 .ToList();
 
             // Period navigation reads this on every selection change. Build the sorted index once
@@ -59,7 +70,8 @@ namespace AniloxRoll.Monitor.Core.Data
 
         private ImageMetadata ParsePath(string path)
         {
-            var fileName = Path.GetFileName(path);
+            string virtualBase = CaptureArchiveStore.GetVirtualBaseName(path);
+            var fileName = virtualBase ?? Path.GetFileName(path);
             var match = _fileNameRegex.Match(fileName);
             if (!match.Success) return null;
 

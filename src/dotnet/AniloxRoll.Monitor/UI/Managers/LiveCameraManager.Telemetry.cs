@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Matrox.MatroxImagingLibrary;
@@ -64,7 +65,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.CameraStatusTimer] {ex.GetType().Name}: {ex.Message}"); return; }
 
             _statusTickInFlight = true;
-            Task.Run(() =>
+            Task.Run(async () =>
             {
                 try
                 {
@@ -80,6 +81,12 @@ namespace AniloxRoll.Monitor.UI.Managers
                         // 單飛路徑觸碰 → 背景使用安全。
                         bool wasConnected = _lastPresence.TryGetValue(cam.CameraId, out var pv) && pv;
                         _lastPresence[cam.CameraId] = isConnected;
+                        if (isConnected != wasConnected)
+                        {
+                            InvalidateCapturePhase(
+                                "presence-cam" + cam.CameraId +
+                                (isConnected ? "-connected" : "-disconnected"));
+                        }
                         if (isConnected && !wasConnected)
                             cam.RetryCLProtocolOnReconnect();
 
@@ -131,7 +138,12 @@ namespace AniloxRoll.Monitor.UI.Managers
                             double expFps = (cam.FrameHeight > 0 && cam.AppliedLineRateHz > 0)
                                 ? cam.AppliedLineRateHz / cam.FrameHeight : 0;
                             bool stalled = _stallDetector.Update(cam.CameraId, cam.GetFrameCount(), expFps);
-                            if (stalled) { statusText = "STALL"; color = Color.Red; }
+                            if (stalled)
+                            {
+                                InvalidateCapturePhase("stall-cam" + cam.CameraId);
+                                statusText = "STALL";
+                                color = Color.Red;
+                            }
                             else if (!cam.UserWantsGrab)
                             {
                                 statusText = "就緒"; color = Color.LightGreen;
@@ -142,6 +154,35 @@ namespace AniloxRoll.Monitor.UI.Managers
                             }
                         }
                         statuses.Add((cam.CameraId, statusText, color, clearFrame));
+                    }
+
+                    string capturePhaseFault = null;
+                    if (IsLiveGrabbing && _captureGateOpen)
+                    {
+                        AniloxCamera[] captureTargets = snapshot
+                            .Where(cam => cam != null && cam.IsConnected)
+                            .ToArray();
+                        string phaseReason;
+                        if (captureTargets.Length > 0 &&
+                            !TryValidateStandbyPhase(
+                                captureTargets,
+                                out phaseReason,
+                                logAligned: false,
+                                logPrefix: "capture runtime phase"))
+                        {
+                            // A transient callback/tick skew must not truncate the machine's
+                            // fixed High window. Keep this capture open, invalidate only the next
+                            // start, and let idle preparation realign after the normal Stop flow.
+                            if (System.Threading.Interlocked.CompareExchange(
+                                ref _captureRuntimePhaseFaultRaised, 1, 0) == 0)
+                            {
+                                InvalidateCapturePhase("runtime-" + phaseReason);
+                                capturePhaseFault = phaseReason;
+                                FlowTrace.Log(
+                                    $"capture phase drift deferred reason={phaseReason} " +
+                                    "gate=open next=resync");
+                            }
+                        }
                     }
 
                     int connected = 0;
@@ -168,7 +209,14 @@ namespace AniloxRoll.Monitor.UI.Managers
                             _hwReadyRaised = true;
                             OnHwReady?.Invoke();
                         }
+                        if (capturePhaseFault != null)
+                            OnCapturePhaseFault?.Invoke(capturePhaseFault);
                     }, null);
+
+                    // A machine IO High is a fixed capture window. Prepare phase while IO is Low
+                    // so an edge never spends several seconds inside full synchronization.
+                    if (!IsLiveGrabbing && capturePhaseFault == null)
+                        await PrepareIdleCaptureStandbyAsync(snapshot);
                 }
                 catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.CameraStatusTick(bg)] {ex.GetType().Name}: {ex.Message}"); }
                 finally { _statusTickInFlight = false; }

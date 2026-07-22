@@ -18,6 +18,7 @@ namespace AniloxRoll.Monitor.UI.Services
         public int[] ExpectedHeights { get; set; }
         public int TotalImageCount { get; set; }
         public long ConfigMs { get; set; }
+        public string StorageSource { get; set; }
     }
 
     internal sealed class ReviewImageData
@@ -34,6 +35,7 @@ namespace AniloxRoll.Monitor.UI.Services
         public int TotalImageCount { get; set; }
         public long ConfigMs { get; set; }
         public long StitchMs { get; set; }
+        public string StorageSource { get; set; }
 
         public void DisposeImages()
         {
@@ -67,7 +69,11 @@ namespace AniloxRoll.Monitor.UI.Services
             long configMs = configWatch.ElapsedMilliseconds;
 
             int totalImageCount = 0;
+            bool usesArchive = false;
             foreach (var camera in grouped) totalImageCount += camera.Value.Count;
+            foreach (var camera in grouped)
+                foreach (string path in camera.Value)
+                    if (CaptureArchiveStore.IsVirtualPath(path)) { usesArchive = true; break; }
 
             var alignment = FrameTickIndex.ResolveAlignment(grouped);
             var expectedWidths = new int[cameraCount];
@@ -82,7 +88,7 @@ namespace AniloxRoll.Monitor.UI.Services
             }
 
             if (logPaths)
-                FlowTrace.Log($"RV loadGrab paths {grabId} root={root} images={totalImageCount} cams={grouped.Count} cfg={(config != null ? "yes" : "no")} align={alignment.Mode}");
+                FlowTrace.Log($"RV loadGrab paths {grabId} root={root} images={totalImageCount} cams={grouped.Count} cfg={(config != null ? "yes" : "no")} align={alignment.Mode} source={(usesArchive ? "acap" : "legacy")}");
             return new ReviewImageLoadPlan
             {
                 GroupedPaths = grouped,
@@ -91,7 +97,8 @@ namespace AniloxRoll.Monitor.UI.Services
                 ExpectedWidths = expectedWidths,
                 ExpectedHeights = expectedHeights,
                 TotalImageCount = totalImageCount,
-                ConfigMs = configMs
+                ConfigMs = configMs,
+                StorageSource = usesArchive ? "acap" : "legacy"
             };
         }
 
@@ -164,7 +171,8 @@ namespace AniloxRoll.Monitor.UI.Services
                 Config = config,
                 TotalImageCount = plan.TotalImageCount,
                 ConfigMs = plan.ConfigMs,
-                StitchMs = stitchWatch.ElapsedMilliseconds
+                StitchMs = stitchWatch.ElapsedMilliseconds,
+                StorageSource = plan.StorageSource
             };
         }
 

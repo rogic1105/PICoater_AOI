@@ -22,6 +22,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         }
 
         public double RowPitchMm => _display?.RowPitchMm ?? 0;
+        public bool HasViewRange => _hasViewRange;
 
         public void SetThresholds(float mean, float max) => _display?.SetThresholds(mean, max);
 

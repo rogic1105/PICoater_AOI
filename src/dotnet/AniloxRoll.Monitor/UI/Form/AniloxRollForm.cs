@@ -119,6 +119,7 @@ namespace AniloxRoll.Monitor.Forms
         // --- 檢測日誌 ---
         private InspectionLogService _inspectionLogService;
         private string _currentGrabId;
+        private DateTime _currentCaptureDate;
 
         // --- App Mode ---
         private AppModeConfig _appMode;
@@ -181,6 +182,7 @@ namespace AniloxRoll.Monitor.Forms
         private readonly float[][] _liveCurveMean = new float[CameraCount][];
         private readonly float[][] _liveCurveMax  = new float[CameraCount][];
         private volatile bool _liveOverviewDirty;
+        private bool _liveColumnCurvePresented;
         private bool _isIoSuspended;
         private bool _shutdownInProgress;
         private bool _shutdownComplete;
@@ -897,7 +899,7 @@ namespace AniloxRoll.Monitor.Forms
             {
                 System.Threading.Interlocked.Exchange(
                     ref _lastLocalSaveUtcTicks, DateTime.UtcNow.Ticks);
-                _remoteCopyService?.EnqueueFiles(files);
+                _remoteCopyService?.StageFiles(files);
                 _outputHealthService?.Resolve("CaptureWriteFailure.CAM" + camId);
             };
             _liveCameraManager.OnCaptureSaveFailed = (camId, error) =>
@@ -913,6 +915,7 @@ namespace AniloxRoll.Monitor.Forms
             _liveCameraManager.OnLiveRowCurveData   += OnLiveRowCurveData;
             _liveCameraManager.OnMainContentPresented += PresentPendingLiveRowCurves;
             _liveCameraManager.OnCaptureSequenceReset += ResetLiveChartsForDisplayTransition;
+            _liveCameraManager.OnCapturePhaseFault += HandleCapturePhaseFault;
             _liveCameraManager.OnLiveViewRange      += ApplyLiveViewRange; // 主畫面縮放/平移 → live 曲線圖 zoom 連動（bin↔主畫面對齊）
             _liveCameraManager.OnCameraCountChanged += (connected, expected) =>
             {

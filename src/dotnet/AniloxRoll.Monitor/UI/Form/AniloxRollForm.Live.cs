@@ -48,6 +48,8 @@ namespace AniloxRoll.Monitor.Forms
                 ClearBackgroundPreview();
 
             bool wasGrabbing = _liveCameraManager.IsLiveGrabbing;
+            string stoppingGrabId = wasGrabbing ? _currentGrabId : string.Empty;
+            DateTime stoppingCaptureDate = _currentCaptureDate;
 
             // CLProtocol 尚未就緒不可開始抓取（grab 進行中才 enable + 重套線掃會掉幀，cam1 最明顯）。
             // 手動鈕在就緒前已是灰色；此處主要擋 IO 觸發路徑（IoStartGrab 直接呼叫本方法繞過按鈕狀態）。
@@ -60,9 +62,15 @@ namespace AniloxRoll.Monitor.Forms
             // 啟動路徑：先亮燈 → 等光源穩定 → 再開始 grab
             if (!wasGrabbing)
             {
+                var lightStart = Stopwatch.StartNew();
+                FlowTrace.Log("capture light prepare begin");
                 await Task.Run(() => LightTurnOn());   // 序列埠寫入 ~百 ms，不佔 UI（順序仍保證：燈亮→暖機→grab）
                 int warmup = _settings?.LightWarmupMs ?? 0;
                 if (warmup > 0) await Task.Delay(warmup);
+                lightStart.Stop();
+                FlowTrace.Log(
+                    $"capture light prepare done commandAndWarmupMs={lightStart.ElapsedMilliseconds} " +
+                    $"configuredWarmupMs={warmup}");
                 ResetLiveChartsForDisplayTransition();
                 _muraExceedLatch[0] = _muraExceedLatch[1] = false;   // 每輪 grab 重新邊緣觸發超標留痕
                 _outputHealthService?.Resolve("MuraExceed.v");
@@ -115,14 +123,16 @@ namespace AniloxRoll.Monitor.Forms
             if (!wasGrabbing && _liveCameraManager.IsLiveGrabbing)
             {
                 _currentGrabId = _inspectionLogService.NextGrabId();
+                _liveCameraManager.SetCaptureGrabId(_currentGrabId);
                 DateTime captureDate = DateTime.Now;
+                _currentCaptureDate = captureDate;
                 string captureRoot = _settings?.CaptureRootPath ?? string.Empty;
                 string imageDir = string.IsNullOrWhiteSpace(captureRoot)
                     ? "(empty)" : CaptureStoragePaths.DateImageDir(captureRoot, captureDate);
                 string csvPath = string.IsNullOrWhiteSpace(captureRoot)
                     ? "(empty)" : CaptureStoragePaths.DailyCsv(captureRoot, captureDate);
                 FlowTrace.Log($"capture plan grab={_currentGrabId} root={captureRoot} imageDir={imageDir} csv={csvPath} " +
-                    $"files=*{CaptureFileNaming.RawJpg}|*{CaptureFileNaming.ProcC}|*{CaptureFileNaming.ProcR}|*{CaptureFileNaming.MeanC}|*{CaptureFileNaming.MaxC}|*{CaptureFileNaming.MeanR}|*{CaptureFileNaming.MaxR} " +
+                    $"archive={_currentGrabId}{CaptureArchiveStore.Extension} " +
                     $"scale={InspectionEngineConfig.DefaultSaveResizeScale}");
 
                 int limitSeconds = Math.Max(1, _settings?.GrabLimitSeconds ?? InspectionDefaults.GrabLimitSeconds);
@@ -137,6 +147,7 @@ namespace AniloxRoll.Monitor.Forms
                     UpdateGrabButton(false);
                     return false;
                 }
+                _outputHealthService?.Resolve("CapturePhaseDrift");
             }
 
             // 剛從「抓取中」→「停止」：關燈 + 觸發循環儲存 + 通知儲存機清理
@@ -144,6 +155,15 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _grabDurationCoordinator?.Disarm();
                 _ = Task.Run(() => LightTurnOff());   // 序列埠寫入不佔 UI（[UiStack] 抓到停止時卡在 SerialStream.Write）
+                lock (_pendingLiveRowCurveLock)
+                {
+                    _pendingLiveRowMean.Clear();
+                    _pendingLiveRowMax.Clear();
+                }
+                FlowTrace.Log($"capture save drain begin grab={stoppingGrabId}");
+                await _liveCameraManager.WaitForCaptureSavesAsync();
+                FlowTrace.Log($"capture save drain done grab={stoppingGrabId}");
+                ReleaseCaptureRemoteDelivery(stoppingGrabId, stoppingCaptureDate);
                 TriggerRetentionAndFlagAsync();
                 _muraExceedLatch[0] = _muraExceedLatch[1] = false;
                 _outputHealthService?.Resolve("MuraExceed.v");
@@ -180,16 +200,17 @@ namespace AniloxRoll.Monitor.Forms
         /// EnableAutoCapture=true 且抓取中時才會觸發。
         /// </summary>
         private void OnCameraInspectionResult(
-            int camId, string fileNameNoExt, float meanPeak, float maxPeak,
+            string grabId, int camId, string fileNameNoExt, float meanPeak, float maxPeak,
             float maxCMean, float meanRPeak, float maxRPeak)
         {
-            if (string.IsNullOrEmpty(_currentGrabId)) return;
+            if (string.IsNullOrEmpty(grabId)) grabId = _currentGrabId;
+            if (string.IsNullOrEmpty(grabId)) return;
             int idx = camId - 1;
             if (_inspectionLogService != null)
             {
                 // OnCameraInspectionResult 的 meanPeak/maxPeak 為 V 方向（pipeline 主處理方向），用 V 閾值記錄
                 _inspectionLogService.AppendRecord(
-                    _currentGrabId,
+                    grabId,
                     fileNameNoExt,
                     meanPeak,
                     maxPeak,
@@ -206,10 +227,11 @@ namespace AniloxRoll.Monitor.Forms
                         ? _settings.Acquisition.CameraExposureTimeUs[idx] : 0,
                     CsvConfigSnapshot.FromSettings(_settings));
 
-                // CSV 寫完後排入遠端複製佇列（CSV 在 month 目錄，不在 OnFilesSaved 的 day 目錄）
+                // CSV 寫完只建立 durable 待傳標記；Stop 排水完成後才釋放遠端複製。
+                // CSV 在 month 目錄，不在 OnFilesSaved 的 day 目錄。
                 string csvPath = _inspectionLogService.LastCsvPath;
                 if (!string.IsNullOrEmpty(csvPath))
-                    _remoteCopyService?.EnqueueFile(csvPath);
+                    _remoteCopyService?.StageFiles(new[] { csvPath });
             }
 
             // 抓圖計數器 + watchdog 時間戳（Inspection 模式）
@@ -229,6 +251,39 @@ namespace AniloxRoll.Monitor.Forms
         /// 陣列為 0-255，閾值為 0-1，取陣列 max 後除以 255 比較。
         /// </summary>
         // Mura 超標狀態（[0]=v,[1]=h；邊緣觸發 flow 留痕用，超標期間不洗版）
+        private void ReleaseCaptureRemoteDelivery(string grabId, DateTime captureDate)
+        {
+            if (_remoteCopyService == null || string.IsNullOrWhiteSpace(grabId)) return;
+            string root = _settings?.CaptureRootPath ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(root)) return;
+
+            string archivePath = Path.Combine(
+                CaptureStoragePaths.DateImageDir(root, captureDate),
+                grabId + CaptureArchiveStore.Extension);
+            string csvPath = CaptureStoragePaths.DailyCsv(root, captureDate);
+            var files = new List<string>(2);
+            if (File.Exists(archivePath)) files.Add(archivePath);
+            if (File.Exists(csvPath)) files.Add(csvPath);
+
+            _remoteCopyService.ReleaseStagedFiles(files.ToArray());
+            long bytes = 0;
+            foreach (string path in files)
+            {
+                try { bytes += new FileInfo(path).Length; }
+                catch { }
+            }
+            FlowTrace.Log(
+                $"capture remote release grab={grabId} files={files.Count} bytes={bytes}");
+        }
+
+        private void HandleCapturePhaseFault(string reason)
+        {
+            _outputHealthService?.Report(
+                "CapturePhaseDrift",
+                OutputHealthSeverity.OutputFault,
+                "相機相位偏移，本輪繼續抓滿，下一輪前重新對齊");
+        }
+
         private readonly bool[] _muraExceedLatch = new bool[2];
 
         private void CheckLiveMura(float[] meanArr, float[] maxArr, string direction)
@@ -368,7 +423,9 @@ namespace AniloxRoll.Monitor.Forms
             // 瀑布餵的是「顯示順序」band 緩衝（index 0=畫面最上列）；即時餵原始擷取順序 → 反向規則不同（adapter 內）
             if (_liveRowDisplay != null)
                 _liveRowDisplay.DataIsDisplayOrdered = mode == MainDisplayMode.Waterfall;
-            return _liveRowSync?.UpdateData(mean, max, requireViewRange) ?? true;
+            bool canPresent = !requireViewRange || (_liveRowSync?.HasViewRange ?? true);
+            _liveRowSync?.UpdateData(mean, max, requireViewRange);
+            return canPresent;
         }
 
         private void OnLiveCurveData(int camId, float[] meanArr, float[] maxArr)
@@ -423,17 +480,22 @@ namespace AniloxRoll.Monitor.Forms
                 _pendingLiveRowMax.Clear();
             }
 
-            FlowTrace.Log(
-                $"rowCurve present after=mainImage cams={readyMean.Count} " +
-                $"mode={(_settings?.he_MainDisplay == MainDisplayMode.Waterfall ? "WF" : "IC")}");
             var swRow = System.Diagnostics.Stopwatch.StartNew();
+            bool presented = false;
             try
             {
                 for (int camId = 1; camId <= CameraCount; camId++)
                 {
                     if (!readyMean.TryGetValue(camId, out float[] meanArr)) continue;
                     if (!readyMax.TryGetValue(camId, out float[] maxArr)) continue;
-                    OnLiveRowCurveDataUi(camId, meanArr, maxArr);
+                    presented |= OnLiveRowCurveDataUi(camId, meanArr, maxArr);
+                }
+
+                if (presented)
+                {
+                    FlowTrace.Log(
+                        $"rowCurve present after=mainImage cams={readyMean.Count} " +
+                        $"mode={(_settings?.he_MainDisplay == MainDisplayMode.Waterfall ? "WF" : "IC")}");
                 }
             }
             finally
@@ -443,14 +505,13 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        private void OnLiveRowCurveDataUi(int camId, float[] meanArr, float[] maxArr)
+        private bool OnLiveRowCurveDataUi(int camId, float[] meanArr, float[] maxArr)
         {
-            if (_liveRowDisplay == null) return;
+            if (_liveRowDisplay == null) return false;
 
             if (_settings?.he_MainDisplay == MainDisplayMode.Waterfall)
             {
-                UpdateLiveWaterfallRowChart(camId, meanArr, maxArr);
-                return;
+                return UpdateLiveWaterfallRowChart(camId, meanArr, maxArr);
             }
 
             bool isGlobal = _liveCameraManager?.IsGlobalMergeActive == true;
@@ -461,14 +522,14 @@ namespace AniloxRoll.Monitor.Forms
                 // 全域模式：快取每台相機資料，合併後更新（mean 取 mean, max 取 max）
                 _liveRowMeanCache[camId] = meanArr;
                 _liveRowMaxCache[camId]  = maxArr;
-                if (!TryMergeLiveRowCurve(out float[] mergedMean, out float[] mergedMax)) return;
-                UpdateLiveRowDataAndViewRange(mergedMean, mergedMax);
+                if (!TryMergeLiveRowCurve(out float[] mergedMean, out float[] mergedMax)) return false;
+                return UpdateLiveRowDataAndViewRange(mergedMean, mergedMax);
             }
             else
             {
                 // 合圖未啟用（啟用失敗/尚未啟用）：只顯示選中相機
-                if (camId != _liveCameraManager.SelectedMainCameraId) return;
-                UpdateLiveRowDataAndViewRange(meanArr, maxArr);
+                if (camId != _liveCameraManager.SelectedMainCameraId) return false;
+                return UpdateLiveRowDataAndViewRange(meanArr, maxArr);
             }
         }
 
@@ -529,28 +590,28 @@ namespace AniloxRoll.Monitor.Forms
                 _liveCurveMax[i] = null;
             }
             _liveOverviewDirty = false;
+            _liveColumnCurvePresented = false;
             _liveOverviewHelper?.Clear();
             _liveViewLeftMm = _liveViewRightMm = double.NaN;
             _liveViewTopMm = _liveViewBotMm = double.NaN;
         }
 
-        private void UpdateLiveWaterfallRowChart(int camId, float[] meanArr, float[] maxArr)
+        private bool UpdateLiveWaterfallRowChart(int camId, float[] meanArr, float[] maxArr)
         {
-            if (meanArr == null || meanArr.Length == 0 || _liveRowDisplay == null) return;
+            if (meanArr == null || meanArr.Length == 0 || _liveRowDisplay == null) return false;
 
             bool isGlobal = _liveCameraManager?.IsGlobalMergeActive == true;
             if (!isGlobal)
             {
-                if (camId != _liveCameraManager.SelectedMainCameraId) return;
-                AppendLiveWaterfallRowBand(meanArr, maxArr);
-                return;
+                if (camId != _liveCameraManager.SelectedMainCameraId) return false;
+                return AppendLiveWaterfallRowBand(meanArr, maxArr);
             }
 
             _waterfallRowMeanPending[camId] = meanArr;
             _waterfallRowMaxPending[camId] = maxArr;
 
             int expected = Math.Max(1, _liveCameraManager?.ConnectedCameraCount ?? CameraCount);
-            if (_waterfallRowMeanPending.Count < expected) return;
+            if (_waterfallRowMeanPending.Count < expected) return false;
 
             var rowMean = new float[CameraCount][];
             var rowMax = new float[CameraCount][];
@@ -561,14 +622,14 @@ namespace AniloxRoll.Monitor.Forms
 
             CurveMergeHelper.MergeRowCurvesOverlap(rowMean, rowMax, CameraCount,
                 out float[] mergedMean, out float[] mergedMax);
-            if (mergedMean == null) return;
+            if (mergedMean == null) return false;
 
             _waterfallRowMeanPending.Clear();
             _waterfallRowMaxPending.Clear();
-            AppendLiveWaterfallRowBand(mergedMean, mergedMax);
+            return AppendLiveWaterfallRowBand(mergedMean, mergedMax);
         }
 
-        private void AppendLiveWaterfallRowBand(float[] meanBand, float[] maxBand)
+        private bool AppendLiveWaterfallRowBand(float[] meanBand, float[] maxBand)
         {
             int capacity = _settings?.ImageView?.WaterfallTotalHeight ?? InspectionDefaults.WaterfallTotalHeight;
             capacity = Math.Max(1000, capacity);
@@ -600,7 +661,7 @@ namespace AniloxRoll.Monitor.Forms
                 ? (_waterfallRowWrite + bandLen) % capacity
                 : Math.Min(capacity, _waterfallRowWrite + bandLen);
 
-            if (UpdateLiveRowDataAndViewRange(_waterfallRowMean, _waterfallRowMax)) return;
+            return UpdateLiveRowDataAndViewRange(_waterfallRowMean, _waterfallRowMax);
         }
 
         /// <summary>用 A輪速度 和選中相機的取樣頻率（Line Rate）更新列圖表座標。</summary>

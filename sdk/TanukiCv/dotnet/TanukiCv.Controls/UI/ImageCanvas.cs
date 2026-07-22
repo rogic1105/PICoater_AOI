@@ -328,6 +328,17 @@ namespace TanukiCv.Controls
         }
 
         /// <summary>
+        /// Invalidates an in-flight LOD request without replacing the tile that is already visible.
+        /// A later RefreshLod starts a new request for the current content generation.
+        /// </summary>
+        public void CancelPendingLodRefresh()
+        {
+            if (!_lodActive) return;
+            System.Threading.Interlocked.Increment(ref _lodContentGeneration);
+            _lodRecomputePending = false;
+        }
+
+        /// <summary>
         /// 宿主由隱藏轉為可見時，以完成 layout 後的控制項尺寸補畫內容。
         /// LOD 尚無 tile 時主動重算；已有 tile 或一般 Image 時同步 paint，避免必須先有滑鼠互動才顯示。
         /// </summary>
@@ -436,7 +447,14 @@ namespace TanukiCv.Controls
         {
             _lodRecomputeInFlight = false;
             if (!_lodActive) { tile?.Dispose(); return; }
-            if (tile != null)
+            bool isCurrent = contentGeneration ==
+                System.Threading.Interlocked.Read(ref _lodContentGeneration);
+            if (!isCurrent)
+            {
+                tile?.Dispose();
+                tile = null;
+            }
+            else if (tile != null)
             {
                 if (_lodTile != null && !ReferenceEquals(_lodTile, tile)) _lodTile.Dispose();
                 _lodTile = tile;

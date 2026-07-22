@@ -71,9 +71,16 @@ namespace MilGrabber.Core
         public bool KeepAcquiringWhenIdle => _keepAcquiringWhenIdle;
         public bool HasObservedFrameSinceAcquisitionStart =>
             IsLive && _hasObservedFrameSinceAcquisitionStart;
+        /// <summary>
+        /// Monotonic Stopwatch timestamp of the newest completed frame callback. Zero means that
+        /// this acquisition generation has not produced a frame yet.
+        /// </summary>
+        public long LastFrameObservedTimestamp =>
+            System.Threading.Interlocked.Read(ref _lastFrameObservedTimestamp);
         private bool _userWantsGrab = false;
         private bool _keepAcquiringWhenIdle;
         private volatile bool _hasObservedFrameSinceAcquisitionStart;
+        private long _lastFrameObservedTimestamp;
         private int _acquisitionPauseDepth;
         private readonly object _grabStateLock = new object();
         private bool _isReleased = false;
@@ -327,6 +334,7 @@ namespace MilGrabber.Core
                 IsLive = false;
             }
             _hasObservedFrameSinceAcquisitionStart = false;
+            System.Threading.Interlocked.Exchange(ref _lastFrameObservedTimestamp, 0);
             try { MIL.MdigControl(_milDigitizer, MIL.M_GRAB_ABORT, MIL.M_DEFAULT); }
             catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}] M_GRAB_ABORT 不支援/失敗（continue）：{ex.Message}"); }
         }
@@ -339,7 +347,10 @@ namespace MilGrabber.Core
             MIL.MdigInquire(_milDigitizer, MIL.M_CAMERA_PRESENT, ref presence);
             IsConnected = (presence == MIL.M_YES);
             if (!IsConnected)
+            {
                 _hasObservedFrameSinceAcquisitionStart = false;
+                System.Threading.Interlocked.Exchange(ref _lastFrameObservedTimestamp, 0);
+            }
             return IsConnected;
         }
 
@@ -356,11 +367,14 @@ namespace MilGrabber.Core
             MIL_ID modifiedBuffer = MIL.M_NULL;
             MIL.MdigGetHookInfo(eventId, MIL.M_MODIFIED_BUFFER + MIL.M_BUFFER_ID, ref modifiedBuffer);
             cam._milLastGrabBuffer = modifiedBuffer;
-            // Idle standby only needs one observed frame to prove readiness. During product grab,
-            // continue reading every latch for alignment diagnostics and display timestamps.
-            if (!cam._hasObservedFrameSinceAcquisitionStart || cam._userWantsGrab)
-                cam.CaptureFrameStartLatch(eventId);
+            // Drain every hardware latch even in standby. Product policy can then arm a future
+            // common frame without restarting MIL. CaptureFrameStartLatch only writes the
+            // diagnostic phase file while the user actually wants a grab.
+            cam.CaptureFrameStartLatch(eventId);
             cam._hasObservedFrameSinceAcquisitionStart = true;
+            System.Threading.Interlocked.Exchange(
+                ref cam._lastFrameObservedTimestamp,
+                System.Diagnostics.Stopwatch.GetTimestamp());
 
             if (modifiedBuffer != MIL.M_NULL && cam._milDisplayBuffer != MIL.M_NULL)
             {

@@ -170,10 +170,127 @@ namespace AniloxRoll.Monitor.Tests
                 string destination = Path.Combine(
                     _remoteRoot, "2026", "202607", "20260715", "_ticks.csv");
                 Assert.That(File.ReadAllText(destination), Is.EqualTo(File.ReadAllText(source)));
-                Assert.That(service.TotalCopiedFiles, Is.EqualTo(2));
+                // An update before the first snapshot starts coalesces into one publish;
+                // an in-flight snapshot requires one dirty follow-up publish.
+                Assert.That(service.TotalCopiedFiles, Is.InRange(1L, 2L));
                 Assert.That(FindPendingMarkers(), Is.Empty);
                 Assert.That(FindPartFiles(_remoteRoot), Is.Empty);
             }
+        }
+
+        [Test]
+        public void StageFiles_HoldsLatestContentUntilReleased()
+        {
+            Directory.CreateDirectory(_remoteRoot);
+            string source = CreateCaptureFile("capture.acap", "frame-1");
+            string destination = Path.Combine(
+                _remoteRoot, "2026", "202607", "20260715", "capture.acap");
+
+            using (var service = new RemoteCopyService(() => _remoteRoot, () => _localRoot))
+            {
+                service.StageFiles(new[] { source });
+                File.AppendAllText(source, "-frame-2");
+                service.StageFiles(new[] { source });
+
+                Thread.Sleep(250);
+                Assert.That(File.Exists(destination), Is.False);
+                Assert.That(service.QueueCount, Is.EqualTo(1));
+                Assert.That(FindPendingMarkers(), Has.Length.EqualTo(1));
+
+                service.ReleaseStagedFiles(new[] { source });
+                WaitUntil(() => service.QueueCount == 0, 5000, "staged file release");
+
+                Assert.That(File.ReadAllText(destination), Is.EqualTo("frame-1-frame-2"));
+                Assert.That(service.TotalCopiedFiles, Is.EqualTo(1));
+                Assert.That(FindPendingMarkers(), Is.Empty);
+            }
+        }
+
+        [Test]
+        public void Restart_WithStagedMarker_ReleasesInterruptedCapture()
+        {
+            Directory.CreateDirectory(_remoteRoot);
+            string source = CreateCaptureFile("interrupted.acap", "partial-capture");
+
+            using (var first = new RemoteCopyService(() => _remoteRoot, () => _localRoot))
+            {
+                first.StageFiles(new[] { source });
+                Assert.That(first.QueueCount, Is.EqualTo(1));
+            }
+
+            using (var restarted = new RemoteCopyService(() => _remoteRoot, () => _localRoot))
+            {
+                WaitUntil(() => restarted.QueueCount == 0, 5000, "staged restart recovery");
+            }
+
+            string destination = Path.Combine(
+                _remoteRoot, "2026", "202607", "20260715", "interrupted.acap");
+            Assert.That(File.ReadAllText(destination), Is.EqualTo("partial-capture"));
+            Assert.That(FindPendingMarkers(), Is.Empty);
+        }
+
+        [Test]
+        public void StageFiles_HoldsPathThatWasAlreadyQueuedByPreviousCapture()
+        {
+            string blockedPath = CreateBlockedRemotePath();
+            string currentRemote = blockedPath;
+            string source = CreateCaptureFile("20260715.csv", "previous-grab\r\n");
+            string destination = Path.Combine(
+                _remoteRoot, "2026", "202607", "20260715", "20260715.csv");
+
+            using (var service = new RemoteCopyService(() => currentRemote, () => _localRoot))
+            {
+                service.EnqueueFile(source);
+                WaitUntil(() => service.TotalRetryAttempts > 0, 5000, "previous capture retry");
+
+                File.AppendAllText(source, "current-grab\r\n");
+                service.StageFiles(new[] { source });
+                Directory.CreateDirectory(_remoteRoot);
+                currentRemote = _remoteRoot;
+                Assert.That(service.ProbeRemoteWritable(), Is.True);
+
+                Thread.Sleep(2500);
+                Assert.That(File.Exists(destination), Is.False);
+                Assert.That(service.QueueCount, Is.EqualTo(1));
+
+                service.ReleaseStagedFiles(new[] { source });
+                WaitUntil(() => service.QueueCount == 0, 5000, "current capture release");
+
+                Assert.That(
+                    File.ReadAllText(destination),
+                    Is.EqualTo("previous-grab\r\ncurrent-grab\r\n"));
+                Assert.That(service.TotalCopiedFiles, Is.EqualTo(1));
+                Assert.That(FindPendingMarkers(), Is.Empty);
+            }
+        }
+
+        [Test]
+        public void CopySharedSnapshot_AllowsCaptureWriterToAppendWhileSourceIsOpen()
+        {
+            string source = CreateCaptureFile("capture.acap", "frame-1");
+            string destination = Path.Combine(_tempRoot, "capture.acap.part-test");
+            bool appended = false;
+
+            RemoteCopyService.CopySharedSnapshot(
+                source,
+                destination,
+                () =>
+                {
+                    using (var writer = new FileStream(
+                        source,
+                        FileMode.Append,
+                        FileAccess.Write,
+                        FileShare.Read))
+                    {
+                        writer.WriteByte(0x7F);
+                        writer.Flush(true);
+                    }
+                    appended = true;
+                });
+
+            Assert.That(appended, Is.True);
+            Assert.That(new FileInfo(source).Length, Is.EqualTo("frame-1".Length + 1));
+            Assert.That(new FileInfo(destination).Length, Is.EqualTo("frame-1".Length));
         }
 
         [Test]

@@ -162,11 +162,21 @@ namespace AniloxRoll.Monitor.Forms
                 FlowTrace.Log("IO grab accepted busy=on state=already-grabbing");
                 return;
             }
+            string standbyReason;
+            if (!_liveCameraManager.TryGetCaptureStandbyReady(out standbyReason))
+            {
+                await RejectIoGrabStartAsync(
+                    controller,
+                    generation,
+                    "capture-not-ready:" + standbyReason);
+                return;
+            }
             if (IsStandardBgSubEnabled && !IsBgBinReady())
             {
-                System.Diagnostics.Trace.TraceWarning("[IoStartGrab] StandardBgSub 無背景 bin，自動取得背景後接續 grab");
-                _autoStartGrabAfterBg = true;
-                _autoStartGrabIoGeneration = generation;
+                System.Diagnostics.Trace.TraceWarning(
+                    "[IoStartGrab] StandardBgSub 無背景 bin，本輪拒絕並自動取得背景；等待下一個完整 START 邊緣");
+                await RejectIoGrabStartAsync(controller, generation, "background-not-ready");
+                if (!IsCurrentIoController(controller, generation)) return;
                 btnLiveGetBackground_Click(null, null);
                 return;
             }

@@ -51,7 +51,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             for (int i = 0; i < sortedPaths.Count; i++)
             {
                 string path = sortedPaths[i];
-                if (string.IsNullOrEmpty(path) || !File.Exists(path)) continue;   // 留 null = 黑布
+                if (string.IsNullOrEmpty(path) || !CaptureArchiveStore.Exists(path)) continue;
                 try
                 {
                     var bmp = LoadCameraImage(path, bmpResizeScale, bmpLoader, useProcessed, ridgeDirection);
@@ -112,11 +112,12 @@ namespace AniloxRoll.Monitor.UI.Widgets
             for (int i = 0; i < sortedPaths.Count; i++)
             {
                 string loadPath = ResolveLoadPath(sortedPaths[i], useProcessed, ridgeDirection);
-                if (string.IsNullOrEmpty(loadPath) || !File.Exists(loadPath)) continue;
+                if (string.IsNullOrEmpty(loadPath) || !CaptureArchiveStore.Exists(loadPath)) continue;
                 try
                 {
-                    using (var stream = new FileStream(
-                        loadPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                    byte[] bytes = CaptureArchiveStore.ReadAllBytes(loadPath);
+                    if (bytes == null) continue;
+                    using (var stream = new MemoryStream(bytes, false))
                     using (var image = Image.FromStream(stream, false, false))
                     {
                         width = image.Width;
@@ -143,9 +144,11 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 return null;
 
             string loadPath = ResolveLoadPath(path, useProcessed, ridgeDirection);
-            byte[] bytes = File.ReadAllBytes(loadPath);
-            using (var ms = new MemoryStream(bytes))
-                return new Bitmap(ms);
+            byte[] bytes = CaptureArchiveStore.ReadAllBytes(loadPath);
+            if (bytes == null) return null;
+            using (var ms = new MemoryStream(bytes, false))
+            using (var decoded = new Bitmap(ms))
+                return new Bitmap(decoded);
         }
 
         private static string ResolveLoadPath(
@@ -157,7 +160,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
             string baseName = CaptureFileNaming.StripRawJpg(path);
             string procPath = CaptureFileNaming.ResolveProcJpg(baseName, ridgeDirection);
-            return File.Exists(procPath) ? procPath : path;
+            return CaptureArchiveStore.Exists(procPath) ? procPath : path;
         }
 
     }

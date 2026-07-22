@@ -81,6 +81,8 @@
   <ItemGroup>
     <Compile Include="Acquisition\AniloxCamera.cs" />
     <Compile Include="Acquisition\CameraFrameSaver.cs" />
+    <Compile Include="Acquisition\CaptureSaveSessionGate.cs" />
+    <Compile Include="Acquisition\CapturePhaseMath.cs" />
     <Compile Include="Acquisition\CaptureTimestampCoordinator.cs" />
     <Compile Include="Acquisition\CameraSystemManager.cs" />
     <Compile Include="ImageCatalog\ImageMetadata.cs" />
@@ -122,6 +124,7 @@
     <Compile Include="Interop\NativeMethods.cs" />
     <Compile Include="Services\AoiService.cs" />
     <Compile Include="Services\CaptureFileNaming.cs" />
+    <Compile Include="Services\CaptureArchiveStore.cs" />
     <Compile Include="Services\FlowTrace.cs" />
     <Compile Include="Services\FrameTickIndex.cs" />
     <Compile Include="Services\CaptureStoragePaths.cs" />

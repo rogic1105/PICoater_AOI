@@ -25,6 +25,10 @@ class CaptureFlowValidator:
         r"code=(?P<code>\S+) active=(?P<active>True|False)$"
     )
     _health_ack = re.compile(r"^\[OutputHealth\] ack codes=(?P<codes>\S+)$")
+    _remote_release = re.compile(
+        r"^capture remote release grab=(?P<grab>\d{6}-\d{6}) "
+        r"files=(?P<files>\d+) bytes=(?P<bytes>\d+)$"
+    )
 
     def validate(self, session: FlowSession) -> CheckReport:
         report = CheckReport()
@@ -32,6 +36,10 @@ class CaptureFlowValidator:
         records = [
             line for line in session.lines
             if line.message.startswith("capture csv firstRecord ")
+        ]
+        archive_appends = [
+            line for line in session.lines
+            if line.message.startswith("capture archive append ")
         ]
         csv_lines = [
             line for line in session.lines if line.message.startswith("capture csv ")
@@ -45,21 +53,16 @@ class CaptureFlowValidator:
         else:
             self._check_capture_plan(plans, report)
             self._check_config_snapshots(configs, report)
-            self._check_first_records(plans, records, report)
+            self._check_first_records(plans, archive_appends, records, report)
+        self._check_write_integrity(plans, archive_appends, session, report)
+        self._check_delivery_release(plans, archive_appends, session, report)
         self._check_output_health(session, report)
         return report
 
     def _check_capture_plan(self, plans, report: CheckReport) -> None:
-        required = (
-            "_raw.jpg",
-            "_proc_c.jpg",
-            "_proc_r.jpg",
-            "_mean_c.bin",
-            "_max_c.bin",
-            "_mean_r.bin",
-            "_max_r.bin",
-        )
         legacy = (
+            " files=",
+            "_raw.jpg",
             "_proc_v.jpg",
             "_proc_h.jpg",
             "_mean_v.bin",
@@ -74,13 +77,12 @@ class CaptureFlowValidator:
             current_id = grab_id(message)
             if current_id:
                 ids.add(current_id)
-            missing = [token for token in required if token not in message]
             old = [token for token in legacy if token in message]
             if not current_id or " root=" not in message or " imageDir=" not in message or " csv=" not in message:
                 failures.append(f"{line.timestamp} 欄位不完整")
-            elif missing or old:
+            elif f" archive={current_id}.acap" not in message or old:
                 failures.append(
-                    f"{line.timestamp} missing={','.join(missing) or '-'} legacy={','.join(old) or '-'}"
+                    f"{line.timestamp} archive=invalid legacy={','.join(old) or '-'}"
                 )
 
         if not plans:
@@ -127,12 +129,18 @@ class CaptureFlowValidator:
             + (f"；首例 {failures[0]}" if failures else ""),
         )
 
-    def _check_first_records(self, plans, records, report: CheckReport) -> None:
+    def _check_first_records(self, plans, archive_appends, records, report: CheckReport) -> None:
         plan_positions = {}
         for index, line in enumerate(plans):
             current_id = grab_id(line.message)
             if current_id:
                 plan_positions[current_id] = line.elapsed
+
+        append_positions = {}
+        for line in archive_appends:
+            current_id = grab_id(line.message)
+            if current_id:
+                append_positions.setdefault(current_id, []).append(line.elapsed)
 
         failures = []
         seen = set()
@@ -148,6 +156,14 @@ class CaptureFlowValidator:
             if current_id not in plan_positions or plan_positions[current_id] > line.elapsed:
                 failures.append(f"{line.timestamp} grab={current_id} 缺先行 capture plan")
 
+        for line in records:
+            current_id = grab_id(line.message)
+            if current_id and (
+                current_id not in append_positions
+                or not any(elapsed <= line.elapsed for elapsed in append_positions[current_id])
+            ):
+                failures.append(f"{line.timestamp} grab={current_id} missing archive append")
+
         if not records:
             report.add(self.domain, "C2.first-record", CheckStatus.NOT_COVERED, "本 session 無成功存檔首筆")
             return
@@ -157,6 +173,150 @@ class CaptureFlowValidator:
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
             f"firstRecords={len(records)} invalid={len(failures)}"
             + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_write_integrity(
+        self, plans, archive_appends, session: FlowSession, report: CheckReport
+    ) -> None:
+        if not plans and not archive_appends:
+            report.add(
+                self.domain,
+                "C3.write-integrity",
+                CheckStatus.NOT_COVERED,
+                "session did not run capture persistence",
+            )
+            return
+
+        failures = []
+        for line in session.lines:
+            match = self._health_raise.match(line.message)
+            if match and match.group("code").startswith("CaptureWriteFailure."):
+                failures.append(
+                    f"{line.timestamp} {match.group('code')} {match.group('message')}"
+                )
+
+        report.add(
+            self.domain,
+            "C3.write-integrity",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"archiveAppends={len(archive_appends)} writeFailures={len(failures)}"
+            + (f"; first={failures[0]}" if failures else ""),
+        )
+
+    def _check_delivery_release(
+        self, plans, archive_appends, session: FlowSession, report: CheckReport
+    ) -> None:
+        indexed = list(enumerate(session.lines))
+        plan_positions = []
+        for index, line in indexed:
+            if not line.message.startswith("capture plan "):
+                continue
+            current_id = grab_id(line.message)
+            if current_id:
+                plan_positions.append((index, current_id))
+
+        stopped_grabs = set()
+        for position, (plan_index, current_id) in enumerate(plan_positions):
+            next_plan_index = (
+                plan_positions[position + 1][0]
+                if position + 1 < len(plan_positions)
+                else len(session.lines)
+            )
+            if any(
+                line.message == "StopGrab"
+                for _, line in indexed[plan_index + 1:next_plan_index]
+            ):
+                stopped_grabs.add(current_id)
+
+        events = {}
+        for index, line in indexed:
+            message = line.message
+            if message.startswith("capture save drain begin "):
+                kind = "begin"
+            elif message.startswith("capture save drain done "):
+                kind = "done"
+            elif message.startswith("capture remote release "):
+                kind = "release"
+            else:
+                continue
+            current_id = grab_id(message)
+            if current_id:
+                events.setdefault(current_id, {"begin": [], "done": [], "release": []})[
+                    kind
+                ].append((index, line))
+
+        covered_grabs = stopped_grabs | set(events)
+        if not covered_grabs:
+            report.add(
+                self.domain,
+                "C3.delivery-release",
+                CheckStatus.NOT_COVERED,
+                "session did not complete a capture stop",
+            )
+            return
+
+        append_positions = {}
+        for index, line in indexed:
+            if not line.message.startswith("capture archive append "):
+                continue
+            current_id = grab_id(line.message)
+            if current_id:
+                append_positions.setdefault(current_id, []).append(index)
+
+        plan_index_by_grab = {current_id: index for index, current_id in plan_positions}
+        stop_positions = [
+            index for index, line in indexed if line.message == "StopGrab"
+        ]
+        failures = []
+        for current_id in sorted(covered_grabs):
+            current = events.get(
+                current_id, {"begin": [], "done": [], "release": []})
+            counts = {kind: len(current[kind]) for kind in ("begin", "done", "release")}
+            if any(count != 1 for count in counts.values()):
+                failures.append(
+                    f"grab={current_id} event-count "
+                    f"begin={counts['begin']} done={counts['done']} release={counts['release']}"
+                )
+                continue
+
+            begin_index, _ = current["begin"][0]
+            done_index, _ = current["done"][0]
+            release_index, release_line = current["release"][0]
+            if not begin_index < done_index < release_index:
+                failures.append(
+                    f"grab={current_id} order begin={begin_index} "
+                    f"done={done_index} release={release_index}"
+                )
+
+            plan_index = plan_index_by_grab.get(current_id, -1)
+            if not any(plan_index < stop_index < begin_index for stop_index in stop_positions):
+                failures.append(f"grab={current_id} drain has no preceding StopGrab")
+
+            late_appends = [
+                index for index in append_positions.get(current_id, []) if index > done_index
+            ]
+            if late_appends:
+                failures.append(
+                    f"grab={current_id} archive append after drain done count={len(late_appends)}"
+                )
+
+            release_match = self._remote_release.match(release_line.message)
+            if release_match is None:
+                failures.append(f"grab={current_id} malformed remote release")
+            elif append_positions.get(current_id):
+                files = int(release_match.group("files"))
+                byte_count = int(release_match.group("bytes"))
+                if files != 2 or byte_count <= 0:
+                    failures.append(
+                        f"grab={current_id} release files={files} bytes={byte_count}; expected ACAP+CSV"
+                    )
+
+        report.add(
+            self.domain,
+            "C3.delivery-release",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"stoppedGrabs={len(covered_grabs)} invalid={len(failures)}"
+            + (f"; first={failures[0]}" if failures else ""),
         )
 
     def _check_output_health(

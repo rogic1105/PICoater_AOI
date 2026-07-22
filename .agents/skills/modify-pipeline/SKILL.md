@@ -44,7 +44,12 @@ description: Modify image-processing pipelines, native processing calls, buffer 
 - NativeBufferPool.Dispose：`_isDisposed = true` 必須在所有 `FreePinned` 之前設定（防重複 Free）
 
 ### 存檔格式（TrySaveCapture）
-- 7 個固定檔案：`_raw.jpg`, `_proc_c.jpg`, `_proc_r.jpg`, `_mean_c.bin`, `_max_c.bin`, `_mean_r.bin`, `_max_r.bin`
+- 每個 grab 寫入一個 `{grabId}.acap`；每幀仍保有 7 個獨立 record：`_raw.jpg`, `_proc_c.jpg`, `_proc_r.jpg`,
+  `_mean_c.bin`, `_max_c.bin`, `_mean_r.bin`, `_max_r.bin`。不可把七台或多幀先拼成長圖再拆。
+- ACAP 為 append-only record 格式，每筆帶 baseName、cameraId、frame tick、payload length 與 CRC；斷電造成的
+  不完整尾筆只忽略尾筆，前面完整資料仍可讀。既有散檔由讀端 fallback，不再由新 grab 寫出。
+- 每次 append 與 CSV 寫入只建立 durable remote-copy marker；Stop 關閉 save session 並等背景 saver 歸零後，
+  才一次釋放該 grab 的 ACAP＋每日 CSV 給遠端 worker。禁止在 grab 期間反覆複製成長中的 ACAP。
 - 額外（`SaveOriginalBmp=true`）：全解析度 `.bmp`（必須在 callback 同步完成）
 - JPEG 寫入移至 `Task.Run` 背景執行；BMP 匯出同步（`sourceBuffer` 會被 MIL 回收）
 - 時間戳精確到毫秒（`.fff`），同 Line Rate 相機由 `CaptureTimestampCoordinator` 協調
@@ -66,12 +71,14 @@ description: Modify image-processing pipelines, native processing calls, buffer 
 magic(4)="MCBF" | version(4=int) | scale_factor(4=float) | array_length(4=int) | float[]
 ```
 - `scale_factor` = `SaveResizeScale`；曲線長度 = 全解析度圖寬
-- 讀端唯一入口為 `CurveBinFile.Load`：header 逐欄驗證、float payload 一次 bulk read；禁止回退成逐元素 `ReadSingle()`。
+- 讀端唯一入口為 `CurveBinFile.Load`：來源可為 ACAP virtual path 或舊散檔，MCBF header 逐欄驗證、float payload
+  一次 bulk read；禁止回退成逐元素 `ReadSingle()`。
 - 多 capture 欄曲線由 `CurveMergeHelper.MergeCurves` 邊讀邊累加 Mean／Max，不保留全部來源陣列做第二輪掃描；每個 bin 仍完整讀取，不得用 latest-only 掠過序號。
-- 報表單序號可使用 `SingleGrabCurveSummaryStore` 的 `.mcsf` 可重建匯總，避免冷磁碟開啟數百個小 bin；匯總不改統計公式、不取代原始 bin。重建後先回 UI，互動停止 750ms 才由 bounded 單一 writer 採同目錄暫存檔原子替換。
+- 報表單序號可使用 `SingleGrabCurveSummaryStore` 的 `.mcsf` 可重建匯總；匯總不改統計公式、不取代 ACAP
+  curve record／舊 raw bin SSoT。重建後先回 UI，互動停止 750ms 才由 bounded 單一 writer 採同目錄暫存檔原子替換。
 
 ### ImageRepository 掃描
-- 同時掃 `*_raw.jpg` + `*.bmp`，兩格式共存
+- 新資料掃 `*.acap` 的 RawJpeg record；舊資料 fallback 掃 `*_raw.jpg`，兩種來源可共存
 - **JPG 優先**：同相機同時存在 JPG+BMP 時，回傳 JPG（避免 duplicate key 崩潰）
 - `_proc_*.jpg` 和 `*.bin` 不被收入索引
 

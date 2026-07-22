@@ -95,7 +95,7 @@ namespace AniloxRoll.Monitor.Core.Services
             string ridgeMode = null, string ridgeDirection = "v")
         {
             if (_isDisposed) return null;
-            if (!File.Exists(filePath)) return null;
+            if (!CaptureArchiveStore.Exists(filePath)) return null;
 
             if (CaptureFileNaming.IsRawJpg(filePath))
                 return LoadFromPrecomputedFiles(filePath, isProcessedMode, ridgeDirection);
@@ -110,7 +110,7 @@ namespace AniloxRoll.Monitor.Core.Services
             try
             {
                 Bitmap srcBmp;
-                using (var ms = new MemoryStream(File.ReadAllBytes(rawJpgPath)))
+                using (var ms = new MemoryStream(CaptureArchiveStore.ReadAllBytes(rawJpgPath), false))
                     srcBmp = new Bitmap(ms);
                 long ioMs = sw.ElapsedMilliseconds;
 
@@ -136,10 +136,10 @@ namespace AniloxRoll.Monitor.Core.Services
             {
                 string baseNoSuffix = CaptureFileNaming.StripRawJpg(rawJpgPath);
                 string procJpgPath  = CaptureFileNaming.ResolveProcJpg(baseNoSuffix, "v");
-                string imgPath      = File.Exists(procJpgPath) ? procJpgPath : rawJpgPath;
+                string imgPath      = CaptureArchiveStore.Exists(procJpgPath) ? procJpgPath : rawJpgPath;
 
                 Bitmap srcBmp;
-                using (var ms = new MemoryStream(File.ReadAllBytes(imgPath)))
+                using (var ms = new MemoryStream(CaptureArchiveStore.ReadAllBytes(imgPath), false))
                     srcBmp = new Bitmap(ms);
                 long ioMs = sw.ElapsedMilliseconds;
 
@@ -185,13 +185,14 @@ namespace AniloxRoll.Monitor.Core.Services
             string meanBinPath  = CaptureFileNaming.ResolveMeanC(baseNoSuffix);
             string maxBinPath   = CaptureFileNaming.ResolveMaxC(baseNoSuffix);
 
-            string imgPath = (isProcessedMode && File.Exists(procJpgPath)) ? procJpgPath : rawJpgPath;
+            string imgPath = (isProcessedMode && CaptureArchiveStore.Exists(procJpgPath))
+                ? procJpgPath : rawJpgPath;
 
             Bitmap bmp;
             try
             {
                 // 用 MemoryStream 載入避免 GDI+ 鎖住檔案
-                byte[] bytes = File.ReadAllBytes(imgPath);
+                byte[] bytes = CaptureArchiveStore.ReadAllBytes(imgPath);
                 using (var ms = new MemoryStream(bytes))
                     bmp = new Bitmap(ms);
             }

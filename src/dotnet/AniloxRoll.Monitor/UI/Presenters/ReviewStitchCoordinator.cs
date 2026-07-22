@@ -444,7 +444,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             FlowTrace.Log(
                 $"RV loadGrab paths {grabId} root={root} images={plan.TotalImageCount} " +
                 $"cams={plan.GroupedPaths.Count} cfg={(plan.Config != null ? "yes" : "no")} " +
-                $"align={plan.Alignment.Mode}");
+                $"align={plan.Alignment.Mode} source={plan.StorageSource}");
         }
 
         public void Dispose()

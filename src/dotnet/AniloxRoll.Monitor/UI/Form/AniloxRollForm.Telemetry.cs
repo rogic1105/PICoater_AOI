@@ -231,6 +231,21 @@ namespace AniloxRoll.Monitor.Forms
                 _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray(),
                 _settings.ErrorValueMeanV, _settings.ErrorValueMaxV,
                 _liveOverviewHelper, CameraCount, _settings.StitchMode, LiveViewRangeProvider);
+            if (!_liveColumnCurvePresented)
+            {
+                int readyCameras = 0;
+                for (int i = 0; i < CameraCount; i++)
+                    if (_liveCurveMean[i] != null && _liveCurveMax[i] != null) readyCameras++;
+                int expectedCameras = Math.Max(
+                    1, _liveCameraManager?.ConnectedCameraCount ?? CameraCount);
+                if (readyCameras >= expectedCameras)
+                {
+                    _liveColumnCurvePresented = true;
+                    FlowTrace.Log(
+                        $"columnCurve first-present cams={readyCameras} " +
+                        $"mode={(_settings.he_MainDisplay == MainDisplayMode.Waterfall ? "WF" : "IC")}");
+                }
+            }
             if (swOv.ElapsedMilliseconds > 50)
                 FlowTrace.Log($"[UiSlow] OverviewChart {swOv.ElapsedMilliseconds}ms");
         }

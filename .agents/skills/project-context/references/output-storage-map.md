@@ -9,12 +9,8 @@
 | Output | Default path | Source of truth | Remote copy | Retention |
 |---|---|---|---|---|
 | Daily inspection records | `D:\Anilox\Captures\yyyy\yyyyMM\yyyyMMdd.csv` | Yes | Yes | Delete with the oldest complete day when low on space |
-| Raw image | `...\yyyyMMdd\{yyyyMMdd_HHmmss.fff}-{cam}_raw.jpg` | Yes | Yes | Delete with the oldest complete day when low on space |
-| Column processed image | `...\yyyyMMdd\{base}_proc_c.jpg` | Yes | Yes | Delete with the oldest complete day when low on space |
-| Row processed image | `...\yyyyMMdd\{base}_proc_r.jpg` | Yes | Yes | Delete with the oldest complete day when low on space |
-| Column curves | `...\yyyyMMdd\{base}_{mean|max}_c.bin` | Yes | Yes | Delete with the oldest complete day when low on space |
-| Row curves | `...\yyyyMMdd\{base}_{mean|max}_r.bin` | Yes | Yes | Delete with the oldest complete day when low on space |
-| Frame-start tick index | `...\yyyyMMdd\_ticks.csv` | Alignment source while images exist | Yes | Delete with the day output |
+| Per-grab capture package | `...\yyyyMMdd\{grabId}.acap` | Yes; contains independent raw/proc_c/proc_r/curve records and frame ticks | Yes | Delete with the oldest complete day when low on space |
+| Legacy frame files | `...\yyyyMMdd\{base}_raw.jpg`, `_proc_c.jpg`, `_proc_r.jpg`, `_{mean|max}_{c|r}.bin`, `_ticks.csv` | Read-only compatibility for data produced before ACAP | Yes when already pending | Delete with the day output |
 | Rebuildable curve summary | `...\yyyyMMdd\_curve_summary\{grabId}.mcsf` | No; bins are authoritative | No | Delete with the day output |
 | Background calibration | `D:\Anilox\Bg\bg_{width}_{cam}_{yyyyMMdd-HHmmssfff}.bin`; active manifest `Bg\active-background.json` | Yes for local acquisition | No | Active set protected; a successful low-space cleanup also removes inactive timestamped sets |
 | Runtime trace and diagnostics | `D:\Anilox\Logs\` | Diagnostic evidence | No | Cataloged logs expire after `LogRetentionHours` (default 168 h) |
@@ -23,8 +19,11 @@
 | Durable remote-copy ledger | `D:\Anilox\Captures\.remote-copy-pending\*.pending` | Delivery state | No | Remove after confirmed publish or explicit retention cancellation; corrupt markers move to `quarantine\` |
 | Stress dataset | `D:\Anilox\StressCaptures_30000` | Test-only | No | Remove manually after testing |
 
-Readers accept legacy `_proc_v.jpg` / `_proc_h.jpg` and legacy curve-bin names. New writers must
-emit only the c/r names above.
+New writers emit one append-only `{grabId}.acap` per grab. Each JPEG and MCBF curve remains an
+independent record inside the package, so readers can decode cameras in parallel without reopening
+thousands of files. Every record carries camera ID, frame-start tick, payload length, and CRC32.
+Readers prefer ACAP and fall back to the legacy scattered files, including `_proc_v.jpg`,
+`_proc_h.jpg`, legacy curve-bin names, and `_ticks.csv`.
 
 The repository source of truth for the MIL binary configuration is
 `sdk/MIL/Config/Radient_Config.dcf`. The product and MIL monitor sample link that one file into
@@ -35,9 +34,8 @@ the nearest preceding `#CFG`; this intentionally avoids a second settings file t
 out of sync after a crash. A new snapshot contains the complete `OPS + START + CROP` layout,
 column/row normalization, `RidgeSigma` (細線濾除), thresholds, and capture parameters.
 
-`_ticks.csv` is a shared index inside each date image folder. Each row maps one image base name to
-its frame-start monotonic tick, allowing review to align cameras even when filenames jitter. It is
-appended by `CameraFrameSaver` and recopied whenever it changes.
+For ACAP, the frame-start monotonic tick is embedded in every record. Legacy `_ticks.csv` remains a
+shared index for old frame files only; each row maps one image base name to its tick.
 
 `_curve_summary\{grabId}.mcsf` is a per-grab UI acceleration cache created by
 `SingleGrabCurveSummaryStore`; the C/R curve bins remain authoritative. Retention therefore deletes
@@ -62,6 +60,11 @@ A `.part-*` file is a remote staging file, not a capture result. The copy worker
 the final filename only after the source stayed stable and both lengths match. A crash can leave an
 old part file behind; readers ignore it, and the worker deletes parts older than 24 hours when that
 destination directory is next used. Full-day retention removes the rest with the date folder.
+During a grab, ACAP and the daily CSV create durable pending markers but remain held locally. Stop
+first closes the per-camera save session, waits for every accepted saver, then releases that grab's
+ACAP and CSV to the copy worker. This avoids repeatedly sending a growing ACAP. If the process exits
+before release, startup restores the marker and sends the last complete local version. Shared-read
+snapshotting remains a defensive mechanism for restart recovery and older direct enqueue callers.
 
 The managed log catalog is `trace-*.log`, `resource-monitor-*.csv`, `dropdiag-*.csv`,
 `phaselog-*.csv`, `paramchange-*.csv`, `ui-actions-*.jsonl`, `io-*.log`, and

@@ -102,6 +102,7 @@ namespace TanukiCv.Controls
         private readonly Queue<BandJob> _writeQueue = new Queue<BandJob>();
         private bool _writerRunning;
         private int _contentGeneration;
+        private volatile bool _captureActive = true;
         private sealed class BandJob
         {
             public int Generation, FullW, BandH, BandStartRow;
@@ -346,6 +347,7 @@ namespace TanukiCv.Controls
         /// 重 grab 時呼叫 → 舊圖清空（符合預期）+ 避免新幀接在舊網格上、兩台重啟相位不一而錯位。</summary>
         public void Reset()
         {
+            _captureActive = false;
             lock (_lock)
             {
                 _contentGeneration++;
@@ -356,8 +358,22 @@ namespace TanukiCv.Controls
                 for (int i = 0; i < _camCount; i++) { _perCamLastTick[i] = 0; _perCamLastWall[i] = 0; _perCamSeq[i] = -1; }
                 _periodTicks = 0; _periodWallMs = 0; _originTick = 0; _originSet = false; _lastNewCamWallMs = 0;
             }
+            _captureActive = true;
             _lodContentDirty = true;
             PushLodRefresh();
+        }
+
+        /// <summary>
+        /// Stops accepting and presenting capture work while preserving the last complete tile.
+        /// Reset reopens the view for the next capture generation.
+        /// </summary>
+        public void QuiesceCapture()
+        {
+            if (_disposed) return;
+            _captureActive = false;
+            System.Threading.Interlocked.Increment(ref _contentGeneration);
+            _lodContentDirty = false;
+            _canvas.CancelPendingLodRefresh();
         }
 
         /// <summary>各相機每幀（MIL hook 多執行緒）：複製幀 + tick 網格錨定歸入 band（同掃描同 seq；缺幀補黑）。</summary>
@@ -371,7 +387,7 @@ namespace TanukiCv.Controls
         public void PushFrameVariants(
             int camId, byte[] raw, byte[] column, byte[] row, int w, int h, long tick)
         {
-            if (_disposed || camId < 1 || camId > _camCount || raw == null || w <= 0 || h <= 0) return;
+            if (_disposed || !_captureActive || camId < 1 || camId > _camCount || raw == null || w <= 0 || h <= 0) return;
             int n = w * h;
             byte[] rawCopy = CopyFrame(raw, n);
             byte[] columnCopy = ReferenceEquals(column, raw) ? rawCopy : CopyFrame(column ?? raw, n);
@@ -381,6 +397,7 @@ namespace TanukiCv.Controls
             long nowMs = _clock.ElapsedMilliseconds;
             lock (_lock)
             {
+                if (!_captureActive) return;
                 if (_seenCams.Add(camId)) _lastNewCamWallMs = nowMs; // 新相機被發現 → 重置穩定計時（啟動期給 join grace）
                 if (w > _defaultFrameW)
                 {
@@ -470,9 +487,12 @@ namespace TanukiCv.Controls
         // 滯留太久（相機停了）則 stale 強制 flush。某台缺幀那欄補黑。
         private void TryFlush(long nowMs)
         {
+            if (_disposed || !_captureActive) return;
             List<Slot> ready = null;
-            lock (_lock)
+            if (!System.Threading.Monitor.TryEnter(_lock)) return;
+            try
             {
+                if (!_captureActive) return;
                 long stale = _periodWallMs > 0 ? Math.Max(750, _periodWallMs * 3) : StaleBaseMs;
                 bool stable = (nowMs - _lastNewCamWallMs) >= StabilizeMs; // 相機集合穩定 → 即時 flush；否則啟動期給 join grace
                 while (_pending.Count > 0)
@@ -496,6 +516,7 @@ namespace TanukiCv.Controls
                         if (job != null) _writeQueue.Enqueue(job);
                     }
             }
+            finally { System.Threading.Monitor.Exit(_lock); }
             KickWriter();
         }
 
@@ -609,7 +630,7 @@ namespace TanukiCv.Controls
                         BandJob job;
                         lock (_lock)
                         {
-                            if (_disposed || _writeQueue.Count == 0) { _writerRunning = false; return; }
+                            if (_disposed || !_captureActive || _writeQueue.Count == 0) { _writerRunning = false; return; }
                             job = _writeQueue.Dequeue();
                         }
                         WriteBand(job);
@@ -629,7 +650,7 @@ namespace TanukiCv.Controls
             int fullW = job.FullW;
             for (int y = 0; y < job.BandH; y++)
             {
-                if (_disposed) return;
+                if (_disposed || !_captureActive) return;
                 int gy = job.Ring ? (job.BandStartRow + y) % _totalHeight : (job.BandStartRow + y);
                 if (gy < 0 || gy >= _totalHeight) break; // Restart clamp
                 int ci = gy / ChunkRows, off = gy % ChunkRows;
@@ -660,6 +681,8 @@ namespace TanukiCv.Controls
                     }
                 }
             }
+            if (!_captureActive || job.Generation !=
+                System.Threading.Volatile.Read(ref _contentGeneration)) return;
             _lodContentDirty = true;
             // LOD 刷新由 flushTimer 的 PushLodRefresh 在 UI 執行緒做，避免每 band BeginInvoke。
         }

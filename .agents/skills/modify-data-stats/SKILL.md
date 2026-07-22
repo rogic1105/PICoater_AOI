@@ -81,8 +81,10 @@ description: Modify the Data tab, inspection CSV schema, statistics, report list
 - 報表列 Curve 只屬單序號模式；與欄 Curve 共用單序號 profile/cache/prefetch，並沿用
   `RowCurveChartHelper + RowCurveDisplayAdapter`。切到序號範圍或年/月/日範圍必清空，不得保留上一筆。
 - 單序號資料來源：`InspectionConfigRepository.LoadForGrabId`（#CFG OPS/Pos）+ `SingleGrabCurveSummaryStore`；匯總缺少／失效時才走 `InspectionImagePathRepository.LoadForGrabId`，最多 2 台相機並行執行欄／列 bin 合併，先顯示 Curve，再由單一背景 writer 原子寫回。
-- `.mcsf` 匯總是可重建 materialized view，只保存 rescale 前的逐相機 MeanC 平均／MaxC 最大；原始 MeanC/MaxC bins 仍是 SSoT。格式版本、grab 時間範圍或相機數不符時不得使用舊匯總。
-- 只有所有預期 capture 的 MeanC/MaxC 都成功讀取（`merged == captures`）才可落匯總；remote copy 未完成或 bin 損壞時記 `skip-incomplete`，避免固化部分資料。
+- `.mcsf` 匯總是可重建 materialized view，只保存 rescale 前的逐相機 MeanC 平均／MaxC 最大；ACAP curve record
+  是新資料 SSoT，舊資料則 fallback 原始 MeanC/MaxC bins。格式版本、grab 時間範圍或相機數不符時不得使用舊匯總。
+- 只有所有預期 capture 的 MeanC/MaxC 都成功讀取（`merged == captures`）才可落匯總；remote copy 未完成、
+  ACAP record／舊 bin 損壞時記 `skip-incomplete`，避免固化部分資料。
 - 匯總 writer 平常對序號互動讓路，pending raw profile 達 72 MB 才 pressure drain，96 MB 為硬上限；不可在每格同步 `Flush(true)`，也不可用無界背景 task 製造記憶體或磁碟競爭。單序號 raw Curve LRU 為 512 筆／256 MB，30,000 筆資料仍須維持固定上限。
 - `SingleGrabCurveCache` 只保存 rescale 前的完整 Mean/Max 合併結果（LRU 64 筆／64 MB），相同 key 的前景與背景載入 single-flight；Presenter 依滾動方向只預讀下一個未命中相鄰序號，資料夾重載時必清空。
 - cache 命中後必 clone 再做 view-time Hessian rescale，禁止直接修改 raw cache；設定變更可用同一 raw Curve 重新套目前比例與門檻。

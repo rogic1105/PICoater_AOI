@@ -181,42 +181,7 @@ namespace AniloxRoll.Monitor.Forms
                 UpdateStandardBgSubLockState();
             }
 
-            if (!captureSucceeded)
-            {
-                int ioGeneration = _autoStartGrabIoGeneration;
-                var ioController = _ioGrabController;
-                _autoStartGrabAfterBg = false;
-                _autoStartGrabIoGeneration = 0;
-                if (ioController != null && IsCurrentIoController(ioController, ioGeneration))
-                    await RejectIoGrabStartAsync(ioController, ioGeneration, "background-capture-failed");
-                return;
-            }
-
-            if (_autoStartGrabAfterBg)
-            {
-                int ioGeneration = _autoStartGrabIoGeneration;
-                var ioController = _ioGrabController;
-                _autoStartGrabAfterBg = false;
-                _autoStartGrabIoGeneration = 0;
-                if (ioController == null || !IsCurrentIoController(ioController, ioGeneration) ||
-                    ioController.CurrentState != IoState.Running)
-                {
-                    FlowTrace.Log("IO background continuation cancelled reason=stale-or-start-low");
-                    return;
-                }
-                await _liveCameraManager.ReleaseAsync();
-                bool started = await ToggleLiveGrabAsync("io:背景取得完成 → 開始抓取");
-                if (started && IsCurrentIoController(ioController, ioGeneration))
-                {
-                    await ioController.NotifyGrabStarted();
-                    FlowTrace.Log("IO grab accepted busy=on source=background");
-                }
-                else
-                {
-                    await RejectIoGrabStartAsync(ioController, ioGeneration, "background-continuation-failed");
-                }
-                return;
-            }
+            if (!captureSucceeded) return;
 
             // 採集完成後直接預覽（先清除舊預覽，確保每次都重新開啟）
             if (IsBgPreviewActive) ClearBackgroundPreview();
@@ -492,9 +457,6 @@ namespace AniloxRoll.Monitor.Forms
 
         private bool IsLightReadyForBg =>
             !(_settings?.LightEnabled == true) || (_lightController != null && _lightController.IsConnected);
-
-        private bool _autoStartGrabAfterBg;
-        private int _autoStartGrabIoGeneration;
 
         private bool IsBgBinReady()
         {

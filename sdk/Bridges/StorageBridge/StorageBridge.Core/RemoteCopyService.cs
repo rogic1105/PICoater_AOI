@@ -31,6 +31,10 @@ namespace StorageBridge.Core
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _dirtyPaths =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _heldPaths =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _inFlightPaths =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, long> _pendingSizes =
             new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _cleanedRemoteDirectories =
@@ -133,7 +137,10 @@ namespace StorageBridge.Core
             if (string.IsNullOrWhiteSpace(_getRemotePath())) return;
 
             CopyItem item;
-            if (!TryPersistPendingItem(localFilePath, out item)) return;
+            bool shouldQueue;
+            if (!TryRegisterPendingItem(localFilePath, false, out item, out shouldQueue) ||
+                !shouldQueue)
+                return;
 
             _queue.Enqueue(item);
             _workSignal.Set();
@@ -150,12 +157,39 @@ namespace StorageBridge.Core
                 if (string.IsNullOrWhiteSpace(path)) continue;
 
                 CopyItem item;
-                if (!TryPersistPendingItem(path, out item)) continue;
+                bool shouldQueue;
+                if (!TryRegisterPendingItem(path, false, out item, out shouldQueue) ||
+                    !shouldQueue)
+                    continue;
                 _queue.Enqueue(item);
                 added = true;
             }
 
             if (added) _workSignal.Set();
+        }
+
+        /// <summary>
+        /// Persists delivery intent without starting network I/O. A process restart releases
+        /// staged markers automatically, so an interrupted capture is still delivered.
+        /// </summary>
+        public void StageFiles(string[] localFilePaths)
+        {
+            if (_disposed || localFilePaths == null) return;
+            if (string.IsNullOrWhiteSpace(_getRemotePath())) return;
+
+            foreach (string path in localFilePaths)
+            {
+                if (string.IsNullOrWhiteSpace(path)) continue;
+                CopyItem ignoredItem;
+                bool ignoredQueue;
+                TryRegisterPendingItem(path, true, out ignoredItem, out ignoredQueue);
+            }
+        }
+
+        /// <summary>Releases staged paths to the durable background worker.</summary>
+        public void ReleaseStagedFiles(string[] localFilePaths)
+        {
+            EnqueueFiles(localFilePaths);
         }
 
         /// <summary>
@@ -264,6 +298,7 @@ namespace StorageBridge.Core
                 {
                     _pendingPaths.Remove(path);
                     _dirtyPaths.Remove(path);
+                    _heldPaths.Remove(path);
                     long size;
                     if (_pendingSizes.TryGetValue(path, out size))
                     {
@@ -295,6 +330,7 @@ namespace StorageBridge.Core
             {
                 canceled = _pendingPaths.Remove(normalizedPath);
                 _dirtyPaths.Remove(normalizedPath);
+                _heldPaths.Remove(normalizedPath);
                 long size;
                 if (_pendingSizes.TryGetValue(normalizedPath, out size))
                 {
@@ -322,7 +358,16 @@ namespace StorageBridge.Core
                     continue;
                 }
 
-                if (TryProcessItem(item)) continue;
+                // Starting work and checking the hold flag are one transition. Otherwise a
+                // new capture could stage the daily CSV between those two operations.
+                if (!TryBeginProcessing(item.LocalPath)) continue;
+
+                bool completed;
+                bool followUpScheduled = false;
+                try { completed = TryProcessItem(item); }
+                finally { followUpScheduled = EndProcessing(item); }
+                if (completed) continue;
+                if (followUpScheduled) continue;
 
                 if (_disposed) break;
                 _queue.Enqueue(item);
@@ -353,7 +398,7 @@ namespace StorageBridge.Core
 
                 long sourceSizeBefore = new FileInfo(item.LocalPath).Length;
                 tempPath = destinationPath + ".part-" + Guid.NewGuid().ToString("N");
-                File.Copy(item.LocalPath, tempPath, false);
+                CopySharedSnapshot(item.LocalPath, tempPath);
 
                 long sourceSizeAfter = new FileInfo(item.LocalPath).Length;
                 long tempSize = new FileInfo(tempPath).Length;
@@ -419,9 +464,59 @@ namespace StorageBridge.Core
             }
         }
 
-        private bool TryPersistPendingItem(string localFilePath, out CopyItem item)
+        private static void CopySharedSnapshot(string sourcePath, string destinationPath)
+        {
+            CopySharedSnapshot(sourcePath, destinationPath, null);
+        }
+
+        internal static void CopySharedSnapshot(
+            string sourcePath,
+            string destinationPath,
+            Action sourceOpened)
+        {
+            const int bufferSize = 1024 * 1024;
+            using (var source = new FileStream(
+                sourcePath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete,
+                bufferSize,
+                FileOptions.SequentialScan))
+            using (var destination = new FileStream(
+                destinationPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize,
+                FileOptions.SequentialScan))
+            {
+                long remaining = source.Length;
+                sourceOpened?.Invoke();
+                var buffer = new byte[bufferSize];
+                while (remaining > 0)
+                {
+                    int read = source.Read(
+                        buffer,
+                        0,
+                        (int)Math.Min(buffer.Length, remaining));
+                    if (read <= 0)
+                        throw new EndOfStreamException(
+                            "Source became shorter while creating a remote snapshot.");
+                    destination.Write(buffer, 0, read);
+                    remaining -= read;
+                }
+                destination.Flush(true);
+            }
+        }
+
+        private bool TryRegisterPendingItem(
+            string localFilePath,
+            bool hold,
+            out CopyItem item,
+            out bool shouldQueue)
         {
             item = default(CopyItem);
+            shouldQueue = false;
             try
             {
                 string localRoot = _getLocalRoot();
@@ -436,9 +531,30 @@ namespace StorageBridge.Core
                 {
                     if (_pendingPaths.Contains(normalizedPath))
                     {
-                        _dirtyPaths.Add(normalizedPath);
                         UpdatePendingSizeLocked(normalizedPath);
-                        return false;
+                        if (hold)
+                        {
+                            _heldPaths.Add(normalizedPath);
+                            if (_inFlightPaths.Contains(normalizedPath))
+                                _dirtyPaths.Add(normalizedPath);
+                            return true;
+                        }
+
+                        if (_heldPaths.Remove(normalizedPath))
+                        {
+                            if (_inFlightPaths.Contains(normalizedPath))
+                            {
+                                _dirtyPaths.Add(normalizedPath);
+                                return true;
+                            }
+                            _dirtyPaths.Remove(normalizedPath);
+                            item = CreateCopyItem(normalizedPath, relativePath);
+                            shouldQueue = true;
+                            return true;
+                        }
+
+                        _dirtyPaths.Add(normalizedPath);
+                        return true;
                     }
 
                     Directory.CreateDirectory(_pendingDirectory);
@@ -456,15 +572,11 @@ namespace StorageBridge.Core
                     }
 
                     _pendingPaths.Add(normalizedPath);
+                    if (hold) _heldPaths.Add(normalizedPath);
                     UpdatePendingSizeLocked(normalizedPath);
                     PendingPersistenceRecovered?.Invoke();
-                    item = new CopyItem
-                    {
-                        LocalPath = normalizedPath,
-                        RelativePath = relativePath,
-                        MarkerPath = markerPath,
-                        Attempt = 0
-                    };
+                    item = CreateCopyItem(normalizedPath, relativePath);
+                    shouldQueue = !hold;
                     return true;
                 }
             }
@@ -478,6 +590,19 @@ namespace StorageBridge.Core
                 PendingPersistenceFailed?.Invoke(error);
                 return false;
             }
+        }
+
+        private CopyItem CreateCopyItem(string normalizedPath, string relativePath)
+        {
+            return new CopyItem
+            {
+                LocalPath = normalizedPath,
+                RelativePath = relativePath,
+                MarkerPath = Path.Combine(
+                    _pendingDirectory,
+                    ComputeMarkerName(normalizedPath) + PendingExtension),
+                Attempt = 0
+            };
         }
 
         private void RestorePendingItems()
@@ -595,13 +720,16 @@ namespace StorageBridge.Core
 
                 if (_dirtyPaths.Remove(item.LocalPath))
                 {
-                    followUp = new CopyItem
+                    if (!_heldPaths.Contains(item.LocalPath))
                     {
-                        LocalPath = item.LocalPath,
-                        RelativePath = item.RelativePath,
-                        MarkerPath = item.MarkerPath,
-                        Attempt = 0
-                    };
+                        followUp = new CopyItem
+                        {
+                            LocalPath = item.LocalPath,
+                            RelativePath = item.RelativePath,
+                            MarkerPath = item.MarkerPath,
+                            Attempt = 0
+                        };
+                    }
                     return true;
                 }
 
@@ -617,6 +745,7 @@ namespace StorageBridge.Core
                     return false;
                 }
                 _pendingPaths.Remove(item.LocalPath);
+                _heldPaths.Remove(item.LocalPath);
                 long size;
                 if (_pendingSizes.TryGetValue(item.LocalPath, out size))
                 {
@@ -630,6 +759,35 @@ namespace StorageBridge.Core
         private bool IsPending(string path)
         {
             lock (_pendingSync) return _pendingPaths.Contains(path);
+        }
+
+        private bool TryBeginProcessing(string path)
+        {
+            lock (_pendingSync)
+            {
+                if (_heldPaths.Contains(path)) return false;
+                return _inFlightPaths.Add(path);
+            }
+        }
+
+        private bool EndProcessing(CopyItem item)
+        {
+            CopyItem followUp = default(CopyItem);
+            lock (_pendingSync)
+            {
+                _inFlightPaths.Remove(item.LocalPath);
+                if (_pendingPaths.Contains(item.LocalPath) &&
+                    !_heldPaths.Contains(item.LocalPath) &&
+                    _dirtyPaths.Remove(item.LocalPath))
+                {
+                    followUp = CreateCopyItem(item.LocalPath, item.RelativePath);
+                }
+            }
+
+            if (followUp.LocalPath == null) return false;
+            _queue.Enqueue(followUp);
+            _workSignal.Set();
+            return true;
         }
 
         private void QuarantinePendingMarker(string markerPath)

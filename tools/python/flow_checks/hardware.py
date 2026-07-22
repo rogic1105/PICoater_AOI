@@ -9,6 +9,7 @@ from .core import CheckReport, CheckStatus, FlowSession
 
 class HardwareFlowValidator:
     domain = "HARDWARE"
+    _io_accept_latency_limit_seconds = 2.0
 
     _edge_pattern = re.compile(
         r"^(?:⚠ )?(IO|光源|儲存分享) (?:未連線（開機基線）|斷線|恢復連線)$"
@@ -33,6 +34,7 @@ class HardwareFlowValidator:
         self._check_camera_edges(session, report)
         self._check_io_controller_lifecycle(session, report)
         self._check_io_grab_outcomes(session, report)
+        self._check_io_capture_window(session, report)
         return report
 
     def _check_io_controller_lifecycle(self, session: FlowSession, report: CheckReport) -> None:
@@ -90,6 +92,74 @@ class HardwareFlowValidator:
             "H3.io-grab",
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
             f"starts={len(starts)} invalid={len(failures)}" + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_io_capture_window(self, session: FlowSession, report: CheckReport) -> None:
+        starts = [
+            index for index, line in enumerate(session.lines)
+            if line.message == "io:DI START 上升緣 → 開始抓取"
+        ]
+        accepted = 0
+        covered = 0
+        failures = []
+        latencies = []
+        for position, start_index in enumerate(starts):
+            end = starts[position + 1] if position + 1 < len(starts) else len(session.lines)
+            window = session.lines[start_index + 1:end]
+            outcome = next(
+                (line for line in window if line.message.startswith(
+                    ("IO grab accepted busy=on", "IO grab rejected busy=off"))),
+                None,
+            )
+            if outcome is None or not outcome.message.startswith("IO grab accepted busy=on"):
+                continue
+
+            accepted += 1
+            paths = [
+                line for line in window[:window.index(outcome) + 1]
+                if line.message.startswith("acquisition start path=")
+            ]
+            if not paths:
+                continue
+            covered += 1
+            path = paths[-1].message
+            sync_after_edge = any(
+                line.message.startswith("acquisition sync begin reason=start ")
+                for line in window[:window.index(outcome) + 1]
+            )
+            if "path=verified-standby" not in path or sync_after_edge:
+                failures.append(
+                    f"{session.lines[start_index].timestamp} accepted path={path} "
+                    f"syncAfterEdge={sync_after_edge}"
+                )
+            latency = max(
+                0.0, outcome.elapsed - session.lines[start_index].elapsed
+            )
+            latencies.append(latency)
+            if latency > self._io_accept_latency_limit_seconds:
+                failures.append(
+                    f"{session.lines[start_index].timestamp} accept latency="
+                    f"{latency:.3f}s exceeds "
+                    f"{self._io_accept_latency_limit_seconds:.3f}s"
+                )
+
+        if accepted == 0 or covered == 0:
+            report.add(
+                self.domain,
+                "H3.io-window",
+                CheckStatus.NOT_COVERED,
+                "無新版 IO accepted Start，無法判定固定 High 視窗是否被同步吃掉",
+            )
+            return
+
+        max_latency = max(latencies) if latencies else 0.0
+        report.add(
+            self.domain,
+            "H3.io-window",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"accepted={accepted} covered={covered} maxAcceptLatency={max_latency:.3f}s "
+            f"limit={self._io_accept_latency_limit_seconds:.3f}s "
+            f"invalid={len(failures)}" + (f"；首例 {failures[0]}" if failures else ""),
         )
 
     def _check_connection_edges(self, session: FlowSession, report: CheckReport) -> None:

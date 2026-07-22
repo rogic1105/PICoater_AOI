@@ -749,6 +749,37 @@ class ParameterFlowValidatorTests(unittest.TestCase):
 
 
 class LiveStandbyFlowValidatorTests(unittest.TestCase):
+    def test_live_curves_present_after_each_grab_starts(self):
+        lines = [
+            FlowLine(0.0, "00:00:00.000", 1, "StartGrab (cams=2)"),
+            FlowLine(0.1, "00:00:00.100", 1, "viewRange refire reason=capture-start mode=WF"),
+            FlowLine(1.0, "00:00:01.000", 7, "firstFrame cam1 10x10 -> Waterfall"),
+            FlowLine(1.2, "00:00:01.200", 1, "columnCurve first-present cams=2 mode=WF"),
+            FlowLine(1.3, "00:00:01.300", 1, "rowCurve present after=mainImage cams=2 mode=WF"),
+            FlowLine(5.0, "00:00:05.000", 1, "StopGrab"),
+        ]
+        report = LiveFlowValidator().validate(
+            FlowSession(Path("synthetic.log"), lines)
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "F2.curve-liveness").status
+        )
+
+    def test_live_curve_missing_after_grab_fails_liveness(self):
+        lines = [
+            FlowLine(0.0, "00:00:00.000", 1, "StartGrab (cams=2)"),
+            FlowLine(0.1, "00:00:00.100", 1, "viewRange refire reason=capture-start mode=WF"),
+            FlowLine(1.0, "00:00:01.000", 7, "firstFrame cam1 10x10 -> Waterfall"),
+            FlowLine(1.2, "00:00:01.200", 1, "columnCurve first-present cams=2 mode=WF"),
+            FlowLine(5.0, "00:00:05.000", 1, "StopGrab"),
+        ]
+        report = LiveFlowValidator().validate(
+            FlowSession(Path("synthetic.log"), lines)
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "F2.curve-liveness").status
+        )
+
     def test_row_chart_waits_for_main_image_presentation(self):
         report = LiveFlowValidator().validate(
             session(
@@ -771,6 +802,17 @@ class LiveStandbyFlowValidatorTests(unittest.TestCase):
         self.assertEqual(
             CheckStatus.FAIL, result(report, "F2.row-presentation").status
         )
+
+    def test_row_curve_presentation_after_stop_fails_standby_contract(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "StopGrab",
+                "display capture quiesce mode=WF",
+                "capture gate closed standby=on",
+                "rowCurve present after=mainImage cams=2 mode=WF",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "F2.standby").status)
 
     def test_initialization_ignores_later_height_reallocation_metrics(self):
         lines = [
@@ -923,6 +965,171 @@ class LiveStandbyFlowValidatorTests(unittest.TestCase):
                 "StartGrab cams=4",
                 "capture plan grab=260720-120000 root=D:\\Anilox",
                 "capture gate open cams=1 warm=True",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "F2.standby").status)
+
+    def test_verified_standby_second_start_uses_future_frame_arm(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "acquisition parameters ready cam1 cl=True lineRate=3000",
+                "acquisition standby start cam1",
+                "acquisition standby ready cam1 tick=100",
+                "acquisition sync begin reason=start attempt=1 gate=closed cams=1",
+                "acquisition sync ready reason=start attempt=1 cam1 system=0 tick=100 freq=1000",
+                "acquisition sync phase reason=start attempt=1 system=0 cams=1 spreadTicks=0 spreadMs=0.000 limitMs=5.000 measurable=True aligned=True",
+                "acquisition sync complete reason=start attempts=1 cams=1 phase=True",
+                "acquisition phase verified reason=start-sync",
+                "acquisition start path=full-sync cams=1 reason=phase-Invalid",
+                "StartGrab cams=1",
+                "capture plan grab=260722-120000 root=D:\\Anilox",
+                "capture gate arm path=full-sync cams=1 marginMs=10 targets=0:110",
+                "capture gate open cams=1 warm=True path=full-sync",
+                "capture frame admitted path=full-sync cam1 system=0 tick=200 target=110",
+                "capture frame-set ready path=full-sync cams=1",
+                "firstFrame cam1 100x100 -> Waterfall",
+                "StopGrab",
+                "capture gate closed standby=on",
+                "acquisition start path=verified-standby cams=1",
+                "StartGrab cams=1",
+                "capture plan grab=260722-120001 root=D:\\Anilox",
+                "capture gate arm path=verified-standby cams=1 marginMs=10 targets=0:210",
+                "capture gate open cams=1 warm=True path=verified-standby",
+                "capture frame admitted path=verified-standby cam1 system=0 tick=300 target=210",
+                "capture frame-set ready path=verified-standby cams=1",
+                "firstFrame cam1 100x100 -> Waterfall",
+                "StopGrab",
+                "capture gate closed standby=on",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "F2.standby").status)
+
+    def test_verified_standby_after_invalidation_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "acquisition parameters ready cam1 cl=True lineRate=3000",
+                "acquisition standby ready cam1 tick=100",
+                "acquisition sync begin reason=start attempt=1 gate=closed cams=1",
+                "acquisition sync ready reason=start attempt=1 cam1 system=0 tick=100 freq=1000",
+                "acquisition sync phase reason=start attempt=1 system=0 cams=1 spreadTicks=0 spreadMs=0.000 limitMs=5.000 measurable=True aligned=True",
+                "acquisition sync complete reason=start attempts=1 cams=1 phase=True",
+                "acquisition phase invalidated reason=stall-cam1 previous=Verified",
+                "acquisition start path=verified-standby cams=1",
+                "StartGrab cams=1",
+                "capture plan grab=260722-120000 root=D:\\Anilox",
+                "capture gate arm path=verified-standby cams=1 marginMs=10 targets=0:110",
+                "capture gate open cams=1 warm=True path=verified-standby",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "F2.standby").status)
+
+    def test_verified_standby_requires_current_phase_probe_in_new_logs(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "acquisition parameters ready cam1 cl=True lineRate=3000",
+                "acquisition parameters ready cam2 cl=True lineRate=3000",
+                "acquisition standby ready cam1 tick=100",
+                "acquisition standby ready cam2 tick=120",
+                "acquisition sync begin reason=start attempt=1 gate=closed cams=2",
+                "acquisition sync ready reason=start attempt=1 cam1 system=0 tick=100 freq=1000",
+                "acquisition sync ready reason=start attempt=1 cam2 system=0 tick=102 freq=1000",
+                "acquisition sync phase reason=start attempt=1 system=0 cams=1,2 spreadTicks=2 spreadMs=2.000 limitMs=5.000 measurable=True aligned=True",
+                "acquisition sync complete reason=start attempts=1 cams=2 phase=True",
+                "acquisition standby phase system=0 cams=1,2 periodMs=1000.000 periodMismatchMs=0.000 spreadTicks=20 spreadMs=20.000 limitMs=5.000 measurable=True aligned=False",
+                "acquisition start path=verified-standby cams=2",
+                "StartGrab cams=2",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "F2.standby").status)
+
+    def test_admitted_frame_set_with_large_hardware_spread_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "acquisition parameters ready cam1 cl=True lineRate=3000",
+                "acquisition parameters ready cam2 cl=True lineRate=3000",
+                "acquisition standby ready cam1 tick=100",
+                "acquisition standby ready cam2 tick=102",
+                "acquisition sync begin reason=start attempt=1 gate=closed cams=2",
+                "acquisition sync ready reason=start attempt=1 cam1 system=0 tick=100 freq=1000",
+                "acquisition sync ready reason=start attempt=1 cam2 system=0 tick=102 freq=1000",
+                "acquisition sync phase reason=start attempt=1 system=0 cams=1,2 spreadTicks=2 spreadMs=2.000 limitMs=5.000 measurable=True aligned=True",
+                "acquisition sync complete reason=start attempts=1 cams=2 phase=True",
+                "acquisition start path=full-sync cams=2 reason=phase-Invalid",
+                "StartGrab cams=2",
+                "capture plan grab=260722-120000 root=D:\\Anilox",
+                "capture gate arm path=full-sync cams=2 marginMs=10 targets=0:110",
+                "capture gate open cams=2 warm=True path=full-sync",
+                "capture frame admitted path=full-sync cam1 system=0 tick=200 target=110",
+                "capture frame admitted path=full-sync cam2 system=0 tick=900 target=110",
+                "capture frame-set ready path=full-sync cams=2",
+                "StopGrab",
+                "capture gate closed standby=on",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "F2.standby").status)
+
+    def test_runtime_phase_drift_defers_resync_until_normal_stop(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "acquisition parameters ready cam1 cl=True lineRate=3000",
+                "acquisition standby ready cam1 tick=100",
+                "acquisition sync begin reason=start attempt=1 gate=closed cams=1",
+                "acquisition sync ready reason=start attempt=1 cam1 system=0 tick=100 freq=1000",
+                "acquisition sync phase reason=start attempt=1 system=0 cams=1 spreadTicks=0 spreadMs=0.000 limitMs=5.000 measurable=True aligned=True",
+                "acquisition sync complete reason=start attempts=1 cams=1 phase=True",
+                "acquisition start path=full-sync cams=1 reason=phase-Invalid",
+                "StartGrab cams=1",
+                "capture plan grab=260722-120000 root=D:\\Anilox",
+                "capture gate arm path=full-sync cams=1 marginMs=10 targets=0:110",
+                "capture gate open cams=1 warm=True path=full-sync",
+                "capture frame admitted path=full-sync cam1 system=0 tick=200 target=110",
+                "capture frame-set ready path=full-sync cams=1",
+                "capture runtime phase system=0 cams=1 periodMs=1000.000 periodMismatchMs=0.000 spreadTicks=0 spreadMs=0.000 limitMs=5.000 measurable=False aligned=False",
+                "capture phase drift deferred reason=phase-unmeasurable-system0 gate=open next=resync",
+                "StopGrab",
+                "capture gate closed standby=on",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "F2.standby").status)
+
+    def test_runtime_phase_drift_deferred_while_gate_closed_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "acquisition parameters ready cam1 cl=True lineRate=3000",
+                "acquisition standby ready cam1 tick=100",
+                "acquisition sync begin reason=start attempt=1 gate=closed cams=1",
+                "acquisition sync ready reason=start attempt=1 cam1 system=0 tick=100 freq=1000",
+                "acquisition sync phase reason=start attempt=1 system=0 cams=1 spreadTicks=0 spreadMs=0.000 limitMs=5.000 measurable=True aligned=True",
+                "acquisition sync complete reason=start attempts=1 cams=1 phase=True",
+                "acquisition start path=full-sync cams=1 reason=phase-Invalid",
+                "StartGrab cams=1",
+                "capture plan grab=260722-120000 root=D:\\Anilox",
+                "capture gate arm path=full-sync cams=1 marginMs=10 targets=0:110",
+                "capture gate open cams=1 warm=True path=full-sync",
+                "capture frame admitted path=full-sync cam1 system=0 tick=200 target=110",
+                "capture frame-set ready path=full-sync cams=1",
+                "StopGrab",
+                "capture gate closed standby=on",
+                "capture phase drift deferred reason=phase-unmeasurable-system0 gate=open next=resync",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "F2.standby").status)
+
+    def test_future_frame_must_be_admitted_before_first_frame(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "acquisition parameters ready cam1 cl=True lineRate=3000",
+                "acquisition standby ready cam1 tick=100",
+                "acquisition sync begin reason=start attempt=1 gate=closed cams=1",
+                "acquisition sync ready reason=start attempt=1 cam1 system=0 tick=100 freq=1000",
+                "acquisition sync phase reason=start attempt=1 system=0 cams=1 spreadTicks=0 spreadMs=0.000 limitMs=5.000 measurable=True aligned=True",
+                "acquisition sync complete reason=start attempts=1 cams=1 phase=True",
+                "acquisition start path=full-sync cams=1 reason=phase-Invalid",
+                "StartGrab cams=1",
+                "capture plan grab=260722-120000 root=D:\\Anilox",
+                "capture gate arm path=full-sync cams=1 marginMs=10 targets=0:110",
+                "capture gate open cams=1 warm=True path=full-sync",
+                "firstFrame cam1 100x100 -> Waterfall",
             )
         )
         self.assertEqual(CheckStatus.FAIL, result(report, "F2.standby").status)

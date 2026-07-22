@@ -253,6 +253,29 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (WaterfallMode) _waterfallView?.Reset();
         }
 
+        public void QuiesceCapture()
+        {
+            if (!WaterfallMode || _waterfallView == null) return;
+            _waterfallView.QuiesceCapture();
+            Flow("display capture quiesce mode=WF");
+        }
+
+        public void RefireMainViewRange(string reason)
+        {
+            if (WaterfallMode && _waterfallView != null)
+            {
+                _waterfallView.RefireViewRange();
+                Flow($"viewRange refire reason={reason} mode=WF");
+                return;
+            }
+
+            if (_imageDisplay != null)
+            {
+                _imageDisplay.RefireViewRange();
+                Flow($"viewRange refire reason={reason} mode=IC");
+            }
+        }
+
         public void SetWaterfallDisplayLayer(WaterfallFrameLayer layer)
         {
             _waterfallDisplayLayer = layer;

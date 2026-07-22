@@ -118,6 +118,30 @@ namespace AniloxRoll.Monitor.Tests
             }
         }
 
+        [Test]
+        public void QuiesceCapture_DropsNewFramesUntilReset()
+        {
+            using (var host = new Panel { Size = new Size(320, 240) })
+            using (var view = new WaterfallView(
+                host,
+                camCount: 1,
+                totalHeight: 1000,
+                fullMode: WaterfallFullMode.Restart,
+                screenMmPerPx: 0.264))
+            {
+                view.QuiesceCapture();
+                view.PushFrame(1, new byte[] { 1, 2, 3, 4 }, 2, 2, 100);
+
+                var preBuffer = ReadPrivate<System.Collections.ICollection>(view, "_preBuffer");
+                Assert.That(preBuffer.Count, Is.EqualTo(0));
+
+                view.Reset();
+                view.PushFrame(1, new byte[] { 1, 2, 3, 4 }, 2, 2, 100);
+
+                Assert.That(preBuffer.Count, Is.EqualTo(1));
+            }
+        }
+
         private static T ReadPrivate<T>(object target, string fieldName)
         {
             FieldInfo field = target.GetType().GetField(

@@ -196,7 +196,8 @@
 
   <div class="vendor-alert">
     <strong>不要把 DI-1 做成瞬間 pulse。</strong>AOI 約每 500ms 輪詢一次，短脈衝可能完全讀不到。
-    第一次取像還可能包含光源暖機與相機初始化，因此 PLC 應等待 DO-2 回授，不要只寫固定 timer。
+    AOI 會在 DI-1 為 LOW 時先完成相機相位待命；若尚未待命就收到上升緣，本輪 DO-2 會保持 LOW，
+    PLC 必須先將 DI-1 拉回 LOW，等下一個完整上升緣再試。AOI 不會在固定 High 視窗中途才開始取像。
   </div>
   <div class="vendor-alert">
     AOI 有「抓取上限(sec)」安全設定，預設 10 秒。若 PLC 忘記將 DI-1 拉回 LOW，AOI 會自行停止並將 DO-2 拉低；

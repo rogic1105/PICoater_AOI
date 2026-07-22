@@ -67,6 +67,7 @@ namespace AniloxRoll.Monitor.Core.Services
         public static string BaseFromImagePath(string imagePath)
         {
             if (IsRawJpg(imagePath)) return StripRawJpg(imagePath);
+            if (CaptureArchiveStore.IsVirtualPath(imagePath)) return imagePath;
             return Path.Combine(
                 Path.GetDirectoryName(imagePath),
                 Path.GetFileNameWithoutExtension(imagePath));
@@ -94,7 +95,8 @@ namespace AniloxRoll.Monitor.Core.Services
             string baseNoSuffix, string current, string previous, string legacy)
         {
             string path = baseNoSuffix + current;
-            if (File.Exists(path)) return path;
+            if (CaptureArchiveStore.Exists(path)) return path;
+            if (CaptureArchiveStore.IsVirtualPath(baseNoSuffix)) return path;
             path = baseNoSuffix + previous;
             if (File.Exists(path)) return path;
             return baseNoSuffix + legacy;
@@ -105,7 +107,8 @@ namespace AniloxRoll.Monitor.Core.Services
         {
             bool row = axis == "r" || axis == "h";
             string current = baseNoSuffix + (row ? ProcR : ProcC);
-            if (File.Exists(current)) return current;
+            if (CaptureArchiveStore.Exists(current)) return current;
+            if (CaptureArchiveStore.IsVirtualPath(baseNoSuffix)) return baseNoSuffix + RawJpg;
             string previous = baseNoSuffix + (row ? ProcRPrevious : ProcCPrevious);
             return File.Exists(previous) ? previous : baseNoSuffix + ProcLegacy;
         }
