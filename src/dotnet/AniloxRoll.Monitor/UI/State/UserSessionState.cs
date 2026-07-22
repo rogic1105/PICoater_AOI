@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
+using TanukiCv.Controls;
 
 namespace AniloxRoll.Monitor.UI.State
 {
@@ -112,12 +113,29 @@ namespace AniloxRoll.Monitor.UI.State
             }
         }
 
+        public static CanvasOverlayMode CanvasOverlayMode
+        {
+            get
+            {
+                return Enum.TryParse(Get("CanvasOverlayMode"), out CanvasOverlayMode value) &&
+                    Enum.IsDefined(typeof(CanvasOverlayMode), value)
+                    ? value
+                    : CanvasOverlayMode.Coordinates;
+            }
+        }
+
         public static void SetLastDataPath(string path)
             => _data["LastDataPath"] = path ?? string.Empty;
 
         public static void SaveMainWorkspaceFullWidth(bool fullWidth)
         {
             _data["MainWorkspaceFullWidth"] = fullWidth ? "true" : "false";
+            Save();
+        }
+
+        public static void SaveCanvasOverlayMode(CanvasOverlayMode mode)
+        {
+            _data["CanvasOverlayMode"] = mode.ToString();
             Save();
         }
 

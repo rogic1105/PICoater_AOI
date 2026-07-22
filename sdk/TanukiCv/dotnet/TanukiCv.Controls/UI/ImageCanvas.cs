@@ -67,6 +67,7 @@ namespace TanukiCv.Controls
         private static readonly Brush _ovTextBrush = new SolidBrush(Color.White);
 
         public event Action<CanvasInfo> StatusChanged;
+        public event Action<CanvasOverlayMode> OverlayModeChanged;
 
         /// <summary>從顯示色取回原始灰階強度；預設灰階讀 R，偽彩色可指定保留強度的通道。</summary>
         public Func<Color, int> BrightnessSelector { get; set; } = color => color.R;
@@ -212,6 +213,7 @@ namespace TanukiCv.Controls
                 if (_overlayMode == value) return;
                 _overlayMode = value;
                 Invalidate();
+                OverlayModeChanged?.Invoke(value);
             }
         }
 

@@ -549,12 +549,16 @@ OnMouseMove@ImageCanvas.cs（拖曳中；UI 執行緒 T1）
 **log-flow**
 ```
 T1: IC|WF|RV overlay mode=Coordinates|CoordinateFrames|CoordinateFramesParameters|Hidden
+T1: ui:canvas overlay mode={mode} sync=live+review persisted=true
+T1: canvas overlay restore mode={mode} sync=live+review
 T1: ui:IO state five-click rightPanel=hidden|visible
 T1: workspace restore rightPanel=hidden|visible
 ```
 
 - 主畫面右鍵循環順序固定為：全空 → 座標數值 → 座標數值＋七台相機影像框線 →
   座標數值＋七台相機影像框線＋參數表格 → 全空；後兩態為累加顯示。
+- 監控即時、監控瀑布與回顧共用一份 `CanvasOverlayMode` session 狀態；任一主畫面右鍵切換後，
+  其他畫面下一次顯示時必為同一模式。狀態寫入 `Config/session-state.json`，重開程式後還原。
 - 監控參數資訊讀目前 PropertyGrid；回顧／報表共用的回顧畫布讀該序號拍攝時 `#CFG`。
   SDK 只負責畫字，不得引用 `InspectionSettings` 或其他 app policy。
 - 相機框線使用與合圖相同的 `MergeLayout` placements；每台畫實際影像區域，七台相鄰時必可見外框與六條分隔線，
@@ -571,9 +575,13 @@ OnMouseDown@ImageCanvas.cs（右鍵）
    ├ Coordinates：座標數值
    ├ CoordinateFrames：座標數值＋CameraFrameRegionsProvider
    │  └ ImageDisplayView|WaterfallView 以現行 MergeLayout placements 提供七台影像區域
-   └ CoordinateFramesParameters：座標數值＋框線＋InformationTextProvider
-      ├ Live：CanvasParameterTextBuilder.FromCurrentSettings
-      └ Review：CanvasParameterTextBuilder.FromCaptureConfig(CurrentGrabConfig)
+    └ CoordinateFramesParameters：座標數值＋框線＋InformationTextProvider
+       ├ Live：CanvasParameterTextBuilder.FromCurrentSettings
+       └ Review：CanvasParameterTextBuilder.FromCaptureConfig(CurrentGrabConfig)
+ → OverlayModeChanged@ImageCanvas.cs
+   → LiveDisplayCoordinator|ReviewDisplayManager → AniloxRollForm.ApplyCanvasOverlayMode
+      ├ 同步 Live 即時／瀑布與 Review 畫布
+      └ UserSessionState.SaveCanvasOverlayMode
 
 lblIoState.MouseDown
  → MainWorkspaceLayoutController 連續按下計數（相鄰按下間隔 ≤1200ms）
@@ -599,6 +607,7 @@ T1: IC|WF|RV fit(double-click) / physical1x(triple-click)   ← 使用者 fit/1x
 **code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
 ```
 OnMouseWheel@ImageCanvas.cs   ← 滾輪一律 canvas 自理（app 無全域訊息濾鏡）
+    ├ `FitRelativeZoom=false`（監控即時／瀑布與回顧一致；fit 不是最小值，允許再縮小總覽）
     ├ zoom ×1.1^(e.Delta/120)     ← 正比實際轉動量（事件合併時大 e.Delta 也按比例；修卡頓漏算）
     ├ FlowLog "wheelZoom in|out"（100ms 節流＝每手勢至少一行）
     ├ pan 錨定游標點＋Invalidate（zoom 防抖：滾動中拉伸舊 cache/tile，_zoomSettleTimer 停 150ms 才重建）

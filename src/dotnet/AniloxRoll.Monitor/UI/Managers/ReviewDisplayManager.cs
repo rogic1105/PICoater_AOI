@@ -20,14 +20,30 @@ namespace AniloxRoll.Monitor.UI.Managers
         private bool _disposed;
         private bool _suppressViewRangeEvents;
         private IntensityColorMap _mainColorMap = IntensityColorMap.Grayscale;
+        private CanvasOverlayMode _overlayMode = CanvasOverlayMode.Coordinates;
+        private bool _applyingOverlayMode;
         private Func<string> _informationTextProvider;
 
         /// <summary>視野可見範圍（mm）pass-through（View 為 lazy，外部訂這裡）：left,right,top,bot →
         /// 回顧曲線圖 zoom 連動（拖曳中也即時，鐵則：不可為效能抑制）。</summary>
         public event Action<double, double, double, double> ViewRangeMmChanged;
+        public event Action<CanvasOverlayMode> OverlayModeChanged;
 
         /// <summary>sdk 顯示元件（接事件 / 進階用；未建立前 null）。</summary>
         public ImageDisplayView View => _view;
+
+        public CanvasOverlayMode OverlayMode
+        {
+            get => _overlayMode;
+            set
+            {
+                _overlayMode = value;
+                if (_view == null) return;
+                _applyingOverlayMode = true;
+                try { _view.Canvas.OverlayMode = value; }
+                finally { _applyingOverlayMode = false; }
+            }
+        }
 
         public ReviewDisplayManager(Panel mainHost, Panel[] thumbHosts)
         {
@@ -43,6 +59,8 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             _view = new ImageDisplayView(_mainHost, _thumbHosts, screenMmPerPx);
             _view.Canvas.InformationTextProvider = _informationTextProvider;
+            _view.Canvas.OverlayMode = _overlayMode;
+            _view.Canvas.OverlayModeChanged += OnCanvasOverlayModeChanged;
             _view.MainColorMap = _mainColorMap;
             _view.ThumbSelectedColor = Color.Orange;   // 與監控同款；選取視覺唯一來源 = sdk ThumbView
             _view.MergeAll = true;                     // 缺台黑占位（與影像/曲線分界一致）
@@ -161,7 +179,19 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (_disposed) return;
             _disposed = true;
             // 宿主 Panel 是 Designer 擁有（Form 自行 dispose）；這裡只釋放 ImageDisplayView。
-            _view?.Dispose(); _view = null;
+            if (_view != null)
+            {
+                _view.Canvas.OverlayModeChanged -= OnCanvasOverlayModeChanged;
+                _view.Dispose();
+                _view = null;
+            }
+        }
+
+        private void OnCanvasOverlayModeChanged(CanvasOverlayMode mode)
+        {
+            if (_applyingOverlayMode) return;
+            _overlayMode = mode;
+            OverlayModeChanged?.Invoke(mode);
         }
     }
 

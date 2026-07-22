@@ -36,6 +36,8 @@ namespace AniloxRoll.Monitor.UI.Managers
         private WaterfallView _waterfallView;
         private ThumbStrip _waterfallThumbs;   // 顯示鐵則1：縮圖在瀑布模式也一律即時影像（與即時模式同源 CPU ThumbStrip）
         private WaterfallFrameLayer _waterfallDisplayLayer = WaterfallFrameLayer.Raw;
+        private CanvasOverlayMode _overlayMode = CanvasOverlayMode.Coordinates;
+        private bool _applyingOverlayMode;
 
         // ── [Flow] 顯示資料流跡：咽喉點各一行（按鈕/設定→接線→首幀→顯示），落 Logs\trace-*.log。
         //    驗證＝跑一輪操作後把 log 與「預期步驟（DVT）」比對；headless 可驗、不用肉眼盯 UI。
@@ -59,10 +61,20 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         public event Action<double, double, double, double> OnLiveViewRange;
         public event Action MainContentPresented;
+        public event Action<CanvasOverlayMode> OverlayModeChanged;
 
         public int SelectedMainCameraId => _selectedMainCameraId;
         public int UserSelectedMainCameraId => _userSelectedMainCameraId;
         public double ScreenMmPerPx => _screenMmPerPx;
+        public CanvasOverlayMode OverlayMode
+        {
+            get => _overlayMode;
+            set
+            {
+                _overlayMode = value;
+                ApplyOverlayModeToViews();
+            }
+        }
         public double RowPitchMm
         {
             get => _rowPitchMm;
@@ -292,6 +304,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             _waterfallView.ContentPresented += OnMainContentPresented;
             _waterfallView.CenterCamChanged += OnWaterfallCenterCam;   // 主畫面 pan → 縮圖橘框跟隨（反向連動）
             _waterfallView.FlowLog = s => FlowTrace.Display("WF", s);  // 互動 intent與診斷快照分級
+            _waterfallView.Canvas.OverlayMode = _overlayMode;
+            _waterfallView.Canvas.OverlayModeChanged += OnCanvasOverlayModeChanged;
 
             // 顯示鐵則1：瀑布模式的 7 台縮圖也一律即時影像（CPU ThumbStrip，與即時模式同源；點選/高亮一致）。
             _waterfallThumbs = new ThumbStrip(_cameraPanels);
@@ -338,6 +352,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _waterfallView.ViewRangeMmChanged -= OnImageViewRange;
             _waterfallView.ContentPresented -= OnMainContentPresented;
             _waterfallView.CenterCamChanged -= OnWaterfallCenterCam;
+            _waterfallView.Canvas.OverlayModeChanged -= OnCanvasOverlayModeChanged;
             _waterfallView.Dispose();
             _waterfallView = null;
             _waterfallThumbs?.Dispose();
@@ -396,6 +411,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                 Flow($"centerCam → cam{camId}（IC）");   // F6：拖主畫面→橘框跟隨（每跨一台一行,可驗）
             };
             _imageDisplay.FlowLog = s => FlowTrace.Display("IC", s);   // 互動 intent與診斷快照分級
+            _imageDisplay.Canvas.OverlayMode = _overlayMode;
+            _imageDisplay.Canvas.OverlayModeChanged += OnCanvasOverlayModeChanged;
             _imageDisplay.ViewRangeMmChanged += OnImageViewRange;
             _imageDisplay.ContentPresented += OnMainContentPresented;
             _imageDisplay.SetSelected(_selectedMainCameraId);
@@ -528,6 +545,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             Flow($"TeardownImageDisplay（unsubscribe {Cameras.Count} cams）");
             foreach (var cam in Cameras) cam.OnDisplayFrame -= OnCameraDisplayFrame;
             _imageDisplay.ContentPresented -= OnMainContentPresented;
+            _imageDisplay.Canvas.OverlayModeChanged -= OnCanvasOverlayModeChanged;
             _imageDisplay.Dispose();
             _imageDisplay = null;
             _gpuResizeProvider.Release();
@@ -575,6 +593,29 @@ namespace AniloxRoll.Monitor.UI.Managers
                 System.Diagnostics.Trace.TraceWarning(
                     $"[LiveDisplayCoordinator.MainContentPresented] {ex.GetType().Name}: {ex.Message}");
             }
+        }
+
+        private void ApplyOverlayModeToViews()
+        {
+            if (_applyingOverlayMode) return;
+            _applyingOverlayMode = true;
+            try
+            {
+                if (_imageDisplay != null) _imageDisplay.Canvas.OverlayMode = _overlayMode;
+                if (_waterfallView != null) _waterfallView.Canvas.OverlayMode = _overlayMode;
+            }
+            finally
+            {
+                _applyingOverlayMode = false;
+            }
+        }
+
+        private void OnCanvasOverlayModeChanged(CanvasOverlayMode mode)
+        {
+            if (_applyingOverlayMode) return;
+            _overlayMode = mode;
+            ApplyOverlayModeToViews();
+            OverlayModeChanged?.Invoke(mode);
         }
 
         public void SwitchMainDisplay(int cameraIndex) => SwitchMainDisplay(cameraIndex, centerView: false);

@@ -1,5 +1,6 @@
 using System;
 using AniloxRoll.Monitor.Core.Data;
+using TanukiCv.Controls;
 
 namespace AniloxRoll.Monitor.UI.Managers
 {
@@ -8,6 +9,18 @@ namespace AniloxRoll.Monitor.UI.Managers
     public partial class LiveCameraManager
     {
         public int SelectedMainCameraId => _display.SelectedMainCameraId;
+
+        public CanvasOverlayMode CanvasOverlayMode
+        {
+            get { return _display.OverlayMode; }
+            set { _display.OverlayMode = value; }
+        }
+
+        public event Action<CanvasOverlayMode> OnCanvasOverlayModeChanged
+        {
+            add { _display.OverlayModeChanged += value; }
+            remove { _display.OverlayModeChanged -= value; }
+        }
 
         public event Action<double, double, double, double> OnLiveViewRange
         {

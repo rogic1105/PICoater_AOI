@@ -130,6 +130,8 @@ namespace TanukiCv.Controls
         public event Action<ImageDisplayView.CursorStatus> CursorStatusChanged;
         public event Action ContentPresented;
 
+        public ImageCanvas Canvas => _canvas;
+
         public Func<string> InformationTextProvider
         {
             get => _canvas.InformationTextProvider;
@@ -164,7 +166,7 @@ namespace TanukiCv.Controls
             _canvas = new ImageCanvas { Dock = DockStyle.Fill, BackColor = Color.Black };
             _canvas.CameraFrameRegionsProvider = GetCameraFrameRegions;
             _canvas.ShowOverlay = true;               // 游標座標 + 亮度
-            _canvas.FitRelativeZoom = true;           // 滾輪相對 fit 縮放（fit=1×，與 live/review 一致）
+            _canvas.FitRelativeZoom = false;          // 監控允許縮到 fit 以下，與即時／回顧畫布一致
             _canvas.DoubleClickFitToScreen = true;    // 點兩下 fit 整張
             _canvas.TripleClickPhysical1x = true;     // 三擊實體 1:1（需 mm 校正；SetLayout 後設）
             host.Controls.Add(_canvas);

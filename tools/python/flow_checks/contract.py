@@ -1,5 +1,7 @@
 """Global invariants that apply to every flow domain."""
 
+import re
+
 from .core import CheckReport, CheckStatus, FlowSession
 
 
@@ -26,7 +28,46 @@ class GlobalContractValidator:
         else:
             report.add(self.domain, "G1", CheckStatus.PASS, "未出現契約違規行")
         self._check_shutdown(session, report)
+        self._check_overlay_state(session, report)
         return report
+
+    def _check_overlay_state(self, session: FlowSession, report: CheckReport) -> None:
+        modes = "Coordinates|CoordinateFrames|CoordinateFramesParameters|Hidden"
+        restore_pattern = re.compile(
+            rf"^canvas overlay restore mode=({modes}) sync=live\+review$"
+        )
+        change_pattern = re.compile(
+            rf"^ui:canvas overlay mode=({modes}) sync=live\+review persisted=true$"
+        )
+        restores = [
+            line for line in session.lines
+            if line.message.startswith("canvas overlay restore mode=")
+        ]
+        changes = [
+            line for line in session.lines
+            if line.message.startswith("ui:canvas overlay mode=")
+        ]
+        if not restores and not changes:
+            report.add(
+                self.domain,
+                "G3.overlay",
+                CheckStatus.NOT_COVERED,
+                "舊版 session 無畫布模式同步／還原儀器",
+            )
+            return
+
+        invalid = [
+            line for line in restores if not restore_pattern.match(line.message)
+        ] + [
+            line for line in changes if not change_pattern.match(line.message)
+        ]
+        ok = len(restores) == 1 and not invalid
+        report.add(
+            self.domain,
+            "G3.overlay",
+            CheckStatus.PASS if ok else CheckStatus.FAIL,
+            f"restore={len(restores)} changes={len(changes)} 格式錯誤={len(invalid)}",
+        )
 
     def _check_shutdown(self, session: FlowSession, report: CheckReport) -> None:
         closing = [

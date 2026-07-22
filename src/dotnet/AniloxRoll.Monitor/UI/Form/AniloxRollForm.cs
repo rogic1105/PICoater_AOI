@@ -80,6 +80,7 @@ namespace AniloxRoll.Monitor.Forms
         private int _waterfallRowWrite;
         private ProportionalScaler _scaler;
         private MainWorkspaceLayoutController _workspaceLayout;
+        private bool _syncingCanvasOverlayMode;
 
         // --- 相機參數控制項陣列（供 SyncFromCamera 存取）---
         private TrackBar[]      _expBars;
@@ -884,6 +885,10 @@ namespace AniloxRoll.Monitor.Forms
                         camLive4, camLive5, camLive6, camLive7 },
                 camLiveMain
             );
+            _liveCameraManager.OnCanvasOverlayModeChanged += OnCanvasOverlayModeChanged;
+            if (_reviewDisplayManager != null)
+                _reviewDisplayManager.OverlayModeChanged += OnCanvasOverlayModeChanged;
+            ApplyCanvasOverlayMode(UserSessionState.CanvasOverlayMode, persist: false);
             _grabDurationCoordinator = new GrabDurationCoordinator(seconds =>
                 SafeBeginInvoke(() => HandleGrabLimitElapsed(seconds)));
             _liveCameraManager.SetCaptureSettings(_settings);
@@ -935,6 +940,33 @@ namespace AniloxRoll.Monitor.Forms
             // 修法：Shown + Resize 後把 chart 提到 z-order 最上層，hit-test 順序就會正確。
             Shown    += (s, e) => BringLiveChartsToFront();
             Resize   += (s, e) => BringLiveChartsToFront();
+        }
+
+        private void OnCanvasOverlayModeChanged(CanvasOverlayMode mode)
+        {
+            ApplyCanvasOverlayMode(mode, persist: true);
+        }
+
+        private void ApplyCanvasOverlayMode(CanvasOverlayMode mode, bool persist)
+        {
+            if (_syncingCanvasOverlayMode) return;
+            _syncingCanvasOverlayMode = true;
+            try
+            {
+                if (_liveCameraManager != null)
+                    _liveCameraManager.CanvasOverlayMode = mode;
+                if (_reviewDisplayManager != null)
+                    _reviewDisplayManager.OverlayMode = mode;
+                if (persist)
+                    UserSessionState.SaveCanvasOverlayMode(mode);
+                FlowTrace.Log(persist
+                    ? $"ui:canvas overlay mode={mode} sync=live+review persisted=true"
+                    : $"canvas overlay restore mode={mode} sync=live+review");
+            }
+            finally
+            {
+                _syncingCanvasOverlayMode = false;
+            }
         }
 
         private void BringLiveChartsToFront()
