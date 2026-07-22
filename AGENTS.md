@@ -134,6 +134,20 @@ instructions with large lookup tables.
 
 Do not commit or push unless the user explicitly requests it.
 
+### Feature, Refactor, And Experiment Branches
+
+- Keep `main` green. Use one short-lived branch for one coherent feature, refactor responsibility,
+  or experimental hypothesis; do not create a branch for every small function.
+- A successful branch may merge only after the affected Release|x64 build, proportional automated
+  checks, DVT contract audit, and required on-machine smoke test pass.
+- Do not stack an unrelated experiment on an unverified branch. Start it from the latest verified
+  base; use a Git worktree when two hardware variants must remain runnable at the same time.
+- For a failed experiment, record the commit SHA, hypothesis, measured evidence, and rejection
+  reason in the owning engineering reference or closed PR. Then close and delete the branch; Git
+  history remains the evidence. Tag only unusually important failed baselines that must be rebuilt.
+- Merge successful branches and delete their branch names after integration. Branches are work
+  queues, not permanent documentation; durable conclusions belong in skills/references and DVT.
+
 Before commit:
 
 1. Build the affected Release|x64 target and run proportional unit/integration/DVT checks.
