@@ -174,13 +174,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV);
         }
 
-        public async Task<bool> UpdateRangePreviewAsync(
+        public async Task UpdateRangePreviewAsync(
             IList<GrabIdInfo> candidateRange, int generation,
-            Func<bool> isCurrent, CancellationToken cancellationToken)
+            Func<int> getLatestGeneration, CancellationToken cancellationToken)
         {
             if (_muraProfileHelper == null || _ctx.Settings == null ||
                 candidateRange == null || candidateRange.Count == 0)
-                return false;
+                return;
 
             string statsRoot = _getStatsRoot();
             var rangeSnapshot = new List<GrabIdInfo>(candidateRange);
@@ -195,28 +195,24 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             var profiles = await Task.Run(() =>
                 InspectionMuraProfileRepository.LoadRange(
-                    statsRoot, rangeSnapshot, 50, cancellationToken), cancellationToken);
+                    statsRoot, rangeSnapshot, DataRangePreviewCoordinator.CurveSampleLimit,
+                    cancellationToken), cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             long loadMs = sw.ElapsedMilliseconds;
-            if (isCurrent == null || !isCurrent())
-            {
-                FlowTrace.Log($"DT range preview stale-drop gen={generation} range={range} " +
-                    $"loadMs={loadMs} cache={profiles.CurveCacheHits}/{profiles.CurveCacheMisses}");
-                return false;
-            }
 
             ApplyAggregateProfiles(
                 profiles.Mean, profiles.Max, camCount, ops, positions, errorMean, errorMax);
+            int latestGeneration = getLatestGeneration?.Invoke() ?? generation;
             string method = profiles.RankedCams == 0 ? "even" :
                 profiles.RankedCams == profiles.TotalCams ? "top-maxcmean" : "mixed";
-            FlowTrace.Log($"DT range preview apply gen={generation} range={range} " +
+            FlowTrace.Log($"DT range preview apply gen={generation} latest={latestGeneration} range={range} " +
                 $"loadMs={loadMs} drawMs={sw.ElapsedMilliseconds - loadMs} " +
                 $"meanRows={profiles.MeanRows} maxRows={profiles.MaxRows} method={method} " +
                 $"coverage={profiles.ScoredRows}/{profiles.TotalRows} " +
                 $"rankedCams={profiles.RankedCams}/{profiles.TotalCams} " +
                 $"index={profiles.IndexHits}/{profiles.IndexBuilds} " +
-                $"cache={profiles.CurveCacheHits}/{profiles.CurveCacheMisses}");
-            return true;
+                $"cache={profiles.CurveCacheHits}/{profiles.CurveCacheMisses} " +
+                $"sampleLimit={DataRangePreviewCoordinator.CurveSampleLimit}");
         }
 
         private void ApplyAggregateProfiles(

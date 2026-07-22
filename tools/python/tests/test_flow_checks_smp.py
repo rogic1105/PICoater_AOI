@@ -12,6 +12,7 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 from flow_checks.core import CheckStatus, FlowLine, FlowSession
+from flow_checks.contract import GlobalContractValidator
 from flow_checks.data import DataFlowValidator
 from flow_checks.live import LiveFlowValidator
 from flow_checks.mura import MuraFlowValidator
@@ -36,6 +37,25 @@ def session(*messages: str) -> FlowSession:
 
 def result(report, rule: str):
     return next(item for item in report.results if item.rule == rule)
+
+
+class GlobalContractValidatorTests(unittest.TestCase):
+    def test_overlay_restore_and_synchronized_change_pass(self):
+        report = GlobalContractValidator().validate(
+            session(
+                "canvas overlay restore mode=Coordinates sync=live+review",
+                "ui:canvas overlay mode=CoordinateFrames sync=live+review persisted=true",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "G3.overlay").status)
+
+    def test_overlay_requires_one_restore_line(self):
+        report = GlobalContractValidator().validate(
+            session(
+                "ui:canvas overlay mode=CoordinateFrames sync=live+review persisted=true",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "G3.overlay").status)
 
 
 class SettingsFlowValidatorTests(unittest.TestCase):
@@ -216,25 +236,41 @@ class ReviewFlowValidatorTests(unittest.TestCase):
 
 
 class DataFlowValidatorTests(unittest.TestCase):
-    def test_range_preview_drops_stale_generation_and_applies_latest(self):
+    def test_range_preview_paints_running_then_skips_to_latest(self):
         report = DataFlowValidator().validate(
             session(
-                "DT range policy listMs=33 curveMs=80 settleMs=150 curveMode=latest-only "
-                "curveCacheEntries=2048 curveCacheMB=256",
+                "DT range policy listMs=33 curveMs=80 settleMs=150 curveMode=monotonic "
+                "curveSamples=50 curveCacheEntries=2048 curveCacheMB=256",
                 "ui:【序號範圍-起始】變更",
                 "DT range list preview gen=1 range=260721-080000~260721-080010 rows=11 ms=1 source=index",
                 "ui:【序號範圍-結束】變更",
                 "DT range list preview gen=2 range=260721-080000~260721-080020 rows=21 ms=1 source=index",
-                "DT range preview stale-drop gen=1 range=260721-080000~260721-080010 "
-                "loadMs=120 cache=0/100",
-                "DT range preview apply gen=2 range=260721-080000~260721-080020 loadMs=10 drawMs=2 "
+                "DT range preview apply gen=1 latest=2 range=260721-080000~260721-080010 "
+                "loadMs=120 drawMs=2 meanRows=50 maxRows=50 method=top-maxcmean "
+                "coverage=11/11 rankedCams=7/7 index=1/0 cache=0/100 sampleLimit=50",
+                "DT range preview apply gen=2 latest=2 range=260721-080000~260721-080020 loadMs=10 drawMs=2 "
                 "meanRows=21 maxRows=21 method=top-maxcmean coverage=21/21 rankedCams=7/7 "
-                "index=1/0 cache=100/0",
+                "index=1/0 cache=100/0 sampleLimit=50",
                 "DT range settle → refresh",
             )
         )
         self.assertEqual(CheckStatus.PASS, result(report, "D3.range-policy").status)
         self.assertEqual(CheckStatus.PASS, result(report, "D3.range-preview").status)
+
+    def test_range_preview_requires_final_generation_to_catch_up(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT range policy listMs=33 curveMs=80 settleMs=150 curveMode=monotonic "
+                "curveSamples=50 curveCacheEntries=2048 curveCacheMB=256",
+                "ui:【序號範圍-結束】變更",
+                "DT range list preview gen=4 range=260721-080000~260721-080020 rows=21 ms=1 source=index",
+                "DT range preview apply gen=3 latest=4 range=260721-080000~260721-080010 loadMs=10 drawMs=2 "
+                "meanRows=50 maxRows=50 method=top-maxcmean coverage=11/11 rankedCams=7/7 "
+                "index=1/0 cache=0/100 sampleLimit=50",
+                "DT range settle → refresh",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "D3.range-preview").status)
 
     def test_fail_filter_requires_range_option_evidence(self):
         report = DataFlowValidator().validate(

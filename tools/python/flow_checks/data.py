@@ -812,7 +812,8 @@ class DataFlowValidator:
             return
 
         expected = (
-            "DT range policy listMs=33 curveMs=80 settleMs=150 curveMode=latest-only "
+            "DT range policy listMs=33 curveMs=80 settleMs=150 curveMode=monotonic "
+            "curveSamples=50 "
             "curveCacheEntries=2048 curveCacheMB=256"
         )
         unique = sorted(set(lines))
@@ -830,17 +831,14 @@ class DataFlowValidator:
             if line.message.startswith("ui:【序號範圍-")
         )
         pattern = re.compile(
-            r"^DT range preview apply gen=(\d+) range=(\d{6}-\d{6})~(\d{6}-\d{6}) "
+            r"^DT range preview apply gen=(\d+) latest=(\d+) "
+            r"range=(\d{6}-\d{6})~(\d{6}-\d{6}) "
             r"loadMs=(\d+) drawMs=(\d+) meanRows=(\d+) maxRows=(\d+) "
             r"method=(top-maxcmean|mixed|even) coverage=(\d+)/(\d+) rankedCams=(\d+)/(\d+)"
-            r" index=(\d+)/(\d+) cache=(\d+)/(\d+)$"
+            r" index=(\d+)/(\d+) cache=(\d+)/(\d+) "
+            r"sampleLimit=(\d+)$"
         )
-        stale_pattern = re.compile(
-            r"^DT range preview stale-drop gen=(\d+) "
-            r"range=(\d{6}-\d{6})~(\d{6}-\d{6}) loadMs=(\d+) cache=(\d+)/(\d+)$"
-        )
-        generations = []
-        stale_generations = []
+        applies = []
         invalid = []
         for line in session.lines:
             if line.message.startswith("DT range preview apply"):
@@ -848,18 +846,21 @@ class DataFlowValidator:
                 if not match:
                     invalid.append(f"{line.timestamp} apply 格式錯誤")
                     continue
-                generations.append(int(match.group(1)))
+                generation = int(match.group(1))
+                latest = int(match.group(2))
+                sample_limit = int(match.group(18))
+                if generation > latest or sample_limit != 50:
+                    invalid.append(
+                        f"{line.timestamp} gen={generation} latest={latest} sampleLimit={sample_limit}"
+                    )
+                applies.append((generation, latest, sample_limit))
             elif line.message.startswith("DT range preview stale-drop"):
-                match = stale_pattern.match(line.message)
-                if not match:
-                    invalid.append(f"{line.timestamp} stale-drop 格式錯誤")
-                    continue
-                stale_generations.append(int(match.group(1)))
+                invalid.append(f"{line.timestamp} monotonic 模式不應 stale-drop")
 
         if intents == 0:
             report.add(self.domain, "D3.range-preview", CheckStatus.NOT_COVERED, "無序號範圍滾動")
             return
-        if not generations:
+        if not applies:
             report.add(
                 self.domain,
                 "D3.range-preview",
@@ -868,6 +869,7 @@ class DataFlowValidator:
             )
             return
 
+        generations = [item[0] for item in applies]
         monotonic = all(
             current > previous
             for previous, current in zip(generations, generations[1:])
@@ -878,12 +880,13 @@ class DataFlowValidator:
             if match:
                 list_generations.append(int(match.group(1)))
         final_caught_up = not list_generations or generations[-1] >= list_generations[-1]
+        lagged_applies = sum(1 for generation, latest, _ in applies if generation < latest)
         ok = not invalid and monotonic and final_caught_up
         report.add(
             self.domain,
             "D3.range-preview",
             CheckStatus.PASS if ok else CheckStatus.FAIL,
-            f"intent={intents} apply={len(generations)} stale={len(stale_generations)} "
+            f"intent={intents} apply={len(generations)} 跳讀上畫={lagged_applies} "
             f"generation={generations[0]}~{generations[-1]} "
             f"倒退上畫={0 if monotonic else 1} 最終追上={1 if final_caught_up else 0} "
             f"格式錯誤={len(invalid)}",

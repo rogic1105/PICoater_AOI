@@ -190,7 +190,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             FlowTrace.Log(
                 $"DT range policy listMs={DataRangePreviewCoordinator.ListPreviewIntervalMs} " +
                 $"curveMs={DataRangePreviewCoordinator.CurvePreviewIntervalMs} " +
-                $"settleMs={DataRangePreviewCoordinator.SettleIntervalMs} curveMode=latest-only " +
+                $"settleMs={DataRangePreviewCoordinator.SettleIntervalMs} curveMode=monotonic " +
+                $"curveSamples={DataRangePreviewCoordinator.CurveSampleLimit} " +
                 $"curveCacheEntries={InspectionMuraProfileRepository.RangeCurveCacheEntryCapacity} " +
                 $"curveCacheMB={InspectionMuraProfileRepository.RangeCurveCacheByteCapacityMb}");
 
@@ -405,14 +406,15 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _statsPresenter.UpdateRowResult(null);
         }
 
-        private async System.Threading.Tasks.Task<bool> ApplyRangeCurvePreviewAsync(
-            int generation, Func<bool> isCurrent, CancellationToken cancellationToken)
+        private async System.Threading.Tasks.Task ApplyRangeCurvePreviewAsync(
+            int generation, Func<int> getLatestGeneration,
+            CancellationToken cancellationToken)
         {
             if (!TryGetSelectedRange(out List<GrabIdInfo> rangeInfos))
-                return false;
+                return;
 
-            return await _muraChart.UpdateRangePreviewAsync(
-                rangeInfos, generation, isCurrent, cancellationToken);
+            await _muraChart.UpdateRangePreviewAsync(
+                rangeInfos, generation, getLatestGeneration, cancellationToken);
         }
 
         private bool TryGetSelectedRange(out List<GrabIdInfo> rangeInfos)

@@ -13,11 +13,12 @@ namespace AniloxRoll.Monitor.UI.Coordinators
         internal const int ListPreviewIntervalMs = 33;
         internal const int CurvePreviewIntervalMs = 80;
         internal const int SettleIntervalMs = 150;
+        internal const int CurveSampleLimit = 50;
 
         private readonly Action _clearTransientPresentation;
         private readonly Action _applySettledSelection;
         private readonly Func<int, bool> _applyListPreview;
-        private readonly Func<int, Func<bool>, CancellationToken, Task<bool>> _applyCurvePreviewAsync;
+        private readonly Func<int, Func<int>, CancellationToken, Task> _applyCurvePreviewAsync;
         private readonly Action<string> _flow;
         private readonly System.Windows.Forms.Timer _settleTimer;
         private readonly System.Windows.Forms.Timer _listTimer;
@@ -34,7 +35,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
             Action clearTransientPresentation,
             Action applySettledSelection,
             Func<int, bool> applyListPreview,
-            Func<int, Func<bool>, CancellationToken, Task<bool>> applyCurvePreviewAsync,
+            Func<int, Func<int>, CancellationToken, Task> applyCurvePreviewAsync,
             Action<string> flow)
         {
             _clearTransientPresentation = clearTransientPresentation ??
@@ -117,15 +118,13 @@ namespace AniloxRoll.Monitor.UI.Coordinators
             var cancellation = new CancellationTokenSource();
             _curveCancellation = cancellation;
             _curveRunning = true;
-            bool applied = false;
             try
             {
-                applied = await _applyCurvePreviewAsync(
+                await _applyCurvePreviewAsync(
                     generation,
-                    () => generation == _generation,
+                    () => _generation,
                     cancellation.Token);
-                if (applied && !cancellation.IsCancellationRequested &&
-                    generation == _generation)
+                if (!cancellation.IsCancellationRequested)
                     _curveAppliedGeneration = generation;
             }
             catch (OperationCanceledException)
@@ -138,8 +137,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                     _curveCancellation = null;
                 cancellation.Dispose();
                 _curveRunning = false;
-                bool superseded = generation != _generation;
-                if ((!applied && !superseded) || _curveAppliedGeneration == _generation)
+                if (_curveAppliedGeneration == _generation)
                     _curveTimer.Stop();
             }
         }
