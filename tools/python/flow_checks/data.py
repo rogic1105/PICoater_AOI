@@ -292,7 +292,7 @@ class DataFlowValidator:
 
         expected = (
             "DT curve load policy latest-only shared-loader "
-            "entries=512 maxMB=256 scale=merged-only"
+            "entries=512 maxMB=256 scale=merged-only minCycleMs=33"
         )
         unique = sorted(set(lines))
         ok = len(lines) == 1 and unique == [expected]

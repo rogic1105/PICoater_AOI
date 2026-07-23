@@ -63,6 +63,26 @@ namespace AniloxRoll.Monitor.Core.Services
                 string dateDir = CaptureStoragePaths.DateImageDir(rootPath, info.Earliest);
                 if (!Directory.Exists(dateDir)) continue;
 
+                string archivePath = CaptureStoragePaths.GrabArchive(
+                    rootPath, info.Earliest, info.GrabId);
+                if (File.Exists(archivePath))
+                {
+                    for (int camId = 1; camId <= 7; camId++)
+                    {
+                        List<string> archiveFrames = CaptureArchiveStore.ListVirtualRawPaths(
+                            archivePath, camId);
+                        if (archiveFrames.Count == 0) continue;
+                        string archiveBase = CaptureFileNaming.BaseFromImagePath(archiveFrames[0]);
+                        float[] mean = CurveBinFile.Load(
+                            CaptureFileNaming.ResolveMeanC(archiveBase));
+                        float[] max = CurveBinFile.Load(
+                            CaptureFileNaming.ResolveMaxC(archiveBase));
+                        AccumulateAverage(
+                            camId, mean, max, accMean, accMax, counts);
+                    }
+                    continue;
+                }
+
                 string prefix = info.Earliest.ToString("yyyyMMdd_HHmmss");
                 for (int camId = 1; camId <= 7; camId++)
                 {
@@ -76,26 +96,7 @@ namespace AniloxRoll.Monitor.Core.Services
                     if (mean == null || mean.Length == 0) continue;
                     float[] max = maxFiles.Length > 0 ? CurveBinFile.Load(maxFiles[0]) : null;
 
-                    if (!accMean.TryGetValue(camId, out float[] accumulatedMean))
-                    {
-                        accMean[camId] = new float[mean.Length];
-                        accMax[camId] = new float[mean.Length];
-                        counts[camId] = 0;
-                    }
-                    else if (accumulatedMean.Length != mean.Length)
-                    {
-                        continue;
-                    }
-
-                    float[] sumMean = accMean[camId];
-                    float[] maxValues = accMax[camId];
-                    for (int i = 0; i < mean.Length; i++)
-                    {
-                        sumMean[i] += mean[i];
-                        if (max != null && i < max.Length && max[i] > maxValues[i])
-                            maxValues[i] = max[i];
-                    }
-                    counts[camId]++;
+                    AccumulateAverage(camId, mean, max, accMean, accMax, counts);
                 }
             }
 
@@ -113,6 +114,37 @@ namespace AniloxRoll.Monitor.Core.Services
             }
 
             return (resultMean, resultMax);
+        }
+
+        private static void AccumulateAverage(
+            int camId,
+            float[] mean,
+            float[] max,
+            Dictionary<int, float[]> accMean,
+            Dictionary<int, float[]> accMax,
+            Dictionary<int, int> counts)
+        {
+            if (mean == null || mean.Length == 0) return;
+            if (!accMean.TryGetValue(camId, out float[] accumulatedMean))
+            {
+                accMean[camId] = new float[mean.Length];
+                accMax[camId] = new float[mean.Length];
+                counts[camId] = 0;
+            }
+            else if (accumulatedMean.Length != mean.Length)
+            {
+                return;
+            }
+
+            float[] sumMean = accMean[camId];
+            float[] maxValues = accMax[camId];
+            for (int i = 0; i < mean.Length; i++)
+            {
+                sumMean[i] += mean[i];
+                if (max != null && i < max.Length && max[i] > maxValues[i])
+                    maxValues[i] = max[i];
+            }
+            counts[camId]++;
         }
 
         public static (
@@ -266,11 +298,21 @@ namespace AniloxRoll.Monitor.Core.Services
 
                         if (!byGrabId.TryGetValue(record.GrabId, out var records))
                             byGrabId[record.GrabId] = records = new List<MuraCurveRecord>();
+                        string basePath = Path.Combine(
+                            CaptureStoragePaths.DateImageDir(rootPath, timestamp), record.FileName);
+                        string archivePath = CaptureStoragePaths.GrabArchive(
+                            rootPath, timestamp, record.GrabId);
+                        if (File.Exists(archivePath))
+                        {
+                            string virtualRaw = CaptureArchiveStore.CreateVirtualRawPath(
+                                archivePath, record.FileName);
+                            if (CaptureArchiveStore.Exists(virtualRaw))
+                                basePath = CaptureFileNaming.BaseFromImagePath(virtualRaw);
+                        }
                         records.Add(new MuraCurveRecord
                         {
                             CameraId = camId,
-                            BasePath = Path.Combine(
-                                CaptureStoragePaths.DateImageDir(rootPath, timestamp), record.FileName),
+                            BasePath = basePath,
                             MaxCMean = record.MaxCMean
                         });
                         recordCount++;
@@ -389,7 +431,10 @@ namespace AniloxRoll.Monitor.Core.Services
         {
             if (string.IsNullOrWhiteSpace(path)) return null;
             string key;
-            try { key = Path.GetFullPath(path); }
+            try
+            {
+                key = CaptureArchiveStore.IsVirtualPath(path) ? path : Path.GetFullPath(path);
+            }
             catch { key = path; }
 
             lock (RangeCurveCacheLock)

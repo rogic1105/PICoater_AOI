@@ -63,7 +63,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         // 曲線與圖片是兩條獨立資料流：曲線 latest-only，圖片由 Form 的 250ms debounce 觸發。
         // 不共用 token，避免圖片開始載入時把同一序號仍在讀取的曲線誤判為 stale。
-        private readonly LatestCurveLoadCoordinator _curveLoads;
+        private readonly LatestGrabLoadCoordinator _curveLoads;
+        private readonly LatestGrabLoadCoordinator _thumbnailLoads;
         private readonly SingleGrabCurveDataLoader _curveDataLoader;
         private readonly ReviewImageDataLoader _imageDataLoader;
         private readonly ReviewPeriodDataLoader _periodDataLoader;
@@ -83,15 +84,120 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public Task LoadGrabCurvesOnlyAsync(string grabId, DateTime hintFrom, DateTime hintTo)
             => _curveLoads.Enqueue(grabId, hintFrom, hintTo);
 
-        /// <summary>使正在解碼的舊圖片結果失效；每次使用者改序號時呼叫，不等待 250ms。</summary>
-        public void InvalidateImageLoad()
+        /// <summary>
+        /// Invalidates only the debounced full-resolution load. The serialized thumbnail lane
+        /// remains active so selections arriving while it is busy can coalesce to the latest one.
+        /// </summary>
+        public void InvalidateSettledImageLoad()
         {
-            if (!_imageLoads.Invalidate()) return;
-            _ctx.BusyUi.SetBusy(false);
-            Core.Services.FlowTrace.Log("RV loadGrab busy off reason=invalidated");
+            if (_imageLoads.Invalidate())
+            {
+                _ctx.BusyUi.SetBusy(false);
+                Core.Services.FlowTrace.Log("RV loadGrab busy off reason=invalidated");
+            }
         }
 
-        private async Task LoadGrabCurvesCoreAsync(SingleGrabCurveLoadRequest request)
+        /// <summary>
+        /// Invalidates both preview and full-resolution image lanes when leaving the current
+        /// single-grab display context.
+        /// </summary>
+        public void InvalidateImageLoad()
+        {
+            _thumbnailLoads.Invalidate();
+            InvalidateSettledImageLoad();
+        }
+
+        public Task LoadGrabThumbnailAsync(
+            string grabId, DateTime hintFrom, DateTime hintTo)
+            => _thumbnailLoads.Enqueue(grabId, hintFrom, hintTo);
+
+        private async Task LoadGrabThumbnailCoreAsync(SingleGrabLoadRequest request)
+        {
+            string grabId = request.GrabId;
+            DateTime hintFrom = request.HintFrom;
+            DateTime hintTo = request.HintTo;
+            string root = !string.IsNullOrWhiteSpace(
+                UI.State.UserSessionState.LastDataPath)
+                ? UI.State.UserSessionState.LastDataPath
+                : _ctx.DataStatsPresenter.StatsDataRootPath;
+            if (string.IsNullOrWhiteSpace(root)) return;
+
+            var watch = Stopwatch.StartNew();
+            if (request.CoalescedCount > 0)
+            {
+                Core.Services.FlowTrace.Log(
+                    $"RV thumbnail coalesced {grabId} skipped={request.CoalescedCount} " +
+                    "minCycleMs=33");
+            }
+            Core.Services.FlowTrace.Log($"RV thumbnail begin {grabId}");
+            ReviewImageData loaded = null;
+            try
+            {
+                int cameraCount = _ctx.CameraCount;
+                bool enableProcess = LastReviewProcessedMode;
+                string ridgeDirection = ActiveRidgeDirection;
+                ReviewImageLoadPlan plan;
+                if (!TryGetPreparedPlan(
+                    root, grabId, enableProcess, ridgeDirection, out plan))
+                {
+                    plan = await Task.Run(() => _imageDataLoader.Prepare(
+                        root, grabId, hintFrom, hintTo, cameraCount,
+                        enableProcess, ridgeDirection, logPaths: false));
+                }
+                loaded = await Task.Run(() => _imageDataLoader.Load(
+                    plan, cameraCount, enableProcess, ridgeDirection,
+                    includeCurves: false, useThumbnail: true));
+
+                if (!_thumbnailLoads.CanApplyStarted(request))
+                {
+                    Core.Services.FlowTrace.Log(
+                        $"RV thumbnail stale-drop {grabId} ({watch.ElapsedMilliseconds}ms)");
+                    return;
+                }
+
+                int imageCount = 0;
+                for (int i = 0; i < loaded.GrayFrames.Length; i++)
+                    if (loaded.GrayFrames[i] != null) imageCount++;
+                if (imageCount == 0 || loaded.PixelScaleRatio <= 1.0)
+                {
+                    Core.Services.FlowTrace.Log(
+                        $"RV thumbnail unavailable {grabId} ({watch.ElapsedMilliseconds}ms)");
+                    return;
+                }
+
+                double[] ops = plan.Config?.CamOps ??
+                    _ctx.Settings.GetCameraOpsUmArray();
+                double[] positions = plan.Config?.CamPos ??
+                    _ctx.Settings.GetCameraStartPositionMmArray();
+                int feedScale = Math.Max(
+                    1, (int)Math.Round(
+                        InspectionEngineConfig.DefaultSaveResizeScale *
+                        loaded.PixelScaleRatio));
+                StitchedImagesReady?.Invoke(
+                    loaded.GrayFrames, loaded.GrayWidths, loaded.GrayHeights,
+                    ops, positions, true, true,
+                    feedScale, loaded.PixelScaleRatio);
+                Core.Services.FlowTrace.Log(
+                    $"RV thumbnail done {grabId} total={watch.ElapsedMilliseconds}ms " +
+                    $"decode={loaded.StitchMs}ms images={imageCount} " +
+                    $"ratio={loaded.PixelScaleRatio:F2} source={loaded.PreviewSource} " +
+                    $"atlas={(loaded.PreviewSource == "atlas" ? loaded.PreviewWidth + "x" + loaded.PreviewHeight : "none")}");
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine(
+                    $"[ReviewThumbnail] {grabId}: {ex.GetType().Name}: {ex.Message}");
+                Core.Services.FlowTrace.Log(
+                    $"RV thumbnail unavailable {grabId} " +
+                    $"({watch.ElapsedMilliseconds}ms; {ex.GetType().Name})");
+            }
+            finally
+            {
+                loaded?.DisposeImages();
+            }
+        }
+
+        private async Task LoadGrabCurvesCoreAsync(SingleGrabLoadRequest request)
         {
             string grabId = request.GrabId;
             DateTime hintFrom = request.HintFrom;
@@ -169,9 +275,12 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     DateTimeNavigator = ctx.DateTimeNavigator,
                     InspectionService = ctx.InspectionService,
                     CameraCount = ctx.CameraCount,
-                    PublishFrames = (frames, widths, heights, ops, positions, isGlobal, preserveView) =>
+                    PublishFrames = (
+                        frames, widths, heights, ops, positions,
+                        isGlobal, preserveView, feedScale, rowPitchScale) =>
                         StitchedImagesReady?.Invoke(
-                            frames, widths, heights, ops, positions, isGlobal, preserveView)
+                            frames, widths, heights, ops, positions,
+                            isGlobal, preserveView, feedScale, rowPitchScale)
                 },
                 _periodDataLoader);
             _charts = new ReviewChartPresenter(
@@ -191,7 +300,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _charts.CurvesUpdated += (mean, max, ops, positions, errorMean, errorMax) =>
                 StitchedCurveUpdated?.Invoke(
                     mean, max, ops, positions, errorMean, errorMax);
-            _curveLoads = new LatestCurveLoadCoordinator(LoadGrabCurvesCoreAsync);
+            _curveLoads = new LatestGrabLoadCoordinator(LoadGrabCurvesCoreAsync);
+            _thumbnailLoads = new LatestGrabLoadCoordinator(
+                LoadGrabThumbnailCoreAsync, minimumCycleMs: 33);
         }
 
         /// <summary>延遲注入 DataStatsPresenter（初始化順序：coordinator 先於 presenter 建立）。</summary>
@@ -223,7 +334,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// </summary>
         /// <summary>一組 grab 影像載好（7 台拼接圖 + CFG 有效 ops/pos + 是否 Global）。
         /// Form 訂閱後交給 ReviewDisplayManager.PushImages，以 ImageDisplayView 顯示。</summary>
-        public event Action<byte[][], int[], int[], double[], double[], bool, bool> StitchedImagesReady; // gray bytes, w, h, ops, pos, isGlobal, preserveChartView
+        internal event ReviewFramesReady StitchedImagesReady;
 
         /// <summary>JPEG 表頭與 CFG 就緒後、完整解碼前發布預期合圖尺寸，供主畫面同源 fit 預算。</summary>
         public event Action<string, int[], int[], double[], double[], bool> StitchedLayoutReady;
@@ -243,6 +354,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
             // 圖片自己的最後贏 token；序號 intent 會先 InvalidateImageLoad，防舊圖片在 debounce 前上畫面。
             int myLoad = _imageLoads.Begin();
+            _thumbnailLoads.Invalidate();
             _ctx.BusyUi.SetBusy(true);
             Core.Services.FlowTrace.Log($"RV loadGrab begin {grabId}（proc={enableProcess}）");
             LastReviewProcessedMode = enableProcess;
@@ -324,7 +436,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
                 StitchedImagesReady?.Invoke(
                     loaded.GrayFrames, loaded.GrayWidths, loaded.GrayHeights, opsEff, posEff,
-                    isGlobal, keepDisplayedCurves);
+                    isGlobal, keepDisplayedCurves,
+                    InspectionEngineConfig.DefaultSaveResizeScale, 1.0);
 
                 if (!preserveCurves)
                 {

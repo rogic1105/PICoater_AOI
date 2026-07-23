@@ -14,8 +14,9 @@
 | Row processed image | `...\yyyyMMdd\{base}_proc_r.jpg` | Yes | Yes | Delete with the oldest complete day when low on space |
 | Column curves | `...\yyyyMMdd\{base}_{mean|max}_c.bin` | Yes | Yes | Delete with the oldest complete day when low on space |
 | Row curves | `...\yyyyMMdd\{base}_{mean|max}_r.bin` | Yes | Yes | Delete with the oldest complete day when low on space |
+| Per-grab capture archive | `...\yyyyMMdd\{grabId}.acap` | Yes when present; contains authoritative raw/processed JPEG, C/R curves, camera id, frame ticks, plus optional rebuildable preview atlases | Yes | Delete with the oldest complete day when low on space |
 | Frame-start tick index | `...\yyyyMMdd\_ticks.csv` | Alignment source while images exist | Yes | Delete with the day output |
-| Rebuildable curve summary | `...\yyyyMMdd\_curve_summary\{grabId}.mcsf` | No; bins are authoritative | No | Delete with the day output |
+| Rebuildable curve summary | `...\yyyyMMdd\_curve_summary\{grabId}.mcsf` | No; legacy bins or `.acap` curve records are authoritative | No | Delete with the day output |
 | Background calibration | `D:\Anilox\Bg\bg_{width}_{cam}_{yyyyMMdd-HHmmssfff}.bin`; active manifest `Bg\active-background.json` | Yes for local acquisition | No | Active set protected; a successful low-space cleanup also removes inactive timestamped sets |
 | Runtime trace and diagnostics | `D:\Anilox\Logs\` | Diagnostic evidence | No | Cataloged logs expire after `LogRetentionHours` (default 168 h) |
 | Runtime settings | `{ExeDir}\Config\*.json`, `Radient_Config.dcf` | Yes for that machine | No | Not part of capture retention |
@@ -25,6 +26,14 @@
 
 Readers accept legacy `_proc_v.jpg` / `_proc_h.jpg` and legacy curve-bin names. New writers must
 emit only the c/r names above.
+
+Readers support mixed daily data: when `{grabId}.acap` exists, CSV file names resolve to virtual
+archive records and image/curve/tick readers use the container; otherwise they read the legacy
+individual JPG/BIN files. Authoritative image and curve records remain independent. A rebuildable
+preview cache adds one raw, column-processed, and row-processed atlas record per grab; each atlas
+packs the tick-aligned camera strips into one JPEG bounded by 1920x1080 and stores camera rectangles
+for in-memory splitting. It may be regenerated or omitted without changing inspection truth;
+settled review always replaces it with the independent full JPEG records.
 
 The repository source of truth for the MIL binary configuration is
 `sdk/MIL/Config/Radient_Config.dcf`. The product and MIL monitor sample link that one file into

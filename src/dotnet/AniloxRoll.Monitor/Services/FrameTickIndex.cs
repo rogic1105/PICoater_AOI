@@ -79,6 +79,12 @@ namespace AniloxRoll.Monitor.Core.Services
             foreach (var p in imagePaths)
             {
                 if (string.IsNullOrEmpty(p)) continue;
+                if (CaptureArchiveStore.IsVirtualPath(p))
+                {
+                    if (CaptureArchiveStore.TryGetFrameTicks(p, out long archiveTicks))
+                        map[TickKey(p)] = archiveTicks;
+                    continue;
+                }
                 string d = Path.GetDirectoryName(p);
                 if (!string.IsNullOrEmpty(d)) dirs.Add(d);
             }
@@ -103,7 +109,9 @@ namespace AniloxRoll.Monitor.Core.Services
 
         /// <summary>影像路徑 → 側車 key（"{ts}-{camId}"，= 檔名去掉 _raw.jpg 等 suffix）。</summary>
         private static string TickKey(string path)
-            => Path.GetFileName(CaptureFileNaming.BaseFromImagePath(path));
+            => CaptureArchiveStore.IsVirtualPath(path)
+                ? CaptureArchiveStore.GetVirtualBaseName(path)
+                : Path.GetFileName(CaptureFileNaming.BaseFromImagePath(path));
 
         /// <summary>
         /// 用硬體 tick 就近聚類建跨相機對齊時間軸。
@@ -207,7 +215,9 @@ namespace AniloxRoll.Monitor.Core.Services
         /// <summary>檔名共用時間戳 key＝"{ts}-{camId}" 去掉 "-{camId}"。</summary>
         private static string StitchKey(string path)
         {
-            string baseName = Path.GetFileName(CaptureFileNaming.BaseFromImagePath(path)); // "{ts}-{camId}"
+            string baseName = CaptureArchiveStore.IsVirtualPath(path)
+                ? CaptureArchiveStore.GetVirtualBaseName(path)
+                : Path.GetFileName(CaptureFileNaming.BaseFromImagePath(path)); // "{ts}-{camId}"
             int dash = baseName.LastIndexOf('-');
             return dash > 0 ? baseName.Substring(0, dash) : baseName;
         }

@@ -121,6 +121,8 @@
     <Compile Include="Settings\System\SystemSettings.cs" />
     <Compile Include="Interop\NativeMethods.cs" />
     <Compile Include="Services\AoiService.cs" />
+    <Compile Include="Services\CaptureArchiveStore.cs" />
+    <Compile Include="Services\CapturePreviewAtlasCodec.cs" />
     <Compile Include="Services\CaptureFileNaming.cs" />
     <Compile Include="Services\FlowTrace.cs" />
     <Compile Include="Services\FrameTickIndex.cs" />
@@ -195,7 +197,7 @@
     <Compile Include="UI\Binders\GrabDetailListBinder.cs" />
     <Compile Include="UI\Coordinators\GrabDurationCoordinator.cs" />
     <Compile Include="UI\Coordinators\InspectionSettingsCoordinator.cs" />
-    <Compile Include="UI\Coordinators\LatestCurveLoadCoordinator.cs" />
+    <Compile Include="UI\Coordinators\LatestGrabLoadCoordinator.cs" />
     <Compile Include="UI\Coordinators\ReviewImageLoadGate.cs" />
     <Compile Include="UI\Coordinators\ReviewPeriodLoadCoordinator.cs" />
     <Compile Include="UI\Coordinators\DataRangePreviewCoordinator.cs" />

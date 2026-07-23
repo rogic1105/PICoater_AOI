@@ -44,7 +44,7 @@ against current code with `rg` before editing because lookup data can become sta
 | `UI/Binders/BusyUiBinder.cs` | 回顧載入忙碌視覺唯一 owner：等待游標、命令按鈕鎖與 UI-thread marshal。Presenter workflow 與 stitched image loader 共用同一實例。 |
 | `UI/Coordinators/ReviewFolderCoordinator.cs` | 回顧資料夾選擇、路徑修正、ImageRepository refresh、DateTimeNavigator 初始化。 |
 | `UI/Coordinators/InspectionSettingsCoordinator.cs` | InspectionSettings 到 BatchInspectionService 的 pipeline 副作用唯一 owner。 |
-| `UI/Coordinators/LatestCurveLoadCoordinator.cs` | 回顧／報表共用的單序號 Curve latest-only／single-flight 排程與 stale token owner；不負責讀 bin 或畫 chart。 |
+| `UI/Coordinators/LatestGrabLoadCoordinator.cs` | 回顧／報表／預覽共用的單序號 latest-only／single-flight 排程與 stale token owner；不負責讀檔或畫畫面。 |
 | `UI/Coordinators/ReviewPeriodLoadCoordinator.cs` | 回顧時段載入的 FIFO single-flight、重複 request 去重與 generation 失效 owner。 |
 | `UI/Services/ImageCacheService.cs` | ProcessBatch 產出但不直接顯示的 Bitmap 生命週期唯一 owner；下一次 workflow 前統一 Dispose。 |
 | `UI/Services/ReviewImageDataLoader.cs` | 回顧單片完整載入 service：查影像/CFG、幀對齊、每台拼接、欄列 curve 合併與灰階轉換；背景執行且不持有 WinForms 狀態。 |
@@ -72,6 +72,8 @@ against current code with `rg` before editing because lookup data can become sta
 | `Services/FlowTrace.cs` | 產品 `[Flow]` trace 的單一輸出介面 |
 | `Services/FrameTickIndex.cs` | 跨相機時間槽對齊唯一決策點：硬體 tick 優先，任一 tick 缺失時整批 fallback 檔名，並回報實際模式。 |
 | `UI/Widgets/WaterfallView.cs` | App 對瀑布顯示流程的相容入口 |
+| `Services/CaptureArchiveStore.cs` | 每序號 `.acap` 容器、CRC、虛擬路徑、隨機記錄讀寫與舊資料轉換 owner。 |
+| `Services/CapturePreviewAtlasCodec.cs` | `.acap` raw／欄／列 1080p 預覽合圖的生成、metadata 編解碼與相機切片 owner；完整 JPEG 仍是真實來源。 |
 | `Services/CaptureFileNaming.cs` | 擷取影像、曲線與背景檔名規則及 legacy 解析 |
 | `Services/CaptureStoragePaths.cs` | 每日 CSV 與日期影像目錄的路徑規則 |
 | `Acquisition/CaptureTimestampCoordinator.cs` | 多相機存檔時間戳同步 |

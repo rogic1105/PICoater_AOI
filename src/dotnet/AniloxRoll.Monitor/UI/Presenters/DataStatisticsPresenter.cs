@@ -100,6 +100,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private bool _showFailOnly;
         private bool _preserveDetailListDuringSelection;
         private DataRangePreviewCoordinator _rangePreview;
+        private const int SingleGrabPreviewIntervalMs = 33;
+        private System.Windows.Forms.Timer _singleGrabPreviewTimer;
+        private int _singleGrabPreviewRequests;
 
         // --- 圖表導航 ---
 
@@ -147,7 +150,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 () => _grabIdInfos,
                 () => _rangeGrabIdInfos,
                 ScheduleRangeRefresh,
-                RefreshSelectedGrab,
+                ScheduleSelectedGrabRefresh,
                 (grabId, earliest, latest, idx) => GrabIdSelectedFromData?.Invoke(grabId, earliest, latest, idx),
                 (grabId, earliest, latest, idx) => GrabIdSelectedFromReview?.Invoke(grabId, earliest, latest, idx),
                 SetGroupBoxActive, SetChipActive);
@@ -170,6 +173,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _dateGrabIdNavigator.WireEvents();
             _ctx.GrabDetailList.RowCommitted += OnGrabDetailRowCommitted;
             _ctx.GrabDetailList.Initialize();
+            _singleGrabPreviewTimer = new System.Windows.Forms.Timer
+            {
+                Interval = SingleGrabPreviewIntervalMs
+            };
+            _singleGrabPreviewTimer.Tick += SingleGrabPreviewTimer_Tick;
             _muraChart = new MuraProfileChartPresenter(_ctx,
                 () => _dateGrabIdNavigator.ActiveStatMode, () => _grabIdInfos, () => _statsDataRootPath);
             _muraChart.SingleGrabCurvePresented += OnSingleGrabCurvePresented;
@@ -391,12 +399,19 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         private void ScheduleRangeRefresh()
         {
+            CancelSelectedGrabRefresh();
             if (_rangePreview == null)
             {
                 RefreshStats();
                 return;
             }
             _rangePreview.Start();
+        }
+
+        private void CancelSelectedGrabRefresh()
+        {
+            _singleGrabPreviewTimer?.Stop();
+            _singleGrabPreviewRequests = 0;
         }
 
         private void ClearRangePreviewPresentation()
@@ -436,6 +451,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
         {
             _rangePreview?.Dispose();
             _rangePreview = null;
+            if (_singleGrabPreviewTimer != null)
+            {
+                _singleGrabPreviewTimer.Stop();
+                _singleGrabPreviewTimer.Tick -= SingleGrabPreviewTimer_Tick;
+                _singleGrabPreviewTimer.Dispose();
+                _singleGrabPreviewTimer = null;
+            }
             if (_muraChart != null)
             {
                 _muraChart.SingleGrabCurvePresented -= OnSingleGrabCurvePresented;
@@ -444,6 +466,38 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _muraChart = null;
             _ctx.GrabDetailList.RowCommitted -= OnGrabDetailRowCommitted;
             _ctx.GrabDetailList.Dispose();
+        }
+
+        private void ScheduleSelectedGrabRefresh()
+        {
+            if (_singleGrabPreviewTimer == null)
+            {
+                RefreshSelectedGrab();
+                return;
+            }
+
+            _singleGrabPreviewRequests++;
+            if (!_singleGrabPreviewTimer.Enabled)
+                _singleGrabPreviewTimer.Start();
+        }
+
+        private void SingleGrabPreviewTimer_Tick(object sender, EventArgs e)
+        {
+            _singleGrabPreviewTimer.Stop();
+            int requestCount = _singleGrabPreviewRequests;
+            _singleGrabPreviewRequests = 0;
+
+            if (!TryGetSelectedDataGrabInfo(out GrabIdInfo selected))
+                return;
+
+            FlowTrace.Log($"ui:【報表序號】→ {selected.GrabId}");
+            if (requestCount > 1)
+            {
+                FlowTrace.Log(
+                    $"DT selected coalesced {selected.GrabId} " +
+                    $"skipped={requestCount - 1} intervalMs={SingleGrabPreviewIntervalMs}");
+            }
+            RefreshSelectedGrab();
         }
 
         private void OnSingleGrabCurvePresented(
@@ -455,6 +509,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// <summary>單片序號快路：List 範圍內容不變，只更新該筆統計、Mura curve 與反白。</summary>
         private void RefreshSelectedGrab()
         {
+            CancelSelectedGrabRefresh();
             if (string.IsNullOrWhiteSpace(_statsDataRootPath)) return;
             if (!TryGetSelectedDataGrabInfo(out GrabIdInfo grab)) return;
 

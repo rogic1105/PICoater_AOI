@@ -427,7 +427,6 @@ namespace AniloxRoll.Monitor.UI.Navigators
             int allIndex = allGrabIdInfos.FindIndex(candidate =>
                 string.Equals(candidate.GrabId, info.GrabId, StringComparison.Ordinal));
             if (allIndex < 0) return;
-            FlowTrace.Log($"ui:【報表序號】→ {info.GrabId}");
 
             // cbDataId（單片序號）變更「不」連動 cbDataIdStart/End —— 範圍序號獨立，選單片不動範圍。
             _refreshSelectedGrab();

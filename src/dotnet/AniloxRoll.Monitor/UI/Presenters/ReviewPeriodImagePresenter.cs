@@ -10,6 +10,17 @@ using AniloxRoll.Monitor.UI.Widgets;
 
 namespace AniloxRoll.Monitor.UI.Presenters
 {
+    internal delegate void ReviewFramesReady(
+        byte[][] frames,
+        int[] widths,
+        int[] heights,
+        double[] ops,
+        double[] positions,
+        bool isGlobal,
+        bool preserveChartView,
+        int feedScale,
+        double rowPitchScale);
+
     internal sealed class ReviewPeriodImageContext
     {
         public ReviewRuntimeState ReviewState { get; set; }
@@ -18,7 +29,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public DateTimeNavigator DateTimeNavigator { get; set; }
         public BatchInspectionService InspectionService { get; set; }
         public int CameraCount { get; set; }
-        public Action<byte[][], int[], int[], double[], double[], bool, bool> PublishFrames { get; set; }
+        public ReviewFramesReady PublishFrames { get; set; }
     }
 
     /// <summary>
@@ -67,7 +78,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 processedMode, ridgeDirection);
             _ctx.PublishFrames?.Invoke(
                 frames.GrayFrames, frames.Widths, frames.Heights,
-                cameraOps, cameraPositions, true, preserveChartView);
+                cameraOps, cameraPositions, true, preserveChartView,
+                InspectionEngineConfig.DefaultSaveResizeScale, 1.0);
         }
 
         private Dictionary<int, string> GetImages(DateTime? period)

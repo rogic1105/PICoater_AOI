@@ -70,6 +70,19 @@ magic(4)="MCBF" | version(4=int) | scale_factor(4=float) | array_length(4=int) |
 - 多 capture 欄曲線由 `CurveMergeHelper.MergeCurves` 邊讀邊累加 Mean／Max，不保留全部來源陣列做第二輪掃描；每個 bin 仍完整讀取，不得用 latest-only 掠過序號。
 - 報表單序號可使用 `SingleGrabCurveSummaryStore` 的 `.mcsf` 可重建匯總，避免冷磁碟開啟數百個小 bin；匯總不改統計公式、不取代原始 bin。重建後先回 UI，互動停止 750ms 才由 bounded 單一 writer 採同目錄暫存檔原子替換。
 
+### Capture archive compatibility
+- `{grabId}.acap` stores independent raw/processed JPEG and C/R curve records for one grab.
+- `CaptureArchiveStore` owns the container index, CRC validation, virtual paths, and random record reads.
+- All readers must accept both archive virtual paths and legacy individual files; UI code must not
+  parse the binary format or treat the archive as one stitched image.
+- Rebuildable preview caches live inside the same archive. New archives prefer one raw/C/R
+  `PreviewAtlas` record per mode: camera strips are packed into one JPEG bounded by 1920x1080,
+  with camera rectangles and source dimensions in the payload. Review reads and decodes one atlas,
+  then splits camera images in memory. Older per-frame thumbnail records remain read fallback only.
+  Full JPEG records remain authoritative; settled full-image load invalidates older preview output.
+- CSV remains the selection/index truth. A selected grab with `images=0` or `cams=0` is a
+  data-health failure (`R2.assets`), not a valid blank review state.
+
 ### ImageRepository 掃描
 - 同時掃 `*_raw.jpg` + `*.bmp`，兩格式共存
 - **JPG 優先**：同相機同時存在 JPG+BMP 時，回傳 JPG（避免 duplicate key 崩潰）

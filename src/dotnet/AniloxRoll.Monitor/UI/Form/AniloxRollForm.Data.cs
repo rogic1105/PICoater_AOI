@@ -332,8 +332,8 @@ namespace AniloxRoll.Monitor.Forms
             catch (Exception ex) { Trace.WriteLine($"[OnDataGrabIdSelected] {ex}"); }
         }
 
-        // 快速滾序號的載入 debounce（250ms）：滾動中只做輕量日期同步與 latest-only 曲線；
-        // 停頓才載入最後一張圖片、儲存 session、同步 Data tab。
+        // 快速滾序號的載入 debounce（250ms）：滾動中只送 latest-only 曲線；
+        // 停頓才同步日期/時間、載入最後一張圖片、儲存 session、同步 Data tab。
         private Timer _reviewLoadDebounce;
         private (string grabId, DateTime earliest, DateTime latest, int idx, int sequence) _pendingReviewLoad;
         private int _reviewSelectionSeq;
@@ -343,15 +343,14 @@ namespace AniloxRoll.Monitor.Forms
             try
             {
                 int selectionSeq = ++_reviewSelectionSeq;
-                _stitchCoordinator.InvalidateImageLoad();
-
-                // 滾動中只同步畫面上的日期/時間，不寫 session、不重建完整日期清單。
-                using (_dataStatsPresenter.GrabIdNavGuard.Enter())
-                    _dateTimeNavigator.SetPeriodToCombo(earliest);
-                _presenter.UpdatePeriodNavigationState();
+                // Keep the serialized thumbnail lane alive: while it is busy, intermediate
+                // selections collapse into its latest pending request. Only the debounced
+                // full-resolution load must be invalidated immediately.
+                _stitchCoordinator.InvalidateSettledImageLoad();
 
                 // 分層載入：曲線（輕）即時跟滾動 → 使用者快速掃 chart 找異常；影像（重）settle 才載。
                 _ = _stitchCoordinator.LoadGrabCurvesOnlyAsync(grabId, earliest, latest);
+                _ = _stitchCoordinator.LoadGrabThumbnailAsync(grabId, earliest, latest);
 
                 _pendingReviewLoad = (grabId, earliest, latest, idx, selectionSeq);
                 if (_reviewLoadDebounce == null)
@@ -361,6 +360,11 @@ namespace AniloxRoll.Monitor.Forms
                     {
                         _reviewLoadDebounce.Stop();
                         var p = _pendingReviewLoad;
+                        // ComboBox.Items.Contains/SelectedItem 會線性搜尋當日時間清單；
+                        // 大量序號下不可逐格執行，只在 latest selection settle 後同步一次。
+                        using (_dataStatsPresenter.GrabIdNavGuard.Enter())
+                            _dateTimeNavigator.SetPeriodToCombo(p.earliest);
+                        _presenter.UpdatePeriodNavigationState();
                         // session 只在使用者停下後落盤一次。
                         _dateTimeNavigator.SaveCurrentSelection();
                         try

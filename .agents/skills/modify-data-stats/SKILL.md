@@ -77,7 +77,7 @@ description: Modify the Data tab, inspection CSV schema, statistics, report list
 - chart.Tag = `"auto"` 代表 AutoScale 模式，null = FixedScale
 
 ### chartDataColumn（Mura 空間分布圖）
-- 單序號模式每格都顯示該 grab 的完整 Curve，不得用 debounce/latest-only 掠過中間序號；範圍模式則顯示 50 筆 Mean 均勻候選與 50 筆 MaxCMean 排名候選。
+- 單序號模式的每次實際上畫都必須是該 grab 的完整 Curve；孤立選擇立即載入。快速連續滾動時以 33ms 最短週期合併尚未開始的中間序號；已開始的 Curve 依序完成上畫，再接最新待辦，形成單調跳著更新，停下後最後序號必須完整顯示。切模式的明確 invalidation 仍禁止舊結果上畫。範圍模式則顯示 50 筆 Mean 均勻候選與 50 筆 MaxCMean 排名候選。
 - 報表列 Curve 只屬單序號模式；與欄 Curve 共用單序號 profile/cache/prefetch，並沿用
   `RowCurveChartHelper + RowCurveDisplayAdapter`。切到序號範圍或年/月/日範圍必清空，不得保留上一筆。
 - 單序號資料來源：`InspectionConfigRepository.LoadForGrabId`（#CFG OPS/Pos）+ `SingleGrabCurveSummaryStore`；匯總缺少／失效時才走 `InspectionImagePathRepository.LoadForGrabId`，最多 2 台相機並行執行欄／列 bin 合併，先顯示 Curve，再由單一背景 writer 原子寫回。
@@ -85,6 +85,13 @@ description: Modify the Data tab, inspection CSV schema, statistics, report list
 - 只有所有預期 capture 的 MeanC/MaxC 都成功讀取（`merged == captures`）才可落匯總；remote copy 未完成或 bin 損壞時記 `skip-incomplete`，避免固化部分資料。
 - 匯總 writer 平常對序號互動讓路，pending raw profile 達 72 MB 才 pressure drain，96 MB 為硬上限；不可在每格同步 `Flush(true)`，也不可用無界背景 task 製造記憶體或磁碟競爭。單序號 raw Curve LRU 為 512 筆／256 MB，30,000 筆資料仍須維持固定上限。
 - `SingleGrabCurveCache` 只保存 rescale 前的完整 Mean/Max 合併結果（LRU 64 筆／64 MB），相同 key 的前景與背景載入 single-flight；Presenter 依滾動方向只預讀下一個未命中相鄰序號，資料夾重載時必清空。
+- 報表單序號快速滾動時，ComboBox 文字逐格更新；統計卡、List 高亮與 Curve 排程由
+  `DataStatisticsPresenter` 以 33ms 固定週期合併，只處理當下最新序號。不得把逐格重繪重新接回
+  `SelectedIndexChanged`。
+- 回顧單序號快速滾動時，欄／列 Curve 走 latest-only；低解析圖片優先讀 `.acap` 單筆 1080p
+  PreviewAtlas。圖片與 Curve 都採 running 依序完成上畫、33ms 最短呈現週期內 pending 只留最新；
+  只有切模式／時序或完整圖開始載入才取消 thumbnail。日期／時間 Combo、session、完整圖片與
+  Data tab 同步只在 250ms settle 後套最後序號。大量資料下不得逐格呼叫 `SetPeriodToCombo`。
 - cache 命中後必 clone 再做 view-time Hessian rescale，禁止直接修改 raw cache；設定變更可用同一 raw Curve 重新套目前比例與門檻。
 - 不依賴 camReviewMain — Data tab 操作即時顯示對齊圖；Review tab 載入後 `SyncMuraProfileFromReview` 覆寫為同源資料，無視覺差
 

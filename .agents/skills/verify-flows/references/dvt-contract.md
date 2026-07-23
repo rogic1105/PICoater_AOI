@@ -1115,7 +1115,8 @@ T1: RV folder selected root=…
 T1: RV repo scan root=… files=N
 T1: （首次）RV EnsureImageDisplay create（thumbs=7）
 T1: RV loadGrab begin {grabId}（proc=…）
-Tn: RV loadGrab paths {grabId} root=… images=N cams=P cfg=yes|no align=tick|filename
+Tn: RV loadGrab paths {grabId} root=… images=N cams=P cfg=yes|no align=tick|filename source=acap|legacy
+    ← CSV 已選到的單序號必須 images>0 且 cams>0；`R2.assets` 自動判斷，避免索引存在但實體輸出不可讀
 T1: RV prefit {grabId} content=WxH viewport=WxH viewX=L~R viewY=T~B
     ← 只讀 JPEG 表頭＋CFG，完整解碼前先由主畫面同源公式算好欄／列視野
 T1: RV prefitPaint {grabId} chart=col|row after=Nms axis=A~B/view=L~R
@@ -1153,7 +1154,14 @@ T1: RV prefit {grabId} …
 T1: RV layout intent {grabId} images=N cams=P align=tick|filename before=curves
 T1: RV curves {grabId}（…ms）          ← 快路：先套新序號主畫面幾何，再讓欄+列曲線即時跟滾動
 （快速滾動：曲線 single-flight/latest-only，中間 intent 可無 paths；正在讀的舊筆完成後 stale-drop，再直接讀最新筆）
-（影像 debounce 250ms：滾動中不發完整載入；停下才載「最後選取」；session 也只在 settle 落盤一次）
+Tn: RV thumbnail begin {grabId}
+Tn: RV thumbnail coalesced {grabId} skipped=N minCycleMs=33
+T1: RV thumbnail done {grabId} total=Nms decode=Nms images=P ratio=R source=atlas|frames atlas=WxH|none
+    或 RV thumbnail unavailable {grabId}（Nms）／RV thumbnail stale-drop {grabId}（Nms）
+    ← `.acap` 有內嵌預覽時，快滾可先上低解析圖片；已開始的圖片准依序完成上畫，
+      尚未開始的中間 intent 合併為最新一筆，不顯示 busy cursor。
+      `atlas`＝所選 raw／proc C／proc R 只讀一筆 1080p 預覽合圖；`frames`＝舊逐幀縮圖 fallback
+（影像 debounce 250ms：滾動中不發完整載入；停下才同步日期/時間、載「最後選取」完整圖；session 也只在 settle 落盤一次）
 T1/Tn: RV loadGrab begin {grabId} → RV loadGrab paths … → RV prefit … → RV lodRebind merge …（fit reset）→ RV pushFrames → RV loadGrab done
 ```
 - **分層**：單步時曲線立即載；快速滾動時曲線最多「執行中 1 筆＋等待中最新 1 筆」，中間序號不讀檔；
@@ -1161,8 +1169,21 @@ T1/Tn: RV loadGrab begin {grabId} → RV loadGrab paths … → RV prefit … �
   **Data tab 同步（統計/Mura 圖重算）也只在 settle 後做一次、排在影像之後**——唯一觸發點
   `SyncDataTabFromReviewSettled@AniloxRollForm.Data.cs`，不得回到逐格 inline
   （2026-07-10 定罪：逐格全量重算＝快撥 UiStall 5.7s＋曲線快路全餓死）。
-- **日期/session 分層**：滾動中只走 `SetPeriodToCombo`（同日不重建 time items），不得走 `NavigateTo`
-  的完整 Initialize/Save；`SaveCurrentSelection` 只在 250ms settle 執行一次。
+- **預覽是可重建快取，不是真實來源**：新格式每個 grab 內嵌 raw／proc C／proc R 各一筆
+  `PreviewAtlas`；每筆是先依 tick 時間軸將各相機垂直拼接，再橫向裝入單張
+  `<=1920×1080` JPEG，並保存 camera rectangle 與原始寬高。快滾只讀／解碼所選模式一筆，
+  再於記憶體切回各相機，最後沿用 OPS／START／CROP 合併。舊逐幀 thumbnail 只作 fallback；
+  兩者都缺時記 `unavailable` 並等待既有 250ms 完整圖路徑，不得退回快滾中解碼完整 JPEG。
+  縮圖與完整圖使用不同 latest-only token；完整 `RV loadGrab begin` 必須立即作廢正在讀的縮圖，
+  因此其後只准 `stale-drop`，不得讓舊縮圖覆蓋完整圖。縮圖沿用完整圖的 OPS／START／CROP
+  幾何與物理座標，只降低像素解析度，不得使欄／列 Curve 或視野跳位。
+  預覽上畫有 33ms 最短週期，滑輪輸入更快時 running 依序完成、pending 只保留最新序號；
+  `RV thumbnail coalesced skipped=N` 必須留下被合併數量，不得用每個 intent 塞滿 UI。
+  只有切時序／模式、離開單序號或完整圖開始載入時才准 invalidate thumbnail；
+  一般序號變更只准作廢 250ms settle 的完整圖，不得清除 thumbnail pending。
+- **日期/session 分層**：滾動中不得逐格呼叫 `SetPeriodToCombo`；其 `Items.Contains/SelectedItem`
+  會線性搜尋時間 Combo，大量資料時可單獨阻塞 UI。日期/時間同步與 `SaveCurrentSelection`
+  都只在 250ms settle 對最後序號執行一次；不得走 `NavigateTo` 的完整 Initialize/Save。
 - **換序號＝重設視野（fit）＝預期**（各 grab 高度不同 → lodRebind 合法出現）。
 - **報表／回顧初始 fit SSoT**：`ReviewImageDataLoader.Prepare` 只讀 JPEG 表頭與 `#CFG`，不解碼像素；
   `ImageDisplayView.TryComputeMergeFitViewRange` 再以實際主畫面的 `MergeLayout + AspectFitCalculator + PixelMmMapper`
@@ -1191,10 +1212,10 @@ T1/Tn: RV loadGrab begin {grabId} → RV loadGrab paths … → RV prefit … �
 **code-flow（曲線快路與 settle 圖片路分治）**
 ```
 OnReviewGrabIdSelected@AniloxRollForm.Data.cs
- ├ InvalidateImageLoad@ReviewStitchCoordinator.cs
- │  └ Invalidate@ReviewImageLoadGate.cs（立即讓舊圖片失效；同時釋放該圖片的 busy lease）
+ ├ InvalidateSettledImageLoad@ReviewStitchCoordinator.cs
+ │  └ Invalidate@ReviewImageLoadGate.cs（只讓舊完整圖失效；同時釋放該圖片的 busy lease）
  ├ LoadGrabCurvesOnlyAsync@ReviewStitchCoordinator.cs
- │  └ Enqueue@LatestCurveLoadCoordinator.cs
+ │  └ Enqueue@LatestGrabLoadCoordinator.cs
  │     ├ pending 僅保留最新一筆；running 恆單工
  │     └ LoadGrabCurvesCoreAsync@ReviewStitchCoordinator.cs
  │        ├ Prepare@ReviewImageDataLoader.cs（只讀 CFG／JPEG 表頭，與曲線 IO 同在背景執行）
@@ -1203,14 +1224,25 @@ OnReviewGrabIdSelected@AniloxRollForm.Data.cs
  │        │  ├ TryLoad@SingleGrabCurveSummaryStore.cs（與報表共用 `_curve_summary` materialized view）
  │        │  └ miss → LoadForGrabId＋ResolveAlignment＋MergeCurves／MergeRowCurves
  │        │       └ QueueSave summary（下次回顧／報表直接讀匯總；原始 bins 仍是 SSoT）
- │        └ IsCurrent@LatestCurveLoadCoordinator.cs
+ │        └ IsCurrent@LatestGrabLoadCoordinator.cs
  │           ├ false → RV curves stale-drop
  │           └ true → CachePreparedPlan＋StitchedLayoutReady（先發布 fit）
  │                    → ReviewRuntimeState＋SetCurves@ReviewDisplayContent.cs
  │                    → UpdateStitchedOverviewChart＋UpdateGlobalRowChart@ReviewChartPresenter.cs
- └ 250ms settle → LoadGrabStitchedViewGuardRowRangeAsync@AniloxRollForm.Review.cs
+ ├ LoadGrabThumbnailAsync@ReviewStitchCoordinator.cs
+ │  ├ LatestGrabLoadCoordinator（與完整圖 token 分離；running 單工、pending 只留最新、minCycle=33ms）
+ │  │  └ CanApplyStarted（新 intent 不作廢 running；明確切模式／完整圖載入才 stale-drop）
+ │  ├ Load(useThumbnail=true)@ReviewImageDataLoader.cs
+ │  │  ├ TryLoad@CapturePreviewAtlasCodec.cs
+ │  │  │  └ ReadAsset(PreviewAtlas raw|C|R) 一筆 → JPEG 解碼一次 → camera rectangle 記憶體切片
+ │  │  └ atlas miss → StitchCamera(useThumbnail=true)@GrabImageStitcher.cs（舊逐幀縮圖 fallback）
+ │  └ StitchedImagesReady(chartView=preserve)（只換低解析圖片，不重讀／重畫 Curve）
+ └ 250ms settle
+    ├ SetPeriodToCombo＋UpdatePeriodNavigationState＋SaveCurrentSelection（只套最後一筆）
+    └ LoadGrabStitchedViewGuardRowRangeAsync@AniloxRollForm.Review.cs
     ├ SuspendUntilNextData@RowCurveSyncCoordinator.cs（舊 view range 失效；新 row data 等新 fit）
     └ LoadGrabStitchedViewAsync@ReviewStitchCoordinator.cs
+       ├ Invalidate thumbnail token（完整圖開始後，舊縮圖不得再上畫）
        ├ TryGetPreparedPlan；快路已有同 grab plan 時直接重用，否則 Prepare
        │  ├ LoadForGrabId@InspectionImagePathRepository.cs
        │  │  └ InspectionCsvReader.OpenShared＋TryParseRecord＋TryExtractCameraId（影像依 cam 分組）
@@ -1486,17 +1518,20 @@ listViewGrabDetail.MouseUp
 ### D3 報表序號 / 序號範圍
 ```
 T1: ui:【報表序號】→ {grabId}          ← 單片切換（同 D2 的 cb 版）
+（快速滾動合併）DT selected coalesced {grabId} skipped=N intervalMs=33
 T1: DT curve load {grabId} captures=N source=shared storage=summary|bins|memory-summary|memory-bins configMs=N waitMs=N pathMs=N mergeMs=N summaryMs=N points=N drawMs=N totalMs=N
      ← 回顧／報表共用 `SingleGrabCurveDataLoader`；storage 表示持久匯總、原始 bin 或同來源的記憶體命中
 T1: DT row curve load {grabId} source=shared storage=summary|bins|memory-summary|memory-bins points=N pitch=Nmm
      ← 單片模式欄／列 Curve 同一刻套用同一份 load result，不得另掃一次路徑
 （快速滾過的舊選取）DT curve stale-drop {grabId}
-     ← running IO 允許完成但不得上畫；pending 只保留最新一筆，禁止每格排隊造成越滾越慢
+     ← 僅切模式／清快取等明確 invalidation 可使 running 結果失效；單純較新序號到達不得丟掉已開始的結果
+（快速滾動合併）DT curve coalesced {grabId} skipped=N minCycleMs=33
+     ← 前一筆已快速完成但仍在呈現週期內；中間 pending 被最新序號覆寫，N 為省略的未開始筆數
 （舊資料缺 Row bin）DT row curve missing {grabId}，畫面清空
 （切序號範圍／年/月/日）DT row curve clear mode=range
      ← 列沒有相機起始線，只對單序號反映；範圍模式不得保留上一筆列 Curve
-T1: DT curve load policy latest-only shared-loader entries=512 maxMB=256 scale=merged-only
-     ← Presenter 初始化一次；報表不再自行同步等待或相鄰預讀，排程與回顧共用 latest-only coordinator
+T1: DT curve load policy latest-only shared-loader entries=512 maxMB=256 scale=merged-only minCycleMs=33
+     ← Presenter 初始化一次；孤立選擇立即載入，連續快滾最多約 30 次/s 上畫；報表不再自行同步等待或相鄰預讀
 Tn: DT curve summary {grabId} write=queued|ok|failed|dropped|evicted|skip-incomplete captures=N merged=N ms=N [reason=idle|pressure]
      ← merged=captures 才排入 bounded queue；一般於序號互動停止 750ms 後由單一背景 writer 寫入；
        pending 達 72 MB 壓力線時允許單線 pressure drain，防止持續滾動只排隊不落盤
@@ -1517,6 +1552,9 @@ T1: DT range preview apply gen=G latest=L range={start}~{end} loadMs=N drawMs=N 
 T1: DT range settle → refresh             ← 最後一次變更後 150ms；一串連續滾動只准一行
 T1: DT list reload range={start}~{end} rows=N ms=N source=index
 ```
+- **單片呈現節流**：ComboBox 選項逐格跟手；統計卡、List 高亮與 Curve 排程以 33ms 固定週期只套最新序號，
+  中間序號記 `DT selected coalesced` 後省略，最後停住的序號不得省略。這避免每個滾輪事件都在 UI thread
+  重繪七張統計卡與同步寫高密度 Trace。
 - **List ownership**：明細 List 屬於範圍結果，不屬於單片序號；`ui:【報表序號】` 後只准 `list=keep`，
   不得出現 `DT list reload`／`GrabDetailListBinder.SetItems`／重設 `VirtualListSize`／欄寬。只有資料夾、範圍、期間、閾值改變才重算 List。
 - **列判定索引**：明細第 8 判定欄固定為「列」；O/X 由同序號所有相機／capture 的
@@ -1534,6 +1572,10 @@ T1: DT list reload range={start}~{end} rows=N ms=N source=index
 - **時序索引只建一次**：`ImageRepository.LoadDirectory` 建立排序去重的 available-period index；報表／回顧每格同步
   只能對既有索引做查找，不得在 UI 執行緒重新解析全部影像檔名、`Distinct`、`OrderBy`。
 - **單片 Curve latest-only**：快速滾動時 running request 可記 `DT curve stale-drop`，尚未開始的 request 只保留最新一筆；
+  即使 `.mcsf` 快到兩次 UI intent 間已完成，也由 33ms 最短呈現週期保留 backpressure，並以
+  `DT curve coalesced` 記錄省略筆數。這只省略中間上畫，不縮減任何一次實際上畫的 Curve 資料；
+  已開始的 result 必須依序完成上畫，再接 pending latest，避免連續 intent 讓所有 running result 都 stale 而畫面停住。
+  只有離開單片模式、清快取等明確 invalidation 才准 `DT curve stale-drop`；
   最後停住的 `ui:【報表序號】` 必有同 grabId 的 `DT curve load`，且列資料存在時必有 `DT row curve load`。
   欄／列必共用同一份 `SingleGrabCurveData`；快取保存 rescale 前欄 Mean/Max 與合併後列 Mean/Max，資料夾重載或 Presenter Dispose 必清空。
 - **快 Curve／慢圖片可並行**：R2 圖片仍在 debounce 載入舊 grabId 時，後續序號的 `RV prefit/prefitPaint/prefitApply`
@@ -1588,13 +1630,15 @@ T1: DT list reload range={start}~{end} rows=N ms=N source=index
 ```
 cbDataId.SelectedIndexChanged
  → OnSingleSheetComboChanged@DataDateGrabIdNavigator.cs
+   → ScheduleSelectedGrabRefresh@DataStatisticsPresenter.cs
+     └ 33ms Timer：合併中間選取，只將當下最新序號送入 RefreshSelectedGrab
    → RefreshSelectedGrab@DataStatisticsPresenter.cs
      ├ _currentDetails.FirstOrDefault（範圍內命中）／EnsureSingleGrabDetailIndex（範圍外只建一次全序號索引）
      │  └ 命中→BuildSingleGrabStats；索引仍無該 ID 才允許單 ID CSV scan fallback
      ├ InspectionStatsPresenter.Update／UpdateRowResult（7 台色卡＋camDataRow 列 O/X）
      ├ GrabDetailListBinder.Highlight（只移反白＋EnsureVisible＋RedrawItems）
      └ MuraProfileChartPresenter.Update（該 ID curve）
-       ├ LatestCurveLoadCoordinator.Enqueue（running 保留、pending 覆寫成最新；stale result 不上畫）
+       ├ LatestGrabLoadCoordinator.Enqueue（running 依序完成上畫、pending 覆寫成最新；明確 invalidation 才 stale-drop）
        └ LoadSingleGrabCoreAsync → Task.Run
           ├ ReviewImageDataLoader.Prepare（只讀路徑／CFG／JPEG header，不解碼圖片）
           │  → ReviewFitViewRangeProvider → ReviewDisplayManager.TryComputeFitViewRange
@@ -1631,7 +1675,7 @@ cbDataIdStart|End 手動變更
  → ScheduleRangeRefresh@DataStatisticsPresenter.cs
    → Start@DataRangePreviewCoordinator.cs（Timer／generation／cancellation 唯一 owner）
      ├ MuraProfileChartPresenter.ClearRow（列圖只屬單序號；範圍 mode 清空）
-     │  └ LatestCurveLoadCoordinator.Invalidate（單片 running result 不得晚到覆蓋範圍 Curve）
+     │  └ LatestGrabLoadCoordinator.Invalidate（單片 running result 不得晚到覆蓋範圍 Curve）
      ├ generation++（不取消已開始的 Curve；中間 intent 只更新 latest；資料夾／模式 teardown 才取消 token）
      ├ 33ms repeating throttle → ListTimer_Tick@DataRangePreviewCoordinator.cs
      │  └ ApplyRangeListPreview（只在完整 detail index 簽章有效時）

@@ -41,7 +41,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             int bmpResizeScale = InspectionEngineConfig.DefaultSaveResizeScale,
             Func<string, Bitmap> bmpLoader = null,
             bool useProcessed = false,
-            string ridgeDirection = "v")
+            string ridgeDirection = "v",
+            bool useThumbnail = false)
         {
             // slot-based：保留位置（null/缺檔 = 黑布幀），讓掉偵那格補黑、各台高度一致對齊（不縮短不錯位）。
             // sortedPaths 可含 null（呼叫端對齊參考時間軸後，缺的位置塞 null）；no-null 時行為與舊版一致。
@@ -51,10 +52,12 @@ namespace AniloxRoll.Monitor.UI.Widgets
             for (int i = 0; i < sortedPaths.Count; i++)
             {
                 string path = sortedPaths[i];
-                if (string.IsNullOrEmpty(path) || !File.Exists(path)) continue;   // 留 null = 黑布
+                if (string.IsNullOrEmpty(path) || !CaptureArchiveStore.Exists(path)) continue;
                 try
                 {
-                    var bmp = LoadCameraImage(path, bmpResizeScale, bmpLoader, useProcessed, ridgeDirection);
+                    var bmp = LoadCameraImage(
+                        path, bmpResizeScale, bmpLoader,
+                        useProcessed, ridgeDirection, useThumbnail);
                     if (bmp == null) continue;
                     slots[i] = bmp; realCount++;
                     if (refW == 0) { refW = bmp.Width; refH = bmp.Height; }
@@ -112,11 +115,21 @@ namespace AniloxRoll.Monitor.UI.Widgets
             for (int i = 0; i < sortedPaths.Count; i++)
             {
                 string loadPath = ResolveLoadPath(sortedPaths[i], useProcessed, ridgeDirection);
-                if (string.IsNullOrEmpty(loadPath) || !File.Exists(loadPath)) continue;
+                if (string.IsNullOrEmpty(loadPath) || !CaptureArchiveStore.Exists(loadPath)) continue;
                 try
                 {
-                    using (var stream = new FileStream(
-                        loadPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                    if (CaptureArchiveStore.IsVirtualPath(loadPath) &&
+                        CaptureArchiveStore.TryReadJpegSize(
+                            loadPath, out int archiveWidth, out int archiveHeight))
+                    {
+                        width = archiveWidth;
+                        height = checked(archiveHeight * sortedPaths.Count);
+                        return width > 0 && height > 0;
+                    }
+
+                    byte[] bytes = CaptureArchiveStore.ReadAllBytes(loadPath);
+                    if (bytes == null) continue;
+                    using (var stream = new MemoryStream(bytes, false))
                     using (var image = Image.FromStream(stream, false, false))
                     {
                         width = image.Width;
@@ -137,27 +150,32 @@ namespace AniloxRoll.Monitor.UI.Widgets
         // （MergeLayout + MergeAll 黑占位，與 live/瀑布/曲線同一單一來源）。本檔只留 StitchCamera（垂直拼）+ LoadCameraImage。
 
         internal static Bitmap LoadCameraImage(string path, int bmpResizeScale,
-            Func<string, Bitmap> bmpLoader, bool useProcessed, string ridgeDirection = "v")
+            Func<string, Bitmap> bmpLoader, bool useProcessed, string ridgeDirection = "v",
+            bool useThumbnail = false)
         {
             if (!CaptureFileNaming.IsRawJpg(path))
                 return null;
 
             string loadPath = ResolveLoadPath(path, useProcessed, ridgeDirection);
-            byte[] bytes = File.ReadAllBytes(loadPath);
-            using (var ms = new MemoryStream(bytes))
-                return new Bitmap(ms);
+            if (useThumbnail)
+            {
+                string thumbnailPath = CaptureFileNaming.ResolveThumbnailJpg(
+                    path, useProcessed, ridgeDirection);
+                if (string.IsNullOrEmpty(thumbnailPath)) return null;
+                loadPath = thumbnailPath;
+            }
+            byte[] bytes = CaptureArchiveStore.ReadAllBytes(loadPath);
+            if (bytes == null) return null;
+            using (var ms = new MemoryStream(bytes, false))
+            using (var decoded = new Bitmap(ms))
+                return new Bitmap(decoded);
         }
 
         private static string ResolveLoadPath(
             string path, bool useProcessed, string ridgeDirection)
         {
-            if (string.IsNullOrEmpty(path) || !CaptureFileNaming.IsRawJpg(path))
-                return null;
-            if (!useProcessed) return path;
-
-            string baseName = CaptureFileNaming.StripRawJpg(path);
-            string procPath = CaptureFileNaming.ResolveProcJpg(baseName, ridgeDirection);
-            return File.Exists(procPath) ? procPath : path;
+            return CaptureFileNaming.ResolveDisplayJpg(
+                path, useProcessed, ridgeDirection);
         }
 
     }

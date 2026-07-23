@@ -825,13 +825,15 @@ namespace AniloxRoll.Monitor.Forms
                         prepared: true);
                     LogReviewPrefitApplied();
                 };
-                _stitchCoordinator.StitchedImagesReady += (gray, ws, hs, ops, pos, isGlobal, preserveChartView) =>
+                _stitchCoordinator.StitchedImagesReady += (
+                    gray, ws, hs, ops, pos, isGlobal, preserveChartView,
+                    feedScale, rowPitchScale) =>
                 {
                     _reviewDisplayManager?.SetMainColorMap(ResolveReviewColorMap());
                     _reviewDisplayManager?.PushFrames(gray, ws, hs, ops, pos, isGlobal,
                         _reviewRuntimeState.ScreenMmPerPixel,
-                        AniloxRoll.Monitor.Core.Services.InspectionEngineConfig.DefaultSaveResizeScale,
-                        _reviewRowDisplay?.RowPitchMm ?? 0,
+                        feedScale,
+                        (_reviewRowDisplay?.RowPitchMm ?? 0) * rowPitchScale,
                         ShouldFlipDisplayVertical(),
                         preserveChartView);   // 灰階已在 RSC 解碼段轉好（零 race）；?.：關閉時序防 NRE
                 };

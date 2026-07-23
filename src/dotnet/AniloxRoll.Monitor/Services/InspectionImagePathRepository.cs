@@ -76,6 +76,22 @@ namespace AniloxRoll.Monitor.Core.Services
                     if (fileName.Length < 8) continue;
                     string directory = CaptureStoragePaths.DateImageDir(captureRootPath, fileName);
 
+                    if (InspectionCsvReader.TryParseTimestamp(fileName, out DateTime timestamp))
+                    {
+                        string archivePath = CaptureStoragePaths.GrabArchive(
+                            captureRootPath, timestamp, grabId);
+                        if (File.Exists(archivePath))
+                        {
+                            string virtualRaw = CaptureArchiveStore.CreateVirtualRawPath(
+                                archivePath, fileName);
+                            if (CaptureArchiveStore.Exists(virtualRaw))
+                            {
+                                paths.Add(virtualRaw);
+                                continue;
+                            }
+                        }
+                    }
+
                     string rawJpg = Path.Combine(directory, fileName + CaptureFileNaming.RawJpg);
                     if (File.Exists(rawJpg))
                     {

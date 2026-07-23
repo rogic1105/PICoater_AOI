@@ -25,13 +25,15 @@ namespace AniloxRoll.Monitor.UI.Presenters
     /// </summary>
     public sealed class MuraProfileChartPresenter : IDisposable
     {
+        private const int SingleGrabCurveMinimumCycleMs = 33;
+
         private readonly DataStatisticsContext _ctx;
         private readonly Func<System.Windows.Forms.GroupBox> _getActiveStatMode;
         private readonly Func<List<GrabIdInfo>> _getGrabIdInfos;
         private readonly Func<string> _getStatsRoot;
         private readonly SingleGrabCurveDataLoader _singleGrabDataLoader;
         private readonly ReviewImageDataLoader _reviewImageDataLoader;
-        private readonly LatestCurveLoadCoordinator _singleGrabLoads;
+        private readonly LatestGrabLoadCoordinator _singleGrabLoads;
 
         private ColumnCurveChartHelper _muraProfileHelper;
         private RowCurveDisplayAdapter _rowDisplay;
@@ -53,7 +55,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _getStatsRoot = getStatsRoot ?? throw new ArgumentNullException(nameof(getStatsRoot));
             _singleGrabDataLoader = new SingleGrabCurveDataLoader();
             _reviewImageDataLoader = new ReviewImageDataLoader();
-            _singleGrabLoads = new LatestCurveLoadCoordinator(LoadSingleGrabCoreAsync);
+            _singleGrabLoads = new LatestGrabLoadCoordinator(
+                LoadSingleGrabCoreAsync, SingleGrabCurveMinimumCycleMs);
         }
 
         public void Init()
@@ -76,7 +79,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (_ctx.ChartDataRow != null)
                 _ctx.ChartDataRow.PostPaint += OnRowChartPostPaint;
             FlowTrace.Log("DT curve load policy latest-only shared-loader " +
-                "entries=512 maxMB=256 scale=merged-only");
+                $"entries=512 maxMB=256 scale=merged-only minCycleMs={SingleGrabCurveMinimumCycleMs}");
         }
 
         private void OnColumnChartPostPaint(
@@ -254,10 +257,17 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _singleGrabLoads.Enqueue(info.GrabId, info.Earliest, info.Latest);
         }
 
-        private async Task LoadSingleGrabCoreAsync(SingleGrabCurveLoadRequest request)
+        private async Task LoadSingleGrabCoreAsync(SingleGrabLoadRequest request)
         {
             string statsRoot = _getStatsRoot();
             if (string.IsNullOrWhiteSpace(statsRoot)) return;
+
+            if (request.CoalescedCount > 0)
+            {
+                FlowTrace.Log(
+                    $"DT curve coalesced {request.GrabId} skipped={request.CoalescedCount} " +
+                    $"minCycleMs={SingleGrabCurveMinimumCycleMs}");
+            }
 
             var sw = Stopwatch.StartNew();
             try
@@ -274,7 +284,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     return _singleGrabDataLoader.Load(
                         statsRoot, request.GrabId, request.HintFrom, request.HintTo, camCount);
                 });
-                if (!_singleGrabLoads.IsCurrent(request))
+                if (!_singleGrabLoads.CanApplyStarted(request))
                 {
                     FlowTrace.Log($"DT curve stale-drop {request.GrabId}");
                     return;

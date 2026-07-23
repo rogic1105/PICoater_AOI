@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using NUnit.Framework;
 using AniloxRoll.Monitor.Core.Data;
+using AniloxRoll.Monitor.Core.Services;
 
 namespace AniloxRoll.Monitor.Integration.Tests
 {
@@ -49,6 +50,35 @@ namespace AniloxRoll.Monitor.Integration.Tests
             {
                 new DateTime(2026, 7, 15, 1, 2, 3, 4),
             }));
+        }
+
+        [Test]
+        public void LoadDirectory_IndexesArchiveFramesAndPrefersThemOverLegacyFiles()
+        {
+            const string baseName = "20260722_120405.006-1";
+            string legacy = Path.Combine(
+                _tempRoot, baseName + CaptureFileNaming.RawJpg);
+            File.WriteAllText(legacy, "legacy");
+            string archive = Path.Combine(_tempRoot, "260722-120405.acap");
+            CaptureArchiveStore.AppendFrame(
+                archive, "260722-120405", baseName, 1, 88,
+                new[]
+                {
+                    new CaptureArchiveAsset
+                    {
+                        Kind = CaptureAssetKind.RawJpeg,
+                        Data = new byte[] { 1, 2, 3 }
+                    }
+                });
+
+            var repository = new ImageRepository();
+            repository.LoadDirectory(_tempRoot);
+
+            Assert.That(repository.FileCount, Is.EqualTo(1));
+            var images = repository.GetImages(
+                new DateTime(2026, 7, 22, 12, 4, 5, 6));
+            Assert.That(images.ContainsKey(1), Is.True);
+            Assert.That(CaptureArchiveStore.IsVirtualPath(images[1]), Is.True);
         }
 
         private void WriteRaw(string fileName)

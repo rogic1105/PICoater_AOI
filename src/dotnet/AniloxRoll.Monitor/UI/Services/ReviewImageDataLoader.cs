@@ -18,6 +18,7 @@ namespace AniloxRoll.Monitor.UI.Services
         public int[] ExpectedHeights { get; set; }
         public int TotalImageCount { get; set; }
         public long ConfigMs { get; set; }
+        public string StorageSource { get; set; }
     }
 
     internal sealed class ReviewImageData
@@ -34,6 +35,12 @@ namespace AniloxRoll.Monitor.UI.Services
         public int TotalImageCount { get; set; }
         public long ConfigMs { get; set; }
         public long StitchMs { get; set; }
+        public string StorageSource { get; set; }
+        public bool IsThumbnail { get; set; }
+        public double PixelScaleRatio { get; set; } = 1.0;
+        public string PreviewSource { get; set; }
+        public int PreviewWidth { get; set; }
+        public int PreviewHeight { get; set; }
 
         public void DisposeImages()
         {
@@ -67,7 +74,11 @@ namespace AniloxRoll.Monitor.UI.Services
             long configMs = configWatch.ElapsedMilliseconds;
 
             int totalImageCount = 0;
+            bool usesArchive = false;
             foreach (var camera in grouped) totalImageCount += camera.Value.Count;
+            foreach (var camera in grouped)
+                foreach (string path in camera.Value)
+                    if (CaptureArchiveStore.IsVirtualPath(path)) { usesArchive = true; break; }
 
             var alignment = FrameTickIndex.ResolveAlignment(grouped);
             var expectedWidths = new int[cameraCount];
@@ -82,7 +93,7 @@ namespace AniloxRoll.Monitor.UI.Services
             }
 
             if (logPaths)
-                FlowTrace.Log($"RV loadGrab paths {grabId} root={root} images={totalImageCount} cams={grouped.Count} cfg={(config != null ? "yes" : "no")} align={alignment.Mode}");
+                FlowTrace.Log($"RV loadGrab paths {grabId} root={root} images={totalImageCount} cams={grouped.Count} cfg={(config != null ? "yes" : "no")} align={alignment.Mode} source={(usesArchive ? "acap" : "legacy")}");
             return new ReviewImageLoadPlan
             {
                 GroupedPaths = grouped,
@@ -91,7 +102,8 @@ namespace AniloxRoll.Monitor.UI.Services
                 ExpectedWidths = expectedWidths,
                 ExpectedHeights = expectedHeights,
                 TotalImageCount = totalImageCount,
-                ConfigMs = configMs
+                ConfigMs = configMs,
+                StorageSource = usesArchive ? "acap" : "legacy"
             };
         }
 
@@ -100,7 +112,8 @@ namespace AniloxRoll.Monitor.UI.Services
             int cameraCount,
             bool enableProcess,
             string ridgeDirection,
-            bool includeCurves = true)
+            bool includeCurves = true,
+            bool useThumbnail = false)
         {
             if (plan == null) throw new ArgumentNullException(nameof(plan));
             var grouped = plan.GroupedPaths;
@@ -120,6 +133,43 @@ namespace AniloxRoll.Monitor.UI.Services
             var alignment = plan.Alignment;
             var alignedByCamera = alignment.ByCamera;
 
+            if (useThumbnail && !includeCurves &&
+                CapturePreviewAtlasCodec.TryLoad(
+                    grouped, cameraCount, enableProcess, ridgeDirection,
+                    out CapturePreviewAtlasData atlas))
+            {
+                using (atlas)
+                {
+                    images = atlas.CameraImages;
+                    atlas.CameraImages = null;
+                    Parallel.For(0, cameraCount, index =>
+                    {
+                        if (images[index] == null) return;
+                        grayFrames[index] = BitmapGrayConverter.ToGray8(
+                            images[index],
+                            out grayWidths[index],
+                            out grayHeights[index]);
+                    });
+                    return new ReviewImageData
+                    {
+                        Images = images,
+                        GrayFrames = grayFrames,
+                        GrayWidths = grayWidths,
+                        GrayHeights = grayHeights,
+                        Config = config,
+                        TotalImageCount = plan.TotalImageCount,
+                        ConfigMs = plan.ConfigMs,
+                        StitchMs = stitchWatch.ElapsedMilliseconds,
+                        StorageSource = plan.StorageSource,
+                        IsThumbnail = true,
+                        PixelScaleRatio = atlas.PixelScaleRatio,
+                        PreviewSource = "atlas",
+                        PreviewWidth = atlas.AtlasWidth,
+                        PreviewHeight = atlas.AtlasHeight
+                    };
+                }
+            }
+
             Parallel.For(0, cameraCount, index =>
             {
                 int cameraId = index + 1;
@@ -130,7 +180,7 @@ namespace AniloxRoll.Monitor.UI.Services
                         ? value
                         : paths;
                     images[index] = GrabImageStitcher.StitchCamera(
-                        aligned, scale, null, enableProcess, ridgeDirection);
+                        aligned, scale, null, enableProcess, ridgeDirection, useThumbnail);
                     if (includeCurves)
                     {
                         CurveMergeHelper.MergeCurves(
@@ -151,6 +201,21 @@ namespace AniloxRoll.Monitor.UI.Services
                 }
             });
 
+            double pixelScaleRatio = 1.0;
+            if (useThumbnail)
+            {
+                for (int i = 0; i < cameraCount; i++)
+                {
+                    if (images[i] == null || images[i].Width <= 0 ||
+                        plan.ExpectedWidths == null ||
+                        i >= plan.ExpectedWidths.Length ||
+                        plan.ExpectedWidths[i] <= 0)
+                        continue;
+                    pixelScaleRatio = plan.ExpectedWidths[i] / (double)images[i].Width;
+                    break;
+                }
+            }
+
             return new ReviewImageData
             {
                 Images = images,
@@ -164,7 +229,13 @@ namespace AniloxRoll.Monitor.UI.Services
                 Config = config,
                 TotalImageCount = plan.TotalImageCount,
                 ConfigMs = plan.ConfigMs,
-                StitchMs = stitchWatch.ElapsedMilliseconds
+                StitchMs = stitchWatch.ElapsedMilliseconds,
+                StorageSource = plan.StorageSource,
+                IsThumbnail = useThumbnail,
+                PixelScaleRatio = pixelScaleRatio,
+                PreviewSource = useThumbnail ? "frames" : null,
+                PreviewWidth = 0,
+                PreviewHeight = 0
             };
         }
 
@@ -176,11 +247,14 @@ namespace AniloxRoll.Monitor.UI.Services
             int cameraCount,
             bool enableProcess,
             string ridgeDirection,
-            bool includeCurves = true)
+            bool includeCurves = true,
+            bool useThumbnail = false)
         {
             ReviewImageLoadPlan plan = Prepare(
                 root, grabId, hintFrom, hintTo, cameraCount, enableProcess, ridgeDirection);
-            return Load(plan, cameraCount, enableProcess, ridgeDirection, includeCurves);
+            return Load(
+                plan, cameraCount, enableProcess, ridgeDirection,
+                includeCurves, useThumbnail);
         }
     }
 }

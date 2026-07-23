@@ -31,7 +31,15 @@ namespace AniloxRoll.Monitor.Core.Data
             _availablePeriods = new DateTime[0];
             if (!Directory.Exists(rootPath)) return;
 
-            var files = Directory.GetFiles(rootPath, CaptureFileNaming.RawJpgGlob, SearchOption.AllDirectories);
+            var legacyFiles = Directory.GetFiles(
+                rootPath, CaptureFileNaming.RawJpgGlob, SearchOption.AllDirectories);
+            var archiveFiles = Directory.GetFiles(
+                rootPath, "*" + CaptureArchiveStore.Extension, SearchOption.AllDirectories);
+            var archivePaths = archiveFiles
+                .AsParallel()
+                .SelectMany(CaptureArchiveStore.ListAllVirtualRawPaths)
+                .ToArray();
+            var files = legacyFiles.Concat(archivePaths);
 
             _metadataCache = files.AsParallel()
                 .Select(f =>
@@ -44,6 +52,11 @@ namespace AniloxRoll.Monitor.Core.Data
                     }
                 })
                 .Where(x => x != null)
+                .GroupBy(MetadataKey)
+                .Select(group => group
+                    .OrderByDescending(item =>
+                        CaptureArchiveStore.IsVirtualPath(item.FullPath))
+                    .First())
                 .ToList();
 
             // Period navigation reads this on every selection change. Build the sorted index once
@@ -55,6 +68,12 @@ namespace AniloxRoll.Monitor.Core.Data
                 .Distinct()
                 .OrderBy(x => x)
                 .ToArray();
+        }
+
+        private static string MetadataKey(ImageMetadata item)
+        {
+            return item.Year + item.Month + item.Day + item.Hour + item.Minute +
+                item.Second + item.Millisecond + "-" + item.CameraId;
         }
 
         private ImageMetadata ParsePath(string path)

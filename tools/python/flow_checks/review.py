@@ -45,10 +45,149 @@ class ReviewFlowValidator:
         self._check_period_dedup(session, report)
         self._check_period_single_flight(session, report)
         self._check_curve_single_flight(session, report)
+        self._check_assets(session, report)
+        self._check_thumbnail_lifecycle(session, report)
         self._check_drag_first_publish(session, report)
         self._check_direction(session, report)
         self._check_tab_visible_repaint(session, report)
         return report
+
+    def _check_assets(self, session: FlowSession, report: CheckReport) -> None:
+        path_lines = [
+            line.message for line in session.lines
+            if line.message.startswith("RV loadGrab paths ")
+        ]
+        if not path_lines:
+            report.add(
+                self.domain, "R2.assets", CheckStatus.NOT_COVERED,
+                "無單序號圖片路徑探針",
+            )
+            return
+
+        pattern = re.compile(
+            r"^RV loadGrab paths (?P<id>\d{6}-\d{6}) root=.*? "
+            r"images=(?P<images>\d+) cams=(?P<cams>\d+) "
+            r"cfg=(?:yes|no) align=(?:tick|filename)"
+            r"(?: source=(?P<source>acap|legacy))?$"
+        )
+        invalid = []
+        empty = []
+        archives = 0
+        for message in path_lines:
+            match = pattern.match(message)
+            if not match:
+                invalid.append(message)
+                continue
+            if match.group("source") == "acap":
+                archives += 1
+            if int(match.group("images")) <= 0 or int(match.group("cams")) <= 0:
+                empty.append(match.group("id"))
+
+        report.add(
+            self.domain,
+            "R2.assets",
+            CheckStatus.PASS if not invalid and not empty else CheckStatus.FAIL,
+            f"loads={len(path_lines)} acap={archives} empty={len(empty)} "
+            f"invalid={len(invalid)}"
+            + (f" first={empty[0]}" if empty else ""),
+        )
+
+    def _check_thumbnail_lifecycle(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        thumbnail_lines = [
+            (index, line.message)
+            for index, line in enumerate(session.lines)
+            if line.message.startswith("RV thumbnail ")
+        ]
+        if not thumbnail_lines:
+            report.add(
+                self.domain, "R2.thumbnail", CheckStatus.NOT_COVERED,
+                "無內嵌縮圖載入探針",
+            )
+            return
+
+        latest_intent = None
+        open_loads = []
+        wrong_started = []
+        completed_after_full_begin = []
+        invalid_sources = []
+        invalid_atlas_sizes = []
+        source_counts = {"atlas": 0, "frames": 0}
+        for index, line in enumerate(session.lines):
+            message = line.message
+            if message.startswith("ui:【單片序號】"):
+                latest_intent = grab_id(message)
+            elif message.startswith("RV thumbnail begin "):
+                open_loads.append((grab_id(message), index, latest_intent))
+            elif message.startswith((
+                "RV thumbnail done ",
+                "RV thumbnail stale-drop ",
+                "RV thumbnail unavailable ",
+            )):
+                current = grab_id(message)
+                matching = next(
+                    (
+                        item for item in reversed(open_loads)
+                        if item[0] == current
+                    ),
+                    None,
+                )
+                if matching is not None:
+                    open_loads.remove(matching)
+                if message.startswith("RV thumbnail done "):
+                    source_match = re.search(
+                        r" source=(atlas|frames) atlas=(?:(\d+)x(\d+)|none)$",
+                        message,
+                    )
+                    if source_match is None:
+                        invalid_sources.append(current)
+                    else:
+                        source = source_match.group(1)
+                        source_counts[source] += 1
+                        if source == "atlas":
+                            width = int(source_match.group(2) or 0)
+                            height = int(source_match.group(3) or 0)
+                            if (
+                                width <= 0
+                                or height <= 0
+                                or width > 1920
+                                or height > 1080
+                            ):
+                                invalid_atlas_sizes.append(
+                                    f"{current}:{width}x{height}"
+                                )
+                    if (
+                        matching is not None
+                        and matching[2] is not None
+                        and current != matching[2]
+                    ):
+                        wrong_started.append(current)
+                    if matching is not None and any(
+                        candidate.message.startswith("RV loadGrab begin ")
+                        for candidate in session.lines[matching[1] + 1 : index + 1]
+                    ):
+                        completed_after_full_begin.append(current)
+
+        report.add(
+            self.domain,
+            "R2.thumbnail",
+            CheckStatus.PASS
+            if (
+                not open_loads
+                and not wrong_started
+                and not completed_after_full_begin
+                and not invalid_sources
+                and not invalid_atlas_sizes
+            )
+            else CheckStatus.FAIL,
+            f"events={len(thumbnail_lines)} open={len(open_loads)} "
+            f"wrongStarted={wrong_started or 0} "
+            f"afterFullBegin={completed_after_full_begin or 0} "
+            f"source=atlas:{source_counts['atlas']}/frames:{source_counts['frames']} "
+            f"invalidSource={invalid_sources or 0} "
+            f"invalidAtlas={invalid_atlas_sizes or 0}",
+        )
 
     def _check_tab_visible_repaint(
         self, session: FlowSession, report: CheckReport

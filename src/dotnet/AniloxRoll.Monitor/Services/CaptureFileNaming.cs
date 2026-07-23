@@ -24,6 +24,9 @@ namespace AniloxRoll.Monitor.Core.Services
         public const string MaxC   = "_max_c.bin";
         public const string MeanR  = "_mean_r.bin";
         public const string MaxR   = "_max_r.bin";
+        public const string ThumbRawJpg = "_thumb_raw.jpg";
+        public const string ThumbProcC  = "_thumb_proc_c.jpg";
+        public const string ThumbProcR  = "_thumb_proc_r.jpg";
 
         // ── 舊格式 suffix（向後相容 fallback）──────────────────────────────
         public const string MeanCPrevious = "_mean_v.bin";
@@ -67,6 +70,7 @@ namespace AniloxRoll.Monitor.Core.Services
         public static string BaseFromImagePath(string imagePath)
         {
             if (IsRawJpg(imagePath)) return StripRawJpg(imagePath);
+            if (CaptureArchiveStore.IsVirtualPath(imagePath)) return imagePath;
             return Path.Combine(
                 Path.GetDirectoryName(imagePath),
                 Path.GetFileNameWithoutExtension(imagePath));
@@ -94,7 +98,8 @@ namespace AniloxRoll.Monitor.Core.Services
             string baseNoSuffix, string current, string previous, string legacy)
         {
             string path = baseNoSuffix + current;
-            if (File.Exists(path)) return path;
+            if (CaptureArchiveStore.Exists(path)) return path;
+            if (CaptureArchiveStore.IsVirtualPath(baseNoSuffix)) return path;
             path = baseNoSuffix + previous;
             if (File.Exists(path)) return path;
             return baseNoSuffix + legacy;
@@ -105,9 +110,38 @@ namespace AniloxRoll.Monitor.Core.Services
         {
             bool row = axis == "r" || axis == "h";
             string current = baseNoSuffix + (row ? ProcR : ProcC);
-            if (File.Exists(current)) return current;
+            if (CaptureArchiveStore.Exists(current)) return current;
+            if (CaptureArchiveStore.IsVirtualPath(baseNoSuffix)) return baseNoSuffix + RawJpg;
             string previous = baseNoSuffix + (row ? ProcRPrevious : ProcCPrevious);
             return File.Exists(previous) ? previous : baseNoSuffix + ProcLegacy;
+        }
+
+        /// <summary>
+        /// 解析回顧真正要顯示的 JPEG。處理圖不存在時退回原圖；完整載入與預覽圖集生成共用。
+        /// </summary>
+        public static string ResolveDisplayJpg(
+            string rawJpgPath, bool useProcessed, string axis)
+        {
+            if (string.IsNullOrEmpty(rawJpgPath) || !IsRawJpg(rawJpgPath))
+                return null;
+            if (!useProcessed) return rawJpgPath;
+
+            string processed = ResolveProcJpg(StripRawJpg(rawJpgPath), axis);
+            return CaptureArchiveStore.Exists(processed) ? processed : rawJpgPath;
+        }
+
+        public static string ResolveThumbnailJpg(
+            string rawJpgPath, bool useProcessed, string axis)
+        {
+            if (!IsRawJpg(rawJpgPath) || !CaptureArchiveStore.IsVirtualPath(rawJpgPath))
+                return null;
+
+            string baseNoSuffix = StripRawJpg(rawJpgPath);
+            string suffix = !useProcessed
+                ? ThumbRawJpg
+                : (axis == "r" || axis == "h" ? ThumbProcR : ThumbProcC);
+            string path = baseNoSuffix + suffix;
+            return CaptureArchiveStore.Exists(path) ? path : null;
         }
     }
 }

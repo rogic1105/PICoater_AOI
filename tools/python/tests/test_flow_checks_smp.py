@@ -175,7 +175,7 @@ class SettingsFlowValidatorTests(unittest.TestCase):
     def test_image_variant_only_does_not_require_a_new_prefit(self):
         report = DataFlowValidator().validate(
             session(
-                "DT curve load policy latest-only shared-loader entries=512 maxMB=256 scale=merged-only",
+                "DT curve load policy latest-only shared-loader entries=512 maxMB=256 scale=merged-only minCycleMs=33",
                 "RV prefit 260720-120000 content=100x100 viewport=50x50 viewX=0~1 viewY=0~1",
                 "RV mainRange 260720-120000 viewX=0~1 viewY=0~1",
                 "RV chartRange 260720-120000 chart=col axis=0~1/view=0~1",
@@ -213,6 +213,64 @@ class SettingsFlowValidatorTests(unittest.TestCase):
 
 
 class ReviewFlowValidatorTests(unittest.TestCase):
+    def test_review_thumbnail_started_frame_can_finish_before_latest_pending(self):
+        report = ReviewFlowValidator().validate(
+            session(
+                "ui:【單片序號】→ 260723-080000",
+                "RV thumbnail begin 260723-080000",
+                "ui:【單片序號】→ 260723-080001",
+                "RV thumbnail done 260723-080000 total=8ms decode=5ms "
+                "images=7 ratio=6.4 source=atlas atlas=1920x1080",
+                "RV thumbnail coalesced 260723-080001 skipped=1 minCycleMs=33",
+                "RV thumbnail begin 260723-080001",
+                "RV thumbnail done 260723-080001 total=7ms decode=5ms "
+                "images=7 ratio=6.4 source=atlas atlas=1920x1080",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "R2.thumbnail").status)
+
+    def test_review_thumbnail_begin_for_non_latest_selection_fails(self):
+        report = ReviewFlowValidator().validate(
+            session(
+                "ui:【單片序號】→ 260723-080000",
+                "ui:【單片序號】→ 260723-080001",
+                "RV thumbnail begin 260723-080000",
+                "RV thumbnail done 260723-080000 total=7ms decode=5ms "
+                "images=7 ratio=6.4 source=atlas atlas=1920x1080",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "R2.thumbnail").status)
+
+    def test_review_thumbnail_cannot_publish_after_full_load_begins(self):
+        report = ReviewFlowValidator().validate(
+            session(
+                "ui:【單片序號】→ 260723-080000",
+                "RV thumbnail begin 260723-080000",
+                "RV loadGrab begin 260723-080000",
+                "RV thumbnail done 260723-080000 total=7ms decode=5ms "
+                "images=7 ratio=6.4 source=atlas atlas=1920x1080",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "R2.thumbnail").status)
+
+    def test_review_assets_accept_archive_source(self):
+        report = ReviewFlowValidator().validate(
+            session(
+                "RV loadGrab paths 260722-154554 root=D:\\Anilox\\Captures "
+                "images=20 cams=2 cfg=yes align=tick source=acap"
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "R2.assets").status)
+
+    def test_review_assets_reject_empty_selection(self):
+        report = ReviewFlowValidator().validate(
+            session(
+                "RV loadGrab paths 260722-154128 root=D:\\Anilox\\Captures "
+                "images=0 cams=0 cfg=yes align=filename source=legacy"
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "R2.assets").status)
+
     def test_initial_empty_review_tab_does_not_require_visible_content(self):
         report = ReviewFlowValidator().validate(
             session(
@@ -355,7 +413,7 @@ class DataFlowValidatorTests(unittest.TestCase):
     def test_single_curve_latest_only_allows_stale_intermediate_and_requires_final(self):
         report = DataFlowValidator().validate(
             session(
-                "DT curve load policy latest-only shared-loader entries=512 maxMB=256 scale=merged-only",
+                "DT curve load policy latest-only shared-loader entries=512 maxMB=256 scale=merged-only minCycleMs=33",
                 "ui:【報表序號】→ 260721-080000",
                 "DT selected 260721-080000 stats=cache list=keep ms=1",
                 "ui:【報表序號】→ 260721-080001",
@@ -372,7 +430,7 @@ class DataFlowValidatorTests(unittest.TestCase):
     def test_single_curve_latest_only_fails_when_final_selection_never_applies(self):
         report = DataFlowValidator().validate(
             session(
-                "DT curve load policy latest-only shared-loader entries=512 maxMB=256 scale=merged-only",
+                "DT curve load policy latest-only shared-loader entries=512 maxMB=256 scale=merged-only minCycleMs=33",
                 "ui:【報表序號】→ 260721-080001",
                 "DT selected 260721-080001 stats=cache list=keep ms=1",
                 "DT curve stale-drop 260721-080001",
