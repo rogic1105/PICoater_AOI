@@ -27,6 +27,8 @@ namespace AniloxRoll.Monitor.Forms
     /// <summary>AniloxRollForm IO / 光源 / 儲存硬體狀態（初始化 + 連線標籤 + LED）相關方法 — 由主檔拆出的 partial。</summary>
     public partial class AniloxRollForm
     {
+        private const int IoPollIntervalMs = 100;
+
         /// <summary>初始化 IO 連動：自動偵測連線，連上後以 DI START 控制 Grab。</summary>
         private void InitIoController()
         {
@@ -41,6 +43,7 @@ namespace AniloxRoll.Monitor.Forms
 
             var controller = new IoGrabController(_settings.IoModel)
             {
+                PollIntervalMs = IoPollIntervalMs,
                 ReconnectIntervalMs = 3000,
                 ReadWriteTimeoutMs = 500
             };
@@ -60,7 +63,9 @@ namespace AniloxRoll.Monitor.Forms
             controller.OnIoUpdated += snapshot => DispatchCurrentIoController(
                 controller, generation, () => UpdateIoLeds(snapshot));
 
-            FlowTrace.Log($"IO controller start generation={generation} endpoint={ip}:{port}");
+            FlowTrace.Log(
+                $"IO controller start generation={generation} endpoint={ip}:{port} " +
+                $"poll={controller.PollIntervalMs}ms reconnect={controller.ReconnectIntervalMs}ms");
             _ioControllerStartTask = StartIoControllerAsync(controller, generation, ip, port);
         }
 

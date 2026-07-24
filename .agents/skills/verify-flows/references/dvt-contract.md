@@ -752,9 +752,9 @@ Tn: ⚠ IO 斷線 ／ IO 恢復連線            ← 光源/儲存分享 同格�
 Tn: ⚠ IO 未連線（開機基線）             ← 首次觀測就不在線（拔線開機/初始化未完，恢復行會跟著出現）
 Tn: 儲存程式 heartbeat 恢復 pid=N age=Ns
 Tn: ⚠ 儲存程式 heartbeat 未回報 reason=…
-T1: IO controller start generation=N endpoint=IP:Port
+T1: IO controller start generation=N endpoint=IP:Port poll=100ms reconnect=3000ms
 設定變更：IO controller stop generation=N reason=settings
-        → IO controller start generation=N+1 endpoint=IP:Port
+        → IO controller start generation=N+1 endpoint=IP:Port poll=100ms reconnect=3000ms
 快速連改：IO controller restart coalesced generation=N（可有；該代不得再 start）
 關閉：IO controller stop generation=N reason=shutdown
 DI START：io:DI START 上升緣 → 開始抓取
