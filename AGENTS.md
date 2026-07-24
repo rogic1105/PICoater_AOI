@@ -156,3 +156,22 @@ Before commit:
 4. Keep unrelated user changes and untracked files out of the commit.
 5. Split unrelated themes into separate commits; commit messages explain why, not only what.
 6. Commit an on-machine verified green state immediately when the user has authorized commit/push.
+
+### Commit Record Format
+
+Commit history is a delivery record. Every non-trivial commit must identify one primary product
+task and record the verified result with STAR:
+
+- Subject: `type(task): result`. Use a stable responsibility for `task`, such as `monitor`,
+  `review`, `report`, `settings`, `bridge`, `acquisition`, `storage`, `deploy`, `test`,
+  `architecture`, or another clearly named owner. Do not use a filename or vague `misc` task.
+- Body:
+  - `Situation:` the observed problem, constraint, or baseline.
+  - `Task:` the intended behavior or responsibility being delivered.
+  - `Action:` the code-flow or architecture change, including the owner moved or added.
+  - `Result:` build, automated check, DVT, on-machine smoke, or measured timing evidence.
+
+Keep one primary task per commit. When a change crosses responsibilities, split it unless the
+cross-domain behavior is one indivisible flow; in that case name the end-to-end task and list every
+affected domain under `Action`. `Result` must state what was actually verified and must not claim
+unrun hardware or UI tests.
