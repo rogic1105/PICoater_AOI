@@ -43,7 +43,8 @@ namespace AniloxRoll.Monitor.Forms
         private async Task<bool> ToggleLiveGrabAsync(
             string intentLine,
             bool ioControlled = false,
-            bool drainIoTail = false)
+            bool drainIoTail = false,
+            Func<bool> captureStartStillValid = null)
         {
             FlowTrace.Log(intentLine);
 
@@ -121,6 +122,15 @@ namespace AniloxRoll.Monitor.Forms
             // 剛從「未抓取」→「抓取中」：分配新的抓圖編號（燈已在上方開啟）
             if (!wasGrabbing && _liveCameraManager.IsLiveGrabbing)
             {
+                if (captureStartStillValid != null && !captureStartStillValid())
+                {
+                    FlowTrace.Log("capture start cancelled before gate reason=io-request-invalid");
+                    _liveCameraManager.StopGrab();
+                    LightTurnOff();
+                    UpdateGrabButton(false);
+                    return false;
+                }
+
                 _currentGrabId = _inspectionLogService.NextGrabId();
                 DateTime captureDate = DateTime.Now;
                 _currentGrabCaptureDate = captureDate;

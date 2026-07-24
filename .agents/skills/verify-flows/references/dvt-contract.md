@@ -872,9 +872,25 @@ T1: IO controller start generation=N endpoint=IP:Port
 DI START：io:DI START 上升緣 → 抓取請求
        → （接受時）io:DI START 上升緣 → 開始抓取
        → IO grab accepted busy=on …｜IO grab rejected busy=off reason=…（每個請求恰一）
+啟動途中失效：capture start cancelled before gate reason=io-request-invalid
+             → StopGrab → IO grab rejected busy=off reason=…
 ```
+- **IO Start 交界狀態表**（Form 與 `IoGrabController` 之間的產品 gate；完整轉移不得拆成零散 guard）：
+
+| 目前狀態 | 事件／條件 | 下一狀態 | 動作 |
+|---|---|---|---|
+| Idle | START 上升緣，controller 為目前代且已連線 | Starting | 建立 request generation，取得 IO Grab transition gate |
+| Starting | START 下降、IO 斷線或 controller 換代 | CancelPending | 立即使 request generation 失效；Stop 等待同一 transition gate |
+| Starting | 相機準備完成，且開產品 gate 前 request 仍有效、IO 仍為 Running | Capturing | 建 GrabId／capture plan → 開 capture gate → `NotifyGrabStarted` |
+| Starting／CancelPending | 開產品 gate 前發現 request 已失效 | Idle／CommLost | capture gate 維持關閉；若相機已進 StartGrab 則 rollback StopGrab；記一筆 rejected |
+| Capturing | START 下降或 IO 斷線 | Idle／CommLost | 取得同一 transition gate → drain／StopGrab → `NotifyGrabStopped` |
+
 - **單 process／單 controller**：`Program` named mutex 必須在 Form 建立前擋掉同機第二份程式；同一 session
   任一時刻只能有一個 active generation。restart 以 lifecycle gate 序列化，舊 generation callback 不得進 UI/Grab。
+- **Start／Stop 不得交錯 Toggle**：IO Start、下降緣 Stop、斷線 Stop 共用一個 transition gate；下降緣、斷線與
+  controller 換代必須先讓在途 request generation 失效。`ToggleLiveGrabAsync` 在建立 GrabId／capture plan／開產品
+  gate 前必須再次驗證 request；禁止 Stop 先看見 `IsLiveGrabbing=false` 返回、Start 稍後才留下 gate-closed 半啟動；
+  也禁止下降緣 Stop 與斷線 Stop 同時進入共用 Toggle，造成第一個關閉、第二個反向重開。
 - **BUSY 代表事實，不代表請求**：DI 上升緣只提出 intent；必須等共用 `ToggleLiveGrabAsync` 成功且 capture gate
   已開啟，才能 `NotifyGrabStarted` 拉高 PC BUSY。CLProtocol 未就緒／相位同步失敗時回
   `IO grab rejected busy=off`，FSM 回 Idle；禁止「沒抓到但 PLC 看見 BUSY」。

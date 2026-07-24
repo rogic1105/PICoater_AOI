@@ -142,8 +142,11 @@ namespace AniloxRoll.Monitor.Forms
         private Task _ioControllerStartTask = Task.CompletedTask;
         private readonly System.Threading.SemaphoreSlim _ioControllerLifecycleGate =
             new System.Threading.SemaphoreSlim(1, 1);
+        private readonly System.Threading.SemaphoreSlim _ioGrabTransitionGate =
+            new System.Threading.SemaphoreSlim(1, 1);
         private int _ioControllerGeneration;
         private int _ioControllerActiveGeneration;
+        private int _ioGrabRequestGeneration;
         private LightController _lightController;
 
         // --- 統計 ---
