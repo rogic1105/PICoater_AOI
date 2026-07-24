@@ -19,6 +19,9 @@ namespace AniloxRoll.Monitor.UI.Managers
 {
     public partial class LiveCameraManager
     {
+        // Experiment branch: compare physical cold start against the verified hot-standby flow.
+        internal static readonly bool HotStandbyEnabled = false;
+
         private List<AniloxCamera> _cameras = new List<AniloxCamera>();
         private List<CameraHardwareConfig> _cameraHardwareConfigs;
         private Dictionary<int, MIL_ID> _allocatedSystems = new Dictionary<int, MIL_ID>();
@@ -29,6 +32,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private readonly CaptureTimestampCoordinator _timestampCoordinator = new CaptureTimestampCoordinator();
         private readonly System.Threading.SemaphoreSlim _allocationGate =
             new System.Threading.SemaphoreSlim(1, 1);
+        private Task _coldStopDrainTask = Task.CompletedTask;
         private volatile bool _isAllocating;
 
         public bool IsAllocated    { get; private set; } = false;
@@ -77,7 +81,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 {
                     if (!cam.IsConnected) continue;
                     hasConnectedCamera = true;
-                    if (!cam.IsAcquisitionWarm) return false;
+                    if (HotStandbyEnabled && !cam.IsAcquisitionWarm) return false;
                 }
                 return hasConnectedCamera;
             }
@@ -324,6 +328,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             ConnectedCameraCount = present;
             OnCameraCountChanged?.Invoke(present, ExpectedCameraCount);
             FlowTrace.Log($"AllocateCameras done（配置 {_cameras.Count}、在線 {present}/{ExpectedCameraCount}）");
+            FlowTrace.Log(
+                $"acquisition mode hotStandby={HotStandbyEnabled.ToString().ToLowerInvariant()}");
             totalSw.Stop();
             FlowTrace.Log(
                 $"camera init summary cams={_cameras.Count} totalMs={totalSw.ElapsedMilliseconds} " +
@@ -395,36 +401,57 @@ namespace AniloxRoll.Monitor.UI.Managers
                 if (targets.Length == 0) return false;
 
                 _captureGateOpen = false;
-                ClearUserGrabIntents();
-                _isCaptureSynchronizing = true;
-                AcquisitionSyncResult sync;
-                try
+                if (HotStandbyEnabled)
                 {
-                    sync = await SynchronizeAcquisitionAsync(
-                        "start",
-                        targets,
-                        null,
-                        () => ReapplyLineRatesForSynchronization("start", targets),
-                        () => IsReleasing);
-                }
-                finally
-                {
-                    _isCaptureSynchronizing = false;
-                }
+                    ClearUserGrabIntents();
+                    _isCaptureSynchronizing = true;
+                    AcquisitionSyncResult sync;
+                    try
+                    {
+                        sync = await SynchronizeAcquisitionAsync(
+                            "start",
+                            targets,
+                            null,
+                            () => ReapplyLineRatesForSynchronization("start", targets),
+                            () => IsReleasing);
+                    }
+                    finally
+                    {
+                        _isCaptureSynchronizing = false;
+                    }
 
-                if (!sync.Succeeded)
+                    if (!sync.Succeeded)
+                    {
+                        FlowTrace.Log(
+                            $"capture synchronize failed gate=closed error={sync.Error}");
+                        return false;
+                    }
+                }
+                else if (!_coldStopDrainTask.IsCompleted)
                 {
-                    FlowTrace.Log(
-                        $"capture synchronize failed gate=closed error={sync.Error}");
-                    return false;
+                    FlowTrace.Log("capture cold-stop wait begin");
+                    await _coldStopDrainTask;
+                    FlowTrace.Log("capture cold-stop wait complete");
                 }
 
                 _display.ResetFlowFirstFrame();
                 ApplyMainDisplayMode();
                 _display.ResetWaterfallIfActive();
                 IsLiveGrabbing = true;
+                Stopwatch coldStart = null;
+                if (!HotStandbyEnabled)
+                {
+                    coldStart = Stopwatch.StartNew();
+                    FlowTrace.Log($"capture cold-start begin cams={targets.Length}");
+                }
                 foreach (var cam in targets)
                     cam.SetUserGrabIntent(true);
+                if (coldStart != null)
+                {
+                    coldStart.Stop();
+                    FlowTrace.Log(
+                        $"capture cold-start armed cams={targets.Length} ms={coldStart.ElapsedMilliseconds}");
+                }
 
                 FlowTrace.Log($"StartGrab（cams={_cameras.Count}）");
                 if (!deferCaptureGate)
@@ -460,7 +487,25 @@ namespace AniloxRoll.Monitor.UI.Managers
             FlowTrace.Log("StopGrab");
             _captureGateOpen = false;
             IsLiveGrabbing = false;
-            if (_isParameterReconfiguring)
+            if (!HotStandbyEnabled)
+            {
+                AniloxCamera[] targets = _cameras.ToArray();
+                _coldStopDrainTask = Task.Run(() =>
+                {
+                    try
+                    {
+                        System.Threading.Tasks.Parallel.ForEach(
+                            targets, cam => cam.SetUserGrabIntent(false));
+                        FlowTrace.Log($"capture cold-stop complete cams={targets.Length}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Trace.TraceWarning(
+                            $"[StopGrab.cold-drain] {ex.GetType().Name}: {ex.Message}");
+                    }
+                });
+            }
+            else if (_isParameterReconfiguring)
             {
                 // PauseAcquisition owns the per-camera grab lock while draining. Waiting for that
                 // lock here would freeze the UI when the duration guard stops during a parameter
@@ -472,7 +517,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             {
                 ClearUserGrabIntents();
             }
-            FlowTrace.Log("capture gate closed standby=on");
+            FlowTrace.Log(
+                $"capture gate closed standby={(HotStandbyEnabled ? "on" : "off")}");
         }
 
         private void ClearUserGrabIntents()
@@ -486,6 +532,19 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         private void FreeCamerasCore()
         {
+            if (!HotStandbyEnabled)
+            {
+                try
+                {
+                    if (!_coldStopDrainTask.IsCompleted)
+                        _coldStopDrainTask.Wait(TimeSpan.FromSeconds(15));
+                }
+                catch (Exception ex)
+                {
+                    Trace.TraceWarning(
+                        $"[FreeCameras.cold-drain] {ex.GetType().Name}: {ex.Message}");
+                }
+            }
             FlowTrace.Log($"FreeCameras（cams={_cameras.Count}）");
             IsReleasing = true;
             _cameraStatusTimer.Stop();

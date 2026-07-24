@@ -236,7 +236,7 @@ against current code with `rg` before editing because lookup data can become sta
 | COM Port | `LightComPort` | COM17 | RS-232 連接埠；啟動時先試此 port，失敗則自動掃描所有 port（找到後更新此欄位） |
 | 通道 | `LightChannel` | 1 | 使用通道（單通道機型固定 1） |
 | 亮度 | `LightBrightness` | 255 | 亮度（0~255） |
-| 暖機延遲 (ms) | `LightWarmupMs` | 300 | 開燈後等待光源穩定的延遲；Grab 啟動前插入此延遲 |
+| 暖機延遲 (ms) | `LightWarmupMs` | 0 | 開燈後等待光源穩定的延遲；預設不等待，需要時由實機量測後設定 |
 
 ### 7. IO 設定
 

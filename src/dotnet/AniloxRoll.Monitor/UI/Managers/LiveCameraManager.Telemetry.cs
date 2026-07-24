@@ -94,12 +94,15 @@ namespace AniloxRoll.Monitor.UI.Managers
                                     $"cl={cam.IsClProtocolEnabled} lineRate={cam.AppliedLineRateHz:F0}");
                             }
 
-                            bool started = cam.EnableHotStandby();
-                            if (started)
-                                FlowTrace.Log($"acquisition standby start cam{cam.CameraId}");
+                            if (HotStandbyEnabled)
+                            {
+                                bool started = cam.EnableHotStandby();
+                                if (started)
+                                    FlowTrace.Log($"acquisition standby start cam{cam.CameraId}");
+                            }
                         }
 
-                        if (isConnected && cam.IsAcquisitionWarm)
+                        if (HotStandbyEnabled && isConnected && cam.IsAcquisitionWarm)
                         {
                             if (_warmReadyLogged.Add(cam.CameraId))
                             {
@@ -120,9 +123,14 @@ namespace AniloxRoll.Monitor.UI.Managers
                             _stallDetector.Reset(cam.CameraId);
                             clearFrame = true;
                         }
-                        else if (!cam.IsLive || !cam.IsAcquisitionWarm)
+                        else if (HotStandbyEnabled && (!cam.IsLive || !cam.IsAcquisitionWarm))
                         {
                             statusText = "暖機中"; color = Color.LightGray;
+                            _stallDetector.Reset(cam.CameraId);
+                        }
+                        else if (!HotStandbyEnabled && !cam.UserWantsGrab)
+                        {
+                            statusText = "就緒"; color = Color.LightGreen;
                             _stallDetector.Reset(cam.CameraId);
                         }
                         else

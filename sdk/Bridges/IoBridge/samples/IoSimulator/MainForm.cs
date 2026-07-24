@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -163,22 +164,37 @@ tools/python/analyze_phaselog.py 分析
             int onMs = Math.Max(1, ParseInt(_onSec.Text, 10)) * 1000;
             int offMs = Math.Max(1, ParseInt(_offSec.Text, 1)) * 1000;
             _cycling = true; _cycleCount = 0;
-            bool high = false; int remain = 0;   // remain=0 → 第一個 tick 立即進 high
-            _cycleTimer = new System.Windows.Forms.Timer { Interval = 100 };
+            bool high = false;
+            long phaseStartedMs = 0;
+            long nextTransitionMs = 0;
+            var cycleClock = Stopwatch.StartNew();
+            _cycleTimer = new System.Windows.Forms.Timer { Interval = 20 };
             _cycleTimer.Tick += (s, e) =>
             {
-                remain -= 100;
-                if (remain > 0) return;
+                long nowMs = cycleClock.ElapsedMilliseconds;
+                if (nowMs < nextTransitionMs) return;
+
+                if (_cycleCount > 0)
+                {
+                    long actualMs = nowMs - phaseStartedMs;
+                    AppendLog(
+                        $"DI-1 {(high ? "HIGH" : "LOW")} actual={actualMs}ms " +
+                        $"target={(high ? onMs : offMs)}ms");
+                }
+
                 high = !high;
+                phaseStartedMs = nowMs;
                 if (high)   // START 上升緣 → app 開抓
                 {
                     _cycleCount++;
-                    _srv.SetDi(1, true); _diStart.Checked = true; remain = onMs;
+                    _srv.SetDi(1, true); _diStart.Checked = true;
+                    nextTransitionMs = nowMs + onMs;
                     _btnCycle.Text = $"循環中 #{_cycleCount}（拍 {onMs / 1000}s）";
                 }
                 else        // START 下降緣 → app 停抓
                 {
-                    _srv.SetDi(1, false); _diStart.Checked = false; remain = offMs;
+                    _srv.SetDi(1, false); _diStart.Checked = false;
+                    nextTransitionMs = nowMs + offMs;
                     _btnCycle.Text = $"循環中 #{_cycleCount}（停 {offMs / 1000}s）";
                 }
             };

@@ -229,6 +229,19 @@ IC|WF viewEdges X …｜Y …                     ← 拖曳放開時畫面四�
 
 禁止：多台相機平行呼叫 `TanukiCv_AllocPinned`；MIL 與 processing 不得各自建立第二條配置入口。
 
+**`codex/experiment-no-hot-standby` 實驗覆寫（不可當成正式契約合併）**
+
+- `Parameterizing → ReadyIdle`：CLProtocol 與參數寫入完成即解鎖 Grab，不啟動 `MdigProcess`。
+- `ReadyIdle + Start intent → Capturing`：IO HIGH／燈光暖機後才逐台 `M_START`，建立 capture plan
+  後開產品 gate；不執行 hot-standby 相位同步。
+- `Capturing + StopGrab → ReadyIdle`：先關產品 gate，再於背景平行 `M_STOP+M_WAIT`；
+  下一次 Start 必須等前一輪 drain 完成。
+- 每輪必有：
+  `acquisition mode hotStandby=false`、`capture cold-start begin`、
+  `capture cold-start armed ... ms=N`、`StartGrab`、`capture gate open`、各台 `firstFrame`。
+- 時間比較使用 `python tools/python/measure_io_capture_latency.py`，至少報告
+  `IO HIGH → cold-start armed` 與 `IO HIGH → all firstFrame`；不得用按鈕時間代替 IO HIGH。
+
 **log-flow（執行期腳印＝判準）**
 ```
 T1: AllocateCameras begin（expect N）
