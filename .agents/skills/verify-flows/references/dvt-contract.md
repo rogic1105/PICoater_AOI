@@ -395,12 +395,14 @@ T1: acquisition sync phase reason=start attempt=A system=S cams=... spreadTicks=
 T1: acquisition sync complete reason=start attempts=A cams=P phase=True
 T1: StartGrab（cams=M）
 T1: ApplyMainDisplayMode → 同模式    ← 冪等：不得出現 create/teardown 行
+T1: WF reset generation=G pendingDropped=N queuedDropped=N writerActive=B clearTile=True
 T1: viewRange refire reason=capture-start mode=WF|IC
     ← 清除上一輪 Curve 視野後，用主畫面既有幾何主動重發；不得等滑鼠或首幀才補
 T1: capture output begin grab=… date=yyyyMMdd
 T1: capture plan grab=… root=… imageDir=… csv=… archive=….acap assets=… preview=1920x1080x3 scale=…
 T1: grab limit armed Ns grab=…       ← 正式監控 grab 成功後啟動 one-shot；背景採樣借用 grab 不武裝
 T1: capture gate open cams=P warm=True   ← P=在線數；必晚於同步完成與 plan/limit，早於所有 firstFrame
+Tn: WF band first generation=G seq=S ticks=A~B startRow=0 height=H
 Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線」相機恰一行，順序不定
 （首幀齊後進入穩態 → 適用「穩態靜默通則」：無互動下不得再有顯示狀態**變更**行。
   狀態**快照**行〔rowChart/WF state/IC state/stats，見§狀態快照儀器〕＝儀器輸出，穩態每秒出現正常）
@@ -1542,8 +1544,12 @@ T1: WF layer raw|column|row->raw|column|row writeRow=N history=preserved   ← �
   `_writeRow`、pending slots、tick 網格、zoom 與 pan 都必須不變，禁止呼叫 `Reset` 或重建 view。
 - 三層固定上限：以 101171×30000 灰階計約 8.48 GiB；採 512-row lazy chunk，尚未寫到的區域不配置，
   view dispose 時全部釋放。這是使用者核准的記憶體換無縫切換政策，不得退回清空瀑布。
-- `WaterfallView.Reset` 必須遞增 content generation；已被背景 writer 取走的舊 generation band
-  在真正重新 Grab、改總高或佈局 Reset 後不得寫回，避免清空後殘留一條舊來源影像。
+- `WaterfallView.Reset` 必須遞增 content generation；已被背景 writer 取走的舊 generation band，
+  以及 Reset 前已開始計算的舊 LOD tile，在真正重新 Grab、改總高或佈局 Reset 後都不得安裝，
+  避免清空後殘留一條舊來源影像。`ImageCanvas.ApplyLodTile` 是 LOD generation 的最後守門。
+  新 Grab Reset 還必須以 `RefreshLod(clearCurrentTile:true)` 立即清除目前可見 tile；一般串流更新維持
+  `clearCurrentTile:false`，保留上一 tile 等新內容完成，兩種語意不得混用。首個 `WF band first`
+  的 generation 必須等於該輪 Reset，且 `startRow=0`。
 - 新配置相機由 `AllocateCamerasAsync(enableEnhance)` 取得同一設定，不能另有預設值。
 
 ### S5 強化熱力圖（hda_EnhanceHeatmap）

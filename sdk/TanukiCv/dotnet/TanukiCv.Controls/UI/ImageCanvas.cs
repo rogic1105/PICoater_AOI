@@ -331,10 +331,23 @@ namespace TanukiCv.Controls
         }
 
         /// <summary>新幀進來（內容變、視角沒變）→ 立刻用當前視角重算 tile（不延遲）。</summary>
-        public void RefreshLod()
+        public void RefreshLod() => RefreshLod(false);
+
+        /// <summary>
+        /// 重新計算 LOD 內容。新一輪資料開始時可先清除目前 tile，避免舊內容在非同步重算完成前
+        /// 繼續顯示；一般串流更新則保留目前 tile，避免每幀閃黑。
+        /// </summary>
+        public void RefreshLod(bool clearCurrentTile)
         {
             if (!_lodActive) return;
             System.Threading.Interlocked.Increment(ref _lodContentGeneration);
+            if (clearCurrentTile && _lodTile != null)
+            {
+                _lodTile.Dispose();
+                _lodTile = null;
+                _lodTileRect = Rectangle.Empty;
+                Invalidate();
+            }
             RecomputeLodTile();
         }
 
@@ -447,6 +460,16 @@ namespace TanukiCv.Controls
         {
             _lodRecomputeInFlight = false;
             if (!_lodActive) { tile?.Dispose(); return; }
+            if (contentGeneration != System.Threading.Interlocked.Read(ref _lodContentGeneration))
+            {
+                tile?.Dispose();
+                if (_lodRecomputePending)
+                {
+                    _lodRecomputePending = false;
+                    RecomputeLodTile();
+                }
+                return;
+            }
             if (tile != null)
             {
                 if (_lodTile != null && !ReferenceEquals(_lodTile, tile)) _lodTile.Dispose();

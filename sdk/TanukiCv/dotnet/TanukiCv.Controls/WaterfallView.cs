@@ -104,6 +104,8 @@ namespace TanukiCv.Controls
         private readonly Queue<BandJob> _writeQueue = new Queue<BandJob>();
         private bool _writerRunning;
         private int _contentGeneration;
+        private bool _logFirstBandAfterReset;
+        private bool _clearVisibleTileOnNextRefresh;
         private sealed class BandJob
         {
             public int Generation, FullW, BandH, BandStartRow;
@@ -370,9 +372,17 @@ namespace TanukiCv.Controls
         /// 重 grab 時呼叫 → 舊圖清空（符合預期）+ 避免新幀接在舊網格上、兩台重啟相位不一而錯位。</summary>
         public void Reset()
         {
+            int generation;
+            int pendingDropped;
+            int queuedDropped;
+            bool writerWasRunning;
             lock (_lock)
             {
+                pendingDropped = _pending.Count + _preBuffer.Count;
+                queuedDropped = _writeQueue.Count;
+                writerWasRunning = _writerRunning;
                 _contentGeneration++;
+                generation = _contentGeneration;
                 ClearLayerChunksLocked();
                 _writeRow = 0;
                 _pending.Clear(); _preBuffer.Clear(); _writeQueue.Clear();
@@ -383,7 +393,12 @@ namespace TanukiCv.Controls
                 _originTick = 0;
                 _originSet = false;
                 _lastNewCamWallMs = 0;
+                _logFirstBandAfterReset = true;
+                _clearVisibleTileOnNextRefresh = true;
             }
+            FlowLog?.Invoke(
+                $"reset generation={generation} pendingDropped={pendingDropped} " +
+                $"queuedDropped={queuedDropped} writerActive={writerWasRunning} clearTile=True");
             _lodContentDirty = true;
             PushLodRefresh();
         }
@@ -608,6 +623,20 @@ namespace TanukiCv.Controls
 
             if (ring) _writeRow = (_writeRow + bandH) % _totalHeight;
             else _writeRow += bandH;
+            if (_logFirstBandAfterReset)
+            {
+                long minTick = long.MaxValue;
+                long maxTick = long.MinValue;
+                foreach (Frame frame in slot.Frames.Values)
+                {
+                    if (frame.Tick < minTick) minTick = frame.Tick;
+                    if (frame.Tick > maxTick) maxTick = frame.Tick;
+                }
+                _logFirstBandAfterReset = false;
+                FlowLog?.Invoke(
+                    $"band first generation={_contentGeneration} seq={slot.Seq} " +
+                    $"ticks={minTick}~{maxTick} startRow={bandStart} height={bandH}");
+            }
             FlowState();   // 狀態快照（每秒一行）：占用/總高+畫面端＝方向可判量
 
             return new BandJob
@@ -708,7 +737,9 @@ namespace TanukiCv.Controls
             else if (_lodContentDirty)
             {
                 _lodContentDirty = false;
-                _canvas.RefreshLod();
+                bool clearVisibleTile = _clearVisibleTileOnNextRefresh;
+                _clearVisibleTileOnNextRefresh = false;
+                _canvas.RefreshLod(clearVisibleTile);
                 _awaitedLodGeneration = _canvas.LodContentGeneration;
             }
         }

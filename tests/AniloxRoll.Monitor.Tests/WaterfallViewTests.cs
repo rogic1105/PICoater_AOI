@@ -171,6 +171,47 @@ namespace AniloxRoll.Monitor.Tests
             }
         }
 
+        [Test]
+        public void LodTile_FromPreviousContentGeneration_IsNotInstalled()
+        {
+            using (var canvas = new ImageCanvas { Size = new Size(320, 240) })
+            using (var staleTile = new Bitmap(32, 24))
+            {
+                WritePrivate(canvas, "_lodActive", true);
+                WritePrivate(canvas, "_lodContentGeneration", 2L);
+                int applied = 0;
+                canvas.LodTileApplied += generation => applied++;
+
+                MethodInfo applyLodTile = typeof(ImageCanvas).GetMethod(
+                    "ApplyLodTile",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.That(applyLodTile, Is.Not.Null);
+                applyLodTile.Invoke(
+                    canvas,
+                    new object[] { staleTile, new Rectangle(0, 0, 32, 24), 1L });
+
+                Assert.That(ReadPrivate<Bitmap>(canvas, "_lodTile"), Is.Null);
+                Assert.That(applied, Is.Zero);
+            }
+        }
+
+        [Test]
+        public void RefreshLod_NewSequence_ClearsVisibleTileBeforeRecompute()
+        {
+            using (var canvas = new ImageCanvas { Size = new Size(320, 240) })
+            using (var previousTile = new Bitmap(32, 24))
+            {
+                WritePrivate(canvas, "_lodActive", true);
+                WritePrivate(canvas, "_lodContentGeneration", 1L);
+                WritePrivate(canvas, "_lodTile", previousTile);
+
+                canvas.RefreshLod(clearCurrentTile: true);
+
+                Assert.That(ReadPrivate<Bitmap>(canvas, "_lodTile"), Is.Null);
+                Assert.That(canvas.LodContentGeneration, Is.EqualTo(2L));
+            }
+        }
+
         private static T ReadPrivate<T>(object target, string fieldName)
         {
             FieldInfo field = target.GetType().GetField(
@@ -178,6 +219,15 @@ namespace AniloxRoll.Monitor.Tests
                 BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(field, Is.Not.Null, fieldName);
             return (T)field.GetValue(target);
+        }
+
+        private static void WritePrivate<T>(object target, string fieldName, T value)
+        {
+            FieldInfo field = target.GetType().GetField(
+                fieldName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, fieldName);
+            field.SetValue(target, value);
         }
     }
 }
