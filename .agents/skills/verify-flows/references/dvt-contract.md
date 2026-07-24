@@ -822,17 +822,23 @@ T1: ⚠ 相機離線 4→3/7 ／ 相機在線 0→4/7   ← 數量變化才記�
 
 ## 相機參數契約（P 系列）
 
-### P1 滑桿/數字框調參（停止時三種皆可；Grab 中只開放曝光）
+### P1 滑桿/數字框調參（曝光即時；線掃／高度延後至 Stop 後套用）
 ```
 T1: ui:【相機參數】camN {param}={v}｜All {param}={v}    ← 帶參數名+值單行自足（Exp/LineRate/Height…）
 （之後的 HtRealloc/合圖佈局重算等程式化行歸此 intent 管；滑桿拖曳 vs 數字框輸入同一路徑，log 不區分）
-停止 Grab 時可調曝光、線掃速度與擷取高度；Grab 中只開放曝光。線掃速度與擷取高度的單台／All
-控制項必須停用，Form command 與 LiveCameraManager setter 也必須拒絕繞過 UI 的寫入。
-拒絕時只留 `parameter change blocked scope={scope} param={param} reason=GrabActive`，不得寫硬體、
-不得產生使用者 intent 或進入 parameter reconfigure。
+三種控制項在 Grab 中皆可編輯。曝光走既有快速套用；線掃速度與擷取高度只更新 UI 與 pending 最後值，
+不得在 capture gate 開啟期間寫硬體、更新 JSON 或進入 parameter reconfigure。StopGrab 關閉 gate 後自動
+flush timing pending；Form command 與 LiveCameraManager setter 仍須拒絕任何繞過此佇列的 Grab 中直接寫入。
 開機初始化控制項期間 `_cameraParameterControlsReady=false`，不得排程硬體寫入、不得出現上述 `ui:` 行，
 也不得建立 `paramchange-*.csv`。初始硬體值的權威路徑是 Allocate/Initialize 套用 settings，及 CLProtocol
 就緒後重套線掃；`paramchange` 只記使用者完成的實際調整。
+線掃／高度只要仍 pending 或硬體套用中，按鈕與 IO Start 都必須立即拒絕，不可等待後帶著舊參數啟動。
+IO High 在此期間出現時，該輪完整跳過並回 `busy=off reason=timing-parameter-busy`；等待下一個 Low→High
+完整邊緣。這可避免 NumericUpDown 輸入到一半的 `3`／`30`／`300` 被 Start 強制結算。
+同一個控制項已有硬體套用進行中時，新輸入採 **latest-wins**：保留最後值，中間 pending 值不得各自
+排成完整 MIL 重配；已經開始的硬體寫入可完成，worker 仍須等待新輸入通過 debounce 穩定期，之後才套最後值。
+每筆 inspection CSV 的 `GrabHeight/LineRateHz/ExposureUs` 必須取自相機/MIL capture-time 實際值，
+不得直接抄尚未確認套用的 PropertyGrid desired value。
 禁止：調參數不得出現任何 MIL 視窗——headless 鐵則：**每一個 MdispSelectWindow 呼叫點都必須帶
 `_panelHandle != IntPtr.Zero` 守門**（MIL 對 Zero handle 會自開獨立浮動視窗；2026-07-07 實例：
 改高度 realloc 路徑漏守門 → 4 台各跳一個視窗）。新增 MdispSelectWindow 呼叫點＝必帶守門。
@@ -843,15 +849,45 @@ T1: ui:【相機參數】camN {param}={v}｜All {param}={v}    ← 帶參數名+
   多留 1 秒是為了抓「初始化時誤排 debounce、配置完成後才發作」的歷史病。
 - `P1.intent`：只接受 `cam1~7 Exp|LineRate|Height=N` 或
   `All ExpAll|LineRateAll|HeightAll=N`，scope 與參數尾綴必須一致。
-- `P1.live-policy`：capture gate 開啟期間只允許 `Exp|ExpAll` intent；任何
-  `LineRate|LineRateAll|Height|HeightAll` intent 直接 FAIL。後端正確拒絕的 `parameter change blocked`
-  算已覆蓋且不算違規。
+- `P1.live-policy`：capture gate 開啟期間允許曝光 intent 與 timing `parameter queue deferred`；任何
+  LineRate／Height 實際 intent 或硬體套用直接 FAIL。後端正確拒絕的 `parameter change blocked` 仍算防線證據。
 - `P1.responsiveness`：調參後 5 秒內 `UiStall > 1000ms` 判 FAIL；沒有使用者調參則回
   `NOT COVERED`，開機靜默仍可獨立判 PASS/FAIL。
 - `P1.synchronization`：只驗 Grab 中曝光調整。每個 intent 必須完成以下同 scope 快速套用；
   不得關 capture gate、不得 stop/start digitizer、不得重設顯示世代或重跑相位同步。套用失敗、
   超過 5 秒或出現任何 `parameter reconfigure`／`acquisition sync reason=parameter` 都判 FAIL。
   調參途中若使用者 StopGrab，曝光寫入可完成，但 terminal 必須如實記 `gate=closed`。
+- `P1.queue-before-grab`：只要出現 pending flush，必須先看到
+  `parameter queue flush complete ... success=True`，之後才可出現 `StartGrab`。
+- `P1.deferred-timing`：Grab 中 timing 變更必須先記 deferred；Stop 後 `post-stop apply begin` 到
+  `complete success=True` 間不得 StartGrab。期間 IO High 必須被 `timing-parameter-busy` 拒絕。
+- `P1.frame-period`：停止狀態的 LineRate／Height 重配完成前，必須以 Data Latch 連續 frame-start
+  時戳量出每台實際週期。每個 target 的最後一次 `acquisition sync rate` 都須 `aligned=True`；
+  缺相機、缺量測或實際週期不符一律 FAIL。參數 readback／程式 cache 不能代替實際出幀證據。
+- `P1.start-transition`：通過 timing busy 守門後才鎖住參數控制，到 StartGrab 成功或失敗才解鎖；
+  進入 `acquisition sync reason=start` 後不得接受 LineRate／Height intent。
+- `P1.applied-truth`：每個 LineRate／Height intent 必須有對應的 `parameter hardware applied`
+  實測值與 `parameter ui apply complete` terminal；blocked、UI apply failed、缺 applied 或
+  requested/applied 不符都判 FAIL。
+
+**Grab 中調整線掃／高度，Stop 後套用的 log-flow**：
+```
+T1: parameter queue deferred scope={scope} param={LineRate|Height} until=GrabStop value=V
+T1: StopGrab
+T1: capture gate closed standby=on
+T1: parameter post-stop apply begin pending=N
+T1: ui:【相機參數】{scope} {LineRate|Height}=V
+Tbg: parameter hardware applied scope=camN param={LineRate|Height} requested=V applied=A
+Tbg: acquisition sync rate reason=parameter:{scope} attempt=N camN
+     expectedMs=E actualMs=A toleranceMs=T aligned=True
+     ← 每台至少一行；若 false 則 pause/reapply/resume 重試，最多 3 次
+T1: parameter ui apply complete scope={scope} param={LineRate|Height} value=V
+T1: parameter post-stop apply complete success=True bindings=N
+```
+套用期間 IO High：`io:DI START 上升緣` → `IO grab rejected busy=off reason=timing-parameter-busy`；
+手動按鈕則記 `Grab start rejected reason=TimingParameterBusy`。兩者都不得出現 StartGrab。
+快速連續輸入時可出現 `parameter queue latest-wins scope=... param=... value=V`；之後只要求已開始值
+與最後值各有 terminal，中間被覆蓋值不得再產生 `ui:【相機參數】` intent。
 
 **Grab 中曝光 log-flow（單台與 All 共用）**：
 ```
@@ -873,17 +909,30 @@ T1: exposure live apply complete scope={scope} gate=closed elapsedMs=N
 **code-flow 與不變量**：
 ```
 TrackBar/NUD settle
- → ApplyCamParamAsync｜ApplyAllCamParamAsync@AniloxRollForm.SettingsTabs.cs
+ ├（Grab 中 timing）pending binding 記最後值 → parameter queue deferred
+ │  └ StopGrab → BeginFlushPendingCameraTimingParametersAfterGrab
+ │     → FlushPendingCameraTimingParametersAfterGrabAsync（worker 採 latest-wins drain）
+ └（停止／曝光）ApplyCamParamAsync｜ApplyAllCamParamAsync@AniloxRollForm.SettingsTabs.cs
+   ├ ToggleLiveGrabAsync：IsCameraTimingParameterBusy=true → reject；否則鎖控制→StartGrab→finally 解鎖
+   ├ hardware apply 成功 → save settings＋同步控制項；失敗 → 恢復 settings 值
    ├（Grab 中非曝光）parameter change blocked → return
    ├（Grab 中曝光）SetParamControlsLocked(true)＋SetCaptureSuppressed(true)
    └（Grab 中曝光）await ApplyExposureFastAsync@LiveCameraManager.Parameters.cs
        ├ _allocationGate 序列化實際硬體寫入
        ├ Task.Run：寫曝光；不碰 line timing
        └ finally：恢復存檔、立即解鎖控制項
+LineRate／Height 實際套用：LiveCameraManager.Parameters.cs
+ ├ setter 在 coordinated reconfiguration 內才可繞過 GrabActive 防線
+ ├ LineRate：寫入後讀回 AcquisitionLineRate，記 requested/applied（僅第一層證據）
+ ├ Height：以 MIL FrameHeight 驗證，記 requested/applied
+ ├ SynchronizeAcquisitionAsync(validateFramePeriod=true)
+ │  ├ PauseAcquisition → 寫參數／重套 LineRate → ResumeAcquisition
+ │  ├ Data Latch 量相鄰 frame-start：expected=FrameHeight/AppliedLineRateHz
+ │  └ 每台實際週期與預期誤差須 ≤ max(100ms, 20%)；否則最多重試 3 次且 gate 保持 closed
+ └ TryGetAppliedCaptureParameters → OnCameraInspectionResult → CSV 每筆 capture truth
 UpdateGrabButton@AniloxRollForm.Live.cs
  └ RefreshCameraParameterControlState
-    ├ 停止：曝光／線掃／高度皆 Enabled
-    └ Grab：只有曝光 Enabled；線掃／高度（單台＋All）Disabled
+    └ 曝光／線掃／高度皆 Enabled；Start transition 短暫鎖定
 ```
 - **曝光不重啟原則**：曝光只改 integration time，不改 Line Rate／幀高／資料節奏；因此沿用目前
   acquisition generation 才是最小副作用。為曝光去 stop/start 反而會製造多秒空窗與相位重建風險。

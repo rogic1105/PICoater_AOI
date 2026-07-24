@@ -31,6 +31,15 @@ namespace AniloxRoll.Monitor.Forms
     public partial class AniloxRollForm
     {
         private bool _cameraParameterControlsReady;
+        private readonly List<PendingCameraParameterBinding> _pendingCameraParameterBindings =
+            new List<PendingCameraParameterBinding>();
+
+        private sealed class PendingCameraParameterBinding
+        {
+            public bool IsTiming { get; set; }
+            public Func<bool> HasPending { get; set; }
+            public Func<Task<bool>> FlushAsync { get; set; }
+        }
 
         // ==========================================
         // --- 右側面板：初始化 ---
@@ -108,11 +117,13 @@ namespace AniloxRoll.Monitor.Forms
 
             BindAllSync(_expAllBar, _expAllNum, _expBars, _expNums, "ExpAll",
                 (j, v) => _liveCameraManager?.SetExposureForCamera(j + 1, v),
-                (j, v) => { acq.CameraExposureTimeUs[j] = v; ConfigManager.SaveAcquisitionSettings(acq); });
+                (j, v) => { acq.CameraExposureTimeUs[j] = v; ConfigManager.SaveAcquisitionSettings(acq); },
+                () => (int)acq.CameraExposureTimeUs[0]);
 
             BindAllSync(_lrAllBar, _lrAllNum, _lrBars, _lrNums, "LineRateAll",
                 (j, v) => _liveCameraManager?.SetLineRateForCamera(j + 1, v),
                 (j, v) => { acq.CameraLineRateHz[j] = v; ConfigManager.SaveAcquisitionSettings(acq); },
+                () => (int)acq.CameraLineRateHz[0],
                 () => {
                     // 同步所有 cam 的 exp max（每台 LR 都同值，算一次套到所有 cam）
                     int newMax = (int)acq.CameraLineRateHz[0];
@@ -124,6 +135,7 @@ namespace AniloxRoll.Monitor.Forms
             BindAllSync(_htAllBar, _htAllNum, _htBars, _htNums, "HeightAll",
                 (j, v) => _liveCameraManager?.SetGrabHeightForCamera(j + 1, v),
                 (j, v) => { acq.CameraGrabHeight[j] = v; ConfigManager.SaveAcquisitionSettings(acq); },
+                () => acq.CameraGrabHeight[0],
                 () => {
                     if (_settings.StitchMode == StitchMode.Global && _liveCameraManager?.IsGlobalMergeActive == true)
                         _liveCameraManager.RefreshGlobalMergeLayout(_settings.Ops.ToArray(), _settings.StartPosition.ToArray());
@@ -143,23 +155,26 @@ namespace AniloxRoll.Monitor.Forms
 
                 // ── 曝光時間 ────────────────────────────────────────────
                 int expMax = CalcExpMax();
-                BindBidirectionalSync(_expBars[idx], _expNums[idx], camId,
+                BindBidirectionalSync(_expBars[idx], _expNums[idx], camId, "Exp",
                     ExpMin, expMax, (int)acq.CameraExposureTimeUs[idx],
                     v => { acq.CameraExposureTimeUs[idx] = v; ConfigManager.SaveAcquisitionSettings(acq); },
+                    () => (int)acq.CameraExposureTimeUs[idx],
                     v => ApplyCamParamAsync(camId, "Exp", v, () => _liveCameraManager.SetExposureForCamera(camId, v)),
                     debounceMs: 200);
 
                 // ── 線掃速率 ────────────────────────────────────────────
-                BindBidirectionalSync(_lrBars[idx], _lrNums[idx], camId,
+                BindBidirectionalSync(_lrBars[idx], _lrNums[idx], camId, "LineRate",
                     LrMin, LrMax, (int)acq.CameraLineRateHz[idx],
                     v => { acq.CameraLineRateHz[idx] = v; ConfigManager.SaveAcquisitionSettings(acq); },
+                    () => (int)acq.CameraLineRateHz[idx],
                     v => ApplyCamParamAsync(camId, "LineRate", v, () => _liveCameraManager.SetLineRateForCamera(camId, v)),
                     () => { UpdateExpMaxAndClampColor(idx, CalcExpMax()); if (idx == 0) UpdateRowChartPitch(); });
 
                 // ── 擷取高度 ────────────────────────────────────────────
-                BindBidirectionalSync(_htBars[idx], _htNums[idx], camId,
+                BindBidirectionalSync(_htBars[idx], _htNums[idx], camId, "Height",
                     HtMin, HtMax, Math.Max(HtMin, Math.Min(HtMax, acq.CameraGrabHeight[idx])),
                     v => { acq.CameraGrabHeight[idx] = v; ConfigManager.SaveAcquisitionSettings(acq); },
+                    () => acq.CameraGrabHeight[idx],
                     v => ApplyCamParamAsync(camId, "Height", v, () => _liveCameraManager.SetGrabHeightForCamera(camId, v)),
                     () => {
                         if (_settings.StitchMode == StitchMode.Global && _liveCameraManager?.IsGlobalMergeActive == true)
@@ -207,9 +222,9 @@ namespace AniloxRoll.Monitor.Forms
         /// - 滾輪 / 鍵盤箭頭 / NUD 輸入：1 秒 debounce 才寫硬體（避免高頻 MIL 寫入造成卡頓）。
         /// </summary>
         private void BindBidirectionalSync(
-            TrackBar bar, NumericUpDown num, int camId,
+            TrackBar bar, NumericUpDown num, int camId, string paramLabel,
             int min, int max, int initialValue,
-            Action<int> saveSetting, Func<int, Task> writeHardwareAsync,
+            Action<int> saveSetting, Func<int> readSetting, Func<int, Task<bool>> writeHardwareAsync,
             Action postAction = null,
             int debounceMs = 1000)
         {
@@ -224,18 +239,95 @@ namespace AniloxRoll.Monitor.Forms
             var debounce = new System.Windows.Forms.Timer { Interval = debounceMs };
             int pendingValue = clamped;
             bool hasPending = false;
-            debounce.Tick += async (s, e) =>
+            DateTime settleAfterUtc = DateTime.MinValue;
+            Task<bool> flushWorker = Task.FromResult(true);
+            bool deferredLogged = false;
+
+            async Task<bool> ApplyValueAsync(int value)
+            {
+                bool applied = await writeHardwareAsync(value);
+                if (applied)
+                {
+                    saveSetting(value);
+                    postAction?.Invoke();
+                    return true;
+                }
+
+                int restored = Math.Max(min, Math.Min(max, readSetting()));
+                syncing = true;
+                try
+                {
+                    bar.Value = restored;
+                    num.Value = restored;
+                }
+                finally { syncing = false; }
+                return false;
+            }
+
+            async Task<bool> DrainPendingAsync()
+            {
+                bool succeeded = true;
+                while (hasPending)
+                {
+                    int settleDelayMs = Math.Max(0, (int)Math.Ceiling(
+                        (settleAfterUtc - DateTime.UtcNow).TotalMilliseconds));
+                    if (settleDelayMs > 0)
+                    {
+                        await Task.Delay(Math.Min(settleDelayMs, 100));
+                        continue;
+                    }
+
+                    int value = pendingValue;
+                    hasPending = false;
+                    succeeded = await ApplyValueAsync(value) && succeeded;
+                }
+                return succeeded;
+            }
+
+            Task<bool> FlushAsync()
             {
                 debounce.Stop();
-                if (!hasPending) return;
-                hasPending = false;
-                await writeHardwareAsync(pendingValue);
-                postAction?.Invoke();   // 硬體寫完後再 refresh（例：HT 改變後重新載入主畫面 buffer）
-            };
+                if (!flushWorker.IsCompleted)
+                    return flushWorker;
+                if (!hasPending)
+                    return flushWorker;
+
+                flushWorker = DrainPendingAsync();
+                return flushWorker;
+            }
+
+            Task<bool> FlushWhenAllowedAsync()
+            {
+                if (IsTimingParameter(paramLabel)
+                    && _liveCameraManager?.IsLiveGrabbing == true)
+                {
+                    if (!deferredLogged)
+                    {
+                        FlowTrace.Log(
+                            $"parameter queue deferred scope=cam{camId} " +
+                            $"param={paramLabel} until=GrabStop value={pendingValue}");
+                        deferredLogged = true;
+                    }
+                    return Task.FromResult(true);
+                }
+
+                return FlushAsync();
+            }
+
+            debounce.Tick += async (s, e) => await FlushWhenAllowedAsync();
             void ScheduleWrite(int v)
             {
+                if (!hasPending)
+                    deferredLogged = false;
                 pendingValue = v;
                 hasPending = true;
+                settleAfterUtc = DateTime.UtcNow.AddMilliseconds(debounceMs);
+                if (!flushWorker.IsCompleted)
+                {
+                    FlowTrace.Log(
+                        $"parameter queue latest-wins scope=cam{camId} " +
+                        $"param={paramLabel} value={v}");
+                }
                 debounce.Stop();
                 debounce.Start();
             }
@@ -245,16 +337,15 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _dragging.Remove(bar);
                 // 拖曳結束 → 立即寫入並取消 debounce
-                debounce.Stop();
-                hasPending = false;
-                await writeHardwareAsync(bar.Value);
-                postAction?.Invoke();   // 硬體寫完後再 refresh（例：HT 改變後重新載入主畫面 buffer）
+                pendingValue = bar.Value;
+                hasPending = true;
+                settleAfterUtc = DateTime.UtcNow;
+                await FlushWhenAllowedAsync();
             };
             bar.ValueChanged += (s, e) =>
             {
                 if (!_cameraParameterControlsReady || syncing || _syncingFromHw) return; syncing = true;
                 num.Value = bar.Value;
-                saveSetting(bar.Value);
                 if (!_dragging.Contains(bar)) ScheduleWrite(bar.Value);
                 syncing = false;
             };
@@ -263,10 +354,16 @@ namespace AniloxRoll.Monitor.Forms
                 if (!_cameraParameterControlsReady || syncing || _syncingFromHw) return; syncing = true;
                 int v = (int)num.Value;
                 bar.Value = Math.Max(min, Math.Min(max, v));
-                saveSetting(v);
                 ScheduleWrite(v);
                 syncing = false;
             };
+
+            _pendingCameraParameterBindings.Add(new PendingCameraParameterBinding
+            {
+                IsTiming = IsTimingParameter(paramLabel),
+                HasPending = () => hasPending || !flushWorker.IsCompleted,
+                FlushAsync = FlushAsync
+            });
         }
 
         /// <summary>
@@ -279,6 +376,7 @@ namespace AniloxRoll.Monitor.Forms
             string paramLabel,                       // 參數名（param-change log 用）
             Action<int, int> writeHardwareForCam,    // (camIdx0based, value)
             Action<int, int> saveSettingForCam,      // (camIdx0based, value)
+            Func<int> readSetting,
             Action postWriteAll = null)
         {
             bool allSyncing = false;
@@ -288,15 +386,30 @@ namespace AniloxRoll.Monitor.Forms
             };
             int pendingValue = barAll.Value;
             bool hasPending = false;
+            DateTime settleAfterUtc = DateTime.MinValue;
+            Task<bool> flushWorker = Task.FromResult(true);
+            bool deferredLogged = false;
 
-            async Task ApplyAsync(int v)
+            async Task<bool> ApplyAsync(int v)
             {
                 // 1. 寫硬體（所有 7 台）：關產品 gate → 全部 drain/write/resume → raw 新幀到齊才放行。
-                await ApplyAllCamParamAsync(paramLabel, v, () =>
+                bool applied = await ApplyAllCamParamAsync(paramLabel, v, () =>
                 {
                     for (int j = 0; j < bars.Length; j++)
                         writeHardwareForCam(j, v);
                 });
+                if (!applied)
+                {
+                    int restored = Math.Max(barAll.Minimum, Math.Min(barAll.Maximum, readSetting()));
+                    allSyncing = true;
+                    try
+                    {
+                        barAll.Value = restored;
+                        numAll.Value = restored;
+                    }
+                    finally { allSyncing = false; }
+                    return false;
+                }
                 // 2. 寫 settings
                 for (int j = 0; j < bars.Length; j++)
                     saveSettingForCam(j, v);
@@ -313,19 +426,73 @@ namespace AniloxRoll.Monitor.Forms
                 }
                 finally { _syncingFromHw = false; }
                 postWriteAll?.Invoke();
+                return true;
             }
 
-            debounce.Tick += async (s, e) =>
+            async Task<bool> DrainPendingAsync()
+            {
+                bool succeeded = true;
+                while (hasPending)
+                {
+                    int settleDelayMs = Math.Max(0, (int)Math.Ceiling(
+                        (settleAfterUtc - DateTime.UtcNow).TotalMilliseconds));
+                    if (settleDelayMs > 0)
+                    {
+                        await Task.Delay(Math.Min(settleDelayMs, 100));
+                        continue;
+                    }
+
+                    int value = pendingValue;
+                    hasPending = false;
+                    succeeded = await ApplyAsync(value) && succeeded;
+                }
+                return succeeded;
+            }
+
+            Task<bool> FlushAsync()
             {
                 debounce.Stop();
-                if (!hasPending) return;
-                hasPending = false;
-                await ApplyAsync(pendingValue);
-            };
+                if (!flushWorker.IsCompleted)
+                    return flushWorker;
+                if (!hasPending)
+                    return flushWorker;
+
+                flushWorker = DrainPendingAsync();
+                return flushWorker;
+            }
+
+            Task<bool> FlushWhenAllowedAsync()
+            {
+                if (IsTimingParameter(paramLabel)
+                    && _liveCameraManager?.IsLiveGrabbing == true)
+                {
+                    if (!deferredLogged)
+                    {
+                        FlowTrace.Log(
+                            $"parameter queue deferred scope=All " +
+                            $"param={paramLabel} until=GrabStop value={pendingValue}");
+                        deferredLogged = true;
+                    }
+                    return Task.FromResult(true);
+                }
+
+                return FlushAsync();
+            }
+
+            debounce.Tick += async (s, e) => await FlushWhenAllowedAsync();
             void Schedule(int v)
             {
+                if (!hasPending)
+                    deferredLogged = false;
                 pendingValue = v;
                 hasPending = true;
+                settleAfterUtc = DateTime.UtcNow.AddMilliseconds(debounce.Interval);
+                if (!flushWorker.IsCompleted)
+                {
+                    FlowTrace.Log(
+                        $"parameter queue latest-wins scope=All " +
+                        $"param={paramLabel} value={v}");
+                }
                 debounce.Stop();
                 debounce.Start();
             }
@@ -334,9 +501,10 @@ namespace AniloxRoll.Monitor.Forms
             barAll.MouseUp += async (s, e) =>
             {
                 _dragging.Remove(barAll);
-                debounce.Stop();
-                hasPending = false;
-                await ApplyAsync(barAll.Value);
+                pendingValue = barAll.Value;
+                hasPending = true;
+                settleAfterUtc = DateTime.UtcNow;
+                await FlushWhenAllowedAsync();
             };
             barAll.ValueChanged += (s, e) => {
                 if (!_cameraParameterControlsReady || allSyncing || _syncingFromHw) return; allSyncing = true;
@@ -351,6 +519,13 @@ namespace AniloxRoll.Monitor.Forms
                 Schedule(v);
                 allSyncing = false;
             };
+
+            _pendingCameraParameterBindings.Add(new PendingCameraParameterBinding
+            {
+                IsTiming = IsTimingParameter(paramLabel),
+                HasPending = () => hasPending || !flushWorker.IsCompleted,
+                FlushAsync = FlushAsync
+            });
         }
 
         // ==================== 相機參數鎖（套用期間真正 disable，防空拉跳值）====================
@@ -367,20 +542,28 @@ namespace AniloxRoll.Monitor.Forms
                 || string.Equals(param, "ExpAll", StringComparison.Ordinal);
         }
 
+        private static bool IsTimingParameter(string param)
+        {
+            return string.Equals(param, "LineRate", StringComparison.Ordinal)
+                || string.Equals(param, "LineRateAll", StringComparison.Ordinal)
+                || string.Equals(param, "Height", StringComparison.Ordinal)
+                || string.Equals(param, "HeightAll", StringComparison.Ordinal);
+        }
+
         /// <summary>套用單一相機參數：記 log → 鎖控制項 → 非同步重配置 → cooldown 解鎖。</summary>
-        private async Task ApplyCamParamAsync(int camId, string param, int value, Action write)
+        private async Task<bool> ApplyCamParamAsync(int camId, string param, int value, Action write)
         {
             if (_liveCameraManager?.IsLiveGrabbing == true && !IsExposureParameter(param))
             {
                 FlowTrace.Log(
                     $"parameter change blocked scope=cam{camId} param={param} reason=GrabActive");
-                RefreshCameraParameterControlState(true);
-                return;
+                RefreshCameraParameterControlState();
+                return false;
             }
 
             FlowTrace.Log($"ui:【相機參數】cam{camId} {param}={value}");   // intent 帶參數名+值（單行自足）
             LogParamChange("cam", camId, param, value);
-            if (_liveCameraManager == null) { write?.Invoke(); return; }
+            if (_liveCameraManager == null) { write?.Invoke(); return true; }
             bool live = _liveCameraManager.IsLiveGrabbing;
             bool fastExposure = live && IsExposureParameter(param);
             if (live) { SetParamControlsLocked(true); _liveCameraManager.SetCaptureSuppressed(true); }
@@ -392,6 +575,10 @@ namespace AniloxRoll.Monitor.Forms
                 if (!applied)
                     FlowTrace.Log(
                         $"parameter ui apply failed scope=cam{camId} param={param} value={value}");
+                else
+                    FlowTrace.Log(
+                        $"parameter ui apply complete scope=cam{camId} param={param} value={value}");
+                return applied;
             }
             catch (Exception ex)
             {
@@ -400,6 +587,7 @@ namespace AniloxRoll.Monitor.Forms
                 FlowTrace.Log(
                     $"parameter ui apply failed scope=cam{camId} param={param} " +
                     $"value={value} error={ex.GetType().Name}");
+                return false;
             }
             finally
             {
@@ -416,19 +604,19 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         /// <summary>套用全部相機參數：記 log → 鎖控制項 → 同一代重配置 → cooldown 解鎖。</summary>
-        private async Task ApplyAllCamParamAsync(string param, int value, Action write)
+        private async Task<bool> ApplyAllCamParamAsync(string param, int value, Action write)
         {
             if (_liveCameraManager?.IsLiveGrabbing == true && !IsExposureParameter(param))
             {
                 FlowTrace.Log(
                     $"parameter change blocked scope=All param={param} reason=GrabActive");
-                RefreshCameraParameterControlState(true);
-                return;
+                RefreshCameraParameterControlState();
+                return false;
             }
 
             FlowTrace.Log($"ui:【相機參數】All {param}={value}");   // intent 帶參數名+值（單行自足；開機初始還原三連發亦經此=同值可辨識）
             LogParamChange("all", 0, param, value);
-            if (_liveCameraManager == null) { write?.Invoke(); return; }
+            if (_liveCameraManager == null) { write?.Invoke(); return true; }
             bool live = _liveCameraManager.IsLiveGrabbing;
             bool fastExposure = live && IsExposureParameter(param);
             if (live) { SetParamControlsLocked(true); _liveCameraManager.SetCaptureSuppressed(true); }
@@ -440,6 +628,10 @@ namespace AniloxRoll.Monitor.Forms
                 if (!applied)
                     FlowTrace.Log(
                         $"parameter ui apply failed scope=All param={param} value={value}");
+                else
+                    FlowTrace.Log(
+                        $"parameter ui apply complete scope=All param={param} value={value}");
+                return applied;
             }
             catch (Exception ex)
             {
@@ -448,6 +640,7 @@ namespace AniloxRoll.Monitor.Forms
                 FlowTrace.Log(
                     $"parameter ui apply failed scope=All param={param} " +
                     $"value={value} error={ex.GetType().Name}");
+                return false;
             }
             finally
             {
@@ -461,6 +654,94 @@ namespace AniloxRoll.Monitor.Forms
                     BeginParamUnlockPoll();
                 }
             }
+        }
+
+        private bool _timingParameterApplyInProgress;
+
+        private bool IsCameraTimingParameterBusy()
+        {
+            return _timingParameterApplyInProgress
+                || _pendingCameraParameterBindings.Any(
+                    binding => binding != null
+                        && binding.IsTiming
+                        && binding.HasPending?.Invoke() == true);
+        }
+
+        private void BeginFlushPendingCameraTimingParametersAfterGrab()
+        {
+            if (_timingParameterApplyInProgress) return;
+            if (!_pendingCameraParameterBindings.Any(
+                binding => binding != null
+                    && binding.IsTiming
+                    && binding.HasPending?.Invoke() == true))
+            {
+                return;
+            }
+
+            _ = FlushPendingCameraTimingParametersAfterGrabAsync();
+        }
+
+        private async Task FlushPendingCameraTimingParametersAfterGrabAsync()
+        {
+            _timingParameterApplyInProgress = true;
+            bool succeeded = true;
+            int appliedBindings = 0;
+            try
+            {
+                PendingCameraParameterBinding[] pending;
+                do
+                {
+                    pending = _pendingCameraParameterBindings
+                        .Where(binding => binding != null
+                            && binding.IsTiming
+                            && binding.HasPending?.Invoke() == true)
+                        .ToArray();
+                    if (pending.Length == 0) break;
+
+                    if (appliedBindings == 0)
+                    {
+                        FlowTrace.Log(
+                            $"parameter post-stop apply begin pending={pending.Length}");
+                    }
+
+                    foreach (PendingCameraParameterBinding binding in pending)
+                    {
+                        succeeded &= await binding.FlushAsync();
+                        appliedBindings++;
+                    }
+                }
+                while (pending.Length > 0);
+            }
+            catch (Exception ex)
+            {
+                succeeded = false;
+                Trace.TraceWarning(
+                    $"[PostStopParameterApply] {ex.GetType().Name}: {ex.Message}");
+            }
+            finally
+            {
+                FlowTrace.Log(
+                    $"parameter post-stop apply complete success={succeeded} " +
+                    $"bindings={appliedBindings}");
+                _timingParameterApplyInProgress = false;
+            }
+        }
+
+        private async Task<bool> FlushPendingCameraParametersBeforeGrabAsync()
+        {
+            PendingCameraParameterBinding[] pending = _pendingCameraParameterBindings
+                .Where(binding => binding?.HasPending?.Invoke() == true)
+                .ToArray();
+            if (pending.Length == 0) return true;
+
+            FlowTrace.Log($"parameter queue flush begin reason=GrabStart pending={pending.Length}");
+            bool succeeded = true;
+            foreach (PendingCameraParameterBinding binding in pending)
+                succeeded &= await binding.FlushAsync();
+
+            FlowTrace.Log(
+                $"parameter queue flush complete reason=GrabStart success={succeeded}");
+            return succeeded;
         }
 
         // ── 參數變更 log（diag：對齊 _ticks.csv 掉偵時間，定位掉偵 vs 改參數）──────────
@@ -485,7 +766,7 @@ namespace AniloxRoll.Monitor.Forms
             catch { }
         }
 
-        /// <summary>套用參數期間鎖住全部控制項；解鎖後仍遵守 Grab 中只開放曝光的產品規則。</summary>
+        /// <summary>啟動／曝光套用期間暫停控制項；線掃與高度在 Grab 中仍可編輯並延後套用。</summary>
         private void SetParamControlsLocked(bool locked)
         {
             _cameraParameterOperationLocked = locked;
@@ -493,14 +774,12 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         /// <summary>
-        /// 相機參數控制項唯一狀態計算點：停止時三種皆可改；Grab 中只有曝光可改。
+        /// 相機參數控制項唯一狀態計算點：三種參數皆可編輯；線掃與高度在 Grab 中只排隊。
         /// </summary>
-        private void RefreshCameraParameterControlState(bool? isGrabbingOverride = null)
+        private void RefreshCameraParameterControlState()
         {
-            bool isGrabbing = isGrabbingOverride
-                ?? (_liveCameraManager?.IsLiveGrabbing == true);
             bool exposureEnabled = !_cameraParameterOperationLocked;
-            bool timingEnabled = exposureEnabled && !isGrabbing;
+            bool timingEnabled = exposureEnabled;
 
             void SetArr(System.Windows.Forms.Control[] controls, bool enabled)
             {

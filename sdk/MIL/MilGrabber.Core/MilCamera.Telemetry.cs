@@ -26,9 +26,12 @@ namespace MilGrabber.Core
             if (!_clProtocolEnabled || _milDigitizer == MIL.M_NULL) return double.NaN;
             try
             {
-                double val = 0;
-                MIL.MdigInquireFeature(_milDigitizer, MIL.M_FEATURE_VALUE, "DeviceTemperature", MIL.M_TYPE_DOUBLE, ref val);
-                return val;
+                lock (_clProtocolFeatureLock)
+                {
+                    double val = 0;
+                    MIL.MdigInquireFeature(_milDigitizer, MIL.M_FEATURE_VALUE, "DeviceTemperature", MIL.M_TYPE_DOUBLE, ref val);
+                    return val;
+                }
             }
             catch { return double.NaN; }
         }

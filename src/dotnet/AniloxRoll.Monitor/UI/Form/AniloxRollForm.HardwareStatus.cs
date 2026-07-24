@@ -162,6 +162,13 @@ namespace AniloxRoll.Monitor.Forms
                 FlowTrace.Log("IO grab accepted busy=on state=already-grabbing");
                 return;
             }
+            if (IsCameraTimingParameterBusy())
+            {
+                FlowTrace.Log("io:DI START 上升緣 → 開始抓取");
+                await RejectIoGrabStartAsync(
+                    controller, generation, "timing-parameter-busy");
+                return;
+            }
             if (IsStandardBgSubEnabled && !IsBgBinReady())
             {
                 System.Diagnostics.Trace.TraceWarning("[IoStartGrab] StandardBgSub 無背景 bin，自動取得背景後接續 grab");

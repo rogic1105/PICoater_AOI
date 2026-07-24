@@ -87,13 +87,32 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// </summary>
         public void SetLineRateForCamera(int camId, double hz)
         {
-            if (IsLiveGrabbing)
+            if (IsLiveGrabbing && !_isParameterReconfiguring)
             {
                 FlowTrace.Log(
                     $"parameter change blocked scope=cam{camId} param=LineRate reason=GrabActive");
+                throw new InvalidOperationException("LineRate cannot change during an active Grab.");
+            }
+
+            var cam = FindCamera(camId);
+            if (cam == null)
+            {
+                FlowTrace.Log(
+                    $"parameter hardware deferred scope=cam{camId} param=LineRate requested={hz:F1} reason=Unavailable");
                 return;
             }
-            FindCamera(camId)?.SetLineRateHz(hz);
+
+            cam.SetLineRateHz(hz);
+            double measured = cam.IsConnected ? cam.GetLineRateHz() : 0;
+            double applied = measured > 0 ? measured : cam.AppliedLineRateHz;
+            double tolerance = Math.Max(5.0, hz * 0.02);
+            if (cam.IsConnected && measured > 0 && Math.Abs(measured - hz) > tolerance)
+                throw new InvalidOperationException(
+                    $"CAM{camId} LineRate mismatch: requested={hz:F1}, applied={measured:F1}.");
+
+            FlowTrace.Log(
+                $"parameter hardware applied scope=cam{camId} param=LineRate " +
+                $"requested={hz:F1} applied={applied:F1}");
         }
 
         /// <summary>
@@ -103,19 +122,41 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// </summary>
         public void SetGrabHeightForCamera(int camId, int height)
         {
-            if (IsLiveGrabbing)
+            if (IsLiveGrabbing && !_isParameterReconfiguring)
             {
                 FlowTrace.Log(
                     $"parameter change blocked scope=cam{camId} param=Height reason=GrabActive");
-                return;
+                throw new InvalidOperationException("Height cannot change during an active Grab.");
             }
             // grab 中拉大到 ~12062 會 stall → 一律 cap 在 MaxGrabHeightPx(12000) 以下（per-camera 固定，不分台數）。
             if (height > AcquisitionDefaults.MaxGrabHeightPx) height = AcquisitionDefaults.MaxGrabHeightPx;
             var cam = FindCamera(camId);
-            if (cam == null) return;
-            cam.PauseAcquisition();
-            try { cam.SetGrabHeight(height); }
-            finally { cam.ResumeAcquisition(); }
+            if (cam == null)
+            {
+                FlowTrace.Log(
+                    $"parameter hardware deferred scope=cam{camId} param=Height requested={height} reason=Unavailable");
+                return;
+            }
+
+            if (_isParameterReconfiguring)
+            {
+                cam.SetGrabHeight(height);
+            }
+            else
+            {
+                cam.PauseAcquisition();
+                try { cam.SetGrabHeight(height); }
+                finally { cam.ResumeAcquisition(); }
+            }
+
+            int applied = cam.FrameHeight;
+            if (cam.IsConnected && applied != height)
+                throw new InvalidOperationException(
+                    $"CAM{camId} Height mismatch: requested={height}, applied={applied}.");
+
+            FlowTrace.Log(
+                $"parameter hardware applied scope=cam{camId} param=Height " +
+                $"requested={height} applied={applied}");
         }
 
         /// <summary>
@@ -212,7 +253,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                     .Distinct()
                     .ToArray();
                 bool wasCapturing = IsLiveGrabbing;
-                if (!wasCapturing || targets.Length == 0)
+                bool acquisitionRunning = targets.Any(cam => cam.IsLive);
+                if (!acquisitionRunning || targets.Length == 0)
                 {
                     await Task.Run(write);
                     return true;
@@ -238,11 +280,12 @@ namespace AniloxRoll.Monitor.UI.Managers
                     },
                     () => ReapplyLineRatesForSynchronization(
                         "parameter:" + scope, targets),
-                    () => !IsLiveGrabbing || IsReleasing);
+                    () => IsReleasing || (wasCapturing && !IsLiveGrabbing),
+                    validateFramePeriod: true);
 
                 if (!sync.Succeeded)
                 {
-                    if (sync.Canceled || !IsLiveGrabbing || IsReleasing)
+                    if (sync.Canceled || (wasCapturing && !IsLiveGrabbing) || IsReleasing)
                     {
                         if (!IsReleasing)
                         {
@@ -269,6 +312,13 @@ namespace AniloxRoll.Monitor.UI.Managers
                     FlowTrace.Log(
                         $"parameter warm ready scope={scope} cam{sample.CameraId} " +
                         $"tick={sample.FrameStartTicks}");
+                }
+
+                if (!wasCapturing)
+                {
+                    FlowTrace.Log(
+                        $"parameter reconfigure complete scope={scope} gate=closed warm=True");
+                    return true;
                 }
 
                 // Stop/close may run while reconfiguration is awaiting a frame. Never reopen a
@@ -315,6 +365,26 @@ namespace AniloxRoll.Monitor.UI.Managers
             for (int i = 0; i < _cameras.Count; i++)
                 if (_cameras[i].CameraId == camId) return _cameras[i];
             return null;
+        }
+
+        /// <summary>
+        /// Returns the capture-time values owned by the camera/MIL layer. These values are used
+        /// for persisted inspection records so a rejected UI command cannot make CSV metadata lie.
+        /// </summary>
+        public bool TryGetAppliedCaptureParameters(
+            int camId, out int frameHeight, out double lineRateHz, out double exposureUs)
+        {
+            frameHeight = 0;
+            lineRateHz = 0;
+            exposureUs = 0;
+
+            AniloxCamera cam = FindCamera(camId);
+            if (cam == null) return false;
+
+            frameHeight = cam.FrameHeight;
+            lineRateHz = cam.AppliedLineRateHz;
+            exposureUs = cam.GetExposureUs();
+            return frameHeight > 0;
         }
 
         /// <summary>改參數窗口：暫停/恢復「全部相機」存檔（不影響 grab/檢測/顯示）。
@@ -381,4 +451,3 @@ namespace AniloxRoll.Monitor.UI.Managers
         }
     }
 }
-

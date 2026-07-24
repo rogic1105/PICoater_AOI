@@ -744,6 +744,220 @@ class ParameterFlowValidatorTests(unittest.TestCase):
             CheckStatus.PASS, result(report, "P1.live-policy").status
         )
 
+    def test_live_timing_parameter_is_deferred_without_hardware_write(self):
+        report = ParameterFlowValidator().validate(
+            session(
+                "capture gate open cams=2 warm=True",
+                "parameter queue deferred scope=All param=HeightAll until=GrabStop value=3000",
+                "StopGrab",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "P1.live-policy").status
+        )
+
+    def test_pending_all_parameter_is_applied_before_grab(self):
+        report = ParameterFlowValidator().validate(
+            session(
+                "parameter queue flush begin reason=GrabStart pending=1",
+                "ui:【相機參數】All ExpAll=300",
+                "parameter queue flush complete reason=GrabStart success=True",
+                "StartGrab（cams=2）",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "P1.queue-before-grab").status
+        )
+
+    def test_grab_overtaking_pending_parameter_fails(self):
+        report = ParameterFlowValidator().validate(
+            session(
+                "parameter queue flush begin reason=GrabStart pending=1",
+                "StartGrab（cams=2）",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "P1.queue-before-grab").status
+        )
+
+    def test_blocked_write_after_intent_fails_applied_truth(self):
+        report = ParameterFlowValidator().validate(
+            session(
+                "ui:【相機參數】All LineRateAll=3000",
+                "parameter change blocked scope=cam1 param=LineRate reason=GrabActive",
+                "parameter reconfigure applied scope=All",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "P1.applied-truth").status
+        )
+
+    def test_hardware_mismatch_fails_applied_truth(self):
+        report = ParameterFlowValidator().validate(
+            session(
+                "ui:【相機參數】cam2 Height=3000",
+                "parameter hardware applied scope=cam2 param=Height requested=3000 applied=6000",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "P1.applied-truth").status
+        )
+
+    def test_line_rate_hardware_rounding_within_tolerance_passes(self):
+        report = ParameterFlowValidator().validate(
+            session(
+                "ui:【相機參數】cam2 LineRate=6000",
+                "parameter hardware applied scope=cam2 param=LineRate requested=6000 applied=6002",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "P1.applied-truth").status
+        )
+
+    def test_interleaved_parameter_intents_match_their_later_hardware_values(self):
+        report = ParameterFlowValidator().validate(
+            session(
+                "ui:【相機參數】All LineRateAll=6000",
+                "ui:【相機參數】All HeightAll=3000",
+                "parameter hardware applied scope=cam1 param=LineRate requested=6000 applied=6002",
+                "parameter hardware applied scope=cam1 param=Height requested=3000 applied=3000",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "P1.applied-truth").status
+        )
+
+    def test_live_timing_parameter_applies_after_stop(self):
+        report = ParameterFlowValidator().validate(
+            session(
+                "capture gate open cams=2 warm=True",
+                "parameter queue deferred scope=All param=HeightAll until=GrabStop value=3000",
+                "StopGrab",
+                "parameter post-stop apply begin pending=1",
+                "ui:【相機參數】All HeightAll=3000",
+                "parameter reconfigure begin scope=All gate=closed targets=1",
+                "parameter hardware applied scope=cam1 param=Height requested=3000 applied=3000",
+                "acquisition sync rate reason=parameter:All attempt=1 cam1 expectedMs=500.000 actualMs=500.000 toleranceMs=100.000 aligned=True",
+                "parameter reconfigure complete scope=All gate=closed warm=True",
+                "parameter ui apply complete scope=All param=HeightAll value=3000",
+                "parameter post-stop apply complete success=True bindings=1",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "P1.deferred-timing").status
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "P1.frame-period").status
+        )
+
+    def test_post_stop_timing_without_hardware_period_fails(self):
+        report = ParameterFlowValidator().validate(
+            session(
+                "parameter post-stop apply begin pending=1",
+                "parameter reconfigure begin scope=All gate=closed targets=2",
+                "parameter reconfigure complete scope=All gate=closed warm=True",
+                "parameter post-stop apply complete success=True bindings=1",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "P1.frame-period").status
+        )
+
+    def test_post_stop_timing_half_speed_camera_fails(self):
+        report = ParameterFlowValidator().validate(
+            session(
+                "parameter post-stop apply begin pending=1",
+                "parameter reconfigure begin scope=All gate=closed targets=2",
+                "acquisition sync rate reason=parameter:All attempt=1 cam1 expectedMs=1000.000 actualMs=2000.000 toleranceMs=200.000 aligned=False",
+                "acquisition sync rate reason=parameter:All attempt=1 cam2 expectedMs=1000.000 actualMs=1000.000 toleranceMs=200.000 aligned=True",
+                "parameter reconfigure complete scope=All gate=closed warm=True",
+                "parameter post-stop apply complete success=True bindings=1",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "P1.frame-period").status
+        )
+
+    def test_start_grab_cannot_overtake_post_stop_parameter_apply(self):
+        report = ParameterFlowValidator().validate(
+            session(
+                "parameter queue deferred scope=All param=HeightAll until=GrabStop value=3000",
+                "StopGrab",
+                "parameter post-stop apply begin pending=1",
+                "StartGrab cams=2",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "P1.deferred-timing").status
+        )
+
+    def test_io_high_is_rejected_during_post_stop_parameter_apply(self):
+        report = ParameterFlowValidator().validate(
+            session(
+                "parameter post-stop apply begin pending=1",
+                "io:DI START 上升緣 → 開始抓取",
+                "IO grab rejected busy=off reason=timing-parameter-busy",
+                "parameter post-stop apply complete success=True bindings=1",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "P1.deferred-timing").status
+        )
+
+    def test_io_high_without_busy_rejection_fails_deferred_timing(self):
+        report = ParameterFlowValidator().validate(
+            session(
+                "parameter post-stop apply begin pending=1",
+                "io:DI START 上升緣 → 開始抓取",
+                "parameter post-stop apply complete success=True bindings=1",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "P1.deferred-timing").status
+        )
+
+    def test_timing_parameter_during_start_transition_fails(self):
+        report = ParameterFlowValidator().validate(
+            session(
+                "acquisition sync begin reason=start attempt=1 gate=closed cams=2",
+                "ui:【相機參數】All HeightAll=3000",
+                "StartGrab cams=2",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "P1.start-transition").status
+        )
+
+    def test_start_transition_lock_without_timing_input_passes(self):
+        report = ParameterFlowValidator().validate(
+            session(
+                "parameter controls lock reason=GrabStart state=on",
+                "StartGrab cams=2",
+                "parameter controls lock reason=GrabStart state=off",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "P1.start-transition").status
+        )
+
+    def test_pending_parameter_flush_before_start_sync_is_allowed(self):
+        report = ParameterFlowValidator().validate(
+            session(
+                "parameter controls lock reason=GrabStart state=on",
+                "parameter queue flush begin reason=GrabStart pending=1",
+                "ui:【相機參數】All HeightAll=3000",
+                "parameter hardware applied scope=cam1 param=Height requested=3000 applied=3000",
+                "parameter ui apply complete scope=All param=HeightAll value=3000",
+                "parameter queue flush complete reason=GrabStart success=True",
+                "acquisition sync begin reason=start attempt=1 gate=closed cams=2",
+                "StartGrab cams=2",
+                "parameter controls lock reason=GrabStart state=off",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "P1.start-transition").status
+        )
+
     def test_registry_has_no_pending_domains(self):
         self.assertEqual((), PENDING_DOMAINS)
 

@@ -58,8 +58,30 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             // 啟動路徑：先亮燈 → 等光源穩定 → 再開始 grab
+            bool lockParametersForStart = false;
             if (!wasGrabbing)
             {
+                if (IsCameraTimingParameterBusy())
+                {
+                    FlowTrace.Log("Grab start rejected reason=TimingParameterBusy");
+                    return false;
+                }
+
+                lockParametersForStart = true;
+                SetParamControlsLocked(true);
+                FlowTrace.Log("parameter controls lock reason=GrabStart state=on");
+            }
+
+            try
+            {
+                if (!wasGrabbing)
+                {
+                    if (!await FlushPendingCameraParametersBeforeGrabAsync())
+                    {
+                        FlowTrace.Log("Grab start rejected reason=PendingParameterApplyFailed");
+                        return false;
+                    }
+
                 await Task.Run(() => LightTurnOn());   // 序列埠寫入 ~百 ms，不佔 UI（順序仍保證：燈亮→暖機→grab）
                 int warmup = _settings?.LightWarmupMs ?? 0;
                 if (warmup > 0) await Task.Delay(warmup);
@@ -153,10 +175,20 @@ namespace AniloxRoll.Monitor.Forms
                 // 硬體 DO 閂鎖也要清：手動 grab 不經 FSM，不清則 DO_MURA 永遠掛著（Nakan 誤報 +
                 // IO 暫停→恢復後 snapshot 讀回殘留 latch、燈「自己亮」——2026-07-07 盲測輪3抓到）。
                 _ = _ioGrabController?.ClearMura();
+                BeginFlushPendingCameraTimingParametersAfterGrab();
             }
 
-            UpdateGrabButton(_liveCameraManager.IsLiveGrabbing);
-            return wasGrabbing != _liveCameraManager.IsLiveGrabbing;
+                UpdateGrabButton(_liveCameraManager.IsLiveGrabbing);
+                return wasGrabbing != _liveCameraManager.IsLiveGrabbing;
+            }
+            finally
+            {
+                if (lockParametersForStart)
+                {
+                    SetParamControlsLocked(false);
+                    FlowTrace.Log("parameter controls lock reason=GrabStart state=off");
+                }
+            }
         }
 
         /// <summary>倒數執行緒只送 intent；實際停止回 UI 後走共用命令，保留燈號、retention、MURA 與 IO 收尾。</summary>
@@ -187,6 +219,12 @@ namespace AniloxRoll.Monitor.Forms
             int idx = camId - 1;
             if (_inspectionLogService != null)
             {
+                int actualHeight = 0;
+                double actualLineRate = 0;
+                double actualExposure = 0;
+                bool hasAppliedParameters = _liveCameraManager.TryGetAppliedCaptureParameters(
+                    camId, out actualHeight, out actualLineRate, out actualExposure);
+
                 // OnCameraInspectionResult 的 meanPeak/maxPeak 為 V 方向（pipeline 主處理方向），用 V 閾值記錄
                 _inspectionLogService.AppendRecord(
                     _currentGrabId,
@@ -198,11 +236,17 @@ namespace AniloxRoll.Monitor.Forms
                     maxRPeak,
                     _settings.ErrorValueMeanV,
                     _settings.ErrorValueMaxV,
-                    idx >= 0 && idx < _settings.Acquisition.CameraGrabHeight.Length
+                    hasAppliedParameters
+                        ? actualHeight
+                        : idx >= 0 && idx < _settings.Acquisition.CameraGrabHeight.Length
                         ? _settings.Acquisition.CameraGrabHeight[idx] : 0,
-                    idx >= 0 && idx < _settings.Acquisition.CameraLineRateHz.Length
+                    hasAppliedParameters
+                        ? actualLineRate
+                        : idx >= 0 && idx < _settings.Acquisition.CameraLineRateHz.Length
                         ? _settings.Acquisition.CameraLineRateHz[idx] : 0,
-                    idx >= 0 && idx < _settings.Acquisition.CameraExposureTimeUs.Length
+                    hasAppliedParameters
+                        ? actualExposure
+                        : idx >= 0 && idx < _settings.Acquisition.CameraExposureTimeUs.Length
                         ? _settings.Acquisition.CameraExposureTimeUs[idx] : 0,
                     CsvConfigSnapshot.FromSettings(_settings));
 
@@ -661,7 +705,7 @@ namespace AniloxRoll.Monitor.Forms
             // 抓取中：凍結取得背景/預覽背景；停止後解鎖
             btnLiveGetBackground.Enabled = !isGrabbing;
             btnLiveViewBackground.Enabled = !isGrabbing;
-            RefreshCameraParameterControlState(isGrabbing);
+            RefreshCameraParameterControlState();
             if (!isGrabbing)
             {
                 UpdateStandardBgSubLockState(); // 停止後依 bin 狀態重新檢查

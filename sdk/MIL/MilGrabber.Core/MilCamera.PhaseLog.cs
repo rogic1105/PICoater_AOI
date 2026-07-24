@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using Matrox.MatroxImagingLibrary;
 
 namespace MilGrabber.Core
@@ -17,9 +18,18 @@ namespace MilGrabber.Core
         private long _phaseSeq;               // 本相機 hook 幀序（跨相機對齊用：tick 就近配對）
 
         /// <summary>最後一幀 frame-start 硬體時戳（Data Latch ticks）；0＝尚未取得 / latch 未啟用。</summary>
-        public long LastFrameStartTicks => _lastFrameStartTicks;
+        private volatile bool _observeFramePeriod;
+
+        public long LastFrameStartTicks => Interlocked.Read(ref _lastFrameStartTicks);
+        public long FrameStartSequence => Interlocked.Read(ref _phaseSeq);
         /// <summary>Data Latch 時鐘頻率（Hz）；ticks / 此值 = 秒。</summary>
         public long DataLatchClockFreqHz => _dataLatchClockFreqHz;
+
+        /// <summary>Temporarily keeps frame-start latches current while hot standby is idle.</summary>
+        public void SetFramePeriodObservationEnabled(bool enabled)
+        {
+            _observeFramePeriod = enabled;
+        }
 
         /// <summary>相位 log 檔路徑（static，多相機共寫）。設了就每幀 append；null＝不記。診斷用。
         /// 欄位：wallclock,cam,seq,ticks,freqHz（離線：tick 就近配對相減 /freq = 相位秒，×線掃率 = 差幾條線）。</summary>
@@ -62,8 +72,8 @@ namespace MilGrabber.Core
                     MIL_INT v = 0;
                     MIL.MdigGetHookInfo(eventId, MIL.M_DATA_LATCH_VALUE + latchIndex, ref v);   // pop 最舊一筆
                     long ticks = (long)v;
-                    _lastFrameStartTicks = ticks;
-                    long seq = ++_phaseSeq;
+                    Interlocked.Exchange(ref _lastFrameStartTicks, ticks);
+                    long seq = Interlocked.Increment(ref _phaseSeq);
                     if (path != null)
                     {
                         string line = $"{DateTime.Now:HH:mm:ss.fff},{CameraId},{seq},{ticks},{_dataLatchClockFreqHz}\r\n";

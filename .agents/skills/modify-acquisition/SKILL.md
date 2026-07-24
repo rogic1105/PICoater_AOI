@@ -151,9 +151,17 @@ capture gate=false → Parallel PauseAcquisition
 - `paramchange-yyyyMMdd_HHmmss.csv`：每次改參數 time,scope,cam,param,value（`AniloxRollForm.ParamChangeLogPath`）→ 對齊 `_ticks.csv` 看掉偵 vs 改參數。
 - 結論：**穩態 0 掉偵；掉偵 100% 來自改參數的重啟空檔**。
 
-## Grab 中改曝光（不中斷快速套用 + 參數鎖）
+## Grab 中調參政策（曝光即時；線掃／高度延後）
 
-- **產品規則：Grab 中只有曝光可調**。線掃速度與擷取高度只能在停止 Grab 後修改；UI 的單台／All 控制項停用，Form command 與 `LiveCameraManager` setter 都要守門，禁止只靠 UI 防護。
+- **三種控制項在 Grab 中皆可編輯**。曝光立即走快速套用；線掃速度與擷取高度只寫入 latest-wins pending，StopGrab 關 gate 後才由 post-stop flush 實際重配。套用期間的 IO High 必須拒絕並跳過該輪 Grab；Form command 與 `LiveCameraManager` setter 仍要拒絕 Grab 中直接寫硬體，禁止只靠 UI 防護。
+- **參數命令成功不等於相機真的改速**：停止後 LineRate／Height 重配必須保持 hot standby，並以
+  Data Latch 連續 frame-start 量每台實際幀週期（`FrameHeight / AppliedLineRateHz`，容差
+  `max(100ms, 20%)`）。不符就由同一同步流程 pause／重套 Line Rate／resume，最多 3 次；仍不符時
+  gate 維持 closed、參數套用回報失敗，禁止帶著半速相機進入下一輪 Grab。
+- **CLProtocol feature 呼叫全域序列化**：Exposure、AcquisitionLineRate 與 DeviceTemperature 的
+  `MdigControlFeature`／`MdigInquireFeature` 共用 process-wide lock；同張卡的不同 digitizer 仍共享
+  driver 內部序列，故 telemetry 不得與任何相機的參數寫入重疊。readback 與
+  `_appliedLineRateHz` cache 只能描述命令值，不能取代實際幀週期驗證。
 - **`LiveCameraManager.ApplyExposureFastAsync` 是 Grab 中曝光的唯一調參路徑**：曝光只改 integration time，不改 Line Rate、幀高或資料節奏，因此只在 `_allocationGate` 內背景寫硬體；不關 capture gate、不 pause/resume、不重套 Line Rate、不清顯示世代。
 - **UI settle**：曝光 TrackBar／NumericUpDown 以 200ms debounce 合併輸入；拖曳放開立即套用。實際寫入期間曝光控制項鎖住，完成後立即解鎖，不再等待幀週期 cooldown。
 - **`SetCaptureSuppressed` 只保護存檔**：硬體寫曝光期間暫停落盤，GPU／Curve／主畫面仍持續。若同時 StopGrab，Stop 的 gate=false 優先，terminal log 必須記實際 gate 狀態。

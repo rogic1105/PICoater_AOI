@@ -35,7 +35,10 @@ namespace MilGrabber.Core
 
             System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}][Exposure] 寫 {exposureUs}μs（CLProtocol={_clProtocolEnabled}）");
             if (_clProtocolEnabled)
-                MIL.MdigControlFeature(_milDigitizer, MIL.M_FEATURE_VALUE, "ExposureTime", MIL.M_TYPE_DOUBLE, ref exposureUs);
+            {
+                lock (_clProtocolFeatureLock)
+                    MIL.MdigControlFeature(_milDigitizer, MIL.M_FEATURE_VALUE, "ExposureTime", MIL.M_TYPE_DOUBLE, ref exposureUs);
+            }
             else
                 MIL.MdigControl(_milDigitizer, MIL.M_EXPOSURE_TIME, exposureUs * 1000.0);
         }
@@ -49,9 +52,12 @@ namespace MilGrabber.Core
             if (_milDigitizer == MIL.M_NULL) return 0;
             if (_clProtocolEnabled)
             {
-                double valUs = 0;
-                MIL.MdigInquireFeature(_milDigitizer, MIL.M_FEATURE_VALUE, "ExposureTime", MIL.M_TYPE_DOUBLE, ref valUs);
-                return valUs;
+                lock (_clProtocolFeatureLock)
+                {
+                    double valUs = 0;
+                    MIL.MdigInquireFeature(_milDigitizer, MIL.M_FEATURE_VALUE, "ExposureTime", MIL.M_TYPE_DOUBLE, ref valUs);
+                    return valUs;
+                }
             }
             return 0;
         }
@@ -67,9 +73,12 @@ namespace MilGrabber.Core
             if (!_clProtocolEnabled || _milDigitizer == MIL.M_NULL) return 0;
             try
             {
-                double val = 0;
-                MIL.MdigInquireFeature(_milDigitizer, MIL.M_FEATURE_VALUE, "AcquisitionLineRate", MIL.M_TYPE_DOUBLE, ref val);
-                return val;
+                lock (_clProtocolFeatureLock)
+                {
+                    double val = 0;
+                    MIL.MdigInquireFeature(_milDigitizer, MIL.M_FEATURE_VALUE, "AcquisitionLineRate", MIL.M_TYPE_DOUBLE, ref val);
+                    return val;
+                }
             }
             catch { return 0; }
         }
@@ -80,9 +89,12 @@ namespace MilGrabber.Core
             if (!_clProtocolEnabled || _milDigitizer == MIL.M_NULL) return 0;
             try
             {
-                double max = 0;
-                MIL.MdigInquireFeature(_milDigitizer, MIL.M_FEATURE_MAX, "AcquisitionLineRate", MIL.M_TYPE_DOUBLE, ref max);
-                return max;
+                lock (_clProtocolFeatureLock)
+                {
+                    double max = 0;
+                    MIL.MdigInquireFeature(_milDigitizer, MIL.M_FEATURE_MAX, "AcquisitionLineRate", MIL.M_TYPE_DOUBLE, ref max);
+                    return max;
+                }
             }
             catch { return 0; }
         }
@@ -102,7 +114,8 @@ namespace MilGrabber.Core
             {
                 // 診斷：頻率(線掃速率)變更。skill 記「會 stall 的最大宗＝改線掃」→ stall 時對 dropdiag 看是改哪台/哪頻率後卡。
                 System.Diagnostics.Trace.WriteLine($"[CAM{CameraId}][LineRate] 寫 AcquisitionLineRate {prev}->{hz}Hz");
-                MIL.MdigControlFeature(_milDigitizer, MIL.M_FEATURE_VALUE, "AcquisitionLineRate", MIL.M_TYPE_DOUBLE, ref hz);
+                lock (_clProtocolFeatureLock)
+                    MIL.MdigControlFeature(_milDigitizer, MIL.M_FEATURE_VALUE, "AcquisitionLineRate", MIL.M_TYPE_DOUBLE, ref hz);
             }
             catch (Exception ex)
             {

@@ -16,6 +16,9 @@ namespace MilGrabber.Core
         // 同一張卡的多個 digitizer 並行呼叫 M_GC_CLPROTOCOL,M_ENABLE 會搶 MIL 內部鎖導致失敗，
         // 以 static lock 序列化，確保每台相機依序完成初始化。
         private static readonly object _clProtocolInitLock = new object();
+        // Feature transactions share board/driver internals across digitizers. Serialize them
+        // process-wide so telemetry on one camera cannot overlap a parameter write on another.
+        private static readonly object _clProtocolFeatureLock = new object();
 
         // ==================== MIL Resources ====================
         private MIL_ID _ownerSystemId = MIL.M_NULL;
@@ -358,7 +361,7 @@ namespace MilGrabber.Core
             cam._milLastGrabBuffer = modifiedBuffer;
             // Idle standby only needs one observed frame to prove readiness. During product grab,
             // continue reading every latch for alignment diagnostics and display timestamps.
-            if (!cam._hasObservedFrameSinceAcquisitionStart || cam._userWantsGrab)
+            if (!cam._hasObservedFrameSinceAcquisitionStart || cam._userWantsGrab || cam._observeFramePeriod)
                 cam.CaptureFrameStartLatch(eventId);
             cam._hasObservedFrameSinceAcquisitionStart = true;
 

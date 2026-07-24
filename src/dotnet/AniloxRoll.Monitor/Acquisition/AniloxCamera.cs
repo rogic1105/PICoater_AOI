@@ -32,7 +32,10 @@ namespace AniloxRoll.Monitor.Core.Camera
         public bool UserWantsGrab => _mil.UserWantsGrab;
         public bool IsAcquisitionWarm => _mil.HasObservedFrameSinceAcquisitionStart;
         public long LastFrameStartTicks => _mil.LastFrameStartTicks;
+        public long FrameStartSequence => _mil.FrameStartSequence;
         public long DataLatchClockFreqHz => _mil.DataLatchClockFreqHz;
+        public void SetFramePeriodObservationEnabled(bool enabled) =>
+            _mil.SetFramePeriodObservationEnabled(enabled);
         /// <summary>CLProtocol 初始化（含參數重套）已完成，可安全從硬體讀回參數。</summary>
         public bool IsHwParamsStable => _mil.IsHwParamsStable;
         public bool IsClProtocolEnabled => _mil.IsClProtocolEnabled;

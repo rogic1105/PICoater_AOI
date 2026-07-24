@@ -405,7 +405,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                         targets,
                         null,
                         () => ReapplyLineRatesForSynchronization("start", targets),
-                        () => IsReleasing);
+                        () => IsReleasing,
+                        validateFramePeriod: false);
                 }
                 finally
                 {

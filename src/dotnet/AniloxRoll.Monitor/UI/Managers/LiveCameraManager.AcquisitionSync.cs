@@ -21,6 +21,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             public int CameraId;
             public int SystemNum;
             public long FrameStartTicks;
+            public long FrameStartSequence;
             public long ClockFrequencyHz;
         }
 
@@ -38,100 +39,123 @@ namespace AniloxRoll.Monitor.UI.Managers
             AniloxCamera[] targets,
             Action applyWhilePaused,
             Action resetTimingWhilePaused,
-            Func<bool> cancellationRequested)
+            Func<bool> cancellationRequested,
+            bool validateFramePeriod)
         {
             var result = new AcquisitionSyncResult();
             bool actionApplied = applyWhilePaused == null;
 
-            for (int attempt = 1; attempt <= CaptureSynchronizationMaxAttempts; attempt++)
+            if (validateFramePeriod)
             {
-                if (cancellationRequested != null && cancellationRequested())
+                foreach (AniloxCamera cam in targets)
+                    cam.SetFramePeriodObservationEnabled(true);
+            }
+
+            try
+            {
+                for (int attempt = 1; attempt <= CaptureSynchronizationMaxAttempts; attempt++)
                 {
-                    result.Canceled = true;
-                    result.Error = "Canceled";
-                    return result;
-                }
-
-                FlowTrace.Log(
-                    $"acquisition sync begin reason={reason} attempt={attempt} " +
-                    $"gate=closed cams={targets.Length}");
-
-                Exception failure = null;
-                try
-                {
-                    await Task.Run(() =>
-                        System.Threading.Tasks.Parallel.ForEach(
-                            targets, cam => cam.PauseAcquisition()));
-                    FlowTrace.Log(
-                        $"acquisition sync paused reason={reason} attempt={attempt} " +
-                        $"cams={targets.Length}");
-
-                    if (!actionApplied)
+                    if (cancellationRequested != null && cancellationRequested())
                     {
-                        await Task.Run(applyWhilePaused);
-                        actionApplied = true;
+                        result.Canceled = true;
+                        result.Error = "Canceled";
+                        return result;
                     }
-                    if (resetTimingWhilePaused != null)
-                        await Task.Run(resetTimingWhilePaused);
-                }
-                catch (Exception ex)
-                {
-                    failure = ex;
-                }
-                finally
-                {
+
+                    FlowTrace.Log(
+                        $"acquisition sync begin reason={reason} attempt={attempt} " +
+                        $"gate=closed cams={targets.Length}");
+
+                    Exception failure = null;
                     try
                     {
-                        // M_START is intentionally issued back-to-back from one worker. The
-                        // measured first hardware ticks, not a fixed delay, decide readiness.
                         await Task.Run(() =>
+                            System.Threading.Tasks.Parallel.ForEach(
+                                targets, cam => cam.PauseAcquisition()));
+                        FlowTrace.Log(
+                            $"acquisition sync paused reason={reason} attempt={attempt} " +
+                            $"cams={targets.Length}");
+
+                        if (!actionApplied)
                         {
-                            foreach (var cam in targets)
-                                cam.ResumeAcquisition();
-                        });
+                            await Task.Run(applyWhilePaused);
+                            actionApplied = true;
+                        }
+                        if (resetTimingWhilePaused != null)
+                            await Task.Run(resetTimingWhilePaused);
                     }
                     catch (Exception ex)
                     {
-                        if (failure == null) failure = ex;
+                        failure = ex;
                     }
-                }
+                    finally
+                    {
+                        try
+                        {
+                            // M_START is intentionally issued back-to-back from one worker. The
+                            // measured first hardware ticks, not a fixed delay, decide readiness.
+                            await Task.Run(() =>
+                            {
+                                foreach (var cam in targets)
+                                    cam.ResumeAcquisition();
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            if (failure == null) failure = ex;
+                        }
+                    }
 
-                if (failure != null)
-                {
-                    result.Error = failure.GetType().Name;
+                    if (failure != null)
+                    {
+                        result.Error = failure.GetType().Name;
+                        FlowTrace.Log(
+                            $"acquisition sync failed reason={reason} attempt={attempt} " +
+                            $"gate=closed error={result.Error}");
+                        return result;
+                    }
+
                     FlowTrace.Log(
-                        $"acquisition sync failed reason={reason} attempt={attempt} " +
-                        $"gate=closed error={result.Error}");
-                    return result;
-                }
+                        $"acquisition sync resumed reason={reason} attempt={attempt} " +
+                        $"cams={targets.Length}");
 
-                FlowTrace.Log(
-                    $"acquisition sync resumed reason={reason} attempt={attempt} " +
-                    $"cams={targets.Length}");
+                    AcquisitionSyncResult warm = await WaitForAcquisitionWarmAsync(
+                        reason, attempt, targets, cancellationRequested);
+                    if (!warm.Succeeded)
+                        return warm;
 
-                AcquisitionSyncResult warm = await WaitForAcquisitionWarmAsync(
-                    reason, attempt, targets, cancellationRequested);
-                if (!warm.Succeeded)
-                    return warm;
+                    result.Samples = warm.Samples;
+                    bool framePeriodAligned = !validateFramePeriod ||
+                        await WaitAndValidateFramePeriodsAsync(
+                            reason, attempt, targets, warm.Samples, cancellationRequested);
+                    bool phaseAligned = LogAndValidateCapturePhase(
+                        reason, attempt, warm.Samples);
+                    if (framePeriodAligned && phaseAligned)
+                    {
+                        result.Succeeded = true;
+                        result.Error = null;
+                        FlowTrace.Log(
+                            $"acquisition sync complete reason={reason} attempts={attempt} " +
+                            $"cams={targets.Length} phase=True");
+                        return result;
+                    }
 
-                result.Samples = warm.Samples;
-                if (LogAndValidateCapturePhase(reason, attempt, warm.Samples))
-                {
-                    result.Succeeded = true;
-                    result.Error = null;
                     FlowTrace.Log(
-                        $"acquisition sync complete reason={reason} attempts={attempt} " +
-                        $"cams={targets.Length} phase=True");
-                    return result;
+                        $"acquisition sync retry reason={reason} attempt={attempt} " +
+                        $"error={(framePeriodAligned ? "PhaseOutOfRange" : "FramePeriodOutOfRange")}");
                 }
 
-                FlowTrace.Log(
-                    $"acquisition sync retry reason={reason} attempt={attempt} " +
-                    $"error=PhaseOutOfRange");
+                result.Error = "SynchronizationOutOfRange";
+                return result;
             }
-
-            result.Error = "PhaseOutOfRange";
-            return result;
+            finally
+            {
+                if (validateFramePeriod)
+                {
+                    foreach (AniloxCamera cam in targets)
+                        cam.SetFramePeriodObservationEnabled(false);
+                }
+            }
         }
 
         private async Task<AcquisitionSyncResult> WaitForAcquisitionWarmAsync(
@@ -169,6 +193,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                         CameraId = cam.CameraId,
                         SystemNum = GetCameraSystemNum(cam.CameraId),
                         FrameStartTicks = cam.LastFrameStartTicks,
+                        FrameStartSequence = cam.FrameStartSequence,
                         ClockFrequencyHz = cam.DataLatchClockFreqHz
                     };
                     result.Samples.Add(sample);
@@ -192,6 +217,78 @@ namespace AniloxRoll.Monitor.UI.Managers
                 $"acquisition sync timeout reason={reason} attempt={attempt} " +
                 $"pending={string.Join(",", pending)} limitMs={timeoutMs}");
             return result;
+        }
+
+        private async Task<bool> WaitAndValidateFramePeriodsAsync(
+            string reason,
+            int attempt,
+            IList<AniloxCamera> targets,
+            IList<AcquisitionWarmSample> samples,
+            Func<bool> cancellationRequested)
+        {
+            var sampleByCamera = samples.ToDictionary(sample => sample.CameraId);
+            var pending = new HashSet<int>(sampleByCamera.Keys);
+            int maxExpectedMs = targets
+                .Select(cam => (int)Math.Ceiling(
+                    AcquisitionFramePeriodPolicy.ExpectedMs(
+                        cam.FrameHeight, cam.AppliedLineRateHz)))
+                .DefaultIfEmpty(0)
+                .Max();
+            int timeoutMs = Math.Max(5000, Math.Min(60000, maxExpectedMs * 4 + 2000));
+            bool allAligned = true;
+            var stopwatch = Stopwatch.StartNew();
+
+            while (pending.Count > 0 && stopwatch.ElapsedMilliseconds <= timeoutMs)
+            {
+                if (IsReleasing ||
+                    (cancellationRequested != null && cancellationRequested()))
+                {
+                    return false;
+                }
+
+                foreach (AniloxCamera cam in targets)
+                {
+                    if (!pending.Contains(cam.CameraId)) continue;
+
+                    AcquisitionWarmSample first = sampleByCamera[cam.CameraId];
+                    long sequence = cam.FrameStartSequence;
+                    if (sequence <= first.FrameStartSequence) continue;
+
+                    double expectedMs;
+                    double actualMs;
+                    double toleranceMs;
+                    bool aligned = AcquisitionFramePeriodPolicy.IsWithinTolerance(
+                        cam.FrameHeight,
+                        cam.AppliedLineRateHz,
+                        first.FrameStartTicks,
+                        cam.LastFrameStartTicks,
+                        sequence - first.FrameStartSequence,
+                        first.ClockFrequencyHz,
+                        out expectedMs,
+                        out actualMs,
+                        out toleranceMs);
+                    allAligned &= aligned;
+                    pending.Remove(cam.CameraId);
+
+                    FlowTrace.Log(
+                        $"acquisition sync rate reason={reason} attempt={attempt} " +
+                        $"cam{cam.CameraId} expectedMs={expectedMs:F3} " +
+                        $"actualMs={actualMs:F3} toleranceMs={toleranceMs:F3} " +
+                        $"aligned={aligned}");
+                }
+
+                if (pending.Count > 0)
+                    await Task.Delay(20);
+            }
+
+            if (pending.Count > 0)
+            {
+                FlowTrace.Log(
+                    $"acquisition sync rate timeout reason={reason} attempt={attempt} " +
+                    $"pending={string.Join(",", pending)} limitMs={timeoutMs}");
+                return false;
+            }
+            return allAligned;
         }
 
         private bool LogAndValidateCapturePhase(
@@ -257,6 +354,39 @@ namespace AniloxRoll.Monitor.UI.Managers
             FlowTrace.Log(
                 $"acquisition sync timing-reset reason={reason} " +
                 $"lineRates={string.Join(",", applied)}");
+        }
+    }
+
+    internal static class AcquisitionFramePeriodPolicy
+    {
+        private const double RelativeTolerance = 0.20;
+        private const double MinimumToleranceMs = 100.0;
+
+        public static double ExpectedMs(int frameHeight, double lineRateHz)
+        {
+            return frameHeight > 0 && lineRateHz > 0
+                ? frameHeight * 1000.0 / lineRateHz
+                : 0.0;
+        }
+
+        public static bool IsWithinTolerance(
+            int frameHeight,
+            double lineRateHz,
+            long firstTicks,
+            long lastTicks,
+            long frameCount,
+            long clockFrequencyHz,
+            out double expectedMs,
+            out double actualMs,
+            out double toleranceMs)
+        {
+            expectedMs = ExpectedMs(frameHeight, lineRateHz);
+            actualMs = frameCount > 0 && clockFrequencyHz > 0 && lastTicks > firstTicks
+                ? (lastTicks - firstTicks) * 1000.0 / clockFrequencyHz / frameCount
+                : 0.0;
+            toleranceMs = Math.Max(MinimumToleranceMs, expectedMs * RelativeTolerance);
+            return expectedMs > 0 && actualMs > 0 &&
+                Math.Abs(actualMs - expectedMs) <= toleranceMs;
         }
     }
 }
