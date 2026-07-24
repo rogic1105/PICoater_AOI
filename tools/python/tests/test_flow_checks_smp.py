@@ -213,6 +213,37 @@ class SettingsFlowValidatorTests(unittest.TestCase):
 
 
 class ReviewFlowValidatorTests(unittest.TestCase):
+    def test_reload_latest_compares_against_current_root_listing(self):
+        report = ReviewFlowValidator().validate(
+            session(
+                "ui:【讀取資料】鈕（Review）",
+                "DT list reload range=260724-080000~260724-120000 rows=2 ms=1 source=index",
+                "RV loadGrab begin 260724-120000（proc=True）",
+                "ui:【讀取資料】鈕（Review）",
+                "RV folder selected root=D:\\Anilox\\Captures_pack",
+                "DT list reload range=251117-111919~260721-210928 rows=100 ms=2 source=index",
+                "RV loadGrab begin 260721-210928（proc=True）",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "R1.reload-latest").status
+        )
+
+    def test_reload_latest_rejects_non_latest_from_current_root(self):
+        report = ReviewFlowValidator().validate(
+            session(
+                "ui:【讀取資料】鈕（Review）",
+                "DT list reload range=260724-080000~260724-120000 rows=2 ms=1 source=index",
+                "RV loadGrab begin 260724-120000（proc=True）",
+                "ui:【讀取資料】鈕（Review）",
+                "DT list reload range=251117-111919~260721-210928 rows=100 ms=2 source=index",
+                "RV loadGrab begin 260721-200000（proc=True）",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "R1.reload-latest").status
+        )
+
     def test_review_thumbnail_started_frame_can_finish_before_latest_pending(self):
         report = ReviewFlowValidator().validate(
             session(
@@ -807,6 +838,115 @@ class ParameterFlowValidatorTests(unittest.TestCase):
 
 
 class LiveStandbyFlowValidatorTests(unittest.TestCase):
+    def test_head_guard_drops_one_callback_per_camera_before_first_set(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "experiment build=mil-edge-coverage-v8",
+                "capture gate open cams=2 warm=True path=verified-standby",
+                "capture head frame dropped cam1 tick=100 reason=cross-boundary",
+                "capture head frame dropped cam2 tick=102 reason=cross-boundary",
+                "capture first-set ready path=verified-standby "
+                "cams=1,2 aligned=True",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "F2.head-guard").status
+        )
+
+    def test_head_guard_missing_camera_before_first_set_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "experiment build=mil-edge-coverage-v8",
+                "capture gate open cams=2 warm=True path=verified-standby",
+                "capture head frame dropped cam1 tick=100 reason=cross-boundary",
+                "capture first-set ready path=verified-standby "
+                "cams=1,2 aligned=True",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "F2.head-guard").status
+        )
+
+    def test_head_guard_duplicate_camera_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "experiment build=mil-edge-coverage-v8",
+                "capture gate open cams=2 warm=True path=verified-standby",
+                "capture head frame dropped cam1 tick=100 reason=cross-boundary",
+                "capture head frame dropped cam1 tick=101 reason=cross-boundary",
+                "capture head frame dropped cam2 tick=102 reason=cross-boundary",
+                "capture first-set ready path=verified-standby "
+                "cams=1,2 aligned=True",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "F2.head-guard").status
+        )
+
+    def test_verified_standby_io_edges_and_complete_tail_pass(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "acquisition parameters ready cam1 cl=True lineRate=3000",
+                "acquisition parameters ready cam2 cl=True lineRate=3000",
+                "acquisition standby start cam1",
+                "acquisition standby start cam2",
+                "acquisition standby ready cam1 tick=100",
+                "acquisition standby ready cam2 tick=102",
+                "acquisition phase verified reason=idle-sync cams=2",
+                "acquisition start path=verified-standby cams=2",
+                "StartGrab cams=2",
+                "capture plan grab=260723-120000 root=D:\\Anilox",
+                "capture gate open cams=2 warm=True path=verified-standby",
+                "capture first-set phase system=0 cams=1,2 spreadTicks=2 "
+                "spreadMs=2.000 limitMs=5.000 aligned=True",
+                "capture first-set ready path=verified-standby cams=1,2 aligned=True",
+                "firstFrame cam1 100x100 -> Waterfall",
+                "firstFrame cam2 100x100 -> Waterfall",
+                "capture tail begin cams=1,2 timeoutMs=2000",
+                "capture tail accepted cam1 tick=200",
+                "capture tail complete cam1 tick=200",
+                "capture tail accepted cam2 tick=202",
+                "capture tail complete cam2 tick=202",
+                "capture tail complete pending=",
+                "StopGrab",
+                "capture gate closed standby=on",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "F2.standby").status)
+
+    def test_verified_standby_without_phase_proof_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "acquisition parameters ready cam1 cl=True lineRate=3000",
+                "acquisition standby start cam1",
+                "acquisition standby ready cam1 tick=100",
+                "acquisition start path=verified-standby cams=1",
+                "StartGrab cams=1",
+                "capture plan grab=260723-120000 root=D:\\Anilox",
+                "capture gate open cams=1 warm=True path=verified-standby",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "F2.standby").status)
+
+    def test_io_tail_timeout_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "acquisition parameters ready cam1 cl=True lineRate=3000",
+                "acquisition standby start cam1",
+                "acquisition standby ready cam1 tick=100",
+                "acquisition phase verified reason=idle-sync cams=1",
+                "acquisition start path=verified-standby cams=1",
+                "StartGrab cams=1",
+                "capture plan grab=260723-120000 root=D:\\Anilox",
+                "capture gate open cams=1 warm=True path=verified-standby",
+                "capture tail begin cams=1 timeoutMs=2000",
+                "capture tail timeout pending=1 elapsedMs=2000",
+                "StopGrab",
+                "capture gate closed standby=on",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "F2.standby").status)
+
     def test_row_chart_waits_for_main_image_presentation(self):
         report = LiveFlowValidator().validate(
             session(
@@ -817,6 +957,85 @@ class LiveStandbyFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(
             CheckStatus.PASS, result(report, "F2.row-presentation").status
+        )
+
+    def test_content_aware_zoom_floor_passes(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "WF wheelZoom out → zoom=0.00002（fit=0.01 min=0.00002 "
+                "content=100000x50000）",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "F6.zoom-floor").status
+        )
+
+    def test_content_aware_zoom_floor_accepts_logged_rounding(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "RV wheelZoom out → zoom=0.00003（fit=0.01271 min=0.00003 "
+                "content=101171x30000）",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "F6.zoom-floor").status
+        )
+
+    def test_legacy_fixed_zoom_floor_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "WF wheelZoom out → zoom=0.01（fit=0.01）",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "F6.zoom-floor").status
+        )
+
+    def test_capture_view_range_is_refired_before_gate_opens(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "StartGrab cams=2",
+                "viewRange refire reason=capture-start mode=WF",
+                "capture gate open cams=2 warm=True",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "F2.view-refire").status
+        )
+
+    def test_capture_gate_before_view_range_refire_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "StartGrab cams=2",
+                "capture gate open cams=2 warm=True",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "F2.view-refire").status
+        )
+
+    def test_waterfall_bootstrap_period_precedes_each_start(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "ApplyMainDisplayMode → Waterfall",
+                "WF bootstrap period cam1 periodMs=500.000 source=applied-hardware",
+                "StartGrab cams=2",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "F2.waterfall-bootstrap").status
+        )
+
+    def test_waterfall_runtime_period_learning_fails_new_contract(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "ApplyMainDisplayMode → Waterfall",
+                "WF bootstrap period unavailable; learn from runtime frames",
+                "StartGrab cams=2",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "F2.waterfall-bootstrap").status
         )
 
     def test_row_chart_without_main_image_presentation_fails(self):
@@ -862,7 +1081,7 @@ class LiveStandbyFlowValidatorTests(unittest.TestCase):
                 "acquisition sync resumed reason=start attempt=1 cams=2",
                 "acquisition sync ready reason=start attempt=1 cam1 system=0 tick=100 freq=1000",
                 "acquisition sync ready reason=start attempt=1 cam2 system=0 tick=102 freq=1000",
-                "acquisition sync phase reason=start attempt=1 system=0 cams=1,2 spreadTicks=2 spreadMs=2.000 limitMs=5.000 measurable=True aligned=True",
+                "acquisition sync phase reason=start attempt=1 system=0 cams=1,2 spreadTicks=2 spreadMs=2.000 limitMs=5.000 measurable=True aligned=True sampleSource=warm-snapshot",
                 "acquisition sync complete reason=start attempts=1 cams=2 phase=True",
                 "StartGrab cams=4",
                 "capture plan grab=260720-120000 root=D:\\Anilox",
@@ -906,12 +1125,12 @@ class LiveStandbyFlowValidatorTests(unittest.TestCase):
                 "acquisition standby ready cam1 tick=100",
                 "acquisition standby ready cam2 tick=200",
                 "acquisition sync begin reason=start attempt=1 gate=closed cams=2",
-                "acquisition sync phase reason=start attempt=1 system=0 cams=1,2 spreadTicks=20 spreadMs=20.000 limitMs=5.000 measurable=True aligned=False",
+                "acquisition sync phase reason=start attempt=1 system=0 cams=1,2 spreadTicks=20 spreadMs=20.000 limitMs=5.000 measurable=True aligned=False sampleSource=warm-snapshot",
                 "acquisition sync retry reason=start attempt=1 error=PhaseOutOfRange",
                 "acquisition sync begin reason=start attempt=2 gate=closed cams=2",
                 "acquisition sync ready reason=start attempt=2 cam1 system=0 tick=200 freq=1000",
                 "acquisition sync ready reason=start attempt=2 cam2 system=0 tick=202 freq=1000",
-                "acquisition sync phase reason=start attempt=2 system=0 cams=1,2 spreadTicks=2 spreadMs=2.000 limitMs=5.000 measurable=True aligned=True",
+                "acquisition sync phase reason=start attempt=2 system=0 cams=1,2 spreadTicks=2 spreadMs=2.000 limitMs=5.000 measurable=True aligned=True sampleSource=warm-snapshot",
                 "acquisition sync complete reason=start attempts=2 cams=2 phase=True",
                 "StartGrab cams=2",
                 "capture plan grab=260720-120000 root=D:\\Anilox",
@@ -949,7 +1168,7 @@ class LiveStandbyFlowValidatorTests(unittest.TestCase):
                 "acquisition sync paused reason=start attempt=1 cams=1",
                 "acquisition sync resumed reason=start attempt=1 cams=1",
                 "acquisition sync ready reason=start attempt=1 cam1 system=0 tick=100 freq=1000",
-                "acquisition sync phase reason=start attempt=1 system=0 cams=1 spreadTicks=0 spreadMs=0.000 limitMs=5.000 measurable=True aligned=True",
+                "acquisition sync phase reason=start attempt=1 system=0 cams=1 spreadTicks=0 spreadMs=0.000 limitMs=5.000 measurable=True aligned=True sampleSource=warm-snapshot",
                 "acquisition sync complete reason=start attempts=1 cams=1 phase=True",
                 "StartGrab cams=1",
                 "capture plan grab=260720-120000 root=D:\\Anilox",

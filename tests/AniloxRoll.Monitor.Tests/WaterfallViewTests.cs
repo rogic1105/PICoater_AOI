@@ -118,6 +118,59 @@ namespace AniloxRoll.Monitor.Tests
             }
         }
 
+        [Test]
+        public void ExpectedFramePeriod_AllowsFirstAlignedCameraSetToFlush()
+        {
+            using (var host = new Panel { Size = new Size(320, 240) })
+            using (var view = new WaterfallView(
+                host,
+                camCount: 2,
+                totalHeight: 1000,
+                fullMode: WaterfallFullMode.Restart,
+                screenMmPerPx: 0.264))
+            {
+                view.SetLayout(
+                    new[] { 0.0, 2.0 },
+                    new[] { 1000000.0, 1000000.0 },
+                    refOpsMm: 1.0);
+                view.SetExpectedFramePeriod(periodTicks: 500, periodMs: 500);
+                view.Reset();
+
+                view.PushFrame(1, new byte[] { 10, 11, 12, 13 }, 2, 2, tick: 1000);
+                view.PushFrame(2, new byte[] { 20, 21, 22, 23 }, 2, 2, tick: 1002);
+
+                Thread.Sleep(200);
+                Application.DoEvents();
+                Assert.That(
+                    SpinWait.SpinUntil(() => ReadPrivate<int>(view, "_writeRow") >= 2, 1000),
+                    Is.True,
+                    "the first aligned camera set should not wait for a second frame to learn its period");
+            }
+        }
+
+        [Test]
+        public void MonitoringCanvas_WheelOutCanZoomBelowLegacyPointZeroOneFloor()
+        {
+            using (var canvas = new ImageCanvas { Size = new Size(1000, 500) })
+            using (var image = new Bitmap(1000, 500))
+            {
+                canvas.Image = image;
+                canvas.FitRelativeZoom = false;
+                canvas.FitToScreen();
+
+                MethodInfo onMouseWheel = typeof(ImageCanvas).GetMethod(
+                    "OnMouseWheel",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.That(onMouseWheel, Is.Not.Null);
+                onMouseWheel.Invoke(
+                    canvas,
+                    new object[] { new MouseEventArgs(MouseButtons.None, 0, 500, 250, -12000) });
+
+                Assert.That(canvas.Zoom, Is.LessThan(0.01f));
+                Assert.That(canvas.Zoom, Is.EqualTo(1f / 500f).Within(0.000001f));
+            }
+        }
+
         private static T ReadPrivate<T>(object target, string fieldName)
         {
             FieldInfo field = target.GetType().GetField(

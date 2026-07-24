@@ -38,6 +38,26 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void UpdateData_ReportsAppliedOnlyAfterPendingViewRangeIsPublished()
+        {
+            using (var chart = new Chart())
+            {
+                var helper = new RowCurveChartHelper(chart);
+                var display = new RowCurveDisplayAdapter(
+                    helper, () => VerticalDisplayDirection.BottomToTop);
+                var sync = new RowCurveSyncCoordinator(display);
+                int applied = 0;
+                sync.DataAccepted += () => applied++;
+
+                sync.UpdateData(new float[20], new float[20], requireViewRange: true);
+                Assert.That(applied, Is.Zero);
+
+                sync.SetViewRange(0, 20);
+                Assert.That(applied, Is.EqualTo(1));
+            }
+        }
+
+        [Test]
         public void UpdateDataAndView_DataLengthChanges_KeepsAxisOwnedByViewport()
         {
             using (var chart = new Chart())

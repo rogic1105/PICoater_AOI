@@ -39,7 +39,10 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         /// <summary>開始/停止抓取的共用命令；按鈕、IO 接續與抓取上限都必須走這條收尾鏈。</summary>
-        private async Task<bool> ToggleLiveGrabAsync(string intentLine)
+        private async Task<bool> ToggleLiveGrabAsync(
+            string intentLine,
+            bool ioControlled = false,
+            bool drainIoTail = false)
         {
             FlowTrace.Log(intentLine);
 
@@ -48,6 +51,8 @@ namespace AniloxRoll.Monitor.Forms
                 ClearBackgroundPreview();
 
             bool wasGrabbing = _liveCameraManager.IsLiveGrabbing;
+            if (wasGrabbing && drainIoTail)
+                await _liveCameraManager.DrainIoTailAsync();
 
             // CLProtocol 尚未就緒不可開始抓取（grab 進行中才 enable + 重套線掃會掉幀，cam1 最明顯）。
             // 手動鈕在就緒前已是灰色；此處主要擋 IO 觸發路徑（IoStartGrab 直接呼叫本方法繞過按鈕狀態）。
@@ -100,7 +105,8 @@ namespace AniloxRoll.Monitor.Forms
             else
             {
                 grabStateChanged = await _liveCameraManager.ToggleGrabAsync(
-                    deferCaptureGate: true);
+                    deferCaptureGate: true,
+                    requireVerifiedStandby: ioControlled);
             }
 
             if (!grabStateChanged)
@@ -125,9 +131,19 @@ namespace AniloxRoll.Monitor.Forms
                     $"files=*{CaptureFileNaming.RawJpg}|*{CaptureFileNaming.ProcC}|*{CaptureFileNaming.ProcR}|*{CaptureFileNaming.MeanC}|*{CaptureFileNaming.MaxC}|*{CaptureFileNaming.MeanR}|*{CaptureFileNaming.MaxR} " +
                     $"scale={InspectionEngineConfig.DefaultSaveResizeScale}");
 
-                int limitSeconds = Math.Max(1, _settings?.GrabLimitSeconds ?? InspectionDefaults.GrabLimitSeconds);
-                _grabDurationCoordinator?.Arm(limitSeconds);
-                FlowTrace.Log($"grab limit armed {limitSeconds}s grab={_currentGrabId}");
+                int configuredLimitSeconds = Math.Max(
+                    1,
+                    _settings?.GrabLimitSeconds ?? InspectionDefaults.GrabLimitSeconds);
+                int boundaryGraceSeconds = ioControlled
+                    ? _liveCameraManager.GetCaptureBoundaryGraceSeconds()
+                    : 0;
+                int effectiveLimitSeconds =
+                    configuredLimitSeconds + boundaryGraceSeconds;
+                _grabDurationCoordinator?.Arm(effectiveLimitSeconds);
+                FlowTrace.Log(
+                    $"grab limit armed {effectiveLimitSeconds}s " +
+                    $"configured={configuredLimitSeconds}s grace={boundaryGraceSeconds}s " +
+                    $"source={(ioControlled ? "io" : "manual")} grab={_currentGrabId}");
 
                 if (!_liveCameraManager.OpenCaptureGate())
                 {
@@ -423,9 +439,7 @@ namespace AniloxRoll.Monitor.Forms
                 _pendingLiveRowMax.Clear();
             }
 
-            FlowTrace.Log(
-                $"rowCurve present after=mainImage cams={readyMean.Count} " +
-                $"mode={(_settings?.he_MainDisplay == MainDisplayMode.Waterfall ? "WF" : "IC")}");
+            _liveRowPresentationCameraCount = readyMean.Count;
             var swRow = System.Diagnostics.Stopwatch.StartNew();
             try
             {
@@ -441,6 +455,13 @@ namespace AniloxRoll.Monitor.Forms
                 if (swRow.ElapsedMilliseconds > 50)
                     FlowTrace.Log($"[UiSlow] RowChart {swRow.ElapsedMilliseconds}ms");
             }
+        }
+
+        private void OnLiveRowCurveAccepted()
+        {
+            FlowTrace.Log(
+                $"rowCurve present after=mainImage cams={_liveRowPresentationCameraCount} " +
+                $"mode={(_settings?.he_MainDisplay == MainDisplayMode.Waterfall ? "WF" : "IC")}");
         }
 
         private void OnLiveRowCurveDataUi(int camId, float[] meanArr, float[] maxArr)
@@ -532,6 +553,7 @@ namespace AniloxRoll.Monitor.Forms
             _liveOverviewHelper?.Clear();
             _liveViewLeftMm = _liveViewRightMm = double.NaN;
             _liveViewTopMm = _liveViewBotMm = double.NaN;
+            _liveRowPresentationCameraCount = 0;
         }
 
         private void UpdateLiveWaterfallRowChart(int camId, float[] meanArr, float[] maxArr)

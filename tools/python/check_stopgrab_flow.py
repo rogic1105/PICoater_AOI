@@ -11,10 +11,13 @@ FLOW_RE = re.compile(r"\[Flow\].*?\sT\s*\d+\s+(?P<msg>.*)$")
 
 BOUNDARY_PATTERNS = (
     "ui:",
+    "io:DI START 上升緣",
     "StartGrab",
     "AllocateCameras begin",
     "FreeCameras",
     "ApplyMainDisplayMode",
+    "wheelZoom",
+    "drag(",
 )
 
 FORBIDDEN_PATTERNS = (
@@ -38,6 +41,11 @@ FORBIDDEN_PATTERNS = (
 ALLOWED_AFTER_STOP = (
     "capture gate closed standby=on",
     "drop drainedFrame after StopGrab cam",
+)
+
+FINAL_TAIL_ROW_PATTERNS = (
+    "LC row ",
+    "rowCurve present after=mainImage",
 )
 
 
@@ -79,14 +87,24 @@ def check(rows):
     stop_windows = 0
     in_stop_window = False
     gate_closed = False
+    tail_completed = False
+    allow_final_tail_row = False
+    final_tail_row_presentations = 0
 
     for lineno, msg in rows:
+        if msg.startswith("capture tail complete pending="):
+            tail_completed = True
+            continue
+
         if msg == "StopGrab":
             if in_stop_window and not gate_closed:
                 violations.append((lineno, "previous StopGrab has no capture gate closed"))
             stop_windows += 1
             in_stop_window = True
             gate_closed = False
+            allow_final_tail_row = tail_completed
+            final_tail_row_presentations = 0
+            tail_completed = False
             continue
 
         if not in_stop_window:
@@ -96,6 +114,7 @@ def check(rows):
             if not gate_closed:
                 violations.append((lineno, "StopGrab has no capture gate closed"))
             in_stop_window = False
+            allow_final_tail_row = False
             continue
 
         if msg == "capture gate closed standby=on":
@@ -103,6 +122,16 @@ def check(rows):
             continue
 
         if is_allowed(msg):
+            continue
+
+        if any(pattern in msg for pattern in FINAL_TAIL_ROW_PATTERNS):
+            if not allow_final_tail_row:
+                violations.append((lineno, msg))
+                continue
+            if "rowCurve present after=mainImage" in msg:
+                final_tail_row_presentations += 1
+                if final_tail_row_presentations > 1:
+                    violations.append((lineno, "more than one final tail row presentation"))
             continue
 
         if is_forbidden(msg):
@@ -116,7 +145,10 @@ def check(rows):
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Check the StopGrab capture gate and reject post-stop display, chart, CSV, or firstFrame flow."
+        description=(
+            "Check the StopGrab capture gate. One coalesced row-Curve presentation "
+            "from a completed IO tail frame is allowed; new frames/CSV/display work is rejected."
+        )
     )
     ap.add_argument("trace", nargs="?", help="trace-*.log path. Defaults to latest D:\\Anilox\\Logs\\trace-*.log")
     args = ap.parse_args()
@@ -140,7 +172,7 @@ def main():
             print(f"  line {lineno}: {msg}")
         return 1
 
-    print("PASS StopGrab gate closed and no post-stop forbidden flow lines")
+    print("PASS StopGrab gate closed; only the optional final IO-tail row Curve appeared")
     return 0
 
 

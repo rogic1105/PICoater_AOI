@@ -50,7 +50,11 @@ namespace AniloxRoll.Monitor.Forms
             _ioControllerActiveGeneration = generation;
 
             controller.OnStartRequested += () => DispatchCurrentIoController(
-                controller, generation, () => _ = IoStartGrabAsync(controller, generation));
+                controller, generation, () =>
+                {
+                    FlowTrace.Log("io:DI START 上升緣 → 抓取請求");
+                    _ = IoStartGrabAsync(controller, generation);
+                });
             controller.OnStopRequested += () => DispatchCurrentIoController(
                 controller, generation, () => _ = IoStopGrabAsync(controller, generation));
             controller.OnStateChanged += state => DispatchCurrentIoController(
@@ -156,10 +160,27 @@ namespace AniloxRoll.Monitor.Forms
                 await RejectIoGrabStartAsync(controller, generation, "camera-manager-unavailable");
                 return;
             }
+            if (_liveCameraManager.IsCaptureTailDrainActive)
+            {
+                await RejectIoGrabStartAsync(
+                    controller,
+                    generation,
+                    "capture-not-ready:tail-drain");
+                return;
+            }
             if (_liveCameraManager.IsLiveGrabbing)
             {
                 await controller.NotifyGrabStarted();
                 FlowTrace.Log("IO grab accepted busy=on state=already-grabbing");
+                return;
+            }
+            string standbyReason;
+            if (!_liveCameraManager.TryGetCaptureStandbyReady(out standbyReason))
+            {
+                await RejectIoGrabStartAsync(
+                    controller,
+                    generation,
+                    "capture-not-ready:" + standbyReason);
                 return;
             }
             if (IsStandardBgSubEnabled && !IsBgBinReady())
@@ -173,7 +194,9 @@ namespace AniloxRoll.Monitor.Forms
 
             try
             {
-                bool started = await ToggleLiveGrabAsync("io:DI START 上升緣 → 開始抓取");
+                bool started = await ToggleLiveGrabAsync(
+                    "io:DI START 上升緣 → 開始抓取",
+                    ioControlled: true);
                 if (!IsCurrentIoController(controller, generation)) return;
                 if (started && _liveCameraManager.IsLiveGrabbing && controller.CurrentState == IoState.Running)
                 {
@@ -183,7 +206,9 @@ namespace AniloxRoll.Monitor.Forms
                 }
 
                 if (started && _liveCameraManager.IsLiveGrabbing)
-                    await ToggleLiveGrabAsync("io:START 已下降或 controller 已換代 → 停止晚到抓取");
+                    await ToggleLiveGrabAsync(
+                        "io:START 已下降或 controller 已換代 → 停止晚到抓取",
+                        drainIoTail: true);
                 await RejectIoGrabStartAsync(controller, generation, "capture-start-failed");
             }
             catch (Exception ex)
@@ -205,7 +230,9 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (!IsCurrentIoController(controller, generation) || _isIoSuspended) return;
             if (_liveCameraManager == null || !_liveCameraManager.IsLiveGrabbing) return;
-            bool stopped = await ToggleLiveGrabAsync("io:DI START 下降緣 → 停止抓取");
+            bool stopped = await ToggleLiveGrabAsync(
+                "io:DI START 下降緣 → 停止抓取",
+                drainIoTail: true);
             if (stopped && IsCurrentIoController(controller, generation))
                 await controller.NotifyGrabStopped();
         }

@@ -21,6 +21,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             _display = display;
         }
 
+        public event System.Action DataAccepted;
+
         public double RowPitchMm => _display?.RowPitchMm ?? 0;
 
         public void SetThresholds(float mean, float max) => _display?.SetThresholds(mean, max);
@@ -118,10 +120,12 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             if (requireViewRange)
             {
+                DataAccepted?.Invoke();
                 _display.UpdateDataAndViewRange(mean, max, _topMm, _botMm);
                 return true;
             }
 
+            DataAccepted?.Invoke();
             _display.UpdateData(mean, max);
             return false;
         }
@@ -155,6 +159,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _currentMean = mean;
             _currentMax = max;
             _currentRequiresViewRange = true;
+            DataAccepted?.Invoke();
             _display.UpdateDataAndViewRange(mean, max, _topMm, _botMm);
         }
     }

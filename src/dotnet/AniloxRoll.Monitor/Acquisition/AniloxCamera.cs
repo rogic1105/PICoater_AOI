@@ -33,6 +33,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         public bool IsAcquisitionWarm => _mil.HasObservedFrameSinceAcquisitionStart;
         public long LastFrameStartTicks => _mil.LastFrameStartTicks;
         public long DataLatchClockFreqHz => _mil.DataLatchClockFreqHz;
+        public long LastFrameObservedTimestamp => _mil.LastFrameObservedTimestamp;
         /// <summary>CLProtocol 初始化（含參數重套）已完成，可安全從硬體讀回參數。</summary>
         public bool IsHwParamsStable => _mil.IsHwParamsStable;
         public bool IsClProtocolEnabled => _mil.IsClProtocolEnabled;
@@ -112,7 +113,8 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// Atomic product gate shared by every camera. MIL may stay armed while this gate is
         /// closed; closed frames never enter processing, display, or persistence.
         /// </summary>
-        public Func<bool> CaptureGateOpen { get; set; }
+        public Func<int, long, bool> CaptureFrameAccepted { get; set; }
+        public Action<int, long> CaptureFrameCompleted { get; set; }
 
         // ==================== Save Format (resize + JPEG) ====================
         private int _saveResizeScale = 5;
@@ -391,7 +393,8 @@ namespace AniloxRoll.Monitor.Core.Camera
             if (_isReleased) return;
             if (modifiedBuffer == MIL.M_NULL) return;
             bool captureOpen = mil.UserWantsGrab &&
-                (CaptureGateOpen == null || CaptureGateOpen());
+                (CaptureFrameAccepted == null ||
+                 CaptureFrameAccepted(CameraId, mil.LastFrameStartTicks));
             if (!captureOpen)
             {
                 if (_hasAcceptedCaptureFrame && !mil.UserWantsGrab && !_flowLoggedDrainFrameDrop)
@@ -439,6 +442,7 @@ namespace AniloxRoll.Monitor.Core.Camera
             // 在此 FrameReady handler 返回後由 _mil 執行（顯示 buffer 已更新完成）。
 
             TrySaveCapture(modifiedBuffer);
+            CaptureFrameCompleted?.Invoke(CameraId, mil.LastFrameStartTicks);
         }
 
         // ==================== Picoater Ridge Processing ====================

@@ -47,12 +47,14 @@ namespace AniloxRoll.Monitor.UI.Managers
         private const int CaptureSynchronizationMaxAttempts = 3;
         private const double CapturePhaseToleranceMs = 5.0;
 
-        private sealed class AcquisitionWarmSample
+        private sealed class CapturePhaseSample
         {
             public int CameraId;
             public int SystemNum;
             public long FrameStartTicks;
             public long ClockFrequencyHz;
+            public int FrameHeight;
+            public double AppliedLineRateHz;
         }
 
         private sealed class AcquisitionSyncResult
@@ -60,8 +62,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             public bool Succeeded;
             public bool Canceled;
             public string Error;
-            public List<AcquisitionWarmSample> Samples =
-                new List<AcquisitionWarmSample>();
+            public List<CapturePhaseSample> Samples =
+                new List<CapturePhaseSample>();
         }
 
         public bool IsAllocated    { get; private set; } = false;
@@ -220,6 +222,8 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (IsAllocated) return;
             _captureGateOpen = false;
+            ClearCaptureBoundary();
+            InvalidateCapturePhase("allocate");
             FlowTrace.Log($"AllocateCameras begin（expect {_cameraHardwareConfigs.Count} cams）");
             IsReleasing = false;
             var totalSw = Stopwatch.StartNew();
@@ -285,7 +289,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.SaveResizeScale      = _saveResizeScale;
                 cam.SaveJpgQuality       = _saveJpgQuality;
                 cam.TimestampCoordinator = _timestampCoordinator;
-                cam.CaptureGateOpen = () => _captureGateOpen;
+                cam.CaptureFrameAccepted = IsCaptureFrameAccepted;
+                cam.CaptureFrameCompleted = NotifyCaptureFrameCompleted;
 
                 cam.OnInspectionResult += (camId, fn, mp, xp, maxCMean, meanRPeak, maxRPeak) =>
                     OnInspectionResult?.Invoke(
@@ -367,7 +372,9 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         // ==================== Grab Control ====================
 
-        public async Task<bool> ToggleGrabAsync(bool deferCaptureGate = false)
+        public async Task<bool> ToggleGrabAsync(
+            bool deferCaptureGate = false,
+            bool requireVerifiedStandby = false)
         {
             if (!IsAllocated) return false;
             if (IsLiveGrabbing)
@@ -375,7 +382,9 @@ namespace AniloxRoll.Monitor.UI.Managers
                 StopGrab();
                 return true;
             }
-            return await StartGrabAsync(deferCaptureGate);
+            return await StartGrabAsync(
+                deferCaptureGate,
+                requireVerifiedStandby);
         }
 
         public async Task<bool> EnsureAllocatedAndToggleGrabAsync(
@@ -414,7 +423,9 @@ namespace AniloxRoll.Monitor.UI.Managers
             }
         }
 
-        private async Task<bool> StartGrabAsync(bool deferCaptureGate)
+        private async Task<bool> StartGrabAsync(
+            bool deferCaptureGate,
+            bool requireVerifiedStandby)
         {
             await _allocationGate.WaitAsync();
             try
@@ -430,28 +441,55 @@ namespace AniloxRoll.Monitor.UI.Managers
                 if (targets.Length == 0) return false;
 
                 _captureGateOpen = false;
+                ClearCaptureBoundary();
                 ClearUserGrabIntents();
-                _isCaptureSynchronizing = true;
-                AcquisitionSyncResult sync;
-                try
+                string standbyReason;
+                if (CanUseVerifiedStandby(targets, out standbyReason))
                 {
-                    sync = await SynchronizeAcquisitionAsync(
-                        "start",
-                        targets,
-                        null,
-                        () => ReapplyLineRatesForSynchronization("start", targets),
-                        () => IsReleasing);
-                }
-                finally
-                {
-                    _isCaptureSynchronizing = false;
-                }
-
-                if (!sync.Succeeded)
-                {
+                    SetCaptureStartPath("verified-standby");
                     FlowTrace.Log(
-                        $"capture synchronize failed gate=closed error={sync.Error}");
-                    return false;
+                        $"acquisition start path=verified-standby cams={targets.Length}");
+                }
+                else
+                {
+                    if (requireVerifiedStandby)
+                    {
+                        FlowTrace.Log(
+                            $"acquisition start rejected path=io reason={standbyReason}");
+                        return false;
+                    }
+
+                    SetCapturePhaseSynchronizing("start");
+                    _isCaptureSynchronizing = true;
+                    AcquisitionSyncResult sync;
+                    try
+                    {
+                        sync = await SynchronizeAcquisitionAsync(
+                            "start",
+                            targets,
+                            null,
+                            () => ReapplyLineRatesForSynchronization("start", targets),
+                            () => IsReleasing);
+                    }
+                    finally
+                    {
+                        _isCaptureSynchronizing = false;
+                    }
+
+                    if (!sync.Succeeded)
+                    {
+                        InvalidateCapturePhase(
+                            "start-sync-" + (sync.Error ?? "failed"));
+                        FlowTrace.Log(
+                            $"capture synchronize failed gate=closed error={sync.Error}");
+                        return false;
+                    }
+
+                    MarkCapturePhaseVerified("start-sync");
+                    SetCaptureStartPath("full-sync");
+                    FlowTrace.Log(
+                        $"acquisition start path=full-sync cams={targets.Length} " +
+                        $"reason={standbyReason}");
                 }
 
                 _display.ResetFlowFirstFrame();
@@ -462,6 +500,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                     cam.SetUserGrabIntent(true);
 
                 FlowTrace.Log($"StartGrab（cams={_cameras.Count}）");
+                _display.RefireMainViewRange("capture-start");
                 if (!deferCaptureGate)
                     return OpenCaptureGate();
                 return true;
@@ -483,9 +522,15 @@ namespace AniloxRoll.Monitor.UI.Managers
                 return false;
             if (_captureGateOpen)
                 return true;
+            AniloxCamera[] targets = _cameras
+                .Where(cam => cam != null && cam.IsConnected)
+                .ToArray();
+            if (!ArmCaptureBoundary(targets))
+                return false;
             _captureGateOpen = true;
             FlowTrace.Log(
-                $"capture gate open cams={ConnectedCameraCount} warm={AreCamerasHwReady}");
+                $"capture gate open cams={targets.Length} warm={AreCamerasHwReady} " +
+                $"path={_captureStartPath}");
             return true;
         }
 
@@ -494,6 +539,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (!IsAllocated || !IsLiveGrabbing) return;
             FlowTrace.Log("StopGrab");
             _captureGateOpen = false;
+            ClearCaptureBoundary();
             IsLiveGrabbing = false;
             if (_isParameterReconfiguring)
             {
@@ -647,12 +693,14 @@ namespace AniloxRoll.Monitor.UI.Managers
                     if (!pending.Contains(cam.CameraId) || !cam.IsAcquisitionWarm)
                         continue;
 
-                    var sample = new AcquisitionWarmSample
+                    var sample = new CapturePhaseSample
                     {
                         CameraId = cam.CameraId,
                         SystemNum = GetCameraSystemNum(cam.CameraId),
                         FrameStartTicks = cam.LastFrameStartTicks,
-                        ClockFrequencyHz = cam.DataLatchClockFreqHz
+                        ClockFrequencyHz = cam.DataLatchClockFreqHz,
+                        FrameHeight = cam.FrameHeight,
+                        AppliedLineRateHz = cam.AppliedLineRateHz
                     };
                     result.Samples.Add(sample);
                     pending.Remove(cam.CameraId);
@@ -680,40 +728,17 @@ namespace AniloxRoll.Monitor.UI.Managers
         private bool LogAndValidateCapturePhase(
             string reason,
             int attempt,
-            IList<AcquisitionWarmSample> samples)
+            IList<CapturePhaseSample> samples)
         {
-            bool allAligned = samples != null && samples.Count > 0;
-            foreach (var group in (samples ?? new List<AcquisitionWarmSample>())
-                .GroupBy(sample => sample.SystemNum))
-            {
-                var ordered = group.OrderBy(sample => sample.CameraId).ToArray();
-                bool measurable = (ordered.Length == 1 || group.Key >= 0) &&
-                    ordered.All(sample =>
-                        sample.FrameStartTicks > 0 &&
-                        sample.ClockFrequencyHz > 0 &&
-                        sample.ClockFrequencyHz == ordered[0].ClockFrequencyHz);
-                long spreadTicks = measurable && ordered.Length > 1
-                    ? ordered.Max(sample => sample.FrameStartTicks) -
-                      ordered.Min(sample => sample.FrameStartTicks)
-                    : 0;
-                double spreadMs = measurable && ordered.Length > 1
-                    ? spreadTicks * 1000.0 / ordered[0].ClockFrequencyHz
-                    : 0.0;
-                bool aligned = measurable &&
-                    (ordered.Length == 1 || spreadMs <= CapturePhaseToleranceMs);
-                allAligned &= aligned;
-
-                string spreadText = spreadMs.ToString(
-                    "F3", System.Globalization.CultureInfo.InvariantCulture);
-                string limitText = CapturePhaseToleranceMs.ToString(
-                    "F3", System.Globalization.CultureInfo.InvariantCulture);
-                FlowTrace.Log(
-                    $"acquisition sync phase reason={reason} attempt={attempt} " +
-                    $"system={group.Key} cams={string.Join(",", ordered.Select(s => s.CameraId))} " +
-                    $"spreadTicks={spreadTicks} spreadMs={spreadText} " +
-                    $"limitMs={limitText} measurable={measurable} aligned={aligned}");
-            }
-            return allAligned;
+            if (samples == null || samples.Count == 0)
+                return false;
+            string phaseReason;
+            return TryValidateCapturePhaseSamples(
+                samples,
+                out phaseReason,
+                true,
+                $"acquisition sync phase reason={reason} attempt={attempt}",
+                "warm-snapshot");
         }
 
         private int GetCameraSystemNum(int cameraId)
@@ -750,6 +775,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             IsReleasing = true;
             _cameraStatusTimer.Stop();
             _captureGateOpen = false;
+            ClearCaptureBoundary();
+            InvalidateCapturePhase("free");
             IsLiveGrabbing = false;
             _hwReadyRaised = false;
 
@@ -907,6 +934,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                     $"parameter change blocked scope=cam{camId} param=LineRate reason=GrabActive");
                 return;
             }
+            InvalidateCapturePhase("line-rate-cam" + camId);
             FindCamera(camId)?.SetLineRateHz(hz);
         }
 
@@ -927,6 +955,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (height > AcquisitionDefaults.MaxGrabHeightPx) height = AcquisitionDefaults.MaxGrabHeightPx;
             var cam = FindCamera(camId);
             if (cam == null) return;
+            InvalidateCapturePhase("height-cam" + camId);
             cam.PauseAcquisition();
             try { cam.SetGrabHeight(height); }
             finally { cam.ResumeAcquisition(); }
@@ -1028,12 +1057,15 @@ namespace AniloxRoll.Monitor.UI.Managers
                 bool wasCapturing = IsLiveGrabbing;
                 if (!wasCapturing || targets.Length == 0)
                 {
+                    InvalidateCapturePhase("parameter-" + scope);
                     await Task.Run(write);
                     return true;
                 }
 
                 _isParameterReconfiguring = true;
                 enteredReconfiguration = true;
+                InvalidateCapturePhase("parameter-" + scope);
+                SetCapturePhaseSynchronizing("parameter:" + scope);
                 // This must precede every physical stop. Callbacks already inside the old
                 // generation are discarded by the display/curve reset before the gate reopens.
                 _captureGateOpen = false;
@@ -1056,6 +1088,8 @@ namespace AniloxRoll.Monitor.UI.Managers
 
                 if (!sync.Succeeded)
                 {
+                    InvalidateCapturePhase(
+                        "parameter-sync-" + (sync.Error ?? "failed"));
                     if (sync.Canceled || !IsLiveGrabbing || IsReleasing)
                     {
                         if (!IsReleasing)
@@ -1078,7 +1112,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                     return false;
                 }
 
-                foreach (AcquisitionWarmSample sample in sync.Samples)
+                foreach (CapturePhaseSample sample in sync.Samples)
                 {
                     FlowTrace.Log(
                         $"parameter warm ready scope={scope} cam{sample.CameraId} " +
@@ -1103,8 +1137,21 @@ namespace AniloxRoll.Monitor.UI.Managers
                 _display.ResetFlowFirstFrame();
                 _display.ResetWaterfallIfActive();
                 OnCaptureSequenceReset?.Invoke();
+                _display.RefireMainViewRange("parameter-reset");
                 FlowTrace.Log($"parameter sequence reset scope={scope}");
 
+                MarkCapturePhaseVerified("parameter-sync");
+                SetCaptureStartPath("parameter-sync");
+                if (!ArmCaptureBoundary(targets))
+                {
+                    InvalidateCapturePhase("parameter-gate-no-targets");
+                    IsLiveGrabbing = false;
+                    ClearUserGrabIntents();
+                    FlowTrace.Log(
+                        $"parameter reconfigure failed scope={scope} gate=closed " +
+                        $"error=no-targets");
+                    return false;
+                }
                 _captureGateOpen = true;
                 FlowTrace.Log(
                     $"parameter reconfigure complete scope={scope} gate=open warm=True");

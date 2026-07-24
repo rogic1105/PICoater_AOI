@@ -14,7 +14,11 @@ class LiveFlowValidator:
         report = CheckReport()
         self._check_camera_initialization(session, report)
         self._check_capture_standby(session, report)
+        self._check_capture_head_guard(session, report)
+        self._check_waterfall_bootstrap(session, report)
+        self._check_capture_view_refire(session, report)
         self._check_row_presentation(session, report)
+        self._check_wheel_zoom_floor(session, report)
         if not any(
             line.message.startswith(("LC ", "IC ", "WF ", "ui:【開始抓取】"))
             for line in session.lines
@@ -24,6 +28,269 @@ class LiveFlowValidator:
 
         self._check_drag_first_publish(session, report)
         return report
+
+    def _check_capture_head_guard(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        contract_enabled = any(
+            line.message == "experiment build=mil-edge-coverage-v8"
+            for line in session.lines
+        )
+        has_head_evidence = any(
+            line.message.startswith("capture head frame dropped ")
+            for line in session.lines
+        )
+        if not contract_enabled and not has_head_evidence:
+            report.add(
+                self.domain,
+                "F2.head-guard",
+                CheckStatus.NOT_COVERED,
+                "session predates cross-boundary head-frame guard",
+            )
+            return
+
+        expected = None
+        dropped = set()
+        opens = 0
+        completed = 0
+        failures = []
+
+        for line in session.lines:
+            gate_match = re.match(r"capture gate open cams=(\d+)\b", line.message)
+            if gate_match:
+                expected = int(gate_match.group(1))
+                dropped = set()
+                opens += 1
+                continue
+
+            drop_match = re.match(
+                r"capture head frame dropped cam(\d+) tick=-?\d+ "
+                r"reason=cross-boundary$",
+                line.message,
+            )
+            if drop_match:
+                camera_id = int(drop_match.group(1))
+                if expected is None:
+                    failures.append(
+                        f"head-frame drop without open gate at {line.timestamp}"
+                    )
+                elif camera_id in dropped:
+                    failures.append(
+                        f"duplicate head-frame drop for cam{camera_id} "
+                        f"at {line.timestamp}"
+                    )
+                else:
+                    dropped.add(camera_id)
+                continue
+
+            first_set_match = re.match(
+                r"capture first-set ready path=\S+ cams=([\d,]+) "
+                r"aligned=(True|False)$",
+                line.message,
+            )
+            if first_set_match:
+                first_set_cameras = {
+                    int(value) for value in first_set_match.group(1).split(",")
+                }
+                if expected is None:
+                    failures.append(
+                        f"first accepted set without open gate at {line.timestamp}"
+                    )
+                elif len(dropped) != expected:
+                    failures.append(
+                        f"first accepted set before all head frames were dropped "
+                        f"at {line.timestamp}: dropped={len(dropped)}/{expected}"
+                    )
+                elif dropped != first_set_cameras:
+                    failures.append(
+                        f"head-drop cameras {sorted(dropped)} differ from first set "
+                        f"{sorted(first_set_cameras)} at {line.timestamp}"
+                    )
+                else:
+                    completed += 1
+                expected = None
+                dropped = set()
+                continue
+
+            if line.message == "StopGrab":
+                expected = None
+                dropped = set()
+
+        if completed == 0 and not failures:
+            report.add(
+                self.domain,
+                "F2.head-guard",
+                CheckStatus.NOT_COVERED,
+                f"gateOpens={opens}; no complete first accepted set",
+            )
+            return
+
+        report.add(
+            self.domain,
+            "F2.head-guard",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"gateOpens={opens} completed={completed} failures={len(failures)}"
+            + (f"; first={failures[0]}" if failures else ""),
+        )
+
+    def _check_wheel_zoom_floor(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        pattern = re.compile(
+            r"^(?:IC|WF|RV) wheelZoom (?:in|out) → "
+            r"zoom=(?P<zoom>\d+(?:\.\d+)?)（fit=(?P<fit>\d+(?:\.\d+)?) "
+            r"min=(?P<minimum>\d+(?:\.\d+)?) "
+            r"content=(?P<width>\d+)x(?P<height>\d+)）$"
+        )
+        samples = []
+        failures = []
+
+        for line in session.lines:
+            if " wheelZoom " not in line.message:
+                continue
+            match = pattern.match(line.message)
+            if match is None:
+                failures.append(f"{line.timestamp} 舊版或無法解析的 wheelZoom：{line.message}")
+                continue
+
+            zoom = float(match.group("zoom"))
+            minimum_text = match.group("minimum")
+            minimum = float(minimum_text)
+            width = int(match.group("width"))
+            height = int(match.group("height"))
+            expected = max(0.000001, 1.0 / width, 1.0 / height)
+            samples.append((zoom, minimum, expected))
+            decimal_places = (
+                len(minimum_text.split(".", 1)[1])
+                if "." in minimum_text
+                else 0
+            )
+            print_rounding = 0.5 * (10 ** -decimal_places)
+            if abs(minimum - expected) > max(
+                print_rounding + 1e-12, expected * 0.02
+            ):
+                failures.append(
+                    f"{line.timestamp} min={minimum:g} 應為內容下限 {expected:g}"
+                )
+            if zoom + 0.000001 < minimum:
+                failures.append(
+                    f"{line.timestamp} zoom={zoom:g} 低於 min={minimum:g}"
+                )
+
+        if not samples and not failures:
+            report.add(
+                self.domain,
+                "F6.zoom-floor",
+                CheckStatus.NOT_COVERED,
+                "本 session 無主畫面滾輪縮放",
+            )
+            return
+        report.add(
+            self.domain,
+            "F6.zoom-floor",
+            CheckStatus.PASS if samples and not failures else CheckStatus.FAIL,
+            f"samples={len(samples)} failures={len(failures)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_waterfall_bootstrap(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        bootstrap_lines = [
+            line
+            for line in session.lines
+            if line.message.startswith("WF bootstrap period ")
+        ]
+        if not bootstrap_lines:
+            report.add(
+                self.domain,
+                "F2.waterfall-bootstrap",
+                CheckStatus.NOT_COVERED,
+                "本 session 無瀑布預載週期儀器",
+            )
+            return
+
+        waterfall_mode = False
+        prepared = False
+        starts = 0
+        failures = []
+        for line in session.lines:
+            message = line.message
+            if message == "ApplyMainDisplayMode → Waterfall":
+                waterfall_mode = True
+                continue
+            if message == "ApplyMainDisplayMode → ImageCanvas":
+                waterfall_mode = False
+                continue
+            if message.startswith("WF bootstrap period "):
+                prepared = "source=applied-hardware" in message
+                if not prepared:
+                    failures.append(
+                        f"{line.timestamp} 瀑布週期退回第二幀學習：{message}"
+                    )
+                continue
+            if message.startswith("StartGrab") and waterfall_mode:
+                starts += 1
+                if not prepared:
+                    failures.append(
+                        f"{line.timestamp} 瀑布 StartGrab 前未預載硬體週期"
+                    )
+                prepared = False
+
+        report.add(
+            self.domain,
+            "F2.waterfall-bootstrap",
+            CheckStatus.PASS if starts > 0 and not failures else CheckStatus.FAIL,
+            f"starts={starts} bootstrap={len(bootstrap_lines)} failures={len(failures)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_capture_view_refire(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        starts = 0
+        refires = 0
+        awaiting_refire = False
+        failures = []
+
+        for line in session.lines:
+            message = line.message
+            if message.startswith("StartGrab"):
+                if awaiting_refire:
+                    failures.append(
+                        f"{line.timestamp} previous StartGrab has no view-range refire"
+                    )
+                starts += 1
+                awaiting_refire = True
+                continue
+            if message.startswith("viewRange refire reason=capture-start mode="):
+                if awaiting_refire:
+                    refires += 1
+                    awaiting_refire = False
+                continue
+            if message.startswith("capture gate open ") and awaiting_refire:
+                failures.append(
+                    f"{line.timestamp} capture gate opened before view-range refire"
+                )
+                awaiting_refire = False
+
+        if awaiting_refire:
+            failures.append("last StartGrab has no view-range refire")
+        if starts == 0:
+            report.add(
+                self.domain,
+                "F2.view-refire",
+                CheckStatus.NOT_COVERED,
+                "session has no StartGrab",
+            )
+            return
+        report.add(
+            self.domain,
+            "F2.view-refire",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"starts={starts} refires={refires} failures={len(failures)}"
+            + (f"; first={failures[0]}" if failures else ""),
+        )
 
     def _check_row_presentation(
         self, session: FlowSession, report: CheckReport
@@ -55,11 +322,16 @@ class LiveFlowValidator:
                 )
 
         if rows == 0:
+            detail = (
+                "已有 mainImage 後 Curve 接受證據，但日常記錄未開啟 rowChart DVT 快照"
+                if presentations > 0
+                else "本 session 無監控列曲線更新"
+            )
             report.add(
                 self.domain,
                 "F2.row-presentation",
                 CheckStatus.NOT_COVERED,
-                "本 session 無監控列曲線更新",
+                detail,
             )
             return
         report.add(
@@ -266,7 +538,11 @@ class LiveFlowValidator:
         stops = 0
         start_syncs = 0
         start_sync_ready = False
+        standby_phase_verified = False
+        standby_start_ready = False
         parameter_sync_ready = False
+        tail_active = False
+        tail_completed = False
         sync_expected = {}
         sync_ready_cameras = {}
         sync_phase_results = {}
@@ -350,21 +626,31 @@ class LiveFlowValidator:
 
             sync_phase_match = re.match(
                 r"acquisition sync phase reason=(\S+) attempt=(\d+) "
-                r"system=(-?\d+) cams=([\d,]+) spreadTicks=(-?\d+) "
-                r"spreadMs=([0-9]+(?:\.[0-9]+)?) "
-                r"limitMs=([0-9]+(?:\.[0-9]+)?) "
-                r"measurable=(True|False) aligned=(True|False)",
+                r"system=(?P<system>-?\d+) cams=(?P<cams>[\d,]+) "
+                r"(?:periodMs=[0-9]+(?:\.[0-9]+)? "
+                r"periodMismatchMs=[0-9]+(?:\.[0-9]+)? )?"
+                r"spreadTicks=(?P<ticks>-?\d+) "
+                r"spreadMs=(?P<spread>[0-9]+(?:\.[0-9]+)?) "
+                r"limitMs=(?P<limit>[0-9]+(?:\.[0-9]+)?) "
+                r"measurable=(?P<measurable>True|False) "
+                r"aligned=(?P<aligned>True|False)"
+                r"(?: sampleSource=(?P<source>\S+))?",
                 message,
             )
             if sync_phase_match:
-                measurable = sync_phase_match.group(8) == "True"
-                aligned = sync_phase_match.group(9) == "True"
-                spread_ms = float(sync_phase_match.group(6))
-                limit_ms = float(sync_phase_match.group(7))
+                measurable = sync_phase_match.group("measurable") == "True"
+                aligned = sync_phase_match.group("aligned") == "True"
+                spread_ms = float(sync_phase_match.group("spread"))
+                limit_ms = float(sync_phase_match.group("limit"))
                 if aligned and (not measurable or spread_ms > limit_ms):
                     failures.append(
                         f"invalid aligned phase evidence at {line.timestamp}: "
                         f"measurable={measurable} spread={spread_ms} limit={limit_ms}"
+                    )
+                if sync_phase_match.group("source") != "warm-snapshot":
+                    failures.append(
+                        f"sync phase did not use immutable warm snapshot "
+                        f"at {line.timestamp}"
                     )
                 key = (
                     sync_phase_match.group(1),
@@ -414,11 +700,38 @@ class LiveFlowValidator:
             if message.startswith(
                 ("acquisition sync failed ", "capture synchronize failed ")
             ):
-                failures.append(
-                    f"acquisition synchronization failed at {line.timestamp}: {message}"
-                )
+                if "reason=idle" not in message:
+                    failures.append(
+                        f"acquisition synchronization failed at {line.timestamp}: {message}"
+                    )
                 start_sync_ready = False
                 parameter_sync_ready = False
+                continue
+
+            if message.startswith("acquisition phase verified "):
+                standby_phase_verified = True
+                continue
+
+            if message.startswith("acquisition phase invalidated "):
+                standby_phase_verified = False
+                standby_start_ready = False
+                continue
+
+            start_path_match = re.match(
+                r"acquisition start path=(verified-standby|full-sync) cams=(\d+)",
+                message,
+            )
+            if start_path_match:
+                path = start_path_match.group(1)
+                standby_start_ready = (
+                    standby_phase_verified
+                    if path == "verified-standby"
+                    else start_sync_ready
+                )
+                if not standby_start_ready:
+                    failures.append(
+                        f"{path} selected without phase proof at {line.timestamp}"
+                    )
                 continue
 
             if message == "ui:【取得背景】鈕":
@@ -427,12 +740,13 @@ class LiveFlowValidator:
 
             if message.startswith("StartGrab"):
                 starts += 1
-                if not start_sync_ready:
+                if not (start_sync_ready or standby_start_ready):
                     failures.append(
-                        f"StartGrab without successful physical synchronization "
+                        f"StartGrab without verified standby or physical synchronization "
                         f"at {line.timestamp}"
                     )
                 start_sync_ready = False
+                standby_start_ready = False
                 start_pending = True
                 stop_pending = False
                 plan_ready = background_capture
@@ -471,6 +785,12 @@ class LiveFlowValidator:
 
             if message == "StopGrab":
                 stops += 1
+                if tail_active and not tail_completed:
+                    failures.append(
+                        f"StopGrab before tail completion at {line.timestamp}"
+                    )
+                tail_active = False
+                tail_completed = False
                 capture_open = False
                 stop_pending = True
                 background_capture = False
@@ -509,6 +829,35 @@ class LiveFlowValidator:
                 ("parameter reconfigure failed ", "parameter reconfigure canceled ")
             ):
                 capture_open = False
+                continue
+
+            first_set_match = re.match(
+                r"capture first-set ready path=\S+ cams=[\d,]+ aligned=(True|False)",
+                message,
+            )
+            if first_set_match:
+                if first_set_match.group(1) != "True":
+                    failures.append(
+                        f"first accepted frame set is out of phase at {line.timestamp}"
+                    )
+                continue
+
+            if message.startswith("capture tail begin "):
+                if not capture_open:
+                    failures.append(
+                        f"tail drain began while capture gate closed at {line.timestamp}"
+                    )
+                tail_active = True
+                tail_completed = False
+                continue
+
+            if message.startswith("capture tail complete pending="):
+                tail_completed = True
+                continue
+
+            if message.startswith("capture tail timeout "):
+                failures.append(f"tail drain timeout at {line.timestamp}: {message}")
+                tail_completed = True
                 continue
 
             if "firstFrame " in message and not capture_open:

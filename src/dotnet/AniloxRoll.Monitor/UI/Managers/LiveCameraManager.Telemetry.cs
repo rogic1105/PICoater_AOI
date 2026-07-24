@@ -64,7 +64,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.CameraStatusTimer] {ex.GetType().Name}: {ex.Message}"); return; }
 
             _statusTickInFlight = true;
-            Task.Run(() =>
+            Task.Run(async () =>
             {
                 try
                 {
@@ -80,6 +80,9 @@ namespace AniloxRoll.Monitor.UI.Managers
                         // 單飛路徑觸碰 → 背景使用安全。
                         bool wasConnected = _lastPresence.TryGetValue(cam.CameraId, out var pv) && pv;
                         _lastPresence[cam.CameraId] = isConnected;
+                        if (isConnected != wasConnected)
+                            InvalidateCapturePhase(
+                                $"presence-cam{cam.CameraId}-{(isConnected ? "online" : "offline")}");
                         if (isConnected && !wasConnected)
                             cam.RetryCLProtocolOnReconnect();
 
@@ -131,7 +134,11 @@ namespace AniloxRoll.Monitor.UI.Managers
                             double expFps = (cam.FrameHeight > 0 && cam.AppliedLineRateHz > 0)
                                 ? cam.AppliedLineRateHz / cam.FrameHeight : 0;
                             bool stalled = _stallDetector.Update(cam.CameraId, cam.GetFrameCount(), expFps);
-                            if (stalled) { statusText = "STALL"; color = Color.Red; }
+                            if (stalled)
+                            {
+                                InvalidateCapturePhase("stall-cam" + cam.CameraId);
+                                statusText = "STALL"; color = Color.Red;
+                            }
                             else if (!cam.UserWantsGrab)
                             {
                                 statusText = "就緒"; color = Color.LightGreen;
@@ -169,6 +176,9 @@ namespace AniloxRoll.Monitor.UI.Managers
                             OnHwReady?.Invoke();
                         }
                     }, null);
+
+                    if (!IsLiveGrabbing)
+                        await PrepareIdleCaptureStandbyAsync(snapshot);
                 }
                 catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[LiveCameraManager.CameraStatusTick(bg)] {ex.GetType().Name}: {ex.Message}"); }
                 finally { _statusTickInFlight = false; }

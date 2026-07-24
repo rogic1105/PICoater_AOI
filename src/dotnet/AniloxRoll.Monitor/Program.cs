@@ -131,6 +131,8 @@ namespace AniloxRoll.Monitor
                     $"[Program] runtime logs={_runtimeLogDirectory} trace={traceFile}");
                 System.Diagnostics.Trace.WriteLine(
                     $"[Program] single instance acquired pid={System.Diagnostics.Process.GetCurrentProcess().Id}");
+                System.Diagnostics.Trace.WriteLine(
+                    $"[Program] executable={Application.ExecutablePath}");
             }
             catch { /* Logging must never prevent application startup. */ }
         }

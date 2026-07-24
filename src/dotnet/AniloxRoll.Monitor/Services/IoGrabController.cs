@@ -241,7 +241,10 @@ namespace AniloxRoll.Monitor.Core.Services
             catch (Exception ex) { IoLogger.Error("WriteDo PC_BUSY=false failed", ex); }
         }
 
-        /// <summary>App 拒絕或無法開始 Grab：BUSY 保持 Low，FSM 回 Idle 等待下一個完整 START 邊緣。</summary>
+        /// <summary>
+        /// App 暫時無法開始 Grab：BUSY 保持 Low，FSM 回 Idle。
+        /// 若 START 仍為 High，下一次 PollTick 會重試；成功進入 Running 後同一段 High 不再重複。
+        /// </summary>
         public async Task NotifyGrabStartRejected()
         {
             await NotifyGrabStopped();
@@ -385,10 +388,15 @@ namespace AniloxRoll.Monitor.Core.Services
                     return;
                 }
 
-                // START 上升緣 → 開始 Grab
-                if (!_lastDiStart && diStart && _currentState == IoState.Idle)
+                // START is level-sensitive while Idle. A rejected request returns to Idle, so a
+                // held HIGH is retried after the previous tail or camera preparation finishes.
+                // Running consumes the current HIGH and LOW rearms the next capture.
+                if (diStart && _currentState == IoState.Idle)
                 {
-                    IoLogger.Info("START rising edge → Start Grab");
+                    IoLogger.Info(
+                        _lastDiStart
+                            ? "START held high -> Retry Start Grab"
+                            : "START rising/high level -> Start Grab");
                     SetState(IoState.Running);
                     OnStartRequested?.Invoke();
                 }

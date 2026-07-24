@@ -73,6 +73,7 @@ namespace AniloxRoll.Monitor.Forms
         private readonly object _pendingLiveRowCurveLock = new object();
         private readonly Dictionary<int, float[]> _pendingLiveRowMean = new Dictionary<int, float[]>();
         private readonly Dictionary<int, float[]> _pendingLiveRowMax = new Dictionary<int, float[]>();
+        private int _liveRowPresentationCameraCount;
         private readonly Dictionary<int, float[]> _waterfallRowMeanPending = new Dictionary<int, float[]>();
         private readonly Dictionary<int, float[]> _waterfallRowMaxPending  = new Dictionary<int, float[]>();
         private float[] _waterfallRowMean;
@@ -293,6 +294,8 @@ namespace AniloxRoll.Monitor.Forms
         public AniloxRollForm()
         {
             InitializeComponent();
+            Text += " [MIL Edge Experiment]";
+            FlowTrace.Log("experiment build=mil-edge-coverage-v8");
             _uiStallDetector = new Core.Services.UiStallDetector(this);   // [UiStall]/[UiPing] UI 卡頓常駐儀器（GC 歸因＋佇列飽和判別）
             // [UiPaint] WM_PAINT 探針：量 chart「真正畫」的時間（UpdateData 快、WM_PAINT 才是重活的盲區）
             _paintProbes = new[]
@@ -713,6 +716,7 @@ namespace AniloxRoll.Monitor.Forms
             _liveRowChartHelper = new RowCurveChartHelper(this.chartLiveRow);
             _liveRowDisplay = new RowCurveDisplayAdapter(_liveRowChartHelper, GetVerticalDisplayDirection) { FlowName = "LC row" };
             _liveRowSync = new RowCurveSyncCoordinator(_liveRowDisplay);
+            _liveRowSync.DataAccepted += OnLiveRowCurveAccepted;
             _liveRowDisplay.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
 
             _reviewRowChartHelper = new RowCurveChartHelper(this.chartReviewRow);

@@ -65,15 +65,39 @@ class HardwareFlowValidator:
         )
 
     def _check_io_grab_outcomes(self, session: FlowSession, report: CheckReport) -> None:
+        request_message = "io:DI START 上升緣 → 抓取請求"
+        legacy_message = "io:DI START 上升緣 → 開始抓取"
+        has_request_probe = any(
+            line.message == request_message for line in session.lines
+        )
         starts = [
             index for index, line in enumerate(session.lines)
-            if line.message == "io:DI START 上升緣 → 開始抓取"
+            if line.message == (
+                request_message if has_request_probe else legacy_message
+            )
         ]
         if not starts:
             report.add(self.domain, "H3.io-grab", CheckStatus.NOT_COVERED, "本 session 無 IO START Grab")
             return
 
         failures = []
+        tail_active = False
+        for line in session.lines:
+            if line.message.startswith("capture tail begin "):
+                tail_active = True
+                continue
+            if line.message == "StopGrab":
+                tail_active = False
+                continue
+            if (
+                tail_active
+                and line.message
+                == "IO grab accepted busy=on state=already-grabbing"
+            ):
+                failures.append(
+                    f"{line.timestamp} tail drain was accepted as already-grabbing"
+                )
+
         for position, start_index in enumerate(starts):
             end = starts[position + 1] if position + 1 < len(starts) else len(session.lines)
             outcomes = [
@@ -89,7 +113,8 @@ class HardwareFlowValidator:
             self.domain,
             "H3.io-grab",
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
-            f"starts={len(starts)} invalid={len(failures)}" + (f"；首例 {failures[0]}" if failures else ""),
+            f"requests={len(starts)} probe={'request' if has_request_probe else 'legacy'} "
+            f"invalid={len(failures)}" + (f"；首例 {failures[0]}" if failures else ""),
         )
 
     def _check_connection_edges(self, session: FlowSession, report: CheckReport) -> None:

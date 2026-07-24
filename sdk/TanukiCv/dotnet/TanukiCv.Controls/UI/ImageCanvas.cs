@@ -114,12 +114,23 @@ namespace TanukiCv.Controls
         /// <summary>LOD overscan：tile 多裁「可見區 × 此倍率」的邊（每側）。1.0=各側多一個視窗(3×3)→ 拖曳不易破圖。</summary>
         public float LodMargin { get; set; } = 1.0f;
 
-        // ── 滾輪相對 fit 縮放（opt-in；預設 false=原 [0.01,100] 行為，主程式回顧畫布不受影響）──
+        // ── 滾輪相對 fit 縮放（opt-in；預設 false=可縮到內容仍至少保留 1px 的實用下限）──
         //    開啟後：fit=最小(看全圖)，滾 N 格不管 resize 放大程度一致；上限=bitmap 1:1 的 N 倍
         //    → resize 多(bitmap 小)放不了那麼大、resize 少可放更大看真細節。
         private float _fitZoom = 1f;                            // FitToScreen 當下的 _zoom（=「1×」基準）
         public bool FitRelativeZoom { get; set; } = false;
         public float MaxZoomOverBitmap { get; set; } = 8f;     // 上限 = 餵入 bitmap 的 1:1 再放大幾倍（像素級檢視）
+
+        private float MinimumUsefulZoom()
+        {
+            int width = ContentW;
+            int height = ContentH;
+            if (width <= 0 || height <= 0) return 0.000001f;
+
+            // 固定 0.01 對超寬合圖會變成可見的縮小牆。依內容計算下限，直到較短邊仍有 1px；
+            // 再縮已無可辨識資訊，且可能讓繪圖尺寸退化成 0。
+            return Math.Max(0.000001f, Math.Max(1f / width, 1f / height));
+        }
 
         /// <summary>縮小（fit/overview）時整圖快取的內插模式。預設 <see cref="InterpolationMode.NearestNeighbor"/>（快，
         /// 適合每幀重建的即時顯示）；靜態畫面（如回顧 camReviewMain）可設 HighQualityBilinear 換平滑（成本只在
@@ -785,6 +796,7 @@ namespace TanukiCv.Controls
             float notches = e.Delta / 120f;
             _zoom *= (float)Math.Pow(1.1, notches);
 
+            float minimumZoom;
             if (FitRelativeZoom)
             {
                 // fit=最小（看全圖），上限=bitmap 1:1 的 N 倍。滾 N 格相對 fit 放大一致；
@@ -793,10 +805,12 @@ namespace TanukiCv.Controls
                 float hi = Math.Max(_fitZoom, MaxZoomOverBitmap);
                 if (_zoom < lo) _zoom = lo;
                 if (_zoom > hi) _zoom = hi;
+                minimumZoom = lo;
             }
             else
             {
-                if (_zoom < 0.01f) _zoom = 0.01f;
+                minimumZoom = MinimumUsefulZoom();
+                if (_zoom < minimumZoom) _zoom = minimumZoom;
                 if (_zoom > 100.0f) _zoom = 100.0f;
             }
 
@@ -805,7 +819,10 @@ namespace TanukiCv.Controls
             if (FlowLog != null && Environment.TickCount - _flowWheelLastTick > 100)
             {
                 _flowWheelLastTick = Environment.TickCount;
-                FlowLog($"wheelZoom {(notches > 0 ? "in" : "out")} → zoom={_zoom:F2}（fit={_fitZoom:F2}）");
+                FlowLog(
+                    $"wheelZoom {(notches > 0 ? "in" : "out")} → " +
+                    $"zoom={_zoom:0.########}（fit={_fitZoom:0.########} min={minimumZoom:0.########} " +
+                    $"content={ContentW}x{ContentH}）");
             }
 
             _panOffset.X = e.X - (e.X - _panOffset.X) * scaleChange;

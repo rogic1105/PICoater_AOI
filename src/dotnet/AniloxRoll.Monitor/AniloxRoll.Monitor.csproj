@@ -124,6 +124,7 @@
     <Compile Include="Services\CaptureArchiveStore.cs" />
     <Compile Include="Services\CapturePreviewAtlasCodec.cs" />
     <Compile Include="Services\CaptureFileNaming.cs" />
+    <Compile Include="Acquisition\CapturePhaseMath.cs" />
     <Compile Include="Services\FlowTrace.cs" />
     <Compile Include="Services\FrameTickIndex.cs" />
     <Compile Include="Services\CaptureStoragePaths.cs" />
@@ -216,6 +217,7 @@
     <Compile Include="UI\Managers\RowCurveDisplayAdapter.cs" />
     <Compile Include="UI\Managers\RowCurveSyncCoordinator.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.cs" />
+    <Compile Include="UI\Managers\LiveCameraManager.CaptureBoundary.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.Display.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.Merge.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.Telemetry.cs" />

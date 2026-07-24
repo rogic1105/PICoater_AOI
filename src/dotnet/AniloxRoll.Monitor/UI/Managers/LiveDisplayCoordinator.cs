@@ -250,7 +250,48 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         public void ResetWaterfallIfActive()
         {
-            if (WaterfallMode) _waterfallView?.Reset();
+            if (!WaterfallMode || _waterfallView == null) return;
+            SeedWaterfallFramePeriod();
+            _waterfallView.Reset();
+        }
+
+        public void RefireMainViewRange(string reason)
+        {
+            if (WaterfallMode && _waterfallView != null)
+            {
+                _waterfallView.RefireViewRange();
+                Flow($"viewRange refire reason={reason} mode=WF");
+                return;
+            }
+
+            if (_imageDisplay != null)
+            {
+                _imageDisplay.RefireViewRange();
+                Flow($"viewRange refire reason={reason} mode=IC");
+            }
+        }
+
+        private void SeedWaterfallFramePeriod()
+        {
+            if (_waterfallView == null) return;
+
+            foreach (var cam in Cameras)
+            {
+                if (cam == null || !cam.IsConnected || cam.FrameHeight <= 0 ||
+                    cam.AppliedLineRateHz <= 0 || cam.DataLatchClockFreqHz <= 0)
+                    continue;
+
+                double periodMs = cam.FrameHeight * 1000.0 / cam.AppliedLineRateHz;
+                long periodTicks = (long)Math.Round(
+                    cam.DataLatchClockFreqHz * cam.FrameHeight / cam.AppliedLineRateHz);
+                if (periodTicks <= 0 || periodMs <= 0) continue;
+
+                _waterfallView.SetExpectedFramePeriod(periodTicks, periodMs);
+                Flow($"WF bootstrap period cam{cam.CameraId} periodMs={periodMs:F3} source=applied-hardware");
+                return;
+            }
+
+            Flow("WF bootstrap period unavailable; learn from runtime frames");
         }
 
         public void SetWaterfallDisplayLayer(WaterfallFrameLayer layer)

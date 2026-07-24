@@ -288,6 +288,100 @@ AutoAllocateCameras(Form)                    顯示基線 set:[顯示基線] 一
 
 ### F2 開始抓取（btnLiveGrab，已配置）
 
+#### MIL/IO boundary state table (experiment: edge coverage)
+
+The machine `DI START` high interval is the requested capture window. MIL remains physically
+armed while the product gate is closed; synchronization work must finish before the rising edge.
+
+| State | Event | Next state | Required action |
+|---|---|---|---|
+| `PhaseInvalid` | idle status tick, cameras ready | `PhaseSynchronizing` | Close product gate; pause/drain all connected cameras, reapply timing, resume back-to-back. |
+| `PhaseSynchronizing` | all cameras warm and phase spread within tolerance | `ReadyIdle` | Mark phase verified; keep MIL armed; product gate stays closed. |
+| `PhaseSynchronizing` | timeout, phase mismatch, disconnect, release | `PhaseInvalid` | Keep gate closed; log reason; retry only from a later idle tick. |
+| `ReadyIdle` | line-rate/height/presence generation changes or standby becomes stale | `PhaseInvalid` | Invalidate readiness before another capture may start. |
+| `ReadyIdle` | manual start | `HeadGuard` | Create grab owners and open the product gate without restarting MIL. |
+| `ReadyIdle` | IO HIGH (rising, startup-held, or retry-held) | `HeadGuard` | After the existing form-level light command/warm-up, open without a physical MIL restart. A temporarily busy request returns to `Idle` and is retried only while DI remains HIGH. |
+| `PhaseInvalid` / `PhaseSynchronizing` | manual start | `HeadGuard` or `PhaseInvalid` | Manual flow may wait for one full synchronization; open only after verification succeeds, then reject one boundary callback per camera. |
+| `PhaseInvalid` / `PhaseSynchronizing` | IO HIGH | same state | Reject the attempt with `capture-not-ready`; BUSY remains off and the same held HIGH may retry after readiness completes. |
+| `HeadGuard` | first callback from each connected camera | `HeadGuard` | Drop it before processing/display/persistence because a hot-standby line-scan frame can cross the light-off interval. |
+| `HeadGuard` | next complete frame from every connected camera | `Capturing` | Log per-camera hardware ticks and validate circular phase spread. A mismatch invalidates the next start but does not truncate the current HIGH window. |
+| `Capturing` | IO falling edge | `TailDrain` | Snapshot each camera's last accepted tick; accept exactly one newer complete frame per camera. |
+| `TailDrain` | IO HIGH returns before drain completes | `TailDrain` | Reject with `capture-not-ready:tail-drain`; BUSY stays Low. Controller returns to `Idle` and retries the held HIGH after drain/readiness completes. Never accept this as `already-grabbing`. |
+| `TailDrain` | every camera completes its newer frame | `ReadyIdle` or `PhaseInvalid` | Close gate, stop product grab, keep MIL armed; readiness follows the last phase verdict. |
+| `TailDrain` | timeout or disconnect | `PhaseInvalid` | Close gate and stop; log the missing cameras. Never wait indefinitely. |
+| `Capturing` | manual stop or safety limit | `ReadyIdle` or `PhaseInvalid` | Close gate immediately; manual/safety stop does not extend the requested window. |
+
+Boundary invariants:
+- The MIL segment after form-level illumination readiness contains no `PauseAcquisition`,
+  `ResumeAcquisition`, MIL fixed delay, or target-next-frame wait. DI polling and light warm-up
+  remain separately measurable upstream costs and are not hidden as MIL synchronization time.
+- `IO fall` closes only after one post-edge full frame per connected camera completes, or after
+  the bounded tail timeout.
+- First/tail frame decisions use hardware frame-start ticks. Wall-clock time is used only for
+  freshness and timeout guards.
+- One callback per connected camera is rejected after every new gate-open. It must produce
+  `capture head frame dropped ... reason=cross-boundary` and must not reach image processing,
+  display, Curve, CSV, or image persistence.
+- IO start is level-sensitive only while the controller is `Idle`. `Running` consumes that HIGH,
+  so a safety-limit stop cannot reopen repeatedly until DI first returns LOW.
+- `IO grab accepted busy=on state=already-grabbing` is forbidden between `capture tail begin` and
+  `StopGrab`; that would consume the next HIGH while the previous grab is still closing.
+- A phase fault may reject the next IO pulse, but must not silently shorten an already accepted
+  machine pulse.
+
+IO edge log-flow (this supersedes the legacy `reason=start` sequence below for IO starts):
+```
+Tbg: acquisition phase synchronizing reason=idle previous=...
+Tbg: acquisition idle prepare begin reason=... cams=P
+Tbg: acquisition sync begin/paused/timing-reset/resumed/ready/phase/complete reason=idle ...
+Tbg: acquisition phase verified reason=idle-sync
+Tbg: acquisition idle prepare ready cams=P
+
+T1: acquisition start path=verified-standby cams=P
+T1: StartGrab...
+T1: capture plan grab=...
+T1: grab limit armed Ns configured=10s grace=Gs source=io grab=...
+T1: capture gate open cams=P warm=True path=verified-standby
+Tn: capture head frame dropped camN tick=T reason=cross-boundary × P
+Tn: capture first-set phase system=S cams=... periodMs=... periodMismatchMs=...
+    spreadTicks=D spreadMs=X limitMs=5.000 measurable=True aligned=True
+Tn: capture first-set ready path=verified-standby cams=... aligned=True
+
+T1: capture tail begin cams=... timeoutMs=N
+Tn: capture tail frame accepted camN tick=T
+Tn: capture tail frame complete camN tick=T
+T1: capture tail complete pending=
+T1: StopGrab
+T1: capture gate closed standby=on
+```
+
+IO code-flow:
+```
+CameraStatusTimer_Tick@LiveCameraManager.Telemetry.cs
+ -> PrepareIdleCaptureStandbyAsync@LiveCameraManager.CaptureBoundary.cs
+    -> SynchronizeAcquisitionAsync(reason=idle) -> MarkCapturePhaseVerified
+
+IoStartGrabAsync@AniloxRollForm.HardwareStatus.cs
+ -> TryGetCaptureStandbyReady
+ -> ToggleLiveGrabAsync(ioControlled=true)
+    -> StartGrabAsync(requireVerifiedStandby=true)
+       -> verified standby: no Pause/Resume/fixed delay/next-frame target
+    -> capture plan + duration guard
+    -> OpenCaptureGate -> ArmCaptureBoundary
+
+ProcessingFunction@MilCamera.cs
+ -> updates LastFrameStartTicks + LastFrameObservedTimestamp for every standby callback
+ -> OnMilFrameReady@AniloxCamera.cs
+    -> CaptureFrameAccepted(cam,tick)
+    -> processing/display/save
+    -> CaptureFrameCompleted(cam,tick)
+
+IoStopGrabAsync@AniloxRollForm.HardwareStatus.cs
+ -> ToggleLiveGrabAsync(drainIoTail=true)
+    -> DrainIoTailAsync: exactly one newer completed frame per connected camera, or timeout
+    -> StopGrab
+```
+
 **log-flow（執行期腳印＝判準）**
 ```
 T1: acquisition sync begin reason=start attempt=A gate=closed cams=P
@@ -296,10 +390,13 @@ Tbg: acquisition sync timing-reset reason=start lineRates=cam1=R,cam2=R,...
 T1: acquisition sync resumed reason=start attempt=A cams=P
 T1: acquisition sync ready reason=start attempt=A camN system=S tick=T freq=F       × P
 T1: acquisition sync phase reason=start attempt=A system=S cams=... spreadTicks=D
-    spreadMs=X limitMs=5.000 measurable=True aligned=True                          × 有在線相機的板
+    spreadMs=X limitMs=5.000 measurable=True aligned=True sampleSource=warm-snapshot
+                                                                                   × 有在線相機的板
 T1: acquisition sync complete reason=start attempts=A cams=P phase=True
 T1: StartGrab（cams=M）
 T1: ApplyMainDisplayMode → 同模式    ← 冪等：不得出現 create/teardown 行
+T1: viewRange refire reason=capture-start mode=WF|IC
+    ← 清除上一輪 Curve 視野後，用主畫面既有幾何主動重發；不得等滑鼠或首幀才補
 T1: capture plan grab=… root=… imageDir=… csv=… files=… scale=…
 T1: grab limit armed Ns grab=…       ← 正式監控 grab 成功後啟動 one-shot；背景採樣借用 grab 不武裝
 T1: capture gate open cams=P warm=True   ← P=在線數；必晚於同步完成與 plan/limit，早於所有 firstFrame
@@ -337,6 +434,8 @@ Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線�
  │      ├ IsLiveGrabbing = true
  │      ├ ApplyMainDisplayMode@LiveDisplayCoordinator.cs   ← 冪等（view 已存在早退）＝本 flow 不得出現 create/teardown 行
  │      ├ ResetWaterfallIfActive@LiveDisplayCoordinator.cs → Reset@WaterfallView.cs（清舊圖＋重置 tick 對齊，防新幀接舊網格錯位）
+ │      ├ RefireMainViewRange(reason=capture-start)@LiveDisplayCoordinator.cs
+ │      │  └ RefireViewRange@WaterfallView.cs｜ImageDisplayView.cs → ApplyLiveViewRange
  │      └ per-cam SetUserGrabIntent(true)@AniloxCamera.cs
  │         └ SetUserGrabIntent@MilCamera.cs（同步 M_START 已完成；此處只開產品意圖）
  ├（啟動成功）NextGrabId@InspectionLogService.cs → _currentGrabId ＋ capture plan 行（C1）
@@ -381,11 +480,23 @@ ContentPresented → MainContentPresented@LiveDisplayCoordinator/LiveCameraManag
  → OnLiveRowCurveDataUi → RowCurveDisplayAdapter.FlowApply（rowChart 快照行）
 ```
 
+瀑布每輪 Reset 前由 `LiveDisplayCoordinator.SeedWaterfallFramePeriod` 使用相機已套用的
+`FrameHeight / AppliedLineRateHz` 與 Data Latch clock 預載分組週期：
+`WF bootstrap period camN periodMs=P source=applied-hardware`。第一批已對齊相機幀到齊後即可組成 band，
+不得為了重新量測週期而額外等待同一台相機的第二幀；硬體週期不可用時才允許
+`WF bootstrap period unavailable; learn from runtime frames`，後續仍由實際 tick delta 校正。
+
 列曲線顯示不變量：GPU 完成只能更新 pending cache；必須等同一條主畫面 API 發出
 `ContentPresented` 才可更新 chart。LOD 以 content generation 對應實際安裝的 tile，不能在
-`RefreshLod` 僅提出請求時提前發布。每次發布留
-`rowCurve present after=mainImage cams=N mode=IC|WF`；快速累積時只保留每台最新一筆，禁止
+`RefreshLod` 僅提出請求時提前發布。`rowCurve present after=mainImage cams=N mode=IC|WF`
+只能由 `RowCurveSyncCoordinator.DataAccepted` 在確認 chart 已具備完整資料與視野、即將同步更新時發布；資料仍因缺視野停在
+pending 時不得先記成 present。快速累積時只保留每台最新一筆，禁止
 用固定延遲猜影像完成時間。
+
+同步相位不變量：`acquisition sync ready` 取得的 `tick/freq/height/lineRate` 是同一批不可變
+warm snapshot；`acquisition sync phase ... sampleSource=warm-snapshot` 必須只用這批數值計算。
+禁止驗證時重新讀取仍在前進的 `LastFrameStartTicks`，否則低 Line Rate 會把不同幀世代誤判成
+約一個 frame period 的相位差，讓 manager 永久停在 busy。
 
 ### F3 停止抓取
 
@@ -393,8 +504,11 @@ ContentPresented → MainContentPresented@LiveDisplayCoordinator/LiveCameraManag
 ```
 T1: StopGrab
 T1: capture gate closed standby=on
+T1: rowCurve present after=mainImage cams=N mode=IC|WF
+    （可選且最多一行；僅限前面已有 `capture tail complete pending=` 的最後一組合法尾幀）
 Tn: drop drainedFrame after StopGrab camN（可選；每台最多一行）
-（之後不得再出現 firstFrame / 任何 [Flow] 顯示行，直到下一個動作；
+（之後不得再出現 firstFrame / 新的 CSV、影像或 Curve 更新，直到下一個動作；
+  最後一組 row Curve 是 Stop 前已接受並完成的 IO tail 幀，只是 UI 合併呈現晚於 StopGrab；
   drop 行是 gate 關閉競態的觀測儀器，不是顯示更新）
 ```
 
@@ -433,8 +547,10 @@ Tn: drop drainedFrame after StopGrab camN（可選；每台最多一行）
 python tools/python/check_stopgrab_flow.py [trace.log]
 ```
 - PASS 判準：每個 `StopGrab` 必接 `capture gate closed standby=on`；其後到下一個
-  `ui:`/`StartGrab`/`AllocateCameras begin` 前只允許 `drop drainedFrame after StopGrab camN`，
-  不得再出現 `firstFrame`、`LC row`、`capture csv`、IC/WF display 更新。
+  `ui:`/`StartGrab`/`AllocateCameras begin` 前只允許：
+  ①已有 `capture tail complete pending=` 時的一組 `LC row` 快照與最多一行
+  `rowCurve present after=mainImage`；②`drop drainedFrame after StopGrab camN`。
+  不得再出現 `firstFrame`、`capture csv`、新的 IC/WF display 更新或第二組 Curve 呈現。
 
 ### F4 切「主畫面顯示」設定（即時↔瀑布，即時生效）
 
@@ -596,9 +712,11 @@ lblIoState.MouseDown
 
 **log-flow（執行期腳印＝判準）**
 ```
-T1: IC|WF wheelZoom in|out → zoom=Z（fit=F）   ← 每手勢至少一行（100ms 節流）
+T1: IC|WF wheelZoom in|out → zoom=Z（fit=F min=M content=WxH）   ← 每手勢至少一行（100ms 節流）
 T1: IC|WF|RV fit(double-click) / physical1x(triple-click)   ← 使用者 fit/1x 手勢（合法的視野重設主人）
 （縮放/互動期間**不得出現 `autoFit(...)`/`lodRebind(...)` 行**——出現＝系統 fit 跟使用者縮放打架。
+  `FitRelativeZoom=false` 時 M 必須等於 `max(1/W, 1/H)`（最低保護值 `0.000001`）；
+  不得再出現固定 `0.01` 縮小牆。Z 不得低於 M，且超寬合圖必須能縮到 `0.01` 以下。
   zoom 突然回 fit 而無 fit(double-click) 行＝有東西在暗中重設（孤兒判讀）。
   `autoFit(firstFrame ...)` 只允許在 view 建立後首幀；`autoFit(sizeChanged@fitView ...)` 只允許在
   使用者「未動過視野」時的尺寸變更。centerCam 行在縮放中出現＝正常（中心相機隨視野變）。）
@@ -608,6 +726,8 @@ T1: IC|WF|RV fit(double-click) / physical1x(triple-click)   ← 使用者 fit/1x
 ```
 OnMouseWheel@ImageCanvas.cs   ← 滾輪一律 canvas 自理（app 無全域訊息濾鏡）
     ├ `FitRelativeZoom=false`（監控即時／瀑布與回顧一致；fit 不是最小值，允許再縮小總覽）
+    ├ `MinimumUsefulZoom=max(1/ContentW, 1/ContentH, 0.000001)`（較短邊至少 1px；
+    │   內容尺寸自適應，禁止固定 `0.01` 下限）
     ├ zoom ×1.1^(e.Delta/120)     ← 正比實際轉動量（事件合併時大 e.Delta 也按比例；修卡頓漏算）
     ├ FlowLog "wheelZoom in|out"（100ms 節流＝每手勢至少一行）
     ├ pan 錨定游標點＋Invalidate（zoom 防抖：滾動中拉伸舊 cache/tile，_zoomSettleTimer 停 150ms 才重建）
@@ -744,8 +864,9 @@ T1: IO controller start generation=N endpoint=IP:Port
         → IO controller start generation=N+1 endpoint=IP:Port
 快速連改：IO controller restart coalesced generation=N（可有；該代不得再 start）
 關閉：IO controller stop generation=N reason=shutdown
-DI START：io:DI START 上升緣 → 開始抓取
-       → IO grab accepted busy=on …｜IO grab rejected busy=off reason=…（恰一）
+DI START：io:DI START 上升緣 → 抓取請求
+       → （接受時）io:DI START 上升緣 → 開始抓取
+       → IO grab accepted busy=on …｜IO grab rejected busy=off reason=…（每個請求恰一）
 ```
 - **單 process／單 controller**：`Program` named mutex 必須在 Form 建立前擋掉同機第二份程式；同一 session
   任一時刻只能有一個 active generation。restart 以 lifecycle gate 序列化，舊 generation callback 不得進 UI/Grab。
@@ -1136,7 +1257,8 @@ T1: RV loadGrab done {grabId}（…ms）
 （若由 Data 頁隱藏預載：切到回顧後延後一個 UI message，出現 `RV tabVisible repaint view=True` →
  `RV visiblePaint ready=True lod=… size=WxH`；以可見尺寸補 LOD tile + paint，不重讀檔、不重設視野）
 （grab 中按：另會出現 DisableGlobalMerge 等監控行——歸本 intent 管，見孤兒判讀規則）
-不變量：手按【讀取資料】＝刷新+跳最新（loadGrab 的 grabId=清單最新；2026-07-10 修「停在舊選取」）；
+不變量：手按【讀取資料】＝刷新+跳最新（loadGrab 的 grabId=該次 `DT list reload range` 最新值；
+切換 Captures/Captures_pack 等資料根目錄時不得拿前一根目錄的序號比較；2026-07-10 修「停在舊選取」）；
 開機自動恢復上次位置不在此限。
 載入 busy 視覺唯一 owner＝`BusyUiBinder`；`AniloxRollPresenter.BusyStateChanged` 與
 `ReviewStitchCoordinator.LoadGrabStitchedViewAsync` 共用同一實例。圖片 latest token 與 busy lease 由

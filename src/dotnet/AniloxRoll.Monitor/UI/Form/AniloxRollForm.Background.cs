@@ -205,7 +205,9 @@ namespace AniloxRoll.Monitor.Forms
                     return;
                 }
                 await _liveCameraManager.ReleaseAsync();
-                bool started = await ToggleLiveGrabAsync("io:背景取得完成 → 開始抓取");
+                bool started = await ToggleLiveGrabAsync(
+                    "io:背景取得完成 → 開始抓取",
+                    ioControlled: true);
                 if (started && IsCurrentIoController(ioController, ioGeneration))
                 {
                     await ioController.NotifyGrabStarted();

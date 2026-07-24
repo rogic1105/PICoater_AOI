@@ -353,31 +353,43 @@ class ReviewFlowValidator:
             return
 
         details = []
-        for reload_time in reload_times[1:]:
-            seen = [
-                current
-                for line in session.lines
-                if line.elapsed < reload_time
-                for current in [grab_id(line.message)]
-                if current
-            ]
-            newest_seen = max(seen) if seen else None
-            after_begin = next(
-                (
-                    grab_id(line.message)
-                    for line in session.lines
-                    if line.elapsed >= reload_time
-                    and line.message.startswith("RV loadGrab begin")
-                ),
-                None,
+        checked = 0
+        range_pattern = re.compile(
+            r"^DT list reload range=(?:\d{6}-\d{6})~"
+            r"(?P<latest>\d{6}-\d{6})\b"
+        )
+        for position, reload_time in enumerate(reload_times[1:], start=1):
+            reload_end = (
+                reload_times[position + 1]
+                if position + 1 < len(reload_times)
+                else float("inf")
             )
-            if newest_seen and after_begin and after_begin < newest_seen:
-                details.append(f"{after_begin} < {newest_seen}")
+            latest_in_root = None
+            loaded = None
+            for line in session.lines:
+                if line.elapsed < reload_time or line.elapsed >= reload_end:
+                    continue
+                range_match = range_pattern.match(line.message)
+                if range_match is not None and latest_in_root is None:
+                    latest_in_root = range_match.group("latest")
+                if line.message.startswith("RV loadGrab begin") and loaded is None:
+                    loaded = grab_id(line.message)
+                if latest_in_root and loaded:
+                    break
+
+            if latest_in_root is None or loaded is None:
+                details.append(
+                    f"{reload_time:.3f}s 缺少清單最新值或 loadGrab 證據"
+                )
+                continue
+            checked += 1
+            if loaded != latest_in_root:
+                details.append(f"{loaded} != 本次清單最新 {latest_in_root}")
         report.add(
             self.domain,
             "R1.reload-latest",
             CheckStatus.FAIL if details else CheckStatus.PASS,
-            "; ".join(details) if details else "第 2 次起皆未退回舊序號",
+            "; ".join(details) if details else f"第 2 次起 checked={checked}，皆載入本次清單最新序號",
         )
 
     def _check_period_dedup(self, session: FlowSession, report: CheckReport) -> None:

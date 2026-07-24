@@ -150,6 +150,19 @@ namespace AniloxRoll.Monitor.Tests
             Assert.That(_startCount, Is.EqualTo(1), "Should not fire start twice for held-high signal");
         }
 
+        [Test]
+        public async Task PollTick_StartupHeldHigh_StartsOnceAfterHandshake()
+        {
+            SetupDiStatuses(true, true);
+            await ConnectAndEnterIdle();
+
+            await _ctrl.PollTick();
+            await _ctrl.PollTick();
+
+            Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Running));
+            Assert.That(_startCount, Is.EqualTo(1));
+        }
+
         // ── PLC ALIVE 故障 ──
 
         [Test]
@@ -260,7 +273,7 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
-        public async Task NotifyGrabStartRejected_ClearsBusyAndWaitsForNextFullEdge()
+        public async Task NotifyGrabStartRejected_HeldHighRetriesThenRunsOnce()
         {
             await ConnectAndEnterIdle();
             SetupDiStatuses(true, true);
@@ -273,13 +286,16 @@ namespace AniloxRoll.Monitor.Tests
             Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Idle));
             _mockPlc.Verify(p => p.WriteDo(2, false), Times.Once);
 
-            await _ctrl.PollTick(); // START still high: not a new edge.
-            Assert.That(_startCount, Is.EqualTo(1));
+            await _ctrl.PollTick(); // START still high: retry after transient rejection.
+            await _ctrl.PollTick(); // Running consumes this HIGH.
+            Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Running));
+            Assert.That(_startCount, Is.EqualTo(2));
+
             SetupDiStatuses(true, false);
             await _ctrl.PollTick();
             SetupDiStatuses(true, true);
             await _ctrl.PollTick();
-            Assert.That(_startCount, Is.EqualTo(2));
+            Assert.That(_startCount, Is.EqualTo(3));
         }
 
         [Test]

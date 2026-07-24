@@ -94,6 +94,8 @@ namespace TanukiCv.Controls
         private readonly long[] _perCamSeq;          // 各相機目前 seq（watermark；初值 -1=尚無幀）
         private long _periodTicks;                    // 線上估計幀週期（運行最小 tick delta）
         private long _periodWallMs;                   // 線上估計幀週期（運行最小 wall delta，算 stale）
+        private long _expectedPeriodTicks;             // Seeded hardware period for first-band grouping after Reset.
+        private long _expectedPeriodWallMs;
         private long _originTick;                     // 序號原點＝第一幀 tick
         private bool _originSet;
         private long _lastNewCamWallMs;               // 最後一台新相機被發現的 wall-clock（判相機集合是否穩定）
@@ -185,6 +187,28 @@ namespace TanukiCv.Controls
                 UpdateCenterCam(_canvas.Zoom, _canvas.PanOffset);
             };
             _flushTimer.Start();
+        }
+
+        /// <summary>
+        /// Supplies the already-applied camera frame period so the first waterfall band does not
+        /// wait for a second frame merely to relearn the period. Runtime tick deltas still refine
+        /// this seed after acquisition starts.
+        /// </summary>
+        public void SetExpectedFramePeriod(long periodTicks, double periodMs)
+        {
+            if (periodTicks <= 0 || double.IsNaN(periodMs) || double.IsInfinity(periodMs) || periodMs <= 0)
+                return;
+
+            lock (_lock)
+            {
+                _expectedPeriodTicks = periodTicks;
+                _expectedPeriodWallMs = Math.Max(1L, (long)Math.Round(periodMs));
+                if (!_originSet)
+                {
+                    _periodTicks = _expectedPeriodTicks;
+                    _periodWallMs = _expectedPeriodWallMs;
+                }
+            }
         }
 
         /// <summary>合圖佈局（各台 start mm + 基準像素尺寸 mm/px）。對齊 live 全域合圖；
@@ -354,7 +378,11 @@ namespace TanukiCv.Controls
                 _pending.Clear(); _preBuffer.Clear(); _writeQueue.Clear();
                 _seenCams.Clear();
                 for (int i = 0; i < _camCount; i++) { _perCamLastTick[i] = 0; _perCamLastWall[i] = 0; _perCamSeq[i] = -1; }
-                _periodTicks = 0; _periodWallMs = 0; _originTick = 0; _originSet = false; _lastNewCamWallMs = 0;
+                _periodTicks = _expectedPeriodTicks;
+                _periodWallMs = _expectedPeriodWallMs;
+                _originTick = 0;
+                _originSet = false;
+                _lastNewCamWallMs = 0;
             }
             _lodContentDirty = true;
             PushLodRefresh();
