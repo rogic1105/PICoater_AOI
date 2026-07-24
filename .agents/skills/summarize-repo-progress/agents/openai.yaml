@@ -1,0 +1,4 @@
+interface:
+  display_name: "整理 Repo 日報"
+  short_description: "從 Git 依產品面向整理精簡 TR 格式開發日報摘要"
+  default_prompt: "Use $summarize-repo-progress to summarize today's repository progress by meaningful product area in short Task-and-Result bullets."
