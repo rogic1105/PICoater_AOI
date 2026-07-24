@@ -183,39 +183,70 @@ namespace AniloxRoll.Monitor.Forms
 
             if (!captureSucceeded)
             {
+                bool wasIoContinuation = _autoStartGrabAfterBg;
                 int ioGeneration = _autoStartGrabIoGeneration;
                 var ioController = _ioGrabController;
                 _autoStartGrabAfterBg = false;
                 _autoStartGrabIoGeneration = 0;
-                if (ioController != null && IsCurrentIoController(ioController, ioGeneration))
-                    await RejectIoGrabStartAsync(ioController, ioGeneration, "background-capture-failed");
+                _autoStartGrabIoRequestGeneration = 0;
+                if (wasIoContinuation)
+                    await RejectIoGrabStartAsync(
+                        ioController,
+                        ioGeneration,
+                        "background-capture-failed");
                 return;
             }
 
             if (_autoStartGrabAfterBg)
             {
                 int ioGeneration = _autoStartGrabIoGeneration;
+                int ioRequestGeneration = _autoStartGrabIoRequestGeneration;
                 var ioController = _ioGrabController;
                 _autoStartGrabAfterBg = false;
                 _autoStartGrabIoGeneration = 0;
-                if (ioController == null || !IsCurrentIoController(ioController, ioGeneration) ||
-                    ioController.CurrentState != IoState.Running)
+                _autoStartGrabIoRequestGeneration = 0;
+
+                await _ioGrabTransitionGate.WaitAsync();
+                try
                 {
-                    FlowTrace.Log("IO background continuation cancelled reason=stale-or-start-low");
-                    return;
+                    if (!IsCurrentIoGrabRequest(
+                        ioController,
+                        ioGeneration,
+                        ioRequestGeneration))
+                    {
+                        await RejectIoGrabStartAsync(
+                            ioController,
+                            ioGeneration,
+                            "background-continuation-cancelled");
+                        return;
+                    }
+                    await _liveCameraManager.ReleaseAsync();
+                    bool started = await ToggleLiveGrabAsync(
+                        "io:背景取得完成 → 開始抓取",
+                        ioControlled: true,
+                        captureStartStillValid: () => IsCurrentIoGrabRequest(
+                            ioController,
+                            ioGeneration,
+                            ioRequestGeneration));
+                    if (started && IsCurrentIoGrabRequest(
+                        ioController,
+                        ioGeneration,
+                        ioRequestGeneration))
+                    {
+                        await ioController.NotifyGrabStarted();
+                        FlowTrace.Log("IO grab accepted busy=on source=background");
+                    }
+                    else
+                    {
+                        await RejectIoGrabStartAsync(
+                            ioController,
+                            ioGeneration,
+                            "background-continuation-failed");
+                    }
                 }
-                await _liveCameraManager.ReleaseAsync();
-                bool started = await ToggleLiveGrabAsync(
-                    "io:背景取得完成 → 開始抓取",
-                    ioControlled: true);
-                if (started && IsCurrentIoController(ioController, ioGeneration))
+                finally
                 {
-                    await ioController.NotifyGrabStarted();
-                    FlowTrace.Log("IO grab accepted busy=on source=background");
-                }
-                else
-                {
-                    await RejectIoGrabStartAsync(ioController, ioGeneration, "background-continuation-failed");
+                    _ioGrabTransitionGate.Release();
                 }
                 return;
             }
@@ -497,6 +528,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private bool _autoStartGrabAfterBg;
         private int _autoStartGrabIoGeneration;
+        private int _autoStartGrabIoRequestGeneration;
 
         private bool IsBgBinReady()
         {

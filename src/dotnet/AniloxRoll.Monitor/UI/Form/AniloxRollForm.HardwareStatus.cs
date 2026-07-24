@@ -49,18 +49,35 @@ namespace AniloxRoll.Monitor.Forms
             _ioGrabController = controller;
             _ioControllerActiveGeneration = generation;
 
-            controller.OnStartRequested += () => DispatchCurrentIoController(
-                controller, generation, () =>
-                {
-                    FlowTrace.Log("io:DI START 上升緣 → 抓取請求");
-                    _ = IoStartGrabAsync(controller, generation);
-                });
-            controller.OnStopRequested += () => DispatchCurrentIoController(
-                controller, generation, () => _ = IoStopGrabAsync(controller, generation));
+            controller.OnStartRequested += () =>
+            {
+                if (!IsCurrentIoController(controller, generation)) return;
+                int requestGeneration = System.Threading.Interlocked.Increment(
+                    ref _ioGrabRequestGeneration);
+                DispatchCurrentIoController(
+                    controller, generation, () =>
+                    {
+                        FlowTrace.Log("io:DI START 上升緣 → 抓取請求");
+                        _ = IoStartGrabAsync(controller, generation, requestGeneration);
+                    });
+            };
+            controller.OnStopRequested += () =>
+            {
+                if (!IsCurrentIoController(controller, generation)) return;
+                System.Threading.Interlocked.Increment(ref _ioGrabRequestGeneration);
+                DispatchCurrentIoController(
+                    controller, generation, () => _ = IoStopGrabAsync(controller, generation));
+            };
             controller.OnStateChanged += state => DispatchCurrentIoController(
                 controller, generation, () => UpdateIoStateLabel(state));
-            controller.OnConnectionChanged += connected => DispatchCurrentIoController(
-                controller, generation, () => UpdateIoConnectionUi(connected));
+            controller.OnConnectionChanged += connected =>
+            {
+                if (!IsCurrentIoController(controller, generation)) return;
+                if (!connected)
+                    System.Threading.Interlocked.Increment(ref _ioGrabRequestGeneration);
+                DispatchCurrentIoController(
+                    controller, generation, () => UpdateIoConnectionUi(connected));
+            };
             controller.OnIoUpdated += snapshot => DispatchCurrentIoController(
                 controller, generation, () => UpdateIoLeds(snapshot));
 
@@ -89,6 +106,33 @@ namespace AniloxRoll.Monitor.Forms
             return !_shutdownInProgress &&
                    generation == System.Threading.Volatile.Read(ref _ioControllerGeneration) &&
                    ReferenceEquals(_ioGrabController, controller);
+        }
+
+        private string GetIoGrabRequestInvalidReason(
+            IoGrabController controller,
+            int controllerGeneration,
+            int requestGeneration)
+        {
+            if (!IsCurrentIoController(controller, controllerGeneration))
+                return "controller-stale";
+            if (!controller.IsConnected)
+                return "io-disconnected";
+            if (requestGeneration != System.Threading.Volatile.Read(ref _ioGrabRequestGeneration))
+                return "request-cancelled";
+            if (controller.CurrentState != IoState.Running)
+                return "start-not-running:" + controller.CurrentState;
+            return null;
+        }
+
+        private bool IsCurrentIoGrabRequest(
+            IoGrabController controller,
+            int controllerGeneration,
+            int requestGeneration)
+        {
+            return GetIoGrabRequestInvalidReason(
+                controller,
+                controllerGeneration,
+                requestGeneration) == null;
         }
 
         private void DispatchCurrentIoController(
@@ -147,94 +191,130 @@ namespace AniloxRoll.Monitor.Forms
             });
         }
 
-        private async Task IoStartGrabAsync(IoGrabController controller, int generation)
+        private async Task IoStartGrabAsync(
+            IoGrabController controller,
+            int generation,
+            int requestGeneration)
         {
-            if (!IsCurrentIoController(controller, generation)) return;
-            if (_isIoSuspended)
-            {
-                await RejectIoGrabStartAsync(controller, generation, "io-suspended");
-                return;
-            }
-            if (_liveCameraManager == null)
-            {
-                await RejectIoGrabStartAsync(controller, generation, "camera-manager-unavailable");
-                return;
-            }
-            if (_liveCameraManager.IsCaptureTailDrainActive)
-            {
-                await RejectIoGrabStartAsync(
-                    controller,
-                    generation,
-                    "capture-not-ready:tail-drain");
-                return;
-            }
-            if (_liveCameraManager.IsLiveGrabbing)
-            {
-                await controller.NotifyGrabStarted();
-                FlowTrace.Log("IO grab accepted busy=on state=already-grabbing");
-                return;
-            }
-            string standbyReason;
-            if (!_liveCameraManager.TryGetCaptureStandbyReady(out standbyReason))
-            {
-                await RejectIoGrabStartAsync(
-                    controller,
-                    generation,
-                    "capture-not-ready:" + standbyReason);
-                return;
-            }
-            if (IsStandardBgSubEnabled && !IsBgBinReady())
-            {
-                System.Diagnostics.Trace.TraceWarning("[IoStartGrab] StandardBgSub 無背景 bin，自動取得背景後接續 grab");
-                _autoStartGrabAfterBg = true;
-                _autoStartGrabIoGeneration = generation;
-                btnLiveGetBackground_Click(null, null);
-                return;
-            }
-
+            await _ioGrabTransitionGate.WaitAsync();
             try
             {
-                bool started = await ToggleLiveGrabAsync(
-                    "io:DI START 上升緣 → 開始抓取",
-                    ioControlled: true);
-                if (!IsCurrentIoController(controller, generation)) return;
-                if (started && _liveCameraManager.IsLiveGrabbing && controller.CurrentState == IoState.Running)
+                string invalidReason = GetIoGrabRequestInvalidReason(
+                    controller,
+                    generation,
+                    requestGeneration);
+                if (invalidReason != null)
+                {
+                    await RejectIoGrabStartAsync(controller, generation, invalidReason);
+                    return;
+                }
+                if (_isIoSuspended)
+                {
+                    await RejectIoGrabStartAsync(controller, generation, "io-suspended");
+                    return;
+                }
+                if (_liveCameraManager == null)
+                {
+                    await RejectIoGrabStartAsync(controller, generation, "camera-manager-unavailable");
+                    return;
+                }
+                if (_liveCameraManager.IsCaptureTailDrainActive)
+                {
+                    await RejectIoGrabStartAsync(
+                        controller,
+                        generation,
+                        "capture-not-ready:tail-drain");
+                    return;
+                }
+                if (_liveCameraManager.IsLiveGrabbing)
                 {
                     await controller.NotifyGrabStarted();
-                    FlowTrace.Log("IO grab accepted busy=on");
+                    FlowTrace.Log("IO grab accepted busy=on state=already-grabbing");
+                    return;
+                }
+                string standbyReason;
+                if (!_liveCameraManager.TryGetCaptureStandbyReady(out standbyReason))
+                {
+                    await RejectIoGrabStartAsync(
+                        controller,
+                        generation,
+                        "capture-not-ready:" + standbyReason);
+                    return;
+                }
+                if (IsStandardBgSubEnabled && !IsBgBinReady())
+                {
+                    System.Diagnostics.Trace.TraceWarning("[IoStartGrab] StandardBgSub 無背景 bin，自動取得背景後接續 grab");
+                    _autoStartGrabAfterBg = true;
+                    _autoStartGrabIoGeneration = generation;
+                    _autoStartGrabIoRequestGeneration = requestGeneration;
+                    btnLiveGetBackground_Click(null, null);
                     return;
                 }
 
-                if (started && _liveCameraManager.IsLiveGrabbing)
-                    await ToggleLiveGrabAsync(
-                        "io:START 已下降或 controller 已換代 → 停止晚到抓取",
-                        drainIoTail: true);
-                await RejectIoGrabStartAsync(controller, generation, "capture-start-failed");
+                try
+                {
+                    bool started = await ToggleLiveGrabAsync(
+                        "io:DI START 上升緣 → 開始抓取",
+                        ioControlled: true,
+                        captureStartStillValid: () => IsCurrentIoGrabRequest(
+                            controller,
+                            generation,
+                            requestGeneration));
+                    invalidReason = GetIoGrabRequestInvalidReason(
+                        controller,
+                        generation,
+                        requestGeneration);
+                    if (invalidReason != null)
+                    {
+                        await RejectIoGrabStartAsync(controller, generation, invalidReason);
+                        return;
+                    }
+                    if (started && _liveCameraManager.IsLiveGrabbing)
+                    {
+                        await controller.NotifyGrabStarted();
+                        FlowTrace.Log("IO grab accepted busy=on");
+                        return;
+                    }
+
+                    await RejectIoGrabStartAsync(controller, generation, "capture-start-failed");
+                }
+                catch (Exception ex)
+                {
+                    Trace.TraceWarning($"[IO.GrabStart] {ex.GetType().Name}: {ex.Message}");
+                    await RejectIoGrabStartAsync(controller, generation, "exception");
+                }
             }
-            catch (Exception ex)
+            finally
             {
-                Trace.TraceWarning($"[IO.GrabStart] {ex.GetType().Name}: {ex.Message}");
-                await RejectIoGrabStartAsync(controller, generation, "exception");
+                _ioGrabTransitionGate.Release();
             }
         }
 
         private async Task RejectIoGrabStartAsync(
             IoGrabController controller, int generation, string reason)
         {
-            if (!IsCurrentIoController(controller, generation)) return;
-            await controller.NotifyGrabStartRejected();
+            if (controller != null && IsCurrentIoController(controller, generation))
+                await controller.NotifyGrabStartRejected();
             FlowTrace.Log($"IO grab rejected busy=off reason={reason}");
         }
 
         private async Task IoStopGrabAsync(IoGrabController controller, int generation)
         {
-            if (!IsCurrentIoController(controller, generation) || _isIoSuspended) return;
-            if (_liveCameraManager == null || !_liveCameraManager.IsLiveGrabbing) return;
-            bool stopped = await ToggleLiveGrabAsync(
-                "io:DI START 下降緣 → 停止抓取",
-                drainIoTail: true);
-            if (stopped && IsCurrentIoController(controller, generation))
-                await controller.NotifyGrabStopped();
+            await _ioGrabTransitionGate.WaitAsync();
+            try
+            {
+                if (!IsCurrentIoController(controller, generation) || _isIoSuspended) return;
+                if (_liveCameraManager == null || !_liveCameraManager.IsLiveGrabbing) return;
+                bool stopped = await ToggleLiveGrabAsync(
+                    "io:DI START 下降緣 → 停止抓取",
+                    drainIoTail: true);
+                if (stopped && IsCurrentIoController(controller, generation))
+                    await controller.NotifyGrabStopped();
+            }
+            finally
+            {
+                _ioGrabTransitionGate.Release();
+            }
         }
 
         private void LightTurnOn()
@@ -298,6 +378,7 @@ namespace AniloxRoll.Monitor.Forms
                 case nameof(InspectionSettings.IoIp):
                 case nameof(InspectionSettings.IoPort):
                 case nameof(InspectionSettings.IoModel):
+                    System.Threading.Interlocked.Increment(ref _ioGrabRequestGeneration);
                     int generation = System.Threading.Interlocked.Increment(ref _ioControllerGeneration);
                     _ = RestartIoControllerAsync(generation);
                     break;
@@ -345,6 +426,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private async Task ShutdownIoControllerAsync()
         {
+            System.Threading.Interlocked.Increment(ref _ioGrabRequestGeneration);
             System.Threading.Interlocked.Increment(ref _ioControllerGeneration);
             await _ioControllerLifecycleGate.WaitAsync();
             try

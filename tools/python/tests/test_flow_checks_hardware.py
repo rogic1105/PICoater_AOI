@@ -88,6 +88,20 @@ class HardwareFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(CheckStatus.PASS, result(report, "H3.io-grab").status)
 
+    def test_disconnect_during_start_with_rejection_passes(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "io:DI START 上升緣 → 抓取請求",
+                "io:DI START 上升緣 → 開始抓取",
+                "StartGrab（cams=4）",
+                "⚠ IO 斷線",
+                "capture start cancelled before gate reason=io-request-invalid",
+                "StopGrab",
+                "IO grab rejected busy=off reason=io-disconnected",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "H3.io-grab").status)
+
 
 if __name__ == "__main__":
     unittest.main()
