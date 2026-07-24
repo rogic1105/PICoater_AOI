@@ -40,24 +40,26 @@ class CaptureFlowValidator:
             line for line in session.lines
             if line.message.startswith("capture csv cfg ")
         ]
+        finalizes = [
+            line for line in session.lines
+            if line.message.startswith("capture finalize ")
+        ]
         if not plans and not csv_lines:
             report.add(self.domain, "C0", CheckStatus.NOT_COVERED, "本 session 無存檔/檢測輸出")
         else:
             self._check_capture_plan(plans, report)
             self._check_config_snapshots(configs, report)
             self._check_first_records(plans, records, report)
+            self._check_capture_finalize(plans, finalizes, report)
         self._check_output_health(session, report)
         return report
 
     def _check_capture_plan(self, plans, report: CheckReport) -> None:
         required = (
-            "_raw.jpg",
-            "_proc_c.jpg",
-            "_proc_r.jpg",
-            "_mean_c.bin",
-            "_max_c.bin",
-            "_mean_r.bin",
-            "_max_r.bin",
+            " archive=",
+            ".acap",
+            " assets=raw|proc_c|proc_r|mean_c|max_c|mean_r|max_r",
+            " preview=1920x1080x3",
         )
         legacy = (
             "_proc_v.jpg",
@@ -91,6 +93,59 @@ class CaptureFlowValidator:
             "C1.plan",
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
             f"plans={len(plans)} grabs={len(ids)} invalid={len(failures)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_capture_finalize(self, plans, finalizes, report: CheckReport) -> None:
+        planned_ids = {
+            current_id
+            for line in plans
+            for current_id in [grab_id(line.message)]
+            if current_id
+        }
+        completed_ids = set()
+        failures = []
+        pattern = re.compile(
+            r"^capture finalize grab=(?P<grab>\S+) "
+            r"archive=(?P<archive>.+\.acap) "
+            r"atlas=(?P<atlas>\d+) atlasBytes=(?P<bytes>\d+) "
+            r"remoteFiles=(?P<remote>\d+)$"
+        )
+        for line in finalizes:
+            if line.message.startswith("capture finalize failed "):
+                failures.append(f"{line.timestamp} {line.message}")
+                continue
+            match = pattern.match(line.message)
+            if match is None:
+                failures.append(f"{line.timestamp} 欄位不完整")
+                continue
+            current_id = match.group("grab")
+            completed_ids.add(current_id)
+            if current_id not in planned_ids:
+                failures.append(f"{line.timestamp} grab={current_id} 缺 capture plan")
+            if int(match.group("atlas")) != 3 or int(match.group("bytes")) <= 0:
+                failures.append(
+                    f"{line.timestamp} grab={current_id} atlas="
+                    f"{match.group('atlas')} bytes={match.group('bytes')}"
+                )
+
+        if not finalizes:
+            report.add(
+                self.domain,
+                "C3.finalize",
+                CheckStatus.NOT_COVERED,
+                "本 session 沒有完成 Stop 後封裝收尾",
+            )
+            return
+        missing = sorted(planned_ids - completed_ids)
+        if missing:
+            failures.append("缺完成：" + ",".join(missing[:3]))
+        report.add(
+            self.domain,
+            "C3.finalize",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"planned={len(planned_ids)} finalized={len(completed_ids)} "
+            f"invalid={len(failures)}"
             + (f"；首例 {failures[0]}" if failures else ""),
         )
 

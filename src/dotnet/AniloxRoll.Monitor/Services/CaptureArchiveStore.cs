@@ -599,6 +599,21 @@ namespace AniloxRoll.Monitor.Core.Services
                 replaceExisting, progress);
         }
 
+        public static CaptureArchivePreviewAtlasResult AddPreviewAtlasesToArchive(
+            string archivePath,
+            int maxWidth,
+            int maxHeight,
+            bool replaceExisting = false,
+            Action<string> progress = null)
+        {
+            return CapturePreviewAtlasCodec.AddToArchive(
+                archivePath,
+                maxWidth,
+                maxHeight,
+                replaceExisting,
+                progress);
+        }
+
         private static void AddThumbnailAsset(
             List<CaptureArchiveAsset> assets,
             string sourcePath,

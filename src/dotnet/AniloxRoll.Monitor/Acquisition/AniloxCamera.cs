@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.IO;
@@ -49,6 +50,8 @@ namespace AniloxRoll.Monitor.Core.Camera
         public bool SuppressCapture { get; set; } = false;
         public bool SaveOriginalBmp { get; set; } = false;
         public string CaptureRootPath { get; set; } = string.Empty;
+        public string CaptureGrabId { get; set; } = string.Empty;
+        public DateTime CaptureDate { get; set; }
         /// <summary>Grab 高度（0 = 用 DCF 預設）。必須在 Initialize() 之前設定（轉發給 _mil）。</summary>
         public int CameraGrabHeight { get; set; } = 0;
 
@@ -103,6 +106,11 @@ namespace AniloxRoll.Monitor.Core.Camera
         public bool IsProcessingResourcesReady => _processingResourcesReady;
 
         private string _lastCaptureKey = string.Empty;
+        private readonly object _captureSaveSync = new object();
+        private readonly Dictionary<string, int> _pendingCaptureSaves =
+            new Dictionary<string, int>(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> _activeCaptureCallbacks =
+            new Dictionary<string, int>(StringComparer.Ordinal);
 
         /// <summary>
         /// 同 Line Rate 相機共用時間戳協調器。由 LiveCameraManager 注入。
@@ -164,7 +172,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         // ==================== Events ====================
         /// <summary>每次 TrySaveCapture 成功存檔後觸發（MIL 回呼執行緒）。
         /// 參數：(cameraId, fileNameWithoutExt, meanPeak_0to1, maxPeak_0to1, maxCMean_0to1)</summary>
-        public event Action<int, string, float, float, float, float, float> OnInspectionResult;
+        public event Action<string, int, string, float, float, float, float, float> OnInspectionResult;
 
         /// <summary>ImageCanvas / 瀑布顯示路徑用：每幀提供「顯示 bytes(8-bit 灰階)+ 尺寸 + 本幀硬體 frame-start tick」(MIL 回呼執行緒)。
         /// bytes 是重用緩衝 → 訂閱者必須**同步消費**(組 bitmap 複製)、勿存 ref。只在有訂閱者時觸發。
@@ -404,8 +412,13 @@ namespace AniloxRoll.Monitor.Core.Camera
                 }
                 return;
             }
-            _hasAcceptedCaptureFrame = true;
-            _flowLoggedDrainFrameDrop = false;
+            string frameGrabId = CaptureGrabId;
+            DateTime frameCaptureDate = CaptureDate;
+            IncrementCaptureCount(_activeCaptureCallbacks, frameGrabId);
+            try
+            {
+                _hasAcceptedCaptureFrame = true;
+                _flowLoggedDrainFrameDrop = false;
 
             // 不管 EnableImageProcessing，一律執行 GPU 處理以取得 Mura 曲線（供 CSV 日誌判斷）
             bool processedByPicoater = TryApplyPicoaterRidge(modifiedBuffer);
@@ -441,8 +454,13 @@ namespace AniloxRoll.Monitor.Core.Camera
             // Global merge 複製（display buffer → 合併 buffer 裁切位置）已移至 MilCamera grab hook，
             // 在此 FrameReady handler 返回後由 _mil 執行（顯示 buffer 已更新完成）。
 
-            TrySaveCapture(modifiedBuffer);
-            CaptureFrameCompleted?.Invoke(CameraId, mil.LastFrameStartTicks);
+                TrySaveCapture(modifiedBuffer, frameGrabId, frameCaptureDate);
+                CaptureFrameCompleted?.Invoke(CameraId, mil.LastFrameStartTicks);
+            }
+            finally
+            {
+                DecrementCaptureCount(_activeCaptureCallbacks, frameGrabId);
+            }
         }
 
         // ==================== Picoater Ridge Processing ====================
@@ -647,12 +665,20 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         // ==================== Auto Capture ====================
 
-        private void TrySaveCapture(MIL_ID sourceBuffer)
+        private void TrySaveCapture(
+            MIL_ID sourceBuffer,
+            string grabId,
+            DateTime captureDate)
         {
             if (!EnableAutoCapture) return;
             if (SuppressCapture) return;   // 改參數→恢復同步 窗口內暫停存檔（避免存不齊序列）
             if (sourceBuffer == MIL.M_NULL) return;
             if (string.IsNullOrWhiteSpace(CaptureRootPath)) return;
+            if (string.IsNullOrWhiteSpace(grabId) || captureDate == default(DateTime))
+            {
+                OnCaptureSaveFailed?.Invoke(CameraId, "Capture output identity is not initialized.");
+                return;
+            }
 
             try
             {
@@ -670,9 +696,9 @@ namespace AniloxRoll.Monitor.Core.Camera
 
                 string saveDir = Path.Combine(
                     CaptureRootPath,
-                    now.ToString("yyyy"),
-                    now.ToString("yyyyMM"),
-                    now.ToString("yyyyMMdd"));
+                    captureDate.ToString("yyyy"),
+                    captureDate.ToString("yyyyMM"),
+                    captureDate.ToString("yyyyMMdd"));
 
                 string baseName = $"{now:yyyyMMdd_HHmmss.fff}-{CameraId}";
 
@@ -765,7 +791,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                         MeanR = rowMeanArr, MaxR = rowMaxArr,
                         ResizeWidth = rw, ResizeHeight = rh,
                         JpgQuality = quality, ScaleForHeader = scale,
-                        SaveDir = saveDir, BaseName = baseName,
+                        SaveDir = saveDir, GrabId = grabId, BaseName = baseName,
                         CameraId = camId, OrigWidth = origW, OrigHeight = origH,
                         MeanPeak = meanPeak, MaxPeak = maxPeak,
                         GpuTimeMs = LastGpuTimeMs,
@@ -775,6 +801,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                     };
 
                     var saver = _frameSaver;
+                    IncrementPendingCaptureSave(grabId);
                     Task.Run(() =>
                     {
                         try { saver.SaveCapture(ctx); }
@@ -785,15 +812,17 @@ namespace AniloxRoll.Monitor.Core.Camera
                                 $"[CAM{camId}] TrySaveCapture(bg) failed: {error}");
                             OnCaptureSaveFailed?.Invoke(camId, error);
                         }
+                        finally
+                        {
+                            DecrementPendingCaptureSave(grabId);
+                        }
                     });
                 }
                 else
                 {
-                    // Resize buffer 不可用時的 fallback（不應發生）
-                    Directory.CreateDirectory(saveDir);
-                    MIL.MbufExport(Path.Combine(saveDir, baseName + ".bmp"), MIL.M_BMP, sourceBuffer);
-                    OnInspectionResult?.Invoke(CameraId, baseName,
-                        _lastMeanPeak, _lastMaxPeak, float.NaN, float.NaN, float.NaN);
+                    OnCaptureSaveFailed?.Invoke(
+                        CameraId,
+                        "Capture archive skipped because resized frame data is unavailable.");
                 }
             }
             catch (Exception ex)
@@ -802,6 +831,53 @@ namespace AniloxRoll.Monitor.Core.Camera
                 System.Diagnostics.Trace.WriteLine(
                     $"[CAM{CameraId}] TrySaveCapture failed: {error}");
                 OnCaptureSaveFailed?.Invoke(CameraId, error);
+            }
+        }
+
+        internal int GetPendingCaptureSaveCount(string grabId)
+        {
+            if (string.IsNullOrWhiteSpace(grabId)) return 0;
+            lock (_captureSaveSync)
+                return _pendingCaptureSaves.TryGetValue(grabId, out int count) ? count : 0;
+        }
+
+        internal int GetActiveCaptureCallbackCount(string grabId)
+        {
+            if (string.IsNullOrWhiteSpace(grabId)) return 0;
+            lock (_captureSaveSync)
+                return _activeCaptureCallbacks.TryGetValue(grabId, out int count) ? count : 0;
+        }
+
+        private void IncrementPendingCaptureSave(string grabId)
+        {
+            IncrementCaptureCount(_pendingCaptureSaves, grabId);
+        }
+
+        private void DecrementPendingCaptureSave(string grabId)
+        {
+            DecrementCaptureCount(_pendingCaptureSaves, grabId);
+        }
+
+        private void IncrementCaptureCount(Dictionary<string, int> counts, string grabId)
+        {
+            if (string.IsNullOrWhiteSpace(grabId)) return;
+            lock (_captureSaveSync)
+            {
+                counts.TryGetValue(grabId, out int count);
+                counts[grabId] = count + 1;
+            }
+        }
+
+        private void DecrementCaptureCount(Dictionary<string, int> counts, string grabId)
+        {
+            if (string.IsNullOrWhiteSpace(grabId)) return;
+            lock (_captureSaveSync)
+            {
+                if (!counts.TryGetValue(grabId, out int count)) return;
+                if (count <= 1)
+                    counts.Remove(grabId);
+                else
+                    counts[grabId] = count - 1;
             }
         }
 

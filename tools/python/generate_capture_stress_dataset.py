@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Build an isolated, resumable capture dataset for on-machine UI stress tests.
+"""Build an isolated legacy-loose dataset for compatibility UI stress tests.
 
 The generated dataset uses seven camera records per grab. File contents are
 backed by a rotating pool of NTFS hard links so the test exercises realistic
-file counts and paths without duplicating the logical payload size.
+file counts and paths without duplicating the logical payload size. Production
+Capture output uses Captures_pack and .acap; this tool is only for exercising
+the old loose-file reader.
 
 Dry-run is the default. Pass --execute to create files.
 """
@@ -55,7 +57,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate an isolated 30k-style capture dataset. Dry-run by default."
     )
-    parser.add_argument("--source", default=r"D:\Anilox\Captures")
+    parser.add_argument(
+        "--source",
+        required=True,
+        help="Explicit legacy loose-file template root; production Captures_pack is not modified.",
+    )
     parser.add_argument("--output", default=r"D:\Anilox\StressCaptures_30000")
     parser.add_argument("--grabs", type=int, default=30_000)
     parser.add_argument("--months", type=int, default=30)

@@ -132,7 +132,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// <summary>每台相機存檔並完成 inspection 後觸發。
         /// 參數：(cameraId, fileNameWithoutExt, meanPeak_0to1, maxPeak_0to1,
         /// maxCMean_0to1, meanRPeak_0to1, maxRPeak_0to1)</summary>
-        public event Action<int, string, float, float, float, float, float> OnInspectionResult;
+        public event Action<string, int, string, float, float, float, float, float> OnInspectionResult;
 
         /// <summary>每幀 GPU pipeline 完成後觸發（MIL 回呼執行緒）。
         /// 參數：(cameraId, curveMean_raw255, curveMax_raw255)</summary>
@@ -292,9 +292,9 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.CaptureFrameAccepted = IsCaptureFrameAccepted;
                 cam.CaptureFrameCompleted = NotifyCaptureFrameCompleted;
 
-                cam.OnInspectionResult += (camId, fn, mp, xp, maxCMean, meanRPeak, maxRPeak) =>
+                cam.OnInspectionResult += (grabId, camId, fn, mp, xp, maxCMean, meanRPeak, maxRPeak) =>
                     OnInspectionResult?.Invoke(
-                        camId, fn, mp, xp, maxCMean, meanRPeak, maxRPeak);
+                        grabId, camId, fn, mp, xp, maxCMean, meanRPeak, maxRPeak);
                 cam.OnLiveCurveData      += (camId, mean, max) =>
                     OnLiveCurveData?.Invoke(camId, mean, max);
                 cam.OnLiveRowCurveData   += (camId, mean, max) =>
@@ -532,6 +532,46 @@ namespace AniloxRoll.Monitor.UI.Managers
                 $"capture gate open cams={targets.Length} warm={AreCamerasHwReady} " +
                 $"path={_captureStartPath}");
             return true;
+        }
+
+        public void BeginCaptureOutput(string grabId, DateTime captureDate)
+        {
+            if (string.IsNullOrWhiteSpace(grabId))
+                throw new ArgumentNullException(nameof(grabId));
+            foreach (var cam in _cameras)
+            {
+                cam.CaptureGrabId = grabId;
+                cam.CaptureDate = captureDate;
+            }
+            FlowTrace.Log($"capture output begin grab={grabId} date={captureDate:yyyyMMdd}");
+        }
+
+        public async Task<bool> WaitForCaptureSavesAsync(string grabId, int timeoutMs)
+        {
+            if (string.IsNullOrWhiteSpace(grabId)) return true;
+            var stopwatch = Stopwatch.StartNew();
+            while (stopwatch.ElapsedMilliseconds <= timeoutMs)
+            {
+                int pending = 0;
+                foreach (var cam in _cameras)
+                    pending += cam.GetPendingCaptureSaveCount(grabId) +
+                        cam.GetActiveCaptureCallbackCount(grabId);
+                if (pending == 0)
+                {
+                    FlowTrace.Log(
+                        $"capture output drain grab={grabId} pending=0 ms={stopwatch.ElapsedMilliseconds}");
+                    return true;
+                }
+                await Task.Delay(25).ConfigureAwait(false);
+            }
+
+            int remaining = 0;
+            foreach (var cam in _cameras)
+                remaining += cam.GetPendingCaptureSaveCount(grabId) +
+                    cam.GetActiveCaptureCallbackCount(grabId);
+            FlowTrace.Log(
+                $"capture output drain timeout grab={grabId} pending={remaining} limitMs={timeoutMs}");
+            return false;
         }
 
         public void StopGrab()

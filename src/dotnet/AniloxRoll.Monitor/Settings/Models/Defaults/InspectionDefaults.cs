@@ -52,11 +52,13 @@ namespace AniloxRoll.Monitor.Core.Data
         // ── 4. 儲存設定 ────────────────────────────────────────────────────
         public const bool   EnableAutoCapture = true;                              // 存檔
         public const bool   SaveOriginalBmp   = false;                             // 存原圖
-        public const string AniloxRootPath    = @"D:\Anilox";                      // Anilox 根目錄（Captures/Bg/Logs 為子目錄；Dcf 跟 exe 走）
+        public const string AniloxRootPath    = @"D:\Anilox";
+        public const string CaptureDirectoryName = "Captures_pack";
         public const int    LocalMinFreeGB    = 100;                               // 預留空間 (GB)
         public static readonly LogRecordingMode DefaultLogRecordingMode = LogRecordingMode.Operational;
         public const int    LogRetentionHours = 168;                               // Log 保留 7 天
-        public const string RemotePath        = @"\\192.168.10.20\Anilox\Captures"; // 遠端路徑
+        public const string RemotePath        = @"\\192.168.10.20\Anilox\Captures_pack";
+        public const string LegacyRemotePath  = @"\\192.168.10.20\Anilox\Captures";
         public const string RemoteConfigPath  = @"\\192.168.10.20\Anilox\Config";   // 遠端設定路徑
 
         // ── 5. IO 設定 ─────────────────────────────────────────────────────

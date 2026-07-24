@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Management;
@@ -122,14 +123,16 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _currentGrabId = _inspectionLogService.NextGrabId();
                 DateTime captureDate = DateTime.Now;
+                _currentGrabCaptureDate = captureDate;
+                _liveCameraManager.BeginCaptureOutput(_currentGrabId, captureDate);
                 string captureRoot = _settings?.CaptureRootPath ?? string.Empty;
                 string imageDir = string.IsNullOrWhiteSpace(captureRoot)
                     ? "(empty)" : CaptureStoragePaths.DateImageDir(captureRoot, captureDate);
                 string csvPath = string.IsNullOrWhiteSpace(captureRoot)
                     ? "(empty)" : CaptureStoragePaths.DailyCsv(captureRoot, captureDate);
                 FlowTrace.Log($"capture plan grab={_currentGrabId} root={captureRoot} imageDir={imageDir} csv={csvPath} " +
-                    $"files=*{CaptureFileNaming.RawJpg}|*{CaptureFileNaming.ProcC}|*{CaptureFileNaming.ProcR}|*{CaptureFileNaming.MeanC}|*{CaptureFileNaming.MaxC}|*{CaptureFileNaming.MeanR}|*{CaptureFileNaming.MaxR} " +
-                    $"scale={InspectionEngineConfig.DefaultSaveResizeScale}");
+                    $"archive={_currentGrabId}{CaptureArchiveStore.Extension} assets=raw|proc_c|proc_r|mean_c|max_c|mean_r|max_r " +
+                    $"preview=1920x1080x3 scale={InspectionEngineConfig.DefaultSaveResizeScale}");
 
                 int configuredLimitSeconds = Math.Max(
                     1,
@@ -160,7 +163,12 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _grabDurationCoordinator?.Disarm();
                 _ = Task.Run(() => LightTurnOff());   // 序列埠寫入不佔 UI（[UiStack] 抓到停止時卡在 SerialStream.Write）
-                TriggerRetentionAndFlagAsync();
+                string completedGrabId = _currentGrabId;
+                DateTime completedCaptureDate = _currentGrabCaptureDate;
+                if (_settings?.EnableAutoCapture == true)
+                    _ = FinalizeCaptureOutputsAsync(completedGrabId, completedCaptureDate);
+                else
+                    TriggerRetentionAndFlagAsync();
                 _muraExceedLatch[0] = _muraExceedLatch[1] = false;
                 _outputHealthService?.Resolve("MuraExceed.v");
                 _outputHealthService?.Resolve("MuraExceed.h");
@@ -196,16 +204,24 @@ namespace AniloxRoll.Monitor.Forms
         /// EnableAutoCapture=true 且抓取中時才會觸發。
         /// </summary>
         private void OnCameraInspectionResult(
-            int camId, string fileNameNoExt, float meanPeak, float maxPeak,
+            string grabId, int camId, string fileNameNoExt, float meanPeak, float maxPeak,
             float maxCMean, float meanRPeak, float maxRPeak)
         {
-            if (string.IsNullOrEmpty(_currentGrabId)) return;
+            if (string.IsNullOrEmpty(grabId)) return;
+            DateTime captureDate;
+            if (!DateTime.TryParseExact(
+                grabId,
+                "yyMMdd-HHmmss",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out captureDate))
+                captureDate = _currentGrabCaptureDate;
             int idx = camId - 1;
             if (_inspectionLogService != null)
             {
                 // OnCameraInspectionResult 的 meanPeak/maxPeak 為 V 方向（pipeline 主處理方向），用 V 閾值記錄
                 _inspectionLogService.AppendRecord(
-                    _currentGrabId,
+                    grabId,
                     fileNameNoExt,
                     meanPeak,
                     maxPeak,
@@ -220,12 +236,9 @@ namespace AniloxRoll.Monitor.Forms
                         ? _settings.Acquisition.CameraLineRateHz[idx] : 0,
                     idx >= 0 && idx < _settings.Acquisition.CameraExposureTimeUs.Length
                         ? _settings.Acquisition.CameraExposureTimeUs[idx] : 0,
-                    CsvConfigSnapshot.FromSettings(_settings));
+                    CsvConfigSnapshot.FromSettings(_settings),
+                    captureDate);
 
-                // CSV 寫完後排入遠端複製佇列（CSV 在 month 目錄，不在 OnFilesSaved 的 day 目錄）
-                string csvPath = _inspectionLogService.LastCsvPath;
-                if (!string.IsNullOrEmpty(csvPath))
-                    _remoteCopyService?.EnqueueFile(csvPath);
             }
 
             // 抓圖計數器 + watchdog 時間戳（Inspection 模式）
@@ -235,6 +248,59 @@ namespace AniloxRoll.Monitor.Forms
                 int count = System.Threading.Interlocked.Increment(ref _completedGrabCount);
                 if (count % 10 == 0)
                     TriggerRetentionAndFlagAsync();
+            }
+        }
+
+        private async Task FinalizeCaptureOutputsAsync(string grabId, DateTime captureDate)
+        {
+            const int saveDrainTimeoutMs = 30000;
+            const int previewMaxWidth = 1920;
+            const int previewMaxHeight = 1080;
+
+            try
+            {
+                bool drained = await _liveCameraManager.WaitForCaptureSavesAsync(
+                    grabId, saveDrainTimeoutMs);
+                if (!drained)
+                    throw new TimeoutException(
+                        $"等待 {grabId} 存檔完成超過 {saveDrainTimeoutMs}ms。");
+
+                string captureRoot = _settings?.CaptureRootPath ?? string.Empty;
+                string archivePath = CaptureStoragePaths.GrabArchive(
+                    captureRoot, captureDate, grabId);
+                if (!File.Exists(archivePath))
+                    throw new FileNotFoundException("Grab 封裝檔未建立。", archivePath);
+
+                CaptureArchivePreviewAtlasResult preview = await Task.Run(() =>
+                    CaptureArchiveStore.AddPreviewAtlasesToArchive(
+                        archivePath,
+                        previewMaxWidth,
+                        previewMaxHeight,
+                        replaceExisting: true));
+                if (preview.FailedArchiveCount != 0 || preview.AtlasCount != 3)
+                    throw new InvalidDataException(
+                        $"預覽圖集不完整：atlas={preview.AtlasCount}/3 failed={preview.FailedArchiveCount}。");
+
+                string csvPath = CaptureStoragePaths.DailyCsv(captureRoot, captureDate);
+                var completedFiles = new List<string> { archivePath };
+                if (File.Exists(csvPath)) completedFiles.Add(csvPath);
+                _remoteCopyService?.EnqueueFiles(completedFiles.ToArray());
+
+                FlowTrace.Log(
+                    $"capture finalize grab={grabId} archive={archivePath} " +
+                    $"atlas={preview.AtlasCount} atlasBytes={preview.AtlasBytes} " +
+                    $"remoteFiles={completedFiles.Count}");
+                _outputHealthService?.Resolve("CaptureFinalizeFailure");
+                TriggerRetentionAndFlagAsync();
+            }
+            catch (Exception ex)
+            {
+                string error = ex.GetType().Name + ": " + ex.Message;
+                FlowTrace.Log($"capture finalize failed grab={grabId} error={error}");
+                _outputHealthService?.Report(
+                    "CaptureFinalizeFailure",
+                    OutputHealthSeverity.OutputFault,
+                    $"序號 {grabId} 封裝失敗：{error}");
             }
         }
 

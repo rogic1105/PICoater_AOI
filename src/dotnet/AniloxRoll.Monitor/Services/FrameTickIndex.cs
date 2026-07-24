@@ -23,8 +23,8 @@ namespace AniloxRoll.Monitor.Core.Services
     /// 物理同一瞬間拍的兩幀 tick 只差 &lt;0.5ms，而一個幀週期 ≥幾十 ms → 用 tick 就近聚類即可精準對位，
     /// 某台在某時間槽沒有幀 = 它在那裡掉幀 → 該格補黑（StitchCamera 的 null slot）。
     ///
-    /// tick 由存檔側車 _ticks.csv（<see cref="CameraFrameSaver.AppendTickSidecar"/>）提供；
-    /// <see cref="ResolveAlignment(IDictionary{int, List{string}})"/> 是唯一決策點，舊資料無側車時會自動 fallback 檔名法。
+    /// 新封裝把 tick 寫進每筆 archive record；舊散檔仍可讀 _ticks.csv。
+    /// <see cref="ResolveAlignment(IDictionary{int, List{string}})"/> 是唯一決策點，tick 不完整時自動 fallback 檔名法。
     /// </summary>
     public static class FrameTickIndex
     {

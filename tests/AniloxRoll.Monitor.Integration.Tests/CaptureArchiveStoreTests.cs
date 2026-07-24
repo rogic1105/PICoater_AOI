@@ -55,6 +55,68 @@ namespace AniloxRoll.Monitor.Integration.Tests
         }
 
         [Test]
+        public void CameraFrameSaver_WritesOneArchiveWithAllAssetsAndNoLooseFiles()
+        {
+            const string grabId = "260724-120000";
+            const string baseName = "20260724_120000.000-1";
+            string[] savedFiles = null;
+            string resultGrabId = null;
+            var pixels = new byte[12];
+            for (int i = 0; i < pixels.Length; i++)
+                pixels[i] = (byte)(i * 10);
+
+            var saver = new CameraFrameSaver();
+            saver.SaveCapture(new CaptureContext
+            {
+                RawBytes = pixels,
+                ProcCBytes = pixels,
+                ProcRBytes = pixels,
+                MeanC = new[] { 1f, 2f, 3f },
+                MaxC = new[] { 4f, 5f, 6f },
+                MeanR = new[] { 7f, 8f, 9f },
+                MaxR = new[] { 10f, 11f, 12f },
+                ResizeWidth = 4,
+                ResizeHeight = 3,
+                JpgQuality = 90,
+                ScaleForHeader = 5,
+                SaveDir = _root,
+                GrabId = grabId,
+                BaseName = baseName,
+                CameraId = 1,
+                OrigWidth = 40,
+                OrigHeight = 30,
+                FrameStartTicks = 1234,
+                OnFilesSaved = files => savedFiles = files,
+                OnResult = (id, cameraId, name, meanPeak, maxPeak, maxCMean, meanRPeak, maxRPeak) =>
+                    resultGrabId = id
+            });
+
+            string archive = Path.Combine(_root, grabId + CaptureArchiveStore.Extension);
+            string rawPath = CaptureArchiveStore.CreateVirtualRawPath(archive, baseName);
+            string basePath = CaptureFileNaming.StripRawJpg(rawPath);
+            string[] expectedAssets =
+            {
+                rawPath,
+                basePath + CaptureFileNaming.ProcC,
+                basePath + CaptureFileNaming.ProcR,
+                basePath + CaptureFileNaming.MeanC,
+                basePath + CaptureFileNaming.MaxC,
+                basePath + CaptureFileNaming.MeanR,
+                basePath + CaptureFileNaming.MaxR
+            };
+
+            Assert.That(File.Exists(archive), Is.True);
+            Assert.That(savedFiles, Is.EqualTo(new[] { archive }));
+            Assert.That(resultGrabId, Is.EqualTo(grabId));
+            foreach (string assetPath in expectedAssets)
+                Assert.That(CaptureArchiveStore.Exists(assetPath), Is.True, assetPath);
+            Assert.That(
+                Directory.GetFiles(_root, "*", SearchOption.AllDirectories),
+                Is.EqualTo(new[] { archive }));
+            Assert.That(File.Exists(Path.Combine(_root, CameraFrameSaver.TickSidecarName)), Is.False);
+        }
+
+        [Test]
         public void Reader_IgnoresTruncatedFinalRecordAndKeepsEarlierFrame()
         {
             string archive = Path.Combine(_root, "260722-120001.acap");
@@ -282,13 +344,13 @@ namespace AniloxRoll.Monitor.Integration.Tests
             }
 
             CaptureArchivePreviewAtlasResult first =
-                CaptureArchiveStore.AddPreviewAtlases(_root, 100, 60);
+                CaptureArchiveStore.AddPreviewAtlasesToArchive(archive, 100, 60);
             long lengthAfterFirst = new FileInfo(archive).Length;
             CaptureArchivePreviewAtlasResult second =
-                CaptureArchiveStore.AddPreviewAtlases(_root, 100, 60);
+                CaptureArchiveStore.AddPreviewAtlasesToArchive(archive, 100, 60);
             CaptureArchivePreviewAtlasResult replaced =
-                CaptureArchiveStore.AddPreviewAtlases(
-                    _root, 50, 30, replaceExisting: true);
+                CaptureArchiveStore.AddPreviewAtlasesToArchive(
+                    archive, 50, 30, replaceExisting: true);
             var grouped = new Dictionary<int, List<string>>
             {
                 { 1, CaptureArchiveStore.ListVirtualRawPaths(archive, 1) },

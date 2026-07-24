@@ -463,7 +463,7 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        // ── 參數變更 log（diag：對齊 _ticks.csv 掉偵時間，定位掉偵 vs 改參數）──────────
+        // ── 參數變更 log（diag：對齊 phaselog 或 archive tick，定位掉偵 vs 改參數）────
         /// <summary>參數變更 log 路徑（AutoAllocateCameras 設）；null=不記。</summary>
         public static string ParamChangeLogPath;
         private static readonly object _paramChangeLogLock = new object();
@@ -686,7 +686,10 @@ namespace AniloxRoll.Monitor.Forms
             // ── 磁碟（所有固定碟） ──
             try
             {
-                string capRoot = _settings?.CaptureRootPath ?? @"D:\AniloxCaptures";
+                string capRoot = _settings?.CaptureRootPath ??
+                    Path.Combine(
+                        InspectionDefaults.AniloxRootPath,
+                        InspectionDefaults.CaptureDirectoryName);
                 string capDrive = Path.GetPathRoot(capRoot)?.TrimEnd('\\') ?? "";
                 foreach (var di in DriveInfo.GetDrives())
                 {

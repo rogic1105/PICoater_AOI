@@ -26,7 +26,7 @@ release because the simulator cannot reproduce wiring, switch, or power-supply f
 
 Low-disk retention does not require filling a disk. On an isolated test volume, set
 `LocalMinFreeGB` above that volume's current free space, run cleanup once, and verify oldest-first
-deletion, pending-copy protection, `_ticks.csv`/`_curve_summary` deletion, and daily CSV retention.
+deletion, pending-copy protection, complete-day `.acap` deletion, and matching daily CSV deletion.
 Never point this test at production captures.
 
 ## Evidence

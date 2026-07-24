@@ -314,6 +314,13 @@ namespace AniloxRoll.Monitor.Core.Data
             // 舊版讀取時推回：AniloxRootPath = CaptureRootPath 的父目錄（D:\AniloxCaptures → D:\），不對；
             // 直接 fallback InspectionDefaults.AniloxRootPath（D:\Anilox）較合理（舊資料不動，新資料用新位置）。
             string aniloxRoot = SettingsStoreHelper.GetString(obj, "AniloxRootPath", InspectionDefaults.AniloxRootPath);
+            string remotePath = SettingsStoreHelper.GetString(
+                obj, "RemotePath", InspectionDefaults.RemotePath);
+            if (string.Equals(
+                remotePath,
+                InspectionDefaults.LegacyRemotePath,
+                StringComparison.OrdinalIgnoreCase))
+                remotePath = InspectionDefaults.RemotePath;
             return new StorageSettings
             {
                 EnableAutoCapture    = SettingsStoreHelper.GetBool  (obj, "EnableAutoCapture",    InspectionDefaults.EnableAutoCapture),
@@ -323,7 +330,7 @@ namespace AniloxRoll.Monitor.Core.Data
                     ? SettingsStoreHelper.GetBool(obj, "SaveOriginalBmp", InspectionDefaults.SaveOriginalBmp)
                     : !SettingsStoreHelper.GetBool(obj, "UseCompressedCapture", true),
                 LocalMinFreeGB       = SettingsStoreHelper.GetInt   (obj, "LocalMinFreeGB",   InspectionDefaults.LocalMinFreeGB),
-                RemotePath           = SettingsStoreHelper.GetString(obj, "RemotePath",       InspectionDefaults.RemotePath),
+                RemotePath           = remotePath,
                 RemoteConfigPath     = SettingsStoreHelper.GetString(obj, "RemoteConfigPath", InspectionDefaults.RemoteConfigPath),
             };
         }

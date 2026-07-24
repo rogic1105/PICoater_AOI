@@ -397,7 +397,8 @@ T1: StartGrab（cams=M）
 T1: ApplyMainDisplayMode → 同模式    ← 冪等：不得出現 create/teardown 行
 T1: viewRange refire reason=capture-start mode=WF|IC
     ← 清除上一輪 Curve 視野後，用主畫面既有幾何主動重發；不得等滑鼠或首幀才補
-T1: capture plan grab=… root=… imageDir=… csv=… files=… scale=…
+T1: capture output begin grab=… date=yyyyMMdd
+T1: capture plan grab=… root=… imageDir=… csv=… archive=….acap assets=… preview=1920x1080x3 scale=…
 T1: grab limit armed Ns grab=…       ← 正式監控 grab 成功後啟動 one-shot；背景採樣借用 grab 不武裝
 T1: capture gate open cams=P warm=True   ← P=在線數；必晚於同步完成與 plan/limit，早於所有 firstFrame
 Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線」相機恰一行，順序不定
@@ -438,7 +439,9 @@ Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線�
  │      │  └ RefireViewRange@WaterfallView.cs｜ImageDisplayView.cs → ApplyLiveViewRange
  │      └ per-cam SetUserGrabIntent(true)@AniloxCamera.cs
  │         └ SetUserGrabIntent@MilCamera.cs（同步 M_START 已完成；此處只開產品意圖）
- ├（啟動成功）NextGrabId@InspectionLogService.cs → _currentGrabId ＋ capture plan 行（C1）
+ ├（啟動成功）NextGrabId@InspectionLogService.cs → _currentGrabId
+ │  ├ BeginCaptureOutput@LiveCameraManager.cs → 每台 CaptureGrabId/CaptureDate 快照
+ │  ├ capture plan 行（C1）
  │  └ Arm(GrabLimitSeconds)@GrabDurationCoordinator.cs → grab limit armed 行
  │     ← 設定在本輪開始時拍快照；PropertyGrid 中途改值從下一輪生效
  ├ OpenCaptureGate@LiveCameraManager.cs
@@ -447,7 +450,7 @@ Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線�
 （每幀幀流，MIL 回呼執行緒 Tn）
 ProcessingFunction@MilCamera.cs（MdigProcess hook，static）
  └ FrameReady 事件 → OnMilFrameReady@AniloxCamera.cs
-    ├ UserWantsGrab && CaptureGateOpen 才繼續；gate 關閉時不進 GPU／顯示／CSV／存檔
+    ├ UserWantsGrab && CaptureFrameAccepted(cam,tick) 才繼續；未准入時不進 GPU／顯示／CSV／存檔
     ├ TryApplyPicoaterRidge@AniloxCamera.cs（GPU 檢測，一律跑）  ⚠ _picoaterLock＋尺寸守門（高度變更瞬間跳過幀防 AV）
     │  ├ ProcessImage@AoiService.cs（P/Invoke TanukiPipeline_Process；fused 存檔縮圖 wantResize＝grab-level 決策）
     │  ├ OnLiveCurveData 事件 → OnLiveCurveData@AniloxRollForm.Live.cs → CheckLiveMura("v")（M1）＋ _liveOverviewDirty=true
@@ -908,10 +911,10 @@ DI START：io:DI START 上升緣 → 抓取請求
   複製失敗保持 pending 並退避重試，程式重開從標記復原。禁止恢復「重試固定次數後丟棄」語意。
 - **發布原子性**：遠端先寫同目錄 `.part-*`，確認來源前後長度穩定且遠端長度一致後，再原子
   move/replace 成正式檔名；正式發布且 pending 標記成功刪除後才算完成。
-- **可變側車不漏尾筆**：`_ticks.csv` 追加期間若同一路徑已 pending/in-flight，必須標記 dirty；首輪發布後
-  保留 durable marker 並再排一輪，直到遠端內容等於最新本機 snapshot 才可刪 marker。
+- **封裝完成才遠傳**：同一 Grab 的相機 callback 與背景 append 全部 drain，三張 preview atlas 寫入成功後，
+  才把固定不再變動的 `.acap` 與每日 CSV 排入 durable remote-copy。
 - **Retention 以可持續寫入優先**：空間低於預留值時，檢測與儲存電腦都刪除「最舊的完整一天」；
-  今天的資料不得刪。刪除集合＝日期資料夾內全部影像/bin/`_ticks.csv`/`_curve_summary`
+  今天的資料不得刪。刪除集合＝日期資料夾內全部 `.acap`/legacy assets/`_curve_summary`
   ＋月份層同日期 `yyyyMMdd.csv`；任一低空間清理成功後，非 active 的舊背景版本也列入候選。若該日仍有 pending 遠端檔案，必須先取消並移除
   對應 durable marker，再刪檔，禁止 worker 對已刪來源永久重試。刪到未送達資料須留下深橘狀態與 log。
 - **光源釋放**：SerialPort ownership 必須先在 lock 內從 `_port` 移除，再對 detached instance 單次 Dispose；
@@ -1049,12 +1052,15 @@ Tn: MURA 恢復（v|h）                                                        
 T1: capture plan grab={yyMMdd-HHmmss} root={CaptureRootPath}
     imageDir={root}\yyyy\yyyyMM\yyyyMMdd
     csv={root}\yyyy\yyyyMM\yyyyMMdd.csv
-    files=*_raw.jpg|*_proc_c.jpg|*_proc_r.jpg|*_mean_c.bin|*_max_c.bin|*_mean_r.bin|*_max_r.bin
+    archive={grabId}.acap
+    assets=raw|proc_c|proc_r|mean_c|max_c|mean_r|max_r
+    preview=1920x1080x3
     scale={DefaultSaveResizeScale}
 ```
-- `imageDir` 與 `csv` 必須由 `CaptureStoragePaths` 推導；檔名 suffix 必須由 `CaptureFileNaming` 推導。
-- 曲線持久化新格式一律 C/R：`_mean_c/_max_c/_mean_r/_max_r.bin`；讀端依序 fallback 上一代
-  `_mean_v/_max_v/_mean_h/_max_h.bin` 與最舊 `_mean/_max/_row_mean/_row_max.bin`，寫端不得再產生 V/H curve bin。
+- `CaptureRootPath` 預設為 `D:\Anilox\Captures_pack`；遠端預設為
+  `\\192.168.10.20\Anilox\Captures_pack`。舊預設 UNC 在 JSON 載入時自動升級。
+- `imageDir`、`csv` 與 archive path 必須由 `CaptureStoragePaths` 推導。
+- 新寫端只產生每 Grab 一個 `.acap`；七種獨立 asset 與 frame tick 都在 record 內。舊散檔名稱只保留讀取相容。
 - 這行是每輪 grab 的「存放方式/位置」摘要；逐幀大小與資源量仍歸 `resource-monitor-*.csv`，不得用 `[Flow]` 洗版。
 
 ### C2 檢測 CSV 寫入（每個 grab 首筆 + CFG 變更）
@@ -1084,7 +1090,7 @@ TrySaveCapture@AniloxCamera.cs
  → CaptureContext.MaxC/MeanR/MaxR → SaveCapture@CameraFrameSaver.cs
    → ComputeCurveMeanNormalized（sum(MaxC)/length/255）
    ＋ ComputeCurvePeakNormalized（Row peak/255）
-   → OnInspectionResult(camId,file,meanPeak,maxPeak,maxCMean,meanRPeak,maxRPeak)
+   → OnInspectionResult(grabId,camId,file,meanPeak,maxPeak,maxCMean,meanRPeak,maxRPeak)
      → LiveCameraManager forwarder → OnCameraInspectionResult@AniloxRollForm.Live.cs
        → AppendRecord@InspectionLogService.cs → CSV 第 10~12 欄 MaxCMean/MeanRPeak/MaxRPeak
 ```
@@ -1092,11 +1098,15 @@ TrySaveCapture@AniloxCamera.cs
 ### C3 遠端交付與循環儲存
 ```
 CameraFrameSaver.SaveCapture
- → OnFilesSaved（本幀固定輸出 + 當日共享 `_ticks.csv`）
-   → RemoteCopyService.EnqueueFiles
-     → 本機 `.remote-copy-pending` durable marker
-     → remote `{destination}.part-{guid}`
-     → 來源穩定/長度一致 → Move|Replace 正式檔 → 刪 marker
+ → AppendFrame（七種 asset + camera id + frame tick）→ `{grabId}.acap`
+StopGrab
+ → FinalizeCaptureOutputsAsync
+   → WaitForCaptureSavesAsync（同 grab callback + background append 全部歸零）
+   → AddPreviewAtlasesToArchive（raw/column/row，1920x1080）
+   → RemoteCopyService.EnqueueFiles（`.acap` + daily CSV）
+      → 本機 `.remote-copy-pending` durable marker
+      → remote `{destination}.part-{guid}`
+      → 來源穩定/長度一致 → Move|Replace 正式檔 → 刪 marker
 
 StorageRetentionService.RunCleanup
  → Storage role 使用 app-mode `StorageMinFreeGB`；Inspection role 使用 `LocalMinFreeGB`
@@ -1119,7 +1129,7 @@ StorageRetentionService.RunCleanup
  → heartbeat/磁碟不可讀 → 對應電腦顯示`無法讀取`
 ```
 低磁碟整合測試原則上使用隔離 volume/root，將門檻設為高於該測試磁碟目前可用空間、但低於磁碟總容量即可直接觸發，
-不必真的填滿磁碟。只有使用者明確確認目前沒有正式資料時，才可直接使用實際 Captures；執行前仍須記錄來源、目的地與檔案量，
+不必真的填滿磁碟。只有使用者明確確認目前沒有正式資料時，才可直接使用實際 Captures_pack；執行前仍須記錄來源、目的地與檔案量，
 複製只能合併、不得 `/MIR` 或預先刪除目的資料。
 
 ### C4 產出健康度與底部狀態列
@@ -1900,7 +1910,7 @@ Tbg acquisition standby ready cam2 tick=T
 ```
 10:37:13.854 T 1 StartGrab（cams=4）
 10:37:13.855 T 1 ApplyMainDisplayMode → ImageCanvas
-T1 capture plan grab=… root=… imageDir=… csv=… files=… scale=…
+T1 capture plan grab=… root=… imageDir=… csv=… archive=….acap assets=raw|proc_c|proc_r|mean_c|max_c|mean_r|max_r preview=1920x1080x3 scale=…
 T1 grab limit armed 10s grab=…
 T1 capture gate open cams=2 warm=True
 10:37:15.170 T31 firstFrame cam1 16384x3000 → ImageDisplayView
@@ -1911,6 +1921,8 @@ T1 capture gate open cams=2 warm=True
 ```
 10:37:21.226 T 1 StopGrab
 T1 capture gate closed standby=on
+Tbg capture save drain done grab=… callbacks=0 pending=0
+Tbg capture finalize grab=… archive=….acap atlas=3 atlasBytes=… remoteFiles=2
 ```
 
 **F4 範例**：

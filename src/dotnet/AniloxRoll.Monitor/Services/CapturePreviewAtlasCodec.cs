@@ -75,50 +75,82 @@ namespace AniloxRoll.Monitor.Core.Services
             Array.Sort(archives, StringComparer.OrdinalIgnoreCase);
             for (int archiveIndex = 0; archiveIndex < archives.Length; archiveIndex++)
             {
-                string archivePath = archives[archiveIndex];
-                string grabId = Path.GetFileNameWithoutExtension(archivePath);
-                try
-                {
-                    Dictionary<int, List<string>> grouped =
-                        GroupRawPaths(archivePath);
-                    if (grouped.Count == 0)
-                    {
-                        result.FailedArchiveCount++;
-                        continue;
-                    }
-
-                    FrameAlignmentResult alignment =
-                        FrameTickIndex.ResolveAlignment(grouped);
-                    var assets = new List<CaptureArchiveAsset>(3);
-                    AddVariant(
-                        archivePath, alignment, false, "c",
-                        CaptureAssetKind.PreviewAtlasRaw,
-                        maxWidth, maxHeight, replaceExisting, assets, result);
-                    AddVariant(
-                        archivePath, alignment, true, "c",
-                        CaptureAssetKind.PreviewAtlasColumn,
-                        maxWidth, maxHeight, replaceExisting, assets, result);
-                    AddVariant(
-                        archivePath, alignment, true, "r",
-                        CaptureAssetKind.PreviewAtlasRow,
-                        maxWidth, maxHeight, replaceExisting, assets, result);
-
-                    if (assets.Count == 0) continue;
-                    result.AtlasBytes += CaptureArchiveStore.AppendFrame(
-                        archivePath, grabId, AtlasBaseName, 0, 0, assets);
-                    result.AtlasCount += assets.Count;
-                    result.ArchiveCount++;
-                    progress?.Invoke(archivePath);
-                }
-                catch (Exception ex)
-                {
-                    result.FailedArchiveCount++;
-                    Trace.WriteLine(
-                        $"[CapturePreviewAtlas] {grabId}: " +
-                        $"{ex.GetType().Name}: {ex.Message}");
-                }
+                CaptureArchivePreviewAtlasResult archiveResult = AddToArchive(
+                    archives[archiveIndex],
+                    maxWidth,
+                    maxHeight,
+                    replaceExisting,
+                    progress);
+                Accumulate(result, archiveResult);
             }
             return result;
+        }
+
+        internal static CaptureArchivePreviewAtlasResult AddToArchive(
+            string archivePath,
+            int maxWidth,
+            int maxHeight,
+            bool replaceExisting,
+            Action<string> progress)
+        {
+            var result = new CaptureArchivePreviewAtlasResult();
+            if (string.IsNullOrWhiteSpace(archivePath) ||
+                !File.Exists(archivePath) ||
+                maxWidth <= 0 ||
+                maxHeight <= 0)
+                return result;
+
+            string grabId = Path.GetFileNameWithoutExtension(archivePath);
+            try
+            {
+                Dictionary<int, List<string>> grouped = GroupRawPaths(archivePath);
+                if (grouped.Count == 0)
+                {
+                    result.FailedArchiveCount++;
+                    return result;
+                }
+
+                FrameAlignmentResult alignment = FrameTickIndex.ResolveAlignment(grouped);
+                var assets = new List<CaptureArchiveAsset>(3);
+                AddVariant(
+                    archivePath, alignment, false, "c",
+                    CaptureAssetKind.PreviewAtlasRaw,
+                    maxWidth, maxHeight, replaceExisting, assets, result);
+                AddVariant(
+                    archivePath, alignment, true, "c",
+                    CaptureAssetKind.PreviewAtlasColumn,
+                    maxWidth, maxHeight, replaceExisting, assets, result);
+                AddVariant(
+                    archivePath, alignment, true, "r",
+                    CaptureAssetKind.PreviewAtlasRow,
+                    maxWidth, maxHeight, replaceExisting, assets, result);
+
+                if (assets.Count == 0) return result;
+                result.AtlasBytes += CaptureArchiveStore.AppendFrame(
+                    archivePath, grabId, AtlasBaseName, 0, 0, assets);
+                result.AtlasCount += assets.Count;
+                result.ArchiveCount++;
+                progress?.Invoke(archivePath);
+            }
+            catch (Exception ex)
+            {
+                result.FailedArchiveCount++;
+                Trace.WriteLine(
+                    $"[CapturePreviewAtlas] {grabId}: " +
+                    $"{ex.GetType().Name}: {ex.Message}");
+            }
+            return result;
+        }
+
+        private static void Accumulate(
+            CaptureArchivePreviewAtlasResult target,
+            CaptureArchivePreviewAtlasResult source)
+        {
+            target.ArchiveCount += source.ArchiveCount;
+            target.AtlasCount += source.AtlasCount;
+            target.AtlasBytes += source.AtlasBytes;
+            target.SkippedAtlasCount += source.SkippedAtlasCount;
+            target.FailedArchiveCount += source.FailedArchiveCount;
         }
 
         internal static bool TryLoad(

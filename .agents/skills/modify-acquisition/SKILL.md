@@ -148,7 +148,7 @@ capture gate=false → Parallel PauseAcquisition
 ### 改參數掉偵診斷 log（Logs\）
 - `phaselog-yyyyMMdd.csv`：每幀硬體 frame-start tick（`MilCamera.PhaseLog.cs` Data Latch）→ 真實相位/掉幀位置。
 - `dropdiag-yyyyMMdd_HHmmss.csv`：每 500ms 背景記 frames/procMissed/grabMissed（`LiveTelemetryPresenter.DropDiagLogPath`）→ 分層（host vs 硬體）。
-- `paramchange-yyyyMMdd_HHmmss.csv`：每次改參數 time,scope,cam,param,value（`AniloxRollForm.ParamChangeLogPath`）→ 對齊 `_ticks.csv` 看掉偵 vs 改參數。
+- `paramchange-yyyyMMdd_HHmmss.csv`：每次改參數 time,scope,cam,param,value（`AniloxRollForm.ParamChangeLogPath`）→ 對齊 `phaselog` 或 `.acap` record tick 看掉偵 vs 改參數。
 - 結論：**穩態 0 掉偵；掉偵 100% 來自改參數的重啟空檔**。
 
 ## Grab 中改曝光（不中斷快速套用 + 參數鎖）

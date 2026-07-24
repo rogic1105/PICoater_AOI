@@ -28,4 +28,4 @@ Invoke-DeployStep '6/6 關閉自動睡眠' (Join-Path $deployRoot 'common\setup_
 
 Write-Host ''
 Write-Host '[完成] 儲存電腦已安裝。' -ForegroundColor Green
-Write-Host ("檢測電腦遠端資料路徑: \\" + $cfg.IpAddress + "\" + $cfg.ShareName + "\Captures")
+Write-Host ("檢測電腦遠端資料路徑: \\" + $cfg.IpAddress + "\" + $cfg.ShareName + "\Captures_pack")

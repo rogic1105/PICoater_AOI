@@ -220,7 +220,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             FlowTrace.Log("ui:【讀取資料】鈕（Data）");   // intent 行（孤兒判讀規則）
             using (var dlg = new FolderBrowserDialog())
             {
-                dlg.Description = "選擇 AniloxCaptures 根目錄";
+                dlg.Description = "選擇 Captures_pack 根目錄";
                 dlg.SelectedPath = string.IsNullOrWhiteSpace(_statsDataRootPath)
                     ? (_ctx.Settings?.CaptureRootPath ?? string.Empty)
                     : _statsDataRootPath;

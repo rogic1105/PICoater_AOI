@@ -21,7 +21,9 @@ def validate_config(message: str):
         [
             FlowLine(0, "00:00:00.000", 1,
                      "capture plan grab=260721-120000 root=D:\\Anilox imageDir=x csv=y "
-                     "_raw.jpg _proc_c.jpg _proc_r.jpg _mean_c.bin _max_c.bin _mean_r.bin _max_r.bin"),
+                     "archive=260721-120000.acap "
+                     "assets=raw|proc_c|proc_r|mean_c|max_c|mean_r|max_r "
+                     "preview=1920x1080x3 scale=5"),
             FlowLine(1, "00:00:01.000", 1, message),
         ],
     )
@@ -41,6 +43,64 @@ class CaptureFlowValidatorTests(unittest.TestCase):
             "capture csv cfg path=x HM=1/1 ridge=9 thrV=1/1 thrH=1/1"
         )
         self.assertEqual(CheckStatus.FAIL, result.status)
+
+    def test_packed_plan_and_finalize_pass(self):
+        session = FlowSession(
+            Path("synthetic.log"),
+            [
+                FlowLine(
+                    0,
+                    "00:00:00.000",
+                    1,
+                    "capture plan grab=260721-120000 root=D:\\Anilox\\Captures_pack "
+                    "imageDir=x csv=y archive=260721-120000.acap "
+                    "assets=raw|proc_c|proc_r|mean_c|max_c|mean_r|max_r "
+                    "preview=1920x1080x3 scale=5",
+                ),
+                FlowLine(
+                    1,
+                    "00:00:01.000",
+                    1,
+                    "capture finalize grab=260721-120000 "
+                    "archive=D:\\Anilox\\Captures_pack\\2026\\202607\\20260721\\260721-120000.acap "
+                    "atlas=3 atlasBytes=1234 remoteFiles=2",
+                ),
+            ],
+        )
+
+        report = CaptureFlowValidator().validate(session)
+        plan = next(item for item in report.results if item.rule == "C1.plan")
+        finalize = next(item for item in report.results if item.rule == "C3.finalize")
+
+        self.assertEqual(CheckStatus.PASS, plan.status)
+        self.assertEqual(CheckStatus.PASS, finalize.status)
+
+    def test_finalize_failure_is_reported(self):
+        session = FlowSession(
+            Path("synthetic.log"),
+            [
+                FlowLine(
+                    0,
+                    "00:00:00.000",
+                    1,
+                    "capture plan grab=260721-120000 root=D:\\Anilox\\Captures_pack "
+                    "imageDir=x csv=y archive=260721-120000.acap "
+                    "assets=raw|proc_c|proc_r|mean_c|max_c|mean_r|max_r "
+                    "preview=1920x1080x3 scale=5",
+                ),
+                FlowLine(
+                    1,
+                    "00:00:01.000",
+                    1,
+                    "capture finalize failed grab=260721-120000 error=IOException",
+                ),
+            ],
+        )
+
+        report = CaptureFlowValidator().validate(session)
+        finalize = next(item for item in report.results if item.rule == "C3.finalize")
+
+        self.assertEqual(CheckStatus.FAIL, finalize.status)
 
 
 if __name__ == "__main__":

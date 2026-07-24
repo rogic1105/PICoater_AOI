@@ -213,12 +213,12 @@ against current code with `rg` before editing because lookup data can become sta
 | 存檔 | `EnableAutoCapture` | true | 取像時自動存檔 |
 | 存原圖 | `SaveOriginalBmp` | false | 額外存原始 BMP |
 | Anilox 根目錄 | `AniloxRootPath` | D:\Anilox | 資料根目錄；磁碟不存在時自動 fallback 到 C:\Anilox + MessageBox + 寫回 settings |
-| 存檔目錄 | （computed）| `{AniloxRoot}\Captures` | 影像 + 統計 CSV；不顯示於 PropertyGrid |
+| 存檔目錄 | （computed）| `{AniloxRoot}\Captures_pack` | 每序號 `.acap` + 統計 CSV；不顯示於 PropertyGrid |
 | 存背景目錄 | （computed）| `{AniloxRoot}\Bg` | StandardBgSub 背景影像；不顯示 |
 | Logs 目錄 | （computed）| `{AniloxRoot}\Logs` | Resource Log；不顯示 |
 | Dcf 檔 | （跟 exe 走）| `{ExeDir}\Config\Radient_Config.dcf` | MIL DCF；repo 唯一來源 `sdk/MIL/Config/Radient_Config.dcf`，app/sample build 連結複製，PG 隱藏 |
 | 預留空間 (GB) | `LocalMinFreeGB` | 100 | 磁碟可用空間低於此值時刪除最舊完整一天的全部產出（含月份 CSV）；輸入超過磁碟容量時自動調整 |
-| 遠端路徑 | `RemotePath` | \\192.168.10.20\Anilox\Captures | 遠端複製目標路徑（空=不複製）。單一 SMB share `Anilox` 子目錄 |
+| 遠端路徑 | `RemotePath` | \\192.168.10.20\Anilox\Captures_pack | 遠端複製目標路徑（空=不複製）。單一 SMB share `Anilox` 子目錄 |
 | 遠端設定路徑 | `RemoteConfigPath` | \\192.168.10.20\Anilox\Config | [Browsable(false)] 開發者設定；cleanup-request.flag 寫入位置 |
 
 ### 5. Log 設定（記錄／除錯）

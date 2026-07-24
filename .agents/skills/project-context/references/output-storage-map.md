@@ -8,32 +8,25 @@
 
 | Output | Default path | Source of truth | Remote copy | Retention |
 |---|---|---|---|---|
-| Daily inspection records | `D:\Anilox\Captures\yyyy\yyyyMM\yyyyMMdd.csv` | Yes | Yes | Delete with the oldest complete day when low on space |
-| Raw image | `...\yyyyMMdd\{yyyyMMdd_HHmmss.fff}-{cam}_raw.jpg` | Yes | Yes | Delete with the oldest complete day when low on space |
-| Column processed image | `...\yyyyMMdd\{base}_proc_c.jpg` | Yes | Yes | Delete with the oldest complete day when low on space |
-| Row processed image | `...\yyyyMMdd\{base}_proc_r.jpg` | Yes | Yes | Delete with the oldest complete day when low on space |
-| Column curves | `...\yyyyMMdd\{base}_{mean|max}_c.bin` | Yes | Yes | Delete with the oldest complete day when low on space |
-| Row curves | `...\yyyyMMdd\{base}_{mean|max}_r.bin` | Yes | Yes | Delete with the oldest complete day when low on space |
-| Per-grab capture archive | `...\yyyyMMdd\{grabId}.acap` | Yes when present; contains authoritative raw/processed JPEG, C/R curves, camera id, frame ticks, plus optional rebuildable preview atlases | Yes | Delete with the oldest complete day when low on space |
-| Frame-start tick index | `...\yyyyMMdd\_ticks.csv` | Alignment source while images exist | Yes | Delete with the day output |
+| Daily inspection records | `D:\Anilox\Captures_pack\yyyy\yyyyMM\yyyyMMdd.csv` | Yes | Yes | Delete with the oldest complete day when low on space |
+| Per-grab capture archive | `...\yyyyMMdd\{grabId}.acap` | Yes; contains authoritative raw/processed JPEG, C/R curves, camera id, frame ticks, plus three rebuildable 1920x1080 preview atlases | Yes, after Grab finalization | Delete with the oldest complete day when low on space |
+| Legacy loose JPG/BIN and `_ticks.csv` | Manually selected old roots only | Read compatibility, never written by the current product | No new delivery | Existing old data follows its original root policy |
 | Rebuildable curve summary | `...\yyyyMMdd\_curve_summary\{grabId}.mcsf` | No; legacy bins or `.acap` curve records are authoritative | No | Delete with the day output |
 | Background calibration | `D:\Anilox\Bg\bg_{width}_{cam}_{yyyyMMdd-HHmmssfff}.bin`; active manifest `Bg\active-background.json` | Yes for local acquisition | No | Active set protected; a successful low-space cleanup also removes inactive timestamped sets |
 | Runtime trace and diagnostics | `D:\Anilox\Logs\` | Diagnostic evidence | No | Cataloged logs expire after `LogRetentionHours` (default 168 h) |
 | Runtime settings | `{ExeDir}\Config\*.json`, `Radient_Config.dcf` | Yes for that machine | No | Not part of capture retention |
 | Review/session state | `{ExeDir}\Config\session-state.json` | UI convenience only | No | Replaceable |
-| Durable remote-copy ledger | `D:\Anilox\Captures\.remote-copy-pending\*.pending` | Delivery state | No | Remove after confirmed publish or explicit retention cancellation; corrupt markers move to `quarantine\` |
+| Durable remote-copy ledger | `D:\Anilox\Captures_pack\.remote-copy-pending\*.pending` | Delivery state | No | Remove after confirmed publish or explicit retention cancellation; corrupt markers move to `quarantine\` |
 | Stress dataset | `D:\Anilox\StressCaptures_30000` | Test-only | No | Remove manually after testing |
 
-Readers accept legacy `_proc_v.jpg` / `_proc_h.jpg` and legacy curve-bin names. New writers must
-emit only the c/r names above.
+Readers accept legacy loose JPG/BIN names when an engineer explicitly selects an old root. New
+production writes never create loose capture assets.
 
-Readers support mixed daily data: when `{grabId}.acap` exists, CSV file names resolve to virtual
-archive records and image/curve/tick readers use the container; otherwise they read the legacy
-individual JPG/BIN files. Authoritative image and curve records remain independent. A rebuildable
-preview cache adds one raw, column-processed, and row-processed atlas record per grab; each atlas
-packs the tick-aligned camera strips into one JPEG bounded by 1920x1080 and stores camera rectangles
-for in-memory splitting. It may be regenerated or omitted without changing inspection truth;
-settled review always replaces it with the independent full JPEG records.
+Each new Grab writes one `{grabId}.acap`. Stop waits for every accepted camera frame to finish
+appending, then adds one raw, column-processed, and row-processed atlas. Each atlas packs the
+tick-aligned camera strips into one JPEG bounded by 1920x1080 and stores camera rectangles for
+in-memory splitting. Only after this finalization are the archive and daily CSV enqueued for remote
+copy. Full JPEG and curve records inside the archive remain authoritative.
 
 The repository source of truth for the MIL binary configuration is
 `sdk/MIL/Config/Radient_Config.dcf`. The product and MIL monitor sample link that one file into
@@ -44,9 +37,7 @@ the nearest preceding `#CFG`; this intentionally avoids a second settings file t
 out of sync after a crash. A new snapshot contains the complete `OPS + START + CROP` layout,
 column/row normalization, `RidgeSigma` (細線濾除), thresholds, and capture parameters.
 
-`_ticks.csv` is a shared index inside each date image folder. Each row maps one image base name to
-its frame-start monotonic tick, allowing review to align cameras even when filenames jitter. It is
-appended by `CameraFrameSaver` and recopied whenever it changes.
+Frame-start ticks now live in each archive record. `_ticks.csv` is legacy read compatibility only.
 
 `_curve_summary\{grabId}.mcsf` is a per-grab UI acceleration cache created by
 `SingleGrabCurveSummaryStore`; the C/R curve bins remain authoritative. Retention therefore deletes
@@ -56,14 +47,14 @@ the summary directory together with the images and bins for that date.
 
 | Output | Default path | Meaning |
 |---|---|---|
-| Mirrored production data | `D:\Anilox\Captures\...` | Same relative layout as monitoring PC for remotely copied outputs |
+| Mirrored production data | `D:\Anilox\Captures_pack\...` | Same relative layout as monitoring PC for remotely copied outputs |
 | Storage-app heartbeat | `D:\Anilox\Config\storage-app-heartbeat.json` | Atomic liveness/status snapshot from the Storage-role app |
 | Cleanup request | `D:\Anilox\Config\cleanup-request.flag` | Transient fixed command; watcher consumes and deletes it |
 | Publish temporary file | `{destination}.part-{guid}` | Incomplete remote copy; length-verified then atomically renamed, normally absent |
 | Storage runtime settings | `C:\AniloxMonitor\Config\*.json` | Configuration for the Storage-role app only |
 | Storage runtime logs | `D:\Anilox\Logs\` | Local evidence from the Storage-role app |
 
-The SMB defaults are `\\192.168.10.20\Anilox\Captures` and
+The SMB defaults are `\\192.168.10.20\Anilox\Captures_pack` and
 `\\192.168.10.20\Anilox\Config`. A green share probe proves SMB write/delete access; a fresh
 heartbeat proves the Storage-role application is running. These are separate states.
 

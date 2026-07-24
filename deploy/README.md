@@ -91,7 +91,7 @@
    依照設定檔預設值，檔案總管應看到：
 
    ```text
-   D:\Anilox\Captures
+   D:\Anilox\Captures_pack
    D:\Anilox\Config
    C:\AniloxMonitor\AniloxRoll.Monitor.exe
    ```
@@ -106,7 +106,7 @@
     \\192.168.10.20\Anilox
     ```
 
-    以上是預設值；若第 4 步改過 `IpAddress` 或 `ShareName`，請改用修改後的值。應直接看到 `Captures` 與 `Config`，而且可以新增並刪除測試文字檔。
+    以上是預設值；若第 4 步改過 `IpAddress` 或 `ShareName`，請改用修改後的值。應直接看到 `Captures_pack` 與 `Config`，而且可以新增並刪除測試文字檔。
 
 ### 檢測電腦第一次安裝
 
@@ -178,7 +178,7 @@
 - 不要直接在 ZIP 壓縮檔內執行 BAT。
 - 不要只複製 `setup.bat`。
 - 不要刪除已安裝目錄的 `Config`，除非目的是恢復預設值。
-- 不要刪除 `D:\Anilox\Captures` 來更新程式。
+- 不要刪除 `D:\Anilox\Captures_pack` 來更新程式。
 - 不要自行執行 `scripts` 裡的單一步驟後就假設整台電腦已安裝完成。
 
 ---
@@ -228,7 +228,7 @@ deploy\package\rebuild_and_package.bat
 
 確認類型後按 `Y` 繼續，按 `N` 就取消，不會開始編譯。繼續後會對整個 solution 執行 `Release|x64 Rebuild`，再一次產生 Storage 與 Inspection 兩包，完成後自動開啟 `artifacts\deploy`。封裝暫存資料夾在 ZIP 驗證成功後會自動刪除，該目錄只保留 ZIP。
 
-`Rebuild` 只清除 repository 的編譯輸出，不會刪除產線 Captures、CSV 或已安裝程式的 Config。測試包的 `VERSION.txt` 會標示 `SourceState=dirty`。ZIP 內會以完整包名建立唯一根資料夾，即使解壓到當前位置也不會散落。
+`Rebuild` 只清除 repository 的編譯輸出，不會刪除產線 Captures_pack、CSV 或已安裝程式的 Config。測試包的 `VERSION.txt` 會標示 `SourceState=dirty`。ZIP 內會以完整包名建立唯一根資料夾，即使解壓到當前位置也不會散落。
 
 ### 由封裝器負責 Build：PowerShell
 
@@ -288,7 +288,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy\package\package_rel
 $inspection = Get-Content .\deploy\inspection-pc\inspection-config.json -Raw | ConvertFrom-Json
 $storage = Get-Content .\deploy\storage-pc\storage-config.json -Raw | ConvertFrom-Json
 Test-NetConnection -ComputerName $inspection.VerifyPingTarget -Port 445
-$p = '\\{0}\{1}\Captures\__deploy_test.txt' -f $inspection.VerifyPingTarget,$storage.ShareName
+$p = '\\{0}\{1}\Captures_pack\__deploy_test.txt' -f $inspection.VerifyPingTarget,$storage.ShareName
 'ok' | Set-Content $p
 Remove-Item $p
 ```

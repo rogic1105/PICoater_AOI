@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
@@ -32,47 +33,40 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// </summary>
         public void SaveCapture(CaptureContext ctx)
         {
+            if (string.IsNullOrWhiteSpace(ctx.GrabId))
+                throw new InvalidOperationException("Capture GrabId is not initialized.");
+
             Directory.CreateDirectory(ctx.SaveDir);
 
-            SaveJpegFromBytes(ctx.RawBytes, ctx.ResizeWidth, ctx.ResizeHeight,
-                Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.RawJpg), ctx.JpgQuality);
-
-            if (ctx.ProcCBytes != null)
-                SaveJpegFromBytes(ctx.ProcCBytes, ctx.ResizeWidth, ctx.ResizeHeight,
-                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.ProcC), ctx.JpgQuality);
-
-            if (ctx.ProcRBytes != null)
-                SaveJpegFromBytes(ctx.ProcRBytes, ctx.ResizeWidth, ctx.ResizeHeight,
-                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.ProcR), ctx.JpgQuality);
-
-            if (ctx.MeanC != null)
+            string archivePath = Path.Combine(
+                ctx.SaveDir, ctx.GrabId + CaptureArchiveStore.Extension);
+            var assets = new List<CaptureArchiveAsset>(7)
             {
-                SaveCurveBinFromArray(ctx.MeanC, ctx.ScaleForHeader,
-                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.MeanC));
-                SaveCurveBinFromArray(ctx.MaxC, ctx.ScaleForHeader,
-                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.MaxC));
-            }
+                new CaptureArchiveAsset
+                {
+                    Kind = CaptureAssetKind.RawJpeg,
+                    Data = EncodeJpegFromBytes(
+                        ctx.RawBytes, ctx.ResizeWidth, ctx.ResizeHeight, ctx.JpgQuality)
+                }
+            };
+            AddJpegAsset(
+                assets, CaptureAssetKind.ProcessedColumnJpeg,
+                ctx.ProcCBytes, ctx.ResizeWidth, ctx.ResizeHeight, ctx.JpgQuality);
+            AddJpegAsset(
+                assets, CaptureAssetKind.ProcessedRowJpeg,
+                ctx.ProcRBytes, ctx.ResizeWidth, ctx.ResizeHeight, ctx.JpgQuality);
+            AddCurveAsset(assets, CaptureAssetKind.MeanColumnCurve, ctx.MeanC, ctx.ScaleForHeader);
+            AddCurveAsset(assets, CaptureAssetKind.MaxColumnCurve, ctx.MaxC, ctx.ScaleForHeader);
+            AddCurveAsset(assets, CaptureAssetKind.MeanRowCurve, ctx.MeanR, ctx.ScaleForHeader);
+            AddCurveAsset(assets, CaptureAssetKind.MaxRowCurve, ctx.MaxR, ctx.ScaleForHeader);
 
-            if (ctx.MeanR != null)
-            {
-                SaveCurveBinFromArray(ctx.MeanR, ctx.ScaleForHeader,
-                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.MeanR));
-                SaveCurveBinFromArray(ctx.MaxR, ctx.ScaleForHeader,
-                    Path.Combine(ctx.SaveDir, ctx.BaseName + CaptureFileNaming.MaxR));
-            }
-
-            // 每幀硬體 frame-start tick 側車（回顧用 tick 就近對位補黑：cam 各自獨立掉幀位置不同，
-            // seq 會歪、檔名軟體戳不知道實際掉哪幀；唯有同板 tick 可精準對齊）。
-            if (ctx.FrameStartTicks > 0)
-                AppendTickSidecar(ctx.SaveDir, ctx.BaseName, ctx.FrameStartTicks);
-
-            // 計算本幀存檔總大小（排除 .bmp 原圖）
-            long frameBytes = 0;
-            foreach (var f in Directory.GetFiles(ctx.SaveDir, ctx.BaseName + "*"))
-            {
-                if (f.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase)) continue;
-                frameBytes += new FileInfo(f).Length;
-            }
+            long frameBytes = CaptureArchiveStore.AppendFrame(
+                archivePath,
+                ctx.GrabId,
+                ctx.BaseName,
+                ctx.CameraId,
+                ctx.FrameStartTicks,
+                assets);
             LastSaveBytesTotal = frameBytes;
             SessionSaveBytes += frameBytes;
             SessionFrameCount++;
@@ -82,27 +76,43 @@ namespace AniloxRoll.Monitor.Core.Camera
             AppendResourceLog(ctx.CameraId, ctx.OrigWidth, ctx.OrigHeight,
                 ctx.GpuTimeMs, frameBytes, SessionSaveBytes, SessionFrameCount, ramMB);
 
-            // 通知遠端複製佇列
-            if (ctx.OnFilesSaved != null)
-            {
-                var savedFiles = Directory.GetFiles(ctx.SaveDir, ctx.BaseName + "*");
-                if (ctx.FrameStartTicks > 0)
-                {
-                    string tickSidecar = Path.Combine(ctx.SaveDir, TickSidecarName);
-                    if (File.Exists(tickSidecar))
-                    {
-                        Array.Resize(ref savedFiles, savedFiles.Length + 1);
-                        savedFiles[savedFiles.Length - 1] = tickSidecar;
-                    }
-                }
-                ctx.OnFilesSaved(savedFiles);
-            }
+            ctx.OnFilesSaved?.Invoke(new[] { archivePath });
 
             float maxCMean = ComputeCurveMeanNormalized(ctx.MaxC);
             float meanRPeak = ComputeCurvePeakNormalized(ctx.MeanR);
             float maxRPeak = ComputeCurvePeakNormalized(ctx.MaxR);
-            ctx.OnResult?.Invoke(ctx.CameraId, ctx.BaseName,
+            ctx.OnResult?.Invoke(ctx.GrabId, ctx.CameraId, ctx.BaseName,
                 ctx.MeanPeak, ctx.MaxPeak, maxCMean, meanRPeak, maxRPeak);
+        }
+
+        private static void AddJpegAsset(
+            ICollection<CaptureArchiveAsset> assets,
+            CaptureAssetKind kind,
+            byte[] data,
+            int width,
+            int height,
+            int quality)
+        {
+            if (data == null || data.Length == 0) return;
+            assets.Add(new CaptureArchiveAsset
+            {
+                Kind = kind,
+                Data = EncodeJpegFromBytes(data, width, height, quality)
+            });
+        }
+
+        private static void AddCurveAsset(
+            ICollection<CaptureArchiveAsset> assets,
+            CaptureAssetKind kind,
+            float[] curve,
+            int scaleForHeader)
+        {
+            if (curve == null || curve.Length == 0) return;
+            assets.Add(new CaptureArchiveAsset
+            {
+                Kind = kind,
+                Data = EncodeCurveBin(curve, scaleForHeader)
+            });
         }
 
         internal static float ComputeCurveMeanNormalized(float[] curve)
@@ -143,7 +153,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// GDI+ JPEG encoder 需要 24bpp，透過 GCHandle pin + Graphics.DrawImage 轉換。
         /// bmp24 使用 ThreadStatic 重用，避免每幀分配 LOH 觸發 Gen2 GC。
         /// </summary>
-        internal static void SaveJpegFromBytes(byte[] data, int w, int h, string path, int quality)
+        internal static byte[] EncodeJpegFromBytes(byte[] data, int w, int h, int quality)
         {
             var gch = GCHandle.Alloc(data, GCHandleType.Pinned);
             try
@@ -161,12 +171,21 @@ namespace AniloxRoll.Monitor.Core.Camera
                         g.DrawImage(bmp8, 0, 0, w, h);
 
                     var codec = GetJpegEncoder();
-                    if (codec == null) { _reuseBmp24.Save(path); return; }
-
-                    using (var ep = new EncoderParameters(1))
+                    using (var stream = new MemoryStream())
                     {
-                        ep.Param[0] = new EncoderParameter(Encoder.Quality, (long)quality);
-                        _reuseBmp24.Save(path, codec, ep);
+                        if (codec == null)
+                        {
+                            _reuseBmp24.Save(stream, ImageFormat.Jpeg);
+                        }
+                        else
+                        {
+                            using (var ep = new EncoderParameters(1))
+                            {
+                                ep.Param[0] = new EncoderParameter(Encoder.Quality, (long)quality);
+                                _reuseBmp24.Save(stream, codec, ep);
+                            }
+                        }
+                        return stream.ToArray();
                     }
                 }
             }
@@ -182,10 +201,11 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// 將 float[] 曲線資料寫成自描述 .bin 格式。
         /// Header: magic(4)"MCBF" + version(4)=1 + scale_factor(4f) + array_length(4) + float[]
         /// </summary>
-        internal static void SaveCurveBinFromArray(float[] arr, int scaleForHeader, string path)
+        internal static byte[] EncodeCurveBin(float[] arr, int scaleForHeader)
         {
-            if (arr == null || arr.Length == 0) return;
-            using (var bw = new BinaryWriter(File.Open(path, FileMode.Create, FileAccess.Write)))
+            if (arr == null || arr.Length == 0) return null;
+            using (var stream = new MemoryStream(16 + arr.Length * sizeof(float)))
+            using (var bw = new BinaryWriter(stream))
             {
                 bw.Write(new byte[] { (byte)'M', (byte)'C', (byte)'B', (byte)'F' });
                 bw.Write(1);                        // version
@@ -193,26 +213,13 @@ namespace AniloxRoll.Monitor.Core.Camera
                 bw.Write(arr.Length);               // array_length
                 for (int i = 0; i < arr.Length; i++)
                     bw.Write(arr[i]);
+                bw.Flush();
+                return stream.ToArray();
             }
         }
 
-        // ── Tick 側車（每影像資料夾一份 _ticks.csv：「baseName,ticks」）──────────
-
-        /// <summary>tick 側車檔名（與當日影像同資料夾；回顧載入時讀回對位）。</summary>
+        // Legacy read compatibility only. New archives carry ticks in each record.
         public const string TickSidecarName = "_ticks.csv";
-        private static readonly object _tickSidecarLock = new object();
-
-        /// <summary>append 一列「baseName,ticks」到當日資料夾的 _ticks.csv。
-        /// 多相機背景執行緒共寫 → static lock。失敗不影響存檔主流程。</summary>
-        internal static void AppendTickSidecar(string saveDir, string baseName, long ticks)
-        {
-            try
-            {
-                string path = Path.Combine(saveDir, TickSidecarName);
-                lock (_tickSidecarLock) { File.AppendAllText(path, baseName + "," + ticks + "\r\n"); }
-            }
-            catch { /* 側車失敗不影響主存檔 */ }
-        }
 
         // ══════════════════════════════════════════════════════════════════════
         // Resource Log（靜態，所有相機共用一份 CSV）
@@ -468,6 +475,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         public int JpgQuality;
         public int ScaleForHeader;
         public string SaveDir;
+        public string GrabId;
         public string BaseName;
         public int CameraId;
         public int OrigWidth;
@@ -476,10 +484,10 @@ namespace AniloxRoll.Monitor.Core.Camera
         public float MaxPeak;
         public long GpuTimeMs;
         /// <summary>本幀 frame-start 硬體時戳（Data Latch ticks）。0＝未取得。
-        /// 寫進 _ticks.csv 側車，供回顧用「tick 就近對位」精準補黑（免疫 seq 歪掉/軟體戳抖動）。</summary>
+        /// 寫進 archive record，供回顧用「tick 就近對位」精準補黑。</summary>
         public long FrameStartTicks;
-        public Action<int, string, float, float, float, float, float> OnResult;
-        /// <summary>存檔完成後回呼，傳入已儲存的檔案路徑陣列（供遠端複製佇列用）。</summary>
+        public Action<string, int, string, float, float, float, float, float> OnResult;
+        /// <summary>單幀 append 完成後回呼；遠端複製要等整輪封裝完成後才排入。</summary>
         public Action<string[]> OnFilesSaved;
     }
 }

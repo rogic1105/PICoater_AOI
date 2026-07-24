@@ -47,7 +47,9 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                 string preferredPath = UserSessionState.LastDataPath;
                 if (!Directory.Exists(preferredPath)) preferredPath = _settings?.CaptureRootPath;
                 if (string.IsNullOrEmpty(preferredPath) || !Directory.Exists(preferredPath))
-                    preferredPath = @"D:\Anilox\Captures";
+                    preferredPath = Path.Combine(
+                        InspectionDefaults.AniloxRootPath,
+                        InspectionDefaults.CaptureDirectoryName);
                 if (Directory.Exists(preferredPath))
                     dialog.SelectedPath = preferredPath;
 
@@ -56,7 +58,8 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                 string selectedPath = dialog.SelectedPath;
                 if (!HasYearSubdir(selectedPath))
                 {
-                    string capturesSub = Path.Combine(selectedPath, "Captures");
+                    string capturesSub = Path.Combine(
+                        selectedPath, InspectionDefaults.CaptureDirectoryName);
                     if (HasYearSubdir(capturesSub)) selectedPath = capturesSub;
                 }
 

@@ -120,6 +120,7 @@ namespace AniloxRoll.Monitor.Forms
         // --- 檢測日誌 ---
         private InspectionLogService _inspectionLogService;
         private string _currentGrabId;
+        private DateTime _currentGrabCaptureDate;
 
         // --- App Mode ---
         private AppModeConfig _appMode;
@@ -465,7 +466,7 @@ namespace AniloxRoll.Monitor.Forms
 
         /// <summary>確保 Anilox 資料根目錄與子目錄存在。
         /// AniloxRootPath 的磁碟不存在時，把磁碟換成 C:（如 D:\Anilox → C:\Anilox），
-        /// MessageBox 告知 + 寫回 settings.json。建立 Captures/Logs/Bg/Dcf 子目錄。</summary>
+        /// MessageBox 告知 + 寫回 settings.json。建立 Captures_pack/Logs/Bg 子目錄。</summary>
         private void EnsureAniloxFolderStructure()
         {
             try
@@ -903,7 +904,6 @@ namespace AniloxRoll.Monitor.Forms
             {
                 System.Threading.Interlocked.Exchange(
                     ref _lastLocalSaveUtcTicks, DateTime.UtcNow.Ticks);
-                _remoteCopyService?.EnqueueFiles(files);
                 _outputHealthService?.Resolve("CaptureWriteFailure.CAM" + camId);
             };
             _liveCameraManager.OnCaptureSaveFailed = (camId, error) =>
@@ -1008,7 +1008,7 @@ namespace AniloxRoll.Monitor.Forms
                         // 掉偵診斷 log（每 500ms 背景 Capture 記 frames/procMissed/grabMissed → 離線定位掉在哪層）
                         AniloxRoll.Monitor.UI.Presenters.LiveTelemetryPresenter.DropDiagLogPath =
                             System.IO.Path.Combine(logsDir, $"dropdiag-{DateTime.Now:yyyyMMdd_HHmmss}.csv");
-                        // 參數變更 log（time,scope,cam,param,value → 對齊 _ticks.csv 掉偵時間，定位掉偵 vs 改參數）
+                        // 參數變更 log（time,scope,cam,param,value → 對齊 phaselog 或 archive tick，定位掉偵 vs 改參數）
                         ParamChangeLogPath =
                             System.IO.Path.Combine(logsDir, $"paramchange-{DateTime.Now:yyyyMMdd_HHmmss}.csv");
                     }
