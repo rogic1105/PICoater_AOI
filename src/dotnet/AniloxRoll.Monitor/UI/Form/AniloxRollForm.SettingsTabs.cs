@@ -622,6 +622,9 @@ namespace AniloxRoll.Monitor.Forms
             foreach (var kv in SystemInfo.GetGenericHardwareRows())
                 listViewHardware.Items.Add(new ListViewItem(new[] { kv.Key, kv.Value }));
 
+            listViewHardware.Items.Add(new ListViewItem(new[] {
+                "IO_Model", _settings?.IoModel ?? InspectionDefaults.IoModel }));
+
             // ── Grabber（PCIe frame grabber）──
             try
             {

@@ -2,6 +2,8 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using AniloxRoll.Monitor.Core.Services;
+using TanukiCv.Controls;
 
 namespace AniloxRoll.Monitor.Core.Data
 {
@@ -82,6 +84,7 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"RidgeDir\": \"{R.RidgeDir}\",");
             sb.AppendLine($"    \"HessianMaxFactorV\": {F(R.HessianMaxFactorV)},");
             sb.AppendLine($"    \"HessianMaxFactorH\": {F(R.HessianMaxFactorH)},");
+            sb.AppendLine($"    \"RidgeSigma\": {F(R.RidgeSigma)},");
             sb.AppendLine($"    \"ErrorValueMeanV\": {F(R.ErrorValueMeanV)},");
             sb.AppendLine($"    \"ErrorValueMaxV\": {F(R.ErrorValueMaxV)},");
             sb.AppendLine($"    \"ErrorValueMeanH\": {F(R.ErrorValueMeanH)},");
@@ -109,7 +112,9 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"EnhanceHeatmap\": \"{V.EnhanceHeatmap}\",");
             sb.AppendLine($"    \"MainDisplay\": \"{V.MainDisplay}\",");
             sb.AppendLine($"    \"VerticalDirection\": \"{V.VerticalDirection}\",");
-            sb.AppendLine($"    \"LiveLod\": \"{V.LiveLod}\"");
+            sb.AppendLine($"    \"LiveLod\": \"{V.LiveLod}\",");
+            sb.AppendLine($"    \"WaterfallTotalHeight\": {V.WaterfallTotalHeight},");
+            sb.AppendLine($"    \"WaterfallFullMode\": \"{V.WaterfallFullMode}\"");
             sb.AppendLine("  },");
 
             // Storage
@@ -142,8 +147,7 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"Enabled\": {(LT.Enabled ? "true" : "false")},");
             sb.AppendLine($"    \"ComPort\": \"{SettingsStoreHelper.EscapeJson(LT.ComPort)}\",");
             sb.AppendLine($"    \"Channel\": {LT.Channel},");
-            sb.AppendLine($"    \"Brightness\": {LT.Brightness},");
-            sb.AppendLine($"    \"WarmupMs\": {LT.WarmupMs}");
+            sb.AppendLine($"    \"Brightness\": {LT.Brightness}");
             sb.AppendLine("  },");
 
             // Logging
@@ -224,6 +228,7 @@ namespace AniloxRoll.Monitor.Core.Data
                 RidgeDir         = ridgeDir,
                 HessianMaxFactorV = SettingsStoreHelper.GetFloat(obj, "HessianMaxFactorV", InspectionDefaults.HessianMaxFactorV),
                 HessianMaxFactorH = SettingsStoreHelper.GetFloat(obj, "HessianMaxFactorH", InspectionDefaults.HessianMaxFactorH),
+                RidgeSigma       = SettingsStoreHelper.GetFloat(obj, "RidgeSigma", InspectionEngineConfig.DefaultRidgeSigma),
                 ErrorValueMeanV  = SettingsStoreHelper.GetFloat(obj, "ErrorValueMeanV", InspectionDefaults.ErrorValueMeanV),
                 ErrorValueMaxV   = SettingsStoreHelper.GetFloat(obj, "ErrorValueMaxV",  InspectionDefaults.ErrorValueMaxV),
                 ErrorValueMeanH  = SettingsStoreHelper.GetFloat(obj, "ErrorValueMeanH", InspectionDefaults.ErrorValueMeanH),
@@ -280,6 +285,14 @@ namespace AniloxRoll.Monitor.Core.Data
             if (!System.Enum.TryParse(SettingsStoreHelper.GetString(obj, "LiveLod", InspectionDefaults.LiveLod.ToString()),
                     true, out LiveLodMode liveLod))
                 liveLod = InspectionDefaults.LiveLod;
+            if (!System.Enum.TryParse(
+                    SettingsStoreHelper.GetString(
+                        obj,
+                        "WaterfallFullMode",
+                        InspectionDefaults.WaterfallFullMode.ToString()),
+                    true,
+                    out WaterfallFullMode waterfallFullMode))
+                waterfallFullMode = InspectionDefaults.WaterfallFullMode;
             string heatmapText = SettingsStoreHelper.GetString(obj, "EnhanceHeatmap", "");
             if (string.Equals(heatmapText, "BlueRed", System.StringComparison.OrdinalIgnoreCase))
                 heatmapText = EnhanceHeatmapMode.BlueYellowRed.ToString();
@@ -304,6 +317,11 @@ namespace AniloxRoll.Monitor.Core.Data
                 MainDisplay         = mainDisplay,
                 VerticalDirection   = verticalDirection,
                 LiveLod             = liveLod,
+                WaterfallTotalHeight = SettingsStoreHelper.GetInt(
+                    obj,
+                    "WaterfallTotalHeight",
+                    InspectionDefaults.WaterfallTotalHeight),
+                WaterfallFullMode   = waterfallFullMode,
             };
         }
 
@@ -376,7 +394,6 @@ namespace AniloxRoll.Monitor.Core.Data
                 ComPort    = SettingsStoreHelper.GetString(obj, "ComPort",    InspectionDefaults.LightComPort),
                 Channel    = SettingsStoreHelper.GetInt   (obj, "Channel",    InspectionDefaults.LightChannel),
                 Brightness = SettingsStoreHelper.GetInt   (obj, "Brightness", InspectionDefaults.LightBrightness),
-                WarmupMs   = SettingsStoreHelper.GetInt   (obj, "WarmupMs",   InspectionDefaults.LightWarmupMs),
             };
         }
 

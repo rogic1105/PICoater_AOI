@@ -71,6 +71,22 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void SaveAndLoad_PersistsInspectionAndWaterfallSettings()
+        {
+            var settings = new InspectionSettings();
+            settings.RidgeSigma = 12.5f;
+            settings.ImageView.WaterfallTotalHeight = 42000;
+            settings.ImageView.WaterfallFullMode = WaterfallFullMode.Ring;
+
+            InspectionSettingsStore.Save(settings);
+            var loaded = InspectionSettingsStore.Load();
+
+            Assert.That(loaded.RidgeSigma, Is.EqualTo(12.5f).Within(0.001f));
+            Assert.That(loaded.ImageView.WaterfallTotalHeight, Is.EqualTo(42000));
+            Assert.That(loaded.ImageView.WaterfallFullMode, Is.EqualTo(WaterfallFullMode.Ring));
+        }
+
+        [Test]
         public void Load_WhenConfigIsMissing_DefaultsMainDisplayToWaterfall()
         {
             var loaded = InspectionSettingsStore.Load();

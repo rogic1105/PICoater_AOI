@@ -60,12 +60,10 @@ namespace AniloxRoll.Monitor.Forms
                 }
             }
 
-            // 確保 grab 中，先開燈等穩定再開始
+            // 確保 grab 中；開燈命令完成後直接開始，無固定暖機等待。
             if (!_liveCameraManager.IsLiveGrabbing)
             {
                 LightTurnOn();
-                int warmup = _settings?.LightWarmupMs ?? 0;
-                if (warmup > 0) await Task.Delay(warmup);
                 bool started = await _liveCameraManager.ToggleGrabAsync();
                 if (!started) return;
                 UpdateGrabButton(true);

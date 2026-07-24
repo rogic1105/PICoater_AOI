@@ -77,10 +77,10 @@ namespace AniloxRoll.Monitor.Core.Data
         private readonly InspectionRecipe _recipe;
         public TimeSettingsConfig(InspectionRecipe recipe) { _recipe = recipe; }
 
-        [DisplayName("背景採樣(sec)")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [DisplayName("背景採樣(秒)")][TypeConverter(typeof(LeftAlignNumericConverter))]
         public int BackgroundSampleSeconds { get => _recipe.BackgroundSampleSeconds; set => _recipe.BackgroundSampleSeconds = value; }
 
-        [DisplayName("抓取上限(sec)")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [DisplayName("總時間(秒)")][TypeConverter(typeof(LeftAlignNumericConverter))]
         public int GrabLimitSeconds { get => _recipe.GrabLimitSeconds; set => _recipe.GrabLimitSeconds = value; }
 
         public override string ToString() => "";

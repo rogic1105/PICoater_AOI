@@ -417,7 +417,8 @@ Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線�
  ├ AreCamerasHwReady@LiveCameraManager.cs 未就緒 → return   ← 守門：擋 IO 觸發路徑
  │                                                （IoStartGrab 直呼本方法繞過按鈕灰色）
  ├（未抓取→啟動）await Task.Run(LightTurnOn@AniloxRollForm.HardwareStatus.cs)
- │   → await Task.Delay(LightWarmupMs)               ⚠ 序列埠寫入一律背景（UI 執行緒零 MIL/序列埠鐵則）
+ │                                                  ⚠ 命令完成即續行；無固定暖機延遲
+ │                                                  ⚠ 序列埠寫入一律背景（UI 執行緒零 MIL/序列埠鐵則）
  ├（未抓取）ResetLiveChartsForDisplayTransition@AniloxRollForm.Live.cs ＋ _muraExceedLatch 歸零
  │   ＋ UpdateMuraLed(false) ＋ ClearMura@IoGrabController.cs   ← MURA 閂鎖歸零（latch 非脈衝，M1）
  ├（未配置）await EnsureAllocatedAndToggleGrabAsync(deferCaptureGate:true)@LiveCameraManager.cs
@@ -809,7 +810,7 @@ btnLiveGetBackground_Click@AniloxRollForm.Background.cs      intent 行 ui:【�
  ├ IsStandardBgSubEnabled 守門（非標準去背 → MessageBox return）
  ├（舊預覽）ClearBackgroundPreview@AniloxRollForm.Background.cs
  ├（未配置）await EnsureAllocatedAndToggleGrabAsync@LiveCameraManager.cs（=F1＋F2 借道，不開影像處理）
- ├（未抓取）LightTurnOn@AniloxRollForm.HardwareStatus.cs → await Task.Delay(LightWarmupMs)
+ ├（未抓取）LightTurnOn@AniloxRollForm.HardwareStatus.cs（命令完成即續行；無固定暖機延遲）
  │   → ToggleGrab@LiveCameraManager.cs ＋ UpdateGrabButton(true)   ← 借用現有 grab（啟停包夾）
  ├ 採集迴圈（await Task.Delay(100) × BackgroundSampleSeconds，UI 執行緒非阻塞、按鈕倒數）
  │   └ per-cam TryComputeColumnMean@AniloxCamera.cs → accum 累加
@@ -825,7 +826,8 @@ btnLiveGetBackground_Click@AniloxRollForm.Background.cs      intent 行 ui:【�
  ├（_autoStartGrabAfterBg）await ReleaseAsync → btnLiveGrab_Click（IO 觸發自動回抓）→ return
  └ 尾端自動預覽：btnLiveViewBackground_Click（直呼）
 時間設定不變量：`BackgroundSampleSeconds` 只管本段背景採樣；`GrabLimitSeconds` 只在 F2 正式監控啟動成功後
-武裝，兩者不得互相中止。PropertyGrid 顯示於「時間設定」下：`背景採樣(sec)`、`抓取上限(sec)`。
+武裝，兩者不得互相中止。PropertyGrid 分別顯示為檢測設定的 `背景採樣(秒)`，以及「畫布設定」下的
+`總時間(秒)`。
 預覽背景：
 btnLiveViewBackground_Click@AniloxRollForm.Background.cs     intent 行 ui:【預覽背景】鈕
  ├（IsBgPreviewActive）ClearBackgroundPreview → return       ← 再按一次＝清除（toggle）

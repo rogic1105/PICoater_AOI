@@ -75,6 +75,5 @@ namespace AniloxRoll.Monitor.Core.Data
         public const string LightComPort    = "COM17"; // COM Port
         public const int    LightChannel    = 1;       // 通道
         public const int    LightBrightness = 255;     // 亮度
-        public const int    LightWarmupMs   = 300;     // 暖機延遲 (ms)
     }
 }

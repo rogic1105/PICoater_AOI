@@ -64,12 +64,10 @@ namespace AniloxRoll.Monitor.Forms
                 return false;
             }
 
-            // 啟動路徑：先亮燈 → 等光源穩定 → 再開始 grab
+            // 啟動路徑：開燈命令完成後再開始 grab；實機已驗證不需要固定暖機等待。
             if (!wasGrabbing)
             {
-                await Task.Run(() => LightTurnOn());   // 序列埠寫入 ~百 ms，不佔 UI（順序仍保證：燈亮→暖機→grab）
-                int warmup = _settings?.LightWarmupMs ?? 0;
-                if (warmup > 0) await Task.Delay(warmup);
+                await Task.Run(() => LightTurnOn());
                 ResetLiveChartsForDisplayTransition();
                 _muraExceedLatch[0] = _muraExceedLatch[1] = false;   // 每輪 grab 重新邊緣觸發超標留痕
                 _outputHealthService?.Resolve("MuraExceed.v");

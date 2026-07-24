@@ -103,8 +103,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                 nameof(InspectionSettings.cc_CropTail),
                 nameof(InspectionSettings.fb_BackgroundSampleSeconds),
                 nameof(InspectionSettings.fc_GrabLimitSeconds),
-                nameof(InspectionSettings.RemotePath),
-                nameof(InspectionSettings.LightWarmupMs));
+                nameof(InspectionSettings.RemotePath));
 
             Add(routes, nameof(InspectionSettings.db_Algorithm), SettingFeatureOwner.Background);
             Add(routes, nameof(InspectionSettings.dc_HessianMaxFactorV), SettingFeatureOwner.DataStats,
@@ -154,8 +153,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
             AddMany(routes, SettingFeatureOwner.Io,
                 nameof(InspectionSettings.IoEnabled),
                 nameof(InspectionSettings.IoIp),
-                nameof(InspectionSettings.IoPort),
-                nameof(InspectionSettings.IoModel));
+                nameof(InspectionSettings.IoPort));
             Add(routes, nameof(InspectionSettings.MuraDetectPaused), SettingFeatureOwner.MuraPause);
 
             return routes;

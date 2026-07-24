@@ -12,7 +12,7 @@ namespace AniloxRoll.Monitor.Core.Data
         private const string CategoryInspection = "2. 檢測設定";
         private const string CategoryCharts = "3. 圖表設定";
         private const string CategoryStorage = "4. 儲存設定";
-        private const string CategoryLogging = "5. Log 設定（記錄／除錯）";
+        private const string CategoryLogging = "5. LOG 設定";
         private const string CategoryLight = "6. 光源設定";
         private const string CategoryIo = "7. IO設定";
 
@@ -105,36 +105,40 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public double Cam7_Ops { get => MachineLayout.Cam7_Ops; set => MachineLayout.Cam7_Ops = value; }
 
         // ===== 2. 檢測設定 =====
-        [Category(CategoryInspection)][DisplayName("─ 演算法 ─")][ReadOnly(true)]
+        [Category(CategoryInspection)][DisplayName("─ 演算法 ─")][ReadOnly(true)][PropertyOrder(1)]
         public string da_AlgorithmHeader => "";
-        [Category(CategoryInspection)][DisplayName("去背演算法")]
+        [Category(CategoryInspection)][DisplayName("去背演算法")][PropertyOrder(2)]
         public BackgroundAlgorithm db_Algorithm { get => Recipe.Algorithm; set => Recipe.Algorithm = value; }
-        [Category(CategoryInspection)][DisplayName("欄正規值")][TypeConverter(typeof(LeftAlignNumericConverter))]
-        public float dc_HessianMaxFactorV { get => Recipe.HessianMaxFactorV; set => Recipe.HessianMaxFactorV = value; }
-        [Category(CategoryInspection)][DisplayName("列正規值")][TypeConverter(typeof(LeftAlignNumericConverter))]
-        public float dd_HessianMaxFactorH { get => Recipe.HessianMaxFactorH; set => Recipe.HessianMaxFactorH = value; }
-        [Category(CategoryInspection)][DisplayName("細線濾除")][TypeConverter(typeof(LeftAlignNumericConverter))]
-        public float de_RidgeSigma { get => Recipe.RidgeSigma; set => Recipe.RidgeSigma = value; }
+        [Category(CategoryInspection)][DisplayName("背景採樣(秒)")][PropertyOrder(3)][TypeConverter(typeof(LeftAlignNumericConverter))]
+        public int fb_BackgroundSampleSeconds { get => Recipe.BackgroundSampleSeconds; set => Recipe.BackgroundSampleSeconds = value; }
 
-        [Category(CategoryInspection)][DisplayName("─ 檢出標準 ─")][ReadOnly(true)]
+        [Category(CategoryInspection)][DisplayName("─ 檢出標準 ─")][ReadOnly(true)][PropertyOrder(4)]
         public string ea_DetectionHeader => "";
-        [Category(CategoryInspection)][DisplayName("檢出方向")]
+        [Category(CategoryInspection)][DisplayName("檢出方向")][PropertyOrder(5)]
         public RidgeDirection eb_RidgeDir { get => Recipe.RidgeDir; set => Recipe.RidgeDir = value; }
-        [Category(CategoryInspection)][DisplayName("欄平均閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryInspection)][DisplayName("欄正規值")][PropertyOrder(6)][TypeConverter(typeof(LeftAlignNumericConverter))]
+        public float dc_HessianMaxFactorV { get => Recipe.HessianMaxFactorV; set => Recipe.HessianMaxFactorV = value; }
+        [Category(CategoryInspection)][DisplayName("列正規值")][PropertyOrder(7)][TypeConverter(typeof(LeftAlignNumericConverter))]
+        public float dd_HessianMaxFactorH { get => Recipe.HessianMaxFactorH; set => Recipe.HessianMaxFactorH = value; }
+        [Category(CategoryInspection)][DisplayName("細線濾除")][PropertyOrder(8)][TypeConverter(typeof(LeftAlignNumericConverter))]
+        public float de_RidgeSigma { get => Recipe.RidgeSigma; set => Recipe.RidgeSigma = value; }
+        [Category(CategoryInspection)][DisplayName("欄平均閾值")][PropertyOrder(9)][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float ec_ErrorValueMeanV { get => Recipe.ErrorValueMeanV; set => Recipe.ErrorValueMeanV = value; }
-        [Category(CategoryInspection)][DisplayName("欄最大閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryInspection)][DisplayName("欄最大閾值")][PropertyOrder(10)][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float ed_ErrorValueMaxV  { get => Recipe.ErrorValueMaxV;  set => Recipe.ErrorValueMaxV  = value; }
-        [Category(CategoryInspection)][DisplayName("列平均閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryInspection)][DisplayName("列平均閾值")][PropertyOrder(11)][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float ee_ErrorValueMeanH { get => Recipe.ErrorValueMeanH; set => Recipe.ErrorValueMeanH = value; }
-        [Category(CategoryInspection)][DisplayName("列最大閾值")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryInspection)][DisplayName("列最大閾值")][PropertyOrder(12)][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float ef_ErrorValueMaxH  { get => Recipe.ErrorValueMaxH;  set => Recipe.ErrorValueMaxH  = value; }
 
-        [Category(CategoryInspection)][DisplayName("─ 時間設定 ─")][ReadOnly(true)]
-        public string fa_TimeHeader => "";
-        [Category(CategoryInspection)][DisplayName("背景採樣(sec)")][TypeConverter(typeof(LeftAlignNumericConverter))]
-        public int fb_BackgroundSampleSeconds { get => Recipe.BackgroundSampleSeconds; set => Recipe.BackgroundSampleSeconds = value; }
-        [Category(CategoryInspection)][DisplayName("抓取上限(sec)")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryInspection)][DisplayName("─ 畫布設定 ─")][ReadOnly(true)][PropertyOrder(13)]
+        public string fa_CanvasHeader => "";
+        [Category(CategoryInspection)][DisplayName("總時間(秒)")][PropertyOrder(14)][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Description("正式監控單次抓取的最長時間，單位為秒；到時走共用停止流程。")]
         public int fc_GrabLimitSeconds { get => Recipe.GrabLimitSeconds; set => Recipe.GrabLimitSeconds = value; }
+        [Category(CategoryInspection)][DisplayName("總高度")][PropertyOrder(15)]
+        [Description("瀑布圖虛擬長圖總高度，單位為 px；預設 30000。只在主畫面顯示為瀑布時有效。")]
+        public int hg_WaterfallTotalHeight { get => ImageView.WaterfallTotalHeight; set => ImageView.WaterfallTotalHeight = value; }
 
         // 向後相容：程式碼中直接存取的快捷屬性
         [Browsable(false)] public BackgroundAlgorithm Algorithm       { get => Recipe.Algorithm;       set => Recipe.Algorithm       = value; }
@@ -147,38 +151,36 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public double AniloxRollSpeedMPerMin  { get => Recipe.AniloxRollSpeedMPerMin;  set => Recipe.AniloxRollSpeedMPerMin  = value; }
 
         // ===== 3. 圖表設定 =====
-        [Category(CategoryCharts)][DisplayName("─ 檢測報表 ─")][ReadOnly(true)]
+        [Category(CategoryCharts)][DisplayName("─ 檢測報表 ─")][ReadOnly(true)][PropertyOrder(1)]
         public string ga_ChartHeader => "";
-        [Category(CategoryCharts)][DisplayName("y座標")]
+        [Category(CategoryCharts)][DisplayName("y座標")][PropertyOrder(2)]
         public ChartScaleMode gb_ChartScaleMode { get => Chart.ScaleMode; set => Chart.ScaleMode = value; }
-        [Category(CategoryCharts)][DisplayName("月產量")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryCharts)][DisplayName("月產量")][PropertyOrder(3)][TypeConverter(typeof(LeftAlignNumericConverter))]
         public int gc_YearlyYMax { get => Chart.YearlyYMax; set => Chart.YearlyYMax = value; }
-        [Category(CategoryCharts)][DisplayName("日產量")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryCharts)][DisplayName("日產量")][PropertyOrder(4)][TypeConverter(typeof(LeftAlignNumericConverter))]
         public int gd_MonthlyYMax { get => Chart.MonthlyYMax; set => Chart.MonthlyYMax = value; }
-        [Category(CategoryCharts)][DisplayName("時產量")][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryCharts)][DisplayName("時產量")][PropertyOrder(5)][TypeConverter(typeof(LeftAlignNumericConverter))]
         public int ge_DailyYMax { get => Chart.DailyYMax; set => Chart.DailyYMax = value; }
 
-        [Category(CategoryCharts)][DisplayName("─ 主畫面 ─")][ReadOnly(true)]
+        [Category(CategoryCharts)][DisplayName("─ 主畫面 ─")][ReadOnly(true)][PropertyOrder(6)]
         public string ha_DisplayHeader => "";
         // 合圖方式選項已退場（2026-06-13 上機決策：app 永遠 Global 合圖；單張模式留 sample）。
         // PG 隱藏 + setter 強制 Global（絞殺式：Vertical 分支變死路，Stage4 刪死碼）。
         [Browsable(false)]
         public StitchMode hb_StitchMode { get => StitchMode.Global; set => ImageView.StitchMode = StitchMode.Global; }
-        [Category(CategoryCharts)][DisplayName("監控強化")][TypeConverter(typeof(BoolYesNoConverter))]
+        [Category(CategoryCharts)][DisplayName("監控強化")][PropertyOrder(7)][TypeConverter(typeof(BoolYesNoConverter))]
         public bool hc_EnableMuraEnhance { get => ImageView.EnableMuraEnhance; set => ImageView.EnableMuraEnhance = value; }
-        [Category(CategoryCharts)][DisplayName("回顧強化")][TypeConverter(typeof(BoolYesNoConverter))]
+        [Category(CategoryCharts)][DisplayName("回顧強化")][PropertyOrder(8)][TypeConverter(typeof(BoolYesNoConverter))]
         public bool hd_EnableReviewEnhance { get => ImageView.EnableReviewEnhance; set => ImageView.EnableReviewEnhance = value; }
-        [Category(CategoryCharts)][DisplayName("強化熱力圖")][Description("關閉／冷色／暖色／藍黃紅；只有主畫面的欄／列強化圖上色，原圖、縮圖、檢測與存檔資料不變。")]
+        [Category(CategoryCharts)][DisplayName("強化熱力圖")][PropertyOrder(9)][Description("關閉／冷色／暖色／藍黃紅；只有主畫面的欄／列強化圖上色，原圖、縮圖、檢測與存檔資料不變。")]
         public EnhanceHeatmapMode hda_EnhanceHeatmap { get => ImageView.EnhanceHeatmap; set => ImageView.EnhanceHeatmap = value; }
-        [Category(CategoryCharts)][DisplayName("主畫面顯示")][Description("即時=CPU 繪、跟回顧畫布同源；瀑布=全幅合圖即時捲動。變更後重開抓取生效。")]
+        [Category(CategoryCharts)][DisplayName("主畫面顯示")][PropertyOrder(10)][Description("即時=CPU 繪、跟回顧畫布同源；瀑布=全幅合圖即時捲動。變更後重開抓取生效。")]
         public MainDisplayMode he_MainDisplay { get => ImageView.MainDisplay; set => ImageView.MainDisplay = value; }
-        [Category(CategoryCharts)][DisplayName("上下方向")][Description("監控與回顧主畫面共用；預設由下而上。")]
+        [Category(CategoryCharts)][DisplayName("上下方向")][PropertyOrder(11)][Description("監控與回顧主畫面共用；預設由下而上。")]
         public VerticalDisplayDirection hee_VerticalDirection { get => ImageView.VerticalDirection; set => ImageView.VerticalDirection = value; }
-        [Category(CategoryCharts)][DisplayName("動態LOD")][Description("Off=關；GPU=TanukiCv GPU 縮；CPU=純 CPU 縮。放大巨圖看細節用（顯示成本大降）。即時模式即時生效。")]
+        [Category(CategoryCharts)][DisplayName("動態LOD")][PropertyOrder(12)][Description("Off=關；GPU=TanukiCv GPU 縮；CPU=純 CPU 縮。放大巨圖看細節用（顯示成本大降）。即時模式即時生效。")]
         public LiveLodMode hf_LiveLod { get => ImageView.LiveLod; set => ImageView.LiveLod = value; }
-        [Category(CategoryCharts)][DisplayName("瀑布總高")][Description("瀑布圖虛擬長圖總高（px，預設 30000）；點兩下 fit 縮放到此整張高度。只在主畫面顯示=瀑布圖時有效。")]
-        public int hg_WaterfallTotalHeight { get => ImageView.WaterfallTotalHeight; set => ImageView.WaterfallTotalHeight = value; }
-        [Category(CategoryCharts)][DisplayName("瀑布滿了")][Description("瀑布圖填滿總高後：重來=清空黑幕從頭；循環=從頭覆蓋最舊的連續捲。")]
+        [Category(CategoryCharts)][DisplayName("瀑布滿了")][PropertyOrder(13)][Description("瀑布圖填滿總高後：重來=清空黑幕從頭；循環=從頭覆蓋最舊的連續捲。")]
         public WaterfallFullMode hh_WaterfallFullMode { get => ImageView.WaterfallFullMode; set => ImageView.WaterfallFullMode = value; }
 
         // 向後相容：程式碼中直接存取的快捷屬性
@@ -198,13 +200,17 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public float ErrorValueMaxH  { get => Recipe.ErrorValueMaxH;  set => Recipe.ErrorValueMaxH  = value; }
 
         // ===== 4. 儲存設定 =====
-        [Category(CategoryStorage)][DisplayName("Anilox 根目錄")][PropertyOrder(1)]  public string AniloxRootPath       { get => Storage.AniloxRootPath;       set => Storage.AniloxRootPath       = value; }
+        [Category(CategoryStorage)][DisplayName("─ 本機設定 ─")][ReadOnly(true)][PropertyOrder(1)]
+        public string ia_LocalStorageHeader => "";
+        [Category(CategoryStorage)][DisplayName("Anilox 根目錄")][PropertyOrder(2)]  public string AniloxRootPath       { get => Storage.AniloxRootPath;       set => Storage.AniloxRootPath       = value; }
         // 子目錄路徑：PropertyGrid 不顯示，由 AniloxRootPath 推算
         [Browsable(false)] public string CaptureRootPath => Storage.CaptureRootPath;
-        [Category(CategoryStorage)][DisplayName("預留空間 (GB)")][PropertyOrder(2)][TypeConverter(typeof(LeftAlignNumericConverter))] public int    LocalMinFreeGB       { get => Storage.LocalMinFreeGB;       set => Storage.LocalMinFreeGB       = value; }
-        [Category(CategoryStorage)][DisplayName("遠端路徑")][PropertyOrder(3)]      public string RemotePath           { get => Storage.RemotePath;           set => Storage.RemotePath           = value; }
+        [Category(CategoryStorage)][DisplayName("預留空間 (GB)")][PropertyOrder(3)][TypeConverter(typeof(LeftAlignNumericConverter))] public int    LocalMinFreeGB       { get => Storage.LocalMinFreeGB;       set => Storage.LocalMinFreeGB       = value; }
         [Category(CategoryStorage)][DisplayName("存檔")][PropertyOrder(4)][TypeConverter(typeof(BoolYesNoConverter))]          public bool   EnableAutoCapture    { get => Storage.EnableAutoCapture;    set => Storage.EnableAutoCapture    = value; }
         [Category(CategoryStorage)][DisplayName("存原圖")][PropertyOrder(5)][TypeConverter(typeof(BoolYesNoConverter))]        public bool   SaveOriginalBmp      { get => Storage.SaveOriginalBmp;      set => Storage.SaveOriginalBmp      = value; }
+        [Category(CategoryStorage)][DisplayName("─ 遠端設定 ─")][ReadOnly(true)][PropertyOrder(6)]
+        public string ib_RemoteStorageHeader => "";
+        [Category(CategoryStorage)][DisplayName("遠端路徑")][PropertyOrder(7)]      public string RemotePath           { get => Storage.RemotePath;           set => Storage.RemotePath           = value; }
         // 開發者設定：PropertyGrid 不顯示，部署時直接改 JSON
         [Browsable(false)] public string RemoteConfigPath { get => Storage.RemoteConfigPath; set => Storage.RemoteConfigPath = value; }
 
@@ -221,23 +227,24 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public string DcfPath { get => CameraParam.DcfPath; set => CameraParam.DcfPath = value; }
 
         // ===== 6. 光源設定 =====
-        [Category(CategoryLight)][DisplayName("啟用光源")][TypeConverter(typeof(BoolYesNoConverter))]      public bool   LightEnabled    { get => Light.Enabled;    set => Light.Enabled    = value; }
-        [Category(CategoryLight)][DisplayName("COM Port")]      public string LightComPort    { get => Light.ComPort;    set => Light.ComPort    = value; }
-        [Category(CategoryLight)][DisplayName("通道")][TypeConverter(typeof(LeftAlignNumericConverter))]          public int    LightChannel    { get => Light.Channel;    set => Light.Channel    = value; }
-        [Category(CategoryLight)][DisplayName("亮度")][TypeConverter(typeof(LeftAlignNumericConverter))]          public int    LightBrightness { get => Light.Brightness; set => Light.Brightness = value; }
-        [Category(CategoryLight)][DisplayName("暖機延遲 (ms)")][TypeConverter(typeof(LeftAlignNumericConverter))] public int    LightWarmupMs   { get => Light.WarmupMs;   set => Light.WarmupMs   = value; }
+        [Category(CategoryLight)][DisplayName("COM Port")][PropertyOrder(1)] public string LightComPort { get => Light.ComPort; set => Light.ComPort = value; }
+        [Category(CategoryLight)][DisplayName("通道")][PropertyOrder(2)][TypeConverter(typeof(LeftAlignNumericConverter))] public int LightChannel { get => Light.Channel; set => Light.Channel = value; }
+        [Category(CategoryLight)][DisplayName("亮度")][PropertyOrder(3)][TypeConverter(typeof(LeftAlignNumericConverter))] public int LightBrightness { get => Light.Brightness; set => Light.Brightness = value; }
+        [Category(CategoryLight)][DisplayName("啟用光源")][PropertyOrder(4)][TypeConverter(typeof(BoolYesNoConverter))] public bool LightEnabled { get => Light.Enabled; set => Light.Enabled = value; }
 
         // ===== 7. IO 設定 =====
         [Category(CategoryIo)][DisplayName("IO IP")][PropertyOrder(1)][TypeConverter(typeof(IoIpTypeConverter))]
         [Description("實機通常使用 192.168.255.1；本機模擬器使用 127.0.0.1。可輸入其他 IP。")]
         public string IoIp { get; set; } = InspectionDefaults.IoIp;
-        [Category(CategoryIo)][DisplayName("IO 型號")][PropertyOrder(2)] public string IoModel { get; set; } = InspectionDefaults.IoModel;
-        [Category(CategoryIo)][DisplayName("啟用 IO")][PropertyOrder(3)][TypeConverter(typeof(BoolYesNoConverter))]  public bool   IoEnabled { get; set; } = InspectionDefaults.IoEnabled;
-        [Category(CategoryIo)][DisplayName("IO Port")][PropertyOrder(4)][TypeConverter(typeof(IoPortTypeConverter))]
+        [Category(CategoryIo)][DisplayName("IO Port")][PropertyOrder(2)][TypeConverter(typeof(IoPortTypeConverter))]
         [Description("ET-7044 實機與 IoSimulator 都使用 502；1502 僅作 Port 衝突時的備援。")]
         public int IoPort { get; set; } = InspectionDefaults.IoPort;
+        [Browsable(false)] public string IoModel { get; set; } = InspectionDefaults.IoModel;
+        [Category(CategoryIo)][DisplayName("啟用 IO")][PropertyOrder(3)][TypeConverter(typeof(BoolYesNoConverter))] public bool IoEnabled { get; set; } = InspectionDefaults.IoEnabled;
         // Mura 檢出（DO1 MURA_DET）：runtime toggle，不持久化 — 每次啟動為 false（避免漏檢）
-        [Category(CategoryIo)][DisplayName("Mura檢出")][PropertyOrder(5)][TypeConverter(typeof(BoolYesNoConverter))]  public bool   MuraDetectPaused { get; set; } = false;
+        [Category(CategoryIo)][DisplayName("暫停檢出")][PropertyOrder(4)][TypeConverter(typeof(BoolYesNoConverter))]
+        [Description("是=暫停 Mura 檢出與 DO1 輸出；否=正常檢出。每次啟動自動恢復為否。")]
+        public bool MuraDetectPaused { get; set; } = false;
 
     }
 }

@@ -176,19 +176,20 @@ against current code with `rg` before editing because lookup data can become sta
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
 | ── 演算法 ── | （分隔列，唯讀） | — | — |
-| 去背演算法 | `db_Algorithm` → `Algorithm` | SingleFrameBgSub | None / SingleFrameBgSub / StandardBgSub |
+| 去背演算法 | `db_Algorithm` → `Algorithm` | SingleFrameBgSub | SingleFrameBgSub / StandardBgSub |
+| 背景採樣(秒) | `fb_BackgroundSampleSeconds` → `BackgroundSampleSeconds` | 3 | StandardBgSub 背景採樣時間 |
+| ── 檢出標準 ── | （分隔列，唯讀） | — | — |
+| 檢出方向 | `eb_RidgeDir` → `RidgeDir` | Both | 欄 / 列 / 全部 |
 | 欄正規值 | `dc_HessianMaxFactorV` → `HessianMaxFactorV` | 0.3 | V Hessian 正規化係數（capture-time baked-in） |
 | 列正規值 | `dd_HessianMaxFactorH` → `HessianMaxFactorH` | 0.3 | H Hessian 正規化係數（view-time only） |
 | 細線濾除 | `de_RidgeSigma` → `RidgeSigma` | 9.0 | Ridge 前 Gaussian blur sigma；越大→濾掉越多細線/雜訊（較不敏感），越小→越敏感。走每幀 json 送 native；改設定下次 grab 生效。唯一預設 `InspectionEngineConfig.DefaultRidgeSigma` |
-| ── 檢出標準 ── | （分隔列，唯讀） | — | — |
-| 檢出方向 | `eb_RidgeDir` → `RidgeDir` | Both | 欄 / 列 / 全部 |
 | 欄平均閾值 | `ec_ErrorValueMeanV` → `ErrorValueMeanV` | 0.2 | V chart Mean 閾值線 |
 | 欄最大閾值 | `ed_ErrorValueMaxV` → `ErrorValueMaxV` | 0.6 | V chart Max 閾值線 |
 | 列平均閾值 | `ee_ErrorValueMeanH` → `ErrorValueMeanH` | 0.2 | H chart Mean 閾值線 |
 | 列最大閾值 | `ef_ErrorValueMaxH` → `ErrorValueMaxH` | 0.6 | H chart Max 閾值線 |
-| ── 時間設定 ── | （分隔列，唯讀） | — | — |
-| 背景採樣(sec) | `fb_BackgroundSampleSeconds` → `BackgroundSampleSeconds` | 3 | StandardBgSub 背景採樣時間 |
-| 抓取上限(sec) | `fc_GrabLimitSeconds` → `GrabLimitSeconds` | 10 | 正式監控單次 grab 最長時間；到時走共用停止流程 |
+| ── 畫布設定 ── | （分隔列，唯讀） | — | — |
+| 總時間(秒) | `fc_GrabLimitSeconds` → `GrabLimitSeconds` | 10 | 正式監控單次 grab 最長時間；到時走共用停止流程 |
+| 總高度 | `hg_WaterfallTotalHeight` → `ImageView.WaterfallTotalHeight` | 30000 | 瀑布虛擬長圖總高度（px） |
 
 ### 3. 圖表設定
 
@@ -200,28 +201,32 @@ against current code with `rg` before editing because lookup data can become sta
 | 日產量 | `gd_MonthlyYMax` → `ChartDataYieldMonthlyYMax` | 2000 | 良率月圖 Y 軸上限 |
 | 時產量 | `ge_DailyYMax` → `ChartDataYieldDailyYMax` | 300 | 良率日圖 Y 軸上限 |
 | ── 主畫面 ── | （分隔列，唯讀） | — | — |
-| 合圖方式 | `hb_StitchMode` → `StitchMode` | Global | Vertical / Global |
 | 監控強化 | `hc_EnableMuraEnhance` → `EnableMuraEnhance` | false | 即時影像強化 Mura |
 | 回顧強化 | `hd_EnableReviewEnhance` → `EnableReviewEnhance` | false | 回顧影像強化 Mura |
+| 強化熱力圖 | `hda_EnhanceHeatmap` → `EnhanceHeatmap` | Off | 關閉 / 冷色 / 暖色 / 藍黃紅；只影響主畫面強化顯示 |
 | 主畫面顯示 | `he_MainDisplay` → `ImageView.MainDisplay` | Waterfall | ImageCanvas（即時合圖）/ Waterfall（瀑布合圖） |
+| 上下方向 | `hee_VerticalDirection` → `ImageView.VerticalDirection` | BottomToTop | 由下而上 / 由上而下；監控與回顧共用 |
 | 動態LOD | `hf_LiveLod` → `ImageView.LiveLod` | CPU | Off / GPU（TanukiCv GPU 縮）/ CPU（GrayResizeCpu 純 CPU 縮）。ImageCanvas 模式放大巨圖看細節用（顯示成本 ~180ms→~1ms），即時生效。預設 CPU＝無 GPU 機也能跑。`LiveCameraManager.SetLodMode` 套到 `ImageDisplayView.EnableLod`/`DisableLod` |
+| 瀑布滿了 | `hh_WaterfallFullMode` → `ImageView.WaterfallFullMode` | Restart | 重來 / 循環 |
 
 ### 4. 儲存設定
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
+| ── 本機設定 ── | （分隔列，唯讀） | — | — |
+| Anilox 根目錄 | `AniloxRootPath` | D:\Anilox | 資料根目錄；磁碟不存在時自動 fallback 到 C:\Anilox + MessageBox + 寫回 settings |
+| 預留空間 (GB) | `LocalMinFreeGB` | 100 | 磁碟可用空間低於此值時刪除最舊完整一天的全部產出（含月份 CSV）；輸入超過磁碟容量時自動調整 |
 | 存檔 | `EnableAutoCapture` | true | 取像時自動存檔 |
 | 存原圖 | `SaveOriginalBmp` | false | 額外存原始 BMP |
-| Anilox 根目錄 | `AniloxRootPath` | D:\Anilox | 資料根目錄；磁碟不存在時自動 fallback 到 C:\Anilox + MessageBox + 寫回 settings |
+| ── 遠端設定 ── | （分隔列，唯讀） | — | — |
+| 遠端路徑 | `RemotePath` | \\192.168.10.20\Anilox\Captures_pack | 遠端複製目標路徑（空=不複製）。單一 SMB share `Anilox` 子目錄 |
 | 存檔目錄 | （computed）| `{AniloxRoot}\Captures_pack` | 每序號 `.acap` + 統計 CSV；不顯示於 PropertyGrid |
 | 存背景目錄 | （computed）| `{AniloxRoot}\Bg` | StandardBgSub 背景影像；不顯示 |
 | Logs 目錄 | （computed）| `{AniloxRoot}\Logs` | Resource Log；不顯示 |
 | Dcf 檔 | （跟 exe 走）| `{ExeDir}\Config\Radient_Config.dcf` | MIL DCF；repo 唯一來源 `sdk/MIL/Config/Radient_Config.dcf`，app/sample build 連結複製，PG 隱藏 |
-| 預留空間 (GB) | `LocalMinFreeGB` | 100 | 磁碟可用空間低於此值時刪除最舊完整一天的全部產出（含月份 CSV）；輸入超過磁碟容量時自動調整 |
-| 遠端路徑 | `RemotePath` | \\192.168.10.20\Anilox\Captures_pack | 遠端複製目標路徑（空=不複製）。單一 SMB share `Anilox` 子目錄 |
 | 遠端設定路徑 | `RemoteConfigPath` | \\192.168.10.20\Anilox\Config | [Browsable(false)] 開發者設定；cleanup-request.flag 寫入位置 |
 
-### 5. Log 設定（記錄／除錯）
+### 5. LOG 設定
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
@@ -232,20 +237,20 @@ against current code with `rg` before editing because lookup data can become sta
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
-| 啟用光源 | `LightEnabled` | true | 啟用 LTS-3DPA24 光源控制器 |
 | COM Port | `LightComPort` | COM17 | RS-232 連接埠；啟動時先試此 port，失敗則自動掃描所有 port（找到後更新此欄位） |
 | 通道 | `LightChannel` | 1 | 使用通道（單通道機型固定 1） |
 | 亮度 | `LightBrightness` | 255 | 亮度（0~255） |
-| 暖機延遲 (ms) | `LightWarmupMs` | 300 | 開燈後等待光源穩定的延遲；Grab 啟動前插入此延遲 |
+| 啟用光源 | `LightEnabled` | true | 啟用 LTS-3DPA24 光源控制器 |
 
 ### 7. IO 設定
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
-| IO 型號 | `IoModel` | ET-7044 | 對應 `IoModuleFactory.Create(model)`；換型號改此值。目前支援 ET-7044 |
-| 啟用 IO | `IoEnabled` | true | 啟用 IO Modbus TCP |
 | IO IP | `IoIp` | 192.168.255.1 | ET-7044 IP |
 | IO Port | `IoPort` | 502 | Modbus TCP port |
+| 啟用 IO | `IoEnabled` | true | 啟用 IO Modbus TCP |
+| 暫停檢出 | `MuraDetectPaused` | false | 是=暫停 Mura 檢出與 DO1；每次啟動恢復為否，不寫入 JSON |
+| IO 型號（硬體資訊表） | `IoModel` | ET-7044 | PropertyGrid 隱藏；唯讀顯示於 `listViewHardware`，仍由 JSON 供 `IoModuleFactory` 選型 |
 
 ---
 

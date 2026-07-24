@@ -72,8 +72,8 @@ namespace AniloxRoll.Monitor.Core.Data
         [DisplayName("Error Value Max V")]  public float ErrorValueMaxV  { get; set; } = InspectionDefaults.ErrorValueMaxV;
         [DisplayName("Error Value Mean H")] public float ErrorValueMeanH { get; set; } = InspectionDefaults.ErrorValueMeanH;
         [DisplayName("Error Value Max H")]  public float ErrorValueMaxH  { get; set; } = InspectionDefaults.ErrorValueMaxH;
-        [DisplayName("背景採樣(sec)")] public int BackgroundSampleSeconds { get; set; } = InspectionDefaults.BackgroundSampleSeconds;
-        [DisplayName("抓取上限(sec)")] public int GrabLimitSeconds { get; set; } = InspectionDefaults.GrabLimitSeconds;
+        [DisplayName("背景採樣(秒)")] public int BackgroundSampleSeconds { get; set; } = InspectionDefaults.BackgroundSampleSeconds;
+        [DisplayName("總時間(秒)")] public int GrabLimitSeconds { get; set; } = InspectionDefaults.GrabLimitSeconds;
         [DisplayName("A輪速度 (m/min)")]  public double AniloxRollSpeedMPerMin { get; set; } = InspectionDefaults.AniloxRollSpeedMPerMin;
 
         /// <summary>存檔縮小倍率。原圖寬高各除以此值後存成 JPEG。唯一預設值來源：InspectionEngineConfig.DefaultSaveResizeScale。</summary>
