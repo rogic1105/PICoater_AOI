@@ -209,6 +209,8 @@ namespace StorageBridge.Core
 
         private static long GetDirectoryBytes(string path)
         {
+            if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path)) return 0;
+
             long total = 0;
             foreach (string file in SafeGetFiles(path, "*.*", SearchOption.AllDirectories))
                 total += GetFileBytes(file);
