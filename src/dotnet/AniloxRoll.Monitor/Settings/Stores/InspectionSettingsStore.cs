@@ -334,11 +334,7 @@ namespace AniloxRoll.Monitor.Core.Data
             string aniloxRoot = SettingsStoreHelper.GetString(obj, "AniloxRootPath", InspectionDefaults.AniloxRootPath);
             string remotePath = SettingsStoreHelper.GetString(
                 obj, "RemotePath", InspectionDefaults.RemotePath);
-            if (string.Equals(
-                remotePath,
-                InspectionDefaults.LegacyRemotePath,
-                StringComparison.OrdinalIgnoreCase))
-                remotePath = InspectionDefaults.RemotePath;
+            remotePath = CaptureStoragePaths.UpgradeLegacyPackedRoot(remotePath);
             return new StorageSettings
             {
                 EnableAutoCapture    = SettingsStoreHelper.GetBool  (obj, "EnableAutoCapture",    InspectionDefaults.EnableAutoCapture),

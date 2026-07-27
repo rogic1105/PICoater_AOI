@@ -220,7 +220,7 @@ class ReviewFlowValidatorTests(unittest.TestCase):
                 "DT list reload range=260724-080000~260724-120000 rows=2 ms=1 source=index",
                 "RV loadGrab begin 260724-120000（proc=True）",
                 "ui:【讀取資料】鈕（Review）",
-                "RV folder selected root=D:\\Anilox\\Captures_pack",
+                "RV folder selected root=D:\\Anilox\\Captures",
                 "DT list reload range=251117-111919~260721-210928 rows=100 ms=2 source=index",
                 "RV loadGrab begin 260721-210928（proc=True）",
             )

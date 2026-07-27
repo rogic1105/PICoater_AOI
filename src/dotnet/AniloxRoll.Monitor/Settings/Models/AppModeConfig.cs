@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.IO;
+using AniloxRoll.Monitor.Core.Services;
 using StorageBridge.Core;
 
 namespace AniloxRoll.Monitor.Core.Data
@@ -35,9 +36,16 @@ namespace AniloxRoll.Monitor.Core.Data
         {
             string fullPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"Config\app-mode.json");
             var loaded = JsonConfigLoader.LoadOrDefault(@"Config\app-mode.json", new AppModeConfig());
+            string resolvedDataPath =
+                CaptureStoragePaths.UpgradeLegacyPackedRoot(loaded.StorageMachineDataPath);
+            bool dataPathMigrated = !string.Equals(
+                resolvedDataPath,
+                loaded.StorageMachineDataPath,
+                StringComparison.OrdinalIgnoreCase);
+            loaded.StorageMachineDataPath = resolvedDataPath;
             if (loaded.StorageMinFreeGB <= 0)
                 loaded.StorageMinFreeGB = AppModeDefaults.StorageMinFreeGB;
-            if (!File.Exists(fullPath))
+            if (!File.Exists(fullPath) || dataPathMigrated)
                 JsonConfigLoader.SaveJson(fullPath, loaded);
             return loaded;
         }

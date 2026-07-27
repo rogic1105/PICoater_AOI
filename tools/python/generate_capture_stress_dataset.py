@@ -4,7 +4,7 @@
 The generated dataset uses seven camera records per grab. File contents are
 backed by a rotating pool of NTFS hard links so the test exercises realistic
 file counts and paths without duplicating the logical payload size. Production
-Capture output uses Captures_pack and .acap; this tool is only for exercising
+Capture output uses Captures and .acap; this tool is only for exercising
 the old loose-file reader.
 
 Dry-run is the default. Pass --execute to create files.
@@ -60,7 +60,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--source",
         required=True,
-        help="Explicit legacy loose-file template root; production Captures_pack is not modified.",
+        help="Explicit legacy loose-file template root; production Captures is not modified.",
     )
     parser.add_argument("--output", default=r"D:\Anilox\StressCaptures_30000")
     parser.add_argument("--grabs", type=int, default=30_000)

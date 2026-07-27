@@ -44,7 +44,21 @@ namespace AniloxRoll.Monitor.UI.Coordinators
         {
             using (var dialog = new FolderBrowserDialog())
             {
-                string preferredPath = UserSessionState.LastDataPath;
+                string configuredRoot = _settings?.CaptureRootPath;
+                string sessionRoot = UserSessionState.LastDataPath;
+                string preferredPath = CaptureStoragePaths.ResolveSelectedDataRoot(
+                    sessionRoot,
+                    configuredRoot);
+                if (!string.Equals(
+                    preferredPath,
+                    sessionRoot,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    UserSessionState.SetLastDataPath(preferredPath);
+                    UserSessionState.Save();
+                    FlowTrace.Log(
+                        $"RV data root upgraded from={sessionRoot} to={preferredPath}");
+                }
                 if (!Directory.Exists(preferredPath)) preferredPath = _settings?.CaptureRootPath;
                 if (string.IsNullOrEmpty(preferredPath) || !Directory.Exists(preferredPath))
                     preferredPath = Path.Combine(
@@ -55,7 +69,9 @@ namespace AniloxRoll.Monitor.UI.Coordinators
 
                 if (dialog.ShowDialog() != DialogResult.OK) return;
 
-                string selectedPath = dialog.SelectedPath;
+                string selectedPath = CaptureStoragePaths.ResolveSelectedDataRoot(
+                    dialog.SelectedPath,
+                    configuredRoot);
                 if (!HasYearSubdir(selectedPath))
                 {
                     string capturesSub = Path.Combine(

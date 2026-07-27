@@ -8,7 +8,7 @@
 
 | Output | Default path | Source of truth | Remote copy | Retention |
 |---|---|---|---|---|
-| Daily inspection records | `D:\Anilox\Captures_pack\yyyy\yyyyMM\yyyyMMdd.csv` | Yes | Yes | Delete with the oldest complete day when low on space |
+| Daily inspection records | `D:\Anilox\Captures\yyyy\yyyyMM\yyyyMMdd.csv` | Yes | Yes | Delete with the oldest complete day when low on space |
 | Per-grab capture archive | `...\yyyyMMdd\{grabId}.acap` | Yes; contains authoritative raw/processed JPEG, C/R curves, camera id, frame ticks, plus three rebuildable 1920x1080 preview atlases | Yes, after Grab finalization | Delete with the oldest complete day when low on space |
 | Legacy loose JPG/BIN and `_ticks.csv` | Manually selected old roots only | Read compatibility, never written by the current product | No new delivery | Existing old data follows its original root policy |
 | Rebuildable curve summary | `...\yyyyMMdd\_curve_summary\{grabId}.mcsf` | No; legacy bins or `.acap` curve records are authoritative | No | Delete with the day output |
@@ -16,7 +16,7 @@
 | Runtime trace and diagnostics | `D:\Anilox\Logs\` | Diagnostic evidence | No | Cataloged logs expire after `LogRetentionHours` (default 168 h) |
 | Runtime settings | `{ExeDir}\Config\*.json`, `Radient_Config.dcf` | Yes for that machine | No | Not part of capture retention |
 | Review/session state | `{ExeDir}\Config\session-state.json` | UI convenience only | No | Replaceable |
-| Durable remote-copy ledger | `D:\Anilox\Captures_pack\.remote-copy-pending\*.pending` | Delivery state | No | Remove after confirmed publish or explicit retention cancellation; corrupt markers move to `quarantine\` |
+| Durable remote-copy ledger | `D:\Anilox\Captures\.remote-copy-pending\*.pending` | Delivery state | No | Remove after confirmed publish or explicit retention cancellation; corrupt markers move to `quarantine\` |
 | Stress dataset | `D:\Anilox\StressCaptures_30000` | Test-only | No | Remove manually after testing |
 
 Readers accept legacy loose JPG/BIN names when an engineer explicitly selects an old root. New
@@ -47,14 +47,14 @@ the summary directory together with the images and bins for that date.
 
 | Output | Default path | Meaning |
 |---|---|---|
-| Mirrored production data | `D:\Anilox\Captures_pack\...` | Same relative layout as monitoring PC for remotely copied outputs |
+| Mirrored production data | `D:\Anilox\Captures\...` | Same relative layout as monitoring PC for remotely copied outputs |
 | Storage-app heartbeat | `D:\Anilox\Config\storage-app-heartbeat.json` | Atomic liveness/status snapshot from the Storage-role app |
 | Cleanup request | `D:\Anilox\Config\cleanup-request.flag` | Transient fixed command; watcher consumes and deletes it |
 | Publish temporary file | `{destination}.part-{guid}` | Incomplete remote copy; length-verified then atomically renamed, normally absent |
 | Storage runtime settings | `C:\AniloxMonitor\Config\*.json` | Configuration for the Storage-role app only |
 | Storage runtime logs | `D:\Anilox\Logs\` | Local evidence from the Storage-role app |
 
-The SMB defaults are `\\192.168.10.20\Anilox\Captures_pack` and
+The SMB defaults are `\\192.168.10.20\Anilox\Captures` and
 `\\192.168.10.20\Anilox\Config`. A green share probe proves SMB write/delete access; a fresh
 heartbeat proves the Storage-role application is running. These are separate states.
 

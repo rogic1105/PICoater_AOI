@@ -43,7 +43,7 @@ description: Configure or troubleshoot inspection-PC and storage-PC networking a
 - `192.168.255.x`：PLC、IO、光源等控制網段。
 - `192.168.10.x`：檢測電腦與儲存電腦傳輸網段。
 - 檢測電腦使用同一 NIC 時，儲存網段必須以 secondary IP 加入，不得刪除既有 PLC IP。
-- 儲存電腦共用 `AniloxRoot`，`Captures_pack` 與 `Config` 是其子目錄。
+- 儲存電腦共用 `AniloxRoot`，`Captures` 與 `Config` 是其子目錄。
 - Storage 角色循環儲存門檻來自 `storage-config.json` 的 `StorageMinFreeGB`，安裝時寫入 `app-mode.json`；不得誤用檢測電腦的 `LocalMinFreeGB`。
 - 連線健康必須分開判斷 SMB share 可寫與 Storage app heartbeat；只有兩者皆正常才是綠燈。
 

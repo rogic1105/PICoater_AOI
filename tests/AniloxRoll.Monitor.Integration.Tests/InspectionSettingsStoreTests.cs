@@ -95,31 +95,31 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
-        public void Load_WhenConfigIsMissing_UsesPackedCaptureRoot()
+        public void Load_WhenConfigIsMissing_UsesCaptureRoot()
         {
             var loaded = InspectionSettingsStore.Load();
 
             Assert.That(
                 loaded.CaptureRootPath,
-                Is.EqualTo(@"D:\Anilox\Captures_pack").IgnoreCase);
+                Is.EqualTo(@"D:\Anilox\Captures").IgnoreCase);
             Assert.That(
                 loaded.RemotePath,
-                Is.EqualTo(@"\\192.168.10.20\Anilox\Captures_pack").IgnoreCase);
+                Is.EqualTo(@"\\192.168.10.20\Anilox\Captures").IgnoreCase);
         }
 
         [Test]
-        public void Load_LegacyDefaultRemotePath_UpgradesToPackedRoot()
+        public void Load_LegacyPackedRemotePath_UpgradesToCaptureRoot()
         {
             File.WriteAllText(
                 _configPath,
                 "{\"Storage\":{\"AniloxRootPath\":\"D:\\\\Anilox\"," +
-                "\"RemotePath\":\"\\\\\\\\192.168.10.20\\\\Anilox\\\\Captures\"}}");
+                "\"RemotePath\":\"\\\\\\\\192.168.10.20\\\\Anilox\\\\Captures_pack\"}}");
 
             var loaded = InspectionSettingsStore.Load();
 
             Assert.That(
                 loaded.RemotePath,
-                Is.EqualTo(@"\\192.168.10.20\Anilox\Captures_pack").IgnoreCase);
+                Is.EqualTo(@"\\192.168.10.20\Anilox\Captures").IgnoreCase);
         }
 
         [Test]

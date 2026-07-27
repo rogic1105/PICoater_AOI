@@ -11,7 +11,7 @@
 #   Gateway         預設閘道（空=不設）
 #   AniloxRoot      Anilox 根目錄（如 D:\Anilox），對應單一 SMB share
 #   ShareName       SMB 共用名稱（如 Anilox）
-#   Subdirs         要建立的子目錄陣列（如 ["Captures_pack", "Config"]）
+#   Subdirs         要建立的子目錄陣列（如 ["Captures", "Config"]）
 #   AllowedUser     授權使用者（Everyone 或特定帳號）
 
 param(
@@ -105,7 +105,7 @@ $acl.SetAccessRule($rule)
 Set-Acl -Path $cfg.AniloxRoot -AclObject $acl
 Write-Host ("  -> " + $cfg.AllowedUser + " : Modify (含子目錄繼承)") -ForegroundColor Green
 
-# ── 5. SMB 共用（單一 share Anilox，內含 Captures_pack/Config 子目錄）────────
+# ── 5. SMB 共用（單一 share Anilox，內含 Captures/Config 子目錄）────────
 Write-Host ("[4/6] 設定 SMB 共用 (" + $cfg.ShareName + ")...")
 $existing = Get-SmbShare -Name $cfg.ShareName -ErrorAction SilentlyContinue
 if ($existing) {
@@ -149,5 +149,5 @@ try {
 
 Write-Host ""
 Write-Host "[Setup] 完成！" -ForegroundColor Cyan
-Write-Host ("         檢測機 PropertyGrid「遠端路徑」請填: \\" + $cfg.IpAddress + "\" + $cfg.ShareName + "\Captures_pack")
+Write-Host ("         檢測機 PropertyGrid「遠端路徑」請填: \\" + $cfg.IpAddress + "\" + $cfg.ShareName + "\Captures")
 Write-Host ("         檢測機 PropertyGrid「遠端 Config 路徑」（如顯示）: \\" + $cfg.IpAddress + "\" + $cfg.ShareName + "\Config")

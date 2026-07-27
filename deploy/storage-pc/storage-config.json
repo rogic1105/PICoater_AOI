@@ -6,7 +6,7 @@
   "AniloxRoot": "D:\\Anilox",
   "StorageMinFreeGB": 100,
   "ShareName": "Anilox",
-  "Subdirs": ["Captures_pack", "Config"],
+  "Subdirs": ["Captures", "Config"],
   "AllowedUser": "Everyone",
   "AppDir": "C:\\AniloxMonitor",
   "PreviousAppDirs": ["D:\\AniloxMonitor"],

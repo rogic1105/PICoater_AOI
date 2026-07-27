@@ -9,7 +9,7 @@ namespace AniloxRoll.Monitor.Core.Data
         [DisplayName("存檔")]     public bool EnableAutoCapture { get; set; } = InspectionDefaults.EnableAutoCapture;
         [DisplayName("存原圖")]   public bool SaveOriginalBmp { get; set; } = InspectionDefaults.SaveOriginalBmp;
 
-        /// <summary>Anilox 資料根目錄（如 D:\Anilox），Captures_pack/Bg/Logs 為其子目錄。
+        /// <summary>Anilox 資料根目錄（如 D:\Anilox），Captures/Bg/Logs 為其子目錄。
         /// 註：DCF 不在此，改跟 exe 走（exe\Config\Radient_Config.dcf）。</summary>
         [DisplayName("Anilox 根目錄")] public string AniloxRootPath { get; set; } = InspectionDefaults.AniloxRootPath;
 

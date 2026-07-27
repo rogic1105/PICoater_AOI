@@ -52,7 +52,7 @@ class CaptureFlowValidatorTests(unittest.TestCase):
                     0,
                     "00:00:00.000",
                     1,
-                    "capture plan grab=260721-120000 root=D:\\Anilox\\Captures_pack "
+                    "capture plan grab=260721-120000 root=D:\\Anilox\\Captures "
                     "imageDir=x csv=y archive=260721-120000.acap "
                     "assets=raw|proc_c|proc_r|mean_c|max_c|mean_r|max_r "
                     "preview=1920x1080x3 scale=5",
@@ -62,7 +62,7 @@ class CaptureFlowValidatorTests(unittest.TestCase):
                     "00:00:01.000",
                     1,
                     "capture finalize grab=260721-120000 "
-                    "archive=D:\\Anilox\\Captures_pack\\2026\\202607\\20260721\\260721-120000.acap "
+                    "archive=D:\\Anilox\\Captures\\2026\\202607\\20260721\\260721-120000.acap "
                     "atlas=3 atlasBytes=1234 remoteFiles=2",
                 ),
             ],
@@ -83,7 +83,7 @@ class CaptureFlowValidatorTests(unittest.TestCase):
                     0,
                     "00:00:00.000",
                     1,
-                    "capture plan grab=260721-120000 root=D:\\Anilox\\Captures_pack "
+                    "capture plan grab=260721-120000 root=D:\\Anilox\\Captures "
                     "imageDir=x csv=y archive=260721-120000.acap "
                     "assets=raw|proc_c|proc_r|mean_c|max_c|mean_r|max_r "
                     "preview=1920x1080x3 scale=5",

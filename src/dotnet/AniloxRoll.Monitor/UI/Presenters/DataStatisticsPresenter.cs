@@ -220,7 +220,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             FlowTrace.Log("ui:【讀取資料】鈕（Data）");   // intent 行（孤兒判讀規則）
             using (var dlg = new FolderBrowserDialog())
             {
-                dlg.Description = "選擇 Captures_pack 根目錄";
+                dlg.Description = "選擇 Captures 根目錄";
                 dlg.SelectedPath = string.IsNullOrWhiteSpace(_statsDataRootPath)
                     ? (_ctx.Settings?.CaptureRootPath ?? string.Empty)
                     : _statsDataRootPath;
@@ -237,6 +237,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// <summary>載入指定資料夾的統計資料，填充所有 ComboBox。</summary>
         public void LoadDataFolder(string path)
         {
+            string selectedPath = path;
+            path = CaptureStoragePaths.ResolveSelectedDataRoot(
+                selectedPath,
+                _ctx.Settings?.CaptureRootPath);
+            if (!string.Equals(path, selectedPath, StringComparison.OrdinalIgnoreCase))
+                FlowTrace.Log($"DT data root upgraded from={selectedPath} to={path}");
+
             CancelRangePreview();
             _muraChart?.ResetSingleGrabCache();
             ResetSingleGrabDetailIndex();

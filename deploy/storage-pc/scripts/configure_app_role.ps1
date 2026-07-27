@@ -14,7 +14,7 @@ if (-not $cfg.StorageMinFreeGB -or [int]$cfg.StorageMinFreeGB -lt 1) {
 }
 
 $storageConfig = Join-Path $cfg.AniloxRoot 'Config'
-$storageData = Join-Path $cfg.AniloxRoot 'Captures_pack'
+$storageData = Join-Path $cfg.AniloxRoot 'Captures'
 Write-AppRoleConfig `
     -AppDir $cfg.AppDir `
     -Role 'Storage' `

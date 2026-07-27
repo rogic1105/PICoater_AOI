@@ -1077,8 +1077,8 @@ T1: capture plan grab={yyMMdd-HHmmss} root={CaptureRootPath}
     preview=1920x1080x3
     scale={DefaultSaveResizeScale}
 ```
-- `CaptureRootPath` 預設為 `D:\Anilox\Captures_pack`；遠端預設為
-  `\\192.168.10.20\Anilox\Captures_pack`。舊預設 UNC 在 JSON 載入時自動升級。
+- `CaptureRootPath` 預設為 `D:\Anilox\Captures`；遠端預設為
+  `\\192.168.10.20\Anilox\Captures`。舊 `Captures_pack` 預設在 JSON 載入時自動升級。
 - `imageDir`、`csv` 與 archive path 必須由 `CaptureStoragePaths` 推導。
 - 新寫端只產生每 Grab 一個 `.acap`；七種獨立 asset 與 frame tick 都在 record 內。舊散檔名稱只保留讀取相容。
 - 這行是每輪 grab 的「存放方式/位置」摘要；逐幀大小與資源量仍歸 `resource-monitor-*.csv`，不得用 `[Flow]` 洗版。
@@ -1149,7 +1149,7 @@ StorageRetentionService.RunCleanup
  → heartbeat/磁碟不可讀 → 對應電腦顯示`無法讀取`
 ```
 低磁碟整合測試原則上使用隔離 volume/root，將門檻設為高於該測試磁碟目前可用空間、但低於磁碟總容量即可直接觸發，
-不必真的填滿磁碟。只有使用者明確確認目前沒有正式資料時，才可直接使用實際 Captures_pack；執行前仍須記錄來源、目的地與檔案量，
+不必真的填滿磁碟。只有使用者明確確認目前沒有正式資料時，才可直接使用實際 Captures；執行前仍須記錄來源、目的地與檔案量，
 複製只能合併、不得 `/MIR` 或預先刪除目的資料。
 
 ### C4 產出健康度與底部狀態列
@@ -1289,6 +1289,8 @@ T1: RV loadGrab done {grabId}（…ms）
 （grab 中按：另會出現 DisableGlobalMerge 等監控行——歸本 intent 管，見孤兒判讀規則）
 不變量：手按【讀取資料】＝刷新+跳最新（loadGrab 的 grabId=該次 `DT list reload range` 最新值；
 切換 Captures/Captures_pack 等資料根目錄時不得拿前一根目錄的序號比較；2026-07-10 修「停在舊選取」）；
+已退場的同層 `Captures_pack` 或 Anilox 根目錄會先解析成設定的 `CaptureRootPath`，並寫回 session；
+log 留 `RV|DT data root upgraded from=… to=…`。其他外部封存資料夾仍保留使用者選擇。
 開機自動恢復上次位置不在此限。
 載入 busy 視覺唯一 owner＝`BusyUiBinder`；`AniloxRollPresenter.BusyStateChanged` 與
 `ReviewStitchCoordinator.LoadGrabStitchedViewAsync` 共用同一實例。圖片 latest token 與 busy lease 由

@@ -15,6 +15,8 @@ namespace AniloxRoll.Monitor.Core.Services
     /// </summary>
     public static class CaptureStoragePaths
     {
+        private const string LegacyCaptureDirectoryName = "Captures_pack";
+
         /// <summary>每日 CSV 路徑：{root}\{yyyy}\{yyyyMM}\{yyyyMMdd}.csv</summary>
         public static string DailyCsv(string root, DateTime d) =>
             Path.Combine(root, d.ToString("yyyy"), d.ToString("yyyyMM"), d.ToString("yyyyMMdd") + ".csv");
@@ -37,5 +39,69 @@ namespace AniloxRoll.Monitor.Core.Services
         /// <summary>One appendable archive per grab, stored beside that day's capture outputs.</summary>
         public static string GrabArchive(string root, DateTime captureDate, string grabId) =>
             Path.Combine(DateImageDir(root, captureDate), grabId + CaptureArchiveStore.Extension);
+
+        /// <summary>
+        /// Keeps review/report readers on the configured packed-capture root while preserving
+        /// intentionally selected external data roots.
+        /// </summary>
+        public static string ResolveSelectedDataRoot(string selectedRoot, string configuredRoot)
+        {
+            if (string.IsNullOrWhiteSpace(selectedRoot))
+                return configuredRoot ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(configuredRoot))
+                return selectedRoot;
+
+            try
+            {
+                string selectedFull = NormalizeForComparison(selectedRoot);
+                string configuredFull = NormalizeForComparison(configuredRoot);
+                string configuredParent = Path.GetDirectoryName(configuredFull);
+                if (string.Equals(selectedFull, configuredFull, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(selectedFull, configuredParent, StringComparison.OrdinalIgnoreCase))
+                    return configuredRoot;
+
+                string legacyRoot = string.IsNullOrEmpty(configuredParent)
+                    ? string.Empty
+                    : NormalizeForComparison(
+                        Path.Combine(configuredParent, LegacyCaptureDirectoryName));
+                return string.Equals(selectedFull, legacyRoot, StringComparison.OrdinalIgnoreCase)
+                    ? configuredRoot
+                    : selectedRoot;
+            }
+            catch (Exception)
+            {
+                return selectedRoot;
+            }
+        }
+
+        public static string UpgradeLegacyPackedRoot(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return path ?? string.Empty;
+
+            try
+            {
+                string fullPath = NormalizeForComparison(path);
+                if (!string.Equals(
+                    Path.GetFileName(fullPath),
+                    LegacyCaptureDirectoryName,
+                    StringComparison.OrdinalIgnoreCase))
+                    return path;
+
+                string parent = Path.GetDirectoryName(fullPath);
+                return string.IsNullOrEmpty(parent)
+                    ? path
+                    : Path.Combine(parent, "Captures");
+            }
+            catch (Exception)
+            {
+                return path;
+            }
+        }
+
+        private static string NormalizeForComparison(string path) =>
+            Path.GetFullPath(path).TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar);
     }
 }

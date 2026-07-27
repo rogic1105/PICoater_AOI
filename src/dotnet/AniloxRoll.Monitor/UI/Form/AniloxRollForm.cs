@@ -469,7 +469,7 @@ namespace AniloxRoll.Monitor.Forms
 
         /// <summary>確保 Anilox 資料根目錄與子目錄存在。
         /// AniloxRootPath 的磁碟不存在時，把磁碟換成 C:（如 D:\Anilox → C:\Anilox），
-        /// MessageBox 告知 + 寫回 settings.json。建立 Captures_pack/Logs/Bg 子目錄。</summary>
+        /// MessageBox 告知 + 寫回 settings.json。建立 Captures/Logs/Bg 子目錄。</summary>
         private void EnsureAniloxFolderStructure()
         {
             try

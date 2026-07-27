@@ -219,8 +219,8 @@ against current code with `rg` before editing because lookup data can become sta
 | 存檔 | `EnableAutoCapture` | true | 取像時自動存檔 |
 | 存原圖 | `SaveOriginalBmp` | false | 額外存原始 BMP |
 | ── 遠端設定 ── | （分隔列，唯讀） | — | — |
-| 遠端路徑 | `RemotePath` | \\192.168.10.20\Anilox\Captures_pack | 遠端複製目標路徑（空=不複製）。單一 SMB share `Anilox` 子目錄 |
-| 存檔目錄 | （computed）| `{AniloxRoot}\Captures_pack` | 每序號 `.acap` + 統計 CSV；不顯示於 PropertyGrid |
+| 遠端路徑 | `RemotePath` | \\192.168.10.20\Anilox\Captures | 遠端複製目標路徑（空=不複製）。單一 SMB share `Anilox` 子目錄 |
+| 存檔目錄 | （computed）| `{AniloxRoot}\Captures` | 每序號 `.acap` + 統計 CSV；不顯示於 PropertyGrid |
 | 存背景目錄 | （computed）| `{AniloxRoot}\Bg` | StandardBgSub 背景影像；不顯示 |
 | Logs 目錄 | （computed）| `{AniloxRoot}\Logs` | Resource Log；不顯示 |
 | Dcf 檔 | （跟 exe 走）| `{ExeDir}\Config\Radient_Config.dcf` | MIL DCF；repo 唯一來源 `sdk/MIL/Config/Radient_Config.dcf`，app/sample build 連結複製，PG 隱藏 |
