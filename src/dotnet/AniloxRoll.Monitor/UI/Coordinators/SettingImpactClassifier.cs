@@ -96,6 +96,18 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                 nameof(InspectionSettings.hg_WaterfallTotalHeight),
                 nameof(InspectionSettings.hh_WaterfallFullMode));
 
+            AddMany(routes, SettingFeatureOwner.None,
+                SettingImpact.CapturePolicy,
+                nameof(InspectionSettings.bj_RowOffsetCam1),
+                nameof(InspectionSettings.bk_RowOffsetCam2),
+                nameof(InspectionSettings.bl_RowOffsetCam3),
+                nameof(InspectionSettings.bm_RowOffsetCam4),
+                nameof(InspectionSettings.bn_RowOffsetCam5),
+                nameof(InspectionSettings.bo_RowOffsetCam6),
+                nameof(InspectionSettings.bp_RowOffsetCam7),
+                nameof(InspectionSettings.fh_EnableRowPhaseAlignment),
+                nameof(InspectionSettings.fi_RowPhaseSearchRangeRows));
+
             Add(routes, nameof(InspectionSettings.ai_OpsSpeed), SettingFeatureOwner.None,
                 SettingImpact.RowPitch);
             AddMany(routes, SettingFeatureOwner.None,
@@ -175,6 +187,16 @@ namespace AniloxRoll.Monitor.UI.Coordinators
         {
             foreach (string name in names)
                 Add(routes, name, owner);
+        }
+
+        private static void AddMany(
+            IDictionary<string, SettingRoute> routes,
+            SettingFeatureOwner owner,
+            SettingImpact impacts,
+            params string[] names)
+        {
+            foreach (string name in names)
+                Add(routes, name, owner, impacts);
         }
     }
 }

@@ -18,6 +18,7 @@ namespace AniloxRoll.Monitor.Core.Data
         public const double CamPos_Cam5 = 1380.0;     // Start (mm)     ← Cam 5
         public const double CamPos_Cam6 = 1725.0;     // Start (mm)     ← Cam 6
         public const double CamPos_Cam7 = 2070.0;     // Start (mm)     ← Cam 7
+        public const double CamRowOffsetMm = 0.0;     // 固定列偏移 (mm) ← Cam 1~7
         public const double TrimHeadMm  = 0.0;        // 去頭 (mm)
         public const double TrimTailMm  = 0.0;        // 去尾 (mm)
 
@@ -33,6 +34,8 @@ namespace AniloxRoll.Monitor.Core.Data
         public const int    BackgroundSampleSeconds = 3;      // 背景採樣秒數
         public const int    GrabLimitSeconds        = 10;     // 單次抓取上限秒數
         public const double AniloxRollSpeedMPerMin  = 40.0;   // 輪速 (m/min)
+        public const bool   EnableRowPhaseAlignment = false;  // 自動列相位補償（明確開啟才生效）
+        public const int    RowPhaseSearchRangeRows = 600;    // 動態相位搜尋半徑（row）
 
         // ── 3. 圖表設定 ────────────────────────────────────────────────────
         public static readonly ChartScaleMode ScaleMode = ChartScaleMode.Auto;       // 統計圖表 > 數量範圍

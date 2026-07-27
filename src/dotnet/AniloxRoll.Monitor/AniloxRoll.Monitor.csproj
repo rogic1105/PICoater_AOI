@@ -82,6 +82,7 @@
     <Compile Include="Acquisition\AniloxCamera.cs" />
     <Compile Include="Acquisition\CameraFrameSaver.cs" />
     <Compile Include="Acquisition\CaptureTimestampCoordinator.cs" />
+    <Compile Include="Acquisition\RowPhaseAlignment.cs" />
     <Compile Include="Acquisition\CameraSystemManager.cs" />
     <Compile Include="ImageCatalog\ImageMetadata.cs" />
     <Compile Include="ImageCatalog\ImageRepository.cs" />

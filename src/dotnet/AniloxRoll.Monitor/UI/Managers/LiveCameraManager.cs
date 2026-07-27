@@ -291,6 +291,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.TimestampCoordinator = _timestampCoordinator;
                 cam.CaptureFrameAccepted = IsCaptureFrameAccepted;
                 cam.CaptureFrameCompleted = NotifyCaptureFrameCompleted;
+                cam.CaptureFrameAlignment = AlignCaptureFrame;
 
                 cam.OnInspectionResult += (grabId, camId, fn, mp, xp, maxCMean, meanRPeak, maxRPeak) =>
                     OnInspectionResult?.Invoke(

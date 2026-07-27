@@ -12,6 +12,7 @@ namespace AniloxRoll.Monitor.Core.Services
     {
         public double[] CamOps { get; }   // length 7
         public double[] CamPos { get; }   // START (mm), length 7
+        public double[] CamRowOffsetMm { get; } // fixed row placement, length 7
         public int[] CamGrabHeight { get; }    // length 7，高度滑桿（line scan 行數）
         public double[] CamExposureUs { get; } // length 7，曝光滑桿（μs）
         public double[] CamLineRateHz { get; } // length 7，線掃滑桿（Hz）
@@ -39,12 +40,14 @@ namespace AniloxRoll.Monitor.Core.Services
             float errorValueMeanH, float errorValueMaxH,
             double trimHeadMm, double trimTailMm,
             DateTime timestamp,
-            double aniloxRollSpeedMPerMin = 0)
+            double aniloxRollSpeedMPerMin = 0,
+            double[] camRowOffsetMm = null)
             : this(
                 camOps, camPos, camGrabHeight, camExposureUs, camLineRateHz,
                 hessianMaxFactorV, hessianMaxFactorH, 0f,
                 errorValueMeanV, errorValueMaxV, errorValueMeanH, errorValueMaxH,
-                trimHeadMm, trimTailMm, timestamp, aniloxRollSpeedMPerMin)
+                trimHeadMm, trimTailMm, timestamp, aniloxRollSpeedMPerMin,
+                camRowOffsetMm)
         {
         }
 
@@ -56,10 +59,12 @@ namespace AniloxRoll.Monitor.Core.Services
             float errorValueMeanH, float errorValueMaxH,
             double trimHeadMm, double trimTailMm,
             DateTime timestamp,
-            double aniloxRollSpeedMPerMin = 0)
+            double aniloxRollSpeedMPerMin = 0,
+            double[] camRowOffsetMm = null)
         {
             CamOps = camOps ?? new double[7];
             CamPos = camPos ?? new double[7];
+            CamRowOffsetMm = camRowOffsetMm ?? new double[7];
             CamGrabHeight = camGrabHeight ?? new int[7];
             CamExposureUs = camExposureUs ?? new double[7];
             CamLineRateHz = camLineRateHz ?? new double[7];
@@ -91,7 +96,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 s.TrimHeadMm,
                 s.TrimTailMm,
                 DateTime.Now,
-                s.AniloxRollSpeedMPerMin);
+                s.AniloxRollSpeedMPerMin,
+                s.GetCameraRowOffsetMmArray());
         }
 
         /// <summary>不含時間戳的內容鍵，用於偵測設定是否變更。</summary>
@@ -104,6 +110,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 var inv = CultureInfo.InvariantCulture;
                 for (int i = 0; i < 7; i++) sb.Append(CamOps[i].ToString("R", inv)).Append(',');
                 for (int i = 0; i < 7; i++) sb.Append(CamPos[i].ToString("R", inv)).Append(',');
+                for (int i = 0; i < 7; i++) sb.Append(CamRowOffsetMm[i].ToString("R", inv)).Append(',');
                 for (int i = 0; i < 7; i++) sb.Append(CamGrabHeight[i]).Append(',');
                 for (int i = 0; i < 7; i++) sb.Append(CamExposureUs[i].ToString("R", inv)).Append(',');
                 for (int i = 0; i < 7; i++) sb.Append(CamLineRateHz[i].ToString("R", inv)).Append(',');
@@ -131,6 +138,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 sb.Append($",Cam{i + 1}_Ops={CamOps[i]:F2}");
             for (int i = 0; i < 7; i++)
                 sb.Append($",Cam{i + 1}_Pos={CamPos[i]:F2}");
+            for (int i = 0; i < 7; i++)
+                sb.Append($",Cam{i + 1}_RowOffsetMm={CamRowOffsetMm[i]:F3}");
             sb.Append($",TrimHead={TrimHeadMm:F2}");
             sb.Append($",TrimTail={TrimTailMm:F2}");
             for (int i = 0; i < 7; i++)
@@ -165,6 +174,7 @@ namespace AniloxRoll.Monitor.Core.Services
 
             double[] ops = new double[7];
             double[] pos = new double[7];
+            double[] rowOffsetMm = new double[7];
             int[] grabH = new int[7];
             double[] expUs = new double[7];
             double[] lrHz = new double[7];
@@ -192,6 +202,12 @@ namespace AniloxRoll.Monitor.Core.Services
                     int camIdx = key[3] - '1';
                     if (camIdx >= 0 && camIdx < 7)
                         double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out pos[camIdx]);
+                }
+                else if (key.StartsWith("Cam") && key.EndsWith("_RowOffsetMm"))
+                {
+                    int camIdx = key[3] - '1';
+                    if (camIdx >= 0 && camIdx < 7)
+                        double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out rowOffsetMm[camIdx]);
                 }
                 else if (key.StartsWith("Cam") && key.EndsWith("_GrabH"))
                 {
@@ -245,7 +261,7 @@ namespace AniloxRoll.Monitor.Core.Services
             result = new CsvConfigSnapshot(ops, pos, grabH, expUs, lrHz,
                 hessianV, hessianH, ridgeSigma,
                 meanV, maxV, meanH, maxH, trimHead, trimTail, ts,
-                aniloxRollSpeedMPerMin);
+                aniloxRollSpeedMPerMin, rowOffsetMm);
             return true;
         }
     }

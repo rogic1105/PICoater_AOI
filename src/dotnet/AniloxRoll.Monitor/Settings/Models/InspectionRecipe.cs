@@ -75,6 +75,8 @@ namespace AniloxRoll.Monitor.Core.Data
         [DisplayName("背景採樣(秒)")] public int BackgroundSampleSeconds { get; set; } = InspectionDefaults.BackgroundSampleSeconds;
         [DisplayName("總時間(秒)")] public int GrabLimitSeconds { get; set; } = InspectionDefaults.GrabLimitSeconds;
         [DisplayName("A輪速度 (m/min)")]  public double AniloxRollSpeedMPerMin { get; set; } = InspectionDefaults.AniloxRollSpeedMPerMin;
+        [DisplayName("自動相位補償")] public bool EnableRowPhaseAlignment { get; set; } = InspectionDefaults.EnableRowPhaseAlignment;
+        [DisplayName("相位搜尋範圍")] public int RowPhaseSearchRangeRows { get; set; } = InspectionDefaults.RowPhaseSearchRangeRows;
 
         /// <summary>存檔縮小倍率。原圖寬高各除以此值後存成 JPEG。唯一預設值來源：InspectionEngineConfig.DefaultSaveResizeScale。</summary>
         [Browsable(false)] public int SaveResizeScale { get; set; } = InspectionEngineConfig.DefaultSaveResizeScale;
@@ -95,6 +97,8 @@ namespace AniloxRoll.Monitor.Core.Data
             if (BackgroundSampleSeconds < 1) BackgroundSampleSeconds = InspectionDefaults.BackgroundSampleSeconds;
             if (GrabLimitSeconds < 1) GrabLimitSeconds = InspectionDefaults.GrabLimitSeconds;
             if (AniloxRollSpeedMPerMin <= 0) AniloxRollSpeedMPerMin = InspectionDefaults.AniloxRollSpeedMPerMin;
+            if (RowPhaseSearchRangeRows < 0) RowPhaseSearchRangeRows = 0;
+            else if (RowPhaseSearchRangeRows > 3000) RowPhaseSearchRangeRows = 3000;
             if (SaveResizeScale <= 0) SaveResizeScale = InspectionEngineConfig.DefaultSaveResizeScale;
             if (SaveJpgQuality  < 1 || SaveJpgQuality > 100) SaveJpgQuality = InspectionEngineConfig.DefaultSaveJpgQuality;
         }

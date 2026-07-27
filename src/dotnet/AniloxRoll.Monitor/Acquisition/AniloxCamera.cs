@@ -9,6 +9,7 @@ using MilGrabber.Core;
 using TanukiCv.Core;
 using AniloxRoll.Monitor.Core.Interop;
 using AniloxRoll.Monitor.Core.Services;
+using TanukiCv.Controls;
 
 namespace AniloxRoll.Monitor.Core.Camera
 {
@@ -123,6 +124,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// </summary>
         public Func<int, long, bool> CaptureFrameAccepted { get; set; }
         public Action<int, long> CaptureFrameCompleted { get; set; }
+        internal Func<RowPhaseFrameData, RowPhaseFramePlan> CaptureFrameAlignment { get; set; }
 
         // ==================== Save Format (resize + JPEG) ====================
         private int _saveResizeScale = 5;
@@ -137,6 +139,8 @@ namespace AniloxRoll.Monitor.Core.Camera
         private int _resizeHeight = 0;
         // 本幀 fused 縮圖是否成功填好三塊 buffer（供 TrySaveCapture 判定；detection 失敗幀不得存舊縮圖）。
         private bool _lastFrameResized = false;
+        private int _lastProcessedHeight = 0;
+        private int _lastResizeHeight = 0;
         private bool _fusedResizeLogged = false;   // 每台每次開程式只記一筆「fused 路徑已啟用」確認 log
 
         /// <summary>存檔縮小倍率（1=不縮小，5=寬高各除以5）。必須在 InitializeProcessingResources() 之前設定。</summary>
@@ -420,45 +424,84 @@ namespace AniloxRoll.Monitor.Core.Camera
                 _hasAcceptedCaptureFrame = true;
                 _flowLoggedDrainFrameDrop = false;
 
-            // 不管 EnableImageProcessing，一律執行 GPU 處理以取得 Mura 曲線（供 CSV 日誌判斷）
-            bool processedByPicoater = TryApplyPicoaterRidge(modifiedBuffer);
+                if (!TryLoadHostInput(modifiedBuffer))
+                    return;
 
-            // EnableImageProcessing 控制「顯示」：勾選且處理成功才顯示處理結果，否則顯示原圖
-            bool showProcessed = EnableImageProcessing && processedByPicoater;
-            byte[] processedDisplay = LiveDisplayDirection == "h"
-                ? _hostRowOutputBuffer
-                : _hostColumnOutputBuffer;
-            if (showProcessed)
-                _mil.PutDisplayBytes(processedDisplay); // 已填好的處理結果寫入顯示 buffer
-            else
-                _mil.CopyToDisplay(modifiedBuffer);       // 顯示原圖
+                RowPhaseFramePlan alignment = CaptureFrameAlignment?.Invoke(
+                    new RowPhaseFrameData
+                    {
+                        CameraId = CameraId,
+                        Pixels = _hostInputBuffer,
+                        Width = FrameWidth,
+                        Height = FrameHeight,
+                        FrameStartTicks = mil.LastFrameStartTicks
+                    }) ?? RowPhaseFramePlan.PassThrough(FrameHeight);
+                if (!alignment.Accepted)
+                {
+                    FlowTrace.Log(
+                        $"row phase frame dropped cam={CameraId} batch={alignment.BatchId} " +
+                        $"reason={alignment.Reason ?? "rejected"}");
+                    return;
+                }
 
-            // ImageCanvas 顯示路徑：每幀把「顯示 bytes」交給訂閱者(同步組 bitmap)。MIL 模式無訂閱者→不觸發。
-            var onDisp = OnDisplayFrame;
-            if (onDisp != null)
-            {
-                byte[] disp = showProcessed ? processedDisplay : _hostInputBuffer;
-                if (disp != null) onDisp(CameraId, disp, FrameWidth, FrameHeight, _mil.LastFrameStartTicks);
-            }
+                int activeHeight = alignment.CommonHeight;
+                if (!ApplyRowCrop(alignment.SourceTop, activeHeight))
+                    return;
 
-            var onWaterfall = OnWaterfallFrame;
-            if (onWaterfall != null && _hostInputBuffer != null)
-            {
-                byte[] column = processedByPicoater ? _hostColumnOutputBuffer : _hostInputBuffer;
-                byte[] row = processedByPicoater ? _hostRowOutputBuffer : _hostInputBuffer;
-                onWaterfall(
-                    CameraId, _hostInputBuffer, column, row,
-                    FrameWidth, FrameHeight, _mil.LastFrameStartTicks);
-            }
+                // 不管 EnableImageProcessing，一律執行 GPU 處理以取得 Mura 曲線（供 CSV 日誌判斷）
+                bool processedByPicoater = TryApplyPicoaterRidge(activeHeight);
 
-            // Global merge 複製（display buffer → 合併 buffer 裁切位置）已移至 MilCamera grab hook，
-            // 在此 FrameReady handler 返回後由 _mil 執行（顯示 buffer 已更新完成）。
+                // EnableImageProcessing 控制「顯示」：勾選且處理成功才顯示處理結果，否則顯示原圖
+                bool showProcessed = EnableImageProcessing && processedByPicoater;
+                byte[] processedDisplay = LiveDisplayDirection == "h"
+                    ? _hostRowOutputBuffer
+                    : _hostColumnOutputBuffer;
+                if (showProcessed)
+                    _mil.PutDisplayBytes(processedDisplay); // 已填好的處理結果寫入顯示 buffer
+                else
+                    _mil.PutDisplayBytes(_hostInputBuffer); // 對齊後的共同有效原圖
+
+                // ImageCanvas 顯示路徑：每幀把「顯示 bytes」交給訂閱者(同步組 bitmap)。MIL 模式無訂閱者→不觸發。
+                var onDisp = OnDisplayFrame;
+                if (onDisp != null)
+                {
+                    byte[] disp = showProcessed ? processedDisplay : _hostInputBuffer;
+                    if (disp != null)
+                        onDisp(
+                            CameraId,
+                            disp,
+                            FrameWidth,
+                            activeHeight,
+                            _mil.LastFrameStartTicks);
+                }
+
+                var onWaterfall = OnWaterfallFrame;
+                if (onWaterfall != null && _hostInputBuffer != null)
+                {
+                    byte[] column = processedByPicoater
+                        ? _hostColumnOutputBuffer
+                        : _hostInputBuffer;
+                    byte[] row = processedByPicoater
+                        ? _hostRowOutputBuffer
+                        : _hostInputBuffer;
+                    onWaterfall(
+                        CameraId,
+                        _hostInputBuffer,
+                        column,
+                        row,
+                        FrameWidth,
+                        activeHeight,
+                        _mil.LastFrameStartTicks);
+                }
+
+                // Global merge 複製（display buffer → 合併 buffer 裁切位置）已移至 MilCamera grab hook，
+                // 在此 FrameReady handler 返回後由 _mil 執行（顯示 buffer 已更新完成）。
 
                 TrySaveCapture(modifiedBuffer, frameGrabId, frameCaptureDate);
-                CaptureFrameCompleted?.Invoke(CameraId, mil.LastFrameStartTicks);
             }
             finally
             {
+                CaptureFrameCompleted?.Invoke(CameraId, mil.LastFrameStartTicks);
                 DecrementCaptureCount(_activeCaptureCallbacks, frameGrabId);
             }
         }
@@ -469,12 +512,62 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// 跑 GPU pipeline：MIL buffer → host → picoater → 填欄／列輸出緩衝 + 觸發曲線事件。
         /// 顯示交由 OnMilFrameReady 選取輸出後處理（不在此寫 MIL buffer）。
         /// </summary>
-        private bool TryApplyPicoaterRidge(MIL_ID srcBuffer)
+        private bool TryLoadHostInput(MIL_ID srcBuffer)
+        {
+            if (srcBuffer == MIL.M_NULL || _hostInputBuffer == null) return false;
+            lock (_picoaterLock)
+            {
+                try
+                {
+                    _mil.GetFrameBytes(srcBuffer, _hostInputBuffer);
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine(
+                        $"[CAM{CameraId}] row phase input copy failed: " +
+                        $"{ex.GetType().Name}: {ex.Message}");
+                    return false;
+                }
+            }
+        }
+
+        private bool ApplyRowCrop(int sourceTop, int activeHeight)
+        {
+            int width = FrameWidth;
+            int fullHeight = FrameHeight;
+            if (_hostInputBuffer == null || width <= 0 || activeHeight <= 0 ||
+                sourceTop < 0 || sourceTop + activeHeight > fullHeight)
+                return false;
+
+            int activeBytes = checked(width * activeHeight);
+            int sourceOffset = checked(width * sourceTop);
+            if (sourceOffset > 0)
+            {
+                Buffer.BlockCopy(
+                    _hostInputBuffer,
+                    sourceOffset,
+                    _hostInputBuffer,
+                    0,
+                    activeBytes);
+            }
+            ClearTail(_hostInputBuffer, activeBytes);
+            return true;
+        }
+
+        private static void ClearTail(byte[] buffer, int activeLength)
+        {
+            if (buffer == null || activeLength >= buffer.Length) return;
+            Array.Clear(buffer, activeLength, buffer.Length - activeLength);
+        }
+
+        private bool TryApplyPicoaterRidge(int activeHeight)
         {
             _lastFrameResized = false;   // 每幀先重置；成功跑完 fused 縮圖才設 true（detection 失敗幀不得存舊縮圖）
-            if (srcBuffer == MIL.M_NULL) return false;
+            _lastProcessedHeight = 0;
+            _lastResizeHeight = 0;
             int fw = _mil.FrameWidth;
-            int fh = _mil.FrameHeight;
+            int fh = activeHeight;
             if (fw <= 0 || fh <= 0) return false;
             if (_hostInputBuffer == null || _hostColumnOutputBuffer == null || _hostRowOutputBuffer == null) return false;
 
@@ -494,8 +587,8 @@ namespace AniloxRoll.Monitor.Core.Camera
 
                 try
                 {
-                    _mil.GetFrameBytes(srcBuffer, _hostInputBuffer);
-                    Marshal.Copy(_hostInputBuffer, 0, picoaterInputBuffer, _hostInputBuffer.Length);
+                    int activePixels = checked(fw * fh);
+                    Marshal.Copy(_hostInputBuffer, 0, picoaterInputBuffer, activePixels);
 
                     IntPtr picoaterCurveMean    = _nativeBufferPool.CurveMeanBuffer;
                     IntPtr picoaterCurveMax     = _nativeBufferPool.CurveMaxBuffer;
@@ -505,10 +598,11 @@ namespace AniloxRoll.Monitor.Core.Camera
                     // fused 存檔縮圖：只在「這趟 grab 會存圖」時，要 native 在檢測同一次就把縮圖產出（免二次 H2D）。
                     // grab-level 決策（EnableAutoCapture 整趟固定）；SuppressCapture 期間 + 純 live grab 不縮。
                     // 去重/暫停跳過的少數幀會白縮一張（可忽略）；true→native 填 _rawResizeBuf/_procResizeBuf/_muraResizeBuf。
+                    int activeResizeHeight = fh / _saveResizeScale;
                     bool wantResize = EnableAutoCapture && !SuppressCapture
                         && !string.IsNullOrWhiteSpace(CaptureRootPath)
                         && _saveResizeScale > 1
-                        && _resizeWidth > 0 && _resizeHeight > 0
+                        && _resizeWidth > 0 && activeResizeHeight > 0
                         && _rawResizeBuf != IntPtr.Zero && _procResizeBuf != IntPtr.Zero && _muraResizeBuf != IntPtr.Zero;
 
                     var swGpu = System.Diagnostics.Stopwatch.StartNew();
@@ -533,7 +627,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                             Stream           = IntPtr.Zero,
                             // fused 縮圖目標（wantResize=false 時全 0 → native 跳過）
                             ResizeWidth  = wantResize ? _resizeWidth  : 0,
-                            ResizeHeight = wantResize ? _resizeHeight : 0,
+                            ResizeHeight = wantResize ? activeResizeHeight : 0,
                             ResizedRaw   = wantResize ? _rawResizeBuf  : IntPtr.Zero,
                             ResizedRidge = wantResize ? _procResizeBuf : IntPtr.Zero,
                             ResizedMura  = wantResize ? _muraResizeBuf : IntPtr.Zero
@@ -549,6 +643,8 @@ namespace AniloxRoll.Monitor.Core.Camera
                     });
                     LastGpuTimeMs = swGpu.ElapsedMilliseconds;
                     _lastFrameResized = wantResize;   // ProcessImage 成功；縮圖已填好（若有要）
+                    _lastProcessedHeight = fh;
+                    _lastResizeHeight = wantResize ? activeResizeHeight : 0;
                     if (wantResize && !_fusedResizeLogged)
                     {
                         _fusedResizeLogged = true;
@@ -593,12 +689,14 @@ namespace AniloxRoll.Monitor.Core.Camera
                         picoaterRidgeBuffer,
                         _hostColumnOutputBuffer,
                         0,
-                        _hostColumnOutputBuffer.Length);
+                        activePixels);
                     Marshal.Copy(
                         _nativeBufferPool.MuraBuffer,
                         _hostRowOutputBuffer,
                         0,
-                        _hostRowOutputBuffer.Length);
+                        activePixels);
+                    ClearTail(_hostColumnOutputBuffer, activePixels);
+                    ClearTail(_hostRowOutputBuffer, activePixels);
                     return true;
                 }
                 catch (Exception ex)
@@ -703,12 +801,13 @@ namespace AniloxRoll.Monitor.Core.Camera
                 string baseName = $"{now:yyyyMMdd_HHmmss.fff}-{CameraId}";
 
                 int fw = _mil.FrameWidth;
-                int fh = _mil.FrameHeight;
+                int fh = _lastProcessedHeight;
+                if (fh <= 0 || fh > _mil.FrameHeight) return;
 
                 byte[] rawBytes = null, procCBytes = null, procRBytes = null;
                 float[] meanArr = null, maxArr = null;
                 float[] rowMeanArr = null, rowMaxArr = null;
-                int rw = _resizeWidth, rh = _resizeHeight;
+                int rw = _resizeWidth, rh = _lastResizeHeight;
                 bool hasResizeData = false;
 
                 // Pipeline 永遠跑 "vertical+horizontal"，因此 _ridgeBuffer=V, _muraBuffer=H，一律存 7 檔
@@ -751,7 +850,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                         }
 
                         // Row curves（horizontal ridge）
-                        int rowCurveLen = _nativeBufferPool.CurveRowBufferSize / sizeof(float);
+                        int rowCurveLen = fh;
                         if (rowCurveLen > 0 &&
                             _nativeBufferPool.CurveRowMeanBuffer != IntPtr.Zero &&
                             _nativeBufferPool.CurveRowMaxBuffer  != IntPtr.Zero)
@@ -780,7 +879,12 @@ namespace AniloxRoll.Monitor.Core.Camera
                     if (alsoBmp)
                     {
                         Directory.CreateDirectory(saveDir);
-                        MIL.MbufExport(Path.Combine(saveDir, baseName + ".bmp"), MIL.M_BMP, sourceBuffer);
+                        using (var bitmap = GrayBitmap.From(_hostInputBuffer, fw, fh))
+                        {
+                            bitmap.Save(
+                                Path.Combine(saveDir, baseName + ".bmp"),
+                                System.Drawing.Imaging.ImageFormat.Bmp);
+                        }
                     }
 
                     // 建立快照，背景執行緒存檔

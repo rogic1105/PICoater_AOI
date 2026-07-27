@@ -74,6 +74,13 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"Cam5_Pos\": {D(L.Cam5_Pos)},");
             sb.AppendLine($"    \"Cam6_Pos\": {D(L.Cam6_Pos)},");
             sb.AppendLine($"    \"Cam7_Pos\": {D(L.Cam7_Pos)},");
+            sb.AppendLine($"    \"Cam1_RowOffsetMm\": {D(L.RowOffset.Cam1)},");
+            sb.AppendLine($"    \"Cam2_RowOffsetMm\": {D(L.RowOffset.Cam2)},");
+            sb.AppendLine($"    \"Cam3_RowOffsetMm\": {D(L.RowOffset.Cam3)},");
+            sb.AppendLine($"    \"Cam4_RowOffsetMm\": {D(L.RowOffset.Cam4)},");
+            sb.AppendLine($"    \"Cam5_RowOffsetMm\": {D(L.RowOffset.Cam5)},");
+            sb.AppendLine($"    \"Cam6_RowOffsetMm\": {D(L.RowOffset.Cam6)},");
+            sb.AppendLine($"    \"Cam7_RowOffsetMm\": {D(L.RowOffset.Cam7)},");
             sb.AppendLine($"    \"TrimHeadMm\": {D(L.TrimHeadMm)},");
             sb.AppendLine($"    \"TrimTailMm\": {D(L.TrimTailMm)}");
             sb.AppendLine("  },");
@@ -92,6 +99,8 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine($"    \"BackgroundSampleSeconds\": {R.BackgroundSampleSeconds},");
             sb.AppendLine($"    \"GrabLimitSeconds\": {R.GrabLimitSeconds},");
             sb.AppendLine($"    \"AniloxRollSpeedMPerMin\": {D(R.AniloxRollSpeedMPerMin)},");
+            sb.AppendLine($"    \"EnableRowPhaseAlignment\": {(R.EnableRowPhaseAlignment ? "true" : "false")},");
+            sb.AppendLine($"    \"RowPhaseSearchRangeRows\": {R.RowPhaseSearchRangeRows},");
             sb.AppendLine($"    \"SaveResizeScale\": {R.SaveResizeScale},");
             sb.AppendLine($"    \"SaveJpgQuality\": {R.SaveJpgQuality}");
             sb.AppendLine("  },");
@@ -203,6 +212,16 @@ namespace AniloxRoll.Monitor.Core.Data
                 Cam5_Pos = SettingsStoreHelper.GetDouble(obj, "Cam5_Pos", InspectionDefaults.CamPos_Cam5),
                 Cam6_Pos = SettingsStoreHelper.GetDouble(obj, "Cam6_Pos", InspectionDefaults.CamPos_Cam6),
                 Cam7_Pos    = SettingsStoreHelper.GetDouble(obj, "Cam7_Pos",    InspectionDefaults.CamPos_Cam7),
+                RowOffset = new CameraRowOffsetConfig
+                {
+                    Cam1 = SettingsStoreHelper.GetDouble(obj, "Cam1_RowOffsetMm", InspectionDefaults.CamRowOffsetMm),
+                    Cam2 = SettingsStoreHelper.GetDouble(obj, "Cam2_RowOffsetMm", InspectionDefaults.CamRowOffsetMm),
+                    Cam3 = SettingsStoreHelper.GetDouble(obj, "Cam3_RowOffsetMm", InspectionDefaults.CamRowOffsetMm),
+                    Cam4 = SettingsStoreHelper.GetDouble(obj, "Cam4_RowOffsetMm", InspectionDefaults.CamRowOffsetMm),
+                    Cam5 = SettingsStoreHelper.GetDouble(obj, "Cam5_RowOffsetMm", InspectionDefaults.CamRowOffsetMm),
+                    Cam6 = SettingsStoreHelper.GetDouble(obj, "Cam6_RowOffsetMm", InspectionDefaults.CamRowOffsetMm),
+                    Cam7 = SettingsStoreHelper.GetDouble(obj, "Cam7_RowOffsetMm", InspectionDefaults.CamRowOffsetMm),
+                },
                 TrimHeadMm  = SettingsStoreHelper.GetDouble(obj, "TrimHeadMm",  InspectionDefaults.TrimHeadMm),
                 TrimTailMm  = SettingsStoreHelper.GetDouble(obj, "TrimTailMm",  InspectionDefaults.TrimTailMm),
             };
@@ -236,6 +255,8 @@ namespace AniloxRoll.Monitor.Core.Data
                 BackgroundSampleSeconds = SettingsStoreHelper.GetInt(obj, "BackgroundSampleSeconds", InspectionDefaults.BackgroundSampleSeconds),
                 GrabLimitSeconds = SettingsStoreHelper.GetInt(obj, "GrabLimitSeconds", InspectionDefaults.GrabLimitSeconds),
                 AniloxRollSpeedMPerMin = SettingsStoreHelper.GetDouble(obj, "AniloxRollSpeedMPerMin", InspectionDefaults.AniloxRollSpeedMPerMin),
+                EnableRowPhaseAlignment = SettingsStoreHelper.GetBool(obj, "EnableRowPhaseAlignment", InspectionDefaults.EnableRowPhaseAlignment),
+                RowPhaseSearchRangeRows = SettingsStoreHelper.GetInt(obj, "RowPhaseSearchRangeRows", InspectionDefaults.RowPhaseSearchRangeRows),
                 SaveResizeScale      = SettingsStoreHelper.GetInt(obj, "SaveResizeScale",   5),
                 SaveJpgQuality       = SettingsStoreHelper.GetInt(obj, "SaveJpgQuality",    90),
             };

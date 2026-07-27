@@ -26,16 +26,17 @@ namespace AniloxRoll.Monitor.UI.Widgets
             if (config == null) return source;
             var sb = new StringBuilder(640);
             sb.AppendLine(source);
-            sb.AppendLine("CAM | OPS(um) | START(mm) | HEIGHT | EXP(us) | RATE(Hz)");
-            sb.AppendLine("----+---------+-----------+--------+---------+---------");
+            sb.AppendLine("CAM | OPS(um) | START(mm) | ROW(mm) | HEIGHT | EXP(us) | RATE(Hz)");
+            sb.AppendLine("----+---------+-----------+---------+--------+---------+---------");
             int cameraCount = MaxLength(
-                config.CamOps, config.CamPos, config.CamGrabHeight,
+                config.CamOps, config.CamPos, config.CamRowOffsetMm, config.CamGrabHeight,
                 config.CamExposureUs, config.CamLineRateHz);
             for (int i = 0; i < cameraCount; i++)
             {
                 sb.Append('C').Append((i + 1).ToString(CultureInfo.InvariantCulture).PadRight(3));
                 sb.Append("| ").Append(ValueAt(config.CamOps, i, "0.###").PadLeft(7));
                 sb.Append(" | ").Append(ValueAt(config.CamPos, i, "0.###").PadLeft(9));
+                sb.Append(" | ").Append(ValueAt(config.CamRowOffsetMm, i, "0.###").PadLeft(7));
                 sb.Append(" | ").Append(ValueAt(config.CamGrabHeight, i).PadLeft(6));
                 sb.Append(" | ").Append(ValueAt(config.CamExposureUs, i, "0.##").PadLeft(7));
                 sb.Append(" | ").AppendLine(ValueAt(config.CamLineRateHz, i, "0.##").PadLeft(7));

@@ -329,6 +329,46 @@ Boundary invariants:
 - A phase fault may reject the next IO pulse, but must not silently shorten an already accepted
   machine pulse.
 
+#### Software row phase alignment (experimental branch)
+
+This layer is downstream of the hardware capture boundary and upstream of Hessian processing.
+It does not replace MIL phase validation. It removes the row region that is not common to all
+connected cameras, so black padding never reaches processing, Curve, display, or persistence.
+
+| State | Event | Next state | Required action |
+|---|---|---|---|
+| `Idle` | `ArmCaptureBoundary` | `Collecting` | Convert each camera's fixed row offset from mm to rows using current web speed and applied line rate; snapshot START/OPS and active camera IDs. |
+| `Collecting` | one unique camera frame arrives | `Collecting` | Retain its existing host buffer and wait for the same batch's other active cameras. |
+| `Collecting` | every active camera arrives | `Ready` | On the first batch only, correlate adjacent-camera physical overlap inside the configured search range. Low confidence falls back to fixed offsets. Build one common valid row interval without padding. |
+| `Ready` | plans published | `Collecting` | Every camera crops to its own `sourceTop` but publishes the same `commonHeight`; then the existing processing/display/save chain continues. |
+| `Collecting` | timeout | `Resync` | Drop the incomplete batch; drop one subsequent frame from every active camera before accepting a new batch. Never pair a late old frame with a newer frame. |
+| any | stop/release/rearm | `Idle` | Cancel the current batch and wake all waiting callbacks. |
+
+Invariants:
+- Total row placement is `fixed rows + dynamic rows`; dynamic compensation never overwrites the
+  PropertyGrid fixed physical adjustment.
+- Dynamic correlation uses only adjacent cameras' physical X overlap derived from `START + OPS`.
+- A low-texture or ambiguous peak must log `trusted=False` and use fixed offsets only; it must not
+  guess.
+- All downstream consumers receive the same cropped height: GPU input, row Curve, live image,
+  waterfall, archive preview, `.bin` header, and optional original BMP.
+- The original full frame remains unavailable outside the current callback; the coordinator may
+  wait only for a bounded period and stop/release must wake it.
+
+Row phase log-flow:
+```text
+T1: row phase configured auto=B search=N speed=V timeoutMs=T fixedRows=cam1=...,...
+Tn: row phase calibrated batch=1 auto=B trusted=B confidence=C reason=...
+DVT: row phase pair batch=1 cams=A-B shift=N corr=C margin=M trusted=B  × adjacent overlap pair
+DVT: row phase batch ready batch=N cams=P height=H trusted=B total=cam1=...,...
+```
+
+Forbidden:
+- `row phase timeout` during a normal complete-camera smoke test.
+- Different `height=` values within one `batch=`.
+- `row phase frame dropped ... reason=resync-drop` without a preceding timeout.
+- Any black-row padding inserted to preserve the configured grab height.
+
 IO edge log-flow (this supersedes the legacy `reason=start` sequence below for IO starts):
 ```
 Tbg: acquisition phase synchronizing reason=idle previous=...
@@ -373,7 +413,11 @@ ProcessingFunction@MilCamera.cs
  -> updates LastFrameStartTicks + LastFrameObservedTimestamp for every standby callback
  -> OnMilFrameReady@AniloxCamera.cs
     -> CaptureFrameAccepted(cam,tick)
-    -> processing/display/save
+    -> TryLoadHostInput
+    -> RowPhaseAlignmentCoordinator.Align
+       -> first complete batch: overlap correlation
+       -> common valid row crop; no padding
+    -> processing/display/save (all use commonHeight)
     -> CaptureFrameCompleted(cam,tick)
 
 IoStopGrabAsync@AniloxRollForm.HardwareStatus.cs

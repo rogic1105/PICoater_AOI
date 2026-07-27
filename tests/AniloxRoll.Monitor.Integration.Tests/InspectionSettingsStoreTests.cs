@@ -87,6 +87,24 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void SaveAndLoad_PersistsRowPhaseAlignmentSettings()
+        {
+            var settings = new InspectionSettings();
+            settings.MachineLayout.RowOffset.Cam1 = -1.25;
+            settings.MachineLayout.RowOffset.Cam7 = 3.5;
+            settings.EnableRowPhaseAlignment = true;
+            settings.RowPhaseSearchRangeRows = 480;
+
+            InspectionSettingsStore.Save(settings);
+            var loaded = InspectionSettingsStore.Load();
+
+            Assert.That(loaded.MachineLayout.RowOffset.Cam1, Is.EqualTo(-1.25).Within(0.001));
+            Assert.That(loaded.MachineLayout.RowOffset.Cam7, Is.EqualTo(3.5).Within(0.001));
+            Assert.That(loaded.EnableRowPhaseAlignment, Is.True);
+            Assert.That(loaded.RowPhaseSearchRangeRows, Is.EqualTo(480));
+        }
+
+        [Test]
         public void Load_WhenConfigIsMissing_DefaultsMainDisplayToWaterfall()
         {
             var loaded = InspectionSettingsStore.Load();

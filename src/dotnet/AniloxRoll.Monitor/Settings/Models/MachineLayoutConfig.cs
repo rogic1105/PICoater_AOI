@@ -39,6 +39,21 @@ namespace AniloxRoll.Monitor.Core.Data
     }
 
     [TypeConverter(typeof(ExpandableLeftAlignConverter))]
+    public class CameraRowOffsetConfig
+    {
+        [DisplayName("Cam 1")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam1 { get; set; } = InspectionDefaults.CamRowOffsetMm;
+        [DisplayName("Cam 2")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam2 { get; set; } = InspectionDefaults.CamRowOffsetMm;
+        [DisplayName("Cam 3")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam3 { get; set; } = InspectionDefaults.CamRowOffsetMm;
+        [DisplayName("Cam 4")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam4 { get; set; } = InspectionDefaults.CamRowOffsetMm;
+        [DisplayName("Cam 5")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam5 { get; set; } = InspectionDefaults.CamRowOffsetMm;
+        [DisplayName("Cam 6")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam6 { get; set; } = InspectionDefaults.CamRowOffsetMm;
+        [DisplayName("Cam 7")][TypeConverter(typeof(LeftAlignNumericConverter))] public double Cam7 { get; set; } = InspectionDefaults.CamRowOffsetMm;
+
+        public double[] ToArray() => new[] { Cam1, Cam2, Cam3, Cam4, Cam5, Cam6, Cam7 };
+        public override string ToString() => "";
+    }
+
+    [TypeConverter(typeof(ExpandableLeftAlignConverter))]
     public class CameraCropConfig
     {
         [DisplayName("去頭")][TypeConverter(typeof(LeftAlignNumericConverter))] public double TrimHeadMm { get; set; } = 0.0;
@@ -58,6 +73,7 @@ namespace AniloxRoll.Monitor.Core.Data
     {
         public CameraOpsConfig Ops { get; set; } = new CameraOpsConfig();
         public CameraStartPositionConfig StartPosition { get; set; } = new CameraStartPositionConfig();
+        public CameraRowOffsetConfig RowOffset { get; set; } = new CameraRowOffsetConfig();
         public CameraCropConfig Crop { get; set; } = new CameraCropConfig();
 
         // 向後相容：舊 JSON 欄位名稱對應
@@ -80,6 +96,7 @@ namespace AniloxRoll.Monitor.Core.Data
         {
             if (Ops == null) Ops = new CameraOpsConfig();
             if (StartPosition == null) StartPosition = new CameraStartPositionConfig();
+            if (RowOffset == null) RowOffset = new CameraRowOffsetConfig();
             if (Crop == null) Crop = new CameraCropConfig();
             Ops.Validate();
             Crop.Validate();
@@ -90,6 +107,7 @@ namespace AniloxRoll.Monitor.Core.Data
 
         public double[] GetCameraOpsUmArray() => Ops.ToArray();
         public double[] GetCameraStartPositionMmArray() => StartPosition.ToArray();
+        public double[] GetCameraRowOffsetMmArray() => RowOffset.ToArray();
         public override string ToString() => "Layout (OPS/Position)";
     }
 }

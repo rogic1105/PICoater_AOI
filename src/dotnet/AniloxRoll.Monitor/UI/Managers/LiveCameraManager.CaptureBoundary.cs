@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using AniloxRoll.Monitor.Core.Camera;
+using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
 
 namespace AniloxRoll.Monitor.UI.Managers
@@ -20,6 +21,8 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         private const int IdleCapturePreparationRetryMs = 3000;
         private readonly object _captureBoundaryLock = new object();
+        private readonly RowPhaseAlignmentCoordinator _rowPhaseAlignment =
+            new RowPhaseAlignmentCoordinator();
         private CapturePhaseEligibility _capturePhaseEligibility =
             CapturePhaseEligibility.Invalid;
         private readonly Dictionary<int, long> _firstAcceptedTicks =
@@ -269,6 +272,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (targets == null || targets.Count == 0)
                 return false;
 
+            ConfigureRowPhaseAlignment(targets);
             lock (_captureBoundaryLock)
             {
                 _firstAcceptedTicks.Clear();
@@ -286,11 +290,13 @@ namespace AniloxRoll.Monitor.UI.Managers
                     _headBoundaryPendingCameraIds.Add(cam.CameraId);
                 }
             }
+            _rowPhaseAlignment.Arm(targets.Select(cam => cam.CameraId));
             return true;
         }
 
         private void ClearCaptureBoundary()
         {
+            _rowPhaseAlignment.Cancel("capture-boundary-clear");
             TaskCompletionSource<bool> completion;
             lock (_captureBoundaryLock)
             {
@@ -307,6 +313,45 @@ namespace AniloxRoll.Monitor.UI.Managers
                 _captureStartPath = "none";
             }
             completion?.TrySetResult(false);
+        }
+
+        private RowPhaseFramePlan AlignCaptureFrame(RowPhaseFrameData frame)
+        {
+            return _rowPhaseAlignment.Align(frame);
+        }
+
+        private void ConfigureRowPhaseAlignment(IList<AniloxCamera> targets)
+        {
+            InspectionSettings settings = _inspectionSettings;
+            double[] fixedMm = settings?.GetCameraRowOffsetMmArray() ?? new double[7];
+            int[] fixedRows = new int[Math.Max(7, fixedMm.Length)];
+            double speed = settings?.Recipe?.AniloxRollSpeedMPerMin ?? 0.0;
+            foreach (AniloxCamera cam in targets)
+            {
+                int index = cam.CameraId - 1;
+                if (index < 0 || index >= fixedRows.Length) continue;
+                double offsetMm = index < fixedMm.Length ? fixedMm[index] : 0.0;
+                fixedRows[index] = RowPhaseAlignmentMath.MillimetersToRows(
+                    offsetMm,
+                    speed,
+                    cam.AppliedLineRateHz);
+            }
+
+            int timeoutMs = Math.Max(
+                1500,
+                Math.Min(10000, GetMaxFramePeriodMs(targets) * 2 + 500));
+            _rowPhaseAlignment.Configure(
+                settings?.Recipe?.EnableRowPhaseAlignment ?? false,
+                settings?.Recipe?.RowPhaseSearchRangeRows ?? 0,
+                timeoutMs,
+                settings?.GetCameraStartPositionMmArray(),
+                settings?.GetCameraOpsUmArray(),
+                fixedRows);
+            FlowTrace.Log(
+                $"row phase configured auto={settings?.Recipe?.EnableRowPhaseAlignment ?? false} " +
+                $"search={settings?.Recipe?.RowPhaseSearchRangeRows ?? 0} " +
+                $"speed={speed:F3} timeoutMs={timeoutMs} " +
+                $"fixedRows={string.Join(",", targets.OrderBy(cam => cam.CameraId).Select(cam => "cam" + cam.CameraId + "=" + fixedRows[cam.CameraId - 1]))}");
         }
 
         private void SetCaptureStartPath(string path)

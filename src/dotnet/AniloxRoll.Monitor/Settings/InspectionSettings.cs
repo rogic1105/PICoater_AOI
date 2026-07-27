@@ -52,6 +52,7 @@ namespace AniloxRoll.Monitor.Core.Data
 
         public double[] GetCameraOpsUmArray() => MachineLayout.GetCameraOpsUmArray();
         public double[] GetCameraStartPositionMmArray() => MachineLayout.GetCameraStartPositionMmArray();
+        public double[] GetCameraRowOffsetMmArray() => MachineLayout.GetCameraRowOffsetMmArray();
 
         // ===== 0. 機台設定（寫入 app-mode.json，不存入 inspection-settings.json）=====
         [Category(CategoryMachineRole)]
@@ -83,6 +84,16 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category(CategoryMachineLayout)][DisplayName("Cam 6")][TypeConverter(typeof(LeftAlignNumericConverter))] public double bg_StartCam6 { get => MachineLayout.StartPosition.Cam6; set => MachineLayout.StartPosition.Cam6 = value; }
         [Category(CategoryMachineLayout)][DisplayName("Cam 7")][TypeConverter(typeof(LeftAlignNumericConverter))] public double bh_StartCam7 { get => MachineLayout.StartPosition.Cam7; set => MachineLayout.StartPosition.Cam7 = value; }
 
+        [Category(CategoryMachineLayout)][DisplayName("─ 固定列偏移 (mm) ─")][ReadOnly(true)]
+        public string bi_RowOffsetHeader => "";
+        [Category(CategoryMachineLayout)][DisplayName("Cam 1")][TypeConverter(typeof(LeftAlignNumericConverter))] public double bj_RowOffsetCam1 { get => MachineLayout.RowOffset.Cam1; set => MachineLayout.RowOffset.Cam1 = value; }
+        [Category(CategoryMachineLayout)][DisplayName("Cam 2")][TypeConverter(typeof(LeftAlignNumericConverter))] public double bk_RowOffsetCam2 { get => MachineLayout.RowOffset.Cam2; set => MachineLayout.RowOffset.Cam2 = value; }
+        [Category(CategoryMachineLayout)][DisplayName("Cam 3")][TypeConverter(typeof(LeftAlignNumericConverter))] public double bl_RowOffsetCam3 { get => MachineLayout.RowOffset.Cam3; set => MachineLayout.RowOffset.Cam3 = value; }
+        [Category(CategoryMachineLayout)][DisplayName("Cam 4")][TypeConverter(typeof(LeftAlignNumericConverter))] public double bm_RowOffsetCam4 { get => MachineLayout.RowOffset.Cam4; set => MachineLayout.RowOffset.Cam4 = value; }
+        [Category(CategoryMachineLayout)][DisplayName("Cam 5")][TypeConverter(typeof(LeftAlignNumericConverter))] public double bn_RowOffsetCam5 { get => MachineLayout.RowOffset.Cam5; set => MachineLayout.RowOffset.Cam5 = value; }
+        [Category(CategoryMachineLayout)][DisplayName("Cam 6")][TypeConverter(typeof(LeftAlignNumericConverter))] public double bo_RowOffsetCam6 { get => MachineLayout.RowOffset.Cam6; set => MachineLayout.RowOffset.Cam6 = value; }
+        [Category(CategoryMachineLayout)][DisplayName("Cam 7")][TypeConverter(typeof(LeftAlignNumericConverter))] public double bp_RowOffsetCam7 { get => MachineLayout.RowOffset.Cam7; set => MachineLayout.RowOffset.Cam7 = value; }
+
         [Category(CategoryMachineLayout)][DisplayName("─ Crop (mm) ─")][ReadOnly(true)]
         public string ca_CropHeader => "";
         [Category(CategoryMachineLayout)][DisplayName("去頭")][TypeConverter(typeof(LeftAlignNumericConverter))] public double cb_CropHead { get => MachineLayout.Crop.TrimHeadMm; set => MachineLayout.Crop.TrimHeadMm = value; }
@@ -95,6 +106,7 @@ namespace AniloxRoll.Monitor.Core.Data
         // 向後相容：程式碼中直接存取的快捷屬性
         [Browsable(false)] public CameraOpsConfig Ops => MachineLayout.Ops;
         [Browsable(false)] public CameraStartPositionConfig StartPosition => MachineLayout.StartPosition;
+        [Browsable(false)] public CameraRowOffsetConfig RowOffset => MachineLayout.RowOffset;
         [Browsable(false)] public CameraCropConfig Crop => MachineLayout.Crop;
         [Browsable(false)] public double Cam1_Ops { get => MachineLayout.Cam1_Ops; set => MachineLayout.Cam1_Ops = value; }
         [Browsable(false)] public double Cam2_Ops { get => MachineLayout.Cam2_Ops; set => MachineLayout.Cam2_Ops = value; }
@@ -139,6 +151,12 @@ namespace AniloxRoll.Monitor.Core.Data
         [Category(CategoryInspection)][DisplayName("總高度")][PropertyOrder(15)]
         [Description("瀑布圖虛擬長圖總高度，單位為 px；預設 30000。只在主畫面顯示為瀑布時有效。")]
         public int hg_WaterfallTotalHeight { get => ImageView.WaterfallTotalHeight; set => ImageView.WaterfallTotalHeight = value; }
+        [Category(CategoryInspection)][DisplayName("自動相位補償")][PropertyOrder(16)][TypeConverter(typeof(BoolYesNoConverter))]
+        [Description("開啟後，每組相機幀先在重疊區估算列方向位移，再與固定列偏移相加並共同裁切；低信心時只使用固定偏移。")]
+        public bool fh_EnableRowPhaseAlignment { get => Recipe.EnableRowPhaseAlignment; set => Recipe.EnableRowPhaseAlignment = value; }
+        [Category(CategoryInspection)][DisplayName("相位搜尋範圍 (列)")][PropertyOrder(17)][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Description("自動相位補償在固定偏移附近允許搜尋的最大列數；0 表示只套用固定列偏移。")]
+        public int fi_RowPhaseSearchRangeRows { get => Recipe.RowPhaseSearchRangeRows; set => Recipe.RowPhaseSearchRangeRows = value; }
 
         // 向後相容：程式碼中直接存取的快捷屬性
         [Browsable(false)] public BackgroundAlgorithm Algorithm       { get => Recipe.Algorithm;       set => Recipe.Algorithm       = value; }
@@ -149,6 +167,8 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public int    BackgroundSampleSeconds { get => Recipe.BackgroundSampleSeconds; set => Recipe.BackgroundSampleSeconds = value; }
         [Browsable(false)] public int    GrabLimitSeconds        { get => Recipe.GrabLimitSeconds;        set => Recipe.GrabLimitSeconds        = value; }
         [Browsable(false)] public double AniloxRollSpeedMPerMin  { get => Recipe.AniloxRollSpeedMPerMin;  set => Recipe.AniloxRollSpeedMPerMin  = value; }
+        [Browsable(false)] public bool   EnableRowPhaseAlignment { get => Recipe.EnableRowPhaseAlignment; set => Recipe.EnableRowPhaseAlignment = value; }
+        [Browsable(false)] public int    RowPhaseSearchRangeRows { get => Recipe.RowPhaseSearchRangeRows; set => Recipe.RowPhaseSearchRangeRows = value; }
 
         // ===== 3. 圖表設定 =====
         [Category(CategoryCharts)][DisplayName("─ 檢測報表 ─")][ReadOnly(true)][PropertyOrder(1)]

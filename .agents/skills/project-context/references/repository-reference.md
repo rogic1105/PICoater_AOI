@@ -167,6 +167,8 @@ against current code with `rg` before editing because lookup data can become sta
 | A輪速度 (m/min) | `ai_OpsSpeed` → `AniloxRollSpeedMPerMin` | 40.0 | Anilox 輪速 |
 | ── Start (mm) ── | （分隔列，唯讀） | — | — |
 | Cam 1~7 | `bb_StartCam1~bh_StartCam7` | 0/345/690/1035/1380/1725/2070 | 各相機起始位置 |
+| ── 固定列偏移 (mm) ── | （分隔列，唯讀） | — | — |
+| Cam 1~7 | `bj_RowOffsetCam1~bp_RowOffsetCam7` | 0 | 各相機物理安裝造成的固定列偏移；正值代表該相機內容在材料行進方向較晚，Grab 時轉成列數並共同裁切 |
 | ── Crop (mm) ── | （分隔列，唯讀） | — | — |
 | 去頭 | `cb_CropHead` → `Crop.TrimHeadMm` | 0.0 | CAM1 左側裁切 |
 | 去尾 | `cc_CropTail` → `Crop.TrimTailMm` | 0.0 | CAM7 右側裁切 |
@@ -190,6 +192,8 @@ against current code with `rg` before editing because lookup data can become sta
 | ── 畫布設定 ── | （分隔列，唯讀） | — | — |
 | 總時間(秒) | `fc_GrabLimitSeconds` → `GrabLimitSeconds` | 10 | 正式監控單次 grab 最長時間；到時走共用停止流程 |
 | 總高度 | `hg_WaterfallTotalHeight` → `ImageView.WaterfallTotalHeight` | 30000 | 瀑布虛擬長圖總高度（px） |
+| 自動相位補償 | `fh_EnableRowPhaseAlignment` → `Recipe.EnableRowPhaseAlignment` | false | 每輪第一組完整相機幀從相鄰相機實體重疊區估算列位移；低信心只用固定偏移 |
+| 相位搜尋範圍 (列) | `fi_RowPhaseSearchRangeRows` → `Recipe.RowPhaseSearchRangeRows` | 600 | 在固定偏移附近允許搜尋的最大列數；所有相機只保留共同有效區，不補黑邊 |
 
 ### 3. 圖表設定
 

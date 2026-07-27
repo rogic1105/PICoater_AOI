@@ -17,8 +17,10 @@ namespace AniloxRoll.Monitor.Tests
             var grabH = new int[] { 3001, 3001, 3001, 3001, 3001, 3001, 3001 };
             var expUs = new double[] { 149, 150, 151, 152, 153, 154, 155 };
             var lrHz = new double[] { 3001, 3002, 3003, 3004, 3005, 3006, 3007 };
+            var rowOffsetMm = new double[] { -1.25, -0.5, 0, 0.75, 1.5, 2.25, 3.0 };
             var snap = new CsvConfigSnapshot(ops, pos, grabH, expUs, lrHz, 1.2345f, 1.6789f, 9.25f,
-                0.5678f, 0.9012f, 0.5678f, 0.9012f, 5.0, 3.5, ts, 42.5);
+                0.5678f, 0.9012f, 0.5678f, 0.9012f, 5.0, 3.5, ts, 42.5,
+                rowOffsetMm);
 
             string csv = snap.ToCsvLine();
             Assert.That(csv.StartsWith("#CFG,"), Is.True);
@@ -47,6 +49,7 @@ namespace AniloxRoll.Monitor.Tests
             {
                 Assert.That(parsed.CamOps[i], Is.EqualTo(ops[i]).Within(0.01));
                 Assert.That(parsed.CamPos[i], Is.EqualTo(pos[i]).Within(0.01));
+                Assert.That(parsed.CamRowOffsetMm[i], Is.EqualTo(rowOffsetMm[i]).Within(0.001));
                 Assert.That(parsed.CamGrabHeight[i], Is.EqualTo(grabH[i]));
                 Assert.That(parsed.CamExposureUs[i], Is.EqualTo(expUs[i]).Within(0.01));
                 Assert.That(parsed.CamLineRateHz[i], Is.EqualTo(lrHz[i]).Within(0.01));
@@ -146,6 +149,7 @@ namespace AniloxRoll.Monitor.Tests
             var snap = new CsvConfigSnapshot(null, null, null, null, null, 0, 0, 0, 0, 0, 0, 0.0, 0.0, DateTime.Now);
             Assert.That(snap.CamOps.Length, Is.EqualTo(7));
             Assert.That(snap.CamPos.Length, Is.EqualTo(7));
+            Assert.That(snap.CamRowOffsetMm.Length, Is.EqualTo(7));
             Assert.That(snap.CamGrabHeight.Length, Is.EqualTo(7));
             Assert.That(snap.CamExposureUs.Length, Is.EqualTo(7));
             Assert.That(snap.CamLineRateHz.Length, Is.EqualTo(7));
