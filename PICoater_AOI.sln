@@ -98,6 +98,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StorageBridge.Control", "sd
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TanukiCv.SysInfoTool", "sdk\TanukiCv\samples\TanukiCv.SysInfoTool\TanukiCv.SysInfoTool.csproj", "{7B9E2F14-3C5A-4D6E-8F10-2A3B4C5D6E7F}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{A000000F-0000-0000-0000-00000000000F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AniloxRoll.DvtRunner", "tools\dvt\AniloxRoll.DvtRunner\AniloxRoll.DvtRunner.csproj", "{6A2F0B1C-90D4-4A62-B5A1-6D87071BDB31}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Release|x64 = Release|x64
@@ -155,6 +159,8 @@ Global
 		{D4E5F6A7-4444-5555-6666-777788889999}.Release|x64.Build.0 = Release|x64
 		{E5F6A7B8-5555-6666-7777-888899990000}.Release|x64.ActiveCfg = Release|x64
 		{E5F6A7B8-5555-6666-7777-888899990000}.Release|x64.Build.0 = Release|x64
+		{6A2F0B1C-90D4-4A62-B5A1-6D87071BDB31}.Release|x64.ActiveCfg = Release|x64
+		{6A2F0B1C-90D4-4A62-B5A1-6D87071BDB31}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -196,6 +202,7 @@ Global
 		{C481DC6D-5350-4633-94C2-0665A10F7A5C} = {A0000006-0000-0000-0000-000000000006}
 		{E4F5A6B7-5555-6666-7777-88889999AAAA} = {A0000006-0000-0000-0000-000000000006}
 		{F5A6B7C8-6666-7777-8888-9999AAAABBBB} = {A0000006-0000-0000-0000-000000000006}
+		{6A2F0B1C-90D4-4A62-B5A1-6D87071BDB31} = {A000000F-0000-0000-0000-00000000000F}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {7740A437-AC6B-4FD7-8E8F-6AB368D15162}

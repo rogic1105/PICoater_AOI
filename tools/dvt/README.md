@@ -1,0 +1,43 @@
+# PICoater DVT Runner
+
+`AniloxRoll.DvtRunner` 是外部 WinForms 操作器。它操作真正的
+`AniloxRoll.Monitor` 視窗，依 `verify-flows` DVT contract 等待 Flow 證據，
+最後執行 `tools/python/check_all_flows.py`。
+
+它不是單元測試，也不取代壓力或長時間測試。用途是把重複的 smoke/DVT 操作自動化，
+讓操作員在旁觀察畫面，並把未覆蓋的流程明確列出。
+
+## 執行
+
+1. 以 `Release|x64` 建置 `AniloxRoll.DvtRunner`。
+2. 開啟 `bin/x64/Release/AniloxRoll.DvtRunner.exe`。
+3. 確認監控程式與 `D:\Anilox\Logs` 路徑。
+4. 選擇情境後按「開始」。Runner 會開啟或接上已開啟的監控程式。
+5. 需要停下觀察時按「暫停」；「中止」會嘗試停止 Grab 並還原被修改的 PropertyGrid 設定。
+6. 情境完成後會先還原設定，再正常關閉監控程式，確認 shutdown Flow 後顯示結果。
+
+初次使用先跑 `Runner 自我檢查（不 Grab）`。它只驗證 UI 連接、設定提交、
+Flow tail 與還原，不會啟動相機。
+
+`監控與背景 V1` 若相機或光源尚未就緒，會停在可用性守門持續等待；接妥後自動繼續，
+也可隨時按「中止」。這類等待不使用固定秒數，避免不同電腦初始化速度造成假失敗。
+
+## 情境規則
+
+- 情境在 `AniloxRoll.DvtRunner/Scenarios/*.json`。
+- 每個操作步驟必須填 `Contract`，指向 `dvt-contract.md` 的 flow。
+- `wait-log` 只寫該步需要的最小證據，不重複完整判定規格。
+- 跨步驟、禁止行、數量與完整性仍由 `check_all_flows.py` 判定。
+- 若 checker 顯示 `NOT COVERED`，代表這次情境沒有操作到該功能，不代表 PASS。
+
+## V1 範圍
+
+`監控與背景 V1` 自動執行：
+
+- 切換流程驗證記錄。
+- 暫時停用 IO 自動控制並切到標準去背。
+- 取得背景、確認輸出被抑制、預覽與清除。
+- 正常 Grab/Stop，確認首組相位、主畫面與 Curve 時序。
+- 執行完整 Flow checker。
+
+實體拔線、畫面內容是否符合肉眼預期，以及未納入的回顧、報表、Bridge 流程仍需後續情境。
