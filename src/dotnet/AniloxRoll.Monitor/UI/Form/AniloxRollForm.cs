@@ -134,6 +134,7 @@ namespace AniloxRoll.Monitor.Forms
         // --- 儲存管理 ---
         private StorageRetentionService _retentionService;
         private RemoteCopyService _remoteCopyService;
+        private StorageHealthCoordinator _storageHealthCoordinator;
         private StorageAppHeartbeatService _storageHeartbeatService;
         private LogRetentionService _logRetentionService;
         private OutputHealthService _outputHealthService;
@@ -274,6 +275,8 @@ namespace AniloxRoll.Monitor.Forms
             try { _inspectionService?.Dispose(); } catch { }
             try { _lightConnectionCoordinator?.Dispose(); } catch { }
             _lightConnectionCoordinator = null;
+            try { _storageHealthCoordinator?.Dispose(); } catch { }
+            _storageHealthCoordinator = null;
             try { _storageHeartbeatService?.Dispose(); } catch { }
             _storageHeartbeatService = null;
             try { _logRetentionService?.Dispose(); } catch { }
@@ -605,6 +608,29 @@ namespace AniloxRoll.Monitor.Forms
                     _outputHealthService?.Resolve("RemotePendingQuarantined");
                 }
             }
+
+            _storageHealthCoordinator = new StorageHealthCoordinator(
+                TelemetryTickMs,
+                _appMode?.Role == MachineRole.Storage,
+                () => GetStorageRetentionRoot(),
+                () => _settings?.RemotePath ?? string.Empty,
+                () =>
+                {
+                    string configPath =
+                        _settings?.RemoteConfigPath ?? string.Empty;
+                    return string.IsNullOrWhiteSpace(configPath)
+                        ? DeriveFlagSharePath(
+                            _settings?.RemotePath ?? string.Empty)
+                        : configPath;
+                },
+                _remoteCopyService);
+            _storageHealthCoordinator.StateChanged += () =>
+                SafeBeginInvoke(() =>
+                {
+                    RefreshCapacityInfoLabel();
+                    UpdateStorageConnLabel();
+                    FlowHardwareEdges();
+                });
 
             // 循環儲存（事件驅動：grab 結束 / watchdog / 每 10 grab / 啟動時各觸發一次）
             _retentionService = new StorageRetentionService(
