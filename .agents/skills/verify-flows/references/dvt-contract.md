@@ -868,14 +868,18 @@ btnLiveGetBackground_Click@AniloxRollForm.Background.cs      intent 行 ui:【�
  ├（未配置）await EnsureAllocatedAndToggleGrabAsync@LiveCameraManager.cs（=F1＋F2 借道）
  ├（未抓取）LightTurnOn@AniloxRollForm.HardwareStatus.cs（命令完成即續行；無固定暖機延遲）
  │   → ToggleGrab@LiveCameraManager.cs ＋ UpdateGrabButton(true)   ← 借用現有 grab（啟停包夾）
- ├ WaitForCaptureFirstSetReadyAsync@LiveCameraManager.CaptureBoundary.cs
- │   ← 全部在線相機首組完整幀到齊且相位通過後，背景採樣秒數才開始計算
- ├ 採集迴圈（await Task.Delay(100) × BackgroundSampleSeconds，UI 執行緒非阻塞、按鈕倒數）
- │   └ per-cam TryComputeColumnMean@AniloxCamera.cs → accum 累加
- ├ 產生 version=`yyyyMMdd-HHmmssfff`
- ├ per-cam 平均 → SaveCameraProfile@BackgroundProfileRepository.cs
- │   → `bg_{width}_{cam}_{version}.bin`（MCBF v2；CreateNew＋WriteThrough＋Flush）
- ├ 全部在線相機成功 → ActivateVersion@BackgroundProfileRepository.cs 原子替換 `active-background.json`
+ ├ CaptureAndActivateAsync@BackgroundCaptureCoordinator.cs
+ │   ├ 產生 version=`yyyyMMdd-HHmmssfff`
+ │   ├ WaitForCaptureFirstSetReadyAsync@LiveCameraManager.CaptureBoundary.cs
+ │   │   ← 全部在線相機首組完整幀到齊且相位通過後，背景採樣秒數才開始計算
+ │   ├ 採集迴圈（await Task.Delay(100) × BackgroundSampleSeconds，UI 執行緒非阻塞、按鈕倒數）
+ │   │   └ per-cam TryComputeColumnMean@AniloxCamera.cs → accum 累加
+ │   ├ per-cam 平均 → SaveCameraProfile@BackgroundProfileRepository.cs
+ │   │   → `bg_{width}_{cam}_{version}.bin`（MCBF v2；CreateNew＋WriteThrough＋Flush）
+ │   ├ 全部在線相機成功 → ActivateVersion@BackgroundProfileRepository.cs
+ │   │   原子替換 `active-background.json`
+ │   └ 任一相機失敗 → DeleteVersion@BackgroundProfileRepository.cs 刪本次 version 檔，
+ │       manifest 不動、上一組背景繼續生效
  ├ LoadBackgroundBins@AniloxRollForm.Background.cs
  │   → ReadManifest＋ResolveCameraProfilePath＋LoadProfile@BackgroundProfileRepository.cs
  │   → manifest 指向的同一版 bin → 驗證長度/有限值
@@ -888,8 +892,7 @@ btnLiveGetBackground_Click@AniloxRollForm.Background.cs      intent 行 ui:【�
  ├ 每次正式 Grab 第一個成功處理幀：TryApplyPicoaterRidge@AniloxCamera.cs
  │   → AoiService.ProcessImage → TanukiPipeline_Process(precomputed_col_mean)
  │   → `background apply` 留下 native 呼叫實際收到的來源（非 UI 設定意圖）
- ├ 任一相機失敗 → DeleteVersion@BackgroundProfileRepository.cs 刪本次 version 檔、
- │   manifest 不動、上一組背景繼續生效
+ ├ 任一相機失敗 → Form catch
  │   → OutputHealth `BackgroundCaptureFailure` 深橘提示
  ├ finally：ToggleGrab 停止（=F3）＋ LightTurnOff ＋ SetCaptureSuppressed(false)
  │   ＋ `background capture end output=disabled result=ok|failed` ＋ UpdateStandardBgSubLockState

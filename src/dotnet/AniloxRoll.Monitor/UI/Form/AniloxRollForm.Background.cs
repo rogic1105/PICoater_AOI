@@ -1,12 +1,9 @@
 using System;
 using System.ComponentModel;
 using System.IO;
-using System.Linq;
-using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.Runtime.InteropServices;
-using System.Threading.Tasks;
 using System.Management;
 using System.Windows.Forms;
 using StorageBridge.Core;
@@ -18,6 +15,7 @@ using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Interop;
 using AniloxRoll.Monitor.Core.Services;
+using AniloxRoll.Monitor.UI.Coordinators;
 using AniloxRoll.Monitor.UI.State;
 using AniloxRoll.Monitor.UI.Managers;
 using AniloxRoll.Monitor.UI.Navigators;
@@ -91,95 +89,18 @@ namespace AniloxRoll.Monitor.Forms
             int sampleSeconds = Math.Max(1, _settings.Recipe.BackgroundSampleSeconds);
             string bgDir = _settings.Storage.BackgroundPath;
             var backgroundRepository = new BackgroundProfileRepository(bgDir);
-            string version = DateTime.Now.ToString("yyyyMMdd-HHmmssfff");
-            int savedCameraCount = 0;
+            var captureCoordinator = new BackgroundCaptureCoordinator(
+                _liveCameraManager,
+                backgroundRepository);
             bool captureSucceeded = false;
 
             try
             {
-                int firstSetTimeoutMs =
-                    _liveCameraManager.GetCaptureFirstSetTimeoutMs();
-                FlowTrace.Log(
-                    $"background capture waiting first-set timeoutMs={firstSetTimeoutMs}");
-                bool firstSetReady =
-                    await _liveCameraManager.WaitForCaptureFirstSetReadyAsync(
-                        firstSetTimeoutMs);
-                if (!firstSetReady)
-                    throw new IOException(
-                        $"背景採樣未等到完整首幀組 ({firstSetTimeoutMs}ms)");
-
-                FlowTrace.Log(
-                    $"background capture sampling start duration={sampleSeconds}s");
-                backgroundRepository.EnsureDirectory();
-
-                var cameras = _liveCameraManager.Cameras;
-                int camCount = cameras.Count;
-
-                double[][] accum = new double[camCount][];
-                int[] frameCount = new int[camCount];
-
-                // 採集 sampleSeconds 秒，按鈕顯示倒數
-                var sw = Stopwatch.StartNew();
-                int lastShown = -1;
-                while (sw.Elapsed.TotalSeconds < sampleSeconds)
-                {
-                    int remaining = sampleSeconds - (int)sw.Elapsed.TotalSeconds;
-                    if (remaining != lastShown)
-                    {
-                        lastShown = remaining;
-                        btnLiveGetBackground.Text = $"採集中 {remaining}s";
-                    }
-
-                    await Task.Delay(100);
-
-                    for (int i = 0; i < camCount; i++)
-                    {
-                        var cam = cameras[i];
-                        if (!cam.IsConnected || cam.FrameWidth <= 0) continue;
-
-                        if (accum[i] == null)
-                            accum[i] = new double[cam.FrameWidth];
-
-                        float[] colMean = new float[cam.FrameWidth];
-                        if (cam.TryComputeColumnMean(colMean))
-                        {
-                            for (int c = 0; c < cam.FrameWidth; c++)
-                                accum[i][c] += colMean[c];
-                            frameCount[i]++;
-                        }
-                    }
-                }
-                FlowTrace.Log(
-                    $"background capture sampling complete durationMs={sw.ElapsedMilliseconds} " +
-                    $"frames={string.Join(",", cameras.Select((cam, index) => $"cam{cam.CameraId}:{frameCount[index]}"))}");
-
-                // 平均並存檔
-                for (int i = 0; i < camCount; i++)
-                {
-                    var cam = cameras[i];
-                    if (!cam.IsConnected || cam.FrameWidth <= 0) continue;
-                    if (frameCount[i] == 0 || accum[i] == null)
-                        throw new IOException($"CAM{cam.CameraId} 沒有取得有效背景樣本");
-
-                    float[] avgColMean = new float[cam.FrameWidth];
-                    double invN = 1.0 / frameCount[i];
-                    for (int c = 0; c < cam.FrameWidth; c++)
-                        avgColMean[c] = (float)(accum[i][c] * invN);
-
-                    backgroundRepository.SaveCameraProfile(
-                        avgColMean,
-                        cam.FrameWidth,
-                        cam.CameraId,
-                        version,
-                        _settings.LightBrightness,
-                        (float)cam.CameraExposureTimeUs);
-                    savedCameraCount++;
-                }
-
-                if (savedCameraCount == 0)
-                    throw new IOException("沒有任何相機產生背景檔");
-
-                backgroundRepository.ActivateVersion(version);
+                await captureCoordinator.CaptureAndActivateAsync(
+                    sampleSeconds,
+                    _settings.LightBrightness,
+                    remaining =>
+                        btnLiveGetBackground.Text = $"採集中 {remaining}s");
                 // 載入到各相機
                 LoadBackgroundBins();
                 captureSucceeded = true;
@@ -187,7 +108,6 @@ namespace AniloxRoll.Monitor.Forms
             }
             catch (Exception ex)
             {
-                backgroundRepository.DeleteVersion(version);
                 _outputHealthService?.Report(
                     "BackgroundCaptureFailure",
                     OutputHealthSeverity.OutputFault,

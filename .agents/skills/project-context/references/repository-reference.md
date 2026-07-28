@@ -32,7 +32,7 @@ against current code with `rg` before editing because lookup data can become sta
 | `UI/Form/AniloxRollForm.cs` | App bootstrap、依賴組裝、Form 生命週期與 setting change 路由 |
 | `UI/Form/AniloxRollForm.Live.cs` | Live 監控：grab 流程（`btnLiveGrab_Click`）、即時曲線（`OnLiveCurveData`/`OnLiveRowCurveData`）、Mura 判定（`CheckLiveMura`）、強化/合圖切換（`ApplyMuraEnhance`/`SwitchStitchModeWithEnhanceSequence`） |
 | `UI/Form/AniloxRollForm.Review.cs` | 回顧：資料夾/時段載入（`btnReviewSelectFolder_Click`/period 導航/`ApplyReviewEnhance`/`LoadImagesWithReviewConfig`） |
-| `UI/Form/AniloxRollForm.Background.cs` | 背景取得/載入/預覽 + 背景判斷（`IsBgBinReady`/`IsStandardBgSubEnabled`） |
+| `UI/Form/AniloxRollForm.Background.cs` | 背景取得的 UI／光源／grab 包夾、背景載入／預覽與背景判斷（`IsBgBinReady`/`IsStandardBgSubEnabled`） |
 | `UI/Form/AniloxRollForm.SettingsTabs.cs` | 右側設定面板 tab 建構（`SetupCameraTab`/`SetupSystemTab`/`Bind*Sync`）+ 相機參數硬體同步（`SyncCameraParamsFromHardware`） |
 | `UI/Form/AniloxRollForm.HardwareStatus.cs` | IO、光源與儲存連線狀態的 UI 接線 |
 | `UI/Form/AniloxRollForm.DirectionStitch.cs` | V/H 方向/ridge/合圖模式切換（`SwitchRidgeDirection`/`OnStitchModeChangedAsync`） |
@@ -44,6 +44,7 @@ against current code with `rg` before editing because lookup data can become sta
 | `UI/Binders/BusyUiBinder.cs` | 回顧載入忙碌視覺唯一 owner：等待游標、命令按鈕鎖與 UI-thread marshal。Presenter workflow 與 stitched image loader 共用同一實例。 |
 | `UI/Coordinators/ReviewFolderCoordinator.cs` | 回顧資料夾選擇、路徑修正、ImageRepository refresh、DateTimeNavigator 初始化。 |
 | `UI/Coordinators/InspectionSettingsCoordinator.cs` | InspectionSettings 到 BatchInspectionService 的 pipeline 副作用唯一 owner。 |
+| `UI/Coordinators/BackgroundCaptureCoordinator.cs` | 一輪背景取得的流程 owner：等完整首幀組、定時採樣、欄平均、發布新背景版本；失敗時刪除本輪未啟用版本。 |
 | `UI/Coordinators/LatestGrabLoadCoordinator.cs` | 回顧／報表／預覽共用的單序號 latest-only／single-flight 排程與 stale token owner；不負責讀檔或畫畫面。 |
 | `UI/Coordinators/ReviewPeriodLoadCoordinator.cs` | 回顧時段載入的 FIFO single-flight、重複 request 去重與 generation 失效 owner。 |
 | `UI/Services/ImageCacheService.cs` | ProcessBatch 產出但不直接顯示的 Bitmap 生命週期唯一 owner；下一次 workflow 前統一 Dispose。 |
