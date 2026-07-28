@@ -873,10 +873,12 @@ btnLiveGetBackground_Click@AniloxRollForm.Background.cs      intent 行 ui:【�
  ├ 採集迴圈（await Task.Delay(100) × BackgroundSampleSeconds，UI 執行緒非阻塞、按鈕倒數）
  │   └ per-cam TryComputeColumnMean@AniloxCamera.cs → accum 累加
  ├ 產生 version=`yyyyMMdd-HHmmssfff`
- ├ per-cam 平均 → SaveBackgroundBin@AniloxRollForm.Background.cs
+ ├ per-cam 平均 → SaveCameraProfile@BackgroundProfileRepository.cs
  │   → `bg_{width}_{cam}_{version}.bin`（MCBF v2；CreateNew＋WriteThrough＋Flush）
- ├ 全部在線相機成功 → ActivateBackgroundVersion 原子替換 `active-background.json`
- ├ LoadBackgroundBins@AniloxRollForm.Background.cs（manifest 指向的同一版 bin → 驗證長度/有限值
+ ├ 全部在線相機成功 → ActivateVersion@BackgroundProfileRepository.cs 原子替換 `active-background.json`
+ ├ LoadBackgroundBins@AniloxRollForm.Background.cs
+ │   → ReadManifest＋ResolveCameraProfilePath＋LoadProfile@BackgroundProfileRepository.cs
+ │   → manifest 指向的同一版 bin → 驗證長度/有限值
  │   → TanukiCv_AllocPinned → ReplacePrecomputedColumnMean@AniloxCamera.cs）
  │   ← 只要求目前在線相機具備同版背景；離線相機清除舊綁定／舊警示並記 `status=skipped reason=offline`
  │   ← pinned 生命週期：相機的 `_picoaterLock` 內原子換新，離鎖後 FreePinned 舊 buffer；
@@ -886,7 +888,8 @@ btnLiveGetBackground_Click@AniloxRollForm.Background.cs      intent 行 ui:【�
  ├ 每次正式 Grab 第一個成功處理幀：TryApplyPicoaterRidge@AniloxCamera.cs
  │   → AoiService.ProcessImage → TanukiPipeline_Process(precomputed_col_mean)
  │   → `background apply` 留下 native 呼叫實際收到的來源（非 UI 設定意圖）
- ├ 任一相機失敗 → 刪本次 version 檔、manifest 不動、上一組背景繼續生效
+ ├ 任一相機失敗 → DeleteVersion@BackgroundProfileRepository.cs 刪本次 version 檔、
+ │   manifest 不動、上一組背景繼續生效
  │   → OutputHealth `BackgroundCaptureFailure` 深橘提示
  ├ finally：ToggleGrab 停止（=F3）＋ LightTurnOff ＋ SetCaptureSuppressed(false)
  │   ＋ `background capture end output=disabled result=ok|failed` ＋ UpdateStandardBgSubLockState
@@ -905,7 +908,8 @@ btnLiveViewBackground_Click@AniloxRollForm.Background.cs     intent 行 ui:【�
  │                            （合圖未啟用→用設定 start/ops 餵佈局）
  ├ ClearLiveRowChartForBackgroundPreview@AniloxRollForm.Live.cs
  │   → 清列圖表、待上畫資料及列曲線快取；預覽期間 MainContentPresented 不得重新上畫列曲線
- ├ ReadActiveBackgroundVersion → per-cam Load@CurveBinFile.cs（同一 active version）
+ ├ ReadManifest → per-cam ResolvePreviewProfilePath＋LoadProfile@BackgroundProfileRepository.cs
+ │   （同一 active version；manifest 損壞不得 fallback 到 legacy bin）
  │   → ExpandColMeanToGray@AniloxRollForm.Live.cs
  │   → PushStaticFrame@LiveDisplayCoordinator.cs（與 grab 幀同一條 PushFrame 路＝合圖/縮圖/縮放/overlay 全免費）
  └（pushed==0）ExitBackgroundPreview＋MessageBox
@@ -1323,6 +1327,8 @@ ui:【產出狀態】確認 code=C
 - `app-mode.json` 與 `system-settings.json` 也必須走同一個 `SettingsStoreHelper` 原子寫入／損壞回報；
   Storage role 的 `StorageMinFreeGB` 是部署 bootstrap，啟動後與 PropertyGrid `LocalMinFreeGB` 同值，
   使用者修改時同步寫回 app-mode，禁止顯示值與實際清理門檻分歧。
+- 背景檔案 I/O 的唯一 owner 是 `BackgroundProfileRepository`；Form 只編排取得／載入／預覽 intent，
+  不得自行掃描、解析、寫入或刪除背景檔。
 - 背景版本只有在所有在線相機都完成 `CreateNew + WriteThrough + Flush` 後，才原子替換
   `active-background.json`。manifest 存在但無法解析時不得 fallback 到 legacy bin 混用；保留目前已載入背景，
   並回報 `BackgroundManifestInvalid`。
