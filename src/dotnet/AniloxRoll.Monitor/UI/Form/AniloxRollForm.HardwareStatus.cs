@@ -30,84 +30,115 @@ namespace AniloxRoll.Monitor.Forms
         /// <summary>初始化 IO 連動：自動偵測連線，連上後以 DI START 控制 Grab。</summary>
         private void InitIoController()
         {
-            int generation = System.Threading.Interlocked.Increment(ref _ioControllerGeneration);
-            StartIoController(generation);
+            if (_ioConnectionCoordinator == null)
+            {
+                _ioConnectionCoordinator =
+                    new IoConnectionCoordinator();
+                _ioConnectionCoordinator.StartRequested +=
+                    OnIoControllerStartRequested;
+                _ioConnectionCoordinator.StopRequested +=
+                    OnIoControllerStopRequested;
+                _ioConnectionCoordinator.StateChanged +=
+                    (controller, generation, state) =>
+                        DispatchCurrentIoController(
+                            controller,
+                            generation,
+                            () => UpdateIoStateLabel(state));
+                _ioConnectionCoordinator.ConnectionChanged +=
+                    OnIoControllerConnectionChanged;
+                _ioConnectionCoordinator.IoUpdated +=
+                    (controller, generation, snapshot) =>
+                        DispatchCurrentIoController(
+                            controller,
+                            generation,
+                            () => UpdateIoLeds(snapshot));
+            }
+
+            _ = _ioConnectionCoordinator.StartAsync(
+                CreateIoConnectionOptions());
         }
 
-        private void StartIoController(int generation)
+        private IoConnectionOptions CreateIoConnectionOptions()
         {
-            if (!_settings.IoEnabled || generation != System.Threading.Volatile.Read(ref _ioControllerGeneration))
+            return new IoConnectionOptions(
+                _settings.IoEnabled,
+                _settings.IoModel,
+                _settings.IoIp,
+                _settings.IoPort,
+                _settings.CaptureStopCondition ==
+                    CaptureStopCondition.IoSignal);
+        }
+
+        private IoGrabController CurrentIoController =>
+            _ioConnectionCoordinator?.CurrentController;
+
+        private void OnIoControllerStartRequested(
+            IoGrabController controller,
+            int generation)
+        {
+            if (!IsCurrentIoController(controller, generation))
                 return;
 
-            var controller = new IoGrabController(_settings.IoModel)
-            {
-                ReconnectIntervalMs = 3000,
-                ReadWriteTimeoutMs = 500,
-                StopCaptureOnStartLow =
-                    _settings.CaptureStopCondition == CaptureStopCondition.IoSignal
-            };
-            string ip = _settings.IoIp;
-            int port = _settings.IoPort;
-            _ioGrabController = controller;
-            _ioControllerActiveGeneration = generation;
-
-            controller.OnStartRequested += () =>
-            {
-                if (!IsCurrentIoController(controller, generation)) return;
-                int requestGeneration = System.Threading.Interlocked.Increment(
+            int requestGeneration =
+                System.Threading.Interlocked.Increment(
                     ref _ioGrabRequestGeneration);
-                DispatchCurrentIoController(
-                    controller, generation, () =>
-                    {
-                        FlowTrace.Log("io:DI START 上升緣 → 抓取請求");
-                        _ = IoStartGrabAsync(controller, generation, requestGeneration);
-                    });
-            };
-            controller.OnStopRequested += reason =>
-            {
-                if (!IsCurrentIoController(controller, generation)) return;
-                System.Threading.Interlocked.Increment(ref _ioGrabRequestGeneration);
-                DispatchCurrentIoController(
-                    controller, generation, () => _ = IoStopGrabAsync(controller, generation, reason));
-            };
-            controller.OnStateChanged += state => DispatchCurrentIoController(
-                controller, generation, () => UpdateIoStateLabel(state));
-            controller.OnConnectionChanged += connected =>
-            {
-                if (!IsCurrentIoController(controller, generation)) return;
-                if (!connected)
-                    System.Threading.Interlocked.Increment(ref _ioGrabRequestGeneration);
-                DispatchCurrentIoController(
-                    controller, generation, () => UpdateIoConnectionUi(connected));
-            };
-            controller.OnIoUpdated += snapshot => DispatchCurrentIoController(
-                controller, generation, () => UpdateIoLeds(snapshot));
-
-            FlowTrace.Log($"IO controller start generation={generation} endpoint={ip}:{port}");
-            _ioControllerStartTask = StartIoControllerAsync(controller, generation, ip, port);
+            DispatchCurrentIoController(
+                controller,
+                generation,
+                () =>
+                {
+                    FlowTrace.Log("io:DI START 上升緣 → 抓取請求");
+                    _ = IoStartGrabAsync(
+                        controller,
+                        generation,
+                        requestGeneration);
+                });
         }
 
-        private async Task StartIoControllerAsync(
-            IoGrabController controller, int generation, string ip, int port)
+        private void OnIoControllerStopRequested(
+            IoGrabController controller,
+            int generation,
+            IoStopRequestReason reason)
         {
-            try
+            if (!IsCurrentIoController(controller, generation))
+                return;
+
+            System.Threading.Interlocked.Increment(
+                ref _ioGrabRequestGeneration);
+            DispatchCurrentIoController(
+                controller,
+                generation,
+                () => _ = IoStopGrabAsync(
+                    controller,
+                    generation,
+                    reason));
+        }
+
+        private void OnIoControllerConnectionChanged(
+            IoGrabController controller,
+            int generation,
+            bool connected)
+        {
+            if (!IsCurrentIoController(controller, generation))
+                return;
+
+            if (!connected)
             {
-                await controller.StartAsync(ip, port);
+                System.Threading.Interlocked.Increment(
+                    ref _ioGrabRequestGeneration);
             }
-            catch (Exception ex)
-            {
-                Trace.TraceWarning(
-                    $"[IO.Start generation={generation}] {ex.GetType().Name}: {ex.Message}");
-                DispatchCurrentIoController(
-                    controller, generation, () => UpdateIoConnectionUi(false));
-            }
+            DispatchCurrentIoController(
+                controller,
+                generation,
+                () => UpdateIoConnectionUi(connected));
         }
 
         private bool IsCurrentIoController(IoGrabController controller, int generation)
         {
             return !_shutdownInProgress &&
-                   generation == System.Threading.Volatile.Read(ref _ioControllerGeneration) &&
-                   ReferenceEquals(_ioGrabController, controller);
+                   _ioConnectionCoordinator?.IsCurrent(
+                       controller,
+                       generation) == true;
         }
 
         private string GetIoGrabRequestInvalidReason(
@@ -391,80 +422,24 @@ namespace AniloxRoll.Monitor.Forms
                 case nameof(InspectionSettings.IoPort):
                 case nameof(InspectionSettings.IoModel):
                     System.Threading.Interlocked.Increment(ref _ioGrabRequestGeneration);
-                    int generation = System.Threading.Interlocked.Increment(ref _ioControllerGeneration);
-                    _ = RestartIoControllerAsync(generation);
+                    UpdateIoConnectionUi(false);
+                    if (_ioConnectionCoordinator == null)
+                        InitIoController();
+                    else
+                        _ = _ioConnectionCoordinator.RestartAsync(
+                            CreateIoConnectionOptions());
                     break;
-            }
-        }
-
-        /// <summary>序列化停舊與重建；快速連續改設定只建立最後一代 controller。</summary>
-        private async Task RestartIoControllerAsync(int requestedGeneration)
-        {
-            await _ioControllerLifecycleGate.WaitAsync();
-            try
-            {
-                if (requestedGeneration != System.Threading.Volatile.Read(ref _ioControllerGeneration))
-                {
-                    FlowTrace.Log($"IO controller restart coalesced generation={requestedGeneration}");
-                    return;
-                }
-
-                var oldController = _ioGrabController;
-                var oldStartTask = _ioControllerStartTask;
-                int oldGeneration = _ioControllerActiveGeneration;
-                _ioGrabController = null;
-                _ioControllerActiveGeneration = 0;
-                _ioControllerStartTask = Task.CompletedTask;
-                if (oldController != null)
-                {
-                    FlowTrace.Log($"IO controller stop generation={oldGeneration} reason=settings");
-                    try { await oldStartTask; } catch { }
-                    try { await oldController.StopAsync(); } catch { }
-                    oldController.Dispose();
-                }
-
-                if (requestedGeneration != System.Threading.Volatile.Read(ref _ioControllerGeneration) ||
-                    _shutdownInProgress)
-                    return;
-
-                UpdateIoConnectionUi(false);
-                StartIoController(requestedGeneration);
-            }
-            finally
-            {
-                _ioControllerLifecycleGate.Release();
             }
         }
 
         private async Task ShutdownIoControllerAsync()
         {
             System.Threading.Interlocked.Increment(ref _ioGrabRequestGeneration);
-            System.Threading.Interlocked.Increment(ref _ioControllerGeneration);
-            await _ioControllerLifecycleGate.WaitAsync();
-            try
-            {
-                var controller = _ioGrabController;
-                var startTask = _ioControllerStartTask;
-                int activeGeneration = _ioControllerActiveGeneration;
-                _ioGrabController = null;
-                _ioControllerActiveGeneration = 0;
-                _ioControllerStartTask = Task.CompletedTask;
-                if (controller == null) return;
+            if (_ioConnectionCoordinator == null)
+                return;
 
-                FlowTrace.Log($"IO controller stop generation={activeGeneration} reason=shutdown");
-                try { await startTask; } catch { }
-                try { await controller.StopAsync(); }
-                catch (Exception ex)
-                {
-                    Trace.TraceWarning(
-                        $"[Shutdown.IO] {ex.GetType().Name}: {ex.Message}");
-                }
-                try { controller.Dispose(); } catch { }
-            }
-            finally
-            {
-                _ioControllerLifecycleGate.Release();
-            }
+            await _ioConnectionCoordinator.ShutdownAsync();
+            _ioConnectionCoordinator = null;
         }
 
         private void UpdateIoStateLabel(IoState state)
@@ -542,7 +517,8 @@ namespace AniloxRoll.Monitor.Forms
                     FlowTrace.Log($"⚠ {name} 未連線（開機基線）");
                 last = now;
             }
-            Edge(ref _lastFlowIoConn, _ioGrabController?.IsConnected == true, "IO");
+            IoGrabController ioController = CurrentIoController;
+            Edge(ref _lastFlowIoConn, ioController?.IsConnected == true, "IO");
             if (_settings?.LightEnabled == true)
                 Edge(
                     ref _lastFlowLightConn,
@@ -554,9 +530,9 @@ namespace AniloxRoll.Monitor.Forms
                     _storageHealthCoordinator?.Snapshot.RemoteShareConnected == true,
                     "儲存分享");
 
-            if (_settings?.IoEnabled == true && _ioGrabController != null)
+            if (_settings?.IoEnabled == true && ioController != null)
             {
-                if (_ioGrabController.IsConnected)
+                if (ioController.IsConnected)
                     _outputHealthService?.Resolve("IoConnection");
                 else
                     _outputHealthService?.Report(
@@ -585,16 +561,17 @@ namespace AniloxRoll.Monitor.Forms
 
         private void RefreshIoConnLabel()
         {
-            if (_ioGrabController == null || _isIoSuspended) return;  // 手動暫停 → 保留「IO 暫停 ⏸」
-            if (_ioGrabController.IsConnected)
+            IoGrabController controller = CurrentIoController;
+            if (controller == null || _isIoSuspended) return;  // 手動暫停 → 保留「IO 暫停 ⏸」
+            if (controller.IsConnected)
             {
                 if (lblIoConn.BackColor != IecGreen) UpdateIoConnectionUi(true);  // 連上 → 綠（idempotent）
                 return;
             }
-            var next = _ioGrabController.NextReconnectAtUtc;
+            var next = controller.NextReconnectAtUtc;
             if (!next.HasValue) return;  // 尚未排程重連（初始連線進行中）→ 維持「初始化中」
             int sec = (int)Math.Ceiling((next.Value - DateTime.UtcNow).TotalSeconds);
-            sec = Math.Max(0, Math.Min(sec, _ioGrabController.ReconnectIntervalMs / 1000));
+            sec = Math.Max(0, Math.Min(sec, controller.ReconnectIntervalMs / 1000));
             lblIoConn.Text = $"● IO 重連中 {sec}s…";
             lblIoConn.BackColor = IecRed;
             lblIoConn.ForeColor = Color.White;
@@ -977,7 +954,7 @@ namespace AniloxRoll.Monitor.Forms
             if (_settings.MuraDetectPaused)
             {
                 FlowTrace.Log("MURA 暫停 → 清除 DO1");
-                _ = _ioGrabController?.ClearMura();
+                _ = CurrentIoController?.ClearMura();
             }
         }
 
@@ -1098,7 +1075,8 @@ namespace AniloxRoll.Monitor.Forms
 
         private void lblIoConn_Click(object sender, EventArgs e)
         {
-            if (_ioGrabController == null) return;
+            IoGrabController controller = CurrentIoController;
+            if (controller == null) return;
             _isIoSuspended = !_isIoSuspended;
             FlowTrace.Log($"ui:【IO暫停】鈕 → {(_isIoSuspended ? "暫停" : "恢復")}");   // intent 行（原本完全無痕＝盲區）
             if (_isIoSuspended)
@@ -1121,7 +1099,7 @@ namespace AniloxRoll.Monitor.Forms
             }
             else
             {
-                UpdateIoConnectionUi(_ioGrabController.IsConnected);
+                UpdateIoConnectionUi(controller.IsConnected);
             }
         }
     }

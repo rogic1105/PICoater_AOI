@@ -144,14 +144,9 @@ namespace AniloxRoll.Monitor.Forms
         private DateTime _lastGrabEventTime;
 
         // --- IO 連動 ---
-        private IoGrabController _ioGrabController;
-        private Task _ioControllerStartTask = Task.CompletedTask;
-        private readonly System.Threading.SemaphoreSlim _ioControllerLifecycleGate =
-            new System.Threading.SemaphoreSlim(1, 1);
+        private IoConnectionCoordinator _ioConnectionCoordinator;
         private readonly System.Threading.SemaphoreSlim _ioGrabTransitionGate =
             new System.Threading.SemaphoreSlim(1, 1);
-        private int _ioControllerGeneration;
-        private int _ioControllerActiveGeneration;
         private int _ioGrabRequestGeneration;
         private LightConnectionCoordinator _lightConnectionCoordinator;
 
@@ -1143,7 +1138,11 @@ namespace AniloxRoll.Monitor.Forms
             if (IsDisposed || Disposing || btnLiveGrab == null) return;
 
             bool camReady      = _liveCameraManager?.AreCamerasHwReady ?? false;
-            bool ioControlling = _ioGrabController != null && _ioGrabController.IsConnected && !_isIoSuspended;
+            IoGrabController ioController = CurrentIoController;
+            bool ioControlling =
+                ioController != null &&
+                ioController.IsConnected &&
+                !_isIoSuspended;
 
             if (!camReady)
             {

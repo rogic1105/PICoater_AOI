@@ -136,7 +136,7 @@ namespace AniloxRoll.Monitor.Forms
             {
                 bool wasIoContinuation = _autoStartGrabAfterBg;
                 int ioGeneration = _autoStartGrabIoGeneration;
-                var ioController = _ioGrabController;
+                var ioController = CurrentIoController;
                 _autoStartGrabAfterBg = false;
                 _autoStartGrabIoGeneration = 0;
                 _autoStartGrabIoRequestGeneration = 0;
@@ -152,7 +152,7 @@ namespace AniloxRoll.Monitor.Forms
             {
                 int ioGeneration = _autoStartGrabIoGeneration;
                 int ioRequestGeneration = _autoStartGrabIoRequestGeneration;
-                var ioController = _ioGrabController;
+                var ioController = CurrentIoController;
                 _autoStartGrabAfterBg = false;
                 _autoStartGrabIoGeneration = 0;
                 _autoStartGrabIoRequestGeneration = 0;
@@ -393,7 +393,7 @@ namespace AniloxRoll.Monitor.Forms
                 && !(_liveCameraManager?.IsLiveGrabbing ?? false);
 
             // IO 已連線且未暫停：btnLiveGrab 由 IO 連線邏輯控制，不覆寫
-            if (_ioGrabController?.IsConnected == true && !_isIoSuspended) return;
+            if (CurrentIoController?.IsConnected == true && !_isIoSuspended) return;
             // IO 暫停模式：交由使用者手動控制，不受 StandardBgSub bin 限制
             if (_isIoSuspended) { btnLiveGrab.Enabled = camReady; return; }
 

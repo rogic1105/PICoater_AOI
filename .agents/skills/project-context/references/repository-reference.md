@@ -46,6 +46,7 @@ against current code with `rg` before editing because lookup data can become sta
 | `UI/Coordinators/InspectionSettingsCoordinator.cs` | InspectionSettings 到 BatchInspectionService 的 pipeline 副作用唯一 owner。 |
 | `UI/Coordinators/BackgroundCaptureCoordinator.cs` | 一輪背景取得的流程 owner：等完整首幀組、定時採樣、欄平均、發布新背景版本；失敗時刪除本輪未啟用版本。 |
 | `UI/Coordinators/LightConnectionCoordinator.cs` | 光源連線生命週期 owner：初次全埠偵測、2 秒 probe／指定 COM 快重連、每 5 次全埠防呆掃描、controller 替換與釋放；不依賴 WinForms。 |
+| `UI/Coordinators/IoConnectionCoordinator.cs` | IO controller 連線生命週期 owner：單一 active generation、設定連改合併、舊 callback 過濾、controller 替換與關閉；Grab/Stop 與停止條件仍由 Form／IoGrabController 負責。 |
 | `UI/Coordinators/StorageHealthCoordinator.cs` | 儲存健康觀測 owner：本機／遠端容量、TCP 445、分享可寫、遠端 app heartbeat 與 2 秒重探；不負責保留刪檔或遠端複製 policy。 |
 | `UI/Coordinators/CaptureStopCoordinator.cs` | 每輪 IO／時間／高度停止條件的狀態機：快照條件與數值、首幀後啟動時間計時、IO tail 決策、高度門檻與單一 terminal request。 |
 | `UI/Coordinators/LatestGrabLoadCoordinator.cs` | 回顧／報表／預覽共用的單序號 latest-only／single-flight 排程與 stale token owner；不負責讀檔或畫畫面。 |
