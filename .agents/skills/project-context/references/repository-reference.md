@@ -109,6 +109,7 @@ against current code with `rg` before editing because lookup data can become sta
 | `Services/IoState.cs` | IoState enum（FSM 狀態）+ IoSnapshot struct（IO 快照） |
 | `Services/IoGrabController.cs` | IO-Grab 連動：IoState FSM、IO 追蹤、Watchdog keepalive；支援 IModbusTcpClient 注入測試。`ReadWriteTimeoutMs`（可設）= 斷線偵測下限（拔線 OS 即報錯近 0ms；斷電靠逾時 ~500ms）；`NextReconnectAtUtc` 供 UI 重連倒數 |
 | `Services/CsvConfigSnapshot.cs` | 不可變 `#CFG` 快照（OPS + START/CamPos + CROP/TrimHead/TrimTail、擷取參數、欄列正規值、RidgeSigma、門檻） |
+| `Services/BackgroundProfileRepository.cs` | 標準背景檔案唯一 owner：MCBF v2 寫入、active manifest 原子切換、同版路徑解析、預覽讀取與非啟用版本清理 |
 | `Services/HessianRescaleHelper.cs` | View-time HM rescale 共用：Ratio / IsNoOp / RescaleInPlace1D\|2D / CloneAndRescale1D\|2D — 5 個公式單一來源 |
 | `sdk/Bridges/StorageBridge/StorageBridge.Core/StorageRetentionService.cs` | 循環儲存：事件驅動（grab 結束/每 10 grab/watchdog），磁碟可用空間低於門檻時刪最舊日期資料夾影像，保留 CSV 與仍待遠端發布的日期資料夾 |
 | `Services/CleanupFlagWatcher.cs` | Storage PC 專用：每 10 秒自主查空間 + 清理；同時輪詢 cleanup-request.flag（Inspection PC 寫入）立即觸發 |
@@ -138,6 +139,7 @@ against current code with `rg` before editing because lookup data can become sta
 | `InspectionConfigRepositoryTests.cs` | 同檔最後 CFG、grabId 最近 CFG、跨日最新 CFG |
 | `InspectionImagePathRepositoryTests.cs` | 影像格式 fallback、去重排序、日期提示縮限 |
 | `InspectionMuraProfileRepositoryTests.cs` | 多序號 MeanC 平均與 MaxC 逐點最大聚合 |
+| `BackgroundProfileRepositoryTests.cs` | 背景 MCBF v2/manifest round-trip、損壞 manifest 禁止 fallback、版本清理與失敗版本刪除 |
 | `SingleGrabCurveCacheTests.cs` | 同 key single-flight、LRU 淘汰、重載世代隔離與 raw Curve 複製隔離 |
 | `SingleGrabCurveSummaryStoreTests.cs` | `.mcsf` round-trip、來源時間失效、損壞退回與原子覆寫 |
 | `IoGrabControllerTests.cs` | FSM 狀態機：連線、邊緣偵測、故障恢復、CommLost |

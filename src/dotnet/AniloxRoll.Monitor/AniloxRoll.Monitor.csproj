@@ -124,6 +124,7 @@
     <Compile Include="Services\CaptureArchiveStore.cs" />
     <Compile Include="Services\CapturePreviewAtlasCodec.cs" />
     <Compile Include="Services\CaptureFileNaming.cs" />
+    <Compile Include="Services\BackgroundProfileRepository.cs" />
     <Compile Include="Acquisition\CapturePhaseMath.cs" />
     <Compile Include="Services\FlowTrace.cs" />
     <Compile Include="Services\FrameTickIndex.cs" />
