@@ -1,0 +1,108 @@
+{
+  "Id": "physical-storage-stability",
+  "Name": "儲存電腦五分鐘穩定測試（不 Grab）",
+  "Description": "確認 SMB 可寫、Storage app heartbeat、UI 綠燈、五分鐘穩定性與關閉收尾；不啟動相機 Grab。",
+  "Steps": [
+    {
+      "Id": "launch",
+      "Contract": "H1",
+      "Title": "開啟或連接監控程式",
+      "Action": "launch",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "normalize-log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "正規化為日常運行記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "日常運行",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "切換為流程驗證記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "流程驗證",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "log-mode-proof",
+      "Contract": "DVT.LogMode",
+      "Title": "確認 Flow marker",
+      "Action": "wait-log",
+      "Pattern": "log mode=FlowVerification",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "share-writable",
+      "Contract": "H1",
+      "Title": "確認 SMB 分享可實際寫入",
+      "Action": "wait-log",
+      "Pattern": "\\[RemoteCopy\\] remote share accepted \\(write verified\\)",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "heartbeat",
+      "Contract": "H1",
+      "Title": "確認儲存程式 heartbeat 新鮮",
+      "Action": "wait-log",
+      "Pattern": "儲存程式 heartbeat 恢復 pid=\\d+ age=[0-9.]+s",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "storage-green",
+      "Contract": "H1",
+      "Title": "確認儲存電腦兩層皆正常",
+      "Action": "wait-element",
+      "Target": "● 儲存電腦 已連線",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "stability-window",
+      "Contract": "H1",
+      "Title": "持續探測五分鐘",
+      "Action": "delay",
+      "TimeoutSeconds": 300
+    },
+    {
+      "Id": "storage-still-green",
+      "Contract": "H1",
+      "Title": "確認五分鐘後仍為綠燈",
+      "Action": "wait-element",
+      "Target": "● 儲存電腦 已連線",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "restore-settings",
+      "Contract": "DVT.Cleanup",
+      "Title": "還原 Runner 修改的設定",
+      "Action": "restore-properties",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "close-app",
+      "Contract": "G2.shutdown",
+      "Title": "正常關閉主程式",
+      "Action": "close-app",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "shutdown-complete",
+      "Contract": "G2.shutdown",
+      "Title": "確認資源釋放完成",
+      "Action": "wait-log",
+      "Pattern": "shutdown resources released",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "checker",
+      "Contract": "DVT",
+      "Title": "執行所有已註冊 Flow 檢查器",
+      "Action": "run-checker",
+      "TimeoutSeconds": 120
+    }
+  ]
+}

@@ -10,17 +10,19 @@ echo  1. 離線功能測試（Build + Unit + Integration + DVT）
 echo  2. 離線壓力測試
 echo  3. 離線耐久測試
 echo  4. 實體 IO 五分鐘穩定測試（不 Grab）
-echo  5. 完整離線測試並記錄最新報告
-echo  6. 結束
+echo  5. 儲存電腦五分鐘穩定測試（不 Grab）
+echo  6. 完整離線測試並記錄最新報告
+echo  7. 結束
 echo.
-set /p choice="請選擇 (1-6): "
+set /p choice="請選擇 (1-7): "
 
 if "%choice%"=="1" goto :functional
 if "%choice%"=="2" goto :stress
 if "%choice%"=="3" goto :soak
 if "%choice%"=="4" goto :physical_io
-if "%choice%"=="5" goto :all
-if "%choice%"=="6" goto :done
+if "%choice%"=="5" goto :physical_storage
+if "%choice%"=="6" goto :all
+if "%choice%"=="7" goto :done
 goto :invalid
 
 :functional
@@ -41,6 +43,10 @@ goto :result
 
 :physical_io
 powershell -NoProfile -ExecutionPolicy Bypass -File "tests\TestRunner.ps1" -Mode PhysicalIo
+goto :result
+
+:physical_storage
+powershell -NoProfile -ExecutionPolicy Bypass -File "tests\TestRunner.ps1" -Mode PhysicalStorage
 goto :result
 
 :all

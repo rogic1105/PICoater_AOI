@@ -4,7 +4,7 @@
 
 - 結果：**PASS**
 - 日期：2026-07-28
-- 基準：`6ef23b9` 加上本次測試工具變更
+- 基準：`8a74e41` 加上儲存電腦測試情境
 - 電腦：`DESKTOP-C1MN5KD`
 - 產品行為變更：無
 
@@ -20,6 +20,7 @@
 | Stress | 離線壓力測試，含 IO / Storage bridge | **PASS** | 8 / 8，87.47 秒 |
 | Soak | 離線耐久測試 | **PASS** | 8 / 8，693.69 秒 |
 | Physical IO DVT | ET-7044 待機輪詢五分鐘，不 Grab | **PASS** | 305.59 秒；15 flow PASS / 0 FAIL |
+| Physical Storage DVT | SMB、Storage heartbeat 與綠燈五分鐘，不 Grab | **PASS** | 306.67 秒；15 flow PASS / 0 FAIL |
 
 實體 IO 測試證明：
 
@@ -29,12 +30,21 @@
 - Runner 還原設定後正常關閉主程式。
 - `IO controller stop reason=shutdown` 與 `shutdown resources released` 均有 log 證據。
 
+儲存電腦測試證明：
+
+- `\\192.168.10.20\Anilox\Captures` 可建立、flush 並刪除專用探針檔。
+- Storage app heartbeat 回報 PID `13696`，測得年齡 `4.2s`。
+- 主程式顯示「儲存電腦 已連線」，五分鐘後仍為綠燈。
+- 測試資料夾沒有殘留 `.picoater-*-probe-*`。
+- Runner 正常關閉主程式，`shutdown resources released` 有 log 證據。
+
 本機原始輸出位於 `artifacts/test-reports/`，該目錄不進 Git：
 
 - `20260728-211907-6ef23b9/`：Build、Flow checker、Unit、Integration、DVT self-check。
 - `20260728-205359-6ef23b9/`：Stress。
 - `20260728-205545-6ef23b9/`：10 分鐘離線 Soak。
 - `20260728-211306-6ef23b9/`：實體 IO 五分鐘 DVT。
+- `20260728-223305-8a74e41/`：儲存電腦五分鐘 DVT。
 
 ## 測試中改善
 
@@ -44,6 +54,7 @@
 4. 壓力測試 fixture 補上現行 IO 啟動交握資料；產品要求沒有降低。
 5. Stress / Soak 納入 `BridgeStress`，不再漏掉 IO 與 Storage bridge。
 6. 每次測試產生原始 artifact；只有這份最新彙總進 Git，避免測試報告無限累積。
+7. 新增可重跑的儲存電腦情境，同時驗證 SMB 可寫與 Storage app heartbeat，避免只通網路就誤判綠燈。
 
 ## 尚未覆蓋
 
@@ -52,7 +63,7 @@
 - 實體相機／grabber、七台相機負載、背景取得與正式 Grab。
 - 實體光源連線、斷線與恢復。
 - 實體 IO 斷線／恢復與 IO START 觸發 Grab；本次只測穩定待機。
-- 儲存電腦 SMB 中斷、待傳 backlog、低磁碟刪除與恢復。
+- 儲存電腦斷線／恢復、待傳 backlog、低磁碟刪除與恢復；本次只測連續健康狀態。
 - 全硬體接線下的一個班次或 24 小時產品耐久測試。
 
 下一階段應在接線恢復後，先跑完整功能 DVT，再決定壓力時間，最後才跑長時間 Soak。

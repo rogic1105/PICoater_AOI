@@ -56,3 +56,7 @@ Runner 會開啟主程式、執行情境、正常關閉主程式、寫入 PASS/F
 `實體 IO 五分鐘穩定測試（不 Grab）` 只驗證 `192.168.255.1:502` 的安全交握、待機輪詢、
 controller 關閉與 Flow checker；不按開始抓取。它仍會依產品協定輸出
 MURA/BUSY Low 與 PC ALIVE High。
+
+`儲存電腦五分鐘穩定測試（不 Grab）` 驗證 `\\192.168.10.20\Anilox` 的 SMB 寫入探針、
+Storage app heartbeat、UI 綠燈、五分鐘穩定性及正常關閉。產品探針只建立並立刻刪除自己的
+`.picoater-write-probe-*`，不讀寫正式影像，也不觸發低磁碟清理。

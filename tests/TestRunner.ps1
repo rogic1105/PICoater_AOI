@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("Functional", "Unit", "Integration", "Dvt", "PhysicalIo", "Stress", "Soak", "All")]
+    [ValidateSet("Functional", "Unit", "Integration", "Dvt", "PhysicalIo", "PhysicalStorage", "Stress", "Soak", "All")]
     [string]$Mode = "All",
     [double]$StressMinutes = 1,
     [double]$SoakMinutes = 10,
@@ -332,6 +332,11 @@ if (Test-ModeIncludes "Dvt") {
 if ($Mode -eq "PhysicalIo") {
     $allPassed = (Invoke-DvtScenario "physical-io-stability" `
         "Physical IO five-minute stability" "Physical IO DVT" 600) -and $allPassed
+}
+
+if ($Mode -eq "PhysicalStorage") {
+    $allPassed = (Invoke-DvtScenario "physical-storage-stability" `
+        "Physical storage five-minute stability" "Physical storage DVT" 600) -and $allPassed
 }
 
 if (Test-ModeIncludes "Stress") {
