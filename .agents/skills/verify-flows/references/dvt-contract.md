@@ -375,7 +375,7 @@ CameraStatusTimer_Tick@LiveCameraManager.Telemetry.cs
  -> PrepareIdleCaptureStandbyAsync@LiveCameraManager.CaptureBoundary.cs
     -> SynchronizeAcquisitionAsync(reason=idle) -> MarkCapturePhaseVerified
 
-IoStartGrabAsync@AniloxRollForm.HardwareStatus.cs
+IoStartGrabAsync@AniloxRollForm.IoControl.cs
  -> snapshot CaptureStopCondition and set IoGrabController.StopCaptureOnStartLow
  -> TryGetCaptureStandbyReady
  -> ToggleLiveGrabAsync(ioControlled=true)
@@ -400,7 +400,7 @@ ProcessingFunction@MilCamera.cs
           -> ObserveCommonRows@CaptureStopCoordinator.cs
              -> terminal request only in ArmedHeight at the snapshotted threshold
 
-IoStopGrabAsync@AniloxRollForm.HardwareStatus.cs
+IoStopGrabAsync@AniloxRollForm.IoControl.cs
  -> TryRequestIoStop@CaptureStopCoordinator.cs evaluates the snapshotted state and IoStopRequestReason
  -> IO condition + StartLow: ToggleLiveGrabAsync(drainIoTail=true)
     -> DrainIoTailAsync: exactly one newer completed frame per connected camera, or timeout
@@ -612,7 +612,7 @@ Tn: drop drainedFrame after StopGrab camN（可選；每台最多一行）
  ├ CompleteStop@CaptureStopCoordinator.cs → Disarm@GrabDurationCoordinator.cs
  │                                                            ← 回 Idle 並作廢 generation，舊 callback 不得停掉下一輪
  ├ Task.Run(LightTurnOff@AniloxRollForm.HardwareStatus.cs)   ⚠ [UiStack] 曾定罪停止時卡 SerialStream.Write → 一律背景
- ├ TriggerRetentionAndFlagAsync@AniloxRollForm.HardwareStatus.cs
+ ├ TriggerRetentionAndFlagAsync@AniloxRollForm.StorageStatus.cs
  ├ UpdateMuraLed(false) ＋ ClearMura@IoGrabController.cs   ← MURA latch 清除時機＝檢測結束（M1；手動流程不經 FSM 必須自清 DO）
  ├ UpdateGrabButton@AniloxRollForm.Live.cs
  └（IO 安全逾時）NotifyGrabStopped@IoGrabController.cs       ← 先把 DO_PC_INSPECT 拉低；FSM 在 DI START
@@ -1023,7 +1023,7 @@ DI START：io:DI START 上升緣 → 抓取請求
 ```
 **IO code-flow（連線生命週期與產品擷取分層）**
 ```
-InitIoController／HandleIoSettingsChanged@AniloxRollForm.HardwareStatus.cs
+InitIoController／HandleIoSettingsChanged@AniloxRollForm.IoControl.cs
  → StartAsync／RestartAsync@IoConnectionCoordinator.cs
     ├ requested generation 立即使舊 callback 失效
     ├ lifecycle gate 序列化 StopAsync／Dispose 舊 controller
@@ -1031,11 +1031,11 @@ InitIoController／HandleIoSettingsChanged@AniloxRollForm.HardwareStatus.cs
     └ 建立 IoGrabController → StartAsync(IP, Port)
 IoGrabController events
  → IoConnectionCoordinator.IsCurrent（舊 generation 截止）
- → OnIoController*Requested／DispatchCurrentIoController@AniloxRollForm.HardwareStatus.cs
+ → OnIoController*Requested／DispatchCurrentIoController@AniloxRollForm.IoControl.cs
     ├ Start／Stop → Form 的 request generation＋transition gate＋既有 Grab FSM
     └ State／Connection／IoUpdated → UI 呈現
 關閉程式
- → ShutdownIoControllerAsync@AniloxRollForm.HardwareStatus.cs
+ → ShutdownIoControllerAsync@AniloxRollForm.IoControl.cs
  → ShutdownAsync@IoConnectionCoordinator.cs
  → generation 失效 → StopAsync／Dispose
 ```
@@ -1054,7 +1054,8 @@ TelemetryTimer_Tick
        → RemoteCopyService.ProbeRemoteWritable（分享實際寫入探針）
        → StorageAppHeartbeatService.TryRead（程式存活＋遠端容量）
        → StorageHealthSnapshot
- → UpdateStorageConnLabel／RefreshCapacityInfoLabel／FlowHardwareEdges@AniloxRollForm.HardwareStatus.cs
+ → UpdateStorageConnLabel／RefreshCapacityInfoLabel@AniloxRollForm.StorageStatus.cs
+ → FlowHardwareEdges@AniloxRollForm.HardwareStatus.cs
 ```
 - `StorageHealthCoordinator` 只擁有觀測狀態與探測節拍；循環刪檔仍由 `StorageRetentionService`、
   遠端傳輸仍由 `RemoteCopyService` 負責。Form 不得另存第二份容量、分享或 heartbeat 狀態。

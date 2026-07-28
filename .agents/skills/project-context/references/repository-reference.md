@@ -34,7 +34,9 @@ against current code with `rg` before editing because lookup data can become sta
 | `UI/Form/AniloxRollForm.Review.cs` | 回顧：資料夾/時段載入（`btnReviewSelectFolder_Click`/period 導航/`ApplyReviewEnhance`/`LoadImagesWithReviewConfig`） |
 | `UI/Form/AniloxRollForm.Background.cs` | 背景取得的 UI／光源／grab 包夾、背景載入／預覽與背景判斷（`IsBgBinReady`/`IsStandardBgSubEnabled`） |
 | `UI/Form/AniloxRollForm.SettingsTabs.cs` | 右側設定面板 tab 建構（`SetupCameraTab`/`SetupSystemTab`/`Bind*Sync`）+ 相機參數硬體同步（`SyncCameraParamsFromHardware`） |
-| `UI/Form/AniloxRollForm.HardwareStatus.cs` | IO 生命週期與硬體／儲存健康快照的 UI 接線 |
+| `UI/Form/AniloxRollForm.IoControl.cs` | IO 連線、擷取請求、Mura 輸出與 IO 狀態顯示的 UI 接線 |
+| `UI/Form/AniloxRollForm.StorageStatus.cs` | 本機／遠端容量、傳輸 backlog、保留清理與儲存模式 UI 接線 |
+| `UI/Form/AniloxRollForm.HardwareStatus.cs` | 光源接線與 IO／光源／儲存狀態的共同彙整 |
 | `UI/Form/AniloxRollForm.DirectionStitch.cs` | V/H 方向/ridge/合圖模式切換（`SwitchRidgeDirection`/`OnStitchModeChangedAsync`） |
 | `UI/Form/AniloxRollForm.Data.cs` | 檢測數據 Tab（`SetupDataTab`/grabId 選擇） |
 | `UI/Form/AniloxRollForm.Telemetry.cs` | Telemetry timer 與資源監控畫面更新 |
