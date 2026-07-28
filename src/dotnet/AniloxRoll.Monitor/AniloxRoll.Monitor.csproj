@@ -198,7 +198,7 @@
     <Compile Include="UI\Presenters\LiveTelemetryPresenter.cs" />
     <Compile Include="UI\Binders\BusyUiBinder.cs" />
     <Compile Include="UI\Binders\GrabDetailListBinder.cs" />
-    <Compile Include="UI\Coordinators\CaptureStopPolicy.cs" />
+    <Compile Include="UI\Coordinators\CaptureStopCoordinator.cs" />
     <Compile Include="UI\Coordinators\BackgroundCaptureCoordinator.cs" />
     <Compile Include="UI\Coordinators\GrabDurationCoordinator.cs" />
     <Compile Include="UI\Coordinators\InspectionSettingsCoordinator.cs" />

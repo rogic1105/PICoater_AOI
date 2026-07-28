@@ -19,6 +19,7 @@ using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Interop;
 using AniloxRoll.Monitor.Core.Services;
+using AniloxRoll.Monitor.UI.Coordinators;
 using AniloxRoll.Monitor.UI.State;
 using AniloxRoll.Monitor.UI.Managers;
 using AniloxRoll.Monitor.UI.Navigators;
@@ -160,49 +161,26 @@ namespace AniloxRoll.Monitor.Forms
                 int configuredLimitSeconds = Math.Max(
                     1,
                     _settings?.GrabLimitSeconds ?? InspectionDefaults.GrabLimitSeconds);
-                _activeCaptureStopCondition = ioControlled
+                CaptureStopCondition stopCondition = ioControlled
                     ? (_settings?.CaptureStopCondition ?? InspectionDefaults.DefaultCaptureStopCondition)
                     : CaptureStopCondition.Time;
-                _activeCaptureIsIoControlled = ioControlled;
-                _activeCaptureHeightLimitRows = Math.Max(
+                int heightLimitRows = Math.Max(
                     1,
                     _settings?.ImageView?.WaterfallTotalHeight ??
                     InspectionDefaults.WaterfallTotalHeight);
-                System.Threading.Interlocked.Exchange(ref _captureHeightStopIssued, 0);
-                int timeLimitSeconds = 0;
-
-                if (_activeCaptureStopCondition == CaptureStopCondition.Height)
-                {
-                    _grabDurationCoordinator?.Disarm();
-                    FlowTrace.Log(
-                        $"grab stop armed condition=height limit={_activeCaptureHeightLimitRows}px " +
-                        $"source=io grab={_currentGrabId}");
-                }
-                else if (_activeCaptureStopCondition == CaptureStopCondition.IoSignal)
-                {
-                    int boundaryGraceSeconds =
-                        _liveCameraManager.GetCaptureBoundaryGraceSeconds();
-                    int effectiveLimitSeconds =
-                        configuredLimitSeconds + boundaryGraceSeconds;
-                    _grabDurationCoordinator?.Arm(effectiveLimitSeconds);
-                    FlowTrace.Log(
-                        $"grab stop armed condition={_activeCaptureStopCondition} " +
-                        $"limit={effectiveLimitSeconds}s configured={configuredLimitSeconds}s " +
-                        $"grace={boundaryGraceSeconds}s " +
-                        $"source={(ioControlled ? "io" : "manual")} grab={_currentGrabId}");
-                }
-                else
-                {
-                    _grabDurationCoordinator?.Disarm();
-                    timeLimitSeconds = configuredLimitSeconds;
-                    FlowTrace.Log(
-                        $"grab stop waiting condition=Time configured={configuredLimitSeconds}s " +
-                        $"source={(ioControlled ? "io" : "manual")} grab={_currentGrabId}");
-                }
+                int boundaryGraceSeconds =
+                    _liveCameraManager.GetCaptureBoundaryGraceSeconds();
+                bool waitForFirstSet = _captureStopCoordinator.Arm(
+                    stopCondition,
+                    ioControlled,
+                    configuredLimitSeconds,
+                    boundaryGraceSeconds,
+                    heightLimitRows,
+                    _currentGrabId);
 
                 if (!_liveCameraManager.OpenCaptureGate())
                 {
-                    _grabDurationCoordinator?.Disarm();
+                    _captureStopCoordinator.Cancel();
                     _liveCameraManager.StopGrab();
                     LightTurnOff();
                     UpdateGrabButton(false);
@@ -210,7 +188,7 @@ namespace AniloxRoll.Monitor.Forms
                 }
                 UpdateGrabButton(true);
 
-                if (timeLimitSeconds > 0)
+                if (waitForFirstSet)
                 {
                     int firstSetTimeoutMs =
                         _liveCameraManager.GetCaptureFirstSetTimeoutMs();
@@ -219,6 +197,7 @@ namespace AniloxRoll.Monitor.Forms
                             firstSetTimeoutMs);
                     if (!firstSetReady || !_liveCameraManager.IsLiveGrabbing)
                     {
+                        _captureStopCoordinator.FailFirstSet();
                         FlowTrace.Log(
                             $"grab stop start failed condition=Time " +
                             $"reason=first-set-not-ready timeoutMs={firstSetTimeoutMs} " +
@@ -238,21 +217,14 @@ namespace AniloxRoll.Monitor.Forms
                         return false;
                     }
 
-                    _grabDurationCoordinator?.Arm(timeLimitSeconds);
-                    FlowTrace.Log(
-                        $"grab stop armed condition=Time limit={timeLimitSeconds}s " +
-                        $"configured={timeLimitSeconds}s grace=0s " +
-                        $"source={(ioControlled ? "io" : "manual")} " +
-                        $"start=first-set grab={_currentGrabId}");
+                    _captureStopCoordinator.ActivateTimeAfterFirstSet();
                 }
             }
 
             // 剛從「抓取中」→「停止」：關燈 + 觸發循環儲存 + 通知儲存機清理
             if (wasGrabbing && !_liveCameraManager.IsLiveGrabbing)
             {
-                _grabDurationCoordinator?.Disarm();
-                _activeCaptureHeightLimitRows = 0;
-                System.Threading.Interlocked.Exchange(ref _captureHeightStopIssued, 0);
+                _captureStopCoordinator?.CompleteStop();
                 _ = Task.Run(() => LightTurnOff());   // 序列埠寫入不佔 UI（[UiStack] 抓到停止時卡在 SerialStream.Write）
                 string completedGrabId = _currentGrabId;
                 DateTime completedCaptureDate = _currentGrabCaptureDate;
@@ -287,20 +259,24 @@ namespace AniloxRoll.Monitor.Forms
             return wasGrabbing != _liveCameraManager.IsLiveGrabbing;
         }
 
-        /// <summary>倒數執行緒只送 intent；實際停止回 UI 後走共用命令，保留燈號、retention、MURA 與 IO 收尾。</summary>
-        private async void HandleGrabLimitElapsed(int limitSeconds)
+        /// <summary>狀態機只送 terminal intent；實際停止仍走共用命令，保留燈號、retention、MURA 與 IO 收尾。</summary>
+        private async void HandleCaptureStopRequested(
+            CaptureStopRequest request)
         {
-            if (_liveCameraManager?.IsLiveGrabbing != true) return;
+            if (request == null) return;
+            if (_liveCameraManager?.IsLiveGrabbing != true)
+            {
+                _captureStopCoordinator?.CompleteStop();
+                return;
+            }
 
             bool stopped = await ToggleLiveGrabAsync(
-                $"auto:抓取停止 condition={_activeCaptureStopCondition} " +
-                $"limit={limitSeconds}s grab={_currentGrabId}");
+                request.CreateIntentLine());
             if (stopped && _ioGrabController != null)
             {
                 try
                 {
-                    if (_activeCaptureIsIoControlled &&
-                        _activeCaptureStopCondition == CaptureStopCondition.Time)
+                    if (request.NotifyFixedGrabCompleted)
                         await _ioGrabController.NotifyFixedGrabCompleted();
                     else
                         await _ioGrabController.NotifyGrabStopped();
@@ -311,33 +287,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private void OnCaptureCommonRowsCompleted(int commonRows)
         {
-            if (_activeCaptureStopCondition != CaptureStopCondition.Height ||
-                commonRows < _activeCaptureHeightLimitRows ||
-                System.Threading.Interlocked.CompareExchange(
-                    ref _captureHeightStopIssued, 1, 0) != 0)
-                return;
-
-            SafeBeginInvoke(() => HandleCaptureHeightReached(
-                commonRows,
-                _activeCaptureHeightLimitRows));
-        }
-
-        private async void HandleCaptureHeightReached(int commonRows, int limitRows)
-        {
-            if (_liveCameraManager?.IsLiveGrabbing != true) return;
-
-            bool stopped = await ToggleLiveGrabAsync(
-                $"auto:抓取停止 condition=Height rows={commonRows} " +
-                $"limit={limitRows}px grab={_currentGrabId}");
-            if (stopped && _activeCaptureIsIoControlled && _ioGrabController != null)
-            {
-                try { await _ioGrabController.NotifyFixedGrabCompleted(); }
-                catch (Exception ex)
-                {
-                    Trace.WriteLine(
-                        $"[GrabHeight.NotifyStopped] {ex.GetType().Name}: {ex.Message}");
-                }
-            }
+            _captureStopCoordinator?.ObserveCommonRows(commonRows);
         }
 
         /// <summary>

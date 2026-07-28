@@ -66,11 +66,7 @@ namespace AniloxRoll.Monitor.Forms
         private RowCurveSyncCoordinator _liveRowSync;
         private RowCurveSyncCoordinator _reviewRowSync;
         private LiveCameraManager _liveCameraManager;
-        private GrabDurationCoordinator _grabDurationCoordinator;
-        private CaptureStopCondition _activeCaptureStopCondition = CaptureStopCondition.IoSignal;
-        private bool _activeCaptureIsIoControlled;
-        private int _activeCaptureHeightLimitRows;
-        private int _captureHeightStopIssued;
+        private CaptureStopCoordinator _captureStopCoordinator;
         // Global merge 用：快取各相機 row curve 資料，合併後更新圖表
         private readonly Dictionary<int, float[]> _liveRowMeanCache = new Dictionary<int, float[]>();
         private readonly Dictionary<int, float[]> _liveRowMaxCache  = new Dictionary<int, float[]>();
@@ -221,7 +217,7 @@ namespace AniloxRoll.Monitor.Forms
             FlowTrace.Log("ui:關閉程式");   // session 收尾行——log 無此行而中斷＝異常終止（crash）的訊號
             // 先停止所有可能回 UI 的活動；視窗保持存活，直到必要 native 資源完成釋放。
             try { if (_liveCameraManager?.IsLiveGrabbing == true) _liveCameraManager.StopGrab(); } catch { }
-            try { _grabDurationCoordinator?.Dispose(); _grabDurationCoordinator = null; } catch { }
+            try { _captureStopCoordinator?.Dispose(); _captureStopCoordinator = null; } catch { }
             try { _telemetryTimer?.Stop(); } catch { }
             try { _liveOverviewTimer?.Stop(); } catch { }
             try { _statsRefreshDebouncer?.Stop(); _statsRefreshDebouncer?.Dispose(); _statsRefreshDebouncer = null; } catch { }  // H3 + round-2 H3 補 Dispose
@@ -921,8 +917,8 @@ namespace AniloxRoll.Monitor.Forms
             if (_reviewDisplayManager != null)
                 _reviewDisplayManager.OverlayModeChanged += OnCanvasOverlayModeChanged;
             ApplyCanvasOverlayMode(UserSessionState.CanvasOverlayMode, persist: false);
-            _grabDurationCoordinator = new GrabDurationCoordinator(seconds =>
-                SafeBeginInvoke(() => HandleGrabLimitElapsed(seconds)));
+            _captureStopCoordinator = new CaptureStopCoordinator(request =>
+                SafeBeginInvoke(() => HandleCaptureStopRequested(request)));
             _liveCameraManager.SetCaptureSettings(_settings);
             UpdateRowChartPitch();
             _liveCameraManager.OnFilesSaved = (camId, files) =>

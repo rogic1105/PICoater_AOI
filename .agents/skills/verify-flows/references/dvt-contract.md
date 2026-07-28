@@ -382,7 +382,12 @@ IoStartGrabAsync@AniloxRollForm.HardwareStatus.cs
     -> StartGrabAsync(requireVerifiedStandby=true)
        -> verified standby: no Pause/Resume/fixed delay/next-frame target
     -> capture plan + selected duration/height guard
+    -> Arm@CaptureStopCoordinator.cs
+       -> IO: ArmedIo + GrabDurationCoordinator safety timer
+       -> Time: WaitingForFirstSet (no timer)
+       -> Height: ArmedHeight (common-row threshold)
     -> OpenCaptureGate -> ArmCaptureBoundary
+    -> Time first-set ready: ActivateTimeAfterFirstSet -> ArmedTime + fixed timer
 
 ProcessingFunction@MilCamera.cs
  -> updates LastFrameStartTicks + LastFrameObservedTimestamp for every standby callback
@@ -392,22 +397,40 @@ ProcessingFunction@MilCamera.cs
     -> CaptureFrameCompleted(cam,tick)
        -> NotifyCaptureFrameCompleted accumulates accepted rows per camera
        -> OnCaptureCommonRowsCompleted(min rows across connected cameras)
-          -> HandleCaptureHeightReached when stop condition=Height
+          -> ObserveCommonRows@CaptureStopCoordinator.cs
+             -> terminal request only in ArmedHeight at the snapshotted threshold
 
 IoStopGrabAsync@AniloxRollForm.HardwareStatus.cs
- -> CaptureStopPolicy evaluates the snapshotted active stop condition plus IoStopRequestReason
+ -> TryRequestIoStop@CaptureStopCoordinator.cs evaluates the snapshotted state and IoStopRequestReason
  -> IO condition + StartLow: ToggleLiveGrabAsync(drainIoTail=true)
     -> DrainIoTailAsync: exactly one newer completed frame per connected camera, or timeout
     -> StopGrab
  -> IO condition + PlcAliveLost/CommunicationLost: ToggleLiveGrabAsync(drainIoTail=false) -> StopGrab immediately
  -> Time/Height condition + any IO stop reason: log ignored and keep the product capture gate open
 
-HandleGrabLimitElapsed / HandleCaptureHeightReached@AniloxRollForm.Live.cs
+HandleCaptureStopRequested@AniloxRollForm.Live.cs
  -> ToggleLiveGrabAsync
  -> NotifyFixedGrabCompleted@IoGrabController.cs
     -> START Low: Idle
     -> START High: AwaitingStartLow; the following falling edge returns Idle
 ```
+
+Capture stop state table (the coordinator is the only owner of these transitions):
+
+| Current state | Event | Next state | Action |
+|---|---|---|---|
+| Idle | Arm(IO) | ArmedIo | Snapshot condition/limit/grab; arm configured time + boundary grace safety timer |
+| Idle | Arm(Time) | WaitingForFirstSet | Snapshot condition/limit/grab; do not start timer |
+| Idle | Arm(Height) | ArmedHeight | Snapshot height/grab; watch common accepted rows |
+| WaitingForFirstSet | FirstSetReady | ArmedTime | Arm configured fixed timer |
+| WaitingForFirstSet | FirstSetFailed | StopPending | Cancel timer; Form rolls back the start |
+| ArmedIo | START Low | StopPending | One terminal request with tail drain |
+| ArmedIo | PLC alive lost / communication lost | StopPending | One terminal request without tail drain |
+| WaitingForFirstSet / ArmedTime / ArmedHeight | Any IO stop request | unchanged | Ignore IO stop; fixed target remains authoritative |
+| ArmedIo / ArmedTime | TimerElapsed | StopPending | One terminal request |
+| ArmedHeight | CommonRows >= snapshotted height | StopPending | One terminal request |
+| StopPending | Any terminal trigger | StopPending | Ignore duplicate |
+| Any active state | Complete / Cancel | Idle | Disarm generation timer and clear snapshot |
 
 **log-flow（執行期腳印＝判準）**
 ```
@@ -483,15 +506,17 @@ Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線�
  ├（啟動成功）NextGrabId@InspectionLogService.cs → _currentGrabId
  │  ├ BeginCaptureOutput@LiveCameraManager.cs → 每台 CaptureGrabId/CaptureDate 快照
  │  ├ capture plan 行（C1）
- │  ├（IO）Arm(limit＋boundary grace)@GrabDurationCoordinator.cs → grab stop armed 行
- │  ├（時間）只記 `grab stop waiting`，尚不啟動 timer
- │  └（高度）OnCaptureCommonRowsCompleted@LiveCameraManager.cs → HandleCaptureHeightReached
- │     ← 停止條件與數值在本輪開始時拍快照；PropertyGrid 中途改值從下一輪生效
+ │  └ Arm@CaptureStopCoordinator.cs
+ │     ├（IO）ArmedIo＋GrabDurationCoordinator(limit＋boundary grace) → grab stop armed 行
+ │     ├（時間）WaitingForFirstSet，只記 `grab stop waiting`，尚不啟動 timer
+ │     └（高度）ArmedHeight，等 OnCaptureCommonRowsCompleted
+ │        ← 停止條件與數值在本輪開始時拍快照；PropertyGrid 中途改值從下一輪生效
  ├ OpenCaptureGate@LiveCameraManager.cs
  │  ├ _captureGateOpen=true                         ← 單一全域寫入點；資料 owner 已準備後，7 台 callback 才一起取得資格
  │  └ WaitForCaptureFirstSetReadyAsync@LiveCameraManager.CaptureBoundary.cs
  │     → 全部在線相機首組完整幀到齊且相位驗證通過
- │     →（時間）Arm(configured seconds)@GrabDurationCoordinator.cs
+ │     →（時間）ActivateTimeAfterFirstSet@CaptureStopCoordinator.cs
+ │        → ArmedTime＋Arm(configured seconds)@GrabDurationCoordinator.cs
  └ UpdateGrabButton@AniloxRollForm.Live.cs
 （每幀幀流，MIL 回呼執行緒 Tn）
 ProcessingFunction@MilCamera.cs（MdigProcess hook，static）
@@ -565,11 +590,13 @@ Tn: drop drainedFrame after StopGrab camN（可選；每台最多一行）
 ```
 手動：btnLiveGrab_Click@AniloxRollForm.Live.cs（wasGrabbing=true）→ ToggleLiveGrabAsync
                                                           intent 行 ui:【開始抓取】鈕
-時間／IO 安全逾時：Elapsed@GrabDurationCoordinator.cs → SafeBeginInvoke
- → HandleGrabLimitElapsed@AniloxRollForm.Live.cs
+時間／IO 安全逾時：Elapsed@GrabDurationCoordinator.cs
+ → HandleTimerElapsed@CaptureStopCoordinator.cs → StopPending → SafeBeginInvoke
+ → HandleCaptureStopRequested@AniloxRollForm.Live.cs
                                                           intent 行 auto:抓取停止 condition=... limit=Ns grab=… → 停止
-高度：OnCaptureCommonRowsCompleted@LiveCameraManager.cs → SafeBeginInvoke
- → HandleCaptureHeightReached@AniloxRollForm.Live.cs
+高度：OnCaptureCommonRowsCompleted@LiveCameraManager.cs
+ → ObserveCommonRows@CaptureStopCoordinator.cs → StopPending → SafeBeginInvoke
+ → HandleCaptureStopRequested@AniloxRollForm.Live.cs
                                                           intent 行 auto:抓取停止 condition=Height rows=R limit=Hpx grab=… → 停止
  ├ ToggleLiveGrabAsync@AniloxRollForm.Live.cs
  │  └ ToggleGrab@LiveCameraManager.cs
@@ -582,7 +609,8 @@ Tn: drop drainedFrame after StopGrab camN（可選；每台最多一行）
           └ callback 若已跨過 gate 讀取邊界：最多一個 drop 行，不進 Hessian/row chart/CSV/存檔
              ← 防停止尾幀「有效影像 + 黑尾」被 Hessian 當水平脊線（黑白硬邊界）寫到最後 row
 （form 收尾，T1）
- ├ Disarm@GrabDurationCoordinator.cs                         ← 作廢 generation，舊 callback 不得停掉下一輪
+ ├ CompleteStop@CaptureStopCoordinator.cs → Disarm@GrabDurationCoordinator.cs
+ │                                                            ← 回 Idle 並作廢 generation，舊 callback 不得停掉下一輪
  ├ Task.Run(LightTurnOff@AniloxRollForm.HardwareStatus.cs)   ⚠ [UiStack] 曾定罪停止時卡 SerialStream.Write → 一律背景
  ├ TriggerRetentionAndFlagAsync@AniloxRollForm.HardwareStatus.cs
  ├ UpdateMuraLed(false) ＋ ClearMura@IoGrabController.cs   ← MURA latch 清除時機＝檢測結束（M1；手動流程不經 FSM 必須自清 DO）

@@ -416,30 +416,6 @@ namespace AniloxRoll.Monitor.Tests
             }));
         }
 
-        [TestCase(CaptureStopCondition.IoSignal, true)]
-        [TestCase(CaptureStopCondition.Time, false)]
-        [TestCase(CaptureStopCondition.Height, false)]
-        public void CaptureStopPolicy_IoRequest_UsesSnapshottedStopCondition(
-            CaptureStopCondition condition,
-            bool shouldStop)
-        {
-            Assert.That(
-                CaptureStopPolicy.ShouldStopOnIoRequest(condition),
-                Is.EqualTo(shouldStop));
-        }
-
-        [TestCase(IoStopRequestReason.StartLow, true)]
-        [TestCase(IoStopRequestReason.PlcAliveLost, false)]
-        [TestCase(IoStopRequestReason.CommunicationLost, false)]
-        public void CaptureStopPolicy_TailDrain_OnlyForStartLow(
-            IoStopRequestReason reason,
-            bool shouldDrain)
-        {
-            Assert.That(
-                CaptureStopPolicy.ShouldDrainIoTail(reason),
-                Is.EqualTo(shouldDrain));
-        }
-
         // ── Helper ──
 
         private async Task ConnectAndEnterIdle()
