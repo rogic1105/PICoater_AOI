@@ -74,9 +74,40 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         /// <summary>
         /// 預算背景 column mean（pinned host float*，size = frameWidth）。
-        /// 非 IntPtr.Zero 時，pipeline 跳過每幀 column mean 計算，使用此固定背景。
+        /// 讀取與替換都受 _picoaterLock 保護，避免背景切換與 native 處理競爭。
         /// </summary>
-        public IntPtr PrecomputedColMean { get; set; } = IntPtr.Zero;
+        private IntPtr _precomputedColMean = IntPtr.Zero;
+        private int _backgroundApplyTracePending;
+
+        public bool HasPrecomputedColumnMean
+        {
+            get
+            {
+                lock (_picoaterLock)
+                    return _precomputedColMean != IntPtr.Zero;
+            }
+        }
+
+        /// <summary>接管新的 pinned 背景並安全釋放舊背景；呼叫端不得再釋放 newBuffer。</summary>
+        public void ReplacePrecomputedColumnMean(IntPtr newBuffer)
+        {
+            IntPtr oldBuffer;
+            lock (_picoaterLock)
+            {
+                oldBuffer = _precomputedColMean;
+                _precomputedColMean = newBuffer;
+                System.Threading.Interlocked.Exchange(
+                    ref _backgroundApplyTracePending, 1);
+            }
+
+            if (oldBuffer != IntPtr.Zero && oldBuffer != newBuffer)
+                NativeMethods.TanukiCv_FreePinned(oldBuffer);
+        }
+
+        public void ClearPrecomputedColumnMean()
+        {
+            ReplacePrecomputedColumnMean(IntPtr.Zero);
+        }
 
         // ==================== Internal ====================
         private bool _isReleased = false;
@@ -372,7 +403,15 @@ namespace AniloxRoll.Monitor.Core.Camera
 
         // ==================== Grab Control（委派 MIL） ====================
 
-        public void SetUserGrabIntent(bool enable) => _mil.SetUserGrabIntent(enable);
+        public void SetUserGrabIntent(bool enable)
+        {
+            if (enable)
+            {
+                System.Threading.Interlocked.Exchange(
+                    ref _backgroundApplyTracePending, 1);
+            }
+            _mil.SetUserGrabIntent(enable);
+        }
 
         public void ApplyGrabState() => _mil.ApplyGrabState();
 
@@ -412,6 +451,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                 }
                 return;
             }
+            bool frameCaptureSuppressed = SuppressCapture;
             string frameGrabId = CaptureGrabId;
             DateTime frameCaptureDate = CaptureDate;
             IncrementCaptureCount(_activeCaptureCallbacks, frameGrabId);
@@ -421,7 +461,8 @@ namespace AniloxRoll.Monitor.Core.Camera
                 _flowLoggedDrainFrameDrop = false;
 
             // 不管 EnableImageProcessing，一律執行 GPU 處理以取得 Mura 曲線（供 CSV 日誌判斷）
-            bool processedByPicoater = TryApplyPicoaterRidge(modifiedBuffer);
+            bool processedByPicoater = TryApplyPicoaterRidge(
+                modifiedBuffer, frameCaptureSuppressed);
 
             // EnableImageProcessing 控制「顯示」：勾選且處理成功才顯示處理結果，否則顯示原圖
             bool showProcessed = EnableImageProcessing && processedByPicoater;
@@ -454,7 +495,11 @@ namespace AniloxRoll.Monitor.Core.Camera
             // Global merge 複製（display buffer → 合併 buffer 裁切位置）已移至 MilCamera grab hook，
             // 在此 FrameReady handler 返回後由 _mil 執行（顯示 buffer 已更新完成）。
 
-                TrySaveCapture(modifiedBuffer, frameGrabId, frameCaptureDate);
+                TrySaveCapture(
+                    modifiedBuffer,
+                    frameGrabId,
+                    frameCaptureDate,
+                    frameCaptureSuppressed);
                 CaptureFrameCompleted?.Invoke(CameraId, mil.LastFrameStartTicks);
             }
             finally
@@ -469,7 +514,9 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// 跑 GPU pipeline：MIL buffer → host → picoater → 填欄／列輸出緩衝 + 觸發曲線事件。
         /// 顯示交由 OnMilFrameReady 選取輸出後處理（不在此寫 MIL buffer）。
         /// </summary>
-        private bool TryApplyPicoaterRidge(MIL_ID srcBuffer)
+        private bool TryApplyPicoaterRidge(
+            MIL_ID srcBuffer,
+            bool captureSuppressed)
         {
             _lastFrameResized = false;   // 每幀先重置；成功跑完 fused 縮圖才設 true（detection 失敗幀不得存舊縮圖）
             if (srcBuffer == MIL.M_NULL) return false;
@@ -505,13 +552,14 @@ namespace AniloxRoll.Monitor.Core.Camera
                     // fused 存檔縮圖：只在「這趟 grab 會存圖」時，要 native 在檢測同一次就把縮圖產出（免二次 H2D）。
                     // grab-level 決策（EnableAutoCapture 整趟固定）；SuppressCapture 期間 + 純 live grab 不縮。
                     // 去重/暫停跳過的少數幀會白縮一張（可忽略）；true→native 填 _rawResizeBuf/_procResizeBuf/_muraResizeBuf。
-                    bool wantResize = EnableAutoCapture && !SuppressCapture
+                    bool wantResize = EnableAutoCapture && !captureSuppressed
                         && !string.IsNullOrWhiteSpace(CaptureRootPath)
                         && _saveResizeScale > 1
                         && _resizeWidth > 0 && _resizeHeight > 0
                         && _rawResizeBuf != IntPtr.Zero && _procResizeBuf != IntPtr.Zero && _muraResizeBuf != IntPtr.Zero;
 
                     var swGpu = System.Diagnostics.Stopwatch.StartNew();
+                    IntPtr backgroundColumnMean = _precomputedColMean;
                     _aoiService.ProcessImage(new AoiProcessRequest
                     {
                         Input = new AoiProcessRequest.InputImage
@@ -544,10 +592,23 @@ namespace AniloxRoll.Monitor.Core.Camera
                             RidgeSigma     = (float)HessianSigma,
                             HessianMaxFactor = (float)HessianFixedMax,
                             RidgeMode      = "vertical+horizontal",  // 永遠計算雙方向，確保 V/H 皆可存檔
-                            PrecomputedColMean = PrecomputedColMean
+                            PrecomputedColMean = backgroundColumnMean
                         }
                     });
                     LastGpuTimeMs = swGpu.ElapsedMilliseconds;
+                    if (System.Threading.Interlocked.Exchange(
+                        ref _backgroundApplyTracePending, 0) == 1)
+                    {
+                        string grabId = string.IsNullOrWhiteSpace(CaptureGrabId)
+                            ? "none"
+                            : CaptureGrabId;
+                        bool standard = backgroundColumnMean != IntPtr.Zero;
+                        FlowTrace.Log(
+                            $"background apply cam{CameraId} grab={grabId} " +
+                            $"mode={(standard ? "standard" : "single")} " +
+                            $"source={(standard ? "precomputed" : "per-frame")} " +
+                            $"width={fw}");
+                    }
                     _lastFrameResized = wantResize;   // ProcessImage 成功；縮圖已填好（若有要）
                     if (wantResize && !_fusedResizeLogged)
                     {
@@ -668,10 +729,11 @@ namespace AniloxRoll.Monitor.Core.Camera
         private void TrySaveCapture(
             MIL_ID sourceBuffer,
             string grabId,
-            DateTime captureDate)
+            DateTime captureDate,
+            bool captureSuppressed)
         {
             if (!EnableAutoCapture) return;
-            if (SuppressCapture) return;   // 改參數→恢復同步 窗口內暫停存檔（避免存不齊序列）
+            if (captureSuppressed) return; // 以幀進入 callback 時的決策為準，避免 Stop/恢復旗標競爭。
             if (sourceBuffer == MIL.M_NULL) return;
             if (string.IsNullOrWhiteSpace(CaptureRootPath)) return;
             if (string.IsNullOrWhiteSpace(grabId) || captureDate == default(DateTime))
@@ -935,6 +997,7 @@ namespace AniloxRoll.Monitor.Core.Camera
             _mil?.Dispose();
 
             // 檢測記憶體（非 MIL）
+            ClearPrecomputedColumnMean();
             FreeResizeBuffers();
             lock (_picoaterLock)
             {

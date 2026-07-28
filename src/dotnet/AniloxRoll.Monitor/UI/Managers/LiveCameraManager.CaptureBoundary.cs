@@ -24,6 +24,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             CapturePhaseEligibility.Invalid;
         private readonly Dictionary<int, long> _firstAcceptedTicks =
             new Dictionary<int, long>();
+        private TaskCompletionSource<bool> _firstSetReadyCompletion;
         private readonly HashSet<int> _firstPendingCameraIds =
             new HashSet<int>();
         private readonly HashSet<int> _headBoundaryPendingCameraIds =
@@ -93,6 +94,35 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             int framePeriodMs = Math.Max(1, GetMaxFramePeriodMs());
             return Math.Max(2, (int)Math.Ceiling(framePeriodMs / 1000.0) + 1);
+        }
+
+        public int GetCaptureFirstSetTimeoutMs()
+        {
+            return Math.Max(3000, Math.Min(30000, GetMaxFramePeriodMs() * 4 + 500));
+        }
+
+        /// <summary>
+        /// Waits for the first complete, phase-validated frame set after the current gate opens.
+        /// Stop/rearm completes the previous waiter with false.
+        /// </summary>
+        public async Task<bool> WaitForCaptureFirstSetReadyAsync(int timeoutMs)
+        {
+            TaskCompletionSource<bool> completion;
+            lock (_captureBoundaryLock)
+                completion = _firstSetReadyCompletion;
+            if (completion == null) return false;
+
+            int boundedTimeout = Math.Max(1, timeoutMs);
+            Task winner = await Task.WhenAny(
+                completion.Task,
+                Task.Delay(boundedTimeout)).ConfigureAwait(false);
+            if (winner != completion.Task)
+            {
+                FlowTrace.Log(
+                    $"capture first-set timeout limitMs={boundedTimeout}");
+                return false;
+            }
+            return await completion.Task.ConfigureAwait(false);
         }
 
         public async Task<bool> DrainIoTailAsync()
@@ -264,12 +294,14 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             Dictionary<int, long> ticks;
             AniloxCamera[] targets;
+            TaskCompletionSource<bool> completion;
             lock (_captureBoundaryLock)
             {
                 ticks = new Dictionary<int, long>(_firstAcceptedTicks);
                 targets = _cameras
                     .Where(cam => cam != null && ticks.ContainsKey(cam.CameraId))
                     .ToArray();
+                completion = _firstSetReadyCompletion;
             }
 
             string reason;
@@ -283,6 +315,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 $"capture first-set ready path={_captureStartPath} " +
                 $"cams={string.Join(",", targets.Select(cam => cam.CameraId))} " +
                 $"aligned={aligned}");
+            completion?.TrySetResult(aligned);
             if (!aligned)
                 InvalidateCapturePhase("first-set-" + reason);
         }
@@ -292,8 +325,12 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (targets == null || targets.Count == 0)
                 return false;
 
+            TaskCompletionSource<bool> previousFirstSet;
             lock (_captureBoundaryLock)
             {
+                previousFirstSet = _firstSetReadyCompletion;
+                _firstSetReadyCompletion = new TaskCompletionSource<bool>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
                 _firstAcceptedTicks.Clear();
                 _firstPendingCameraIds.Clear();
                 _headBoundaryPendingCameraIds.Clear();
@@ -312,15 +349,19 @@ namespace AniloxRoll.Monitor.UI.Managers
                     _completedRowsByCamera[cam.CameraId] = 0;
                 }
             }
+            previousFirstSet?.TrySetResult(false);
             return true;
         }
 
         private void ClearCaptureBoundary()
         {
             TaskCompletionSource<bool> completion;
+            TaskCompletionSource<bool> firstSetCompletion;
             lock (_captureBoundaryLock)
             {
                 completion = _tailDrainCompletion;
+                firstSetCompletion = _firstSetReadyCompletion;
+                _firstSetReadyCompletion = null;
                 _firstAcceptedTicks.Clear();
                 _firstPendingCameraIds.Clear();
                 _headBoundaryPendingCameraIds.Clear();
@@ -335,6 +376,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 _captureStartPath = "none";
             }
             completion?.TrySetResult(false);
+            firstSetCompletion?.TrySetResult(false);
         }
 
         private void SetCaptureStartPath(string path)

@@ -351,13 +351,15 @@ T1: StartGrab...
 T1: capture plan grab=...
 T1: IO grab request stopCondition=IoSignal|Time|Height stopOnLow=True|False
 T1: grab stop armed condition=IoSignal limit=Ns configured=10s grace=Gs source=io grab=...
-    | grab stop armed condition=Time limit=Ns configured=Ns grace=0s source=io grab=...
+    | grab stop waiting condition=Time configured=Ns source=io grab=...
     | grab stop armed condition=height limit=Hpx source=io grab=...
 T1: capture gate open cams=P warm=True path=verified-standby
 Tn: capture head frame dropped camN tick=T reason=cross-boundary × P
 Tn: capture first-set phase system=S cams=... periodMs=... periodMismatchMs=...
     spreadTicks=D spreadMs=X limitMs=5.000 measurable=True aligned=True
 Tn: capture first-set ready path=verified-standby cams=... aligned=True
+Tn: grab stop armed condition=Time limit=Ns configured=Ns grace=0s source=io
+    start=first-set grab=...                                              ← 僅 Time 模式
 
 T1: capture tail begin cams=... timeoutMs=N
 Tn: capture tail frame accepted camN tick=T
@@ -418,6 +420,7 @@ T1: acquisition sync phase reason=start attempt=A system=S cams=... spreadTicks=
     spreadMs=X limitMs=5.000 measurable=True aligned=True sampleSource=warm-snapshot
                                                                                    × 有在線相機的板
 T1: acquisition sync complete reason=start attempts=A cams=P phase=True
+T1: capture charts reset reason=start-grab
 T1: StartGrab（cams=M）
 T1: ApplyMainDisplayMode → 同模式    ← 冪等：不得出現 create/teardown 行
 T1: WF reset generation=G pendingDropped=N queuedDropped=N writerActive=B clearTile=True
@@ -425,10 +428,14 @@ T1: viewRange refire reason=capture-start mode=WF|IC
     ← 清除上一輪 Curve 視野後，用主畫面既有幾何主動重發；不得等滑鼠或首幀才補
 T1: capture output begin grab=… date=yyyyMMdd
 T1: capture plan grab=… root=… imageDir=… csv=… archive=….acap assets=… preview=1920x1080x3 scale=…
-T1: grab stop armed condition=IoSignal|Time limit=Ns configured=Ns grace=Gs source=io|manual grab=…
+T1: grab stop armed condition=IoSignal limit=Ns configured=Ns grace=Gs source=io grab=…
+    | grab stop waiting condition=Time configured=Ns source=io|manual grab=…
     | grab stop armed condition=height limit=Hpx source=io grab=…
-    ← 本輪開始時依停止條件只武裝一種 owner；背景採樣借用 grab 不武裝
+    ← 本輪開始時依停止條件只建立一種 owner；Time 此時只等待，不得先啟動 timer
 T1: capture gate open cams=P warm=True   ← P=在線數；必晚於同步完成與 plan/limit，早於所有 firstFrame
+Tn: capture first-set ready ... aligned=True
+Tn: grab stop armed condition=Time limit=Ns configured=Ns grace=0s source=io|manual
+    start=first-set grab=…                  ← Time 真正起算點；前面的跨邊界丟幀不算入擷取時間
 Tn: WF band first generation=G seq=S ticks=A~B startRow=0 height=H
 Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線」相機恰一行，順序不定
 （首幀齊後進入穩態 → 適用「穩態靜默通則」：無互動下不得再有顯示狀態**變更**行。
@@ -446,7 +453,7 @@ Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線�
  ├（未抓取→啟動）await Task.Run(LightTurnOn@AniloxRollForm.HardwareStatus.cs)
  │                                                  ⚠ 命令完成即續行；無固定暖機延遲
  │                                                  ⚠ 序列埠寫入一律背景（UI 執行緒零 MIL/序列埠鐵則）
- ├（未抓取）ResetLiveChartsForDisplayTransition@AniloxRollForm.Live.cs ＋ _muraExceedLatch 歸零
+ ├（未抓取）_muraExceedLatch 歸零
  │   ＋ UpdateMuraLed(false) ＋ ClearMura@IoGrabController.cs   ← MURA 閂鎖歸零（latch 非脈衝，M1）
  ├（未配置）await EnsureAllocatedAndToggleGrabAsync(deferCaptureGate:true)@LiveCameraManager.cs
  │   → AllocateCamerasAsync（=F1 全序）→ ToggleGrabAsync
@@ -462,9 +469,13 @@ Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線�
  │      │  ├ raw callback 到齊後讀 Data Latch 首幀 tick
  │      │  └ 同板 spread≤5ms 才成功；超限最多重試 3 次，失敗不進產品狀態
  │      ├ ResetFlowFirstFrame@LiveDisplayCoordinator.cs（每輪 grab 重驗「幀有流到 view」）
- │      ├ IsLiveGrabbing = true
  │      ├ ApplyMainDisplayMode@LiveDisplayCoordinator.cs   ← 冪等（view 已存在早退）＝本 flow 不得出現 create/teardown 行
  │      ├ ResetWaterfallIfActive@LiveDisplayCoordinator.cs → Reset@WaterfallView.cs（清舊圖＋重置 tick 對齊，防新幀接舊網格錯位）
+ │      ├ OnCaptureSequenceReset → ResetLiveChartsForDisplayTransition@AniloxRollForm.Live.cs
+ │      │  → 清列曲線累積位置、待上畫資料及欄／列相機快取
+ │      │  → `capture charts reset reason=start-grab`
+ │      │  ← 一般 Grab、IO Grab、取得背景共用；Form 不得另走專用重置
+ │      ├ IsLiveGrabbing = true
  │      ├ RefireMainViewRange(reason=capture-start)@LiveDisplayCoordinator.cs
  │      │  └ RefireViewRange@WaterfallView.cs｜ImageDisplayView.cs → ApplyLiveViewRange
  │      └ per-cam SetUserGrabIntent(true)@AniloxCamera.cs
@@ -472,11 +483,15 @@ Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線�
  ├（啟動成功）NextGrabId@InspectionLogService.cs → _currentGrabId
  │  ├ BeginCaptureOutput@LiveCameraManager.cs → 每台 CaptureGrabId/CaptureDate 快照
  │  ├ capture plan 行（C1）
- │  ├（IO／時間）Arm(limit)@GrabDurationCoordinator.cs → grab stop armed 行
+ │  ├（IO）Arm(limit＋boundary grace)@GrabDurationCoordinator.cs → grab stop armed 行
+ │  ├（時間）只記 `grab stop waiting`，尚不啟動 timer
  │  └（高度）OnCaptureCommonRowsCompleted@LiveCameraManager.cs → HandleCaptureHeightReached
  │     ← 停止條件與數值在本輪開始時拍快照；PropertyGrid 中途改值從下一輪生效
  ├ OpenCaptureGate@LiveCameraManager.cs
- │  └ _captureGateOpen=true                         ← 單一全域寫入點；資料 owner 已準備後，7 台 callback 才一起取得資格
+ │  ├ _captureGateOpen=true                         ← 單一全域寫入點；資料 owner 已準備後，7 台 callback 才一起取得資格
+ │  └ WaitForCaptureFirstSetReadyAsync@LiveCameraManager.CaptureBoundary.cs
+ │     → 全部在線相機首組完整幀到齊且相位驗證通過
+ │     →（時間）Arm(configured seconds)@GrabDurationCoordinator.cs
  └ UpdateGrabButton@AniloxRollForm.Live.cs
 （每幀幀流，MIL 回呼執行緒 Tn）
 ProcessingFunction@MilCamera.cs（MdigProcess hook，static）
@@ -848,20 +863,33 @@ Timer.Tick 跑在 UI 執行緒，不先 Stop 則 Tick 可能在背景 cam.Free()
 btnLiveGetBackground_Click@AniloxRollForm.Background.cs      intent 行 ui:【取得背景】鈕
  ├ IsStandardBgSubEnabled 守門（非標準去背 → MessageBox return）
  ├（舊預覽）ClearBackgroundPreview@AniloxRollForm.Background.cs
- ├（未配置）await EnsureAllocatedAndToggleGrabAsync@LiveCameraManager.cs（=F1＋F2 借道，不開影像處理）
+ ├ SetCaptureSuppressed(true)＋`background capture begin output=disabled`
+ │   ← 背景採樣借用 grab／演算法／顯示，但不是產品擷取；不得寫圖片、CSV 或產生 CaptureWriteFailure
+ ├（未配置）await EnsureAllocatedAndToggleGrabAsync@LiveCameraManager.cs（=F1＋F2 借道）
  ├（未抓取）LightTurnOn@AniloxRollForm.HardwareStatus.cs（命令完成即續行；無固定暖機延遲）
  │   → ToggleGrab@LiveCameraManager.cs ＋ UpdateGrabButton(true)   ← 借用現有 grab（啟停包夾）
+ ├ WaitForCaptureFirstSetReadyAsync@LiveCameraManager.CaptureBoundary.cs
+ │   ← 全部在線相機首組完整幀到齊且相位通過後，背景採樣秒數才開始計算
  ├ 採集迴圈（await Task.Delay(100) × BackgroundSampleSeconds，UI 執行緒非阻塞、按鈕倒數）
  │   └ per-cam TryComputeColumnMean@AniloxCamera.cs → accum 累加
  ├ 產生 version=`yyyyMMdd-HHmmssfff`
  ├ per-cam 平均 → SaveBackgroundBin@AniloxRollForm.Background.cs
  │   → `bg_{width}_{cam}_{version}.bin`（MCBF v2；CreateNew＋WriteThrough＋Flush）
  ├ 全部在線相機成功 → ActivateBackgroundVersion 原子替換 `active-background.json`
- ├ LoadBackgroundBins@AniloxRollForm.Background.cs（manifest 指向的同一版 bin → TanukiCv_AllocPinned → cam.PrecomputedColMean）
- │   ← pinned 生命週期：舊 buffer 先 FreePinned 再換新（防漏）
+ ├ LoadBackgroundBins@AniloxRollForm.Background.cs（manifest 指向的同一版 bin → 驗證長度/有限值
+ │   → TanukiCv_AllocPinned → ReplacePrecomputedColumnMean@AniloxCamera.cs）
+ │   ← 只要求目前在線相機具備同版背景；離線相機清除舊綁定／舊警示並記 `status=skipped reason=offline`
+ │   ← pinned 生命週期：相機的 `_picoaterLock` 內原子換新，離鎖後 FreePinned 舊 buffer；
+ │      切回單張去背也走 ClearPrecomputedColumnMean，不得遺失舊指標造成漏記憶體
+ │   ← 新檔載入失敗保留上一份已綁定背景並回報 OutputHealth；完全沒有可用背景時正式 Grab 必須阻擋，
+ │      不得在「標準去背」設定下靜默退回每幀自算
+ ├ 每次正式 Grab 第一個成功處理幀：TryApplyPicoaterRidge@AniloxCamera.cs
+ │   → AoiService.ProcessImage → TanukiPipeline_Process(precomputed_col_mean)
+ │   → `background apply` 留下 native 呼叫實際收到的來源（非 UI 設定意圖）
  ├ 任一相機失敗 → 刪本次 version 檔、manifest 不動、上一組背景繼續生效
  │   → OutputHealth `BackgroundCaptureFailure` 深橘提示
- ├ finally：ToggleGrab 停止（=F3）＋ LightTurnOff ＋ UpdateStandardBgSubLockState@AniloxRollForm.Background.cs
+ ├ finally：ToggleGrab 停止（=F3）＋ LightTurnOff ＋ SetCaptureSuppressed(false)
+ │   ＋ `background capture end output=disabled result=ok|failed` ＋ UpdateStandardBgSubLockState
  ├（_autoStartGrabAfterBg）await ReleaseAsync → btnLiveGrab_Click（IO 觸發自動回抓）→ return
  └ 尾端自動預覽：btnLiveViewBackground_Click（直呼）
 時間設定不變量：`BackgroundSampleSeconds` 只管本段背景採樣；`GrabLimitSeconds` 只在 F2 正式監控啟動成功後，
@@ -875,6 +903,8 @@ btnLiveViewBackground_Click@AniloxRollForm.Background.cs     intent 行 ui:【�
  │   └＝靜音鍵 _bgPreviewOverride=true → ApplyMainDisplayMode()   ⚠ 只改狀態→呼閘門，不自建/拆 view
  │       閘門 BgPreview 分支：DisableWaterfall＋EnsureImageDisplay＋ApplyBgPreviewLayout
  │                            （合圖未啟用→用設定 start/ops 餵佈局）
+ ├ ClearLiveRowChartForBackgroundPreview@AniloxRollForm.Live.cs
+ │   → 清列圖表、待上畫資料及列曲線快取；預覽期間 MainContentPresented 不得重新上畫列曲線
  ├ ReadActiveBackgroundVersion → per-cam Load@CurveBinFile.cs（同一 active version）
  │   → ExpandColMeanToGray@AniloxRollForm.Live.cs
  │   → PushStaticFrame@LiveDisplayCoordinator.cs（與 grab 幀同一條 PushFrame 路＝合圖/縮圖/縮放/overlay 全免費）
@@ -894,9 +924,48 @@ btnLiveViewBackground_Click@AniloxRollForm.Background.cs     intent 行 ui:【�
 T1: ui:【預覽背景】鈕
 T1: ApplyMainDisplayMode → BgPreview（靜音鍵，設定不動）    ← 閘門分支（WF 設定時前面多一行 TeardownWaterfall）
 T1: EnterBackgroundPreview（view=True merge=… mode=…）
+T1: background preview rowChart clear
 T1: bgPreview push camN WxH（view=True）× 有 bin 的台數
 再按/開始抓取：ExitBackgroundPreview → ApplyMainDisplayMode → {Waterfall|ImageCanvas}（回設定模式）
 ```
+預覽期間列圖表必須保持空白；`EnterBackgroundPreview` 後不得出現
+`rowCurve present after=mainImage`，直到 `ExitBackgroundPreview`。
+
+**log-flow（去背演算法實際生效）**
+```
+設定／啟動載入：
+background bind camN mode=standard source=bg_...bin status=ready width=W samples=W min=A max=B mean=C
+或
+background bind camN mode=single source=per-frame status=ready
+離線相機：
+background bind camN mode=standard source=none status=skipped reason=offline
+
+取得背景非產品採樣：
+background capture begin output=disabled
+background capture waiting first-set timeoutMs=N
+capture first-set ready ... aligned=True
+background capture sampling start duration=Ns
+...
+background capture sampling complete durationMs=M frames=cam1:A,cam2:B,...
+background capture end output=disabled result=ok|failed
+
+每次正式 Grab 第一個成功 native 幀（每台恰一行）：
+background apply camN grab=G mode=standard source=precomputed width=W
+或
+background apply camN grab=G mode=single source=per-frame width=W
+```
+- `bind` 證明背景檔成功解析並綁定；`apply` 證明 `TanukiPipeline_Process` 成功返回且實際收到該來源，兩者都要有。
+- 標準模式出現 `source=per-frame`、單張模式出現 `source=precomputed`，或已完成 Grab 的 `apply` 台數少於
+  `capture gate open cams=N`，均為契約違規。
+- 載入失敗行為：
+  `background bind camN mode=standard ... status=failed reason=... retained=True|False`。
+  `retained=True` 表示保留上一份已驗證背景；`False` 時正式 Grab 必須出現
+  `capture start blocked reason=standard-background-not-ready`，不得開 capture gate。
+- `background capture begin` 到 `end` 之間不得出現 `CaptureWriteFailure`，且 begin/end 必須成對。
+- 成功採樣必須有 `sampling start/complete`，且 `durationMs >= duration*1000`；Stop 後仍在途的 callback
+  以進入 callback 當下的 `captureSuppressed` 快照為準，不得在旗標恢復後補寫產品檔。
+- `tools/python/check_all_flows.py` 的 `LIVE/F8.background-subtraction` 與
+  `LIVE/F8.background-capture`，以及 `LIVE/F2.time-origin` 自動檢查上述關係。
 
 ## 硬體連線契約（H 系列）——邊緣觸發（同 MURA 模式：轉變才記，不洗版）
 

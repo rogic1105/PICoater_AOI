@@ -940,6 +940,195 @@ class ParameterFlowValidatorTests(unittest.TestCase):
 
 
 class LiveStandbyFlowValidatorTests(unittest.TestCase):
+    def test_standard_background_binding_and_first_frame_evidence_pass(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "background bind cam1 mode=standard source=bg1.bin "
+                "status=ready width=16384 samples=16384 min=1 max=2 mean=1.5",
+                "background bind cam2 mode=standard source=bg2.bin "
+                "status=ready width=16384 samples=16384 min=1 max=2 mean=1.5",
+                "capture plan grab=260728-150000 root=D:\\Anilox",
+                "capture gate open cams=2 warm=True",
+                "background apply cam1 grab=260728-150000 mode=standard "
+                "source=precomputed width=16384",
+                "background apply cam2 grab=260728-150000 mode=standard "
+                "source=precomputed width=16384",
+                "StopGrab",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS,
+            result(report, "F8.background-subtraction").status,
+        )
+
+    def test_standard_background_silent_fallback_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "background bind cam1 mode=standard source=bg1.bin "
+                "status=ready width=16384 samples=16384 min=1 max=2 mean=1.5",
+                "capture plan grab=260728-150000 root=D:\\Anilox",
+                "capture gate open cams=1 warm=True",
+                "background apply cam1 grab=260728-150000 mode=single "
+                "source=per-frame width=16384",
+                "StopGrab",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL,
+            result(report, "F8.background-subtraction").status,
+        )
+
+    def test_background_evidence_requires_every_connected_camera(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "background bind cam1 mode=single source=per-frame status=ready",
+                "background bind cam2 mode=single source=per-frame status=ready",
+                "capture plan grab=260728-150000 root=D:\\Anilox",
+                "capture gate open cams=2 warm=True",
+                "background apply cam1 grab=260728-150000 mode=single "
+                "source=per-frame width=16384",
+                "StopGrab",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL,
+            result(report, "F8.background-subtraction").status,
+        )
+
+    def test_standard_background_skips_offline_camera_without_failure(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "background bind cam1 mode=standard source=bg1.bin "
+                "status=ready width=16384 samples=16384 min=1 max=2 mean=1.5",
+                "background bind cam2 mode=standard source=none "
+                "status=skipped reason=offline",
+                "capture plan grab=260728-150000 root=D:\\Anilox",
+                "capture gate open cams=1 warm=True",
+                "background apply cam1 grab=260728-150000 mode=standard "
+                "source=precomputed width=16384",
+                "StopGrab",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS,
+            result(report, "F8.background-subtraction").status,
+        )
+
+    def test_background_capture_disables_product_output(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "background capture begin output=disabled",
+                "capture gate open cams=2 warm=True",
+                "capture first-set ready path=verified-standby cams=1,2 aligned=True",
+                "background capture sampling start duration=3s",
+                "background apply cam1 grab=none mode=standard "
+                "source=precomputed width=16384",
+                "background apply cam2 grab=none mode=standard "
+                "source=precomputed width=16384",
+                "background capture sampling complete durationMs=3007 "
+                "frames=cam1:30,cam2:30",
+                "background capture end output=disabled result=ok",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS,
+            result(report, "F8.background-capture").status,
+        )
+
+    def test_background_capture_short_timed_sample_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "background capture begin output=disabled",
+                "background capture sampling start duration=3s",
+                "background capture sampling complete durationMs=1900 "
+                "frames=cam1:19",
+                "background capture end output=disabled result=ok",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL,
+            result(report, "F8.background-capture").status,
+        )
+
+    def test_background_capture_product_write_attempt_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "background capture begin output=disabled",
+                "background capture sampling start duration=3s",
+                "background capture sampling complete durationMs=3000 "
+                "frames=cam1:30",
+                "background capture end output=disabled result=ok",
+                "[OutputHealth] raise code=CaptureWriteFailure.CAM1 "
+                "severity=OutputFault message=unexpected",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL,
+            result(report, "F8.background-capture").status,
+        )
+
+    def test_background_preview_clears_and_suppresses_row_chart(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "EnterBackgroundPreview（view=True merge=True mode=WF設定）",
+                "background preview rowChart clear",
+                "bgPreview push cam1 16384x3000（view=True）",
+                "ExitBackgroundPreview",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS,
+            result(report, "F8.background-preview-row").status,
+        )
+
+    def test_background_preview_row_curve_presentation_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "EnterBackgroundPreview（view=True merge=True mode=WF設定）",
+                "background preview rowChart clear",
+                "bgPreview push cam1 16384x3000（view=True）",
+                "rowCurve present after=mainImage cams=2 mode=WF",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL,
+            result(report, "F8.background-preview-row").status,
+        )
+
+    def test_time_stop_arms_only_after_aligned_first_set(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "grab stop waiting condition=Time configured=10s "
+                "source=manual grab=260728-150000",
+                "capture gate open cams=2 warm=True",
+                "capture first-set ready path=verified-standby cams=1,2 aligned=True",
+                "grab stop armed condition=Time limit=10s configured=10s "
+                "grace=0s source=manual start=first-set grab=260728-150000",
+                "StopGrab",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS,
+            result(report, "F2.time-origin").status,
+        )
+
+    def test_time_stop_before_first_set_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "grab stop waiting condition=Time configured=10s "
+                "source=manual grab=260728-150000",
+                "capture gate open cams=2 warm=True",
+                "grab stop armed condition=Time limit=10s configured=10s "
+                "grace=0s source=manual start=first-set grab=260728-150000",
+                "capture first-set ready path=verified-standby cams=1,2 aligned=True",
+                "StopGrab",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL,
+            result(report, "F2.time-origin").status,
+        )
+
     def test_head_guard_drops_one_callback_per_camera_before_first_set(self):
         report = LiveFlowValidator().validate(
             session(
@@ -1070,6 +1259,25 @@ class LiveStandbyFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(
             CheckStatus.PASS, result(report, "F6.zoom-floor").status
+        )
+
+    def test_every_capture_resets_charts_before_start(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "capture charts reset reason=start-grab",
+                "StartGrab cams=2",
+                "capture charts reset reason=start-grab",
+                "StartGrab cams=2",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "F2.chart-reset").status
+        )
+
+    def test_capture_without_chart_reset_fails(self):
+        report = LiveFlowValidator().validate(session("StartGrab cams=2"))
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "F2.chart-reset").status
         )
 
     def test_content_aware_zoom_floor_accepts_logged_rounding(self):

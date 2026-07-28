@@ -68,7 +68,6 @@ namespace AniloxRoll.Monitor.Forms
             if (!wasGrabbing)
             {
                 await Task.Run(() => LightTurnOn());
-                ResetLiveChartsForDisplayTransition();
                 _muraExceedLatch[0] = _muraExceedLatch[1] = false;   // 每輪 grab 重新邊緣觸發超標留痕
                 _outputHealthService?.Resolve("MuraExceed.v");
                 _outputHealthService?.Resolve("MuraExceed.h");
@@ -117,6 +116,16 @@ namespace AniloxRoll.Monitor.Forms
                 return false;
             }
 
+            if (!wasGrabbing && IsStandardBgSubEnabled && !IsBgBinReady())
+            {
+                FlowTrace.Log(
+                    "capture start blocked reason=standard-background-not-ready");
+                _liveCameraManager.StopGrab();
+                LightTurnOff();
+                UpdateGrabButton(false);
+                return false;
+            }
+
             // 剛從「未抓取」→「抓取中」：分配新的抓圖編號（燈已在上方開啟）
             if (!wasGrabbing && _liveCameraManager.IsLiveGrabbing)
             {
@@ -160,6 +169,7 @@ namespace AniloxRoll.Monitor.Forms
                     _settings?.ImageView?.WaterfallTotalHeight ??
                     InspectionDefaults.WaterfallTotalHeight);
                 System.Threading.Interlocked.Exchange(ref _captureHeightStopIssued, 0);
+                int timeLimitSeconds = 0;
 
                 if (_activeCaptureStopCondition == CaptureStopCondition.Height)
                 {
@@ -168,13 +178,10 @@ namespace AniloxRoll.Monitor.Forms
                         $"grab stop armed condition=height limit={_activeCaptureHeightLimitRows}px " +
                         $"source=io grab={_currentGrabId}");
                 }
-                else
+                else if (_activeCaptureStopCondition == CaptureStopCondition.IoSignal)
                 {
                     int boundaryGraceSeconds =
-                        ioControlled &&
-                        _activeCaptureStopCondition == CaptureStopCondition.IoSignal
-                            ? _liveCameraManager.GetCaptureBoundaryGraceSeconds()
-                            : 0;
+                        _liveCameraManager.GetCaptureBoundaryGraceSeconds();
                     int effectiveLimitSeconds =
                         configuredLimitSeconds + boundaryGraceSeconds;
                     _grabDurationCoordinator?.Arm(effectiveLimitSeconds);
@@ -182,6 +189,14 @@ namespace AniloxRoll.Monitor.Forms
                         $"grab stop armed condition={_activeCaptureStopCondition} " +
                         $"limit={effectiveLimitSeconds}s configured={configuredLimitSeconds}s " +
                         $"grace={boundaryGraceSeconds}s " +
+                        $"source={(ioControlled ? "io" : "manual")} grab={_currentGrabId}");
+                }
+                else
+                {
+                    _grabDurationCoordinator?.Disarm();
+                    timeLimitSeconds = configuredLimitSeconds;
+                    FlowTrace.Log(
+                        $"grab stop waiting condition=Time configured={configuredLimitSeconds}s " +
                         $"source={(ioControlled ? "io" : "manual")} grab={_currentGrabId}");
                 }
 
@@ -192,6 +207,43 @@ namespace AniloxRoll.Monitor.Forms
                     LightTurnOff();
                     UpdateGrabButton(false);
                     return false;
+                }
+                UpdateGrabButton(true);
+
+                if (timeLimitSeconds > 0)
+                {
+                    int firstSetTimeoutMs =
+                        _liveCameraManager.GetCaptureFirstSetTimeoutMs();
+                    bool firstSetReady =
+                        await _liveCameraManager.WaitForCaptureFirstSetReadyAsync(
+                            firstSetTimeoutMs);
+                    if (!firstSetReady || !_liveCameraManager.IsLiveGrabbing)
+                    {
+                        FlowTrace.Log(
+                            $"grab stop start failed condition=Time " +
+                            $"reason=first-set-not-ready timeoutMs={firstSetTimeoutMs} " +
+                            $"grab={_currentGrabId}");
+                        if (_liveCameraManager.IsLiveGrabbing)
+                        {
+                            await ToggleLiveGrabAsync(
+                                $"auto:抓取取消 condition=Time " +
+                                $"reason=first-set-not-ready grab={_currentGrabId}",
+                                ioControlled: ioControlled);
+                        }
+                        else
+                        {
+                            LightTurnOff();
+                            UpdateGrabButton(false);
+                        }
+                        return false;
+                    }
+
+                    _grabDurationCoordinator?.Arm(timeLimitSeconds);
+                    FlowTrace.Log(
+                        $"grab stop armed condition=Time limit={timeLimitSeconds}s " +
+                        $"configured={timeLimitSeconds}s grace=0s " +
+                        $"source={(ioControlled ? "io" : "manual")} " +
+                        $"start=first-set grab={_currentGrabId}");
                 }
             }
 
@@ -622,6 +674,16 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
 
+            if (IsBgPreviewActive)
+            {
+                lock (_pendingLiveRowCurveLock)
+                {
+                    _pendingLiveRowMean.Clear();
+                    _pendingLiveRowMax.Clear();
+                }
+                return;
+            }
+
             Dictionary<int, float[]> readyMean;
             Dictionary<int, float[]> readyMax;
             lock (_pendingLiveRowCurveLock)
@@ -748,6 +810,20 @@ namespace AniloxRoll.Monitor.Forms
             _liveViewLeftMm = _liveViewRightMm = double.NaN;
             _liveViewTopMm = _liveViewBotMm = double.NaN;
             _liveRowPresentationCameraCount = 0;
+        }
+
+        private void ClearLiveRowChartForBackgroundPreview()
+        {
+            ResetLiveWaterfallRowChart();
+            lock (_pendingLiveRowCurveLock)
+            {
+                _pendingLiveRowMean.Clear();
+                _pendingLiveRowMax.Clear();
+            }
+            _liveRowMeanCache.Clear();
+            _liveRowMaxCache.Clear();
+            _liveRowPresentationCameraCount = 0;
+            FlowTrace.Log("background preview rowChart clear");
         }
 
         private void UpdateLiveWaterfallRowChart(int camId, float[] meanArr, float[] maxArr)

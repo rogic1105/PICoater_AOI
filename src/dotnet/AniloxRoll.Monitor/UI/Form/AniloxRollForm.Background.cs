@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Management;
@@ -44,6 +45,10 @@ namespace AniloxRoll.Monitor.Forms
             // 先清除舊的背景預覽（釋放 overlay + 恢復 MIL display）
             if (IsBgPreviewActive) ClearBackgroundPreview();
 
+            // 背景採樣只借用相機 grab 與演算法，不是產品擷取，不得產生圖片/CSV。
+            _liveCameraManager.SetCaptureSuppressed(true);
+            FlowTrace.Log("background capture begin output=disabled");
+
             // 確保相機已 allocate
             if (!_liveCameraManager.IsAllocated)
             {
@@ -51,10 +56,17 @@ namespace AniloxRoll.Monitor.Forms
                 {
                     bool started =
                         await _liveCameraManager.EnsureAllocatedAndToggleGrabAsync(false);
-                    if (!_liveCameraManager.IsAllocated || !started) return;
+                    if (!_liveCameraManager.IsAllocated || !started)
+                    {
+                        _liveCameraManager.SetCaptureSuppressed(false);
+                        FlowTrace.Log("background capture end output=disabled result=start-failed");
+                        return;
+                    }
                 }
                 catch (Exception ex)
                 {
+                    _liveCameraManager.SetCaptureSuppressed(false);
+                    FlowTrace.Log("background capture end output=disabled result=start-failed");
                     MessageBox.Show($"相機配置失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
@@ -65,7 +77,12 @@ namespace AniloxRoll.Monitor.Forms
             {
                 LightTurnOn();
                 bool started = await _liveCameraManager.ToggleGrabAsync();
-                if (!started) return;
+                if (!started)
+                {
+                    _liveCameraManager.SetCaptureSuppressed(false);
+                    FlowTrace.Log("background capture end output=disabled result=start-failed");
+                    return;
+                }
                 UpdateGrabButton(true);
             }
 
@@ -80,6 +97,19 @@ namespace AniloxRoll.Monitor.Forms
 
             try
             {
+                int firstSetTimeoutMs =
+                    _liveCameraManager.GetCaptureFirstSetTimeoutMs();
+                FlowTrace.Log(
+                    $"background capture waiting first-set timeoutMs={firstSetTimeoutMs}");
+                bool firstSetReady =
+                    await _liveCameraManager.WaitForCaptureFirstSetReadyAsync(
+                        firstSetTimeoutMs);
+                if (!firstSetReady)
+                    throw new IOException(
+                        $"背景採樣未等到完整首幀組 ({firstSetTimeoutMs}ms)");
+
+                FlowTrace.Log(
+                    $"background capture sampling start duration={sampleSeconds}s");
                 if (!Directory.Exists(bgDir))
                     Directory.CreateDirectory(bgDir);
 
@@ -120,6 +150,9 @@ namespace AniloxRoll.Monitor.Forms
                         }
                     }
                 }
+                FlowTrace.Log(
+                    $"background capture sampling complete durationMs={sw.ElapsedMilliseconds} " +
+                    $"frames={string.Join(",", cameras.Select((cam, index) => $"cam{cam.CameraId}:{frameCount[index]}"))}");
 
                 // 平均並存檔
                 for (int i = 0; i < camCount; i++)
@@ -176,6 +209,9 @@ namespace AniloxRoll.Monitor.Forms
                     UpdateGrabButton(false);
                 }
 
+                _liveCameraManager.SetCaptureSuppressed(false);
+                FlowTrace.Log(
+                    $"background capture end output=disabled result={(captureSucceeded ? "ok" : "failed")}");
                 UpdateStandardBgSubLockState();
             }
 
@@ -360,20 +396,32 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        /// 從 BackgroundPath 載入各相機的 bg bin → pinned buffer → 設定到 AniloxCamera.PrecomputedColMean。
+        /// 從 BackgroundPath 載入各相機的 bg bin，驗證後原子替換相機持有的 pinned 背景。
         /// </summary>
         private void LoadBackgroundBins()
         {
             if (!IsStandardBgSubEnabled)
             {
-                // 非 StandardBgSub 模式：清除所有預算背景
+                // 非 StandardBgSub 模式：每幀自行計算背景。
                 foreach (var cam in _liveCameraManager.Cameras)
-                    cam.PrecomputedColMean = IntPtr.Zero;
+                {
+                    cam.ClearPrecomputedColumnMean();
+                    _outputHealthService?.Resolve(
+                        "BackgroundLoad.cam" + cam.CameraId);
+                    FlowTrace.Log(
+                        $"background bind cam{cam.CameraId} mode=single " +
+                        "source=per-frame status=ready");
+                }
                 return;
             }
 
             string bgDir = _settings.Storage.BackgroundPath;
-            if (!Directory.Exists(bgDir)) return;
+            if (!Directory.Exists(bgDir))
+            {
+                ReportBackgroundLoadFailure(
+                    "directory-missing", Path.GetFileName(bgDir));
+                return;
+            }
 
             if (HasActiveBackgroundManifest(bgDir) &&
                 string.IsNullOrWhiteSpace(ReadActiveBackgroundVersion(bgDir)))
@@ -382,40 +430,113 @@ namespace AniloxRoll.Monitor.Forms
                     "BackgroundManifestInvalid",
                     OutputHealthSeverity.OutputFault,
                     "背景啟用清單損壞，未切換背景");
+                ReportBackgroundLoadFailure(
+                    "manifest-invalid", CaptureFileNaming.BgActiveManifest);
                 return;
             }
             _outputHealthService?.Resolve("BackgroundManifestInvalid");
 
             foreach (var cam in _liveCameraManager.Cameras)
             {
-                if (cam.FrameWidth <= 0) continue;
+                if (!cam.IsConnected || cam.FrameWidth <= 0)
+                {
+                    cam.ClearPrecomputedColumnMean();
+                    _outputHealthService?.Resolve(
+                        "BackgroundLoad.cam" + cam.CameraId);
+                    FlowTrace.Log(
+                        $"background bind cam{cam.CameraId} mode=standard " +
+                        "source=none status=skipped reason=offline");
+                    continue;
+                }
 
                 string binPath = ResolveBackgroundBinPath(
                     bgDir, cam.FrameWidth, cam.CameraId);
                 float[] colMean = CurveBinFile.Load(binPath);
-                if (colMean != null && colMean.Length == cam.FrameWidth)
+                if (TryDescribeBackground(
+                    colMean, cam.FrameWidth,
+                    out float minimum, out float maximum, out double mean))
                 {
-                    // 分配 pinned memory 並複製
                     IntPtr pinned = NativeMethods.TanukiCv_AllocPinned((ulong)(cam.FrameWidth * sizeof(float)));
                     if (pinned != IntPtr.Zero)
                     {
                         Marshal.Copy(colMean, 0, pinned, colMean.Length);
-
-                        // 釋放舊的（如果有）
-                        if (cam.PrecomputedColMean != IntPtr.Zero)
-                            NativeMethods.TanukiCv_FreePinned(cam.PrecomputedColMean);
-
-                        cam.PrecomputedColMean = pinned;
+                        cam.ReplacePrecomputedColumnMean(pinned);
+                        _outputHealthService?.Resolve(
+                            "BackgroundLoad.cam" + cam.CameraId);
+                        FlowTrace.Log(
+                            $"background bind cam{cam.CameraId} mode=standard " +
+                            $"source={Path.GetFileName(binPath)} status=ready " +
+                            $"width={cam.FrameWidth} samples={colMean.Length} " +
+                            $"min={minimum.ToString("0.###", CultureInfo.InvariantCulture)} " +
+                            $"max={maximum.ToString("0.###", CultureInfo.InvariantCulture)} " +
+                            $"mean={mean.ToString("0.###", CultureInfo.InvariantCulture)}");
+                        continue;
                     }
+
+                    ReportBackgroundLoadFailure(
+                        cam, "alloc-failed", Path.GetFileName(binPath));
                 }
-                else if (cam.PrecomputedColMean != IntPtr.Zero)
+                else
                 {
-                    NativeMethods.TanukiCv_FreePinned(cam.PrecomputedColMean);
-                    cam.PrecomputedColMean = IntPtr.Zero;
+                    ReportBackgroundLoadFailure(
+                        cam, "invalid-bin", Path.GetFileName(binPath));
                 }
             }
 
             UpdateViewBackgroundButtonText();
+        }
+
+        private static bool TryDescribeBackground(
+            float[] values,
+            int expectedLength,
+            out float minimum,
+            out float maximum,
+            out double mean)
+        {
+            minimum = 0f;
+            maximum = 0f;
+            mean = 0.0;
+            if (values == null || values.Length != expectedLength || values.Length == 0)
+                return false;
+
+            minimum = values[0];
+            maximum = values[0];
+            double sum = 0.0;
+            for (int i = 0; i < values.Length; i++)
+            {
+                float value = values[i];
+                if (float.IsNaN(value) || float.IsInfinity(value))
+                    return false;
+                if (value < minimum) minimum = value;
+                if (value > maximum) maximum = value;
+                sum += value;
+            }
+            mean = sum / values.Length;
+            return true;
+        }
+
+        private void ReportBackgroundLoadFailure(
+            string reason,
+            string source)
+        {
+            foreach (var cam in _liveCameraManager.Cameras)
+                ReportBackgroundLoadFailure(cam, reason, source);
+        }
+
+        private void ReportBackgroundLoadFailure(
+            AniloxCamera cam,
+            string reason,
+            string source)
+        {
+            bool retained = cam.HasPrecomputedColumnMean;
+            _outputHealthService?.Report(
+                "BackgroundLoad.cam" + cam.CameraId,
+                OutputHealthSeverity.OutputFault,
+                $"CAM{cam.CameraId} 標準背景載入失敗 ({reason})");
+            FlowTrace.Log(
+                $"background bind cam{cam.CameraId} mode=standard " +
+                $"source={(string.IsNullOrWhiteSpace(source) ? "none" : source)} " +
+                $"status=failed reason={reason} retained={retained}");
         }
 
         private void UpdateViewBackgroundButtonText()
@@ -423,18 +544,12 @@ namespace AniloxRoll.Monitor.Forms
             // lblBgBinInfo 已刪除（2026-06-12 使用者刪除清單）；保留空方法給既有呼叫點，待 #13 收尾一併清。
         }
 
-        /// <summary>釋放所有相機的 PrecomputedColMean pinned buffer。</summary>
+        /// <summary>釋放所有相機持有的預算背景 pinned buffer。</summary>
         private void FreePrecomputedColMeanBuffers()
         {
             if (_liveCameraManager == null) return;
             foreach (var cam in _liveCameraManager.Cameras)
-            {
-                if (cam.PrecomputedColMean != IntPtr.Zero)
-                {
-                    NativeMethods.TanukiCv_FreePinned(cam.PrecomputedColMean);
-                    cam.PrecomputedColMean = IntPtr.Zero;
-                }
-            }
+                cam.ClearPrecomputedColumnMean();
         }
 
         /// <summary>
@@ -490,6 +605,7 @@ namespace AniloxRoll.Monitor.Forms
 
             int[] grabHeights = _settings.Acquisition.CameraGrabHeight;
             _liveCameraManager.EnterBackgroundPreview();
+            ClearLiveRowChartForBackgroundPreview();
             int pushed = 0;
             for (int i = 0; i < CameraCount; i++)
             {
@@ -538,9 +654,7 @@ namespace AniloxRoll.Monitor.Forms
                 {
                     if (!cam.IsConnected) continue;
                     if (cam.FrameWidth <= 0) continue;
-                    string binPath = ResolveBackgroundBinPath(
-                        bgDir, cam.FrameWidth, cam.CameraId);
-                    if (!File.Exists(binPath)) return false;
+                    if (!cam.HasPrecomputedColumnMean) return false;
                 }
                 return true;
             }

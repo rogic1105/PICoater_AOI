@@ -501,6 +501,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                 _display.ResetFlowFirstFrame();
                 ApplyMainDisplayMode();
                 _display.ResetWaterfallIfActive();
+                OnCaptureSequenceReset?.Invoke();
+                FlowTrace.Log("capture charts reset reason=start-grab");
                 IsLiveGrabbing = true;
                 foreach (var cam in targets)
                     cam.SetUserGrabIntent(true);

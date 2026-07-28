@@ -15,10 +15,15 @@ class LiveFlowValidator:
         self._check_camera_initialization(session, report)
         self._check_capture_standby(session, report)
         self._check_capture_head_guard(session, report)
+        self._check_time_stop_origin(session, report)
         self._check_waterfall_bootstrap(session, report)
+        self._check_capture_chart_reset(session, report)
         self._check_capture_view_refire(session, report)
         self._check_row_presentation(session, report)
         self._check_wheel_zoom_floor(session, report)
+        self._check_background_subtraction(session, report)
+        self._check_background_capture_output(session, report)
+        self._check_background_preview_row_chart(session, report)
         if not any(
             line.message.startswith(("LC ", "IC ", "WF ", "ui:【開始抓取】"))
             for line in session.lines
@@ -28,6 +33,387 @@ class LiveFlowValidator:
 
         self._check_drag_first_publish(session, report)
         return report
+
+    def _check_background_subtraction(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        bind_pattern = re.compile(
+            r"^background bind cam(?P<cam>\d+) "
+            r"mode=(?P<mode>standard|single) "
+            r"source=(?P<source>\S+) status=(?P<status>ready|failed|skipped)"
+        )
+        apply_pattern = re.compile(
+            r"^background apply cam(?P<cam>\d+) grab=(?P<grab>\S+) "
+            r"mode=(?P<mode>standard|single) "
+            r"source=(?P<source>precomputed|per-frame) width=(?P<width>\d+)$"
+        )
+        plan_pattern = re.compile(r"^capture plan grab=(?P<grab>\S+)\b")
+        gate_pattern = re.compile(r"^capture gate open cams=(?P<cams>\d+)\b")
+
+        bindings = {}
+        pending_grab = None
+        active_capture = None
+        ready_binds = 0
+        failed_binds = 0
+        skipped_binds = 0
+        applications = 0
+        completed = 0
+        blocked = 0
+        failures = []
+
+        for line in session.lines:
+            message = line.message
+            bind_match = bind_pattern.match(message)
+            if bind_match:
+                camera_id = int(bind_match.group("cam"))
+                status = bind_match.group("status")
+                if status == "ready":
+                    bindings[camera_id] = bind_match.group("mode")
+                    ready_binds += 1
+                elif status == "failed":
+                    failed_binds += 1
+                    if "retained=False" in message:
+                        bindings.pop(camera_id, None)
+                else:
+                    skipped_binds += 1
+                    bindings.pop(camera_id, None)
+                continue
+
+            plan_match = plan_pattern.match(message)
+            if plan_match:
+                pending_grab = plan_match.group("grab")
+                continue
+
+            gate_match = gate_pattern.match(message)
+            if gate_match and pending_grab is not None:
+                active_capture = {
+                    "grab": pending_grab,
+                    "expected": int(gate_match.group("cams")),
+                    "cameras": set(),
+                }
+                pending_grab = None
+                continue
+
+            apply_match = apply_pattern.match(message)
+            if apply_match:
+                applications += 1
+                camera_id = int(apply_match.group("cam"))
+                grab = apply_match.group("grab")
+                mode = apply_match.group("mode")
+                source = apply_match.group("source")
+                width = int(apply_match.group("width"))
+                expected_source = (
+                    "precomputed" if mode == "standard" else "per-frame"
+                )
+                if source != expected_source or width <= 0:
+                    failures.append(
+                        f"{line.timestamp} cam{camera_id} mode={mode} "
+                        f"source={source} width={width}"
+                    )
+                if bindings.get(camera_id) != mode:
+                    failures.append(
+                        f"{line.timestamp} cam{camera_id} applied {mode} "
+                        f"without matching ready binding"
+                    )
+                if (
+                    active_capture is not None
+                    and grab == active_capture["grab"]
+                ):
+                    active_capture["cameras"].add(camera_id)
+                continue
+
+            if message.startswith(
+                "capture start blocked reason=standard-background-not-ready"
+            ):
+                blocked += 1
+                pending_grab = None
+                active_capture = None
+                continue
+
+            if message == "StopGrab" and active_capture is not None:
+                actual = len(active_capture["cameras"])
+                expected = active_capture["expected"]
+                if actual != expected:
+                    failures.append(
+                        f"{line.timestamp} grab={active_capture['grab']} "
+                        f"background evidence {actual}/{expected}"
+                    )
+                completed += 1
+                active_capture = None
+
+        if ready_binds == 0 and failed_binds == 0 and applications == 0:
+            report.add(
+                self.domain,
+                "F8.background-subtraction",
+                CheckStatus.NOT_COVERED,
+                "session predates standard-background runtime evidence",
+            )
+            return
+
+        report.add(
+            self.domain,
+            "F8.background-subtraction",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"readyBinds={ready_binds} failedBinds={failed_binds} "
+            f"skippedBinds={skipped_binds} "
+            f"applies={applications} completedGrabs={completed} blocked={blocked} "
+            f"failures={len(failures)}"
+            + (f"; first={failures[0]}" if failures else ""),
+        )
+
+    def _check_background_capture_output(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        active = False
+        guard_product_output = False
+        sample_seconds = None
+        sample_completed = False
+        begins = 0
+        ends = 0
+        failures = []
+
+        for line in session.lines:
+            message = line.message
+            if message == "background capture begin output=disabled":
+                begins += 1
+                if active:
+                    failures.append(f"{line.timestamp} nested background capture begin")
+                active = True
+                guard_product_output = True
+                sample_seconds = None
+                sample_completed = False
+                continue
+
+            if message.startswith("background capture end output=disabled result="):
+                ends += 1
+                if not active:
+                    failures.append(f"{line.timestamp} background capture end without begin")
+                if message.endswith("result=ok") and (
+                    sample_seconds is None or not sample_completed
+                ):
+                    failures.append(
+                        f"{line.timestamp} successful background capture lacks "
+                        "complete timed sample evidence"
+                    )
+                active = False
+                continue
+
+            sample_start = re.match(
+                r"^background capture sampling start duration=(\d+)s$",
+                message,
+            )
+            if sample_start and active:
+                sample_seconds = int(sample_start.group(1))
+                continue
+
+            sample_end = re.match(
+                r"^background capture sampling complete durationMs=(\d+)\b",
+                message,
+            )
+            if sample_end and active:
+                duration_ms = int(sample_end.group(1))
+                if sample_seconds is None:
+                    failures.append(
+                        f"{line.timestamp} sample complete without duration start"
+                    )
+                elif duration_ms < sample_seconds * 1000:
+                    failures.append(
+                        f"{line.timestamp} sample {duration_ms}ms "
+                        f"< configured {sample_seconds * 1000}ms"
+                    )
+                sample_completed = True
+                continue
+
+            if message.startswith("capture plan grab="):
+                guard_product_output = False
+
+            if guard_product_output and "code=CaptureWriteFailure." in message:
+                failures.append(
+                    f"{line.timestamp} product capture write attempted during background sample"
+                )
+
+        if begins == 0 and ends == 0:
+            report.add(
+                self.domain,
+                "F8.background-capture",
+                CheckStatus.NOT_COVERED,
+                "session predates non-product background capture evidence",
+            )
+            return
+
+        if active:
+            failures.append("background capture begin has no matching end")
+        if begins != ends:
+            failures.append(f"background capture lifecycle begin={begins} end={ends}")
+
+        report.add(
+            self.domain,
+            "F8.background-capture",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"begins={begins} ends={ends} failures={len(failures)}"
+            + (f"; first={failures[0]}" if failures else ""),
+        )
+
+    def _check_background_preview_row_chart(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        active = False
+        cleared = False
+        entries = 0
+        failures = []
+
+        for line in session.lines:
+            message = line.message
+            if message.startswith("EnterBackgroundPreview"):
+                if active:
+                    failures.append(
+                        f"{line.timestamp} nested background preview entry"
+                    )
+                active = True
+                cleared = False
+                entries += 1
+                continue
+
+            if message == "background preview rowChart clear":
+                if not active:
+                    failures.append(
+                        f"{line.timestamp} rowChart clear outside background preview"
+                    )
+                cleared = True
+                continue
+
+            if active and message.startswith("bgPreview push "):
+                if not cleared:
+                    failures.append(
+                        f"{line.timestamp} background frame pushed before rowChart clear"
+                    )
+                continue
+
+            if active and message.startswith("rowCurve present after=mainImage"):
+                failures.append(
+                    f"{line.timestamp} rowCurve presented during background preview"
+                )
+                continue
+
+            if message.startswith("ExitBackgroundPreview"):
+                if active and not cleared:
+                    failures.append(
+                        f"{line.timestamp} background preview exited without rowChart clear"
+                    )
+                active = False
+                cleared = False
+
+        if entries == 0:
+            report.add(
+                self.domain,
+                "F8.background-preview-row",
+                CheckStatus.NOT_COVERED,
+                "session has no background preview entry",
+            )
+            return
+
+        if active and not cleared:
+            failures.append("active background preview has no rowChart clear")
+
+        report.add(
+            self.domain,
+            "F8.background-preview-row",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"entries={entries} failures={len(failures)}"
+            + (f"; first={failures[0]}" if failures else ""),
+        )
+
+    def _check_time_stop_origin(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        wait_pattern = re.compile(
+            r"^grab stop waiting condition=Time configured=(?P<seconds>\d+)s "
+            r"source=(?P<source>io|manual) grab=(?P<grab>\S+)$"
+        )
+        arm_pattern = re.compile(
+            r"^grab stop armed condition=Time limit=(?P<seconds>\d+)s "
+            r"configured=(?P<configured>\d+)s grace=0s "
+            r"source=(?P<source>io|manual) start=first-set grab=(?P<grab>\S+)$"
+        )
+
+        active = None
+        waits = 0
+        arms = 0
+        cancelled = 0
+        failures = []
+
+        for index, line in enumerate(session.lines):
+            message = line.message
+            wait_match = wait_pattern.match(message)
+            if wait_match:
+                waits += 1
+                if active is not None:
+                    failures.append(
+                        f"{line.timestamp} overlapping Time wait "
+                        f"{active['grab']}->{wait_match.group('grab')}"
+                    )
+                active = {
+                    "grab": wait_match.group("grab"),
+                    "seconds": int(wait_match.group("seconds")),
+                    "source": wait_match.group("source"),
+                    "first_set": None,
+                }
+                continue
+
+            if message.startswith("capture first-set ready ") and active is not None:
+                if "aligned=True" in message:
+                    active["first_set"] = index
+                continue
+
+            arm_match = arm_pattern.match(message)
+            if arm_match:
+                arms += 1
+                if active is None:
+                    failures.append(
+                        f"{line.timestamp} Time armed without waiting state"
+                    )
+                    continue
+                if arm_match.group("grab") != active["grab"]:
+                    failures.append(
+                        f"{line.timestamp} Time grab mismatch "
+                        f"{active['grab']}->{arm_match.group('grab')}"
+                    )
+                if active["first_set"] is None:
+                    failures.append(
+                        f"{line.timestamp} Time armed before aligned first-set"
+                    )
+                if (
+                    int(arm_match.group("seconds")) != active["seconds"]
+                    or int(arm_match.group("configured")) != active["seconds"]
+                    or arm_match.group("source") != active["source"]
+                ):
+                    failures.append(
+                        f"{line.timestamp} Time arm parameters changed while waiting"
+                    )
+                active = None
+                continue
+
+            if message == "StopGrab" and active is not None:
+                cancelled += 1
+                active = None
+
+        if waits == 0 and arms == 0:
+            report.add(
+                self.domain,
+                "F2.time-origin",
+                CheckStatus.NOT_COVERED,
+                "session predates first-set Time origin evidence",
+            )
+            return
+
+        report.add(
+            self.domain,
+            "F2.time-origin",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"waits={waits} arms={arms} cancelled={cancelled} "
+            f"failures={len(failures)}"
+            + (f"; first={failures[0]}" if failures else ""),
+        )
 
     def _check_capture_head_guard(
         self, session: FlowSession, report: CheckReport
@@ -340,6 +726,53 @@ class LiveFlowValidator:
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
             f"presentations={presentations} rowUpdates={rows} failures={len(failures)}"
             + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_capture_chart_reset(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        pending_reset = False
+        resets = 0
+        starts = 0
+        failures = []
+
+        for line in session.lines:
+            message = line.message
+            if message == "capture charts reset reason=start-grab":
+                if pending_reset:
+                    failures.append(
+                        f"{line.timestamp} repeated chart reset before StartGrab"
+                    )
+                pending_reset = True
+                resets += 1
+                continue
+
+            if message.startswith("StartGrab"):
+                starts += 1
+                if not pending_reset:
+                    failures.append(
+                        f"{line.timestamp} StartGrab without shared chart reset"
+                    )
+                pending_reset = False
+
+        if starts == 0 and resets == 0:
+            report.add(
+                self.domain,
+                "F2.chart-reset",
+                CheckStatus.NOT_COVERED,
+                "session predates shared capture chart-reset evidence",
+            )
+            return
+
+        if pending_reset:
+            failures.append("last chart reset has no matching StartGrab")
+
+        report.add(
+            self.domain,
+            "F2.chart-reset",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"starts={starts} resets={resets} failures={len(failures)}"
+            + (f"; first={failures[0]}" if failures else ""),
         )
 
     def _check_camera_initialization(
