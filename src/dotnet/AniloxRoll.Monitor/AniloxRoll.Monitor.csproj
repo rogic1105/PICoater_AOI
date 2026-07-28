@@ -186,6 +186,14 @@
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="UI\Form\AniloxRollForm.IoControl.cs">
+      <DependentUpon>AniloxRollForm.cs</DependentUpon>
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UI\Form\AniloxRollForm.StorageStatus.cs">
+      <DependentUpon>AniloxRollForm.cs</DependentUpon>
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="UI\Form\AniloxRollForm.Review.cs">
       <DependentUpon>AniloxRollForm.cs</DependentUpon>
       <SubType>Form</SubType>

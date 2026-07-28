@@ -31,7 +31,7 @@ sdk/Bridges/IoBridge/
 ## app 整合（src/AniloxRoll.Monitor）
 
 - **`Services/IoGrabController.cs`**：背景 Modbus 輪詢 loop（Task.Run，不依賴 message pump）。連線時以 DI-1 START 邊緣控制 grab 啟停；未連線退回 UI 按鈕。注入 `IModbusTcpClient`（可 mock 測試）。
-- **`UI/Form/AniloxRollForm.HardwareStatus.cs` `InitIoController()`**：`new IoGrabController(IoModel)` + 接事件（OnStart/Stop/StateChanged/ConnectionChanged/IoUpdated）+ `StartAsync(IoIp, IoPort)` 背景連線。`IoEnabled=false` 時 early-return（不建）。
+- **`UI/Form/AniloxRollForm.IoControl.cs` `InitIoController()`**：`new IoGrabController(IoModel)` + 接事件（OnStart/Stop/StateChanged/ConnectionChanged/IoUpdated）+ `StartAsync(IoIp, IoPort)` 背景連線。`IoEnabled=false` 時 early-return（不建）。
 
 ### 重連可用性定義（不是 TCP connected 就算成功）
 
@@ -62,7 +62,7 @@ ReconnectTick
 改 **IO IP / Port / 型號 / 啟用** 在 PropertyGrid → 走 SSoT：
 ```
 SettingsHub.Changed → AniloxRollForm.OnSettingChanged(c)
-  → HandleIoSettingsChanged(c.Name)            // HardwareStatus.cs
+  → HandleIoSettingsChanged(c.Name)            // IoControl.cs
       case IoIp / IoPort / IoModel / IoEnabled
   → RestartAsync@IoConnectionCoordinator        // requested generation 立即使舊 callback 失效
   → lifecycle gate                              // 快速連續設定只保留最後一代
