@@ -34,7 +34,7 @@ against current code with `rg` before editing because lookup data can become sta
 | `UI/Form/AniloxRollForm.Review.cs` | 回顧：資料夾/時段載入（`btnReviewSelectFolder_Click`/period 導航/`ApplyReviewEnhance`/`LoadImagesWithReviewConfig`） |
 | `UI/Form/AniloxRollForm.Background.cs` | 背景取得的 UI／光源／grab 包夾、背景載入／預覽與背景判斷（`IsBgBinReady`/`IsStandardBgSubEnabled`） |
 | `UI/Form/AniloxRollForm.SettingsTabs.cs` | 右側設定面板 tab 建構（`SetupCameraTab`/`SetupSystemTab`/`Bind*Sync`）+ 相機參數硬體同步（`SyncCameraParamsFromHardware`） |
-| `UI/Form/AniloxRollForm.HardwareStatus.cs` | IO、光源與儲存連線狀態的 UI 接線 |
+| `UI/Form/AniloxRollForm.HardwareStatus.cs` | IO 生命週期與硬體／儲存健康快照的 UI 接線 |
 | `UI/Form/AniloxRollForm.DirectionStitch.cs` | V/H 方向/ridge/合圖模式切換（`SwitchRidgeDirection`/`OnStitchModeChangedAsync`） |
 | `UI/Form/AniloxRollForm.Data.cs` | 檢測數據 Tab（`SetupDataTab`/grabId 選擇） |
 | `UI/Form/AniloxRollForm.Telemetry.cs` | Telemetry timer 與資源監控畫面更新 |
@@ -46,6 +46,7 @@ against current code with `rg` before editing because lookup data can become sta
 | `UI/Coordinators/InspectionSettingsCoordinator.cs` | InspectionSettings 到 BatchInspectionService 的 pipeline 副作用唯一 owner。 |
 | `UI/Coordinators/BackgroundCaptureCoordinator.cs` | 一輪背景取得的流程 owner：等完整首幀組、定時採樣、欄平均、發布新背景版本；失敗時刪除本輪未啟用版本。 |
 | `UI/Coordinators/LightConnectionCoordinator.cs` | 光源連線生命週期 owner：初次全埠偵測、2 秒 probe／指定 COM 快重連、每 5 次全埠防呆掃描、controller 替換與釋放；不依賴 WinForms。 |
+| `UI/Coordinators/StorageHealthCoordinator.cs` | 儲存健康觀測 owner：本機／遠端容量、TCP 445、分享可寫、遠端 app heartbeat 與 2 秒重探；不負責保留刪檔或遠端複製 policy。 |
 | `UI/Coordinators/CaptureStopCoordinator.cs` | 每輪 IO／時間／高度停止條件的狀態機：快照條件與數值、首幀後啟動時間計時、IO tail 決策、高度門檻與單一 terminal request。 |
 | `UI/Coordinators/LatestGrabLoadCoordinator.cs` | 回顧／報表／預覽共用的單序號 latest-only／single-flight 排程與 stale token owner；不負責讀檔或畫畫面。 |
 | `UI/Coordinators/ReviewPeriodLoadCoordinator.cs` | 回顧時段載入的 FIFO single-flight、重複 request 去重與 generation 失效 owner。 |

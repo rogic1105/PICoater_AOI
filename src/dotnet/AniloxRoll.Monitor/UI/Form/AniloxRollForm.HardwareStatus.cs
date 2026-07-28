@@ -549,7 +549,10 @@ namespace AniloxRoll.Monitor.Forms
                     _lightConnectionCoordinator?.Snapshot.Connected == true,
                     "光源");
             if (!string.IsNullOrWhiteSpace(_settings?.RemotePath))
-                Edge(ref _lastFlowStorageShareConn, _storageLastConnected == true, "儲存分享");
+                Edge(
+                    ref _lastFlowStorageShareConn,
+                    _storageHealthCoordinator?.Snapshot.RemoteShareConnected == true,
+                    "儲存分享");
 
             if (_settings?.IoEnabled == true && _ioGrabController != null)
             {
@@ -631,33 +634,20 @@ namespace AniloxRoll.Monitor.Forms
             UpdateStandardBgSubLockState();
         }
 
-        private int _storageProbeTickCounter;
-        private volatile bool _storageProbeInFlight;
-        private bool? _storageLastConnected;   // 最後一次 probe 結果（供每 tick 刷新倒數用）
-        private bool? _storageAppAlive;        // 遠端 heartbeat 是否在 15 秒有效期內
-        private long _localCapacityFreeBytes = -1;
-        private long _localCapacityTotalBytes;
-        private long _remoteCapacityFreeBytes = -1;
-        private long _remoteCapacityTotalBytes;
-        private bool _capacityProbeErrorReported;
-
-        // ── 重連倒數 / probe 排程的單一真實來源（秒數由此推導，不寫死）──────────────
         internal const int TelemetryTickMs = 500;          // = SettingsTabs 的 _telemetryTimer.Interval
-        private const int StorageProbeIntervalTicks = 4;   // 儲存每 4 tick(2s) 背景 probe 一次
         private const long RemoteBacklogWarningBytes = 20L * 1024 * 1024 * 1024;
-
-        /// <summary>倒數剩餘秒數 = (intervalTicks − 已過 ticks) × tick 間隔，至少 1。</summary>
-        private static int CountdownSec(int elapsedTicks, int intervalTicks)
-            => Math.Max(1, (int)Math.Ceiling((intervalTicks - elapsedTicks) * TelemetryTickMs / 1000.0));
 
         private void RefreshOutputCapacityHealth()
         {
             if (_outputHealthService == null) return;
 
+            StorageHealthSnapshot storage =
+                _storageHealthCoordinator?.Snapshot;
             long minFreeBytes = GetStorageMinFreeBytes();
-            if (_localCapacityFreeBytes >= 0 && _localCapacityTotalBytes > 0)
+            if (storage?.LocalFreeBytes >= 0 &&
+                storage.LocalTotalBytes > 0)
             {
-                if (minFreeBytes >= _localCapacityTotalBytes)
+                if (minFreeBytes >= storage.LocalTotalBytes)
                 {
                     _outputHealthService.Report(
                         "StorageThresholdInvalid",
@@ -668,7 +658,7 @@ namespace AniloxRoll.Monitor.Forms
                 else
                 {
                     _outputHealthService.Resolve("StorageThresholdInvalid");
-                    if (_localCapacityFreeBytes < minFreeBytes)
+                    if (storage.LocalFreeBytes < minFreeBytes)
                     {
                         _outputHealthService.Report(
                             "LocalLowSpace",
@@ -722,15 +712,9 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (changedPropertyName != nameof(InspectionSettings.LocalMinFreeGB)) return;
 
-            long totalBytes = _localCapacityTotalBytes;
-            if (totalBytes <= 0)
-            {
-                TryReadDriveCapacity(
-                    GetStorageRetentionRoot(),
-                    out _localCapacityFreeBytes,
-                    out totalBytes);
-                _localCapacityTotalBytes = totalBytes;
-            }
+            StorageHealthSnapshot storage =
+                _storageHealthCoordinator?.RefreshLocalCapacity();
+            long totalBytes = storage?.LocalTotalBytes ?? 0;
 
             int requestedGb = _settings.LocalMinFreeGB;
             int maxGb = totalBytes > 0
@@ -802,33 +786,6 @@ namespace AniloxRoll.Monitor.Forms
             }
         }
 
-        private bool TryReadDriveCapacity(string root, out long freeBytes, out long totalBytes)
-        {
-            freeBytes = -1;
-            totalBytes = 0;
-            try
-            {
-                if (string.IsNullOrWhiteSpace(root)) return false;
-                var drive = new System.IO.DriveInfo(
-                    System.IO.Path.GetPathRoot(System.IO.Path.GetFullPath(root)));
-                if (!drive.IsReady) return false;
-                freeBytes = drive.AvailableFreeSpace;
-                totalBytes = drive.TotalSize;
-                if (_capacityProbeErrorReported)
-                    System.Diagnostics.Trace.WriteLine("[CapacityInfo] local drive probe recovered.");
-                _capacityProbeErrorReported = false;
-                return totalBytes > 0;
-            }
-            catch (Exception ex)
-            {
-                if (!_capacityProbeErrorReported)
-                    System.Diagnostics.Trace.WriteLine(
-                        "[CapacityInfo] local drive probe failed: " + ex.Message);
-                _capacityProbeErrorReported = true;
-                return false;
-            }
-        }
-
         private static string FormatCapacity(string computerName, long freeBytes, long totalBytes)
         {
             if (freeBytes < 0 || totalBytes <= 0)
@@ -845,10 +802,21 @@ namespace AniloxRoll.Monitor.Forms
 
             RefreshOutputCapacityHealth();
 
+            StorageHealthSnapshot storage =
+                _storageHealthCoordinator?.Snapshot;
             string capacityText = _appMode?.Role == MachineRole.Storage
-                ? FormatCapacity("儲存電腦", _localCapacityFreeBytes, _localCapacityTotalBytes)
-                : FormatCapacity("檢測電腦", _localCapacityFreeBytes, _localCapacityTotalBytes) +
-                  " ｜ " + FormatCapacity("儲存電腦", _remoteCapacityFreeBytes, _remoteCapacityTotalBytes);
+                ? FormatCapacity(
+                    "儲存電腦",
+                    storage?.LocalFreeBytes ?? -1,
+                    storage?.LocalTotalBytes ?? 0)
+                : FormatCapacity(
+                    "檢測電腦",
+                    storage?.LocalFreeBytes ?? -1,
+                    storage?.LocalTotalBytes ?? 0) +
+                  " ｜ " + FormatCapacity(
+                    "儲存電腦",
+                    storage?.RemoteFreeBytes ?? -1,
+                    storage?.RemoteTotalBytes ?? 0);
 
             if (_appMode?.Role != MachineRole.Storage && _remoteCopyService != null)
             {
@@ -871,11 +839,8 @@ namespace AniloxRoll.Monitor.Forms
                 lblInfo.Text = capacityText;
         }
 
-        private void UpdateStorageConnLabel(bool? connected)
+        private void UpdateStorageConnLabel()
         {
-            // connected 有值 = probe 回報新結果；null = 每 tick 刷新倒數（沿用上次結果）
-            if (connected.HasValue) _storageLastConnected = connected;
-
             string path = _settings?.RemotePath ?? string.Empty;
             if (string.IsNullOrWhiteSpace(path))
             {
@@ -883,18 +848,15 @@ namespace AniloxRoll.Monitor.Forms
                 lblStorageConn.BackColor = IecGray;
                 _outputHealthService?.Resolve("StorageConnection");
                 _outputHealthService?.Resolve("StorageHeartbeat");
-                if (_appMode?.Role != MachineRole.Storage)
-                {
-                    _remoteCapacityFreeBytes = -1;
-                    _remoteCapacityTotalBytes = 0;
-                    RefreshCapacityInfoLabel();
-                }
                 return;
             }
-            if (_storageLastConnected == true)
+
+            StorageHealthSnapshot storage =
+                _storageHealthCoordinator?.Snapshot;
+            if (storage?.RemoteShareConnected == true)
             {
                 _outputHealthService?.Resolve("StorageConnection");
-                if (_storageAppAlive == true)
+                if (storage.RemoteAppAlive == true)
                 {
                     lblStorageConn.Text = "● 儲存電腦 已連線";
                     lblStorageConn.BackColor = IecGreen;
@@ -910,37 +872,44 @@ namespace AniloxRoll.Monitor.Forms
                         "儲存電腦程式未回報");
                 }
             }
-            else if (_storageLastConnected == false)
+            else if (storage?.RemoteShareConnected == false)
             {
                 _outputHealthService?.Resolve("StorageHeartbeat");
                 _outputHealthService?.Report(
                     "StorageConnection",
                     OutputHealthSeverity.Critical,
                     "儲存電腦連線中斷，本機持續存檔");
-                // 斷線 → 重連倒數（探測進行中顯示「探測中」）。秒數源自 StorageProbeIntervalTicks。
-                lblStorageConn.Text = _storageProbeInFlight
+                lblStorageConn.Text = storage.RemoteProbeInFlight
                     ? "● 儲存電腦 探測中…"
-                    : $"● 儲存電腦 重連中 {CountdownSec(_storageProbeTickCounter, StorageProbeIntervalTicks)}s…";
+                    : $"● 儲存電腦 重連中 {storage.ReconnectSeconds}s…";
                 lblStorageConn.BackColor = IecRed;
             }
-            // _storageLastConnected == null（還沒 probe 過）：維持「初始化中」不覆蓋
+            // 尚未 probe 過時維持「初始化中」。
         }
 
         /// <summary>
-        /// 由 TelemetryTimer_Tick 每 500ms 呼叫。光源與儲存機每 2 秒背景 probe 一次；
-        /// SerialPort 與 SMB 分享路徑都必須實際操作驗證，不可只相信 transport 狀態。
+        /// 由 TelemetryTimer_Tick 每 500ms 呼叫。各 coordinator 推進自己的
+        /// 連線生命週期，Form 只依快照更新控制項與產品告警。
         /// </summary>
         private void UpdateConnectionStatusLabels()
         {
+            _storageHealthCoordinator?.Tick();
+            StorageHealthSnapshot storage =
+                _storageHealthCoordinator?.Snapshot;
+
             if (_appMode?.Role == MachineRole.Storage)
             {
-                string root = GetStorageRetentionRoot();
-                if (TryReadDriveCapacity(root, out _localCapacityFreeBytes, out _localCapacityTotalBytes))
+                if (storage?.LocalFreeBytes >= 0 &&
+                    storage.LocalTotalBytes > 0)
                 {
                     if (_storageDiskFreeRow != null)
                     {
-                        double freeGb = _localCapacityFreeBytes / (1024.0 * 1024 * 1024);
-                        double totalGb = _localCapacityTotalBytes / (1024.0 * 1024 * 1024);
+                        double freeGb =
+                            storage.LocalFreeBytes /
+                            (1024.0 * 1024 * 1024);
+                        double totalGb =
+                            storage.LocalTotalBytes /
+                            (1024.0 * 1024 * 1024);
                         _storageDiskFreeRow.SubItems[1].Text = $"{freeGb:F1} / {totalGb:F1} GB";
                     }
                 }
@@ -948,8 +917,6 @@ namespace AniloxRoll.Monitor.Forms
                 return;
             }
 
-            TryReadDriveCapacity(GetStorageRetentionRoot(),
-                out _localCapacityFreeBytes, out _localCapacityTotalBytes);
             RefreshCapacityInfoLabel();
 
             // Grab watchdog：取像中超過 30 秒沒有 result callback → 觸發循環儲存
@@ -965,90 +932,8 @@ namespace AniloxRoll.Monitor.Forms
             _lightConnectionCoordinator?.Tick();
             UpdateLightConnLabel();
             RefreshIoConnLabel();          // IO 重連倒數每 tick 刷新（源自 IoGrabController）
-            UpdateStorageConnLabel(null);  // 儲存重連倒數每 tick 刷新（用上次 probe 結果）
+            UpdateStorageConnLabel();
             FlowHardwareEdges();           // H 系列：IO/光源/儲存 斷線/恢復 邊緣留痕
-
-            // 儲存機：每 2 秒先探 TCP 445，再實際建立/寫入/刪除探針檔。
-            if (++_storageProbeTickCounter < StorageProbeIntervalTicks) return;
-            _storageProbeTickCounter = 0;
-
-            string path = _settings?.RemotePath ?? string.Empty;
-            string configPath = _settings?.RemoteConfigPath ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(configPath))
-                configPath = DeriveFlagSharePath(path);
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                UpdateStorageConnLabel(null);
-                return;
-            }
-            if (_storageProbeInFlight) return;
-            _storageProbeInFlight = true;
-
-            System.Threading.Tasks.Task.Run(() =>
-            {
-                bool ok;
-                bool appAlive = false;
-                string heartbeatError = null;
-                StorageAppHeartbeatRecord heartbeatRecord = null;
-                try
-                {
-                    bool transportReachable = ProbeStorageTransportReachable(path);
-                    if (transportReachable)
-                    {
-                        ok = _remoteCopyService?.ProbeRemoteWritable() == true;
-                        if (ok)
-                        {
-                            appAlive = StorageAppHeartbeatService.TryRead(
-                                configPath,
-                                DateTime.UtcNow,
-                                out heartbeatRecord,
-                                out heartbeatError);
-                        }
-                    }
-                    else
-                    {
-                        _remoteCopyService?.ReportRemoteUnavailable("TCP 445 unavailable.");
-                        ok = false;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _remoteCopyService?.ReportRemoteUnavailable(
-                        ex.GetType().Name + ": " + ex.Message);
-                    ok = false;
-                }
-                finally { _storageProbeInFlight = false; }
-
-                if (IsDisposed || Disposing) return;
-                try
-                {
-                    BeginInvoke(new Action(() =>
-                    {
-                        if (_storageAppAlive != appAlive)
-                        {
-                            if (appAlive)
-                            {
-                                double ageSec = Math.Max(0,
-                                    (DateTime.UtcNow - heartbeatRecord.LastSeenUtc.ToUniversalTime()).TotalSeconds);
-                                FlowTrace.Log($"儲存程式 heartbeat 恢復 pid={heartbeatRecord.ProcessId} age={ageSec:F1}s");
-                            }
-                            else
-                            {
-                                FlowTrace.Log("⚠ 儲存程式 heartbeat 未回報 reason=" +
-                                    (heartbeatError ?? (ok ? "unknown" : "storage share unavailable")));
-                            }
-                        }
-                        _storageAppAlive = appAlive;
-                        _remoteCapacityFreeBytes = appAlive && heartbeatRecord != null
-                            ? heartbeatRecord.FreeBytes : -1;
-                        _remoteCapacityTotalBytes = appAlive && heartbeatRecord != null
-                            ? heartbeatRecord.TotalBytes : 0;
-                        RefreshCapacityInfoLabel();
-                        UpdateStorageConnLabel(ok);
-                    }));
-                }
-                catch (InvalidOperationException) { }
-            });
         }
 
         /// <summary>本機網路介面變動（拔/插網路線）→ 立即觸發儲存重探（下一個 telemetry tick ≤500ms），
@@ -1056,46 +941,7 @@ namespace AniloxRoll.Monitor.Forms
         /// 注意：遠端 PC 自己關機/更新時本機網卡不變、此事件不觸發，那種情況仍靠週期探測。</summary>
         private void OnNetworkAddressChanged(object sender, EventArgs e)
         {
-            // 事件在 thread pool 觸發 → marshal 回 UI 執行緒改計數器（與 telemetry tick 同執行緒，無 race）
-            SafeBeginInvoke(() => { _storageProbeTickCounter = StorageProbeIntervalTicks; });
-        }
-
-        /// <summary>儲存機 transport 探測：解析 UNC host 後 TCP 連 445(SMB) port，1s 逾時。
-        /// 不用 Directory.Exists —— 拔網路線後 Windows SMB redirector 會把該 server 快取為不可達，
-        /// 重插網路線甚至重開程式都恢復不了（"找不到"）。直接 TCP 探測繞過 SMB session 快取，
-        /// 網路一通後仍須通過 RemoteCopyService 的分享路徑寫入探針才可恢復綠燈。</summary>
-        private static bool ProbeStorageTransportReachable(string uncPath)
-        {
-            string host = ParseUncHost(uncPath);
-            if (string.IsNullOrEmpty(host)) return false;
-            System.Net.Sockets.Socket sock = null;
-            try
-            {
-                sock = new System.Net.Sockets.Socket(
-                    System.Net.Sockets.AddressFamily.InterNetwork,
-                    System.Net.Sockets.SocketType.Stream,
-                    System.Net.Sockets.ProtocolType.Tcp);
-                var ar = sock.BeginConnect(host, 445, null, null);
-                // 逾時就直接 Close（不呼叫 EndConnect）—— 避免 TcpClient.ConnectAsync 在 dispose 後
-                // 仍呼叫 EndConnect 於已釋放 socket 而拋 NullReferenceException（並非儲存機端問題）。
-                // 1s 逾時（LAN 連線 <50ms，足夠）→ 斷線偵測更快。
-                if (ar.AsyncWaitHandle.WaitOne(1000) && sock.Connected)
-                {
-                    sock.EndConnect(ar);
-                    return true;
-                }
-                return false;
-            }
-            finally { sock?.Dispose(); }
-        }
-
-        /// <summary>從 UNC 路徑（\\host\share\...）解析出 host。</summary>
-        private static string ParseUncHost(string uncPath)
-        {
-            if (string.IsNullOrWhiteSpace(uncPath)) return null;
-            string p = uncPath.TrimStart('\\', '/');
-            int slash = p.IndexOfAny(new[] { '\\', '/' });
-            return slash > 0 ? p.Substring(0, slash) : p;
+            _storageHealthCoordinator?.ForceRemoteProbe();
         }
 
         private void UpdateIoLeds(IoSnapshot io)

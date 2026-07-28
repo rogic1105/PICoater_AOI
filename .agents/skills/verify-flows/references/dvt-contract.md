@@ -1021,6 +1021,21 @@ DI START：io:DI START 上升緣 → 抓取請求
 啟動途中失效：capture start cancelled before gate reason=io-request-invalid
              → StopGrab → IO grab rejected busy=off reason=…
 ```
+**儲存 code-flow（觀測與呈現分層）**
+```
+TelemetryTimer_Tick
+ → UpdateConnectionStatusLabels@AniloxRollForm.HardwareStatus.cs
+ → Tick@StorageHealthCoordinator.cs
+    ├ RefreshLocalCapacity → DriveInfo（本機容量快照）
+    └（Inspection，每 2 秒）ProbeStorageTransportReachable(TCP 445)
+       → RemoteCopyService.ProbeRemoteWritable（分享實際寫入探針）
+       → StorageAppHeartbeatService.TryRead（程式存活＋遠端容量）
+       → StorageHealthSnapshot
+ → UpdateStorageConnLabel／RefreshCapacityInfoLabel／FlowHardwareEdges@AniloxRollForm.HardwareStatus.cs
+```
+- `StorageHealthCoordinator` 只擁有觀測狀態與探測節拍；循環刪檔仍由 `StorageRetentionService`、
+  遠端傳輸仍由 `RemoteCopyService` 負責。Form 不得另存第二份容量、分享或 heartbeat 狀態。
+
 - **IO Start 交界狀態表**（Form 與 `IoGrabController` 之間的產品 gate；完整轉移不得拆成零散 guard）：
 
 | 目前狀態 | 事件／條件 | 下一狀態 | 動作 |
@@ -1308,9 +1323,9 @@ StorageRetentionService.RunCleanup
  → 空月份/年份資料夾一併移除
 
 容量狀態列（`lblInfo`，不顯示游標座標）
- → Storage role：TelemetryTimer → DriveInfo(`StorageMachineDataPath`) → `儲存電腦：剩餘/總容量`
- → Inspection role 本機：TelemetryTimer → DriveInfo(`CaptureRootPath`) → `檢測電腦：剩餘/總容量`
- → Inspection role 遠端：儲存 probe → heartbeat FreeBytes/TotalBytes → `儲存電腦：剩餘/總容量`
+ → Storage role：TelemetryTimer → `StorageHealthCoordinator` → DriveInfo(`StorageMachineDataPath`) → `儲存電腦：剩餘/總容量`
+ → Inspection role 本機：TelemetryTimer → `StorageHealthCoordinator` → DriveInfo(`CaptureRootPath`) → `檢測電腦：剩餘/總容量`
+ → Inspection role 遠端：`StorageHealthCoordinator` probe → heartbeat FreeBytes/TotalBytes → `儲存電腦：剩餘/總容量`
  → Inspection role 待傳：`RemoteCopyService.PendingBytes/QueueCount` → `待傳：N GB（M 檔）`
  → Inspection role 成功時間：`OnFilesSaved`／`RemoteCopyService.LastSuccessfulCopyUtc`
    → `最近存檔 HH:mm:ss`／`最近遠傳 HH:mm:ss`
