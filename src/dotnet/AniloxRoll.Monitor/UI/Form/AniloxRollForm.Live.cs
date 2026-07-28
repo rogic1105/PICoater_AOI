@@ -73,7 +73,7 @@ namespace AniloxRoll.Monitor.Forms
                 _outputHealthService?.Resolve("MuraExceed.v");
                 _outputHealthService?.Resolve("MuraExceed.h");
                 if (_settings?.MuraDetectPaused != true) UpdateMuraLed(false);   // 新一輪檢測：警告閂鎖歸零
-                _ = _ioGrabController?.ClearMura();   // 硬體 DO 閂鎖同步歸零（手動流程與 FSM EnterIdle 對齊）
+                _ = CurrentIoController?.ClearMura();   // 硬體 DO 閂鎖同步歸零（手動流程與 FSM EnterIdle 對齊）
             }
 
             bool grabStateChanged;
@@ -252,7 +252,7 @@ namespace AniloxRoll.Monitor.Forms
                 if (_settings?.MuraDetectPaused != true) UpdateMuraLed(false);
                 // 硬體 DO 閂鎖也要清：手動 grab 不經 FSM，不清則 DO_MURA 永遠掛著（Nakan 誤報 +
                 // IO 暫停→恢復後 snapshot 讀回殘留 latch、燈「自己亮」——2026-07-07 盲測輪3抓到）。
-                _ = _ioGrabController?.ClearMura();
+                _ = CurrentIoController?.ClearMura();
             }
 
             UpdateGrabButton(_liveCameraManager.IsLiveGrabbing);
@@ -272,14 +272,15 @@ namespace AniloxRoll.Monitor.Forms
 
             bool stopped = await ToggleLiveGrabAsync(
                 request.CreateIntentLine());
-            if (stopped && _ioGrabController != null)
+            IoGrabController ioController = CurrentIoController;
+            if (stopped && ioController != null)
             {
                 try
                 {
                     if (request.NotifyFixedGrabCompleted)
-                        await _ioGrabController.NotifyFixedGrabCompleted();
+                        await ioController.NotifyFixedGrabCompleted();
                     else
-                        await _ioGrabController.NotifyGrabStopped();
+                        await ioController.NotifyGrabStopped();
                 }
                 catch (Exception ex) { Trace.WriteLine($"[GrabLimit.NotifyStopped] {ex.GetType().Name}: {ex.Message}"); }
             }
@@ -469,7 +470,7 @@ namespace AniloxRoll.Monitor.Forms
                 _muraExceedLatch[di] = exceed;
                 if (exceed)
                 {
-                    string ioState = _ioGrabController?.IsConnected != true ? "IO未連線→僅畫面警告"
+                    string ioState = CurrentIoController?.IsConnected != true ? "IO未連線→僅畫面警告"
                         : _isIoSuspended ? "IO暫停中→僅畫面警告" : "IO已連線";
                     FlowTrace.Log($"⚠ MURA 超標（{direction}）mean={meanPeak:F2}/max={maxPeak:F2}"
                         + $"（thr {thMean:F2}/{thMax:F2}，{ioState}）");
@@ -494,10 +495,11 @@ namespace AniloxRoll.Monitor.Forms
             // lblIoDoMura 視覺警告一律亮；DO 輸出（給 Nakan）看 IO 連線「且未被使用者暫停」（暫停=視同離線）。
             WarnMuraVisual();
 
-            if (!_isIoSuspended && _ioGrabController?.IsConnected == true)
+            IoGrabController ioController = CurrentIoController;
+            if (!_isIoSuspended && ioController?.IsConnected == true)
             {
                 // fire-and-forget; 寫入失敗不應影響取像流程
-                _ = _ioGrabController.NotifyMuraDetected().ContinueWith(
+                _ = ioController.NotifyMuraDetected().ContinueWith(
                     t => { /* swallow — PollTick 會偵測真正的 CommLost */ },
                     TaskContinuationOptions.OnlyOnFaulted);
             }

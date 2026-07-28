@@ -204,6 +204,7 @@
     <Compile Include="UI\Coordinators\InspectionSettingsCoordinator.cs" />
     <Compile Include="UI\Coordinators\LatestGrabLoadCoordinator.cs" />
     <Compile Include="UI\Coordinators\LightConnectionCoordinator.cs" />
+    <Compile Include="UI\Coordinators\IoConnectionCoordinator.cs" />
     <Compile Include="UI\Coordinators\StorageHealthCoordinator.cs" />
     <Compile Include="UI\Coordinators\ReviewImageLoadGate.cs" />
     <Compile Include="UI\Coordinators\ReviewPeriodLoadCoordinator.cs" />

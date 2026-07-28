@@ -1021,6 +1021,29 @@ DI START：io:DI START 上升緣 → 抓取請求
 啟動途中失效：capture start cancelled before gate reason=io-request-invalid
              → StopGrab → IO grab rejected busy=off reason=…
 ```
+**IO code-flow（連線生命週期與產品擷取分層）**
+```
+InitIoController／HandleIoSettingsChanged@AniloxRollForm.HardwareStatus.cs
+ → StartAsync／RestartAsync@IoConnectionCoordinator.cs
+    ├ requested generation 立即使舊 callback 失效
+    ├ lifecycle gate 序列化 StopAsync／Dispose 舊 controller
+    ├ 快速連改只建立最後 generation
+    └ 建立 IoGrabController → StartAsync(IP, Port)
+IoGrabController events
+ → IoConnectionCoordinator.IsCurrent（舊 generation 截止）
+ → OnIoController*Requested／DispatchCurrentIoController@AniloxRollForm.HardwareStatus.cs
+    ├ Start／Stop → Form 的 request generation＋transition gate＋既有 Grab FSM
+    └ State／Connection／IoUpdated → UI 呈現
+關閉程式
+ → ShutdownIoControllerAsync@AniloxRollForm.HardwareStatus.cs
+ → ShutdownAsync@IoConnectionCoordinator.cs
+ → generation 失效 → StopAsync／Dispose
+```
+- `IoConnectionCoordinator` 只擁有 controller 建立、替換、關閉、active generation 與 lifecycle gate；
+  不得擁有 GrabId、相機準備、停止條件、BUSY／MURA 等產品政策。
+- Form 只保留 IO 擷取 request generation 與 transition gate；controller lifecycle 欄位不得在 Form
+  另存第二份。
+
 **儲存 code-flow（觀測與呈現分層）**
 ```
 TelemetryTimer_Tick
