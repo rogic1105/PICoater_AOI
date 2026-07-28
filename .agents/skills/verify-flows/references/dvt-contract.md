@@ -1093,6 +1093,17 @@ DI START：io:DI START 上升緣 → 抓取請求
 - **光源重連防呆**：開機首次偵測 `AutoDetect` 全 port；離線後每 2 秒先 `TryConnect` 設定 COM，
   每 5 次失敗（約 10 秒）必須 `AutoDetect` 全 port 一次。找到不同 COM 要回寫 SSoT；禁止移除全掃描造成
   工廠現場無法自救，也禁止每輪全掃描造成 SerialPort handle churn。
+- **光源 code-flow**：
+  `InitLightController@AniloxRollForm.HardwareStatus.cs`
+  → `Start@LightConnectionCoordinator.cs`
+  → 背景 `AutoDetect@LightController.cs`；
+  `TelemetryTimer_Tick@AniloxRollForm.Telemetry.cs`
+  → `UpdateConnectionStatusLabels`
+  → `Tick@LightConnectionCoordinator.cs`
+  → 每 2 秒背景 `Probe`／`TryConnect`／第 5 次 `AutoDetect`。
+  coordinator 的 `StateChanged` 只回 Form 執行 `UpdateLightConnLabel`，
+  `ActivePortChanged` 只經 `SettingsHub.SetBatch` 回寫 COM；
+  `LightTurnOn/LightTurnOff` 只轉送 coordinator，Form 不得再持有或替換 `LightController`。
 - 光源停用（LightEnabled=false）/ 遠端路徑空 → 該項不觀測（靜默合法）。
 - 開機常見「未連線（開機基線）→ 恢復連線」＝平行初始化的正常時序，非異常。
 

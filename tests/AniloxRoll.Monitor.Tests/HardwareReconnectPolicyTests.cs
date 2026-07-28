@@ -1,4 +1,4 @@
-using AniloxRoll.Monitor.Forms;
+using AniloxRoll.Monitor.UI.Coordinators;
 using NUnit.Framework;
 
 namespace AniloxRoll.Monitor.Tests
@@ -13,7 +13,9 @@ namespace AniloxRoll.Monitor.Tests
         [TestCase(10, true)]
         public void LightReconnect_FullPortScanRunsEveryFiveAttempts(int attempt, bool expected)
         {
-            Assert.That(AniloxRollForm.ShouldRunFullLightPortScan(attempt), Is.EqualTo(expected));
+            Assert.That(
+                LightConnectionCoordinator.ShouldRunFullPortScan(attempt),
+                Is.EqualTo(expected));
         }
     }
 }

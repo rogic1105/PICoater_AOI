@@ -203,6 +203,7 @@
     <Compile Include="UI\Coordinators\GrabDurationCoordinator.cs" />
     <Compile Include="UI\Coordinators\InspectionSettingsCoordinator.cs" />
     <Compile Include="UI\Coordinators\LatestGrabLoadCoordinator.cs" />
+    <Compile Include="UI\Coordinators\LightConnectionCoordinator.cs" />
     <Compile Include="UI\Coordinators\ReviewImageLoadGate.cs" />
     <Compile Include="UI\Coordinators\ReviewPeriodLoadCoordinator.cs" />
     <Compile Include="UI\Coordinators\DataRangePreviewCoordinator.cs" />

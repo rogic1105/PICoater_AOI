@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 using System.Management;
 using System.Windows.Forms;
 using StorageBridge.Core;
-using LightBridge.Core;
 using MilGrabber.Core;
 using TanukiCv.Controls;
 using TanukiCv.Utils;
@@ -151,47 +150,31 @@ namespace AniloxRoll.Monitor.Forms
         private void InitLightController()
         {
             if (!_settings.LightEnabled) return;
-            System.Threading.Interlocked.Exchange(ref _lightReconnectAttemptCount, 0);
-
-            // AutoDetect 會先試設定 COM，失敗則掃描全部 port —— 這是阻塞數秒的序列埠 IO。
-            // 過去直接跑在 UI 執行緒（InitServiceLayer）→ 啟動期間整個視窗拖不動（光源是真正瓶頸，不是相機）。
-            // 改為背景偵測，完成後 marshal 回 UI 接管 _lightController + 更新 COM 設定 + 刷狀態燈。
-            string preferredPort = _settings.LightComPort;
-            int channel = _settings.LightChannel;
-            var controller = new LightController();
-            _lightProbeInFlight = true;   // 佔住，避免 telemetry 重連 probe 同時也跑 AutoDetect 搶 COM
-            Task.Run(() =>
+            if (_lightConnectionCoordinator == null)
             {
-                string found;
-                try { found = controller.AutoDetect(preferredPort, channel); }
-                finally { _lightProbeInFlight = false; }
-                SafeBeginInvoke(() =>
-                {
-                    _lightProbedOnce = true;   // 初次偵測完成 → label 從「初始化中」切到實際狀態
-                    if (_settings == null || !_settings.LightEnabled || IsDisposed || Disposing)
+                _lightConnectionCoordinator =
+                    new LightConnectionCoordinator(TelemetryTickMs);
+                _lightConnectionCoordinator.StateChanged += () =>
+                    SafeBeginInvoke(UpdateLightConnLabel);
+                _lightConnectionCoordinator.ActivePortChanged += found =>
+                    SafeBeginInvoke(() =>
                     {
-                        controller.Dispose();
-                        return;
-                    }
-                    if (found == null)
-                    {
-                        System.Diagnostics.Trace.WriteLine("[Light] 光源控制器: NA（設定 " + preferredPort + " + 全 port 掃描均無回應）");
-                        controller.Dispose();
-                        _lightController = null;
-                        UpdateLightConnLabel();
-                        return;
-                    }
-                    _lightController?.Dispose();
-                    _lightController = controller;
-                    // 掃描找到但非原設定 → 更新記錄的 COM（下次啟動直接命中）。SetBatch（save only no event）避免遞迴。
-                    if (!string.Equals(found, preferredPort, StringComparison.OrdinalIgnoreCase))
-                    {
+                        if (_settings == null ||
+                            !_settings.LightEnabled ||
+                            string.Equals(
+                                found,
+                                _settings.LightComPort,
+                                StringComparison.OrdinalIgnoreCase))
+                            return;
+
                         _settingsHub.SetBatch(s => s.LightComPort = found);
                         RefreshGridItem(nameof(InspectionSettings.LightComPort));
-                    }
-                    UpdateLightConnLabel();
-                });
-            });
+                    });
+            }
+
+            _lightConnectionCoordinator.Start(
+                _settings.LightComPort,
+                _settings.LightChannel);
         }
 
         private async Task IoStartGrabAsync(
@@ -352,14 +335,14 @@ namespace AniloxRoll.Monitor.Forms
 
         private void LightTurnOn()
         {
-            if (_lightController == null || !_lightController.IsConnected) return;
-            _lightController.TurnOn(_settings.LightChannel, _settings.LightBrightness);
+            _lightConnectionCoordinator?.TurnOn(
+                _settings.LightChannel,
+                _settings.LightBrightness);
         }
 
         private void LightTurnOff()
         {
-            if (_lightController == null || !_lightController.IsConnected) return;
-            _lightController.TurnOff(_settings.LightChannel);
+            _lightConnectionCoordinator?.TurnOff(_settings.LightChannel);
         }
 
         /// <summary>
@@ -375,28 +358,24 @@ namespace AniloxRoll.Monitor.Forms
                 case nameof(InspectionSettings.LightEnabled):
                     if (_settings.LightEnabled)
                     {
-                        if (_lightController == null) InitLightController();
+                        InitLightController();
                     }
                     else
                     {
-                        _lightController?.Dispose();
-                        _lightController = null;
+                        _lightConnectionCoordinator?.Disable();
                     }
                     break;
 
                 case nameof(InspectionSettings.LightComPort):
                 case nameof(InspectionSettings.LightChannel):
                     if (_settings.LightEnabled)
-                    {
-                        _lightController?.Dispose();
-                        _lightController = null;
                         InitLightController();
-                    }
                     break;
 
                 case nameof(InspectionSettings.LightBrightness):
-                    if (_lightController != null && _lightController.IsConnected)
-                        _lightController.SetBrightness(_settings.LightChannel, _settings.LightBrightness);
+                    _lightConnectionCoordinator?.SetBrightness(
+                        _settings.LightChannel,
+                        _settings.LightBrightness);
                     UpdateLightConnLabel();
                     break;
             }
@@ -565,7 +544,10 @@ namespace AniloxRoll.Monitor.Forms
             }
             Edge(ref _lastFlowIoConn, _ioGrabController?.IsConnected == true, "IO");
             if (_settings?.LightEnabled == true)
-                Edge(ref _lastFlowLightConn, _lightController?.IsConnected == true, "光源");
+                Edge(
+                    ref _lastFlowLightConn,
+                    _lightConnectionCoordinator?.Snapshot.Connected == true,
+                    "光源");
             if (!string.IsNullOrWhiteSpace(_settings?.RemotePath))
                 Edge(ref _lastFlowStorageShareConn, _storageLastConnected == true, "儲存分享");
 
@@ -582,9 +564,11 @@ namespace AniloxRoll.Monitor.Forms
                 _outputHealthService?.Resolve("IoConnection");
             }
 
-            if (_settings?.LightEnabled == true && _lightProbedOnce)
+            LightConnectionSnapshot light =
+                _lightConnectionCoordinator?.Snapshot;
+            if (_settings?.LightEnabled == true && light?.HasProbed == true)
             {
-                if (_lightController?.IsConnected == true)
+                if (light.Connected)
                     _outputHealthService?.Resolve("LightConnection");
                 else
                     _outputHealthService?.Report(
@@ -621,12 +605,15 @@ namespace AniloxRoll.Monitor.Forms
                 lblLightConn.BackColor = IecGray;
                 return;
             }
-            if (_lightController != null && _lightController.IsConnected)
+
+            LightConnectionSnapshot light =
+                _lightConnectionCoordinator?.Snapshot;
+            if (light?.Connected == true)
             {
                 lblLightConn.Text = $"● 光源 已連線 ({_settings.LightBrightness})";
                 lblLightConn.BackColor = IecGreen;
             }
-            else if (!_lightProbedOnce)
+            else if (light == null || !light.HasProbed)
             {
                 // 初次偵測還沒回來 → 維持「初始化中」（與 IO/儲存一致）
                 lblLightConn.Text = "● 光源: 初始化中…";
@@ -634,10 +621,10 @@ namespace AniloxRoll.Monitor.Forms
             }
             else
             {
-                // 斷線 → 顯示重連倒數（探測進行中時顯示「探測中」）。秒數源自 LightProbeIntervalTicks。
-                lblLightConn.Text = _lightProbeInFlight
+                // 斷線 → 顯示 coordinator 提供的 probe 狀態與倒數。
+                lblLightConn.Text = light.ProbeInFlight
                     ? "● 光源 探測中…"
-                    : $"● 光源 重連中 {CountdownSec(_lightProbeTickCounter, LightProbeIntervalTicks)}s…";
+                    : $"● 光源 重連中 {light.ReconnectSeconds}s…";
                 lblLightConn.BackColor = IecRed;
             }
 
@@ -646,12 +633,8 @@ namespace AniloxRoll.Monitor.Forms
 
         private int _storageProbeTickCounter;
         private volatile bool _storageProbeInFlight;
-        private int _lightProbeTickCounter;
-        private int _lightReconnectAttemptCount;
-        private volatile bool _lightProbeInFlight;
         private bool? _storageLastConnected;   // 最後一次 probe 結果（供每 tick 刷新倒數用）
         private bool? _storageAppAlive;        // 遠端 heartbeat 是否在 15 秒有效期內
-        private bool _lightProbedOnce;         // 光源初次偵測是否完成（未完成前 label 維持「初始化中」）
         private long _localCapacityFreeBytes = -1;
         private long _localCapacityTotalBytes;
         private long _remoteCapacityFreeBytes = -1;
@@ -660,15 +643,8 @@ namespace AniloxRoll.Monitor.Forms
 
         // ── 重連倒數 / probe 排程的單一真實來源（秒數由此推導，不寫死）──────────────
         internal const int TelemetryTickMs = 500;          // = SettingsTabs 的 _telemetryTimer.Interval
-        private const int LightProbeIntervalTicks = 4;     // 光源每 4 tick(2s) 背景 probe / 重連一次
-        private const int LightFullScanEveryAttempts = 5;  // 固定 COM 失敗約 10s 後全 port 防呆掃描
         private const int StorageProbeIntervalTicks = 4;   // 儲存每 4 tick(2s) 背景 probe 一次
         private const long RemoteBacklogWarningBytes = 20L * 1024 * 1024 * 1024;
-
-        internal static bool ShouldRunFullLightPortScan(int reconnectAttempt)
-        {
-            return reconnectAttempt > 0 && reconnectAttempt % LightFullScanEveryAttempts == 0;
-        }
 
         /// <summary>倒數剩餘秒數 = (intervalTicks − 已過 ticks) × tick 間隔，至少 1。</summary>
         private static int CountdownSec(int elapsedTicks, int intervalTicks)
@@ -985,81 +961,12 @@ namespace AniloxRoll.Monitor.Forms
                 Task.Run(() => _retentionService?.RunCleanup());
             }
 
-            // 光源：先同步更新（用 IsConnected 快取結果），再 2 秒背景實測 / 重連
-            // （Probe 用 TryEnter，與取像時 SendCommand 不會競爭，可放心高頻）
+            // 光源連線生命週期由 coordinator 管理；Form 只推進 timer 並畫快照。
+            _lightConnectionCoordinator?.Tick();
             UpdateLightConnLabel();
             RefreshIoConnLabel();          // IO 重連倒數每 tick 刷新（源自 IoGrabController）
             UpdateStorageConnLabel(null);  // 儲存重連倒數每 tick 刷新（用上次 probe 結果）
             FlowHardwareEdges();           // H 系列：IO/光源/儲存 斷線/恢復 邊緣留痕
-            if (++_lightProbeTickCounter >= LightProbeIntervalTicks)
-            {
-                _lightProbeTickCounter = 0;
-                if (_settings != null && _settings.LightEnabled && !_lightProbeInFlight)
-                {
-                    _lightProbeInFlight = true;
-                    int channel = _settings.LightChannel;
-                    string preferredPort = _settings.LightComPort;
-                    var lc = _lightController;
-                    System.Threading.Tasks.Task.Run(() =>
-                    {
-                        try
-                        {
-                            if (lc != null && lc.IsConnected)
-                            {
-                                // 已連線 → 實測（拔線會被 Probe 偵測，內部關 port）
-                                if (lc.Probe(channel))
-                                    System.Threading.Interlocked.Exchange(ref _lightReconnectAttemptCount, 0);
-                            }
-                            else
-                            {
-                                // 未連線先快速試設定 COM；連續失敗後定期全掃描，兼顧
-                                // handle churn 與工廠現場 COM 重新編號/設定錯誤的自救能力。
-                                int attempt = System.Threading.Interlocked.Increment(ref _lightReconnectAttemptCount);
-                                bool fullScan = ShouldRunFullLightPortScan(attempt);
-                                var fresh = new LightController();
-                                string found = fullScan
-                                    ? fresh.AutoDetect(preferredPort, channel)
-                                    : (fresh.TryConnect(preferredPort, channel) ? preferredPort : null);
-                                if (found != null && !IsDisposed && !Disposing)
-                                {
-                                    System.Threading.Interlocked.Exchange(ref _lightReconnectAttemptCount, 0);
-                                    try
-                                    {
-                                        BeginInvoke(new Action(() =>
-                                        {
-                                            if (_settings != null && _settings.LightEnabled)
-                                            {
-                                                _lightController?.Dispose();
-                                                _lightController = fresh;
-                                                if (!string.Equals(found, _settings.LightComPort, StringComparison.OrdinalIgnoreCase))
-                                                {
-                                                    _settingsHub.SetBatch(s => s.LightComPort = found);
-                                                    RefreshGridItem(nameof(InspectionSettings.LightComPort));
-                                                }
-                                            }
-                                            else
-                                            {
-                                                fresh.Dispose();
-                                            }
-                                        }));
-                                    }
-                                    catch (InvalidOperationException) { fresh.Dispose(); }
-                                }
-                                else
-                                {
-                                    fresh.Dispose();
-                                }
-                            }
-                        }
-                        catch { /* Probe/AutoDetect 內已處理例外，這裡保險 */ }
-                        finally { _lightProbeInFlight = false; }
-
-                        if (IsDisposed || Disposing) return;
-                        try { BeginInvoke(new Action(UpdateLightConnLabel)); }
-                        catch (InvalidOperationException) { }
-                    });
-                }
-            }
 
             // 儲存機：每 2 秒先探 TCP 445，再實際建立/寫入/刪除探針檔。
             if (++_storageProbeTickCounter < StorageProbeIntervalTicks) return;
