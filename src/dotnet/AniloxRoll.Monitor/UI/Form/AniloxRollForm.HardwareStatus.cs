@@ -319,22 +319,28 @@ namespace AniloxRoll.Monitor.Forms
             {
                 if (!IsCurrentIoController(controller, generation) || _isIoSuspended) return;
                 if (_liveCameraManager == null || !_liveCameraManager.IsLiveGrabbing) return;
-                CaptureStopCondition stopCondition = _activeCaptureStopCondition;
-                if (!CaptureStopPolicy.ShouldStopOnIoRequest(stopCondition))
+                CaptureStopRequest stopRequest;
+                if (_captureStopCoordinator == null ||
+                    !_captureStopCoordinator.TryRequestIoStop(
+                        reason,
+                        out stopRequest))
                 {
+                    CaptureStopCondition stopCondition =
+                        _captureStopCoordinator?.Condition ??
+                        CaptureStopCondition.IoSignal;
                     FlowTrace.Log(
                         $"IO grab stop ignored reason={reason} stopCondition={stopCondition} " +
                         "captureContinues=True");
                     return;
                 }
 
-                bool drainIoTail = CaptureStopPolicy.ShouldDrainIoTail(reason);
                 FlowTrace.Log(
-                    $"IO grab stop accepted reason={reason} stopCondition={stopCondition} " +
-                    $"drainTail={drainIoTail}");
+                    $"IO grab stop accepted reason={reason} " +
+                    $"stopCondition={stopRequest.Condition} " +
+                    $"drainTail={stopRequest.DrainIoTail}");
                 bool stopped = await ToggleLiveGrabAsync(
-                    $"io:stop reason={reason} condition={stopCondition}",
-                    drainIoTail: drainIoTail);
+                    stopRequest.CreateIntentLine(),
+                    drainIoTail: stopRequest.DrainIoTail);
                 if (stopped && IsCurrentIoController(controller, generation))
                     await controller.NotifyGrabStopped();
             }

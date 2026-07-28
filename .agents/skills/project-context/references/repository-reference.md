@@ -45,6 +45,7 @@ against current code with `rg` before editing because lookup data can become sta
 | `UI/Coordinators/ReviewFolderCoordinator.cs` | 回顧資料夾選擇、路徑修正、ImageRepository refresh、DateTimeNavigator 初始化。 |
 | `UI/Coordinators/InspectionSettingsCoordinator.cs` | InspectionSettings 到 BatchInspectionService 的 pipeline 副作用唯一 owner。 |
 | `UI/Coordinators/BackgroundCaptureCoordinator.cs` | 一輪背景取得的流程 owner：等完整首幀組、定時採樣、欄平均、發布新背景版本；失敗時刪除本輪未啟用版本。 |
+| `UI/Coordinators/CaptureStopCoordinator.cs` | 每輪 IO／時間／高度停止條件的狀態機：快照條件與數值、首幀後啟動時間計時、IO tail 決策、高度門檻與單一 terminal request。 |
 | `UI/Coordinators/LatestGrabLoadCoordinator.cs` | 回顧／報表／預覽共用的單序號 latest-only／single-flight 排程與 stale token owner；不負責讀檔或畫畫面。 |
 | `UI/Coordinators/ReviewPeriodLoadCoordinator.cs` | 回顧時段載入的 FIFO single-flight、重複 request 去重與 generation 失效 owner。 |
 | `UI/Services/ImageCacheService.cs` | ProcessBatch 產出但不直接顯示的 Bitmap 生命週期唯一 owner；下一次 workflow 前統一 Dispose。 |
@@ -144,6 +145,7 @@ against current code with `rg` before editing because lookup data can become sta
 | `SingleGrabCurveCacheTests.cs` | 同 key single-flight、LRU 淘汰、重載世代隔離與 raw Curve 複製隔離 |
 | `SingleGrabCurveSummaryStoreTests.cs` | `.mcsf` round-trip、來源時間失效、損壞退回與原子覆寫 |
 | `IoGrabControllerTests.cs` | FSM 狀態機：連線、邊緣偵測、故障恢復、CommLost |
+| `CaptureStopCoordinatorTests.cs` | 擷取停止狀態機：IO／時間／高度轉移、首幀起算、tail drain、固定目標通知與重複 terminal 抑制 |
 | `StressTests.cs` | 長時間壓力：PLC 100 萬循環、CSV 50 萬筆、Settings 14.5 萬讀寫；STRESS_MINUTES 環境變數控制時長 |
 
 ---
