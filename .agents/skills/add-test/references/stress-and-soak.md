@@ -9,6 +9,15 @@ Use this reference for long-loop, load, endurance, or failure-recovery work. Kee
 - Duration input: `STRESS_MINUTES`
 - Build and run only `Release|x64`.
 
+`tests/TestRunner.bat` is the operator entry point. It keeps functional, stress, and soak
+classification separate while producing one campaign report. Raw output is written under ignored
+`artifacts/test-reports/<run>/`. A recorded complete campaign overwrites
+`references/latest-campaign.md`; Git history retains previous reports without accumulating report
+files in the working tree.
+
+The offline soak option repeats the mocked/temp-file stress suite for a longer duration. It proves
+bounded logic and file behavior only. It does not replace the on-machine shift/24-hour phase below.
+
 Inspect the current test names before documenting a case; do not rely on old counts.
 
 ## On-machine phases

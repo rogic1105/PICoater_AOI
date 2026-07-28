@@ -102,6 +102,8 @@ namespace AniloxRoll.Monitor.Tests
             mockPlc.Setup(p => p.ConnectAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>()))
                 .ReturnsAsync(true);
             mockPlc.Setup(p => p.IsConnected).Returns(true);
+            mockPlc.Setup(p => p.ReadDiStatuses())
+                .ReturnsAsync(new bool[] { true, false, false, false, false, false, false, false });
 
             using (var ctrl = new IoGrabController(mockPlc.Object) { AutoBackgroundLoop = false })
             {
@@ -152,6 +154,8 @@ namespace AniloxRoll.Monitor.Tests
             mockPlc.Setup(p => p.ConnectAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>()))
                 .ReturnsAsync(true);
             mockPlc.Setup(p => p.IsConnected).Returns(true);
+            mockPlc.Setup(p => p.ReadDiStatuses())
+                .ReturnsAsync(new bool[] { true, false, false, false, false, false, false, false });
 
             using (var ctrl = new IoGrabController(mockPlc.Object) { AutoBackgroundLoop = false })
             {

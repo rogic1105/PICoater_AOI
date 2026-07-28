@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -19,13 +21,19 @@ namespace AniloxRoll.DvtRunner
         private readonly ListView _steps = new ListView();
         private readonly RichTextBox _output = new RichTextBox();
         private readonly Label _status = new Label();
+        private readonly string _autoScenarioId;
+        private readonly string _resultPath;
         private IReadOnlyList<DvtScenario> _scenarios;
         private ScenarioEngine _engine;
         private CancellationTokenSource _runCancellation;
         private string _repositoryRoot;
 
-        public MainForm()
+        public MainForm(
+            string autoScenarioId = null,
+            string resultPath = null)
         {
+            _autoScenarioId = autoScenarioId;
+            _resultPath = resultPath;
             Text = "PICoater DVT Runner";
             StartPosition = FormStartPosition.CenterScreen;
             MinimumSize = new Size(960, 640);
@@ -164,8 +172,35 @@ namespace AniloxRoll.DvtRunner
                     AppDomain.CurrentDomain.BaseDirectory, "Scenarios");
                 _scenarios = ScenarioLoader.LoadDirectory(scenarioDirectory);
                 foreach (DvtScenario item in _scenarios) _scenario.Items.Add(item);
-                if (_scenario.Items.Count > 0) _scenario.SelectedIndex = 0;
-                else _status.Text = "沒有找到 DVT 情境。";
+                if (_scenario.Items.Count == 0)
+                {
+                    _status.Text = "沒有找到 DVT 情境。";
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(_autoScenarioId))
+                {
+                    _scenario.SelectedIndex = 0;
+                }
+                else
+                {
+                    DvtScenario selected = _scenarios.FirstOrDefault(
+                        item => string.Equals(
+                            item.Id,
+                            _autoScenarioId,
+                            StringComparison.OrdinalIgnoreCase));
+                    if (selected == null)
+                        throw new InvalidDataException(
+                            "找不到指定情境：" + _autoScenarioId);
+                    _scenario.SelectedItem = selected;
+                    BeginInvoke(new Action(async () =>
+                    {
+                        bool passed = await StartScenarioAsync();
+                        WriteAutomationResult(passed);
+                        Environment.ExitCode = passed ? 0 : 1;
+                        Close();
+                    }));
+                }
             }
             catch (Exception ex)
             {
@@ -192,14 +227,14 @@ namespace AniloxRoll.DvtRunner
                 $"已選：{selected.Name}，共 {selected.Steps.Count} 步。{selected.Description}";
         }
 
-        private async Task StartScenarioAsync()
+        private async Task<bool> StartScenarioAsync()
         {
             var selected = _scenario.SelectedItem as DvtScenario;
-            if (selected == null) return;
+            if (selected == null) return false;
             if (!File.Exists(_appPath.Text))
             {
                 MessageBox.Show("找不到監控程式：" + _appPath.Text);
-                return;
+                return false;
             }
             if (!Directory.Exists(_logDirectory.Text))
                 Directory.CreateDirectory(_logDirectory.Text);
@@ -223,17 +258,20 @@ namespace AniloxRoll.DvtRunner
                     () => _engine.RunAsync(selected, _runCancellation.Token));
                 _status.Text = "PASS：" + selected.Name;
                 _status.ForeColor = Color.DarkGreen;
+                return true;
             }
             catch (OperationCanceledException)
             {
                 _status.Text = "已中止；已嘗試停止 Grab 並還原設定。";
                 _status.ForeColor = Color.DarkOrange;
+                return false;
             }
             catch (Exception ex)
             {
                 _status.Text = "FAIL：" + ex.Message;
                 _status.ForeColor = Color.DarkRed;
                 AppendOutput(ex.ToString());
+                return false;
             }
             finally
             {
@@ -242,6 +280,22 @@ namespace AniloxRoll.DvtRunner
                 _runCancellation = null;
                 _engine = null;
             }
+        }
+
+        private void WriteAutomationResult(bool passed)
+        {
+            if (string.IsNullOrWhiteSpace(_resultPath)) return;
+            string directory = Path.GetDirectoryName(_resultPath);
+            if (!string.IsNullOrEmpty(directory))
+                Directory.CreateDirectory(directory);
+            File.WriteAllText(
+                _resultPath,
+                "Result: " + (passed ? "PASS" : "FAIL") +
+                Environment.NewLine +
+                "Status: " + _status.Text +
+                Environment.NewLine + Environment.NewLine +
+                _output.Text,
+                new UTF8Encoding(false));
         }
 
         private void ApplyStepUpdate(StepUpdate update)

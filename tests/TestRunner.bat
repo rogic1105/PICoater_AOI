@@ -2,52 +2,67 @@
 chcp 65001 >nul
 pushd "%~dp0.."
 
-echo ============================================
-echo  AniloxRoll.Monitor Test Runner
-echo ============================================
+echo ==================================================
+echo  PICoater AOI 統一測試入口
+echo ==================================================
 echo.
-echo  1. Unit tests only    (~2 sec)
-echo  2. Stress tests only
-echo  3. All tests (unit first, then stress)
-echo  4. Exit
+echo  1. 離線功能測試（Build + Unit + Integration + DVT）
+echo  2. 離線壓力測試
+echo  3. 離線耐久測試
+echo  4. 實體 IO 五分鐘穩定測試（不 Grab）
+echo  5. 完整離線測試並記錄最新報告
+echo  6. 結束
 echo.
-set /p choice="Select (1-4): "
+set /p choice="請選擇 (1-6): "
 
-set "TEST_PROJ=tests\AniloxRoll.Monitor.Tests\AniloxRoll.Monitor.Tests.csproj"
-set "LOG=%~dp0TestRunner.log"
-
-if "%choice%"=="1" goto :unit
-if "%choice%"=="2" goto :ask_minutes
-if "%choice%"=="3" goto :ask_minutes
-if "%choice%"=="4" exit /b
-goto :eof
-
-:unit
-echo.
-echo [%date% %time%] Running unit tests...
-dotnet test "%TEST_PROJ%" -p:Configuration=Release -v normal --filter "TestCategory!=Stress"
-goto :done
-
-:ask_minutes
-echo.
-echo  Examples: 6=quick, 60=1hr, 480=8hr, 1440=24hr
-set /p minutes="How many minutes? (default=60): "
-if "%minutes%"=="" set "minutes=60"
-echo.
+if "%choice%"=="1" goto :functional
 if "%choice%"=="2" goto :stress
-goto :all
+if "%choice%"=="3" goto :soak
+if "%choice%"=="4" goto :physical_io
+if "%choice%"=="5" goto :all
+if "%choice%"=="6" goto :done
+goto :invalid
+
+:functional
+powershell -NoProfile -ExecutionPolicy Bypass -File "tests\TestRunner.ps1" -Mode Functional
+goto :result
 
 :stress
-echo [%date% %time%] Running stress tests (%minutes% min)... log: %LOG%
-powershell -ExecutionPolicy Bypass -File "%~dp0TestRunner.ps1" "%TEST_PROJ%" "%LOG%" "Stress" "%minutes%"
-goto :done
+set /p stress_minutes="壓力測試分鐘數（預設 1）: "
+if "%stress_minutes%"=="" set "stress_minutes=1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "tests\TestRunner.ps1" -Mode Stress -StressMinutes "%stress_minutes%"
+goto :result
+
+:soak
+set /p soak_minutes="耐久測試分鐘數（預設 10；正式可填 480 或 1440）: "
+if "%soak_minutes%"=="" set "soak_minutes=10"
+powershell -NoProfile -ExecutionPolicy Bypass -File "tests\TestRunner.ps1" -Mode Soak -SoakMinutes "%soak_minutes%"
+goto :result
+
+:physical_io
+powershell -NoProfile -ExecutionPolicy Bypass -File "tests\TestRunner.ps1" -Mode PhysicalIo
+goto :result
 
 :all
-echo [%date% %time%] Running all tests (%minutes% min)... log: %LOG%
-powershell -ExecutionPolicy Bypass -File "%~dp0TestRunner.ps1" "%TEST_PROJ%" "%LOG%" "All" "%minutes%"
+set /p stress_minutes="壓力測試分鐘數（預設 1）: "
+if "%stress_minutes%"=="" set "stress_minutes=1"
+set /p soak_minutes="耐久測試分鐘數（預設 10）: "
+if "%soak_minutes%"=="" set "soak_minutes=10"
+powershell -NoProfile -ExecutionPolicy Bypass -File "tests\TestRunner.ps1" -Mode All -StressMinutes "%stress_minutes%" -SoakMinutes "%soak_minutes%" -RecordLatest
+goto :result
+
+:invalid
+echo 無效選項。
 goto :done
 
-:done
+:result
 echo.
+if errorlevel 1 (
+  echo 測試結果：FAIL，請查看畫面與 artifacts\test-reports。
+) else (
+  echo 測試結果：PASS。
+)
+
+:done
 popd
 pause

@@ -19,6 +19,8 @@ namespace AniloxRoll.DvtRunner
                 "click",
                 "wait-log",
                 "delay",
+                "restore-properties",
+                "close-app",
                 "run-checker"
             };
 
@@ -71,7 +73,13 @@ namespace AniloxRoll.DvtRunner
                         throw new InvalidDataException(prefix + " requires a regex pattern.");
                     _ = new Regex(step.Pattern, RegexOptions.CultureInvariant);
                 }
-                if (step.TimeoutSeconds <= 0)
+                if (step.TimeoutSeconds < 0)
+                    throw new InvalidDataException(
+                        prefix + " timeout cannot be negative.");
+                if (step.TimeoutSeconds == 0 &&
+                    !string.Equals(
+                        step.Action, "wait-element",
+                        StringComparison.OrdinalIgnoreCase))
                     step.TimeoutSeconds = 30;
             }
         }

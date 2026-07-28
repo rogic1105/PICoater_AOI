@@ -16,7 +16,8 @@ namespace AniloxRoll.DvtRunner
             new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, long> _offsets =
             new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
-        private readonly Queue<string> _pendingLines = new Queue<string>();
+        private readonly Queue<string> _newLines = new Queue<string>();
+        private readonly List<string> _unmatchedLines = new List<string>();
 
         public FlowLogMonitor(string logDirectory)
         {
@@ -29,7 +30,8 @@ namespace AniloxRoll.DvtRunner
         {
             _initialLengths.Clear();
             _offsets.Clear();
-            _pendingLines.Clear();
+            _newLines.Clear();
+            _unmatchedLines.Clear();
             if (!Directory.Exists(_logDirectory)) return;
 
             foreach (string path in Directory.GetFiles(_logDirectory, "trace-*.log"))
@@ -50,11 +52,20 @@ namespace AniloxRoll.DvtRunner
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 ReadAvailableLines();
-                while (_pendingLines.Count > 0)
+                while (_newLines.Count > 0)
                 {
-                    string line = _pendingLines.Dequeue();
+                    string line = _newLines.Dequeue();
                     LineObserved?.Invoke(line);
-                    if (regex.IsMatch(line)) return line;
+                    _unmatchedLines.Add(line);
+                }
+
+                for (int i = 0; i < _unmatchedLines.Count; i++)
+                {
+                    string line = _unmatchedLines[i];
+                    if (!regex.IsMatch(line)) continue;
+
+                    _unmatchedLines.RemoveAt(i);
+                    return line;
                 }
                 await Task.Delay(120, cancellationToken);
             }
@@ -97,7 +108,7 @@ namespace AniloxRoll.DvtRunner
                     {
                         string line;
                         while ((line = reader.ReadLine()) != null)
-                            _pendingLines.Enqueue(line);
+                            _newLines.Enqueue(line);
                     }
                     _offsets[path] = stream.Length;
                 }

@@ -41,3 +41,18 @@ Flow tail 與還原，不會啟動相機。
 - 執行完整 Flow checker。
 
 實體拔線、畫面內容是否符合肉眼預期，以及未納入的回顧、報表、Bridge 流程仍需後續情境。
+
+## 無人值守模式
+
+統一測試入口會以 CLI 執行不需接線的 Runner 自我檢查：
+
+```powershell
+AniloxRoll.DvtRunner.exe --scenario runner-self-check --result-file result.txt
+```
+
+Runner 會開啟主程式、執行情境、正常關閉主程式、寫入 PASS/FAIL 結果，最後自行結束。
+需要相機、光源或 IO 的情境不會被離線測試誤判為通過。
+
+`實體 IO 五分鐘穩定測試（不 Grab）` 只驗證 `192.168.255.1:502` 的安全交握、待機輪詢、
+controller 關閉與 Flow checker；不按開始抓取。它仍會依產品協定輸出
+MURA/BUSY Low 與 PC ALIVE High。
