@@ -10,7 +10,6 @@ using System.Threading.Tasks;
 using System.Management;
 using System.Windows.Forms;
 using StorageBridge.Core;
-using LightBridge.Core;
 using MilGrabber.Core;
 using TanukiCv.Controls;
 using TanukiCv.Utils;
@@ -153,7 +152,7 @@ namespace AniloxRoll.Monitor.Forms
         private int _ioControllerGeneration;
         private int _ioControllerActiveGeneration;
         private int _ioGrabRequestGeneration;
-        private LightController _lightController;
+        private LightConnectionCoordinator _lightConnectionCoordinator;
 
         // --- 統計 ---
         private DataStatisticsPresenter _dataStatsPresenter;
@@ -273,8 +272,8 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             try { _inspectionService?.Dispose(); } catch { }
-            try { _lightController?.Dispose(); } catch { }
-            _lightController = null;
+            try { _lightConnectionCoordinator?.Dispose(); } catch { }
+            _lightConnectionCoordinator = null;
             try { _storageHeartbeatService?.Dispose(); } catch { }
             _storageHeartbeatService = null;
             try { _logRetentionService?.Dispose(); } catch { }

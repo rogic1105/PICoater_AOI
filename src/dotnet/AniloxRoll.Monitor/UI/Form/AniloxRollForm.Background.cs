@@ -7,7 +7,6 @@ using System.Runtime.InteropServices;
 using System.Management;
 using System.Windows.Forms;
 using StorageBridge.Core;
-using LightBridge.Core;
 using MilGrabber.Core;
 using TanukiCv.Controls;
 using TanukiCv.Utils;
@@ -465,7 +464,8 @@ namespace AniloxRoll.Monitor.Forms
             _settings?.Recipe?.Algorithm == BackgroundAlgorithm.StandardBgSub;
 
         private bool IsLightReadyForBg =>
-            !(_settings?.LightEnabled == true) || (_lightController != null && _lightController.IsConnected);
+            !(_settings?.LightEnabled == true) ||
+            (_lightConnectionCoordinator?.Snapshot.Connected == true);
 
         private bool _autoStartGrabAfterBg;
         private int _autoStartGrabIoGeneration;

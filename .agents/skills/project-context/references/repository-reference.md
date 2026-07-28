@@ -45,6 +45,7 @@ against current code with `rg` before editing because lookup data can become sta
 | `UI/Coordinators/ReviewFolderCoordinator.cs` | 回顧資料夾選擇、路徑修正、ImageRepository refresh、DateTimeNavigator 初始化。 |
 | `UI/Coordinators/InspectionSettingsCoordinator.cs` | InspectionSettings 到 BatchInspectionService 的 pipeline 副作用唯一 owner。 |
 | `UI/Coordinators/BackgroundCaptureCoordinator.cs` | 一輪背景取得的流程 owner：等完整首幀組、定時採樣、欄平均、發布新背景版本；失敗時刪除本輪未啟用版本。 |
+| `UI/Coordinators/LightConnectionCoordinator.cs` | 光源連線生命週期 owner：初次全埠偵測、2 秒 probe／指定 COM 快重連、每 5 次全埠防呆掃描、controller 替換與釋放；不依賴 WinForms。 |
 | `UI/Coordinators/CaptureStopCoordinator.cs` | 每輪 IO／時間／高度停止條件的狀態機：快照條件與數值、首幀後啟動時間計時、IO tail 決策、高度門檻與單一 terminal request。 |
 | `UI/Coordinators/LatestGrabLoadCoordinator.cs` | 回顧／報表／預覽共用的單序號 latest-only／single-flight 排程與 stale token owner；不負責讀檔或畫畫面。 |
 | `UI/Coordinators/ReviewPeriodLoadCoordinator.cs` | 回顧時段載入的 FIFO single-flight、重複 request 去重與 generation 失效 owner。 |
@@ -117,7 +118,7 @@ against current code with `rg` before editing because lookup data can become sta
 | `Services/CleanupFlagWatcher.cs` | Storage PC 專用：每 10 秒自主查空間 + 清理；同時輪詢 cleanup-request.flag（Inspection PC 寫入）立即觸發 |
 | `Settings/Models/AppModeConfig.cs` | 機台角色設定：Role（Inspection/Storage）、StorageMachineConfigFolder、StorageMachineDataPath；Load/Save → Config\app-mode.json |
 | `sdk/Bridges/StorageBridge/StorageBridge.Core/RemoteCopyService.cs` | 背景遠端複製：持久 pending 佇列、斷線退避重試、重開復原、`.part-*` 長度驗證後原子發布、分享路徑可寫探針 |
-| `Services/LightController.cs` | LTS-3DPA24 光源控制器 RS-232 通訊：AutoDetect（先試設定 COM 再掃描）、嚴格 probe（PDF §4.1.4 表-4 驗證：8-byte、cmd/ch echo、XOR checksum）、TurnOn/Off/SetBrightness，跟隨 IO Grab 開關 |
+| `sdk/Bridges/LightBridge/LightBridge.Core/LightController.cs` | LTS-3DPA24 光源 RS-232 協定／transport：AutoDetect（先試設定 COM 再掃描）、嚴格 probe（PDF §4.1.4 表-4 驗證：8-byte、cmd/ch echo、XOR checksum）、TurnOn/Off/SetBrightness；產品重連與 Grab 開關政策不在 Bridge。 |
 | `UI/Widgets/GrabImageStitcher.cs` | 多張影像垂直拼接 + MergeHorizontal 全域合圖（佈局 xOffset + 重疊中點分界委派 sdk `TanukiCv.Controls.MergeLayout.Compute(Midline)` 單一來源，totalW 保留自家 ALL-slots 含空缺占位版）；LoadCameraImage（internal） |
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/Layout/ProportionalScaler.cs` | WinForms 控制項樹的等比例 layout scaler |
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/Layout/RoundedLabel.cs` | 可重用圓角狀態 Label |
