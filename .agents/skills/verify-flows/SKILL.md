@@ -28,11 +28,11 @@ For coordinate or mirror changes, also use the `row-chart-coordinates` skill.
 
 PropertyGrid `5. Log 設定（記錄／除錯） > 記錄範圍` is the runtime SSoT:
 
-- `日常運行（預設，檔案較小）`: operations, connections, errors, persistence, capture lifecycle,
+- `日常運行`: operations, connections, errors, persistence, capture lifecycle,
   and anomaly-triggered performance evidence.
-- `流程驗證（測試／驗收）`: adds coordinate/direction snapshots, prefit, main/chart ranges, and
+- `流程驗證`: adds coordinate/direction snapshots, prefit, main/chart ranges, and
   other evidence required for full DVT checking.
-- `完整診斷（除錯，檔案較大）`: adds per-second paint/stat evidence and raw `UiActionLogger`
+- `完整診斷`: adds per-second paint/stat evidence and raw `UiActionLogger`
   JSONL under `D:\Anilox\Logs\fsm\`.
 
 `check_all_flows.py` reads the `log mode=...` session marker. Rules that require DVT-only evidence

@@ -347,6 +347,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _waterfallView.FlowLog = s => FlowTrace.Display("WF", s);  // 互動 intent與診斷快照分級
             _waterfallView.Canvas.OverlayMode = _overlayMode;
             _waterfallView.Canvas.OverlayModeChanged += OnCanvasOverlayModeChanged;
+            ApplyHorizontalDisplayCrop();
 
             // 顯示鐵則1：瀑布模式的 7 台縮圖也一律即時影像（CPU ThumbStrip，與即時模式同源；點選/高亮一致）。
             _waterfallThumbs = new ThumbStrip(_cameraPanels);
@@ -457,6 +458,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _imageDisplay.ViewRangeMmChanged += OnImageViewRange;
             _imageDisplay.ContentPresented += OnMainContentPresented;
             _imageDisplay.SetSelected(_selectedMainCameraId);
+            ApplyHorizontalDisplayCrop();
 
             if (_globalMerge.IsActive && _globalMerge.Merger != null)
             {
@@ -713,6 +715,63 @@ namespace AniloxRoll.Monitor.UI.Managers
                 _imageDisplay.SetLayout(startPosMm, opsUm, 1, RowPitchMm);
             if (_waterfallView != null && _globalMerge.Merger != null)
                 _waterfallView.SetLayout(startPosMm, opsUm, refOpsMm);
+        }
+
+        public void RefreshHorizontalDisplayCrop()
+        {
+            InspectionSettings settings = _getSettings();
+            RefreshHorizontalDisplayCrop(
+                settings?.TrimHeadMm ?? 0,
+                settings?.TrimTailMm ?? 0);
+        }
+
+        public void RefreshHorizontalDisplayCrop(double trimHeadMm, double trimTailMm)
+        {
+            ApplyHorizontalDisplayCrop(trimHeadMm, trimTailMm);
+            FeedWaterfallLayout();
+            _imageDisplay?.RefreshNow();
+
+            if (_imageDisplay != null)
+            {
+                _imageDisplay.Canvas.FitToScreen();
+                _imageDisplay.RefireViewRange();
+                _imageDisplay.Canvas.RefreshVisibleContent();
+            }
+            if (_waterfallView != null)
+            {
+                _waterfallView.Canvas.FitToScreen();
+                _waterfallView.RefireViewRange();
+                _waterfallView.Canvas.RefreshVisibleContent();
+            }
+
+            ImageCanvas activeCanvas = WaterfallMode
+                ? _waterfallView?.Canvas
+                : _imageDisplay?.Canvas;
+            string mode = WaterfallMode ? "WF" : "IC";
+            FlowTrace.Log(
+                $"displayCrop applied head={trimHeadMm:F2} tail={trimTailMm:F2} " +
+                $"mode={mode} content={activeCanvas?.ContentSize.Width ?? 0}x{activeCanvas?.ContentSize.Height ?? 0} " +
+                $"zoom={activeCanvas?.Zoom ?? 0:F6} fit={activeCanvas?.IsAtFitView() == true} " +
+                "frames=dynamic");
+
+            FlowTrace.Dvt(
+                $"displayCrop head={trimHeadMm:F2} " +
+                $"tail={trimTailMm:F2} " +
+                "scope=main+column-chart data=unchanged waterfallHistory=preserved");
+        }
+
+        private void ApplyHorizontalDisplayCrop()
+        {
+            InspectionSettings settings = _getSettings();
+            double trimHeadMm = settings?.TrimHeadMm ?? 0;
+            double trimTailMm = settings?.TrimTailMm ?? 0;
+            ApplyHorizontalDisplayCrop(trimHeadMm, trimTailMm);
+        }
+
+        private void ApplyHorizontalDisplayCrop(double trimHeadMm, double trimTailMm)
+        {
+            _imageDisplay?.SetHorizontalDisplayCrop(trimHeadMm, trimTailMm);
+            _waterfallView?.SetHorizontalDisplayCrop(trimHeadMm, trimTailMm);
         }
 
         private IReadOnlyList<AniloxCamera> Cameras => _getCameras() ?? Array.Empty<AniloxCamera>();

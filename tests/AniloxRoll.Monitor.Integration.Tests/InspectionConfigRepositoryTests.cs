@@ -80,6 +80,41 @@ namespace AniloxRoll.Monitor.Tests
             Assert.That(result.HessianMaxFactorV, Is.EqualTo(2.5f));
         }
 
+        [Test]
+        public void LoadForGrabId_FinalLayoutOverridesWholeGrab()
+        {
+            DateTime date = new DateTime(2026, 7, 28);
+            string csvPath = CaptureStoragePaths.DailyCsv(_tempRoot, date);
+            Directory.CreateDirectory(Path.GetDirectoryName(csvPath));
+            var initial = CreateConfig(1.5f, date.AddHours(10));
+            var finalLayout = new CaptureLayoutSnapshot(
+                "260728-100000",
+                new[] { 24.4, 24.4, 24.4, 24.4, 24.4, 24.4, 24.4 },
+                new[] { 0d, 345, 690, 1035, 1380, 1725, 2070 },
+                40,
+                100,
+                200,
+                date.AddHours(10).AddSeconds(10));
+            File.WriteAllLines(csvPath, new[]
+            {
+                initial.ToCsvLine(),
+                "Id,FileName,MaxExceed,MeanExceed",
+                "260728-100000,20260728_100001.000-1,0,0",
+                "260728-100000,20260728_100002.000-1,0,0",
+                finalLayout.ToCsvLine()
+            });
+
+            CsvConfigSnapshot result = InspectionConfigRepository.LoadForGrabId(
+                _tempRoot, "260728-100000", date, date);
+
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result.HessianMaxFactorV, Is.EqualTo(1.5f));
+            Assert.That(result.CamPos[6], Is.EqualTo(2070));
+            Assert.That(result.AniloxRollSpeedMPerMin, Is.EqualTo(40));
+            Assert.That(result.TrimHeadMm, Is.EqualTo(100));
+            Assert.That(result.TrimTailMm, Is.EqualTo(200));
+        }
+
         private void WriteDailyConfig(DateTime date, float hessian)
         {
             string path = CaptureStoragePaths.DailyCsv(_tempRoot, date);

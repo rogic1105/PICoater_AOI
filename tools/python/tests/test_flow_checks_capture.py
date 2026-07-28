@@ -102,6 +102,74 @@ class CaptureFlowValidatorTests(unittest.TestCase):
 
         self.assertEqual(CheckStatus.FAIL, finalize.status)
 
+    def test_final_layout_with_pending_change_passes(self):
+        session = FlowSession(
+            Path("synthetic.log"),
+            [
+                FlowLine(
+                    0, "00:00:00.000", 1,
+                    "capture plan grab=260728-120000 root=D:\\Anilox "
+                    "imageDir=x csv=y archive=260728-120000.acap "
+                    "assets=raw|proc_c|proc_r|mean_c|max_c|mean_r|max_r "
+                    "preview=1920x1080x3 scale=5",
+                ),
+                FlowLine(
+                    1, "00:00:01.000", 1,
+                    "capture layout pending grab=260728-120000 "
+                    "setting=cb_CropHead apply=display-now+stop-final",
+                ),
+                FlowLine(
+                    2, "00:00:02.000", 1,
+                    "capture layout final grab=260728-120000 "
+                    "ops=1|1|1|1|1|1|1 start=0|1|2|3|4|5|6 "
+                    "speed=40 head=50 tail=10 path=x",
+                ),
+                FlowLine(
+                    3, "00:00:03.000", 1,
+                    "capture layout applied grab=260728-120000 timing=stop "
+                    "ops=1|1|1|1|1|1|1 start=0|1|2|3|4|5|6 "
+                    "speed=40 head=50 tail=10 "
+                    "render=already-applied source=unchanged",
+                ),
+                FlowLine(
+                    4, "00:00:04.000", 1,
+                    "capture finalize grab=260728-120000 "
+                    "archive=D:\\Anilox\\260728-120000.acap "
+                    "atlas=3 atlasBytes=1234 remoteFiles=2",
+                ),
+            ],
+        )
+
+        report = CaptureFlowValidator().validate(session)
+        result = next(
+            item for item in report.results if item.rule == "C2.final-layout"
+        )
+        self.assertEqual(CheckStatus.PASS, result.status)
+
+    def test_pending_layout_without_apply_fails(self):
+        session = FlowSession(
+            Path("synthetic.log"),
+            [
+                FlowLine(
+                    0, "00:00:00.000", 1,
+                    "capture layout pending grab=260728-120000 "
+                    "setting=cb_CropHead apply=display-now+stop-final",
+                ),
+                FlowLine(
+                    1, "00:00:01.000", 1,
+                    "capture layout final grab=260728-120000 "
+                    "ops=1|1|1|1|1|1|1 start=0|1|2|3|4|5|6 "
+                    "speed=40 head=50 tail=10 path=x",
+                ),
+            ],
+        )
+
+        report = CaptureFlowValidator().validate(session)
+        result = next(
+            item for item in report.results if item.rule == "C2.final-layout"
+        )
+        self.assertEqual(CheckStatus.FAIL, result.status)
+
 
 if __name__ == "__main__":
     unittest.main()

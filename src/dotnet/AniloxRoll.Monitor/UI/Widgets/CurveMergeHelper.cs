@@ -29,7 +29,9 @@ namespace AniloxRoll.Monitor.UI.Widgets
             StitchMode stitchMode,
             Func<int, bool, double, double> viewRangeProvider,
             MergeOverlap overlap = MergeOverlap.Midline,
-            float valueScale = 1f)
+            float valueScale = 1f,
+            double trimHeadMm = 0,
+            double trimTailMm = 0)
         {
             if (target == null) return;
             if (allMean == null)
@@ -56,7 +58,29 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 viewLeft = viewRangeProvider(0, true, double.NaN);
                 viewRight = viewRangeProvider(0, false, double.NaN);
             }
+            ResolveHorizontalDisplayRange(
+                r.GlobalMinMm, r.Mean.Length, r.GridMm,
+                trimHeadMm, trimTailMm,
+                ref viewLeft, ref viewRight);
             target.UpdateDataAndView(r.Mean, r.Max, r.GlobalMinMm, viewLeft, viewRight);
+        }
+
+        internal static void ResolveHorizontalDisplayRange(
+            double dataStartMm,
+            int pointCount,
+            double pointPitchMm,
+            double trimHeadMm,
+            double trimTailMm,
+            ref double viewLeft,
+            ref double viewRight)
+        {
+            if (!double.IsNaN(viewLeft) && !double.IsNaN(viewRight)) return;
+            if (trimHeadMm <= 0 && trimTailMm <= 0) return;
+
+            HorizontalDisplayCrop crop = HorizontalDisplayCrop.Compute(
+                pointCount, dataStartMm, pointPitchMm, trimHeadMm, trimTailMm);
+            viewLeft = crop.VisibleStartMm;
+            viewRight = crop.VisibleStartMm + crop.VisibleWidthPx * Math.Max(0, pointPitchMm);
         }
 
         internal static void ScaleMergedCurveValues(float[] mean, float[] max, float valueScale)

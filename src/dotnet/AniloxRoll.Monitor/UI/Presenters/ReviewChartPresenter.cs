@@ -140,7 +140,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
             CurveMergeHelper.UpdateOverviewChart(
                 displayMean, displayMax, ops, positions, errorMean, errorMax,
                 _ctx.OverviewHelper, _ctx.CameraCount, _ctx.Settings.StitchMode,
-                ViewRangeProvider);
+                ViewRangeProvider,
+                trimHeadMm: config?.TrimHeadMm ?? _ctx.Settings.TrimHeadMm,
+                trimTailMm: config?.TrimTailMm ?? _ctx.Settings.TrimTailMm);
 
             if (notifyData)
                 CurvesUpdated?.Invoke(
@@ -177,7 +179,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
             CurveMergeHelper.UpdateOverviewChart(
                 curves.Mean, curves.Max, ops, positions, errorMean, errorMax,
                 _ctx.OverviewHelper, _ctx.CameraCount, _ctx.Settings.StitchMode,
-                ViewRangeProvider);
+                ViewRangeProvider,
+                trimHeadMm: config?.TrimHeadMm ?? _ctx.Settings.TrimHeadMm,
+                trimTailMm: config?.TrimTailMm ?? _ctx.Settings.TrimTailMm);
         }
 
         public void UpdateRowChart(DateTime? period)

@@ -155,13 +155,13 @@ namespace AniloxRoll.Monitor.Tests
         {
             var settings = new InspectionSettings
             {
-                EnhanceHeatmap = EnhanceHeatmapMode.BlueYellowRed
+                EnhanceHeatmap = EnhanceHeatmapMode.Green
             };
 
             InspectionSettingsStore.Save(settings);
             var loaded = InspectionSettingsStore.Load();
 
-            Assert.That(loaded.EnhanceHeatmap, Is.EqualTo(EnhanceHeatmapMode.BlueYellowRed));
+            Assert.That(loaded.EnhanceHeatmap, Is.EqualTo(EnhanceHeatmapMode.Green));
         }
 
         [Test]

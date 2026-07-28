@@ -33,6 +33,7 @@ class HardwareFlowValidator:
         self._check_camera_edges(session, report)
         self._check_io_controller_lifecycle(session, report)
         self._check_io_grab_outcomes(session, report)
+        self._check_io_stop_policy(session, report)
         return report
 
     def _check_io_controller_lifecycle(self, session: FlowSession, report: CheckReport) -> None:
@@ -115,6 +116,56 @@ class HardwareFlowValidator:
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
             f"requests={len(starts)} probe={'request' if has_request_probe else 'legacy'} "
             f"invalid={len(failures)}" + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_io_stop_policy(self, session: FlowSession, report: CheckReport) -> None:
+        pattern = re.compile(
+            r"^IO grab stop (?P<action>accepted|ignored) "
+            r"reason=(?P<reason>StartLow|PlcAliveLost|CommunicationLost) "
+            r"stopCondition=(?P<condition>IoSignal|Time|Height) "
+            r"(?:(?:drainTail=(?P<drain>True|False))|(?:captureContinues=True))$"
+        )
+        lines = [
+            (line, pattern.match(line.message))
+            for line in session.lines
+            if line.message.startswith("IO grab stop ")
+        ]
+        if not lines:
+            report.add(
+                self.domain,
+                "H4.io-stop-policy",
+                CheckStatus.NOT_COVERED,
+                "本 session 無 IO 停止要求",
+            )
+            return
+
+        failures = []
+        for line, match in lines:
+            if match is None:
+                failures.append(f"{line.timestamp} 格式錯誤")
+                continue
+            action = match.group("action")
+            reason = match.group("reason")
+            condition = match.group("condition")
+            drain = match.group("drain")
+            if action == "accepted":
+                expected_drain = "True" if reason == "StartLow" else "False"
+                if condition != "IoSignal" or drain != expected_drain:
+                    failures.append(
+                        f"{line.timestamp} accepted condition={condition} "
+                        f"reason={reason} drain={drain}"
+                    )
+            elif condition not in ("Time", "Height"):
+                failures.append(
+                    f"{line.timestamp} ignored condition={condition}"
+                )
+
+        report.add(
+            self.domain,
+            "H4.io-stop-policy",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"requests={len(lines)} invalid={len(failures)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
         )
 
     def _check_connection_edges(self, session: FlowSession, report: CheckReport) -> None:

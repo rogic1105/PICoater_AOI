@@ -83,7 +83,7 @@ bootstrap 例外（line 232 AppRole）：Hub 還沒建構，加註解標明合�
 - **多擊手勢（單一來源）**：`DoubleClickFitToScreen`(雙擊 fit)、`TripleClickPhysical1x`(三擊實體 1:1，需 `SetPhysicalCalibration`)。SmartCanvas 使用 sdk `MultiClickDetector` + `IsAtFitView()`；雙擊只在非 fit 時動作、已 fit 不歸零讓三擊接手。事件 `FitPerformed`/`Physical1xPerformed`/`DragStarted` 給上層記 log。**主程式 `camReviewMain` 已改用**（`CanvasInteractionHelper.UpdateCanvasInfo` 餵 `SetPhysicalCalibration(_imageScaleFactor×opsInMm, _screenMmPerPx)`；移除了 app 的手勢 handler / SetPhysicalMagnification1x / IsCanvasFitToScreen）。`camLiveMain` 的雙擊 fit／三擊實體 1:1＝ImageDisplayView 內建手勢（grab 與背景預覽同一套，form 無自建路由）。
 
 ### 系統資訊 / 實體校正（TanukiCv.Core 唯一來源）
-- `TanukiCv.Core.SystemInfo`：`GetScreenMetrics()`(GDI32 螢幕 mm/px)、`GetGenericHardwareRows()`(CPU/RAM/GPU WMI)、`GetScreenRows()`。主程式 `SettingsTabs` listViewHardware 的 CPU/GPU/RAM/螢幕已改吃這個（Grabber/Disk/Storage/Resource 仍留 app；MIL Grabber 不進 sdk）。
+- `TanukiCv.Core.SystemInfo`：`GetScreenMetrics()`(GDI32 螢幕 mm/px)、`GetGenericHardwareRows()`(CPU/RAM/GPU WMI)、`GetScreenRows()`。主程式 `SettingsTabs` 的 `listViewSystemParameters` 合併顯示引擎與硬體參數；CPU/GPU/RAM/螢幕吃這個唯一來源（Grabber/Disk/Storage/Resource 仍留 app；MIL Grabber 不進 sdk）。
 - `TanukiCv.Core.PixelMmMapper`：pixel↔mm + `PhysicalMagnification`/`OneToOneZoom`（從 app 搬來的唯一來源）。實體 1:1 = `OneToOneZoom(mmPerImagePx, screenMmPerPx)`；`mmPerImagePx = FOV÷影像寬 ×(LOD?1:scale)`。
 
 ### SwitchRidgeDirection 三態切換

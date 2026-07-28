@@ -5,13 +5,13 @@ namespace AniloxRoll.Monitor.Core.Data
     [TypeConverter(typeof(EnumDescriptionConverter))]
     public enum LogRecordingMode
     {
-        [Description("日常運行（預設，檔案較小）")]
+        [Description("日常運行")]
         Operational = 0,
 
-        [Description("流程驗證（測試／驗收）")]
+        [Description("流程驗證")]
         FlowVerification = 1,
 
-        [Description("完整診斷（除錯，檔案較大）")]
+        [Description("完整診斷")]
         FullDiagnostic = 2
     }
 

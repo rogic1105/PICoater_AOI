@@ -48,6 +48,7 @@ class SettingsFlowValidator:
         self._check_review_enhance(session, settings, report)
         self._check_live_enhance(session, settings, report)
         self._check_enhance_heatmap(session, settings, report)
+        self._check_display_crop(session, settings, report)
         self._check_direction_refresh(session, settings, report)
         return report
 
@@ -386,8 +387,8 @@ class SettingsFlowValidator:
             return
 
         pattern = re.compile(
-            r"^enhance heatmap mode=(Off|Cold|Warm|BlueYellowRed) "
-            r"live=(cold|warm|blue-yellow-red|gray) review=(cold|warm|blue-yellow-red|gray) "
+            r"^enhance heatmap mode=(Off|Cold|Warm|BlueYellowRed|Green) "
+            r"live=(cold|warm|blue-yellow-red|green|gray) review=(cold|warm|blue-yellow-red|green|gray) "
             r"scope=main-only data=unchanged$"
         )
         failures = []
@@ -415,6 +416,7 @@ class SettingsFlowValidator:
                 "Cold": "cold",
                 "Warm": "warm",
                 "BlueYellowRed": "blue-yellow-red",
+                "Green": "green",
             }.get(mode)
             if expected_map is not None:
                 for target, actual in (
@@ -431,6 +433,249 @@ class SettingsFlowValidator:
             "S5.enhance-heatmap",
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
             f"changes={len(changes)} failures={len(failures)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_display_crop(
+        self, session: FlowSession, settings, report: CheckReport
+    ) -> None:
+        changes = [
+            (index, line, match)
+            for index, line, match in settings
+            if match and match.group("name") in ("cb_CropHead", "cc_CropTail")
+        ]
+        if not changes:
+            report.add(
+                self.domain,
+                "S6.display-crop",
+                CheckStatus.NOT_COVERED,
+                "未調整顯示去頭／去尾",
+            )
+            return
+        if not session.dvt_enabled:
+            report.add(
+                self.domain,
+                "S6.display-crop",
+                CheckStatus.NOT_COVERED,
+                "記錄範圍為日常運行；請切到流程驗證後重跑",
+            )
+            return
+
+        state_pattern = re.compile(
+            r"^displayCrop head=(?P<head>\d+(?:\.\d+)?) "
+            r"tail=(?P<tail>\d+(?:\.\d+)?) "
+            r"scope=main\+column-chart data=unchanged "
+            r"waterfallHistory=preserved$"
+        )
+        actual_pattern = re.compile(
+            r"^displayCrop applied head=(?P<head>\d+(?:\.\d+)?) "
+            r"tail=(?P<tail>\d+(?:\.\d+)?) "
+            r"mode=(?P<mode>IC|WF) "
+            r"content=(?P<width>\d+)x(?P<height>\d+) "
+            r"zoom=(?P<zoom>\d+(?:\.\d+)?) fit=True frames=dynamic$"
+        )
+        pending_pattern = re.compile(
+            r"^capture layout pending grab=(?P<grab>\S+) "
+            r"setting=(?P<setting>\S+) "
+            r"apply=(?P<apply>display-now\+stop-final|stop-final)$"
+        )
+        applied_pattern = re.compile(
+            r"^capture layout applied grab=(?P<grab>\S+) timing=stop "
+            r"ops=\S+ start=\S+ speed=\S+ "
+            r"head=(?P<head>\d+(?:\.\d+)?) "
+            r"tail=(?P<tail>\d+(?:\.\d+)?) "
+            r"render=(?P<render>once|already-applied) source=unchanged$"
+        )
+        failures = []
+        deferred = {}
+        setting_indices = [item[0] for item in settings]
+        for index, line, match in changes:
+            next_change = next(
+                (
+                    setting_index
+                    for setting_index in setting_indices
+                    if setting_index > index
+                ),
+                len(session.lines),
+            )
+            pending_line = next(
+                (
+                    item
+                    for item in session.lines[index + 2:next_change]
+                    if item.message.startswith("capture layout pending ")
+                ),
+                None,
+            )
+            if pending_line is not None:
+                pending_match = pending_pattern.match(pending_line.message)
+                if (
+                    pending_match is None
+                    or pending_match.group("setting") != match.group("name")
+                    or pending_match.group("apply") != "display-now+stop-final"
+                ):
+                    failures.append(f"{line.timestamp} 延後布局狀態行格式錯誤")
+                    continue
+                deferred.setdefault(pending_match.group("grab"), []).append(
+                    (index, line, match, pending_line)
+                )
+
+            state_line = next(
+                (
+                    item
+                    for item in session.lines[index + 2:next_change]
+                    if item.message.startswith("displayCrop head=")
+                ),
+                None,
+            )
+            if state_line is None:
+                failures.append(f"{line.timestamp} 缺顯示裁切狀態行")
+                continue
+            state_match = state_pattern.match(state_line.message)
+            if state_match is None:
+                failures.append(f"{state_line.timestamp} 顯示裁切狀態行缺失或格式錯誤")
+                continue
+
+            try:
+                expected = float(
+                    (match.group("value") or match.group("arrow")).strip()
+                )
+            except ValueError:
+                failures.append(f"{line.timestamp} Crop 值無法解析")
+                continue
+            actual = float(
+                state_match.group(
+                    "head" if match.group("name") == "cb_CropHead" else "tail"
+                )
+            )
+            if abs(actual - expected) > 0.011:
+                failures.append(
+                    f"{line.timestamp} 設定={expected:g} 實際={actual:g}"
+                )
+            actual_line = next(
+                (
+                    item
+                    for item in session.lines[index + 2:next_change]
+                    if item.message.startswith("displayCrop applied ")
+                ),
+                None,
+            )
+            actual_match = actual_pattern.match(actual_line.message) if actual_line else None
+            if (
+                actual_match is None
+                or int(actual_match.group("width")) <= 0
+                or int(actual_match.group("height")) <= 0
+            ):
+                failures.append(f"{line.timestamp} 缺實際畫布 Crop 後置條件")
+
+        for current_id, items in deferred.items():
+            last_pending = items[-1][3]
+            applied_line = next(
+                (
+                    item
+                    for item in session.lines
+                    if item.elapsed >= last_pending.elapsed
+                    and item.message.startswith(
+                        f"capture layout applied grab={current_id} "
+                    )
+                ),
+                None,
+            )
+            if applied_line is None:
+                failures.append(f"grab={current_id} 延後布局未在 Stop 套用")
+                continue
+            applied_match = applied_pattern.match(applied_line.message)
+            if applied_match is None:
+                failures.append(f"{applied_line.timestamp} applied 格式錯誤")
+                continue
+
+            final_line = next(
+                (
+                    item
+                    for item in session.lines
+                    if item.elapsed >= last_pending.elapsed
+                    and item.message.startswith(
+                        f"capture layout final grab={current_id} "
+                    )
+                ),
+                None,
+            )
+            if final_line is None:
+                failures.append(f"grab={current_id} 延後布局缺 final")
+                continue
+
+            actual_line = next(
+                (
+                    item
+                    for item in session.lines
+                    if item.elapsed >= (
+                        last_pending.elapsed
+                        if applied_match.group("render") == "already-applied"
+                        else final_line.elapsed
+                    )
+                    and item.elapsed <= applied_line.elapsed
+                    and item.message.startswith("displayCrop applied ")
+                ),
+                None,
+            )
+            actual_match = actual_pattern.match(actual_line.message) if actual_line else None
+            if (
+                actual_match is None
+                or int(actual_match.group("width")) <= 0
+                or int(actual_match.group("height")) <= 0
+            ):
+                failures.append(
+                    f"grab={current_id} 延後布局缺實際畫布 Crop 後置條件"
+                )
+            elif (
+                abs(float(actual_match.group("head")) - float(applied_match.group("head"))) > 0.011
+                or abs(float(actual_match.group("tail")) - float(applied_match.group("tail"))) > 0.011
+            ):
+                failures.append(
+                    f"grab={current_id} 畫布 Crop 與最終布局不一致"
+                )
+
+            early_crop = next(
+                (
+                    item
+                    for item in session.lines
+                    if last_pending.elapsed <= item.elapsed < final_line.elapsed
+                    and item.message.startswith("displayCrop head=")
+                ),
+                None,
+            )
+            if (
+                early_crop is not None
+                and applied_match.group("render") == "once"
+            ):
+                failures.append(
+                    f"{early_crop.timestamp} Grab 中提前套用顯示裁切"
+                )
+
+            last_by_name = {}
+            for _, line, match, _ in items:
+                last_by_name[match.group("name")] = (line, match)
+            for name, (line, match) in last_by_name.items():
+                try:
+                    expected = float(
+                        (match.group("value") or match.group("arrow")).strip()
+                    )
+                except ValueError:
+                    failures.append(f"{line.timestamp} Crop 值無法解析")
+                    continue
+                field = "head" if name == "cb_CropHead" else "tail"
+                actual = float(applied_match.group(field))
+                if abs(actual - expected) > 0.011:
+                    failures.append(
+                        f"grab={current_id} 最後{name}={expected:g} "
+                        f"applied={actual:g}"
+                    )
+
+        report.add(
+            self.domain,
+            "S6.display-crop",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"changes={len(changes)} deferredGrabs={len(deferred)} "
+            f"failures={len(failures)}"
             + (f"；首例 {failures[0]}" if failures else ""),
         )
 

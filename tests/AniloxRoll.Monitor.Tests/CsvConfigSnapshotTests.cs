@@ -150,5 +150,46 @@ namespace AniloxRoll.Monitor.Tests
             Assert.That(snap.CamExposureUs.Length, Is.EqualTo(7));
             Assert.That(snap.CamLineRateHz.Length, Is.EqualTo(7));
         }
+
+        [Test]
+        public void CaptureLayoutSnapshot_RoundTrips_AndOverridesOnlyLayout()
+        {
+            var timestamp = new DateTime(2026, 7, 28, 12, 34, 56, 789);
+            var layout = new CaptureLayoutSnapshot(
+                "260728-123400",
+                new[] { 24.1, 24.2, 24.3, 24.4, 24.5, 24.6, 24.7 },
+                new[] { 0d, 345, 690, 1035, 1380, 1725, 2070 },
+                42.5,
+                100,
+                200,
+                timestamp);
+
+            Assert.That(
+                CaptureLayoutSnapshot.TryParse(layout.ToCsvLine(), out var parsed),
+                Is.True);
+            Assert.That(parsed.GrabId, Is.EqualTo("260728-123400"));
+            Assert.That(parsed.CamOps[6], Is.EqualTo(24.7).Within(0.00000001));
+            Assert.That(parsed.CamPos[5], Is.EqualTo(1725));
+            Assert.That(parsed.AniloxRollSpeedMPerMin, Is.EqualTo(42.5));
+            Assert.That(parsed.TrimHeadMm, Is.EqualTo(100));
+            Assert.That(parsed.TrimTailMm, Is.EqualTo(200));
+
+            var original = new CsvConfigSnapshot(
+                null, null, new[] { 3000, 0, 0, 0, 0, 0, 0 },
+                new[] { 50d, 0, 0, 0, 0, 0, 0 },
+                new[] { 3000d, 0, 0, 0, 0, 0, 0 },
+                0.3f, 0.4f, 9f,
+                0.2f, 0.6f, 0.25f, 0.65f,
+                0, 0, timestamp.AddMinutes(-1), 30);
+            CsvConfigSnapshot applied = original.WithMachineLayout(parsed);
+
+            Assert.That(applied.CamOps[6], Is.EqualTo(24.7).Within(0.00000001));
+            Assert.That(applied.TrimHeadMm, Is.EqualTo(100));
+            Assert.That(applied.AniloxRollSpeedMPerMin, Is.EqualTo(42.5));
+            Assert.That(applied.CamGrabHeight[0], Is.EqualTo(3000));
+            Assert.That(applied.CamExposureUs[0], Is.EqualTo(50));
+            Assert.That(applied.HessianMaxFactorV, Is.EqualTo(0.3f));
+            Assert.That(applied.ErrorValueMaxH, Is.EqualTo(0.65f));
+        }
     }
 }

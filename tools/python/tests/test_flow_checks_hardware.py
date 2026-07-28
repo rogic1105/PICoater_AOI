@@ -102,6 +102,25 @@ class HardwareFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(CheckStatus.PASS, result(report, "H3.io-grab").status)
 
+    def test_io_stop_policy_accepts_io_and_ignores_fixed_targets(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "IO grab stop accepted reason=StartLow stopCondition=IoSignal drainTail=True",
+                "IO grab stop accepted reason=CommunicationLost stopCondition=IoSignal drainTail=False",
+                "IO grab stop ignored reason=CommunicationLost stopCondition=Time captureContinues=True",
+                "IO grab stop ignored reason=PlcAliveLost stopCondition=Height captureContinues=True",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "H4.io-stop-policy").status)
+
+    def test_io_stop_policy_rejects_fixed_target_stop(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "IO grab stop accepted reason=CommunicationLost stopCondition=Time drainTail=False",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "H4.io-stop-policy").status)
+
 
 if __name__ == "__main__":
     unittest.main()

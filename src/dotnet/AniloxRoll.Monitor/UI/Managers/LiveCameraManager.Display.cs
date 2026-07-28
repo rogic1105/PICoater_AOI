@@ -70,6 +70,16 @@ namespace AniloxRoll.Monitor.UI.Managers
             _display.RefreshEnhanceColorMap();
         }
 
+        public void RefreshHorizontalDisplayCrop()
+        {
+            _display.RefreshHorizontalDisplayCrop();
+        }
+
+        public void RefreshHorizontalDisplayCrop(double trimHeadMm, double trimTailMm)
+        {
+            _display.RefreshHorizontalDisplayCrop(trimHeadMm, trimTailMm);
+        }
+
         public void SetLodMode(LiveLodMode mode)
         {
             _display.SetLodMode(mode);

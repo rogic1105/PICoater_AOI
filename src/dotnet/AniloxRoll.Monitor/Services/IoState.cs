@@ -13,6 +13,14 @@ namespace AniloxRoll.Monitor.Core.Services
         Closed          // 已關閉
     }
 
+    /// <summary>Why the IO controller asks the product capture flow to stop.</summary>
+    public enum IoStopRequestReason
+    {
+        StartLow,
+        PlcAliveLost,
+        CommunicationLost
+    }
+
     /// <summary>IO 快照（每次 PollTick 結束時發布）。</summary>
     public struct IoSnapshot
     {

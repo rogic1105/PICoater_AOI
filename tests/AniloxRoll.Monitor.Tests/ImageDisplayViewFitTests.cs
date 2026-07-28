@@ -87,5 +87,22 @@ namespace AniloxRoll.Monitor.Tests
                 Assert.That(selector(bitmap.GetPixel(4, 0)), Is.EqualTo(255));
             }
         }
+
+        [Test]
+        public void GrayBitmap_GreenHeatmapPreservesIntensityInGreenChannel()
+        {
+            using (Bitmap bitmap = GrayBitmap.From(
+                new byte[] { 0, 128, 255 }, 3, 1, false,
+                IntensityColorMap.HeatmapGreen))
+            {
+                Assert.That(bitmap.GetPixel(0, 0).ToArgb(), Is.EqualTo(Color.Black.ToArgb()));
+                Assert.That(bitmap.GetPixel(1, 0).ToArgb(), Is.EqualTo(Color.FromArgb(0, 128, 0).ToArgb()));
+                Assert.That(bitmap.GetPixel(2, 0).ToArgb(), Is.EqualTo(Color.White.ToArgb()));
+                var selector = GrayBitmap.GetBrightnessSelector(IntensityColorMap.HeatmapGreen);
+                Assert.That(selector(bitmap.GetPixel(0, 0)), Is.EqualTo(0));
+                Assert.That(selector(bitmap.GetPixel(1, 0)), Is.EqualTo(128));
+                Assert.That(selector(bitmap.GetPixel(2, 0)), Is.EqualTo(255));
+            }
+        }
     }
 }

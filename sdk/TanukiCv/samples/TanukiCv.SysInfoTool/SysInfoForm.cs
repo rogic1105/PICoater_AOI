@@ -7,7 +7,7 @@ namespace TanukiCv.SysInfoTool
 {
     /// <summary>
     /// 系統資訊工具（code-built，無 Designer）：列出 TanukiCv.Core.SystemInfo 的通用硬體 + 螢幕。
-    /// 展示「listViewHardware 的資料來源已收進 sdk 唯一來源」——主程式、MIL 範例三擊計算同源。
+    /// 展示「系統硬體資訊的資料來源已收進 sdk 唯一來源」——主程式、MIL 範例三擊計算同源。
     /// </summary>
     public sealed class SysInfoForm : Form
     {

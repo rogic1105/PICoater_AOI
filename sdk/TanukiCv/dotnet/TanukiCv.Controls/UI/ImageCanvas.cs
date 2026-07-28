@@ -200,6 +200,7 @@ namespace TanukiCv.Controls
 
         public bool LodActive => _lodActive;
         public long LodContentGeneration => _lodContentGeneration;
+        public Size ContentSize => new Size(ContentW, ContentH);
 
         // 內容尺寸：LOD 模式用虛擬尺寸，否則用實際 Image 尺寸（座標/fit/clamp/overlay 共用）
         internal int ContentW => _lodActive ? _lodVirtualW : (this.Image?.Width  ?? 0);

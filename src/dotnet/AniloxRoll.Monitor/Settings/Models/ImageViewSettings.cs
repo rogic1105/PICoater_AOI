@@ -25,9 +25,10 @@ namespace AniloxRoll.Monitor.Core.Data
     public enum EnhanceHeatmapMode
     {
         [Description("關閉")] Off,
-        [Description("冷色（黑→藍→青→白）")] Cold,
-        [Description("暖色（黑→紅→黃→白）")] Warm,
-        [Description("藍黃紅（黑底不上色）")] BlueYellowRed
+        [Description("冷色")] Cold,
+        [Description("暖色")] Warm,
+        [Description("藍黃紅")] BlueYellowRed,
+        [Description("綠階")] Green
     }
 
     [TypeConverter(typeof(ExpandableObjectConverter))]
@@ -56,6 +57,7 @@ namespace AniloxRoll.Monitor.Core.Data
                 case EnhanceHeatmapMode.Cold: return IntensityColorMap.HeatmapCold;
                 case EnhanceHeatmapMode.Warm: return IntensityColorMap.HeatmapWarm;
                 case EnhanceHeatmapMode.BlueYellowRed: return IntensityColorMap.HeatmapBlueYellowRed;
+                case EnhanceHeatmapMode.Green: return IntensityColorMap.HeatmapGreen;
                 default: return IntensityColorMap.Grayscale;
             }
         }
@@ -67,6 +69,7 @@ namespace AniloxRoll.Monitor.Core.Data
                 case IntensityColorMap.HeatmapCold: return "cold";
                 case IntensityColorMap.HeatmapWarm: return "warm";
                 case IntensityColorMap.HeatmapBlueYellowRed: return "blue-yellow-red";
+                case IntensityColorMap.HeatmapGreen: return "green";
                 default: return "gray";
             }
         }

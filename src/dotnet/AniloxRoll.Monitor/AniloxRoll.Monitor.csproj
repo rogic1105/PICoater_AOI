@@ -131,6 +131,7 @@
     <Compile Include="Services\CurveBinFile.cs" />
     <Compile Include="Services\UiActionLogger.cs" />
     <Compile Include="Services\CsvConfigSnapshot.cs" />
+    <Compile Include="Services\CaptureLayoutSnapshot.cs" />
     <Compile Include="Services\RowCurvePhysicalScaleResolver.cs" />
     <Compile Include="Services\InspectionLogService.cs" />
     <Compile Include="Services\IoGrabController.cs" />
@@ -196,6 +197,7 @@
     <Compile Include="UI\Presenters\LiveTelemetryPresenter.cs" />
     <Compile Include="UI\Binders\BusyUiBinder.cs" />
     <Compile Include="UI\Binders\GrabDetailListBinder.cs" />
+    <Compile Include="UI\Coordinators\CaptureStopPolicy.cs" />
     <Compile Include="UI\Coordinators\GrabDurationCoordinator.cs" />
     <Compile Include="UI\Coordinators\InspectionSettingsCoordinator.cs" />
     <Compile Include="UI\Coordinators\LatestGrabLoadCoordinator.cs" />

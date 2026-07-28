@@ -40,9 +40,9 @@ log 格式為 `[Flow] HH:mm:ss.fff T{執行緒} 訊息`，唯一出口是 `Servi
 
 | UI 選項 | 適用時機 | 額外證據 |
 |---|---|---|
-| 日常運行（預設，檔案較小） | 產線常駐 | 操作、連線、錯誤、存檔、開始／停止、異常觸發的 UiStall/UiPing/UiStack/UiSlow/UiPaint |
-| 流程驗證（測試／驗收） | smoke/DVT 驗收 | 再加 rowChart、IC/WF state、viewEdges、prefit、mainRange、chartRange |
-| 完整診斷（除錯，檔案較大） | 短時間深度除錯 | 再加 IC/WF stats 與 `Logs\fsm\` 原始 UI action JSONL |
+| 日常運行 | 產線常駐／預設 | 操作、連線、錯誤、存檔、開始／停止、異常觸發的 UiStall/UiPing/UiStack/UiSlow/UiPaint |
+| 流程驗證 | smoke/DVT 驗收 | 再加 rowChart、IC/WF state、viewEdges、prefit、mainRange、chartRange |
+| 完整診斷 | 短時間深度除錯 | 再加 IC/WF stats 與 `Logs\fsm\` 原始 UI action JSONL；檔案較大 |
 
 `check_all_flows.py` 必讀 session 的 mode；日常模式缺少 DVT-only 證據時回 `NOT COVERED`，不得誤判
 `FAIL`。需要完整驗收時先切到「流程驗證」再操作；測完可切回日常運行。舊 trace 無 mode 行，視為
@@ -307,6 +307,8 @@ armed while the product gate is closed; synchronization work must finish before 
 | `HeadGuard` | next complete frame from every connected camera | `Capturing` | Log per-camera hardware ticks and validate circular phase spread. A mismatch invalidates the next start but does not truncate the current HIGH window. |
 | `Capturing` | IO falling edge and stop condition=`IO` | `TailDrain` | Snapshot each camera's last accepted tick; accept exactly one newer complete frame per camera. |
 | `Capturing` | IO falling edge and stop condition=`Time`/`Height` | `Capturing` | Record the edge but keep the product gate open; the selected fixed target owns stop timing. |
+| `Capturing` | IO communication/PLC-alive loss and stop condition=`IO` | `ReadyIdle` | Stop immediately without waiting for a tail frame; the IO boundary is no longer trustworthy. |
+| `Capturing` | IO communication/PLC-alive loss and stop condition=`Time`/`Height` | `Capturing` | Keep the product gate open and finish the selected fixed target; report the hardware fault independently. |
 | `Capturing` | fixed time or common completed-row target reached | `ReadyIdle` or `AwaitingStartLow` | Close the gate immediately. If START is still High, wait for Low before rearming; otherwise return Idle. |
 | `TailDrain` | IO HIGH returns before drain completes | `TailDrain` | Reject with `capture-not-ready:tail-drain`; BUSY stays Low. Controller returns to `Idle` and retries the held HIGH after drain/readiness completes. Never accept this as `already-grabbing`. |
 | `TailDrain` | every camera completes its newer frame | `ReadyIdle` or `PhaseInvalid` | Close gate, stop product grab, keep MIL armed; readiness follows the last phase verdict. |
@@ -391,10 +393,12 @@ ProcessingFunction@MilCamera.cs
           -> HandleCaptureHeightReached when stop condition=Height
 
 IoStopGrabAsync@AniloxRollForm.HardwareStatus.cs
- -> IO condition: ToggleLiveGrabAsync(drainIoTail=true)
+ -> CaptureStopPolicy evaluates the snapshotted active stop condition plus IoStopRequestReason
+ -> IO condition + StartLow: ToggleLiveGrabAsync(drainIoTail=true)
     -> DrainIoTailAsync: exactly one newer completed frame per connected camera, or timeout
     -> StopGrab
- -> Time/Height condition: falling edge is observed but does not call StopGrab
+ -> IO condition + PlcAliveLost/CommunicationLost: ToggleLiveGrabAsync(drainIoTail=false) -> StopGrab immediately
+ -> Time/Height condition + any IO stop reason: log ignored and keep the product capture gate open
 
 HandleGrabLimitElapsed / HandleCaptureHeightReached@AniloxRollForm.Live.cs
  -> ToggleLiveGrabAsync
@@ -703,8 +707,8 @@ OnMouseMove@ImageCanvas.cs（拖曳中；UI 執行緒 T1）
 T1: IC|WF|RV overlay mode=Coordinates|CoordinateFrames|CoordinateFramesParameters|Hidden
 T1: ui:canvas overlay mode={mode} sync=live+review persisted=true
 T1: canvas overlay restore mode={mode} sync=live+review
-T1: ui:monitor tab five-click rightPanel=hidden|visible
-T1: workspace restore rightPanel=hidden|visible
+T1: ui:monitor tab five-click rightPanel=hidden|visible workspaceW=N rightPanelW=N
+T1: workspace restore rightPanel=hidden|visible workspaceW=N rightPanelW=N
 ```
 
 - 主畫面右鍵循環順序固定為：全空 → 座標數值 → 座標數值＋七台相機影像框線 →
@@ -716,8 +720,10 @@ T1: workspace restore rightPanel=hidden|visible
 - 相機框線使用與合圖相同的 `MergeLayout` placements；每台畫實際影像區域，七台相鄰時必可見外框與六條分隔線，
   不得以 control 外框冒充影像邊界。
 - `tabMain` 的「監控」頁籤標籤區連續左鍵五下只切換一次右側 `tabControlRight`；點頁面內容或其他
-  頁籤不計數。隱藏時 `tabMain` 使用原右側邊界，
-  還原時回到 Designer／ProportionalScaler 的正常佈局。狀態寫入 `Config/session-state.json`，下次啟動在
+  頁籤不計數。一般模式由 `MainWorkspaceLayoutController` 以可用寬度分配：右側約 1/5、`tabMain`
+  約 4/5，視窗改變大小時重新計算，再由 `ProportionalScaler` 等比例縮放頁內元件。隱藏時
+  `tabMain` 使用原右側邊界；還原時必回到 4/5＋1/5，Designer 亦使用相同比例作為設計基準。
+  狀態寫入 `Config/session-state.json`，下次啟動在
   `PrewarmAllTabs` 後還原。這是 UI session 狀態，不屬於檢測設定或 CSV `#CFG`。
 
 **code-flow**
@@ -739,7 +745,9 @@ OnMouseDown@ImageCanvas.cs（右鍵）
 tabMain.MouseDown（hit-test 必須落在 tabPageLiveView 標籤區）
  → MainWorkspaceLayoutController 連續按下計數（相鄰按下間隔 ≤1200ms）
    └ 第五下 → MainWorkspaceLayoutController.ApplyLayout
-      ├ tabControlRight.Visible 切換＋tabMain 寬度重算＋ProportionalScaler.RescaleActiveTabs
+      ├ 一般模式：可用寬度按 tabMain 4/5＋tabControlRight 1/5 重算
+      ├ 全寬模式：tabControlRight.Visible=false＋tabMain 使用原右側邊界
+      ├ ProportionalScaler.RescaleActiveTabs
       └ UserSessionState.SaveMainWorkspaceFullWidth
 啟動 PrewarmAllTabs 完成
  → MainWorkspaceLayoutController.ApplyPersistedLayout
@@ -917,12 +925,14 @@ DI START：io:DI START 上升緣 → 抓取請求
 | Starting | START 下降、IO 斷線或 controller 換代 | CancelPending | 立即使 request generation 失效；Stop 等待同一 transition gate |
 | Starting | 相機準備完成，且開產品 gate 前 request 仍有效、IO 仍為 Running | Capturing | 建 GrabId／capture plan → 開 capture gate → `NotifyGrabStarted` |
 | Starting／CancelPending | 開產品 gate 前發現 request 已失效 | Idle／CommLost | capture gate 維持關閉；若相機已進 StartGrab 則 rollback StopGrab；記一筆 rejected |
-| Capturing（IO） | START 下降或 IO 斷線 | Idle／CommLost | 取得同一 transition gate → drain／StopGrab → `NotifyGrabStopped` |
+| Capturing（IO） | START 下降 | Idle | 取得同一 transition gate → drain／StopGrab → `NotifyGrabStopped` |
+| Capturing（IO） | IO 斷線／PLC Alive 遺失 | CommLost／Faulted | 取得同一 transition gate → 不等尾幀直接 StopGrab；BUSY Low |
+| Capturing（時間／高度） | START 下降或 IO 斷線／PLC Alive 遺失 | Capturing | IO FSM 可進 Idle／CommLost／Faulted，但產品 capture gate 保持開啟，直到時間／高度目標完成 |
 | Capturing（時間／高度） | START 下降 | Capturing | 不停止；固定時間／共同完成列數是本輪唯一停止 owner |
 | Capturing（時間／高度） | 固定目標完成且 START High | AwaitingStartLow | StopGrab → `NotifyFixedGrabCompleted`；BUSY Low，禁止同一段 High 重啟 |
 | Capturing（時間／高度） | 固定目標完成且 START Low | Idle | StopGrab → `NotifyFixedGrabCompleted` |
 | AwaitingStartLow | START 下降 | Idle | 解除本次 High 的消耗狀態，下一個上升緣才可開始 |
-| Capturing／AwaitingStartLow | IO 斷線 | CommLost | 關閉 capture，BUSY Low，等待連線安全交握恢復 |
+| AwaitingStartLow | IO 斷線 | CommLost | 沒有產品 capture；BUSY Low，等待連線安全交握恢復 |
 
 - **單 process／單 controller**：`Program` named mutex 必須在 Form 建立前擋掉同機第二份程式；同一 session
   任一時刻只能有一個 active generation。restart 以 lifecycle gate 序列化，舊 generation callback 不得進 UI/Grab。
@@ -1125,12 +1135,18 @@ T1: capture plan grab={yyMMdd-HHmmss} root={CaptureRootPath}
 Tn: capture csv open path=… cfg=yes|no              ← 新檔或換日首次開啟
 Tn: capture csv cfg path=… speed=N lr=N HM=V/H ridge=N thrV=mean/max thrH=mean/max
 Tn: capture csv firstRecord grab=… path=… file=… verdict=max0|1/mean0|1 peak=…/… rowPeak=…/… maxCMean=… thrV=…/…
+Tn: capture layout final grab=… ops=… start=… speed=N head=H tail=T path=…
+    ← Stop 後每個 grab 恰一行；機台布局以停止前最後值為準
 ```
 - `firstRecord` 每個 grab 只出一行，用來確認檢測結果有落到哪一份 CSV；逐相機逐幀細節看 CSV 本體。
 - `cfg` 行出現代表 `#CFG` 已寫入同一 CSV；`ridge` 是捕捉時的細線濾除值。
 - `#CFG` 的機台佈局必須完整保存 `OPS + START(CamN_Pos) + CROP(TrimHead/TrimTail)`；
   列實體尺度必須保存 `AniloxRollSpeedMPerMin + CamN_Lr`（總高由 row bin 點數推導，不另存衍生尺寸）；
-  檢測設定必須包含欄／列正規值、細線濾除與欄／列門檻。設定變更後，下一筆資料前必須出現新版 `#CFG`。
+  檢測設定必須包含欄／列正規值、細線濾除與欄／列門檻。非布局設定變更後，下一筆資料前必須出現新版 `#CFG`。
+- Grab 開始時凍結該 grab 的初始布局；Grab 中修改 OPS／START／A輪速度／Crop 只更新設定，
+  逐幀 `#CFG` 仍使用初始布局。Stop 時追加唯一的 `#LAYOUT_FINAL`，回顧／報表用它覆蓋該
+  grab 全部資料的布局語意，因此同一序號不會同時存在多套座標。
+- `#LAYOUT_FINAL` 只改布局解讀，不改圖片、Curve bin、檢測結果或 `.acap` 內容。
 - `#CFG` 刻意與每日資料列同檔，不拆成平行設定檔：每筆資料以上方最近一行 `#CFG` 為設定版本，
   避免斷電或跨檔寫入失敗造成資料與設定失配。
 - `verdict` 使用寫入 CSV 同一組 V 閾值，與 `AppendRecord@InspectionLogService.cs` 的 `MaxExceed/MeanExceed` 同源。
@@ -1586,6 +1602,38 @@ T1: ui:設定[hd_EnableReviewEnhance]
     ← 重載目前真正顯示的模式；不得一律假設單序號，也不得重畫 Curve
 ```
 
+### S6 顯示裁切（cb_CropHead／cc_CropTail）
+未 Grab：
+```
+T1: ui:設定[cb_CropHead|cc_CropTail]=N
+T1: setting route {name} owner=LiveLayout effects=None
+T1: displayCrop applied head=H tail=T mode=IC|WF content=WxH zoom=Z fit=True frames=dynamic
+T1: displayCrop head=H tail=T scope=main+column-chart data=unchanged waterfallHistory=preserved
+```
+Grab 中：
+```
+T1: ui:設定[cb_CropHead|cc_CropTail]=N
+T1: setting route {name} owner=LiveLayout effects=…
+T1: capture layout pending grab=… setting={name} apply=display-now+stop-final
+T1: displayCrop applied head=H tail=T mode=IC|WF content=WxH zoom=Z fit=True frames=dynamic
+T1: displayCrop head=H tail=T scope=main+column-chart data=unchanged waterfallHistory=preserved
+... 可繼續修改；每次 Crop intent 都立即更新顯示，但只記最後布局 ...
+T1: StopGrab
+T1: capture layout final grab=… ops=… start=… speed=N head=H tail=T path=…
+T1: capture layout applied grab=… timing=stop ops=… start=… speed=N head=H tail=T render=already-applied source=unchanged
+```
+- Crop 是 **X／欄方向的純顯示布局**：先由完整合圖幾何算可視區，再用同一份可視布局驅動
+  即時主畫面、瀑布主畫面、橘色相機框線及欄圖表；縮圖仍顯示各相機完整影像。
+- `HorizontalDisplayCrop.Compute/Apply` 是裁切幾何唯一來源；fit 必須在裁切後寬度上計算，
+  不得先 fit 完整寬度再隱藏頭尾。
+- Live 使用目前 PropertyGrid；Review／Report 單序號使用該筆 CSV `#CFG` 的
+  `TrimHead/TrimTail`，使歷史畫面與拍攝布局一致。
+- **資料不變量**：Crop 不得進入 pipeline、相機 frame、Curve bin、圖片、`.acap` 或 CSV 資料列。
+  Grab 中 Crop 立即更新主畫面、欄圖表與橘框，但拍攝布局只在 Stop 封存最後值；只有
+  OPS／Start／A輪速度等延後布局也曾改變時，Stop 才允許一次輕量 repaint。不得重讀檔、
+  重跑演算法、重算 Curve 或清除既有瀑布歷史。
+- 允許頭尾合計超過內容時保留最少一個顯示像素，不得產生零寬畫布或例外。
+
 ### S4 監控強化（hc_EnableMuraEnhance）
 ```
 T1: ui:設定[hc_EnableMuraEnhance]=True|False
@@ -1611,13 +1659,13 @@ T1: WF layer raw|column|row->raw|column|row writeRow=N history=preserved   ← �
 
 ### S5 強化熱力圖（hda_EnhanceHeatmap）
 ```
-T1: ui:設定[hda_EnhanceHeatmap]=Off|Cold|Warm|BlueYellowRed
+T1: ui:設定[hda_EnhanceHeatmap]=Off|Cold|Warm|BlueYellowRed|Green
 T1: setting route hda_EnhanceHeatmap owner=Enhance effects=None
-T1: enhance heatmap mode=Off|Cold|Warm|BlueYellowRed live=gray|cold|warm|blue-yellow-red review=gray|cold|warm|blue-yellow-red scope=main-only data=unchanged
+T1: enhance heatmap mode=Off|Cold|Warm|BlueYellowRed|Green live=gray|cold|warm|blue-yellow-red|green review=gray|cold|warm|blue-yellow-red|green scope=main-only data=unchanged
 ```
 - 熱力圖是 **8-bit 顯示調色盤**，固定以 0..255 映射；不得依每張圖的 min/max 自動拉伸，
-  否則不同時間的顏色不能比較。三種模式都讓 0 保持純黑：Cold=黑→藍→青→白、
-  Warm=黑→紅→黃→白、BlueYellowRed=黑→藍→黃→紅。
+  否則不同時間的顏色不能比較。四種模式都讓 0 保持純黑：Cold=黑→藍→青→白、
+  Warm=黑→紅→黃→白、BlueYellowRed=黑→藍→黃→紅、Green=黑→綠→白。
 - 只套用監控與回顧的主畫面強化圖；原圖、背景預覽與縮圖恒為灰階。滑鼠亮度仍回報原始 0..255 值。
 - 切換只准重畫現有 bytes／瀑布 LOD tile；不得重讀圖片、重算 Curve、清空瀑布、改 fit／pan／zoom，
   也不得修改 raw/proc 圖檔、bin、CSV 或檢測結果。
@@ -1644,6 +1692,12 @@ T1: RV row …（Review 有資料時）或 RV load/update row（依當前 Review
   `scope=all-cameras waterfallHistory=preserved` 的狀態行；enabled=False 必須是 raw，
   enabled=True 必須是 column 或 row，證明全相機狀態一致且瀑布歷史未被清除。
 - `S5.enhance-heatmap`：熱力圖 intent 後必須緊接 route 與 `scope=main-only data=unchanged`
+  的狀態行，所選模式只能映射成同名 palette 或 gray。
+- `S6.display-crop`：流程驗證模式下，每次去頭／去尾 intent 後必須緊接 route、
+  `displayCrop applied` 與 `scope=main+column-chart data=unchanged waterfallHistory=preserved`，
+  且 head/tail 必須立即反映新值。Grab 中另外要求
+  `capture layout pending … apply=display-now+stop-final`；Stop 後 final/applied 必須等於最後值。
+  若該輪只有 Crop 改變，必須是 `render=already-applied`，禁止停止時再跳一次。
   狀態行；Off 後 live/review 都必須回灰階，非灰階輸出必須與所選模式一致。固定相鄰行也保證
   切換中沒有插入圖片或 Curve 重載。
 - `S3.direction`：方向變更後、下一次方向變更前，必須看見相同方向的

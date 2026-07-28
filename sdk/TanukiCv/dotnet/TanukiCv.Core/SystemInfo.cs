@@ -18,7 +18,7 @@ namespace TanukiCv.Core
 
     /// <summary>
     /// 通用系統資訊查詢（CPU / RAM / GPU / 螢幕）——純查詢、無 GUI、無 MIL。
-    /// 跨專案唯一來源：主程式 listViewHardware、硬體工具、MIL 範例三擊計算共用。
+    /// 跨專案唯一來源：主程式系統參數表、硬體工具、MIL 範例三擊計算共用。
     /// MIL Grabber / 應用層磁碟/Storage 等專屬資訊不在此（留各自原處）。
     /// </summary>
     public static class SystemInfo
@@ -59,7 +59,7 @@ namespace TanukiCv.Core
         }
 
         /// <summary>螢幕顯示列（ScreenSize / NativeRes / EffectiveRes / DpiScale / mm/px）。
-        /// 與原 listViewHardware 一致；mm/px 計算的單一格式來源（消費端不必自己組字串）。</summary>
+        /// 與主程式系統參數表一致；mm/px 計算的單一格式來源（消費端不必自己組字串）。</summary>
         public static List<KeyValuePair<string, string>> GetScreenRows()
         {
             var rows = new List<KeyValuePair<string, string>>();

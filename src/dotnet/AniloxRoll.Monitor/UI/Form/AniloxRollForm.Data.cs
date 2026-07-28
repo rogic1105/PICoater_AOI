@@ -78,13 +78,14 @@ namespace AniloxRoll.Monitor.Forms
 
         private ImageViewRange? ComputeReviewFitViewRange(
             int[] widths, int[] heights, double[] opsUm, double[] positionsMm,
-            bool isGlobal, double rowPitchMm)
+            bool isGlobal, double rowPitchMm, double trimHeadMm, double trimTailMm)
         {
             if (_reviewDisplayManager == null) return null;
             if (!_reviewDisplayManager.TryComputeFitViewRange(
                 widths, heights, opsUm, positionsMm, isGlobal,
                 InspectionEngineConfig.DefaultSaveResizeScale,
-                rowPitchMm, ShouldFlipDisplayVertical(), out ImageViewRange range))
+                rowPitchMm, ShouldFlipDisplayVertical(),
+                trimHeadMm, trimTailMm, out ImageViewRange range))
                 return null;
             return range;
         }

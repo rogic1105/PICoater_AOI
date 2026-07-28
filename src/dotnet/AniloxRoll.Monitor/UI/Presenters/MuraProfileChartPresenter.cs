@@ -242,7 +242,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
             }
             CurveMergeHelper.UpdateOverviewChart(
                 allMean, allMax, ops, positions, errorMean, errorMax,
-                _muraProfileHelper, camCount, StitchMode.Vertical, null);
+                _muraProfileHelper, camCount, StitchMode.Vertical, null,
+                trimHeadMm: _ctx.Settings.TrimHeadMm,
+                trimTailMm: _ctx.Settings.TrimTailMm);
         }
 
         /// <summary>
@@ -308,7 +310,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     : _ctx.ReviewFitViewRangeProvider?.Invoke(
                         layoutPlan.ExpectedWidths, layoutPlan.ExpectedHeights,
                         ops, pos, _ctx.Settings.StitchMode == StitchMode.Global,
-                        rowPitchMm);
+                        rowPitchMm,
+                        grabCfg?.TrimHeadMm ?? _ctx.Settings.TrimHeadMm,
+                        grabCfg?.TrimTailMm ?? _ctx.Settings.TrimTailMm);
                 double[] view = preparedView.HasValue
                     ? new[]
                     {
@@ -337,7 +341,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 CurveMergeHelper.UpdateOverviewChart(
                     data.ColumnMean, data.ColumnMax, ops, pos, errMean, errMax,
                     _muraProfileHelper, camCount,
-                    _ctx.Settings.StitchMode, fitViewRange, valueScale: valueScale);
+                    _ctx.Settings.StitchMode, fitViewRange, valueScale: valueScale,
+                    trimHeadMm: grabCfg?.TrimHeadMm ?? _ctx.Settings.TrimHeadMm,
+                    trimTailMm: grabCfg?.TrimTailMm ?? _ctx.Settings.TrimTailMm);
                 UpdateRowChart(data, grabCfg, request.GrabId, view, physicalScale);
                 SingleGrabCurvePresented?.Invoke(statsRoot, request.GrabId, data);
                 FlowTrace.Log($"DT curve load {request.GrabId} captures={data.ImageCount} " +
@@ -435,7 +441,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 ? (Func<int, bool, double, double>)((_, isLeft, __) => isLeft ? view[0] : view[1])
                 : null;
             CurveMergeHelper.UpdateOverviewChart(mean, max, ops, pos, errMean, errMax,
-                _muraProfileHelper, _ctx.CameraCount, _ctx.Settings.StitchMode, viewRange);
+                _muraProfileHelper, _ctx.CameraCount, _ctx.Settings.StitchMode, viewRange,
+                trimHeadMm: _ctx.Settings.TrimHeadMm,
+                trimTailMm: _ctx.Settings.TrimTailMm);
             if (_rowHasData && view != null && view.Length >= 4)
                 _rowDisplay?.UpdateViewRange(view[2], view[3]);
         }

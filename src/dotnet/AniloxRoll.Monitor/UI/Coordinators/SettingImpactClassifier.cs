@@ -94,13 +94,13 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                 nameof(InspectionSettings.hee_VerticalDirection),
                 nameof(InspectionSettings.hf_LiveLod),
                 nameof(InspectionSettings.hg_WaterfallTotalHeight),
-                nameof(InspectionSettings.hh_WaterfallFullMode));
+                nameof(InspectionSettings.hh_WaterfallFullMode),
+                nameof(InspectionSettings.cb_CropHead),
+                nameof(InspectionSettings.cc_CropTail));
 
             Add(routes, nameof(InspectionSettings.ai_OpsSpeed), SettingFeatureOwner.None,
                 SettingImpact.RowPitch);
             AddMany(routes, SettingFeatureOwner.None,
-                nameof(InspectionSettings.cb_CropHead),
-                nameof(InspectionSettings.cc_CropTail),
                 nameof(InspectionSettings.fb_BackgroundSampleSeconds),
                 nameof(InspectionSettings.fb_CaptureStopCondition),
                 nameof(InspectionSettings.fc_GrabLimitSeconds),

@@ -17,6 +17,7 @@ using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Interop;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.State;
+using AniloxRoll.Monitor.UI.Coordinators;
 using AniloxRoll.Monitor.UI.Managers;
 using AniloxRoll.Monitor.UI.Navigators;
 using AniloxRoll.Monitor.UI.Presenters;
@@ -63,12 +64,12 @@ namespace AniloxRoll.Monitor.Forms
                         _ = IoStartGrabAsync(controller, generation, requestGeneration);
                     });
             };
-            controller.OnStopRequested += () =>
+            controller.OnStopRequested += reason =>
             {
                 if (!IsCurrentIoController(controller, generation)) return;
                 System.Threading.Interlocked.Increment(ref _ioGrabRequestGeneration);
                 DispatchCurrentIoController(
-                    controller, generation, () => _ = IoStopGrabAsync(controller, generation));
+                    controller, generation, () => _ = IoStopGrabAsync(controller, generation, reason));
             };
             controller.OnStateChanged += state => DispatchCurrentIoController(
                 controller, generation, () => UpdateIoStateLabel(state));
@@ -308,16 +309,32 @@ namespace AniloxRoll.Monitor.Forms
             FlowTrace.Log($"IO grab rejected busy=off reason={reason}");
         }
 
-        private async Task IoStopGrabAsync(IoGrabController controller, int generation)
+        private async Task IoStopGrabAsync(
+            IoGrabController controller,
+            int generation,
+            IoStopRequestReason reason)
         {
             await _ioGrabTransitionGate.WaitAsync();
             try
             {
                 if (!IsCurrentIoController(controller, generation) || _isIoSuspended) return;
                 if (_liveCameraManager == null || !_liveCameraManager.IsLiveGrabbing) return;
+                CaptureStopCondition stopCondition = _activeCaptureStopCondition;
+                if (!CaptureStopPolicy.ShouldStopOnIoRequest(stopCondition))
+                {
+                    FlowTrace.Log(
+                        $"IO grab stop ignored reason={reason} stopCondition={stopCondition} " +
+                        "captureContinues=True");
+                    return;
+                }
+
+                bool drainIoTail = CaptureStopPolicy.ShouldDrainIoTail(reason);
+                FlowTrace.Log(
+                    $"IO grab stop accepted reason={reason} stopCondition={stopCondition} " +
+                    $"drainTail={drainIoTail}");
                 bool stopped = await ToggleLiveGrabAsync(
-                    "io:DI START 下降緣 → 停止抓取",
-                    drainIoTail: true);
+                    $"io:stop reason={reason} condition={stopCondition}",
+                    drainIoTail: drainIoTail);
                 if (stopped && IsCurrentIoController(controller, generation))
                     await controller.NotifyGrabStopped();
             }

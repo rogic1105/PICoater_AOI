@@ -44,6 +44,10 @@ class CaptureFlowValidator:
             line for line in session.lines
             if line.message.startswith("capture finalize ")
         ]
+        layout_lines = [
+            line for line in session.lines
+            if line.message.startswith("capture layout ")
+        ]
         if not plans and not csv_lines:
             report.add(self.domain, "C0", CheckStatus.NOT_COVERED, "本 session 無存檔/檢測輸出")
         else:
@@ -51,6 +55,7 @@ class CaptureFlowValidator:
             self._check_config_snapshots(configs, report)
             self._check_first_records(plans, records, report)
             self._check_capture_finalize(plans, finalizes, report)
+        self._check_final_layout(plans, finalizes, layout_lines, report)
         self._check_output_health(session, report)
         return report
 
@@ -211,6 +216,118 @@ class CaptureFlowValidator:
             "C2.first-record",
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
             f"firstRecords={len(records)} invalid={len(failures)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_final_layout(
+        self, plans, finalizes, layout_lines, report: CheckReport
+    ) -> None:
+        if not layout_lines:
+            report.add(
+                self.domain,
+                "C2.final-layout",
+                CheckStatus.NOT_COVERED,
+                "此紀錄由舊版程式產生，沒有 grab 最終布局探針",
+            )
+            return
+
+        number = r"[-+]?\d+(?:\.\d+)?"
+        values = (
+            rf"ops=(?P<ops>{number}(?:\|{number}){{6}}) "
+            rf"start=(?P<start>{number}(?:\|{number}){{6}}) "
+            rf"speed=(?P<speed>{number}) "
+            rf"head=(?P<head>{number}) tail=(?P<tail>{number})"
+        )
+        pending_pattern = re.compile(
+            r"^capture layout pending grab=(?P<grab>\S+) "
+            r"setting=(?P<setting>\S+) "
+            r"apply=(?P<apply>display-now\+stop-final|stop-final)$"
+        )
+        final_pattern = re.compile(
+            rf"^capture layout final grab=(?P<grab>\S+) {values} path=.+$"
+        )
+        applied_pattern = re.compile(
+            rf"^capture layout applied grab=(?P<grab>\S+) timing=stop "
+            rf"{values} render=(?P<render>once|already-applied) source=unchanged$"
+        )
+
+        pending = {}
+        finals = {}
+        applied = {}
+        failures = []
+
+        for line in layout_lines:
+            match = pending_pattern.match(line.message)
+            if match:
+                pending.setdefault(match.group("grab"), []).append(line)
+                continue
+            match = final_pattern.match(line.message)
+            if match:
+                current_id = match.group("grab")
+                if current_id in finals:
+                    failures.append(
+                        f"{line.timestamp} grab={current_id} 重複 final"
+                    )
+                finals[current_id] = (line, match)
+                continue
+            match = applied_pattern.match(line.message)
+            if match:
+                current_id = match.group("grab")
+                if current_id in applied:
+                    failures.append(
+                        f"{line.timestamp} grab={current_id} 重複 applied"
+                    )
+                applied[current_id] = (line, match)
+                continue
+            failures.append(f"{line.timestamp} 最終布局行格式錯誤")
+
+        finalized_ids = {
+            current_id
+            for line in finalizes
+            if not line.message.startswith("capture finalize failed ")
+            for current_id in [grab_id(line.message)]
+            if current_id
+        }
+        missing_final = sorted(finalized_ids - set(finals))
+        if missing_final:
+            failures.append("已封裝但缺 final=" + ",".join(missing_final[:3]))
+
+        for current_id, pending_lines in pending.items():
+            final_item = finals.get(current_id)
+            applied_item = applied.get(current_id)
+            if final_item is None:
+                failures.append(f"grab={current_id} 有 pending 但缺 final")
+                continue
+            if applied_item is None:
+                failures.append(f"grab={current_id} 有 pending 但缺 applied")
+                continue
+
+            final_line, final_match = final_item
+            applied_line, applied_match = applied_item
+            if final_line.elapsed < pending_lines[-1].elapsed:
+                failures.append(f"grab={current_id} final 早於最後 pending")
+            if applied_line.elapsed < final_line.elapsed:
+                failures.append(f"grab={current_id} applied 早於 final")
+
+            for field in ("ops", "start", "speed", "head", "tail"):
+                if final_match.group(field) != applied_match.group(field):
+                    failures.append(
+                        f"grab={current_id} final/applied {field} 不一致"
+                    )
+                    break
+
+        unexpected_applied = sorted(set(applied) - set(pending))
+        if unexpected_applied:
+            failures.append(
+                "沒有 pending 卻 applied=" + ",".join(unexpected_applied[:3])
+            )
+
+        report.add(
+            self.domain,
+            "C2.final-layout",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"final={len(finals)} pendingGrabs={len(pending)} "
+            f"applied={len(applied)} invalid={len(failures)}"
             + (f"；首例 {failures[0]}" if failures else ""),
         )
 

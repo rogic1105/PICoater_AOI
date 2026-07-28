@@ -81,7 +81,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// </summary>
         public void PushFrames(byte[][] gray, int[] w, int[] h, double[] opsUm, double[] posMm,
             bool mergeMode, double screenMmPerPx, int feedScale, double rowPitchMm, bool flipVertical,
-            bool preserveChartView = false)
+            double trimHeadMm, double trimTailMm, bool preserveChartView = false)
         {
             if (_disposed || gray == null) return;
             EnsureCreated(screenMmPerPx);
@@ -90,6 +90,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             {
                 _view.FlipVertical = flipVertical;
                 _view.VerticalZeroAtBottom = flipVertical;   // 垂直座標約定同方向（由下而上＝0 錨定畫面底）
+                _view.SetHorizontalDisplayCrop(trimHeadMm, trimTailMm);
                 _view.SetLayout(posMm, opsUm, Math.Max(1, feedScale), rowPitchMm); // feedScale=降採樣倍率；rowPitchMm=真實 mm/列
                 _view.SetMergeMode(mergeMode);
                 var present = new bool[_thumbHosts.Length + 1];
@@ -125,6 +126,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         public bool TryComputeFitViewRange(
             int[] widths, int[] heights, double[] opsUm, double[] posMm,
             bool mergeMode, int feedScale, double rowPitchMm, bool flipVertical,
+            double trimHeadMm, double trimTailMm,
             out ImageViewRange range)
         {
             range = default(ImageViewRange);
@@ -135,6 +137,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                 mergeAll: true, mergeStrategy: MergeOverlap.Midline,
                 verticalZeroAtBottom: flipVertical,
                 viewport: _mainHost.ClientSize,
+                trimHeadMm: trimHeadMm,
+                trimTailMm: trimTailMm,
                 range: out range);
         }
 

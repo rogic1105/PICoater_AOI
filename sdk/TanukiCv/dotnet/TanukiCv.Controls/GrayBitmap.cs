@@ -11,7 +11,8 @@ namespace TanukiCv.Controls
         Grayscale = 0,
         HeatmapCold = 1,
         HeatmapWarm = 2,
-        HeatmapBlueYellowRed = 3
+        HeatmapBlueYellowRed = 3,
+        HeatmapGreen = 4
     }
 
     /// <summary>
@@ -25,8 +26,10 @@ namespace TanukiCv.Controls
         private static readonly Color[] _coldEntries = BuildColdEntries();
         private static readonly Color[] _warmEntries = BuildWarmEntries();
         private static readonly Color[] _blueYellowRedEntries = BuildBlueYellowRedEntries();
+        private static readonly Color[] _greenEntries = BuildGreenEntries();
         private static readonly Func<Color, int> _redIntensity = color => color.R;
         private static readonly Func<Color, int> _blueIntensity = color => color.B;
+        private static readonly Func<Color, int> _greenIntensity = color => color.G;
         private static readonly Func<Color, int> _blueYellowRedIntensity = DecodeBlueYellowRedIntensity;
         private static Color[] BuildGrayEntries() { var e = new Color[256]; for (int i = 0; i < 256; i++) e[i] = Color.FromArgb(i, i, i); return e; }
 
@@ -82,11 +85,24 @@ namespace TanukiCv.Controls
             return entries;
         }
 
+        private static Color[] BuildGreenEntries()
+        {
+            var entries = new Color[256];
+            for (int intensity = 0; intensity < entries.Length; intensity++)
+            {
+                // 固定 0..255 尺度：黑→綠→白；G 恒等於原 intensity。
+                int redBlue = intensity <= 224 ? 0 : (intensity - 224) * 255 / 31;
+                entries[intensity] = Color.FromArgb(redBlue, intensity, redBlue);
+            }
+            return entries;
+        }
+
         /// <summary>取得與調色盤配對的原始亮度解碼器，供畫布游標/狀態列共用。</summary>
         public static Func<Color, int> GetBrightnessSelector(IntensityColorMap colorMap)
         {
             if (colorMap == IntensityColorMap.HeatmapCold) return _blueIntensity;
             if (colorMap == IntensityColorMap.HeatmapBlueYellowRed) return _blueYellowRedIntensity;
+            if (colorMap == IntensityColorMap.HeatmapGreen) return _greenIntensity;
             return _redIntensity;
         }
 
@@ -111,6 +127,7 @@ namespace TanukiCv.Controls
                 case IntensityColorMap.HeatmapCold: entries = _coldEntries; break;
                 case IntensityColorMap.HeatmapWarm: entries = _warmEntries; break;
                 case IntensityColorMap.HeatmapBlueYellowRed: entries = _blueYellowRedEntries; break;
+                case IntensityColorMap.HeatmapGreen: entries = _greenEntries; break;
                 default: entries = _grayEntries; break;
             }
             for (int i = 0; i < 256; i++) pal.Entries[i] = entries[i];

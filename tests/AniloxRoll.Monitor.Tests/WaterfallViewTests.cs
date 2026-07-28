@@ -119,6 +119,48 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void HorizontalCrop_PreservesWaterfallHistoryAndWriteHead()
+        {
+            using (var host = new Panel { Size = new Size(320, 240) })
+            using (var view = new WaterfallView(
+                host,
+                camCount: 1,
+                totalHeight: 1000,
+                fullMode: WaterfallFullMode.Restart,
+                screenMmPerPx: 0.264))
+            {
+                view.SetLayout(new[] { 0.0 }, new[] { 1000000.0 }, 1.0);
+                view.SetExpectedFramePeriod(periodTicks: 100, periodMs: 100);
+                view.PushFrame(1, new byte[] { 10, 11, 12, 13 }, 2, 2, tick: 100);
+                view.PushFrame(1, new byte[] { 14, 15, 16, 17 }, 2, 2, tick: 200);
+
+                Thread.Sleep(200);
+                Application.DoEvents();
+                Assert.That(
+                    SpinWait.SpinUntil(() => ReadPrivate<int>(view, "_writeRow") >= 2, 1000),
+                    Is.True);
+                Assert.That(
+                    SpinWait.SpinUntil(
+                        () => !ReadPrivate<bool>(view, "_writerRunning"), 1000),
+                    Is.True);
+
+                int writeRow = ReadPrivate<int>(view, "_writeRow");
+                byte[][][] history = ReadPrivate<byte[][][]>(view, "_layerChunks");
+                byte firstPixel = history[(int)WaterfallFrameLayer.Raw][0][0];
+
+                view.SetHorizontalDisplayCrop(0.25, 0.25);
+
+                Assert.That(
+                    ReadPrivate<byte[][][]>(view, "_layerChunks"),
+                    Is.SameAs(history));
+                Assert.That(ReadPrivate<int>(view, "_writeRow"), Is.EqualTo(writeRow));
+                Assert.That(
+                    history[(int)WaterfallFrameLayer.Raw][0][0],
+                    Is.EqualTo(firstPixel));
+            }
+        }
+
+        [Test]
         public void ExpectedFramePeriod_AllowsFirstAlignedCameraSetToFlush()
         {
             using (var host = new Panel { Size = new Size(320, 240) })

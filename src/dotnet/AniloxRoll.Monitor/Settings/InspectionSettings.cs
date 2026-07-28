@@ -176,7 +176,7 @@ namespace AniloxRoll.Monitor.Core.Data
         public bool hc_EnableMuraEnhance { get => ImageView.EnableMuraEnhance; set => ImageView.EnableMuraEnhance = value; }
         [Category(CategoryCharts)][DisplayName("回顧強化")][PropertyOrder(8)][TypeConverter(typeof(BoolYesNoConverter))]
         public bool hd_EnableReviewEnhance { get => ImageView.EnableReviewEnhance; set => ImageView.EnableReviewEnhance = value; }
-        [Category(CategoryCharts)][DisplayName("強化熱力圖")][PropertyOrder(9)][Description("關閉／冷色／暖色／藍黃紅；只有主畫面的欄／列強化圖上色，原圖、縮圖、檢測與存檔資料不變。")]
+        [Category(CategoryCharts)][DisplayName("強化熱力圖")][PropertyOrder(9)][Description("冷色、暖色、藍黃紅或綠階；只有主畫面的欄／列強化圖上色，原圖、縮圖、檢測與存檔資料不變。")]
         public EnhanceHeatmapMode hda_EnhanceHeatmap { get => ImageView.EnhanceHeatmap; set => ImageView.EnhanceHeatmap = value; }
         [Category(CategoryCharts)][DisplayName("主畫面顯示")][PropertyOrder(10)][Description("即時=CPU 繪、跟回顧畫布同源；瀑布=全幅合圖即時捲動。變更後重開抓取生效。")]
         public MainDisplayMode he_MainDisplay { get => ImageView.MainDisplay; set => ImageView.MainDisplay = value; }

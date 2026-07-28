@@ -285,6 +285,42 @@ namespace AniloxRoll.Monitor.Core.Services
             }
         }
 
+        /// <summary>
+        /// Appends the final machine layout for one completed grab. The marker is grab-scoped,
+        /// so review/report readers can apply the last layout value to the complete grab without
+        /// rewriting already persisted inspection records.
+        /// </summary>
+        public void WriteFinalLayout(CaptureLayoutSnapshot layout, DateTime captureDate)
+        {
+            if (layout == null || string.IsNullOrWhiteSpace(layout.GrabId)) return;
+            try
+            {
+                string root = _getCaptureRoot();
+                if (string.IsNullOrWhiteSpace(root)) return;
+
+                string csvPath = CaptureStoragePaths.DailyCsv(root, captureDate);
+                Directory.CreateDirectory(Path.GetDirectoryName(csvPath));
+                lock (_csvLock)
+                {
+                    using (var fs = new FileStream(
+                        csvPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
+                    using (var sw = new StreamWriter(fs, new UTF8Encoding(false)))
+                        sw.WriteLine(layout.ToCsvLine());
+                }
+
+                FlowTrace.Log(
+                    $"capture layout final grab={layout.GrabId} " +
+                    $"{layout.ToFlowValues()} path={csvPath}");
+                WriteSucceeded?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                string error = ex.GetType().Name + ": " + ex.Message;
+                Trace.WriteLine("[InspectionLogService.WriteFinalLayout] " + error);
+                WriteFailed?.Invoke(error);
+            }
+        }
+
         private static void FlowConfigWrite(string csvPath, CsvConfigSnapshot config)
         {
             double lineRate = config.CamLineRateHz != null && config.CamLineRateHz.Length > 0

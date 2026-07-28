@@ -116,6 +116,19 @@ class SettingsFlowValidatorTests(unittest.TestCase):
             CheckStatus.PASS, result(report, "S5.enhance-heatmap").status
         )
 
+    def test_green_heatmap_is_accepted(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "ui:設定[hda_EnhanceHeatmap]=Green",
+                "setting route hda_EnhanceHeatmap owner=Enhance effects=None",
+                "enhance heatmap mode=Green live=green review=gray "
+                "scope=main-only data=unchanged",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "S5.enhance-heatmap").status
+        )
+
     def test_enhance_heatmap_rejects_missing_immediate_state_line(self):
         report = SettingsFlowValidator().validate(
             session(
@@ -128,6 +141,95 @@ class SettingsFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(
             CheckStatus.FAIL, result(report, "S5.enhance-heatmap").status
+        )
+
+    def test_display_crop_is_display_only_and_reflects_setting(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "ui:設定[cb_CropHead]=25",
+                "setting route cb_CropHead owner=LiveLayout effects=None",
+                "displayCrop applied head=25.00 tail=10.00 mode=WF "
+                "content=9000x30000 zoom=0.050000 fit=True frames=dynamic",
+                "displayCrop head=25.00 tail=10.00 "
+                "scope=main+column-chart data=unchanged "
+                "waterfallHistory=preserved",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "S6.display-crop").status
+        )
+
+    def test_display_crop_rejects_stale_value(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "ui:設定[cc_CropTail]=30",
+                "setting route cc_CropTail owner=LiveLayout effects=None",
+                "displayCrop head=25.00 tail=10.00 "
+                "scope=main+column-chart data=unchanged "
+                "waterfallHistory=preserved",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "S6.display-crop").status
+        )
+
+    def test_display_crop_during_grab_uses_last_value_at_stop(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "ui:設定[cb_CropHead]=25",
+                "setting route cb_CropHead owner=LiveLayout effects=None",
+                "capture layout pending grab=260728-120000 "
+                "setting=cb_CropHead apply=display-now+stop-final",
+                "displayCrop applied head=25.00 tail=10.00 mode=WF "
+                "content=8500x30000 zoom=0.050000 fit=True frames=dynamic",
+                "displayCrop head=25.00 tail=10.00 "
+                "scope=main+column-chart data=unchanged "
+                "waterfallHistory=preserved",
+                "ui:設定[cb_CropHead]=50",
+                "setting route cb_CropHead owner=LiveLayout effects=None",
+                "capture layout pending grab=260728-120000 "
+                "setting=cb_CropHead apply=display-now+stop-final",
+                "displayCrop applied head=50.00 tail=10.00 mode=WF "
+                "content=8000x30000 zoom=0.050000 fit=True frames=dynamic",
+                "displayCrop head=50.00 tail=10.00 "
+                "scope=main+column-chart data=unchanged "
+                "waterfallHistory=preserved",
+                "StopGrab",
+                "capture layout final grab=260728-120000 "
+                "ops=1|1|1|1|1|1|1 start=0|1|2|3|4|5|6 "
+                "speed=40 head=50 tail=10 path=x",
+                "capture layout applied grab=260728-120000 timing=stop "
+                "ops=1|1|1|1|1|1|1 start=0|1|2|3|4|5|6 "
+                "speed=40 head=50 tail=10 "
+                "render=already-applied source=unchanged",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "S6.display-crop").status
+        )
+
+    def test_display_crop_during_grab_rejects_missing_actual_apply(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "ui:設定[cc_CropTail]=30",
+                "setting route cc_CropTail owner=LiveLayout effects=None",
+                "capture layout pending grab=260728-120000 "
+                "setting=cc_CropTail apply=display-now+stop-final",
+                "displayCrop head=0.00 tail=30.00 "
+                "scope=main+column-chart data=unchanged "
+                "waterfallHistory=preserved",
+                "StopGrab",
+                "capture layout final grab=260728-120000 "
+                "ops=1|1|1|1|1|1|1 start=0|1|2|3|4|5|6 "
+                "speed=40 head=0 tail=30 path=x",
+                "capture layout applied grab=260728-120000 timing=stop "
+                "ops=1|1|1|1|1|1|1 start=0|1|2|3|4|5|6 "
+                "speed=40 head=0 tail=30 "
+                "render=already-applied source=unchanged",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "S6.display-crop").status
         )
 
     def test_enhance_heatmap_rejects_palette_different_from_selected_mode(self):

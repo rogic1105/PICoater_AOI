@@ -54,9 +54,12 @@ namespace TanukiCv.Controls
 
         // 三種顯示共用同一套時間軸與寫頭；各層分塊 lazy 配置，切換只換讀取層，不清歷史。
         // _layerChunks[layer][ci] = byte[_fullW * ChunkRows]（null=黑）。
+        // _fullW 永遠是未裁切的完整資料寬；Crop 只改 _visibleW/_displaySourceLeftPx。
         private byte[][][] _layerChunks;
         private WaterfallFrameLayer _displayLayer = WaterfallFrameLayer.Raw;
         private int _fullW;
+        private int _visibleW;
+        private int _displaySourceLeftPx;
         private int _writeRow;                       // 下一個 band 寫入起始 row（也是 Ring 顯示接縫位置）
         private int _lastStateLogMs;                 // 狀態快照節流（每秒一行）
 
@@ -119,8 +122,11 @@ namespace TanukiCv.Controls
         }
 
         private int _defaultFrameW = 16384;           // 尚無幀的槽位用此寬度排佈局 → 7 槽寬度穩定
+        private readonly int[] _cameraWidths;
         private double[] _startMm;
         private double _refOpsMm = 0.024;
+        private double _trimHeadMm, _trimTailMm;
+        private double _displayStartMm;
         private readonly List<CameraPlacement> _cameraPlacements = new List<CameraPlacement>();
         private CanvasInfo _lastCanvasInfo;
         private bool _hasCanvasInfo;
@@ -165,6 +171,7 @@ namespace TanukiCv.Controls
             _perCamLastTick = new long[_camCount];
             _perCamLastWall = new long[_camCount];
             _perCamSeq = new long[_camCount];
+            _cameraWidths = new int[_camCount];
             for (int i = 0; i < _camCount; i++) _perCamSeq[i] = -1;
 
             _canvas = new ImageCanvas { Dock = DockStyle.Fill, BackColor = Color.Black };
@@ -217,42 +224,75 @@ namespace TanukiCv.Controls
         /// 在首幀前即建立由設定決定的黑底座標畫布，使 grab 前後使用同一組視野。</summary>
         public void SetLayout(double[] startMm, double[] opsUm, double refOpsMm)
         {
-            int layoutW;
-            bool sizeChanged;
+            int visibleW;
+            bool storageSizeChanged;
+            bool visibleSizeChanged;
             double calibrationOps;
             lock (_lock)
             {
                 _startMm = startMm;
                 if (refOpsMm > 0) _refOpsMm = refOpsMm;
                 calibrationOps = _refOpsMm;
-                layoutW = RebuildCameraPlacementsLocked();
-                sizeChanged = layoutW > 0 && (_layerChunks == null || _fullW != layoutW);
-                if (sizeChanged)
+                int previousVisibleW = _visibleW;
+                visibleW = RebuildCameraPlacementsLocked(out int storageW);
+                storageSizeChanged =
+                    storageW > 0 && (_layerChunks == null || _fullW != storageW);
+                visibleSizeChanged = visibleW > 0 && previousVisibleW != visibleW;
+                if (storageSizeChanged)
                 {
-                    _fullW = layoutW;
+                    _fullW = storageW;
                     _layerChunks = CreateLayerChunks();
                     _writeRow = 0;
                 }
+                _visibleW = visibleW;
             }
 
             if (_screenMmPerPx > 0 && calibrationOps > 0)
                 try { _canvas.SetPhysicalCalibration(calibrationOps, _screenMmPerPx); } catch { }
-            if (layoutW <= 0) return;
+            if (visibleW <= 0) return;
 
             if (!_virtualSet || !_canvas.LodActive)
             {
                 _virtualSet = true;
-                _canvas.EnableLod(layoutW, _totalHeight, ProvideRegion);
+                _canvas.EnableLod(visibleW, _totalHeight, ProvideRegion);
             }
-            else if (sizeChanged)
+            else if (storageSizeChanged || visibleSizeChanged)
             {
-                _canvas.UpdateLodVirtualSize(layoutW, _totalHeight);
+                _canvas.UpdateLodVirtualSize(visibleW, _totalHeight);
             }
             else
             {
                 // START/OPS may change without changing the pixel width; republish the same view with new physical coordinates.
                 _canvas.SetView(_canvas.Zoom, _canvas.PanOffset);
             }
+        }
+
+        /// <summary>
+        /// Restricts the waterfall main display to a physical X range.
+        /// Incoming camera frames and waterfall history remain full width; only the visible
+        /// LOD window and physical-coordinate mapping change.
+        /// </summary>
+        public void SetHorizontalDisplayCrop(double trimHeadMm, double trimTailMm)
+        {
+            double head = Math.Max(0, trimHeadMm);
+            double tail = Math.Max(0, trimTailMm);
+            double[] startMm;
+            double refOpsMm;
+            lock (_lock)
+            {
+                if (Math.Abs(_trimHeadMm - head) < 0.000001 &&
+                    Math.Abs(_trimTailMm - tail) < 0.000001)
+                    return;
+                _trimHeadMm = head;
+                _trimTailMm = tail;
+                startMm = _startMm;
+                refOpsMm = _refOpsMm;
+            }
+
+            SetLayout(startMm, null, refOpsMm);
+            _lodContentDirty = true;
+            PushLodRefresh();
+            RefireViewRange();
         }
 
         private IReadOnlyList<RectangleF> GetCameraFrameRegions()
@@ -425,12 +465,12 @@ namespace TanukiCv.Controls
             lock (_lock)
             {
                 if (_seenCams.Add(camId)) _lastNewCamWallMs = nowMs; // 新相機被發現 → 重置穩定計時（啟動期給 join grace）
-                if (w > _defaultFrameW)
-                {
-                    _defaultFrameW = w;
-                    RebuildCameraPlacementsLocked();
-                }
                 int ci = camId - 1;
+                if (_cameraWidths[ci] != w)
+                {
+                    _cameraWidths[ci] = w;
+                    _visibleW = RebuildCameraPlacementsLocked(out _);
+                }
 
                 long lastTick = _perCamLastTick[ci];
                 long lastWall = _perCamLastWall[ci];
@@ -581,12 +621,14 @@ namespace TanukiCv.Controls
             var cams = new List<MergeLayout.CamGeom>(_camCount);
             for (int i = 0; i < _camCount; i++)
             {
-                int wpx = slot.Frames.TryGetValue(i + 1, out var f) ? f.W : _defaultFrameW;
+                int wpx = slot.Frames.TryGetValue(i + 1, out var f)
+                    ? f.W
+                    : (_cameraWidths[i] > 0 ? _cameraWidths[i] : _defaultFrameW);
                 cams.Add(new MergeLayout.CamGeom { CameraId = i + 1, StartMm = i < _startMm.Length ? _startMm[i] : 0, WidthPx = wpx });
             }
-            var places = MergeLayout.Compute(cams, minStart, _refOpsMm, 1, MergeOverlap.Midline, out int fullW);
+            var places = MergeLayout.Compute(
+                cams, minStart, _refOpsMm, 1, MergeOverlap.Midline, out int fullW);
             if (fullW <= 0) return null;
-
             if (_layerChunks == null || _fullW != fullW)
             {
                 _fullW = fullW;
@@ -724,13 +766,13 @@ namespace TanukiCv.Controls
         // UI 執行緒（flushTimer）：固定虛擬尺寸一次 + 刷 LOD（內容變、視角不變）。
         private void PushLodRefresh()
         {
-            if (_disposed || _fullW <= 0) return;
+            if (_disposed || _visibleW <= 0) return;
             if (!_virtualSet)
             {
                 // EnableLod synchronously publishes CanvasInfo through FitToScreen.
                 // This fallback is only used when the actual frame width differs from the configured 16384-pixel layout.
                 _virtualSet = true;
-                _canvas.EnableLod(_fullW, _totalHeight, ProvideRegion);
+                _canvas.EnableLod(_visibleW, _totalHeight, ProvideRegion);
                 _awaitedLodGeneration = _canvas.LodContentGeneration;
                 _lodContentDirty = false;
             }
@@ -783,7 +825,7 @@ namespace TanukiCv.Controls
                     int orow = dy * dw;
                     for (int dx = 0; dx < dw; dx++)
                     {
-                        long sx = r.X + (long)dx * rw / dw;
+                        long sx = _displaySourceLeftPx + r.X + (long)dx * rw / dw;
                         if (sx < 0 || sx >= _fullW) continue;
                         outp[orow + dx] = chunk[rowBase + (int)sx];
                     }
@@ -823,8 +865,9 @@ namespace TanukiCv.Controls
             return span.Raw;
         }
 
-        private int RebuildCameraPlacementsLocked()
+        private int RebuildCameraPlacementsLocked(out int storageWidth)
         {
+            storageWidth = 0;
             _cameraPlacements.Clear();
             if (_startMm == null || _startMm.Length == 0 || _refOpsMm <= 0) return 0;
 
@@ -843,13 +886,19 @@ namespace TanukiCv.Controls
                 {
                     CameraId = i + 1,
                     StartMm = i < _startMm.Length ? _startMm[i] : 0,
-                    WidthPx = _defaultFrameW
+                    WidthPx = _cameraWidths[i] > 0 ? _cameraWidths[i] : _defaultFrameW
                 });
             }
 
-            _cameraPlacements.AddRange(MergeLayout.Compute(
-                cams, minStart, _refOpsMm, 1, MergeOverlap.Midline, out int fullW));
-            return fullW;
+            List<CameraPlacement> placements = MergeLayout.Compute(
+                cams, minStart, _refOpsMm, 1, MergeOverlap.Midline, out int fullW);
+            storageWidth = fullW;
+            HorizontalDisplayCrop crop = HorizontalDisplayCrop.Compute(
+                fullW, minStart, _refOpsMm, _trimHeadMm, _trimTailMm);
+            _cameraPlacements.AddRange(crop.Apply(placements));
+            _displaySourceLeftPx = crop.SourceLeftPx;
+            _displayStartMm = crop.VisibleStartMm;
+            return crop.VisibleWidthPx;
         }
 
         private void OnCanvasStatus(CanvasInfo info)
@@ -976,16 +1025,10 @@ namespace TanukiCv.Controls
 
         private double MinStartMm()
         {
-            double min = double.MaxValue;
             lock (_lock)
             {
-                if (_startMm != null)
-                {
-                    for (int i = 0; i < _startMm.Length; i++)
-                        if (_startMm[i] < min) min = _startMm[i];
-                }
+                return _displayStartMm;
             }
-            return min == double.MaxValue ? 0 : min;
         }
 
         public void Dispose()

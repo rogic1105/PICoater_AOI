@@ -36,6 +36,8 @@ namespace AniloxRoll.Monitor.Core.Services
                 try
                 {
                     CsvConfigSnapshot lastConfig = null;
+                    CsvConfigSnapshot grabConfig = null;
+                    CaptureLayoutSnapshot finalLayout = null;
                     using (var reader = InspectionCsvReader.OpenShared(csvPath))
                     {
                         string line;
@@ -48,10 +50,20 @@ namespace AniloxRoll.Monitor.Core.Services
                                 continue;
                             }
 
+                            if (CaptureLayoutSnapshot.TryParse(line, out var layout))
+                            {
+                                if (string.Equals(layout.GrabId, grabId, StringComparison.Ordinal))
+                                    finalLayout = layout;
+                                continue;
+                            }
+
                             if (!InspectionCsvReader.TryParseRecord(line, out var record)) continue;
-                            if (record.GrabId == grabId && lastConfig != null) return lastConfig;
+                            if (record.GrabId == grabId && grabConfig == null)
+                                grabConfig = lastConfig;
                         }
                     }
+                    if (grabConfig != null)
+                        return grabConfig.WithMachineLayout(finalLayout);
                 }
                 catch (Exception ex)
                 {
@@ -86,6 +98,9 @@ namespace AniloxRoll.Monitor.Core.Services
                         if (line.StartsWith("#CFG,") &&
                             CsvConfigSnapshot.TryParse(line, out var config))
                             latest = config;
+                        else if (CaptureLayoutSnapshot.TryParse(line, out var layout) &&
+                                 latest != null)
+                            latest = latest.WithMachineLayout(layout);
                     }
                 }
             }

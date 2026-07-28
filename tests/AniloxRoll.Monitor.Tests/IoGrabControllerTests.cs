@@ -6,6 +6,8 @@ using Moq;
 using NUnit.Framework;
 using IoBridge.Core;
 using AniloxRoll.Monitor.Core.Services;
+using AniloxRoll.Monitor.Core.Data;
+using AniloxRoll.Monitor.UI.Coordinators;
 
 namespace AniloxRoll.Monitor.Tests
 {
@@ -18,6 +20,7 @@ namespace AniloxRoll.Monitor.Tests
         private List<bool> _connectionLog;
         private int _startCount;
         private int _stopCount;
+        private List<IoStopRequestReason> _stopReasons;
 
         [SetUp]
         public void SetUp()
@@ -35,11 +38,16 @@ namespace AniloxRoll.Monitor.Tests
             _connectionLog = new List<bool>();
             _startCount = 0;
             _stopCount = 0;
+            _stopReasons = new List<IoStopRequestReason>();
 
             _ctrl.OnStateChanged += s => _stateLog.Add(s);
             _ctrl.OnConnectionChanged += connected => _connectionLog.Add(connected);
             _ctrl.OnStartRequested += () => _startCount++;
-            _ctrl.OnStopRequested += () => _stopCount++;
+            _ctrl.OnStopRequested += reason =>
+            {
+                _stopCount++;
+                _stopReasons.Add(reason);
+            };
         }
 
         [TearDown]
@@ -136,6 +144,7 @@ namespace AniloxRoll.Monitor.Tests
             await _ctrl.PollTick();
             Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Idle));
             Assert.That(_stopCount, Is.EqualTo(1));
+            Assert.That(_stopReasons, Is.EqualTo(new[] { IoStopRequestReason.StartLow }));
         }
 
         [Test]
@@ -220,6 +229,7 @@ namespace AniloxRoll.Monitor.Tests
 
             Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Faulted));
             Assert.That(_stopCount, Is.EqualTo(1), "Should fire stop on fault");
+            Assert.That(_stopReasons, Is.EqualTo(new[] { IoStopRequestReason.PlcAliveLost }));
         }
 
         [Test]
@@ -251,6 +261,7 @@ namespace AniloxRoll.Monitor.Tests
             await _ctrl.PollTick();
             Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.CommLost));
             Assert.That(_stopCount, Is.EqualTo(1));
+            Assert.That(_stopReasons, Is.EqualTo(new[] { IoStopRequestReason.CommunicationLost }));
         }
 
         // ── ReconnectTick ──
@@ -403,6 +414,30 @@ namespace AniloxRoll.Monitor.Tests
                 IoState.Stopping,
                 IoState.Idle
             }));
+        }
+
+        [TestCase(CaptureStopCondition.IoSignal, true)]
+        [TestCase(CaptureStopCondition.Time, false)]
+        [TestCase(CaptureStopCondition.Height, false)]
+        public void CaptureStopPolicy_IoRequest_UsesSnapshottedStopCondition(
+            CaptureStopCondition condition,
+            bool shouldStop)
+        {
+            Assert.That(
+                CaptureStopPolicy.ShouldStopOnIoRequest(condition),
+                Is.EqualTo(shouldStop));
+        }
+
+        [TestCase(IoStopRequestReason.StartLow, true)]
+        [TestCase(IoStopRequestReason.PlcAliveLost, false)]
+        [TestCase(IoStopRequestReason.CommunicationLost, false)]
+        public void CaptureStopPolicy_TailDrain_OnlyForStartLow(
+            IoStopRequestReason reason,
+            bool shouldDrain)
+        {
+            Assert.That(
+                CaptureStopPolicy.ShouldDrainIoTail(reason),
+                Is.EqualTo(shouldDrain));
         }
 
         // ── Helper ──

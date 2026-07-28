@@ -94,6 +94,32 @@ namespace AniloxRoll.Monitor.Core.Services
                 s.AniloxRollSpeedMPerMin);
         }
 
+        /// <summary>
+        /// Replaces only machine-layout values. Capture-time processing values and camera
+        /// acquisition parameters remain from this snapshot.
+        /// </summary>
+        public CsvConfigSnapshot WithMachineLayout(CaptureLayoutSnapshot layout)
+        {
+            if (layout == null) return this;
+            return new CsvConfigSnapshot(
+                layout.CamOps,
+                layout.CamPos,
+                CamGrabHeight,
+                CamExposureUs,
+                CamLineRateHz,
+                HessianMaxFactorV,
+                HessianMaxFactorH,
+                RidgeSigma,
+                ErrorValueMeanV,
+                ErrorValueMaxV,
+                ErrorValueMeanH,
+                ErrorValueMaxH,
+                layout.TrimHeadMm,
+                layout.TrimTailMm,
+                layout.Timestamp,
+                layout.AniloxRollSpeedMPerMin);
+        }
+
         /// <summary>不含時間戳的內容鍵，用於偵測設定是否變更。</summary>
         public string ContentKey
         {

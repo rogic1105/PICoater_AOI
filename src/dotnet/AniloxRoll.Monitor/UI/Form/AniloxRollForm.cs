@@ -125,6 +125,12 @@ namespace AniloxRoll.Monitor.Forms
         private InspectionLogService _inspectionLogService;
         private string _currentGrabId;
         private DateTime _currentGrabCaptureDate;
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, CaptureLayoutSnapshot>
+            _captureLayouts =
+                new System.Collections.Concurrent.ConcurrentDictionary<string, CaptureLayoutSnapshot>(
+                    StringComparer.Ordinal);
+        private bool _captureLayoutPending;
+        private bool _captureLayoutDeferredRenderPending;
 
         // --- App Mode ---
         private AppModeConfig _appMode;
@@ -826,9 +832,12 @@ namespace AniloxRoll.Monitor.Forms
                     CanvasParameterTextBuilder.FromCaptureConfig(_stitchCoordinator?.CurrentGrabConfig));
                 _stitchCoordinator.StitchedLayoutReady += (grabId, ws, hs, ops, pos, isGlobal) =>
                 {
+                    CsvConfigSnapshot cropConfig = _stitchCoordinator.CurrentGrabConfig;
                     ImageViewRange? computed = ComputeReviewFitViewRange(
                         ws, hs, ops, pos, isGlobal,
-                        _reviewRowSync?.RowPitchMm ?? 0);
+                        _reviewRowSync?.RowPitchMm ?? 0,
+                        cropConfig?.TrimHeadMm ?? _settings.TrimHeadMm,
+                        cropConfig?.TrimTailMm ?? _settings.TrimTailMm);
                     if (!computed.HasValue) return;
                     ImageViewRange range = computed.Value;
 
@@ -847,12 +856,15 @@ namespace AniloxRoll.Monitor.Forms
                     gray, ws, hs, ops, pos, isGlobal, preserveChartView,
                     feedScale, rowPitchScale) =>
                 {
+                    CsvConfigSnapshot cropConfig = _stitchCoordinator.CurrentGrabConfig;
                     _reviewDisplayManager?.SetMainColorMap(ResolveReviewColorMap());
                     _reviewDisplayManager?.PushFrames(gray, ws, hs, ops, pos, isGlobal,
                         _reviewRuntimeState.ScreenMmPerPixel,
                         feedScale,
                         (_reviewRowDisplay?.RowPitchMm ?? 0) * rowPitchScale,
                         ShouldFlipDisplayVertical(),
+                        cropConfig?.TrimHeadMm ?? _settings.TrimHeadMm,
+                        cropConfig?.TrimTailMm ?? _settings.TrimTailMm,
                         preserveChartView);   // 灰階已在 RSC 解碼段轉好（零 race）；?.：關閉時序防 NRE
                 };
                 // Stage2：新 canvas 視野 → 回顧曲線圖 zoom 連動（欄=全覽 X、列=Y；拖曳中即時）
@@ -1057,7 +1069,7 @@ namespace AniloxRoll.Monitor.Forms
             UpdateCamCountLabel(_liveCameraManager.ConnectedCameraCount, CameraCount);
             RefreshGrabButtonState();
 
-            // CLProtocol 就緒後：把每張板的板載記憶體（總量/可用）標到 listViewHardware（grabber 記憶體大小）。
+            // CLProtocol 就緒後：把每張板的板載記憶體（總量/可用）標到系統參數表。
             // 記憶體是「每張板」共用（同板 channel 共池）→ 每個 unique System 顯示一列；同時 log 高度/線掃上限診斷。
             try
             {
@@ -1077,7 +1089,7 @@ namespace AniloxRoll.Monitor.Forms
                     if (cam == null) continue;
 
                     // 每張板（System）只加一列板載記憶體（去重）：用量/總量 + 已配台數。存 item ref → telemetry timer 即時刷新（改參數後用量會變）。
-                    if (listViewHardware != null && !IsDisposed && cam.HasGrabBuffers && seenSystems.Add(cam.OwnerSystemKey))
+                    if (listViewSystemParameters != null && !IsDisposed && cam.HasGrabBuffers && seenSystems.Add(cam.OwnerSystemKey))
                     {
                         long key   = cam.OwnerSystemKey;
                         long total = cam.GetMemoryTotalMB();    // 板載總量（on-board，硬體固定）
@@ -1086,7 +1098,7 @@ namespace AniloxRoll.Monitor.Forms
                         int  nCam  = boardCamCount.TryGetValue(key, out var c) ? c : 1;
                         string val = (used >= 0) ? $"{used}/{total} MB" : $"{free} MB free";
                         var item = new ListViewItem(new[] { $"Grabber記憶體_板{boardIdx}（{nCam}台）", val });
-                        listViewHardware.Items.Add(item);
+                        listViewSystemParameters.Items.Add(item);
                         _boardMemItems[key] = item;             // 存 ref 供 timer 更新
                         _boardMemInfo[key]  = (nCam, total);
                         boardIdx++;
@@ -1246,10 +1258,33 @@ namespace AniloxRoll.Monitor.Forms
                 if (c.Source == AniloxRoll.Monitor.Settings.Services.SettingSource.Programmatic)
                     RefreshGridItem(c.Name);
 
-                ApplyCrossFeatureSettingImpacts(route.Impacts);
+                bool machineLayoutChangedDuringGrab =
+                    _liveCameraManager?.IsLiveGrabbing == true &&
+                    MachineLayoutSettingNames.Contains(c.Name);
+                if (machineLayoutChangedDuringGrab)
+                {
+                    bool applyDisplayImmediately = CropSettingNames.Contains(c.Name);
+                    _captureLayoutPending = true;
+                    _captureLayoutDeferredRenderPending |= !applyDisplayImmediately;
+                    FlowTrace.Log(
+                        $"capture layout pending grab={_currentGrabId} setting={c.Name} " +
+                        $"apply={(applyDisplayImmediately ? "display-now+stop-final" : "stop-final")}");
+
+                    if (applyDisplayImmediately)
+                    {
+                        ApplyCrossFeatureSettingImpacts(route.Impacts);
+                        await DispatchSettingOwner(route.Owner, c.Name);
+                    }
+                }
+                else
+                {
+                    ApplyCrossFeatureSettingImpacts(route.Impacts);
+                    await DispatchSettingOwner(route.Owner, c.Name);
+                }
+
                 if (_liveCameraManager?.IsLiveGrabbing == true)
-                    _inspectionLogService?.ForceWriteConfig(CsvConfigSnapshot.FromSettings(_settings));
-                await DispatchSettingOwner(route.Owner, c.Name);
+                    _inspectionLogService?.ForceWriteConfig(
+                        BuildCaptureConfigSnapshot(_currentGrabId));
             }
             catch (Exception ex) { Trace.WriteLine($"[OnSettingChanged {c?.Name}] {ex}"); }
             finally { _onSettingChangedSemaphore.Release(); }
@@ -1351,6 +1386,21 @@ namespace AniloxRoll.Monitor.Forms
             "ab_OpsCam1", "ac_OpsCam2", "ad_OpsCam3", "ae_OpsCam4", "af_OpsCam5", "ag_OpsCam6", "ah_OpsCam7",
             "bb_StartCam1", "bc_StartCam2", "bd_StartCam3", "be_StartCam4", "bf_StartCam5", "bg_StartCam6", "bh_StartCam7"
         };
+
+        private static readonly HashSet<string> CropSettingNames =
+            new HashSet<string>(StringComparer.Ordinal)
+            {
+                nameof(InspectionSettings.cb_CropHead),
+                nameof(InspectionSettings.cc_CropTail)
+            };
+
+        private static readonly HashSet<string> MachineLayoutSettingNames =
+            new HashSet<string>(OpsStartSettingNames, StringComparer.Ordinal)
+            {
+                nameof(InspectionSettings.ai_OpsSpeed),
+                nameof(InspectionSettings.cb_CropHead),
+                nameof(InspectionSettings.cc_CropTail)
+            };
 
         /// <summary>
         /// PropertyGrid 改值：setter 已寫 memory，這裡只負責把它導入 SettingsHub 走統一管線。

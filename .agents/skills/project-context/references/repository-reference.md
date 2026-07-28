@@ -168,8 +168,8 @@ against current code with `rg` before editing because lookup data can become sta
 | ── Start (mm) ── | （分隔列，唯讀） | — | — |
 | Cam 1~7 | `bb_StartCam1~bh_StartCam7` | 0/345/690/1035/1380/1725/2070 | 各相機起始位置 |
 | ── Crop (mm) ── | （分隔列，唯讀） | — | — |
-| 去頭 | `cb_CropHead` → `Crop.TrimHeadMm` | 0.0 | CAM1 左側裁切 |
-| 去尾 | `cc_CropTail` → `Crop.TrimTailMm` | 0.0 | CAM7 右側裁切 |
+| 去頭 | `cb_CropHead` → `Crop.TrimHeadMm` | 0.0 | 顯示範圍左側裁切；不修改影像、BIN、CSV 或演算法輸入 |
+| 去尾 | `cc_CropTail` → `Crop.TrimTailMm` | 0.0 | 顯示範圍右側裁切；主畫面、相機框線與欄圖表共用 |
 
 ### 2. 檢測設定
 
@@ -204,7 +204,7 @@ against current code with `rg` before editing because lookup data can become sta
 | ── 主畫面 ── | （分隔列，唯讀） | — | — |
 | 監控強化 | `hc_EnableMuraEnhance` → `EnableMuraEnhance` | false | 即時影像強化 Mura |
 | 回顧強化 | `hd_EnableReviewEnhance` → `EnableReviewEnhance` | false | 回顧影像強化 Mura |
-| 強化熱力圖 | `hda_EnhanceHeatmap` → `EnhanceHeatmap` | Off | 關閉 / 冷色 / 暖色 / 藍黃紅；只影響主畫面強化顯示 |
+| 強化熱力圖 | `hda_EnhanceHeatmap` → `EnhanceHeatmap` | Off | 關閉 / 冷色 / 暖色 / 藍黃紅 / 綠階；只影響主畫面強化顯示 |
 | 主畫面顯示 | `he_MainDisplay` → `ImageView.MainDisplay` | Waterfall | ImageCanvas（即時合圖）/ Waterfall（瀑布合圖） |
 | 上下方向 | `hee_VerticalDirection` → `ImageView.VerticalDirection` | BottomToTop | 由下而上 / 由上而下；監控與回顧共用 |
 | 動態LOD | `hf_LiveLod` → `ImageView.LiveLod` | CPU | Off / GPU（TanukiCv GPU 縮）/ CPU（GrayResizeCpu 純 CPU 縮）。ImageCanvas 模式放大巨圖看細節用（顯示成本 ~180ms→~1ms），即時生效。預設 CPU＝無 GPU 機也能跑。`LiveCameraManager.SetLodMode` 套到 `ImageDisplayView.EnableLod`/`DisableLod` |
@@ -231,7 +231,7 @@ against current code with `rg` before editing because lookup data can become sta
 
 | 顯示名稱 | 屬性 | 預設值 | 說明 |
 |---------|------|--------|------|
-| 記錄範圍 | `LogMode` | 日常運行 | 日常／流程驗證／完整診斷三級；用途直接顯示在下拉名稱中 |
+| 記錄範圍 | `LogMode` | 日常運行 | 日常運行／流程驗證／完整診斷三級；用途顯示於 PropertyGrid 說明區 |
 | 保留時間 (小時) | `LogRetentionHours` | 168 | 只清理 Log catalog 內的診斷檔；目前 process 的 log 與未知檔案保留 |
 
 ### 6. 光源設定
@@ -251,7 +251,7 @@ against current code with `rg` before editing because lookup data can become sta
 | IO Port | `IoPort` | 502 | Modbus TCP port |
 | 啟用 IO | `IoEnabled` | true | 啟用 IO Modbus TCP |
 | 暫停檢出 | `MuraDetectPaused` | false | 是=暫停 Mura 檢出與 DO1；每次啟動恢復為否，不寫入 JSON |
-| IO 型號（硬體資訊表） | `IoModel` | ET-7044 | PropertyGrid 隱藏；唯讀顯示於 `listViewHardware`，仍由 JSON 供 `IoModuleFactory` 選型 |
+| IO 型號（系統參數表） | `IoModel` | ET-7044 | PropertyGrid 隱藏；唯讀顯示於 `listViewSystemParameters`，仍由 JSON 供 `IoModuleFactory` 選型 |
 
 ---
 
@@ -317,9 +317,7 @@ against current code with `rg` before editing because lookup data can become sta
 | 線掃滑桿1~7 | `trackBarLrCam1~7` + `numLrCam1~7` | TrackBar+NUD | — |
 | 高度滑桿1~7 | `trackBarHtCam1~7` + `numHtCam1~7` | TrackBar+NUD | — |
 | Telemetry 列表 | `listViewCameras` | ListView | — |
-| 引擎常數列表 | `listViewEngine` | ListView | — |
-| 圖表常數列表 | `listViewChartConst` | ListView | — |
-| 硬體參數列表 | `listViewHardware` | ListView | — |
+| 系統參數列表 | `listViewSystemParameters` | ListView | 合併影像／圖表引擎常數、硬體、Storage／Resource Monitor |
 | 電腦容量狀態列 | `lblInfo` | Label | 檢測電腦：剩餘 N / Total GB｜儲存電腦：剩餘 N / Total GB（座標與亮度由 ImageCanvas 顯示在滑鼠旁） |
 | 相機數狀態 | `lblCamCount` | Label | 相機: N/7 |
 | IO 狀態 | `lblIoState` | RoundedLabel | -- → 待機/取像/停止/故障/斷線/關閉/未連線（FSM 運作狀態，非連線燈；已移入 `panelIo` IO 運作區當開頭，與 DIO 燈號同組，皆圓角晶片） |

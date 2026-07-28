@@ -148,7 +148,7 @@ namespace AniloxRoll.Monitor.Forms
         private ListViewItem AddResMonItem(string key, string value)
         {
             var item = new ListViewItem(new[] { key, value });
-            listViewHardware.Items.Add(item);
+            listViewSystemParameters.Items.Add(item);
             return item;
         }
 
@@ -230,7 +230,9 @@ namespace AniloxRoll.Monitor.Forms
             CurveMergeHelper.UpdateOverviewChart(_liveCurveMean, _liveCurveMax,
                 _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray(),
                 _settings.ErrorValueMeanV, _settings.ErrorValueMaxV,
-                _liveOverviewHelper, CameraCount, _settings.StitchMode, LiveViewRangeProvider);
+                _liveOverviewHelper, CameraCount, _settings.StitchMode, LiveViewRangeProvider,
+                trimHeadMm: _settings.TrimHeadMm,
+                trimTailMm: _settings.TrimTailMm);
             if (swOv.ElapsedMilliseconds > 50)
                 FlowTrace.Log($"[UiSlow] OverviewChart {swOv.ElapsedMilliseconds}ms");
         }

@@ -64,6 +64,8 @@ namespace TanukiCv.Controls
         private double[] _startPosMm, _opsUm;
         private int _feedScale = 1;
         private double _rowPitchMm;
+        private double _trimHeadMm, _trimTailMm;
+        private double _mergeDisplayStartMm;
         private volatile int _mergeCapK = 1;
 
         // 合圖幾何快取（BuildMerge 與「合圖 LOD」合成 provider 共用單一來源）
@@ -316,10 +318,57 @@ namespace TanukiCv.Controls
         /// FOV 來源的呼叫端自己把 fovMm/frameWidth 換算成 ops 再餵進來 → 單張/合圖/overlay 同一條路。</summary>
         public void SetLayout(double[] startPosMm, double[] opsUm, int feedScale, double rowPitchMm)
         {
-            _startPosMm = startPosMm; _opsUm = opsUm;
-            _feedScale = feedScale > 0 ? feedScale : 1;
+            int normalizedFeedScale = feedScale > 0 ? feedScale : 1;
+            bool changed =
+                !SameValues(_startPosMm, startPosMm) ||
+                !SameValues(_opsUm, opsUm) ||
+                _feedScale != normalizedFeedScale ||
+                Math.Abs(_rowPitchMm - rowPitchMm) > 0.0000001;
+
+            _startPosMm = startPosMm == null ? null : (double[])startPosMm.Clone();
+            _opsUm = opsUm == null ? null : (double[])opsUm.Clone();
+            _feedScale = normalizedFeedScale;
             _rowPitchMm = rowPitchMm;
             _mergeReady = startPosMm != null && opsUm != null && opsUm.Length > 0 && opsUm[0] > 0;
+            if (!changed) return;
+
+            _mergePlacements = null;
+            _lodCamId = -1;
+            _lodMergeW = _lodMergeH = -1;
+            _mainW = _mainH = -1;
+            _mainDirty = true;
+        }
+
+        private static bool SameValues(double[] left, double[] right)
+        {
+            if (ReferenceEquals(left, right)) return true;
+            if (left == null || right == null || left.Length != right.Length) return false;
+            for (int i = 0; i < left.Length; i++)
+            {
+                if (Math.Abs(left[i] - right[i]) > 0.0000001) return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Restricts the merged main display to the configured physical X range.
+        /// Source frames and thumbnail frames remain unchanged.
+        /// </summary>
+        public void SetHorizontalDisplayCrop(double trimHeadMm, double trimTailMm)
+        {
+            double head = Math.Max(0, trimHeadMm);
+            double tail = Math.Max(0, trimTailMm);
+            if (Math.Abs(_trimHeadMm - head) < 0.000001 &&
+                Math.Abs(_trimTailMm - tail) < 0.000001)
+                return;
+
+            _trimHeadMm = head;
+            _trimTailMm = tail;
+            _mergePlacements = null;
+            _lodCamId = -1;
+            _lodMergeW = _lodMergeH = -1;
+            _mainW = _mainH = -1;
+            _mainDirty = true;
         }
 
         /// <summary>
@@ -334,6 +383,21 @@ namespace TanukiCv.Controls
             bool verticalZeroAtBottom, Size viewport,
             out ImageViewRange range)
         {
+            return TryComputeMergeFitViewRange(
+                widths, heights, startPosMm, opsUm,
+                feedScale, rowPitchMm, mergeAll, mergeStrategy,
+                0, 0, verticalZeroAtBottom, viewport, out range);
+        }
+
+        public static bool TryComputeMergeFitViewRange(
+            int[] widths, int[] heights,
+            double[] startPosMm, double[] opsUm,
+            int feedScale, double rowPitchMm,
+            bool mergeAll, MergeOverlap mergeStrategy,
+            double trimHeadMm, double trimTailMm,
+            bool verticalZeroAtBottom, Size viewport,
+            out ImageViewRange range)
+        {
             range = default(ImageViewRange);
             int cameraCount = Math.Max(widths?.Length ?? 0, heights?.Length ?? 0);
             if (!TryComputeMergeGeometry(
@@ -342,14 +406,17 @@ namespace TanukiCv.Controls
                 mergeAll, mergeStrategy,
                 out _, out int totalWidth, out int maxHeight))
                 return false;
+            double startMm = MinStart(startPosMm);
+            double opsInMm = opsUm[0] / 1000.0;
+            double scale = Math.Max(1, feedScale);
+            HorizontalDisplayCrop crop = HorizontalDisplayCrop.Compute(
+                totalWidth, startMm, opsInMm * scale, trimHeadMm, trimTailMm);
+            totalWidth = crop.VisibleWidthPx;
+            startMm = crop.VisibleStartMm;
             if (!AspectFitCalculator.TryCompute(
                 totalWidth, maxHeight, viewport.Width, viewport.Height,
                 out AspectFitTransform fit))
                 return false;
-
-            double startMm = MinStart(startPosMm);
-            double opsInMm = opsUm[0] / 1000.0;
-            double scale = Math.Max(1, feedScale);
             if (!TryMapViewRange(
                 viewport.Width, viewport.Height,
                 totalWidth, maxHeight,
@@ -799,9 +866,14 @@ namespace TanukiCv.Controls
                 out int totalW, out int maxH))
                 return false;
 
-            _mergePlacements = placements;
-            _mergeTotalW = totalW;
+            double minStartMm = MinStart();
+            double mmPerDisplayPixel = _opsUm[0] / 1000.0 * Math.Max(1, _feedScale);
+            HorizontalDisplayCrop crop = HorizontalDisplayCrop.Compute(
+                totalW, minStartMm, mmPerDisplayPixel, _trimHeadMm, _trimTailMm);
+            _mergePlacements = crop.Apply(placements);
+            _mergeTotalW = crop.VisibleWidthPx;
             _mergeMaxH = maxH;
+            _mergeDisplayStartMm = crop.VisibleStartMm;
             return true;
         }
 
@@ -901,7 +973,9 @@ namespace TanukiCv.Controls
         {
             if (_mergeMode && _mergeReady)
             {
-                startMm = MinStart(); opsInMm = _opsUm[0] / 1000.0; sf = _feedScale * _mergeCapK;
+                startMm = _mergeDisplayStartMm;
+                opsInMm = _opsUm[0] / 1000.0;
+                sf = _feedScale * _mergeCapK;
                 return opsInMm > 0;
             }
             int idx = _selectedCamId - 1;

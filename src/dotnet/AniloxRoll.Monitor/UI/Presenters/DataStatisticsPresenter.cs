@@ -66,7 +66,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public InspectionSettings Settings { get; set; }
 
         public Func<double[]> ReviewViewRangeProvider { get; set; }
-        internal Func<int[], int[], double[], double[], bool, double, ImageViewRange?>
+        internal Func<int[], int[], double[], double[], bool, double, double, double, ImageViewRange?>
             ReviewFitViewRangeProvider { get; set; }
 
         public int CameraCount { get; set; } = 7;

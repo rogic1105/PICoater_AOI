@@ -4,8 +4,7 @@ using System.Windows.Forms;
 namespace AniloxRoll.Monitor.UI.Coordinators
 {
     /// <summary>
-    /// Owns the temporary full-width workspace layout. The Designer remains the source of the
-    /// normal layout; this controller only applies and removes the right-panel override.
+    /// Owns the main workspace/right-panel split and the temporary full-width override.
     /// </summary>
     internal sealed class MainWorkspaceLayoutController : IDisposable
     {
@@ -18,12 +17,14 @@ namespace AniloxRoll.Monitor.UI.Coordinators
         private readonly Action<bool> _persistFullWidth;
         private readonly Action<string> _flowLog;
         private readonly int _normalGap;
+        private readonly int _normalRightMargin;
         private int _clickCount;
         private int _lastClickTick;
         private bool _fullWidth;
         private bool _disposed;
 
         private const int ClickSequenceGapMs = 1200;
+        private const int RightPanelWidthDivisor = 5;
 
         public MainWorkspaceLayoutController(
             Form form,
@@ -46,6 +47,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
             _flowLog = flowLog;
             _fullWidth = initialFullWidth;
             _normalGap = Math.Max(0, _rightPanel.Left - _workspace.Right);
+            _normalRightMargin = Math.Max(0, _form.ClientSize.Width - _rightPanel.Right);
 
             // MouseDown is raised for every physical press, including clicks that WinForms folds
             // into DoubleClick. MouseClick can therefore under-count a fast five-click gesture.
@@ -74,13 +76,13 @@ namespace AniloxRoll.Monitor.UI.Coordinators
             _fullWidth = !_fullWidth;
             ApplyLayout();
             _persistFullWidth?.Invoke(_fullWidth);
-            _flowLog?.Invoke($"ui:monitor tab five-click rightPanel={(_fullWidth ? "hidden" : "visible")}");
+            LogLayout("ui:monitor tab five-click");
         }
 
         public void ApplyPersistedLayout()
         {
             ApplyLayout();
-            _flowLog?.Invoke($"workspace restore rightPanel={(_fullWidth ? "hidden" : "visible")}");
+            LogLayout("workspace restore");
         }
 
         private void ResetClickSequence()
@@ -91,7 +93,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
 
         private void Form_Resize(object sender, EventArgs e)
         {
-            if (_fullWidth) ApplyLayout();
+            ApplyLayout();
         }
 
         private void ApplyLayout()
@@ -101,17 +103,31 @@ namespace AniloxRoll.Monitor.UI.Coordinators
             _form.SuspendLayout();
             try
             {
+                int right = Math.Max(
+                    _workspace.Left + 1,
+                    _form.ClientSize.Width - _normalRightMargin);
+
                 if (_fullWidth)
                 {
-                    int right = _rightPanel.Right;
                     _rightPanel.Visible = false;
                     _workspace.Width = Math.Max(1, right - _workspace.Left);
                 }
                 else
                 {
+                    int availableWidth = Math.Max(1,
+                        right - _workspace.Left - _normalGap);
+                    int rightPanelWidth = Math.Max(1,
+                        availableWidth / RightPanelWidthDivisor);
+                    int workspaceWidth = Math.Max(1,
+                        availableWidth - rightPanelWidth);
+
+                    _rightPanel.SetBounds(
+                        _workspace.Left + workspaceWidth + _normalGap,
+                        _rightPanel.Top,
+                        rightPanelWidth,
+                        _rightPanel.Height);
                     _rightPanel.Visible = true;
-                    _workspace.Width = Math.Max(1,
-                        _rightPanel.Left - _normalGap - _workspace.Left);
+                    _workspace.Width = workspaceWidth;
                 }
 
                 _rescaleActiveTabs?.Invoke();
@@ -121,6 +137,13 @@ namespace AniloxRoll.Monitor.UI.Coordinators
             {
                 _form.ResumeLayout(true);
             }
+        }
+
+        private void LogLayout(string intent)
+        {
+            _flowLog?.Invoke(
+                $"{intent} rightPanel={(_fullWidth ? "hidden" : "visible")} " +
+                $"workspaceW={_workspace.Width} rightPanelW={_rightPanel.Width}");
         }
 
         public void Dispose()

@@ -101,8 +101,8 @@ namespace AniloxRoll.Monitor.Core.Services
         /// <summary>PLC START 上升緣 → 要求開始 Grab。</summary>
         public event Action OnStartRequested;
 
-        /// <summary>PLC START 下降緣 → 要求停止 Grab。</summary>
-        public event Action OnStopRequested;
+        /// <summary>IO 邊界失效時，連同原因要求產品流程判斷是否停止 Grab。</summary>
+        public event Action<IoStopRequestReason> OnStopRequested;
 
         /// <summary>狀態變更通知（UI 更新用）。</summary>
         public event Action<IoState> OnStateChanged;
@@ -385,7 +385,7 @@ namespace AniloxRoll.Monitor.Core.Services
                         _doPcBusy = false;
                     }
                     catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"[IoGrabController.Poll.StopCleanup] {ex.GetType().Name}: {ex.Message}"); }
-                    OnStopRequested?.Invoke();
+                    OnStopRequested?.Invoke(IoStopRequestReason.PlcAliveLost);
                     FireIoSnapshot(plcAlive, diStart);
                     return;
                 }
@@ -436,7 +436,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 {
                     IoLogger.Info("START falling edge → Stop Grab");
                     SetState(IoState.Stopping);
-                    OnStopRequested?.Invoke();
+                    OnStopRequested?.Invoke(IoStopRequestReason.StartLow);
                     await ClearMura();
                     await NotifyGrabStopped();
                     // Keepalive：多次 WriteDo 後補一次讀取，確保 1.5s Watchdog 不逾時
@@ -457,7 +457,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 _doPcBusy = false;
                 Volatile.Write(ref _connectionAccepted, 0);
                 OnConnectionChanged?.Invoke(false);
-                OnStopRequested?.Invoke();
+                OnStopRequested?.Invoke(IoStopRequestReason.CommunicationLost);
                 FireIoSnapshot(false, false);
                 _plc.Dispose();
                 // BackgroundLoop 偵測 !IsConnected 後會自動走 ReconnectTick 路徑，不需手動排程。

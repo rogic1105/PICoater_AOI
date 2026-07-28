@@ -79,6 +79,7 @@
     <Compile Include="PixelMmMapper.cs" />
     <Compile Include="AspectFitCalculator.cs" />
     <Compile Include="MergeLayout.cs" />
+    <Compile Include="HorizontalDisplayCrop.cs" />
     <Compile Include="CurveOverviewMerger.cs" />
     <Compile Include="SystemInfo.cs" />
     <Compile Include="Core\GPUHelper.cs" />

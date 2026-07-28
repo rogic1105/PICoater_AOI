@@ -132,6 +132,12 @@ namespace AniloxRoll.Monitor.Forms
                 _currentGrabId = _inspectionLogService.NextGrabId();
                 DateTime captureDate = DateTime.Now;
                 _currentGrabCaptureDate = captureDate;
+                CaptureLayoutSnapshot initialLayout =
+                    CaptureLayoutSnapshot.FromSettings(_currentGrabId, _settings, captureDate);
+                if (initialLayout != null)
+                    _captureLayouts[_currentGrabId] = initialLayout;
+                _captureLayoutPending = false;
+                _captureLayoutDeferredRenderPending = false;
                 _liveCameraManager.BeginCaptureOutput(_currentGrabId, captureDate);
                 string captureRoot = _settings?.CaptureRootPath ?? string.Empty;
                 string imageDir = string.IsNullOrWhiteSpace(captureRoot)
@@ -198,10 +204,23 @@ namespace AniloxRoll.Monitor.Forms
                 _ = Task.Run(() => LightTurnOff());   // 序列埠寫入不佔 UI（[UiStack] 抓到停止時卡在 SerialStream.Write）
                 string completedGrabId = _currentGrabId;
                 DateTime completedCaptureDate = _currentGrabCaptureDate;
+                CaptureLayoutSnapshot finalLayout =
+                    CaptureLayoutSnapshot.FromSettings(
+                        completedGrabId, _settings, DateTime.Now);
+                if (finalLayout != null)
+                {
+                    _captureLayouts[completedGrabId] = finalLayout;
+                    _inspectionLogService?.WriteFinalLayout(
+                        finalLayout, completedCaptureDate);
+                }
+                ApplyFinalCaptureLayout(finalLayout);
                 if (_settings?.EnableAutoCapture == true)
                     _ = FinalizeCaptureOutputsAsync(completedGrabId, completedCaptureDate);
                 else
+                {
+                    _captureLayouts.TryRemove(completedGrabId, out _);
                     TriggerRetentionAndFlagAsync();
+                }
                 _muraExceedLatch[0] = _muraExceedLatch[1] = false;
                 _outputHealthService?.Resolve("MuraExceed.v");
                 _outputHealthService?.Resolve("MuraExceed.h");
@@ -306,7 +325,7 @@ namespace AniloxRoll.Monitor.Forms
                         ? _settings.Acquisition.CameraLineRateHz[idx] : 0,
                     idx >= 0 && idx < _settings.Acquisition.CameraExposureTimeUs.Length
                         ? _settings.Acquisition.CameraExposureTimeUs[idx] : 0,
-                    CsvConfigSnapshot.FromSettings(_settings),
+                    BuildCaptureConfigSnapshot(grabId),
                     captureDate);
 
             }
@@ -372,6 +391,45 @@ namespace AniloxRoll.Monitor.Forms
                     OutputHealthSeverity.OutputFault,
                     $"序號 {grabId} 封裝失敗：{error}");
             }
+            finally
+            {
+                _captureLayouts.TryRemove(grabId, out _);
+            }
+        }
+
+        private CsvConfigSnapshot BuildCaptureConfigSnapshot(string grabId)
+        {
+            CsvConfigSnapshot current = CsvConfigSnapshot.FromSettings(_settings);
+            if (current == null || string.IsNullOrWhiteSpace(grabId))
+                return current;
+            return _captureLayouts.TryGetValue(grabId, out CaptureLayoutSnapshot layout)
+                ? current.WithMachineLayout(layout)
+                : current;
+        }
+
+        private void ApplyFinalCaptureLayout(CaptureLayoutSnapshot layout)
+        {
+            if (!_captureLayoutPending || layout == null) return;
+            bool renderDeferredLayout = _captureLayoutDeferredRenderPending;
+            _captureLayoutPending = false;
+            _captureLayoutDeferredRenderPending = false;
+
+            if (renderDeferredLayout)
+            {
+                UpdateRowChartPitch();
+                if (_liveCameraManager?.IsGlobalMergeActive == true)
+                    _liveCameraManager.RefreshGlobalMergeLayout(
+                        layout.CamOps,
+                        layout.CamPos);
+                _liveCameraManager?.RefreshHorizontalDisplayCrop(
+                    layout.TrimHeadMm,
+                    layout.TrimTailMm);
+            }
+            FlowTrace.Log(
+                $"capture layout applied grab={layout.GrabId} timing=stop " +
+                $"{layout.ToFlowValues()} " +
+                $"render={(renderDeferredLayout ? "once" : "already-applied")} " +
+                "source=unchanged");
         }
 
 
@@ -843,6 +901,11 @@ namespace AniloxRoll.Monitor.Forms
             {
                 ResetLiveChartsForDisplayTransition();
                 _liveCameraManager?.RefreshWaterfallDisplay(); // 瀑布總高/滿了行為變更 → 重建套新值
+            }
+            if (name == nameof(InspectionSettings.cb_CropHead) ||
+                name == nameof(InspectionSettings.cc_CropTail))
+            {
+                _liveCameraManager?.RefreshHorizontalDisplayCrop();
             }
             if (OpsStartSettingNames.Contains(name) && _liveCameraManager?.IsGlobalMergeActive == true)
                 _liveCameraManager.RefreshGlobalMergeLayout(

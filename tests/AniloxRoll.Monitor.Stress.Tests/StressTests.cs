@@ -107,7 +107,7 @@ namespace AniloxRoll.Monitor.Tests
             {
                 int startCount = 0, stopCount = 0;
                 ctrl.OnStartRequested += () => startCount++;
-                ctrl.OnStopRequested  += () => stopCount++;
+                ctrl.OnStopRequested  += _ => stopCount++;
 
                 await ctrl.StartAsync("192.168.255.1");
                 Assert.That(ctrl.CurrentState, Is.EqualTo(IoState.Idle));

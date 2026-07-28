@@ -33,6 +33,8 @@ namespace AniloxRoll.Monitor.Tests
             yield return Route(nameof(InspectionSettings.LocalMinFreeGB), SettingFeatureOwner.Storage);
             yield return Route(nameof(InspectionSettings.LogMode), SettingFeatureOwner.Logging);
             yield return Route(nameof(InspectionSettings.he_MainDisplay), SettingFeatureOwner.LiveLayout);
+            yield return Route(nameof(InspectionSettings.cb_CropHead), SettingFeatureOwner.LiveLayout);
+            yield return Route(nameof(InspectionSettings.cc_CropTail), SettingFeatureOwner.LiveLayout);
             yield return Route(nameof(InspectionSettings.hda_EnhanceHeatmap), SettingFeatureOwner.Enhance);
             yield return Route(nameof(InspectionSettings.gb_ChartScaleMode), SettingFeatureOwner.ChartScale);
             yield return Route(nameof(InspectionSettings.fb_BackgroundSampleSeconds), SettingFeatureOwner.None);

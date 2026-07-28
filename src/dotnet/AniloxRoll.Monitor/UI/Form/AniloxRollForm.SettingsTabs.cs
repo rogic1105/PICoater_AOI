@@ -591,38 +591,37 @@ namespace AniloxRoll.Monitor.Forms
             _telemetryPresenter = new LiveTelemetryPresenter(listViewCameras);
             _telemetryPresenter.Initialize(SystemSettings.CreateDefault().CameraDevices);
 
-            // ── 影像引擎常數 ──────────────────────────────────────────────
-            listViewEngine.Columns.Add("參數", 160);
-            listViewEngine.Columns.Add("值",    90);
+            listViewSystemParameters.Columns.Add("參數", 160);
+            listViewSystemParameters.Columns.Add("值", 120);
 
-            listViewEngine.Items.Add(new ListViewItem(new[] { "MaxWidth",            InspectionEngineConfig.MaxWidth.ToString() }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "MaxHeight",           InspectionEngineConfig.MaxHeight.ToString() }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "MaxThumbnailSide",    InspectionEngineConfig.MaxThumbnailSide.ToString() }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "DefaultBgSigma",      InspectionEngineConfig.DefaultBgSigma.ToString() }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "PerFrameBgSigma",     InspectionEngineConfig.PerFrameBgSigma.ToString() }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "DefaultRidgeSigma",   InspectionEngineConfig.DefaultRidgeSigma.ToString() }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "DefaultHessianMax",   InspectionEngineConfig.DefaultHessianMaxFactor.ToString() }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "DefaultRidgeMode",    InspectionEngineConfig.DefaultRidgeMode }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "SaveResizeScale",     InspectionEngineConfig.DefaultSaveResizeScale.ToString() }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "SaveJpgQuality",      InspectionEngineConfig.DefaultSaveJpgQuality.ToString() }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "───", "── 圖表引擎 ──" }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "MaxOverviewPoints", "2000" }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "TelemetryInterval", "500 ms" }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "OverviewRefresh",   "FPS-sync" }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "DownsampleMode",    "Max-Window" }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "OverlapMean",       "Average" }));
-            listViewEngine.Items.Add(new ListViewItem(new[] { "OverlapMax",        "Maximum" }));
-            AutoFitListViewColumns(listViewEngine);
+            // ── 影像／圖表引擎 ────────────────────────────────────────────
+            listViewSystemParameters.Items.Add(new ListViewItem(new[] { "───", "── 影像引擎 ──" }));
+            listViewSystemParameters.Items.Add(new ListViewItem(new[] { "MaxWidth",            InspectionEngineConfig.MaxWidth.ToString() }));
+            listViewSystemParameters.Items.Add(new ListViewItem(new[] { "MaxHeight",           InspectionEngineConfig.MaxHeight.ToString() }));
+            listViewSystemParameters.Items.Add(new ListViewItem(new[] { "MaxThumbnailSide",    InspectionEngineConfig.MaxThumbnailSide.ToString() }));
+            listViewSystemParameters.Items.Add(new ListViewItem(new[] { "DefaultBgSigma",      InspectionEngineConfig.DefaultBgSigma.ToString() }));
+            listViewSystemParameters.Items.Add(new ListViewItem(new[] { "PerFrameBgSigma",     InspectionEngineConfig.PerFrameBgSigma.ToString() }));
+            listViewSystemParameters.Items.Add(new ListViewItem(new[] { "DefaultRidgeSigma",   InspectionEngineConfig.DefaultRidgeSigma.ToString() }));
+            listViewSystemParameters.Items.Add(new ListViewItem(new[] { "DefaultHessianMax",   InspectionEngineConfig.DefaultHessianMaxFactor.ToString() }));
+            listViewSystemParameters.Items.Add(new ListViewItem(new[] { "DefaultRidgeMode",    InspectionEngineConfig.DefaultRidgeMode }));
+            listViewSystemParameters.Items.Add(new ListViewItem(new[] { "SaveResizeScale",     InspectionEngineConfig.DefaultSaveResizeScale.ToString() }));
+            listViewSystemParameters.Items.Add(new ListViewItem(new[] { "SaveJpgQuality",      InspectionEngineConfig.DefaultSaveJpgQuality.ToString() }));
+            listViewSystemParameters.Items.Add(new ListViewItem(new[] { "───", "── 圖表引擎 ──" }));
+            listViewSystemParameters.Items.Add(new ListViewItem(new[] { "MaxOverviewPoints", "2000" }));
+            listViewSystemParameters.Items.Add(new ListViewItem(new[] { "TelemetryInterval", "500 ms" }));
+            listViewSystemParameters.Items.Add(new ListViewItem(new[] { "OverviewRefresh",   "FPS-sync" }));
+            listViewSystemParameters.Items.Add(new ListViewItem(new[] { "DownsampleMode",    "Max-Window" }));
+            listViewSystemParameters.Items.Add(new ListViewItem(new[] { "OverlapMean",       "Average" }));
+            listViewSystemParameters.Items.Add(new ListViewItem(new[] { "OverlapMax",        "Maximum" }));
 
             // ── 硬體參數 ─────────────────────────────────────────────────
-            listViewHardware.Columns.Add("參數", 120);
-            listViewHardware.Columns.Add("值",   120);
+            listViewSystemParameters.Items.Add(new ListViewItem(new[] { "───", "── 硬體 ──" }));
 
             // ── CPU / RAM / GPU（通用硬體，收進 TanukiCv.Core.SystemInfo 唯一來源）──
             foreach (var kv in SystemInfo.GetGenericHardwareRows())
-                listViewHardware.Items.Add(new ListViewItem(new[] { kv.Key, kv.Value }));
+                listViewSystemParameters.Items.Add(new ListViewItem(new[] { kv.Key, kv.Value }));
 
-            listViewHardware.Items.Add(new ListViewItem(new[] {
+            listViewSystemParameters.Items.Add(new ListViewItem(new[] {
                 "IO_Model", _settings?.IoModel ?? InspectionDefaults.IoModel }));
 
             // ── Grabber（PCIe frame grabber）──
@@ -634,7 +633,7 @@ namespace AniloxRoll.Monitor.Forms
                 {
                     string grabName = obj["Name"]?.ToString() ?? "N/A";
                     string devId = obj["DeviceID"]?.ToString() ?? "";
-                    listViewHardware.Items.Add(new ListViewItem(new[] { "Grabber", grabName }));
+                    listViewSystemParameters.Items.Add(new ListViewItem(new[] { "Grabber", grabName }));
 
                     if (!devId.StartsWith("PCI\\", StringComparison.OrdinalIgnoreCase)) continue;
 
@@ -676,7 +675,7 @@ namespace AniloxRoll.Monitor.Forms
                                 if (linkSpeed >= 3 && linkSpeed < genGTs.Length)
                                     bwGBs = genGTs[linkSpeed] * linkWidth * (128.0 / 130.0) / 8.0;
 
-                                listViewHardware.Items.Add(new ListViewItem(new[] {
+                                listViewSystemParameters.Items.Add(new ListViewItem(new[] {
                                     "Grabber_PCIe", $"{gen} x{linkWidth} ({bwGBs:F1} GB/s)" }));
                             }
                         }
@@ -701,7 +700,7 @@ namespace AniloxRoll.Monitor.Forms
                     double freeGb  = di.AvailableFreeSpace / (1024.0 * 1024 * 1024);
                     string label   = di.Name.TrimEnd('\\');
                     string suffix  = label.Equals(capDrive, StringComparison.OrdinalIgnoreCase) ? " [存圖]" : "";
-                    listViewHardware.Items.Add(new ListViewItem(new[] {
+                    listViewSystemParameters.Items.Add(new ListViewItem(new[] {
                         $"Disk_{label}", $"{di.DriveFormat}  {freeGb:F1} / {totalGb:F1} GB free{suffix}" }));
                 }
             }
@@ -709,7 +708,7 @@ namespace AniloxRoll.Monitor.Forms
 
             // ── 螢幕（收進 TanukiCv.Core.SystemInfo 唯一來源；mm/px 同步給座標/倍率計算）──
             foreach (var kv in SystemInfo.GetScreenRows())
-                listViewHardware.Items.Add(new ListViewItem(new[] { kv.Key, kv.Value }));
+                listViewSystemParameters.Items.Add(new ListViewItem(new[] { kv.Key, kv.Value }));
             var screen = SystemInfo.GetScreenMetrics();
             if (screen.HorzPx > 0)
             {
@@ -720,7 +719,7 @@ namespace AniloxRoll.Monitor.Forms
             // ── Storage 模式：磁碟 + 清理狀態（即時，Timer 更新）──
             if (_appMode?.Role == MachineRole.Storage)
             {
-                listViewHardware.Items.Add(new ListViewItem(new[] { "───", "── Storage 狀態 ──" }));
+                listViewSystemParameters.Items.Add(new ListViewItem(new[] { "───", "── Storage 狀態 ──" }));
                 _storageDiskFreeRow  = AddResMonItem("Disk_Free",    "—");
                 _storageLastCleanRow = AddResMonItem("Last_Cleanup", "—");
                 _retentionService.OnCleanupCompleted += r =>
@@ -735,7 +734,7 @@ namespace AniloxRoll.Monitor.Forms
             else
             {
                 // ── Resource Monitor（即時資源用量，Timer 更新）──
-                listViewHardware.Items.Add(new ListViewItem(new[] { "───", "── Resource Monitor ──" }));
+                listViewSystemParameters.Items.Add(new ListViewItem(new[] { "───", "── Resource Monitor ──" }));
                 _resMonRawSize     = AddResMonItem("RawSize",     "—");
                 _resMonGpuTime     = AddResMonItem("GPU_Time",    "—");
                 _resMonSaveSize    = AddResMonItem("Save/Frame",  "—");
@@ -744,7 +743,7 @@ namespace AniloxRoll.Monitor.Forms
                 _resMonRamUsed     = AddResMonItem("RAM_Used",    "—");
                 _resMonVramEst     = AddResMonItem("VRAM_Est",    "—");
             }
-            AutoFitListViewColumns(listViewHardware);
+            AutoFitListViewColumns(listViewSystemParameters);
 
             // ── Telemetry Timer（每 TelemetryTickMs 更新 ListView + SyncFromHardware + 重連倒數）─
             _telemetryTimer = new System.Windows.Forms.Timer { Interval = TelemetryTickMs };
