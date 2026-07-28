@@ -317,11 +317,10 @@ class SettingsFlowValidator:
                 failures.append(
                     f"{state_line.timestamp} enabled={enabled} 與 direction={layer} 矛盾"
                 )
-            waterfall_lines = [
-                item for item in session.lines[index + 1:next_change]
-                if item.message.startswith("WF layer ")
-            ]
-            for waterfall_line in waterfall_lines:
+            transition_lines = session.lines[index + 1:next_change]
+            for transition_index, waterfall_line in enumerate(transition_lines):
+                if not waterfall_line.message.startswith("WF layer "):
+                    continue
                 waterfall_match = re.match(
                     r"^WF layer (raw|column|row)->(raw|column|row) "
                     r"writeRow=(\d+) history=preserved$",
@@ -329,10 +328,28 @@ class SettingsFlowValidator:
                 )
                 if waterfall_match is None:
                     failures.append(f"{waterfall_line.timestamp} WF layer 格式錯誤")
-                elif waterfall_match.group(2) != layer:
+                    continue
+
+                paired_state = next(
+                    (
+                        item for item in transition_lines[transition_index + 1:]
+                        if item.message.startswith("live enhance enabled=")
+                    ),
+                    None,
+                )
+                paired_match = (
+                    pattern.match(paired_state.message)
+                    if paired_state is not None
+                    else None
+                )
+                if paired_match is None:
+                    failures.append(
+                        f"{waterfall_line.timestamp} WF layer 後缺對應持續狀態行"
+                    )
+                elif waterfall_match.group(2) != paired_match.group(2):
                     failures.append(
                         f"{waterfall_line.timestamp} WF={waterfall_match.group(2)} "
-                        f"但 manager={layer}"
+                        f"但 manager={paired_match.group(2)}"
                     )
 
         if exercised == 0 and not failures:

@@ -11,6 +11,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
     {
         private readonly Form _form;
         private readonly Control _toggleTarget;
+        private readonly Func<MouseEventArgs, bool> _toggleHitTest;
         private readonly Control _workspace;
         private readonly Control _rightPanel;
         private readonly Action _rescaleActiveTabs;
@@ -27,6 +28,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
         public MainWorkspaceLayoutController(
             Form form,
             Control toggleTarget,
+            Func<MouseEventArgs, bool> toggleHitTest,
             Control workspace,
             Control rightPanel,
             bool initialFullWidth,
@@ -36,6 +38,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
         {
             _form = form ?? throw new ArgumentNullException(nameof(form));
             _toggleTarget = toggleTarget ?? throw new ArgumentNullException(nameof(toggleTarget));
+            _toggleHitTest = toggleHitTest;
             _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
             _rightPanel = rightPanel ?? throw new ArgumentNullException(nameof(rightPanel));
             _rescaleActiveTabs = rescaleActiveTabs;
@@ -52,7 +55,8 @@ namespace AniloxRoll.Monitor.UI.Coordinators
 
         private void ToggleTarget_MouseDown(object sender, MouseEventArgs e)
         {
-            if (e.Button != MouseButtons.Left)
+            if (e.Button != MouseButtons.Left ||
+                (_toggleHitTest != null && !_toggleHitTest(e)))
             {
                 ResetClickSequence();
                 return;
@@ -70,7 +74,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
             _fullWidth = !_fullWidth;
             ApplyLayout();
             _persistFullWidth?.Invoke(_fullWidth);
-            _flowLog?.Invoke($"ui:IO state five-click rightPanel={(_fullWidth ? "hidden" : "visible")}");
+            _flowLog?.Invoke($"ui:monitor tab five-click rightPanel={(_fullWidth ? "hidden" : "visible")}");
         }
 
         public void ApplyPersistedLayout()

@@ -673,7 +673,7 @@ OnMouseMove@ImageCanvas.cs（拖曳中；UI 執行緒 T1）
 T1: IC|WF|RV overlay mode=Coordinates|CoordinateFrames|CoordinateFramesParameters|Hidden
 T1: ui:canvas overlay mode={mode} sync=live+review persisted=true
 T1: canvas overlay restore mode={mode} sync=live+review
-T1: ui:IO state five-click rightPanel=hidden|visible
+T1: ui:monitor tab five-click rightPanel=hidden|visible
 T1: workspace restore rightPanel=hidden|visible
 ```
 
@@ -685,7 +685,8 @@ T1: workspace restore rightPanel=hidden|visible
   SDK 只負責畫字，不得引用 `InspectionSettings` 或其他 app policy。
 - 相機框線使用與合圖相同的 `MergeLayout` placements；每台畫實際影像區域，七台相鄰時必可見外框與六條分隔線，
   不得以 control 外框冒充影像邊界。
-- `lblIoState` 連續左鍵五下只切換一次右側 `tabControlRight`；隱藏時 `tabMain` 使用原右側邊界，
+- `tabMain` 的「監控」頁籤標籤區連續左鍵五下只切換一次右側 `tabControlRight`；點頁面內容或其他
+  頁籤不計數。隱藏時 `tabMain` 使用原右側邊界，
   還原時回到 Designer／ProportionalScaler 的正常佈局。狀態寫入 `Config/session-state.json`，下次啟動在
   `PrewarmAllTabs` 後還原。這是 UI session 狀態，不屬於檢測設定或 CSV `#CFG`。
 
@@ -705,7 +706,7 @@ OnMouseDown@ImageCanvas.cs（右鍵）
       ├ 同步 Live 即時／瀑布與 Review 畫布
       └ UserSessionState.SaveCanvasOverlayMode
 
-lblIoState.MouseDown
+tabMain.MouseDown（hit-test 必須落在 tabPageLiveView 標籤區）
  → MainWorkspaceLayoutController 連續按下計數（相鄰按下間隔 ≤1200ms）
    └ 第五下 → MainWorkspaceLayoutController.ApplyLayout
       ├ tabControlRight.Visible 切換＋tabMain 寬度重算＋ProportionalScaler.RescaleActiveTabs

@@ -322,7 +322,13 @@ namespace AniloxRoll.Monitor.Forms
             _scaler.Initialize();
             _workspaceLayout = new MainWorkspaceLayoutController(
                 this,
-                lblIoState,
+                tabMain,
+                e =>
+                {
+                    int liveIndex = tabMain.TabPages.IndexOf(tabPageLiveView);
+                    return liveIndex >= 0 &&
+                        tabMain.GetTabRect(liveIndex).Contains(e.Location);
+                },
                 tabMain,
                 tabControlRight,
                 UserSessionState.MainWorkspaceFullWidth,
