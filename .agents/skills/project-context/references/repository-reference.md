@@ -188,8 +188,9 @@ against current code with `rg` before editing because lookup data can become sta
 | 列平均閾值 | `ee_ErrorValueMeanH` → `ErrorValueMeanH` | 0.2 | H chart Mean 閾值線 |
 | 列最大閾值 | `ef_ErrorValueMaxH` → `ErrorValueMaxH` | 0.6 | H chart Max 閾值線 |
 | ── 畫布設定 ── | （分隔列，唯讀） | — | — |
-| 總時間(秒) | `fc_GrabLimitSeconds` → `GrabLimitSeconds` | 10 | 正式監控單次 grab 最長時間；到時走共用停止流程 |
-| 總高度 | `hg_WaterfallTotalHeight` → `ImageView.WaterfallTotalHeight` | 30000 | 瀑布虛擬長圖總高度（px） |
+| 停止條件 | `fb_CaptureStopCondition` → `CaptureStopCondition` | IO | IO / 時間 / 高度；三者都由 IO High 啟動，選擇本輪由 Low、總時間或共同完成列數停止 |
+| 總時間(秒) | `fc_GrabLimitSeconds` → `GrabLimitSeconds` | 10 | 時間模式的停止值；IO 模式仍作防止無限抓取的安全上限 |
+| 總高度 | `hg_WaterfallTotalHeight` → `ImageView.WaterfallTotalHeight` | 30000 | 瀑布虛擬長圖總高度；高度模式同時以各在線相機共同完成列數達此值為停止條件 |
 
 ### 3. 圖表設定
 

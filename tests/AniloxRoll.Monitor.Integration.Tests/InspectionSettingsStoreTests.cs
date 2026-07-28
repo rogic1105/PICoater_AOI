@@ -61,12 +61,14 @@ namespace AniloxRoll.Monitor.Tests
         {
             var settings = new InspectionSettings();
             settings.BackgroundSampleSeconds = 4;
+            settings.CaptureStopCondition = CaptureStopCondition.Height;
             settings.GrabLimitSeconds = 17;
 
             InspectionSettingsStore.Save(settings);
             var loaded = InspectionSettingsStore.Load();
 
             Assert.That(loaded.BackgroundSampleSeconds, Is.EqualTo(4));
+            Assert.That(loaded.CaptureStopCondition, Is.EqualTo(CaptureStopCondition.Height));
             Assert.That(loaded.GrabLimitSeconds, Is.EqualTo(17));
         }
 

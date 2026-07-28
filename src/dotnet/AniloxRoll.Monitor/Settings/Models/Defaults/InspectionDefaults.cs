@@ -31,6 +31,7 @@ namespace AniloxRoll.Monitor.Core.Data
         public const float  ErrorValueMeanH         = 0.2f;   // Mura 圖表 > 列平均閾值
         public const float  ErrorValueMaxH          = 0.6f;   // Mura 圖表 > 列最大閾值（PICoater 機台實測）
         public const int    BackgroundSampleSeconds = 3;      // 背景採樣秒數
+        public static readonly CaptureStopCondition DefaultCaptureStopCondition = CaptureStopCondition.IoSignal;
         public const int    GrabLimitSeconds        = 10;     // 單次抓取上限秒數
         public const double AniloxRollSpeedMPerMin  = 40.0;   // 輪速 (m/min)
 

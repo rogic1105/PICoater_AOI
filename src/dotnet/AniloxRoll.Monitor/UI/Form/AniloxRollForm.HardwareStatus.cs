@@ -42,7 +42,9 @@ namespace AniloxRoll.Monitor.Forms
             var controller = new IoGrabController(_settings.IoModel)
             {
                 ReconnectIntervalMs = 3000,
-                ReadWriteTimeoutMs = 500
+                ReadWriteTimeoutMs = 500,
+                StopCaptureOnStartLow =
+                    _settings.CaptureStopCondition == CaptureStopCondition.IoSignal
             };
             string ip = _settings.IoIp;
             int port = _settings.IoPort;
@@ -253,6 +255,14 @@ namespace AniloxRoll.Monitor.Forms
 
                 try
                 {
+                    CaptureStopCondition stopCondition =
+                        _settings?.CaptureStopCondition ??
+                        InspectionDefaults.DefaultCaptureStopCondition;
+                    controller.StopCaptureOnStartLow =
+                        stopCondition == CaptureStopCondition.IoSignal;
+                    FlowTrace.Log(
+                        $"IO grab request stopCondition={stopCondition} " +
+                        $"stopOnLow={controller.StopCaptureOnStartLow}");
                     bool started = await ToggleLiveGrabAsync(
                         "io:DI START 上升緣 → 開始抓取",
                         ioControlled: true,
@@ -464,6 +474,7 @@ namespace AniloxRoll.Monitor.Forms
             {
                 case IoState.Idle:      text = "待機";   bgColor = IecGreen;  break;
                 case IoState.Running:   text = "取像";   bgColor = IecBlue;   break;
+                case IoState.AwaitingStartLow: text = "等待復歸"; bgColor = IecYellow; break;
                 case IoState.Stopping:  text = "停止";   bgColor = IecYellow; break;
                 case IoState.Faulted:   text = "故障";   bgColor = IecRed;    break;
                 case IoState.CommLost:  text = "斷線";   bgColor = IecRed;    break;

@@ -67,6 +67,10 @@ namespace AniloxRoll.Monitor.Forms
         private RowCurveSyncCoordinator _reviewRowSync;
         private LiveCameraManager _liveCameraManager;
         private GrabDurationCoordinator _grabDurationCoordinator;
+        private CaptureStopCondition _activeCaptureStopCondition = CaptureStopCondition.IoSignal;
+        private bool _activeCaptureIsIoControlled;
+        private int _activeCaptureHeightLimitRows;
+        private int _captureHeightStopIssued;
         // Global merge 用：快取各相機 row curve 資料，合併後更新圖表
         private readonly Dictionary<int, float[]> _liveRowMeanCache = new Dictionary<int, float[]>();
         private readonly Dictionary<int, float[]> _liveRowMaxCache  = new Dictionary<int, float[]>();
@@ -926,6 +930,7 @@ namespace AniloxRoll.Monitor.Forms
             UpdateStandardBgSubLockState();
             _liveCameraManager.OnLiveCurveData      += OnLiveCurveData;
             _liveCameraManager.OnLiveRowCurveData   += OnLiveRowCurveData;
+            _liveCameraManager.OnCaptureCommonRowsCompleted += OnCaptureCommonRowsCompleted;
             _liveCameraManager.OnMainContentPresented += PresentPendingLiveRowCurves;
             _liveCameraManager.OnCaptureSequenceReset += ResetLiveChartsForDisplayTransition;
             _liveCameraManager.OnLiveViewRange      += ApplyLiveViewRange; // 主畫面縮放/平移 → live 曲線圖 zoom 連動（bin↔主畫面對齊）

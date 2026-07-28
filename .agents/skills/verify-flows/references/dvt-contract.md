@@ -305,7 +305,9 @@ armed while the product gate is closed; synchronization work must finish before 
 | `PhaseInvalid` / `PhaseSynchronizing` | IO HIGH | same state | Reject the attempt with `capture-not-ready`; BUSY remains off and the same held HIGH may retry after readiness completes. |
 | `HeadGuard` | first callback from each connected camera | `HeadGuard` | Drop it before processing/display/persistence because a hot-standby line-scan frame can cross the light-off interval. |
 | `HeadGuard` | next complete frame from every connected camera | `Capturing` | Log per-camera hardware ticks and validate circular phase spread. A mismatch invalidates the next start but does not truncate the current HIGH window. |
-| `Capturing` | IO falling edge | `TailDrain` | Snapshot each camera's last accepted tick; accept exactly one newer complete frame per camera. |
+| `Capturing` | IO falling edge and stop condition=`IO` | `TailDrain` | Snapshot each camera's last accepted tick; accept exactly one newer complete frame per camera. |
+| `Capturing` | IO falling edge and stop condition=`Time`/`Height` | `Capturing` | Record the edge but keep the product gate open; the selected fixed target owns stop timing. |
+| `Capturing` | fixed time or common completed-row target reached | `ReadyIdle` or `AwaitingStartLow` | Close the gate immediately. If START is still High, wait for Low before rearming; otherwise return Idle. |
 | `TailDrain` | IO HIGH returns before drain completes | `TailDrain` | Reject with `capture-not-ready:tail-drain`; BUSY stays Low. Controller returns to `Idle` and retries the held HIGH after drain/readiness completes. Never accept this as `already-grabbing`. |
 | `TailDrain` | every camera completes its newer frame | `ReadyIdle` or `PhaseInvalid` | Close gate, stop product grab, keep MIL armed; readiness follows the last phase verdict. |
 | `TailDrain` | timeout or disconnect | `PhaseInvalid` | Close gate and stop; log the missing cameras. Never wait indefinitely. |
@@ -322,8 +324,13 @@ Boundary invariants:
 - One callback per connected camera is rejected after every new gate-open. It must produce
   `capture head frame dropped ... reason=cross-boundary` and must not reach image processing,
   display, Curve, CSV, or image persistence.
-- IO start is level-sensitive only while the controller is `Idle`. `Running` consumes that HIGH,
-  so a safety-limit stop cannot reopen repeatedly until DI first returns LOW.
+- IO start is level-sensitive only while the controller is `Idle`. `Running` and
+  `AwaitingStartLow` consume that HIGH, so a fixed-target or safety stop cannot reopen repeatedly
+  until DI first returns LOW.
+- Stop condition is snapshotted when an IO request starts. `IO` stops on the falling edge and keeps
+  the configured time as a safety ceiling; `Time` ignores an early falling edge and stops at
+  `GrabLimitSeconds`; `Height` ignores an early falling edge and stops when the minimum accepted
+  completed rows across all connected cameras reaches `WaterfallTotalHeight`.
 - `IO grab accepted busy=on state=already-grabbing` is forbidden between `capture tail begin` and
   `StopGrab`; that would consume the next HIGH while the previous grab is still closing.
 - A phase fault may reject the next IO pulse, but must not silently shorten an already accepted
@@ -340,7 +347,10 @@ Tbg: acquisition idle prepare ready cams=P
 T1: acquisition start path=verified-standby cams=P
 T1: StartGrab...
 T1: capture plan grab=...
-T1: grab limit armed Ns configured=10s grace=Gs source=io grab=...
+T1: IO grab request stopCondition=IoSignal|Time|Height stopOnLow=True|False
+T1: grab stop armed condition=IoSignal limit=Ns configured=10s grace=Gs source=io grab=...
+    | grab stop armed condition=Time limit=Ns configured=Ns grace=0s source=io grab=...
+    | grab stop armed condition=height limit=Hpx source=io grab=...
 T1: capture gate open cams=P warm=True path=verified-standby
 Tn: capture head frame dropped camN tick=T reason=cross-boundary × P
 Tn: capture first-set phase system=S cams=... periodMs=... periodMismatchMs=...
@@ -362,11 +372,12 @@ CameraStatusTimer_Tick@LiveCameraManager.Telemetry.cs
     -> SynchronizeAcquisitionAsync(reason=idle) -> MarkCapturePhaseVerified
 
 IoStartGrabAsync@AniloxRollForm.HardwareStatus.cs
+ -> snapshot CaptureStopCondition and set IoGrabController.StopCaptureOnStartLow
  -> TryGetCaptureStandbyReady
  -> ToggleLiveGrabAsync(ioControlled=true)
     -> StartGrabAsync(requireVerifiedStandby=true)
        -> verified standby: no Pause/Resume/fixed delay/next-frame target
-    -> capture plan + duration guard
+    -> capture plan + selected duration/height guard
     -> OpenCaptureGate -> ArmCaptureBoundary
 
 ProcessingFunction@MilCamera.cs
@@ -375,11 +386,21 @@ ProcessingFunction@MilCamera.cs
     -> CaptureFrameAccepted(cam,tick)
     -> processing/display/save
     -> CaptureFrameCompleted(cam,tick)
+       -> NotifyCaptureFrameCompleted accumulates accepted rows per camera
+       -> OnCaptureCommonRowsCompleted(min rows across connected cameras)
+          -> HandleCaptureHeightReached when stop condition=Height
 
 IoStopGrabAsync@AniloxRollForm.HardwareStatus.cs
- -> ToggleLiveGrabAsync(drainIoTail=true)
+ -> IO condition: ToggleLiveGrabAsync(drainIoTail=true)
     -> DrainIoTailAsync: exactly one newer completed frame per connected camera, or timeout
     -> StopGrab
+ -> Time/Height condition: falling edge is observed but does not call StopGrab
+
+HandleGrabLimitElapsed / HandleCaptureHeightReached@AniloxRollForm.Live.cs
+ -> ToggleLiveGrabAsync
+ -> NotifyFixedGrabCompleted@IoGrabController.cs
+    -> START Low: Idle
+    -> START High: AwaitingStartLow; the following falling edge returns Idle
 ```
 
 **log-flow（執行期腳印＝判準）**
@@ -400,7 +421,9 @@ T1: viewRange refire reason=capture-start mode=WF|IC
     ← 清除上一輪 Curve 視野後，用主畫面既有幾何主動重發；不得等滑鼠或首幀才補
 T1: capture output begin grab=… date=yyyyMMdd
 T1: capture plan grab=… root=… imageDir=… csv=… archive=….acap assets=… preview=1920x1080x3 scale=…
-T1: grab limit armed Ns grab=…       ← 正式監控 grab 成功後啟動 one-shot；背景採樣借用 grab 不武裝
+T1: grab stop armed condition=IoSignal|Time limit=Ns configured=Ns grace=Gs source=io|manual grab=…
+    | grab stop armed condition=height limit=Hpx source=io grab=…
+    ← 本輪開始時依停止條件只武裝一種 owner；背景採樣借用 grab 不武裝
 T1: capture gate open cams=P warm=True   ← P=在線數；必晚於同步完成與 plan/limit，早於所有 firstFrame
 Tn: WF band first generation=G seq=S ticks=A~B startRow=0 height=H
 Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線」相機恰一行，順序不定
@@ -445,8 +468,9 @@ Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線�
  ├（啟動成功）NextGrabId@InspectionLogService.cs → _currentGrabId
  │  ├ BeginCaptureOutput@LiveCameraManager.cs → 每台 CaptureGrabId/CaptureDate 快照
  │  ├ capture plan 行（C1）
- │  └ Arm(GrabLimitSeconds)@GrabDurationCoordinator.cs → grab limit armed 行
- │     ← 設定在本輪開始時拍快照；PropertyGrid 中途改值從下一輪生效
+ │  ├（IO／時間）Arm(limit)@GrabDurationCoordinator.cs → grab stop armed 行
+ │  └（高度）OnCaptureCommonRowsCompleted@LiveCameraManager.cs → HandleCaptureHeightReached
+ │     ← 停止條件與數值在本輪開始時拍快照；PropertyGrid 中途改值從下一輪生效
  ├ OpenCaptureGate@LiveCameraManager.cs
  │  └ _captureGateOpen=true                         ← 單一全域寫入點；資料 owner 已準備後，7 台 callback 才一起取得資格
  └ UpdateGrabButton@AniloxRollForm.Live.cs
@@ -522,8 +546,12 @@ Tn: drop drainedFrame after StopGrab camN（可選；每台最多一行）
 ```
 手動：btnLiveGrab_Click@AniloxRollForm.Live.cs（wasGrabbing=true）→ ToggleLiveGrabAsync
                                                           intent 行 ui:【開始抓取】鈕
-逾時：Elapsed@GrabDurationCoordinator.cs → SafeBeginInvoke → HandleGrabLimitElapsed@AniloxRollForm.Live.cs
-                                                          intent 行 auto:抓取上限到時 limit=Ns grab=… → 停止
+時間／IO 安全逾時：Elapsed@GrabDurationCoordinator.cs → SafeBeginInvoke
+ → HandleGrabLimitElapsed@AniloxRollForm.Live.cs
+                                                          intent 行 auto:抓取停止 condition=... limit=Ns grab=… → 停止
+高度：OnCaptureCommonRowsCompleted@LiveCameraManager.cs → SafeBeginInvoke
+ → HandleCaptureHeightReached@AniloxRollForm.Live.cs
+                                                          intent 行 auto:抓取停止 condition=Height rows=R limit=Hpx grab=… → 停止
  ├ ToggleLiveGrabAsync@AniloxRollForm.Live.cs
  │  └ ToggleGrab@LiveCameraManager.cs
     └ StopGrab@LiveCameraManager.cs
@@ -540,9 +568,11 @@ Tn: drop drainedFrame after StopGrab camN（可選；每台最多一行）
  ├ TriggerRetentionAndFlagAsync@AniloxRollForm.HardwareStatus.cs
  ├ UpdateMuraLed(false) ＋ ClearMura@IoGrabController.cs   ← MURA latch 清除時機＝檢測結束（M1；手動流程不經 FSM 必須自清 DO）
  ├ UpdateGrabButton@AniloxRollForm.Live.cs
- └（逾時來源）NotifyGrabStopped@IoGrabController.cs          ← 先把 DO_PC_INSPECT 拉低；FSM 在 DI START
-                                                            維持 High 時刻意留 Running（沒有新上升緣，不會重啟），
-                                                            等 START 真正下降後才走既有 falling-edge 收尾回 Idle
+ └（IO 安全逾時）NotifyGrabStopped@IoGrabController.cs       ← 先把 DO_PC_INSPECT 拉低；FSM 在 DI START
+                                                            維持 High 時不重啟，等下降後回 Idle
+   （時間／高度完成）NotifyFixedGrabCompleted@IoGrabController.cs
+                                                            ← START 已 Low 直接 Idle；仍 High 則進
+                                                            AwaitingStartLow，下降後才可接受下一輪
 實體停止邊界只有兩種：
  - Start 同步／停止狀態的高度重配置：PauseAcquisition → M_STOP+M_WAIT＋M_GRAB_ABORT → 修改 → ResumeAcquisition
  - Release：先關 capture gate，再平行 PauseAcquisition，完成後才能釋放 merge／camera buffers
@@ -826,9 +856,10 @@ btnLiveGetBackground_Click@AniloxRollForm.Background.cs      intent 行 ui:【�
  ├ finally：ToggleGrab 停止（=F3）＋ LightTurnOff ＋ UpdateStandardBgSubLockState@AniloxRollForm.Background.cs
  ├（_autoStartGrabAfterBg）await ReleaseAsync → btnLiveGrab_Click（IO 觸發自動回抓）→ return
  └ 尾端自動預覽：btnLiveViewBackground_Click（直呼）
-時間設定不變量：`BackgroundSampleSeconds` 只管本段背景採樣；`GrabLimitSeconds` 只在 F2 正式監控啟動成功後
-武裝，兩者不得互相中止。PropertyGrid 分別顯示為檢測設定的 `背景採樣(秒)`，以及「畫布設定」下的
-`總時間(秒)`。
+時間設定不變量：`BackgroundSampleSeconds` 只管本段背景採樣；`GrabLimitSeconds` 只在 F2 正式監控啟動成功後，
+依 `CaptureStopCondition` 作為時間模式停止值或 IO 模式安全上限，兩者不得互相中止。高度模式不武裝此 timer。
+PropertyGrid 分別顯示為檢測設定的 `背景採樣(秒)`，以及「畫布設定」下的
+`停止條件`／`總時間(秒)`／`總高度`。
 預覽背景：
 btnLiveViewBackground_Click@AniloxRollForm.Background.cs     intent 行 ui:【預覽背景】鈕
  ├（IsBgPreviewActive）ClearBackgroundPreview → return       ← 再按一次＝清除（toggle）
@@ -886,7 +917,12 @@ DI START：io:DI START 上升緣 → 抓取請求
 | Starting | START 下降、IO 斷線或 controller 換代 | CancelPending | 立即使 request generation 失效；Stop 等待同一 transition gate |
 | Starting | 相機準備完成，且開產品 gate 前 request 仍有效、IO 仍為 Running | Capturing | 建 GrabId／capture plan → 開 capture gate → `NotifyGrabStarted` |
 | Starting／CancelPending | 開產品 gate 前發現 request 已失效 | Idle／CommLost | capture gate 維持關閉；若相機已進 StartGrab 則 rollback StopGrab；記一筆 rejected |
-| Capturing | START 下降或 IO 斷線 | Idle／CommLost | 取得同一 transition gate → drain／StopGrab → `NotifyGrabStopped` |
+| Capturing（IO） | START 下降或 IO 斷線 | Idle／CommLost | 取得同一 transition gate → drain／StopGrab → `NotifyGrabStopped` |
+| Capturing（時間／高度） | START 下降 | Capturing | 不停止；固定時間／共同完成列數是本輪唯一停止 owner |
+| Capturing（時間／高度） | 固定目標完成且 START High | AwaitingStartLow | StopGrab → `NotifyFixedGrabCompleted`；BUSY Low，禁止同一段 High 重啟 |
+| Capturing（時間／高度） | 固定目標完成且 START Low | Idle | StopGrab → `NotifyFixedGrabCompleted` |
+| AwaitingStartLow | START 下降 | Idle | 解除本次 High 的消耗狀態，下一個上升緣才可開始 |
+| Capturing／AwaitingStartLow | IO 斷線 | CommLost | 關閉 capture，BUSY Low，等待連線安全交握恢復 |
 
 - **單 process／單 controller**：`Program` named mutex 必須在 Form 建立前擋掉同機第二份程式；同一 session
   任一時刻只能有一個 active generation。restart 以 lifecycle gate 序列化，舊 generation callback 不得進 UI/Grab。
@@ -1938,7 +1974,8 @@ Tbg acquisition standby ready cam2 tick=T
 10:37:13.854 T 1 StartGrab（cams=4）
 10:37:13.855 T 1 ApplyMainDisplayMode → ImageCanvas
 T1 capture plan grab=… root=… imageDir=… csv=… archive=….acap assets=raw|proc_c|proc_r|mean_c|max_c|mean_r|max_r preview=1920x1080x3 scale=…
-T1 grab limit armed 10s grab=…
+T1 IO grab request stopCondition=IoSignal stopOnLow=True
+T1 grab stop armed condition=IoSignal limit=Ns configured=10s grace=Gs source=io grab=…
 T1 capture gate open cams=2 warm=True
 10:37:15.170 T31 firstFrame cam1 16384x3000 → ImageDisplayView
 10:37:15.207 T30 firstFrame cam2 16384x3000 → ImageDisplayView

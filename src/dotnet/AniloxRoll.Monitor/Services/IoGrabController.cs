@@ -58,6 +58,12 @@ namespace AniloxRoll.Monitor.Core.Services
         /// <summary>Poll 週期（ms）。</summary>
         public int PollIntervalMs { get; set; } = 500;
 
+        /// <summary>
+        /// True uses START Low as the capture stop request. False keeps the current capture
+        /// running until the app reports that its configured time/height target was reached.
+        /// </summary>
+        public bool StopCaptureOnStartLow { get; set; } = true;
+
         /// <summary>重連週期（ms）。</summary>
         public int ReconnectIntervalMs { get; set; } = 5000;
 
@@ -241,6 +247,18 @@ namespace AniloxRoll.Monitor.Core.Services
             catch (Exception ex) { IoLogger.Error("WriteDo PC_BUSY=false failed", ex); }
         }
 
+        public async Task NotifyFixedGrabCompleted()
+        {
+            await NotifyGrabStopped();
+            if (_currentState != IoState.Running &&
+                _currentState != IoState.AwaitingStartLow)
+                return;
+
+            SetState(_lastDiStart
+                ? IoState.AwaitingStartLow
+                : IoState.Idle);
+        }
+
         /// <summary>
         /// App 暫時無法開始 Grab：BUSY 保持 Low，FSM 回 Idle。
         /// 若 START 仍為 High，下一次 PollTick 會重試；成功進入 Running 後同一段 High 不再重複。
@@ -401,8 +419,20 @@ namespace AniloxRoll.Monitor.Core.Services
                     OnStartRequested?.Invoke();
                 }
 
+                if (_lastDiStart && !diStart &&
+                    _currentState == IoState.AwaitingStartLow)
+                {
+                    IoLogger.Info("START low -> Fixed capture rearmed");
+                    SetState(IoState.Idle);
+                }
+                else if (_lastDiStart && !diStart &&
+                    (_currentState == IoState.Running || _currentState == IoState.Faulted) &&
+                    !StopCaptureOnStartLow)
+                {
+                    IoLogger.Info("START falling edge -> Capture continues to fixed target");
+                }
                 // START 下降緣 → 停止 Grab
-                if (_lastDiStart && !diStart && (_currentState == IoState.Running || _currentState == IoState.Faulted))
+                else if (_lastDiStart && !diStart && (_currentState == IoState.Running || _currentState == IoState.Faulted))
                 {
                     IoLogger.Info("START falling edge → Stop Grab");
                     SetState(IoState.Stopping);

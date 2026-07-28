@@ -133,11 +133,14 @@ namespace AniloxRoll.Monitor.Core.Data
 
         [Category(CategoryInspection)][DisplayName("─ 畫布設定 ─")][ReadOnly(true)][PropertyOrder(13)]
         public string fa_CanvasHeader => "";
-        [Category(CategoryInspection)][DisplayName("總時間(秒)")][PropertyOrder(14)][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryInspection)][DisplayName("停止條件")][PropertyOrder(14)]
+        [Description("IO：由 IO High/Low 控制；時間或高度：IO High 啟動後，達到設定值才停止。")]
+        public CaptureStopCondition fb_CaptureStopCondition { get => Recipe.CaptureStopCondition; set => Recipe.CaptureStopCondition = value; }
+        [Category(CategoryInspection)][DisplayName("總時間(秒)")][PropertyOrder(15)][TypeConverter(typeof(LeftAlignNumericConverter))]
         [Description("正式監控單次抓取的最長時間，單位為秒；到時走共用停止流程。")]
         public int fc_GrabLimitSeconds { get => Recipe.GrabLimitSeconds; set => Recipe.GrabLimitSeconds = value; }
-        [Category(CategoryInspection)][DisplayName("總高度")][PropertyOrder(15)]
-        [Description("瀑布圖虛擬長圖總高度，單位為 px；預設 30000。只在主畫面顯示為瀑布時有效。")]
+        [Category(CategoryInspection)][DisplayName("總高度")][PropertyOrder(16)]
+        [Description("單位為 px。作為瀑布畫布總高度；停止條件為高度時，也作為七台相機共同完成列數的停止值。")]
         public int hg_WaterfallTotalHeight { get => ImageView.WaterfallTotalHeight; set => ImageView.WaterfallTotalHeight = value; }
 
         // 向後相容：程式碼中直接存取的快捷屬性
@@ -147,6 +150,7 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public float  HessianMaxFactorH      { get => Recipe.HessianMaxFactorH;      set => Recipe.HessianMaxFactorH      = value; }
         [Browsable(false)] public float  RidgeSigma             { get => Recipe.RidgeSigma;             set => Recipe.RidgeSigma             = value; }
         [Browsable(false)] public int    BackgroundSampleSeconds { get => Recipe.BackgroundSampleSeconds; set => Recipe.BackgroundSampleSeconds = value; }
+        [Browsable(false)] public CaptureStopCondition CaptureStopCondition { get => Recipe.CaptureStopCondition; set => Recipe.CaptureStopCondition = value; }
         [Browsable(false)] public int    GrabLimitSeconds        { get => Recipe.GrabLimitSeconds;        set => Recipe.GrabLimitSeconds        = value; }
         [Browsable(false)] public double AniloxRollSpeedMPerMin  { get => Recipe.AniloxRollSpeedMPerMin;  set => Recipe.AniloxRollSpeedMPerMin  = value; }
 

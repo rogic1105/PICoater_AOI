@@ -6,6 +6,7 @@ namespace AniloxRoll.Monitor.Core.Services
         Disconnected,   // 未連線
         Idle,           // 待機
         Running,        // 取像中
+        AwaitingStartLow, // 固定時間/高度完成，等待 START Low 復歸
         Stopping,       // 停止中
         Faulted,        // 設備離線（DI_NAKAN_ALIVE 消失）
         CommLost,       // 通訊中斷（TCP 例外）

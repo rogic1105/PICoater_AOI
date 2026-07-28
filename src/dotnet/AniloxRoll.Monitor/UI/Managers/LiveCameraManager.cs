@@ -142,6 +142,12 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// 參數：(cameraId, rowCurveMean_raw255, rowCurveMax_raw255)</summary>
         public event Action<int, float[], float[]> OnLiveRowCurveData;
 
+        /// <summary>
+        /// Raised when every connected capture camera has completed at least the reported
+        /// number of rows in the current product capture.
+        /// </summary>
+        public event Action<int> OnCaptureCommonRowsCompleted;
+
         /// <summary>存檔完成回呼：(cameraId, 已儲存檔案路徑陣列)。</summary>
         public Action<int, string[]> OnFilesSaved { get; set; }
         public Action<int, string> OnCaptureSaveFailed { get; set; }

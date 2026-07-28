@@ -57,6 +57,14 @@ namespace AniloxRoll.Monitor.Core.Data
         [Description("全部")]   Both
     }
 
+    [TypeConverter(typeof(EnumDescriptionConverter))]
+    public enum CaptureStopCondition
+    {
+        [Description("IO")]   IoSignal,
+        [Description("時間")] Time,
+        [Description("高度")] Height
+    }
+
     [TypeConverter(typeof(ExpandableObjectConverter))]
     public class InspectionRecipe
     {
@@ -73,6 +81,7 @@ namespace AniloxRoll.Monitor.Core.Data
         [DisplayName("Error Value Mean H")] public float ErrorValueMeanH { get; set; } = InspectionDefaults.ErrorValueMeanH;
         [DisplayName("Error Value Max H")]  public float ErrorValueMaxH  { get; set; } = InspectionDefaults.ErrorValueMaxH;
         [DisplayName("背景採樣(秒)")] public int BackgroundSampleSeconds { get; set; } = InspectionDefaults.BackgroundSampleSeconds;
+        [DisplayName("停止條件")] public CaptureStopCondition CaptureStopCondition { get; set; } = InspectionDefaults.DefaultCaptureStopCondition;
         [DisplayName("總時間(秒)")] public int GrabLimitSeconds { get; set; } = InspectionDefaults.GrabLimitSeconds;
         [DisplayName("A輪速度 (m/min)")]  public double AniloxRollSpeedMPerMin { get; set; } = InspectionDefaults.AniloxRollSpeedMPerMin;
 

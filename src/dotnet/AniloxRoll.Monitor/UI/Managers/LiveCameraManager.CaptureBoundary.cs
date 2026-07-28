@@ -30,6 +30,9 @@ namespace AniloxRoll.Monitor.UI.Managers
             new HashSet<int>();
         private readonly Dictionary<int, long> _lastAcceptedTicks =
             new Dictionary<int, long>();
+        private readonly Dictionary<int, int> _completedRowsByCamera =
+            new Dictionary<int, int>();
+        private int _lastPublishedCommonRows;
         private readonly Dictionary<int, long> _tailBaselineTicks =
             new Dictionary<int, long>();
         private readonly Dictionary<int, long> _tailAcceptedTicks =
@@ -156,18 +159,38 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             TaskCompletionSource<bool> completion = null;
             bool accepted = false;
+            int commonRows = 0;
             lock (_captureBoundaryLock)
             {
-                if (!_tailDrainActive) return;
-                long tailTick;
-                if (!_tailAcceptedTicks.TryGetValue(cameraId, out tailTick) ||
-                    tailTick != frameStartTicks)
-                    return;
+                if (_completedRowsByCamera.ContainsKey(cameraId))
+                {
+                    AniloxCamera camera = _cameras.FirstOrDefault(
+                        item => item != null && item.CameraId == cameraId);
+                    int frameHeight = Math.Max(0, camera?.FrameHeight ?? 0);
+                    _completedRowsByCamera[cameraId] += frameHeight;
+                    int completedByAll = _completedRowsByCamera.Values.Min();
+                    if (completedByAll > _lastPublishedCommonRows)
+                    {
+                        _lastPublishedCommonRows = completedByAll;
+                        commonRows = completedByAll;
+                    }
+                }
 
-                accepted = _tailPendingCameraIds.Remove(cameraId);
-                if (accepted && _tailPendingCameraIds.Count == 0)
-                    completion = _tailDrainCompletion;
+                if (_tailDrainActive)
+                {
+                    long tailTick;
+                    if (_tailAcceptedTicks.TryGetValue(cameraId, out tailTick) &&
+                        tailTick == frameStartTicks)
+                    {
+                        accepted = _tailPendingCameraIds.Remove(cameraId);
+                        if (accepted && _tailPendingCameraIds.Count == 0)
+                            completion = _tailDrainCompletion;
+                    }
+                }
             }
+
+            if (commonRows > 0)
+                OnCaptureCommonRowsCompleted?.Invoke(commonRows);
 
             if (accepted)
             {
@@ -275,6 +298,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                 _firstPendingCameraIds.Clear();
                 _headBoundaryPendingCameraIds.Clear();
                 _lastAcceptedTicks.Clear();
+                _completedRowsByCamera.Clear();
+                _lastPublishedCommonRows = 0;
                 _tailBaselineTicks.Clear();
                 _tailAcceptedTicks.Clear();
                 _tailPendingCameraIds.Clear();
@@ -284,6 +309,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 {
                     _firstPendingCameraIds.Add(cam.CameraId);
                     _headBoundaryPendingCameraIds.Add(cam.CameraId);
+                    _completedRowsByCamera[cam.CameraId] = 0;
                 }
             }
             return true;
@@ -299,6 +325,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                 _firstPendingCameraIds.Clear();
                 _headBoundaryPendingCameraIds.Clear();
                 _lastAcceptedTicks.Clear();
+                _completedRowsByCamera.Clear();
+                _lastPublishedCommonRows = 0;
                 _tailBaselineTicks.Clear();
                 _tailAcceptedTicks.Clear();
                 _tailPendingCameraIds.Clear();

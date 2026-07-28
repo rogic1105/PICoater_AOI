@@ -102,6 +102,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                 nameof(InspectionSettings.cb_CropHead),
                 nameof(InspectionSettings.cc_CropTail),
                 nameof(InspectionSettings.fb_BackgroundSampleSeconds),
+                nameof(InspectionSettings.fb_CaptureStopCondition),
                 nameof(InspectionSettings.fc_GrabLimitSeconds),
                 nameof(InspectionSettings.RemotePath));
 

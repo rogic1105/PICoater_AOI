@@ -139,6 +139,51 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public async Task PollTick_FixedCapture_IgnoresStartLowUntilAppCompletes()
+        {
+            await ConnectAndEnterIdle();
+            _ctrl.StopCaptureOnStartLow = false;
+
+            SetupDiStatuses(true, true);
+            await _ctrl.PollTick();
+
+            SetupDiStatuses(true, false);
+            await _ctrl.PollTick();
+
+            Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Running));
+            Assert.That(_stopCount, Is.Zero);
+
+            await _ctrl.NotifyFixedGrabCompleted();
+
+            Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Idle));
+            _mockPlc.Verify(p => p.WriteDo(2, false), Times.AtLeastOnce);
+        }
+
+        [Test]
+        public async Task FixedCaptureCompletedWhileHigh_WaitsForLowBeforeRearming()
+        {
+            await ConnectAndEnterIdle();
+            _ctrl.StopCaptureOnStartLow = false;
+
+            SetupDiStatuses(true, true);
+            await _ctrl.PollTick();
+            await _ctrl.NotifyFixedGrabCompleted();
+
+            Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.AwaitingStartLow));
+
+            await _ctrl.PollTick();
+            Assert.That(_startCount, Is.EqualTo(1));
+
+            SetupDiStatuses(true, false);
+            await _ctrl.PollTick();
+            Assert.That(_ctrl.CurrentState, Is.EqualTo(IoState.Idle));
+
+            SetupDiStatuses(true, true);
+            await _ctrl.PollTick();
+            Assert.That(_startCount, Is.EqualTo(2));
+        }
+
+        [Test]
         public async Task PollTick_StartHigh_NoRepeatedStart()
         {
             await ConnectAndEnterIdle();
