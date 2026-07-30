@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -69,6 +70,67 @@ namespace AniloxRoll.Monitor.Tests
             }
         }
 
+        [Test]
+        public async Task SustainedPolling_ReusesKernelResources()
+        {
+            const int warmupPolls = 50;
+            const int measuredPolls = 1000;
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            var client = new IcpDasModbusTcpClient { ReadWriteTimeoutMs = 1000 };
+            listener.Start();
+
+            try
+            {
+                int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+                Task<TcpClient> accept = listener.AcceptTcpClientAsync();
+                Assert.That(
+                    await client.ConnectAsync("127.0.0.1", port, 1000),
+                    Is.True);
+
+                using (TcpClient serverSide = await accept)
+                {
+                    Task server = Task.Run(
+                        () => ServeReadPollsBlocking(
+                            serverSide.Client,
+                            warmupPolls + measuredPolls));
+
+                    for (int i = 0; i < warmupPolls; i++)
+                        await client.ReadDiStatuses();
+
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect();
+
+                    int handlesBefore;
+                    using (Process process = Process.GetCurrentProcess())
+                        handlesBefore = process.HandleCount;
+
+                    for (int i = 0; i < measuredPolls; i++)
+                        await client.ReadDiStatuses();
+
+                    await server;
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect();
+
+                    int handlesAfter;
+                    using (Process process = Process.GetCurrentProcess())
+                        handlesAfter = process.HandleCount;
+
+                    Assert.That(
+                        handlesAfter - handlesBefore,
+                        Is.LessThanOrEqualTo(10),
+                        $"Sustained Modbus polling accumulated kernel handles: " +
+                        $"{handlesBefore} -> {handlesAfter}");
+                }
+            }
+            finally
+            {
+                client.Dispose();
+                listener.Stop();
+            }
+        }
+
         private static async Task ServeHandshake(TcpClient client)
         {
             NetworkStream stream = client.GetStream();
@@ -108,6 +170,65 @@ namespace AniloxRoll.Monitor.Tests
                 offset += read;
             }
             return bytes;
+        }
+
+        private static void ServeReadPollsBlocking(
+            Socket socket,
+            int requestCount)
+        {
+            for (int requestIndex = 0; requestIndex < requestCount; requestIndex++)
+            {
+                byte[] request = ReadExactlyBlocking(socket, 12);
+                if (request[7] != 2)
+                    throw new InvalidOperationException(
+                        $"Unexpected Modbus function {request[7]}");
+
+                byte[] response =
+                {
+                    request[0], request[1], 0, 0, 0, 4, 1, 2, 1, 1
+                };
+                SendExactlyBlocking(socket, response);
+            }
+        }
+
+        private static byte[] ReadExactlyBlocking(
+            Socket socket,
+            int count)
+        {
+            var bytes = new byte[count];
+            int offset = 0;
+            while (offset < count)
+            {
+                int read = socket.Receive(
+                    bytes,
+                    offset,
+                    count - offset,
+                    SocketFlags.None);
+                if (read <= 0)
+                    throw new InvalidOperationException(
+                        "Client closed during sustained polling");
+                offset += read;
+            }
+            return bytes;
+        }
+
+        private static void SendExactlyBlocking(
+            Socket socket,
+            byte[] bytes)
+        {
+            int offset = 0;
+            while (offset < bytes.Length)
+            {
+                int sent = socket.Send(
+                    bytes,
+                    offset,
+                    bytes.Length - offset,
+                    SocketFlags.None);
+                if (sent <= 0)
+                    throw new InvalidOperationException(
+                        "Client closed during sustained polling response");
+                offset += sent;
+            }
         }
     }
 }

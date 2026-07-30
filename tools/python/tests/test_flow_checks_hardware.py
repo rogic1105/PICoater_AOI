@@ -121,6 +121,25 @@ class HardwareFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(CheckStatus.FAIL, result(report, "H4.io-stop-policy").status)
 
+    def test_io_poll_health_requires_equal_advancing_counters(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "IO controller start generation=1 endpoint=192.168.255.1:502",
+                "IO poll state attempts=60 successes=60 snapshots=60 connected=True state=Idle",
+                "IO poll state attempts=120 successes=120 snapshots=120 connected=True state=Idle",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "H1.io-poll").status)
+
+    def test_io_poll_health_rejects_stalled_or_divergent_counters(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "IO poll state attempts=60 successes=59 snapshots=59 connected=True state=Idle",
+                "IO poll state attempts=60 successes=59 snapshots=59 connected=False state=Idle",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "H1.io-poll").status)
+
 
 if __name__ == "__main__":
     unittest.main()

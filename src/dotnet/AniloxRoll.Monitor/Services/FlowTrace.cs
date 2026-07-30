@@ -66,8 +66,11 @@ namespace AniloxRoll.Monitor.Core.Services
         private readonly System.Windows.Forms.Timer _timer;
         private readonly System.Windows.Forms.Control _pingTarget;
         private readonly System.Threading.Thread _pingThread;
+        private readonly System.Threading.ManualResetEventSlim _ponged =
+            new System.Threading.ManualResetEventSlim(false);
         private volatile bool _disposed;
         private volatile bool _measurementActive;
+        private int _pingGeneration;
         private int _lastTick;
         private int _g0, _g1, _g2;
         private const int ThresholdMs = 100;   // 33ms timer 遲到 3 倍以上才算卡（避免正常排程抖動洗版）
@@ -96,26 +99,34 @@ namespace AniloxRoll.Monitor.Core.Services
                 while (!_disposed)
                 {
                     System.Threading.Thread.Sleep(100);
+                    if (_disposed) break;
                     if (!_measurementActive) continue;
-                    var t = _pingTarget;
-                    if (t == null || t.IsDisposed || !t.IsHandleCreated) continue;
-                    int sent = Environment.TickCount;
-                    var ponged = new System.Threading.ManualResetEventSlim(false);
-                    try
-                    {
-                        t.BeginInvoke(new Action(() =>
-                        {
-                            ponged.Set();
-                            int rtt = Environment.TickCount - sent;
-                            if (rtt >= ThresholdMs)
-                                FlowTrace.Log($"[UiPing] {rtt}ms");
+                     var t = _pingTarget;
+                     if (t == null || t.IsDisposed || !t.IsHandleCreated) continue;
+                     int sent = Environment.TickCount;
+                     int generation = System.Threading.Interlocked.Increment(
+                         ref _pingGeneration);
+                     _ponged.Reset();
+                     try
+                     {
+                         t.BeginInvoke(new Action(() =>
+                         {
+                             if (_disposed ||
+                                 System.Threading.Volatile.Read(ref _pingGeneration) != generation)
+                                 return;
+
+                             try { _ponged.Set(); }
+                             catch (ObjectDisposedException) { return; }
+                             int rtt = Environment.TickCount - sent;
+                             if (rtt >= ThresholdMs)
+                                 FlowTrace.Log($"[UiPing] {rtt}ms");
                         }));
                     }
                     catch (InvalidOperationException) { continue; }
 
-                    // 200ms 沒回應＝UI 正卡住 → 當場取 UI 執行緒堆疊（卡在哪一行直接點名）。
-                    // Suspend+StackTrace 是 deprecated 診斷手段（.NET Framework 可用）：只在已卡住時取樣、立刻 Resume。
-                    if (!ponged.Wait(200) && !_disposed)
+                     // 200ms 沒回應＝UI 正卡住 → 當場取 UI 執行緒堆疊（卡在哪一行直接點名）。
+                     // Suspend+StackTrace 是 deprecated 診斷手段（.NET Framework 可用）：只在已卡住時取樣、立刻 Resume。
+                     if (!_ponged.Wait(200) && !_disposed)
                     {
                         try
                         {
@@ -161,7 +172,16 @@ namespace AniloxRoll.Monitor.Core.Services
             _measurementActive = true;
         }
 
-        public void Dispose() { _disposed = true; _timer.Stop(); _timer.Dispose(); }
+        public void Dispose()
+        {
+            _disposed = true;
+            System.Threading.Interlocked.Increment(ref _pingGeneration);
+            _timer.Stop();
+            _timer.Dispose();
+            if (System.Threading.Thread.CurrentThread != _pingThread)
+                _pingThread.Join(500);
+            _ponged.Dispose();
+        }
     }
 
     /// <summary>WM_PAINT 探針（卡頓歸因儀器）：subclass 目標控制項的 WndProc，量「真正畫」的時間。

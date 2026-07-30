@@ -59,6 +59,7 @@ namespace AniloxRoll.Monitor.Forms
         {
             // 連線狀態不受相機釋放影響，先於 gate 更新
             UpdateConnectionStatusLabels();
+            ApplyPendingIoSnapshot();
 
             if (_liveCameraManager == null || _liveCameraManager.IsReleasing) return;
 
@@ -67,10 +68,16 @@ namespace AniloxRoll.Monitor.Forms
             // 持有的 MIL 內部鎖競爭 → UI 執行緒卡死在查詢裡數秒（視窗拖不動、燈號一次 flush）。
             // 與 CameraStatusTimer_Tick / SyncCameraParamsFromHardware 同一條規則（初始化期間跳過 UI 端 MIL 查詢）。
             bool hwReady = _liveCameraManager.AreCamerasHwReady;
+            bool systemTelemetryVisible =
+                tabControlRight != null &&
+                tabControlRight.SelectedTab == tabPageSystem;
 
             // Telemetry 的 MIL 查詢（16 欄 MdigInquire/MsysInquire ≈ 195ms/tick）移到背景執行緒做，
             // UI 執行緒只 Apply 字串快照（極快）→ 不再每 500ms 卡 UI ~195ms。maxFps 也由快照算，不另查 MIL。
-            if (hwReady && _telemetryPresenter != null && !_telemetryCaptureInFlight)
+            if (systemTelemetryVisible &&
+                hwReady &&
+                _telemetryPresenter != null &&
+                !_telemetryCaptureInFlight)
             {
                 _telemetryCaptureInFlight = true;
                 var cams = _liveCameraManager.Cameras;
@@ -111,7 +118,9 @@ namespace AniloxRoll.Monitor.Forms
                 SyncCameraParamsFromHardware();
 
             // ── 板載記憶體列即時更新（改參數後用量會變）：背景查每板 free，UI 更新「用量/總量」──
-            if (hwReady && _boardMemItems.Count > 0)
+            if (systemTelemetryVisible &&
+                hwReady &&
+                _boardMemItems.Count > 0)
             {
                 var cams = _liveCameraManager.Cameras;
                 System.Threading.Tasks.Task.Run(() =>
@@ -142,7 +151,8 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             // ── Resource Monitor 更新 ──
-            UpdateResourceMonitor();
+            if (systemTelemetryVisible)
+                UpdateResourceMonitor();
         }
 
         private ListViewItem AddResMonItem(string key, string value)
@@ -201,7 +211,9 @@ namespace AniloxRoll.Monitor.Forms
                 _resMonFrames.SubItems[1].Text = totalFrames > 0 ? $"{totalFrames}" : "—";
 
                 // RAM: process working set
-                long ramBytes = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64;
+                long ramBytes;
+                using (Process process = Process.GetCurrentProcess())
+                    ramBytes = process.WorkingSet64;
                 _resMonRamUsed.SubItems[1].Text = $"{ramBytes / (1024.0 * 1024):F0} MB";
 
                 // VRAM: 根據演算法計算（6×W×H + Gaussian workspace 3×W×H×4）

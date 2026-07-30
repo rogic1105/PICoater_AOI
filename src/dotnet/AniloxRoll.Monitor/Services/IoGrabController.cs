@@ -45,6 +45,10 @@ namespace AniloxRoll.Monitor.Core.Services
         private bool _doPcBusy;
         private int _connectionAccepted;
         private int _reconnectAttemptCount;
+        private long _pollAttemptCount;
+        private long _pollSuccessCount;
+        private long _snapshotCount;
+        private int _lastDvtPollSnapshotTick;
 
         /// <summary>IO module 已完成 TCP + safe-output + DI handshake。</summary>
         public bool IsConnected => Volatile.Read(ref _connectionAccepted) == 1 && _plc.IsConnected;
@@ -133,6 +137,10 @@ namespace AniloxRoll.Monitor.Core.Services
         {
             Volatile.Write(ref _connectionAccepted, 0);
             Interlocked.Exchange(ref _reconnectAttemptCount, 0);
+            Interlocked.Exchange(ref _pollAttemptCount, 0);
+            Interlocked.Exchange(ref _pollSuccessCount, 0);
+            Interlocked.Exchange(ref _snapshotCount, 0);
+            _lastDvtPollSnapshotTick = Environment.TickCount;
             _plcIp = ip;
             _plcPort = port;
 
@@ -351,6 +359,7 @@ namespace AniloxRoll.Monitor.Core.Services
 
         private void FireIoSnapshot(bool diPlcAlive, bool diStart)
         {
+            Interlocked.Increment(ref _snapshotCount);
             OnIoUpdated?.Invoke(new IoSnapshot
             {
                 DiNakanAlive = diPlcAlive,
@@ -363,11 +372,13 @@ namespace AniloxRoll.Monitor.Core.Services
 
         internal async Task PollTick()
         {
+            Interlocked.Increment(ref _pollAttemptCount);
             try
             {
                 // ReadDiStatuses 產生 Modbus 流量，同時餵 ET-7044 Host Watchdog
                 var diStates = await _plc.ReadDiStatuses();
                 if (diStates == null || diStates.Length < 2) return;
+                Interlocked.Increment(ref _pollSuccessCount);
 
                 bool plcAlive = diStates[DI_NAKAN_ALIVE];
                 bool diStart  = diStates[DI_INSPECT_START];
@@ -462,6 +473,26 @@ namespace AniloxRoll.Monitor.Core.Services
                 _plc.Dispose();
                 // BackgroundLoop 偵測 !IsConnected 後會自動走 ReconnectTick 路徑，不需手動排程。
             }
+            finally
+            {
+                FlowDvtPollSnapshot();
+            }
+        }
+
+        private void FlowDvtPollSnapshot()
+        {
+            if (!FlowTrace.DvtEnabled) return;
+
+            int now = Environment.TickCount;
+            if (unchecked(now - _lastDvtPollSnapshotTick) < 30000)
+                return;
+
+            _lastDvtPollSnapshotTick = now;
+            FlowTrace.Dvt(
+                $"IO poll state attempts={Interlocked.Read(ref _pollAttemptCount)} " +
+                $"successes={Interlocked.Read(ref _pollSuccessCount)} " +
+                $"snapshots={Interlocked.Read(ref _snapshotCount)} " +
+                $"connected={IsConnected} state={CurrentState}");
         }
 
         internal async Task ReconnectTick()

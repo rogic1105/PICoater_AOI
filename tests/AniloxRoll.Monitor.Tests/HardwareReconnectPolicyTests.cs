@@ -1,3 +1,4 @@
+using System;
 using AniloxRoll.Monitor.UI.Coordinators;
 using NUnit.Framework;
 
@@ -45,6 +46,25 @@ namespace AniloxRoll.Monitor.Tests
             Assert.That(success, Is.False);
             Assert.That(freeBytes, Is.EqualTo(-1));
             Assert.That(totalBytes, Is.EqualTo(0));
+        }
+
+        [TestCase(true, 5, true)]
+        [TestCase(true, 15, true)]
+        [TestCase(true, 16, false)]
+        [TestCase(false, 5, false)]
+        public void StorageHealth_TransientHeartbeatReadUsesFreshLastSuccess(
+            bool previousAlive,
+            int ageSeconds,
+            bool expected)
+        {
+            DateTime now = DateTime.UtcNow;
+
+            Assert.That(
+                StorageHealthCoordinator.ShouldKeepRemoteAppAlive(
+                    previousAlive,
+                    now.AddSeconds(-ageSeconds),
+                    now),
+                Is.EqualTo(expected));
         }
     }
 }

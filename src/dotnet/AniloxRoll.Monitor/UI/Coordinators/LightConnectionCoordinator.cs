@@ -1,6 +1,6 @@
 using System;
 using System.Diagnostics;
-using System.Threading.Tasks;
+using System.Threading;
 using LightBridge.Core;
 
 namespace AniloxRoll.Monitor.UI.Coordinators
@@ -38,9 +38,13 @@ namespace AniloxRoll.Monitor.UI.Coordinators
         private const int FullScanEveryAttempts = 5;
 
         private readonly object _sync = new object();
+        private readonly AutoResetEvent _probeSignal =
+            new AutoResetEvent(false);
+        private readonly Thread _probeThread;
         private readonly int _telemetryTickMs;
 
         private LightController _controller;
+        private Action _pendingProbe;
         private bool _enabled;
         private bool _hasProbed;
         private bool _probeInFlight;
@@ -57,6 +61,12 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                 throw new ArgumentOutOfRangeException(nameof(telemetryTickMs));
 
             _telemetryTickMs = telemetryTickMs;
+            _probeThread = new Thread(ProbeWorkerLoop)
+            {
+                IsBackground = true,
+                Name = "LightProbe"
+            };
+            _probeThread.Start();
         }
 
         public event Action StateChanged;
@@ -100,7 +110,8 @@ namespace AniloxRoll.Monitor.UI.Coordinators
 
             DisposeController(staleController);
             RaiseStateChanged();
-            Task.Run(() => RunInitialProbe(generation, preferredPort, channel));
+            QueueProbe(() =>
+                RunInitialProbe(generation, preferredPort, channel));
         }
 
         public void Disable()
@@ -150,8 +161,10 @@ namespace AniloxRoll.Monitor.UI.Coordinators
             }
 
             if (startProbe)
-                Task.Run(() => RunPeriodicProbe(
+            {
+                QueueProbe(() => RunPeriodicProbe(
                     generation, controller, preferredPort, channel));
+            }
         }
 
         public void TurnOn(int channel, int brightness)
@@ -337,7 +350,51 @@ namespace AniloxRoll.Monitor.UI.Coordinators
 
         private void RaiseStateChanged()
         {
-            StateChanged?.Invoke();
+            Action handler;
+            lock (_sync)
+            {
+                if (_disposed) return;
+                handler = StateChanged;
+            }
+            handler?.Invoke();
+        }
+
+        private void QueueProbe(Action action)
+        {
+            lock (_sync)
+            {
+                if (_disposed)
+                    return;
+                _pendingProbe = action;
+            }
+            _probeSignal.Set();
+        }
+
+        private void ProbeWorkerLoop()
+        {
+            while (true)
+            {
+                _probeSignal.WaitOne();
+
+                Action action;
+                lock (_sync)
+                {
+                    if (_disposed)
+                        return;
+                    action = _pendingProbe;
+                    _pendingProbe = null;
+                }
+
+                try
+                {
+                    action?.Invoke();
+                }
+                catch (Exception ex)
+                {
+                    Trace.TraceWarning(
+                        $"[Light.ProbeWorker] {ex.GetType().Name}: {ex.Message}");
+                }
+            }
         }
 
         private void ThrowIfDisposed()
@@ -358,9 +415,22 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                 _probeInFlight = false;
                 staleController = _controller;
                 _controller = null;
+                _pendingProbe = null;
+            }
+
+            _probeSignal.Set();
+            bool workerStopped =
+                Thread.CurrentThread == _probeThread ||
+                _probeThread.Join(15000);
+            if (!workerStopped)
+            {
+                Trace.TraceWarning(
+                    "[Light.Dispose] timed out waiting for probe worker");
             }
 
             DisposeController(staleController);
+            if (workerStopped)
+                _probeSignal.Dispose();
         }
 
         private static void DisposeController(LightController controller)

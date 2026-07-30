@@ -27,10 +27,17 @@ namespace AniloxRoll.Monitor.Forms
     /// <summary>IO connection, capture requests, and IO status presentation.</summary>
     public partial class AniloxRollForm
     {
+        private int _pendingIoSnapshotBits = -1;
+        private int _appliedIoSnapshotBits = -1;
 
         /// <summary>初始化 IO 連動：自動偵測連線，連上後以 DI START 控制 Grab。</summary>
         private void InitIoController()
         {
+            // Disabled startup owns no idle coordinator. The first later enable
+            // is therefore a clean generation instead of restarting an empty one.
+            if (_settings == null || !_settings.IoEnabled)
+                return;
+
             if (_ioConnectionCoordinator == null)
             {
                 _ioConnectionCoordinator =
@@ -48,11 +55,7 @@ namespace AniloxRoll.Monitor.Forms
                 _ioConnectionCoordinator.ConnectionChanged +=
                     OnIoControllerConnectionChanged;
                 _ioConnectionCoordinator.IoUpdated +=
-                    (controller, generation, snapshot) =>
-                        DispatchCurrentIoController(
-                            controller,
-                            generation,
-                            () => UpdateIoLeds(snapshot));
+                    OnIoControllerSnapshotUpdated;
             }
 
             _ = _ioConnectionCoordinator.StartAsync(
@@ -132,6 +135,19 @@ namespace AniloxRoll.Monitor.Forms
                 controller,
                 generation,
                 () => UpdateIoConnectionUi(connected));
+        }
+
+        private void OnIoControllerSnapshotUpdated(
+            IoGrabController controller,
+            int generation,
+            IoSnapshot snapshot)
+        {
+            if (!IsCurrentIoController(controller, generation))
+                return;
+
+            System.Threading.Interlocked.Exchange(
+                ref _pendingIoSnapshotBits,
+                PackIoSnapshot(snapshot));
         }
 
         private bool IsCurrentIoController(IoGrabController controller, int generation)
@@ -431,6 +447,33 @@ namespace AniloxRoll.Monitor.Forms
             SetIoLed(lblIoDoPcAlive, io.DoPcAlive);
             UpdateMuraLed(io.DoMuraDetected);
             SetIoLed(lblIoDoPcBusy,  io.DoPcInspect);
+        }
+
+        private void ApplyPendingIoSnapshot()
+        {
+            int bits = System.Threading.Volatile.Read(
+                ref _pendingIoSnapshotBits);
+            if (bits < 0 || bits == _appliedIoSnapshotBits)
+                return;
+
+            _appliedIoSnapshotBits = bits;
+            UpdateIoLeds(new IoSnapshot
+            {
+                DiNakanAlive = (bits & 1) != 0,
+                DiInspectStart = (bits & 2) != 0,
+                DoPcAlive = (bits & 4) != 0,
+                DoMuraDetected = (bits & 8) != 0,
+                DoPcInspect = (bits & 16) != 0
+            });
+        }
+
+        private static int PackIoSnapshot(IoSnapshot snapshot)
+        {
+            return (snapshot.DiNakanAlive ? 1 : 0) |
+                   (snapshot.DiInspectStart ? 2 : 0) |
+                   (snapshot.DoPcAlive ? 4 : 0) |
+                   (snapshot.DoMuraDetected ? 8 : 0) |
+                   (snapshot.DoPcInspect ? 16 : 0);
         }
 
         private static void SetIoLed(Label lbl, bool on)

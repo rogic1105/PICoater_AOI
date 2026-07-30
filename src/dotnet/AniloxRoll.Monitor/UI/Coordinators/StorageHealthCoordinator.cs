@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Sockets;
+using System.Threading;
 using System.Threading.Tasks;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.State;
@@ -63,6 +65,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
         private bool _capacityProbeErrorReported;
         private bool? _remoteShareConnected;
         private bool? _remoteAppAlive;
+        private DateTime? _lastRemoteHeartbeatUtc;
         private long _localFreeBytes = -1;
         private long _localTotalBytes;
         private long _remoteFreeBytes = -1;
@@ -226,14 +229,34 @@ namespace AniloxRoll.Monitor.UI.Coordinators
             {
                 if (_disposed) return;
                 previousAppAlive = _remoteAppAlive;
+                if (appAlive && heartbeatRecord != null)
+                {
+                    _lastRemoteHeartbeatUtc =
+                        heartbeatRecord.LastSeenUtc.ToUniversalTime();
+                }
+                else if (shareConnected &&
+                         ShouldKeepRemoteAppAlive(
+                             previousAppAlive,
+                             _lastRemoteHeartbeatUtc,
+                             DateTime.UtcNow))
+                {
+                    // File.Replace over SMB can expose a brief missing-file
+                    // window. Keep the last valid heartbeat until it expires.
+                    appAlive = true;
+                }
+
                 _remoteShareConnected = shareConnected;
                 _remoteAppAlive = appAlive;
-                _remoteFreeBytes = appAlive && heartbeatRecord != null
-                    ? heartbeatRecord.FreeBytes
-                    : -1;
-                _remoteTotalBytes = appAlive && heartbeatRecord != null
-                    ? heartbeatRecord.TotalBytes
-                    : 0;
+                if (appAlive && heartbeatRecord != null)
+                {
+                    _remoteFreeBytes = heartbeatRecord.FreeBytes;
+                    _remoteTotalBytes = heartbeatRecord.TotalBytes;
+                }
+                else if (!appAlive)
+                {
+                    _remoteFreeBytes = -1;
+                    _remoteTotalBytes = 0;
+                }
                 _remoteProbeInFlight = false;
             }
 
@@ -277,6 +300,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                     _remoteTotalBytes > 0;
                 _remoteShareConnected = null;
                 _remoteAppAlive = null;
+                _lastRemoteHeartbeatUtc = null;
                 _remoteFreeBytes = -1;
                 _remoteTotalBytes = 0;
                 _remoteProbeTickCounter = 0;
@@ -348,19 +372,40 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                     AddressFamily.InterNetwork,
                     SocketType.Stream,
                     ProtocolType.Tcp);
-                IAsyncResult result =
-                    socket.BeginConnect(host, 445, null, null);
-                if (result.AsyncWaitHandle.WaitOne(1000) && socket.Connected)
+                socket.Blocking = false;
+                try
                 {
-                    socket.EndConnect(result);
-                    return true;
+                    socket.Connect(host, 445);
+                    return socket.Connected;
                 }
-                return false;
+                catch (SocketException ex)
+                {
+                    if (!IsConnectInProgress(ex.SocketErrorCode))
+                        return false;
+                }
+
+                var writable = new List<Socket> { socket };
+                var errors = new List<Socket> { socket };
+                Socket.Select(null, writable, errors, 1000 * 1000);
+                if (errors.Count > 0 || writable.Count == 0)
+                    return false;
+
+                int error = (int)socket.GetSocketOption(
+                    SocketOptionLevel.Socket,
+                    SocketOptionName.Error);
+                return error == 0 && socket.Connected;
             }
             finally
             {
                 socket?.Dispose();
             }
+        }
+
+        private static bool IsConnectInProgress(SocketError error)
+        {
+            return error == SocketError.WouldBlock ||
+                   error == SocketError.InProgress ||
+                   error == SocketError.AlreadyInProgress;
         }
 
         internal static string ParseUncHost(string uncPath)
@@ -369,6 +414,21 @@ namespace AniloxRoll.Monitor.UI.Coordinators
             string path = uncPath.TrimStart('\\', '/');
             int slash = path.IndexOfAny(new[] { '\\', '/' });
             return slash > 0 ? path.Substring(0, slash) : path;
+        }
+
+        internal static bool ShouldKeepRemoteAppAlive(
+            bool? previousAppAlive,
+            DateTime? lastHeartbeatUtc,
+            DateTime nowUtc)
+        {
+            if (previousAppAlive != true || !lastHeartbeatUtc.HasValue)
+                return false;
+
+            TimeSpan age =
+                nowUtc.ToUniversalTime() -
+                lastHeartbeatUtc.Value.ToUniversalTime();
+            if (age < TimeSpan.Zero) age = TimeSpan.Zero;
+            return age <= StorageAppHeartbeatService.StaleAfter;
         }
 
         public void Dispose()

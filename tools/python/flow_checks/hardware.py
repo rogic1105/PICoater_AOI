@@ -21,7 +21,7 @@ class HardwareFlowValidator:
             self._edge_pattern.match(line.message)
             or self._camera_pattern.match(line.message)
             or line.message.startswith(("儲存程式 heartbeat ", "⚠ 儲存程式 heartbeat "))
-            or line.message.startswith(("IO controller ", "io:DI START ", "IO grab "))
+            or line.message.startswith(("IO controller ", "IO poll state ", "io:DI START ", "IO grab "))
             for line in session.lines
         )
         if not covered:
@@ -32,9 +32,66 @@ class HardwareFlowValidator:
         self._check_storage_heartbeat(session, report)
         self._check_camera_edges(session, report)
         self._check_io_controller_lifecycle(session, report)
+        self._check_io_poll_health(session, report)
         self._check_io_grab_outcomes(session, report)
         self._check_io_stop_policy(session, report)
         return report
+
+    def _check_io_poll_health(self, session: FlowSession, report: CheckReport) -> None:
+        pattern = re.compile(
+            r"^IO poll state attempts=(\d+) successes=(\d+) snapshots=(\d+) "
+            r"connected=(True|False) state=(\w+)$"
+        )
+        samples = [
+            (line, pattern.match(line.message))
+            for line in session.lines
+            if line.message.startswith("IO poll state ")
+        ]
+        if not samples:
+            report.add(
+                self.domain,
+                "H1.io-poll",
+                CheckStatus.NOT_COVERED,
+                "no stable IO polling snapshot in this session",
+            )
+            return
+
+        failures = []
+        previous = None
+        for line, match in samples:
+            if match is None:
+                failures.append(f"{line.timestamp} malformed snapshot")
+                continue
+
+            attempts = int(match.group(1))
+            successes = int(match.group(2))
+            snapshots = int(match.group(3))
+            connected = match.group(4) == "True"
+            current = (attempts, successes, snapshots)
+
+            if not connected:
+                failures.append(f"{line.timestamp} controller disconnected")
+            if attempts != successes or successes != snapshots:
+                failures.append(
+                    f"{line.timestamp} counts diverged "
+                    f"attempts={attempts} successes={successes} snapshots={snapshots}"
+                )
+            if previous is not None and any(
+                current[index] <= previous[index] for index in range(3)
+            ):
+                failures.append(
+                    f"{line.timestamp} counters did not advance "
+                    f"previous={previous} current={current}"
+                )
+            previous = current
+
+        report.add(
+            self.domain,
+            "H1.io-poll",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"samples={len(samples)} invalid={len(failures)}"
+            + (f"; first={failures[0]}" if failures else ""),
+        )
 
     def _check_io_controller_lifecycle(self, session: FlowSession, report: CheckReport) -> None:
         pattern = re.compile(r"^IO controller (start|stop) generation=(\d+)")
