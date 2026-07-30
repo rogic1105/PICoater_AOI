@@ -18,6 +18,8 @@ namespace AniloxRoll.DvtRunner
                 "launch-helper",
                 "wait-helper-exit",
                 "stop-helper",
+                "disable-target-network",
+                "enable-target-network",
                 "wait-element",
                 "set-property",
                 "click",

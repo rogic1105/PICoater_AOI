@@ -21,6 +21,7 @@ class HardwareFlowValidator:
             self._edge_pattern.match(line.message)
             or self._camera_pattern.match(line.message)
             or line.message.startswith(("儲存程式 heartbeat ", "⚠ 儲存程式 heartbeat "))
+            or line.message.startswith("[RemoteCopy] ")
             or line.message.startswith(
                 ("IO controller ", "IO poll state ", "io:DI START ", "IO grab ", "IO START edge=")
             )
@@ -32,12 +33,74 @@ class HardwareFlowValidator:
 
         self._check_connection_edges(session, report)
         self._check_storage_heartbeat(session, report)
+        self._check_remote_copy_recovery(session, report)
         self._check_camera_edges(session, report)
         self._check_io_controller_lifecycle(session, report)
         self._check_io_poll_health(session, report)
         self._check_io_grab_outcomes(session, report)
         self._check_io_stop_policy(session, report)
         return report
+
+    def _check_remote_copy_recovery(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        queued = [
+            (index, line)
+            for index, line in enumerate(session.lines)
+            if line.message.startswith("[RemoteCopy] pending queued ")
+        ]
+        retries = [
+            (index, line)
+            for index, line in enumerate(session.lines)
+            if line.message.startswith("[RemoteCopy] retry pending ")
+        ]
+        evidence = sorted(queued + retries, key=lambda item: item[0])
+        if not evidence:
+            report.add(
+                self.domain,
+                "H1.remote-copy-recovery",
+                CheckStatus.NOT_COVERED,
+                "本 session 無 SMB 中斷待傳資料",
+            )
+            return
+
+        last_pending_index = evidence[-1][0]
+        unavailable = [
+            line for line in session.lines[: last_pending_index + 1]
+            if line.message.startswith("[RemoteCopy] remote share unavailable:")
+        ]
+        accepted = [
+            (index, line)
+            for index, line in enumerate(session.lines)
+            if index > last_pending_index
+            and line.message
+            == "[RemoteCopy] remote share accepted (write verified)"
+        ]
+        drained = [
+            (index, line)
+            for index, line in enumerate(session.lines)
+            if index > last_pending_index
+            and line.message.startswith("[RemoteCopy] backlog drained: ")
+        ]
+
+        failures = []
+        if not unavailable:
+            failures.append("待傳重試前缺 remote share unavailable")
+        if not accepted:
+            failures.append("最後重試後缺 remote share accepted")
+        if not drained:
+            failures.append("最後重試後缺 backlog drained")
+        if accepted and drained and drained[0][0] < accepted[0][0]:
+            failures.append("backlog drained 早於 remote share accepted")
+
+        report.add(
+            self.domain,
+            "H1.remote-copy-recovery",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"queued={len(queued)} retries={len(retries)} unavailable={len(unavailable)} "
+            f"acceptedAfter={len(accepted)} drainedAfter={len(drained)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
+        )
 
     def _check_io_poll_health(self, session: FlowSession, report: CheckReport) -> None:
         pattern = re.compile(

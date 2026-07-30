@@ -129,6 +129,18 @@ exit /b %errorlevel%
 "@
 [System.IO.File]::WriteAllText((Join-Path $stage 'setup.bat'), $setupWrapper, [System.Text.Encoding]::ASCII)
 
+if ($Role -eq 'Storage') {
+    $restartTestWrapper = @"
+@echo off
+call "%~dp0deploy\storage-pc\test_app_restart.bat"
+exit /b %errorlevel%
+"@
+    [System.IO.File]::WriteAllText(
+        (Join-Path $stage 'test_storage_restart.bat'),
+        $restartTestWrapper,
+        [System.Text.Encoding]::ASCII)
+}
+
 $commit = (& git -C $repoRoot rev-parse --short HEAD 2>$null)
 $versionText = "Package=$packageName`r`nCommit=$commit`r`nSourceState=$sourceState`r`nBuiltUtc=$([DateTime]::UtcNow.ToString('o'))`r`n"
 [System.IO.File]::WriteAllText((Join-Path $stage 'VERSION.txt'), $versionText, [System.Text.Encoding]::ASCII)
@@ -163,6 +175,17 @@ try {
     } | Select-Object -First 1
     if (-not $hasSetup) {
         throw ('ZIP 缺少版本根資料夾內的 setup.bat: ' + $expectedSetup)
+    }
+    if ($Role -eq 'Storage') {
+        $expectedRestartTest = $rootPrefix + 'test_storage_restart.bat'
+        $hasRestartTest = $archive.Entries | Where-Object {
+            $_.FullName.Replace('\', '/').Equals(
+                $expectedRestartTest,
+                [System.StringComparison]::OrdinalIgnoreCase)
+        } | Select-Object -First 1
+        if (-not $hasRestartTest) {
+            throw ('ZIP 缺少儲存程式重啟測試入口: ' + $expectedRestartTest)
+        }
     }
 }
 finally {

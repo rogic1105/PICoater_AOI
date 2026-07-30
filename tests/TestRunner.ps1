@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("Functional", "Unit", "Integration", "Dvt", "ReviewReport30k", "PhysicalCamera", "PhysicalCapture", "PhysicalIo", "PhysicalStorage", "PhysicalSoak", "Stress", "Soak", "All")]
+    [ValidateSet("Functional", "Unit", "Integration", "Dvt", "ReviewReport30k", "PhysicalCamera", "PhysicalCapture", "PhysicalIo", "PhysicalStorage", "PhysicalRecovery", "PhysicalSoak", "Stress", "Soak", "All")]
     [string]$Mode = "All",
     [double]$StressMinutes = 120,
     [double]$SoakMinutes = 120,
@@ -65,6 +65,8 @@ $acceptanceCriteria = @{
         "Physical IO remains connected and Idle for 5 minutes; controller and shutdown flows complete."
     "Physical storage five-minute stability" =
         "SMB probe write and heartbeat remain green for 5 minutes; shutdown is clean."
+    "Physical SMB backlog recovery" =
+        "The network adapter routing to the storage PC is disabled in software; two captures finalize locally and remain pending; after re-enable, the share is write-verified, the backlog drains, heartbeat recovers, settings restore, and shutdown is clean."
     "Physical IO and storage soak" =
         "Fixed hardware topology; IO and storage stay green; UI always responds; Private Bytes sustained growth <=256 MB/hour and total delta <=4 GB; handles/GDI/USER/threads stay within guards; clean shutdown."
     "Offline stress tests" =
@@ -527,9 +529,9 @@ function Write-CampaignReport {
     [void]$builder.AppendLine()
     [void]$builder.AppendLine("## Not covered by this campaign")
     [void]$builder.AppendLine()
-    if ($Mode -in @("PhysicalCamera", "PhysicalCapture")) {
+    if ($Mode -in @("PhysicalCamera", "PhysicalCapture", "PhysicalRecovery")) {
         [void]$builder.AppendLine("- Seven-camera full-load acquisition remains untested; this run covered only the connected cameras.")
-        if ($Mode -eq "PhysicalCapture") {
+        if ($Mode -in @("PhysicalCapture", "PhysicalRecovery")) {
             [void]$builder.AppendLine("- Background capture and preview are covered by the separate PhysicalCamera scenario, not this run.")
         }
     }
@@ -537,7 +539,12 @@ function Write-CampaignReport {
         [void]$builder.AppendLine("- Physical camera/grabber acquisition, seven-camera frame load, background capture, and live Grab.")
     }
     [void]$builder.AppendLine("- Physical IO and light disconnect/reconnect timing.")
-    [void]$builder.AppendLine("- Storage-PC SMB interruption, remote backlog transfer, and real-disk/UI low-space status and recovery.")
+    if ($Mode -eq "PhysicalRecovery") {
+        [void]$builder.AppendLine("- Physical cable/switch interruption and real-disk/UI low-space status remain untested; this run covered repeatable software SMB isolation and backlog recovery.")
+    }
+    else {
+        [void]$builder.AppendLine("- Storage-PC SMB interruption, remote backlog transfer, and real-disk/UI low-space status and recovery.")
+    }
     [void]$builder.AppendLine("- Shift/24-hour product soak with the IO simulator, cameras, storage transfer, and operator interactions.")
     [void]$builder.AppendLine()
     [void]$builder.AppendLine("These cases remain **NOT COVERED**, not PASS. Run their dedicated DVT or soak campaign before release.")
@@ -636,6 +643,11 @@ if ($Mode -eq "PhysicalIo") {
 if ($Mode -eq "PhysicalStorage") {
     $allPassed = (Invoke-DvtScenario "physical-storage-stability" `
         "Physical storage five-minute stability" "Physical storage DVT" 600) -and $allPassed
+}
+
+if ($Mode -eq "PhysicalRecovery") {
+    $allPassed = (Invoke-DvtScenario "physical-smb-backlog-recovery" `
+        "Physical SMB backlog recovery" "Physical storage recovery DVT" 1200) -and $allPassed
 }
 
 if ($Mode -eq "PhysicalSoak") {

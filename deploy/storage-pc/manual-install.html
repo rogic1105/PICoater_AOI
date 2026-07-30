@@ -94,6 +94,13 @@
   <p>「控制台 → 電源選項 → 變更進階電源設定」把睡眠、休眠與硬碟關閉時間設為「永不」。螢幕關閉時間可以保留。</p>
 
   <h2>驗證</h2>
+  <h3>一鍵測試自動重啟</h3>
+  <ol>
+    <li>在解壓縮後的 Release 根目錄，對 <code>test_storage_restart.bat</code> 按右鍵，選「以系統管理員身分執行」。</li>
+    <li>直接按 Enter 使用預設 3 次。工具會故意關閉儲存程式，等待工作排程以新 PID 自動重開；不會手動替排程啟動程式。</li>
+    <li>每次都必須在 90 秒內看到新 PID 與新 heartbeat。完成後程式會保持運行。</li>
+    <li>測試報告位於 <code>D:\Anilox\Logs\DvtReports</code>；任一輪失敗都保留報告供追查。</li>
+  </ol>
   <table><tr><th>檢查</th><th>正確結果</th></tr>
     <tr><td><code>ipconfig</code></td><td>指定網卡具有 <code>IpAddress</code></td></tr>
     <tr><td>檢測電腦開啟 <code>\\&lt;IpAddress&gt;\&lt;ShareName&gt;</code></td><td>不要求密碼，能建立並刪除測試檔</td></tr>

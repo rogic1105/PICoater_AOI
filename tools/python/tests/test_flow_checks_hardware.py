@@ -158,6 +158,47 @@ class HardwareFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(CheckStatus.FAIL, result(report, "H1.io-poll").status)
 
+    def test_remote_copy_backlog_recovery_passes_in_order(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "[RemoteCopy] remote share unavailable: TCP 445 unavailable.",
+                "[RemoteCopy] pending queued added=2 queue=2 bytes=2048",
+                "[RemoteCopy] remote share accepted (write verified)",
+                "[RemoteCopy] backlog drained: copied=2 bytes=2048",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS,
+            result(report, "H1.remote-copy-recovery").status,
+        )
+
+    def test_remote_copy_backlog_without_drain_fails(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "[RemoteCopy] remote share unavailable: TCP 445 unavailable.",
+                "[RemoteCopy] pending queued added=1 queue=1 bytes=1024",
+                "[RemoteCopy] remote share accepted (write verified)",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL,
+            result(report, "H1.remote-copy-recovery").status,
+        )
+
+    def test_remote_copy_legacy_retry_evidence_still_passes(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "[RemoteCopy] remote share unavailable: TCP 445 unavailable.",
+                "[RemoteCopy] retry pending attempt=1 queue=1 file=a.acap error=IOException",
+                "[RemoteCopy] remote share accepted (write verified)",
+                "[RemoteCopy] backlog drained: copied=1 bytes=1024",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS,
+            result(report, "H1.remote-copy-recovery").status,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

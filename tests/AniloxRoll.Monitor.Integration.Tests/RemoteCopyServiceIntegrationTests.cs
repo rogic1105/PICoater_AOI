@@ -148,6 +148,45 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void EnqueueFile_PreviouslyUnavailableThenDirectSuccess_LogsDurableBacklogAndDrain()
+        {
+            string currentRemote = Path.Combine(_tempRoot, "missing");
+            string source = CreateCaptureFile("direct-recovery.bin", "payload");
+            var traceOutput = new StringWriter();
+            var listener = new TextWriterTraceListener(traceOutput);
+            bool previousAutoFlush = Trace.AutoFlush;
+            Trace.Listeners.Add(listener);
+            Trace.AutoFlush = true;
+
+            try
+            {
+                using (var service = new RemoteCopyService(() => currentRemote, () => _localRoot))
+                {
+                    Assert.That(service.ProbeRemoteWritable(), Is.False);
+
+                    Directory.CreateDirectory(_remoteRoot);
+                    currentRemote = _remoteRoot;
+                    service.EnqueueFile(source);
+                    WaitUntil(() => service.QueueCount == 0, 5000, "direct recovery queue drain");
+
+                    Assert.That(service.TotalRetryAttempts, Is.Zero);
+                }
+
+                listener.Flush();
+                string trace = traceOutput.ToString();
+                StringAssert.Contains("[RemoteCopy] pending queued added=1 queue=1", trace);
+                StringAssert.Contains("[RemoteCopy] backlog drained:", trace);
+            }
+            finally
+            {
+                Trace.Listeners.Remove(listener);
+                listener.Dispose();
+                Trace.AutoFlush = previousAutoFlush;
+                traceOutput.Dispose();
+            }
+        }
+
+        [Test]
         public void EnqueueMutableFile_UpdatedWhilePending_PublishesLatestSnapshot()
         {
             string blockedPath = CreateBlockedRemotePath();

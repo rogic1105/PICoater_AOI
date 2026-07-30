@@ -135,6 +135,7 @@ namespace StorageBridge.Core
             CopyItem item;
             if (!TryPersistPendingItem(localFilePath, out item)) return;
 
+            MarkPendingQueuedIfRemoteUnavailable(1);
             _queue.Enqueue(item);
             _workSignal.Set();
         }
@@ -144,18 +145,32 @@ namespace StorageBridge.Core
             if (_disposed || localFilePaths == null) return;
             if (string.IsNullOrWhiteSpace(_getRemotePath())) return;
 
-            bool added = false;
+            var addedItems = new List<CopyItem>();
             foreach (string path in localFilePaths)
             {
                 if (string.IsNullOrWhiteSpace(path)) continue;
 
                 CopyItem item;
                 if (!TryPersistPendingItem(path, out item)) continue;
-                _queue.Enqueue(item);
-                added = true;
+                addedItems.Add(item);
             }
 
-            if (added) _workSignal.Set();
+            if (addedItems.Count == 0) return;
+
+            MarkPendingQueuedIfRemoteUnavailable(addedItems.Count);
+            foreach (CopyItem item in addedItems)
+                _queue.Enqueue(item);
+            _workSignal.Set();
+        }
+
+        private void MarkPendingQueuedIfRemoteUnavailable(int addedCount)
+        {
+            if (Volatile.Read(ref _remoteWritableState) != 0) return;
+
+            Interlocked.Exchange(ref _backlogRecoveryPending, 1);
+            Trace.TraceInformation(
+                $"[RemoteCopy] pending queued added={addedCount} " +
+                $"queue={QueueCount} bytes={PendingBytes}");
         }
 
         /// <summary>

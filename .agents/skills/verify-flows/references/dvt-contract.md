@@ -1148,6 +1148,11 @@ TelemetryTimer_Tick
   安裝當下必須由目前登入的系統管理員立即啟動，並在 10 秒內確認正確 EXE process 存活；
   `LastTaskResult=267011 (0x00041303)` 代表尚未執行，必須判定失敗而非歸因 DLL 封鎖。Storage role 每 5 秒原子發布
   heartbeat（PID、啟動/回報時間、磁碟與最後清理結果）。SMB 可寫只證明分享，不得當成程式存活。
+  Release 根目錄 `test_storage_restart.bat` 是保活 DVT 唯一入口：在儲存電腦上強制結束指定
+  `AppDir` 的程序後，禁止測試工具自行啟動 app；每輪必須由排程在 90 秒內產生不同 PID，且該 PID
+  在 15 秒 freshness 規則內發布 heartbeat。工具必須接受產品 `JavaScriptSerializer` 寫出的
+  `\/Date(milliseconds)\/` UTC 日期格式，也可相容 ISO 8601。預設三輪，報告寫入
+  `D:\Anilox\Logs\DvtReports`，無論成功或失敗，測試收尾都必須讓儲存程式維持運行。
 - **儲存資料捷徑**：檢測電腦 `setup.bat` 必須冪等在 Public Desktop 建立
   `Anilox 儲存資料.lnk`，目標由 `\\VerifyPingTarget\StorageShareName` 計算，不得額外寫死 `192.168.10.20`。
 - **程式桌面捷徑**：Storage 與 Inspection 的安裝及更新都必須冪等建立 Public Desktop
@@ -1186,12 +1191,23 @@ TelemetryTimer_Tick
 ```
 [RemoteCopy] remote share unavailable: ...             ← TCP/路徑/寫入任一層未通
 [RemoteCopy] remote share accepted (write verified)    ← 實際寫入交握通過
+[RemoteCopy] pending queued added=N queue=N bytes=N     ← 本機 durable marker 已落盤；斷線期間待傳正式成立
 [RemoteCopy] retry pending attempt=N queue=N file=...  ← 保留待傳；第 1 次及每 10 次留痕
 [RemoteCopy] restored pending queue count=N            ← 程式重開復原
 [RemoteCopy] backlog drained: copied=N bytes=N          ← 斷線積壓清空
 ```
 狀態轉換：`未排程 --持久標記成功--> 待傳 --複製失敗/重開--> 待傳
 --長度驗證+原子發布+刪標記--> 完成`。任何失敗不得進完成態。
+
+**H1/C3 軟體斷線 DVT**：`physical-smb-backlog-recovery` 找出通往儲存電腦 IP 的網卡並
+暫時以軟體停用；情境必須先把 IO 切到本機模擬器，避免同張實體網卡上的 IO 影響取相。
+阻斷期間必須完成至少兩輪本機封裝，
+看見 `remote share unavailable` 與 `pending queued`；恢復網卡後必須依序出現
+`remote share accepted`、`backlog drained`，且 heartbeat 恢復。Windows UNC 呼叫可能在
+網路中斷期間阻塞，恢復後直接成功，因此 `retry pending` 是診斷證據而非必要成功條件。`check_all_flows.py`
+的 `H1.remote-copy-recovery` 驗證上述順序。Runner 在成功、失敗與中止時都必須移除自己建立的
+故障狀態並重新啟用該網卡。此測試適合反覆執行；最終版本仍需另做一次實體拔線，以涵蓋網卡、
+交換器與線材，不得把軟體阻斷冒充實體接線證據。
 
 ### H2 相機在線數轉變
 ```

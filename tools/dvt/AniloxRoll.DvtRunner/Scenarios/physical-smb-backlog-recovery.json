@@ -1,0 +1,275 @@
+{
+  "Id": "physical-smb-backlog-recovery",
+  "Name": "SMB 中斷與待傳恢復",
+  "Description": "以軟體暫時停用通往儲存電腦的網卡，期間完成兩輪實際取相，恢復後驗證遠端待傳清空與 heartbeat 回復。",
+  "Steps": [
+    {
+      "Id": "launch",
+      "Contract": "F1",
+      "Title": "開啟或連接監控程式",
+      "Action": "launch",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "normalize-log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "正規化記錄模式",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "日常運行",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "開啟流程驗證記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "流程驗證",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "log-mode-proof",
+      "Contract": "DVT.LogMode",
+      "Title": "確認 DVT 探針已開啟",
+      "Action": "wait-log",
+      "Pattern": "log mode=FlowVerification",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "enable-light",
+      "Contract": "H.Light",
+      "Title": "啟用實體光源",
+      "Action": "set-property",
+      "Target": "啟用光源",
+      "Value": "是",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "wait-light-ready",
+      "Contract": "H.Light",
+      "Title": "等待光源完成連線",
+      "Action": "wait-log",
+      "Pattern": "\\[LightController\\] AutoDetect: (使用設定|掃描找到)",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "wait-acquisition-ready",
+      "Contract": "F1/F2",
+      "Title": "等待相機待機與相位準備完成",
+      "Action": "wait-log",
+      "Pattern": "acquisition idle prepare ready cams=",
+      "TimeoutSeconds": 180
+    },
+    {
+      "Id": "stop-condition",
+      "Contract": "F2.IO",
+      "Title": "停止條件設為 IO",
+      "Action": "set-property",
+      "Target": "停止條件",
+      "Value": "IO",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "enable-save",
+      "Contract": "C1/C3",
+      "Title": "啟用正式存檔與遠端待傳",
+      "Action": "set-property",
+      "Target": "存檔",
+      "Value": "是",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "reset-capture-evidence",
+      "Contract": "F2.IO/C3",
+      "Title": "清除啟動階段舊證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "io-simulator",
+      "Contract": "H1/F2.IO",
+      "Title": "啟動兩循環 IO 模擬器",
+      "Action": "launch-helper",
+      "Target": "bin\\x64\\Release\\tools\\io\\IoBridge.IoSimulator.exe",
+      "Value": "--auto --port 502 --cycles 2 --initial-delay-ms 40000 --high-ms 10000 --low-ms 4000 --exit-delay-ms 5000 --result-file D:\\Anilox\\Logs\\io-simulator-smb-dvt.txt",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "io-ip",
+      "Contract": "H1",
+      "Title": "切換到本機 IO 模擬器",
+      "Action": "set-property",
+      "Target": "IO IP",
+      "Value": "127.0.0.1",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "io-port",
+      "Contract": "H1",
+      "Title": "使用標準 Modbus 連接埠",
+      "Action": "set-property",
+      "Target": "IO Port",
+      "Value": "502",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "enable-io",
+      "Contract": "H1",
+      "Title": "啟用 IO 控制",
+      "Action": "set-property",
+      "Target": "啟用 IO",
+      "Value": "是",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "local-io-idle",
+      "Contract": "H1",
+      "Title": "等待模擬 IO 連線並進入待機",
+      "Action": "wait-element",
+      "Target": "待機",
+      "TimeoutSeconds": 25
+    },
+    {
+      "Id": "smb-outage",
+      "Contract": "H1.Storage/C3",
+      "Title": "用軟體停用儲存網路",
+      "Action": "disable-target-network",
+      "Target": "\\\\192.168.10.20\\Anilox",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "cycle1-gate",
+      "Contract": "F2.IO",
+      "Title": "中斷期間第一輪開始取相",
+      "Action": "wait-log",
+      "Pattern": "capture gate open cams=",
+      "TimeoutSeconds": 45
+    },
+    {
+      "Id": "cycle1-first-set",
+      "Contract": "F2.IO",
+      "Title": "第一輪首組影像到齊",
+      "Action": "wait-log",
+      "Pattern": "capture first-set ready .*aligned=True",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "cycle1-finalize",
+      "Contract": "C1/C3",
+      "Title": "第一輪在本機完成封裝並加入待傳",
+      "Action": "wait-log",
+      "Pattern": "capture finalize grab=.*archive=.*\\.acap .*remoteFiles=[1-9]\\d*",
+      "TimeoutSeconds": 45
+    },
+    {
+      "Id": "share-unavailable",
+      "Contract": "H1.Storage/C3",
+      "Title": "確認第一批待傳遇到 SMB 中斷",
+      "Action": "wait-log",
+      "Pattern": "\\[RemoteCopy\\] remote share unavailable:",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "cycle2-gate",
+      "Contract": "F2.IO",
+      "Title": "中斷期間第二輪開始取相",
+      "Action": "wait-log",
+      "Pattern": "capture gate open cams=",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "cycle2-first-set",
+      "Contract": "F2.IO",
+      "Title": "第二輪首組影像到齊",
+      "Action": "wait-log",
+      "Pattern": "capture first-set ready .*aligned=True",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "cycle2-finalize",
+      "Contract": "C1/C3",
+      "Title": "第二輪在本機完成封裝並加入待傳",
+      "Action": "wait-log",
+      "Pattern": "capture finalize grab=.*archive=.*\\.acap .*remoteFiles=[1-9]\\d*",
+      "TimeoutSeconds": 45
+    },
+    {
+      "Id": "pending-proof",
+      "Contract": "C3",
+      "Title": "確認斷線資料保留在待傳佇列",
+      "Action": "wait-log",
+      "Pattern": "\\[RemoteCopy\\] pending queued added=\\d+ queue=[2-9]\\d* bytes=\\d+",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "restore-smb",
+      "Contract": "H1.Storage/C3",
+      "Title": "重新啟用儲存網路",
+      "Action": "enable-target-network",
+      "Target": "smb-outage",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "share-recovered",
+      "Contract": "H1.Storage/C3",
+      "Title": "確認遠端分享重新可寫",
+      "Action": "wait-log",
+      "Pattern": "\\[RemoteCopy\\] remote share accepted \\(write verified\\)",
+      "TimeoutSeconds": 45
+    },
+    {
+      "Id": "backlog-drained",
+      "Contract": "C3",
+      "Title": "確認待傳資料全部補送完成",
+      "Action": "wait-log",
+      "Pattern": "\\[RemoteCopy\\] backlog drained: copied=\\d+ bytes=\\d+",
+      "TimeoutSeconds": 90
+    },
+    {
+      "Id": "heartbeat-recovered",
+      "Contract": "H1.Storage",
+      "Title": "確認儲存程式 heartbeat 恢復",
+      "Action": "wait-log",
+      "Pattern": "儲存程式 heartbeat 恢復 pid=\\d+ age=[0-9.]+s",
+      "TimeoutSeconds": 45
+    },
+    {
+      "Id": "simulator-complete",
+      "Contract": "H1/F3.IO",
+      "Title": "IO 模擬器兩循環正常結束",
+      "Action": "wait-helper-exit",
+      "Target": "io-simulator",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "restore-settings",
+      "Contract": "DVT.Cleanup",
+      "Title": "還原 Runner 修改的設定",
+      "Action": "restore-properties",
+      "TimeoutSeconds": 45
+    },
+    {
+      "Id": "close-app",
+      "Contract": "G2.shutdown",
+      "Title": "正常關閉主程式",
+      "Action": "close-app",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "shutdown-complete",
+      "Contract": "G2.shutdown",
+      "Title": "確認資源釋放完成",
+      "Action": "wait-log",
+      "Pattern": "shutdown resources released",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "checker",
+      "Contract": "DVT",
+      "Title": "執行完整 Flow 檢查器",
+      "Action": "run-checker",
+      "TimeoutSeconds": 120
+    }
+  ]
+}

@@ -15,9 +15,10 @@ echo  6. IO＋儲存電腦待機耐久測試（不 Grab）
 echo  7. 完整離線測試並記錄最新報告
 echo  8. 回顧／報表 30,000 筆資料測試
 echo  9. 實際取相（IO 三循環＋時間／高度）
-echo 10. 結束
+echo 10. SMB 中斷／待傳補送恢復（需系統管理員）
+echo 11. 結束
 echo.
-set /p choice="請選擇 (1-10): "
+set /p choice="請選擇 (1-11): "
 
 if "%choice%"=="1" goto :functional
 if "%choice%"=="2" goto :stress
@@ -28,7 +29,8 @@ if "%choice%"=="6" goto :physical_soak
 if "%choice%"=="7" goto :all
 if "%choice%"=="8" goto :review_report_30k
 if "%choice%"=="9" goto :physical_capture
-if "%choice%"=="10" goto :done
+if "%choice%"=="10" goto :physical_recovery
+if "%choice%"=="11" goto :done
 goto :invalid
 
 :functional
@@ -57,6 +59,10 @@ goto :result
 
 :physical_storage
 powershell -NoProfile -ExecutionPolicy Bypass -File "tests\TestRunner.ps1" -Mode PhysicalStorage
+goto :result
+
+:physical_recovery
+powershell -NoProfile -ExecutionPolicy Bypass -File "tests\TestRunner.ps1" -Mode PhysicalRecovery
 goto :result
 
 :physical_soak

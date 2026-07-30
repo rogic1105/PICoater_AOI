@@ -18,6 +18,8 @@ namespace AniloxRoll.DvtRunner
             new Dictionary<string, string>(StringComparer.Ordinal);
         private readonly Dictionary<string, Process> _helperProcesses =
             new Dictionary<string, Process>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string> _disabledNetworkAdapters =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private readonly ManualResetEventSlim _pauseGate = new ManualResetEventSlim(true);
         private bool _captureMayBeActive;
         private string _sessionStatePath;
@@ -49,6 +51,7 @@ namespace AniloxRoll.DvtRunner
             _log.BeginSession();
             _originalProperties.Clear();
             _helperProcesses.Clear();
+            _disabledNetworkAdapters.Clear();
             _captureMayBeActive = false;
             CaptureSessionState();
             try
@@ -134,6 +137,12 @@ namespace AniloxRoll.DvtRunner
                 case "stop-helper":
                     StopHelper(step.Target);
                     return "helper stopped: " + step.Target;
+
+                case "disable-target-network":
+                    return DisableTargetNetwork(step);
+
+                case "enable-target-network":
+                    return EnableTargetNetwork(step.Target, false);
 
                 case "wait-element":
                     return await _ui.WaitForElementAsync(
@@ -259,6 +268,7 @@ namespace AniloxRoll.DvtRunner
             }
 
             StopAllHelpers();
+            EnableAllDisabledNetworkAdapters();
 
             using (var restoreTimeout =
                 new CancellationTokenSource(TimeSpan.FromSeconds(30)))
@@ -394,6 +404,168 @@ namespace AniloxRoll.DvtRunner
             finally
             {
                 process.Dispose();
+            }
+        }
+
+        private string DisableTargetNetwork(DvtStep step)
+        {
+            if (string.IsNullOrWhiteSpace(step.Target))
+                throw new InvalidDataException(
+                    "disable-target-network requires a UNC Target.");
+            if (_disabledNetworkAdapters.ContainsKey(step.Id))
+                throw new InvalidOperationException(
+                    "Network disable step is already active: " + step.Id);
+
+            string server = ParseUncServer(step.Target);
+            System.Net.IPAddress address;
+            if (!System.Net.IPAddress.TryParse(server, out address))
+                throw new InvalidDataException(
+                    "disable-target-network requires an IP-based UNC Target: " +
+                    step.Target);
+
+            string command =
+                "$route=@(Find-NetRoute -RemoteIPAddress '" + server +
+                "' | Where-Object { $_.PSObject.Properties['DestinationPrefix'] })" +
+                " | Select-Object -First 1;" +
+                "if(-not $route){throw 'No route to target'};" +
+                "$adapter=Get-NetAdapter -InterfaceIndex $route.InterfaceIndex " +
+                "-ErrorAction Stop;" +
+                "if($adapter.Status -ne 'Up'){throw 'Target adapter is not Up'};" +
+                "Write-Output ('INDEX=' + $adapter.ifIndex);" +
+                "$adapter | Disable-NetAdapter -Confirm:$false";
+            string output = RunProcessChecked(
+                "powershell.exe",
+                "-NoProfile -ExecutionPolicy Bypass -Command \"" +
+                command.Replace("\"", "\\\"") + "\"",
+                30);
+
+            const string marker = "INDEX=";
+            int markerIndex = output.IndexOf(
+                marker, StringComparison.OrdinalIgnoreCase);
+            if (markerIndex < 0)
+                throw new InvalidOperationException(
+                    "Unable to identify the disabled network adapter.");
+            int endIndex = output.IndexOfAny(
+                new[] { '\r', '\n' }, markerIndex);
+            string interfaceIndex = output.Substring(
+                markerIndex + marker.Length,
+                (endIndex < 0 ? output.Length : endIndex) -
+                markerIndex - marker.Length).Trim();
+            int parsedInterfaceIndex;
+            if (!int.TryParse(interfaceIndex, out parsedInterfaceIndex))
+                throw new InvalidOperationException(
+                    "Invalid disabled network adapter index: " + interfaceIndex);
+
+            _disabledNetworkAdapters.Add(step.Id, interfaceIndex);
+            return "network disabled target=" + step.Target +
+                " ifIndex=" + interfaceIndex;
+        }
+
+        private string EnableTargetNetwork(string disableStepId, bool cleanup)
+        {
+            string interfaceIndex;
+            if (string.IsNullOrWhiteSpace(disableStepId) ||
+                !_disabledNetworkAdapters.TryGetValue(
+                    disableStepId, out interfaceIndex))
+            {
+                if (cleanup) return "target network already enabled";
+                throw new InvalidOperationException(
+                    "Unknown network disable step: " + disableStepId);
+            }
+
+            string command =
+                "$adapter=Get-NetAdapter -InterfaceIndex " + interfaceIndex +
+                " -ErrorAction Stop;" +
+                "if($adapter.Status -ne 'Up'){" +
+                "$adapter | Enable-NetAdapter -Confirm:$false}";
+            RunProcessChecked(
+                "powershell.exe",
+                "-NoProfile -ExecutionPolicy Bypass -Command \"" +
+                command.Replace("\"", "\\\"") + "\"",
+                30);
+            _disabledNetworkAdapters.Remove(disableStepId);
+            return "network enabled ifIndex=" + interfaceIndex;
+        }
+
+        private void EnableAllDisabledNetworkAdapters()
+        {
+            foreach (string stepId in new List<string>(
+                _disabledNetworkAdapters.Keys))
+            {
+                try
+                {
+                    Output?.Invoke(
+                        "[cleanup] " + EnableTargetNetwork(stepId, true));
+                }
+                catch (Exception ex)
+                {
+                    Output?.Invoke(
+                        "[cleanup warning] network adapter recovery failed: " +
+                        ex.Message);
+                }
+            }
+            _disabledNetworkAdapters.Clear();
+        }
+
+        private static string ParseUncServer(string uncPath)
+        {
+            if (!uncPath.StartsWith(@"\\", StringComparison.Ordinal))
+                throw new InvalidDataException(
+                    "Network Target must be a UNC path: " + uncPath);
+            string[] parts = uncPath.TrimStart('\\').Split('\\');
+            if (parts.Length < 2 || string.IsNullOrWhiteSpace(parts[0]))
+                throw new InvalidDataException(
+                    "Network Target must include server and share: " + uncPath);
+            return parts[0];
+        }
+
+        private static string RunProcessChecked(
+            string fileName,
+            string arguments,
+            int timeoutSeconds)
+        {
+            int exitCode;
+            string output = RunProcess(
+                fileName, arguments, timeoutSeconds, out exitCode);
+            if (exitCode != 0)
+            {
+                throw new InvalidOperationException(
+                    Path.GetFileName(fileName) + " failed exit=" + exitCode +
+                    ". Run DVT Runner as administrator. " + output.Trim());
+            }
+            return output;
+        }
+
+        private static string RunProcess(
+            string fileName,
+            string arguments,
+            int timeoutSeconds,
+            out int exitCode)
+        {
+            var start = new ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = arguments,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            using (Process process = Process.Start(start))
+            {
+                if (process == null)
+                    throw new InvalidOperationException(
+                        "Unable to start " + fileName);
+                string stdout = process.StandardOutput.ReadToEnd();
+                string stderr = process.StandardError.ReadToEnd();
+                if (!process.WaitForExit(timeoutSeconds * 1000))
+                {
+                    try { process.Kill(); } catch { }
+                    throw new TimeoutException(
+                        Path.GetFileName(fileName) + " timed out.");
+                }
+                exitCode = process.ExitCode;
+                return stdout + Environment.NewLine + stderr;
             }
         }
 

@@ -62,6 +62,17 @@ MURA/BUSY Low 與 PC ALIVE High。
 Storage app heartbeat、UI 綠燈、五分鐘穩定性及正常關閉。產品探針只建立並立刻刪除自己的
 `.picoater-write-probe-*`，不讀寫正式影像，也不觸發低磁碟清理。
 
+`SMB 中斷／待傳補送恢復` 需以系統管理員執行。Runner 會找出通往
+`192.168.10.20` 的網卡並暫時以軟體停用；情境先把 IO 切到本機模擬器，因此不依賴同張
+網卡上的實體 IO。中斷期間完成兩次實際取相，並以 `pending queued` 證明本機 durable marker
+已落盤；恢復網卡後必須看到分享寫入驗證、backlog 清空及 heartbeat 恢復。
+情境成功、失敗或中止都會嘗試重新啟用該網卡。
+
+儲存電腦上的程式保活另由 Release ZIP 根目錄 `test_storage_restart.bat` 驗證。工具會
+強制關閉指定安裝路徑的儲存程式，等待排程工作在 90 秒內以新 PID 拉起，並要求新 PID
+發布有效 heartbeat；預設重複三次，報告寫入 `D:\Anilox\Logs\DvtReports`，結束時保持
+儲存程式運行。
+
 `IO＋儲存電腦待機耐久測試（不 Grab）` 同時守住 IO「待機」與儲存電腦綠燈。CLI 的
 `--duration-seconds N` 會覆寫情境內的 `soak` 時間；統一測試器每 30 秒記錄主程式
 Working Set、Private Bytes、handle、thread、CPU 與 Responding。這些資料用來找資源洩漏與
