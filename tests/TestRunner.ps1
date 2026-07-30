@@ -1,17 +1,35 @@
 param(
-    [ValidateSet("Functional", "Unit", "Integration", "Dvt", "PhysicalIo", "PhysicalStorage", "Stress", "Soak", "All")]
+    [ValidateSet("Functional", "Unit", "Integration", "Dvt", "ReviewReport30k", "PhysicalCamera", "PhysicalIo", "PhysicalStorage", "PhysicalSoak", "Stress", "Soak", "All")]
     [string]$Mode = "All",
-    [double]$StressMinutes = 1,
-    [double]$SoakMinutes = 10,
+    [double]$StressMinutes = 120,
+    [double]$SoakMinutes = 120,
+    [double]$PhysicalSoakMinutes = 120,
     [switch]$RecordLatest,
     [switch]$SkipBuild,
-    [string]$ImprovementSummary = "No product behavior change; verification campaign only."
+    [string]$ImprovementSummary = "Inspect the tested commit and worktree diff for product changes; the campaign runner does not infer them."
 )
 
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 
+if (-not ("TestRunner.NativeMethods" -as [type])) {
+    Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+namespace TestRunner
+{
+    public static class NativeMethods
+    {
+        [DllImport("user32.dll")]
+        public static extern int GetGuiResources(IntPtr process, int flags);
+    }
+}
+"@
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot "TestRunner.ResourceTrend.ps1")
 $runId = Get-Date -Format "yyyyMMdd-HHmmss"
 $commit = (& git -C $repoRoot rev-parse --short HEAD).Trim()
 $dirty = -not [string]::IsNullOrWhiteSpace(
@@ -21,6 +39,43 @@ $latestReport = Join-Path $repoRoot ".agents\skills\add-test\references\latest-c
 $results = New-Object System.Collections.Generic.List[object]
 
 New-Item -ItemType Directory -Force -Path $runDirectory | Out-Null
+
+$acceptanceCriteria = @{
+    "Release x64 solution build" =
+        "Release|x64 build; 0 compiler errors; 0 warnings."
+    "Resource trend guard tests" =
+        "One-time heap expansion passes; sustained 330 MB/hour growth and post-expansion growth fail."
+    "Python flow checker tests" =
+        "All discovered checker self-tests pass; 0 failures."
+    ".NET unit tests" =
+        "All discovered unit tests pass; 0 failures."
+    ".NET integration tests" =
+        "All discovered integration tests pass; 0 failures."
+    "DVT Runner self-check" =
+        "Launch the exact app, restore changed settings, close cleanly, and finish the checker with exit code 0."
+    "Review and report 30,000-record DVT" =
+        "Load exactly 30,000 grab IDs; reload jumps to newest; Review rapid/period navigation, enhancement, direction, heatmap, and display crop preserve data contracts; Report single/range curves, Y-axis toggle, fail filter, cross-tab curve reuse, clean shutdown, and the full checker pass."
+    "Physical camera/background smoke" =
+        "Connected cameras become ready; background capture, preview, Grab/Stop, image-before-curve order, cleanup, and the full checker pass."
+    "Physical IO five-minute stability" =
+        "Physical IO remains connected and Idle for 5 minutes; controller and shutdown flows complete."
+    "Physical storage five-minute stability" =
+        "SMB probe write and heartbeat remain green for 5 minutes; shutdown is clean."
+    "Physical IO and storage soak" =
+        "Fixed hardware topology; IO and storage stay green; UI always responds; Private Bytes sustained growth <=256 MB/hour and total delta <=4 GB; handles/GDI/USER/threads stay within guards; clean shutdown."
+    "Offline stress tests" =
+        "All 9 high-frequency and mock Bridge cases pass for the configured wall-clock budget."
+    "Offline endurance tests" =
+        "The mixed IO, CSV/CFG, statistics, remote-copy, and cleanup workload runs continuously; queue drains; temp files clean up; Private Bytes <=512 MB, handles <=50, and threads <=15 after warm-up."
+}
+
+function Get-AcceptanceCriteria {
+    param([string]$Name)
+    if ($acceptanceCriteria.ContainsKey($Name)) {
+        return $acceptanceCriteria[$Name]
+    }
+    return "Exit code 0 with no failed cases."
+}
 
 function Find-MSBuild {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
@@ -161,16 +216,21 @@ function Invoke-DvtScenario {
         [string]$ScenarioId,
         [string]$Name,
         [string]$Layer,
-        [int]$SafetyTimeoutSeconds
+        [int]$SafetyTimeoutSeconds,
+        [int]$DurationSeconds = 0,
+        [switch]$SampleResources
     )
 
     $safeScenario = ($ScenarioId -replace "[^A-Za-z0-9_-]", "_").ToLowerInvariant()
     $logPath = Join-Path $runDirectory ($safeScenario + ".log")
     $resultPath = Join-Path $runDirectory ($safeScenario + ".txt")
+    $processIdPath = Join-Path $runDirectory ($safeScenario + "-pid.txt")
     $runnerPath = Join-Path $repoRoot "bin\x64\Release\AniloxRoll.DvtRunner.exe"
     $watch = [Diagnostics.Stopwatch]::StartNew()
     $status = "FAIL"
     $detail = ""
+    $resourceSamples = New-Object System.Collections.Generic.List[object]
+    $resourcePath = Join-Path $runDirectory ($safeScenario + "-resources.csv")
 
     Write-Host ""
     Write-Host ("========== {0} ==========" -f $Name) -ForegroundColor Cyan
@@ -179,11 +239,100 @@ function Invoke-DvtScenario {
             throw "DVT Runner executable not found: $runnerPath"
         }
 
-        $process = Start-Process -FilePath $runnerPath -PassThru -ArgumentList @(
+        $runnerArguments = @(
             "--scenario", $ScenarioId,
-            "--result-file", ('"' + $resultPath + '"')
+            "--result-file", ('"' + $resultPath + '"'),
+            "--process-id-file", ('"' + $processIdPath + '"')
         )
-        if (-not $process.WaitForExit($SafetyTimeoutSeconds * 1000)) {
+        if ($DurationSeconds -gt 0) {
+            $runnerArguments += @(
+                "--duration-seconds", $DurationSeconds.ToString(
+                    [Globalization.CultureInfo]::InvariantCulture))
+        }
+
+        $process = Start-Process -FilePath $runnerPath -PassThru `
+            -ArgumentList $runnerArguments
+        $deadline = [DateTime]::UtcNow.AddSeconds($SafetyTimeoutSeconds)
+        $nextResourceSample = [DateTime]::UtcNow
+        $monitorProcessId = 0
+        while (-not $process.HasExited -and [DateTime]::UtcNow -lt $deadline) {
+            $insideResourceWindow =
+                $DurationSeconds -le 0 -or
+                $watch.Elapsed.TotalSeconds -lt $DurationSeconds
+            if ($SampleResources -and
+                $insideResourceWindow -and
+                [DateTime]::UtcNow -ge $nextResourceSample) {
+                if ($monitorProcessId -eq 0 -and
+                    (Test-Path -LiteralPath $processIdPath)) {
+                    $pidText = (Get-Content -LiteralPath $processIdPath `
+                        -Raw -ErrorAction SilentlyContinue).Trim()
+                    [int]::TryParse(
+                        $pidText,
+                        [ref]$monitorProcessId) | Out-Null
+                }
+                $app = if ($monitorProcessId -gt 0) {
+                    Get-Process -Id $monitorProcessId `
+                        -ErrorAction SilentlyContinue
+                } else {
+                    $null
+                }
+                if ($app) {
+                    $threadCollection = $null
+                    try {
+                        $app.Refresh()
+                        $threadCollection = $app.Threads
+                        $sample = [pscustomobject]@{
+                            Utc = [DateTime]::UtcNow.ToString("o")
+                            ElapsedSeconds = [Math]::Round(
+                                $watch.Elapsed.TotalSeconds, 1)
+                            WorkingSetMB = [Math]::Round(
+                                $app.WorkingSet64 / 1MB, 1)
+                            PrivateMB = [Math]::Round(
+                                $app.PrivateMemorySize64 / 1MB, 1)
+                            Handles = $app.HandleCount
+                            GdiObjects = [TestRunner.NativeMethods]::GetGuiResources(
+                                $app.Handle, 0)
+                            UserObjects = [TestRunner.NativeMethods]::GetGuiResources(
+                                $app.Handle, 1)
+                            Threads = $threadCollection.Count
+                            CpuSeconds = [Math]::Round(
+                                $app.TotalProcessorTime.TotalSeconds, 1)
+                            Responding = $app.Responding
+                        }
+                        $resourceSamples.Add($sample)
+                        if ($resourceSamples.Count -eq 1) {
+                            $sample | Export-Csv -LiteralPath $resourcePath `
+                                -NoTypeInformation -Encoding UTF8
+                        }
+                        else {
+                            $sample | Export-Csv -LiteralPath $resourcePath `
+                                -NoTypeInformation -Encoding UTF8 -Append
+                        }
+                    }
+                    catch {
+                        # The app may be closing normally between lookup and sampling,
+                        # but keep the evidence if instrumentation itself is broken.
+                        if (-not $app.HasExited) {
+                            Write-Warning (
+                                "Resource sample failed: " + $_.Exception.Message)
+                        }
+                    }
+                    finally {
+                        if ($threadCollection) {
+                            foreach ($thread in $threadCollection) {
+                                $thread.Dispose()
+                            }
+                        }
+                        $app.Dispose()
+                    }
+                }
+                $nextResourceSample = [DateTime]::UtcNow.AddSeconds(30)
+            }
+            Start-Sleep -Milliseconds 500
+            $process.Refresh()
+        }
+
+        if (-not $process.HasExited) {
             try { $process.CloseMainWindow() | Out-Null } catch { }
             if (-not $process.WaitForExit(5000)) {
                 try { $process.Kill() } catch { }
@@ -200,16 +349,126 @@ function Invoke-DvtScenario {
                 "FAIL"
             }
             $detail = (($text -split "\r?\n" | Select-Object -First 2) -join "; ")
+            if ($ScenarioId -eq "review-report-30000") {
+                $comboCount = if ($text -match "DT combo fill count=(\d+)") {
+                    $Matches[1]
+                } else {
+                    "unknown"
+                }
+                $worstStall = if (
+                    $text -match "(?m)^\[PASS\] REVIEW/U\.stall: [^\r\n]*?(\d+)ms"
+                ) {
+                    $Matches[1] + "ms"
+                } else {
+                    "unknown"
+                }
+                $checker = if (
+                    $text -match "sessions=\d+ failSessions=\d+ PASS=(\d+) FAIL=(\d+)"
+                ) {
+                    $Matches[1] + " PASS / " + $Matches[2] + " FAIL"
+                } else {
+                    "unknown"
+                }
+                $detail +=
+                    "; grabIds=$comboCount; maxUiStall=$worstStall; checker=$checker"
+            }
         }
         else {
             "DVT Runner did not produce a result file. ExitCode=$($process.ExitCode)" |
                 Set-Content -LiteralPath $logPath -Encoding UTF8
             $detail = "missing result file; exit code $($process.ExitCode)"
         }
+
+        if ($SampleResources) {
+            if ($resourceSamples.Count -lt 2) {
+                $status = "FAIL"
+                $detail += "; resource sampling produced fewer than 2 samples"
+            }
+            else {
+                # Windows PowerShell 5 cannot reliably apply @() directly to a
+                # generic List[object]. Materialize first so resource guards
+                # cannot fail open with "Argument types do not match".
+                $allResourceSamples = $resourceSamples.ToArray()
+                $resourceTrend = Get-ResourceTrend $allResourceSamples
+                $steady = $resourceTrend.Samples
+                $first = $resourceTrend.First
+                $last = $resourceTrend.Last
+                $maxPrivate = ($steady | Measure-Object PrivateMB -Maximum).Maximum
+                $maxHandles = ($steady | Measure-Object Handles -Maximum).Maximum
+                $privateDelta = [Math]::Round(
+                    $resourceTrend.PrivateDeltaMB, 1)
+                $handleDelta = $last.Handles - $first.Handles
+                $gdiDelta = $last.GdiObjects - $first.GdiObjects
+                $userDelta = $last.UserObjects - $first.UserObjects
+                $threadDelta = $last.Threads - $first.Threads
+                $steadySeconds = $resourceTrend.SteadySeconds
+                $privateRatePerHour = [Math]::Round(
+                    $resourceTrend.TotalPrivateRateMBPerHour, 1)
+                $medianPrivateRatePerHour = [Math]::Round(
+                    $resourceTrend.MedianPrivateRateMBPerHour, 1)
+                $postExpansionRatePerHour = [Math]::Round(
+                    $resourceTrend.PostExpansionRateMBPerHour, 1)
+                $postExpansionSeconds = [Math]::Round(
+                    $resourceTrend.PostExpansionSeconds, 1)
+                $largestPrivateStep = [Math]::Round(
+                    $resourceTrend.LargestPositiveStepMB, 1)
+                $handleRatePerHour = [Math]::Round(
+                    $handleDelta * 3600 / $steadySeconds, 1)
+                $notResponding = @($steady | Where-Object {
+                    -not $_.Responding
+                }).Count
+                $detail += ((
+                    "; resources samples={0} privateMB={1}->{2} max={3} " +
+                    "handles={4}->{5} max={6} gdi={7}->{8} user={9}->{10} " +
+                    "threads={11}->{12} ratesPerHour=private:{13}MB " +
+                    "medianPrivate:{14}MB postExpansionPrivate:{15}MB " +
+                    "postExpansionSeconds={16} largestPrivateStepMB={17} " +
+                    "handles:{18} observer=external") -f
+                    $resourceSamples.Count,
+                    $first.PrivateMB, $last.PrivateMB, $maxPrivate,
+                    $first.Handles, $last.Handles, $maxHandles,
+                    $first.GdiObjects, $last.GdiObjects,
+                    $first.UserObjects, $last.UserObjects,
+                    $first.Threads, $last.Threads,
+                    $privateRatePerHour, $medianPrivateRatePerHour,
+                    $postExpansionRatePerHour, $postExpansionSeconds,
+                    $largestPrivateStep, $handleRatePerHour)
+
+                $privateLeak = $resourceTrend.PrivateLeak
+                $handleRateLeak =
+                    $handleDelta -ge 50 -and
+                    $handleRatePerHour -gt 200
+
+                if ($notResponding -gt 0 -or
+                    $privateLeak -or
+                    $handleDelta -gt 200 -or
+                    $gdiDelta -gt 100 -or
+                    $userDelta -gt 100 -or
+                    $threadDelta -gt 25 -or
+                    ($steadySeconds -ge 180 -and
+                     $handleRateLeak)) {
+                    $status = "FAIL"
+                    $detail += ((
+                        "; resource guard failed privateDeltaMB={0} " +
+                        "handleDelta={1} gdiDelta={2} userDelta={3} " +
+                        "threadDelta={4} notResponding={5} " +
+                        "privateRateMBPerHour={6} " +
+                        "medianPrivateRateMBPerHour={7} " +
+                        "postExpansionRateMBPerHour={8} " +
+                        "postExpansionSeconds={9} handleRatePerHour={10}") -f
+                        $privateDelta, $handleDelta, $gdiDelta, $userDelta,
+                        $threadDelta, $notResponding,
+                        $privateRatePerHour, $medianPrivateRatePerHour,
+                        $postExpansionRatePerHour, $postExpansionSeconds,
+                        $handleRatePerHour)
+                }
+            }
+        }
     }
     catch {
         $_ | Out-String | Set-Content -LiteralPath $logPath -Encoding UTF8
-        $detail = $_.Exception.Message
+        $status = "FAIL"
+        $detail = "campaign analysis failed: " + $_.Exception.Message
     }
     finally {
         $watch.Stop()
@@ -248,12 +507,13 @@ function Write-CampaignReport {
     [void]$builder.AppendLine()
     [void]$builder.AppendLine("## Results")
     [void]$builder.AppendLine()
-    [void]$builder.AppendLine("| Layer | Check | Result | Seconds | Evidence |")
-    [void]$builder.AppendLine("|---|---|---:|---:|---|")
+    [void]$builder.AppendLine("| Layer | Check | Result | Theory / acceptance | Experimental value / evidence | Seconds |")
+    [void]$builder.AppendLine("|---|---|---:|---|---|---:|")
     foreach ($result in $results) {
-        $detail = ($result.Detail -replace "\|", "\|")
+        $criteria = (Get-AcceptanceCriteria $result.Name) -replace "\|", "\|"
+        $detail = $result.Detail -replace "\|", "\|"
         [void]$builder.AppendLine(
-            "| $($result.Layer) | $($result.Name) | **$($result.Status)** | $($result.DurationSeconds) | $detail |")
+            "| $($result.Layer) | $($result.Name) | **$($result.Status)** | $criteria | $detail | $($result.DurationSeconds) |")
     }
     [void]$builder.AppendLine()
     [void]$builder.AppendLine("## Improvement record")
@@ -263,9 +523,14 @@ function Write-CampaignReport {
     [void]$builder.AppendLine()
     [void]$builder.AppendLine("## Not covered without wiring")
     [void]$builder.AppendLine()
-    [void]$builder.AppendLine("- Physical camera/grabber acquisition, seven-camera frame load, background capture, and live Grab.")
+    if ($Mode -eq "PhysicalCamera") {
+        [void]$builder.AppendLine("- Seven-camera full-load acquisition remains untested; this run covered only the connected cameras.")
+    }
+    else {
+        [void]$builder.AppendLine("- Physical camera/grabber acquisition, seven-camera frame load, background capture, and live Grab.")
+    }
     [void]$builder.AppendLine("- Physical IO and light disconnect/reconnect timing.")
-    [void]$builder.AppendLine("- Storage-PC SMB interruption, remote backlog, low-disk deletion, and recovery.")
+    [void]$builder.AppendLine("- Storage-PC SMB interruption, remote backlog transfer, and real-disk/UI low-space status and recovery.")
     [void]$builder.AppendLine("- Shift/24-hour product soak with the IO simulator, cameras, storage transfer, and operator interactions.")
     [void]$builder.AppendLine()
     [void]$builder.AppendLine("These cases remain **NOT COVERED**, not PASS. Run the on-machine DVT and soak campaign when wiring is available.")
@@ -290,6 +555,15 @@ if ((Test-ModeIncludes "Build") -and -not $SkipBuild) {
         "/m",
         "/nologo"
     )) -and $allPassed
+}
+
+if ($Mode -in @("Functional", "Unit", "PhysicalSoak", "All")) {
+    $allPassed = (Invoke-CommandStep "Resource trend guard tests" "Unit" `
+        "powershell.exe" @(
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", "tests/TestRunner.ResourceTrend.Tests.ps1"
+        )) -and $allPassed
 }
 
 if (Test-ModeIncludes "Python") {
@@ -329,6 +603,17 @@ if (Test-ModeIncludes "Dvt") {
         "DVT Runner self-check" "DVT functional" 600) -and $allPassed
 }
 
+if ($Mode -in @("ReviewReport30k", "All")) {
+    $allPassed = (Invoke-DvtScenario "review-report-30000" `
+        "Review and report 30,000-record DVT" `
+        "Large-data UI DVT" 2400) -and $allPassed
+}
+
+if ($Mode -eq "PhysicalCamera") {
+    $allPassed = (Invoke-DvtScenario "monitor-background-v1" `
+        "Physical camera/background smoke" "Physical camera DVT" 900) -and $allPassed
+}
+
 if ($Mode -eq "PhysicalIo") {
     $allPassed = (Invoke-DvtScenario "physical-io-stability" `
         "Physical IO five-minute stability" "Physical IO DVT" 600) -and $allPassed
@@ -337,6 +622,16 @@ if ($Mode -eq "PhysicalIo") {
 if ($Mode -eq "PhysicalStorage") {
     $allPassed = (Invoke-DvtScenario "physical-storage-stability" `
         "Physical storage five-minute stability" "Physical storage DVT" 600) -and $allPassed
+}
+
+if ($Mode -eq "PhysicalSoak") {
+    $physicalSoakSeconds = [Math]::Max(
+        1,
+        [int][Math]::Round($PhysicalSoakMinutes * 60))
+    $allPassed = (Invoke-DvtScenario "physical-io-storage-soak" `
+        "Physical IO and storage soak" "Physical soak" `
+        ($physicalSoakSeconds + 600) $physicalSoakSeconds `
+        -SampleResources) -and $allPassed
 }
 
 if (Test-ModeIncludes "Stress") {
@@ -360,10 +655,10 @@ if (Test-ModeIncludes "Soak") {
         "--configuration", "Release",
         "-p:Platform=x64",
         "--no-restore",
-        "--filter", "(TestCategory=Stress|TestCategory=BridgeStress)",
+        "--filter", "TestCategory=Soak",
         "--results-directory", $runDirectory,
         "--logger", "trx;LogFileName=soak.trx"
-    ) @{ STRESS_MINUTES = $SoakMinutes.ToString(
+    ) @{ SOAK_MINUTES = $SoakMinutes.ToString(
             [Globalization.CultureInfo]::InvariantCulture) }) -and $allPassed
 }
 

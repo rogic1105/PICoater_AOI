@@ -13,12 +13,20 @@ namespace AniloxRoll.DvtRunner
         private static readonly HashSet<string> Actions =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
+                "set-session-value",
                 "launch",
                 "wait-element",
                 "set-property",
                 "click",
+                "wheel",
+                "drag",
+                "select-tab",
+                "confirm-folder",
+                "select-combo",
                 "wait-log",
+                "reset-evidence",
                 "delay",
+                "soak",
                 "restore-properties",
                 "close-app",
                 "run-checker"

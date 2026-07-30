@@ -47,5 +47,7 @@ namespace AniloxRoll.DvtRunner
         public string RepositoryRoot { get; set; }
         public string AppExePath { get; set; }
         public string LogDirectory { get; set; }
+        public string ProcessIdPath { get; set; }
+        public bool CloseAppOnCleanup { get; set; }
     }
 }

@@ -23,6 +23,8 @@ namespace AniloxRoll.DvtRunner
         private readonly Label _status = new Label();
         private readonly string _autoScenarioId;
         private readonly string _resultPath;
+        private readonly string _processIdPath;
+        private readonly int? _durationSeconds;
         private IReadOnlyList<DvtScenario> _scenarios;
         private ScenarioEngine _engine;
         private CancellationTokenSource _runCancellation;
@@ -30,10 +32,14 @@ namespace AniloxRoll.DvtRunner
 
         public MainForm(
             string autoScenarioId = null,
-            string resultPath = null)
+            string resultPath = null,
+            string processIdPath = null,
+            int? durationSeconds = null)
         {
             _autoScenarioId = autoScenarioId;
             _resultPath = resultPath;
+            _processIdPath = processIdPath;
+            _durationSeconds = durationSeconds;
             Text = "PICoater DVT Runner";
             StartPosition = FormStartPosition.CenterScreen;
             MinimumSize = new Size(960, 640);
@@ -192,9 +198,11 @@ namespace AniloxRoll.DvtRunner
                     if (selected == null)
                         throw new InvalidDataException(
                             "找不到指定情境：" + _autoScenarioId);
+                    ApplyDurationOverride(selected);
                     _scenario.SelectedItem = selected;
                     BeginInvoke(new Action(async () =>
                     {
+                        Hide();
                         bool passed = await StartScenarioAsync();
                         WriteAutomationResult(passed);
                         Environment.ExitCode = passed ? 0 : 1;
@@ -207,6 +215,19 @@ namespace AniloxRoll.DvtRunner
                 _status.Text = "初始化失敗：" + ex.Message;
                 _start.Enabled = false;
             }
+        }
+
+        private void ApplyDurationOverride(DvtScenario scenario)
+        {
+            if (!_durationSeconds.HasValue) return;
+
+            DvtStep soak = scenario.Steps.SingleOrDefault(
+                step => string.Equals(
+                    step.Action, "soak", StringComparison.OrdinalIgnoreCase));
+            if (soak == null)
+                throw new InvalidDataException(
+                    "指定 --duration-seconds 的情境必須恰有一個 soak 步驟。");
+            soak.TimeoutSeconds = _durationSeconds.Value;
         }
 
         private void PopulateSteps()
@@ -247,7 +268,9 @@ namespace AniloxRoll.DvtRunner
             {
                 RepositoryRoot = _repositoryRoot,
                 AppExePath = _appPath.Text,
-                LogDirectory = _logDirectory.Text
+                LogDirectory = _logDirectory.Text,
+                ProcessIdPath = _processIdPath,
+                CloseAppOnCleanup = !string.IsNullOrWhiteSpace(_autoScenarioId)
             });
             _engine.StepChanged += update => Ui(() => ApplyStepUpdate(update));
             _engine.Output += text => Ui(() => AppendOutput(text));

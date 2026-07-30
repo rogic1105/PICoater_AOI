@@ -50,5 +50,9 @@ remain owned by `tools/python/check_all_flows.py`.
 - A scenario must not duplicate the full contract or invent a second PASS standard.
 - Every UI action or setting change step must identify its owning contract.
 - The runner restores changed PropertyGrid values and attempts to stop an active Grab on abort.
+- Automated cleanup gives the product up to 60 seconds to close normally. If failure recovery or
+  disconnected hardware prevents shutdown, the runner force-terminates its test process so a
+  failed campaign cannot leave an orphaned product instance; that run does not satisfy the normal
+  shutdown contract.
 - `NOT COVERED` still means the scenario did not exercise that behavior. Physical disconnects,
   visual correctness, stress, and soak evidence remain separate test layers.

@@ -72,6 +72,13 @@ namespace AniloxRoll.DvtRunner
             throw new TimeoutException("Flow evidence timed out: " + pattern);
         }
 
+        public void ResetEvidence()
+        {
+            ReadAvailableLines();
+            _newLines.Clear();
+            _unmatchedLines.Clear();
+        }
+
         private void ReadAvailableLines()
         {
             if (!Directory.Exists(_logDirectory)) return;

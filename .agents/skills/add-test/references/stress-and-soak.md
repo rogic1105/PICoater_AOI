@@ -15,8 +15,44 @@ classification separate while producing one campaign report. Raw output is writt
 `references/latest-campaign.md`; Git history retains previous reports without accumulating report
 files in the working tree.
 
-The offline soak option repeats the mocked/temp-file stress suite for a longer duration. It proves
-bounded logic and file behavior only. It does not replace the on-machine shift/24-hour phase below.
+Long campaigns use **120 minutes per cycle** by default. Each cycle must start from a known
+hardware topology, complete its own shutdown, and produce its own report. Four passing two-hour
+cycles provide repeatability evidence but do not replace a later uninterrupted eight-hour run when
+that release criterion is required. Functional DVT scenarios remain action-bounded and finish when
+their contract steps complete.
+
+If an operator intentionally powers off, disconnects, or changes the required hardware topology,
+the raw guard still fails immediately, but the durable verification record classifies the run as
+`INTERRUPTED`, not as product `FAIL`. Preserve the raw failing artifact and cite the trace transition
+that proves the external interruption. An interrupted run never counts toward the requested duration.
+
+The offline stress option runs nine high-frequency logic, persistence, and mock Bridge cases.
+Each of the six adjustable workloads receives one sixth of `STRESS_MINUTES`; the three bounded
+Bridge/resource cases run their complete cycle counts.
+
+The offline soak option runs one persistent mixed workload for `SOAK_MINUTES`. It interleaves
+mock IO start/stop transitions, CSV/CFG persistence, statistics recomputation, remote-copy queue
+drain, and temporary-file cleanup in one testhost process. After warm-up, it requires Private
+Bytes growth <=512 MB, handle growth <=50, and thread growth <=15. All files stay under an
+isolated `%TEMP%` directory. This proves bounded logic and file behavior only; it does not replace
+the on-machine shift/24-hour phase below.
+
+The physical IO + storage soak runs the real product without Grab or light output. It samples
+Working Set, Private Bytes, total handles, GDI objects, USER objects, threads,
+CPU time, and UI responsiveness every 30 seconds,
+while the DVT runner continuously requires IO Idle and the storage two-layer green state.
+Resource sampling is owned by the external runner. Do not add periodic
+`Process.GetCurrentProcess().Threads` enumeration or resource probes inside the product process:
+the observer must not create handles or alter the resource trend being judged. Target-process GC
+generation counts are diagnostic-only and are not required by the soak acceptance gate. After
+the first five minutes, the default resource guards are: handle growth <= 200, GDI/USER growth
+<= 100 each, thread growth <= 25, and zero non-responsive samples. Private Bytes is judged by the
+median 30-second interval rate and, after a large heap-expansion step, by the rate from that new
+baseline. This distinguishes sustained growth from Server GC reserving a larger heap once while
+managed memory drops. Sustained growth above 256 MB/hour fails once movement reaches 64 MB; an
+absolute 4 GB increase is always an emergency failure. The report keeps the total first-to-last
+rate as context but does not use that single slope as the verdict. Handle growth above 200/hour
+fails once movement reaches 50. These are leak guardrails, not hardware lifetime estimates.
 
 Inspect the current test names before documenting a case; do not rely on old counts.
 
@@ -50,6 +86,10 @@ Never point this test at production captures.
 
 - Define numeric limits before the run from a recent clean baseline on the same machine and recipe.
 - Judge trends, not one sample: no monotonic RAM/handle/VRAM/queue growth after warm-up.
+- IO Bridge polling has a dedicated kernel-resource regression:
+  `IoBridgeReconnectStressTests.SustainedPolling_ReusesKernelResources` performs 1,000
+  serialized Modbus polls after warm-up and permits at most 10 additional process handles.
+  This guards against reintroducing per-poll `NetworkStream` overlapped Event allocation.
 - Every user intent must retain its DVT owner; no forbidden flow, orphan, incomplete begin/done, or stale-token winner.
 - A failure-injection case passes only if the state transition, operator indication, data integrity, and recovery path all agree.
 - Save the tested commit, runtime settings, duration, hardware layout, and relevant logs with the result.

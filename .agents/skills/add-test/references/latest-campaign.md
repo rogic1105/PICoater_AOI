@@ -1,69 +1,39 @@
-# 最新自動化測試紀錄
+# Latest automated test campaign
 
-> 本檔只保留最近一次彙總；下次正式測試會覆寫。Git commit history 才是長期紀錄。
+> This file is overwritten by the next recorded campaign. Git history is the durable record.
 
-- 結果：**PASS**
-- 日期：2026-07-28
-- 基準：`8a74e41` 加上儲存電腦測試情境
-- 電腦：`DESKTOP-C1MN5KD`
-- 產品行為變更：無
+- Result: **PASS**
+- Run: `20260730-021810`
+- Commit: `9307c6c`
+- Working tree: dirty
+- Mode: `All`
+- Machine: `DESKTOP-C1MN5KD`
+- Finished: 2026-07-30 02:20:10 +08:00
+- Raw artifacts: `artifacts/test-reports/20260730-021810-9307c6c/` (local, ignored by Git)
 
-## 測試結果
+## Results
 
-| 層級 | 測試 | 結果 | 實際證據 |
-|---|---|---:|---|
-| Build | `Release|x64` 全方案建置 | **PASS** | 0 warnings / 0 errors |
-| Flow checker | Python DVT checker 自我測試 | **PASS** | 115 / 115 |
-| Unit | .NET 單元測試 | **PASS** | 143 / 143 |
-| Integration | .NET 整合測試 | **PASS** | 113 / 113 |
-| DVT functional | Runner 自我檢查、開啟與正常關閉主程式 | **PASS** | 1 scenario |
-| Stress | 離線壓力測試，含 IO / Storage bridge | **PASS** | 8 / 8，87.47 秒 |
-| Soak | 離線耐久測試 | **PASS** | 8 / 8，693.69 秒 |
-| Physical IO DVT | ET-7044 待機輪詢五分鐘，不 Grab | **PASS** | 305.59 秒；15 flow PASS / 0 FAIL |
-| Physical Storage DVT | SMB、Storage heartbeat 與綠燈五分鐘，不 Grab | **PASS** | 306.67 秒；15 flow PASS / 0 FAIL |
+| Layer | Check | Result | Theory / acceptance | Experimental value / evidence | Seconds |
+|---|---|---:|---|---|---:|
+| Unit | Resource trend guard tests | **PASS** | One-time heap expansion passes; sustained 330 MB/hour growth and post-expansion growth fail. | exit code 0 | 0.23 |
+| Functional | Python flow checker tests | **PASS** | All discovered checker self-tests pass; 0 failures. | Ran 119 tests in 0.015s; OK | 0.12 |
+| Unit | .NET unit tests | **PASS** | All discovered unit tests pass; 0 failures. | total 147, passed 147, failed 0, not-executed 0 | 3.43 |
+| Integration | .NET integration tests | **PASS** | All discovered integration tests pass; 0 failures. | total 114, passed 114, failed 0, not-executed 0 | 6.81 |
+| DVT functional | DVT Runner self-check | **PASS** | Launch the exact app, restore changed settings, close cleanly, and finish the checker with exit code 0. | Result: PASS; Status: PASS：Runner 自我檢查（不 Grab） | 7.15 |
+| Large-data UI DVT | Review and report 30,000-record DVT | **PASS** | Load exactly 30,000 grab IDs; reload jumps to newest; Review rapid/period navigation, enhancement, direction, heatmap, and display crop preserve data contracts; Report single/range curves, Y-axis toggle, fail filter, cross-tab curve reuse, clean shutdown, and the full checker pass. | Result: PASS; Status: PASS：回顧與報表 30,000 筆; grabIds=30000; maxUiStall=1000ms; checker=44 PASS / 0 FAIL | 39.7 |
+| Stress | Offline stress tests | **PASS** | All 9 high-frequency and mock Bridge cases pass for the configured wall-clock budget. | total 9, passed 9, failed 0, not-executed 0 | 54.12 |
+| Soak | Offline endurance tests | **PASS** | The mixed IO, CSV/CFG, statistics, remote-copy, and cleanup workload runs continuously; queue drains; temp files clean up; Private Bytes <=512 MB, handles <=50, and threads <=15 after warm-up. | total 1, passed 1, failed 0, not-executed 0 | 8.3 |
 
-實體 IO 測試證明：
+## Improvement record
 
-- `192.168.255.1:502` controller 正常啟動。
-- 主程式完成交握後進入「待機」，五分鐘後仍維持待機。
-- 測試期間沒有 Grab、沒有啟動光源。
-- Runner 還原設定後正常關閉主程式。
-- `IO controller stop reason=shutdown` 與 `shutdown resources released` 均有 log 證據。
+- Inspect the tested commit and worktree diff for product changes; the campaign runner does not infer them.
+- The commit STAR body records the exact implementation change and verified result.
 
-儲存電腦測試證明：
+## Not covered without wiring
 
-- `\\192.168.10.20\Anilox\Captures` 可建立、flush 並刪除專用探針檔。
-- Storage app heartbeat 回報 PID `13696`，測得年齡 `4.2s`。
-- 主程式顯示「儲存電腦 已連線」，五分鐘後仍為綠燈。
-- 測試資料夾沒有殘留 `.picoater-*-probe-*`。
-- Runner 正常關閉主程式，`shutdown resources released` 有 log 證據。
+- Physical camera/grabber acquisition, seven-camera frame load, background capture, and live Grab.
+- Physical IO and light disconnect/reconnect timing.
+- Storage-PC SMB interruption, remote backlog transfer, and real-disk/UI low-space status and recovery.
+- Shift/24-hour product soak with the IO simulator, cameras, storage transfer, and operator interactions.
 
-本機原始輸出位於 `artifacts/test-reports/`，該目錄不進 Git：
-
-- `20260728-211907-6ef23b9/`：Build、Flow checker、Unit、Integration、DVT self-check。
-- `20260728-205359-6ef23b9/`：Stress。
-- `20260728-205545-6ef23b9/`：10 分鐘離線 Soak。
-- `20260728-211306-6ef23b9/`：實體 IO 五分鐘 DVT。
-- `20260728-223305-8a74e41/`：儲存電腦五分鐘 DVT。
-
-## 測試中改善
-
-1. 將原本分散的測試入口統一為 `tests/TestRunner.bat` / `tests/TestRunner.ps1`。
-2. DVT Runner 新增命令列 scenario、自動輸出結果與自動關閉，能由測試腳本無人值守執行。
-3. DVT log monitor 會保留前一步期間已到達但尚未使用的證據，避免硬體事件早到被誤判 timeout。
-4. 壓力測試 fixture 補上現行 IO 啟動交握資料；產品要求沒有降低。
-5. Stress / Soak 納入 `BridgeStress`，不再漏掉 IO 與 Storage bridge。
-6. 每次測試產生原始 artifact；只有這份最新彙總進 Git，避免測試報告無限累積。
-7. 新增可重跑的儲存電腦情境，同時驗證 SMB 可寫與 Storage app heartbeat，避免只通網路就誤判綠燈。
-
-## 尚未覆蓋
-
-以下不是失敗，但目前沒有接線或環境，因此明確記為 **NOT COVERED**：
-
-- 實體相機／grabber、七台相機負載、背景取得與正式 Grab。
-- 實體光源連線、斷線與恢復。
-- 實體 IO 斷線／恢復與 IO START 觸發 Grab；本次只測穩定待機。
-- 儲存電腦斷線／恢復、待傳 backlog、低磁碟刪除與恢復；本次只測連續健康狀態。
-- 全硬體接線下的一個班次或 24 小時產品耐久測試。
-
-下一階段應在接線恢復後，先跑完整功能 DVT，再決定壓力時間，最後才跑長時間 Soak。
+These cases remain **NOT COVERED**, not PASS. Run the on-machine DVT and soak campaign when wiring is available.

@@ -14,6 +14,7 @@
 3. 確認監控程式與 `D:\Anilox\Logs` 路徑。
 4. 選擇情境後按「開始」。Runner 會開啟或接上已開啟的監控程式。
 5. 需要停下觀察時按「暫停」；「中止」會嘗試停止 Grab 並還原被修改的 PropertyGrid 設定。
+   失敗清理會先等待主程式正常關閉最多 60 秒；仍無法退出才強制結束測試程序，並把正常關閉判為未通過。
 6. 情境完成後會先還原設定，再正常關閉監控程式，確認 shutdown Flow 後顯示結果。
 
 初次使用先跑 `Runner 自我檢查（不 Grab）`。它只驗證 UI 連接、設定提交、
@@ -60,3 +61,8 @@ MURA/BUSY Low 與 PC ALIVE High。
 `儲存電腦五分鐘穩定測試（不 Grab）` 驗證 `\\192.168.10.20\Anilox` 的 SMB 寫入探針、
 Storage app heartbeat、UI 綠燈、五分鐘穩定性及正常關閉。產品探針只建立並立刻刪除自己的
 `.picoater-write-probe-*`，不讀寫正式影像，也不觸發低磁碟清理。
+
+`IO＋儲存電腦待機耐久測試（不 Grab）` 同時守住 IO「待機」與儲存電腦綠燈。CLI 的
+`--duration-seconds N` 會覆寫情境內的 `soak` 時間；統一測試器每 30 秒記錄主程式
+Working Set、Private Bytes、handle、thread、CPU 與 Responding。這些資料用來找資源洩漏與
+連線抖動，不等於硬體壽命估算。

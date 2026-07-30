@@ -46,6 +46,31 @@
       "TimeoutSeconds": 10
     },
     {
+      "Id": "enable-light",
+      "Contract": "H.Light",
+      "Title": "啟用實體光源",
+      "Action": "set-property",
+      "Target": "啟用光源",
+      "Value": "是",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "wait-light-ready",
+      "Contract": "H.Light",
+      "Title": "等待光源完成 COM 連線",
+      "Action": "wait-log",
+      "Pattern": "\\[LightController\\] AutoDetect: (使用設定|掃描找到)",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "wait-acquisition-ready",
+      "Contract": "F1/F2",
+      "Title": "等待相機待機與相位準備完成",
+      "Action": "wait-log",
+      "Pattern": "acquisition idle prepare ready cams=",
+      "TimeoutSeconds": 180
+    },
+    {
       "Id": "standard-bg",
       "Contract": "F8",
       "Title": "切換標準去背",
@@ -58,9 +83,9 @@
       "Id": "wait-bg-ready",
       "Contract": "F1/F8",
       "Title": "等待相機與光源可取得背景",
-      "Action": "wait-element",
-      "Target": "取得背景",
-      "TimeoutSeconds": 0
+      "Action": "wait-log",
+      "Pattern": "background capture ready=True camReady=True lightReady=True grabbing=False",
+      "TimeoutSeconds": 30
     },
     {
       "Id": "get-bg",
@@ -151,12 +176,11 @@
       "TimeoutSeconds": 15
     },
     {
-      "Id": "wait-grab-ready",
+      "Id": "normal-grab-evidence-boundary",
       "Contract": "F2",
-      "Title": "等待正常 Grab 可用",
-      "Action": "wait-element",
-      "Target": "開始抓取",
-      "TimeoutSeconds": 0
+      "Title": "切開背景流程與正常 Grab 證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
     },
     {
       "Id": "start-grab",
@@ -164,7 +188,7 @@
       "Title": "開始正常 Grab",
       "Action": "click",
       "Target": "開始抓取",
-      "TimeoutSeconds": 10
+      "TimeoutSeconds": 30
     },
     {
       "Id": "start-intent",

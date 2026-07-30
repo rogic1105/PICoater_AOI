@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Web.Script.Serialization;
 
 namespace AniloxRoll.DvtRunner
 {
@@ -14,6 +17,9 @@ namespace AniloxRoll.DvtRunner
             new Dictionary<string, string>(StringComparer.Ordinal);
         private readonly ManualResetEventSlim _pauseGate = new ManualResetEventSlim(true);
         private bool _captureMayBeActive;
+        private string _sessionStatePath;
+        private byte[] _originalSessionState;
+        private bool _sessionStateExisted;
 
         public ScenarioEngine(RunnerOptions options)
         {
@@ -40,6 +46,7 @@ namespace AniloxRoll.DvtRunner
             _log.BeginSession();
             _originalProperties.Clear();
             _captureMayBeActive = false;
+            CaptureSessionState();
             try
             {
                 for (int i = 0; i < scenario.Steps.Count; i++)
@@ -73,7 +80,14 @@ namespace AniloxRoll.DvtRunner
             finally
             {
                 _pauseGate.Set();
-                await SafeCleanupAsync();
+                try
+                {
+                    await SafeCleanupAsync();
+                }
+                finally
+                {
+                    RestoreSessionState();
+                }
             }
         }
 
@@ -84,10 +98,25 @@ namespace AniloxRoll.DvtRunner
             string action = step.Action.ToLowerInvariant();
             switch (action)
             {
+                case "set-session-value":
+                    SetSessionValue(step.Target, step.Value);
+                    return step.Target + "=" + step.Value;
+
                 case "launch":
                     await _ui.AttachOrLaunchAsync(
                         _options.AppExePath, step.TimeoutSeconds, cancellationToken);
-                    return "已連接 AniloxRoll.Monitor";
+                    if (!string.IsNullOrWhiteSpace(_options.ProcessIdPath))
+                    {
+                        string directory =
+                            Path.GetDirectoryName(_options.ProcessIdPath);
+                        if (!string.IsNullOrEmpty(directory))
+                            Directory.CreateDirectory(directory);
+                        File.WriteAllText(
+                            _options.ProcessIdPath,
+                            _ui.ProcessId.ToString(
+                                System.Globalization.CultureInfo.InvariantCulture));
+                    }
+                    return "已連接 AniloxRoll.Monitor PID=" + _ui.ProcessId;
 
                 case "wait-element":
                     return await _ui.WaitForElementAsync(
@@ -113,6 +142,32 @@ namespace AniloxRoll.DvtRunner
                         _captureMayBeActive = false;
                     return "已觸發 " + step.Target;
 
+                case "wheel":
+                    return await _ui.WheelAsync(
+                        step.Target,
+                        step.Value,
+                        step.TimeoutSeconds,
+                        cancellationToken);
+
+                case "drag":
+                    return await _ui.DragAsync(
+                        step.Target,
+                        step.Value,
+                        step.TimeoutSeconds,
+                        cancellationToken);
+
+                case "select-tab":
+                    return await _ui.SelectTabAsync(
+                        step.Target, step.TimeoutSeconds, cancellationToken);
+
+                case "confirm-folder":
+                    return await _ui.ConfirmFolderAsync(
+                        step.Target, step.Value, step.TimeoutSeconds, cancellationToken);
+
+                case "select-combo":
+                    return await _ui.SelectComboAsync(
+                        step.Target, step.Value, step.TimeoutSeconds, cancellationToken);
+
                 case "wait-log":
                     string evidence = await _log.WaitForAsync(
                         step.Pattern, step.TimeoutSeconds, cancellationToken);
@@ -121,10 +176,22 @@ namespace AniloxRoll.DvtRunner
                         _captureMayBeActive = false;
                     return evidence;
 
+                case "reset-evidence":
+                    _log.ResetEvidence();
+                    return "後續只接受本階段新產生的 Flow 證據";
+
                 case "delay":
                     await Task.Delay(
                         TimeSpan.FromSeconds(step.TimeoutSeconds), cancellationToken);
                     return "等待完成";
+
+                case "soak":
+                    await _ui.ObserveElementsAsync(
+                        step.Target,
+                        step.TimeoutSeconds,
+                        message => Output?.Invoke(message),
+                        cancellationToken);
+                    return $"耐久觀察完成 {step.TimeoutSeconds}s";
 
                 case "restore-properties":
                     await RestoreOriginalPropertiesAsync(cancellationToken);
@@ -153,14 +220,15 @@ namespace AniloxRoll.DvtRunner
 
         private async Task SafeCleanupAsync()
         {
-            using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
+            if (_captureMayBeActive)
             {
-                if (_captureMayBeActive)
+                Output?.Invoke("[cleanup] 中止仍在進行的 Grab");
+                using (var stopTimeout =
+                    new CancellationTokenSource(TimeSpan.FromSeconds(15)))
                 {
-                    Output?.Invoke("[cleanup] 中止仍在進行的 Grab");
                     try
                     {
-                        await _ui.TryStopCaptureAsync(timeout.Token);
+                        await _ui.TryStopCaptureAsync(stopTimeout.Token);
                         Output?.Invoke("[cleanup] Grab 停止完成");
                     }
                     catch (Exception ex)
@@ -169,9 +237,81 @@ namespace AniloxRoll.DvtRunner
                             "清理警告：停止抓取失敗：" + ex.Message);
                     }
                 }
-
-                await RestoreOriginalPropertiesAsync(timeout.Token);
             }
+
+            using (var restoreTimeout =
+                new CancellationTokenSource(TimeSpan.FromSeconds(30)))
+            {
+                await RestoreOriginalPropertiesAsync(restoreTimeout.Token);
+            }
+
+            if (_options.CloseAppOnCleanup && _ui.IsAttached)
+            {
+                Output?.Invoke("[cleanup] closing AniloxRoll.Monitor");
+                using (var closeTimeout =
+                    new CancellationTokenSource(TimeSpan.FromSeconds(65)))
+                {
+                    try
+                    {
+                        await _ui.CloseAppAsync(60, closeTimeout.Token);
+                        Output?.Invoke("[cleanup] AniloxRoll.Monitor closed");
+                        return;
+                    }
+                    catch (Exception ex)
+                    {
+                        Output?.Invoke(
+                            "[cleanup warning] app close failed: " + ex.Message);
+                    }
+                }
+
+                try
+                {
+                    bool exited = _ui.ForceTerminateApp(5);
+                    Output?.Invoke(
+                        exited
+                            ? "[cleanup] AniloxRoll.Monitor force-terminated"
+                            : "[cleanup warning] force termination timed out");
+                }
+                catch (Exception ex)
+                {
+                    Output?.Invoke(
+                        "[cleanup warning] force termination failed: " +
+                        ex.Message);
+                }
+            }
+        }
+
+        private void SetSessionValue(string name, string value)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                throw new InvalidDataException(
+                    "set-session-value requires Target.");
+
+            string directory = Path.GetDirectoryName(_sessionStatePath);
+            if (!string.IsNullOrEmpty(directory))
+                Directory.CreateDirectory(directory);
+
+            var serializer = new JavaScriptSerializer();
+            Dictionary<string, object> state;
+            if (File.Exists(_sessionStatePath))
+            {
+                string json = File.ReadAllText(
+                    _sessionStatePath, Encoding.UTF8);
+                state = serializer.Deserialize<Dictionary<string, object>>(json)
+                    ?? new Dictionary<string, object>(
+                        StringComparer.OrdinalIgnoreCase);
+            }
+            else
+            {
+                state = new Dictionary<string, object>(
+                    StringComparer.OrdinalIgnoreCase);
+            }
+
+            state[name] = value;
+            File.WriteAllText(
+                _sessionStatePath,
+                serializer.Serialize(state),
+                new UTF8Encoding(false));
         }
 
         private async Task RestoreOriginalPropertiesAsync(
@@ -194,6 +334,47 @@ namespace AniloxRoll.DvtRunner
                 }
             }
             _originalProperties.Clear();
+        }
+
+        private void CaptureSessionState()
+        {
+            string exeDirectory = Path.GetDirectoryName(_options.AppExePath);
+            _sessionStatePath = Path.Combine(
+                exeDirectory ?? string.Empty,
+                "Config",
+                "session-state.json");
+            _sessionStateExisted = File.Exists(_sessionStatePath);
+            _originalSessionState = _sessionStateExisted
+                ? File.ReadAllBytes(_sessionStatePath)
+                : null;
+        }
+
+        private void RestoreSessionState()
+        {
+            if (string.IsNullOrWhiteSpace(_sessionStatePath))
+                return;
+            try
+            {
+                if (_sessionStateExisted)
+                {
+                    Directory.CreateDirectory(
+                        Path.GetDirectoryName(_sessionStatePath));
+                    File.WriteAllBytes(
+                        _sessionStatePath, _originalSessionState);
+                }
+                else if (File.Exists(_sessionStatePath))
+                {
+                    File.Delete(_sessionStatePath);
+                }
+                Output?.Invoke(
+                    "[cleanup] session-state.json restored");
+            }
+            catch (Exception ex)
+            {
+                Output?.Invoke(
+                    "[cleanup warning] session-state restore failed: " +
+                    ex.Message);
+            }
         }
 
         private void WaitWhilePaused(CancellationToken cancellationToken)
