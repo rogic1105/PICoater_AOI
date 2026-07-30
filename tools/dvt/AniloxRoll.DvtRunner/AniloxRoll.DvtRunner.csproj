@@ -71,6 +71,12 @@
     <None Include="Scenarios\physical-io-stability.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="Scenarios\physical-io-capture.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Scenarios\physical-fixed-stop-capture.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="Scenarios\physical-storage-stability.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

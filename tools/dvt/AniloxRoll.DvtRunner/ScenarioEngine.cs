@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -15,6 +16,8 @@ namespace AniloxRoll.DvtRunner
         private readonly FlowLogMonitor _log;
         private readonly Dictionary<string, string> _originalProperties =
             new Dictionary<string, string>(StringComparer.Ordinal);
+        private readonly Dictionary<string, Process> _helperProcesses =
+            new Dictionary<string, Process>(StringComparer.OrdinalIgnoreCase);
         private readonly ManualResetEventSlim _pauseGate = new ManualResetEventSlim(true);
         private bool _captureMayBeActive;
         private string _sessionStatePath;
@@ -45,6 +48,7 @@ namespace AniloxRoll.DvtRunner
         {
             _log.BeginSession();
             _originalProperties.Clear();
+            _helperProcesses.Clear();
             _captureMayBeActive = false;
             CaptureSessionState();
             try
@@ -118,6 +122,19 @@ namespace AniloxRoll.DvtRunner
                     }
                     return "已連接 AniloxRoll.Monitor PID=" + _ui.ProcessId;
 
+                case "launch-helper":
+                    return LaunchHelper(step);
+
+                case "wait-helper-exit":
+                    return await WaitForHelperExitAsync(
+                        step.Target,
+                        step.TimeoutSeconds,
+                        cancellationToken);
+
+                case "stop-helper":
+                    StopHelper(step.Target);
+                    return "helper stopped: " + step.Target;
+
                 case "wait-element":
                     return await _ui.WaitForElementAsync(
                         step.Target, step.Value, step.TimeoutSeconds, cancellationToken);
@@ -171,6 +188,8 @@ namespace AniloxRoll.DvtRunner
                 case "wait-log":
                     string evidence = await _log.WaitForAsync(
                         step.Pattern, step.TimeoutSeconds, cancellationToken);
+                    if (step.Pattern.Contains("capture gate open"))
+                        _captureMayBeActive = true;
                     if (step.Pattern.Contains("background capture end") ||
                         step.Pattern.Contains("capture gate closed"))
                         _captureMayBeActive = false;
@@ -239,6 +258,8 @@ namespace AniloxRoll.DvtRunner
                 }
             }
 
+            StopAllHelpers();
+
             using (var restoreTimeout =
                 new CancellationTokenSource(TimeSpan.FromSeconds(30)))
             {
@@ -278,6 +299,101 @@ namespace AniloxRoll.DvtRunner
                         "[cleanup warning] force termination failed: " +
                         ex.Message);
                 }
+            }
+        }
+
+        private string LaunchHelper(DvtStep step)
+        {
+            if (string.IsNullOrWhiteSpace(step.Target))
+                throw new InvalidDataException("launch-helper requires Target.");
+            if (_helperProcesses.ContainsKey(step.Id))
+                throw new InvalidOperationException(
+                    "Helper step is already running: " + step.Id);
+
+            string path = step.Target;
+            if (!Path.IsPathRooted(path))
+                path = Path.Combine(_options.RepositoryRoot, path);
+            path = Path.GetFullPath(path);
+            if (!File.Exists(path))
+                throw new FileNotFoundException("Helper executable not found.", path);
+
+            var start = new ProcessStartInfo
+            {
+                FileName = path,
+                Arguments = step.Value ?? string.Empty,
+                WorkingDirectory = Path.GetDirectoryName(path),
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            Process process = Process.Start(start);
+            if (process == null)
+                throw new InvalidOperationException("Failed to start helper: " + path);
+            _helperProcesses.Add(step.Id, process);
+            return "helper " + step.Id + " PID=" + process.Id;
+        }
+
+        private async Task<string> WaitForHelperExitAsync(
+            string helperId,
+            int timeoutSeconds,
+            CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(helperId) ||
+                !_helperProcesses.TryGetValue(helperId, out Process process))
+                throw new InvalidOperationException(
+                    "Unknown helper process: " + helperId);
+
+            DateTime deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+            while (!process.HasExited && DateTime.UtcNow < deadline)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await Task.Delay(100, cancellationToken);
+                process.Refresh();
+            }
+            if (!process.HasExited)
+                throw new TimeoutException("Helper did not exit: " + helperId);
+
+            int exitCode = process.ExitCode;
+            process.Dispose();
+            _helperProcesses.Remove(helperId);
+            if (exitCode != 0)
+                throw new InvalidOperationException(
+                    "Helper failed: " + helperId + " exit=" + exitCode);
+            return "helper " + helperId + " exit=0";
+        }
+
+        private void StopHelper(string helperId)
+        {
+            if (string.IsNullOrWhiteSpace(helperId) ||
+                !_helperProcesses.TryGetValue(helperId, out Process process))
+                return;
+            StopProcess(process);
+            _helperProcesses.Remove(helperId);
+        }
+
+        private void StopAllHelpers()
+        {
+            foreach (Process process in _helperProcesses.Values)
+                StopProcess(process);
+            _helperProcesses.Clear();
+        }
+
+        private static void StopProcess(Process process)
+        {
+            try
+            {
+                if (!process.HasExited)
+                {
+                    try { process.CloseMainWindow(); } catch { }
+                    if (!process.WaitForExit(1000))
+                    {
+                        try { process.Kill(); } catch { }
+                        process.WaitForExit(3000);
+                    }
+                }
+            }
+            finally
+            {
+                process.Dispose();
             }
         }
 

@@ -15,6 +15,9 @@ namespace AniloxRoll.DvtRunner
             {
                 "set-session-value",
                 "launch",
+                "launch-helper",
+                "wait-helper-exit",
+                "stop-helper",
                 "wait-element",
                 "set-property",
                 "click",

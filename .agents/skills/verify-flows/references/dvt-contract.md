@@ -1487,6 +1487,53 @@ python tools/python/check_all_flows.py trace-a.log trace-b.log
 - domain 專用舊指令保留為薄 wrapper（例如 `check_review_flows.py`），規則實作只能存在
   `flow_checks/{domain}.py` 一份，避免 wrapper／總入口兩份判準分歧。
 
+### 實際取相自動 DVT
+
+`physical-io-capture` 不是模擬產品影像；它使用實體相機與光源，只把 PLC START
+替換成 Runner 管理的本機 Modbus 模擬器。固定執行三次 `High 10s / Low 4s`，每輪必須具備：
+
+```
+IO grab request stopCondition=IoSignal stopOnLow=True
+capture gate open cams=P
+capture head frame dropped ... × P
+capture first-set ready ... aligned=True
+rowCurve present after=mainImage
+capture tail begin cams=...
+capture tail complete pending=
+StopGrab
+capture gate closed standby=on
+capture finalize grab=... archive=...acap ... remoteFiles=N
+```
+
+- 三輪須各自成對，不得以第一輪的 gate 搭配第二輪的 finalize。
+- `P` 為當次在線相機數；七台未接齊時可驗既有相機，但報告必明列未覆蓋七台滿載。
+- `remoteFiles>0` 只證明完成封裝並加入遠端待傳；實際 SMB 可寫與 heartbeat 由
+  `physical-storage-stability` 驗證，兩者不得互相冒充。
+- Runner 中止或失敗時，必先停止可能仍在進行的 Grab，再終止所有 helper、
+  還原 PropertyGrid 並關閉主程式。helper exit code 非 0 直接判 FAIL。
+
+`physical-fixed-stop-capture` 延續同一條實體影像鏈，另外驗證停止 owner：
+
+```
+Time:
+IO grab request stopCondition=Time stopOnLow=False
+grab stop waiting condition=Time configured=10s source=io
+capture first-set ready ... aligned=True
+grab stop armed condition=Time limit=10s ... start=first-set
+IO START edge=Low stopOnLow=False action=continue-fixed-target
+auto:抓取停止 condition=Time limit=10s
+
+Height:
+IO grab request stopCondition=Height stopOnLow=False
+grab stop armed condition=height limit=15000px source=io
+IO START edge=Low stopOnLow=False action=continue-fixed-target
+auto:抓取停止 condition=Height rows=N limit=15000px
+```
+
+- Time 的十秒從 `first-set` 起算，不含跨邊界丟幀與等待相機成組時間。
+- Height 的 `rows` 是所有在線相機已完成列數的最小值，不得用最快單台提前停止。
+- 兩種模式皆須另外具備主圖先於 Curve、gate 關閉、封裝、遠端待傳與正常清理證據。
+
 ## 回顧 tab 契約（R 系列；儀器前綴 RV）
 
 **回顧鏈自動校稿工具**（`flow_checks/review.py` 的相容入口；改回顧/跨 tab 同步後必跑）：

@@ -1,0 +1,359 @@
+{
+  "Id": "physical-io-capture",
+  "Name": "IO 實際取相三循環",
+  "Description": "用本機 IO 模擬器送出三次 10 秒 START High，驗證實體相機、光源、Curve、尾幀排水、封裝與遠端待傳鏈。",
+  "Steps": [
+    {
+      "Id": "launch",
+      "Contract": "F1",
+      "Title": "開啟或連接監控程式",
+      "Action": "launch",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "normalize-log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "正規化為日常運行記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "日常運行",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "切換為流程驗證記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "流程驗證",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "log-mode-proof",
+      "Contract": "DVT.LogMode",
+      "Title": "確認 DVT 探針已開啟",
+      "Action": "wait-log",
+      "Pattern": "log mode=FlowVerification",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "enable-light",
+      "Contract": "H.Light",
+      "Title": "啟用實體光源",
+      "Action": "set-property",
+      "Target": "啟用光源",
+      "Value": "是",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "wait-light-ready",
+      "Contract": "H.Light",
+      "Title": "等待光源完成 COM 連線",
+      "Action": "wait-log",
+      "Pattern": "\\[LightController\\] AutoDetect: (使用設定|掃描找到)",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "wait-acquisition-ready",
+      "Contract": "F1/F2",
+      "Title": "等待相機待機與相位準備完成",
+      "Action": "wait-log",
+      "Pattern": "acquisition idle prepare ready cams=",
+      "TimeoutSeconds": 180
+    },
+    {
+      "Id": "stop-condition",
+      "Contract": "F2.IO",
+      "Title": "停止條件設為 IO",
+      "Action": "set-property",
+      "Target": "停止條件",
+      "Value": "IO",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "grab-limit",
+      "Contract": "F2.IO",
+      "Title": "安全上限設為十秒",
+      "Action": "set-property",
+      "Target": "總時間(秒)",
+      "Value": "10",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "enable-save",
+      "Contract": "C1",
+      "Title": "啟用正式存檔",
+      "Action": "set-property",
+      "Target": "存檔",
+      "Value": "是",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "reset-capture-evidence",
+      "Contract": "F2.IO",
+      "Title": "清除啟動階段舊證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "io-ip",
+      "Contract": "H1",
+      "Title": "切換到本機 IO 模擬器",
+      "Action": "set-property",
+      "Target": "IO IP",
+      "Value": "127.0.0.1",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "io-port",
+      "Contract": "H1",
+      "Title": "使用標準 Modbus 連接埠",
+      "Action": "set-property",
+      "Target": "IO Port",
+      "Value": "502",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "enable-io",
+      "Contract": "H1",
+      "Title": "啟用 IO 控制",
+      "Action": "set-property",
+      "Target": "啟用 IO",
+      "Value": "是",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "io-simulator",
+      "Contract": "H1/F2.IO",
+      "Title": "啟動三循環 IO 模擬器",
+      "Action": "launch-helper",
+      "Target": "bin\\x64\\Release\\tools\\io\\IoBridge.IoSimulator.exe",
+      "Value": "--auto --port 502 --cycles 3 --initial-delay-ms 20000 --high-ms 10000 --low-ms 4000 --exit-delay-ms 5000 --result-file D:\\Anilox\\Logs\\io-simulator-dvt.txt",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "local-controller",
+      "Contract": "H1",
+      "Title": "確認主程式改連本機 IO",
+      "Action": "wait-log",
+      "Pattern": "IO controller start generation=\\d+ endpoint=127\\.0\\.0\\.1:502",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "local-io-idle",
+      "Contract": "H1",
+      "Title": "等待模擬 IO 連線並進入待機",
+      "Action": "wait-element",
+      "Target": "待機",
+      "TimeoutSeconds": 18
+    },
+
+    {
+      "Id": "cycle1-request",
+      "Contract": "F2.IO",
+      "Title": "第一輪 START High 被接受",
+      "Action": "wait-log",
+      "Pattern": "IO grab request stopCondition=IoSignal stopOnLow=True",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "cycle1-gate",
+      "Contract": "F2.IO",
+      "Title": "第一輪取相閘門開啟",
+      "Action": "wait-log",
+      "Pattern": "capture gate open cams=",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "cycle1-first-set",
+      "Contract": "F2.IO",
+      "Title": "第一輪首組影像到齊",
+      "Action": "wait-log",
+      "Pattern": "capture first-set ready .*aligned=True",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "cycle1-curve",
+      "Contract": "F2.IO",
+      "Title": "第一輪 Curve 晚於影像上畫",
+      "Action": "wait-log",
+      "Pattern": "rowCurve present after=mainImage",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "cycle1-tail",
+      "Contract": "F3.IO",
+      "Title": "第一輪 Low 進入尾幀排水",
+      "Action": "wait-log",
+      "Pattern": "capture tail begin cams=",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "cycle1-closed",
+      "Contract": "F3.IO",
+      "Title": "第一輪安全關閉取相閘門",
+      "Action": "wait-log",
+      "Pattern": "capture gate closed standby=on",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "cycle1-finalize",
+      "Contract": "C1/F3.IO",
+      "Title": "第一輪封裝完成並加入遠端待傳",
+      "Action": "wait-log",
+      "Pattern": "capture finalize grab=.*archive=.*\\.acap .*remoteFiles=[1-9]\\d*",
+      "TimeoutSeconds": 30
+    },
+
+    {
+      "Id": "cycle2-request",
+      "Contract": "F2.IO",
+      "Title": "第二輪 START High 被接受",
+      "Action": "wait-log",
+      "Pattern": "IO grab request stopCondition=IoSignal stopOnLow=True",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "cycle2-gate",
+      "Contract": "F2.IO",
+      "Title": "第二輪取相閘門開啟",
+      "Action": "wait-log",
+      "Pattern": "capture gate open cams=",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "cycle2-first-set",
+      "Contract": "F2.IO",
+      "Title": "第二輪首組影像到齊",
+      "Action": "wait-log",
+      "Pattern": "capture first-set ready .*aligned=True",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "cycle2-curve",
+      "Contract": "F2.IO",
+      "Title": "第二輪 Curve 晚於影像上畫",
+      "Action": "wait-log",
+      "Pattern": "rowCurve present after=mainImage",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "cycle2-tail",
+      "Contract": "F3.IO",
+      "Title": "第二輪 Low 進入尾幀排水",
+      "Action": "wait-log",
+      "Pattern": "capture tail begin cams=",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "cycle2-closed",
+      "Contract": "F3.IO",
+      "Title": "第二輪安全關閉取相閘門",
+      "Action": "wait-log",
+      "Pattern": "capture gate closed standby=on",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "cycle2-finalize",
+      "Contract": "C1/F3.IO",
+      "Title": "第二輪封裝完成並加入遠端待傳",
+      "Action": "wait-log",
+      "Pattern": "capture finalize grab=.*archive=.*\\.acap .*remoteFiles=[1-9]\\d*",
+      "TimeoutSeconds": 30
+    },
+
+    {
+      "Id": "cycle3-request",
+      "Contract": "F2.IO",
+      "Title": "第三輪 START High 被接受",
+      "Action": "wait-log",
+      "Pattern": "IO grab request stopCondition=IoSignal stopOnLow=True",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "cycle3-gate",
+      "Contract": "F2.IO",
+      "Title": "第三輪取相閘門開啟",
+      "Action": "wait-log",
+      "Pattern": "capture gate open cams=",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "cycle3-first-set",
+      "Contract": "F2.IO",
+      "Title": "第三輪首組影像到齊",
+      "Action": "wait-log",
+      "Pattern": "capture first-set ready .*aligned=True",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "cycle3-curve",
+      "Contract": "F2.IO",
+      "Title": "第三輪 Curve 晚於影像上畫",
+      "Action": "wait-log",
+      "Pattern": "rowCurve present after=mainImage",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "cycle3-tail",
+      "Contract": "F3.IO",
+      "Title": "第三輪 Low 進入尾幀排水",
+      "Action": "wait-log",
+      "Pattern": "capture tail begin cams=",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "cycle3-closed",
+      "Contract": "F3.IO",
+      "Title": "第三輪安全關閉取相閘門",
+      "Action": "wait-log",
+      "Pattern": "capture gate closed standby=on",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "cycle3-finalize",
+      "Contract": "C1/F3.IO",
+      "Title": "第三輪封裝完成並加入遠端待傳",
+      "Action": "wait-log",
+      "Pattern": "capture finalize grab=.*archive=.*\\.acap .*remoteFiles=[1-9]\\d*",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "simulator-complete",
+      "Contract": "H1/F3.IO",
+      "Title": "IO 模擬器三循環正常結束",
+      "Action": "wait-helper-exit",
+      "Target": "io-simulator",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "restore-settings",
+      "Contract": "DVT.Cleanup",
+      "Title": "還原 Runner 修改的設定",
+      "Action": "restore-properties",
+      "TimeoutSeconds": 45
+    },
+    {
+      "Id": "close-app",
+      "Contract": "G2.shutdown",
+      "Title": "正常關閉主程式",
+      "Action": "close-app",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "shutdown-complete",
+      "Contract": "G2.shutdown",
+      "Title": "確認資源釋放完成",
+      "Action": "wait-log",
+      "Pattern": "shutdown resources released",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "checker",
+      "Contract": "DVT",
+      "Title": "執行完整 Flow 檢查器",
+      "Action": "run-checker",
+      "TimeoutSeconds": 120
+    }
+  ]
+}

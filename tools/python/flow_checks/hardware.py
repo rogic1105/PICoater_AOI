@@ -21,7 +21,9 @@ class HardwareFlowValidator:
             self._edge_pattern.match(line.message)
             or self._camera_pattern.match(line.message)
             or line.message.startswith(("儲存程式 heartbeat ", "⚠ 儲存程式 heartbeat "))
-            or line.message.startswith(("IO controller ", "IO poll state ", "io:DI START ", "IO grab "))
+            or line.message.startswith(
+                ("IO controller ", "IO poll state ", "io:DI START ", "IO grab ", "IO START edge=")
+            )
             for line in session.lines
         )
         if not covered:
@@ -187,7 +189,16 @@ class HardwareFlowValidator:
             for line in session.lines
             if line.message.startswith("IO grab stop ")
         ]
-        if not lines:
+        fixed_low_message = (
+            "IO START edge=Low stopOnLow=False "
+            "action=continue-fixed-target"
+        )
+        fixed_lows = [
+            (index, line)
+            for index, line in enumerate(session.lines)
+            if line.message == fixed_low_message
+        ]
+        if not lines and not fixed_lows:
             report.add(
                 self.domain,
                 "H4.io-stop-policy",
@@ -217,11 +228,34 @@ class HardwareFlowValidator:
                     f"{line.timestamp} ignored condition={condition}"
                 )
 
+        request_pattern = re.compile(
+            r"^IO grab request stopCondition=(?P<condition>IoSignal|Time|Height) "
+            r"stopOnLow=(?P<stop>True|False)$"
+        )
+        for index, line in fixed_lows:
+            prior_request = next(
+                (
+                    request_pattern.match(candidate.message)
+                    for candidate in reversed(session.lines[:index])
+                    if request_pattern.match(candidate.message)
+                ),
+                None,
+            )
+            if (
+                prior_request is None
+                or prior_request.group("condition") not in ("Time", "Height")
+                or prior_request.group("stop") != "False"
+            ):
+                failures.append(
+                    f"{line.timestamp} fixed Low 無有效的 Time/Height request"
+                )
+
         report.add(
             self.domain,
             "H4.io-stop-policy",
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
-            f"requests={len(lines)} invalid={len(failures)}"
+            f"requests={len(lines)} fixedLow={len(fixed_lows)} "
+            f"invalid={len(failures)}"
             + (f"；首例 {failures[0]}" if failures else ""),
         )
 

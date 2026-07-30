@@ -66,3 +66,20 @@ Storage app heartbeat、UI 綠燈、五分鐘穩定性及正常關閉。產品�
 `--duration-seconds N` 會覆寫情境內的 `soak` 時間；統一測試器每 30 秒記錄主程式
 Working Set、Private Bytes、handle、thread、CPU 與 Responding。這些資料用來找資源洩漏與
 連線抖動，不等於硬體壽命估算。
+
+`IO 實際取相三循環` 會把主程式暫時切到 `127.0.0.1:502`，由 Runner 啟動
+`IoBridge.IoSimulator.exe --auto`，送出三次 10 秒 START High。每輪都必須依序看到：
+IO 請求、capture gate、首組相位、影像後 Curve、Low 後尾幀排水、gate 關閉、`.acap`
+封裝與遠端待傳。成功或失敗時 Runner 都會關閉模擬器、停止可能仍在進行的 Grab、
+還原 PropertyGrid 設定並關閉主程式。
+
+同一個 `PhysicalCapture` 測試入口接著執行 `時間與高度實際取相`。模擬器會在目標
+完成前提早送出 START Low：時間模式必須從首幀集合對齊後完整抓取 10 秒；高度模式
+必須等所有在線相機共同完成 15,000 列。兩者都不得被提早 Low 截短，並須完成 Curve、
+`.acap` 封裝、遠端待傳、設定還原與正常關閉。
+
+情境可用三個通用 helper action 控制同 repo 的外部測試工具：
+
+- `launch-helper`：`Target` 是 repo 相對 exe，`Value` 是命令列參數；以步驟 `Id` 追蹤。
+- `wait-helper-exit`：`Target` 指向前述步驟 `Id`，並要求 exit code 0。
+- `stop-helper`：提前結束指定 helper；中止／失敗清理也會停止全部 helper。

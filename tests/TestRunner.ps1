@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("Functional", "Unit", "Integration", "Dvt", "ReviewReport30k", "PhysicalCamera", "PhysicalIo", "PhysicalStorage", "PhysicalSoak", "Stress", "Soak", "All")]
+    [ValidateSet("Functional", "Unit", "Integration", "Dvt", "ReviewReport30k", "PhysicalCamera", "PhysicalCapture", "PhysicalIo", "PhysicalStorage", "PhysicalSoak", "Stress", "Soak", "All")]
     [string]$Mode = "All",
     [double]$StressMinutes = 120,
     [double]$SoakMinutes = 120,
@@ -57,6 +57,10 @@ $acceptanceCriteria = @{
         "Load exactly 30,000 grab IDs; reload jumps to newest; Review rapid/period navigation, enhancement, direction, heatmap, and display crop preserve data contracts; Report single/range curves, Y-axis toggle, fail filter, cross-tab curve reuse, clean shutdown, and the full checker pass."
     "Physical camera/background smoke" =
         "Connected cameras become ready; background capture, preview, Grab/Stop, image-before-curve order, cleanup, and the full checker pass."
+    "Physical IO capture cycles" =
+        "Three 10-second START High cycles each open the product gate, produce an aligned first set and image-before-curve evidence, drain one tail frame per camera on Low, close cleanly, finalize an archive, and enqueue remote output."
+    "Physical fixed-stop capture modes" =
+        "Time mode ignores an early START Low and runs 10 seconds from the aligned first set; Height mode ignores an early START Low and stops only after all connected cameras complete 15,000 rows; both finalize archives and remote output."
     "Physical IO five-minute stability" =
         "Physical IO remains connected and Idle for 5 minutes; controller and shutdown flows complete."
     "Physical storage five-minute stability" =
@@ -521,10 +525,13 @@ function Write-CampaignReport {
     [void]$builder.AppendLine("- $ImprovementSummary")
     [void]$builder.AppendLine("- The commit STAR body records the exact implementation change and verified result.")
     [void]$builder.AppendLine()
-    [void]$builder.AppendLine("## Not covered without wiring")
+    [void]$builder.AppendLine("## Not covered by this campaign")
     [void]$builder.AppendLine()
-    if ($Mode -eq "PhysicalCamera") {
+    if ($Mode -in @("PhysicalCamera", "PhysicalCapture")) {
         [void]$builder.AppendLine("- Seven-camera full-load acquisition remains untested; this run covered only the connected cameras.")
+        if ($Mode -eq "PhysicalCapture") {
+            [void]$builder.AppendLine("- Background capture and preview are covered by the separate PhysicalCamera scenario, not this run.")
+        }
     }
     else {
         [void]$builder.AppendLine("- Physical camera/grabber acquisition, seven-camera frame load, background capture, and live Grab.")
@@ -533,7 +540,7 @@ function Write-CampaignReport {
     [void]$builder.AppendLine("- Storage-PC SMB interruption, remote backlog transfer, and real-disk/UI low-space status and recovery.")
     [void]$builder.AppendLine("- Shift/24-hour product soak with the IO simulator, cameras, storage transfer, and operator interactions.")
     [void]$builder.AppendLine()
-    [void]$builder.AppendLine("These cases remain **NOT COVERED**, not PASS. Run the on-machine DVT and soak campaign when wiring is available.")
+    [void]$builder.AppendLine("These cases remain **NOT COVERED**, not PASS. Run their dedicated DVT or soak campaign before release.")
 
     $runReport = Join-Path $runDirectory "campaign-report.md"
     [IO.File]::WriteAllText($runReport, $builder.ToString(), (New-Object Text.UTF8Encoding($false)))
@@ -612,6 +619,13 @@ if ($Mode -in @("ReviewReport30k", "All")) {
 if ($Mode -eq "PhysicalCamera") {
     $allPassed = (Invoke-DvtScenario "monitor-background-v1" `
         "Physical camera/background smoke" "Physical camera DVT" 900) -and $allPassed
+}
+
+if ($Mode -eq "PhysicalCapture") {
+    $allPassed = (Invoke-DvtScenario "physical-io-capture" `
+        "Physical IO capture cycles" "Physical acquisition DVT" 900) -and $allPassed
+    $allPassed = (Invoke-DvtScenario "physical-fixed-stop-capture" `
+        "Physical fixed-stop capture modes" "Physical acquisition DVT" 900) -and $allPassed
 }
 
 if ($Mode -eq "PhysicalIo") {

@@ -440,6 +440,9 @@ namespace AniloxRoll.Monitor.Core.Services
                     (_currentState == IoState.Running || _currentState == IoState.Faulted) &&
                     !StopCaptureOnStartLow)
                 {
+                    FlowTrace.Log(
+                        "IO START edge=Low stopOnLow=False " +
+                        "action=continue-fixed-target");
                     IoLogger.Info("START falling edge -> Capture continues to fixed target");
                 }
                 // START 下降緣 → 停止 Grab

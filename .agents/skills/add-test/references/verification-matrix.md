@@ -2,24 +2,25 @@
 
 ## Latest no-wiring baseline (2026-07-30)
 
-Tested dirty worktree based on commit `9307c6c`. Raw reports remain local under
+Tested dirty worktree based on commit `3c30df3`. Raw reports remain local under
 `artifacts/test-reports/`; `latest-campaign.md` is the durable summary.
 
 | Layer | Theory / acceptance | Experimental result | Status | Evidence |
 |---|---|---|---:|---|
 | Build | `Release|x64`, 0 compiler errors and 0 warnings | Full solution built successfully | **PASS** | on-machine MSBuild before campaign |
-| Flow checker | All checker self-tests pass | 119 / 119 | **PASS** | `20260730-021810-9307c6c` |
-| Unit | All unit tests pass | 147 / 147 | **PASS** | `20260730-021810-9307c6c` |
-| Integration | All file/JSON/CSV/mock Bridge tests pass | 114 / 114 | **PASS** | `20260730-021810-9307c6c` |
-| DVT runner | Launch exact app, restore settings, close cleanly, checker exit 0 | 1 / 1 scenario | **PASS** | `20260730-021810-9307c6c` |
+| Flow checker | All checker self-tests pass | 121 / 121 | **PASS** | `20260730-114957-3c30df3` |
+| Unit | All unit tests pass | 147 / 147 | **PASS** | `20260730-114957-3c30df3` |
+| Integration | All file/JSON/CSV/mock Bridge tests pass | 114 / 114 | **PASS** | `20260730-114957-3c30df3` |
+| DVT runner | Launch exact app, restore settings, close cleanly, checker exit 0 | 1 / 1 scenario | **PASS** | `20260730-114957-3c30df3` |
 | 30,000-record UI DVT | 30,000 IDs; Review/Report navigation and charts; no contract failure | 44 PASS / 0 FAIL; max UI Stall 1000 ms; `transitionDrift=0` | **PASS** | `20260730-021810-9307c6c` |
 | Offline stress | All nine high-frequency/mock Bridge cases pass | 9 / 9 | **PASS** | `20260730-021810-9307c6c` |
 | Short offline soak | Queue drains, temp files clean up, resource guards pass | 1 / 1 for 6 seconds | **PASS** | `20260730-021810-9307c6c` |
 | Two-hour offline stress | Same nine cases under a two-hour budget | 9 / 9 | **PASS** | `20260729-201511-9307c6c` |
 | Two-hour offline soak | Mixed IO/CSV/CFG/statistics/copy/cleanup remains bounded | 7200.2 s; 222,434 cycles; Private +277.1 MB; handles -89; threads -2 | **PASS** | `20260729-221921-9307c6c` |
 
-Physical camera, light, IO disconnect/reconnect, SMB interruption, real-disk low-space UI transition, and an
-uninterrupted eight-hour on-machine soak remain separate because current wiring is off.
+Physical camera/background and five actual capture cycles are now covered with two connected cameras.
+Seven-camera full load, physical disconnect/reconnect injection, SMB interruption, real-disk low-space
+UI transition, and an uninterrupted eight-hour on-machine soak remain separate.
 
 本表是測試狀態的單一總覽。每一列同時記錄：
 
@@ -46,6 +47,10 @@ uninterrupted eight-hour on-machine soak remain separate because current wiring 
 | Physical Storage DVT | SMB 與 heartbeat 5 分鐘 | 探針可寫、heartbeat 綠燈、正常釋放 | 306.67 秒；Flow 15 PASS / 0 FAIL | **PASS** | `20260728-223305-8a74e41` |
 | Physical combined | IO＋Storage 10 分鐘資格測試 | 固定硬體；UI 全回應；狀態全綠；資源守門通過 | 609.66 秒；Private 2440.4→2456.1 MB；Handles 1290→1296；GDI 134→134；USER 284→284；Threads 104→103 | **PASS** | `20260729-052442-9307c6c` |
 | Physical camera DVT | 兩台相機、光源、背景與 Grab 短煙測 | 相機 Ready；光源 COM 探測；背景取得／預覽；Grab/Stop；圖片先於 Curve；正常關閉；checker 0 fail | 23.13 秒；背景採樣 3061 ms；CAM1/2 各 24 幀；完整 checker 28 PASS / 0 FAIL | **PASS** | `20260729-103519-9307c6c` |
+| Physical camera DVT | 最新背景與 Grab 回歸 | 相機 Ready；背景取得／預覽；Grab/Stop；圖片先於 Curve；設定還原；正常關閉 | 22.49 秒；兩台在線相機；情境與完整 checker 通過 | **PASS** | `20260730-114918-3c30df3` |
+| Physical acquisition DVT | IO 停止三循環 | 三次 High 10 秒皆開 gate、首組對齊、主圖先於 Curve；Low 後每台一筆尾幀；封裝與遠端待傳 | 84.42 秒；3/3 輪完成；每輪 `aligned=True`、tail complete、`.acap`、`remoteFiles=2` | **PASS** | `20260730-114606-3c30df3` |
+| Physical acquisition DVT | 時間／高度停止 | Low 提早到不得截短；時間從首組起滿 10 秒；高度等所有在線相機共同完成 15,000 列 | 75.80 秒；Time=10.012 秒；Height=15,005 列；兩輪皆完成 Curve、封裝、遠端待傳；checker 32 PASS / 0 FAIL | **PASS** | `20260730-114606-3c30df3` |
+| Physical storage output | 實際遠端落檔 | 五輪 `.acap` 必須在儲存電腦存在，大小與本機一致 | `260730-114640`、`114653`、`114708`、`114800`、`114819` 全部存在於 `\\192.168.10.20\Anilox\Captures\2026\202607\20260730`，5/5 大小一致 | **PASS** | `20260730-114606-3c30df3` |
 | Physical combined | IO＋Storage 1 小時歷史基準 | IO／Storage 全綠、正常關閉 | 3608.08 秒；舊版資源判準通過 | **PASS（已被新守門取代）** | `20260729-005833-9307c6c` |
 | Physical combined | 8 小時耐久校準輪 | 測試期間硬體拓撲固定 | 4 小時內相機由 0→2 台，資源基線改變；UI 全程有回應；正常中止 | **無效基準，不是產品 FAIL** | `20260729-053546-9307c6c` |
 | Physical soak | 固定拓撲 2 小時 IO＋Storage＋Light | IO／Storage／Light 全程綠；UI 0 次無回應；Private 持續成長 <=256 MB/h、總增量 <=4 GB；Handles 增量 <=200；GDI／USER <=100；Threads <=25；正常關閉 | 7210.64 秒；IO 13982 / 13982 成功；Private 2751.8→3185.8 MB；Handles 1283→1368；GDI 135→135；USER 282→284；Threads 109→128；checker 17 PASS / 0 FAIL；正常關閉 | **PASS** | `20260729-141939-9307c6c` |

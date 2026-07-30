@@ -121,6 +121,24 @@ class HardwareFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(CheckStatus.FAIL, result(report, "H4.io-stop-policy").status)
 
+    def test_fixed_target_low_edge_pairs_with_time_or_height_request(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "IO grab request stopCondition=Time stopOnLow=False",
+                "IO START edge=Low stopOnLow=False action=continue-fixed-target",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "H4.io-stop-policy").status)
+
+    def test_fixed_target_low_edge_without_fixed_request_fails(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "IO grab request stopCondition=IoSignal stopOnLow=True",
+                "IO START edge=Low stopOnLow=False action=continue-fixed-target",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "H4.io-stop-policy").status)
+
     def test_io_poll_health_requires_equal_advancing_counters(self):
         report = HardwareFlowValidator().validate(
             session(
