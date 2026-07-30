@@ -1,16 +1,16 @@
 # PICoater AOI verification matrix
 
-## Latest no-wiring baseline (2026-07-30)
+## Latest offline baseline (2026-07-30)
 
-Tested dirty worktree based on commit `3c30df3`. Raw reports remain local under
+Tested dirty worktree based on commit `458942f`. Raw reports remain local under
 `artifacts/test-reports/`; `latest-campaign.md` is the durable summary.
 
 | Layer | Theory / acceptance | Experimental result | Status | Evidence |
 |---|---|---|---:|---|
-| Build | `Release|x64`, 0 compiler errors and 0 warnings | Full solution built successfully | **PASS** | on-machine MSBuild before campaign |
-| Flow checker | All checker self-tests pass | 121 / 121 | **PASS** | `20260730-114957-3c30df3` |
-| Unit | All unit tests pass | 147 / 147 | **PASS** | `20260730-114957-3c30df3` |
-| Integration | All file/JSON/CSV/mock Bridge tests pass | 114 / 114 | **PASS** | `20260730-114957-3c30df3` |
+| Build | `Release|x64`, 0 compiler errors and 0 warnings | Full solution built successfully | **PASS** | `20260730-172525-458942f` |
+| Flow checker | All checker self-tests pass | 126 / 126 | **PASS** | on-machine Python unittest at 2026-07-30 17:25 |
+| Unit | All unit tests pass | 147 / 147 | **PASS** | `20260730-172525-458942f` |
+| Integration | All file/JSON/CSV/mock Bridge tests pass | 115 / 115 | **PASS** | `20260730-172544-458942f` |
 | DVT runner | Launch exact app, restore settings, close cleanly, checker exit 0 | 1 / 1 scenario | **PASS** | `20260730-114957-3c30df3` |
 | 30,000-record UI DVT | 30,000 IDs; Review/Report navigation and charts; no contract failure | 44 PASS / 0 FAIL; max UI Stall 1000 ms; `transitionDrift=0` | **PASS** | `20260730-021810-9307c6c` |
 | Offline stress | All nine high-frequency/mock Bridge cases pass | 9 / 9 | **PASS** | `20260730-021810-9307c6c` |
@@ -18,9 +18,10 @@ Tested dirty worktree based on commit `3c30df3`. Raw reports remain local under
 | Two-hour offline stress | Same nine cases under a two-hour budget | 9 / 9 | **PASS** | `20260729-201511-9307c6c` |
 | Two-hour offline soak | Mixed IO/CSV/CFG/statistics/copy/cleanup remains bounded | 7200.2 s; 222,434 cycles; Private +277.1 MB; handles -89; threads -2 | **PASS** | `20260729-221921-9307c6c` |
 
-Physical camera/background and five actual capture cycles are now covered with two connected cameras.
-Seven-camera full load, physical disconnect/reconnect injection, SMB interruption, real-disk low-space
-UI transition, and an uninterrupted eight-hour on-machine soak remain separate.
+Physical camera/background, five actual capture cycles, and repeatable IO/light software fault
+injection are now covered with the connected hardware. Seven-camera full load, physical cable/power
+disconnect injection, SMB interruption, real-disk low-space UI transition, and an uninterrupted
+eight-hour on-machine soak remain separate.
 
 本表是測試狀態的單一總覽。每一列同時記錄：
 
@@ -35,15 +36,16 @@ UI transition, and an uninterrupted eight-hour on-machine soak remain separate.
 
 | 層級 | 測試項目 | 理論／驗收值 | 最近實測值 | 狀態 | 證據 |
 |---|---|---|---|---:|---|
-| Build | `Release\|x64` 全方案 | 0 errors、0 warnings | 0 errors、0 warnings | **PASS** | `20260730-015108-9307c6c` |
-| Flow checker | Python checker 自我測試 | 全部通過、0 fail | 118 / 118 | **PASS** | `20260730-015108-9307c6c` |
-| Unit | .NET 單元測試 | 全部通過、0 fail | 147 / 147 | **PASS** | `20260730-015108-9307c6c` |
-| Integration | JSON、CSV、檔案與 Mock Bridge | 全部通過、0 fail | 114 / 114 | **PASS** | `20260730-015108-9307c6c` |
+| Build | `Release\|x64` 全方案 | 0 errors、0 warnings | 0 errors、0 warnings | **PASS** | `20260730-172525-458942f` |
+| Flow checker | Python checker 自我測試 | 全部通過、0 fail | 126 / 126 | **PASS** | 2026-07-30 17:25 on-machine unittest |
+| Unit | .NET 單元測試 | 全部通過、0 fail | 147 / 147 | **PASS** | `20260730-172525-458942f` |
+| Integration | JSON、CSV、檔案與 Mock Bridge | 全部通過、0 fail | 115 / 115 | **PASS** | `20260730-172544-458942f` |
 | DVT | Runner 自我檢查 | 開啟正確程式、還原設定、正常關閉、checker exit 0 | 1 scenario；7.12 秒；結束後 Runner／Monitor process 均不存在 | **PASS** | `20260730-015108-9307c6c` |
 | DVT | Runner 失敗清理 | 情境失敗仍還原設定；先正常關閉最多 60 秒；不得留下 Runner／Monitor 孤兒程序 | 關閉硬體後故意讓 Light 守門逾時；設定全還原；Monitor 正常關閉；process=none | **PASS** | `cleanup-failure-smoke-20260729.txt` |
 | Stress | 離線設定／統計／PLC／IO／Storage 壓力 | 9 case 全部通過且不逾時；六項可調工作各持續 20 分鐘 | 9 / 9，7213.59 秒；1000 筆待傳檔案 662 ms 完成恢復與排空 | **PASS** | `20260729-201511-9307c6c` |
 | Soak | 離線混合耐久 | IO 狀態、CSV／CFG、統計、遠端複製與清理持續 120 分鐘；queue=0；Private 增量 <=512 MB；Handles <=+50；Threads <=+15 | 7200.2 秒；222,434 cycles；2,785 copied；56 statistics；Private +277.1 MB；Handles -89；Threads -2 | **PASS** | `20260729-221921-9307c6c` |
 | Physical IO DVT | ET-7044 待機 5 分鐘 | IO 全程連線且 Idle；正常釋放 | 305.59 秒；Flow 15 PASS / 0 FAIL | **PASS** | `20260728-211306-6ef23b9` |
+| Failure injection | IO＋光源軟體斷線／恢復 | IO 端點與 COM17 各隔離三輪；每輪依序 raise→resolve；最後正常關閉且不留下路由、停用裝置或孤兒程序 | 55.84 秒；IO 斷線／恢復／raise／resolve 各 3 次；光源各 3 次；checker 17 PASS / 0 FAIL | **PASS** | `20260730-171929-458942f` |
 | Physical Storage DVT | SMB 與 heartbeat 5 分鐘 | 探針可寫、heartbeat 綠燈、正常釋放 | 306.67 秒；Flow 15 PASS / 0 FAIL | **PASS** | `20260728-223305-8a74e41` |
 | Physical combined | IO＋Storage 10 分鐘資格測試 | 固定硬體；UI 全回應；狀態全綠；資源守門通過 | 609.66 秒；Private 2440.4→2456.1 MB；Handles 1290→1296；GDI 134→134；USER 284→284；Threads 104→103 | **PASS** | `20260729-052442-9307c6c` |
 | Physical camera DVT | 兩台相機、光源、背景與 Grab 短煙測 | 相機 Ready；光源 COM 探測；背景取得／預覽；Grab/Stop；圖片先於 Curve；正常關閉；checker 0 fail | 23.13 秒；背景採樣 3061 ms；CAM1/2 各 24 幀；完整 checker 28 PASS / 0 FAIL | **PASS** | `20260729-103519-9307c6c` |
@@ -63,7 +65,7 @@ UI transition, and an uninterrupted eight-hour on-machine soak remain separate.
 | 層級 | 測試項目 | 理論／驗收值 | 目前狀態 | 下一步 |
 |---|---|---|---:|---|
 | Physical soak | 連續 8 小時最終耐久 | 前述守門連續 8 小時成立，中途不重啟且硬體拓撲不變 | **PENDING** | 2 小時資格輪已通過；待硬體可連續供電時，重新跑完整 8 小時。中止輪不可冒充本項 |
-| Failure injection | 實體 IO 反覆斷線／恢復 | 每輪 raise→resolve→ack 正確；不產生孤兒 Grab；可恢復 | **PENDING** | 獨立短測，不與 8 小時混跑 |
+| Failure injection | IO／光源實體拔線或斷電恢復 | 每輪 raise→resolve→ack 正確；不產生孤兒 Grab；可恢復 | **PENDING** | 軟體隔離已通過；仍需最終版本各做一次實體線材／電源故障 |
 | Failure injection | Storage app 關閉／自動重啟 | 排程重新啟動；檢測端由異常恢復；heartbeat 更新 | **PENDING** | 獨立短測 |
 | Failure injection | SMB 網路中斷與 backlog | 本機持續保存；恢復後補傳；無遺失、重複或幽靈 marker | **PENDING** | 獨立短測 |
 | Retention DVT | 實際磁碟低空間＋UI 狀態 | 與隔離整合測試相同，另驗證狀態標籤 raise→resolve→ack | **PENDING** | 刪除核心已自動驗綠；待使用可刪的實機資料獨立做故障注入 |

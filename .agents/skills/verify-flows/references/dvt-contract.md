@@ -1209,6 +1209,26 @@ TelemetryTimer_Tick
 故障狀態並重新啟用該網卡。此測試適合反覆執行；最終版本仍需另做一次實體拔線，以涵蓋網卡、
 交換器與線材，不得把軟體阻斷冒充實體接線證據。
 
+**H1/H.Light 軟體故障注入 DVT**：`physical-bridge-recovery` 以暫時 `/32` Loopback 黑洞路由
+阻斷實體 IO `192.168.255.1`，並以 PnP 暫停光源 `COM17`；兩者各三輪。檢測電腦的
+IO `192.168.255.x` 與儲存 `192.168.10.x` 共用實體 NIC，不得停用整張網卡。Windows
+Firewall profile 也可能被停用，不能以 Firewall rule 存在冒充已阻斷。黑洞路由固定送至
+本機 Loopback（ifIndex 1／next hop `0.0.0.0`），不得假設區網內某個未用 IP 永遠不可達。
+每輪加入黑洞路由後必須在 PropertyGrid 將 `啟用 IO` 切成 `否 → 是`，強迫新的
+controller generation 在阻斷狀態下重新連線；安裝器與 Runner 都必須量測新的 TCP
+確實失敗，解除路由後再量測恢復。
+光源因 Windows 不允許停用仍由主程式持有的串口，每輪須先在 PropertyGrid 將
+`啟用光源` 切成 `否` 釋放 COM17，再停用 PnP 裝置，接著切回 `是`，讓新
+controller 在裝置停用狀態下探測失敗；恢復 COM17 後才驗證自動重連。
+每輪必須嚴格完成 `⚠ {IO|光源} 斷線 → OutputHealth raise →
+{IO|光源} 恢復連線 → OutputHealth resolve`，最後 IO 回待機且正常關閉。
+第一次由 `tests/InstallDvtAdminActions.bat` 經 UAC 安裝四個固定白名單排程動作；
+後續 Runner 本身仍以一般權限執行，只能要求封鎖／解除固定 IO 端點及停用／啟用
+固定 COM17，不得建立可執行任意 repo script 的永久提升入口。
+Runner 在成功、失敗及中止時，都必須移除自己建立的黑洞路由並重新啟用 PnP
+裝置。此情境驗證產品與 Windows 驅動之間的失聯恢復，不代表線材、電源或硬體重新上電
+已覆蓋；正式交付仍各需一次實體拔線／斷電證據。
+
 ### H2 相機在線數轉變
 ```
 T1: ⚠ 相機離線 4→3/7 ／ 相機在線 0→4/7   ← 數量變化才記（開機 0→N＝配置完成）

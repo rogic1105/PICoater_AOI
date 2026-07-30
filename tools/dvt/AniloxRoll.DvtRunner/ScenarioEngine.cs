@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,6 +12,15 @@ namespace AniloxRoll.DvtRunner
 {
     internal sealed class ScenarioEngine
     {
+        private const string ScheduledTaskHandlePrefix = "scheduled-task:";
+        private const string IoBlockTaskName = "PICoater-DVT-Block-IO502";
+        private const string IoUnblockTaskName = "PICoater-DVT-Unblock-IO502";
+        private const string LightDisableTaskName = "PICoater-DVT-Disable-COM17";
+        private const string LightEnableTaskName = "PICoater-DVT-Enable-COM17";
+        private const string FixedIoBlockedRoutePrefix =
+            "192.168.255.1/32";
+        private const int FixedIoBlackholeInterfaceIndex = 1;
+        private const string FixedIoBlackholeNextHop = "0.0.0.0";
         private readonly RunnerOptions _options;
         private readonly UiAutomationDriver _ui = new UiAutomationDriver();
         private readonly FlowLogMonitor _log;
@@ -19,6 +29,10 @@ namespace AniloxRoll.DvtRunner
         private readonly Dictionary<string, Process> _helperProcesses =
             new Dictionary<string, Process>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, string> _disabledNetworkAdapters =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string> _blockedTargetPorts =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string> _disabledSerialDevices =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private readonly ManualResetEventSlim _pauseGate = new ManualResetEventSlim(true);
         private bool _captureMayBeActive;
@@ -144,6 +158,18 @@ namespace AniloxRoll.DvtRunner
                 case "enable-target-network":
                     return EnableTargetNetwork(step.Target, false);
 
+                case "block-target-port":
+                    return BlockTargetPort(step);
+
+                case "unblock-target-port":
+                    return UnblockTargetPort(step.Target, false);
+
+                case "disable-serial-device":
+                    return DisableSerialDevice(step);
+
+                case "enable-serial-device":
+                    return EnableSerialDevice(step.Target, false);
+
                 case "wait-element":
                     return await _ui.WaitForElementAsync(
                         step.Target, step.Value, step.TimeoutSeconds, cancellationToken);
@@ -268,6 +294,8 @@ namespace AniloxRoll.DvtRunner
             }
 
             StopAllHelpers();
+            EnableAllDisabledSerialDevices();
+            UnblockAllTargetPorts();
             EnableAllDisabledNetworkAdapters();
 
             using (var restoreTimeout =
@@ -505,6 +533,467 @@ namespace AniloxRoll.DvtRunner
                 }
             }
             _disabledNetworkAdapters.Clear();
+        }
+
+        private string BlockTargetPort(DvtStep step)
+        {
+            if (string.IsNullOrWhiteSpace(step.Target))
+                throw new InvalidDataException(
+                    "block-target-port requires an IPv4:port Target.");
+            if (_blockedTargetPorts.ContainsKey(step.Id))
+                throw new InvalidOperationException(
+                    "Target port block step is already active: " + step.Id);
+
+            int separator = step.Target.LastIndexOf(':');
+            string addressText = separator > 0
+                ? step.Target.Substring(0, separator)
+                : string.Empty;
+            string portText = separator > 0
+                ? step.Target.Substring(separator + 1)
+                : string.Empty;
+            System.Net.IPAddress address;
+            int port;
+            if (!System.Net.IPAddress.TryParse(addressText, out address) ||
+                address.AddressFamily !=
+                    System.Net.Sockets.AddressFamily.InterNetwork ||
+                !int.TryParse(portText, out port) ||
+                port < 1 ||
+                port > 65535)
+            {
+                throw new InvalidDataException(
+                    "block-target-port requires an IPv4:port Target: " +
+                    step.Target);
+            }
+
+            string ruleName;
+            if (string.Equals(
+                    addressText,
+                    "192.168.255.1",
+                    StringComparison.OrdinalIgnoreCase) &&
+                port == 502 &&
+                TryStartScheduledTask(IoBlockTaskName))
+            {
+                ruleName =
+                    ScheduledTaskHandlePrefix + IoUnblockTaskName;
+                _blockedTargetPorts.Add(step.Id, ruleName);
+                try
+                {
+                    WaitForPowerShellBoolean(
+                        "[bool](Get-NetRoute -DestinationPrefix '" +
+                        FixedIoBlockedRoutePrefix +
+                        "' -PolicyStore ActiveStore " +
+                        "-ErrorAction SilentlyContinue | Where-Object {" +
+                        "$_.InterfaceIndex -eq " +
+                        FixedIoBlackholeInterfaceIndex.ToString() +
+                        " -and $_.NextHop -eq '" +
+                        FixedIoBlackholeNextHop +
+                        "'})",
+                        true,
+                        20,
+                        "Pre-authorized IO blackhole route did not appear.");
+                    WaitForTcpReachability(
+                        addressText,
+                        port,
+                        false,
+                        20,
+                        "IO TCP remained reachable after installing the " +
+                        "blackhole route.");
+                }
+                catch
+                {
+                    try { UnblockTargetPort(step.Id, true); }
+                    catch { }
+                    throw;
+                }
+                return "target port blocked by pre-authorized action " +
+                    addressText + ":" + portText;
+            }
+
+            ruleName =
+                "PICoater-DVT-" +
+                Process.GetCurrentProcess().Id.ToString() +
+                "-" +
+                Guid.NewGuid().ToString("N");
+            try
+            {
+                string command =
+                    "New-NetFirewallRule -Name '" +
+                    PowerShellLiteral(ruleName) +
+                    "' -DisplayName '" +
+                    PowerShellLiteral(ruleName) +
+                    "' -Direction Outbound -Action Block -Protocol TCP " +
+                    "-RemoteAddress '" +
+                    PowerShellLiteral(addressText) +
+                    "' -RemotePort " +
+                    port.ToString() +
+                    " -Profile Any -ErrorAction Stop | Out-Null";
+                RunPowerShellChecked(command, 30);
+            }
+            catch
+            {
+                try { RemoveFirewallRule(ruleName); } catch { }
+                throw;
+            }
+
+            _blockedTargetPorts.Add(step.Id, ruleName);
+            return "target port blocked " + addressText + ":" + portText;
+        }
+
+        private string UnblockTargetPort(string blockStepId, bool cleanup)
+        {
+            string ruleName;
+            if (string.IsNullOrWhiteSpace(blockStepId) ||
+                !_blockedTargetPorts.TryGetValue(blockStepId, out ruleName))
+            {
+                if (cleanup) return "target port already unblocked";
+                throw new InvalidOperationException(
+                    "Unknown target port block step: " + blockStepId);
+            }
+
+            if (ruleName.StartsWith(
+                ScheduledTaskHandlePrefix,
+                StringComparison.Ordinal))
+            {
+                string taskName =
+                    ruleName.Substring(ScheduledTaskHandlePrefix.Length);
+                if (!TryStartScheduledTask(taskName))
+                    throw new InvalidOperationException(
+                        "Pre-authorized action is missing: " + taskName);
+                WaitForPowerShellBoolean(
+                    "[bool](Get-NetRoute -DestinationPrefix '" +
+                    FixedIoBlockedRoutePrefix +
+                    "' -PolicyStore ActiveStore " +
+                    "-ErrorAction SilentlyContinue | Where-Object {" +
+                    "$_.InterfaceIndex -eq " +
+                    FixedIoBlackholeInterfaceIndex.ToString() +
+                    " -and $_.NextHop -eq '" +
+                    FixedIoBlackholeNextHop +
+                    "'})",
+                    false,
+                    20,
+                    "Pre-authorized IO blackhole route was not removed.");
+                WaitForTcpReachability(
+                    FixedIoBlockedRoutePrefix.Substring(
+                        0,
+                        FixedIoBlockedRoutePrefix.IndexOf('/')),
+                    502,
+                    true,
+                    20,
+                    "IO TCP did not recover after removing the " +
+                    "blackhole route.");
+            }
+            else
+            {
+                RemoveFirewallRule(ruleName);
+            }
+            _blockedTargetPorts.Remove(blockStepId);
+            return "target port unblocked rule=" + ruleName;
+        }
+
+        private void UnblockAllTargetPorts()
+        {
+            foreach (string stepId in new List<string>(
+                _blockedTargetPorts.Keys))
+            {
+                try
+                {
+                    Output?.Invoke(
+                        "[cleanup] " + UnblockTargetPort(stepId, true));
+                }
+                catch (Exception ex)
+                {
+                    Output?.Invoke(
+                        "[cleanup warning] target port recovery failed: " +
+                        ex.Message);
+                }
+            }
+            _blockedTargetPorts.Clear();
+        }
+
+        private static void RemoveFirewallRule(string ruleName)
+        {
+            string command =
+                "$rule=Get-NetFirewallRule -Name '" +
+                PowerShellLiteral(ruleName) +
+                "' -ErrorAction SilentlyContinue;" +
+                "if($rule){$rule | Remove-NetFirewallRule -ErrorAction Stop}";
+            RunPowerShellChecked(command, 30);
+        }
+
+        private string DisableSerialDevice(DvtStep step)
+        {
+            if (string.IsNullOrWhiteSpace(step.Target))
+                throw new InvalidDataException(
+                    "disable-serial-device requires a COM port Target.");
+            if (_disabledSerialDevices.ContainsKey(step.Id))
+                throw new InvalidOperationException(
+                    "Serial disable step is already active: " + step.Id);
+
+            string portName = step.Target.Trim();
+            string instanceId = ResolveSerialInstanceId(portName);
+
+            if (string.Equals(
+                    portName,
+                    "COM17",
+                    StringComparison.OrdinalIgnoreCase) &&
+                TryStartScheduledTask(LightDisableTaskName))
+            {
+                WaitForPowerShellBoolean(
+                    GetPnpDeviceOkExpression(instanceId),
+                    false,
+                    20,
+                    "Pre-authorized COM17 disable did not take effect.");
+                _disabledSerialDevices.Add(
+                    step.Id,
+                    ScheduledTaskHandlePrefix + LightEnableTaskName);
+                return "serial device disabled by pre-authorized action port=" +
+                    portName;
+            }
+
+            try
+            {
+                string command =
+                    "$device=Get-PnpDevice -InstanceId '" +
+                    PowerShellLiteral(instanceId) +
+                    "' -ErrorAction Stop;" +
+                    "if($device.Status -ne 'OK'){" +
+                    "throw ('Serial device is not ready: ' + $device.Status)};" +
+                    "$device | Disable-PnpDevice -Confirm:$false " +
+                    "-ErrorAction Stop";
+                RunPowerShellChecked(command, 30);
+            }
+            catch
+            {
+                try { EnablePnpDevice(instanceId); } catch { }
+                throw;
+            }
+
+            _disabledSerialDevices.Add(step.Id, instanceId);
+            return "serial device disabled port=" + portName;
+        }
+
+        private string EnableSerialDevice(string disableStepId, bool cleanup)
+        {
+            string instanceId;
+            if (string.IsNullOrWhiteSpace(disableStepId) ||
+                !_disabledSerialDevices.TryGetValue(
+                    disableStepId, out instanceId))
+            {
+                if (cleanup) return "serial device already enabled";
+                throw new InvalidOperationException(
+                    "Unknown serial disable step: " + disableStepId);
+            }
+
+            if (instanceId.StartsWith(
+                ScheduledTaskHandlePrefix,
+                StringComparison.Ordinal))
+            {
+                string taskName =
+                    instanceId.Substring(ScheduledTaskHandlePrefix.Length);
+                if (!TryStartScheduledTask(taskName))
+                    throw new InvalidOperationException(
+                        "Pre-authorized action is missing: " + taskName);
+                string currentInstanceId = ResolveSerialInstanceId("COM17");
+                WaitForPowerShellBoolean(
+                    GetPnpDeviceOkExpression(currentInstanceId),
+                    true,
+                    20,
+                    "Pre-authorized COM17 enable did not take effect.");
+            }
+            else
+            {
+                EnablePnpDevice(instanceId);
+            }
+            _disabledSerialDevices.Remove(disableStepId);
+            return "serial device enabled";
+        }
+
+        private void EnableAllDisabledSerialDevices()
+        {
+            foreach (string stepId in new List<string>(
+                _disabledSerialDevices.Keys))
+            {
+                try
+                {
+                    Output?.Invoke(
+                        "[cleanup] " + EnableSerialDevice(stepId, true));
+                }
+                catch (Exception ex)
+                {
+                    Output?.Invoke(
+                        "[cleanup warning] serial device recovery failed: " +
+                        ex.Message);
+                }
+            }
+            _disabledSerialDevices.Clear();
+        }
+
+        private static void EnablePnpDevice(string instanceId)
+        {
+            string command =
+                "$device=Get-PnpDevice -InstanceId '" +
+                PowerShellLiteral(instanceId) +
+                "' -ErrorAction Stop;" +
+                "if($device.Status -ne 'OK'){" +
+                "$device | Enable-PnpDevice -Confirm:$false " +
+                "-ErrorAction Stop};" +
+                "$deadline=(Get-Date).AddSeconds(15);" +
+                "do{Start-Sleep -Milliseconds 250;" +
+                "$device=Get-PnpDevice -InstanceId '" +
+                PowerShellLiteral(instanceId) +
+                "' -ErrorAction Stop}" +
+                "while($device.Status -ne 'OK' -and " +
+                "(Get-Date) -lt $deadline);" +
+                "if($device.Status -ne 'OK'){" +
+                "throw ('Serial device did not recover: ' + $device.Status)}";
+            RunPowerShellChecked(command, 30);
+        }
+
+        private static string ResolveSerialInstanceId(string portName)
+        {
+            string resolveCommand =
+                "$port=Get-PnpDevice -Class Ports -ErrorAction Stop | " +
+                "Where-Object {$_.FriendlyName -match '\\(" +
+                PowerShellLiteral(portName) +
+                "\\)$'} | Select-Object -First 1;" +
+                "if(-not $port){throw 'Serial port not found'};" +
+                "[Convert]::ToBase64String(" +
+                "[Text.Encoding]::UTF8.GetBytes([string]$port.InstanceId))";
+            string encoded = LastNonEmptyLine(
+                RunPowerShellChecked(resolveCommand, 30));
+            try
+            {
+                string instanceId = Encoding.UTF8.GetString(
+                    Convert.FromBase64String(encoded));
+                if (!string.IsNullOrWhiteSpace(instanceId))
+                    return instanceId;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    "Unable to identify serial device for " + portName,
+                    ex);
+            }
+            throw new InvalidOperationException(
+                "Serial device ID is empty for " + portName);
+        }
+
+        private static string GetPnpDeviceOkExpression(string instanceId)
+        {
+            return
+                "$device=Get-PnpDevice -InstanceId '" +
+                PowerShellLiteral(instanceId) +
+                "' -ErrorAction SilentlyContinue;" +
+                "[bool]($device -and $device.Status -eq 'OK')";
+        }
+
+        private static bool TryStartScheduledTask(string taskName)
+        {
+            int exitCode;
+            RunProcess(
+                "schtasks.exe",
+                "/Query /TN \"" + taskName + "\"",
+                15,
+                out exitCode);
+            if (exitCode != 0) return false;
+
+            RunProcessChecked(
+                "schtasks.exe",
+                "/Run /TN \"" + taskName + "\"",
+                15);
+            return true;
+        }
+
+        private static void WaitForPowerShellBoolean(
+            string expression,
+            bool expected,
+            int timeoutSeconds,
+            string failureMessage)
+        {
+            Stopwatch timer = Stopwatch.StartNew();
+            while (timer.Elapsed.TotalSeconds < timeoutSeconds)
+            {
+                string result = LastNonEmptyLine(
+                    RunPowerShellChecked(expression, 10));
+                bool actual;
+                if (bool.TryParse(result, out actual) && actual == expected)
+                    return;
+                Thread.Sleep(250);
+            }
+            throw new TimeoutException(failureMessage);
+        }
+
+        private static void WaitForTcpReachability(
+            string address,
+            int port,
+            bool expected,
+            int timeoutSeconds,
+            string failureMessage)
+        {
+            Stopwatch timer = Stopwatch.StartNew();
+            while (timer.Elapsed.TotalSeconds < timeoutSeconds)
+            {
+                bool reachable = false;
+                using (var client = new TcpClient())
+                {
+                    try
+                    {
+                        IAsyncResult pending = client.BeginConnect(
+                            address,
+                            port,
+                            null,
+                            null);
+                        using (WaitHandle waitHandle = pending.AsyncWaitHandle)
+                        {
+                            if (waitHandle.WaitOne(500))
+                            {
+                                client.EndConnect(pending);
+                                reachable = client.Connected;
+                            }
+                        }
+                    }
+                    catch (SocketException)
+                    {
+                        reachable = false;
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        reachable = false;
+                    }
+                }
+
+                if (reachable == expected)
+                    return;
+                Thread.Sleep(250);
+            }
+            throw new TimeoutException(failureMessage);
+        }
+
+        private static string RunPowerShellChecked(
+            string command,
+            int timeoutSeconds)
+        {
+            return RunProcessChecked(
+                "powershell.exe",
+                "-NoProfile -ExecutionPolicy Bypass -Command \"" +
+                command.Replace("\"", "\\\"") + "\"",
+                timeoutSeconds);
+        }
+
+        private static string PowerShellLiteral(string value)
+        {
+            return (value ?? string.Empty).Replace("'", "''");
+        }
+
+        private static string LastNonEmptyLine(string text)
+        {
+            string[] lines = (text ?? string.Empty).Split(
+                new[] { '\r', '\n' },
+                StringSplitOptions.RemoveEmptyEntries);
+            if (lines.Length == 0)
+                throw new InvalidOperationException(
+                    "PowerShell command returned no output.");
+            return lines[lines.Length - 1].Trim();
         }
 
         private static string ParseUncServer(string uncPath)

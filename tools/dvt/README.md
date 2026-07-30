@@ -73,6 +73,21 @@ Storage app heartbeat、UI 綠燈、五分鐘穩定性及正常關閉。產品�
 發布有效 heartbeat；預設重複三次，報告寫入 `D:\Anilox\Logs\DvtReports`，結束時保持
 儲存程式運行。
 
+`IO／光源軟體斷線恢復` 第一次執行會由
+`tests/InstallDvtAdminActions.bat` 要求一次 UAC 授權，安裝四個固定的排程動作：
+封鎖／解除實體 IO `192.168.255.1:502`，以及停用／啟用光源 `COM17`。之後
+`tests/TestRunner.bat` 的選項 11 以一般權限執行，不再詢問 UAC。這不是把整個
+TestRunner 或可修改的 repo 永久提升成系統管理員；排程只能執行這四個白名單動作。
+Runner 仍會在成功、失敗或中止時解除規則並重新啟用串口。
+
+IO 與光源各跑三輪，必須逐輪看到斷線、`OutputHealth raise`、恢復連線及
+`resolve`。這是可重複的軟體故障注入，不能取代最終版本的一次實體拔線／斷電。
+IO 每輪使用本機 Loopback `/32` 黑洞路由，並以新 TCP 連線確認端點真的被阻斷。
+光源每輪先關閉 controller 釋放
+COM17，再停用裝置並重開 controller，避免 Windows 因串口仍被占用而拒絕停用。
+需要移除預先授權時，以系統管理員 PowerShell 執行：
+`Get-ScheduledTask PICoater-DVT-* | Unregister-ScheduledTask -Confirm:$false`。
+
 `IO＋儲存電腦待機耐久測試（不 Grab）` 同時守住 IO「待機」與儲存電腦綠燈。CLI 的
 `--duration-seconds N` 會覆寫情境內的 `soak` 時間；統一測試器每 30 秒記錄主程式
 Working Set、Private Bytes、handle、thread、CPU 與 Responding。這些資料用來找資源洩漏與

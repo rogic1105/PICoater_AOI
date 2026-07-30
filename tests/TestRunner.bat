@@ -16,9 +16,10 @@ echo  7. 完整離線測試並記錄最新報告
 echo  8. 回顧／報表 30,000 筆資料測試
 echo  9. 實際取相（IO 三循環＋時間／高度）
 echo 10. SMB 中斷／待傳補送恢復（需系統管理員）
-echo 11. 結束
+echo 11. IO／光源軟體斷線恢復（首次安裝固定管理員動作）
+echo 12. 結束
 echo.
-set /p choice="請選擇 (1-11): "
+set /p choice="請選擇 (1-12): "
 
 if "%choice%"=="1" goto :functional
 if "%choice%"=="2" goto :stress
@@ -30,7 +31,8 @@ if "%choice%"=="7" goto :all
 if "%choice%"=="8" goto :review_report_30k
 if "%choice%"=="9" goto :physical_capture
 if "%choice%"=="10" goto :physical_recovery
-if "%choice%"=="11" goto :done
+if "%choice%"=="11" goto :physical_bridge_recovery
+if "%choice%"=="12" goto :done
 goto :invalid
 
 :functional
@@ -63,6 +65,17 @@ goto :result
 
 :physical_recovery
 powershell -NoProfile -ExecutionPolicy Bypass -File "tests\TestRunner.ps1" -Mode PhysicalRecovery
+goto :result
+
+:physical_bridge_recovery
+schtasks /Query /TN "PICoater-DVT-Block-IO502" >nul 2>&1
+if errorlevel 1 (
+  echo.
+  echo 尚未安裝固定管理員動作，現在進行一次性安裝。
+  call "tests\InstallDvtAdminActions.bat" --no-pause
+  if errorlevel 1 goto :result
+)
+powershell -NoProfile -ExecutionPolicy Bypass -File "tests\TestRunner.ps1" -Mode PhysicalBridgeRecovery
 goto :result
 
 :physical_soak

@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("Functional", "Unit", "Integration", "Dvt", "ReviewReport30k", "PhysicalCamera", "PhysicalCapture", "PhysicalIo", "PhysicalStorage", "PhysicalRecovery", "PhysicalSoak", "Stress", "Soak", "All")]
+    [ValidateSet("Functional", "Unit", "Integration", "Dvt", "ReviewReport30k", "PhysicalCamera", "PhysicalCapture", "PhysicalIo", "PhysicalStorage", "PhysicalRecovery", "PhysicalBridgeRecovery", "PhysicalSoak", "Stress", "Soak", "All")]
     [string]$Mode = "All",
     [double]$StressMinutes = 120,
     [double]$SoakMinutes = 120,
@@ -67,6 +67,8 @@ $acceptanceCriteria = @{
         "SMB probe write and heartbeat remain green for 5 minutes; shutdown is clean."
     "Physical SMB backlog recovery" =
         "The network adapter routing to the storage PC is disabled in software; two captures finalize locally and remain pending; after re-enable, the share is write-verified, the backlog drains, heartbeat recovers, settings restore, and shutdown is clean."
+    "Physical IO and light software recovery" =
+        "The physical IO TCP endpoint and light serial device are each isolated and restored three times in software; every cycle raises one disconnect edge and health incident, then reconnects and resolves before clean shutdown."
     "Physical IO and storage soak" =
         "Fixed hardware topology; IO and storage stay green; UI always responds; Private Bytes sustained growth <=256 MB/hour and total delta <=4 GB; handles/GDI/USER/threads stay within guards; clean shutdown."
     "Offline stress tests" =
@@ -217,6 +219,61 @@ function Invoke-CommandStep {
     return $exitCode -eq 0
 }
 
+function Stop-DvtRunnerForPath {
+    param(
+        [string]$RunnerPath,
+        [Diagnostics.Process]$KnownProcess = $null
+    )
+
+    $fullRunnerPath = [IO.Path]::GetFullPath($RunnerPath)
+    $candidates = New-Object System.Collections.Generic.List[Diagnostics.Process]
+    if ($KnownProcess) {
+        $candidates.Add($KnownProcess)
+    }
+    foreach ($candidate in @(Get-Process AniloxRoll.DvtRunner `
+            -ErrorAction SilentlyContinue)) {
+        if (-not $KnownProcess -or $candidate.Id -ne $KnownProcess.Id) {
+            $candidates.Add($candidate)
+        }
+    }
+
+    foreach ($candidate in $candidates) {
+        try {
+            $candidate.Refresh()
+            if ($candidate.HasExited) { continue }
+            $candidatePath = $candidate.Path
+            if ([string]::IsNullOrWhiteSpace($candidatePath) -or
+                -not [string]::Equals(
+                    [IO.Path]::GetFullPath($candidatePath),
+                    $fullRunnerPath,
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                continue
+            }
+
+            Write-Host (
+                "[Cleanup] Closing stale DVT Runner PID={0}" -f
+                $candidate.Id) -ForegroundColor DarkYellow
+            try { $candidate.CloseMainWindow() | Out-Null } catch { }
+            if (-not $candidate.WaitForExit(2000)) {
+                Stop-Process -Id $candidate.Id -Force -ErrorAction SilentlyContinue
+                $candidate.WaitForExit(5000) | Out-Null
+            }
+        }
+        catch {
+            if ($candidate -eq $KnownProcess) {
+                Write-Warning (
+                    "Failed to close DVT Runner PID={0}: {1}" -f
+                    $candidate.Id, $_.Exception.Message)
+            }
+        }
+        finally {
+            if ($candidate -ne $KnownProcess) {
+                $candidate.Dispose()
+            }
+        }
+    }
+}
+
 function Invoke-DvtScenario {
     param(
         [string]$ScenarioId,
@@ -240,10 +297,12 @@ function Invoke-DvtScenario {
 
     Write-Host ""
     Write-Host ("========== {0} ==========" -f $Name) -ForegroundColor Cyan
+    $process = $null
     try {
         if (-not (Test-Path -LiteralPath $runnerPath)) {
             throw "DVT Runner executable not found: $runnerPath"
         }
+        Stop-DvtRunnerForPath $runnerPath
 
         $runnerArguments = @(
             "--scenario", $ScenarioId,
@@ -477,6 +536,10 @@ function Invoke-DvtScenario {
         $detail = "campaign analysis failed: " + $_.Exception.Message
     }
     finally {
+        if ($process) {
+            Stop-DvtRunnerForPath $runnerPath $process
+            $process.Dispose()
+        }
         $watch.Stop()
     }
 
@@ -538,7 +601,12 @@ function Write-CampaignReport {
     else {
         [void]$builder.AppendLine("- Physical camera/grabber acquisition, seven-camera frame load, background capture, and live Grab.")
     }
-    [void]$builder.AppendLine("- Physical IO and light disconnect/reconnect timing.")
+    if ($Mode -eq "PhysicalBridgeRecovery") {
+        [void]$builder.AppendLine("- Physical IO/light cable removal and power-cycle recovery remain untested; this run covered repeatable software endpoint and device isolation.")
+    }
+    else {
+        [void]$builder.AppendLine("- Physical IO and light disconnect/reconnect timing.")
+    }
     if ($Mode -eq "PhysicalRecovery") {
         [void]$builder.AppendLine("- Physical cable/switch interruption and real-disk/UI low-space status remain untested; this run covered repeatable software SMB isolation and backlog recovery.")
     }
@@ -560,6 +628,8 @@ function Write-CampaignReport {
 $allPassed = $true
 
 if ((Test-ModeIncludes "Build") -and -not $SkipBuild) {
+    Stop-DvtRunnerForPath (
+        Join-Path $repoRoot "bin\x64\Release\AniloxRoll.DvtRunner.exe")
     $msbuild = Find-MSBuild
     $allPassed = (Invoke-CommandStep "Release x64 solution build" "Build" $msbuild @(
         "PICoater_AOI.sln",
@@ -648,6 +718,12 @@ if ($Mode -eq "PhysicalStorage") {
 if ($Mode -eq "PhysicalRecovery") {
     $allPassed = (Invoke-DvtScenario "physical-smb-backlog-recovery" `
         "Physical SMB backlog recovery" "Physical storage recovery DVT" 1200) -and $allPassed
+}
+
+if ($Mode -eq "PhysicalBridgeRecovery") {
+    $allPassed = (Invoke-DvtScenario "physical-bridge-recovery" `
+        "Physical IO and light software recovery" `
+        "Physical bridge recovery DVT" 1200) -and $allPassed
 }
 
 if ($Mode -eq "PhysicalSoak") {
