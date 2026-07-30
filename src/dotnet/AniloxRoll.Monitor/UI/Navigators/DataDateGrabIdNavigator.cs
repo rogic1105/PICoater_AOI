@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.Presenters;
@@ -12,6 +13,8 @@ namespace AniloxRoll.Monitor.UI.Navigators
 
     public sealed class DataDateGrabIdNavigator
     {
+        private const int ComboFillYieldDelayMs = 50;
+
         private readonly DataStatisticsContext _ctx;
         private readonly Func<List<GrabIdInfo>> _getGrabIdInfos;
         private readonly Func<List<GrabIdInfo>> _getRangeGrabIdInfos;
@@ -100,6 +103,32 @@ namespace AniloxRoll.Monitor.UI.Navigators
             }
         }
 
+        public async Task PopulateAllGrabIdCombosAsync(bool selectDataGrabId = false)
+        {
+            using (StatComboGuard.Enter())
+            {
+                object[] ids = BuildGrabIdItems(_getGrabIdInfos());
+                FlowTrace.Log(
+                    $"DT combo fill count={ids.Length} yieldMs={ComboFillYieldDelayMs}");
+                ReplaceItems(_ctx.CbReviewGrabId, ids);
+                await Task.Delay(ComboFillYieldDelayMs);
+
+                PopulateDataGrabIdComboCore(selectDataGrabId);
+                await Task.Delay(ComboFillYieldDelayMs);
+
+                object[] rangeIds = BuildGrabIdItems(_getRangeGrabIdInfos());
+                ReplaceItems(_ctx.CbGrabIdStart, rangeIds);
+                await Task.Delay(ComboFillYieldDelayMs);
+                ReplaceItems(_ctx.CbGrabIdEnd, rangeIds);
+                if (rangeIds.Length > 0)
+                {
+                    _ctx.CbGrabIdStart.SelectedIndex = rangeIds.Length - 1;
+                    _ctx.CbGrabIdEnd.SelectedIndex = 0;
+                }
+                UpdateGrabIdNavState();
+            }
+        }
+
         /// <summary>依目前篩選來源重建報表單片與範圍序號；回顧序號維持全量。</summary>
         public int RefreshFilteredGrabIdCombos(string preferredDataGrabId = null)
         {
@@ -107,6 +136,32 @@ namespace AniloxRoll.Monitor.UI.Navigators
             {
                 PopulateDataGrabIdComboCore(selectOldest: false, preferredDataGrabId);
                 PopulateRangeGrabIdCombosCore();
+            }
+            _rangeSource = GrabIdRangeSource.Global;
+            UpdateSourceHighlights();
+            return _ctx.CbGrabIdStart.Items.Count;
+        }
+
+        public async Task<int> RefreshFilteredGrabIdCombosAsync(
+            string preferredDataGrabId = null)
+        {
+            using (StatComboGuard.Enter())
+            {
+                PopulateDataGrabIdComboCore(
+                    selectOldest: false, preferredDataGrabId);
+                await Task.Delay(ComboFillYieldDelayMs);
+
+                object[] rangeIds = BuildGrabIdItems(
+                    _getRangeGrabIdInfos());
+                ReplaceItems(_ctx.CbGrabIdStart, rangeIds);
+                await Task.Delay(ComboFillYieldDelayMs);
+                ReplaceItems(_ctx.CbGrabIdEnd, rangeIds);
+                if (rangeIds.Length > 0)
+                {
+                    _ctx.CbGrabIdStart.SelectedIndex =
+                        rangeIds.Length - 1;
+                    _ctx.CbGrabIdEnd.SelectedIndex = 0;
+                }
             }
             _rangeSource = GrabIdRangeSource.Global;
             UpdateSourceHighlights();
@@ -195,6 +250,14 @@ namespace AniloxRoll.Monitor.UI.Navigators
             combo.Items.Clear();
             combo.Items.AddRange(items);
             combo.EndUpdate();
+        }
+
+        private static object[] BuildGrabIdItems(List<GrabIdInfo> infos)
+        {
+            var ids = new object[infos.Count];
+            for (int i = 0; i < infos.Count; i++)
+                ids[i] = infos[i].GrabId;
+            return ids;
         }
 
         public void SyncDataGrabIdFromReview(int idx, GrabIdInfo info)

@@ -377,6 +377,7 @@ class DataFlowValidator:
         missing_paints = []
         late_paints = []
         chart_drifts = []
+        transition_chart_drifts = []
         report_chart_drifts = []
         report_prefit_ordering_failures = []
         active = None
@@ -409,6 +410,7 @@ class DataFlowValidator:
         last_report_intent = {}
         last_report_prefit = {}
         report_chart_ranges = []
+        pending_review_fit = None
         for index, line in enumerate(session.lines):
             if line.message.startswith("ui:【報表序號】"):
                 last_report_intent[grab_id(line.message)] = index
@@ -445,6 +447,42 @@ class DataFlowValidator:
                     index, report_match.group(1), report_match.group(2),
                     tuple(float(report_match.group(group)) for group in range(3, 7)),
                 ))
+
+            transition_apply_match = apply_pattern.match(line.message)
+            if transition_apply_match:
+                pending_review_fit = {
+                    "id": transition_apply_match.group(1),
+                    "col": tuple(
+                        float(transition_apply_match.group(group))
+                        for group in range(3, 7)
+                    ),
+                    "row": tuple(
+                        float(transition_apply_match.group(group))
+                        for group in range(7, 11)
+                    ),
+                }
+            elif line.message == "RV fit(record-change)":
+                pending_review_fit = None
+            else:
+                transition_range_match = chart_range_pattern.match(line.message)
+                if (pending_review_fit and transition_range_match and
+                        transition_range_match.group(1) in (
+                            pending_review_fit["id"], "-"
+                        )):
+                    chart = transition_range_match.group(2)
+                    view = tuple(
+                        float(transition_range_match.group(group))
+                        for group in range(3, 7)
+                    )
+                    expected_view = pending_review_fit[chart]
+                    if any(
+                        abs(actual_value - expected_value) > 0.05
+                        for actual_value, expected_value in zip(view, expected_view)
+                    ):
+                        transition_chart_drifts.append(
+                            f"{pending_review_fit['id']}:{chart} "
+                            f"axis/view {expected_view}->{view}"
+                        )
 
             if line.message.startswith("RV loadGrab begin "):
                 active = {
@@ -551,6 +589,17 @@ class DataFlowValidator:
         report_edges_ok = not intents
         if intents:
             final_intent_index, final_intent_id = intents[-1]
+            # WinForms can synchronously repaint one chart while the native ComboBox
+            # selection message is still unwinding, a few milliseconds before the
+            # managed intent line. Only state edges for the final ID, after the most
+            # recent different-ID intent, belong to the final selection burst.
+            final_window_start = max(
+                (
+                    index for index, item_id in intents[:-1]
+                    if item_id != final_intent_id
+                ),
+                default=-1,
+            )
             final_mode_end = next(
                 (
                     index for index in range(final_intent_index + 1, len(session.lines))
@@ -562,7 +611,7 @@ class DataFlowValidator:
             )
             final_ranges = [
                 (chart, state) for index, item_id, chart, state in report_chart_ranges
-                if final_intent_index < index < final_mode_end and item_id == final_intent_id
+                if final_window_start < index < final_mode_end and item_id == final_intent_id
             ]
             report_edges_ok = {chart for chart, _ in final_ranges} >= {"col", "row"}
             for chart in ("col", "row"):
@@ -585,7 +634,7 @@ class DataFlowValidator:
             not invalid and not invalid_report_fits and final_ok and not mismatches
             and not ordering_failures and not curve_ordering_failures and not missing_prefit
             and not missing_paints and not late_paints
-            and review_edges_ok and not chart_drifts
+            and review_edges_ok and not chart_drifts and not transition_chart_drifts
             and report_edges_ok and not report_chart_drifts
             and not report_prefit_ordering_failures
         )
@@ -603,6 +652,7 @@ class DataFlowValidator:
             f"mainEdge={'yes' if has_main_range_edges else 'no'} "
             f"chartEdge={'yes' if has_chart_range_edges else 'no'} "
             f"reportEdge={'yes' if report_edges_ok else 'no'} "
+            f"transitionDrift={len(transition_chart_drifts)} "
             f"二次跳位={len(chart_drifts)} 報表跳位={len(report_chart_drifts)}"
             + (f"；首筆 {mismatches[0]}" if mismatches else ""),
         )

@@ -262,6 +262,16 @@ namespace TanukiCv.Controls
         }
 
         /// <summary>
+        /// Explicitly resets the main canvas to its fitted view.
+        /// The caller owns the product policy that decides when a new record should reset the view.
+        /// </summary>
+        public void ResetViewToFit()
+        {
+            if (_disposed || _canvas == null || _canvas.IsDisposed) return;
+            _canvas.FitToScreen();
+        }
+
+        /// <summary>
         /// 內容在隱藏宿主中完成載入後，宿主重新可見時要求畫布重繪。
         /// 不重建影像或重設視野，只補上可能在隱藏期間被略過的 paint。
         /// </summary>

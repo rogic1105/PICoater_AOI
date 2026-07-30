@@ -31,7 +31,7 @@ description: Modify the Data tab, inspection CSV schema, statistics, report list
 - **`listViewGrabDetail` = `VirtualMode`**：不再逐筆建 `ListViewItem`，只存 `_visibleDetails`（List<GrabDetail>）+ 設 `VirtualListSize`；`RetrieveVirtualItem` → `BuildGrabDetailListViewItem(index)` 按需即時產生可見列。點選改用 `SelectedIndices[0]` 對應 `_visibleDetails[index].GrabId`（**不可用 `SelectedItems[0].Text`**，virtual 下不可靠）。
 - **owner-draw 樣式不變**：`DrawSubItem` 照樣讀 `e.Item.Tag`（rowHasFail）畫紅綠底 + 選中外框；symbol 用 unicode `—`/`○`/`×`（無資料/正常/異常），**勿降級成 ASCII**。
 - **欄寬 = `FitGrabDetailColumnsToContent`**：VirtualMode 下 `lv.Items` 為空，`AutoResizeColumns(ColumnContent)` / 量 Items 的 `FitListViewColumnsProportional` 都失效 → 改用 `_visibleDetails` 取樣量測，還原「貼齊內容緊湊欄寬」觀感。
-- **4 個 grabId combo 批次填充**：`DataDateGrabIdNavigator.PopulateAllGrabIdCombos` 用 `BeginUpdate` + `Items.AddRange(object[])`（**非逐筆 Add**），一萬筆時重繪 4 萬次 → 4 次，避免每次載入/換日期 UI 凍住。
+- **4 個 grabId combo 批次填充**：`DataDateGrabIdNavigator.PopulateAllGrabIdCombos` 用 `BeginUpdate` + `Items.AddRange(object[])`（**非逐筆 Add**）；Review 讀取資料走 async 版本，每填完一個 30,000 筆 ComboBox 就讓出 UI `50ms`，避免四次配置串成超過一秒的 UI starvation。實際政策由 `DT combo fill count=N yieldMs=50` 留痕。
 
 ### camData1~7 良率色卡（`InspectionStatsPresenter`）
 
@@ -44,7 +44,7 @@ description: Modify the Data tab, inspection CSV schema, statistics, report list
 - `btnDataSelectFolder` 觸發 `DataFolderSelected` event → `AniloxRollForm.OnDataFolderSelected`
 - `OnDataFolderSelected` 是 async void，呼叫 `ResetAndLoadReviewAfterFolderChanged(dataPresenterAlreadySynced: true)` helper（與 Review tab `btnReviewSelectFolder_Click` 共用 helper）
 - helper 內：state reset（合圖方式=全域、回顧強化=否）+ Live merge sync + chart series clear + DataPresenter `SyncGrabIdFromTime` + ClearStitchedMode + SetReviewGroupBoxes + SelectLatestInSingleSheetMode + LoadGrabStitchedViewAsync
-- `dataPresenterAlreadySynced=true` 跳過 `SyncFromReviewFolder` 避免 duplicate load
+- `dataPresenterAlreadySynced=true` 跳過 `SyncFromReviewFolderAsync` 避免 duplicate load；Review 入口的 repository scan 與統計 snapshot 都在背景執行，只有 navigator／ComboBox 套用回 UI 執行緒
 
 ### 統計模式（`_activeStatMode` 追蹤）
 - 三模式：`GrpDataSingleSheet`（單片，cbDataId 驅動）、`GroupBoxGrabIdRange`（序號範圍，cbDataIdStart/End 驅動）、`GroupBoxTimeRange`（時序範圍，cbDataDateStart~cbDataTimeEnd 驅動）

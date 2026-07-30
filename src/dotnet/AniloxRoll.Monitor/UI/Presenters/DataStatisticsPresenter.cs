@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
 using AniloxRoll.Monitor.Core.Data;
@@ -264,15 +265,19 @@ namespace AniloxRoll.Monitor.UI.Presenters
         }
 
         /// <summary>從 Review tab 選擇資料夾後同步載入序號清單。</summary>
-        public void SyncFromReviewFolder(string path)
+        public async Task SyncFromReviewFolderAsync(string path)
         {
             CancelRangePreview();
             _muraChart?.ResetSingleGrabCache();
             ResetSingleGrabDetailIndex();
             _statsDataRootPath = path;
-            LoadStatisticsSnapshot(path);
+            var watch = Stopwatch.StartNew();
+            ThresholdContext threshold = CreateThresholdContext();
+            InspectionStatisticsSnapshot snapshot = await Task.Run(
+                () => InspectionStatisticsService.LoadSnapshot(path, threshold));
+            ApplyStatisticsSnapshot(path, threshold, snapshot, watch.ElapsedMilliseconds);
 
-            PopulateAllGrabIdCombos();
+            await PopulateAllGrabIdCombosAsync();
 
             PopulateChartNavigators(_statAvailableTimes.Count > 0
                 ? (DateTime?)_statAvailableTimes.Max : null);
@@ -286,7 +291,15 @@ namespace AniloxRoll.Monitor.UI.Presenters
             var threshold = CreateThresholdContext();
             InspectionStatisticsSnapshot snapshot =
                 InspectionStatisticsService.LoadSnapshot(path, threshold);
+            ApplyStatisticsSnapshot(path, threshold, snapshot, watch.ElapsedMilliseconds);
+        }
 
+        private void ApplyStatisticsSnapshot(
+            string path,
+            ThresholdContext threshold,
+            InspectionStatisticsSnapshot snapshot,
+            long elapsedMilliseconds)
+        {
             _statAvailableTimes = snapshot.AvailableTimes;
             _grabIdInfos = snapshot.GrabIdsDescending;
             _singleGrabDetailIndex.Clear();
@@ -305,7 +318,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             FlowTrace.Log(
                 $"DT stats snapshot csv={snapshot.CsvFileCount} " +
                 $"records={snapshot.RecordCount} grabs={_grabIdInfos.Count} " +
-                $"ms={watch.ElapsedMilliseconds}");
+                $"ms={elapsedMilliseconds}");
         }
 
         // ══════════════════════════════════════════════════════════════
@@ -749,43 +762,56 @@ namespace AniloxRoll.Monitor.UI.Presenters
         // 異常篩選
         // ══════════════════════════════════════════════════════════════
 
-        private void BtnShowFail_Click(object sender, EventArgs e)
+        private async void BtnShowFail_Click(object sender, EventArgs e)
         {
-            string preferredGrabId = Convert.ToString(_ctx.CbDataGrabId.SelectedItem);
-            _showFailOnly = !_showFailOnly;
-            _ctx.BtnShowFail.Text = _showFailOnly ? "○ 顯示全部" : "△ 顯示異常";
-            _ctx.BtnShowFail.BackColor = _showFailOnly
-                ? Color.FromArgb(255, 235, 238)
-                : SystemColors.Control;
-
-            EnsureSingleGrabDetailIndex();
-            RefreshRangeGrabIdInfos();
-            int rangeOptions = _dateGrabIdNavigator.RefreshFilteredGrabIdCombos(preferredGrabId);
-            int dataOptions = _ctx.CbDataGrabId.Items.Count;
-            _currentDetails = GetIndexedDetailsForSelectedRange();
-            ApplyFailFilter();
-            string selectedGrabId = dataOptions == 0
-                ? "empty"
-                : Convert.ToString(_ctx.CbDataGrabId.SelectedItem);
-
-            string range = rangeOptions == 0
-                ? "empty"
-                : $"{_ctx.CbGrabIdStart.Text}~{_ctx.CbGrabIdEnd.Text}";
-            FlowTrace.Log(
-                $"ui:【篩選異常】→ {(_showFailOnly ? "只顯示異常" : "顯示全部")} " +
-                $"dataOptions={dataOptions} rangeOptions={rangeOptions} " +
-                $"selected={selectedGrabId} range={range}");
-
-            if (rangeOptions == 0)
+            _ctx.BtnShowFail.Enabled = false;
+            try
             {
-                ClearRangePresentation();
-                return;
+                string preferredGrabId =
+                    Convert.ToString(_ctx.CbDataGrabId.SelectedItem);
+                _showFailOnly = !_showFailOnly;
+                _ctx.BtnShowFail.Text =
+                    _showFailOnly ? "○ 顯示全部" : "△ 顯示異常";
+                _ctx.BtnShowFail.BackColor = _showFailOnly
+                    ? Color.FromArgb(255, 235, 238)
+                    : SystemColors.Control;
+
+                EnsureSingleGrabDetailIndex();
+                RefreshRangeGrabIdInfos();
+                int rangeOptions = await _dateGrabIdNavigator
+                    .RefreshFilteredGrabIdCombosAsync(preferredGrabId);
+                int dataOptions = _ctx.CbDataGrabId.Items.Count;
+                _currentDetails = GetIndexedDetailsForSelectedRange();
+                ApplyFailFilter();
+                string selectedGrabId = dataOptions == 0
+                    ? "empty"
+                    : Convert.ToString(_ctx.CbDataGrabId.SelectedItem);
+
+                string range = rangeOptions == 0
+                    ? "empty"
+                    : $"{_ctx.CbGrabIdStart.Text}~{_ctx.CbGrabIdEnd.Text}";
+                FlowTrace.Log(
+                    $"ui:【篩選異常】→ {(_showFailOnly ? "只顯示異常" : "顯示全部")} " +
+                    $"dataOptions={dataOptions} rangeOptions={rangeOptions} " +
+                    $"selected={selectedGrabId} range={range}");
+
+                if (rangeOptions == 0)
+                {
+                    ClearRangePresentation();
+                    return;
+                }
+                if (_dateGrabIdNavigator.ActiveStatMode ==
+                    _ctx.GroupBoxGrabIdRange)
+                    RefreshStats();
+                else if (_dateGrabIdNavigator.ActiveStatMode ==
+                    _ctx.GrpDataSingleSheet)
+                    RefreshSelectedGrab();
+                _ctx.GrabDetailList.Highlight(selectedGrabId);
             }
-            if (_dateGrabIdNavigator.ActiveStatMode == _ctx.GroupBoxGrabIdRange)
-                RefreshStats();
-            else if (_dateGrabIdNavigator.ActiveStatMode == _ctx.GrpDataSingleSheet)
-                RefreshSelectedGrab();
-            _ctx.GrabDetailList.Highlight(selectedGrabId);
+            finally
+            {
+                _ctx.BtnShowFail.Enabled = true;
+            }
         }
 
         private void ApplyFailFilter()
@@ -852,6 +878,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
         }
         public void PopulateAllGrabIdCombos(bool selectDataGrabId = false) =>
             _dateGrabIdNavigator.PopulateAllGrabIdCombos(selectDataGrabId);
+        public Task PopulateAllGrabIdCombosAsync(bool selectDataGrabId = false) =>
+            _dateGrabIdNavigator.PopulateAllGrabIdCombosAsync(selectDataGrabId);
         public void SetReviewGroupBoxes(bool grabNavActive)
         {
             SetGroupBoxActive(_ctx.GrpReviewGrabNav, grabNavActive);

@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
@@ -40,7 +41,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                 _timeNavigator.Initialize(UserSessionState.LastYear);
         }
 
-        public void SelectAndLoadFolder()
+        public async Task<bool> SelectAndLoadFolderAsync()
         {
             using (var dialog = new FolderBrowserDialog())
             {
@@ -67,7 +68,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                 if (Directory.Exists(preferredPath))
                     dialog.SelectedPath = preferredPath;
 
-                if (dialog.ShowDialog() != DialogResult.OK) return;
+                if (dialog.ShowDialog() != DialogResult.OK) return false;
 
                 string selectedPath = CaptureStoragePaths.ResolveSelectedDataRoot(
                     dialog.SelectedPath,
@@ -83,15 +84,16 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                 UserSessionState.Save();
 
                 FlowTrace.Log($"RV folder selected root={selectedPath}");
-                _imageRepository.LoadDirectory(selectedPath);
+                await Task.Run(() => _imageRepository.LoadDirectory(selectedPath));
                 FlowTrace.Log($"RV repo scan root={selectedPath} files={_imageRepository.FileCount}");
                 if (_imageRepository.FileCount == 0)
                 {
                     MessageBox.Show(_dialogOwner, "該路徑下無符合格式的圖片！");
-                    return;
+                    return false;
                 }
 
                 _timeNavigator.Initialize(UserSessionState.LastYear);
+                return true;
             }
         }
 
