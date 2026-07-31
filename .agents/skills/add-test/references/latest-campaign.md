@@ -3,19 +3,20 @@
 > This file is overwritten by the next recorded campaign. Git history is the durable record.
 
 - Result: **PASS**
-- Run: `20260731-082930`
-- Commit: `eec7b84`
+- Run: `20260731-083512`
+- Commit: `8f184b4`
 - Working tree: dirty
-- Mode: `PhysicalRetention`
+- Mode: `PhysicalSoak`
 - Machine: `DESKTOP-C1MN5KD`
-- Finished: 2026-07-31 08:29:41 +08:00
-- Raw artifacts: `artifacts/test-reports/20260731-082930-eec7b84/` (local, ignored by Git)
+- Finished: 2026-07-31 10:35:23 +08:00
+- Raw artifacts: `artifacts/test-reports/20260731-083512-8f184b4/` (local, ignored by Git)
 
 ## Results
 
 | Layer | Check | Result | Theory / acceptance | Experimental value / evidence | Seconds |
 |---|---|---:|---|---|---:|
-| Physical retention DVT | Physical low-disk retention recovery | **PASS** | A marker-protected TEMP root holds two complete historical days; the threshold is derived from current free space; only the oldest day and its CSV are deleted; the newer day remains; low-space and cleanup incidents complete raise, resolve, and individual acknowledgement; settings and fixture are cleaned up. | threshold=1554GiB free=1668911194112 fixture=450621440B oldest=deleted newer=preserved; freed=429MB; outputHealth=6 events/5 states/0 invalid; checker=16 PASS/0 FAIL | 10.75 |
+| Unit | Resource trend guard tests | **PASS** | One-time heap expansion passes; sustained 330 MB/hour growth and post-expansion growth fail. | exit code 0 | 0.23 |
+| Physical soak | Physical IO and storage soak | **PASS** | Fixed hardware topology; IO and storage stay green; UI always responds; Private Bytes sustained growth <=256 MB/hour and total delta <=4 GB; handles/GDI/USER/threads stay within guards; clean shutdown. | Result: PASS; Status: PASS：IO＋儲存電腦待機耐久測試（不 Grab）; resources samples=237 privateMB=2751.6->3213.1 max=3213.1 handles=1256->1365 max=1367 gdi=134->135 user=281->283 threads=106->129 ratesPerHour=private:241.1MB medianPrivate:154.5MB postExpansionPrivate:19.9MB postExpansionSeconds=1245.4 largestPrivateStepMB=203.6 handles:57 observer=external | 7209.9 |
 
 ## Improvement record
 
@@ -26,8 +27,7 @@
 
 - Physical camera/grabber acquisition, seven-camera frame load, background capture, and live Grab.
 - Physical IO and light disconnect/reconnect timing.
-- Storage-PC SMB interruption and backlog transfer are covered by their separate recovery campaign, not this run.
-- Retention on the storage PC's own local disk remains separate; this run exercised the shared cleanup core and inspection-PC UI state with a marker-protected isolated fixture.
+- Storage-PC SMB interruption, remote backlog transfer, and real-disk/UI low-space status and recovery.
 - Shift/24-hour product soak with the IO simulator, cameras, storage transfer, and operator interactions.
 
 These cases remain **NOT COVERED**, not PASS. Run their dedicated DVT or soak campaign before release.
