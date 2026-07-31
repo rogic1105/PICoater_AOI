@@ -22,7 +22,7 @@ goto :install
 
 :elevate
 echo First-time Windows administrator authorization is required.
-echo After installation, option 11 will not ask for UAC again.
+echo After installation, options 10 and 11 will not ask for UAC again.
 echo.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%ELEVATOR%" -Installer "%INSTALLER%"
 set "RESULT=%ERRORLEVEL%"

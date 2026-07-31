@@ -62,11 +62,17 @@ MURA/BUSY Low 與 PC ALIVE High。
 Storage app heartbeat、UI 綠燈、五分鐘穩定性及正常關閉。產品探針只建立並立刻刪除自己的
 `.picoater-write-probe-*`，不讀寫正式影像，也不觸發低磁碟清理。
 
-`SMB 中斷／待傳補送恢復` 需以系統管理員執行。Runner 會找出通往
-`192.168.10.20` 的網卡並暫時以軟體停用；情境先把 IO 切到本機模擬器，因此不依賴同張
-網卡上的實體 IO。中斷期間完成兩次實際取相，並以 `pending queued` 證明本機 durable marker
-已落盤；恢復網卡後必須看到分享寫入驗證、backlog 清空及 heartbeat 恢復。
-情境成功、失敗或中止都會嘗試重新啟用該網卡。
+`SMB 中斷／待傳補送恢復` 第一次執行會安裝固定管理員動作；Runner 之後仍以一般
+權限建立 `192.168.10.20/32` 的 Loopback 黑洞路由，只隔離儲存電腦，不停用與 IO 共用的
+實體網卡。情境先把 IO 切到本機模擬器。中斷期間完成兩次實際取相，並以 `pending queued` 證明本機 durable marker
+已落盤；移除黑洞路由後必須看到分享寫入驗證、backlog 清空及 heartbeat 恢復。
+情境成功、失敗或中止都會移除黑洞路由；阻斷與恢復都以新的 TCP `:445` 連線確認。
+
+`低磁碟刪檔與狀態恢復` 不會使用正式 Capture。Runner 固定在
+`%TEMP%\PICoater-DVT-Retention` 建立兩天隔離資料，且只有專用 marker 存在時才允許
+刪除。門檻會依當下磁碟剩餘量計算；驗收要求只刪最舊完整一天與同日 CSV、保留較新
+一天，並逐一完成低磁碟與清理通知的 raise、resolve、ack。無論成功或失敗，最後都會
+還原 PropertyGrid 並清除 fixture。
 
 儲存電腦上的程式保活另由 Release ZIP 根目錄 `test_storage_restart.bat` 驗證。工具會
 強制關閉指定安裝路徑的儲存程式，等待排程工作在 90 秒內以新 PID 拉起，並要求新 PID
@@ -74,10 +80,11 @@ Storage app heartbeat、UI 綠燈、五分鐘穩定性及正常關閉。產品�
 儲存程式運行。
 
 `IO／光源軟體斷線恢復` 第一次執行會由
-`tests/InstallDvtAdminActions.bat` 要求一次 UAC 授權，安裝四個固定的排程動作：
-封鎖／解除實體 IO `192.168.255.1:502`，以及停用／啟用光源 `COM17`。之後
-`tests/TestRunner.bat` 的選項 11 以一般權限執行，不再詢問 UAC。這不是把整個
-TestRunner 或可修改的 repo 永久提升成系統管理員；排程只能執行這四個白名單動作。
+`tests/InstallDvtAdminActions.bat` 要求一次 UAC 授權，安裝六個固定的排程動作：
+封鎖／解除實體 IO `192.168.255.1:502`、封鎖／解除儲存電腦
+`192.168.10.20:445`，以及停用／啟用光源 `COM17`。之後
+`tests/TestRunner.bat` 的選項 10、11 以一般權限執行，不再詢問 UAC。這不是把整個
+TestRunner 或可修改的 repo 永久提升成系統管理員；排程只能執行這六個白名單動作。
 Runner 仍會在成功、失敗或中止時解除規則並重新啟用串口。
 
 IO 與光源各跑三輪，必須逐輪看到斷線、`OutputHealth raise`、恢復連線及

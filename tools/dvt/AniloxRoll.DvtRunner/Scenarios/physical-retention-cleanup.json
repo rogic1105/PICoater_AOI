@@ -1,0 +1,169 @@
+{
+  "Id": "physical-retention-cleanup",
+  "Name": "低磁碟刪檔與狀態恢復",
+  "Description": "在固定的 TEMP 隔離根目錄建立兩天測試產出，動態製造低磁碟條件，驗證只刪最舊完整一天、保留較新一天、狀態 raise/resolve/ack，最後還原設定並清除 fixture。",
+  "Steps": [
+    {
+      "Id": "launch",
+      "Contract": "H1.Retention",
+      "Title": "開啟或連接監控程式",
+      "Action": "launch",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "normalize-log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "正規化為日常運行記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "日常運行",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "切換為流程驗證記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "流程驗證",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "log-mode-proof",
+      "Contract": "DVT.LogMode",
+      "Title": "確認 Flow marker",
+      "Action": "wait-log",
+      "Pattern": "log mode=FlowVerification",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "reset",
+      "Contract": "H1.Retention",
+      "Title": "清除前段健康狀態證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "prepare-fixture",
+      "Contract": "H1.Retention",
+      "Title": "建立隔離資料並觸發低磁碟清理",
+      "Action": "prepare-retention-fixture",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "low-space-raised",
+      "Contract": "H1.Retention",
+      "Title": "確認低磁碟狀態升起",
+      "Action": "wait-log",
+      "Pattern": "\\[OutputHealth\\] raise code=LocalLowSpace",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "cleanup-complete",
+      "Contract": "H1.Retention",
+      "Title": "確認刪除完成且實際釋放空間",
+      "Action": "wait-log",
+      "Pattern": "\\[StorageRetention\\] Cleanup done: freed [1-9][0-9]* MB",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "cleanup-raised",
+      "Contract": "H1.Retention",
+      "Title": "確認清理通知升起",
+      "Action": "wait-log",
+      "Pattern": "\\[OutputHealth\\] raise code=RetentionCleanup",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "cleanup-resolved",
+      "Contract": "H1.Retention",
+      "Title": "確認清理通知轉為可確認",
+      "Action": "wait-log",
+      "Pattern": "\\[OutputHealth\\] resolve code=RetentionCleanup",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "low-space-resolved",
+      "Contract": "H1.Retention",
+      "Title": "確認磁碟空間恢復",
+      "Action": "wait-log",
+      "Pattern": "\\[OutputHealth\\] resolve code=LocalLowSpace",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "verify-fixture",
+      "Contract": "H1.Retention",
+      "Title": "核對只刪最舊完整一天",
+      "Action": "verify-retention-fixture",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "ack-cleanup",
+      "Contract": "H1.OutputHealth",
+      "Title": "確認清理完成提示",
+      "Action": "click",
+      "Target": "空間不足，已清理最舊 1 天資料（已恢復，點擊關閉）",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "ack-cleanup-proof",
+      "Contract": "H1.OutputHealth",
+      "Title": "確認只關閉清理提示",
+      "Action": "wait-log",
+      "Pattern": "\\[OutputHealth\\] ack codes=RetentionCleanup",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "ack-low-space",
+      "Contract": "H1.OutputHealth",
+      "Title": "確認空間恢復提示",
+      "Action": "click",
+      "Target": "檢測電腦空間低於預留值，正在清理最舊資料（已恢復，點擊關閉）",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "ack-low-space-proof",
+      "Contract": "H1.OutputHealth",
+      "Title": "確認只關閉低磁碟提示",
+      "Action": "wait-log",
+      "Pattern": "\\[OutputHealth\\] ack codes=LocalLowSpace",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "restore-settings",
+      "Contract": "DVT.Cleanup",
+      "Title": "還原 Runner 修改的設定",
+      "Action": "restore-properties",
+      "TimeoutSeconds": 45
+    },
+    {
+      "Id": "cleanup-fixture",
+      "Contract": "DVT.Cleanup",
+      "Title": "刪除隔離測試資料",
+      "Action": "cleanup-retention-fixture",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "close-app",
+      "Contract": "G2.shutdown",
+      "Title": "正常關閉主程式",
+      "Action": "close-app",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "shutdown-complete",
+      "Contract": "G2.shutdown",
+      "Title": "確認資源釋放完成",
+      "Action": "wait-log",
+      "Pattern": "shutdown resources released",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "checker",
+      "Contract": "DVT",
+      "Title": "執行完整 Flow 檢查器",
+      "Action": "run-checker",
+      "TimeoutSeconds": 120
+    }
+  ]
+}

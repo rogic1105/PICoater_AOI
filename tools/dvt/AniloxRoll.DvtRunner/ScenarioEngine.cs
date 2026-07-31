@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Net.Sockets;
 using System.Text;
@@ -15,12 +16,30 @@ namespace AniloxRoll.DvtRunner
         private const string ScheduledTaskHandlePrefix = "scheduled-task:";
         private const string IoBlockTaskName = "PICoater-DVT-Block-IO502";
         private const string IoUnblockTaskName = "PICoater-DVT-Unblock-IO502";
+        private const string StorageBlockTaskName =
+            "PICoater-DVT-Block-Storage";
+        private const string StorageUnblockTaskName =
+            "PICoater-DVT-Unblock-Storage";
         private const string LightDisableTaskName = "PICoater-DVT-Disable-COM17";
         private const string LightEnableTaskName = "PICoater-DVT-Enable-COM17";
         private const string FixedIoBlockedRoutePrefix =
             "192.168.255.1/32";
         private const int FixedIoBlackholeInterfaceIndex = 1;
         private const string FixedIoBlackholeNextHop = "0.0.0.0";
+        private const string FixedStorageAddress = "192.168.10.20";
+        private const string FixedStorageBlockedRoutePrefix =
+            FixedStorageAddress + "/32";
+        private const int FixedStorageBlackholeInterfaceIndex = 1;
+        private const string FixedStorageBlackholeNextHop = "0.0.0.0";
+        private const string RetentionFixtureDirectoryName =
+            "PICoater-DVT-Retention";
+        private const string RetentionFixtureMarkerName =
+            ".dvt-retention-fixture";
+        private const string RetentionFixtureMarkerValue =
+            "PICoater DVT retention fixture v1";
+        private const string RetentionRootPropertyName = "Anilox 根目錄";
+        private const string RetentionThresholdPropertyName =
+            "預留空間 (GB)";
         private readonly RunnerOptions _options;
         private readonly UiAutomationDriver _ui = new UiAutomationDriver();
         private readonly FlowLogMonitor _log;
@@ -28,7 +47,7 @@ namespace AniloxRoll.DvtRunner
             new Dictionary<string, string>(StringComparer.Ordinal);
         private readonly Dictionary<string, Process> _helperProcesses =
             new Dictionary<string, Process>(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, string> _disabledNetworkAdapters =
+        private readonly Dictionary<string, string> _blockedNetworkTargets =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, string> _blockedTargetPorts =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -36,6 +55,13 @@ namespace AniloxRoll.DvtRunner
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private readonly ManualResetEventSlim _pauseGate = new ManualResetEventSlim(true);
         private bool _captureMayBeActive;
+        private string _retentionFixtureRoot;
+        private string _retentionOldDayDirectory;
+        private string _retentionOldDailyCsv;
+        private string _retentionNewDayDirectory;
+        private string _retentionNewDailyCsv;
+        private int _retentionThresholdGb;
+        private long _retentionFixtureBytes;
         private string _sessionStatePath;
         private byte[] _originalSessionState;
         private bool _sessionStateExisted;
@@ -65,7 +91,14 @@ namespace AniloxRoll.DvtRunner
             _log.BeginSession();
             _originalProperties.Clear();
             _helperProcesses.Clear();
-            _disabledNetworkAdapters.Clear();
+            _blockedNetworkTargets.Clear();
+            _retentionFixtureRoot = null;
+            _retentionOldDayDirectory = null;
+            _retentionOldDailyCsv = null;
+            _retentionNewDayDirectory = null;
+            _retentionNewDailyCsv = null;
+            _retentionThresholdGb = 0;
+            _retentionFixtureBytes = 0;
             _captureMayBeActive = false;
             CaptureSessionState();
             try
@@ -169,6 +202,16 @@ namespace AniloxRoll.DvtRunner
 
                 case "enable-serial-device":
                     return EnableSerialDevice(step.Target, false);
+
+                case "prepare-retention-fixture":
+                    return await PrepareRetentionFixtureAsync(
+                        step.TimeoutSeconds, cancellationToken);
+
+                case "verify-retention-fixture":
+                    return VerifyRetentionFixture();
+
+                case "cleanup-retention-fixture":
+                    return CleanupRetentionFixture(false);
 
                 case "wait-element":
                     return await _ui.WaitForElementAsync(
@@ -296,13 +339,14 @@ namespace AniloxRoll.DvtRunner
             StopAllHelpers();
             EnableAllDisabledSerialDevices();
             UnblockAllTargetPorts();
-            EnableAllDisabledNetworkAdapters();
+            UnblockAllNetworkTargets();
 
             using (var restoreTimeout =
                 new CancellationTokenSource(TimeSpan.FromSeconds(30)))
             {
                 await RestoreOriginalPropertiesAsync(restoreTimeout.Token);
             }
+            CleanupRetentionFixture(true);
 
             if (_options.CloseAppOnCleanup && _ui.IsAttached)
             {
@@ -368,6 +412,248 @@ namespace AniloxRoll.DvtRunner
                 throw new InvalidOperationException("Failed to start helper: " + path);
             _helperProcesses.Add(step.Id, process);
             return "helper " + step.Id + " PID=" + process.Id;
+        }
+
+        private async Task<string> PrepareRetentionFixtureAsync(
+            int timeoutSeconds,
+            CancellationToken cancellationToken)
+        {
+            string root = Path.GetFullPath(Path.Combine(
+                Path.GetTempPath(), RetentionFixtureDirectoryName));
+            PrepareEmptyRetentionRoot(root);
+            _retentionFixtureRoot = root;
+
+            string markerPath = Path.Combine(
+                root, RetentionFixtureMarkerName);
+            File.WriteAllText(
+                markerPath,
+                RetentionFixtureMarkerValue,
+                new UTF8Encoding(false));
+
+            var drive = new DriveInfo(Path.GetPathRoot(root));
+            long freeBefore = drive.AvailableFreeSpace;
+            int thresholdGb = (int)(freeBefore / (1024L * 1024L * 1024L));
+            if (thresholdGb < 1)
+                throw new InvalidOperationException(
+                    "Retention DVT requires at least 1 GiB of free space.");
+            if ((long)thresholdGb * 1024L * 1024L * 1024L >=
+                drive.TotalSize)
+                throw new InvalidOperationException(
+                    "Computed retention threshold is not below volume total.");
+
+            DateTime oldDate = DateTime.Today.AddDays(-2);
+            DateTime newDate = DateTime.Today.AddDays(-1);
+            _retentionOldDayDirectory = GetRetentionDayDirectory(
+                root, oldDate);
+            _retentionNewDayDirectory = GetRetentionDayDirectory(
+                root, newDate);
+            Directory.CreateDirectory(_retentionOldDayDirectory);
+            Directory.CreateDirectory(_retentionNewDayDirectory);
+
+            _retentionOldDailyCsv = Path.Combine(
+                Path.GetDirectoryName(_retentionOldDayDirectory),
+                oldDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture) +
+                ".csv");
+            _retentionNewDailyCsv = Path.Combine(
+                Path.GetDirectoryName(_retentionNewDayDirectory),
+                newDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture) +
+                ".csv");
+
+            long thresholdBytes =
+                (long)thresholdGb * 1024L * 1024L * 1024L;
+            long bytesToAllocate =
+                freeBefore - thresholdBytes + 128L * 1024L * 1024L;
+            if (bytesToAllocate < 128L * 1024L * 1024L ||
+                bytesToAllocate > 1200L * 1024L * 1024L)
+                throw new InvalidOperationException(
+                    "Unsafe retention fixture size: " +
+                    bytesToAllocate.ToString(
+                        CultureInfo.InvariantCulture) + " bytes.");
+
+            string oldArchive = Path.Combine(
+                _retentionOldDayDirectory, "retention-old.acap");
+            WriteAllocatedFile(
+                oldArchive, bytesToAllocate, cancellationToken);
+            File.WriteAllText(
+                _retentionOldDailyCsv, "old-day", new UTF8Encoding(false));
+            File.WriteAllText(
+                Path.Combine(
+                    _retentionNewDayDirectory, "retention-new.acap"),
+                "new-day",
+                new UTF8Encoding(false));
+            File.WriteAllText(
+                _retentionNewDailyCsv, "new-day", new UTF8Encoding(false));
+
+            drive = new DriveInfo(Path.GetPathRoot(root));
+            if (drive.AvailableFreeSpace >= thresholdBytes)
+                throw new InvalidOperationException(
+                    "Fixture did not lower free space below the threshold.");
+
+            if (!_originalProperties.ContainsKey(
+                RetentionRootPropertyName))
+                _originalProperties[RetentionRootPropertyName] =
+                    _ui.GetPropertyValue(RetentionRootPropertyName);
+            if (!_originalProperties.ContainsKey(
+                RetentionThresholdPropertyName))
+                _originalProperties[RetentionThresholdPropertyName] =
+                    _ui.GetPropertyValue(RetentionThresholdPropertyName);
+
+            await _ui.SetPropertyValueAsync(
+                RetentionRootPropertyName,
+                root,
+                timeoutSeconds,
+                cancellationToken);
+            await _ui.SetPropertyValueAsync(
+                RetentionThresholdPropertyName,
+                thresholdGb.ToString(CultureInfo.InvariantCulture),
+                timeoutSeconds,
+                cancellationToken);
+
+            _retentionThresholdGb = thresholdGb;
+            _retentionFixtureBytes = bytesToAllocate;
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "root={0} threshold={1}GiB fixture={2} bytes freeBefore={3}",
+                root,
+                thresholdGb,
+                bytesToAllocate,
+                freeBefore);
+        }
+
+        private string VerifyRetentionFixture()
+        {
+            if (string.IsNullOrWhiteSpace(_retentionFixtureRoot))
+                throw new InvalidOperationException(
+                    "Retention fixture was not prepared.");
+            if (Directory.Exists(_retentionOldDayDirectory) ||
+                File.Exists(_retentionOldDailyCsv))
+                throw new InvalidOperationException(
+                    "The oldest complete day was not fully deleted.");
+            if (!Directory.Exists(_retentionNewDayDirectory) ||
+                !File.Exists(_retentionNewDailyCsv) ||
+                !File.Exists(Path.Combine(
+                    _retentionNewDayDirectory, "retention-new.acap")))
+                throw new InvalidOperationException(
+                    "The newer complete day was deleted or damaged.");
+
+            var drive = new DriveInfo(
+                Path.GetPathRoot(_retentionFixtureRoot));
+            long thresholdBytes =
+                (long)_retentionThresholdGb * 1024L * 1024L * 1024L;
+            if (drive.AvailableFreeSpace < thresholdBytes)
+                throw new InvalidOperationException(
+                    "Free space remains below the configured threshold.");
+
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "oldest=deleted newer=preserved threshold={0}GiB " +
+                "free={1} fixture={2}",
+                _retentionThresholdGb,
+                drive.AvailableFreeSpace,
+                _retentionFixtureBytes);
+        }
+
+        private string CleanupRetentionFixture(bool cleanup)
+        {
+            if (string.IsNullOrWhiteSpace(_retentionFixtureRoot))
+                return "retention fixture already clean";
+
+            string root = _retentionFixtureRoot;
+            _retentionFixtureRoot = null;
+            string markerPath = Path.Combine(
+                root, RetentionFixtureMarkerName);
+            if (!Directory.Exists(root))
+                return "retention fixture already absent";
+            if (!File.Exists(markerPath) ||
+                !string.Equals(
+                    File.ReadAllText(markerPath, Encoding.UTF8),
+                    RetentionFixtureMarkerValue,
+                    StringComparison.Ordinal))
+            {
+                string message =
+                    "Refused to delete retention fixture without marker: " +
+                    root;
+                if (cleanup)
+                {
+                    Output?.Invoke("[cleanup warning] " + message);
+                    return message;
+                }
+                throw new InvalidOperationException(message);
+            }
+
+            DirectoryInfo info = new DirectoryInfo(root);
+            if ((info.Attributes & FileAttributes.ReparsePoint) != 0 ||
+                !string.Equals(
+                    info.Name,
+                    RetentionFixtureDirectoryName,
+                    StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "Refused to delete an unsafe retention fixture path: " +
+                    root);
+
+            Directory.Delete(root, true);
+            return "retention fixture removed: " + root;
+        }
+
+        private static void PrepareEmptyRetentionRoot(string root)
+        {
+            if (Directory.Exists(root))
+            {
+                string markerPath = Path.Combine(
+                    root, RetentionFixtureMarkerName);
+                if (!File.Exists(markerPath) ||
+                    !string.Equals(
+                        File.ReadAllText(markerPath, Encoding.UTF8),
+                        RetentionFixtureMarkerValue,
+                        StringComparison.Ordinal))
+                    throw new InvalidOperationException(
+                        "Existing retention test root has no valid marker: " +
+                        root);
+                DirectoryInfo info = new DirectoryInfo(root);
+                if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
+                    throw new InvalidOperationException(
+                        "Retention test root cannot be a reparse point.");
+                Directory.Delete(root, true);
+            }
+            Directory.CreateDirectory(root);
+        }
+
+        private static string GetRetentionDayDirectory(
+            string root,
+            DateTime date)
+        {
+            return Path.Combine(
+                root,
+                "Captures",
+                date.ToString("yyyy", CultureInfo.InvariantCulture),
+                date.ToString("yyyyMM", CultureInfo.InvariantCulture),
+                date.ToString("yyyyMMdd", CultureInfo.InvariantCulture));
+        }
+
+        private static void WriteAllocatedFile(
+            string path,
+            long bytes,
+            CancellationToken cancellationToken)
+        {
+            byte[] buffer = new byte[4 * 1024 * 1024];
+            using (var stream = new FileStream(
+                path,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                buffer.Length,
+                FileOptions.SequentialScan))
+            {
+                long remaining = bytes;
+                while (remaining > 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    int count = (int)Math.Min(buffer.Length, remaining);
+                    stream.Write(buffer, 0, count);
+                    remaining -= count;
+                }
+                stream.Flush(true);
+            }
         }
 
         private async Task<string> WaitForHelperExitAsync(
@@ -440,7 +726,7 @@ namespace AniloxRoll.DvtRunner
             if (string.IsNullOrWhiteSpace(step.Target))
                 throw new InvalidDataException(
                     "disable-target-network requires a UNC Target.");
-            if (_disabledNetworkAdapters.ContainsKey(step.Id))
+            if (_blockedNetworkTargets.ContainsKey(step.Id))
                 throw new InvalidOperationException(
                     "Network disable step is already active: " + step.Id);
 
@@ -451,74 +737,111 @@ namespace AniloxRoll.DvtRunner
                     "disable-target-network requires an IP-based UNC Target: " +
                     step.Target);
 
-            string command =
-                "$route=@(Find-NetRoute -RemoteIPAddress '" + server +
-                "' | Where-Object { $_.PSObject.Properties['DestinationPrefix'] })" +
-                " | Select-Object -First 1;" +
-                "if(-not $route){throw 'No route to target'};" +
-                "$adapter=Get-NetAdapter -InterfaceIndex $route.InterfaceIndex " +
-                "-ErrorAction Stop;" +
-                "if($adapter.Status -ne 'Up'){throw 'Target adapter is not Up'};" +
-                "Write-Output ('INDEX=' + $adapter.ifIndex);" +
-                "$adapter | Disable-NetAdapter -Confirm:$false";
-            string output = RunProcessChecked(
-                "powershell.exe",
-                "-NoProfile -ExecutionPolicy Bypass -Command \"" +
-                command.Replace("\"", "\\\"") + "\"",
-                30);
-
-            const string marker = "INDEX=";
-            int markerIndex = output.IndexOf(
-                marker, StringComparison.OrdinalIgnoreCase);
-            if (markerIndex < 0)
+            if (!string.Equals(
+                    server,
+                    FixedStorageAddress,
+                    StringComparison.OrdinalIgnoreCase))
+            {
                 throw new InvalidOperationException(
-                    "Unable to identify the disabled network adapter.");
-            int endIndex = output.IndexOfAny(
-                new[] { '\r', '\n' }, markerIndex);
-            string interfaceIndex = output.Substring(
-                markerIndex + marker.Length,
-                (endIndex < 0 ? output.Length : endIndex) -
-                markerIndex - marker.Length).Trim();
-            int parsedInterfaceIndex;
-            if (!int.TryParse(interfaceIndex, out parsedInterfaceIndex))
+                    "Network isolation is restricted to the fixed storage " +
+                    "endpoint " + FixedStorageAddress + ".");
+            }
+            if (!TryStartScheduledTask(StorageBlockTaskName))
+            {
                 throw new InvalidOperationException(
-                    "Invalid disabled network adapter index: " + interfaceIndex);
+                    "Pre-authorized storage isolation action is missing. " +
+                    "Run tests\\InstallDvtAdminActions.bat once.");
+            }
 
-            _disabledNetworkAdapters.Add(step.Id, interfaceIndex);
-            return "network disabled target=" + step.Target +
-                " ifIndex=" + interfaceIndex;
+            _blockedNetworkTargets.Add(
+                step.Id,
+                ScheduledTaskHandlePrefix + StorageUnblockTaskName);
+            try
+            {
+                WaitForPowerShellBoolean(
+                    "[bool](Get-NetRoute -DestinationPrefix '" +
+                    FixedStorageBlockedRoutePrefix +
+                    "' -PolicyStore ActiveStore " +
+                    "-ErrorAction SilentlyContinue | Where-Object {" +
+                    "$_.InterfaceIndex -eq " +
+                    FixedStorageBlackholeInterfaceIndex.ToString() +
+                    " -and $_.NextHop -eq '" +
+                    FixedStorageBlackholeNextHop +
+                    "'})",
+                    true,
+                    20,
+                    "Pre-authorized storage blackhole route did not appear.");
+                WaitForTcpReachability(
+                    FixedStorageAddress,
+                    445,
+                    false,
+                    20,
+                    "Storage SMB remained reachable after installing the " +
+                    "blackhole route.");
+            }
+            catch
+            {
+                try { EnableTargetNetwork(step.Id, true); }
+                catch { }
+                throw;
+            }
+            return "network isolated target=" + step.Target +
+                " route=" + FixedStorageBlockedRoutePrefix;
         }
 
         private string EnableTargetNetwork(string disableStepId, bool cleanup)
         {
-            string interfaceIndex;
+            string handle;
             if (string.IsNullOrWhiteSpace(disableStepId) ||
-                !_disabledNetworkAdapters.TryGetValue(
-                    disableStepId, out interfaceIndex))
+                !_blockedNetworkTargets.TryGetValue(
+                    disableStepId, out handle))
             {
                 if (cleanup) return "target network already enabled";
                 throw new InvalidOperationException(
                     "Unknown network disable step: " + disableStepId);
             }
 
-            string command =
-                "$adapter=Get-NetAdapter -InterfaceIndex " + interfaceIndex +
-                " -ErrorAction Stop;" +
-                "if($adapter.Status -ne 'Up'){" +
-                "$adapter | Enable-NetAdapter -Confirm:$false}";
-            RunProcessChecked(
-                "powershell.exe",
-                "-NoProfile -ExecutionPolicy Bypass -Command \"" +
-                command.Replace("\"", "\\\"") + "\"",
-                30);
-            _disabledNetworkAdapters.Remove(disableStepId);
-            return "network enabled ifIndex=" + interfaceIndex;
+            if (!handle.StartsWith(
+                    ScheduledTaskHandlePrefix,
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Unsupported network isolation handle: " + handle);
+            }
+
+            string taskName =
+                handle.Substring(ScheduledTaskHandlePrefix.Length);
+            if (!TryStartScheduledTask(taskName))
+                throw new InvalidOperationException(
+                    "Pre-authorized action is missing: " + taskName);
+            WaitForPowerShellBoolean(
+                "[bool](Get-NetRoute -DestinationPrefix '" +
+                FixedStorageBlockedRoutePrefix +
+                "' -PolicyStore ActiveStore " +
+                "-ErrorAction SilentlyContinue | Where-Object {" +
+                "$_.InterfaceIndex -eq " +
+                FixedStorageBlackholeInterfaceIndex.ToString() +
+                " -and $_.NextHop -eq '" +
+                FixedStorageBlackholeNextHop +
+                "'})",
+                false,
+                20,
+                "Pre-authorized storage blackhole route was not removed.");
+            WaitForTcpReachability(
+                FixedStorageAddress,
+                445,
+                true,
+                20,
+                "Storage SMB did not recover after removing the " +
+                "blackhole route.");
+            _blockedNetworkTargets.Remove(disableStepId);
+            return "network restored target=" + FixedStorageAddress;
         }
 
-        private void EnableAllDisabledNetworkAdapters()
+        private void UnblockAllNetworkTargets()
         {
             foreach (string stepId in new List<string>(
-                _disabledNetworkAdapters.Keys))
+                _blockedNetworkTargets.Keys))
             {
                 try
                 {
@@ -528,11 +851,11 @@ namespace AniloxRoll.DvtRunner
                 catch (Exception ex)
                 {
                     Output?.Invoke(
-                        "[cleanup warning] network adapter recovery failed: " +
+                        "[cleanup warning] network target recovery failed: " +
                         ex.Message);
                 }
             }
-            _disabledNetworkAdapters.Clear();
+            _blockedNetworkTargets.Clear();
         }
 
         private string BlockTargetPort(DvtStep step)

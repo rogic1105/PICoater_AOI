@@ -1,7 +1,7 @@
 {
   "Id": "physical-smb-backlog-recovery",
   "Name": "SMB 中斷與待傳恢復",
-  "Description": "以軟體暫時停用通往儲存電腦的網卡，期間完成兩輪實際取相，恢復後驗證遠端待傳清空與 heartbeat 回復。",
+  "Description": "以固定 /32 Loopback 黑洞路由只隔離儲存電腦，期間完成兩輪實際取相，恢復後驗證遠端待傳清空與 heartbeat 回復。",
   "Steps": [
     {
       "Id": "launch",
@@ -133,7 +133,7 @@
     {
       "Id": "smb-outage",
       "Contract": "H1.Storage/C3",
-      "Title": "用軟體停用儲存網路",
+      "Title": "只隔離儲存電腦路徑",
       "Action": "disable-target-network",
       "Target": "\\\\192.168.10.20\\Anilox",
       "TimeoutSeconds": 20
@@ -205,7 +205,7 @@
     {
       "Id": "restore-smb",
       "Contract": "H1.Storage/C3",
-      "Title": "重新啟用儲存網路",
+      "Title": "恢復儲存電腦路徑",
       "Action": "enable-target-network",
       "Target": "smb-outage",
       "TimeoutSeconds": 20

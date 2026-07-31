@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("Functional", "Unit", "Integration", "Dvt", "ReviewReport30k", "PhysicalCamera", "PhysicalCapture", "PhysicalIo", "PhysicalStorage", "PhysicalRecovery", "PhysicalBridgeRecovery", "PhysicalSoak", "Stress", "Soak", "All")]
+    [ValidateSet("Functional", "Unit", "Integration", "Dvt", "ReviewReport30k", "PhysicalCamera", "PhysicalCapture", "PhysicalIo", "PhysicalStorage", "PhysicalRecovery", "PhysicalBridgeRecovery", "PhysicalRetention", "PhysicalSoak", "Stress", "Soak", "All")]
     [string]$Mode = "All",
     [double]$StressMinutes = 120,
     [double]$SoakMinutes = 120,
@@ -66,9 +66,11 @@ $acceptanceCriteria = @{
     "Physical storage five-minute stability" =
         "SMB probe write and heartbeat remain green for 5 minutes; shutdown is clean."
     "Physical SMB backlog recovery" =
-        "The network adapter routing to the storage PC is disabled in software; two captures finalize locally and remain pending; after re-enable, the share is write-verified, the backlog drains, heartbeat recovers, settings restore, and shutdown is clean."
+        "A fixed /32 Loopback blackhole isolates only the storage PC while the shared IO NIC stays online; two captures finalize locally and remain pending; after route removal, the share is write-verified, the backlog drains, heartbeat recovers, settings restore, and shutdown is clean."
     "Physical IO and light software recovery" =
         "The physical IO TCP endpoint and light serial device are each isolated and restored three times in software; every cycle raises one disconnect edge and health incident, then reconnects and resolves before clean shutdown."
+    "Physical low-disk retention recovery" =
+        "A marker-protected TEMP root holds two complete historical days; the threshold is derived from current free space; only the oldest day and its CSV are deleted; the newer day remains; low-space and cleanup incidents complete raise, resolve, and individual acknowledgement; settings and fixture are cleaned up."
     "Physical IO and storage soak" =
         "Fixed hardware topology; IO and storage stay green; UI always responds; Private Bytes sustained growth <=256 MB/hour and total delta <=4 GB; handles/GDI/USER/threads stay within guards; clean shutdown."
     "Offline stress tests" =
@@ -437,6 +439,48 @@ function Invoke-DvtScenario {
                 $detail +=
                     "; grabIds=$comboCount; maxUiStall=$worstStall; checker=$checker"
             }
+            elseif ($ScenarioId -eq "physical-retention-cleanup") {
+                $fixture = if (
+                    $text -match
+                    "oldest=deleted newer=preserved threshold=(\d+)GiB free=(\d+) fixture=(\d+)"
+                ) {
+                    "threshold=$($Matches[1])GiB free=$($Matches[2]) " +
+                        "fixture=$($Matches[3])B oldest=deleted newer=preserved"
+                }
+                else {
+                    "fixture verification=missing"
+                }
+                $freed = if (
+                    $text -match "Cleanup done: freed (\d+) MB"
+                ) {
+                    $Matches[1] + "MB"
+                }
+                else {
+                    "unknown"
+                }
+                $outputHealth = if (
+                    $text -match
+                    "CAPTURE/C4\.output-health: events=(\d+) states=(\d+) invalid=(\d+)"
+                ) {
+                    "$($Matches[1]) events/$($Matches[2]) states/" +
+                        "$($Matches[3]) invalid"
+                }
+                else {
+                    "unknown"
+                }
+                $checker = if (
+                    $text -match
+                    "sessions=\d+ failSessions=\d+ PASS=(\d+) FAIL=(\d+)"
+                ) {
+                    "$($Matches[1]) PASS/$($Matches[2]) FAIL"
+                }
+                else {
+                    "unknown"
+                }
+                $detail =
+                    "$fixture; freed=$freed; outputHealth=$outputHealth; " +
+                    "checker=$checker"
+            }
         }
         else {
             "DVT Runner did not produce a result file. ExitCode=$($process.ExitCode)" |
@@ -610,6 +654,10 @@ function Write-CampaignReport {
     if ($Mode -eq "PhysicalRecovery") {
         [void]$builder.AppendLine("- Physical cable/switch interruption and real-disk/UI low-space status remain untested; this run covered repeatable software SMB isolation and backlog recovery.")
     }
+    elseif ($Mode -eq "PhysicalRetention") {
+        [void]$builder.AppendLine("- Storage-PC SMB interruption and backlog transfer are covered by their separate recovery campaign, not this run.")
+        [void]$builder.AppendLine("- Retention on the storage PC's own local disk remains separate; this run exercised the shared cleanup core and inspection-PC UI state with a marker-protected isolated fixture.")
+    }
     else {
         [void]$builder.AppendLine("- Storage-PC SMB interruption, remote backlog transfer, and real-disk/UI low-space status and recovery.")
     }
@@ -724,6 +772,12 @@ if ($Mode -eq "PhysicalBridgeRecovery") {
     $allPassed = (Invoke-DvtScenario "physical-bridge-recovery" `
         "Physical IO and light software recovery" `
         "Physical bridge recovery DVT" 1200) -and $allPassed
+}
+
+if ($Mode -eq "PhysicalRetention") {
+    $allPassed = (Invoke-DvtScenario "physical-retention-cleanup" `
+        "Physical low-disk retention recovery" `
+        "Physical retention DVT" 1200) -and $allPassed
 }
 
 if ($Mode -eq "PhysicalSoak") {

@@ -407,6 +407,29 @@ namespace AniloxRoll.DvtRunner
                     NativeMethods.IsWindowVisible(handle) &&
                     NativeMethods.ClickWindowCenter(handle))
                     return;
+
+                // ToolStrip items such as output-health labels do not own an
+                // HWND. UI Automation still exposes their screen bounds.
+                AutomationElement element =
+                    FindUnique(name, throwIfMissing: false);
+                if (element != null &&
+                    element.Current.IsEnabled &&
+                    !element.Current.IsOffscreen)
+                {
+                    System.Windows.Rect bounds =
+                        element.Current.BoundingRectangle;
+                    if (!bounds.IsEmpty &&
+                        bounds.Width > 1 &&
+                        bounds.Height > 1)
+                    {
+                        NativeMethods.SetForegroundWindow(
+                            _process.MainWindowHandle);
+                        NativeMethods.ClickScreenPoint(
+                            (int)Math.Round(bounds.Left + bounds.Width / 2.0),
+                            (int)Math.Round(bounds.Top + bounds.Height / 2.0));
+                        return;
+                    }
+                }
                 await Task.Delay(150, cancellationToken);
             }
             throw new TimeoutException("Timed out waiting to click: " + name);

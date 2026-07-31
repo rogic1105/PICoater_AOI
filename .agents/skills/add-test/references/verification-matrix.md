@@ -47,6 +47,9 @@ eight-hour on-machine soak remain separate.
 | Physical IO DVT | ET-7044 待機 5 分鐘 | IO 全程連線且 Idle；正常釋放 | 305.59 秒；Flow 15 PASS / 0 FAIL | **PASS** | `20260728-211306-6ef23b9` |
 | Failure injection | IO＋光源軟體斷線／恢復 | IO 端點與 COM17 各隔離三輪；每輪依序 raise→resolve；最後正常關閉且不留下路由、停用裝置或孤兒程序 | 55.84 秒；IO 斷線／恢復／raise／resolve 各 3 次；光源各 3 次；checker 17 PASS / 0 FAIL | **PASS** | `20260730-171929-458942f` |
 | Physical Storage DVT | SMB 與 heartbeat 5 分鐘 | 探針可寫、heartbeat 綠燈、正常釋放 | 306.67 秒；Flow 15 PASS / 0 FAIL | **PASS** | `20260728-223305-8a74e41` |
+| Failure injection | Storage app 關閉／自動重啟 | 測試工具只終止程式，不代替排程啟動；90 秒內取得新 PID；15 秒 freshness 內恢復 heartbeat；連跑三輪 | 3 / 3；新 PID 與 heartbeat 分別在 8.824、54.410、55.025 秒恢復 | **PASS** | commit `458942f` STAR result；storage restart DVT report |
+| Failure injection | SMB 網路中斷與 backlog | 只隔離儲存端點；本機持續保存至少兩輪；恢復後補傳；本機／遠端內容一致；無幽靈 marker；正常關閉 | 95.94 秒；2 輪 capture；pending queue 最大 3 筆／17,218,956 bytes；恢復後 copied=4／17,224,269 bytes；2 個 `.acap` 本機／遠端長度與 SHA-256 全相同；CSV 同尺寸同時間；pending marker=0；checker 32 PASS / 0 FAIL | **PASS** | `20260731-081640-eec7b84` |
+| Retention DVT | 實際磁碟低空間＋UI 狀態 | marker 保護的隔離根目錄建立兩個完整日期；只刪最舊日與同日 CSV；保留較新日；空間恢復；`LocalLowSpace` 與 `RetentionCleanup` 皆完成 raise→resolve→ack；還原設定並刪除 fixture | 10.75 秒；門檻 1554 GiB；fixture 450,621,440 bytes；實際釋放 429 MB；oldest=deleted、newer=preserved；OutputHealth 6 events／5 states／0 invalid；checker 16 PASS / 0 FAIL；fixture=0 | **PASS** | `20260731-082930-eec7b84` |
 | Physical combined | IO＋Storage 10 分鐘資格測試 | 固定硬體；UI 全回應；狀態全綠；資源守門通過 | 609.66 秒；Private 2440.4→2456.1 MB；Handles 1290→1296；GDI 134→134；USER 284→284；Threads 104→103 | **PASS** | `20260729-052442-9307c6c` |
 | Physical camera DVT | 兩台相機、光源、背景與 Grab 短煙測 | 相機 Ready；光源 COM 探測；背景取得／預覽；Grab/Stop；圖片先於 Curve；正常關閉；checker 0 fail | 23.13 秒；背景採樣 3061 ms；CAM1/2 各 24 幀；完整 checker 28 PASS / 0 FAIL | **PASS** | `20260729-103519-9307c6c` |
 | Physical camera DVT | 最新背景與 Grab 回歸 | 相機 Ready；背景取得／預覽；Grab/Stop；圖片先於 Curve；設定還原；正常關閉 | 22.49 秒；兩台在線相機；情境與完整 checker 通過 | **PASS** | `20260730-114918-3c30df3` |
@@ -66,9 +69,6 @@ eight-hour on-machine soak remain separate.
 |---|---|---|---:|---|
 | Physical soak | 連續 8 小時最終耐久 | 前述守門連續 8 小時成立，中途不重啟且硬體拓撲不變 | **PENDING** | 2 小時資格輪已通過；待硬體可連續供電時，重新跑完整 8 小時。中止輪不可冒充本項 |
 | Failure injection | IO／光源實體拔線或斷電恢復 | 每輪 raise→resolve→ack 正確；不產生孤兒 Grab；可恢復 | **PENDING** | 軟體隔離已通過；仍需最終版本各做一次實體線材／電源故障 |
-| Failure injection | Storage app 關閉／自動重啟 | 排程重新啟動；檢測端由異常恢復；heartbeat 更新 | **PENDING** | 獨立短測 |
-| Failure injection | SMB 網路中斷與 backlog | 本機持續保存；恢復後補傳；無遺失、重複或幽靈 marker | **PENDING** | 獨立短測 |
-| Retention DVT | 實際磁碟低空間＋UI 狀態 | 與隔離整合測試相同，另驗證狀態標籤 raise→resolve→ack | **PENDING** | 刪除核心已自動驗綠；待使用可刪的實機資料獨立做故障注入 |
 | Camera load | 七台相機滿負載 | 七台首組完整；無持續掉幀；存檔、Curve、畫面與停止邊界一致 | **BLOCKED** | 目前沒有七台相機 |
 
 ## 執行順序

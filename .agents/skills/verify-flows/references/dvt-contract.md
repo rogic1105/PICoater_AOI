@@ -1199,14 +1199,16 @@ TelemetryTimer_Tick
 狀態轉換：`未排程 --持久標記成功--> 待傳 --複製失敗/重開--> 待傳
 --長度驗證+原子發布+刪標記--> 完成`。任何失敗不得進完成態。
 
-**H1/C3 軟體斷線 DVT**：`physical-smb-backlog-recovery` 找出通往儲存電腦 IP 的網卡並
-暫時以軟體停用；情境必須先把 IO 切到本機模擬器，避免同張實體網卡上的 IO 影響取相。
+**H1/C3 軟體斷線 DVT**：`physical-smb-backlog-recovery` 以固定 `/32` Loopback
+黑洞路由只隔離儲存電腦 `192.168.10.20`。IO 與儲存共用實體 NIC，禁止停用整張網卡；
+情境仍把 IO 切到本機模擬器，使 START 循環不依賴外部控制器。
 阻斷期間必須完成至少兩輪本機封裝，
-看見 `remote share unavailable` 與 `pending queued`；恢復網卡後必須依序出現
+看見 `remote share unavailable` 與 `pending queued`；移除黑洞路由後必須依序出現
 `remote share accepted`、`backlog drained`，且 heartbeat 恢復。Windows UNC 呼叫可能在
 網路中斷期間阻塞，恢復後直接成功，因此 `retry pending` 是診斷證據而非必要成功條件。`check_all_flows.py`
-的 `H1.remote-copy-recovery` 驗證上述順序。Runner 在成功、失敗與中止時都必須移除自己建立的
-故障狀態並重新啟用該網卡。此測試適合反覆執行；最終版本仍需另做一次實體拔線，以涵蓋網卡、
+的 `H1.remote-copy-recovery` 驗證上述順序。安裝器與 Runner 都必須以新的 TCP 連線量測
+SMB `:445` 確實由可達→不可達→可達，不能以路由存在冒充故障已生效。Runner 在成功、
+失敗與中止時都必須移除自己建立的黑洞路由。此測試適合反覆執行；最終版本仍需另做一次實體拔線，以涵蓋網卡、
 交換器與線材，不得把軟體阻斷冒充實體接線證據。
 
 **H1/H.Light 軟體故障注入 DVT**：`physical-bridge-recovery` 以暫時 `/32` Loopback 黑洞路由
@@ -1222,8 +1224,8 @@ controller generation 在阻斷狀態下重新連線；安裝器與 Runner 都�
 controller 在裝置停用狀態下探測失敗；恢復 COM17 後才驗證自動重連。
 每輪必須嚴格完成 `⚠ {IO|光源} 斷線 → OutputHealth raise →
 {IO|光源} 恢復連線 → OutputHealth resolve`，最後 IO 回待機且正常關閉。
-第一次由 `tests/InstallDvtAdminActions.bat` 經 UAC 安裝四個固定白名單排程動作；
-後續 Runner 本身仍以一般權限執行，只能要求封鎖／解除固定 IO 端點及停用／啟用
+第一次由 `tests/InstallDvtAdminActions.bat` 經 UAC 安裝六個固定白名單排程動作；
+後續 Runner 本身仍以一般權限執行，只能要求封鎖／解除固定 IO、儲存端點及停用／啟用
 固定 COM17，不得建立可執行任意 repo script 的永久提升入口。
 Runner 在成功、失敗及中止時，都必須移除自己建立的黑洞路由並重新啟用 PnP
 裝置。此情境驗證產品與 Windows 驅動之間的失聯恢復，不代表線材、電源或硬體重新上電
@@ -1430,6 +1432,19 @@ StorageRetentionService.RunCleanup
 低磁碟整合測試原則上使用隔離 volume/root，將門檻設為高於該測試磁碟目前可用空間、但低於磁碟總容量即可直接觸發，
 不必真的填滿磁碟。只有使用者明確確認目前沒有正式資料時，才可直接使用實際 Captures；執行前仍須記錄來源、目的地與檔案量，
 複製只能合併、不得 `/MIR` 或預先刪除目的資料。
+
+**C3/C4 實機低磁碟 DVT**：`physical-retention-cleanup` 只可使用
+`%TEMP%\PICoater-DVT-Retention`，且刪除前必須核對 Runner 專用 marker，禁止指向正式
+`D:\Anilox\Captures`。Runner 建立前天與昨天兩個完整日期資料；依當下 volume free space
+選擇 `floor(freeGiB)` 為門檻，並只在最舊日配置足以讓 free 暫時低於門檻的檔案。
+清理後必須同時成立：
+
+- 最舊日期資料夾及月份層同日 CSV 消失；
+- 較新日期資料夾、`.acap` 與 CSV 全部保留；
+- free space 回到門檻以上，`LocalLowSpace` 與 `RetentionCleanup` 各自完成
+  `raise → resolve → ack`；
+- Runner 還原 `Anilox 根目錄`、`預留空間 (GB)`，再刪除 marker 保護的 fixture；
+- 成功、失敗或中止都不得碰正式 Capture，且需正常關閉與通過完整 checker。
 
 ### C4 產出健康度與底部狀態列
 
