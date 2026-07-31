@@ -18,6 +18,7 @@ namespace AniloxRoll.DvtRunner
             new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
         private readonly Queue<string> _newLines = new Queue<string>();
         private readonly List<string> _unmatchedLines = new List<string>();
+        private readonly List<string> _evidenceLines = new List<string>();
 
         public FlowLogMonitor(string logDirectory)
         {
@@ -32,6 +33,7 @@ namespace AniloxRoll.DvtRunner
             _offsets.Clear();
             _newLines.Clear();
             _unmatchedLines.Clear();
+            _evidenceLines.Clear();
             if (!Directory.Exists(_logDirectory)) return;
 
             foreach (string path in Directory.GetFiles(_logDirectory, "trace-*.log"))
@@ -77,6 +79,37 @@ namespace AniloxRoll.DvtRunner
             ReadAvailableLines();
             _newLines.Clear();
             _unmatchedLines.Clear();
+            _evidenceLines.Clear();
+        }
+
+        public async Task<int> WaitForMinimumCountAsync(
+            string pattern,
+            int minimumCount,
+            int timeoutSeconds,
+            CancellationToken cancellationToken)
+        {
+            if (minimumCount < 1)
+                throw new ArgumentOutOfRangeException(nameof(minimumCount));
+
+            var regex = new Regex(pattern, RegexOptions.CultureInvariant);
+            DateTime deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+            while (DateTime.UtcNow < deadline)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                ReadAvailableLines();
+                // Aggregate guards consume _evidenceLines directly. Do not keep
+                // the same high-volume soak lines queued for a later wait-log
+                // step, otherwise the UI replays the entire soak at shutdown.
+                _newLines.Clear();
+                int count = _evidenceLines.Count(line => regex.IsMatch(line));
+                if (count >= minimumCount)
+                    return count;
+                await Task.Delay(120, cancellationToken);
+            }
+
+            int finalCount = _evidenceLines.Count(line => regex.IsMatch(line));
+            throw new TimeoutException(
+                $"Flow evidence count {finalCount} < {minimumCount}: {pattern}");
         }
 
         private void ReadAvailableLines()
@@ -115,7 +148,10 @@ namespace AniloxRoll.DvtRunner
                     {
                         string line;
                         while ((line = reader.ReadLine()) != null)
+                        {
                             _newLines.Enqueue(line);
+                            _evidenceLines.Add(line);
+                        }
                     }
                     _offsets[path] = stream.Length;
                 }

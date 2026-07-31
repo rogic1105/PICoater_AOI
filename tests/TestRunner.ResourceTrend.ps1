@@ -47,6 +47,8 @@ function Get-ResourceTrend {
     $intervalRates = New-Object System.Collections.Generic.List[double]
     $largestPositiveStep = 0.0
     $lastExpansionIndex = -1
+    $positiveExpansionCount = 0
+    $negativeExpansionCount = 0
     for ($index = 1; $index -lt $steady.Count; $index++) {
         $previous = $steady[$index - 1]
         $current = $steady[$index]
@@ -63,6 +65,10 @@ function Get-ResourceTrend {
         }
         if ($step -ge $ExpansionStepMB) {
             $lastExpansionIndex = $index
+            $positiveExpansionCount++
+        }
+        if ($step -le -$ExpansionStepMB) {
+            $negativeExpansionCount++
         }
     }
 
@@ -96,6 +102,51 @@ function Get-ResourceTrend {
         $postExpansionRate -gt $PrivateRateLimitMBPerHour
     $emergencyLeak = $privateDelta -gt $PrivateEmergencyDeltaMB
 
+    # Repeated image capture produces a large sawtooth: each grab expands the
+    # Server GC heap, then later collections return to a lower retained
+    # baseline. Comparing arbitrary first/last samples misclassifies a run that
+    # happens to end at a peak. When expansions and contractions repeat, compare
+    # the lowest retained point in each half of the steady window instead.
+    $cyclicExpansion =
+        $positiveExpansionCount -ge 3 -and
+        $negativeExpansionCount -ge 3
+    $cycleTroughDelta = 0.0
+    $cycleTroughRate = 0.0
+    $cycleTroughLeak = $false
+    if ($cyclicExpansion) {
+        $midpointSeconds =
+            ([double]$first.ElapsedSeconds + [double]$last.ElapsedSeconds) / 2.0
+        $firstHalf = @($steady | Where-Object {
+            [double]$_.ElapsedSeconds -le $midpointSeconds
+        })
+        $secondHalf = @($steady | Where-Object {
+            [double]$_.ElapsedSeconds -gt $midpointSeconds
+        })
+        if ($firstHalf.Count -gt 0 -and $secondHalf.Count -gt 0) {
+            $firstTrough =
+                [double](($firstHalf | Measure-Object PrivateMB -Minimum).Minimum)
+            $secondTrough =
+                [double](($secondHalf | Measure-Object PrivateMB -Minimum).Minimum)
+            $cycleTroughDelta = $secondTrough - $firstTrough
+            $halfWindowSeconds = [Math]::Max(1.0, $steadySeconds / 2.0)
+            $cycleTroughRate =
+                $cycleTroughDelta * 3600.0 / $halfWindowSeconds
+            $cycleTroughLeak =
+                $steadySeconds -ge $MinimumRateWindowSeconds -and
+                $cycleTroughDelta -gt 0 -and
+                $cycleTroughRate -gt $PrivateRateLimitMBPerHour
+            $emergencyLeak =
+                $cycleTroughDelta -gt $PrivateEmergencyDeltaMB
+        }
+    }
+
+    $privateLeak = if ($cyclicExpansion) {
+        $cycleTroughLeak -or $emergencyLeak
+    }
+    else {
+        $medianRateLeak -or $postExpansionLeak -or $emergencyLeak
+    }
+
     return [pscustomobject]@{
         Samples = $steady
         First = $first
@@ -109,10 +160,15 @@ function Get-ResourceTrend {
         PostExpansionDeltaMB = $postExpansionDelta
         PostExpansionRateMBPerHour = $postExpansionRate
         HasExpansion = $lastExpansionIndex -ge 0
-        PrivateLeak = $medianRateLeak -or $postExpansionLeak -or
-            $emergencyLeak
+        CyclicExpansion = $cyclicExpansion
+        CycleTroughDeltaMB = $cycleTroughDelta
+        CycleTroughRateMBPerHour = $cycleTroughRate
+        PositiveExpansionCount = $positiveExpansionCount
+        NegativeExpansionCount = $negativeExpansionCount
+        PrivateLeak = $privateLeak
         MedianRateLeak = $medianRateLeak
         PostExpansionLeak = $postExpansionLeak
+        CycleTroughLeak = $cycleTroughLeak
         EmergencyLeak = $emergencyLeak
     }
 }

@@ -1433,7 +1433,7 @@ StorageRetentionService.RunCleanup
 不必真的填滿磁碟。只有使用者明確確認目前沒有正式資料時，才可直接使用實際 Captures；執行前仍須記錄來源、目的地與檔案量，
 複製只能合併、不得 `/MIR` 或預先刪除目的資料。
 
-**C3/C4 實機低磁碟 DVT**：`physical-retention-cleanup` 只可使用
+**C3/C4 檢測電腦低磁碟 DVT**：`physical-retention-cleanup` 只可使用
 `%TEMP%\PICoater-DVT-Retention`，且刪除前必須核對 Runner 專用 marker，禁止指向正式
 `D:\Anilox\Captures`。Runner 建立前天與昨天兩個完整日期資料；依當下 volume free space
 選擇 `floor(freeGiB)` 為門檻，並只在最舊日配置足以讓 free 暫時低於門檻的檔案。
@@ -1445,6 +1445,22 @@ StorageRetentionService.RunCleanup
   `raise → resolve → ack`；
 - Runner 還原 `Anilox 根目錄`、`預留空間 (GB)`，再刪除 marker 保護的 fixture；
 - 成功、失敗或中止都不得碰正式 Capture，且需正常關閉與通過完整 checker。
+
+**C3 儲存電腦本機最終驗收**：只有使用者明確確認實際資料可刪時，才可在儲存電腦本機執行
+`test_storage_retention.bat`。工具必須硬性核對根目錄恰為 `D:\Anilox\Captures`、要求人工輸入
+`DELETE`、備份 `C:\AniloxMonitor\Config\app-mode.json`，並把暫時門檻設為
+`floor(currentFreeGiB)+1`（且小於 volume total）。最舊完整日的容量必須足以單獨達標，否則拒絕執行。
+驗收必須證明只刪最舊完整一天與同日 CSV、較新日期全保留、free 達標；最後還原原始 JSON、重啟
+儲存程式並取得新鮮 heartbeat。報告與 JSON 備份寫入 `D:\Anilox\Logs\DvtReports`。
+
+長時間聚合驗證使用 `verify-log-min-count` 直接統計 evidence；已納入聚合統計的高密度行不得留在
+`wait-log` 的逐行 UI 輸出佇列。否則 2 小時約 4 萬行會在關閉階段重播，產品雖已完成取相與關閉，
+Runner 仍會因 UI 佇列塞住而觸發外層 safety timeout。
+
+反覆 Grab 的 Private Bytes 是大幅鋸齒波；同一輪配置影像／封裝 buffer，之後由 Server GC 回收。
+資源守門偵測到至少三次擴張與三次回收後，必須改比較穩態前半／後半的最低 retained trough，
+不可用任意最後樣本與第一樣本相減。trough 持續成長超過 256 MB/hour 或增加超過 4 GB 才判定
+Private leak；UI 無回應、handle、GDI、USER、thread 仍各自獨立判定。
 
 ### C4 產出健康度與底部狀態列
 
@@ -1562,6 +1578,18 @@ capture finalize grab=... archive=...acap ... remoteFiles=N
   `physical-storage-stability` 驗證，兩者不得互相冒充。
 - Runner 中止或失敗時，必先停止可能仍在進行的 Grab，再終止所有 helper、
   還原 PropertyGrid 並關閉主程式。helper exit code 非 0 直接判 FAIL。
+
+`physical-capture-soak` 將同一契約延伸為耐久驗證，不另造產品判準：
+
+- IO 模擬器固定 `High 10s / Low 4s`，測試時間只換算完整循環數；結束必落在 Low。
+- 兩小時理論值為 `floor(7200 / 14) = 514` 輪。
+- 每輪必須各有一筆 request、gate open、`aligned=True` first-set、gate close 與
+  `capture finalize ... remoteFiles>0`；每輪至少一筆 `rowCurve present after=mainImage`。
+- 六個聚合計數守門只負責及早指出缺輪；最終仍由 `check_all_flows.py` 逐輪檢查順序，
+  不能以總數相同掩蓋跨輪錯配。
+- 外部資源探針每 30 秒量測 UI 回應、Private Bytes、handle、GDI/USER 與 thread。
+  影像封裝造成的暫時尖峰可接受，但暖機後基線不可持續墊高。
+- 儲存與光源狀態必須全程健康；七台未接齊時，報告必明列七台滿載仍為未覆蓋。
 
 `physical-fixed-stop-capture` 延續同一條實體影像鏈，另外驗證停止 owner：
 

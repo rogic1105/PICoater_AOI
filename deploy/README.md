@@ -11,6 +11,8 @@
 | `setup.bat` | 唯一入口：新電腦跑完整安裝，已安裝電腦只更新程式 |
 | `manual-install.html` | BAT 無法執行時的 PowerShell 與完全手動備援說明 |
 | `VERSION.txt` | 記錄封裝角色、來源 commit、工作區狀態與封裝時間 |
+| `test_storage_restart.bat` | Storage 包限定：驗證程式關閉後由排程自動重啟 |
+| `test_storage_retention.bat` | Storage 包限定：在明確確認後，以正式清理流程刪除最舊完整一天 |
 
 一般使用者不應自行執行 `deploy/*/scripts` 內的個別腳本，除非正在依照手動安裝說明排除問題。
 

@@ -273,6 +273,18 @@ namespace AniloxRoll.DvtRunner
                         _captureMayBeActive = false;
                     return evidence;
 
+                case "verify-log-min-count":
+                    int minimumCount = int.Parse(
+                        step.Value,
+                        NumberStyles.Integer,
+                        CultureInfo.InvariantCulture);
+                    int observedCount = await _log.WaitForMinimumCountAsync(
+                        step.Pattern,
+                        minimumCount,
+                        step.TimeoutSeconds,
+                        cancellationToken);
+                    return $"count={observedCount} minimum={minimumCount}";
+
                 case "reset-evidence":
                     _log.ResetEvidence();
                     return "後續只接受本階段新產生的 Flow 證據";

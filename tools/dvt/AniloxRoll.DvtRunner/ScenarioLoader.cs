@@ -36,6 +36,7 @@ namespace AniloxRoll.DvtRunner
                 "confirm-folder",
                 "select-combo",
                 "wait-log",
+                "verify-log-min-count",
                 "reset-evidence",
                 "delay",
                 "soak",
@@ -92,6 +93,21 @@ namespace AniloxRoll.DvtRunner
                     if (string.IsNullOrWhiteSpace(step.Pattern))
                         throw new InvalidDataException(prefix + " requires a regex pattern.");
                     _ = new Regex(step.Pattern, RegexOptions.CultureInvariant);
+                }
+                if (step.Action == "verify-log-min-count")
+                {
+                    if (string.IsNullOrWhiteSpace(step.Pattern))
+                        throw new InvalidDataException(prefix + " requires a regex pattern.");
+                    _ = new Regex(step.Pattern, RegexOptions.CultureInvariant);
+                    bool isDurationCycleToken = Regex.IsMatch(
+                        step.Value ?? string.Empty,
+                        @"^\{cycles:[1-9]\d*\}$",
+                        RegexOptions.CultureInvariant);
+                    if ((!int.TryParse(step.Value, out int minimumCount) ||
+                         minimumCount < 1) &&
+                        !isDurationCycleToken)
+                        throw new InvalidDataException(
+                            prefix + " requires a positive count in Value.");
                 }
                 if (step.TimeoutSeconds < 0)
                     throw new InvalidDataException(

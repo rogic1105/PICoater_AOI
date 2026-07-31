@@ -1,0 +1,267 @@
+{
+  "Id": "physical-capture-soak",
+  "Name": "反覆 Grab 耐久測試",
+  "Description": "本機 IO 模擬器持續送出 High 10 秒／Low 4 秒；每輪都必須完成取相、Curve、尾幀排水、封裝與遠端待傳，並持續量測 UI 與資源。",
+  "Steps": [
+    {
+      "Id": "launch",
+      "Contract": "F1",
+      "Title": "開啟或連接監控程式",
+      "Action": "launch",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "normalize-log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "正規化為日常運行記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "日常運行",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "切換為流程驗證記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "流程驗證",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "log-mode-proof",
+      "Contract": "DVT.LogMode",
+      "Title": "確認 DVT 探針已開啟",
+      "Action": "wait-log",
+      "Pattern": "log mode=FlowVerification",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "light-port",
+      "Contract": "H.Light",
+      "Title": "指定實體光源 COM Port",
+      "Action": "set-property",
+      "Target": "COM Port",
+      "Value": "COM17",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "enable-light",
+      "Contract": "H.Light",
+      "Title": "啟用實體光源",
+      "Action": "set-property",
+      "Target": "啟用光源",
+      "Value": "是",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "wait-light-ready",
+      "Contract": "H.Light",
+      "Title": "等待光源完成 COM 連線",
+      "Action": "wait-log",
+      "Pattern": "\\[LightController\\] AutoDetect: (使用設定|掃描找到)",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "wait-acquisition-ready",
+      "Contract": "F1/F2",
+      "Title": "等待相機待機與相位準備完成",
+      "Action": "wait-log",
+      "Pattern": "acquisition idle prepare ready cams=",
+      "TimeoutSeconds": 180
+    },
+    {
+      "Id": "stop-condition",
+      "Contract": "F2.IO",
+      "Title": "停止條件設為 IO",
+      "Action": "set-property",
+      "Target": "停止條件",
+      "Value": "IO",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "grab-limit",
+      "Contract": "F2.IO",
+      "Title": "安全上限設為十秒",
+      "Action": "set-property",
+      "Target": "總時間(秒)",
+      "Value": "10",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "enable-save",
+      "Contract": "C1",
+      "Title": "啟用正式存檔",
+      "Action": "set-property",
+      "Target": "存檔",
+      "Value": "是",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "reset-capture-evidence",
+      "Contract": "F2.IO",
+      "Title": "清除啟動階段舊證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "io-ip",
+      "Contract": "H1",
+      "Title": "切換到本機 IO 模擬器",
+      "Action": "set-property",
+      "Target": "IO IP",
+      "Value": "127.0.0.1",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "io-port",
+      "Contract": "H1",
+      "Title": "使用標準 Modbus 連接埠",
+      "Action": "set-property",
+      "Target": "IO Port",
+      "Value": "502",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "enable-io",
+      "Contract": "H1",
+      "Title": "啟用 IO 控制",
+      "Action": "set-property",
+      "Target": "啟用 IO",
+      "Value": "是",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "io-simulator",
+      "Contract": "H1/F2.IO",
+      "Title": "啟動指定時間的 IO 循環",
+      "Action": "launch-helper",
+      "Target": "bin\\x64\\Release\\tools\\io\\IoBridge.IoSimulator.exe",
+      "Value": "--auto --port 502 --cycles {cycles:14000} --initial-delay-ms 20000 --high-ms 10000 --low-ms 4000 --exit-delay-ms 5000 --result-file D:\\Anilox\\Logs\\io-simulator-capture-soak.txt",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "local-controller",
+      "Contract": "H1",
+      "Title": "確認主程式改連本機 IO",
+      "Action": "wait-log",
+      "Pattern": "IO controller start generation=\\d+ endpoint=127\\.0\\.0\\.1:502",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "local-io-idle",
+      "Contract": "H1",
+      "Title": "等待模擬 IO 連線並進入待機",
+      "Action": "wait-element",
+      "Target": "待機",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "storage-green",
+      "Contract": "H1",
+      "Title": "確認儲存電腦可接收資料",
+      "Action": "wait-element",
+      "Target": "● 儲存電腦 已連線",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "capture-window",
+      "Contract": "F2.IO/C1/H1",
+      "Title": "持續執行 Grab 並監看穩定硬體狀態",
+      "Action": "soak",
+      "Target": "● 儲存電腦 已連線|● 光源 已連線 (255)",
+      "TimeoutSeconds": 7200
+    },
+    {
+      "Id": "simulator-complete",
+      "Contract": "H1/F3.IO",
+      "Title": "IO 模擬器在完整 Low 後正常結束",
+      "Action": "wait-helper-exit",
+      "Target": "io-simulator",
+      "TimeoutSeconds": 90
+    },
+    {
+      "Id": "requests-complete",
+      "Contract": "F2.IO",
+      "Title": "每個 High 都形成一筆 Grab 請求",
+      "Action": "verify-log-min-count",
+      "Pattern": "IO grab request stopCondition=IoSignal stopOnLow=True",
+      "Value": "{cycles:14000}",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "gates-complete",
+      "Contract": "F2.IO",
+      "Title": "每輪取相閘門都成功開啟",
+      "Action": "verify-log-min-count",
+      "Pattern": "capture gate open cams=",
+      "Value": "{cycles:14000}",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "first-sets-complete",
+      "Contract": "F2.IO",
+      "Title": "每輪首組影像都完整對齊",
+      "Action": "verify-log-min-count",
+      "Pattern": "capture first-set ready .*aligned=True",
+      "Value": "{cycles:14000}",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "curves-complete",
+      "Contract": "F2.IO",
+      "Title": "每輪 Curve 都晚於主影像出現",
+      "Action": "verify-log-min-count",
+      "Pattern": "rowCurve present after=mainImage",
+      "Value": "{cycles:14000}",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "gates-closed",
+      "Contract": "F3.IO",
+      "Title": "每輪 Low 都安全關閉取相閘門",
+      "Action": "verify-log-min-count",
+      "Pattern": "capture gate closed standby=on",
+      "Value": "{cycles:14000}",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "archives-complete",
+      "Contract": "C1/F3.IO",
+      "Title": "每輪都完成封裝並加入遠端待傳",
+      "Action": "verify-log-min-count",
+      "Pattern": "capture finalize grab=.*archive=.*\\.acap .*remoteFiles=[1-9]\\d*",
+      "Value": "{cycles:14000}",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "restore-settings",
+      "Contract": "DVT.Cleanup",
+      "Title": "還原 Runner 修改的設定",
+      "Action": "restore-properties",
+      "TimeoutSeconds": 45
+    },
+    {
+      "Id": "close-app",
+      "Contract": "G2.shutdown",
+      "Title": "正常關閉主程式",
+      "Action": "close-app",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "shutdown-complete",
+      "Contract": "G2.shutdown",
+      "Title": "確認資源釋放完成",
+      "Action": "wait-log",
+      "Pattern": "shutdown resources released",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "checker",
+      "Contract": "DVT",
+      "Title": "執行完整 Flow 檢查器",
+      "Action": "run-checker",
+      "TimeoutSeconds": 180
+    }
+  ]
+}

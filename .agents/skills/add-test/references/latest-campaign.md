@@ -3,20 +3,19 @@
 > This file is overwritten by the next recorded campaign. Git history is the durable record.
 
 - Result: **PASS**
-- Run: `20260731-083512`
-- Commit: `8f184b4`
+- Run: `20260731-133218`
+- Commit: `96035a3`
 - Working tree: dirty
-- Mode: `PhysicalSoak`
+- Mode: `PhysicalCaptureSoak`
 - Machine: `DESKTOP-C1MN5KD`
-- Finished: 2026-07-31 10:35:23 +08:00
-- Raw artifacts: `artifacts/test-reports/20260731-083512-8f184b4/` (local, ignored by Git)
+- Finished: 2026-07-31 15:33:07 +08:00
+- Raw artifacts: `artifacts/test-reports/20260731-133218-96035a3/` (local, ignored by Git)
 
 ## Results
 
 | Layer | Check | Result | Theory / acceptance | Experimental value / evidence | Seconds |
 |---|---|---:|---|---|---:|
-| Unit | Resource trend guard tests | **PASS** | One-time heap expansion passes; sustained 330 MB/hour growth and post-expansion growth fail. | exit code 0 | 0.23 |
-| Physical soak | Physical IO and storage soak | **PASS** | Fixed hardware topology; IO and storage stay green; UI always responds; Private Bytes sustained growth <=256 MB/hour and total delta <=4 GB; handles/GDI/USER/threads stay within guards; clean shutdown. | Result: PASS; Status: PASS：IO＋儲存電腦待機耐久測試（不 Grab）; resources samples=237 privateMB=2751.6->3213.1 max=3213.1 handles=1256->1365 max=1367 gdi=134->135 user=281->283 threads=106->129 ratesPerHour=private:241.1MB medianPrivate:154.5MB postExpansionPrivate:19.9MB postExpansionSeconds=1245.4 largestPrivateStepMB=203.6 handles:57 observer=external | 7209.9 |
+| Physical capture soak | Physical repeated capture soak | **PASS** | High 10 seconds / Low 4 seconds for the configured duration; every High produces one request, gate, aligned first set, image-before-curve result, clean gate close, archive, and remote enqueue; storage and light remain green; UI and resource guards pass; clean shutdown. | cycles=514/514; flowCountGuards=6/6; checker=31 PASS/0 FAIL; resources samples=239 privateMB=17059.1->16274.4 max=42366.9 handles=1485->1633 max=1633 gdi=136->137 user=283->286 threads=149->150 ratesPerHour=private:-408.3MB medianPrivate:125082.1MB postExpansionPrivate:0MB postExpansionSeconds=0 largestPrivateStepMB=26890.4 cyclic=True troughDeltaMB=-801.7 troughRateMBPerHour=-834.3 handles:77 observer=external | 7248.6 |
 
 ## Improvement record
 
@@ -25,7 +24,8 @@
 
 ## Not covered by this campaign
 
-- Physical camera/grabber acquisition, seven-camera frame load, background capture, and live Grab.
+- Seven-camera full-load acquisition remains untested; this run covered only the connected cameras.
+- Background capture and preview are covered by the separate PhysicalCamera scenario, not this run.
 - Physical IO and light disconnect/reconnect timing.
 - Storage-PC SMB interruption, remote backlog transfer, and real-disk/UI low-space status and recovery.
 - Shift/24-hour product soak with the IO simulator, cameras, storage transfer, and operator interactions.

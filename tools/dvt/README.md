@@ -106,6 +106,13 @@ IO 請求、capture gate、首組相位、影像後 Curve、Low 後尾幀排水�
 封裝與遠端待傳。成功或失敗時 Runner 都會關閉模擬器、停止可能仍在進行的 Grab、
 還原 PropertyGrid 設定並關閉主程式。
 
+`反覆 Grab 耐久測試` 沿用同一條實體取相流程，以 `High 10 秒 / Low 4 秒` 重複執行。
+CLI 的測試分鐘數會換算為完整循環數，最後一定停在 Low，不會為了湊時間截斷一輪。
+兩小時的理論值是 514 輪；request、gate、對齊首組、影像後 Curve、gate close、封裝與
+遠端待傳都必須逐輪完整。統一測試器每 30 秒另記錄 Working Set、Private Bytes、
+handle、GDI/USER、thread、CPU 與 UI Responding。短資格輪通過只證明工具與流程可跑，
+不能替代兩小時或八小時耐久結果。
+
 同一個 `PhysicalCapture` 測試入口接著執行 `時間與高度實際取相`。模擬器會在目標
 完成前提早送出 START Low：時間模式必須從首幀集合對齊後完整抓取 10 秒；高度模式
 必須等所有在線相機共同完成 15,000 列。兩者都不得被提早 Low 截短，並須完成 Curve、

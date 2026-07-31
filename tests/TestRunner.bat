@@ -18,9 +18,10 @@ echo  9. 實際取相（IO 三循環＋時間／高度）
 echo 10. SMB 中斷／待傳補送恢復（需系統管理員）
 echo 11. IO／光源軟體斷線恢復（首次安裝固定管理員動作）
 echo 12. 低磁碟刪檔與狀態恢復（隔離 TEMP，不碰正式資料）
-echo 13. 結束
+echo 13. 反覆 Grab 耐久測試（預設 120 分鐘）
+echo 14. 結束
 echo.
-set /p choice="請選擇 (1-13): "
+set /p choice="請選擇 (1-14): "
 
 if "%choice%"=="1" goto :functional
 if "%choice%"=="2" goto :stress
@@ -34,7 +35,8 @@ if "%choice%"=="9" goto :physical_capture
 if "%choice%"=="10" goto :physical_recovery
 if "%choice%"=="11" goto :physical_bridge_recovery
 if "%choice%"=="12" goto :physical_retention
-if "%choice%"=="13" goto :done
+if "%choice%"=="13" goto :physical_capture_soak
+if "%choice%"=="14" goto :done
 goto :invalid
 
 :functional
@@ -95,6 +97,12 @@ goto :result
 set /p physical_soak_minutes="耐久測試分鐘數（預設一循環 120）: "
 if "%physical_soak_minutes%"=="" set "physical_soak_minutes=120"
 powershell -NoProfile -ExecutionPolicy Bypass -File "tests\TestRunner.ps1" -Mode PhysicalSoak -PhysicalSoakMinutes "%physical_soak_minutes%"
+goto :result
+
+:physical_capture_soak
+set /p physical_capture_soak_minutes="反覆 Grab 分鐘數（預設 120）: "
+if "%physical_capture_soak_minutes%"=="" set "physical_capture_soak_minutes=120"
+powershell -NoProfile -ExecutionPolicy Bypass -File "tests\TestRunner.ps1" -Mode PhysicalCaptureSoak -PhysicalCaptureSoakMinutes "%physical_capture_soak_minutes%"
 goto :result
 
 :review_report_30k

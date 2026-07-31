@@ -1,9 +1,10 @@
 param(
-    [ValidateSet("Functional", "Unit", "Integration", "Dvt", "ReviewReport30k", "PhysicalCamera", "PhysicalCapture", "PhysicalIo", "PhysicalStorage", "PhysicalRecovery", "PhysicalBridgeRecovery", "PhysicalRetention", "PhysicalSoak", "Stress", "Soak", "All")]
+    [ValidateSet("Functional", "Unit", "Integration", "Dvt", "ReviewReport30k", "PhysicalCamera", "PhysicalCapture", "PhysicalIo", "PhysicalStorage", "PhysicalRecovery", "PhysicalBridgeRecovery", "PhysicalRetention", "PhysicalSoak", "PhysicalCaptureSoak", "Stress", "Soak", "All")]
     [string]$Mode = "All",
     [double]$StressMinutes = 120,
     [double]$SoakMinutes = 120,
     [double]$PhysicalSoakMinutes = 120,
+    [double]$PhysicalCaptureSoakMinutes = 120,
     [switch]$RecordLatest,
     [switch]$SkipBuild,
     [string]$ImprovementSummary = "Inspect the tested commit and worktree diff for product changes; the campaign runner does not infer them."
@@ -73,6 +74,8 @@ $acceptanceCriteria = @{
         "A marker-protected TEMP root holds two complete historical days; the threshold is derived from current free space; only the oldest day and its CSV are deleted; the newer day remains; low-space and cleanup incidents complete raise, resolve, and individual acknowledgement; settings and fixture are cleaned up."
     "Physical IO and storage soak" =
         "Fixed hardware topology; IO and storage stay green; UI always responds; Private Bytes sustained growth <=256 MB/hour and total delta <=4 GB; handles/GDI/USER/threads stay within guards; clean shutdown."
+    "Physical repeated capture soak" =
+        "High 10 seconds / Low 4 seconds for the configured duration; every High produces one request, gate, aligned first set, image-before-curve result, clean gate close, archive, and remote enqueue; storage and light remain green; UI and resource guards pass; clean shutdown."
     "Offline stress tests" =
         "All 9 high-frequency and mock Bridge cases pass for the configured wall-clock budget."
     "Offline endurance tests" =
@@ -323,9 +326,11 @@ function Invoke-DvtScenario {
         $nextResourceSample = [DateTime]::UtcNow
         $monitorProcessId = 0
         while (-not $process.HasExited -and [DateTime]::UtcNow -lt $deadline) {
+            # Duration belongs to the scenario's soak step. Keep sampling through
+            # setup and cleanup so short qualification runs still have a trend.
             $insideResourceWindow =
                 $DurationSeconds -le 0 -or
-                $watch.Elapsed.TotalSeconds -lt $DurationSeconds
+                $watch.Elapsed.TotalSeconds -lt ($DurationSeconds + 300)
             if ($SampleResources -and
                 $insideResourceWindow -and
                 [DateTime]::UtcNow -ge $nextResourceSample) {
@@ -481,6 +486,33 @@ function Invoke-DvtScenario {
                     "$fixture; freed=$freed; outputHealth=$outputHealth; " +
                     "checker=$checker"
             }
+            elseif ($ScenarioId -eq "physical-capture-soak") {
+                $countGuards = [regex]::Matches(
+                    $text,
+                    "count=(\d+) minimum=(\d+)")
+                $cycles = if ($countGuards.Count -ge 6) {
+                    "$($countGuards[0].Groups[1].Value)/" +
+                        "$($countGuards[0].Groups[2].Value)"
+                }
+                else {
+                    "missing"
+                }
+                $checker = if (
+                    $text -match
+                    "sessions=\d+ failSessions=\d+ PASS=(\d+) FAIL=(\d+)"
+                ) {
+                    "$($Matches[1]) PASS/$($Matches[2]) FAIL"
+                }
+                else {
+                    "unknown"
+                }
+                $detail =
+                    "cycles=$cycles; flowCountGuards=$($countGuards.Count)/6; " +
+                    "checker=$checker"
+                if ($countGuards.Count -lt 6) {
+                    $status = "FAIL"
+                }
+            }
         }
         else {
             "DVT Runner did not produce a result file. ExitCode=$($process.ExitCode)" |
@@ -521,6 +553,10 @@ function Invoke-DvtScenario {
                     $resourceTrend.PostExpansionSeconds, 1)
                 $largestPrivateStep = [Math]::Round(
                     $resourceTrend.LargestPositiveStepMB, 1)
+                $cycleTroughDelta = [Math]::Round(
+                    $resourceTrend.CycleTroughDeltaMB, 1)
+                $cycleTroughRate = [Math]::Round(
+                    $resourceTrend.CycleTroughRateMBPerHour, 1)
                 $handleRatePerHour = [Math]::Round(
                     $handleDelta * 3600 / $steadySeconds, 1)
                 $notResponding = @($steady | Where-Object {
@@ -532,7 +568,8 @@ function Invoke-DvtScenario {
                     "threads={11}->{12} ratesPerHour=private:{13}MB " +
                     "medianPrivate:{14}MB postExpansionPrivate:{15}MB " +
                     "postExpansionSeconds={16} largestPrivateStepMB={17} " +
-                    "handles:{18} observer=external") -f
+                    "cyclic={18} troughDeltaMB={19} troughRateMBPerHour={20} " +
+                    "handles:{21} observer=external") -f
                     $resourceSamples.Count,
                     $first.PrivateMB, $last.PrivateMB, $maxPrivate,
                     $first.Handles, $last.Handles, $maxHandles,
@@ -541,7 +578,8 @@ function Invoke-DvtScenario {
                     $first.Threads, $last.Threads,
                     $privateRatePerHour, $medianPrivateRatePerHour,
                     $postExpansionRatePerHour, $postExpansionSeconds,
-                    $largestPrivateStep, $handleRatePerHour)
+                    $largestPrivateStep, $resourceTrend.CyclicExpansion,
+                    $cycleTroughDelta, $cycleTroughRate, $handleRatePerHour)
 
                 $privateLeak = $resourceTrend.PrivateLeak
                 $handleRateLeak =
@@ -564,11 +602,13 @@ function Invoke-DvtScenario {
                         "privateRateMBPerHour={6} " +
                         "medianPrivateRateMBPerHour={7} " +
                         "postExpansionRateMBPerHour={8} " +
-                        "postExpansionSeconds={9} handleRatePerHour={10}") -f
+                        "postExpansionSeconds={9} cycleTroughDeltaMB={10} " +
+                        "cycleTroughRateMBPerHour={11} handleRatePerHour={12}") -f
                         $privateDelta, $handleDelta, $gdiDelta, $userDelta,
                         $threadDelta, $notResponding,
                         $privateRatePerHour, $medianPrivateRatePerHour,
                         $postExpansionRatePerHour, $postExpansionSeconds,
+                        $cycleTroughDelta, $cycleTroughRate,
                         $handleRatePerHour)
                 }
             }
@@ -636,9 +676,9 @@ function Write-CampaignReport {
     [void]$builder.AppendLine()
     [void]$builder.AppendLine("## Not covered by this campaign")
     [void]$builder.AppendLine()
-    if ($Mode -in @("PhysicalCamera", "PhysicalCapture", "PhysicalRecovery")) {
+    if ($Mode -in @("PhysicalCamera", "PhysicalCapture", "PhysicalCaptureSoak", "PhysicalRecovery")) {
         [void]$builder.AppendLine("- Seven-camera full-load acquisition remains untested; this run covered only the connected cameras.")
-        if ($Mode -in @("PhysicalCapture", "PhysicalRecovery")) {
+        if ($Mode -in @("PhysicalCapture", "PhysicalCaptureSoak", "PhysicalRecovery")) {
             [void]$builder.AppendLine("- Background capture and preview are covered by the separate PhysicalCamera scenario, not this run.")
         }
     }
@@ -787,6 +827,16 @@ if ($Mode -eq "PhysicalSoak") {
     $allPassed = (Invoke-DvtScenario "physical-io-storage-soak" `
         "Physical IO and storage soak" "Physical soak" `
         ($physicalSoakSeconds + 600) $physicalSoakSeconds `
+        -SampleResources) -and $allPassed
+}
+
+if ($Mode -eq "PhysicalCaptureSoak") {
+    $physicalCaptureSoakSeconds = [Math]::Max(
+        14,
+        [int][Math]::Round($PhysicalCaptureSoakMinutes * 60))
+    $allPassed = (Invoke-DvtScenario "physical-capture-soak" `
+        "Physical repeated capture soak" "Physical capture soak" `
+        ($physicalCaptureSoakSeconds + 900) $physicalCaptureSoakSeconds `
         -SampleResources) -and $allPassed
 }
 

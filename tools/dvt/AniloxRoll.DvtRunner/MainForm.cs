@@ -219,15 +219,39 @@ namespace AniloxRoll.DvtRunner
 
         private void ApplyDurationOverride(DvtScenario scenario)
         {
-            if (!_durationSeconds.HasValue) return;
-
             DvtStep soak = scenario.Steps.SingleOrDefault(
                 step => string.Equals(
                     step.Action, "soak", StringComparison.OrdinalIgnoreCase));
-            if (soak == null)
+            if (_durationSeconds.HasValue && soak == null)
                 throw new InvalidDataException(
                     "指定 --duration-seconds 的情境必須恰有一個 soak 步驟。");
-            soak.TimeoutSeconds = _durationSeconds.Value;
+            if (_durationSeconds.HasValue)
+                soak.TimeoutSeconds = _durationSeconds.Value;
+
+            int durationSeconds = soak?.TimeoutSeconds ?? 0;
+            if (durationSeconds <= 0) return;
+
+            var cycleToken = new System.Text.RegularExpressions.Regex(
+                @"\{cycles:(\d+)\}",
+                System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+            foreach (DvtStep step in scenario.Steps)
+            {
+                if (string.IsNullOrWhiteSpace(step.Value)) continue;
+                step.Value = cycleToken.Replace(
+                    step.Value,
+                    match =>
+                    {
+                        int cycleMilliseconds = int.Parse(
+                            match.Groups[1].Value,
+                            System.Globalization.CultureInfo.InvariantCulture);
+                        int cycles = Math.Max(
+                            1,
+                            (durationSeconds * 1000) /
+                            cycleMilliseconds);
+                        return cycles.ToString(
+                            System.Globalization.CultureInfo.InvariantCulture);
+                    });
+            }
         }
 
         private void PopulateSteps()

@@ -70,4 +70,33 @@ Assert-Condition $postExpansionTrend.PrivateLeak `
 Assert-Condition $postExpansionTrend.PostExpansionLeak `
     "Post-expansion retained growth must be reported explicitly."
 
+$stableSawtooth = @(
+    for ($index = 0; $index -lt 80; $index++) {
+        $phase = $index % 4
+        $privateMB = 7000 + @(0, 9000, 24000, 4000)[$phase]
+        New-Sample ($index * 30) $privateMB
+    }
+)
+$stableSawtoothTrend = Get-ResourceTrend $stableSawtooth
+Assert-Condition $stableSawtoothTrend.CyclicExpansion `
+    "Repeated capture expansion and collection must be classified as cyclic."
+Assert-Condition (-not $stableSawtoothTrend.PrivateLeak) `
+    "A stable repeated-capture sawtooth must not depend on its final peak."
+
+$leakingSawtooth = @(
+    for ($index = 0; $index -lt 80; $index++) {
+        $phase = $index % 4
+        $baseline = 7000 + ($index * 4)
+        $privateMB = $baseline + @(0, 9000, 24000, 4000)[$phase]
+        New-Sample ($index * 30) $privateMB
+    }
+)
+$leakingSawtoothTrend = Get-ResourceTrend $leakingSawtooth
+Assert-Condition $leakingSawtoothTrend.CyclicExpansion `
+    "The leaking sawtooth fixture must exercise the cyclic path."
+Assert-Condition $leakingSawtoothTrend.PrivateLeak `
+    "A rising retained trough under a cyclic workload must fail."
+Assert-Condition $leakingSawtoothTrend.CycleTroughLeak `
+    "The cyclic leak must be attributed to the retained trough."
+
 Write-Output "PASS: resource trend guard tests"
