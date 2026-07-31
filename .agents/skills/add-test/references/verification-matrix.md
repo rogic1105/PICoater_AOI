@@ -18,10 +18,10 @@ Tested dirty worktree based on commit `458942f`. Raw reports remain local under
 | Two-hour offline stress | Same nine cases under a two-hour budget | 9 / 9 | **PASS** | `20260729-201511-9307c6c` |
 | Two-hour offline soak | Mixed IO/CSV/CFG/statistics/copy/cleanup remains bounded | 7200.2 s; 222,434 cycles; Private +277.1 MB; handles -89; threads -2 | **PASS** | `20260729-221921-9307c6c` |
 
-Physical camera/background, five actual capture cycles, and repeatable IO/light software fault
-injection are now covered with the connected hardware. Seven-camera full load, physical cable/power
-disconnect injection, SMB interruption, real-disk low-space UI transition, and an uninterrupted
-eight-hour on-machine soak remain separate.
+Physical camera/background, actual capture cycles, IO/light software and physical power fault
+injection, SMB interruption/backlog recovery, and real-disk low-space retention are now covered
+with the connected hardware. Seven-camera full load and an uninterrupted eight-hour on-machine
+soak remain separate.
 
 本表是測試狀態的單一總覽。每一列同時記錄：
 
@@ -45,7 +45,8 @@ eight-hour on-machine soak remain separate.
 | Stress | 離線設定／統計／PLC／IO／Storage 壓力 | 9 case 全部通過且不逾時；六項可調工作各持續 20 分鐘 | 9 / 9，7213.59 秒；1000 筆待傳檔案 662 ms 完成恢復與排空 | **PASS** | `20260729-201511-9307c6c` |
 | Soak | 離線混合耐久 | IO 狀態、CSV／CFG、統計、遠端複製與清理持續 120 分鐘；queue=0；Private 增量 <=512 MB；Handles <=+50；Threads <=+15 | 7200.2 秒；222,434 cycles；2,785 copied；56 statistics；Private +277.1 MB；Handles -89；Threads -2 | **PASS** | `20260729-221921-9307c6c` |
 | Physical IO DVT | ET-7044 待機 5 分鐘 | IO 全程連線且 Idle；正常釋放 | 305.59 秒；Flow 15 PASS / 0 FAIL | **PASS** | `20260728-211306-6ef23b9` |
-| Failure injection | IO＋光源軟體斷線／恢復 | IO 端點與 COM17 各隔離三輪；每輪依序 raise→resolve；最後正常關閉且不留下路由、停用裝置或孤兒程序 | 55.84 秒；IO 斷線／恢復／raise／resolve 各 3 次；光源各 3 次；checker 17 PASS / 0 FAIL | **PASS** | `20260730-171929-458942f` |
+| Failure injection | IO＋光源軟體斷線／恢復 | IO 端點與 COM17 各隔離三輪；每輪依序 raise→resolve；最後正常關閉且不留下路由、停用裝置或孤兒程序 | 55.59 秒；IO 斷線／恢復／raise／resolve 各 3 次，恢復 3.528／4.002／4.009 秒；光源斷線／恢復／raise／resolve 各 3 次，恢復 6.501／6.499／6.511 秒；checker 17 PASS / 0 FAIL；IO TCP、COM17 與程序收尾皆正常 | **PASS** | `20260731-164731-51235fb` |
+| Failure injection | IO＋光源實體斷電／恢復 | IO 與光源各斷電／上電三輪；每輪必須各自完成 disconnect→raise→reconnect→resolve；UI stall <1 秒；最後正常關閉 | IO 三輪恢復 9.494／6.494／6.492 秒；光源三輪恢復 14.110／16.025／12.111 秒；兩次斷電探測 UI stall 421／438 ms；OutputHealth invalid=0、hardware duplicate=0；checker 17 PASS / 0 FAIL；正常關閉 | **PASS** | `trace-20260731_165130` on `51235fb` |
 | Physical Storage DVT | SMB 與 heartbeat 5 分鐘 | 探針可寫、heartbeat 綠燈、正常釋放 | 306.67 秒；Flow 15 PASS / 0 FAIL | **PASS** | `20260728-223305-8a74e41` |
 | Failure injection | Storage app 關閉／自動重啟 | 測試工具只終止程式，不代替排程啟動；90 秒內取得新 PID；15 秒 freshness 內恢復 heartbeat；連跑三輪 | 3 / 3；新 PID 與 heartbeat 分別在 8.824、54.410、55.025 秒恢復 | **PASS** | commit `458942f` STAR result；storage restart DVT report |
 | Failure injection | SMB 網路中斷與 backlog | 只隔離儲存端點；本機持續保存至少兩輪；恢復後補傳；本機／遠端內容一致；無幽靈 marker；正常關閉 | 95.94 秒；2 輪 capture；pending queue 最大 3 筆／17,218,956 bytes；恢復後 copied=4／17,224,269 bytes；2 個 `.acap` 本機／遠端長度與 SHA-256 全相同；CSV 同尺寸同時間；pending marker=0；checker 32 PASS / 0 FAIL | **PASS** | `20260731-081640-eec7b84` |
@@ -73,7 +74,7 @@ eight-hour on-machine soak remain separate.
 | Physical soak | 連續 8 小時最終耐久 | 前述守門連續 8 小時成立，中途不重啟且硬體拓撲不變 | **PENDING** | 2 小時資格輪已通過；待硬體可連續供電時，重新跑完整 8 小時。中止輪不可冒充本項 |
 | Physical capture soak | 連續 2 小時反覆 Grab | High 10 秒／Low 4 秒共 514 輪；六條取相／存檔鏈逐輪完整；遠端持續落檔；資源趨勢有界；Runner 自行完成報告 | **PASS** | 正式重跑 514 輪、checker 31/0、資源守門與正常關閉全通過；前一輪的 Runner UI evidence 重播缺陷已修復 |
 | Storage retention | 儲存電腦本機 `D:\Anilox\Captures` 低磁碟 | 低於門檻時每次只刪最舊完整一天及同日 CSV；空間達標即停；較新日保留；heartbeat 記錄釋放量 | **PASS** | 連續兩輪 2 小時遠傳讓空間兩次跨門檻；依序刪 `20260103`、`20260104`，兩日各 8.398 GiB 且同日 CSV 同步消失；`20260105` 後全保留；最新 heartbeat freed=9,017,128,089 bytes、free=28.087/99.999 GiB，15 秒後未再刪。另保留本機一鍵工具供日後可控重驗 |
-| Failure injection | IO／光源實體拔線或斷電恢復 | 每輪 raise→resolve→ack 正確；不產生孤兒 Grab；可恢復 | **PENDING** | 軟體隔離已通過；仍需最終版本各做一次實體線材／電源故障 |
+| Failure injection | IO／光源實體拔線或斷電恢復 | 每輪 raise→resolve 正確；不產生孤兒 Grab；可恢復；正常關閉 | **PASS** | IO 與光源同時斷電／上電三輪；各自完成 disconnect→raise→reconnect→resolve；checker 17 PASS / 0 FAIL；實測值見上表 |
 | Camera load | 七台相機滿負載 | 七台首組完整；無持續掉幀；存檔、Curve、畫面與停止邊界一致 | **BLOCKED** | 目前沒有七台相機 |
 
 ## 執行順序
