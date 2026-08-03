@@ -60,6 +60,7 @@ soak remain separate.
 | Physical combined | IO＋Storage 1 小時歷史基準 | IO／Storage 全綠、正常關閉 | 3608.08 秒；舊版資源判準通過 | **PASS（已被新守門取代）** | `20260729-005833-9307c6c` |
 | Physical combined | 8 小時耐久校準輪 | 測試期間硬體拓撲固定 | 4 小時內相機由 0→2 台，資源基線改變；UI 全程有回應；正常中止 | **無效基準，不是產品 FAIL** | `20260729-053546-9307c6c` |
 | Physical soak | 固定拓撲 2 小時 IO＋Storage＋Light | IO／Storage／Light 全程綠；UI 0 次無回應；Private 持續成長 <=256 MB/h、總增量 <=4 GB；Handles 增量 <=200；GDI／USER <=100；Threads <=25；正常關閉 | 7209.9 秒；120 / 120 健康快照；IO 14,041 / 14,041；Private 2751.6→3213.1 MB，總體 241.1 MB/h、中位 154.5 MB/h、擴張後 19.9 MB/h；Handles 1256→1365；GDI 134→135；USER 281→283；Threads 106→129；UI 無回應 0 次；待機相位三次越過 5 ms 均自動重同步至 0.192～0.320 ms；checker 17 PASS / 0 FAIL；正常關閉 | **PASS** | `20260731-083512-8f184b4` |
+| Physical soak | 固定拓撲 4 小時 IO＋Storage＋Light | IO／Storage／Light 全程健康；UI 0 次無回應；Private 持續成長 <=256 MB/h、總增量 <=4 GB；Handles 增量 <=200；GDI／USER <=100；Threads <=25；正常關閉 | 14,415.2 秒；475 個資源樣本；Private 2761.3→3241.8 MB，總體 122.8 MB/h、中位 71.5 MB/h、擴張後 22.2 MB/h；Handles 1260→1369；GDI 135→137；USER 281→285；Threads 106→128；UI 無回應 0 次；checker 17 PASS / 0 FAIL；正常關閉 | **PASS（資格輪）** | `20260803-100950-9036db0` |
 | Physical capture soak | 5 分鐘反覆 Grab 資格輪 | High 10 秒／Low 4 秒；21 輪 request、gate、首組、Curve、close、finalize 全完整；遠端實際落檔；UI 與資源守門通過 | 352.89 秒；21 / 21 輪；六個聚合守門全通過；Curve 206 筆；checker 31 PASS / 0 FAIL；Private 2,760～34,383 MB，結束前回落至 7,391 MB；UI 無回應 0 次；遠端 21 個 `.acap` | **PASS（資格輪）** | `20260731-110010-96035a3` |
 | Physical capture soak | 2 小時產品流程輪（Runner 收尾缺陷） | High 10 秒／Low 4 秒共 514 輪；取相、Curve、封裝與遠端落檔完整；Runner 正常產生最終報告 | 514 / 514 request、gate open、aligned first set、gate close、finalize；Curve 4,936 筆；checker 31 PASS / 0 FAIL；主程式正常關閉；Runner 將約 40,000 行舊 evidence 重播到 UI，外層 8,105 秒 safety timeout | **產品流程 PASS／Runner FAIL（已修復並於下列正式輪重驗）** | `20260731-110727-96035a3` |
 | Physical capture soak | 2 小時反覆 Grab 正式輪 | High 10 秒／Low 4 秒共 514 輪；六條取相／存檔鏈完整；遠端持續落檔；UI 與資源趨勢有界；Runner 自行完成報告 | 7,248.6 秒；514 / 514 輪；六個聚合守門 6 / 6；checker 31 PASS / 0 FAIL；239 資源樣本；UI 無回應 0；Private 最大 42,366.9 MB，循環低谷後半比前半下降 801.7 MB（-834.3 MB/hour）；Handles +148（77/hour）；GDI +1；USER +3；Threads +1；正常關閉 | **PASS** | `20260731-133218-96035a3` |
@@ -71,7 +72,7 @@ soak remain separate.
 
 | 層級 | 測試項目 | 理論／驗收值 | 目前狀態 | 下一步 |
 |---|---|---|---:|---|
-| Physical soak | 連續 8 小時最終耐久 | 前述守門連續 8 小時成立，中途不重啟且硬體拓撲不變 | **PENDING** | 2 小時資格輪已通過；待硬體可連續供電時，重新跑完整 8 小時。中止輪不可冒充本項 |
+| Physical soak | 連續 8 小時最終耐久 | 前述守門連續 8 小時成立，中途不重啟且硬體拓撲不變 | **PENDING** | 4 小時資格輪已通過；待硬體可連續供電時，重新跑完整 8 小時。資格輪不可冒充本項 |
 | Physical capture soak | 連續 2 小時反覆 Grab | High 10 秒／Low 4 秒共 514 輪；六條取相／存檔鏈逐輪完整；遠端持續落檔；資源趨勢有界；Runner 自行完成報告 | **PASS** | 正式重跑 514 輪、checker 31/0、資源守門與正常關閉全通過；前一輪的 Runner UI evidence 重播缺陷已修復 |
 | Storage retention | 儲存電腦本機 `D:\Anilox\Captures` 低磁碟 | 低於門檻時每次只刪最舊完整一天及同日 CSV；空間達標即停；較新日保留；heartbeat 記錄釋放量 | **PASS** | 連續兩輪 2 小時遠傳讓空間兩次跨門檻；依序刪 `20260103`、`20260104`，兩日各 8.398 GiB 且同日 CSV 同步消失；`20260105` 後全保留；最新 heartbeat freed=9,017,128,089 bytes、free=28.087/99.999 GiB，15 秒後未再刪。另保留本機一鍵工具供日後可控重驗 |
 | Failure injection | IO／光源實體拔線或斷電恢復 | 每輪 raise→resolve 正確；不產生孤兒 Grab；可恢復；正常關閉 | **PASS** | IO 與光源同時斷電／上電三輪；各自完成 disconnect→raise→reconnect→resolve；checker 17 PASS / 0 FAIL；實測值見上表 |
