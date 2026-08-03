@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
 using IoBridge.Core;
-using Moq;
 using NUnit.Framework;
 using StorageBridge.Core;
 
@@ -50,25 +49,7 @@ namespace AniloxRoll.Monitor.Tests
             Directory.CreateDirectory(localRoot);
             Directory.CreateDirectory(remoteRoot);
 
-            var mockPlc = new Mock<IModbusTcpClient>();
-            bool startSignal = false;
-            mockPlc.SetupProperty(p => p.ReadWriteTimeoutMs, 2000);
-            mockPlc.Setup(p => p.IsConnected).Returns(true);
-            mockPlc.Setup(p => p.WriteDo(
-                    It.IsAny<int>(),
-                    It.IsAny<bool>()))
-                .Returns(Task.CompletedTask);
-            mockPlc.Setup(p => p.ConnectAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>()))
-                .ReturnsAsync(true);
-            mockPlc.Setup(p => p.ReadDiStatuses())
-                .Returns(() => Task.FromResult(new[]
-                {
-                    true, startSignal, false, false,
-                    false, false, false, false
-                }));
+            var fakePlc = new SoakModbusTcpClient();
 
             var stopwatch = Stopwatch.StartNew();
             var samples = new List<ResourceSample>();
@@ -101,7 +82,7 @@ namespace AniloxRoll.Monitor.Tests
 
             try
             {
-                using (var controller = new IoGrabController(mockPlc.Object)
+                using (var controller = new IoGrabController(fakePlc)
                 {
                     AutoBackgroundLoop = false
                 })
@@ -117,9 +98,9 @@ namespace AniloxRoll.Monitor.Tests
                     {
                         cycles++;
 
-                        startSignal = true;
+                        fakePlc.StartSignal = true;
                         await controller.PollTick();
-                        startSignal = false;
+                        fakePlc.StartSignal = false;
                         await controller.PollTick();
                         Assert.That(
                             controller.CurrentState,
@@ -333,6 +314,57 @@ namespace AniloxRoll.Monitor.Tests
             public double PrivateMB { get; set; }
             public int Handles { get; set; }
             public int Threads { get; set; }
+        }
+
+        private sealed class SoakModbusTcpClient : IModbusTcpClient
+        {
+            private readonly bool[] _diStatuses = new bool[8];
+            private readonly bool[] _doStatuses = new bool[8];
+
+            public SoakModbusTcpClient()
+            {
+                _diStatuses[0] = true;
+                IsConnected = true;
+                ReadWriteTimeoutMs = 2000;
+            }
+
+            public int ReadWriteTimeoutMs { get; set; }
+            public bool IsConnected { get; private set; }
+
+            public bool StartSignal
+            {
+                set { _diStatuses[1] = value; }
+            }
+
+            public Task<bool> ConnectAsync(
+                string ip,
+                int port = 502,
+                int timeoutMs = 5000)
+            {
+                IsConnected = true;
+                return Task.FromResult(true);
+            }
+
+            public Task<bool[]> ReadDoStatuses()
+            {
+                return Task.FromResult(_doStatuses);
+            }
+
+            public Task<bool[]> ReadDiStatuses()
+            {
+                return Task.FromResult(_diStatuses);
+            }
+
+            public Task WriteDo(int index, bool value)
+            {
+                _doStatuses[index] = value;
+                return Task.CompletedTask;
+            }
+
+            public void Dispose()
+            {
+                IsConnected = false;
+            }
         }
     }
 }

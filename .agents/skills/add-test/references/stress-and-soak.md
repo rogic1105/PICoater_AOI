@@ -31,11 +31,17 @@ Each of the six adjustable workloads receives one sixth of `STRESS_MINUTES`; the
 Bridge/resource cases run their complete cycle counts.
 
 The offline soak option runs one persistent mixed workload for `SOAK_MINUTES`. It interleaves
-mock IO start/stop transitions, CSV/CFG persistence, statistics recomputation, remote-copy queue
+lightweight fake IO start/stop transitions, CSV/CFG persistence, statistics recomputation, remote-copy queue
 drain, and temporary-file cleanup in one testhost process. After warm-up, it requires Private
 Bytes growth <=512 MB, handle growth <=50, and thread growth <=15. All files stay under an
 isolated `%TEMP%` directory. This proves bounded logic and file behavior only; it does not replace
 the on-machine shift/24-hour phase below.
+
+Do not use an invocation-recording mock such as Moq in a long-running polling or soak loop. Moq
+retains every invocation until explicitly cleared, so the test harness itself can create linear
+memory growth. Use a state-only handwritten fake when call-history verification is not part of the
+acceptance criteria. The 2026-08-03 baseline replaced the Moq PLC with `SoakModbusTcpClient` and
+held Private Bytes at 43.5-43.6 MB for 60 minutes and 108,486 cycles.
 
 The physical IO + storage soak runs the real product without Grab or light output. It samples
 Working Set, Private Bytes, total handles, GDI objects, USER objects, threads,

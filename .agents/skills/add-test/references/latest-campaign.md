@@ -3,19 +3,20 @@
 > This file is overwritten by the next recorded campaign. Git history is the durable record.
 
 - Result: **PASS**
-- Run: `20260731-133218`
-- Commit: `96035a3`
+- Run: `20260803-083546`
+- Commit: `1459410`
 - Working tree: dirty
-- Mode: `PhysicalCaptureSoak`
+- Mode: `Soak`
 - Machine: `DESKTOP-C1MN5KD`
-- Finished: 2026-07-31 15:33:07 +08:00
-- Raw artifacts: `artifacts/test-reports/20260731-133218-96035a3/` (local, ignored by Git)
+- Finished: 2026-08-03 09:35:52 +08:00
+- Raw artifacts: `artifacts/test-reports/20260803-083546-1459410/` (local, ignored by Git)
 
 ## Results
 
 | Layer | Check | Result | Theory / acceptance | Experimental value / evidence | Seconds |
 |---|---|---:|---|---|---:|
-| Physical capture soak | Physical repeated capture soak | **PASS** | High 10 seconds / Low 4 seconds for the configured duration; every High produces one request, gate, aligned first set, image-before-curve result, clean gate close, archive, and remote enqueue; storage and light remain green; UI and resource guards pass; clean shutdown. | cycles=514/514; flowCountGuards=6/6; checker=31 PASS/0 FAIL; resources samples=239 privateMB=17059.1->16274.4 max=42366.9 handles=1485->1633 max=1633 gdi=136->137 user=283->286 threads=149->150 ratesPerHour=private:-408.3MB medianPrivate:125082.1MB postExpansionPrivate:0MB postExpansionSeconds=0 largestPrivateStepMB=26890.4 cyclic=True troughDeltaMB=-801.7 troughRateMBPerHour=-834.3 handles:77 observer=external | 7248.6 |
+| Build | Release x64 solution build | **PASS** | Release\|x64 build; 0 compiler errors; 0 warnings. | exit code 0 | 3.48 |
+| Soak | Offline endurance tests | **PASS** | The mixed IO, CSV/CFG, statistics, remote-copy, and cleanup workload runs continuously; queue drains; temp files clean up; Private Bytes <=512 MB, handles <=50, and threads <=15 after warm-up. | total 1, passed 1, failed 0, not-executed 0 | 3602.34 |
 
 ## Improvement record
 
@@ -24,8 +25,7 @@
 
 ## Not covered by this campaign
 
-- Seven-camera full-load acquisition remains untested; this run covered only the connected cameras.
-- Background capture and preview are covered by the separate PhysicalCamera scenario, not this run.
+- Physical camera/grabber acquisition, seven-camera frame load, background capture, and live Grab.
 - Physical IO and light disconnect/reconnect timing.
 - Storage-PC SMB interruption, remote backlog transfer, and real-disk/UI low-space status and recovery.
 - Shift/24-hour product soak with the IO simulator, cameras, storage transfer, and operator interactions.
