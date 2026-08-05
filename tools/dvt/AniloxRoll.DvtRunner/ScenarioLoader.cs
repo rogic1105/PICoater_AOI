@@ -36,7 +36,9 @@ namespace AniloxRoll.DvtRunner
                 "confirm-folder",
                 "select-combo",
                 "wait-log",
+                "wait-log-current-combo",
                 "verify-log-min-count",
+                "verify-range-scroll",
                 "reset-evidence",
                 "delay",
                 "soak",
@@ -88,11 +90,20 @@ namespace AniloxRoll.DvtRunner
                     throw new InvalidDataException(prefix + " has unsupported action " + step.Action);
                 if (step.Action != "run-checker" && string.IsNullOrWhiteSpace(step.Contract))
                     throw new InvalidDataException(prefix + " must reference a verify-flow contract.");
-                if (step.Action == "wait-log")
+                if (step.Action == "wait-log" ||
+                    step.Action == "wait-log-current-combo")
                 {
                     if (string.IsNullOrWhiteSpace(step.Pattern))
                         throw new InvalidDataException(prefix + " requires a regex pattern.");
-                    _ = new Regex(step.Pattern, RegexOptions.CultureInvariant);
+                    string pattern = step.Action == "wait-log-current-combo"
+                        ? step.Pattern.Replace("{value}", "DVT_VALUE")
+                        : step.Pattern;
+                    _ = new Regex(pattern, RegexOptions.CultureInvariant);
+                    if (step.Action == "wait-log-current-combo" &&
+                        (string.IsNullOrWhiteSpace(step.Target) ||
+                         !step.Pattern.Contains("{value}")))
+                        throw new InvalidDataException(
+                            prefix + " requires Target and a {value} token.");
                 }
                 if (step.Action == "verify-log-min-count")
                 {

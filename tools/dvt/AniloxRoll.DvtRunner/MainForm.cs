@@ -25,6 +25,9 @@ namespace AniloxRoll.DvtRunner
         private readonly string _resultPath;
         private readonly string _processIdPath;
         private readonly int? _durationSeconds;
+        private readonly string _repositoryRootOverride;
+        private readonly string _appPathOverride;
+        private readonly string _logDirectoryOverride;
         private IReadOnlyList<DvtScenario> _scenarios;
         private ScenarioEngine _engine;
         private CancellationTokenSource _runCancellation;
@@ -34,12 +37,18 @@ namespace AniloxRoll.DvtRunner
             string autoScenarioId = null,
             string resultPath = null,
             string processIdPath = null,
-            int? durationSeconds = null)
+            int? durationSeconds = null,
+            string repositoryRoot = null,
+            string appPath = null,
+            string logDirectory = null)
         {
             _autoScenarioId = autoScenarioId;
             _resultPath = resultPath;
             _processIdPath = processIdPath;
             _durationSeconds = durationSeconds;
+            _repositoryRootOverride = repositoryRoot;
+            _appPathOverride = appPath;
+            _logDirectoryOverride = logDirectory;
             Text = "PICoater DVT Runner";
             StartPosition = FormStartPosition.CenterScreen;
             MinimumSize = new Size(960, 640);
@@ -170,10 +179,20 @@ namespace AniloxRoll.DvtRunner
         {
             try
             {
-                _repositoryRoot = RepositoryLocator.FindRoot();
-                _appPath.Text = Path.Combine(
-                    _repositoryRoot, "bin", "x64", "Release", "AniloxRoll.Monitor.exe");
-                _logDirectory.Text = @"D:\Anilox\Logs";
+                _repositoryRoot = string.IsNullOrWhiteSpace(_repositoryRootOverride)
+                    ? RepositoryLocator.FindRoot()
+                    : Path.GetFullPath(_repositoryRootOverride);
+                _appPath.Text = string.IsNullOrWhiteSpace(_appPathOverride)
+                    ? Path.Combine(
+                        _repositoryRoot,
+                        "bin",
+                        "x64",
+                        "Release",
+                        "AniloxRoll.Monitor.exe")
+                    : Path.GetFullPath(_appPathOverride);
+                _logDirectory.Text = string.IsNullOrWhiteSpace(_logDirectoryOverride)
+                    ? @"D:\Anilox\Logs"
+                    : Path.GetFullPath(_logDirectoryOverride);
                 string scenarioDirectory = Path.Combine(
                     AppDomain.CurrentDomain.BaseDirectory, "Scenarios");
                 _scenarios = ScenarioLoader.LoadDirectory(scenarioDirectory);

@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
@@ -273,6 +274,14 @@ namespace AniloxRoll.DvtRunner
                         _captureMayBeActive = false;
                     return evidence;
 
+                case "wait-log-current-combo":
+                    string comboValue = await _ui.ReadComboValueAsync(
+                        step.Target, step.TimeoutSeconds, cancellationToken);
+                    string currentPattern = step.Pattern.Replace(
+                        "{value}", Regex.Escape(comboValue));
+                    return await _log.WaitForAsync(
+                        currentPattern, step.TimeoutSeconds, cancellationToken);
+
                 case "verify-log-min-count":
                     int minimumCount = int.Parse(
                         step.Value,
@@ -284,6 +293,10 @@ namespace AniloxRoll.DvtRunner
                         step.TimeoutSeconds,
                         cancellationToken);
                     return $"count={observedCount} minimum={minimumCount}";
+
+                case "verify-range-scroll":
+                    return RangeScrollEvidenceVerifier.Verify(
+                        _log.GetEvidenceLines());
 
                 case "reset-evidence":
                     _log.ResetEvidence();

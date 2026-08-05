@@ -1,0 +1,189 @@
+{
+  "Id": "review-packed-performance",
+  "Name": "回顧封裝資料換序號效能",
+  "Description": "以正式 Captures 封裝資料量測索引、預覽縮圖與停穩後完整圖片，不操作相機 Grab。",
+  "Steps": [
+    {
+      "Id": "stage-review-root",
+      "Contract": "DVT.Setup",
+      "Title": "暫設正式封裝資料路徑",
+      "Action": "set-session-value",
+      "Target": "LastDataPath",
+      "Value": "D:\\Anilox\\Captures",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "launch",
+      "Contract": "F1",
+      "Title": "啟動並連接監控程式",
+      "Action": "launch",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "enable-flow-log",
+      "Contract": "DVT.LogMode",
+      "Title": "啟用流程驗證探針",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "流程驗證",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "flow-log-proof",
+      "Contract": "DVT.LogMode",
+      "Title": "確認流程驗證探針已開啟",
+      "Action": "wait-log",
+      "Pattern": "log mode=FlowVerification",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "open-review",
+      "Contract": "R1",
+      "Title": "切到回顧",
+      "Action": "select-tab",
+      "Target": "回顧",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "review-evidence-boundary",
+      "Contract": "R1",
+      "Title": "切開讀取資料量測邊界",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "select-captures-folder",
+      "Contract": "R1/D1",
+      "Title": "讀取正式封裝資料",
+      "Action": "confirm-folder",
+      "Target": "讀取資料",
+      "Value": "D:\\Anilox\\Captures",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "review-index-proof",
+      "Contract": "R1",
+      "Title": "等待回顧索引完成",
+      "Action": "wait-log",
+      "Pattern": "RV repo scan root=D:\\\\Anilox\\\\Captures files=[1-9][0-9]*",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "data-index-proof",
+      "Contract": "D1",
+      "Title": "等待報表索引完成",
+      "Action": "wait-log",
+      "Pattern": "DT stats snapshot csv=[1-9][0-9]* records=[1-9][0-9]* grabs=[1-9][0-9]* ms=[0-9]+",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "review-first-load",
+      "Contract": "R1",
+      "Title": "等待第一筆完整圖片",
+      "Action": "wait-log",
+      "Pattern": "RV loadGrab done [0-9]{6}-[0-9]{6}",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "review-scroll-boundary",
+      "Contract": "R2",
+      "Title": "切開快速換序號量測邊界",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "review-fast-scroll-forward",
+      "Contract": "R2",
+      "Title": "快速向前滾動序號 500 筆",
+      "Action": "select-combo",
+      "Target": "回顧序號",
+      "Value": "next:500",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "review-thumbnail-forward",
+      "Contract": "R2",
+      "Title": "等待最後縮圖落地",
+      "Action": "wait-log-current-combo",
+      "Target": "回顧序號",
+      "Pattern": "RV thumbnail done {value} total=[0-9]+ms",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "review-fast-curve-forward",
+      "Contract": "R2",
+      "Title": "等待最後 Curve 落地",
+      "Action": "wait-log-current-combo",
+      "Target": "回顧序號",
+      "Pattern": "RV curves {value}（[0-9]+ms）",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "review-fast-image-forward",
+      "Contract": "R2",
+      "Title": "等待最後完整圖片落地",
+      "Action": "wait-log-current-combo",
+      "Target": "回顧序號",
+      "Pattern": "RV loadGrab done {value}",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "review-adjacent-prefetch-ready",
+      "Contract": "R2",
+      "Title": "等待相鄰序號預載完成",
+      "Action": "wait-log-current-combo",
+      "Target": "回顧序號",
+      "Pattern": "RV prefetch ready center={value} neighbor=[0-9]{6}-[0-9]{6} thumbnail=(cold|join|hit) total=[0-9]+ms",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "review-select-prefetched-neighbor",
+      "Contract": "R2",
+      "Title": "切到已預載的下一筆序號",
+      "Action": "select-combo",
+      "Target": "回顧序號",
+      "Value": "next:1",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "review-prefetched-thumbnail-hit",
+      "Contract": "R2",
+      "Title": "確認相鄰縮圖直接命中快取",
+      "Action": "wait-log-current-combo",
+      "Target": "回顧序號",
+      "Pattern": "RV thumbnail done {value} total=[0-9]+ms .*cache=hit ",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "review-prefetched-full-image",
+      "Contract": "R2",
+      "Title": "等待預載鄰居的完整圖片落地",
+      "Action": "wait-log-current-combo",
+      "Target": "回顧序號",
+      "Pattern": "RV loadGrab done {value}",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "restore-settings",
+      "Contract": "DVT.Cleanup",
+      "Title": "還原 Runner 暫改的設定",
+      "Action": "restore-properties",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "close-app",
+      "Contract": "G2.shutdown",
+      "Title": "正常關閉主程式",
+      "Action": "close-app",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "shutdown-complete",
+      "Contract": "G2.shutdown",
+      "Title": "確認資源釋放完成",
+      "Action": "wait-log",
+      "Pattern": "shutdown resources released",
+      "TimeoutSeconds": 30
+    }
+  ]
+}

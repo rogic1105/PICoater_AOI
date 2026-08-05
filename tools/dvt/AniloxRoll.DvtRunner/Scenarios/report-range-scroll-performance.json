@@ -1,0 +1,177 @@
+{
+  "Id": "report-range-scroll-performance",
+  "Name": "報表序號範圍高速滾動",
+  "Description": "持續操作序號範圍，驗證 List 節流、Curve monotonic 跳讀、停止後追上與 UI 響應。",
+  "Steps": [
+    {
+      "Id": "stage-data-root",
+      "Contract": "DVT.Setup",
+      "Title": "指定 30,000 筆測試資料",
+      "Action": "set-session-value",
+      "Target": "LastDataPath",
+      "Value": "D:\\Anilox\\StressCaptures_30000",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "launch",
+      "Contract": "F1",
+      "Title": "啟動主程式",
+      "Action": "launch",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "normalize-log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "先切回日常記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "日常運行",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "enable-flow-log",
+      "Contract": "DVT.LogMode",
+      "Title": "啟用流程驗證探針",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "流程驗證",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "flow-log-proof",
+      "Contract": "DVT.LogMode",
+      "Title": "確認流程驗證探針",
+      "Action": "wait-log",
+      "Pattern": "log mode=FlowVerification",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "open-review",
+      "Contract": "R1",
+      "Title": "切到回顧以套用指定資料路徑",
+      "Action": "select-tab",
+      "Target": "回顧",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "load-data",
+      "Contract": "R1/D1",
+      "Title": "讀取 30,000 筆測試資料",
+      "Action": "confirm-folder",
+      "Target": "讀取資料",
+      "Value": "D:\\Anilox\\StressCaptures_30000",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "folder-ready",
+      "Contract": "R1",
+      "Title": "確認載入指定資料路徑",
+      "Action": "wait-log",
+      "Pattern": "RV repo scan root=D:\\\\Anilox\\\\StressCaptures_30000 files=[1-9][0-9]*",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "snapshot-ready",
+      "Contract": "D1",
+      "Title": "等待報表索引完成",
+      "Action": "wait-log",
+      "Pattern": "DT stats snapshot csv=[1-9][0-9]* records=[1-9][0-9]* grabs=30000 ms=[0-9]+",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "detail-index-ready",
+      "Contract": "D1",
+      "Title": "等待 30,000 筆明細索引完成",
+      "Action": "wait-log",
+      "Pattern": "DT stats index rows=30000 ms=[0-9]+",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "setup-settle",
+      "Contract": "DVT.Setup",
+      "Title": "排除資料初始化的 UI 量測",
+      "Action": "delay",
+      "TimeoutSeconds": 1
+    },
+    {
+      "Id": "open-report",
+      "Contract": "D1",
+      "Title": "切到報表",
+      "Action": "select-tab",
+      "Target": "報表",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "range-boundary",
+      "Contract": "D3",
+      "Title": "切開高速滾動證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "scroll-range-end",
+      "Contract": "D3",
+      "Title": "持續滾動範圍結束 400 筆",
+      "Action": "select-combo",
+      "Target": "報表範圍結束",
+      "Value": "next:400:8",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "scroll-range-start",
+      "Contract": "D3",
+      "Title": "持續滾動範圍起始 400 筆",
+      "Action": "select-combo",
+      "Target": "報表範圍起始",
+      "Value": "previous:400:8",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "curve-jumps",
+      "Contract": "D3",
+      "Title": "至少兩次 Curve 跳讀上畫",
+      "Action": "verify-log-min-count",
+      "Pattern": "DT range preview apply gen=[0-9]+ latest=[0-9]+",
+      "Value": "2",
+      "TimeoutSeconds": 300
+    },
+    {
+      "Id": "range-settle",
+      "Contract": "D3",
+      "Title": "停止後 Curve 追上最後範圍",
+      "Action": "verify-log-min-count",
+      "Pattern": "DT range settle .*refresh",
+      "Value": "1",
+      "TimeoutSeconds": 300
+    },
+    {
+      "Id": "verify-range-scroll",
+      "Contract": "D3",
+      "Title": "驗證跳號、追上與卡頓指標",
+      "Action": "verify-range-scroll",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "restore-settings",
+      "Contract": "DVT.Cleanup",
+      "Title": "還原 Runner 修改的設定",
+      "Action": "restore-properties",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "close-app",
+      "Contract": "G2.shutdown",
+      "Title": "關閉主程式",
+      "Action": "close-app",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "shutdown-complete",
+      "Contract": "G2.shutdown",
+      "Title": "確認資源完整釋放",
+      "Action": "wait-log",
+      "Pattern": "shutdown resources released",
+      "TimeoutSeconds": 60
+    }
+  ]
+}

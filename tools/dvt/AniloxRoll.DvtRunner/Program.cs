@@ -12,12 +12,21 @@ namespace AniloxRoll.DvtRunner
             string scenarioId = ReadArgument(args, "--scenario");
             string resultPath = ReadArgument(args, "--result-file");
             string processIdPath = ReadArgument(args, "--process-id-file");
+            string repositoryRoot = ReadArgument(args, "--repository-root");
+            string appPath = ReadArgument(args, "--app-path");
+            string logDirectory = ReadArgument(args, "--log-directory");
             int? durationSeconds = ReadPositiveIntArgument(
                 args, "--duration-seconds");
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new MainForm(
-                scenarioId, resultPath, processIdPath, durationSeconds));
+                scenarioId,
+                resultPath,
+                processIdPath,
+                durationSeconds,
+                repositoryRoot,
+                appPath,
+                logDirectory));
         }
 
         private static string ReadArgument(string[] args, string name)

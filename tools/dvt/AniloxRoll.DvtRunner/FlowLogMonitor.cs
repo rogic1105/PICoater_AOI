@@ -82,6 +82,12 @@ namespace AniloxRoll.DvtRunner
             _evidenceLines.Clear();
         }
 
+        public IReadOnlyList<string> GetEvidenceLines()
+        {
+            ReadAvailableLines();
+            return _evidenceLines.ToArray();
+        }
+
         public async Task<int> WaitForMinimumCountAsync(
             string pattern,
             int minimumCount,

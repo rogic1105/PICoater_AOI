@@ -85,9 +85,15 @@ namespace AniloxRoll.DvtRunner
                 _process.Refresh();
                 if (_process.MainWindowHandle != IntPtr.Zero)
                 {
-                    _root = AutomationElement.FromHandle(_process.MainWindowHandle);
-                    if (_root != null &&
-                        await WaitForStableWindowAsync(deadline, cancellationToken))
+                    // Every scenario action has its own enabled/value/log wait. Requiring five
+                    // consecutive WM_NULL replies here made the runner and the product's DVT
+                    // stall sampler amplify each other before the first action could run.
+                    if (NativeMethods.IsWindowResponsive(
+                        _process.MainWindowHandle, 2000))
+                    {
+                        _root = AutomationElement.FromHandle(_process.MainWindowHandle);
+                    }
+                    if (_root != null)
                         return;
                 }
                 await Task.Delay(200, cancellationToken);
@@ -549,6 +555,7 @@ namespace AniloxRoll.DvtRunner
             string command = (movement ?? string.Empty).Trim();
             int virtualKey;
             int count;
+            int delayMilliseconds = 0;
             if (string.Equals(command, "first", StringComparison.OrdinalIgnoreCase))
             {
                 virtualKey = NativeMethods.VkHome;
@@ -562,13 +569,18 @@ namespace AniloxRoll.DvtRunner
             else
             {
                 string[] parts = command.Split(':');
-                if (parts.Length != 2 ||
+                if ((parts.Length != 2 && parts.Length != 3) ||
                     !int.TryParse(parts[1], out count) ||
                     count < 1)
                 {
                     throw new InvalidOperationException(
-                        "Combo movement must be first, last, next:N, or previous:N.");
+                        "Combo movement must be first, last, next:N[:delayMs], or previous:N[:delayMs].");
                 }
+                if (parts.Length == 3 &&
+                    (!int.TryParse(parts[2], out delayMilliseconds) ||
+                     delayMilliseconds < 0 || delayMilliseconds > 1000))
+                    throw new InvalidOperationException(
+                        "Combo movement delay must be between 0 and 1000 ms.");
                 if (string.Equals(
                     parts[0], "next", StringComparison.OrdinalIgnoreCase))
                     virtualKey = NativeMethods.VkDown;
@@ -577,7 +589,7 @@ namespace AniloxRoll.DvtRunner
                     virtualKey = NativeMethods.VkUp;
                 else
                     throw new InvalidOperationException(
-                        "Combo movement must be first, last, next:N, or previous:N.");
+                        "Combo movement must be first, last, next:N[:delayMs], or previous:N[:delayMs].");
             }
 
             for (int i = 0; i < count; i++)
@@ -592,7 +604,11 @@ namespace AniloxRoll.DvtRunner
                     throw new InvalidOperationException(
                         "Failed to post selection key to ComboBox: " + name);
                 }
-                if ((i + 1) % 20 == 0)
+                if (delayMilliseconds > 0)
+                {
+                    await Task.Delay(delayMilliseconds, cancellationToken);
+                }
+                else if ((i + 1) % 20 == 0)
                 {
                     await Task.Delay(1, cancellationToken);
                 }
@@ -603,6 +619,33 @@ namespace AniloxRoll.DvtRunner
             if (string.IsNullOrWhiteSpace(result))
                 result = command;
             return name + "=" + result;
+        }
+
+        public async Task<string> ReadComboValueAsync(
+            string name,
+            int timeoutSeconds,
+            CancellationToken cancellationToken)
+        {
+            DateTime deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+            while (DateTime.UtcNow < deadline)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                IntPtr comboHandle =
+                    NativeMethods.FindDescendantWindowByAccessibleName(
+                        _process.MainWindowHandle,
+                        name,
+                        "COMBOBOX");
+                if (comboHandle != IntPtr.Zero)
+                {
+                    string value = NativeMethods.ReadWindowText(
+                        comboHandle, 1000);
+                    if (!string.IsNullOrWhiteSpace(value))
+                        return value;
+                }
+                await Task.Delay(100, cancellationToken);
+            }
+            throw new TimeoutException(
+                "Timed out reading ComboBox value: " + name);
         }
 
         public async Task<string> ConfirmFolderAsync(
@@ -782,33 +825,6 @@ namespace AniloxRoll.DvtRunner
             }
             throw new TimeoutException(
                 "Timed out locating interactive UI target: " + name);
-        }
-
-        private async Task<bool> WaitForStableWindowAsync(
-            DateTime deadline,
-            CancellationToken cancellationToken)
-        {
-            int consecutiveResponsiveChecks = 0;
-            while (DateTime.UtcNow < deadline)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (_process.HasExited) return false;
-
-                if (NativeMethods.IsWindowResponsive(
-                    _process.MainWindowHandle, 500))
-                {
-                    consecutiveResponsiveChecks++;
-                    if (consecutiveResponsiveChecks >= 5)
-                        return true;
-                }
-                else
-                {
-                    consecutiveResponsiveChecks = 0;
-                }
-
-                await Task.Delay(250, cancellationToken);
-            }
-            return false;
         }
 
         private static string ReadRequiredValue(AutomationElement element)
