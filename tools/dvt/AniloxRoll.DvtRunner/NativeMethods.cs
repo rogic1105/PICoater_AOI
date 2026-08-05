@@ -13,6 +13,7 @@ namespace AniloxRoll.DvtRunner
         internal const uint WmGetTextLength = 0x000E;
         internal const uint WmKeyDown = 0x0100;
         internal const uint WmKeyUp = 0x0101;
+        private const uint WmVScroll = 0x0115;
         internal const uint WmLButtonDown = 0x0201;
         internal const uint WmLButtonUp = 0x0202;
         private const uint TcmGetItemCount = 0x1304;
@@ -25,6 +26,8 @@ namespace AniloxRoll.DvtRunner
         internal const int VkUp = 0x26;
         internal const int VkDown = 0x28;
         private const int MkLButton = 0x0001;
+        private const int SbPageUp = 2;
+        private const int SbPageDown = 3;
         private const uint SmtoAbortIfHung = 0x0002;
         private const uint MouseeventfLeftdown = 0x0002;
         private const uint MouseeventfLeftup = 0x0004;
@@ -229,6 +232,45 @@ namespace AniloxRoll.DvtRunner
                     point);
         }
 
+        internal static bool ScrollVerticalPage(IntPtr handle, bool down)
+        {
+            if (handle == IntPtr.Zero || !IsWindow(handle))
+                return false;
+
+            IntPtr scrollBar = IntPtr.Zero;
+            EnumChildWindows(
+                handle,
+                (child, parameter) =>
+                {
+                    var className = new StringBuilder(128);
+                    GetClassName(child, className, className.Capacity);
+                    NativeRect rect;
+                    if (className.ToString().IndexOf(
+                            "SCROLLBAR",
+                            StringComparison.OrdinalIgnoreCase) >= 0 &&
+                        GetWindowRect(child, out rect) &&
+                        rect.Bottom - rect.Top > rect.Right - rect.Left)
+                    {
+                        scrollBar = child;
+                        return false;
+                    }
+                    return true;
+                },
+                IntPtr.Zero);
+            if (scrollBar == IntPtr.Zero)
+                return false;
+
+            IntPtr result;
+            return SendMessageTimeout(
+                handle,
+                WmVScroll,
+                new IntPtr(down ? SbPageDown : SbPageUp),
+                scrollBar,
+                SmtoAbortIfHung,
+                1000,
+                out result) != IntPtr.Zero;
+        }
+
         internal static bool SelectMainTab(IntPtr parent, int index)
         {
             IntPtr tab = FindMainTabControl(parent);
@@ -270,6 +312,23 @@ namespace AniloxRoll.DvtRunner
             IntPtr parent,
             string expectedText)
         {
+            return FindDescendantWindowByTextAndClass(
+                parent, expectedText, string.Empty);
+        }
+
+        internal static IntPtr FindDescendantButtonByText(
+            IntPtr parent,
+            string expectedText)
+        {
+            return FindDescendantWindowByTextAndClass(
+                parent, expectedText, "BUTTON");
+        }
+
+        private static IntPtr FindDescendantWindowByTextAndClass(
+            IntPtr parent,
+            string expectedText,
+            string classNameFragment)
+        {
             if (parent == IntPtr.Zero ||
                 string.IsNullOrEmpty(expectedText))
                 return IntPtr.Zero;
@@ -282,13 +341,22 @@ namespace AniloxRoll.DvtRunner
                     if (!IsWindowVisible(handle))
                         return true;
 
-                    int length = GetWindowTextLength(handle);
-                    if (length <= 0) return true;
+                    if (!string.IsNullOrEmpty(classNameFragment))
+                    {
+                        var className = new StringBuilder(128);
+                        GetClassName(handle, className, className.Capacity);
+                        if (className.ToString().IndexOf(
+                                classNameFragment,
+                                StringComparison.OrdinalIgnoreCase) < 0)
+                            return true;
+                    }
 
-                    var text = new StringBuilder(length + 1);
-                    GetWindowText(handle, text, text.Capacity);
+                    string text;
+                    if (!TryReadWindowText(handle, 100, out text) ||
+                        text.Length == 0)
+                        return true;
                     if (!string.Equals(
-                        text.ToString(),
+                        text,
                         expectedText,
                         StringComparison.Ordinal))
                         return true;
@@ -461,6 +529,19 @@ namespace AniloxRoll.DvtRunner
 
         internal static string ReadWindowText(IntPtr handle, int timeoutMs)
         {
+            string text;
+            if (TryReadWindowText(handle, timeoutMs, out text))
+                return text;
+            throw new InvalidOperationException(
+                "Timed out reading control text.");
+        }
+
+        private static bool TryReadWindowText(
+            IntPtr handle,
+            int timeoutMs,
+            out string text)
+        {
+            text = string.Empty;
             IntPtr lengthResult;
             if (SendMessageTimeout(
                 handle,
@@ -470,12 +551,11 @@ namespace AniloxRoll.DvtRunner
                 SmtoAbortIfHung,
                 unchecked((uint)timeoutMs),
                 out lengthResult) == IntPtr.Zero)
-            {
-                throw new InvalidOperationException(
-                    "Timed out reading control text length.");
-            }
+                return false;
 
             int length = Math.Max(0, lengthResult.ToInt32());
+            if (length == 0)
+                return true;
             var buffer = new StringBuilder(length + 1);
             IntPtr textResult;
             if (SendMessageTimeoutText(
@@ -486,11 +566,9 @@ namespace AniloxRoll.DvtRunner
                 SmtoAbortIfHung,
                 unchecked((uint)timeoutMs),
                 out textResult) == IntPtr.Zero)
-            {
-                throw new InvalidOperationException(
-                    "Timed out reading control text.");
-            }
-            return buffer.ToString();
+                return false;
+            text = buffer.ToString();
+            return true;
         }
 
         internal static void PressKey(byte virtualKey)

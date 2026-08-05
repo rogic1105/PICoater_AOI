@@ -238,6 +238,19 @@ namespace AniloxRoll.DvtRunner
                         _captureMayBeActive = false;
                     return "已觸發 " + step.Target;
 
+                case "click-button":
+                    await _ui.ClickButtonAsync(
+                        step.Target, step.TimeoutSeconds, cancellationToken);
+                    if (string.Equals(
+                            step.Target, "開始抓取", StringComparison.Ordinal) ||
+                        string.Equals(
+                            step.Target, "取得背景", StringComparison.Ordinal))
+                        _captureMayBeActive = true;
+                    else if (string.Equals(
+                        step.Target, "停止抓取", StringComparison.Ordinal))
+                        _captureMayBeActive = false;
+                    return "native button clicked: " + step.Target;
+
                 case "wheel":
                     return await _ui.WheelAsync(
                         step.Target,

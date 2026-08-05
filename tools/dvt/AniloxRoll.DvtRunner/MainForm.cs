@@ -379,6 +379,32 @@ namespace AniloxRoll.DvtRunner
             if (update.Status == StepStatus.Running)
                 _status.Text = "執行中：" + update.Step.Title;
             item.EnsureVisible();
+            WriteAutomationProgress(update);
+        }
+
+        private void WriteAutomationProgress(StepUpdate update)
+        {
+            if (string.IsNullOrWhiteSpace(_resultPath)) return;
+            try
+            {
+                string directory = Path.GetDirectoryName(_resultPath);
+                if (!string.IsNullOrEmpty(directory))
+                    Directory.CreateDirectory(directory);
+                File.WriteAllText(
+                    _resultPath,
+                    "Result: RUNNING" + Environment.NewLine +
+                    "Step: " + (update.Step?.Id ?? "unknown") +
+                    Environment.NewLine +
+                    "StepStatus: " + update.Status + Environment.NewLine +
+                    "Detail: " + (update.Detail ?? string.Empty) +
+                    Environment.NewLine + Environment.NewLine +
+                    _output.Text,
+                    new UTF8Encoding(false));
+            }
+            catch (IOException)
+            {
+                // Progress is diagnostic only; the final result remains required.
+            }
         }
 
         private static string StatusText(StepStatus status)

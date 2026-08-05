@@ -406,7 +406,7 @@ namespace AniloxRoll.DvtRunner
             while (DateTime.UtcNow < deadline)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                IntPtr handle = NativeMethods.FindDescendantWindowByText(
+                IntPtr handle = NativeMethods.FindDescendantButtonByText(
                     _process.MainWindowHandle, name);
                 if (handle != IntPtr.Zero &&
                     NativeMethods.IsWindowEnabled(handle) &&
@@ -439,6 +439,28 @@ namespace AniloxRoll.DvtRunner
                 await Task.Delay(150, cancellationToken);
             }
             throw new TimeoutException("Timed out waiting to click: " + name);
+        }
+
+        public async Task ClickButtonAsync(
+            string name,
+            int timeoutSeconds,
+            CancellationToken cancellationToken)
+        {
+            DateTime deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+            while (DateTime.UtcNow < deadline)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                IntPtr handle = NativeMethods.FindDescendantButtonByText(
+                    _process.MainWindowHandle, name);
+                if (handle != IntPtr.Zero &&
+                    NativeMethods.IsWindowEnabled(handle) &&
+                    NativeMethods.IsWindowVisible(handle) &&
+                    NativeMethods.ClickWindowCenter(handle))
+                    return;
+                await Task.Delay(100, cancellationToken);
+            }
+            throw new TimeoutException(
+                "Timed out waiting to click native button: " + name);
         }
 
         public async Task<string> WheelAsync(
@@ -771,12 +793,18 @@ namespace AniloxRoll.DvtRunner
                     itemBounds.Height > 0;
                 if (visible) return item;
 
-                int delta = itemBounds.Top > tableBounds.Bottom ? -1200 : 1200;
-                NativeMethods.SetForegroundWindow(_process.MainWindowHandle);
-                NativeMethods.WheelAt(
-                    (int)Math.Round(tableBounds.Left + tableBounds.Width / 2.0),
-                    (int)Math.Round(tableBounds.Top + tableBounds.Height / 2.0),
-                    delta);
+                AutomationElement scrollOwner = table;
+                IntPtr scrollHandle = IntPtr.Zero;
+                while (scrollOwner != null && scrollHandle == IntPtr.Zero)
+                {
+                    scrollHandle = new IntPtr(
+                        scrollOwner.Current.NativeWindowHandle);
+                    scrollOwner = TreeWalker.RawViewWalker.GetParent(scrollOwner);
+                }
+                bool down = itemBounds.Top > tableBounds.Bottom;
+                if (!NativeMethods.ScrollVerticalPage(scrollHandle, down))
+                    throw new InvalidOperationException(
+                        "Cannot safely scroll PropertyGrid for " + name);
                 await Task.Delay(150, cancellationToken);
             }
             throw new TimeoutException(

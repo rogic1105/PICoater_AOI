@@ -1,28 +1,29 @@
 @echo off
-chcp 65001 >nul
 pushd "%~dp0.."
+set "test_exit=0"
 
 echo ==================================================
-echo  PICoater AOI 統一測試入口
+echo  PICoater AOI Test Runner
 echo ==================================================
 echo.
-echo  1. 離線功能測試（Build + Unit + Integration + DVT）
-echo  2. 離線壓力測試
-echo  3. 離線耐久測試
-echo  4. 實體 IO 五分鐘穩定測試（不 Grab）
-echo  5. 儲存電腦五分鐘穩定測試（不 Grab）
-echo  6. IO＋儲存電腦待機耐久測試（不 Grab）
-echo  7. 完整離線測試並記錄最新報告
-echo  8. 回顧／報表 30,000 筆資料測試
-echo  9. 實際取相（IO 三循環＋時間／高度）
-echo 10. SMB 中斷／待傳補送恢復（需系統管理員）
-echo 11. IO／光源軟體斷線恢復（首次安裝固定管理員動作）
-echo 12. 低磁碟刪檔與狀態恢復（隔離 TEMP，不碰正式資料）
-echo 13. 反覆 Grab 耐久測試（預設 120 分鐘）
-echo 14. 監控檢測標準（光源 100/255 替代刺激）
-echo 15. 結束
+echo  1. Offline functional: Build + Unit + Integration + DVT
+echo  2. Offline stress
+echo  3. Offline soak
+echo  4. Physical IO stability, no Grab
+echo  5. Storage-PC stability, no Grab
+echo  6. Physical IO + Storage-PC soak, no Grab
+echo  7. Full offline campaign and latest report
+echo  8. Review/report 30,000-record test
+echo  9. Physical capture: IO + time + height
+echo 10. SMB interruption and backlog recovery, admin required
+echo 11. IO/light software disconnect recovery
+echo 12. Low-disk retention in isolated TEMP
+echo 13. Repeated Grab soak, default 120 minutes
+echo 14. Inspection standards with light 100/255 surrogate
+echo 15. Exit
 echo.
-set /p choice="請選擇 (1-15): "
+set "choice=%~1"
+if not defined choice set /p choice="Select (1-15): "
 
 if "%choice%"=="1" goto :functional
 if "%choice%"=="2" goto :stress
@@ -124,17 +125,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "tests\TestRunner.ps1" -Mode
 goto :result
 
 :invalid
-echo 無效選項。
+echo Invalid selection.
+set "test_exit=2"
 goto :done
 
 :result
+set "test_exit=%errorlevel%"
 echo.
-if errorlevel 1 (
-  echo 測試結果：FAIL，請查看畫面與 artifacts\test-reports。
-) else (
-  echo 測試結果：PASS。
-)
+if "%test_exit%"=="0" goto :result_pass
+echo Test result: FAIL. See artifacts\test-reports.
+goto :done
+
+:result_pass
+echo Test result: PASS.
 
 :done
 popd
-pause
+if /i not "%~2"=="--no-pause" pause
+exit /b %test_exit%

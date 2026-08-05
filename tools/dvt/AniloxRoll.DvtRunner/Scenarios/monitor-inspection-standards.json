@@ -46,6 +46,15 @@
       "TimeoutSeconds": 10
     },
     {
+      "Id": "normalize-light-disabled",
+      "Contract": "H.Light",
+      "Title": "先關閉光源連線以建立測試起點",
+      "Action": "set-property",
+      "Target": "啟用光源",
+      "Value": "否",
+      "TimeoutSeconds": 15
+    },
+    {
       "Id": "enable-light",
       "Contract": "H.Light",
       "Title": "啟用實體光源",
@@ -71,10 +80,28 @@
       "TimeoutSeconds": 180
     },
     {
+      "Id": "fixed-stop-time",
+      "Contract": "F2/F3",
+      "Title": "固定測試期間使用時間停止",
+      "Action": "set-property",
+      "Target": "停止條件",
+      "Value": "時間",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "fixed-stop-limit",
+      "Contract": "F2/F3",
+      "Title": "避免檢測標準驗證途中自動停止",
+      "Action": "set-property",
+      "Target": "總時間(秒)",
+      "Value": "120",
+      "TimeoutSeconds": 10
+    },
+    {
       "Id": "start-grab",
       "Contract": "F2",
       "Title": "開始監控 Grab",
-      "Action": "click",
+      "Action": "click-button",
       "Target": "開始抓取",
       "TimeoutSeconds": 30
     },
@@ -255,7 +282,7 @@
       "Id": "stop-grab",
       "Contract": "F3",
       "Title": "停止監控 Grab",
-      "Action": "click",
+      "Action": "click-button",
       "Target": "停止抓取",
       "TimeoutSeconds": 15
     },

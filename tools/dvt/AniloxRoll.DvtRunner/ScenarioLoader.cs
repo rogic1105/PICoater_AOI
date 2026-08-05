@@ -30,6 +30,7 @@ namespace AniloxRoll.DvtRunner
                 "wait-element",
                 "set-property",
                 "click",
+                "click-button",
                 "wheel",
                 "drag",
                 "select-tab",

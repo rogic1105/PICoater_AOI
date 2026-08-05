@@ -159,7 +159,10 @@ namespace AniloxRoll.DvtRunner
                             _evidenceLines.Add(line);
                         }
                     }
-                    _offsets[path] = stream.Length;
+                    // Use the position this reader actually reached. The writer
+                    // may append after ReadLine observes EOF but before this
+                    // assignment; stream.Length would then skip unread evidence.
+                    _offsets[path] = stream.Position;
                 }
             }
             catch (IOException)
